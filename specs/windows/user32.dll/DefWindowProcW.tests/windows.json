@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "dwp_close",
+      "exe_sha256": "2381f3851f67f2957f96a2d229db554b0d9a52ba71c8f9d62258779935975d01",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayByZWdpc3RlcmVkX25vY2xvc2UKLS0gV01fQ0xPU0UgdG8gQSByZXR1cm5lZCAwCiAgQSBXTV9DTE9TRSB3PTB4MCBsPTB4MAogIEEgV01fREVTVFJPWSB3PTB4MCBsPTB4MAogIEEgV01fTkNERVNUUk9ZIHc9MHgwIGw9MHgwCkE6IElzV2luZG93PTAKLS0gV01fQ0xPU0UgdG8gQiAocHJvY2VkdXJlIGtlZXBzIGl0KSByZXR1cm5lZCAwCiAgQiBXTV9DTE9TRSB3PTB4MCBsPTB4MApCOiBJc1dpbmRvdz0xCi0tIFdNX1NZU0NPTU1BTkQgU0NfQ0xPU0UgdG8gQiByZXR1cm5lZCAwCiAgQiBXTV9TWVNDT01NQU5EIHc9MHhmMDYwIGw9MHgwCiAgQiBXTV9DTE9TRSB3PTB4MCBsPTB4MAogIEIgV01fREVTVFJPWSB3PTB4MCBsPTB4MAogIEIgV01fTkNERVNUUk9ZIHc9MHgwIGw9MHgwCkI6IElzV2luZG93PTAKLS0gV01fU1lTS0VZRE9XTiBBbHQrRjQgdG8gQyByZXR1cm5lZCAwCiAgQyBXTV9TWVNLRVlET1dOIHc9MHg3MyBsPTB4MjAzZTAwMDEKQyByaWdodCBhZnRlcjogSXNXaW5kb3c9MQpDIGFmdGVyIHB1bXBpbmc6IElzV2luZG93PTEKLS0gV01fU1lTQ09NTUFORCBTQ19DTE9TRSB0byBhIENTX05PQ0xPU0Ugd2luZG93IHJldHVybmVkIDAKICBEIFdNX1NZU0NPTU1BTkQgdz0weGYwNjAgbD0weDAKICBEIFdNX0NMT1NFIHc9MHgwIGw9MHgwCiAgRCBXTV9ERVNUUk9ZIHc9MHgwIGw9MHgwCiAgRCBXTV9OQ0RFU1RST1kgdz0weDAgbD0weDAKRDogSXNXaW5kb3c9MApEIGFmdGVyIHB1bXBpbmc6IElzV2luZG93PTAKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok registered_noclose\n-- WM_CLOSE to A returned 0\n  A WM_CLOSE w=0x0 l=0x0\n  A WM_DESTROY w=0x0 l=0x0\n  A WM_NCDESTROY w=0x0 l=0x0\nA: IsWindow=0\n-- WM_CLOSE to B (procedure keeps it) returned 0\n  B WM_CLOSE w=0x0 l=0x0\nB: IsWindow=1\n-- WM_SYSCOMMAND SC_CLOSE to B returned 0\n  B WM_SYSCOMMAND w=0xf060 l=0x0\n  B WM_CLOSE w=0x0 l=0x0\n  B WM_DESTROY w=0x0 l=0x0\n  B WM_NCDESTROY w=0x0 l=0x0\nB: IsWindow=0\n-- WM_SYSKEYDOWN Alt+F4 to C returned 0\n  C WM_SYSKEYDOWN w=0x73 l=0x203e0001\nC right after: IsWindow=1\nC after pumping: IsWindow=1\n-- WM_SYSCOMMAND SC_CLOSE to a CS_NOCLOSE window returned 0\n  D WM_SYSCOMMAND w=0xf060 l=0x0\n  D WM_CLOSE w=0x0 l=0x0\n  D WM_DESTROY w=0x0 l=0x0\n  D WM_NCDESTROY w=0x0 l=0x0\nD: IsWindow=0\nD after pumping: IsWindow=0\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "dwp_poschanged",
+      "exe_sha256": "579ec5ea0ce81af1b03722668c2aa97c7ca76988f9c2a70934a89ab822381b16",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApwb3B1cCBmbGFncyAwOiByZXR1cm5lZCAwCiAgc2VudCBXTV9NT1ZFIHc9MCBsPTQxLDMxCiAgc2VudCBXTV9TSVpFIHc9MCBsPTExOCw4OApwb3B1cCBTV1BfTk9NT1ZFOiByZXR1cm5lZCAwCiAgc2VudCBXTV9NT1ZFIHc9MCBsPTQxLDMxCiAgc2VudCBXTV9TSVpFIHc9MCBsPTExOCw4OApwb3B1cCBTV1BfTk9TSVpFOiByZXR1cm5lZCAwCiAgc2VudCBXTV9NT1ZFIHc9MCBsPTQxLDMxCiAgc2VudCBXTV9TSVpFIHc9MCBsPTExOCw4OApwb3B1cCBTV1BfTk9NT1ZFfFNXUF9OT1NJWkU6IHJldHVybmVkIDAKICBzZW50IFdNX01PVkUgdz0wIGw9NDEsMzEKICBzZW50IFdNX1NJWkUgdz0wIGw9MTE4LDg4CmNoaWxkIGZsYWdzIDA6IHJldHVybmVkIDAKICBzZW50IFdNX01PVkUgdz0wIGw9NSw2CiAgc2VudCBXTV9TSVpFIHc9MCBsPTIwLDEwCldNX05DQ0FMQ1NJWkUgRkFMU0U6IHJldHVybmVkIDAgcmVjdCA0MSwzMSwxNTksMTE5CldNX0dFVE1JTk1BWElORk8gb24gemVyb3M6IHJldHVybmVkIDAgbWF4c2l6ZT0wLDAgbWF4cG9zPTAsMCBtaW50cmFjaz0wLDAgbWF4dHJhY2s9MCwwCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\npopup flags 0: returned 0\n  sent WM_MOVE w=0 l=41,31\n  sent WM_SIZE w=0 l=118,88\npopup SWP_NOMOVE: returned 0\n  sent WM_MOVE w=0 l=41,31\n  sent WM_SIZE w=0 l=118,88\npopup SWP_NOSIZE: returned 0\n  sent WM_MOVE w=0 l=41,31\n  sent WM_SIZE w=0 l=118,88\npopup SWP_NOMOVE|SWP_NOSIZE: returned 0\n  sent WM_MOVE w=0 l=41,31\n  sent WM_SIZE w=0 l=118,88\nchild flags 0: returned 0\n  sent WM_MOVE w=0 l=5,6\n  sent WM_SIZE w=0 l=20,10\nWM_NCCALCSIZE FALSE: returned 0 rect 41,31,159,119\nWM_GETMINMAXINFO on zeros: returned 0 maxsize=0,0 maxpos=0,0 mintrack=0,0 maxtrack=0,0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    },
+    {
+      "name": "dwp_returns",
+      "exe_sha256": "10f10c2e1db688e7b829437c6971469509660b56939fa8795b2c6fc02f557d38",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApXTV9OVUxMOiAwCldNX0NSRUFURTogMApXTV9NT1ZFOiAwCldNX1NJWkU6IDAKV01fU0hPV1dJTkRPVyAxOiAwCldNX1BBSU5UIChub3RoaW5nIGludmFsaWQpOiAwCldNX0VSQVNFQktHTkQgd2l0aG91dCBjbGFzcyBicnVzaDogMApXTV9HRVRURVhUTEVOR1RIOiA0CldNX1FVRVJZRU5EU0VTU0lPTjogMQpXTV9HRVRJQ09OOiAwCldNX0dFVEZPTlQ6IDAKV01fU0VURk9OVDogMApXTV9OT1RJRllGT1JNQVQ6IDIKV01fS0VZRE9XTiBBOiAwCldNX0tFWVVQIEE6IDAKV01fQ0hBUiBhOiAwCldNX0xCVVRUT05ET1dOOiAwCldNX01PVVNFQUNUSVZBVEUgKHRvcC1sZXZlbCk6IDEKV01fTU9VU0VBQ1RJVkFURSAoY2hpbGQpOiAxCldNX1NFVENVUlNPUjogMApXTV9OQ0hJVFRFU1QgaW5zaWRlOiAxCldNX05DSElUVEVTVCBvdXRzaWRlOiAwCldNX05DSElUVEVTVCBjaGlsZCBpbnNpZGU6IDEKV01fQ0FOQ0VMTU9ERTogMApXTV9VU0VSOiAwCldNX0FQUDogMAoweDdmZmY6IDAKV01fREVTVFJPWSAobm90IGRlc3Ryb3lpbmcpOiAwCnN0aWxsIGEgd2luZG93IGFmdGVyIERlZldpbmRvd1Byb2MoV01fREVTVFJPWSk6IDEKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nWM_NULL: 0\nWM_CREATE: 0\nWM_MOVE: 0\nWM_SIZE: 0\nWM_SHOWWINDOW 1: 0\nWM_PAINT (nothing invalid): 0\nWM_ERASEBKGND without class brush: 0\nWM_GETTEXTLENGTH: 4\nWM_QUERYENDSESSION: 1\nWM_GETICON: 0\nWM_GETFONT: 0\nWM_SETFONT: 0\nWM_NOTIFYFORMAT: 2\nWM_KEYDOWN A: 0\nWM_KEYUP A: 0\nWM_CHAR a: 0\nWM_LBUTTONDOWN: 0\nWM_MOUSEACTIVATE (top-level): 1\nWM_MOUSEACTIVATE (child): 1\nWM_SETCURSOR: 0\nWM_NCHITTEST inside: 1\nWM_NCHITTEST outside: 0\nWM_NCHITTEST child inside: 1\nWM_CANCELMODE: 0\nWM_USER: 0\nWM_APP: 0\n0x7fff: 0\nWM_DESTROY (not destroying): 0\nstill a window after DefWindowProc(WM_DESTROY): 1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

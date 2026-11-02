@@ -1,0 +1,98 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "cw_owner",
+      "exe_sha256": "5e6d4310e574051647225632e27fcfeda7180a721a9a244d03dda1752a7b96ff",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAp0b3A6IHBhcmVudD1udWxsIG93bmVyPW51bGwgZ2FfcGFyZW50PWRlc2t0b3AgZ2Ffcm9vdD10b3AgZ2Ffcm9vdG93bmVyPXRvcCBod25kcGFyZW50PW51bGwKY2hpbGQ6IHBhcmVudD10b3Agb3duZXI9bnVsbCBnYV9wYXJlbnQ9dG9wIGdhX3Jvb3Q9dG9wIGdhX3Jvb3Rvd25lcj10b3AgaHduZHBhcmVudD10b3AKcG9wdXA6IHBhcmVudD10b3Agb3duZXI9dG9wIGdhX3BhcmVudD1kZXNrdG9wIGdhX3Jvb3Q9cG9wdXAgZ2Ffcm9vdG93bmVyPXRvcCBod25kcGFyZW50PXRvcApvdmVyOiBwYXJlbnQ9bnVsbCBvd25lcj10b3AgZ2FfcGFyZW50PWRlc2t0b3AgZ2Ffcm9vdD1vdmVyIGdhX3Jvb3Rvd25lcj1vdmVyIGh3bmRwYXJlbnQ9dG9wCmJ5X2NoaWxkOiBwYXJlbnQ9dG9wIG93bmVyPXRvcCBnYV9wYXJlbnQ9ZGVza3RvcCBnYV9yb290PWJ5X2NoaWxkIGdhX3Jvb3Rvd25lcj10b3AgaHduZHBhcmVudD10b3AKbXNnb25seTogcGFyZW50PW51bGwgb3duZXI9bnVsbCBnYV9wYXJlbnQ9b3RoZXIgZ2Ffcm9vdD1tc2dvbmx5IGdhX3Jvb3Rvd25lcj1tc2dvbmx5IGh3bmRwYXJlbnQ9b3RoZXIKbXNnb25seSBnYV9wYXJlbnQgaXMgZGVza3RvcCAwIGlzIG1lc3NhZ2UgcGFyZW50IDEKb2sgaXNjaGlsZF9jaGlsZApvayBpc2NoaWxkX3BvcHVwCm9rIGRlc2t0b3BfcGFyZW50X251bGwKb2sgb3duZWRfcG9wdXBfZGVzdHJveWVkX3dpdGhfb3duZXIKb2sgb3duZWRfYnlfY2hpbGRfZGVzdHJveWVkCnN1bW1hcnkgNiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\ntop: parent=null owner=null ga_parent=desktop ga_root=top ga_rootowner=top hwndparent=null\nchild: parent=top owner=null ga_parent=top ga_root=top ga_rootowner=top hwndparent=top\npopup: parent=top owner=top ga_parent=desktop ga_root=popup ga_rootowner=top hwndparent=top\nover: parent=null owner=top ga_parent=desktop ga_root=over ga_rootowner=over hwndparent=top\nby_child: parent=top owner=top ga_parent=desktop ga_root=by_child ga_rootowner=top hwndparent=top\nmsgonly: parent=null owner=null ga_parent=other ga_root=msgonly ga_rootowner=msgonly hwndparent=other\nmsgonly ga_parent is desktop 0 is message parent 1\nok ischild_child\nok ischild_popup\nok desktop_parent_null\nok owned_popup_destroyed_with_owner\nok owned_by_child_destroyed\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "cw_params",
+      "exe_sha256": "90e305215ce6be798dd99a310a5782159d0c5924f2740b046f1a91b8f968435a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBjcmVhdGVkCm9rIGxwY3JlYXRlcGFyYW1zCm9rIGhtZW51X251bGwKb2sgaGluc3RhbmNlCm9rIHBhcmVudF9udWxsCm9rIG5hbWVfcG9pbnRlcl9pc190aGVfY2FsbGVycwpjbGFzcyBwb2ludGVyIGlzIHRoZSBjYWxsZXInczogMApXTV9DUkVBVEUgcGFyYW1zIHNhbWUgYXMgV01fTkNDUkVBVEUgMQp0ZXh0IHZpYSBkZWZhdWx0IFdNX05DQ1JFQVRFOiA1ICJIZWxsbyIKb2sgY2hpbGRfaG1lbnVfaXNfaWQKb2sgY2hpbGRfcGFyZW50Cm9rIGNoaWxkX2d3bHBfaWQKb2sgY2hpbGRfZ3dscF9oaW5zdGFuY2UKb2sgY2hpbGRfZ3dscF9od25kcGFyZW50Cm9rIHBvcHVwX2d3bHBfaWQKb2sgY3JlYXRlZF93aXRob3V0X2RlZmF1bHRfbmNjcmVhdGUKdGV4dCB3aGVuIFdNX05DQ1JFQVRFIGlzIGFuc3dlcmVkIGJ5IHRoZSBwcm9jZWR1cmU6IDAgIiIKdGV4dCB3aXRoIGEgTlVMTCBuYW1lOiAwICIiIG5hbWUgcG9pbnRlciBudWxsIDEKc3VtbWFyeSAxNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok created\nok lpcreateparams\nok hmenu_null\nok hinstance\nok parent_null\nok name_pointer_is_the_callers\nclass pointer is the caller's: 0\nWM_CREATE params same as WM_NCCREATE 1\ntext via default WM_NCCREATE: 5 \"Hello\"\nok child_hmenu_is_id\nok child_parent\nok child_gwlp_id\nok child_gwlp_hinstance\nok child_gwlp_hwndparent\nok popup_gwlp_id\nok created_without_default_nccreate\ntext when WM_NCCREATE is answered by the procedure: 0 \"\"\ntext with a NULL name: 0 \"\" name pointer null 1\nsummary 14 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "cw_seq_child",
+      "exe_sha256": "0a1fbe444f8c61983e36153473a4a6d2a18b62b203b26807045adf7de830b1b2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBwYXJlbnQKLS0gaGlkZGVuIGNoaWxkLCBpZCA1CkMgV01fTkNDUkVBVEUgcG9zPTEwLDIwIHNpemU9NTAsNDAgc3R5bGU9MHg0MDAwMDAwMCBleD0weDAKQyBXTV9OQ0NBTENTSVpFIDAgcmVjdD01MCw1MCwxMDAsOTAKQyBXTV9DUkVBVEUgcG9zPTEwLDIwIHNpemU9NTAsNDAgc3R5bGU9MHg0MDAwMDAwMCBleD0weDAKQyBXTV9TSVpFIHc9MCBsPTUwLDQwCkMgV01fTU9WRSB3PTAgbD0xMCwyMApQIFdNX1BBUkVOVE5PVElGWSBldmVudD1XTV9DUkVBVEUgaWQ9NSBsPTEKLS0gdmlzaWJsZSBjaGlsZCwgaWQgNgpEIFdNX05DQ1JFQVRFIHBvcz02MCwyMCBzaXplPTUwLDQwIHN0eWxlPTB4NTAwMDAwMDAgZXg9MHgwCkQgV01fTkNDQUxDU0laRSAwIHJlY3Q9MTAwLDUwLDE1MCw5MApEIFdNX0NSRUFURSBwb3M9NjAsMjAgc2l6ZT01MCw0MCBzdHlsZT0weDUwMDAwMDAwIGV4PTB4MApEIFdNX1NJWkUgdz0wIGw9NTAsNDAKRCBXTV9NT1ZFIHc9MCBsPTYwLDIwClAgV01fUEFSRU5UTk9USUZZIGV2ZW50PVdNX0NSRUFURSBpZD02IGw9MQpEIFdNX1NIT1dXSU5ET1cgdz0weDEgbD0weDAKLS0gV1NfRVhfTk9QQVJFTlROT1RJRlkgY2hpbGQsIGlkIDcKRSBXTV9OQ0NSRUFURSBwb3M9MCwwIHNpemU9NSw1IHN0eWxlPTB4NDAwMDAwMDAgZXg9MHg0CkUgV01fTkNDQUxDU0laRSAwIHJlY3Q9NDAsMzAsNDUsMzUKRSBXTV9DUkVBVEUgcG9zPTAsMCBzaXplPTUsNSBzdHlsZT0weDQwMDAwMDAwIGV4PTB4NApFIFdNX1NJWkUgdz0wIGw9NSw1CkUgV01fTU9WRSB3PTAgbD0wLDAKLS0gZ3JhbmRjaGlsZCBvZiB0aGUgV1NfRVhfTk9QQVJFTlROT1RJRlkgY2hpbGQsIGlkIDgKRiBXTV9OQ0NSRUFURSBwb3M9MSwxIHNpemU9MiwyIHN0eWxlPTB4NDAwMDAwMDAgZXg9MHgwCkYgV01fTkNDQUxDU0laRSAwIHJlY3Q9NDEsMzEsNDMsMzMKRiBXTV9DUkVBVEUgcG9zPTEsMSBzaXplPTIsMiBzdHlsZT0weDQwMDAwMDAwIGV4PTB4MApGIFdNX1NJWkUgdz0wIGw9MiwyCkYgV01fTU9WRSB3PTAgbD0xLDEKRSBXTV9QQVJFTlROT1RJRlkgZXZlbnQ9V01fQ1JFQVRFIGlkPTggbD0xCm9rIGNoaWxkcmVuCmNoaWxkIHdpbmRvdyByZWN0IDUwLDUwLDEwMCw5MApjaGlsZCByZWN0IGluIHBhcmVudCBjbGllbnQgMTAsMjAsNjAsNjAKdmlzaWJsZSBwYXJlbnQ9MCBjMT0wIGMyPTAKb2sgYzJfaGFzX3dzX3Zpc2libGUKb2sgaWRfb2ZfYzEKUCBXTV9ERVNUUk9ZIHc9MHgwIGw9MHgwCkMgV01fREVTVFJPWSB3PTB4MCBsPTB4MApEIFdNX0RFU1RST1kgdz0weDAgbD0weDAKRSBXTV9ERVNUUk9ZIHc9MHgwIGw9MHgwCkYgV01fREVTVFJPWSB3PTB4MCBsPTB4MApDIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MApEIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MApGIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MApFIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MApQIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MApzdW1tYXJ5IDUgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok parent\n-- hidden child, id 5\nC WM_NCCREATE pos=10,20 size=50,40 style=0x40000000 ex=0x0\nC WM_NCCALCSIZE 0 rect=50,50,100,90\nC WM_CREATE pos=10,20 size=50,40 style=0x40000000 ex=0x0\nC WM_SIZE w=0 l=50,40\nC WM_MOVE w=0 l=10,20\nP WM_PARENTNOTIFY event=WM_CREATE id=5 l=1\n-- visible child, id 6\nD WM_NCCREATE pos=60,20 size=50,40 style=0x50000000 ex=0x0\nD WM_NCCALCSIZE 0 rect=100,50,150,90\nD WM_CREATE pos=60,20 size=50,40 style=0x50000000 ex=0x0\nD WM_SIZE w=0 l=50,40\nD WM_MOVE w=0 l=60,20\nP WM_PARENTNOTIFY event=WM_CREATE id=6 l=1\nD WM_SHOWWINDOW w=0x1 l=0x0\n-- WS_EX_NOPARENTNOTIFY child, id 7\nE WM_NCCREATE pos=0,0 size=5,5 style=0x40000000 ex=0x4\nE WM_NCCALCSIZE 0 rect=40,30,45,35\nE WM_CREATE pos=0,0 size=5,5 style=0x40000000 ex=0x4\nE WM_SIZE w=0 l=5,5\nE WM_MOVE w=0 l=0,0\n-- grandchild of the WS_EX_NOPARENTNOTIFY child, id 8\nF WM_NCCREATE pos=1,1 size=2,2 style=0x40000000 ex=0x0\nF WM_NCCALCSIZE 0 rect=41,31,43,33\nF WM_CREATE pos=1,1 size=2,2 style=0x40000000 ex=0x0\nF WM_SIZE w=0 l=2,2\nF WM_MOVE w=0 l=1,1\nE WM_PARENTNOTIFY event=WM_CREATE id=8 l=1\nok children\nchild window rect 50,50,100,90\nchild rect in parent client 10,20,60,60\nvisible parent=0 c1=0 c2=0\nok c2_has_ws_visible\nok id_of_c1\nP WM_DESTROY w=0x0 l=0x0\nC WM_DESTROY w=0x0 l=0x0\nD WM_DESTROY w=0x0 l=0x0\nE WM_DESTROY w=0x0 l=0x0\nF WM_DESTROY w=0x0 l=0x0\nC WM_NCDESTROY w=0x0 l=0x0\nD WM_NCDESTROY w=0x0 l=0x0\nF WM_NCDESTROY w=0x0 l=0x0\nE WM_NCDESTROY w=0x0 l=0x0\nP WM_NCDESTROY w=0x0 l=0x0\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "cw_seq_overlapped",
+      "exe_sha256": "e45beef5ada82be44e8d3d1fc6a29e6a32204e272cc11900a2dbace9b746719f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBjcmVhdGVkCkEgV01fR0VUTUlOTUFYSU5GTyBtYXhzaXplPTEwNDAsNzg0IG1heHBvcz0tOCwtOCBtaW50cmFjaz0xMzYsMzkgbWF4dHJhY2s9MTA0NCw3ODgKQSBXTV9OQ0NSRUFURSBwb3M9MTAwLDEwMCBzaXplPTMwMCwyMDAgc3R5bGU9MHhjZjAwMDAgZXg9MHgxMDAKQSBXTV9OQ0NBTENTSVpFIDAgcmVjdD0xMDAsMTAwLDQwMCwzMDAKQSBXTV9DUkVBVEUgcG9zPTEwMCwxMDAgc2l6ZT0zMDAsMjAwIHN0eWxlPTB4Y2YwMDAwIGV4PTB4MTAwCndpbmRvdyAxMDAsMTAwLDQwMCwzMDAKY2xpZW50IDAsMCwyODQsMTYxCmNsaWVudCBvcmlnaW4gb24gc2NyZWVuIDEwOCwxMzEKb2sgaGlkZGVuCnN0eWxlIDB4NGNmMDAwMApleHN0eWxlIDB4MTAwCm9rIG5vdGhpbmdfcG9zdGVkX2Zvcl90aGVfd2luZG93CkEgV01fREVTVFJPWSB3PTB4MCBsPTB4MApBIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MApzdW1tYXJ5IDQgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok created\nA WM_GETMINMAXINFO maxsize=1040,784 maxpos=-8,-8 mintrack=136,39 maxtrack=1044,788\nA WM_NCCREATE pos=100,100 size=300,200 style=0xcf0000 ex=0x100\nA WM_NCCALCSIZE 0 rect=100,100,400,300\nA WM_CREATE pos=100,100 size=300,200 style=0xcf0000 ex=0x100\nwindow 100,100,400,300\nclient 0,0,284,161\nclient origin on screen 108,131\nok hidden\nstyle 0x4cf0000\nexstyle 0x100\nok nothing_posted_for_the_window\nA WM_DESTROY w=0x0 l=0x0\nA WM_NCDESTROY w=0x0 l=0x0\nsummary 4 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "cw_seq_popup_visible",
+      "exe_sha256": "ef37d261dc39234623fdf05c88c3c5a8467a5516d499fca516aa44e42392a591",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAotLSBXU19QT1BVUHxXU19WSVNJQkxFLCBXU19FWF9OT0FDVElWQVRFCkEgV01fTkNDUkVBVEUgcG9zPTEwLDEwIHNpemU9MTIwLDkwIHN0eWxlPTB4OTAwMDAwMDAgZXg9MHg4MDAwMDAwCkEgV01fTkNDQUxDU0laRSAwIHJlY3Q9MTAsMTAsMTMwLDEwMApBIFdNX0NSRUFURSBwb3M9MTAsMTAgc2l6ZT0xMjAsOTAgc3R5bGU9MHg5MDAwMDAwMCBleD0weDgwMDAwMDAKQSBXTV9TSVpFIHc9MCBsPTEyMCw5MApBIFdNX01PVkUgdz0wIGw9MTAsMTAKQSBXTV9TSE9XV0lORE9XIHc9MHgxIGw9MHgwCkEgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDQzCkEgV01fV0lORE9XUE9TQ0hBTkdFRCBwb3M9MTAsMTAgc2l6ZT0xMjAsOTAgZmxhZ3M9MHgxODQ3Cm9rIGNyZWF0ZWRfYQpvayBhX2hhc193c192aXNpYmxlCi0tIFdTX1BPUFVQfFdTX1ZJU0lCTEUKQiBXTV9OQ0NSRUFURSBwb3M9MjAwLDEwIHNpemU9MTIwLDkwIHN0eWxlPTB4OTAwMDAwMDAgZXg9MHgwCkIgV01fTkNDQUxDU0laRSAwIHJlY3Q9MjAwLDEwLDMyMCwxMDAKQiBXTV9DUkVBVEUgcG9zPTIwMCwxMCBzaXplPTEyMCw5MCBzdHlsZT0weDkwMDAwMDAwIGV4PTB4MApCIFdNX1NJWkUgdz0wIGw9MTIwLDkwCkIgV01fTU9WRSB3PTAgbD0yMDAsMTAKQiBXTV9TSE9XV0lORE9XIHc9MHgxIGw9MHgwCkIgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDQzCkIgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDEzCkIgV01fV0lORE9XUE9TQ0hBTkdFRCBwb3M9MjAwLDEwIHNpemU9MTIwLDkwIGZsYWdzPTB4MTg0NwpvayBjcmVhdGVkX2IKLS0gZGVzdHJveSBib3RoCkIgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDk3CkIgV01fV0lORE9XUE9TQ0hBTkdFRCBwb3M9MjAwLDEwIHNpemU9MTIwLDkwIGZsYWdzPTB4MTg5NwpCIFdNX0RFU1RST1kgdz0weDAgbD0weDAKQiBXTV9OQ0RFU1RST1kgdz0weDAgbD0weDAKQSBXTV9XSU5ET1dQT1NDSEFOR0lORyBwb3M9MCwwIHNpemU9MCwwIGZsYWdzPTB4OTcKQSBXTV9XSU5ET1dQT1NDSEFOR0VEIHBvcz0xMCwxMCBzaXplPTEyMCw5MCBmbGFncz0weDE4OTcKQSBXTV9ERVNUUk9ZIHc9MHgwIGw9MHgwCkEgV01fTkNERVNUUk9ZIHc9MHgwIGw9MHgwCnN1bW1hcnkgNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n-- WS_POPUP|WS_VISIBLE, WS_EX_NOACTIVATE\nA WM_NCCREATE pos=10,10 size=120,90 style=0x90000000 ex=0x8000000\nA WM_NCCALCSIZE 0 rect=10,10,130,100\nA WM_CREATE pos=10,10 size=120,90 style=0x90000000 ex=0x8000000\nA WM_SIZE w=0 l=120,90\nA WM_MOVE w=0 l=10,10\nA WM_SHOWWINDOW w=0x1 l=0x0\nA WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x43\nA WM_WINDOWPOSCHANGED pos=10,10 size=120,90 flags=0x1847\nok created_a\nok a_has_ws_visible\n-- WS_POPUP|WS_VISIBLE\nB WM_NCCREATE pos=200,10 size=120,90 style=0x90000000 ex=0x0\nB WM_NCCALCSIZE 0 rect=200,10,320,100\nB WM_CREATE pos=200,10 size=120,90 style=0x90000000 ex=0x0\nB WM_SIZE w=0 l=120,90\nB WM_MOVE w=0 l=200,10\nB WM_SHOWWINDOW w=0x1 l=0x0\nB WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x43\nB WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x13\nB WM_WINDOWPOSCHANGED pos=200,10 size=120,90 flags=0x1847\nok created_b\n-- destroy both\nB WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x97\nB WM_WINDOWPOSCHANGED pos=200,10 size=120,90 flags=0x1897\nB WM_DESTROY w=0x0 l=0x0\nB WM_NCDESTROY w=0x0 l=0x0\nA WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x97\nA WM_WINDOWPOSCHANGED pos=10,10 size=120,90 flags=0x1897\nA WM_DESTROY w=0x0 l=0x0\nA WM_NCDESTROY w=0x0 l=0x0\nsummary 4 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    },
+    {
+      "name": "cw_styles",
+      "exe_sha256": "5fb025a84925067a69e05aa4ec7bfa488f4c1b9dd4fb464272345ccc46997bd3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvdmVybGFwcGVkOiBhc2tlZCAweDAvMHgwIG5jY3JlYXRlIDB4MC8weDAgY3JlYXRlIDB4MC8weDAgYWZ0ZXIgMHg0YzAwMDAwLzB4MTAwCm92ZXJsYXBwZWR3aW5kb3c6IGFza2VkIDB4Y2YwMDAwLzB4MCBuY2NyZWF0ZSAweGNmMDAwMC8weDEwMCBjcmVhdGUgMHhjZjAwMDAvMHgxMDAgYWZ0ZXIgMHg0Y2YwMDAwLzB4MTAwCm92ZXJsYXBwZWRfdmlzaWJsZV9kaXNhYmxlZDogYXNrZWQgMHg4MDAwMDAwLzB4MCBuY2NyZWF0ZSAweDgwMDAwMDAvMHgwIGNyZWF0ZSAweDgwMDAwMDAvMHgwIGFmdGVyIDB4Y2MwMDAwMC8weDEwMApjYXB0aW9uOiBhc2tlZCAweGMwMDAwMC8weDAgbmNjcmVhdGUgMHhjMDAwMDAvMHgxMDAgY3JlYXRlIDB4YzAwMDAwLzB4MTAwIGFmdGVyIDB4NGMwMDAwMC8weDEwMApwb3B1cDogYXNrZWQgMHg4MDAwMDAwMC8weDAgbmNjcmVhdGUgMHg4MDAwMDAwMC8weDAgY3JlYXRlIDB4ODAwMDAwMDAvMHgwIGFmdGVyIDB4ODQwMDAwMDAvMHgwCnBvcHVwX2NhcHRpb246IGFza2VkIDB4ODBjMDAwMDAvMHgwIG5jY3JlYXRlIDB4ODBjMDAwMDAvMHgxMDAgY3JlYXRlIDB4ODBjMDAwMDAvMHgxMDAgYWZ0ZXIgMHg4NGMwMDAwMC8weDEwMApwb3B1cF9ib3JkZXI6IGFza2VkIDB4ODA4MDAwMDAvMHgwIG5jY3JlYXRlIDB4ODA4MDAwMDAvMHgwIGNyZWF0ZSAweDgwODAwMDAwLzB4MCBhZnRlciAweDg0ODAwMDAwLzB4MApwb3B1cF90aGlja2ZyYW1lOiBhc2tlZCAweDgwMDQwMDAwLzB4MCBuY2NyZWF0ZSAweDgwMDQwMDAwLzB4MTAwIGNyZWF0ZSAweDgwMDQwMDAwLzB4MTAwIGFmdGVyIDB4ODQwNDAwMDAvMHgxMDAKcG9wdXBfZGxnZnJhbWU6IGFza2VkIDB4ODA0MDAwMDAvMHgwIG5jY3JlYXRlIDB4ODA0MDAwMDAvMHgxMDAgY3JlYXRlIDB4ODA0MDAwMDAvMHgxMDAgYWZ0ZXIgMHg4NDQwMDAwMC8weDEwMApwb3B1cF9kbGdtb2RhbGZyYW1lOiBhc2tlZCAweDgwMDAwMDAwLzB4MSBuY2NyZWF0ZSAweDgwMDAwMDAwLzB4MTAxIGNyZWF0ZSAweDgwMDAwMDAwLzB4MTAxIGFmdGVyIDB4ODQwMDAwMDAvMHgxMDEKcG9wdXBfdG9vbHdpbmRvdzogYXNrZWQgMHg4MGMwMDAwMC8weDgwIG5jY3JlYXRlIDB4ODBjMDAwMDAvMHgxODAgY3JlYXRlIDB4ODBjMDAwMDAvMHgxODAgYWZ0ZXIgMHg4NGMwMDAwMC8weDE4MApwb3B1cF9jbGllbnRlZGdlOiBhc2tlZCAweDgwMDAwMDAwLzB4MjAwIG5jY3JlYXRlIDB4ODAwMDAwMDAvMHgyMDAgY3JlYXRlIDB4ODAwMDAwMDAvMHgyMDAgYWZ0ZXIgMHg4NDAwMDAwMC8weDIwMApwb3B1cF9zdGF0aWNlZGdlOiBhc2tlZCAweDgwMDAwMDAwLzB4MjAwMDAgbmNjcmVhdGUgMHg4MDAwMDAwMC8weDIwMDAwIGNyZWF0ZSAweDgwMDAwMDAwLzB4MjAwMDAgYWZ0ZXIgMHg4NDAwMDAwMC8weDIwMDAwCnBvcHVwX3dpbmRvd2VkZ2Vfb25seTogYXNrZWQgMHg4MDAwMDAwMC8weDEwMCBuY2NyZWF0ZSAweDgwMDAwMDAwLzB4MCBjcmVhdGUgMHg4MDAwMDAwMC8weDAgYWZ0ZXIgMHg4NDAwMDAwMC8weDAKcG9wdXBfdG9wbW9zdDogYXNrZWQgMHg4MDAwMDAwMC8weDggbmNjcmVhdGUgMHg4MDAwMDAwMC8weDggY3JlYXRlIDB4ODAwMDAwMDAvMHg4IGFmdGVyIDB4ODQwMDAwMDAvMHg4CnBvcHVwX3Njcm9sbGJhcnM6IGFza2VkIDB4ODAzMDAwMDAvMHgwIG5jY3JlYXRlIDB4ODAzMDAwMDAvMHgwIGNyZWF0ZSAweDgwMzAwMDAwLzB4MCBhZnRlciAweDg0MzAwMDAwLzB4MApjaGlsZDogYXNrZWQgMHg0MDAwMDAwMC8weDAgbmNjcmVhdGUgMHg0MDAwMDAwMC8weDAgY3JlYXRlIDB4NDAwMDAwMDAvMHgwIGFmdGVyIDB4NDAwMDAwMDAvMHgwCmNoaWxkX2NhcHRpb246IGFza2VkIDB4NDBjMDAwMDAvMHgwIG5jY3JlYXRlIDB4NDBjMDAwMDAvMHgxMDAgY3JlYXRlIDB4NDBjMDAwMDAvMHgxMDAgYWZ0ZXIgMHg0MGMwMDAwMC8weDEwMApjaGlsZF9ib3JkZXJfY2xpcDogYXNrZWQgMHg0NjgwMDAwMC8weDAgbmNjcmVhdGUgMHg0NjgwMDAwMC8weDAgY3JlYXRlIDB4NDY4MDAwMDAvMHgwIGFmdGVyIDB4NDY4MDAwMDAvMHgwCmNoaWxkX3RvcG1vc3Q6IGFza2VkIDB4NDAwMDAwMDAvMHg4IG5jY3JlYXRlIDB4NDAwMDAwMDAvMHg4IGNyZWF0ZSAweDQwMDAwMDAwLzB4OCBhZnRlciAweDQwMDAwMDAwLzB4OApjaGlsZF9hcHB3aW5kb3c6IGFza2VkIDB4NDAwMDAwMDAvMHg0MDAwMCBuY2NyZWF0ZSAweDQwMDAwMDAwLzB4NDAwMDAgY3JlYXRlIDB4NDAwMDAwMDAvMHg0MDAwMCBhZnRlciAweDQwMDAwMDAwLzB4NDAwMDAKb3duZWRfb3ZlcmxhcHBlZDogZmFpbGVkIGVycm9yPTE0MDEKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\noverlapped: asked 0x0/0x0 nccreate 0x0/0x0 create 0x0/0x0 after 0x4c00000/0x100\noverlappedwindow: asked 0xcf0000/0x0 nccreate 0xcf0000/0x100 create 0xcf0000/0x100 after 0x4cf0000/0x100\noverlapped_visible_disabled: asked 0x8000000/0x0 nccreate 0x8000000/0x0 create 0x8000000/0x0 after 0xcc00000/0x100\ncaption: asked 0xc00000/0x0 nccreate 0xc00000/0x100 create 0xc00000/0x100 after 0x4c00000/0x100\npopup: asked 0x80000000/0x0 nccreate 0x80000000/0x0 create 0x80000000/0x0 after 0x84000000/0x0\npopup_caption: asked 0x80c00000/0x0 nccreate 0x80c00000/0x100 create 0x80c00000/0x100 after 0x84c00000/0x100\npopup_border: asked 0x80800000/0x0 nccreate 0x80800000/0x0 create 0x80800000/0x0 after 0x84800000/0x0\npopup_thickframe: asked 0x80040000/0x0 nccreate 0x80040000/0x100 create 0x80040000/0x100 after 0x84040000/0x100\npopup_dlgframe: asked 0x80400000/0x0 nccreate 0x80400000/0x100 create 0x80400000/0x100 after 0x84400000/0x100\npopup_dlgmodalframe: asked 0x80000000/0x1 nccreate 0x80000000/0x101 create 0x80000000/0x101 after 0x84000000/0x101\npopup_toolwindow: asked 0x80c00000/0x80 nccreate 0x80c00000/0x180 create 0x80c00000/0x180 after 0x84c00000/0x180\npopup_clientedge: asked 0x80000000/0x200 nccreate 0x80000000/0x200 create 0x80000000/0x200 after 0x84000000/0x200\npopup_staticedge: asked 0x80000000/0x20000 nccreate 0x80000000/0x20000 create 0x80000000/0x20000 after 0x84000000/0x20000\npopup_windowedge_only: asked 0x80000000/0x100 nccreate 0x80000000/0x0 create 0x80000000/0x0 after 0x84000000/0x0\npopup_topmost: asked 0x80000000/0x8 nccreate 0x80000000/0x8 create 0x80000000/0x8 after 0x84000000/0x8\npopup_scrollbars: asked 0x80300000/0x0 nccreate 0x80300000/0x0 create 0x80300000/0x0 after 0x84300000/0x0\nchild: asked 0x40000000/0x0 nccreate 0x40000000/0x0 create 0x40000000/0x0 after 0x40000000/0x0\nchild_caption: asked 0x40c00000/0x0 nccreate 0x40c00000/0x100 create 0x40c00000/0x100 after 0x40c00000/0x100\nchild_border_clip: asked 0x46800000/0x0 nccreate 0x46800000/0x0 create 0x46800000/0x0 after 0x46800000/0x0\nchild_topmost: asked 0x40000000/0x8 nccreate 0x40000000/0x8 create 0x40000000/0x8 after 0x40000000/0x8\nchild_appwindow: asked 0x40000000/0x40000 nccreate 0x40000000/0x40000 create 0x40000000/0x40000 after 0x40000000/0x40000\nowned_overlapped: failed error=1401\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 97
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/AdjustWindowRectEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  Grows a client rectangle to the window rectangle a window of the given
+  styles needs, using the frame metrics: SM_CYCAPTION 23, SM_CXBORDER 1,
+  SM_CXDLGFRAME 3, SM_CXFRAME 4, SM_CXPADDEDBORDER 4, SM_CXEDGE 2, SM_CYMENU
+  20 on the oracle.
+interface:
+  signature: "BOOL AdjustWindowRectEx(RECT* rect, DWORD style, BOOL menu, DWORD ex_style)"
+rules:
+  per_style: "added left/top/right/bottom: no frame (0, WS_POPUP, WS_CHILD, WS_OVERLAPPED alone) 0; WS_BORDER 1; WS_DLGFRAME 3; WS_THICKFRAME 7; WS_BORDER|WS_THICKFRAME 8; WS_CAPTION 8,31,8,8; WS_OVERLAPPEDWINDOW 8,31,8,8 (with menu 8,51,8,8); menu flag alone adds 20 at the top (also for WS_CHILD); WS_EX_CLIENTEDGE 2; WS_EX_STATICEDGE 1; WS_EX_WINDOWEDGE alone 0; WS_EX_DLGMODALFRAME 3 (also with WS_BORDER); WS_OVERLAPPEDWINDOW + WS_EX_OVERLAPPEDWINDOW 10,33,10,10; WS_EX_TOOLWINDOW does not change WS_CAPTION; WS_BORDER + WS_EX_CLIENTEDGE 3; WS_DLGFRAME + client and static edge 4"
+  scrollbars: "WS_VSCROLL / WS_HSCROLL are ignored"
+  inverted: "an inverted rectangle is adjusted the same way"
+  adjustwindowrect: "AdjustWindowRect = AdjustWindowRectEx with ex style 0"
+  roundtrip: "a window created with the adjusted size has exactly the asked client size, except WS_OVERLAPPED alone (the system adds WS_CAPTION at creation); with the menu flag but no menu the client is 20 taller"
+  return: "1"
+errors:
+  none: "no error cases observed"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "ccd_basic",
+      "exe_sha256": "c81dc0ac184363317f1c8b396a56ef71a8deb72b589d50017545915efdf40490",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dHlwZT0xMCBiaXRzcGl4ZWw9MzIgcGxhbmVzPTEgdGV4dD0weDAwMDAwMCBiaz0weGZmZmZmZiBtb2RlPTIKc3RvY2sgb2JqZWN0czogYnJ1c2ggd2hpdGUgMSBwZW4gYmxhY2sgMSBmb250IHN5c3RlbSAxCml0cyBiaXRtYXA6IEdldE9iamVjdD0zMiAxeDEgYnBwPTEgcGxhbmVzPTEgd2lkdGhieXRlcz0yIGJpdHNfbnVsbD0xCmNsaXAgYm94IGtpbmQ9MiAwLDAsMSwxCkNyZWF0ZUNvbXBhdGlibGVCaXRtYXAobWVtb3J5IERDLCAxMCwgNSk6IEdldE9iamVjdD0zMiAxMHg1IGJwcD0xIHBsYW5lcz0xIHdpZHRoYnl0ZXM9MiBiaXRzX251bGw9MQpDcmVhdGVDb21wYXRpYmxlQml0bWFwKHNjcmVlbiwgMTAsIDUpOiBHZXRPYmplY3Q9MzIgMTB4NSBicHA9MzIgcGxhbmVzPTEgd2lkdGhieXRlcz00MCBiaXRzX251bGw9MQpjb21wYXRpYmxlIHdpdGggYSBtZW1vcnkgREM6IHR5cGU9MTAKb2sgcmVnaXN0ZXJlZApjb21wYXRpYmxlIHdpdGggYSB3aW5kb3cgREM6IHR5cGU9MTAgYml0c3BpeGVsPTMyCkNyZWF0ZUNvbXBhdGlibGVCaXRtYXAgMHgwOiB3aW5kb3cKICBpdDogR2V0T2JqZWN0PTMyIDF4MSBicHA9MSBwbGFuZXM9MSB3aWR0aGJ5dGVzPTIgYml0c19udWxsPTEKRGVsZXRlREM6IDEgMSAxCnR5cGUgYWZ0ZXIgRGVsZXRlREM6IDMKRGVsZXRlREMgYWdhaW46IDAgZXJyb3IgMApzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "type=10 bitspixel=32 planes=1 text=0x000000 bk=0xffffff mode=2\nstock objects: brush white 1 pen black 1 font system 1\nits bitmap: GetObject=32 1x1 bpp=1 planes=1 widthbytes=2 bits_null=1\nclip box kind=2 0,0,1,1\nCreateCompatibleBitmap(memory DC, 10, 5): GetObject=32 10x5 bpp=1 planes=1 widthbytes=2 bits_null=1\nCreateCompatibleBitmap(screen, 10, 5): GetObject=32 10x5 bpp=32 planes=1 widthbytes=40 bits_null=1\ncompatible with a memory DC: type=10\nok registered\ncompatible with a window DC: type=10 bitspixel=32\nCreateCompatibleBitmap 0x0: window\n  it: GetObject=32 1x1 bpp=1 planes=1 widthbytes=2 bits_null=1\nDeleteDC: 1 1 1\ntype after DeleteDC: 3\nDeleteDC again: 0 error 0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

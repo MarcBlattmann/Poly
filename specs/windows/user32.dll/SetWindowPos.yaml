@@ -1,0 +1,69 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/SetWindowPos
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  Moves, sizes, shows/hides or reorders a window. It sends
+  WM_WINDOWPOSCHANGING (the WINDOWPOS can be changed), WM_GETMINMAXINFO for
+  windows with a thick frame or caption when sizing, WM_NCCALCSIZE(TRUE)
+  when the size or frame changes, and WM_WINDOWPOSCHANGED, whose default
+  handling sends WM_MOVE and WM_SIZE for what changed. A call that changes
+  nothing sends only WM_WINDOWPOSCHANGING.
+interface:
+  signature: "BOOL SetWindowPos(HWND hwnd, HWND insert_after, int x, int y, int cx, int cy, UINT flags)"
+rules:
+  move: "child to 20,30: CHANGING(20,30 size 0,0 flags 0x15), CHANGED(20,30 50x50, 0x81d), WM_MOVE(20,30)"
+  size: "to 70x40: CHANGING(0,0 70x40, 0x16), WM_NCCALCSIZE(TRUE, new rect in parent client coordinates, 0x181e), CHANGED(0x101e), WM_SIZE(0, 70,40)"
+  both: "CHANGING(0x14), NCCALCSIZE(0x181c), CHANGED(0x1c), WM_MOVE, WM_SIZE"
+  no_change: "same position and size, or SWP_NOMOVE|SWP_NOSIZE: only CHANGING"
+  nosendchanging: "no CHANGING; CHANGED flags include 0x400"
+  framechanged: "CHANGING(0x37), NCCALCSIZE(0x183f), CHANGED(0x183f), no WM_MOVE/WM_SIZE when nothing moved"
+  show_hide: "SWP_SHOWWINDOW: CHANGING(0x57), CHANGED(0x185f); SWP_HIDEWINDOW: CHANGING(0x97), CHANGED(0x189f); no WM_SHOWWINDOW"
+  negative_size: "sizes below 0 become 0"
+  changing_handler: "a WM_WINDOWPOSCHANGING handler that changes cx, x, or adds SWP_NOMOVE changes the result accordingly (adding SWP_NOMOVE to a move-only call: nothing more is sent)"
+  changed_handler: "a procedure that answers WM_WINDOWPOSCHANGED itself gets no WM_MOVE/WM_SIZE"
+  minmax: "WS_OVERLAPPEDWINDOW: WM_GETMINMAXINFO after WM_WINDOWPOSCHANGING; the size is clamped to the min/max track size the procedure returns (150x120..250x220 asked: 50x50 -> 150x120, 400x400 -> 250x220); a frameless popup gets no WM_GETMINMAXINFO"
+  zorder: "new children go below their siblings (GW_CHILD = the first created); HWND_BOTTOM / HWND_TOP of a window already there sends only CHANGING(0x13); moving C after A in A B C gives A C B with CHANGING(0x13) and CHANGED(0x181b), no WM_MOVE/WM_SIZE"
+  return: "1"
+errors:
+  bad_handle: "0, ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there. WINDOWPOS flags as observed: the caller's SWP_* bits plus
+  0x800 (client area keeps its size) and 0x1000 (client area does not move)
+  in WM_WINDOWPOSCHANGED and WM_NCCALCSIZE where true; 0x8000 when the
+  minimized/maximized state changes; a WM_WINDOWPOSCHANGING for a show/hide
+  carries pos 0,0 size 0,0 with SWP_NOMOVE|SWP_NOSIZE.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

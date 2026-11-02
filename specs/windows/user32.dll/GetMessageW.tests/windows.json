@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "gm_basic",
+      "exe_sha256": "11c27ad1f63f47a49bbd46fc7e64f9191f68c190d3262c814adebd92a1320e04",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApmaWx0ZXIgQjogcmV0dXJuZWQgMSBCIG1zZ18weDA0MDIgdz0yIGw9MjAgZXJyb3I9MApmaWx0ZXIgLTEgKHRocmVhZCBtZXNzYWdlcyk6IHJldHVybmVkIDEgdGhyZWFkIG1zZ18weDA0MDMgdz0zIGw9MzAgZXJyb3I9MApyYW5nZSBXTV9BUFAuLldNX0FQUCsxMDogcmV0dXJuZWQgMSBBIG1zZ18weDgwMDQgdz00IGw9NDAgZXJyb3I9MApubyBmaWx0ZXI6IHJldHVybmVkIDEgQSBtc2dfMHgwNDAxIHc9MSBsPTEwIGVycm9yPTAKbm8gZmlsdGVyOiByZXR1cm5lZCAxIEIgbXNnXzB4MDQwNSB3PTUgbD0tNTAgZXJyb3I9MAphZnRlciBQb3N0UXVpdE1lc3NhZ2UoMTcpOiByZXR1cm5lZCAxIEEgbXNnXzB4MDQwNiB3PTYgbD02MCBlcnJvcj0wCnRoZW46IHJldHVybmVkIDAgdGhyZWFkIFdNX1FVSVQgdz0xNyBsPTAgZXJyb3I9MApiYWQgd2luZG93IGZpbHRlcjogcmV0dXJuZWQgLTEgdGhyZWFkIFdNX05VTEwgdz0wIGw9MCBlcnJvcj0xNDAwCmFmdGVyd2FyZHM6IHJldHVybmVkIDEgQSBtc2dfMHgwNDA3IHc9NyBsPTcwIGVycm9yPTAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nfilter B: returned 1 B msg_0x0402 w=2 l=20 error=0\nfilter -1 (thread messages): returned 1 thread msg_0x0403 w=3 l=30 error=0\nrange WM_APP..WM_APP+10: returned 1 A msg_0x8004 w=4 l=40 error=0\nno filter: returned 1 A msg_0x0401 w=1 l=10 error=0\nno filter: returned 1 B msg_0x0405 w=5 l=-50 error=0\nafter PostQuitMessage(17): returned 1 A msg_0x0406 w=6 l=60 error=0\nthen: returned 0 thread WM_QUIT w=17 l=0 error=0\nbad window filter: returned -1 thread WM_NULL w=0 l=0 error=1400\nafterwards: returned 1 A msg_0x0407 w=7 l=70 error=0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 244
+    }
+  ]
+}

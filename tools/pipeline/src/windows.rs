@@ -35,8 +35,10 @@ pub const CORPUS_DIR: &str = "tests/windows";
 /// The support library every test links.
 pub const SUPPORT_CRATE: &str = "tests/windows/support";
 pub const TARGET: &str = "x86_64-pc-windows-msvc";
-/// The only DLLs a test program may import from (by name).
-pub const ALLOWED_DLLS: &[&str] = &["ntdll.dll", "kernel32.dll"];
+/// The only DLLs a test program may import from (by name): the native
+/// API, `kernel32`, and the GUI's `user32` and `gdi32` (Phase 7's window,
+/// message and painting entries).
+pub const ALLOWED_DLLS: &[&str] = &["ntdll.dll", "kernel32.dll", "user32.dll", "gdi32.dll"];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
 
@@ -239,7 +241,7 @@ pub fn check_image_with(bytes: &[u8], allowed: &[&str]) -> Result<BTreeMap<Strin
         let d = d.map_err(|e| format!("imports: {e:?}"))?;
         let dll = String::from_utf8_lossy(d.dll_name().map_err(|e| format!("{e:?}"))?).to_ascii_lowercase();
         if !allowed.contains(&dll.as_str()) {
-            return Err(format!("imports from {dll}; only {} are allowed", allowed.join(" and ")));
+            return Err(format!("imports from {dll}; only {} are allowed", allowed.join(", ")));
         }
         let names = out.entry(dll.clone()).or_default();
         for e in d.entries().map_err(|e| format!("{e:?}"))? {
@@ -1200,14 +1202,17 @@ mod tests {
     }
 
     #[test]
-    fn images_import_by_name_from_ntdll_and_kernel32_only() {
+    fn images_import_by_name_from_the_allowed_dlls_only() {
         let ok = image(&[("NTDLL.dll", &["NtClose", "NtCreateFile"]), ("kernel32.dll", &["ExitProcess"])], 3);
         let check_image = |b: &[u8]| check_image_with(b, ALLOWED_DLLS);
         let imports = check_image(&ok).unwrap();
         assert_eq!(imports["ntdll.dll"], ["NtClose", "NtCreateFile"]);
         assert_eq!(imports["kernel32.dll"], ["ExitProcess"]);
-        let other = image(&[("user32.dll", &["MessageBoxW"])], 3);
-        assert!(check_image(&other).unwrap_err().contains("user32.dll"));
+        // GUI tests (Phase 7) import user32 and gdi32, still as console programs.
+        let gui_dlls = image(&[("USER32.dll", &["CreateWindowExW"]), ("gdi32.dll", &["BitBlt"])], 3);
+        assert_eq!(check_image(&gui_dlls).unwrap()["user32.dll"], ["CreateWindowExW"]);
+        let other = image(&[("shell32.dll", &["SHGetFolderPathW"])], 3);
+        assert!(check_image(&other).unwrap_err().contains("shell32.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);
         assert!(check_image(&gui).unwrap_err().contains("subsystem 2"));
         assert!(check_image(b"MZ not really").is_err());

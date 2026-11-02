@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "wt_set",
+      "exe_sha256": "cf4256c2426ae5c417316559aa8cd31accb790572d664267703d3add6958ddf8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApjcmVhdGVkOiB0ZXh0IDUgIlN0YXJ0IgotLSBzZXQgSGVsbG86IHJldHVybmVkIDEgZXJyb3I9LTEKICBXIFdNX1NFVFRFWFQgIkhlbGxvLCB3b3JsZCIKb2sgbHBhcmFtX2lzX2NhbGxlcnNfc3RyaW5nCmFmdGVyIHNldDogdGV4dCAxMiAiSGVsbG8sIHdvcmxkIgotLSBzZXQgTlVMTDogcmV0dXJuZWQgMSBlcnJvcj0tMQogIFcgV01fU0VUVEVYVCAiIiAobnVsbCkKYWZ0ZXIgTlVMTDogdGV4dCAwICIiCi0tIHNldCBlbXB0eTogcmV0dXJuZWQgMSBlcnJvcj0tMQogIFcgV01fU0VUVEVYVCAiIgphZnRlciBlbXB0eTogdGV4dCAwICIiCi0tIHNldCB3aGlsZSB0aGUgcHJvY2VkdXJlIHJlZnVzZXM6IHJldHVybmVkIDEgZXJyb3I9LTEKICBXIFdNX1NFVFRFWFQgIlJlZnVzZWQiCmFmdGVyIHJlZnVzZWQ6IHRleHQgMCAiIgpsb25nIHRleHQ6IHNldD0xIGdvdD0xMDAwIGxlbmd0aD0xMDAwIHNhbWU9MQotLSBiYWQgaGFuZGxlOiByZXR1cm5lZCAxIGVycm9yPS0xCi0tIGNoaWxkOiByZXR1cm5lZCAxIGVycm9yPS0xCiAgVyBXTV9TRVRURVhUICJLaWQyIgpjaGlsZDogdGV4dCA0ICJLaWQyIgpzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\ncreated: text 5 \"Start\"\n-- set Hello: returned 1 error=-1\n  W WM_SETTEXT \"Hello, world\"\nok lparam_is_callers_string\nafter set: text 12 \"Hello, world\"\n-- set NULL: returned 1 error=-1\n  W WM_SETTEXT \"\" (null)\nafter NULL: text 0 \"\"\n-- set empty: returned 1 error=-1\n  W WM_SETTEXT \"\"\nafter empty: text 0 \"\"\n-- set while the procedure refuses: returned 1 error=-1\n  W WM_SETTEXT \"Refused\"\nafter refused: text 0 \"\"\nlong text: set=1 got=1000 length=1000 same=1\n-- bad handle: returned 1 error=-1\n-- child: returned 1 error=-1\n  W WM_SETTEXT \"Kid2\"\nchild: text 4 \"Kid2\"\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

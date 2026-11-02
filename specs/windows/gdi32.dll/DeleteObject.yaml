@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/gdi32.dll/DeleteObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  Deletes a GDI object (pen, brush, bitmap, font, region). Stock objects are
+  not deleted. Objects selected into a DC are deleted when deselected
+  (brushes) or when the DC is deleted (bitmaps).
+interface:
+  signature: "BOOL DeleteObject(HGDIOBJ obj)"
+rules:
+  success: "brush, pen, bitmap: 1"
+  solid_brush_after: "a deleted solid brush still has type OBJ_BRUSH; a second DeleteObject fails"
+  stock: "stock brush/font: 1, and they stay usable"
+  selected_brush: "deleting a brush selected into a DC returns 1; the DC keeps painting with it; after another brush is selected it is gone (type 0)"
+  selected_bitmap: "a bitmap selected into a memory DC: 1, but it stays (type OBJ_BITMAP) until the DC is deleted; then a DeleteObject fails"
+  dc: "DeleteObject of a memory DC returns 1 (GetObjectType then still says OBJ_DC); DeleteDC is the call for DCs; a deleted DC also still reads OBJ_DC (observed) while its bitmap is free again"
+errors:
+  invalid: "a second delete, NULL, a made-up handle: 0, last error 0"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/DispatchMessageW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  Calls the window procedure of msg.hwnd with the message and returns its
+  result; WM_TIMER with a registered TIMERPROC in lParam calls that instead.
+interface:
+  signature: "LRESULT DispatchMessageW(const MSG* msg)"
+rules:
+  call: "the procedure gets hwnd, message, wParam, lParam; InSendMessage is 0 inside; the result is returned"
+  made_up: "a MSG never queued is dispatched the same way"
+  thread_message: "hwnd NULL: nothing called, returns 0"
+  other_thread: "a window of another thread of the process: its procedure runs on the calling thread, the result is returned"
+  timer_callback: "WM_TIMER of a timer set with a TIMERPROC: the callback gets (hwnd, WM_TIMER, id, tick) and the window procedure nothing; the return value is nonzero (22 observed)"
+  fake_timer: "a WM_TIMER made up or posted by hand whose lParam is a function not registered with SetTimer: neither that function nor the window procedure is called; returns 0"
+errors:
+  bad_window: "0, ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

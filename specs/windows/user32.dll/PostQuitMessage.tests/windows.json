@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "pq_basic",
+      "exe_sha256": "e99374d05418d8464da4997668764a92ebb5be5d0257a59fa073cdd9d7b8cdbd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApxdWV1ZSBzdGF0dXMgd2l0aCBhIG1lc3NhZ2UgYW5kIHF1aXQgcGVuZGluZyAweDgwMDA4CkdldE1lc3NhZ2VXIDEgbXNnXzB4MDQwMSB3PTEgaHduZF9udWxsPTAKR2V0TWVzc2FnZVcgMSBtc2dfMHgwNDAyIHc9MiBod25kX251bGw9MApwZWVrIG5vcmVtb3ZlIDEgV01fUVVJVCB3PTYKR2V0TWVzc2FnZVcgMCBXTV9RVUlUIHc9NiBod25kX251bGw9MQphZnRlciByZWFkaW5nIGl0OiBwZWVrIDAKcXVldWUgc3RhdHVzIHdpdGggb25seSBxdWl0IHBlbmRpbmcgMHg4MDAwOApHZXRNZXNzYWdlVyAwIFdNX1FVSVQgdz00Mjk0OTY3Mjk1IGh3bmRfbnVsbD0xCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nqueue status with a message and quit pending 0x80008\nGetMessageW 1 msg_0x0401 w=1 hwnd_null=0\nGetMessageW 1 msg_0x0402 w=2 hwnd_null=0\npeek noremove 1 WM_QUIT w=6\nGetMessageW 0 WM_QUIT w=6 hwnd_null=1\nafter reading it: peek 0\nqueue status with only quit pending 0x80008\nGetMessageW 0 WM_QUIT w=4294967295 hwnd_null=1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

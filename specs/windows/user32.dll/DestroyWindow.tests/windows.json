@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "dw_errors",
+      "exe_sha256": "896843238d849e9762c3c0b1682ad1db02119fd81104c6875341cc9a0b360725",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApudWxsOiByZXN1bHQ9MCBlcnJvcj0xNDAwCm1hZGVfdXA6IHJlc3VsdD0wIGVycm9yPTE0MDAKZGVza3RvcDogcmVzdWx0PTAgZXJyb3I9NQpwYXJlbnQ6IHJlc3VsdD0xIGVycm9yPS0xCldNX0RFU1RST1kgaXN3aW5kb3c9MSBjaGlsZD0xIHRleHRsZW49NiB2aXNpYmxlPTAKV01fREVTVFJPWSBpc3dpbmRvdz0xIGNoaWxkPTAgdGV4dGxlbj01IHZpc2libGU9MApXTV9OQ0RFU1RST1kgaXN3aW5kb3c9MSBjaGlsZD0wIHRleHRsZW49NSB2aXNpYmxlPTAKV01fTkNERVNUUk9ZIGlzd2luZG93PTEgY2hpbGQ9MCB0ZXh0bGVuPTYgdmlzaWJsZT0wCnBhcmVudF9hZ2FpbjogcmVzdWx0PTAgZXJyb3I9MTQwMApwb3N0X3RvX2Rlc3Ryb3llZDogcmVzdWx0PTAgZXJyb3I9MTQwMAotLSBxdWV1ZSBhZnRlciBkZXN0cm95CmRyYWluZWQgbXNnXzB4MDQwMiB3PTB4MCBsPTB4MApvayBvdGhlcl90aHJlYWRfd2luZG93Cm90aGVyX3RocmVhZDogcmVzdWx0PTAgZXJyb3I9NQpvayBvdGhlcl9zdXJ2aXZlcwpvayBvdGhlcl9nb25lX2FmdGVyX2l0c190aHJlYWRfZGVzdHJveWVkX2l0CnN1bW1hcnkgNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nnull: result=0 error=1400\nmade_up: result=0 error=1400\ndesktop: result=0 error=5\nparent: result=1 error=-1\nWM_DESTROY iswindow=1 child=1 textlen=6 visible=0\nWM_DESTROY iswindow=1 child=0 textlen=5 visible=0\nWM_NCDESTROY iswindow=1 child=0 textlen=5 visible=0\nWM_NCDESTROY iswindow=1 child=0 textlen=6 visible=0\nparent_again: result=0 error=1400\npost_to_destroyed: result=0 error=1400\n-- queue after destroy\ndrained msg_0x0402 w=0x0 l=0x0\nok other_thread_window\nother_thread: result=0 error=5\nok other_survives\nok other_gone_after_its_thread_destroyed_it\nsummary 4 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    },
+    {
+      "name": "dw_order",
+      "exe_sha256": "43ee307a8ea4fa457dc4c4d4bdb946e0e286525c6ec22a61f4ca0906772388ec",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBjcmVhdGVkCi0tIGRlc3Ryb3kgY2hpbGQgQyBhbG9uZQpvayBkZXN0cm95X2NoaWxkX3Jlc3VsdApQIFdNX1BBUkVOVE5PVElGWSBldmVudD1XTV9ERVNUUk9ZIGlkPTQgbD0xCkMgV01fREVTVFJPWSB3PTB4MCBsPTB4MApDIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MAotLSBkZXN0cm95IHRoZSBwYXJlbnQKb2sgZGVzdHJveV9wYXJlbnRfcmVzdWx0ClAgV01fREVTVFJPWSB3PTB4MCBsPTB4MApBIFdNX0RFU1RST1kgdz0weDAgbD0weDAKRyBXTV9ERVNUUk9ZIHc9MHgwIGw9MHgwCkIgV01fREVTVFJPWSB3PTB4MCBsPTB4MApHIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MApBIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MApCIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MApQIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MAppc3dpbmRvdyBwPTAgYT0wIGI9MCBnPTAgYz0wCnN1bW1hcnkgNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok created\n-- destroy child C alone\nok destroy_child_result\nP WM_PARENTNOTIFY event=WM_DESTROY id=4 l=1\nC WM_DESTROY w=0x0 l=0x0\nC WM_NCDESTROY w=0x0 l=0x0\n-- destroy the parent\nok destroy_parent_result\nP WM_DESTROY w=0x0 l=0x0\nA WM_DESTROY w=0x0 l=0x0\nG WM_DESTROY w=0x0 l=0x0\nB WM_DESTROY w=0x0 l=0x0\nG WM_NCDESTROY w=0x0 l=0x0\nA WM_NCDESTROY w=0x0 l=0x0\nB WM_NCDESTROY w=0x0 l=0x0\nP WM_NCDESTROY w=0x0 l=0x0\niswindow p=0 a=0 b=0 g=0 c=0\nsummary 4 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "dw_visible",
+      "exe_sha256": "c852c4bbd78df85ed0173e10e935ae80a42aa0e6218fe4946e770df0cd3aecd3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBjcmVhdGVkCi0tIGRlc3Ryb3kgdGhlIHZpc2libGUgY2hpbGQKUCBXTV9QQVJFTlROT1RJRlkgZXZlbnQ9V01fREVTVFJPWSBpZD05IGw9MQpDIFdNX1NIT1dXSU5ET1cgdz0weDAgbD0weDAKQyBXTV9XSU5ET1dQT1NDSEFOR0lORyBwb3M9MCwwIHNpemU9MCwwIGZsYWdzPTB4OTcKQyBXTV9XSU5ET1dQT1NDSEFOR0VEIHBvcz0xMCwxMCBzaXplPTUwLDUwIGZsYWdzPTB4MTg5NwpDIFdNX0RFU1RST1kgdz0weDAgbD0weDAKQyBXTV9OQ0RFU1RST1kgdz0weDAgbD0weDAKLS0gZGVzdHJveSB0aGUgdmlzaWJsZSBwb3B1cApQIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHg5NwpQIFdNX1dJTkRPV1BPU0NIQU5HRUQgcG9zPTAsMCBzaXplPTIwMCwyMDAgZmxhZ3M9MHgxODk3ClAgV01fREVTVFJPWSB3PTB4MCBsPTB4MApQIFdNX05DREVTVFJPWSB3PTB4MCBsPTB4MApzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok created\n-- destroy the visible child\nP WM_PARENTNOTIFY event=WM_DESTROY id=9 l=1\nC WM_SHOWWINDOW w=0x0 l=0x0\nC WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x97\nC WM_WINDOWPOSCHANGED pos=10,10 size=50,50 flags=0x1897\nC WM_DESTROY w=0x0 l=0x0\nC WM_NCDESTROY w=0x0 l=0x0\n-- destroy the visible popup\nP WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x97\nP WM_WINDOWPOSCHANGED pos=0,0 size=200,200 flags=0x1897\nP WM_DESTROY w=0x0 l=0x0\nP WM_NCDESTROY w=0x0 l=0x0\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

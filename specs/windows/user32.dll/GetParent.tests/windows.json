@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "gp_relations",
+      "exe_sha256": "08a4e3cb1d081f96f6f2b713f48c304a428d15201feaacac40c1e2d978620c76",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApHZXRQYXJlbnQoQSkgPSBudWxsIGVycm9yPTAKR2V0UGFyZW50KEIpID0gbnVsbCBlcnJvcj0wCkdldFBhcmVudChDKSA9IEEgZXJyb3I9MApHZXRQYXJlbnQoTykgPSBBIGVycm9yPTAKR2V0UGFyZW50KFYpID0gbnVsbCBlcnJvcj0wCkdldFBhcmVudChkZXNrdG9wKSA9IG51bGwgZXJyb3I9MApHZXRQYXJlbnQoYmFkKSA9IG51bGwgZXJyb3I9MTQwMApTZXRQYXJlbnQoQywgQikgcmV0dXJuZWQgQQogIEMgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDUKICBDIFdNX0NISUxEQUNUSVZBVEUgdz0weDAgbD0weDAKR2V0UGFyZW50KEMpID0gQiBJc0NoaWxkKEIsQyk9MSBJc0NoaWxkKEEsQyk9MApTZXRQYXJlbnQoQywgTlVMTCkgcmV0dXJuZWQgQgogIEMgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDUKICBDIFdNX0NISUxEQUNUSVZBVEUgdz0weDAgbD0weDAKYWZ0ZXI6IEdldFBhcmVudChDKSA9IGRlc2t0b3AgZ2FfcGFyZW50PWRlc2t0b3Agc3R5bGUgY2hpbGQ9MQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nGetParent(A) = null error=0\nGetParent(B) = null error=0\nGetParent(C) = A error=0\nGetParent(O) = A error=0\nGetParent(V) = null error=0\nGetParent(desktop) = null error=0\nGetParent(bad) = null error=1400\nSetParent(C, B) returned A\n  C WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x5\n  C WM_CHILDACTIVATE w=0x0 l=0x0\nGetParent(C) = B IsChild(B,C)=1 IsChild(A,C)=0\nSetParent(C, NULL) returned B\n  C WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x5\n  C WM_CHILDACTIVATE w=0x0 l=0x0\nafter: GetParent(C) = desktop ga_parent=desktop style child=1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

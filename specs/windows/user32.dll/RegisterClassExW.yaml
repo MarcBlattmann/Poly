@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/RegisterClassExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  Registers a window class local to the process. Returns an atom in the
+  string-atom range (0xC000..0xFFFF); the class is then known by its name
+  (compared without regard to letter case) and by that atom, and
+  GetClassInfoExW / GetClassLongPtrW / GetClassNameW report the registered
+  fields.
+interface:
+  signature: "ATOM RegisterClassExW(const WNDCLASSEXW* wc)"
+  WNDCLASSEXW: "winuser.h layout, 80 bytes on x64; cbSize must be exactly 80"
+  return: "the class atom, >= 0xC000; GetClassInfoExW returns the same atom (not just TRUE)"
+rules:
+  lookup: "by name in any letter case or by atom (MAKEINTATOM as the class pointer): GetClassInfoExW, CreateWindowExW, FindWindowW"
+  stored_fields: "style (CS_*), cbClsExtra, cbWndExtra, lpfnWndProc, hInstance, hbrBackground, menu name are returned as given; GetClassInfoExW sets lpszClassName to the caller's argument pointer"
+  class_longs: "GetClassLongPtrW: GCW_ATOM the atom, GCL_STYLE, GCL_CBWNDEXTRA, GCL_CBCLSEXTRA, GCLP_HBRBACKGROUND as registered; class extra bytes start at 0; an index past them returns 0 with ERROR_INVALID_INDEX"
+  class_name: "GetClassNameW returns the name as registered (its case), the count without NUL; a short buffer gets a truncated, NUL-terminated name (buffer 5: 4 characters)"
+  unicode: "windows of a class registered with the W function are Unicode (IsWindowUnicode 1)"
+  null_instance: "a class registered with hInstance NULL is found by GetClassInfoExW with NULL or with the executable's instance; it reports hInstance NULL; its windows report the executable's instance in GWLP_HINSTANCE; UnregisterClassW with NULL removes it"
+  system_classes: "GetClassInfoExW finds \"Button\", \"Static\", \"Edit\" with a NULL instance and with the executable's instance (\"Button\": style 0x8b, cbWndExtra 8, cbClsExtra 0)"
+  override_system_class: "a local class may be registered under a system class name (\"Button\"); CreateWindowExW then uses the local class"
+  limits: "cbWndExtra 40000 accepted; a 255-character name accepted; lpfnWndProc NULL accepted"
+errors:
+  same_name: "a second registration of a name (any case): 0, ERROR_CLASS_ALREADY_EXISTS (1410)"
+  cbsize: "cbSize 0, 88 or 72: 0, ERROR_INVALID_PARAMETER (87)"
+  negative_extra: "cbWndExtra -1 or cbClsExtra -4: 0, ERROR_INVALID_PARAMETER"
+  long_name: "256 characters: 0, ERROR_INVALID_PARAMETER"
+  empty_name: "\"\": 0, ERROR_INVALID_NAME (123)"
+  no_class: "GetClassInfoExW of a name never registered: 0, ERROR_CLASS_DOES_NOT_EXIST (1411); CreateWindowExW of it: NULL, ERROR_CANNOT_FIND_WND_CLASS (1407)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

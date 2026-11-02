@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "uc_basic",
+      "exe_sha256": "a5a6ee692484be453bb7e7ef4fe426ddda3d237bed5688fccefc1d53d9b14511",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApieV91cHBlcl9uYW1lOiByZXN1bHQ9MSBlcnJvcj0tMQphZ2FpbjogcmVzdWx0PTAgZXJyb3I9MTQxMQpvayBsb29rdXBfYWZ0ZXJfdW5yZWdpc3RlcgpvayBsb29rdXBfZXJyb3IKb2sgbm9fd2luZG93X2FmdGVyX3VucmVnaXN0ZXIKb2sgY3JlYXRlX2Vycm9yCm9rIHJlZ2lzdGVyZWRfYWdhaW4Kc2Vjb25kX2F0b21fc2FtZV9hc19maXJzdD0xCmJ5X2F0b206IHJlc3VsdD0xIGVycm9yPS0xCmJ5X2F0b21fYWdhaW46IHJlc3VsdD0wIGVycm9yPTYKb2sgcmVnaXN0ZXJlZF90aGlyZF90aW1lCm51bGxfaW5zdGFuY2U6IHJlc3VsdD0xIGVycm9yPS0xCm5ldmVyX3JlZ2lzdGVyZWQ6IHJlc3VsdD0wIGVycm9yPTE0MTEKc3lzdGVtX2NsYXNzX2J1dHRvbjogcmVzdWx0PTAgZXJyb3I9MTQxMQphdG9tX3plcm86IHJlc3VsdD0wIGVycm9yPTg3CnN1bW1hcnkgNyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nby_upper_name: result=1 error=-1\nagain: result=0 error=1411\nok lookup_after_unregister\nok lookup_error\nok no_window_after_unregister\nok create_error\nok registered_again\nsecond_atom_same_as_first=1\nby_atom: result=1 error=-1\nby_atom_again: result=0 error=6\nok registered_third_time\nnull_instance: result=1 error=-1\nnever_registered: result=0 error=1411\nsystem_class_button: result=0 error=1411\natom_zero: result=0 error=87\nsummary 7 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}
