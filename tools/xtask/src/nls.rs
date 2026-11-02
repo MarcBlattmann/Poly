@@ -192,9 +192,8 @@ fn download(root: &Path) -> Result<PathBuf, String> {
 }
 
 fn check_sha(path: &Path, want: &str) -> Result<(), String> {
-    let out = Command::new("sha256sum").arg(path).output().map_err(|e| format!("sha256sum: {e}"))?;
-    let got = String::from_utf8_lossy(&out.stdout);
-    if got.split_whitespace().next() != Some(want) {
+    let got = crate::sha256::file(path).ok_or_else(|| format!("{}: cannot be read", path.display()))?;
+    if got != want {
         return Err(format!("{} does not have the pinned SHA-256 {want} (got {got})", path.display()));
     }
     Ok(())

@@ -178,10 +178,7 @@ pub fn cache_dir() -> PathBuf {
 }
 
 fn sha256(path: &Path) -> Option<String> {
-    let out = Command::new("sha256sum").arg(path).stderr(Stdio::null()).output().ok()?;
-    // GNU sha256sum starts the line with a backslash when the path has one
-    // (a Windows path): the sum follows it.
-    String::from_utf8_lossy(&out.stdout).split_whitespace().next().map(|s| s.trim_start_matches('\\').to_string())
+    crate::sha256::file(path)
 }
 
 fn matches(path: &Path, size: u64, sum: &str) -> bool {
@@ -200,11 +197,8 @@ pub fn shell_cache_dir() -> PathBuf {
     cache_dir().with_file_name(format!("shell-{SHELL_VERSIONS}"))
 }
 
-/// SHA-256 in pure Rust, as lower-case hex.
 fn sha256_hex(data: &[u8]) -> String {
-    let mut h = poly_crypto::sha256::Sha256::new();
-    h.update(data);
-    h.finish().iter().map(|b| format!("{b:02x}")).collect()
+    crate::sha256::hex(data)
 }
 
 fn file_matches(path: &Path, size: u64, sum: &str) -> bool {
@@ -304,7 +298,9 @@ fn fetch_dejavu() -> Result<PathBuf> {
         eprintln!("==> {} holds the pinned DejaVu {VERSION} fonts", dir.display());
         return Ok(dir);
     }
-    for tool in ["curl", "sha256sum", "tar", "bzip2"] {
+    // GNU tar runs `bzip2` for `-j`; Windows' tar (bsdtar) has it built in.
+    let tools: &[&str] = if cfg!(unix) { &["curl", "tar", "bzip2"] } else { &["curl", "tar"] };
+    for tool in tools {
         if Command::new(tool).arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_err() {
             return Err(format!("fetching the fonts needs `{tool}`"));
         }
@@ -337,11 +333,14 @@ fn fetch_dejavu() -> Result<PathBuf> {
     std::fs::create_dir_all(&unpack).map_err(|e| format!("{}: {e}", unpack.display()))?;
     let mut members: Vec<String> = FILES.iter().map(|(f, _, _)| format!("{ARCHIVE_DIR}/ttf/{f}")).collect();
     members.push(format!("{ARCHIVE_DIR}/{LICENSE}"));
+    // Paths relative to the cache directory: GNU tar (Git Bash's) reads
+    // `C:\...` as a remote host.
     let unpacked = Command::new("tar")
+        .current_dir(&dir)
         .arg("-xjf")
-        .arg(&archive)
+        .arg(ARCHIVE)
         .arg("-C")
-        .arg(&unpack)
+        .arg("unpack")
         .arg("--no-same-owner")
         .arg("--")
         .args(&members)

@@ -106,6 +106,7 @@ mod rootdisk;
 mod screen;
 mod sevenzip;
 mod sevenzip_trace;
+mod sha256;
 mod sound;
 mod symbols;
 mod sysmsg;
