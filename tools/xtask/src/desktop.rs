@@ -51,6 +51,7 @@
 //! PNGs, one per step.
 
 use super::{Boot, Result, Symbols, boot_with, compositor, has_desktop, initramfs, qemu, root, screen};
+use crate::hostscreen;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -85,7 +86,11 @@ pub fn append(extra: &str) -> String {
 /// QEMU's devices for the desktop: a virtio GPU of [`SIZE`], a virtio
 /// keyboard and tablet.
 pub fn devices() -> Vec<String> {
-    let (w, h) = SIZE;
+    devices_sized(SIZE)
+}
+
+/// [`devices`] with a virtio GPU of `(w, h)`.
+pub fn devices_sized((w, h): (u32, u32)) -> Vec<String> {
     [
         "-vga",
         "none",
@@ -155,14 +160,41 @@ fn image_with(name: &str, extra: Vec<(String, u16, Vec<u8>)>) -> Result<PathBuf>
 /// `/mnt/poly/shell.conf`).
 pub const STATE_FILE: &str = "poly-desktop-state.img";
 
-/// `cargo xtask desktop [--release] [--fresh-state] [kernel args...]`: boot
-/// into the desktop in a QEMU window (no window without a desktop: then a
-/// VNC display on port 5900). The settings live on a small disk,
-/// `target/poly-desktop-state.img`, so they survive from one run to the
-/// next (`--fresh-state` starts again with the defaults).
+/// `cargo xtask desktop [--release] [--fresh-state] [--size=WxH]
+/// [--scale=N] [kernel args...]`: boot into the desktop in a QEMU window
+/// (no window without a desktop: then a VNC display on port 5900). The
+/// settings live on a small disk, `target/poly-desktop-state.img`, so they
+/// survive from one run to the next (`--fresh-state` starts again with the
+/// defaults).
+///
+/// The screen is [`SIZE`] times the host's display scale, with Poly's own
+/// scale (`poly.display.scale=`) set to it, so text and icons are drawn
+/// sharp at the host's pixel density instead of stretched by the host; a
+/// smaller scale (or screen) where that would not fit the host's main
+/// screen ([`hostscreen::fit`]). `--scale=N` and `--size=WxH` override them.
+/// A scale other than 1 is given to the compositor as `--scale`, so it wins
+/// over the scale in the saved settings.
 pub fn command(args: &[String]) -> Result {
     let release = args.iter().any(|a| a == "--release");
     let fresh = args.iter().any(|a| a == "--fresh-state");
+    let value = |name: &str| args.iter().find_map(|a| a.strip_prefix(name)).map(str::to_string);
+    let asked = match value("--scale=") {
+        Some(v) => {
+            Some(v.parse::<u32>().ok().filter(|s| (1..=4).contains(s)).ok_or(format!("--scale={v}: expected 1 to 4"))?)
+        }
+        None => None,
+    };
+    let host = hostscreen::main_screen();
+    // (size, scale) for the host's main screen.
+    let fitted = host.map(|h| hostscreen::fit(SIZE, h, WINDOW_TITLE));
+    let scale = asked.or(fitted.map(|f| f.1)).unwrap_or(1);
+    let size = match value("--size=") {
+        Some(v) => parse_size(&v).ok_or(format!("--size={v}: expected WxH, such as 2560x1600"))?,
+        None => match fitted {
+            Some((size, s)) if asked.is_none() || asked == Some(s) => size,
+            _ => (SIZE.0 * scale, SIZE.1 * scale),
+        },
+    };
     let extra: Vec<&str> = args.iter().map(String::as_str).filter(|a| !a.starts_with("--")).collect();
     let kernel = super::build_kernel(release)?;
     let image = image()?;
@@ -173,17 +205,59 @@ pub fn command(args: &[String]) -> Result {
     } else {
         eprintln!("==> the settings disk {} is kept from before (--fresh-state starts again)", state.display());
     }
-    let kernel_args = format!("{} {}", SETTINGS_ARGS, extra.join(" "));
+    // The compositor's `--scale` wins over the saved settings' scale (which
+    // a run at another scale may have saved): asked for, or the host's when
+    // that is not 1. At scale 1 the settings choose, as before.
+    let force = if asked.is_some() || scale != 1 {
+        format!("poly.init.arg=--scale poly.init.arg={scale}")
+    } else {
+        String::new()
+    };
+    let kernel_args = format!("{SETTINGS_ARGS} poly.display.scale={scale} {force} {}", extra.join(" "));
     let mut cmd = qemu(&kernel, MEMORY, &append(kernel_args.trim_end()), super::Devices::None, "mon:stdio");
-    cmd.arg("-initrd").arg(&image).args(devices()).args(state_drive(&state));
-    if has_desktop() {
+    cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
+    eprintln!("==> screen {}x{} at scale {scale} (--size=WxH, --scale=N)", size.0, size.1);
+    let sdl = window_display(&mut cmd);
+    let mut child = cmd.spawn().map_err(|e| format!("qemu: {e}"))?;
+    if let (true, Some(h)) = (sdl, host) {
+        hostscreen::place_window(child.id(), size, h);
+    }
+    let _ = child.wait().map_err(|e| format!("qemu: {e}"))?;
+    Ok(())
+}
+
+/// The height of QEMU's window title bar, in logical pixels (room left
+/// for it when the window is fitted to the screen).
+const WINDOW_TITLE: u32 = 32;
+
+/// `WxH` as a screen size (each side 320 to 8192).
+fn parse_size(v: &str) -> Option<(u32, u32)> {
+    let (w, h) = v.split_once(['x', 'X'])?;
+    let side = |s: &str| s.parse::<u32>().ok().filter(|n| (320..=8192).contains(n));
+    Some((side(w)?, side(h)?))
+}
+
+/// The QEMU window an interactive desktop boot shows on (`POLY_QEMU_DISPLAY`
+/// overrides it; VNC on port 5900 without a desktop); whether it is SDL's.
+/// On Windows that is SDL, marked DPI-aware so Windows does not stretch it:
+/// QEMU's GTK window there tells the guest its size in scaled units (a
+/// 1280x800 screen became 640x480, stretched back up).
+pub fn window_display(cmd: &mut std::process::Command) -> bool {
+    if let Some(display) = std::env::var("POLY_QEMU_DISPLAY").ok().filter(|d| !d.is_empty()) {
+        cmd.args(["-display", &display]);
+        eprintln!("==> QEMU display {display} (POLY_QEMU_DISPLAY)");
+        return display.starts_with("sdl");
+    } else if cfg!(windows) {
+        cmd.args(["-display", "sdl"]).env("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2");
+        eprintln!("==> the desktop is in QEMU's window; the Windows key or Ctrl+Space toggles the launcher");
+        return true;
+    } else if has_desktop() {
         eprintln!("==> the desktop is in QEMU's window; the Windows key or Ctrl+Space toggles the launcher");
     } else {
         cmd.args(["-display", "vnc=0.0.0.0:0"]);
         eprintln!("==> no desktop here: the screen is on VNC, port 5900 (Ctrl-A X quits)");
     }
-    let _ = cmd.status().map_err(|e| format!("qemu: {e}"))?;
-    Ok(())
+    false
 }
 
 /// Where the screenshots go.

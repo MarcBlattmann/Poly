@@ -100,6 +100,7 @@ mod ext4disk;
 mod font;
 mod fonts;
 mod hostfs;
+mod hostscreen;
 mod initramfs;
 mod input;
 mod ktest;
@@ -1851,11 +1852,11 @@ fn lint() -> Result {
 }
 
 /// The boot tests a second time on QEMU's emulator, when the first ran on
-/// KVM: the self-test boots, so code paths only TCG takes (and TCG's own
+/// a hypervisor: the self-test boots, so code paths only TCG takes (and TCG's own
 /// quirks) stay tested. A separate xtask, since the accelerator is chosen
 /// once per process.
 fn tcg_boot_tests() -> Result {
-    if accel::get() != accel::Accel::Kvm {
+    if accel::get() == accel::Accel::Tcg {
         return Ok(());
     }
     let xtask = std::env::current_exe().map_err(|e| format!("the xtask binary: {e}"))?;
