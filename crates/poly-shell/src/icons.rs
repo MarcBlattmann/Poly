@@ -565,8 +565,40 @@ pub mod lucide {
     /// lucide `bluetooth`.
     pub const BLUETOOTH: Icon = Icon(&["m7 7 10 10-5 5V2l5 5L7 17"]);
 
+    /// lucide `plus`.
+    pub const PLUS: Icon = Icon(&["M5 12h14", "M12 5v14"]);
+    /// lucide `refresh-cw`.
+    pub const REFRESH_CW: Icon = Icon(&[
+        "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8",
+        "M21 3v5h-5",
+        "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16",
+        "M8 16H3v5",
+    ]);
+    /// lucide `layout-dashboard`.
+    pub const LAYOUT_DASHBOARD: Icon = Icon(&[
+        "M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z",
+        "M15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1z",
+        "M15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z",
+        "M4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1z",
+    ]);
+    /// lucide `command`.
+    pub const COMMAND: Icon = Icon(&["M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"]);
+    /// lucide `sun-moon`.
+    pub const SUN_MOON: Icon = Icon(&[
+        "M12 2v2",
+        "M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715",
+        "M16 12a4 4 0 0 0-4-4",
+        "m19 5-1.256 1.256",
+        "M20 12h2",
+    ]);
+
     /// Every icon above (for tests).
     pub const ALL: &[Icon] = &[
+        PLUS,
+        REFRESH_CW,
+        LAYOUT_DASHBOARD,
+        COMMAND,
+        SUN_MOON,
         APP_WINDOW,
         BELL,
         CALENDAR_CLOCK,

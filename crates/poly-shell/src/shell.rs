@@ -44,7 +44,10 @@ use poly_wayland::compose::{Framebuffer, Layer, Rect, WindowId};
 
 pub use panels::{ControlView, Panel};
 
-const WHITE: u32 = 0xff_ffff;
+/// What the shell draws on its surfaces with (white, or black in the light theme).
+pub(crate) fn fg() -> u32 {
+    crate::theme::pal().ink
+}
 
 /// What a pointer press did.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,6 +70,9 @@ pub enum Press {
 /// The system menu's actions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Power {
+    /// End the session: every app's window closes and the desktop starts
+    /// empty again (Poly has no login screen).
+    LogOut,
     Restart,
     ShutDown,
 }
@@ -145,6 +151,9 @@ pub struct Shell {
     /// What the surface covered when last drawn (logical).
     surface_extent: Rect,
     pointer: (i32, i32),
+    /// The windows' rectangles, logical (frames included): Alpine draws its
+    /// ridge's edge only over windows.
+    cover: Vec<Rect>,
     /// Settings changes made in the panels, for the compositor.
     changes: Vec<Change>,
     /// The wallpaper drawn once at the screen's size, copied from then on.
@@ -185,6 +194,7 @@ impl Shell {
             panels: panels::State::default(),
             motion: Motion::default(),
             surface_extent: Rect::default(),
+            cover: Vec::new(),
             pointer: (-1, -1),
             changes: Vec::new(),
             wall: core::cell::RefCell::new(None),
@@ -293,6 +303,7 @@ impl Shell {
     /// Settings read at start: wallpaper and time zone take effect.
     pub fn set_settings(&mut self, s: Settings) {
         self.settings = s;
+        crate::theme::set_light(self.settings.theme == "light");
         self.zone = self.settings.zone();
         self.clock.clear();
         self.damage.push(self.screen());
@@ -307,6 +318,10 @@ impl Shell {
         }
         match c {
             Change::Wallpaper(_) => self.damage.push(self.screen()),
+            Change::Theme(t) => {
+                crate::theme::set_light(t == "light");
+                self.damage.push(self.screen());
+            }
             Change::TimeZone(_) => {
                 self.zone = self.settings.zone();
                 // The clock is drawn again with the next time set.
@@ -376,6 +391,49 @@ impl Shell {
             self.apps = apps;
             self.launcher.requery(&self.apps);
             self.touch();
+        }
+    }
+
+    /// Where the windows are (logical, frames included). Over them the
+    /// ridge and its surface get Alpine's 1-pixel edge (white at 12 %, black
+    /// in the light theme) while the pointer is on the ridge or a surface
+    /// hangs from it (`ChromeCanvas`'s `windowCoverage`).
+    pub fn set_window_cover(&mut self, rects: &[Rect]) {
+        if rects != self.cover.as_slice() {
+            for r in self.cover.iter().chain(rects) {
+                self.damage.push(r.intersect(&self.edge_band()));
+            }
+            self.cover = rects.to_vec();
+        }
+    }
+
+    /// Where the edge can be: the row under the ridge and the surface.
+    fn edge_band(&self) -> Rect {
+        let row = Rect::new(0, rt::HEIGHT, self.width, 1);
+        let e = self.current_extent();
+        if e.is_empty() { row } else { row.union(&Rect::new(e.x - 1, e.y, e.width + 2, e.height + 1)) }
+    }
+
+    /// Whether the edge shows (where windows are).
+    fn edge_shows(&self) -> bool {
+        !self.cover.is_empty()
+            && ((0..rt::HEIGHT).contains(&self.pointer.1) || self.motion.drawn(self.now_ms).is_some())
+    }
+
+    fn draw_edge(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
+        if !self.edge_shows() {
+            return;
+        }
+        let alpha = crate::theme::RIDGE_EDGE_ALPHA;
+        for c in &self.cover {
+            let cl = clip.intersect(&c.scale(s));
+            if cl.is_empty() {
+                continue;
+            }
+            match self.motion.drawn(self.now_ms) {
+                Some((_, g, h)) => g.chrome(rt::HEIGHT, h, s).outline(fb, cl, self.width * s, s, fg(), alpha),
+                None => fill(fb, cl, Rect::new(0, rt::HEIGHT * s, self.width * s, s), fg(), alpha),
+            }
         }
     }
 
@@ -553,8 +611,12 @@ impl Shell {
         if changed || extent != self.surface_extent || self.motion.animating(self.now_ms) {
             for r in [self.surface_extent, extent] {
                 if !r.is_empty() {
-                    self.damage.push(r);
+                    // With the edge's pixel around it.
+                    self.damage.push(Rect::new(r.x - 1, r.y, r.width + 2, r.height + 1));
                 }
+            }
+            if !self.cover.is_empty() && (self.surface_extent.is_empty() != extent.is_empty()) {
+                self.damage.push(Rect::new(0, rt::HEIGHT, self.width, 1));
             }
             self.surface_extent = extent;
         }
@@ -744,7 +806,11 @@ impl Shell {
     /// panel, leaving the item and the panel closes it.
     pub fn pointer_motion(&mut self, x: i32, y: i32) {
         let before = self.pointer;
+        let shows = self.edge_shows();
         self.pointer = (x, y);
+        if shows != self.edge_shows() {
+            self.damage.push(self.edge_band());
+        }
         let ridge = self.ridge_layout();
         if ridge.clock.contains(before.0, before.1) != ridge.clock.contains(x, y) {
             self.damage.push(self.ridge_rect());
@@ -960,51 +1026,46 @@ impl Shell {
         if ridge.intersect(&clip).is_empty() {
             return;
         }
-        fill(fb, clip, ridge, rt::BACKGROUND, 255);
+        fill(fb, clip, ridge, crate::theme::pal().bar, 255);
         let l = self.ridge_layout();
         let fs = s as f32;
         let icon_y = ((rt::HEIGHT - rt::ICON) / 2 * s) as f32;
         // The system menu: Lucide's dashed circle.
-        lucide::CIRCLE_DASHED.draw(fb, clip, (rt::MENU_ICON_X * s) as f32, icon_y, (rt::ICON * s) as f32, WHITE, 255);
+        lucide::CIRCLE_DASHED.draw(fb, clip, (rt::MENU_ICON_X * s) as f32, icon_y, (rt::ICON * s) as f32, fg(), 255);
         // The clock, in a pill that lights up under the pointer.
         let st = Style::new(Face::Sans, rt::TEXT_SIZE).scaled(s);
         let clock = l.clock.scale(s);
         if l.clock.contains(self.pointer.0, self.pointer.1) || self.panel == Some(Panel::Calendar) {
-            rounded_rect(fb, clip, clock, clock.height / 2, WHITE, rt::PILL_ALPHA);
+            rounded_rect(fb, clip, clock, clock.height / 2, fg(), rt::PILL_ALPHA);
         }
         let baseline = self.text.centre(clock.y, clock.height, st);
         let tx = (clock.x + rt::PILL_PADDING * s) as f32;
-        self.text.draw_style(fb, clip, tx, baseline, ridge.right(), &self.clock, st, rt::TEXT, 255);
+        self.text.draw_style(fb, clip, tx, baseline, ridge.right(), &self.clock, st, fg(), 255);
         // The status pill: network and volume.
         let pill = l.status.scale(s);
-        rounded_rect(fb, clip, pill, pill.height / 2, WHITE, rt::PILL_ALPHA);
+        rounded_rect(fb, clip, pill, pill.height / 2, fg(), rt::PILL_ALPHA);
         let ix = (pill.x + rt::PILL_PADDING * s) as f32;
         let size = (rt::ICON * s) as f32;
+        // Alpine's status face: Bluetooth (crossed out: no adapter), then the
+        // network (the Ethernet port when wired, Wi-Fi crossed out when not).
+        lucide::BLUETOOTH_OFF.draw(fb, clip, ix, icon_y, size, fg(), 255);
         let net: (Icon, u8) = match self.network {
             Network::Online(_) => (lucide::ETHERNET_PORT, 255),
             Network::Unknown => (lucide::ETHERNET_PORT, 128),
             Network::Offline => (lucide::WIFI_OFF, 255),
         };
-        net.0.draw(fb, clip, ix, icon_y, size, WHITE, net.1);
-        let (vol, a) = match self.volume {
-            Some((_, true)) => (lucide::VOLUME_X, 255),
-            Some((0, false)) => (lucide::VOLUME, 255),
-            Some((v, false)) if v <= 50 => (lucide::VOLUME_1, 255),
-            Some(_) => (lucide::VOLUME_2, 255),
-            None => (lucide::VOLUME_X, 128),
-        };
-        vol.draw(fb, clip, ix + ((rt::ICON + rt::GAP) * s) as f32, icon_y, size, WHITE, a);
+        net.0.draw(fb, clip, ix + ((rt::ICON + rt::GAP) * s) as f32, icon_y, size, fg(), net.1);
         // The unread notifications in the middle: a dot and the count.
         if let Some(n) = l.notice {
             let n = n.scale(s);
             let cy = n.y + n.height / 2;
             let dr = rt::NOTICE_DOT * s / 2;
             let dx = n.x + 6 * s + dr;
-            draw::circle(fb, clip, dx, cy, dr, None, WHITE, rt::NOTICE_DOT_ALPHA);
+            draw::circle(fb, clip, dx, cy, dr, None, fg(), rt::NOTICE_DOT_ALPHA);
             let ns = Style::new(Face::Sans, rt::NOTICE_SIZE).scaled(s);
             let x = (n.x + (6 + rt::NOTICE_DOT + rt::NOTICE_GAP) * s) as f32;
             let b = self.text.centre(n.y, n.height, ns);
-            self.text.draw_style(fb, clip, x, b, n.right(), &self.unread_label(), ns, WHITE, rt::NOTICE_ALPHA);
+            self.text.draw_style(fb, clip, x, b, n.right(), &self.unread_label(), ns, fg(), rt::NOTICE_ALPHA);
         }
         let _ = fs;
     }
@@ -1018,7 +1079,7 @@ impl Shell {
         if shape.bounds().intersect(&clip).is_empty() {
             return;
         }
-        shape.fill(fb, clip, rt::BACKGROUND, 255);
+        shape.fill(fb, clip, crate::theme::pal().bar, 255);
         // The contents slide down with the opening surface and are cut at
         // its edge (logical body at full height, moved up by what is hidden).
         let hidden = (g.height - h).max(0.0) as i32;
@@ -1045,7 +1106,7 @@ impl Shell {
         let cy = search.y + search.height / 2;
         let gx = search.x + lt::SEARCH_PADDING * s;
         let gs = lt::SEARCH_ICON * s;
-        lucide::SEARCH.draw(fb, clip, gx as f32, (cy - gs / 2) as f32, gs as f32, WHITE, lt::SEARCH_ICON_ALPHA);
+        lucide::SEARCH.draw(fb, clip, gx as f32, (cy - gs / 2) as f32, gs as f32, fg(), lt::SEARCH_ICON_ALPHA);
         let tx = gx + (lt::SEARCH_ICON + lt::SEARCH_GAP) * s;
         let st = Style::new(Face::Sans, lt::INPUT_SIZE).scaled(s);
         let baseline = self.text.centre(search.y, search.height, st);
@@ -1060,33 +1121,33 @@ impl Shell {
                 right,
                 lt::PLACEHOLDER,
                 st,
-                WHITE,
+                fg(),
                 lt::PLACEHOLDER_ALPHA,
             );
             tx as f32
         } else {
-            self.text.draw_style(fb, clip, tx as f32, baseline, right, query, st, WHITE, 255)
+            self.text.draw_style(fb, clip, tx as f32, baseline, right, query, st, fg(), 255)
         };
         let caret_h = 18 * s;
-        fill(fb, clip, Rect::new(end as i32 + s / 2, cy - caret_h / 2, s.max(1), caret_h), WHITE, 255);
+        fill(fb, clip, Rect::new(end as i32 + s / 2, cy - caret_h / 2, s.max(1), caret_h), fg(), 255);
         if l.rows == 0 {
             return;
         }
         let w = l.body.width * s;
         let bx = l.body.x * s;
-        fill(fb, clip, Rect::new(bx, search.bottom(), w, s), WHITE, lt::DIVIDER_ALPHA);
+        fill(fb, clip, Rect::new(bx, search.bottom(), w, s), fg(), lt::DIVIDER_ALPHA);
         // The section title: 11 px medium at 50 %, `px-2.5 pt-2`.
         let sst = Style::new(Face::Medium, lt::SECTION_SIZE).scaled(s);
         let sx = bx + (lt::LIST_PADDING + lt::ROW_PADDING) * s;
         let sb = search.bottom() + s + 8 * s + (sst.size * 1.5 / 2.0 + self.text.cap(sst) / 2.0) as i32;
         let windows = self.window_rows();
         let first = if windows > 0 { "Windows" } else { "Apps" };
-        self.text.draw_style(fb, clip, sx as f32, sb, bx + w, first, sst, WHITE, lt::SECTION_ALPHA);
+        self.text.draw_style(fb, clip, sx as f32, sb, bx + w, first, sst, fg(), lt::SECTION_ALPHA);
         if windows > 0 && windows < l.rows {
             let r = self.row_rect(&l, windows).scale(s);
             let ab =
                 r.y - (lt::SECTION_HEIGHT - 2) * s + 8 * s + (sst.size * 1.5 / 2.0 + self.text.cap(sst) / 2.0) as i32;
-            self.text.draw_style(fb, clip, sx as f32, ab, bx + w, "Apps", sst, WHITE, lt::SECTION_ALPHA);
+            self.text.draw_style(fb, clip, sx as f32, ab, bx + w, "Apps", sst, fg(), lt::SECTION_ALPHA);
         }
         for (i, &app) in self.launcher.results().iter().enumerate() {
             let row = self.row_rect(&l, i).scale(s);
@@ -1095,9 +1156,9 @@ impl Shell {
             }
             let app = &self.apps[app];
             if self.launcher.selected() == Some(i) {
-                rounded_rect(fb, clip, row, lt::ROW_RADIUS * s, WHITE, lt::SELECTED_ALPHA);
+                rounded_rect(fb, clip, row, lt::ROW_RADIUS * s, fg(), lt::SELECTED_ALPHA);
             } else if self.launcher.hover() == Some(i) {
-                rounded_rect(fb, clip, row, lt::ROW_RADIUS * s, WHITE, lt::HOVER_ALPHA);
+                rounded_rect(fb, clip, row, lt::ROW_RADIUS * s, fg(), lt::HOVER_ALPHA);
             }
             // The icon: a Lucide glyph at 40 % in the 28-pixel box.
             let ib = lt::ICON_BOX * s;
@@ -1110,7 +1171,7 @@ impl Shell {
             };
             let gsz = lt::GLYPH * s;
             let (gx, gy) = (icon.x + (ib - gsz) / 2, icon.y + (ib - gsz) / 2);
-            glyph.draw(fb, clip, gx as f32, gy as f32, gsz as f32, WHITE, ink::ICON);
+            glyph.draw(fb, clip, gx as f32, gy as f32, gsz as f32, fg(), ink::ICON);
             // Name and description: 13 px over 11 px at 50 %.
             let tx = (icon.right() + lt::ROW_ICON_GAP * s) as f32;
             let tst = Style::new(Face::Sans, lt::TITLE_SIZE).scaled(s);
@@ -1126,15 +1187,15 @@ impl Shell {
                 let sb = top + 19.5 * fs + (16.5 * fs + self.text.cap(sst)) / 2.0;
                 (tb as i32, sb as i32)
             };
-            self.text.draw_style(fb, clip, tx, title_b, right, &app.name, tst, WHITE, 255);
+            self.text.draw_style(fb, clip, tx, title_b, right, &app.name, tst, fg(), 255);
             if !app.comment.is_empty() {
-                self.text.draw_style(fb, clip, tx, sub_b, right, &app.comment, sst, WHITE, lt::SUBTITLE_ALPHA);
+                self.text.draw_style(fb, clip, tx, sub_b, right, &app.comment, sst, fg(), lt::SUBTITLE_ALPHA);
             }
         }
         // The footer: what Enter does.
         if let Some(f) = l.footer {
             let f = f.scale(s);
-            fill(fb, clip, Rect::new(f.x, f.y - s, f.width, s), WHITE, lt::DIVIDER_ALPHA);
+            fill(fb, clip, Rect::new(f.x, f.y - s, f.width, s), fg(), lt::DIVIDER_ALPHA);
             let fst = Style::new(Face::Sans, lt::FOOTER_SIZE).scaled(s);
             let cst = Style::new(Face::Sans, lt::CHIP_SIZE).scaled(s);
             let chip = "\u{21b5}";
@@ -1142,14 +1203,14 @@ impl Shell {
             let ch = 16 * s + 2 * s;
             let x = f.right() - lt::SEARCH_PADDING * s - cw;
             let chip_rect = Rect::new(x, f.y + (f.height - ch) / 2, cw, ch);
-            rounded_rect(fb, clip, chip_rect, 4 * s, WHITE, ink::SELECTED);
+            rounded_rect(fb, clip, chip_rect, 4 * s, fg(), ink::SELECTED);
             let cb = self.text.centre(chip_rect.y, chip_rect.height, cst);
-            self.text.draw_style(fb, clip, (x + 6 * s) as f32, cb, chip_rect.right(), chip, cst, WHITE, ink::CHIP_TEXT);
+            self.text.draw_style(fb, clip, (x + 6 * s) as f32, cb, chip_rect.right(), chip, cst, fg(), ink::CHIP_TEXT);
             let label = "Open";
             let lw = self.text.measure(label, fst) as i32;
             let lx = x - 6 * s - lw;
             let lb = self.text.centre(f.y, f.height, fst);
-            self.text.draw_style(fb, clip, lx as f32, lb, lx + lw + s, label, fst, WHITE, lt::SUBTITLE_ALPHA);
+            self.text.draw_style(fb, clip, lx as f32, lb, lx + lw + s, label, fst, fg(), lt::SUBTITLE_ALPHA);
         }
     }
 
@@ -1159,19 +1220,19 @@ impl Shell {
         for (i, (card, e)) in cards.iter().zip(self.switcher.entries()).enumerate() {
             let c = card.scale(s);
             let r = sw::RADIUS * s;
-            rounded_rect(fb, clip, c, r, WHITE, sw::CARD_ALPHA);
+            rounded_rect(fb, clip, c, r, fg(), sw::CARD_ALPHA);
             if i == self.switcher.selected() {
-                draw::rounded_border(fb, clip, c, r, 2 * s, WHITE, sw::SELECTED_ALPHA);
+                draw::rounded_border(fb, clip, c, r, 2 * s, fg(), sw::SELECTED_ALPHA);
             } else {
-                rounded_outline(fb, clip, c, r, WHITE, sw::RING_ALPHA);
+                rounded_outline(fb, clip, c, r, fg(), sw::RING_ALPHA);
             }
             // The name row: an app glyph and the title.
             let isz = sw::ICON * s;
-            lucide::APP_WINDOW.draw(fb, clip, (c.x + 6 * s) as f32, (c.y + 6 * s) as f32, isz as f32, WHITE, 200);
+            lucide::APP_WINDOW.draw(fb, clip, (c.x + 6 * s) as f32, (c.y + 6 * s) as f32, isz as f32, fg(), 200);
             let base = self.text.centre(c.y, sw::HEADER * s, st);
             let alpha = if e.minimized { 153 } else { 255 };
             let tx = (c.x + 6 * s + isz + 8 * s) as f32;
-            self.text.draw_style(fb, clip, tx, base, c.right() - 6 * s, &e.title, st, WHITE, alpha);
+            self.text.draw_style(fb, clip, tx, base, c.right() - 6 * s, &e.title, st, fg(), alpha);
             // The thumbnail, centred in its area (dimmed if minimized).
             let area = Rect::new(c.x, c.y + sw::HEADER * s, c.width, sw::THUMB_HEIGHT * s);
             let th = &e.thumb;
@@ -1196,8 +1257,8 @@ impl Shell {
         if r.intersect(&clip).is_empty() {
             return;
         }
-        rounded_rect(fb, clip, r, ot::SNAP_RADIUS * s, WHITE, ot::SNAP_ALPHA);
-        rounded_outline(fb, clip, r, ot::SNAP_RADIUS * s, WHITE, ot::SNAP_OUTLINE_ALPHA);
+        rounded_rect(fb, clip, r, ot::SNAP_RADIUS * s, fg(), ot::SNAP_ALPHA);
+        rounded_outline(fb, clip, r, ot::SNAP_RADIUS * s, fg(), ot::SNAP_OUTLINE_ALPHA);
     }
 }
 
@@ -1242,6 +1303,7 @@ impl Layer for Above<'_> {
     fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: i32) {
         self.0.draw_snap(fb, clip, scale);
         self.0.draw_surface(fb, clip, scale);
+        self.0.draw_edge(fb, clip, scale);
     }
 }
 

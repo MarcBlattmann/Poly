@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 95 of 147 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 96 of 147 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">95 / 147 milestones · 65%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">96 / 147 milestones · 65%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -252,7 +252,7 @@
 <rect x="790.9" y="203.0" width="23.1" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
 </g>
 <text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">18/19</text>
-<text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
+<text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
 <g><title>✔ ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)</title>
 <rect x="340.0" y="233.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
 </g>
@@ -298,8 +298,8 @@
 <g><title>✔ The desktop (compositor, shell, notifications, settings) runs as native Poly processes; Linux apps' Wayland and X11 windows still reach it (the desktop and toolkits boot groups pass) (ADR 0126: ABI version 2 with sockets, handle passing, mappings, memory objects, process handles; poly-compositor and notify-send are native programs, Linux programs may execve them; boot groups wayland, wayland-kms, desktop, desktop-shell, xwayland and toolkits pass)</title>
 <rect x="710.2" y="233.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>The shell looks 1:1 like Alpine Shell: ridge with panels extending from it, centred launcher, notifications at the top right, settings window, its fonts, icons, colours, soft shadows and blur (screenshots match Alpine Shell's references)</title>
-<rect x="736.7" y="233.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ The shell looks 1:1 like Alpine Shell: ridge with panels extending from it, centred launcher, notifications at the top right, settings window, its fonts, icons, colours, soft shadows and blur (screenshots match Alpine Shell's references) (ADR 0127: surfaces hanging from the ridge, Alpine's fonts, Lucide icons and tokens, light and dark themes, the settings app in its current layout; compared with the live Alpine Shell and its screenshots, only intended differences left)</title>
+<rect x="736.7" y="233.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>✔ cargo xtask desktop builds and boots the desktop on a Windows host as well as on Linux (ADR 0126: the glibc build is gone, the C test clients are optional in its image)</title>
 <rect x="763.1" y="233.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
@@ -307,7 +307,7 @@
 <g><title>✔ Milestone: GTK and Qt apps run; VLC plays a video with sound (ADR 0120, 0123: GTK 3, GTK 4 and Qt 6 apps from the launcher, clicked and typed into; cvlc plays the test video with its sound through ALSA; VLC's Qt interface through Xwayland shows it; boot group toolkits)</title>
 <rect x="789.6" y="233.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">17/18</text>
+<text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">18/18</text>
 <text x="16.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 7  Windows GUI apps</text>
 <g><title>win32k services: windows, message queues, input routing, hooks, timers</title>
 <rect x="340.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>

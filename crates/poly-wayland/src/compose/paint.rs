@@ -311,6 +311,33 @@ impl Chrome {
         cov
     }
 
+    /// The shape grown outwards by `d` (the body wider and deeper, the
+    /// corners rounder, the concave shoulders tighter; their tips stay on
+    /// the bar's edge where they were).
+    pub fn grown(&self, d: f32) -> Chrome {
+        let (r, s) = self.sizes();
+        let b = self.body;
+        Chrome {
+            body: Box2 { x0: b.x0 - d, x1: b.x1 + d, y0: b.y0, y1: b.y1 + d },
+            radius: r + d,
+            shoulder: (s - d).max(0.0),
+            ..*self
+        }
+    }
+
+    /// Alpine's 1-pixel line around it and along the bar's bottom edge
+    /// (`barBorderPath`): `width` pixels outside the shape, then the bar's
+    /// edge to the screen's sides (`screen_w` wide), drawn within `clip`.
+    pub fn outline(&self, fb: &mut dyn Framebuffer, clip: Rect, screen_w: i32, width: i32, rgb: u32, alpha: u8) {
+        let outer = self.grown(width as f32);
+        let ob = outer.bounds();
+        paint(fb, clip, ob, Rect::default(), rgb, alpha, |x, y| (outer.coverage(x, y) - self.coverage(x, y)).max(0.0));
+        let top = ceil(self.body.y0) as i32;
+        for band in [Rect::new(0, top, ob.x, width), Rect::new(ob.right(), top, screen_w - ob.right(), width)] {
+            paint(fb, clip, band, band, rgb, alpha, |_, _| 1.0);
+        }
+    }
+
     /// Fill it with `rgb`.
     pub fn fill(&self, fb: &mut dyn Framebuffer, clip: Rect, rgb: u32, alpha: u8) {
         let (r, _) = self.sizes();

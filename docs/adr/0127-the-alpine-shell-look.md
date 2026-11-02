@@ -2,7 +2,8 @@
 
 **Status:** Accepted. Roadmap Phase 6, "The shell looks 1:1 like Alpine
 Shell…" (decision 2 of [ADR 0124](0124-native-desktop-alpine-shell-look-and-builds-on-windows-and-linux.md)).
-The milestone stays unticked: see "What still differs". It changes the
+The milestone is ticked: what still differs is intended or is content Poly
+does not have (see "What still differs"). It changes the
 shell of [ADR 0107](0107-desktop-fbdev-input-routing-and-shell.md) and
 [ADR 0117](0117-shell-window-management-notifications-and-settings.md)
 and the frame's colours of [ADR 0106](0106-wayland-server-core-and-software-compositor.md);
@@ -56,8 +57,8 @@ The surfaces:
 | Surface | Opened by | Alpine source | Poly |
 |---|---|---|---|
 | Launcher | the Windows key, Ctrl+Space, an empty desktop | `launcher/*` | hangs from the ridge's middle (was centred on the screen, ADR 0107): 720 wide, a 48 px search row (Lucide search 16 px at 60 %, 15 px text, placeholder at 40 %), a divider, the section title (11 px medium at 50 %), 48 px rows 2 px apart with a 28 px icon box (Lucide glyphs at 40 % for apps without icons), 13/11 px text, selected white 10 %, hovered 5 %, the footer (36 px, "Open" and a ↵ chip on white 10 %); the list at most 560 px or 70 % of the screen; nothing typed or nothing found shows the search row only |
-| System menu | the dashed circle (Lucide `circle-dashed`, 14 px) | `systemMenu.tsx` | Restart and Shut Down, 12 px at 80 % with 12 px icons, each confirmed by a second click ("Confirm restart?"); `Press::Power` makes the compositor `sync` and `reboot(2)` |
-| Control centre | the status pill | `status/controlCenter.tsx`, `controlSlider.tsx`, `soundMenu.tsx` | 260 wide, `p-3 gap-3`: Ethernet (the interface under it) and Sound (the card) rows with 17 px icons and 15 px chevrons, each opening a list (Output/Input; the interface) with a back arrow; the volume slider on `#3F3F3F` at 20 % with a 10 px white track over white 20 %, its speaker muting; the gear (24 px) opening the settings. Its changes reach the compositor through `Shell::take_changes` |
+| System menu | the dashed circle (Lucide `circle-dashed`, 14 px) | `systemMenu.tsx` | Log Out, Restart and Shut Down, 12 px at 80 % with 12 px icons, each confirmed by a second click ("Confirm log out?"); `Press::Power` makes the compositor end the session (below) or `sync` and `reboot(2)`. Hibernate is Alpine's only where the machine can hibernate (`power.hibernateShown()`); Poly cannot, so it is hidden as Alpine hides it |
+| Control centre | the status pill | `status/controlCenter.tsx`, `controlSlider.tsx`, `wifiMenu.tsx`, `bluetoothMenu.tsx`, `bluetoothPresentation.ts` | 260 wide, `p-3 gap-3`, as Alpine shows a machine without adapters: Wi-Fi (its radio reads as on when no adapter answers, so white, no network under it) and Bluetooth ("unavailable": dimmed) rows with 17 px icons and 15 px chevrons. Wi-Fi's list: its switch on, rescan, "No networks found" with Wi-Fi crossed out; Bluetooth's: add and rescan dimmed, the switch off and disabled, "No Bluetooth adapter". No Sound row (Alpine's is opt-in, `statusShowSound`, off by default) and no wired row (Alpine shows Ethernet in the status pill only). The volume slider on `#3F3F3F` at 20 % with a 10 px white track over white 20 % (light: black at 5 %, a white track over black at 8 %), its speaker muting; the gear (24 px) opening the settings. The status pill is Alpine's face: Bluetooth crossed out, then the network (Ethernet port when wired, Wi-Fi crossed out when not). Its changes reach the compositor through `Shell::take_changes` |
 | Calendar | the clock | `calendar/calendarFlyout.tsx` | one day (Alpine's default): a 46 px gutter and a 264 px column, the date heading (14 px medium) with day arrows and "Today", weekday in 9 px capitals, today's date in a white circle, the all-day strip, 44 px hours in a 416 px window scrolled to the time now, the red now line |
 | Notices | a notification | `noticeStrip.tsx` | against the right edge under the ridge (the owner's top right), newest first with dividers: 14 × 10 px padding, an 8 px dot (rose when critical), 12 px medium title at 95 %, 12 px message at 70 % in 16 px lines, the × at 60 %, action buttons on white 15 % |
 | History | the unread count in the ridge's middle, Super+N | (Alpine keeps none; its notice face `noticeFace.tsx` is the trigger) | 360 wide, "Notifications" and Clear, rows of title, time and message |
@@ -105,13 +106,62 @@ line), sections are an 11-pixel medium label over a group card (white at
 6 %, radius 12, rows at least 48 pixels with `px-3.5 py-2.5`, hairlines
 between), 32 pixels apart. Poly does the same with its pages: Home;
 Personal: Wallpaper; Devices: Displays, Sound, Keyboard; System: Date &
-time, About (Desktop has no Poly page yet and, as in Alpine, a section
-without pages has no tab). Home shows the wallpaper (236 × 132), "Poly",
+time, About; and Desktop (below). Home shows the wallpaper (236 × 132), "Poly",
 the system and processor, the memory in use as a bar (`MemAvailable`), and
 a card of rows to the pages with their values. The search finds pages by
 their names and words (volume, resolution, time zone, ...); typing in the
-window searches, Enter opens the first result, Escape clears. Dark theme
-with Alpine's dark tokens; Alpine's light theme is not added.
+window searches, Enter opens the first result, Escape clears.
+
+Desktop has Alpine's three pages. **Search**: the hotkey as Alpine's key
+cap (Win) and the most results (8). **Window tiling**: Alpine's "Enable
+window tiling" and, while it is on, Snapping (Win+Arrow snapping, Drag to
+zone) and Spacing (gap 8 px, outer margin 0 px, fixed: Poly's snapping has
+no gaps to set); the switches are Poly's snapping (settings keys `tiling`,
+`snap_keys`, `snap_drag`; the compositor asks `Settings::snaps`). Poly has
+always snapped, so tiling starts on where Alpine starts it off; Alpine's
+auto-tile mode, layouts and oversized-window rows are not there, as Poly
+has no auto-tiling. **Keyboard shortcuts**: Alpine's page, two columns
+from 1024 pixels, groups of fixed rows with key caps (22 px high, radius 5,
+`bg-fill-ghost`, a hairline ring and the strong line under them, Geist
+Mono 11 px) and the room of the invisible Set button; Poly's shortcuts
+(Search; Apps: Settings, Notifications; Windows: switch, snap, close)
+cannot be rebound, so the list is read-only. Personal has **Appearance**:
+Alpine's "Color mode", Light or Dark (settings key `theme`).
+
+### Light and dark
+
+`theme::Palette` holds every colour the shell draws with; `theme::pal()`
+is the one in use (one per process, `theme::set_light`, set from the
+settings and on a change). Dark is the tokens above. Light is Alpine's
+light tokens over its light ground `#d6d6d6`: surfaces the ground mixed
+with white at 60/85/45 % (`#eeeeee`, `#f9f9f9`, `#e8e8e8`), inks the ground
+mixed with black at 78/48/32 % (`#2f2f2f`, `#6f6f6f`, `#919191`), the
+strong line `#b4b4b4`, hairlines black at 9 %, ghost fills black at 5 %,
+tracks black at 15 %, knobs and text on solid colours white. The ridge,
+its surfaces (text and icons in black where they were white), the
+launcher, the notices, the settings window and the window frames
+(`Theme::LIGHT`: title bar `#d6d6d6`, inactive `#e4e4e4`, text `#2f2f2f`/
+`#6f6f6f`, border `#b4b4b4`, lighter shadows) follow it. The light
+pictures are compared with the live Alpine (homeserver2 runs light), the
+dark ones with the repository's dark screenshots.
+
+### Log Out
+
+Log Out ends the session as far as Poly has one: the settings window
+closes, every app window is asked to close (`xdg_toplevel.close`) and the
+apps the compositor started are stopped, and the launcher comes back on
+the empty desktop. Poly has no login screen or user sessions, so nothing
+else changes.
+
+### The ridge's edge over windows
+
+Alpine strokes a 1-pixel line (white at 12 %, black at 12 % on a light
+ridge; `topbarSurface.ts`) along the ridge's bottom edge and around the
+surface hanging from it (`barBorderPath`), only where windows lie under
+it and only while the pointer is on the ridge or a surface shows
+(`ChromeCanvas`, `windowCoverage`). Poly does the same: the compositor
+passes the windows' rectangles (`Shell::set_window_cover`) and the shell
+draws `paint::Chrome::outline` over them.
 
 ### The launcher lists open windows
 
@@ -228,7 +278,12 @@ launcher the section title's height became 31 (with the list's gap).
   system menu's confirmation, the control centre's slider, mute, lists and
   gear, the calendar's dates and days, the switcher, HiDPI.
 - `settings_ui`: every page fits and draws, controls in Alpine's colours,
-  the arrows' history, every change.
+  the arrows' history, every change, Appearance, Window tiling with and
+  without tiling, the shortcuts' caps.
+- `shell`: the control centre without adapters (Bluetooth's list), Log
+  Out's confirmation, the ridge's edge over windows only.
+- `tests/light.rs` draws the shell in the light theme (its own program, as
+  the theme is the process's) and checks the light ground.
 - The compositor's frame: rounded corners, the shadow fading out and
   damaged with the window, kept off a shell's rows.
 - `poly-font`: the vertically scaled rendering. `xtask`: CRC-32, stored,
@@ -240,32 +295,36 @@ launcher the section title's height became 31 (with the list's gap).
   launcher under the ridge, the switcher hanging from it, the settings
   window's controls at their new positions).
 
-## What still differs (why the milestone stays unticked)
+## What still differs
+
+Intended (the owner's direction or what cannot be shipped):
 
 - **Typeface of the ridge and the launcher.** Alpine's top bar and launcher
   inherit `system-ui`, which is Segoe UI on Windows (only the settings use
   Geist); Segoe UI cannot be shipped, so Poly uses Geist there too.
+- **The notices** hang from the ridge's middle in Alpine and at the top
+  right in Poly; **the clock** is 24-hour.
 - **Text rendering.** Alpine's Chromium draws ClearType (subpixel) text on
   opaque surfaces; Poly draws grayscale with light hinting.
+
+Not differences of the shell:
+
+- **The live screenshots' ridge colour** is navy (the user picked it on
+  homeserver2); Poly uses Alpine's default `#202020` (light: `#d6d6d6`).
+- **The window frame** is Poly's own: Alpine has none (it runs among
+  Windows 11's frames), so its colours follow the tokens and hovering its
+  buttons is not drawn.
 - **No live calendar or switcher.** The calendar needs a Google account
   connected and the switcher a real Alt+Tab; both follow Alpine's source.
-- **Settings content and theme.** The layout is Alpine's current one, but
-  homeserver2 runs it in the light theme (Poly: dark, no light theme yet);
-  Poly has no Desktop tab, no disk bar, no Network, Bluetooth, Battery,
-  Appearance or Ridge pages, and its search finds pages, not single
-  settings.
-- **The notices** hang from the ridge's middle in Alpine and at the top
-  right in Poly (the owner's direction).
-- **The screenshots' ridge colour** is navy (the user picked the wallpaper's
-  colour); Poly uses Alpine's default `#202020`.
-- **Content.** Poly's pages are its own (Displays has no arrangement
-  card, there is no Home, Appearance or search field in the sidebar); the
-  launcher has no settings, calculator or web rows, and no app icons; the control
-  centre has no Wi-Fi or Bluetooth; the system menu has no Log Out or
-  Hibernate; the clock is 24-hour.
-- The 1 px border Alpine draws along the ridge and around surfaces where
-  windows lie under them, and hover colours of the frame's buttons, are not
-  drawn.
+
+Content Poly does not have (features, not the look):
+
+- The launcher has no Calculator, Run, Commands, Settings, Bookmarks or
+  Web sections and no app icons; the settings search finds pages, not
+  single settings.
+- No Network, Bluetooth, Battery, Ridge or Apps settings pages, no disk
+  bar on Home, no display arrangement; Window tiling has no auto-tile
+  mode; gap and margin are fixed; shortcuts cannot be rebound.
 
 ## Consequences
 
@@ -276,8 +335,12 @@ launcher the section title's height became 31 (with the list's gap).
   `poly_shell::{chrome, icons}`, `draw::{Face, Style, Fonts}`,
   `Text::{with_fonts, draw_style, measure, centre}`, `Shell::{open_panel,
   close_panel, panel, surface, release, take_changes, set_sound_card,
-  set_animations}`, `Press::Power`; `poly_font::render_glyph_scaled`.
+  set_animations, set_window_cover}`, `Press::Power`, `theme::{Palette,
+  pal, set_light}`, `Theme::LIGHT`, `paint::Chrome::{grown, outline}`;
+  `poly_font::render_glyph_scaled`.
 - The compositor's changes: the fonts it loads, `Press::Power`, the
   release of a shell press, the panels' changes applied, no ridge hover
   while a window is dragged, the sound card's name for the control centre,
-  the wallpapers' pictures (`desktop::load_wallpapers`).
+  the wallpapers' pictures (`desktop::load_wallpapers`), the theme and the
+  snapping switches applied, Log Out, the windows' rectangles for the
+  ridge's edge.
