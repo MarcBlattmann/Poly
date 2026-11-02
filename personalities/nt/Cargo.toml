@@ -22,6 +22,8 @@ poly-security.workspace = true
 poly-seh.workspace = true
 # NT file I/O (ADR 0067) runs on the VFS.
 poly-vfs.workspace = true
+# win32k's logic: the service table, the desktop link (ADR 0128).
+poly-win32k.workspace = true
 
 [lints]
 workspace = true

@@ -36,6 +36,7 @@ pub const KNOWN_DLLS: &[&str] = &[
     "advapi32.dll",
     "user32.dll",
     "gdi32.dll",
+    "win32u.dll",
     "ws2_32.dll",
     "ole32.dll",
     "oleaut32.dll",

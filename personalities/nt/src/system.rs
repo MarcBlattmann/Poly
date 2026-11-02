@@ -75,6 +75,9 @@ pub struct NtSystem {
     /// the process ends.
     pub token_privileges: BTreeMap<ProcessId, Vec<(u32, u32)>>,
 
+    /// win32k's machine-wide state: the desktop link's surfaces (ADR 0128).
+    pub win32k: crate::win32k::Win32k,
+
     sections: BTreeMap<u64, Section>,
     next_key: u64,
 }
@@ -111,6 +114,7 @@ impl NtSystem {
             registry,
             process_exits: BTreeMap::new(),
             token_privileges: BTreeMap::new(),
+            win32k: crate::win32k::Win32k::default(),
             sections: BTreeMap::new(),
             next_key: 1,
         }
@@ -218,6 +222,10 @@ pub struct NtProcess {
     /// The user-mode exception dispatcher: `ntdll`'s
     /// `KiUserExceptionDispatcher` (ADR 0068, 0071); 0 for none.
     pub exception_dispatcher: u64,
+    /// The win32k lockdown (`ProcessSystemCallDisablePolicy`'s
+    /// `DisallowWin32kSystemCalls`): every table-1 call fails (ADR 0128).
+    /// Set by the security milestone; off for every process until then.
+    pub win32k_disabled: bool,
 }
 
 impl NtProcess {
@@ -237,6 +245,7 @@ impl NtProcess {
             default_stack_commit: 0x1000,
             exit_status: None,
             exception_dispatcher: 0,
+            win32k_disabled: false,
         }
     }
 

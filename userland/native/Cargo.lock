@@ -32,6 +32,7 @@ dependencies = [
  "poly-rt",
  "poly-shell",
  "poly-wayland",
+ "poly-win32k",
  "poly-x11",
 ]
 
@@ -121,6 +122,10 @@ dependencies = [
  "poly-gfx",
  "poly-input",
 ]
+
+[[package]]
+name = "poly-win32k"
+version = "0.0.1"
 
 [[package]]
 name = "poly-x11"
