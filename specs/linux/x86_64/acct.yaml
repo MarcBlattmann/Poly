@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/acct                 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64 (CONFIG_BSD_PROCESS_ACCT, version 3 records); tests run as root and as uid/gid 65534; files on /dev/shm (tmpfs)"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  acct(filename) (syscall 163; BusyBox accton) turns BSD process
+  accounting on for the caller's pid namespace, writing to filename, or
+  off with NULL. CAP_SYS_PACCT is checked first: without it every call is
+  EPERM (NULL, bad pointers and bad paths included). The file is opened
+  for appending; it must exist (ENOENT; also "" and a dangling symlink),
+  the path must resolve (ENOTDIR, ENAMETOOLONG, EFAULT), and it must be a
+  regular file (directory EISDIR, device such as /dev/null EACCES; a FIFO
+  blocks in the open until a reader appears, then EACCES). A failed call
+  leaves accounting as it was. While on, every process of the namespace
+  (and of namespaces below it) that ends appends one 64-byte struct
+  acct_v3 record, written before its parent's wait returns. Naming a file
+  while accounting is on switches to it (the same file again too); the
+  file left gets one record for the caller, as if it ended; acct(NULL)
+  likewise writes the caller's record into the file and turns accounting
+  off; acct(NULL) when off returns 0 and writes nothing. Record (linux/
+  acct.h acct_v3): ac_flag u8 at 0 (AFORK 0x01 forked and did not exec,
+  ASU 0x02, ACORE 0x08, AXSIG 0x10 killed by a signal), ac_version u8 = 3,
+  ac_tty u16 (0 without a controlling terminal), ac_exitcode u32 (the
+  wait status of an exit, e.g. 7 << 8; the signal number for a signal
+  death; 0 in the caller's switch/off record), ac_uid, ac_gid, ac_pid,
+  ac_ppid u32 (pids in the accounting namespace; a parent outside it is
+  0), ac_btime u32 (start, seconds since the epoch), ac_etime float32,
+  ac_utime/stime/mem/io/rw/minflt/majflt/swaps comp_t (u16), ac_comm[16]
+  (command name, NUL padded).
+returns:
+  success: "0"
+errors:
+  permission: "EPERM (1): no CAP_SYS_PACCT (checked first)"
+  missing: "ENOENT (2): file does not exist, empty path, dangling symlink"
+  notdir: "ENOTDIR (20): a path component is not a directory"
+  long: "ENAMETOOLONG (36): a component over 255 bytes"
+  fault: "EFAULT (14): filename unreadable"
+  directory: "EISDIR (21): a directory"
+  not_regular: "EACCES (13): not a regular file (/dev/null)"
+side_effects: "accounting state of the pid namespace; records appended to the file"
+threading: "none specific"
+ordering:
+  - "a process's record is in the file before its parent's wait returns"
+  - "switch/off: the caller's record goes to the file being left"
+timing:
+  typical: "microseconds per record"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: accounting is per pid namespace, so the record tests run in a pid
+# namespace of their own (pids 1, 2, 3 there; unaffected by other tests
+# running in parallel). Only AFORK/AXSIG/ACORE are checked of ac_flag (ASU
+# was seen set for an exec'd /bin/true run by root); times and memory
+# figures are never compared. Accounting is suspended when the file system
+# is nearly full (not tested). The error test never turns accounting on.

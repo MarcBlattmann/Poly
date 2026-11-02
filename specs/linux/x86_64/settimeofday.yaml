@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/settimeofday         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  settimeofday(tv, tz) (syscall 164) sets CLOCK_REALTIME from struct
+  timeval {i64 tv_sec; i64 tv_usec} and/or the kernel's time zone from
+  struct timezone {int tz_minuteswest; int tz_dsttime}; either pointer may
+  be NULL (both NULL: success, nothing changes, still needs the
+  capability). Order of checks: tv is read (EFAULT) and checked (tv_usec
+  in [0, 999999], tv_sec >= 0, else EINVAL); then tz is read (EFAULT);
+  then tv_sec is checked against the clock's range (a tv_sec such as
+  0x7fffffffffff is EINVAL); then CAP_SYS_TIME (EPERM); then
+  tz_minuteswest must be in [-900, 900] (EINVAL). Only after all checks
+  pass is anything changed: the time zone is stored as given (tz_dsttime
+  any int, gettimeofday(2) reports both fields back), then the clock is
+  set. Setting the clock steps CLOCK_REALTIME (not CLOCK_MONOTONIC) and
+  marks the NTP state unsynchronised (adjtimex(2) then reports STA_UNSYNC
+  and TIME_ERROR until a time daemon synchronises again).
+returns:
+  success: "0"
+errors:
+  tv_fault: "EFAULT (14): tv unreadable (checked first; also with any tz)"
+  tv_invalid: "EINVAL (22): tv_usec < 0 or > 999999, or tv_sec < 0 (before tz is read: an invalid tv with an unreadable tz is EINVAL)"
+  tz_fault: "EFAULT (14): tz unreadable (after tv was read and checked)"
+  tv_range: "EINVAL (22): tv_sec beyond the clock's range (e.g. 0x7fffffffffff); before the permission check"
+  permission: "EPERM (1): no CAP_SYS_TIME; for any call whose pointers and timeval are valid, including both NULL and a tz out of range"
+  tz_range: "EINVAL (22): tz_minuteswest < -900 or > 900 (root only; nothing is set, the clock neither)"
+side_effects: "sets the system-wide time zone and/or CLOCK_REALTIME; a clock set clears the NTP synchronised state"
+threading: "none specific"
+ordering:
+  - "tv read, tv check, tz read, tv range, permission, tz range, then the time zone is stored, then the clock is set"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct timeval/timezone from linux/time.h. Root tests set the clock
+# only to the time just read and restore the time zone they found. The
+# reference's initial time zone was {0, 0}. The permission tests drop to
+# uid/gid 65534 in a child when run as root.

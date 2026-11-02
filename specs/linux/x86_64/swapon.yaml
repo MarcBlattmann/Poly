@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/swapon               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534, children dropping to uid/gid 1000; umask 022; files on /dev/shm (tmpfs); the host has one active swap partition, which the tests never touch"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  swapon(path, swapflags) (syscall 167; swapflags is an int, bits above
+  31 are ignored) activates a swap area on a block device or a regular
+  file of a file system that supports swap files. Order of checks:
+  (1) swapflags must only contain SWAP_FLAG_PREFER (0x8000),
+  SWAP_FLAG_PRIO_MASK (0x7fff), SWAP_FLAG_DISCARD (0x10000),
+  SWAP_FLAG_DISCARD_ONCE (0x20000), SWAP_FLAG_DISCARD_PAGES (0x40000),
+  else EINVAL, for any caller and before the path is read (also with a
+  NULL path); (2) CAP_SYS_ADMIN, else EPERM; (3) the path is resolved
+  (ENOENT, ENOTDIR, ENAMETOOLONG, EFAULT; "" is ENOENT); a directory is
+  EISDIR; (4) the target must hold a valid swap header and be usable as
+  swap: anything else is EINVAL — a zero-filled file, a file shorter than
+  a page, a character device such as /dev/null, and any file on tmpfs,
+  even one carrying a valid-looking "SWAPSPACE2" header (tmpfs cannot
+  hold swap). An area already in use gives EBUSY. A failed swapon
+  activates nothing (swapoff on the file then gives EINVAL).
+returns:
+  success: "0 (not observed: the oracle has no file system able to hold a new swap area; needs a block device or a swap-capable disk file system)"
+errors:
+  flags: "EINVAL (22): bits outside 0x7ffff; checked before the capability and the path"
+  perm: "EPERM (1): no CAP_SYS_ADMIN (with valid flags), before the path is read"
+  missing: "ENOENT (2): path missing or empty"
+  fault: "EFAULT (14): path NULL or unreadable"
+  notdir: "ENOTDIR (20): a path component is not a directory"
+  toolong: "ENAMETOOLONG (36): path longer than PATH_MAX"
+  isdir: "EISDIR (21): path is a directory"
+  notswap: "EINVAL (22): no valid swap header, too small, not a block device or regular file (e.g. /dev/null), or on a file system without swap file support (tmpfs)"
+  busy: "EBUSY (16): already an active swap area (seen for the host's swap partition; not tested)"
+side_effects: "on success the area is listed in /proc/swaps and used for paging"
+threading: "none specific"
+ordering:
+  - "flags, then capability, then path lookup, then the swap header/file system checks"
+timing:
+  typical: "microseconds for errors"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/swap.h. Swap header layout (union
+# swap_header): "SWAPSPACE2" in the last 10 bytes of the first page,
+# version (1) and last_page as u32 at offset 1024. Poly has no swap and
+# no block devices; it can reject every target with these errors.
