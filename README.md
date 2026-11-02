@@ -136,8 +136,12 @@ cargo xtask boot-tests --list   # the boot test groups; `boot-tests <group>` run
 cargo xtask ci      # everything CI checks (`ci lint`, `ci host-tests`, ...: one part)
 ```
 
-QEMU runs on KVM when `/dev/kvm` is usable (much faster) and on its
-emulator (TCG) otherwise; `POLY_QEMU_ACCEL=tcg` forces the emulator.
+QEMU runs on the host's hypervisor when it can (much faster): KVM on Linux,
+the Windows Hypervisor Platform (WHPX) on Windows (turn on the Windows
+feature "Windows Hypervisor Platform"), and on its emulator (TCG)
+otherwise; `POLY_QEMU_ACCEL=tcg` forces the emulator. `cargo xtask desktop`
+sizes the screen for the host's display (a 200% display gets 2560x1600
+drawn at scale 2, so it is sharp); `--size=WxH` and `--scale=N` override it.
 
 On Windows, `cargo xtask run` builds and boots the kernel natively (QEMU
 for Windows on the `PATH`). The parts that need a Linux host report so: the
