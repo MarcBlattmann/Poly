@@ -1,4 +1,4 @@
-# 0129: Chromium from pinned Debian packages, unpacked in pure Rust on every host
+# 0130: Chromium from pinned Debian packages, unpacked in pure Rust on every host
 
 **Status:** Accepted. Roadmap Phase 6, toward the milestone "Chromium (the
 Linux build) runs on the desktop with its sandbox enabled". The spec side

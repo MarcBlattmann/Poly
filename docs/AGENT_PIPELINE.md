@@ -161,7 +161,7 @@ seen under load) is booted once more.
 **Chromium's scenario tests** (`specs/linux/apps/chromium.tests/`, entry
 `linux/api/apps/chromium`) use the same JSON format but run programs of
 Chromium's own root disk (Debian packages pinned in
-`tools/xtask/chromium.lock`, ADR 0129) rather than the host's, so the
+`tools/xtask/chromium.lock`, ADR 0130) rather than the host's, so the
 diff runner does not run them: `cargo xtask chromium apptest
 [--target linux|poly|both|linux-twice] [--tests-dir DIR]...` runs each
 test's steps as a shell script on the reference (the Debian root entered
