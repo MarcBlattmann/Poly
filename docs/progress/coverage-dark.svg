@@ -1274,7 +1274,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">0.1%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">42 / 58,682 entries · 73,276 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">43 / 58,682 entries · 73,276 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 16,439 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="157.7" height="218.0" fill="#21262d"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2ea043"/>
@@ -1366,7 +1366,7 @@
 <rect x="346.7" y="548.4" width="3.9" height="35.5" fill="#388bfd"/>
 <rect x="345.6" y="547.4" width="33.6" height="37.5" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
-<g><title>gdi32: 8 / 545 done (1.5%)</title>
+<g><title>gdi32: 9 / 545 done (1.7%)</title>
 <rect x="346.6" y="585.9" width="31.6" height="32.7" fill="#21262d"/>
 <rect x="346.6" y="585.9" width="0.5" height="32.7" fill="#2ea043"/>
 <rect x="347.1" y="585.9" width="0.5" height="32.7" fill="#388bfd"/>

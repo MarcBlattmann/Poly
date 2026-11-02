@@ -609,7 +609,19 @@ fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     if i.maximized {
         return;
     }
-    let [size, pos, _, _] = metrics::minmax(i.style, i.ex_style, screen(env));
+    // WM_GETMINMAXINFO first: the maximized size and position are the
+    // procedure's answer (ShowWindow.yaml: maxsize 1040,784 at -8,-8 on a
+    // 1024x768 screen, the frame overhanging it).
+    let [ms, mp, mt, xt] = metrics::minmax(i.style, i.ex_style, screen(env));
+    let mut mmi = MinMaxInfo {
+        reserved: CPoint::default(),
+        max_size: CPoint { x: ms.0, y: ms.1 },
+        max_position: CPoint { x: mp.0, y: mp.1 },
+        min_track: CPoint { x: mt.0, y: mt.1 },
+        max_track: CPoint { x: xt.0, y: xt.1 },
+    };
+    send(env, u64::from(i.hwnd), WM_GETMINMAXINFO, 0, ptr(&mut mmi));
+    let (size, pos) = ((mmi.max_size.x, mmi.max_size.y), (mmi.max_position.x, mmi.max_position.y));
     let normal = if i.minimized { None } else { Some(i.window_rel) };
     set_state(env, i.hwnd, false, true, normal);
     swp(env, i.hwnd, HWND_TOP, pos.0, pos.1, size.0, size.1, SWP_STATECHANGED | SWP_FRAMECHANGED, 0, false);
