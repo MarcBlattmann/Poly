@@ -306,3 +306,95 @@ pub mod overlay {
     pub const SNAP_OUTLINE_ALPHA: u8 = 102;
     pub const SNAP_RADIUS: i32 = 10;
 }
+
+/// The ridge's edge over windows: white at 12 % on a dark ridge, black at
+/// 12 % on a light one (`topbarSurface.ts`'s `borderColor`).
+pub const RIDGE_EDGE_ALPHA: u8 = 31;
+
+/// Light or dark (ADR 0127: Alpine Shell's themes). Every colour the shell
+/// draws with comes from the palette in use; a process has one theme at a
+/// time ([`set_light`]), which the shell sets from its settings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Palette {
+    /// The ridge and the surfaces that hang from it.
+    pub bar: u32,
+    /// What is drawn on them: text and translucent fills (Alpine's
+    /// `text-white`/`bg-white/10`, or with dark text `text-black`/`bg-black/10`).
+    pub ink: u32,
+    /// The settings window: surfaces 0 to 3, the strong line, inks, the
+    /// colour on a solid fill, the off toggle's knob.
+    pub s0: u32,
+    pub s1: u32,
+    pub s2: u32,
+    pub s3: u32,
+    pub line: u32,
+    pub ink_primary: u32,
+    pub quiet: u32,
+    pub faint: u32,
+    pub on_solid: u32,
+    pub knob_off: u32,
+    /// Coverages of `ink` for ghost fills, tracks and hairlines.
+    pub ghost: u8,
+    pub track: u8,
+    pub hairline: u8,
+}
+
+/// Alpine's dark tokens as its screenshots show them.
+pub const DARK: Palette = Palette {
+    bar: ridge::BACKGROUND,
+    ink: 0xff_ffff,
+    s0: settings::SURFACE_0,
+    s1: settings::SURFACE_1,
+    s2: settings::SURFACE_2,
+    s3: settings::SURFACE_3,
+    line: settings::LINE,
+    ink_primary: settings::INK,
+    quiet: settings::INK_QUIET,
+    faint: settings::INK_FAINT,
+    on_solid: settings::SURFACE_0,
+    knob_off: settings::KNOB_OFF,
+    ghost: settings::GHOST_ALPHA,
+    track: settings::TRACK_ALPHA,
+    hairline: settings::HAIRLINE_ALPHA,
+};
+
+/// Alpine's light tokens (`@alpine/ui` `tokens.css`: ground `#d6d6d6`,
+/// surfaces the ground mixed with white 60 / 85 / 45 %, inks the ground
+/// mixed with black 78 / 48 / 32 %, hairlines black at 9 %, ghost fills at
+/// 5 %, tracks at 15 %, a white knob and white on solid fills), as the live
+/// settings window measures them; the ridge in the ground colour with dark
+/// text, as Alpine draws a light ridge.
+pub const LIGHT: Palette = Palette {
+    bar: 0xd6_d6d6,
+    ink: 0x00_0000,
+    s0: 0xd6_d6d6,
+    s1: 0xee_eeee,
+    s2: 0xf9_f9f9,
+    s3: 0xe8_e8e8,
+    line: 0xb4_b4b4,
+    ink_primary: 0x2f_2f2f,
+    quiet: 0x6f_6f6f,
+    faint: 0x91_9191,
+    on_solid: 0xff_ffff,
+    knob_off: 0xff_ffff,
+    ghost: 13,
+    track: 38,
+    hairline: 23,
+};
+
+static LIGHT_THEME: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Use the light theme (or the dark one).
+pub fn set_light(light: bool) {
+    LIGHT_THEME.store(light, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether the light theme is in use.
+pub fn is_light() -> bool {
+    LIGHT_THEME.load(core::sync::atomic::Ordering::Relaxed)
+}
+
+/// The palette in use.
+pub fn pal() -> &'static Palette {
+    if is_light() { &LIGHT } else { &DARK }
+}

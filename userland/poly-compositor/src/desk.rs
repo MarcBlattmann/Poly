@@ -18,7 +18,7 @@ use poly_shell::settings_ui::{Page, SystemInfo};
 use poly_shell::switcher::{Entry, Mru, thumbnail};
 use poly_shell::wm::{self, Action, Placed, Zone};
 use poly_shell::{Key, Press, Shell};
-use poly_wayland::compose::{MemoryFramebuffer, Placement, WindowId};
+use poly_wayland::compose::{MemoryFramebuffer, Placement, Rect, Theme, WindowId};
 use poly_wayland::seat::{BTN_LEFT, InputEvent, InputSource};
 use poly_wayland::server::{InternalEvent, OutputConfig, Server};
 use poly_wayland::wire::Fixed;
@@ -191,6 +191,9 @@ impl Desktop {
             );
         }
         shell.set_settings(settings);
+        if shell.settings().theme == "light" {
+            server.scene_mut().set_theme(Theme::LIGHT);
+        }
         let input = evdev::Evdev::open_all();
         let names: Vec<String> =
             input.devices.iter().map(|d| format!("{} ({:?})", d.name, d.translator.kind)).collect();
@@ -333,6 +336,11 @@ impl Desktop {
                             self.open_settings(page, server);
                             return None;
                         }
+                        Press::Power(poly_shell::Power::LogOut) => {
+                            self.shell_button = true;
+                            self.log_out(server);
+                            return None;
+                        }
                         Press::Power(action) => {
                             self.shell_button = true;
                             desktop::power(action);
@@ -368,7 +376,7 @@ impl Desktop {
                 }
                 if server.moving_window().is_some() {
                     let work = server.scene().work_area();
-                    self.snap = wm::zone_at(x, y, work);
+                    self.snap = if self.shell.settings().snaps().1 { wm::zone_at(x, y, work) } else { None };
                     self.shell.set_snap_preview(self.snap.map(|z| wm::zone_rect(z, work)));
                 } else if self.snap.take().is_some() {
                     self.shell.set_snap_preview(None);
@@ -445,6 +453,7 @@ impl Desktop {
                     server.request_close(w);
                 }
             }
+            WmKey::Place(_) if !self.shell.settings().snaps().0 => {}
             WmKey::Place(arrow) => {
                 let Some(w) = server.active_window() else { return };
                 let Some(info) = server.managed_windows().into_iter().find(|i| i.window == w) else { return };
@@ -464,6 +473,24 @@ impl Desktop {
             WmKey::Settings => self.open_settings(Page::Home, server),
             WmKey::History => self.shell.toggle_history(),
         }
+    }
+
+    /// The system menu's Log Out: the session ends without a login screen
+    /// (Poly has none): every app is asked to close and then stopped, the
+    /// settings window closes, and the desktop is empty again with the
+    /// launcher on it.
+    fn log_out(&mut self, server: &mut Server) {
+        if let Some(win) = self.settings_win.take() {
+            server.remove_internal_window(win.id);
+        }
+        println!("poly-compositor: log out: closing {} window(s)", server.managed_windows().len());
+        for w in server.managed_windows() {
+            server.request_close(w.window);
+        }
+        for (pid, _) in &self.children {
+            os::terminate(*pid);
+        }
+        self.shell.close_panel();
     }
 
     /// An app the launcher started that is the shell's own.
@@ -565,6 +592,13 @@ impl Desktop {
             return;
         }
         match &change {
+            // The window manager reads these from the settings when it acts.
+            Change::Tiling(_) | Change::SnapKeys(_) | Change::SnapDrag(_) => {}
+            Change::Theme(t) => {
+                let theme = if t == "light" { Theme::LIGHT } else { Theme::NEUTRAL };
+                server.scene_mut().set_theme(theme);
+                server.scene_mut().damage_all();
+            }
             Change::Keyboard(name) => {
                 if let Some(layout) = poly_input::layout::by_name(name) {
                     match desktop::keymap_file(&self.dir, layout) {
@@ -734,6 +768,15 @@ impl Desktop {
             self.shell.toggle_launcher();
         }
         self.windows = now;
+        // Where the windows are: the ridge's edge shows over them.
+        let cover: Vec<Rect> = server
+            .scene()
+            .windows()
+            .iter()
+            .filter(|w| w.is_visible())
+            .map(|w| server.scene().frame_rect(w.id()).unwrap_or(w.bounds()))
+            .collect();
+        self.shell.set_window_cover(&cover);
         // The launcher lists the open windows (Alpine Shell's "Windows").
         let list: Vec<(u32, String, String)> =
             server.managed_windows().iter().map(|i| (i.window.0, i.title.clone(), i.app_id.clone())).collect();

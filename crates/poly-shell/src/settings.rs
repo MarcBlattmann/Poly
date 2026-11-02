@@ -34,6 +34,15 @@ pub struct Settings {
     pub muted: bool,
     /// A [`ZONES`] name or a POSIX `TZ` rule.
     pub time_zone: String,
+    /// "dark" (Alpine's dark tokens, the default) or "light".
+    pub theme: String,
+    /// Window tiling on at all (Alpine's "Enable window tiling"; Poly has
+    /// always snapped, so on by default where Alpine starts off), then
+    /// Win+Arrow snapping and snapping a dragged window at the screen's
+    /// edges (its Snapping switches).
+    pub tiling: bool,
+    pub snap_keys: bool,
+    pub snap_drag: bool,
     /// Keys this version does not know, kept as they were.
     pub extra: Vec<(String, String)>,
 }
@@ -48,6 +57,10 @@ impl Default for Settings {
             volume: 80,
             muted: false,
             time_zone: "UTC".into(),
+            theme: "dark".into(),
+            tiling: true,
+            snap_keys: true,
+            snap_drag: true,
             extra: Vec::new(),
         }
     }
@@ -64,6 +77,11 @@ pub enum Change {
     Volume(u32),
     Muted(bool),
     TimeZone(String),
+    /// "dark" or "light".
+    Theme(String),
+    Tiling(bool),
+    SnapKeys(bool),
+    SnapDrag(bool),
 }
 
 impl Settings {
@@ -101,6 +119,24 @@ impl Settings {
                     s.muted = value == "true";
                     true
                 }
+                "theme" => {
+                    if matches!(value, "dark" | "light") {
+                        s.theme = value.into();
+                    }
+                    true
+                }
+                "tiling" => {
+                    s.tiling = value != "false";
+                    true
+                }
+                "snap_keys" => {
+                    s.snap_keys = value != "false";
+                    true
+                }
+                "snap_drag" => {
+                    s.snap_drag = value != "false";
+                    true
+                }
                 "timezone" => {
                     if TimeZone::named(value).is_some() {
                         s.time_zone = value.into();
@@ -128,10 +164,19 @@ impl Settings {
         out += &format!("volume={}\n", self.volume);
         out += &format!("muted={}\n", self.muted);
         out += &format!("timezone={}\n", self.time_zone);
+        out += &format!("theme={}\n", self.theme);
+        out += &format!("tiling={}\n", self.tiling);
+        out += &format!("snap_keys={}\n", self.snap_keys);
+        out += &format!("snap_drag={}\n", self.snap_drag);
         for (k, v) in &self.extra {
             out += &format!("{k}={v}\n");
         }
         out
+    }
+
+    /// Whether Win+Arrow snaps, and whether a dragged window snaps.
+    pub fn snaps(&self) -> (bool, bool) {
+        (self.tiling && self.snap_keys, self.tiling && self.snap_drag)
     }
 
     /// Apply a change; true if anything changed.
@@ -145,6 +190,10 @@ impl Settings {
             Change::Volume(v) => self.volume = (*v).min(100),
             Change::Muted(m) => self.muted = *m,
             Change::TimeZone(z) if TimeZone::named(z).is_some() => self.time_zone = z.clone(),
+            Change::Theme(t) if matches!(t.as_str(), "dark" | "light") => self.theme = t.clone(),
+            Change::Tiling(b) => self.tiling = *b,
+            Change::SnapKeys(b) => self.snap_keys = *b,
+            Change::SnapDrag(b) => self.snap_drag = *b,
             _ => {}
         }
         *self != before
@@ -175,6 +224,10 @@ mod tests {
             volume: 35,
             muted: true,
             time_zone: "Europe/Zurich".into(),
+            theme: "light".into(),
+            tiling: false,
+            snap_keys: false,
+            snap_drag: true,
             extra: alloc::vec![("future".into(), "yes".into())],
         };
         let text = s.to_text();
