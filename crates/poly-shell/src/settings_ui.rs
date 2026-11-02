@@ -204,6 +204,8 @@ pub struct Context<'a> {
     pub now: &'a str,
     /// Unix seconds now (for the zones' offsets).
     pub utc: i64,
+    /// The wallpapers' pictures (for the tiles).
+    pub pictures: &'a crate::picture::Pictures,
 }
 
 /// `+hh:mm` of an offset in minutes east of UTC.
@@ -773,7 +775,7 @@ impl SettingsWindow {
                     let r = rect.scale(s);
                     let mut tile = TileFb { fb, origin: (r.x, r.y), size: (r.width, r.height) };
                     let full = Rect::new(0, 0, r.width, r.height);
-                    crate::shell::draw_wallpaper(&mut tile, full, id, r.width, r.height);
+                    crate::shell::draw_wallpaper(&mut tile, full, id, r.width, r.height, cx.pictures);
                     // Cut the corners round: the page's colour over them.
                     corner_mask(fb, all, r, 8 * s);
                     if *selected {
@@ -855,8 +857,10 @@ mod tests {
     }
 
     fn cx<'a>(st: &'a Settings, i: &'a SystemInfo, text: &'a Text) -> Context<'a> {
-        Context { settings: st, info: i, text, now: "12:00 Nov 1", utc: 1_793_491_200 }
+        Context { settings: st, info: i, text, now: "12:00 Nov 1", utc: 1_793_491_200, pictures: &NO_PICTURES }
     }
+
+    static NO_PICTURES: crate::picture::Pictures = crate::picture::Pictures::new();
 
     const W: i32 = t::WIDTH;
     const H: i32 = t::HEIGHT;
@@ -894,7 +898,7 @@ mod tests {
         assert_eq!(win.button(kx, ky, true, W, H, &c).1, Some(Change::Keyboard("de-ch".into())));
         // Wallpapers, time zones, the scale.
         win.page = Page::Wallpaper;
-        let (wx, wy) = at(&win, &c, Target::Wallpaper(3));
+        let (wx, wy) = at(&win, &c, Target::Wallpaper(4));
         assert_eq!(win.button(wx, wy, true, W, H, &c).1, Some(Change::Wallpaper("forest".into())));
         win.page = Page::DateTime;
         let (zx, zy) = at(&win, &c, Target::Zone(1));

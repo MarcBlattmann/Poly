@@ -147,6 +147,8 @@ pub struct Shell {
     changes: Vec<Change>,
     /// The wallpaper drawn once at the screen's size, copied from then on.
     wall: core::cell::RefCell<Option<wallpaper::Cache>>,
+    /// The wallpapers' pictures (Alpine Shell's), by preset.
+    pictures: crate::picture::Pictures,
     /// The settings window's state (its contents are the shell's).
     pub settings_window: SettingsWindow,
 }
@@ -183,6 +185,7 @@ impl Shell {
             pointer: (-1, -1),
             changes: Vec::new(),
             wall: core::cell::RefCell::new(None),
+            pictures: crate::picture::Pictures::new(),
             settings_window: SettingsWindow::default(),
         };
         let rows = s.room_for_rows();
@@ -351,6 +354,14 @@ impl Shell {
 
     pub fn volume(&self) -> Option<(u32, bool)> {
         self.volume
+    }
+
+    /// The picture of wallpaper preset `id` (the compositor reads Alpine
+    /// Shell's from the disk).
+    pub fn add_wallpaper(&mut self, id: &str, picture: crate::picture::Picture) {
+        self.pictures.insert(id.into(), picture);
+        *self.wall.borrow_mut() = None;
+        self.damage.push(self.screen());
     }
 
     /// The sound card's name (the control centre shows it).
@@ -849,7 +860,7 @@ impl Shell {
     /// Draw the settings window, `w` × `h` logical at scale `s`.
     pub fn draw_settings(&self, fb: &mut dyn Framebuffer, w: i32, h: i32, s: i32, info: &SystemInfo, utc: i64) {
         let now = self.local_time(utc);
-        let cx = Context { settings: &self.settings, info, text: &self.text, now: &now, utc };
+        let cx = Context { settings: &self.settings, info, text: &self.text, now: &now, utc, pictures: &self.pictures };
         self.settings_window.draw(fb, w, h, s, &cx);
     }
 
@@ -864,7 +875,7 @@ impl Shell {
         utc: i64,
     ) -> (bool, Option<Change>) {
         let now = self.local_time(utc);
-        let cx = Context { settings: &self.settings, info, text: &self.text, now: &now, utc };
+        let cx = Context { settings: &self.settings, info, text: &self.text, now: &now, utc, pictures: &self.pictures };
         self.settings_window.motion(x, y, w, h, &cx)
     }
 
@@ -881,7 +892,7 @@ impl Shell {
         utc: i64,
     ) -> (bool, Option<Change>) {
         let now = self.local_time(utc);
-        let cx = Context { settings: &self.settings, info, text: &self.text, now: &now, utc };
+        let cx = Context { settings: &self.settings, info, text: &self.text, now: &now, utc, pictures: &self.pictures };
         self.settings_window.button(x, y, pressed, w, h, &cx)
     }
 
@@ -1151,8 +1162,15 @@ impl Shell {
 
 /// Draw wallpaper `id` on a `w` × `h` (physical) screen inside `clip`
 /// (the settings window's tiles use it).
-pub fn draw_wallpaper(fb: &mut dyn Framebuffer, clip: Rect, id: &str, w: i32, h: i32) {
-    wallpaper::draw(fb, clip, id, w, h);
+pub fn draw_wallpaper(
+    fb: &mut dyn Framebuffer,
+    clip: Rect,
+    id: &str,
+    w: i32,
+    h: i32,
+    pictures: &crate::picture::Pictures,
+) {
+    wallpaper::draw(fb, clip, id, w, h, pictures);
 }
 
 /// The layer under the windows.
@@ -1166,7 +1184,15 @@ pub struct Above<'a>(&'a Shell);
 impl Layer for Below<'_> {
     fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: i32) {
         let sh = self.0;
-        wallpaper::Cache::draw(&sh.wall, fb, clip, &sh.settings.wallpaper, sh.width * scale, sh.height * scale);
+        wallpaper::Cache::draw(
+            &sh.wall,
+            fb,
+            clip,
+            &sh.settings.wallpaper,
+            sh.width * scale,
+            sh.height * scale,
+            &sh.pictures,
+        );
         sh.draw_ridge(fb, clip, scale);
     }
 }

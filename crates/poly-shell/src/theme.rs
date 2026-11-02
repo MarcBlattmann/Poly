@@ -90,8 +90,9 @@ pub mod launcher {
     pub const DIVIDER_ALPHA: u8 = 26;
     /// The list's padding (`px-1.5 pb-1.5`).
     pub const LIST_PADDING: i32 = 6;
-    /// A section title: 11 px medium at 50 %, `px-2.5 pt-2 pb-1`.
-    pub const SECTION_HEIGHT: i32 = 28;
+    /// A section title: 11 px medium at 50 %, `px-2.5 pt-2 pb-1`, then the
+    /// list's 2-pixel gap (31 in all, as the live Alpine Shell measures).
+    pub const SECTION_HEIGHT: i32 = 31;
     pub const SECTION_SIZE: f32 = 11.0;
     pub const SECTION_ALPHA: u8 = 128;
     pub const ROW_HEIGHT: i32 = 48;
@@ -121,21 +122,22 @@ pub mod launcher {
     pub const LIST_SHARE_PERCENT: i32 = 70;
 }
 
-/// The desktop behind the windows. Alpine Shell shows the Windows
-/// wallpaper, and the two pictures it bundles have no recorded author or
-/// licence, so Poly's are drawn here (ADR 0127): the default is a dark
-/// valley in Alpine's greys; the others are gradients.
+/// The desktop behind the windows (ADR 0127): Alpine Shell's two bundled
+/// pictures, Grainy Valley the default, then gradients. The colours are
+/// what is drawn without the pictures: Grainy Valley falls back to a drawn
+/// valley, the others to a gradient from `top` to `bottom` with a soft
+/// light of `glow`.
 pub mod wallpaper {
     /// The default.
-    pub const DEFAULT: &str = "valley";
+    pub const DEFAULT: &str = "grainy-valley";
 
-    /// (ID, label, top, bottom, glow); the first is drawn as the valley.
+    /// (ID, label, top, bottom, glow).
     pub const PRESETS: &[(&str, &str, u32, u32, u32)] = &[
-        ("valley", "Valley", 0x9a_9c_9e, 0x1a_1a_19, 0xd8_d8_d6),
+        ("grainy-valley", "Grainy Valley", 0x9a_9c_9e, 0x1a_1a_19, 0xd8_d8_d6),
+        ("quiet-moment", "Quiet Moment", 0xb8_a4_b0, 0x2a_36_2c, 0xe6_c4_bc),
         ("slate", "Slate", 0x2c_3e_50, 0x10_16_1d, 0x4a_6a_82),
         ("dusk", "Dusk", 0x3b_2a_4a, 0x14_0f_1c, 0x7a_5a_8c),
         ("forest", "Forest", 0x24_44_3a, 0x0d_17_14, 0x4f_7f_6a),
-        ("ember", "Ember", 0x4a_2f_24, 0x17_0e_0b, 0x8c_5a_44),
         ("graphite", "Graphite", 0x3a_3a_3a, 0x12_12_12, 0x5e_5e_5e),
     ];
 

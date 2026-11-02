@@ -90,6 +90,20 @@ fn shell(w: i32, h: i32, fonts: Fonts) -> Shell {
     s.set_volume(Some((60, false)));
     s.set_sound_card(Some("virtio-sound".into()));
     s.set_now_ms(1000);
+    // Alpine Shell's wallpapers, as `cargo xtask` converts them
+    // (`POLY_SHELL_WALLPAPER_DIR`: `target/wallpapers/`, files `<id>-*.pwal`).
+    if let Some(dir) = std::env::var_os("POLY_SHELL_WALLPAPER_DIR") {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            for (id, ..) in poly_shell::theme::wallpaper::PRESETS {
+                if name.starts_with(&format!("{id}-"))
+                    && let Some(p) = std::fs::read(entry.path()).ok().and_then(|d| poly_shell::picture::parse(&d))
+                {
+                    s.add_wallpaper(id, p);
+                }
+            }
+        }
+    }
     s
 }
 

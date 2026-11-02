@@ -39,6 +39,7 @@ pub mod draw;
 pub mod icons;
 pub mod launcher;
 pub mod notify;
+pub mod picture;
 pub mod search;
 pub mod settings;
 pub mod settings_ui;

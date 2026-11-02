@@ -169,6 +169,9 @@ fn image() -> crate::Result<Option<PathBuf>> {
     for (path, data) in crate::fonts::shell_tree() {
         contents.tree.file(&path, 0o644, &data);
     }
+    for (path, data) in crate::wallpapers::tree()? {
+        contents.tree.file(&path, 0o644, &data);
+    }
     for (file, text) in DESKTOP_FILES {
         contents.tree.file(&format!("usr/share/applications/{file}"), 0o644, text.as_bytes());
     }
