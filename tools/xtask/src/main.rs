@@ -109,6 +109,7 @@ mod symbols;
 mod sysmsg;
 mod terminal;
 mod toolkits;
+mod unzip;
 mod virgl;
 mod wayland;
 mod win32;

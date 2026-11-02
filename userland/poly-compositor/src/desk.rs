@@ -115,14 +115,15 @@ impl Desktop {
         o: &Options<'_>,
         server: &mut Server,
         keymap: unix::SharedKeymap,
-        font: Option<poly_font::Font<'static>>,
+        fonts: poly_shell::draw::Fonts,
     ) -> Desktop {
         let (lw, lh) = server.scene().logical_size();
         let apps = poly_shell::apps::catalog(desktop::desktop_files(Path::new(desktop::APPLICATIONS)));
-        let mut shell = Shell::new(lw, lh, apps, poly_shell::draw::Text::new(font));
-        if let Some(f) = font {
-            // Window titles in the same font, 13 pixels as Alpine's rows.
-            server.scene_mut().set_text(Box::new(poly_shell::draw::TitleFont::new(f, 13.0, 16)));
+        let title_font = fonts.sans;
+        let mut shell = Shell::new(lw, lh, apps, poly_shell::draw::Text::with_fonts(fonts));
+        if let Some(f) = title_font {
+            // Window titles in the shell's font, 12 pixels as Windows 11's.
+            server.scene_mut().set_text(Box::new(poly_shell::draw::TitleFont::new(f, 12.0, 16)));
         }
         // The settings: read, the command line's choices first.
         let settings_path = o.settings.clone().unwrap_or_else(settings_path);
@@ -235,6 +236,7 @@ impl Desktop {
             next_status_ms: 0,
         };
         d.info = d.system_info(server);
+        d.shell.set_sound_card(d.info.sound.clone());
         d
     }
 
@@ -327,9 +329,15 @@ impl Desktop {
                             self.open_settings(page, server);
                             return None;
                         }
+                        Press::Power(action) => {
+                            self.shell_button = true;
+                            desktop::power(action);
+                            return None;
+                        }
                         Press::NotMine => {}
                     }
                 } else if std::mem::take(&mut self.shell_button) {
+                    self.shell.release();
                     return None;
                 }
                 let moving = server.moving_window();
@@ -350,7 +358,10 @@ impl Desktop {
                 server.handle_input(ev);
                 let (x, y) = server.pointer();
                 let (x, y) = (x.floor(), y.floor());
-                self.shell.pointer_motion(x, y);
+                // While a window is dragged the ridge's panels stay shut.
+                if server.moving_window().is_none() {
+                    self.shell.pointer_motion(x, y);
+                }
                 if server.moving_window().is_some() {
                     let work = server.scene().work_area();
                     self.snap = wm::zone_at(x, y, work);
@@ -742,6 +753,10 @@ impl Desktop {
             }
         }
         self.serve_notifications();
+        // The volume slider and the mute button of the control centre.
+        for c in self.shell.take_changes() {
+            self.apply_change(c, server);
+        }
         for r in self.shell.take_damage() {
             server.scene_mut().damage_logical(r);
         }

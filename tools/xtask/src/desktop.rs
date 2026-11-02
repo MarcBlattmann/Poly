@@ -8,14 +8,16 @@
 //! Demo") and `/bin/wl-client`, a desktop file
 //! `/usr/share/applications/demo-window.desktop` ("Demo Window", which
 //! starts `wl-demo` too, so the launcher's desktop file path is used), and
-//! DejaVu Sans from the font store when it is fetched (`cargo xtask fonts
-//! fetch`; without it the shell draws with the bitmap font).
+//! DejaVu Sans from the font store and Alpine Shell's fonts (Geist, Geist
+//! Mono, Averia Serif Libre; ADR 0126) when they are fetched (`cargo xtask
+//! fonts fetch`; without them the shell draws in DejaVu Sans or with the
+//! bitmap font).
 //!
 //! The boot test, on QEMU's screen (`screendump` of the virtio GPU) and
 //! its input (`input-send-event`, QEMU's QMP reference):
 //!
 //! 1. the desktop is up: the ridge (rgb(32, 32, 32) along the top), the
-//!    launcher's panel in the middle, the wallpaper elsewhere;
+//!    launcher hanging from it (ADR 0126), the wallpaper elsewhere;
 //! 2. typing `demo` into the launcher lists the apps (the compositor logs
 //!    the query); Enter starts the first, "Demo Window" (from the desktop
 //!    file), whose window must appear, centred below the ridge, in its
@@ -101,6 +103,14 @@ pub fn image() -> Result<PathBuf> {
     match std::fs::read(&font) {
         Ok(data) => tree.files.push(("usr/share/fonts/truetype/dejavu/DejaVuSans.ttf".into(), 0o644, data)),
         Err(_) => eprintln!("==> no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font"),
+    }
+    // Alpine Shell's fonts for the shell (ADR 0126).
+    let shell_fonts = crate::fonts::shell_tree();
+    if shell_fonts.is_empty() {
+        eprintln!("==> no shell fonts (`cargo xtask fonts fetch`): the shell draws in DejaVu Sans");
+    }
+    for (path, data) in shell_fonts {
+        tree.files.push((path, 0o644, data));
     }
     let programs: [(&str, &[u8]); 4] =
         [("poly-compositor", &compositor), ("wl-demo", &demo), ("wl-client", &client), ("notify-send", &notify)];
@@ -236,13 +246,11 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let img = d.shot("launcher")?;
     expect("the screen is 1280x800", (img.width, img.height) == SIZE)?;
     expect("the ridge runs along the top", img.pixel(640, 6) == RIDGE && img.pixel(640, 20) == RIDGE)?;
-    expect("the wallpaper is below the ridge", img.pixel(640, 26) != RIDGE && img.pixel(100, 700) != RIDGE)?;
-    // The launcher's search row: 720 wide, x 280..1000, y 296..344.
-    expect(
-        "the launcher's panel is in the middle",
-        img.pixel(900, 320) == RIDGE && img.pixel(281 + 300, 340) == RIDGE,
-    )?;
-    expect("not outside the panel", img.pixel(200, 320) != RIDGE)?;
+    expect("the wallpaper is below the ridge", img.pixel(100, 26) != RIDGE && img.pixel(100, 700) != RIDGE)?;
+    // The launcher hangs from the ridge (Alpine Shell's look, ADR 0126):
+    // its search row 720 wide, x 280..1000, y 24..72, in the ridge's colour.
+    expect("the launcher hangs from the ridge", img.pixel(900, 40) == RIDGE && img.pixel(581, 64) == RIDGE)?;
+    expect("not outside the launcher", img.pixel(200, 40) != RIDGE && img.pixel(640, 90) != RIDGE)?;
 
     // 2. Type, list, launch.
     d.type_text(&["d", "e", "m", "o"])?;
@@ -250,7 +258,7 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     thread::sleep(Duration::from_millis(800));
     let img = d.shot("typed")?;
     // Rows: the first, selected, is lighter than the panel.
-    let row = img.pixel(640, 344 + 1 + 28 + 10);
+    let row = img.pixel(640, 72 + 1 + 28 + 10);
     expect("the launcher lists apps (a selected row)", row != RIDGE && row[0] > RIDGE[0])?;
     d.type_text(&["ret"])?;
     d.wait("poly-compositor: launched Demo Window", 30)?;
@@ -261,7 +269,7 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let img = d.shot("window")?;
     let inside = (x as u32 + 20, y as u32 + 20);
     expect("the client's window is on the screen", img.pixel(inside.0, inside.1) == DEMO_A)?;
-    expect("the launcher is gone", img.pixel(900, 320) != RIDGE)?;
+    expect("the launcher is gone", img.pixel(900, 40) != RIDGE)?;
 
     // 3. Pointer and keyboard reach the client.
     let mut ev = abs(x + w / 2, y + 30);
@@ -302,7 +310,7 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     d.wait("wl-demo: closed", 30)?;
     thread::sleep(Duration::from_millis(1500));
     let img = d.shot("empty-again")?;
-    expect("the launcher is back on the empty desktop", img.pixel(900, 320) == RIDGE)?;
+    expect("the launcher is back on the empty desktop", img.pixel(900, 40) == RIDGE)?;
     d.qmp.quit();
     Ok(())
 }
@@ -429,19 +437,19 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     chord(&mut d, &["meta_l", "i"])?;
     d.wait("settings window opened", 30)?;
     let (sx, sy, sw, sh) = shown(&d, "Settings", 30)?;
-    expect("the settings window is 760x520", (sw, sh) == (760, 520))?;
-    click(&mut d, sx + 100, sy + 176)?; // Sound
+    expect("the settings window is 900x620", (sw, sh) == (900, 620))?;
+    click(&mut d, sx + 100, sy + 256)?; // Sound
     thread::sleep(Duration::from_millis(1000));
-    click(&mut d, sx + 528, sy + 150)?; // 30 % of the volume slider
+    click(&mut d, sx + 705, sy + 193)?; // 30 % of the volume slider
     d.wait("settings saved to /mnt/poly/shell.conf", 30)?;
     if sound {
         d.wait("poly-compositor: volume 30", 30)?;
     }
     thread::sleep(Duration::from_millis(1500));
     d.shot("settings-sound")?;
-    click(&mut d, sx + 100, sy + 100)?; // Keyboard
+    click(&mut d, sx + 100, sy + 218)?; // Keyboard
     thread::sleep(Duration::from_millis(1000));
-    click(&mut d, sx + 500, sy + 180)?; // German (Switzerland)
+    click(&mut d, sx + 500, sy + 252)?; // German (Switzerland)
     d.wait("poly-compositor: keymap de-ch", 30)?;
     // The demo client got the new keymap.
     wait_nth(&lines, "wl-demo: keymap format 1", 2, 30)?;
@@ -456,14 +464,14 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     d.wait("switcher open: [\"Settings\", \"Poly Demo\"]", 30)?;
     thread::sleep(Duration::from_millis(1500));
     let img = d.shot("switcher")?;
-    expect("the switcher's panel in the middle", img.pixel(640, 320) == RIDGE || img.pixel(640, 480) == RIDGE)?;
+    expect("the switcher hangs from the ridge", img.pixel(640, 30) == RIDGE)?;
     d.send(&[key("alt", false)])?;
     d.wait("switched to \"Poly Demo\"", 30)?;
 
     // 8. Minimized with the frame's button, back with Alt+Tab.
     let min_button = (645 + 630 - 4 - 8 - 44, 53 - 12);
     click(&mut d, min_button.0, min_button.1)?;
-    thread::sleep(Duration::from_millis(1500));
+    thread::sleep(Duration::from_millis(4000));
     let img = d.shot("minimized")?;
     expect("minimized: the right half shows no demo", img.pixel(1000, 700) != DEMO_A)?;
     d.send(&[key("alt", true)])?;
@@ -471,7 +479,7 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     d.send(&[key("tab", false)])?;
     d.send(&[key("alt", false)])?;
     wait_nth(&lines, "switched to \"Poly Demo\"", 2, 30)?;
-    thread::sleep(Duration::from_millis(1500));
+    thread::sleep(Duration::from_millis(3000));
     let img = d.shot("unminimized")?;
     expect("back from the switcher", img.pixel(1000, 700) == DEMO_A)?;
 

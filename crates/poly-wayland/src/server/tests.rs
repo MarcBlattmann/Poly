@@ -542,7 +542,7 @@ fn a_toplevel_is_configured_mapped_framed_and_composed() {
     assert_eq!(fb.pixel(x as u32, y as u32), Some(0x33_66_99));
     assert_eq!(fb.pixel((x + 99) as u32, (y + 49) as u32), Some(0x33_66_99));
     assert_eq!(fb.pixel((x + 50) as u32, (y - 2) as u32), Some(Theme::NEUTRAL.title_active));
-    assert_eq!(fb.pixel(5, 5), Some(Theme::NEUTRAL.background));
+    assert_eq!(fb.pixel(630, 470), Some(Theme::NEUTRAL.background));
     // The frame callback fires with the frame, then is gone.
     assert!(srv.wants_frame());
     srv.frame_presented(super::FrameTime { monotonic_ns: 5_000_000_000 });

@@ -557,6 +557,7 @@ dependencies = [
  "poly-block",
  "poly-cpio",
  "poly-crt",
+ "poly-crypto",
  "poly-elf",
  "poly-ext2",
  "poly-font",

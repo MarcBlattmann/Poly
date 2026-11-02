@@ -1,43 +1,48 @@
-//! The shell: layout, drawing and input of the ridge, the launcher, the
-//! wallpaper, the notifications, the window switcher and the snap preview,
-//! as two compositor layers ([`Shell::below`] under the windows,
-//! [`Shell::above`] over them), and the settings window's contents.
+//! The shell: layout, drawing and input of the ridge, the surfaces that
+//! hang from it (the launcher, the system menu, the control centre, the
+//! calendar, the notification history and the notices, the window
+//! switcher), the wallpaper and the snap preview, as two compositor layers
+//! ([`Shell::below`] under the windows, [`Shell::above`] over them), and
+//! the settings window's contents. It looks like Alpine Shell (ADR 0126).
 //!
 //! ```text
 //!  ┌──────────────────────────────────────────────────────────────────┐
-//!  │ ◌                                   [● 2] [ ▮▮▮ ◖) ] 21:41 Sep 12 │ ← the ridge, 24 px, rgb(32,32,32)
-//!  ├──────────────────────────────────────────────────────────────────┤
-//!  │                                            ╭──────────────────╮  │
-//!  │              ╭───────────────────────╮      │ ● Hello           │ ← toasts, top right
-//!  │              │ ⌕  Search apps         │      │   From a client   │  │
-//!  │              ├───────────────────────┤      ╰──────────────────╯  │
-//!  │              │ ▢ Poly Demo            │ ← the launcher (or the    │
-//!  │              ╰───────────────────────╯    switcher, the history)  │
-//!  └──────────────────────────────────────────────────────────────────┘
+//!  │ ◌                       ● 2 new           [ ⇄ ◖) ]  21:41 Nov 1  │ ← the ridge, 24 px, rgb(32,32,32)
+//!  ├─────────────╮      ╭────────────────────╮            ╭──────────┤
+//!  │             ╰──────╯ ⌕ Search apps…     ╰────────────╯ ● Hello  │ ← surfaces hang from it:
+//!  │                     ╰──────────────────╯                ╰───────┤   one at a time, shoulders
+//!  └──────────────────────────────────────────────────────────────────┘   at the free sides
 //! ```
 //!
-//! The ridge is a status strip (the owner's decision, ADR 0107): its
-//! parts open nothing that hangs from it. The unread count opens the
-//! notification history and the status pill the settings window, both in
-//! the middle of the screen.
+//! Only one surface shows at a time, as in Alpine: the launcher above the
+//! switcher above a panel opened from the ridge above the notices. Panels
+//! open when the pointer comes onto their item on the ridge (or on a
+//! click) and close when it leaves the item and the panel.
 //!
 //! Coordinates are logical; drawing multiplies them by the output's scale.
 //! Everything that changes damages its rectangle ([`Shell::take_damage`]),
 //! which the compositor hands to the scene, so only that is drawn again.
 
+mod panels;
+mod wallpaper;
+
 use crate::apps::App;
-use crate::draw::{self, Text, fill, rounded_outline, rounded_rect};
+use crate::chrome::{Geometry, Motion};
+use crate::draw::{self, Face, Style, Text, fill, rounded_outline, rounded_rect};
+use crate::icons::{Icon, lucide};
 use crate::launcher::{Key, Launcher, Outcome};
-use crate::notify::{Notification, Notifications};
+use crate::notify::Notifications;
 use crate::settings::{Change, Settings};
 use crate::settings_ui::{Context, Page, SettingsWindow, SystemInfo};
 use crate::switcher::{Entry, Switcher, look as sw};
-use crate::theme::{launcher as lt, notice as nt, overlay as ot, ridge as rt, wallpaper as wt};
+use crate::theme::{ink, launcher as lt, overlay as ot, ridge as rt};
 use crate::tz::TimeZone;
 use alloc::string::String;
 use alloc::vec::Vec;
-use poly_dbus::notifications::{Notify, Urgency};
+use poly_dbus::notifications::Notify;
 use poly_wayland::compose::{Framebuffer, Layer, Rect, WindowId};
+
+pub use panels::{ControlView, Panel};
 
 const WHITE: u32 = 0xff_ffff;
 
@@ -52,8 +57,18 @@ pub enum Press {
     Switch(WindowId),
     /// The shell took it: open the settings window at this page.
     Settings(Page),
+    /// The shell took it: the system menu asks to restart or shut down
+    /// (confirmed).
+    Power(Power),
     /// Not the shell's: the windows get it.
     NotMine,
+}
+
+/// The system menu's actions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Power {
+    Restart,
+    ShutDown,
 }
 
 /// The network as the ridge shows it.
@@ -68,48 +83,35 @@ pub enum Network {
     Online(String),
 }
 
-/// The launcher's parts, logical.
+/// The surfaces that hang from the ridge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Surface {
+    Launcher,
+    Switcher,
+    Panel(Panel),
+    Notices,
+}
+
+/// The launcher's parts, logical, for its body at `top`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct LauncherLayout {
-    panel: Rect,
+    body: Rect,
     search: Rect,
     /// The first row's rectangle; the others follow every
     /// `ROW_HEIGHT + ROW_GAP`.
     first_row: Rect,
     rows: usize,
-    /// "No apps match" instead of rows.
-    empty: bool,
     footer: Option<Rect>,
 }
 
 /// The ridge's parts, logical.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct RidgeLayout {
+    menu: Rect,
     clock: Rect,
     status: Rect,
-    /// The unread notifications, when there are some.
-    unread: Option<Rect>,
-}
-
-/// A toast's parts, logical.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct ToastLayout {
-    id: u32,
-    card: Rect,
-    close: Rect,
-    title: String,
-    lines: Vec<String>,
-    /// (button, action key, label).
-    buttons: Vec<(Rect, String, String)>,
-    critical: bool,
-}
-
-/// The notification history's parts, logical.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct HistoryLayout {
-    panel: Rect,
-    clear: Option<Rect>,
-    rows: Vec<Rect>,
+    /// The unread notifications in the middle, when there are some.
+    notice: Option<Rect>,
 }
 
 /// The desktop shell.
@@ -121,24 +123,38 @@ pub struct Shell {
     launcher: Launcher,
     text: Text,
     clock: String,
+    /// The time last set: Unix seconds and the offset east of UTC.
+    time: (i64, i32),
     damage: Vec<Rect>,
     settings: Settings,
     zone: TimeZone,
     network: Network,
     /// The master volume and mute (`None`: no sound card).
     volume: Option<(u32, bool)>,
+    sound_card: Option<String>,
     notes: Notifications,
     now_ms: u64,
-    history: bool,
     switcher: Switcher,
     snap: Option<Rect>,
+    /// The panel open from the ridge, and its state.
+    panel: Option<Panel>,
+    panels: panels::State,
+    motion: Motion<Surface>,
+    /// What the surface covered when last drawn (logical).
+    surface_extent: Rect,
+    pointer: (i32, i32),
+    /// Settings changes made in the panels, for the compositor.
+    changes: Vec<Change>,
+    /// The wallpaper drawn once at the screen's size, copied from then on.
+    wall: core::cell::RefCell<Option<wallpaper::Cache>>,
     /// The settings window's state (its contents are the shell's).
     pub settings_window: SettingsWindow,
 }
 
 impl Shell {
     /// A shell on a `width` × `height` logical output with these apps and
-    /// fonts. The launcher shows at the start (an empty desktop).
+    /// fonts. The launcher shows at the start (an empty desktop), already
+    /// open.
     pub fn new(width: i32, height: i32, apps: Vec<App>, text: Text) -> Shell {
         let settings = Settings::default();
         let zone = settings.zone();
@@ -149,22 +165,39 @@ impl Shell {
             launcher: Launcher::new(lt::MAX_ROWS),
             text,
             clock: String::new(),
+            time: (0, 0),
             damage: Vec::new(),
             settings,
             zone,
             network: Network::Unknown,
             volume: None,
+            sound_card: None,
             notes: Notifications::new(),
             now_ms: 0,
-            history: false,
             switcher: Switcher::default(),
             snap: None,
+            panel: None,
+            panels: panels::State::default(),
+            motion: Motion::default(),
+            surface_extent: Rect::default(),
+            pointer: (-1, -1),
+            changes: Vec::new(),
+            wall: core::cell::RefCell::new(None),
             settings_window: SettingsWindow::default(),
         };
         let rows = s.room_for_rows();
         s.launcher.set_limit(rows);
         s.launcher.show();
+        // At the start the launcher is simply there.
+        s.motion.set_animate(false);
+        s.sync();
+        s.motion.set_animate(true);
         s
+    }
+
+    /// Animate the surfaces (the default) or move them at once.
+    pub fn set_animations(&mut self, on: bool) {
+        self.motion.set_animate(on);
     }
 
     pub fn apps(&self) -> &[App] {
@@ -197,12 +230,19 @@ impl Shell {
         core::mem::take(&mut self.damage)
     }
 
+    /// Settings changes made in the shell's panels (the volume slider, the
+    /// mute button) since the last call, for the compositor to apply.
+    pub fn take_changes(&mut self) -> Vec<Change> {
+        core::mem::take(&mut self.changes)
+    }
+
     /// The output's logical size changed (another scale or mode).
     pub fn resize(&mut self, width: i32, height: i32) {
         (self.width, self.height) = (width, height);
         let rows = self.room_for_rows();
         self.launcher.set_limit(rows);
         self.damage.push(self.screen());
+        self.sync();
     }
 
     /// The clock's text now.
@@ -213,12 +253,16 @@ impl Shell {
     /// The time is `secs` on the Unix clock (`offset_minutes` east of UTC):
     /// the ridge's clock shows it. True if the text changed.
     pub fn set_time(&mut self, secs: i64, offset_minutes: i32) -> bool {
+        self.time = (secs, offset_minutes);
         let text = crate::clock::ridge_text(&crate::clock::civil(secs, offset_minutes));
         if text == self.clock {
             return false;
         }
         self.clock = text;
         self.damage.push(self.ridge_rect());
+        if self.panel == Some(Panel::Calendar) {
+            self.touch();
+        }
         true
     }
 
@@ -262,6 +306,17 @@ impl Shell {
                 // The clock is drawn again with the next time set.
                 self.clock.clear();
             }
+            Change::Volume(_) | Change::Muted(_) => {
+                if let Some((v, m)) = self.volume.as_mut() {
+                    match c {
+                        Change::Volume(n) => *v = *n,
+                        Change::Muted(b) => *m = *b,
+                        _ => {}
+                    }
+                }
+                self.damage.push(self.ridge_rect());
+                self.touch();
+            }
             _ => {}
         }
         true
@@ -274,6 +329,7 @@ impl Shell {
         }
         self.network = n;
         self.damage.push(self.ridge_rect());
+        self.touch();
         true
     }
 
@@ -289,6 +345,7 @@ impl Shell {
         }
         self.volume = v;
         self.damage.push(self.ridge_rect());
+        self.touch();
         true
     }
 
@@ -296,30 +353,37 @@ impl Shell {
         self.volume
     }
 
+    /// The sound card's name (the control centre shows it).
+    pub fn set_sound_card(&mut self, name: Option<String>) {
+        if self.sound_card != name {
+            self.sound_card = name;
+            self.touch();
+        }
+    }
+
     // -----------------------------------------------------------------
     // Notifications.
 
-    /// Run `f`, damaging what the toasts covered before and after (and the
-    /// ridge's unread count, the history panel).
+    /// Run `f`, then damage what changed (the notices, the history, the
+    /// ridge's unread count).
     fn notes_change<R>(&mut self, f: impl FnOnce(&mut Shell) -> R) -> R {
-        let before = (self.toasts_extent(), self.history_extent(), self.notes.unread());
+        let unread = self.notes.unread();
         let r = f(self);
         if self.notes.take_changed() {
-            let after = (self.toasts_extent(), self.history_extent(), self.notes.unread());
-            for e in [before.0, after.0, before.1, after.1].into_iter().flatten() {
-                self.damage.push(e);
-            }
-            if before.2 != after.2 {
+            if unread != self.notes.unread() {
                 self.damage.push(self.ridge_rect());
             }
+            self.touch();
         }
         r
     }
 
-    /// The clock for timeouts, in milliseconds (any monotonic clock).
+    /// The clock for timeouts and animations, in milliseconds (any
+    /// monotonic clock).
     pub fn set_now_ms(&mut self, now: u64) {
         self.now_ms = now;
         self.notes_change(|s| s.notes.tick(now));
+        self.sync();
     }
 
     /// A `Notify` call: shown (or queued), kept in the history; its ID.
@@ -345,9 +409,14 @@ impl Shell {
         self.notes.take_invoked()
     }
 
-    /// When a toast expires next (on the [`Shell::set_now_ms`] clock).
+    /// When the shell wants to be woken next (on the [`Shell::set_now_ms`]
+    /// clock): a notice's expiry, or the next frame while a surface moves.
     pub fn next_notification_deadline(&self) -> Option<u64> {
-        self.notes.next_deadline()
+        let frame = self.motion.animating(self.now_ms).then_some(self.now_ms + crate::theme::chrome::FRAME_MS);
+        match (self.notes.next_deadline(), frame) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
     }
 
     pub fn notifications(&self) -> &Notifications {
@@ -355,32 +424,121 @@ impl Shell {
     }
 
     pub fn history_open(&self) -> bool {
-        self.history
+        self.panel == Some(Panel::History)
     }
 
-    /// Open or close the notification history (it opens in the middle;
-    /// opening marks everything read).
+    /// Open or close the notification history (opening marks everything
+    /// read).
     pub fn toggle_history(&mut self) {
-        let before = self.history_extent();
-        self.history = !self.history;
-        if self.history {
-            self.hide_launcher();
+        if self.history_open() {
+            self.close_panel();
+        } else {
+            self.open_panel(Panel::History);
+        }
+    }
+
+    /// A key while an overlay (a panel) is open; true if taken.
+    pub fn overlay_key(&mut self, key: Key) -> bool {
+        if self.panel.is_some() && key == Key::Escape {
+            self.close_panel();
+            return true;
+        }
+        false
+    }
+
+    // -----------------------------------------------------------------
+    // Panels.
+
+    /// The panel open from the ridge.
+    pub fn panel(&self) -> Option<Panel> {
+        self.panel
+    }
+
+    /// Open `p` (closing another; the launcher and the switcher go).
+    pub fn open_panel(&mut self, p: Panel) {
+        self.hide_launcher();
+        if self.switcher.is_open() {
+            self.switcher.cancel();
+        }
+        if p == Panel::History {
             self.notes.mark_read();
             self.notes.take_changed();
             self.damage.push(self.ridge_rect());
         }
-        for e in [before, self.history_extent()].into_iter().flatten() {
-            self.damage.push(e);
+        if self.panel != Some(p) {
+            self.panels = panels::State::default();
+        }
+        self.panel = Some(p);
+        self.damage.push(self.ridge_rect());
+        self.touch();
+    }
+
+    pub fn close_panel(&mut self) {
+        if self.panel.take().is_some() {
+            self.panels = panels::State::default();
+            self.damage.push(self.ridge_rect());
+            self.touch();
         }
     }
 
-    /// A key while an overlay (the history) is open; true if taken.
-    pub fn overlay_key(&mut self, key: Key) -> bool {
-        if self.history && key == Key::Escape {
-            self.toggle_history();
-            return true;
+    // -----------------------------------------------------------------
+    // The surface on the screen.
+
+    /// The surface that should show now and where.
+    fn wanted(&self) -> Option<(Surface, Geometry)> {
+        if self.launcher.is_visible() {
+            let w = self.launcher_width();
+            let h = self.launcher_layout(0).body.height;
+            return Some((Surface::Launcher, Geometry::centred(self.width, w, h)));
         }
-        false
+        if self.switcher.is_open() {
+            let (p, _) = self.switcher.layout(self.width, self.height);
+            return Some((Surface::Switcher, Geometry::centred(self.width, p.width, p.height)));
+        }
+        if let Some(p) = self.panel {
+            return Some((Surface::Panel(p), self.panel_geometry(p)));
+        }
+        if !self.notes.toasts().is_empty() {
+            let h = self.notice_layout(0).iter().map(|n| n.rect.bottom()).max().unwrap_or(0);
+            return Some((Surface::Notices, Geometry::at_right(self.width, self.notice_width(), h)));
+        }
+        None
+    }
+
+    /// What the surface covers now, logical.
+    fn current_extent(&self) -> Rect {
+        match self.motion.drawn(self.now_ms) {
+            Some((_, g, h)) => g.chrome(rt::HEIGHT, h, 1).bounds(),
+            None => Rect::default(),
+        }
+    }
+
+    /// Bring the surface up to date: what shows, where, how far open; damage
+    /// what it covered and covers.
+    fn sync(&mut self) {
+        let changed = self.motion.want(self.wanted(), self.now_ms);
+        let extent = self.current_extent();
+        if changed || extent != self.surface_extent || self.motion.animating(self.now_ms) {
+            for r in [self.surface_extent, extent] {
+                if !r.is_empty() {
+                    self.damage.push(r);
+                }
+            }
+            self.surface_extent = extent;
+        }
+    }
+
+    /// The surface's contents changed: draw it again.
+    fn touch(&mut self) {
+        self.sync();
+        if !self.surface_extent.is_empty() {
+            self.damage.push(self.surface_extent);
+        }
+    }
+
+    /// The surface that is open (not one closing).
+    pub fn surface(&self) -> Option<Surface> {
+        self.motion.shown()
     }
 
     // -----------------------------------------------------------------
@@ -394,28 +552,22 @@ impl Shell {
         &self.switcher
     }
 
-    fn switcher_extent(&self) -> Option<Rect> {
-        if !self.switcher.is_open() {
-            return None;
-        }
-        let (p, _) = self.switcher.layout(self.width, self.height);
-        Some(shadowed(p))
+    /// The switcher's panel and cards where they hang (logical).
+    fn switcher_layout(&self, top: i32) -> (Rect, Vec<Rect>) {
+        let (p, cards) = self.switcher.layout(self.width, self.height);
+        let dy = top - p.y;
+        (p.translate(0, dy), cards.iter().map(|c| c.translate(0, dy)).collect())
     }
 
     fn switcher_change(&mut self, f: impl FnOnce(&mut Switcher)) {
-        let before = self.switcher_extent();
         f(&mut self.switcher);
-        for e in [before, self.switcher_extent()].into_iter().flatten() {
-            self.damage.push(e);
-        }
+        self.touch();
     }
 
     /// Open the switcher on `entries` (most recently used first).
     pub fn open_switcher(&mut self, entries: Vec<Entry>, backward: bool) {
         self.hide_launcher();
-        if self.history {
-            self.toggle_history();
-        }
+        self.panel = None;
         self.switcher_change(|s| s.open(entries, backward));
     }
 
@@ -456,72 +608,53 @@ impl Shell {
     // -----------------------------------------------------------------
     // The launcher.
 
-    /// How many rows fit below the search row on this screen.
+    /// How many rows fit in the list (Alpine's cap: 560 pixels or 70 % of
+    /// the screen).
     fn room_for_rows(&self) -> usize {
-        let top = self.search_top();
-        let fixed = lt::SEARCH_HEIGHT + 1 + lt::SECTION_HEIGHT + lt::LIST_PADDING + 1 + lt::FOOTER_HEIGHT + 16;
-        let room = (self.height - top - fixed + lt::ROW_GAP) / (lt::ROW_HEIGHT + lt::ROW_GAP);
+        let cap = lt::LIST_CAP.min(self.height * lt::LIST_SHARE_PERCENT / 100);
+        let room = (cap - lt::SECTION_HEIGHT - lt::LIST_PADDING + lt::ROW_GAP) / (lt::ROW_HEIGHT + lt::ROW_GAP);
         (room.max(1) as usize).min(lt::MAX_ROWS)
     }
 
-    /// The search row's top: centred, raised a little.
-    fn search_top(&self) -> i32 {
-        let centred = (self.height - lt::SEARCH_HEIGHT) / 2 - self.height * lt::RAISE_PERCENT / 100;
-        centred.max(rt::HEIGHT + 16)
+    fn launcher_width(&self) -> i32 {
+        lt::WIDTH.min(self.width - 2 * lt::SIDE_MARGIN).max(200)
     }
 
-    fn launcher_layout(&self) -> LauncherLayout {
-        let w = lt::WIDTH.min(self.width - 2 * lt::SIDE_MARGIN).max(200);
+    /// The launcher with its body's top at `top`.
+    fn launcher_layout(&self, top: i32) -> LauncherLayout {
+        let w = self.launcher_width();
         let x = (self.width - w) / 2;
-        let top = self.search_top();
         let search = Rect::new(x, top, w, lt::SEARCH_HEIGHT);
         let n = self.launcher.results().len();
-        let typed = !self.launcher.query().is_empty();
         let list_top = search.bottom() + 1 + lt::SECTION_HEIGHT;
         let first_row = Rect::new(x + lt::LIST_PADDING, list_top, w - 2 * lt::LIST_PADDING, lt::ROW_HEIGHT);
-        let (height, footer) = if !typed {
+        // Without results (nothing typed, or nothing found) only the search
+        // row shows, as in Alpine.
+        let (height, footer) = if n == 0 {
             (lt::SEARCH_HEIGHT, None)
         } else {
-            let rows = n.max(1) as i32;
+            let rows = n as i32;
             let list = lt::SECTION_HEIGHT + rows * lt::ROW_HEIGHT + (rows - 1) * lt::ROW_GAP + lt::LIST_PADDING;
             let body = lt::SEARCH_HEIGHT + 1 + list;
             (body + 1 + lt::FOOTER_HEIGHT, Some(Rect::new(x, top + body + 1, w, lt::FOOTER_HEIGHT)))
         };
-        LauncherLayout {
-            panel: Rect::new(x, top, w, height),
-            search,
-            first_row,
-            rows: n,
-            empty: typed && n == 0,
-            footer,
-        }
+        LauncherLayout { body: Rect::new(x, top, w, height), search, first_row, rows: n, footer }
     }
 
-    /// Everything the launcher draws on, shadow included.
-    fn launcher_extent(&self) -> Rect {
-        shadowed(self.launcher_layout().panel)
-    }
-
-    /// Run `f` on the launcher, damaging what it covered before and after.
+    /// Run `f` on the launcher, then bring the surface up to date.
     fn change(&mut self, f: impl FnOnce(&mut Shell) -> Outcome) -> Outcome {
         let was_visible = self.launcher.is_visible();
-        let before = self.launcher_extent();
         let out = f(self);
         if out != Outcome::Unchanged || was_visible != self.launcher.is_visible() {
-            if was_visible {
-                self.damage.push(before);
-            }
-            if self.launcher.is_visible() {
-                self.damage.push(self.launcher_extent());
-            }
+            self.touch();
         }
         out
     }
 
     /// The hotkey: show the launcher, or hide it.
     pub fn toggle_launcher(&mut self) {
-        if self.history && !self.launcher.is_visible() {
-            self.toggle_history();
+        if !self.launcher.is_visible() {
+            self.panel = None;
         }
         self.change(|s| {
             s.launcher.toggle();
@@ -549,10 +682,10 @@ impl Shell {
 
     /// The row at logical (`x`, `y`), if the launcher shows one there.
     fn row_at(&self, x: i32, y: i32) -> Option<usize> {
-        let l = self.launcher_layout();
-        if l.empty || !self.launcher.is_visible() {
+        if !self.launcher.is_visible() {
             return None;
         }
+        let l = self.launcher_layout(rt::HEIGHT);
         (0..l.rows).find(|&i| self.row_rect(&l, i).contains(x, y))
     }
 
@@ -560,11 +693,21 @@ impl Shell {
         l.first_row.translate(0, i as i32 * (lt::ROW_HEIGHT + lt::ROW_GAP))
     }
 
+    // -----------------------------------------------------------------
+    // Pointer input.
+
     /// The pointer is at logical (`x`, `y`): hovering a launcher row or a
-    /// switcher card selects it.
+    /// switcher card selects it; coming onto an item of the ridge opens its
+    /// panel, leaving the item and the panel closes it.
     pub fn pointer_motion(&mut self, x: i32, y: i32) {
+        let before = self.pointer;
+        self.pointer = (x, y);
+        let ridge = self.ridge_layout();
+        if ridge.clock.contains(before.0, before.1) != ridge.clock.contains(x, y) {
+            self.damage.push(self.ridge_rect());
+        }
         if self.switcher.is_open() {
-            let (_, cards) = self.switcher.layout(self.width, self.height);
+            let (_, cards) = self.switcher_layout(rt::HEIGHT);
             if let Some(i) = cards.iter().position(|c| c.contains(x, y))
                 && self.switcher.selected() != i
             {
@@ -574,22 +717,62 @@ impl Shell {
             }
             return;
         }
-        if !self.launcher.is_visible() {
+        if self.launcher.is_visible() {
+            let row = self.row_at(x, y);
+            if self.launcher.hover() != row {
+                self.change(|s| if s.launcher.set_hover(row) { Outcome::Changed } else { Outcome::Unchanged });
+            }
             return;
         }
-        let row = self.row_at(x, y);
-        if self.launcher.hover() != row {
-            self.change(|s| if s.launcher.set_hover(row) { Outcome::Changed } else { Outcome::Unchanged });
+        if self.panels.dragging {
+            self.panel_drag(x, y);
+            return;
+        }
+        if let Some(p) = self.trigger_at(&ridge, x, y) {
+            if self.panel != Some(p) {
+                self.open_panel(p);
+            }
+            return;
+        }
+        if let Some(p) = self.panel {
+            let body = self.panel_geometry(p).bounds(rt::HEIGHT);
+            if !body.contains(x, y) && !self.trigger_rect(&ridge, p).contains(x, y) {
+                self.close_panel();
+            } else {
+                self.panel_hover(x, y);
+            }
         }
     }
 
-    /// A press of the left button at logical (`x`, `y`). The switcher,
-    /// the launcher and the history take every press while they show (a
-    /// press outside closes them, as clicking Alpine's transparent overlay
-    /// does); toasts and the ridge take theirs.
+    /// Which panel the ridge's item at (`x`, `y`) opens.
+    fn trigger_at(&self, r: &RidgeLayout, x: i32, y: i32) -> Option<Panel> {
+        if !(0..rt::HEIGHT).contains(&y) {
+            return None;
+        }
+        [Panel::Menu, Panel::Control, Panel::Calendar, Panel::History]
+            .into_iter()
+            .find(|&p| self.trigger_rect(r, p).contains(x, y))
+    }
+
+    /// The ridge item that opens `p`, the full height of the ridge.
+    fn trigger_rect(&self, r: &RidgeLayout, p: Panel) -> Rect {
+        let full = |q: Rect| Rect::new(q.x, 0, q.width, rt::HEIGHT);
+        match p {
+            Panel::Menu => r.menu,
+            Panel::Control => full(r.status),
+            Panel::Calendar => full(r.clock),
+            Panel::History => r.notice.map(full).unwrap_or_default(),
+        }
+    }
+
+    /// A press of the left button at logical (`x`, `y`). The switcher and
+    /// the launcher take every press while they show (a press outside
+    /// closes them, as clicking Alpine's transparent overlay does); an
+    /// open panel takes the presses on it (others close it and go on);
+    /// the notices and the ridge take theirs.
     pub fn press(&mut self, x: i32, y: i32) -> Press {
         if self.switcher.is_open() {
-            let (_, cards) = self.switcher.layout(self.width, self.height);
+            let (_, cards) = self.switcher_layout(rt::HEIGHT);
             return match cards.iter().position(|c| c.contains(x, y)) {
                 Some(i) => {
                     self.switcher_change(|s| {
@@ -610,47 +793,43 @@ impl Shell {
                     _ => Press::Taken,
                 };
             }
-            if !self.launcher_layout().panel.contains(x, y) {
+            let g = self.wanted().map(|w| w.1.bounds(rt::HEIGHT)).unwrap_or_default();
+            if !g.contains(x, y) {
                 self.hide_launcher();
             }
             return Press::Taken;
         }
-        if self.history {
-            if let Some(h) = self.history_layout() {
-                if h.clear.is_some_and(|c| c.contains(x, y)) {
-                    self.notes_change(|s| s.notes.clear_history());
-                    self.damage.push(shadowed(h.panel));
-                } else if !h.panel.contains(x, y) {
-                    self.toggle_history();
-                }
+        let ridge = self.ridge_layout();
+        if let Some(p) = self.panel {
+            if self.panel_geometry(p).bounds(rt::HEIGHT).contains(x, y) {
+                return self.panel_press(p, x, y);
             }
-            return Press::Taken;
+            if self.trigger_rect(&ridge, p).contains(x, y) {
+                self.close_panel();
+                return Press::Taken;
+            }
+            self.close_panel();
         }
-        // A toast: its buttons invoke actions, its cross dismisses it, the
-        // rest invokes the default action (or dismisses).
-        if let Some(t) = self.toast_layout().into_iter().find(|t| t.card.contains(x, y)) {
-            let now = self.now_ms;
-            let id = t.id;
-            if let Some((_, key, _)) = t.buttons.iter().find(|b| b.0.contains(x, y)) {
-                let key = key.clone();
-                self.notes_change(|s| s.notes.invoke(id, &key, now));
-            } else if !t.close.contains(x, y) && self.notes.has_action(id, "default") {
-                self.notes_change(|s| s.notes.invoke(id, "default", now));
-            } else {
-                self.notes_change(|s| s.notes.dismiss(id, now));
-            }
-            return Press::Taken;
+        if self.surface() == Some(Surface::Notices)
+            && let Some(press) = self.notices_press(x, y)
+        {
+            return press;
         }
         if self.ridge_rect().contains(x, y) {
-            let r = self.ridge_layout();
-            if r.unread.is_some_and(|u| u.contains(x, y)) || r.clock.contains(x, y) {
-                self.toggle_history();
-            } else if r.status.contains(x, y) {
-                return Press::Settings(Page::Sound);
+            if let Some(p) = self.trigger_at(&ridge, x, y) {
+                self.open_panel(p);
             }
             return Press::Taken;
         }
         Press::NotMine
+    }
+
+    /// The left button went up (ends a slider's drag).
+    pub fn release(&mut self) {
+        if self.panels.dragging {
+            self.panels.dragging = false;
+            self.touch();
+        }
     }
 
     /// The layer under the windows: the wallpaper and the ridge.
@@ -658,8 +837,8 @@ impl Shell {
         Below(self)
     }
 
-    /// The layer over the windows: the snap preview, the toasts, the
-    /// history, the switcher and the launcher.
+    /// The layer over the windows: the snap preview and the surface that
+    /// hangs from the ridge.
     pub fn above(&self) -> Above<'_> {
         Above(self)
     }
@@ -707,150 +886,30 @@ impl Shell {
     }
 
     // -----------------------------------------------------------------
-    // Layouts of the new parts.
+    // The ridge.
 
     fn ridge_layout(&self) -> RidgeLayout {
-        let tw = self.text.width(&self.clock, rt::TEXT_SIZE) as i32;
+        let st = Style::new(Face::Sans, rt::TEXT_SIZE);
+        let tw = self.text.measure(&self.clock, st) as i32;
         let clock_w = tw + 2 * rt::PILL_PADDING;
         let pill_y = (rt::HEIGHT - rt::PILL_HEIGHT) / 2;
         let clock = Rect::new(self.width - rt::RIGHT_MARGIN - clock_w, pill_y, clock_w, rt::PILL_HEIGHT);
         let icons = 2 * rt::ICON + rt::GAP;
         let status_w = icons + 2 * rt::PILL_PADDING;
         let status = Rect::new(clock.x - rt::GAP - status_w, pill_y, status_w, rt::PILL_HEIGHT);
-        let unread = (self.notes.unread() > 0).then(|| {
+        let menu = Rect::new(0, 0, rt::MENU_ICON_X * 2 + rt::ICON, rt::HEIGHT);
+        let notice = (self.notes.unread() > 0).then(|| {
             let label = self.unread_label();
-            let w = 6 + 6 + 6 + self.text.width(&label, 11.0) as i32 + 6;
-            Rect::new(status.x - rt::GAP - w, pill_y, w, rt::PILL_HEIGHT)
+            let ns = Style::new(Face::Sans, rt::NOTICE_SIZE);
+            let w = 6 + rt::NOTICE_DOT + rt::NOTICE_GAP + self.text.measure(&label, ns) as i32 + 6;
+            Rect::new((self.width - w) / 2, 0, w, rt::HEIGHT)
         });
-        RidgeLayout { clock, status, unread }
+        RidgeLayout { menu, clock, status, notice }
     }
 
     fn unread_label(&self) -> String {
         let n = self.notes.unread();
-        if n == 1 { "1 new".into() } else { alloc::format!("{n} new") }
-    }
-
-    /// The toasts' cards, newest at the top.
-    fn toast_layout(&self) -> Vec<ToastLayout> {
-        let w = nt::WIDTH.min(self.width - 2 * nt::MARGIN);
-        let x = self.width - nt::MARGIN - w;
-        let mut y = rt::HEIGHT + nt::MARGIN;
-        let text_x = nt::PADDING_X + nt::DOT + nt::DOT_GAP;
-        let text_w = (w - text_x - nt::PADDING_X - nt::CLOSE - 6) as f32;
-        let mut out = Vec::new();
-        for n in self.notes.toasts() {
-            let (title, body) =
-                if n.summary.is_empty() { (n.app_name.clone(), &n.body) } else { (n.summary.clone(), &n.body) };
-            let title = self.text.fit(&title, nt::TEXT_SIZE, text_w);
-            let lines =
-                if body.is_empty() { Vec::new() } else { self.text.wrap(body, nt::TEXT_SIZE, text_w, nt::MAX_LINES) };
-            let actions: Vec<&(String, String)> = n.actions.iter().filter(|a| a.0 != "default").take(2).collect();
-            let mut h = 2 * nt::PADDING_Y + nt::LINE * (1 + lines.len() as i32);
-            if !actions.is_empty() {
-                h += 8 + nt::BUTTON_HEIGHT;
-            }
-            let card = Rect::new(x, y, w, h);
-            let close = Rect::new(
-                card.right() - nt::PADDING_X - nt::CLOSE,
-                card.y + nt::PADDING_Y - 2,
-                nt::CLOSE + 4,
-                nt::LINE + 4,
-            );
-            let mut bx = card.x + text_x;
-            let by = card.bottom() - nt::PADDING_Y - nt::BUTTON_HEIGHT;
-            let mut buttons = Vec::new();
-            for (key, label) in actions {
-                let bw = self.text.width(label, nt::BUTTON_SIZE) as i32 + 20;
-                buttons.push((Rect::new(bx, by, bw, nt::BUTTON_HEIGHT), key.clone(), label.clone()));
-                bx += bw + 6;
-            }
-            out.push(ToastLayout {
-                id: n.id,
-                card,
-                close,
-                title,
-                lines,
-                buttons,
-                critical: n.urgency == Urgency::Critical,
-            });
-            y += h + nt::GAP;
-            if y > self.height {
-                break;
-            }
-        }
-        out
-    }
-
-    fn toasts_extent(&self) -> Option<Rect> {
-        let l = self.toast_layout();
-        let all = l.iter().fold(Rect::default(), |a, t| a.union(&t.card));
-        (!all.is_empty()).then(|| shadowed(all))
-    }
-
-    /// The history panel: centred where the launcher is.
-    fn history_layout(&self) -> Option<HistoryLayout> {
-        if !self.history {
-            return None;
-        }
-        let w = 480.min(self.width - 2 * lt::SIDE_MARGIN);
-        let x = (self.width - w) / 2;
-        let top = self.search_top();
-        let n = self.notes.history_len().min(lt::MAX_ROWS);
-        let rows_h = if n == 0 { lt::ROW_HEIGHT } else { n as i32 * (lt::ROW_HEIGHT + lt::ROW_GAP) - lt::ROW_GAP };
-        let panel = Rect::new(x, top, w, lt::SEARCH_HEIGHT + 1 + lt::LIST_PADDING * 2 + rows_h);
-        let clear = (n > 0).then(|| {
-            let cw = self.text.width("Clear", 11.0) as i32 + 16;
-            Rect::new(panel.right() - lt::SEARCH_PADDING - cw, top + (lt::SEARCH_HEIGHT - 22) / 2, cw, 22)
-        });
-        let first = top + lt::SEARCH_HEIGHT + 1 + lt::LIST_PADDING;
-        let rows = (0..n)
-            .map(|i| {
-                Rect::new(
-                    x + lt::LIST_PADDING,
-                    first + i as i32 * (lt::ROW_HEIGHT + lt::ROW_GAP),
-                    w - 2 * lt::LIST_PADDING,
-                    lt::ROW_HEIGHT,
-                )
-            })
-            .collect();
-        Some(HistoryLayout { panel, clear, rows })
-    }
-
-    fn history_extent(&self) -> Option<Rect> {
-        self.history_layout().map(|h| shadowed(h.panel))
-    }
-
-    // -----------------------------------------------------------------
-    // Drawing (physical pixels: logical × s).
-
-    fn draw_wallpaper(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
-        let (top, bottom, glow) = wt::colours(&self.settings.wallpaper);
-        let (w, h) = (self.width * s, self.height * s);
-        let ch = |c: u32, sh: u32| ((c >> sh) & 0xff) as i32;
-        // A 4×4 ordered dither (thresholds 0-15 of 16) hides the steps a
-        // gradient this gentle would show in 8 bits.
-        const BAYER: [i32; 16] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-        for y in clip.y..clip.bottom() {
-            // Channels in 1/256 levels: the vertical gradient...
-            let t = (y * 256 / h.max(1)).clamp(0, 256);
-            let base = [16, 8, 0].map(|sh| ch(top, sh) * (256 - t) + ch(bottom, sh) * t);
-            // ...and the glow: an ellipse around a point a third down,
-            // fading out half the screen's width and height away.
-            let ny = (y - h / 3) * 1024 / (h / 2).max(1);
-            let row = fb.row_mut(y as u32);
-            for x in clip.x..clip.right() {
-                let nx = (x - w / 2) * 1024 / (w / 2).max(1);
-                // 0 to 1024 at the centre, squared for a soft edge.
-                let g = (1024 - (nx * nx + ny * ny) / 1024).max(0);
-                let a = g * g / 1024 * 90 / 256; // up to 360 of 1024
-                let dither = BAYER[((y & 3) * 4 + (x & 3)) as usize] * 16;
-                let c = |i: usize, sh: u32| {
-                    let v = base[i] + (ch(glow, sh) * 256 - base[i]) * a / 1024;
-                    (((v + dither) >> 8).clamp(0, 255) as u32) << sh
-                };
-                row[x as usize] = 0xff00_0000 | c(0, 16) | c(1, 8) | c(2, 0);
-            }
-        }
+        if n == 1 { "1 new notification".into() } else { alloc::format!("{n} new notifications") }
     }
 
     fn draw_ridge(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
@@ -859,149 +918,125 @@ impl Shell {
             return;
         }
         fill(fb, clip, ridge, rt::BACKGROUND, 255);
-        let cy = rt::HEIGHT * s / 2;
         let l = self.ridge_layout();
-        // The menu glyph on the left: a ring (Alpine's power menu face),
-        // inert.
-        let r = rt::ICON * s / 2 - s;
-        draw::circle(fb, clip, (rt::MENU_ICON_X + rt::ICON / 2) * s, cy, r, Some(s.max(1)), WHITE, 200);
-        // The clock.
-        let size = rt::TEXT_SIZE * s as f32;
-        let baseline = cy + (self.text.cap_height(size) as i32) / 2;
+        let fs = s as f32;
+        let icon_y = ((rt::HEIGHT - rt::ICON) / 2 * s) as f32;
+        // The system menu: Lucide's dashed circle.
+        lucide::CIRCLE_DASHED.draw(fb, clip, (rt::MENU_ICON_X * s) as f32, icon_y, (rt::ICON * s) as f32, WHITE, 255);
+        // The clock, in a pill that lights up under the pointer.
+        let st = Style::new(Face::Sans, rt::TEXT_SIZE).scaled(s);
         let clock = l.clock.scale(s);
+        if l.clock.contains(self.pointer.0, self.pointer.1) || self.panel == Some(Panel::Calendar) {
+            rounded_rect(fb, clip, clock, clock.height / 2, WHITE, rt::PILL_ALPHA);
+        }
+        let baseline = self.text.centre(clock.y, clock.height, st);
         let tx = (clock.x + rt::PILL_PADDING * s) as f32;
-        self.text.draw(fb, clip, tx, baseline, ridge.right(), &self.clock, size, rt::TEXT, 255);
+        self.text.draw_style(fb, clip, tx, baseline, ridge.right(), &self.clock, st, rt::TEXT, 255);
         // The status pill: network and volume.
         let pill = l.status.scale(s);
         rounded_rect(fb, clip, pill, pill.height / 2, WHITE, rt::PILL_ALPHA);
-        let ix = pill.x + rt::PILL_PADDING * s;
-        // Network: three bars rising to the right, dim when offline.
-        let bars = match self.network {
-            Network::Online(_) => 230,
-            Network::Unknown => 140,
-            Network::Offline => 70,
+        let ix = (pill.x + rt::PILL_PADDING * s) as f32;
+        let size = (rt::ICON * s) as f32;
+        let net: (Icon, u8) = match self.network {
+            Network::Online(_) => (lucide::ETHERNET_PORT, 255),
+            Network::Unknown => (lucide::ETHERNET_PORT, 128),
+            Network::Offline => (lucide::WIFI_OFF, 255),
         };
-        for i in 0..3 {
-            let bh = (4 + 4 * i) * s;
-            let bar = Rect::new(ix + (1 + 4 * i) * s, cy + 5 * s - bh, 3 * s, bh);
-            fill(fb, clip, bar, WHITE, bars);
-        }
-        if self.network == Network::Offline {
-            // A slash across the bars.
-            for i in 0..10 * s {
-                fill(fb, clip, Rect::new(ix + s + i, cy + 5 * s - i - s, s, s), WHITE, 230);
-            }
-        }
-        // Volume: a speaker, then a wave per third of the level; a cross
-        // when muted, dim without a sound card.
-        let vx = ix + (rt::ICON + rt::GAP) * s;
-        let (level, muted, a) = match self.volume {
-            Some((v, m)) => (v, m, 230),
-            None => (0, false, 90),
+        net.0.draw(fb, clip, ix, icon_y, size, WHITE, net.1);
+        let (vol, a) = match self.volume {
+            Some((_, true)) => (lucide::VOLUME_X, 255),
+            Some((0, false)) => (lucide::VOLUME, 255),
+            Some((v, false)) if v <= 50 => (lucide::VOLUME_1, 255),
+            Some(_) => (lucide::VOLUME_2, 255),
+            None => (lucide::VOLUME_X, 128),
         };
-        fill(fb, clip, Rect::new(vx + s, cy - 2 * s, 3 * s, 4 * s), WHITE, a);
-        for i in 0..4 {
-            fill(fb, clip, Rect::new(vx + (4 + i) * s, cy - (2 + i) * s, s, (4 + 2 * i) * s), WHITE, a);
+        vol.draw(fb, clip, ix + ((rt::ICON + rt::GAP) * s) as f32, icon_y, size, WHITE, a);
+        // The unread notifications in the middle: a dot and the count.
+        if let Some(n) = l.notice {
+            let n = n.scale(s);
+            let cy = n.y + n.height / 2;
+            let dr = rt::NOTICE_DOT * s / 2;
+            let dx = n.x + 6 * s + dr;
+            draw::circle(fb, clip, dx, cy, dr, None, WHITE, rt::NOTICE_DOT_ALPHA);
+            let ns = Style::new(Face::Sans, rt::NOTICE_SIZE).scaled(s);
+            let x = (n.x + (6 + rt::NOTICE_DOT + rt::NOTICE_GAP) * s) as f32;
+            let b = self.text.centre(n.y, n.height, ns);
+            self.text.draw_style(fb, clip, x, b, n.right(), &self.unread_label(), ns, WHITE, rt::NOTICE_ALPHA);
         }
-        if muted {
-            for i in 0..5 * s {
-                fill(fb, clip, Rect::new(vx + 9 * s + i, cy - 2 * s - s / 2 + i, s, s), WHITE, 230);
-                fill(fb, clip, Rect::new(vx + 9 * s + i, cy + 2 * s + s / 2 - i, s, s), WHITE, 230);
-            }
-        } else {
-            let waves = match level {
-                0 => 0,
-                1..=33 => 1,
-                34..=66 => 2,
-                _ => 3,
-            };
-            let half = clip.intersect(&Rect::new(vx + 9 * s, cy - 8 * s, 7 * s, 16 * s));
-            for i in 0..waves {
-                draw::circle(fb, half, vx + 7 * s, cy, (3 + 2 * i) * s, Some(s), WHITE, 200);
-            }
+        let _ = fs;
+    }
+
+    // -----------------------------------------------------------------
+    // The surface.
+
+    fn draw_surface(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
+        let Some((kind, g, h)) = self.motion.drawn(self.now_ms) else { return };
+        let shape = g.chrome(rt::HEIGHT, h, s);
+        if shape.bounds().intersect(&clip).is_empty() {
+            return;
         }
-        // The unread notifications: a dot and a count.
-        if let Some(u) = l.unread {
-            let u = u.scale(s);
-            rounded_rect(fb, clip, u, u.height / 2, WHITE, rt::PILL_ALPHA);
-            draw::circle(fb, clip, u.x + 9 * s, cy, 3 * s, None, WHITE, 200);
-            let size = 11.0 * s as f32;
-            let label = self.unread_label();
-            self.text.draw(fb, clip, (u.x + 18 * s) as f32, baseline, u.right(), &label, size, WHITE, 191);
+        shape.fill(fb, clip, rt::BACKGROUND, 255);
+        // The contents slide down with the opening surface and are cut at
+        // its edge (logical body at full height, moved up by what is hidden).
+        let hidden = (g.height - h).max(0.0) as i32;
+        let top = rt::HEIGHT - hidden;
+        let body = shape.body.pixels();
+        let inner = clip.intersect(&Rect::new(body.x, rt::HEIGHT * s, body.width, body.height));
+        if inner.is_empty() {
+            return;
+        }
+        match kind {
+            Surface::Launcher => self.draw_launcher(fb, inner, s, top),
+            Surface::Switcher => self.draw_switcher(fb, inner, s, top),
+            Surface::Panel(p) => self.draw_panel(fb, inner, s, p, g.body(top)),
+            Surface::Notices => self.draw_notices(fb, inner, s, g.body(top)),
         }
     }
 
-    /// A floating panel: Alpine's floating shadow, the bar colour, the
-    /// outline.
-    fn panel(&self, fb: &mut dyn Framebuffer, clip: Rect, panel: Rect, s: i32) {
-        let radius = lt::RADIUS * s;
-        const LAYERS: i32 = 4;
-        for i in (1..=LAYERS).rev() {
-            let grow = lt::SHADOW_SPREAD * s * i / LAYERS;
-            let r = Rect::new(
-                panel.x - grow,
-                panel.y - grow + lt::SHADOW_OFFSET * s / 2,
-                panel.width + 2 * grow,
-                panel.height + 2 * grow,
-            );
-            rounded_rect(fb, clip, r, radius + grow, 0, (lt::SHADOW_ALPHA as i32 / (LAYERS + 2)) as u8);
-        }
-        rounded_rect(fb, clip, panel, radius, lt::BACKGROUND, 255);
-        rounded_outline(fb, clip, panel, radius, WHITE, lt::OUTLINE_ALPHA);
-    }
-
-    fn draw_launcher(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
-        if !self.launcher.is_visible() {
-            return;
-        }
-        let l = self.launcher_layout();
-        let panel = l.panel.scale(s);
-        if self.launcher_extent().scale(s).intersect(&clip).is_empty() {
-            return;
-        }
-        self.panel(fb, clip, panel, s);
-
-        // The search row: glyph, text or placeholder, caret.
+    fn draw_launcher(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, top: i32) {
+        let l = self.launcher_layout(top);
+        let fs = s as f32;
+        // The search row: Lucide's search glyph at 60 %, the text or the
+        // placeholder, the caret.
         let search = l.search.scale(s);
         let cy = search.y + search.height / 2;
         let gx = search.x + lt::SEARCH_PADDING * s;
-        let ring = 5 * s;
-        draw::circle(fb, clip, gx + ring + s, cy - s, ring, Some((3 * s + 1) / 2), WHITE, lt::SEARCH_ICON_ALPHA);
-        for i in 0..4 * s {
-            let p = Rect::new(gx + ring + s + ring * 7 / 10 + i, cy - s + ring * 7 / 10 + i, 2 * s, 2 * s);
-            fill(fb, clip, p, WHITE, lt::SEARCH_ICON_ALPHA);
-        }
+        let gs = lt::SEARCH_ICON * s;
+        lucide::SEARCH.draw(fb, clip, gx as f32, (cy - gs / 2) as f32, gs as f32, WHITE, lt::SEARCH_ICON_ALPHA);
         let tx = gx + (lt::SEARCH_ICON + lt::SEARCH_GAP) * s;
-        let size = lt::INPUT_SIZE * s as f32;
-        let baseline = cy + self.text.cap_height(size) as i32 / 2;
+        let st = Style::new(Face::Sans, lt::INPUT_SIZE).scaled(s);
+        let baseline = self.text.centre(search.y, search.height, st);
         let right = search.right() - lt::SEARCH_PADDING * s;
         let query = self.launcher.query();
         let end = if query.is_empty() {
-            self.text.draw(fb, clip, tx as f32, baseline, right, lt::PLACEHOLDER, size, WHITE, lt::PLACEHOLDER_ALPHA);
+            self.text.draw_style(
+                fb,
+                clip,
+                tx as f32,
+                baseline,
+                right,
+                lt::PLACEHOLDER,
+                st,
+                WHITE,
+                lt::PLACEHOLDER_ALPHA,
+            );
             tx as f32
         } else {
-            self.text.draw(fb, clip, tx as f32, baseline, right, query, size, WHITE, 255)
+            self.text.draw_style(fb, clip, tx as f32, baseline, right, query, st, WHITE, 255)
         };
         let caret_h = 18 * s;
-        fill(fb, clip, Rect::new(end as i32 + s, cy - caret_h / 2, s.max(1), caret_h), WHITE, 255);
-
-        if query.is_empty() {
+        fill(fb, clip, Rect::new(end as i32 + s / 2, cy - caret_h / 2, s.max(1), caret_h), WHITE, 255);
+        if l.rows == 0 {
             return;
         }
-        let w = panel.width;
-        fill(fb, clip, Rect::new(panel.x, search.bottom(), w, s), WHITE, lt::DIVIDER_ALPHA);
-        // The section title.
-        let small = lt::SECTION_SIZE * s as f32;
-        let sx = panel.x + (lt::LIST_PADDING + lt::ROW_PADDING) * s;
-        let sb = search.bottom() + s + 8 * s + self.text.cap_height(small) as i32 + 2 * s;
-        self.text.draw(fb, clip, sx as f32, sb, panel.right(), "Apps", small, WHITE, lt::SECTION_ALPHA);
-        if l.empty {
-            let row = l.first_row.scale(s);
-            let b = row.y + row.height / 2 + self.text.cap_height(lt::TITLE_SIZE * s as f32) as i32 / 2;
-            let msg = "No apps match";
-            let x = (row.x + lt::ROW_PADDING * s) as f32;
-            self.text.draw(fb, clip, x, b, row.right(), msg, lt::TITLE_SIZE * s as f32, WHITE, lt::SUBTITLE_ALPHA);
-        }
+        let w = l.body.width * s;
+        let bx = l.body.x * s;
+        fill(fb, clip, Rect::new(bx, search.bottom(), w, s), WHITE, lt::DIVIDER_ALPHA);
+        // The section title: 11 px medium at 50 %, `px-2.5 pt-2`.
+        let sst = Style::new(Face::Medium, lt::SECTION_SIZE).scaled(s);
+        let sx = bx + (lt::LIST_PADDING + lt::ROW_PADDING) * s;
+        let sb = search.bottom() + s + 8 * s + (sst.size * 1.5 / 2.0 + self.text.cap(sst) / 2.0) as i32;
+        self.text.draw_style(fb, clip, sx as f32, sb, bx + w, "Apps", sst, WHITE, lt::SECTION_ALPHA);
         for (i, &app) in self.launcher.results().iter().enumerate() {
             let row = self.row_rect(&l, i).scale(s);
             if row.intersect(&clip).is_empty() {
@@ -1013,212 +1048,78 @@ impl Shell {
             } else if self.launcher.hover() == Some(i) {
                 rounded_rect(fb, clip, row, lt::ROW_RADIUS * s, WHITE, lt::HOVER_ALPHA);
             }
-            // The icon: a tile in a colour of the app's own with its initial.
+            // The icon: a Lucide glyph at 40 % in the 28-pixel box.
             let ib = lt::ICON_BOX * s;
             let icon = Rect::new(row.x + lt::ROW_PADDING * s, row.y + (row.height - ib) / 2, ib, ib);
-            self.tile(fb, clip, icon, &app.name, 15.0, s);
-            // Name and description.
+            let glyph = match app.internal() {
+                Some(crate::apps::SETTINGS) => lucide::SETTINGS,
+                Some(crate::apps::NOTIFICATIONS) => lucide::BELL,
+                _ => lucide::APP_WINDOW,
+            };
+            let gsz = lt::GLYPH * s;
+            let (gx, gy) = (icon.x + (ib - gsz) / 2, icon.y + (ib - gsz) / 2);
+            glyph.draw(fb, clip, gx as f32, gy as f32, gsz as f32, WHITE, ink::ICON);
+            // Name and description: 13 px over 11 px at 50 %.
             let tx = (icon.right() + lt::ROW_ICON_GAP * s) as f32;
-            let tsize = lt::TITLE_SIZE * s as f32;
+            let tst = Style::new(Face::Sans, lt::TITLE_SIZE).scaled(s);
+            let sst = Style::new(Face::Sans, lt::SUBTITLE_SIZE).scaled(s);
             let right = row.right() - lt::ROW_PADDING * s;
-            self.text.draw(fb, clip, tx, row.y + 21 * s, right, &app.name, tsize, WHITE, 255);
-            let ssize = lt::SUBTITLE_SIZE * s as f32;
-            self.text.draw(fb, clip, tx, row.y + 37 * s, right, &app.comment, ssize, WHITE, lt::SUBTITLE_ALPHA);
+            let (title_b, sub_b) = if app.comment.is_empty() {
+                (self.text.centre(row.y, row.height, tst), 0)
+            } else {
+                // Two lines of 19.5 and 16.5 pixels, centred together.
+                let block = (13.0 * 1.5 + 11.0 * 1.5) * fs;
+                let top = row.y as f32 + (row.height as f32 - block) / 2.0;
+                let tb = top + (19.5 * fs + self.text.cap(tst)) / 2.0;
+                let sb = top + 19.5 * fs + (16.5 * fs + self.text.cap(sst)) / 2.0;
+                (tb as i32, sb as i32)
+            };
+            self.text.draw_style(fb, clip, tx, title_b, right, &app.name, tst, WHITE, 255);
+            if !app.comment.is_empty() {
+                self.text.draw_style(fb, clip, tx, sub_b, right, &app.comment, sst, WHITE, lt::SUBTITLE_ALPHA);
+            }
         }
-        // The footer: what Enter and Escape do.
+        // The footer: what Enter does.
         if let Some(f) = l.footer {
-            self.footer(fb, clip, f.scale(s), &[("Close", "Esc"), ("Open", "\u{21b5}")], s);
-        }
-    }
-
-    /// A tile in a colour of `name`'s own with its initial, `size` px.
-    fn tile(&self, fb: &mut dyn Framebuffer, clip: Rect, icon: Rect, name: &str, size: f32, s: i32) {
-        rounded_rect(fb, clip, icon, (icon.width / 5).max(s), tile_colour(name), 255);
-        let initial: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
-        let isize = size * s as f32;
-        let iw = self.text.width(&initial, isize) as i32;
-        let ibase = icon.y + icon.height / 2 + self.text.cap_height(isize) as i32 / 2;
-        self.text.draw(
-            fb,
-            clip,
-            (icon.x + (icon.width - iw) / 2) as f32,
-            ibase,
-            icon.right(),
-            &initial,
-            isize,
-            WHITE,
-            255,
-        );
-    }
-
-    /// A footer of `(label, key chip)` pairs, right-aligned (physical `f`).
-    fn footer(&self, fb: &mut dyn Framebuffer, clip: Rect, f: Rect, pairs: &[(&str, &str)], s: i32) {
-        fill(fb, clip, Rect::new(f.x, f.y - s, f.width, s), WHITE, lt::DIVIDER_ALPHA);
-        let size = lt::FOOTER_SIZE * s as f32;
-        let chip_size = 10.0 * s as f32;
-        let base = f.y + f.height / 2 + self.text.cap_height(size) as i32 / 2;
-        let mut x = f.right() - lt::SEARCH_PADDING * s;
-        for (label, chip) in pairs {
-            let cw = self.text.width(chip, chip_size) as i32 + 12 * s;
-            let ch = 16 * s;
-            x -= cw;
+            let f = f.scale(s);
+            fill(fb, clip, Rect::new(f.x, f.y - s, f.width, s), WHITE, lt::DIVIDER_ALPHA);
+            let fst = Style::new(Face::Sans, lt::FOOTER_SIZE).scaled(s);
+            let cst = Style::new(Face::Sans, lt::CHIP_SIZE).scaled(s);
+            let chip = "\u{21b5}";
+            let cw = self.text.measure(chip, cst) as i32 + 12 * s;
+            let ch = 16 * s + 2 * s;
+            let x = f.right() - lt::SEARCH_PADDING * s - cw;
             let chip_rect = Rect::new(x, f.y + (f.height - ch) / 2, cw, ch);
-            rounded_rect(fb, clip, chip_rect, 4 * s, WHITE, 26);
-            let cb = chip_rect.y + ch / 2 + self.text.cap_height(chip_size) as i32 / 2;
-            self.text.draw(fb, clip, (x + 6 * s) as f32, cb, chip_rect.right(), chip, chip_size, WHITE, 153);
-            let lw = self.text.width(label, size) as i32;
-            x -= 6 * s + lw;
-            self.text.draw(fb, clip, x as f32, base, x + lw + s, label, size, WHITE, lt::SUBTITLE_ALPHA);
-            x -= 12 * s;
+            rounded_rect(fb, clip, chip_rect, 4 * s, WHITE, ink::SELECTED);
+            let cb = self.text.centre(chip_rect.y, chip_rect.height, cst);
+            self.text.draw_style(fb, clip, (x + 6 * s) as f32, cb, chip_rect.right(), chip, cst, WHITE, ink::CHIP_TEXT);
+            let label = "Open";
+            let lw = self.text.measure(label, fst) as i32;
+            let lx = x - 6 * s - lw;
+            let lb = self.text.centre(f.y, f.height, fst);
+            self.text.draw_style(fb, clip, lx as f32, lb, lx + lw + s, label, fst, WHITE, lt::SUBTITLE_ALPHA);
         }
     }
 
-    fn draw_toasts(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
-        let toasts = self.toast_layout();
-        if toasts.is_empty() || self.toasts_extent().is_none_or(|e| e.scale(s).intersect(&clip).is_empty()) {
-            return;
-        }
-        let size = nt::TEXT_SIZE * s as f32;
-        for t in &toasts {
-            let card = t.card.scale(s);
-            self.panel(fb, clip, card, s);
-            let tx = card.x + (nt::PADDING_X + nt::DOT + nt::DOT_GAP) * s;
-            let right = card.right() - (nt::PADDING_X + nt::CLOSE + 6) * s;
-            // The dot.
-            let (dot, alpha) = if t.critical { (nt::CRITICAL, 255) } else { (WHITE, nt::DOT_ALPHA) };
-            let dr = nt::DOT * s / 2;
-            let dcx = card.x + nt::PADDING_X * s + dr;
-            let dcy = card.y + (nt::PADDING_Y + nt::DOT_TOP) * s + dr;
-            draw::circle(fb, clip, dcx, dcy, dr, None, dot, alpha);
-            // The title and the message, a line every 16 pixels.
-            let mut base = card.y + nt::PADDING_Y * s + (nt::LINE * s + self.text.cap_height(size) as i32) / 2;
-            self.text.draw(fb, clip, tx as f32, base, right, &t.title, size, WHITE, nt::TITLE_ALPHA);
-            for line in &t.lines {
-                base += nt::LINE * s;
-                self.text.draw(fb, clip, tx as f32, base, right, line, size, WHITE, nt::MESSAGE_ALPHA);
-            }
-            // The dismiss cross.
-            let c = t.close.scale(s);
-            let (cx, cy, arm) = (c.x + c.width / 2, c.y + c.height / 2, 3 * s);
-            for i in -arm..=arm {
-                fill(fb, clip, Rect::new(cx + i, cy + i, s.max(1), s.max(1)), WHITE, nt::CLOSE_ALPHA);
-                fill(fb, clip, Rect::new(cx + i, cy - i, s.max(1), s.max(1)), WHITE, nt::CLOSE_ALPHA);
-            }
-            // Action buttons.
-            let bsize = nt::BUTTON_SIZE * s as f32;
-            for (b, _, label) in &t.buttons {
-                let b = b.scale(s);
-                rounded_rect(fb, clip, b, 6 * s, WHITE, nt::BUTTON_ALPHA);
-                let bb = b.y + (b.height + self.text.cap_height(bsize) as i32) / 2;
-                self.text.draw(fb, clip, (b.x + 10 * s) as f32, bb, b.right(), label, bsize, WHITE, 255);
-            }
-        }
-    }
-
-    fn draw_history(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
-        let Some(h) = self.history_layout() else { return };
-        if shadowed(h.panel).scale(s).intersect(&clip).is_empty() {
-            return;
-        }
-        let panel = h.panel.scale(s);
-        self.panel(fb, clip, panel, s);
-        // The header: a title and the clear chip.
-        let tsize = lt::INPUT_SIZE * s as f32;
-        let head = Rect::new(panel.x, panel.y, panel.width, lt::SEARCH_HEIGHT * s);
-        let hb = head.y + (head.height + self.text.cap_height(tsize) as i32) / 2;
-        let tx = (panel.x + lt::SEARCH_PADDING * s) as f32;
-        self.text.draw(fb, clip, tx, hb, panel.right(), "Notifications", tsize, WHITE, 255);
-        if let Some(c) = h.clear {
-            let c = c.scale(s);
-            rounded_rect(fb, clip, c, 6 * s, WHITE, 26);
-            let csize = 11.0 * s as f32;
-            let cb = c.y + (c.height + self.text.cap_height(csize) as i32) / 2;
-            self.text.draw(fb, clip, (c.x + 8 * s) as f32, cb, c.right(), "Clear", csize, WHITE, 200);
-        }
-        fill(fb, clip, Rect::new(panel.x, head.bottom(), panel.width, s), WHITE, lt::DIVIDER_ALPHA);
-        if h.rows.is_empty() {
-            let size = lt::TITLE_SIZE * s as f32;
-            let y = head.bottom() + s + lt::LIST_PADDING * s;
-            let b = y + (lt::ROW_HEIGHT * s + self.text.cap_height(size) as i32) / 2;
-            let x = (panel.x + (lt::LIST_PADDING + lt::ROW_PADDING) * s) as f32;
-            self.text.draw(fb, clip, x, b, panel.right(), "No notifications", size, WHITE, lt::SUBTITLE_ALPHA);
-            return;
-        }
-        let tsize = lt::TITLE_SIZE * s as f32;
-        let ssize = lt::SUBTITLE_SIZE * s as f32;
-        for (row, n) in h.rows.iter().zip(self.notes.history()) {
-            let row = row.scale(s);
-            let ib = lt::ICON_BOX * s;
-            let icon = Rect::new(row.x + lt::ROW_PADDING * s, row.y + (row.height - ib) / 2, ib, ib);
-            let who = if n.app_name.is_empty() { &n.summary } else { &n.app_name };
-            self.tile(fb, clip, icon, who, 15.0, s);
-            let tx = (icon.right() + lt::ROW_ICON_GAP * s) as f32;
-            let time = self.age(n);
-            let tw = self.text.width(&time, ssize) as i32;
-            let right = row.right() - lt::ROW_PADDING * s;
-            self.text.draw(fb, clip, tx, row.y + 21 * s, right - tw - 8 * s, &n.summary, tsize, WHITE, 255);
-            let line = n.body.lines().next().unwrap_or("");
-            self.text.draw(fb, clip, tx, row.y + 37 * s, right, line, ssize, WHITE, lt::SUBTITLE_ALPHA);
-            self.text.draw(
-                fb,
-                clip,
-                (right - tw) as f32,
-                row.y + 21 * s,
-                right,
-                &time,
-                ssize,
-                WHITE,
-                lt::SUBTITLE_ALPHA,
-            );
-        }
-    }
-
-    /// How long ago a notification came, briefly.
-    fn age(&self, n: &Notification) -> String {
-        let secs = self.now_ms.saturating_sub(n.arrived_ms) / 1000;
-        match secs {
-            0..60 => "now".into(),
-            60..3600 => alloc::format!("{} min", secs / 60),
-            _ => alloc::format!("{} h", secs / 3600),
-        }
-    }
-
-    fn draw_switcher(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
-        let Some(extent) = self.switcher_extent() else { return };
-        if extent.scale(s).intersect(&clip).is_empty() {
-            return;
-        }
-        let (panel, cards) = self.switcher.layout(self.width, self.height);
-        self.panel(fb, clip, panel.scale(s), s);
-        let size = sw::TEXT_SIZE * s as f32;
+    fn draw_switcher(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, top: i32) {
+        let (_, cards) = self.switcher_layout(top);
+        let st = Style::new(Face::Sans, sw::TEXT_SIZE).scaled(s);
         for (i, (card, e)) in cards.iter().zip(self.switcher.entries()).enumerate() {
             let c = card.scale(s);
             let r = sw::RADIUS * s;
             rounded_rect(fb, clip, c, r, WHITE, sw::CARD_ALPHA);
             if i == self.switcher.selected() {
-                rounded_outline(fb, clip, c, r, WHITE, sw::SELECTED_ALPHA);
-                let inner = Rect::new(c.x + s, c.y + s, c.width - 2 * s, c.height - 2 * s);
-                rounded_outline(fb, clip, inner, r - s, WHITE, sw::SELECTED_ALPHA);
+                draw::rounded_border(fb, clip, c, r, 2 * s, WHITE, sw::SELECTED_ALPHA);
             } else {
                 rounded_outline(fb, clip, c, r, WHITE, sw::RING_ALPHA);
             }
-            // The name row: an icon tile and the title.
-            let icon = Rect::new(c.x + 6 * s, c.y + 6 * s, sw::ICON * s, sw::ICON * s);
-            let who = &e.title;
-            self.tile(fb, clip, icon, who, 10.0, s);
-            let base = c.y + (sw::HEADER * s + self.text.cap_height(size) as i32) / 2;
+            // The name row: an app glyph and the title.
+            let isz = sw::ICON * s;
+            lucide::APP_WINDOW.draw(fb, clip, (c.x + 6 * s) as f32, (c.y + 6 * s) as f32, isz as f32, WHITE, 200);
+            let base = self.text.centre(c.y, sw::HEADER * s, st);
             let alpha = if e.minimized { 153 } else { 255 };
-            self.text.draw(
-                fb,
-                clip,
-                (icon.right() + 8 * s) as f32,
-                base,
-                c.right() - 6 * s,
-                &e.title,
-                size,
-                WHITE,
-                alpha,
-            );
+            let tx = (c.x + 6 * s + isz + 8 * s) as f32;
+            self.text.draw_style(fb, clip, tx, base, c.right() - 6 * s, &e.title, st, WHITE, alpha);
             // The thumbnail, centred in its area (dimmed if minimized).
             let area = Rect::new(c.x, c.y + sw::HEADER * s, c.width, sw::THUMB_HEIGHT * s);
             let th = &e.thumb;
@@ -1248,18 +1149,10 @@ impl Shell {
     }
 }
 
-/// A floating panel's rectangle with its shadow.
-fn shadowed(p: Rect) -> Rect {
-    let s = lt::SHADOW_SPREAD;
-    Rect::new(p.x - s, p.y - s, p.width + 2 * s, p.height + 2 * s + lt::SHADOW_OFFSET)
-}
-
-/// A tile colour for an app, from its name: muted, light enough for white
-/// text.
-fn tile_colour(name: &str) -> u32 {
-    const COLOURS: [u32; 6] = [0x3b_6e_a8, 0x4f_8a_5b, 0x8a_5a_a8, 0xa8_6a_3b, 0x3b_8a_8a, 0xa8_45_5a];
-    let h = name.bytes().fold(5381u32, |h, b| h.wrapping_mul(33) ^ u32::from(b));
-    COLOURS[(h % COLOURS.len() as u32) as usize]
+/// Draw wallpaper `id` on a `w` × `h` (physical) screen inside `clip`
+/// (the settings window's tiles use it).
+pub fn draw_wallpaper(fb: &mut dyn Framebuffer, clip: Rect, id: &str, w: i32, h: i32) {
+    wallpaper::draw(fb, clip, id, w, h);
 }
 
 /// The layer under the windows.
@@ -1272,253 +1165,18 @@ pub struct Above<'a>(&'a Shell);
 
 impl Layer for Below<'_> {
     fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: i32) {
-        self.0.draw_wallpaper(fb, clip, scale);
-        self.0.draw_ridge(fb, clip, scale);
+        let sh = self.0;
+        wallpaper::Cache::draw(&sh.wall, fb, clip, &sh.settings.wallpaper, sh.width * scale, sh.height * scale);
+        sh.draw_ridge(fb, clip, scale);
     }
 }
 
 impl Layer for Above<'_> {
     fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: i32) {
         self.0.draw_snap(fb, clip, scale);
-        self.0.draw_toasts(fb, clip, scale);
-        self.0.draw_history(fb, clip, scale);
-        self.0.draw_switcher(fb, clip, scale);
-        self.0.draw_launcher(fb, clip, scale);
+        self.0.draw_surface(fb, clip, scale);
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::apps::builtins;
-    use crate::switcher::Thumb;
-    use poly_dbus::notifications::reason;
-    use poly_wayland::compose::MemoryFramebuffer;
-
-    fn shell() -> Shell {
-        let mut s = Shell::new(1280, 800, builtins(), Text::new(None));
-        s.set_time(1_793_491_200, 0);
-        s
-    }
-
-    fn render(s: &Shell) -> MemoryFramebuffer {
-        let mut fb = MemoryFramebuffer::new(1280, 800);
-        let all = Rect::new(0, 0, 1280, 800);
-        s.below().draw(&mut fb, all, 1);
-        s.above().draw(&mut fb, all, 1);
-        fb
-    }
-
-    fn note(summary: &str, body: &str) -> Notify {
-        Notify {
-            app_name: "test".into(),
-            summary: summary.into(),
-            body: body.into(),
-            expire_timeout: -1,
-            ..Notify::default()
-        }
-    }
-
-    #[test]
-    fn the_ridge_and_the_launcher_on_an_empty_desktop() {
-        let s = shell();
-        assert_eq!(s.clock(), "00:00 Nov 1");
-        assert!(s.launcher().is_visible(), "shown on an empty desktop");
-        let fb = render(&s);
-        // The ridge: rgb(32, 32, 32) across the top, 24 rows.
-        assert_eq!(fb.pixel(640, 2), Some(0x20_20_20));
-        assert_eq!(fb.pixel(640, 23), Some(0x20_20_20));
-        assert_ne!(fb.pixel(640, 24), Some(0x20_20_20));
-        // The launcher: 720 wide, centred: x 280..1000; its search row 48
-        // high at (800 - 48) / 2 - 80 = 296.
-        let l = s.launcher_layout();
-        assert_eq!(l.panel, Rect::new(280, 296, 720, 48));
-        assert_eq!(fb.pixel(600, 320), Some(0x20_20_20), "the panel");
-        assert_eq!(fb.pixel(281, 297).map(|p| p == 0x20_20_20), Some(false), "a rounded corner");
-        // The clock's text is drawn in the ridge's right part.
-        let lit = (1100..1276).any(|x| (4..20).any(|y| fb.pixel(x, y) == Some(0xff_ffff)));
-        assert!(lit);
-    }
-
-    #[test]
-    fn typing_lists_apps_and_enter_launches() {
-        let mut s = shell();
-        s.take_damage();
-        for c in "demo".chars() {
-            assert_eq!(s.key(Key::Char(c)), None);
-        }
-        let damage = s.take_damage();
-        assert!(!damage.is_empty(), "typing damages the launcher");
-        assert!(damage.iter().all(|d| d.y >= 296 - lt::SHADOW_SPREAD));
-        let l = s.launcher_layout();
-        assert_eq!(l.rows, 1);
-        assert!(l.footer.is_some());
-        assert_eq!(l.panel.height, 48 + 1 + 28 + 48 + 6 + 1 + 36);
-        // Clicking the row starts the app; the launcher goes.
-        let row = s.row_rect(&l, 0);
-        match s.press(row.x + 5, row.y + 5) {
-            Press::Launch(app) => assert_eq!(app.name, "Poly Demo"),
-            p => panic!("{p:?}"),
-        }
-        assert!(!s.launcher().is_visible());
-        // Hidden: presses outside the ridge are the windows'.
-        assert_eq!(s.press(640, 500), Press::NotMine);
-        assert_eq!(s.press(640, 10), Press::Taken);
-        // The hotkey brings it back, empty; a press outside hides it.
-        s.toggle_launcher();
-        assert!(s.launcher().is_visible());
-        assert_eq!(s.launcher().query(), "");
-        assert_eq!(s.press(10, 700), Press::Taken);
-        assert!(!s.launcher().is_visible());
-        // Enter launches too.
-        s.toggle_launcher();
-        for c in "wayland".chars() {
-            s.key(Key::Char(c));
-        }
-        assert_eq!(s.key(Key::Enter).map(|a| a.name), Some("Wayland Test Client".into()));
-    }
-
-    #[test]
-    fn no_match_and_the_clock() {
-        let mut s = shell();
-        s.key(Key::Char('q'));
-        s.key(Key::Char('q'));
-        s.key(Key::Char('q'));
-        let l = s.launcher_layout();
-        assert!(l.empty);
-        assert_eq!(s.key(Key::Enter), None);
-        s.take_damage();
-        assert!(!s.set_time(1_793_491_210, 0), "the same minute");
-        assert!(s.set_time(1_793_491_260, 0));
-        assert_eq!(s.take_damage(), [Rect::new(0, 0, 1280, 24)]);
-        // A small screen: fewer rows fit.
-        let small = Shell::new(640, 400, builtins(), Text::new(None));
-        assert!(small.room_for_rows() < lt::MAX_ROWS);
-        assert!(small.room_for_rows() >= 1);
-    }
-
-    #[test]
-    fn toasts_show_stack_and_go() {
-        let mut s = shell();
-        s.hide_launcher();
-        s.set_now_ms(1000);
-        s.take_damage();
-        let a = s.notify(note("Hello", "From a test client"));
-        let damage = s.take_damage();
-        // The toast's card and the ridge (the unread count) are damaged.
-        assert!(damage.iter().any(|d| d.right() >= 1280 - 8 && d.y <= 32 + 12));
-        assert!(damage.contains(&s.ridge_rect()));
-        let t = s.toast_layout();
-        assert_eq!(t[0].card, Rect::new(1280 - 8 - 360, 24 + 8, 360, 10 + 16 + 16 + 10));
-        let fb = render(&s);
-        assert_eq!(fb.pixel(1280 - 8 - 180, 24 + 8 + 40), Some(0x20_20_20), "the card's colour");
-        // The unread count shows on the ridge.
-        assert!(s.ridge_layout().unread.is_some());
-        let b = s.notify(note("Second", ""));
-        let t = s.toast_layout();
-        assert_eq!((t[0].id, t[1].id), (b, a), "newest on top");
-        assert_eq!(t[1].card.y, t[0].card.bottom() + 8);
-        // A click dismisses the newest; the other moves up.
-        let c = t[0].card;
-        assert_eq!(s.press(c.x + 40, c.y + 10), Press::Taken);
-        assert_eq!(s.take_closed_notifications(), [(b, reason::DISMISSED)]);
-        assert_eq!(s.toast_layout()[0].card.y, 32);
-        // The other expires after the default 7 s.
-        s.set_now_ms(1000 + 7000);
-        assert_eq!(s.take_closed_notifications(), [(a, reason::EXPIRED)]);
-        assert!(s.toast_layout().is_empty());
-        // The history keeps both; opening it marks them read.
-        let u = s.ridge_layout().unread.unwrap();
-        s.press(u.x + 2, u.y + 2);
-        assert!(s.history_open());
-        assert!(s.ridge_layout().unread.is_none());
-        let h = s.history_layout().unwrap();
-        assert_eq!(h.rows.len(), 2);
-        let fb = render(&s);
-        assert_eq!(fb.pixel((h.panel.x + 200) as u32, (h.panel.y + 30) as u32), Some(0x20_20_20));
-        // Escape closes it; a press outside would too.
-        assert!(s.overlay_key(Key::Escape));
-        assert!(!s.history_open());
-    }
-
-    #[test]
-    fn actions_and_long_messages() {
-        let mut s = shell();
-        s.hide_launcher();
-        let mut n =
-            note("Update ready", "A rather long message that will certainly not fit on one single line of the toast");
-        n.actions = alloc::vec![("default".into(), "Open".into()), ("later".into(), "Later".into())];
-        let id = s.notify(n);
-        let t = &s.toast_layout()[0];
-        assert!(t.lines.len() >= 2, "wrapped: {:?}", t.lines);
-        assert_eq!(t.buttons.len(), 1, "the default action has no button");
-        let b = t.buttons[0].0;
-        s.press(b.x + 2, b.y + 2);
-        assert_eq!(s.take_invoked_actions(), [(id, "later".into())]);
-        assert_eq!(s.take_closed_notifications(), [(id, reason::DISMISSED)]);
-    }
-
-    #[test]
-    fn the_switcher_and_the_snap_preview() {
-        let mut s = shell();
-        s.hide_launcher();
-        let entry = |id: u32| Entry {
-            window: WindowId(id),
-            title: alloc::format!("Window {id}"),
-            app_id: String::new(),
-            minimized: id == 3,
-            thumb: Thumb { width: 160, height: 100, pixels: alloc::vec![0x30_80_50; 160 * 100] },
-        };
-        s.take_damage();
-        s.open_switcher(alloc::vec![entry(1), entry(2), entry(3)], false);
-        assert!(s.switcher_open());
-        assert!(!s.take_damage().is_empty());
-        let fb = render(&s);
-        let (panel, cards) = s.switcher().layout(1280, 800);
-        assert_eq!(fb.pixel((panel.x + 5) as u32, (panel.y + panel.height / 2) as u32), Some(0x20_20_20));
-        let c = cards[1];
-        assert_eq!(fb.pixel((c.x + c.width / 2) as u32, (c.y + 28 + 62) as u32), Some(0x30_80_50), "a thumbnail");
-        s.switcher_step(true);
-        assert_eq!(s.switcher_commit(), Some(WindowId(3)));
-        // A click on a card switches too.
-        s.open_switcher(alloc::vec![entry(1), entry(2)], false);
-        let (_, cards) = s.switcher().layout(1280, 800);
-        assert_eq!(s.press(cards[0].x + 3, cards[0].y + 3), Press::Switch(WindowId(1)));
-        // The snap preview damages where it was and is.
-        s.take_damage();
-        let left = Rect::new(4, 28, 632, 768);
-        s.set_snap_preview(Some(left));
-        assert_eq!(s.take_damage(), [left]);
-        let fb = render(&s);
-        assert_ne!(fb.pixel(300, 400), render(&shell_without_launcher()).pixel(300, 400), "drawn over the wallpaper");
-        s.set_snap_preview(None);
-        assert_eq!(s.take_damage(), [left]);
-    }
-
-    fn shell_without_launcher() -> Shell {
-        let mut s = shell();
-        s.hide_launcher();
-        s
-    }
-
-    #[test]
-    fn status_and_settings_from_the_ridge() {
-        let mut s = shell();
-        s.hide_launcher();
-        s.take_damage();
-        assert!(s.set_network(Network::Online("eth0".into())));
-        assert!(!s.set_network(Network::Online("eth0".into())));
-        assert!(s.set_volume(Some((60, false))));
-        assert_eq!(s.take_damage(), [s.ridge_rect(), s.ridge_rect()]);
-        let st = s.ridge_layout().status;
-        assert_eq!(s.press(st.x + 3, st.y + 3), Press::Settings(Page::Sound));
-        // Settings: the wallpaper repaints everything; the time zone moves the clock.
-        assert!(s.apply(&Change::Wallpaper("forest".into())));
-        assert!(s.take_damage().contains(&Rect::new(0, 0, 1280, 800)));
-        assert!(s.apply(&Change::TimeZone("Europe/Zurich".into())));
-        let t = 1_793_491_200;
-        assert!(s.set_time(t, s.local_offset(t)));
-        assert_eq!(s.clock(), "01:00 Nov 1");
-        assert_eq!(s.local_time(t), "01:00 Nov 1 CET");
-    }
-}
+mod tests;

@@ -372,19 +372,6 @@ fn client_env(socket: &str, dir: &Path, dump: &Path, bus: Option<&str>, display:
     env
 }
 
-/// The shell's font, if the font store has it (kept for the program's
-/// life).
-fn shell_font() -> Option<poly_font::Font<'static>> {
-    let font = std::fs::read(desktop::FONT).ok().and_then(|data| {
-        let data: &'static [u8] = Box::leak(data.into_boxed_slice());
-        poly_font::Font::parse(data).ok()
-    });
-    if font.is_none() {
-        println!("poly-compositor: no {} (fonts not fetched?): the shell uses the bitmap font", desktop::FONT);
-    }
-    font
-}
-
 fn run(args: &[String]) -> Result<u8, String> {
     let o = parse_args(args)?;
     let dir = runtime_dir()?;
@@ -448,7 +435,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             scale: o.scale,
             settings: o.settings.clone(),
         };
-        Some(desk::Desktop::new(&opts, &mut server, keymap, shell_font()))
+        Some(desk::Desktop::new(&opts, &mut server, keymap, desktop::shell_fonts()))
     } else {
         None
     };
