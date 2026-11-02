@@ -91,6 +91,35 @@ Devices: Displays, Keyboard, Sound; System: Date & time, About), the
 header Alpine's back and forward arrows (a page history) and the page's
 name underlined.
 
+### The settings window in Alpine's current layout
+
+Alpine's live settings app (measured on the window captures, content
+1200 × 800) puts the sections in tabs in a 40-pixel header — back and
+forward arrows (28 px, `pl-3`), then Home, Personal, Desktop, Devices,
+System (`h-7 px-3`, 13 px, the active one medium on surface 3) and the
+settings search on the right (256 × 32, radius 8, a hairline, a 14-pixel
+search glyph, "Search settings", "Ctrl K" in Geist Mono) — and lists only
+the active section's pages in the 224-pixel sidebar (36-pixel rows from
+y 44). The page title is Geist 22 px medium (`tracking-tight`, a 32-pixel
+line), sections are an 11-pixel medium label over a group card (white at
+6 %, radius 12, rows at least 48 pixels with `px-3.5 py-2.5`, hairlines
+between), 32 pixels apart. Poly does the same with its pages: Home;
+Personal: Wallpaper; Devices: Displays, Sound, Keyboard; System: Date &
+time, About (Desktop has no Poly page yet and, as in Alpine, a section
+without pages has no tab). Home shows the wallpaper (236 × 132), "Poly",
+the system and processor, the memory in use as a bar (`MemAvailable`), and
+a card of rows to the pages with their values. The search finds pages by
+their names and words (volume, resolution, time zone, ...); typing in the
+window searches, Enter opens the first result, Escape clears. Dark theme
+with Alpine's dark tokens; Alpine's light theme is not added.
+
+### The launcher lists open windows
+
+As Alpine, the launcher finds open windows as well as apps: a "Windows"
+section first, then "Apps", each with its 11-pixel title; Enter or a click
+on a window switches to it (`apps::window_entry`, `Shell::set_windows`; the
+compositor keeps the list current from its window manager).
+
 ### Fonts
 
 Alpine's: Geist (regular, medium, semibold) for everything, Averia Serif
@@ -220,18 +249,18 @@ launcher the section title's height became 31 (with the list's gap).
   opaque surfaces; Poly draws grayscale with light hinting.
 - **No live calendar or switcher.** The calendar needs a Google account
   connected and the switcher a real Alt+Tab; both follow Alpine's source.
-- **The live settings window is newer.** Alpine's current settings put the
-  sections in tabs in the header with a search field and show only the
-  section's pages in the sidebar, page titles in Geist, and homeserver2 runs
-  it in the light theme; Poly follows the dark sidebar layout of the
-  repository's screenshots.
+- **Settings content and theme.** The layout is Alpine's current one, but
+  homeserver2 runs it in the light theme (Poly: dark, no light theme yet);
+  Poly has no Desktop tab, no disk bar, no Network, Bluetooth, Battery,
+  Appearance or Ridge pages, and its search finds pages, not single
+  settings.
 - **The notices** hang from the ridge's middle in Alpine and at the top
   right in Poly (the owner's direction).
 - **The screenshots' ridge colour** is navy (the user picked the wallpaper's
   colour); Poly uses Alpine's default `#202020`.
 - **Content.** Poly's pages are its own (Displays has no arrangement
   card, there is no Home, Appearance or search field in the sidebar); the
-  launcher has no settings, windows, calculator or web rows; the control
+  launcher has no settings, calculator or web rows, and no app icons; the control
   centre has no Wi-Fi or Bluetooth; the system menu has no Log Out or
   Hibernate; the clock is 24-hour.
 - The 1 px border Alpine draws along the ridge and around surfaces where

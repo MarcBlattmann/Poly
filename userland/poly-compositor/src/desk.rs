@@ -56,6 +56,8 @@ pub struct Desktop {
     /// Windows seen, to log new ones and to bring the launcher back when
     /// the last one goes.
     windows: BTreeSet<u32>,
+    /// The open windows the launcher lists (ID, title, app ID).
+    window_list: Vec<(u32, String, String)>,
     pub ready: bool,
     mru: Mru,
     last_active: Option<WindowId>,
@@ -223,6 +225,7 @@ impl Desktop {
             shell_button: false,
             children: Vec::new(),
             windows: BTreeSet::new(),
+            window_list: Vec::new(),
             ready: false,
             mru: Mru::default(),
             last_active: None,
@@ -243,7 +246,8 @@ impl Desktop {
     fn system_info(&self, server: &Server) -> SystemInfo {
         let (sys, release, version, machine) = status::uname();
         let cpu = fs::read_to_string("/proc/cpuinfo").map(|t| status::cpu_model(&t)).unwrap_or_default();
-        let memory_kib = fs::read_to_string("/proc/meminfo").map(|t| status::mem_total_kib(&t)).unwrap_or(0);
+        let meminfo = fs::read_to_string("/proc/meminfo").unwrap_or_default();
+        let (memory_kib, memory_available_kib) = (status::mem_total_kib(&meminfo), status::mem_available_kib(&meminfo));
         let o = server.output();
         SystemInfo {
             os: format!("Poly {}", env!("CARGO_PKG_VERSION")),
@@ -251,6 +255,7 @@ impl Desktop {
             machine,
             cpu,
             memory_kib,
+            memory_available_kib,
             display: (o.width, o.height),
             modes: vec![(o.width, o.height)],
             sound: self.mixer.as_ref().map(|m| if m.card.is_empty() { "sound card 0".into() } else { m.card.clone() }),
@@ -456,7 +461,7 @@ impl Desktop {
                     Action::Minimize => server.minimize_window(w),
                 }
             }
-            WmKey::Settings => self.open_settings(Page::Display, server),
+            WmKey::Settings => self.open_settings(Page::Home, server),
             WmKey::History => self.shell.toggle_history(),
         }
     }
@@ -464,7 +469,12 @@ impl Desktop {
     /// An app the launcher started that is the shell's own.
     pub fn open_internal(&mut self, app: &poly_shell::App, server: &mut Server) -> bool {
         match app.internal() {
-            Some(poly_shell::apps::SETTINGS) => self.open_settings(Page::Display, server),
+            _ if app.window().is_some() => {
+                if let Some(id) = app.window() {
+                    self.switch_to(WindowId(id), server);
+                }
+            }
+            Some(poly_shell::apps::SETTINGS) => self.open_settings(Page::Home, server),
             Some(poly_shell::apps::NOTIFICATIONS) => self.shell.toggle_history(),
             Some(_) => {}
             None => return false,
@@ -476,7 +486,7 @@ impl Desktop {
     // The settings window.
 
     fn open_settings(&mut self, page: Page, server: &mut Server) {
-        self.shell.settings_window.page = page;
+        self.shell.settings_window.open_at(page);
         match &self.settings_win {
             Some(w) => {
                 let id = w.id;
@@ -517,17 +527,14 @@ impl Desktop {
                 InternalEvent::Button { window, x, y, button: BTN_LEFT, pressed } if window == id => {
                     self.shell.settings_button(x, y, pressed, w, h, &self.info, utc)
                 }
-                InternalEvent::Key { window, key, pressed: true } if window == id => match key {
-                    103 => {
-                        self.shell.settings_window.step_page(false);
-                        (true, None)
+                InternalEvent::Key { window, key, pressed: true } if window == id => {
+                    // Typing searches the settings, Up and Down step pages.
+                    let (depressed, locked) = server.modifiers();
+                    match desktop::launcher_key(key, depressed, locked, self.layout) {
+                        Some(k) => (self.shell.settings_key(k), None),
+                        None => (false, None),
                     }
-                    108 => {
-                        self.shell.settings_window.step_page(true);
-                        (true, None)
-                    }
-                    _ => (false, None),
-                },
+                }
                 InternalEvent::Resize { window, width, height } if window == id => {
                     if let Some(sw) = &mut self.settings_win {
                         sw.size = (width, height);
@@ -727,6 +734,13 @@ impl Desktop {
             self.shell.toggle_launcher();
         }
         self.windows = now;
+        // The launcher lists the open windows (Alpine Shell's "Windows").
+        let list: Vec<(u32, String, String)> =
+            server.managed_windows().iter().map(|i| (i.window.0, i.title.clone(), i.app_id.clone())).collect();
+        if list != self.window_list {
+            self.shell.set_windows(&list);
+            self.window_list = list;
+        }
         let active = server.active_window();
         if active != self.last_active {
             if let Some(w) = active {

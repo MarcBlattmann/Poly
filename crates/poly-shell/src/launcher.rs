@@ -104,8 +104,17 @@ impl Launcher {
             .into_iter()
             .filter_map(|a| apps.iter().position(|x| core::ptr::eq(x, a)))
             .collect();
+        // Open windows first, in their own section (Alpine's order).
+        self.results.sort_by_key(|&i| apps[i].window().is_none());
         self.selected = 0;
         self.hover = None;
+    }
+
+    /// The catalog changed (windows opened or closed): filter again.
+    pub fn requery(&mut self, apps: &[App]) {
+        if self.visible && !self.query.is_empty() {
+            self.refilter(apps);
+        }
     }
 
     /// The row under the pointer (`None`: none).

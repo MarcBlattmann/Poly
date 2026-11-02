@@ -202,7 +202,27 @@ pub fn builtins() -> Vec<App> {
 pub const SETTINGS: &str = "poly-shell:settings";
 pub const NOTIFICATIONS: &str = "poly-shell:notifications";
 
+/// The `argv` prefix of an open window listed in the launcher (Alpine lists
+/// windows with the apps); the window's ID follows.
+pub const WINDOW: &str = "poly-shell:window:";
+
+/// A launcher entry for open window `id` titled `title` (of app `app_id`).
+pub fn window_entry(id: u32, title: &str, app_id: &str) -> App {
+    App {
+        name: if title.is_empty() { app_id.into() } else { title.into() },
+        comment: if app_id.is_empty() { "Window".into() } else { app_id.into() },
+        keywords: Vec::new(),
+        argv: alloc::vec![alloc::format!("{WINDOW}{id}")],
+        id: alloc::format!("{WINDOW}{id}"),
+    }
+}
+
 impl App {
+    /// The open window this entry stands for, if it is one.
+    pub fn window(&self) -> Option<u32> {
+        self.argv.first()?.strip_prefix(WINDOW)?.parse().ok()
+    }
+
     /// The shell's own part this app opens, if it is one.
     pub fn internal(&self) -> Option<&str> {
         self.argv.first().map(String::as_str).filter(|a| a.starts_with("poly-shell:"))

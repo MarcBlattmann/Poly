@@ -455,18 +455,18 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     d.wait("settings window opened", 30)?;
     let (sx, sy, sw, sh) = shown(&d, "Settings", 30)?;
     expect("the settings window is 900x620", (sw, sh) == (900, 620))?;
-    click(&mut d, sx + 100, sy + 256)?; // Sound
+    click(&mut d, sx + 400, sy + 339)?; // Home's card to Sound (ADR 0127: Alpine's current settings)
     thread::sleep(Duration::from_millis(1000));
-    click(&mut d, sx + 705, sy + 193)?; // 30 % of the volume slider
+    click(&mut d, sx + 691, sy + 178)?; // 30 % of the volume slider
     d.wait("settings saved to /mnt/poly/shell.conf", 30)?;
     if sound {
         d.wait("poly-compositor: volume 30", 30)?;
     }
     thread::sleep(Duration::from_millis(1500));
     d.shot("settings-sound")?;
-    click(&mut d, sx + 100, sy + 218)?; // Keyboard
+    click(&mut d, sx + 100, sy + 138)?; // Keyboard in the Devices pages
     thread::sleep(Duration::from_millis(1000));
-    click(&mut d, sx + 500, sy + 252)?; // German (Switzerland)
+    click(&mut d, sx + 500, sy + 221)?; // German (Switzerland)
     d.wait("poly-compositor: keymap de-ch", 30)?;
     // The demo client got the new keymap.
     wait_nth(&lines, "wl-demo: keymap format 1", 2, 30)?;

@@ -70,6 +70,7 @@ fn typing_lists_apps_and_enter_launches() {
     assert_eq!(l.rows, 1);
     assert!(l.footer.is_some());
     assert_eq!(l.body.height, 48 + 1 + 31 + 48 + 6 + 1 + 36);
+    assert_eq!(s.window_rows(), 0);
     let fb = render(&s);
     let row = s.row_rect(&l, 0);
     let p = fb.pixel((row.x + 300) as u32, (row.y + 2) as u32).unwrap() & 0xff;
@@ -312,7 +313,7 @@ fn the_control_centre_sets_the_volume_and_mute_and_opens_lists() {
     assert_eq!(s.panels.view, ControlView::Main);
     // The gear opens the settings.
     let m = s.control_main(s.panel_geometry(Panel::Control).body(24));
-    assert_eq!(s.press(m.gear.x + 3, m.gear.y + 3), Press::Settings(Page::Display));
+    assert_eq!(s.press(m.gear.x + 3, m.gear.y + 3), Press::Settings(Page::Home));
     let fb = render(&s);
     let _ = fb;
 }
@@ -414,4 +415,27 @@ fn hidpi_draws_the_same_at_twice_the_size() {
     assert_eq!(big.pixel(1280, 40), Some(BAR), "the ridge is 48 physical rows");
     let body = s.panel_geometry(Panel::Menu).body(24).scale(2);
     assert_eq!(big.pixel((body.x + 4) as u32, (body.y + 4) as u32), Some(BAR), "the menu hangs at twice the size");
+}
+
+#[test]
+fn the_launcher_lists_open_windows_first_and_switches_to_them() {
+    let mut s = shell();
+    s.set_windows(&[(7, "Demo Notes".into(), "notes".into()), (9, "Terminal".into(), "term".into())]);
+    for c in "demo".chars() {
+        s.key(Key::Char(c));
+    }
+    // "Demo Notes" (a window) before "Poly Demo" (an app), each in its section.
+    let names: Vec<&str> = s.launcher().results().iter().map(|&i| s.apps()[i].name.as_str()).collect();
+    assert_eq!(names.first(), Some(&"Demo Notes"));
+    assert!(names.contains(&"Poly Demo"));
+    assert_eq!(s.window_rows(), 1);
+    let l = s.launcher_layout(24);
+    let (w0, a0) = (s.row_rect(&l, 0), s.row_rect(&l, 1));
+    assert_eq!(a0.y - w0.bottom(), lt::SECTION_HEIGHT, "a section title between them");
+    // Enter switches to the window (the compositor reads its ID).
+    let app = s.key(Key::Enter).expect("an entry");
+    assert_eq!(app.window(), Some(7));
+    // Closed windows leave the list.
+    s.set_windows(&[]);
+    assert!(s.apps().iter().all(|a| a.window().is_none()));
 }

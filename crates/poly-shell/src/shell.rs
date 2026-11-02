@@ -120,6 +120,8 @@ pub struct Shell {
     width: i32,
     height: i32,
     apps: Vec<App>,
+    /// The catalog without the open windows.
+    base_apps: Vec<App>,
     launcher: Launcher,
     text: Text,
     clock: String,
@@ -163,6 +165,7 @@ impl Shell {
         let mut s = Shell {
             width,
             height,
+            base_apps: apps.clone(),
             apps,
             launcher: Launcher::new(lt::MAX_ROWS),
             text,
@@ -362,6 +365,24 @@ impl Shell {
         self.pictures.insert(id.into(), picture);
         *self.wall.borrow_mut() = None;
         self.damage.push(self.screen());
+    }
+
+    /// The open windows (ID, title, app ID): the launcher lists them, as
+    /// Alpine does, and Enter or a click switches to one.
+    pub fn set_windows(&mut self, windows: &[(u32, String, String)]) {
+        let mut apps = self.base_apps.clone();
+        apps.extend(windows.iter().map(|(id, title, app)| crate::apps::window_entry(*id, title, app)));
+        if apps != self.apps {
+            self.apps = apps;
+            self.launcher.requery(&self.apps);
+            self.touch();
+        }
+    }
+
+    /// A key for the settings window (its search, Up and Down); whether to
+    /// draw it again.
+    pub fn settings_key(&mut self, key: Key) -> bool {
+        self.settings_window.key(key)
     }
 
     /// The sound card's name (the control centre shows it).
@@ -640,12 +661,15 @@ impl Shell {
         let list_top = search.bottom() + 1 + lt::SECTION_HEIGHT;
         let first_row = Rect::new(x + lt::LIST_PADDING, list_top, w - 2 * lt::LIST_PADDING, lt::ROW_HEIGHT);
         // Without results (nothing typed, or nothing found) only the search
-        // row shows, as in Alpine.
+        // row shows, as in Alpine. Windows and apps each get a section.
+        let windows = self.window_rows();
+        let sections = i32::from(windows > 0) + i32::from(n > windows);
         let (height, footer) = if n == 0 {
             (lt::SEARCH_HEIGHT, None)
         } else {
             let rows = n as i32;
-            let list = lt::SECTION_HEIGHT + rows * lt::ROW_HEIGHT + (rows - 1) * lt::ROW_GAP + lt::LIST_PADDING;
+            let list =
+                sections * lt::SECTION_HEIGHT + rows * lt::ROW_HEIGHT + (rows - 1) * lt::ROW_GAP + lt::LIST_PADDING;
             let body = lt::SEARCH_HEIGHT + 1 + list;
             (body + 1 + lt::FOOTER_HEIGHT, Some(Rect::new(x, top + body + 1, w, lt::FOOTER_HEIGHT)))
         };
@@ -701,7 +725,15 @@ impl Shell {
     }
 
     fn row_rect(&self, l: &LauncherLayout, i: usize) -> Rect {
-        l.first_row.translate(0, i as i32 * (lt::ROW_HEIGHT + lt::ROW_GAP))
+        let w = self.window_rows();
+        let extra = if w > 0 && i >= w { lt::SECTION_HEIGHT - lt::ROW_GAP } else { 0 };
+        l.first_row.translate(0, i as i32 * (lt::ROW_HEIGHT + lt::ROW_GAP) + extra)
+    }
+
+    /// How many of the launcher's results are open windows (they come
+    /// first).
+    fn window_rows(&self) -> usize {
+        self.launcher.results().iter().take_while(|&&i| self.apps[i].window().is_some()).count()
     }
 
     // -----------------------------------------------------------------
@@ -1047,7 +1079,15 @@ impl Shell {
         let sst = Style::new(Face::Medium, lt::SECTION_SIZE).scaled(s);
         let sx = bx + (lt::LIST_PADDING + lt::ROW_PADDING) * s;
         let sb = search.bottom() + s + 8 * s + (sst.size * 1.5 / 2.0 + self.text.cap(sst) / 2.0) as i32;
-        self.text.draw_style(fb, clip, sx as f32, sb, bx + w, "Apps", sst, WHITE, lt::SECTION_ALPHA);
+        let windows = self.window_rows();
+        let first = if windows > 0 { "Windows" } else { "Apps" };
+        self.text.draw_style(fb, clip, sx as f32, sb, bx + w, first, sst, WHITE, lt::SECTION_ALPHA);
+        if windows > 0 && windows < l.rows {
+            let r = self.row_rect(&l, windows).scale(s);
+            let ab =
+                r.y - (lt::SECTION_HEIGHT - 2) * s + 8 * s + (sst.size * 1.5 / 2.0 + self.text.cap(sst) / 2.0) as i32;
+            self.text.draw_style(fb, clip, sx as f32, ab, bx + w, "Apps", sst, WHITE, lt::SECTION_ALPHA);
+        }
         for (i, &app) in self.launcher.results().iter().enumerate() {
             let row = self.row_rect(&l, i).scale(s);
             if row.intersect(&clip).is_empty() {
@@ -1063,6 +1103,7 @@ impl Shell {
             let ib = lt::ICON_BOX * s;
             let icon = Rect::new(row.x + lt::ROW_PADDING * s, row.y + (row.height - ib) / 2, ib, ib);
             let glyph = match app.internal() {
+                _ if app.window().is_some() => lucide::APP_WINDOW,
                 Some(crate::apps::SETTINGS) => lucide::SETTINGS,
                 Some(crate::apps::NOTIFICATIONS) => lucide::BELL,
                 _ => lucide::APP_WINDOW,

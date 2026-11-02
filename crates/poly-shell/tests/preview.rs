@@ -72,6 +72,7 @@ fn info() -> SystemInfo {
         machine: "x86_64".into(),
         cpu: "QEMU Virtual CPU version 2.5+".into(),
         memory_kib: 512 * 1024,
+        memory_available_kib: 300 * 1024,
         display: (1280, 800),
         modes: vec![(1280, 800)],
         sound: Some("virtio-sound".into()),
@@ -186,7 +187,7 @@ fn a_framed_window_and_the_settings() {
     // Every settings page, at the window's size and at Alpine's.
     let info = info();
     for (w, h, tag) in
-        [(poly_shell::theme::settings::WIDTH, poly_shell::theme::settings::HEIGHT, ""), (1280, 820, "-1280")]
+        [(poly_shell::theme::settings::WIDTH, poly_shell::theme::settings::HEIGHT, ""), (1200, 800, "-1200")]
     {
         for page in Page::ALL {
             s.settings_window.page = page;
