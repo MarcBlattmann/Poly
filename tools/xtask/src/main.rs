@@ -1,6 +1,12 @@
 //! Developer and CI entry point: `cargo xtask <command>`.
 //!
 //! Commands:
+//!   start [--last | --print]
+//!                       a menu in the terminal of everything below that boots or checks
+//!                       (the desktop, Chromium's and the toolkits' disks, the kernel's shells,
+//!                       boot test groups, CI parts) with their options; it remembers the last
+//!                       choice (target/poly-start.json), so Enter runs it again; --last runs it
+//!                       without the menu, --print shows the command it would run (start.rs)
 //!   build [--release]   build the native programs (userland/native, native.rs) and the kernel
 //!   run   [--release] [--gdb] [--no-disk] [--headless] [--virtio-gpu] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
@@ -111,14 +117,17 @@ mod net;
 mod nls;
 mod ntdll;
 mod programs;
+mod progress;
 mod rootdisk;
 mod screen;
 mod sevenzip;
 mod sevenzip_trace;
 mod sha256;
 mod sound;
+mod start;
 mod symbols;
 mod sysmsg;
+mod term;
 mod terminal;
 mod toolkits;
 mod unzip;
@@ -126,6 +135,7 @@ mod virgl;
 mod wallpapers;
 mod wayland;
 mod win32;
+mod winapp;
 mod winimports;
 mod wintrace;
 mod xwayland;
@@ -175,41 +185,17 @@ const QEMU_CPUS: u32 = 2;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let release = args.iter().any(|a| a == "--release");
     if let Err(e) = accel::init() {
         eprintln!("xtask: error: {e}");
         return ExitCode::FAILURE;
     }
     let result = match args.first().map(String::as_str) {
-        Some("build") => build_kernel(release).map(|_| ()),
-        Some("run") => run(&args[1..]),
-        Some("screenshot") => screenshot(&args[1..]),
-        Some("desktop") => desktop::command(&args[1..]),
-        Some("test") => test(),
-        Some("ci") => ci(&args[1..]),
-        Some("boot-tests") => boot_tests_command(&args[1..]),
-        Some("symbolize") => symbolize(&args[1..]),
-        Some("coverage") => coverage(&args[1..]),
         Some("pipeline") => return pipeline_command(&args[1..]),
-        Some("font") => font::run(&root(), &args[1..]),
-        Some("nls-tables") => nls::run(&root(), &args[1..]),
-        Some("system-messages") => sysmsg::run(&root(), &args[1..]),
-        Some("fonts") => fonts::command(&args[1..]),
-        Some("wayland") => wayland::run(&root(), &args[1..]),
-        Some("ntdll") => ntdll::command(&args[1..]),
-        Some("win32") => win32::command(&args[1..]),
-        Some("win") => sevenzip::command(&args[1..]),
-        Some("dynamic-initramfs") => dynamic::command(),
-        Some("busybox-initramfs") => busybox::command(),
-        Some("busybox-test") => busybox_test(),
-        Some("root-disk") => rootdisk::command(),
-        Some("root-disk-test") => root_disk_test(),
-        Some("toolkits") => toolkits::command(&args[1..]),
-        Some("chromium") => chromium::command(&args[1..]),
+        Some("start") => start::command(&args[1..]),
+        Some(name) if COMMANDS.contains(&name) => dispatch(&args),
         _ => {
-            eprintln!(
-                "usage: cargo xtask <build|run|screenshot|desktop|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test|toolkits|chromium> [--release]"
-            );
+            eprintln!("usage: cargo xtask <start|{}|pipeline> [--release]", COMMANDS.join("|"));
+            eprintln!("       cargo xtask start: a menu of what to build and boot, remembering the last choice");
             return ExitCode::from(2);
         }
     };
@@ -219,6 +205,68 @@ fn main() -> ExitCode {
             eprintln!("xtask: error: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// The commands [`dispatch`] runs (besides `start` and `pipeline`).
+const COMMANDS: [&str; 24] = [
+    "build",
+    "run",
+    "screenshot",
+    "desktop",
+    "test",
+    "boot-tests",
+    "ci",
+    "symbolize",
+    "coverage",
+    "font",
+    "fonts",
+    "wayland",
+    "nls-tables",
+    "system-messages",
+    "ntdll",
+    "win32",
+    "win",
+    "dynamic-initramfs",
+    "busybox-initramfs",
+    "busybox-test",
+    "root-disk",
+    "root-disk-test",
+    "toolkits",
+    "chromium",
+];
+
+/// Run `cargo xtask <args>`: the same functions for the command line and
+/// for `cargo xtask start`'s menu.
+fn dispatch(args: &[String]) -> Result {
+    let release = args.iter().any(|a| a == "--release");
+    let rest = args.get(1..).unwrap_or_default();
+    match args.first().map(String::as_str) {
+        Some("build") => build_kernel(release).map(|_| ()),
+        Some("run") => run(rest),
+        Some("screenshot") => screenshot(rest),
+        Some("desktop") => desktop::command(rest),
+        Some("test") => test(),
+        Some("ci") => ci(rest),
+        Some("boot-tests") => boot_tests_command(rest),
+        Some("symbolize") => symbolize(rest),
+        Some("coverage") => coverage(rest),
+        Some("font") => font::run(&root(), rest),
+        Some("nls-tables") => nls::run(&root(), rest),
+        Some("system-messages") => sysmsg::run(&root(), rest),
+        Some("fonts") => fonts::command(rest),
+        Some("wayland") => wayland::run(&root(), rest),
+        Some("ntdll") => ntdll::command(rest),
+        Some("win32") => win32::command(rest),
+        Some("win") => sevenzip::command(rest),
+        Some("dynamic-initramfs") => dynamic::command(),
+        Some("busybox-initramfs") => busybox::command(),
+        Some("busybox-test") => busybox_test(),
+        Some("root-disk") => rootdisk::command(),
+        Some("root-disk-test") => root_disk_test(),
+        Some("toolkits") => toolkits::command(rest),
+        Some("chromium") => chromium::command(rest),
+        other => Err(format!("no command {other:?}")),
     }
 }
 
@@ -234,34 +282,49 @@ fn cargo() -> Command {
     Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
 }
 
+/// Run `cmd`, a build step called `name`: its output on the terminal, or
+/// in a log shown by `cargo xtask start`'s progress table ([`progress`]).
 fn step(name: &str, cmd: &mut Command) -> Result {
-    eprintln!("==> {name}");
-    let status = cmd.status().map_err(|e| format!("{name}: {e}"))?;
-    if status.success() { Ok(()) } else { Err(format!("{name} failed ({status})")) }
+    progress::step(name, cmd)
 }
 
 /// `cargo` run inside kernel/ (so kernel/.cargo/config.toml, target and
-/// flags, applies), with our `ntdll.dll` up to date and named in the
-/// environment for the kernel's `build.rs` to embed (ADR 0071).
+/// flags, applies), with our `ntdll.dll` and the Win32 DLLs up to date and
+/// named in the environment for the kernel's `build.rs` to embed (ADR
+/// 0071). The two are made at the same time (each its own cargo build in a
+/// target directory of its own, or taken from the cache).
 fn kernel_cargo() -> Result<Command> {
-    let dll = ntdll::ensure()?;
-    let win32 = win32::ensure()?;
+    let (dll, win32) = thread::scope(|s| {
+        let dll = s.spawn(ntdll::ensure);
+        let win32 = win32::ensure();
+        (dll.join().unwrap_or_else(|_| Err("building ntdll.dll panicked".into())), win32)
+    });
+    let (dll, win32) = (dll?, win32?);
     let mut cmd = cargo();
     cmd.current_dir(kernel_dir()).env(ntdll::KERNEL_ENV, dll).env(win32::KERNEL_ENV, win32);
     Ok(cmd)
 }
 
 /// Builds from inside kernel/ so kernel/.cargo/config.toml (target, flags) applies.
-/// The native programs (`userland/native/`, ADR 0125) are built first: they
-/// ship with the kernel, on every host.
+/// The native programs (`userland/native/`, ADR 0125) are built too: they
+/// ship with the kernel, on every host. The kernel does not need them, so
+/// they build at the same time (their own target directory, so the two
+/// cargo runs do not wait for each other's lock).
 fn build_kernel(release: bool) -> Result<PathBuf> {
-    native::build()?;
-    let mut cmd = kernel_cargo()?;
-    cmd.arg("build");
-    if release {
-        cmd.arg("--release");
-    }
-    step("build kernel", &mut cmd)?;
+    let (native, kernel) = thread::scope(|s| {
+        let native = s.spawn(native::build);
+        let kernel = (|| {
+            let mut cmd = kernel_cargo()?;
+            cmd.arg("build");
+            if release {
+                cmd.arg("--release");
+            }
+            step("build kernel", &mut cmd)
+        })();
+        (native.join().unwrap_or_else(|_| Err("building the native programs panicked".into())), kernel)
+    });
+    native?;
+    kernel?;
     Ok(kernel_elf(release))
 }
 

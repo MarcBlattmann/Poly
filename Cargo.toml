@@ -82,6 +82,7 @@ members = [
     "tools/xtask",
     "userland/poly-compositor",
     "userland/poly-notify",
+    "userland/poly-wl-demo",
 ]
 exclude = ["kernel", "userland/native", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 

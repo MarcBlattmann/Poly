@@ -1,0 +1,13 @@
+[package]
+name = "poly-wl-demo"
+description = "The desktop's Wayland test clients as native Poly programs on poly-rt (ADR 0125, ADR 0133): wl-demo (the launcher's Poly Demo) and wl-client (the compositor's protocol test). This is their code, tested on the host; userland/native/wl-demo builds the programs on any host."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+poly-rt.workspace = true
+
+[lints]
+workspace = true

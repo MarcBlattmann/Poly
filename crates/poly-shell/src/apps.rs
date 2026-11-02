@@ -181,7 +181,12 @@ pub fn builtins() -> Vec<App> {
         id: alloc::format!("poly:{name}"),
     };
     alloc::vec![
-        app("Poly Demo", "A Wayland window drawn by a small C client", &["demo", "wayland", "test"], &["/bin/wl-demo"]),
+        app(
+            "Poly Demo",
+            "A Wayland window drawn by a small native client",
+            &["demo", "wayland", "test"],
+            &["/bin/wl-demo"]
+        ),
         app(
             "Wayland Test Client",
             "The compositor's protocol test (exits when done)",
