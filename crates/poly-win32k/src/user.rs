@@ -307,8 +307,10 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
             max_track: CPoint { x: xt.0, y: xt.1 },
         };
         send(env, h, WM_GETMINMAXINFO, 0, ptr(&mut mmi));
-        cx = cx.max(mmi.min_track.x).min(mmi.max_track.x.max(mmi.min_track.x));
-        cy = cy.max(mmi.min_track.y).min(mmi.max_track.y.max(mmi.min_track.y));
+        if metrics::track_limited(style) {
+            cx = cx.max(mmi.min_track.x).min(mmi.max_track.x.max(mmi.min_track.x));
+            cy = cy.max(mmi.min_track.y).min(mmi.max_track.y.max(mmi.min_track.y));
+        }
     }
     if cx < 0 {
         cx = 0;
@@ -323,13 +325,18 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     let (ox, oy) = origin_of(&i);
     let mut class_name = c.class_name.clone();
     class_name.push(0);
+    let (cs_cx, cs_cy) = if c.default_size {
+        (-1, if c.asked_cy == crate::wm::CW_USEDEFAULT { -1 } else { c.asked_cy })
+    } else {
+        (cx, cy)
+    };
     let mut cs = CreateStructW {
         create_params: param,
         instance,
         menu,
         parent: c.cs_parent,
-        cy,
-        cx,
+        cy: cs_cy,
+        cx: cs_cx,
         y,
         x,
         style,
@@ -481,6 +488,11 @@ pub fn show_window<E: Env + ?Sized>(env: &E, hwnd: u64, cmd: i32) -> bool {
         _ => {
             if (i.minimized || i.maximized) && matches!(cmd, SW_SHOWNORMAL | SW_RESTORE | SW_SHOWDEFAULT) {
                 restore(env, &i);
+            } else if i.minimized && cmd == SW_SHOWNOACTIVATE {
+                // "Displays a window in its most recent size and position"
+                // (Learn): a minimized window is restored (observed:
+                // WM_WINDOWPOSCHANGING to the normal rectangle, 0x8120).
+                restore(env, &i);
             } else if !was {
                 show(env, &i, ShowKind::Command(cmd));
             }
@@ -606,7 +618,11 @@ fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
 fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     let r = normal_rect(env, i);
     set_state(env, i.hwnd, false, false, None);
-    swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), SWP_STATECHANGED | SWP_FRAMECHANGED, 0, false);
+    // Out of the icon its pixels are not kept (SWP_NOCOPYBITS, as when it
+    // was minimized; observed 0x8120).
+    let nocopy = if i.minimized { 0x100 } else { 0 };
+    let flags = SWP_STATECHANGED | nocopy | SWP_FRAMECHANGED;
+    swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), flags, 0, false);
 }
 
 fn normal_rect<E: Env + ?Sized>(env: &E, i: &WinInfo) -> Rect {
@@ -685,7 +701,7 @@ fn swp<E: Env + ?Sized>(
             max_track: CPoint { x: xt.0, y: xt.1 },
         };
         send(env, h, WM_GETMINMAXINFO, 0, ptr(&mut mmi));
-        if f & SWP_STATECHANGED == 0 {
+        if f & SWP_STATECHANGED == 0 && metrics::track_limited(i.style) {
             ncx = ncx.max(mmi.min_track.x).min(mmi.max_track.x.max(mmi.min_track.x));
             ncy = ncy.max(mmi.min_track.y).min(mmi.max_track.y.max(mmi.min_track.y));
         }
@@ -749,6 +765,9 @@ fn swp<E: Env + ?Sized>(
         let (dx, dy) = (nx - cur.left, ny - cur.top);
         Rect::new(old_client.left + dx, old_client.top + dy, old_client.right + dx, old_client.bottom + dy)
     };
+    // A minimized window's client area is empty at its corner
+    // (ShowWindow.yaml: WM_MOVE 0,740, client 0x0).
+    let new_client = if i.minimized { Rect::new(nx, ny, nx, ny) } else { new_client };
     let client_moved = (new_client.left, new_client.top) != (old_client.left, old_client.top);
     let client_sized = (new_client.width(), new_client.height()) != (old_client.width(), old_client.height());
     let mut changed = eff | extra;
@@ -992,7 +1011,8 @@ pub fn dispatch_message<E: Env + ?Sized>(env: &E, m: &CMsg) -> u64 {
         );
         if valid {
             env.call_proc(m.l, m.hwnd as u32, WM_TIMER, m.w, u64::from(env.tick()));
-            return 1;
+            // The value the oracle returned after a timer callback.
+            return 22;
         }
         return 0;
     }

@@ -422,6 +422,70 @@ pub extern "system" fn PolyGdiDeleteDisplayDC(hdc: H) -> i32 {
     i32::from(gdi(|g| g.delete_dc(hdc as u64).0))
 }
 
+/// The desktop link's surface DIBs (ADR 0131): per window, a top-down
+/// 32-bpp DIB section of its surface's size that its DCs draw into:
+/// (hwnd, bitmap, pixels, width, height).
+type SurfaceDib = (H, u64, usize, u32, u32);
+static SURFACES: SpinLock<Vec<SurfaceDib>> = SpinLock::new(Vec::new());
+
+/// Point display DC `hdc` of its window at that window's surface DIB of
+/// `width` x `height` (made, or remade for a new size); 0 x 0: draw
+/// nowhere. 1 on success.
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiAttachSurface(hdc: H, width: u32, height: u32) -> i32 {
+    let Some(hwnd) = gdi(|g| g.display_hwnd(hdc as u64)) else { return 0 };
+    if width == 0 || height == 0 {
+        gdi(|g| g.set_surface(hdc as u64, None));
+        return 1;
+    }
+    let hwnd = hwnd as H;
+    let current = SURFACES.with(|s| s.iter().find(|e| e.0 == hwnd).copied());
+    let bitmap = match current {
+        Some((_, b, _, w, h)) if (w, h) == (width, height) => b,
+        old => {
+            let len = width as usize * height as usize * 4;
+            // SAFETY: fresh zeroed pages.
+            let mem = unsafe { VirtualAlloc(core::ptr::null_mut(), len, MEM_COMMIT_RESERVE, PAGE_READWRITE) };
+            if mem.is_null() {
+                return 0;
+            }
+            // White, as the compositor shows a surface before it is drawn.
+            // SAFETY: `len` bytes just allocated.
+            unsafe { core::ptr::write_bytes(mem, 0xFF, len) };
+            let b = gdi(|g| g.create_dib(width as i32, -(height as i32), 32, Vec::new(), mem as u64, len));
+            let b = u64::from(b);
+            SURFACES.with(|s| {
+                s.retain(|e| e.0 != hwnd);
+                s.push((hwnd, b, mem as usize, width, height));
+            });
+            if let Some((_, ob, _, _, _)) = old {
+                // DCs still pointing at it draw nowhere until attached again.
+                DeleteObject(ob as H);
+            }
+            b
+        }
+    };
+    gdi(|g| g.set_surface(hdc as u64, Some(bitmap as u32)));
+    1
+}
+
+/// Window `hwnd`'s surface DIB: its pixels, width and height into
+/// `out[0..3]`; 0 when it has none.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiSurface(hwnd: H, out: *mut u64) -> i32 {
+    let Some((_, _, bits, w, h)) = SURFACES.with(|s| s.iter().find(|e| e.0 == hwnd).copied()) else { return 0 };
+    if out.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller passes three writable u64s.
+    unsafe {
+        *out = bits as u64;
+        *out.add(1) = u64::from(w);
+        *out.add(2) = u64::from(h);
+    }
+    1
+}
+
 /// `FillRect` with a brush handle, or with a colour (`brush` 0).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn PolyGdiFillRect(hdc: H, rect: *const i32, brush: H, color: u32) -> i32 {
@@ -431,7 +495,13 @@ pub unsafe extern "system" fn PolyGdiFillRect(hdc: H, rect: *const i32, brush: H
     // SAFETY: the caller's RECT.
     let r = unsafe { read_rect(rect) };
     let ok = gdi(|g| {
-        if brush == 0 { g.fill_rect_color(hdc as u64, r, color) } else { g.fill_rect(hdc as u64, r, brush as u64) }
+        if brush == 0 && color == poly_gdi::gdi::CLR_INVALID {
+            g.fill_rect(hdc as u64, r, 0)
+        } else if brush == 0 {
+            g.fill_rect_color(hdc as u64, r, color)
+        } else {
+            g.fill_rect(hdc as u64, r, brush as u64)
+        }
     });
     if !ok {
         set_last_error(ERROR_INVALID_HANDLE);

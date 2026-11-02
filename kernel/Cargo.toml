@@ -57,6 +57,8 @@ poly-pe = { path = "../crates/poly-pe" }
 # The PE builder of the ring-3 loader tests (ADR 0071).
 poly-ldr = { path = "../crates/poly-ldr" }
 poly-personality-nt = { path = "../personalities/nt" }
+# The desktop link's records and device numbers (/dev/win32k, ADR 0131).
+poly-win32k = { path = "../crates/poly-win32k" }
 poly-personality-xnu = { path = "../personalities/xnu" }
 poly-virtio = { path = "../crates/poly-virtio" }
 poly-virtio-blk = { path = "../crates/poly-virtio-blk" }

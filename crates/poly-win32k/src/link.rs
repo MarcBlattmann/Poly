@@ -27,6 +27,51 @@ pub const VERSION: u32 = 1;
 /// The device the compositor opens (one opener at a time).
 pub const DEVICE: &str = "/dev/win32k";
 
+/// [`DEVICE`]'s number: a major of the range Linux's `devices.txt` keeps
+/// for local and experimental use (240 to 254), minor 0.
+pub const DEVICE_MAJOR: u32 = 250;
+pub const DEVICE_MINOR: u32 = 0;
+
+/// The device request that copies rows of a buffer into the compositor's
+/// memory (a buffer's handle, in this first version of the link: the
+/// compositor keeps its own copy of each buffer and refreshes the damaged
+/// rows before it applies a [`ToCompositor::Damage`]). The argument points
+/// to a [`ReadBuffer`]. Encoded as Linux's `_IOW('W', 1, 24)`
+/// (`asm-generic/ioctl.h`).
+pub const READ_BUFFER: u32 = (1 << 30) | ((ReadBuffer::SIZE as u32) << 16) | ((b'W' as u32) << 8) | 1;
+
+/// [`READ_BUFFER`]'s argument: rows `row .. row + rows` of `buffer`
+/// (`stride` bytes each) go to `dst`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ReadBuffer {
+    pub buffer: BufferId,
+    pub row: u32,
+    pub rows: u32,
+    pub dst: u64,
+}
+
+impl ReadBuffer {
+    /// Its size in memory: `buffer`, `row`, `rows` (`u32` each), 4 bytes
+    /// of padding, `dst` (`u64`).
+    pub const SIZE: usize = 24;
+
+    pub fn to_bytes(&self) -> [u8; Self::SIZE] {
+        let mut b = [0u8; Self::SIZE];
+        b[0..4].copy_from_slice(&self.buffer.to_le_bytes());
+        b[4..8].copy_from_slice(&self.row.to_le_bytes());
+        b[8..12].copy_from_slice(&self.rows.to_le_bytes());
+        b[16..24].copy_from_slice(&self.dst.to_le_bytes());
+        b
+    }
+
+    pub fn from_bytes(b: &[u8; Self::SIZE]) -> ReadBuffer {
+        let u32_at = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
+        let mut dst = [0u8; 8];
+        dst.copy_from_slice(&b[16..24]);
+        ReadBuffer { buffer: u32_at(0), row: u32_at(4), rows: u32_at(8), dst: u64::from_le_bytes(dst) }
+    }
+}
+
 /// The longest record (the length field is 16 bits).
 pub const MAX_RECORD: usize = u16::MAX as usize;
 

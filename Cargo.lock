@@ -520,6 +520,13 @@ name = "poly-winsock"
 version = "0.0.1"
 
 [[package]]
+name = "poly-wl-demo"
+version = "0.0.1"
+dependencies = [
+ "poly-rt",
+]
+
+[[package]]
 name = "poly-x11"
 version = "0.0.1"
 
@@ -619,6 +626,7 @@ name = "xtask"
 version = "0.0.1"
 dependencies = [
  "jpeg-decoder",
+ "libc",
  "lzma-rs",
  "poly-binfmt",
  "poly-block",

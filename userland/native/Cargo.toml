@@ -7,7 +7,7 @@
 # Windows and Linux hosts) and puts them into the initramfs as /bin/<name>.
 [workspace]
 resolver = "3"
-members = ["compositor", "hello", "notify"]
+members = ["compositor", "hello", "notify", "wl-demo"]
 
 [workspace.package]
 version = "0.0.1"
