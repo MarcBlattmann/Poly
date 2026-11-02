@@ -146,8 +146,11 @@ pub const DC_PEN: u32 = 19;
 const STOCK_BITMAP: u32 = 20;
 const STOCK_COUNT: u32 = 21;
 
-/// Handles are `HANDLE_BASE | (index << 2)`.
-const HANDLE_BASE: u32 = 0x0100_0000;
+/// Handles are `generation << 24 | index << 2`: a slot used again gets a
+/// new generation (1 to 127), so a deleted object's handle stays invalid
+/// (observed: a PatBlt after selecting a deleted brush's handle paints
+/// nothing, even when a new brush took its place).
+const MAX_GENERATION: u8 = 0x7F;
 
 /// What `GetDeviceCaps` of the screen reports.
 #[derive(Clone, Copy, Debug)]
@@ -160,6 +163,8 @@ pub struct Screen {
 #[derive(Debug)]
 pub struct Gdi {
     objs: Vec<Option<Obj>>,
+    /// Each slot's generation (the handle's top byte).
+    gens: Vec<u8>,
     pub screen: Screen,
 }
 
@@ -177,7 +182,7 @@ struct Src<'a> {
 
 impl Gdi {
     pub fn new() -> Gdi {
-        let mut g = Gdi { objs: Vec::new(), screen: Screen { width: 1024, height: 768 } };
+        let mut g = Gdi { objs: Vec::new(), gens: Vec::new(), screen: Screen { width: 1024, height: 768 } };
         g.objs.push(None); // index 0 is never a handle
         let brush = |c: u32, style: u32| Obj::Brush {
             style,
@@ -218,29 +223,41 @@ impl Gdi {
         g
     }
 
-    fn handle_of(index: usize) -> u32 {
-        HANDLE_BASE | ((index as u32) << 2)
+    fn handle_of(&self, index: usize) -> u32 {
+        let generation = self.gens.get(index).copied().unwrap_or(1);
+        (u32::from(generation) << 24) | ((index as u32) << 2)
     }
 
     fn index_of(&self, h: u64) -> Option<usize> {
         let h = h as u32;
-        if h & !0x00FF_FFFC != HANDLE_BASE {
+        if h & 3 != 0 || h >> 24 == 0 || h >> 24 > u32::from(MAX_GENERATION) {
             return None;
         }
         let i = ((h & 0x00FF_FFFF) >> 2) as usize;
-        (i > 0 && i < self.objs.len() && self.objs[i].is_some()).then_some(i)
+        let current = self.gens.get(i).map_or(1, |&g| u32::from(g));
+        (i > 0 && i < self.objs.len() && self.objs[i].is_some() && h >> 24 == current).then_some(i)
     }
 
     fn add(&mut self, o: Obj) -> u32 {
         let i = match self.objs.iter().skip(1 + STOCK_COUNT as usize).position(Option::is_none) {
-            Some(p) => p + 1 + STOCK_COUNT as usize,
+            Some(p) => {
+                let i = p + 1 + STOCK_COUNT as usize;
+                if self.gens.len() <= i {
+                    self.gens.resize(i + 1, 1);
+                }
+                self.gens[i] = if self.gens[i] >= MAX_GENERATION { 1 } else { self.gens[i] + 1 };
+                i
+            }
             None => {
                 self.objs.push(None);
                 self.objs.len() - 1
             }
         };
+        if self.gens.len() <= i {
+            self.gens.resize(i + 1, 1);
+        }
         self.objs[i] = Some(o);
-        Self::handle_of(i)
+        self.handle_of(i)
     }
 
     /// `GetStockObject`.
@@ -248,7 +265,7 @@ impl Gdi {
         if i >= STOCK_COUNT - 1 || i == 9 {
             return 0;
         }
-        Self::handle_of(1 + i as usize)
+        self.handle_of(1 + i as usize)
     }
 
     fn obj(&self, h: u64) -> Option<&Obj> {
@@ -295,7 +312,7 @@ impl Gdi {
     /// `CreateCompatibleDC`: a memory DC with the default bitmap.
     pub fn create_compatible_dc(&mut self, _of: u64) -> u32 {
         let state = self.default_state();
-        let bitmap = Self::handle_of(1 + STOCK_BITMAP as usize);
+        let bitmap = self.handle_of(1 + STOCK_BITMAP as usize);
         self.add(Obj::Dc(Dc { kind: DcKind::Memory, state, saved: Vec::new(), bitmap, surface: None }))
     }
 
@@ -513,6 +530,11 @@ impl Gdi {
             return Err(ERROR_INVALID_HANDLE);
         }
         let kind = match self.obj(obj) {
+            // A deleted solid brush stays readable and paints where it is
+            // named (FillRect), but cannot be selected again: the DC keeps
+            // its brush (observed: a PatBlt after selecting it paints with
+            // the brush before, a FillRect with it paints its colour).
+            Some(Obj::Brush { deleted: true, .. }) => return Ok(0),
             Some(Obj::Brush { .. }) => OBJ_BRUSH,
             Some(Obj::Pen { .. }) => OBJ_PEN,
             Some(Obj::Font { .. }) => OBJ_FONT,
@@ -841,8 +863,6 @@ impl Gdi {
     fn brush_color(&self, brush: u32, state: &DcState) -> Option<Rgb> {
         match self.obj(u64::from(brush)) {
             Some(Obj::Brush { style: BS_NULL, .. }) => None,
-            // A deleted brush selected again paints nothing (observed).
-            Some(Obj::Brush { deleted: true, .. }) => None,
             Some(Obj::Brush { .. }) if brush == self.stock(DC_BRUSH) => Some(Rgb::from_colorref(state.dc_brush)),
             Some(Obj::Brush { color, .. }) => Some(Rgb::from_colorref(*color)),
             _ => None,

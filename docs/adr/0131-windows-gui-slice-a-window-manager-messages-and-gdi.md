@@ -107,8 +107,10 @@ operation to raw pixel values (so `NOTSRCCOPY` sets the high byte, as
 observed); colour↔monochrome blits use the source's background and the
 destination's text and background colours. The observed object
 lifetimes are kept: a deleted DC answers `OBJ_DC`, a deleted unselected
-solid brush stays readable, a selected brush or bitmap goes when it is
-deselected or its DC is deleted.
+solid brush stays readable (and paints where it is named) but cannot be
+selected again, a selected brush or bitmap goes when it is deselected or
+its DC is deleted. GDI handles carry a generation (the top byte), so a
+deleted object's handle never names the object that reuses its slot.
 
 **Fonts.** The stock fonts report the sheets' `TEXTMETRICW`. The system
 font is a 16-pixel bitmap font whose advance widths were solved from
