@@ -158,6 +158,18 @@ Poly is in `specs/linux/FAILING.md`. To trace one: `cargo xtask pipeline
 trace app-ls --print`. A QEMU that dies by a signal (an emulator crash
 seen under load) is booted once more.
 
+**Chromium's scenario tests** (`specs/linux/apps/chromium.tests/`, entry
+`linux/api/apps/chromium`) use the same JSON format but run programs of
+Chromium's own root disk (Debian packages pinned in
+`tools/xtask/chromium.lock`, ADR 0129) rather than the host's, so the
+diff runner does not run them: `cargo xtask chromium apptest
+[--target linux|poly|both|linux-twice] [--tests-dir DIR]...` runs each
+test's steps as a shell script on the reference (the Debian root entered
+with `pivot_root`) and on Poly (one boot of the disk), and compares stdout
+and exit status; stderr and system calls are not compared (Chromium is
+about 15 processes and 250 threads, its log lines carry pids and times).
+What Chromium needs call by call is in `docs/chromium-linux-gaps.md`.
+
 ### Diff runner
 
 ```sh
