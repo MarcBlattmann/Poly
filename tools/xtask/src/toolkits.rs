@@ -559,6 +559,23 @@ impl Machine {
         init: &str,
         cpus: Option<u32>,
     ) -> Result<Machine> {
+        Machine::boot_with_init_args(kernel, syms, image, initrd, tag, memory, init, cpus, &[])
+    }
+
+    /// [`Machine::boot_with_init`] with additional QEMU arguments (e.g. a
+    /// virtio-net device on user networking).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn boot_with_init_args(
+        kernel: &Path,
+        syms: &Arc<Symbols>,
+        image: &Path,
+        initrd: &Path,
+        tag: &str,
+        memory: &str,
+        init: &str,
+        cpus: Option<u32>,
+        qemu_args: &[String],
+    ) -> Result<Machine> {
         let qmp_path = std::env::temp_dir().join(format!("poly-toolkits-qmp-{}-{tag}.sock", std::process::id()));
         let _ = std::fs::remove_file(&qmp_path);
         let wav = root().join(format!("target/poly-toolkits-{tag}.wav"));
@@ -578,6 +595,7 @@ impl Machine {
             .args(["-device", "virtio-sound-pci,audiodev=snd0"])
             // A later -smp overrides crate::qemu's.
             .args(cpus.map(|n| vec!["-smp".to_string(), n.to_string()]).unwrap_or_default())
+            .args(qemu_args)
             .args(["-qmp", &format!("unix:{},server=on,wait=off", qmp_path.display())]);
         let mut s = Session::spawn(cmd, syms)?;
         s.set_timeouts(Duration::from_secs(600), Duration::from_secs(3600));

@@ -69,7 +69,8 @@ use crate::rootdisk::{self, Contents, RootTree};
 use crate::symbols::Symbols;
 use crate::{Result, compositor, root};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::io::Write;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -954,6 +955,8 @@ pub const GROUP: &str = "root:x:0:\nnogroup:x:65534:\npoly:x:1000:\n";
 fn configure(tree: &mut RootTree) {
     tree.file("etc/passwd", 0o644, PASSWD.as_bytes());
     tree.file("etc/group", 0o644, GROUP.as_bytes());
+    // QEMU user networking's built-in DNS resolver (poly.net=qemu).
+    tree.file("etc/resolv.conf", 0o644, b"nameserver 10.0.2.3\n");
     // A fixed machine id (machine-id(5)): D-Bus and Chromium read it.
     tree.file("etc/machine-id", 0o444, b"504f4c59636872006f6d69756d000001\n");
     for (path, data) in PAGES {
@@ -1070,9 +1073,10 @@ fn run(args: &[String]) -> Result {
     let initrd = write_initramfs()?;
     // POLY_CHROMIUM_APPEND: more kernel arguments (`poly.debug.profile`, ...).
     let more = std::env::var("POLY_CHROMIUM_APPEND").unwrap_or_default();
-    let append = format!("{INIT_ARGS} console=ttyS0 poly.terminal=off {more}");
+    let append = format!("{INIT_ARGS} console=ttyS0 poly.terminal=off poly.net=qemu {more}");
     let mut cmd = crate::qemu(&kernel, MEMORY, append.trim_end(), crate::Devices::None, "mon:stdio");
     cmd.args(rootdisk::drive_args(&image)).arg("-initrd").arg(&initrd).args(crate::desktop::devices());
+    cmd.args(crate::net::nic_args(None, false));
     if let Some(n) = CPUS {
         cmd.args(["-smp", &n.to_string()]);
     }
@@ -1527,7 +1531,44 @@ fn apptest(args: &[String]) -> Result {
 /// What the console runs Chromium with: as `poly`, with the sandbox,
 /// headless.
 fn headless(args: &str, page: &str) -> String {
-    format!("/usr/local/bin/poly-chromium --headless=new --log-level=3 {args} file:///{PAGES_DIR}/{page}")
+    headless_url(args, &format!("file:///{PAGES_DIR}/{page}"))
+}
+
+/// Run Chromium headless against an absolute URL.
+fn headless_url(args: &str, url: &str) -> String {
+    format!("/usr/local/bin/poly-chromium --headless=new --log-level=3 {args} {url}")
+}
+
+/// An HTTP server on the host loopback, reached from QEMU user networking
+/// as 10.0.2.2 (QEMU's documented host address).
+struct HostHttpPage {
+    port: u16,
+}
+
+impl HostHttpPage {
+    fn start() -> Result<HostHttpPage> {
+        const BODY: &str = "<!doctype html><html><head><meta charset=utf-8><title>Poly host HTTP page</title></head>\
+                            <body><h1>served by the xtask host over QEMU user networking</h1>\
+                            <p id=source>10.0.2.2</p></body></html>\n";
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("host HTTP page: {e}"))?;
+        let port = listener.local_addr().map_err(|e| format!("host HTTP page: {e}"))?.port();
+        std::thread::spawn(move || {
+            for incoming in listener.incoming() {
+                let Ok(mut stream) = incoming else { break };
+                let mut request = [0; 4096];
+                if stream.read(&mut request).is_err() {
+                    continue;
+                }
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{BODY}",
+                    BODY.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+        Ok(HostHttpPage { port })
+    }
 }
 
 /// How long a step of the windowed scenario may take: Chromium starts in
@@ -1635,18 +1676,22 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         );
         return Ok(());
     }
+    let http = HostHttpPage::start()?;
     let initrd = write_initramfs()?;
     let (image, _) = make(TEST_FILE_NAME)?;
     eprintln!("==> boot test: Chromium headless and on the desktop with its sandbox, from its root disk");
-    let mut m = crate::toolkits::Machine::boot_with_init(
+    let init = format!("{INIT_ARGS} poly.net=qemu");
+    let network_args = crate::net::nic_args(None, false);
+    let mut m = crate::toolkits::Machine::boot_with_init_args(
         kernel,
         syms,
         &image,
         &initrd,
         "chromium-test",
         MEMORY,
-        INIT_ARGS,
+        &init,
         CPUS,
+        &network_args,
     )?;
     m.set_timeouts(Duration::from_secs(600), Duration::from_secs(3600));
     m.desktop_up()?;
@@ -1664,7 +1709,16 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             failed.push(format!("--screenshot of colours.html: {out:?}"));
         }
     }
-    // 3. Windowed with the sandbox, from the launcher: clicks turn the
+    // 3. Headless over the guest's virtio-net interface to a page served on
+    // the host. QEMU user networking exposes the host as 10.0.2.2.
+    if failed.is_empty() {
+        let url = format!("http://10.0.2.2:{}/", http.port);
+        let out = m.run(&headless_url("--dump-dom", &url))?;
+        if !out.contains("served by the xtask host over QEMU user networking") {
+            failed.push(format!("HTTP page from {url}: {out:?}"));
+        }
+    }
+    // 4. Windowed with the sandbox, from the launcher: clicks turn the
     // page's colour and back, typing changes its title.
     if failed.is_empty()
         && let Err(e) = window_scenario(&mut m)
