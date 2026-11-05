@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "gmi_info",
+      "exe_sha256": "55935d572d996d52ea3258a8d389b731dc0aff786fe0d20b8dee5ca4d9107f57",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TU9OSVRPUklORk9FWFc6IG9rPTEgZXJyb3IgMCBjYlNpemUgMTA0CiAgbW9uaXRvciAwLDAsMTkyMCwxMDgwIHdvcmsgMCwyNCwxOTIwLDEwODAgZmxhZ3MgMHgxCiAgZGV2aWNlICJcXC5cRElTUExBWTEiIGxlbmd0aCAxMiBhZnRlciB0aGUgTlVMOiAweGFhYWEKTU9OSVRPUklORk86IG9rPTEgY2JTaXplIDQwIG1vbml0b3IgMCwwLDE5MjAsMTA4MCB3b3JrIDAsMjQsMTkyMCwxMDgwIGZsYWdzIDB4MQpvayBieXRlcyBwYXN0IGNiU2l6ZSA0MCB1bnRvdWNoZWQKb2sgd29yayBhcmVhID09IFNQSV9HRVRXT1JLQVJFQQpvayBtb25pdG9yID09IHRoZSBzY3JlZW4Kc3VtbWFyeSAzIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "MONITORINFOEXW: ok=1 error 0 cbSize 104\n  monitor 0,0,1920,1080 work 0,24,1920,1080 flags 0x1\n  device \"\\\\.\\DISPLAY1\" length 12 after the NUL: 0xaaaa\nMONITORINFO: ok=1 cbSize 40 monitor 0,0,1920,1080 work 0,24,1920,1080 flags 0x1\nok bytes past cbSize 40 untouched\nok work area == SPI_GETWORKAREA\nok monitor == the screen\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

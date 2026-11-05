@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "mwp_errors",
+      "exe_sha256": "83bad0462b095442e9db25e6c663d3d519752e1225645ba27ecc9cb1030e07ba",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAptYWRlLXVwIHNvdXJjZSB0byBQLCAxIHBvaW50KHMpOiA1LDcgLT4gNSw3IHJldHVybmVkIDB4MDAwMDAwMDAgZXJyb3IgMTQwMApQIHRvIG1hZGUtdXAgdGFyZ2V0LCAxIHBvaW50KHMpOiA1LDcgLT4gNSw3IHJldHVybmVkIDB4MDAwMDAwMDAgZXJyb3IgMTQwMAptYWRlLXVwIHNvdXJjZSB0byBOVUxMLCAxIHBvaW50KHMpOiA1LDcgLT4gNSw3IHJldHVybmVkIDB4MDAwMDAwMDAgZXJyb3IgMTQwMApkZXN0cm95ZWQgd2luZG93IHRvIFAsIDEgcG9pbnQocyk6IDUsNyAtPiA1LDcgcmV0dXJuZWQgMHgwMDAwMDAwMCBlcnJvciAxNDAwClAgdG8gYSBkZXN0cm95ZWQgd2luZG93LCAxIHBvaW50KHMpOiA1LDcgLT4gNSw3IHJldHVybmVkIDB4MDAwMDAwMDAgZXJyb3IgMTQwMAptYWRlLXVwIHNvdXJjZSB0byBQLCAwIHBvaW50KHMpOiA1LDcgLT4gNSw3IHJldHVybmVkIDB4MDAwMDAwMDAgZXJyb3IgMTQwMApQIHRvIG1hZGUtdXAgdGFyZ2V0LCAwIHBvaW50KHMpOiA1LDcgLT4gNSw3IHJldHVybmVkIDB4MDAwMDAwMDAgZXJyb3IgMTQwMAptYWRlLXVwIHNvdXJjZSB0byBOVUxMLCAwIHBvaW50KHMpOiA1LDcgLT4gNSw3IHJldHVybmVkIDB4MDAwMDAwMDAgZXJyb3IgMTQwMApkZXN0cm95ZWQgd2luZG93IHRvIFAsIDAgcG9pbnQocyk6IDUsNyAtPiA1LDcgcmV0dXJuZWQgMHgwMDAwMDAwMCBlcnJvciAxNDAwClAgdG8gYSBkZXN0cm95ZWQgd2luZG93LCAwIHBvaW50KHMpOiA1LDcgLT4gNSw3IHJldHVybmVkIDB4MDAwMDAwMDAgZXJyb3IgMTQwMAptaW5pbWl6ZWQgZnJhbWVkIHdpbmRvdyB0byBzY3JlZW4sIDEgcG9pbnQocyk6IDUsNyAtPiA1LDEwNTkgcmV0dXJuZWQgMHgwNDFjMDAwMCBlcnJvciAwCm1lc3NhZ2Utb25seSB3aW5kb3cgKDQwLDUwKSB0byBzY3JlZW4sIDEgcG9pbnQocyk6IDUsNyAtPiA1Myw4OCByZXR1cm5lZCAweDAwNTEwMDMwIGVycm9yIDAKUCB0byB0aGUgbWVzc2FnZS1vbmx5IHdpbmRvdywgMSBwb2ludChzKTogNSw3IC0+IDU3LDI2IHJldHVybmVkIDB4MDAxMzAwMzQgZXJyb3IgMApzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nmade-up source to P, 1 point(s): 5,7 -> 5,7 returned 0x00000000 error 1400\nP to made-up target, 1 point(s): 5,7 -> 5,7 returned 0x00000000 error 1400\nmade-up source to NULL, 1 point(s): 5,7 -> 5,7 returned 0x00000000 error 1400\ndestroyed window to P, 1 point(s): 5,7 -> 5,7 returned 0x00000000 error 1400\nP to a destroyed window, 1 point(s): 5,7 -> 5,7 returned 0x00000000 error 1400\nmade-up source to P, 0 point(s): 5,7 -> 5,7 returned 0x00000000 error 1400\nP to made-up target, 0 point(s): 5,7 -> 5,7 returned 0x00000000 error 1400\nmade-up source to NULL, 0 point(s): 5,7 -> 5,7 returned 0x00000000 error 1400\ndestroyed window to P, 0 point(s): 5,7 -> 5,7 returned 0x00000000 error 1400\nP to a destroyed window, 0 point(s): 5,7 -> 5,7 returned 0x00000000 error 1400\nminimized framed window to screen, 1 point(s): 5,7 -> 5,1059 returned 0x041c0000 error 0\nmessage-only window (40,50) to screen, 1 point(s): 5,7 -> 53,88 returned 0x00510030 error 0\nP to the message-only window, 1 point(s): 5,7 -> 57,26 returned 0x00130034 error 0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 130
+    },
+    {
+      "name": "mwp_rtl",
+      "exe_sha256": "55ad66654be8ebdf67628894d8859c1317437452109d1c8aaf1386dbb4212998",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApSIGV4IHN0eWxlIDB4ODQwMDAwMDsgUyBleCBzdHlsZSAweDQwMDAwMDsgTiBleCBzdHlsZSAweDUwMDAwMApTIHdpbmRvdyByZWN0IDc4MCwxMjAsODQwLDE2MDsgTiB3aW5kb3cgcmVjdCA2OTAsMTIwLDc1MCwxNjAKUiB0byBzY3JlZW4sIDEgcG9pbnQ6IDEwLDUgLT4gODQwLDEwNSByZXR1cm5lZCAweDAwNjRmY2FlCnNjcmVlbiB0byBSLCAxIHBvaW50OiA4NDAsMTA1IC0+IDEwLDUgcmV0dXJuZWQgMHhmZjljZmNhZQpSIHRvIHNjcmVlbiwgMiBwb2ludHM6IDEwLDUgNTAsMjUgLT4gODAwLDEwNSA4NDAsMTI1IHJldHVybmVkIDB4MDA2NGZjYWUKc2NyZWVuIHRvIFIsIDIgcG9pbnRzOiA4MDAsMTA1IDg0MCwxMjUgLT4gMTAsNSA1MCwyNSByZXR1cm5lZCAweGZmOWNmY2FlClIgdG8gc2NyZWVuLCAzIHBvaW50czogMTAsNSA1MCwyNSAwLDAgLT4gODQwLDEwNSA4MDAsMTI1IDg1MCwxMDAgcmV0dXJuZWQgMHgwMDY0ZmNhZQpTIHRvIHNjcmVlbiwgMSBwb2ludDogMCwwIC0+IDg0MCwxMjAgcmV0dXJuZWQgMHgwMDc4ZmNiOApTIHRvIFIsIDEgcG9pbnQ6IDAsMCAtPiAxMCwyMCByZXR1cm5lZCAweDAwMTQwMDBhCk4gdG8gc2NyZWVuLCAxIHBvaW50OiAwLDAgLT4gNzUwLDEyMCByZXR1cm5lZCAweDAwNzhmZDEyCk4gdG8gUiwgMSBwb2ludDogMCwwIC0+IDEwMCwyMCByZXR1cm5lZCAweDAwMTQwMDY0ClIgdG8gUCwgMSBwb2ludDogMTAsNSAtPiA3NDAsNSByZXR1cm5lZCAweDAwMDBmZDEyClAgdG8gUiwgMSBwb2ludDogMTAsNSAtPiA3NDAsNSByZXR1cm5lZCAweDAwMDBmZDEyClIgdG8gUCwgMiBwb2ludHM6IDEwLDUgNTAsMjUgLT4gNzAwLDUgNzQwLDI1IHJldHVybmVkIDB4MDAwMGZkMTIKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nR ex style 0x8400000; S ex style 0x400000; N ex style 0x500000\nS window rect 780,120,840,160; N window rect 690,120,750,160\nR to screen, 1 point: 10,5 -> 840,105 returned 0x0064fcae\nscreen to R, 1 point: 840,105 -> 10,5 returned 0xff9cfcae\nR to screen, 2 points: 10,5 50,25 -> 800,105 840,125 returned 0x0064fcae\nscreen to R, 2 points: 800,105 840,125 -> 10,5 50,25 returned 0xff9cfcae\nR to screen, 3 points: 10,5 50,25 0,0 -> 840,105 800,125 850,100 returned 0x0064fcae\nS to screen, 1 point: 0,0 -> 840,120 returned 0x0078fcb8\nS to R, 1 point: 0,0 -> 10,20 returned 0x0014000a\nN to screen, 1 point: 0,0 -> 750,120 returned 0x0078fd12\nN to R, 1 point: 0,0 -> 100,20 returned 0x00140064\nR to P, 1 point: 10,5 -> 740,5 returned 0x0000fd12\nP to R, 1 point: 10,5 -> 740,5 returned 0x0000fd12\nR to P, 2 points: 10,5 50,25 -> 700,5 740,25 returned 0x0000fd12\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    }
+  ]
+}

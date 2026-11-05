@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "saw_special",
+      "exe_sha256": "030ef1c979fd3a2a7cfb127320aa1860d7ec7877df6e73bef9adcdd79690cf34",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCnN0YXJ0OiBhY3RpdmU9QSBmb2N1cz1BIGZnPUEKU2V0QWN0aXZlV2luZG93KE4sIFdTX0VYX05PQUNUSVZBVEUpOiByZXR1cm5lZCBBIGVycm9yIDAKICBBIFdNX05DQUNUSVZBVEUgYWN0aXZlPTAgbD1oYW5kbGUKICBBIFdNX0FDVElWQVRFIHN0YXRlPTAgbWluaW1pemVkPTAgb3RoZXI9TgogIE4gV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDMKICBOIFdNX1dJTkRPV1BPU0NIQU5HRUQgcG9zPTQwMCw1MCBzaXplPTE1MCwxMDAgZmxhZ3M9MHgxODAzCiAgTiBXTV9OQ0FDVElWQVRFIGFjdGl2ZT0xIGw9aGFuZGxlCiAgTiBXTV9BQ1RJVkFURSBzdGF0ZT0xIG1pbmltaXplZD0wIG90aGVyPUEKICBBIFdNX0tJTExGT0NVUyBvdGhlcj1OCiAgTiBXTV9TRVRGT0NVUyBvdGhlcj1BCiAgbm93OiBhY3RpdmU9TiBmb2N1cz1OIGZnPU4KU2V0QWN0aXZlV2luZG93KEMsIGNoaWxkIG9mIEEpOiByZXR1cm5lZCBBIGVycm9yIDAKICBub3c6IGFjdGl2ZT1BIGZvY3VzPUEgZmc9QQpTZXRBY3RpdmVXaW5kb3coSCwgaGlkZGVuKTogcmV0dXJuZWQgQSBlcnJvciAwCiAgQSBXTV9OQ0FDVElWQVRFIGFjdGl2ZT0wIGw9aGFuZGxlCiAgQSBXTV9BQ1RJVkFURSBzdGF0ZT0wIG1pbmltaXplZD0wIG90aGVyPUgKICBIIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHgzCiAgSCBXTV9OQ0FDVElWQVRFIGFjdGl2ZT0xIGw9aGFuZGxlCiAgSCBXTV9BQ1RJVkFURSBzdGF0ZT0xIG1pbmltaXplZD0wIG90aGVyPUEKICBBIFdNX0tJTExGT0NVUyBvdGhlcj1ICiAgSCBXTV9TRVRGT0NVUyBvdGhlcj1BCiAgbm93OiBhY3RpdmU9SCBmb2N1cz1IIGZnPUgKU2V0QWN0aXZlV2luZG93KEQsIGRpc2FibGVkKTogcmV0dXJuZWQgQSBlcnJvciAwCiAgQSBXTV9OQ0FDVElWQVRFIGFjdGl2ZT0wIGw9aGFuZGxlCiAgQSBXTV9BQ1RJVkFURSBzdGF0ZT0wIG1pbmltaXplZD0wIG90aGVyPUQKICBEIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHgzCiAgRCBXTV9XSU5ET1dQT1NDSEFOR0VEIHBvcz02MDAsNTAgc2l6ZT0xNTAsMTAwIGZsYWdzPTB4MTgwMwogIEQgV01fTkNBQ1RJVkFURSBhY3RpdmU9MSBsPWhhbmRsZQogIEQgV01fQUNUSVZBVEUgc3RhdGU9MSBtaW5pbWl6ZWQ9MCBvdGhlcj1BCiAgQSBXTV9LSUxMRk9DVVMgb3RoZXI9RAogIEQgV01fU0VURk9DVVMgb3RoZXI9QQogIG5vdzogYWN0aXZlPUQgZm9jdXM9RCBmZz1EClNldEFjdGl2ZVdpbmRvdyhPLCBvd25lZCBieSBBKTogcmV0dXJuZWQgQSBlcnJvciAwCiAgQSBXTV9OQ0FDVElWQVRFIGFjdGl2ZT0wIGw9aGFuZGxlCiAgQSBXTV9BQ1RJVkFURSBzdGF0ZT0wIG1pbmltaXplZD0wIG90aGVyPU8KICBPIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHgzCiAgQSBXTV9XSU5ET1dQT1NDSEFOR0lORyBwb3M9MCwwIHNpemU9MCwwIGZsYWdzPTB4MTMKICBPIFdNX1dJTkRPV1BPU0NIQU5HRUQgcG9zPTYwMCwyMDAgc2l6ZT0xNTAsMTAwIGZsYWdzPTB4MTgwMwogIE8gV01fTkNBQ1RJVkFURSBhY3RpdmU9MSBsPWhhbmRsZQogIE8gV01fQUNUSVZBVEUgc3RhdGU9MSBtaW5pbWl6ZWQ9MCBvdGhlcj1BCiAgQSBXTV9LSUxMRk9DVVMgb3RoZXI9TwogIE8gV01fU0VURk9DVVMgb3RoZXI9QQogIG5vdzogYWN0aXZlPU8gZm9jdXM9TyBmZz1PClNldEFjdGl2ZVdpbmRvdyhtYWRlLXVwIGhhbmRsZSk6IHJldHVybmVkIG51bGwgZXJyb3IgMTQwMAogIG5vdzogYWN0aXZlPUEgZm9jdXM9QSBmZz1BCnN1bW1hcnkgMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\nstart: active=A focus=A fg=A\nSetActiveWindow(N, WS_EX_NOACTIVATE): returned A error 0\n  A WM_NCACTIVATE active=0 l=handle\n  A WM_ACTIVATE state=0 minimized=0 other=N\n  N WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x3\n  N WM_WINDOWPOSCHANGED pos=400,50 size=150,100 flags=0x1803\n  N WM_NCACTIVATE active=1 l=handle\n  N WM_ACTIVATE state=1 minimized=0 other=A\n  A WM_KILLFOCUS other=N\n  N WM_SETFOCUS other=A\n  now: active=N focus=N fg=N\nSetActiveWindow(C, child of A): returned A error 0\n  now: active=A focus=A fg=A\nSetActiveWindow(H, hidden): returned A error 0\n  A WM_NCACTIVATE active=0 l=handle\n  A WM_ACTIVATE state=0 minimized=0 other=H\n  H WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x3\n  H WM_NCACTIVATE active=1 l=handle\n  H WM_ACTIVATE state=1 minimized=0 other=A\n  A WM_KILLFOCUS other=H\n  H WM_SETFOCUS other=A\n  now: active=H focus=H fg=H\nSetActiveWindow(D, disabled): returned A error 0\n  A WM_NCACTIVATE active=0 l=handle\n  A WM_ACTIVATE state=0 minimized=0 other=D\n  D WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x3\n  D WM_WINDOWPOSCHANGED pos=600,50 size=150,100 flags=0x1803\n  D WM_NCACTIVATE active=1 l=handle\n  D WM_ACTIVATE state=1 minimized=0 other=A\n  A WM_KILLFOCUS other=D\n  D WM_SETFOCUS other=A\n  now: active=D focus=D fg=D\nSetActiveWindow(O, owned by A): returned A error 0\n  A WM_NCACTIVATE active=0 l=handle\n  A WM_ACTIVATE state=0 minimized=0 other=O\n  O WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x3\n  A WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x13\n  O WM_WINDOWPOSCHANGED pos=600,200 size=150,100 flags=0x1803\n  O WM_NCACTIVATE active=1 l=handle\n  O WM_ACTIVATE state=1 minimized=0 other=A\n  A WM_KILLFOCUS other=O\n  O WM_SETFOCUS other=A\n  now: active=O focus=O fg=O\nSetActiveWindow(made-up handle): returned null error 1400\n  now: active=A focus=A fg=A\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1219
+    },
+    {
+      "name": "saw_two",
+      "exe_sha256": "cff7555a5b6a485c889644abe38636577210cc4bc71b9be1553cb542c511c366",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCnN0YXJ0OiBhY3RpdmU9QSBmb2N1cz1BIGZnPUEKU2V0QWN0aXZlV2luZG93KEIpOiByZXR1cm5lZCBBIGVycm9yIDAKICBBIFdNX05DQUNUSVZBVEUgYWN0aXZlPTAgbD1oYW5kbGUKICBBIFdNX0FDVElWQVRFIHN0YXRlPTAgbWluaW1pemVkPTAgb3RoZXI9QgogIEIgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDMKICBCIFdNX05DQUNUSVZBVEUgYWN0aXZlPTEgbD1oYW5kbGUKICBCIFdNX0FDVElWQVRFIHN0YXRlPTEgbWluaW1pemVkPTAgb3RoZXI9QQogIEEgV01fS0lMTEZPQ1VTIG90aGVyPUIKICBCIFdNX1NFVEZPQ1VTIG90aGVyPUEKICBub3c6IGFjdGl2ZT1CIGZvY3VzPUIgZmc9QgpTZXRBY3RpdmVXaW5kb3coQikgYWdhaW46IHJldHVybmVkIEIgZXJyb3IgMAogIG5vdzogYWN0aXZlPUIgZm9jdXM9QiBmZz1CClNldEFjdGl2ZVdpbmRvdyhBKTogcmV0dXJuZWQgQiBlcnJvciAwCiAgQiBXTV9OQ0FDVElWQVRFIGFjdGl2ZT0wIGw9aGFuZGxlCiAgQiBXTV9BQ1RJVkFURSBzdGF0ZT0wIG1pbmltaXplZD0wIG90aGVyPUEKICBBIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHgzCiAgQSBXTV9XSU5ET1dQT1NDSEFOR0VEIHBvcz01MCw1MCBzaXplPTMwMCwyMDAgZmxhZ3M9MHgxODAzCiAgQSBXTV9OQ0FDVElWQVRFIGFjdGl2ZT0xIGw9aGFuZGxlCiAgQSBXTV9BQ1RJVkFURSBzdGF0ZT0xIG1pbmltaXplZD0wIG90aGVyPUIKICBCIFdNX0tJTExGT0NVUyBvdGhlcj1BCiAgQSBXTV9TRVRGT0NVUyBvdGhlcj1CCiAgbm93OiBhY3RpdmU9QSBmb2N1cz1BIGZnPUEKU2V0QWN0aXZlV2luZG93KE5VTEwpOiByZXR1cm5lZCBudWxsIGVycm9yIDAKICBub3c6IGFjdGl2ZT1BIGZvY3VzPUEgZmc9QQpTZXRBY3RpdmVXaW5kb3coQSkgYWZ0ZXIgTlVMTDogcmV0dXJuZWQgQSBlcnJvciAwCiAgbm93OiBhY3RpdmU9QSBmb2N1cz1BIGZnPUEKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\nstart: active=A focus=A fg=A\nSetActiveWindow(B): returned A error 0\n  A WM_NCACTIVATE active=0 l=handle\n  A WM_ACTIVATE state=0 minimized=0 other=B\n  B WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x3\n  B WM_NCACTIVATE active=1 l=handle\n  B WM_ACTIVATE state=1 minimized=0 other=A\n  A WM_KILLFOCUS other=B\n  B WM_SETFOCUS other=A\n  now: active=B focus=B fg=B\nSetActiveWindow(B) again: returned B error 0\n  now: active=B focus=B fg=B\nSetActiveWindow(A): returned B error 0\n  B WM_NCACTIVATE active=0 l=handle\n  B WM_ACTIVATE state=0 minimized=0 other=A\n  A WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x3\n  A WM_WINDOWPOSCHANGED pos=50,50 size=300,200 flags=0x1803\n  A WM_NCACTIVATE active=1 l=handle\n  A WM_ACTIVATE state=1 minimized=0 other=B\n  B WM_KILLFOCUS other=A\n  A WM_SETFOCUS other=B\n  now: active=A focus=A fg=A\nSetActiveWindow(NULL): returned null error 0\n  now: active=A focus=A fg=A\nSetActiveWindow(A) after NULL: returned A error 0\n  now: active=A focus=A fg=A\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 747
+    }
+  ]
+}

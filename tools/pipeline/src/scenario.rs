@@ -1062,6 +1062,7 @@ pub fn run_poly(
             version: manifest.revision.as_ref().map(|r| format!("rev {}", &r[..12.min(r.len())])),
             build: None,
             arch: Some("x86_64".into()),
+            session: None,
         },
         bundle: None,
         runner: Some("cargo xtask pipeline win scenario poly".into()),

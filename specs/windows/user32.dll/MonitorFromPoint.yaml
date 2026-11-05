@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/MonitorFromPoint
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read. "MonitorFromPoint", "MonitorFromRect",
+  "Multiple Display Monitors".
+summary: >
+  Returns the monitor containing a point (screen coordinates, the monitor
+  rectangle's right and bottom edges excluded), or for a point on no monitor
+  NULL / the primary / the nearest monitor as the flag says. The same handle
+  comes back for every point of a monitor, from every thread.
+  MonitorFromRect works the same way on a rectangle (an empty or inverted
+  rectangle inside the screen counts as on it).
+interface:
+  signature: "HMONITOR MonitorFromPoint(POINT pt, DWORD flags)"
+rules:
+  inside: "0,0, 1919,1079, 1919,0, 0,1079 and 960,540 are on the primary monitor with every flag"
+  outside: "1920,540, 960,1080, -1,540, 960,-1, 1920,1080, -1,-1, far points and the i32 extremes: NULL with MONITOR_DEFAULTTONULL, the primary monitor with MONITOR_DEFAULTTOPRIMARY and MONITOR_DEFAULTTONEAREST"
+  rect: "MonitorFromRect: a rectangle overlapping the screen by any amount is on it; touching an edge from outside (-50,10,0,100; 1920,10,2000,100) is not; empty (50,50,50,50), inverted (100,100,10,10) and zero-width rectangles inside the screen are on it, an empty one outside is not"
+  threads: "the handle from another thread is the same value"
+  last_error: "unchanged on success (a value set before stays)"
+errors:
+  bad_flags: "flags other than 0, 1, 2 (3, 4, 0x10, 0x100, 0x80000000, 0xFFFFFFFF): NULL, ERROR_INVALID_FLAGS (1004), for points on and off the screen"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Several monitors, negative virtual-screen origins. DPI awareness other
+  than unaware (the tests have no manifest), several monitors, other
+  keyboard layouts than German, IME, touch and pen, hooks, menus and the
+  menu loop.

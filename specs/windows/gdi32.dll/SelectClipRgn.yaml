@@ -1,0 +1,71 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/gdi32.dll/SelectClipRgn
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read. "Regions", "About Regions", "Clipping", the
+  reference pages of the functions named. "SelectClipRgn",
+  "ExtSelectClipRgn", "GetClipRgn", "IntersectClipRect", "ExcludeClipRect",
+  "SaveDC".
+summary: >
+  Makes a copy of a region the DC's clip region (in device coordinates) and
+  returns the kind of the new clip region (NULLREGION 1, SIMPLEREGION 2,
+  COMPLEXREGION 3); NULL removes the clip region (returns SIMPLEREGION).
+  Drawing is limited to the clip region and the surface. ExtSelectClipRgn
+  combines a region with the current clip; GetClipRgn copies the clip region
+  out.
+interface:
+  signature: "int SelectClipRgn(HDC hdc, HRGN rgn)"
+  GetClipRgn: "int GetClipRgn(HDC, HRGN): 0 when the DC has no clip region, 1 and the region copied into the HRGN when it has one; -1 for a bad DC (ERROR_INVALID_PARAMETER 87)"
+  ExtSelectClipRgn: "int ExtSelectClipRgn(HDC, HRGN, int mode): RGN_AND/OR/XOR/DIFF combine the region with the current clip (with no clip region: with the whole surface), RGN_COPY replaces it (NULL with RGN_COPY removes it); returns the new kind"
+rules:
+  copy: "the region is copied: deleting it right after (DeleteObject returns 1) keeps the clip"
+  drawing: "FillRect over a whole 20x10 DIB with the clip 2,2,8,6 + 12,4,18,9 paints only those pixels; with an empty clip region (return 1) nothing is painted; after SelectClipRgn(NULL) everything (200 pixels)"
+  larger: "a clip region larger than the surface (-10,-10,100,100) returns 2; GetClipBox is then the surface 0,0,20,10; GetClipRgn returns the region as given (window DC: 150,50,400,300 stays, GetClipBox 150,50,200,100); a region wholly outside a window's client area returns 1 (NULLREGION) and GetClipBox 0,0,0,0"
+  device_coordinates: "the region is in device coordinates: with the viewport origin at 5,2 the clip 2,2,8,6 stays where it is (FillRect of logical 0,0,20,10 paints device columns 5..7 of rows 2..5; GetClipBox in logical coordinates -3,0,3,4), and selecting it while the origin is moved gives the same clip"
+  ext_modes: "clip A 0,0,20,20 then B 10,10,30,25: AND 10,10,20,20 (2), OR 0,0,20,10 + 0,10,30,20 + 10,20,30,25 (3), XOR 0,0,20,10 + 0,10,10,20 + 20,10,30,20 + 10,20,30,25 (3), DIFF 0,0,20,10 + 0,10,10,20 (3), COPY 10,10,30,25 (2); with no clip region on a 40x30 DIB: AND B (2), OR the whole surface 0,0,40,30 (2), XOR and DIFF the surface minus B (3)"
+  ext_null: "ExtSelectClipRgn(NULL, RGN_AND) returns 0 (ERROR), last error unchanged, the clip stays; ExtSelectClipRgn(NULL, RGN_COPY) removes it (returns 2)"
+  clip_rect_functions: "IntersectClipRect and ExcludeClipRect return 3 (COMPLEXREGION) whenever the result is not empty, even when it is one rectangle, and 1 when it is empty (observed); without a clip region they work on the whole surface (IntersectClipRect 5,5,25,15 -> clip 5,5,25,15; ExcludeClipRect 0,0,40,10 on 40x30 -> 0,10,40,30); swapped corners are normalised"
+  save_restore: "SaveDC keeps the clip region; RestoreDC brings it back (returns 1)"
+  window_dc: "on a GetDC DC of a visible window the region is in client coordinates (GetClipRgn gives it back unchanged); ReleaseDC drops it (a new GetDC has none); on GetWindowDC it is relative to the window's top-left corner"
+  fresh_dc: "a new DC has no clip region (GetClipRgn 0)"
+errors:
+  bad_dc: "SelectClipRgn of a made-up DC: ERROR (0), ERROR_INVALID_HANDLE (6)"
+  bad_region: "a made-up region: ERROR (0), last error unchanged, the clip region unchanged"
+  bad_mode: "ExtSelectClipRgn mode 9: ERROR (0), ERROR_INVALID_PARAMETER (87)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Metafile DCs, printer DCs, the meta region (SetMetaRgn). DPI awareness
+  other than unaware (the tests have no manifest), several monitors, other
+  keyboard layouts than German, IME, touch and pen, hooks, menus and the
+  menu loop.
