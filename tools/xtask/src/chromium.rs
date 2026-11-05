@@ -112,12 +112,13 @@ pub const ARCHIVES: [Archive; 2] = [
 /// What Poly's disk is made from: Chromium, its setuid sandbox helper
 /// (`chrome-sandbox`, used where user namespaces are not available), and
 /// what Debian takes for granted (Essential packages are nobody's
-/// dependency): the shells Chromium's start script and the console need,
-/// coreutils, findutils and grep (the start script uses them), and
-/// `util-linux` for `setpriv` and `findmnt`.
+/// dependency): `ca-certificates` for HTTPS, the shells Chromium's start
+/// script and the console need, coreutils, findutils and grep (the start
+/// script uses them), and `util-linux` for `setpriv` and `findmnt`.
 pub const DISK_SEEDS: &[&str] = &[
     "chromium",
     "chromium-sandbox",
+    "ca-certificates",
     "base-files",
     "bash",
     "dash",
@@ -1718,7 +1719,15 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             failed.push(format!("HTTP page from {url}: {out:?}"));
         }
     }
-    // 4. Windowed with the sandbox, from the launcher: clicks turn the
+    // 4. DNS resolution, TLS and Debian's CA bundle: load a public HTTPS page.
+    if failed.is_empty() {
+        let url = "https://example.com/";
+        let out = m.run(&headless_url("--dump-dom", url))?;
+        if !out.contains("<title>Example Domain</title>") || !out.contains("<h1>Example Domain</h1>") {
+            failed.push(format!("HTTPS page from {url}: {out:?}"));
+        }
+    }
+    // 5. Windowed with the sandbox, from the launcher: clicks turn the
     // page's colour and back, typing changes its title.
     if failed.is_empty()
         && let Err(e) = window_scenario(&mut m)
