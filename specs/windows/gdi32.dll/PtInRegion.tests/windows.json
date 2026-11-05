@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "pir_rect",
+      "exe_sha256": "ed7345ab7c89cca720534bfde1a6ce1677f22ac3f52a01b2d390b6cc64a3b8c9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5zaWRlIDEyLDEyLDE1LDE1OiByZWN0IHJlZ2lvbiAxIEwgcmVnaW9uIDAKb3ZlcmxhcHBpbmcgMTUsMTUsMjUsMjU6IHJlY3QgcmVnaW9uIDEgTCByZWdpb24gMQp0b3VjaGluZyByaWdodCBlZGdlIDIwLDEwLDMwLDIwOiByZWN0IHJlZ2lvbiAwIEwgcmVnaW9uIDAKdG91Y2hpbmcgbGVmdCBlZGdlIDAsMTAsMTAsMjA6IHJlY3QgcmVnaW9uIDAgTCByZWdpb24gMQpzd2FwcGVkIGluc2lkZSAxNSwxNSwxMiwxMjogcmVjdCByZWdpb24gMSBMIHJlZ2lvbiAwCnN3YXBwZWQgb3ZlciB0aGUgcmlnaHQgZWRnZSAyNSwxNSwxNSwxODogcmVjdCByZWdpb24gMSBMIHJlZ2lvbiAwCmVtcHR5IGluc2lkZSAxNSwxNSwxNSwxNTogcmVjdCByZWdpb24gMSBMIHJlZ2lvbiAwCnplcm8gaGVpZ2h0IGluc2lkZSAxMiwxNSwxOCwxNTogcmVjdCByZWdpb24gMSBMIHJlZ2lvbiAwCmluIHRoZSBMJ3MgY3V0LW91dCAxNSw1LDI1LDE1OiByZWN0IHJlZ2lvbiAxIEwgcmVnaW9uIDAKY292ZXJpbmcgdGhlIEwgLTUsLTUsNDAsNDA6IHJlY3QgcmVnaW9uIDEgTCByZWdpb24gMQpleHRyZW1lczogKC0yMTQ3NDgzNjQ4LC0yMTQ3NDgzNjQ4KT0wICgyMTQ3NDgzNjQ3LDIxNDc0ODM2NDcpPTAKTlVMTDogUHRJblJlZ2lvbiAwIGVycm9yIDYsIFJlY3RJblJlZ2lvbiAwIGVycm9yIDAKbWFkZS11cDogUHRJblJlZ2lvbiAwIGVycm9yIDYsIFJlY3RJblJlZ2lvbiAwIGVycm9yIDAKYSBicnVzaDogUHRJblJlZ2lvbiAwIGVycm9yIDYsIFJlY3RJblJlZ2lvbiAwIGVycm9yIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "inside 12,12,15,15: rect region 1 L region 0\noverlapping 15,15,25,25: rect region 1 L region 1\ntouching right edge 20,10,30,20: rect region 0 L region 0\ntouching left edge 0,10,10,20: rect region 0 L region 1\nswapped inside 15,15,12,12: rect region 1 L region 0\nswapped over the right edge 25,15,15,18: rect region 1 L region 0\nempty inside 15,15,15,15: rect region 1 L region 0\nzero height inside 12,15,18,15: rect region 1 L region 0\nin the L's cut-out 15,5,25,15: rect region 1 L region 0\ncovering the L -5,-5,40,40: rect region 1 L region 1\nextremes: (-2147483648,-2147483648)=0 (2147483647,2147483647)=0\nNULL: PtInRegion 0 error 6, RectInRegion 0 error 0\nmade-up: PtInRegion 0 error 6, RectInRegion 0 error 0\na brush: PtInRegion 0 error 6, RectInRegion 0 error 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

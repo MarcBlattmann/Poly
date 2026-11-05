@@ -1,0 +1,77 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/SetFocus
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read. "Keyboard Input Overview" (keyboard focus and
+  activation), WM_SETFOCUS, WM_KILLFOCUS, WM_SYSKEYDOWN.
+summary: >
+  Gives the keyboard focus to a window of the calling thread and returns the
+  window that had the focus before (NULL if none). A window in another
+  top-level window is activated first (that top-level window becomes the
+  active and, when the process may, the foreground window). SetFocus(NULL)
+  removes the focus; keys then go to the active window as system keys.
+interface:
+  signature: "HWND SetFocus(HWND hwnd)"
+rules:
+  child_of_active: "SetFocus(C), C a child of the active window A with the focus on A: returns A; A WM_KILLFOCUS(other=C), C WM_SETFOCUS(other=A); active stays A"
+  between_children: "from child C to child D: returns C; C WM_KILLFOCUS(other=D), D WM_SETFOCUS(other=C)"
+  same_window: "SetFocus on the window that has the focus: returns it, no messages"
+  null: "SetFocus(NULL) with the focus on A: returns A; A WM_KILLFOCUS(other=NULL); GetFocus NULL, active stays A. A key pressed then (F24) arrives at the active window A as WM_SYSKEYDOWN/WM_SYSKEYUP (lParam as for WM_KEYDOWN/WM_KEYUP: 0x00760001, 0xc0760001)"
+  from_no_focus: "SetFocus(C) while no window has the focus: returns NULL; only C WM_SETFOCUS(other=NULL)"
+  keys: "with the focus on C a key arrives at C as WM_KEYDOWN vk=0x87 l=0x00760001, WM_KEYUP l=0xc0760001"
+  inactive_toplevel_child: "SetFocus(K), K a child of the inactive top-level window B: returns B (not the old focus window A): B is activated first (the activation sequence, with A's WM_KILLFOCUS(other=B), B WM_SETFOCUS(other=A)), then B WM_KILLFOCUS(other=K), K WM_SETFOCUS(other=B); active B, foreground B"
+  inactive_toplevel: "SetFocus(B), B an inactive top-level window, focus on C (child of A): returns B; activation of B (C WM_KILLFOCUS(other=B), B WM_SETFOCUS(other=C)), then B WM_KILLFOCUS(other=B) and B WM_SETFOCUS(other=B)"
+  hidden_toplevel: "SetFocus(H), H a hidden popup of the thread: succeeds and activates H though it stays hidden (returns H, the same messages as an inactive top-level window, H active, focus and foreground)"
+  child_of_hidden: "SetFocus(J), J a visible child of the hidden active popup H: returns H, H WM_KILLFOCUS(other=J), J WM_SETFOCUS(other=H)"
+  hide_focused: "ShowWindow(C, SW_HIDE) while C has the focus: after C's WM_SHOWWINDOW, WM_WINDOWPOSCHANGING and WM_WINDOWPOSCHANGED, C WM_KILLFOCUS(other=A) and the parent A WM_SETFOCUS(other=C): the focus goes to the parent"
+  destroy_focused: "DestroyWindow(D) while D has the focus: D WM_SHOWWINDOW(0), WM_WINDOWPOSCHANGING, WM_WINDOWPOSCHANGED, WM_KILLFOCUS(other=A), A WM_SETFOCUS(other=D): the focus goes to the parent"
+  background_thread: "SetFocus(A) on the thread's own top-level window while another thread of the process (T) has the foreground: returns A (the thread's last focus), A WM_WINDOWPOSCHANGING(0x3), WM_ACTIVATEAPP(1), WM_NCACTIVATE(0), WM_ACTIVATE(1, other=NULL), WM_SETFOCUS(other=NULL), WM_KILLFOCUS(other=A), WM_SETFOCUS(other=A); the thread's active and focus window is A but the foreground stays T"
+errors:
+  disabled: "a disabled window: NULL, ERROR_INVALID_PARAMETER (87); nothing changes"
+  other_thread: "a window of another thread (input not attached): NULL, ERROR_ACCESS_DENIED (5); nothing changes"
+  bad_handle: "a made-up handle: NULL, ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering:
+  - "Activation from window X to window Y of the same thread, both ours: X WM_NCACTIVATE(0), X WM_ACTIVATE(WA_INACTIVE, other=Y), Y WM_WINDOWPOSCHANGING(SWP_NOMOVE|SWP_NOSIZE = 0x3; brought to the top), Y WM_WINDOWPOSCHANGED (only when the z order changed), Y WM_NCACTIVATE(1), Y WM_ACTIVATE(WA_ACTIVE, other=X), X's focus window WM_KILLFOCUS(other=Y), Y WM_SETFOCUS(other=that window). WM_NCACTIVATE's lParam is nonzero between two windows of the thread and 0 when the other window is in another thread or process. When the thread gains or loses the foreground, WM_ACTIVATEAPP (1 or 0) goes to every top-level window of the thread, between WM_WINDOWPOSCHANGING and WM_NCACTIVATE when gaining, after WM_ACTIVATE(0) when losing."
+  - "Activation caused by SetFocus comes before the focus change into the target child."
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test. Every
+  test first makes its window A the foreground window with
+  SetForegroundWindow (the test program may: the previous test passed the
+  right on with AllowSetForegroundWindow(ASFW_ANY), or it is the first
+  program the runner starts). "other" below is a window of another process
+  (on the oracle a console window); "ours" a window of the test without a
+  tag.
+not_covered: >
+  Focus inside an attached thread is in GetFocus (gf_threads); dialogs and
+  WM_GETDLGCODE. DPI awareness other than unaware (the tests have no
+  manifest), several monitors, other keyboard layouts than German, IME,
+  touch and pen, hooks, menus and the menu loop.

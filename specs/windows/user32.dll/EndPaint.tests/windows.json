@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "ep_basic",
+      "exe_sha256": "f5bdfa184ccde3030a87186544d8ed0fdc11cc67bcc8166e0933081eb566c85f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApmaXJzdDogcGFpbnQgMTogdGV4dD0weDAwMDAwMCBtb2RlPTIgYnJ1c2hfaXNfd2hpdGU9MQpmaXJzdDogICBFbmRQYWludCByZXR1cm5lZCAxCnBhaW50IDI6IHRleHQ9MHgwMDAwMDAgbW9kZT0yIGJydXNoX2lzX3doaXRlPTEKICBFbmRQYWludCByZXR1cm5lZCAxCmFmdGVyIEVuZFBhaW50OiB1cGRhdGUgYW55PTAKdGhlIHBhaW50IERDIGFmdGVyIEVuZFBhaW50OiB0eXBlIDAgR2V0UGl4ZWwgMHhmZmZmZmZmZgpFbmRQYWludCB3aXRob3V0IEJlZ2luUGFpbnQ6IDEKRW5kUGFpbnQgb2YgYSBiYWQgd2luZG93OiAwIGVycm9yIDE0MDAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nfirst: paint 1: text=0x000000 mode=2 brush_is_white=1\nfirst:   EndPaint returned 1\npaint 2: text=0x000000 mode=2 brush_is_white=1\n  EndPaint returned 1\nafter EndPaint: update any=0\nthe paint DC after EndPaint: type 0 GetPixel 0xffffffff\nEndPaint without BeginPaint: 1\nEndPaint of a bad window: 0 error 1400\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 193
+    },
+    {
+      "name": "ep_outside",
+      "exe_sha256": "61537b8f2ab96580d2048182810d3e1025c2ca1c2224e429f3576682edadbe6a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAppbnZhbGlkIHdpdGggZXJhc2U6IGRjPTEgZXJyb3IgMCByY1BhaW50IDEwLDEwLDMwLDMwIGVyYXNlIDEgY2xpcCBraW5kIDIgMTAsMTAsMzAsMzAKICBzZW50OiBXIFdNX0VSQVNFQktHTkQKICBFbmRQYWludCAxCiAgRW5kUGFpbnQgYWdhaW4gMQpub3RoaW5nIGludmFsaWQ6IGRjPTEgZXJyb3IgMCByY1BhaW50IDAsMCwwLDAgZXJhc2UgMSBjbGlwIGtpbmQgMSAwLDAsMCwwCmZpcnN0IEJlZ2luUGFpbnQ6IGRjPTEgZXJyb3IgMCByY1BhaW50IDAsMCwxMCwxMCBlcmFzZSAxIGNsaXAga2luZCAyIDAsMCwxMCwxMApzZWNvbmQgQmVnaW5QYWludCBhZnRlciBpbnZhbGlkYXRpbmcgNTAsNDAsNjAsNTA6IGRjPTEgZXJyb3IgMCByY1BhaW50IDUwLDQwLDYwLDUwIGVyYXNlIDEgY2xpcCBraW5kIDIgNTAsNDAsNjAsNTAKaGlkZGVuIHdpbmRvdzogZGM9MSBlcnJvciAwIHJjUGFpbnQgMCwwLDAsMCBlcmFzZSAwIGNsaXAga2luZCAxIDAsMCwwLDAKYmFkIGhhbmRsZTogZGM9MCBlcnJvciAxNDAwIHJjUGFpbnQgMCwwLDAsMCBlcmFzZSAwIGNsaXAga2luZCAwIDAsMCwwLDAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\ninvalid with erase: dc=1 error 0 rcPaint 10,10,30,30 erase 1 clip kind 2 10,10,30,30\n  sent: W WM_ERASEBKGND\n  EndPaint 1\n  EndPaint again 1\nnothing invalid: dc=1 error 0 rcPaint 0,0,0,0 erase 1 clip kind 1 0,0,0,0\nfirst BeginPaint: dc=1 error 0 rcPaint 0,0,10,10 erase 1 clip kind 2 0,0,10,10\nsecond BeginPaint after invalidating 50,40,60,50: dc=1 error 0 rcPaint 50,40,60,50 erase 1 clip kind 2 50,40,60,50\nhidden window: dc=1 error 0 rcPaint 0,0,0,0 erase 0 clip kind 1 0,0,0,0\nbad handle: dc=0 error 1400 rcPaint 0,0,0,0 erase 0 clip kind 0 0,0,0,0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 178
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/BeginPaint
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read.
+summary: >
+  Prepares a window for painting: returns a DC for the client area (also
+  stored in ps->hdc) clipped to the update region, fills the PAINTSTRUCT and
+  validates the update region. With an erase pending it first sends
+  WM_ERASEBKGND (and WM_NCPAINT when the frame is pending) to the window.
+interface:
+  signature: "HDC BeginPaint(HWND hwnd, PAINTSTRUCT* ps)"
+  PAINTSTRUCT: "winuser.h: hdc, fErase, rcPaint (RECT), fRestore, fIncUpdate, rgbReserved[32]; 72 bytes on x64"
+  return: "the DC (GetObjectType OBJ_DC, 3), equal to ps->hdc; NULL for a bad handle"
+rules:
+  rcpaint: "rcPaint is the update region's bounding box (client coordinates): 10,20,30,40 for one rectangle; 0,0,120,90 for 0,0,10,10 + 100,80,120,90; clipped to the client area"
+  clip: "the DC's clip box is rcPaint, GetClipBox kind SIMPLEREGION (2) for one rectangle and COMPLEXREGION (3) for two; the DC has no application clip region (GetClipRgn 0)"
+  state: "default DC state: text 0x000000, background 0xffffff, OPAQUE (2), the stock SYSTEM_FONT, WHITE_BRUSH, BLACK_PEN; changes made in one paint are gone at the next"
+  validates: "after BeginPaint the update region is empty (GetUpdateRect 0) and QS_PAINT is not in the queue; fRestore and fIncUpdate are 0"
+  erase_sent: "erase pending: WM_ERASEBKGND is sent from inside BeginPaint; its wParam is the DC BeginPaint then returns (WindowFromDC of it is the window)"
+  ferase: "fErase is 0 when the procedure returned nonzero from WM_ERASEBKGND, 1 when it returned 0, and 1 when no erase was pending"
+  erase_any: "one rectangle with erase TRUE among others with FALSE: the whole paint erases (one WM_ERASEBKGND)"
+  class_brush: "DefWindowProc's WM_ERASEBKGND fills the update area with the class brush and returns 1: a solid brush (0x563412 read back), GRAY_BRUSH (0x808080), COLOR_WINDOW + 1 (the system colour, 0xffffff); outside the update area the pixels stay; with no class brush it returns 0 and paints nothing (fErase 1)"
+  frame: "a captioned window after RedrawWindow(RDW_INVALIDATE | RDW_ERASE | RDW_FRAME): BeginPaint sends WM_NCPAINT (wParam 1) then WM_ERASEBKGND"
+  nothing_invalid: "WM_PAINT sent by SendMessage with nothing invalid: rcPaint 0,0,0,0, clip box NULLREGION (1) 0,0,0,0"
+  outside_wm_paint: "BeginPaint outside WM_PAINT works the same: on an invalid window it sends what is pending, returns the DC and validates; no WM_PAINT comes afterwards; with nothing invalid rcPaint is empty and fErase 1"
+  nested: "a second BeginPaint before EndPaint, after invalidating 50,40,60,50: rcPaint 50,40,60,50"
+  hidden: "a hidden window: a DC, rcPaint 0,0,0,0, fErase 0, clip box NULLREGION"
+errors:
+  bad_window: "a made-up handle: NULL, ERROR_INVALID_WINDOW_HANDLE (1400); the PAINTSTRUCT is zeroed"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  The caret (BeginPaint hides it). All windows in these tests are
+  WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW popups (or their
+  children), so no activation messages interleave and nothing covers them.
+  DPI awareness other than unaware (the tests have no manifest), several
+  monitors, other keyboard layouts than German, IME, touch and pen, hooks,
+  menus and the menu loop.

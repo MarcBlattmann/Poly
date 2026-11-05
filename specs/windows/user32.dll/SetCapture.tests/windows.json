@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "sc_basic",
+      "exe_sha256": "466b16a93577778c894a1a0edda87367aef7538fb9b77fc37cb2850d6ec8d3a3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayByZWdpc3RlcmVkIG90aGVyCm9rIGZvcmVncm91bmQKR2V0Q2FwdHVyZSBiZWZvcmU6IG51bGwKU2V0Q2FwdHVyZShBKSByZXR1cm5lZCBudWxsOyBHZXRDYXB0dXJlIEEKU2V0Q2FwdHVyZShBKSBhZ2FpbiByZXR1cm5lZCBBCi0tIGFmdGVyIFNldENhcHR1cmUoQSkKICBBIFdNX0NBUFRVUkVDSEFOR0VEIG5ldz1BCi0tIGN1cnNvciBvdmVyIEIsIG5vIGJ1dHRvbgogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD0zMzAsNDAKLS0gY3Vyc29yIG92ZXIgQyAob3RoZXIgdGhyZWFkKSwgbm8gYnV0dG9uCiAgQSBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTYzMCw0MAotLSBjdXJzb3IgYmFjayBvdmVyIEEKICBBIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9NjAsNzAKbGVmdCBkb3duIGluIEE6IDEKICBBIFdNX05DSElUVEVTVCBzY3JlZW49MTYwLDE3MAogIEEgV01fTEJVVFRPTkRPV04ga2V5cz0weDEgY2xpZW50PTYwLDcwCi0tIGRyYWdnZWQgb3ZlciBCCiAgQSBXTV9NT1VTRU1PVkUga2V5cz0weDEgY2xpZW50PTMzMCw0MAotLSBkcmFnZ2VkIG92ZXIgQyAob3RoZXIgdGhyZWFkKQogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgxIGNsaWVudD02MzAsNDAKbGVmdCB1cCBvdmVyIEM6IDEKICBBIFdNX0xCVVRUT05VUCBrZXlzPTB4MCBjbGllbnQ9NjMwLDQwCkdldENhcHR1cmUgYWZ0ZXIgdGhlIGJ1dHRvbiB3ZW50IHVwOiBBClNldENhcHR1cmUoQikgcmV0dXJuZWQgQTsgR2V0Q2FwdHVyZSBCCiAgQSBXTV9DQVBUVVJFQ0hBTkdFRCBuZXc9QgotLSBhZnRlciBTZXRDYXB0dXJlKEIpClJlbGVhc2VDYXB0dXJlIDE7IEdldENhcHR1cmUgbnVsbAogIEIgV01fQ0FQVFVSRUNIQU5HRUQgbmV3PW51bGwKLS0gYWZ0ZXIgUmVsZWFzZUNhcHR1cmUKc3VtbWFyeSAzIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok registered other\nok foreground\nGetCapture before: null\nSetCapture(A) returned null; GetCapture A\nSetCapture(A) again returned A\n-- after SetCapture(A)\n  A WM_CAPTURECHANGED new=A\n-- cursor over B, no button\n  A WM_MOUSEMOVE keys=0x0 client=330,40\n-- cursor over C (other thread), no button\n  A WM_MOUSEMOVE keys=0x0 client=630,40\n-- cursor back over A\n  A WM_MOUSEMOVE keys=0x0 client=60,70\nleft down in A: 1\n  A WM_NCHITTEST screen=160,170\n  A WM_LBUTTONDOWN keys=0x1 client=60,70\n-- dragged over B\n  A WM_MOUSEMOVE keys=0x1 client=330,40\n-- dragged over C (other thread)\n  A WM_MOUSEMOVE keys=0x1 client=630,40\nleft up over C: 1\n  A WM_LBUTTONUP keys=0x0 client=630,40\nGetCapture after the button went up: A\nSetCapture(B) returned A; GetCapture B\n  A WM_CAPTURECHANGED new=B\n-- after SetCapture(B)\nReleaseCapture 1; GetCapture null\n  B WM_CAPTURECHANGED new=null\n-- after ReleaseCapture\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1272
+    }
+  ]
+}

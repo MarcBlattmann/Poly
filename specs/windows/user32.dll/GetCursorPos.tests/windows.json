@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "gcp_messagepos",
+      "exe_sha256": "51dc3bb5d33b15f612c884e25bc1704f6b6d71677e6143ddb420d9770bd95980",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCi0tIHR3byBtb3ZlcyBiZWZvcmUgcmVhZGluZyB0aGUgcXVldWUKICBBIFdNX05DSElUVEVTVCBzY3JlZW49MTYwLDE1MAogIEEgV01fU0VUQ1VSU09SIHdpbmRvdz1BIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBBIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9NjAsNTAKICAgIChHZXRNZXNzYWdlUG9zIDE2MCwxNTAgR2V0Q3Vyc29yUG9zIDE2MCwxNTApCi0tIG9uZSBtb3ZlOyB0aGUgaGFuZGxlciBtb3ZlcyB0aGUgY3Vyc29yIGFnYWluCiAgQSBXTV9OQ0hJVFRFU1Qgc2NyZWVuPTE1MCwxNjAKICBBIFdNX1NFVENVUlNPUiB3aW5kb3c9QSBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQSBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTUwLDYwCiAgICAoR2V0TWVzc2FnZVBvcyAxNTAsMTYwIEdldEN1cnNvclBvcyAxNTAsMTYwKQogICAgKGFmdGVyIFNldEN1cnNvclBvcygxNzAsMTQwKSBpbiB0aGUgaGFuZGxlcjogR2V0TWVzc2FnZVBvcyAxNTAsMTYwIEdldEN1cnNvclBvcyAxNzAsMTQwKQogIEEgV01fTkNISVRURVNUIHNjcmVlbj0xNzAsMTQwCiAgQSBXTV9TRVRDVVJTT1Igd2luZG93PUEgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD03MCw0MAogICAgKEdldE1lc3NhZ2VQb3MgMTcwLDE0MCBHZXRDdXJzb3JQb3MgMTcwLDE0MCkKLS0gYSBjbGljayAoMiBldmVudHMpCiAgQSBXTV9OQ0hJVFRFU1Qgc2NyZWVuPTE3MCwxNDAKICBBIFdNX05DSElUVEVTVCBzY3JlZW49MTcwLDE0MAogIEEgV01fU0VUQ1VSU09SIHdpbmRvdz1BIGhpdD0xIG1zZz1XTV9MQlVUVE9ORE9XTgogIEEgV01fTEJVVFRPTkRPV04ga2V5cz0weDEgY2xpZW50PTcwLDQwCiAgICAoR2V0TWVzc2FnZVBvcyAxNzAsMTQwIEdldEN1cnNvclBvcyAxNzAsMTQwKQogIEEgV01fTkNISVRURVNUIHNjcmVlbj0xNzAsMTQwCiAgQSBXTV9TRVRDVVJTT1Igd2luZG93PUEgaGl0PTEgbXNnPVdNX0xCVVRUT05VUAogIEEgV01fTEJVVFRPTlVQIGtleXM9MHgwIGNsaWVudD03MCw0MAogICAgKEdldE1lc3NhZ2VQb3MgMTcwLDE0MCBHZXRDdXJzb3JQb3MgMTcwLDE0MCkKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\n-- two moves before reading the queue\n  A WM_NCHITTEST screen=160,150\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=60,50\n    (GetMessagePos 160,150 GetCursorPos 160,150)\n-- one move; the handler moves the cursor again\n  A WM_NCHITTEST screen=150,160\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=50,60\n    (GetMessagePos 150,160 GetCursorPos 150,160)\n    (after SetCursorPos(170,140) in the handler: GetMessagePos 150,160 GetCursorPos 170,140)\n  A WM_NCHITTEST screen=170,140\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=70,40\n    (GetMessagePos 170,140 GetCursorPos 170,140)\n-- a click (2 events)\n  A WM_NCHITTEST screen=170,140\n  A WM_NCHITTEST screen=170,140\n  A WM_SETCURSOR window=A hit=1 msg=WM_LBUTTONDOWN\n  A WM_LBUTTONDOWN keys=0x1 client=70,40\n    (GetMessagePos 170,140 GetCursorPos 170,140)\n  A WM_NCHITTEST screen=170,140\n  A WM_SETCURSOR window=A hit=1 msg=WM_LBUTTONUP\n  A WM_LBUTTONUP keys=0x0 client=70,40\n    (GetMessagePos 170,140 GetCursorPos 170,140)\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 697
+    }
+  ]
+}

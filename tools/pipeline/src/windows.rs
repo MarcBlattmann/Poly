@@ -588,6 +588,11 @@ pub struct System {
     pub build: Option<String>,
     #[serde(default)]
     pub arch: Option<String>,
+    /// Windows: `interactive` when the runner ran the tests in the logged-on
+    /// user's desktop session (`poly-oracle.ps1 -Interactive`), absent for
+    /// the SSH session (session 0, no visible desktop).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
 }
 
 fn bits32() -> u8 {
@@ -803,6 +808,7 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
             version: manifest.revision.as_ref().map(|r| format!("rev {}", &r[..12.min(r.len())])),
             build: None,
             arch: Some("x86_64".into()),
+            session: None,
         },
         bundle: None,
         runner: Some("cargo xtask pipeline win poly".into()),
@@ -1324,6 +1330,12 @@ mod tests {
             \"error\": null, \"stable\": true, \"ms\": 31 } ]\r\n}\r\n";
         let f = RunFile::parse(text.as_bytes()).unwrap();
         assert_eq!(f.system.build.as_deref(), Some("26200.6899"));
+        assert_eq!(f.system.session, None);
+        let interactive = text.replace("\"arch\": \"AMD64\"", "\"arch\": \"AMD64\", \"session\": \"interactive\"");
+        let g = RunFile::parse(interactive.as_bytes()).unwrap();
+        assert_eq!(g.system.session.as_deref(), Some("interactive"));
+        assert!(serde_json::to_string(&g.system).unwrap().contains("\"session\":\"interactive\""));
+        assert!(!serde_json::to_string(&f.system).unwrap().contains("session"));
         let t = f.test("t").unwrap();
         assert_eq!(t.exit_code, Some(0xC000_0005));
         assert_eq!(t.exit_code_bits, 32);

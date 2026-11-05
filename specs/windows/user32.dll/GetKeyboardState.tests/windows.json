@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "gkbs_set",
+      "exe_sha256": "e6a6c90f46dfc0459909338270802a7c6510c972124902a2c0abd133752f6d5c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAphcyBmb3VuZCAoY2FwcyB0b2dnbGUgcHJpbnRlZCBzZXBhcmF0ZWx5KTogcG9zdGVkIFdNX0tFWURPV04gJ0EnIHRyYW5zbGF0ZWQ6CiAgICBXTV9DSEFSIGNoPTB4MDA2MQpjYXBzIHRvZ2dsZSBhcyBmb3VuZDogMApTZXRLZXlib2FyZFN0YXRlIChub3RoaW5nIGRvd24sIGNhcHMgb2ZmKSByZXR1cm5lZCAxCm5vdGhpbmcgZG93biwgY2FwcyBvZmY6IHBvc3RlZCBXTV9LRVlET1dOICdBJyB0cmFuc2xhdGVkOgogICAgV01fQ0hBUiBjaD0weDAwNjEKU2V0S2V5Ym9hcmRTdGF0ZSAoU2hpZnQgZG93bikgcmV0dXJuZWQgMQpHZXRLZXlTdGF0ZShWS19TSElGVCk9MHhmZjgwIEdldEtleVN0YXRlKFZLX0xTSElGVCk9MHhmZjgwIGFzeW5jIGRvd249MAphbm90aGVyIHRocmVhZCdzIEdldEtleVN0YXRlKFZLX1NISUZUKSBkb3duPTAKU2hpZnQgZG93bjogcG9zdGVkIFdNX0tFWURPV04gJ0EnIHRyYW5zbGF0ZWQ6CiAgICBXTV9DSEFSIGNoPTB4MDA0MQpjYXBzIHRvZ2dsZSBzZXQ6IEdldEtleVN0YXRlKFZLX0NBUElUQUwpPTB4MDAwMQpTaGlmdCBkb3duLCBjYXBzIG9uOiBwb3N0ZWQgV01fS0VZRE9XTiAnQScgdHJhbnNsYXRlZDoKICAgIFdNX0NIQVIgY2g9MHgwMDYxCmNhcHMgb24gb25seTogcG9zdGVkIFdNX0tFWURPV04gJ0EnIHRyYW5zbGF0ZWQ6CiAgICBXTV9DSEFSIGNoPTB4MDA0MQpvayByZXN0b3JlZApzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nas found (caps toggle printed separately): posted WM_KEYDOWN 'A' translated:\n    WM_CHAR ch=0x0061\ncaps toggle as found: 0\nSetKeyboardState (nothing down, caps off) returned 1\nnothing down, caps off: posted WM_KEYDOWN 'A' translated:\n    WM_CHAR ch=0x0061\nSetKeyboardState (Shift down) returned 1\nGetKeyState(VK_SHIFT)=0xff80 GetKeyState(VK_LSHIFT)=0xff80 async down=0\nanother thread's GetKeyState(VK_SHIFT) down=0\nShift down: posted WM_KEYDOWN 'A' translated:\n    WM_CHAR ch=0x0041\ncaps toggle set: GetKeyState(VK_CAPITAL)=0x0001\nShift down, caps on: posted WM_KEYDOWN 'A' translated:\n    WM_CHAR ch=0x0061\ncaps on only: posted WM_KEYDOWN 'A' translated:\n    WM_CHAR ch=0x0041\nok restored\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    },
+    {
+      "name": "gkbs_snapshot",
+      "exe_sha256": "0128deb3e387ced4fca68b2806c77a7565d65074359b82e2a356f84c9caa4d29",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCiAgICBiZWZvcmU6IHJldHVybmVkIDEsIGRvd246IG5vbmUgb3RoZXItYml0cz0weDAKU2VuZElucHV0IFNoaWZ0K0M6IDQKICBBIFdNX0tFWURPV04gdms9MHgxMCBsPTB4MDAyYTAwMDEKICAgICAgaW4gaGFuZGxlcjogcmV0dXJuZWQgMSwgZG93bjogMHgxMCAweGEwIG90aGVyLWJpdHM9MHgwCiAgQSBXTV9LRVlET1dOIHZrPTB4NDMgbD0weDAwMmUwMDAxCiAgICAgIGluIGhhbmRsZXI6IHJldHVybmVkIDEsIGRvd246IDB4MTAgMHg0MyAweGEwIG90aGVyLWJpdHM9MHgwCiAgQSBXTV9DSEFSIGNoPTB4MDA0MyBsPTB4MDAyZTAwMDEKICBBIFdNX0tFWVVQIHZrPTB4NDMgbD0weGMwMmUwMDAxCiAgICAgIGluIGhhbmRsZXI6IHJldHVybmVkIDEsIGRvd246IDB4MTAgMHhhMCBvdGhlci1iaXRzPTB4MAogIEEgV01fS0VZVVAgdms9MHgxMCBsPTB4YzAyYTAwMDEKICAgICAgaW4gaGFuZGxlcjogcmV0dXJuZWQgMSwgZG93bjogbm9uZSBvdGhlci1iaXRzPTB4MAogICAgYWZ0ZXI6IHJldHVybmVkIDEsIGRvd246IG5vbmUgb3RoZXItYml0cz0weDAKYXJyYXkgYW5kIEdldEtleVN0YXRlIGFncmVlOiAxIChmaXJzdCBkaWZmZXJlbmNlOiBpbmRleCAweGZmZmZmZmZmIGJ5dGUgMHgwMCBHZXRLZXlTdGF0ZSAweDAwMDApCnN1bW1hcnkgMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\n    before: returned 1, down: none other-bits=0x0\nSendInput Shift+C: 4\n  A WM_KEYDOWN vk=0x10 l=0x002a0001\n      in handler: returned 1, down: 0x10 0xa0 other-bits=0x0\n  A WM_KEYDOWN vk=0x43 l=0x002e0001\n      in handler: returned 1, down: 0x10 0x43 0xa0 other-bits=0x0\n  A WM_CHAR ch=0x0043 l=0x002e0001\n  A WM_KEYUP vk=0x43 l=0xc02e0001\n      in handler: returned 1, down: 0x10 0xa0 other-bits=0x0\n  A WM_KEYUP vk=0x10 l=0xc02a0001\n      in handler: returned 1, down: none other-bits=0x0\n    after: returned 1, down: none other-bits=0x0\narray and GetKeyState agree: 1 (first difference: index 0xffffffff byte 0x00 GetKeyState 0x0000)\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 538
+    }
+  ]
+}

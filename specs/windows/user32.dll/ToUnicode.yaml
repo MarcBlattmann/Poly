@@ -1,0 +1,71 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/ToUnicode
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read.
+summary: >
+  Translates a key with a given 256-byte key-state array into UTF-16 with
+  the calling thread's keyboard layout (German on the oracle), keeping a
+  pending dead key in the thread's keyboard state between calls unless flags
+  bit 2 (value 4) is set. Returns the number of UTF-16 units written, 0 for
+  none, -1 for a dead key (its spacing character is written).
+interface:
+  signature: "int ToUnicode(UINT virt_key, UINT scan_code, const BYTE* key_state, LPWSTR buffer, int buffer_len, UINT flags)"
+  return: "n > 0 units written; 0: no character; -1: a dead key, its spacing character in buffer[0]"
+  buffer_fill: "with a buffer of 8 units prefilled with 0xAAAA: after a one-unit result units 1..3 read 0 (zeroed past the result), after a result of 0 units 0..3 read 0; with buffer_len 1 only unit 0 is written; with buffer_len 0 the call returns 0 and still sets unit 0 to 0"
+  key_state: "only the high bit (down) of VK_SHIFT, VK_CONTROL, VK_MENU and the low bit (toggle) of VK_CAPITAL were used by the tests; AltGr is VK_CONTROL and VK_MENU both down"
+  scan_code: "bit 15 (0x8000) set means a key-up: returns 0; the scan code itself may be 0"
+  flags: "bit 2 (4): the thread's keyboard state (pending dead key) is not changed"
+rules:
+  letters: "German layout, states none/Shift/Caps/Shift+Caps/Ctrl/Ctrl+Shift/AltGr/Alt: A a,A,A,a,0x01,0x01,none,a; Q q,Q,Q,q,0x11,0x11,'@',q; E e,E,E,e,0x05,0x05,U+20AC,e; M m,M,M,m,0x0D,0x0D,U+00B5,m; Y y,Y,Y,y,0x19,0x19,none,y; Z z,Z,Z,z,0x1A,0x1A,none,z"
+  digits: "1 1,!,!,1,none,none,none,1; 2 2,\",\",2,none,U+0000 (returns 1 with a NUL unit),U+00B2,2; 3 3,U+00A7,U+00A7,3,none,none,U+00B3,3; 7 7,/,/,7,-,-,{,7; 8 8,(,(,8,-,-,[,8; 9 9,),),9,-,-,],9; 0 0,=,=,0,-,-,},0 (Caps Lock acts like Shift on the digit row)"
+  oem: "VK_OEM_4 U+00DF,?,?,U+00DF,-,-,\\,U+00DF; VK_OEM_1 U+00FC,U+00DC,U+00DC,U+00FC,0x1B,-,-,U+00FC; VK_OEM_PLUS +,*,*,+,0x1D,-,~,+; VK_OEM_2 #,',',#,0x1C,-,-,#; VK_OEM_3 U+00F6,U+00D6,U+00D6,U+00F6,-,-,-,U+00F6; VK_OEM_7 U+00E4,U+00C4,U+00C4,U+00E4,-,-,-,U+00E4; VK_OEM_102 <,>,<,>,-,-,|,<; VK_OEM_COMMA ',',;,;,',',-,-,-,','; VK_OEM_MINUS -,_,-,_,-,0x1F,-,- (Caps Lock does not shift VK_OEM_102 and VK_OEM_MINUS); \"-\" = returns 0"
+  control_keys: "Space 0x20 in every state but Ctrl+Shift and AltGr (0) with Ctrl 0x20; Enter 0x0D, with Ctrl 0x0A; Back 0x08, with Ctrl 0x7F; Tab 0x09, with Ctrl 0; Escape 0x1B, with Ctrl 0x1B; none of them with Ctrl+Shift or AltGr"
+  numpad: "VK_NUMPAD5 '5' with no modifier and with Caps, 0 with Shift, Ctrl, AltGr or Alt; VK_DECIMAL ',' except with Ctrl, Ctrl+Shift, AltGr; VK_LEFT 0 in every state"
+  alt: "Alt alone (VK_MENU down) gives the unmodified character"
+  dead_keys: "VK_OEM_5 (^): -1, U+005E; then a: 1, U+00E2; then Space: 1, U+005E; then x: 2, U+005E U+0078; then ^ again: 2, U+005E U+005E. VK_OEM_6: -1, U+00B4 (acute); then e U+00E9, Shift+E U+00C9. Shift+VK_OEM_6: -1, U+0060 (grave); then Shift+A U+00C0"
+  dead_key_pending: "the dead key stays pending across a key-up call (scan | 0x8000, returns 0) and across VK_SHIFT (returns 0): the next a still gives U+00E2; after a combination nothing is pending (a gives a)"
+  flags_4: "a dead key with flags 4 returns -1 and U+005E but leaves nothing pending (the next a with flags 0 gives a)"
+  buffer: "buffer_len 1 for a one-unit result: 1; buffer_len 0: returns 0, writes nothing, and a dead key given with buffer_len 0 is not left pending; ^ then x with buffer_len 1: returns 1 with U+005E only, the x is lost (the next x gives x)"
+  ctrl: "Ctrl+VK_OEM_1 0x1B, Ctrl+Space 0x20, Ctrl+2 0 (the 0x00 unit comes only with Ctrl+Shift+2), Ctrl+Back 0x7F, Ctrl+Enter 0x0A"
+errors:
+  null_state: "a NULL key_state: 0 (no exception)"
+  no_key: "virt_key 0 or 0xFF: 0"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering:
+  - "typed (real input, TranslateMessage) dead keys give WM_DEADCHAR with the spacing character, then the combined WM_CHAR (see SendInput)"
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Other layouts, ligature keys, Unicode outside the BMP from a layout, flags
+  bit 0 (menu active). DPI awareness other than unaware (the tests have no
+  manifest), several monitors, other keyboard layouts than German, IME,
+  touch and pen, hooks, menus and the menu loop.
