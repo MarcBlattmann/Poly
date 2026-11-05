@@ -590,6 +590,16 @@ pub trait LinuxKernel {
         Err(Errno::ENOSYS)
     }
 
+    /// prctl(2) `PR_SET_VMA_ANON_NAME`: name the regions of `[addr, addr +
+    /// len)` (`addr` page aligned; `len` rounded up to a page) `name`, or
+    /// remove their names (`None`). `ENOMEM` if a page of the range is not
+    /// mapped, `EBADF` if a region of it is not anonymous memory; nothing
+    /// changes then. `ENOSYS` by default.
+    fn name_anon(&mut self, addr: u64, len: u64, name: Option<&[u8]>) -> Result<(), Errno> {
+        let _ = (addr, len, name);
+        Err(Errno::ENOSYS)
+    }
+
     /// madvise(2) on `[addr, addr + len)` (both page aligned, `len`
     /// non-zero, no overflow) with the advice the personality decoded
     /// ([`crate::sys::madvise::Advice`]): apply it to the mapped parts and

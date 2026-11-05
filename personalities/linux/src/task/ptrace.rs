@@ -229,7 +229,7 @@ pub enum UserArea {
 }
 
 pub const fn user_area(off: u64) -> Option<UserArea> {
-    if off % 8 != 0 || off >= USER_SIZE {
+    if off & 7 != 0 || off >= USER_SIZE {
         return None;
     }
     Some(if off < REGS_SIZE as u64 {

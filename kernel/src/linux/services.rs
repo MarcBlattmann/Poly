@@ -568,6 +568,12 @@ impl LinuxKernel for Thread<'_> {
         memory.protect(addr, len, vm_prot(prot)).map_err(memory_errno)
     }
 
+    fn name_anon(&mut self, addr: u64, len: u64, name: Option<&[u8]>) -> Result<(), Errno> {
+        // The personality let only printable ASCII through.
+        let name = name.map(|n| core::str::from_utf8(n).map_err(|_| Errno::EINVAL)).transpose()?;
+        self.memory()?.set_anon_name(addr, len, name).map_err(memory_errno)
+    }
+
     fn madvise(
         &mut self,
         addr: u64,
@@ -1107,7 +1113,11 @@ impl LinuxKernel for Thread<'_> {
         super::perf::source(self, pid)
     }
 
-    fn perf_install(&mut self, counter: Arc<poly_personality_linux::perf::Counter>, cloexec: bool) -> Result<i32, Errno> {
+    fn perf_install(
+        &mut self,
+        counter: Arc<poly_personality_linux::perf::Counter>,
+        cloexec: bool,
+    ) -> Result<i32, Errno> {
         super::perf::install(self, counter, cloexec)
     }
 

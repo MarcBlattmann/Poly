@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "mvk_scan",
+      "exe_sha256": "89eef9774c265f888ed69ccf1da0a4d485a3e4d75bef09e26a7a38397ed85c3d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MHgwMDogMDAvMDAgMWIvMWIgMzEvMzEgMzIvMzIgMzMvMzMgMzQvMzQgMzUvMzUgMzYvMzYKMHgwODogMzcvMzcgMzgvMzggMzkvMzkgMzAvMzAgZGIvZGIgZGQvZGQgMDgvMDggMDkvMDkKMHgxMDogNTEvNTEgNTcvNTcgNDUvNDUgNTIvNTIgNTQvNTQgNWEvNWEgNTUvNTUgNDkvNDkKMHgxODogNGYvNGYgNTAvNTAgYmEvYmEgYmIvYmIgMGQvMGQgMTEvYTIgNDEvNDEgNTMvNTMKMHgyMDogNDQvNDQgNDYvNDYgNDcvNDcgNDgvNDggNGEvNGEgNGIvNGIgNGMvNGMgYzAvYzAKMHgyODogZGUvZGUgZGMvZGMgMTAvYTAgYmYvYmYgNTkvNTkgNTgvNTggNDMvNDMgNTYvNTYKMHgzMDogNDIvNDIgNGUvNGUgNGQvNGQgYmMvYmMgYmUvYmUgYmQvYmQgMTAvYTEgNmEvNmEKMHgzODogMTIvYTQgMjAvMjAgMTQvMTQgNzAvNzAgNzEvNzEgNzIvNzIgNzMvNzMgNzQvNzQKMHg0MDogNzUvNzUgNzYvNzYgNzcvNzcgNzgvNzggNzkvNzkgOTAvOTAgOTEvOTEgMjQvMjQKMHg0ODogMjYvMjYgMjEvMjEgNmQvNmQgMjUvMjUgMGMvMGMgMjcvMjcgNmIvNmIgMjMvMjMKMHg1MDogMjgvMjggMjIvMjIgMmQvMmQgMmUvMmUgMmMvMmMgMDAvMDAgZTIvZTIgN2EvN2EKMHg1ODogN2IvN2IgMGMvMGMgZWUvZWUgZjEvZjEgZWEvZWEgZjkvZjkgZjUvZjUgZjMvZjMKMHg2MDogMDAvMDAgMDAvMDAgZmIvZmIgMmYvMmYgN2MvN2MgN2QvN2QgN2UvN2UgN2YvN2YKMHg2ODogODAvODAgODEvODEgODIvODIgODMvODMgODQvODQgODUvODUgODYvODYgZWQvZWQKMHg3MDogMDAvMDAgZTkvZTkgMDAvMDAgYzEvYzEgMDAvMDAgMDAvMDAgODcvODcgMDAvMDAKMHg3ODogMDAvMDAgMDAvMDAgMDAvMDAgZWIvZWIgMDkvMDkgMDAvMDAgYzIvYzIgMDAvMDAKMHhlMDFjOiB2az0weDBkIHZrX2V4PTB4MGQKMHhlMDFkOiB2az0weDExIHZrX2V4PTB4YTMKMHhlMDM1OiB2az0weDZmIHZrX2V4PTB4NmYKMHhlMDM3OiB2az0weDJjIHZrX2V4PTB4MmMKMHhlMDM4OiB2az0weDEyIHZrX2V4PTB4YTUKMHhlMDQ3OiB2az0weDI0IHZrX2V4PTB4MjQKMHhlMDQ4OiB2az0weDI2IHZrX2V4PTB4MjYKMHhlMDQ5OiB2az0weDIxIHZrX2V4PTB4MjEKMHhlMDRiOiB2az0weDI1IHZrX2V4PTB4MjUKMHhlMDRkOiB2az0weDI3IHZrX2V4PTB4MjcKMHhlMDRmOiB2az0weDIzIHZrX2V4PTB4MjMKMHhlMDUwOiB2az0weDI4IHZrX2V4PTB4MjgKMHhlMDUxOiB2az0weDIyIHZrX2V4PTB4MjIKMHhlMDUyOiB2az0weDJkIHZrX2V4PTB4MmQKMHhlMDUzOiB2az0weDJlIHZrX2V4PTB4MmUKMHhlMDViOiB2az0weDViIHZrX2V4PTB4NWIKMHhlMDVjOiB2az0weDVjIHZrX2V4PTB4NWMKMHhlMDVkOiB2az0weDVkIHZrX2V4PTB4NWQKMHhlMTFkOiB2az0weDEzIHZrX2V4PTB4MTMKMHhlMDJhOiB2az0weDAwIHZrX2V4PTB4MDAKMHhlMDQ2OiB2az0weDAzIHZrX2V4PTB4MDMKMHhlMGZmOiB2az0weDAwIHZrX2V4PTB4MDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "0x00: 00/00 1b/1b 31/31 32/32 33/33 34/34 35/35 36/36\n0x08: 37/37 38/38 39/39 30/30 db/db dd/dd 08/08 09/09\n0x10: 51/51 57/57 45/45 52/52 54/54 5a/5a 55/55 49/49\n0x18: 4f/4f 50/50 ba/ba bb/bb 0d/0d 11/a2 41/41 53/53\n0x20: 44/44 46/46 47/47 48/48 4a/4a 4b/4b 4c/4c c0/c0\n0x28: de/de dc/dc 10/a0 bf/bf 59/59 58/58 43/43 56/56\n0x30: 42/42 4e/4e 4d/4d bc/bc be/be bd/bd 10/a1 6a/6a\n0x38: 12/a4 20/20 14/14 70/70 71/71 72/72 73/73 74/74\n0x40: 75/75 76/76 77/77 78/78 79/79 90/90 91/91 24/24\n0x48: 26/26 21/21 6d/6d 25/25 0c/0c 27/27 6b/6b 23/23\n0x50: 28/28 22/22 2d/2d 2e/2e 2c/2c 00/00 e2/e2 7a/7a\n0x58: 7b/7b 0c/0c ee/ee f1/f1 ea/ea f9/f9 f5/f5 f3/f3\n0x60: 00/00 00/00 fb/fb 2f/2f 7c/7c 7d/7d 7e/7e 7f/7f\n0x68: 80/80 81/81 82/82 83/83 84/84 85/85 86/86 ed/ed\n0x70: 00/00 e9/e9 00/00 c1/c1 00/00 00/00 87/87 00/00\n0x78: 00/00 00/00 00/00 eb/eb 09/09 00/00 c2/c2 00/00\n0xe01c: vk=0x0d vk_ex=0x0d\n0xe01d: vk=0x11 vk_ex=0xa3\n0xe035: vk=0x6f vk_ex=0x6f\n0xe037: vk=0x2c vk_ex=0x2c\n0xe038: vk=0x12 vk_ex=0xa5\n0xe047: vk=0x24 vk_ex=0x24\n0xe048: vk=0x26 vk_ex=0x26\n0xe049: vk=0x21 vk_ex=0x21\n0xe04b: vk=0x25 vk_ex=0x25\n0xe04d: vk=0x27 vk_ex=0x27\n0xe04f: vk=0x23 vk_ex=0x23\n0xe050: vk=0x28 vk_ex=0x28\n0xe051: vk=0x22 vk_ex=0x22\n0xe052: vk=0x2d vk_ex=0x2d\n0xe053: vk=0x2e vk_ex=0x2e\n0xe05b: vk=0x5b vk_ex=0x5b\n0xe05c: vk=0x5c vk_ex=0x5c\n0xe05d: vk=0x5d vk_ex=0x5d\n0xe11d: vk=0x13 vk_ex=0x13\n0xe02a: vk=0x00 vk_ex=0x00\n0xe046: vk=0x03 vk_ex=0x03\n0xe0ff: vk=0x00 vk_ex=0x00\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    },
+    {
+      "name": "mvk_types",
+      "exe_sha256": "e9868beeac9e45fa78a3b7281fd21b633ce179371159e391e559fcdfeaf93650",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFwIDB4NTogKDB4NDEpIDB4MCBlcnJvciA4NzsgKDB4MWUpIDB4MCBlcnJvciA4NwptYXAgMHg2OiAoMHg0MSkgMHgwIGVycm9yIDg3OyAoMHgxZSkgMHgwIGVycm9yIDg3Cm1hcCAweDc6ICgweDQxKSAweDAgZXJyb3IgODc7ICgweDFlKSAweDAgZXJyb3IgODcKbWFwIDB4ODogKDB4NDEpIDB4MCBlcnJvciA4NzsgKDB4MWUpIDB4MCBlcnJvciA4NwptYXAgMHgxMDA6ICgweDQxKSAweDAgZXJyb3IgODc7ICgweDFlKSAweDAgZXJyb3IgODcKbWFwIDB4ZmZmZmZmZmY6ICgweDQxKSAweDAgZXJyb3IgODc7ICgweDFlKSAweDAgZXJyb3IgODcKdmsgMHgxMDA6IHZzYz0weDAgY2hhcj0weDAgZXJyb3IgODcKdmsgMHgxNDE6IHZzYz0weDAgY2hhcj0weDAgZXJyb3IgODcKdmsgMHhmZmZmOiB2c2M9MHgwIGNoYXI9MHgwIGVycm9yIDg3CnNjYW4gMHgxMDA6IHZrPTB4MApzY2FuIDB4MWUxZTogdms9MHgwCnZrIDB4YTAgLT4gdnNjIDB4MmEgLT4gdmsgMHgxMCAvIHZrX2V4IDB4YTA7IHZzY19leCAweDJhIC0+IHZrX2V4IDB4YTAKdmsgMHhhMSAtPiB2c2MgMHgzNiAtPiB2ayAweDEwIC8gdmtfZXggMHhhMTsgdnNjX2V4IDB4MzYgLT4gdmtfZXggMHhhMQp2ayAweGEyIC0+IHZzYyAweDFkIC0+IHZrIDB4MTEgLyB2a19leCAweGEyOyB2c2NfZXggMHgxZCAtPiB2a19leCAweGEyCnZrIDB4YTMgLT4gdnNjIDB4MWQgLT4gdmsgMHgxMSAvIHZrX2V4IDB4YTI7IHZzY19leCAweGUwMWQgLT4gdmtfZXggMHhhMwp2ayAweGE0IC0+IHZzYyAweDM4IC0+IHZrIDB4MTIgLyB2a19leCAweGE0OyB2c2NfZXggMHgzOCAtPiB2a19leCAweGE0CnZrIDB4YTUgLT4gdnNjIDB4MzggLT4gdmsgMHgxMiAvIHZrX2V4IDB4YTQ7IHZzY19leCAweGUwMzggLT4gdmtfZXggMHhhNQp2ayAweDI1IC0+IHZzYyAweDRiIC0+IHZrIDB4MjUgLyB2a19leCAweDI1OyB2c2NfZXggMHg0YiAtPiB2a19leCAweDI1CnZrIDB4MjYgLT4gdnNjIDB4NDggLT4gdmsgMHgyNiAvIHZrX2V4IDB4MjY7IHZzY19leCAweDQ4IC0+IHZrX2V4IDB4MjYKdmsgMHgyZSAtPiB2c2MgMHg1MyAtPiB2ayAweDJlIC8gdmtfZXggMHgyZTsgdnNjX2V4IDB4NTMgLT4gdmtfZXggMHgyZQpvayBNYXBWaXJ0dWFsS2V5RXhXIHdpdGggdGhlIHRocmVhZCdzIGxheW91dCBhZ3JlZXMKbGF5b3V0IEhLTCBsb3cgMzIgYml0cyAweDA0MDcyMDAwCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "map 0x5: (0x41) 0x0 error 87; (0x1e) 0x0 error 87\nmap 0x6: (0x41) 0x0 error 87; (0x1e) 0x0 error 87\nmap 0x7: (0x41) 0x0 error 87; (0x1e) 0x0 error 87\nmap 0x8: (0x41) 0x0 error 87; (0x1e) 0x0 error 87\nmap 0x100: (0x41) 0x0 error 87; (0x1e) 0x0 error 87\nmap 0xffffffff: (0x41) 0x0 error 87; (0x1e) 0x0 error 87\nvk 0x100: vsc=0x0 char=0x0 error 87\nvk 0x141: vsc=0x0 char=0x0 error 87\nvk 0xffff: vsc=0x0 char=0x0 error 87\nscan 0x100: vk=0x0\nscan 0x1e1e: vk=0x0\nvk 0xa0 -> vsc 0x2a -> vk 0x10 / vk_ex 0xa0; vsc_ex 0x2a -> vk_ex 0xa0\nvk 0xa1 -> vsc 0x36 -> vk 0x10 / vk_ex 0xa1; vsc_ex 0x36 -> vk_ex 0xa1\nvk 0xa2 -> vsc 0x1d -> vk 0x11 / vk_ex 0xa2; vsc_ex 0x1d -> vk_ex 0xa2\nvk 0xa3 -> vsc 0x1d -> vk 0x11 / vk_ex 0xa2; vsc_ex 0xe01d -> vk_ex 0xa3\nvk 0xa4 -> vsc 0x38 -> vk 0x12 / vk_ex 0xa4; vsc_ex 0x38 -> vk_ex 0xa4\nvk 0xa5 -> vsc 0x38 -> vk 0x12 / vk_ex 0xa4; vsc_ex 0xe038 -> vk_ex 0xa5\nvk 0x25 -> vsc 0x4b -> vk 0x25 / vk_ex 0x25; vsc_ex 0x4b -> vk_ex 0x25\nvk 0x26 -> vsc 0x48 -> vk 0x26 / vk_ex 0x26; vsc_ex 0x48 -> vk_ex 0x26\nvk 0x2e -> vsc 0x53 -> vk 0x2e / vk_ex 0x2e; vsc_ex 0x53 -> vk_ex 0x2e\nok MapVirtualKeyExW with the thread's layout agrees\nlayout HKL low 32 bits 0x04072000\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    }
+  ]
+}

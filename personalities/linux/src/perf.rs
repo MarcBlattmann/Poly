@@ -343,11 +343,8 @@ impl Counter {
     pub fn value(&self) -> (u64, u64, u64) {
         let (total, now) = (self.total(), self.source.now_ns());
         let s = self.state.lock();
-        let (running, time) = if s.enabled {
-            (total.saturating_sub(s.at_enable), now.saturating_sub(s.since))
-        } else {
-            (0, 0)
-        };
+        let (running, time) =
+            if s.enabled { (total.saturating_sub(s.at_enable), now.saturating_sub(s.since)) } else { (0, 0) };
         let enabled = s.enabled_ns + time;
         (s.base + running + s.children, enabled, enabled)
     }

@@ -530,11 +530,6 @@ impl Gdi {
             return Err(ERROR_INVALID_HANDLE);
         }
         let kind = match self.obj(obj) {
-            // A deleted solid brush stays readable and paints where it is
-            // named (FillRect), but cannot be selected again: the DC keeps
-            // its brush (observed: a PatBlt after selecting it paints with
-            // the brush before, a FillRect with it paints its colour).
-            Some(Obj::Brush { deleted: true, .. }) => return Ok(0),
             Some(Obj::Brush { .. }) => OBJ_BRUSH,
             Some(Obj::Pen { .. }) => OBJ_PEN,
             Some(Obj::Font { .. }) => OBJ_FONT,
@@ -863,6 +858,10 @@ impl Gdi {
     fn brush_color(&self, brush: u32, state: &DcState) -> Option<Rgb> {
         match self.obj(u64::from(brush)) {
             Some(Obj::Brush { style: BS_NULL, .. }) => None,
+            // A deleted solid brush stays readable and can be selected (the
+            // old selection comes back), but paints nothing (observed: a
+            // PatBlt with it selected leaves the white destination).
+            Some(Obj::Brush { deleted: true, .. }) => None,
             Some(Obj::Brush { .. }) if brush == self.stock(DC_BRUSH) => Some(Rgb::from_colorref(state.dc_brush)),
             Some(Obj::Brush { color, .. }) => Some(Rgb::from_colorref(*color)),
             _ => None,

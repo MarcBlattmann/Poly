@@ -13,7 +13,7 @@
 //! | `0x0000_0000_0000_0000` – `0x0000_7fff_ffff_ffff` | 128 TiB | lower half: empty here; each user address space has its own (`addrspace.rs`) |
 //! | [`DIRECT_MAP_BASE`] + phys | up to 64 TiB | direct map: every region of the memory map, read-write, no-execute |
 //! | [`MMIO_BASE`] | 512 GiB | device memory from [`map_mmio`] (uncached) and [`map_mmio_wc`] (write-combining), no-execute |
-//! | [`THREAD_STACKS_BASE`] | 2 MiB | kernel thread stacks from [`map_thread_stack`], read-write, no-execute, each above unmapped guard pages |
+//! | [`THREAD_STACKS_BASE`] | 16 MiB | kernel thread stacks from [`map_thread_stack`], read-write, no-execute, each above unmapped guard pages |
 //! | [`INTERRUPT_STACKS_BASE`] | 2 MiB | each CPU's interrupt stack (`irqstack.rs`), mapped the same way |
 //! | [`KERNEL_VMA`] + phys | image | kernel image, per-section permissions (see `kernel/linker.ld`) |
 //!
@@ -24,8 +24,9 @@
 //! never changes afterwards: the direct map's, the kernel image's, an empty
 //! PDPT for the MMIO window, which [`map_mmio`] fills later, and the tables
 //! of the stack areas (thread stacks, interrupt stacks) down to their page
-//! tables, one each, whose entries [`map_thread_stack`] and
-//! [`unmap_thread_stack`] set and clear.
+//! tables ([`THREAD_STACK_TABLES`] for the threads, one for the interrupt
+//! stacks), whose entries [`map_thread_stack`] and [`unmap_thread_stack`]
+//! set and clear.
 //!
 //! The direct map covers the regions of the memory map, not the holes between
 //! them (see [`poly_mem::DirectMap`]), so [`phys_to_virt`] answers `None` for a
@@ -96,9 +97,17 @@ pub const MMIO_SIZE: u64 = 512 << 30;
 /// each above unmapped guard pages (ADR 0050).
 pub const THREAD_STACKS_BASE: u64 = 0xffff_c080_0000_0000;
 
-/// Size of the thread stack area: what one page table maps, so its tables
+/// What one page table maps: 2 MiB.
+const TABLE_SPAN: u64 = (ENTRIES as u64) * PAGE_SIZE;
+
+/// Page tables of the thread stack area, consecutive in one page directory:
+/// 16 MiB, room for 512 threads' stacks and guards (`thread::STACKS`;
+/// Chromium alone runs about 250 threads).
+pub const THREAD_STACK_TABLES: usize = 8;
+
+/// Size of the thread stack area: what its page tables map, so its tables
 /// are made once at boot and the area never needs another one.
-pub const THREAD_STACKS_SIZE: u64 = (ENTRIES as u64) * PAGE_SIZE;
+pub const THREAD_STACKS_SIZE: u64 = THREAD_STACK_TABLES as u64 * TABLE_SPAN;
 
 /// Start of the interrupt stack area, right after the thread stacks and
 /// mapped the same way, by a page table of its own: each CPU's interrupt
@@ -106,7 +115,7 @@ pub const THREAD_STACKS_SIZE: u64 = (ENTRIES as u64) * PAGE_SIZE;
 pub const INTERRUPT_STACKS_BASE: u64 = THREAD_STACKS_BASE + THREAD_STACKS_SIZE;
 
 /// Size of the interrupt stack area: one page table's worth.
-pub const INTERRUPT_STACKS_SIZE: u64 = (ENTRIES as u64) * PAGE_SIZE;
+pub const INTERRUPT_STACKS_SIZE: u64 = TABLE_SPAN;
 
 /// PCD | PWT: uncached (UC): PAT entry 3, which is UC at power-on (SDM
 /// Vol. 3A §11.12.3, Table 11-11) and which [`init`] leaves alone.
@@ -417,15 +426,14 @@ pub(super) unsafe fn init_ap() {
 const MMIO_SLOT: usize = ((MMIO_BASE >> 39) & 0x1ff) as usize;
 
 /// Physical addresses of the page tables that map the thread stack area
-/// ([`THREAD_STACKS_BASE`]) and the interrupt stack area right after it
-/// ([`INTERRUPT_STACKS_BASE`]); 0 before [`init`].
-static STACKS_PT: [AtomicU64; 2] = [const { AtomicU64::new(0) }; 2];
+/// ([`THREAD_STACKS_BASE`], [`THREAD_STACK_TABLES`] of them) and the
+/// interrupt stack area right after it ([`INTERRUPT_STACKS_BASE`], the
+/// last); 0 before [`init`].
+static STACKS_PT: [AtomicU64; THREAD_STACK_TABLES + 1] = [const { AtomicU64::new(0) }; THREAD_STACK_TABLES + 1];
 
-const _: () =
-    assert!(THREAD_STACKS_BASE.is_multiple_of(THREAD_STACKS_SIZE), "the stack area needs a page table of its own");
-const _: () = assert!(THREAD_STACKS_SIZE == INTERRUPT_STACKS_SIZE, "one page table per stack area");
+const _: () = assert!(THREAD_STACKS_BASE.is_multiple_of(TABLE_SPAN), "the stack area needs page tables of its own");
 const _: () = assert!(
-    (THREAD_STACKS_BASE >> 21) & 0x1ff < 0x1ff,
+    ((THREAD_STACKS_BASE >> 21) & 0x1ff) as usize + THREAD_STACK_TABLES < 0x1ff,
     "both stack areas need to share one page directory (consecutive entries)"
 );
 const _: () = assert!(THREAD_STACKS_BASE >= MMIO_BASE + MMIO_SIZE && INTERRUPT_STACKS_BASE < KERNEL_VMA);
@@ -434,13 +442,12 @@ const _: () = assert!(THREAD_STACKS_BASE >= MMIO_BASE + MMIO_SIZE && INTERRUPT_S
 /// is whole pages inside one of the stack areas and the areas are set up.
 fn stack_pages(virt: u64, len: u64) -> Option<(u64, core::ops::Range<usize>)> {
     let offset = virt.checked_sub(THREAD_STACKS_BASE)?;
-    let area = usize::try_from(offset / THREAD_STACKS_SIZE).ok().filter(|&a| a < STACKS_PT.len())?;
-    let pt = STACKS_PT[area].load(Ordering::Acquire);
-    let offset = offset % THREAD_STACKS_SIZE;
+    let table = usize::try_from(offset / TABLE_SPAN).ok().filter(|&a| a < STACKS_PT.len())?;
+    let pt = STACKS_PT[table].load(Ordering::Acquire);
+    let offset = offset % TABLE_SPAN;
     let end = offset.checked_add(len)?;
     let whole = offset.is_multiple_of(PAGE_SIZE) && len.is_multiple_of(PAGE_SIZE);
-    (pt != 0 && whole && end <= THREAD_STACKS_SIZE)
-        .then_some((pt, (offset / PAGE_SIZE) as usize..(end / PAGE_SIZE) as usize))
+    (pt != 0 && whole && end <= TABLE_SPAN).then_some((pt, (offset / PAGE_SIZE) as usize..(end / PAGE_SIZE) as usize))
 }
 
 /// Map the `len` bytes of physical memory at `phys` (whole frames, which
@@ -561,8 +568,10 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
     let index = |level: u32| ((THREAD_STACKS_BASE >> (12 + 9 * level)) & 0x1ff) as usize;
     let stacks_pdpt = link(root, index(3));
     let stacks_pd = link(stacks_pdpt, index(2));
-    let stacks_pt = link(stacks_pd, index(1));
-    let interrupt_stacks_pt = link(stacks_pd, index(1) + 1);
+    let mut stack_tables = [0u64; THREAD_STACK_TABLES + 1];
+    for (i, pt) in stack_tables.iter_mut().enumerate() {
+        *pt = link(stacks_pd, index(1) + i);
+    }
 
     let mapped: u64 = direct.spans().iter().map(Region::len).sum();
     let (spans, end) = (direct.spans().len(), direct.end());
@@ -575,8 +584,9 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
     // map exactly `direct` at DIRECT_MAP_BASE.
     unsafe { DIRECT_MAP.activate(direct) };
     KERNEL_ROOT.store(tables.root(), Ordering::Release);
-    STACKS_PT[0].store(stacks_pt, Ordering::Release);
-    STACKS_PT[1].store(interrupt_stacks_pt, Ordering::Release);
+    for (slot, pt) in STACKS_PT.iter().zip(stack_tables) {
+        slot.store(pt, Ordering::Release);
+    }
     if features.pge {
         // SAFETY: CPUID says the CPU has global pages; enabling them changes
         // no translation.

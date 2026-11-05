@@ -586,7 +586,6 @@ impl ProcessTree {
         false
     }
 
-
     /// setpgid(2) by `caller`: move `pid` (0: the caller) into group
     /// `pgid` (0: `pid`'s own). Errors from the man page, in this order:
     /// `EINVAL` for a negative `pgid`; `ESRCH` if `pid` is neither the

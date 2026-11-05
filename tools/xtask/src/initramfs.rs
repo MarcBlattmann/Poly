@@ -428,6 +428,52 @@ pub fn disk_root_image_with(busybox: &[u8], inittab: &str) -> Vec<u8> {
     busybox_image_with(busybox, inittab, &[("etc/init.d/rootdisk", ROOTDISK_SCRIPT)])
 }
 
+/// The kernel arguments that make the initramfs's shell run
+/// [`SWITCH_ROOT_SCRIPT`] as the first program (pid 1), as a Linux
+/// initramfs's `/init` does; the kernel's first program cannot be a script
+/// itself, so BusyBox's `sh` gets it as its argument (`poly.init.arg`).
+pub const SWITCH_ROOT_INIT_ARGS: &str = "poly.init=/bin/sh poly.init.arg=/etc/init.d/switch-root";
+
+/// Where a disk entered with [`SWITCH_ROOT_SCRIPT`] has a statically
+/// linked BusyBox, whose `init` takes over as pid 1 on the disk.
+pub const DISK_BUSYBOX: &str = "usr/local/lib/poly/busybox";
+
+/// `/etc/init.d/switch-root`, pid 1 of an initramfs that hands the system
+/// over to the root disk the way switch_root(8) does (ADR 0130's
+/// amendment): the file systems of `rcS`, the disk mounted on `/mnt/root`
+/// with the kernel's file systems bound into it (`rootdisk`), the disk's
+/// mount moved over `/` (mount(2) `MS_MOVE`) and the root changed to it
+/// from inside (`chroot .`, so the root is the mount namespace's top mount,
+/// not a chroot), then BusyBox's `init` from the disk with the disk's
+/// `/etc/inittab`. Unlike switch_root(8) it does not empty the initramfs:
+/// its `/dev` (device nodes the kernel made) is what the disk's `/dev`
+/// shows. If the disk cannot be mounted, a shell stays on the console.
+pub const SWITCH_ROOT_SCRIPT: &str = "\
+#!/bin/sh
+# Pid 1 of the initramfs (tools/xtask/src/initramfs.rs, SWITCH_ROOT_SCRIPT).
+export PATH=/sbin:/usr/sbin:/bin:/usr/bin
+/etc/init.d/rcS
+if ! /etc/init.d/rootdisk || [ ! -x /mnt/root/usr/local/lib/poly/busybox ]; then
+    echo \"switch-root: no root disk with /usr/local/lib/poly/busybox: a shell instead\"
+    exec /bin/sh
+fi
+cd /mnt/root
+mount --move /mnt/root / || exec /bin/sh
+echo \"switch-root: /dev/vda is the root\"
+exec usr/local/lib/poly/busybox chroot . /usr/local/lib/poly/busybox init
+";
+
+/// An initramfs whose first program switches to the root disk
+/// ([`SWITCH_ROOT_INIT_ARGS`], [`SWITCH_ROOT_SCRIPT`]); the disk brings
+/// BusyBox ([`DISK_BUSYBOX`]) and its own `/etc/inittab`.
+pub fn switch_root_image(busybox: &[u8]) -> Vec<u8> {
+    busybox_image_with(
+        busybox,
+        DISK_ROOT_INITTAB,
+        &[("etc/init.d/rootdisk", ROOTDISK_SCRIPT), ("etc/init.d/switch-root", SWITCH_ROOT_SCRIPT)],
+    )
+}
+
 /// [`busybox_image`] with another `/etc/inittab` and more scripts in it.
 fn busybox_image_with(busybox: &[u8], inittab: &str, scripts: &[(&str, &str)]) -> Vec<u8> {
     let mut w = writer();

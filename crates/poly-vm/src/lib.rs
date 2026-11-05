@@ -115,6 +115,7 @@
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 use core::ops::BitOr;
@@ -319,6 +320,10 @@ pub struct Vma<F> {
     /// an absent page is then [`FaultAction::UserFault`]. Not inherited by
     /// a fork child (the kernel clears it, [`VmMap::clear_userfault`]).
     pub uffd: u32,
+    /// The name prctl(2) `PR_SET_VMA_ANON_NAME` gave the region (anonymous
+    /// memory only; `/proc/<pid>/maps` shows `[anon:<name>]`). Inherited
+    /// by a fork child; regions with different names never merge.
+    pub name: Option<Arc<str>>,
 }
 
 impl<F: Clone + PartialEq> Vma<F> {
@@ -378,6 +383,7 @@ impl<F: Clone + PartialEq> Vma<F> {
             locked: self.locked,
             sealed: self.sealed,
             uffd: self.uffd,
+            name: self.name.clone(),
         }
     }
 
@@ -392,6 +398,7 @@ impl<F: Clone + PartialEq> Vma<F> {
             && self.locked == next.locked
             && self.sealed == next.sealed
             && self.uffd == next.uffd
+            && self.name == next.name
             && match (&self.backing, &next.backing) {
                 (Backing::Anonymous, Backing::Anonymous) => true,
                 (
@@ -531,15 +538,19 @@ pub enum Error {
     /// A range [`VmMap::remap`] was given is not inside one region
     /// (`EFAULT`, as mremap(2) says).
     Fault,
+    /// A region [`VmMap::set_anon_name`] was given is not anonymous memory
+    /// (`EBADF`, prctl(2) `PR_SET_VMA_ANON_NAME` on a file mapping).
+    NotAnonymous,
 }
 
 impl Error {
     /// The Linux errno for this error: values from the UAPI headers
-    /// `asm-generic/errno-base.h` (`EPERM` 1, `ENOMEM` 12, `EACCES` 13, `EFAULT` 14,
-    /// `EEXIST` 17, `EINVAL` 22) and `asm-generic/errno.h` (`EOVERFLOW` 75).
+    /// `asm-generic/errno-base.h` (`EPERM` 1, `EBADF` 9, `ENOMEM` 12, `EACCES` 13,
+    /// `EFAULT` 14, `EEXIST` 17, `EINVAL` 22) and `asm-generic/errno.h` (`EOVERFLOW` 75).
     pub const fn linux_errno(self) -> u64 {
         match self {
             Error::Permission => 1,
+            Error::NotAnonymous => 9,
             Error::NoMemory => 12,
             Error::Access => 13,
             Error::Exists => 17,
@@ -767,6 +778,7 @@ enum Op<F> {
     Lock(bool),
     Seal,
     UserFault(u32),
+    Name(Option<Arc<str>>),
 }
 
 impl<F: Clone + PartialEq> VmMap<F> {
@@ -886,6 +898,7 @@ impl<F: Clone + PartialEq> VmMap<F> {
             locked: self.lock_future.is_some(),
             sealed: false,
             uffd: 0,
+            name: None,
         };
         let replaced = self.rewrite(addr, addr + len, Op::Insert(vma))?;
         Ok(Mapped { addr, replaced })
@@ -1108,6 +1121,33 @@ impl<F: Clone + PartialEq> VmMap<F> {
         self.rewrite(addr, end, Op::UserFault(uffd)).map(|_| ())
     }
 
+    /// Name the regions of `[addr, addr + len)` (prctl(2) `PR_SET_VMA`,
+    /// `PR_SET_VMA_ANON_NAME`; `len` is rounded up to a page), or remove
+    /// their names (`None`). Naming part of a region splits it.
+    ///
+    /// Errors, nothing changed then: a misaligned `addr`, a range that
+    /// wraps around ([`Error::Invalid`]); a page of the range not mapped
+    /// ([`Error::NoMemory`]); a region of it that is not private anonymous
+    /// memory ([`Error::NotAnonymous`]); too many regions
+    /// ([`Error::NoMemory`]). A zero `len` changes nothing.
+    pub fn set_anon_name(&mut self, addr: u64, len: u64, name: Option<Arc<str>>) -> Result<(), Error> {
+        if !is_page_aligned(addr) {
+            return Err(Error::Invalid);
+        }
+        let len = page_up(len).ok_or(Error::Invalid)?;
+        let end = addr.checked_add(len).ok_or(Error::Invalid)?;
+        if len == 0 {
+            return Ok(());
+        }
+        if !self.is_covered(addr, end) {
+            return Err(Error::NoMemory);
+        }
+        if self.regions_in(addr, end).any(|v| !matches!(v.backing, Backing::Anonymous)) {
+            return Err(Error::NotAnonymous);
+        }
+        self.rewrite(addr, end, Op::Name(name)).map(|_| ())
+    }
+
     /// Undo the registrations with `uffd` of the mapped parts of `[addr,
     /// addr + len)` (`UFFDIO_UNREGISTER`).
     ///
@@ -1267,6 +1307,7 @@ impl<F: Clone + PartialEq> VmMap<F> {
             locked: self.lock_future.is_some(),
             sealed: false,
             uffd: 0,
+            name: None,
         };
         self.rewrite(start, top, Op::Insert(vma))?;
         Ok(start)
@@ -1332,6 +1373,7 @@ impl<F: Clone + PartialEq> VmMap<F> {
                     locked: self.lock_future.is_some(),
                     sealed: false,
                     uffd: 0,
+                    name: None,
                 };
                 if self.rewrite(old_end, new_end, Op::Insert(vma)).is_err() {
                     return unchanged;
@@ -1428,7 +1470,13 @@ impl<F: Clone + PartialEq> VmMap<F> {
                 Backing::Anonymous => FaultAction::ZeroFill { page: page_addr, prot: vma.prot },
                 Backing::File { file, offset, .. } => {
                     let offset = offset + (page_addr - vma.start);
-                    FaultAction::ReadFile { page: page_addr, file: file.clone(), offset, prot: vma.prot, private_copy: true }
+                    FaultAction::ReadFile {
+                        page: page_addr,
+                        file: file.clone(),
+                        offset,
+                        prot: vma.prot,
+                        private_copy: true,
+                    }
                 }
             },
             PageState::Present { refs } if refs > 1 => FaultAction::CopyOnWrite { page: page_addr, prot: vma.prot },
@@ -1568,6 +1616,7 @@ impl<F: Clone + PartialEq> VmMap<F> {
                 Op::Lock(locked) => pieces.push(Vma { locked, ..inside }),
                 Op::Seal => pieces.push(Vma { sealed: true, ..inside }),
                 Op::UserFault(uffd) => pieces.push(Vma { uffd, ..inside }),
+                Op::Name(ref name) => pieces.push(Vma { name: name.clone(), ..inside }),
                 Op::Remove | Op::Insert(_) => removed.push(inside),
             }
             if v.end > end {

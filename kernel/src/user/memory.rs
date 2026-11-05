@@ -586,9 +586,15 @@ impl Memory {
         let end = addr + poly_vm::page_up(len).expect("checked by VmMap::protect");
         let rights = page_prot(prot);
         let mut result = Ok(());
-        // TODO(perf): this visits every page of the range; a walk that
-        // skips absent page tables would make large ranges cheap.
-        for page in (addr..end).step_by(PAGE_SIZE as usize) {
+        // Only pages that hold something: mapped ones (found by walking the
+        // page tables that exist) and the shared, cached and parked ones,
+        // so re-protecting a terabyte reservation (V8's) is cheap.
+        let mut pages: alloc::collections::BTreeSet<u64> =
+            self.space.mapped_pages(addr, end).into_iter().map(|(p, _)| p).collect();
+        pages.extend(inner.shared.range(addr..end).map(|(&p, _)| p));
+        pages.extend(inner.cached.range(addr..end).map(|(&p, _)| p));
+        pages.extend(inner.parked.range(addr..end).map(|(&p, _)| p));
+        for page in pages {
             if inner.shared.contains_key(&page) {
                 if let Err(e) = self.protect_shared(&mut inner, page, prot) {
                     result = Err(e);

@@ -75,11 +75,8 @@ impl FileObject for PerfFile {
 
 /// `LinuxKernel::perf_source`.
 pub fn source(k: &Thread<'_>, pid: i32) -> Result<Arc<dyn PerfSource>, Errno> {
-    let process = if pid == 0 {
-        crate::user::current_process().ok_or(Errno::ESRCH)?
-    } else {
-        super::procaccess::process(pid)?
-    };
+    let process =
+        if pid == 0 { crate::user::current_process().ok_or(Errno::ESRCH)? } else { super::procaccess::process(pid)? };
     let _ = k;
     Ok(Arc::new(TaskSource { process }))
 }

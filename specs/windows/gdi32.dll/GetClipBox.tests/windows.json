@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "gcb_memdc",
+      "exe_sha256": "5bd3f9a319b94f9636c8421bece8eba5e3943a27c46e40270c0279f86446b709",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWVtb3J5IERDLCBkZWZhdWx0IGJpdG1hcDogMiAwLDAsMSwxIGVycm9yIDAKbWVtb3J5IERDLCA0MHgzMCBESUI6IDIgMCwwLDQwLDMwIGVycm9yIDAKSW50ZXJzZWN0Q2xpcFJlY3QoNSw1LDMwLDIwKSA9IDMKICB0aGVuOiAyIDUsNSwzMCwyMCBlcnJvciAwCkV4Y2x1ZGVDbGlwUmVjdCg1LDUsMzAsMTApID0gMwogIHRoZW46IDIgNSwxMCwzMCwyMCBlcnJvciAwCkV4Y2x1ZGVDbGlwUmVjdCgxMCwxMiwxNSwxNSkgPSAzCiAgdGhlbjogMyA1LDEwLDMwLDIwIGVycm9yIDAKSW50ZXJzZWN0Q2xpcFJlY3QoMTAwLDEwMCwxMTAsMTEwKSA9IDEKICB0aGVuIChlbXB0eSk6IDEgMCwwLDAsMCBlcnJvciAwCmNsaXAgcmVtb3ZlZDogMiAwLDAsNDAsMzAgZXJyb3IgMAp3aW5kb3cgb3JpZ2luIDEwLDIwOiAyIDEwLDIwLDUwLDUwIGVycm9yIDAKdmlld3BvcnQgb3JpZ2luIDEwLDIwOiAyIC0xMCwtMjAsMzAsMTAgZXJyb3IgMApkZWxldGVkIERDOiAwIC03LC03LC03LC03IGVycm9yIDYKTlVMTDogMCAtNywtNywtNywtNyBlcnJvciA2Cm1hZGUtdXAgREM6IDAgLTcsLTcsLTcsLTcgZXJyb3IgNgphIHJlZ2lvbiBoYW5kbGU6IDAgLTcsLTcsLTcsLTcgZXJyb3IgNgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "memory DC, default bitmap: 2 0,0,1,1 error 0\nmemory DC, 40x30 DIB: 2 0,0,40,30 error 0\nIntersectClipRect(5,5,30,20) = 3\n  then: 2 5,5,30,20 error 0\nExcludeClipRect(5,5,30,10) = 3\n  then: 2 5,10,30,20 error 0\nExcludeClipRect(10,12,15,15) = 3\n  then: 3 5,10,30,20 error 0\nIntersectClipRect(100,100,110,110) = 1\n  then (empty): 1 0,0,0,0 error 0\nclip removed: 2 0,0,40,30 error 0\nwindow origin 10,20: 2 10,20,50,50 error 0\nviewport origin 10,20: 2 -10,-20,30,10 error 0\ndeleted DC: 0 -7,-7,-7,-7 error 6\nNULL: 0 -7,-7,-7,-7 error 6\nmade-up DC: 0 -7,-7,-7,-7 error 6\na region handle: 0 -7,-7,-7,-7 error 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "gcb_window",
+      "exe_sha256": "6ccdcc69a0cd0eb5344370a6016ef9c1aeac5704b69bb5565170f0df2972a221",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApwb3B1cCBhdCAxMDAsMTAwOiBHZXRDbGlwQm94IDIgMCwwLDIwMCwxMDA7IHN5c3RlbSByZWdpb24gMSBbMTAwLDEwMCwzMDAsMjAwXQpwb3B1cCBhdCAtNTAsMTAwOiBHZXRDbGlwQm94IDIgNTAsMCwyMDAsMTAwOyBzeXN0ZW0gcmVnaW9uIDEgWzAsMTAwLDE1MCwyMDBdCmhpZGRlbiBwb3B1cCA1MHg0MDogR2V0Q2xpcEJveCAxIDAsMCwwLDA7IHN5c3RlbSByZWdpb24gMSBbZW1wdHldCmNhcHRpb25lZCAzMDB4MjAwLCBHZXREQzogR2V0Q2xpcEJveCAyIDAsMCwyODQsMTYxOyBzeXN0ZW0gcmVnaW9uIDEgWzQwOCwxMzEsNjkyLDI5Ml0KY2FwdGlvbmVkIDMwMHgyMDAsIEdldFdpbmRvd0RDOiBHZXRDbGlwQm94IDIgMCwwLDMwMCwyMDA7IHN5c3RlbSByZWdpb24gMSBbNDAwLDEwMCw3MDAsMzAwXQpwYXJlbnQgd2l0aG91dCBXU19DTElQQ0hJTERSRU4sIGNoaWxkIGF0IDE1MCw1MCAxMDB4MTAwOiBHZXRDbGlwQm94IDIgMCwwLDIwMCwxMDA7IHN5c3RlbSByZWdpb24gMSBbMTAwLDMwMCwzMDAsNDAwXQogIHRoZSBjaGlsZDogR2V0Q2xpcEJveCAyIDAsMCw1MCw1MDsgc3lzdGVtIHJlZ2lvbiAxIFsyNTAsMzUwLDMwMCw0MDBdCnBhcmVudCB3aXRoIFdTX0NMSVBDSElMRFJFTjogR2V0Q2xpcEJveCAzIDAsMCwyMDAsMTAwOyBzeXN0ZW0gcmVnaW9uIDEgWzEwMCwzMDAsMzAwLDM1MCArIDEwMCwzNTAsMjUwLDQwMF0KcGFyZW50IHdpdGggV1NfQ0xJUENISUxEUkVOLCBjaGlsZCBpbnNpZGUgYXQgMjAsMjAgNTB4NTA6IEdldENsaXBCb3ggMyAwLDAsMjAwLDEwMDsgc3lzdGVtIHJlZ2lvbiAxIFsxMDAsMzAwLDMwMCwzMjAgKyAxMDAsMzIwLDEyMCwzNzAgKyAxNzAsMzIwLDMwMCwzNzAgKyAxMDAsMzcwLDMwMCw0MDBdCmZpcnN0IHNpYmxpbmcgKGJlbG93KSwgbm8gV1NfQ0xJUFNJQkxJTkdTOiBHZXRDbGlwQm94IDIgMCwwLDEwMCw2MDsgc3lzdGVtIHJlZ2lvbiAxIFsxMTAsMzEwLDIxMCwzNzBdCnNlY29uZCBzaWJsaW5nICh0b3ApLCBubyBXU19DTElQU0lCTElOR1M6IEdldENsaXBCb3ggMiAwLDAsMTAwLDYwOyBzeXN0ZW0gcmVnaW9uIDEgWzE2MCwzMzAsMjYwLDM5MF0KZmlyc3Qgc2libGluZywgV1NfQ0xJUFNJQkxJTkdTOiBHZXRDbGlwQm94IDIgMCwwLDEwMCw2MDsgc3lzdGVtIHJlZ2lvbiAxIFsxMTAsMzEwLDIxMCwzNzBdCnNlY29uZCBzaWJsaW5nLCBXU19DTElQU0lCTElOR1M6IEdldENsaXBCb3ggMyAwLDAsMTAwLDYwOyBzeXN0ZW0gcmVnaW9uIDEgWzIxMCwzMzAsMjYwLDM3MCArIDE2MCwzNzAsMjYwLDM5MF0KcG9wdXAgQSB1bmRlciBhbm90aGVyIHRvcC1sZXZlbCBwb3B1cCBhdCAxNTAsMTIwOiBHZXRDbGlwQm94IDIgMCwwLDIwMCwxMDA7IHN5c3RlbSByZWdpb24gMSBbMTAwLDEwMCwzMDAsMjAwXQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\npopup at 100,100: GetClipBox 2 0,0,200,100; system region 1 [100,100,300,200]\npopup at -50,100: GetClipBox 2 50,0,200,100; system region 1 [0,100,150,200]\nhidden popup 50x40: GetClipBox 1 0,0,0,0; system region 1 [empty]\ncaptioned 300x200, GetDC: GetClipBox 2 0,0,284,161; system region 1 [408,131,692,292]\ncaptioned 300x200, GetWindowDC: GetClipBox 2 0,0,300,200; system region 1 [400,100,700,300]\nparent without WS_CLIPCHILDREN, child at 150,50 100x100: GetClipBox 2 0,0,200,100; system region 1 [100,300,300,400]\n  the child: GetClipBox 2 0,0,50,50; system region 1 [250,350,300,400]\nparent with WS_CLIPCHILDREN: GetClipBox 3 0,0,200,100; system region 1 [100,300,300,350 + 100,350,250,400]\nparent with WS_CLIPCHILDREN, child inside at 20,20 50x50: GetClipBox 3 0,0,200,100; system region 1 [100,300,300,320 + 100,320,120,370 + 170,320,300,370 + 100,370,300,400]\nfirst sibling (below), no WS_CLIPSIBLINGS: GetClipBox 2 0,0,100,60; system region 1 [110,310,210,370]\nsecond sibling (top), no WS_CLIPSIBLINGS: GetClipBox 2 0,0,100,60; system region 1 [160,330,260,390]\nfirst sibling, WS_CLIPSIBLINGS: GetClipBox 2 0,0,100,60; system region 1 [110,310,210,370]\nsecond sibling, WS_CLIPSIBLINGS: GetClipBox 3 0,0,100,60; system region 1 [210,330,260,370 + 160,370,260,390]\npopup A under another top-level popup at 150,120: GetClipBox 2 0,0,200,100; system region 1 [100,100,300,200]\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 473
+    }
+  ]
+}

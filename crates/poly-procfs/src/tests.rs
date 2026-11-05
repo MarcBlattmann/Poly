@@ -32,6 +32,10 @@ struct Fake {
     pins: Mutex<std::collections::BTreeMap<(u32, usize), i32>>,
     /// What was written to hostname and domainname.
     names: Mutex<Vec<(KernelName, Vec<u8>)>>,
+    /// oom_score_adj per process (0 when absent); lowering needs `root`.
+    oom: Mutex<std::collections::BTreeMap<u32, i32>>,
+    /// What process 42's descriptor 5 is open on, for following its link.
+    fd5: Mutex<Option<Arc<poly_vfs::OpenFile>>>,
 }
 
 /// Process 42's namespaces have inode numbers 100 + kind (pid 1's: 200 +
@@ -340,6 +344,27 @@ impl ProcSource for Fake {
         self.uid_map.lock().unwrap().push((pid, offset, data.to_vec()));
         Ok(data.len())
     }
+
+    fn magic_target(&self, pid: u32, link: MagicLink) -> Option<poly_vfs::MagicTarget> {
+        match (pid, link) {
+            (42, MagicLink::Fd(5)) => self.fd5.lock().unwrap().clone().map(poly_vfs::MagicTarget::File),
+            _ => None,
+        }
+    }
+
+    fn oom_score_adj(&self, pid: u32) -> i32 {
+        self.oom.lock().unwrap().get(&pid).copied().unwrap_or(0)
+    }
+
+    /// Lowering below -500 is refused (as a caller without
+    /// `CAP_SYS_RESOURCE` would be).
+    fn set_oom_score_adj(&self, pid: u32, value: i32) -> Result<(), poly_vfs::Errno> {
+        if value < -500 {
+            return Err(poly_vfs::Errno::EACCES);
+        }
+        self.oom.lock().unwrap().insert(pid, value);
+        Ok(())
+    }
 }
 
 struct Env {
@@ -503,7 +528,10 @@ fn process_directories_list_their_files() {
             "uid_map",
             "gid_map",
             "setgroups",
-            "task"
+            "task",
+            "oom_score_adj",
+            "oom_score",
+            "clear_refs"
         ]
     );
     assert_eq!(names(&e.list("/proc/42/fd")), [".", "..", "0", "1", "2", "5"]);
@@ -797,6 +825,10 @@ fn sys_kernel_files() {
     assert_eq!(e.text("/proc/sys/kernel/domainname"), "(none)\n");
     assert_eq!(e.text("/proc/sys/kernel/pid_max"), "32768\n");
     assert_eq!(e.text("/proc/sys/fs/nr_open"), "1048576\n");
+    assert_eq!(e.text("/proc/sys/kernel/cap_last_cap"), "40\n");
+    assert_eq!(e.text("/proc/sys/fs/inotify/max_user_watches"), "65536\n");
+    assert_eq!(e.text("/proc/sys/fs/inotify/max_user_instances"), "128\n");
+    assert_eq!(e.text("/proc/sys/fs/inotify/max_queued_events"), "16384\n");
     assert_eq!(e.text("/proc/sys/kernel/random/poolsize"), "4096\n");
     assert_eq!(e.text("/proc/sys/kernel/random/entropy_avail"), "256\n");
     assert_eq!(e.text("/proc/sys/kernel/random/boot_id"), "00010203-0405-4607-8809-0a0b0c0d0e0f\n");
@@ -892,11 +924,137 @@ fn a_static_tree_serves_sysfs() {
 fn task_lists_threads_with_their_own_names() {
     let e = env();
     assert_eq!(names(&e.list("/proc/42/task")), [".", "..", "42", "43"]);
-    assert_eq!(names(&e.list("/proc/42/task/43")), [".", "..", "comm"]);
+    assert_eq!(names(&e.list("/proc/42/task/43")), [".", "..", "comm", "stat", "status"]);
     assert_eq!(e.text("/proc/42/task/43/comm"), "worker\n");
     assert_eq!(e.text("/proc/42/task/42/comm"), "a-very-long-pro\n", "the process's comm, 15 bytes");
     assert_eq!(e.read("/proc/42/task/44/comm"), Err(poly_vfs::Errno::ENOENT));
     assert_eq!(e.read("/proc/1/task/43/comm"), Err(poly_vfs::Errno::ENOENT));
     let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/42/task/43", true).unwrap();
     assert_eq!(st.mode, 0o040555);
+}
+
+#[test]
+fn task_directory_links_count_the_threads() {
+    // 2 plus one per thread: Chromium's single-thread check reads 3 for a
+    // process with one thread (docs/chromium-linux-gaps.md, A0).
+    let e = env();
+    let nlink = |p: &str| e.vfs.stat(&e.ctx, &e.cred, At::Cwd, p.as_bytes(), true).unwrap().nlink;
+    assert_eq!(nlink("/proc/1/task"), 3);
+    assert_eq!(nlink("/proc/42/task"), 4);
+    assert_eq!(nlink("/proc/self/task/"), 4);
+    assert_eq!(nlink("/proc/42"), 2);
+    assert_eq!(nlink("/proc/42/task/43"), 2);
+    assert_eq!(nlink("/proc/42/status"), 1);
+}
+
+#[test]
+fn task_status_and_stat_are_the_threads() {
+    let e = env();
+    let status = e.text("/proc/42/task/43/status");
+    assert!(status.starts_with("Name:\tworker\n"), "{status}");
+    assert!(status.contains("\nTgid:\t42\n") && status.contains("\nPid:\t43\n"), "{status}");
+    assert!(status.contains("\nNStgid:\t42\nNSpid:\t43\n"), "{status}");
+    let leader = e.text("/proc/42/task/42/status");
+    assert!(leader.starts_with("Name:\ta-very-long-pro\n") && leader.contains("\nPid:\t42\n"), "{leader}");
+    let stat = e.text("/proc/42/task/43/stat");
+    assert!(stat.starts_with("43 (worker) R 1 42 42 "), "{stat}");
+    assert_eq!(stat.split_whitespace().count(), 52);
+    assert_eq!(e.read("/proc/42/task/44/status"), Err(poly_vfs::Errno::ENOENT));
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/42/task/43/status", true).unwrap();
+    assert_eq!(st.mode, 0o100444);
+}
+
+#[test]
+fn oom_score_adj_is_written_through_creat() {
+    let e = env();
+    use poly_vfs::Errno::{EACCES, EINVAL};
+    assert_eq!(e.text("/proc/42/oom_score_adj"), "0\n");
+    assert_eq!(e.text("/proc/42/oom_score"), "0\n");
+    // creat(2) is O_CREAT | O_WRONLY | O_TRUNC: the existing file opens.
+    let creat = OpenFlags::WRONLY | OpenFlags::CREAT | OpenFlags::TRUNC;
+    let w = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/oom_score_adj", creat, 0o644).unwrap();
+    assert_eq!(w.write(b"300"), Ok(3));
+    assert_eq!(e.text("/proc/42/oom_score_adj"), "300\n");
+    assert_eq!(e.text("/proc/42/oom_score"), "300\n");
+    assert_eq!(e.text("/proc/1/oom_score_adj"), "0\n", "per process");
+    let w = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/self/oom_score_adj", OpenFlags::WRONLY, 0).unwrap();
+    assert_eq!(w.write(b" -200\n"), Ok(6));
+    assert_eq!(e.text("/proc/42/oom_score_adj"), "-200\n");
+    assert_eq!(e.text("/proc/42/oom_score"), "0\n");
+    for bad in [&b"1001"[..], b"-1001", b"abc", b"1 2"] {
+        assert_eq!(w.write(bad), Err(EINVAL), "{bad:?}");
+    }
+    assert_eq!(w.write(b"-1000"), Err(EACCES), "the source refuses");
+    assert_eq!(e.text("/proc/42/oom_score_adj"), "-200\n");
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/42/oom_score_adj", true).unwrap();
+    assert_eq!((st.mode, st.uid), (0o100644, 1001));
+}
+
+#[test]
+fn clear_refs_takes_one_to_five() {
+    let e = env();
+    let w = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/clear_refs", OpenFlags::WRONLY, 0).unwrap();
+    for v in [&b"1"[..], b"4", b"5\n"] {
+        assert_eq!(w.write(v), Ok(v.len()));
+    }
+    for bad in [&b"0"[..], b"6", b"x"] {
+        assert_eq!(w.write(bad), Err(poly_vfs::Errno::EINVAL));
+    }
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/42/clear_refs", true).unwrap();
+    assert_eq!(st.mode, 0o100200);
+}
+
+#[test]
+fn a_file_read_in_pieces_continues_in_what_its_first_read_made() {
+    let e = env();
+    let whole = e.text("/proc/42/stat");
+    let f = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/stat", OpenFlags::RDONLY, 0).unwrap();
+    let mut first = [0u8; 5];
+    assert_eq!(f.read(&mut first), Ok(5));
+    // The process goes; the rest still comes from the first read's contents.
+    *e.fake.pids.lock().unwrap() = std::vec![1];
+    let mut rest = std::vec![0u8; 4096];
+    let n = f.read(&mut rest).unwrap();
+    assert_eq!([&first[..], &rest[..n]].concat(), whole.as_bytes());
+    // A read from the start makes the file again: gone now.
+    let g = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/1/stat", OpenFlags::RDONLY, 0).unwrap();
+    assert!(g.read(&mut rest).unwrap() > 0);
+    assert_eq!(e.read("/proc/42/stat"), Err(poly_vfs::Errno::ENOENT));
+}
+
+#[test]
+fn a_directory_of_a_process_that_ended_stays_pinnable() {
+    // Chromium's sandbox: the root becomes /proc/<helper>/fdinfo and the
+    // helper exits; copying the context must not fail, lookups say ENOENT.
+    let e = env();
+    let mut ctx = e.ctx.clone();
+    e.vfs.chdir(&mut ctx, &e.cred, At::Cwd, b"/proc/42/fdinfo").unwrap();
+    *e.fake.pids.lock().unwrap() = std::vec![1];
+    let copy = ctx.clone();
+    let r = e.vfs.stat(&copy, &e.cred, At::Cwd, b"5", true);
+    assert_eq!(r.err(), Some(poly_vfs::Errno::ENOENT));
+    let r = e.vfs.stat(&copy, &e.cred, At::Cwd, b".", true);
+    assert_eq!(r.err(), Some(poly_vfs::Errno::ENOENT));
+}
+
+#[test]
+fn descriptor_links_lead_to_the_open_file_whatever_the_root() {
+    let e = env();
+    let create = OpenFlags::RDWR | OpenFlags::CREAT;
+    let f = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/data", create, 0o644).unwrap();
+    assert_eq!(f.write(b"hello"), Ok(5));
+    *e.fake.fd5.lock().unwrap() = Some(f.clone());
+    // A root where the file's path means nothing: /proc itself.
+    let mut ctx = e.ctx.clone();
+    e.vfs.chroot(&mut ctx, &e.cred, At::Cwd, b"/proc").unwrap();
+    let st = e.vfs.stat(&ctx, &e.cred, At::Cwd, b"/42/fd/5", true).unwrap();
+    assert_eq!(st.size, 5);
+    let g = e.vfs.open(&ctx, &e.cred, At::Cwd, b"/42/fd/5", OpenFlags::RDONLY, 0).unwrap();
+    let mut buf = [0u8; 8];
+    assert_eq!(g.read(&mut buf), Ok(5));
+    assert_eq!(&buf[..5], b"hello");
+    // Not followed: the link itself; others (no target) by their text.
+    let st = e.vfs.stat(&ctx, &e.cred, At::Cwd, b"/42/fd/5", false).unwrap();
+    assert_eq!(st.mode & 0o170000, 0o120000);
+    assert!(e.vfs.stat(&ctx, &e.cred, At::Cwd, b"/42/fd/0", true).is_err());
 }

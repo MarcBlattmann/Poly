@@ -27,6 +27,22 @@ pub const PR_CAP_AMBIENT_IS_SET: u64 = 1;
 pub const PR_CAP_AMBIENT_RAISE: u64 = 2;
 pub const PR_CAP_AMBIENT_LOWER: u64 = 3;
 pub const PR_CAP_AMBIENT_CLEAR_ALL: u64 = 4;
+pub const PR_GET_SPECULATION_CTRL: u32 = 52;
+pub const PR_SET_SPECULATION_CTRL: u32 = 53;
+/// The speculation features (`PR_SPEC_STORE_BYPASS`,
+/// `PR_SPEC_INDIRECT_BRANCH`, `PR_SPEC_L1D_FLUSH`) and their states.
+pub const PR_SPEC_FEATURES: u64 = 3;
+pub const PR_SPEC_PRCTL: u64 = 1 << 0;
+pub const PR_SPEC_ENABLE: u64 = 1 << 1;
+pub const PR_SPEC_DISABLE: u64 = 1 << 2;
+pub const PR_SPEC_FORCE_DISABLE: u64 = 1 << 3;
+pub const PR_SPEC_DISABLE_NOEXEC: u64 = 1 << 4;
+pub const PR_SET_VMA: u32 = 0x5356_4d41;
+pub const PR_SET_VMA_ANON_NAME: u64 = 0;
+/// The longest name `PR_SET_VMA_ANON_NAME` takes, with its NUL
+/// (`ANON_VMA_NAME_MAX_LEN`, 80; the prctl spec sheet: 79 bytes accepted,
+/// 80 refused).
+pub const ANON_VMA_NAME_MAX_LEN: usize = 80;
 /// `SECBIT_KEEP_CAPS` (`1 << SECURE_KEEP_CAPS`, UAPI `linux/securebits.h`).
 pub const SECBIT_KEEP_CAPS: u64 = 1 << 4;
 
@@ -158,8 +174,79 @@ pub fn prctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         }
         super::subreaper::PR_SET_CHILD_SUBREAPER => super::subreaper::set(k, arg2),
         super::subreaper::PR_GET_CHILD_SUBREAPER => super::subreaper::get(k, a.ptr(1)),
+        PR_SET_VMA => set_vma(k, a),
+        PR_GET_SPECULATION_CTRL => {
+            require_zero(a, 2)?;
+            let which = spec_feature(arg2)?;
+            let tid = k.tid();
+            let state = with_own(k, |p| p.thread(tid).spec_ctrl[which]);
+            Ok(PR_SPEC_PRCTL | if state == 0 { PR_SPEC_ENABLE } else { u64::from(state) })
+        }
+        PR_SET_SPECULATION_CTRL => {
+            require_zero(a, 3)?;
+            let which = spec_feature(arg2)?;
+            let set = a.ulong(2);
+            if ![PR_SPEC_ENABLE, PR_SPEC_DISABLE, PR_SPEC_FORCE_DISABLE, PR_SPEC_DISABLE_NOEXEC].contains(&set) {
+                return Err(Errno::ERANGE);
+            }
+            let tid = k.tid();
+            with_own(k, |p| {
+                let state = &mut p.thread_mut(tid).spec_ctrl[which];
+                // "PR_SPEC_FORCE_DISABLE: Same as PR_SPEC_DISABLE, but
+                // cannot be undone": EPERM for anything but itself after.
+                if u64::from(*state) == PR_SPEC_FORCE_DISABLE && set != PR_SPEC_FORCE_DISABLE {
+                    return Err(Errno::EPERM);
+                }
+                *state = set as u8;
+                Ok(0)
+            })
+        }
         _ => Err(Errno::EINVAL),
     }
+}
+
+/// The feature of `PR_GET/SET_SPECULATION_CTRL` (`arg2`): `ENODEV` for
+/// one the kernel does not know (prctl(2)).
+fn spec_feature(v: u64) -> Result<usize, Errno> {
+    if v < PR_SPEC_FEATURES { Ok(v as usize) } else { Err(Errno::ENODEV) }
+}
+
+/// `PR_SET_VMA` with `PR_SET_VMA_ANON_NAME` (the only sub-option, else
+/// `EINVAL`): name the anonymous mappings of `[arg3, arg3 + arg4)` with
+/// the string at `arg5`, or remove their names (`arg5` NULL). The name is
+/// at most 79 bytes of printable ASCII without `\` `` ` `` `$` `[` `]`
+/// (`EINVAL`), readable (`EFAULT`); the kernel checks the range
+/// ([`LinuxKernel::name_anon`]: `EINVAL` for an unaligned start, `ENOMEM`
+/// for a hole, `EBADF` for a file mapping).
+fn set_vma(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    if a.ulong(1) != PR_SET_VMA_ANON_NAME {
+        return Err(Errno::EINVAL);
+    }
+    let (addr, len) = (a.ulong(2), a.ulong(3));
+    if addr % crate::abi::PAGE_SIZE != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let mut buf = [0u8; ANON_VMA_NAME_MAX_LEN];
+    let name = if a.ptr(4).is_null() {
+        None
+    } else {
+        let n = match k.strncpy_from_user(a.ptr(4), &mut buf) {
+            Ok(n) => n,
+            Err(Errno::ENAMETOOLONG) => return Err(Errno::EINVAL),
+            Err(e) => return Err(e),
+        };
+        if !valid_anon_name(&buf[..n]) {
+            return Err(Errno::EINVAL);
+        }
+        Some(&buf[..n])
+    };
+    k.name_anon(addr, len, name).map(|()| 0)
+}
+
+/// Whether `name` may name anonymous memory: printable ASCII, none of
+/// `` \ ` $ [ ] `` (the prctl spec sheet, `vma_name_invalid`).
+pub fn valid_anon_name(name: &[u8]) -> bool {
+    name.iter().all(|&b| (0x20..0x7f).contains(&b) && !b"\\`$[]".contains(&b))
 }
 
 /// `PR_CAP_AMBIENT`: the operation in `arg2`, the capability in `arg3`.

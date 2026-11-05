@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "rw_errors",
+      "exe_sha256": "8e714a35dfeab5c6446ef6a6b06f3130f66be085f0e05cc9a79cae1a85e81c0a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApiYWQgaGFuZGxlOiAwIGVycm9yIDE0MDAKaGlkZGVuIHdpbmRvdywgSU5WQUxJREFURXxFUkFTRXxGUkFNRXxVUERBVEVOT1c6IDEgdXBkYXRlIDAKaGlkZGVuIGNoaWxkIG9mIGEgdmlzaWJsZSBwYXJlbnQ6IDEgdXBkYXRlIDAgcGFyZW50IHVwZGF0ZSAwCkVSQVNFTk9XIGFsb25lIGFmdGVyIEludmFsaWRhdGVSZWN0KE5VTEwsIFRSVUUpOiAxIHVwZGF0ZSAxCiAgc2VudDogSCBXTV9FUkFTRUJLR05ECiAgcHVtcGVkOiBIIFdNX1BBSU5UCm90aGVyIHRocmVhZCdzIHdpbmRvdywgSU5WQUxJREFURXxVUERBVEVOT1c6IDEgV01fUEFJTlQgc28gZmFyIDEgdXBkYXRlIDAKICBXTV9QQUlOVCBhZnRlciBpdHMgdGhyZWFkIHB1bXBlZCAxCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nbad handle: 0 error 1400\nhidden window, INVALIDATE|ERASE|FRAME|UPDATENOW: 1 update 0\nhidden child of a visible parent: 1 update 0 parent update 0\nERASENOW alone after InvalidateRect(NULL, TRUE): 1 update 1\n  sent: H WM_ERASEBKGND\n  pumped: H WM_PAINT\nother thread's window, INVALIDATE|UPDATENOW: 1 WM_PAINT so far 1 update 0\n  WM_PAINT after its thread pumped 1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 324
+    },
+    {
+      "name": "rw_flags",
+      "exe_sha256": "ebbac779efb27d0cfc8961b7522c7a3997cf18845979c558ed5c82e31be594f6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApjbGllbnQgMCwwLDEyNCw2MQotLSBJTlZBTElEQVRFIChmbGFncyAweDEpOiByZXR1cm5lZCAxCiAgdXBkYXRlIHJlZ2lvbiBraW5kIDI6IDAsMCwxMjQsNjEKICBwdW1wZWQ6IFdNX1BBSU5UIHJjUGFpbnQgMCwwLDEyNCw2MSBmRXJhc2UgMQotLSBJTlZBTElEQVRFfEVSQVNFIChmbGFncyAweDUpOiByZXR1cm5lZCAxCiAgdXBkYXRlIHJlZ2lvbiBraW5kIDI6IDAsMCwxMjQsNjEKICBwdW1wZWQ6IFdNX0VSQVNFQktHTkQKICBwdW1wZWQ6IFdNX1BBSU5UIHJjUGFpbnQgMCwwLDEyNCw2MSBmRXJhc2UgMQotLSBJTlZBTElEQVRFfEZSQU1FIChmbGFncyAweDQwMSk6IHJldHVybmVkIDEKICB1cGRhdGUgcmVnaW9uIGtpbmQgMjogMCwwLDEyNCw2MQogIHB1bXBlZDogV01fTkNQQUlOVCByZ249MQogIHB1bXBlZDogV01fUEFJTlQgcmNQYWludCAwLDAsMTI0LDYxIGZFcmFzZSAxCi0tIElOVkFMSURBVEV8RVJBU0V8RlJBTUUgKGZsYWdzIDB4NDA1KTogcmV0dXJuZWQgMQogIHVwZGF0ZSByZWdpb24ga2luZCAyOiAwLDAsMTI0LDYxCiAgcHVtcGVkOiBXTV9OQ1BBSU5UIHJnbj0xCiAgcHVtcGVkOiBXTV9FUkFTRUJLR05ECiAgcHVtcGVkOiBXTV9QQUlOVCByY1BhaW50IDAsMCwxMjQsNjEgZkVyYXNlIDEKLS0gSU5WQUxJREFURXxFUkFTRXxFUkFTRU5PVyAoZmxhZ3MgMHgyMDUpOiByZXR1cm5lZCAxCiAgZHVyaW5nOiBXTV9FUkFTRUJLR05ECiAgdXBkYXRlIHJlZ2lvbiBraW5kIDI6IDAsMCwxMjQsNjEKICBwdW1wZWQ6IFdNX1BBSU5UIHJjUGFpbnQgMCwwLDEyNCw2MSBmRXJhc2UgMQotLSBJTlZBTElEQVRFfEVSQVNFfEZSQU1FfEVSQVNFTk9XIChmbGFncyAweDYwNSk6IHJldHVybmVkIDEKICBkdXJpbmc6IFdNX05DUEFJTlQgcmduPTEKICBkdXJpbmc6IFdNX0VSQVNFQktHTkQKICB1cGRhdGUgcmVnaW9uIGtpbmQgMjogMCwwLDEyNCw2MQogIHB1bXBlZDogV01fUEFJTlQgcmNQYWludCAwLDAsMTI0LDYxIGZFcmFzZSAxCi0tIElOVkFMSURBVEV8VVBEQVRFTk9XIChmbGFncyAweDEwMSk6IHJldHVybmVkIDEKICBkdXJpbmc6IFdNX1BBSU5UIHJjUGFpbnQgMCwwLDEyNCw2MSBmRXJhc2UgMQogIHVwZGF0ZSByZWdpb24ga2luZCAxOiBlbXB0eQotLSBJTlZBTElEQVRFfEVSQVNFfEZSQU1FfFVQREFURU5PVyAoZmxhZ3MgMHg1MDUpOiByZXR1cm5lZCAxCiAgZHVyaW5nOiBXTV9OQ1BBSU5UIHJnbj0xCiAgZHVyaW5nOiBXTV9FUkFTRUJLR05ECiAgZHVyaW5nOiBXTV9QQUlOVCByY1BhaW50IDAsMCwxMjQsNjEgZkVyYXNlIDEKICB1cGRhdGUgcmVnaW9uIGtpbmQgMTogZW1wdHkKLS0gSU5WQUxJREFURSB3aXRoIHJlY3QgMTAsMTAsMzAsMjAgKGZsYWdzIDB4MSk6IHJldHVybmVkIDEKICB1cGRhdGUgcmVnaW9uIGtpbmQgMjogMTAsMTAsMzAsMjAKICBwdW1wZWQ6IFdNX1BBSU5UIHJjUGFpbnQgMTAsMTAsMzAsMjAgZkVyYXNlIDEKLS0gSU5WQUxJREFURSB3aXRoIHJlZ2lvbiAwLDAsMTAsMTAgKyAxMDAsNTAsMTIwLDYwIChmbGFncyAweDEpOiByZXR1cm5lZCAxCiAgdXBkYXRlIHJlZ2lvbiBraW5kIDM6IDAsMCwxMCwxMCArIDEwMCw1MCwxMjAsNjAKICBwdW1wZWQ6IFdNX1BBSU5UIHJjUGFpbnQgMCwwLDEyMCw2MCBmRXJhc2UgMQotLSBJTlZBTElEQVRFIHdpdGggdGhhdCByZWdpb24gYW5kIHJlY3QgMTAsMTAsMzAsMjAgKGZsYWdzIDB4MSk6IHJldHVybmVkIDEKICB1cGRhdGUgcmVnaW9uIGtpbmQgMzogMCwwLDEwLDEwICsgMTAwLDUwLDEyMCw2MAogIHB1bXBlZDogV01fUEFJTlQgcmNQYWludCAwLDAsMTIwLDYwIGZFcmFzZSAxCi0tIFZBTElEQVRFIGFmdGVyIEludmFsaWRhdGVSZWN0KE5VTEwsIFRSVUUpIChmbGFncyAweDgpOiByZXR1cm5lZCAxCiAgdXBkYXRlIHJlZ2lvbiBraW5kIDE6IGVtcHR5Ci0tIFZBTElEQVRFIHdpdGggcmVjdCAxMCwxMCwzMCwyMCBhZnRlciBJbnZhbGlkYXRlUmVjdChOVUxMLCBUUlVFKSAoZmxhZ3MgMHg4KTogcmV0dXJuZWQgMQogIHVwZGF0ZSByZWdpb24ga2luZCAzOiAwLDAsMTI0LDEwICsgMCwxMCwxMCwyMCArIDMwLDEwLDEyNCwyMCArIDAsMjAsMTI0LDYxCiAgcHVtcGVkOiBXTV9FUkFTRUJLR05ECiAgcHVtcGVkOiBXTV9QQUlOVCByY1BhaW50IDAsMCwxMjQsNjEgZkVyYXNlIDEKLS0gTk9FUkFTRSBhZnRlciBJbnZhbGlkYXRlUmVjdChOVUxMLCBUUlVFKSAoZmxhZ3MgMHgyMCk6IHJldHVybmVkIDEKICB1cGRhdGUgcmVnaW9uIGtpbmQgMjogMCwwLDEyNCw2MQogIHB1bXBlZDogV01fRVJBU0VCS0dORAogIHB1bXBlZDogV01fUEFJTlQgcmNQYWludCAwLDAsMTI0LDYxIGZFcmFzZSAxCi0tIE5PRlJBTUV8VkFMSURBVEUgYWZ0ZXIgSU5WQUxJREFURXxGUkFNRSAoZmxhZ3MgMHg4MDgpOiByZXR1cm5lZCAxCiAgdXBkYXRlIHJlZ2lvbiBraW5kIDE6IGVtcHR5Ci0tIElOVEVSTkFMUEFJTlQgKGZsYWdzIDB4Mik6IHJldHVybmVkIDEKICB1cGRhdGUgcmVnaW9uIGtpbmQgMTogZW1wdHkKICBwdW1wZWQ6IFdNX1BBSU5UIHJjUGFpbnQgMCwwLDAsMCBmRXJhc2UgMQotLSBOT0lOVEVSTkFMUEFJTlQgYWZ0ZXIgSU5URVJOQUxQQUlOVCAoZmxhZ3MgMHgxMCk6IHJldHVybmVkIDEKICB1cGRhdGUgcmVnaW9uIGtpbmQgMTogZW1wdHkKLS0gMCAoZmxhZ3MgMHgwKTogcmV0dXJuZWQgMQogIHVwZGF0ZSByZWdpb24ga2luZCAxOiBlbXB0eQotLSBJTlZBTElEQVRFfFZBTElEQVRFIChmbGFncyAweDkpOiByZXR1cm5lZCAxCiAgdXBkYXRlIHJlZ2lvbiBraW5kIDI6IDAsMCwxMjQsNjEKICBwdW1wZWQ6IFdNX1BBSU5UIHJjUGFpbnQgMCwwLDEyNCw2MSBmRXJhc2UgMQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nclient 0,0,124,61\n-- INVALIDATE (flags 0x1): returned 1\n  update region kind 2: 0,0,124,61\n  pumped: WM_PAINT rcPaint 0,0,124,61 fErase 1\n-- INVALIDATE|ERASE (flags 0x5): returned 1\n  update region kind 2: 0,0,124,61\n  pumped: WM_ERASEBKGND\n  pumped: WM_PAINT rcPaint 0,0,124,61 fErase 1\n-- INVALIDATE|FRAME (flags 0x401): returned 1\n  update region kind 2: 0,0,124,61\n  pumped: WM_NCPAINT rgn=1\n  pumped: WM_PAINT rcPaint 0,0,124,61 fErase 1\n-- INVALIDATE|ERASE|FRAME (flags 0x405): returned 1\n  update region kind 2: 0,0,124,61\n  pumped: WM_NCPAINT rgn=1\n  pumped: WM_ERASEBKGND\n  pumped: WM_PAINT rcPaint 0,0,124,61 fErase 1\n-- INVALIDATE|ERASE|ERASENOW (flags 0x205): returned 1\n  during: WM_ERASEBKGND\n  update region kind 2: 0,0,124,61\n  pumped: WM_PAINT rcPaint 0,0,124,61 fErase 1\n-- INVALIDATE|ERASE|FRAME|ERASENOW (flags 0x605): returned 1\n  during: WM_NCPAINT rgn=1\n  during: WM_ERASEBKGND\n  update region kind 2: 0,0,124,61\n  pumped: WM_PAINT rcPaint 0,0,124,61 fErase 1\n-- INVALIDATE|UPDATENOW (flags 0x101): returned 1\n  during: WM_PAINT rcPaint 0,0,124,61 fErase 1\n  update region kind 1: empty\n-- INVALIDATE|ERASE|FRAME|UPDATENOW (flags 0x505): returned 1\n  during: WM_NCPAINT rgn=1\n  during: WM_ERASEBKGND\n  during: WM_PAINT rcPaint 0,0,124,61 fErase 1\n  update region kind 1: empty\n-- INVALIDATE with rect 10,10,30,20 (flags 0x1): returned 1\n  update region kind 2: 10,10,30,20\n  pumped: WM_PAINT rcPaint 10,10,30,20 fErase 1\n-- INVALIDATE with region 0,0,10,10 + 100,50,120,60 (flags 0x1): returned 1\n  update region kind 3: 0,0,10,10 + 100,50,120,60\n  pumped: WM_PAINT rcPaint 0,0,120,60 fErase 1\n-- INVALIDATE with that region and rect 10,10,30,20 (flags 0x1): returned 1\n  update region kind 3: 0,0,10,10 + 100,50,120,60\n  pumped: WM_PAINT rcPaint 0,0,120,60 fErase 1\n-- VALIDATE after InvalidateRect(NULL, TRUE) (flags 0x8): returned 1\n  update region kind 1: empty\n-- VALIDATE with rect 10,10,30,20 after InvalidateRect(NULL, TRUE) (flags 0x8): returned 1\n  update region kind 3: 0,0,124,10 + 0,10,10,20 + 30,10,124,20 + 0,20,124,61\n  pumped: WM_ERASEBKGND\n  pumped: WM_PAINT rcPaint 0,0,124,61 fErase 1\n-- NOERASE after InvalidateRect(NULL, TRUE) (flags 0x20): returned 1\n  update region kind 2: 0,0,124,61\n  pumped: WM_ERASEBKGND\n  pumped: WM_PAINT rcPaint 0,0,124,61 fErase 1\n-- NOFRAME|VALIDATE after INVALIDATE|FRAME (flags 0x808): returned 1\n  update region kind 1: empty\n-- INTERNALPAINT (flags 0x2): returned 1\n  update region kind 1: empty\n  pumped: WM_PAINT rcPaint 0,0,0,0 fErase 1\n-- NOINTERNALPAINT after INTERNALPAINT (flags 0x10): returned 1\n  update region kind 1: empty\n-- 0 (flags 0x0): returned 1\n  update region kind 1: empty\n-- INVALIDATE|VALIDATE (flags 0x9): returned 1\n  update region kind 2: 0,0,124,61\n  pumped: WM_PAINT rcPaint 0,0,124,61 fErase 1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 754
+    }
+  ]
+}

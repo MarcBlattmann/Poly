@@ -178,6 +178,10 @@ pub enum SockOpt {
     IpTos(u8),
     Ipv6V6Only(bool),
     Ipv6UnicastHops(Option<u8>),
+    /// `IP_RECVERR` / `IPV6_RECVERR` (ip(7), ipv6(7)): extended errors
+    /// queued for `MSG_ERRQUEUE` (Chromium sets it on its UDP sockets).
+    IpRecvErr(bool),
+    Ipv6RecvErr(bool),
     NetlinkAddMembership(u32),
     NetlinkDropMembership(u32),
 }
@@ -214,6 +218,8 @@ pub enum OptName {
     IpTos,
     Ipv6V6Only,
     Ipv6UnicastHops,
+    IpRecvErr,
+    Ipv6RecvErr,
 }
 
 /// An option's value, as `getsockopt` encodes it.

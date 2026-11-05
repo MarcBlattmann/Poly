@@ -210,7 +210,11 @@ fn stop(k: &mut dyn LinuxKernel, kind: StopKind) -> Option<Restarted> {
                         }
                         t.touch();
                     });
-                    return Some(Restarted { resume: Resume { how: How::Cont, signal: 0 }, regs: None, info: kind.info });
+                    return Some(Restarted {
+                        resume: Resume { how: How::Cont, signal: 0 },
+                        regs: None,
+                        info: kind.info,
+                    });
                 }
                 k.wait_tree(generation);
             }
@@ -265,15 +269,7 @@ fn load(k: &mut dyn LinuxKernel, resume: Resume, stop: Option<Box<Stop>>) -> Res
 /// (`None`: suppressed).
 pub fn signal_stop(k: &mut dyn LinuxKernel, info: SigInfo) -> Option<SigInfo> {
     let signal = info.signal();
-    let kind = StopKind {
-        signal,
-        event: 0,
-        delivery: true,
-        info,
-        message: 0,
-        op: SyscallOp::None,
-        rax: None,
-    };
+    let kind = StopKind { signal, event: 0, delivery: true, info, message: 0, op: SyscallOp::None, rax: None };
     let tracer = with_link(k, |l| l.tracer).unwrap_or(0);
     let Some(r) = stop(k, kind) else { return Some(info) };
     match r.resume.signal {
@@ -311,6 +307,7 @@ pub fn left_kernel(k: &mut dyn LinuxKernel) {
 }
 
 /// What [`syscall_entry`] decided.
+#[derive(Debug)]
 pub struct Entry {
     /// The call is skipped (the tracer set `orig_rax` to -1); `rax` holds
     /// its result.
@@ -465,10 +462,9 @@ pub fn trace_new_child(t: &mut ProcessTree, creator: i32, child: i32, flags: u64
 /// fork, vfork or clone event stop its options ask for, with the child's
 /// id as message.
 pub fn clone_event(k: &mut dyn LinuxKernel, child: i32, flags: u64, exit_signal: u32) {
-    let Some(e) = with_link(k, |l| {
-        inherits(l, flags, exit_signal).filter(|&e| l.options & state::option_for(e) != 0)
-    })
-    .flatten() else {
+    let Some(e) =
+        with_link(k, |l| inherits(l, flags, exit_signal).filter(|&e| l.options & state::option_for(e) != 0)).flatten()
+    else {
         return;
     };
     stop(k, StopKind::event(e, child as u64));
@@ -730,8 +726,7 @@ fn request_of(k: &mut dyn LinuxKernel, request: u64, pid: i32, addr: u64, data: 
             Ok(0)
         }
         req::GET_SYSCALL_INFO => {
-            let (b, len) =
-                with_stop(k, target, |s| state::syscall_info(&s.op, s.regs[reg::RIP], s.regs[reg::RSP]))?;
+            let (b, len) = with_stop(k, target, |s| state::syscall_info(&s.op, s.regs[reg::RIP], s.regs[reg::RSP]))?;
             let n = (addr as usize).min(len);
             k.copy_to_user(out, &b[..n])?;
             Ok(len as u64)
@@ -938,8 +933,14 @@ mod tests {
         t.insert_child(10, 10, 11, SIGCHLD, 0);
         // 1 traces its grandchild 11 (not its child).
         t.attach(11, stopped(1));
-        let filter =
-            WaitFilter { selector: Selector::Pid(11), ended: true, stopped: false, continued: false, consume: true, clones: Clones::Include };
+        let filter = WaitFilter {
+            selector: Selector::Pid(11),
+            ended: true,
+            stopped: false,
+            continued: false,
+            consume: true,
+            clones: Clones::Include,
+        };
         match t.poll(1, &filter) {
             Poll::Ready(w) => assert_eq!(wait::status_word(w.event), (5 << 8) | 0x7f | (128 << 16)),
             other => panic!("{other:?}"),

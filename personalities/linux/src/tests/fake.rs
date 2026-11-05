@@ -139,6 +139,8 @@ pub struct FakeKernel {
     pub cpus: u32,
     /// Every madvise that reached the kernel (ADR 0049).
     pub advised: Vec<(u64, u64, crate::sys::madvise::Advice)>,
+    /// Every PR_SET_VMA_ANON_NAME that reached the kernel.
+    pub named: Vec<(u64, u64, Option<Vec<u8>>)>,
     /// mlock (`true`) and munlock calls: address, length.
     pub locked: Vec<(u64, u64, crate::kernel::MemLock)>,
     /// Locked pages (by page number) and the mlockall(2) future setting.
@@ -240,6 +242,7 @@ impl FakeKernel {
             ioctls: Vec::new(),
             protects: Vec::new(),
             advised: Vec::new(),
+            named: Vec::new(),
             locked: Vec::new(),
             locked_pages: alloc::collections::BTreeSet::new(),
             lock_future: None,
@@ -803,6 +806,11 @@ impl LinuxKernel for FakeKernel {
             true => crate::kernel::PageQuery::Present,
             false => crate::kernel::PageQuery::Unmapped,
         })
+    }
+
+    fn name_anon(&mut self, addr: u64, len: u64, name: Option<&[u8]>) -> Result<(), Errno> {
+        self.named.push((addr, len, name.map(<[u8]>::to_vec)));
+        Ok(())
     }
 
     fn madvise(&mut self, addr: u64, len: u64, advice: crate::sys::madvise::Advice) -> Result<(), Errno> {

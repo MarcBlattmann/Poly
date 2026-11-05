@@ -62,6 +62,7 @@ fn region(start: u64, end: u64, prot: Prot, kind: Kind, backing: Backing<u32>) -
         locked: false,
         sealed: false,
         uffd: 0,
+        name: None,
     }
 }
 
@@ -1075,11 +1076,53 @@ fn forced_writes_copy_private_pages_and_keep_their_protection() {
         |page, file, offset, prot, private_copy| FaultAction::ReadFile { page, file, offset, prot, private_copy };
     // A read-only private file page: a private copy, still read-only.
     assert_eq!(m.fault_forced(a + 8, PageState::Absent), read(a, 5, 16 * P, Prot::READ, true));
-    assert_eq!(m.fault_forced(a, PageState::Present { refs: 2 }), FaultAction::CopyOnWrite { page: a, prot: Prot::READ });
+    assert_eq!(
+        m.fault_forced(a, PageState::Present { refs: 2 }),
+        FaultAction::CopyOnWrite { page: a, prot: Prot::READ }
+    );
     // A read-only shared mapping is not written.
     assert_eq!(m.fault_forced(a + P, PageState::Absent), FaultAction::Segv(SegvCode::AccErr));
     // Anonymous read-only memory.
-    assert_eq!(m.fault_forced(a + 2 * P, PageState::Absent), FaultAction::ZeroFill { page: a + 2 * P, prot: Prot::READ });
+    assert_eq!(
+        m.fault_forced(a + 2 * P, PageState::Absent),
+        FaultAction::ZeroFill { page: a + 2 * P, prot: Prot::READ }
+    );
     // Nothing mapped.
     assert_eq!(m.fault_forced(a + 9 * P, PageState::Absent), FaultAction::Segv(SegvCode::MapErr));
+}
+
+// ------------------------------------------------------------ anon names --
+
+#[test]
+fn anonymous_regions_take_names_and_split_for_them() {
+    let mut m = map_with(small());
+    fixed(&mut m, MIN, 3, Prot::RW);
+    let names = |m: &Map| {
+        m.regions().map(|v| (v.start, v.end, v.name.as_deref().map(std::string::String::from))).collect::<Vec<_>>()
+    };
+    let name = |s: &str| Some(Arc::<str>::from(s));
+    m.set_anon_name(MIN, 3 * P, name("region")).unwrap();
+    assert_eq!(names(&m), vec![(MIN, MIN + 3 * P, Some("region".into()))]);
+    m.set_anon_name(MIN + P, 1, name("mid")).unwrap();
+    assert_eq!(
+        names(&m),
+        vec![
+            (MIN, MIN + P, Some("region".into())),
+            (MIN + P, MIN + 2 * P, Some("mid".into())),
+            (MIN + 2 * P, MIN + 3 * P, Some("region".into()))
+        ],
+        "the length is rounded up to a page"
+    );
+    m.set_anon_name(MIN, 3 * P, None).unwrap();
+    assert_eq!(names(&m), vec![(MIN, MIN + 3 * P, None)], "unnamed again, merged");
+    assert_eq!(m.set_anon_name(MIN + 1, P, name("x")), Err(Error::Invalid));
+    assert_eq!(m.set_anon_name(MIN, 4 * P, name("x")), Err(Error::NoMemory), "a hole");
+    assert_eq!(names(&m), vec![(MIN, MIN + 3 * P, None)], "nothing changed");
+    assert_eq!(m.set_anon_name(MIN, 0, name("x")), Ok(()));
+    m.map(file(P, Prot::READ, 7, 0, false, Placement::Fixed(MIN + 10 * P))).unwrap();
+    assert_eq!(m.set_anon_name(MIN + 10 * P, P, name("x")), Err(Error::NotAnonymous));
+    assert_eq!(Error::NotAnonymous.linux_errno(), 9);
+    // A fork child's copy keeps the names.
+    m.set_anon_name(MIN, P, name("kept")).unwrap();
+    assert_eq!(m.clone().find(MIN).and_then(|v| v.name.clone()), name("kept"));
 }

@@ -1274,7 +1274,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">0.1%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">42 / 58,682 entries · 73,276 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">43 / 58,682 entries · 73,276 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 16,439 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="157.7" height="218.0" fill="#e6eaef"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2da44e"/>
@@ -1343,7 +1343,7 @@
 <g><title>user32: 31 / 992 done (3.1%)</title>
 <rect x="304.4" y="595.6" width="40.2" height="48.3" fill="#e6eaef"/>
 <rect x="304.4" y="595.6" width="1.3" height="48.3" fill="#2da44e"/>
-<rect x="305.7" y="595.6" width="0.2" height="48.3" fill="#218bff"/>
+<rect x="305.7" y="595.6" width="1.9" height="48.3" fill="#218bff"/>
 <rect x="303.4" y="594.6" width="42.2" height="50.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="309.4" y="609.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">user…</text>
 </g>
@@ -1366,10 +1366,10 @@
 <rect x="346.7" y="548.4" width="3.9" height="35.5" fill="#218bff"/>
 <rect x="345.6" y="547.4" width="33.6" height="37.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>gdi32: 8 / 545 done (1.5%)</title>
+<g><title>gdi32: 9 / 545 done (1.7%)</title>
 <rect x="346.6" y="585.9" width="31.6" height="32.7" fill="#e6eaef"/>
 <rect x="346.6" y="585.9" width="0.5" height="32.7" fill="#2da44e"/>
-<rect x="347.1" y="585.9" width="0.2" height="32.7" fill="#218bff"/>
+<rect x="347.1" y="585.9" width="0.5" height="32.7" fill="#218bff"/>
 <rect x="345.6" y="584.9" width="33.6" height="34.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>icuuc: 0 / 542 done (0.0%)</title>
@@ -2119,9 +2119,9 @@
 <rect x="575.8" y="681.5" width="9.2" height="6.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <text x="600.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">Linux</text>
-<text x="885.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">86.5%</text>
-<text x="600.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">320 / 370 entries</text>
-<g><title>syscalls: 320 / 370 done (86.5%)</title>
+<text x="885.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">88.2%</text>
+<text x="600.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">321 / 370 entries · 6 not applicable by design</text>
+<g><title>syscalls: 321 / 370 done (88.2%)</title>
 <rect x="601.0" y="469.0" width="283.0" height="218.0" fill="#e6eaef"/>
 <rect x="601.0" y="469.0" width="12.9" height="12.8" fill="#2da44e"/>
 <rect x="601.0" y="469.0" width="12.9" height="12.8" fill="none" stroke="#ffffff" stroke-width="0.5"/>
@@ -2763,7 +2763,7 @@
 <rect x="749.2" y="648.5" width="13.5" height="12.8" fill="none" stroke="#ffffff" stroke-width="0.5"/>
 <rect x="762.7" y="648.5" width="13.5" height="12.8" fill="#2da44e"/>
 <rect x="762.7" y="648.5" width="13.5" height="12.8" fill="none" stroke="#ffffff" stroke-width="0.5"/>
-<rect x="776.2" y="648.5" width="13.5" height="12.8" fill="#218bff"/>
+<rect x="776.2" y="648.5" width="13.5" height="12.8" fill="#2da44e"/>
 <rect x="776.2" y="648.5" width="13.5" height="12.8" fill="none" stroke="#ffffff" stroke-width="0.5"/>
 <rect x="789.7" y="648.5" width="13.5" height="12.8" fill="#218bff"/>
 <rect x="789.7" y="648.5" width="13.5" height="12.8" fill="none" stroke="#ffffff" stroke-width="0.5"/>
@@ -2862,7 +2862,7 @@
 <rect x="870.5" y="674.2" width="13.5" height="12.8" fill="none" stroke="#ffffff" stroke-width="0.5"/>
 <rect x="600.0" y="468.0" width="285.0" height="220.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="606.0" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">syscalls</text>
-<text x="606.0" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">86%</text>
+<text x="606.0" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">88%</text>
 </g>
 <rect x="16.0" y="703.0" width="10.0" height="10.0" fill="#2da44e" rx="2" stroke="#d0d7de"/>
 <text x="31.0" y="712.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">green</text>
