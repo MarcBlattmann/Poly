@@ -588,6 +588,12 @@ unsafe fn urls_and_dates() {
         let u = w!("http://user:pw@example.com:8080/a/b?c=d#e");
         let mut comp = core::mem::zeroed::<UrlComponents>();
         comp.struct_size = core::mem::size_of::<UrlComponents>() as u32;
+        comp.scheme_length = 1;
+        comp.user_name_length = 1;
+        comp.password_length = 1;
+        comp.host_name_length = 1;
+        comp.url_path_length = 1;
+        comp.extra_info_length = 1;
         let r = WinHttpCrackUrl(u, 0, 0, &mut comp);
         check(r != 0);
         check_got(comp.scheme_id == 1, comp.scheme_id as u32);
@@ -597,7 +603,7 @@ unsafe fn urls_and_dates() {
         check_got(comp.password_length == 2, comp.password_length);
         check_got(comp.host_name_length == 11, comp.host_name_length);
         check_got(comp.url_path_length == 4, comp.url_path_length);
-        check_got(comp.extra_info_length == 8, comp.extra_info_length);
+        check_got(comp.extra_info_length == 6, comp.extra_info_length);
         check_got(comp.scheme.is_null() == false, 1u32);
         check_got(comp.host_name.is_null() == false, 1u32);
         check_got(comp.url_path.is_null() == false, 1u32);
@@ -636,25 +642,26 @@ unsafe fn urls_and_dates() {
         check_got(comp2.password_length == 2, comp2.password_length);
         check_got(comp2.host_name_length == 11, comp2.host_name_length);
         check_got(comp2.url_path_length == 4, comp2.url_path_length);
-        check_got(comp2.extra_info_length == 8, comp2.extra_info_length);
+        check_got(comp2.extra_info_length == 6, comp2.extra_info_length);
         // unit after text is NUL
         check_got(scheme[4] == 0, 1u32);
         check_got(user[4] == 0, 1u32);
         check_got(password[2] == 0, 1u32);
         check_got(host[11] == 0, 1u32);
         check_got(path[4] == 0, 1u32);
-        check_got(extra[8] == 0, 1u32);
+        check_got(extra[6] == 0, 1u32);
 
         // ----- c) Too small buffer -----
+        let comp_path = [0u16; 2];
         let mut comp3 = core::mem::zeroed::<UrlComponents>();
         comp3.struct_size = core::mem::size_of::<UrlComponents>() as u32;
-        comp3.url_path = core::ptr::null_mut();
-        comp3.url_path_length = 0;
+        comp3.url_path = comp_path.as_ptr() as *mut u16;
+        comp3.url_path_length = comp_path.len() as u32;
         let r = WinHttpCrackUrl(u, 0, 0, &mut comp3);
         check_fail(r, ERROR_INSUFFICIENT_BUFFER);
         check_got(comp3.url_path_length == 5, comp3.url_path_length);
 
-        // ----- d) ftp://h/ unrerecognized scheme -----
+        // ----- d) ftp://h/ unrecognized scheme -----
         let f = w!("ftp://h/");
         let mut comp4 = core::mem::zeroed::<UrlComponents>();
         comp4.struct_size = core::mem::size_of::<UrlComponents>() as u32;
@@ -705,20 +712,12 @@ unsafe fn urls_and_dates() {
         let mut tbuf = [0u16; 31];
         let r = WinHttpTimeFromSystemTime(&st, tbuf.as_mut_ptr());
         check(r != 0);
-        let expected_gmt = w!("Tue, 03 Nov 2026 14:05:00 GMT");
-        // Compare byte-by-byte: expected_gmt chars vs tbuf UTF-16 units
-        let mut ok = true;
+        let want = b"Tue, 03 Nov 2026 14:05:00 GMT";
+        let mut ok = tbuf[29] == 0;
         let mut i = 0;
-        while i < 29 {
-            if *expected_gmt.add(i) != tbuf[i * 2] {
-                ok = false;
-                break;
-            }
+        while ok && i < want.len() {
+            ok = tbuf[i] == u16::from(want[i]);
             i += 1;
-        }
-        // NUL after the 29 chars (position 29*2+1 in the u16 buffer)
-        if ok && tbuf[29 * 2 + 1] != 0 {
-            ok = false;
         }
         check_got(ok, 1u32);
 
