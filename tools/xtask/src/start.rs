@@ -728,7 +728,9 @@ impl Menu {
     /// Enter or Space on an option.
     fn activate(&mut self, o: Opt, enter: bool) {
         match o {
-            Opt::Release | Opt::TestApps | Opt::FreshState | Opt::FreshDisk | Opt::Accel | Opt::Scale => self.change(o, 1),
+            Opt::Release | Opt::TestApps | Opt::FreshState | Opt::FreshDisk | Opt::Accel | Opt::Scale => {
+                self.change(o, 1)
+            }
             Opt::Size | Opt::Display | Opt::KernelArgs if enter => {
                 let now = match o {
                     Opt::Size if self.s.size == "auto" => String::new(),

@@ -1017,7 +1017,9 @@ impl Wm {
     /// window's Win32 geometry. `client` is in screen coordinates, as the
     /// desktop link's `Configure` record is.
     pub fn configure_from_desktop(&mut self, hwnd: u32, client: Rect, frame: FrameMetrics) -> bool {
-        let Some(window) = self.get(u64::from(hwnd)) else { return false };
+        if self.get(u64::from(hwnd)).is_none() {
+            return false;
+        }
         let (ox, oy) = self.parent_origin(hwnd);
         let outer = frame.window_from_surface(client);
         let window_rel = Rect::new(outer.left - ox, outer.top - oy, outer.right - ox, outer.bottom - oy);
@@ -1662,6 +1664,29 @@ mod tests {
             wm.handle(at(50), Request::Peek { filter: 0, min: 0, max: 0, flags: PM_REMOVE }, &mut Effects::default()),
             Reply::Empty { next_timer_ms: Some(10) }
         ));
+    }
+
+    #[test]
+    fn desktop_moves_update_win32_geometry_and_close_is_posted_to_its_thread() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let hwnd = create(&mut wm, A, "C", WS_POPUP, 0, 0);
+        let client = Rect::new(200, 300, 584, 561);
+        assert!(wm.configure_from_desktop(hwnd, client, FrameMetrics::POLY));
+        let info = wm.info(hwnd).unwrap();
+        assert_eq!(info.client, client);
+        assert_eq!(info.window, Rect::new(199, 275, 585, 562));
+        assert_eq!(info.window_rel, info.window);
+
+        let mut fx = Effects::default();
+        assert!(wm.post_system_message(hwnd, crate::user::WM_CLOSE, 77, &mut fx));
+        assert_eq!(fx.wake, [(A.pid, A.tid)]);
+        let Reply::Message { msg } =
+            wm.handle(Ctx { now: 77, ..A }, Request::Peek { filter: 0, min: 0, max: 0, flags: PM_REMOVE }, &mut fx)
+        else {
+            panic!("the compositor close request was not queued")
+        };
+        assert_eq!((msg.hwnd, msg.msg, msg.time), (hwnd, crate::user::WM_CLOSE, 77));
     }
 
     #[test]

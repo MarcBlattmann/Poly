@@ -26,11 +26,11 @@ use crate::os;
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
-use poly_wayland::compose::{Content, Rect, Scene, WindowId};
-use poly_win32k::frame::{FrameMetrics, Rect as WinRect};
+use poly_wayland::compose::{Content, Hit, Rect, Scene, WindowId};
+use poly_win32k::frame::FrameMetrics;
 use poly_win32k::link::{
-    BufferId, CursorShape, DEVICE, Edges, FromCompositor, PixelFormat, READ_BUFFER, ReadBuffer, Record, Request, Stream,
-    SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState,
+    BufferId, CursorShape, DEVICE, Edges, FromCompositor, PixelFormat, READ_BUFFER, ReadBuffer, Record, Request,
+    Stream, SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState,
 };
 
 /// The scene owner of Windows surfaces: this bit, or'ed with the surface,
@@ -95,6 +95,39 @@ impl WindowsSurfaces {
         self.surfaces.iter().find(|(_, s)| s.window == window).map(|(&id, _)| id)
     }
 
+    /// The Windows surface under a title-bar close hit, if any. Use the
+    /// scene's hit test so a covered window cannot receive the click.
+    pub fn close_at(&self, scene: &Scene, x: i32, y: i32) -> Option<SurfaceId> {
+        match scene.hit_test(x, y) {
+            Hit::Close(window) => self.surface_of(window),
+            _ => None,
+        }
+    }
+
+    /// Configure records for Windows surfaces moved or resized in the
+    /// scene. Their cached geometry suppresses duplicate records.
+    pub fn sync_geometry(&mut self, scene: &Scene) -> Vec<FromCompositor> {
+        let mut moved = Vec::new();
+        for (&surface, s) in &self.surfaces {
+            let Some(win) = scene.window(s.window) else { continue };
+            let (x, y) = win.position();
+            let (width, height) = win.content().logical_size();
+            let geometry = (x, y, width.max(0) as u32, height.max(0) as u32);
+            if s.geometry != geometry {
+                moved.push((surface, geometry));
+            }
+        }
+        for (surface, (x, y, width, height)) in &moved {
+            if let Some(s) = self.surfaces.get_mut(surface) {
+                s.geometry = (*x, *y, *width, *height);
+            }
+        }
+        moved
+            .into_iter()
+            .map(|(surface, (x, y, width, height))| FromCompositor::Configure { surface, x, y, width, height })
+            .collect()
+    }
+
     /// win32k's connection ended: its windows leave the scene.
     pub fn clear(&mut self, scene: &mut Scene) -> Vec<Action> {
         let mut actions = Vec::new();
@@ -157,7 +190,7 @@ impl WindowsSurfaces {
                 }
             }
             ToCompositor::Damage { surface, x, y, width, height } => {
-                if let Some(&Surface { window, buffer: Some((b, bw, bh, stride, format)) }) =
+                if let Some(&Surface { window, buffer: Some((b, bw, bh, stride, format)), .. }) =
                     self.surfaces.get(&surface)
                     && let Some(bytes) = buffers.bytes(b)
                 {
@@ -299,16 +332,7 @@ impl Link {
     /// The compositor normally sends an xdg close to Wayland clients; a
     /// Windows surface needs the equivalent request over `/dev/win32k`.
     pub fn close_at(&mut self, scene: &Scene, x: i32, y: i32) -> bool {
-        let surface = self.surfaces.surfaces.iter().find_map(|(&surface, s)| {
-            let win = scene.window(s.window)?;
-            if !win.is_decorated() {
-                return None;
-            }
-            let frame = scene.frame_rect(s.window)?;
-            let outer = WinRect::new(frame.x, frame.y, frame.x + frame.width, frame.y + frame.height);
-            FrameMetrics::POLY.buttons(outer).close.contains(x, y).then_some(surface)
-        });
-        if let Some(surface) = surface {
+        if let Some(surface) = self.surfaces.close_at(scene, x, y) {
             self.send(FromCompositor::Request { surface, request: Request::Close });
             true
         } else {
@@ -319,22 +343,8 @@ impl Link {
     /// Tell win32k where the compositor moved a Windows surface. This keeps
     /// the app's GetWindowRect and later input in step with Poly's frame.
     pub fn sync_geometry(&mut self, scene: &Scene) {
-        let mut moved = Vec::new();
-        for (&surface, s) in &self.surfaces.surfaces {
-            let Some(win) = scene.window(s.window) else { continue };
-            let (x, y) = win.position();
-            let (width, height) = win.content().logical_size();
-            let (width, height) = (width.max(0) as u32, height.max(0) as u32);
-            let geometry = (x, y, width, height);
-            if s.geometry != geometry {
-                moved.push((surface, geometry));
-            }
-        }
-        for (surface, (x, y, width, height)) in moved {
-            if let Some(s) = self.surfaces.surfaces.get_mut(&surface) {
-                s.geometry = (x, y, width, height);
-            }
-            self.send(FromCompositor::Configure { surface, x, y, width, height });
+        for record in self.surfaces.sync_geometry(scene) {
+            self.send(record);
         }
     }
 
@@ -503,6 +513,22 @@ mod tests {
         assert_eq!(c.pixels[0], 0xFF10_2030);
         assert_eq!(c.pixels[7], 0xFFFF_FFFF);
         assert_eq!(c.pixels[1], 0xFF00_0000);
+
+        // The compositor reports moved client geometry once, and the
+        // Windows frame's close hit maps back to the owning surface.
+        assert!(ws.sync_geometry(&scene).is_empty());
+        scene.set_position(w, 75, 120);
+        assert_eq!(
+            ws.sync_geometry(&scene),
+            vec![FromCompositor::Configure { surface: s, x: 75, y: 120, width: 4, height: 2 }]
+        );
+        assert!(ws.sync_geometry(&scene).is_empty(), "unchanged geometry is not resent");
+        let frame = scene.frame_rect(w).unwrap();
+        let close = FrameMetrics::POLY
+            .buttons(poly_win32k::frame::Rect::new(frame.x, frame.y, frame.x + frame.width, frame.y + frame.height))
+            .close;
+        assert_eq!(ws.close_at(&scene, close.left, close.top), Some(s));
+        assert_eq!(ws.close_at(&scene, 5, 5), None);
 
         // A new buffer releases the old one back to win32k, which frees it.
         let b2 = d.attach_buffer(s, 8, 4, 32, PixelFormat::Xrgb8888).unwrap();

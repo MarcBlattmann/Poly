@@ -791,14 +791,29 @@ impl Desktop {
     /// logged.
     pub fn sync(&mut self, server: &mut Server) {
         self.internal_events(server);
+        let mut app_exited = false;
+        self.children.retain(|(pid, name)| match os::try_wait(*pid) {
+            Some(status) => {
+                println!("poly-compositor: {name} (pid {pid}) exited with status {status}");
+                app_exited = true;
+                false
+            }
+            None => true,
+        });
         let now: BTreeSet<u32> = server.scene().windows().iter().filter(|w| w.is_visible()).map(|w| w.id().0).collect();
         for w in server.scene().windows().iter().filter(|w| w.is_visible() && !self.windows.contains(&w.id().0)) {
             let (x, y) = w.position();
             let (cw, ch) = w.content().logical_size();
             println!("poly-compositor: window {:?} shown at {x},{y} size {cw}x{ch}", w.title());
         }
-        if now.is_empty() && !self.windows.is_empty() && !self.shell.launcher().is_visible() {
+        if desktop::launcher_should_reopen(
+            self.shell.launcher().is_visible(),
+            !now.is_empty(),
+            !self.windows.is_empty(),
+            app_exited,
+        ) {
             self.shell.toggle_launcher();
+            println!("poly-compositor: launcher shown");
         }
         self.windows = now;
         // Where the windows are: the ridge's edge shows over them.
@@ -850,13 +865,6 @@ impl Desktop {
             server.scene_mut().damage_logical(r);
         }
         server.set_keyboard_suspended(self.shell.launcher().is_visible());
-        self.children.retain(|(pid, name)| match os::try_wait(*pid) {
-            Some(status) => {
-                println!("poly-compositor: {name} (pid {pid}) exited with status {status}");
-                false
-            }
-            None => true,
-        });
     }
 
     /// How long the main loop may sleep: the next toast's expiry or the

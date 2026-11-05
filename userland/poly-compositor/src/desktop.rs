@@ -32,9 +32,20 @@ pub const WALLPAPERS: &str = "/usr/share/poly/wallpapers";
 pub fn launcher_catalog(files: Vec<App>, test_apps: bool) -> Vec<App> {
     let mut apps = poly_shell::apps::catalog(files);
     if !test_apps {
-        apps.retain(|app| !matches!(app.name.as_str(), "Poly Demo" | "Wayland Test Client"));
+        apps.retain(|app| {
+            !matches!(
+                app.name.as_str(),
+                "Poly Demo" | "Wayland Test Client" | "Demo Window" | "Poly Fill" | "Send Test Notification"
+            )
+        });
     }
     apps
+}
+
+/// Whether an empty desktop should show the launcher after the last window
+/// disappears or a no-window app exits.
+pub fn launcher_should_reopen(launcher_visible: bool, has_windows: bool, had_windows: bool, app_exited: bool) -> bool {
+    !launcher_visible && !has_windows && (had_windows || app_exited)
 }
 
 /// Give the shell the wallpapers' pictures that are on the disk.
@@ -272,13 +283,38 @@ mod tests {
 
     #[test]
     fn test_clients_are_opt_in_launcher_apps() {
-        let normal: Vec<String> = launcher_catalog(Vec::new(), false).into_iter().map(|a| a.name).collect();
+        let files: Vec<App> = [
+            ("demo-window.desktop", "Demo Window"),
+            ("poly-fill.desktop", "Poly Fill"),
+            ("notify-test.desktop", "Send Test Notification"),
+        ]
+        .into_iter()
+        .map(|(file, name)| {
+            poly_shell::apps::parse_desktop_entry(
+                file,
+                &alloc::format!("[Desktop Entry]\nType=Application\nName={name}\nExec=/bin/test-app\n"),
+            )
+            .unwrap()
+        })
+        .collect();
+        let normal: Vec<String> = launcher_catalog(files.clone(), false).into_iter().map(|a| a.name).collect();
         assert!(normal.iter().any(|name| name == "Settings"));
-        assert!(!normal.iter().any(|name| name == "Poly Demo"));
-        assert!(!normal.iter().any(|name| name == "Wayland Test Client"));
+        for fixture in ["Poly Demo", "Wayland Test Client", "Demo Window", "Poly Fill", "Send Test Notification"] {
+            assert!(!normal.iter().any(|name| name == fixture), "{fixture} appeared in the normal launcher");
+        }
 
-        let tests: Vec<String> = launcher_catalog(Vec::new(), true).into_iter().map(|a| a.name).collect();
-        assert!(tests.iter().any(|name| name == "Poly Demo"));
-        assert!(tests.iter().any(|name| name == "Wayland Test Client"));
+        let tests: Vec<String> = launcher_catalog(files, true).into_iter().map(|a| a.name).collect();
+        for fixture in ["Poly Demo", "Wayland Test Client", "Demo Window", "Poly Fill", "Send Test Notification"] {
+            assert!(tests.iter().any(|name| name == fixture), "{fixture} missing from the test launcher");
+        }
+    }
+
+    #[test]
+    fn an_empty_desktop_returns_to_the_launcher_after_an_app_exits() {
+        assert!(launcher_should_reopen(false, false, false, true), "no-window apps such as notify-send");
+        assert!(launcher_should_reopen(false, false, true, false), "the last window closed");
+        assert!(!launcher_should_reopen(true, false, false, true), "do not toggle a visible launcher off");
+        assert!(!launcher_should_reopen(false, true, true, true), "another window is still open");
+        assert!(!launcher_should_reopen(false, false, false, false), "a live app has not opened a window yet");
     }
 }

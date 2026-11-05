@@ -3,18 +3,12 @@
 //! and tablet; boot group `desktop` does the same and drives it through
 //! QMP.
 //!
-//! The image: `/bin/poly-compositor` (as init, `--desktop`), the Wayland
-//! test clients `/bin/wl-demo` (the launcher's "Poly Demo") and
-//! `/bin/wl-client` ("Wayland Test Client"), native programs of
-//! `userland/poly-wl-demo` built on every host (ADR 0133), the Windows GUI
-//! test program of `desktop-win32` (`/win/win_gui_fill.exe`, "Poly Fill",
-//! below) where it can be built, a desktop file
-//! `/usr/share/applications/demo-window.desktop` ("Demo Window", which
-//! starts `wl-demo` too, so the launcher's desktop file path is used), and
-//! DejaVu Sans from the font store and Alpine Shell's fonts (Geist, Geist
-//! Mono, Averia Serif Libre; ADR 0127) when they are fetched (`cargo xtask
-//! fonts fetch`; without them the shell draws in DejaVu Sans or with the
-//! bitmap font).
+//! The image: `/bin/poly-compositor` (as init, `--desktop`), the native
+//! programs of `userland/poly-wl-demo`, and the system fonts/wallpapers.
+//! `--test-apps` additionally exposes the native clients, their desktop
+//! files, and the Windows GUI test program (`/win/win_gui_fill.exe`, "Poly
+//! Fill") where it can be built; the ordinary desktop keeps those fixtures
+//! out of the launcher.
 //!
 //! The boot test, on QEMU's screen (`screendump` of the virtio GPU) and
 //! its input (`input-send-event`, QEMU's QMP reference):
@@ -120,8 +114,7 @@ pub fn devices_sized((w, h): (u32, u32)) -> Vec<String> {
 pub const PROGRAMS: [&str; 4] = ["poly-compositor", "wl-demo", "wl-client", "notify-send"];
 
 /// Whether this checkout has the Windows GUI test program of
-/// `desktop-win32` ([`WIN32_TEST`], ADR 0131), which every desktop image
-/// carries behind a desktop file ("Poly Fill") when it can be built here.
+/// `desktop-win32` ([`WIN32_TEST`], ADR 0131).
 fn has_windows_app() -> bool {
     root().join(format!("tests/windows/{WIN32_TEST}.rs")).is_file()
 }
@@ -129,6 +122,22 @@ fn has_windows_app() -> bool {
 /// The name a desktop file gives its app.
 fn desktop_name(file: &str) -> &str {
     file.lines().find_map(|l| l.strip_prefix("Name=")).unwrap_or("?")
+}
+
+/// Desktop entries for test fixtures. No fixture file is installed in an
+/// ordinary desktop image.
+fn application_files(test_apps: bool) -> Vec<(String, u16, Vec<u8>)> {
+    if !test_apps {
+        return Vec::new();
+    }
+    [
+        ("usr/share/applications/demo-window.desktop", DESKTOP_FILE),
+        ("usr/share/applications/wayland-test-client.desktop", WL_CLIENT_FILE),
+        ("usr/share/applications/notify-test.desktop", NOTIFY_FILE),
+    ]
+    .into_iter()
+    .map(|(path, contents)| (path.to_string(), 0o644, contents.as_bytes().to_vec()))
+    .collect()
 }
 
 /// What the desktop's launcher offers beyond its real apps, for `cargo
@@ -179,8 +188,8 @@ fn windows_app_files(test_apps: bool) -> Vec<(String, u16, Vec<u8>)> {
     }
 }
 
-/// Build the desktop's initramfs, with the Windows test app when it can
-/// be built; returns its path.
+/// Build the desktop's initramfs; test fixture apps are included only when
+/// requested, and the Windows app only when it can be built.
 pub fn image(test_apps: bool) -> Result<PathBuf> {
     build_image("poly-desktop-initramfs.cpio", test_apps, move || windows_app_files(test_apps))
 }
@@ -225,11 +234,7 @@ fn build_image(
 /// fonts, the wallpapers.
 fn image_files(test_apps: bool) -> Result<initramfs::Tree> {
     let mut tree = initramfs::Tree::default();
-    if test_apps {
-        tree.files.push(("usr/share/applications/demo-window.desktop".into(), 0o644, DESKTOP_FILE.as_bytes().into()));
-        tree.files.push(("usr/share/applications/wayland-test-client.desktop".into(), 0o644, WL_CLIENT_FILE.as_bytes().into()));
-        tree.files.push(("usr/share/applications/notify-test.desktop".into(), 0o644, NOTIFY_FILE.as_bytes().into()));
-    }
+    tree.files.extend(application_files(test_apps));
     let font = crate::fonts::cache_dir().join("DejaVuSans.ttf");
     match std::fs::read(&font) {
         Ok(data) => tree.files.push(("usr/share/fonts/truetype/dejavu/DejaVuSans.ttf".into(), 0o644, data)),
@@ -356,8 +361,7 @@ pub fn boot(p: Prepared) -> Result {
     let force =
         if asked || scale != 1 { format!("poly.init.arg=--scale poly.init.arg={scale}") } else { String::new() };
     let kernel_args = format!("{SETTINGS_ARGS} poly.display.scale={scale} {force} {}", extra.join(" "));
-    let mut cmd =
-        qemu(&kernel, MEMORY, &append(kernel_args.trim_end(), test_apps), super::Devices::None, "mon:stdio");
+    let mut cmd = qemu(&kernel, MEMORY, &append(kernel_args.trim_end(), test_apps), super::Devices::None, "mon:stdio");
     cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
     eprintln!("==> screen {}x{} at scale {scale} (--size=WxH, --scale=N)", size.0, size.1);
     let sdl = window_display(&mut cmd);
@@ -578,6 +582,35 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let img = d.shot("empty-again")?;
     expect("the launcher is back on the empty desktop", img.pixel(900, 40) == RIDGE)?;
 
+    // The built-in entry is a distinct launcher path from "Demo Window";
+    // it must also draw, move, and close.
+    d.wait(LAUNCHER_SHOWN, 30)?;
+    let shown_before = count(&d.lines, "window \"Poly Demo\" shown at");
+    d.type_text(&["p", "o", "l", "y", "spc", "d", "e", "m", "o"])?;
+    d.wait("launcher query \"poly demo\"", 30)?;
+    d.type_text(&["ret"])?;
+    d.wait("poly-compositor: launched Poly Demo", 30)?;
+    let line = wait_nth_line(&d.lines, "window \"Poly Demo\" shown at", shown_before + 1, 90)?;
+    let (px, py, pw, _) = window_place(&line).ok_or_else(|| format!("unreadable window line {line:?}"))?;
+    thread::sleep(Duration::from_millis(1200));
+    let img = d.shot("poly-demo")?;
+    expect("the built-in Poly Demo draws", img.pixel((px + 20) as u32, (py + 20) as u32) == DEMO_A)?;
+    d.send(&abs(px + 40, py - 12))?;
+    d.send(&[button(true)])?;
+    for i in 1..=4 {
+        d.send(&abs(px + 40 + 25 * i, py - 12 + 15 * i))?;
+    }
+    d.send(&[button(false)])?;
+    thread::sleep(Duration::from_millis(1200));
+    let img = d.shot("poly-demo-moved")?;
+    expect("the built-in Poly Demo moves", img.pixel((px + 100 + 20) as u32, (py + 60 + 20) as u32) == DEMO_A)?;
+    let closed = count(&d.lines, "wl-demo: closed");
+    d.send(&abs(px + 100 + pw / 2, py + 60 + 30))?;
+    d.type_text(&["q"])?;
+    wait_nth(&d.lines, "wl-demo: closed", closed + 1, 30)?;
+    wait_nth(&d.lines, "Poly Demo (pid", 2, 30)?;
+    d.wait(LAUNCHER_SHOWN, 30)?;
+
     // The native protocol test is also an interactive launcher app: it must
     // pass its checks, keep the shared buffer visible, and respond to close.
     d.type_text(&["w", "a", "y", "l", "a", "n", "d", "spc", "t", "e", "s", "t", "spc", "c", "l", "i", "e", "n", "t"])?;
@@ -585,15 +618,31 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     d.type_text(&["ret"])?;
     d.wait("poly-compositor: launched Wayland Test Client", 30)?;
     let client_line = d.wait("window \"wl-client\" shown at", 30)?;
-    let (cx, cy, cw, ch) = window_place(&client_line).ok_or_else(|| format!("unreadable window line {client_line:?}"))?;
+    let (cx, cy, cw, ch) =
+        window_place(&client_line).ok_or_else(|| format!("unreadable window line {client_line:?}"))?;
     expect("the interactive protocol-test window is 64x48", (cw, ch) == (64, 48))?;
     d.wait("wl-client: ok", 30)?;
     thread::sleep(Duration::from_millis(500));
     let img = d.shot("wl-client")?;
-    expect("the protocol-test window's left half is drawn", img.pixel((cx + 5) as u32, (cy + 5) as u32) == [0x20, 0x60, 0xc0])?;
+    expect(
+        "the protocol-test window's left half is drawn",
+        img.pixel((cx + 5) as u32, (cy + 5) as u32) == [0x20, 0x60, 0xc0],
+    )?;
     expect(
         "the protocol-test window's right half is drawn",
         img.pixel((cx + 40) as u32, (cy + 5) as u32) == [0xe0, 0x70, 0x20],
+    )?;
+    d.send(&abs(cx + 24, cy - 12))?;
+    d.send(&[button(true)])?;
+    for i in 1..=4 {
+        d.send(&abs(cx + 24 + 15 * i, cy - 12 + 10 * i))?;
+    }
+    d.send(&[button(false)])?;
+    thread::sleep(Duration::from_millis(1000));
+    let img = d.shot("wl-client-moved")?;
+    expect(
+        "the protocol-test buffer moves with its frame",
+        img.pixel((cx + 60 + 5) as u32, (cy + 40 + 5) as u32) == [0x20, 0x60, 0xc0],
     )?;
     chord(&mut d, &["alt", "f4"])?;
     d.wait("wl-client: closed", 30)?;
@@ -637,15 +686,22 @@ fn count(lines: &Lines, text: &str) -> usize {
 
 /// Wait for the `n`th line containing `text`.
 fn wait_nth(lines: &Lines, text: &str, n: usize, secs: u64) -> std::result::Result<(), String> {
+    wait_nth_line(lines, text, n, secs).map(|_| ())
+}
+
+/// Wait for and return the `n`th line containing `text`.
+fn wait_nth_line(lines: &Lines, text: &str, n: usize, secs: u64) -> std::result::Result<String, String> {
     let deadline = Instant::now() + Duration::from_secs(secs);
     loop {
-        let count = lines.lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|l| l.contains(text)).count();
-        if count >= n {
-            return Ok(());
+        let lines = lines.lock().unwrap_or_else(|e| e.into_inner());
+        let matching: Vec<String> = lines.iter().filter(|l| l.contains(text)).cloned().collect();
+        if let Some(line) = matching.get(n.saturating_sub(1)) {
+            return Ok(line.clone());
         }
         if Instant::now() > deadline {
-            return Err(format!("{count} of {n} lines {text:?} within {secs} s"));
+            return Err(format!("{} of {n} lines {text:?} within {secs} s", matching.len()));
         }
+        drop(lines);
         thread::sleep(Duration::from_millis(100));
     }
 }
@@ -664,6 +720,20 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     let mut d = Driver { qmp, lines: Arc::clone(&lines), shots, step: 100 };
     thread::sleep(Duration::from_millis(500));
     d.wait("session bus on unix:path=", 1)?;
+
+    // A no-window app must return to the launcher after its child exits.
+    let launchers_shown = count(&lines, LAUNCHER_SHOWN);
+    d.type_text(&["s", "e", "n", "d"])?;
+    d.wait("launcher query \"send\"", 30)?;
+    d.type_text(&["ret"])?;
+    d.wait("notification 1 from Poly Test: \"Hello from a test client\"", 60)?;
+    let exit = d.wait("exited with status", 60)?;
+    expect("notify-send exited 0", exit.contains("Send Test Notification") && exit.contains("status 0"))?;
+    wait_nth(&lines, LAUNCHER_SHOWN, launchers_shown + 1, 30)?;
+    thread::sleep(Duration::from_millis(1000));
+    let img = d.shot("notification-return")?;
+    expect("the toast is visible", img.pixel(1280 - 8 - 60, 24 + 8 + 40) == RIDGE)?;
+    expect("the launcher returned after notify-send", img.pixel(900, 40) == RIDGE)?;
 
     // 1. The demo window, maximized with the frame's middle button.
     d.type_text(&["d", "e", "m", "o"])?;
@@ -717,19 +787,7 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     let img = d.shot("tiled-right")?;
     expect("the right half", img.pixel(1000, 700) == DEMO_A && img.pixel(300, 700) != DEMO_A)?;
 
-    // 5. A notification from a test client through the session bus.
-    chord(&mut d, &["ctrl", "spc"])?;
-    d.type_text(&["s", "e", "n", "d"])?;
-    d.wait("launcher query \"send\"", 30)?;
-    d.type_text(&["ret"])?;
-    d.wait("notification 1 from Poly Test: \"Hello from a test client\"", 60)?;
-    let exit = d.wait("exited with status", 60)?;
-    expect("notify-send exited 0", exit.contains("Send Test Notification") && exit.contains("status 0"))?;
-    thread::sleep(Duration::from_millis(1500));
-    let img = d.shot("notification")?;
-    expect("the toast in the top right corner", img.pixel(1280 - 8 - 60, 24 + 8 + 40) == RIDGE)?;
-
-    // 6. The settings window: the volume and the keyboard layout.
+    // 5. The settings window: the volume and the keyboard layout.
     chord(&mut d, &["meta_l", "i"])?;
     d.wait("settings window opened", 30)?;
     let (sx, sy, sw, sh) = shown(&d, "Settings", 30)?;
@@ -1150,6 +1208,35 @@ pub fn win32_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_apps_are_absent_from_normal_images_and_launcher_output() {
+        assert!(application_files(false).is_empty());
+        assert!(launcher_apps(false).is_empty());
+
+        let files = application_files(true);
+        let names: Vec<&str> = files
+            .iter()
+            .map(|(_, _, bytes)| {
+                std::str::from_utf8(bytes).unwrap().lines().find_map(|line| line.strip_prefix("Name=")).unwrap()
+            })
+            .collect();
+        assert_eq!(names, ["Demo Window", "Wayland Test Client", "Send Test Notification"]);
+
+        let apps = launcher_apps(true);
+        for name in ["Poly Demo", "Wayland Test Client", "Demo Window", "Send Test Notification", "Poly Fill"] {
+            assert!(apps.iter().any(|(app, _)| app == name), "{name} is not in the test launcher");
+        }
+    }
+
+    #[test]
+    fn test_apps_flag_is_added_only_when_enabled() {
+        assert_eq!(append("", false), "poly.init=/bin/poly-compositor poly.init.arg=--desktop poly.terminal=off");
+        assert_eq!(
+            append("", true),
+            "poly.init=/bin/poly-compositor poly.init.arg=--desktop poly.terminal=off poly.init.arg=--test-apps"
+        );
+    }
 
     #[test]
     fn reads_the_window_line() {
