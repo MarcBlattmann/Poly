@@ -193,7 +193,11 @@ pub fn activate<E: Env + ?Sized>(env: &E, y: u32, in_show: bool, foreground: boo
         send(env, u64::from(x), WM_NCACTIVATE, 0, u64::from(y));
         send(env, u64::from(x), WM_ACTIVATE, WA_INACTIVE | min_bits(xi), u64::from(y));
     }
-    raise(env, &yi, !in_show);
+    // A background input queue may update its active/focus window without
+    // taking the foreground. Its attempted raise sends WINDOWPOSCHANGING,
+    // but does not report a z-order change with WINDOWPOSCHANGED
+    // (SetActiveWindow.yaml / SetFocus.yaml `background`).
+    raise(env, &yi, !in_show && !background);
     set(env, y, 0, SET_ACTIVE | if background { 0 } else { SET_FOREGROUND });
     if x == 0 {
         for t in thread_tops(env) {

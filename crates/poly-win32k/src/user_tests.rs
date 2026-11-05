@@ -353,7 +353,7 @@ fn rtl_children_inherit_layout_and_map_points_mirror_horizontally() {
 }
 
 #[test]
-fn client_mouse_move_sets_cursor_without_sending_nchittest_to_the_window() {
+fn client_mouse_move_sends_nchittest_before_setcursor() {
     with_env(|e| {
         register(e, "MouseMove");
         let h = create(e, 'A', 0, "MouseMove", WS_POPUP | WS_VISIBLE, 0, 0, 100, 100, 0, 0);
@@ -363,8 +363,59 @@ fn client_mouse_move_sets_cursor_without_sending_nchittest_to_the_window() {
 
         assert!(input::mouse_retrieved(e, &mut message));
 
-        assert_eq!(take_log(), ["A WM_SETCURSOR window=A hit=1 msg=512"]);
+        assert_eq!(take_log(), ["A WM_NCHITTEST screen=50,50", "A WM_SETCURSOR window=A hit=1 msg=512"]);
         assert_eq!(message.l, makelparam(50, 50));
+    });
+}
+
+#[test]
+fn nonclient_mouse_move_uses_geometric_hit_without_nchittest_callout() {
+    with_env(|e| {
+        register(e, "MouseMoveNc");
+        let h = create(e, 'A', 0, "MouseMoveNc", WS_POPUP | WS_VISIBLE | WS_CAPTION, 0, 0, 100, 100, 0, 0);
+        take_log();
+        let mut message =
+            CMsg { hwnd: h, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 5), ..CMsg::default() };
+
+        assert!(input::mouse_retrieved(e, &mut message));
+
+        assert_eq!(take_log(), ["A WM_SETCURSOR window=A hit=2 msg=512"]);
+        assert_eq!(message.message, 0x00A0);
+        assert_eq!(message.w, 2);
+        assert_eq!(message.l, makelparam(50, 5));
+    });
+}
+
+#[test]
+fn background_focus_activation_does_not_send_windowposchanged() {
+    with_env(|e| {
+        register(e, "FocusBackground");
+        let a = create(e, 'A', 0, "FocusBackground", WS_POPUP | WS_VISIBLE, 50, 50, 100, 100, 0, 0);
+        e.call(Request::SetInput {
+            active: a as u32,
+            focus: a as u32,
+            capture: 0,
+            which: crate::wm::input::SET_ACTIVE | crate::wm::input::SET_FOCUS | crate::wm::input::SET_FOREGROUND,
+        });
+
+        e.tid.set(2);
+        let t = create(e, 'T', 0, "FocusBackground", WS_POPUP | WS_VISIBLE, 200, 50, 100, 100, 0, 0);
+        e.call(Request::SetInput {
+            active: t as u32,
+            focus: t as u32,
+            capture: 0,
+            which: crate::wm::input::SET_ACTIVE | crate::wm::input::SET_FOCUS | crate::wm::input::SET_FOREGROUND,
+        });
+        e.tid.set(1);
+        take_log();
+
+        assert_eq!(focus::set_focus(e, u64::from(a)), u64::from(a));
+
+        let log = take_log();
+        assert!(log.iter().any(|line| line == "A WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x3"));
+        assert!(!log.iter().any(|line| line.starts_with("A WM_WINDOWPOSCHANGED")));
+        assert!(matches!(e.call(Request::InputState {}), Reply::Input { active, focus, foreground, .. }
+            if u64::from(active) == a && u64::from(focus) == a && u64::from(foreground) == t));
     });
 }
 

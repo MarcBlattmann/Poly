@@ -36,11 +36,12 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
         }
         return true;
     }
-    // A client mouse move reuses DefWindowProc's geometric hit test instead
-    // of calling the app's WM_NCHITTEST procedure. A button-down asks the app
-    // first, so it can return HTTRANSPARENT or a non-client code.
+    // A mouse move over the non-client area uses the geometric hit test
+    // directly (SetCursorPos.yaml: no WM_NCHITTEST there). Client moves and
+    // button events send WM_NCHITTEST to the window procedure.
     let hit = if m.message == WM_MOUSEMOVE {
-        def_window_proc(env, h, WM_NCHITTEST, 0, screen_l)
+        let geometric = def_window_proc(env, h, WM_NCHITTEST, 0, screen_l);
+        if geometric == HTCLIENT { send(env, h, WM_NCHITTEST, 0, screen_l) } else { geometric }
     } else {
         send(env, h, WM_NCHITTEST, 0, screen_l)
     };
