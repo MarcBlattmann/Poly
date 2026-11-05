@@ -123,6 +123,8 @@ unsafe extern "system" {
     fn InternetOpenUrlW(s: Handle, url: *const u16, headers: *const u16, len: u32, flags: u32, ctx: usize) -> Handle;
     fn InternetReadFile(r: Handle, buf: *mut u8, n: u32, read: *mut u32) -> i32;
     fn InternetCloseHandle(h: Handle) -> i32;
+    fn InternetCrackUrlW(url: *const u16, len: u32, flags: u32, components: *mut UrlComponents) -> i32;
+    fn InternetCreateUrlW(components: *const UrlComponents, flags: u32, out: *mut u16, len: *mut u32) -> i32;
 }
 
 const PASS: u32 = 0x48;
@@ -751,6 +753,59 @@ unsafe fn urls_and_dates() {
     }
 }
 
+unsafe fn wininet_urls() {
+    // SAFETY: wininet calls with valid buffers and structs.
+    unsafe {
+        // NULL pointers, length fields 1: pointers into the caller's URL.
+        let u = w!("http://user:pw@example.com:8080/a/b?c=d#e");
+        let mut comp = core::mem::zeroed::<UrlComponents>();
+        comp.struct_size = core::mem::size_of::<UrlComponents>() as u32;
+        comp.scheme_length = 1;
+        comp.user_name_length = 1;
+        comp.password_length = 1;
+        comp.host_name_length = 1;
+        comp.url_path_length = 1;
+        comp.extra_info_length = 1;
+        check(InternetCrackUrlW(u, 0, 0, &mut comp) != 0);
+        check_got(comp.scheme_id == 1, comp.scheme_id as u32);
+        check_got(comp.port == 8080, comp.port as u32);
+        check_got(comp.scheme_length == 4, comp.scheme_length);
+        check_got(comp.user_name_length == 4, comp.user_name_length);
+        check_got(comp.password_length == 2, comp.password_length);
+        check_got(comp.host_name_length == 11, comp.host_name_length);
+        check_got(comp.url_path_length == 4, comp.url_path_length);
+        check_got(comp.extra_info_length == 6, comp.extra_info_length);
+        check_got(*comp.scheme == 0x68, (*comp.scheme).into()); // 'h'
+        check_got(*comp.host_name == 0x65, (*comp.host_name).into()); // 'e'
+        check_got(*comp.url_path == 0x2f, (*comp.url_path).into()); // '/'
+        check_got(*comp.extra_info == 0x3f, (*comp.extra_info).into()); // '?'
+        // ftp is no scheme for us.
+        check_fail(InternetCrackUrlW(w!("ftp://h/"), 0, 0, &mut comp), ERROR_UNRECOGNIZED_SCHEME);
+        // CreateUrl: size query, then the URL.
+        let mut uc = core::mem::zeroed::<UrlComponents>();
+        uc.struct_size = core::mem::size_of::<UrlComponents>() as u32;
+        uc.scheme = w!("http") as *mut u16;
+        uc.host_name = w!("example.com") as *mut u16;
+        uc.port = 8080;
+        uc.url_path = w!("/a/b") as *mut u16;
+        uc.extra_info = w!("?c=d") as *mut u16;
+        let mut len = 0u32;
+        check_fail(InternetCreateUrlW(&uc, 0, core::ptr::null_mut(), &mut len), ERROR_INSUFFICIENT_BUFFER);
+        check_got(len == 32, len);
+        let mut out = [0u16; 32];
+        let mut out_len = 32u32;
+        check(InternetCreateUrlW(&uc, 0, out.as_mut_ptr(), &mut out_len) != 0);
+        check_got(out_len == 31, out_len);
+        let expected = w!("http://example.com:8080/a/b?c=d");
+        let mut i = 0;
+        while i < 31 {
+            check_got(*expected.add(i) == out[i], 1u32);
+            i += 1;
+        }
+        check_got(out[31] == 0, 1u32);
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn httptest_main(_peb: *mut u8) -> u32 {
     out(b"httptest: start\n");
@@ -774,6 +829,7 @@ pub extern "system" fn httptest_main(_peb: *mut u8) -> u32 {
         winhttp(port);
         wininet(port);
         urls_and_dates();
+        wininet_urls();
         check(WaitForSingleObject(t, 20_000) == 0);
         let mut served = 0;
         check(GetExitCodeThread(t, &mut served) != 0);
