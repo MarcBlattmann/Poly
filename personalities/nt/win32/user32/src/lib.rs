@@ -685,16 +685,32 @@ pub unsafe extern "system" fn ScreenToClient(hwnd: H, pt: *mut i32) -> i32 {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn MapWindowPoints(from: H, to: H, pts: *mut i32, n: u32) -> i32 {
-    let (Some(a), Some(b)) = (origin(from), origin(to)) else { return bad_window() };
-    let (dx, dy) = (a.0 - b.0, a.1 - b.1);
+    let map_origin = |hwnd: H| -> Option<u::MapOrigin> {
+        if hwnd == 0 {
+            return Some(u::MapOrigin::default());
+        }
+        info(hwnd).map(|i| u::MapOrigin {
+            x: if i.ex_style & metrics::WS_EX_LAYOUTRTL != 0 { i.client.right } else { i.client.left },
+            y: i.client.top,
+            rtl: i.ex_style & metrics::WS_EX_LAYOUTRTL != 0,
+        })
+    };
+    let (Some(a), Some(b)) = (map_origin(from), map_origin(to)) else { return bad_window() };
+    let mut points = Vec::with_capacity(n as usize);
     for i in 0..n as usize {
-        // SAFETY: the caller's `n` POINTs.
+        // SAFETY: the caller supplies `n` readable POINTs.
+        let point = unsafe { (*pts.add(2 * i), *pts.add(2 * i + 1)) };
+        points.push(point);
+    }
+    let result = u::map_points(a, b, &mut points);
+    for (i, point) in points.iter().enumerate() {
+        // SAFETY: the caller supplies `n` writable POINTs, matching the slice above.
         unsafe {
-            *pts.add(2 * i) += dx;
-            *pts.add(2 * i + 1) += dy;
+            *pts.add(2 * i) = point.0;
+            *pts.add(2 * i + 1) = point.1;
         }
     }
-    (dx as u16 as u32 | ((dy as u16 as u32) << 16)) as i32
+    result
 }
 
 #[unsafe(no_mangle)]

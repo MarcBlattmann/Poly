@@ -253,6 +253,45 @@ fn origin_of(i: &WinInfo) -> (i32, i32) {
     (i.window.left - i.window_rel.left, i.window.top - i.window_rel.top)
 }
 
+/// The origin and horizontal direction of a window's client coordinates.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MapOrigin {
+    pub x: i32,
+    pub y: i32,
+    pub rtl: bool,
+}
+
+/// Map one point between two client coordinate spaces (`MapWindowPoints`,
+/// including the `WS_EX_LAYOUTRTL` direction from `winuser.h`).
+pub fn map_point(from: MapOrigin, to: MapOrigin, point: (i32, i32)) -> (i32, i32) {
+    let screen_x = if from.rtl { from.x - point.0 } else { from.x + point.0 };
+    let x = if to.rtl { to.x - screen_x } else { screen_x - to.x };
+    (x, from.y + point.1 - to.y)
+}
+
+/// `MapWindowPoints`' packed translation. An RTL source reverses the
+/// horizontal translation; the destination's direction is reflected in the
+/// mapped point itself.
+pub fn map_offset(from: MapOrigin, to: MapOrigin) -> i32 {
+    let dx = if from.rtl { to.x - from.x } else { from.x - to.x };
+    let dy = from.y - to.y;
+    (dx as u16 as u32 | ((dy as u16 as u32) << 16)) as i32
+}
+
+/// Map the supplied points and keep a two-point rectangle left-to-right when
+/// either coordinate space is RTL.
+pub fn map_points(from: MapOrigin, to: MapOrigin, points: &mut [(i32, i32)]) -> i32 {
+    for point in points.iter_mut() {
+        *point = map_point(from, to, *point);
+    }
+    if points.len() == 2 && (from.rtl || to.rtl) {
+        let left = points[0].0;
+        points[0].0 = points[1].0;
+        points[1].0 = left;
+    }
+    map_offset(from, to)
+}
+
 fn ptr<T>(v: &mut T) -> u64 {
     v as *mut T as u64
 }
@@ -327,6 +366,13 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
         cy = 0;
     }
     let _ = (&mut x, &mut y);
+    let Some(i) = info(env, h) else { return 0 };
+    if i.style & WS_CHILD != 0
+        && let Some(parent) = info(env, u64::from(i.parent))
+        && parent.ex_style & WS_EX_LAYOUTRTL != 0
+    {
+        x = parent.client.width() - x - cx;
+    }
     let win_rel = Rect::new(x, y, x + cx, y + cy);
     env.call(Request::SetRects { hwnd, window_rel: Some(win_rel), client_rel: None });
     let Some(i) = info(env, h) else { return 0 };

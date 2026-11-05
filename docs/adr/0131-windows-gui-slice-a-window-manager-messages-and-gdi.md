@@ -185,8 +185,12 @@ ADR 0128's Decision 3, made concrete for this slice:
    dialog frame (ours: additive except that one observed case).
 4. Thread timer ids (ours: from 0x7FEF up); `DispatchMessageW` returns
    22 after a timer callback, as observed, without a documented reason.
-5. Minimize, maximize and restore in full (ours: the sheet's rectangles,
-   simplified flags); `SendNotifyMessageW` to another thread (ours: posted).
+5. Minimize, maximize and restore in full. Confirmed for minimizing a
+   300x200 overlapped window to `0,740,160,768`: the `WM_NCCALCSIZE(TRUE)`
+   `WINDOWPOS` (`0,740,160,28`) has flags `0x9920`, without
+   `SWP_SHOWWINDOW` (`0x0040`) or `SWP_NOZORDER` (`0x0004`) from `winuser.h`.
+   Other minimize/maximize/restore details remain open; `SendNotifyMessageW`
+   to another thread remains posted here.
 6. `"The quick brown fox"`'s exact glyph pixels: only the extent and the
    recorded rows are reproducible from the sheets.
 

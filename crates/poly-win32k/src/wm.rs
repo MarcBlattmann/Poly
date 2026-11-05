@@ -662,6 +662,13 @@ impl Wm {
             }
         }
         let mut ex = s.ex_style;
+        if child
+            && self
+                .get(u64::from(parent))
+                .is_some_and(|p| p.ex_style & (WS_EX_LAYOUTRTL | WS_EX_NOINHERITLAYOUT) == WS_EX_LAYOUTRTL)
+        {
+            ex |= WS_EX_LAYOUTRTL;
+        }
         if s.style & (WS_DLGFRAME | WS_THICKFRAME) != 0 || ex & WS_EX_DLGMODALFRAME != 0 {
             ex |= WS_EX_WINDOWEDGE;
         } else {

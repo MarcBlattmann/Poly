@@ -160,6 +160,10 @@ extern "system" fn logging_proc(h: u64, msg: u32, w: u64, l: u64) -> u64 {
             log(format!("{t} WM_PARENTNOTIFY event={ev} id={} l={}", w >> 16, u8::from(l != 0)));
         }
         WM_SHOWWINDOW => log(format!("{t} WM_SHOWWINDOW w={w:#x} l={l:#x}")),
+        WM_NCHITTEST => log(format!("{t} WM_NCHITTEST screen={},{}", l as u16 as i16, (l >> 16) as u16 as i16)),
+        input::WM_SETCURSOR => {
+            log(format!("{t} WM_SETCURSOR window={} hit={} msg={}", tag(w), l & 0xFFFF, (l >> 16) & 0xFFFF))
+        }
         WM_DESTROY => log(format!("{t} WM_DESTROY")),
         WM_NCDESTROY => log(format!("{t} WM_NCDESTROY")),
         _ => {}
@@ -299,6 +303,68 @@ fn set_window_pos_on_a_hidden_child() {
                 "C WM_WINDOWPOSCHANGED pos=20,30 size=70,40 flags=0x185f",
             ]
         );
+    });
+}
+
+#[test]
+fn minimize_nccalcsize_drops_show_and_nozorder_flags() {
+    with_env(|e| {
+        register(e, "Min");
+        let style = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | 0x0003_0000;
+        let h = create(e, 'M', 0, "Min", style, 50, 40, 300, 200, 0, 0);
+        take_log();
+
+        show_window(e, h, SW_MINIMIZE);
+
+        assert!(
+            take_log()
+                .iter()
+                .any(|entry| { entry == "M WM_NCCALCSIZE 1 new=0,740,160,768 pos=0,740,160,28 flags=0x9920" })
+        );
+    });
+}
+
+#[test]
+fn rtl_children_inherit_layout_and_map_points_mirror_horizontally() {
+    with_env(|e| {
+        register(e, "Rtl");
+        let rtl =
+            u64::from(create(e, 'R', WS_EX_NOACTIVATE | WS_EX_LAYOUTRTL, "Rtl", WS_POPUP, 650, 100, 200, 150, 0, 0));
+        let s = u64::from(create(e, 'S', 0, "Rtl", WS_CHILD | WS_VISIBLE, 10, 20, 60, 40, rtl, 1));
+        let n = u64::from(create(e, 'N', WS_EX_NOINHERITLAYOUT, "Rtl", WS_CHILD | WS_VISIBLE, 100, 20, 60, 40, rtl, 2));
+        let Reply::Window { info: r } = e.call(Request::Window { hwnd: rtl }) else { panic!() };
+        let Reply::Window { info: s } = e.call(Request::Window { hwnd: s }) else { panic!() };
+        let Reply::Window { info: n } = e.call(Request::Window { hwnd: n }) else { panic!() };
+
+        assert_eq!(s.ex_style, WS_EX_LAYOUTRTL);
+        assert_eq!(n.ex_style, WS_EX_LAYOUTRTL | WS_EX_NOINHERITLAYOUT);
+        assert_eq!(s.window, Rect::new(780, 120, 840, 160));
+        assert_eq!(n.window, Rect::new(690, 120, 750, 160));
+
+        let r_origin = MapOrigin { x: r.client.right, y: r.client.top, rtl: true };
+        let screen = MapOrigin::default();
+        let mut single = [(10, 5)];
+        assert_eq!(map_points(r_origin, screen, &mut single), 0x0064_fcae_u32 as i32);
+        assert_eq!(single, [(840, 105)]);
+        let mut rect = [(10, 5), (50, 25)];
+        assert_eq!(map_points(r_origin, screen, &mut rect), 0x0064_fcae_u32 as i32);
+        assert_eq!(rect, [(800, 105), (840, 125)]);
+    });
+}
+
+#[test]
+fn client_mouse_move_sets_cursor_without_sending_nchittest_to_the_window() {
+    with_env(|e| {
+        register(e, "MouseMove");
+        let h = create(e, 'A', 0, "MouseMove", WS_POPUP | WS_VISIBLE, 0, 0, 100, 100, 0, 0);
+        take_log();
+        let mut message =
+            CMsg { hwnd: h, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 50), ..CMsg::default() };
+
+        assert!(input::mouse_retrieved(e, &mut message));
+
+        assert_eq!(take_log(), ["A WM_SETCURSOR window=A hit=1 msg=512"]);
+        assert_eq!(message.l, makelparam(50, 50));
     });
 }
 

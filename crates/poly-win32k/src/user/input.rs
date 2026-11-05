@@ -36,7 +36,14 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
         }
         return true;
     }
-    let hit = send(env, h, WM_NCHITTEST, 0, screen_l);
+    // A client mouse move reuses DefWindowProc's geometric hit test instead
+    // of calling the app's WM_NCHITTEST procedure. A button-down asks the app
+    // first, so it can return HTTRANSPARENT or a non-client code.
+    let hit = if m.message == WM_MOUSEMOVE {
+        def_window_proc(env, h, WM_NCHITTEST, 0, screen_l)
+    } else {
+        send(env, h, WM_NCHITTEST, 0, screen_l)
+    };
     let mut eat = false;
     if is_button_down(m.message) {
         let top = top_level_of(env, &i);

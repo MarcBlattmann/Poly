@@ -122,7 +122,8 @@ impl CharDevice for LinkFile {
 
     fn write(&self, _: u64, buf: &[u8], _: bool) -> poly_vfs::Result<usize> {
         let mut early = self.0.early.lock();
-        let handled = early.is_empty() && with_existing(|s| s.sys.win32k.link_receive(&mut s.sys.objects, buf)).is_some();
+        let handled =
+            early.is_empty() && with_existing(|s| s.sys.win32k.link_receive(&mut s.sys.objects, buf)).is_some();
         if !handled {
             early.extend_from_slice(buf);
         }

@@ -33,6 +33,9 @@ pub const WS_EX_TOPMOST: u32 = 0x0000_0008;
 pub const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
 pub const WS_EX_WINDOWEDGE: u32 = 0x0000_0100;
 pub const WS_EX_CLIENTEDGE: u32 = 0x0000_0200;
+// Extended layout styles (`winuser.h`).
+pub const WS_EX_NOINHERITLAYOUT: u32 = 0x0010_0000;
+pub const WS_EX_LAYOUTRTL: u32 = 0x0040_0000;
 pub const WS_EX_STATICEDGE: u32 = 0x0002_0000;
 pub const WS_EX_NOACTIVATE: u32 = 0x0800_0000;
 
