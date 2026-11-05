@@ -1063,3 +1063,23 @@ fn userfault_registration_turns_missing_pages_into_user_faults() {
     m.forget_userfaults(Some(3));
     assert_eq!(m.region_count(), 1);
 }
+
+#[test]
+fn forced_writes_copy_private_pages_and_keep_their_protection() {
+    let mut m = map_with(small());
+    let a = MIN + 10 * P;
+    m.map(file(P, Prot::READ, 5, 16 * P, false, Placement::Fixed(a))).unwrap();
+    m.map(file(P, Prot::READ, 6, 0, true, Placement::Fixed(a + P))).unwrap();
+    fixed(&mut m, a + 2 * P, 1, Prot::READ);
+    let read =
+        |page, file, offset, prot, private_copy| FaultAction::ReadFile { page, file, offset, prot, private_copy };
+    // A read-only private file page: a private copy, still read-only.
+    assert_eq!(m.fault_forced(a + 8, PageState::Absent), read(a, 5, 16 * P, Prot::READ, true));
+    assert_eq!(m.fault_forced(a, PageState::Present { refs: 2 }), FaultAction::CopyOnWrite { page: a, prot: Prot::READ });
+    // A read-only shared mapping is not written.
+    assert_eq!(m.fault_forced(a + P, PageState::Absent), FaultAction::Segv(SegvCode::AccErr));
+    // Anonymous read-only memory.
+    assert_eq!(m.fault_forced(a + 2 * P, PageState::Absent), FaultAction::ZeroFill { page: a + 2 * P, prot: Prot::READ });
+    // Nothing mapped.
+    assert_eq!(m.fault_forced(a + 9 * P, PageState::Absent), FaultAction::Segv(SegvCode::MapErr));
+}

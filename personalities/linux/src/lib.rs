@@ -74,10 +74,12 @@ pub mod fs;
 pub mod futex;
 pub mod ipc;
 pub mod kernel;
+pub mod keys;
 pub mod landlock;
 pub mod mountapi;
 pub mod net;
 pub mod ns;
+pub mod perf;
 mod numbers;
 pub mod rlimit;
 pub mod seccomp;
@@ -130,7 +132,26 @@ impl Linux {
     /// that way or is restarted is decided by [`Linux::exit_to_user`],
     /// which the kernel must call before the thread returns to user mode.
     pub fn dispatch_with(kernel: &mut dyn LinuxKernel, regs: &mut SyscallRegs) -> Outcome {
+        // ptrace(2) (ADR 0134): a traced thread's entry stop, where the
+        // tracer may change the call or skip it.
+        let traced = sys::ptrace::syscall_entry(kernel, regs);
+        if let Some(entry) = &traced
+            && entry.skip
+        {
+            let number = regs.rax;
+            sys::ptrace::syscall_exit(kernel, regs, number, entry);
+            return Outcome::Handled;
+        }
         let number = regs.rax;
+        let outcome = Self::dispatch_call(kernel, regs, number);
+        if let Some(entry) = &traced {
+            sys::ptrace::syscall_exit(kernel, regs, number, entry);
+        }
+        outcome
+    }
+
+    /// [`dispatch_with`](Self::dispatch_with) without the ptrace(2) stops.
+    fn dispatch_call(kernel: &mut dyn LinuxKernel, regs: &mut SyscallRegs, number: u64) -> Outcome {
         // seccomp(2): the filters decide before the call runs (ADR 0054).
         if kernel.seccomp_active() && seccomp::check(kernel, regs) == seccomp::Verdict::Skip {
             return Outcome::Handled;
@@ -211,6 +232,7 @@ impl Linux {
         sys::sem::process_exit(kernel);
         sys::aio::process_exit(kernel);
         sys::mqueue::process_exit(kernel);
+        sys::perf::process_exit(kernel);
     }
 
     /// Called by the kernel for a fault in user mode that becomes a signal

@@ -9,7 +9,7 @@
 //! overrun: the handler leaves the rest in the UART and switches its
 //! receive interrupt off, so QEMU holds the input back, and the reader
 //! drains the UART again and switches the interrupt on once it has taken
-//! the ring down to half (flow control, ADR 0123). The reader
+//! the ring down to half (flow control, ADR 0134). The reader
 //! decodes the terminal's byte stream into edits with
 //! `poly_line::TermDecoder`. If the IRQ cannot be routed, the reader polls
 //! the UART every 10 ms instead.

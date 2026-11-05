@@ -117,7 +117,7 @@ impl SerialReceiver {
         }
     }
 
-    /// No more receive interrupts (flow control, ADR 0123): what arrives
+    /// No more receive interrupts (flow control, ADR 0134): what arrives
     /// stays in the receive FIFO, which is kept. Once it is full QEMU's
     /// UART takes no more from its character device, which holds the rest
     /// back; a real one without hardware flow control would overrun.

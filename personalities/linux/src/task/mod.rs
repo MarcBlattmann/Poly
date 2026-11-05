@@ -13,6 +13,7 @@
 pub mod clone;
 pub mod exec;
 pub mod jobs;
+pub mod ptrace;
 pub mod sched;
 pub mod tree;
 pub mod wait;
@@ -102,6 +103,8 @@ fn end_namespace(k: &mut dyn LinuxKernel, pid: i32) {
 pub fn process_exited(k: &mut dyn LinuxKernel, how: Termination) {
     let pid = k.pid();
     let uid = k.credentials().uid;
+    // ptrace(2): its tracees go free, its tracer hears of its end.
+    crate::sys::ptrace::process_exited(k, pid, how);
     end_namespace(k, pid);
     let children = with_tree(k, |t| t.children(pid)).unwrap_or_default();
     let Ok(Some(parent)) = with_tree(k, |t| t.parent(pid)) else { return };

@@ -1,4 +1,4 @@
-//! A serial port's receive ring with flow control (ADR 0123).
+//! A serial port's receive ring with flow control (ADR 0134).
 //!
 //! The interrupt handler moves what the UART received into the ring; a
 //! reader (the shell, or the terminal on the port) takes it out. When the
@@ -195,7 +195,7 @@ mod tests {
     }
 
     /// A long line through a small ring, with the reader slower than the
-    /// sender: every byte arrives, in order (the scenario of ADR 0123).
+    /// sender: every byte arrives, in order (the scenario of ADR 0134).
     #[test]
     fn every_byte_of_a_long_line_arrives() {
         let r = RxRing::<16>::new();

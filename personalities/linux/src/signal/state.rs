@@ -80,6 +80,14 @@ pub struct LinuxThread {
     /// keeps it but for `READ_IMPLIES_EXEC`
     /// ([`crate::sys::personality::after_exec`]).
     pub personality: u32,
+    /// set_mempolicy(2): the thread's NUMA memory policy
+    /// ([`crate::sys::numa`]); copied to the threads and processes it
+    /// creates, kept by execve(2).
+    pub mempolicy: crate::sys::numa::MemPolicy,
+    /// The thread's keyrings and request-key default (keyrings(7),
+    /// [`crate::keys`]): a new thread starts without a thread keyring, a
+    /// fork(2) child also without a process keyring.
+    pub keys: crate::keys::ThreadKeys,
 }
 
 impl LinuxThread {
@@ -140,6 +148,14 @@ pub struct LinuxProcess {
     /// discarding it when it is generated, so the taking is seen
     /// ([`LinuxProcess::send`]). Inherited by fork, kept by exec.
     pub traced: bool,
+    /// A tracer ptrace(2)s it (ADR 0134): like [`Self::traced`], it keeps
+    /// ignored signals, which stop it on their way. Not inherited.
+    pub ptraced: bool,
+    /// perf_event_open(2) counters it opened or counts into (ADR 0134).
+    pub perf: crate::perf::Links,
+    /// modify_ldt(2): the raw descriptors of the local descriptor table
+    /// (ADR 0134). Shared by the threads, copied by fork, dropped by exec.
+    pub ldt: alloc::vec::Vec<u64>,
     /// prctl(2) `PR_SET_DUMPABLE`: whether the process may be dumped and
     /// looked at by others of its user without `CAP_SYS_PTRACE`
     /// (ptrace(2) "ptrace access mode checking"). 1 at start; inherited by
@@ -151,6 +167,9 @@ pub struct LinuxProcess {
     /// a fresh one again after execve(2).
     /// Poly copies the actions to such a child instead of sharing them.
     pub sighand: u64,
+    /// mbind(2): the NUMA memory policies of page ranges of the address
+    /// space ([`crate::sys::numa`]); copied by fork, dropped by execve(2).
+    pub mempolicies: crate::sys::numa::RangePolicies,
 }
 
 /// A signal handler table identity no process has had
@@ -177,8 +196,12 @@ impl LinuxProcess {
             timers: crate::time::timers::Timers::new(),
             ns: crate::ns::Namespaces::default(),
             traced: false,
+            ptraced: false,
+            perf: crate::perf::Links::default(),
+            ldt: alloc::vec::Vec::new(),
             dumpable: true,
             sighand: new_sighand_id(),
+            mempolicies: Default::default(),
         }
     }
 
@@ -206,6 +229,7 @@ impl LinuxProcess {
             rseq: parent.rseq,
             ioprio: parent.ioprio,
             personality: parent.personality,
+            keys: parent.keys.for_fork(),
             ..LinuxThread::default()
         };
         let mut threads = BTreeMap::new();
@@ -223,8 +247,12 @@ impl LinuxProcess {
             timers,
             ns: self.ns.for_child(),
             traced: self.traced,
+            ptraced: false,
+            perf: self.perf.for_child(),
+            ldt: self.ldt.clone(),
             dumpable: self.dumpable,
             sighand: new_sighand_id(),
+            mempolicies: self.mempolicies.clone(),
         }
     }
 
@@ -258,6 +286,7 @@ impl LinuxProcess {
         // timers are preserved.
         self.timers.exec();
         self.dumpable = true;
+        self.mempolicies.clear();
     }
 
     /// A new thread `tid` created by `parent_tid` with clone(2). It
@@ -278,6 +307,7 @@ impl LinuxProcess {
             sched: parent.sched.for_child(),
             ioprio: parent.ioprio,
             personality: parent.personality,
+            keys: parent.keys.for_thread(),
             ..LinuxThread::default()
         };
         self.threads.insert(tid, thread);
@@ -433,7 +463,7 @@ impl LinuxProcess {
             Disposition::Ignore | Disposition::Default(DefaultAction::Ignore | DefaultAction::Continue) => !blocked,
             _ => false,
         };
-        if ignored && !self.traced {
+        if ignored && !self.traced && !self.ptraced {
             return Ok(sent);
         }
         let queue_limit = self.queue_limit;

@@ -771,6 +771,40 @@ impl LinuxKernel for FakeKernel {
         Ok(())
     }
 
+    fn memory_regions(&mut self, pid: i32, start: u64, end: u64) -> Result<Vec<crate::kernel::MemRegion>, Errno> {
+        // Every live process of the fake sees the fake's one memory.
+        if !self.procs.get(&pid).is_some_and(|p| !p.info.zombie) {
+            return Err(Errno::ESRCH);
+        }
+        let mut out: Vec<crate::kernel::MemRegion> = Vec::new();
+        if start >= end {
+            return Ok(out);
+        }
+        for (&page, p) in self.pages.range(start / PAGE_SIZE..end.div_ceil(PAGE_SIZE)) {
+            let at = page * PAGE_SIZE;
+            match out.last_mut() {
+                Some(r) if r.end == at && r.prot == Prot(p.prot) => r.end = at + PAGE_SIZE,
+                _ => out.push(crate::kernel::MemRegion {
+                    start: at,
+                    end: at + PAGE_SIZE,
+                    prot: Prot(p.prot),
+                    shared: false,
+                    object: 0,
+                }),
+            }
+        }
+        Ok(out)
+    }
+
+    fn page_query(&mut self, pid: i32, addr: u64) -> Result<crate::kernel::PageQuery, Errno> {
+        self.memory_regions(pid, 0, 0)?;
+        // Pages the fake has are all present.
+        Ok(match self.pages.contains_key(&(addr / PAGE_SIZE)) {
+            true => crate::kernel::PageQuery::Present,
+            false => crate::kernel::PageQuery::Unmapped,
+        })
+    }
+
     fn madvise(&mut self, addr: u64, len: u64, advice: crate::sys::madvise::Advice) -> Result<(), Errno> {
         self.advised.push((addr, len, advice));
         let pages = addr / PAGE_SIZE..(addr + len).div_ceil(PAGE_SIZE);

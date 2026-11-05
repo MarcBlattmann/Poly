@@ -97,6 +97,11 @@ pub fn prctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             Ok(0)
         }
         PR_GET_DUMPABLE => Ok(u64::from(with_own(k, |p| p.dumpable))),
+        crate::sys::perf::PR_TASK_PERF_EVENTS_DISABLE | crate::sys::perf::PR_TASK_PERF_EVENTS_ENABLE => {
+            let enable = a.int(0) as u32 == crate::sys::perf::PR_TASK_PERF_EVENTS_ENABLE;
+            crate::sys::perf::task_events(k, enable);
+            Ok(0)
+        }
         PR_SET_DUMPABLE => {
             let dumpable = bool_arg(arg2)?;
             with_own(k, |p| p.dumpable = dumpable);

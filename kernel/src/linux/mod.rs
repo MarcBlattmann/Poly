@@ -43,6 +43,8 @@ mod mountapi;
 mod mqueue;
 pub mod net;
 mod ns_tests;
+mod numa;
+mod perf;
 mod pidfd;
 mod procaccess;
 mod services;

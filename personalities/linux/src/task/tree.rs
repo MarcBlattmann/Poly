@@ -61,6 +61,10 @@ pub enum ChildEvent {
     Stopped(u32),
     /// The stopped child was continued (`WCONTINUED`).
     Continued,
+    /// A tracee is in a ptrace-stop (ptrace(2); reported to its tracer
+    /// without `WUNTRACED`): the stop signal with the event above it
+    /// (`sig | event << 8`), so the status is `code << 8 | 0x7f`.
+    Trapped(u32),
 }
 
 /// A stop or continue not yet reported to the parent.
@@ -178,11 +182,13 @@ pub struct ProcessTree {
     nodes: BTreeMap<i32, Node>,
     generation: u64,
     reaped: Vec<i32>,
+    /// ptrace(2) links, by tracee (ADR 0134).
+    ptrace: BTreeMap<i32, super::ptrace::Tracee>,
 }
 
 impl ProcessTree {
     pub const fn new() -> ProcessTree {
-        ProcessTree { nodes: BTreeMap::new(), generation: 0, reaped: Vec::new() }
+        ProcessTree { nodes: BTreeMap::new(), generation: 0, reaped: Vec::new(), ptrace: BTreeMap::new() }
     }
 
     /// Changes a waiter may care about so far.
@@ -342,6 +348,7 @@ impl ProcessTree {
     }
 
     fn reap(&mut self, pid: i32) {
+        self.ptrace.remove(&pid);
         if let Some(node) = self.nodes.remove(&pid) {
             if let Some(p) = self.nodes.get_mut(&node.parent) {
                 p.children.remove(&pid);
@@ -440,22 +447,31 @@ impl ProcessTree {
     /// to.
     pub fn poll(&mut self, waiter: i32, filter: &WaitFilter) -> Poll {
         let Some(w) = self.nodes.get(&waiter) else { return Poll::NoChildren };
+        // Its children, then the tracees that are not (ptrace(2): a tracer
+        // waits for its tracees as for children).
+        let mut candidates: Vec<i32> = w.children.iter().copied().collect();
+        candidates.extend(
+            self.ptrace.iter().filter(|(t, r)| r.traced_by(waiter) && !w.children.contains(t)).map(|(&t, _)| t),
+        );
         let mut any = false;
         let mut exiting = false;
         let mut found = None;
-        for &child in &w.children {
+        for child in candidates {
             let Some(c) = self.nodes.get(&child) else { continue };
+            let link = self.ptrace.get(&child).filter(|r| !r.detaching);
+            let mine = link.is_some_and(|r| r.tracer == waiter);
             let selected = match filter.selector {
                 Selector::Any => true,
                 Selector::Pid(pid) => child == pid,
                 Selector::Group(g) => c.pgid == g,
             };
             let clone_child = c.exit_signal != crate::abi::signal::SIGCHLD;
-            let kind_ok = match filter.clones {
-                Clones::Exclude => !clone_child,
-                Clones::Only => clone_child,
-                Clones::Include => true,
-            };
+            let kind_ok = mine
+                || match filter.clones {
+                    Clones::Exclude => !clone_child,
+                    Clones::Only => clone_child,
+                    Clones::Include => true,
+                };
             if !selected || !kind_ok {
                 continue;
             }
@@ -464,18 +480,25 @@ impl ProcessTree {
                 exiting |= filter.ended;
                 continue;
             }
-            let event = match (c.zombie, c.report) {
-                (Some(how), _) if filter.ended => Some(ChildEvent::Ended(how)),
-                (None, Some(Report::Stopped(sig))) if filter.stopped => Some(ChildEvent::Stopped(sig)),
-                (None, Some(Report::Continued)) if filter.continued => Some(ChildEvent::Continued),
+            // A child another process traces: its stops and its end go to
+            // the tracer first.
+            if link.is_some() && !mine {
+                continue;
+            }
+            let trapped = link.and_then(|r| r.stopped()).filter(|s| !s.reported).map(|s| s.code());
+            let event = match (c.zombie, c.report, trapped) {
+                (Some(how), _, _) if filter.ended => Some(ChildEvent::Ended(how)),
+                (None, _, Some(code)) => Some(ChildEvent::Trapped(code)),
+                (None, Some(Report::Stopped(sig)), None) if filter.stopped && !mine => Some(ChildEvent::Stopped(sig)),
+                (None, Some(Report::Continued), None) if filter.continued && !mine => Some(ChildEvent::Continued),
                 _ => None,
             };
             if let Some(event) = event {
-                found = Some(Waited { pid: child, uid: c.uid, event });
+                found = Some((Waited { pid: child, uid: c.uid, event }, mine && c.parent != waiter));
                 break;
             }
         }
-        let Some(waited) = found else {
+        let Some((waited, tracer_only)) = found else {
             return match (exiting, any) {
                 (true, _) => Poll::Exiting,
                 (false, true) => Poll::Pending,
@@ -484,9 +507,20 @@ impl ProcessTree {
         };
         if filter.consume {
             match waited.event {
+                // A tracer that is not the parent learns of the end first;
+                // then the parent may reap it.
+                ChildEvent::Ended(_) if tracer_only => {
+                    self.ptrace.remove(&waited.pid);
+                    self.generation += 1;
+                }
                 ChildEvent::Ended(_) => {
                     self.reap(waited.pid);
                     self.generation += 1;
+                }
+                ChildEvent::Trapped(_) => {
+                    if let Some(s) = self.ptrace.get_mut(&waited.pid).and_then(|r| r.stop.as_deref_mut()) {
+                        s.reported = true;
+                    }
                 }
                 _ => {
                     if let Some(c) = self.nodes.get_mut(&waited.pid) {
@@ -497,6 +531,61 @@ impl ProcessTree {
         }
         Poll::Ready(waited)
     }
+
+    /// The ptrace(2) link of tracee `tid`.
+    pub fn tracee(&self, tid: i32) -> Option<&super::ptrace::Tracee> {
+        self.ptrace.get(&tid)
+    }
+
+    /// The ptrace(2) link of tracee `tid`, to change (callers that change
+    /// what a waiter looks at call [`touch`](Self::touch)).
+    pub fn tracee_mut(&mut self, tid: i32) -> Option<&mut super::ptrace::Tracee> {
+        self.ptrace.get_mut(&tid)
+    }
+
+    /// Link tracee `tid` to its tracer.
+    pub fn attach(&mut self, tid: i32, link: super::ptrace::Tracee) {
+        self.ptrace.insert(tid, link);
+        self.generation += 1;
+    }
+
+    /// Drop the ptrace(2) link of `tid`.
+    pub fn untrace(&mut self, tid: i32) -> Option<super::ptrace::Tracee> {
+        let link = self.ptrace.remove(&tid);
+        self.generation += 1;
+        link
+    }
+
+    /// The tracees of `tracer`.
+    pub fn tracees_of(&self, tracer: i32) -> Vec<i32> {
+        self.ptrace.iter().filter(|(_, r)| r.tracer == tracer).map(|(&t, _)| t).collect()
+    }
+
+    /// Whether any process is traced.
+    pub fn any_traced(&self) -> bool {
+        !self.ptrace.is_empty()
+    }
+
+    /// Wake the tree's waiters: something they look at changed.
+    pub fn touch(&mut self) {
+        self.generation += 1;
+    }
+
+    /// Whether `a` is `pid` or one of its ancestors.
+    pub fn is_ancestor(&self, a: i32, pid: i32) -> bool {
+        let mut p = pid;
+        for _ in 0..=self.nodes.len() {
+            if p == a {
+                return true;
+            }
+            match self.nodes.get(&p) {
+                Some(n) if n.parent > 0 => p = n.parent,
+                _ => return false,
+            }
+        }
+        false
+    }
+
 
     /// setpgid(2) by `caller`: move `pid` (0: the caller) into group
     /// `pgid` (0: `pid`'s own). Errors from the man page, in this order:
