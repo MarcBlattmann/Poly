@@ -606,10 +606,10 @@ unsafe fn urls_and_dates() {
         check_got(comp.host_name_length == 11, comp.host_name_length);
         check_got(comp.url_path_length == 4, comp.url_path_length);
         check_got(comp.extra_info_length == 6, comp.extra_info_length);
-        check_got(comp.scheme.is_null() == false, 1u32);
-        check_got(comp.host_name.is_null() == false, 1u32);
-        check_got(comp.url_path.is_null() == false, 1u32);
-        check_got(comp.extra_info.is_null() == false, 1u32);
+        check_got(!comp.scheme.is_null(), 1u32);
+        check_got(!comp.host_name.is_null(), 1u32);
+        check_got(!comp.url_path.is_null(), 1u32);
+        check_got(!comp.extra_info.is_null(), 1u32);
         // first unit of scheme is 'h' (0x68), host is 'e' (0x65), path is '/' (0x2f), extra is '?' (0x3f)
         check_got(*comp.scheme == 0x68, (*comp.scheme).into());
         check_got(*comp.host_name == 0x65, (*comp.host_name).into());
@@ -691,7 +691,7 @@ unsafe fn urls_and_dates() {
         check(r != 0);
         check_got(out_len == 31, out_len);
         // compare: "http://example.com:8080/a/b?c=d"
-        let expected = w!("http://example.com:8080/a/b?c=d") as *const u16;
+        let expected: *const u16 = w!("http://example.com:8080/a/b?c=d");
         let mut i = 0;
         while i < out_len as usize {
             let ok = *expected.add(i) == out[i];
