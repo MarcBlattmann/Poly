@@ -637,7 +637,13 @@ fn run(args: &[String]) -> Result<u8, String> {
         if let Some(l) = &mut winlink
             && fds.get(win_at).is_some_and(|p| p.revents != 0)
         {
-            l.pump(server.scene_mut());
+            l.pump_server(&mut server);
+        }
+        // Input to Windows windows goes to win32k (ADR 0134).
+        if let (Some(l), Some(d)) = (&mut winlink, &mut desk) {
+            for ev in core::mem::take(&mut d.foreign) {
+                l.input(&ev);
+            }
         }
 
         // A frame when one is due: with KMS whenever no flip is pending (the

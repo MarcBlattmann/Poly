@@ -18,9 +18,9 @@
 //! copies the damaged rows out with the device's
 //! [`READ_BUFFER`](crate::link::READ_BUFFER) request ([`Surfaces::rows`]).
 //!
-//! Nothing happens before a compositor first connects: headless Windows
-//! programs (the tests) get no surfaces and their window DCs draw nowhere,
-//! as before the link.
+//! Nothing happens before a compositor first connects, unless the session
+//! is interactive (slice B): headless programs of session 0 (slice A's
+//! tests) get no surfaces and their window DCs draw nowhere.
 
 use crate::desktop::Desktop;
 use crate::link::{BufferId, PixelFormat, SurfaceId, SurfaceKind};
@@ -56,6 +56,11 @@ impl Surfaces {
         Surfaces::default()
     }
 
+    /// The window a surface shows.
+    pub fn hwnd_of(&self, surface: SurfaceId) -> Option<u32> {
+        self.windows.iter().find(|e| *e.1 == surface).map(|e| *e.0)
+    }
+
     /// The surface of window `hwnd`.
     pub fn surface(&self, hwnd: u32) -> Option<SurfaceId> {
         self.windows.get(&hwnd).copied()
@@ -67,7 +72,10 @@ impl Surfaces {
         for b in desktop.take_released() {
             self.buffers.remove(&b);
         }
-        if !desktop.is_connected() && self.windows.is_empty() {
+        // Surfaces exist with a compositor, and in an interactive session
+        // even without one (window DCs keep their pixels, BeginPaint.yaml
+        // reads them back).
+        if !desktop.is_connected() && !wm.display().interactive && self.windows.is_empty() {
             return;
         }
         let tops = wm.top_levels();
@@ -81,7 +89,7 @@ impl Surfaces {
         // Bottom to top, so an owner has its surface before what it owns.
         for &h in tops.iter().rev() {
             let Some(i) = wm.info(h) else { continue };
-            if i.pid == 0 || i.message_only {
+            if i.pid == 0 || i.message_only || wm.is_keeper(h) {
                 continue;
             }
             let client = i.client;

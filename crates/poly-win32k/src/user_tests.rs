@@ -62,6 +62,14 @@ impl Env for TestEnv {
     }
     fn fill_rect(&self, _: u64, _: CRect, _: u64) {}
     fn delete_dc(&self, _: u64) {}
+    fn paint_dc(&self, _: u32, _: Option<&[Rect]>) -> u64 {
+        0x77
+    }
+    fn release_dc(&self, _: u32, _: u64) {}
+    fn make_region(&self, _: &[Rect]) -> u64 {
+        0x99
+    }
+    fn delete_object(&self, _: u64) {}
 }
 
 fn with_env(f: impl FnOnce(&TestEnv)) {

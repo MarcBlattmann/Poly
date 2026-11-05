@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "gf_threads",
+      "exe_sha256": "4e419f505776d0da1b67f11068d6640460629df9e17f95c09ed05794baa6eb93",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCkEgZm9yZWdyb3VuZDogbWFpbiB0aHJlYWQ6IGFjdGl2ZT1BIGZvY3VzPUEgZmc9QQpBIGZvcmVncm91bmQ6IHRocmVhZCBUIHNlZXMgYWN0aXZlPW51bGwgZm9jdXM9bnVsbCBmZz1BCiAgbWFpbiB0aHJlYWQ6IEdldEdVSVRocmVhZEluZm89MSBhY3RpdmU9QSBmb2N1cz1BIGNhcHR1cmU9bnVsbAogIHRocmVhZCBUOiBHZXRHVUlUaHJlYWRJbmZvPTEgYWN0aXZlPW51bGwgZm9jdXM9bnVsbCBjYXB0dXJlPW51bGwKICBmb3JlZ3JvdW5kIHRocmVhZCAoMCk6IEdldEdVSVRocmVhZEluZm89MSBhY3RpdmU9QSBmb2N1cz1BIGNhcHR1cmU9bnVsbApTZXRGb3JlZ3JvdW5kV2luZG93KFQpOiAxClQgZm9yZWdyb3VuZDogbWFpbiB0aHJlYWQ6IGFjdGl2ZT1udWxsIGZvY3VzPW51bGwgZmc9VApUIGZvcmVncm91bmQ6IHRocmVhZCBUIHNlZXMgYWN0aXZlPVQgZm9jdXM9VCBmZz1UCiAgbWFpbiB0aHJlYWQ6IEdldEdVSVRocmVhZEluZm89MSBhY3RpdmU9bnVsbCBmb2N1cz1udWxsIGNhcHR1cmU9bnVsbAogIHRocmVhZCBUOiBHZXRHVUlUaHJlYWRJbmZvPTEgYWN0aXZlPVQgZm9jdXM9VCBjYXB0dXJlPW51bGwKICBmb3JlZ3JvdW5kIHRocmVhZCAoMCk6IEdldEdVSVRocmVhZEluZm89MSBhY3RpdmU9VCBmb2N1cz1UIGNhcHR1cmU9bnVsbApBdHRhY2hUaHJlYWRJbnB1dChtYWluLCBULCBUUlVFKTogMQphdHRhY2hlZDogbWFpbiB0aHJlYWQ6IGFjdGl2ZT1UIGZvY3VzPVQgZmc9VAphdHRhY2hlZDogdGhyZWFkIFQgc2VlcyBhY3RpdmU9VCBmb2N1cz1UIGZnPVQKYXR0YWNoZWQ6IFNldEZvY3VzKFQpIGZyb20gdGhlIG1haW4gdGhyZWFkOiByZXR1cm5lZCBUIGVycm9yIDAKICBtYWluIHRocmVhZDogYWN0aXZlPVQgZm9jdXM9VCBmZz1UCiAgbm93OiB0aHJlYWQgVCBzZWVzIGFjdGl2ZT1UIGZvY3VzPVQgZmc9VApBdHRhY2hUaHJlYWRJbnB1dChtYWluLCBULCBGQUxTRSk6IDEKZGV0YWNoZWQ6IG1haW4gdGhyZWFkOiBhY3RpdmU9bnVsbCBmb2N1cz1udWxsIGZnPVQKZGV0YWNoZWQ6IHRocmVhZCBUIHNlZXMgYWN0aXZlPVQgZm9jdXM9VCBmZz1UCnN1bW1hcnkgMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\nA foreground: main thread: active=A focus=A fg=A\nA foreground: thread T sees active=null focus=null fg=A\n  main thread: GetGUIThreadInfo=1 active=A focus=A capture=null\n  thread T: GetGUIThreadInfo=1 active=null focus=null capture=null\n  foreground thread (0): GetGUIThreadInfo=1 active=A focus=A capture=null\nSetForegroundWindow(T): 1\nT foreground: main thread: active=null focus=null fg=T\nT foreground: thread T sees active=T focus=T fg=T\n  main thread: GetGUIThreadInfo=1 active=null focus=null capture=null\n  thread T: GetGUIThreadInfo=1 active=T focus=T capture=null\n  foreground thread (0): GetGUIThreadInfo=1 active=T focus=T capture=null\nAttachThreadInput(main, T, TRUE): 1\nattached: main thread: active=T focus=T fg=T\nattached: thread T sees active=T focus=T fg=T\nattached: SetFocus(T) from the main thread: returned T error 0\n  main thread: active=T focus=T fg=T\n  now: thread T sees active=T focus=T fg=T\nAttachThreadInput(main, T, FALSE): 1\ndetached: main thread: active=null focus=null fg=T\ndetached: thread T sees active=T focus=T fg=T\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1172
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+==> build kernel
+==> build native programs (userland/native)
+    Finished `release` profile [optimized] target(s) in 1.23s
+==> build kernel
+    Finished `dev` profile [optimized + debuginfo] target(s) in 3.83s

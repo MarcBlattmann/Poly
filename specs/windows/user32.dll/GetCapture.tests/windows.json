@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "gc_thread",
+      "exe_sha256": "3854c46e759734cc1939ce3568c803ab3b81dfa2a6ce6dbdee646b449753dd09",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayByZWdpc3RlcmVkIFQKb2sgZm9yZWdyb3VuZApzZXBhcmF0ZTogc2Vjb25kIHRocmVhZCBHZXRDYXB0dXJlIG51bGwKc2VwYXJhdGU6IGl0cyBTZXRDYXB0dXJlKFQpIHJldHVybmVkIG51bGwsIHRoZW4gaXRzIEdldENhcHR1cmUgVApzZXBhcmF0ZTogR2V0R1VJVGhyZWFkSW5mbyhtYWluKS5od25kQ2FwdHVyZSBzZWVuIGZyb20gaXQgQQpzZXBhcmF0ZTogYWZ0ZXIgaXRzIFJlbGVhc2VDYXB0dXJlIGl0cyBHZXRDYXB0dXJlIG51bGwKc2VwYXJhdGU6IG1haW4gdGhyZWFkIEdldENhcHR1cmUgbm93IEEKYXR0YWNoZWQ6IEF0dGFjaFRocmVhZElucHV0IDEKYXR0YWNoZWQ6IHNlY29uZCB0aHJlYWQgR2V0Q2FwdHVyZSBBCmF0dGFjaGVkOiBpdHMgU2V0Q2FwdHVyZShUKSByZXR1cm5lZCBBLCB0aGVuIGl0cyBHZXRDYXB0dXJlIFQKYXR0YWNoZWQ6IEdldEdVSVRocmVhZEluZm8obWFpbikuaHduZENhcHR1cmUgc2VlbiBmcm9tIGl0IFQKYXR0YWNoZWQ6IGFmdGVyIGl0cyBSZWxlYXNlQ2FwdHVyZSBpdHMgR2V0Q2FwdHVyZSBudWxsCmF0dGFjaGVkOiBtYWluIHRocmVhZCBHZXRDYXB0dXJlIG5vdyBudWxsCiAgQSBXTV9OQ0FDVElWQVRFIGFjdGl2ZT0wIGw9MAogIEEgV01fQUNUSVZBVEUgc3RhdGU9MCBtaW5pbWl6ZWQ9MCBvdGhlcj1udWxsCiAgQSBXTV9BQ1RJVkFURUFQUCBhY3RpdmU9MAogIEEgV01fS0lMTEZPQ1VTIG90aGVyPW51bGwKICBBIFdNX0NBUFRVUkVDSEFOR0VEIG5ldz1vdXJzCnN1bW1hcnkgMyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok registered T\nok foreground\nseparate: second thread GetCapture null\nseparate: its SetCapture(T) returned null, then its GetCapture T\nseparate: GetGUIThreadInfo(main).hwndCapture seen from it A\nseparate: after its ReleaseCapture its GetCapture null\nseparate: main thread GetCapture now A\nattached: AttachThreadInput 1\nattached: second thread GetCapture A\nattached: its SetCapture(T) returned A, then its GetCapture T\nattached: GetGUIThreadInfo(main).hwndCapture seen from it T\nattached: after its ReleaseCapture its GetCapture null\nattached: main thread GetCapture now null\n  A WM_NCACTIVATE active=0 l=0\n  A WM_ACTIVATE state=0 minimized=0 other=null\n  A WM_ACTIVATEAPP active=0\n  A WM_KILLFOCUS other=null\n  A WM_CAPTURECHANGED new=ours\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 216
+    }
+  ]
+}

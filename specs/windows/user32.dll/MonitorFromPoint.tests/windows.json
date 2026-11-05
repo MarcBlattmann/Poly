@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "mfp_flags",
+      "exe_sha256": "39311adcc91191c3164da4fa3815b830d7f3e7f041260ea7972b7c232a8ae498",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b24gdGhlIHNjcmVlbiBmbGFncyAweDA6IHByaW1hcnkgZXJyb3IgNDY2MApvbiB0aGUgc2NyZWVuIGZsYWdzIDB4MTogcHJpbWFyeSBlcnJvciA0NjYwCm9uIHRoZSBzY3JlZW4gZmxhZ3MgMHgyOiBwcmltYXJ5IGVycm9yIDQ2NjAKb24gdGhlIHNjcmVlbiBmbGFncyAweDM6IG51bGwgZXJyb3IgMTAwNApvbiB0aGUgc2NyZWVuIGZsYWdzIDB4NDogbnVsbCBlcnJvciAxMDA0Cm9uIHRoZSBzY3JlZW4gZmxhZ3MgMHgxMDogbnVsbCBlcnJvciAxMDA0Cm9uIHRoZSBzY3JlZW4gZmxhZ3MgMHgxMDA6IG51bGwgZXJyb3IgMTAwNApvbiB0aGUgc2NyZWVuIGZsYWdzIDB4ODAwMDAwMDA6IG51bGwgZXJyb3IgMTAwNApvbiB0aGUgc2NyZWVuIGZsYWdzIDB4ZmZmZmZmZmY6IG51bGwgZXJyb3IgMTAwNApmYXIgb2ZmIGZsYWdzIDB4MDogbnVsbCBlcnJvciA0NjYwCmZhciBvZmYgZmxhZ3MgMHgxOiBwcmltYXJ5IGVycm9yIDQ2NjAKZmFyIG9mZiBmbGFncyAweDI6IHByaW1hcnkgZXJyb3IgNDY2MApmYXIgb2ZmIGZsYWdzIDB4MzogbnVsbCBlcnJvciAxMDA0CmZhciBvZmYgZmxhZ3MgMHg0OiBudWxsIGVycm9yIDEwMDQKZmFyIG9mZiBmbGFncyAweDEwOiBudWxsIGVycm9yIDEwMDQKZmFyIG9mZiBmbGFncyAweDEwMDogbnVsbCBlcnJvciAxMDA0CmZhciBvZmYgZmxhZ3MgMHg4MDAwMDAwMDogbnVsbCBlcnJvciAxMDA0CmZhciBvZmYgZmxhZ3MgMHhmZmZmZmZmZjogbnVsbCBlcnJvciAxMDA0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "on the screen flags 0x0: primary error 4660\non the screen flags 0x1: primary error 4660\non the screen flags 0x2: primary error 4660\non the screen flags 0x3: null error 1004\non the screen flags 0x4: null error 1004\non the screen flags 0x10: null error 1004\non the screen flags 0x100: null error 1004\non the screen flags 0x80000000: null error 1004\non the screen flags 0xffffffff: null error 1004\nfar off flags 0x0: null error 4660\nfar off flags 0x1: primary error 4660\nfar off flags 0x2: primary error 4660\nfar off flags 0x3: null error 1004\nfar off flags 0x4: null error 1004\nfar off flags 0x10: null error 1004\nfar off flags 0x100: null error 1004\nfar off flags 0x80000000: null error 1004\nfar off flags 0xffffffff: null error 1004\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

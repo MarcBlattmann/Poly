@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "vr_basic",
+      "exe_sha256": "2d0d6f9e2cef20c829213c3628833372707847157a4ef750fa68c794dbf28305",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAphbGwgaW52YWxpZDogYW55PTEgcmVjdCAwLDAsMTAwLDgwIHJlZ2lvbiBraW5kIDI6IDAsMCwxMDAsODAgd21fcGFpbnRfd2FpdGluZz0xCiAgVmFsaWRhdGVSZWN0IHJldHVybmVkIDEgZXJyb3IgMAp0b3AgaGFsZiB2YWxpZGF0ZWQ6IGFueT0xIHJlY3QgMCw0MCwxMDAsODAgcmVnaW9uIGtpbmQgMjogMCw0MCwxMDAsODAgd21fcGFpbnRfd2FpdGluZz0xCiAgVmFsaWRhdGVSZWN0IHJldHVybmVkIDEgZXJyb3IgMApib3R0b20tbGVmdCB2YWxpZGF0ZWQgdG9vOiBhbnk9MSByZWN0IDUwLDQwLDEwMCw4MCByZWdpb24ga2luZCAyOiA1MCw0MCwxMDAsODAgd21fcGFpbnRfd2FpdGluZz0xCiAgVmFsaWRhdGVSZWN0IHJldHVybmVkIDEgZXJyb3IgMAphIGhvbGUgaW4gdGhlIHJlc3Q6IGFueT0xIHJlY3QgNTAsNDAsMTAwLDgwIHJlZ2lvbiBraW5kIDM6IDUwLDQwLDEwMCw1MCArIDUwLDUwLDcwLDYwICsgODAsNTAsMTAwLDYwICsgNTAsNjAsMTAwLDgwIHdtX3BhaW50X3dhaXRpbmc9MQogIFZhbGlkYXRlUmVjdCByZXR1cm5lZCAxIGVycm9yIDAKYSByZWN0IHBhc3QgdGhlIGVkZ2U6IGFueT0xIHJlY3QgNTAsNDAsMTAwLDgwIHJlZ2lvbiBraW5kIDM6IDUwLDQwLDEwMCw1MCArIDUwLDUwLDcwLDYwICsgODAsNTAsMTAwLDYwICsgNTAsNjAsMTAwLDcwICsgNTAsNzAsOTAsODAgd21fcGFpbnRfd2FpdGluZz0xCiAgVmFsaWRhdGVSZWN0IHJldHVybmVkIDEgZXJyb3IgMAphbiBpbnZlcnRlZCByZWN0OiBhbnk9MSByZWN0IDUwLDQwLDEwMCw4MCByZWdpb24ga2luZCAzOiA1MCw0MCwxMDAsNTAgKyA1MCw1MCw3MCw2MCArIDgwLDUwLDEwMCw2MCArIDUwLDYwLDEwMCw3MCArIDUwLDcwLDkwLDgwIHdtX3BhaW50X3dhaXRpbmc9MQogIFZhbGlkYXRlUmVjdCByZXR1cm5lZCAxIGVycm9yIDAKTlVMTDogYW55PTAgcmVjdCAwLDAsMCwwIHJlZ2lvbiBraW5kIDE6IGVtcHR5IHdtX3BhaW50X3dhaXRpbmc9MAogIFZhbGlkYXRlUmVjdCByZXR1cm5lZCAxIGVycm9yIDAKTlVMTCBhZ2FpbiAobm90aGluZyBpbnZhbGlkKTogYW55PTAgcmVjdCAwLDAsMCwwIHJlZ2lvbiBraW5kIDE6IGVtcHR5IHdtX3BhaW50X3dhaXRpbmc9MAogIFZhbGlkYXRlUmVjdCByZXR1cm5lZCAxIGVycm9yIDAKcGFyZW50IHZhbGlkYXRlZDogcGFyZW50OiBhbnk9MCByZWN0IDAsMCwwLDAgcmVnaW9uIGtpbmQgMTogZW1wdHkgd21fcGFpbnRfd2FpdGluZz0wCnBhcmVudCB2YWxpZGF0ZWQ6IGNoaWxkOiBhbnk9MCByZWN0IDAsMCwwLDAgcmVnaW9uIGtpbmQgMTogZW1wdHkgd21fcGFpbnRfd2FpdGluZz0wCiAgVmFsaWRhdGVSZWN0IHJldHVybmVkIDEgZXJyb3IgMApjaGlsZCB2YWxpZGF0ZWQ6IGNoaWxkOiBhbnk9MCByZWN0IDAsMCwwLDAgcmVnaW9uIGtpbmQgMTogZW1wdHkgd21fcGFpbnRfd2FpdGluZz0wCmJhZCBoYW5kbGU6CiAgVmFsaWRhdGVSZWN0IHJldHVybmVkIDAgZXJyb3IgMTQwMAotLSBtZXNzYWdlcyB3aGlsZSBwdW1waW5nIGF0IHRoZSBlbmQ6CnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nall invalid: any=1 rect 0,0,100,80 region kind 2: 0,0,100,80 wm_paint_waiting=1\n  ValidateRect returned 1 error 0\ntop half validated: any=1 rect 0,40,100,80 region kind 2: 0,40,100,80 wm_paint_waiting=1\n  ValidateRect returned 1 error 0\nbottom-left validated too: any=1 rect 50,40,100,80 region kind 2: 50,40,100,80 wm_paint_waiting=1\n  ValidateRect returned 1 error 0\na hole in the rest: any=1 rect 50,40,100,80 region kind 3: 50,40,100,50 + 50,50,70,60 + 80,50,100,60 + 50,60,100,80 wm_paint_waiting=1\n  ValidateRect returned 1 error 0\na rect past the edge: any=1 rect 50,40,100,80 region kind 3: 50,40,100,50 + 50,50,70,60 + 80,50,100,60 + 50,60,100,70 + 50,70,90,80 wm_paint_waiting=1\n  ValidateRect returned 1 error 0\nan inverted rect: any=1 rect 50,40,100,80 region kind 3: 50,40,100,50 + 50,50,70,60 + 80,50,100,60 + 50,60,100,70 + 50,70,90,80 wm_paint_waiting=1\n  ValidateRect returned 1 error 0\nNULL: any=0 rect 0,0,0,0 region kind 1: empty wm_paint_waiting=0\n  ValidateRect returned 1 error 0\nNULL again (nothing invalid): any=0 rect 0,0,0,0 region kind 1: empty wm_paint_waiting=0\n  ValidateRect returned 1 error 0\nparent validated: parent: any=0 rect 0,0,0,0 region kind 1: empty wm_paint_waiting=0\nparent validated: child: any=0 rect 0,0,0,0 region kind 1: empty wm_paint_waiting=0\n  ValidateRect returned 1 error 0\nchild validated: child: any=0 rect 0,0,0,0 region kind 1: empty wm_paint_waiting=0\nbad handle:\n  ValidateRect returned 0 error 1400\n-- messages while pumping at the end:\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 174
+    },
+    {
+      "name": "vr_in_paint",
+      "exe_sha256": "8e3c3ebc4f08d32b230d168ed84f31c2684f7a70820103f7b722377bce93403f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAotLSBWYWxpZGF0ZVJlY3QoTlVMTCkgaW4gV01fUEFJTlQsIGVyYXNlIHBlbmRpbmc6IFdNX1BBSU5UIDEgdGltZShzKQogIFcgV01fUEFJTlQgdXBkYXRlIDAsMCwxMDAsODAKLS0gbGVmdCBoYWxmIHZhbGlkYXRlZCBpbiB0aGUgZmlyc3QgV01fUEFJTlQ6IFdNX1BBSU5UIDIgdGltZShzKQogIFcgV01fUEFJTlQgdXBkYXRlIDAsMCwxMDAsODAKICBXIFdNX1BBSU5UIHVwZGF0ZSA1MCwwLDEwMCw4MAotLSB2YWxpZGF0aW5nIG91dHNpZGUgdGhlIHVwZGF0ZSByZWdpb24sIGF0IG1vc3QgMyBtZXNzYWdlczogV01fUEFJTlQgMyB0aW1lKHMpCiAgVyBXTV9QQUlOVCB1cGRhdGUgMCwwLDIwLDIwCiAgVyBXTV9QQUlOVCB1cGRhdGUgMCwwLDIwLDIwCiAgVyBXTV9QQUlOVCB1cGRhdGUgMCwwLDIwLDIwCi0tIHRoZW4gVmFsaWRhdGVSZWN0KE5VTEwpOiBXTV9QQUlOVCAxIHRpbWUocykKICBXIFdNX1BBSU5UIHVwZGF0ZSAwLDAsMjAsMjAKLS0gZXJhc2UgcGVuZGluZywgdG9wIGhhbGYgdmFsaWRhdGVkLCB0aGVuIEJlZ2luUGFpbnQ6IFdNX1BBSU5UIDEgdGltZShzKQogIFcgV01fUEFJTlQgdXBkYXRlIDAsNDAsMTAwLDgwCiAgVyBXTV9FUkFTRUJLR05ECiAgICBCZWdpblBhaW50IHJjUGFpbnQgMCw0MCwxMDAsODAgZkVyYXNlIDEKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n-- ValidateRect(NULL) in WM_PAINT, erase pending: WM_PAINT 1 time(s)\n  W WM_PAINT update 0,0,100,80\n-- left half validated in the first WM_PAINT: WM_PAINT 2 time(s)\n  W WM_PAINT update 0,0,100,80\n  W WM_PAINT update 50,0,100,80\n-- validating outside the update region, at most 3 messages: WM_PAINT 3 time(s)\n  W WM_PAINT update 0,0,20,20\n  W WM_PAINT update 0,0,20,20\n  W WM_PAINT update 0,0,20,20\n-- then ValidateRect(NULL): WM_PAINT 1 time(s)\n  W WM_PAINT update 0,0,20,20\n-- erase pending, top half validated, then BeginPaint: WM_PAINT 1 time(s)\n  W WM_PAINT update 0,40,100,80\n  W WM_ERASEBKGND\n    BeginPaint rcPaint 0,40,100,80 fErase 1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 145
+    }
+  ]
+}

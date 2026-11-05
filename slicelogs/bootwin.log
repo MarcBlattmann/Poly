@@ -1,0 +1,218 @@
+==> build native programs (userland/native)
+   Compiling poly-win32k v0.0.1 (/repo/crates/poly-win32k)
+==> build kernelbase.dll, kernel32.dll, advapi32.dll, ucrtbase.dll, msvcrt.dll and the test programs
+   Compiling poly-compositor v0.0.1 (/repo/userland/poly-compositor)
+   Compiling poly-compositor-native v0.0.1 (/repo/userland/native/compositor)
+    Finished `release` profile [optimized] target(s) in 3.90s
+   Compiling compiler_builtins v0.1.160 (/opt/rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/opt/rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling poly-ntobj v0.0.1 (/repo/crates/poly-ntobj)
+   Compiling cryptest v0.0.1 (/repo/personalities/nt/win32/cryptest)
+   Compiling wstest v0.0.1 (/repo/personalities/nt/win32/wstest)
+   Compiling k32test v0.0.1 (/repo/personalities/nt/win32/k32test)
+   Compiling a32test v0.0.1 (/repo/personalities/nt/win32/a32test)
+   Compiling bcrypt v0.0.1 (/repo/personalities/nt/win32/bcrypt)
+   Compiling ws2_32 v0.0.1 (/repo/personalities/nt/win32/ws2_32)
+   Compiling crypt32 v0.0.1 (/repo/personalities/nt/win32/crypt32)
+   Compiling wininet v0.0.1 (/repo/personalities/nt/win32/wininet)
+   Compiling crtloctest v0.0.1 (/repo/personalities/nt/win32/crtloctest)
+   Compiling crttest v0.0.1 (/repo/personalities/nt/win32/crttest)
+   Compiling winhttp v0.0.1 (/repo/personalities/nt/win32/winhttp)
+   Compiling win32u v0.0.1 (/repo/personalities/nt/win32/win32u)
+   Compiling gdi32 v0.0.1 (/repo/personalities/nt/win32/gdi32)
+   Compiling httptest v0.0.1 (/repo/personalities/nt/win32/httptest)
+   Compiling kernelbase v0.0.1 (/repo/personalities/nt/win32/kernelbase)
+   Compiling user32 v0.0.1 (/repo/personalities/nt/win32/user32)
+   Compiling crtiotest v0.0.1 (/repo/personalities/nt/win32/crtiotest)
+   Compiling contest v0.0.1 (/repo/personalities/nt/win32/contest)
+   Compiling poly-rtl v0.0.1 (/repo/crates/poly-rtl)
+   Compiling poly-nls v0.0.1 (/repo/crates/poly-nls)
+   Compiling poly-kernelbase v0.0.1 (/repo/crates/poly-kernelbase)
+   Compiling poly-crt v0.0.1 (/repo/crates/poly-crt)
+   Compiling msvcrt v0.0.1 (/repo/personalities/nt/win32/msvcrt)
+   Compiling ucrtbase v0.0.1 (/repo/personalities/nt/win32/ucrtbase)
+   Compiling advapi32 v0.0.1 (/repo/personalities/nt/win32/advapi32)
+   Compiling oleaut32 v0.0.1 (/repo/personalities/nt/win32/oleaut32)
+   Compiling kernel32 v0.0.1 (/repo/personalities/nt/win32/kernel32)
+   Compiling alloc v0.0.0 (/opt/rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling poly-win32-rt v0.0.1 (/repo/personalities/nt/win32/rt)
+   Compiling poly-crypto v0.0.1 (/repo/crates/poly-crypto)
+   Compiling poly-http v0.0.1 (/repo/crates/poly-http)
+   Compiling poly-libm v0.0.1 (/repo/crates/poly-libm)
+   Compiling poly-seh v0.0.1 (/repo/crates/poly-seh)
+   Compiling poly-win32-gui v0.0.1 (/repo/personalities/nt/win32/gui)
+   Compiling poly-win32k v0.0.1 (/repo/crates/poly-win32k)
+   Compiling poly-pe v0.0.1 (/repo/crates/poly-pe)
+   Compiling poly-winsock v0.0.1 (/repo/crates/poly-winsock)
+   Compiling poly-gdi v0.0.1 (/repo/crates/poly-gdi)
+   Compiling poly-console v0.0.1 (/repo/crates/poly-console)
+   Compiling poly-win32-cryptrt v0.0.1 (/repo/personalities/nt/win32/cryptrt)
+   Compiling poly-win32-inet v0.0.1 (/repo/personalities/nt/win32/inet)
+   Compiling poly-cxxeh v0.0.1 (/repo/crates/poly-cxxeh)
+   Compiling poly-x509 v0.0.1 (/repo/crates/poly-x509)
+   Compiling poly-security v0.0.1 (/repo/crates/poly-security)
+   Compiling poly-wincrypt v0.0.1 (/repo/crates/poly-wincrypt)
+   Compiling poly-win32-crt v0.0.1 (/repo/personalities/nt/win32/crt)
+    Finished `release` profile [optimized] target(s) in 21.53s
+==> Win32 modules built in 22s, cached as /repo/target/win32-cache/win32-e5c8546579687f38
+==> build kernel
+   Compiling poly-win32k v0.0.1 (/repo/crates/poly-win32k)
+   Compiling poly-kernel v0.0.1 (/repo/kernel)
+   Compiling poly-personality-nt v0.0.1 (/repo/personalities/nt)
+    Finished `dev` profile [optimized + debuginfo] target(s) in 51.51s
+==> QEMU accelerator: TCG, QEMU's emulator, much slower (no KVM: /dev/kvm: No such file or directory (os error 2))
+==> boot test group desktop-win32 (QEMU on TCG)
+==> build 1 Windows test programs
+    Finished `release` profile [optimized] target(s) in 0.11s
+win_gui_fill.exe               7680 bytes  gdi32.dll: CreateSolidBrush DeleteObject TextOutW; kernel32.dll: GetModuleHandleW; ntdll.dll: NtClose NtCreateFile NtTerminateProcess NtWriteFile; user32.dll: BeginPaint CreateWindowExW DefWindowProcW DestroyWindow DispatchMessageW EndPaint FillRect GetClientRect GetDC GetMessageW InvalidateRect PostQuitMessage RegisterClassExW ReleaseDC SetTimer ShowWindow
+built 1 Windows test programs into target/pipeline/windows/desktop-bin
+==> no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font
+==> no shell fonts (`cargo xtask fonts fetch`): the shell draws in DejaVu Sans
+==> boot test: a Windows GUI program's window on the desktop through /dev/win32k (launched, framed, filled)
+    | 
+    | Poly kernel 0.0.1 (x86_64)
+    | cpu: gdt, tss and idt loaded
+    | boot: cmdline "poly.init=/bin/poly-compositor poly.init.arg=--desktop poly.terminal=off"
+    | boot: ACPI RSDP at 0xf52a0
+    | mem: 0x0000000000-0x0000001000 Reserved
+    | mem: 0x0000001000-0x0000005000 Kernel
+    | mem: 0x0000005000-0x0000100000 Reserved
+    | mem: 0x0000100000-0x0000a4d000 Kernel
+    | mem: 0x0000a4d000-0x001ffdf000 Usable
+    | mem: 0x001ffdf000-0x0020000000 Reserved
+    | mem: 0x00b0000000-0x00c0000000 Reserved
+    | mem: 0x00fed1c000-0x00fed20000 Reserved
+    | mem: 0x00fffc0000-0x0100000000 Reserved
+    | mem: 0xfd00000000-0x10000000000 Reserved
+    | mem: 501 MiB usable, kernel image 9540 KiB
+    | boot: initramfs at 0x1f625000-0x1ffd7264 (9929 KiB)
+    | mm: direct map at 0xffff800000000000: 12 ranges, 13056 MiB, up to 0x10000000000; NX: yes, 1 GiB pages: no, global pages: yes, write-combining (PAT): yes
+    | mm: kernel page tables at 0xa4d000 (136 KiB); text r-x, rodata r--, data rw-, stacks rw- above guard pages; boot identity map removed
+    | user: syscall/sysret on; PCID: no, SMEP: no, SMAP: no; FPU state: FXSAVE, 512 bytes, XCR0 0x0
+    | frames: buddy allocator, 128352 frames total (501 MiB), 125869 free, metadata 64 KiB at 0xa6f000
+    | thread: scheduler up, 64 slots, 16 KiB stacks above 16 KiB guards from 0xffffc08000000000, time slice 10 ticks
+    | acpi: revision 0 OEM "BOCHS", RSDT lists FACP APIC HPET MCFG WAET
+    | acpi: CPUs: 2 enabled, 0 online-capable; local APIC at 0xfee00000, 8259 PICs present
+    | acpi: I/O APIC 0 at 0xfec00000, GSI base 0
+    | acpi: 5 interrupt source overrides: IRQ0->GSI2 IRQ5->GSI5 IRQ9->GSI9 IRQ10->GSI10 IRQ11->GSI11
+    | acpi: HPET at 0xfed00000, 3 comparators, minimum tick 0
+    | acpi: PCI ECAM at 0xb0000000, segment 0 buses 0-255
+    | acpi: FADT SCI 9, century 0x32, PM timer port 0x608 (24-bit), 8042, reset 0xcf9=0xf, S5 0/0 via PM1a 0x604
+    | irq: 8259 PICs remapped to vectors 0x20-0x2f, all masked
+    | apic: local APIC id 0 version 0x14, xAPIC mode at 0xfee00000, 6 LVT entries, spurious vector 0xff, 1 LINT input(s) wired to NMI
+    | apic: I/O APIC 0 at 0xfec00000: version 0x20, GSI 0-23, all masked
+    | time: HPET at 0xfed00000: 100.000 MHz, 64-bit counter, 3 timers
+    | time: TSC 2994.116 MHz, calibrated against the HPET (5 of 6 measurements, spread 2 ppm), invariant: no
+    | time: clock source TSC (a virtual CPU's TSC: constant rate)
+    | time: APIC timer 62.499 MHz (input clock / 16, calibrated against the TSC), periodic tick 1000 Hz on vector 0xf0
+    | irq: interrupts enabled
+    | smp: 2 of 2 CPUs online (0-1)
+    | pci: segment 0 buses 00-ff: ECAM at 0xb0000000, mapped at 0xffffc00000200000
+    | pci: 00:00.0 8086:29c0 class 06.00.00, BARs not probed
+    | pci: 00:01.0 8086:10d3 class 02.00.00, BAR0 mem32 0xfeb80000 128 KiB, BAR1 mem32 0xfeba0000 128 KiB, BAR2 io 0xc040 32 B, BAR3 mem32 0xfebc0000 16 KiB
+    | pci: 00:02.0 1af4:1050 class 03.80.00, BAR1 mem32 0xfebc4000 4 KiB, BAR4 mem64 pf 0xfebf4000 16 KiB
+    | pci: 00:03.0 1af4:1052 class 09.00.00, BAR1 mem32 0xfebc5000 4 KiB, BAR4 mem64 pf 0xfebf8000 16 KiB
+    | pci: 00:04.0 1af4:1052 class 09.80.00, BAR1 mem32 0xfebc6000 4 KiB, BAR4 mem64 pf 0xfebfc000 16 KiB
+    | pci: 00:1f.0 8086:2918 class 06.01.00, BARs not probed
+    | pci: 00:1f.2 8086:2922 class 01.06.01, BAR4 io 0xc060 32 B, BAR5 mem32 0xfebc7000 4 KiB
+    | pci: 00:1f.3 8086:2930 class 0c.05.00, BAR4 io 0x700 64 B
+    | pci: 8 functions
+    | virtio-blk: no device
+    | block: ram0: RAM disk, 512 blocks of 512 bytes (256 KiB); queue 32 requests, cache 128 buffers (64 KiB); polled
+    | input: event0: PS/2 Keyboard
+    | input: event1: PS/2 IntelliMouse Explorer
+    | keyboard: i8042 config 0x71 -> 0x43, 0 stale byte(s) flushed; keyboard reset ok, scancode set 2 translated to set 1
+    | keyboard: ISA IRQ 1 -> GSI 1 -> vector 0x30; layout us (US English (QWERTY)), Num Lock on
+    | mouse: PS/2 IntelliMouse Explorer (id 4), ISA IRQ 12 -> GSI 12 -> vector 0x31; event1
+    | input: event2: QEMU Virtio Keyboard
+    | virtio-input: 00:03.0: "QEMU Virtio Keyboard" (bus 0x06 vendor 0x0627 product 0x0001), event types 0x120003, features 0x120000000, queues 64 / 16 entries; event2
+    | input: event3: QEMU Virtio Tablet
+    | virtio-input: 00:04.0: "QEMU Virtio Tablet" (bus 0x06 vendor 0x0627 product 0x0003), event types 0xf, features 0x120000000, queues 64 / 16 entries; event3
+    | virtio-input: 00:03.0: MSI-X entry 0 -> vector 0x32; interrupt-driven
+virtio_input_hid_handle_status: unknown type 0
+    | virtio-input: 00:04.0: MSI-X entry 0 -> vector 0x33; interrupt-driven
+    | virtio-gpu: 00:02.0: features 0x120000002 (EDID), 1 scanout(s), 0 capset(s), control queue 64 entries, MSI-X
+    | virtio-gpu: 00:02.0: scanout 0: enabled, preferred 1280x800
+    | virtio-gpu: 00:02.0: scanout 0: EDID 1.4 from RHT product 0x1234 "QEMU Monitor", preferred timing 1280x800
+    | display: virtio-gpu 00:02.0 1280x800x32 (Preferred size), resource 1 on scanout(s) 0; back buffer 0xc00000 (4000 KiB)
+    | fs: page cache of up to 32088 pages (125 MiB); writeback every 5 s
+    | time: RTC reads 2026-11-02 20:22:33 UTC
+    | fs: initramfs unpacked into /: 9 directories, 16 files (10163260 bytes), 0 symbolic links, 1 device nodes, 0 hard links
+    | fs: initramfs: 2483 pages (9932 KiB) at 0x1f625000-0x1ffd8000 returned to the frame allocator
+    | input: 4 event device(s), 4 node(s) made in /dev/input (char 13, 64+n)
+    | fbdev: /dev/fb0 (char 29,0): 1280x800 XRGB8888 on virtio-gpu
+    | fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7), random (1,8), urandom (1,9); 12 of 14 directories, nodes and links made
+    | fs: proc, sysfs, tmpfs on /dev/shm, /run, /run/lock, mqueue on /dev/mqueue; 6 of 6 mounted
+    | drm: /dev/dri/card0 (226:0) and renderD128 (226:128) on virtio-gpu pci:0000:00:02.0: 1 CRTC(s), dumb buffers, PRIME, atomic
+    | shell: serial input on COM1, ISA IRQ 4 -> vector 0x34
+    | tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys on /dev/pts
+    | net: no network device; loopback only
+    | sound: no sound device
+    | init: running /bin/poly-compositor
+    | vdso: 3616 bytes, mapped into every Linux process; clock_gettime reads the TSC
+    | POLY-INIT: exec /bin/poly-compositor
+    | display: virtio-gpu: a DRM client took the display; the console waits
+    | poly-compositor: KMS on /dev/dri/card0: connector 21, CRTC 19, 1280x800 at 74.993 Hz, 325x203 mm, scale 1, dma-bufs taken
+    | poly-compositor: listening on /run/user/0/wayland-0 (1280x800, scale 1)
+    | poly-compositor: no /usr/share/poly/fonts/Geist-Regular.ttf (fonts not fetched?): the shell uses DejaVu Sans
+    | poly-compositor: no /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf either: the shell uses the bitmap font
+    | poly-compositor: no mixer (/dev/snd/controlC0: not found): the ridge shows no volume
+    | random: ChaCha20 generator seeded from jitter
+    | poly-compositor: session bus on unix:path=/run/user/0/bus (org.freedesktop.Notifications served)
+    | poly-compositor: desktop on /dev/dri/card0 (KMS) (1280x800, scale 1), keymap us, 4 input device(s): PS/2 Keyboard (Keyboard), PS/2 IntelliMouse Explorer (Mouse), QEMU Virtio Keyboard (Keyboard), QEMU Virtio Tablet (Tablet { x: (0, 32767), y: (0, 32767) })
+    | poly-compositor: 7 app(s) in the launcher
+    | nt: registry in memory (no disk with a /poly directory)
+    | nt: layout: ntdll.dll written to System32
+    | nt: layout: kernelbase.dll written to System32
+    | nt: layout: kernel32.dll written to System32
+    | nt: layout: ucrtbase.dll written to System32
+    | nt: layout: msvcrt.dll written to System32
+    | nt: layout: user32.dll written to System32
+    | nt: layout: oleaut32.dll written to System32
+    | nt: layout: bcrypt.dll written to System32
+    | nt: layout: crypt32.dll written to System32
+    | nt: layout: ws2_32.dll written to System32
+    | nt: layout: winhttp.dll written to System32
+    | nt: layout: wininet.dll written to System32
+    | nt: layout: gdi32.dll written to System32
+    | nt: layout: win32u.dll written to System32
+    | nt: layout: advapi32.dll written to System32
+    | nt: C: is /nt/c; 49 folders made, 55 registry values synced
+    | poly-compositor: desktop link to Windows apps on /dev/win32k
+    | poly-compositor: network not connected
+    | poly-compositor: desktop ready (first frame drawn in 308 ms; launcher shown)
+==> screenshot /repo/target/desktop/desktop-201-win32-before.png
+    | poly-compositor: launcher query "f"
+    | poly-compositor: launcher query "fi"
+    | poly-compositor: launcher query "fil"
+    | poly-compositor: launcher query "fill"
+    | poly-compositor: launched Poly Fill (pid 2)
+    | poly-compositor: window "Poly Fill" shown at 48,431 size 384x261
+==> screenshot /repo/target/desktop/desktop-202-win32-window.png
+==> screenshot /repo/target/desktop/desktop-203-win32-clicked.png
+==> screenshot /repo/target/desktop/desktop-204-win32-typed.png
+    | poly-compositor: Poly Fill (pid 2) exited with status 0
+==> QEMU timed out after 420 s (last line: "poly-compositor: Poly Fill (pid 2) exited with status 0"); killing it
+    time: TSC 2994.116 MHz, calibrated against the HPET (5 of 6 measurements, spread 2 ppm), invariant: no
+    nt: registry in memory (no disk with a /poly directory)
+    nt: layout: ntdll.dll written to System32
+    nt: layout: kernelbase.dll written to System32
+    nt: layout: kernel32.dll written to System32
+    nt: layout: ucrtbase.dll written to System32
+    nt: layout: msvcrt.dll written to System32
+    nt: layout: user32.dll written to System32
+    nt: layout: oleaut32.dll written to System32
+    nt: layout: bcrypt.dll written to System32
+    nt: layout: crypt32.dll written to System32
+    nt: layout: ws2_32.dll written to System32
+    nt: layout: winhttp.dll written to System32
+    nt: layout: wininet.dll written to System32
+    nt: layout: gdi32.dll written to System32
+    nt: layout: win32u.dll written to System32
+    nt: layout: advapi32.dll written to System32
+    nt: C: is /nt/c; 49 folders made, 55 registry values synced
+    poly-compositor: desktop link to Windows apps on /dev/win32k
+    poly-compositor: launched Poly Fill (pid 2)
+    poly-compositor: window "Poly Fill" shown at 48,431 size 384x261
+    poly-compositor: Poly Fill (pid 2) exited with status 0
+xtask: error: boot test group desktop-win32: the desktop boot test: the typed characters are drawn (0 black pixels)

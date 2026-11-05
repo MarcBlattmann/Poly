@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "scr_draw",
+      "exe_sha256": "676de25fa37306559a21aa4037ddd68e4f3e5769f63e731608a60f25bc1ffeb8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2VsZWN0Q2xpcFJnbih0d28gcmVjdHMpID0gMwpEZWxldGVPYmplY3QodGhlIHJlZ2lvbikgPSAxCkZpbGxSZWN0IGJsYWNrIG92ZXIgZXZlcnl0aGluZywgY2xpcCB0d28gcmVjdHMgKHJlZ2lvbiBkZWxldGVkKToKICB8Li4uLi4uLi4uLi4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi4uLi4uLi4uLi4ufAogIHwuLiMjIyMjIy4uLi4uLi4uLi4uLnwKICB8Li4jIyMjIyMuLi4uLi4uLi4uLi58CiAgfC4uIyMjIyMjLi4uLiMjIyMjIy4ufAogIHwuLiMjIyMjIy4uLi4jIyMjIyMuLnwKICB8Li4uLi4uLi4uLi4uIyMjIyMjLi58CiAgfC4uLi4uLi4uLi4uLiMjIyMjIy4ufAogIHwuLi4uLi4uLi4uLi4jIyMjIyMuLnwKICB8Li4uLi4uLi4uLi4uLi4uLi4uLi58ClNlbGVjdENsaXBSZ24oZW1wdHkpID0gMQogIHBpeGVscyBkcmF3biB3aXRoIGFuIGVtcHR5IGNsaXA6IDAKU2VsZWN0Q2xpcFJnbigtMTAsLTEwLDEwMCwxMDApID0gMgogIEdldENsaXBCb3ggMiAwLDAsMjAsMTAKU2VsZWN0Q2xpcFJnbihOVUxMKSA9IDIKICBwaXhlbHMgZHJhd24gcmVkIHdpdGggbm8gY2xpcDogMjAwClNlbGVjdENsaXBSZ24oYSA9IDIsMiw4LDYpID0gMgp2aWV3cG9ydCBvcmlnaW4gNSwyLCBGaWxsUmVjdCBsb2dpY2FsIDAsMCwyMCwxMDoKICB8Li4uLi4uLi4uLi4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi4uLi4uLi4uLi4ufAogIHwuLi4uLiMjIy4uLi4uLi4uLi4uLnwKICB8Li4uLi4jIyMuLi4uLi4uLi4uLi58CiAgfC4uLi4uIyMjLi4uLi4uLi4uLi4ufAogIHwuLi4uLiMjIy4uLi4uLi4uLi4uLnwKICB8Li4uLi4uLi4uLi4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi4uLi4uLi4uLi4ufAogIHwuLi4uLi4uLi4uLi4uLi4uLi4uLnwKICB8Li4uLi4uLi4uLi4uLi4uLi4uLi58CiAgR2V0Q2xpcEJveCAobG9naWNhbCkgMiAtMywwLDMsNApTZWxlY3RDbGlwUmduKGEpIHdpdGggdGhlIHZpZXdwb3J0IG9yaWdpbiBhdCA1LDIgPSAyCiAgdGhlbiBvcmlnaW4gYmFjayB0byAwLDAsIEZpbGxSZWN0IGV2ZXJ5dGhpbmc6CiAgfC4uLi4uLi4uLi4uLi4uLi4uLi4ufAogIHwuLi4uLi4uLi4uLi4uLi4uLi4uLnwKICB8Li4jIyMjIyMuLi4uLi4uLi4uLi58CiAgfC4uIyMjIyMjLi4uLi4uLi4uLi4ufAogIHwuLiMjIyMjIy4uLi4uLi4uLi4uLnwKICB8Li4jIyMjIyMuLi4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi4uLi4uLi4uLi4ufAogIHwuLi4uLi4uLi4uLi4uLi4uLi4uLnwKICB8Li4uLi4uLi4uLi4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi4uLi4uLi4uLi4ufApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SelectClipRgn(two rects) = 3\nDeleteObject(the region) = 1\nFillRect black over everything, clip two rects (region deleted):\n  |....................|\n  |....................|\n  |..######............|\n  |..######............|\n  |..######....######..|\n  |..######....######..|\n  |............######..|\n  |............######..|\n  |............######..|\n  |....................|\nSelectClipRgn(empty) = 1\n  pixels drawn with an empty clip: 0\nSelectClipRgn(-10,-10,100,100) = 2\n  GetClipBox 2 0,0,20,10\nSelectClipRgn(NULL) = 2\n  pixels drawn red with no clip: 200\nSelectClipRgn(a = 2,2,8,6) = 2\nviewport origin 5,2, FillRect logical 0,0,20,10:\n  |....................|\n  |....................|\n  |.....###............|\n  |.....###............|\n  |.....###............|\n  |.....###............|\n  |....................|\n  |....................|\n  |....................|\n  |....................|\n  GetClipBox (logical) 2 -3,0,3,4\nSelectClipRgn(a) with the viewport origin at 5,2 = 2\n  then origin back to 0,0, FillRect everything:\n  |....................|\n  |....................|\n  |..######............|\n  |..######............|\n  |..######............|\n  |..######............|\n  |....................|\n  |....................|\n  |....................|\n  |....................|\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 70
+    },
+    {
+      "name": "scr_window",
+      "exe_sha256": "858548988f824b2131a24a1c73f181c8f0d195adf03b4d30835ffce0f40a9f9c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApHZXREQywgbm8gY2xpcDogR2V0Q2xpcFJnbiAwIFtdOyBHZXRDbGlwQm94IDIgMCwwLDIwMCwxMDAKU2VsZWN0Q2xpcFJnbigxMCwyMCw1MCw2MCkgPSAyCiAgdGhlbjogR2V0Q2xpcFJnbiAxIFsxMCwyMCw1MCw2MF07IEdldENsaXBCb3ggMiAxMCwyMCw1MCw2MApTZWxlY3RDbGlwUmduKDE1MCw1MCw0MDAsMzAwKSA9IDIKICB0aGVuOiBHZXRDbGlwUmduIDEgWzE1MCw1MCw0MDAsMzAwXTsgR2V0Q2xpcEJveCAyIDE1MCw1MCwyMDAsMTAwClNlbGVjdENsaXBSZ24ob3V0c2lkZSB0aGUgY2xpZW50IGFyZWEpID0gMQogIHRoZW46IEdldENsaXBSZ24gMSBbMzAwLDMwMCw0MDAsNDAwXTsgR2V0Q2xpcEJveCAxIDAsMCwwLDAKUmVsZWFzZURDID0gMQphIG5ldyBHZXREQzogR2V0Q2xpcFJnbiAwIFtdOyBHZXRDbGlwQm94IDIgMCwwLDIwMCwxMDAKR2V0V2luZG93REMgb2YgYSBjYXB0aW9uZWQgd2luZG93IDMwMHgyMDA6IEdldENsaXBSZ24gMCBbXTsgR2V0Q2xpcEJveCAyIDAsMCwzMDAsMjAwClNlbGVjdENsaXBSZ24oMTAsMjAsNTAsNjApIG9uIGl0ID0gMgogIHRoZW46IEdldENsaXBSZ24gMSBbMTAsMjAsNTAsNjBdOyBHZXRDbGlwQm94IDIgMTAsMjAsNTAsNjAKY2xpZW50IHJlY3Qgb2YgdGhlIGNhcHRpb25lZCB3aW5kb3cgMCwwLDI4NCwxNjEKU2VsZWN0Q2xpcFJnbigxMCwyMCw1MCw2MCkgb24gaXRzIEdldERDID0gMgogIHRoZW46IEdldENsaXBSZ24gMSBbMTAsMjAsNTAsNjBdOyBHZXRDbGlwQm94IDIgMTAsMjAsNTAsNjAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nGetDC, no clip: GetClipRgn 0 []; GetClipBox 2 0,0,200,100\nSelectClipRgn(10,20,50,60) = 2\n  then: GetClipRgn 1 [10,20,50,60]; GetClipBox 2 10,20,50,60\nSelectClipRgn(150,50,400,300) = 2\n  then: GetClipRgn 1 [150,50,400,300]; GetClipBox 2 150,50,200,100\nSelectClipRgn(outside the client area) = 1\n  then: GetClipRgn 1 [300,300,400,400]; GetClipBox 1 0,0,0,0\nReleaseDC = 1\na new GetDC: GetClipRgn 0 []; GetClipBox 2 0,0,200,100\nGetWindowDC of a captioned window 300x200: GetClipRgn 0 []; GetClipBox 2 0,0,300,200\nSelectClipRgn(10,20,50,60) on it = 2\n  then: GetClipRgn 1 [10,20,50,60]; GetClipBox 2 10,20,50,60\nclient rect of the captioned window 0,0,284,161\nSelectClipRgn(10,20,50,60) on its GetDC = 2\n  then: GetClipRgn 1 [10,20,50,60]; GetClipBox 2 10,20,50,60\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 186
+    }
+  ]
+}

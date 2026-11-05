@@ -58,6 +58,17 @@ It is emptied first.
 
 .PARAMETER PrintJson
 Also print the result file on standard output (to copy it from a session).
+
+.PARAMETER Interactive
+Run the tests in the interactive session of the user running this script
+(the one logged on at the machine's console), not in this (SSH) session.
+GUI tests need it: an SSH session is session 0, whose window station is not
+visible, so no window there is painted and no input reaches it. The runner
+registers a one-time scheduled task for the same user with the interactive
+logon type, runs itself through it with the same parameters, waits for it,
+prints its log and removes the task again. The user must be logged on and
+the session unlocked. The result file's `system.session` says
+`interactive`.
 #>
 [CmdletBinding()]
 param(
@@ -71,7 +82,12 @@ param(
     [int] $Runs = 2,
     [string] $Work = (Join-Path ([IO.Path]::GetTempPath()) 'poly-oracle'),
     [switch] $KeepScratch,
-    [switch] $PrintJson
+    [switch] $PrintJson,
+    [switch] $Interactive,
+    [int] $InteractiveTimeoutSeconds = 3600,
+    # Internal: set by -Interactive for the run inside the task.
+    [string] $SessionKind,
+    [string] $Log
 )
 
 Set-StrictMode -Version 2
@@ -108,7 +124,7 @@ function Get-SystemInfo {
     $build = [string](Get-Prop $cv 'CurrentBuild')
     $ubr = Get-Prop $cv 'UBR'
     if ($null -ne $ubr) { $build = "$build.$ubr" }
-    return [ordered]@{
+    $info = [ordered]@{
         name    = 'windows'
         version = [Environment]::OSVersion.Version.ToString()
         build   = $build
@@ -116,6 +132,80 @@ function Get-SystemInfo {
         edition = [string](Get-Prop $cv 'EditionID')
         display = [string](Get-Prop $cv 'DisplayVersion')
     }
+    if ($SessionKind) { $info.session = $SessionKind }
+    return $info
+}
+
+# Quote one argument for a Windows command line (CommandLineToArgvW rules).
+function ConvertTo-CmdArg([string] $Arg) {
+    if ($Arg -ne '' -and $Arg -notmatch '[\s"]') { return $Arg }
+    $s = $Arg -replace '(\\*)"', '$1$1\"'
+    $s = $s -replace '(\\+)$', '$1$1'
+    return '"' + $s + '"'
+}
+
+# -Interactive: run this script with the same parameters in the interactive
+# session of the current user, through a one-time scheduled task.
+function Invoke-Interactive {
+    $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $mine = @(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" | Where-Object {
+            $_.SessionId -ne 0 -and (Invoke-CimMethod -InputObject $_ -MethodName GetOwner).User -eq $env:USERNAME
+        })
+    if ($mine.Count -eq 0) { throw "-Interactive: $user is not logged on interactively (no explorer.exe of theirs)" }
+    $session = $mine[0].SessionId
+    if (@(Get-Process LogonUI -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session }).Count -gt 0) {
+        throw "-Interactive: session $session of $user is locked"
+    }
+    $base = Resolve-UserPath $Work
+    $parent = Split-Path -Parent $base
+    $innerOut = Resolve-UserPath $Out
+    $innerLog = Join-Path $parent ('poly-oracle-task-' + [Guid]::NewGuid().ToString('N').Substring(0, 8) + '.log')
+    $a = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', $PSCommandPath)
+    if ($Bundle.Count -gt 0) { $a += @('-Bundle', ((@($Bundle | ForEach-Object { Resolve-UserPath $_ })) -join ',')) }
+    if ($TestsDir) { $a += @('-TestsDir', (Resolve-UserPath $TestsDir)) }
+    if ($DataDir) { $a += @('-DataDir', (Resolve-UserPath $DataDir)) }
+    if (@($TestTimeouts | Where-Object { $_ }).Count -gt 0) { $a += @('-TestTimeouts', ($TestTimeouts -join ',')) }
+    if ($Tests.Count -gt 0) { $a += @('-Tests', ($Tests -join ',')) }
+    $a += @('-Out', $innerOut, '-Work', $base, '-TimeoutSeconds', [string]$TimeoutSeconds, '-Runs', [string]$Runs)
+    $a += @('-SessionKind', 'interactive', '-Log', $innerLog)
+    if ($KeepScratch) { $a += '-KeepScratch' }
+    $argLine = ($a | ForEach-Object { ConvertTo-CmdArg $_ }) -join ' '
+    if (Test-Path -LiteralPath $innerOut) { Remove-Item -LiteralPath $innerOut -Force }
+    $name = 'poly-oracle-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argLine -WorkingDirectory $parent
+    $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit (New-TimeSpan -Seconds $InteractiveTimeoutSeconds) -MultipleInstances IgnoreNew
+    Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -Settings $settings | Out-Null
+    try {
+        Write-Host "running in session $session of $user through scheduled task $name"
+        Start-ScheduledTask -TaskName $name
+        $watch = [Diagnostics.Stopwatch]::StartNew()
+        $seenRunning = $false
+        while ($true) {
+            Start-Sleep -Milliseconds 500
+            $state = [string](Get-ScheduledTask -TaskName $name).State
+            if ($state -eq 'Running') { $seenRunning = $true }
+            $info = Get-ScheduledTaskInfo -TaskName $name
+            $ran = $seenRunning -or ($info.LastRunTime -and $info.LastRunTime.Year -gt 2000)
+            if ($ran -and $state -ne 'Running' -and $state -ne 'Queued') { break }
+            if ($watch.Elapsed.TotalSeconds -gt $InteractiveTimeoutSeconds) {
+                Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+                throw "-Interactive: the task did not finish within $InteractiveTimeoutSeconds s"
+            }
+        }
+        if (Test-Path -LiteralPath $innerLog) {
+            Get-Content -LiteralPath $innerLog | Where-Object { $_ -notmatch '^\*+$|^(Windows PowerShell transcript|Start time|End time|Username|RunAs User|Configuration Name|Machine|Host Application|Process ID|PSVersion|PSEdition|PSCompatibleVersions|BuildVersion|CLRVersion|WSManStackVersion|PSRemotingProtocolVersion|SerializationVersion|Transcript started)' } |
+                ForEach-Object { Write-Host $_ }
+        }
+        if (-not (Test-Path -LiteralPath $innerOut)) {
+            throw "-Interactive: the task ended (result $($info.LastTaskResult)) without writing $innerOut"
+        }
+    } finally {
+        Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $innerLog -Force -ErrorAction SilentlyContinue
+    }
+    if ($PrintJson) { Write-Output ([IO.File]::ReadAllText($innerOut)) }
 }
 
 # Unpack a bundle into $BinDir (data files into $DataOut\<test>\); returns
@@ -271,6 +361,11 @@ $script:BundleHasData = $false
 if ($Bundle.Count -eq 0 -and -not $TestsDir) {
     throw 'give -Bundle <file or parts> or -TestsDir <directory of .exe files>'
 }
+if ($Interactive) {
+    Invoke-Interactive
+    exit 0
+}
+if ($Log) { Start-Transcript -LiteralPath $Log -Force | Out-Null }
 if ($Runs -lt 1) { $Runs = 1 }
 $Work = Resolve-UserPath $Work
 $OutPath = Resolve-UserPath $Out
@@ -302,6 +397,78 @@ try {
     Write-Warning "SetErrorMode not set ($($_.Exception.Message)); a failing test may show a dialog until its timeout"
 }
 
+# In the interactive session: a small topmost window of the runner (the
+# "keeper", 16x16 at the screen's bottom-right corner) that is the foreground
+# window between tests. When a test's last window closes, activation falls
+# to it rather than to whatever the user has open (an elevated console there
+# would block SetCursorPos and SendInput, UIPI), and every test is started by
+# the foreground process, so it may take the foreground itself (Learn:
+# SetForegroundWindow). Before each run the runner brings the keeper to the
+# front and parks the cursor at (1500, 600), so every test starts the same.
+$script:Keeper = $null
+if ($SessionKind -eq 'interactive') {
+    try {
+        Add-Type -Namespace PolyOracle -Name Desk -MemberDefinition @'
+[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
+[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+'@
+        $shared = [hashtable]::Synchronized(@{ hwnd = [IntPtr]::Zero; form = $null })
+        $rs = [runspacefactory]::CreateRunspace()
+        $rs.ApartmentState = 'STA'
+        $rs.Open()
+        $rs.SessionStateProxy.SetVariable('shared', $shared)
+        $ps = [powershell]::Create()
+        $ps.Runspace = $rs
+        [void]$ps.AddScript({
+                Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+                $f = New-Object System.Windows.Forms.Form
+                $f.Text = 'poly-oracle keeper'
+                $f.FormBorderStyle = 'None'
+                $f.ShowInTaskbar = $false
+                $f.TopMost = $true
+                $f.StartPosition = 'Manual'
+                $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+                $f.Bounds = New-Object System.Drawing.Rectangle(($b.Right - 16), ($b.Bottom - 16), 16, 16)
+                $f.BackColor = [System.Drawing.Color]::Black
+                $f.Add_Shown({ $shared.hwnd = $f.Handle })
+                $shared.form = $f
+                [System.Windows.Forms.Application]::Run($f)
+            })
+        $async = $ps.BeginInvoke()
+        for ($w = 0; $w -lt 100 -and $shared.hwnd -eq [IntPtr]::Zero; $w++) { Start-Sleep -Milliseconds 50 }
+        if ($shared.hwnd -eq [IntPtr]::Zero) { throw 'the keeper window did not appear' }
+        $script:Keeper = @{ shared = $shared; ps = $ps; rs = $rs; async = $async }
+    } catch {
+        Write-Warning "no keeper window ($($_.Exception.Message)); tests may not get the foreground"
+    }
+}
+
+# The keeper to the front and the cursor parked; returns what was in front
+# before ('keeper' or 'other').
+function Enter-Keeper {
+    if ($null -eq $script:Keeper) { return 'none' }
+    $h = $script:Keeper.shared.hwnd
+    $was = if ([PolyOracle.Desk]::GetForegroundWindow() -eq $h) { 'keeper' } else { 'other' }
+    if ($was -ne 'keeper') {
+        [void][PolyOracle.Desk]::SetForegroundWindow($h)
+        Start-Sleep -Milliseconds 100
+    }
+    [void][PolyOracle.Desk]::SetCursorPos(1500, 600)
+    Start-Sleep -Milliseconds 50
+    return $was
+}
+
+function Stop-Keeper {
+    if ($null -eq $script:Keeper) { return }
+    $f = $script:Keeper.shared.form
+    try { [void]$f.Invoke([Action] { $f.Close() }) } catch { }
+    try { [void]$script:Keeper.async.AsyncWaitHandle.WaitOne(3000) } catch { }
+    try { $script:Keeper.ps.Dispose(); $script:Keeper.rs.Dispose() } catch { }
+    $script:Keeper = $null
+}
+
+$script:KeeperMissed = @()
 $started = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $results = New-Object System.Collections.ArrayList
 foreach ($exe in @(Get-ChildItem -LiteralPath $BinDir -Filter '*.exe' | Sort-Object Name)) {
@@ -310,6 +477,7 @@ foreach ($exe in @(Get-ChildItem -LiteralPath $BinDir -Filter '*.exe' | Sort-Obj
     $hash = Get-Sha256Hex ([IO.File]::ReadAllBytes($exe.FullName))
     $runsDone = @()
     for ($i = 0; $i -lt $Runs; $i++) {
+        if ((Enter-Keeper) -eq 'other') { $script:KeeperMissed += "$name.$i" }
         $runsDone += , (Invoke-TestOnce $exe.FullName $name $i)
     }
     $first = $runsDone[0]
@@ -341,6 +509,11 @@ foreach ($exe in @(Get-ChildItem -LiteralPath $BinDir -Filter '*.exe' | Sort-Obj
     Write-Host ("{0,-28} {1,-8} exit {2}{3}{4}" -f $name, $first.status, $code, $note, $why)
 }
 
+Stop-Keeper
+if ($script:KeeperMissed.Count -gt 0) {
+    Write-Host "note: another window was in front before $($script:KeeperMissed.Count) run(s): $($script:KeeperMissed -join ' ')"
+}
+
 $result = [ordered]@{
     format  = $RunFormat
     system  = Get-SystemInfo
@@ -355,6 +528,7 @@ $result = [ordered]@{
 $json = ConvertTo-Json -InputObject $result -Depth 6
 [IO.File]::WriteAllText($OutPath, $json, (New-Object Text.UTF8Encoding($false)))
 Write-Host "$($results.Count) tests; results: $OutPath"
+if ($Log) { Stop-Transcript | Out-Null }
 if ($PrintJson) {
     Write-Output $json
 }

@@ -90,9 +90,33 @@ impl Win32k {
 
     /// The device: bytes the compositor wrote (its greeting brings the
     /// surfaces of the windows there are already).
-    pub fn link_receive(&mut self, bytes: &[u8]) {
-        // Input, focus and the shell's requests come with a later slice.
-        let _ = self.desktop.receive(bytes);
+    pub fn link_receive(&mut self, objects: &mut poly_ntobj::ObjectManager, bytes: &[u8]) {
+        use poly_win32k::link::FromCompositor;
+        let events = self.desktop.receive(bytes);
+        // Input from the desktop: the pointer over a surface (relative to
+        // its top left, the window's client area), buttons, keys
+        // (ADR 0134); the shell's requests come later.
+        let mut fx = Effects::default();
+        for e in events {
+            match e {
+                FromCompositor::Pointer { surface, x, y, .. } => {
+                    if let Some(i) = self.surfaces.hwnd_of(surface).and_then(|h| self.wm.info(h)) {
+                        self.wm.link_pointer(i.client.left + x, i.client.top + y, &mut fx);
+                    }
+                }
+                FromCompositor::Button { button, pressed, .. } => self.wm.link_button(button, pressed, &mut fx),
+                FromCompositor::Key { code, pressed, .. } => self.wm.link_key(code, pressed, &mut fx),
+                _ => {}
+            }
+        }
+        self.wake(objects, &fx);
+        // With a compositor the session is interactive, its screen the
+        // output, the work area below Poly's 24-pixel ridge.
+        if let Some(o) = self.desktop.output()
+            && !self.wm.display().interactive
+        {
+            self.wm.set_display(poly_win32k::metrics::Display::desktop(o.width as i32, o.height as i32, 24));
+        }
         self.sync();
     }
 

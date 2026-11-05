@@ -331,6 +331,43 @@ impl Server {
         win
     }
 
+    /// Treat scene window `w`, which its owner keeps (a Windows app's
+    /// surface, ADR 0134), as an internal window: it takes part in focus,
+    /// and its pointer and keyboard input come as [`InternalEvent`]s. It is
+    /// activated when `activate`.
+    pub fn adopt_internal_window(&mut self, w: WindowId, app_id: &str, activate: bool) {
+        if self.scene.window(w).is_none() || self.internal.contains_key(&w) {
+            return;
+        }
+        let size = self.scene.window(w).map_or((0, 0), |win| win.content().logical_size());
+        let state = Internal { app_id: app_id.into(), maximized: false, tile: None, restore: None, size };
+        self.internal.insert(w, state);
+        if activate {
+            self.activate_internal(w);
+        }
+    }
+
+    /// Stop treating `w` as an internal window (it is not removed).
+    pub fn release_internal_window(&mut self, w: WindowId) {
+        if self.internal.remove(&w).is_none() {
+            return;
+        }
+        let was_active = self.active_internal == Some(w);
+        if was_active {
+            self.active_internal = None;
+        }
+        let input = &mut self.seat.input;
+        if input.internal_grab == Some(w) {
+            input.internal_grab = None;
+        }
+        if input.internal_hover == Some(w) {
+            input.internal_hover = None;
+        }
+        if was_active {
+            self.focus_next();
+        }
+    }
+
     /// Remove an internal window.
     pub fn remove_internal_window(&mut self, w: WindowId) {
         if self.internal.remove(&w).is_none() {

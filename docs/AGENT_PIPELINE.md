@@ -362,15 +362,52 @@ cargo xtask pipeline win diff --reference <windows results.json> [--build-kernel
 `rust-src`, `rust-lld`; the first build compiles `core`, about 30 s) and
 refuses an executable that imports from a DLL other than `ntdll`,
 `kernel32`, `user32` and `gdi32` (the GUI entries' tests are still console
-programs), by ordinal, or delay-loaded. GUI tests run in the oracle's SSH
-session, whose desktop is not visible: windows and messages work, but no
-window is visible and nothing is painted through windows (no `WM_PAINT`,
-no update regions), so painting is observed through memory DCs and DIB
-sections. `win diff` compares per test the 32-bit exit code, the
+programs), by ordinal, or delay-loaded. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
 start or was not the same on both runs is an **error**, a test Poly cannot
 start is **unsupported**. `win show`, `win diff` and `win remote` read real
 Windows' observations, so implementers may not run them.
+
+**GUI tests and the interactive session.** By default the runner runs
+the tests in the SSH session, which is session 0 with a non-interactive
+window station: windows and messages work there, but no window is
+visible, nothing is painted through windows (no `WM_PAINT`, no update
+regions, `IsWindowVisible` 0) and no input arrives. Tests of painting,
+focus and activation, the cursor or real input (`SendInput`) run with
+`--runner-arg -Interactive`: `poly-oracle.ps1 -Interactive` registers a
+one-time scheduled task for the same user with the interactive logon type
+(`New-ScheduledTaskPrincipal -LogonType Interactive`, no password stored),
+runs itself through it with the same parameters in that user's desktop
+session (session 1 on homeserver2, where `server` stays logged on), waits,
+prints the inner run's log and unregisters the task. It refuses when the
+user has no interactive session or it is locked. Inside, the runner keeps
+a 16x16 topmost window of its own (the "keeper", at the screen's
+bottom-right corner) as the foreground window between tests: before each
+run it brings the keeper to the front and parks the cursor at (1500, 600).
+So every test starts the same way and is started by the foreground
+process, which lets it take the foreground; without the keeper, activation
+fell to whatever the user had open when a test's window closed (on
+homeserver2 an elevated console, which made `SetCursorPos` fail and
+`SendInput` go nowhere). The result file's
+`system.session` is `interactive` (absent for the SSH session), and a
+spec entry's `windows.json` keeps it, so a reference says where it was
+recorded; the screen there is 1920x1080 at 96 DPI (session 0: 1024x768).
+Poly reproduces the session a test was recorded in: `win build` keeps
+each test's `system.session` from the `windows.json` beside its source
+in the manifest, and `win poly` boots those tests with the kernel
+argument `poly.win32k.session=interactive` (ADR 0134), so a test
+directory has to hold its `windows.json` when it is built.
+The windows of such tests appear on the oracle's real desktop, so tests
+keep to a few rules (spec-win-gui-b's sheets list them): windows in the
+top-left 1000x500 pixels, closed within seconds; the cursor parked away
+from them first and put back at the end; keyboard input only while a
+window of the test is in the foreground, clicks only onto a window of the
+test, never Alt, the Windows key or other shell shortcuts. Only one
+interactive run at a time may use the machine.
+
+```sh
+POLY_RUN=~/poly-dev/polyd tools/pipeline/windows/poly-remote.sh --host homeserver2     --tests-dir specs/windows/user32.dll/InvalidateRect.tests --runner-arg -Interactive [--record]
+```
 
 **C++ tests** ([ADR 0098](adr/0098-cpp-windows-tests-and-the-cpp-exception-spec.md)):
 a test may also be one `.cpp` file, for what Rust cannot do (C++
