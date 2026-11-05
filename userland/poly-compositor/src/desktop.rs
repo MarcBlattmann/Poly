@@ -27,6 +27,16 @@ pub const SHELL_FONTS: &str = "/usr/share/poly/fonts";
 /// (`poly_shell::picture` files, ADR 0127).
 pub const WALLPAPERS: &str = "/usr/share/poly/wallpapers";
 
+/// The shell's catalog. The demo clients are fixture apps, not part of a
+/// normal desktop; `--test-apps` opts them in.
+pub fn launcher_catalog(files: Vec<App>, test_apps: bool) -> Vec<App> {
+    let mut apps = poly_shell::apps::catalog(files);
+    if !test_apps {
+        apps.retain(|app| !matches!(app.name.as_str(), "Poly Demo" | "Wayland Test Client"));
+    }
+    apps
+}
+
 /// Give the shell the wallpapers' pictures that are on the disk.
 pub fn load_wallpapers(shell: &mut poly_shell::Shell) {
     for (id, _, _, _, _) in poly_shell::theme::wallpaper::PRESETS {
@@ -258,5 +268,17 @@ mod tests {
     fn keymap_files_and_desktop_files_need_the_kernel() {
         assert!(desktop_files("/usr/share/applications").is_empty());
         assert!(keymap_file("/run/user/0", &US).is_err());
+    }
+
+    #[test]
+    fn test_clients_are_opt_in_launcher_apps() {
+        let normal: Vec<String> = launcher_catalog(Vec::new(), false).into_iter().map(|a| a.name).collect();
+        assert!(normal.iter().any(|name| name == "Settings"));
+        assert!(!normal.iter().any(|name| name == "Poly Demo"));
+        assert!(!normal.iter().any(|name| name == "Wayland Test Client"));
+
+        let tests: Vec<String> = launcher_catalog(Vec::new(), true).into_iter().map(|a| a.name).collect();
+        assert!(tests.iter().any(|name| name == "Poly Demo"));
+        assert!(tests.iter().any(|name| name == "Wayland Test Client"));
     }
 }

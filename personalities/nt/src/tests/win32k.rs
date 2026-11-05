@@ -134,7 +134,10 @@ fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
     // is replayed with a client-sized buffer.
     let hello =
         FromCompositor::Hello { version: VERSION, width: 1280, height: 800, scale: 1, frame: FrameMetrics::POLY };
-    f.with_state(|sys, _, _| sys.win32k.link_receive(&encode_all(&[hello])));
+    f.with_state(|sys, _, _| {
+        let (win32k, objects) = (&mut sys.win32k, &mut sys.objects);
+        win32k.link_receive(objects, &encode_all(&[hello]));
+    });
     let (w, hgt) = (20u64, 10u64);
     assert_eq!(call(&mut f, Request::Surface { hwnd: h }), Reply::Value { value: w | (hgt << 32) });
     let records = |f: &mut Fake| {

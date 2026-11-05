@@ -27,9 +27,9 @@ use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 use poly_wayland::compose::{Content, Rect, Scene, WindowId};
-use poly_win32k::frame::FrameMetrics;
+use poly_win32k::frame::{FrameMetrics, Rect as WinRect};
 use poly_win32k::link::{
-    BufferId, CursorShape, DEVICE, Edges, FromCompositor, PixelFormat, READ_BUFFER, ReadBuffer, Record, Stream,
+    BufferId, CursorShape, DEVICE, Edges, FromCompositor, PixelFormat, READ_BUFFER, ReadBuffer, Record, Request, Stream,
     SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState,
 };
 
@@ -65,6 +65,7 @@ pub enum Action {
 struct Surface {
     window: WindowId,
     buffer: Option<(BufferId, u32, u32, u32, PixelFormat)>,
+    geometry: (i32, i32, u32, u32),
 }
 
 /// Windows surfaces in the scene.
@@ -125,11 +126,14 @@ impl WindowsSurfaces {
                 if let Some(owner) = self.window(owner) {
                     scene.set_parent(window, Some(owner));
                 }
-                self.surfaces.insert(surface, Surface { window, buffer: None });
+                self.surfaces.insert(surface, Surface { window, buffer: None, geometry: (0, 0, 0, 0) });
             }
-            ToCompositor::Geometry { surface, x, y, .. } => {
+            ToCompositor::Geometry { surface, x, y, width, height } => {
                 if let Some(w) = self.window(surface) {
                     scene.set_position(w, x, y);
+                }
+                if let Some(s) = self.surfaces.get_mut(&surface) {
+                    s.geometry = (x, y, width, height);
                 }
             }
             ToCompositor::Title { surface, ref text } => {
@@ -289,6 +293,57 @@ impl Link {
     /// The surfaces in the scene.
     pub fn surfaces(&self) -> &WindowsSurfaces {
         &self.surfaces
+    }
+
+    /// The close button at (`x`, `y`) belongs to a Windows surface, if any.
+    /// The compositor normally sends an xdg close to Wayland clients; a
+    /// Windows surface needs the equivalent request over `/dev/win32k`.
+    pub fn close_at(&mut self, scene: &Scene, x: i32, y: i32) -> bool {
+        let surface = self.surfaces.surfaces.iter().find_map(|(&surface, s)| {
+            let win = scene.window(s.window)?;
+            if !win.is_decorated() {
+                return None;
+            }
+            let frame = scene.frame_rect(s.window)?;
+            let outer = WinRect::new(frame.x, frame.y, frame.x + frame.width, frame.y + frame.height);
+            FrameMetrics::POLY.buttons(outer).close.contains(x, y).then_some(surface)
+        });
+        if let Some(surface) = surface {
+            self.send(FromCompositor::Request { surface, request: Request::Close });
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Tell win32k where the compositor moved a Windows surface. This keeps
+    /// the app's GetWindowRect and later input in step with Poly's frame.
+    pub fn sync_geometry(&mut self, scene: &Scene) {
+        let mut moved = Vec::new();
+        for (&surface, s) in &self.surfaces.surfaces {
+            let Some(win) = scene.window(s.window) else { continue };
+            let (x, y) = win.position();
+            let (width, height) = win.content().logical_size();
+            let (width, height) = (width.max(0) as u32, height.max(0) as u32);
+            let geometry = (x, y, width, height);
+            if s.geometry != geometry {
+                moved.push((surface, geometry));
+            }
+        }
+        for (surface, (x, y, width, height)) in moved {
+            if let Some(s) = self.surfaces.surfaces.get_mut(&surface) {
+                s.geometry = (x, y, width, height);
+            }
+            self.send(FromCompositor::Configure { surface, x, y, width, height });
+        }
+    }
+
+    fn send(&mut self, record: FromCompositor) {
+        let mut bytes = Vec::new();
+        record.encode(&mut bytes);
+        if let Err(e) = os::write(self.fd, &bytes) {
+            eprintln!("poly-compositor: {DEVICE}: {e}");
+        }
     }
 
     /// Read what win32k sent and apply it to the scene.

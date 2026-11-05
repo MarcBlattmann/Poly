@@ -54,7 +54,7 @@
 //!
 //! ```text
 //! poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE]
-//!                 [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]]
+//!                 [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE] [--test-apps]]
 //!                 [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy]
 //!                 [--exec PROGRAM [ARGS...]]
 //! ```
@@ -107,7 +107,7 @@ use alloc::collections::BTreeMap;
 use poly_rt::fs;
 use poly_rt::net::{UnixListener, UnixStream};
 use poly_wayland::compose::{Framebuffer, MemoryFramebuffer};
-use poly_wayland::seat::InputSource;
+use poly_wayland::seat::{BTN_LEFT, InputEvent, InputSource};
 use poly_wayland::server::{ClientId, Config, FrameTime, OutputConfig, Server, present_flags};
 use poly_wayland::wire::Fd;
 
@@ -128,6 +128,8 @@ struct Options {
     /// `--keymap` as given (it wins over the settings).
     keymap: Option<String>,
     settings: Option<String>,
+    /// Include the desktop's test fixtures in the launcher.
+    test_apps: bool,
     /// On the screen without the shell.
     kms: bool,
     drm: String,
@@ -136,7 +138,7 @@ struct Options {
     exec: Vec<String>,
 }
 
-const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
+const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE] [--test-apps]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
 
 /// A scale given as `N` (1 to 8) or `auto`.
 fn parse_scale(v: &str) -> Result<Option<u32>, String> {
@@ -163,6 +165,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         fb: "/dev/fb0".into(),
         keymap: None,
         settings: None,
+        test_apps: false,
         kms: false,
         drm: "/dev/dri/card0".into(),
         no_kms: false,
@@ -195,6 +198,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
                 o.keymap = Some(v);
             }
             "--settings" => o.settings = Some(value()?),
+            "--test-apps" => o.test_apps = true,
             "--xwayland" => o.xwayland = Some(xwayland::Start::Now),
             "--xwayland-lazy" => o.xwayland = Some(xwayland::Start::Lazy),
             "--exec" => {
@@ -468,6 +472,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             keymap: o.keymap.as_deref(),
             scale: o.scale,
             settings: o.settings.clone(),
+            test_apps: o.test_apps,
         };
         Some(desk::Desktop::new(&opts, &mut server, keymap, desktop::shell_fonts()))
     } else {
@@ -605,6 +610,12 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
             d.polled(&fds[desk_at..desk_end]);
             while let Some(ev) = d.input.next_event() {
+                if let InputEvent::PointerButton { button: BTN_LEFT, pressed: true, .. } = &ev
+                    && let Some(link) = &mut winlink
+                {
+                    let (x, y) = server.pointer();
+                    link.close_at(server.scene(), x.floor(), y.floor());
+                }
                 if let Some(app) = d.route(ev, &mut server) {
                     if d.open_internal(&app, &mut server) {
                         continue;
@@ -616,6 +627,9 @@ fn run(args: &[String]) -> Result<u8, String> {
                         }
                         Err(e) => eprintln!("poly-compositor: {}: {e}", app.argv[0]),
                     }
+                }
+                if let Some(link) = &mut winlink {
+                    link.sync_geometry(server.scene());
                 }
             }
             d.sync(&mut server);
@@ -759,6 +773,8 @@ mod tests {
         assert_eq!((o.fb.as_str(), o.keymap.as_deref()), ("/dev/fb1", Some("de-ch")));
         let o = parse_args(&args("--desktop --settings /tmp/s.conf --scale 2")).unwrap();
         assert_eq!((o.settings, o.scale, o.keymap), (Some("/tmp/s.conf".into()), Some(2), None));
+        let o = parse_args(&args("--desktop --test-apps")).unwrap();
+        assert!(o.test_apps);
         assert!(parse_args(&args("--keymap xx")).is_err());
         assert!(parse_args(&args("--size 0x4")).is_err());
         assert!(parse_args(&args("--scale 9")).is_err());

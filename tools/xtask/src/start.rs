@@ -69,6 +69,7 @@ pub const ENTRIES: [Entry; 9] = [
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Opt {
     Release,
+    TestApps,
     Accel,
     Scale,
     Size,
@@ -119,7 +120,7 @@ impl Entry {
     pub fn about(self) -> &'static str {
         match self {
             Entry::Desktop => {
-                "Poly's desktop in QEMU's window: compositor, shell, launcher, test apps (cargo xtask desktop)"
+                "Poly's desktop in QEMU's window; test fixtures are optional (cargo xtask desktop --test-apps)"
             }
             Entry::ChromiumRun => {
                 "the desktop from Chromium's disk; type \"chromium\" in the launcher (cargo xtask chromium run)"
@@ -140,7 +141,7 @@ impl Entry {
     pub fn options(self) -> &'static [Opt] {
         use Opt::*;
         match self {
-            Entry::Desktop => &[Release, Accel, Scale, Size, FreshState, KernelArgs, Display],
+            Entry::Desktop => &[Release, TestApps, Accel, Scale, Size, FreshState, KernelArgs, Display],
             Entry::ChromiumRun => &[Release, Accel, FreshDisk, Display],
             Entry::ChromiumDisk => &[],
             Entry::Toolkits => &[Release, Accel, FreshDisk],
@@ -165,6 +166,7 @@ impl Opt {
     pub fn title(self) -> &'static str {
         match self {
             Opt::Release => "Build",
+            Opt::TestApps => "Test apps",
             Opt::Accel => "Accelerator",
             Opt::Scale => "Scale",
             Opt::Size => "Screen size",
@@ -181,6 +183,7 @@ impl Opt {
     fn hint(self) -> &'static str {
         match self {
             Opt::Release => "release or debug build of the kernel and the programs",
+            Opt::TestApps => "--test-apps: show the desktop's test fixtures in the launcher",
             Opt::Accel => "POLY_QEMU_ACCEL: the host's hypervisor if usable (auto), or QEMU's emulator (tcg)",
             Opt::Scale => "--scale=N: Poly's display scale; auto fits the host's screen",
             Opt::Size => "--size=WxH: the guest's screen; auto fits the host's screen (Enter types one)",
@@ -201,6 +204,7 @@ impl Opt {
 pub struct Settings {
     pub entry: Entry,
     pub release: bool,
+    pub test_apps: bool,
     /// `auto`, `kvm`, `whpx` or `tcg`.
     pub accel: String,
     /// `auto` or 1 to 4.
@@ -221,6 +225,7 @@ impl Default for Settings {
         Settings {
             entry: Entry::Desktop,
             release: true,
+            test_apps: false,
             accel: "auto".into(),
             scale: "auto".into(),
             size: "auto".into(),
@@ -267,6 +272,7 @@ impl Settings {
             "format": FORMAT,
             "entry": self.entry.id(),
             "release": self.release,
+            "test_apps": self.test_apps,
             "accel": self.accel,
             "scale": self.scale,
             "size": self.size,
@@ -299,6 +305,7 @@ impl Settings {
         Settings {
             entry: text("entry").and_then(|e| Entry::from_id(&e)).unwrap_or(d.entry),
             release: flag("release", d.release),
+            test_apps: flag("test_apps", d.test_apps),
             accel: one_of("accel", &ACCELS, "auto"),
             scale: one_of("scale", &SCALES, "auto"),
             size: text("size").filter(|s| s == "auto" || valid_size(s)).unwrap_or(d.size.clone()),
@@ -338,6 +345,7 @@ impl Settings {
         let list = |l: &[String]| if l.is_empty() { "all".to_string() } else { l.join(", ") };
         match o {
             Opt::Release => if self.release { "release" } else { "debug" }.into(),
+            Opt::TestApps => if self.test_apps { "on" } else { "off" }.into(),
             Opt::Accel => self.accel.clone(),
             Opt::Scale => self.scale.clone(),
             Opt::Size => self.size.clone(),
@@ -437,13 +445,17 @@ fn note(e: Entry, host: &Host) -> Option<&'static str> {
 
 /// What the desktop's launcher will offer (beyond Settings and
 /// Notifications).
-fn apps_line(e: Entry) -> Option<String> {
+fn apps_line(e: Entry, s: &Settings) -> Option<String> {
     match e {
         Entry::Desktop => {
-            let apps: Vec<String> = crate::desktop::launcher_apps().into_iter().map(|(n, _)| n).collect();
-            Some(format!("The desktop image's apps: {}", apps.join(", ")))
+            let apps: Vec<String> = crate::desktop::launcher_apps(s.test_apps).into_iter().map(|(n, _)| n).collect();
+            if apps.is_empty() {
+                Some("Test fixtures are hidden; turn on Test apps to include them".into())
+            } else {
+                Some(format!("The desktop image's test apps: {}", apps.join(", ")))
+            }
         }
-        Entry::ChromiumRun => Some("The launcher: Chromium, the demo window, and the disk's desktop files".into()),
+        Entry::ChromiumRun => Some("The launcher: Chromium and the disk's desktop files".into()),
         _ => None,
     }
 }
@@ -484,6 +496,7 @@ pub fn args(e: Entry, s: &Settings) -> Vec<String> {
         Entry::Desktop => {
             a.push("desktop".into());
             flag(&mut a, s.release, "--release");
+            flag(&mut a, s.test_apps, "--test-apps");
             flag(&mut a, s.fresh_state, "--fresh-state");
             if s.scale != "auto" {
                 a.push(format!("--scale={}", s.scale));
@@ -715,7 +728,7 @@ impl Menu {
     /// Enter or Space on an option.
     fn activate(&mut self, o: Opt, enter: bool) {
         match o {
-            Opt::Release | Opt::FreshState | Opt::FreshDisk | Opt::Accel | Opt::Scale => self.change(o, 1),
+            Opt::Release | Opt::TestApps | Opt::FreshState | Opt::FreshDisk | Opt::Accel | Opt::Scale => self.change(o, 1),
             Opt::Size | Opt::Display | Opt::KernelArgs if enter => {
                 let now = match o {
                     Opt::Size if self.s.size == "auto" => String::new(),
@@ -749,6 +762,7 @@ impl Menu {
         let s = &mut self.s;
         match o {
             Opt::Release => s.release = !s.release,
+            Opt::TestApps => s.test_apps = !s.test_apps,
             Opt::FreshState => s.fresh_state = !s.fresh_state,
             Opt::FreshDisk => s.fresh_disk = !s.fresh_disk,
             Opt::Accel => s.accel = cycle(&self.host.accels(), &s.accel),
@@ -911,7 +925,7 @@ impl Menu {
             ]);
         }
         out.push(vec![]);
-        if let Some(apps) = apps_line(self.s.entry) {
+        if let Some(apps) = apps_line(self.s.entry, &self.s) {
             out.push(vec![(Look::Dim, format!(" {apps}"))]);
         }
         match plan(&self.s, &self.host) {
@@ -1151,6 +1165,7 @@ mod tests {
         let s = Settings {
             entry: Entry::BootTests,
             release: false,
+            test_apps: true,
             accel: "tcg".into(),
             scale: "2".into(),
             size: "2560x1600".into(),
@@ -1179,6 +1194,7 @@ mod tests {
         assert_eq!(s.entry, Entry::Desktop);
         assert_eq!((s.accel.as_str(), s.scale.as_str(), s.size.as_str()), ("auto", "auto", "auto"));
         assert!(s.release);
+        assert!(!s.test_apps);
         assert_eq!(s.groups, ["desktop"]);
         assert_eq!(s.display, "auto");
     }
@@ -1190,11 +1206,22 @@ mod tests {
         s.scale = "2".into();
         s.size = "2560x1600".into();
         s.fresh_state = true;
+        s.test_apps = true;
         s.kernel_args = " poly.a=1  poly.b ".into();
         assert_eq!(
             args(Entry::Desktop, &s),
-            ["desktop", "--release", "--fresh-state", "--scale=2", "--size=2560x1600", "poly.a=1", "poly.b"]
+            [
+                "desktop",
+                "--release",
+                "--test-apps",
+                "--fresh-state",
+                "--scale=2",
+                "--size=2560x1600",
+                "poly.a=1",
+                "poly.b"
+            ]
         );
+        s.test_apps = false;
         s.release = false;
         s.fresh_disk = true;
         assert_eq!(args(Entry::ChromiumRun, &s), ["chromium", "run", "--fresh-disk"]);
@@ -1270,6 +1297,12 @@ mod tests {
         assert_eq!(m.s.entry, Entry::Desktop);
         assert!(m.message.contains("Linux host"), "{}", m.message);
         assert!(m.lines().iter().flatten().any(|(_, t)| t.contains("poly-dev container")));
+        m.focus_on(Row::Opt(Opt::TestApps));
+        m.key(Key::Right);
+        assert!(m.s.test_apps);
+        assert!(m.lines().iter().flatten().any(|(_, t)| t.contains("Poly Fill")));
+        m.key(Key::Right);
+        assert!(!m.s.test_apps);
         // Chromium: chosen, with what comes first.
         m.focus_on(Row::Entry(Entry::ChromiumRun));
         m.key(Key::Enter);

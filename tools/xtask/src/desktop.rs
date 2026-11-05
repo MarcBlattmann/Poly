@@ -32,7 +32,8 @@
 //! 4. dragging the title bar moves the window (its colour found at the new
 //!    place);
 //! 5. Q closes the client, and the launcher comes back on the empty
-//!    desktop.
+//!    desktop; the launcher then starts the interactive native protocol
+//!    test client and checks its two-colour shared buffer.
 //!
 //! Boot group `desktop-shell` (ADR 0117) boots the same desktop with a
 //! virtio-sound card (the mixer) and an ext2 disk mounted on `/mnt` for
@@ -71,6 +72,9 @@ const RIDGE: [u8; 3] = [0x20, 0x20, 0x20];
 /// The desktop file the image carries.
 const DESKTOP_FILE: &str = "[Desktop Entry]\nType=Application\nName=Demo Window\n\
     Comment=The demo client, from a desktop file\nExec=/bin/wl-demo\nKeywords=demo;sample;\n";
+/// The interactive launcher entry for the protocol test client.
+const WL_CLIENT_FILE: &str = "[Desktop Entry]\nType=Application\nName=Wayland Test Client\n\
+    Comment=An interactive native Wayland protocol test window\nExec=/bin/wl-client --interactive\nKeywords=wayland;test;client;\n";
 /// A desktop file for `notify-send` (ADR 0117): the launcher sends a
 /// notification through `org.freedesktop.Notifications` with it.
 const NOTIFY_FILE: &str = "[Desktop Entry]\nType=Application\nName=Send Test Notification\n\
@@ -82,8 +86,11 @@ const NOTIFY_FILE: &str = "[Desktop Entry]\nType=Application\nName=Send Test Not
 const MEMORY: &str = "512M";
 
 /// The kernel command line of a desktop boot.
-pub fn append(extra: &str) -> String {
-    format!("poly.init=/bin/poly-compositor poly.init.arg=--desktop poly.terminal=off {extra}").trim_end().to_string()
+pub fn append(extra: &str, test_apps: bool) -> String {
+    let test_apps = if test_apps { " poly.init.arg=--test-apps" } else { "" };
+    format!("poly.init=/bin/poly-compositor poly.init.arg=--desktop poly.terminal=off{test_apps} {extra}")
+        .trim_end()
+        .to_string()
 }
 
 /// QEMU's devices for the desktop: a virtio GPU of [`SIZE`], a virtio
@@ -124,13 +131,15 @@ fn desktop_name(file: &str) -> &str {
     file.lines().find_map(|l| l.strip_prefix("Name=")).unwrap_or("?")
 }
 
-/// What the desktop's launcher offers, beyond its settings and
-/// notifications: (name in the launcher, what starts it). For `cargo xtask
-/// start`'s menu.
-pub fn launcher_apps() -> Vec<(String, String)> {
+/// What the desktop's launcher offers beyond its real apps, for `cargo
+/// xtask start`'s menu. Test fixtures are absent unless requested.
+pub fn launcher_apps(test_apps: bool) -> Vec<(String, String)> {
+    if !test_apps {
+        return Vec::new();
+    }
     let mut apps: Vec<(String, String)> = [
         ("Poly Demo", "/bin/wl-demo (built in)"),
-        ("Wayland Test Client", "/bin/wl-client (built in)"),
+        (desktop_name(WL_CLIENT_FILE), "/bin/wl-client --interactive (desktop file)"),
         (desktop_name(DESKTOP_FILE), "/bin/wl-demo (demo-window.desktop)"),
         (desktop_name(NOTIFY_FILE), "/bin/notify-send (notify-test.desktop)"),
     ]
@@ -145,8 +154,8 @@ pub fn launcher_apps() -> Vec<(String, String)> {
 
 /// The Windows GUI test program built (on any host, [`crate::winapp`]),
 /// with its desktop file; left out, saying why, where it cannot be built.
-fn windows_app_files() -> Vec<(String, u16, Vec<u8>)> {
-    if !has_windows_app() {
+fn windows_app_files(test_apps: bool) -> Vec<(String, u16, Vec<u8>)> {
+    if !test_apps || !has_windows_app() {
         return Vec::new();
     }
     match crate::winapp::build(&[WIN32_TEST]) {
@@ -172,23 +181,27 @@ fn windows_app_files() -> Vec<(String, u16, Vec<u8>)> {
 
 /// Build the desktop's initramfs, with the Windows test app when it can
 /// be built; returns its path.
-pub fn image() -> Result<PathBuf> {
-    build_image("poly-desktop-initramfs.cpio", windows_app_files)
+pub fn image(test_apps: bool) -> Result<PathBuf> {
+    build_image("poly-desktop-initramfs.cpio", test_apps, move || windows_app_files(test_apps))
 }
 
 /// [`image`] with `extra` files (path, mode, bytes) instead of the Windows
 /// app, written to `name`.
-fn image_with(name: &str, extra: Vec<(String, u16, Vec<u8>)>) -> Result<PathBuf> {
-    build_image(name, move || extra)
+fn image_with(name: &str, test_apps: bool, extra: Vec<(String, u16, Vec<u8>)>) -> Result<PathBuf> {
+    build_image(name, test_apps, move || extra)
 }
 
 /// The desktop's initramfs with the files `extra` gives, written to `name`.
-fn build_image(name: &str, extra: impl FnOnce() -> Vec<(String, u16, Vec<u8>)> + Send) -> Result<PathBuf> {
+fn build_image(
+    name: &str,
+    test_apps: bool,
+    extra: impl FnOnce() -> Vec<(String, u16, Vec<u8>)> + Send,
+) -> Result<PathBuf> {
     // Every program is a native program, built on any host (ADR 0125;
     // the Wayland test clients since ADR 0133). The files are gathered
     // while they build.
     let (built, files, extra) = thread::scope(|s| {
-        let files = s.spawn(|| crate::progress::task("desktop files (fonts, wallpapers)", image_files));
+        let files = s.spawn(|| crate::progress::task("desktop files (fonts, wallpapers)", || image_files(test_apps)));
         let extra = s.spawn(extra);
         let built = crate::native::build();
         let files = files.join().unwrap_or_else(|_| Err("gathering the desktop's files panicked".into()));
@@ -210,10 +223,13 @@ fn build_image(name: &str, extra: impl FnOnce() -> Vec<(String, u16, Vec<u8>)> +
 
 /// The desktop image's files besides the programs: the desktop files, the
 /// fonts, the wallpapers.
-fn image_files() -> Result<initramfs::Tree> {
+fn image_files(test_apps: bool) -> Result<initramfs::Tree> {
     let mut tree = initramfs::Tree::default();
-    tree.files.push(("usr/share/applications/demo-window.desktop".into(), 0o644, DESKTOP_FILE.as_bytes().into()));
-    tree.files.push(("usr/share/applications/notify-test.desktop".into(), 0o644, NOTIFY_FILE.as_bytes().into()));
+    if test_apps {
+        tree.files.push(("usr/share/applications/demo-window.desktop".into(), 0o644, DESKTOP_FILE.as_bytes().into()));
+        tree.files.push(("usr/share/applications/wayland-test-client.desktop".into(), 0o644, WL_CLIENT_FILE.as_bytes().into()));
+        tree.files.push(("usr/share/applications/notify-test.desktop".into(), 0o644, NOTIFY_FILE.as_bytes().into()));
+    }
     let font = crate::fonts::cache_dir().join("DejaVuSans.ttf");
     match std::fs::read(&font) {
         Ok(data) => tree.files.push(("usr/share/fonts/truetype/dejavu/DejaVuSans.ttf".into(), 0o644, data)),
@@ -277,6 +293,7 @@ pub struct Prepared {
     asked: bool,
     host: Option<hostscreen::Screen>,
     extra: Vec<String>,
+    test_apps: bool,
 }
 
 /// The options of [`command`] read, and everything built for the boot: the
@@ -285,6 +302,7 @@ pub struct Prepared {
 pub fn prepare(args: &[String]) -> Result<Prepared> {
     let release = args.iter().any(|a| a == "--release");
     let fresh = args.iter().any(|a| a == "--fresh-state");
+    let test_apps = args.iter().any(|a| a == "--test-apps");
     let value = |name: &str| args.iter().find_map(|a| a.strip_prefix(name)).map(str::to_string);
     let asked = match value("--scale=") {
         Some(v) => {
@@ -320,25 +338,26 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
             }
             Ok(())
         });
-        let image = image();
+        let image = image(test_apps);
         let kernel = kernel.join().unwrap_or_else(|_| Err("building the kernel panicked".into()));
         (kernel, image, disk.join().unwrap_or_else(|_| Err("making the settings disk panicked".into())))
     });
     let (kernel, image) = (kernel?, image?);
     disk?;
-    Ok(Prepared { kernel, image, state, size, scale, asked: asked.is_some(), host, extra })
+    Ok(Prepared { kernel, image, state, size, scale, asked: asked.is_some(), host, extra, test_apps })
 }
 
 /// Boot what [`prepare`] made, in QEMU's window.
 pub fn boot(p: Prepared) -> Result {
-    let Prepared { kernel, image, state, size, scale, asked, host, extra } = p;
+    let Prepared { kernel, image, state, size, scale, asked, host, extra, test_apps } = p;
     // The compositor's `--scale` wins over the saved settings' scale (which
     // a run at another scale may have saved): asked for, or the host's when
     // that is not 1. At scale 1 the settings choose, as before.
     let force =
         if asked || scale != 1 { format!("poly.init.arg=--scale poly.init.arg={scale}") } else { String::new() };
     let kernel_args = format!("{SETTINGS_ARGS} poly.display.scale={scale} {force} {}", extra.join(" "));
-    let mut cmd = qemu(&kernel, MEMORY, &append(kernel_args.trim_end()), super::Devices::None, "mon:stdio");
+    let mut cmd =
+        qemu(&kernel, MEMORY, &append(kernel_args.trim_end(), test_apps), super::Devices::None, "mon:stdio");
     cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
     eprintln!("==> screen {}x{} at scale {scale} (--size=WxH, --scale=N)", size.0, size.1);
     let sdl = window_display(&mut cmd);
@@ -558,6 +577,27 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     thread::sleep(Duration::from_millis(1500));
     let img = d.shot("empty-again")?;
     expect("the launcher is back on the empty desktop", img.pixel(900, 40) == RIDGE)?;
+
+    // The native protocol test is also an interactive launcher app: it must
+    // pass its checks, keep the shared buffer visible, and respond to close.
+    d.type_text(&["w", "a", "y", "l", "a", "n", "d", "spc", "t", "e", "s", "t", "spc", "c", "l", "i", "e", "n", "t"])?;
+    d.wait("launcher query \"wayland test client\"", 30)?;
+    d.type_text(&["ret"])?;
+    d.wait("poly-compositor: launched Wayland Test Client", 30)?;
+    let client_line = d.wait("window \"wl-client\" shown at", 30)?;
+    let (cx, cy, cw, ch) = window_place(&client_line).ok_or_else(|| format!("unreadable window line {client_line:?}"))?;
+    expect("the interactive protocol-test window is 64x48", (cw, ch) == (64, 48))?;
+    d.wait("wl-client: ok", 30)?;
+    thread::sleep(Duration::from_millis(500));
+    let img = d.shot("wl-client")?;
+    expect("the protocol-test window's left half is drawn", img.pixel((cx + 5) as u32, (cy + 5) as u32) == [0x20, 0x60, 0xc0])?;
+    expect(
+        "the protocol-test window's right half is drawn",
+        img.pixel((cx + 40) as u32, (cy + 5) as u32) == [0xe0, 0x70, 0x20],
+    )?;
+    chord(&mut d, &["alt", "f4"])?;
+    d.wait("wl-client: closed", 30)?;
+    wait_nth(&d.lines, "Wayland Test Client (pid", 2, 30)?;
     d.qmp.quit();
     Ok(())
 }
@@ -807,8 +847,8 @@ fn state_drive(state: &Path) -> Vec<String> {
 const SETTINGS_ARGS: &str = "poly.mount=virtio0:/mnt poly.init.arg=--settings poly.init.arg=/mnt/poly/shell.conf";
 
 /// The kernel command line of the shell's boots.
-fn shell_append() -> String {
-    append(SETTINGS_ARGS)
+fn shell_append(test_apps: bool) -> String {
+    append(SETTINGS_ARGS, test_apps)
 }
 
 /// One boot of the shell test with `drive` run once the desktop is up.
@@ -845,7 +885,7 @@ fn shell_boot(
         }
     };
     let b: Result<Boot> = super::with_boot_timeout(Duration::from_secs(600), || {
-        boot_with(kernel, syms, MEMORY, &shell_append(), super::Devices::None, &qemu_args, None, on_line)
+        boot_with(kernel, syms, MEMORY, &shell_append(true), super::Devices::None, &qemu_args, None, on_line)
     });
     let _ = std::fs::remove_file(&socket);
     let b = b?;
@@ -875,7 +915,7 @@ pub fn shell_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         eprintln!("==> skipped: the desktop shell boot test needs a Unix host (QMP)");
         return Ok(());
     }
-    let image = image()?;
+    let image = image(true)?;
     let state = root().join("target").join("poly-shell-state.img");
     std::fs::write(&state, crate::ext2disk::image()?).map_err(|e| format!("{}: {e}", state.display()))?;
     let sound = crate::sound::qemu_has_virtio_sound();
@@ -913,7 +953,7 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         eprintln!("==> skipped: the desktop boot test needs a Unix host (QMP)");
         return Ok(());
     }
-    let image = image()?;
+    let image = image(true)?;
     eprintln!(
         "==> boot test: the desktop on virtio-gpu through DRM/KMS (ridge, launcher, typing, a client launched, \
          pointer and keyboard routed, a window dragged)"
@@ -943,7 +983,7 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         }
     };
     let b: Result<Boot> = super::with_boot_timeout(Duration::from_secs(420), || {
-        boot_with(kernel, syms, MEMORY, &append(""), super::Devices::None, &qemu_args, None, on_line)
+        boot_with(kernel, syms, MEMORY, &append("", true), super::Devices::None, &qemu_args, None, on_line)
     });
     let _ = std::fs::remove_file(&socket);
     let b = b?;
@@ -1009,6 +1049,28 @@ fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
         "Poly's title bar is above the client area",
         img.pixel(title.0, title.1) != before.pixel(title.0, title.1) && img.pixel(title.0, title.1) != WIN32_FILL,
     )?;
+
+    // Drag Poly's frame. The compositor must send Configure back over
+    // /dev/win32k, not leave GetWindowRect at the program's old position.
+    d.send(&abs(x + 120, y - 16))?;
+    d.send(&[button(true)])?;
+    for i in 1..=4 {
+        d.send(&abs(x + 120 + 25 * i, y - 16 + 15 * i))?;
+    }
+    d.send(&[button(false)])?;
+    thread::sleep(Duration::from_millis(1200));
+    let img = d.shot("win32-moved")?;
+    let moved = ((x + 100 + w / 2) as u32, (y + 60 + h / 2) as u32);
+    expect("the Windows client area moves with Poly's frame", img.pixel(moved.0, moved.1) == WIN32_FILL)?;
+    expect("the old client position is cleared", img.pixel((x + w / 2) as u32, (y + h / 2) as u32) != WIN32_FILL)?;
+
+    // The frame's close button sends WM_CLOSE to the Windows app through
+    // the desktop link; its message loop destroys the window and exits.
+    click(&mut d, x + 100 + w - 12, y + 60 - 13)?;
+    wait_nth(&d.lines, "Poly Fill (pid", 2, 30)?;
+    thread::sleep(Duration::from_millis(500));
+    let img = d.shot("win32-closed")?;
+    expect("the launcher returns after the Windows window closes", img.pixel(900, 40) == RIDGE)?;
     d.qmp.quit();
     Ok(())
 }
@@ -1037,9 +1099,9 @@ pub fn win32_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         (format!("win/{WIN32_TEST}.exe"), 0o755, exe),
         ("usr/share/applications/poly-fill.desktop".to_string(), 0o644, WIN32_DESKTOP_FILE.as_bytes().to_vec()),
     ];
-    let image = image_with("poly-desktop-win32-initramfs.cpio", extra)?;
+    let image = image_with("poly-desktop-win32-initramfs.cpio", true, extra)?;
     eprintln!(
-        "==> boot test: a Windows GUI program's window on the desktop through /dev/win32k (launched, framed, filled)"
+        "==> boot test: a Windows GUI program on the desktop through /dev/win32k (launched, filled, moved, closed)"
     );
     let socket = std::env::temp_dir().join(format!("poly-desktop-win32-qmp-{}.sock", std::process::id()));
     let _ = std::fs::remove_file(&socket);
@@ -1066,7 +1128,7 @@ pub fn win32_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         }
     };
     let b: Result<Boot> = super::with_boot_timeout(Duration::from_secs(420), || {
-        boot_with(kernel, syms, MEMORY, &append(""), super::Devices::None, &qemu_args, None, on_line)
+        boot_with(kernel, syms, MEMORY, &append("", true), super::Devices::None, &qemu_args, None, on_line)
     });
     let _ = std::fs::remove_file(&socket);
     let b = b?;

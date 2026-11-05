@@ -39,6 +39,7 @@ pub struct Options<'a> {
     pub keymap: Option<&'a str>,
     pub scale: Option<u32>,
     pub settings: Option<String>,
+    pub test_apps: bool,
 }
 
 /// The desktop.
@@ -119,7 +120,7 @@ impl Desktop {
         fonts: poly_shell::draw::Fonts,
     ) -> Desktop {
         let (lw, lh) = server.scene().logical_size();
-        let apps = poly_shell::apps::catalog(desktop::desktop_files(desktop::APPLICATIONS));
+        let apps = desktop::launcher_catalog(desktop::desktop_files(desktop::APPLICATIONS), o.test_apps);
         let title_font = fonts.sans;
         let mut shell = Shell::new(lw, lh, apps, poly_shell::draw::Text::with_fonts(fonts));
         desktop::load_wallpapers(&mut shell);
