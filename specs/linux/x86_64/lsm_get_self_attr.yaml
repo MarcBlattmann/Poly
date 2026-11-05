@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/lsm_get_self_attr    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root and as uid/gid 65534; SELinux active without a policy (context \"kernel\")"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  lsm_get_self_attr(attr, ctx, size, flags) (syscall 459) reads one
+  security attribute of the calling task from every active module that
+  provides it. attr is LSM_ATTR_CURRENT 100, EXEC 101, FSCREATE 102,
+  KEYCREATE 103, PREV 104, SOCKCREATE 105 (linux/lsm.h). The result is a
+  sequence of struct lsm_ctx {u64 id; u64 flags; u64 len; u64 ctx_len; u8
+  ctx[ctx_len]} (32-byte header, len = 32 + ctx_len rounded up to 8,
+  flags 0), one per providing module; *size (u32) becomes the bytes used
+  and the return value is the number of entries. With too small a *size
+  the call fails with E2BIG and sets *size to the bytes needed (ctx may be
+  NULL to ask). flags is 0 or LSM_FLAG_SINGLE (1): then ctx->id (read from
+  the caller's buffer) names the one module to ask.
+  When no active module provides the attribute (every attribute on a
+  kernel without SELinux, AppArmor or Smack; capability, landlock and yama
+  provide none) the call fails with EOPNOTSUPP and sets *size to 0. That
+  is the behaviour Poly must have (it has no attribute-providing module).
+  On the oracle SELinux (101) answers without a policy: CURRENT and PREV
+  give one entry, ctx "kernel" (ctx_len 7, len 40); EXEC, FSCREATE,
+  KEYCREATE, SOCKCREATE one entry with ctx_len 0 (len 32).
+returns:
+  success: "number of lsm_ctx entries; *size = bytes used"
+errors:
+  flags: "EINVAL (22): flags not 0 or LSM_FLAG_SINGLE (2, 3, 0x100); *size untouched"
+  size_null: "EINVAL (22): size is NULL"
+  size_fault: "EFAULT (14): size unreadable (non-NULL bad pointer)"
+  attr_undef: "EINVAL (22): attr LSM_ATTR_UNDEF (0)"
+  unprovided: "EOPNOTSUPP (95): no active module provides attr (1..7, 99, 106, 107, 999, 0x10000 on the oracle), or LSM_FLAG_SINGLE names a module without attributes (100 capability, 110 landlock) or no module (999); *size set to 0"
+  single_id: "EINVAL (22): LSM_FLAG_SINGLE with ctx NULL or ctx->id 0"
+  single_fault: "EFAULT (14): LSM_FLAG_SINGLE with ctx unreadable"
+  too_small: "E2BIG (7): *size smaller than needed; *size set to the bytes needed"
+  ctx_fault: "EFAULT (14): ctx unwritable when there are entries to write"
+side_effects: none
+threading: "the calling thread's attributes"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: f_lsm_get_self_attr_current checks LSM_ATTR_CURRENT so that both
+# outcomes (entries, or EOPNOTSUPP with size 0) give the same output; the
+# other tests use attributes and module ids no module provides on either
+# system. Validation order seen: flags, size NULL, size read, attr 0, then
+# the modules.

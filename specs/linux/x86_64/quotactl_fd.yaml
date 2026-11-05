@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/quotactl_fd          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534, children dropping to uid/gid 1000; umask 022; CONFIG_TMPFS_QUOTA off (tmpfs has no quota support)"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  quotactl_fd(fd, cmd, id, addr) (syscall 443) is quotactl(2) addressing
+  the file system of an open descriptor instead of a block device. Order:
+  (1) fd must be open, else EBADF (-1, closed or huge numbers), checked
+  before anything else (a bad type with a bad fd is EBADF); any kind of
+  descriptor is accepted, also O_PATH, pipes, sockets, character devices;
+  (2) the quota type (cmd & 0xff) must be below 3, else EINVAL; (3) the
+  file system of fd must support quota operations, else ENOSYS — for
+  every command, also Q_SYNC, setting commands (Q_QUOTAON, Q_QUOTAOFF,
+  Q_SETQUOTA, Q_SETINFO), unknown commands and commands whose buffer is
+  unreadable; there is no permission check before this, so a user without
+  capabilities gets ENOSYS too. tmpfs (without CONFIG_TMPFS_QUOTA), proc,
+  pipes, sockets and the /dev file system have no quota support. This is
+  why quotactl_fd(0, 0, 0, NULL) returns ENOSYS for a process whose stdin
+  is a pipe or terminal: fd 0 is open, type 0 is valid, and the pipe's
+  file system has no quota operations. (4) On a quota-capable file system
+  the command runs as for quotactl(2) (not observed).
+returns:
+  success: "as quotactl(2) for the file system of fd (not observed)"
+errors:
+  bad_fd: "EBADF (9): fd not open; checked first"
+  type: "EINVAL (22): quota type >= 3"
+  nosys: "ENOSYS (38): the file system of fd has no quota support (any command)"
+side_effects: "none on file systems without quota"
+threading: "none specific"
+ordering:
+  - "fd, then quota type, then file-system quota support, then the command"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/quota.h. All tests run as any user. If Poly's
+# tmpfs ever gains quota support, the ENOSYS tests on /dev/shm change.

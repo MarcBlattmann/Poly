@@ -159,7 +159,7 @@ fn trap_sends_sigsys_with_the_call_in_its_siginfo() {
     assert_eq!(info.code, SYS_SECCOMP);
     assert_eq!(info.errno, 0x42);
     let b = info.to_bytes();
-    assert_eq!(u64::from_le_bytes(b[16..24].try_into().unwrap()), SYSCALL_RIP - 2, "si_call_addr");
+    assert_eq!(u64::from_le_bytes(b[16..24].try_into().unwrap()), SYSCALL_RIP, "si_call_addr: the return address");
     assert_eq!(i32::from_le_bytes(b[24..28].try_into().unwrap()), nr::GETPID as i32, "si_syscall");
     assert_eq!(u32::from_le_bytes(b[28..32].try_into().unwrap()), AUDIT_ARCH_X86_64, "si_arch");
     assert!(k.notified.contains(&100));

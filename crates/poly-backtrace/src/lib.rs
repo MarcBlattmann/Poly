@@ -56,12 +56,32 @@ impl End {
 /// How many times one walk may move from a known stack to another.
 pub const MAX_STACK_SWITCHES: usize = 2;
 
+/// The known stacks a walk may read: which one holds an address. A slice
+/// of ranges is one; a kernel with many thread stacks can answer from
+/// their layout instead of listing them all.
+pub trait Stacks {
+    /// The stack that contains `addr`, if any.
+    fn stack_of(&self, addr: u64) -> Option<Range<u64>>;
+}
+
+impl Stacks for [Range<u64>] {
+    fn stack_of(&self, addr: u64) -> Option<Range<u64>> {
+        self.iter().find(|s| s.contains(&addr)).cloned()
+    }
+}
+
+impl<const N: usize> Stacks for [Range<u64>; N] {
+    fn stack_of(&self, addr: u64) -> Option<Range<u64>> {
+        self.as_slice().stack_of(addr)
+    }
+}
+
 /// Iterator over the return addresses on a frame-pointer chain, innermost
 /// first. Call [`FrameWalker::end`] afterwards to learn why it stopped.
 #[derive(Debug)]
-pub struct FrameWalker<'a, R> {
+pub struct FrameWalker<'a, R, S: ?Sized = [Range<u64>]> {
     fp: u64,
-    stacks: &'a [Range<u64>],
+    stacks: &'a S,
     stack: Option<Range<u64>>,
     switches: usize,
     remaining: usize,
@@ -69,7 +89,7 @@ pub struct FrameWalker<'a, R> {
     end: Option<End>,
 }
 
-impl<'a, R: FnMut(u64) -> u64> FrameWalker<'a, R> {
+impl<'a, R: FnMut(u64) -> u64, S: Stacks + ?Sized> FrameWalker<'a, R, S> {
     /// Walk the chain starting at frame pointer `fp`, yielding at most
     /// `max_depth` return addresses.
     ///
@@ -79,8 +99,9 @@ impl<'a, R: FnMut(u64) -> u64> FrameWalker<'a, R> {
     /// word; it is only ever called with an 8-byte-aligned address `a` where
     /// `a..a + 8` lies inside one of `stacks`, so the caller can make it a
     /// plain memory read as long as every range in `stacks` is mapped.
-    pub fn new(fp: u64, stacks: &'a [Range<u64>], max_depth: usize, read: R) -> Self {
-        let stack = stacks.iter().find(|s| s.contains(&fp)).cloned();
+    /// Stacks never overlap.
+    pub fn new(fp: u64, stacks: &'a S, max_depth: usize, read: R) -> Self {
+        let stack = stacks.stack_of(fp);
         FrameWalker { fp, stacks, stack, switches: 0, remaining: max_depth, read, end: None }
     }
 
@@ -108,7 +129,7 @@ impl<'a, R: FnMut(u64) -> u64> FrameWalker<'a, R> {
     }
 }
 
-impl<R: FnMut(u64) -> u64> Iterator for FrameWalker<'_, R> {
+impl<R: FnMut(u64) -> u64, S: Stacks + ?Sized> Iterator for FrameWalker<'_, R, S> {
     type Item = u64;
 
     fn next(&mut self) -> Option<u64> {
@@ -127,7 +148,7 @@ impl<R: FnMut(u64) -> u64> Iterator for FrameWalker<'_, R> {
         }
         let here = self.stack.clone().unwrap_or_default();
         let elsewhere = (caller_fp != 0 && !here.contains(&caller_fp) && self.switches < MAX_STACK_SWITCHES)
-            .then(|| self.stacks.iter().find(|s| **s != here && s.contains(&caller_fp)).cloned())
+            .then(|| self.stacks.stack_of(caller_fp).filter(|s| *s != here))
             .flatten();
         if let Some(next) = elsewhere {
             // The chain goes on on another stack (an interrupt stack's

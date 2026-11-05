@@ -80,6 +80,11 @@ pub struct LinuxThread {
     /// keeps it but for `READ_IMPLIES_EXEC`
     /// ([`crate::sys::personality::after_exec`]).
     pub personality: u32,
+    /// prctl(2) `PR_SET_SPECULATION_CTRL` per feature (store bypass,
+    /// indirect branch, L1D flush): 0 for the default (enabled), else the
+    /// `PR_SPEC_*` value set. Inherited by fork(2) and clone(2);
+    /// `PR_SPEC_DISABLE_NOEXEC` goes back to 0 at execve(2).
+    pub spec_ctrl: [u8; 3],
 }
 
 impl LinuxThread {
@@ -151,6 +156,11 @@ pub struct LinuxProcess {
     /// a fresh one again after execve(2).
     /// Poly copies the actions to such a child instead of sharing them.
     pub sighand: u64,
+    /// `/proc/<pid>/oom_score_adj` (proc_pid_oom_score_adj(5)), -1000 to
+    /// 1000: 0 at start; inherited by fork(2) (Chromium sets its
+    /// children's) and kept by execve(2). Poly never kills for memory,
+    /// so it is only shown.
+    pub oom_score_adj: i16,
 }
 
 /// A signal handler table identity no process has had
@@ -179,6 +189,7 @@ impl LinuxProcess {
             traced: false,
             dumpable: true,
             sighand: new_sighand_id(),
+            oom_score_adj: 0,
         }
     }
 
@@ -206,6 +217,7 @@ impl LinuxProcess {
             rseq: parent.rseq,
             ioprio: parent.ioprio,
             personality: parent.personality,
+            spec_ctrl: parent.spec_ctrl,
             ..LinuxThread::default()
         };
         let mut threads = BTreeMap::new();
@@ -225,6 +237,7 @@ impl LinuxProcess {
             traced: self.traced,
             dumpable: self.dumpable,
             sighand: new_sighand_id(),
+            oom_score_adj: self.oom_score_adj,
         }
     }
 
@@ -252,6 +265,11 @@ impl LinuxProcess {
         thread.restart = None;
         thread.restart_block = None;
         thread.personality = crate::sys::personality::after_exec(thread.personality);
+        for s in &mut thread.spec_ctrl {
+            if u64::from(*s) == crate::sys::prctl::PR_SPEC_DISABLE_NOEXEC {
+                *s = 0;
+            }
+        }
         self.threads.clear();
         self.threads.insert(tid, thread);
         // timer_create(2): POSIX timers are deleted; setitimer(2): interval
@@ -278,6 +296,7 @@ impl LinuxProcess {
             sched: parent.sched.for_child(),
             ioprio: parent.ioprio,
             personality: parent.personality,
+            spec_ctrl: parent.spec_ctrl,
             ..LinuxThread::default()
         };
         self.threads.insert(tid, thread);

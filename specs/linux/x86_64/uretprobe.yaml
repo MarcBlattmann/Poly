@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/uretprobe            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; CONFIG_UPROBES=y; core_pattern pipes to a crash handler, so the dying children make themselves non-dumpable"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  uretprobe() (syscall 335) is only meant to be executed by the kernel's
+  uretprobe trampoline (return probes installed by perf/BPF tooling).
+  Called from anywhere else, the kernel forces SIGILL on the calling
+  thread, as root and as any user, whatever the arguments. "Forced" means:
+  if SIGILL is blocked or ignored, it is unblocked and its action reset to
+  the default, so the process dies of SIGILL (the whole thread group, also
+  when another thread made the call). If a handler is installed it runs:
+  si_signo SIGILL, si_code SI_KERNEL (0x80), si_errno 0; when it returns
+  the call returns -1 in rax (the same bits as -EPERM) to the caller, and
+  calling again raises SIGILL again. For Poly, which installs no
+  uretprobes, this is the complete behaviour.
+returns:
+  handler_installed: "SIGILL handler runs (SI_KERNEL); then the call returns -1"
+  default: "the process is killed by SIGILL (wait status: signaled, WTERMSIG 4)"
+errors: {}
+side_effects: "SIGILL forced on the caller (unblocked, ignored disposition reset to default)"
+threading: "the signal is thread-directed at the caller; its default action kills the whole process"
+ordering: []
+timing:
+  typical: "immediate"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the core-dump bit of the wait status is not tested (it depends on
+# the dumpable flag and core_pattern).

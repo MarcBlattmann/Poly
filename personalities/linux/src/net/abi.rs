@@ -98,7 +98,11 @@ pub const IPPROTO_ICMPV6: i32 = 58;
 
 pub const IP_TOS: i32 = 1;
 pub const IP_TTL: i32 = 2;
+/// `linux/in.h`.
+pub const IP_RECVERR: i32 = 11;
 pub const IPV6_UNICAST_HOPS: i32 = 16;
+/// `linux/in6.h`.
+pub const IPV6_RECVERR: i32 = 25;
 pub const IPV6_V6ONLY: i32 = 26;
 
 pub const TCP_NODELAY: i32 = 1;

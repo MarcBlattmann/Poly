@@ -176,8 +176,8 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     };
     let number = regs.rax;
     let args = [regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9];
-    let strace = strace::enter(process, number, &args);
     let tid = k.tid;
+    let strace = strace::enter(process, tid, number, &args);
     if process.traced && testrun::starts_task(number) {
         testrun::enter(process.pid, tid, number, &args);
     }

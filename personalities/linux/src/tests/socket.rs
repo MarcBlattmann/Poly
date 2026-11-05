@@ -621,6 +621,8 @@ fn options_are_decoded_and_encoded() {
     assert_eq!(set(&mut k, abi::SOL_TCP, abi::TCP_NODELAY, &[1, 0]), Err(Errno::EINVAL), "short optlen");
     assert_eq!(set(&mut k, abi::SOL_IP, abi::IP_TTL, &(-1i32).to_le_bytes()), Ok(0));
     assert_eq!(set(&mut k, abi::SOL_IP, abi::IP_TTL, &256i32.to_le_bytes()), Err(Errno::EINVAL));
+    assert_eq!(set(&mut k, abi::SOL_IP, abi::IP_RECVERR, &1i32.to_le_bytes()), Ok(0));
+    assert_eq!(set(&mut k, abi::SOL_IPV6, abi::IPV6_RECVERR, &0i32.to_le_bytes()), Ok(0));
     assert_eq!(set(&mut k, abi::SOL_SOCKET, abi::SO_TYPE, &1i32.to_le_bytes()), Err(Errno::ENOPROTOOPT));
     assert_eq!(set(&mut k, 999, 1, &1i32.to_le_bytes()), Err(Errno::ENOPROTOOPT));
     let opts = net(&mut k).socks[&(fd as i32)].opts.clone();
@@ -634,6 +636,8 @@ fn options_are_decoded_and_encoded() {
             SockOpt::RcvTimeout(2_500_000_000),
             SockOpt::Linger(Some(0)),
             SockOpt::IpTtl(None),
+            SockOpt::IpRecvErr(true),
+            SockOpt::Ipv6RecvErr(false),
         ]
     );
     // getsockopt: values, truncation, lengths.

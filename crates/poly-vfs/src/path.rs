@@ -178,6 +178,15 @@ impl Resolve {
 /// the name.
 pub(crate) type Found = (Location, Option<(Location, Vec<u8>)>);
 
+/// Where following a link goes ([`Walk::link_target`]).
+pub(crate) enum LinkTarget {
+    /// Its text, resolved like any path.
+    Path(Vec<u8>),
+    /// A magic link's file or directory itself, with the directory and
+    /// name it was found by if known.
+    Jump(Found),
+}
+
 /// One resolution: who asks, where `/` is, how many links may still be
 /// followed.
 pub(crate) struct Walk<'a> {
@@ -305,7 +314,14 @@ impl<'a> Walk<'a> {
                 name => {
                     let child = self.child(&cur, name)?;
                     if child.attr()?.kind == FileType::Symlink {
-                        let target = self.link_target(&child)?;
+                        let target = match self.link_target(&child)? {
+                            LinkTarget::Path(t) => t,
+                            LinkTarget::Jump((loc, _)) => {
+                                cur = self.vfs.follow_mounts(loc);
+                                pos = next;
+                                continue;
+                            }
+                        };
                         let mut spliced = Vec::with_capacity(target.len() + 1 + buf.len() - next);
                         spliced.extend_from_slice(&target);
                         spliced.push(b'/');
@@ -356,7 +372,15 @@ impl<'a> Walk<'a> {
             let loc = self.child(&p.dir, &name)?;
             let kind = loc.attr()?.kind;
             if kind == FileType::Symlink && (follow || p.trailing_slash) {
-                let mut target = self.link_target(&loc)?;
+                let mut target = match self.link_target(&loc)? {
+                    LinkTarget::Path(t) => t,
+                    LinkTarget::Jump(found) => {
+                        if p.trailing_slash && found.0.attr()?.kind != FileType::Directory {
+                            return Err(Errno::ENOTDIR);
+                        }
+                        return Ok(found);
+                    }
+                };
                 if p.trailing_slash {
                     target.push(b'/');
                 }
@@ -374,8 +398,9 @@ impl<'a> Walk<'a> {
     /// about to be followed. Under openat2(2)'s restrictions following it
     /// may be refused: any link with [`Resolve::NO_SYMLINKS`], a magic one
     /// with [`Resolve::NO_MAGICLINKS`] (`ELOOP`), an absolute target with
-    /// [`Resolve::BENEATH`] (`EXDEV`).
-    pub(crate) fn link_target(&mut self, link: &Location) -> Result<Vec<u8>> {
+    /// [`Resolve::BENEATH`] (`EXDEV`). A magic link whose file system says
+    /// where it leads ([`crate::FileSystem::magic_target`]) is a jump there.
+    pub(crate) fn link_target(&mut self, link: &Location) -> Result<LinkTarget> {
         if self.resolve.contains(Resolve::NO_SYMLINKS)
             || (self.resolve.contains(Resolve::NO_MAGICLINKS) && link.mount.sb.fs.is_magic_link(link.ino))
         {
@@ -387,6 +412,20 @@ impl<'a> Walk<'a> {
             return Err(Errno::ELOOP);
         }
         self.links_left -= 1;
+        if let Some(jump) = link.mount.sb.fs.magic_target(link.ino) {
+            if self.beneath.is_some() {
+                return Err(Errno::EXDEV);
+            }
+            return Ok(LinkTarget::Jump(match jump {
+                crate::fs::MagicTarget::File(f) => {
+                    let named = f
+                        .origin()
+                        .and_then(|o| Some((Location { mount: o.mount.upgrade()?, ino: o.dir }, o.name.to_vec())));
+                    (f.node().loc().clone(), named)
+                }
+                crate::fs::MagicTarget::Node(n) => (n.loc().clone(), None),
+            }));
+        }
         let target = link.mount.sb.fs.readlink(link.ino)?;
         if target.is_empty() {
             return Err(Errno::ENOENT);
@@ -394,7 +433,7 @@ impl<'a> Walk<'a> {
         if target[0] == b'/' && self.beneath.is_some() {
             return Err(Errno::EXDEV);
         }
-        Ok(target)
+        Ok(LinkTarget::Path(target))
     }
 
     /// The parent of `cur`, staying at the process root and climbing out of

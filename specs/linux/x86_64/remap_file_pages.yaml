@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/remap_file_pages     # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root and as uid/gid 65534; umask 022; files on /dev/shm (tmpfs)"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  remap_file_pages(void *start, size_t size, int prot, size_t pgoff, int
+  flags) (syscall 216) is deprecated and emulated: it makes the pages
+  [start, start + size) of an existing MAP_SHARED mapping show the
+  mapping's object from page pgoff on, like an mmap(MAP_FIXED|MAP_SHARED)
+  of the same object at that offset with the mapping's own protection;
+  the rest of the mapping is unchanged (the mapping is split). start is
+  rounded down to its page and size down to whole pages. Works on shared
+  file mappings (also read-only ones) and shared anonymous memory (its
+  pages are offsets in the shared object). Writes through a remapped page
+  reach the file at the offset that page shows. pgoff beyond the end of
+  the file is accepted; touching such a page raises SIGBUS. Only
+  MAP_NONBLOCK (0x10000) in flags has a meaning (skip populating); all
+  other flag bits are ignored. prot must be 0.
+returns:
+  success: "0"
+  example: "4-page file A|B|C|D mapped in order; remap page 0 -> pgoff 3: D B C D; then pages 1-2 -> pgoff 0: D A B D"
+errors:
+  prot: "EINVAL (22): prot != 0"
+  size: "EINVAL (22): size 0 or below one page (rounds down to 0)"
+  range: "EINVAL (22): [start, start + size) not inside one mapping (runs past its end), no mapping at start, or pgoff + pages overflows (pgoff -1)"
+  private: "EINVAL (22): MAP_PRIVATE mapping (file or anonymous)"
+side_effects: "splits the mapping (separate entries in /proc/self/maps); the kernel logs a one-time deprecation warning"
+threading: "per address space"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the SIGBUS check runs in a forked child (core dump bit masked).

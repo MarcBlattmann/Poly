@@ -107,10 +107,17 @@ pub fn vm_sizes(maps: &[MapEntry], exe: Option<&[u8]>) -> VmSizes {
 /// pointer, wait channel, swap) are 0; the scheduling policy is
 /// `SCHED_OTHER` (0) and the nice value 0, so `priority` is 20.
 pub fn stat(p: &ProcessInfo, maps: &[MapEntry], sys: &SystemInfo) -> Vec<u8> {
+    thread_stat(p, p.pid, maps, sys)
+}
+
+/// `/proc/<pid>/task/<tid>/stat`: the process's line with the thread's id
+/// in the first field (`p.comm` is the thread's name: the caller puts it
+/// there).
+pub fn thread_stat(p: &ProcessInfo, tid: u32, maps: &[MapEntry], sys: &SystemInfo) -> Vec<u8> {
     let _ = sys;
     let v = vm_sizes(maps, p.exe.as_deref());
     let mut o = Out::default();
-    let _ = write!(o, "{} (", p.pid);
+    let _ = write!(o, "{tid} (");
     o.bytes(comm(&p.comm));
     let _ = writeln!(
         o,
@@ -174,6 +181,13 @@ fn kb(o: &mut Out, name: &str, bytes: u64) {
 /// `/proc/<pid>/status` (proc_pid_status(5)): the fields of the manual's
 /// example, in its order, `Key:\tvalue` per line.
 pub fn status(p: &ProcessInfo, maps: &[MapEntry]) -> Vec<u8> {
+    thread_status(p, p.pid, maps)
+}
+
+/// `/proc/<pid>/task/<tid>/status`: the process's, with the thread's id in
+/// `Pid` and `NSpid` (`Tgid` stays the process's; `p.comm` is the thread's
+/// name: the caller puts it there).
+pub fn thread_status(p: &ProcessInfo, tid: u32, maps: &[MapEntry]) -> Vec<u8> {
     let v = vm_sizes(maps, p.exe.as_deref());
     let rss = p.resident_pages * PAGE;
     let rss_file = p.resident_file_pages.min(p.resident_pages) * PAGE;
@@ -184,9 +198,9 @@ pub fn status(p: &ProcessInfo, maps: &[MapEntry]) -> Vec<u8> {
     let [g0, g1, g2, g3] = p.gids;
     let _ = write!(
         o,
-        "\nUmask:\t{:04o}\nState:\t{}\nTgid:\t{pid}\nNgid:\t0\nPid:\t{pid}\nPPid:\t{}\nTracerPid:\t0\n\
+        "\nUmask:\t{:04o}\nState:\t{}\nTgid:\t{pid}\nNgid:\t0\nPid:\t{tid}\nPPid:\t{}\nTracerPid:\t0\n\
          Uid:\t{u0}\t{u1}\t{u2}\t{u3}\nGid:\t{g0}\t{g1}\t{g2}\t{g3}\nFDSize:\t{}\nGroups:\t\n\
-         NStgid:\t{pid}\nNSpid:\t{pid}\nNSpgid:\t{}\nNSsid:\t{}\n",
+         NStgid:\t{pid}\nNSpid:\t{tid}\nNSpgid:\t{}\nNSsid:\t{}\n",
         p.umask,
         p.state.status(),
         p.ppid,

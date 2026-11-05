@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/clock_adjtime        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  clock_adjtime(clockid, buf) (syscall 305) is adjtimex(2) for a given
+  clock, with the same struct timex (see adjtimex.yaml). The struct is
+  read first: an unreadable buf is EFAULT whatever the clock id. Then the
+  clock: CLOCK_REALTIME (0) behaves exactly as adjtimex(2) (modes 0 and
+  ADJ_OFFSET_SS_READ read for anybody and return the clock state 0..5;
+  0x8000 without ADJ_OFFSET EINVAL; other modes need CAP_SYS_TIME, else
+  EPERM; ADJ_TICK/ADJ_SETOFFSET values as there). Every other existing
+  clock (CLOCK_MONOTONIC 1, PROCESS_CPUTIME 2, THREAD_CPUTIME 3,
+  MONOTONIC_RAW 4, REALTIME_COARSE 5, MONOTONIC_COARSE 6, BOOTTIME 7,
+  REALTIME_ALARM 8, BOOTTIME_ALARM 9, TAI 11) and CPU-time clock ids (e.g.
+  -6, the caller's process clock) are EOPNOTSUPP, whatever the modes and
+  for root and other users alike (clock before permission). Unknown ids
+  (10 = the removed CLOCK_SGI_CYCLE, 12, 100) are EINVAL.
+returns:
+  success: "clock state 0..5 (CLOCK_REALTIME)"
+errors:
+  fault: "EFAULT (14): buf unreadable (checked before the clock id)"
+  unknown_clock: "EINVAL (22): no such clock (10, 12, 100)"
+  not_adjustable: "EOPNOTSUPP (95): a clock that cannot be adjusted, any modes, any user"
+  realtime: "as adjtimex(2): EINVAL for 0x8000 without ADJ_OFFSET and bad values, EPERM without CAP_SYS_TIME"
+side_effects: "as adjtimex(2) for CLOCK_REALTIME"
+threading: "none specific"
+ordering:
+  - "read struct, clock id, then adjtimex(2)'s checks"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: dynamic (file descriptor) clocks, ids with low three bits 3, belong
+# to PTP devices and were not observed. Root tests change nothing
+# observable (ADJ_TICK with the current tick, ADJ_SETOFFSET by zero).

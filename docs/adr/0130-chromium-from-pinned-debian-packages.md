@@ -73,3 +73,39 @@ builds on Windows and Linux).
   make a user namespace: Chromium takes its set-user-ID sandbox there
   (docs/chromium-linux-gaps.md, "Which sandbox"). Whether the desktop
   disks should be entered with `switch_root` instead is left to the owner.
+
+## Amendment: Chromium's disk becomes the root (switch_root), not a chroot
+
+The owner decided (2026-11-02) that Chromium's disk is entered the way a
+distribution's initramfs hands over to its root, so that Chromium uses
+its **user-namespace sandbox**, which Poly implements, rather than the
+set-user-ID helper. Only Chromium's disk changes; the root disk and the
+toolkits' disk still chroot.
+
+- **The first program is the initramfs's shell**, `poly.init=/bin/sh
+  poly.init.arg=/etc/init.d/switch-root` (`initramfs::SWITCH_ROOT_INIT_ARGS`;
+  the kernel's first program cannot be a `#!` script). As pid 1 it runs
+  `rcS` and `rootdisk` as before (the disk on `/mnt/root`, `/dev`,
+  `/dev/pts`, `/dev/shm`, `/proc`, `/sys` and `/tmp` bound into it), moves
+  the disk's mount over `/` (`mount --move`, mount(2) `MS_MOVE`), changes
+  its root to it from inside (`chroot .`) and execs BusyBox's `init` from
+  the disk. That is switch_root(8)'s sequence; unlike switch_root it
+  leaves the initramfs's files alone, because its `/dev` (the device nodes
+  the kernel made) is what the disk's `/dev` shows.
+- **The root is the mount namespace's top mount**, which Poly's
+  `Vfs::is_chrooted` already treats as not chrooted (Linux likewise lets a
+  process whose root is a mount stacked on the namespace's root make user
+  namespaces). So `clone(CLONE_NEWUSER)` succeeds and Chromium's zygote
+  sandboxes itself with user, pid and network namespaces
+  (docs/chromium-linux-gaps.md, batch C).
+- **BusyBox on the disk.** The same `busybox-static` binary of the lock is
+  copied to `/usr/local/lib/poly/busybox` (`initramfs::DISK_BUSYBOX`), with
+  `cttyhack` linked to it, and the disk gets an `/etc/inittab`
+  (`chromium::INITTAB`): the desktop once, the disk's bash on the console,
+  reboot on Ctrl-Alt-Del, `umount -a -r` at shutdown. The disk's
+  `poweroff`/`reboot` (ADR 0059) signal this init as before.
+- **Unchanged:** the boot groups, Machine's console protocol and the
+  desktop (`poly-desktop` is started by init on the disk instead of
+  through `chroot`). The set-user-ID helper is still on the disk
+  (mode 4755): `--disable-namespace-sandbox` (the `chromium-setuid-sandbox`
+  scenario test) still takes it.

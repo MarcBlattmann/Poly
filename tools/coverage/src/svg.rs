@@ -381,7 +381,7 @@ fn status_color(st: Status, t: &Theme) -> &'static str {
 /// otherwise a proportional fill per status.
 fn draw_group(s: &mut Svg, g: &Group, (x, y, w, h): (f64, f64, f64, f64), t: &Theme) {
     let total = g.total();
-    let pct = percent(g.get(Status::Green), total);
+    let pct = percent(g.get(Status::Green), total - g.get(Status::BlockedByDesign));
     let _ = writeln!(
         s.out,
         "<g><title>{}: {} / {} done ({pct:.1}%)</title>",
@@ -511,6 +511,7 @@ fn panel(s: &mut Svg, c: &Coverage, os: Os, (x, y, w, map_h): (f64, f64, f64, f6
 
     let total: u64 = groups.iter().map(Group::total).sum();
     let done: u64 = groups.iter().map(|g| g.get(Status::Green)).sum();
+    let na: u64 = groups.iter().map(|g| g.get(Status::BlockedByDesign)).sum();
     let mut sub = format!("{} / {} entries", thousands(done), thousands(total));
     if os == Os::Macos && !c.entries.iter().any(|e| e.os == Os::Macos && e.layer == Layer::Api) {
         sub.push_str(" · frameworks not mapped yet");
@@ -518,8 +519,11 @@ fn panel(s: &mut Svg, c: &Coverage, os: Os, (x, y, w, map_h): (f64, f64, f64, f6
     if app_provided > 0 {
         let _ = write!(sub, " · {} app-provided not counted", thousands(app_provided));
     }
+    if na > 0 {
+        let _ = write!(sub, " · {} not applicable by design", thousands(na));
+    }
     s.text(x, y + 14.0, 14.0, t.text, 600, "start", os.title());
-    s.text(x + w, y + 14.0, 14.0, t.text, 600, "end", &format!("{:.1}%", percent(done, total)));
+    s.text(x + w, y + 14.0, 14.0, t.text, 600, "end", &format!("{:.1}%", percent(done, total - na)));
     s.text(x, y + 29.0, 11.0, t.muted, 400, "start", &sub);
 
     let top = y + PANEL_HEAD;

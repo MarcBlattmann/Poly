@@ -34,7 +34,22 @@ pub struct Vfs {
     fifos: crate::fifo::Fifos,
     /// Counts every change of a name ([`namespace_generation`](Self::namespace_generation)).
     names_changed: core::sync::atomic::AtomicU64,
+    /// Names found by scanning directories ([`Vfs::name_in`]), for naming
+    /// paths (`/proc/<pid>/maps` names every mapped file): right while the
+    /// namespace generation has not moved.
+    names: SpinMutex<DirNames>,
 }
+
+/// Names of inodes in directories: `(device, directory, child)` to the
+/// name, all made at `generation`.
+#[derive(Default)]
+struct DirNames {
+    generation: u64,
+    map: BTreeMap<(u32, u32, Ino, Ino), Vec<u8>>,
+}
+
+/// The most names [`DirNames`] keeps (it starts again when full).
+const NAME_CACHE_MAX: usize = 4096;
 
 impl core::fmt::Debug for Vfs {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -64,6 +79,7 @@ impl Vfs {
             anon: (anon_fs, anon_mount),
             fifos: crate::fifo::Fifos::default(),
             names_changed: core::sync::atomic::AtomicU64::new(0),
+            names: SpinMutex::new(DirNames::default()),
         }
     }
 
@@ -526,7 +542,15 @@ impl Vfs {
                     if flags.contains(OpenFlags::NOFOLLOW) {
                         return Err(Errno::ELOOP);
                     }
-                    let mut target = walk.link_target(&loc)?;
+                    let mut target = match walk.link_target(&loc)? {
+                        crate::path::LinkTarget::Path(t) => t,
+                        crate::path::LinkTarget::Jump(found) => {
+                            if p.trailing_slash && found.0.attr()?.kind != FileType::Directory {
+                                return Err(Errno::ENOTDIR);
+                            }
+                            return Ok((found, false));
+                        }
+                    };
                     if p.trailing_slash {
                         target.push(b'/');
                     }
@@ -1198,7 +1222,7 @@ impl Vfs {
                 return Err(Errno::ENOENT);
             }
             let parent = cur.mount.sb.fs.lookup(cur.ino, b"..")?;
-            let name = Self::name_in(&cur.mount, parent, cur.ino)?;
+            let name = self.name_in(&cur.mount, parent, cur.ino)?;
             total += name.len() + 1;
             if total >= PATH_MAX {
                 return Err(Errno::ENAMETOOLONG);
@@ -1245,7 +1269,7 @@ impl Vfs {
         let linked = node.attr()?.nlink > 0;
         let same = self.child(dir.loc(), &origin.name).is_ok_and(|l| l.same(node.loc()));
         let name = if linked && !same && Arc::ptr_eq(dir.mount(), node.mount()) {
-            Self::name_in(dir.mount(), dir.ino(), node.ino()).ok()
+            self.name_in(dir.mount(), dir.ino(), node.ino()).ok()
         } else {
             None
         };
@@ -1256,8 +1280,22 @@ impl Vfs {
         Ok(path)
     }
 
-    /// The name `child` has in directory `dir`.
-    fn name_in(mount: &Mount, dir: Ino, child: Ino) -> Result<Vec<u8>> {
+    /// The name `child` has in directory `dir`: a scan of the directory,
+    /// remembered until a name changes anywhere (file systems whose
+    /// entries come and go on their own, `cache_lookups` false, are always
+    /// scanned).
+    fn name_in(&self, mount: &Mount, dir: Ino, child: Ino) -> Result<Vec<u8>> {
+        let cacheable = mount.sb.info.cache_lookups;
+        let key = (mount.sb.dev.major, mount.sb.dev.minor, dir, child);
+        let generation = self.namespace_generation();
+        if cacheable {
+            let names = self.names.lock();
+            if names.generation == generation
+                && let Some(n) = names.map.get(&key)
+            {
+                return Ok(n.clone());
+            }
+        }
         let mut found = None;
         mount.sb.fs.readdir(dir, 0, &mut |e| {
             if e.ino == child && e.name != b"." && e.name != b".." {
@@ -1266,7 +1304,16 @@ impl Vfs {
             }
             true
         })?;
-        found.ok_or(Errno::ENOENT)
+        let name = found.ok_or(Errno::ENOENT)?;
+        if cacheable {
+            let mut names = self.names.lock();
+            if names.generation != generation || names.map.len() >= NAME_CACHE_MAX {
+                names.map.clear();
+                names.generation = generation;
+            }
+            names.map.insert(key, name.clone());
+        }
+        Ok(name)
     }
 
     // ----- mounting -----
