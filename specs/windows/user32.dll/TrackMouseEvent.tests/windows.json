@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "tme_hover",
+      "exe_sha256": "378e74c61e2a1979fa58ab2f36785fb89c8ae0e25bacf82c43f61353b1e7fe8e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCmhvdmVyOiBUcmFja01vdXNlRXZlbnQoMHgxLCBob3ZlciAxMDApIHJldHVybmVkIDEKcmlnaHQgYWZ0ZXI6IFRNRV9RVUVSWSByZXR1cm5lZCAxIGZsYWdzPTB4MSB3aW5kb3c9QSBob3Zlcj0xMDAKLS0gYWZ0ZXIgMzAgbXMKLS0gYWZ0ZXIgMzMwIG1zCiAgQSBXTV9NT1VTRUhPVkVSIGtleXM9MHgwIGNsaWVudD01MCw1MAphZnRlciB0aGUgaG92ZXI6IFRNRV9RVUVSWSByZXR1cm5lZCAxIGZsYWdzPTB4MCB3aW5kb3c9bnVsbCBob3Zlcj0wCmRlZmF1bHQgdGltZTogVHJhY2tNb3VzZUV2ZW50KDB4MSwgaG92ZXIgLTEpIHJldHVybmVkIDEKZGVmYXVsdCB0aW1lOiBUTUVfUVVFUlkgcmV0dXJuZWQgMSBmbGFncz0weDEgd2luZG93PUEgaG92ZXI9NDAwCmNhbmNlbDogVHJhY2tNb3VzZUV2ZW50KDB4ODAwMDAwMDEsIGhvdmVyIDApIHJldHVybmVkIDEKYWZ0ZXIgY2FuY2VsOiBUTUVfUVVFUlkgcmV0dXJuZWQgMSBmbGFncz0weDAgd2luZG93PW51bGwgaG92ZXI9MAotLSA2MDAgbXMgYWZ0ZXIgdGhlIGNhbmNlbApob3ZlciBhbmQgbGVhdmU6IFRyYWNrTW91c2VFdmVudCgweDMsIGhvdmVyIDEwMCkgcmV0dXJuZWQgMQotLSBhZnRlciAzMDAgbXMKICBBIFdNX01PVVNFSE9WRVIga2V5cz0weDAgY2xpZW50PTUwLDUwCmFmdGVyIHRoZSBob3ZlcjogVE1FX1FVRVJZIHJldHVybmVkIDEgZmxhZ3M9MHgyIHdpbmRvdz1BIGhvdmVyPTAKLS0gY3Vyc29yIG1vdmVkIG9udG8gQgogIEIgV01fTkNISVRURVNUIHNjcmVlbj00MzAsMTMwCiAgQiBXTV9TRVRDVVJTT1Igd2luZG93PUIgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEIgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD0zMCwzMAogIEEgV01fTU9VU0VMRUFWRQpsZWF2ZTogVHJhY2tNb3VzZUV2ZW50KDB4MiwgaG92ZXIgMCkgcmV0dXJuZWQgMQpjYW5jZWwgbGVhdmU6IFRyYWNrTW91c2VFdmVudCgweDgwMDAwMDAyLCBob3ZlciAwKSByZXR1cm5lZCAxCmFmdGVyIGNhbmNlbDogVE1FX1FVRVJZIHJldHVybmVkIDEgZmxhZ3M9MHgwIHdpbmRvdz1udWxsIGhvdmVyPTAKLS0gY3Vyc29yIG1vdmVkIG9udG8gQgogIEIgV01fTkNISVRURVNUIHNjcmVlbj00MzAsMTMwCiAgQiBXTV9TRVRDVVJTT1Igd2luZG93PUIgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEIgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD0zMCwzMApzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\nhover: TrackMouseEvent(0x1, hover 100) returned 1\nright after: TME_QUERY returned 1 flags=0x1 window=A hover=100\n-- after 30 ms\n-- after 330 ms\n  A WM_MOUSEHOVER keys=0x0 client=50,50\nafter the hover: TME_QUERY returned 1 flags=0x0 window=null hover=0\ndefault time: TrackMouseEvent(0x1, hover -1) returned 1\ndefault time: TME_QUERY returned 1 flags=0x1 window=A hover=400\ncancel: TrackMouseEvent(0x80000001, hover 0) returned 1\nafter cancel: TME_QUERY returned 1 flags=0x0 window=null hover=0\n-- 600 ms after the cancel\nhover and leave: TrackMouseEvent(0x3, hover 100) returned 1\n-- after 300 ms\n  A WM_MOUSEHOVER keys=0x0 client=50,50\nafter the hover: TME_QUERY returned 1 flags=0x2 window=A hover=0\n-- cursor moved onto B\n  B WM_NCHITTEST screen=430,130\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=30,30\n  A WM_MOUSELEAVE\nleave: TrackMouseEvent(0x2, hover 0) returned 1\ncancel leave: TrackMouseEvent(0x80000002, hover 0) returned 1\nafter cancel: TME_QUERY returned 1 flags=0x0 window=null hover=0\n-- cursor moved onto B\n  B WM_NCHITTEST screen=430,130\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=30,30\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1984
+    },
+    {
+      "name": "tme_leave",
+      "exe_sha256": "fc81872490c701a7e16f5fe23786642b98f78737934233948d52a9a813e0aaec",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCm5vdGhpbmcgdHJhY2tlZDogVE1FX1FVRVJZIHJldHVybmVkIDEgZmxhZ3M9MHgwIHdpbmRvdz1udWxsIGhvdmVyPTAKb3ZlciBBOiBUcmFja01vdXNlRXZlbnQoMHgyKSByZXR1cm5lZCAxIGVycm9yIDAKdHJhY2tpbmcgQTogVE1FX1FVRVJZIHJldHVybmVkIDEgZmxhZ3M9MHgyIHdpbmRvdz1BIGhvdmVyPTAKLS0gY3Vyc29yIHN0aWxsIG92ZXIgQQotLSBjdXJzb3IgbW92ZWQgb250byBCCiAgQiBXTV9OQ0hJVFRFU1Qgc2NyZWVuPTQzMCwxMzAKICBCIFdNX1NFVENVUlNPUiB3aW5kb3c9QiBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQiBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTMwLDMwCiAgQSBXTV9NT1VTRUxFQVZFCmFmdGVyIGxlYXZpbmc6IFRNRV9RVUVSWSByZXR1cm5lZCAxIGZsYWdzPTB4MCB3aW5kb3c9bnVsbCBob3Zlcj0wCkEgd2hpbGUgdGhlIGN1cnNvciBpcyBvdmVyIEI6IFRyYWNrTW91c2VFdmVudCgweDIpIHJldHVybmVkIDEgZXJyb3IgMAogIEEgV01fTU9VU0VMRUFWRQphZnRlciB0aGF0OiBUTUVfUVVFUlkgcmV0dXJuZWQgMSBmbGFncz0weDAgd2luZG93PW51bGwgaG92ZXI9MApvdmVyIEEgYWdhaW46IFRyYWNrTW91c2VFdmVudCgweDIpIHJldHVybmVkIDEgZXJyb3IgMAphbmQgb25jZSBtb3JlOiBUcmFja01vdXNlRXZlbnQoMHgyKSByZXR1cm5lZCAxIGVycm9yIDAKLS0gY3Vyc29yIG1vdmVkIG9udG8gQSdzIGNoaWxkIEMKICBDIFdNX05DSElUVEVTVCBzY3JlZW49MjQwLDIwMAogIEMgV01fU0VUQ1VSU09SIHdpbmRvdz1DIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBBIFdNX1NFVENVUlNPUiB3aW5kb3c9QyBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQyBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTIwLDIwCiAgQSBXTV9NT1VTRUxFQVZFCkMsIGN1cnNvciBvdmVyIEM6IFRyYWNrTW91c2VFdmVudCgweDIpIHJldHVybmVkIDEgZXJyb3IgMAotLSBjdXJzb3IgbW92ZWQgZnJvbSBDIGJhY2sgb250byBBCiAgQSBXTV9OQ0hJVFRFU1Qgc2NyZWVuPTE1MCwxNTAKICBBIFdNX1NFVENVUlNPUiB3aW5kb3c9QSBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQSBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTUwLDUwCiAgQyBXTV9NT1VTRUxFQVZFCi0tIGN1cnNvciBtb3ZlZCBvbnRvIEIgKEEgbm90IHRyYWNrZWQpCiAgQiBXTV9OQ0hJVFRFU1Qgc2NyZWVuPTQzMCwxMzAKICBCIFdNX1NFVENVUlNPUiB3aW5kb3c9QiBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQiBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTMwLDMwCnN1bW1hcnkgMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\nnothing tracked: TME_QUERY returned 1 flags=0x0 window=null hover=0\nover A: TrackMouseEvent(0x2) returned 1 error 0\ntracking A: TME_QUERY returned 1 flags=0x2 window=A hover=0\n-- cursor still over A\n-- cursor moved onto B\n  B WM_NCHITTEST screen=430,130\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=30,30\n  A WM_MOUSELEAVE\nafter leaving: TME_QUERY returned 1 flags=0x0 window=null hover=0\nA while the cursor is over B: TrackMouseEvent(0x2) returned 1 error 0\n  A WM_MOUSELEAVE\nafter that: TME_QUERY returned 1 flags=0x0 window=null hover=0\nover A again: TrackMouseEvent(0x2) returned 1 error 0\nand once more: TrackMouseEvent(0x2) returned 1 error 0\n-- cursor moved onto A's child C\n  C WM_NCHITTEST screen=240,200\n  C WM_SETCURSOR window=C hit=1 msg=WM_MOUSEMOVE\n  A WM_SETCURSOR window=C hit=1 msg=WM_MOUSEMOVE\n  C WM_MOUSEMOVE keys=0x0 client=20,20\n  A WM_MOUSELEAVE\nC, cursor over C: TrackMouseEvent(0x2) returned 1 error 0\n-- cursor moved from C back onto A\n  A WM_NCHITTEST screen=150,150\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=50,50\n  C WM_MOUSELEAVE\n-- cursor moved onto B (A not tracked)\n  B WM_NCHITTEST screen=430,130\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=30,30\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1320
+    }
+  ]
+}

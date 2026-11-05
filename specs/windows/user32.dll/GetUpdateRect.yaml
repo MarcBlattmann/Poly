@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/GetUpdateRect
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read.
+summary: >
+  Returns whether a window's update region is not empty, and its bounding
+  box in client coordinates. With erase TRUE and an erase pending it sends
+  WM_ERASEBKGND (and WM_NCPAINT for a pending frame) first, and the erase is
+  no longer pending.
+interface:
+  signature: "BOOL GetUpdateRect(HWND hwnd, RECT* rect, BOOL erase)"
+  return: "nonzero when the update region is not empty; the rectangle 0,0,0,0 when it is empty; rect may be NULL (only the answer)"
+rules:
+  client_coords: "client coordinates, also for a window with a caption and sizing frame (5,6,7,8 invalidated reads 5,6,7,8; its whole client 0,0,134,81)"
+  new_window: "a visible window just created, before its first WM_PAINT: the whole client area"
+  bounding_box: "several rectangles: their bounding box clipped to the client area"
+  erase_true: "erase TRUE with an erase pending: WM_ERASEBKGND is sent before it returns; a second call sends nothing; the WM_PAINT's BeginPaint then sends no WM_ERASEBKGND and fErase is 0 (1 when the procedure returned 0 from WM_ERASEBKGND); the update region stays"
+  erase_true_none_pending: "erase TRUE without an erase pending: nothing is sent"
+  erase_false: "erase FALSE: nothing is sent; the erase stays for BeginPaint"
+  frame: "erase TRUE after RedrawWindow(RDW_INVALIDATE | RDW_FRAME [| RDW_ERASE]) of a captioned window: WM_NCPAINT, then WM_ERASEBKGND when RDW_ERASE was given"
+  hidden: "a hidden window has nothing invalid (InvalidateRect leaves nothing); hiding a window with an update region empties it; showing a window makes its whole client area invalid"
+  hidden_parent: "a visible child of a hidden parent: InvalidateRect returns 1, nothing invalid; when the parent is shown the child is wholly invalid too"
+  off_screen: "a window moved to -500,-500 (off the screen) has nothing invalid after the move, but InvalidateRect still invalidates it (0,0,100,80) and it is painted"
+  minimized: "a minimized captioned window after InvalidateRect: returns 1 with the rectangle 0,0,0,0, QS_PAINT in the queue, and it gets WM_PAINT"
+errors:
+  bad_window: "NULL or a made-up handle: 0, ERROR_INVALID_WINDOW_HANDLE (1400); the rectangle is not written"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  CS_OWNDC windows with a mapping mode other than MM_TEXT (Learn: logical
+  coordinates). All windows in these tests are WS_EX_TOPMOST |
+  WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW popups (or their children), so no
+  activation messages interleave and nothing covers them. DPI awareness
+  other than unaware (the tests have no manifest), several monitors, other
+  keyboard layouts than German, IME, touch and pen, hooks, menus and the
+  menu loop.

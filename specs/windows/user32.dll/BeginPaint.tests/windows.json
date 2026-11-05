@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "bp_class_brush",
+      "exe_sha256": "334ff21ba6dee5a09f4e45900b8005443dabd1ac135c3ba8e33fd282f9ba3f33",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0U3lzQ29sb3IoQ09MT1JfV0lORE9XKT0weGZmZmZmZgpvayBzb2xpZCAweDU2MzQxMgotLSBzb2xpZCAweDU2MzQxMgogIFdNX0VSQVNFQktHTkQgZGVmYXVsdCByZXR1cm5lZCAxCiAgQmVnaW5QYWludCBlcmFzZT0wIHJjUGFpbnQ9MTAsMTAsMjAsMjAgcGl4ZWwoMTUsMTUpPTB4NTYzNDEyCiAgR2V0REMgYWZ0ZXI6IGluc2lkZSAweDU2MzQxMiBvdXRzaWRlIDB4MDAwMDAwCm9rIHN0b2NrIEdSQVlfQlJVU0gKLS0gc3RvY2sgR1JBWV9CUlVTSAogIFdNX0VSQVNFQktHTkQgZGVmYXVsdCByZXR1cm5lZCAxCiAgQmVnaW5QYWludCBlcmFzZT0wIHJjUGFpbnQ9MTAsMTAsMjAsMjAgcGl4ZWwoMTUsMTUpPTB4ODA4MDgwCiAgR2V0REMgYWZ0ZXI6IGluc2lkZSAweDgwODA4MCBvdXRzaWRlIDB4MDAwMDAwCm9rIENPTE9SX1dJTkRPVysxCi0tIENPTE9SX1dJTkRPVysxCiAgV01fRVJBU0VCS0dORCBkZWZhdWx0IHJldHVybmVkIDEKICBCZWdpblBhaW50IGVyYXNlPTAgcmNQYWludD0xMCwxMCwyMCwyMCBwaXhlbCgxNSwxNSk9MHhmZmZmZmYKICBHZXREQyBhZnRlcjogaW5zaWRlIDB4ZmZmZmZmIG91dHNpZGUgMHgwMDAwMDAKb2sgbm8gYnJ1c2gKLS0gbm8gYnJ1c2gKICBXTV9FUkFTRUJLR05EIGRlZmF1bHQgcmV0dXJuZWQgMAogIEJlZ2luUGFpbnQgZXJhc2U9MSByY1BhaW50PTEwLDEwLDIwLDIwIHBpeGVsKDE1LDE1KT0weDAwMDAwMAogIEdldERDIGFmdGVyOiBpbnNpZGUgMHgwMDAwMDAgb3V0c2lkZSAweDAwMDAwMApzdW1tYXJ5IDQgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetSysColor(COLOR_WINDOW)=0xffffff\nok solid 0x563412\n-- solid 0x563412\n  WM_ERASEBKGND default returned 1\n  BeginPaint erase=0 rcPaint=10,10,20,20 pixel(15,15)=0x563412\n  GetDC after: inside 0x563412 outside 0x000000\nok stock GRAY_BRUSH\n-- stock GRAY_BRUSH\n  WM_ERASEBKGND default returned 1\n  BeginPaint erase=0 rcPaint=10,10,20,20 pixel(15,15)=0x808080\n  GetDC after: inside 0x808080 outside 0x000000\nok COLOR_WINDOW+1\n-- COLOR_WINDOW+1\n  WM_ERASEBKGND default returned 1\n  BeginPaint erase=0 rcPaint=10,10,20,20 pixel(15,15)=0xffffff\n  GetDC after: inside 0xffffff outside 0x000000\nok no brush\n-- no brush\n  WM_ERASEBKGND default returned 0\n  BeginPaint erase=1 rcPaint=10,10,20,20 pixel(15,15)=0x000000\n  GetDC after: inside 0x000000 outside 0x000000\nsummary 4 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 288
+    },
+    {
+      "name": "bp_paintstruct",
+      "exe_sha256": "d33c057b711bdb9538bfbaa6cc488b87361597427d6b145881a7b1989ac8228d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAotLSBmaXJzdCBwYWludApCZWdpblBhaW50OiByZXR1cm5lZF9wc19oZGM9MSB0eXBlPTMgcmNQYWludD0wLDAsMTIwLDkwIGVyYXNlPTAgcmVzdG9yZT0wIGluY3VwZGF0ZT0wCiAgY2xpcCBib3gga2luZD0yIDAsMCwxMjAsOTAgY2xpcCByZWdpb24gbm9uZSAoMCkgdXBkYXRlIGxlZnQ9MAogIHRleHQ9MHgwMDAwMDAgYms9MHhmZmZmZmYgbW9kZT0yIGZvbnRfaXNfc3lzdGVtPTEgYnJ1c2hfaXNfd2hpdGU9MSBwZW5faXNfYmxhY2s9MSBxc19wYWludF9ub3c9MAogIEVuZFBhaW50IHJldHVybmVkIDEKLS0gYWZ0ZXIgSW52YWxpZGF0ZVJlY3QoMTAsMjAsMzAsNDApCkJlZ2luUGFpbnQ6IHJldHVybmVkX3BzX2hkYz0xIHR5cGU9MyByY1BhaW50PTEwLDIwLDMwLDQwIGVyYXNlPTAgcmVzdG9yZT0wIGluY3VwZGF0ZT0wCiAgY2xpcCBib3gga2luZD0yIDEwLDIwLDMwLDQwIGNsaXAgcmVnaW9uIG5vbmUgKDApIHVwZGF0ZSBsZWZ0PTAKICB0ZXh0PTB4MDAwMDAwIGJrPTB4ZmZmZmZmIG1vZGU9MiBmb250X2lzX3N5c3RlbT0xIGJydXNoX2lzX3doaXRlPTEgcGVuX2lzX2JsYWNrPTEgcXNfcGFpbnRfbm93PTAKICBFbmRQYWludCByZXR1cm5lZCAxCi0tIHR3byByZWN0czogMCwwLDEwLDEwIGFuZCAxMDAsODAsMTIwLDkwCkJlZ2luUGFpbnQ6IHJldHVybmVkX3BzX2hkYz0xIHR5cGU9MyByY1BhaW50PTAsMCwxMjAsOTAgZXJhc2U9MCByZXN0b3JlPTAgaW5jdXBkYXRlPTAKICBjbGlwIGJveCBraW5kPTMgMCwwLDEyMCw5MCBjbGlwIHJlZ2lvbiBub25lICgwKSB1cGRhdGUgbGVmdD0wCiAgdGV4dD0weDAwMDAwMCBiaz0weGZmZmZmZiBtb2RlPTIgZm9udF9pc19zeXN0ZW09MSBicnVzaF9pc193aGl0ZT0xIHBlbl9pc19ibGFjaz0xIHFzX3BhaW50X25vdz0wCiAgRW5kUGFpbnQgcmV0dXJuZWQgMQotLSBXTV9QQUlOVCBzZW50IHdpdGggbm90aGluZyBpbnZhbGlkCkJlZ2luUGFpbnQ6IHJldHVybmVkX3BzX2hkYz0xIHR5cGU9MyByY1BhaW50PTAsMCwwLDAgZXJhc2U9MCByZXN0b3JlPTAgaW5jdXBkYXRlPTAKICBjbGlwIGJveCBraW5kPTEgMCwwLDAsMCBjbGlwIHJlZ2lvbiBub25lICgwKSB1cGRhdGUgbGVmdD0wCiAgdGV4dD0weDAwMDAwMCBiaz0weGZmZmZmZiBtb2RlPTIgZm9udF9pc19zeXN0ZW09MSBicnVzaF9pc193aGl0ZT0xIHBlbl9pc19ibGFjaz0xIHFzX3BhaW50X25vdz0wCiAgRW5kUGFpbnQgcmV0dXJuZWQgMQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n-- first paint\nBeginPaint: returned_ps_hdc=1 type=3 rcPaint=0,0,120,90 erase=0 restore=0 incupdate=0\n  clip box kind=2 0,0,120,90 clip region none (0) update left=0\n  text=0x000000 bk=0xffffff mode=2 font_is_system=1 brush_is_white=1 pen_is_black=1 qs_paint_now=0\n  EndPaint returned 1\n-- after InvalidateRect(10,20,30,40)\nBeginPaint: returned_ps_hdc=1 type=3 rcPaint=10,20,30,40 erase=0 restore=0 incupdate=0\n  clip box kind=2 10,20,30,40 clip region none (0) update left=0\n  text=0x000000 bk=0xffffff mode=2 font_is_system=1 brush_is_white=1 pen_is_black=1 qs_paint_now=0\n  EndPaint returned 1\n-- two rects: 0,0,10,10 and 100,80,120,90\nBeginPaint: returned_ps_hdc=1 type=3 rcPaint=0,0,120,90 erase=0 restore=0 incupdate=0\n  clip box kind=3 0,0,120,90 clip region none (0) update left=0\n  text=0x000000 bk=0xffffff mode=2 font_is_system=1 brush_is_white=1 pen_is_black=1 qs_paint_now=0\n  EndPaint returned 1\n-- WM_PAINT sent with nothing invalid\nBeginPaint: returned_ps_hdc=1 type=3 rcPaint=0,0,0,0 erase=0 restore=0 incupdate=0\n  clip box kind=1 0,0,0,0 clip region none (0) update left=0\n  text=0x000000 bk=0xffffff mode=2 font_is_system=1 brush_is_white=1 pen_is_black=1 qs_paint_now=0\n  EndPaint returned 1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 199
+    }
+  ]
+}

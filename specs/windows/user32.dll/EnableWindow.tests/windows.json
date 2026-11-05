@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "ew_basic",
+      "exe_sha256": "1cf7e9c0f0abf8e4ceb2c069727f341fcc2f6e537b63b53f7c175755459acbe5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCkVuYWJsZVdpbmRvdyhDLCBGQUxTRSk6IHJldHVybmVkIDAgZXJyb3IgMAogIEMgV01fQ0FOQ0VMTU9ERQogIEMgV01fS0lMTEZPQ1VTIG90aGVyPW51bGwKICBDIFdNX0VOQUJMRSBlbmFibGVkPTAKICBXU19ESVNBQkxFRD0xIElzV2luZG93RW5hYmxlZD0wCkVuYWJsZVdpbmRvdyhDLCBGQUxTRSkgYWdhaW46IHJldHVybmVkIDEgZXJyb3IgMAogIEMgV01fQ0FOQ0VMTU9ERQogIFdTX0RJU0FCTEVEPTEgSXNXaW5kb3dFbmFibGVkPTAKRW5hYmxlV2luZG93KEMsIFRSVUUpOiByZXR1cm5lZCAxIGVycm9yIDAKICBDIFdNX0VOQUJMRSBlbmFibGVkPTEKICBXU19ESVNBQkxFRD0wIElzV2luZG93RW5hYmxlZD0xCkVuYWJsZVdpbmRvdyhDLCBUUlVFKSBhZ2FpbjogcmV0dXJuZWQgMCBlcnJvciAwCiAgV1NfRElTQUJMRUQ9MCBJc1dpbmRvd0VuYWJsZWQ9MQpFbmFibGVXaW5kb3coQywgRkFMU0UpOiByZXR1cm5lZCAwIGVycm9yIDAKICBDIFdNX0NBTkNFTE1PREUKICBDIFdNX0VOQUJMRSBlbmFibGVkPTAKICBXU19ESVNBQkxFRD0xIElzV2luZG93RW5hYmxlZD0wCkVuYWJsZVdpbmRvdyhDLCAyKTogcmV0dXJuZWQgMSBlcnJvciAwCiAgQyBXTV9FTkFCTEUgZW5hYmxlZD0xCiAgV1NfRElTQUJMRUQ9MCBJc1dpbmRvd0VuYWJsZWQ9MQpFbmFibGVXaW5kb3coSCBoaWRkZW4sIEZBTFNFKTogcmV0dXJuZWQgMCBlcnJvciAwCiAgSCBXTV9DQU5DRUxNT0RFCiAgSCBXTV9FTkFCTEUgZW5hYmxlZD0wCiAgV1NfRElTQUJMRUQ9MSBJc1dpbmRvd0VuYWJsZWQ9MApFbmFibGVXaW5kb3coSCBoaWRkZW4sIFRSVUUpOiByZXR1cm5lZCAxIGVycm9yIDAKICBIIFdNX0VOQUJMRSBlbmFibGVkPTEKICBXU19ESVNBQkxFRD0wIElzV2luZG93RW5hYmxlZD0xCkVuYWJsZVdpbmRvdyhOVUxMLCBGQUxTRSk6IHJldHVybmVkIDAgZXJyb3IgMTQwMAogIFdTX0RJU0FCTEVEPTAgSXNXaW5kb3dFbmFibGVkPTAKRW5hYmxlV2luZG93KG1hZGUtdXAgaGFuZGxlLCBGQUxTRSk6IHJldHVybmVkIDAgZXJyb3IgMTQwMAogIFdTX0RJU0FCTEVEPTAgSXNXaW5kb3dFbmFibGVkPTAKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\nEnableWindow(C, FALSE): returned 0 error 0\n  C WM_CANCELMODE\n  C WM_KILLFOCUS other=null\n  C WM_ENABLE enabled=0\n  WS_DISABLED=1 IsWindowEnabled=0\nEnableWindow(C, FALSE) again: returned 1 error 0\n  C WM_CANCELMODE\n  WS_DISABLED=1 IsWindowEnabled=0\nEnableWindow(C, TRUE): returned 1 error 0\n  C WM_ENABLE enabled=1\n  WS_DISABLED=0 IsWindowEnabled=1\nEnableWindow(C, TRUE) again: returned 0 error 0\n  WS_DISABLED=0 IsWindowEnabled=1\nEnableWindow(C, FALSE): returned 0 error 0\n  C WM_CANCELMODE\n  C WM_ENABLE enabled=0\n  WS_DISABLED=1 IsWindowEnabled=0\nEnableWindow(C, 2): returned 1 error 0\n  C WM_ENABLE enabled=1\n  WS_DISABLED=0 IsWindowEnabled=1\nEnableWindow(H hidden, FALSE): returned 0 error 0\n  H WM_CANCELMODE\n  H WM_ENABLE enabled=0\n  WS_DISABLED=1 IsWindowEnabled=0\nEnableWindow(H hidden, TRUE): returned 1 error 0\n  H WM_ENABLE enabled=1\n  WS_DISABLED=0 IsWindowEnabled=1\nEnableWindow(NULL, FALSE): returned 0 error 1400\n  WS_DISABLED=0 IsWindowEnabled=0\nEnableWindow(made-up handle, FALSE): returned 0 error 1400\n  WS_DISABLED=0 IsWindowEnabled=0\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 315
+    },
+    {
+      "name": "ew_focus",
+      "exe_sha256": "60fc90bd3784ec041e9e3a7de212b71f005597bf09dec49b199522629a4734b2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCnN0YXJ0OiBhY3RpdmU9QSBmb2N1cz1DIGZnPUEKRW5hYmxlV2luZG93KEMsIEZBTFNFKSB3aXRoIHRoZSBmb2N1cyBvbiBDCiAgQyBXTV9DQU5DRUxNT0RFCiAgQyBXTV9LSUxMRk9DVVMgb3RoZXI9bnVsbAogIEMgV01fRU5BQkxFIGVuYWJsZWQ9MAogIG5vdzogYWN0aXZlPUEgZm9jdXM9bnVsbCBmZz1BCiAgcmV0dXJuZWQgMApFbmFibGVXaW5kb3coQywgVFJVRSkKICBDIFdNX0VOQUJMRSBlbmFibGVkPTEKICBub3c6IGFjdGl2ZT1BIGZvY3VzPW51bGwgZmc9QQpFbmFibGVXaW5kb3coQSwgRkFMU0UpOiBBIGFjdGl2ZSwgZm9jdXMgb24gaXRzIGNoaWxkIEMKICBBIFdNX0NBTkNFTE1PREUKICBBIFdNX0VOQUJMRSBlbmFibGVkPTAKICBub3c6IGFjdGl2ZT1BIGZvY3VzPUMgZmc9QQogIHJldHVybmVkIDAKICBJc1dpbmRvd0VuYWJsZWQgQT0wIEM9MQprZXkgRjI0IHdoaWxlIEEgaXMgZGlzYWJsZWQ6IDIgZXZlbnRzCmFmdGVyIHRoZSBrZXkKICBDIFdNX0tFWURPV04gdms9MHg4NyBsPTB4MDA3NjAwMDEKICBDIFdNX0tFWVVQIHZrPTB4ODcgbD0weGMwNzYwMDAxCiAgbm93OiBhY3RpdmU9QSBmb2N1cz1DIGZnPUEKU2V0Rm9jdXMoRCwgY2hpbGQgb2YgZGlzYWJsZWQgQSkKICBub3c6IGFjdGl2ZT1BIGZvY3VzPUMgZmc9QQogIHJldHVybmVkIG51bGwgZXJyb3IgODcKRW5hYmxlV2luZG93KEEsIFRSVUUpCiAgQSBXTV9FTkFCTEUgZW5hYmxlZD0xCiAgbm93OiBhY3RpdmU9QSBmb2N1cz1DIGZnPUEKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\nstart: active=A focus=C fg=A\nEnableWindow(C, FALSE) with the focus on C\n  C WM_CANCELMODE\n  C WM_KILLFOCUS other=null\n  C WM_ENABLE enabled=0\n  now: active=A focus=null fg=A\n  returned 0\nEnableWindow(C, TRUE)\n  C WM_ENABLE enabled=1\n  now: active=A focus=null fg=A\nEnableWindow(A, FALSE): A active, focus on its child C\n  A WM_CANCELMODE\n  A WM_ENABLE enabled=0\n  now: active=A focus=C fg=A\n  returned 0\n  IsWindowEnabled A=0 C=1\nkey F24 while A is disabled: 2 events\nafter the key\n  C WM_KEYDOWN vk=0x87 l=0x00760001\n  C WM_KEYUP vk=0x87 l=0xc0760001\n  now: active=A focus=C fg=A\nSetFocus(D, child of disabled A)\n  now: active=A focus=C fg=A\n  returned null error 87\nEnableWindow(A, TRUE)\n  A WM_ENABLE enabled=1\n  now: active=A focus=C fg=A\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 983
+    }
+  ]
+}

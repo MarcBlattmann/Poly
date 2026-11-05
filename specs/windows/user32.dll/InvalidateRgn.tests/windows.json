@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "irg_basic",
+      "exe_sha256": "80e1dcf6ae167c3c1c6719dce28c50078d8482b2de5bd64b81ce20c078cf5d78",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApJbnZhbGlkYXRlUmduKHR3byByZWN0cywgRkFMU0UpIHJldHVybmVkIDEKICBhZnRlciBpdDogdXBkYXRlIHJlZ2lvbiBraW5kIDM6IDEwLDEwLDIwLDIwICsgNjAsNTAsNzAsNjAKICByZWdpb24gb2JqZWN0IGNoYW5nZWQgdG8gdGhlIHdob2xlIGNsaWVudDogdXBkYXRlIHJlZ2lvbiBraW5kIDM6IDEwLDEwLDIwLDIwICsgNjAsNTAsNzAsNjAKICByZWdpb24gb2JqZWN0IGRlbGV0ZWQ6IHVwZGF0ZSByZWdpb24ga2luZCAzOiAxMCwxMCwyMCwyMCArIDYwLDUwLDcwLDYwCiAgcHVtcGVkOgogIFdNX1BBSU5UIHJjUGFpbnQgMTAsMTAsNzAsNjAgZkVyYXNlIDEgR2V0Q2xpcFJnbiAwICBjbGlwIGJveCBraW5kIDMgMTAsMTAsNzAsNjAKSW52YWxpZGF0ZVJnbigtMTAsLTEwLDEwLDEwICsgOTAsNzAsMTUwLDE1MCwgVFJVRSkgcmV0dXJuZWQgMQogIGFmdGVyIGl0OiB1cGRhdGUgcmVnaW9uIGtpbmQgMzogMCwwLDEwLDEwICsgOTAsNzAsMTAwLDgwCiAgcHVtcGVkOgogIFdNX0VSQVNFQktHTkQKICBXTV9QQUlOVCByY1BhaW50IDAsMCwxMDAsODAgZkVyYXNlIDEgR2V0Q2xpcFJnbiAwICBjbGlwIGJveCBraW5kIDMgMCwwLDEwMCw4MApJbnZhbGlkYXRlUmduKE5VTEwsIEZBTFNFKSByZXR1cm5lZCAxCiAgYWZ0ZXIgaXQ6IHVwZGF0ZSByZWdpb24ga2luZCAyOiAwLDAsMTAwLDgwCiAgcHVtcGVkOgogIFdNX1BBSU5UIHJjUGFpbnQgMCwwLDEwMCw4MCBmRXJhc2UgMSBHZXRDbGlwUmduIDAgIGNsaXAgYm94IGtpbmQgMiAwLDAsMTAwLDgwCkludmFsaWRhdGVSZ24oZW1wdHkgcmVnaW9uLCBUUlVFKSByZXR1cm5lZCAxCiAgYWZ0ZXIgaXQ6IHVwZGF0ZSByZWdpb24ga2luZCAxOiBlbXB0eQogIHB1bXBlZDoKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nInvalidateRgn(two rects, FALSE) returned 1\n  after it: update region kind 3: 10,10,20,20 + 60,50,70,60\n  region object changed to the whole client: update region kind 3: 10,10,20,20 + 60,50,70,60\n  region object deleted: update region kind 3: 10,10,20,20 + 60,50,70,60\n  pumped:\n  WM_PAINT rcPaint 10,10,70,60 fErase 1 GetClipRgn 0  clip box kind 3 10,10,70,60\nInvalidateRgn(-10,-10,10,10 + 90,70,150,150, TRUE) returned 1\n  after it: update region kind 3: 0,0,10,10 + 90,70,100,80\n  pumped:\n  WM_ERASEBKGND\n  WM_PAINT rcPaint 0,0,100,80 fErase 1 GetClipRgn 0  clip box kind 3 0,0,100,80\nInvalidateRgn(NULL, FALSE) returned 1\n  after it: update region kind 2: 0,0,100,80\n  pumped:\n  WM_PAINT rcPaint 0,0,100,80 fErase 1 GetClipRgn 0  clip box kind 2 0,0,100,80\nInvalidateRgn(empty region, TRUE) returned 1\n  after it: update region kind 1: empty\n  pumped:\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 259
+    },
+    {
+      "name": "irg_children",
+      "exe_sha256": "cf31c8c4e0b5fe23148911f4c001cfd8be1115468e7b55016694b132a9e6602a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBwYXJlbnQgd2l0aG91dCBXU19DTElQQ0hJTERSRU4KLS0gSW52YWxpZGF0ZVJnbihwYXJlbnQsIDAsMCw0MCw0MCArIDcwLDcwLDkwLDkwLCBUUlVFKQogIHBhcmVudCBraW5kIDM6IDAsMCw0MCw0MCArIDcwLDcwLDkwLDkwCiAgY2hpbGQga2luZCAyOiAwLDAsMjAsMjAKICBwdW1wZWQ6IFAgV01fUEFJTlQKICBwdW1wZWQ6IFAgV01fRVJBU0VCS0dORAogIHB1bXBlZDogYyBXTV9QQUlOVAogIHB1bXBlZDogYyBXTV9OQ1BBSU5UIHJnbj1yZWdpb24KICBwdW1wZWQ6IGMgV01fRVJBU0VCS0dORAotLSBJbnZhbGlkYXRlUmduKGNoaWxkLCAzMCwzMCw1MCw1MCwgRkFMU0UpCiAgcGFyZW50IGtpbmQgMTogZW1wdHkKICBjaGlsZCBraW5kIDI6IDMwLDMwLDQwLDQwCiAgcHVtcGVkOiBjIFdNX1BBSU5UCj09IHBhcmVudCB3aXRoIFdTX0NMSVBDSElMRFJFTgotLSBJbnZhbGlkYXRlUmduKHBhcmVudCwgMCwwLDQwLDQwICsgNzAsNzAsOTAsOTAsIFRSVUUpCiAgcGFyZW50IGtpbmQgMzogMCwwLDQwLDQwICsgNzAsNzAsOTAsOTAKICBjaGlsZCBraW5kIDE6IGVtcHR5CiAgcHVtcGVkOiBRIFdNX1BBSU5UCiAgcHVtcGVkOiBRIFdNX0VSQVNFQktHTkQKLS0gSW52YWxpZGF0ZVJnbihjaGlsZCwgMzAsMzAsNTAsNTAsIEZBTFNFKQogIHBhcmVudCBraW5kIDE6IGVtcHR5CiAgY2hpbGQga2luZCAyOiAzMCwzMCw0MCw0MAogIHB1bXBlZDogYyBXTV9QQUlOVApzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== parent without WS_CLIPCHILDREN\n-- InvalidateRgn(parent, 0,0,40,40 + 70,70,90,90, TRUE)\n  parent kind 3: 0,0,40,40 + 70,70,90,90\n  child kind 2: 0,0,20,20\n  pumped: P WM_PAINT\n  pumped: P WM_ERASEBKGND\n  pumped: c WM_PAINT\n  pumped: c WM_NCPAINT rgn=region\n  pumped: c WM_ERASEBKGND\n-- InvalidateRgn(child, 30,30,50,50, FALSE)\n  parent kind 1: empty\n  child kind 2: 30,30,40,40\n  pumped: c WM_PAINT\n== parent with WS_CLIPCHILDREN\n-- InvalidateRgn(parent, 0,0,40,40 + 70,70,90,90, TRUE)\n  parent kind 3: 0,0,40,40 + 70,70,90,90\n  child kind 1: empty\n  pumped: Q WM_PAINT\n  pumped: Q WM_ERASEBKGND\n-- InvalidateRgn(child, 30,30,50,50, FALSE)\n  parent kind 1: empty\n  child kind 2: 30,30,40,40\n  pumped: c WM_PAINT\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 302
+    }
+  ]
+}
