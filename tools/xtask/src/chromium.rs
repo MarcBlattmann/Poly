@@ -966,11 +966,13 @@ fn configure(tree: &mut RootTree) {
     tree.dir("home/poly", 0o755);
 }
 
-/// The launcher's desktop file for Chromium: as `poly`, sandbox on.
+/// The launcher's desktop file for Chromium: as `poly`, sandbox on. The
+/// compositor (a native program) starts programs, not `#!` scripts: bash
+/// runs `poly-chromium`.
 fn desktop_file() -> String {
     format!(
         "[Desktop Entry]\nType=Application\nName=Chromium\nComment=Web browser (Debian's Chromium)\n\
-         Exec=/usr/local/bin/poly-chromium {WINDOW_ARGS} file:///{PAGES_DIR}/input.html\n"
+         Exec=/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS} file:///{PAGES_DIR}/input.html\n"
     )
 }
 
@@ -1064,16 +1066,20 @@ pub const CPUS: Option<u32> = Some(4);
 fn run(args: &[String]) -> Result {
     let release = args.iter().any(|a| a == "--release");
     let kernel = crate::build_kernel(release)?;
-    let image = root().join("target").join(FILE_NAME);
-    if args.iter().any(|a| a == "--fresh-disk") || !image.exists() {
-        make(FILE_NAME)?;
-    }
+    let image = disk_image(args.iter().any(|a| a == "--fresh-disk"))?;
     let initrd = write_initramfs()?;
-    let append = format!("{INIT_ARGS} console=ttyS0 poly.terminal=off");
-    let mut cmd = crate::qemu(&kernel, MEMORY, &append, crate::Devices::None, "mon:stdio");
+    // POLY_CHROMIUM_APPEND: more kernel arguments (`poly.debug.profile`, ...).
+    let more = std::env::var("POLY_CHROMIUM_APPEND").unwrap_or_default();
+    let append = format!("{INIT_ARGS} console=ttyS0 poly.terminal=off {more}");
+    let mut cmd = crate::qemu(&kernel, MEMORY, append.trim_end(), crate::Devices::None, "mon:stdio");
     cmd.args(rootdisk::drive_args(&image)).arg("-initrd").arg(&initrd).args(crate::desktop::devices());
     if let Some(n) = CPUS {
         cmd.args(["-smp", &n.to_string()]);
+    }
+    // POLY_CHROMIUM_QMP: a QMP server for driving the boot by hand or by a
+    // script (`tcp:127.0.0.1:4444`, any host).
+    if let Ok(qmp) = std::env::var("POLY_CHROMIUM_QMP") {
+        cmd.args(["-qmp", &format!("{qmp},server=on,wait=off")]);
     }
     eprintln!(
         "==> the desktop is in QEMU's window (the Windows key or Ctrl+Space opens the launcher: type \"chromium\"); \
@@ -1084,6 +1090,27 @@ fn run(args: &[String]) -> Result {
     let _ = crate::desktop::window_display(&mut cmd);
     let _ = cmd.status().map_err(|e| format!("qemu: {e}"))?;
     Ok(())
+}
+
+/// The disk `run` and a driven boot use: [`FILE_NAME`], made if missing or
+/// `fresh`. With `POLY_CHROMIUM_PROBE_DIR` (a directory of scripts to try
+/// things with) a fresh image of its own with them in `/root/probe/`.
+fn disk_image(fresh: bool) -> Result<PathBuf> {
+    let image = root().join("target").join(FILE_NAME);
+    if let Ok(dir) = std::env::var("POLY_CHROMIUM_PROBE_DIR") {
+        let mut contents = collect()?;
+        for e in std::fs::read_dir(&dir).map_err(|e| format!("{dir}: {e}"))?.flatten() {
+            let data = std::fs::read(e.path()).map_err(|e| e.to_string())?;
+            contents.tree.file(&format!("root/probe/{}", e.file_name().to_string_lossy()), 0o755, &data);
+        }
+        let probe = root().join("target/poly-chromium-probe.img");
+        rootdisk::write_image_poly_ext2(&contents.tree, &probe)?;
+        return Ok(probe);
+    }
+    if fresh || !image.exists() {
+        make(FILE_NAME)?;
+    }
+    Ok(image)
 }
 
 /// `cargo xtask chromium <lock|fetch [--reference]|disk|run|root
@@ -1124,20 +1151,7 @@ pub fn command(args: &[String]) -> Result {
     fetch(false)?;
     let kernel = crate::build_kernel(release)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
-    let mut image = root().join("target").join(FILE_NAME);
-    // POLY_CHROMIUM_PROBE_DIR: a directory of scripts to try things with,
-    // copied to /root/probe/ on a fresh image of its own.
-    if let Ok(dir) = std::env::var("POLY_CHROMIUM_PROBE_DIR") {
-        let mut contents = collect()?;
-        for e in std::fs::read_dir(&dir).map_err(|e| format!("{dir}: {e}"))?.flatten() {
-            let data = std::fs::read(e.path()).map_err(|e| e.to_string())?;
-            contents.tree.file(&format!("root/probe/{}", e.file_name().to_string_lossy()), 0o755, &data);
-        }
-        image = root().join("target/poly-chromium-probe.img");
-        rootdisk::write_image_poly_ext2(&contents.tree, &image)?;
-    } else if fresh || !image.exists() {
-        make(FILE_NAME)?;
-    }
+    let image = disk_image(fresh)?;
     let initrd = write_initramfs()?;
     let mut m = crate::toolkits::Machine::boot_with_init(
         &kernel,
@@ -1516,6 +1530,95 @@ fn headless(args: &str, page: &str) -> String {
     format!("/usr/local/bin/poly-chromium --headless=new --log-level=3 {args} file:///{PAGES_DIR}/{page}")
 }
 
+/// How long a step of the windowed scenario may take: Chromium starts in
+/// about a minute with a hypervisor, several under QEMU's emulator.
+const WINDOW_WAIT: Duration = Duration::from_secs(1200);
+/// How long a click or typing may take to show.
+const INPUT_WAIT: Duration = Duration::from_secs(180);
+
+/// Whether the launcher is shown, from the compositor's last word on it
+/// in the console's text (it is shown on an empty desktop at start).
+fn launcher_shown(text: &str) -> bool {
+    let at = |needle: &str| text.rfind(needle);
+    let shown = at("launcher shown");
+    let hidden = [at("launcher hidden"), at("poly-compositor: launched ")].into_iter().flatten().max();
+    shown > hidden
+}
+
+/// The windowed scenario (docs/chromium-linux-gaps.md, "The windowed
+/// scenario"): Chromium from the launcher, as `poly` with its sandbox, on
+/// Poly's desktop through Wayland; its page `input.html` fills the window
+/// with [`INPUT_BEFORE`]; a click turns it [`INPUT_AFTER`], a second one
+/// back; typing "poly" into its text field makes the title "typed poly"
+/// (read from the compositor's window list, asked for on its control
+/// pipe). Every wait is generous: under QEMU's emulator Chromium is slow,
+/// so each check polls until its deadline.
+fn window_scenario(m: &mut crate::toolkits::Machine) -> Result {
+    use crate::toolkits::find_colour;
+    if !launcher_shown(&m.text()) {
+        m.key("meta_l")?;
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    let from = m.text_len();
+    m.type_text("chromium")?;
+    m.seen(from, "launcher query \"chromium\"", Duration::from_secs(60))?;
+    std::thread::sleep(Duration::from_millis(500));
+    let from = m.text_len();
+    m.key("ret")?;
+    let started = std::time::Instant::now();
+    m.seen(from, "poly-compositor: launched Chromium", Duration::from_secs(60))?;
+    let rest = m.seen(from, "poly-compositor: window ", WINDOW_WAIT)?;
+    let place @ (_, _, w, h) =
+        crate::toolkits::window_place(&rest).ok_or_else(|| format!("unreadable window line {rest:?}"))?;
+    eprintln!("==> Chromium's window shown after {} s: {rest}", started.elapsed().as_secs());
+    // The page drawn: most of the window its colour.
+    let ((x0, y0, x1, y1), n) = poll(WINDOW_WAIT, || {
+        let img = m.shot("chromium-shown")?;
+        Ok(find_colour(&img, INPUT_BEFORE, 3, place).filter(|f| f.1 as i64 * 3 >= i64::from(w) * i64::from(h)))
+    })
+    .map_err(|e| format!("the window at {place:?} never showed {INPUT_BEFORE:02x?}: {e}"))?;
+    eprintln!("==> the page is drawn after {} s", started.elapsed().as_secs());
+    let page = (x0 as i32, y0 as i32, (x1 - x0 + 1) as i32, (y1 - y0 + 1) as i32);
+    let centre = (((x0 + x1) / 2) as i32, ((y0 + y1) / 2) as i32);
+    for (i, colour) in [(1, INPUT_AFTER), (2, INPUT_BEFORE)] {
+        m.click(centre.0, centre.1)?;
+        poll(INPUT_WAIT, || {
+            let img = m.shot(&format!("chromium-clicked-{i}"))?;
+            Ok(find_colour(&img, colour, 3, page).filter(|f| f.1 * 4 >= n * 3))
+        })
+        .map_err(|e| format!("click {i} did not turn the page {colour:02x?}: {e}"))?;
+        eprintln!("==> click {i} turned the page {colour:02x?}");
+    }
+    // The text field is at 10,10 of the page (input.html), 300x30.
+    m.click(page.0 + 60, page.1 + 25)?;
+    std::thread::sleep(Duration::from_secs(1));
+    m.type_text("poly")?;
+    let ask = ". /etc/poly-desktop.env; echo dump > \"$XDG_RUNTIME_DIR/poly-compositor.ctl\"";
+    poll(INPUT_WAIT, || {
+        let from = m.text_len();
+        m.run(ask)?;
+        Ok(m.seen(from, "window \"typed poly", Duration::from_secs(10)).ok())
+    })
+    .map_err(|e| format!("typing \"poly\" did not change the title: {e}"))?;
+    eprintln!("==> typing changed the title to \"typed poly\"");
+    m.shot("chromium-typed")?;
+    Ok(())
+}
+
+/// `check` every few seconds until it gives a value or `wait` is over.
+fn poll<T>(wait: Duration, mut check: impl FnMut() -> Result<Option<T>>) -> Result<T> {
+    let deadline = std::time::Instant::now() + wait;
+    loop {
+        if let Some(v) = check()? {
+            return Ok(v);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(format!("not within {} s", wait.as_secs()));
+        }
+        std::thread::sleep(Duration::from_secs(3));
+    }
+}
+
 /// The boot test of the milestone (see the module documentation). Every
 /// check is there and counted; it fails until Poly runs Chromium.
 pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
@@ -1561,10 +1664,10 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             failed.push(format!("--screenshot of colours.html: {out:?}"));
         }
     }
-    // 3. Windowed with the sandbox, from the launcher: a click turns the
-    // page's colour.
+    // 3. Windowed with the sandbox, from the launcher: clicks turn the
+    // page's colour and back, typing changes its title.
     if failed.is_empty()
-        && let Err(e) = m.launch_and_click("chromium", "Chromium", INPUT_BEFORE, INPUT_AFTER)
+        && let Err(e) = window_scenario(&mut m)
     {
         failed.push(format!("Chromium on the desktop: {e}"));
     }
@@ -1766,6 +1869,16 @@ mod tests {
         let tests = load_tests(&[root().join(TESTS_DIR)]).unwrap();
         assert!(!tests.is_empty());
         assert!(tests.iter().all(|t| t.steps.iter().flatten().any(|a| a.contains("chromium"))));
+    }
+
+    #[test]
+    fn the_launcher_state_comes_from_the_compositors_last_word() {
+        let ready = "poly-compositor: desktop ready (first frame drawn in 9 ms; launcher shown)\n";
+        assert!(launcher_shown(ready));
+        assert!(!launcher_shown(&format!("{ready}poly-compositor: launcher hidden\n")));
+        assert!(!launcher_shown(&format!("{ready}poly-compositor: launched Chromium (pid 40)\n")));
+        assert!(launcher_shown(&format!("{ready}poly-compositor: launcher hidden\npoly-compositor: launcher shown\n")));
+        assert!(!launcher_shown("nothing yet"));
     }
 
     #[test]
