@@ -12,7 +12,9 @@
 extern crate alloc;
 
 use alloc::string::String;
+use alloc::vec::Vec;
 use poly_http::consts::*;
+use poly_http::date::{self, DateTime};
 use poly_http::request;
 use poly_win32_inet::{self as inet, Connect, Handle, Object, Request, Session, fail};
 use poly_win32_rt as _;
@@ -266,5 +268,108 @@ pub extern "system" fn WinHttpCheckPlatform() -> i32 {
 /// The entry point (`DllMain`): nothing to set up.
 #[unsafe(no_mangle)]
 pub extern "system" fn winhttp_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
+    TRUE
+}
+
+// ----- URL_COMPONENTS: WinHttpCrackUrl and WinHttpCreateUrl
+
+pub use poly_win32_inet::UrlComponents;
+
+/// `WinHttpCrackUrl`: `URL_COMPONENTS` filled from `url`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WinHttpCrackUrl(
+    url: *const u16,
+    len: u32,
+    flags: u32,
+    components: *mut UrlComponents,
+) -> i32 {
+    // SAFETY: the caller's URL and structure.
+    ret(unsafe { inet::crack_url(url, len, flags, components) })
+}
+
+/// `WinHttpCreateUrl`: a URL from `URL_COMPONENTS`; a buffer too small (or
+/// none) is `ERROR_INSUFFICIENT_BUFFER` with the characters needed, the
+/// terminator included.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WinHttpCreateUrl(
+    components: *const UrlComponents,
+    flags: u32,
+    out: *mut u16,
+    len: *mut u32,
+) -> i32 {
+    // SAFETY: the caller's structure, buffer and length.
+    ret(unsafe { inet::create_url(components, flags, out, len) })
+}
+
+// ----- HTTP dates: WinHttpTimeFromSystemTime and WinHttpTimeToSystemTime
+
+/// `SYSTEMTIME` (`minwinbase.h`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SystemTime {
+    pub year: u16,
+    pub month: u16,
+    pub day_of_week: u16,
+    pub day: u16,
+    pub hour: u16,
+    pub minute: u16,
+    pub second: u16,
+    pub milliseconds: u16,
+}
+
+/// `WinHttpTimeFromSystemTime`: the preferred HTTP date (RFC 9110 section
+/// 5.6.7) into the caller's `WINHTTP_TIME_FORMAT_BUFSIZE` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WinHttpTimeFromSystemTime(time: *const SystemTime, out: *mut u16) -> i32 {
+    if time.is_null() || out.is_null() {
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    // SAFETY: checked non-null; the caller owns it for this call.
+    let t = unsafe { *time };
+    let date = DateTime {
+        year: t.year,
+        month: t.month,
+        day_of_week: t.day_of_week,
+        day: t.day,
+        hour: t.hour,
+        minute: t.minute,
+        second: t.second,
+        millis: t.milliseconds,
+    };
+    let Some(text) = date::format_http_date(&date) else { return fail(ERROR_INVALID_PARAMETER) };
+    let units: Vec<u16> = text.encode_utf16().collect();
+    // SAFETY: the caller's buffer of `WINHTTP_TIME_FORMAT_BUFSIZE` bytes,
+    // longer than the 30 units written.
+    unsafe {
+        core::ptr::copy_nonoverlapping(units.as_ptr(), out, units.len());
+        out.add(units.len()).write(0);
+    }
+    TRUE
+}
+
+/// `WinHttpTimeToSystemTime`: any of the three HTTP date forms into
+/// `SYSTEMTIME` (`wDayOfWeek` worked out from the date, `wMilliseconds`
+/// zero).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WinHttpTimeToSystemTime(text: *const u16, time: *mut SystemTime) -> i32 {
+    if text.is_null() || time.is_null() {
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    // SAFETY: the caller's string.
+    let Some(s) = (unsafe { inet::wstr(text) }) else { return fail(ERROR_INVALID_PARAMETER) };
+    let Some(d) = date::parse_http_date(&s) else { return fail(ERROR_INVALID_PARAMETER) };
+    // SAFETY: checked non-null.
+    unsafe {
+        *time = SystemTime {
+            year: d.year,
+            month: d.month,
+            day_of_week: d.day_of_week,
+            day: d.day,
+            hour: d.hour,
+            minute: d.minute,
+            second: d.second,
+            milliseconds: d.millis,
+        }
+    };
     TRUE
 }

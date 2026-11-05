@@ -60,6 +60,16 @@ pub const INTERNET_DEFAULT_HTTP_PORT: u16 = 80;
 pub const INTERNET_DEFAULT_HTTPS_PORT: u16 = 443;
 pub const WINHTTP_ADDREQ_FLAG_ADD: u32 = 0x2000_0000;
 pub const WINHTTP_ADDREQ_FLAG_REPLACE: u32 = 0x8000_0000;
+
+/// `winhttp.h`: `INTERNET_SCHEME_HTTP`, `INTERNET_SCHEME_HTTPS`.
+pub const INTERNET_SCHEME_HTTP: i32 = 1;
+pub const INTERNET_SCHEME_HTTPS: i32 = 2;
+/// `winhttp.h`: the flags of `WinHttpCrackUrl` and `WinHttpCreateUrl`.
+pub const ICU_DECODE: u32 = 0x1000_0000;
+pub const ICU_ESCAPE: u32 = 0x8000_0000;
+pub const ICU_REJECT_USERPWD: u32 = 0x0000_4000;
+/// `winhttp.h`: the bytes `WinHttpTimeFromSystemTime` needs (31 WCHARs).
+pub const WINHTTP_TIME_FORMAT_BUFSIZE: u32 = 62;
 /// `WINHTTP_OPTION_*` read back by `WinHttpQueryOption`.
 pub const WINHTTP_OPTION_CONNECT_TIMEOUT: u32 = 3;
 pub const WINHTTP_OPTION_RECEIVE_TIMEOUT: u32 = 6;
