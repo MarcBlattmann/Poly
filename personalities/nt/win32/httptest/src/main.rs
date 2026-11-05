@@ -661,7 +661,10 @@ unsafe fn urls_and_dates() {
         comp3.url_path_length = comp_path.len() as u32;
         let r = WinHttpCrackUrl(u, 0, 0, &mut comp3);
         check_fail(r, ERROR_INSUFFICIENT_BUFFER);
-        check_got(comp3.url_path_length == 5, comp3.url_path_length);
+        // Learn: WinHttpCrackUrl includes query/fragment in the path when
+        // ExtraInfo is not requested; `/a/b?c=d#e` needs 11 WCHARs including NUL.
+        // https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpcrackurl
+        check_got(comp3.url_path_length == 11, comp3.url_path_length);
 
         // ----- d) ftp://h/ unrecognized scheme -----
         let f = w!("ftp://h/");
