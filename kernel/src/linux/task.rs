@@ -236,7 +236,9 @@ pub fn wait_tree(k: &Thread<'_>, generation: u64) -> Wakeup {
 /// `parent_tid`: `LinuxProcess::fork`, and with `clear_handlers`
 /// (`CLONE_CLEAR_SIGHAND`) every caught signal back at `SIG_DFL`.
 fn child_state(parent: &LinuxState, parent_tid: u32, child: u32, clear_handlers: bool) -> LinuxState {
-    let mut state = parent.with(|p| p.fork(parent_tid as i32, child as i32));
+    // Fork state is a few KiB; build it behind a box instead of keeping both
+    // the parent copy and child result on the 16 KiB kernel stack.
+    let mut state = parent.with(|p| alloc::boxed::Box::new(p.fork(parent_tid as i32, child as i32)));
     if clear_handlers {
         for signal in 1..=NSIG {
             let a = state.actions.get(signal);

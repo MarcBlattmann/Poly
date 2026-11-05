@@ -86,7 +86,9 @@ static FUTEXES: SpinLock<FutexTable> = SpinLock::new(FutexTable::new());
 /// What the kernel keeps for the Linux personality per process.
 #[derive(Debug)]
 pub struct LinuxState {
-    process: SpinLock<LinuxProcess>,
+    // The personality state is several KiB. Keep it out of clone's kernel
+    // stack while constructing a fork child.
+    process: SpinLock<alloc::boxed::Box<LinuxProcess>>,
     /// Some thread of the process has seccomp state (ADR 0054): the
     /// dispatcher checks every call. Never cleared; copied to children.
     pub(crate) seccomp: AtomicBool,
@@ -98,7 +100,10 @@ impl LinuxState {
     pub fn new(pid: u32) -> LinuxState {
         // A process the kernel starts: the root of a process tree.
         task::register_root(pid);
-        LinuxState { process: SpinLock::new(LinuxProcess::new(pid as i32)), seccomp: AtomicBool::new(false) }
+        LinuxState {
+            process: SpinLock::new(alloc::boxed::Box::new(LinuxProcess::new(pid as i32))),
+            seccomp: AtomicBool::new(false),
+        }
     }
 
     /// A thread `tid` was started (the main thread is there from the start):
@@ -113,7 +118,7 @@ impl LinuxState {
         let parent = p.thread_ids().next();
         match parent {
             Some(parent) => p.add_thread(parent, tid, true),
-            None => first_thread(&mut p, tid),
+            None => first_thread(p.as_mut(), tid),
         }
     }
 
@@ -134,7 +139,7 @@ impl LinuxState {
 
     /// Run `f` on the personality's state, locked. `f` must not block.
     pub fn with<R>(&self, f: impl FnOnce(&mut LinuxProcess) -> R) -> R {
-        f(&mut self.process.lock())
+        f(self.process.lock().as_mut())
     }
 }
 
