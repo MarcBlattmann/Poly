@@ -531,7 +531,7 @@
 {"symbol":"StrokePath","src":["wine-spec"],"seeds":["wine:gdi32/tests/path.c:test_path_state"]},
 {"symbol":"SwapBuffers","src":["wine-spec"]},
 {"symbol":"TextOutA","src":["wine-spec"]},
-{"symbol":"TextOutW","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"]},
+{"symbol":"TextOutW","status":"claimed","claimed_by":"impl-win-gui-a","tests_visible":2,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"TranslateCharsetInfo","src":["wine-spec"],"seeds":["wine:gdi32/tests/font.c:test_TranslateCharsetInfo","wine:gdi32/tests/font.c:test_EnumFontFamiliesEx_default_charset","wine:gdi32/tests/font.c:test_nonexistent_font","wine:gdi32/tests/font.c:test_bitmap_font_metrics","wine:gdi32/tests/font.c:test_bitmap_font_glyph_index","wine:gdi32/tests/font.c:get_glyph_indices"]},
 {"symbol":"UnloadNetworkFonts","src":["wine-spec"]},
 {"symbol":"UnrealizeObject","src":["wine-spec"],"seeds":["wine:gdi32/tests/gdiobj.c:test_gdi_objects"]},
