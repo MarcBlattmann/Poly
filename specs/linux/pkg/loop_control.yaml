@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/loop_control              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; /tmp is the container's overlay file system; loop devices, /dev/loop-control and squashfs (gzip, xz, lzo, lz4; NOT zstd, NOT legacy lzma) are in the kernel; mksquashfs 4.6.1 builds the images"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  /dev/loop-control is the character device 10:237 (the tests make their own node with
+  mknod(S_IFCHR | 0600, makedev(10, 237)); the node's mode is its owner's choice). It is a
+  control device with three ioctls and no data: read and write fail with EINVAL, lseek with
+  ESPIPE; any other request (0x4C83, LOOP_SET_FD, TCGETS) is ENOSYS. Loop device numbers go
+  from 0 to 0xfffff; the number is the minor of the device's block node (major 7, see
+  loop_blockdev). The requests work on a descriptor opened O_RDONLY as well as O_RDWR. Every
+  process on the machine shares the devices, so the tests never print a device number and the
+  tests that need a device of their own add one with an explicit number.
+  LOOP_CTL_GET_FREE (0x4C82, argument ignored): returns the number of a loop device that is
+  not bound to a file, and creates a new device when every existing one is bound. A device
+  bound to a file is never returned. It does not reserve the device: two callers can get the
+  same number, so users retry when LOOP_SET_FD says EBUSY.
+  LOOP_CTL_ADD (0x4C80, argument = number): creates device `arg` and returns `arg`. A negative
+  argument (-1, -2, -7) creates the lowest unused number and returns it. EEXIST when the number
+  is in use, EINVAL when it is above 0xfffff (0x100000, 0x7fffffff). A new device is unbound:
+  LOOP_GET_STATUS64 is ENXIO and BLKGETSIZE64 gives 0; its block node (major 7, minor = number)
+  can be opened at once, and a file can be bound to it.
+  LOOP_CTL_REMOVE (0x4C81, argument = number): destroys device `arg` and returns 0. EBUSY while
+  the device is bound to a file, and also while any descriptor of it is open (an unbound
+  device somebody still holds open, also after LOOP_CLR_FD); a device with LO_FLAGS_AUTOCLEAR is
+  unbound by the last close and is removable after it. ENODEV for a number with no device
+  (never added or already removed); EINVAL for a negative argument. After removal the number
+  can be added again.
+  The requests check no capability themselves: whoever may open the control node can use them
+  (the access check is the node's mode: a normal user on a node of mode 0600 owned by root
+  gets EACCES from open). Creating the nodes needs CAP_MKNOD (mknod of a block or character
+  device by a normal user is EPERM). A normal user with a node of mode 0666 can allocate, add,
+  remove, bind a file it can open and read through the device.
+returns:
+  get_free: "number >= 0 (below 0x100000)"
+  add: "the number asked for; for a negative argument the lowest unused number"
+  remove: "0"
+  read_write_seek: "read EINVAL, write EINVAL, lseek ESPIPE"
+errors:
+  unknown_request: "ENOSYS (38) for any request other than 0x4C80..0x4C82 (also LOOP_SET_FD 0x4C00 and TCGETS 0x5401)"
+  add_exists: "EEXIST (17)"
+  add_too_big: "EINVAL (22): number above 0xfffff"
+  remove_busy: "EBUSY (16): bound (also with autoclear) or open by anybody"
+  remove_missing: "ENODEV (19)"
+  remove_negative: "EINVAL (22): -1, -2"
+  open_without_permission: "EACCES (13): normal user, node mode 0600 owned by root"
+  mknod_without_capability: "EPERM (1): block or character device node by a process without CAP_MKNOD"
+side_effects: >
+  ADD, and the implicit creation by GET_FREE, make devices that live until removed. The tests
+  make the block nodes themselves; nothing depends on /dev.
+threading: any thread may call; the calls are atomic with respect to each other
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: ioctl numbers from linux/loop.h (LOOP_CTL_ADD 0x4C80, LOOP_CTL_REMOVE 0x4C81,
+# LOOP_CTL_GET_FREE 0x4C82); character major/minor 10:237 (misc major 10, LOOP_CTRL_MINOR 237,
+# linux/miscdevice.h). Tests use device numbers from 600000 up for devices of their own.

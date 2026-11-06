@@ -1,0 +1,77 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/loop_attach              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; /tmp is the container's overlay file system; loop devices, /dev/loop-control and squashfs (gzip, xz, lzo, lz4; NOT zstd, NOT legacy lzma) are in the kernel; mksquashfs 4.6.1 builds the images"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  Binding and unbinding a regular file to a loop device (ioctls on the device's block node,
+  major 7, opened O_RDWR; the backing file is opened by the caller in any access mode).
+  LOOP_SET_FD (0x4C00, argument = fd): binds the open file to an unbound device. The device's
+  size is the file's size rounded down to 512-byte sectors; an empty file is accepted (size 0).
+  A file opened O_RDONLY makes a read-only device (LO_FLAGS_READ_ONLY, writes EPERM,
+  BLKROGET 1; BLKROSET 0 does not change that); files opened O_RDWR or O_WRONLY give a
+  writable device. LOOP_GET_STATUS64 afterwards shows lo_number = the device number, flags 0
+  (1 for read-only), offset 0, limit 0 and an empty name. A second LOOP_SET_FD (even with the
+  same descriptor) is EBUSY. A loop device may be the backing file of another loop device
+  (data read through both layers, size of the upper = size of the lower after BLKFLSBUF of the
+  lower). The same file can be bound to two devices at once, with the same or another
+  descriptor.
+  LOOP_CONFIGURE (0x4C0A, argument = struct loop_config: u32 fd, u32 block_size, struct
+  loop_info64 info, u64 reserved[8]; 304 bytes): LOOP_SET_FD and the status in one step, applied
+  at once: info's lo_offset, lo_sizelimit, lo_file_name and the flags LO_FLAGS_READ_ONLY (1),
+  LO_FLAGS_AUTOCLEAR (4), LO_FLAGS_PARTSCAN (8), and block_size (0 keeps 512; 512, 1024 and
+  4096 set it, BLKSSZGET reads it back). A bound device answers EBUSY; a bad descriptor EBADF; a
+  directory or a character device as the backing file EINVAL; block_size 256 or 1000 EINVAL; a
+  NULL argument EFAULT; a failed call binds nothing (the device is still unbound). The
+  reserved words are not checked. LOOP_GET_STATUS64 shows the flags (read-only + autoclear = 5),
+  offset, limit and file name given.
+  LOOP_CLR_FD (0x4C01): with the caller's descriptor the only one open on the device, the device
+  is unbound at once (0), LOOP_GET_STATUS64 is then ENXIO, a repeated LOOP_CLR_FD ENXIO, and
+  LOOP_SET_FD on the same open descriptor is still EBUSY (open the node again to bind
+  again). If another descriptor of the device is open (or a file system is mounted from it)
+  LOOP_CLR_FD returns 0 but only sets LO_FLAGS_AUTOCLEAR: the device stays bound, still reads,
+  LOOP_SET_FD is EBUSY, until the last descriptor and mount are gone; then it is unbound.
+  LO_FLAGS_AUTOCLEAR given by LOOP_CONFIGURE or LOOP_SET_STATUS64 has the same effect at the last
+  close without any LOOP_CLR_FD; switching it off again with LOOP_SET_STATUS64 (flags 0) keeps
+  the device bound after the close.
+  LOOP_CHANGE_FD (0x4C06, argument = fd): replaces the backing file of a read-only device by
+  another open file of exactly the same size (0; flags unchanged, data read after BLKFLSBUF is
+  the new file's); EINVAL on a writable device or a file of another size; EBADF for a bad
+  descriptor.
+  Reads and writes pass to the file: data written to the device reaches the file after fsync
+  on the device or BLKFLSBUF; data changed in the file is seen after BLKFLSBUF (the device has
+  its own page cache). An unbound device reads as empty (read 0), writes fail with ENOSPC and
+  lseek(SEEK_END) gives 0. Behaviour of binding or unbinding through a descriptor opened
+  O_RDONLY is not specified (only LOOP_GET_STATUS64 and BLKROGET are used on such descriptors).
+returns:
+  set_fd: "0"
+  configure: "0"
+  clr_fd: "0, also when only deferred"
+  change_fd: "0"
+  unbound_device: "LOOP_GET_STATUS64, LOOP_SET_STATUS64, LOOP_CLR_FD, LOOP_SET_CAPACITY: ENXIO; read 0; write ENOSPC; lseek(SEEK_END) 0"
+errors:
+  busy: "EBUSY (16): LOOP_SET_FD or LOOP_CONFIGURE on a bound device (also given the device's own descriptor)"
+  bad_fd: "EBADF (9): not open, -1, an O_PATH descriptor, or the unbound device's own descriptor"
+  bad_backing_file: "EINVAL (22): a directory, a pipe, a character device (loop-control)"
+  unbound: "ENXIO (6): status, clr, capacity and status-set requests on an unbound device"
+  change_fd: "EINVAL (22): the device is writable, or the new file has another size"
+  configure_block_size: "EINVAL (22): block_size 256, 1000"
+  configure_null: "EFAULT (14)"
+  descriptor_reuse: "EBUSY (16): LOOP_SET_FD on a descriptor whose device was just unbound by LOOP_CLR_FD"
+side_effects: >
+  The file stays open inside the device until it is unbound. The device holds no reference after
+  the unbind.
+threading: requests on one device are serialised; several processes may bind different devices at once
+ordering: "binding is complete when the ioctl returns; a deferred unbind happens at the last close of the node and the last unmount"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: request numbers and struct loop_config / loop_info64 from linux/loop.h. The tests
+# bind devices numbered from 600000 (LOOP_CTL_ADD with an explicit number) so that they never
+# take a device another process on the machine is using.

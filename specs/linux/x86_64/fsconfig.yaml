@@ -1,0 +1,78 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fsconfig           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (the unprivileged cases as uid/gid 65534 without capabilities); umask 022; unprivileged user namespaces allowed; every test makes a mount namespace of its own, makes / MS_REC|MS_PRIVATE and mounts a tmpfs on a private directory below /tmp"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  fsconfig(fs_fd, cmd, key, value, aux) (syscall 431) sets parameters of a
+  filesystem context made by fsopen (430) or fspick (433) and drives its
+  life cycle. fs_fd is the context descriptor, cmd one of: 0
+  FSCONFIG_SET_FLAG (key only: a boolean option such as "ro"), 1 SET_STRING
+  (key and a NUL terminated value), 2 SET_BINARY (key, value points to aux
+  bytes, 1..1 MiB), 3 SET_PATH (key, path in value, aux a directory
+  descriptor or AT_FDCWD), 4 SET_PATH_EMPTY (the same; an empty path means
+  aux itself), 5 SET_FD (key, aux a descriptor), 6 CMD_CREATE (build the
+  superblock), 7 CMD_RECONFIGURE (apply the new parameters to a live mount),
+  8 CMD_CREATE_EXCL (like CREATE; a filesystem that was already there is an
+  error). Unused arguments must be zero or NULL (EINVAL). Keys and strings
+  longer than 256 bytes are EINVAL. The state machine: a context from fsopen
+  takes parameters; CMD_CREATE or CMD_CREATE_EXCL builds the superblock and
+  moves it to "created" where every fsconfig command is EBUSY (and fsmount
+  is allowed); fsmount takes the mount and moves it to "reconfigure": there
+  parameters are accepted again, CMD_RECONFIGURE applies them to the live
+  mount, and CREATE is EBUSY. A context from fspick starts in the
+  reconfigure state. Before create, CMD_RECONFIGURE is EBUSY. A rejected
+  parameter (EINVAL) leaves the context as it was; a failed CMD_CREATE or
+  CMD_RECONFIGURE ends the context: every later command is EBUSY (fsmount
+  EINVAL). Parameters are not applied until create (or reconfigure); a later
+  value for the same key wins. Messages: when a parameter is rejected the
+  context gets a message that read(2) on the descriptor returns, one whole
+  message per read, oldest first; a successful call adds none; with nothing
+  queued read is ENODATA; a buffer smaller than the next message is EMSGSIZE
+  and keeps it. The wording is the kernel's: "e tmpfs: Unknown parameter
+  'NAME'" and "e tmpfs: Bad value for 'NAME'" (also an option that needs a
+  value given as a flag, or an unparsable number), "e overlay: Bad value for
+  'NAME'", "e proc: unknown value of hidepid - NAME" (followed by an empty
+  line), "e Multiple sources" (a second source), "e Non-string source"
+  (source given as a path), "e No source specified" (CMD_CREATE of squashfs
+  or ext4 without a source), "e tmpfs: Too few inodes for current use"
+  (reconfigure); every message ends with a newline. tmpfs parameters seen:
+  size (bytes, k/m/g suffix or percent; rounded up to 4096-byte blocks),
+  nr_blocks, nr_inodes, mode (octal, at most 7777), uid, gid, source (any
+  string), flags ro and rw. tmpfs takes "ro" as a flag and as a string, "rw"
+  as a flag; "size" as a flag is a bad value. overlay takes lowerdir (':'
+  separated; each directory is checked as it is given: ENOENT), upperdir,
+  workdir, redirect_dir as strings. The caller needs CAP_SYS_ADMIN for
+  CMD_CREATE (EPERM); setting parameters on an inherited descriptor needs
+  none.
+returns:
+  success: "0"
+  read_message: "one message per read, e.g. e tmpfs: Bad value for 'size' followed by a newline"
+  read_empty: "-1 ENODATA (61)"
+  size_rounding: "size=1m gives statfs f_blocks 256 (4096-byte blocks), size=512k 128, size=1g 262144, size=5000 2, size=2m 512; nr_blocks=300 gives 300"
+  nr_inodes: "statfs f_files equals nr_inodes"
+  reconfigure: "size, nr_blocks and ro/rw apply to every mount of the superblock (a bind mount too); the mode of the root directory is not changed by reconfigure"
+errors:
+  state: "EBUSY (16): any command after CREATE (until fsmount); a second CREATE; RECONFIGURE before create; any command after a failed CREATE or RECONFIGURE; CREATE after fsmount"
+  bad_parameter: "EINVAL (22): unknown key (also as a flag), bad value (size 'abc', mode '999', nr_inodes 'y'), flag for a value option, value for a flag, nonzero unused argument, empty key, key or string over 256 bytes, SET_BINARY of length 0 or over 1048576 or for an option that is not binary, SET_PATH / SET_PATH_EMPTY / SET_FD for a string option, key or value given for CREATE/RECONFIGURE"
+  unknown_cmd: "EOPNOTSUPP (95): cmd 9 or above"
+  bad_pointers: "EFAULT (14): invalid key, value or path pointer; SET_BINARY with an unreadable buffer"
+  bad_fd: "EBADF (9): fs_fd not open (also the mount descriptor of fsmount, which is not a context); SET_FD with aux not open; EINVAL for fs_fd -1 and for an fs_fd that is some other file (a regular file)"
+  missing_directory: "ENOENT (2): overlay lowerdir that does not exist (when it is set)"
+  permission: "EPERM (1): CMD_CREATE without CAP_SYS_ADMIN"
+side_effects: >
+  Changes the context; CMD_CREATE allocates the filesystem, CMD_RECONFIGURE
+  changes a live one.
+threading: "descriptors are per process (shared file table); no other thread-specific behaviour"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: FSCONFIG_* from linux/mount.h. Tests compare the messages listed in the summary exactly.
+# The fuse fd parameter (the descriptor of /dev/fuse) is not covered here.

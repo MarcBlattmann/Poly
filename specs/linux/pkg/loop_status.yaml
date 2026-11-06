@@ -1,0 +1,73 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/loop_status              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; /tmp is the container's overlay file system; loop devices, /dev/loop-control and squashfs (gzip, xz, lzo, lz4; NOT zstd, NOT legacy lzma) are in the kernel; mksquashfs 4.6.1 builds the images"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  Status and geometry of a bound loop device. struct loop_info64 (linux/loop.h, 232 bytes):
+  u64 lo_device (st_dev of the backing file), u64 lo_inode (its st_ino), u64 lo_rdevice (its
+  st_rdev: 0 for a regular file, the device number of the lower loop device when a loop device
+  is the backing file), u64 lo_offset, u64 lo_sizelimit, u32 lo_number (the device's
+  number), u32 lo_encrypt_type, u32 lo_encrypt_key_size, u32 lo_flags, u8 lo_file_name[64], u8
+  lo_crypt_name[64], u8 lo_encrypt_key[32], u64 lo_init[2].
+  LOOP_GET_STATUS64 (0x4C05): fills the struct for a bound device (everything not named here
+  is 0, the names empty until set); lo_flags shows LO_FLAGS_READ_ONLY (1), LO_FLAGS_AUTOCLEAR
+  (4), LO_FLAGS_PARTSCAN (8), LO_FLAGS_DIRECT_IO (16). It works on descriptors opened read-only
+  and gives every opener the same status. NULL argument: EINVAL; an unmapped pointer: EFAULT.
+  The old LOOP_GET_STATUS (0x4C03, small struct) also returns 0.
+  LOOP_SET_STATUS64 (0x4C04): changes a bound device and replaces offset, size limit and name
+  every call: a call that leaves them 0 resets them. The size = min(file size - offset, limit
+  when non-zero) rounded down to 512-byte sectors, 0 when the offset is at or past the end of
+  the file; offsets need not be sector aligned (the device's byte 0 is the file's byte at
+  the offset: offset 100 shows byte 100 first; 512 shows the second sector first); the values
+  are stored as given (a limit larger than the file is kept, the size is capped by the file).
+  The size changes at once (BLKGETSIZE64); data already read through the device is the cached
+  old data until BLKFLSBUF. lo_file_name is stored with its last byte (index 63) forced to 0, so
+  64 bytes of 'N' read back as 63 'N' and a 0. Flags in the argument: LO_FLAGS_AUTOCLEAR and
+  LO_FLAGS_PARTSCAN are taken over (AUTOCLEAR is cleared by a call that does not list it; PARTSCAN,
+  once set, stays set whatever later calls say); LO_FLAGS_READ_ONLY, LO_FLAGS_DIRECT_IO and
+  unknown bits (0x80, 0x40000000) are ignored: the device does not become read-only and the flags
+  read back without them. lo_encrypt_type other than 0 and lo_encrypt_key_size above 32 are
+  EINVAL and change nothing. lo_number, lo_device, lo_inode and lo_rdevice in the argument are
+  ignored. NULL argument: EFAULT. ENXIO on an unbound device.
+  LOOP_SET_CAPACITY (0x4C07, argument ignored, any value gives the same result): re-reads the
+  backing file's size after it was grown or shrunk with ftruncate; the device keeps its old size until
+  then; the new size follows the offset and limit rules above (an offset of 4096 with a limit of
+  6144 on a 65536-byte file: 6144; on a 5000-byte file: 512) and shows in BLKGETSIZE64,
+  BLKGETSIZE (in 512-byte sectors) and lseek(SEEK_END); a file of 8200 bytes gives 8192; ENXIO on an
+  unbound device. The grown part reads as zeros and can be written; the shrunk part is gone
+  (read at the new end returns 0).
+  LOOP_SET_BLOCK_SIZE (0x4C09, argument = bytes): sets the device's logical block size
+  (BLKSSZGET reads it back): 512 (the default), 1024, 4096 and 8192 are accepted, 0 returns 0
+  and changes nothing; 256, 1000, 100 and 3000 are EINVAL and change nothing. The size
+  of the device does not change (a 12800-byte file stays 12800 bytes at block size 4096)
+  and the data is the same; ENXIO on an unbound device.
+  LOOP_SET_DIRECT_IO (0x4C08, argument 0 or 1): 0 clears LO_FLAGS_DIRECT_IO and returns 0;
+  ENXIO on an unbound device. With 1 the result depends on the backing file system and is not
+  specified.
+returns:
+  get_status64_after_set_fd: "lo_number = device number, flags 0, offset 0, limit 0, name empty, encrypt 0, lo_device and lo_inode of the file, lo_rdevice 0"
+  set_status64: "0"
+  set_capacity: "0"
+  set_block_size: "0"
+errors:
+  encrypt: "EINVAL (22): lo_encrypt_type != 0, lo_encrypt_key_size > 32"
+  get_null: "EINVAL (22)"
+  get_bad_pointer: "EFAULT (14): address 8"
+  set_null: "EFAULT (14)"
+  block_size: "EINVAL (22): 256, 1000, 100, 3000"
+  unbound: "ENXIO (6)"
+side_effects: none beyond the device's own state
+threading: requests on one device are serialised
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: linux/loop.h (struct loop_info64, LO_FLAGS_*, request numbers), linux/fs.h (BLKGETSIZE64,
+# BLKGETSIZE, BLKSSZGET).

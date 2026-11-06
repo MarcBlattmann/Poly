@@ -1,0 +1,109 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml. A package-format batch entry:
+# the prctl(2) calls a sandbox (bubblewrap, Flatpak, libseccomp users) makes
+# around installing its filter. It has no coverage-map entry; prctl itself is
+# linux/syscall/x86_64/prctl, seccomp(2) is linux/syscall/x86_64/seccomp.
+# Only what those sheets do not pin is described here.
+id: linux/api/pkg/seccomp_prctl
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64; CAP_LAST_CAP 40)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (and drop to uid/gid 65534 in children where they need an unprivileged answer); umask 022; every process already runs under one seccomp filter of the container runtime (PR_GET_SECCOMP reads 2 at start), which the tests neither rely on nor count"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER=2, &sock_fprog) (option 22) is
+  the older way to install a filter, the one libseccomp and bubblewrap
+  use. It installs exactly what seccomp(SECCOMP_SET_MODE_FILTER, 0,
+  &sock_fprog) would, with the same program rules (linux/api/pkg/
+  seccomp_bpf_isa) and the same verdicts; filters installed by the two
+  calls are in one chain and the most severe verdict wins. Arguments after
+  the program pointer (arg4, arg5) are ignored. PR_GET_SECCOMP (21) then
+  reads 2. Mode 1 (strict) is described in linux/syscall/x86_64/prctl
+  (EINVAL under a filter). The modes are checked first: 0 and anything
+  above 2 (3, 99, -1) are EINVAL, with or without privilege, whatever the
+  pointer is. For mode 2: an unreadable struct (NULL, 8) is EFAULT, a
+  struct with length 0 or a NULL filter pointer is EINVAL; without
+  no_new_privs and without CAP_SYS_ADMIN the install is EACCES, which is
+  decided after those checks and before the instructions are checked (a
+  program with a bad opcode is then EACCES; the same through seccomp()).
+  A caller with CAP_SYS_ADMIN (root) needs no no_new_privs, and installing
+  does not set it. After setting no_new_privs (PR_SET_NO_NEW_PRIVS) an
+  unprivileged caller installs normally. A rejected program installs
+  nothing.
+  Bounding set: PR_CAPBSET_DROP (24) of every capability from 0 up to the
+  last one succeeds for a caller with CAP_SETPCAP and every PR_CAPBSET_READ
+  (23) then answers 0; dropping again is 0; the number above the last
+  capability (41 here), and 63, are EINVAL for both; arg3..arg5 of DROP are
+  ignored; without CAP_SETPCAP DROP is EPERM while READ still answers. A
+  fork child inherits the (reduced) set; a drop in a child does not reach
+  the parent. The "last capability" is the first number whose READ is
+  EINVAL, minus one.
+  Secure bits: PR_GET_SECUREBITS (27) reads the bits (0 at start for root;
+  arguments ignored); PR_SET_SECUREBITS (28) with CAP_SETPCAP sets them:
+  bit 1 is SECBIT_NOROOT and bit 2 its lock; setting 1 reads 1, clearing
+  (0) works while unlocked; setting 3 (NOROOT plus its lock) reads 3; then
+  clearing everything, or clearing only NOROOT (2), is EPERM; adding more
+  bits (0x2f) is allowed and reads 0x2f; fork children inherit the bits;
+  without CAP_SETPCAP SET is EPERM and GET still works.
+  Ambient capabilities: PR_CAP_AMBIENT (47) with operation in arg2:
+  PR_CAP_AMBIENT_IS_SET 1 (cap in arg3 -> 1 or 0), RAISE 2, LOWER 3,
+  CLEAR_ALL 4. The set starts empty. RAISE needs the capability in both the
+  permitted and the inheritable set: otherwise EPERM (root has everything
+  permitted and nothing inheritable, so the inheritable set is first
+  extended with capset). After RAISE the capability reads 1 and others 0;
+  raising again is 0; LOWER and CLEAR_ALL empty it; removing the capability
+  from the inheritable set with capset empties its ambient entry at once
+  and a new RAISE is EPERM; fork children inherit the set; an unprivileged
+  caller (uid 65534 with no capabilities) gets EPERM for RAISE and 0 for
+  IS_SET and CLEAR_ALL. An invalid capability (63) is EINVAL for IS_SET and
+  RAISE; an unknown operation (0, 9) EINVAL; RAISE or LOWER with arg4 or
+  arg5 non-zero, and CLEAR_ALL with arg3 non-zero, are EINVAL.
+  The sandbox order the last test follows: PR_SET_DUMPABLE 0, PR_SET_NO_NEW_
+  PRIVS, drop all capabilities from the bounding set, install a deny-list
+  filter (first the architecture check, then EPERM for mount, umount2,
+  pivot_root, chroot, ptrace, setns, unshare and keyctl by number), then
+  start the app as a child. The denied calls then return -EPERM without
+  running (with arguments that would otherwise be EFAULT), other calls
+  work, an allow-all filter added later removes nothing, PR_SET_SECCOMP
+  mode 0 is still EINVAL, and the child sees dumpable 0, no_new_privs 1,
+  an empty bounding set, seccomp mode 2 and the same denials. The parent
+  that forked the sandboxed child is unaffected (dumpable 1, no_new_privs
+  0, bounding set full).
+returns:
+  set_seccomp: "0; PR_GET_SECCOMP then 2 (it already was 0 or 2 before, depending on the environment); installing again, or with arg4/arg5 set, is 0"
+  verdicts_via_prctl: "ERRNO|13 -> the probed call returns -13; ALLOW runs it; argument rules see the argument words (arg0 = 77 matches, 78 does not); KILL_PROCESS and KILL_THREAD end the child with SIGSYS; the same verdicts through seccomp()"
+  stacking: "a deny filter installed with prctl (ERRNO 5 on one call) stays in force after an allow-all is installed with seccomp() and after another with prctl; a later second deny filter (ERRNO 9 on another call) adds to it"
+  capbset: "READ 1 for all capabilities of root at start, 0 for all after the drops; DROP 0"
+  securebits: "see the summary: 0 -> 1 -> 0 -> 3 -> (EPERM on clearing) -> 0x2f; children inherit 0x2f"
+  ambient: "see the summary"
+errors:
+  mode: "EINVAL (22): mode 0, 3, 99, -1"
+  pointer: "EFAULT (14): mode 2 with arg NULL or 8; EINVAL: length 0, filter pointer NULL, bad program"
+  no_permission: "EACCES (13): mode 2, valid struct, caller without no_new_privs and without CAP_SYS_ADMIN (uid 65534 after setresuid)"
+  order: "mode (EINVAL) > struct copy (EFAULT) > length 0 and NULL filter pointer (EINVAL) > privilege (EACCES) > instruction check (EINVAL)"
+  capbset: "EINVAL (22): capability above the last, 63; EPERM (1): DROP without CAP_SETPCAP"
+  securebits: "EPERM (1): SET without CAP_SETPCAP; clearing a locked bit"
+  ambient: "EPERM (1): RAISE without the capability in permitted and inheritable; EINVAL (22): invalid capability, unknown operation, non-zero arguments that must be 0"
+side_effects: >
+  Installing adds a filter that cannot be removed, for the calling thread
+  and what it creates afterwards. The other options change the calling
+  thread (bounding set, ambient set, secure bits are per thread; dumpable is
+  per process) and are inherited by fork children.
+threading: "per thread; see the summary"
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: option numbers from linux/prctl.h (PR_GET_SECCOMP 21, PR_SET_SECCOMP
+# 22, PR_CAPBSET_READ 23, PR_CAPBSET_DROP 24, PR_GET_SECUREBITS 27,
+# PR_SET_SECUREBITS 28, PR_SET_NO_NEW_PRIVS 38, PR_GET_NO_NEW_PRIVS 39,
+# PR_CAP_AMBIENT 47); SECBIT_* from linux/securebits.h; capability numbers
+# from linux/capability.h (CAP_NET_BIND_SERVICE 10, CAP_NET_RAW 13);
+# capget/capset version 3 header 0x20080522. The tests need root
+# (poly-diff: needs=root) except the first (filter), which passes for any
+# user. The secure-bits observations: an unknown extra bit (0x100) was
+# accepted by this kernel; not tested. Strict mode could not be observed:
+# the container's filter makes it EINVAL.

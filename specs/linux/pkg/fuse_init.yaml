@@ -1,0 +1,90 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/pkg/fuse_init.yaml. A feature entry (package formats, ADR 0132): the
+# kernel interface, not one API symbol, so it has no coverage-map entry.
+id: linux/api/pkg/fuse_init
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; /dev/fuse is a character device 10:229, mode 0666"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  The request/reply protocol on /dev/fuse and its first exchange, the
+  FUSE_INIT handshake (linux/fuse.h, protocol major 7). Every request the
+  server reads starts with struct fuse_in_header {u32 len, u32 opcode, u64
+  unique, u64 nodeid, u32 uid, u32 gid, u32 pid, u16 total_extlen, u16
+  padding} (40 bytes) followed by the opcode's body; len is the whole
+  request, a read returns exactly one request. A reply is written with
+  one write(2) call: struct fuse_out_header {u32 len, i32 error, u64
+  unique} (16 bytes) and the body; len is the whole reply, error is 0 or
+  a negative errno, unique is copied from the request. Requests that need
+  no answer (FORGET 2, BATCH_FORGET 42) are not replied to. unique numbers of kernel
+  requests are even (odd ones are for notifications); each request
+  has a different one. FUSE_INIT (opcode 26): the kernel sends it by itself
+  once after the mount, before any user operation, with nodeid 0, the
+  mounting user's uid and gid, a nonzero even unique, and the body
+  struct fuse_init_in {u32 major 7, u32 minor, u32 max_readahead, u32
+  flags, u32 flags2, u32 unused[11]} (64 bytes; len 104 on the oracle).
+  The oracle kernel sent minor 45; a Poly kernel must send minor 31 or
+  more (the tests check >= 31), a nonzero max_readahead (131072 on the
+  oracle) and flags that include FUSE_ASYNC_READ (bit 0), FUSE_ATOMIC_O_TRUNC
+  (bit 3) and FUSE_MAX_PAGES (bit 22); the other flags the oracle offered
+  (big writes, export support, writeback cache, dont-mask, splice, readdirplus
+  and so on) need not be offered. No second INIT is sent on a connection.
+  The server answers with struct fuse_init_out {u32 major, u32 minor, u32
+  max_readahead, u32 flags, u16 max_background, u16 congestion_threshold,
+  u32 max_write, u32 time_gran, u16 max_pages, u16 map_alignment, u32
+  flags2, u32 unused[7]} (64 bytes). Replies the kernel accepts: major
+  7 with any minor, also lower (24) and higher (99) than its own; flags
+  that do not name unsupported features, even all 32 bits set; any
+  max_write (65536 normal, 8192 or 4096 limit write requests to that
+  size); with FUSE_MAX_PAGES in the reply flags, max_pages limits the
+  size of READ and WRITE requests to that many 4096-byte pages (2 pages:
+  at most 8192 bytes). The mount option max_read=N limits READ requests
+  to at most N bytes; without limits READ requests were at most 131072 bytes
+  and WRITE requests at most 65536 (max_write). Until the INIT reply is
+  written, operations on the mount wait (a stat blocks and sends no
+  LOOKUP) and then proceed; mount(2) itself does not wait. Replies that
+  make the connection unusable: a major other than 7 (8, 6), or an error
+  (-ENOSYS, -EPERM, -EIO) instead of a body. Each is accepted by write(2)
+  (the write succeeds) but afterwards every operation on the mount,
+  stat of the root and of files, open, statfs, mkdir, fails with ECONNREFUSED
+  (111) and no request but INIT reaches the server; unmount still works
+  and the server then reads ENODEV. Malformed replies are refused by
+  write(2) and change nothing: shorter than the 16-byte header (10 bytes:
+  EINVAL), a header whose len field is larger than what was written (EINVAL,
+  also with the right unique), a header with a unique that is not
+  an outstanding request (ENOENT), a second reply for a request that
+  was already answered (ENOENT), a positive number in the error field
+  (EINVAL, checked first).
+returns:
+  init_request: "opcode 26, nodeid 0, uid/gid of the mounter, unique even and nonzero, len >= 56, major 7, minor >= 31, max_readahead > 0, flags with bits 0, 3, 22"
+  init_reply: "write returns the reply's length for an accepted reply (the connection is then ready), also for replies that make it unusable"
+  limits: "READ and WRITE requests never exceed min(max_read for reads / max_write for writes, max_pages*4096 when the reply asked for it, else 131072 reads / 65536 writes); writes are split at the limit into requests at consecutive offsets covering the whole write, the data intact"
+errors:
+  unusable_connection: "ECONNREFUSED (111): every operation on the mount after an INIT reply with major != 7 or with an error"
+  malformed_short: "EINVAL (22): reply shorter than 16 bytes, or len larger than the bytes written, or a positive error"
+  unknown_unique: "ENOENT (2): reply for an unique that is not outstanding, or a second reply"
+side_effects: >
+  The accepted reply sets the connection's limits for its lifetime. An
+  unusable reply makes every later operation fail immediately.
+threading: >
+  The kernel sends INIT once; the reply may be written from any thread of
+  the server. Client operations that arrive before the reply wait.
+ordering:
+  - "INIT is the first request of a connection, sent without any user operation"
+  - "operations on the mount are queued until the INIT reply; none sends a request before it"
+timing:
+  typical: "INIT arrives within milliseconds after mount(2)"
+  guarantees: "none; a test waits up to 3 s"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: opcodes, struct layouts and init flag names from the public
+# linux/fuse.h (FUSE_KERNEL_VERSION 7, the header of the oracle's
+# userland says minor 39; the kernel itself sent 45). Same test setup as
+# fuse_mount (client + forked server, shared-memory log, helper
+# tests/linux/include/p_fuse.h); all tests need root and compare output
+# only. Not asserted because it varies: the exact minor, the exact flag
+# set, max_readahead, max_background, the pid in the INIT header. A reply
+# with minor 3 (lower than the kernel supports) made operations fail with EIO on the
+# oracle and is not specified.

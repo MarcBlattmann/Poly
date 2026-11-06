@@ -1,0 +1,129 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml. A package-format batch entry:
+# how seccomp filters spread over tasks, which is what a sandbox relies on
+# (bubblewrap installs the filter and then starts the app; Flatpak's rules;
+# container runtimes' supervisors). It has no coverage-map entry; the
+# system call is linux/syscall/x86_64/seccomp.
+id: linux/api/pkg/seccomp_inherit
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities where they do not need root; umask 022; every process already runs under one seccomp filter of the container runtime, which the tests neither rely on nor count; they install their own filters in forked children"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  Each thread has a chain of filters. A task created by fork, vfork, clone
+  (with or without CLONE_VM/CLONE_VFORK, on its own stack) or clone3 starts
+  with a copy of its creator's chain; so does a thread created with
+  CLONE_THREAD, after the creator's last install. What the new task does
+  to its own chain (installing, being killed) does not reach the creator or
+  its other children: a sibling made later sees only the common ancestor's
+  filters; a grandchild sees the child's too. A filter can never be
+  removed: an allow-all filter installed later does not lift an earlier
+  deny. Changing user and group ids (setresgid, setresuid to 65534) keeps
+  the chain. execve keeps it, together with no_new_privs and the seccomp
+  mode (2): a program that is run again with a fresh empty environment finds
+  its calls still denied, and PR_GET_SECCOMP reads 2, PR_GET_NO_NEW_PRIVS
+  1; an execve that the filter itself denies (ERRNO EPERM) fails with
+  -EPERM and the caller goes on, still filtered. Starting a task under a
+  filter (fork, clone3, execve) works when the filter allows those calls.
+  Threads: a filter installed by one thread is not applied to threads that
+  already exist, only to those created afterwards. With the flag
+  SECCOMP_FILTER_FLAG_TSYNC (1) the new filter is installed on every
+  thread of the process at once: another thread without filters of its
+  own then has the caller's whole chain and the new filter. If another
+  thread has a filter that is not part of the caller's chain (it installed
+  one of its own), TSYNC installs nothing, and seccomp() returns the thread
+  id of such a thread as a positive number (not -1 or -errno); the same
+  filter installed without TSYNC works on the caller alone. A thread that
+  has run into TSYNC keeps what it had. Threads are created with clone flags
+  CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM.
+  Chain semantics seen across tasks: process A installs F_A (sched_yield
+  -> ERRNO 5); its child B adds F_B (getuid -> ERRNO 6); B's child C adds
+  F_C (getgid -> KILL_PROCESS). A sees F_A only; B sees F_A and F_B and
+  not F_C; C sees all, and dies by SIGSYS in getgid while B and A go on;
+  a sibling of B created later sees F_A only. The seccomp mode and
+  no_new_privs are inherited by all.
+  Rules of the kind Flatpak installs, checked on real calls (filter on
+  nr/arch/arguments, ERRNO/KILL verdicts):
+  socket(AF_NETLINK=16, SOCK_DGRAM, 0) with ERRNO EAFNOSUPPORT (97) fails
+  with -97; socket(AF_UNIX, SOCK_STREAM, 0) succeeds. unshare(flags) and
+  clone(flags, ...) with CLONE_NEWUSER (0x10000000) set in the low word of
+  argument 0 (JSET) fail with -EPERM; unshare(0) is 0 and clone(SIGCHLD)
+  works; the high word is not part of the flags the rule looks at. clone3
+  with ERRNO ENOSYS (38) fails with -38 (the C library then falls back to
+  clone). ioctl(fd, TIOCSTI=0x5412, ...) with ERRNO EPERM is denied with
+  -EPERM before the descriptor is looked at (fd -1 would be EBADF), while
+  ioctl(-1, TCGETS=0x5401, 0) reaches the kernel (-EBADF). The ioctl
+  request is passed to the filter as the full 64-bit register: the value
+  0x100005412 is a different number to a filter, and to the kernel it is
+  TIOCSTI (the upper half is cut). A rule that compares only the low word
+  (rule A) denies it too; a rule that compares both halves (rule B) lets it
+  through to the kernel (-EBADF for fd -1). personality(x) with a rule
+  that allows only 0, 8 and 0xffffffff: the query 0xffffffff succeeds
+  (result >= 0), 0x400000 and 0x100400000 (low word 0x400000) are -EPERM.
+  A default-deny filter (arch check, then JEQ chain over an allow list of
+  getpid, write, exit_group, rt_sigreturn, prctl, then KILL_PROCESS) kills
+  the process by SIGSYS at the first call that is not on the list.
+  Notifications (SECCOMP_RET_USER_NOTIF): seccomp(SECCOMP_SET_MODE_FILTER,
+  SECCOMP_FILTER_FLAG_NEW_LISTENER=8, &fprog) returns a descriptor (>= 0)
+  and the filter is installed in the caller (which, as the supervisor,
+  must not make the intercepted call itself). A call that the filter
+  answers with USER_NOTIF blocks its caller. ioctl(fd,
+  SECCOMP_IOCTL_NOTIF_RECV=0xc0502100, &struct seccomp_notif) (80 bytes:
+  u64 id, u32 pid, u32 flags, then struct seccomp_data of 64 bytes, i.e. nr
+  at offset 16, arch at 20, ip at 24, args[6] at 32; all of the buffer
+  must be zero before) waits for the next intercepted call and returns 0 with the
+  caller's id, its pid (as seen by the supervisor's pid namespace), flags 0
+  and a copy of seccomp_data (nr, arch). ioctl(fd,
+  SECCOMP_IOCTL_NOTIF_ID_VALID=0x40082102, &id) is 0 while the caller waits
+  and -ENOENT once the id was answered. ioctl(fd,
+  SECCOMP_IOCTL_NOTIF_SEND=0xc0182101, &struct seccomp_notif_resp {u64 id;
+  s64 val; s32 error; u32 flags}) answers: error 0 makes the call return
+  val (1234 -> 1234), a negative error (-EPERM) makes it return that
+  error, and flags SECCOMP_USER_NOTIF_FLAG_CONTINUE (1) lets the call run
+  for real (sched_yield -> 0) and ignores val and error. Calls that the
+  filter does not send to USER_NOTIF (getpid) are not intercepted. RECV
+  with a buffer that is not all zero is -EINVAL at once. Answering an id a
+  second time right after the first answer may be ENOENT or EINPROGRESS
+  depending on whether the blocked task has run yet: not specified, not
+  tested. RECV when nothing is pending waits as long as any task is under the filter
+  (including the supervisor itself): not tested.
+returns:
+  tsync_conflict: "the thread id of the diverging thread (positive, equal to what that thread's gettid returned)"
+  tsync_ok: "0; the other thread then has the caller's chain and the new filter (a call the older filter denies is denied there, a call the new one denies too)"
+  notif_recv: "0 with id, pid, nr, arch filled"
+  notif_send: "0"
+errors:
+  fork_under_filter: "none: a filter that does not mention clone/clone3/execve leaves them as they were"
+  execve_denied: "the filter's ERRNO (here EPERM) as the call's result, the old image goes on"
+  clone3_rule: "ENOSYS (38) from the filter"
+  notif_recv_dirty: "EINVAL (22): buffer not all zero"
+  notif_unknown_id: "ENOENT (2): ID_VALID or SEND for an id that is not waiting (answered, or caller gone)"
+side_effects: >
+  Filters are never removed. TSYNC changes other threads of the caller's
+  process. A notification blocks the intercepted caller until the
+  supervisor answers.
+threading: >
+  Filters are per thread, copied to new threads and tasks at creation;
+  TSYNC installs on all threads of the process or on none.
+ordering:
+  - "TSYNC conflict check happens before anything is installed: on conflict neither the caller nor the other threads change"
+  - "a task created after an install sees that install; one created before does not (for threads, unless TSYNC)"
+timing:
+  typical: "microseconds per call; a notification round trip tens of microseconds"
+  guarantees: "none"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: constants from linux/seccomp.h, linux/sched.h (CLONE_*), linux/audit.h,
+# asm-generic/ioctls.h (TIOCSTI 0x5412, TCGETS 0x5401), asm-generic/socket.h
+# and linux/socket.h (AF_UNIX 1, AF_NETLINK 16), linux/personality.h.
+# Threads and notification tests spin (no system calls) to wait for each
+# other, and pass `syscalls=off`. The exec test starts itself again through
+# its own path (AT_EXECFN) with argv[1] "pk-child" and reports through the
+# exit status. Needs root only for the setresuid step in the fork test
+# (poly-diff: needs=root there); the other tests pass as root and as an
+# unprivileged user. A compat (32-bit, int 0x80) entry was not explored: the
+# arch word would then be AUDIT_ARCH_I386; Poly is not expected to run 32-bit
+# code. SECCOMP_RET_TRACE with no tracer (ENOSYS) was not tested because the
+# reference runs the tests under a ptrace tracer.

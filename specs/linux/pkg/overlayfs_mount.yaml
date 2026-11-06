@@ -1,0 +1,87 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/pkg/overlayfs_mount.yaml
+id: linux/api/pkg/overlayfs_mount
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities inside a mount namespace of their own (unshare(CLONE_NEWNS) then MS_REC|MS_PRIVATE on /); layers live on tmpfs mounts made by the test; umask 022; unprivileged user namespaces allowed"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  mount(source, target, "overlay", flags, data) (syscall 165) makes an overlay
+  filesystem (statfs f_type 0x794c7630) that shows several directories
+  ("layers") as one tree. This is what container runtimes, Flatpak and the
+  distribution tools use for writable roots over read-only images. The source
+  string is only a label (shown in /proc/self/mountinfo); data is a comma
+  separated option string. Options used here: lowerdir=A:B:C (one or more
+  lower layers separated by ':', leftmost is highest), upperdir=U, workdir=W,
+  userxattr, redirect_dir=on|off|follow, index=on|off, metacopy=on|off (the
+  tests set the last three explicitly where it matters; the defaults of a
+  kernel configuration vary). Paths may be relative to the caller's working
+  directory.
+  Read-only overlay: without upperdir the mount is read-only (statfs f_flags
+  has ST_RDONLY) and needs at least two lowerdir entries (a single one is
+  EINVAL); every modification fails with EROFS. A workdir given without an
+  upperdir is ignored. With an upperdir, a workdir on the same filesystem is
+  required and one lowerdir is enough.
+  Merged view: names come from the upper layer first, then from the lower
+  layers from left to right; the first layer that has a name wins. Directories
+  present in several layers are merged: readdir lists every name once, and the
+  directory's own mode, owner and times come from its highest layer. A
+  non-directory in a higher layer hides a directory of the same name below (its
+  content does not show); a directory in a higher layer hides a non-directory
+  below. Attributes (mode, uid, gid, size, content, symlink target) of a merged
+  file come from the layer that wins. The layers themselves are unchanged by
+  anything done through the merged view except the upper layer. The same
+  upper/work/lower directories may be mounted again later (changes made earlier
+  are there). An overlay may be mounted over one of its own lowerdirs.
+  Mount flags MS_RDONLY, MS_NOSUID, MS_NODEV, MS_NOEXEC apply as for any
+  filesystem (statfs f_flags). MS_REMOUNT with MS_RDONLY makes an overlay with
+  an upperdir read-only (EROFS for changes) and a remount without it makes it
+  writable again; a remount with no data keeps the layers.
+  Unprivileged use: a process that is root only inside a new user namespace
+  (unshare(CLONE_NEWUSER|CLONE_NEWNS), ids mapped) may mount an overlay of
+  directories it can access. With the option userxattr the overlay keeps its
+  metadata in "user.overlay.*" attributes instead of "trusted.overlay.*" (a
+  directory made anew over a removed lower directory has user.overlay.opaque =
+  "y"; whiteouts are still character devices 0:0). Without that option the
+  mount is accepted but the overlay cannot store its markers (removing a lower
+  directory then fails with EIO).
+  umount2 works as for other mounts: EBUSY while a file is open on it, and
+  MNT_DETACH succeeds and leaves open files usable.
+returns:
+  mount_ok: "0"
+  statfs: "f_type 0x794c7630; f_flags carries ST_RDONLY for read-only overlays, ST_NOSUID/ST_NODEV/ST_NOEXEC for those flags"
+  readdir: "the union of all layers' names without duplicates (order not specified; tests sort), minus names hidden by whiteouts"
+  attributes: "from the highest layer that has the name (see summary)"
+  mountinfo: "line shows fstype overlay and the source label given"
+errors:
+  no_options: "EINVAL (22): no data at all, empty data, or no lowerdir"
+  single_lower_without_upper: "EINVAL (22): a single lowerdir and no upperdir"
+  upper_without_work: "EINVAL (22): upperdir without workdir"
+  work_upper_overlap: "EINVAL (22): workdir inside upperdir, upperdir inside workdir, or both the same directory"
+  work_other_filesystem: "EINVAL (22): workdir on another filesystem than upperdir"
+  lower_not_directory: "EINVAL (22): a lowerdir that is a regular file"
+  missing_dir: "ENOENT (2): a lowerdir, upperdir or workdir that does not exist"
+  bad_option: "EINVAL (22): unknown option name, bad value (redirect_dir=maybe)"
+  upper_is_lower: "ELOOP (40): the upperdir is also a lowerdir, a lowerdir is inside the upperdir, or the same lowerdir appears twice"
+  bad_target: "ENOTDIR (20): the target is a file; ENOENT (2): the target does not exist"
+  erofs: "EROFS (30): any change on a read-only overlay (create, open for writing, unlink, mkdir, rmdir, chmod, truncate, rename, symlink)"
+  permission: "EPERM (1): mount without CAP_SYS_ADMIN in the caller's user namespace"
+  busy: "EBUSY (16): umount2 with a file open on the mount (flag 0)"
+  order: "a missing lowerdir, upperdir or workdir is ENOENT even when other options are wrong later in the list; nothing is mounted after a failure"
+side_effects: "A mount point appears; the upper directory is modified by writes to the merged view; workdir gets an internal subdirectory (not specified)."
+threading: "ordinary filesystem semantics"
+ordering: []
+timing:
+  typical: "mount in well under a millisecond on tmpfs layers"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+# Notes: constants from linux/mount.h (MS_*, MNT_DETACH), linux/magic.h
+# (OVERLAYFS_SUPER_MAGIC), linux/sched.h (CLONE_NEWUSER, CLONE_NEWNS).
+# Every test makes its own tmpfs under /tmp/pk_ovm_* in a private mount
+# namespace, so nothing depends on the host's filesystems. The kernel
+# prints diagnostics for most mount failures (not compared). The oracle
+# also accepts the option forms "lowerdir+=" and "datadir+=": not
+# required of Poly.

@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/loop_blockdev              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; /tmp is the container's overlay file system; loop devices, /dev/loop-control and squashfs (gzip, xz, lzo, lz4; NOT zstd, NOT legacy lzma) are in the kernel; mksquashfs 4.6.1 builds the images"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  The block node of loop device number N is a block device with major 7 (LOOP_MAJOR) and minor
+  N (the tests create it with mknod(S_IFBLK | 0600, makedev(7, N))); stat gives S_IFBLK with
+  the mode given, st_rdev = makedev(7, N), st_size 0, st_nlink 1; stat by path and fstat agree.
+  Size: BLKGETSIZE64 (0x80081272, u64 bytes) and lseek(SEEK_END) give the file's size (less the
+  offset, capped by the size limit) rounded down to 512-byte sectors (a 1700-byte file: 1536; a
+  512-byte file: 512; 511 bytes: 0; unbound: 0); BLKGETSIZE (0x1260, an unsigned long, in
+  sectors: 3 for the 1700-byte file); BLKSSZGET (0x1268, an int): 512 by default; BLKROGET
+  (0x125E, an int): 0 for a device from a writable file, 1 for a read-only one; BLKROSET (0x125D,
+  pointer to an int): sets or clears the device's read-only flag on a device made from a writable
+  file (a device from a read-only file stays read-only; the flag is per device, so a second
+  descriptor is subject to it too); BLKFLSBUF (0x1261): writes dirty data to the file and drops
+  the device's cache, so that later reads show changes made to the file.
+  Reads: a read that starts inside the device and extends past its end is cut at the end (36
+  bytes at offset 1500 of 1536), a read at or past the end returns 0 (also far past, at 100000),
+  a zero-byte read returns 0; the last partial sector of the file (bytes 1536..1699) is not
+  visible. A sequential read after lseek to near the end returns the rest, then 0. lseek works up
+  to the size (SEEK_END gives the size; SEEK_CUR and SEEK_SET as usual); a negative position is
+  EINVAL. Writes: a write that starts inside is cut at the end (36 bytes at 1500), a write at or
+  past the end (1536, 100000) is ENOSPC (also a sequential write at the end); a zero-byte write at
+  the end returns 0; a write of a few bytes in the middle of a sector keeps the rest of the sector.
+  Data written reaches the file after fsync or fdatasync on the device (0) or BLKFLSBUF, and never
+  reaches file bytes beyond the device's end. A second descriptor of the same device sees writes of
+  the first at once (one page cache). A read-only device (BLKROSET 1): write, pwrite and sequential
+  write fail with EPERM; reads work; BLKROSET 0 makes a writable device writable again. A
+  descriptor opened O_RDONLY cannot write (EBADF) but reads and can issue BLKROGET. ftruncate on
+  the device is EINVAL; open with O_DIRECTORY is ENOTDIR.
+  mmap: a MAP_SHARED PROT_READ mapping of the device shows its bytes; a PROT_READ|PROT_WRITE
+  MAP_SHARED mapping on an O_RDWR descriptor writes them (msync, then fsync on the device, then the
+  file has them); a writable shared mapping on an O_RDONLY descriptor is EACCES. O_DIRECT opens
+  work: reads and writes of whole 512-byte sectors at 512-aligned device offsets return the data
+  (a direct write is in the file at once and is seen by buffered readers); an offset or a length
+  that is not a multiple of 512 is EINVAL (a buffer at an odd address is accepted); a direct read
+  at the end returns 0.
+returns:
+  stat: "mode S_IFBLK | node's mode, st_rdev makedev(7, N), st_size 0"
+  sizes: "1700-byte file: BLKGETSIZE64 1536, BLKGETSIZE 3, SEEK_END 1536"
+  short_read_write: "reads and writes are cut at the end of the device; ENOSPC (write) or 0 (read) when nothing at all fits"
+errors:
+  write_past_end: "ENOSPC (28)"
+  write_read_only: "EPERM (1)"
+  write_on_rdonly_descriptor: "EBADF (9)"
+  seek_negative: "EINVAL (22)"
+  ftruncate: "EINVAL (22)"
+  open_directory: "ENOTDIR (20)"
+  shared_write_map_of_rdonly_fd: "EACCES (13)"
+  direct_io_unaligned: "EINVAL (22): offset or length not a multiple of 512"
+side_effects: writes change the backing file
+threading: buffered I/O goes through one page cache shared by all descriptors of the device
+ordering: "a write is visible to every reader of the device at once; the file sees it after fsync, BLKFLSBUF or O_DIRECT"
+timing:
+  typical: "microseconds per sector"
+  guarantees: "none"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: LOOP_MAJOR 7 (linux/major.h); BLK* request numbers from linux/fs.h.

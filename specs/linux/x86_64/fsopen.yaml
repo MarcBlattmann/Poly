@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fsopen           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (the unprivileged cases as uid/gid 65534 without capabilities); umask 022; unprivileged user namespaces allowed; every test makes a mount namespace of its own, makes / MS_REC|MS_PRIVATE and mounts a tmpfs on a private directory below /tmp"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  fsopen(fs_name, flags) (syscall 430) starts creating a filesystem of type
+  fs_name (a NUL terminated name from /proc/filesystems) and returns a
+  filesystem context descriptor: the lowest free descriptor, with FD_CLOEXEC
+  set only when flags has FSOPEN_CLOEXEC (1); any other flag bit (flags is a
+  32-bit value; bits above 31 are ignored) is EINVAL. The descriptor is an
+  anonymous inode: readlink of /proc/self/fd/N gives
+  "anon_inode:[fscontext]", fstat shows mode 0600, lseek is ESPIPE. Nothing
+  is mounted: the context starts in the "parameters" state where fsconfig
+  sets options, FSCONFIG_CMD_CREATE builds the superblock and fsmount (432)
+  turns it into a detached mount that move_mount (429) attaches. A fresh
+  context has no messages: read gives ENODATA (see fsconfig for the message
+  log). The caller needs CAP_SYS_ADMIN in its user namespace (the check
+  comes before the type is looked up, so an unknown type is EPERM for an
+  unprivileged caller); a caller that is root in a user namespace it owns
+  may open every type, and later fsconfig CMD_CREATE is refused (EPERM) for
+  types that cannot be mounted from a user namespace. Accepted types seen:
+  tmpfs, proc, sysfs, devpts, devtmpfs, mqueue, cgroup2, overlay, squashfs,
+  fuse, ext4. Unknown and special names (the empty name, a name with a
+  slash, different case, rootfs, bdev) are ENODEV. Several contexts may
+  exist at once; they are independent. Closing a context discards it.
+returns:
+  success: "descriptor >= 3; lowest free; FD_CLOEXEC only with FSOPEN_CLOEXEC"
+  link: "/proc/self/fd/N -> anon_inode:[fscontext]"
+  read_new_context: "-1 ENODATA (61): no message"
+  seek: "-1 ESPIPE (29)"
+errors:
+  unknown_type: "ENODEV (19): not a registered filesystem name, the empty string, 'tmpfs/x', 'TMPFS'"
+  bad_pointer: "EFAULT (14): NULL or invalid fs_name"
+  bad_flags: "EINVAL (22): any flag but 1 (2, ~0); checked before the type is looked up (unknown type with flag 2 is EINVAL); bit 32 and above are ignored"
+  permission: "EPERM (1): no CAP_SYS_ADMIN, also for an unknown type name"
+  no_descriptor: "EMFILE (24): RLIMIT_NOFILE exhausted"
+  order: "EINVAL (flags) > ENODEV / EFAULT (name, as root); EPERM before the name is looked up (an unprivileged caller gets EPERM for tmpfs and for an unknown name alike)"
+side_effects: >
+  Allocates a context descriptor only; the filesystem is created later.
+threading: "no thread-specific behaviour; descriptors are per process (file table)"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: FSOPEN_CLOEXEC 1 (linux/mount.h). The unprivileged-in-user-namespace test needs unprivileged user namespaces; all tests need root.

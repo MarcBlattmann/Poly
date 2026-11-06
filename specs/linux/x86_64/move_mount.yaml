@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/move_mount           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (the unprivileged cases as uid/gid 65534 without capabilities); umask 022; unprivileged user namespaces allowed; every test makes a mount namespace of its own, makes / MS_REC|MS_PRIVATE and mounts a tmpfs on a private directory below /tmp"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  move_mount(from_dfd, from_path, to_dfd, to_path, flags) (syscall 429)
+  attaches a detached mount (from fsmount or open_tree with
+  OPEN_TREE_CLONE), or moves an attached mount, to a directory (a file for
+  the clone of a file). Flags: MOVE_MOUNT_F_SYMLINKS 1 and T_SYMLINKS 0x10
+  (follow a final symbolic link of the source / target; by default a final
+  link is not followed: it is no mount top and no directory, EINVAL; links
+  inside a path are always followed), F_AUTOMOUNTS 2 and T_AUTOMOUNTS 0x20
+  (accepted, no visible effect), F_EMPTY_PATH 4 and T_EMPTY_PATH 0x40 (an
+  empty path means the descriptor itself: the mount that from_dfd refers to,
+  an fsmount descriptor, an open_tree descriptor or a directory or O_PATH
+  descriptor of a mount top; or the directory to_dfd; an empty path without
+  the flag is ENOENT); MOVE_MOUNT_SET_GROUP 0x100 (accepted for two bind
+  mounts); any other bit is EINVAL. An absolute path ignores its dfd (even
+  an invalid one), a relative path needs AT_FDCWD or a directory descriptor.
+  The source must be the top of a mount or a detached mount: a directory
+  inside a mount and a descriptor of a regular file are EINVAL. The target
+  keeps its old contents underneath: a later mount at the same place hides
+  the earlier one, and umount2 of the top shows it again. After a move the
+  old place shows what was underneath, the new place shows the same files,
+  and mounts below the moved one move along. A directory mount needs a
+  directory target and the clone of a file a file target (EINVAL otherwise);
+  a file target shows the clone's content. Moving a mount onto the place it
+  is at, below itself, or moving the root of the namespace is ELOOP (a
+  target below the mount that does not exist is ENOENT). A detached mount
+  can be attached in a different mount namespace than the one that made it
+  (once); a mount attached in another mount namespace cannot be moved
+  (EINVAL), and a detached mount that is attached already is EINVAL. Needs
+  CAP_SYS_ADMIN: EPERM before any path is looked at (also for a missing
+  target).
+returns:
+  success: "0"
+  empty_path_target: "with T_EMPTY_PATH and a directory descriptor: attaches there"
+  plain_open_tree_fd: "moves the attached mount that the descriptor names (a plain open_tree descriptor of a mount top)"
+errors:
+  loop: "ELOOP (40): source mount onto itself, below itself, or the namespace root as source"
+  not_movable: "EINVAL (22): source is not a mount top (plain directory, regular file descriptor); mount attached in another mount namespace; a detached mount that is attached elsewhere already"
+  kind_mismatch: "EINVAL (22): directory mount on a file; file clone on a directory"
+  symlinks: "EINVAL (22): final symbolic link source or target without the follow flag"
+  missing: "ENOENT (2): missing source or target; empty path without the EMPTY_PATH flag"
+  bad_flags: "EINVAL (22): bits 0x08, 0x80, 0x1000, ~0"
+  bad_pointer: "EFAULT (14): NULL or invalid from_path or to_path"
+  bad_dfd: "EBADF (9): invalid from_dfd or to_dfd with a relative or empty path (also -1)"
+  permission: "EPERM (1): no CAP_SYS_ADMIN"
+side_effects: >
+  Changes the mount tree of the caller's mount namespace.
+threading: "descriptors are per process (shared file table); no other thread-specific behaviour"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: MOVE_MOUNT_* from linux/mount.h. Moves below a shared parent mount, and MOVE_MOUNT_BENEATH,
+# are not covered.

@@ -1,0 +1,79 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/squashfs_tree              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; /tmp is the container's overlay file system; loop devices, /dev/loop-control and squashfs (gzip, xz, lzo, lz4; NOT zstd, NOT legacy lzma) are in the kernel; mksquashfs 4.6.1 builds the images"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  What a mounted squashfs image shows: inodes, directories, data, symlinks, special files and
+  extended attributes. Test image "tree1" (mksquashfs 4.6.1 tree1 tree1.sqsh -b 4096 -comp gzip
+  -noappend -no-progress -quiet -mkfs-time 0 -all-time 0 -processors 1; the tree was made by root, every
+  timestamp then set to 0): hello.txt (15 bytes, 0644), empty (0600), suid (04755), tmp (an empty
+  directory, 1777 with the sticky bit), owned (0640, uid 1000, gid 2000), dir (0750, uid 5, gid 6) with
+  a (2 bytes) and sub/deep.txt (5 bytes), link -> hello.txt, longlink (a symlink of 209 characters
+  ending in hello.txt), hard1 and hard2 (hard links, 7 bytes), loop1 -> loop2 and loop2 -> loop1, dlink -> dir,
+  fifo, chr (character device 1:3), blk (block device 7:42), xa (user.alpha = "one", user.beta =
+  "two"), many/f000..f299 (one byte each: the hexadecimal digit of index mod 16), big.bin (10000
+  bytes, byte i = (i*7 + i/251) mod 256), sparse.bin (12288 zero bytes then 100 times 'S'); 323
+  inodes in all.
+  Inodes: stat gives type and permission bits (including setuid and sticky), uid, gid, size,
+  nlink (a directory: 2 + its number of subdirectories, so 3 for dir, 2 for tmp, 5 for the root;
+  files with several links: the count, 2 for hard1/hard2), and atime = mtime = ctime = the time
+  stored in the inode (0), nanoseconds 0. Hard links share the inode number. Device nodes
+  report st_rdev; a FIFO, a character and a block device have their types. st_blksize is 1024
+  whatever the image's block size. Symlinks: lstat gives S_IFLNK | 0777 with size = the target's
+  length (9, 209); readlink returns the target (a smaller buffer cuts it); stat follows links; a
+  cycle is ELOOP for stat and open; readlink on a regular file is EINVAL.
+  Directories: getdents64 returns "." and ".." first, then the entries sorted byte-wise by name
+  (the image's order), with the true d_type (DT_REG, DT_DIR, DT_LNK, DT_FIFO, DT_CHR, DT_BLK).
+  A buffer too small for one entry is EINVAL; 300 entries are listed completely and in order
+  whatever the buffer size (each call returns what fits); lseek(fd, 0, SEEK_SET) restarts the
+  listing; a second pass without rewind returns 0; getdents64 on a regular file is ENOTDIR; read on
+  a directory is EISDIR; opening a directory for writing is EISDIR (checked before EROFS);
+  opening a file with O_DIRECTORY is ENOTDIR.
+  Data: files read byte for byte whatever their storage (full blocks plus a fragment tail,
+  only a fragment, sparse blocks stored as holes): whole and chunked reads, preads across block
+  boundaries (4090+20, 8190+20) and past the end (0 bytes), preadv, a shared PROT_READ
+  mapping (the page after the end of file reads as zeros), a MAP_PRIVATE writable mapping (changes
+  stay in the process, the file is unchanged). A shared writable mapping is EACCES. The sparse
+  file reads zeros for its holes, the data after them, and its size is 12388.
+  Read-only: every change is EROFS: open for writing or with O_CREAT (also of an existing file),
+  unlink, rmdir, mkdir, rename, symlink, link, chmod, chown, truncate, mknod, utimes, fchmod; write
+  on a read-only descriptor is EBADF, ftruncate on one EINVAL. Path errors: ENOENT for a missing
+  name, ENOTDIR through a file.
+  Extended attributes (only those stored in the image): listxattr returns "user.alpha\0user.beta\0"
+  (21 bytes; a NULL buffer returns the size; a 10-byte buffer is ERANGE; a plain file gives 0 bytes);
+  getxattr returns the value (3 bytes; ERANGE for a 2-byte buffer; ENODATA for a missing name;
+  EOPNOTSUPP for a name outside the known namespaces); fgetxattr and flistxattr work on
+  descriptors; setxattr and removexattr are EROFS.
+  statx: mask contains STATX_BASIC_STATS (0x7ff) and not STATX_BTIME; mode, size, nlink, uid, gid,
+  ino and the times equal stat's; rdev major/minor for device nodes; AT_SYMLINK_NOFOLLOW on a
+  symlink gives S_IFLNK and size 9; AT_EMPTY_PATH works on a descriptor; ENOENT for a missing
+  name. statfs and fstatfs give the same values.
+returns:
+  readdir_order: ". .. then names in byte order"
+  special: "chr rdev 1:3; blk rdev 7:42; fifo S_IFIFO"
+  xattr_list: "user.alpha, user.beta (21 bytes)"
+errors:
+  erofs: "EROFS (30): every change, open for write, creat"
+  eloop: "ELOOP (40): symlink cycle"
+  enotdir: "ENOTDIR (20): path through a file, O_DIRECTORY on a file, getdents64 on a file"
+  eisdir: "EISDIR (21): open a directory for writing, read a directory"
+  enodata: "ENODATA (61): missing attribute"
+  erange: "ERANGE (34): buffer too small"
+  eacces_map: "EACCES (13): writable shared mapping"
+  eopnotsupp: "EOPNOTSUPP (95): attribute name outside the known namespaces"
+side_effects: none (access times are not updated: atime stays 0)
+threading: reads may run in parallel
+ordering: []
+timing:
+  typical: "cached reads at memory speed"
+  guarantees: none
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: the tests embed tree1.sqsh (4730 bytes) as a byte array. To recreate it: make the tree as
+# root (ownerships and modes above, mknod chr c 1 3 and blk b 7 42, mkfifo fifo, the setfattr
+# calls for xa), touch every entry with -h -d @0, run the mksquashfs command above.

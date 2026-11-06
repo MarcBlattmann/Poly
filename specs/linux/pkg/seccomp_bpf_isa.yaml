@@ -1,0 +1,104 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml. A package-format batch entry:
+# the classic-BPF language of seccomp filters, as bubblewrap, Flatpak, apt's
+# sandbox and container runtimes use it. It has no coverage-map entry (the
+# system call itself is linux/syscall/x86_64/seccomp; this sheet is about
+# the programs it accepts and how they run).
+id: linux/api/pkg/seccomp_bpf_isa
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; every process already runs under one seccomp filter of the container runtime, which allows everything the tests use; the tests install their own filters in forked children and only observe the effect of those"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  A seccomp filter is a classic BPF program (struct sock_filter {u16 code;
+  u8 jt; u8 jf; u32 k}, 8 bytes; struct sock_fprog {u16 len; filter
+  pointer}) run on every system call of a task, with the call described by
+  struct seccomp_data (64 bytes: int nr at 0, u32 arch at 4, u64
+  instruction_pointer at 8, u64 args[6] at 16) as the packet. It has a
+  32-bit accumulator A, a 32-bit index register X and 16 scratch words
+  M[0..15]; A, X and M wrap modulo 2^32. The program ends in a return
+  whose value is the verdict (see "verdicts"). Only a subset of classic BPF
+  is accepted, and the whole program is checked when it is installed.
+  Instructions accepted (codes from linux/bpf_common.h; "k" is the
+  instruction's 32-bit constant):
+  loads - LD|W|ABS: A = the 32-bit word at byte offset k of seccomp_data;
+  k must be a multiple of 4 and below 64 (the last word is at 60); the
+  word at 16+8*i is the low half of argument i, at 20+8*i its high half
+  (the full 64-bit register as the call was made, so a 32-bit int passed
+  with garbage above shows the garbage and -1 shows as two words of
+  0xffffffff). LD|W|LEN and LDX|W|LEN load the data length, 64, into A or X
+  (k is ignored). LD|IMM and LDX|IMM load k. LD|MEM and LDX|MEM load
+  scratch word k (k < 16). ST and STX store A or X into scratch word k (k <
+  16).
+  Moves - MISC|TAX: X = A; MISC|TXA: A = X.
+  Arithmetic - ALU|ADD, SUB, MUL, DIV, OR, AND, LSH, RSH, XOR with K (the
+  constant) or X as second operand, and ALU|NEG (A = -A; only the K-form
+  code 0x84, k ignored). DIV is unsigned, ADD/SUB/MUL wrap. A shift by the
+  constant must be below 32; a shift by X uses the low 5 bits of X (a count
+  of 32 shifts by 0, of 33 by 1). MOD is not accepted in any form.
+  Jumps - JMP|JA with the full 32-bit k as the number of instructions to
+  skip; JMP|JEQ, JGT, JGE (unsigned compares of A with k or X) and JSET (A &
+  operand != 0), each with K or X, taking jt (8 bits) instructions to skip
+  when true and jf when false; offset 0 goes on with the next instruction.
+  Returns - RET|K returns k; RET|A returns A (RET with X is not accepted).
+  Not accepted: byte and half-word loads (LD|B|ABS, LD|H|ABS, LD|H|IMM),
+  indirect loads (BPF_IND), BPF_MSH, LDX|ABS, ALU|NEG with X, MOD, and
+  any opcode outside the list. Reading a scratch word that was not written
+  by an earlier instruction on every path that reaches the read is
+  rejected, a word written on only one branch included.
+  Verdicts (the returned 32-bit value): the high 16 bits (masked with
+  0xffff0000, bit 31 included) are the action, the low 16 bits the data.
+  ALLOW 0x7fff0000 and LOG 0x7ffc0000 run the call (any data); ERRNO
+  0x00050000 does not run it and returns -data, data above 4095 giving
+  -4095 (data 0 returns 0); USER_NOTIF 0x7fc00000 with no listener attached
+  fails the call with ENOSYS; TRACE 0x7ff00000 asks a tracer (ENOSYS
+  without one; not tested, because the reference traces its tests); TRAP
+  0x00030000 and the kill actions are described in
+  linux/syscall/x86_64/seccomp. KILL_THREAD (0) and KILL_PROCESS
+  (0x80000000, with or without data) end the process with SIGSYS (wait
+  status: signal 31, core flag set where core dumps are on) before the call
+  runs, and so does every action not named above (0x00010000, 0x00020000,
+  0x00040000, 0x40000000, 0x7ff80000, 0x7ffe0000). A program whose A is 0 at
+  RET A, or is a system call number, therefore kills. A DIV by X
+  that is 0 at run time ends the program with result 0: the thread is
+  killed with SIGSYS.
+  Typical programs the tests write: check arch against AUDIT_ARCH_X86_64
+  (0xc000003e) and kill on a mismatch; dispatch on nr with a chain of JEQ;
+  test argument words with JEQ (both halves for a 64-bit value) and JSET
+  (flag masks in the low word); end with ALLOW or ERRNO.
+returns:
+  accepted: "0 from seccomp(SECCOMP_SET_MODE_FILTER, 0, &fprog) or prctl(PR_SET_SECCOMP, 2, &fprog) for a program that passes every check below"
+  alu: "A = 100 with ADD 23 -> 123, SUB 23 -> 77, MUL 23 -> 2300, DIV 7 -> 14; 1 - 2 = 0xffffffff; 0x10001 * 0x10001 = 0x20001; 0x80000000 / 3 = 0x2aaaaaaa (unsigned); 0xf0 | 0x0f = 0xff; 0xff & 0x3c = 0x3c; 0xff ^ 0x3c = 0xc3; 3 << 4 = 48; 0x300 >> 4 = 0x30; 1 << 31 = 0x80000000; -1 as NEG of 1 = 0xffffffff; 3 << X(32) = 3; 0x300 >> X(33) = 0x180; the X-forms give the same results as the K-forms"
+  jumps: "JEQ equal true; JGT 5 vs 5 false, 6 vs 5 true, 0x80000000 vs 1 true (unsigned); JGE 5 vs 5 true; JSET 6 & 2 true, 6 & 1 false, any & 0 false; jt = jf skips the same either way; JA 0, 1, 2 skip that many; a chain of JAs works"
+  loads: "nr, arch (0xc000003e), each argument's low and high word as passed (argument 2 = 0xf000000000000001 reads low 1, high 0xf0000000); unused arguments read 0; LEN loads read 64 into A or X whatever k is; scratch words 0 and 15 are independent, as are all others; ST/LD and STX/LDX round trips; STX then LD MEM into A and ST then LDX work"
+  verdicts: "ERRNO|13 makes the call return -13; ERRNO|4095 -4095; ERRNO|4096 and ERRNO|0xffff -4095; ERRNO|0 0 (success without running); ALLOW|0x1234 and LOG|0xffff run it"
+  no_effect_on_other_calls: "the program runs for every call; the tests prepend a check that makes it act only on the probed call, which is why the child can still exit"
+errors:
+  bad_instruction: "EINVAL (22) for every rejected instruction listed above, including: LD|B|ABS, LD|H|ABS, LD|W|ABS at offset 2, 61, 64 or 0xfffffffc, LD|W|IND, LD|H|IND, LDX|B|MSH, LDX|W|ABS, LD|H|IMM, LD|MEM or LDX|MEM of a word never written (also written only on one path, also a different word), ST/STX/LD|MEM of word 16, ALU|MOD with K or X, ALU|DIV|K with k = 0, ALU|LSH|K and ALU|RSH|K with k >= 32, ALU|NEG|X, RET|X, opcode 0xff, ALU with op 0xd0, MISC with 0x40, JMP with op 0x50, ST with the half-word size bit; accepted at the limits: offset 0 and 60, word 15 and word 0, shifts by 31, DIV by constant 1, DIV by X (even if X may be 0)"
+  bad_flow: "EINVAL (22): JA beyond the last instruction (also 0xffffffff), jt or jf beyond it, a program whose last instruction is not a return (also when the return is followed by a jump), length 0, length above 4096"
+  length_limit: "4096 instructions are accepted (a program of 4095 loads and a final ALLOW runs); 4097 is EINVAL"
+  filter_pointer: "EINVAL for a sock_fprog with len 1 and filter NULL; EFAULT for an unreadable non-NULL filter pointer (8) - and for an unreadable sock_fprog itself, see linux/syscall/x86_64/seccomp"
+  div_by_x_zero: "not a load error: the program installs; the first call it runs on kills the thread with SIGSYS"
+  mod_always: "EINVAL, even MOD by a non-zero constant"
+  no_new_privs_first: "for a caller without no_new_privs and without CAP_SYS_ADMIN a program with a bad opcode is EACCES, not EINVAL (the privilege check comes before the instruction check; a length of 0 is still EINVAL first). The tests install with no_new_privs set"
+side_effects: >
+  A program that loads is installed and cannot be removed; the tests
+  install in forked children only. A program that does not load installs
+  nothing.
+threading: "filters are per thread; see linux/api/pkg/seccomp_inherit"
+ordering: []
+timing:
+  typical: "microseconds per filtered call"
+  guarantees: "none"
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+# Notes: constants from linux/bpf_common.h, linux/filter.h, linux/seccomp.h,
+# linux/audit.h. Observed by installing programs in children and reading the
+# probed call's result (sched_yield, which returns 0 when it runs; ERRNO
+# verdicts carry computed values: A & 0xfff | ERRNO). The accepted-opcode
+# list is the answer of this kernel (6.18), not a reading of the man page.
+# Shifts by X >= 32 are masked to 5 bits on x86-64. The tests never print
+# pids or addresses; no test depends on the filter of the container runtime.
+# TRACE is not exercised (the reference runs tests under a ptrace tracer).
