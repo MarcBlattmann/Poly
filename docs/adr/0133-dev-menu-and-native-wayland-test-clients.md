@@ -112,3 +112,46 @@ Enter, or else I can change them. Run things in parallel where possible."
 - Logic stays host-tested: the settings, command lines, availability,
   key handling and drawing of the menu (`start.rs`, `term.rs`), and the
   clients' encoding, parsing and drawing (`poly-wl-demo`).
+
+## Amendment (test apps are opt-in)
+
+The owner: the desktop's test apps do not work on Windows (Wayland Test
+Client, Poly Demo and others); are they still needed? They are: the
+desktop boot tests drive them, and they are the quickest check that a
+change did not break drawing, moving or closing windows. But they do not
+belong in a normal desktop's launcher.
+
+- **Off means absent, not hidden.** Without `--test-apps` the desktop
+  image has no `wl-demo`, no `wl-client`, no `win_gui_fill.exe` and none of
+  the test desktop files (Poly Demo, Wayland Test Client, Demo Window, Send
+  Test Notification, Poly Fill). The shell has no built-in entry for them
+  either ("Poly Demo" and "Wayland Test Client" are no longer built into
+  `poly-shell`): it learns of test apps only from desktop files, which xtask
+  adds to the image when `--test-apps` is given or the dev menu's "Test
+  apps" switch is on (saved with the other settings as `test_apps`,
+  default off, remembered once turned on). The compositor is the same
+  program either way and has no flag for it. Off is what normal and release
+  runs and anything shipped from main get. The boot tests that use the
+  test apps (desktop, desktop-shell, desktop-win32) build their image with
+  the switch on themselves, so CI keeps covering them; boot group `wayland`
+  puts `wl-client` in its own image. `notify-send`, the command-line
+  notification sender (ADR 0126), stays in the image; only its test desktop
+  file goes.
+- **Wayland Test Client is interactive from the launcher.** `wl-client`
+  is a one-shot protocol test that exits as soon as its checks pass, so
+  the launcher made it look like no window opened. With `--interactive`
+  it keeps the drawn surface and exits on `xdg_toplevel.close`; the
+  launcher's desktop file passes the flag. Without the flag (boot group
+  `wayland`) it behaves as before.
+- **Poly Fill closes after a move (ADR 0131's desktop link, both ways).**
+  `/dev/win32k` used to drop the compositor's records. Now the compositor
+  sends a `Configure` with the frame's new client rectangle whenever a
+  Windows window moved or was resized, and a `Request::Close` when its
+  title-bar close button is clicked or Alt+F4 is pressed on it. win32k
+  applies the geometry to the window (`Wm::configure_from_desktop`) so
+  `GetWindowRect` agrees with the frame, and posts `WM_CLOSE` to the
+  window's own thread (`Wm::post_system_message`), whose default handling
+  destroys the window.
+- **The launcher comes back** when a no-window app (Send Test
+  Notification) exits, as it does when the last window closes
+  (`desktop::launcher_should_reopen`).

@@ -28,7 +28,7 @@
 //!                       (default: the self-test's verdict), save the screen to <file>
 //!                       (default target/poly-screen.png; .ppm for PPM) and quit;
 //!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
-//!   desktop [--release] [--fresh-state] [kernel args...]
+//!   desktop [--release] [--test-apps] [--fresh-state] [kernel args...]
 //!                       boot straight into Poly's desktop: the Wayland compositor and shell on a
 //!                       virtio GPU through DRM/KMS, a virtio keyboard and tablet (desktop.rs,
 //!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop; the settings

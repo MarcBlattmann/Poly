@@ -131,7 +131,8 @@ Ubuntu) or builds the pinned release.
 ```sh
 cargo xtask start   # a menu of everything that boots: the desktop, Chromium, the shells, boot tests, CI
                     # (it remembers your choice: next time Enter runs it again; --last skips the menu)
-cargo xtask desktop # boot Poly's desktop in QEMU's window (the launcher lists the test apps)
+cargo xtask desktop # boot Poly's desktop in QEMU's window (no test apps in the image or the launcher)
+cargo xtask desktop --test-apps # add the test apps: Poly Demo, Wayland Test Client, Demo Window, Poly Fill, Send Test Notification
 cargo xtask run     # boot the kernel in QEMU (Ctrl-A X to quit)
 cargo xtask run --busybox   # boot into BusyBox's init and shell (`poweroff` quits; add console=tty1 for the screen)
 cargo xtask test    # host unit tests + boot tests in QEMU
