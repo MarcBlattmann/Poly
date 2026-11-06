@@ -1046,12 +1046,12 @@ fn unpacked_certs(entries: &[Unpacked], blobs: &Path) -> Result<Vec<(String, Vec
     Ok(out)
 }
 
-/// The launcher's desktop file for Chromium: as `poly`, sandbox on. The
-/// compositor (a native program) starts programs, not `#!` scripts: bash
-/// runs `poly-chromium`.
+/// The launcher's desktop file for Chromium: bash runs `poly-chromium`,
+/// which starts it as `poly`, sandbox on.
 fn desktop_file() -> String {
     format!(
         "[Desktop Entry]\nType=Application\nName=Chromium\nComment=Web browser (Debian's Chromium)\n\
+         Keywords=browser;chrome;web;\n\
          Exec=/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS} file:///{PAGES_DIR}/input.html\n"
     )
 }
@@ -1071,6 +1071,10 @@ pub fn collect() -> std::result::Result<Contents, String> {
         match e {
             Unpacked::Dir { path, mode } => tree.dir(&path, mode),
             Unpacked::Symlink { path, target } => tree.symlink(&path, &target),
+            // Debian's launcher entry runs `chromium` as the compositor's
+            // user, root, which Chromium refuses: the launcher shows only
+            // Poly's entry (as `poly`, sandbox on).
+            Unpacked::File { path, .. } if path.ends_with("share/applications/chromium.desktop") => {}
             Unpacked::File { path, mode, mtime, blob } => {
                 tree.host_file(&path, mode, &blobs.join(blob.to_string()), mtime);
             }
