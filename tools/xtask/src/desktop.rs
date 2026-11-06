@@ -46,9 +46,10 @@
 //! the launcher, it creates an overlapped window and fills its client area
 //! with one colour through GetDC / FillRect / ReleaseDC; through win32k's
 //! desktop link (`/dev/win32k`) the window must show up on the desktop at
-//! its client rectangle, framed by Poly, in that colour
-//! ([`win32_boot_test`]). Skipped where the Windows test programs cannot be
-//! built.
+//! its client rectangle, framed by Poly, in that colour; a click into it
+//! must turn it green and typed characters must be drawn into it, both
+//! through its WM_PAINT handler ([`win32_boot_test`], ADR 0136). Skipped
+//! where the Windows test programs cannot be built.
 //!
 //! Screenshots go to `$POLY_DESKTOP_SHOTS` (default `target/desktop/`) as
 //! PNGs, one per step.
@@ -996,6 +997,8 @@ const WIN32_DESKTOP_FILE: &str = "[Desktop Entry]\nType=Application\nName=Poly F
     Comment=A Windows GUI program that fills its window\nExec=/win/win_gui_fill.exe\nKeywords=fill;windows;\n";
 /// The colour it fills its client area with (`FILL`, RGB).
 const WIN32_FILL: [u8; 3] = [0x8a, 0x47, 0xc0];
+/// Its fill after a left click (`CLICKED`, RGB).
+const WIN32_CLICKED: [u8; 3] = [0x22, 0xaa, 0x44];
 /// Its client rectangle: the window at (40, 400), 400 x 300, less
 /// Windows' non-client frame of an overlapped window (8, 31, 8, 8).
 const WIN32_CLIENT: (i32, i32, i32, i32) = (48, 431, 384, 261);
@@ -1036,6 +1039,33 @@ fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
         "Poly's title bar is above the client area",
         img.pixel(title.0, title.1) != before.pixel(title.0, title.1) && img.pixel(title.0, title.1) != WIN32_FILL,
     )?;
+
+    // Input through the desktop link (ADR 0136): a click reaches the
+    // window (WM_LBUTTONDOWN), which repaints green through WM_PAINT.
+    let (cx, cy) = (x + w / 2, y + h / 2);
+    d.send(&abs(cx, cy))?;
+    d.send(&[button(true)])?;
+    d.send(&[button(false)])?;
+    thread::sleep(Duration::from_millis(3000));
+    let img = d.shot("win32-clicked")?;
+    // Away from the pointer drawn at (cx, cy).
+    let center = img.pixel((cx + 60) as u32, (cy + 40) as u32);
+    expect(&format!("the click turned the window green (got {center:?})"), center == WIN32_CLICKED)?;
+    // Typed keys reach it as WM_KEYDOWN / WM_CHAR: it draws them, black on
+    // white, at its client area's top left.
+    d.type_text(&["p", "o", "l", "y"])?;
+    thread::sleep(Duration::from_millis(3000));
+    let img = d.shot("win32-typed")?;
+    let mut black = 0;
+    for py in (y + 10)..(y + 26) {
+        for px in (x + 10)..(x + 60) {
+            if img.pixel(px as u32, py as u32) == [0, 0, 0] {
+                black += 1;
+            }
+        }
+    }
+    expect(&format!("the typed characters are drawn ({black} black pixels)"), black > 20)?;
+    expect("the rest stays green", img.pixel((cx + 60) as u32, (cy + 40) as u32) == WIN32_CLICKED)?;
     d.qmp.quit();
     Ok(())
 }

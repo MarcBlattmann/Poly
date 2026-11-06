@@ -12,6 +12,8 @@
 //! - [`font`]: the stock fonts' metrics and widths, and the system font's
 //!   glyphs (`sysfont`).
 //! - [`text`]: `DrawTextW`'s layout.
+//! - [`region`]: region algebra (rectangles in canonical bands), for
+//!   `HRGN`s, clipping, and the window manager's update regions.
 //!
 //! Behaviour follows the slice's spec sheets (`specs/windows/gdi32.dll/`,
 //! `user32.dll/FillRect`, `DrawTextW`, `GetDC`, `ReleaseDC`).
@@ -23,6 +25,7 @@ extern crate alloc;
 pub mod bitmap;
 pub mod font;
 pub mod gdi;
+pub mod region;
 mod sysfont;
 pub mod text;
 
