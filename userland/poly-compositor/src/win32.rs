@@ -291,6 +291,78 @@ impl Link {
         &self.surfaces
     }
 
+    /// Input for a Windows surface's scene window (the server's internal
+    /// events of adopted windows): forwarded to win32k. False when the
+    /// event is not about one of ours.
+    pub fn input(&mut self, ev: &poly_wayland::server::InternalEvent) -> bool {
+        use poly_wayland::server::InternalEvent as E;
+        let window = match *ev {
+            E::Motion { window, .. }
+            | E::Button { window, .. }
+            | E::Axis { window, .. }
+            | E::Key { window, .. }
+            | E::Resize { window, .. } => window,
+            E::Leave(window) | E::Close(window) => window,
+        };
+        let Some(surface) = self.surfaces.surface_of(window) else { return false };
+        let time = (os::monotonic_ns() / 1_000_000) as u32;
+        let records: Vec<FromCompositor> = match *ev {
+            E::Motion { x, y, .. } => vec![FromCompositor::Pointer { surface, x, y, time }],
+            E::Button { x, y, button, pressed, .. } => vec![
+                FromCompositor::Pointer { surface, x, y, time },
+                FromCompositor::Button { surface, button: button as u16, pressed, time },
+            ],
+            E::Axis { horizontal, value, .. } => {
+                // 15 logical pixels a step, WHEEL_DELTA (120) a notch, up positive.
+                let notches = -value * 120 / 15;
+                vec![FromCompositor::Axis {
+                    surface,
+                    vertical: if horizontal { 0 } else { notches },
+                    horizontal: if horizontal { notches } else { 0 },
+                    time,
+                }]
+            }
+            E::Key { key, pressed, .. } => vec![FromCompositor::Key { code: key as u16, pressed, time }],
+            E::Leave(_) => vec![FromCompositor::Leave { surface }],
+            E::Close(_) => vec![FromCompositor::Request { surface, request: poly_win32k::link::Request::Close }],
+            E::Resize { .. } => Vec::new(),
+        };
+        let mut out = Vec::new();
+        for r in &records {
+            r.encode(&mut out);
+        }
+        if !out.is_empty()
+            && let Err(e) = os::write(self.fd, &out)
+        {
+            eprintln!("poly-compositor: {DEVICE}: {e}");
+        }
+        true
+    }
+
+    /// Read what win32k sent and apply it to the scene, adopting shown
+    /// Windows windows into the server's focus and input as internal
+    /// windows.
+    pub fn pump_server(&mut self, server: &mut poly_wayland::server::Server) {
+        let before: Vec<WindowId> = self.surfaces.surfaces.values().map(|s| s.window).collect();
+        self.pump(server.scene_mut());
+        let after: Vec<(WindowId, bool)> = self
+            .surfaces
+            .surfaces
+            .values()
+            .map(|s| (s.window, server.scene().window(s.window).is_some_and(|w| w.is_visible())))
+            .collect();
+        for &(w, visible) in &after {
+            if visible && !server.is_internal(w) {
+                server.adopt_internal_window(w, "windows", true);
+            }
+        }
+        for w in before {
+            if !after.iter().any(|a| a.0 == w) {
+                server.release_internal_window(w);
+            }
+        }
+    }
+
     /// Read what win32k sent and apply it to the scene.
     pub fn pump(&mut self, scene: &mut Scene) {
         let mut buf = vec![0u8; 16 * 1024];

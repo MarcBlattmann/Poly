@@ -59,7 +59,7 @@ impl Link {
         let early = core::mem::take(&mut *self.early.lock());
         let more = with_existing(|s| {
             if !early.is_empty() {
-                s.sys.win32k.link_receive(&early);
+                s.sys.win32k.link_receive(&mut s.sys.objects, &early);
             }
             s.sys.win32k.link_output()
         });
@@ -122,11 +122,14 @@ impl CharDevice for LinkFile {
 
     fn write(&self, _: u64, buf: &[u8], _: bool) -> poly_vfs::Result<usize> {
         let mut early = self.0.early.lock();
-        let handled = early.is_empty() && with_existing(|s| s.sys.win32k.link_receive(buf)).is_some();
+        let handled =
+            early.is_empty() && with_existing(|s| s.sys.win32k.link_receive(&mut s.sys.objects, buf)).is_some();
         if !handled {
             early.extend_from_slice(buf);
         }
         drop(early);
+        // The input woke Windows threads waiting on their queue events.
+        super::sched::drain_wakes();
         if self.0.pump() {
             self.0.queue.notify(PollEvents::READABLE);
         }

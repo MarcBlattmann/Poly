@@ -30,6 +30,9 @@
 //!   compositor, the compositor's records read back.
 //! - [`frame`]: Poly's frame as the non-client area of a top-level window:
 //!   rectangles and the non-client hit test.
+//! - [`kbd`]: the keyboard layout (the oracle's German layout): virtual
+//!   keys, scan codes, characters and dead keys for `MapVirtualKeyW`,
+//!   `ToUnicode` and `TranslateMessage`.
 //! - [`exports`]: what `user32.dll`, `gdi32.dll` and `win32u.dll` must
 //!   export, checked by `cargo xtask win32`.
 //!
@@ -45,9 +48,11 @@ extern crate alloc;
 pub mod desktop;
 pub mod exports;
 pub mod frame;
+pub mod kbd;
 pub mod link;
 pub mod metrics;
 pub mod proto;
+pub mod rgn;
 pub mod services;
 pub mod surfaces;
 pub mod user;
