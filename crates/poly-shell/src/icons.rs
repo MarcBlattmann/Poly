@@ -592,6 +592,185 @@ pub mod lucide {
         "M20 12h2",
     ]);
 
+    // Files and Terminal (ADR 0134), from lucide-react 0.575.0 too.
+    /// Lucide `square-terminal`.
+    pub const SQUARE_TERMINAL: Icon = Icon(&[
+        "m7 11 2-2-2-2",
+        "M11 13h4",
+        "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2z",
+    ]);
+    /// Lucide `folder`.
+    pub const FOLDER: Icon = Icon(&[
+        "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z",
+    ]);
+    /// Lucide `folder-open`.
+    pub const FOLDER_OPEN: Icon = Icon(&[
+        "m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2",
+    ]);
+    /// Lucide `file`.
+    pub const FILE: Icon = Icon(&[
+        "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z",
+        "M14 2v5a1 1 0 0 0 1 1h5",
+    ]);
+    /// Lucide `file-text`.
+    pub const FILE_TEXT: Icon = Icon(&[
+        "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z",
+        "M14 2v5a1 1 0 0 0 1 1h5",
+        "M10 9H8",
+        "M16 13H8",
+        "M16 17H8",
+    ]);
+    /// Lucide `file-code`.
+    pub const FILE_CODE: Icon = Icon(&[
+        "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z",
+        "M14 2v5a1 1 0 0 0 1 1h5",
+        "M10 12.5 8 15l2 2.5",
+        "m14 12.5 2 2.5-2 2.5",
+    ]);
+    /// Lucide `file-image`.
+    pub const FILE_IMAGE: Icon = Icon(&[
+        "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z",
+        "M14 2v5a1 1 0 0 0 1 1h5",
+        "M8 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+        "m20 17-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22",
+    ]);
+    /// Lucide `file-music`.
+    pub const FILE_MUSIC: Icon = Icon(&[
+        "M11.65 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v10.35",
+        "M14 2v5a1 1 0 0 0 1 1h5",
+        "M8 20v-7l3 1.474",
+        "M4 20a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+    ]);
+    /// Lucide `file-video-camera`.
+    pub const FILE_VIDEO_CAMERA: Icon = Icon(&[
+        "M4 12V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2",
+        "M14 2v5a1 1 0 0 0 1 1h5",
+        "m10 17.843 3.033-1.755a.64.64 0 0 1 .967.56v4.704a.65.65 0 0 1-.967.56L10 20.157",
+        "M4 16h5a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1z",
+    ]);
+    /// Lucide `file-archive`.
+    pub const FILE_ARCHIVE: Icon = Icon(&[
+        "M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5",
+        "M14 2v5a1 1 0 0 0 1 1h5",
+        "M8 12v-1",
+        "M8 18v-2",
+        "M8 7V6",
+        "M6 20a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+    ]);
+    /// Lucide `file-spreadsheet`.
+    pub const FILE_SPREADSHEET: Icon = Icon(&[
+        "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z",
+        "M14 2v5a1 1 0 0 0 1 1h5",
+        "M8 13h2",
+        "M14 13h2",
+        "M8 17h2",
+        "M14 17h2",
+    ]);
+    /// Lucide `hard-drive`.
+    pub const HARD_DRIVE: Icon = Icon(&[
+        "M10 16h.01",
+        "M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z",
+        "M21.946 12.013H2.054",
+        "M6 16h.01",
+    ]);
+    /// Lucide `download`.
+    pub const DOWNLOAD: Icon = Icon(&["M12 15V3", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "m7 10 5 5 5-5"]);
+    /// Lucide `trash-2`.
+    pub const TRASH_2: Icon = Icon(&[
+        "M10 11v6",
+        "M14 11v6",
+        "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6",
+        "M3 6h18",
+        "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2",
+    ]);
+    /// Lucide `list`.
+    pub const LIST: Icon = Icon(&["M3 5h.01", "M3 12h.01", "M3 19h.01", "M8 5h13", "M8 12h13", "M8 19h13"]);
+    /// Lucide `layout-grid`.
+    pub const LAYOUT_GRID: Icon = Icon(&[
+        "M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-5a1 1 0 0 1 1 -1z",
+        "M15 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-5a1 1 0 0 1 1 -1z",
+        "M15 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-5a1 1 0 0 1 1 -1z",
+        "M4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-5a1 1 0 0 1 1 -1z",
+    ]);
+    /// Lucide `arrow-up`.
+    pub const ARROW_UP: Icon = Icon(&["m5 12 7-7 7 7", "M12 19V5"]);
+    /// Lucide `folder-plus`.
+    pub const FOLDER_PLUS: Icon = Icon(&[
+        "M12 10v6",
+        "M9 13h6",
+        "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z",
+    ]);
+    /// Lucide `clipboard-paste`.
+    pub const CLIPBOARD_PASTE: Icon = Icon(&[
+        "M11 14h10",
+        "M16 4h2a2 2 0 0 1 2 2v1.344",
+        "m17 18 4-4-4-4",
+        "M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113",
+        "M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-6a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1z",
+    ]);
+    /// Lucide `scissors`.
+    pub const SCISSORS: Icon = Icon(&[
+        "M3 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+        "M8.12 8.12 12 12",
+        "M20 4 8.12 15.88",
+        "M3 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+        "M14.8 14.8 20 20",
+    ]);
+    /// Lucide `pencil`.
+    pub const PENCIL: Icon = Icon(&[
+        "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z",
+        "m15 5 4 4",
+    ]);
+    /// Lucide `eye`.
+    pub const EYE: Icon = Icon(&[
+        "M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0",
+        "M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+    ]);
+    /// Lucide `eye-off`.
+    pub const EYE_OFF: Icon = Icon(&[
+        "M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49",
+        "M14.084 14.158a3 3 0 0 1-4.242-4.242",
+        "M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143",
+        "m2 2 20 20",
+    ]);
+    /// Lucide `arrow-up-down`.
+    pub const ARROW_UP_DOWN: Icon = Icon(&["m21 16-4 4-4-4", "M17 20V4", "m3 8 4-4 4 4", "M7 4v16"]);
+    /// Lucide `link`.
+    pub const LINK: Icon = Icon(&[
+        "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71",
+        "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
+    ]);
+    /// Lucide `file-type`.
+    pub const FILE_TYPE: Icon = Icon(&[
+        "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z",
+        "M14 2v5a1 1 0 0 0 1 1h5",
+        "M11 18h2",
+        "M12 12v6",
+        "M9 13v-.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 .5.5v.5",
+    ]);
+    /// Lucide `package`.
+    pub const PACKAGE: Icon = Icon(&[
+        "M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z",
+        "M12 22V12",
+        "M3.29 7L12 12L20.71 7",
+        "m7.5 4.27 9 5.15",
+    ]);
+    /// Lucide `file-cog`.
+    pub const FILE_COG: Icon = Icon(&[
+        "M15 8a1 1 0 0 1-1-1V2a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8z",
+        "M20 8v12a2 2 0 0 1-2 2h-4.182",
+        "m3.305 19.53.923-.382",
+        "M4 10.592V4a2 2 0 0 1 2-2h8",
+        "m4.228 16.852-.924-.383",
+        "m5.852 15.228-.383-.923",
+        "m5.852 20.772-.383.924",
+        "m8.148 15.228.383-.923",
+        "m8.53 21.696-.382-.924",
+        "m9.773 16.852.922-.383",
+        "m9.773 19.148.922.383",
+        "M4 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+    ]);
+
     /// Every icon above (for tests).
     pub const ALL: &[Icon] = &[
         PLUS,
@@ -634,6 +813,34 @@ pub mod lucide {
         SUN,
         BLUETOOTH_OFF,
         BLUETOOTH,
+        SQUARE_TERMINAL,
+        FOLDER,
+        FOLDER_OPEN,
+        FILE,
+        FILE_TEXT,
+        FILE_CODE,
+        FILE_IMAGE,
+        FILE_MUSIC,
+        FILE_VIDEO_CAMERA,
+        FILE_ARCHIVE,
+        FILE_SPREADSHEET,
+        HARD_DRIVE,
+        DOWNLOAD,
+        TRASH_2,
+        LIST,
+        LAYOUT_GRID,
+        ARROW_UP,
+        FOLDER_PLUS,
+        CLIPBOARD_PASTE,
+        SCISSORS,
+        PENCIL,
+        EYE,
+        EYE_OFF,
+        ARROW_UP_DOWN,
+        LINK,
+        FILE_TYPE,
+        PACKAGE,
+        FILE_COG,
     ];
 }
 

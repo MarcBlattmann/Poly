@@ -19,6 +19,7 @@ members = [
     "crates/poly-elf",
     "crates/poly-ext2",
     "crates/poly-fbdev",
+    "crates/poly-files",
     "crates/poly-cpio",
     "crates/poly-dbus",
     "crates/poly-drm",
@@ -58,6 +59,7 @@ members = [
     "crates/poly-term",
     "crates/poly-tty",
     "crates/poly-unix",
+    "crates/poly-vt",
     "crates/poly-virtio",
     "crates/poly-virtio-blk",
     "crates/poly-virtio-gpu",
@@ -80,8 +82,11 @@ members = [
     "tools/coverage",
     "tools/pipeline",
     "tools/xtask",
+    "userland/poly-app",
     "userland/poly-compositor",
+    "userland/poly-files-app",
     "userland/poly-notify",
+    "userland/poly-terminal",
     "userland/poly-wl-demo",
 ]
 exclude = ["kernel", "userland/native", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
@@ -107,6 +112,7 @@ poly-crypto = { path = "crates/poly-crypto" }
 poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-fbdev = { path = "crates/poly-fbdev" }
+poly-files = { path = "crates/poly-files" }
 poly-cpio = { path = "crates/poly-cpio" }
 poly-dbus = { path = "crates/poly-dbus" }
 poly-drm = { path = "crates/poly-drm" }
@@ -139,6 +145,9 @@ poly-rtc = { path = "crates/poly-rtc" }
 poly-rtl = { path = "crates/poly-rtl" }
 poly-sched = { path = "crates/poly-sched" }
 poly-shell = { path = "crates/poly-shell" }
+poly-app = { path = "userland/poly-app" }
+poly-files-app = { path = "userland/poly-files-app" }
+poly-terminal = { path = "userland/poly-terminal" }
 poly-security = { path = "crates/poly-security" }
 poly-seh = { path = "crates/poly-seh" }
 poly-cxxeh = { path = "crates/poly-cxxeh" }
@@ -146,6 +155,7 @@ poly-smp = { path = "crates/poly-smp" }
 poly-term = { path = "crates/poly-term" }
 poly-tty = { path = "crates/poly-tty" }
 poly-unix = { path = "crates/poly-unix" }
+poly-vt = { path = "crates/poly-vt" }
 poly-virtio = { path = "crates/poly-virtio" }
 poly-virtio-blk = { path = "crates/poly-virtio-blk" }
 poly-virtio-gpu = { path = "crates/poly-virtio-gpu" }

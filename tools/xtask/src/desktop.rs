@@ -109,8 +109,10 @@ pub fn devices_sized((w, h): (u32, u32)) -> Vec<String> {
 }
 
 /// The programs in the desktop's image (`/bin/<name>`), all native
-/// programs built on every host (ADR 0125, ADR 0133).
-pub const PROGRAMS: [&str; 4] = ["poly-compositor", "wl-demo", "wl-client", "notify-send"];
+/// programs built on every host (ADR 0125, ADR 0133), Poly's own Files
+/// and Terminal among them (ADR 0134).
+pub const PROGRAMS: [&str; 6] =
+    ["poly-compositor", "wl-demo", "wl-client", "notify-send", "poly-files", "poly-terminal"];
 
 /// Whether this checkout has the Windows GUI test program of
 /// `desktop-win32` ([`WIN32_TEST`], ADR 0131), which every desktop image
@@ -133,6 +135,8 @@ pub fn launcher_apps() -> Vec<(String, String)> {
         ("Wayland Test Client", "/bin/wl-client (built in)"),
         (desktop_name(DESKTOP_FILE), "/bin/wl-demo (demo-window.desktop)"),
         (desktop_name(NOTIFY_FILE), "/bin/notify-send (notify-test.desktop)"),
+        ("Files", "/bin/poly-files (built in)"),
+        ("Terminal", "/bin/poly-terminal (built in)"),
     ]
     .into_iter()
     .map(|(n, w)| (n.to_string(), w.to_string()))
@@ -232,6 +236,23 @@ fn image_files() -> Result<initramfs::Tree> {
     for (path, data) in shell_fonts {
         tree.files.push((path, 0o644, data));
     }
+    // BusyBox, when there is one (a shell for the Terminal, ADR 0134):
+    // `/bin/busybox` and its applets, a home and a `/tmp`.
+    match crate::busybox::obtain()? {
+        Ok(bb) => {
+            tree.files.push(("bin/busybox".into(), 0o755, bb.elf));
+            for (dir, applets) in initramfs::BUSYBOX_APPLETS {
+                for applet in *applets {
+                    tree.symlinks.push((format!("{dir}/{applet}"), "/bin/busybox".into()));
+                }
+            }
+        }
+        Err(why) => {
+            crate::progress::note(&format!("no BusyBox in the desktop image, so the Terminal has no shell: {why}"))
+        }
+    }
+    tree.files.push(("root/.profile".into(), 0o644, b"export PS1='\\w \\$ '\n".to_vec()));
+    tree.files.push(("tmp/.keep".into(), 0o644, Vec::new()));
     Ok(tree)
 }
 
@@ -341,6 +362,12 @@ pub fn boot(p: Prepared) -> Result {
     let mut cmd = qemu(&kernel, MEMORY, &append(kernel_args.trim_end()), super::Devices::None, "mon:stdio");
     cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
     eprintln!("==> screen {}x{} at scale {scale} (--size=WxH, --scale=N)", size.0, size.1);
+    // A QMP socket to drive the desktop from outside (scripted checks on a
+    // host without Unix sockets): `POLY_QEMU_QMP=tcp:127.0.0.1:4444`.
+    if let Some(qmp) = std::env::var("POLY_QEMU_QMP").ok().filter(|q| !q.is_empty()) {
+        cmd.args(["-qmp", &format!("{qmp},server=on,wait=off")]);
+        eprintln!("==> QMP on {qmp} (POLY_QEMU_QMP)");
+    }
     let sdl = window_display(&mut cmd);
     let mut child = cmd.spawn().map_err(|e| format!("qemu: {e}"))?;
     if let (true, Some(h)) = (sdl, host) {
@@ -693,7 +720,7 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     chord(&mut d, &["meta_l", "i"])?;
     d.wait("settings window opened", 30)?;
     let (sx, sy, sw, sh) = shown(&d, "Settings", 30)?;
-    expect("the settings window is 900x620", (sw, sh) == (900, 620))?;
+    expect("the settings window is 900x720", (sw, sh) == (900, 720))?;
     click(&mut d, sx + 400, sy + 339)?; // Home's card to Sound (ADR 0127: Alpine's current settings)
     thread::sleep(Duration::from_millis(1000));
     click(&mut d, sx + 691, sy + 178)?; // 30 % of the volume slider
@@ -1083,6 +1110,217 @@ pub fn win32_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         }
         None => Err("the desktop-win32 boot test did not finish".into()),
     }
+}
+
+/// The qcode (and whether Shift is held) that types `c` on the US layout.
+fn qcode(c: char) -> Option<(String, bool)> {
+    let plain = |s: &str| Some((s.to_string(), false));
+    let shifted = |s: &str| Some((s.to_string(), true));
+    match c {
+        'a'..='z' | '0'..='9' => plain(&c.to_string()),
+        'A'..='Z' => shifted(&c.to_ascii_lowercase().to_string()),
+        ' ' => plain("spc"),
+        '\n' => plain("ret"),
+        '/' => plain("slash"),
+        '.' => plain("dot"),
+        '-' => plain("minus"),
+        ';' => plain("semicolon"),
+        '\'' => plain("apostrophe"),
+        '\\' => plain("backslash"),
+        ']' => plain("bracket_right"),
+        '[' => plain("bracket_left"),
+        '=' => plain("equal"),
+        '>' => shifted("dot"),
+        '<' => shifted("comma"),
+        '|' => shifted("backslash"),
+        '_' => shifted("minus"),
+        '$' => shifted("4"),
+        _ => None,
+    }
+}
+
+/// Type `s` (US layout) as key presses.
+fn type_str(d: &mut Driver, s: &str) -> std::result::Result<(), String> {
+    for c in s.chars() {
+        let (q, shift) = qcode(c).ok_or_else(|| format!("no key for {c:?}"))?;
+        if shift {
+            chord(d, &["shift", &q])?;
+        } else {
+            d.type_text(&[&q])?;
+        }
+    }
+    Ok(())
+}
+
+/// Boot group `desktop-apps` (ADR 0134): Poly's own Terminal and Files.
+/// Terminal from the launcher runs BusyBox's shell on a pseudo-terminal;
+/// `echo hi > /tmp/x` is typed, and the file's contents come back through
+/// the terminal. Files from the launcher goes to `/tmp` (Ctrl+L) and lists
+/// `x`. Ctrl+Alt+T opens another Terminal, where `echo` and `ls` are typed
+/// and their output is captured; Super+E opens Files again. Screenshots of
+/// each step.
+pub fn apps_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    if cfg!(not(unix)) {
+        eprintln!("==> skipped: the desktop apps boot test needs a Unix host (QMP)");
+        return Ok(());
+    }
+    if let Err(why) = crate::busybox::obtain()? {
+        eprintln!("==> skipped: the desktop apps boot test needs BusyBox for the Terminal's shell: {why}");
+        return Ok(());
+    }
+    let image = image()?;
+    eprintln!("==> boot test: Poly's Files and Terminal (launched, a shell command typed, its file listed)");
+    let socket = std::env::temp_dir().join(format!("poly-apps-qmp-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&socket);
+    let mut qemu_args = vec![
+        "-initrd".to_string(),
+        image.display().to_string(),
+        "-qmp".to_string(),
+        format!("unix:{},server=on,wait=off", socket.display()),
+    ];
+    qemu_args.extend(devices());
+    let lines: Lines = Arc::default();
+    let result: Arc<Mutex<Option<std::result::Result<(), String>>>> = Arc::default();
+    let (seen, outcome, path) = (Arc::clone(&lines), Arc::clone(&result), socket.clone());
+    let mut started = false;
+    let on_line = move |line: &str| {
+        seen.lock().unwrap_or_else(|e| e.into_inner()).push(line.to_string());
+        if !started && line.contains(READY) {
+            started = true;
+            let (lines, outcome, path) = (Arc::clone(&seen), Arc::clone(&outcome), path.clone());
+            thread::spawn(move || {
+                let r = drive_apps(&path, lines);
+                *outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+            });
+        }
+    };
+    let b: Result<Boot> = super::with_boot_timeout(Duration::from_secs(600), || {
+        boot_with(kernel, syms, MEMORY, &append(""), super::Devices::None, &qemu_args, None, on_line)
+    });
+    let _ = std::fs::remove_file(&socket);
+    let b = b?;
+    for l in b.output.lines().filter(|l| l.contains("poly-files:") || l.contains("poly-terminal:")) {
+        eprintln!("    {l}");
+    }
+    let r = result.lock().unwrap_or_else(|e| e.into_inner()).take();
+    match r {
+        Some(Ok(())) => {
+            eprintln!("    ok: Terminal ran a command in BusyBox's shell; Files listed its file");
+            Ok(())
+        }
+        Some(Err(e)) => Err(e),
+        None if !b.output.contains(READY) => {
+            Err(format!("the desktop never came up (QEMU status {:?}, timed out: {})", b.status, b.timed_out))
+        }
+        None => Err("the desktop apps boot test did not finish".into()),
+    }
+}
+
+/// The steps of `desktop-apps`.
+fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
+    let shots = shots_dir();
+    std::fs::create_dir_all(&shots).map_err(|e| format!("{}: {e}", shots.display()))?;
+    let qmp = screen::Qmp::connect(socket, Duration::from_secs(20))?;
+    let mut d = Driver { qmp, lines, shots, step: 100 };
+    thread::sleep(Duration::from_millis(500));
+
+    // 1. Terminal from the launcher.
+    type_str(&mut d, "terminal")?;
+    d.wait("launcher query \"terminal\"", 30)?;
+    thread::sleep(Duration::from_millis(500));
+    d.type_text(&["ret"])?;
+    d.wait("poly-compositor: launched Terminal", 30)?;
+    let (tx, ty, tw, th) = shown(&d, "Terminal", 90)?;
+    let shell = d.wait("poly-terminal: ", 30)?;
+    expect("the terminal started a shell on a pseudo-terminal", shell.contains(" on /dev/pts/"))?;
+    // The prompt.
+    thread::sleep(Duration::from_secs(4));
+    let img = d.shot("terminal")?;
+    // The header on the ground, the screen on the page (dark theme).
+    let page = img.pixel((tx + tw / 2) as u32, (ty + th - 6) as u32);
+    expect("the terminal's page is Alpine's surface 1", page == [0x21, 0x21, 0x20])?;
+    expect(
+        "the terminal's header is the ground",
+        img.pixel((tx + 200) as u32, (ty + 20) as u32) == [0x1a, 0x1a, 0x19],
+    )?;
+
+    // 2. A command, and its output read back through the terminal.
+    type_str(&mut d, "echo hi > /tmp/x\n")?;
+    thread::sleep(Duration::from_secs(2));
+    type_str(&mut d, "printf '\\033]0;'; head -c 2 /tmp/x; printf '\\007'\n")?;
+    let title = d.wait("poly-terminal: title ", 60)?;
+    expect(
+        &format!("the shell wrote hi into /tmp/x and the terminal read it ({title:?})"),
+        title.ends_with("title hi"),
+    )?;
+    type_str(&mut d, "ls -l /tmp\n")?;
+    thread::sleep(Duration::from_secs(3));
+    d.shot("terminal-command")?;
+
+    // 3. Files from the launcher, at /tmp.
+    chord(&mut d, &["ctrl", "spc"])?;
+    d.wait(LAUNCHER_SHOWN, 30)?;
+    type_str(&mut d, "files")?;
+    d.wait("launcher query \"files\"", 30)?;
+    thread::sleep(Duration::from_millis(500));
+    d.type_text(&["ret"])?;
+    d.wait("poly-compositor: launched Files", 30)?;
+    let (fx, fy, fw, fh) = shown(&d, "Files", 90)?;
+    thread::sleep(Duration::from_secs(3));
+    d.shot("files-home")?;
+    // A click into its page gives it the keyboard.
+    click(&mut d, fx + fw / 2, fy + fh / 2)?;
+    thread::sleep(Duration::from_secs(2));
+    chord(&mut d, &["ctrl", "l"])?;
+    thread::sleep(Duration::from_secs(3));
+    d.shot("files-path")?;
+    type_str(&mut d, "/tmp")?;
+    thread::sleep(Duration::from_secs(2));
+    d.shot("files-path-typed")?;
+    d.type_text(&["ret"])?;
+    let listing = d.wait("poly-files: /tmp (", 60)?;
+    expect(
+        &format!("Files lists the terminal's file /tmp/x ({listing:?})"),
+        listing.split(": ").nth(2).is_some_and(|names| names.split(' ').any(|n| n == "x")),
+    )?;
+    thread::sleep(Duration::from_secs(3));
+    let img = d.shot("files-tmp")?;
+    expect(
+        "the Files sidebar is the ground",
+        img.pixel((fx + 100) as u32, (fy + fh - 20) as u32) == [0x1a, 0x1a, 0x19],
+    )?;
+    expect(
+        "the Files page is surface 1",
+        img.pixel((fx + fw - 40) as u32, (fy + fh / 2) as u32) == [0x21, 0x21, 0x20],
+    )?;
+    // Grid view (Ctrl+2), for the picture.
+    chord(&mut d, &["ctrl", "2"])?;
+    thread::sleep(Duration::from_secs(2));
+    d.shot("files-grid")?;
+
+    // 4. Ctrl+Alt+T opens a new terminal; type commands and check their output.
+    let terminals = count(&d.lines, "poly-compositor: launched Terminal");
+    let terminal_starts = count(&d.lines, " on /dev/pts/");
+    chord(&mut d, &["ctrl", "alt", "t"])?;
+    wait_nth(&d.lines, "poly-compositor: launched Terminal", terminals + 1, 30)?;
+    wait_nth(&d.lines, " on /dev/pts/", terminal_starts + 1, 30)?;
+    thread::sleep(Duration::from_secs(4));
+    type_str(&mut d, "echo shortcut; ls -l /tmp; printf '\\033]0;'; ls -1 /tmp | tr -d '\\n'; printf '\\007'\n")?;
+    let title = d.wait("poly-terminal: title x", 60)?;
+    expect("the shortcut terminal ran ls and received its output", title.ends_with("title x"))?;
+    thread::sleep(Duration::from_secs(2));
+    d.shot("terminal-shortcut-output")?;
+
+    // Super+E opens Files again.
+    let files = count(&d.lines, "poly-compositor: launched Files");
+    let file_windows = count(&d.lines, "window \"Files\" shown at");
+    chord(&mut d, &["meta_l", "e"])?;
+    wait_nth(&d.lines, "poly-compositor: launched Files", files + 1, 30)?;
+    wait_nth(&d.lines, "window \"Files\" shown at", file_windows + 1, 90)?;
+    thread::sleep(Duration::from_secs(4));
+    d.shot("shortcuts")?;
+    d.qmp.quit();
+    Ok(())
 }
 
 #[cfg(test)]

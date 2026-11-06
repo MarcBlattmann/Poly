@@ -481,7 +481,13 @@ fn run(args: &[String]) -> Result<u8, String> {
     };
     // Windows apps' top-level windows through win32k's desktop link (ADR 0131).
     let mut winlink = if o.desktop { win32::Link::open(server.scene()) } else { None };
-    let env = client_env(&o.socket, &dir, &dump_path, bus_address.as_deref(), xw.as_ref().map(|x| x.display_env()));
+    let mut env = client_env(&o.socket, &dir, &dump_path, bus_address.as_deref(), xw.as_ref().map(|x| x.display_env()));
+    // Poly's own apps follow the desktop's theme and keyboard layout from
+    // the settings file (ADR 0134).
+    if let Some(path) = desk.as_ref().and_then(desk::Desktop::settings_file) {
+        env.retain(|v| !v.starts_with("POLY_SHELL_SETTINGS="));
+        env.push(format!("POLY_SHELL_SETTINGS={path}"));
+    }
     // Children that end wake the loop (their process handles are polled),
     // which reaps them at once.
     let child = if o.exec.is_empty() {

@@ -18,7 +18,7 @@ use poly_shell::settings_ui::{Page, SystemInfo};
 use poly_shell::shortcuts::Hit;
 use poly_shell::switcher::{Entry, Mru, thumbnail};
 use poly_shell::wm::{self, Action, Placed, Zone};
-use poly_shell::{Key, Press, Shell};
+use poly_shell::{Key, Press, Shell, apps};
 use poly_wayland::compose::{MemoryFramebuffer, Placement, Rect, Theme, WindowId};
 use poly_wayland::seat::{BTN_LEFT, InputEvent, InputSource};
 use poly_wayland::server::{InternalEvent, OutputConfig, Server};
@@ -308,6 +308,17 @@ impl Desktop {
                         println!("poly-compositor: launcher {}", if shown { "shown" } else { "hidden" });
                         return None;
                     }
+                    Some(h @ (Hit::Files | Hit::Terminal)) => {
+                        // Poly's own apps (ADR 0134): started as the
+                        // launcher starts them.
+                        if !pressed {
+                            server.handle_input(ev);
+                        }
+                        let program = if h == Hit::Files { apps::FILES } else { apps::TERMINAL };
+                        return apps::builtins()
+                            .into_iter()
+                            .find(|a| a.argv.first().map(String::as_str) == Some(program));
+                    }
                     Some(h) => {
                         // Releasing a modifier reaches the clients (the
                         // modifier goes); the rest is the compositor's.
@@ -498,6 +509,8 @@ impl Desktop {
             }
             Hit::Settings => self.open_settings(Page::Home, server),
             Hit::Notifications => self.shell.toggle_history(),
+            // Started by `route`, which returns them as apps.
+            Hit::Files | Hit::Terminal => {}
         }
     }
 
@@ -518,6 +531,11 @@ impl Desktop {
             os::terminate(*pid);
         }
         self.shell.close_panel();
+    }
+
+    /// Where the settings are kept, if they are.
+    pub fn settings_file(&self) -> Option<&str> {
+        self.settings_path.as_deref()
     }
 
     /// An app the launcher started that is the shell's own.

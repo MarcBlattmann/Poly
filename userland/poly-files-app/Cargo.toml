@@ -1,0 +1,18 @@
+[package]
+name = "poly-files-app"
+description = "Poly's own file explorer, Files (ADR 0134), a native Poly program on poly-rt: a Wayland window in the Alpine Shell look over poly-files' browsing core (places, list and grid views, sorting, search, the trash, file operations, opening files with their apps). This is its code, tested on the host; userland/native/files builds the program."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+poly-app.workspace = true
+poly-files.workspace = true
+poly-input.workspace = true
+poly-rt.workspace = true
+poly-shell.workspace = true
+poly-wayland.workspace = true
+
+[lints]
+workspace = true
