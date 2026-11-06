@@ -99,6 +99,25 @@ fn only_damage_is_drawn_and_presented() {
 }
 
 #[test]
+fn damage_tracking_merges_nearby_overlaps_but_keeps_costly_gaps() {
+    let mut scene = Scene::new(200, 200, 1);
+    let mut fb = MemoryFramebuffer::new(200, 200);
+    scene.render(&mut fb);
+
+    scene.damage_physical(Rect::new(10, 10, 40, 40));
+    scene.damage_physical(Rect::new(20, 20, 40, 40));
+    assert_eq!(scene.damage(), [Rect::new(10, 10, 50, 50)]);
+
+    scene.damage_all();
+    scene.render(&mut fb);
+    // The bounding box of a cross would redraw far more pixels than its two
+    // arms, so the damage tracker must leave those rectangles separate.
+    scene.damage_physical(Rect::new(10, 99, 100, 2));
+    scene.damage_physical(Rect::new(59, 50, 2, 100));
+    assert_eq!(scene.damage(), [Rect::new(10, 99, 100, 2), Rect::new(59, 50, 2, 100)]);
+}
+
+#[test]
 fn hidpi_scales_logical_coordinates_and_buffers() {
     // Output scale 2: a buffer at scale 1 is doubled, one at scale 2 is
     // copied pixel for pixel; positions are logical.

@@ -2,7 +2,7 @@
 //! top — its frame, then its content over it — clipped to the rectangle.
 
 use super::frame::{BORDER, CORNER_RADIUS, FrameLayout, Glyph, glyph_covers};
-use super::paint::{self, Radii};
+use super::paint::{self, Radii, ShadowCache};
 use super::scene::{Backdrop, Content, CursorLook, Scene, Window, WindowId};
 use super::{CURSOR_SIZE, Framebuffer, Layer, Rect, over, with_alpha};
 use alloc::collections::BTreeMap;
@@ -20,6 +20,7 @@ pub(super) fn draw(
     below: Option<&dyn Layer>,
     above: Option<&dyn Layer>,
     backdrops: &mut BTreeMap<WindowId, Backdrop>,
+    shadows: &mut ShadowCache,
 ) {
     let s = scene.output().2 as i32;
     match below {
@@ -34,7 +35,7 @@ pub(super) fn draw(
             b.capture(fb, clip);
         }
         if let Some(f) = w.frame() {
-            draw_shadow(scene, fb, clip, w, &f, s);
+            draw_shadow(scene, shadows, fb, clip, w, &f, s);
             draw_frame(scene, fb, clip, w, &f, s);
         }
         draw_content(fb, clip, w, s);
@@ -145,14 +146,22 @@ fn draw_frame(scene: &Scene, fb: &mut dyn Framebuffer, clip: Rect, w: &Window, f
 /// The frame's soft shadow (the theme's, for an active or inactive
 /// window), not under the frame itself and not over the rows a shell
 /// keeps for itself (its strip is under the windows).
-fn draw_shadow(scene: &Scene, fb: &mut dyn Framebuffer, clip: Rect, w: &Window, f: &FrameLayout, s: i32) {
+fn draw_shadow(
+    scene: &Scene,
+    shadows: &mut ShadowCache,
+    fb: &mut dyn Framebuffer,
+    clip: Rect,
+    w: &Window,
+    f: &FrameLayout,
+    s: i32,
+) {
     let Some(shadow) = scene.theme().shadow(w.is_active()) else { return };
     let top = scene.reserved_top() * s;
     let clip = clip.intersect(&Rect::new(clip.x, top, clip.width, (clip.bottom() - top).max(0)));
     let outer = f.outer.scale(s);
     let r = CORNER_RADIUS * s;
     let occluder = Rect::new(outer.x, outer.y + r, outer.width, outer.height - r);
-    shadow.scaled(s).draw(fb, clip, outer, Radii::top(r as f32), occluder);
+    shadow.scaled(s).draw_cached(shadows, fb, clip, outer, Radii::top(r as f32), occluder);
 }
 
 /// The title, from the left of the text area, vertically centred, cut off

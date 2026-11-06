@@ -263,7 +263,7 @@ fn image_files() -> Result<initramfs::Tree> {
 pub const STATE_FILE: &str = "poly-desktop-state.img";
 
 /// `cargo xtask desktop [--release] [--fresh-state] [--size=WxH]
-/// [--scale=N] [kernel args...]`: boot into the desktop in a QEMU window
+/// [--scale=N] [--qmp-port=PORT] [kernel args...]`: boot into the desktop in a QEMU window
 /// (no window without a desktop: then a VNC display on port 5900). The
 /// settings live on a small disk, `target/poly-desktop-state.img`, so they
 /// survive from one run to the next (`--fresh-state` starts again with the
@@ -298,6 +298,7 @@ pub struct Prepared {
     /// Whether `--scale` was given.
     asked: bool,
     host: Option<hostscreen::Screen>,
+    qmp_port: Option<u16>,
     extra: Vec<String>,
 }
 
@@ -307,6 +308,7 @@ pub struct Prepared {
 pub fn prepare(args: &[String]) -> Result<Prepared> {
     let release = args.iter().any(|a| a == "--release");
     let fresh = args.iter().any(|a| a == "--fresh-state");
+    let qmp_port = parse_qmp_port(args)?;
     let value = |name: &str| args.iter().find_map(|a| a.strip_prefix(name)).map(str::to_string);
     let asked = match value("--scale=") {
         Some(v) => {
@@ -348,12 +350,12 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
     });
     let (kernel, image) = (kernel?, image?);
     disk?;
-    Ok(Prepared { kernel, image, state, size, scale, asked: asked.is_some(), host, extra })
+    Ok(Prepared { kernel, image, state, size, scale, asked: asked.is_some(), host, qmp_port, extra })
 }
 
 /// Boot what [`prepare`] made, in QEMU's window.
 pub fn boot(p: Prepared) -> Result {
-    let Prepared { kernel, image, state, size, scale, asked, host, extra } = p;
+    let Prepared { kernel, image, state, size, scale, asked, host, qmp_port, extra } = p;
     // The compositor's `--scale` wins over the saved settings' scale (which
     // a run at another scale may have saved): asked for, or the host's when
     // that is not 1. At scale 1 the settings choose, as before.
@@ -361,6 +363,9 @@ pub fn boot(p: Prepared) -> Result {
         if asked || scale != 1 { format!("poly.init.arg=--scale poly.init.arg={scale}") } else { String::new() };
     let kernel_args = format!("{SETTINGS_ARGS} poly.display.scale={scale} {force} {}", extra.join(" "));
     let mut cmd = qemu(&kernel, MEMORY, &append(kernel_args.trim_end()), super::Devices::None, "mon:stdio");
+    if let Some(port) = qmp_port {
+        cmd.arg("-qmp").arg(format!("tcp:127.0.0.1:{port},server,nowait"));
+    }
     cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
     eprintln!("==> screen {}x{} at scale {scale} (--size=WxH, --scale=N)", size.0, size.1);
     // A QMP socket to drive the desktop from outside (scripted checks on a
@@ -376,6 +381,17 @@ pub fn boot(p: Prepared) -> Result {
     }
     let _ = child.wait().map_err(|e| format!("qemu: {e}"))?;
     Ok(())
+}
+
+/// An optional loopback QMP TCP port for interactive desktop measurements.
+fn parse_qmp_port(args: &[String]) -> Result<Option<u16>> {
+    let Some(value) = args.iter().find_map(|a| a.strip_prefix("--qmp-port=")) else { return Ok(None) };
+    let port = value
+        .parse::<u16>()
+        .ok()
+        .filter(|p| *p != 0)
+        .ok_or_else(|| format!("--qmp-port={value}: expected a TCP port from 1 to 65535"))?;
+    Ok(Some(port))
 }
 
 /// The height of QEMU's window title bar, in logical pixels (room left
@@ -1356,6 +1372,14 @@ fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_optional_loopback_qmp_port() {
+        assert_eq!(parse_qmp_port(&[]).unwrap(), None);
+        assert_eq!(parse_qmp_port(&["--qmp-port=4444".into()]).unwrap(), Some(4444));
+        assert!(parse_qmp_port(&["--qmp-port=0".into()]).is_err());
+        assert!(parse_qmp_port(&["--qmp-port=nope".into()]).is_err());
+    }
 
     #[test]
     fn reads_the_window_line() {
