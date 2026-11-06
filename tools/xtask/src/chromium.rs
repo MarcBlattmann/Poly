@@ -1058,7 +1058,7 @@ pub const MEMORY: &str = "4G";
 /// TCG emulates each CPU on a host thread of its own).
 pub const CPUS: Option<u32> = Some(4);
 
-/// `cargo xtask chromium run [--release] [--fresh-disk]`: the desktop in
+/// `cargo xtask chromium run [--release] [--fresh-disk] [--memory=SIZE] [--cpus=N]`: the desktop in
 /// QEMU's window with Chromium in the launcher, the disk's bash on this
 /// terminal (Ctrl-A X quits). Any host.
 fn run(args: &[String]) -> Result {
@@ -1070,11 +1070,12 @@ fn run(args: &[String]) -> Result {
     }
     let initrd = write_initramfs()?;
     let append = format!("{INIT_ARGS} console=ttyS0 poly.terminal=off");
-    let mut cmd = crate::qemu(&kernel, MEMORY, &append, crate::Devices::None, "mon:stdio");
+    let res = crate::resources::Resources::from_args(args)?;
+    let cpus = CPUS.unwrap_or(crate::QEMU_CPUS);
+    eprintln!("{}", res.describe(MEMORY, cpus));
+    let mut cmd =
+        crate::qemu_with(&kernel, &res.memory(MEMORY), res.cpus_or(cpus), &append, crate::Devices::None, "mon:stdio");
     cmd.args(rootdisk::drive_args(&image)).arg("-initrd").arg(&initrd).args(crate::desktop::devices());
-    if let Some(n) = CPUS {
-        cmd.args(["-smp", &n.to_string()]);
-    }
     eprintln!(
         "==> the desktop is in QEMU's window (the Windows key or Ctrl+Space opens the launcher: type \"chromium\"); \
          the disk's bash is here (Ctrl-A X quits)"

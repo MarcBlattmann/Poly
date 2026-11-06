@@ -431,7 +431,7 @@ pub(crate) fn write_initramfs() -> Result<std::result::Result<PathBuf, String>> 
 }
 
 /// Guest memory: GTK 4, Qt and VLC side by side.
-const MEMORY: &str = "2G";
+pub const MEMORY: &str = "2G";
 /// The screen.
 pub const SIZE: (u32, u32) = crate::desktop::SIZE;
 /// What the compositor prints when the desktop is up.
@@ -770,7 +770,8 @@ fn shots_dir() -> PathBuf {
     std::env::var_os("POLY_TOOLKITS_SHOTS").map_or_else(|| root().join("target").join("toolkits"), PathBuf::from)
 }
 
-/// `cargo xtask toolkits [--release] [--fresh-disk] [STEP...]`: boot the
+/// `cargo xtask toolkits [--release] [--fresh-disk] [--memory=SIZE] [--cpus=N]
+/// [STEP...]`: boot the
 /// toolkits' disk to the desktop and the console's bash, run the steps,
 /// power off.
 pub fn command(args: &[String]) -> Result {
@@ -784,7 +785,18 @@ pub fn command(args: &[String]) -> Result {
         make(FILE_NAME)?;
     }
     let initrd = write_initramfs()?.map_err(|why| format!("toolkits: {why}"))?;
-    let mut m = Machine::boot(&kernel, &syms, &image, &initrd, "probe")?;
+    let res = crate::resources::Resources::from_args(args)?;
+    eprintln!("{}", res.describe(MEMORY, crate::QEMU_CPUS));
+    let mut m = Machine::boot_with_init(
+        &kernel,
+        &syms,
+        &image,
+        &initrd,
+        "probe",
+        &res.memory(MEMORY),
+        crate::busybox::INIT_ARGS,
+        res.cpus,
+    )?;
     let started = Instant::now();
     m.s.expect("rootdisk: /dev/vda mounted on /mnt/root")?;
     m.s.expect(READY)?;

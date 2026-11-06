@@ -83,6 +83,7 @@ mod shared;
 mod userfault;
 
 pub use advice::Advice;
+pub use residency::PageKind;
 pub use shared::{AnonShared, SharedFrame};
 pub use userfault::FillError;
 
@@ -686,10 +687,10 @@ impl Memory {
     /// by [`read`](Self::read) and [`write`](Self::write).
     pub fn fault(&self, addr: u64, access: Access) -> Result<(), FaultError> {
         let mut inner = self.inner.lock();
-        self.resolve(&mut inner, addr, access)
+        self.resolve(&mut inner, addr, access, false)
     }
 
-    fn resolve(&self, inner: &mut Inner, addr: u64, access: Access) -> Result<(), FaultError> {
+    fn resolve(&self, inner: &mut Inner, addr: u64, access: Access, forced: bool) -> Result<(), FaultError> {
         let page = poly_vm::page_down(addr);
         // The memory's own frames have a single user until fork shares
         // them; a page-cache page in a private region is the cache's too.
@@ -705,7 +706,8 @@ impl Memory {
             || self.space.translate(page).is_some();
         let state = if present { PageState::Present { refs } } else { PageState::Absent };
         let shared = inner.map.find(addr).is_some_and(|v| v.is_shared());
-        match inner.map.fault(addr, access, state) {
+        let action = if forced { inner.map.fault_forced(addr, state) } else { inner.map.fault(addr, access, state) };
+        match action {
             FaultAction::ZeroFill { page, prot } => {
                 let frame = UserFrame::zeroed().ok_or(FaultError::OutOfMemory)?;
                 self.space.map_owned(page, frame, page_prot(prot)).map_err(map_error)
@@ -789,13 +791,21 @@ impl Memory {
     /// use on a space that need not be loaded (a loader, a debugger); code
     /// acting for the running thread uses `copy_from_user`.
     pub fn read(&self, addr: u64, buf: &mut [u8]) -> Result<(), FaultError> {
-        self.access(addr, buf.len(), Access::Read, |space, at, off, n| space.read(at, &mut buf[off..off + n]))
+        self.access(addr, buf.len(), Access::Read, false, |space, at, off, n| space.read(at, &mut buf[off..off + n]))
     }
 
     /// Copy `data` to user memory at `addr`, bringing pages in as a write
     /// would (the regions must allow writing); see [`read`](Self::read).
     pub fn write(&self, addr: u64, data: &[u8]) -> Result<(), FaultError> {
-        self.access(addr, data.len(), Access::Write, |space, at, off, n| space.write(at, &data[off..off + n]))
+        self.access(addr, data.len(), Access::Write, false, |space, at, off, n| space.write(at, &data[off..off + n]))
+    }
+
+    /// Copy `data` to user memory at `addr` as a debugger does (ptrace(2)
+    /// `PTRACE_POKEDATA`): also into private regions the process may not
+    /// write, whose pages become its own copies and keep their protection
+    /// (`poly_vm::VmMap::fault_forced`).
+    pub fn write_forced(&self, addr: u64, data: &[u8]) -> Result<(), FaultError> {
+        self.access(addr, data.len(), Access::Write, true, |space, at, off, n| space.write(at, &data[off..off + n]))
     }
 
     /// Run `copy(space, at, offset, n)` for each piece of `[addr, addr +
@@ -805,6 +815,7 @@ impl Memory {
         addr: u64,
         len: usize,
         access: Access,
+        forced: bool,
         mut copy: impl FnMut(&AddressSpace, u64, usize, usize) -> Result<(), MapError>,
     ) -> Result<(), FaultError> {
         addr.checked_add(len as u64).ok_or(FaultError::Segv(SegvCode::MapErr))?;
@@ -813,7 +824,7 @@ impl Memory {
         while off < len {
             let at = addr + off as u64;
             let n = ((PAGE_SIZE - at % PAGE_SIZE) as usize).min(len - off);
-            self.resolve(&mut inner, at, access)?;
+            self.resolve(&mut inner, at, access, forced)?;
             copy(&self.space, at, off, n).map_err(map_error)?;
             off += n;
         }

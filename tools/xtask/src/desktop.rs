@@ -51,7 +51,7 @@
 //! Screenshots go to `$POLY_DESKTOP_SHOTS` (default `target/desktop/`) as
 //! PNGs, one per step.
 
-use super::{Boot, Result, Symbols, boot_with, has_desktop, initramfs, qemu, root, screen};
+use super::{Boot, Result, Symbols, boot_with, has_desktop, initramfs, root, screen};
 use crate::hostscreen;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -82,7 +82,7 @@ const NOTIFY_FILE: &str = "[Desktop Entry]\nType=Application\nName=Send Test Not
     Keywords=notification;test;\n";
 /// Guest memory: the shadow frame buffer and the clients need more than
 /// the default.
-const MEMORY: &str = "512M";
+pub const MEMORY: &str = "512M";
 
 /// The kernel command line of a desktop boot.
 pub fn append(extra: &str) -> String {
@@ -292,7 +292,7 @@ fn image_files(test_apps: bool) -> Result<initramfs::Tree> {
 pub const STATE_FILE: &str = "poly-desktop-state.img";
 
 /// `cargo xtask desktop [--release] [--fresh-state] [--size=WxH]
-/// [--scale=N] [--qmp-port=PORT] [kernel args...]`: boot into the desktop in a QEMU window
+/// [--scale=N] [--memory=SIZE] [--cpus=N] [--qmp-port=PORT] [kernel args...]`: boot into the desktop in a QEMU window
 /// (no window without a desktop: then a VNC display on port 5900). The
 /// settings live on a small disk, `target/poly-desktop-state.img`, so they
 /// survive from one run to the next (`--fresh-state` starts again with the
@@ -305,6 +305,10 @@ pub const STATE_FILE: &str = "poly-desktop-state.img";
 /// screen ([`hostscreen::fit`]). `--scale=N` and `--size=WxH` override them.
 /// A scale other than 1 is given to the compositor as `--scale`, so it wins
 /// over the scale in the saved settings.
+///
+/// `--memory=SIZE` and `--cpus=N` give the guest more (or less) than the
+/// default [`MEMORY`] and `QEMU_CPUS` (ADR 0141); the desktop boot tests keep
+/// their own sizes.
 ///
 /// `--build-only` builds everything and stops before the boot.
 pub fn command(args: &[String]) -> Result {
@@ -329,6 +333,8 @@ pub struct Prepared {
     host: Option<hostscreen::Screen>,
     qmp_port: Option<u16>,
     extra: Vec<String>,
+    /// `--memory=` and `--cpus=` (ADR 0141).
+    resources: crate::resources::Resources,
 }
 
 /// The options of [`command`] read, and everything built for the boot: the
@@ -346,6 +352,7 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
         }
         None => None,
     };
+    let resources = crate::resources::Resources::from_args(args)?;
     let host = hostscreen::main_screen();
     // (size, scale) for the host's main screen.
     let fitted = host.map(|h| hostscreen::fit(SIZE, h, WINDOW_TITLE));
@@ -380,19 +387,27 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
     });
     let (kernel, image) = (kernel?, image?);
     disk?;
-    Ok(Prepared { kernel, image, state, size, scale, asked: asked.is_some(), host, qmp_port, extra })
+    Ok(Prepared { kernel, image, state, size, scale, asked: asked.is_some(), host, qmp_port, extra, resources })
 }
 
 /// Boot what [`prepare`] made, in QEMU's window.
 pub fn boot(p: Prepared) -> Result {
-    let Prepared { kernel, image, state, size, scale, asked, host, qmp_port, extra } = p;
+    let Prepared { kernel, image, state, size, scale, asked, host, qmp_port, extra, resources } = p;
     // The compositor's `--scale` wins over the saved settings' scale (which
     // a run at another scale may have saved): asked for, or the host's when
     // that is not 1. At scale 1 the settings choose, as before.
     let force =
         if asked || scale != 1 { format!("poly.init.arg=--scale poly.init.arg={scale}") } else { String::new() };
     let kernel_args = format!("{SETTINGS_ARGS} poly.display.scale={scale} {force} {}", extra.join(" "));
-    let mut cmd = qemu(&kernel, MEMORY, &append(kernel_args.trim_end()), super::Devices::None, "mon:stdio");
+    let mut cmd = crate::qemu_with(
+        &kernel,
+        &resources.memory(MEMORY),
+        resources.cpus_or(crate::QEMU_CPUS),
+        &append(kernel_args.trim_end()),
+        super::Devices::None,
+        "mon:stdio",
+    );
+    eprintln!("{}", resources.describe(MEMORY, crate::QEMU_CPUS));
     if let Some(port) = qmp_port {
         cmd.arg("-qmp").arg(format!("tcp:127.0.0.1:{port},server,nowait"));
     }

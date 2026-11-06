@@ -13,6 +13,19 @@
 use super::{Access, Backing, Memory, PAGE_SIZE, Prot};
 use poly_vm::FutureLock;
 
+/// What is at a page ([`Memory::page_kind`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageKind {
+    /// No region.
+    Unmapped,
+    /// A region, no page yet.
+    Absent,
+    /// A page of private anonymous memory that was never written.
+    Zero,
+    /// A page.
+    Present,
+}
+
 /// Why [`Memory::lock`] or [`Memory::residency`] failed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RangeError {
@@ -100,6 +113,24 @@ impl Memory {
         let inner = self.inner.lock();
         let in_range = if len == 0 { 0 } else { inner.map.locked_bytes_in(addr, addr.saturating_add(len)) };
         (inner.map.locked_bytes(), in_range, inner.map.mapped_bytes(), inner.map.lock_future())
+    }
+
+    /// What is at the page holding `addr`, for move_pages(2); nothing is
+    /// brought in.
+    pub fn page_kind(&self, addr: u64) -> PageKind {
+        let page = poly_vm::page_down(addr);
+        let inner = self.inner.lock();
+        let Some(v) = inner.map.find(page) else { return PageKind::Unmapped };
+        if inner.parked.contains_key(&page) || inner.shared.contains_key(&page) || inner.cached.contains_key(&page) {
+            return PageKind::Present;
+        }
+        match self.space.translate(page) {
+            None => PageKind::Absent,
+            // Private anonymous memory never written: it only reads as
+            // zeros so far (Linux maps its shared zero page there).
+            Some(m) if matches!(v.backing, Backing::Anonymous) && m.owned && !m.dirty => PageKind::Zero,
+            Some(_) => PageKind::Present,
+        }
     }
 
     /// mincore(2): 1 or 0 into `out[i]` for whether page `i` from `addr`

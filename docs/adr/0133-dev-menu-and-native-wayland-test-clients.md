@@ -103,6 +103,18 @@ Enter, or else I can change them. Run things in parallel where possible."
   same flags. The pipeline tool itself needs a Unix host. The menu lists
   the image's apps.
 
+### Resources (ADR 0141)
+
+- The interactive entries (desktop, Chromium, toolkits, the kernel shell,
+  BusyBox, root disk bash) have a "Resources" block: **Memory** (auto, 512M to
+  16G, any size typed) and **CPUs** (auto, 1 to the host's cores, 16 at most).
+  Choices the host cannot give are greyed with the reason; both are saved in
+  `target/poly-start.json` (`memory`, `cpus`; older files give `auto`) and
+  passed as `--memory=SIZE --cpus=N`, which the subcommands take too. Boot
+  tests and CI keep their fixed sizes. What the kernel does with them, and
+  why a bigger disk is not offered, is in
+  [ADR 0141](0141-memory-and-cpus-for-interactive-boots-and-the-dev-menu.md).
+
 ## Consequences
 
 - One command to remember. The menu is also the list of what each host

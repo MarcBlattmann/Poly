@@ -219,27 +219,63 @@ enum Step {
 /// `timers`, for [`crate::sys::time::count_taken`].
 fn next_step(p: &mut LinuxProcess, tid: i32, taken: &mut Vec<u32>, timers: &mut Vec<TakenTimer>) -> Step {
     while let Some(info) = p.dequeue(tid) {
-        let signal = info.signal();
-        taken.push(signal);
+        taken.push(info.signal());
         timers.extend(crate::time::timers::signal_taken(p, &info));
-        let action = p.actions.get(signal);
-        match disposition(signal, &action) {
-            Disposition::Ignore | Disposition::Default(DefaultAction::Ignore | DefaultAction::Continue) => {}
-            Disposition::Default(DefaultAction::Stop) => return Step::Stop(signal),
-            Disposition::Default(DefaultAction::Terminate) => return Step::Kill(signal, false),
-            Disposition::Default(DefaultAction::Core) => return Step::Kill(signal, true),
-            Disposition::Handler => {
-                if action.flags & SA_RESETHAND != 0 {
-                    let reset = SigAction { handler: SIG_DFL, flags: action.flags & !SA_SIGINFO, ..action };
-                    p.actions.set(signal, reset);
-                }
-                let thread = p.thread_mut(tid);
-                let saved_mask = thread.saved_mask.take().unwrap_or(thread.mask);
-                return Step::Handle { info, action, saved_mask, current_mask: thread.mask, altstack: thread.altstack };
-            }
+        if let Some(step) = act_on(p, tid, info) {
+            return step;
         }
     }
     Step::None
+}
+
+/// What delivering `info` to thread `tid` does: `None` for an ignored
+/// signal (dropped), else the step (see [`next_step`]).
+fn act_on(p: &mut LinuxProcess, tid: i32, info: SigInfo) -> Option<Step> {
+    let signal = info.signal();
+    let action = p.actions.get(signal);
+    match disposition(signal, &action) {
+        Disposition::Ignore | Disposition::Default(DefaultAction::Ignore | DefaultAction::Continue) => None,
+        Disposition::Default(DefaultAction::Stop) => Some(Step::Stop(signal)),
+        Disposition::Default(DefaultAction::Terminate) => Some(Step::Kill(signal, false)),
+        Disposition::Default(DefaultAction::Core) => Some(Step::Kill(signal, true)),
+        Disposition::Handler => {
+            if action.flags & SA_RESETHAND != 0 {
+                let reset = SigAction { handler: SIG_DFL, flags: action.flags & !SA_SIGINFO, ..action };
+                p.actions.set(signal, reset);
+            }
+            let thread = p.thread_mut(tid);
+            let saved_mask = thread.saved_mask.take().unwrap_or(thread.mask);
+            Some(Step::Handle { info, action, saved_mask, current_mask: thread.mask, altstack: thread.altstack })
+        }
+    }
+}
+
+/// [`next_step`] for a thread a tracer traces (ptrace(2), ADR 0135): a
+/// pending `PTRACE_INTERRUPT` or first stop comes first, and every signal
+/// but `SIGKILL` stops the thread before it is delivered; the tracer
+/// decides which signal, if any, is then delivered.
+fn traced_step(k: &mut dyn LinuxKernel, tid: i32, taken: &mut Vec<u32>, timers: &mut Vec<TakenTimer>) -> Step {
+    loop {
+        crate::sys::ptrace::event_stops(k);
+        let info = with_own(k, |p| {
+            let info = p.dequeue(tid)?;
+            taken.push(info.signal());
+            timers.extend(crate::time::timers::signal_taken(p, &info));
+            Some(info)
+        });
+        let Some(info) = info else { return Step::None };
+        let info = if info.signal() == SIGKILL {
+            info
+        } else {
+            match crate::sys::ptrace::signal_stop(k, info) {
+                Some(info) => info,
+                None => continue,
+            }
+        };
+        if let Some(step) = with_own(k, |p| act_on(p, tid, info)) {
+            return step;
+        }
+    }
 }
 
 /// Called by the kernel each time a thread of a Linux process is about to
@@ -265,8 +301,13 @@ pub fn exit_to_user(k: &mut dyn LinuxKernel) -> ExitToUser {
     let mut pending_restart = with_own(k, |p| p.thread_mut(tid).restart.take());
     let mut taken = Vec::new();
     let mut timers = Vec::new();
+    let traced = crate::sys::ptrace::is_traced(k);
     loop {
-        let mut step = with_own(k, |p| next_step(p, tid, &mut taken, &mut timers));
+        let mut step = if traced {
+            traced_step(k, tid, &mut taken, &mut timers)
+        } else {
+            with_own(k, |p| next_step(p, tid, &mut taken, &mut timers))
+        };
         // Timer signals taken: their overrun counts are fixed now (also in
         // the siginfo a handler gets).
         for t in timers.drain(..) {
@@ -294,10 +335,16 @@ pub fn exit_to_user(k: &mut dyn LinuxKernel) -> ExitToUser {
                         t.mask = mask;
                     }
                 });
+                if traced {
+                    crate::sys::ptrace::left_kernel(k);
+                }
                 return ExitToUser::Return;
             }
             Step::Stop(signal) => k.stop_process(signal),
             Step::Kill(signal, core) => {
+                if traced && signal != SIGKILL {
+                    crate::sys::ptrace::exit_event(k, u64::from(signal));
+                }
                 k.kill_process(signal, core);
                 return ExitToUser::Killed;
             }

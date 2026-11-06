@@ -8,7 +8,7 @@
 //!                       choice (target/poly-start.json), so Enter runs it again; --last runs it
 //!                       without the menu, --print shows the command it would run (start.rs)
 //!   build [--release]   build the native programs (userland/native, native.rs) and the kernel
-//!   run   [--release] [--gdb] [--no-disk] [--headless] [--virtio-gpu] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
+//!   run   [--release] [--gdb] [--no-disk] [--headless] [--virtio-gpu] [--memory=SIZE] [--cpus=N] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
 //!                       with the test devices and a virtio-net NIC on QEMU's user
 //!                       networking attached (--no-disk: without them),
@@ -22,13 +22,15 @@
 //!                       add console=tty1 for the screen; --disk-root [--fresh-disk]: BusyBox's
 //!                       init mounts the root disk (made if missing) and runs its bash, see
 //!                       rootdisk.rs); --virtio-gpu: a virtio GPU instead of the
-//!                       standard VGA (ADR 0102)
+//!                       standard VGA (ADR 0102); --memory=SIZE (4G, 3072M) and --cpus=N: the
+//!                       guest's RAM and virtual CPUs instead of the defaults, as on desktop,
+//!                       chromium run and toolkits (resources.rs, ADR 0141)
 //!   screenshot [--release] [--virtio-gpu] [--out <file>] [--wait <text>] [kernel args...]
 //!                       boot headless, wait for a serial line containing <text>
 //!                       (default: the self-test's verdict), save the screen to <file>
 //!                       (default target/poly-screen.png; .ppm for PPM) and quit;
 //!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
-//!   desktop [--release] [--test-apps] [--fresh-state] [kernel args...]
+//!   desktop [--release] [--test-apps] [--fresh-state] [--memory=SIZE] [--cpus=N] [kernel args...]
 //!                       boot straight into Poly's desktop: the Wayland compositor and shell on a
 //!                       virtio GPU through DRM/KMS, a virtio keyboard and tablet (desktop.rs,
 //!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop; the settings
@@ -55,7 +57,7 @@
 //!   root-disk           write the persistent root disk image target/poly-root-disk.img
 //!                       (the host's bash, coreutils, Python, gcc; rootdisk.rs)
 //!   root-disk-test      only the root disk boot test of `test` (rootdisk.rs)
-//!   toolkits [--release] [--fresh-disk] [STEP...]
+//!   toolkits [--release] [--fresh-disk] [--memory=SIZE] [--cpus=N] [STEP...]
 //!                       boot the toolkits' root disk (GTK, Qt, VLC; toolkits.rs, ADR 0120)
 //!                       to the desktop and the console's bash, and run the steps
 //!                       (run:LINE send:LINE expect:TEXT shot:NAME click:X,Y key:QCODE sleep:S)
@@ -118,6 +120,7 @@ mod nls;
 mod ntdll;
 mod programs;
 mod progress;
+mod resources;
 mod rootdisk;
 mod screen;
 mod sevenzip;
@@ -442,10 +445,18 @@ impl Devices<'_> {
 /// character device) and `devices` attached. The machine has QEMU's standard VGA; add
 /// `-display none` for no window.
 fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial: &str) -> Command {
+    qemu_with(kernel, memory, QEMU_CPUS, append, devices, serial)
+}
+
+/// [`qemu`] with `cpus` virtual CPUs. The interactive boots (`desktop`, `run`,
+/// `chromium run`, `toolkits`) call this with the memory and CPUs of
+/// [`resources::Resources`] (`--memory=`, `--cpus=`, ADR 0141); the boot
+/// tests call [`qemu`], whose sizes are fixed.
+fn qemu_with(kernel: &Path, memory: &str, cpus: u32, append: &str, devices: Devices<'_>, serial: &str) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
     cmd.args(accel::get().qemu_args())
         .args(["-machine", "q35", "-m", memory, "-serial", serial, "-no-reboot"])
-        .args(["-smp", &QEMU_CPUS.to_string()])
+        .args(["-smp", &cpus.to_string()])
         .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
         .arg("-kernel")
         .arg(kernel)
@@ -501,14 +512,17 @@ fn run(args: &[String]) -> Result {
             "--disk-root" => disk_root = true,
             "--fresh-disk" => fresh_disk = true,
             "--virtio-gpu" => virtio_gpu = true,
+            // Read below by `Resources::from_args`.
+            flag if resources::is_flag(flag) => {}
             flag if flag.starts_with("--initrd=") => initrd = Some(PathBuf::from(&flag["--initrd=".len()..])),
             flag if flag.starts_with("--") => return Err(format!("run: unknown option {flag}")),
             arg => cmdline.push(arg),
         }
     }
+    let res = resources::Resources::from_args(args)?;
     let kernel = build_kernel(release)?;
     if disk_root {
-        return run_disk_root(&kernel, fresh_disk, gdb, &cmdline);
+        return run_disk_root(&kernel, fresh_disk, gdb, &cmdline, &res);
     }
     let disk = if with_disk { Some(test_disk()?) } else { None };
     let devices = disk.as_deref().map_or(Devices::None, Devices::Test);
@@ -533,7 +547,15 @@ fn run(args: &[String]) -> Result {
     }
     // `mon:stdio` shares the terminal between the serial port and QEMU's
     // monitor: Ctrl-A C switches between them, Ctrl-A X quits.
-    let mut cmd = qemu(&kernel, DEFAULT_MEMORY, &cmdline.join(" "), devices, "mon:stdio");
+    eprintln!("{}", res.describe(DEFAULT_MEMORY, QEMU_CPUS));
+    let mut cmd = qemu_with(
+        &kernel,
+        &res.memory(DEFAULT_MEMORY),
+        res.cpus_or(QEMU_CPUS),
+        &cmdline.join(" "),
+        devices,
+        "mon:stdio",
+    );
     if with_disk {
         cmd.args(net::nic_args(None, false));
     }
@@ -571,7 +593,7 @@ fn run(args: &[String]) -> Result {
 /// (`target/poly-root-disk.img`, made if missing or with `--fresh-disk`)
 /// and runs its bash on the serial console (rootdisk.rs). No window, no
 /// test devices; the network on QEMU's user networking.
-fn run_disk_root(kernel: &Path, fresh: bool, gdb: bool, cmdline: &[&str]) -> Result {
+fn run_disk_root(kernel: &Path, fresh: bool, gdb: bool, cmdline: &[&str], res: &resources::Resources) -> Result {
     let image = root().join("target").join(rootdisk::FILE_NAME);
     if fresh || !image.exists() {
         rootdisk::make(rootdisk::FILE_NAME)?;
@@ -587,7 +609,9 @@ fn run_disk_root(kernel: &Path, fresh: bool, gdb: bool, cmdline: &[&str]) -> Res
         append.push(' ');
         append.push_str(a);
     }
-    let mut cmd = qemu(kernel, rootdisk::MEMORY, &append, Devices::None, "mon:stdio");
+    eprintln!("{}", res.describe(rootdisk::MEMORY, QEMU_CPUS));
+    let mut cmd =
+        qemu_with(kernel, &res.memory(rootdisk::MEMORY), res.cpus_or(QEMU_CPUS), &append, Devices::None, "mon:stdio");
     cmd.args(rootdisk::drive_args(&image)).args(net::nic_args(None, false));
     cmd.arg("-initrd").arg(&initrd).args(["-display", "none"]);
     if gdb {

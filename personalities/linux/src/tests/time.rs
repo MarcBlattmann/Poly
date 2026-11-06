@@ -169,7 +169,54 @@ fn gettimeofday_time_and_settimeofday() {
     let mut k = FakeKernel::new();
     k.poke(OUT, &Timeval { sec: 1_900_000_000, usec: 0 }.to_bytes());
     assert_eq!(sys(&mut k, nr::SETTIMEOFDAY, &[OUT, 0]), Err(Errno::EPERM));
-    assert_eq!(sys(&mut k, nr::SETTIMEOFDAY, &[0, 0]), Ok(0), "setting nothing needs no privilege");
+    assert_eq!(sys(&mut k, nr::SETTIMEOFDAY, &[0, 0]), Err(Errno::EPERM), "setting nothing needs the privilege too");
+    // The arguments are checked before the privilege, the time zone's
+    // range after it.
+    k.poke(OUT2, &Timezone { minuteswest: 901, dsttime: 0 }.to_bytes());
+    assert_eq!(sys(&mut k, nr::SETTIMEOFDAY, &[0, OUT2]), Err(Errno::EPERM));
+    k.poke(OUT, &Timeval { sec: 0x7fff_ffff_ffff, usec: 0 }.to_bytes());
+    assert_eq!(sys(&mut k, nr::SETTIMEOFDAY, &[OUT, OUT2]), Err(Errno::EINVAL));
+    k.poke(OUT, &Timeval { sec: 1, usec: 1_000_000 }.to_bytes());
+    assert_eq!(sys(&mut k, nr::SETTIMEOFDAY, &[OUT, UNMAPPED]), Err(Errno::EINVAL), "tv before tz is read");
+    assert_eq!(sys(&mut k, nr::SETTIMEOFDAY, &[UNMAPPED, OUT2]), Err(Errno::EFAULT));
+}
+
+#[test]
+fn clock_settime_order_and_cpu_clocks() {
+    let mut k = FakeKernel::new();
+    assert_eq!(sys(&mut k, nr::CLOCK_SETTIME, &[id::CLOCK_MONOTONIC as u64, UNMAPPED]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::CLOCK_SETTIME, &[(-1i64) as u64, UNMAPPED]), Err(Errno::EINVAL));
+    let t = put_ts(&mut k, TS, 0x7fff_ffff_ffff, 0);
+    assert_eq!(sys(&mut k, nr::CLOCK_SETTIME, &[0, t]), Err(Errno::EINVAL), "too large, before EPERM");
+    let mut k = root();
+    k.cpu = Some([CpuTimes::default(); 3]);
+    let t = put_ts(&mut k, TS, 1_800_000_000, 0);
+    // The caller's process (-6) and thread (-2) CPU-time clocks.
+    for clock in [-6i64, -2] {
+        assert_eq!(sys(&mut k, nr::CLOCK_SETTIME, &[clock as u64, t]), Err(Errno::EPERM), "clock {clock}");
+    }
+}
+
+#[test]
+fn adjtimex_reads_and_adjusts() {
+    use crate::sys::timex::*;
+    let mut k = FakeKernel::new();
+    assert_eq!(sys(&mut k, nr::ADJTIMEX, &[OUT]), Ok(TIME_ERROR));
+    let word = |k: &FakeKernel, at: u64| i64::from_le_bytes(k.peek(OUT + at, 8).try_into().unwrap());
+    assert_eq!((word(&k, 64), word(&k, 88), word(&k, 72)), (MAXFREQ_SCALED, 10_000, 1_700_000_000));
+    k.poke(OUT, &ADJ_TICK.to_le_bytes());
+    assert_eq!(sys(&mut k, nr::ADJTIMEX, &[OUT]), Err(Errno::EPERM));
+    assert_eq!(sys(&mut k, nr::ADJTIMEX, &[UNMAPPED]), Err(Errno::EFAULT));
+    // clock_adjtime: the struct first, then the clock.
+    assert_eq!(sys(&mut k, nr::CLOCK_ADJTIME, &[100, UNMAPPED]), Err(Errno::EFAULT));
+    k.poke(OUT, &0u32.to_le_bytes());
+    assert_eq!(sys(&mut k, nr::CLOCK_ADJTIME, &[0, OUT]), Ok(TIME_ERROR));
+    for clock in [1, 2, 3, 4, 5, 6, 7, 8, 9, 11] {
+        assert_eq!(sys(&mut k, nr::CLOCK_ADJTIME, &[clock, OUT]), Err(Errno::EOPNOTSUPP), "clock {clock}");
+    }
+    for clock in [10, 12, 100] {
+        assert_eq!(sys(&mut k, nr::CLOCK_ADJTIME, &[clock, OUT]), Err(Errno::EINVAL), "clock {clock}");
+    }
 }
 
 // ---- sleeping ------------------------------------------------------------

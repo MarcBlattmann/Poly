@@ -172,6 +172,25 @@ pub fn mapping(file: &OpenFile, offset: u64, len: u64) -> Option<Result<Arc<dyn 
     Some(Ok(source))
 }
 
+/// New ring memory of `len` bytes (rounded up to pages), as io_uring's
+/// (also a perf event's ring, `perf.rs`).
+pub fn ring(len: usize) -> Arc<dyn RingMemory> {
+    let rounded = len.div_ceil(PAGE).max(1) * PAGE;
+    Arc::new(Region { pages: Arc::new(AnonShared::new(rounded as u64)), len: rounded })
+}
+
+/// The pages behind ring memory made by [`ring`], to map.
+pub fn ring_pages(r: &Arc<dyn RingMemory>) -> Option<Arc<dyn PageSource>> {
+    let region = r.as_any().downcast_ref::<Region>()?;
+    let source: Arc<dyn PageSource> = region.pages.clone();
+    Some(source)
+}
+
+/// Whether some mapping still holds the pages of ring memory `r`.
+pub fn ring_mapped(r: &Arc<dyn RingMemory>) -> bool {
+    r.as_any().downcast_ref::<Region>().is_some_and(|region| Arc::strong_count(&region.pages) > 1)
+}
+
 /// Counts the wake-ups of one file and kicks the instance at each.
 struct WatchWaker {
     count: AtomicU64,
@@ -208,8 +227,7 @@ impl Watch for FileWatch {
 
 impl UringKernel for Thread<'_> {
     fn ring_memory(&mut self, len: usize) -> Result<Arc<dyn RingMemory>, Errno> {
-        let rounded = len.div_ceil(PAGE).max(1) * PAGE;
-        Ok(Arc::new(Region { pages: Arc::new(AnonShared::new(rounded as u64)), len: rounded }))
+        Ok(ring(len))
     }
 
     fn install_ring(&mut self, instance: Arc<Instance>) -> Result<i32, Errno> {
