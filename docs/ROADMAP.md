@@ -118,7 +118,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 ## Phase 6: Graphics, input, audio and the desktop
 
 - [x] ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)
-- [x] ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app
+- [x] ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app; apps that ask to draw their own (Chromium) get none (ADR 0144)
 - [x] virtio-gpu driver: modesetting and 2D framebuffer
 - [x] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
 - [x] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged (ADR 0108, ADR 0115: kmscube renders with Mesa's kms_swrast on `/dev/dri/card0`, boot group `mesa`)

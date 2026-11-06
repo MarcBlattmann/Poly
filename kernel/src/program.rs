@@ -23,6 +23,7 @@ use crate::user::exec::{self, ExecError, ExecParams};
 use crate::user::memory::PageSource;
 use crate::{fs, kprintln, qemu, testrun, thread};
 use alloc::format;
+use poly_personality_linux::task::exec as shebang;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -161,16 +162,42 @@ fn prepare_full(
     parent: Option<&Process>,
 ) -> Result<Prepared, ExecPathError> {
     let ppid = parent.map_or(0, |p| p.pid);
-    let file = open_exec(path, parent).map_err(ExecPathError::Open)?;
-    let mut header = alloc::vec![0u8; HEADER_BYTES];
-    let mut len = 0;
-    while len < header.len() {
-        match file.read_at(len as u64, &mut header[len..]) {
-            Ok(0) => break,
-            Ok(n) => len += n,
-            Err(e) => return Err(ExecPathError::Open(e)),
+    // A `#!` script runs its interpreter with the script's path as an
+    // argument, as execve(2) does (up to MAX_SCRIPT_DEPTH scripts deep):
+    // the launcher's entries often point at scripts (`/usr/bin/chromium`).
+    let mut script: Option<(Vec<u8>, Vec<Vec<u8>>)> = None;
+    let mut depth = 0;
+    let (file, header, len) = loop {
+        let at = script.as_ref().map_or(path, |(p, _)| p.as_slice());
+        let file = open_exec(at, parent).map_err(ExecPathError::Open)?;
+        let mut header = alloc::vec![0u8; HEADER_BYTES];
+        let mut len = 0;
+        while len < header.len() {
+            match file.read_at(len as u64, &mut header[len..]) {
+                Ok(0) => break,
+                Ok(n) => len += n,
+                Err(e) => return Err(ExecPathError::Open(e)),
+            }
         }
-    }
+        let Ok(Some(line)) = shebang::parse_shebang(&header[..len]) else { break (file, header, len) };
+        if depth == shebang::MAX_SCRIPT_DEPTH {
+            return Err(ExecPathError::Unsupported("#! scripts nested too deep".into()));
+        }
+        depth += 1;
+        let args = match &script {
+            Some((p, a)) => shebang::script_argv(&line, p, a),
+            None => shebang::script_argv(&line, path, &argv.iter().map(|a| a.to_vec()).collect::<Vec<_>>()),
+        };
+        script = Some((line.interpreter, args));
+    };
+    let script_args: Vec<&[u8]>;
+    let (path, argv) = match &script {
+        Some((p, a)) => {
+            script_args = a.iter().map(Vec::as_slice).collect();
+            (p.as_slice(), script_args.as_slice())
+        }
+        None => (path, argv),
+    };
     let format = poly_binfmt::detect(&header[..len])
         .map_err(|_| ExecPathError::Unsupported("not an executable Poly knows (no ELF, PE or Mach-O header)".into()))?;
     match format.personality() {
@@ -217,7 +244,7 @@ fn prepare_full(
             return Ok(Prepared::Native { process, image });
         }
         Some(p) => return Err(ExecPathError::Unsupported(format!("{} programs cannot run yet", p.name()))),
-        None => return Err(ExecPathError::Unsupported("#! scripts are not supported yet".into())),
+        None => return Err(ExecPathError::Unsupported("a #! script without an interpreter".into())),
     }
     let source = FileSource::of(&file);
     let open_interp = |interp: &[u8]| -> Result<Arc<dyn PageSource>, ExecError> {
