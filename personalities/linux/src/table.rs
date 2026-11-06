@@ -232,6 +232,19 @@ pub const GROUPS: &[&[(u64, Handler)]] = &[
     crate::sys::userfaultfd::CALLS,
     crate::sys::uring::CALLS,
     crate::sys::mqueue::CALLS,
+    crate::sys::ptrace::CALLS,
+    crate::sys::perf::CALLS,
+    crate::sys::probe::CALLS,
+    crate::sys::ldt::CALLS,
+    crate::sys::keys::CALLS,
+    crate::sys::lsm::CALLS,
+    crate::sys::numa::CALLS,
+    crate::sys::procmem::CALLS,
+    crate::sys::timex::CALLS,
+    crate::sys::syslog::CALLS,
+    crate::sys::bpf::CALLS,
+    crate::sys::fsinfo::CALLS,
+    crate::sys::hostadmin::CALLS,
 ];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
@@ -366,7 +379,7 @@ mod tests {
             assert!(handler(number).is_some());
         }
         assert_eq!(implemented().count(), GROUPS.iter().map(|g| g.len()).sum::<usize>());
-        assert!(handler(nr::SWAPON).is_none());
+        assert!(handler(nr::KEXEC_LOAD).is_none());
         assert!(handler(TABLE_LEN as u64).is_none());
         assert!(handler(u64::MAX).is_none());
     }

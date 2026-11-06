@@ -68,7 +68,7 @@ kernel, and all three share one core. More detail in
 
 <p>
   <a href="docs/ROADMAP.md"><img alt="roadmap: 100 of 159 milestones" src="docs/progress/badge-roadmap.svg"></a>
-  <img alt="Linux API coverage: 88.2%" src="docs/progress/badge-linux.svg">
+  <img alt="Linux API coverage: 97.0%" src="docs/progress/badge-linux.svg">
   <img alt="Windows API coverage: 0.1%" src="docs/progress/badge-windows.svg">
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
@@ -94,13 +94,13 @@ kernel, and all three share one core. More detail in
 
 | OS | API coverage | App-weighted | Traces passing |
 |---|---:|---:|---:|
-| Linux | 88.2% | n/a | 0 / 0 |
+| Linux | 97.0% | n/a | 0 / 0 |
 | Windows | 0.1% | n/a | 0 / 0 |
 | macOS | 0.0% | n/a | 0 / 0 |
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | N/A by design | App-provided |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| Linux | syscalls | 370 | 321 | 0 | 40 | 3 | 6 | 0 |
+| Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | runs unchanged (glibc, Mesa, GTK, Qt) | | | | | | |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 3 | 1,808 | 0 | 0 |
 | Windows | user-mode DLL exports | 130,147 | 72 | 4 | 2,747 | 54,048 | 0 | 73,276 |

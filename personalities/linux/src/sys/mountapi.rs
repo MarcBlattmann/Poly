@@ -31,6 +31,7 @@ use alloc::vec::Vec;
 pub const CALLS: &[(u64, Handler)] = &[
     (nr::PIVOT_ROOT, pivot_root),
     (nr::OPEN_TREE, open_tree),
+    (nr::OPEN_TREE_ATTR, open_tree_attr),
     (nr::MOVE_MOUNT, move_mount),
     (nr::FSOPEN, fsopen),
     (nr::FSCONFIG, fsconfig),
@@ -80,6 +81,79 @@ pub fn open_tree(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let at = path_at(k, a.fd(0), a.ptr(1), flags & AT_EMPTY_PATH != 0, flags & AT_SYMLINK_NOFOLLOW == 0)?;
     let clone = clone.then_some(flags & AT_RECURSIVE != 0);
     admin(k)?.open_tree(&at, clone, flags & OPEN_TREE_CLOEXEC != 0).map(|fd| fd as u64)
+}
+
+/// open_tree_attr(dfd, path, flags, attr, size): open_tree(2), then
+/// mount_setattr(2) on the result (ADR 0135). With no attributes it is
+/// open_tree. Order, as the spec sheet gives it: the flags and a NULL
+/// `attr` with a size (`EINVAL`), the privilege for `OPEN_TREE_CLONE`,
+/// the path (so path errors come before any check of the attributes),
+/// then the attributes' size and contents as for mount_setattr(2), and
+/// last the privilege to change a mount that is not a clone. A failure
+/// after the tree was opened closes the descriptor again.
+pub fn open_tree_attr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let flags = a.uint(2);
+    let known =
+        OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC | AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_RECURSIVE;
+    let clone = flags & OPEN_TREE_CLONE != 0;
+    let (attr, size) = (a.ptr(3), a.ulong(4));
+    if flags & !known != 0 || (flags & AT_RECURSIVE != 0 && !clone) || (attr.is_null() && size != 0) {
+        return Err(Errno::EINVAL);
+    }
+    if clone {
+        require_mount(k)?;
+    }
+    let at = path_at(k, a.fd(0), a.ptr(1), flags & AT_EMPTY_PATH != 0, flags & AT_SYMLINK_NOFOLLOW == 0)?;
+    let fd = admin(k)?.open_tree(&at, clone.then_some(flags & AT_RECURSIVE != 0), flags & OPEN_TREE_CLOEXEC != 0)?;
+    if attr.is_null() {
+        return Ok(fd as u64);
+    }
+    match set_attributes(k, fd, attr, size, clone, flags & AT_RECURSIVE != 0) {
+        Ok(()) => Ok(fd as u64),
+        Err(e) => {
+            let _ = k.close(fd);
+            Err(e)
+        }
+    }
+}
+
+/// The second half of open_tree_attr(2): check `struct mount_attr` and
+/// apply it to the tree open on `fd`.
+fn set_attributes(
+    k: &mut dyn LinuxKernel,
+    fd: i32,
+    attr: UserPtr,
+    size: u64,
+    clone: bool,
+    recursive: bool,
+) -> Result<(), Errno> {
+    if size < MOUNT_ATTR_SIZE_VER0 as u64 {
+        return Err(Errno::EINVAL);
+    }
+    if size > PAGE as u64 {
+        return Err(Errno::E2BIG);
+    }
+    let mut buf = vec![0u8; size as usize];
+    k.copy_from_user(attr, &mut buf)?;
+    if buf[MOUNT_ATTR_SIZE_VER0..].iter().any(|&b| b != 0) {
+        return Err(Errno::E2BIG);
+    }
+    let change = AttrChange::from_bytes(&buf[..MOUNT_ATTR_SIZE_VER0]);
+    // An id-mapped mount names a user namespace by descriptor (`userns_fd`
+    // at 24): one that is not open is `EBADF`. Poly has no id-mapped
+    // mounts, so an open one is refused like mount_setattr(2) does.
+    let idmap = (change.set | change.clr) & MOUNT_ATTR_IDMAP;
+    AttrChange { set: change.set & !idmap, clr: change.clr & !idmap, ..change }.check()?;
+    if idmap != 0 {
+        let userns_fd = u32::from_le_bytes(buf[24..28].try_into().expect("4 bytes")) as i32;
+        k.fs().ok_or(Errno::ENOSYS)?.status_flags(userns_fd)?;
+        return Err(Errno::EINVAL);
+    }
+    if !clone {
+        require_mount(k)?;
+    }
+    let here = PathAt { dirfd: fd, path: Vec::new(), follow: true };
+    admin(k)?.mount_setattr(&here, recursive, &change)
 }
 
 /// move_mount(from_dfd, from_path, to_dfd, to_path, flags)

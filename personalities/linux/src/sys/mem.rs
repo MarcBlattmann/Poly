@@ -132,6 +132,7 @@ pub fn mmap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     // region map does that) and, without MCL_ONFAULT, populated here.
     let future = crate::sys::mlock::future_mmap_check(k, len)?;
     let at = k.mmap(&request)?;
+    crate::sys::numa::unmapped(k, at, len);
     if future == Some(crate::kernel::MemLock::Lock) {
         // Pages that cannot come in (PROT_NONE) do not fail the mmap.
         let _ = k.mlock(at, len, crate::kernel::MemLock::Lock);
@@ -158,6 +159,7 @@ pub fn munmap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let shm = k.shm_mapped(addr, len);
     k.munmap(addr, len)?;
     crate::sys::aio::unmapped(k, addr, len);
+    crate::sys::numa::unmapped(k, addr, len);
     if !shm.is_empty() {
         crate::sys::shm::unmapped(k, &shm);
     }
@@ -234,7 +236,15 @@ pub fn mremap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     } else {
         Remap::InPlace
     };
-    k.mremap(old, old_len, new_len, to)
+    let at = k.mremap(old, old_len, new_len, to)?;
+    // The NUMA policies of the pages that moved or went are dropped.
+    if at != old {
+        crate::sys::numa::unmapped(k, old, old_len);
+        crate::sys::numa::unmapped(k, at, new_len);
+    } else if new_len < old_len {
+        crate::sys::numa::unmapped(k, old + new_len, old_len - new_len);
+    }
+    Ok(at)
 }
 
 /// msync(2) flags (`asm-generic/mman-common.h`).

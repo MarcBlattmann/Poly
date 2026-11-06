@@ -76,6 +76,12 @@ pub trait FileObject: Any + Send + Sync {
         None
     }
 
+    /// Lines this object adds to `/proc/<pid>/fdinfo/<fd>` after the
+    /// common ones (a bpf map's `map_type`, `key_size`, ...).
+    fn fdinfo(&self) -> alloc::string::String {
+        alloc::string::String::new()
+    }
+
     /// For an object that seeks like a file of this many bytes (a dma-buf:
     /// `lseek(fd, 0, SEEK_END)` gives its size, the kernel's dma-buf
     /// documentation): `lseek` moves the offset as on a regular file of

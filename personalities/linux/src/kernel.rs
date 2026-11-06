@@ -1223,6 +1223,80 @@ pub trait LinuxKernel {
         Err(Errno::EFAULT)
     }
 
+    /// ptrace(2) `PTRACE_PEEKTEXT` / `PEEKDATA`: read the memory of
+    /// process `pid` (`EIO` where it is not mapped or not readable).
+    fn ptrace_peek(&mut self, pid: i32, addr: u64, buf: &mut [u8]) -> Result<(), Errno> {
+        self.process_vm_read(pid, addr, buf).map_err(|_| Errno::EIO)
+    }
+
+    /// ptrace(2) `PTRACE_POKETEXT` / `POKEDATA`: write the memory of
+    /// process `pid`, also where it is mapped read-only and private (the
+    /// page becomes the process's own copy); `EIO` where it is not mapped.
+    fn ptrace_poke(&mut self, pid: i32, addr: u64, data: &[u8]) -> Result<(), Errno> {
+        self.process_vm_write(pid, addr, data).map_err(|_| Errno::EIO)
+    }
+
+    /// The number of CPUs (perf_event_open(2) `cpu` must be below it).
+    fn cpu_count(&self) -> u32 {
+        1
+    }
+
+    /// What a perf_event_open(2) counter of process `pid` (global; 0: the
+    /// caller's) counts from. `ESRCH` if there is none.
+    fn perf_source(&mut self, pid: i32) -> Result<alloc::sync::Arc<dyn crate::perf::PerfSource>, Errno> {
+        let _ = pid;
+        Err(Errno::ENOENT)
+    }
+
+    /// A new descriptor (`anon_inode:[perf_event]`, read-write) on
+    /// `counter`, with `FD_CLOEXEC` if `cloexec`.
+    fn perf_install(&mut self, counter: alloc::sync::Arc<crate::perf::Counter>, cloexec: bool) -> Result<i32, Errno> {
+        let _ = (counter, cloexec);
+        Err(Errno::ENODEV)
+    }
+
+    /// The counter behind descriptor `fd` (`None` if it is no perf event;
+    /// `EBADF` if it is not open).
+    fn perf_counter(&mut self, fd: i32) -> Result<Option<alloc::sync::Arc<crate::perf::Counter>>, Errno> {
+        let _ = fd;
+        Ok(None)
+    }
+
+    /// acct(2): open `path` for appending accounting records (the file is
+    /// known to exist and be a regular file).
+    fn acct_open(&mut self, path: &[u8]) -> Result<alloc::sync::Arc<dyn crate::acct::Sink>, Errno> {
+        let _ = path;
+        Err(Errno::ENOSYS)
+    }
+
+    /// vhangup(2): the controlling terminal of session `sid` is hung up
+    /// (SIGHUP to its session leader and foreground group, the session
+    /// loses it, descriptors opened on it so far are dead). Nothing without
+    /// terminals.
+    fn hangup_terminal(&mut self, sid: i32) {
+        let _ = sid;
+    }
+
+    /// A new descriptor (`anon_inode:bpf-map` or `bpf-prog`, read-write)
+    /// on a bpf(2) object, with `FD_CLOEXEC` if `cloexec`.
+    fn bpf_install(&mut self, object: crate::bpf::Object, cloexec: bool) -> Result<i32, Errno> {
+        let _ = (object, cloexec);
+        Err(Errno::ENOSYS)
+    }
+
+    /// The bpf(2) object behind descriptor `fd` (`None` if it is no map
+    /// or program; `EBADF` if it is not open).
+    fn bpf_object(&mut self, fd: i32) -> Result<Option<crate::bpf::Object>, Errno> {
+        let _ = fd;
+        Err(Errno::EBADF)
+    }
+
+    /// The calling thread's process is ending (a group exit or a kill is
+    /// under way): a thread waiting in a ptrace-stop must go.
+    fn exiting(&self) -> bool {
+        false
+    }
+
     /// pidfd_getfd(2): put the open file description behind descriptor
     /// `fd` of process `pid` on the caller's lowest free descriptor, with
     /// `FD_CLOEXEC`; returns it. `EBADF` if `pid` has no such descriptor,
@@ -1290,6 +1364,75 @@ pub trait LinuxKernel {
     fn uring(&mut self) -> Option<&mut dyn crate::uring::UringKernel> {
         None
     }
+
+    // ---- NUMA, page queries and the clock discipline (sys::numa,
+    // sys::procmem, sys::timex) ------------------------------------------
+
+    /// The mapped parts of `[start, end)` in the memory of process `pid`
+    /// (a global thread group id, the caller's own included), in address
+    /// order, one entry per region. `ESRCH` if the process has no memory
+    /// any more (it has ended or is ending). `ENOSYS` by default.
+    fn memory_regions(&mut self, pid: i32, start: u64, end: u64) -> Result<Vec<MemRegion>, Errno> {
+        let _ = (pid, start, end);
+        Err(Errno::ENOSYS)
+    }
+
+    /// What is at the page holding `addr` in the memory of process `pid`
+    /// (as [`memory_regions`](Self::memory_regions)); nothing is brought
+    /// in. `ENOSYS` by default.
+    fn page_query(&mut self, pid: i32, addr: u64) -> Result<PageQuery, Errno> {
+        let _ = (pid, addr);
+        Err(Errno::ENOSYS)
+    }
+
+    /// remap_file_pages(2): make `[start, start + len)` (page aligned,
+    /// inside shared regions of one object, as the personality checked)
+    /// show the object of the region at `start` from byte `offset` on,
+    /// with that region's protection. `ENOSYS` by default.
+    fn remap_shared(&mut self, start: u64, len: u64, offset: u64) -> Result<(), Errno> {
+        let _ = (start, len, offset);
+        Err(Errno::ENOSYS)
+    }
+
+    /// adjtimex(2): the system's clock discipline. By default the state
+    /// of a clock no time daemon synchronises
+    /// ([`Ntp::default`](crate::sys::timex::Ntp)).
+    fn ntp(&self) -> crate::sys::timex::Ntp {
+        crate::sys::timex::Ntp::default()
+    }
+
+    /// Store the system's clock discipline. Ignored by default.
+    fn set_ntp(&mut self, ntp: &crate::sys::timex::Ntp) {
+        let _ = ntp;
+    }
+}
+
+/// A mapped range of an address space ([`LinuxKernel::memory_regions`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MemRegion {
+    pub start: u64,
+    pub end: u64,
+    pub prot: Prot,
+    /// `MAP_SHARED` (shared anonymous memory too).
+    pub shared: bool,
+    /// What backs it: 0 for private anonymous memory, else an identity of
+    /// the file or memory object, equal for regions of the same one.
+    pub object: u64,
+}
+
+/// What is at one page of an address space ([`LinuxKernel::page_query`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageQuery {
+    /// Nothing is mapped there.
+    Unmapped,
+    /// Mapped, but no page has been brought in.
+    Absent,
+    /// Private anonymous memory that was only read: it reads as zeros and
+    /// has no page of its own yet (move_pages(2) reports it like an
+    /// unmapped address).
+    Zero,
+    /// A page of memory, on NUMA node 0 (the only node).
+    Present,
 }
 
 /// A resource kcmp(2) compares ([`LinuxKernel::kcmp_id`]); the types of
