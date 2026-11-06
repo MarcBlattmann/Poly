@@ -24,6 +24,7 @@
 //! pipes are not a Windows console: `winpty cargo xtask start` gives the
 //! menu there) a plain numbered prompt stands in for the menu.
 
+use crate::resources::{self, HostResources, KERNEL_MAX_CPUS, MEMORY_PRESETS};
 use crate::{Result, progress};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -78,6 +79,8 @@ pub enum Opt {
     Display,
     Groups,
     Parts,
+    Memory,
+    Cpus,
 }
 
 impl Entry {
@@ -151,6 +154,30 @@ impl Entry {
         }
     }
 
+    /// The resources it can be given (`--memory=`, `--cpus=`, ADR 0141):
+    /// the interactive boots only; the boot tests keep their fixed sizes.
+    pub fn resources(self) -> &'static [Opt] {
+        match self {
+            Entry::Desktop | Entry::ChromiumRun | Entry::Toolkits | Entry::Shell | Entry::Busybox | Entry::DiskRoot => {
+                &[Opt::Memory, Opt::Cpus]
+            }
+            Entry::ChromiumDisk | Entry::BootTests | Entry::Ci => &[],
+        }
+    }
+
+    /// The memory and CPUs it boots with unless asked (what "auto" is).
+    pub fn default_resources(self) -> Option<(&'static str, u32)> {
+        let cpus = crate::QEMU_CPUS;
+        match self {
+            Entry::Desktop => Some((crate::desktop::MEMORY, cpus)),
+            Entry::ChromiumRun => Some((crate::chromium::MEMORY, crate::chromium::CPUS.unwrap_or(cpus))),
+            Entry::Toolkits => Some((crate::toolkits::MEMORY, cpus)),
+            Entry::Shell | Entry::Busybox => Some((crate::DEFAULT_MEMORY, cpus)),
+            Entry::DiskRoot => Some((crate::rootdisk::MEMORY, cpus)),
+            Entry::ChromiumDisk | Entry::BootTests | Entry::Ci => None,
+        }
+    }
+
     /// Whether it boots a kernel (built first, with the progress table).
     fn kernel(self, s: &Settings) -> Option<bool> {
         match self {
@@ -174,6 +201,8 @@ impl Opt {
             Opt::Display => "QEMU display",
             Opt::Groups => "Groups",
             Opt::Parts => "Parts",
+            Opt::Memory => "Memory",
+            Opt::Cpus => "CPUs",
         }
     }
 
@@ -190,6 +219,12 @@ impl Opt {
             Opt::Display => "POLY_QEMU_DISPLAY: QEMU's -display (auto: SDL on Windows; Enter types one)",
             Opt::Groups => "the boot test groups to run (none chosen: all of them)",
             Opt::Parts => "the CI parts to run (none chosen: all of them)",
+            Opt::Memory => {
+                "--memory=SIZE: the guest's RAM (QEMU -m); the kernel uses all it is given (Enter types a size)"
+            }
+            Opt::Cpus => {
+                "--cpus=N: the guest's CPUs (QEMU -smp); the kernel starts every one, up to its limit (Enter types)"
+            }
         }
     }
 }
@@ -214,6 +249,10 @@ pub struct Settings {
     pub display: String,
     pub groups: Vec<String>,
     pub parts: Vec<String>,
+    /// `auto` (the entry's own) or a size such as `4G` or `3072M`.
+    pub memory: String,
+    /// `auto` or 1 to [`KERNEL_MAX_CPUS`].
+    pub cpus: String,
 }
 
 impl Default for Settings {
@@ -230,6 +269,8 @@ impl Default for Settings {
             display: "auto".into(),
             groups: vec!["desktop".into(), "desktop-shell".into()],
             parts: vec!["lint".into(), "host-tests".into()],
+            memory: "auto".into(),
+            cpus: "auto".into(),
         }
     }
 }
@@ -244,6 +285,11 @@ fn valid_size(v: &str) -> bool {
     let Some((w, h)) = v.split_once(['x', 'X']) else { return false };
     let side = |s: &str| s.parse::<u32>().is_ok_and(|n| (320..=8192).contains(&n));
     side(w) && side(h)
+}
+
+/// 1 to the kernel's limit (what `--cpus=` can usefully be).
+fn valid_cpus(v: &str) -> bool {
+    v.parse::<u32>().is_ok_and(|n| (1..=KERNEL_MAX_CPUS).contains(&n))
 }
 
 /// The boot test groups, with their CI shard.
@@ -276,6 +322,8 @@ impl Settings {
             "display": self.display,
             "groups": self.groups,
             "parts": self.parts,
+            "memory": self.memory,
+            "cpus": self.cpus,
         })
     }
 
@@ -310,6 +358,12 @@ impl Settings {
                 .unwrap_or(d.display.clone()),
             groups: names("groups", &groups, &d.groups),
             parts: names("parts", &ci_parts(), &d.parts),
+            memory: text("memory")
+                .and_then(
+                    |m| if m == "auto" { Some(m) } else { resources::parse_memory(&m).map(resources::format_memory) },
+                )
+                .unwrap_or(d.memory.clone()),
+            cpus: text("cpus").filter(|c| c == "auto" || valid_cpus(c)).unwrap_or(d.cpus.clone()),
         }
     }
 
@@ -353,6 +407,8 @@ impl Settings {
             Opt::Display => self.display.clone(),
             Opt::Groups => list(&self.groups),
             Opt::Parts => list(&self.parts),
+            Opt::Memory => self.memory.clone(),
+            Opt::Cpus => self.cpus.clone(),
         }
     }
 }
@@ -368,6 +424,8 @@ pub struct Host {
     pub busybox_env: bool,
     /// Chromium's disk image is there.
     pub chromium_disk: bool,
+    /// Its memory and cores, for the resources it can give a guest.
+    pub res: HostResources,
 }
 
 impl Host {
@@ -377,6 +435,7 @@ impl Host {
             windows: cfg!(windows),
             busybox_env: std::env::var("POLY_BUSYBOX").is_ok_and(|v| !v.is_empty() && v != "build"),
             chromium_disk: crate::root().join("target").join(crate::chromium::FILE_NAME).is_file(),
+            res: HostResources::probe(),
         }
     }
 
@@ -480,6 +539,17 @@ pub fn args(e: Entry, s: &Settings) -> Vec<String> {
         }
     };
     let kernel_args = |a: &mut Vec<String>| a.extend(s.kernel_args.split_whitespace().map(str::to_string));
+    // --memory= and --cpus= for what takes them (ADR 0141), before the kernel arguments.
+    let resources = |a: &mut Vec<String>| {
+        if !e.resources().is_empty() {
+            if s.memory != "auto" {
+                a.push(format!("--memory={}", s.memory));
+            }
+            if s.cpus != "auto" {
+                a.push(format!("--cpus={}", s.cpus));
+            }
+        }
+    };
     match e {
         Entry::Desktop => {
             a.push("desktop".into());
@@ -491,18 +561,21 @@ pub fn args(e: Entry, s: &Settings) -> Vec<String> {
             if s.size != "auto" {
                 a.push(format!("--size={}", s.size));
             }
+            resources(&mut a);
             kernel_args(&mut a);
         }
         Entry::ChromiumRun => {
             a.extend(["chromium".into(), "run".into()]);
             flag(&mut a, s.release, "--release");
             flag(&mut a, s.fresh_disk, "--fresh-disk");
+            resources(&mut a);
         }
         Entry::ChromiumDisk => a.extend(["chromium".into(), "disk".into()]),
         Entry::Toolkits => {
             a.push("toolkits".into());
             flag(&mut a, s.release, "--release");
             flag(&mut a, s.fresh_disk, "--fresh-disk");
+            resources(&mut a);
         }
         Entry::Shell | Entry::Busybox | Entry::DiskRoot => {
             a.push("run".into());
@@ -512,6 +585,7 @@ pub fn args(e: Entry, s: &Settings) -> Vec<String> {
                 a.push("--disk-root".into());
                 flag(&mut a, s.fresh_disk, "--fresh-disk");
             }
+            resources(&mut a);
             kernel_args(&mut a);
         }
         Entry::BootTests => {
@@ -633,6 +707,7 @@ impl Menu {
     pub fn rows(&self) -> Vec<Row> {
         let mut rows: Vec<Row> = ENTRIES.iter().map(|e| Row::Entry(*e)).collect();
         rows.extend(self.s.entry.options().iter().map(|o| Row::Opt(*o)));
+        rows.extend(self.s.entry.resources().iter().map(|o| Row::Opt(*o)));
         rows.extend([Row::Start, Row::BuildOnly, Row::Quit]);
         rows
     }
@@ -726,7 +801,11 @@ impl Menu {
                 };
                 self.edit = Some((o, now));
             }
-            Opt::Size | Opt::Display | Opt::KernelArgs => self.change(o, 1),
+            Opt::Memory | Opt::Cpus if enter => {
+                let now = if self.s.value(o) == "auto" { String::new() } else { self.s.value(o) };
+                self.edit = Some((o, now));
+            }
+            Opt::Size | Opt::Display | Opt::KernelArgs | Opt::Memory | Opt::Cpus => self.change(o, 1),
             Opt::Groups | Opt::Parts => {
                 let (items, chosen): (Vec<(String, String)>, Vec<String>) = if o == Opt::Groups {
                     let items =
@@ -746,8 +825,15 @@ impl Menu {
             let i = list.iter().position(|v| *v == now).map_or(0, |i| i as i32 + by);
             list[i.rem_euclid(list.len() as i32) as usize].to_string()
         };
+        let owned = |list: Vec<String>, now: &str| {
+            let i = list.iter().position(|v| v == now).map_or(0, |i| i as i32 + by);
+            list[i.rem_euclid(list.len() as i32) as usize].clone()
+        };
+        let (memory_choices, cpu_choices) = (self.memory_choices(), self.cpu_choices());
         let s = &mut self.s;
         match o {
+            Opt::Memory => s.memory = owned(memory_choices, &s.memory),
+            Opt::Cpus => s.cpus = owned(cpu_choices, &s.cpus),
             Opt::Release => s.release = !s.release,
             Opt::FreshState => s.fresh_state = !s.fresh_state,
             Opt::FreshDisk => s.fresh_disk = !s.fresh_disk,
@@ -758,6 +844,19 @@ impl Menu {
             Opt::KernelArgs => self.edit = Some((o, s.kernel_args.clone())),
             Opt::Groups | Opt::Parts => self.activate(o, true),
         }
+    }
+
+    /// The memory sizes Left and Right step through: auto and the presets
+    /// this host can give.
+    fn memory_choices(&self) -> Vec<String> {
+        let ok = |p: &&str| resources::parse_memory(p).is_some_and(|m| self.host.res.memory_refusal(m).is_none());
+        std::iter::once("auto").chain(MEMORY_PRESETS.iter().copied().filter(ok)).map(str::to_string).collect()
+    }
+
+    /// The CPU counts they step through: auto and 1 to the host's cores
+    /// (the kernel's limit at most).
+    fn cpu_choices(&self) -> Vec<String> {
+        std::iter::once("auto".to_string()).chain((1..=self.host.res.cpu_limit()).map(|n| n.to_string())).collect()
     }
 
     fn edit_key(&mut self, k: Key) {
@@ -785,6 +884,37 @@ impl Menu {
                         return;
                     }
                     Opt::Display => self.s.display = v,
+                    Opt::Memory if v.is_empty() || v == "auto" => self.s.memory = "auto".into(),
+                    Opt::Memory => match resources::parse_memory(&v) {
+                        None => {
+                            self.message = format!(
+                                "{v:?}: a size is a number and M or G, from {}M, such as 4G or 3072M",
+                                resources::MIN_MEMORY_MIB
+                            );
+                            return;
+                        }
+                        Some(mib) => {
+                            if let Some(why) = self.host.res.memory_refusal(mib) {
+                                self.message = why;
+                                return;
+                            }
+                            self.s.memory = resources::format_memory(mib);
+                        }
+                    },
+                    Opt::Cpus if v.is_empty() || v == "auto" => self.s.cpus = "auto".into(),
+                    Opt::Cpus => match v.parse::<u32>().ok().filter(|n| *n >= 1) {
+                        None => {
+                            self.message = format!("{v:?}: a number of CPUs, from 1 to {KERNEL_MAX_CPUS}");
+                            return;
+                        }
+                        Some(n) => {
+                            if let Some(why) = self.host.res.cpu_refusal(n) {
+                                self.message = why;
+                                return;
+                            }
+                            self.s.cpus = n.to_string();
+                        }
+                    },
                     _ => self.s.kernel_args = v,
                 }
                 self.edit = None;
@@ -910,6 +1040,13 @@ impl Menu {
                 (Look::Dim, if focus == Row::Opt(*o) { format!("   {}", o.hint()) } else { String::new() }),
             ]);
         }
+        if !self.s.entry.resources().is_empty() {
+            out.push(vec![]);
+            out.push(vec![(Look::Title, format!(" Resources for {}", self.s.entry.title()))]);
+            for o in self.s.entry.resources() {
+                self.resource_lines(*o, focus == Row::Opt(*o), &mut out);
+            }
+        }
         out.push(vec![]);
         if let Some(apps) = apps_line(self.s.entry) {
             out.push(vec![(Look::Dim, format!(" {apps}"))]);
@@ -947,6 +1084,98 @@ impl Menu {
         };
         out.push(vec![(Look::Dim, help.into())]);
         out
+    }
+
+    /// The rows of a resource: its value and what it means for this entry
+    /// and this host, then the choices (those this host cannot give greyed,
+    /// with the reason).
+    fn resource_lines(&self, o: Opt, focused: bool, out: &mut Vec<Line>) {
+        let (default_memory, default_cpus) = self.s.entry.default_resources().unwrap_or(("?", 0));
+        let host = &self.host.res;
+        let value = match &self.edit {
+            Some((e, text)) if *e == o => format!("{text}_"),
+            _ => self.s.value(o),
+        };
+        let asked_memory = resources::parse_memory(&self.s.memory);
+        let asked_cpus = self.s.cpus.parse::<u32>().ok();
+        // What the value comes to, and a warning where it will not be taken as it is.
+        let (note, warn) = match o {
+            Opt::Memory => match asked_memory {
+                None => (format!("= {default_memory}, the default"), false),
+                Some(m) if host.memory_refusal(m).is_some() => {
+                    let limit = host.memory_limit_mib().unwrap_or(m) / 128 * 128;
+                    (format!("more than this host can give: Start uses {}", resources::format_memory(limit)), true)
+                }
+                Some(m) if resources::parse_memory(default_memory).is_some_and(|d| m < d) => {
+                    (format!("below the default {default_memory}: it may not boot"), true)
+                }
+                Some(_) => (format!("the default is {default_memory}"), false),
+            },
+            _ => match asked_cpus {
+                None => (format!("= {default_cpus}, the default"), false),
+                Some(n) if host.cpu_refusal(n).is_some() => {
+                    (format!("more than this host has: Start uses {}", host.cpu_limit()), true)
+                }
+                Some(_) => (format!("the default is {default_cpus}"), false),
+            },
+        };
+        let look = if focused { Look::Focus } else { Look::Plain };
+        let tail = if focused && !warn { o.hint().to_string() } else { note };
+        out.push(vec![
+            (look, format!("      {:<18}< {value}", o.title())),
+            (if warn { Look::Warn } else { Look::Dim }, format!("   {tail}")),
+        ]);
+        // The choices.
+        let mut strip: Line = vec![(Look::Plain, "                        ".into())];
+        let mut greyed: Vec<String> = Vec::new();
+        let mut item = |strip: &mut Line, text: &str, chosen: bool, refusal: Option<String>| {
+            let look = match (&refusal, chosen) {
+                (Some(_), _) => Look::Dim,
+                (None, true) => Look::Chosen,
+                (None, false) => Look::Plain,
+            };
+            if refusal.is_some() {
+                greyed.push(text.to_string());
+            }
+            strip.push((look, format!("{text:<6}")));
+        };
+        let explain = match o {
+            Opt::Memory => {
+                let mut sizes: Vec<String> =
+                    std::iter::once("auto".to_string()).chain(MEMORY_PRESETS.iter().map(|p| p.to_string())).collect();
+                if !sizes.contains(&self.s.memory) {
+                    sizes.push(self.s.memory.clone());
+                }
+                for size in &sizes {
+                    let refusal = resources::parse_memory(size).and_then(|m| host.memory_refusal(m));
+                    item(&mut strip, size, *size == self.s.memory, refusal);
+                }
+                match (host.memory_mib, host.memory_limit_mib()) {
+                    (Some(total), Some(limit)) if !greyed.is_empty() => format!(
+                        "{} greyed: this host has {}; {} at most, the rest stays for it",
+                        greyed.join(", "),
+                        resources::gib(total),
+                        resources::format_memory(limit / 128 * 128)
+                    ),
+                    (Some(total), _) => format!("this host has {}", resources::gib(total)),
+                    _ => "this host's memory is unknown: nothing greyed".to_string(),
+                }
+            }
+            _ => {
+                item(&mut strip, "auto", self.s.cpus == "auto", None);
+                for n in 1..=host.cpu_limit() {
+                    item(&mut strip, &n.to_string(), self.s.cpus == n.to_string(), None);
+                }
+                let kernel = if host.cpus > KERNEL_MAX_CPUS {
+                    format!("the kernel starts at most {KERNEL_MAX_CPUS} of them")
+                } else {
+                    format!("the kernel starts every one, up to {KERNEL_MAX_CPUS}")
+                };
+                format!("this host has {} logical cores; {kernel}", host.cpus)
+            }
+        };
+        out.push(strip);
+        out.push(vec![(Look::Dim, format!("                        {explain}"))]);
     }
 
     fn picker_lines(&self, p: &Picker) -> Vec<Line> {
@@ -1138,12 +1367,15 @@ pub fn command(args: &[String]) -> Result {
 mod tests {
     use super::*;
 
+    /// A host of 16 GiB and 8 cores (so 12G is the most memory offered).
+    const BIG: HostResources = HostResources { memory_mib: Some(16 * 1024), cpus: 8 };
+
     fn windows() -> Host {
-        Host { linux: false, windows: true, busybox_env: false, chromium_disk: false }
+        Host { linux: false, windows: true, busybox_env: false, chromium_disk: false, res: BIG }
     }
 
     fn linux() -> Host {
-        Host { linux: true, windows: false, busybox_env: false, chromium_disk: true }
+        Host { linux: true, windows: false, busybox_env: false, chromium_disk: true, res: BIG }
     }
 
     #[test]
@@ -1160,6 +1392,8 @@ mod tests {
             display: "gtk,zoom-to-fit=on".into(),
             groups: vec!["desktop".into(), "wayland".into()],
             parts: vec![],
+            memory: "3G".into(),
+            cpus: "6".into(),
         };
         assert_eq!(Settings::from_json(&s.to_json().to_string()), s);
     }
@@ -1338,5 +1572,195 @@ mod tests {
         m.key(Key::Esc);
         assert_eq!(m.s.groups.len(), 2, "Esc keeps what was chosen before");
         assert!(m.lines().iter().flatten().any(|(_, t)| t.contains("cargo xtask boot-tests selftest-")));
+    }
+
+    fn texts(m: &Menu) -> String {
+        m.lines().iter().map(|l| l.iter().map(|(_, t)| t.as_str()).collect::<String>()).collect::<Vec<_>>().join("\n")
+    }
+
+    #[test]
+    fn settings_without_resources_load_with_the_defaults() {
+        // A file from before the resources: every other value is kept.
+        let s = Settings::from_json(r#"{"format": 1, "entry": "toolkits", "release": false, "scale": "2"}"#);
+        assert_eq!((s.entry, s.release, s.scale.as_str()), (Entry::Toolkits, false, "2"));
+        assert_eq!((s.memory.as_str(), s.cpus.as_str()), ("auto", "auto"));
+        // Sizes are kept in their shortest form; wrong values fall back one by one.
+        let s = Settings::from_json(r#"{"format": 1, "memory": "4096M", "cpus": "4", "size": "1920x1200"}"#);
+        assert_eq!((s.memory.as_str(), s.cpus.as_str(), s.size.as_str()), ("4G", "4", "1920x1200"));
+        for (memory, cpus) in [("lots", "0"), ("64M", "17"), ("4T", "two"), ("", "-1")] {
+            let s = Settings::from_json(&format!(r#"{{"format": 1, "memory": "{memory}", "cpus": "{cpus}"}}"#));
+            assert_eq!((s.memory.as_str(), s.cpus.as_str()), ("auto", "auto"), "{memory:?} {cpus:?}");
+        }
+        let s = Settings::from_json(r#"{"format": 1, "memory": 4, "cpus": 4}"#);
+        assert_eq!((s.memory.as_str(), s.cpus.as_str()), ("auto", "auto"), "numbers are not sizes");
+        // Saved and loaded again.
+        let s = Settings { memory: "6G".into(), cpus: "16".into(), ..Settings::default() };
+        assert_eq!(Settings::from_json(&s.to_json().to_string()), s);
+    }
+
+    #[test]
+    fn resources_become_flags_of_the_interactive_boots_only() {
+        let mut s = Settings::default();
+        for e in ENTRIES {
+            assert!(!args(e, &s).iter().any(|a| a.starts_with("--memory") || a.starts_with("--cpus")), "{e:?}");
+        }
+        s.memory = "4G".into();
+        s.cpus = "3".into();
+        s.kernel_args = "poly.a=1".into();
+        assert_eq!(
+            args(Entry::Desktop, &s),
+            ["desktop", "--release", "--memory=4G", "--cpus=3", "poly.a=1"],
+            "before the kernel arguments"
+        );
+        assert_eq!(args(Entry::ChromiumRun, &s), ["chromium", "run", "--release", "--memory=4G", "--cpus=3"]);
+        assert_eq!(args(Entry::Toolkits, &s), ["toolkits", "--release", "--memory=4G", "--cpus=3"]);
+        assert_eq!(args(Entry::Shell, &s), ["run", "--release", "--memory=4G", "--cpus=3", "poly.a=1"]);
+        assert_eq!(args(Entry::Busybox, &s), ["run", "--release", "--busybox", "--memory=4G", "--cpus=3", "poly.a=1"]);
+        assert_eq!(
+            args(Entry::DiskRoot, &s),
+            ["run", "--release", "--disk-root", "--memory=4G", "--cpus=3", "poly.a=1"]
+        );
+        // The boot tests and CI keep their fixed sizes; so does building the disk.
+        for e in [Entry::BootTests, Entry::Ci, Entry::ChromiumDisk] {
+            assert!(!args(e, &s).iter().any(|a| a.starts_with("--memory") || a.starts_with("--cpus")), "{e:?}");
+            assert!(e.resources().is_empty() && e.default_resources().is_none(), "{e:?}");
+        }
+        // One of them alone.
+        s.cpus = "auto".into();
+        assert_eq!(args(Entry::Toolkits, &s), ["toolkits", "--release", "--memory=4G"]);
+        // What --print shows is what the subcommand takes.
+        let s = Settings { memory: "4G".into(), cpus: "3".into(), ..Settings::default() };
+        assert_eq!(plan(&s, &linux()).unwrap()[0].line(), "cargo xtask desktop --release --memory=4G --cpus=3");
+        for e in ENTRIES {
+            let a = args(e, &s);
+            if !e.resources().is_empty() {
+                let (r, notes) = resources::Resources::parse(&a, &BIG).unwrap();
+                assert_eq!((r.memory_mib, r.cpus, notes.len()), (Some(4096), Some(3), 0), "{e:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_entry_that_takes_resources_knows_its_defaults() {
+        for e in ENTRIES {
+            assert_eq!(e.resources().is_empty(), e.default_resources().is_none(), "{e:?}");
+        }
+        assert_eq!(Entry::Desktop.default_resources(), Some(("512M", 2)));
+        assert_eq!(Entry::ChromiumRun.default_resources(), Some(("4G", 4)));
+        assert_eq!(Entry::Toolkits.default_resources(), Some(("2G", 2)));
+        assert_eq!(Entry::Shell.default_resources(), Some(("256M", 2)));
+        assert_eq!(Entry::DiskRoot.default_resources(), Some(("1G", 2)));
+        for e in ENTRIES {
+            if let Some((memory, _)) = e.default_resources() {
+                assert!(resources::parse_memory(memory).is_some(), "{e:?}: {memory}");
+            }
+        }
+    }
+
+    #[test]
+    fn memory_and_cpus_step_through_what_the_host_gives() {
+        let mut m = Menu::new(Settings::default(), linux());
+        assert!(m.rows().contains(&Row::Opt(Opt::Memory)) && m.rows().contains(&Row::Opt(Opt::Cpus)));
+        m.focus_on(Row::Opt(Opt::Memory));
+        let seen: Vec<String> = (0..7)
+            .map(|_| {
+                m.key(Key::Right);
+                m.s.memory.clone()
+            })
+            .collect();
+        // 16G is more than the 12G this host can give: skipped.
+        assert_eq!(seen, ["512M", "1G", "2G", "4G", "8G", "auto", "512M"]);
+        m.key(Key::Left);
+        assert_eq!(m.s.memory, "auto");
+        m.key(Key::Left);
+        assert_eq!(m.s.memory, "8G", "Left from auto goes to the biggest");
+        m.focus_on(Row::Opt(Opt::Cpus));
+        let seen: Vec<String> = (0..10)
+            .map(|_| {
+                m.key(Key::Space);
+                m.s.cpus.clone()
+            })
+            .collect();
+        assert_eq!(seen, ["1", "2", "3", "4", "5", "6", "7", "8", "auto", "1"]);
+    }
+
+    #[test]
+    fn what_the_host_cannot_give_is_greyed_with_the_reason() {
+        let m = Menu::new(Settings::default(), linux());
+        let text = texts(&m);
+        assert!(text.contains("Resources for Desktop"), "{text}");
+        assert!(text.contains("= 512M, the default") && text.contains("= 2, the default"), "{text}");
+        assert!(text.contains("16G greyed: this host has 16.0 GiB; 12G at most"), "{text}");
+        // The 16G choice is drawn dim, 8G is not.
+        let strip = m.lines().into_iter().find(|l| l.iter().any(|(_, t)| t.trim() == "16G")).unwrap();
+        assert!(strip.iter().any(|(k, t)| *k == Look::Dim && t.trim() == "16G"));
+        assert!(strip.iter().any(|(k, t)| *k == Look::Plain && t.trim() == "8G"));
+        assert!(text.contains("this host has 8 logical cores; the kernel starts every one, up to 16"), "{text}");
+        // A host with more cores than the kernel starts says so.
+        let many = Host { res: HostResources { memory_mib: None, cpus: 64 }, ..linux() };
+        let m = Menu::new(Settings::default(), many);
+        let text = texts(&m);
+        assert!(text.contains("the kernel starts at most 16 of them"), "{text}");
+        assert!(text.contains("this host's memory is unknown: nothing greyed"), "{text}");
+        assert_eq!(m.memory_choices().len(), 1 + MEMORY_PRESETS.len());
+        assert_eq!(m.cpu_choices().len(), 1 + 16);
+        // No resources section for what does not boot interactively.
+        let s = Settings { entry: Entry::BootTests, ..Settings::default() };
+        let m = Menu::new(s, linux());
+        assert!(!texts(&m).contains("Resources for") && !m.rows().contains(&Row::Opt(Opt::Memory)));
+    }
+
+    #[test]
+    fn the_menu_warns_where_a_value_will_not_be_taken_as_it_is() {
+        // A saved size below the entry's default.
+        let s = Settings { entry: Entry::ChromiumRun, memory: "1G".into(), ..Settings::default() };
+        let text = texts(&Menu::new(s, linux()));
+        assert!(text.contains("below the default 4G: it may not boot"), "{text}");
+        // Saved on a bigger host: Start clamps it.
+        let s = Settings { memory: "16G".into(), cpus: "16".into(), ..Settings::default() };
+        let text = texts(&Menu::new(s, linux()));
+        assert!(text.contains("more than this host can give: Start uses 12G"), "{text}");
+        assert!(text.contains("more than this host has: Start uses 8"), "{text}");
+    }
+
+    #[test]
+    fn typing_memory_and_cpus() {
+        let mut m = Menu::new(Settings::default(), linux());
+        let type_in = |m: &mut Menu, o: Opt, text: &str| {
+            m.focus_on(Row::Opt(o));
+            m.key(Key::Enter);
+            for c in text.chars() {
+                m.key(Key::Char(c));
+            }
+            m.key(Key::Enter);
+        };
+        type_in(&mut m, Opt::Memory, "64G");
+        assert!(m.edit.is_some() && m.s.memory == "auto", "too much stays in the editor");
+        assert!(m.message.contains("more than this host can give") && m.message.contains("12G"), "{}", m.message);
+        m.key(Key::Esc);
+        type_in(&mut m, Opt::Memory, "lots");
+        assert!(m.edit.is_some() && m.message.contains("such as 4G or 3072M"), "{}", m.message);
+        m.key(Key::Esc);
+        type_in(&mut m, Opt::Memory, "3072m");
+        assert_eq!((m.edit.is_none(), m.s.memory.as_str()), (true, "3G"));
+        type_in(&mut m, Opt::Cpus, "9");
+        assert!(m.edit.is_some() && m.message.contains("8 logical cores"), "{}", m.message);
+        m.key(Key::Esc);
+        type_in(&mut m, Opt::Cpus, "0");
+        assert!(m.edit.is_some() && m.message.contains("from 1 to 16"), "{}", m.message);
+        m.key(Key::Esc);
+        type_in(&mut m, Opt::Cpus, "6");
+        assert_eq!((m.edit.is_none(), m.s.cpus.as_str()), (true, "6"));
+        // The editor starts on the value; empty or auto is auto again.
+        m.focus_on(Row::Opt(Opt::Memory));
+        m.key(Key::Enter);
+        assert_eq!(m.edit.as_ref().map(|(_, t)| t.as_str()), Some("3G"));
+        for _ in 0..2 {
+            m.key(Key::Backspace);
+        }
+        m.key(Key::Enter);
+        assert_eq!((m.edit.is_none(), m.s.memory.as_str()), (true, "auto"));
+        // The line Start runs.
+        assert_eq!(plan(&m.s, &m.host).unwrap()[0].line(), "cargo xtask desktop --release --cpus=6");
     }
 }
