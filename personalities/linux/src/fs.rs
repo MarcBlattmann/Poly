@@ -580,6 +580,21 @@ pub trait LinuxFs {
     fn statfs(&mut self, path: &[u8]) -> Result<StatFs, Errno>;
     fn fstatfs(&mut self, fd: i32) -> Result<StatFs, Errno>;
 
+    /// Whether an open file writes the file `fd` is open on (anywhere:
+    /// finit_module(2) gives `ETXTBSY`). The default: no one does.
+    fn open_for_writing(&mut self, fd: i32) -> Result<bool, Errno> {
+        let _ = fd;
+        Ok(false)
+    }
+
+    /// ustat(2): the statfs of the mounted file system whose `st_dev` has
+    /// this major and minor number; `EINVAL` if there is none (the
+    /// default: a kernel that cannot look file systems up by device).
+    fn statfs_dev(&mut self, major: u32, minor: u32) -> Result<StatFs, Errno> {
+        let _ = (major, minor);
+        Err(Errno::EINVAL)
+    }
+
     /// The soft `RLIMIT_NOFILE` of process `target` changed: descriptors
     /// from `limit` on can no longer be opened there.
     fn set_fd_limit(&mut self, target: Target, limit: u64) -> Result<(), Errno>;

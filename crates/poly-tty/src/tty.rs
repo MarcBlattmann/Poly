@@ -193,6 +193,15 @@ impl Ttys {
         self.sessions.lock().of(sid)
     }
 
+    /// vhangup(2) by a process of session `sid`: its controlling terminal,
+    /// if it has one, is hung up ([`Tty::vhangup`]).
+    pub fn vhangup(&self, sid: i32) {
+        let tty = self.sessions.lock().of(sid);
+        if let Some(tty) = tty {
+            tty.vhangup();
+        }
+    }
+
     /// Process `pid` of session `sid` ended. If it was the session's
     /// leader (the controlling process), the terminal's foreground group
     /// gets `SIGHUP` and the session loses the terminal (POSIX `_exit`).
@@ -227,6 +236,9 @@ pub struct Tty {
     state: Lock<RawSpinLock, State>,
     queue: Arc<WaitQueue>,
     opens: AtomicUsize,
+    /// Counts vhangup(2)s: an open file made before the latest one is
+    /// revoked ([`TtyFile`]).
+    epoch: AtomicUsize,
     me: Weak<Tty>,
 }
 
@@ -272,6 +284,7 @@ impl Tty {
             }),
             queue: Arc::new(WaitQueue::new()),
             opens: AtomicUsize::new(0),
+            epoch: AtomicUsize::new(0),
             me: me.clone(),
         })
     }
@@ -346,7 +359,7 @@ impl Tty {
         if self.opens.fetch_add(1, Ordering::SeqCst) == 0 {
             self.driver.opened(true);
         }
-        Ok(Arc::new(TtyFile { tty: Arc::clone(self) }))
+        Ok(Arc::new(TtyFile { tty: Arc::clone(self), epoch: self.epoch.load(Ordering::SeqCst) }))
     }
 
     fn closed(&self) {
@@ -615,6 +628,20 @@ impl Tty {
     /// the read returns), and a blocked reader is interrupted by the
     /// signal first and reads end of file when it tries again.
     pub fn hangup(&self) {
+        self.hang_up(true);
+    }
+
+    /// vhangup(2): the terminal's controlling process and foreground group
+    /// get the signals of [`hangup`](Self::hangup) and the session loses
+    /// the terminal, but the terminal itself lives on: the open files made
+    /// so far are revoked (reads return end of file, writes and ioctls
+    /// `EIO`), files opened afterwards work.
+    pub fn vhangup(&self) {
+        self.epoch.fetch_add(1, Ordering::SeqCst);
+        self.hang_up(false);
+    }
+
+    fn hang_up(&self, for_good: bool) {
         let (session, pgrp) = {
             let mut sessions = self.ttys.sessions.lock();
             let mut st = self.state.lock();
@@ -636,7 +663,7 @@ impl Tty {
         }
         {
             let mut st = self.state.lock();
-            st.hung_up = true;
+            st.hung_up |= for_good;
             let mut fx = Effects::default();
             st.ldisc.flush_input(&mut fx);
         }
@@ -923,11 +950,18 @@ impl Tty {
 /// and polls. Dropped with the open file, which closes it.
 pub struct TtyFile {
     tty: Arc<Tty>,
+    /// The terminal's [`Tty::vhangup`] count when this file was opened.
+    epoch: usize,
 }
 
 impl TtyFile {
     pub fn tty(&self) -> &Arc<Tty> {
         &self.tty
+    }
+
+    /// Whether a vhangup(2) came after this file was opened.
+    fn revoked(&self) -> bool {
+        self.tty.epoch.load(Ordering::SeqCst) != self.epoch
     }
 }
 
@@ -945,18 +979,30 @@ impl Drop for TtyFile {
 
 impl CharDevice for TtyFile {
     fn read(&self, _: u64, buf: &mut [u8], nonblock: bool) -> Result<usize> {
+        if self.revoked() {
+            return Ok(0);
+        }
         self.tty.read(buf, nonblock)
     }
 
     fn write(&self, _: u64, buf: &[u8], nonblock: bool) -> Result<usize> {
+        if self.revoked() {
+            return Err(Errno::EIO);
+        }
         self.tty.write(buf, nonblock)
     }
 
     fn ioctl(&self, request: u32, arg: u64) -> Result<u64> {
+        if self.revoked() {
+            return Err(Errno::EIO);
+        }
         self.tty.ioctl(request, arg)
     }
 
     fn poll(&self) -> PollEvents {
+        if self.revoked() {
+            return PollEvents::READABLE | PollEvents::WRITABLE | PollEvents::HUP;
+        }
         self.tty.poll()
     }
 

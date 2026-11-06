@@ -363,6 +363,11 @@ pub fn rt_sigsuspend(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         if with_own(k, |p| p.has_deliverable(tid)) {
             return Err(Errno::RESTART_IF_NO_HANDLER);
         }
+        // Another thread ended the process (a fatal signal, exit_group):
+        // the thread leaves on its way out.
+        if k.exiting() {
+            return Err(Errno::EINTR);
+        }
         k.block(None);
     }
 }
@@ -377,6 +382,11 @@ pub fn pause(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
         k.clear_signal_notification();
         if with_own(k, |p| p.has_deliverable(tid)) {
             return Err(Errno::RESTART_IF_NO_HANDLER);
+        }
+        // Another thread ended the process (a fatal signal, exit_group):
+        // the thread leaves on its way out.
+        if k.exiting() {
+            return Err(Errno::EINTR);
         }
         k.block(None);
     }

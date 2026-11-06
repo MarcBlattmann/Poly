@@ -117,6 +117,8 @@ pub struct FakeKernel {
     pub fs_base: u64,
     pub gs_base: u64,
     pub exit: Option<Exit>,
+    /// The bpf(2) objects the fake's descriptors are open on.
+    pub bpf_fds: BTreeMap<i32, crate::bpf::Object>,
     pub pid: i32,
     pub tid: i32,
     pub ppid: i32,
@@ -231,6 +233,7 @@ impl FakeKernel {
             fs_base: 0,
             gs_base: 0,
             exit: None,
+            bpf_fds: BTreeMap::new(),
             pid: 100,
             tid: 100,
             ppid: 1,
@@ -774,6 +777,40 @@ impl LinuxKernel for FakeKernel {
         Ok(())
     }
 
+    fn memory_regions(&mut self, pid: i32, start: u64, end: u64) -> Result<Vec<crate::kernel::MemRegion>, Errno> {
+        // Every live process of the fake sees the fake's one memory.
+        if !self.procs.get(&pid).is_some_and(|p| !p.info.zombie) {
+            return Err(Errno::ESRCH);
+        }
+        let mut out: Vec<crate::kernel::MemRegion> = Vec::new();
+        if start >= end {
+            return Ok(out);
+        }
+        for (&page, p) in self.pages.range(start / PAGE_SIZE..end.div_ceil(PAGE_SIZE)) {
+            let at = page * PAGE_SIZE;
+            match out.last_mut() {
+                Some(r) if r.end == at && r.prot == Prot(p.prot) => r.end = at + PAGE_SIZE,
+                _ => out.push(crate::kernel::MemRegion {
+                    start: at,
+                    end: at + PAGE_SIZE,
+                    prot: Prot(p.prot),
+                    shared: false,
+                    object: 0,
+                }),
+            }
+        }
+        Ok(out)
+    }
+
+    fn page_query(&mut self, pid: i32, addr: u64) -> Result<crate::kernel::PageQuery, Errno> {
+        self.memory_regions(pid, 0, 0)?;
+        // Pages the fake has are all present.
+        Ok(match self.pages.contains_key(&(addr / PAGE_SIZE)) {
+            true => crate::kernel::PageQuery::Present,
+            false => crate::kernel::PageQuery::Unmapped,
+        })
+    }
+
     fn name_anon(&mut self, addr: u64, len: u64, name: Option<&[u8]>) -> Result<(), Errno> {
         self.named.push((addr, len, name.map(<[u8]>::to_vec)));
         Ok(())
@@ -981,6 +1018,21 @@ impl LinuxKernel for FakeKernel {
 
     fn seccomp_log(&mut self, number: u64, ret: u32) {
         self.seccomp_logged.push((number, ret));
+    }
+
+    fn bpf_install(&mut self, object: crate::bpf::Object, cloexec: bool) -> Result<i32, Errno> {
+        let _ = cloexec;
+        let fd = 100 + self.bpf_fds.len() as i32;
+        self.bpf_fds.insert(fd, object);
+        Ok(fd)
+    }
+
+    fn bpf_object(&mut self, fd: i32) -> Result<Option<crate::bpf::Object>, Errno> {
+        if let Some(o) = self.bpf_fds.get(&fd) {
+            return Ok(Some(o.clone()));
+        }
+        // Another descriptor: open or not.
+        if self.files.contains_key(&fd) { Ok(None) } else { Err(Errno::EBADF) }
     }
 
     fn pid_ns(&self) -> crate::ns::pid::PidNsRef {
