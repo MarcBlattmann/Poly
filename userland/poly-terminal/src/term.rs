@@ -985,7 +985,9 @@ mod tests {
 
     /// A launcher that records what it was called with and fails (there is
     /// no pseudo-terminal on the host).
-    fn recording_launcher(calls: &std::rc::Rc<std::cell::RefCell<Vec<(u16, u16, u16, u16)>>>) -> Launcher {
+    type Calls = std::rc::Rc<std::cell::RefCell<Vec<(u16, u16, u16, u16)>>>;
+
+    fn recording_launcher(calls: &Calls) -> Launcher {
         let calls = std::rc::Rc::clone(calls);
         alloc::boxed::Box::new(move |c, r, w, h| {
             calls.borrow_mut().push((c, r, w, h));
