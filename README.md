@@ -145,6 +145,10 @@ feature "Windows Hypervisor Platform"), and on its emulator (TCG)
 otherwise; `POLY_QEMU_ACCEL=tcg` forces the emulator. `cargo xtask desktop`
 sizes the screen for the host's display (a 200% display gets 2560x1600
 drawn at scale 2, so it is sharp); `--size=WxH` and `--scale=N` override it.
+`--memory=SIZE` and `--cpus=N` (on `desktop`, `run`, `chromium run`,
+`toolkits`, and in the menu's Resources block) give the guest more RAM or
+CPUs than its default, up to what the host has (the kernel starts at most 16
+CPUs; it has no RAM limit).
 
 On Windows, `cargo xtask run` builds and boots the kernel natively (QEMU
 for Windows on the `PATH`). The parts that need a Linux host report so: the
