@@ -254,7 +254,13 @@ pub struct TermApp {
     pub ended: bool,
     /// What to run in a new window (this program).
     pub new_window: Option<Vec<String>>,
+    /// Starts the shell: called once, at the first layout, with the grid's
+    /// columns and rows and its size in pixels (see [`Pty`]'s `Launch`).
+    pub launch: Option<Launcher>,
 }
+
+/// See [`TermApp::launch`].
+pub type Launcher = alloc::boxed::Box<dyn FnOnce(u16, u16, u16, u16) -> Result<Pty, String>>;
 
 impl core::fmt::Debug for TermApp {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -287,6 +293,7 @@ impl TermApp {
             dirty_all: true,
             ended: false,
             new_window: None,
+            launch: None,
         }
     }
 
@@ -385,12 +392,31 @@ impl TermApp {
         if (g.cols, g.rows) != (self.vt.cols(), self.vt.rows()) {
             self.vt.resize(g.cols, g.rows);
             if let Some(p) = &self.pty {
+                // A shell that is resized (`SIGWINCH`) may redraw its prompt:
+                // the boot test checks none happens while the shell starts.
+                poly_rt::println!("poly-terminal-pty: resized {}x{} (shell running)", g.cols, g.rows);
                 let px = |n: i32| u16::try_from(n).unwrap_or(u16::MAX);
                 p.resize(g.cols, g.rows, px(i32::from(g.cols) * g.cell_w), px(i32::from(g.rows) * g.cell_h));
             }
             self.selection = None;
         }
         self.grid = g;
+        // Only with the real cell size (`ui`): a shell that started before it
+        // would be resized, redraw its prompt (`SIGWINCH`) and show it twice.
+        if ui.is_some() && self.size.0 > 0 && self.size.1 > 0 {
+            self.start_shell();
+        }
+    }
+
+    /// Start the shell on a terminal of the grid's size, once.
+    fn start_shell(&mut self) {
+        let Some(launch) = self.launch.take() else { return };
+        let px = |n: i32| u16::try_from(n).unwrap_or(u16::MAX);
+        let g = &self.grid;
+        match launch(g.cols, g.rows, px(i32::from(g.cols) * g.cell_w), px(i32::from(g.rows) * g.cell_h)) {
+            Ok(pty) => self.pty = Some(pty),
+            Err(e) => crate::message(self, &e),
+        }
     }
 
     /// The selection's text.
@@ -955,6 +981,57 @@ mod tests {
         assert_eq!(fb.pixel(2, (g.y + 2) as u32), Some(pal().s1));
         // The header is the ground.
         assert_eq!(fb.pixel(5, 5), Some(pal().s0));
+    }
+
+    /// A launcher that records what it was called with and fails (there is
+    /// no pseudo-terminal on the host).
+    fn recording_launcher(calls: &std::rc::Rc<std::cell::RefCell<Vec<(u16, u16, u16, u16)>>>) -> Launcher {
+        let calls = std::rc::Rc::clone(calls);
+        alloc::boxed::Box::new(move |c, r, w, h| {
+            calls.borrow_mut().push((c, r, w, h));
+            Err("test: no pty here".into())
+        })
+    }
+
+    #[test]
+    fn the_shell_starts_at_the_first_layout_with_the_windows_size() {
+        // A shell started at a placeholder size is resized when the window's
+        // size arrives, redraws its prompt on SIGWINCH and shows it twice
+        // (BusyBox's ash does). So the terminal starts it only once the grid
+        // is known, with that grid.
+        let calls = std::rc::Rc::default();
+        let mut t = TermApp::new(None, 80, 24);
+        t.launch = Some(recording_launcher(&calls));
+        let mut cx = Cx::default();
+        let mut fb = MemoryFramebuffer::new(640, 480);
+        assert!(calls.borrow().is_empty(), "not at creation");
+        // The size arrives, but the cell size does not yet: still waiting.
+        t.event(AppEvent::Resized { width: 640, height: 480, scale: 1 }, &mut cx);
+        assert!(calls.borrow().is_empty(), "not before the first draw measures the cells");
+        t.draw(&mut fb, &ui(), true);
+        let g = t.grid;
+        assert_eq!((g.cols, g.rows), (t.vt.cols(), t.vt.rows()), "the emulator has the real size first");
+        assert_eq!(
+            *calls.borrow(),
+            [(g.cols, g.rows, g.cols * g.cell_w as u16, g.rows * g.cell_h as u16)],
+            "started once, with the grid's columns, rows and pixels"
+        );
+        assert_ne!((g.cols, g.rows), (80, 24), "a size other than the placeholder");
+        // Later layouts do not start it again.
+        t.event(AppEvent::Resized { width: 700, height: 500, scale: 1 }, &mut cx);
+        t.draw(&mut fb, &ui(), true);
+        assert_eq!(calls.borrow().len(), 1);
+    }
+
+    #[test]
+    fn a_shell_that_cannot_start_says_so_in_the_window() {
+        let calls = std::rc::Rc::default();
+        let mut t = app(640, 480);
+        t.launch = Some(recording_launcher(&calls));
+        let mut fb = MemoryFramebuffer::new(640, 480);
+        t.draw(&mut fb, &ui(), true);
+        assert!(t.pty.is_none());
+        assert!(t.vt.text((t.vt.display_to_absolute(0), 0), (t.vt.display_to_absolute(5), 79)).contains("no pty here"));
     }
 
     #[test]

@@ -85,6 +85,17 @@ Wayland client needs.
   desktop entries with `Terminal=true` (`apps::parse_desktop_entry`
   prefixes `/bin/poly-terminal -e`); `--dir` starts in a folder (Files'
   "Open in Terminal"). `TERM=xterm-256color`, `COLORTERM=truecolor`.
+- **The shell starts at the window's size.** The window's size and the
+  mono face's cell size are known only at the first layout, so the shell is
+  started then, on a pseudo-terminal that already has the grid's columns,
+  rows and pixels (`pty::Launch::start`, called from `TermApp::relayout`).
+  Started earlier, at a placeholder 80x24, the shell had printed its prompt
+  when the first layout resized the terminal; the `SIGWINCH` made BusyBox's
+  ash redraw it (`~ # \e[J
+~ # `), so a new Terminal showed `~ #`
+  twice whenever the shell was faster than the window. The `desktop-apps`
+  boot test checks the shell starts at a size other than 80x24 and is not
+  resized (`poly-terminal-pty: resized`) while it starts.
 - **The controlling terminal without a kernel change.** A Linux program a
   native process spawns is the root of its own process tree and leads its
   own session (ADR 0126); a session leader without a controlling terminal

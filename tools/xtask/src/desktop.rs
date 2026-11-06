@@ -1279,8 +1279,19 @@ fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let (tx, ty, tw, th) = shown(&d, "Terminal", 90)?;
     let shell = d.wait("poly-terminal: ", 30)?;
     expect("the terminal started a shell on a pseudo-terminal", shell.contains(" on /dev/pts/"))?;
+    // The shell starts at the window's size, not at a placeholder that the
+    // first layout then changes: a resized shell redraws its prompt, and
+    // the prompt shows twice.
+    expect(
+        &format!("the shell started on a pty of the window's size, not 80x24 ({shell:?})"),
+        shell.ends_with(')') && !shell.ends_with("(80x24)"),
+    )?;
     // The prompt.
     thread::sleep(Duration::from_secs(4));
+    expect(
+        "the shell was not resized while it printed its prompt (the prompt would show twice)",
+        count(&d.lines, "poly-terminal-pty: resized") == 0,
+    )?;
     let img = d.shot("terminal")?;
     // The header on the ground, the screen on the page (dark theme).
     let page = img.pixel((tx + tw / 2) as u32, (ty + th - 6) as u32);
@@ -1351,6 +1362,10 @@ fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     wait_nth(&d.lines, "poly-compositor: launched Terminal", terminals + 1, 30)?;
     wait_nth(&d.lines, " on /dev/pts/", terminal_starts + 1, 30)?;
     thread::sleep(Duration::from_secs(4));
+    expect(
+        "the second terminal's shell was not resized after it started either",
+        count(&d.lines, "poly-terminal-pty: resized") == 0,
+    )?;
     type_str(&mut d, "echo shortcut; ls -l /tmp; printf '\\033]0;'; ls -1 /tmp | tr -d '\\n'; printf '\\007'\n")?;
     let title = d.wait("poly-terminal: title x", 60)?;
     expect("the shortcut terminal ran ls and received its output", title.ends_with("title x"))?;
