@@ -72,6 +72,27 @@ impl Wm {
         }
         if which & SET_FOREGROUND != 0 {
             self.take_foreground(k, if active != 0 { active } else { self.keeper });
+            if active == 0 {
+                self.raise_keeper();
+            }
+        }
+    }
+
+    /// The keeper took the foreground: as any activated window it comes to the
+    /// top of its band, above our topmost windows (GetActiveWindow.yaml
+    /// `show_again`: "a window of another process (the runner keeper) was
+    /// activated and raised above A meanwhile"; GetFocus.yaml `restore`).
+    pub(super) fn raise_keeper(&mut self) {
+        let (d, k) = (self.desktop, self.keeper);
+        if k == 0 {
+            return;
+        }
+        if let Some(dw) = self.get_mut(u64::from(d))
+            && let Some(i) = dw.children.iter().position(|&c| c == k)
+            && i != 0
+        {
+            dw.children.remove(i);
+            dw.children.insert(0, k);
         }
     }
 
@@ -148,6 +169,7 @@ impl Wm {
         }
         if self.foreground == h {
             self.foreground = self.keeper;
+            self.raise_keeper();
         }
     }
 

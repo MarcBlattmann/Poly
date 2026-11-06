@@ -344,6 +344,20 @@ fn is_within<E: Env + ?Sized>(env: &E, h: u32, root: u32) -> bool {
     false
 }
 
+/// A window `root` goes (hidden by DestroyWindow): a window below it that
+/// holds the capture is sent WM_CANCELMODE and loses the capture with
+/// WM_CAPTURECHANGED (lParam NULL). The capture of `root` itself ends
+/// without a message (SetCapture.yaml `destroy`).
+pub fn release_capture_below<E: Env + ?Sized>(env: &E, root: u32) {
+    let st = input(env);
+    if st.capture == 0 || st.capture == root || !is_within(env, st.capture, root) {
+        return;
+    }
+    send(env, u64::from(st.capture), WM_CANCELMODE, 0, 0);
+    env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE });
+    send(env, u64::from(st.capture), 0x0215, 0, 0); // WM_CAPTURECHANGED
+}
+
 /// `SetFocus` (SetFocus.yaml).
 pub fn set_focus<E: Env + ?Sized>(env: &E, hwnd: u64) -> u64 {
     let st = input(env);

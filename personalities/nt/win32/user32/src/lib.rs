@@ -210,6 +210,20 @@ impl Env for Sys {
         region_of(rects) as u64
     }
 
+    fn set_cursor(&self, cursor: u64) {
+        with_cursor(|c| *c = cursor as usize);
+    }
+
+    fn region_rects(&self, rgn: u64) -> Option<Vec<Rect>> {
+        rects_of(rgn as H)
+    }
+
+    fn set_region_rects(&self, rgn: u64, rects: &[Rect]) -> i32 {
+        let flat: Vec<i32> = rects.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect();
+        // SAFETY: `rects.len()` quadruples.
+        unsafe { PolyGdiSetRegionRects(rgn as H, flat.as_ptr(), rects.len() as u32) }
+    }
+
     fn delete_object(&self, h: u64) {
         // SAFETY: our gdi32 checks the handle.
         unsafe { DeleteObject(h as H) };
@@ -660,28 +674,38 @@ fn origin(hwnd: H) -> Option<(i32, i32)> {
     info(hwnd).map(|i| (i.client.left, i.client.top))
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn ClientToScreen(hwnd: H, pt: *mut i32) -> i32 {
-    // NULL is not a window here (ClientToScreen.yaml).
-    let Some((x, y)) = (hwnd != 0).then(|| origin(hwnd)).flatten() else { return bad_window() };
-    // SAFETY: the caller's POINT.
+/// ClientToScreen / ScreenToClient of the caller's POINT (`WS_EX_LAYOUTRTL`
+/// windows count x from the client area's right edge).
+unsafe fn convert(hwnd: H, pt: *mut i32, to_screen: bool) -> i32 {
+    // SAFETY: the caller's POINT, if any.
+    let p = if pt.is_null() { None } else { Some(unsafe { (*pt, *pt.add(1)) }) };
+    // A bad window is reported before a bad pointer.
+    let Some(i) = (hwnd != 0).then(|| info(hwnd)).flatten() else { return bad_window() };
+    let Some(p) = p else {
+        set_last_error(ERROR_NOACCESS);
+        return 0;
+    };
+    let Some((x, y)) = u::convert_point(&SYS, u64::from(i.hwnd), p, to_screen) else { return 0 };
+    // SAFETY: the caller's POINT, checked above.
     unsafe {
-        *pt += x;
-        *pt.add(1) += y;
+        *pt = x;
+        *pt.add(1) = y;
     }
     1
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "system" fn ClientToScreen(hwnd: H, pt: *mut i32) -> i32 {
+    // NULL is not a window here (ClientToScreen.yaml).
+    // SAFETY: the caller's POINT.
+    unsafe { convert(hwnd, pt, true) }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "system" fn ScreenToClient(hwnd: H, pt: *mut i32) -> i32 {
     // NULL is not a window here (ScreenToClient.yaml).
-    let Some((x, y)) = (hwnd != 0).then(|| origin(hwnd)).flatten() else { return bad_window() };
     // SAFETY: the caller's POINT.
-    unsafe {
-        *pt -= x;
-        *pt.add(1) -= y;
-    }
-    1
+    unsafe { convert(hwnd, pt, false) }
 }
 
 #[unsafe(no_mangle)]
@@ -1800,7 +1824,8 @@ pub extern "system" fn ReleaseCapture() -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetCursorPos(pt: *mut i32) -> i32 {
     if pt.is_null() {
-        set_last_error(ERROR_INVALID_PARAMETER);
+        // GetCursorPos.yaml `null`.
+        set_last_error(ERROR_NOACCESS);
         return 0;
     }
     let (x, y) = cursor(None);
@@ -2325,6 +2350,11 @@ pub unsafe extern "system" fn TrackMouseEvent(tme: *mut u8) -> i32 {
         return 1;
     }
     let Some(i) = info(hwnd as H) else { return bad_window() };
+    const TME_NONCLIENT: u32 = 0x10;
+    if flags & TME_NONCLIENT != 0 {
+        u::input::track_nonclient(&SYS, i.hwnd, flags);
+        return 1;
+    }
     call(Request::TrackMouse { hwnd: i.hwnd, flags, hover });
     1
 }
@@ -2368,8 +2398,7 @@ pub unsafe extern "system" fn InvalidateRect(hwnd: H, rect: *const i32, erase: i
 
 #[unsafe(no_mangle)]
 pub extern "system" fn InvalidateRgn(hwnd: H, rgn: H, erase: i32) -> i32 {
-    let rects = if rgn == 0 { None } else { Some(rects_of(rgn).unwrap_or_default()) };
-    i32::from(u::paint::invalidate(&SYS, hwnd as u64, rects.as_deref(), erase != 0))
+    i32::from(u::paint::invalidate_rgn(&SYS, hwnd as u64, rgn as u64, erase != 0))
 }
 
 #[unsafe(no_mangle)]
@@ -2417,10 +2446,7 @@ pub unsafe extern "system" fn GetUpdateRect(hwnd: H, rect: *mut i32, erase: i32)
 /// The update region into `rgn` (client coordinates); its kind.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetUpdateRgn(hwnd: H, rgn: H, erase: i32) -> i32 {
-    let Some((p, _)) = u::paint::update_area(&SYS, hwnd as u64, erase != 0) else { return 0 };
-    let flat: Vec<i32> = p.rects.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect();
-    // SAFETY: `p.rects.len()` quadruples.
-    unsafe { PolyGdiSetRegionRects(rgn, flat.as_ptr(), p.rects.len() as u32) }
+    u::paint::get_update_rgn(&SYS, hwnd as u64, rgn as u64, erase != 0)
 }
 
 /// The entry point (`DllMain`): nothing to set up.

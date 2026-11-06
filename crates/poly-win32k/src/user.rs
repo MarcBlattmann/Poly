@@ -219,6 +219,20 @@ pub trait Env {
     /// A GDI region of `rects`, freed with [`Env::delete_object`].
     fn make_region(&self, rects: &[Rect]) -> u64;
     fn delete_object(&self, h: u64);
+    /// Make `cursor` the calling thread's cursor shape (what DefWindowProc's
+    /// `WM_SETCURSOR` does with the class cursor).
+    fn set_cursor(&self, _cursor: u64) {}
+    /// The rectangles of GDI region `rgn` (`None`: not a region: deleted, or
+    /// another kind of object).
+    fn region_rects(&self, _rgn: u64) -> Option<Vec<Rect>> {
+        None
+    }
+    /// Replace GDI region `rgn`'s contents with `rects`: its kind
+    /// (NULLREGION 1, SIMPLEREGION 2, COMPLEXREGION 3), 0 when `rgn` is not
+    /// a region.
+    fn set_region_rects(&self, _rgn: u64, _rects: &[Rect]) -> i32 {
+        0
+    }
 }
 
 /// `MAKELPARAM(lo, hi)`.
@@ -290,6 +304,25 @@ pub fn map_points(from: MapOrigin, to: MapOrigin, points: &mut [(i32, i32)]) -> 
         points[1].0 = left;
     }
     map_offset(from, to)
+}
+
+/// `ClientToScreen` (`to_screen`) and `ScreenToClient` of one point of
+/// window `hwnd` (ClientToScreen.yaml, ScreenToClient.yaml): the client
+/// origin's screen position added or taken off; for a `WS_EX_LAYOUTRTL`
+/// window x runs leftwards from the client area's right edge. `None` for
+/// NULL or a made-up handle (ERROR_INVALID_WINDOW_HANDLE).
+pub fn convert_point<E: Env + ?Sized>(env: &E, hwnd: u64, point: (i32, i32), to_screen: bool) -> Option<(i32, i32)> {
+    let Some(i) = (hwnd != 0).then(|| info(env, hwnd)).flatten() else {
+        env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return None;
+    };
+    let rtl = i.ex_style & metrics::WS_EX_LAYOUTRTL != 0;
+    let own = MapOrigin { x: if rtl { i.client.right } else { i.client.left }, y: i.client.top, rtl };
+    Some(if to_screen {
+        map_point(own, MapOrigin::default(), point)
+    } else {
+        map_point(MapOrigin::default(), own, point)
+    })
 }
 
 fn ptr<T>(v: &mut T) -> u64 {
@@ -484,6 +517,8 @@ fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
         set_window_pos(env, h, 0, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE);
         focus::DESTROYING.store(0, core::sync::atomic::Ordering::Relaxed);
     }
+    // A descendant of the hidden window that holds the capture loses it too.
+    focus::release_capture_below(env, hwnd);
     if let Reply::Relatives { owned, .. } = env.call(Request::Relatives { hwnd }) {
         for o in owned {
             destroy_tree(env, o, false);
@@ -549,12 +584,12 @@ pub fn show_window<E: Env + ?Sized>(env: &E, hwnd: u64, cmd: i32) -> bool {
         SW_SHOWMAXIMIZED => maximize(env, &i),
         _ => {
             if (i.minimized || i.maximized) && matches!(cmd, SW_SHOWNORMAL | SW_RESTORE | SW_SHOWDEFAULT) {
-                restore(env, &i);
+                restore(env, &i, true);
             } else if i.minimized && cmd == SW_SHOWNOACTIVATE {
                 // "Displays a window in its most recent size and position"
                 // (Learn): a minimized window is restored (observed:
                 // WM_WINDOWPOSCHANGING to the normal rectangle, 0x8120).
-                restore(env, &i);
+                restore(env, &i, false);
             } else if !was {
                 show(env, &i, ShowKind::Command(cmd));
             }
@@ -749,14 +784,27 @@ fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     swp(env, i.hwnd, HWND_TOP, pos.0, pos.1, size.0, size.1, SWP_STATECHANGED | SWP_FRAMECHANGED, 0, false);
 }
 
-fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo) {
+/// SW_RESTORE and friends. On the interactive desktop restoring a window
+/// that was minimized or maximized activates it inside the call
+/// (`activate`; GetFocus.yaml `restore`: WM_WINDOWPOSCHANGING 0x8120, the
+/// activation with its own WM_WINDOWPOSCHANGING 0x3, WM_WINDOWPOSCHANGED
+/// 0x8120, then WM_ACTIVATE once more).
+fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo, activate: bool) {
     let r = normal_rect(env, i);
     set_state(env, i.hwnd, false, false, None);
     // Out of the icon its pixels are not kept (SWP_NOCOPYBITS, as when it
     // was minimized; observed 0x8120).
     let nocopy = if i.minimized { 0x100 } else { 0 };
     let flags = SWP_STATECHANGED | nocopy | SWP_FRAMECHANGED;
-    swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), flags, 0, false);
+    let activating = activate
+        && screen(env).interactive
+        && i.style & WS_CHILD == 0
+        && i.ex_style & WS_EX_NOACTIVATE == 0
+        && focus::input(env).active != i.hwnd;
+    swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), flags, 0, activating);
+    if activating && focus::input(env).active == i.hwnd {
+        send(env, u64::from(i.hwnd), focus::WM_ACTIVATE, focus::WA_ACTIVE, 0);
+    }
 }
 
 fn normal_rect<E: Env + ?Sized>(env: &E, i: &WinInfo) -> Rect {
@@ -815,6 +863,15 @@ fn swp<E: Env + ?Sized>(
         send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
     let interactive = screen(env).interactive;
+    // Whether the window is raised: asked before the activation below brings
+    // it to the top, which is a z-order change all the same (GetActiveWindow.yaml
+    // `show_again`: no SWP_NOZORDER once another process's window was raised
+    // above it meanwhile).
+    let raised_by_call = flags & SWP_NOZORDER == 0
+        && matches!(
+            env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
+            Reply::Bool { value: true }
+        );
     if flags & SWP_HIDEWINDOW != 0
         && flags & SWP_NOACTIVATE == 0
         && interactive
@@ -874,10 +931,12 @@ fn swp<E: Env + ?Sized>(
     // A minimizing show of a hidden window enters the z order: it changed
     // (GetForegroundWindow.yaml gfw_show: no SWP_NOZORDER in the result).
     let zchanged = f & SWP_NOZORDER == 0
-        && (matches!(
-            env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
-            Reply::Bool { value: true }
-        ) || (show && interactive && !activate && f & SWP_STATECHANGED != 0));
+        && (raised_by_call
+            || matches!(
+                env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
+                Reply::Bool { value: true }
+            )
+            || (show && interactive && !activate && f & SWP_STATECHANGED != 0));
     let hide = f & SWP_HIDEWINDOW != 0 && styled_visible;
     let frame = f & SWP_FRAMECHANGED != 0;
     if !(moved || sized || zchanged || show || hide || frame) {
@@ -979,6 +1038,11 @@ fn swp<E: Env + ?Sized>(
     let mut done = WindowPos { hwnd: h, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
     send(env, h, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
     if hide && vis_before && interactive {
+        // Destroying a window ends the capture of a window below it before
+        // the deactivation messages (SetCapture.yaml `destroy`).
+        if focus::DESTROYING.load(core::sync::atomic::Ordering::Relaxed) == hwnd {
+            focus::release_capture_below(env, hwnd);
+        }
         focus::after_hide(env, &i);
     }
     true
@@ -1101,6 +1165,18 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 if r != 0 {
                     return r;
                 }
+            }
+            // The window the cursor is over sets its class cursor for a
+            // client hit and returns FALSE; a window asked on behalf of a
+            // child changes nothing (SetCursor.yaml `class_cursor`,
+            // `child_without_cursor`). A class without a cursor keeps the
+            // shape (`kept`).
+            if w == hwnd
+                && l & 0xFFFF == input::HTCLIENT
+                && let Reply::Value { value } = env.call(Request::ClassLong { hwnd, index: -12 })
+                && value != 0
+            {
+                env.set_cursor(value);
             }
             0
         }

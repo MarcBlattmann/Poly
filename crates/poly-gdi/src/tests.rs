@@ -251,6 +251,54 @@ fn region_handles_create_combine_and_fail_as_observed() {
     assert_eq!(g.equal_rgn(a, d), 0);
 }
 
+/// CreateRectRgn.yaml `normalised`, `empty`, `negative`, `interface.GetRegionData`.
+#[test]
+fn rectangular_regions_are_normalised_and_empty_ones_are_empty() {
+    let mut g = Gdi::new();
+    for (l, t, r, b) in [(110, 20, 10, 70), (10, 70, 110, 20), (110, 70, 10, 20), (10, 20, 110, 70)] {
+        let h = u64::from(g.create_rect_rgn(Rect::new(l, t, r, b)).unwrap());
+        assert_eq!(g.rgn_box(h), Some((2, Rect::new(10, 20, 110, 70))), "{l},{t},{r},{b}");
+        assert_eq!(rgn_rects(&g, h), [Rect::new(10, 20, 110, 70)]);
+        // One rectangle: 32 bytes of header and 16 of rectangle.
+        assert_eq!(g.region_data(h).unwrap().len(), 48);
+    }
+    for (l, t, r, b) in [(10, 20, 10, 70), (10, 20, 60, 20), (0, 0, 0, 0), (60, 70, 10, 70)] {
+        let h = u64::from(g.create_rect_rgn(Rect::new(l, t, r, b)).unwrap());
+        assert_eq!(g.object_type(h), OBJ_REGION);
+        assert_eq!(g.rgn_box(h), Some((1, Rect::default())), "{l},{t},{r},{b}");
+        assert!(rgn_rects(&g, h).is_empty());
+        let data = g.region_data(h).unwrap();
+        assert_eq!(data.len(), 32, "an empty region is the header only");
+        assert_eq!(&data[8..16], &[0, 0, 0, 0, 0, 0, 0, 0], "no rectangles, no bytes of them");
+        assert_eq!(&data[16..32], &[0u8; 16], "bound 0,0,0,0");
+    }
+    // Negative coordinates are kept.
+    let h = u64::from(g.create_rect_rgn(Rect::new(-30, -20, -10, -5)).unwrap());
+    assert_eq!(g.rgn_box(h), Some((2, Rect::new(-30, -20, -10, -5))));
+    // The limits on every side: -2^27 and 2^27 - 1 work, one past fails.
+    for bad in [1 << 27, -(1 << 27) - 1, 1 << 28, i32::MAX, i32::MIN] {
+        for corner in 0..4 {
+            let mut c = [0, 0, 10, 10];
+            c[corner] = bad;
+            assert_eq!(g.create_rect_rgn(Rect::new(c[0], c[1], c[2], c[3])), Err(ERROR_INVALID_PARAMETER), "{c:?}");
+        }
+    }
+    let sq = u64::from(g.create_rect_rgn(Rect::new(0, 0, 1_000_000, 1_000_000)).unwrap());
+    assert_eq!(g.rgn_box(sq), Some((2, Rect::new(0, 0, 1_000_000, 1_000_000))));
+    // SetRectRgn: swapped corners are put in order, anything else kept.
+    assert!(g.set_rect_rgn(sq, Rect::new(50, 40, 10, 20)));
+    assert_eq!(g.rgn_box(sq), Some((2, Rect::new(10, 20, 50, 40))));
+    assert!(g.set_rect_rgn(sq, Rect::new(1 << 27, 0, 1 << 28, 10)));
+    assert_eq!(g.rgn_box(sq), Some((2, Rect::new(1 << 27, 0, 1 << 28, 10))));
+    // 1000 regions made and deleted in turn all work.
+    for i in 0..1000 {
+        let h = u64::from(g.create_rect_rgn(Rect::new(i, i, i + 5, i + 5)).unwrap());
+        assert!(g.delete_object(h));
+        assert!(!g.delete_object(h));
+        assert_eq!(g.object_type(h), 0);
+    }
+}
+
 #[test]
 fn clip_regions_limit_drawing_in_device_coordinates() {
     let mut g = Gdi::new();
