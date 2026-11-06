@@ -195,11 +195,32 @@ impl Backdrop {
 
 /// Add `r` to a damage list: dropped if covered, covering ones replaced,
 /// the bounding box past [`MAX_DAMAGE_RECTS`].
-fn add_damage(list: &mut Vec<Rect>, r: Rect) {
-    if r.is_empty() || list.iter().any(|d| d.intersect(&r) == r) {
+fn add_damage(list: &mut Vec<Rect>, mut r: Rect) {
+    if r.is_empty() {
         return;
     }
-    list.retain(|d| r.intersect(d) != *d);
+    let area = |r: Rect| u64::from(r.width.max(0) as u32) * u64::from(r.height.max(0) as u32);
+    let economical_union = |a: Rect, b: Rect| {
+        let union = a.union(&b);
+        let exact = area(a).saturating_add(area(b)).saturating_sub(area(a.intersect(&b)));
+        area(union) <= exact.saturating_add(exact / 8)
+    };
+
+    let mut i = 0;
+    while i < list.len() {
+        let existing = list[i];
+        if existing.intersect(&r) == r {
+            return;
+        }
+        if r.intersect(&existing) == existing || economical_union(existing, r) {
+            r = r.union(&existing);
+            list.swap_remove(i);
+            // The enlarged rectangle may now cheaply absorb an earlier one.
+            i = 0;
+        } else {
+            i += 1;
+        }
+    }
     list.push(r);
     if list.len() > MAX_DAMAGE_RECTS {
         let all = list.iter().fold(Rect::default(), |a, d| a.union(d));
@@ -374,6 +395,8 @@ pub struct Scene {
     cursor_look: CursorLook,
     /// The windows whose backdrop is kept ([`Scene::set_backdrop`]).
     backdrops: BTreeMap<WindowId, Backdrop>,
+    /// The windows' blurred shadows, kept from one frame to the next.
+    shadows: super::paint::ShadowCache,
 }
 
 impl Scene {
@@ -399,6 +422,7 @@ impl Scene {
             cursor: None,
             cursor_look: CursorLook::Arrow,
             backdrops: BTreeMap::new(),
+            shadows: super::paint::ShadowCache::new(),
         };
         s.damage_all();
         s
@@ -976,15 +1000,17 @@ impl Scene {
         }
         let damage: Vec<Rect> = all.iter().map(|d| d.intersect(&screen)).filter(|d| !d.is_empty()).collect();
         let mut backdrops = core::mem::take(&mut self.backdrops);
+        let mut shadows = core::mem::take(&mut self.shadows);
         let s = self.scale as i32;
         for (id, b) in backdrops.iter_mut() {
             let extent = self.window(*id).map_or(Rect::default(), |w| w.extent().scale(s).intersect(&screen));
             b.follow(extent);
         }
         for r in &damage {
-            super::render::draw(self, fb, *r, below, above, &mut backdrops);
+            super::render::draw(self, fb, *r, below, above, &mut backdrops, &mut shadows);
         }
         self.backdrops = backdrops;
+        self.shadows = shadows;
         damage
     }
 }

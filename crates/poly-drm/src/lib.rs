@@ -59,6 +59,7 @@
 
 extern crate alloc;
 
+mod damage;
 mod device;
 mod kms;
 pub mod modes;
@@ -310,6 +311,21 @@ pub trait Hardware {
     fn scanout(&mut self, index: usize, show: Option<(u32, Rect)>) -> Result<(), HwError>;
     /// Put `rect` of framebuffer `fb` on the outputs that show it.
     fn flush(&mut self, fb: u32, rect: Rect) -> Result<(), HwError>;
+    /// The time now (CLOCK_MONOTONIC, ns), if the hardware has a clock:
+    /// programming it takes time, and a flip is on the screen only once it
+    /// is done, so its vblank is the first one after that. `None`: the time
+    /// of the request counts.
+    fn now_ns(&self) -> Option<u64> {
+        None
+    }
+    /// Whether showing `fb` after another framebuffer leaves the parts of
+    /// the picture that were not uploaded as they were (the device keeps
+    /// one picture, and uploads change parts of it), so a flip only has to
+    /// flush what it uploaded. Else it flushes all of the framebuffer.
+    fn scanout_keeps_picture(&self, fb: u32) -> bool {
+        let _ = fb;
+        false
+    }
     /// The device is about to show its own framebuffers: the kernel
     /// console stops drawing to the outputs.
     fn take_display(&mut self);

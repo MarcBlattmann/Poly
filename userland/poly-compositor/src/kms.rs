@@ -25,8 +25,8 @@ use crate::io;
 use crate::os::{self, RawFd};
 use crate::prelude::*;
 use poly_drm::uapi::{
-    CardRes, CreateDumb, EventVblank, FbCmd2, GetConnector, GetEncoder, MapDumb, ModeCrtc, ModeInfo, PageFlip, event,
-    fourcc, ioctl, mode,
+    CardRes, ClipRect, CreateDumb, EventVblank, FbCmd2, FbDirty, GetConnector, GetEncoder, MapDumb, ModeCrtc, ModeInfo,
+    PageFlip, event, fourcc, ioctl, mode,
 };
 use poly_wayland::compose::{Framebuffer, Rect};
 
@@ -245,6 +245,9 @@ pub struct Kms<D: Drm> {
     /// Per buffer: what the other one was drawn with since this one was
     /// last drawn, to copy over before drawing into it.
     stale: Vec<Vec<Rect>>,
+    /// What [`Kms::begin_frame`] copied into the back buffer for the frame
+    /// being drawn: changed in it too, as far as the device is concerned.
+    copied: Vec<Rect>,
     /// Flips completed.
     pub flips: u64,
     /// The time of the first and the last completed flip.
@@ -265,6 +268,7 @@ impl<D: Drm> Kms<D> {
             front: 0,
             pending: false,
             stale: vec![Vec::new(), Vec::new()],
+            copied: Vec::new(),
             flips: 0,
             first_flip_ns: None,
             last_flip_ns: 0,
@@ -331,12 +335,17 @@ impl<D: Drm> Kms<D> {
 
     /// Bring the back buffer up to date before a frame is drawn into it:
     /// copy what it missed from the front buffer.
-    pub fn begin_frame(&mut self) {
+    pub fn begin_frame(&mut self) -> u64 {
         let (back, front) = (self.back(), self.front);
         let (w, h) = self.output.size();
         let screen = Rect::new(0, 0, w as i32, h as i32);
+        let mut copied_bytes = 0u64;
         for r in core::mem::take(&mut self.stale[back]) {
             let r = r.intersect(&screen);
+            if !r.is_empty() {
+                self.copied.push(r);
+            }
+            copied_bytes = copied_bytes.saturating_add(r.width.max(0) as u64 * r.height.max(0) as u64 * 4);
             for y in r.y..r.bottom() {
                 let (src, dst) = (&self.buffers[front], &self.buffers[back]);
                 // SAFETY: both rows are inside their mappings (`r` is inside
@@ -351,6 +360,7 @@ impl<D: Drm> Kms<D> {
                 }
             }
         }
+        copied_bytes
     }
 
     /// Queue the back buffer for the next vblank (`damage`: what was drawn
@@ -360,6 +370,7 @@ impl<D: Drm> Kms<D> {
             return Err(io::Error::new(io::ErrorKind::WouldBlock, "a flip is pending"));
         }
         let back = self.back();
+        self.tell_damage(back, damage);
         let mut p = PageFlip {
             crtc_id: self.output.crtc,
             fb_id: self.buffers[back].fb,
@@ -378,6 +389,36 @@ impl<D: Drm> Kms<D> {
             self.stale[other] = vec![all];
         }
         Ok(())
+    }
+
+    /// Tell the device what changed in the back buffer since it was last
+    /// shown (`DIRTYFB` on a buffer that is not on the screen): what
+    /// [`Kms::begin_frame`] copied into it and what the frame drew, so the
+    /// flip copies just that to the display instead of the whole screen.
+    /// A device that does not take it copies everything, as it always did.
+    fn tell_damage(&mut self, back: usize, damage: &[Rect]) {
+        let (w, h) = self.output.size();
+        let screen = Rect::new(0, 0, w as i32, h as i32);
+        let copied = core::mem::take(&mut self.copied);
+        let clips = clip_list(copied.iter().chain(damage), screen);
+        let mut bytes: Vec<u8> = clips
+            .iter()
+            .flat_map(|r| {
+                // The screen is far smaller than 65536 pixels a side.
+                ClipRect { x1: r.x as u16, y1: r.y as u16, x2: r.right() as u16, y2: r.bottom() as u16 }.to_bytes()
+            })
+            .collect();
+        let mut num_clips = clips.len() as u32;
+        if clips.is_empty() {
+            // Nothing changed: one empty clip says so (no clips would be
+            // all of it).
+            bytes = ClipRect { x1: 0, y1: 0, x2: 0, y2: 0 }.to_bytes().to_vec();
+            num_clips = 1;
+        }
+        let mut arg =
+            FbDirty { fb_id: self.buffers[back].fb, num_clips, clips_ptr: bytes.as_ptr() as u64, ..FbDirty::default() }
+                .to_bytes();
+        let _ = self.drm.ioctl(ioctl::MODE_DIRTYFB, &mut arg);
     }
 
     /// Read the card's events: the flip that completed, if one did.
@@ -456,6 +497,38 @@ impl<D: Drm> Framebuffer for Kms<D> {
     }
 }
 
+/// The most clips one `DIRTYFB` carries: every one is a round trip to the
+/// display device, which costs more than copying a few more pixels.
+const MAX_CLIPS: usize = 3;
+
+/// `rects` cut to `screen`, as few non-overlapping-ish rectangles as are
+/// worth sending: rectangles that touch or overlap and whose union is
+/// hardly larger than the two together are joined, and what is left past
+/// [`MAX_CLIPS`] becomes its bounding box.
+fn clip_list<'a>(rects: impl Iterator<Item = &'a Rect>, screen: Rect) -> Vec<Rect> {
+    let area = |r: &Rect| r.width.max(0) as i64 * r.height.max(0) as i64;
+    let mut list: Vec<Rect> = Vec::new();
+    for r in rects.map(|r| r.intersect(&screen)).filter(|r| !r.is_empty()) {
+        let mut r = r;
+        // Join with whatever it can be joined with, again and again (a
+        // bigger rectangle may now reach another).
+        while let Some(i) = list.iter().position(|d| {
+            let union = d.union(&r);
+            let both = area(d) + area(&r) - area(&d.intersect(&r));
+            // Within an eighth of the pixels the two cover.
+            area(&union) <= both + both / 8
+        }) {
+            r = r.union(&list.swap_remove(i));
+        }
+        list.push(r);
+    }
+    if list.len() > MAX_CLIPS {
+        let all = list.iter().fold(Rect::default(), |a, d| a.union(d));
+        list = vec![all];
+    }
+    list
+}
+
 /// The front buffer of a [`Kms`] read as a framebuffer.
 pub struct FrontView<'a, D: Drm>(&'a mut Kms<D>);
 
@@ -490,6 +563,8 @@ mod tests {
     struct Hw {
         shown: Vec<u32>,
         taken: bool,
+        /// Every upload, (framebuffer, rectangle).
+        uploads: Vec<(u32, HwRect)>,
     }
 
     impl Hardware for Hw {
@@ -512,7 +587,8 @@ mod tests {
             Ok(())
         }
 
-        fn upload(&mut self, _: u32, _: &FbLayout, _: HwRect) -> Result<(), HwError> {
+        fn upload(&mut self, fb: u32, _: &FbLayout, r: HwRect) -> Result<(), HwError> {
+            self.uploads.push((fb, r));
             Ok(())
         }
 
@@ -652,7 +728,7 @@ mod tests {
         assert!(dev.borrow_mut().hardware().taken, "the console yielded");
         let frame_ns = 1_000_000_000_000 / u64::from(refresh);
         // Frame 1: a red square.
-        kms.begin_frame();
+        assert_eq!(kms.begin_frame(), 0);
         for y in 10..20 {
             kms.row_mut(y)[10..20].fill(0x00ff_0000);
         }
@@ -665,7 +741,7 @@ mod tests {
         assert!(!kms.is_pending());
         assert_eq!(kms.front_view().row_mut(15)[15], 0x00ff_0000, "shown");
         // Frame 2 draws elsewhere; the back buffer first gets the square.
-        kms.begin_frame();
+        assert_eq!(kms.begin_frame(), 10 * 10 * 4);
         assert_eq!(kms.row_mut(15)[15], 0x00ff_0000, "brought up to date");
         kms.row_mut(100)[100] = 0x0000_ff00;
         kms.present(&[Rect::new(100, 100, 1, 1)]);
@@ -681,6 +757,69 @@ mod tests {
         drop(kms);
         dev.borrow_mut().close(file, *now.borrow());
         assert!(!dev.borrow_mut().hardware().taken, "the console is back");
+    }
+
+    /// The device is told what each frame changed, so a flip copies that
+    /// to the display and not the whole screen.
+    #[test]
+    fn flips_copy_only_the_damage_to_the_display() {
+        let (dev, now) = device();
+        let file = dev.borrow_mut().open(Node::Primary);
+        let drm = InProcess { dev: Rc::clone(&dev), file, now: Rc::clone(&now) };
+        let mut kms = Kms::open(drm).expect("KMS");
+        let frame_ns = 1_000_000_000_000 / u64::from(kms.output().refresh_mhz());
+        let uploads = |dev: &Rc<RefCell<Device<Hw>>>| std::mem::take(&mut dev.borrow_mut().hardware().uploads);
+        let screen = HwRect::new(0, 0, 1280, 800);
+        uploads(&dev);
+        // Frame 1 goes to a buffer never shown: all of it, whatever was told.
+        kms.begin_frame();
+        kms.present(&[Rect::new(10, 10, 10, 10)]);
+        let first = uploads(&dev);
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].1, screen);
+        *now.borrow_mut() += frame_ns + 1;
+        kms.dispatch().unwrap();
+        // Frame 2 goes to the first buffer: what frame 1 drew (copied over)
+        // and what frame 2 draws, not the screen.
+        kms.begin_frame();
+        kms.present(&[Rect::new(100, 100, 5, 5)]);
+        let second: Vec<HwRect> = uploads(&dev).into_iter().map(|(_, r)| r).collect();
+        assert_eq!(second, [HwRect::new(10, 10, 10, 10), HwRect::new(100, 100, 5, 5)]);
+        *now.borrow_mut() += frame_ns + 1;
+        kms.dispatch().unwrap();
+        // A frame with nothing drawn copies what the buffer missed.
+        kms.begin_frame();
+        kms.present(&[]);
+        let third: Vec<HwRect> = uploads(&dev).into_iter().map(|(_, r)| r).collect();
+        assert_eq!(third, [HwRect::new(100, 100, 5, 5)]);
+        *now.borrow_mut() += frame_ns + 1;
+        kms.dispatch().unwrap();
+        // Nothing at all: a flip that only paces copies nothing.
+        kms.begin_frame();
+        kms.flip(&[]).unwrap();
+        let none = uploads(&dev);
+        assert!(none.len() <= 1, "{none:?}");
+        assert!(none.iter().all(|(_, r)| r.width * r.height <= 10 * 10), "{none:?}");
+    }
+
+    #[test]
+    fn clip_lists_are_few_and_cut_to_the_screen() {
+        let screen = Rect::new(0, 0, 1000, 800);
+        let list = |rects: &[Rect]| clip_list(rects.iter(), screen);
+        // Empty and off-screen ones are nothing.
+        assert!(list(&[Rect::new(5, 5, 0, 9), Rect::new(2000, 0, 5, 5)]).is_empty());
+        // Cut to the screen.
+        assert_eq!(list(&[Rect::new(900, 700, 300, 300)]), [Rect::new(900, 700, 100, 100)]);
+        // Overlapping, nearly one rectangle: joined.
+        assert_eq!(list(&[Rect::new(0, 0, 100, 100), Rect::new(5, 5, 100, 100)]), [Rect::new(0, 0, 105, 105)]);
+        // A cross: the union would be far larger than the arms.
+        let cross = [Rect::new(0, 400, 1000, 4), Rect::new(500, 0, 4, 800)];
+        assert_eq!(list(&cross).len(), 2);
+        // One covering another absorbs it, and a chain joins up.
+        assert_eq!(list(&[Rect::new(10, 10, 5, 5), Rect::new(0, 0, 100, 100)]), [Rect::new(0, 0, 100, 100)]);
+        // More than a few apart: their bounding box.
+        let apart: Vec<Rect> = (0..6).map(|i| Rect::new(i * 160, i * 120, 10, 10)).collect();
+        assert_eq!(list(&apart), [Rect::new(0, 0, 810, 610)]);
     }
 
     /// No connected output: an error, so the compositor falls back to

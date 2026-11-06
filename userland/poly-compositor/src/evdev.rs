@@ -20,7 +20,7 @@
 
 use crate::os::{self, RawFd};
 use crate::prelude::*;
-use alloc::collections::VecDeque;
+use poly_wayland::seat::InputEventQueue;
 use poly_wayland::seat::{Capabilities, InputEvent, InputSource};
 use poly_wayland::wire::Fixed;
 
@@ -251,14 +251,14 @@ impl Drop for Device {
 #[derive(Debug, Default)]
 pub struct Evdev {
     pub devices: Vec<Device>,
-    queue: VecDeque<InputEvent>,
+    queue: InputEventQueue,
 }
 
 impl Evdev {
     /// Open `/dev/input/event0` to `event31`.
     pub fn open_all() -> Evdev {
         let devices = (0..32).filter_map(|n| Device::open(&format!("/dev/input/event{n}"))).collect();
-        Evdev { devices, queue: VecDeque::new() }
+        Evdev { devices, queue: InputEventQueue::default() }
     }
 
     /// Read what device `index` has (it was readable); `size` is the

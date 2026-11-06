@@ -9,6 +9,7 @@
 //! bar; ADR 0107). The capabilities become `wl_seat.capabilities`.
 
 use crate::wire::Fixed;
+use alloc::collections::VecDeque;
 
 /// `wl_seat.capability` bits (wayland.xml).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -67,10 +68,98 @@ pub enum InputEvent {
     },
 }
 
+/// Input waiting for a compositor frame. Consecutive pointer motions collapse
+/// to their final position (absolute) or summed displacement (relative),
+/// while buttons, keys and axes remain ordering barriers.
+#[derive(Debug, Default)]
+pub struct InputEventQueue {
+    events: VecDeque<InputEvent>,
+}
+
+impl InputEventQueue {
+    /// Queue an event, coalescing only with the immediately preceding motion.
+    pub fn push(&mut self, event: InputEvent) {
+        if let Some(last) = self.events.back_mut() {
+            match last {
+                InputEvent::PointerMotion { time, dx, dy } => {
+                    if let InputEvent::PointerMotion { time: next_time, dx: next_dx, dy: next_dy } = event {
+                        *time = next_time;
+                        dx.0 = dx.0.saturating_add(next_dx.0);
+                        dy.0 = dy.0.saturating_add(next_dy.0);
+                        return;
+                    }
+                }
+                InputEvent::PointerMotionAbsolute { .. } => {
+                    if matches!(event, InputEvent::PointerMotionAbsolute { .. }) {
+                        *last = event;
+                        return;
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.events.push_back(event);
+    }
+
+    /// Queue a batch, applying the same motion coalescing across its boundary.
+    pub fn extend(&mut self, events: impl IntoIterator<Item = InputEvent>) {
+        for event in events {
+            self.push(event);
+        }
+    }
+
+    /// Take the next event in order.
+    pub fn pop_front(&mut self) -> Option<InputEvent> {
+        self.events.pop_front()
+    }
+}
+
 /// A source of input events: the input stack's side of the seat.
 pub trait InputSource {
     /// The devices present now.
     fn capabilities(&self) -> Capabilities;
     /// The next event, if one is waiting.
     fn next_event(&mut self) -> Option<InputEvent>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adjacent_absolute_motion_keeps_only_the_latest_position() {
+        let mut queue = InputEventQueue::default();
+        queue.extend([
+            InputEvent::PointerMotionAbsolute { time: 1, x: Fixed::from_int(10), y: Fixed::from_int(20) },
+            InputEvent::PointerMotionAbsolute { time: 2, x: Fixed::from_int(30), y: Fixed::from_int(40) },
+        ]);
+        assert_eq!(
+            queue.pop_front(),
+            Some(InputEvent::PointerMotionAbsolute { time: 2, x: Fixed::from_int(30), y: Fixed::from_int(40) })
+        );
+        assert_eq!(queue.pop_front(), None);
+    }
+
+    #[test]
+    fn relative_motion_sums_but_buttons_and_keys_keep_order() {
+        let mut queue = InputEventQueue::default();
+        queue.extend([
+            InputEvent::PointerMotion { time: 1, dx: Fixed::from_int(3), dy: Fixed::from_int(-2) },
+            InputEvent::PointerMotion { time: 2, dx: Fixed::from_int(4), dy: Fixed::from_int(5) },
+            InputEvent::PointerButton { time: 3, button: BTN_LEFT, pressed: true },
+            InputEvent::PointerMotion { time: 4, dx: Fixed::from_int(1), dy: Fixed::from_int(0) },
+            InputEvent::Key { time: 5, key: 30, pressed: true },
+        ]);
+        assert_eq!(
+            queue.pop_front(),
+            Some(InputEvent::PointerMotion { time: 2, dx: Fixed::from_int(7), dy: Fixed::from_int(3) })
+        );
+        assert_eq!(queue.pop_front(), Some(InputEvent::PointerButton { time: 3, button: BTN_LEFT, pressed: true }));
+        assert_eq!(
+            queue.pop_front(),
+            Some(InputEvent::PointerMotion { time: 4, dx: Fixed::from_int(1), dy: Fixed::from_int(0) })
+        );
+        assert_eq!(queue.pop_front(), Some(InputEvent::Key { time: 5, key: 30, pressed: true }));
+        assert_eq!(queue.pop_front(), None);
+    }
 }
