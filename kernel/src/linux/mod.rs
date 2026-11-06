@@ -67,6 +67,7 @@ use crate::sync::SpinLock;
 use crate::user::memory::SegvCode;
 use crate::user::{self, Fault, FaultError};
 use crate::{kprintln, testrun};
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
 use poly_abi::{Outcome, SyscallRegs};
@@ -84,7 +85,12 @@ static FUTEXES: SpinLock<FutexTable> = SpinLock::new(FutexTable::new());
 /// What the kernel keeps for the Linux personality per process.
 #[derive(Debug)]
 pub struct LinuxState {
-    process: SpinLock<LinuxProcess>,
+    /// On the heap: a `LinuxProcess` is several KiB, and held inline it
+    /// made the frames of `Process::new_linux` and everything that moves a
+    /// `Process` by value so large that spawning a program overflowed its
+    /// 16 KiB kernel stack in a release build when the program's file was
+    /// not cached yet (the disk read is the deepest path under it).
+    process: SpinLock<Box<LinuxProcess>>,
     /// Some thread of the process has seccomp state (ADR 0054): the
     /// dispatcher checks every call. Never cleared; copied to children.
     pub(crate) seccomp: AtomicBool,
@@ -96,7 +102,7 @@ impl LinuxState {
     pub fn new(pid: u32) -> LinuxState {
         // A process the kernel starts: the root of a process tree.
         task::register_root(pid);
-        LinuxState { process: SpinLock::new(LinuxProcess::new(pid as i32)), seccomp: AtomicBool::new(false) }
+        LinuxState { process: SpinLock::new(new_process(pid as i32)), seccomp: AtomicBool::new(false) }
     }
 
     /// A thread `tid` was started (the main thread is there from the start):
@@ -134,6 +140,19 @@ impl LinuxState {
     pub fn with<R>(&self, f: impl FnOnce(&mut LinuxProcess) -> R) -> R {
         f(&mut self.process.lock())
     }
+}
+
+/// A `LinuxProcess` on the heap, made in a frame of its own so that its
+/// callers' frames stay small (see [`LinuxState::process`]).
+#[inline(never)]
+fn new_process(pid: i32) -> Box<LinuxProcess> {
+    Box::new(LinuxProcess::new(pid))
+}
+
+/// `state` moved to the heap, likewise out of line.
+#[inline(never)]
+fn boxed_process(state: LinuxProcess) -> Box<LinuxProcess> {
+    Box::new(state)
 }
 
 /// A process's first thread: its personality state starts afresh. Out of
