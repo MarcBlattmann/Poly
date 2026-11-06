@@ -58,7 +58,8 @@ compositor reached `desktop ready` in each.
 
 - `--memory=SIZE` (`4G`, `3072M`, a bare number is MiB as in QEMU's `-m`;
   at least 128M) and `--cpus=N` (1 or more), or `auto` for the command's own
-  default. They are flags of `desktop`, `run` (so also `--busybox` and
+  default. They are flags of `desktop` (with `--chromium`, ADR 0147, the
+  default is Chromium's 4G and 4 CPUs), `run` (so also `--busybox` and
   `--disk-root`), `chromium run` and `toolkits`, the commands that boot for a
   person. **No environment variable**, so `cargo xtask start --print`
   shows them and `--last` repeats them.

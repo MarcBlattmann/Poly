@@ -30,11 +30,13 @@
 //!                       (default: the self-test's verdict), save the screen to <file>
 //!                       (default target/poly-screen.png; .ppm for PPM) and quit;
 //!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
-//!   desktop [--release] [--test-apps] [--fresh-state] [--memory=SIZE] [--cpus=N] [kernel args...]
+//!   desktop [--release] [--test-apps] [--chromium [--fresh-disk]] [--fresh-state] [--memory=SIZE] [--cpus=N] [kernel args...]
 //!                       boot straight into Poly's desktop: the Wayland compositor and shell on a
 //!                       virtio GPU through DRM/KMS, a virtio keyboard and tablet (desktop.rs,
 //!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop; the settings
-//!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs
+//!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs;
+//!                       --chromium: from Chromium's root disk, with Poly's apps and Chromium the
+//!                       default browser (downloads its packages the first time, ADR 0147)
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   boot-tests [--list] [--shard <name>]... [group...]
 //!                       the boot tests alone: all, the groups named (`selftest` is
@@ -1542,7 +1544,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 37] = [
+const BOOT_GROUPS: [BootGroup; 38] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1601,6 +1603,10 @@ const BOOT_GROUPS: [BootGroup; 37] = [
     // its sandbox; skipped until its packages are fetched (chromium.rs,
     // docs/chromium-linux-gaps.md).
     ("chromium", chromium::boot_test),
+    // The desktop from Chromium's disk, `cargo xtask desktop --chromium`: Poly's
+    // apps on it, the settings disk, Chromium the default browser; skipped
+    // until the packages are fetched (chromium.rs, ADR 0147).
+    ("desktop-chromium", chromium::desktop_boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1676,6 +1682,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
             "xwayland",
             "toolkits",
             "chromium",
+            "desktop-chromium",
         ],
     ),
     (

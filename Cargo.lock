@@ -681,6 +681,7 @@ dependencies = [
  "poly-crypto",
  "poly-elf",
  "poly-ext2",
+ "poly-files",
  "poly-font",
  "poly-gfx",
  "poly-http",
