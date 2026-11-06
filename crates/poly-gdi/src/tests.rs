@@ -386,3 +386,58 @@ fn window_dcs_clip_to_their_visible_region() {
     let mem = u64::from(g.create_compatible_dc(0));
     assert!(!g.set_display_geometry(mem, (0, 0), &[], &[]));
 }
+
+/// A 92-byte `LOGFONTW` (`wingdi.h`) with a height, weight and face name.
+fn logfont(name: &str, height: i32) -> Vec<u8> {
+    let mut b = vec![0u8; 92];
+    b[0..4].copy_from_slice(&height.to_le_bytes());
+    b[16..20].copy_from_slice(&400i32.to_le_bytes());
+    for (i, c) in name.encode_utf16().enumerate() {
+        b[28 + 2 * i..30 + 2 * i].copy_from_slice(&c.to_le_bytes());
+    }
+    b
+}
+
+#[test]
+fn created_fonts_are_mapped_by_name_and_height() {
+    use crate::font::Face;
+    let mut g = Gdi::new();
+    let dc = u64::from(g.create_compatible_dc(0));
+    let mut height_of = |name: &str, h: i32| {
+        let f = u64::from(g.create_font(&logfont(name, h)));
+        g.select_object(dc, f).unwrap();
+        g.text_metrics(dc).unwrap().height
+    };
+    assert_eq!(height_of("Segoe UI", -12), Face::Gui.metrics().height);
+    assert_eq!(height_of("Courier New", -16), Face::AnsiFixed.metrics().height);
+    assert_eq!(height_of("Terminal", -16), Face::OemFixed.metrics().height);
+    assert_eq!(height_of("Arial", -24), Face::System.metrics().height);
+    // A short LOGFONT is the system font's face.
+    let f = u64::from(g.create_font(&[0; 10]));
+    g.select_object(dc, f).unwrap();
+    assert_eq!(g.text_metrics(dc).unwrap(), Face::System.metrics());
+}
+
+#[test]
+fn small_fonts_draw_inside_their_extent_with_descenders() {
+    let mut g = Gdi::new();
+    let (dc, mut px) = dib32(&mut g, 80, 24);
+    px.fill(0x00FF_FFFF);
+    let f = u64::from(g.create_font(&logfont("Tahoma", -11)));
+    g.select_object(dc, f).unwrap();
+    g.set_bk_mode(dc, TRANSPARENT);
+    let s: Vec<u16> = "Hag gypsy".encode_utf16().collect();
+    let (cx, cy) = g.text_extent(dc, &s).unwrap();
+    assert_eq!(cy, 13);
+    g.text_out(dc, 2, 3, &s);
+    let ink: Vec<(i32, i32)> = (0..24)
+        .flat_map(|y| (0..80).map(move |x| (x, y)))
+        .filter(|&(x, y)| px[(y * 80 + x) as usize] != 0x00FF_FFFF)
+        .collect();
+    assert!(ink.len() > 60);
+    // Inside the cell (2, 3, 2 + cx, 3 + 13); the descenders of g, y and p
+    // reach its last rows (descent 2).
+    assert!(ink.iter().all(|&(x, y)| x >= 2 && x < 2 + cx && (3..16).contains(&y)), "{ink:?}");
+    assert_eq!(ink.iter().map(|p| p.1).max(), Some(3 + 12));
+    assert_eq!(ink.iter().map(|p| p.1).min(), Some(3 + 1));
+}

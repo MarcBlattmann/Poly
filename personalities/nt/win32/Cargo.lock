@@ -160,6 +160,13 @@ dependencies = [
 [[package]]
 name = "poly-gdi"
 version = "0.0.1"
+dependencies = [
+ "poly-gfx",
+]
+
+[[package]]
+name = "poly-gfx"
+version = "0.0.1"
 
 [[package]]
 name = "poly-http"

@@ -9,8 +9,9 @@
 //! - [`bitmap`]: bitmaps, the DIB pixel formats and colour conversions,
 //!   raster operations.
 //! - [`gdi`]: objects, DCs, `BitBlt`/`PatBlt`/`Rectangle`/pixels/text.
-//! - [`font`]: the stock fonts' metrics and widths, and the system font's
-//!   glyphs (`sysfont`).
+//! - [`font`]: the stock fonts' metrics and widths, and their glyphs (the
+//!   system font's own in `sysfont`, the rest from Spleen in `bitfont`).
+//! - [`fontmap`]: the font mapper, `LOGFONTW` to Poly's fonts (ADR 0142).
 //! - [`text`]: `DrawTextW`'s layout.
 //! - [`region`]: region algebra (rectangles in canonical bands), for
 //!   `HRGN`s, clipping, and the window manager's update regions.
@@ -22,8 +23,10 @@
 
 extern crate alloc;
 
+mod bitfont;
 pub mod bitmap;
 pub mod font;
+pub mod fontmap;
 pub mod gdi;
 pub mod region;
 mod sysfont;

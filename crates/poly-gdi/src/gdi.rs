@@ -6,6 +6,7 @@
 
 use crate::bitmap::{Bitmap, Rgb, Storage, rop3};
 use crate::font::{self, Face, TextMetric};
+use crate::fontmap::{self, LogFont};
 pub use crate::region::Rect;
 use crate::region::{COMPLEXREGION, NULLREGION, RGN_AND, RGN_COPY, Region, SIMPLEREGION};
 use alloc::vec;
@@ -619,11 +620,11 @@ impl Gdi {
         self.add(Obj::Pen { style, width, color, stock: false, delete_pending: false })
     }
 
-    /// `CreateFontIndirectW`: Poly maps every face onto the stock faces by
-    /// height for now.
+    /// `CreateFontIndirectW`: the font mapper (ADR 0142, `crate::fontmap`)
+    /// picks the face from the face name, pitch and family and height. A
+    /// `LOGFONTW` that is too short gives the system font's face.
     pub fn create_font(&mut self, logfont: &[u8]) -> u32 {
-        let height = logfont.get(0..4).map_or(0, |b| i32::from_le_bytes([b[0], b[1], b[2], b[3]])).unsigned_abs();
-        let face = if height != 0 && height <= 13 { Face::Gui } else { Face::System };
+        let face = LogFont::parse(logfont).map_or(Face::System, |lf| fontmap::bitmap_face(&lf));
         self.add(Obj::Font { face, stock: false, logfont: logfont.to_vec(), delete_pending: false })
     }
 
