@@ -253,6 +253,9 @@ pub struct Kms<D: Drm> {
     /// The time of the first and the last completed flip.
     pub first_flip_ns: Option<u64>,
     pub last_flip_ns: u64,
+    /// A hotplug event came ([`event::HOTPLUG`]: the display configuration
+    /// changed, ADR 0145) that [`Kms::follow_display`] has not answered.
+    hotplug: bool,
 }
 
 impl<D: Drm> Kms<D> {
@@ -272,24 +275,100 @@ impl<D: Drm> Kms<D> {
             flips: 0,
             first_flip_ns: None,
             last_flip_ns: 0,
+            hotplug: false,
         };
         for _ in 0..2 {
             let b = kms.create_buffer(w, h)?;
             kms.buffers.push(b);
         }
-        let mut connector = kms.output.connector;
+        let (output, fb) = (kms.output.clone(), kms.buffers[0].fb);
+        kms.set_mode(&output, fb)?;
+        Ok(kms)
+    }
+
+    /// `SETCRTC`: show framebuffer `fb` on `output`'s CRTC in its mode.
+    fn set_mode(&mut self, output: &Output, fb: u32) -> io::Result<()> {
+        let mut connector = output.connector;
         let mut set = ModeCrtc {
             set_connectors_ptr: &mut connector as *mut u32 as u64,
             count_connectors: 1,
-            crtc_id: kms.output.crtc,
-            fb_id: kms.buffers[0].fb,
+            crtc_id: output.crtc,
+            fb_id: fb,
             mode_valid: 1,
-            mode: kms.output.mode,
+            mode: output.mode,
             ..ModeCrtc::default()
         }
         .to_bytes();
-        kms.drm.ioctl(ioctl::MODE_SETCRTC, &mut set)?;
-        Ok(kms)
+        self.drm.ioctl(ioctl::MODE_SETCRTC, &mut set)
+    }
+
+    /// Unmap and remove a buffer and its framebuffer.
+    fn release(&mut self, b: Buffer) {
+        self.drm.unmap(b.ptr.cast(), b.len);
+        let mut fb = b.fb.to_ne_bytes();
+        let _ = self.drm.ioctl(ioctl::MODE_RMFB, &mut fb);
+        let mut h = b.handle.to_ne_bytes();
+        let _ = self.drm.ioctl(ioctl::MODE_DESTROY_DUMB, &mut h);
+    }
+
+    /// Whether a hotplug event came since the last call: the display
+    /// configuration changed (a window showing the screen was resized), so
+    /// [`Kms::follow_display`] should look at the connector again.
+    pub fn take_hotplug(&mut self) -> bool {
+        core::mem::take(&mut self.hotplug)
+    }
+
+    /// Look at the connector again and follow it: if its preferred mode is
+    /// another size than the screen's, make two buffers of the new size, set
+    /// the mode on the first (the screen is black until the next frame is
+    /// drawn and flipped) and release the old ones. Returns whether the
+    /// screen's size changed, in which case everything that was drawn for
+    /// the old size is to be drawn again. On an error the screen is as it
+    /// was (a connector with no mode, a device out of memory): the old
+    /// buffers keep going. A flip must not be pending.
+    pub fn follow_display(&mut self) -> io::Result<bool> {
+        if self.pending {
+            return Err(io::Error::new(io::ErrorKind::WouldBlock, "a flip is pending"));
+        }
+        let next = probe(&mut self.drm)?;
+        if next.size() == self.output.size() && (next.connector, next.crtc) == (self.output.connector, self.output.crtc)
+        {
+            // The same screen (its refresh rate or physical size may have
+            // been described again).
+            self.output = next;
+            return Ok(false);
+        }
+        let (w, h) = next.size();
+        let mut fresh = Vec::new();
+        for _ in 0..2 {
+            match self.create_buffer(w, h) {
+                Ok(b) => fresh.push(b),
+                Err(e) => {
+                    for b in fresh {
+                        self.release(b);
+                    }
+                    return Err(e);
+                }
+            }
+        }
+        if let Err(e) = self.set_mode(&next, fresh[0].fb) {
+            for b in fresh {
+                self.release(b);
+            }
+            // Show what was shown before, as far as the device lets us.
+            let (old, fb) = (self.output.clone(), self.buffers[self.front].fb);
+            let _ = self.set_mode(&old, fb);
+            return Err(e);
+        }
+        let old = core::mem::replace(&mut self.buffers, fresh);
+        self.output = next;
+        self.front = 0;
+        self.stale = vec![Vec::new(), Vec::new()];
+        self.copied.clear();
+        for b in old {
+            self.release(b);
+        }
+        Ok(true)
     }
 
     fn create_buffer(&mut self, w: u32, h: u32) -> io::Result<Buffer> {
@@ -436,6 +515,9 @@ impl<D: Drm> Kms<D> {
                 if e.length < 8 {
                     break;
                 }
+                if e.ty == event::HOTPLUG {
+                    self.hotplug = true;
+                }
                 if e.ty == event::FLIP_COMPLETE {
                     let ns = u64::from(e.tv_sec) * 1_000_000_000 + u64::from(e.tv_usec) * 1000;
                     done = Some(Flip { monotonic_ns: ns, sequence: e.sequence });
@@ -460,11 +542,7 @@ impl<D: Drm> Kms<D> {
 impl<D: Drm> Drop for Kms<D> {
     fn drop(&mut self) {
         for b in core::mem::take(&mut self.buffers) {
-            self.drm.unmap(b.ptr.cast(), b.len);
-            let mut fb = b.fb.to_ne_bytes();
-            let _ = self.drm.ioctl(ioctl::MODE_RMFB, &mut fb);
-            let mut h = b.handle.to_ne_bytes();
-            let _ = self.drm.ioctl(ioctl::MODE_DESTROY_DUMB, &mut h);
+            self.release(b);
         }
     }
 }
@@ -565,6 +643,11 @@ mod tests {
         taken: bool,
         /// Every upload, (framebuffer, rectangle).
         uploads: Vec<(u32, HwRect)>,
+        /// The display's size now, if it is not the default (a window
+        /// showing it was resized).
+        size: Option<(u32, u32)>,
+        /// Out of memory: no more dumb buffers.
+        no_memory: bool,
     }
 
     impl Hardware for Hw {
@@ -572,10 +655,14 @@ mod tests {
 
         fn probe(&mut self) -> Vec<HwOutput> {
             // QEMU's EDID describes a 100 dpi screen: 1280 px is 325 mm.
-            vec![HwOutput { connected: true, width: 1280, height: 800, edid: None }]
+            let (width, height) = self.size.unwrap_or((1280, 800));
+            vec![HwOutput { connected: true, width, height, edid: None }]
         }
 
         fn alloc(&mut self, size: u64) -> Option<Self::Buffer> {
+            if self.no_memory {
+                return None;
+            }
             Some(Rc::new(RefCell::new(vec![0; size as usize])))
         }
 
@@ -800,6 +887,90 @@ mod tests {
         let none = uploads(&dev);
         assert!(none.len() <= 1, "{none:?}");
         assert!(none.iter().all(|(_, r)| r.width * r.height <= 10 * 10), "{none:?}");
+    }
+
+    /// The display's size changes (ADR 0145): the device sends a hotplug
+    /// event, the backend reads the connector again, makes buffers of the
+    /// new size, sets the mode and lets the old ones go; frames then flip as
+    /// before.
+    #[test]
+    fn follows_a_resized_display() {
+        let (dev, now) = device();
+        let file = dev.borrow_mut().open(Node::Primary);
+        let drm = InProcess { dev: Rc::clone(&dev), file, now: Rc::clone(&now) };
+        let mut kms = Kms::open(drm).expect("KMS");
+        assert_eq!(kms.output().size(), (1280, 800));
+        assert_eq!(dev.borrow().object_counts().1, 2, "two framebuffers");
+        assert!(!kms.take_hotplug());
+        assert!(!kms.follow_display().unwrap(), "nothing changed: the same screen");
+        // The window is dragged to 1313 x 877: the device says so.
+        dev.borrow_mut().hardware().size = Some((1313, 877));
+        dev.borrow_mut().display_changed(*now.borrow());
+        assert_eq!(kms.dispatch().unwrap(), None, "no flip, but the event was read");
+        assert!(kms.take_hotplug());
+        assert!(!kms.take_hotplug(), "once");
+        assert!(kms.follow_display().unwrap(), "another size");
+        assert_eq!(kms.output().size(), (1313, 877));
+        assert_eq!((kms.width(), kms.height()), (1313, 877));
+        assert_eq!(dev.borrow().object_counts(), (2, 2), "the old buffers and framebuffers are gone");
+        // The CRTC shows the new mode, on the first new buffer.
+        let (crtc, fb) = (kms.output().crtc, kms.buffers[0].fb);
+        let mut g = ModeCrtc { crtc_id: crtc, ..ModeCrtc::default() }.to_bytes();
+        kms.drm.ioctl(ioctl::MODE_GETCRTC, &mut g).unwrap();
+        let c = ModeCrtc::decode(&g);
+        assert_eq!((c.fb_id, c.mode.hdisplay, c.mode.vdisplay), (fb, 1313, 877));
+        // Frames draw the whole new size and flip at the vblank (of the new
+        // mode's refresh rate).
+        let frame_ns = 1_000_000_000_000 / u64::from(kms.output().refresh_mhz());
+        assert_eq!(kms.begin_frame(), 0, "nothing stale carried over");
+        let last = kms.height() - 1;
+        kms.row_mut(last)[1312] = 0x00ab_cdef;
+        kms.present(&[Rect::new(0, 0, 1313, 877)]);
+        *now.borrow_mut() += frame_ns + 1;
+        assert!(kms.dispatch().unwrap().is_some());
+        assert_eq!(kms.front_view().row_mut(876)[1312], 0x00ab_cdef);
+        // Smaller again.
+        dev.borrow_mut().hardware().size = Some((900, 600));
+        dev.borrow_mut().display_changed(*now.borrow());
+        kms.dispatch().unwrap();
+        assert!(kms.take_hotplug() && kms.follow_display().unwrap());
+        assert_eq!(kms.output().size(), (900, 600));
+        assert_eq!(dev.borrow().object_counts(), (2, 2));
+        drop(kms);
+        dev.borrow_mut().close(file, *now.borrow());
+        assert_eq!(dev.borrow().object_counts(), (0, 0));
+    }
+
+    /// A resize waits for the flip in flight, and one that cannot be done
+    /// (no memory) leaves the screen as it was.
+    #[test]
+    fn a_resize_waits_for_the_flip_and_a_failed_one_changes_nothing() {
+        let (dev, now) = device();
+        let file = dev.borrow_mut().open(Node::Primary);
+        let drm = InProcess { dev: Rc::clone(&dev), file, now: Rc::clone(&now) };
+        let mut kms = Kms::open(drm).expect("KMS");
+        let frame_ns = 1_000_000_000_000 / u64::from(kms.output().refresh_mhz());
+        kms.begin_frame();
+        kms.present(&[Rect::new(0, 0, 10, 10)]);
+        assert!(kms.is_pending());
+        dev.borrow_mut().hardware().size = Some((1000, 700));
+        assert_eq!(kms.follow_display().unwrap_err().kind(), io::ErrorKind::WouldBlock);
+        *now.borrow_mut() += frame_ns + 1;
+        kms.dispatch().unwrap();
+        // Out of memory: the error comes back, the screen keeps its size and
+        // the framebuffers it has.
+        dev.borrow_mut().hardware().no_memory = true;
+        assert!(kms.follow_display().is_err());
+        assert_eq!(kms.output().size(), (1280, 800));
+        assert_eq!(dev.borrow().object_counts(), (2, 2));
+        kms.begin_frame();
+        kms.present(&[Rect::new(0, 0, 10, 10)]);
+        *now.borrow_mut() += frame_ns + 1;
+        assert!(kms.dispatch().unwrap().is_some(), "still flipping");
+        // Memory again: it follows.
+        dev.borrow_mut().hardware().no_memory = false;
+        assert!(kms.follow_display().unwrap());
+        assert_eq!(kms.output().size(), (1000, 700));
     }
 
     #[test]
