@@ -85,6 +85,14 @@ static SCREEN_OPEN: AtomicBool = AtomicBool::new(false);
 /// The input threads wait here for their terminal to be opened.
 static OPENED: WaitQueue = WaitQueue::new();
 
+/// vhangup(2) by a process of session `sid`: its controlling terminal, if
+/// any, is hung up (`poly_tty::Tty::vhangup`).
+pub fn vhangup(sid: i32) {
+    if let Some(t) = terminals() {
+        t.ttys.vhangup(sid);
+    }
+}
+
 fn terminals() -> Option<&'static Terminals> {
     TERMINALS.get()
 }

@@ -113,6 +113,10 @@ pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if let Some(r) = crate::sys::fdioctl::generic(k, fd, request, a) {
         return r;
     }
+    // A perf event's PERF_EVENT_IOC_* requests (perf_event_open(2)).
+    if let Some(r) = crate::sys::perf::ioctl(k, fd, request, a.ulong(2)) {
+        return r;
+    }
     // A userfaultfd's UFFDIO_* requests (ioctl_userfaultfd(2)).
     if let Some(r) = crate::sys::userfaultfd::ioctl(k, fd, request, a.ptr(2)) {
         return r;
