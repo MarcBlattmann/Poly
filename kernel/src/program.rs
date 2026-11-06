@@ -23,11 +23,11 @@ use crate::user::exec::{self, ExecError, ExecParams};
 use crate::user::memory::PageSource;
 use crate::{fs, kprintln, qemu, testrun, thread};
 use alloc::format;
-use poly_personality_linux::task::exec as shebang;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use poly_abi::Personality;
+use poly_personality_linux::task::exec as shebang;
 use poly_vfs::{At, Cred};
 
 /// The kernel parameter giving the display's scale, handed to the first
