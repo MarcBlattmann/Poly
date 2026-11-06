@@ -3,7 +3,10 @@
 //!
 //! - [`url`]: `http://host[:port]/path` taken apart (`WinHttpCrackUrl`,
 //!   `InternetOpenUrlW`); `https` is recognised and refused by the DLLs
-//!   until Poly has TLS.
+//!   until Poly has TLS. [`url::crack`] and [`url::create`] are
+//!   `URL_COMPONENTS`' two directions.
+//! - [`date`]: the HTTP date `WinHttpTimeFromSystemTime` writes and
+//!   `WinHttpTimeToSystemTime` reads (RFC 9110 section 5.6.7).
 //! - [`request`]: a request's bytes (RFC 9110, RFC 9112 section 3): the
 //!   request line, `Host`, `User-Agent`, the caller's headers,
 //!   `Content-Length`.
@@ -29,6 +32,7 @@
 extern crate alloc;
 
 pub mod consts;
+pub mod date;
 pub mod exports;
 pub mod query;
 pub mod request;
