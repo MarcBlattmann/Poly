@@ -1,0 +1,17 @@
+[package]
+name = "poly-app"
+description = "What Poly's own native apps (Files, Terminal) share: a small Wayland client (one xdg_toplevel window in shared memory, pointer, keyboard with the desktop's layout and key repeat, the clipboard, cursor shapes) on poly-rt, the Alpine Shell look (fonts, theme, widgets) through poly-shell's drawing, and the event loop. The protocol state is I/O-free and tested on the host against poly-wayland's own server."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+poly-font.workspace = true
+poly-input.workspace = true
+poly-rt.workspace = true
+poly-shell.workspace = true
+poly-wayland.workspace = true
+
+[lints]
+workspace = true

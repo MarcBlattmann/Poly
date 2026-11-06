@@ -239,7 +239,8 @@ pub mod panel {
 /// `@alpine/ui`).
 pub mod settings {
     pub const WIDTH: i32 = 900;
-    pub const HEIGHT: i32 = 620;
+    /// 720 tall since the shortcuts of Files and Terminal (ADR 0134).
+    pub const HEIGHT: i32 = 720;
     /// The header row (the title, the arrows, where we are) and the
     /// sidebar (`w-56`).
     pub const HEADER: i32 = 40;

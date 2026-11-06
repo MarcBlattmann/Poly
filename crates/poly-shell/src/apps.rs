@@ -2,7 +2,8 @@
 //! Desktop Entry Specification, version 1.5: the `[Desktop Entry]` group,
 //! `Type`, `Name`, `GenericName`, `Comment`, `Exec` with its quoting and
 //! field codes, `NoDisplay`, `Hidden`, `Terminal`, `Keywords`) and Poly's
-//! built-ins.
+//! built-ins, Files and Terminal among them (ADR 0134). An entry with
+//! `Terminal=true` runs in Poly's Terminal (`poly-terminal -e ...`).
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -31,8 +32,6 @@ pub enum Skip {
     NotAnApplication,
     /// `NoDisplay=true` or `Hidden=true`.
     Hidden,
-    /// `Terminal=true`: there is no terminal emulator yet.
-    NeedsTerminal,
     /// `Exec` is malformed (an unclosed quote).
     BadExec,
 }
@@ -83,12 +82,14 @@ pub fn parse_desktop_entry(id: &str, text: &str) -> Result<App, Skip> {
         return Err(Skip::Hidden);
     }
     let (Some(name), Some(exec)) = (name, exec) else { return Err(Skip::Incomplete) };
-    if terminal {
-        return Err(Skip::NeedsTerminal);
-    }
-    let argv = parse_exec(&exec).ok_or(Skip::BadExec)?;
+    let mut argv = parse_exec(&exec).ok_or(Skip::BadExec)?;
     if argv.is_empty() {
         return Err(Skip::Incomplete);
+    }
+    if terminal {
+        // The program runs in Poly's Terminal, which runs what follows
+        // `-e` instead of the shell (as xterm's `-e`).
+        argv.splice(0..0, [String::from(TERMINAL), String::from("-e")]);
     }
     let comment = comment.or(generic).unwrap_or_default();
     Ok(App { name, comment, keywords, argv, id: id.into() })
@@ -200,8 +201,24 @@ pub fn builtins() -> Vec<App> {
             &[SETTINGS]
         ),
         app("Notifications", "What came in, newest first", &["history", "messages"], &[NOTIFICATIONS]),
+        app(
+            "Files",
+            "Browse and organise your files",
+            &["file", "explorer", "folder", "directory", "manager", "browse", "documents", "downloads", "trash"],
+            &[FILES]
+        ),
+        app(
+            "Terminal",
+            "A shell in a window",
+            &["shell", "console", "command", "prompt", "bash", "sh", "cli", "tty"],
+            &[TERMINAL]
+        ),
     ]
 }
+
+/// Poly's own apps, native programs (ADR 0134).
+pub const FILES: &str = "/bin/poly-files";
+pub const TERMINAL: &str = "/bin/poly-terminal";
 
 /// The `argv` of the built-ins the shell itself opens (ADR 0117).
 pub const SETTINGS: &str = "poly-shell:settings";
@@ -270,7 +287,8 @@ mod tests {
         assert_eq!(e("Type=Link\nName=A\nURL=x"), Err(Skip::NotAnApplication));
         assert_eq!(e("Type=Application\nName=A\nExec=a\nNoDisplay=true"), Err(Skip::Hidden));
         assert_eq!(e("Type=Application\nName=A\nExec=a\nHidden=true"), Err(Skip::Hidden));
-        assert_eq!(e("Type=Application\nName=A\nExec=vim\nTerminal=true"), Err(Skip::NeedsTerminal));
+        let vim = e("Type=Application\nName=A\nExec=vim %F\nTerminal=true").unwrap();
+        assert_eq!(vim.argv, ["/bin/poly-terminal", "-e", "vim"], "Terminal=true runs in Poly's Terminal");
         assert_eq!(e("Type=Application\nName=A"), Err(Skip::Incomplete));
         assert_eq!(e("Type=Application\nName=A\nExec=\"a"), Err(Skip::BadExec));
         assert_eq!(parse_desktop_entry("x", "Name=A\nExec=a"), Err(Skip::Incomplete));
@@ -301,9 +319,14 @@ mod tests {
         };
         let all = catalog(vec![file("zebra"), file("Poly Demo"), file("apple")]);
         let names: Vec<&str> = all.iter().map(|a| a.name.as_str()).collect();
-        assert_eq!(names, ["apple", "Notifications", "Poly Demo", "Settings", "Wayland Test Client", "zebra"]);
-        assert_eq!(all[2].id, "f.desktop", "the desktop file replaced the built-in");
-        assert_eq!(all[3].internal(), Some(SETTINGS));
-        assert_eq!(all[2].internal(), None);
+        assert_eq!(
+            names,
+            ["apple", "Files", "Notifications", "Poly Demo", "Settings", "Terminal", "Wayland Test Client", "zebra"]
+        );
+        assert_eq!(all[3].id, "f.desktop", "the desktop file replaced the built-in");
+        assert_eq!(all[4].internal(), Some(SETTINGS));
+        assert_eq!(all[3].internal(), None);
+        assert_eq!(all[1].argv, [FILES]);
+        assert_eq!(all[5].argv, [TERMINAL]);
     }
 }

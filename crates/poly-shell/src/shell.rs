@@ -1195,7 +1195,11 @@ impl Shell {
                 _ if app.window().is_some() => lucide::APP_WINDOW,
                 Some(crate::apps::SETTINGS) => lucide::SETTINGS,
                 Some(crate::apps::NOTIFICATIONS) => lucide::BELL,
-                _ => lucide::APP_WINDOW,
+                _ => match app.argv.first().map(String::as_str) {
+                    Some(crate::apps::FILES) => lucide::FOLDER,
+                    Some(crate::apps::TERMINAL) if app.argv.len() == 1 => lucide::SQUARE_TERMINAL,
+                    _ => lucide::APP_WINDOW,
+                },
             };
             let gsz = lt::GLYPH * s;
             let (gx, gy) = (icon.x + (ib - gsz) / 2, icon.y + (ib - gsz) / 2);

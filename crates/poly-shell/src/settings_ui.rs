@@ -897,7 +897,12 @@ impl SettingsWindow {
                 b.label("Search");
                 b.bindings(&[(Action::Launcher, Some(LAUNCHER_HINT)), (Action::LauncherAlt, None)]);
                 b.label("Apps");
-                b.bindings(&[(Action::Settings, None), (Action::Notifications, None)]);
+                b.bindings(&[
+                    (Action::Settings, None),
+                    (Action::Notifications, None),
+                    (Action::Files, None),
+                    (Action::Terminal, None),
+                ]);
                 let end = b.y;
                 if two {
                     (b.left, b.right, b.y) = ((left + right + 32) / 2, right, top);

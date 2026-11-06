@@ -155,4 +155,23 @@ mod tests {
         assert_eq!(names(&search(&apps, "send", 8)), ["Send Test Notification"]);
         assert_eq!(names(&search(&apps, "demo", 8)), ["Poly Demo"]);
     }
+
+    /// Poly's own Files and Terminal are found by what people call them.
+    #[test]
+    fn files_and_terminal_are_found_by_their_words() {
+        let apps = crate::apps::builtins();
+        for (query, first) in [
+            ("files", "Files"),
+            ("explorer", "Files"),
+            ("folder", "Files"),
+            ("downloads", "Files"),
+            ("term", "Terminal"),
+            ("shell", "Terminal"),
+            ("console", "Terminal"),
+            ("bash", "Terminal"),
+            ("poly-terminal", "Terminal"),
+        ] {
+            assert_eq!(names(&search(&apps, query, 8)).first().map(String::as_str), Some(first), "{query}");
+        }
+    }
 }

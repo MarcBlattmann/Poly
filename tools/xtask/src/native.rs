@@ -38,10 +38,18 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// The native programs `userland/native/` builds, as `/bin/<name>`: the
-/// test programs, the compositor and desktop, `notify-send`, and the
-/// desktop's Wayland test clients.
-pub const PROGRAMS: [&str; 6] =
-    ["native-hello", "native-child", "poly-compositor", "notify-send", "wl-demo", "wl-client"];
+/// test programs, the compositor and desktop, `notify-send`, the
+/// desktop's Wayland test clients, and Poly's Files and Terminal.
+pub const PROGRAMS: [&str; 8] = [
+    "native-hello",
+    "native-child",
+    "poly-compositor",
+    "notify-send",
+    "wl-demo",
+    "wl-client",
+    "poly-files",
+    "poly-terminal",
+];
 
 /// What `/bin/native-hello` prints last when every check passed.
 pub const HELLO_OUTPUT: &str = "native-hello: done, 0 failed";

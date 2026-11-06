@@ -66,6 +66,17 @@ name = "poly-acpi"
 version = "0.0.1"
 
 [[package]]
+name = "poly-app"
+version = "0.0.1"
+dependencies = [
+ "poly-font",
+ "poly-input",
+ "poly-rt",
+ "poly-shell",
+ "poly-wayland",
+]
+
+[[package]]
 name = "poly-audio"
 version = "0.0.1"
 
@@ -169,6 +180,25 @@ dependencies = [
 [[package]]
 name = "poly-fbdev"
 version = "0.0.1"
+
+[[package]]
+name = "poly-files"
+version = "0.0.1"
+dependencies = [
+ "poly-shell",
+]
+
+[[package]]
+name = "poly-files-app"
+version = "0.0.1"
+dependencies = [
+ "poly-app",
+ "poly-files",
+ "poly-input",
+ "poly-rt",
+ "poly-shell",
+ "poly-wayland",
+]
 
 [[package]]
 name = "poly-font"
@@ -417,6 +447,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-terminal"
+version = "0.0.1"
+dependencies = [
+ "poly-app",
+ "poly-input",
+ "poly-rt",
+ "poly-shell",
+ "poly-vt",
+ "poly-wayland",
+]
+
+[[package]]
 name = "poly-tty"
 version = "0.0.1"
 dependencies = [
@@ -493,6 +535,10 @@ dependencies = [
 
 [[package]]
 name = "poly-vm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-vt"
 version = "0.0.1"
 
 [[package]]

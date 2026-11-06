@@ -14,6 +14,17 @@ name = "poly-abi"
 version = "0.0.1"
 
 [[package]]
+name = "poly-app"
+version = "0.0.1"
+dependencies = [
+ "poly-font",
+ "poly-input",
+ "poly-rt",
+ "poly-shell",
+ "poly-wayland",
+]
+
+[[package]]
 name = "poly-binfmt"
 version = "0.0.1"
 dependencies = [
@@ -55,6 +66,33 @@ version = "0.0.1"
 [[package]]
 name = "poly-fbdev"
 version = "0.0.1"
+
+[[package]]
+name = "poly-files"
+version = "0.0.1"
+dependencies = [
+ "poly-shell",
+]
+
+[[package]]
+name = "poly-files-app"
+version = "0.0.1"
+dependencies = [
+ "poly-app",
+ "poly-files",
+ "poly-input",
+ "poly-rt",
+ "poly-shell",
+ "poly-wayland",
+]
+
+[[package]]
+name = "poly-files-native"
+version = "0.0.1"
+dependencies = [
+ "poly-files-app",
+ "poly-rt",
+]
 
 [[package]]
 name = "poly-font"
@@ -114,6 +152,30 @@ dependencies = [
  "poly-input",
  "poly-wayland",
 ]
+
+[[package]]
+name = "poly-terminal"
+version = "0.0.1"
+dependencies = [
+ "poly-app",
+ "poly-input",
+ "poly-rt",
+ "poly-shell",
+ "poly-vt",
+ "poly-wayland",
+]
+
+[[package]]
+name = "poly-terminal-native"
+version = "0.0.1"
+dependencies = [
+ "poly-rt",
+ "poly-terminal",
+]
+
+[[package]]
+name = "poly-vt"
+version = "0.0.1"
 
 [[package]]
 name = "poly-wayland"

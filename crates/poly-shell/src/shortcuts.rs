@@ -226,6 +226,10 @@ pub enum Action {
     Settings,
     /// The notification history.
     Notifications,
+    /// Open Files (ADR 0134).
+    Files,
+    /// Open a Terminal (ADR 0134).
+    Terminal,
     /// The window switcher.
     SwitchWindows,
     /// Snap the active window (with an arrow).
@@ -235,11 +239,13 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 7] = [
+    pub const ALL: [Action; 9] = [
         Action::Launcher,
         Action::LauncherAlt,
         Action::Settings,
         Action::Notifications,
+        Action::Files,
+        Action::Terminal,
         Action::SwitchWindows,
         Action::SnapWindow,
         Action::CloseWindow,
@@ -252,6 +258,8 @@ impl Action {
             Action::LauncherAlt => "launcher-alt",
             Action::Settings => "settings",
             Action::Notifications => "notifications",
+            Action::Files => "files",
+            Action::Terminal => "terminal",
             Action::SwitchWindows => "switch-windows",
             Action::SnapWindow => "snap-window",
             Action::CloseWindow => "close-window",
@@ -265,6 +273,8 @@ impl Action {
             Action::LauncherAlt => "Search, second hotkey",
             Action::Settings => "Settings",
             Action::Notifications => "Notifications",
+            Action::Files => "Files",
+            Action::Terminal => "Terminal",
             Action::SwitchWindows => "Switch windows",
             Action::SnapWindow => "Snap window",
             Action::CloseWindow => "Close window",
@@ -278,6 +288,10 @@ impl Action {
             Action::LauncherAlt => Chord::key(Mods::CTRL, "Space"),
             Action::Settings => Chord::key(Mods::WIN, "I"),
             Action::Notifications => Chord::key(Mods::WIN, "N"),
+            // Windows' Explorer key and the terminal key of GNOME and
+            // Ubuntu, which people's hands know.
+            Action::Files => Chord::key(Mods::WIN, "E"),
+            Action::Terminal => Chord::key(Mods(Mods::CTRL.0 | Mods::ALT.0), "T"),
             Action::SwitchWindows => Chord::key(Mods::ALT, "Tab"),
             Action::SnapWindow => Chord { mods: Mods::WIN, trigger: Trigger::Arrows },
             Action::CloseWindow => Chord::key(Mods::ALT, "F4"),
@@ -497,6 +511,9 @@ pub enum Hit {
     Launcher,
     Settings,
     Notifications,
+    /// Open Files, a Terminal (ADR 0134).
+    Files,
+    Terminal,
     /// The switcher opens (backwards with Shift).
     SwitchStart {
         backward: bool,
@@ -597,6 +614,8 @@ fn hit(action: Action) -> Option<Hit> {
         Action::Launcher | Action::LauncherAlt => Hit::Launcher,
         Action::Settings => Hit::Settings,
         Action::Notifications => Hit::Notifications,
+        Action::Files => Hit::Files,
+        Action::Terminal => Hit::Terminal,
         Action::SwitchWindows => Hit::SwitchStart { backward: false },
         Action::CloseWindow => Hit::Close,
         Action::SnapWindow => return None,
@@ -795,5 +814,17 @@ mod tests {
         assert_eq!(m.key(&map, Key::Y, true, Mods::WIN, &DE_CH, false), Some(Hit::Settings));
         assert_eq!(m.key(&map, Key::Z, true, Mods::WIN, &DE_CH, false), None);
         assert_eq!(m.key(&map, Key::Z, true, Mods::WIN, &US, false), Some(Hit::Settings));
+    }
+
+    #[test]
+    fn files_and_terminal_have_default_keys() {
+        let map = Keymap::default();
+        let mut m = Matcher::default();
+        assert_eq!(map.chord(Action::Files).to_text(), "Win+E");
+        assert_eq!(map.chord(Action::Terminal).to_text(), "Ctrl+Alt+T");
+        assert_eq!(m.key(&map, Key::E, true, Mods::WIN, &US, false), Some(Hit::Files));
+        let ctrl_alt = Mods(Mods::CTRL.0 | Mods::ALT.0);
+        assert_eq!(m.key(&map, Key::T, true, ctrl_alt, &US, false), Some(Hit::Terminal));
+        assert_eq!(m.key(&map, Key::T, true, Mods::CTRL, &US, false), None);
     }
 }
