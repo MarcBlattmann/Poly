@@ -27,6 +27,8 @@ use poly_abi::{Outcome, SyscallRegs};
 use poly_ntobj::status::{STATUS_BUFFER_TOO_SMALL, STATUS_INVALID_PARAMETER, STATUS_SUCCESS};
 use poly_ntobj::{Handle, NtStatus, ObjectId, ObjectType};
 use poly_win32k::desktop::Desktop;
+use poly_win32k::frame::Rect;
+use poly_win32k::link::{FromCompositor, Request as DesktopRequest};
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::services::Win32kService;
 use poly_win32k::surfaces::{MAX_SIDE, Surfaces};
@@ -90,9 +92,28 @@ impl Win32k {
 
     /// The device: bytes the compositor wrote (its greeting brings the
     /// surfaces of the windows there are already).
-    pub fn link_receive(&mut self, bytes: &[u8]) {
-        // Input, focus and the shell's requests come with a later slice.
-        let _ = self.desktop.receive(bytes);
+    pub fn link_receive(&mut self, objects: &mut poly_ntobj::ObjectManager, bytes: &[u8]) {
+        let events = self.desktop.receive(bytes);
+        let mut fx = Effects::default();
+        let frame = self.desktop.frame();
+        for event in events {
+            match event {
+                FromCompositor::Request { surface, request: DesktopRequest::Close } => {
+                    if let Some(hwnd) = self.surfaces.hwnd(surface) {
+                        self.wm.post_system_message(hwnd, poly_win32k::user::WM_CLOSE, 0, &mut fx);
+                    }
+                }
+                FromCompositor::Configure { surface, x, y, width, height } => {
+                    if let Some(hwnd) = self.surfaces.hwnd(surface) {
+                        let (width, height) = (width.min(i32::MAX as u32) as i32, height.min(i32::MAX as u32) as i32);
+                        let client = Rect::new(x, y, x.saturating_add(width), y.saturating_add(height));
+                        self.wm.configure_from_desktop(hwnd, client, frame);
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.wake(objects, &fx);
         self.sync();
     }
 

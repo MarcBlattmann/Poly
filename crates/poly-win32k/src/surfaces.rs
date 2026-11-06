@@ -61,6 +61,11 @@ impl Surfaces {
         self.windows.get(&hwnd).copied()
     }
 
+    /// The window owning desktop-link `surface`.
+    pub fn hwnd(&self, surface: SurfaceId) -> Option<u32> {
+        self.windows.iter().find_map(|(&hwnd, &id)| (id == surface).then_some(hwnd))
+    }
+
     /// Bring the desktop's surfaces in line with the window manager, and
     /// free the buffers the compositor let go of.
     pub fn sync(&mut self, wm: &Wm, desktop: &mut Desktop) {

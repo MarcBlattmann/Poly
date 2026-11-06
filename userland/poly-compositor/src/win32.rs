@@ -26,11 +26,11 @@ use crate::os;
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
-use poly_wayland::compose::{Content, Rect, Scene, WindowId};
+use poly_wayland::compose::{Content, Hit, Rect, Scene, WindowId};
 use poly_win32k::frame::FrameMetrics;
 use poly_win32k::link::{
-    BufferId, CursorShape, DEVICE, Edges, FromCompositor, PixelFormat, READ_BUFFER, ReadBuffer, Record, Stream,
-    SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState,
+    BufferId, CursorShape, DEVICE, Edges, FromCompositor, PixelFormat, READ_BUFFER, ReadBuffer, Record, Request,
+    Stream, SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState,
 };
 
 /// The scene owner of Windows surfaces: this bit, or'ed with the surface,
@@ -65,6 +65,7 @@ pub enum Action {
 struct Surface {
     window: WindowId,
     buffer: Option<(BufferId, u32, u32, u32, PixelFormat)>,
+    geometry: (i32, i32, u32, u32),
 }
 
 /// Windows surfaces in the scene.
@@ -92,6 +93,39 @@ impl WindowsSurfaces {
     /// The surface a scene window shows, if it is a Windows one.
     pub fn surface_of(&self, window: WindowId) -> Option<SurfaceId> {
         self.surfaces.iter().find(|(_, s)| s.window == window).map(|(&id, _)| id)
+    }
+
+    /// The Windows surface under a title-bar close hit, if any. Use the
+    /// scene's hit test so a covered window cannot receive the click.
+    pub fn close_at(&self, scene: &Scene, x: i32, y: i32) -> Option<SurfaceId> {
+        match scene.hit_test(x, y) {
+            Hit::Close(window) => self.surface_of(window),
+            _ => None,
+        }
+    }
+
+    /// Configure records for Windows surfaces moved or resized in the
+    /// scene. Their cached geometry suppresses duplicate records.
+    pub fn sync_geometry(&mut self, scene: &Scene) -> Vec<FromCompositor> {
+        let mut moved = Vec::new();
+        for (&surface, s) in &self.surfaces {
+            let Some(win) = scene.window(s.window) else { continue };
+            let (x, y) = win.position();
+            let (width, height) = win.content().logical_size();
+            let geometry = (x, y, width.max(0) as u32, height.max(0) as u32);
+            if s.geometry != geometry {
+                moved.push((surface, geometry));
+            }
+        }
+        for (surface, (x, y, width, height)) in &moved {
+            if let Some(s) = self.surfaces.get_mut(surface) {
+                s.geometry = (*x, *y, *width, *height);
+            }
+        }
+        moved
+            .into_iter()
+            .map(|(surface, (x, y, width, height))| FromCompositor::Configure { surface, x, y, width, height })
+            .collect()
     }
 
     /// win32k's connection ended: its windows leave the scene.
@@ -125,11 +159,14 @@ impl WindowsSurfaces {
                 if let Some(owner) = self.window(owner) {
                     scene.set_parent(window, Some(owner));
                 }
-                self.surfaces.insert(surface, Surface { window, buffer: None });
+                self.surfaces.insert(surface, Surface { window, buffer: None, geometry: (0, 0, 0, 0) });
             }
-            ToCompositor::Geometry { surface, x, y, .. } => {
+            ToCompositor::Geometry { surface, x, y, width, height } => {
                 if let Some(w) = self.window(surface) {
                     scene.set_position(w, x, y);
+                }
+                if let Some(s) = self.surfaces.get_mut(&surface) {
+                    s.geometry = (x, y, width, height);
                 }
             }
             ToCompositor::Title { surface, ref text } => {
@@ -153,7 +190,7 @@ impl WindowsSurfaces {
                 }
             }
             ToCompositor::Damage { surface, x, y, width, height } => {
-                if let Some(&Surface { window, buffer: Some((b, bw, bh, stride, format)) }) =
+                if let Some(&Surface { window, buffer: Some((b, bw, bh, stride, format)), .. }) =
                     self.surfaces.get(&surface)
                     && let Some(bytes) = buffers.bytes(b)
                 {
@@ -291,6 +328,47 @@ impl Link {
         &self.surfaces
     }
 
+    /// The close button at (`x`, `y`) belongs to a Windows surface, if any.
+    /// The compositor normally sends an xdg close to Wayland clients; a
+    /// Windows surface needs the equivalent request over `/dev/win32k`.
+    pub fn close_at(&mut self, scene: &Scene, x: i32, y: i32) -> bool {
+        if let Some(surface) = self.surfaces.close_at(scene, x, y) {
+            println!("poly-compositor: close requested for Windows surface {surface}");
+            self.send(FromCompositor::Request { surface, request: Request::Close });
+            true
+        } else {
+            false
+        }
+    }
+
+    /// A keyboard close of `window`: sent to win32k if it is a Windows
+    /// surface (any other window was closed by the server already).
+    pub fn close_window(&mut self, window: WindowId) -> bool {
+        if let Some(surface) = self.surfaces.surface_of(window) {
+            println!("poly-compositor: close requested for Windows surface {surface}");
+            self.send(FromCompositor::Request { surface, request: Request::Close });
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Tell win32k where the compositor moved a Windows surface. This keeps
+    /// the app's GetWindowRect and later input in step with Poly's frame.
+    pub fn sync_geometry(&mut self, scene: &Scene) {
+        for record in self.surfaces.sync_geometry(scene) {
+            self.send(record);
+        }
+    }
+
+    fn send(&mut self, record: FromCompositor) {
+        let mut bytes = Vec::new();
+        record.encode(&mut bytes);
+        if let Err(e) = os::write(self.fd, &bytes) {
+            eprintln!("poly-compositor: {DEVICE}: {e}");
+        }
+    }
+
     /// Read what win32k sent and apply it to the scene.
     pub fn pump(&mut self, scene: &mut Scene) {
         let mut buf = vec![0u8; 16 * 1024];
@@ -403,6 +481,45 @@ mod tests {
     }
 
     #[test]
+    fn a_close_click_on_a_windows_frame_maps_to_its_surface() {
+        use poly_wayland::compose::{BORDER, CLOSE_SIZE, TITLE_HEIGHT};
+        let mut scene = Scene::new(800, 600, 1);
+        let mut ws = WindowsSurfaces::new();
+        let mut d = Desktop::new();
+        let mut mem = Memory(BTreeMap::new());
+        let hello =
+            FromCompositor::Hello { version: VERSION, width: 800, height: 600, scale: 1, frame: FrameMetrics::POLY };
+        d.receive(&encode_all(&[hello]));
+        pump(&mut d, &mut ws, &mut scene, &mem);
+
+        // A window wide enough for Poly's title bar to carry its buttons.
+        let s = d.create(SurfaceKind::TopLevel, 0, true);
+        d.set_geometry(s, 200, 150, 160, 80);
+        d.set_title(s, "Fill");
+        let b = d.attach_buffer(s, 160, 80, 640, PixelFormat::Xrgb8888).unwrap();
+        mem.0.insert(b, vec![0u8; 640 * 80]);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        d.damage(s, 0, 0, 160, 80);
+        d.set_visible(s, true);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let w = ws.window(s).unwrap();
+
+        let frame = scene.frame_rect(w).unwrap();
+        let margin = (TITLE_HEIGHT - CLOSE_SIZE) / 2;
+        let close =
+            (frame.x + frame.width - BORDER - margin - CLOSE_SIZE / 2, frame.y + BORDER + margin + CLOSE_SIZE / 2);
+        assert_eq!(ws.close_at(&scene, close.0, close.1), Some(s));
+        assert_eq!(ws.close_at(&scene, 5, 5), None, "the bare desktop is not a window");
+        assert_eq!(ws.close_at(&scene, 250, 200), None, "the client area is not the close button");
+
+        // After a drag the button is where the frame is now, not where the
+        // program put the window.
+        scene.set_position(w, 300, 250);
+        assert_eq!(ws.close_at(&scene, close.0, close.1), None);
+        assert_eq!(ws.close_at(&scene, close.0 + 100, close.1 + 100), Some(s));
+    }
+
+    #[test]
     fn a_windows_window_is_a_framed_scene_window_with_its_pixels() {
         let mut scene = Scene::new(800, 600, 1);
         let mut ws = WindowsSurfaces::new();
@@ -448,6 +565,15 @@ mod tests {
         assert_eq!(c.pixels[0], 0xFF10_2030);
         assert_eq!(c.pixels[7], 0xFFFF_FFFF);
         assert_eq!(c.pixels[1], 0xFF00_0000);
+
+        // The compositor reports moved client geometry once.
+        assert!(ws.sync_geometry(&scene).is_empty());
+        scene.set_position(w, 75, 120);
+        assert_eq!(
+            ws.sync_geometry(&scene),
+            vec![FromCompositor::Configure { surface: s, x: 75, y: 120, width: 4, height: 2 }]
+        );
+        assert!(ws.sync_geometry(&scene).is_empty(), "unchanged geometry is not resent");
 
         // A new buffer releases the old one back to win32k, which frees it.
         let b2 = d.attach_buffer(s, 8, 4, 32, PixelFormat::Xrgb8888).unwrap();

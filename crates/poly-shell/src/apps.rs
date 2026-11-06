@@ -172,7 +172,9 @@ pub fn parse_exec(exec: &str) -> Option<Vec<String>> {
     Some(args)
 }
 
-/// Poly's own apps, offered whatever is installed.
+/// Poly's own apps, offered whatever is installed. Test fixtures (the demo
+/// clients) are not among them: a desktop that wants them gets them from
+/// desktop files, which `cargo xtask desktop --test-apps` puts in the image.
 pub fn builtins() -> Vec<App> {
     let app = |name: &str, comment: &str, keywords: &[&str], argv: &[&str]| App {
         name: name.into(),
@@ -182,18 +184,6 @@ pub fn builtins() -> Vec<App> {
         id: alloc::format!("poly:{name}"),
     };
     alloc::vec![
-        app(
-            "Poly Demo",
-            "A Wayland window drawn by a small native client",
-            &["demo", "wayland", "test"],
-            &["/bin/wl-demo"]
-        ),
-        app(
-            "Wayland Test Client",
-            "The compositor's protocol test (exits when done)",
-            &["test", "client"],
-            &["/bin/wl-client"]
-        ),
         app(
             "Settings",
             "Display, keyboard, wallpaper, sound, time zone",
@@ -263,6 +253,23 @@ pub fn catalog(desktop: Vec<App>) -> Vec<App> {
     all
 }
 
+/// Desktop-file apps for the shell's tests, standing in for what an image
+/// carries: not Poly's built-ins and not test fixtures.
+#[cfg(test)]
+pub(crate) fn sample_apps() -> Vec<App> {
+    let app = |name: &str, keywords: &[&str], prog: &str| App {
+        name: name.into(),
+        comment: String::new(),
+        keywords: keywords.iter().map(|k| (*k).into()).collect(),
+        argv: alloc::vec![prog.into()],
+        id: alloc::format!("{prog}.desktop"),
+    };
+    catalog(alloc::vec![
+        app("Pixel Viewer", &["picture", "image"], "/bin/viewer"),
+        app("Quill Editor", &["write", "text"], "/bin/editor"),
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,16 +324,22 @@ mod tests {
             argv: vec!["x".into()],
             id: "f.desktop".into(),
         };
-        let all = catalog(vec![file("zebra"), file("Poly Demo"), file("apple")]);
+        let all = catalog(vec![file("zebra"), file("Settings"), file("apple")]);
         let names: Vec<&str> = all.iter().map(|a| a.name.as_str()).collect();
-        assert_eq!(
-            names,
-            ["apple", "Files", "Notifications", "Poly Demo", "Settings", "Terminal", "Wayland Test Client", "zebra"]
-        );
+        assert_eq!(names, ["apple", "Files", "Notifications", "Settings", "Terminal", "zebra"]);
         assert_eq!(all[3].id, "f.desktop", "the desktop file replaced the built-in");
-        assert_eq!(all[4].internal(), Some(SETTINGS));
+        assert_eq!(all[2].internal(), Some(NOTIFICATIONS));
         assert_eq!(all[3].internal(), None);
         assert_eq!(all[1].argv, [FILES]);
-        assert_eq!(all[5].argv, [TERMINAL]);
+        assert_eq!(all[4].argv, [TERMINAL]);
+    }
+
+    #[test]
+    fn the_demo_clients_are_not_built_in() {
+        // Test fixtures arrive only as desktop files an image carries.
+        let all = catalog(Vec::new());
+        let names: Vec<&str> = all.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["Files", "Notifications", "Settings", "Terminal"]);
+        assert!(all.iter().all(|a| !a.argv.iter().any(|p| p.contains("wl-demo") || p.contains("wl-client"))));
     }
 }

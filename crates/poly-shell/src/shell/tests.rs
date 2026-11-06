@@ -1,5 +1,5 @@
 use super::*;
-use crate::apps::builtins;
+use crate::apps::sample_apps;
 use crate::switcher::Thumb;
 use poly_dbus::notifications::reason;
 use poly_wayland::compose::MemoryFramebuffer;
@@ -7,7 +7,7 @@ use poly_wayland::compose::MemoryFramebuffer;
 const BAR: u32 = 0x20_20_20;
 
 fn shell() -> Shell {
-    let mut s = Shell::new(1280, 800, builtins(), Text::new(None));
+    let mut s = Shell::new(1280, 800, sample_apps(), Text::new(None));
     s.set_animations(false);
     s.set_time(1_793_491_200, 0);
     s
@@ -60,7 +60,7 @@ fn the_ridge_and_the_launcher_hanging_from_it() {
 fn typing_lists_apps_and_enter_launches() {
     let mut s = shell();
     s.take_damage();
-    for c in "demo".chars() {
+    for c in "pixel".chars() {
         assert_eq!(s.key(Key::Char(c)), None);
     }
     let damage = s.take_damage();
@@ -77,7 +77,7 @@ fn typing_lists_apps_and_enter_launches() {
     assert!(p > 0x20, "the selected row is lighter");
     // Clicking the row starts the app; the launcher goes.
     match s.press(row.x + 5, row.y + 5) {
-        Press::Launch(app) => assert_eq!(app.name, "Poly Demo"),
+        Press::Launch(app) => assert_eq!(app.name, "Pixel Viewer"),
         p => panic!("{p:?}"),
     }
     assert!(!s.launcher().is_visible());
@@ -92,10 +92,10 @@ fn typing_lists_apps_and_enter_launches() {
     assert!(!s.launcher().is_visible());
     // Enter launches too.
     s.toggle_launcher();
-    for c in "wayland".chars() {
+    for c in "quill".chars() {
         s.key(Key::Char(c));
     }
-    assert_eq!(s.key(Key::Enter).map(|a| a.name), Some("Wayland Test Client".into()));
+    assert_eq!(s.key(Key::Enter).map(|a| a.name), Some("Quill Editor".into()));
 }
 
 #[test]
@@ -112,14 +112,14 @@ fn no_match_shows_the_search_row_only_and_the_clock_ticks() {
     assert!(s.set_time(1_793_491_260, 0));
     assert_eq!(s.take_damage(), [Rect::new(0, 0, 1280, 24)]);
     // A small screen: fewer rows fit.
-    let small = Shell::new(640, 400, builtins(), Text::new(None));
+    let small = Shell::new(640, 400, sample_apps(), Text::new(None));
     assert!(small.room_for_rows() < lt::MAX_ROWS);
     assert!(small.room_for_rows() >= 1);
 }
 
 #[test]
 fn the_launcher_opens_and_closes_with_alpines_animation() {
-    let mut s = Shell::new(1280, 800, builtins(), Text::new(None));
+    let mut s = Shell::new(1280, 800, sample_apps(), Text::new(None));
     s.set_now_ms(10_000);
     // Present at the start, at once.
     assert_eq!(s.current_extent().height, 48);
@@ -420,14 +420,14 @@ fn hidpi_draws_the_same_at_twice_the_size() {
 #[test]
 fn the_launcher_lists_open_windows_first_and_switches_to_them() {
     let mut s = shell();
-    s.set_windows(&[(7, "Demo Notes".into(), "notes".into()), (9, "Terminal".into(), "term".into())]);
-    for c in "demo".chars() {
+    s.set_windows(&[(7, "Pixel Notes".into(), "notes".into()), (9, "Terminal".into(), "term".into())]);
+    for c in "pixel".chars() {
         s.key(Key::Char(c));
     }
-    // "Demo Notes" (a window) before "Poly Demo" (an app), each in its section.
+    // "Pixel Notes" (a window) before "Pixel Viewer" (an app), each in its section.
     let names: Vec<&str> = s.launcher().results().iter().map(|&i| s.apps()[i].name.as_str()).collect();
-    assert_eq!(names.first(), Some(&"Demo Notes"));
-    assert!(names.contains(&"Poly Demo"));
+    assert_eq!(names.first(), Some(&"Pixel Notes"));
+    assert!(names.contains(&"Pixel Viewer"));
     assert_eq!(s.window_rows(), 1);
     let l = s.launcher_layout(24);
     let (w0, a0) = (s.row_rect(&l, 0), s.row_rect(&l, 1));
