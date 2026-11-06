@@ -127,6 +127,7 @@ impl Desktop {
         let title_font = fonts.sans;
         let mut shell = Shell::new(lw, lh, apps, poly_shell::draw::Text::with_fonts(fonts));
         desktop::load_wallpapers(&mut shell);
+        shell.set_icon_files(Box::new(desktop::DiskIcons));
         if let Some(f) = title_font {
             // Window titles in the shell's font, 12 pixels as Windows 11's.
             server.scene_mut().set_text(Box::new(poly_shell::draw::TitleFont::new(f, 12.0, 16)));

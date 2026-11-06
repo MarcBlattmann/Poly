@@ -3,7 +3,8 @@
 //! `Type`, `Name`, `GenericName`, `Comment`, `Exec` with its quoting and
 //! field codes, `NoDisplay`, `Hidden`, `Terminal`, `Keywords`) and Poly's
 //! built-ins, Files and Terminal among them (ADR 0134). An entry with
-//! `Terminal=true` runs in Poly's Terminal (`poly-terminal -e ...`).
+//! `Terminal=true` runs in Poly's Terminal (`poly-terminal -e ...`). The
+//! `Icon` key is kept for the launcher to draw ([`crate::appicon`], ADR 0146).
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -21,6 +22,10 @@ pub struct App {
     /// The desktop file's ID (`foo.desktop`), or `poly:<name>` for a
     /// built-in.
     pub id: String,
+    /// The desktop file's `Icon`: a name for the icon theme or an absolute
+    /// path. `None` for Poly's own apps and open windows without one: the
+    /// shell draws its own glyph.
+    pub icon: Option<String>,
 }
 
 /// Why a desktop file is not offered.
@@ -41,6 +46,7 @@ pub fn parse_desktop_entry(id: &str, text: &str) -> Result<App, Skip> {
     let mut in_entry = false;
     let mut seen_entry = false;
     let (mut name, mut generic, mut comment, mut exec, mut kind) = (None, None, None, None, None);
+    let mut icon = None;
     let mut keywords = Vec::new();
     let (mut hidden, mut terminal) = (false, false);
     for line in text.lines() {
@@ -66,6 +72,7 @@ pub fn parse_desktop_entry(id: &str, text: &str) -> Result<App, Skip> {
             "GenericName" => generic = Some(value),
             "Comment" => comment = Some(value),
             "Exec" => exec = Some(value),
+            "Icon" => icon = Some(value).filter(|v| !v.is_empty()),
             "Keywords" => keywords = value.split(';').filter(|k| !k.is_empty()).map(ToString::to_string).collect(),
             "NoDisplay" | "Hidden" => hidden |= value == "true",
             "Terminal" => terminal = value == "true",
@@ -92,7 +99,7 @@ pub fn parse_desktop_entry(id: &str, text: &str) -> Result<App, Skip> {
         argv.splice(0..0, [String::from(TERMINAL), String::from("-e")]);
     }
     let comment = comment.or(generic).unwrap_or_default();
-    Ok(App { name, comment, keywords, argv, id: id.into() })
+    Ok(App { name, comment, keywords, argv, id: id.into(), icon })
 }
 
 /// The escapes of string values: `\s` space, `\n`, `\t`, `\r`, `\\`.
@@ -124,8 +131,8 @@ fn unescape(v: &str) -> String {
 /// `Exec`'s arguments: separated by spaces, double quotes around an
 /// argument with `\"`, `` \` ``, `\$` and `\\` inside; the field codes
 /// that stand for files or URLs (`%f %F %u %U`) and the deprecated ones
-/// dropped, `%i`, `%c`, `%k` dropped too (no icons, no translated names,
-/// no file location), `%%` a percent sign. `None` for an unclosed quote.
+/// dropped, `%i`, `%c`, `%k` dropped too (the icon is the `Icon` key's, no
+/// translated names, no file location), `%%` a percent sign. `None` for an unclosed quote.
 pub fn parse_exec(exec: &str) -> Option<Vec<String>> {
     let mut args = Vec::new();
     let mut cur = String::new();
@@ -182,6 +189,7 @@ pub fn builtins() -> Vec<App> {
         keywords: keywords.iter().map(|k| (*k).into()).collect(),
         argv: argv.iter().map(|a| (*a).into()).collect(),
         id: alloc::format!("poly:{name}"),
+        icon: None,
     };
     alloc::vec![
         app(
@@ -226,6 +234,7 @@ pub fn window_entry(id: u32, title: &str, app_id: &str) -> App {
         keywords: Vec::new(),
         argv: alloc::vec![alloc::format!("{WINDOW}{id}")],
         id: alloc::format!("{WINDOW}{id}"),
+        icon: None,
     }
 }
 
@@ -263,6 +272,7 @@ pub(crate) fn sample_apps() -> Vec<App> {
         keywords: keywords.iter().map(|k| (*k).into()).collect(),
         argv: alloc::vec![prog.into()],
         id: alloc::format!("{prog}.desktop"),
+        icon: None,
     };
     catalog(alloc::vec![
         app("Pixel Viewer", &["picture", "image"], "/bin/viewer"),
@@ -286,6 +296,7 @@ mod tests {
         assert_eq!(app.argv, ["gedit", "--new-window"]);
         assert_eq!(app.keywords, ["Text", "Plain"]);
         assert_eq!(app.id, "org.gnome.gedit.desktop");
+        assert_eq!(app.icon.as_deref(), Some("gedit"));
     }
 
     #[test]
@@ -323,6 +334,7 @@ mod tests {
             keywords: vec![],
             argv: vec!["x".into()],
             id: "f.desktop".into(),
+            icon: None,
         };
         let all = catalog(vec![file("zebra"), file("Settings"), file("apple")]);
         let names: Vec<&str> = all.iter().map(|a| a.name.as_str()).collect();

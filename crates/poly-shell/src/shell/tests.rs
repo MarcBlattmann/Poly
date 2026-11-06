@@ -1,4 +1,5 @@
 use super::*;
+use crate::appicon::testing::{disk, png};
 use crate::apps::sample_apps;
 use crate::switcher::Thumb;
 use poly_dbus::notifications::reason;
@@ -491,4 +492,149 @@ fn shortcuts_recorded_through_the_shell() {
     s.settings_window.recorder.start(Action::Settings, 1_793_491_200);
     assert!(s.set_time(1_793_491_215, 0));
     assert!(!s.settings_window.recording());
+}
+
+const VIEWER_ICON: &str = "/usr/share/icons/hicolor/32x32/apps/viewer.png";
+
+/// A shell whose Pixel Viewer has `Icon=viewer`, with a red 32-pixel icon
+/// for it on the disk.
+fn shell_with_icons() -> Shell {
+    let mut apps = sample_apps();
+    apps.iter_mut().find(|a| a.name == "Pixel Viewer").unwrap().icon = Some("viewer".into());
+    let mut s = Shell::new(1280, 800, apps, Text::new(None));
+    s.set_animations(false);
+    s.set_time(1_793_491_200, 0);
+    s.set_icon_files(alloc::boxed::Box::new(disk(&[(VIEWER_ICON, png(32, 32, [255, 0, 0, 255]))])));
+    s
+}
+
+/// The middle of row `i`'s icon box.
+fn icon_centre(s: &Shell, i: usize) -> (u32, u32) {
+    let row = s.row_rect(&s.launcher_layout(24), i);
+    ((row.x + 10 + 14) as u32, (row.y + row.height / 2) as u32)
+}
+
+#[test]
+fn an_installed_apps_own_icon_is_drawn_in_the_launcher() {
+    let mut s = shell_with_icons();
+    for c in "viewer".chars() {
+        s.key(Key::Char(c));
+    }
+    let (x, y) = icon_centre(&s, 0);
+    let fb = render(&s);
+    assert_eq!(fb.pixel(x, y), Some(0xff_0000), "the app's icon, scaled into the 28-pixel box");
+    assert_eq!(fb.pixel(x - 13, y - 13), Some(0xff_0000), "it fills the box");
+    // An app without an Icon keeps its glyph (white on the dark row).
+    let mut s = shell_with_icons();
+    for c in "quill".chars() {
+        s.key(Key::Char(c));
+    }
+    let (x, y) = icon_centre(&s, 0);
+    let fb = render(&s);
+    assert_ne!(fb.pixel(x, y), Some(0xff_0000));
+    // Without an icon source (or without the file) the glyph stays too.
+    let mut apps = sample_apps();
+    apps.iter_mut().find(|a| a.name == "Pixel Viewer").unwrap().icon = Some("viewer".into());
+    let mut plain = Shell::new(1280, 800, apps, Text::new(None));
+    plain.set_animations(false);
+    for c in "viewer".chars() {
+        plain.key(Key::Char(c));
+    }
+    let (x, y) = icon_centre(&plain, 0);
+    assert_ne!(render(&plain).pixel(x, y), Some(0xff_0000));
+    let mut missing = shell_with_icons();
+    missing.set_icon_files(alloc::boxed::Box::new(disk(&[])));
+    for c in "viewer".chars() {
+        missing.key(Key::Char(c));
+    }
+    let (x, y) = icon_centre(&missing, 0);
+    assert_ne!(render(&missing).pixel(x, y), Some(0xff_0000));
+}
+
+#[test]
+fn poly_s_own_apps_keep_their_glyphs() {
+    // Even a theme icon called "poly-files" or "Settings" does not replace
+    // the built-ins' Lucide glyphs: they have no `Icon`.
+    let mut s = shell_with_icons();
+    s.set_icon_files(alloc::boxed::Box::new(disk(&[
+        ("/usr/share/icons/hicolor/32x32/apps/Files.png", png(32, 32, [255, 0, 0, 255])),
+        ("/usr/share/icons/hicolor/32x32/apps/poly-files.png", png(32, 32, [255, 0, 0, 255])),
+        ("/usr/share/icons/hicolor/32x32/apps/Settings.png", png(32, 32, [255, 0, 0, 255])),
+    ])));
+    for c in "files".chars() {
+        s.key(Key::Char(c));
+    }
+    let (x, y) = icon_centre(&s, 0);
+    assert_eq!(s.apps()[s.launcher().results()[0]].name, "Files");
+    assert_ne!(render(&s).pixel(x, y), Some(0xff_0000));
+}
+
+#[test]
+fn windows_take_their_apps_icon() {
+    let mut s = shell_with_icons();
+    s.set_windows(&[
+        (1, "Holiday".into(), "viewer".into()),
+        (2, "Files".into(), "poly-files".into()),
+        (3, "Web".into(), "chromium".into()),
+        (4, "Untitled".into(), String::new()),
+    ]);
+    let icon = |id: u32| s.apps().iter().find(|a| a.window() == Some(id)).unwrap().icon.clone();
+    // The desktop file that runs a program of that name: its Icon.
+    assert_eq!(icon(1).as_deref(), Some("viewer"));
+    // Poly's own app: no Icon, its glyph stays.
+    assert_eq!(icon(2), None);
+    // No desktop file: the app ID as an icon name.
+    assert_eq!(icon(3).as_deref(), Some("chromium"));
+    assert_eq!(icon(4), None);
+    // In the launcher the window's row shows the icon.
+    for c in "holiday".chars() {
+        s.key(Key::Char(c));
+    }
+    let (x, y) = icon_centre(&s, 0);
+    assert_eq!(render(&s).pixel(x, y), Some(0xff_0000));
+    // The same windows again change nothing.
+    let before = s.apps().to_vec();
+    s.set_windows(&[
+        (1, "Holiday".into(), "viewer".into()),
+        (2, "Files".into(), "poly-files".into()),
+        (3, "Web".into(), "chromium".into()),
+        (4, "Untitled".into(), String::new()),
+    ]);
+    assert_eq!(s.apps(), before);
+}
+
+#[test]
+fn the_switcher_shows_the_windows_app_icon() {
+    let mut s = shell_with_icons();
+    s.hide_launcher();
+    let entry = |id: u32, app: &str| Entry {
+        window: WindowId(id),
+        title: alloc::format!("Window {id}"),
+        app_id: app.into(),
+        minimized: false,
+        thumb: Thumb { width: 160, height: 100, pixels: alloc::vec![0x30_80_50; 160 * 100] },
+    };
+    s.open_switcher(alloc::vec![entry(1, "viewer"), entry(2, "")], false);
+    let fb = render(&s);
+    let (_, cards) = s.switcher_layout(24);
+    let (c0, c1) = (cards[0], cards[1]);
+    assert_eq!(fb.pixel((c0.x + 6 + 8) as u32, (c0.y + 6 + 8) as u32), Some(0xff_0000), "the viewer's icon");
+    assert_ne!(fb.pixel((c1.x + 6 + 8) as u32, (c1.y + 6 + 8) as u32), Some(0xff_0000));
+}
+
+#[test]
+fn icons_scale_with_the_output() {
+    let mut s = shell_with_icons();
+    for c in "viewer".chars() {
+        s.key(Key::Char(c));
+    }
+    let mut fb = MemoryFramebuffer::new(2560, 1600);
+    let all = Rect::new(0, 0, 2560, 1600);
+    // The shell is 1280 x 800 logical; at scale 2 the box is 56 pixels.
+    s.above().draw(&mut fb, all, 2);
+    let row = s.row_rect(&s.launcher_layout(24), 0).scale(2);
+    let (x, y) = (row.x + 2 * 10 + 28, row.y + row.height / 2);
+    assert_eq!(fb.pixel(x as u32, y as u32), Some(0xff_0000));
+    assert_eq!(fb.pixel((x - 26) as u32, y as u32), Some(0xff_0000), "56 pixels wide");
+    assert_ne!(fb.pixel((x - 30) as u32, y as u32), Some(0xff_0000));
 }
