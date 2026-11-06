@@ -722,6 +722,14 @@ impl Machine {
         self.s.run(line)
     }
 
+    /// Type a command line on the console without waiting for the prompt
+    /// (for a console that is busy with an app's output: the prompt may
+    /// come anywhere in it, and a caller that only wants the command's
+    /// effect looks for that with [`Machine::seen`]).
+    pub(crate) fn send_line(&mut self, line: &str) -> Result {
+        self.s.send(&format!("{line}\r"))
+    }
+
     pub(crate) fn set_timeouts(&mut self, step: Duration, session: Duration) {
         self.s.set_timeouts(step, session);
     }

@@ -214,7 +214,10 @@ U=/run/user/1000
 mkdir -p \"$U\" /home/poly
 chown poly:poly \"$U\" /home/poly && chmod 700 \"$U\"
 S=\"$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY\"
-if [ -S \"$S\" ] && [ ! -e \"$U/$WAYLAND_DISPLAY\" ]; then
+# A new name every time: the disk outlives boots (`chromium run`), and a link
+# left by an earlier boot names a socket nobody listens on any more.
+if [ -S \"$S\" ]; then
+    rm -f \"$U/$WAYLAND_DISPLAY\"
     ln \"$S\" \"$U/$WAYLAND_DISPLAY\" && chown poly:poly \"$U/$WAYLAND_DISPLAY\"
 fi
 cd /home/poly
@@ -970,6 +973,79 @@ fn configure(tree: &mut RootTree) {
     tree.dir("home/poly", 0o755);
 }
 
+// ---- the trust store -------------------------------------------------------
+
+/// Where Debian's `ca-certificates` package puts the certificates it trusts.
+const CA_DIR: &str = "usr/share/ca-certificates";
+/// The bundle `update-ca-certificates(8)` writes (the file TLS clients, curl
+/// and OpenSSL among them, read).
+const CA_BUNDLE: &str = "etc/ssl/certs/ca-certificates.crt";
+
+/// The bundle `update-ca-certificates` would write for the certificate files
+/// `certs` (paths below [`CA_DIR`], e.g. `mozilla/ISRG_Root_X1.crt`, with
+/// their contents): every file in path order, PEM text, each ending in a
+/// newline. Debian's postinst enables every certificate of the package in
+/// `/etc/ca-certificates.conf`; the maintainer scripts do not run here.
+fn ca_bundle(certs: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
+    let mut sorted: Vec<&(String, Vec<u8>)> = certs.iter().collect();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut out = Vec::new();
+    for (name, pem) in sorted {
+        let text = std::str::from_utf8(pem).map_err(|_| format!("{name}: not PEM text"))?;
+        if !text.contains("-----BEGIN CERTIFICATE-----") || !text.contains("-----END CERTIFICATE-----") {
+            return Err(format!("{name}: no PEM certificate in it"));
+        }
+        out.extend_from_slice(pem);
+        if !pem.ends_with(b"\n") {
+            out.push(b'\n');
+        }
+    }
+    if out.is_empty() {
+        return Err("no certificates to trust".into());
+    }
+    Ok(out)
+}
+
+/// The name `update-ca-certificates` links a certificate under in
+/// `/etc/ssl/certs`: its file name with `.pem` for `.crt`, blanks as `_`.
+fn ca_link_name(path: &str) -> String {
+    let file = path.rsplit('/').next().unwrap_or(path);
+    let stem = file.strip_suffix(".crt").unwrap_or(file);
+    format!("{}.pem", stem.replace(' ', "_"))
+}
+
+/// Add the trust store `update-ca-certificates` would have made to `tree`:
+/// the bundle, a link in `/etc/ssl/certs` per certificate, and the
+/// configuration naming them. `certs`: path below [`CA_DIR`] and contents.
+fn add_trust_store(tree: &mut RootTree, certs: &[(String, Vec<u8>)]) -> Result {
+    tree.file(CA_BUNDLE, 0o644, &ca_bundle(certs)?);
+    let mut names: Vec<&str> = certs.iter().map(|(n, _)| n.as_str()).collect();
+    names.sort_unstable();
+    let mut conf = String::new();
+    for name in &names {
+        conf.push_str(name);
+        conf.push('\n');
+        tree.symlink(&format!("etc/ssl/certs/{}", ca_link_name(name)), &format!("/{CA_DIR}/{name}"));
+    }
+    tree.file("etc/ca-certificates.conf", 0o644, conf.as_bytes());
+    Ok(())
+}
+
+/// The certificate files among the unpacked entries, read from their blobs.
+fn unpacked_certs(entries: &[Unpacked], blobs: &Path) -> Result<Vec<(String, Vec<u8>)>> {
+    let mut out = Vec::new();
+    for e in entries {
+        if let Unpacked::File { path, blob, .. } = e
+            && let Some(name) = path.strip_prefix(CA_DIR).and_then(|r| r.strip_prefix('/'))
+            && name.ends_with(".crt")
+        {
+            let at = blobs.join(blob.to_string());
+            out.push((name.to_string(), std::fs::read(&at).map_err(|e| format!("{}: {e}", at.display()))?));
+        }
+    }
+    Ok(out)
+}
+
 /// The launcher's desktop file for Chromium: as `poly`, sandbox on. The
 /// compositor (a native program) starts programs, not `#!` scripts: bash
 /// runs `poly-chromium`.
@@ -990,6 +1066,7 @@ pub fn collect() -> std::result::Result<Contents, String> {
         tree.dir(target, 0o755);
         tree.symlink(link, target);
     }
+    let certs = unpacked_certs(&entries, &blobs)?;
     for e in entries {
         match e {
             Unpacked::Dir { path, mode } => tree.dir(&path, mode),
@@ -1001,6 +1078,7 @@ pub fn collect() -> std::result::Result<Contents, String> {
     }
     contents.have.insert("chromium");
     configure(tree);
+    add_trust_store(tree, &certs)?;
     tree.file("usr/local/bin/poly-compositor", 0o755, &compositor::build_compositor()?);
     for (path, data) in crate::fonts::shell_tree() {
         tree.file(&path, 0o644, &data);
@@ -1636,9 +1714,11 @@ fn window_scenario(m: &mut crate::toolkits::Machine) -> Result {
     std::thread::sleep(Duration::from_secs(1));
     m.type_text("poly")?;
     let ask = ". /etc/poly-desktop.env; echo dump > \"$XDG_RUNTIME_DIR/poly-compositor.ctl\"";
+    // Chromium writes to the console as well (more so with a network): the
+    // prompt is not waited for, only the compositor's answer.
     poll(INPUT_WAIT, || {
         let from = m.text_len();
-        m.run(ask)?;
+        m.send_line(ask)?;
         Ok(m.seen(from, "window \"typed poly", Duration::from_secs(10)).ok())
     })
     .map_err(|e| format!("typing \"poly\" did not change the title: {e}"))?;
@@ -1723,7 +1803,8 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     if failed.is_empty() {
         let url = "https://example.com/";
         let out = m.run(&headless_url("--dump-dom", url))?;
-        if !out.contains("<title>Example Domain</title>") || !out.contains("<h1>Example Domain</h1>") {
+        // The title and the notice have stayed through the site's redesigns.
+        if !out.contains("<title>Example Domain</title>") || !out.contains("documentation examples") {
             failed.push(format!("HTTPS page from {url}: {out:?}"));
         }
     }
@@ -1935,6 +2016,30 @@ mod tests {
     }
 
     #[test]
+    fn the_trust_store_is_what_update_ca_certificates_makes() {
+        let pem = |n: &str| format!("-----BEGIN CERTIFICATE-----\n{n}\n-----END CERTIFICATE-----").into_bytes();
+        let certs = vec![
+            ("mozilla/B Root.crt".to_string(), pem("b")),
+            ("mozilla/A_Root.crt".to_string(), [pem("a"), b"\n".to_vec()].concat()),
+        ];
+        let bundle = String::from_utf8(ca_bundle(&certs).unwrap()).unwrap();
+        // In path order, every certificate ending in exactly one newline.
+        assert_eq!(
+            bundle,
+            "-----BEGIN CERTIFICATE-----\na\n-----END CERTIFICATE-----\n\
+             -----BEGIN CERTIFICATE-----\nb\n-----END CERTIFICATE-----\n"
+        );
+        assert!(ca_bundle(&[]).is_err());
+        assert!(ca_bundle(&[("mozilla/x.crt".into(), b"hello".to_vec())]).is_err());
+        assert_eq!(ca_link_name("mozilla/B Root.crt"), "B_Root.pem");
+        let mut tree = RootTree::default();
+        add_trust_store(&mut tree, &certs).unwrap();
+        let has = |p: &str| tree.entries.contains_key(p);
+        assert!(has(CA_BUNDLE) && has("etc/ca-certificates.conf"));
+        assert!(has("etc/ssl/certs/A_Root.pem") && has("etc/ssl/certs/B_Root.pem"));
+    }
+
+    #[test]
     fn the_launcher_state_comes_from_the_compositors_last_word() {
         let ready = "poly-compositor: desktop ready (first frame drawn in 9 ms; launcher shown)\n";
         assert!(launcher_shown(ready));
@@ -1954,5 +2059,8 @@ mod tests {
                 && desktop_file().contains("poly-chromium --ozone-platform=wayland")
         );
         assert!(LAUNCH_SCRIPT.contains("setpriv --reuid=1000"));
+        // The socket's name for `poly` is made again at every launch: the
+        // disk (and so `/run/user/1000`) outlives a boot.
+        assert!(LAUNCH_SCRIPT.contains("rm -f \"$U/$WAYLAND_DISPLAY\"\n    ln \"$S\""));
     }
 }
