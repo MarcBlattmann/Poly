@@ -42,6 +42,13 @@ struct Fake {
     calls: Vec<Call>,
     live: Rc<RefCell<usize>>,
     fail_scanout: bool,
+    /// The device keeps one picture across scanout switches.
+    keeps_picture: bool,
+    /// The hardware's clock reads this much later than the request's time
+    /// (programming it takes that long).
+    slow_by: Option<u64>,
+    /// The time of the request, for `slow_by`.
+    asked_at: u64,
     /// 3D: what it offers, fences not signalled yet, the last fence.
     caps: GpuCaps,
     unsignalled: std::collections::BTreeSet<u64>,
@@ -98,6 +105,14 @@ impl Hardware for Fake {
     fn flush(&mut self, fb: u32, rect: Rect) -> core::result::Result<(), HwError> {
         self.calls.push(Call::Flush(fb, rect));
         Ok(())
+    }
+
+    fn scanout_keeps_picture(&self, _: u32) -> bool {
+        self.keeps_picture
+    }
+
+    fn now_ns(&self) -> Option<u64> {
+        self.slow_by.map(|d| self.asked_at + d)
     }
 
     fn take_display(&mut self) {
@@ -298,6 +313,13 @@ impl T {
             unique: "pci:0000:00:02.0".to_string(),
         };
         T { dev: Device::new(hw, info), user: User::new(), fds: FdTable::default(), now: 1000 * MS, privileged: true }
+    }
+
+    /// One output, on hardware set up by `setup`.
+    fn one_with(setup: impl FnOnce(&mut Fake)) -> T {
+        let mut t = T::one();
+        setup(t.dev.hardware());
+        t
     }
 
     fn one() -> T {
@@ -1055,6 +1077,99 @@ fn dirty_fb_uploads_the_clips_where_shown() {
     let mut d = FbDirty { fb_id: fb2, ..FbDirty::default() }.to_bytes();
     t.ok(f, ioctl::MODE_DIRTYFB, &mut d);
     assert!(t.calls().is_empty());
+}
+
+/// `DIRTYFB` with `clips` on framebuffer `fb`.
+fn dirty(t: &mut T, f: FileId, fb: u32, clips: &[(u16, u16, u16, u16)]) {
+    let bytes: Vec<u8> = clips.iter().flat_map(|&(x1, y1, x2, y2)| ClipRect { x1, y1, x2, y2 }.to_bytes()).collect();
+    let ptr = t.user.put(&bytes);
+    let mut d = FbDirty { fb_id: fb, num_clips: clips.len() as u32, clips_ptr: ptr, ..FbDirty::default() }.to_bytes();
+    t.ok(f, ioctl::MODE_DIRTYFB, &mut d);
+}
+
+/// A legacy page flip to `fb`.
+fn flip(t: &mut T, f: FileId, crtc: u32, fb: u32) {
+    let mut p = PageFlip { crtc_id: crtc, fb_id: fb, flags: mode::PAGE_FLIP_EVENT, ..PageFlip::default() }.to_bytes();
+    t.ok(f, ioctl::MODE_PAGE_FLIP, &mut p);
+    // The vblank comes: the next flip is not refused.
+    t.now += 20 * MS;
+    t.read(f).unwrap();
+}
+
+#[test]
+fn a_flip_copies_what_the_client_told_and_all_of_a_new_or_silent_one() {
+    let mut t = T::one();
+    let (f, crtc, _, fb, _) = t.showing();
+    let d2 = t.dumb(f, 1024, 768);
+    let fb2 = t.addfb2(f, &d2, 1024, 768).unwrap();
+    let full = Rect::new(0, 0, 1024, 768);
+    t.calls();
+    // Told something about a buffer never shown: still all of it.
+    dirty(&mut t, f, fb2, &[(10, 10, 20, 20)]);
+    assert!(t.calls().is_empty(), "nothing is copied for a buffer that is not shown");
+    flip(&mut t, f, crtc, fb2);
+    assert_eq!(t.calls(), [Call::Upload(fb2, full), Call::Scanout(0, Some((fb2, full))), Call::Flush(fb2, full)]);
+    // Back to the first (silent, shown before): all of it again.
+    flip(&mut t, f, crtc, fb);
+    assert_eq!(t.calls(), [Call::Upload(fb, full), Call::Scanout(0, Some((fb, full))), Call::Flush(fb, full)]);
+    // Told: only the clips are copied; the device flushes all of the
+    // picture it switched to, as it cannot keep the old one.
+    dirty(&mut t, f, fb2, &[(10, 10, 20, 20), (100, 200, 164, 232)]);
+    dirty(&mut t, f, fb2, &[(12, 12, 15, 15)]);
+    flip(&mut t, f, crtc, fb2);
+    let (a, b) = (Rect::new(10, 10, 10, 10), Rect::new(100, 200, 64, 32));
+    assert_eq!(
+        t.calls(),
+        [Call::Upload(fb2, a), Call::Upload(fb2, b), Call::Scanout(0, Some((fb2, full))), Call::Flush(fb2, full)]
+    );
+    // What was told is used up: the next flip to it, silent, is all.
+    flip(&mut t, f, crtc, fb);
+    flip(&mut t, f, crtc, fb2);
+    let calls = t.calls();
+    assert_eq!(calls.len(), 6);
+    assert_eq!(calls[3], Call::Upload(fb2, full));
+}
+
+#[test]
+fn a_flip_completes_at_the_first_vblank_after_the_hardware_was_done() {
+    let mut t = T::one_with(|hw| hw.slow_by = Some(40 * MS));
+    let (f, crtc, _, _, mode) = t.showing();
+    let d2 = t.dumb(f, 1024, 768);
+    let fb2 = t.addfb2(f, &d2, 1024, 768).unwrap();
+    let frame = modes::frame_ns(&mode);
+    t.dev.hardware().asked_at = t.now;
+    let asked = t.now;
+    let mut p = PageFlip { crtc_id: crtc, fb_id: fb2, flags: mode::PAGE_FLIP_EVENT, ..PageFlip::default() }.to_bytes();
+    t.ok(f, ioctl::MODE_PAGE_FLIP, &mut p);
+    // Programming took 40 ms, three frames of a 75 Hz mode: the vblank that
+    // comes after them is when the flip is complete, not the first after the
+    // request.
+    let due = t.dev.next_event_ns().unwrap();
+    assert!(due >= asked + 40 * MS && due < asked + 40 * MS + frame + 1, "{due} for a request at {asked}");
+}
+
+#[test]
+fn a_device_that_keeps_its_picture_flushes_just_what_was_copied() {
+    let mut t = T::one_with(|hw| hw.keeps_picture = true);
+    let (f, crtc, _, fb, _) = t.showing();
+    let d2 = t.dumb(f, 1024, 768);
+    let fb2 = t.addfb2(f, &d2, 1024, 768).unwrap();
+    let full = Rect::new(0, 0, 1024, 768);
+    flip(&mut t, f, crtc, fb2);
+    t.calls();
+    // The clips are cut to the screen; a clip told empty is nothing.
+    dirty(&mut t, f, fb, &[(1000, 700, 3000, 3000), (5, 5, 5, 50)]);
+    flip(&mut t, f, crtc, fb);
+    let c = Rect::new(1000, 700, 24, 68);
+    assert_eq!(t.calls(), [Call::Upload(fb, c), Call::Scanout(0, Some((fb, full))), Call::Flush(fb, c)]);
+    // Told that nothing changed (every clip empty): nothing is copied.
+    dirty(&mut t, f, fb2, &[(0, 0, 0, 0)]);
+    flip(&mut t, f, crtc, fb2);
+    assert_eq!(t.calls(), [Call::Scanout(0, Some((fb2, full)))]);
+    // DIRTYFB on the shown buffer still copies at once.
+    dirty(&mut t, f, fb2, &[(8, 8, 16, 16)]);
+    let r = Rect::new(8, 8, 8, 8);
+    assert_eq!(t.calls(), [Call::Upload(fb2, r), Call::Flush(fb2, r)]);
 }
 
 #[test]

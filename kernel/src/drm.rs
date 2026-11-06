@@ -13,6 +13,13 @@
 //!   scanout `SET_SCANOUT`, a flush `RESOURCE_FLUSH`, all through
 //!   [`display::with_gpu`]. Taking the display and giving it back are
 //!   [`display::console_yield`] and [`display::console_restore`].
+//!   The screen shows one more resource, the [`Mirror`]: a plain 2D
+//!   framebuffer's pixels are copied into it (only the rectangles the
+//!   device was told changed) and it is what the scanout shows for good,
+//!   so a page flip does not switch the host's display from one resource
+//!   to another (which rebuilds QEMU's whole display surface) and does not
+//!   transfer the whole screen again: one `TRANSFER_TO_HOST_2D` and
+//!   `RESOURCE_FLUSH` of the damage, sent together.
 //! - the device nodes: char 226:0 and 226:128 (Linux's DRM major and
 //!   minors), whose every open is a file of the device ([`DrmFile`]):
 //!   ioctls (copying through the user's memory; a blocking vblank wait
@@ -67,6 +74,8 @@ pub const RENDER: DeviceId = DeviceId::new(DRM_MAJOR, 128);
 /// A framebuffer's virtio resource is this plus its object ID (the
 /// console's are 1 and 2).
 const RESOURCE_BASE: u32 = 0x1000;
+/// The mirror's resource (just under the framebuffers').
+const MIRROR_RESOURCE: u32 = RESOURCE_BASE - 1;
 /// `DMA_BUF_IOCTL_SYNC` (linux/dma-buf.h: `_IOW('b', 0, struct
 /// dma_buf_sync)`, one `__u64 flags`) and its flags.
 const DMA_BUF_IOCTL_SYNC: u32 = 0x4008_6200;
@@ -186,6 +195,53 @@ pub struct KernelHw {
     /// Blob resources, and whether each is mapped into the host-visible
     /// region.
     blobs: BTreeMap<u32, bool>,
+    /// The plain 2D framebuffers: their memory and layout.
+    fb_mem: BTreeMap<u32, (Arc<DumbMemory>, FbLayout)>,
+    /// What the screen shows for those.
+    mirror: Option<Mirror>,
+}
+
+/// The one resource that 2D framebuffers are shown through: guest memory of
+/// the screen's size that the damage of the framebuffer being flipped to is
+/// copied into, scanned out by the outputs that show such a framebuffer.
+#[derive(Debug)]
+struct Mirror {
+    memory: Arc<DumbMemory>,
+    layout: FbLayout,
+    /// The outputs scanning it out.
+    on: Vec<usize>,
+    /// Copied into the memory but not transferred to the host yet.
+    pending: Option<Rect>,
+}
+
+impl Mirror {
+    fn matches(&self, l: &FbLayout) -> bool {
+        (self.layout.width, self.layout.height, self.layout.pitch, self.layout.format)
+            == (l.width, l.height, l.pitch, l.format)
+    }
+
+    fn framebuffer(&self) -> poly_virtio_gpu::Framebuffer {
+        poly_virtio_gpu::Framebuffer {
+            resource_id: MIRROR_RESOURCE,
+            width: self.layout.width,
+            height: self.layout.height,
+            stride: self.layout.pitch,
+        }
+    }
+}
+
+/// The bounding rectangle of `a` and `b`.
+fn bounding(a: Rect, b: Rect) -> Rect {
+    if a.is_empty() {
+        return b;
+    }
+    if b.is_empty() {
+        return a;
+    }
+    let (x, y) = (a.x.min(b.x), a.y.min(b.y));
+    let right = (a.x + a.width).max(b.x + b.width);
+    let bottom = (a.y + a.height).max(b.y + b.height);
+    Rect::new(x, y, right - x, bottom - y)
 }
 
 fn resource(fb: u32) -> u32 {
@@ -196,6 +252,101 @@ impl KernelHw {
     /// The resource framebuffer `fb` shows.
     fn res_of(&self, fb: u32) -> u32 {
         self.fb_on_res.get(&fb).copied().unwrap_or_else(|| resource(fb))
+    }
+
+    /// Whether `fb` is shown through the mirror (a plain 2D framebuffer).
+    fn is_mirrored(&self, fb: u32) -> bool {
+        self.fb_mem.contains_key(&fb) && !self.fb_on_res.contains_key(&fb)
+    }
+
+    /// Make the mirror for framebuffers of `layout`, replacing one of
+    /// another size. Returns whether it is new (empty).
+    fn ensure_mirror(&mut self, layout: &FbLayout) -> Result<bool, HwError> {
+        if self.mirror.as_ref().is_some_and(|m| m.matches(layout)) {
+            return Ok(false);
+        }
+        self.drop_mirror();
+        let format = virtio_format(layout.format).ok_or(HwError)?;
+        let size = layout.pitch as u64 * layout.height as u64;
+        let frames = size.div_ceil(PAGE_SIZE);
+        let phys = frames::allocate_contiguous(frames).ok_or(HwError)?;
+        let Some(virt) = arch::phys_range_to_virt(phys, frames * PAGE_SIZE) else {
+            let _ = frames::free_contiguous(phys, frames);
+            return Err(HwError);
+        };
+        // SAFETY: the frames were just allocated for this buffer alone and
+        // are mapped writable and contiguous by the direct map.
+        unsafe { core::ptr::write_bytes(virt as *mut u8, 0, (frames * PAGE_SIZE) as usize) };
+        // Freed with the last reference, unless the device may still read it.
+        let memory = Arc::new(DumbMemory { phys, frames, len: size, window: None, resource: AtomicU32::new(0) });
+        let entry = MemEntry { addr: phys, length: layout.pitch * layout.height };
+        gpu(|g| {
+            g.create_2d(MIRROR_RESOURCE, format, layout.pitch / 4, layout.height)?;
+            if let Err(e) = g.attach_backing(MIRROR_RESOURCE, &[entry]) {
+                let _ = g.unref(MIRROR_RESOURCE);
+                return Err(e);
+            }
+            Ok(())
+        })?;
+        self.mirror = Some(Mirror { memory, layout: *layout, on: Vec::new(), pending: None });
+        Ok(true)
+    }
+
+    /// Forget the mirror (its outputs are turned off first).
+    fn drop_mirror(&mut self) {
+        let Some(m) = self.mirror.take() else { return };
+        let off = poly_virtio_gpu::Rect::ZERO;
+        let freed = gpu(|g| {
+            for &i in &m.on {
+                g.set_scanout(i as u32, 0, off)?;
+            }
+            g.detach_backing(MIRROR_RESOURCE)?;
+            g.unref(MIRROR_RESOURCE)
+        });
+        if freed.is_err() {
+            // The device may still read the memory: never free it.
+            core::mem::forget(m.memory);
+        }
+    }
+
+    /// Copy `rect` of a framebuffer's pixels into the mirror's memory; the
+    /// host gets them with the next [`KernelHw::flush_mirror`].
+    fn copy_to_mirror(&mut self, memory: &Arc<DumbMemory>, layout: &FbLayout, rect: Rect) -> Result<(), HwError> {
+        let new = self.ensure_mirror(layout)?;
+        let m = self.mirror.as_mut().ok_or(HwError)?;
+        // A mirror just made holds nothing yet: it takes all of it.
+        let rect = if new { Rect::new(0, 0, layout.width, layout.height) } else { rect };
+        let rect = rect.clip(layout.width, layout.height);
+        if rect.is_empty() {
+            return Ok(());
+        }
+        let src = arch::phys_to_virt(memory.phys + layout.offset).ok_or(HwError)? as usize;
+        let dst = arch::phys_to_virt(m.memory.phys).ok_or(HwError)? as usize;
+        let (pitch, row_bytes) = (layout.pitch as usize, rect.width as usize * 4);
+        for y in rect.y..rect.y + rect.height {
+            let at = y as usize * pitch + rect.x as usize * 4;
+            // SAFETY: the rectangle is inside the framebuffer (`clip`), which
+            // the device checked fits its buffer, and the mirror has the same
+            // pitch and height, so both ranges are inside their allocations,
+            // which live as long as the `Arc`s held here; they are different
+            // allocations, so the ranges do not overlap. A client writing the
+            // framebuffer meanwhile only changes which bytes are copied.
+            unsafe { core::ptr::copy_nonoverlapping((src + at) as *const u8, (dst + at) as *mut u8, row_bytes) };
+        }
+        m.pending = Some(bounding(m.pending.unwrap_or_default(), rect));
+        Ok(())
+    }
+
+    /// Send the copied rectangles and `rect` to the host and show them:
+    /// `TRANSFER_TO_HOST_2D` and `RESOURCE_FLUSH` in one notification.
+    fn flush_mirror(&mut self, rect: Rect) -> Result<(), HwError> {
+        let Some(m) = self.mirror.as_mut() else { return Err(HwError) };
+        let rect = bounding(m.pending.take().unwrap_or_default(), rect.clip(m.layout.width, m.layout.height));
+        if rect.is_empty() {
+            return Ok(());
+        }
+        let fb = m.framebuffer();
+        gpu(|g| g.update(&fb, gpu_rect(rect)))
     }
 }
 
@@ -278,13 +429,18 @@ impl Hardware for KernelHw {
                 return Err(e);
             }
             Ok(())
-        })
+        })?;
+        if buffer.window.is_none() {
+            self.fb_mem.insert(fb, (buffer.clone(), *layout));
+        }
+        Ok(())
     }
 
     fn destroy_fb(&mut self, fb: u32, buffer: &Arc<DumbMemory>) -> Result<(), HwError> {
         if self.fb_on_res.remove(&fb).is_some() {
             return Ok(());
         }
+        self.fb_mem.remove(&fb);
         let id = resource(fb);
         let r = gpu(|g| {
             g.detach_backing(id)?;
@@ -302,18 +458,50 @@ impl Hardware for KernelHw {
             // The host has the picture already.
             return Ok(());
         }
+        if let Some((memory, layout)) = self.fb_mem.get(&fb).cloned() {
+            return self.copy_to_mirror(&memory, &layout, rect);
+        }
         let offset = rect.y as u64 * layout.pitch as u64 + rect.x as u64 * 4;
         gpu(|g| g.transfer_to_host_2d(resource(fb), gpu_rect(rect), offset))
     }
 
     fn scanout(&mut self, index: usize, show: Option<(u32, Rect)>) -> Result<(), HwError> {
-        let (id, rect) = show.map_or((0, poly_virtio_gpu::Rect::ZERO), |(fb, r)| (self.res_of(fb), gpu_rect(r)));
-        gpu(|g| g.set_scanout(index as u32, id, rect))
+        match show {
+            Some((fb, r)) if self.is_mirrored(fb) => {
+                let m = self.mirror.as_mut().ok_or(HwError)?;
+                // Already scanning the mirror out: what it shows is what the
+                // copies since keep up to date.
+                if !m.on.contains(&index) {
+                    gpu(|g| g.set_scanout(index as u32, MIRROR_RESOURCE, gpu_rect(r)))?;
+                    m.on.push(index);
+                }
+                Ok(())
+            }
+            other => {
+                if let Some(m) = self.mirror.as_mut() {
+                    m.on.retain(|&i| i != index);
+                }
+                let (id, rect) =
+                    other.map_or((0, poly_virtio_gpu::Rect::ZERO), |(fb, r)| (self.res_of(fb), gpu_rect(r)));
+                gpu(|g| g.set_scanout(index as u32, id, rect))
+            }
+        }
     }
 
     fn flush(&mut self, fb: u32, rect: Rect) -> Result<(), HwError> {
+        if self.is_mirrored(fb) {
+            return self.flush_mirror(rect);
+        }
         let id = self.res_of(fb);
         gpu(|g| g.flush(id, gpu_rect(rect)))
+    }
+
+    fn now_ns(&self) -> Option<u64> {
+        Some(time::now_ns())
+    }
+
+    fn scanout_keeps_picture(&self, fb: u32) -> bool {
+        self.is_mirrored(fb)
     }
 
     fn take_display(&mut self) {

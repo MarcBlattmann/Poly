@@ -53,7 +53,7 @@
 //!   loop come with the first Phase 7 slice).
 //!
 //! ```text
-//! poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE]
+//! poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE] [--stats]
 //!                 [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]]
 //!                 [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy]
 //!                 [--exec PROGRAM [ARGS...]]
@@ -106,7 +106,7 @@ use crate::prelude::*;
 use alloc::collections::BTreeMap;
 use poly_rt::fs;
 use poly_rt::net::{UnixListener, UnixStream};
-use poly_wayland::compose::{Framebuffer, MemoryFramebuffer};
+use poly_wayland::compose::{Framebuffer, MemoryFramebuffer, Rect};
 use poly_wayland::seat::InputSource;
 use poly_wayland::server::{ClientId, Config, FrameTime, OutputConfig, Server, present_flags};
 use poly_wayland::wire::Fd;
@@ -132,11 +132,13 @@ struct Options {
     kms: bool,
     drm: String,
     no_kms: bool,
+    /// Print compose/present/damage summaries every few seconds.
+    stats: bool,
     xwayland: Option<xwayland::Start>,
     exec: Vec<String>,
 }
 
-const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
+const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE] [--stats] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
 
 /// A scale given as `N` (1 to 8) or `auto`.
 fn parse_scale(v: &str) -> Result<Option<u32>, String> {
@@ -166,6 +168,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         kms: false,
         drm: "/dev/dri/card0".into(),
         no_kms: false,
+        stats: false,
         xwayland: None,
         exec: Vec::new(),
     };
@@ -182,6 +185,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
             "--kms" => o.kms = true,
             "--drm" => o.drm = value()?,
             "--no-kms" => o.no_kms = true,
+            "--stats" => o.stats = true,
             "--dump" => o.dump = Some(value()?),
             "--probe" => {
                 let v = value()?;
@@ -292,6 +296,160 @@ fn log_flips(k: &kms::Kms<kms::CardFile>) {
         rate / 1000,
         rate % 1000
     );
+}
+
+/// A framebuffer that measures the part of a frame spent presenting it.
+/// Only used when `--stats` is set.
+struct TimedFramebuffer<'a> {
+    inner: &'a mut dyn Framebuffer,
+    present_ns: &'a mut u64,
+}
+
+impl Framebuffer for TimedFramebuffer<'_> {
+    fn width(&self) -> u32 {
+        self.inner.width()
+    }
+
+    fn height(&self) -> u32 {
+        self.inner.height()
+    }
+
+    fn row_mut(&mut self, y: u32) -> &mut [u32] {
+        self.inner.row_mut(y)
+    }
+
+    fn present(&mut self, damage: &[Rect]) {
+        let start = os::monotonic_ns();
+        self.inner.present(damage);
+        *self.present_ns = self.present_ns.saturating_add(os::monotonic_ns().saturating_sub(start));
+    }
+}
+
+/// Low-overhead frame timings, reported in three-second windows.
+#[derive(Default)]
+struct FrameStats {
+    started_ns: u64,
+    frames: u64,
+    compose_ns: u64,
+    compose_max_ns: u64,
+    present_ns: u64,
+    present_max_ns: u64,
+    damaged_pixels: u64,
+    copied_bytes: u64,
+    copied_max_bytes: u64,
+}
+
+impl FrameStats {
+    fn frame(
+        &mut self,
+        now_ns: u64,
+        compose_ns: u64,
+        present_ns: u64,
+        damaged_pixels: u64,
+        copied_bytes: u64,
+        output_pixels: u64,
+    ) {
+        if self.started_ns == 0 {
+            self.started_ns = now_ns;
+        }
+        self.frames += 1;
+        self.compose_ns = self.compose_ns.saturating_add(compose_ns);
+        self.compose_max_ns = self.compose_max_ns.max(compose_ns);
+        self.present_ns = self.present_ns.saturating_add(present_ns);
+        self.present_max_ns = self.present_max_ns.max(present_ns);
+        self.damaged_pixels = self.damaged_pixels.saturating_add(damaged_pixels);
+        self.copied_bytes = self.copied_bytes.saturating_add(copied_bytes);
+        self.copied_max_bytes = self.copied_max_bytes.max(copied_bytes);
+
+        let elapsed_ns = now_ns.saturating_sub(self.started_ns);
+        if elapsed_ns < 3_000_000_000 {
+            return;
+        }
+        let frames = self.frames.max(1);
+        let fps_milli = frames.saturating_mul(1_000_000_000_000) / elapsed_ns.max(1);
+        let compose_avg_us = self.compose_ns / frames / 1_000;
+        let present_avg_us = self.present_ns / frames / 1_000;
+        let damage_avg = self.damaged_pixels / frames;
+        let damage_avg_bytes = damage_avg.saturating_mul(core::mem::size_of::<u32>() as u64);
+        let copied_avg_bytes = self.copied_bytes / frames;
+        let damage_pct_milli =
+            self.damaged_pixels.saturating_mul(100_000) / frames.saturating_mul(output_pixels.max(1));
+        println!(
+            "poly-compositor: stats frames={frames} window_ms={} fps={}.{:03} compose_avg_ms={}.{:03} compose_max_ms={}.{:03} present_avg_ms={}.{:03} present_max_ms={}.{:03} copy_avg_bytes={copied_avg_bytes} copy_max_bytes={} damage_avg={damage_avg}px damage_avg_bytes={damage_avg_bytes} ({}.{:03}%)",
+            elapsed_ns / 1_000_000,
+            fps_milli / 1_000,
+            fps_milli % 1_000,
+            compose_avg_us / 1_000,
+            compose_avg_us % 1_000,
+            self.compose_max_ns / 1_000_000,
+            (self.compose_max_ns / 1_000) % 1_000,
+            present_avg_us / 1_000,
+            present_avg_us % 1_000,
+            self.present_max_ns / 1_000_000,
+            (self.present_max_ns / 1_000) % 1_000,
+            self.copied_max_bytes,
+            damage_pct_milli / 1_000,
+            damage_pct_milli % 1_000,
+        );
+        *self = FrameStats { started_ns: now_ns, ..FrameStats::default() };
+    }
+}
+
+/// The union area of the non-empty physical damage rectangles.
+fn damaged_area(rects: &[Rect]) -> u64 {
+    const MAX_RECTS: usize = 32;
+    if rects.len() > MAX_RECTS {
+        return rects
+            .iter()
+            .fold(0u64, |area, r| area.saturating_add((r.width.max(0) as u64) * (r.height.max(0) as u64)));
+    }
+    let mut ys = [0i32; MAX_RECTS * 2];
+    let mut y_count = 0;
+    for r in rects.iter().filter(|r| !r.is_empty()) {
+        ys[y_count] = r.y;
+        ys[y_count + 1] = r.bottom();
+        y_count += 2;
+    }
+    ys[..y_count].sort_unstable();
+    let mut unique_y_count = 0;
+    for i in 0..y_count {
+        if unique_y_count == 0 || ys[i] != ys[unique_y_count - 1] {
+            ys[unique_y_count] = ys[i];
+            unique_y_count += 1;
+        }
+    }
+
+    let mut intervals = [(0i32, 0i32); MAX_RECTS];
+    let mut area = 0u64;
+    for band in ys[..unique_y_count].windows(2) {
+        let (top, bottom) = (band[0], band[1]);
+        if bottom <= top {
+            continue;
+        }
+        let mut interval_count = 0;
+        for r in rects.iter().filter(|r| !r.is_empty() && r.y < bottom && r.bottom() > top) {
+            intervals[interval_count] = (r.x, r.right());
+            interval_count += 1;
+        }
+        intervals[..interval_count].sort_unstable_by_key(|range| range.0);
+        let mut merged: Option<(i32, i32)> = None;
+        let mut row_width = 0u64;
+        for &(left, right) in &intervals[..interval_count] {
+            match merged {
+                Some((lo, hi)) if left <= hi => merged = Some((lo, hi.max(right))),
+                Some((lo, hi)) => {
+                    row_width += (hi - lo).max(0) as u64;
+                    merged = Some((left, right));
+                }
+                None => merged = Some((left, right)),
+            }
+        }
+        if let Some((lo, hi)) = merged {
+            row_width += (hi - lo).max(0) as u64;
+        }
+        area = area.saturating_add(row_width.saturating_mul((bottom - top) as u64));
+    }
+    area
 }
 
 /// Take the screen through KMS, if the card has an output.
@@ -506,6 +664,7 @@ fn run(args: &[String]) -> Result<u8, String> {
         conns.insert(id, Connection { stream, out: Vec::new(), out_fds: Vec::new() });
     }
     let mut next_frame = 0u64;
+    let mut stats = FrameStats::default();
     let mut buf = vec![0u8; 4096];
     loop {
         // What to wait for, and how long.
@@ -652,28 +811,53 @@ fn run(args: &[String]) -> Result<u8, String> {
         let kms = matches!(screen, Screen::Kms(_));
         let due = if kms { !screen.kms().is_some_and(|k| k.is_pending()) } else { now >= next_frame };
         if server.wants_frame() && due {
-            if let Some(k) = screen.kms() {
-                k.begin_frame();
-            }
-            let fb = screen.fb();
-            let drawn = match &desk {
-                Some(d) => server.render_with(fb, Some(&d.shell.below()), Some(&d.shell.above())),
-                None => server.render(fb),
+            let frame_start = if o.stats { os::monotonic_ns() } else { 0 };
+            let mut present_ns = 0;
+            let copied_bytes = screen.kms().map_or(0, |k| k.begin_frame());
+            let drawn = if o.stats {
+                let fb = screen.fb();
+                let mut timed = TimedFramebuffer { inner: fb, present_ns: &mut present_ns };
+                match &desk {
+                    Some(d) => server.render_with(&mut timed, Some(&d.shell.below()), Some(&d.shell.above())),
+                    None => server.render(&mut timed),
+                }
+            } else {
+                let fb = screen.fb();
+                match &desk {
+                    Some(d) => server.render_with(fb, Some(&d.shell.below()), Some(&d.shell.above())),
+                    None => server.render(fb),
+                }
             };
+            let compose_ns =
+                if o.stats { os::monotonic_ns().saturating_sub(frame_start).saturating_sub(present_ns) } else { 0 };
             let shown = os::monotonic_ns();
             if let Some(k) = screen.kms() {
                 // Drawn frames flipped themselves (`present`); clients
                 // waiting with nothing new to draw are paced by a flip too.
-                if drawn.is_empty()
-                    && let Err(e) = k.flip(&[])
-                {
-                    eprintln!("poly-compositor: page flip: {e}");
+                if drawn.is_empty() {
+                    let start = if o.stats { os::monotonic_ns() } else { 0 };
+                    if let Err(e) = k.flip(&[]) {
+                        eprintln!("poly-compositor: page flip: {e}");
+                    }
+                    if o.stats {
+                        present_ns = present_ns.saturating_add(os::monotonic_ns().saturating_sub(start));
+                    }
                 }
                 server.frame_submitted();
             } else {
                 // Presented: the frame is on the screen once the device's
                 // requests returned.
                 server.frame_presented(FrameTime { monotonic_ns: shown });
+            }
+            if o.stats {
+                stats.frame(
+                    os::monotonic_ns(),
+                    compose_ns,
+                    present_ns,
+                    damaged_area(&drawn),
+                    copied_bytes,
+                    u64::from(width) * u64::from(height),
+                );
             }
             next_frame = now + FRAME_NS;
             if let Some(d) = &mut desk
@@ -760,6 +944,9 @@ mod tests {
         assert_eq!(o.exec, ["/bin/c", "-x"]);
         assert_eq!(o.socket, "wayland-0");
         assert!(!o.desktop);
+        assert!(!o.stats);
+        let measured = parse_args(&args("--stats")).unwrap();
+        assert!(measured.stats);
         let o = parse_args(&args("--desktop --fb /dev/fb1 --keymap de-ch")).unwrap();
         assert!(o.desktop);
         assert_eq!((o.fb.as_str(), o.keymap.as_deref()), ("/dev/fb1", Some("de-ch")));
@@ -770,6 +957,12 @@ mod tests {
         assert!(parse_args(&args("--scale 9")).is_err());
         assert!(parse_args(&args("--exec")).is_err());
         assert!(parse_args(&args("--what")).is_err());
+    }
+
+    #[test]
+    fn damaged_area_counts_overlap_once() {
+        assert_eq!(damaged_area(&[Rect::new(0, 0, 4, 4), Rect::new(2, 2, 4, 4)]), 28);
+        assert_eq!(damaged_area(&[Rect::new(0, 0, 0, 5), Rect::new(1, 1, 2, 3)]), 6);
     }
 
     /// What a client is given: the display's variables and the control

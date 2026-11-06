@@ -21,7 +21,10 @@
 //! asks for `ALLOW_MODESET` if a CRTC's activity, mode or connectors
 //! change, then programs the hardware: for each output whose picture
 //! changed (another framebuffer or rectangle, or turned on or off) it
-//! uploads the visible rectangle, sets the scanout and flushes it; outputs
+//! uploads the visible rectangle (only the parts a client reported with
+//! `DIRTYFB` since the buffer was last shown, if it did: ADR 0140), sets the
+//! scanout and flushes it (just the parts uploaded, where the hardware keeps
+//! one picture over scanout switches); outputs
 //! that the commit named but whose picture stayed the same are uploaded
 //! and flushed again (a client that drew into the shown buffer and commits
 //! it again). A commit with `DRM_MODE_PAGE_FLIP_EVENT` queues a
@@ -40,6 +43,7 @@
 //! CLOCK_MONOTONIC. Event timestamps are those vblank times
 //! (`DRM_CAP_TIMESTAMP_MONOTONIC` is 1).
 
+use crate::damage::{FbDamage, Rects};
 use crate::device::{Device, Event, Fb, FileId, Obj, VblankClock};
 use crate::props::{Kind, Prop};
 use crate::uapi::{
@@ -206,11 +210,25 @@ impl<H: Hardware> Device<H> {
                     if !changed && touched & (1 << i) == 0 {
                         continue;
                     }
-                    self.hw.upload(fb, &layout, r)?;
+                    // Only what the picture lacks (all of it unless the
+                    // client said what it drew).
+                    let clips = match self.fbs.get_mut(&fb) {
+                        Some(f) => f.damage.take_for(&r),
+                        None => Rects::of(r),
+                    };
+                    for c in clips.as_slice() {
+                        self.hw.upload(fb, &layout, *c)?;
+                    }
                     if changed {
                         self.hw.scanout(i, Some((fb, r)))?;
                     }
-                    self.hw.flush(fb, r)?;
+                    if changed && !self.hw.scanout_keeps_picture(fb) {
+                        self.hw.flush(fb, r)?;
+                    } else {
+                        for c in clips.as_slice() {
+                            self.hw.flush(fb, *c)?;
+                        }
+                    }
                 }
                 None if old.is_some() => self.hw.scanout(i, None)?,
                 None => {}
@@ -334,6 +352,8 @@ impl<H: Hardware> Device<H> {
             return Err(Errno::EIO);
         }
         self.set_state(new, now);
+        // The hardware took its time: the flip is on the screen only now.
+        let now = self.hw.now_ns().map_or(now, |t| t.max(now));
         if c.event.is_some() || c.nonblock {
             for &i in &named {
                 if !self.state.crtcs[i].active {
@@ -1045,7 +1065,7 @@ impl<H: Hardware> Device<H> {
         if let Some(o) = self.bos.get_mut(&bo) {
             o.refs += 1;
         }
-        self.fbs.insert(id, Fb { owner: file, layout, bo, flags, modifier, bpp, depth });
+        self.fbs.insert(id, Fb { owner: file, layout, bo, flags, modifier, bpp, depth, damage: FbDamage::default() });
         Ok(id)
     }
 
@@ -1084,38 +1104,45 @@ impl<H: Hardware> Device<H> {
     }
 
     /// `DIRTYFB`: upload and flush the clips (all of it without clips) on
-    /// the outputs that show the framebuffer.
+    /// the outputs that show the framebuffer. A framebuffer that no output
+    /// shows only remembers them: the next flip to it copies just those
+    /// parts (and what other framebuffers changed meanwhile) instead of
+    /// all of it.
     fn dirty_fb(&mut self, b: &mut [u8], user: &mut dyn UserMemory) -> Result<()> {
         let d = FbDirty::decode(b);
         let layout = self.fbs.get(&d.fb_id).ok_or(Errno::ENOENT)?.layout;
         if d.flags & !m::FB_DIRTY_FLAGS != 0 || d.num_clips > m::FB_DIRTY_MAX_CLIPS {
             return Err(Errno::EINVAL);
         }
-        let clips: Vec<Rect> = if d.num_clips == 0 {
-            vec![Rect::new(0, 0, layout.width, layout.height)]
+        let whole = Rect::new(0, 0, layout.width, layout.height);
+        let mut clips = Rects::default();
+        if d.num_clips == 0 {
+            clips.add(whole);
         } else {
             let mut bytes = vec![0u8; d.num_clips as usize * ClipRect::SIZE];
             user.read(d.clips_ptr, &mut bytes)?;
-            bytes
-                .chunks_exact(ClipRect::SIZE)
-                .map(ClipRect::decode)
-                .filter(|c| c.x2 > c.x1 && c.y2 > c.y1)
-                .map(|c| Rect::new(c.x1 as u32, c.y1 as u32, (c.x2 - c.x1) as u32, (c.y2 - c.y1) as u32))
-                .collect()
-        };
+            for c in bytes.chunks_exact(ClipRect::SIZE).map(ClipRect::decode).filter(|c| c.x2 > c.x1 && c.y2 > c.y1) {
+                clips.add(Rect::new(c.x1 as u32, c.y1 as u32, (c.x2 - c.x1) as u32, (c.y2 - c.y1) as u32));
+            }
+        }
+        let mut shown = false;
         for i in 0..self.crtcs.len() {
-            let Some((fb, shown)) = self.target(&self.state, i) else { continue };
+            let Some((fb, visible)) = self.target(&self.state, i) else { continue };
             if fb != d.fb_id {
                 continue;
             }
-            for clip in &clips {
-                let r = intersect(clip, &shown);
+            shown = true;
+            for clip in clips.as_slice() {
+                let r = intersect(clip, &visible);
                 if r.is_empty() {
                     continue;
                 }
                 self.hw.upload(fb, &layout, r).map_err(|_| Errno::EIO)?;
                 self.hw.flush(fb, r).map_err(|_| Errno::EIO)?;
             }
+        }
+        if !shown && let Some(f) = self.fbs.get_mut(&d.fb_id) {
+            f.damage.tell(&clips);
         }
         Ok(())
     }

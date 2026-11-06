@@ -198,6 +198,8 @@ pub(crate) struct Fb {
     /// `bpp` and `depth` as `GETFB` reports them.
     pub bpp: u32,
     pub depth: u32,
+    /// What a flip to it has to copy to the device.
+    pub damage: crate::damage::FbDamage,
 }
 
 #[derive(Debug)]

@@ -24,6 +24,7 @@
 
 use super::{Framebuffer, Rect};
 use alloc::vec;
+use alloc::vec::Vec;
 
 /// `|x|` (no `std` here).
 pub fn fabs(x: f32) -> f32 {
@@ -463,6 +464,46 @@ impl Shadow {
         if region.is_empty() || self.alpha == 0 || occluder_covers(occluder, region) {
             return;
         }
+        let weights = self.weights(r, radii, region);
+        self.blend(fb, region, region, &weights, occluder);
+    }
+
+    /// [`Shadow::draw`] with the blurred shadow of a box this size kept in
+    /// `cache`: a window that moves, or is redrawn in pieces, blurs its
+    /// shadow once instead of on every frame. The same picture as `draw`
+    /// (a shadow does not depend on where its box is, only on its size).
+    pub fn draw_cached(
+        &self,
+        cache: &mut ShadowCache,
+        fb: &mut dyn Framebuffer,
+        clip: Rect,
+        r: Rect,
+        radii: Radii,
+        occluder: Rect,
+    ) {
+        let screen = Rect::new(0, 0, fb.width() as i32, fb.height() as i32);
+        let region = self.extent(r).intersect(&clip).intersect(&screen);
+        if region.is_empty() || self.alpha == 0 || occluder_covers(occluder, region) {
+            return;
+        }
+        let at_origin = Rect::new(0, 0, r.width, r.height);
+        let extent = self.extent(at_origin);
+        if i64::from(extent.width) * i64::from(extent.height) > ShadowCache::MAX_PIXELS {
+            // Too big to keep: blur just the part wanted.
+            let weights = self.weights(r, radii, region);
+            self.blend(fb, region, region, &weights, occluder);
+            return;
+        }
+        let key = ShadowKey::new(self, r, radii);
+        let weights = cache.get_or_make(key, || self.weights(at_origin, radii, extent));
+        // The cached weights cover `extent` around a box at the origin.
+        let shifted = extent.translate(r.x, r.y);
+        self.blend(fb, region, shifted, weights, occluder);
+    }
+
+    /// The weights (0-255, the shadow's opacity where it is darkest) over
+    /// `region` of the shadow of the box `r`, row after row.
+    fn weights(&self, r: Rect, radii: Radii, region: Rect) -> Vec<u8> {
         let shape = Box2::from_rect(r).translate(self.dx, self.dy).grow(self.spread);
         let radii = radii.grow(self.spread);
         let boxes = gauss_boxes(self.blur * 0.5);
@@ -488,20 +529,105 @@ impl Shadow {
             }
         }
         blur_grid(&mut mask, w, h, boxes);
+        let mut out = Vec::with_capacity(region.width as usize * region.height as usize);
+        for y in region.y..region.bottom() {
+            let mrow = (y - work.y) as usize * w + (region.x - work.x) as usize;
+            out.extend(mask[mrow..mrow + region.width as usize].iter().map(|&m| weight(m, self.alpha) as u8));
+        }
+        out
+    }
+
+    /// Blend the shadow into the `region` of `fb` from `weights`, which
+    /// cover `covered` (rows of its width), except over `occluder`.
+    fn blend(&self, fb: &mut dyn Framebuffer, region: Rect, covered: Rect, weights: &[u8], occluder: Rect) {
         for y in region.y..region.bottom() {
             let row = fb.row_mut(y as u32);
-            let mrow = (y - work.y) as usize * w;
+            let wrow = (y - covered.y) as usize * covered.width as usize;
             for x in region.x..region.right() {
                 if occluder.contains(x, y) {
                     continue;
                 }
-                let a = weight(mask[mrow + (x - work.x) as usize], self.alpha);
+                let a = u32::from(weights[wrow + (x - covered.x) as usize]);
                 if a > 0 {
                     let p = &mut row[x as usize];
                     *p = mix(*p, self.rgb, a);
                 }
             }
         }
+    }
+}
+
+/// What the blurred shadow of a box depends on: the shadow's own numbers,
+/// the box's size and its corners (not where it is, not the colour).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ShadowKey {
+    shadow: [u32; 4],
+    alpha: u8,
+    size: (i32, i32),
+    radii: [u32; 4],
+}
+
+impl ShadowKey {
+    fn new(s: &Shadow, r: Rect, radii: Radii) -> ShadowKey {
+        ShadowKey {
+            shadow: [s.dx.to_bits(), s.dy.to_bits(), s.blur.to_bits(), s.spread.to_bits()],
+            alpha: s.alpha,
+            size: (r.width, r.height),
+            radii: [
+                radii.top_left.to_bits(),
+                radii.top_right.to_bits(),
+                radii.bottom_right.to_bits(),
+                radii.bottom_left.to_bits(),
+            ],
+        }
+    }
+}
+
+/// Blurred shadows kept between frames (see [`Shadow::draw_cached`]): the
+/// few most recently used sizes, so a window that is dragged, and the
+/// others on the screen, find theirs.
+#[derive(Debug, Default)]
+pub struct ShadowCache {
+    /// Least recently used first.
+    entries: Vec<(ShadowKey, Vec<u8>)>,
+    /// Shadows blurred (misses), for tests and statistics.
+    pub made: u64,
+}
+
+impl ShadowCache {
+    /// The most shadows kept.
+    const ENTRIES: usize = 6;
+    /// The largest shadow kept, in pixels (4096 × 4096).
+    const MAX_PIXELS: i64 = 1 << 24;
+
+    pub fn new() -> ShadowCache {
+        ShadowCache::default()
+    }
+
+    /// How many shadows are kept.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// The weights for `key`, made by `make` if they are not kept, and now
+    /// the most recently used.
+    fn get_or_make(&mut self, key: ShadowKey, make: impl FnOnce() -> Vec<u8>) -> &[u8] {
+        let entry = match self.entries.iter().position(|(k, _)| *k == key) {
+            Some(i) => self.entries.remove(i),
+            None => {
+                if self.entries.len() >= Self::ENTRIES {
+                    self.entries.remove(0);
+                }
+                self.made += 1;
+                (key, make())
+            }
+        };
+        self.entries.push(entry);
+        &self.entries[self.entries.len() - 1].1
     }
 }
 
@@ -726,6 +852,67 @@ mod tests {
         s.draw(&mut o, all, r, Radii::all(8.0), r);
         assert_eq!(o.pixel(60, 40), Some(0x80_80_80));
         assert_ne!(o.pixel(60, 70), Some(0x80_80_80));
+    }
+
+    /// The largest difference between two framebuffers' channels.
+    fn max_difference(a: &MemoryFramebuffer, b: &MemoryFramebuffer) -> u32 {
+        a.pixels()
+            .iter()
+            .zip(b.pixels())
+            .flat_map(|(&p, &q)| (0..3).map(move |c| ((p >> (8 * c)) & 0xff).abs_diff((q >> (8 * c)) & 0xff)))
+            .max()
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn a_cached_shadow_is_the_same_picture_wherever_its_box_is() {
+        let all = Rect::new(0, 0, 220, 160);
+        let s = Shadow::new(0.0, 8.0, 24.0, 0.0, 0, 90);
+        let radii = Radii::top(8.0);
+        let mut cache = ShadowCache::new();
+        // The same box size at several places, whole and in pieces (and
+        // cut off by the screen's edge).
+        for (x, y) in [(30, 20), (31, 22), (-10, 15), (150, 100), (30, 20)] {
+            let r = Rect::new(x, y, 60, 40);
+            let mut plain = MemoryFramebuffer::new(220, 160);
+            solid(&mut plain, all, 0x80_80_80);
+            s.draw(&mut plain, all, r, radii, Rect::new(x, y + 8, 60, 32));
+            let mut cached = MemoryFramebuffer::new(220, 160);
+            solid(&mut cached, all, 0x80_80_80);
+            for clip in [Rect::new(0, 0, 110, 80), Rect::new(110, 0, 110, 80), Rect::new(0, 80, 220, 80)] {
+                s.draw_cached(&mut cache, &mut cached, clip, r, radii, Rect::new(x, y + 8, 60, 32));
+            }
+            assert!(max_difference(&plain, &cached) <= 1, "box at ({x}, {y})");
+        }
+        assert_eq!(cache.made, 1, "one size, blurred once");
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn the_shadow_cache_keeps_the_most_recently_used_sizes() {
+        let all = Rect::new(0, 0, 400, 400);
+        let s = Shadow::new(0.0, 4.0, 8.0, 0.0, 0, 90);
+        let mut fb = MemoryFramebuffer::new(400, 400);
+        let mut cache = ShadowCache::new();
+        let mut draw = |cache: &mut ShadowCache, w: i32| {
+            s.draw_cached(cache, &mut fb, all, Rect::new(50, 50, w, 30), Radii::all(4.0), Rect::default());
+        };
+        for w in 40..46 {
+            draw(&mut cache, w);
+        }
+        assert_eq!((cache.made, cache.len()), (6, 6));
+        draw(&mut cache, 40); // a hit: now the most recently used
+        assert_eq!(cache.made, 6);
+        draw(&mut cache, 99); // a new size: the least recently used (41) goes
+        assert_eq!((cache.made, cache.len()), (7, 6));
+        draw(&mut cache, 40);
+        assert_eq!(cache.made, 7, "40 was kept");
+        draw(&mut cache, 41);
+        assert_eq!(cache.made, 8, "41 was dropped");
+        // Another opacity or corner is another shadow.
+        let lighter = Shadow::new(0.0, 4.0, 8.0, 0.0, 0, 40);
+        lighter.draw_cached(&mut cache, &mut fb, all, Rect::new(50, 50, 40, 30), Radii::all(4.0), Rect::default());
+        assert_eq!(cache.made, 9);
     }
 
     #[test]
