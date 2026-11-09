@@ -95,6 +95,24 @@ for QEMU without a limit. To tell the person what is going on, Poly's
 launch script sends a notification ("Chromium is starting") when no Chromium
 runs yet; a second launch while it runs opens a window there.
 
+**No X display on this disk.** The compositor of this disk is started
+without `--xwayland-lazy`, as the plain desktop's is: the disk has no
+Xwayland, and a display offered with no server behind it made `xdg-open`
+(which asks `xprop` about the desktop whenever `DISPLAY` is set, as it is in
+Terminal) spin, connecting to it thousands of times a second, so a link opened
+from Terminal never reached Chromium. Chromium and Poly's apps speak Wayland.
+(The same loop on a real X server that closes connections at once is not
+investigated here.)
+
+## Not in this ADR: choosing a browser at install
+
+Chromium is preinstalled on the development disk (ADR 0130); there is no
+Software or store app (owner's decision). The **release installer** will later
+ask which browser to install and download it, then write the matching
+`poly-<browser>.desktop` and `/etc/xdg/mimeapps.list` the way this ADR does for
+Chromium; nothing here depends on Chromium except those two files and the
+launch script, which is why the default is data (the list), not code.
+
 ## Consequences
 
 - A fresh checkout runs `cargo xtask start` (Enter) or `cargo xtask desktop
@@ -106,9 +124,9 @@ runs yet; a second launch while it runs opens a window there.
   `chromium`, until the packages are downloaded.
 - Boot group `desktop-chromium` boots `desktop --chromium`'s configuration
   (test apps, the settings disk) and checks that every app of the plain
-  desktop is on the disk, that `xdg-mime` names Chromium for pages and
+  desktop is on the disk and every launcher entry's program is there, that `xdg-mime` names Chromium for pages and
   links, that the settings disk is bound, that Terminal opens from the
-  launcher, and that `xdg-open` of a page starts Chromium and draws it.
+  launcher, and that `xdg-open` of a page starts Chromium (its window is shown).
 - The disk is bigger than the initramfs and slower to start (the overlay's
   copy is a few megabytes; Chromium's own start is the minute); the plain
   desktop remains one click away for quick edits to the compositor.
