@@ -8,20 +8,18 @@
 //! happened between them. For each pair the comparison looks at the result, the last error and
 //! the values the call read (`in`) and wrote (`out`).
 //!
-//! Poly's side is the `polytrace-sync` kit's trace (`ra`, `in`, `out`; see
-//! `tools/wintrace/polytrace-sync/src/ext.rs` for the shapes); the caller key is made from
-//! `ra` and the PE headers of the modules in Chrome's directory. The Windows side is a JSON
-//! document with a `calls` array (or `process_types.<process>.calls`) of objects:
+//! Both sides are traces of the `polytrace-sync` kit (`tools/wintrace/polytrace-sync`, with
+//! `dump.rs`), so the records have the same shape: `rm` / `ro` (the caller's module and offset;
+//! for a trace without them the caller is made from `ra` and the PE headers of the modules in
+//! Chrome's directory), `ret`, `err`, and `out`, an array of what the call left in memory
+//! (strings, structures, registry data, handle and pointer classes; see `dump.rs`). Poly's file
+//! is `target/chrome-win/stage1.ptrace.jsonl`; Windows' is a `polytrace.jsonl` of the same
+//! kit, or a JSON document with a `calls` array of such records
+//! (`specs/windows/apps/chrome/traces/s1-chrome-elf-init.trace.json`).
 //!
-//! ```text
-//! {"caller":"chrome_elf.dll+0x8e18c","fn":"VerifyVersionInfoW","args":[..],"ret":1,"err":0,
-//!  "in":{"0":{"ver":[6,0,0,0,0,0,0,0]}},"out":{..}}
-//! ```
-//!
-//! `caller` may also be given as `module` and `offset`; `ret` and `err` are numbers or `"0x…"`
-//! strings; `in` and `out` have the shapes of the Poly kit's (wide strings `{"w":…}`, numbers
-//! `{"n":…}`, bytes `{"hex":…}`, handle kinds `{"kind":…}`, …) so that they compare equal when
-//! the values are.
+//! Machine-specific fields (processor counts, address-space bounds, critical-section internals)
+//! and volatile values (the performance counter) are left out of the comparison; handle values
+//! compare as "not 0, not -1", small results (lengths, booleans, status codes) exactly.
 //!
 //! Report, in this order: the **frontier** (the first call, in Windows' order, that Poly never
 //! made: where Poly's run diverges or stops), then **mismatches** between paired calls, then
@@ -77,7 +75,6 @@ pub struct Call {
     pub name: String,
     pub ret: Option<u64>,
     pub err: Option<u32>,
-    pub input: Value,
     pub out: Value,
     /// Poly's sequence number (0 for Windows').
     pub seq: u64,
@@ -96,19 +93,30 @@ pub fn poly_calls(text: &str, modules: &[Module]) -> Vec<Call> {
     let mut out = Vec::new();
     for line in text.lines() {
         let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
-        let (Some(name), Some(ra)) = (v["fn"].as_str(), num(&v["ra"])) else { continue };
-        let Some(key) = caller_key(modules, ra) else { continue };
+        let Some(name) = v["fn"].as_str() else { continue };
+        let Some(key) = record_key(&v, modules) else { continue };
         out.push(Call {
             key,
             name: name.to_string(),
             ret: num(&v["ret"]),
             err: v["err"].as_u64().map(|e| e as u32),
-            input: v["in"].clone(),
             out: v["out"].clone(),
             seq: v["seq"].as_u64().unwrap_or(0),
         });
     }
     out
+}
+
+/// The caller key of a record: the logger's `"rm"` / `"ro"` (module name and offset), else
+/// `ra` resolved with `modules`, else the document's `"caller"`.
+fn record_key(v: &Value, modules: &[Module]) -> Option<String> {
+    if let (Some(m), Some(o)) = (v["rm"].as_str(), num(&v["ro"])) {
+        return Some(format!("{}+{:#x}", m.to_ascii_lowercase(), o));
+    }
+    if let Some(k) = v["caller"].as_str() {
+        return Some(normal_key(k));
+    }
+    caller_key(modules, num(&v["ra"])?)
 }
 
 /// The calls of a Windows call-site trace (see the module documentation).
@@ -120,20 +128,13 @@ pub fn windows_calls(doc: &Value, process: &str) -> Result<Vec<Call>> {
         .ok_or("no `calls` array in the Windows trace")?;
     let mut out = Vec::new();
     for c in calls {
-        let key = match c["caller"].as_str() {
-            Some(k) => normal_key(k),
-            None => match (c["module"].as_str(), num(&c["offset"])) {
-                (Some(m), Some(o)) => format!("{}+{:#x}", m.to_ascii_lowercase(), o),
-                _ => continue,
-            },
-        };
+        let Some(key) = record_key(c, &[]) else { continue };
         let Some(name) = c["fn"].as_str().or_else(|| c["name"].as_str()) else { continue };
         out.push(Call {
             key,
             name: name.to_string(),
             ret: num(&c["ret"]),
             err: num(c.get("err").or_else(|| c.get("last_error")).unwrap_or(&Value::Null)).map(|e| e as u32),
-            input: c["in"].clone(),
             out: c["out"].clone(),
             seq: 0,
         });
@@ -156,7 +157,16 @@ fn normal_key(k: &str) -> String {
 // ----- comparing values ---------------------------------------------------------------------
 
 /// Fields that are the machine's, not the program's: never compared.
-const IGNORED: &[&str] = &["cpus", "level", "rev", "mask", "min", "max", "count"];
+const IGNORED: &[&str] = &["cpus", "level", "revision", "mask", "minaddr", "maxaddr", "res2", "dbg", "sem", "spin"];
+
+/// Functions whose written values are the moment's: never compared.
+const VOLATILE: &[&str] = &[
+    "QueryPerformanceCounter",
+    "GetSystemTimeAsFileTime",
+    "GetSystemTimePreciseAsFileTime",
+    "GetTickCount",
+    "GetTickCount64",
+];
 
 fn lower_norm(s: &str) -> String {
     crate::chrometrace::normalise(s).to_ascii_lowercase()
@@ -179,18 +189,6 @@ pub fn diff_value(path: &str, a: &Value, b: &Value, out: &mut Vec<String>) {
                     Some(bv) => diff_value(&format!("{path}.{k}"), av, bv, out),
                     None => out.push(format!("{path}.{k}: Windows has it, Poly has not")),
                 }
-            }
-        }
-        (Value::Array(x), Value::Array(y)) if path.ends_with(".vars") => {
-            let set = |v: &[Value]| -> Vec<String> {
-                let mut s: Vec<String> = v.iter().filter_map(|e| e.as_str().map(str::to_ascii_lowercase)).collect();
-                s.sort();
-                s
-            };
-            let (wx, py) = (set(x), set(y));
-            let missing: Vec<&String> = wx.iter().filter(|n| !py.contains(n)).collect();
-            if !missing.is_empty() {
-                out.push(format!("{path}: Windows has {missing:?} that Poly has not"));
             }
         }
         (Value::Array(x), Value::Array(y)) => {
@@ -308,10 +306,7 @@ pub fn compare_calls(poly: &[Call], win: &[Call]) -> Vec<String> {
         if !err_alike(w.err, p.err) {
             why.push(format!("last error: Windows {}, Poly {}", w.err.unwrap_or(0), p.err.unwrap_or(0)));
         }
-        if w.input.is_object() {
-            diff_value("in", &w.input, &p.input, &mut why);
-        }
-        if w.out.is_object() {
+        if w.out.is_array() && !VOLATILE.contains(&w.name.as_str()) {
             diff_value("out", &w.out, &p.out, &mut why);
         }
         if !why.is_empty() {
@@ -335,21 +330,19 @@ pub fn compare_calls(poly: &[Call], win: &[Call]) -> Vec<String> {
     lines
 }
 
-/// Calls that succeeded on Poly with values that look like a missing implementation: an empty
-/// string or a zero where a getter wrote something, a `STARTUPINFO` without desktop or title.
+/// Calls whose written values look like a missing implementation on Poly: an empty string where
+/// a getter wrote something, a `STARTUPINFO` without desktop or title.
 pub fn suspects(poly: &[Call]) -> Vec<String> {
     fn empty(v: &Value, path: &str, out: &mut Vec<String>) {
         match v {
             Value::Object(o) => {
                 for (k, x) in o {
-                    if k == "w" || k == "a" || k == "u" {
-                        if x.as_str() == Some("") {
+                    match (k.as_str(), x) {
+                        ("w" | "a" | "u" | "us" | "s", Value::String(t)) if t.is_empty() => {
                             out.push(format!("{path}.{k} is empty"));
                         }
-                    } else if (k == "desktop" || k == "title") && x.is_null() {
-                        out.push(format!("{path}.{k} is NULL"));
-                    } else {
-                        empty(x, &format!("{path}.{k}"), out);
+                        ("desktop" | "title", Value::Null) => out.push(format!("{path}.{k} is NULL")),
+                        _ => empty(x, &format!("{path}.{k}"), out),
                     }
                 }
             }
@@ -358,7 +351,7 @@ pub fn suspects(poly: &[Call]) -> Vec<String> {
         }
     }
     let mut lines = Vec::new();
-    for c in poly {
+    for c in poly.iter().filter(|c| !c.name.contains("Free")) {
         let mut why = Vec::new();
         empty(&c.out, "out", &mut why);
         if !why.is_empty() {
@@ -423,8 +416,10 @@ mod tests {
         assert_eq!(module_of_pe("x", &b[..0x50]), None);
     }
 
-    fn poly_line(seq: u64, f: &str, ra: u64, ret: u64, extra: &str) -> String {
-        format!(r#"{{"seq":{seq},"t":0,"dll":"kernel32.dll","fn":"{f}","args":[],"ra":"{ra:#x}","ret":{ret}{extra}}}"#)
+    fn poly_line(seq: u64, f: &str, rm: &str, ro: u64, ret: u64, extra: &str) -> String {
+        format!(
+            r#"{{"seq":{seq},"t":0,"dll":"kernel32.dll","fn":"{f}","args":[],"ra":"0x1","rm":"{rm}","ro":"{ro:#x}","ret":{ret}{extra}}}"#
+        )
     }
 
     #[test]
@@ -433,21 +428,32 @@ mod tests {
             poly_line(
                 1,
                 "GetModuleFileNameW",
-                0x1_8006_7a09,
+                "chrome_elf.dll",
+                0x67a09,
                 34,
-                r#","out":{"1":{"w":"C:\\Program Files\\Chrome\\chrome.exe"}}"#,
+                r#","out":[{"a":1,"w":"app/chrome.exe"}]"#,
             ),
-            poly_line(2, "GetCommandLineW", 0x1_8006_c22d, 0x810448, r#","out":{"ret":{"w":"\"c.exe\" --a"}}"#),
-            poly_line(3, "CreateMutexW", 0x1_8008_e300, 0x14, ""),
+            poly_line(
+                2,
+                "GetCommandLineW",
+                "chrome_elf.dll",
+                0x6c22d,
+                0x810448,
+                r#","out":[{"a":"ret","w":"c.exe --a"}]"#,
+            ),
+            poly_line(3, "CreateMutexW", "chrome_elf.dll", 0x8e300, 0x14, ""),
         ]
-        .join("\n");
+        .join(
+            "
+",
+        );
         let win = json!({"calls": [
-            {"caller": "chrome_elf.dll+0x67a09", "fn": "GetModuleFileNameW", "ret": 34,
-             "out": {"1": {"w": "C:\\Program Files\\Chrome\\chrome.exe"}}},
-            {"caller": "chrome_elf.dll+0x6c22d", "fn": "GetCommandLineW", "ret": "0x7ff6a0001000",
-             "out": {"ret": {"w": "\"c.exe\" --b"}}},
+            {"rm": "chrome_elf.dll", "ro": "0x67a09", "fn": "GetModuleFileNameW", "ret": 34,
+             "out": [{"a": 1, "w": "app/chrome.exe"}]},
+            {"rm": "chrome_elf.dll", "ro": "0x6c22d", "fn": "GetCommandLineW", "ret": "0x7ff6a0001000",
+             "out": [{"a": "ret", "w": "c.exe --b"}]},
             {"caller": "chrome_elf.dll+0x8e2c0", "fn": "VerifyVersionInfoW", "ret": 1},
-            {"caller": "chrome_elf.dll+0x8e300", "fn": "CreateMutexW", "ret": "0x1f0"}
+            {"rm": "chrome_elf.dll", "ro": "0x8e300", "fn": "CreateMutexW", "ret": "0x1f0"}
         ]});
         let lines = report(&poly, &mods(), Some(&win), "browser").unwrap();
         assert!(
@@ -476,29 +482,26 @@ mod tests {
         let mut d = Vec::new();
         diff_value(
             "out",
-            &json!({"0": {"sys": {"arch": 9, "page": 4096, "cpus": 32, "level": 25}}}),
-            &json!({"0": {"sys": {"arch": 9, "page": 4096, "cpus": 4, "level": 6}}}),
+            &json!([{"a": 0, "sysinfo": {"arch": 9, "page": 4096, "cpus": 32, "level": 25, "maxaddr": "0x1"}}]),
+            &json!([{"a": 0, "sysinfo": {"arch": 9, "page": 4096, "cpus": 4, "level": 6, "maxaddr": "0x2"}}]),
             &mut d,
         );
         assert!(d.is_empty(), "{d:?}");
-        diff_value(
-            "out",
-            &json!({"1": {"w": "C:\\Program Files\\Chrome\\a"}}),
-            &json!({"1": {"w": "c:\\program files\\chrome\\A"}}),
-            &mut d,
-        );
+        diff_value("out", &json!([{"w": "Program Files/A"}]), &json!([{"w": "program files/a"}]), &mut d);
         assert!(d.is_empty(), "{d:?}");
-        diff_value(
-            "out",
-            &json!({"ret": {"vars": ["Path", "SESSIONNAME"]}}),
-            &json!({"ret": {"vars": ["PATH"]}}),
-            &mut d,
-        );
+        diff_value("out", &json!([{"osvi": {"major": 10}}]), &json!([{"osvi": {"major": 6}}]), &mut d);
         assert_eq!(d.len(), 1, "{d:?}");
-        assert!(d[0].contains("sessionname"), "{d:?}");
-        let mut d = Vec::new();
-        diff_value("in", &json!({"0": {"ver": [6, 0, 0, 0]}}), &json!({"0": {"ver": [10, 0, 0, 0]}}), &mut d);
-        assert_eq!(d.len(), 1);
+        diff_value("out", &json!([{"c": "handle"}, {"u32": 1}]), &json!([{"c": "handle"}]), &mut d);
+        assert_eq!(d.len(), 2, "{d:?}");
+    }
+
+    #[test]
+    fn the_caller_comes_from_rm_ro_or_from_the_return_address() {
+        let a = json!({"rm": "Chrome_Elf.DLL", "ro": "0x8e1f5"});
+        assert_eq!(record_key(&a, &[]).as_deref(), Some("chrome_elf.dll+0x8e1f5"));
+        let b = json!({"ra": "0x18008e1f5"});
+        assert_eq!(record_key(&b, &mods()).as_deref(), Some("chrome_elf.dll+0x8e1f5"));
+        assert_eq!(record_key(&b, &[]), None);
     }
 
     #[test]
@@ -507,14 +510,18 @@ mod tests {
             poly_line(
                 1,
                 "GetStartupInfoW",
-                0x1_8001_7b41,
+                "chrome_elf.dll",
+                0x17b41,
                 0,
-                r#","out":{"0":{"cb":104,"desktop":null,"title":null,"flags":256}}"#,
+                r#","out":[{"a":0,"startupinfo":{"cb":104,"desktop":null,"title":null}}]"#,
             ),
-            poly_line(2, "GetUserNameW", 0x1_8001_7b50, 1, r#","out":{"0":{"w":""}}"#),
-            poly_line(3, "GetEnvironmentVariableW", 0x1_8001_7b60, 4, r#","out":{"1":{"w":"abc"}}"#),
+            poly_line(2, "GetUserNameW", "chrome_elf.dll", 0x17b50, 1, r#","out":[{"a":0,"w":""}]"#),
+            poly_line(3, "GetEnvironmentVariableW", "chrome_elf.dll", 0x17b60, 4, r#","out":[{"a":1,"w":"abc"}]"#),
         ]
-        .join("\n");
+        .join(
+            "
+",
+        );
         let s = suspects(&poly_calls(&poly, &mods()));
         assert_eq!(s.len(), 2, "{s:?}");
         assert!(s[0].contains("desktop is NULL") && s[0].contains("title is NULL"));
