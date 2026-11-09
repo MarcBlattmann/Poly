@@ -1,18 +1,20 @@
-# 0142: GDI text: a font mapper onto Poly's own fonts, and Spleen-based bitmap faces for the stock fonts
+# 0142: GDI text: a font mapper onto Poly's own fonts, outline text through `poly-font`, and Spleen-based bitmap faces for the stock fonts
 
 **Status:** Accepted. Follows [ADR 0131](0131-windows-gui-slice-a-window-manager-messages-and-gdi.md)
 (the system font's metrics and hand-set glyphs) and
 [ADR 0128](0128-windows-gui-win32k-in-the-nt-personality-and-the-desktop-link.md)
 Decision 5 (logical fonts are mapped in `gdi32` onto Poly's font store);
-uses the fonts of [ADR 0105](0105-fonts-poly-font-font-store-and-fontconfig-discovery.md)
+uses the fonts and the rasteriser of [ADR 0105](0105-fonts-poly-font-font-store-and-fontconfig-discovery.md)
 and `poly-gfx`'s Spleen. One question is the owner's: ⚖️ see "Open".
 
 ## Context
 
-Windows text reaches Poly through `TextOutW`, `DrawTextW` and (soon) the
-rest of GDI's text calls. Poly cannot ship Microsoft's fonts, and the
-specs record the output of three bitmap stock fonts and one tracked
-behaviour, not a general font engine:
+Windows programs draw text with `TextOutW`, `ExtTextOutW` and `DrawTextW`
+in the fonts they create with `CreateFontW` / `CreateFontIndirectW` (dialogs
+and most older programs; Chrome draws through DirectWrite, which is a later
+slice). Poly cannot ship Microsoft's fonts, and the specs record the output
+of three bitmap stock fonts and one tracked behaviour, not a general font
+engine:
 
 - `TextOutW.yaml` gives `TEXTMETRICW` and advance widths for
   `SYSTEM_FONT`, `DEFAULT_GUI_FONT`, `ANSI_FIXED_FONT` and
@@ -23,16 +25,17 @@ behaviour, not a general font engine:
   That is a fingerprint of Microsoft's system font, glyph by glyph.
 - There are no spec sheets yet for `CreateFontW`, `CreateFontIndirectW`,
   `GetTextMetricsW` on outline faces, `GetTextExtentPoint32W` on them,
-  `GetTextFaceW`, `GetCharWidth32W`, `EnumFontFamiliesExW`, `SetTextAlign`
-  beyond `TextOutW`'s alignment rules, `ExtTextOutW` (clipping, `lpDx`),
-  or `DrawTextW`'s ellipsis, `DT_MODIFYSTRING` and `DT_RTLREADING`.
+  `GetTextFaceW`, `GetCharWidth32W`, `EnumFontFamiliesExW`, `ExtTextOutW`
+  (clipping, `lpDx`), or `DrawTextW`'s ellipsis, `DT_MODIFYSTRING` and
+  `DT_RTLREADING`. For these the implementation follows Microsoft Learn's
+  reference pages; where Learn is silent the rule below is a choice of this
+  ADR, marked "(choice)", for a spec agent to confirm or replace.
 
 Before this ADR the repository drew the system font's glyphs for every
 stock face and every `CreateFontIndirectW` font: `DEFAULT_GUI_FONT` and
 `ANSI_FIXED_FONT` text came out with their descenders cut off and their
-letters clipped on the right (the glyph rows of a 16-pixel bold face in a
-13-pixel cell), and any character outside ASCII was a box. `CreateFontIndirectW`
-picked a face from the height alone.
+letters clipped on the right, any character outside ASCII was a box, and
+`CreateFontIndirectW` picked a face from the height alone.
 
 ## Decisions
 
@@ -58,32 +61,69 @@ this order:
 The class names the free font Poly has of that kind, the fonts of the font
 store of ADR 0105: **DejaVu Sans, DejaVu Serif, DejaVu Sans Mono**. The
 table is the same one `crates/poly-font/fonts.conf` applies for Linux
-programs (Arial, Helvetica, Verdana, Tahoma, Segoe UI -> sans-serif; Times
-New Roman, Georgia -> serif; Courier New, Consolas, Lucida Console ->
-monospace), so a face name means the same on both sides. `Mapping` also
-carries bold (`lfWeight >= 600`) and italic for the outline path.
+programs, so a face name means the same on both sides. `Mapping` carries
+bold (`lfWeight >= 600`, the file `-Bold`) and italic (`-Oblique` or
+`-Italic`).
 
-### 2. Which bitmap face draws a mapped font today
+### 2. Outline fonts (`poly_gdi::outline`)
 
-The outline path (`poly-font` rasterising DejaVu at the `LOGFONT`'s
-height, with metrics from the font) needs the spec sheets listed above,
-or its extents and `TEXTMETRICW` would be guesses the oracle never saw. Until
-they exist `bitmap_face` chooses among the four bitmap faces:
+`CreateFontIndirectW` makes an **`Outline`** for every mapped (not raster)
+font whose file can be read: the file, the pixel size and the
+`TEXTMETRICW`. No file (the font store is not installed) means the bitmap
+face of Decision 3 draws instead, so nothing depends on the fonts being
+there.
 
-| Mapped font | Face |
-|---|---|
-| a raster name | its own face |
-| fixed pitch | `ANSI_FIXED_FONT` (8x13) |
-| sans serif or serif, `abs(lfHeight)` of 13 or less, or 0 (the default size) | `DEFAULT_GUI_FONT` (13, proportional) |
-| sans serif or serif, taller | `SYSTEM_FONT` (16, bold, proportional) |
+**Where the files come from.** `Gdi::set_font_loader`: `gdi32.dll` reads
+`C:\Windows\Fonts\<file>` and then `Z:\usr\share\fonts\truetype\dejavu\<file>`
+(the root disk links the first to the second, ADR 0105; the desktop image
+has only the second) with `CreateFileW`/`ReadFile`, on first use, one file
+at a time, and keeps the bytes. A file that does not parse with outlines
+counts as missing. A missing bold or italic file falls back to the same
+weight upright, then to the regular file (Poly does not slant or embolden
+letters itself).
 
-A `LOGFONTW` shorter than 92 bytes gets the system face. These are
-choices of this ADR, not observations; the table is one function and a
-test, so the outline slice replaces it in one place.
+**Size** (`LOGFONTW.lfHeight`, Learn): negative is the character height, the
+em, in pixels; positive is the cell height (ascent plus descent), for which
+the largest em whose cell fits is taken; zero is a cell of 13 pixels, the
+height of `DEFAULT_GUI_FONT` (choice). `lfWidth` greater than 0 scales the
+glyphs and advances horizontally so that the average lowercase width is that
+many pixels (`render_glyph_scaled`); 0 keeps the font's proportions.
+`lfEscapement` and `lfOrientation` are not honoured: text is horizontal.
+
+**Metrics.** Ascent and descent are the font's `hhea` values (or the typo
+metrics `poly-font` selects) scaled to the em and rounded to the nearest
+pixel (choice: Windows' rounding is not documented); `tmHeight` is their
+sum, `tmInternalLeading` the cell less the em, `tmExternalLeading` the
+scaled line gap, `tmAveCharWidth` the mean advance of `a`..`z`,
+`tmMaxCharWidth` the scaled bounding box width, `tmWeight` 400 or 700,
+`tmPitchAndFamily` `TMPF_VECTOR | TMPF_TRUETYPE` plus the family (and, as
+`wingdi.h` has it, `TMPF_FIXED_PITCH` set for a *variable* pitch font),
+aspect 96x96, first character 0x20, last and default 0xFFFD, break 0x20.
+
+**Advances** are the font's `hmtx` advance scaled to the em and rounded to
+whole pixels, character by character with no kerning, which is how GDI's
+unhinted TrueType text is laid out; a control character is one pixel wide
+(as the system font in `DrawTextW.yaml`) and draws nothing. Characters the
+font lacks show its `.notdef` glyph. Only the Basic Multilingual Plane is
+looked up; a surrogate pair is two `.notdef` glyphs. No shaping, no
+bidirectional text, no font fallback.
+
+**Rendering.** `poly_font::render_glyph_scaled` in grey scale (no hinting)
+at the whole-pixel pen position, through `GlyphCache` (1 MB). The
+coverage byte of each pixel blends the text colour over the surface by
+`dst = (fg * a + dst * (255 - a)) / 255` per channel, inside the clip
+region; a surface of 8 bits per pixel or fewer takes the text colour where
+coverage is 128 or more. In `OPAQUE` mode the cell (the extent by the
+height) is filled with the background colour first, as for the bitmap
+faces. Underline and strike-out (`lfUnderline`, `lfStrikeOut`) are
+rectangles a twelfth of the em thick (at least one pixel): the underline
+from a third of the descent below the baseline, the strike-out through the
+middle of the lowercase (choice).
 
 ### 3. Glyphs for the stock faces (`poly_gdi::bitfont`)
 
-The system font's ASCII glyphs stay what ADR 0131 made them: the oracle's
+The stock fonts keep their bitmap faces, whose extents the sheets pin. The
+system font's ASCII glyphs are what ADR 0131 made them: the oracle's
 recorded rows for `A`, `g`, `1`, hand-set rows for the rest, advance widths
 solved from the measured extents. Everything else is cut from **Spleen
 8x16** (`poly-gfx`, BSD 2-Clause, `THIRD_PARTY.md`), whose baseline lies
@@ -97,23 +137,67 @@ after row 11:
   r w , space`, three quarters of the system font's solved widths for the
   rest): the ink columns are thinned (the emptiest column first, so stems
   stay) or widened (the middle column repeats) to the advance minus a
-  one-pixel gap. Advance widths are not touched: extents stay what the
-  sheets and ADR 0131 settled.
+  one-pixel gap. Advance widths are not touched.
 - Characters of the system font above ASCII (Latin-1, Latin Extended-A,
   Greek, Cyrillic, `€`, `™`, box drawing...) are Spleen's glyph lowered one
   row for the system ascent of 13; a character Spleen lacks is the old
-  box. Every face now shows `ä ö ü é ñ ß € ™`, which German- and
-  French-language programs need.
+  box.
 
-### 4. What was not done
+Where a mapped font has no outline (no files), `bitmap_face` stands in:
+a raster name is its own face, fixed pitch is `ANSI_FIXED_FONT`, a
+proportional font of `abs(lfHeight)` 13 or less (or 0) is
+`DEFAULT_GUI_FONT`, a taller one `SYSTEM_FONT`. A `LOGFONTW` shorter than
+92 bytes gets the system face.
 
-`to_glyphs` cannot pass. The hash and ink count are fingerprints of the
-Microsoft system font's pixels for fifteen letters the sheet does not
-show; only `A`, `g` and `1` are recorded. Reproducing the font would
-need either its glyph data (not ours to ship, and forbidden to look
-inside) or the spec agent recording all 95 glyphs of the font as pixel
-rows, which would be a complete copy of the font's bitmaps in the
-repository. Nothing here approximates the hash.
+### 4. The text calls
+
+- **`TextOutW` / `ExtTextOutW` / the `A` variants** (`Gdi::ext_text_out`):
+  alignment (`TA_*`, `TA_UPDATECP`) as `TextOutW.yaml`; `ETO_OPAQUE` fills
+  the rectangle with the background colour (also for an empty string);
+  `ETO_CLIPPED` clips the text to it; `lpDx` is each character's advance
+  (and the extent used for alignment and the new current position).
+  `ETO_GLYPH_INDEX`, `ETO_RTLREADING`, `ETO_PDY` are ignored. ANSI strings
+  are read as Latin-1 (as the rest of Poly's `A` functions).
+- **Measuring:** `GetTextExtentPoint32W/A`, `GetTextExtentPointW/A`,
+  `GetTextExtentExPointW/A` (fit count and running widths), `GetTextMetricsW/A`,
+  `GetCharWidth32W/A`, `GetCharWidthW/A`, `GetTextFaceW/A` (the name the
+  program asked for, also where Poly draws a font of its own; the stock fonts
+  report System, MS Shell Dlg, Courier, Terminal (choice)).
+- **Creating:** `CreateFontW/A`, `CreateFontIndirectA` build the `LOGFONTW`
+  and call the same path as `CreateFontIndirectW`.
+- **`DrawTextW`, `DrawTextA`, `DrawTextExW/A`** (`Gdi::draw_text_ex`):
+  everything of `DrawTextW.yaml` (unchanged results for the stock fonts)
+  and from Learn: `DT_EXPANDTABS`/`DT_TABSTOP` (stop in average character
+  widths; `DRAWTEXTPARAMS.iTabLength` overrides), `DT_EXTERNALLEADING`
+  (line height plus the external leading), margins of `DrawTextEx`.
+  *Prefixes:* `&x` underlines `x` (every marked character) unless
+  `DT_NOPREFIX` or `DT_HIDEPREFIX`; `DT_PREFIXONLY` draws only the
+  underlines; `DT_CALCRECT` is not affected. *Ellipses:* `DT_END_ELLIPSIS`
+  cuts a line that is too wide and ends it with `...` (as many dots as fit
+  when not even one character does); with `DT_WORDBREAK` text running past
+  the rectangle's bottom ends in an ellipsis on the last line that fits;
+  `DT_PATH_ELLIPSIS` replaces the middle and keeps what follows the last
+  backslash; `DT_WORD_ELLIPSIS` cuts each too-wide word. `DT_MODIFYSTRING`
+  writes the cut text back to the caller's buffer (NUL-terminated) when
+  an ellipsis changed it. Ellipses do not change `DT_CALCRECT` (choice).
+  `DT_RTLREADING`, `DT_EDITCONTROL`, `DT_INTERNAL` and
+  `DT_NOFULLWIDTHCHARBREAK` are accepted and ignored. Lines wrap at spaces
+  only, a word too long stays whole (as the sheet records).
+- `user32.dll` exports `DrawTextA`, `DrawTextExA`, `DrawTextExW`; `gdi32.dll`
+  the functions above; both lists are in `poly_win32k::exports` and checked
+  by `cargo xtask win32`.
+
+### 5. What was not done
+
+- `to_glyphs` cannot pass. The hash and ink count are fingerprints of the
+  Microsoft system font's pixels for fifteen letters the sheet does not
+  show; only `A`, `g` and `1` are recorded. Nothing here approximates the
+  hash.
+- Rotated text (`lfEscapement`), `GetCharABCWidths`, `GetKerningPairs`,
+  `GetOutlineTextMetrics`, `GetGlyphOutline`, `EnumFontFamiliesEx`,
+  `AddFontResource`, `SetTextCharacterExtra`, `SetTextJustification`,
+  `GetTextExtentExPointI`, ClearType-style LCD output (the rasteriser has
+  it; GDI's `lfQuality` is not honoured, grey scale only).
 
 ## Open
 
@@ -133,20 +217,24 @@ Option 1 is what this branch does.
 
 ## Consequences
 
-- Text in the GUI and fixed faces is legible: descenders, right edges and
-  non-ASCII characters were wrong or missing.
-- `CreateFontIndirectW` picks a face by name, hint and size, in a table the
-  outline slice will reuse.
-- `poly-gdi` depends on `poly-gfx` (no further dependencies; only the
-  Spleen 8x16 table, about 15 KB, is linked).
-- Visible tests: unchanged. `to_glyphs` still differs in ink and hash.
+- A Windows program that creates a font gets real, antialiased text in
+  Segoe UI / Arial / Tahoma / Times / Courier / Consolas looks (DejaVu
+  underneath) at any size, in the colours and background mode of its DC; the
+  `desktop-win32` boot test's program shows it (screenshot in the
+  hand-off) and the boot test checks for grey scale pixels.
+- `poly-gdi` depends on `poly-font` and `poly-gfx` (the Spleen 8x16 table,
+  about 15 KB, is linked); the `Gdi` holds the font bytes it has read (up to
+  twelve files, 5.5 MB) and a 1 MB glyph cache per process that draws text.
+- The desktop image carries all twelve DejaVu files in
+  `/usr/share/fonts/truetype/dejavu` (it had only the Sans regular).
+- Visible tests: unchanged (140 of 141; `to_glyphs` still differs in ink and
+  hash).
 - Needs a spec agent: `CreateFontW`/`CreateFontIndirectW` (what `GetObject`
   returns, height and weight rounding, mapping of unknown names),
   `GetTextMetricsW` and `GetTextExtentPoint32W` on TrueType faces (Arial,
   Segoe UI, Tahoma, Courier New, Consolas at -11/-12/-16/-24),
-  `GetTextFaceW`, `GetCharWidth32W`, `GetCharABCWidthsW`,
-  `SetTextAlign`/`GetTextAlign`, `ExtTextOutW` (`ETO_OPAQUE`,
-  `ETO_CLIPPED`, `lpDx`), `GetStockObject` for fonts, `EnumFontFamiliesExW`,
-  `SetTextCharacterExtra`, and the `DrawTextW` flags
-  `DT_END_ELLIPSIS`, `DT_PATH_ELLIPSIS`, `DT_MODIFYSTRING`, `DT_RTLREADING`,
-  `DT_HIDEPREFIX`, `DT_PREFIXONLY`, `DT_EDITCONTROL`, `DT_INTERNAL`.
+  `GetTextFaceW`, `GetCharWidth32W`, `SetTextAlign`/`GetTextAlign`,
+  `ExtTextOutW` (`ETO_OPAQUE`, `ETO_CLIPPED`, `lpDx`), `GetStockObject` for
+  fonts, and the `DrawTextW` flags `DT_END_ELLIPSIS`, `DT_PATH_ELLIPSIS`,
+  `DT_MODIFYSTRING`, `DT_HIDEPREFIX`, `DT_PREFIXONLY`, `DT_EDITCONTROL`,
+  `DT_INTERNAL`. Each "(choice)" above is a rule to confirm.
