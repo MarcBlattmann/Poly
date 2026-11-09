@@ -1844,7 +1844,7 @@ fn boot_tests_command(args: &[String]) -> Result {
     while let Some(a) = it.next() {
         match a.as_str() {
             "--list" => {
-                for (name, _) in BOOT_GROUPS {
+                for &(name, _) in BOOT_GROUPS {
                     let shard = CI_BOOT_SHARDS.iter().find(|(_, g)| g.contains(&name)).map_or("-", |(s, _)| s);
                     println!("{name:<18} CI shard {shard}");
                 }
@@ -2374,7 +2374,7 @@ mod tests {
     /// shards are named once each.
     #[test]
     fn every_boot_group_is_in_one_ci_shard() {
-        for (name, _) in BOOT_GROUPS {
+        for &(name, _) in BOOT_GROUPS {
             let n = CI_BOOT_SHARDS.iter().filter(|(_, g)| g.contains(&name)).count();
             assert_eq!(n, 1, "boot test group {name} is in {n} CI shards");
         }
