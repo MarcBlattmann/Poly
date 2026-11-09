@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_addace_revisions",
+      "exe_sha256": "b88944806a03b558a5465f8dd998f54abec13b8cd1f3a38831c9d5efbdb2aba7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QUNMIHJldmlzaW9uIDIsIEFDRSByZXZpc2lvbiBhcmd1bWVudDogMDoweDAvcmV2Mi9uMSAxOjB4MC9yZXYyL24xIDI6MHgwL3JldjIvbjEgMzoweDAvcmV2My9uMSA0OjB4MC9yZXY0L24xIDU6MHgwL3JldjUvbjEgNjoweDAvcmV2Ni9uMSAyNTU6MHgwL3JldjI1NS9uMSAKQUNMIHJldmlzaW9uIDMsIEFDRSByZXZpc2lvbiBhcmd1bWVudDogMDoweDAvcmV2My9uMSAxOjB4MC9yZXYzL24xIDI6MHgwL3JldjMvbjEgMzoweDAvcmV2My9uMSA0OjB4MC9yZXY0L24xIDU6MHgwL3JldjUvbjEgNjoweDAvcmV2Ni9uMSAyNTU6MHgwL3JldjI1NS9uMSAKQUNMIHJldmlzaW9uIDQsIEFDRSByZXZpc2lvbiBhcmd1bWVudDogMDoweDAvcmV2NC9uMSAxOjB4MC9yZXY0L24xIDI6MHgwL3JldjQvbjEgMzoweDAvcmV2NC9uMSA0OjB4MC9yZXY0L24xIDU6MHgwL3JldjUvbjEgNjoweDAvcmV2Ni9uMSAyNTU6MHgwL3JldjI1NS9uMSAKQUNFIHR5cGUgMHgwOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHgxOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHgyOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHgzOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHg0OiByZXYyPTB4YzAwMDAwMGQvYWZ0ZXIyIHJldjM9MHgwL2FmdGVyMyByZXY0PTB4MC9hZnRlcjQgCkFDRSB0eXBlIDB4NTogcmV2Mj0weGMwMDAwMDBkL2FmdGVyMiByZXYzPTB4YzAwMDAwMGQvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHg2OiByZXYyPTB4YzAwMDAwMGQvYWZ0ZXIyIHJldjM9MHhjMDAwMDAwZC9hZnRlcjMgcmV2ND0weDAvYWZ0ZXI0IApBQ0UgdHlwZSAweDc6IHJldjI9MHhjMDAwMDAwZC9hZnRlcjIgcmV2Mz0weGMwMDAwMDBkL2FmdGVyMyByZXY0PTB4MC9hZnRlcjQgCkFDRSB0eXBlIDB4ODogcmV2Mj0weGMwMDAwMDBkL2FmdGVyMiByZXYzPTB4YzAwMDAwMGQvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHg5OiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHhhOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHhiOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHhjOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHhkOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHhlOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHhmOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHgxMDogcmV2Mj0weDAvYWZ0ZXIyIHJldjM9MHgwL2FmdGVyMyByZXY0PTB4MC9hZnRlcjQgCkFDRSB0eXBlIDB4MTE6IHJldjI9MHgwL2FmdGVyMiByZXYzPTB4MC9hZnRlcjMgcmV2ND0weDAvYWZ0ZXI0IApBQ0UgdHlwZSAweDEyOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHgxMzogcmV2Mj0weDAvYWZ0ZXIyIHJldjM9MHgwL2FmdGVyMyByZXY0PTB4MC9hZnRlcjQgCkFDRSB0eXBlIDB4MTQ6IHJldjI9MHgwL2FmdGVyMiByZXYzPTB4MC9hZnRlcjMgcmV2ND0weDAvYWZ0ZXI0IApBQ0UgdHlwZSAweDE1OiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHgxNjogcmV2Mj0weDAvYWZ0ZXIyIHJldjM9MHgwL2FmdGVyMyByZXY0PTB4MC9hZnRlcjQgCkFDRSB0eXBlIDB4MTc6IHJldjI9MHgwL2FmdGVyMiByZXYzPTB4MC9hZnRlcjMgcmV2ND0weDAvYWZ0ZXI0IApBQ0UgdHlwZSAweDIwOiByZXYyPTB4MC9hZnRlcjIgcmV2Mz0weDAvYWZ0ZXIzIHJldjQ9MHgwL2FmdGVyNCAKQUNFIHR5cGUgMHg3ZjogcmV2Mj0weDAvYWZ0ZXIyIHJldjM9MHgwL2FmdGVyMyByZXY0PTB4MC9hZnRlcjQgCkFDRSB0eXBlIDB4ZmY6IHJldjI9MHgwL2FmdGVyMiByZXYzPTB4MC9hZnRlcjMgcmV2ND0weDAvYWZ0ZXI0IApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ACL revision 2, ACE revision argument: 0:0x0/rev2/n1 1:0x0/rev2/n1 2:0x0/rev2/n1 3:0x0/rev3/n1 4:0x0/rev4/n1 5:0x0/rev5/n1 6:0x0/rev6/n1 255:0x0/rev255/n1 \nACL revision 3, ACE revision argument: 0:0x0/rev3/n1 1:0x0/rev3/n1 2:0x0/rev3/n1 3:0x0/rev3/n1 4:0x0/rev4/n1 5:0x0/rev5/n1 6:0x0/rev6/n1 255:0x0/rev255/n1 \nACL revision 4, ACE revision argument: 0:0x0/rev4/n1 1:0x0/rev4/n1 2:0x0/rev4/n1 3:0x0/rev4/n1 4:0x0/rev4/n1 5:0x0/rev5/n1 6:0x0/rev6/n1 255:0x0/rev255/n1 \nACE type 0x0: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x1: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x2: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x3: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x4: rev2=0xc000000d/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x5: rev2=0xc000000d/after2 rev3=0xc000000d/after3 rev4=0x0/after4 \nACE type 0x6: rev2=0xc000000d/after2 rev3=0xc000000d/after3 rev4=0x0/after4 \nACE type 0x7: rev2=0xc000000d/after2 rev3=0xc000000d/after3 rev4=0x0/after4 \nACE type 0x8: rev2=0xc000000d/after2 rev3=0xc000000d/after3 rev4=0x0/after4 \nACE type 0x9: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0xa: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0xb: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0xc: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0xd: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0xe: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0xf: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x10: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x11: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x12: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x13: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x14: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x15: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x16: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x17: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x20: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0x7f: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nACE type 0xff: rev2=0x0/after2 rev3=0x0/after3 rev4=0x0/after4 \nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "rtl_addace_space",
+      "exe_sha256": "097b9a6cd7bac92161f40cf38c79b6ac4b6778a8e259c60d36b67bd48a1c21bc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QUNMIGxlbmd0aCAyNzogYWRkIDE6IDB4YzAwMDAwMjMgYWRkIDI6IDB4YzAwMDAwMjMgYWRkIDM6IDB4YzAwMDAwMjMgIGNvdW50PTAgc2l6ZV9maWVsZD0yNApBQ0wgbGVuZ3RoIDI4OiBhZGQgMTogMHgwMDAwMDAwMCBhZGQgMjogMHhjMDAwMDAyMyBhZGQgMzogMHhjMDAwMDAyMyAgY291bnQ9MSBzaXplX2ZpZWxkPTI4CkFDTCBsZW5ndGggNDc6IGFkZCAxOiAweDAwMDAwMDAwIGFkZCAyOiAweGMwMDAwMDIzIGFkZCAzOiAweGMwMDAwMDIzICBjb3VudD0xIHNpemVfZmllbGQ9NDQKQUNMIGxlbmd0aCA0ODogYWRkIDE6IDB4MDAwMDAwMDAgYWRkIDI6IDB4MDAwMDAwMDAgYWRkIDM6IDB4YzAwMDAwMjMgIGNvdW50PTIgc2l6ZV9maWVsZD00OApBQ0wgbGVuZ3RoIDQ5OiBhZGQgMTogMHgwMDAwMDAwMCBhZGQgMjogMHgwMDAwMDAwMCBhZGQgMzogMHhjMDAwMDAyMyAgY291bnQ9MiBzaXplX2ZpZWxkPTQ4CkFDTCBsZW5ndGggNTE6IGFkZCAxOiAweDAwMDAwMDAwIGFkZCAyOiAweDAwMDAwMDAwIGFkZCAzOiAweGMwMDAwMDIzICBjb3VudD0yIHNpemVfZmllbGQ9NDgKQUNMIGxlbmd0aCA1MjogYWRkIDE6IDB4MDAwMDAwMDAgYWRkIDI6IDB4MDAwMDAwMDAgYWRkIDM6IDB4YzAwMDAwMjMgIGNvdW50PTIgc2l6ZV9maWVsZD01MgpBQ0wgbGVuZ3RoIDg6IGFkZCAxOiAweGMwMDAwMDIzIGFkZCAyOiAweGMwMDAwMDIzIGFkZCAzOiAweGMwMDAwMDIzICBjb3VudD0wIHNpemVfZmllbGQ9OApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ACL length 27: add 1: 0xc0000023 add 2: 0xc0000023 add 3: 0xc0000023  count=0 size_field=24\nACL length 28: add 1: 0x00000000 add 2: 0xc0000023 add 3: 0xc0000023  count=1 size_field=28\nACL length 47: add 1: 0x00000000 add 2: 0xc0000023 add 3: 0xc0000023  count=1 size_field=44\nACL length 48: add 1: 0x00000000 add 2: 0x00000000 add 3: 0xc0000023  count=2 size_field=48\nACL length 49: add 1: 0x00000000 add 2: 0x00000000 add 3: 0xc0000023  count=2 size_field=48\nACL length 51: add 1: 0x00000000 add 2: 0x00000000 add 3: 0xc0000023  count=2 size_field=48\nACL length 52: add 1: 0x00000000 add 2: 0x00000000 add 3: 0xc0000023  count=2 size_field=52\nACL length 8: add 1: 0xc0000023 add 2: 0xc0000023 add 3: 0xc0000023  count=0 size_field=8\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtDuplicateToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Makes a copy of a token as a primary (1) or impersonation (2) token. The
+  impersonation level comes from the SECURITY_QUALITY_OF_SERVICE in
+  ObjectAttributes (12 bytes); the copy's security descriptor from the
+  attributes; EffectiveOnly TRUE drops disabled and removed privileges.
+  DuplicateTokenEx calls it.
+interface:
+  signature: "NTSTATUS NtDuplicateToken(HANDLE ExistingTokenHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, BOOLEAN EffectiveOnly, TOKEN_TYPE TokenType, PHANDLE NewTokenHandle)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87. Also STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5, STATUS_OBJECT_NAME_INVALID 0xC0000033."
+  quality_of_service: "SECURITY_QUALITY_OF_SERVICE (winnt.h): Length 12, ImpersonationLevel, ContextTrackingMode (byte), EffectiveOnly (byte); OBJECT_ATTRIBUTES.SecurityQualityOfService points at it"
+rules:
+  types: "TokenType 0 and 3 return STATUS_INVALID_PARAMETER for every source and level"
+  primary_source: "from a primary token: to type 1 (primary) every level 0 to 3 and \"none\" gives a primary token (level field not available); level 4 and 5 give STATUS_BAD_IMPERSONATION_LEVEL; to type 2 the quality-of-service level is used (0 to 3, \"none\" gives level 2 = Impersonation); levels 4 and 5 give STATUS_BAD_IMPERSONATION_LEVEL (0xC00000A5)"
+  impersonation_source: "a copy cannot have a higher level than its source: from anonymous only level 0 (and none: 0) works, from identification 0 and 1 (none: 1), from impersonation 0 to 2 (none: 2), from delegation 0 to 3 (none: 3); higher levels give STATUS_BAD_IMPERSONATION_LEVEL; an impersonation token of any level cannot become a primary token when the source is anonymous or identification (STATUS_BAD_IMPERSONATION_LEVEL for all levels), but impersonation and delegation tokens can become primary (levels 0 to 3 and none work; 4 and 5 give 0xC00000A5)"
+  access: "DesiredAccess 0, TOKEN_ALL_ACCESS, MAXIMUM_ALLOWED and GENERIC_ALL are granted 0xf01ff; QUERY 0x8; TOKEN_READ 0x20008; TOKEN_WRITE 0x200e0; GENERIC_READ 0x2001a; ACCESS_SYSTEM_SECURITY 0x1000000; an undefined bit 0x200 is granted 0 (the call still succeeds)"
+  source_rights: "the source handle needs TOKEN_DUPLICATE: with only TOKEN_QUERY, TOKEN_IMPERSONATE, TOKEN_ASSIGN_PRIMARY or READ_CONTROL the call returns STATUS_ACCESS_DENIED; with TOKEN_DUPLICATE (alone or with QUERY) it succeeds even when TOKEN_QUERY is asked for"
+  attributes: "OBJ_INHERIT gives an inheritable handle (flags 1); OBJ_KERNEL_HANDLE, OBJ_EXCLUSIVE, OBJ_OPENIF, OBJ_CASE_INSENSITIVE succeed with flags 0; OBJ_PERMANENT returns STATUS_PRIVILEGE_NOT_HELD; the attribute value 0x80000000 returns STATUS_INVALID_PARAMETER; the OBJECT_ATTRIBUTES length must be exactly 48 (0, 8, 40, 47, 49, 56, 100: STATUS_INVALID_PARAMETER); a NULL ObjectAttributes works (impersonation copy of a primary token gets level 2, primary stays primary)"
+  names: "an object name (with or without OBJ_OPENIF) returns STATUS_OBJECT_NAME_INVALID (0xC0000033): tokens cannot be named; a garbage RootDirectory with no name gives the same status"
+  quality_of_service_rules: "the quality-of-service Length must be exactly 12 (0, 4, 8, 11, 13, 16, 64: STATUS_INVALID_PARAMETER); ContextTrackingMode 0 and 1 work, 2 gives STATUS_INVALID_PARAMETER; EffectiveOnly values 1 and 2 inside it are accepted and do not drop anything (only the EffectiveOnly argument does)"
+  effective_only: "after SeShutdownPrivilege was disabled and SeBackupPrivilege removed in the source: EffectiveOnly FALSE keeps the disabled SeShutdown (attributes 1) and the copy has 1 privilege fewer than the original (the removed SeBackup); TRUE also drops the disabled one (2 fewer, SeShutdown gone); SeChangeNotify stays (attributes 3); the same for primary and impersonation copies; groups are not dropped: a deny-only group (attributes 16) stays with TRUE (0 groups dropped)"
+  security_descriptor: "the default security of a copy: owner Administrators, group the primary group, a DACL of 3 ACEs (Administrators 0xf01ff, SYSTEM 0xf01ff, the logon SID 0x2001f), control 0x8004, length 144 (owner at 20, group at 36, DACL at 64). A descriptor in the attributes with only a DACL (Everyone: 0x8) gives that DACL (1 ACE, size 28) with the default owner and group (length 92); with owner Everyone added the owner is Everyone (length 88, group now at 32); a descriptor with no DACL set gives the default DACL back (3 ACEs, size 80) and the default owner. All succeed with STATUS_SUCCESS"
+errors:
+  level: "STATUS_BAD_IMPERSONATION_LEVEL (0xC00000A5) for a level above the source's, 4 and above"
+  parameter: "STATUS_INVALID_PARAMETER (0xC000000D) for bad token types, attribute lengths and values, quality-of-service lengths and tracking modes"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/SetKernelObjectSecurity
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Replaces the selected parts of a kernel object's descriptor with those of
+  the given absolute or self-relative descriptor. Needs WRITE_DAC for the
+  DACL, WRITE_OWNER for owner, group and label, ACCESS_SYSTEM_SECURITY for
+  the SACL.
+interface:
+  signature: "BOOL SetKernelObjectSecurity(HANDLE Handle, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR SecurityDescriptor)"
+  objects: "Objects used: named events, mutexes and job objects (unique names \"PolySecSd<pid>_<n>\", closed after use), unnamed ones, a duplicate of the process token, and the process / thread pseudo handles. Tests that depend on the oracle token say so: the SSH session runs as a local administrator with the elevated token (High integrity, Administrators group enabled, privileges present); the AccessCheck tests use an impersonation copy of it with every privilege disabled unless a test enables one on purpose."
+rules:
+  dacl: "a DACL of ACEs, NULL (\"D:NO_ACCESS_CONTROL\") and empty (\"D:\") are all accepted and read back as \"D:(A;;0x100002;;;WD)(D;;0x100000;;;AN)\" (mask 0x100000 prints as in SDDL, not as an alias), \"D:NO_ACCESS_CONTROL\", \"D:\"; the control word stays 0x8004; \"D:P(...)\" sets DACL_PROTECTED (0x9004), an AI flag is not kept (0x8004), a DACL without P clears protection again; only the parts selected by the information are used (descriptor \"O:SYG:SYD:...\" with information 4 changes only the DACL); a descriptor lacking the DACL with information 4 sets a NULL DACL; an absolute descriptor works too"
+  effect_on_open: "for a named event: with the default DACL OpenEventW grants SYNCHRONIZE, MODIFY_STATE, READ_CONTROL, WRITE_DAC, WRITE_OWNER, 0x1f0003 and MAXIMUM_ALLOWED gives 0x1f0003; after a DACL \"Everyone SYNCHRONIZE\": SYNCHRONIZE granted, 0x2 and 0x1f0003 denied (5), READ_CONTROL, WRITE_DAC, WRITE_OWNER granted (owner Administrators and the privileges of the elevated token), MAXIMUM_ALLOWED 0x160000; after \"deny Everyone 0x2 then allow all\": 0x2 and 0x1f0003 denied, MAXIMUM_ALLOWED 0x1f0001; empty DACL: only the owner rights (READ_CONTROL, WRITE_DAC, WRITE_OWNER), MAXIMUM_ALLOWED 0x60000; NULL DACL: everything"
+  owner_group: "with the process token (SeRestorePrivilege / SeTakeOwnershipPrivilege enabled) any owner SID (the user, Administrators, Users, Everyone, SYSTEM, S-1-5-99-1, Authenticated Users, a label SID) and any group SID are accepted; with a copy of the token whose privileges are all disabled impersonated by the thread only the user SID and Administrators (an owner group) are accepted as owner: Users, Everyone, SYSTEM, S-1-5-99-1, S-1-5-11 and the logon SID fail with ERROR_INVALID_OWNER (1307) and the owner stays; group changes to Administrators, Everyone, SYSTEM and S-1-5-99-1 succeed; owner and group together (information 3) work"
+  rights: "owner and group through a handle with WRITE_OWNER: TRUE; through WRITE_DAC or READ_CONTROL: ERROR_ACCESS_DENIED (5); the DACL through WRITE_DAC: TRUE, through WRITE_OWNER or READ_CONTROL: 5; the DACL of a token handle without WRITE_DAC: 5"
+  label: "LABEL_SECURITY_INFORMATION (0x10) with a descriptor \"S:(ML;;NW;;;LW)\" sets the label; reading it back with the same information gives \"S:(ML;;NW;;;LW)\" with control 0x8010; Low with NWNRNX, Medium, High, Untrusted (S-1-16-0), policy 0 (\"S:(ML;;;;;LW)\"), NR only and two ACEs \"(ML;;NW;;;LW)(ML;;NR;;;ME)\" all stored as given; \"S:\" and \"S:NO_ACCESS_CONTROL\" empty it (text \"S:\"); a label above the caller's level (System, S-1-16-16384) fails with last error 1299 (ERROR_INVALID_LABEL) and the old label stays; a descriptor with an audit ACE and a label with information LABEL stores only the label; information LABEL|DACL stores both. A new object has control 0x8800 (SACL auto-inherited) and an empty label text"
+  sacl: "SACL information (0x8, also with 0x10) on an event handle without ACCESS_SYSTEM_SECURITY fails with ERROR_ACCESS_DENIED (5) and changes nothing (the label text stays)"
+  information_values: "information 0, 0x20, 0x100, 0x80000000, 0x40000000 and 0x20000000 alone succeed (TRUE), and so do DACL combined with 0x80000000 or 0x20000000; 0x40, 0x80 and 0xFFFFFFFF fail with ERROR_ACCESS_DENIED (5)"
+errors:
+  handle: "NULL and 0x1234: ERROR_INVALID_HANDLE (6)"
+  descriptor: "revision 0 or 2 or an all-zero descriptor: ERROR_UNKNOWN_REVISION (1305); ACL revision 9 or ACL size 4: ERROR_INVALID_ACL (1336); an owner SID with count 16: ERROR_INVALID_SID (1337); information OWNER with a descriptor that has no owner (also an initialized empty absolute one): ERROR_INVALID_SECURITY_DESCR (1338); a NULL descriptor pointer: ERROR_NOACCESS (998)"
+  owner: "ERROR_INVALID_OWNER (1307) as above"
+side_effects: "changes the object's descriptor"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

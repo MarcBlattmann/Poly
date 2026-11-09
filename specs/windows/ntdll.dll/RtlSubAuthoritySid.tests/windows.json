@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_subauth_range",
+      "exe_sha256": "99fa5b6ce5bdbb8cdd5a538714ccac940227fef0158ec944e68d36c70b429ce6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5kZXggMDogbnVsbD1mYWxzZSBvZmZzZXQ9OAppbmRleCAxOiBudWxsPWZhbHNlIG9mZnNldD0xMgppbmRleCAyOiBudWxsPWZhbHNlIG9mZnNldD0xNgppbmRleCAzOiBudWxsPWZhbHNlIG9mZnNldD0yMAppbmRleCAxNDogbnVsbD1mYWxzZSBvZmZzZXQ9NjQKaW5kZXggMTU6IG51bGw9ZmFsc2Ugb2Zmc2V0PTY4CmluZGV4IDE2OiBudWxsPWZhbHNlIG9mZnNldD03MgppbmRleCAxMDA6IG51bGw9ZmFsc2Ugb2Zmc2V0PTQwOApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "index 0: null=false offset=8\nindex 1: null=false offset=12\nindex 2: null=false offset=16\nindex 3: null=false offset=20\nindex 14: null=false offset=64\nindex 15: null=false offset=68\nindex 16: null=false offset=72\nindex 100: null=false offset=408\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

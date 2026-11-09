@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "2d24da3f08a2",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:57:44Z",
+  "tests": [
+    {
+      "name": "nttjo_basic",
+      "exe_sha256": "ab0afacc685402190c8143670e65c1ada398ef6929078ff95e4ce9996a04dbc0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGVybWluYXRlIHdpdGggMHgwOiBzdGF0dXM9MHgwMDAwMDAwMCBleGl0IGNvZGVzIDB4MCAweDAgYWNjb3VudGluZyB0b3RhbD0yIGFjdGl2ZT0wIHRlcm1pbmF0ZWQ9MAogIHRlcm1pbmF0ZSB0aGUgZW1wdGllZCBqb2IgYWdhaW46IDB4MDAwMDAwMDA7IGFzc2lnbiBhIG5ldyBwcm9jZXNzIHRvIHRoZSB0ZXJtaW5hdGVkIGpvYjogMHgwMDAwMDAwMCwgaW4gam9iPTEKdGVybWluYXRlIHdpdGggMHgxOiBzdGF0dXM9MHgwMDAwMDAwMCBleGl0IGNvZGVzIDB4MSAweDEgYWNjb3VudGluZyB0b3RhbD0yIGFjdGl2ZT0wIHRlcm1pbmF0ZWQ9MAogIHRlcm1pbmF0ZSB0aGUgZW1wdGllZCBqb2IgYWdhaW46IDB4MDAwMDAwMDA7IGFzc2lnbiBhIG5ldyBwcm9jZXNzIHRvIHRoZSB0ZXJtaW5hdGVkIGpvYjogMHgwMDAwMDAwMCwgaW4gam9iPTEKdGVybWluYXRlIHdpdGggMHg0MjQyOiBzdGF0dXM9MHgwMDAwMDAwMCBleGl0IGNvZGVzIDB4NDI0MiAweDQyNDIgYWNjb3VudGluZyB0b3RhbD0yIGFjdGl2ZT0wIHRlcm1pbmF0ZWQ9MAogIHRlcm1pbmF0ZSB0aGUgZW1wdGllZCBqb2IgYWdhaW46IDB4MDAwMDAwMDA7IGFzc2lnbiBhIG5ldyBwcm9jZXNzIHRvIHRoZSB0ZXJtaW5hdGVkIGpvYjogMHgwMDAwMDAwMCwgaW4gam9iPTEKdGVybWluYXRlIHdpdGggMHhjMDAwMDAwNTogc3RhdHVzPTB4MDAwMDAwMDAgZXhpdCBjb2RlcyAweGMwMDAwMDA1IDB4YzAwMDAwMDUgYWNjb3VudGluZyB0b3RhbD0yIGFjdGl2ZT0wIHRlcm1pbmF0ZWQ9MAogIHRlcm1pbmF0ZSB0aGUgZW1wdGllZCBqb2IgYWdhaW46IDB4MDAwMDAwMDA7IGFzc2lnbiBhIG5ldyBwcm9jZXNzIHRvIHRoZSB0ZXJtaW5hdGVkIGpvYjogMHgwMDAwMDAwMCwgaW4gam9iPTEKdGVybWluYXRlIHdpdGggMHgxMDM6IHN0YXR1cz0weDAwMDAwMDAwIGV4aXQgY29kZXMgMHgxMDMgMHgxMDMgYWNjb3VudGluZyB0b3RhbD0yIGFjdGl2ZT0wIHRlcm1pbmF0ZWQ9MAogIHRlcm1pbmF0ZSB0aGUgZW1wdGllZCBqb2IgYWdhaW46IDB4MDAwMDAwMDA7IGFzc2lnbiBhIG5ldyBwcm9jZXNzIHRvIHRoZSB0ZXJtaW5hdGVkIGpvYjogMHgwMDAwMDAwMCwgaW4gam9iPTEKdGVybWluYXRlIHdpdGggMHhmZmZmZmZmZjogc3RhdHVzPTB4MDAwMDAwMDAgZXhpdCBjb2RlcyAweGZmZmZmZmZmIDB4ZmZmZmZmZmYgYWNjb3VudGluZyB0b3RhbD0yIGFjdGl2ZT0wIHRlcm1pbmF0ZWQ9MAogIHRlcm1pbmF0ZSB0aGUgZW1wdGllZCBqb2IgYWdhaW46IDB4MDAwMDAwMDA7IGFzc2lnbiBhIG5ldyBwcm9jZXNzIHRvIHRoZSB0ZXJtaW5hdGVkIGpvYjogMHgwMDAwMDAwMCwgaW4gam9iPTEKdGVybWluYXRlIGFuIGVtcHR5IGpvYiB0aGF0IG5ldmVyIGhhZCBhIHByb2Nlc3M6IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "terminate with 0x0: status=0x00000000 exit codes 0x0 0x0 accounting total=2 active=0 terminated=0\n  terminate the emptied job again: 0x00000000; assign a new process to the terminated job: 0x00000000, in job=1\nterminate with 0x1: status=0x00000000 exit codes 0x1 0x1 accounting total=2 active=0 terminated=0\n  terminate the emptied job again: 0x00000000; assign a new process to the terminated job: 0x00000000, in job=1\nterminate with 0x4242: status=0x00000000 exit codes 0x4242 0x4242 accounting total=2 active=0 terminated=0\n  terminate the emptied job again: 0x00000000; assign a new process to the terminated job: 0x00000000, in job=1\nterminate with 0xc0000005: status=0x00000000 exit codes 0xc0000005 0xc0000005 accounting total=2 active=0 terminated=0\n  terminate the emptied job again: 0x00000000; assign a new process to the terminated job: 0x00000000, in job=1\nterminate with 0x103: status=0x00000000 exit codes 0x103 0x103 accounting total=2 active=0 terminated=0\n  terminate the emptied job again: 0x00000000; assign a new process to the terminated job: 0x00000000, in job=1\nterminate with 0xffffffff: status=0x00000000 exit codes 0xffffffff 0xffffffff accounting total=2 active=0 terminated=0\n  terminate the emptied job again: 0x00000000; assign a new process to the terminated job: 0x00000000, in job=1\nterminate an empty job that never had a process: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 95
+    }
+  ]
+}

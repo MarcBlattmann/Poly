@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_addallowedex_matches",
+      "exe_sha256": "5f777959f5ff32012ac97503605fe4e0addb3b23e5f72c0f95a3d6e36d396713",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGxhaW46IDAyMDA0MDAwMDEwMDAwMDAwMDAwMTgwMDE5MDAwMjAwMDEwMjAwMDAwMDAwMDAwNTIwMDAwMDAwMjAwMjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwCkV4OiAgICAwMjAwNDAwMDAxMDAwMDAwMDAwMDE4MDAxOTAwMDIwMDAxMDIwMDAwMDAwMDAwMDUyMDAwMDAwMDIwMDIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMAppZGVudGljYWw6IHRydWUKdGhyZWU6IGhlYWRlcj0wMjAwNDAwMDAyMDAwMDAwIHNpemU9NjQgY291bnQ9Mgp0aHJlZTogYWNlIDAgYXQgODogMDAwMDE4MDAxOTAwMDIwMDAxMDIwMDAwMDAwMDAwMDUyMDAwMDAwMDIwMDIwMDAwCnRocmVlOiBhY2UgMSBhdCAzMjogMDAwMzE4MDAwNTAwMDAwMDAxMDIwMDAwMDAwMDAwMDUyMDAwMDAwMDIwMDIwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "plain: 02004000010000000000180019000200010200000000000520000000200200000000000000000000000000000000000000000000000000000000000000000000\nEx:    02004000010000000000180019000200010200000000000520000000200200000000000000000000000000000000000000000000000000000000000000000000\nidentical: true\nthree: header=0200400002000000 size=64 count=2\nthree: ace 0 at 8: 000018001900020001020000000000052000000020020000\nthree: ace 1 at 32: 000318000500000001020000000000052000000020020000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "rtl_addallowedex_revisions",
+      "exe_sha256": "df1c93da1065aa7f59ed97c45425884e169d8d82f4a24d847cbfe914bf1f5461",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QUNMIHJldmlzaW9uIDIsIHJldmlzaW9uIGFyZ3VtZW50OiAwOjB4MC9yZXYyIDE6MHgwL3JldjIgMjoweDAvcmV2MiAzOjB4MC9yZXYzIDQ6MHgwL3JldjQgNToweGMwMDAwMDU5L3JldjIgMjU1OjB4YzAwMDAwNTkvcmV2MiAKQUNMIHJldmlzaW9uIDMsIHJldmlzaW9uIGFyZ3VtZW50OiAwOjB4MC9yZXYzIDE6MHgwL3JldjMgMjoweDAvcmV2MyAzOjB4MC9yZXYzIDQ6MHgwL3JldjQgNToweGMwMDAwMDU5L3JldjMgMjU1OjB4YzAwMDAwNTkvcmV2MyAKQUNMIHJldmlzaW9uIDQsIHJldmlzaW9uIGFyZ3VtZW50OiAwOjB4MC9yZXY0IDE6MHgwL3JldjQgMjoweDAvcmV2NCAzOjB4MC9yZXY0IDQ6MHgwL3JldjQgNToweGMwMDAwMDU5L3JldjQgMjU1OjB4YzAwMDAwNTkvcmV2NCAKU0lEIHJldmlzaW9uIDI6IHN0YXR1cz0weGMwMDAwMDc4CkFDTCBsZW5ndGggMjc6IHN0YXR1cz0weGMwMDAwMDk5IGNvdW50X2FmdGVyPTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ACL revision 2, revision argument: 0:0x0/rev2 1:0x0/rev2 2:0x0/rev2 3:0x0/rev3 4:0x0/rev4 5:0xc0000059/rev2 255:0xc0000059/rev2 \nACL revision 3, revision argument: 0:0x0/rev3 1:0x0/rev3 2:0x0/rev3 3:0x0/rev3 4:0x0/rev4 5:0xc0000059/rev3 255:0xc0000059/rev3 \nACL revision 4, revision argument: 0:0x0/rev4 1:0x0/rev4 2:0x0/rev4 3:0x0/rev4 4:0x0/rev4 5:0xc0000059/rev4 255:0xc0000059/rev4 \nSID revision 2: status=0xc0000078\nACL length 27: status=0xc0000099 count_after=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

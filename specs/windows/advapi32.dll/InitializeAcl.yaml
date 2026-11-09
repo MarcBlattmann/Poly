@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/InitializeAcl
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Writes an empty ACL header into the caller's buffer: the revision (2, 3 or
+  4), the size (the length argument rounded down to a multiple of 4, from 8
+  to 65532) and a zero ACE count. Only these 8 bytes are written; the rest
+  of the buffer, including ACEs from an earlier use, is left alone.
+interface:
+  signature: "BOOL InitializeAcl(PACL acl, DWORD acl_length, DWORD acl_revision)"
+  layout: "ACL (winnt.h): an 8-byte header {Revision (byte), Sbz1 (byte, 0), AclSize (16 bits), AceCount (16 bits), Sbz2 (16 bits)} followed by the ACEs one after the other, all fields little-endian. Each ACE starts with {AceType (byte), AceFlags (byte), AceSize (16 bits)}; access-allowed (type 0), access-denied (1), system-audit (2) and mandatory-label (0x11) ACEs continue with a 32-bit mask (the policy for a label) and the SID, so their size is 8 + the SID length (20 for the 12-byte S-1-1-0 and S-1-1-0-like SIDs, 24 for S-1-5-32-544, 76 for a 15-sub-authority SID). ACL revisions 2, 3 and 4 are the valid ones. Buffers in the tests are 8-byte aligned unless noted."
+rules:
+  header: "success writes exactly 8 bytes: {revision, 0, size (16 bits), 0, 0, 0, 0}; in a 0xCC-filled buffer for revisions 2, 3, 4 and lengths 8, 16, 64, 1000, 8 bytes change (the last changed offset is 7); revision 2 length 64 gives 02 00 40 00 00 00 00 00 and IsValidAcl is TRUE afterwards"
+  size_rounding: "the stored size is the length argument rounded down to a multiple of 4: lengths 8, 9, 10, 11 store 8; 12..15 store 12; 16..19 store 16; 20 stores 20; 63 stores 60; 65 stores 64; 1023 stores 1020; 4095 stores 4092; 65530 and 65531 store 65528; 65532 stores 65532"
+  limits: "the smallest accepted length is 8 and the largest 65532 (revision 2, 3 and 4 alike: 8 succeeds, 65535 and 65536 fail)"
+  revisions: "revisions 2, 3 and 4 succeed and are stored as given; no other revision is accepted"
+  reinitialise: "initialising a buffer that already holds an ACL with three ACEs rewrites only the header: with the same length (128, revision 2) a single byte differs afterwards (the ACE count), with length 64 revision 4 three bytes (revision, size, count), with length 200 revision 3 three bytes, with length 8 revision 2 two bytes; the old ACE bytes stay in the buffer"
+  alignment: "the buffer address needs no alignment: at byte offsets 0 to 8 into a buffer the call succeeds and the header is written at that address"
+errors:
+  length_small: "length 0..7: FALSE, ERROR_INSUFFICIENT_BUFFER (122), nothing written"
+  length_large: "length 65533, 65534, 65535, 65536, 65537, 0x10008, 0x20000, 0x80000000, 0xFFFFFFFF: FALSE, ERROR_INVALID_PARAMETER (87), nothing written"
+  revision: "revision 0, 1, 5, 6, 7, 8, 15, 16, 0xFF, 0x100, 0x102, 0x10002, 0x80000002, 0xFFFFFFFF with a valid length: FALSE, ERROR_INVALID_PARAMETER (87), nothing written (the whole 32-bit value must be 2, 3 or 4)"
+side_effects: "writes the 8 header bytes of the buffer on success"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/CreateRestrictedToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Makes a copy of a token with fewer rights: privileges removed
+  (DISABLE_MAX_PRIVILEGE, or a list), groups turned into deny-only groups,
+  and restricting SIDs added (a second check for access). The result has the
+  same type (primary or impersonation, with the same level) as the source.
+  Chrome's sandbox builds its lockdown and initial tokens with it.
+interface:
+  signature: "BOOL CreateRestrictedToken(HANDLE token, DWORD flags, DWORD disable_count, PSID_AND_ATTRIBUTES disable, DWORD delete_count, PLUID_AND_ATTRIBUTES delete, DWORD restrict_count, PSID_AND_ATTRIBUTES restrict, PHANDLE new_token)"
+  flags: "DISABLE_MAX_PRIVILEGE 0x1, SANDBOX_INERT 0x2, LUA_TOKEN 0x4, WRITE_RESTRICTED 0x8 (winnt.h)"
+  token_rights: "TOKEN_ASSIGN_PRIMARY 0x1, TOKEN_DUPLICATE 0x2, TOKEN_IMPERSONATE 0x4, TOKEN_QUERY 0x8, TOKEN_QUERY_SOURCE 0x10, TOKEN_ADJUST_PRIVILEGES 0x20, TOKEN_ADJUST_GROUPS 0x40, TOKEN_ADJUST_DEFAULT 0x80, TOKEN_ADJUST_SESSIONID 0x100; TOKEN_ALL_ACCESS 0xF01FF (winnt.h)"
+  oracle_token: "The test process's own token on the oracle is an elevated local administrator's in an SSH logon session: primary token, session 0, High integrity (0x3000), mandatory policy 3 (NO_WRITE_UP | NEW_PROCESS_MIN), 12 groups (Everyone 7, BUILTIN\\Administrators 15 (mandatory, enabled by default, enabled, owner), BUILTIN\\Users 7, NETWORK, Authenticated Users, This Organization, Local account, NTLM Authentication, the logon SID, \"Local account and member of Administrators group\" 7 and the integrity label), 24 privileges all enabled (SeChangeNotify, SeShutdown, SeDebug, SeBackup, SeRestore, SeImpersonate, SeCreateGlobal ... but not SeTcb, SeAssignPrimaryToken or SeCreateToken), owner BUILTIN\\Administrators, primary group \"None\" (S-1-5-21-<machine>-513), TokenElevationType 1 (default), TokenElevation 1."
+rules:
+  privileges: "flags 0 with no lists: a copy with the same privileges (24 on the oracle) and TokenType 1, TokenHasRestrictions 0; DISABLE_MAX_PRIVILEGE: only SeChangeNotifyPrivilege remains, attributes 3; PrivilegesToDelete (SeBackup, SeRestore): those two are gone (24 -> 22), the others unchanged; deleting a privilege the token lacks (twice) succeeds"
+  disable_sids: "a group in SidsToDisable keeps its place but its attributes become 0x10 (SE_GROUP_USE_FOR_DENY_ONLY): Administrators 15 -> 16, Users 7 -> 16, Everyone 7 -> 16 as asked; other groups unchanged; TokenHasRestrictions becomes 1 but IsTokenRestricted stays FALSE; a SID the token does not have is ignored (TokenHasRestrictions stays 0); the user's own SID can be disabled (its attributes 0 -> 0x10, still the same SID); the integrity level stays 0x3000"
+  restrict_sids: "each SID in SidsToRestrict becomes a restricting SID: TokenRestrictedSids lists them (attributes 0x7), IsTokenRestricted TRUE, TokenHasRestrictions 1, groups unchanged; any SID is accepted (S-1-1-0, S-1-5-12, S-1-5-32-545, S-1-5-99-1); the attributes given with a restricting SID must be 0: 0x17 (deny-only plus 7) fails with ERROR_INVALID_PARAMETER (87)"
+  flags: "SANDBOX_INERT alone: TokenSandBoxInert still reads 0 and nothing else changes; LUA_TOKEN: 5 privileges left, Administrators 16 (deny-only), TokenHasRestrictions 1, integrity unchanged; WRITE_RESTRICTED without restricting SIDs: TokenHasRestrictions 1, IsTokenRestricted FALSE; WRITE_RESTRICTED with a restricting SID: IsTokenRestricted TRUE; DISABLE_MAX_PRIVILEGE | SANDBOX_INERT: 1 privilege; all four flags: 1 privilege, Administrators 16; undefined bits 0x10 and 0x80000000 are accepted and change nothing. The integrity level (0x3000) and elevation type (1) are unchanged in every case"
+  source: "a primary source gives a primary token; identification, impersonation and delegation sources give impersonation tokens of the same level; the new handle has the source handle's access (0xF01FF for TOKEN_ALL_ACCESS; 0x2 for a DUPLICATE-only source; 0xA, 0xB likewise); the source needs TOKEN_DUPLICATE (a TOKEN_QUERY-only handle fails with ERROR_ACCESS_DENIED 5; TOKEN_QUERY is not required)"
+  restricting_again: "restricting an already restricted token with another restricting SID fails with ERROR_INVALID_PARAMETER (87)"
+errors:
+  restrict_attributes: "non-zero attributes with a restricting SID: ERROR_INVALID_PARAMETER (87)"
+  restrict_again: "ERROR_INVALID_PARAMETER (87)"
+  access: "ERROR_ACCESS_DENIED (5)"
+side_effects: "creates a token object and a handle"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -40,8 +40,8 @@ pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// message and painting entries), `dwmapi` (the window manager's frame and
 /// attribute calls), `imm32` (input method contexts), `shcore` (per monitor
 /// DPI), `dwrite` (DirectWrite's entries), `advapi32` (the security model:
-/// tokens, SIDs, ACLs, security descriptors, account lookup) and `userenv`
-/// (AppContainer SIDs).
+/// tokens, SIDs, ACLs, security descriptors, account lookup), `userenv`
+/// (AppContainer SIDs) and `version` (version resources; Chrome's stage-9 probe).
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
@@ -53,6 +53,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "dwrite.dll",
     "advapi32.dll",
     "userenv.dll",
+    "version.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
@@ -1265,6 +1266,9 @@ mod tests {
             3,
         );
         assert_eq!(check_image(&more).unwrap()["dwmapi.dll"], ["DwmFlush"]);
+        // The security model's tests import advapi32.
+        let security = image(&[("ADVAPI32.dll", &["OpenProcessToken"])], 3);
+        assert_eq!(check_image(&security).unwrap()["advapi32.dll"], ["OpenProcessToken"]);
         let other = image(&[("shell32.dll", &["SHGetFolderPathW"])], 3);
         assert!(check_image(&other).unwrap_err().contains("shell32.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);
