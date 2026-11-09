@@ -131,6 +131,9 @@ impl Notify {
         let _ = sys.objects.set_signaled(file.0, false);
         let rec = sys.io.file(file.1);
         let (port, skip_port, skip_event) = rec.map_or((None, false, false), |r| (r.port, r.skip_port, r.skip_event));
+        // A synchronous file object ignores an APC routine (Learn:
+        // "ReadFileEx" on a handle not opened for overlapped I/O).
+        let apc = if sync { None } else { self.apc() };
         Ok(Irp {
             id: sys.io.new_irp_id(),
             file: file.1,
@@ -139,7 +142,7 @@ impl Notify {
             thread: caller.thread,
             iosb: self.iosb,
             event,
-            apc: self.apc(),
+            apc,
             sync,
             apc_context: self.apc_context,
             port,
@@ -969,6 +972,7 @@ pub fn cancel_io_file_ex<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
         Ok(sys.io.cancel_file_process(cookie, caller.process, (request != 0).then_some(request)))
     })?;
     if n == 0 {
+        write_iosb(k, iosb, STATUS_NOT_FOUND, 0)?;
         return Err(STATUS_NOT_FOUND);
     }
     write_iosb(k, iosb, STATUS_SUCCESS, 0)?;

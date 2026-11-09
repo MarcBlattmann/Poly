@@ -90,6 +90,7 @@ pub mod win32 {
     pub const ERROR_INVALID_USER_BUFFER: u32 = 1784;
     pub const ERROR_NOT_ENOUGH_QUOTA: u32 = 1816;
     pub const ERROR_NOT_A_REPARSE_POINT: u32 = 4390;
+    pub const ERROR_DYNAMIC_CODE_BLOCKED: u32 = 1655;
 }
 
 use win32::*;
@@ -223,6 +224,7 @@ const TABLE: &[(u32, u32)] = &[
     (0xC000_0225, ERROR_NOT_FOUND),            // STATUS_NOT_FOUND
     (0xC000_0235, ERROR_INVALID_HANDLE),       // STATUS_HANDLE_NOT_CLOSABLE
     (0xC000_0275, ERROR_NOT_A_REPARSE_POINT),  // STATUS_NOT_A_REPARSE_POINT
+    (0xC000_0604, ERROR_DYNAMIC_CODE_BLOCKED), // STATUS_DYNAMIC_CODE_BLOCKED
 ];
 
 /// `RtlNtStatusToDosError` / `RtlNtStatusToDosErrorNoTeb`.

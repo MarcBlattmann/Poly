@@ -358,6 +358,36 @@ pub fn terminate_other(pid: ProcessId, thread: ThreadRef, status: NtStatus) -> R
     Ok(())
 }
 
+/// `NtTerminateProcess` of another process (ADR 0169), or the end of a
+/// job's members: record the exit status (the first one counts) and make
+/// every thread of `target` end at its next return to user mode. A process
+/// whose first thread was never started (created suspended) ends at once.
+pub fn terminate_process_by_id(target: ProcessId, status: NtStatus) -> Result<(), NtStatus> {
+    let (threads, deferred) = with(|s| {
+        let Some(p) = s.processes.get_mut(&target) else { return (Vec::new(), None) };
+        p.exit_status.get_or_insert(status);
+        let threads: Vec<ThreadRef> = p.threads.iter().map(|t| t.thread).collect();
+        let mut deferred = None;
+        for t in &threads {
+            if let Some(c) = s.ctl.get_mut(t)
+                && let Some(d) = c.deferred_process.take()
+            {
+                c.deferred_start = None;
+                deferred = Some(d);
+            }
+        }
+        (threads, deferred)
+    });
+    if let Some((_process, memory)) = deferred {
+        super::process_exit(target.0, &memory);
+        return Ok(());
+    }
+    for t in threads {
+        terminate_other(target, t, status)?;
+    }
+    Ok(())
+}
+
 /// The NT process `thread` belongs to: the caller's `pid` unless another
 /// process has it (a child's first thread, ADR 0089).
 fn owner_of(pid: ProcessId, thread: ThreadRef) -> ProcessId {

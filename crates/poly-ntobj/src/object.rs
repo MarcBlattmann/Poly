@@ -115,7 +115,12 @@ impl ObjectType {
     /// Every right a handle to this type can hold (the type's
     /// `*_ALL_ACCESS`).
     pub const fn valid_access(self) -> AccessMask {
-        self.generic_mapping().all
+        match self {
+            // A handle to a section can be asked to wait (the standard
+            // `SYNCHRONIZE` right is valid for every object).
+            ObjectType::Section => self.generic_mapping().all | SYNCHRONIZE,
+            _ => self.generic_mapping().all,
+        }
     }
 
     /// The type's generic mapping.

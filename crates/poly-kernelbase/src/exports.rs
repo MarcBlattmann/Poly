@@ -18,6 +18,17 @@
 /// `contract.function`.
 pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     // Named pipes, completion ports and overlapped I/O (ADR 0169).
+    ("CreateJobObjectW", "api-ms-win-core-job-l1-1-0"),
+    ("OpenJobObjectW", "api-ms-win-core-job-l1-1-0"),
+    ("AssignProcessToJobObject", "api-ms-win-core-job-l1-1-0"),
+    ("IsProcessInJob", "api-ms-win-core-job-l1-1-0"),
+    ("QueryInformationJobObject", "api-ms-win-core-job-l1-1-0"),
+    ("SetInformationJobObject", "api-ms-win-core-job-l1-1-0"),
+    ("TerminateJobObject", "api-ms-win-core-job-l1-1-0"),
+    ("InitializeProcThreadAttributeList", "api-ms-win-core-processthreads-l1-1-0"),
+    ("UpdateProcThreadAttribute", "api-ms-win-core-processthreads-l1-1-0"),
+    ("DeleteProcThreadAttributeList", "api-ms-win-core-processthreads-l1-1-0"),
+    ("CreateFileMappingA", "api-ms-win-core-memory-l1-1-0"),
     ("CreateNamedPipeW", "api-ms-win-core-namedpipe-l1-1-0"),
     ("ConnectNamedPipe", "api-ms-win-core-namedpipe-l1-1-0"),
     ("DisconnectNamedPipe", "api-ms-win-core-namedpipe-l1-1-0"),

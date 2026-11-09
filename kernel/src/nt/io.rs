@@ -92,6 +92,16 @@ pub(super) fn after_call() {
         kick(dev);
     }
     drain();
+    kill_pending();
+}
+
+/// End the processes jobs asked to be ended (kill on close, `NtTerminateJobObject`,
+/// ADR 0169).
+pub(super) fn kill_pending() {
+    let kills = with(|s| core::mem::take(&mut s.sys.jobs.kills));
+    for (pid, status) in kills {
+        let _ = super::sched::terminate_process_by_id(pid, status);
+    }
 }
 
 /// Wake device `dev`'s worker, starting it on first use.

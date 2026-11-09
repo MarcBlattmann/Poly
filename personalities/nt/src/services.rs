@@ -375,6 +375,29 @@ pub enum Service {
     /// `NtQueryIoCompletion(IoCompletionHandle, IoCompletionInformationClass,
     /// IoCompletionInformation, Length, ReturnLength*)`.
     QueryIoCompletion,
+
+    // ----- job objects (ADR 0169)
+    /// `NtCreateJobObject(JobHandle*, DesiredAccess, ObjectAttributes*)`.
+    CreateJobObject,
+    /// `NtOpenJobObject(JobHandle*, DesiredAccess, ObjectAttributes*)`.
+    OpenJobObject,
+    /// `NtAssignProcessToJobObject(JobHandle, ProcessHandle)`.
+    AssignProcessToJobObject,
+    /// `NtTerminateJobObject(JobHandle, ExitStatus)`.
+    TerminateJobObject,
+    /// `NtQueryInformationJobObject(JobHandle, JobInformationClass,
+    /// JobInformation, JobInformationLength, ReturnLength*)`.
+    QueryInformationJobObject,
+    /// `NtSetInformationJobObject(JobHandle, JobInformationClass,
+    /// JobInformation, JobInformationLength)`.
+    SetInformationJobObject,
+    /// `NtIsProcessInJob(ProcessHandle, JobHandle)`.
+    IsProcessInJob,
+
+    // ----- sections (ADR 0169)
+    /// `NtQuerySection(SectionHandle, SectionInformationClass,
+    /// SectionInformation, SectionInformationLength, ReturnLength*)`.
+    QuerySection,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -523,6 +546,20 @@ pub const IPC_SERVICES: [(Service, u32, &str); 8] = [
     (Service::QueryIoCompletion, 0x0D8, "NtQueryIoCompletion"),
 ];
 
+/// Job objects (ADR 0169), in the processes and threads group.
+pub const JOB_SERVICES: [(Service, u32, &str); 7] = [
+    (Service::CreateJobObject, 0x090, "NtCreateJobObject"),
+    (Service::OpenJobObject, 0x091, "NtOpenJobObject"),
+    (Service::AssignProcessToJobObject, 0x092, "NtAssignProcessToJobObject"),
+    (Service::TerminateJobObject, 0x093, "NtTerminateJobObject"),
+    (Service::QueryInformationJobObject, 0x094, "NtQueryInformationJobObject"),
+    (Service::SetInformationJobObject, 0x095, "NtSetInformationJobObject"),
+    (Service::IsProcessInJob, 0x096, "NtIsProcessInJob"),
+];
+
+/// Section queries (ADR 0169), in the memory group.
+pub const SECTION_SERVICES: [(Service, u32, &str); 1] = [(Service::QuerySection, 0x049, "NtQuerySection")];
+
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
     SERVICES
@@ -534,6 +571,8 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(SECURITY_SERVICES.iter())
         .chain(HANDLE_SERVICES.iter())
         .chain(IPC_SERVICES.iter())
+        .chain(JOB_SERVICES.iter())
+        .chain(SECTION_SERVICES.iter())
 }
 
 impl Service {

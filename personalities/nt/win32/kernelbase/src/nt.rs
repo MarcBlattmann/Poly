@@ -180,6 +180,19 @@ unsafe extern "system" {
         arg3: usize,
     ) -> NtStatus;
     pub fn NtTestAlert() -> NtStatus;
+    pub fn NtCreateJobObject(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
+    pub fn NtOpenJobObject(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
+    pub fn NtAssignProcessToJobObject(job: Handle, process: Handle) -> NtStatus;
+    pub fn NtIsProcessInJob(process: Handle, job: Handle) -> NtStatus;
+    pub fn NtTerminateJobObject(job: Handle, status: NtStatus) -> NtStatus;
+    pub fn NtQueryInformationJobObject(
+        job: Handle,
+        class: u32,
+        info: *mut u8,
+        length: u32,
+        returned: *mut u32,
+    ) -> NtStatus;
+    pub fn NtSetInformationJobObject(job: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
     pub fn NtCreateEvent(
         handle: *mut Handle,
         access: u32,

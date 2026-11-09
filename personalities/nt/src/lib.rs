@@ -54,6 +54,7 @@ pub mod exception;
 pub mod exec;
 pub mod image;
 pub mod io;
+pub mod job;
 pub mod kernel;
 pub mod layout;
 pub mod memory;
@@ -280,6 +281,14 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         QueryPerformanceCounter => sysinfo::query_performance_counter(k, regs),
         QuerySystemInformation => sysinfo::query_system_information(k, regs),
         DeviceIoControlFile => console::services::device_io_control_file(k, regs),
+        QuerySection => memory::query_section(k, regs),
+        CreateJobObject => job::create_job_object(k, regs),
+        OpenJobObject => job::open_job_object(k, regs),
+        AssignProcessToJobObject => job::assign_process_to_job_object(k, regs),
+        TerminateJobObject => job::terminate_job_object(k, regs),
+        QueryInformationJobObject => job::query_information_job_object(k, regs),
+        SetInformationJobObject => job::set_information_job_object(k, regs),
+        IsProcessInJob => job::is_process_in_job(k, regs),
         FsControlFile => io::npservices::fs_control_file(k, regs),
         CreateNamedPipeFile => io::npservices::create_named_pipe_file(k, regs),
         CancelSynchronousIoFile => io::npservices::cancel_synchronous_io_file(k, regs),

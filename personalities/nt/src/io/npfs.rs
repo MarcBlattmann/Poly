@@ -509,7 +509,7 @@ impl IoState {
         if end.nowait {
             return Err((STATUS_PIPE_EMPTY, irp));
         }
-        if len == 0 {
+        if len == 0 && !message_mode {
             irp.sync = false;
             self.complete_now(irp, STATUS_SUCCESS, 0, None);
             return Ok(NpDone::Done(STATUS_SUCCESS));

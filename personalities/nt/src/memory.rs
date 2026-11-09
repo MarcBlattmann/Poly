@@ -18,6 +18,29 @@ use poly_ntobj::status::*;
 use poly_ntobj::{Caller, Handle, NtStatus, ObjectType};
 
 /// Check that `h` names the calling process with `access`.
+/// Whose address space a process handle names.
+#[derive(Clone, Copy)]
+enum Target {
+    Own,
+    Other(poly_ntobj::ProcessId),
+}
+
+/// The process `h` names, for a service that works on other processes too
+/// (ADR 0169): the caller's own, or another one.
+fn target_of(sys: &NtSystem, proc: &NtProcess, caller: &Caller, h: Handle, access: u32) -> Result<Target> {
+    if h == Handle::CURRENT_PROCESS {
+        return Ok(Target::Own);
+    }
+    if h == Handle::NULL {
+        return Err(STATUS_INVALID_HANDLE);
+    }
+    let id = sys.objects.object_by_handle(caller, h, access, Some(ObjectType::Process))?;
+    if proc.object == Some(id) {
+        return Ok(Target::Own);
+    }
+    Ok(Target::Other(poly_ntobj::ProcessId(sys.objects.cookie(id).ok_or(STATUS_INVALID_HANDLE)? as u32)))
+}
+
 fn own_process(sys: &NtSystem, proc: &NtProcess, caller: &Caller, h: Handle, access: u32) -> Result<()> {
     if h == Handle::CURRENT_PROCESS {
         return Ok(());
@@ -29,6 +52,15 @@ fn own_process(sys: &NtSystem, proc: &NtProcess, caller: &Caller, h: Handle, acc
     if proc.object == Some(id) { Ok(()) } else { Err(STATUS_NOT_IMPLEMENTED) }
 }
 
+/// `STATUS_DYNAMIC_CODE_BLOCKED` (`ntstatus.h`): a process with the
+/// prohibit-dynamic-code mitigation cannot make memory executable.
+const STATUS_DYNAMIC_CODE_BLOCKED: NtStatus = NtStatus(0xC000_0604);
+
+/// Whether a `PAGE_*` protection allows execution.
+fn executable(protect: u32) -> bool {
+    protect & 0xF0 != 0
+}
+
 /// `NtAllocateVirtualMemory`: `*BaseAddress` and `*RegionSize` in and out.
 pub fn allocate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, base_ptr, zero_bits, size_ptr, alloc_type, protect] = abi::args::<K, 6>(k, regs)?;
@@ -37,6 +69,9 @@ pub fn allocate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> 
     let caller = k.caller();
     let (base, size) = k.with_state(|sys, proc, b| {
         own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
+        if proc.dynamic_code_blocked && alloc_type as u32 & MEM_COMMIT != 0 && executable(protect as u32) {
+            return Err(STATUS_DYNAMIC_CODE_BLOCKED);
+        }
         let r = proc.vm.allocate(b, base, size, zero_bits, alloc_type as u32, protect as u32)?;
         if alloc_type as u32 & MEM_COMMIT != 0 {
             section::record_section_commit(sys, proc, r.0, r.1);
@@ -77,6 +112,9 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let caller = k.caller();
     let (base, size, old) = k.with_state(|sys, proc, b| {
         own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
+        if proc.dynamic_code_blocked && executable(new as u32) {
+            return Err(STATUS_DYNAMIC_CODE_BLOCKED);
+        }
         proc.vm.protect(b, base, size, new as u32)
     })?;
     abi::write_u64(k, base_ptr, base)?;
@@ -162,15 +200,25 @@ pub fn map_view<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> 
         protect: protect as u32,
     };
     let caller = k.caller();
-    let mapped = k.with_state(|sys, proc, b| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
-        section::map_view(sys, proc, b, &caller, &req, false)
-    })?;
+    let target = k.with_state(|sys, proc, _| target_of(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION))?;
+    let mapped = match target {
+        Target::Own => k.with_state(|sys, proc, b| section::map_view(sys, proc, b, &caller, &req, false))?,
+        Target::Other(pid) => k
+            .with_process(pid, |sys, proc, b| section::map_view(sys, proc, b, &caller, &req, false))
+            .ok_or(STATUS_PROCESS_IS_TERMINATING)??,
+    };
     let written = abi::write_u64(k, base_ptr, mapped.base)
         .and_then(|()| abi::write_u64(k, size_ptr, mapped.size))
         .and_then(|()| if offset_ptr != 0 { abi::write_u64(k, offset_ptr, mapped.offset) } else { Ok(()) });
     if let Err(e) = written {
-        k.with_state(|sys, proc, b| section::unmap_view(sys, proc, b, mapped.base)).ok();
+        match target {
+            Target::Own => {
+                let _ = k.with_state(|sys, proc, b| section::unmap_view(sys, proc, b, mapped.base));
+            }
+            Target::Other(pid) => {
+                let _ = k.with_process(pid, |sys, proc, b| section::unmap_view(sys, proc, b, mapped.base));
+            }
+        }
         return Err(e);
     }
     Ok(mapped.status)
@@ -180,10 +228,50 @@ pub fn map_view<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> 
 pub fn unmap_view<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, addr] = abi::args::<K, 2>(k, regs)?;
     let caller = k.caller();
-    k.with_state(|sys, proc, b| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
-        section::unmap_view(sys, proc, b, addr)
+    let target = k.with_state(|sys, proc, _| target_of(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION))?;
+    match target {
+        Target::Own => k.with_state(|sys, proc, b| section::unmap_view(sys, proc, b, addr))?,
+        Target::Other(pid) => k
+            .with_process(pid, |sys, proc, b| section::unmap_view(sys, proc, b, addr))
+            .ok_or(STATUS_PROCESS_IS_TERMINATING)??,
+    };
+    Ok(STATUS_SUCCESS)
+}
+
+/// `NtQuerySection(SectionHandle, SectionInformationClass,
+/// SectionInformation, SectionInformationLength, ReturnLength*)`: class 0,
+/// `SECTION_BASIC_INFORMATION` (`wdm.h`): the base address (0), the
+/// allocation attributes and the maximum size, 24 bytes (ADR 0169).
+pub fn query_section<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [h, class, buf, len, ret] = abi::args::<K, 5>(k, regs)?;
+    let caller = k.caller();
+    let info = k.with_state(|sys, _, _| -> Result<[u8; 24]> {
+        let access = poly_ntobj::access::SECTION_QUERY;
+        let obj = sys.objects.object_by_handle(&caller, Handle(h), access, Some(ObjectType::Section))?;
+        let key = sys.objects.cookie(obj).ok_or(STATUS_INVALID_HANDLE)?;
+        let s = sys.section(key).ok_or(STATUS_INVALID_HANDLE)?;
+        if class as u32 != 0 {
+            return Err(STATUS_INVALID_INFO_CLASS);
+        }
+        // SEC_FILE for a section of a file, SEC_IMAGE for an image, else
+        // what the section was made with (`SEC_COMMIT`, `SEC_RESERVE`).
+        let attributes = match &s.kind {
+            crate::system::SectionKind::File { .. } => 0x0080_0000u32,
+            crate::system::SectionKind::Image { .. } => 0x0100_0000u32,
+            crate::system::SectionKind::Pagefile { .. } => s.attributes & 0x0C00_0000,
+        };
+        let mut b = [0u8; 24];
+        b[8..12].copy_from_slice(&attributes.to_le_bytes());
+        b[16..24].copy_from_slice(&s.size.to_le_bytes());
+        Ok(b)
     })?;
+    if (len as u32) < 24 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    abi::write(k, buf, &info)?;
+    if ret != 0 {
+        abi::write_u32(k, ret, 24)?;
+    }
     Ok(STATUS_SUCCESS)
 }
 
@@ -238,12 +326,27 @@ pub fn terminate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
     }
     let caller = k.caller();
     let status = NtStatus(status as u32);
-    k.with_state(|sys, proc, _| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_TERMINATE)?;
-        // The first termination's status is the process's (ADR 0079).
-        proc.exit_status.get_or_insert(status);
-        Ok::<(), NtStatus>(())
+    // Another process (ADR 0169): its threads are made to end.
+    let other = k.with_state(|sys, proc, _| -> Result<Option<poly_ntobj::ProcessId>> {
+        if Handle(process) == Handle::CURRENT_PROCESS {
+            proc.exit_status.get_or_insert(status);
+            return Ok(None);
+        }
+        let id = sys.objects.object_by_handle(&caller, Handle(process), PROCESS_TERMINATE, Some(ObjectType::Process))?;
+        if proc.object == Some(id) {
+            // The first termination's status is the process's (ADR 0079).
+            proc.exit_status.get_or_insert(status);
+            return Ok(None);
+        }
+        let pid = poly_ntobj::ProcessId(sys.objects.cookie(id).expect("live process object") as u32);
+        if sys.process_exits.contains_key(&pid) {
+            return Err(STATUS_PROCESS_IS_TERMINATING);
+        }
+        Ok(Some(pid))
     })?;
-    k.terminate_process(status);
+    match other {
+        Some(pid) => k.terminate_other_process(pid, status)?,
+        None => k.terminate_process(status),
+    }
     Ok(STATUS_SUCCESS)
 }

@@ -28,8 +28,6 @@ pub const ERROR_CANNOT_IMPERSONATE: u32 = 1368;
 pub const ERROR_ABANDONED_WAIT_0: u32 = 735;
 /// `ERROR_OBJECT_NAME_EXISTS` (`winerror.h`).
 pub const ERROR_OBJECT_NAME_EXISTS: u32 = 698;
-/// `ERROR_DYNAMIC_CODE_BLOCKED` (`winerror.h`).
-pub const ERROR_DYNAMIC_CODE_BLOCKED: u32 = 1655;
 /// `WAIT_TIMEOUT`, `WAIT_IO_COMPLETION` (`winbase.h`) as errors.
 pub const ERROR_WAIT_TIMEOUT: u32 = 258;
 pub const ERROR_WAIT_IO_COMPLETION: u32 = 192;
