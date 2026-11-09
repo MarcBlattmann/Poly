@@ -26,11 +26,11 @@ use crate::os;
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
-use poly_wayland::compose::{Content, Hit, Rect, Scene, WindowId};
+use poly_wayland::compose::{Content, Rect, Scene, WindowId};
 use poly_win32k::frame::FrameMetrics;
 use poly_win32k::link::{
-    BufferId, CursorShape, DEVICE, Edges, FromCompositor, PixelFormat, READ_BUFFER, ReadBuffer, Record, Request,
-    Stream, SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState,
+    BufferId, CursorShape, DEVICE, Edges, FromCompositor, PixelFormat, READ_BUFFER, ReadBuffer, Record, Stream,
+    SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState,
 };
 
 /// The scene owner of Windows surfaces: this bit, or'ed with the surface,
@@ -93,15 +93,6 @@ impl WindowsSurfaces {
     /// The surface a scene window shows, if it is a Windows one.
     pub fn surface_of(&self, window: WindowId) -> Option<SurfaceId> {
         self.surfaces.iter().find(|(_, s)| s.window == window).map(|(&id, _)| id)
-    }
-
-    /// The Windows surface under a title-bar close hit, if any. Use the
-    /// scene's hit test so a covered window cannot receive the click.
-    pub fn close_at(&self, scene: &Scene, x: i32, y: i32) -> Option<SurfaceId> {
-        match scene.hit_test(x, y) {
-            Hit::Close(window) => self.surface_of(window),
-            _ => None,
-        }
     }
 
     /// Configure records for Windows surfaces moved or resized in the
@@ -328,33 +319,83 @@ impl Link {
         &self.surfaces
     }
 
-    /// The close button at (`x`, `y`) belongs to a Windows surface, if any.
-    /// The compositor normally sends an xdg close to Wayland clients; a
-    /// Windows surface needs the equivalent request over `/dev/win32k`.
-    pub fn close_at(&mut self, scene: &Scene, x: i32, y: i32) -> bool {
-        if let Some(surface) = self.surfaces.close_at(scene, x, y) {
-            println!("poly-compositor: close requested for Windows surface {surface}");
-            self.send(FromCompositor::Request { surface, request: Request::Close });
-            true
-        } else {
-            false
+    /// Input for a Windows surface's scene window (the server's internal
+    /// events of adopted windows): forwarded to win32k. False when the
+    /// event is not about one of ours.
+    pub fn input(&mut self, ev: &poly_wayland::server::InternalEvent) -> bool {
+        use poly_wayland::server::InternalEvent as E;
+        let window = match *ev {
+            E::Motion { window, .. }
+            | E::Button { window, .. }
+            | E::Axis { window, .. }
+            | E::Key { window, .. }
+            | E::Resize { window, .. } => window,
+            E::Leave(window) | E::Close(window) => window,
+        };
+        let Some(surface) = self.surfaces.surface_of(window) else { return false };
+        let time = (os::monotonic_ns() / 1_000_000) as u32;
+        let records: Vec<FromCompositor> = match *ev {
+            E::Motion { x, y, .. } => vec![FromCompositor::Pointer { surface, x, y, time }],
+            E::Button { x, y, button, pressed, .. } => vec![
+                FromCompositor::Pointer { surface, x, y, time },
+                FromCompositor::Button { surface, button: button as u16, pressed, time },
+            ],
+            E::Axis { horizontal, value, .. } => {
+                // 15 logical pixels a step, WHEEL_DELTA (120) a notch, up positive.
+                let notches = -value * 120 / 15;
+                vec![FromCompositor::Axis {
+                    surface,
+                    vertical: if horizontal { 0 } else { notches },
+                    horizontal: if horizontal { notches } else { 0 },
+                    time,
+                }]
+            }
+            E::Key { key, pressed, .. } => vec![FromCompositor::Key { code: key as u16, pressed, time }],
+            E::Leave(_) => vec![FromCompositor::Leave { surface }],
+            E::Close(_) => vec![FromCompositor::Request { surface, request: poly_win32k::link::Request::Close }],
+            E::Resize { .. } => Vec::new(),
+        };
+        let mut out = Vec::new();
+        for r in &records {
+            r.encode(&mut out);
+        }
+        if !out.is_empty()
+            && let Err(e) = os::write(self.fd, &out)
+        {
+            eprintln!("poly-compositor: {DEVICE}: {e}");
+        }
+        true
+    }
+
+    /// Read what win32k sent and apply it to the scene, adopting shown
+    /// Windows windows into the server's focus and input as internal
+    /// windows.
+    pub fn pump_server(&mut self, server: &mut poly_wayland::server::Server) {
+        let before: Vec<WindowId> = self.surfaces.surfaces.values().map(|s| s.window).collect();
+        self.pump(server.scene_mut());
+        let after: Vec<(WindowId, bool)> = self
+            .surfaces
+            .surfaces
+            .values()
+            .map(|s| (s.window, server.scene().window(s.window).is_some_and(|w| w.is_visible())))
+            .collect();
+        for &(w, visible) in &after {
+            if visible && !server.is_internal(w) {
+                server.adopt_internal_window(w, "windows", true);
+            }
+        }
+        for w in before {
+            if !after.iter().any(|a| a.0 == w) {
+                server.release_internal_window(w);
+            }
         }
     }
 
-    /// A keyboard close of `window`: sent to win32k if it is a Windows
-    /// surface (any other window was closed by the server already).
-    pub fn close_window(&mut self, window: WindowId) -> bool {
-        if let Some(surface) = self.surfaces.surface_of(window) {
-            println!("poly-compositor: close requested for Windows surface {surface}");
-            self.send(FromCompositor::Request { surface, request: Request::Close });
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Tell win32k where the compositor moved a Windows surface. This keeps
-    /// the app's GetWindowRect and later input in step with Poly's frame.
+    /// Tell win32k where the compositor moved or resized a Windows
+    /// surface. This keeps the app's GetWindowRect and later input in
+    /// step with Poly's frame. (Closing needs no path of its own: the
+    /// server reports a close of an adopted window as an internal event,
+    /// which [`Link::input`] forwards.)
     pub fn sync_geometry(&mut self, scene: &Scene) {
         for record in self.surfaces.sync_geometry(scene) {
             self.send(record);
@@ -478,45 +519,6 @@ mod tests {
         assert_eq!(i32::from(FrameMetrics::POLY.border), BORDER);
         assert_eq!(FrameMetrics::BUTTON, poly_wayland::compose::CLOSE_SIZE);
         assert_eq!(FrameMetrics::GAP, poly_wayland::compose::BUTTON_GAP);
-    }
-
-    #[test]
-    fn a_close_click_on_a_windows_frame_maps_to_its_surface() {
-        use poly_wayland::compose::{BORDER, CLOSE_SIZE, TITLE_HEIGHT};
-        let mut scene = Scene::new(800, 600, 1);
-        let mut ws = WindowsSurfaces::new();
-        let mut d = Desktop::new();
-        let mut mem = Memory(BTreeMap::new());
-        let hello =
-            FromCompositor::Hello { version: VERSION, width: 800, height: 600, scale: 1, frame: FrameMetrics::POLY };
-        d.receive(&encode_all(&[hello]));
-        pump(&mut d, &mut ws, &mut scene, &mem);
-
-        // A window wide enough for Poly's title bar to carry its buttons.
-        let s = d.create(SurfaceKind::TopLevel, 0, true);
-        d.set_geometry(s, 200, 150, 160, 80);
-        d.set_title(s, "Fill");
-        let b = d.attach_buffer(s, 160, 80, 640, PixelFormat::Xrgb8888).unwrap();
-        mem.0.insert(b, vec![0u8; 640 * 80]);
-        pump(&mut d, &mut ws, &mut scene, &mem);
-        d.damage(s, 0, 0, 160, 80);
-        d.set_visible(s, true);
-        pump(&mut d, &mut ws, &mut scene, &mem);
-        let w = ws.window(s).unwrap();
-
-        let frame = scene.frame_rect(w).unwrap();
-        let margin = (TITLE_HEIGHT - CLOSE_SIZE) / 2;
-        let close =
-            (frame.x + frame.width - BORDER - margin - CLOSE_SIZE / 2, frame.y + BORDER + margin + CLOSE_SIZE / 2);
-        assert_eq!(ws.close_at(&scene, close.0, close.1), Some(s));
-        assert_eq!(ws.close_at(&scene, 5, 5), None, "the bare desktop is not a window");
-        assert_eq!(ws.close_at(&scene, 250, 200), None, "the client area is not the close button");
-
-        // After a drag the button is where the frame is now, not where the
-        // program put the window.
-        scene.set_position(w, 300, 250);
-        assert_eq!(ws.close_at(&scene, close.0, close.1), None);
-        assert_eq!(ws.close_at(&scene, close.0 + 100, close.1 + 100), Some(s));
     }
 
     #[test]
