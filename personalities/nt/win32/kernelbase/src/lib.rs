@@ -23,8 +23,10 @@ mod base;
 mod console;
 mod except;
 mod file;
+mod fileex;
 mod handles;
 mod legacy;
+mod locale;
 mod mapping;
 mod memory;
 mod misc;
@@ -37,8 +39,10 @@ mod registry;
 mod security;
 mod spawn;
 mod sync;
+mod sysex;
 mod system;
 mod tls;
+mod waits;
 
 #[global_allocator]
 static ALLOC: base::ProcessHeap = base::ProcessHeap;
@@ -63,7 +67,10 @@ pub extern "system" fn kernelbase_main(_module: *mut u8, reason: u32, _reserved:
             tls::thread_attach();
         }
         DLL_THREAD_ATTACH => tls::thread_attach(),
-        DLL_THREAD_DETACH => tls::thread_detach(),
+        DLL_THREAD_DETACH => {
+            waits::thread_detach();
+            tls::thread_detach();
+        }
         _ => {}
     }
     base::TRUE

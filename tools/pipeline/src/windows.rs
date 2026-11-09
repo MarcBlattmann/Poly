@@ -36,12 +36,25 @@ pub const CORPUS_DIR: &str = "tests/windows";
 pub const SUPPORT_CRATE: &str = "tests/windows/support";
 pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// The only DLLs a test program may import from (by name): the native
-/// API, `kernel32`, and the GUI's `user32` and `gdi32` (Phase 7's window,
+/// API, `kernel32`, the GUI's `user32` and `gdi32` (Phase 7's window,
 /// message and painting entries), `dwmapi` (the window manager's frame and
-/// attribute calls), `imm32` (input method contexts) and `shcore` (per
-/// monitor DPI).
-pub const ALLOWED_DLLS: &[&str] =
-    &["ntdll.dll", "kernel32.dll", "user32.dll", "gdi32.dll", "dwmapi.dll", "imm32.dll", "shcore.dll"];
+/// attribute calls), `imm32` (input method contexts), `shcore` (per monitor
+/// DPI), `dwrite` (DirectWrite's entries), `advapi32` (the security model:
+/// tokens, SIDs, ACLs, security descriptors, account lookup), `userenv`
+/// (AppContainer SIDs) and `version` (version resources; Chrome's stage-9 probe).
+pub const ALLOWED_DLLS: &[&str] = &[
+    "ntdll.dll",
+    "kernel32.dll",
+    "user32.dll",
+    "gdi32.dll",
+    "dwmapi.dll",
+    "imm32.dll",
+    "shcore.dll",
+    "dwrite.dll",
+    "advapi32.dll",
+    "userenv.dll",
+    "version.dll",
+];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
 
@@ -804,13 +817,56 @@ pub fn parse_poly_serial(name: &str, log: &str, exe_sha256: &str, timed_out: boo
     Ok(r)
 }
 
+/// The fonts Poly keeps in `C:\Windows\Fonts` as initramfs entries: the
+/// DejaVu fonts of `$POLY_FONT_DIR` or `target/fonts/dejavu-*`
+/// (`cargo xtask fonts fetch`), none when they are not there.
+fn system_fonts() -> Vec<(String, Vec<u8>)> {
+    let dir = std::env::var_os("POLY_FONT_DIR").map(PathBuf::from).or_else(|| {
+        let fonts = std::fs::read_dir("target/fonts").ok()?;
+        let mut dirs: Vec<PathBuf> = fonts
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("dejavu-")))
+            .collect();
+        dirs.sort();
+        dirs.pop()
+    });
+    let Some(dir) = dir else { return Vec::new() };
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(&dir) else { return out };
+    let mut names: Vec<_> =
+        rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "ttf")).collect();
+    names.sort();
+    for p in names {
+        if let (Some(n), Ok(data)) = (p.file_name(), std::fs::read(&p)) {
+            out.push((format!("nt/c/Windows/Fonts/{}", n.to_string_lossy()), data));
+        }
+    }
+    out
+}
+
 /// Boot each built test on Poly; `work` keeps the initramfs images and
 /// serial logs. Tests run `jobs` at a time.
 pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &Path, jobs: usize) -> Result<RunFile> {
     let started = util::now_utc();
+    // A DirectWrite test finds the system fonts in `C:\Windows\Fonts` (ADR
+    // 0170): the DejaVu fonts. Without them the system collection is empty
+    // and most of those tests fail in confusing ways, so refuse to run.
+    let fonts = if manifest.tests.iter().any(|t| t.imports.contains_key("dwrite.dll")) {
+        let f = system_fonts();
+        if f.is_empty() {
+            return Err("tests that import dwrite.dll need the system fonts in C:\\Windows\\Fonts, but no DejaVu fonts were found: \
+                run `cargo xtask fonts fetch` (target/fonts/dejavu-*) or set POLY_FONT_DIR to a directory with them"
+                .into());
+        }
+        f
+    } else {
+        Vec::new()
+    };
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
-        let image = poly::initramfs(&bytes)?;
+        let fonts = if t.imports.contains_key("dwrite.dll") { fonts.clone() } else { Vec::new() };
+        let image = poly::initramfs_with(&bytes, &fonts)?;
         let args = format!("{}{}", poly_kernel_args(), session_kernel_args(t.session.as_deref()));
         let (done, log, _) = target.boot_log(&t.name, &image, work, &args)?;
         let timed_out = done.exit == crate::trace::Exit::Timeout;
@@ -1245,11 +1301,17 @@ mod tests {
         // GUI tests (Phase 7) import user32 and gdi32, still as console programs.
         let gui_dlls = image(&[("USER32.dll", &["CreateWindowExW"]), ("gdi32.dll", &["BitBlt"])], 3);
         assert_eq!(check_image(&gui_dlls).unwrap()["user32.dll"], ["CreateWindowExW"]);
+        // DirectWrite tests import dwrite.dll.
+        let dw = image(&[("DWRITE.dll", &["DWriteCreateFactory"])], 3);
+        assert_eq!(check_image(&dw).unwrap()["dwrite.dll"], ["DWriteCreateFactory"]);
         let more = image(
             &[("dwmapi.dll", &["DwmFlush"]), ("IMM32.dll", &["ImmGetContext"]), ("SHCORE.dll", &["GetDpiForMonitor"])],
             3,
         );
         assert_eq!(check_image(&more).unwrap()["dwmapi.dll"], ["DwmFlush"]);
+        // The security model's tests import advapi32.
+        let security = image(&[("ADVAPI32.dll", &["OpenProcessToken"])], 3);
+        assert_eq!(check_image(&security).unwrap()["advapi32.dll"], ["OpenProcessToken"]);
         let other = image(&[("shell32.dll", &["SHGetFolderPathW"])], 3);
         assert!(check_image(&other).unwrap_err().contains("shell32.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);

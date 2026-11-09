@@ -143,6 +143,38 @@ pub unsafe extern "system" fn lstrcmpiW(a: *const u16, b: *const u16) -> i32 {
     unsafe { poly_kernelbase::nls::lstrcmp(wide(a), wide(b), true) }
 }
 
+/// `lstrcmpA`, `lstrcmpiA`: the strings in the ANSI code page, compared as
+/// UTF-16 (`lstrcmpW` / `lstrcmpiW`); a null string is less than any other.
+unsafe fn ansi_cmp(a: *const u8, b: *const u8, ignore_case: bool) -> i32 {
+    // SAFETY: the caller's NUL-terminated strings, or null.
+    let text = |p: *const u8| {
+        (!p.is_null()).then(|| {
+            poly_kernelbase::text::from_ansi(unsafe {
+                core::slice::from_raw_parts(p, poly_kernelbase::text::strlen(p))
+            })
+        })
+    };
+    let (a, b) = (text(a), text(b));
+    match (a, b) {
+        (None, None) => 0,
+        (None, Some(_)) => -1,
+        (Some(_), None) => 1,
+        (Some(a), Some(b)) => poly_kernelbase::nls::lstrcmp(&a, &b, ignore_case),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrcmpA(a: *const u8, b: *const u8) -> i32 {
+    // SAFETY: the caller's strings.
+    unsafe { ansi_cmp(a, b, false) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrcmpiA(a: *const u8, b: *const u8) -> i32 {
+    // SAFETY: the caller's strings.
+    unsafe { ansi_cmp(a, b, true) }
+}
+
 #[link(name = "kernelbase", kind = "raw-dylib")]
 unsafe extern "system" {
     fn GetStartupInfoW(info: *mut u8);

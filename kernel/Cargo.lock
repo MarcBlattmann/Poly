@@ -88,6 +88,10 @@ name = "poly-input"
 version = "0.0.1"
 
 [[package]]
+name = "poly-iphlp"
+version = "0.0.1"
+
+[[package]]
 name = "poly-irq"
 version = "0.0.1"
 dependencies = [
@@ -148,6 +152,16 @@ dependencies = [
  "poly-virtio-sound",
  "poly-vm",
  "poly-win32k",
+]
+
+[[package]]
+name = "poly-kernelbase"
+version = "0.0.1"
+dependencies = [
+ "poly-nls",
+ "poly-ntobj",
+ "poly-pe",
+ "poly-rtl",
 ]
 
 [[package]]
@@ -222,6 +236,8 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-console",
+ "poly-iphlp",
+ "poly-kernelbase",
  "poly-net",
  "poly-ntobj",
  "poly-pe",

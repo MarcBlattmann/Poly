@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_validacl_aces",
+      "exe_sha256": "9dde90119c613c46ec1ad2eabff52535132acaff59c84118526c4e762b9dd7c8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dHdvIEFDRXMsIGNvdW50IDI6IDEKY291bnQgMDogMQpjb3VudCAxOiAxCmNvdW50IDM6IDAKY291bnQgNDogMApjb3VudCA1OiAwCmNvdW50IDEwMDogMApmaXJzdCBBQ0Ugc2l6ZSAwOiAwCmZpcnN0IEFDRSBzaXplIDE6IDAKZmlyc3QgQUNFIHNpemUgMzogMApmaXJzdCBBQ0Ugc2l6ZSA0OiAwCmZpcnN0IEFDRSBzaXplIDU6IDAKZmlyc3QgQUNFIHNpemUgNjogMApmaXJzdCBBQ0Ugc2l6ZSA4OiAwCmZpcnN0IEFDRSBzaXplIDE5OiAwCmZpcnN0IEFDRSBzaXplIDIwOiAxCmZpcnN0IEFDRSBzaXplIDIxOiAwCmZpcnN0IEFDRSBzaXplIDIyOiAwCmZpcnN0IEFDRSBzaXplIDI0OiAwCmZpcnN0IEFDRSBzaXplIDU2OiAwCmZpcnN0IEFDRSBzaXplIDU3OiAwCmZpcnN0IEFDRSBzaXplIDY1NTM1OiAwCnNlY29uZCBBQ0Ugc2l6ZSAwOiAwCnNlY29uZCBBQ0Ugc2l6ZSA0OiAwCnNlY29uZCBBQ0Ugc2l6ZSAxOTogMApzZWNvbmQgQUNFIHNpemUgMjA6IDEKc2Vjb25kIEFDRSBzaXplIDIxOiAwCnNlY29uZCBBQ0Ugc2l6ZSAzNjogMQpzZWNvbmQgQUNFIHNpemUgMzc6IDAKc2Vjb25kIEFDRSBzaXplIDY1NTM1OiAwCkFDTCByZXZpc2lvbiAyLCBmaXJzdCBBQ0Ugb2YgdGhhdCB0eXBlOiAweDA9MSAweDE9MSAweDI9MSAweDM9MSAweDQ9MCAweDU9MCAweDY9MCAweDc9MCAweDg9MCAweDk9MSAweGE9MSAweGI9MCAweGM9MCAweGQ9MSAweGU9MSAweGY9MCAweDEwPTAgMHgxMT0xIDB4MTI9MCAweDEzPTEgMHgxND0xIDB4MTU9MCAweDE2PTAgMHgxNz0xIDB4MjA9MSAweDdmPTEgMHhmZj0xIApBQ0wgcmV2aXNpb24gMywgZmlyc3QgQUNFIG9mIHRoYXQgdHlwZTogMHgwPTEgMHgxPTEgMHgyPTEgMHgzPTEgMHg0PTAgMHg1PTAgMHg2PTAgMHg3PTAgMHg4PTAgMHg5PTEgMHhhPTEgMHhiPTAgMHhjPTAgMHhkPTEgMHhlPTEgMHhmPTAgMHgxMD0wIDB4MTE9MSAweDEyPTAgMHgxMz0xIDB4MTQ9MSAweDE1PTAgMHgxNj0wIDB4MTc9MSAweDIwPTEgMHg3Zj0xIDB4ZmY9MSAKQUNMIHJldmlzaW9uIDQsIGZpcnN0IEFDRSBvZiB0aGF0IHR5cGU6IDB4MD0xIDB4MT0xIDB4Mj0xIDB4Mz0xIDB4ND0wIDB4NT0wIDB4Nj0wIDB4Nz0wIDB4OD0wIDB4OT0xIDB4YT0xIDB4Yj0wIDB4Yz0wIDB4ZD0xIDB4ZT0xIDB4Zj0wIDB4MTA9MCAweDExPTEgMHgxMj0wIDB4MTM9MSAweDE0PTEgMHgxNT0wIDB4MTY9MCAweDE3PTEgMHgyMD0xIDB4N2Y9MSAweGZmPTEgCmNvdW50IDEgYnV0IG5vIHJvb20gZm9yIGFuIEFDRTogMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "two ACEs, count 2: 1\ncount 0: 1\ncount 1: 1\ncount 3: 0\ncount 4: 0\ncount 5: 0\ncount 100: 0\nfirst ACE size 0: 0\nfirst ACE size 1: 0\nfirst ACE size 3: 0\nfirst ACE size 4: 0\nfirst ACE size 5: 0\nfirst ACE size 6: 0\nfirst ACE size 8: 0\nfirst ACE size 19: 0\nfirst ACE size 20: 1\nfirst ACE size 21: 0\nfirst ACE size 22: 0\nfirst ACE size 24: 0\nfirst ACE size 56: 0\nfirst ACE size 57: 0\nfirst ACE size 65535: 0\nsecond ACE size 0: 0\nsecond ACE size 4: 0\nsecond ACE size 19: 0\nsecond ACE size 20: 1\nsecond ACE size 21: 0\nsecond ACE size 36: 1\nsecond ACE size 37: 0\nsecond ACE size 65535: 0\nACL revision 2, first ACE of that type: 0x0=1 0x1=1 0x2=1 0x3=1 0x4=0 0x5=0 0x6=0 0x7=0 0x8=0 0x9=1 0xa=1 0xb=0 0xc=0 0xd=1 0xe=1 0xf=0 0x10=0 0x11=1 0x12=0 0x13=1 0x14=1 0x15=0 0x16=0 0x17=1 0x20=1 0x7f=1 0xff=1 \nACL revision 3, first ACE of that type: 0x0=1 0x1=1 0x2=1 0x3=1 0x4=0 0x5=0 0x6=0 0x7=0 0x8=0 0x9=1 0xa=1 0xb=0 0xc=0 0xd=1 0xe=1 0xf=0 0x10=0 0x11=1 0x12=0 0x13=1 0x14=1 0x15=0 0x16=0 0x17=1 0x20=1 0x7f=1 0xff=1 \nACL revision 4, first ACE of that type: 0x0=1 0x1=1 0x2=1 0x3=1 0x4=0 0x5=0 0x6=0 0x7=0 0x8=0 0x9=1 0xa=1 0xb=0 0xc=0 0xd=1 0xe=1 0xf=0 0x10=0 0x11=1 0x12=0 0x13=1 0x14=1 0x15=0 0x16=0 0x17=1 0x20=1 0x7f=1 0xff=1 \ncount 1 but no room for an ACE: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "rtl_validacl_built",
+      "exe_sha256": "3c22c258f702d7d008c3104207c5fce4e5229194b413e9a6486c95f41230ebb8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW1wdHk6IDEKYWZ0ZXIgYWxsb3dlZCBBQ0U6IHN0YXR1cz0weDAwMDAwMDAwIHZhbGlkPTEKYWZ0ZXIgZGVuaWVkIEFDRSAoQUNMIG5vdyBmdWxsKTogc3RhdHVzPTB4MDAwMDAwMDAgdmFsaWQ9MQpzaXplIGZpZWxkIDUyCnNpemUgZmllbGQgY3V0IGJ5IDQgKHNlY29uZCBBQ0UgY3Jvc3NlcyB0aGUgZW5kKTogMApzaXplIGZpZWxkIGN1dCBieSAyNCAoc2Vjb25kIEFDRSBvdXRzaWRlLCBjb3VudCAyKTogMApzaXplIGZpZWxkIGxhcmdlciB0aGFuIHRoZSBBQ0VzOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "empty: 1\nafter allowed ACE: status=0x00000000 valid=1\nafter denied ACE (ACL now full): status=0x00000000 valid=1\nsize field 52\nsize field cut by 4 (second ACE crosses the end): 0\nsize field cut by 24 (second ACE outside, count 2): 0\nsize field larger than the ACEs: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    }
+  ]
+}

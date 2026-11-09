@@ -35,11 +35,13 @@
 //!                       (default: the self-test's verdict), save the screen to <file>
 //!                       (default target/poly-screen.png; .ppm for PPM) and quit;
 //!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
-//!   desktop [--release] [--test-apps] [--fresh-state] [--memory=SIZE] [--cpus=N] [kernel args...]
+//!   desktop [--release] [--test-apps] [--chromium [--fresh-disk]] [--fresh-state] [--memory=SIZE] [--cpus=N] [kernel args...]
 //!                       boot straight into Poly's desktop: the Wayland compositor and shell on a
 //!                       virtio GPU through DRM/KMS, a virtio keyboard and tablet (desktop.rs,
 //!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop; the settings
-//!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs
+//!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs;
+//!                       --chromium: from Chromium's root disk, with Poly's apps and Chromium the
+//!                       default browser (downloads its packages the first time, ADR 0147)
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   aarch64 build|run|test [--release] [kernel args...]
 //!                       the aarch64 boot stub (kernel/src/arch/aarch64, ADR 0154) on QEMU's
@@ -75,6 +77,11 @@
 //!                       arm64 test programs (tests/a64) and generated one-instruction blocks, run
 //!                       by both and compared; Linux with qemu-user, clang and lld only (elsewhere
 //!                       it says so and succeeds); not part of `ci`
+//!   macos fetch-chrome [x64|arm64]
+//!                       download the pinned Chrome for Testing for macOS into the cache (macimports.rs)
+//!   macos imports <app|zip|file|chrome-x64|chrome-arm64>... [--report <file.md>]
+//!                       what a macOS app's Mach-O files link and import, by name, against the
+//!                       SDK framework map in coverage/macos (ADR 0157; docs/macos/chrome-mac-imports.md)
 //!   chromium lock|fetch|root [--reference]|disk
 //!                       Chromium's root disk from pinned Debian packages (chromium.rs):
 //!                       write the lock, download and check the packages, unpack them
@@ -110,6 +117,8 @@ mod aarch64;
 mod accel;
 mod asmlabels;
 mod busybox;
+mod chrometrace;
+mod chromewin;
 mod chromium;
 mod compositor;
 mod compositor_kms;
@@ -128,6 +137,7 @@ mod initramfs;
 mod input;
 mod ktest;
 mod libsearch;
+mod macimports;
 mod mesa;
 mod native;
 mod net;
@@ -229,7 +239,7 @@ fn main() -> ExitCode {
 }
 
 /// The commands [`dispatch`] runs (besides `start` and `pipeline`).
-const COMMANDS: [&str; 27] = [
+const COMMANDS: &[&str] = &[
     "build",
     "aarch64",
     "prebuild",
@@ -257,6 +267,8 @@ const COMMANDS: [&str; 27] = [
     "toolkits",
     "chromium",
     "a64-diff",
+    "chrome-win",
+    "macos",
 ];
 
 /// Run `cargo xtask <args>`: the same functions for the command line and
@@ -292,6 +304,8 @@ fn dispatch(args: &[String]) -> Result {
         Some("toolkits") => toolkits::command(rest),
         Some("chromium") => chromium::command(rest),
         Some("a64-diff") => a64_diff(rest),
+        Some("chrome-win") => chromewin::command(rest),
+        Some("macos") => macimports::command(rest),
         other => Err(format!("no command {other:?}")),
     }
 }
@@ -1582,7 +1596,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 39] = [
+const BOOT_GROUPS: &[BootGroup] = &[
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1611,6 +1625,9 @@ const BOOT_GROUPS: [BootGroup; 39] = [
     // runs in two jobs (shards `sevenzip` and `sevenzip-b`).
     ("7zip", sevenzip::boot_test_a),
     ("7zip-b", sevenzip::boot_test_b),
+    // Chrome for Testing's headless --dump-dom on the NT personality, skipped
+    // without the cached package (chromewin.rs, ADR 0155).
+    ("chrome-win", chromewin::boot_test),
     // The 7-Zip scenario under the Windows API tracer, each step's trace
     // compared with the committed Windows reference, required (ADR 0114:
     // TRACE_REQUIRED; sevenzip_trace.rs, ADR 0110).
@@ -1648,6 +1665,10 @@ const BOOT_GROUPS: [BootGroup; 39] = [
     // its sandbox; skipped until its packages are fetched (chromium.rs,
     // docs/chromium-linux-gaps.md).
     ("chromium", chromium::boot_test),
+    // The desktop from Chromium's disk, `cargo xtask desktop --chromium`: Poly's
+    // apps on it, the settings disk, Chromium the default browser; skipped
+    // until the packages are fetched (chromium.rs, ADR 0147).
+    ("chromium-desktop", chromium::desktop_boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1708,7 +1729,20 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     // About 75 s: Linux programs and the root disk.
-    ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "toolkits", "chromium"]),
+    (
+        "userland",
+        &[
+            "programs",
+            "native",
+            "dynamic",
+            "busybox",
+            "rootdisk",
+            "chrome-win",
+            "toolkits",
+            "chromium",
+            "chromium-desktop",
+        ],
+    ),
     // About 60 s each: 7-Zip's command line on the NT personality, one boot per
     // step, every second step in each.
     ("sevenzip", &["7zip"]),
@@ -1757,7 +1791,7 @@ fn select_boot_groups(selectors: &[String]) -> Result<Vec<BootGroup>> {
         let names: Vec<_> = BOOT_GROUPS.iter().map(|(n, _)| *n).collect();
         return Err(format!("no boot test group {bad:?}; the groups are {}", names.join(", ")));
     }
-    Ok(BOOT_GROUPS.into_iter().filter(|(n, _)| selectors.iter().any(|sel| matches(sel, n))).collect())
+    Ok(BOOT_GROUPS.iter().copied().filter(|(n, _)| selectors.iter().any(|sel| matches(sel, n))).collect())
 }
 
 /// Build the kernel and run the boot test groups `selectors` name
@@ -1831,7 +1865,7 @@ fn boot_tests_command(args: &[String]) -> Result {
         match a.as_str() {
             "--list" => {
                 for (name, _) in BOOT_GROUPS {
-                    let shard = CI_BOOT_SHARDS.iter().find(|(_, g)| g.contains(&name)).map_or("-", |(s, _)| s);
+                    let shard = CI_BOOT_SHARDS.iter().find(|(_, g)| g.contains(name)).map_or("-", |(s, _)| s);
                     println!("{name:<18} CI shard {shard}");
                 }
                 return Ok(());
@@ -2042,9 +2076,13 @@ fn lint() -> Result {
             [
                 "tools/wintrace/polytrace/src/lib.rs",
                 "tools/wintrace/polytrace/build.rs",
+                "tools/wintrace/polytrace-sync/src/lib.rs",
+                "tools/wintrace/polytrace-sync/build.rs",
+                "tools/wintrace/polytrace-sync/src/dump.rs",
                 "tools/wintrace/polytrace-agg/src/lib.rs",
                 "tools/wintrace/polytrace-agg/build.rs",
                 "tools/wintrace/proxy/common.rs",
+                "tools/wintrace/proxy/common_agg.rs",
             ]
             .map(|f| root().join(f)),
         ),
@@ -2361,7 +2399,7 @@ mod tests {
     #[test]
     fn every_boot_group_is_in_one_ci_shard() {
         for (name, _) in BOOT_GROUPS {
-            let n = CI_BOOT_SHARDS.iter().filter(|(_, g)| g.contains(&name)).count();
+            let n = CI_BOOT_SHARDS.iter().filter(|(_, g)| g.contains(name)).count();
             assert_eq!(n, 1, "boot test group {name} is in {n} CI shards");
         }
         for (shard, groups) in CI_BOOT_SHARDS {

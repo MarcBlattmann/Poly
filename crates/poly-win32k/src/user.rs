@@ -227,6 +227,20 @@ pub trait Env {
     /// A GDI region of `rects`, freed with [`Env::delete_object`].
     fn make_region(&self, rects: &[Rect]) -> u64;
     fn delete_object(&self, h: u64);
+    /// Make `cursor` the calling thread's cursor shape (what DefWindowProc's
+    /// `WM_SETCURSOR` does with the class cursor).
+    fn set_cursor(&self, _cursor: u64) {}
+    /// The rectangles of GDI region `rgn` (`None`: not a region: deleted, or
+    /// another kind of object).
+    fn region_rects(&self, _rgn: u64) -> Option<Vec<Rect>> {
+        None
+    }
+    /// Replace GDI region `rgn`'s contents with `rects`: its kind
+    /// (NULLREGION 1, SIMPLEREGION 2, COMPLEXREGION 3), 0 when `rgn` is not
+    /// a region.
+    fn set_region_rects(&self, _rgn: u64, _rects: &[Rect]) -> i32 {
+        0
+    }
 }
 
 /// `MAKELPARAM(lo, hi)`.
@@ -298,6 +312,25 @@ pub fn map_points(from: MapOrigin, to: MapOrigin, points: &mut [(i32, i32)]) -> 
         points[1].0 = left;
     }
     map_offset(from, to)
+}
+
+/// `ClientToScreen` (`to_screen`) and `ScreenToClient` of one point of
+/// window `hwnd` (ClientToScreen.yaml, ScreenToClient.yaml): the client
+/// origin's screen position added or taken off; for a `WS_EX_LAYOUTRTL`
+/// window x runs leftwards from the client area's right edge. `None` for
+/// NULL or a made-up handle (ERROR_INVALID_WINDOW_HANDLE).
+pub fn convert_point<E: Env + ?Sized>(env: &E, hwnd: u64, point: (i32, i32), to_screen: bool) -> Option<(i32, i32)> {
+    let Some(i) = (hwnd != 0).then(|| info(env, hwnd)).flatten() else {
+        env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return None;
+    };
+    let rtl = i.ex_style & metrics::WS_EX_LAYOUTRTL != 0;
+    let own = MapOrigin { x: if rtl { i.client.right } else { i.client.left }, y: i.client.top, rtl };
+    Some(if to_screen {
+        map_point(own, MapOrigin::default(), point)
+    } else {
+        map_point(MapOrigin::default(), own, point)
+    })
 }
 
 fn ptr<T>(v: &mut T) -> u64 {
@@ -507,6 +540,8 @@ fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
         set_window_pos(env, h, 0, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE);
         focus::DESTROYING.store(0, core::sync::atomic::Ordering::Relaxed);
     }
+    // A descendant of the hidden window that holds the capture loses it too.
+    focus::release_capture_below(env, hwnd);
     if let Reply::Relatives { owned, .. } = env.call(Request::Relatives { hwnd }) {
         for o in owned {
             // The thread's hidden IME window outlives its first window.
@@ -577,18 +612,18 @@ pub fn show_window<E: Env + ?Sized>(env: &E, hwnd: u64, cmd: i32) -> bool {
             if screen(env).interactive {
                 minimize_interactive(env, &i, cmd);
             } else {
-                minimize(env, &i);
+                minimize(env, &i, cmd);
             }
         }
         SW_SHOWMAXIMIZED => maximize(env, &i),
         _ => {
             if (i.minimized || i.maximized) && matches!(cmd, SW_SHOWNORMAL | SW_RESTORE | SW_SHOWDEFAULT) {
-                restore(env, &i);
+                restore(env, &i, true);
             } else if i.minimized && cmd == SW_SHOWNOACTIVATE {
                 // "Displays a window in its most recent size and position"
                 // (Learn): a minimized window is restored (observed:
                 // WM_WINDOWPOSCHANGING to the normal rectangle, 0x8120).
-                restore(env, &i);
+                restore(env, &i, false);
             } else if !was {
                 show(env, &i, ShowKind::Command(cmd));
             }
@@ -699,10 +734,11 @@ fn show<E: Env + ?Sized>(env: &E, i: &WinInfo, kind: ShowKind) {
 fn hide<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     let h = u64::from(i.hwnd);
     send(env, h, WM_SHOWWINDOW, 0, 0);
-    // Hiding the active window of an owner (interactive): the system
-    // activates the owner inside the call, so the call is not
-    // SWP_NOACTIVATE / SWP_NOZORDER (GetActiveWindow.yaml gaw_owner: 0x83).
-    let hands_over = screen(env).interactive && i.owner != 0 && focus::input(env).active == i.hwnd;
+    // Hiding the active window (interactive): the system activates the next
+    // window inside the call (its owner, else a window of another process),
+    // so the call is not SWP_NOACTIVATE / SWP_NOZORDER (GetActiveWindow.yaml
+    // gaw_owner: 0x83 for an owned window, hide_active: 0x83 for any).
+    let hands_over = screen(env).interactive && focus::input(env).active == i.hwnd;
     let flags = if hands_over {
         SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE
     } else {
@@ -722,7 +758,14 @@ fn set_state<E: Env + ?Sized>(env: &E, hwnd: u32, minimized: bool, maximized: bo
     });
 }
 
-fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
+/// A private bit of `swp`'s `extra`: the call raises the window (its
+/// WINDOWPOS has no SWP_NOZORDER) although nothing moves in the z order.
+const Z_RAISED: u32 = 0x4000_0000;
+/// Another: the call shows a window that was hidden (its WS_VISIBLE was set
+/// before the call; SWP_SHOWWINDOW stays in the reported flags).
+const WAS_HIDDEN: u32 = 0x0800_0000;
+
+fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
     if i.minimized {
         return;
     }
@@ -730,7 +773,23 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     let normal = if i.maximized { None } else { Some(i.window_rel) };
     set_state(env, i.hwnd, true, false, normal);
     let (w, h) = MINIMIZED;
-    swp(env, i.hwnd, HWND_TOP, 0, sh - h, w, h, SWP_STATECHANGED | 0x100 | SWP_SHOWWINDOW | SWP_FRAMECHANGED, 0, false);
+    // SW_MINIMIZE and SW_SHOWMINIMIZED activate the next window and raise
+    // this one (WM_WINDOWPOSCHANGED 0x8120 for a shown window); the
+    // NOACTIVE show leaves the z order alone (0x8164; ShowWindow.yaml `minimize`).
+    let raised =
+        if cmd == SW_SHOWMINNOACTIVE { 0 } else { Z_RAISED } | if i.style & WS_VISIBLE == 0 { WAS_HIDDEN } else { 0 };
+    swp(
+        env,
+        i.hwnd,
+        HWND_TOP,
+        0,
+        sh - h,
+        w,
+        h,
+        SWP_STATECHANGED | 0x100 | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
+        raised,
+        false,
+    );
 }
 
 /// Minimizing on the interactive desktop (GetFocus.yaml `minimize`,
@@ -763,7 +822,10 @@ fn minimize_interactive<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
     let (w, h) = MINIMIZED;
     let flags =
         SWP_STATECHANGED | 0x100 | SWP_SHOWWINDOW | SWP_FRAMECHANGED | if activate { 0 } else { SWP_NOACTIVATE };
-    let extra = if was_active && !activate { 0 } else { 0x1000_0000 };
+    // The "shown" bit only when the minimizing shows a hidden window
+    // (GetFocus.yaml `minimize`, GetActiveWindow.yaml `minimize_inactive`:
+    // 0x8130 for a visible one; gfw_show: 0x10008170 for a hidden one).
+    let extra = if i.style & WS_VISIBLE != 0 || (was_active && !activate) { 0 } else { 0x1000_0000 };
     // A window with a minimize box goes to the bottom-left corner like
     // session 0's (ClientToScreen.yaml cts_states: 0,1052 on 1080 rows);
     // one without (a caption-only popup) is parked at -32000,-32000
@@ -799,14 +861,27 @@ fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     swp(env, i.hwnd, HWND_TOP, pos.0, pos.1, size.0, size.1, SWP_STATECHANGED | SWP_FRAMECHANGED, 0, false);
 }
 
-fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo) {
+/// SW_RESTORE and friends. On the interactive desktop restoring a window
+/// that was minimized or maximized activates it inside the call
+/// (`activate`; GetFocus.yaml `restore`: WM_WINDOWPOSCHANGING 0x8120, the
+/// activation with its own WM_WINDOWPOSCHANGING 0x3, WM_WINDOWPOSCHANGED
+/// 0x8120, then WM_ACTIVATE once more).
+fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo, activate: bool) {
     let r = normal_rect(env, i);
     set_state(env, i.hwnd, false, false, None);
     // Out of the icon its pixels are not kept (SWP_NOCOPYBITS, as when it
     // was minimized; observed 0x8120).
     let nocopy = if i.minimized { 0x100 } else { 0 };
     let flags = SWP_STATECHANGED | nocopy | SWP_FRAMECHANGED;
-    swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), flags, 0, false);
+    let activating = activate
+        && screen(env).interactive
+        && i.style & WS_CHILD == 0
+        && i.ex_style & WS_EX_NOACTIVATE == 0
+        && focus::input(env).active != i.hwnd;
+    swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), flags, 0, activating);
+    if activating && focus::input(env).active == i.hwnd {
+        send(env, u64::from(i.hwnd), focus::WM_ACTIVATE, focus::WA_ACTIVE, 0);
+    }
 }
 
 fn normal_rect<E: Env + ?Sized>(env: &E, i: &WinInfo) -> Rect {
@@ -866,7 +941,19 @@ fn swp<E: Env + ?Sized>(
     if flags & SWP_NOSENDCHANGING == 0 {
         send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
+    let z_raised = extra & Z_RAISED != 0;
+    let was_hidden = extra & WAS_HIDDEN != 0;
+    let extra = extra & !(Z_RAISED | WAS_HIDDEN);
     let interactive = screen(env).interactive;
+    // Whether the window is raised: asked before the activation below brings
+    // it to the top, which is a z-order change all the same (GetActiveWindow.yaml
+    // `show_again`: no SWP_NOZORDER once another process's window was raised
+    // above it meanwhile).
+    let raised_by_call = flags & SWP_NOZORDER == 0
+        && matches!(
+            env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
+            Reply::Bool { value: true }
+        );
     if flags & SWP_HIDEWINDOW != 0
         && flags & SWP_NOACTIVATE == 0
         && interactive
@@ -926,12 +1013,26 @@ fn swp<E: Env + ?Sized>(
     // A minimizing show of a hidden window enters the z order: it changed
     // (GetForegroundWindow.yaml gfw_show: no SWP_NOZORDER in the result).
     let zchanged = f & SWP_NOZORDER == 0
-        && (matches!(
-            env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
-            Reply::Bool { value: true }
-        ) || (show && interactive && !activate && f & SWP_STATECHANGED != 0)
+        && (raised_by_call
+            || z_raised
+            || matches!(
+                env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
+                Reply::Bool { value: true }
+            )
+            || (interactive && !activate && f & SWP_STATECHANGED != 0 && (show || i.minimized))
             || (show && force_z));
     let hide = f & SWP_HIDEWINDOW != 0 && styled_visible;
+    // Hiding the active window with no owner to take the activation: it
+    // goes to a window of another process, raised above the hidden one
+    // (GetActiveWindow.yaml hide_active: WM_WINDOWPOSCHANGED 0x20001883, no
+    // SWP_NOZORDER).
+    let activation_goes_away = hide
+        && interactive
+        && f & SWP_NOACTIVATE == 0
+        && focus::input(env).active == hwnd
+        && !(i.owner != 0
+            && info(env, u64::from(i.owner))
+                .is_some_and(|o| o.visible && o.style & WS_DISABLED == 0 && o.tid == env.tid()));
     let frame = f & SWP_FRAMECHANGED != 0;
     if !(moved || sized || zchanged || show || hide || frame) {
         return true;
@@ -943,9 +1044,10 @@ fn swp<E: Env + ?Sized>(
     if !sized {
         eff |= SWP_NOSIZE;
     }
-    if !zchanged {
+    if !zchanged && !activation_goes_away {
         eff |= SWP_NOZORDER;
     }
+    let extra = if activation_goes_away { extra | 0x2000_0000 } else { extra };
     let parent_visible =
         i.desktop || i.parent == 0 || info(env, u64::from(i.parent)).is_some_and(|p| p.visible || p.desktop);
     let vis_before = i.visible;
@@ -987,7 +1089,11 @@ fn swp<E: Env + ?Sized>(
     let client_moved = (new_client.left, new_client.top) != (old_client.left, old_client.top);
     let client_sized = (new_client.width(), new_client.height()) != (old_client.width(), old_client.height());
     let mut changed = eff | extra;
-    if interactive && f & SWP_SHOWWINDOW != 0 && vis_before {
+    // SWP_SHOWWINDOW is not reported for a window that is shown already
+    // (WS_VISIBLE; in session 0 nothing is truly visible, but the style
+    // counts: ShowWindow.yaml `minimize`, SW_MINIMIZE of a shown window
+    // reports 0x8120, SW_SHOWMINNOACTIVE of a hidden one 0x8164).
+    if f & SWP_SHOWWINDOW != 0 && ((styled_visible && !was_hidden) || (interactive && vis_before)) {
         changed &= !SWP_SHOWWINDOW;
     }
     if !client_sized {
@@ -1030,10 +1136,25 @@ fn swp<E: Env + ?Sized>(
         } else if frame && vis_before && vis_after && FRAME_REDRAW.swap(false, core::sync::atomic::Ordering::Relaxed) {
             paint::frame_redraw(env, hwnd);
         }
+        // A top-level window moved or sized wholly off the screen has
+        // nothing to paint: its update region goes (GetUpdateRect.yaml
+        // `off_screen`; InvalidateRect still invalidates it afterwards).
+        if interactive && vis_after && !child && (moved || sized) {
+            let d = screen(env);
+            let w = new_win;
+            if w.right <= 0 || w.bottom <= 0 || w.left >= d.width || w.top >= d.height {
+                paint::validate_all(env, hwnd);
+            }
+        }
     }
     let mut done = WindowPos { hwnd: h, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
     send(env, h, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
     if hide && vis_before && interactive {
+        // Destroying a window ends the capture of a window below it before
+        // the deactivation messages (SetCapture.yaml `destroy`).
+        if focus::DESTROYING.load(core::sync::atomic::Ordering::Relaxed) == hwnd {
+            focus::release_capture_below(env, hwnd);
+        }
         focus::after_hide(env, &i);
     }
     true
@@ -1156,6 +1277,18 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 if r != 0 {
                     return r;
                 }
+            }
+            // The window the cursor is over sets its class cursor for a
+            // client hit and returns FALSE; a window asked on behalf of a
+            // child changes nothing (SetCursor.yaml `class_cursor`,
+            // `child_without_cursor`). A class without a cursor keeps the
+            // shape (`kept`).
+            if w == hwnd
+                && l & 0xFFFF == input::HTCLIENT
+                && let Reply::Value { value } = env.call(Request::ClassLong { hwnd, index: -12 })
+                && value != 0
+            {
+                env.set_cursor(value);
             }
             0
         }

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e5f25a5644ea",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:18:06Z",
+  "tests": [
+    {
+      "name": "sid_init_authority",
+      "exe_sha256": "04301537b63b4e6cc3ae418d7b561da06eb56b22f191baa1e2f512e4fab58404",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YXV0aG9yaXR5IDAwMDAwMDAwMDAwMDogb2s9MSBieXRlcz0wMTAxMDAwMDAwMDAwMDAwMDcwMDAwMDAgdGV4dD1TLTEtMC03CmF1dGhvcml0eSAwMDAwMDAwMDAwMDE6IG9rPTEgYnl0ZXM9MDEwMTAwMDAwMDAwMDAwMTA3MDAwMDAwIHRleHQ9Uy0xLTEtNwphdXRob3JpdHkgMDAwMDAwMDAwMDA1OiBvaz0xIGJ5dGVzPTAxMDEwMDAwMDAwMDAwMDUwNzAwMDAwMCB0ZXh0PVMtMS01LTcKYXV0aG9yaXR5IDAwMDAwMDAwMDAxMDogb2s9MSBieXRlcz0wMTAxMDAwMDAwMDAwMDEwMDcwMDAwMDAgdGV4dD1TLTEtMTYtNwphdXRob3JpdHkgMDAwMDAwMDAwMTAwOiBvaz0xIGJ5dGVzPTAxMDEwMDAwMDAwMDAxMDAwNzAwMDAwMCB0ZXh0PVMtMS0yNTYtNwphdXRob3JpdHkgMDAwMDAwMDEwMDAwOiBvaz0xIGJ5dGVzPTAxMDEwMDAwMDAwMTAwMDAwNzAwMDAwMCB0ZXh0PVMtMS02NTUzNi03CmF1dGhvcml0eSAwMDAwMDEwMDAwMDA6IG9rPTEgYnl0ZXM9MDEwMTAwMDAwMTAwMDAwMDA3MDAwMDAwIHRleHQ9Uy0xLTE2Nzc3MjE2LTcKYXV0aG9yaXR5IDAxMDIwMzA0MDUwNjogb2s9MSBieXRlcz0wMTAxMDEwMjAzMDQwNTA2MDcwMDAwMDAgdGV4dD1TLTEtMHgxMDIwMzA0MDUwNi03CmF1dGhvcml0eSBmZmZmZmZmZmZmZmY6IG9rPTEgYnl0ZXM9MDEwMWZmZmZmZmZmZmZmZjA3MDAwMDAwIHRleHQ9Uy0xLTB4RkZGRkZGRkZGRkZGLTcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "authority 000000000000: ok=1 bytes=010100000000000007000000 text=S-1-0-7\nauthority 000000000001: ok=1 bytes=010100000000000107000000 text=S-1-1-7\nauthority 000000000005: ok=1 bytes=010100000000000507000000 text=S-1-5-7\nauthority 000000000010: ok=1 bytes=010100000000001007000000 text=S-1-16-7\nauthority 000000000100: ok=1 bytes=010100000000010007000000 text=S-1-256-7\nauthority 000000010000: ok=1 bytes=010100000001000007000000 text=S-1-65536-7\nauthority 000001000000: ok=1 bytes=010100000100000007000000 text=S-1-16777216-7\nauthority 010203040506: ok=1 bytes=010101020304050607000000 text=S-1-0x10203040506-7\nauthority ffffffffffff: ok=1 bytes=0101ffffffffffff07000000 text=S-1-0xFFFFFFFFFFFF-7\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "sid_init_counts",
+      "exe_sha256": "29c8091047800a6750018284a6c240d1435c5a1803bb58726b8b65d2562f85de",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y291bnQgMDogb2s9MSBlcnI9LTEgaGVhZGVyPTAxMDAwMDAwMDAwMDAwMDUKY291bnQgMDogdmFsaWQ9MSBsZW5ndGg9OApjb3VudCAxOiBvaz0xIGVycj0tMSBoZWFkZXI9MDEwMTAwMDAwMDAwMDAwNQpjb3VudCAxOiB2YWxpZD0xIGxlbmd0aD0xMgpjb3VudCAyOiBvaz0xIGVycj0tMSBoZWFkZXI9MDEwMjAwMDAwMDAwMDAwNQpjb3VudCAyOiB2YWxpZD0xIGxlbmd0aD0xNgpjb3VudCA1OiBvaz0xIGVycj0tMSBoZWFkZXI9MDEwNTAwMDAwMDAwMDAwNQpjb3VudCA1OiB2YWxpZD0xIGxlbmd0aD0yOApjb3VudCA4OiBvaz0xIGVycj0tMSBoZWFkZXI9MDEwODAwMDAwMDAwMDAwNQpjb3VudCA4OiB2YWxpZD0xIGxlbmd0aD00MApjb3VudCAxNDogb2s9MSBlcnI9LTEgaGVhZGVyPTAxMGUwMDAwMDAwMDAwMDUKY291bnQgMTQ6IHZhbGlkPTEgbGVuZ3RoPTY0CmNvdW50IDE1OiBvaz0xIGVycj0tMSBoZWFkZXI9MDEwZjAwMDAwMDAwMDAwNQpjb3VudCAxNTogdmFsaWQ9MSBsZW5ndGg9NjgKY291bnQgMTY6IG9rPTAgZXJyPTg3IGhlYWRlcj1jY2NjY2NjY2NjY2NjY2NjCmNvdW50IDE3OiBvaz0wIGVycj04NyBoZWFkZXI9Y2NjY2NjY2NjY2NjY2NjYwpjb3VudCAxMDA6IG9rPTAgZXJyPTg3IGhlYWRlcj1jY2NjY2NjY2NjY2NjY2NjCmNvdW50IDI1NTogb2s9MCBlcnI9ODcgaGVhZGVyPWNjY2NjY2NjY2NjY2NjY2MKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "count 0: ok=1 err=-1 header=0100000000000005\ncount 0: valid=1 length=8\ncount 1: ok=1 err=-1 header=0101000000000005\ncount 1: valid=1 length=12\ncount 2: ok=1 err=-1 header=0102000000000005\ncount 2: valid=1 length=16\ncount 5: ok=1 err=-1 header=0105000000000005\ncount 5: valid=1 length=28\ncount 8: ok=1 err=-1 header=0108000000000005\ncount 8: valid=1 length=40\ncount 14: ok=1 err=-1 header=010e000000000005\ncount 14: valid=1 length=64\ncount 15: ok=1 err=-1 header=010f000000000005\ncount 15: valid=1 length=68\ncount 16: ok=0 err=87 header=cccccccccccccccc\ncount 17: ok=0 err=87 header=cccccccccccccccc\ncount 100: ok=0 err=87 header=cccccccccccccccc\ncount 255: ok=0 err=87 header=cccccccccccccccc\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

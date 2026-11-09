@@ -241,6 +241,9 @@ pub trait NtKernel {
     /// Log three values for a test program (`PolyTrace`).
     fn trace(&mut self, values: [u64; 3]);
 
+    /// Log text for the calling process (`PolyDebugPrint`, ADR 0155).
+    fn debug_print(&mut self, _text: &[u8]) {}
+
     /// The system time as a `FILETIME` (100 ns since 1601-01-01 UTC), for
     /// registry last-write times (ADR 0066). A kernel without a clock
     /// answers 0.
@@ -314,6 +317,12 @@ pub trait NtKernel {
     /// (`poly_winsock::afd::NET_INFO`).
     fn net_info(&self) -> (alloc::vec::Vec<[u8; 4]>, alloc::string::String) {
         (alloc::vec::Vec::new(), alloc::string::String::from("poly"))
+    }
+
+    /// The network interfaces `iphlpapi` lists (`poly_winsock::afd::IF_LIST`,
+    /// ADR 0155): by default only the loopback inside the stack.
+    fn net_interfaces(&self) -> alloc::vec::Vec<poly_iphlp::IfInfo> {
+        alloc::vec![poly_iphlp::IfInfo::loopback()]
     }
 
     /// Make the calling thread resume user mode with the registers of `ctx`

@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/ConvertStringSecurityDescriptorToSecurityDescriptorW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Parses an SDDL string into a self-relative descriptor allocated with
+  LocalAlloc (the caller frees it with LocalFree) and returns its size.
+  Revision 1 is the only one accepted.
+interface:
+  signature: "BOOL ConvertStringSecurityDescriptorToSecurityDescriptorW(LPCWSTR StringSecurityDescriptor, DWORD StringSDRevision, PSECURITY_DESCRIPTOR* SecurityDescriptor, PULONG SecurityDescriptorSize)"
+  grammar: "SDDL (sddl.h, Learn \"Security Descriptor String Format\"): \"O:<sid>G:<sid>D:<flags>(<ace>)...S:<flags>(<ace>)...\" where an ACE is \"type;flags;rights;object_guid;inherit_guid;sid\" (plus \";condition\" for conditional ACEs)."
+  layout: "SECURITY_DESCRIPTOR, absolute form (winnt.h, x64, 40 bytes): byte 0 Revision (1), byte 1 Sbz1, bytes 2..3 Control (little-endian 16-bit), bytes 4..7 padding, then four 8-byte pointers: Owner at 8, Group at 16, Sacl at 24, Dacl at 32. Self-relative form: the same first 4 bytes, with SE_SELF_RELATIVE (0x8000) in Control, then four 32-bit offsets from the start of the descriptor: Owner at 4, Group at 8, Sacl at 12, Dacl at 16 (header 20 bytes); an offset of 0 means the part is absent (or, for the ACLs, a NULL ACL when the PRESENT bit is set)."
+  acl: "ACL (winnt.h): byte 0 revision, byte 1 Sbz1, bytes 2..3 AclSize, bytes 4..5 AceCount, bytes 6..7 Sbz2, then the ACEs; an ACCESS_ALLOWED/DENIED/AUDIT/MANDATORY_LABEL ACE is type, flags, 16-bit size (8 + SID length), 32-bit mask, SID."
+rules:
+  layout: "in the result the parts are ordered SACL, DACL, owner, group after the 20-byte header (offsets owner, group, sacl, dacl at 4, 8, 12, 16); the order in the string does not matter: \"G:SYO:BA\" and \"O:BAG:SY\" give the same 48 bytes (owner 20, group 36); \"O:BAG:SYD:(A;;GA;;;WD)\" is 76 bytes with dacl 20, owner 48, group 64 (010004803000000040000000000000001400000002001c00 01000000...); with SACL: \"O:BAG:SYD:(A;;GA;;;WD)S:(AU;SAFA;GA;;;WD)\" 104 bytes, sacl 20, dacl 48, owner 76, group 92; \"\" is 20 bytes 01000080 + zeros; \"D:\" 28 bytes (dacl 20, an 8-byte ACL 02 00 08 00 00 00 00 00), \"D:NO_ACCESS_CONTROL\" 20 bytes with control 0x8004 and dacl 0, \"S:\" 28 bytes with control 0x8010"
+  sid_aliases: "two-letter aliases in \"O:\" (the SID they give): AA S-1-5-32-579, AC S-1-15-2-1, AN S-1-5-7, AO S-1-5-32-548, AS S-1-18-1, AU S-1-5-11, BA S-1-5-32-544, BG S-1-5-32-546, BO S-1-5-32-551, BU S-1-5-32-545, CD S-1-5-32-574, CG S-1-3-1, CO S-1-3-0, CY S-1-5-32-569, ED S-1-5-9, ER S-1-5-32-573, ES S-1-5-32-576, HA S-1-5-32-578, HI S-1-16-12288, IS S-1-5-32-568, IU S-1-5-4, LA S-1-5-21-<machine>-500, LG S-1-5-21-<machine>-501, LS S-1-5-19, LU S-1-5-32-559, LW S-1-16-4096, ME S-1-16-8192, MP S-1-16-8448, MS S-1-5-32-577, MU S-1-5-32-558, NO S-1-5-32-556, NS S-1-5-20, NU S-1-5-2, OW S-1-3-4, PO S-1-5-32-550, PS S-1-5-10, PU S-1-5-32-547, RA S-1-5-32-575, RC S-1-5-12, RD S-1-5-32-555, RE S-1-5-32-552, RM S-1-5-32-580, RU S-1-5-32-554, SI S-1-16-16384, SO S-1-5-32-549, SS S-1-18-2, SU S-1-5-6, SY S-1-5-18, UD S-1-5-84-0-0-0-0-0, WD S-1-1-0, WR S-1-5-33; lower-case aliases work (\"ba\")"
+  domain_aliases: "on this workgroup machine the aliases AP, CA, CN, DA, DC, DD, DG, DU, EA, EK, KA, PA, RO, RS and SA (and the unknown AD, BT, CL, DI, IL, LN, NA, OL, SV, TS, WP, XX, ZZ) fail with ERROR_INVALID_SID (1337) in \"O:\" and \"G:\" (DA also in an ACE); LA and LG give the machine-relative SIDs S-1-5-21-<machine>-500 and -501 (SID of 28 bytes, ACE size 36) in \"O:\", \"G:\" and ACEs; CO and CG give S-1-3-0 and S-1-3-1"
+  numeric_sids: "\"S-1-5-18\", \"S-1-5-32-544\", \"S-1-1-0\", \"S-1-0-0\", \"S-1-3-4\", \"S-1-16-4096\" parse; S-1-5-21-1-2-3 gives a descriptor of 44 bytes and S-1-5-21-1-2-3-500 one of 48 (a 28-byte SID); hexadecimal sub-authorities and authorities work (\"S-1-0x10-1\" is S-1-16-1, \"S-1-5-0x12\" is S-1-5-18, \"S-1-0x5-18\" S-1-5-18); \"S-1-5-4294967295\" is accepted and \"S-1-5-4294967296\" becomes S-1-5-4294967295; lower-case \"s-1-5-18\" works; \"S-2-5-18\" and \"S-0-5-18\" are accepted (an invalid SID is stored, descriptor 32 bytes); 16 and 17 sub-authorities are accepted (descriptors of 92 and 96 bytes) though the SID is invalid; \"S-1-5\", \"S-1\", \"S-1-\", \"S-1-5-\", \"S-1-5-18-\", \"S-1-5-18x\", \"B A\", \"(BA)\" fail with ERROR_INVALID_SID (1337), \"BAA\" with ERROR_INVALID_PARAMETER (87)"
+  rights: "rights strings give: GA 0x10000000, GR 0x80000000, GW 0x40000000, GX 0x20000000, FA 0x1f01ff, FR 0x120089, FW 0x120116, FX 0x1200a0, KA 0xf003f, KR 0x20019, KW 0x20006, KX 0x20019, RC 0x20000, SD 0x10000, WD 0x40000, WO 0x80000, CC 1, DC 2, LC 4, SW 8, RP 0x10, WP 0x20, DT 0x40, LO 0x80, CR 0x100; concatenations are OR-ed (GAGR 0x90000000, RCSDWDWO 0xf0000, CCDCLCSWRPWPDTLOCR 0x1ff, FRFW 0x12019f, SDSD 0x10000); hex \"0x1\", \"0X10\", \"0xFFFFFFFF\", \"0x1F01FF\", \"0xabc\" and decimal \"123\" (0x7b), \"0\", \"01\", \"-1\" (0xffffffff) work; hex above 32 bits saturates to 0xffffffff; \"0x1GA\" is 0x10000001 and \"GA0x1\" too; lower-case \"ga\" works; a leading space is skipped (\" GA\"); an empty rights field is mask 0"
+  rights_errors: "rights \"0x\", \"0xZ\", \"0x1G\", \"GAZZ\", \"ZZ\", \"G\", \"GAG\", \"R\", \"RW\", \"AX\", \"0x-1\", \"0x 1\" and \"GA \" (trailing space) fail with ERROR_INVALID_ACL (1336)"
+  ace_types: "A gives type 0, D type 1, AU type 2, AL fails with ERROR_INVALID_PARAMETER (87) in this parser, ML type 0x11 with the mask taken from the policy letters NW 1, NR 2, NX 4 (NWNRNX 7, repeated NWNW 1, none 0, hex \"0x1\" accepted, GA fails with 1336) and a SID that must be a label (S-1-16-x; \"WD\" fails with 87); ACE flags \"CI\" on a label are kept (0x02); XA type 9 and XD type 0xA with a condition text \"(Member_of {SID(BA)})\" (ACE size 52, round-trips), XU type 0xD in the SACL; RA type 0x12 with a resource attribute; SP type 0x13 with SID S-1-17-1 (ACE size 20); ZA and AA fail with ERROR_INVALID_ACL (1336), TL with 87; unknown types fail with ERROR_INVALID_DATATYPE (1804) (\"X\", \"ZZ\"), and so do types in the wrong section: \"S:(A;...)\", \"S:(D;...)\" and \"D:(ML;...)\" give 1804, \"D:(AU;SA;...)\" gives 1336; lower-case ACE strings work (\"(a;;ga;;;wd)\")"
+  ace_bytes: "\"D:(A;;GA;;;WD)\": ACL 02 00 1c 00 01 00 00 00, ACE 00 00 14 00 00 00 00 10 + SID 01 01 00 00 00 00 00 01 00 00 00 00 (28 bytes); a label ACE: 11 00 14 00 01 00 00 00 + 01 01 00 00 00 00 00 10 00 10 00 00; ACL revision is 2, 3 ACEs \"(A;;GA;;;WD)(D;;GW;;;BA)(A;;GR;;;SY)\" give an ACL of 72 bytes with ACE sizes 20, 24, 20"
+  object_aces: "object GUIDs are written without braces: \"(OA;;CR;00299570-246d-11d0-a768-00aa006e0529;;WD)\" gives an ACL of revision 4, size 48, holding a type 5 ACE of 40 bytes (mask 0x100, then a 32-bit object-flags field 1, the GUID in Windows byte order 70 95 29 00 6d 24 d0 11 a7 68 00 aa 00 6e 05 29, then the SID); with both GUIDs the flags field is 3 (ACE 56 bytes, ACL 64), with only the inherited-object GUID it is 2 (ACE 40 bytes); \"OD\" gives type 6; \"(OA;;CR;;;WD)\" without GUIDs gives a plain type 0 ACE in an ACL of revision 4; a GUID in braces, a GUID with a missing digit and \"xyz\" fail with RPC_S_INVALID_STRING_UUID (1705), also in OU and OL ACEs; a GUID in an \"A\" ACE fails with ERROR_INVALID_ACL (1336)"
+  ace_flags: "CI 0x02, OI 0x01, NP 0x04, IO 0x08, ID 0x10 in allow ACEs; repeated flags collapse (\"OIOI\" 1); order is free (\"CIOI\" = 3, \"IOCIOI\" 0x0b, \"CIOINPIOID\" 0x1f); lower-case works; a space is skipped (\"CI OI\" 3); in audit ACEs SA 0x40 and FA 0x80 are added (SAFA 0xc0, \"FASA\" 0xc0, \"SAFAOICI\" 0xc3, \"IOSA\" 0x48); unknown flags (\"XX\", \"CIXX\", \"0x1\") and SA/FA in an \"A\" ACE fail with ERROR_INVALID_FLAGS (1004); ML with CI/OICI/IO/ID and a non-label rights field fail with 1336"
+  acl_flags: "after D: and S: the flags P (protected 0x1000 / 0x2000), AR (auto-inherit required 0x0100 / 0x0200), AI (auto-inherited 0x0400 / 0x0800) in any order and repeated (\"D:AIP\" = 0x9404); lower-case works; \"D:\" / \"S:\" alone give an empty ACL (8 bytes, present); \"NO_ACCESS_CONTROL\" gives a NULL ACL (present, offset 0) also after flags; \"D:NULL\", \"D:NO_ACCESS_CONTROLP\", \"D:NO_ACCESS_CONTROL(A;;GA;;;WD)\", \"D:Z\", \"D:PZ\" fail with ERROR_INVALID_PARAMETER (87); flags after the ACEs are ignored (\"D:(A;;GA;;;WD)P\" gives control 0x8004)"
+  string_syntax: "\"O:BA \" and \" O:BA\" (36 bytes) and \"O:BA G:SY\" (48) are accepted, \" \", \" \" and \"\" give the empty 20-byte descriptor, a newline or a tab after the string fails with 87; text after the last ACE is ignored: \"D:(A;;GA;;;WD)extra\", \"D:(A;;GA;;;WD))\" and \"D:(A;;GA;;;WD)(\" give the 48-byte descriptor with one ACE, \"D:(\" and \"O:BAD:(\" give an empty DACL; spaces around the fields of an ACE are skipped (\"D: (A;;GA;;;WD)\", \"D:( A;;GA;;;WD)\", \"D:(A;; GA;;;WD)\", \"D:(A;;GA;;; WD)\", \"D:(A;;GA;;;WD )\")"
+  size_output: "success: *size = the byte count (36 for \"O:BA\"); on a syntax failure *size is set to 0, on a revision failure it is untouched; the size pointer may be NULL"
+errors:
+  revision: "revisions 0, 2, 3, 100, 0x80000001, 0xFFFFFFFF: FALSE, ERROR_UNKNOWN_REVISION (1305); only 1 works"
+  syntax: "ERROR_INVALID_PARAMETER (87): \"O\", \"O:BA;\", duplicate parts (\"O:BAO:SY\", \"G:SYG:BA\", \"D:D:\", \"S:S:\", two DACLs), unknown section letters (\"X:BA\", \"T:BA\", \"L:BA\"), upper-case-only part letters (\"o:ba\"), a SID given without its \"O:\" (\"BA\", \"O:BAD\" without colon), \"O:BA:\", \"D:)\", \"D:(A\", \"D:()\" (empty ACE), too few or too many ACE fields; ERROR_NONE_MAPPED (1332): \"O:\", \"G:\", \"O:BAG:\" (empty SID); ERROR_INVALID_SID (1337): bad SID in O:, G: or an ACE; ERROR_INVALID_ACL (1336): bad rights, \"D:(A;;GA;;;WD\" without the closing parenthesis, unknown type letters like \"AA\"; ERROR_INVALID_DATATYPE (1804): \"D:((A;;GA;;;WD))\", ACE type not allowed in that section; ERROR_INVALID_FLAGS (1004): bad ACE flags"
+  null_string: "a NULL string pointer: FALSE, last error ERROR_INVALID_PARAMETER (87), the size output and the descriptor pointer untouched"
+side_effects: "allocates the descriptor with LocalAlloc"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 7  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

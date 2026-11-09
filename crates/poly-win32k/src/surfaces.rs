@@ -101,6 +101,7 @@ impl Surfaces {
                     let kind = if framed { SurfaceKind::TopLevel } else { SurfaceKind::Popup };
                     let owner = self.windows.get(&i.owner).copied().unwrap_or(0);
                     let s = desktop.create(kind, owner, framed);
+                    desktop.set_process(s, i.pid);
                     self.windows.insert(h, s);
                     s
                 }

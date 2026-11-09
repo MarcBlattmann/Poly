@@ -58,6 +58,20 @@ fn prot(p: HwProt) -> Prot {
     Prot::from_bits(bits).unwrap_or(Prot::NONE)
 }
 
+/// The pages of an image, made when a view touches them (ADR 0155): a big
+/// image is never held in kernel memory, its pages are read from its file.
+struct ImagePages(Arc<dyn poly_personality_nt::image::ImageBytes>);
+
+impl PageSource for ImagePages {
+    fn len(&self) -> u64 {
+        self.0.len()
+    }
+
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<usize, crate::user::memory::IoError> {
+        Ok(self.0.read_at(offset, buf))
+    }
+}
+
 /// A [`Backend`] over one process's memory and the shared section store.
 pub struct MemBackend<'a> {
     pub memory: &'a Arc<Memory>,
@@ -103,8 +117,8 @@ impl Backend for MemBackend<'_> {
                 let source = self.sections.source(*id);
                 self.map_source(addr, len, source, map.offset, map.prot, map.shared)
             }
-            ViewSource::Bytes(bytes) => {
-                let source: Arc<dyn PageSource> = Arc::new(MemoryImage(Arc::clone(bytes)));
+            ViewSource::Image(image) => {
+                let source: Arc<dyn PageSource> = Arc::new(ImagePages(Arc::clone(image)));
                 self.map_source(addr, len, source, map.offset, map.prot, false)
             }
         }
@@ -117,7 +131,7 @@ impl Backend for MemBackend<'_> {
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus> {
         let page_source: Arc<dyn PageSource> = match source {
             SectionSource::Pagefile { size, .. } => Arc::new(AnonShared::new(*size)),
-            SectionSource::Image(bytes) => Arc::new(MemoryImage(Arc::clone(bytes))),
+            SectionSource::Image(image) => Arc::new(ImagePages(Arc::clone(image))),
             SectionSource::File { file } => {
                 let bytes = self.sections.files.get(file).ok_or(STATUS_UNSUCCESSFUL)?;
                 Arc::new(MemoryImage(Arc::clone(bytes)))

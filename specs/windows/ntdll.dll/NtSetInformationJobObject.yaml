@@ -1,0 +1,75 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtSetInformationJobObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Sets limits and attributes of a job: basic limits (class 2, 64 bytes),
+  extended limits (class 9, 144 bytes), UI restrictions (4), end-of-job time
+  (6), the completion port (7) and others. The length must match the class
+  exactly (STATUS_INFO_LENGTH_MISMATCH otherwise). JOB_OBJECT_SET_ATTRIBUTES
+  is the right needed. SetInformationJobObject calls it.
+interface:
+  signature: "NTSTATUS NtSetInformationJobObject(HANDLE JobHandle, JOBOBJECTINFOCLASS JobObjectInformationClass, PVOID JobObjectInformation, ULONG JobObjectInformationLength)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87. Also STATUS_QUOTA_EXCEEDED 0xC0000044, STATUS_NOT_SUPPORTED 0xC00000BB."
+  access: "Job access rights (winnt.h): JOB_OBJECT_ASSIGN_PROCESS 0x1, JOB_OBJECT_SET_ATTRIBUTES 0x2, JOB_OBJECT_QUERY 0x4, JOB_OBJECT_TERMINATE 0x8, JOB_OBJECT_SET_SECURITY_ATTRIBUTES 0x10, JOB_OBJECT_ALL_ACCESS 0x1f003f. The tests create the children they assign as suspended copies of the test executable that are never resumed."
+  basic_limit_layout: "JOBOBJECT_BASIC_LIMIT_INFORMATION, 64 bytes: PerProcessUserTimeLimit 0, PerJobUserTimeLimit 8, LimitFlags 16, MinimumWorkingSetSize 24, MaximumWorkingSetSize 32, ActiveProcessLimit 40, Affinity 48, PriorityClass 56, SchedulingClass 60; the extended structure is 144 bytes: the basic one, IO_COUNTERS (48), ProcessMemoryLimit 112, JobMemoryLimit 120, peak values 128 and 136"
+rules:
+  defaults: "a fresh job reads LimitFlags 0, all limits 0 and SchedulingClass 5"
+  active_process: "LimitFlags 0x8 with ActiveProcessLimit 0, 1, 5, 100: accepted, flags 0x8 and the value read back"
+  priority_class: "PriorityClass values 0 to 6 are accepted with flags 0x20 and read back unchanged; 7, 8, 0x20, 0x40 and 0x4000 -> STATUS_INVALID_PARAMETER"
+  scheduling_class: "SchedulingClass 0, 1, 5, 9 accepted (flags 0x80); 10 and 100 -> STATUS_INVALID_PARAMETER"
+  affinity: "Affinity 1 and 3 accepted (flags 0x10, read back); 0 and all bits set -> STATUS_INVALID_PARAMETER"
+  times: "PROCESS_TIME (0x2) with 100000000 and with -1 accepted (reads back 18446744073709551615), with 0 -> STATUS_INVALID_PARAMETER; JOB_TIME (0x4) accepted; JOB_TIME|PRESERVE_JOB_TIME accepted and reads back flags 0x4 (the preserve bit is not stored); PRESERVE_JOB_TIME alone is accepted and reads back flags 0; both time limits 1 and 2 read back flags 0x6"
+  working_set: "WORKINGSET (0x1) with 1 MiB..2 MiB and with equal values accepted (read back); minimum > maximum, 0..0 and values that are not page multiples (12345, 67890) -> STATUS_INVALID_PARAMETER"
+  basic_flags: "with the basic structure the flags BREAKAWAY_OK (0x800), SILENT_BREAKAWAY_OK (0x1000), DIE_ON_UNHANDLED_EXCEPTION (0x400), KILL_ON_JOB_CLOSE (0x2000), PROCESS_MEMORY (0x100), JOB_MEMORY (0x200), SUBSET_AFFINITY (0x4000) alone, 0x8000, 0x10000 and 0xFFFFFFFF -> STATUS_INVALID_PARAMETER and nothing is set"
+  lengths: "class 2 accepts only length 64 and class 9 only 144 (and 152): lengths 0, 4, 63, 65, 145 -> STATUS_INFO_LENGTH_MISMATCH; with class 2 a length of 144 is rejected and with class 9 a length of 64 is rejected"
+  extended: "with the extended structure: PROCESS_MEMORY 64 MiB (flags 0x100), JOB_MEMORY 128 MiB (0x200), both (0x300), KILL_ON_JOB_CLOSE (0x2000), BREAKAWAY_OK (0x800), SILENT_BREAKAWAY_OK (0x1000), DIE_ON_UNHANDLED_EXCEPTION (0x400) and all four (0x3c00) are accepted and read back; PROCESS_MEMORY with limit 0, 0x8000 and SUBSET_AFFINITY alone -> STATUS_INVALID_PARAMETER; memory values without their flags are accepted and not stored (flags 0, limits 0 read back)"
+  kill_on_close: "with KILL_ON_JOB_CLOSE set and a child assigned, closing the only job handle ends the child with exit code 0"
+  ui_restrictions: "class 4 (4 bytes): 0, 0x1, 0x3f, 0xff, 0x100, 0x1ff accepted and read back; 0x80000000 -> STATUS_INVALID_PARAMETER"
+  end_of_job_time: "class 6 (4 bytes): action 0 and 1 accepted and read back; 2 and 3 -> STATUS_INVALID_PARAMETER"
+  completion_port: "class 7 (16 bytes: key, port) with a port: STATUS_SUCCESS; a second association with the same port or with another port: STATUS_INVALID_PARAMETER; lengths 0, 8, 15, 17: STATUS_INFO_LENGTH_MISMATCH; a NULL port on a fresh job is accepted; querying class 7 returns STATUS_INVALID_INFO_CLASS. With ActiveProcessLimit 1 and the port: assigning child A -> STATUS_SUCCESS and the port receives message JOB_OBJECT_MSG_NEW_PROCESS (6) with the key and the pid in the overlapped slot; assigning child B -> STATUS_QUOTA_EXCEEDED (0xC0000044) and the port receives JOB_OBJECT_MSG_ACTIVE_PROCESS_LIMIT (3) with a NULL overlapped slot; NtTerminateJobObject with 0x42 -> A's exit code 0x42 and the port receives JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO (4) with a NULL slot; nothing else arrives within 3 seconds (the children never ran: no exit-process messages); B, never in the job, stays active"
+  class_lengths: "with a zeroed buffer, lengths not rejected with STATUS_INFO_LENGTH_MISMATCH (class: length): 2: 64 ok; 4: 4 ok; 6: 4 ok; 7: 16 ok; 9: 144 and 152 ok; 12: 48 and 56 ok; 16: 4 ok; 31: 48, 96 and 144 ok; 33: 72 ok; 14: multiples of 16 including 0 ok; 15 (8) and 18 (16) reject the zero structure with STATUS_INVALID_PARAMETER; the query-only classes 1 (48), 3 (16), 8 (96), 10 (4), 34 (104) answer STATUS_INVALID_INFO_CLASS at their length; class 0 always STATUS_INVALID_INFO_CLASS; class 5 (40 bytes) STATUS_NOT_SUPPORTED. Classes 36 and above (silos, containers) were not probed"
+  rights: "a handle with only JOB_OBJECT_SET_ATTRIBUTES can set UI restrictions and the end-of-job time (and cannot query); only JOB_OBJECT_QUERY, ASSIGN_PROCESS, SET_SECURITY_ATTRIBUTES, TERMINATE or access 0 refuse the sets with STATUS_ACCESS_DENIED"
+errors:
+  invalid: "NULL and closed handles: STATUS_INVALID_HANDLE; the process pseudo-handle and an event: STATUS_OBJECT_TYPE_MISMATCH"
+  pointers: "NULL information with length 0: STATUS_INFO_LENGTH_MISMATCH; with length 4: STATUS_ACCESS_VIOLATION"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

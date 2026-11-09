@@ -10,6 +10,10 @@
 //!   shape shows it (the shape is remembered for when there are more).
 //! - When the pointer focus moves to another client (or the desktop) the
 //!   arrow is back; clients set their cursor on `enter`.
+//! - While an app that was launched has no window yet (`startup.rs`, ADR
+//!   0167) the arrow is the busy arrow with a spinner, wherever no client
+//!   has set the cursor: over the desktop, the shell and the background. A
+//!   client's own cursor (a surface, a shape, none) always wins.
 
 use super::surface::Role;
 use super::{ClientId, Data, Res, Server, error};
@@ -72,7 +76,9 @@ impl Server {
                 _ => CursorLook::Hidden,
             },
             Some(CursorRequest::Hidden) => CursorLook::Hidden,
-            Some(CursorRequest::Shape(_)) | None => CursorLook::Arrow,
+            Some(CursorRequest::Shape(_)) => CursorLook::Arrow,
+            None if self.launch_busy() => CursorLook::Busy(self.busy_phase()),
+            None => CursorLook::Arrow,
         };
         self.scene.set_cursor_look(look);
     }

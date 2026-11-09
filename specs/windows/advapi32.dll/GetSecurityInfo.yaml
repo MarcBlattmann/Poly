@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/GetSecurityInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Reads the requested parts of an object's descriptor through a handle and
+  returns the status code directly (0 on success). The descriptor is a
+  LocalAlloc'ed self-relative copy; the owner, group, DACL and SACL pointers
+  it hands out point into it. The output pointers are optional only for
+  parts that are not requested.
+interface:
+  signature: "DWORD GetSecurityInfo(HANDLE handle, SE_OBJECT_TYPE ObjectType, SECURITY_INFORMATION SecurityInfo, PSID* ppsidOwner, PSID* ppsidGroup, PACL* ppDacl, PACL* ppSacl, PSECURITY_DESCRIPTOR* ppSecurityDescriptor)"
+  objects: "Objects used: named events, mutexes and job objects (unique names \"PolySecSd<pid>_<n>\", closed after use), unnamed ones, a duplicate of the process token, and the process / thread pseudo handles. Tests that depend on the oracle token say so: the SSH session runs as a local administrator with the elevated token (High integrity, Administrators group enabled, privileges present); the AccessCheck tests use an impersonation copy of it with every privilege disabled unless a test enables one on purpose."
+rules:
+  outputs: "for an event with the default descriptor and information 7 with all outputs: return 0, owner = descriptor + 20, group + 36, DACL + 64 (all inside the returned descriptor), the SACL output untouched, the descriptor self-relative with control 0x8004; information 1 writes only the owner output (descriptor + 20) and the descriptor holds only the owner (control 0x8000, owner 20); information 2 only the group, 4 only the DACL; LABEL_SECURITY_INFORMATION alone writes the SACL output: for an object with no label NULL (the descriptor control 0x8800); information 0 writes nothing and returns an empty descriptor; with only the owner and DACL outputs (no descriptor output) the owner (BA) and the 3-ACE DACL pointers are still returned"
+  missing_outputs: "information 1 with a descriptor output but no owner pointer: 0 (the owner is just not returned); information 1, 2 or 4 with no output pointer at all, or group requested with only the owner pointer: ERROR_INVALID_PARAMETER (87); group+DACL requested with only the DACL and descriptor pointers: 0; information 0 with no pointers: 0"
+  rights: "a READ_CONTROL handle reads owner, group and DACL (0); a SYNCHRONIZE-only handle: ERROR_ACCESS_DENIED (5), but information 0 works (0); the SACL (information 8, also 9) through a full-access handle: 5"
+  token_process: "a duplicate of the process token and the process token itself: owner BA, group <machine>-513, DACL BA and SY 0xf01ff and the logon SID 0x2001f; label information returns an ML ACE for High with mask 1 (text \"S:AI(ML;;NW;;;HI)\"); the current process pseudo handle: DACL BA / SY 0x1fffff and the logon SID 0x121411, label mask 3 (NW NR, text \"S:AI(ML;;NWNR;;;HI)\"); the current thread: logon SID 0x121848"
+  object_types: "SE_KERNEL_OBJECT (6) and SE_FILE_OBJECT (1) work on an event handle (0); SE_UNKNOWN_OBJECT_TYPE (0): 87; SE_SERVICE (2), SE_PRINTER (3), SE_REGISTRY_KEY (4): ERROR_INVALID_HANDLE (6); types 7 to 15 and 99 were tried in the separate test secinfo_get_other_object_types"
+errors:
+  handle: "NULL and 0x1234: ERROR_INVALID_HANDLE (6)"
+  rights: "ERROR_ACCESS_DENIED (5) as above"
+  parameters: "ERROR_INVALID_PARAMETER (87) as above"
+side_effects: "allocates the returned descriptor (the caller frees it with LocalFree)"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

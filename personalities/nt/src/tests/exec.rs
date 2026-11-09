@@ -44,6 +44,8 @@ fn teb_peb_and_stack() {
     assert_eq!(f.u64_at(s.teb + TEB_STACK_BASE), s.stack_base);
     assert_eq!(f.u64_at(s.teb + TEB_STACK_LIMIT), s.stack_limit);
     assert_eq!(f.bytes_at(s.peb + exec::PEB_BEING_DEBUGGED, 1), [0]);
+    // PEB.ImageBaseAddress is the executable's base.
+    assert_eq!(f.u64_at(s.peb + exec::PEB_IMAGE_BASE_ADDRESS), s.image_base);
     // The ClientId is the process and the first thread (its id is the pid).
     assert_eq!(f.u64_at(s.teb + exec::TEB_CLIENT_ID), u64::from(PID.0));
     assert_eq!(f.u64_at(s.teb + exec::TEB_CLIENT_ID + 8), TID.0);
@@ -271,4 +273,22 @@ fn an_executable_with_imports_starts_ntdll_binds_them() {
     let mut f = Fake::bare();
     let s = start(&mut f, &exe).unwrap();
     assert_eq!(s.start_routine, IMAGE_BASE + 0x1000);
+}
+
+#[test]
+fn kuser_shared_data_is_mapped_read_only_with_the_version() {
+    use poly_kernelbase::kuser;
+    let mut f = Fake::bare();
+    start(&mut f, &test_exe(false)).unwrap();
+    let facts = kuser::Facts { processors: 2, ..kuser::Facts::default() };
+    exec::map_user_shared_data(&mut f.proc, &mut f.mem, &facts).unwrap();
+    let info = f.proc.vm.query(kuser::ADDRESS).unwrap();
+    assert_eq!((info.state, info.protect, info.region_size), (MEM_COMMIT, PAGE_READONLY, 0x1000));
+    assert_eq!(f.mem.rights(kuser::ADDRESS), Some(HwProt::R));
+    let major = f.mem.bytes_at(kuser::ADDRESS + kuser::NT_MAJOR_VERSION as u64, 4);
+    assert_eq!(major, 10u32.to_le_bytes());
+    let build = f.mem.bytes_at(kuser::ADDRESS + kuser::NT_BUILD_NUMBER as u64, 4);
+    assert_eq!(build, 19045u32.to_le_bytes());
+    // A second mapping is refused (the page is there).
+    assert!(exec::map_user_shared_data(&mut f.proc, &mut f.mem, &facts).is_err());
 }

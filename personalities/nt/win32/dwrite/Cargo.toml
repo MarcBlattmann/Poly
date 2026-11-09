@@ -1,0 +1,20 @@
+[package]
+name = "dwrite"
+description = "Our dwrite.dll (ADR 0170): DirectWrite's factory, font collections, faces, glyph run analysis and font fallback over poly-dwrite and poly-font"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "dwrite"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-gui = { path = "../gui" }
+poly-dwrite = { path = "../../../../crates/poly-dwrite" }
+poly-font = { path = "../../../../crates/poly-font" }
+
+[lints]
+workspace = true

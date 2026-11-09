@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/FindFirstFreeAce
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Walks the ACE list and returns a pointer to the first byte after the last
+  ACE (offset 8 of an empty ACL, 28 after one 20-byte ACE). When the ACL has
+  no room left the pointer is still the end of the ACEs (equal to the end of
+  the ACL for an exactly full ACL); when the ACEs run past the ACL's size it
+  returns TRUE with a NULL pointer.
+interface:
+  signature: "BOOL FindFirstFreeAce(PACL acl, LPVOID* ace)"
+  layout: "ACL (winnt.h): an 8-byte header {Revision (byte), Sbz1 (byte, 0), AclSize (16 bits), AceCount (16 bits), Sbz2 (16 bits)} followed by the ACEs one after the other, all fields little-endian. Each ACE starts with {AceType (byte), AceFlags (byte), AceSize (16 bits)}; access-allowed (type 0), access-denied (1), system-audit (2) and mandatory-label (0x11) ACEs continue with a 32-bit mask (the policy for a label) and the SID, so their size is 8 + the SID length (20 for the 12-byte S-1-1-0 and S-1-1-0-like SIDs, 24 for S-1-5-32-544, 76 for a 15-sub-authority SID). ACL revisions 2, 3 and 4 are the valid ones. Buffers in the tests are 8-byte aligned unless noted."
+rules:
+  offsets: "empty ACLs of any size (8, 9, 16, 28, 29, 47, 48, 49, 64, 1000) give offset 8; after each successful add of a 20-byte ACE the offset is 28, 48, 68, 88; when the add fails because the ACL is full the offset does not change"
+  full: "an ACL of 28 bytes with one ACE returns 28 (the end), one of 48 bytes with two ACEs returns 48; an ACL of size 8 returns 8; the function reports TRUE in all of these"
+  after_delete: "after deleting ACE 1, then 0, then 0 of the three-ACE ACL the offsets are 72, 52, 32, 8 (and 8 after a failing delete)"
+  no_revision_check: "revision bytes 0, 1 and 5 do not matter (offset 72 for the three-ACE ACL)"
+  count: "the walk follows the count: count 0 gives 8, 1 gives 28, 2 gives 48, 3 gives 72; count 4 (one ACE more than real, the fourth at zero bytes) gives TRUE with a NULL pointer; counts 5 and 100 fail"
+  acl_size: "AclSize 72 and 73 give 72; AclSize 71 (the ACEs run past) gives TRUE with NULL; AclSize 0, 8 and 40 fail"
+  ace_size: "a first-ACE size of 0 gives offset 8 (TRUE), 3 gives 11; sizes 21, 120 and 200 fail; a third-ACE size of 200 gives TRUE with NULL"
+errors:
+  damaged: "an ACE count that the list does not support (count 5 or 100), an AclSize smaller than the ACE area (0, 8, 40) or an ACE size that makes the walk leave the ACL (21, 120, 200 for the first ACE): FALSE, ERROR_INVALID_ACL (1336)"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  The pointer after a failure is NULL in the tests. Domain accounts and
+  domain-relative well-known SIDs of a real domain, AppContainer and
+  capability SIDs beyond their string forms, auditing (SACL entries are only
+  stored, never evaluated), remote systems (the system-name arguments),
+  Kerberos or NTLM logon tokens, tokens of other users.

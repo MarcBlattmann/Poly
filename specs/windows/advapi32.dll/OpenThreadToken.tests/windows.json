@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e1df20b984fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:53:24Z",
+  "tests": [
+    {
+      "name": "tt_impersonating",
+      "exe_sha256": "b44f682495f3b147d478135af7cfd4c238b99b5327068f4acde1f2e117d9ccc5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SW1wZXJzb25hdGVTZWxmKDApOiAxCiAgYXNfc2VsZj0wOiBGQUlMIGVycj0xMzQ3CiAgYXNfc2VsZj0xOiBGQUlMIGVycj0xMzQ3CiAgUmV2ZXJ0VG9TZWxmPTEsIHRoZW4gT3BlblRocmVhZFRva2VuIG9rPTAgZXJyPTEwMDgKSW1wZXJzb25hdGVTZWxmKDEpOiAxCiAgYXNfc2VsZj0wOiBGQUlMIGVycj0xMzQ2CiAgYXNfc2VsZj0xOiBvayB0eXBlPTIgbGV2ZWw9MSBncmFudGVkPTB4OAogIFJldmVydFRvU2VsZj0xLCB0aGVuIE9wZW5UaHJlYWRUb2tlbiBvaz0wIGVycj0xMDA4CkltcGVyc29uYXRlU2VsZigyKTogMQogIGFzX3NlbGY9MDogb2sgdHlwZT0yIGxldmVsPTIgZ3JhbnRlZD0weDgKICBhc19zZWxmPTE6IG9rIHR5cGU9MiBsZXZlbD0yIGdyYW50ZWQ9MHg4CiAgUmV2ZXJ0VG9TZWxmPTEsIHRoZW4gT3BlblRocmVhZFRva2VuIG9rPTAgZXJyPTEwMDgKSW1wZXJzb25hdGVTZWxmKDMpOiAxCiAgYXNfc2VsZj0wOiBvayB0eXBlPTIgbGV2ZWw9MyBncmFudGVkPTB4OAogIGFzX3NlbGY9MTogb2sgdHlwZT0yIGxldmVsPTMgZ3JhbnRlZD0weDgKICBSZXZlcnRUb1NlbGY9MSwgdGhlbiBPcGVuVGhyZWFkVG9rZW4gb2s9MCBlcnI9MTAwOApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ImpersonateSelf(0): 1\n  as_self=0: FAIL err=1347\n  as_self=1: FAIL err=1347\n  RevertToSelf=1, then OpenThreadToken ok=0 err=1008\nImpersonateSelf(1): 1\n  as_self=0: FAIL err=1346\n  as_self=1: ok type=2 level=1 granted=0x8\n  RevertToSelf=1, then OpenThreadToken ok=0 err=1008\nImpersonateSelf(2): 1\n  as_self=0: ok type=2 level=2 granted=0x8\n  as_self=1: ok type=2 level=2 granted=0x8\n  RevertToSelf=1, then OpenThreadToken ok=0 err=1008\nImpersonateSelf(3): 1\n  as_self=0: ok type=2 level=3 granted=0x8\n  as_self=1: ok type=2 level=3 granted=0x8\n  RevertToSelf=1, then OpenThreadToken ok=0 err=1008\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

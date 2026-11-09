@@ -52,6 +52,7 @@ mod input;
 mod output;
 mod presentation;
 mod shm;
+mod startup;
 mod subsurface;
 mod surface;
 mod viewporter;
@@ -437,6 +438,12 @@ pub struct Server {
     /// Activation tokens handed out and not used yet.
     tokens: Vec<String>,
     token_serial: u64,
+    /// Launched apps without a window yet, and the pointer they make busy
+    /// (`startup.rs`, ADR 0167).
+    launches: crate::launch::Launches,
+    launch_now: u64,
+    /// The process of each client that connected, if the caller knows it.
+    client_pids: BTreeMap<ClientId, u32>,
     /// The DRM device dma-bufs are made on, if they are taken.
     dmabuf_device: Option<u64>,
     /// Frame callbacks and feedback of the frame on its way to the display.
@@ -511,6 +518,9 @@ impl Server {
             popup_grabs: Vec::new(),
             tokens: Vec::new(),
             token_serial: 0,
+            launches: crate::launch::Launches::new(),
+            launch_now: 0,
+            client_pids: BTreeMap::new(),
             dmabuf_device,
             in_flight: BTreeMap::new(),
             wm_events: Vec::new(),
@@ -562,6 +572,7 @@ impl Server {
         }
         self.input_client_gone(c);
         self.data_client_gone(c);
+        self.client_pids.remove(&c);
         self.in_flight.remove(&c);
         if self.active.is_some_and(|(ac, _)| ac == c) {
             self.active = None;

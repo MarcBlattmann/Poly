@@ -150,8 +150,6 @@ struct Window {
     paint: paint::Paint,
     /// The DPI awareness it was created under (`guic::AWARE_*`).
     dpi: u8,
-    /// Window properties (`SetPropW`), keyed by atom or upper-cased name.
-    props: Vec<(ClassRef, u64)>,
     /// Layered-window attributes (`WS_EX_LAYERED`, ADR 0172).
     lay: guic::Layered,
     /// The input-context association (`ime::Assoc::code`).
@@ -235,6 +233,9 @@ pub struct Wm {
     tracking: Vec<(u32, u32)>,
     /// TrackMouseEvent's hover tracking: (window, ms, since).
     hover: Option<(u32, u32, u64)>,
+    /// The last button-down that may start a double click: (message,
+    /// window, x, y, time) (`raw`).
+    last_click: Option<(u32, u32, i32, i32, u64)>,
     /// The time of the last request (ms), for input from the desktop link.
     now: u64,
     /// The session's clipboard (ADR 0172).
@@ -297,6 +298,7 @@ impl Wm {
             sync_keys: raw::blank_keys(),
             tracking: Vec::new(),
             hover: None,
+            last_click: None,
             now: 0,
             clip: crate::clip::Clipboard::new(),
             ime: crate::ime::Ime::default(),
@@ -1145,31 +1147,8 @@ impl Wm {
 
     // ----- messages
 
-    /// `SetPropW` (`op` 1), `GetPropW` (0), `RemovePropW` (2) and the count
-    /// of properties (3): a `Value` (0 when there is none).
-    fn prop_op(&mut self, hwnd: u64, op: u8, key: ClassRef, value: u64) -> Reply {
-        let key = match key {
-            ClassRef::Name { name } => ClassRef::Name { name: upcase(&name) },
-            a => a,
-        };
-        let Some(w) = self.get_mut(hwnd) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
-        let at = w.props.iter().position(|p| p.0 == key);
-        match op {
-            0 => Reply::Value { value: at.map_or(0, |i| w.props[i].1) },
-            1 => {
-                match at {
-                    Some(i) => w.props[i].1 = value,
-                    None => w.props.push((key, value)),
-                }
-                Reply::Ok {}
-            }
-            2 => Reply::Value { value: at.map_or(0, |i| w.props.remove(i).1) },
-            _ => Reply::Value { value: w.props.len() as u64 },
-        }
-    }
-
     /// Layered-window attributes (`SetLayeredWindowAttributes`, `GetLayeredWindowAttributes`
-    /// and the mark `UpdateLayeredWindow` leaves; `Layered.yaml` sheets): see [`guic::Layered`].
+    /// and the mark `UpdateLayeredWindow` leaves; the sheets of those calls): see [`guic::Layered`].
     fn layered_op(&mut self, hwnd: u32, op: u8, key: u32, alpha: u8, flags: u32) -> Reply {
         let Some(w) = self.get_mut(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
         if w.ex_style & guic::WS_EX_LAYERED == 0 {
@@ -1794,8 +1773,6 @@ impl Wm {
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
             Request::CursorShape { .. } | Request::ScreenPixel { .. } => Reply::Ok {},
-            Request::RegisterMessage { name } => Reply::Atom { atom: self.atom_for(&name) },
-            Request::Prop { hwnd, op, key, value } => self.prop_op(hwnd, op, key, value),
             Request::Dpi { set, process, awareness } => self.dpi_op(ctx, set, process, awareness),
             Request::Post { hwnd, msg, w, l } => {
                 if hwnd == 0 {
@@ -1874,6 +1851,14 @@ impl Wm {
                 Reply::Handle { hwnd: h }
             }
             Request::TrackMouse { hwnd, flags, hover } => self.track_mouse(ctx, hwnd, flags, hover, fx),
+            Request::RegisterMessage { name } => {
+                // Learn: the string is at most 255 characters; the number is in 0xC000..=0xFFFF.
+                if name.is_empty() || name.len() > 255 {
+                    err(ERROR_INVALID_PARAMETER)
+                } else {
+                    Reply::Atom { atom: self.atom_for(&name) }
+                }
+            }
             Request::Cursor { set, x, y } => {
                 if set {
                     self.cursor = (x.clamp(0, self.screen.0 - 1), y.clamp(0, self.screen.1 - 1));
@@ -1956,7 +1941,6 @@ impl Window {
             seq: 0,
             paint: paint::Paint::default(),
             dpi: 0,
-            props: Vec::new(),
             lay: guic::Layered::default(),
             ime: u32::MAX,
         }
@@ -2009,6 +1993,22 @@ mod tests {
             }
             r => panic!("{r:?}"),
         }
+    }
+
+    #[test]
+    fn window_messages_share_one_number_per_name() {
+        let mut wm = Wm::new();
+        let reg = |wm: &mut Wm, ctx: Ctx, s: &str| {
+            wm.handle(ctx, Request::RegisterMessage { name: s.encode_utf16().collect() }, &mut Effects::default())
+        };
+        let Reply::Atom { atom: a } = reg(&mut wm, A, "Chrome_MessageWindow") else { panic!() };
+        assert!((0xC000..=0xFFFF).contains(&a));
+        // Another process, another case: the same number.
+        assert_eq!(reg(&mut wm, B, "CHROME_MESSAGEWINDOW"), Reply::Atom { atom: a });
+        let Reply::Atom { atom: b } = reg(&mut wm, A, "TaskbarCreated") else { panic!() };
+        assert_ne!(a, b);
+        assert_eq!(reg(&mut wm, A, ""), err(ERROR_INVALID_PARAMETER));
+        assert_eq!(reg(&mut wm, A, &"x".repeat(256)), err(ERROR_INVALID_PARAMETER));
     }
 
     #[test]

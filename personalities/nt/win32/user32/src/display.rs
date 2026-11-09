@@ -739,3 +739,74 @@ pub unsafe extern "system" fn EnumDisplayMonitors(
         i32::from(go != 0)
     }
 }
+
+// ----- the per-monitor DPI functions of `api-ms-win-shcore-scaling-*` (user32 exports them too)
+
+const E_ACCESSDENIED: i32 = 0x8007_0005u32 as i32;
+const E_INVALIDARG: i32 = 0x8007_0057u32 as i32;
+
+/// `GetDpiForMonitor`: 96 x 96 for the effective and angular types; the raw
+/// type is not supported; the type is checked before the monitor.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetDpiForMonitor(monitor: usize, kind: u32, dpi_x: *mut u32, dpi_y: *mut u32) -> i32 {
+    if kind > 2 {
+        set_last_error(0xA0);
+        return 0x8007_00A0u32 as i32;
+    }
+    if monitor != PRIMARY_MONITOR {
+        set_last_error(6);
+        return 0x8007_0006u32 as i32;
+    }
+    if dpi_x.is_null() || dpi_y.is_null() {
+        set_last_error(0x1E7);
+        return 0x8007_01E7u32 as i32;
+    }
+    let v = if kind == 2 { 0 } else { 96 };
+    // SAFETY: the caller's outputs.
+    unsafe {
+        *dpi_x = v;
+        *dpi_y = v;
+    }
+    if kind == 2 {
+        set_last_error(0x32);
+        0x8007_0032u32 as i32
+    } else {
+        0
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetScaleFactorForMonitor(monitor: usize, scale: *mut i32) -> i32 {
+    if scale.is_null() || monitor != PRIMARY_MONITOR {
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's output.
+    unsafe { *scale = 100 };
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetProcessDpiAwareness(value: u32) -> i32 {
+    let ctx = match value {
+        0 => -1,
+        1 => -2,
+        2 => -3,
+        _ => return E_INVALIDARG,
+    };
+    if SetProcessDpiAwarenessContext(ctx) != 0 { 0 } else { E_ACCESSDENIED }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetProcessDpiAwareness(process: usize, value: *mut u32) -> i32 {
+    if value.is_null() {
+        return E_INVALIDARG;
+    }
+    if process != 0 && process != usize::MAX {
+        // SAFETY: the caller's output.
+        unsafe { *value = u32::MAX };
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's output.
+    unsafe { *value = guic::dpi_awareness(thread_awareness()) as u32 };
+    0
+}

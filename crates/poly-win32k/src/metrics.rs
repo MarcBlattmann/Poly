@@ -420,6 +420,143 @@ mod tests {
     }
 
     #[test]
+    fn system_metrics_of_both_sessions_match_the_sheet() {
+        let i = Display::INTERACTIVE;
+        let m = |index| system_metric(index, &i);
+        // GetSystemMetrics.yaml `screen`, `work_area_sizes`.
+        assert_eq!([0, 1, 76, 77, 78, 79, 80, 81].map(|x| m(x).unwrap()), [1920, 1080, 0, 0, 1920, 1080, 1, 1]);
+        assert_eq!(
+            [16, 17, 61, 62, 59, 60, 34, 35].map(|x| m(x).unwrap()),
+            [1920, 1033, 1936, 1072, 1940, 1100, 136, 39]
+        );
+        // `sizes_96`.
+        let sizes = [
+            (2, 17),
+            (3, 17),
+            (4, 23),
+            (5, 1),
+            (6, 1),
+            (7, 3),
+            (8, 3),
+            (9, 17),
+            (10, 17),
+            (11, 32),
+            (12, 32),
+            (13, 32),
+            (14, 32),
+            (15, 20),
+            (18, 0),
+            (20, 17),
+            (21, 17),
+            (28, 136),
+            (29, 39),
+            (30, 36),
+            (31, 22),
+            (32, 4),
+            (33, 4),
+            (36, 4),
+            (37, 4),
+            (38, 75),
+            (39, 75),
+            (45, 2),
+            (46, 2),
+            (47, 160),
+            (48, 28),
+            (49, 16),
+            (50, 16),
+            (51, 23),
+            (52, 22),
+            (53, 22),
+            (54, 19),
+            (55, 19),
+            (57, 160),
+            (58, 28),
+            (68, 4),
+            (69, 4),
+            (71, 15),
+            (72, 15),
+            (83, 1),
+            (84, 1),
+            (92, 4),
+        ];
+        for (index, v) in sizes {
+            assert_eq!(m(index), Some(v), "SM {index}");
+        }
+        // `flags`.
+        for index in [
+            19, 22, 23, 40, 41, 42, 43, 44, 67, 70, 73, 74, 75, 86, 87, 88, 89, 91, 94, 95, 0x1000, 0x2000, 0x2001,
+            0x2003, 0x2004,
+        ] {
+            assert_eq!(m(index), Some(0), "SM {index}");
+        }
+        // SM_NETWORK is 3 in GetSystemMetricsForDpi.yaml's later recording (1 in GetSystemMetrics.yaml's).
+        assert_eq!([56, 82, 0x2002, 63].map(|x| m(x).unwrap()), [8, 1, 1, 3]);
+        // `errors.undefined`: none for the reserved holes, undefined beyond.
+        for index in [24, 25, 26, 27, 64, 65, 66, 90, 96, 0x2005] {
+            assert_eq!(m(index), Some(0), "SM {index}");
+        }
+        for index in [-1, -100, 97, 0x1001, i32::MAX] {
+            assert_eq!(m(index), None, "SM {index}");
+        }
+        // Two indices winuser.h does not define answer on the later oracle (GetSystemMetricsForDpi.yaml).
+        assert_eq!([85, 93].map(|x| m(x).unwrap()), [4, 516]);
+        // The service session (slice A's sheets).
+        assert_eq!(system_metric(0, &Display::SERVICE), Some(1024));
+        assert_eq!(system_metric(17, &Display::SERVICE), Some(745));
+        assert_eq!(system_metric(61, &Display::SERVICE), Some(1040));
+    }
+
+    #[test]
+    fn system_metrics_for_dpi_match_the_sheet() {
+        let d = Display::INTERACTIVE;
+        let f = |index, dpi| system_metric_for_dpi(index, dpi, &d).unwrap();
+        for (index, want) in [
+            (2, [17, 21, 26, 34]),
+            (4, [23, 29, 34, 45]),
+            (51, [23, 29, 34, 45]),
+            (11, [32, 40, 48, 64]),
+            (13, [32, 32, 48, 64]),
+            (15, [20, 25, 30, 39]),
+            (28, [136, 166, 198, 258]),
+            (29, [39, 47, 56, 71]),
+            (30, [36, 46, 54, 72]),
+            (31, [22, 28, 33, 44]),
+            (52, [22, 28, 33, 44]),
+            (32, [4, 4, 5, 5]),
+            (38, [75, 94, 113, 150]),
+            (49, [16, 20, 24, 32]),
+            (54, [19, 24, 29, 38]),
+            (71, [15, 19, 25, 31]),
+            (92, [4, 5, 6, 8]),
+            // Unchanged at every DPI.
+            (5, [1; 4]),
+            (7, [3; 4]),
+            (45, [2; 4]),
+            (36, [4; 4]),
+            (68, [4; 4]),
+            (83, [1; 4]),
+            (57, [160; 4]),
+            (58, [28; 4]),
+            (47, [160; 4]),
+            (48, [28; 4]),
+            (18, [0; 4]),
+            (0, [1920; 4]),
+            (78, [1920; 4]),
+            (61, [1936; 4]),
+        ] {
+            assert_eq!([96, 120, 144, 192].map(|dpi| f(index, dpi)), want, "SM {index}");
+        }
+        // SM_CYCAPTION at unusual DPIs.
+        assert_eq!([f(4, 1), f(4, 48), f(4, 1000)], [24, 12, 230]);
+        // At the system DPI it equals GetSystemMetrics.
+        for index in 0..96 {
+            if let Some(v) = system_metric(index, &d) {
+                assert_eq!(f(index, 96), v, "SM {index}");
+            }
+        }
+    }
+
+    #[test]
     fn client_areas_match_the_sheet() {
         let w = Rect::new(0, 0, 200, 100);
         let size = |s, e| {

@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/GetAclInformation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns, for class 1 (AclRevisionInformation), the ACL's revision as a
+  32-bit value, and for class 2 (AclSizeInformation), three 32-bit values:
+  the ACE count from the header, the bytes in use (header plus all ACEs) and
+  the bytes free (AclSize minus bytes in use). Other classes fail.
+interface:
+  signature: "BOOL GetAclInformation(PACL acl, LPVOID info, DWORD info_length, ACL_INFORMATION_CLASS class)"
+  layout: "ACL (winnt.h): an 8-byte header {Revision (byte), Sbz1 (byte, 0), AclSize (16 bits), AceCount (16 bits), Sbz2 (16 bits)} followed by the ACEs one after the other, all fields little-endian. Each ACE starts with {AceType (byte), AceFlags (byte), AceSize (16 bits)}; access-allowed (type 0), access-denied (1), system-audit (2) and mandatory-label (0x11) ACEs continue with a 32-bit mask (the policy for a label) and the SID, so their size is 8 + the SID length (20 for the 12-byte S-1-1-0 and S-1-1-0-like SIDs, 24 for S-1-5-32-544, 76 for a 15-sub-authority SID). ACL revisions 2, 3 and 4 are the valid ones. Buffers in the tests are 8-byte aligned unless noted."
+  class_1: "ACL_REVISION_INFORMATION: one 32-bit value, the revision; 4 bytes written"
+  class_2: "ACL_SIZE_INFORMATION: AceCount, AclBytesInUse, AclBytesFree, 32 bits each; 12 bytes written"
+rules:
+  revision: "class 1 gives 2, 3 or 4 for ACLs initialised with that revision, and 3 after AddMandatoryAce(3) bumped a revision 2 ACL; it needs a length of at least 4 and writes only 4 bytes (lengths 5, 8, 12, 16, 64 write the same 4)"
+  size_empty: "class 2 of an empty ACL of AclSize N: count 0, in use 8, free N - 8: N = 8 gives free 0, 12 gives 4, 16 gives 8, 28 (initialised with 30) gives 20, 64 gives 56, 100 gives 92, 1000 gives 992"
+  size_with_aces: "a 128-byte ACL with three ACEs (20 + 20 + 24 bytes): count 3, in use 72, free 56; a 64-byte ACL after adding 20-byte ACEs: count 1 in use 28 free 36, count 2 in use 48 free 16 (a third ACE does not fit and the numbers stay); after deleting ACEs back to count 1 (28, 36) and count 0 (8, 56)"
+  length: "class 2 needs a length of at least 12: lengths 0, 1, 4, 8, 11 fail without writing, 12, 13, 16, 64 succeed and write 12 bytes"
+  damaged_revision: "an ACL whose revision byte is 0, 1, 5 or 255 fails for both classes"
+  damaged_class1: "class 1 reads only the revision byte: with count 5 or 100 (more than the real ACEs), count 1 or 0, a first ACE size of 0, 4 or 400, or an AclSize field of 40, 72 or 1100 it still returns 2"
+  damaged_class2: "class 2 walks the ACEs by their size fields: count 5 and count 100 on a three-ACE ACL fail; count 1 gives count 1, in use 28, free 100; count 0 gives 0, 8, 120; a first ACE size of 0 gives count 3, in use 8, free 120; size 4 gives 3, 12, 116; size 400 fails; AclSize 40 (smaller than the ACEs) fails; AclSize 72 gives 3, 72, 0; AclSize 1100 gives 3, 72, 1028. AceCount is the header's count, not a count of walked ACEs"
+errors:
+  class: "a class other than 1 or 2 (0, 3, 4, 5, 6, 7, 16, 0xFF, 0x100, 0xFFFFFFFF): FALSE, ERROR_INVALID_PARAMETER (87), nothing written"
+  length: "length below the structure's size: FALSE, ERROR_INSUFFICIENT_BUFFER (122), nothing written"
+  acl: "revision byte not 2..4, or an ACE walk that leaves the ACL (class 2): FALSE, ERROR_INVALID_PARAMETER (87)"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

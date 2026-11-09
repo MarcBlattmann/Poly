@@ -280,6 +280,12 @@ pub fn in_background<E: Env + ?Sized>(env: &E, pid: u32) -> bool {
 /// WM_ACTIVATE(WA_INACTIVE), WM_ACTIVATEAPP(0) to every top-level window
 /// of the thread, WM_KILLFOCUS (unless `focus_first` killed it already).
 pub fn deactivate_away<E: Env + ?Sized>(env: &E, focus_done: bool) {
+    deactivate(env, focus_done, false);
+}
+
+/// As [`deactivate_away`]; with `names_next` the foreground is left alone: the caller
+/// gives it to a window it names.
+fn deactivate<E: Env + ?Sized>(env: &E, focus_done: bool, names_next: bool) {
     let st = input(env);
     if st.active != 0
         && let Some(xi) = info(env, u64::from(st.active))
@@ -295,10 +301,12 @@ pub fn deactivate_away<E: Env + ?Sized>(env: &E, focus_done: bool) {
     if !focus_done && st.focus != 0 {
         send(env, u64::from(st.focus), WM_KILLFOCUS, 0, 0);
     }
+    // `names_next`: the caller names the new foreground window itself (SetForegroundWindow):
+    // nothing is handed over meanwhile, and no keeper is raised over the windows of the thread.
     if st.active != 0 {
         ime_switch(env, st.active, 0);
     }
-    let fg = if st.fg_mine { SET_FOREGROUND } else { 0 };
+    let fg = if st.fg_mine && !names_next { SET_FOREGROUND } else { 0 };
     set(env, 0, 0, SET_ACTIVE | SET_FOCUS | fg);
 }
 
@@ -349,12 +357,13 @@ pub fn after_hide<E: Env + ?Sized>(env: &E, i: &WinInfo) {
             Some(o) if o.visible && o.style & WS_DISABLED == 0 && o.tid == env.tid() => {
                 activate(env, o.hwnd, false, true);
             }
-            // Else the next window of the thread in z order that can have it
-            // (ImmGetContext.yaml igc_activation: A takes over from B).
+            // Else the next framed (not popup) window of the thread in z order that
+            // can have it (ImmGetContext.yaml igc_activation: A takes over from B;
+            // GetActiveWindow.yaml hide_active: a popup is not taken).
             _ => match tops_of(env, env.tid()).into_iter().filter(|&t| t != i.hwnd).find_map(|t| {
                 info(env, u64::from(t))
                     .filter(|w| w.visible && w.style & WS_DISABLED == 0 && w.ex_style & WS_EX_NOACTIVATE == 0)
-                    .filter(|w| w.owner == 0)
+                    .filter(|w| w.owner == 0 && w.pid == i.pid && w.style & WS_POPUP == 0)
             }) {
                 Some(next) => {
                     activate(env, next.hwnd, false, true);
@@ -383,6 +392,55 @@ fn is_within<E: Env + ?Sized>(env: &E, h: u32, root: u32) -> bool {
         }
     }
     false
+}
+
+/// A window `root` goes (hidden by DestroyWindow): a window below it that
+/// holds the capture is sent WM_CANCELMODE and loses the capture with
+/// WM_CAPTURECHANGED (lParam NULL). The capture of `root` itself ends
+/// without a message (SetCapture.yaml `destroy`).
+pub fn release_capture_below<E: Env + ?Sized>(env: &E, root: u32) {
+    let st = input(env);
+    if st.capture == 0 || st.capture == root || !is_within(env, st.capture, root) {
+        return;
+    }
+    send(env, u64::from(st.capture), WM_CANCELMODE, 0, 0);
+    env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE });
+    send(env, u64::from(st.capture), 0x0215, 0, 0); // WM_CAPTURECHANGED
+}
+
+/// `WM_CAPTURECHANGED` (winuser.h).
+const WM_CAPTURECHANGED: u32 = 0x0215;
+
+/// `SetCapture` (SetCapture.yaml): the previous capture window of the
+/// thread's input. A window of another thread is refused (NULL, no error,
+/// nothing changes); a hidden, disabled or child window can have the
+/// capture; the previous capture window gets WM_CAPTURECHANGED (lParam the
+/// new window) before the call returns; SetCapture(NULL) releases it
+/// (lParam NULL).
+pub fn set_capture<E: Env + ?Sized>(env: &E, hwnd: u64) -> u64 {
+    let st = input(env);
+    let set = |h: u32| {
+        env.call(Request::SetInput { active: 0, focus: 0, capture: h, which: SET_CAPTURE });
+    };
+    if hwnd == 0 {
+        if st.capture != 0 {
+            set(0);
+            send(env, u64::from(st.capture), WM_CAPTURECHANGED, 0, 0);
+        }
+        return u64::from(st.capture);
+    }
+    let Some(i) = info(env, hwnd) else {
+        env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    };
+    if i.tid != env.tid() {
+        return 0;
+    }
+    set(i.hwnd);
+    if st.capture != 0 {
+        send(env, u64::from(st.capture), WM_CAPTURECHANGED, 0, u64::from(i.hwnd));
+    }
+    u64::from(st.capture)
 }
 
 /// `SetFocus` (SetFocus.yaml).
@@ -470,7 +528,7 @@ pub fn set_foreground_window<E: Env + ?Sized>(env: &E, hwnd: u64) -> bool {
         return true;
     }
     if foreign(env, &i) {
-        deactivate_away(env, false);
+        deactivate(env, false, true);
         env.call(Request::GiveForeground { hwnd: i.hwnd });
         return true;
     }

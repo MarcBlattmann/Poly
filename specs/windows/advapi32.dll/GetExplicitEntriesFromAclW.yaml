@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/GetExplicitEntriesFromAclW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-chrome-win-2
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Turns the ACEs of an ACL back into EXPLICIT_ACCESS_W entries (one per ACE)
+  in a single LocalAlloc block that also holds the SIDs; the caller frees it
+  with LocalFree.
+interface:
+  signature: "DWORD GetExplicitEntriesFromAclW(PACL acl, PULONG count, PEXPLICIT_ACCESS_W* entries)"
+  explicit_access_w: "EXPLICIT_ACCESS_W (accctrl.h), 48 bytes on x64: access u32 @0, mode u32 @4, inherit u32 @8, 4 bytes padding @12, TRUSTEE_W @16..48"
+  enumerations: "ACCESS_MODE: NOT_USED_ACCESS 0, GRANT_ACCESS 1, SET_ACCESS 2, DENY_ACCESS 3, REVOKE_ACCESS 4, SET_AUDIT_SUCCESS 5, SET_AUDIT_FAILURE 6; TRUSTEE_FORM: TRUSTEE_IS_SID 0, TRUSTEE_IS_NAME 1, TRUSTEE_BAD_FORM 2, TRUSTEE_IS_OBJECTS_AND_SID 3, TRUSTEE_IS_OBJECTS_AND_NAME 4; TRUSTEE_TYPE: UNKNOWN 0, USER 1, GROUP 2, DOMAIN 3, ALIAS 4, WELL_KNOWN_GROUP 5, DELETED_ACCOUNT 6, INVALID 7, COMPUTER 8; inheritance: NO_INHERITANCE 0, SUB_OBJECTS_ONLY_INHERIT 1 (= OBJECT_INHERIT_ACE), SUB_CONTAINERS_ONLY_INHERIT 2 (= CONTAINER_INHERIT_ACE), SUB_CONTAINERS_AND_OBJECTS_INHERIT 3, INHERIT_NO_PROPAGATE 4, INHERIT_ONLY 8 (accctrl.h, winnt.h)"
+rules:
+  mapping: "allow ACEs become GRANT_ACCESS (1), deny ACEs DENY_ACCESS (3); every system-audit ACE gives two entries, SET_AUDIT_SUCCESS (5) then SET_AUDIT_FAILURE (6), whichever of the success/failure flags (0x40, 0x80, 0xC0, 0x41) it has (4 audit ACEs gave 8 entries); access = the ACE mask, trustee form TRUSTEE_IS_SID (0), type TRUSTEE_IS_UNKNOWN (0), ptstrName points to a copy of the SID inside the returned block"
+  inheritance: "the entry inheritance is the ACE flags (0x1, 0x2, 0x3, 0x4, 0x8 come back as such, 0 as 0); ACEs that have the INHERITED_ACE flag (0x10) are not returned at all: an allow ACL with ACEs of flags 0, 1, 2, 3, 4, 8, 0x10, 0x13, 0x1F gave 6 entries (the last three missing), a deny ACL with flags 0, 3, 0x10 gave 2"
+  order: "entries are in ACL order; a mixed ACL of 4 ACEs [allow Everyone 0x120089, allow SYSTEM 0x1F01FF flags 3, deny Admins 0x2 flags 1, audit Everyone 0x1] returned 5 entries (the audit ACE twice)"
+  empty_and_null: "an empty ACL (header only) and a NULL ACL return 0 with count 0 and a NULL entries pointer"
+  mandatory_label: "an ACL holding only a mandatory-label ACE (SYSTEM_MANDATORY_LABEL_ACE) makes the call fail with ERROR_INVALID_PARAMETER (87), count 0"
+errors:
+  mandatory_label_ace: "ERROR_INVALID_PARAMETER (87) for an ACL with a mandatory-label ACE"
+side_effects: "allocates the entries block (LocalAlloc)"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  object ACEs, compound ACEs, ACLs of revision 4 with callback ACEs, invalid
+  ACLs. Domain accounts and domain-relative well-known SIDs of a real
+  domain, AppContainer and capability SIDs beyond their string forms,
+  auditing (SACL entries are only stored, never evaluated), remote systems
+  (the system-name arguments), Kerberos or NTLM logon tokens, tokens of
+  other users.

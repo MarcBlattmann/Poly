@@ -31,6 +31,7 @@
 pub mod codepage;
 pub mod critsec;
 pub mod heap;
+pub mod peb;
 pub mod status;
 pub mod string;
 pub mod version;

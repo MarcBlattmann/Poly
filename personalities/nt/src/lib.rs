@@ -50,6 +50,7 @@ pub mod backend;
 pub mod console;
 pub mod consts;
 pub mod context;
+pub mod diag;
 pub mod exception;
 pub mod exec;
 pub mod image;
@@ -58,6 +59,7 @@ pub mod kernel;
 pub mod layout;
 pub mod memory;
 pub mod objects;
+pub mod pagemap;
 pub mod params;
 pub mod pe_writer;
 pub mod protect;
@@ -69,6 +71,7 @@ pub mod sync;
 pub mod sysinfo;
 pub mod system;
 pub mod threads;
+pub mod trace;
 pub mod vm;
 pub mod win32k;
 
@@ -80,6 +83,7 @@ pub use context::NtContext;
 pub use kernel::{
     Apc, ClientId, NtKernel, NtTimeout, ProcessCreate, ProcessCreated, ThreadCreate, ThreadCreated, UserFault,
 };
+pub use poly_kernelbase::{cpu::CpuId, kuser};
 pub use protect::HwProt;
 pub use services::Service;
 pub use system::{NtProcess, NtSystem};
@@ -265,6 +269,14 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
             Ok(poly_ntobj::status::STATUS_SUCCESS)
         }
         PolyResumeApc => Ok(k.resume_apc()),
+        PolyDebugPrint => {
+            let [text, length] = abi::args::<K, 2>(k, regs)?;
+            let mut buf = [0u8; 512];
+            let n = (length as usize).min(buf.len());
+            abi::read(k, text, &mut buf[..n])?;
+            k.debug_print(&buf[..n]);
+            Ok(poly_ntobj::status::STATUS_SUCCESS)
+        }
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),
         QuerySystemTime => sysinfo::query_system_time(k, regs),

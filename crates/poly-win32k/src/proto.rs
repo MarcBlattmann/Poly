@@ -301,26 +301,27 @@ crate::wire_enum! {
         /// TrackMouseEvent: `flags` TME_* (TME_QUERY answers a `Value`:
         /// flags | hwnd << 32 ... see `wm::raw`), `hover` ms.
         59 => TrackMouse { hwnd: u32, flags: u32, hover: u32 },
+        /// `RegisterWindowMessageW`: the message number (0xC000..=0xFFFF) of a
+        /// name, the same for every caller of the session and the same
+        /// number as a class of that name has as its atom; an `Atom`.
+        70 => RegisterMessage { name: Vec<u16> },
         /// A clipboard operation (ADR 0172): a `Clip`.
         100 => Clip { op: crate::clip::ClipOp },
         /// DPI awareness (`awareness` is `guic::AWARE_*`): without `set` a
         /// `Value` with the calling thread's; with `set` for the process an
         /// `Ok` (once) or for the thread a `Value` with the previous one.
-        /// Window properties: `op` 0 get, 1 set, 2 remove, 3 count; a `Value`.
-        /// Layered attributes: `op` 0 set, 1 get (a `Value`: key, alpha << 32, flags << 40), 2 mark UpdateLayeredWindow.
-        /// `RegisterWindowMessageW`: an `Atom`.
+        101 => Dpi { set: bool, process: bool, awareness: u8 },
+        /// Layered attributes: `op` 0 set (a `Value` for the first set, else `Ok`), 1 get
+        /// (a `Value`: key, alpha << 32, flags << 40), 2 mark `UpdateLayeredWindow`.
+        103 => Layered { hwnd: u32, op: u8, key: u32, alpha: u8, flags: u32 },
         /// An input-context operation (ADR 0172): an `Ime`.
-        /// The system cursor (`IDC_*`) to show over a top-level window's surface.
-        /// What the screen shows at a point: a `Value`, the `COLORREF`.
-        108 => ScreenPixel { x: i32, y: i32 },
-        107 => CursorShape { hwnd: u32, idc: u16 },
         105 => Ime { op: crate::ime::ImeOp },
         /// Set a window's input-context association (`ime::Assoc::code`): a `Value` with the previous code.
         106 => ImeAssoc { hwnd: u32, code: u32 },
-        104 => RegisterMessage { name: Vec<u16> },
-        103 => Layered { hwnd: u32, op: u8, key: u32, alpha: u8, flags: u32 },
-        102 => Prop { hwnd: u64, op: u8, key: ClassRef, value: u64 },
-        101 => Dpi { set: bool, process: bool, awareness: u8 },
+        /// The system cursor (`IDC_*`) to show over a top-level window's surface.
+        107 => CursorShape { hwnd: u32, idc: u16 },
+        /// What the screen shows at a point: a `Value`, the `COLORREF`.
+        108 => ScreenPixel { x: i32, y: i32 },
     }
 }
 
@@ -398,7 +399,6 @@ mod tests {
             Request::Clip { op: crate::clip::ClipOp::Set { format: 13, handle: 5, data: Some(vec![1, 2]) } },
             Request::Dpi { set: true, process: false, awareness: 2 },
             Request::Layered { hwnd: 1, op: 0, key: 2, alpha: 3, flags: 3 },
-            Request::Prop { hwnd: 1, op: 1, key: ClassRef::Name { name: vec![65] }, value: 9 },
         ] {
             assert_eq!(decode::<Request>(&encode(&r)), Some(r));
         }
