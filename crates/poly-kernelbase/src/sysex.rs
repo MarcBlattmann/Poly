@@ -424,10 +424,10 @@ pub fn alloc_request(
                 if req.alignment != 0 && !req.alignment.is_power_of_two() {
                     return Err(ERROR_INVALID_PARAMETER);
                 }
-                if req.highest != 0 && (req.highest + 1) % PAGE_SIZE != 0 {
+                if req.highest != 0 && !(req.highest + 1).is_multiple_of(PAGE_SIZE) {
                     return Err(ERROR_INVALID_PARAMETER);
                 }
-                if req.lowest % PAGE_SIZE != 0 || (req.highest != 0 && req.lowest > req.highest) {
+                if !req.lowest.is_multiple_of(PAGE_SIZE) || (req.highest != 0 && req.lowest > req.highest) {
                     return Err(ERROR_INVALID_PARAMETER);
                 }
             }
@@ -455,7 +455,7 @@ pub fn align_up(base: usize, alignment: usize) -> usize {
 
 /// Does the range `[at, at + size)` obey `req`?
 pub fn range_ok(req: &AllocRequest, at: usize, size: usize) -> bool {
-    at % effective_alignment(req) == 0
+    at.is_multiple_of(effective_alignment(req))
         && at >= req.lowest
         && (req.highest == 0 || at.checked_add(size).is_some_and(|end| end - 1 <= req.highest))
 }

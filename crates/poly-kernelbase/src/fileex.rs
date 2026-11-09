@@ -14,6 +14,11 @@
 use crate::error::*;
 use alloc::vec::Vec;
 
+/// Makes the NT path of a Win32 name (or says why it cannot).
+pub type NtPathFn<'a> = &'a dyn Fn(&[u16]) -> Result<Vec<u16>, u32>;
+/// Finds the name a directory holds for a component (see [`long_path`]).
+pub type LookupFn<'a> = &'a mut dyn FnMut(&[u16], &[u16]) -> Result<Option<Vec<u16>>, u32>;
+
 /// `ERROR_UNABLE_TO_REMOVE_REPLACED`, `ERROR_UNABLE_TO_MOVE_REPLACEMENT`,
 /// `ERROR_UNABLE_TO_MOVE_REPLACEMENT_2` (`winerror.h`).
 pub const ERROR_UNABLE_TO_REMOVE_REPLACED: u32 = 1175;
@@ -277,14 +282,10 @@ fn u32_at(b: &[u8], at: usize) -> Option<u32> {
 /// `FILE_RENAME_INFORMATION` (same layout, the name an NT path): `convert`
 /// makes one of the Win32 name unless a `RootDirectory` is given (then the
 /// name is relative to it, as NT takes it).
-pub fn rename_info(
-    buf: &[u8],
-    extended: bool,
-    convert: &dyn Fn(&[u16]) -> Result<Vec<u16>, u32>,
-) -> Result<Vec<u8>, u32> {
+pub fn rename_info(buf: &[u8], extended: bool, convert: NtPathFn<'_>) -> Result<Vec<u8>, u32> {
     let len = u32_at(buf, 16).ok_or(ERROR_BAD_LENGTH)? as usize;
     let name = buf.get(20..20 + len).ok_or(ERROR_BAD_LENGTH)?;
-    if len == 0 || len % 2 != 0 {
+    if len == 0 || !len.is_multiple_of(2) {
         return Err(ERROR_INVALID_PARAMETER);
     }
     let replace = if extended { buf[0] & 1 != 0 } else { buf[0] != 0 };
@@ -300,7 +301,7 @@ pub fn rename_info(
 /// The plan for `SetFileInformationByHandle(class, buf)`. A buffer shorter
 /// than the class's structure is `ERROR_BAD_LENGTH`; a class that cannot be
 /// set (the query-only ones) `ERROR_INVALID_PARAMETER`.
-pub fn set_plan(class: u32, buf: &[u8], convert: &dyn Fn(&[u16]) -> Result<Vec<u16>, u32>) -> Result<SetPlan, u32> {
+pub fn set_plan(class: u32, buf: &[u8], convert: NtPathFn<'_>) -> Result<SetPlan, u32> {
     use class::*;
     let take = |n: usize| buf.get(..n).map(<[u8]>::to_vec).ok_or(ERROR_BAD_LENGTH);
     Ok(match class {
@@ -447,10 +448,7 @@ pub fn final_path(volume: u32, drive: u16, below_volume: &[u16]) -> Vec<u16> {
 /// `dir` being the path up to (not including) the component, as given.
 /// The root (`C:\`, `\\?\C:\`, `\\server\share\`), `.` and `..` are kept
 /// as they are; a component with a wildcard is `ERROR_INVALID_NAME`.
-pub fn long_path(
-    path: &[u16],
-    lookup: &mut dyn FnMut(&[u16], &[u16]) -> Result<Option<Vec<u16>>, u32>,
-) -> Result<Vec<u16>, u32> {
+pub fn long_path(path: &[u16], lookup: LookupFn<'_>) -> Result<Vec<u16>, u32> {
     if path.is_empty() {
         return Err(ERROR_INVALID_PARAMETER);
     }
@@ -636,8 +634,8 @@ mod tests {
             Ok(SetPlan::Nt { nt_class: 64, bytes: alloc::vec![3, 0, 0, 0] })
         );
         assert_eq!(set_plan(class::FILE_END_OF_FILE_INFO, &[0; 4], &nothing), Err(ERROR_BAD_LENGTH));
-        assert_eq!(set_plan(class::FILE_END_OF_FILE_INFO, &[5, 0, 0, 0, 0, 0, 0, 0], &nothing).is_ok(), true);
-        assert_eq!(set_plan(class::FILE_BASIC_INFO, &[0; 40], &nothing).is_ok(), true);
+        assert!(set_plan(class::FILE_END_OF_FILE_INFO, &[5, 0, 0, 0, 0, 0, 0, 0], &nothing).is_ok());
+        assert!(set_plan(class::FILE_BASIC_INFO, &[0; 40], &nothing).is_ok());
         assert_eq!(set_plan(class::FILE_BASIC_INFO, &[0; 39], &nothing), Err(ERROR_BAD_LENGTH));
         assert_eq!(set_plan(class::FILE_IO_PRIORITY_HINT_INFO, &[1, 0, 0, 0], &nothing), Ok(SetPlan::Nothing));
         assert_eq!(set_plan(class::FILE_IO_PRIORITY_HINT_INFO, &[3, 0, 0, 0], &nothing), Err(ERROR_INVALID_PARAMETER));
