@@ -56,6 +56,16 @@ pub fn sqrt(v: f32) -> f32 {
     }
 }
 
+/// `v > 0` (false for NaN).
+pub fn positive(v: f32) -> bool {
+    v > 0.0
+}
+
+/// `v >= 0` (false for NaN).
+pub fn non_negative(v: f32) -> bool {
+    v >= 0.0
+}
+
 pub fn abs(v: f32) -> f32 {
     if v < 0.0 { -v } else { v }
 }
@@ -480,7 +490,7 @@ pub fn recommended_mode(em_size: f32, pixels_per_dip: f32, measuring: u32, param
     if measuring > 2 {
         return None;
     }
-    if !(em_size > 0.0) || !(pixels_per_dip > 0.0) {
+    if !positive(em_size) || !positive(pixels_per_dip) {
         return Some(mode::NATURAL);
     }
     if params_mode != mode::DEFAULT {

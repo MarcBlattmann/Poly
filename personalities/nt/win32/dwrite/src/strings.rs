@@ -114,7 +114,7 @@ unsafe fn copy_out(src: &[u16], buf: *mut c_void, cap: u32) -> HRESULT {
         }
         *out.add(n) = 0;
     }
-    if src.len() + 1 <= cap as usize { S_OK } else { E_INSUFFICIENT_BUFFER }
+    if src.len() < cap as usize { S_OK } else { E_INSUFFICIENT_BUFFER }
 }
 
 unsafe extern "system" fn get_locale_name(this: *mut c_void, i: u32, buf: *mut c_void, cap: u32) -> HRESULT {

@@ -134,11 +134,11 @@ unsafe fn custom(
     // SAFETY: output writable.
     unsafe {
         put::<c_void>(out, core::ptr::null_mut());
-        // `!(x > 0.0)` is also true for NaN.
-        if !(gamma > 0.0)
-            || !(contrast >= 0.0)
-            || !(gray >= 0.0)
-            || !(level >= 0.0)
+        // `!r::positive(x)` is also true for NaN.
+        if !r::positive(gamma)
+            || !r::non_negative(contrast)
+            || !r::non_negative(gray)
+            || !r::non_negative(level)
             || geometry > 2
             || mode > max_mode
             || grid > 2
@@ -274,6 +274,7 @@ unsafe fn run_polys(run: &GlyphRun, ppd: f32, m: &Matrix, origin: (f32, f32)) ->
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 unsafe fn create_analysis(
     run: *mut c_void,
     ppd: f32,
@@ -287,11 +288,11 @@ unsafe fn create_analysis(
     // SAFETY: the run and matrix are the caller's.
     unsafe {
         put::<c_void>(out, core::ptr::null_mut());
-        if run.is_null() || rendering > 5 || measuring > 2 || !(ppd > 0.0) {
+        if run.is_null() || rendering > 5 || measuring > 2 || !r::positive(ppd) {
             return E_INVALIDARG;
         }
         let run = &*(run as *const GlyphRun);
-        if !(run.em_size >= 0.0) || !is_face(run.face) {
+        if !r::non_negative(run.em_size) || !is_face(run.face) {
             return E_INVALIDARG;
         }
         let kind = if rendering == r::mode::ALIASED {
@@ -486,7 +487,7 @@ pub unsafe extern "system" fn glyph_run_outline(
 ) -> HRESULT {
     // SAFETY: our face; the arrays hold `count` elements; the sink is the caller's COM object.
     unsafe {
-        if !(em > 0.0) || sink.is_null() {
+        if !r::positive(em) || sink.is_null() {
             return E_INVALIDARG;
         }
         let face = face_ref(this);
@@ -636,7 +637,7 @@ pub unsafe extern "system" fn gdi_metrics(
 ) -> HRESULT {
     // SAFETY: our face; the transform is the caller's.
     unsafe {
-        if !(em > 0.0) || !(ppd > 0.0) {
+        if !r::positive(em) || !r::positive(ppd) {
             return E_INVALIDARG;
         }
         let ppem = em * ppd * read_matrix(transform).scale();
@@ -658,7 +659,7 @@ pub unsafe extern "system" fn gdi_glyph_metrics(
 ) -> HRESULT {
     // SAFETY: our face; arrays of `count` elements.
     unsafe {
-        if !(em > 0.0) || !(ppd > 0.0) {
+        if !r::positive(em) || !r::positive(ppd) {
             return E_INVALIDARG;
         }
         let f = face_ref(this);

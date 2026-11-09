@@ -99,7 +99,7 @@ pub fn read_file(path: &[u16]) -> Result<(Vec<u8>, u64), i32> {
     }
     let mut size = 0i64;
     // SAFETY: `h` is an open file.
-    if unsafe { GetFileSizeEx(h, &mut size) } == 0 || size < 0 || size > 0x4000_0000 {
+    if unsafe { GetFileSizeEx(h, &mut size) } == 0 || !(0..=0x4000_0000).contains(&size) {
         // SAFETY: closing our handle.
         unsafe { CloseHandle(h) };
         return Err(crate::com::E_FAIL);

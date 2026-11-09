@@ -6,7 +6,7 @@
 //! `poly-dwrite`'s, host-tested; this crate is the COM glue.
 
 #![no_std]
-#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::missing_safety_doc, clippy::missing_transmute_annotations, clippy::upper_case_acronyms)]
 
 extern crate alloc;
 

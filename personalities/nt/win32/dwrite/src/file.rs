@@ -234,7 +234,7 @@ pub fn local_key(path: &[u16], time: u64) -> Vec<u8> {
 }
 
 pub fn parse_local_key(key: &[u8]) -> Option<(Vec<u16>, u64)> {
-    if key.len() < 8 || (key.len() - 8) % 2 != 0 {
+    if key.len() < 8 || !(key.len() - 8).is_multiple_of(2) {
         return None;
     }
     let (p, t) = key.split_at(key.len() - 8);

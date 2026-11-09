@@ -15,6 +15,7 @@ use core::ffi::c_void;
 use poly_dwrite::face::Cmap;
 use poly_dwrite::model::{self, FontDesc};
 use poly_dwrite::names::utf16;
+use poly_dwrite::render as r;
 use poly_dwrite::sfnt::Sfnt;
 use poly_dwrite::system::{fallback_families, in_charset};
 use poly_win32_gui::SpinLock;
@@ -155,7 +156,7 @@ unsafe extern "system" fn b_add_mapping(
 ) -> HRESULT {
     // SAFETY: our builder; arrays of the stated lengths.
     unsafe {
-        if n_ranges == 0 || n_families == 0 || ranges.is_null() || families.is_null() || !(scale >= 0.0) {
+        if n_ranges == 0 || n_families == 0 || ranges.is_null() || families.is_null() || !r::non_negative(scale) {
             return E_INVALIDARG;
         }
         let rs: &[u32] = slice(ranges, n_ranges * 2);
@@ -304,12 +305,10 @@ unsafe fn lookup(
                 Some(hit)
             }
             None => {
-                if let Some(c) = collection_of(base) {
-                    if !base_family.is_empty() {
-                        if let Some(h) = find_in(&c.data, base_family, cp, w, s, st, 1.0) {
-                            return Some(h);
-                        }
-                    }
+                if let Some(c) = collection_of(base).filter(|_| !base_family.is_empty())
+                    && let Some(h) = find_in(&c.data, base_family, cp, w, s, st, 1.0)
+                {
+                    return Some(h);
                 }
                 let data = crate::system::system_data();
                 fallback_families(cp).iter().find_map(|f| find_in(&data, &utf16(f), cp, w, s, st, 1.0))
