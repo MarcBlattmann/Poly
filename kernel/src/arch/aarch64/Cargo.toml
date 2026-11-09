@@ -1,0 +1,43 @@
+# The aarch64 boot stub (ADR 0154): its own package and workspace, because
+# `poly-kernel` builds only for x86_64 (its build.rs, linker script, vDSO and
+# embedded DLLs). Build, boot and test it with `cargo xtask aarch64`. The
+# architecture-neutral kernel (roadmap Phase 9, ADR 0151) will fold this into
+# `kernel/` behind `crate::arch`.
+[workspace]
+
+[package]
+name = "poly-kernel-aarch64"
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+# The part that touches no hardware: devicetree reader, register decoding,
+# page table entries, report format. It builds for the host too, where its
+# unit tests run (`cargo xtask aarch64 test`).
+[lib]
+name = "poly_a64"
+
+[[bin]]
+name = "poly-kernel-aarch64"
+test = false
+bench = false
+
+# No third-party crates: shared host-tested crates of this repository only.
+[dependencies]
+poly-heap = { path = "../../../../crates/poly-heap" }
+poly-mem = { path = "../../../../crates/poly-mem" }
+
+[profile.dev]
+panic = "abort"
+opt-level = 1
+
+[profile.release]
+panic = "abort"
+debug = true
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"

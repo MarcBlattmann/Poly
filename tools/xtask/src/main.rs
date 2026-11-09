@@ -36,12 +36,16 @@
 //!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop; the settings
 //!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs
 //!   test                host unit tests + kernel boot tests in QEMU
+//!   aarch64 build|run|test [--release] [kernel args...]
+//!                       the aarch64 boot stub (kernel/src/arch/aarch64, ADR 0154) on QEMU's
+//!                       virt machine: build it, boot it with the serial port on the terminal,
+//!                       or run its unit tests and boots (aarch64.rs)
 //!   boot-tests [--list] [--shard <name>]... [group...]
 //!                       the boot tests alone: all, the groups named (`selftest` is
 //!                       every `selftest-*`), or a CI shard's; --list lists them
 //!   ci [part...]        everything CI checks: fmt, clippy, tests, coverage; or the
 //!                       parts named (lint, host-tests, boot-tests, coverage,
-//!                       pipeline), as CI's parallel jobs run them
+//!                       pipeline, aarch64), as CI's parallel jobs run them
 //!                       QEMU runs on KVM when /dev/kvm is usable, else on TCG;
 //!                       POLY_QEMU_ACCEL=tcg|kvm|auto chooses (accel.rs)
 //!   symbolize [--release] [--elf <path>] [addr...]
@@ -92,6 +96,7 @@
 //!   wayland [--check]   regenerate poly-wayland's protocol modules from the Wayland
 //!                       protocol XML in third_party/ (--check: fail if out of date; wayland.rs)
 
+mod aarch64;
 mod accel;
 mod asmlabels;
 mod busybox;
@@ -212,8 +217,9 @@ fn main() -> ExitCode {
 }
 
 /// The commands [`dispatch`] runs (besides `start` and `pipeline`).
-const COMMANDS: [&str; 24] = [
+const COMMANDS: [&str; 25] = [
     "build",
+    "aarch64",
     "run",
     "screenshot",
     "desktop",
@@ -246,6 +252,7 @@ fn dispatch(args: &[String]) -> Result {
     let rest = args.get(1..).unwrap_or_default();
     match args.first().map(String::as_str) {
         Some("build") => build_kernel(release).map(|_| ()),
+        Some("aarch64") => aarch64::command(rest),
         Some("run") => run(rest),
         Some("screenshot") => screenshot(rest),
         Some("desktop") => desktop::command(rest),
@@ -1889,6 +1896,8 @@ fn lint() -> Result {
         cargo().current_dir(root()).args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
     )?;
     step("clippy (kernel)", kernel_cargo()?.args(["clippy", "--", "-D", "warnings"]))?;
+    // The aarch64 boot stub: its own package (ADR 0154).
+    aarch64::lint()?;
     // xtask itself on Windows, so building and booting work on a Windows
     // host too (hostfs.rs has the stand-ins for what needs Linux).
     step(
@@ -1989,12 +1998,13 @@ type CiPart = (&'static str, fn() -> Result);
 /// runs each as a job of its own (`cargo xtask ci <part>`), and the boot
 /// tests as one job per shard ([`CI_BOOT_SHARDS`], `boot-tests --shard`)
 /// plus the TCG run ([`tcg_boot_tests`]).
-const CI_PARTS: [CiPart; 5] = [
+const CI_PARTS: [CiPart; 6] = [
     ("lint", lint),
     ("host-tests", host_tests),
     ("boot-tests", || boot_tests().and_then(|()| tcg_boot_tests())),
     ("coverage", coverage_checks),
     ("pipeline", pipeline_checks),
+    ("aarch64", aarch64::ci),
 ];
 
 /// The GitHub Actions workflow that runs CI.
