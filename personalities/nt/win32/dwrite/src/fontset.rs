@@ -15,8 +15,8 @@ use crate::abi::*;
 use crate::coll::{CollData, new_collection};
 use crate::com::*;
 use crate::file::{FileSource, local_key, local_loader, new_font_file, source_of};
-use crate::stub;
 use crate::strings::wstr;
+use crate::stub;
 
 unsafe extern "system" fn qi(this: *mut c_void, riid: *mut c_void, out: *mut c_void) -> HRESULT {
     // SAFETY: forwarded unchanged.
@@ -61,7 +61,8 @@ unsafe fn set_dtor(h: *mut Head) {
 pub fn new_font_set_from_collection(factory: *mut c_void, data: Arc<CollData>) -> *mut c_void {
     // SAFETY: a live factory.
     unsafe { com_add_ref(factory) };
-    into_raw(FontSet { head: Head::new(&SET_VTBL as *const _ as *const c_void, set_dtor, &SET_IIDS), factory, data }) as *mut c_void
+    into_raw(FontSet { head: Head::new(&SET_VTBL as *const _ as *const c_void, set_dtor, &SET_IIDS), factory, data })
+        as *mut c_void
 }
 
 unsafe fn set_of<'a>(p: *mut c_void) -> Option<&'a FontSet> {
@@ -92,7 +93,14 @@ unsafe extern "system" fn set_face_reference(this: *mut c_void, i: u32, out: *mu
     S_OK
 }
 
-unsafe fn find_in(s: &FontSet, src: &FileSource, index: u32, sims: u32, out_index: *mut c_void, exists: *mut c_void) -> HRESULT {
+unsafe fn find_in(
+    s: &FontSet,
+    src: &FileSource,
+    index: u32,
+    sims: u32,
+    out_index: *mut c_void,
+    exists: *mut c_void,
+) -> HRESULT {
     // SAFETY: outputs writable.
     unsafe {
         let _ = sims;
@@ -109,7 +117,12 @@ unsafe fn find_in(s: &FontSet, src: &FileSource, index: u32, sims: u32, out_inde
     S_OK
 }
 
-unsafe extern "system" fn set_find_reference(this: *mut c_void, r: *mut c_void, index: *mut c_void, exists: *mut c_void) -> HRESULT {
+unsafe extern "system" fn set_find_reference(
+    this: *mut c_void,
+    r: *mut c_void,
+    index: *mut c_void,
+    exists: *mut c_void,
+) -> HRESULT {
     // SAFETY: our set; `r` one of our references.
     unsafe {
         let Some(fr) = face_ref_of(r) else { return E_INVALIDARG };
@@ -117,7 +130,12 @@ unsafe extern "system" fn set_find_reference(this: *mut c_void, r: *mut c_void, 
     }
 }
 
-unsafe extern "system" fn set_find_face(this: *mut c_void, face: *mut c_void, index: *mut c_void, exists: *mut c_void) -> HRESULT {
+unsafe extern "system" fn set_find_face(
+    this: *mut c_void,
+    face: *mut c_void,
+    index: *mut c_void,
+    exists: *mut c_void,
+) -> HRESULT {
     // SAFETY: our set; `face` one of our faces.
     unsafe {
         let Some((src, idx, sims, _)) = crate::face::identity(face) else { return E_INVALIDARG };
@@ -179,7 +197,13 @@ unsafe fn ref_dtor(h: *mut Head) {
 fn new_face_ref(factory: *mut c_void, src: Arc<FileSource>, entry: FaceEntry, sims: u32) -> *mut c_void {
     // SAFETY: a live factory.
     unsafe { com_add_ref(factory) };
-    into_raw(FaceRef { head: Head::new(&REF_VTBL as *const _ as *const c_void, ref_dtor, &REF_IIDS), factory, src, entry, sims }) as *mut c_void
+    into_raw(FaceRef {
+        head: Head::new(&REF_VTBL as *const _ as *const c_void, ref_dtor, &REF_IIDS),
+        factory,
+        src,
+        entry,
+        sims,
+    }) as *mut c_void
 }
 
 unsafe fn face_ref_of<'a>(p: *mut c_void) -> Option<&'a FaceRef> {
@@ -327,7 +351,12 @@ unsafe extern "system" fn b_add_reference(this: *mut c_void, r: *mut c_void) -> 
     unsafe { add_ref_to(this, r) }
 }
 
-unsafe extern "system" fn b_add_reference_props(this: *mut c_void, r: *mut c_void, _props: *mut c_void, _n: u32) -> HRESULT {
+unsafe extern "system" fn b_add_reference_props(
+    this: *mut c_void,
+    r: *mut c_void,
+    _props: *mut c_void,
+    _n: u32,
+) -> HRESULT {
     // SAFETY: forwarded.
     unsafe { add_ref_to(this, r) }
 }
@@ -389,12 +418,20 @@ pub unsafe extern "system" fn get_system_font_set(this: *mut c_void, out: *mut c
     S_OK
 }
 
-pub unsafe extern "system" fn get_system_font_set_6(this: *mut c_void, _downloadable: i32, out: *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn get_system_font_set_6(
+    this: *mut c_void,
+    _downloadable: i32,
+    out: *mut c_void,
+) -> HRESULT {
     // SAFETY: forwarded.
     unsafe { get_system_font_set(this, out) }
 }
 
-pub unsafe extern "system" fn create_font_collection_from_font_set(this: *mut c_void, set: *mut c_void, out: *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_font_collection_from_font_set(
+    this: *mut c_void,
+    set: *mut c_void,
+    out: *mut c_void,
+) -> HRESULT {
     // SAFETY: a live factory; output writable.
     unsafe {
         put::<c_void>(out, core::ptr::null_mut());
@@ -406,7 +443,12 @@ pub unsafe extern "system" fn create_font_collection_from_font_set(this: *mut c_
     S_OK
 }
 
-pub unsafe extern "system" fn create_font_collection_from_font_set_6(this: *mut c_void, set: *mut c_void, _model: u32, out: *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_font_collection_from_font_set_6(
+    this: *mut c_void,
+    set: *mut c_void,
+    _model: u32,
+    out: *mut c_void,
+) -> HRESULT {
     // SAFETY: forwarded.
     unsafe { create_font_collection_from_font_set(this, set, out) }
 }

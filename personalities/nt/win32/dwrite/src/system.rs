@@ -59,7 +59,13 @@ fn build() -> CollData {
                 e.symbol = Some(alias.symbol);
                 e.charset = alias.charset;
                 e.variant = k as u32 + 1;
-                items.push((e, src.clone()));
+                items.push((e.clone(), src.clone()));
+                if alias.black && info.weight >= 600 && info.style == 0 {
+                    // Windows' Arial family includes Arial Black.
+                    e.weight = Some(900);
+                    e.face = Some(Localized::en_us("Black"));
+                    items.push((e, src.clone()));
+                }
             }
         }
     }

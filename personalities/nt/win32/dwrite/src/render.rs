@@ -27,7 +27,8 @@ pub struct Params {
     grid_fit: u32,
 }
 
-static PARAMS_IIDS: [GUID; 4] = [IID_IDWriteRenderingParams, IID_IDWriteRenderingParams1, IID_IDWriteRenderingParams2, IID_IDWriteRenderingParams3];
+static PARAMS_IIDS: [GUID; 4] =
+    [IID_IDWriteRenderingParams, IID_IDWriteRenderingParams1, IID_IDWriteRenderingParams2, IID_IDWriteRenderingParams3];
 
 static PARAMS_VTBL: IDWriteRenderingParams3Vtbl = IDWriteRenderingParams3Vtbl {
     QueryInterface: qi,
@@ -82,7 +83,15 @@ unsafe extern "system" fn p_grid_fit(this: *mut c_void) -> u32 {
     unsafe { pm(this).grid_fit }
 }
 
-fn new_params(gamma: f32, contrast: f32, gray_contrast: f32, level: f32, geometry: u32, mode: u32, grid_fit: u32) -> *mut c_void {
+fn new_params(
+    gamma: f32,
+    contrast: f32,
+    gray_contrast: f32,
+    level: f32,
+    geometry: u32,
+    mode: u32,
+    grid_fit: u32,
+) -> *mut c_void {
     into_raw(Params {
         head: Head::new(&PARAMS_VTBL as *const _ as *const c_void, drop_box::<Params>, &PARAMS_IIDS),
         gamma,
@@ -101,18 +110,39 @@ pub unsafe extern "system" fn create_rendering_params(_this: *mut c_void, out: *
     S_OK
 }
 
-pub unsafe extern "system" fn create_monitor_rendering_params(_this: *mut c_void, _monitor: *mut c_void, out: *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_monitor_rendering_params(
+    _this: *mut c_void,
+    _monitor: *mut c_void,
+    out: *mut c_void,
+) -> HRESULT {
     // SAFETY: forwarded.
     unsafe { create_rendering_params(_this, out) }
 }
 
 #[allow(clippy::too_many_arguments)]
-unsafe fn custom(out: *mut c_void, gamma: f32, contrast: f32, gray: f32, level: f32, geometry: u32, mode: u32, grid: u32, max_mode: u32) -> HRESULT {
+unsafe fn custom(
+    out: *mut c_void,
+    gamma: f32,
+    contrast: f32,
+    gray: f32,
+    level: f32,
+    geometry: u32,
+    mode: u32,
+    grid: u32,
+    max_mode: u32,
+) -> HRESULT {
     // SAFETY: output writable.
     unsafe {
         put::<c_void>(out, core::ptr::null_mut());
         // `!(x > 0.0)` is also true for NaN.
-        if !(gamma > 0.0) || !(contrast >= 0.0) || !(gray >= 0.0) || !(level >= 0.0) || geometry > 2 || mode > max_mode || grid > 2 {
+        if !(gamma > 0.0)
+            || !(contrast >= 0.0)
+            || !(gray >= 0.0)
+            || !(level >= 0.0)
+            || geometry > 2
+            || mode > max_mode
+            || grid > 2
+        {
             return E_INVALIDARG;
         }
         put(out, new_params(gamma, contrast, gray, level, geometry, mode, grid));
@@ -215,12 +245,20 @@ unsafe fn run_polys(run: &GlyphRun, ppd: f32, m: &Matrix, origin: (f32, f32)) ->
         let Ok(font) = Font::parse_index(&face.bytes, face.index) else { return Err(DWRITE_E_FILEFORMAT) };
         let em_px = run.em_size * ppd;
         let glyphs: &[u16] = slice(run.indices as *const c_void, run.count);
-        let adv: Option<Vec<f32>> =
-            if run.advances.is_null() { None } else { Some(slice::<f32>(run.advances as *const c_void, run.count).iter().map(|a| a * ppd).collect()) };
+        let adv: Option<Vec<f32>> = if run.advances.is_null() {
+            None
+        } else {
+            Some(slice::<f32>(run.advances as *const c_void, run.count).iter().map(|a| a * ppd).collect())
+        };
         let offs: Option<Vec<(f32, f32)>> = if run.offsets.is_null() {
             None
         } else {
-            Some(slice::<f32>(run.offsets as *const c_void, run.count * 2).chunks_exact(2).map(|c| (c[0] * ppd, c[1] * ppd)).collect())
+            Some(
+                slice::<f32>(run.offsets as *const c_void, run.count * 2)
+                    .chunks_exact(2)
+                    .map(|c| (c[0] * ppd, c[1] * ppd))
+                    .collect(),
+            )
         };
         let placed = r::place_run(&font, em_px, glyphs, adv.as_deref(), offs.as_deref(), run.bidi & 1 != 0);
         let mut polys = Polys::default();
@@ -274,7 +312,13 @@ unsafe fn create_analysis(
             };
             r::rasterize(&polys, kind)
         };
-        put(out, into_raw(Analysis { head: Head::new(&ANALYSIS_VTBL as *const _ as *const c_void, drop_box::<Analysis>, &ANALYSIS_IIDS), raster }));
+        put(
+            out,
+            into_raw(Analysis {
+                head: Head::new(&ANALYSIS_VTBL as *const _ as *const c_void, drop_box::<Analysis>, &ANALYSIS_IIDS),
+                raster,
+            }),
+        );
     }
     S_OK
 }
@@ -353,7 +397,13 @@ unsafe extern "system" fn a_bounds(this: *mut c_void, t: u32, out: *mut c_void) 
     }
 }
 
-unsafe extern "system" fn a_texture(this: *mut c_void, t: u32, rect: *mut c_void, buf: *mut c_void, size: u32) -> HRESULT {
+unsafe extern "system" fn a_texture(
+    this: *mut c_void,
+    t: u32,
+    rect: *mut c_void,
+    buf: *mut c_void,
+    size: u32,
+) -> HRESULT {
     // SAFETY: our analysis; the buffer holds `size` bytes.
     unsafe {
         let a = an(this);
@@ -381,7 +431,13 @@ unsafe extern "system" fn a_texture(this: *mut c_void, t: u32, rect: *mut c_void
     S_OK
 }
 
-unsafe extern "system" fn a_blend(_this: *mut c_void, params: *mut c_void, gamma: *mut c_void, contrast: *mut c_void, level: *mut c_void) -> HRESULT {
+unsafe extern "system" fn a_blend(
+    _this: *mut c_void,
+    params: *mut c_void,
+    gamma: *mut c_void,
+    contrast: *mut c_void,
+    level: *mut c_void,
+) -> HRESULT {
     // SAFETY: the parameters are the caller's COM object (or null).
     unsafe {
         let (g, c, l) = if params.is_null() {
@@ -550,9 +606,11 @@ pub unsafe extern "system" fn recommended_mode(
 ) -> HRESULT {
     // SAFETY: the parameters are the caller's COM object (or null).
     unsafe {
-        let pmode = if params.is_null() {
-            0
-        } else {
+        if params.is_null() {
+            put_val(out, 0u32);
+            return E_INVALIDARG;
+        }
+        let pmode = {
             let v = vtbl::<IDWriteRenderingParamsVtbl>(params);
             (v.GetRenderingMode)(params)
         };
@@ -569,7 +627,13 @@ pub unsafe extern "system" fn recommended_mode(
     }
 }
 
-pub unsafe extern "system" fn gdi_metrics(this: *mut c_void, em: f32, ppd: f32, transform: *mut c_void, out: *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn gdi_metrics(
+    this: *mut c_void,
+    em: f32,
+    ppd: f32,
+    transform: *mut c_void,
+    out: *mut c_void,
+) -> HRESULT {
     // SAFETY: our face; the transform is the caller's.
     unsafe {
         if !(em > 0.0) || !(ppd > 0.0) {

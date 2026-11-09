@@ -32,17 +32,6 @@ impl Face {
     pub fn sfnt(&self) -> Option<Sfnt<'_>> {
         Sfnt::parse(&self.bytes, self.index)
     }
-
-    /// The glyph of a code point, honouring the coverage restriction.
-    pub fn glyph(&self, cp: u32) -> u16 {
-        if !in_charset(self.charset, cp) {
-            return 0;
-        }
-        match self.sfnt() {
-            Some(sf) => Cmap::of(&sf).glyph(cp),
-            None => 0,
-        }
-    }
 }
 
 static IIDS: [GUID; 2] = [IID_IDWriteFontFace, IID_IDWriteFontFace1];
@@ -102,8 +91,19 @@ unsafe fn face_dtor(h: *mut Head) {
 }
 
 /// The face of `entry` with `sims`: the cached one while someone holds it.
-pub fn get_face(factory: *mut c_void, src: &Arc<FileSource>, entry: &FaceEntry, sims: u32) -> Result<*mut c_void, HRESULT> {
-    let key = crate::factory::FaceKey { loader: src.loader, key: src.key.clone(), index: entry.index, sims, variant: entry.variant };
+pub fn get_face(
+    factory: *mut c_void,
+    src: &Arc<FileSource>,
+    entry: &FaceEntry,
+    sims: u32,
+) -> Result<*mut c_void, HRESULT> {
+    let key = crate::factory::FaceKey {
+        loader: src.loader,
+        key: src.key.clone(),
+        index: entry.index,
+        sims,
+        variant: entry.variant,
+    };
     if let Some(p) = crate::factory::find_face(factory, &key) {
         return Ok(p as *mut c_void);
     }
@@ -244,7 +244,13 @@ unsafe extern "system" fn glyph_count(this: *mut c_void) -> u16 {
     unsafe { me(this).info.num_glyphs }
 }
 
-unsafe extern "system" fn design_metrics(this: *mut c_void, glyphs: *mut c_void, n: u32, out: *mut c_void, _sideways: i32) -> HRESULT {
+unsafe extern "system" fn design_metrics(
+    this: *mut c_void,
+    glyphs: *mut c_void,
+    n: u32,
+    out: *mut c_void,
+    _sideways: i32,
+) -> HRESULT {
     // SAFETY: our face; arrays of `n` elements.
     unsafe {
         let f = me(this);
@@ -258,7 +264,13 @@ unsafe extern "system" fn design_metrics(this: *mut c_void, glyphs: *mut c_void,
     S_OK
 }
 
-unsafe extern "system" fn design_advances(this: *mut c_void, n: u32, glyphs: *mut c_void, out: *mut c_void, _sideways: i32) -> HRESULT {
+unsafe extern "system" fn design_advances(
+    this: *mut c_void,
+    n: u32,
+    glyphs: *mut c_void,
+    out: *mut c_void,
+    _sideways: i32,
+) -> HRESULT {
     // SAFETY: our face; arrays of `n` elements.
     unsafe {
         let f = me(this);

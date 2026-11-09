@@ -295,11 +295,35 @@ pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
 /// on the reference machine (hier(7)) and in the app tests' tree, so a
 /// test that gave up root can still make files there.
 pub fn initramfs(binary: &[u8]) -> Result<Vec<u8>> {
-    cpio::write(&[
+    initramfs_with(binary, &[])
+}
+
+/// [`initramfs`] plus more files: `(path in the root, data)`, their
+/// directories made on the way. A Windows test's `C:` is `/nt/c` without a disk
+/// (ADR 0073), so `nt/c/Windows/Fonts/x.ttf` is `C:\Windows\Fonts\x.ttf`.
+pub fn initramfs_with(binary: &[u8], files: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
+    let mut entries = vec![
         cpio::Entry::dir("dev"),
         cpio::Entry::dir_mode("tmp", 0o1777),
         cpio::Entry::file(INIT_PATH.trim_start_matches('/'), 0o755, binary.to_vec()),
-    ])
+    ];
+    let mut made: Vec<String> = Vec::new();
+    for (path, data) in files {
+        let mut prefix = String::new();
+        let parts: Vec<&str> = path.split('/').collect();
+        for part in &parts[..parts.len() - 1] {
+            if !prefix.is_empty() {
+                prefix.push('/');
+            }
+            prefix.push_str(part);
+            if !made.contains(&prefix) {
+                entries.push(cpio::Entry::dir(&prefix));
+                made.push(prefix.clone());
+            }
+        }
+        entries.push(cpio::Entry::file(path, 0o644, data.clone()));
+    }
+    cpio::write(&entries)
 }
 
 /// The default kernel ELF (`cargo xtask build`).

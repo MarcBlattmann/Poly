@@ -7,8 +7,15 @@ use core::ffi::c_void;
 
 #[link(name = "kernel32", kind = "raw-dylib")]
 unsafe extern "system" {
-    fn CreateFileW(name: *const u16, access: u32, share: u32, sa: *mut c_void, disp: u32, flags: u32, tmpl: *mut c_void)
-    -> isize;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *mut c_void,
+        disp: u32,
+        flags: u32,
+        tmpl: *mut c_void,
+    ) -> isize;
     fn GetFileSizeEx(h: isize, size: *mut i64) -> i32;
     fn ReadFile(h: isize, buf: *mut u8, n: u32, read: *mut u32, ov: *mut c_void) -> i32;
     fn CloseHandle(h: isize) -> i32;
@@ -30,9 +37,10 @@ const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
 #[repr(C)]
 struct WIN32_FIND_DATAW {
     attributes: u32,
-    created: u64,
-    accessed: u64,
-    written: u64,
+    // `FILETIME`s are two `u32`s (4-byte aligned), not a `u64`.
+    created: [u32; 2],
+    accessed: [u32; 2],
+    written: [u32; 2],
     size_high: u32,
     size_low: u32,
     reserved: [u32; 2],
@@ -75,7 +83,17 @@ pub fn kind(path: &[u16]) -> Kind {
 pub fn read_file(path: &[u16]) -> Result<(Vec<u8>, u64), i32> {
     let p = z(path);
     // SAFETY: `p` is NUL-terminated.
-    let h = unsafe { CreateFileW(p.as_ptr(), GENERIC_READ, FILE_SHARE_READ_WRITE, core::ptr::null_mut(), OPEN_EXISTING, 0, core::ptr::null_mut()) };
+    let h = unsafe {
+        CreateFileW(
+            p.as_ptr(),
+            GENERIC_READ,
+            FILE_SHARE_READ_WRITE,
+            core::ptr::null_mut(),
+            OPEN_EXISTING,
+            0,
+            core::ptr::null_mut(),
+        )
+    };
     if h == INVALID_HANDLE || h == 0 {
         return Err(crate::com::E_FILE_NOT_FOUND);
     }
@@ -112,7 +130,17 @@ pub fn read_file(path: &[u16]) -> Result<(Vec<u8>, u64), i32> {
 pub fn write_time(path: &[u16]) -> u64 {
     let p = z(path);
     // SAFETY: `p` is NUL-terminated.
-    let h = unsafe { CreateFileW(p.as_ptr(), GENERIC_READ, FILE_SHARE_READ_WRITE, core::ptr::null_mut(), OPEN_EXISTING, 0x0200_0000, core::ptr::null_mut()) };
+    let h = unsafe {
+        CreateFileW(
+            p.as_ptr(),
+            GENERIC_READ,
+            FILE_SHARE_READ_WRITE,
+            core::ptr::null_mut(),
+            OPEN_EXISTING,
+            0x0200_0000,
+            core::ptr::null_mut(),
+        )
+    };
     if h == INVALID_HANDLE || h == 0 {
         return 0;
     }

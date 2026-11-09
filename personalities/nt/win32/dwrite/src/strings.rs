@@ -34,7 +34,8 @@ unsafe extern "system" fn qi(this: *mut c_void, riid: *mut c_void, out: *mut c_v
 
 /// A new strings object (reference count 1).
 pub fn new_strings(s: Localized) -> *mut c_void {
-    into_raw(Strings { head: Head::new(&VTBL as *const _ as *const c_void, drop_box::<Strings>, &IIDS), s }) as *mut c_void
+    into_raw(Strings { head: Head::new(&VTBL as *const _ as *const c_void, drop_box::<Strings>, &IIDS), s })
+        as *mut c_void
 }
 
 unsafe fn me<'a>(this: *mut c_void) -> &'a Localized {
@@ -47,7 +48,12 @@ unsafe extern "system" fn get_count(this: *mut c_void) -> u32 {
     unsafe { me(this).entries.len() as u32 }
 }
 
-unsafe extern "system" fn find_locale_name(this: *mut c_void, name: *mut c_void, index: *mut c_void, exists: *mut c_void) -> HRESULT {
+unsafe extern "system" fn find_locale_name(
+    this: *mut c_void,
+    name: *mut c_void,
+    index: *mut c_void,
+    exists: *mut c_void,
+) -> HRESULT {
     // SAFETY: our object; `name` is a NUL-terminated string.
     unsafe {
         put_val(index, u32::MAX);

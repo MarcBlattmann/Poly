@@ -110,9 +110,8 @@ impl FaceInfo {
 
         let family = pick(&names, &[21, 16, 1]);
         let face = pick(&names, &[22, 17, 2]);
-        let oblique_name = [2u16, 17, 22].iter().any(|&id| {
-            names.iter().any(|r| r.name_id == id && contains_ci(&r.text, "oblique"))
-        });
+        let oblique_name =
+            [2u16, 17, 22].iter().any(|&id| names.iter().any(|r| r.name_id == id && contains_ci(&r.text, "oblique")));
         let style = if italic_bit {
             STYLE_ITALIC
         } else if oblique_name || fs_selection & 0x200 != 0 {
@@ -153,7 +152,9 @@ impl FaceInfo {
         }
         let os2_version = os2.and_then(|t| be16(t, 0)).unwrap_or(0);
         let (mut x_height, mut cap_height) = match os2 {
-            Some(t) if os2_version >= 2 => (be16s(t, 86).unwrap_or(0).max(0) as u16, be16s(t, 88).unwrap_or(0).max(0) as u16),
+            Some(t) if os2_version >= 2 => {
+                (be16s(t, 86).unwrap_or(0).max(0) as u16, be16s(t, 88).unwrap_or(0).max(0) as u16)
+            }
             _ => (0, 0),
         };
         if cap_height == 0 {
@@ -236,7 +237,8 @@ fn contains_ci(text: &[u16], needle: &str) -> bool {
     if n.len() > text.len() {
         return false;
     }
-    (0..=text.len() - n.len()).any(|s| n.iter().enumerate().all(|(i, &c)| crate::names::lower(text[s + i]) == u16::from(c)))
+    (0..=text.len() - n.len())
+        .any(|s| n.iter().enumerate().all(|(i, &c)| crate::names::lower(text[s + i]) == u16::from(c)))
 }
 
 /// A `cmap` table: the subtable DirectWrite would use.
@@ -255,7 +257,9 @@ impl<'a> Cmap<'a> {
         let n = usize::from(be16(t, 2).unwrap_or(0));
         let mut best: Option<(u8, &'a [u8], bool)> = None;
         for i in 0..n {
-            let (Some(p), Some(e), Some(off)) = (be16(t, 4 + 8 * i), be16(t, 6 + 8 * i), be32(t, 8 + 8 * i)) else { break };
+            let (Some(p), Some(e), Some(off)) = (be16(t, 4 + 8 * i), be16(t, 6 + 8 * i), be32(t, 8 + 8 * i)) else {
+                break;
+            };
             let Some(sub) = t.get(off as usize..) else { continue };
             let rank = match (p, e) {
                 (3, 10) => 6,
@@ -342,11 +346,7 @@ impl<'a> Cmap<'a> {
             Some(6) => {
                 let first = u32::from(be16(s, 6).unwrap_or(0));
                 let count = u32::from(be16(s, 8).unwrap_or(0));
-                if cp >= first && cp < first + count {
-                    be16(s, 10 + 2 * (cp - first) as usize).unwrap_or(0)
-                } else {
-                    0
-                }
+                if cp >= first && cp < first + count { be16(s, 10 + 2 * (cp - first) as usize).unwrap_or(0) } else { 0 }
             }
             Some(12) => {
                 let n = be32(s, 12).unwrap_or(0) as usize;

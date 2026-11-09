@@ -16,8 +16,8 @@ use crate::abi::*;
 use crate::coll::{CollData, new_collection};
 use crate::com::*;
 use crate::file::{FileSource, local_key, local_loader, new_font_file, source_of};
-use crate::stub;
 use crate::strings::wstr;
+use crate::stub;
 
 /// What identifies a face while someone holds it.
 #[derive(Clone, PartialEq, Eq)]
@@ -67,7 +67,8 @@ static FACTORY_IIDS: [GUID; 7] = [
 ];
 static FACTORY7_IID: GUID = IID_IDWriteFactory7;
 
-static IDENT_VTBL: IUnknownVtbl = IUnknownVtbl { QueryInterface: ident_qi, AddRef: ident_add_ref, Release: ident_release };
+static IDENT_VTBL: IUnknownVtbl =
+    IUnknownVtbl { QueryInterface: ident_qi, AddRef: ident_add_ref, Release: ident_release };
 
 unsafe extern "system" fn ident_qi(this: *mut c_void, riid: *mut c_void, out: *mut c_void) -> HRESULT {
     // SAFETY: the identity object of one of our factories.
@@ -324,12 +325,22 @@ unsafe extern "system" fn get_system_font_collection(this: *mut c_void, out: *mu
     S_OK
 }
 
-unsafe extern "system" fn get_system_font_collection_3(this: *mut c_void, _downloadable: i32, out: *mut c_void, _check: i32) -> HRESULT {
+unsafe extern "system" fn get_system_font_collection_3(
+    this: *mut c_void,
+    _downloadable: i32,
+    out: *mut c_void,
+    _check: i32,
+) -> HRESULT {
     // SAFETY: forwarded.
     unsafe { get_system_font_collection(this, out, 0) }
 }
 
-unsafe extern "system" fn get_system_font_collection_6(this: *mut c_void, _downloadable: i32, _model: u32, out: *mut c_void) -> HRESULT {
+unsafe extern "system" fn get_system_font_collection_6(
+    this: *mut c_void,
+    _downloadable: i32,
+    _model: u32,
+    out: *mut c_void,
+) -> HRESULT {
     // SAFETY: forwarded.
     unsafe { get_system_font_collection(this, out, 0) }
 }
@@ -499,7 +510,12 @@ unsafe extern "system" fn unregister_file_loader(this: *mut c_void, loader: *mut
     }
 }
 
-unsafe extern "system" fn create_font_file_reference(this: *mut c_void, path: *mut c_void, last_write: *mut c_void, out: *mut c_void) -> HRESULT {
+unsafe extern "system" fn create_font_file_reference(
+    this: *mut c_void,
+    path: *mut c_void,
+    last_write: *mut c_void,
+    out: *mut c_void,
+) -> HRESULT {
     // SAFETY: our factory; `path` is NUL-terminated.
     unsafe {
         let _ = this;

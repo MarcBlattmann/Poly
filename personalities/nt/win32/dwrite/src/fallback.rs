@@ -79,8 +79,11 @@ unsafe fn fallback_dtor(h: *mut Head) {
 fn new_fallback(factory: *mut c_void, mappings: Option<Vec<Mapping>>) -> *mut c_void {
     // SAFETY: a live factory.
     unsafe { com_add_ref(factory) };
-    into_raw(Fallback { head: Head::new(&FALLBACK_VTBL as *const _ as *const c_void, fallback_dtor, &FALLBACK_IIDS), factory, mappings })
-        as *mut c_void
+    into_raw(Fallback {
+        head: Head::new(&FALLBACK_VTBL as *const _ as *const c_void, fallback_dtor, &FALLBACK_IIDS),
+        factory,
+        mappings,
+    }) as *mut c_void
 }
 
 pub unsafe extern "system" fn get_system_font_fallback(this: *mut c_void, out: *mut c_void) -> HRESULT {
@@ -157,9 +160,14 @@ unsafe extern "system" fn b_add_mapping(
         }
         let rs: &[u32] = slice(ranges, n_ranges * 2);
         let ranges: Vec<(u32, u32)> = rs.chunks_exact(2).map(|c| (c[0], c[1])).collect();
-        let fams: Vec<Vec<u16>> = slice::<*const u16>(families, n_families).iter().map(|&p| if p.is_null() { Vec::new() } else { wstr(p).to_vec() }).collect();
+        let fams: Vec<Vec<u16>> = slice::<*const u16>(families, n_families)
+            .iter()
+            .map(|&p| if p.is_null() { Vec::new() } else { wstr(p).to_vec() })
+            .collect();
         com_add_ref(collection);
-        (*(this as *const FallbackBuilder)).mappings.with(|m| m.push(Mapping { ranges, families: fams, collection, scale }));
+        (*(this as *const FallbackBuilder))
+            .mappings
+            .with(|m| m.push(Mapping { ranges, families: fams, collection, scale }));
     }
     S_OK
 }
@@ -235,7 +243,9 @@ unsafe fn read_text(src: *mut c_void, pos: u32, len: u32) -> Vec<u16> {
 fn first_char(t: &[u16]) -> (u32, usize) {
     match t {
         [] => (0, 0),
-        [hi @ 0xD800..=0xDBFF, lo @ 0xDC00..=0xDFFF, ..] => (0x10000 + ((u32::from(*hi) - 0xD800) << 10) + (u32::from(*lo) - 0xDC00), 2),
+        [hi @ 0xD800..=0xDBFF, lo @ 0xDC00..=0xDFFF, ..] => {
+            (0x10000 + ((u32::from(*hi) - 0xD800) << 10) + (u32::from(*lo) - 0xDC00), 2)
+        }
         [c, ..] => (u32::from(*c), 1),
     }
 }
@@ -246,6 +256,8 @@ struct Hit {
     family: usize,
     desc: FontDesc,
     scale: f32,
+    /// Which mappings cover the character (a run never spans a change).
+    cover: Vec<(usize, usize)>,
 }
 
 fn covers(data: &CollData, desc: &FontDesc, cp: u32) -> bool {
@@ -260,17 +272,36 @@ fn covers(data: &CollData, desc: &FontDesc, cp: u32) -> bool {
 fn find_in(data: &Arc<CollData>, family: &[u16], cp: u32, w: u32, s: u32, st: u32, scale: f32) -> Option<Hit> {
     let fi = model::find_family(&data.families, family)?;
     let desc = model::first_matching(&data.entries, &data.families[fi], w, s, st)?;
-    covers(data, &desc, cp).then(|| Hit { data: data.clone(), family: fi, desc, scale })
+    covers(data, &desc, cp).then(|| Hit { data: data.clone(), family: fi, desc, scale, cover: Vec::new() })
 }
 
-unsafe fn lookup(fb: &Fallback, cp: u32, base: *mut c_void, base_family: &[u16], w: u32, s: u32, st: u32) -> Option<Hit> {
+unsafe fn lookup(
+    fb: &Fallback,
+    cp: u32,
+    base: *mut c_void,
+    base_family: &[u16],
+    w: u32,
+    s: u32,
+    st: u32,
+) -> Option<Hit> {
     // SAFETY: the base collection is the application's COM object or null.
     unsafe {
         match &fb.mappings {
             Some(ms) => {
-                let m = ms.iter().find(|m| m.ranges.iter().any(|&(a, b)| (a..=b).contains(&cp)))?;
-                let data = if m.collection.is_null() { crate::system::system_data() } else { collection_of(m.collection)?.data.clone() };
-                m.families.iter().find_map(|f| find_in(&data, f, cp, w, s, st, m.scale))
+                let cover: Vec<(usize, usize)> = ms
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, m)| m.ranges.iter().position(|&(a, b)| (a..=b).contains(&cp)).map(|r| (i, r)))
+                    .collect();
+                let m = &ms[cover.first()?.0];
+                let data = if m.collection.is_null() {
+                    crate::system::system_data()
+                } else {
+                    collection_of(m.collection)?.data.clone()
+                };
+                let mut hit = m.families.iter().find_map(|f| find_in(&data, f, cp, w, s, st, m.scale))?;
+                hit.cover = cover;
+                Some(hit)
             }
             None => {
                 if let Some(c) = collection_of(base) {
@@ -330,7 +361,11 @@ unsafe extern "system" fn map_characters(
             }
             // The same mapping must send it to this font too.
             match lookup(fb, c2, base, bf, weight, stretch, style) {
-                Some(h2) if h2.desc.entry == hit.desc.entry && h2.family == hit.family && h2.scale == hit.scale => {}
+                Some(h2)
+                    if h2.desc.entry == hit.desc.entry
+                        && h2.family == hit.family
+                        && h2.scale == hit.scale
+                        && h2.cover == hit.cover => {}
                 _ => break,
             }
             total += n2;

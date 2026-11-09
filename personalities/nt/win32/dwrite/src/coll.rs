@@ -34,11 +34,6 @@ impl CollData {
         let families = model::build_families(&entries);
         CollData { entries, srcs, families }
     }
-
-    /// The font descriptions of the real faces, for font sets.
-    pub fn real_faces(&self) -> impl Iterator<Item = usize> {
-        0..self.entries.len()
-    }
 }
 
 // ----- collection
@@ -83,7 +78,11 @@ unsafe fn coll_dtor(h: *mut Head) {
 pub fn new_collection(factory: *mut c_void, data: Arc<CollData>) -> *mut c_void {
     // SAFETY: a live factory.
     unsafe { com_add_ref(factory) };
-    into_raw(Collection { head: Head::new(&COLL_VTBL as *const _ as *const c_void, coll_dtor, &COLL_IIDS), factory, data }) as *mut c_void
+    into_raw(Collection {
+        head: Head::new(&COLL_VTBL as *const _ as *const c_void, coll_dtor, &COLL_IIDS),
+        factory,
+        data,
+    }) as *mut c_void
 }
 
 pub unsafe fn collection_of<'a>(p: *mut c_void) -> Option<&'a Collection> {
@@ -121,7 +120,12 @@ unsafe extern "system" fn coll_family(this: *mut c_void, i: u32, out: *mut c_voi
     S_OK
 }
 
-unsafe extern "system" fn coll_find(this: *mut c_void, name: *mut c_void, index: *mut c_void, exists: *mut c_void) -> HRESULT {
+unsafe extern "system" fn coll_find(
+    this: *mut c_void,
+    name: *mut c_void,
+    index: *mut c_void,
+    exists: *mut c_void,
+) -> HRESULT {
     // SAFETY: our collection; `name` is NUL-terminated.
     unsafe {
         put_val(index, u32::MAX);
@@ -164,6 +168,20 @@ unsafe extern "system" fn coll_from_face(this: *mut c_void, face: *mut c_void, o
             }
             if found.is_some() {
                 break;
+            }
+        }
+        if found.is_none() && sims != 0 {
+            // A simulation the family does not list: simulate the real font.
+            for pass in 0..2 {
+                for (fi, fam) in c.data.families.iter().enumerate() {
+                    for f in fam.fonts.iter().filter(|f| f.simulations == 0) {
+                        let e = &c.data.entries[f.entry];
+                        if e.index == index && c.data.srcs[f.entry].same(&src) && (pass == 1 || e.variant == variant) {
+                            put(out, new_font(this, fi, model::simulate(&c.data.entries, f, sims)));
+                            return S_OK;
+                        }
+                    }
+                }
             }
         }
         match found {
@@ -231,15 +249,23 @@ unsafe fn fam_dtor(h: *mut Head) {
 fn new_family(coll: *mut c_void, idx: usize) -> *mut c_void {
     // SAFETY: a live collection.
     unsafe { com_add_ref(coll) };
-    into_raw(FamilyObj { head: Head::new(&FAMILY_VTBL as *const _ as *const c_void, fam_dtor, &FAMILY_IIDS), coll, idx, list: None })
-        as *mut c_void
+    into_raw(FamilyObj {
+        head: Head::new(&FAMILY_VTBL as *const _ as *const c_void, fam_dtor, &FAMILY_IIDS),
+        coll,
+        idx,
+        list: None,
+    }) as *mut c_void
 }
 
 fn new_list(coll: *mut c_void, idx: usize, fonts: Vec<FontDesc>) -> *mut c_void {
     // SAFETY: a live collection.
     unsafe { com_add_ref(coll) };
-    into_raw(FamilyObj { head: Head::new(&LIST_VTBL as *const _ as *const c_void, fam_dtor, &LIST_IIDS), coll, idx, list: Some(fonts) })
-        as *mut c_void
+    into_raw(FamilyObj {
+        head: Head::new(&LIST_VTBL as *const _ as *const c_void, fam_dtor, &LIST_IIDS),
+        coll,
+        idx,
+        list: Some(fonts),
+    }) as *mut c_void
 }
 
 unsafe fn fam<'a>(this: *mut c_void) -> (&'a FamilyObj, &'a Collection, &'a Family) {
@@ -293,7 +319,13 @@ unsafe extern "system" fn fam_names(this: *mut c_void, out: *mut c_void) -> HRES
     S_OK
 }
 
-unsafe extern "system" fn fam_first(this: *mut c_void, weight: u32, stretch: u32, style: u32, out: *mut c_void) -> HRESULT {
+unsafe extern "system" fn fam_first(
+    this: *mut c_void,
+    weight: u32,
+    stretch: u32,
+    style: u32,
+    out: *mut c_void,
+) -> HRESULT {
     // SAFETY: our family object.
     unsafe {
         put::<c_void>(out, core::ptr::null_mut());
@@ -308,7 +340,13 @@ unsafe extern "system" fn fam_first(this: *mut c_void, weight: u32, stretch: u32
     }
 }
 
-unsafe extern "system" fn fam_matching(this: *mut c_void, weight: u32, stretch: u32, style: u32, out: *mut c_void) -> HRESULT {
+unsafe extern "system" fn fam_matching(
+    this: *mut c_void,
+    weight: u32,
+    stretch: u32,
+    style: u32,
+    out: *mut c_void,
+) -> HRESULT {
     // SAFETY: our family object.
     unsafe {
         put::<c_void>(out, core::ptr::null_mut());
@@ -359,7 +397,12 @@ unsafe fn font_dtor(h: *mut Head) {
 pub fn new_font(coll: *mut c_void, family: usize, desc: FontDesc) -> *mut c_void {
     // SAFETY: a live collection.
     unsafe { com_add_ref(coll) };
-    into_raw(FontObj { head: Head::new(&FONT_VTBL as *const _ as *const c_void, font_dtor, &FONT_IIDS), coll, family, desc }) as *mut c_void
+    into_raw(FontObj {
+        head: Head::new(&FONT_VTBL as *const _ as *const c_void, font_dtor, &FONT_IIDS),
+        coll,
+        family,
+        desc,
+    }) as *mut c_void
 }
 
 unsafe fn fnt<'a>(this: *mut c_void) -> (&'a FontObj, &'a Collection) {
@@ -412,7 +455,12 @@ unsafe extern "system" fn font_face_names(this: *mut c_void, out: *mut c_void) -
     S_OK
 }
 
-unsafe extern "system" fn font_info_strings(this: *mut c_void, id: u32, out: *mut c_void, exists: *mut c_void) -> HRESULT {
+unsafe extern "system" fn font_info_strings(
+    this: *mut c_void,
+    id: u32,
+    out: *mut c_void,
+    exists: *mut c_void,
+) -> HRESULT {
     // SAFETY: our font.
     unsafe {
         put::<c_void>(out, core::ptr::null_mut());

@@ -153,8 +153,10 @@ unsafe extern "system" fn query_interface_slot(this: *mut c_void, riid: *mut c_v
 
 /// A new `IDWriteFontFile` (reference count 1).
 pub fn new_font_file(src: Arc<FileSource>) -> *mut c_void {
-    into_raw(FontFile { head: Head::new(&FILE_VTBL as *const _ as *const c_void, drop_box::<FontFile>, &[IID_IDWriteFontFile]), src })
-        as *mut c_void
+    into_raw(FontFile {
+        head: Head::new(&FILE_VTBL as *const _ as *const c_void, drop_box::<FontFile>, &[IID_IDWriteFontFile]),
+        src,
+    }) as *mut c_void
 }
 
 /// The source behind one of our `IDWriteFontFile` objects.
@@ -320,7 +322,13 @@ unsafe extern "system" fn local_path_length(_: *mut c_void, key: *mut c_void, si
     }
 }
 
-unsafe extern "system" fn local_path(_: *mut c_void, key: *mut c_void, size: u32, buf: *mut c_void, cap: u32) -> HRESULT {
+unsafe extern "system" fn local_path(
+    _: *mut c_void,
+    key: *mut c_void,
+    size: u32,
+    buf: *mut c_void,
+    cap: u32,
+) -> HRESULT {
     // SAFETY: the caller passes `size` bytes at `key` and room for `cap` units.
     unsafe {
         let Some((p, _)) = parse_local_key(slice(key, size)) else { return DWRITE_E_CACHEFORMAT };
@@ -378,7 +386,13 @@ fn new_stream(data: Arc<Vec<u8>>, time: u64) -> *mut c_void {
     }) as *mut c_void
 }
 
-unsafe extern "system" fn stream_read(this: *mut c_void, start: *mut c_void, offset: u64, size: u64, ctx: *mut c_void) -> HRESULT {
+unsafe extern "system" fn stream_read(
+    this: *mut c_void,
+    start: *mut c_void,
+    offset: u64,
+    size: u64,
+    ctx: *mut c_void,
+) -> HRESULT {
     // SAFETY: our stream; outputs writable.
     unsafe {
         let s = &*(this as *const Stream);
@@ -436,7 +450,12 @@ pub fn new_in_memory_loader() -> *mut c_void {
     }) as *mut c_void
 }
 
-unsafe extern "system" fn inmem_create_stream(this: *mut c_void, key: *mut c_void, size: u32, out: *mut c_void) -> HRESULT {
+unsafe extern "system" fn inmem_create_stream(
+    this: *mut c_void,
+    key: *mut c_void,
+    size: u32,
+    out: *mut c_void,
+) -> HRESULT {
     // SAFETY: our loader; the caller passes `size` bytes at `key`.
     unsafe {
         put::<c_void>(out, core::ptr::null_mut());
@@ -465,16 +484,19 @@ unsafe extern "system" fn inmem_create_reference(
     // SAFETY: our loader and factory; `data` holds `size` bytes.
     unsafe {
         put::<c_void>(out, core::ptr::null_mut());
+        let l = &*(this as *const InMemoryLoader);
+        if size > 0 {
+            // Counted even when the reference is refused.
+            l.count.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        }
         if !crate::factory::file_loader_registered(factory, this) || size == 0 || data.is_null() {
             return E_INVALIDARG;
         }
-        let l = &*(this as *const InMemoryLoader);
         let bytes = Arc::new(slice::<u8>(data, size).to_vec());
         let n = l.files.with(|f| {
             f.push(bytes.clone());
             f.len() - 1
         });
-        l.count.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         let src = FileSource::with_bytes(this, &(n as u32).to_le_bytes(), bytes);
         put(out, new_font_file(src));
     }

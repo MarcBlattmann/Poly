@@ -19,21 +19,30 @@ pub struct GUID {
     pub d4: [u8; 8],
 }
 
-pub const IID_IDWriteFactory: GUID = GUID { d1: 0xB859EE5A, d2: 0xD838, d3: 0x4B5B, d4: [0xA2, 0xE8, 0x1A, 0xDC, 0x7D, 0x93, 0xDB, 0x48] };
-pub const IID_IDWriteFactory1: GUID = GUID { d1: 0x30572F99, d2: 0xDAC6, d3: 0x41DB, d4: [0xA1, 0x6E, 0x04, 0x86, 0x30, 0x7E, 0x60, 0x6A] };
-pub const IID_IDWriteFactory2: GUID = GUID { d1: 0x0439FC60, d2: 0xCA44, d3: 0x4994, d4: [0x8D, 0xEE, 0x3A, 0x9A, 0xF7, 0xB7, 0x32, 0xEC] };
-pub const IID_IDWriteFactory3: GUID = GUID { d1: 0x9A1B41C3, d2: 0xD3BB, d3: 0x466A, d4: [0x87, 0xFC, 0xFE, 0x67, 0x55, 0x6A, 0x3B, 0x65] };
-pub const IID_IDWriteFactory4: GUID = GUID { d1: 0x4B0B5BD3, d2: 0x0797, d3: 0x4549, d4: [0x8A, 0xC5, 0xFE, 0x91, 0x5C, 0xC5, 0x38, 0x56] };
-pub const IID_IDWriteFactory5: GUID = GUID { d1: 0x958DB99A, d2: 0xBE2A, d3: 0x4F09, d4: [0xAF, 0x7D, 0x65, 0x18, 0x98, 0x03, 0xD1, 0xD3] };
-pub const IID_IDWriteFactory7: GUID = GUID { d1: 0x35D0E0B3, d2: 0x9076, d3: 0x4D2E, d4: [0xA0, 0x16, 0xA9, 0x1B, 0x56, 0x8A, 0x06, 0xB4] };
-pub const IID_IDWriteFont: GUID = GUID { d1: 0xACD16696, d2: 0x8C14, d3: 0x4F5D, d4: [0x87, 0x7E, 0xFE, 0x3F, 0xC1, 0xD3, 0x27, 0x37] };
+pub const IID_IDWriteFactory: GUID =
+    GUID { d1: 0xB859EE5A, d2: 0xD838, d3: 0x4B5B, d4: [0xA2, 0xE8, 0x1A, 0xDC, 0x7D, 0x93, 0xDB, 0x48] };
+pub const IID_IDWriteFactory1: GUID =
+    GUID { d1: 0x30572F99, d2: 0xDAC6, d3: 0x41DB, d4: [0xA1, 0x6E, 0x04, 0x86, 0x30, 0x7E, 0x60, 0x6A] };
+pub const IID_IDWriteFactory2: GUID =
+    GUID { d1: 0x0439FC60, d2: 0xCA44, d3: 0x4994, d4: [0x8D, 0xEE, 0x3A, 0x9A, 0xF7, 0xB7, 0x32, 0xEC] };
+pub const IID_IDWriteFactory3: GUID =
+    GUID { d1: 0x9A1B41C3, d2: 0xD3BB, d3: 0x466A, d4: [0x87, 0xFC, 0xFE, 0x67, 0x55, 0x6A, 0x3B, 0x65] };
+pub const IID_IDWriteFactory4: GUID =
+    GUID { d1: 0x4B0B5BD3, d2: 0x0797, d3: 0x4549, d4: [0x8A, 0xC5, 0xFE, 0x91, 0x5C, 0xC5, 0x38, 0x56] };
+pub const IID_IDWriteFactory5: GUID =
+    GUID { d1: 0x958DB99A, d2: 0xBE2A, d3: 0x4F09, d4: [0xAF, 0x7D, 0x65, 0x18, 0x98, 0x03, 0xD1, 0xD3] };
+pub const IID_IDWriteFactory7: GUID =
+    GUID { d1: 0x35D0E0B3, d2: 0x9076, d3: 0x4D2E, d4: [0xA0, 0x16, 0xA9, 0x1B, 0x56, 0x8A, 0x06, 0xB4] };
+pub const IID_IDWriteFont: GUID =
+    GUID { d1: 0xACD16696, d2: 0x8C14, d3: 0x4F5D, d4: [0x87, 0x7E, 0xFE, 0x3F, 0xC1, 0xD3, 0x27, 0x37] };
 pub const IID_IDWriteFontCollection: GUID =
     GUID { d1: 0xA84CEE02, d2: 0x3EEA, d3: 0x4EEE, d4: [0xA8, 0x27, 0x87, 0xC1, 0xA0, 0x2A, 0x0F, 0xCC] };
 pub const IID_IDWriteFontCollection1: GUID =
     GUID { d1: 0x53585141, d2: 0xD9F8, d3: 0x4095, d4: [0x83, 0x21, 0xD7, 0x3C, 0xF6, 0xBD, 0x11, 0x6C] };
 pub const IID_IDWriteFontCollectionLoader: GUID =
     GUID { d1: 0xCCA920E4, d2: 0x52F0, d3: 0x492B, d4: [0xBF, 0xA8, 0x29, 0xC7, 0x2E, 0xE0, 0xA4, 0x68] };
-pub const IID_IDWriteFontFace: GUID = GUID { d1: 0x5F49804D, d2: 0x7024, d3: 0x4D43, d4: [0xBF, 0xA9, 0xD2, 0x59, 0x84, 0xF5, 0x38, 0x49] };
+pub const IID_IDWriteFontFace: GUID =
+    GUID { d1: 0x5F49804D, d2: 0x7024, d3: 0x4D43, d4: [0xBF, 0xA9, 0xD2, 0x59, 0x84, 0xF5, 0x38, 0x49] };
 pub const IID_IDWriteFontFileEnumerator: GUID =
     GUID { d1: 0x72755049, d2: 0x5FF7, d3: 0x435D, d4: [0x83, 0x48, 0x4B, 0xE9, 0x7C, 0xFA, 0x6C, 0x7C] };
 pub const IID_IDWriteFontFileLoader: GUID =
@@ -55,29 +64,55 @@ pub struct IDWriteFactory1Vtbl {
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub GetSystemFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
+    pub CreateCustomFontCollection:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
     pub RegisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
+    pub CreateCustomFontFileReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub CreateFontFace: unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateMonitorRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams: unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub RegisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextFormat: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, f32, *mut c_void, *mut c_void) -> i32,
+    pub CreateTextFormat: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+    ) -> i32,
     pub CreateTypography: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub GetGdiInterop: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextLayout: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
-    pub CreateGdiCompatibleTextLayout:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, f32, *mut c_void, i32, *mut c_void) -> i32,
+    pub CreateTextLayout:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
+    pub CreateGdiCompatibleTextLayout: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        f32,
+        f32,
+        f32,
+        *mut c_void,
+        i32,
+        *mut c_void,
+    ) -> i32,
     pub CreateEllipsisTrimmingSign: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub CreateTextAnalyzer: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateNumberSubstitution: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, i32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis: unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
     pub GetEudcFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomRenderingParams_1: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams_1:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
 }
 
 #[repr(C)]
@@ -87,36 +122,82 @@ pub struct IDWriteFactory2Vtbl {
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub GetSystemFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
+    pub CreateCustomFontCollection:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
     pub RegisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
+    pub CreateCustomFontFileReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub CreateFontFace: unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateMonitorRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams: unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub RegisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextFormat: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, f32, *mut c_void, *mut c_void) -> i32,
+    pub CreateTextFormat: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+    ) -> i32,
     pub CreateTypography: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub GetGdiInterop: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextLayout: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
-    pub CreateGdiCompatibleTextLayout:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, f32, *mut c_void, i32, *mut c_void) -> i32,
+    pub CreateTextLayout:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
+    pub CreateGdiCompatibleTextLayout: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        f32,
+        f32,
+        f32,
+        *mut c_void,
+        i32,
+        *mut c_void,
+    ) -> i32,
     pub CreateEllipsisTrimmingSign: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub CreateTextAnalyzer: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateNumberSubstitution: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, i32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis: unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
     pub GetEudcFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomRenderingParams_1: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams_1:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub GetSystemFontFallback: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFallbackBuilder: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub TranslateColorGlyphRun:
-        unsafe extern "system" fn(*mut c_void, f32, f32, *mut c_void, *mut c_void, u32, *mut c_void, u32, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams_2: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis_2:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, u32, f32, f32, *mut c_void) -> i32,
+    pub TranslateColorGlyphRun: unsafe extern "system" fn(
+        *mut c_void,
+        f32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        u32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateCustomRenderingParams_2:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis_2: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u32,
+        f32,
+        f32,
+        *mut c_void,
+    ) -> i32,
 }
 
 #[repr(C)]
@@ -126,40 +207,98 @@ pub struct IDWriteFactory3Vtbl {
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub GetSystemFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
+    pub CreateCustomFontCollection:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
     pub RegisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
+    pub CreateCustomFontFileReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub CreateFontFace: unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateMonitorRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams: unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub RegisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextFormat: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, f32, *mut c_void, *mut c_void) -> i32,
+    pub CreateTextFormat: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+    ) -> i32,
     pub CreateTypography: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub GetGdiInterop: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextLayout: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
-    pub CreateGdiCompatibleTextLayout:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, f32, *mut c_void, i32, *mut c_void) -> i32,
+    pub CreateTextLayout:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
+    pub CreateGdiCompatibleTextLayout: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        f32,
+        f32,
+        f32,
+        *mut c_void,
+        i32,
+        *mut c_void,
+    ) -> i32,
     pub CreateEllipsisTrimmingSign: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub CreateTextAnalyzer: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateNumberSubstitution: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, i32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis: unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
     pub GetEudcFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomRenderingParams_1: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams_1:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub GetSystemFontFallback: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFallbackBuilder: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub TranslateColorGlyphRun:
-        unsafe extern "system" fn(*mut c_void, f32, f32, *mut c_void, *mut c_void, u32, *mut c_void, u32, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams_2: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis_2:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, u32, f32, f32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis_3:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, u32, f32, f32, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams_3: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
-    pub CreateFontFaceReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
+    pub TranslateColorGlyphRun: unsafe extern "system" fn(
+        *mut c_void,
+        f32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        u32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateCustomRenderingParams_2:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis_2: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u32,
+        f32,
+        f32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateGlyphRunAnalysis_3: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u32,
+        f32,
+        f32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateCustomRenderingParams_3:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
+    pub CreateFontFaceReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateFontFaceReference_ov2: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub GetSystemFontSet: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontSetBuilder: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
@@ -175,49 +314,117 @@ pub struct IDWriteFactory4Vtbl {
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub GetSystemFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
+    pub CreateCustomFontCollection:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
     pub RegisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
+    pub CreateCustomFontFileReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub CreateFontFace: unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateMonitorRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams: unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub RegisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextFormat: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, f32, *mut c_void, *mut c_void) -> i32,
+    pub CreateTextFormat: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+    ) -> i32,
     pub CreateTypography: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub GetGdiInterop: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextLayout: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
-    pub CreateGdiCompatibleTextLayout:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, f32, *mut c_void, i32, *mut c_void) -> i32,
+    pub CreateTextLayout:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
+    pub CreateGdiCompatibleTextLayout: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        f32,
+        f32,
+        f32,
+        *mut c_void,
+        i32,
+        *mut c_void,
+    ) -> i32,
     pub CreateEllipsisTrimmingSign: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub CreateTextAnalyzer: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateNumberSubstitution: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, i32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis: unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
     pub GetEudcFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomRenderingParams_1: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams_1:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub GetSystemFontFallback: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFallbackBuilder: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub TranslateColorGlyphRun:
-        unsafe extern "system" fn(*mut c_void, f32, f32, *mut c_void, *mut c_void, u32, *mut c_void, u32, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams_2: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis_2:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, u32, f32, f32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis_3:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, u32, f32, f32, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams_3: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
-    pub CreateFontFaceReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
+    pub TranslateColorGlyphRun: unsafe extern "system" fn(
+        *mut c_void,
+        f32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        u32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateCustomRenderingParams_2:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis_2: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u32,
+        f32,
+        f32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateGlyphRunAnalysis_3: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u32,
+        f32,
+        f32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateCustomRenderingParams_3:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
+    pub CreateFontFaceReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateFontFaceReference_ov2: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub GetSystemFontSet: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontSetBuilder: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontCollectionFromFontSet: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub GetSystemFontCollection_3: unsafe extern "system" fn(*mut c_void, i32, *mut c_void, i32) -> i32,
     pub GetFontDownloadQueue: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub TranslateColorGlyphRun_4:
-        unsafe extern "system" fn(*mut c_void, u64, *mut c_void, *mut c_void, u32, u32, *mut c_void, u32, *mut c_void) -> i32,
-    pub ComputeGlyphOrigins: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u64, *mut c_void, *mut c_void) -> i32,
+    pub TranslateColorGlyphRun_4: unsafe extern "system" fn(
+        *mut c_void,
+        u64,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        *mut c_void,
+        u32,
+        *mut c_void,
+    ) -> i32,
+    pub ComputeGlyphOrigins:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u64, *mut c_void, *mut c_void) -> i32,
     pub ComputeGlyphOrigins_ov2: unsafe extern "system" fn(*mut c_void, *mut c_void, u64, *mut c_void) -> i32,
 }
 
@@ -228,49 +435,117 @@ pub struct IDWriteFactory5Vtbl {
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub GetSystemFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
+    pub CreateCustomFontCollection:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
     pub RegisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
+    pub CreateCustomFontFileReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub CreateFontFace: unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateMonitorRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams: unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub RegisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextFormat: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, f32, *mut c_void, *mut c_void) -> i32,
+    pub CreateTextFormat: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+    ) -> i32,
     pub CreateTypography: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub GetGdiInterop: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextLayout: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
-    pub CreateGdiCompatibleTextLayout:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, f32, *mut c_void, i32, *mut c_void) -> i32,
+    pub CreateTextLayout:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
+    pub CreateGdiCompatibleTextLayout: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        f32,
+        f32,
+        f32,
+        *mut c_void,
+        i32,
+        *mut c_void,
+    ) -> i32,
     pub CreateEllipsisTrimmingSign: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub CreateTextAnalyzer: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateNumberSubstitution: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, i32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis: unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
     pub GetEudcFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomRenderingParams_1: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams_1:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub GetSystemFontFallback: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFallbackBuilder: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub TranslateColorGlyphRun:
-        unsafe extern "system" fn(*mut c_void, f32, f32, *mut c_void, *mut c_void, u32, *mut c_void, u32, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams_2: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis_2:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, u32, f32, f32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis_3:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, u32, f32, f32, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams_3: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
-    pub CreateFontFaceReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
+    pub TranslateColorGlyphRun: unsafe extern "system" fn(
+        *mut c_void,
+        f32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        u32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateCustomRenderingParams_2:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis_2: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u32,
+        f32,
+        f32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateGlyphRunAnalysis_3: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u32,
+        f32,
+        f32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateCustomRenderingParams_3:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
+    pub CreateFontFaceReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateFontFaceReference_ov2: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub GetSystemFontSet: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontSetBuilder: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontCollectionFromFontSet: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub GetSystemFontCollection_3: unsafe extern "system" fn(*mut c_void, i32, *mut c_void, i32) -> i32,
     pub GetFontDownloadQueue: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub TranslateColorGlyphRun_4:
-        unsafe extern "system" fn(*mut c_void, u64, *mut c_void, *mut c_void, u32, u32, *mut c_void, u32, *mut c_void) -> i32,
-    pub ComputeGlyphOrigins: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u64, *mut c_void, *mut c_void) -> i32,
+    pub TranslateColorGlyphRun_4: unsafe extern "system" fn(
+        *mut c_void,
+        u64,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        *mut c_void,
+        u32,
+        *mut c_void,
+    ) -> i32,
+    pub ComputeGlyphOrigins:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u64, *mut c_void, *mut c_void) -> i32,
     pub ComputeGlyphOrigins_ov2: unsafe extern "system" fn(*mut c_void, *mut c_void, u64, *mut c_void) -> i32,
     pub CreateFontSetBuilder_5: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateInMemoryFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
@@ -286,63 +561,140 @@ pub struct IDWriteFactory7Vtbl {
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub GetSystemFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
+    pub CreateCustomFontCollection:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
     pub RegisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
+    pub CreateCustomFontFileReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub CreateFontFace: unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateMonitorRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams: unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub RegisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextFormat: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, f32, *mut c_void, *mut c_void) -> i32,
+    pub CreateTextFormat: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+    ) -> i32,
     pub CreateTypography: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub GetGdiInterop: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextLayout: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
-    pub CreateGdiCompatibleTextLayout:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, f32, *mut c_void, i32, *mut c_void) -> i32,
+    pub CreateTextLayout:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
+    pub CreateGdiCompatibleTextLayout: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        f32,
+        f32,
+        f32,
+        *mut c_void,
+        i32,
+        *mut c_void,
+    ) -> i32,
     pub CreateEllipsisTrimmingSign: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub CreateTextAnalyzer: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateNumberSubstitution: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, i32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis: unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
     pub GetEudcFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomRenderingParams_1: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams_1:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub GetSystemFontFallback: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFallbackBuilder: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub TranslateColorGlyphRun:
-        unsafe extern "system" fn(*mut c_void, f32, f32, *mut c_void, *mut c_void, u32, *mut c_void, u32, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams_2: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis_2:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, u32, f32, f32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis_3:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, u32, f32, f32, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams_3: unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
-    pub CreateFontFaceReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
+    pub TranslateColorGlyphRun: unsafe extern "system" fn(
+        *mut c_void,
+        f32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        u32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateCustomRenderingParams_2:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis_2: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u32,
+        f32,
+        f32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateGlyphRunAnalysis_3: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u32,
+        f32,
+        f32,
+        *mut c_void,
+    ) -> i32,
+    pub CreateCustomRenderingParams_3:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, f32, u32, u32, u32, *mut c_void) -> i32,
+    pub CreateFontFaceReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateFontFaceReference_ov2: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub GetSystemFontSet: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontSetBuilder: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontCollectionFromFontSet: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub GetSystemFontCollection_3: unsafe extern "system" fn(*mut c_void, i32, *mut c_void, i32) -> i32,
     pub GetFontDownloadQueue: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub TranslateColorGlyphRun_4:
-        unsafe extern "system" fn(*mut c_void, u64, *mut c_void, *mut c_void, u32, u32, *mut c_void, u32, *mut c_void) -> i32,
-    pub ComputeGlyphOrigins: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u64, *mut c_void, *mut c_void) -> i32,
+    pub TranslateColorGlyphRun_4: unsafe extern "system" fn(
+        *mut c_void,
+        u64,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        *mut c_void,
+        u32,
+        *mut c_void,
+    ) -> i32,
+    pub ComputeGlyphOrigins:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u64, *mut c_void, *mut c_void) -> i32,
     pub ComputeGlyphOrigins_ov2: unsafe extern "system" fn(*mut c_void, *mut c_void, u64, *mut c_void) -> i32,
     pub CreateFontSetBuilder_5: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateInMemoryFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateHttpFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
     pub AnalyzeContainerType: unsafe extern "system" fn(*mut c_void, *mut c_void, u32) -> u32,
     pub UnpackFontFile: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, u32, *mut c_void) -> i32,
-    pub CreateFontFaceReference_6: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u32, *mut c_void, u32, *mut c_void) -> i32,
+    pub CreateFontFaceReference_6:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u32, *mut c_void, u32, *mut c_void) -> i32,
     pub CreateFontResource: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void) -> i32,
     pub GetSystemFontSet_6: unsafe extern "system" fn(*mut c_void, i32, *mut c_void) -> i32,
     pub GetSystemFontCollection_6: unsafe extern "system" fn(*mut c_void, i32, u32, *mut c_void) -> i32,
     pub CreateFontCollectionFromFontSet_6: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void) -> i32,
     pub CreateFontSetBuilder_6: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextFormat_6:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void, u32, f32, *mut c_void, *mut c_void) -> i32,
+    pub CreateTextFormat_6: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+    ) -> i32,
     pub GetSystemFontSet_7: unsafe extern "system" fn(*mut c_void, i32, *mut c_void) -> i32,
     pub GetSystemFontCollection_7: unsafe extern "system" fn(*mut c_void, i32, u32, *mut c_void) -> i32,
 }
@@ -354,27 +706,52 @@ pub struct IDWriteFactoryVtbl {
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub GetSystemFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> i32,
-    pub CreateCustomFontCollection: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
+    pub CreateCustomFontCollection:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
     pub RegisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontCollectionLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
+    pub CreateCustomFontFileReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub CreateFontFace: unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, u32, u32, *mut c_void) -> i32,
     pub CreateRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateMonitorRenderingParams: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
-    pub CreateCustomRenderingParams: unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
+    pub CreateCustomRenderingParams:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void) -> i32,
     pub RegisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub UnregisterFontFileLoader: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextFormat: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, u32, u32, f32, *mut c_void, *mut c_void) -> i32,
+    pub CreateTextFormat: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        f32,
+        *mut c_void,
+        *mut c_void,
+    ) -> i32,
     pub CreateTypography: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub GetGdiInterop: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
-    pub CreateTextLayout: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
-    pub CreateGdiCompatibleTextLayout:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, f32, *mut c_void, i32, *mut c_void) -> i32,
+    pub CreateTextLayout:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, f32, f32, *mut c_void) -> i32,
+    pub CreateGdiCompatibleTextLayout: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        f32,
+        f32,
+        f32,
+        *mut c_void,
+        i32,
+        *mut c_void,
+    ) -> i32,
     pub CreateEllipsisTrimmingSign: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub CreateTextAnalyzer: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateNumberSubstitution: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, i32, *mut c_void) -> i32,
-    pub CreateGlyphRunAnalysis: unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
+    pub CreateGlyphRunAnalysis:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, f32, *mut c_void, u32, u32, f32, f32, *mut c_void) -> i32,
 }
 
 #[repr(C)]
@@ -397,7 +774,8 @@ pub struct IDWriteFontCollectionLoaderVtbl {
     pub QueryInterface: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
-    pub CreateEnumeratorFromKey: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
+    pub CreateEnumeratorFromKey:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void) -> i32,
 }
 
 #[repr(C)]
@@ -449,11 +827,22 @@ pub struct IDWriteFontFaceVtbl {
     pub GetGlyphCount: unsafe extern "system" fn(*mut c_void) -> u16,
     pub GetDesignGlyphMetrics: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, i32) -> i32,
     pub GetGlyphIndices: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void) -> i32,
-    pub TryGetFontTable: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
+    pub TryGetFontTable:
+        unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
     pub ReleaseFontTable: unsafe extern "system" fn(*mut c_void, *mut c_void),
-    pub GetGlyphRunOutline:
-        unsafe extern "system" fn(*mut c_void, f32, *mut c_void, *mut c_void, *mut c_void, u32, i32, i32, *mut c_void) -> i32,
-    pub GetRecommendedRenderingMode: unsafe extern "system" fn(*mut c_void, f32, f32, u32, *mut c_void, *mut c_void) -> i32,
+    pub GetGlyphRunOutline: unsafe extern "system" fn(
+        *mut c_void,
+        f32,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        u32,
+        i32,
+        i32,
+        *mut c_void,
+    ) -> i32,
+    pub GetRecommendedRenderingMode:
+        unsafe extern "system" fn(*mut c_void, f32, f32, u32, *mut c_void, *mut c_void) -> i32,
     pub GetGdiCompatibleMetrics: unsafe extern "system" fn(*mut c_void, f32, f32, *mut c_void, *mut c_void) -> i32,
     pub GetGdiCompatibleGlyphMetrics:
         unsafe extern "system" fn(*mut c_void, f32, f32, *mut c_void, i32, *mut c_void, u32, *mut c_void, i32) -> i32,
@@ -465,8 +854,17 @@ pub struct IDWriteFontFallbackBuilderVtbl {
     pub QueryInterface: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
-    pub AddMapping:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, u32, *mut c_void, *mut c_void, *mut c_void, f32) -> i32,
+    pub AddMapping: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        f32,
+    ) -> i32,
     pub AddMappings: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
     pub CreateFontFallback: unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32,
 }
@@ -618,7 +1016,8 @@ pub struct IDWriteGlyphRunAnalysisVtbl {
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub GetAlphaTextureBounds: unsafe extern "system" fn(*mut c_void, u32, *mut c_void) -> i32,
     pub CreateAlphaTexture: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut c_void, u32) -> i32,
-    pub GetAlphaBlendParams: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
+    pub GetAlphaBlendParams:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void, *mut c_void) -> i32,
 }
 
 #[repr(C)]
@@ -628,7 +1027,8 @@ pub struct IDWriteInMemoryFontFileLoaderVtbl {
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub CreateStreamFromKey: unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void) -> i32,
-    pub CreateInMemoryFontFileReference: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
+    pub CreateInMemoryFontFileReference:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub GetFileCount: unsafe extern "system" fn(*mut c_void) -> u32,
 }
 
@@ -734,10 +1134,12 @@ pub struct IDWriteFontFace1Vtbl {
     pub GetUnicodeRanges: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub IsMonospacedFont: unsafe extern "system" fn(*mut c_void) -> i32,
     pub GetDesignGlyphAdvances: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut c_void, i32) -> i32,
-    pub GetGdiCompatibleGlyphAdvances: unsafe extern "system" fn(*mut c_void, f32, f32, *mut c_void, i32, i32, u32, *mut c_void, *mut c_void) -> i32,
+    pub GetGdiCompatibleGlyphAdvances:
+        unsafe extern "system" fn(*mut c_void, f32, f32, *mut c_void, i32, i32, u32, *mut c_void, *mut c_void) -> i32,
     pub GetKerningPairAdjustments: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub HasKerningPairs: unsafe extern "system" fn(*mut c_void) -> i32,
-    pub GetRecommendedRenderingMode_1: unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void, *mut c_void) -> i32,
+    pub GetRecommendedRenderingMode_1:
+        unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void, *mut c_void) -> i32,
     pub GetVerticalGlyphVariants: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub HasVerticalGlyphVariants: unsafe extern "system" fn(*mut c_void) -> i32,
 }

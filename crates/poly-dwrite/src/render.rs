@@ -421,7 +421,9 @@ pub fn rasterize(polys: &Polys, kind: Kind) -> Raster {
                     }
                 } else {
                     for s in 0..subs {
-                        let at = |i: i32| -> f32 { if i < 0 || i >= subs as i32 { 0.0 } else { f32::from(count[i as usize]) / per } };
+                        let at = |i: i32| -> f32 {
+                            if i < 0 || i >= subs as i32 { 0.0 } else { f32::from(count[i as usize]) / per }
+                        };
                         let f = (at(s as i32 - 1) + at(s as i32) + at(s as i32 + 1)) / 3.0;
                         out[row * subs + s] = (f * 255.0 + 0.5) as u8;
                     }
@@ -571,7 +573,10 @@ mod tests {
         assert_eq!((g.underline_position, g.underline_thickness), (-125, 0));
         let g = gdi_metrics(&m, 13.0);
         assert_eq!((g.ascent, g.descent, g.cap_height, g.x_height), (923, 308, 692, 462));
-        assert_eq!((g.underline_position, g.underline_thickness, g.strikethrough_position, g.strikethrough_thickness), (-77, 77, 231, 77));
+        assert_eq!(
+            (g.underline_position, g.underline_thickness, g.strikethrough_position, g.strikethrough_thickness),
+            (-77, 77, 231, 77)
+        );
         let g = gdi_metrics(&m, 20.5);
         assert_eq!((g.ascent, g.descent, g.cap_height, g.x_height), (878, 293, 683, 488));
         assert_eq!(gdi_metrics(&m, 100.0), m);

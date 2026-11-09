@@ -229,7 +229,12 @@ mod tests {
 
     #[test]
     fn sorted_by_locale() {
-        let t = name_table(&[(3, 0x409, 1, "Four"), (3, 0x407, 1, "Vier"), (3, 0xC09, 1, "Fourr"), (3, 0x40C, 1, "Quatre")]);
+        let t = name_table(&[
+            (3, 0x409, 1, "Four"),
+            (3, 0x407, 1, "Vier"),
+            (3, 0xC09, 1, "Fourr"),
+            (3, 0x40C, 1, "Quatre"),
+        ]);
         let l = Localized::from_records(&parse_names(&t), 1);
         let tags: Vec<&str> = l.entries.iter().map(|e| e.0.as_str()).collect();
         assert_eq!(tags, ["de-de", "en-au", "en-us", "fr-fr"]);

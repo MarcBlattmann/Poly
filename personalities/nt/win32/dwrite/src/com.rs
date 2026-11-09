@@ -14,6 +14,7 @@ pub const E_NOINTERFACE: HRESULT = 0x8000_4002u32 as i32;
 pub const E_POINTER: HRESULT = 0x8000_4003u32 as i32;
 pub const E_FAIL: HRESULT = 0x8000_4005u32 as i32;
 pub const E_INVALIDARG: HRESULT = 0x8007_0057u32 as i32;
+#[allow(dead_code)]
 pub const E_OUTOFMEMORY: HRESULT = 0x8007_000Eu32 as i32;
 /// `ERROR_FILE_NOT_FOUND` as an `HRESULT`.
 pub const E_FILE_NOT_FOUND: HRESULT = 0x8007_0002u32 as i32;
@@ -157,11 +158,6 @@ pub unsafe extern "system" fn not_implemented() -> HRESULT {
     E_NOTIMPL
 }
 
-/// `0` for slots that return a number and take no interest in arguments.
-pub unsafe extern "system" fn zero() -> u32 {
-    0
-}
-
 /// A slot filled with [`not_implemented`].
 #[macro_export]
 macro_rules! stub {
@@ -170,11 +166,6 @@ macro_rules! stub {
         // does not read; the result is an HRESULT in EAX.
         unsafe { core::mem::transmute::<unsafe extern "system" fn() -> i32, _>($crate::com::not_implemented) }
     };
-}
-
-/// Does a GUID equal one of these?
-pub fn is_one_of(iid: &GUID, list: &[GUID]) -> bool {
-    list.contains(iid)
 }
 
 /// A void slot that takes a pointer argument and does nothing.

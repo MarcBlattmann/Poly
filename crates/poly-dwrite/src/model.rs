@@ -49,11 +49,13 @@ pub struct FaceEntry {
     /// Which variant of the same font file this entry is (an alias of a
     /// system font has its own).
     pub variant: u32,
+    /// Report this weight instead of the font's own.
+    pub weight: Option<u32>,
 }
 
 impl FaceEntry {
     pub fn new(file: usize, index: u32, info: Arc<FaceInfo>) -> FaceEntry {
-        FaceEntry { file, index, info, family: None, face: None, symbol: None, charset: None, variant: 0 }
+        FaceEntry { file, index, info, family: None, face: None, symbol: None, charset: None, variant: 0, weight: None }
     }
 
     fn family_names(&self) -> &Localized {
@@ -105,17 +107,14 @@ pub fn build_families(entries: &[FaceEntry]) -> Vec<Family> {
         }
     }
     groups.sort_by(|a, b| a.0.cmp(&b.0));
-    groups
-        .into_iter()
-        .map(|(_, names, members)| Family { names, fonts: family_fonts(entries, &members) })
-        .collect()
+    groups.into_iter().map(|(_, names, members)| Family { names, fonts: family_fonts(entries, &members) }).collect()
 }
 
 fn real_font(entries: &[FaceEntry], i: usize) -> FontDesc {
     let e = &entries[i];
     FontDesc {
         entry: i,
-        weight: e.info.weight,
+        weight: e.weight.unwrap_or(e.info.weight),
         stretch: e.info.stretch,
         style: e.info.style,
         simulations: 0,
@@ -127,29 +126,25 @@ fn family_fonts(entries: &[FaceEntry], members: &[usize]) -> Vec<FontDesc> {
     let mut real: Vec<FontDesc> = members.iter().map(|&i| real_font(entries, i)).collect();
     real.sort_by_key(|f| (f.weight, f.stretch.abs_diff(5), f.stretch, f.style));
     let mut out = real.clone();
+    let mut sims: Vec<FontDesc> = Vec::new();
     // Oblique simulations of every upright face.
     for f in real.iter().filter(|f| f.style == STYLE_NORMAL) {
-        out.push(simulate(entries, f, SIM_OBLIQUE));
+        sims.push(simulate(entries, f, SIM_OBLIQUE));
     }
-    // Bold simulations per class (stretch, style) without a heavy face.
-    let mut bold_bases: Vec<FontDesc> = Vec::new();
+    // Bold simulations of every face of a class (stretch, style) that has
+    // no heavy face, and the oblique ones of the upright ones.
     for f in &real {
-        if bold_bases.iter().any(|b| b.stretch == f.stretch && b.style == f.style) {
+        let heavy = real.iter().any(|g| g.stretch == f.stretch && g.style == f.style && g.weight > 600);
+        if heavy {
             continue;
         }
-        let class: Vec<&FontDesc> = real.iter().filter(|g| g.stretch == f.stretch && g.style == f.style).collect();
-        if class.iter().any(|g| g.weight > 600) {
-            continue;
+        sims.push(simulate(entries, f, SIM_BOLD));
+        if f.style == STYLE_NORMAL {
+            sims.push(simulate(entries, f, SIM_BOLD | SIM_OBLIQUE));
         }
-        let base = class.iter().min_by_key(|g| g.weight.abs_diff(400)).copied().unwrap_or(f);
-        bold_bases.push(base.clone());
     }
-    for b in &bold_bases {
-        out.push(simulate(entries, b, SIM_BOLD));
-    }
-    for b in bold_bases.iter().filter(|b| b.style == STYLE_NORMAL) {
-        out.push(simulate(entries, b, SIM_BOLD | SIM_OBLIQUE));
-    }
+    sims.sort_by_key(|f| (f.weight, f.stretch.abs_diff(5), f.stretch, f.style));
+    out.extend(sims);
     out
 }
 
@@ -215,7 +210,11 @@ fn sim_name(entries: &[FaceEntry], base: &FontDesc, sims: u32) -> String {
     let ob = if sims & SIM_OBLIQUE != 0 { "Oblique" } else { "" };
     if sims & SIM_BOLD == 0 {
         // Only oblique.
-        return if base_name == "Regular" || base_name.is_empty() { String::from("Oblique") } else { join(&[&base_name, ob]) };
+        return if base_name == "Regular" || base_name.is_empty() {
+            String::from("Oblique")
+        } else {
+            join(&[&base_name, ob])
+        };
     }
     let style = match base.style {
         STYLE_ITALIC => "Italic",
@@ -307,7 +306,13 @@ fn candidates(entries: &[FaceEntry], family: &Family, req: &Request) -> Vec<(i64
 }
 
 /// The font that best matches the request.
-pub fn first_matching(entries: &[FaceEntry], family: &Family, weight: u32, stretch: u32, style: u32) -> Option<FontDesc> {
+pub fn first_matching(
+    entries: &[FaceEntry],
+    family: &Family,
+    weight: u32,
+    stretch: u32,
+    style: u32,
+) -> Option<FontDesc> {
     let req = Request::new(weight, stretch, style);
     candidates(entries, family, &req).into_iter().next().map(|c| c.4)
 }
@@ -424,9 +429,9 @@ mod tests {
                 "w300 s5 st1 sim2 Light Oblique",
                 "w400 s5 st1 sim2 Oblique",
                 "w400 s3 st1 sim2 Condensed Oblique",
-                "w900 s5 st1 sim2 Black Oblique",
                 "w700 s3 st0 sim1 Condensed Bold",
                 "w700 s3 st1 sim3 Condensed Bold Oblique",
+                "w900 s5 st1 sim2 Black Oblique",
             ]
         );
     }
@@ -436,11 +441,51 @@ mod tests {
         let e = alpha();
         let f = &build_families(&e)[0];
         let m = |w, s, st| matching_fonts(&e, f, w, s, st).iter().map(describe).collect::<Vec<_>>();
-        assert_eq!(m(400, 5, 0), ["w400 s5 st0 sim0 Regular", "w400 s5 st2 sim0 Italic", "w700 s5 st0 sim0 Bold", "w700 s5 st2 sim0 Bold Italic"]);
-        assert_eq!(m(700, 5, 0), ["w700 s5 st0 sim0 Bold", "w700 s5 st0 sim1 Bold", "w700 s5 st2 sim0 Bold Italic", "w700 s5 st2 sim1 Italic Bold"]);
-        assert_eq!(m(400, 5, 1), ["w400 s5 st1 sim2 Oblique", "w400 s5 st2 sim0 Italic", "w700 s5 st1 sim2 Bold Oblique", "w700 s5 st2 sim0 Bold Italic"]);
-        assert_eq!(m(400, 5, 2), ["w400 s5 st2 sim0 Italic", "w400 s5 st1 sim2 Oblique", "w700 s5 st2 sim0 Bold Italic", "w700 s5 st1 sim2 Bold Oblique"]);
-        assert_eq!(m(700, 5, 2), ["w700 s5 st2 sim0 Bold Italic", "w700 s5 st2 sim1 Italic Bold", "w700 s5 st1 sim2 Bold Oblique", "w700 s5 st1 sim3 Bold Oblique"]);
+        assert_eq!(
+            m(400, 5, 0),
+            [
+                "w400 s5 st0 sim0 Regular",
+                "w400 s5 st2 sim0 Italic",
+                "w700 s5 st0 sim0 Bold",
+                "w700 s5 st2 sim0 Bold Italic"
+            ]
+        );
+        assert_eq!(
+            m(700, 5, 0),
+            [
+                "w700 s5 st0 sim0 Bold",
+                "w700 s5 st0 sim1 Bold",
+                "w700 s5 st2 sim0 Bold Italic",
+                "w700 s5 st2 sim1 Italic Bold"
+            ]
+        );
+        assert_eq!(
+            m(400, 5, 1),
+            [
+                "w400 s5 st1 sim2 Oblique",
+                "w400 s5 st2 sim0 Italic",
+                "w700 s5 st1 sim2 Bold Oblique",
+                "w700 s5 st2 sim0 Bold Italic"
+            ]
+        );
+        assert_eq!(
+            m(400, 5, 2),
+            [
+                "w400 s5 st2 sim0 Italic",
+                "w400 s5 st1 sim2 Oblique",
+                "w700 s5 st2 sim0 Bold Italic",
+                "w700 s5 st1 sim2 Bold Oblique"
+            ]
+        );
+        assert_eq!(
+            m(700, 5, 2),
+            [
+                "w700 s5 st2 sim0 Bold Italic",
+                "w700 s5 st2 sim1 Italic Bold",
+                "w700 s5 st1 sim2 Bold Oblique",
+                "w700 s5 st1 sim3 Bold Oblique"
+            ]
+        );
     }
 
     #[test]
@@ -448,13 +493,69 @@ mod tests {
         let e = beta();
         let f = &build_families(&e)[0];
         let m = |w, s, st| matching_fonts(&e, f, w, s, st).iter().map(describe).collect::<Vec<_>>();
-        assert_eq!(m(400, 5, 0), ["w400 s5 st0 sim0 Regular", "w300 s5 st0 sim0 Light", "w400 s3 st0 sim0 Condensed", "w900 s5 st0 sim0 Black"]);
-        assert_eq!(m(700, 5, 0), ["w900 s5 st0 sim0 Black", "w700 s5 st0 sim1 Bold", "w700 s5 st0 sim1 Bold", "w700 s3 st0 sim1 Condensed Bold"]);
-        assert_eq!(m(900, 3, 0), ["w700 s3 st0 sim1 Condensed Bold", "w900 s5 st0 sim0 Black", "w700 s5 st0 sim1 Bold", "w700 s5 st0 sim1 Bold"]);
-        assert_eq!(m(300, 5, 0), ["w300 s5 st0 sim0 Light", "w400 s5 st0 sim0 Regular", "w400 s3 st0 sim0 Condensed", "w900 s5 st0 sim0 Black"]);
-        assert_eq!(m(0, 0, 0), ["w400 s3 st0 sim0 Condensed", "w300 s5 st0 sim0 Light", "w400 s5 st0 sim0 Regular", "w900 s5 st0 sim0 Black"]);
-        assert_eq!(m(700, 5, 2), ["w900 s5 st1 sim2 Black Oblique", "w700 s5 st1 sim3 Bold Oblique", "w700 s5 st1 sim3 Bold Oblique", "w700 s3 st1 sim3 Condensed Bold Oblique"]);
-        assert_eq!(m(500, 7, 2), ["w400 s5 st1 sim2 Oblique", "w300 s5 st1 sim2 Light Oblique", "w900 s5 st1 sim2 Black Oblique", "w400 s3 st1 sim2 Condensed Oblique"]);
+        assert_eq!(
+            m(400, 5, 0),
+            [
+                "w400 s5 st0 sim0 Regular",
+                "w300 s5 st0 sim0 Light",
+                "w400 s3 st0 sim0 Condensed",
+                "w900 s5 st0 sim0 Black"
+            ]
+        );
+        assert_eq!(
+            m(700, 5, 0),
+            [
+                "w900 s5 st0 sim0 Black",
+                "w700 s5 st0 sim1 Bold",
+                "w700 s5 st0 sim1 Bold",
+                "w700 s3 st0 sim1 Condensed Bold"
+            ]
+        );
+        assert_eq!(
+            m(900, 3, 0),
+            [
+                "w700 s3 st0 sim1 Condensed Bold",
+                "w900 s5 st0 sim0 Black",
+                "w700 s5 st0 sim1 Bold",
+                "w700 s5 st0 sim1 Bold"
+            ]
+        );
+        assert_eq!(
+            m(300, 5, 0),
+            [
+                "w300 s5 st0 sim0 Light",
+                "w400 s5 st0 sim0 Regular",
+                "w400 s3 st0 sim0 Condensed",
+                "w900 s5 st0 sim0 Black"
+            ]
+        );
+        assert_eq!(
+            m(0, 0, 0),
+            [
+                "w400 s3 st0 sim0 Condensed",
+                "w300 s5 st0 sim0 Light",
+                "w400 s5 st0 sim0 Regular",
+                "w900 s5 st0 sim0 Black"
+            ]
+        );
+        assert_eq!(
+            m(700, 5, 2),
+            [
+                "w900 s5 st1 sim2 Black Oblique",
+                "w700 s5 st1 sim3 Bold Oblique",
+                "w700 s5 st1 sim3 Bold Oblique",
+                "w700 s3 st1 sim3 Condensed Bold Oblique"
+            ]
+        );
+        assert_eq!(
+            m(500, 7, 2),
+            [
+                "w400 s5 st1 sim2 Oblique",
+                "w300 s5 st1 sim2 Light Oblique",
+                "w900 s5 st1 sim2 Black Oblique",
+                "w400 s3 st1 sim2 Condensed Oblique"
+            ]
+        );
     }
 
     #[test]
