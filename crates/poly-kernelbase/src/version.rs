@@ -228,3 +228,223 @@ mod tests {
         assert_eq!(u32::from_le_bytes(system_info(0)[32..36].try_into().unwrap()), 1);
     }
 }
+
+// ----- VerifyVersionInfoW (ADR 0155) ------------------------------------------
+
+// `VER_*` type masks and comparison values (`winnt.h`; Learn:
+// "VerSetConditionMask function", "VerifyVersionInfoW function").
+pub const VER_MINORVERSION: u32 = 0x1;
+pub const VER_MAJORVERSION: u32 = 0x2;
+pub const VER_BUILDNUMBER: u32 = 0x4;
+pub const VER_PLATFORMID: u32 = 0x8;
+pub const VER_SERVICEPACKMINOR: u32 = 0x10;
+pub const VER_SERVICEPACKMAJOR: u32 = 0x20;
+pub const VER_SUITENAME: u32 = 0x40;
+pub const VER_PRODUCT_TYPE: u32 = 0x80;
+pub const VER_EQUAL: u8 = 1;
+pub const VER_GREATER: u8 = 2;
+pub const VER_GREATER_EQUAL: u8 = 3;
+pub const VER_LESS: u8 = 4;
+pub const VER_LESS_EQUAL: u8 = 5;
+pub const VER_AND: u8 = 6;
+pub const VER_OR: u8 = 7;
+/// `VER_PLATFORM_WIN32_NT` and `VER_NT_WORKSTATION`.
+pub const PLATFORM_WIN32_NT: u32 = 2;
+pub const NT_WORKSTATION: u8 = 1;
+
+/// `VerSetConditionMask`: three bits per version field, at the position of
+/// the field's type bit (bit 0 for the minor version ... bit 7 for the
+/// product type).
+pub fn set_condition(mask: u64, type_mask: u32, condition: u8) -> u64 {
+    let mut m = mask;
+    for bit in 0..8 {
+        if type_mask & (1 << bit) != 0 {
+            m = (m & !(7u64 << (3 * bit))) | (u64::from(condition & 7) << (3 * bit));
+        }
+    }
+    m
+}
+
+/// The version fields of the system, in `OSVERSIONINFOEXW`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fields {
+    pub major: u32,
+    pub minor: u32,
+    pub build: u32,
+    pub platform: u32,
+    pub sp_major: u16,
+    pub sp_minor: u16,
+    pub suite: u16,
+    pub product: u8,
+}
+
+impl Fields {
+    /// What Poly is: `(major, minor, build)` as reported, NT, no service
+    /// pack, a workstation.
+    pub fn of(v: (u32, u32, u32)) -> Fields {
+        Fields {
+            major: v.0,
+            minor: v.1,
+            build: v.2,
+            platform: PLATFORM_WIN32_NT,
+            sp_major: 0,
+            sp_minor: 0,
+            suite: 0,
+            product: NT_WORKSTATION,
+        }
+    }
+
+    /// Read the wanted values from an `OSVERSIONINFOEXW` (284 bytes).
+    pub fn from_bytes(b: &[u8]) -> Option<Fields> {
+        let u32_at = |o: usize| Some(u32::from_le_bytes(b.get(o..o + 4)?.try_into().ok()?));
+        let u16_at = |o: usize| Some(u16::from_le_bytes(b.get(o..o + 2)?.try_into().ok()?));
+        Some(Fields {
+            major: u32_at(4)?,
+            minor: u32_at(8)?,
+            build: u32_at(12)?,
+            platform: u32_at(16)?,
+            sp_major: u16_at(276)?,
+            sp_minor: u16_at(278)?,
+            suite: u16_at(280)?,
+            product: *b.get(282)?,
+        })
+    }
+}
+
+fn holds(condition: u8, actual: i64, wanted: i64) -> bool {
+    match condition {
+        VER_EQUAL => actual == wanted,
+        VER_GREATER => actual > wanted,
+        VER_GREATER_EQUAL => actual >= wanted,
+        VER_LESS => actual < wanted,
+        VER_LESS_EQUAL => actual <= wanted,
+        _ => false,
+    }
+}
+
+/// `VerifyVersionInfoW`: does the system (`actual`) meet `wanted` under the
+/// conditions in `condition_mask` for the fields `type_mask` names? The
+/// major, minor, build and service pack fields are compared in that order
+/// and the first that differs decides; when all of them are equal the
+/// condition of the last one decides (equal passes `VER_EQUAL`,
+/// `VER_GREATER_EQUAL` and `VER_LESS_EQUAL`). The platform and product type
+/// are compared on their own, the suite mask with `VER_AND` (all bits) or
+/// `VER_OR` (any). `None`: a condition not allowed for the field
+/// (`ERROR_BAD_ARGUMENTS`). The order and the tie rule are to be confirmed
+/// by the spec agent.
+pub fn verify(actual: &Fields, wanted: &Fields, type_mask: u32, condition_mask: u64) -> Option<bool> {
+    let cond = |bit: u32| ((condition_mask >> (3 * bit)) & 7) as u8;
+    let ordered = [
+        (VER_MAJORVERSION, 1, i64::from(actual.major), i64::from(wanted.major)),
+        (VER_MINORVERSION, 0, i64::from(actual.minor), i64::from(wanted.minor)),
+        (VER_BUILDNUMBER, 2, i64::from(actual.build), i64::from(wanted.build)),
+        (VER_SERVICEPACKMAJOR, 5, i64::from(actual.sp_major), i64::from(wanted.sp_major)),
+        (VER_SERVICEPACKMINOR, 4, i64::from(actual.sp_minor), i64::from(wanted.sp_minor)),
+    ];
+    let mut decided = None;
+    let mut last = None;
+    for (type_bit, index, a, w) in ordered {
+        if type_mask & type_bit == 0 {
+            continue;
+        }
+        let c = cond(index);
+        if !(VER_EQUAL..=VER_LESS_EQUAL).contains(&c) {
+            return None;
+        }
+        last = Some(c);
+        if a != w && decided.is_none() {
+            decided = Some(holds(c, a, w));
+        }
+    }
+    let mut ok = match (decided, last) {
+        (Some(d), _) => d,
+        (None, Some(c)) => holds(c, 0, 0),
+        (None, None) => true,
+    };
+    if type_mask & VER_PLATFORMID != 0 {
+        let c = cond(3);
+        if !(VER_EQUAL..=VER_LESS_EQUAL).contains(&c) {
+            return None;
+        }
+        ok &= holds(c, i64::from(actual.platform), i64::from(wanted.platform));
+    }
+    if type_mask & VER_PRODUCT_TYPE != 0 {
+        let c = cond(7);
+        if !(VER_EQUAL..=VER_LESS_EQUAL).contains(&c) {
+            return None;
+        }
+        ok &= holds(c, i64::from(actual.product), i64::from(wanted.product));
+    }
+    if type_mask & VER_SUITENAME != 0 {
+        ok &= match cond(6) {
+            VER_AND => actual.suite & wanted.suite == wanted.suite,
+            VER_OR => wanted.suite == 0 || actual.suite & wanted.suite != 0,
+            _ => return None,
+        };
+    }
+    Some(ok)
+}
+
+#[cfg(test)]
+mod verify_tests {
+    use super::*;
+
+    const WIN10: (u32, u32, u32) = (10, 0, 19045);
+
+    fn want(major: u32, minor: u32) -> Fields {
+        Fields { major, minor, ..Fields::of(WIN10) }
+    }
+
+    #[test]
+    fn the_mask_holds_three_bits_per_field() {
+        let m = set_condition(0, VER_MAJORVERSION, VER_GREATER_EQUAL);
+        assert_eq!(m, 3 << 3);
+        let m = set_condition(m, VER_MINORVERSION | VER_SERVICEPACKMAJOR, VER_EQUAL);
+        assert_eq!(m, (3 << 3) | 1 | (1 << 15));
+        // A later call replaces the condition.
+        assert_eq!((set_condition(m, VER_MAJORVERSION, VER_LESS) >> 3) & 7, u64::from(VER_LESS));
+    }
+
+    #[test]
+    fn at_least_a_version_is_the_usual_use() {
+        let actual = Fields::of(WIN10);
+        let mask =
+            set_condition(set_condition(0, VER_MAJORVERSION, VER_GREATER_EQUAL), VER_MINORVERSION, VER_GREATER_EQUAL);
+        let ask = |major, minor| verify(&actual, &want(major, minor), VER_MAJORVERSION | VER_MINORVERSION, mask);
+        assert_eq!(ask(6, 3), Some(true), "10.0 is at least 6.3: the major version decides");
+        assert_eq!(ask(10, 0), Some(true), "all equal, inclusive");
+        assert_eq!(ask(10, 1), Some(false));
+        assert_eq!(ask(11, 0), Some(false));
+        let equal = set_condition(set_condition(0, VER_MAJORVERSION, VER_EQUAL), VER_MINORVERSION, VER_EQUAL);
+        assert_eq!(verify(&actual, &want(10, 0), VER_MAJORVERSION | VER_MINORVERSION, equal), Some(true));
+        assert_eq!(verify(&actual, &want(6, 3), VER_MAJORVERSION | VER_MINORVERSION, equal), Some(false));
+        let greater = set_condition(0, VER_MAJORVERSION, VER_GREATER);
+        assert_eq!(verify(&actual, &want(10, 0), VER_MAJORVERSION, greater), Some(false), "strictly");
+    }
+
+    #[test]
+    fn platform_product_and_suite_are_tested_on_their_own() {
+        let actual = Fields::of(WIN10);
+        let mut w = want(10, 0);
+        w.platform = 2;
+        let eq = set_condition(0, VER_PLATFORMID | VER_PRODUCT_TYPE, VER_EQUAL);
+        assert_eq!(verify(&actual, &w, VER_PLATFORMID | VER_PRODUCT_TYPE, eq), Some(true));
+        w.product = 3;
+        assert_eq!(verify(&actual, &w, VER_PRODUCT_TYPE, eq), Some(false));
+        w.suite = 0x100;
+        assert_eq!(verify(&actual, &w, VER_SUITENAME, set_condition(0, VER_SUITENAME, VER_AND)), Some(false));
+        assert_eq!(verify(&actual, &w, VER_SUITENAME, set_condition(0, VER_SUITENAME, VER_EQUAL)), None);
+    }
+
+    #[test]
+    fn a_wanted_structure_is_read_at_winnts_offsets() {
+        let mut b = [0u8; 284];
+        b[4..8].copy_from_slice(&10u32.to_le_bytes());
+        b[16..20].copy_from_slice(&2u32.to_le_bytes());
+        b[276..278].copy_from_slice(&1u16.to_le_bytes());
+        b[282] = 1;
+        let f = Fields::from_bytes(&b).unwrap();
+        assert_eq!((f.major, f.platform, f.sp_major, f.product), (10, 2, 1, 1));
+        assert_eq!(Fields::from_bytes(&b[..100]), None);
+    }
+}

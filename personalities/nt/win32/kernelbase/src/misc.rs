@@ -488,3 +488,96 @@ pub unsafe extern "system" fn FormatMessageA(
         Err(e) => fail(e, 0),
     }
 }
+
+// ----- version tests, WOW64, vectored handlers (ADR 0155) -----------------------------------
+
+/// `VerSetConditionMask`.
+#[unsafe(no_mangle)]
+pub extern "system" fn VerSetConditionMask(mask: u64, type_mask: u32, condition: u8) -> u64 {
+    version::set_condition(mask, type_mask, condition)
+}
+
+/// `VerifyVersionInfoW`: the system against `info` (an `OSVERSIONINFOEXW`
+/// whose size says how much is there). A mismatch is `FALSE` with
+/// `ERROR_OLD_WIN_VERSION`; a bad condition `ERROR_BAD_ARGUMENTS` (Learn).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn VerifyVersionInfoW(info: *const u8, type_mask: u32, condition_mask: u64) -> i32 {
+    if info.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the caller's OSVERSIONINFOEXW; its first DWORD is its size.
+    let size = unsafe { (info as *const u32).read_unaligned() } as usize;
+    if size != poly_rtl::version::INFO_EX_SIZE as usize && size != poly_rtl::version::INFO_SIZE as usize {
+        return fail(ERROR_INSUFFICIENT_BUFFER, FALSE);
+    }
+    let mut copy = [0u8; poly_rtl::version::INFO_EX_SIZE as usize];
+    // SAFETY: `size` bytes of the caller's structure, at most the copy's.
+    unsafe { core::ptr::copy_nonoverlapping(info, copy.as_mut_ptr(), size.min(copy.len())) };
+    let Some(wanted) = version::Fields::from_bytes(&copy) else { return fail(ERROR_BAD_ARGUMENTS, FALSE) };
+    let actual = version::Fields::of(version::reported(compat()));
+    match version::verify(&actual, &wanted, type_mask, condition_mask) {
+        Some(true) => TRUE,
+        Some(false) => fail(ERROR_OLD_WIN_VERSION, FALSE),
+        None => fail(ERROR_BAD_ARGUMENTS, FALSE),
+    }
+}
+
+/// `IsWow64Process`: Poly runs 64-bit programs only, so never.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn IsWow64Process(_process: nt::Handle, wow64: *mut i32) -> i32 {
+    if wow64.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the caller's BOOL.
+    unsafe { wow64.write(FALSE) };
+    TRUE
+}
+
+/// `PRODUCT_PROFESSIONAL` (`winnt.h`).
+const PRODUCT_PROFESSIONAL: u32 = 0x30;
+
+/// `GetProductInfo`: Windows 10 Pro whatever is asked.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetProductInfo(
+    _major: u32,
+    _minor: u32,
+    _sp_major: u32,
+    _sp_minor: u32,
+    out: *mut u32,
+) -> i32 {
+    if out.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the caller's DWORD.
+    unsafe { out.write(PRODUCT_PROFESSIONAL) };
+    TRUE
+}
+
+/// `AddVectoredExceptionHandler`, `RemoveVectoredExceptionHandler`: ntdll's.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn AddVectoredExceptionHandler(first: u32, handler: *mut u8) -> *mut u8 {
+    // SAFETY: ntdll's contract is the same.
+    unsafe { nt::RtlAddVectoredExceptionHandler(first, handler) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RemoveVectoredExceptionHandler(handle: *mut u8) -> u32 {
+    // SAFETY: as above.
+    unsafe { nt::RtlRemoveVectoredExceptionHandler(handle) }
+}
+
+/// `RtlCaptureStackBackTrace`: no frames are captured yet (the count is 0,
+/// the hash 0), which callers that only record where they were accept.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RtlCaptureStackBackTrace(
+    _skip: u32,
+    _count: u32,
+    _frames: *mut *mut u8,
+    hash: *mut u32,
+) -> u16 {
+    if !hash.is_null() {
+        // SAFETY: the caller's ULONG.
+        unsafe { hash.write(0) };
+    }
+    0
+}
