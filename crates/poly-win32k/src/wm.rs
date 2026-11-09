@@ -1145,7 +1145,6 @@ impl Wm {
 
     // ----- messages
 
-    #[allow(clippy::too_many_arguments)]
     /// `SetPropW` (`op` 1), `GetPropW` (0), `RemovePropW` (2) and the count
     /// of properties (3): a `Value` (0 when there is none).
     fn prop_op(&mut self, hwnd: u64, op: u8, key: ClassRef, value: u64) -> Reply {
@@ -1283,6 +1282,7 @@ impl Wm {
         Reply::Clip { res }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn post(&mut self, ctx: Ctx, to: Key, hwnd: u32, msg: u32, w: u64, l: u64, fx: &mut Effects) -> Reply {
         let cursor = self.cursor;
         if POINTER_MESSAGES.contains(&msg) {
