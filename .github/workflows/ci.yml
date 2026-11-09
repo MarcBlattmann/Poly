@@ -139,7 +139,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: build-${{ matrix.part }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.head_ref == 'ci-speed-2' }}
           workspaces: |
             .
             kernel
@@ -235,6 +235,9 @@ jobs:
       POLY_PREBUILT: 1
     steps:
       - uses: actions/checkout@v4
+      # Rust installs while the packages and the artifacts come in.
+      - name: Start installing Rust
+        run: .github/scripts/rust-start.sh
       - name: Install QEMU and a static BusyBox (the BusyBox and root disk boots)
         uses: ./.github/actions/apt-install
         with:
@@ -263,8 +266,8 @@ jobs:
           fi
       # The boot tests build a few small programs with rustc (the Linux
       # hello worlds); everything big comes from the build jobs.
-      - name: Install Rust (version from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
+      - name: Wait for Rust
+        run: .github/scripts/rust-wait.sh
       - uses: ./.github/actions/prebuilt
       # 7-Zip's 7za.exe and Linux 7zz for the `7zip` and `wintrace` boot tests
       # (ADR 0087, 0091): downloaded and checked against its pinned SHA-256
@@ -280,6 +283,19 @@ jobs:
         if: matrix.sevenzip
         run: target/debug/xtask win fetch-7zip || echo "::warning::could not fetch 7-Zip; the 7zip boot test is skipped"
       - run: target/debug/xtask boot-tests --shard ${{ matrix.shards }}
+      - name: DIAG serial rate of the traced scenario (temporary)
+        if: matrix.boot == 'wintrace'
+        run: |
+          d=$(ls -d target/pipeline/runs/*scenario-poly | tail -1)
+          rm -f /tmp/ser.log
+          start=$(date +%s)
+          qemu-system-x86_64 -accel kvm -machine q35 -m 256M -smp 2 -display none -serial file:/tmp/ser.log -no-reboot             -device isa-debug-exit,iobase=0xf4,iosize=0x04 -kernel kernel/target/x86_64-unknown-none/debug/poly-kernel             -initrd "$d/sevenzip_trace.initramfs.cpio"             -append "poly.qemu_exit poly.init=/sevenzip_trace/sevenzip_trace.exe poly.test.stdout=/sevenzip_trace/poly-test.out" &
+          q=$!
+          while kill -0 $q 2>/dev/null; do
+            sleep 3
+            echo "$(( $(date +%s)-start ))s $(stat -c %s /tmp/ser.log 2>/dev/null) $(grep -c '^POLY-OUT' /tmp/ser.log 2>/dev/null)"
+          done
+          echo "total $(( $(date +%s)-start ))s"
       - name: Keep the boot logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -322,6 +338,9 @@ jobs:
         slice: [extras, 1/4, 2/4, 3/4, 4/4]
     steps:
       - uses: actions/checkout@v4
+      # Rust installs while the packages and the artifacts come in.
+      - name: Start installing Rust
+        run: .github/scripts/rust-start.sh
       # clang++, lld-link and llvm-dlltool build the C++ Windows tests of
       # green Windows entries for `win polycheck` (ADR 0098, 0099).
       - name: Install QEMU, a static BusyBox and the C++ Windows test tools
@@ -340,8 +359,8 @@ jobs:
             echo "::warning::no /dev/kvm on this runner: QEMU runs on TCG (several times slower)"
           fi
       # `win polycheck` builds Windows test programs with cargo.
-      - name: Install Rust (version from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
+      - name: Wait for Rust
+        run: .github/scripts/rust-wait.sh
       - uses: ./.github/actions/prebuilt
       - run: target/debug/xtask ci pipeline --shard ${{ matrix.slice }}
       - name: Keep the polycheck report

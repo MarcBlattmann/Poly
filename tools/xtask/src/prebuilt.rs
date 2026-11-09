@@ -13,8 +13,8 @@
 //! What goes in which artifact:
 //!
 //! - `kernel`: the kernel ELF (with our ntdll.dll and Win32 modules
-//!   embedded) and the native programs (`userland/native`);
-//! - `tools`: the xtask binary itself, the pipeline tool's binary, the
+//!   embedded);
+//! - `tools`: the native programs (`userland/native`), the xtask binary itself, the pipeline tool's binary, the
 //!   traced 7-Zip scenario's kit and driver, the 7-Zip scenario's driver
 //!   and the desktop's Windows test program.
 //!
@@ -154,12 +154,11 @@ fn native_files() -> Vec<PathBuf> {
     crate::native::PROGRAMS.iter().map(|n| dir.join(n)).collect()
 }
 
-/// The kernel part: the kernel (which builds the native programs too).
+/// The kernel part: the kernel alone (the native programs are the tools
+/// part's, which has time to spare).
 fn kernel_files() -> Result<Vec<PathBuf>> {
-    let kernel = crate::build_kernel(false)?;
-    let mut files = vec![kernel];
-    files.extend(native_files());
-    Ok(files)
+    crate::build_kernel_only(false)?;
+    Ok(vec![crate::kernel_elf(false)])
 }
 
 /// Every file below `dir`, in order (nothing for a missing directory).
@@ -185,6 +184,8 @@ fn tools_files() -> Result<Vec<PathBuf>> {
     crate::step("build the pipeline tool", &mut pipeline)?;
     let xtask = std::env::current_exe().map_err(|e| format!("the xtask binary: {e}"))?;
     let mut files = vec![xtask, root().join("target/debug/pipeline")];
+    crate::native::build()?;
+    files.extend(native_files());
     // The traced scenario's kit and driver, the 7-Zip scenario's driver and
     // the desktop's Windows test program.
     crate::sevenzip_trace::stage()?;

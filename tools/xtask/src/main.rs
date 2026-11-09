@@ -329,19 +329,23 @@ fn build_kernel(release: bool) -> Result<PathBuf> {
     }
     let (native, kernel) = thread::scope(|s| {
         let native = s.spawn(native::build);
-        let kernel = (|| {
-            let mut cmd = kernel_cargo()?;
-            cmd.arg("build");
-            if release {
-                cmd.arg("--release");
-            }
-            step("build kernel", &mut cmd)
-        })();
+        let kernel = build_kernel_only(release);
         (native.join().unwrap_or_else(|_| Err("building the native programs panicked".into())), kernel)
     });
     native?;
     kernel?;
     Ok(kernel_elf(release))
+}
+
+/// The kernel alone (the prebuild's `kernel` part builds the native programs
+/// in a job of its own).
+fn build_kernel_only(release: bool) -> Result {
+    let mut cmd = kernel_cargo()?;
+    cmd.arg("build");
+    if release {
+        cmd.arg("--release");
+    }
+    step("build kernel", &mut cmd)
 }
 
 /// Where `build_kernel` puts the kernel ELF.
