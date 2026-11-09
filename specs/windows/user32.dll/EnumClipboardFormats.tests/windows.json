@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "ecf_order",
+      "exe_sha256": "85ab4d16686c58399324248da5aa2e22d8474f9e8bbff6885200e7533f54d1fe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dW5pY29kZTogNCBbQ0ZfVU5JQ09ERVRFWFQgQ0ZfTE9DQUxFIENGX1RFWFQgQ0ZfT0VNVEVYVF0KYW5zaTogNCBbQ0ZfVEVYVCBDRl9MT0NBTEUgQ0ZfT0VNVEVYVCBDRl9VTklDT0RFVEVYVF0Kb2VtOiA0IFtDRl9PRU1URVhUIENGX0xPQ0FMRSBDRl9URVhUIENGX1VOSUNPREVURVhUXQphbnNpLCB1bmljb2RlOiA0IFtDRl9URVhUIENGX1VOSUNPREVURVhUIENGX0xPQ0FMRSBDRl9PRU1URVhUXQp1bmljb2RlLCBhbnNpOiA0IFtDRl9VTklDT0RFVEVYVCBDRl9URVhUIENGX0xPQ0FMRSBDRl9PRU1URVhUXQpvZW0sIHVuaWNvZGU6IDQgW0NGX09FTVRFWFQgQ0ZfVU5JQ09ERVRFWFQgQ0ZfTE9DQUxFIENGX1RFWFRdCnVuaWNvZGUsIG9lbSwgYW5zaTogNCBbQ0ZfVU5JQ09ERVRFWFQgQ0ZfT0VNVEVYVCBDRl9URVhUIENGX0xPQ0FMRV0KdW5pY29kZSwgbG9jYWxlOiA0IFtDRl9VTklDT0RFVEVYVCBDRl9MT0NBTEUgQ0ZfVEVYVCBDRl9PRU1URVhUXQp1bmljb2RlLCBwcml2YXRlLCBhbnNpOiA1IFtDRl9VTklDT0RFVEVYVCBwcml2YXRlIENGX1RFWFQgQ0ZfTE9DQUxFIENGX09FTVRFWFRdCnByaXZhdGUsIHRoZW4gdW5pY29kZSBhZGRlZCBsYXRlcjogNSBbcHJpdmF0ZSBDRl9VTklDT0RFVEVYVCBDRl9MT0NBTEUgQ0ZfVEVYVCBDRl9PRU1URVhUXQpiaXRtYXAsIHVuaWNvZGU6IDcgW0NGX0JJVE1BUCBDRl9VTklDT0RFVEVYVCBDRl9MT0NBTEUgQ0ZfVEVYVCBDRl9PRU1URVhUIENGX0RJQiBDRl9ESUJWNV0Kb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "unicode: 4 [CF_UNICODETEXT CF_LOCALE CF_TEXT CF_OEMTEXT]\nansi: 4 [CF_TEXT CF_LOCALE CF_OEMTEXT CF_UNICODETEXT]\noem: 4 [CF_OEMTEXT CF_LOCALE CF_TEXT CF_UNICODETEXT]\nansi, unicode: 4 [CF_TEXT CF_UNICODETEXT CF_LOCALE CF_OEMTEXT]\nunicode, ansi: 4 [CF_UNICODETEXT CF_TEXT CF_LOCALE CF_OEMTEXT]\noem, unicode: 4 [CF_OEMTEXT CF_UNICODETEXT CF_LOCALE CF_TEXT]\nunicode, oem, ansi: 4 [CF_UNICODETEXT CF_OEMTEXT CF_TEXT CF_LOCALE]\nunicode, locale: 4 [CF_UNICODETEXT CF_LOCALE CF_TEXT CF_OEMTEXT]\nunicode, private, ansi: 5 [CF_UNICODETEXT private CF_TEXT CF_LOCALE CF_OEMTEXT]\nprivate, then unicode added later: 5 [private CF_UNICODETEXT CF_LOCALE CF_TEXT CF_OEMTEXT]\nbitmap, unicode: 7 [CF_BITMAP CF_UNICODETEXT CF_LOCALE CF_TEXT CF_OEMTEXT CF_DIB CF_DIBV5]\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 70
+    },
+    {
+      "name": "ecf_walk",
+      "exe_sha256": "1687b79be839bb31bd9d609aa11b55ed6e933f874fd9af93c2f6946012a1fc8f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm90IG9wZW46IDAgZXJyIDE0MTgKZW1wdHksIG9wZW46IDAgZXJyIDAKICAxOiByZWdpc3RlcmVkIGVyciAwCiAgMjogcHJpdmF0ZSBlcnIgMAogIDM6IENGX1VOSUNPREVURVhUIGVyciAwCndhbGsgZW5kcyBhZnRlciAzIGZvcm1hdHMsIGVyciAwCmFmdGVyIGEgcHJpdmF0ZSBmb3JtYXQgdGhhdCBpcyBub3QgdGhlcmU6IDAgZXJyIDAKYWZ0ZXIgdGhlIGxhc3QgZm9ybWF0OiAwIGVyciAwCmFmdGVyIC0xOiAwIGVyciAwCmFmdGVyIGEgZm9ybWF0IHRoYXQgaXMgbm90IHRoZXJlIChiZWZvcmUgdGhlIGNsb3NlKTogMCBlcnIgMAphZnRlciAweDEyMzQ6IDAgZXJyIDAKc2Vjb25kIG9mIHRoZSBsaXN0IGlzIHByaXZhdGUgKHJlZ2lzdGVyZWQgZmFsc2UpCnRocmVhZCB0aGF0IGRpZCBub3Qgb3BlbjogMCBlcnIgMTQxOApvayBkb25lCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "not open: 0 err 1418\nempty, open: 0 err 0\n  1: registered err 0\n  2: private err 0\n  3: CF_UNICODETEXT err 0\nwalk ends after 3 formats, err 0\nafter a private format that is not there: 0 err 0\nafter the last format: 0 err 0\nafter -1: 0 err 0\nafter a format that is not there (before the close): 0 err 0\nafter 0x1234: 0 err 0\nsecond of the list is private (registered false)\nthread that did not open: 0 err 1418\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 68
+    }
+  ]
+}

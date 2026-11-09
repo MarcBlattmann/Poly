@@ -1,0 +1,57 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "oc_destroy",
+      "exe_sha256": "1b9e07c78268776f82e3ae169c5889b8edcaa7e5ddee41a4eefa10cab4d1777e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVzdHJveWVkIHdoaWxlIG9wZW46IG9wZW4gd2luZG93IG51bGwgdHJ1ZSBvd25lciBudWxsIHRydWUKICBsb2c6IEEgV01fUkVOREVSQUxMRk9STUFUUwogIENsb3NlOiAwIGVyciAxNDE4CiAgYSBOVUxMIG9wZW4gd29ya3M6IHRydWUKb3duZXIgZGVzdHJveWVkLCBjbG9zZWQ6IG93bmVyIG51bGwgdHJ1ZQogIGxvZzogQiBXTV9SRU5ERVJBTExGT1JNQVRTCm93bmVyIGRlc3Ryb3llZCB3aXRoIHRleHQ6IG93bmVyIG51bGwgdHJ1ZQogIGxvZzogQyBXTV9SRU5ERVJBTExGT1JNQVRTCiAgZm9ybWF0czogNCBbQ0ZfVU5JQ09ERVRFWFQgQ0ZfTE9DQUxFIENGX1RFWFQgQ0ZfT0VNVEVYVF0KICBVTkk6IHNpemUgMTggYnl0ZXMgInJceDAwZVx4MDBuXHgwMGRceDAwZVx4MDByXHgwMGVceDAwZFx4MDBceDAwXHgwMCIKb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "destroyed while open: open window null true owner null true\n  log: A WM_RENDERALLFORMATS\n  Close: 0 err 1418\n  a NULL open works: true\nowner destroyed, closed: owner null true\n  log: B WM_RENDERALLFORMATS\nowner destroyed with text: owner null true\n  log: C WM_RENDERALLFORMATS\n  formats: 4 [CF_UNICODETEXT CF_LOCALE CF_TEXT CF_OEMTEXT]\n  UNI: size 18 bytes \"r\\x00e\\x00n\\x00d\\x00e\\x00r\\x00e\\x00d\\x00\\x00\\x00\"\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 83
+    },
+    {
+      "name": "oc_errors",
+      "exe_sha256": "ba3c6c15c2807eb3e150b6af5e1bcb7ae83cd41e1bc3904d1f9f693e13861543",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q2xvc2Ugd2l0aG91dCBvcGVuOiAwIGVyciAxNDE4Ck9wZW4obWFkZS11cCBoYW5kbGUpOiAwIGVyciAxNDAwCk9wZW4oZGVzdHJveWVkIHdpbmRvdyk6IDAgZXJyIDE0MDAKT3BlbihIV05EX01FU1NBR0UpOiAwIGVyciAxNDAwCk9wZW4oLTEpOiAwIGVyciAxNDAwCk9wZW4oQSkgdHdpY2U6IDEgMSBlcnIgNDY2MAogIENsb3NlOiAxCiAgQ2xvc2UgYWdhaW46IDAgZXJyIDE0MTgKT3BlbihOVUxMKSB0d2ljZTogMSAxIGVyciA0NjYwCiAgQ2xvc2U6IDEKICBDbG9zZSBhZ2FpbjogMCBlcnIgMTQxOApPcGVuKEIpIHdoaWxlIEEgaXMgb3BlbjogMCBlcnIgNQogIG9wZW4gd2luZG93IGlzIHN0aWxsIEE6IHRydWUKT3BlbihOVUxMKSB3aGlsZSBBIGlzIG9wZW46IDAgZXJyIDUKICBvcGVuIHdpbmRvdyBpcyBzdGlsbCBBOiB0cnVlCiAgQ2xvc2U6IDEKICBDbG9zZSBhZ2FpbjogMCBlcnIgMTQxOApPcGVuKEEpIHdoaWxlIE5VTEwgaXMgb3BlbjogMCBlcnIgNQogIG9wZW4gd2luZG93IG51bGw6IHRydWUKICBDbG9zZTogMQogIENsb3NlIGFnYWluOiAwIGVyciAxNDE4Ck9wZW4oZGVza3RvcCB3aW5kb3cpOiAxIGVyciA0NjYwCiAgb3BlbiB3aW5kb3cgaXMgdGhlIGRlc2t0b3Agd2luZG93OiB0cnVlCmVycm9yIGFmdGVyIGEgc3VjY2Vzc2Z1bCBvcGVuOiAweDEyMzQKb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Close without open: 0 err 1418\nOpen(made-up handle): 0 err 1400\nOpen(destroyed window): 0 err 1400\nOpen(HWND_MESSAGE): 0 err 1400\nOpen(-1): 0 err 1400\nOpen(A) twice: 1 1 err 4660\n  Close: 1\n  Close again: 0 err 1418\nOpen(NULL) twice: 1 1 err 4660\n  Close: 1\n  Close again: 0 err 1418\nOpen(B) while A is open: 0 err 5\n  open window is still A: true\nOpen(NULL) while A is open: 0 err 5\n  open window is still A: true\n  Close: 1\n  Close again: 0 err 1418\nOpen(A) while NULL is open: 0 err 5\n  open window null: true\n  Close: 1\n  Close again: 0 err 1418\nOpen(desktop window): 1 err 4660\n  open window is the desktop window: true\nerror after a successful open: 0x1234\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 73
+    },
+    {
+      "name": "oc_threads",
+      "exe_sha256": "ea714d537bf60f0d81ec36d9cbb6addfccf9d2e6778822db83e6278f3dc95e17",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFpbiBoYXMgQSBvcGVuOyB0aHJlYWQgT3BlbihOVUxMKTogMCBlcnIgNQogIHRocmVhZCBPcGVuKEIpOiAwIGVyciA1CiAgdGhyZWFkIENsb3NlOiAwIGVyciAxNDE4OyB0aHJlYWQgRW1wdHk6IDAgZXJyIDE0MTg7IHRocmVhZCBzZWVzIEEgb3BlbjogMQogIG1haW4gQ2xvc2U6IDEgZXJyIDAKbWFpbiBoYXMgTlVMTCBvcGVuOyB0aHJlYWQgT3BlbihCKTogMCBlcnIgNQogIHRocmVhZCBPcGVuKE5VTEwpOiAxIGVyciAwIHRocmVhZCBDbG9zZTogMQogIG1haW4gQ2xvc2U6IDAgZXJyIDE0MTgKdGhyZWFkIGhhcyBpdHMgd2luZG93IG9wZW47IG1haW4gT3BlbihBKTogMCBlcnIgNQogIG1haW4gT3BlbihOVUxMKTogMCBlcnIgNQogIG1haW4gc2VlcyBhbiBvcGVuIHdpbmRvdzogdHJ1ZQogIG1haW4gRW1wdHk6IDAgZXJyIDE0MTgKICB0aHJlYWQ6IG9wZW4gMSBlcnIgMCBpdHMgd2luZG93IHdhcyB0aGUgb3BlbiB3aW5kb3cgMSBjbG9zZSAxCm1haW4gT3Blbih3aW5kb3cgb2YgYW5vdGhlciB0aHJlYWQpOiAxIGVyciAwCiAgb3BlbiB3aW5kb3cgaXMgaXQ6IHRydWUKICBFbXB0eTogMQogIG93bmVyIGlzIGl0OiB0cnVlCiAgQ2xvc2U6IDEKb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "main has A open; thread Open(NULL): 0 err 5\n  thread Open(B): 0 err 5\n  thread Close: 0 err 1418; thread Empty: 0 err 1418; thread sees A open: 1\n  main Close: 1 err 0\nmain has NULL open; thread Open(B): 0 err 5\n  thread Open(NULL): 1 err 0 thread Close: 1\n  main Close: 0 err 1418\nthread has its window open; main Open(A): 0 err 5\n  main Open(NULL): 0 err 5\n  main sees an open window: true\n  main Empty: 0 err 1418\n  thread: open 1 err 0 its window was the open window 1 close 1\nmain Open(window of another thread): 1 err 0\n  open window is it: true\n  Empty: 1\n  owner is it: true\n  Close: 1\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 139
+    }
+  ]
+}

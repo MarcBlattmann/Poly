@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "gco_threads",
+      "exe_sha256": "a04f66723b2dcab4a1d6044cbc140e431a5b13e82b773aedff3a3b1885d774ae",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhyZWFkIHNlZXMgQSBhcyBvd25lciAxIGVyciAweDEyMzQKdGhyZWFkJ3Mgb3duIHdpbmRvdyBvd25zOiAxIG1haW4gc2VlcyBpdCB0cnVlCiAgQSBpcyBubyBsb25nZXIgdGhlIG93bmVyIHRydWUKQSBoYXMgaXQgb3BlbiAobm90IGVtcHRpZWQpOiBvd25lciBzdGlsbCB0aGUgdGhyZWFkJ3Mgd2luZG93IHRydWUKdGhyZWFkIGRlc3Ryb3llZCBpdHMgd2luZG93OiBvd25lciBudWxsIHRydWUKb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "thread sees A as owner 1 err 0x1234\nthread's own window owns: 1 main sees it true\n  A is no longer the owner true\nA has it open (not emptied): owner still the thread's window true\nthread destroyed its window: owner null true\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 144
+    }
+  ]
+}
