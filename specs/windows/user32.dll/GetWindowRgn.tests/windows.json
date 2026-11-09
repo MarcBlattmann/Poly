@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "gwr_shape",
+      "exe_sha256": "51e4c3562662803c232e08d798ae088ed5a6ae2b515acb14e938d97efa08b2b2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVjdCAxMCwxMCw1MCw0MDogKDksOSk9b3V0ICgxMCwxMCk9aW4gKDQ5LDM5KT1pbiAoNTAsMzkpPW91dCAoNDksNDApPW91dCAoMzAsMjUpPWluICgyNjAsMjYwKT1vdXQKZWxsaXBzZSAwLDAsNjAsNDA6ICgzMCwyMCk9aW4gKDAsMCk9b3V0ICg1OSwwKT1vdXQgKDAsMzkpPW91dCAoNTksMzkpPW91dCAoMzAsMCk9aW4gKDMwLDM5KT1vdXQgKDI5LDEpPWluICgyLDEyKT1pbiAoMSwyMCk9aW4gKDU4LDIwKT1pbiAoMCwyMCk9aW4gKDU5LDIwKT1vdXQKZWFybGllciBjb3B5IG9mIHRoZSByZWN0YW5nbGU6ICgxMCwxMCk9aW4gKDMwLDI1KT1pbgp0d28gcmVjdGFuZ2xlczogKDEwLDEwKT1pbiAoMzAsMTApPW91dCAoNTAsNDApPWluICg0NSwzNSk9aW4gKDU5LDQ5KT1pbiAoNjAsNTApPW91dCAoMjAsMjApPW91dCAoMTksMTkpPWluCmFmdGVyIG1vdmluZyB0byA0MDAsMzAwIGFuZCByZXNpemluZyB0byAxNTB4OTA6ICgxMCwxMCk9aW4gKDQxMCwzMTApPW91dAogIHR5cGUgMwpoaWRkZW4gd2luZG93OiAoMTAsMTApPWluICg0NSwzNSk9aW4KICB0eXBlIDMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "rect 10,10,50,40: (9,9)=out (10,10)=in (49,39)=in (50,39)=out (49,40)=out (30,25)=in (260,260)=out\nellipse 0,0,60,40: (30,20)=in (0,0)=out (59,0)=out (0,39)=out (59,39)=out (30,0)=in (30,39)=out (29,1)=in (2,12)=in (1,20)=in (58,20)=in (0,20)=in (59,20)=out\nearlier copy of the rectangle: (10,10)=in (30,25)=in\ntwo rectangles: (10,10)=in (30,10)=out (50,40)=in (45,35)=in (59,49)=in (60,50)=out (20,20)=out (19,19)=in\nafter moving to 400,300 and resizing to 150x90: (10,10)=in (410,310)=out\n  type 3\nhidden window: (10,10)=in (45,35)=in\n  type 3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 66
+    }
+  ]
+}

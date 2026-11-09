@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/OpenProcessToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Opens the primary access token of a process with the requested access
+  rights. The handle's granted access is the request after generic mapping
+  (token rights: see the interface entry).
+interface:
+  signature: "BOOL OpenProcessToken(HANDLE process, DWORD desired_access, PHANDLE token)"
+  token_rights: "TOKEN_ASSIGN_PRIMARY 0x1, TOKEN_DUPLICATE 0x2, TOKEN_IMPERSONATE 0x4, TOKEN_QUERY 0x8, TOKEN_QUERY_SOURCE 0x10, TOKEN_ADJUST_PRIVILEGES 0x20, TOKEN_ADJUST_GROUPS 0x40, TOKEN_ADJUST_DEFAULT 0x80, TOKEN_ADJUST_SESSIONID 0x100; TOKEN_ALL_ACCESS 0xF01FF (winnt.h)"
+  oracle_token: "The test process's own token on the oracle is an elevated local administrator's in an SSH logon session: primary token, session 0, High integrity (0x3000), mandatory policy 3 (NO_WRITE_UP | NEW_PROCESS_MIN), 12 groups (Everyone 7, BUILTIN\\Administrators 15 (mandatory, enabled by default, enabled, owner), BUILTIN\\Users 7, NETWORK, Authenticated Users, This Organization, Local account, NTLM Authentication, the logon SID, \"Local account and member of Administrators group\" 7 and the integrity label), 24 privileges all enabled (SeChangeNotify, SeShutdown, SeDebug, SeBackup, SeRestore, SeImpersonate, SeCreateGlobal ... but not SeTcb, SeAssignPrimaryToken or SeCreateToken), owner BUILTIN\\Administrators, primary group \"None\" (S-1-5-21-<machine>-513), TokenElevationType 1 (default), TokenElevation 1."
+rules:
+  granted: "the granted access equals the request for each single or combined token right (QUERY 0x8, QUERY|DUPLICATE 0xA, ADJUST_PRIVILEGES|QUERY 0x28, ASSIGN_PRIMARY 0x1, IMPERSONATE 0x4, QUERY_SOURCE 0x10, TOKEN_ALL_ACCESS 0xF01FF, READ_CONTROL 0x20000, ACCESS_SYSTEM_SECURITY 0x1000000); generic bits are mapped: TOKEN_READ 0x20008, TOKEN_WRITE 0x200E0, TOKEN_EXECUTE 0x20000, GENERIC_ALL 0xF01FF; MAXIMUM_ALLOWED gives everything the caller may have (0xF01FF for the owner)"
+  process_handles: "the pseudo-handle -1 (current process) works; a real handle from OpenProcess of the same process works with PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION or PROCESS_ALL_ACCESS and fails with ERROR_ACCESS_DENIED (5) with only PROCESS_TERMINATE or only SYNCHRONIZE"
+  identity: "two opens give two handles for the same token: the same TokenStatistics token id and authentication id; the token is a primary token (TokenType 1, TokenStatistics.TokenType 1, level field 0, expiration time 0 here); DuplicateHandle with DUPLICATE_SAME_ACCESS gives a working handle with the same access (0x8) and the same token id"
+errors:
+  access_0: "desired access 0: FALSE, ERROR_ACCESS_DENIED (5)"
+  bad_handle: "a NULL process handle, the thread pseudo-handle (-2) and a handle value that is not open: FALSE, ERROR_INVALID_HANDLE (6)"
+  handle_access: "a process handle without query rights: ERROR_ACCESS_DENIED (5)"
+side_effects: "creates a handle the caller closes with CloseHandle"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/GetSecurityDescriptorLength
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns the size of the descriptor: for an absolute descriptor the 40-byte
+  header plus the owner SID, group SID, DACL and SACL sizes (each only when
+  present); for a self-relative one the size the conversion reported. It
+  reads the sizes from the parts and validates nothing.
+interface:
+  signature: "DWORD GetSecurityDescriptorLength(PSECURITY_DESCRIPTOR pSecurityDescriptor)"
+  layout: "SECURITY_DESCRIPTOR, absolute form (winnt.h, x64, 40 bytes): byte 0 Revision (1), byte 1 Sbz1, bytes 2..3 Control (little-endian 16-bit), bytes 4..7 padding, then four 8-byte pointers: Owner at 8, Group at 16, Sacl at 24, Dacl at 32. Self-relative form: the same first 4 bytes, with SE_SELF_RELATIVE (0x8000) in Control, then four 32-bit offsets from the start of the descriptor: Owner at 4, Group at 8, Sacl at 12, Dacl at 16 (header 20 bytes); an offset of 0 means the part is absent (or, for the ACLs, a NULL ACL when the PRESENT bit is set)."
+rules:
+  absolute: "empty 40; owner S-1-5-32-544 (16 bytes) 56; plus group S-1-5-18 (12) 68; plus an empty DACL (ACL size 8) 76; with one ACE for S-1-1-0 (ACL size 28) 96; with two ACEs (ACL size 52) 120; plus a SACL of one audit ACE (28) 148; replacing the DACL by a NULL DACL 96; clearing SACL present 68 (a SACL that is not present is not counted); an owner of 28 bytes alone 68; a group S-1-5 of 8 bytes alone 48"
+  relative_form: "for each of these the MakeSelfRelativeSD size is 20 less (empty 20, owner 36, plus group 48, empty DACL 56, one ACE 76, two ACEs 100, plus SACL 128, NULL DACL 76, SACL not present 48): the absolute count uses the 40-byte header, the self-relative form a 20-byte one"
+  self_relative: "for descriptors from SDDL the length equals the size the conversion reports: \"\" 20, \"O:BA\" 36, \"O:BAG:SY\" 48, \"G:SY\" 32, \"D:\" 28, \"D:(A;;GA;;;WD)\" 48, \"D:(A;;GA;;;WD)(D;;GW;;;BA)\" 72, \"D:NO_ACCESS_CONTROL\" 20, \"S:(AU;SAFA;GA;;;WD)\" 48, a descriptor with owner, group, DACL and a label SACL 104; a copy in a 0xEE-filled buffer gives 76 for \"O:BAG:SYD:(A;;GA;;;WD)\" like the original"
+  unchecked: "an owner SID with count 16 gives 40 + 72 = 112; an ACL header claiming 100 bytes with no ACEs gives 140; revision bytes 0, 1, 2 and 7 all give 52 for a descriptor with a 12-byte owner; SE_DACL_PRESENT with a NULL DACL pointer adds nothing (52)"
+errors:
+  none: "no error is reported"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

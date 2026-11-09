@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/ConvertSecurityDescriptorToStringSecurityDescriptorW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Formats an absolute or self-relative descriptor as an SDDL string
+  (LocalAlloc'ed, freed with LocalFree) and reports a length. Parts are
+  always written in the order O, G, D, S, selected by SecurityInformation;
+  SIDs use aliases where one exists, rights the shortest alias set, and
+  flags in a fixed order.
+interface:
+  signature: "BOOL ConvertSecurityDescriptorToStringSecurityDescriptorW(PSECURITY_DESCRIPTOR SecurityDescriptor, DWORD RequestedStringSDRevision, SECURITY_INFORMATION SecurityInformation, LPWSTR* StringSecurityDescriptor, PULONG StringSecurityDescriptorLen)"
+  grammar: "SDDL (sddl.h, Learn \"Security Descriptor String Format\"): \"O:<sid>G:<sid>D:<flags>(<ace>)...S:<flags>(<ace>)...\" where an ACE is \"type;flags;rights;object_guid;inherit_guid;sid\" (plus \";condition\" for conditional ACEs)."
+  layout: "SECURITY_DESCRIPTOR, absolute form (winnt.h, x64, 40 bytes): byte 0 Revision (1), byte 1 Sbz1, bytes 2..3 Control (little-endian 16-bit), bytes 4..7 padding, then four 8-byte pointers: Owner at 8, Group at 16, Sacl at 24, Dacl at 32. Self-relative form: the same first 4 bytes, with SE_SELF_RELATIVE (0x8000) in Control, then four 32-bit offsets from the start of the descriptor: Owner at 4, Group at 8, Sacl at 12, Dacl at 16 (header 20 bytes); an offset of 0 means the part is absent (or, for the ACLs, a NULL ACL when the PRESENT bit is set)."
+rules:
+  selection: "for a descriptor with owner BA, group SY, DACL (A;;FA;;;WD) and a SACL of an audit ACE and a label ACE (NW, Low): information 1 gives \"O:BA\", 2 \"G:SY\", 4 \"D:(A;;FA;;;WD)\", 8 \"S:(AU;SAFA;FA;;;WD)\", 0x10 \"S:(ML;;NW;;;LW)\", 0x18 \"S:(AU;SAFA;FA;;;WD)(ML;;NW;;;LW)\", 3 \"O:BAG:SY\", 5 \"O:BAD:(A;;FA;;;WD)\", 9 \"O:BAS:(AU;SAFA;FA;;;WD)\", 6 \"G:SYD:(A;;FA;;;WD)\", 0xc \"D:(A;;FA;;;WD)S:(AU;SAFA;FA;;;WD)\", 7 \"O:BAG:SYD:(A;;FA;;;WD)\", 0xf the same plus the audit part, 0x1f and 0x3f/0x7f/0xff/0xffffffff the whole \"O:BAG:SYD:(A;;FA;;;WD)S:(AU;SAFA;FA;;;WD)(ML;;NW;;;LW)\"; a label ACE appears only for bit 0x10, an audit ACE only for 0x8; information 0, and values with only the bits 0x80000000, 0x20000000, 0x40000000, 0x10000000, 0x10000 give \"\"; 0x20, 0x40 and 0x80 alone give \"S:\" ; 0x80000004 gives the DACL (the protect flags are ignored); a requested part the descriptor lacks is left out (owner-only descriptor with information 2, 4, 8, 0x10: \"\"), no error"
+  self_relative: "the same texts for a self-relative descriptor (information 1, 2, 4, 8, 0x10, 0x18, 0xf, 0x1f)"
+  ordering: "\"G:SYO:BA\" is written \"O:BAG:SY\"; \"S:...D:...G:...O:...\" is written O, G, D, S; ACEs keep their order (\"(D;;GA;;;WD)(A;;GR;;;WD)\" stays); an audit ACE and a label ACE are written in the order they are in the SACL"
+  sid_text: "owner or ACE SID texts: S-1-1-0 WD, S-1-3-0 CO, S-1-3-1 CG, S-1-3-4 OW, S-1-5-2 NU, -4 IU, -6 SU, -7 AN, -9 ED, -10 PS, -11 AU, -12 RC, -18 SY, -19 LS, -20 NS, S-1-5-32-544 BA, -545 BU, -546 BG, -547 PU, -548 AO, -549 SO, -550 PO, -551 BO, -552 RE, -554 RU, -555 RD, -556 NO, -558 MU, -559 LU, -568 IS, -569 CY, -573 ER, -574 CD, -575 RA, -576 ES, -577 MS, -578 HA, -579 AA, -580 RM, S-1-5-33 WR, S-1-15-2-1 AC, S-1-16-4096 LW, -8192 ME, -8448 MP, -12288 HI, -16384 SI; no alias: S-1-0-0, S-1-2-0, S-1-2-1, S-1-3-2, S-1-3-3, S-1-5-1, -3, -8, -13, -14, -15, -17, S-1-5-32-557, -560, -561, -562, S-1-5-64-10, S-1-5-80-0, S-1-15-2-2, S-1-15-3-1, S-1-16-0, -4097, -20480, -28672, S-1-5-21-1-2-3-<rid> for every RID (500, 501, 502, 512..520, 553, 571, 1000), S-1-5-99-1, S-1-9-9: printed as numbers"
+  rights_text: "a mask 0 prints as empty; single bits 1 CC, 2 DC, 4 LC, 8 SW, 0x10 RP, 0x20 WP, 0x40 DT, 0x80 LO, 0x100 CR, 0x10000 SD, 0x20000 RC, 0x40000 WD, 0x80000 WO, 0x10000000 GA, 0x20000000 GX, 0x40000000 GW, 0x80000000 GR; combinations: 0x1ff CCDCLCSWRPWPDTLOCR, 0x101ff CCDCLCSWRPWPDTLOCRSD, 0xf0000 SDRCWDWO, 0x1f01ff FA, 0x120089 FR, 0x120116 FW, 0x1200a0 FX, 0x20019 KR, 0x20006 KW, 0xf003f KA, 0x20039 CCSWRPWPRC, 0x2001d CCLCSWRPRC, 0x3 CCDC, 0x7 CCDCLC, 0x7f CCDCLCSWRPWPDT, 0x30000 SDRC, 0x60000 RCWD, 0xe0000 RCWDWO, 0xf0000000 GAGXGWGR, 0xe0000000 GXGWGR, 0x50000000 GAGW; masks with a bit that has no alias print entirely as hex without padding: 0x200 \"0x200\", 0x400, 0x800, 0x1000, 0x8000, 0x100000, 0x1000000, 0x2000000, 0x4000000, 0x8000000 (as \"0x1000000\" etc.), 0x3ff \"0x3ff\", 0x1f0000 \"0x1f0000\", 0x120000 \"0x120000\", 0x12019f \"0x12019f\", 0x120189 \"0x120189\", 0x101f01ff \"0x101f01ff\", 0xffffffff \"0xffffffff\", 0x7fffffff, 0x12345678; a mask made only of aliasable bits is written as the concatenation, standard rights first (SD RC WD WO), then the object bits CC DC LC SW RP WP DT LO CR; the composite aliases FA FR FW FX KA KR KW are used only when the mask equals them exactly"
+  canonical: "text is normalized: \"S-1-5-32-544\" -> BA, \"0x10000000\" -> GA, \"0x1f01ff\" -> FA, \"GRGWGX\" -> \"GXGWGR\", \"RCSDWDWO\" and \"WORCSDWD\" -> \"SDRCWDWO\", \"CRLO\" -> \"LOCR\", \"FRFW\" -> \"0x12019f\", \"KRKW\" -> \"CCDCLCSWRPRC\", \"CIOI\" -> \"OICI\", \"IOCINP\" -> \"CINPIO\", \"ARAIP\" -> \"PARAI\", \"AIP\" -> \"PAI\", \"FASA\" -> \"SAFA\", \"SAFAOICI\" -> \"OICISAFA\", \"NXNRNW\" -> \"NWNRNX\", \"S-1-16-4096\" -> LW, \"S-1-16-12288\" -> HI, S-1-16-4097 stays; ACE flag order is OI CI NP IO ID (and for audit ACEs flags before SA FA: \"OICISAFA\", \"IDSAFA\", \"IOSA\"), the mapping from bits being OI 0x01, CI 0x02, NP 0x04, IO 0x08, ID 0x10, and the bit 0x20 prints as \"CR\" (flag byte 0xff on an allow ACE prints \"OICINPIOIDCR\"; the audit bits 0x40 and 0x80 print nothing on an allow ACE)"
+  acl_flags: "control bits become flags after D: / S:: protected P, auto-inherit-required AR, auto-inherited AI written as \"PARAI\" in that order (\"D:PARAI(...)\", \"S:PAI(...)\"); other control bits (untrusted, server security, RM control, defaulted bits, SELF_RELATIVE) leave no trace (\"O:SYG:SYD:(A;;CC;;;WD)\" for a descriptor with owner, group and DACL defaulted); a NULL DACL is \"D:NO_ACCESS_CONTROL\" (\"D:PNO_ACCESS_CONTROL\" when protected), an empty DACL \"D:\" (\"D:PAI\"), a NULL SACL \"S:NO_ACCESS_CONTROL\"; a descriptor with no DACL and no SACL gives \"\"; a present SACL with no ACE gives \"S:\""
+  ace_text: "allow \"A\", deny \"D\", audit \"AU\" and alarm \"AL\" in the SACL (flags 0x40 SA, 0x80 FA, both SAFA; flags 0 prints empty), a zero-flags object ACE \"D:(OA;;CR;;;WD)\", types 9 and 10 \"XA\" / \"XD\" (\"D:(XA;;CC;;;WD)\"), label \"ML\" with policy letters NW NR NX in that order (policy 0 prints empty, 1 NW, 2 NR, 4 NX, 3 NWNR, 5 NWNX, 6 NRNX, 7 NWNRNX, 8 \"0x8\", 0xf \"0xf\") and the label SID as LW, ME, MP, HI, SI or S-1-16-x (\"S-1-16-0\", \"S-1-16-4095\"); the label ACE keeps its CI/OICI/IO/ID flags (0xc0 prints nothing) and any SID is printed as itself (\"WD\", \"BA\"); ACE types 4, 7, 8, 0xc to 0x10, 0x12 to 0x16, 0x20, 0x80, 0xff and an audit, alarm or label ACE in the DACL fail with ERROR_INVALID_ACL (1336); a raw type 5 or 6 ACE without a valid body fails with ERROR_INVALID_SID (1337), type 0x0b with last error 805"
+  length_output: "*length is the string length in characters without the NUL when the string has no ACL entry (\"O:BA\" 4, \"O:BAG:SY\" 8, \"D:\" 2, \"\" 0, \"O:BAD:\" 6, \"S:\" 2), and larger than the string length otherwise: \"D:(A;;GA;;;WD)\" 15 (string 14), \"D:NO_ACCESS_CONTROL\" 20 (19), \"S:(AU;SAFA;GA;;;WD)\" 20 (19), \"D:(A;;GA;;;WD)(D;;GW;;;BA)(A;;GR;;;SY)\" 41 (38), \"D:(A;;FA;;;WD)S:(AU;SAFA;FA;;;WD)\" 35 (33), the full 54-character text 57, \"D:(A;;0x12019f;;;WD)\" 23 (20), \"D:(A;;CCDCLCSWRPRC;;;WD)\" 25 (24): an upper bound, one more per ACE and more when the rights text is short"
+errors:
+  revision: "a revision other than 1 (0, 2, 3, 0x100, 0xFFFFFFFF): FALSE, ERROR_UNKNOWN_REVISION (1305)"
+  descriptor: "an absolute descriptor with revision byte 0 or 2 and an all-zero buffer: ERROR_UNKNOWN_REVISION (1305); an invalid owner SID (revision 2, count 16, revision 0) with information 1: ERROR_INVALID_SID (1337); an audit, alarm or label ACE in the DACL and the unsupported ACE types: ERROR_INVALID_ACL (1336)"
+side_effects: "allocates the string with LocalAlloc"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  invalid ACLs inside the descriptor are mostly tolerated: an ACL with
+  revision 77 and size 8 prints as "D:", one with size 4 prints its first
+  ACE Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

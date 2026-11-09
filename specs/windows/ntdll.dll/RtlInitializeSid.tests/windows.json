@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_initsid_authority",
+      "exe_sha256": "b6c491e2b03c8378cfde8863551a12f606563eed9971c79e08004b37c2e02328",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YXV0aG9yaXR5IDAwMDAwMDAwMDAwMDogc3RhdHVzPTB4MDAwMDAwMDAgaGVhZGVyPTAxMDIwMDAwMDAwMDAwMDAgc2xvdHM9YWFhYWFhYWFhYWFhYWFhYQphdXRob3JpdHkgMDAwMDAwMDAwMDAxOiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDEwMjAwMDAwMDAwMDAwMSBzbG90cz1hYWFhYWFhYWFhYWFhYWFhCmF1dGhvcml0eSAwMDAwMDAwMDAwMDU6IHN0YXR1cz0weDAwMDAwMDAwIGhlYWRlcj0wMTAyMDAwMDAwMDAwMDA1IHNsb3RzPWFhYWFhYWFhYWFhYWFhYWEKYXV0aG9yaXR5IDAwMDAwMDAwMDAxMDogc3RhdHVzPTB4MDAwMDAwMDAgaGVhZGVyPTAxMDIwMDAwMDAwMDAwMTAgc2xvdHM9YWFhYWFhYWFhYWFhYWFhYQphdXRob3JpdHkgMDEwMjAzMDQwNTA2OiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDEwMjAxMDIwMzA0MDUwNiBzbG90cz1hYWFhYWFhYWFhYWFhYWFhCmF1dGhvcml0eSBmZmZmZmZmZmZmZmY6IHN0YXR1cz0weDAwMDAwMDAwIGhlYWRlcj0wMTAyZmZmZmZmZmZmZmZmIHNsb3RzPWFhYWFhYWFhYWFhYWFhYWEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "authority 000000000000: status=0x00000000 header=0102000000000000 slots=aaaaaaaaaaaaaaaa\nauthority 000000000001: status=0x00000000 header=0102000000000001 slots=aaaaaaaaaaaaaaaa\nauthority 000000000005: status=0x00000000 header=0102000000000005 slots=aaaaaaaaaaaaaaaa\nauthority 000000000010: status=0x00000000 header=0102000000000010 slots=aaaaaaaaaaaaaaaa\nauthority 010203040506: status=0x00000000 header=0102010203040506 slots=aaaaaaaaaaaaaaaa\nauthority ffffffffffff: status=0x00000000 header=0102ffffffffffff slots=aaaaaaaaaaaaaaaa\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "rtl_initsid_overwrite",
+      "exe_sha256": "e642a6d7b2100567b59559337f0866567c303f5b1a0c9e2f9901ce44557839d8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlOiAwMTA1MDAwMDAwMDAwMDA1MjAwMDAwMDAyMDAyMDAwMDAxMDAwMDAwMDIwMDAwMDAwMzAwMDAwMAphZnRlciBjb3VudCAxOiBzdGF0dXM9MHgwMDAwMDAwMCAwMTAxMDAwMDAwMDAwMDAxMjAwMDAwMDAyMDAyMDAwMDAxMDAwMDAwMDIwMDAwMDAwMzAwMDAwMApsZW5ndGg9MTIgdmFsaWQ9MQphZnRlciBjb3VudCA1OiBzdGF0dXM9MHgwMDAwMDAwMCAwMTA1MDAwMDAwMDAwMDA1MjAwMDAwMDAyMDAyMDAwMDAxMDAwMDAwMDIwMDAwMDAwMzAwMDAwMApsZW5ndGg9MjggdmFsaWQ9MQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before: 01050000000000052000000020020000010000000200000003000000\nafter count 1: status=0x00000000 01010000000000012000000020020000010000000200000003000000\nlength=12 valid=1\nafter count 5: status=0x00000000 01050000000000052000000020020000010000000200000003000000\nlength=28 valid=1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

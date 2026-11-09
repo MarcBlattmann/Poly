@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtOpenJobObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Opens an existing named job object. The desired access is checked against
+  the job's DACL; MAXIMUM_ALLOWED gives what the DACL (and the owner rights,
+  READ_CONTROL and WRITE_DAC for an owner the token has) allow.
+  OpenJobObjectW calls it.
+interface:
+  signature: "NTSTATUS NtOpenJobObject(PHANDLE JobHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87. Also STATUS_OBJECT_NAME_NOT_FOUND 0xC0000034, STATUS_OBJECT_PATH_NOT_FOUND 0xC000003A, STATUS_OBJECT_PATH_SYNTAX_BAD 0xC000003B."
+  access: "Job access rights (winnt.h): JOB_OBJECT_ASSIGN_PROCESS 0x1, JOB_OBJECT_SET_ATTRIBUTES 0x2, JOB_OBJECT_QUERY 0x4, JOB_OBJECT_TERMINATE 0x8, JOB_OBJECT_SET_SECURITY_ATTRIBUTES 0x10, JOB_OBJECT_ALL_ACCESS 0x1f003f. The tests create the children they assign as suspended copies of the test executable that are never resumed."
+rules:
+  masks: "job with a DACL \"Everyone: QUERY|SET_ATTRIBUTES\" (0x6) (created with that descriptor in the attributes; the creator's handle still got 0x1f003f): open 0 -> STATUS_ACCESS_DENIED; QUERY -> granted 0x4; SET_ATTRIBUTES -> 0x2; both -> 0x6; TERMINATE, ASSIGN_PROCESS, QUERY|TERMINATE, ALL_ACCESS, SYNCHRONIZE, GENERIC_ALL, DELETE -> STATUS_ACCESS_DENIED; GENERIC_READ -> 0x20004; READ_CONTROL -> 0x20000; WRITE_DAC -> 0x40000; MAXIMUM_ALLOWED -> 0x60006 (owner rights: ambient, the default owner is Administrators)"
+  dacl_order: "MAXIMUM_ALLOWED and specific opens for other DACLs (create statuses all 0): empty DACL: QUERY, TERMINATE denied, MAXIMUM_ALLOWED 0x60000; allow Everyone QUERY: QUERY 0x4, TERMINATE denied, MAX 0x60004; deny Everyone TERMINATE then allow QUERY|TERMINATE: QUERY 0x4, TERMINATE and QUERY|TERMINATE denied, MAX 0x60004; allow QUERY|TERMINATE then deny TERMINATE: QUERY 0x4, TERMINATE 0x8, both 0xc, MAX 0x6000c; allow SYSTEM only and deny Everyone QUERY: everything denied, MAX 0x60000; a NULL DACL: MAX 0x1f003f"
+  attributes: "OBJ_INHERIT gives handle flags 1; OBJ_KERNEL_HANDLE, OBJ_OPENIF, OBJ_PERMANENT, OBJ_OPENLINK, OBJ_FORCE_ACCESS_CHECK and no case flag succeed with flags 0 (QUERY granted 0x4); OBJ_EXCLUSIVE -> STATUS_INVALID_PARAMETER"
+  case: "other case with OBJ_CASE_INSENSITIVE: STATUS_SUCCESS; without it: STATUS_OBJECT_NAME_NOT_FOUND (0xC0000034)"
+  lifetime: "after the last handle of the named job was closed: STATUS_OBJECT_NAME_NOT_FOUND"
+errors:
+  not_found: "a missing name: STATUS_OBJECT_NAME_NOT_FOUND; a missing directory: STATUS_OBJECT_PATH_NOT_FOUND (0xC000003A)"
+  syntax: "a relative name, an empty name and attributes without a name: STATUS_OBJECT_PATH_SYNTAX_BAD (0xC000003B)"
+  type: "the name of an event and the directory \\BaseNamedObjects: STATUS_OBJECT_TYPE_MISMATCH"
+  null_attributes: "a NULL ObjectAttributes: STATUS_INVALID_PARAMETER"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

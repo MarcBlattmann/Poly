@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwmapi.dll/DwmIsCompositionEnabled
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-c
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About the
+  Clipboard", "Using the Clipboard", "Clipboard Formats", "Standard
+  Clipboard Formats", "High DPI Desktop Application Development on Windows",
+  "DPI_AWARENESS_CONTEXT", "Multiple Display Monitors", "Window Features"
+  (layered windows, window regions), "About Cursors", "About Icons",
+  "Desktop Window Manager" (dwmapi), "Input Method Manager" (imm32), "About
+  Messages and Message Queues"; winuser.h, wingdi.h, windef.h, winbase.h,
+  dwmapi.h, imm.h, shellscalingapi.h and winerror.h for constants and
+  layouts. The conformance tests of Wine were consulted only where the own
+  sources line of an entry says so, for ideas of what to observe; no code or
+  expected value of theirs is used (every value in these sheets was observed
+  on the machine above). dwmapi.h (DWMWINDOWATTRIBUTE, MARGINS,
+  DWM_TIMING_INFO, DWMNCRENDERINGPOLICY); Learn pages "Desktop Window
+  Manager", "DWMWINDOWATTRIBUTE", "Extending frames into the client area".
+summary: >
+  Reports whether desktop composition is on. Since Windows 8 it always is:
+  S_OK and TRUE, from any thread, with or without windows.
+interface:
+  signature: "HRESULT DwmIsCompositionEnabled(BOOL* pfEnabled)"
+  returns: "S_OK (0) with *pfEnabled = 1; E_INVALIDARG (0x80070057) for a NULL pointer"
+rules:
+  always_on: "S_OK and TRUE (1) before any window exists, with visible and hidden windows, after they are destroyed, five times in a row each, and from a second thread without window or message queue"
+  window_state: "unaffected by a window whose non-client rendering was disabled (DwmSetWindowAttribute NCRENDERING_POLICY DISABLED)"
+errors:
+  null_pointer: "E_INVALIDARG; nothing is written; the last error is set to 0 (a successful call leaves it)"
+side_effects: "none"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
+  needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants); run with
+  poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because
+  painting, input and the clipboard need the visible desktop. Window
+  procedures log documented messages only: never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels and closed within seconds; the cursor is parked
+  at (1500, 600) at the start and put back at the end; the clipboard is
+  emptied at the end of every test that touches it; a test changes no system
+  setting (only the state of its own process and windows).
+not_covered: >
+  composition turned off by a remote session or a non-DWM desktop. Several
+  monitors, other system DPIs (the oracle is one 1920x1080 monitor at 96
+  DPI, scale 100%), a manifest (the tests have none: awareness is set with
+  the API), other keyboard layouts than German, installed input methods (the
+  oracle has none active), touch and pen, hooks, menus and dialogs, comctl32
+  controls, themed (visual style) painting, clipboard contents put there by
+  other programs or by the cloud clipboard and clipboard history.
