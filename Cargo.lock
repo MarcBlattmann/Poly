@@ -372,6 +372,7 @@ dependencies = [
  "poly-abi",
  "poly-console",
  "poly-iphlp",
+ "poly-kernelbase",
  "poly-ldr",
  "poly-net",
  "poly-ntobj",
