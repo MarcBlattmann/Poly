@@ -2055,7 +2055,7 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
 }
 
-/// Boot group `desktop-chromium` (ADR 0147): `cargo xtask desktop
+/// Boot group `chromium-desktop` (ADR 0147): `cargo xtask desktop
 /// --chromium`'s boot, from Chromium's disk with Poly's own files copied
 /// onto it. Every app of the normal desktop is there (Terminal from the
 /// launcher gets its window), the settings disk is bound into the disk,
@@ -2064,14 +2064,14 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
 /// downloaded or the host has no Unix sockets.
 pub fn desktop_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     if !cfg!(unix) {
-        eprintln!("==> skipped: the desktop-chromium boot test needs a Unix host (QMP)");
+        eprintln!("==> skipped: the chromium-desktop boot test needs a Unix host (QMP)");
         return Ok(());
     }
     let locked = lock()?;
     let absent = missing(&locked, &BUILD_SETS);
     if !absent.is_empty() {
         eprintln!(
-            "==> skipped: the desktop-chromium boot test: {} locked Debian packages not downloaded (cargo xtask chromium fetch)",
+            "==> skipped: the chromium-desktop boot test: {} locked Debian packages not downloaded (cargo xtask chromium fetch)",
             absent.len()
         );
         return Ok(());
@@ -2096,7 +2096,7 @@ pub fn desktop_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         syms,
         &image,
         &initrd,
-        "desktop-chromium-test",
+        "chromium-desktop-test",
         MEMORY,
         &init,
         CPUS,
@@ -2173,7 +2173,7 @@ pub fn desktop_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             Ok(rest) => eprintln!("==> Chromium's window shown after {} s: {rest}", started.elapsed().as_secs()),
         }
     }
-    let log = root().join("target/poly-desktop-chromium-boot.log");
+    let log = root().join("target/poly-chromium-desktop-boot.log");
     let _ = std::fs::write(&log, m.text());
     let _ = m.poweroff();
     if failed.is_empty() {

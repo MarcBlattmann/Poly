@@ -1561,7 +1561,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 38] = [
+const BOOT_GROUPS: [BootGroup; 39] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1626,7 +1626,7 @@ const BOOT_GROUPS: [BootGroup; 38] = [
     // The desktop from Chromium's disk, `cargo xtask desktop --chromium`: Poly's
     // apps on it, the settings disk, Chromium the default browser; skipped
     // until the packages are fetched (chromium.rs, ADR 0147).
-    ("desktop-chromium", chromium::desktop_boot_test),
+    ("chromium-desktop", chromium::desktop_boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1687,7 +1687,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     // About 75 s: Linux programs and the root disk.
-    ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "toolkits", "chromium", "desktop-chromium"]),
+    ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "toolkits", "chromium", "chromium-desktop"]),
     // About 60 s each: 7-Zip's command line on the NT personality, one boot per
     // step, every second step in each.
     ("sevenzip", &["7zip"]),

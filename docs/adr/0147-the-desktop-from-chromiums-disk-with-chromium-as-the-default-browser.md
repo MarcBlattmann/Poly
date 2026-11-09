@@ -120,9 +120,9 @@ launch script, which is why the default is data (the list), not code.
   a 1.3 GB image made the first time, then kept. `cargo xtask desktop
   --chromium` is the same command the menu runs.
 - CI is unchanged: the plain desktop's boot tests use the initramfs as
-  before, and the new boot group `desktop-chromium` skips itself, like
+  before, and the new boot group `chromium-desktop` skips itself, like
   `chromium`, until the packages are downloaded.
-- Boot group `desktop-chromium` boots `desktop --chromium`'s configuration
+- Boot group `chromium-desktop` boots `desktop --chromium`'s configuration
   (test apps, the settings disk) and checks that every app of the plain
   desktop is on the disk and every launcher entry's program is there, that `xdg-mime` names Chromium for pages and
   links, that the settings disk is bound, that Terminal opens from the
