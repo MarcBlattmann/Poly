@@ -1,0 +1,52 @@
+name: Install apt packages (with a cache of the .deb files)
+description: >
+  apt-get update and install take 10 s to 7 minutes on a runner, depending on
+  the Ubuntu mirror. This keeps the .deb files of the packages and their
+  dependencies in a cache, by runner image version and package list, and
+  installs from the cache with dpkg when it has them: no network, no
+  mirror. A miss installs with apt as usual (and the job saves the files).
+
+inputs:
+  packages:
+    description: Space-separated apt package names.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: The cache key of the packages
+      id: key
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        # ImageVersion is the runner image's own version: a new image has
+        # different base packages, so different dependencies to install.
+        sum=$(echo "$PACKAGES" | tr ' ' '\n' | sort -u | sha256sum | cut -c1-16)
+        echo "key=apt-${ImageVersion:-unknown}-$sum" >> "$GITHUB_OUTPUT"
+    - name: Restore the .deb files
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/apt-debs
+        key: ${{ steps.key.outputs.key }}
+    - name: Install the packages
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        HIT: ${{ steps.cache.outputs.cache-hit }}
+      run: |
+        dir="$HOME/apt-debs"
+        if [ "$HIT" = true ] && ls "$dir"/*.deb > /dev/null 2>&1; then
+          echo "installing $(ls "$dir"/*.deb | wc -l) cached .deb files"
+          # One dpkg call: it orders the packages by their dependencies.
+          if sudo dpkg -i "$dir"/*.deb; then exit 0; fi
+          echo "::warning::the cached .deb files did not install; falling back to apt"
+        fi
+        mkdir -p "$dir"
+        sudo apt-get update
+        # shellcheck disable=SC2086
+        sudo apt-get install -y --no-install-recommends -o Dir::Cache::archives="$dir" $PACKAGES
+        # What the cache action (the runner user) may read and save.
+        sudo rm -rf "$dir/partial" "$dir/lock"
+        sudo chown -R "$(id -u):$(id -g)" "$dir"
