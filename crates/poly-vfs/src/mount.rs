@@ -22,7 +22,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 
 /// Identifies a mount for as long as the VFS lives (ids are not reused).
 pub type MountId = u32;
@@ -96,17 +96,20 @@ pub struct Mount {
     /// `NOSYMFOLLOW` is enforced by path resolution, the access time
     /// modes are not (Poly's tmpfs keeps access times as asked).
     attrs: AtomicU32,
-    /// The propagation type, as Linux's `MS_PRIVATE`, `MS_SHARED`,
-    /// `MS_SLAVE` or `MS_UNBINDABLE` value (`linux/mount.h`). Poly
-    /// propagates nothing; the type is kept for `statmount(2)` and the
-    /// checks that refuse shared mounts (`pivot_root(2)`).
-    propagation: AtomicU32,
+    /// The peer group the mount is in, and the group it is a slave of
+    /// (0: none), see `propagation.rs`; `propagation_mark`: unbindable.
+    pub(crate) peer: AtomicU32,
+    pub(crate) master: AtomicU32,
+    pub(crate) propagation_mark: AtomicBool,
     /// Open files writing to inodes through this mount: making it
     /// read-only then is `EBUSY` (`mount_setattr(2)`, `mount(2)` with
     /// `MS_REMOUNT | MS_BIND | MS_RDONLY`). An open file description
     /// counts once however many descriptors (dups) and mappings share it,
     /// for as long as one of them lives.
     writers: AtomicU32,
+    /// `MNT_EXPIRE`: the namespace generation the first call saw plus one
+    /// (0: not marked).
+    pub(crate) expire: AtomicU64,
 }
 
 /// How a mount refers to the mount it is on.
@@ -238,11 +241,7 @@ impl Mount {
 
     /// The propagation type (an `MS_*` value).
     pub fn propagation(&self) -> u32 {
-        self.propagation.load(Ordering::Relaxed)
-    }
-
-    pub fn set_propagation(&self, propagation: u32) {
-        self.propagation.store(propagation, Ordering::Relaxed);
+        self.type_bits()
     }
 
     /// Open files writing through this mount.
@@ -553,6 +552,7 @@ pub(crate) struct MountTable {
     pub(crate) mounts: Vec<Arc<Mount>>,
     next_id: MountId,
     next_anon_minor: u32,
+    pub(crate) next_group: u32,
     supers: Vec<Weak<Superblock>>,
     /// Namespaces whose first mount changed (`pivot_root(2)`): the id a
     /// namespace was named by when it was made, and its first mount now.
@@ -561,7 +561,14 @@ pub(crate) struct MountTable {
 
 impl MountTable {
     pub(crate) fn new() -> MountTable {
-        MountTable { mounts: Vec::new(), next_id: 1, next_anon_minor: 1, supers: Vec::new(), aliases: BTreeMap::new() }
+        MountTable {
+            mounts: Vec::new(),
+            next_id: 1,
+            next_anon_minor: 1,
+            next_group: 1,
+            supers: Vec::new(),
+            aliases: BTreeMap::new(),
+        }
     }
 
     /// The first mount now of the namespace named `name` (its first mount
@@ -647,8 +654,11 @@ impl MountTable {
             subtree: SpinMutex::new(Vec::new()),
             flags: AtomicU8::new(flags.to_bits()),
             attrs: AtomicU32::new(0),
-            propagation: AtomicU32::new(PROPAGATION_PRIVATE),
+            peer: AtomicU32::new(0),
+            master: AtomicU32::new(0),
+            propagation_mark: AtomicBool::new(false),
             writers: AtomicU32::new(0),
+            expire: AtomicU64::new(0),
         });
         self.next_id += 1;
         m

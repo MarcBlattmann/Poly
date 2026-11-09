@@ -93,7 +93,8 @@ pub fn close(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// cannot be written.
 pub fn fstat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
-    let st: FileStat = k.fstat(fd)?;
+    let mut st: FileStat = k.fstat(fd)?;
+    crate::sys::path::view_ids(k, &mut st.uid, &mut st.gid);
     k.copy_to_user(a.ptr(1), &st.to_bytes())?;
     Ok(0)
 }

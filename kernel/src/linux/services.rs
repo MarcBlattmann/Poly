@@ -1081,9 +1081,10 @@ impl LinuxKernel for Thread<'_> {
     fn copy_mounts(
         &mut self,
         owner: &poly_personality_linux::ns::user::UserNsRef,
+        to_slave: bool,
     ) -> Result<Arc<poly_personality_linux::ns::MntNs>, Errno> {
         super::task::release_mount_namespaces();
-        super::task::copy_mounts(&self.process.files, owner)
+        super::task::copy_mounts(&self.process.files, owner, to_slave)
     }
 
     fn enter_mounts(&mut self, ns: &Option<Arc<poly_personality_linux::ns::MntNs>>) -> Result<(), Errno> {

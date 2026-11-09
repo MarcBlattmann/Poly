@@ -48,6 +48,8 @@ struct Made {
     read_only: bool,
     /// fspick's mount.
     picked: Option<Arc<Mount>>,
+    /// The mount fsmount made from the context, which a reconfigure changes.
+    mounted: Option<Arc<Mount>>,
 }
 
 /// The file behind an fsopen(2) / fspick(2) descriptor.
@@ -97,8 +99,20 @@ impl SuperblockOps for Ops<'_> {
         Ok(())
     }
 
-    fn reconfigure(&mut self, read_only: Option<bool>) -> Result<(), Errno> {
-        let m = self.made.picked.as_ref().ok_or(Errno::EINVAL)?;
+    fn reconfigure(&mut self, read_only: Option<bool>, data: &[u8]) -> Result<(), Errno> {
+        let m = self.made.picked.as_ref().or(self.made.mounted.as_ref()).ok_or(Errno::EINVAL)?;
+        if m.fs_name() == "tmpfs" && !data.is_empty() {
+            let root = poly_personality_linux::admin::mount_options(admin::FsType::Tmpfs, data)?;
+            let bytes = match root.size {
+                Some(poly_personality_linux::admin::Amount::Count(b)) => Some(b),
+                _ => None,
+            };
+            let inodes = match root.inodes {
+                Some(poly_personality_linux::admin::Amount::Count(n)) => Some(n),
+                _ => None,
+            };
+            m.fs().set_limits(bytes, inodes).map_err(vfs_errno)?;
+        }
         if let Some(ro) = read_only {
             // The rule of mount(2)'s MS_REMOUNT | MS_RDONLY (writers
             // through any mount, unlinked files still open).
@@ -177,8 +191,8 @@ impl Thread<'_> {
             let (flags, extra) = split_attrs(change.apply(attrs_of(m)));
             m.change_flags(vfs_flags(flags));
             m.set_attrs(extra);
-            m.set_propagation(change.propagation_of(u64::from(m.propagation())) as u32);
         }
+        fs::vfs().set_propagation(&mounts, change.propagation);
         Ok(())
     }
 
@@ -207,12 +221,13 @@ impl Thread<'_> {
         let vfs = fs::vfs();
         let obj = self.context_file(fd)?;
         obj.state.lock().begin_mount()?;
-        let made = obj.made.lock();
+        let mut made = obj.made.lock();
         let fs = made.fs.clone().ok_or(Errno::EINVAL)?;
         let (flags, extra) = split_attrs(attrs);
         let m = vfs.new_detached(fs, vfs_flags(flags));
         m.set_attrs(extra);
         m.set_sb_info(&made.source, &made.options);
+        made.mounted = Some(m.clone());
         if made.read_only {
             m.set_sb_read_only(true);
         }

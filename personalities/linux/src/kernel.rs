@@ -1168,7 +1168,11 @@ pub trait LinuxKernel {
     /// and working directory moved to the same places in the copy. (Poly
     /// does not lock the copied mounts as mount_namespaces(7) describes
     /// for a less privileged namespace.) `EINVAL` by default.
-    fn copy_mounts(&mut self, owner: &crate::ns::user::UserNsRef) -> Result<alloc::sync::Arc<crate::ns::MntNs>, Errno> {
+    fn copy_mounts(
+        &mut self,
+        owner: &crate::ns::user::UserNsRef,
+        _to_slave: bool,
+    ) -> Result<alloc::sync::Arc<crate::ns::MntNs>, Errno> {
         let _ = owner;
         Err(Errno::EINVAL)
     }

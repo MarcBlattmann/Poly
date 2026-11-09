@@ -7,7 +7,7 @@ use crate::cpuflags::flag_names;
 use crate::source::{
     CpuInfo, FdInfo, KernelInfo, MapEntry, MapName, MountEntry, NANOS_PER_TICK, ProcessInfo, SystemInfo,
 };
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt::Write;
 
@@ -187,6 +187,14 @@ pub fn status(p: &ProcessInfo, maps: &[MapEntry]) -> Vec<u8> {
 /// `/proc/<pid>/task/<tid>/status`: the process's, with the thread's id in
 /// `Pid` and `NSpid` (`Tgid` stays the process's; `p.comm` is the thread's
 /// name: the caller puts it there).
+/// Numbers joined by tabs (`NSpid`): the chain, or just `one`.
+fn chain(list: &[u32], one: u32) -> String {
+    if list.is_empty() {
+        return one.to_string();
+    }
+    list.iter().map(u32::to_string).collect::<Vec<_>>().join("\t")
+}
+
 pub fn thread_status(p: &ProcessInfo, tid: u32, maps: &[MapEntry]) -> Vec<u8> {
     let v = vm_sizes(maps, p.exe.as_deref());
     let rss = p.resident_pages * PAGE;
@@ -200,13 +208,16 @@ pub fn thread_status(p: &ProcessInfo, tid: u32, maps: &[MapEntry]) -> Vec<u8> {
         o,
         "\nUmask:\t{:04o}\nState:\t{}\nTgid:\t{pid}\nNgid:\t0\nPid:\t{tid}\nPPid:\t{}\nTracerPid:\t0\n\
          Uid:\t{u0}\t{u1}\t{u2}\t{u3}\nGid:\t{g0}\t{g1}\t{g2}\t{g3}\nFDSize:\t{}\nGroups:\t\n\
-         NStgid:\t{pid}\nNSpid:\t{tid}\nNSpgid:\t{}\nNSsid:\t{}\n",
+         NStgid:\t{}\nNSpid:\t{}\nNSpgid:\t{}\nNSsid:\t{}\n",
         p.umask,
         p.state.status(),
         p.ppid,
         p.fd_slots,
-        p.pgrp,
-        p.session,
+        chain(&p.ns_pids, p.pid),
+        // A thread has its own number at the last level.
+        if tid == p.pid { chain(&p.ns_pids, tid) } else { tid.to_string() },
+        chain(&p.ns_pgids, p.pgrp),
+        chain(&p.ns_sids, p.session),
         pid = p.pid,
     );
     kb(&mut o, "VmPeak", v.size);
@@ -391,7 +402,17 @@ pub fn mountinfo(entries: &[MountEntry]) -> Vec<u8> {
         mount_field(&mut o, &m.root);
         o.0.push(b' ');
         mount_field(&mut o, &m.mount_point);
-        let _ = write!(o, " {} - {} ", mount_options(m), m.fstype);
+        let _ = write!(o, " {}", mount_options(m));
+        if m.peer_group != 0 {
+            let _ = write!(o, " shared:{}", m.peer_group);
+        }
+        if m.master_group != 0 {
+            let _ = write!(o, " master:{}", m.master_group);
+        }
+        if m.unbindable {
+            o.0.extend_from_slice(b" unbindable");
+        }
+        let _ = write!(o, " - {} ", m.fstype);
         mount_field(&mut o, &m.source);
         let _ = writeln!(o, " {}", super_options(m));
     }

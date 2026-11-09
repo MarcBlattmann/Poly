@@ -1043,7 +1043,11 @@ impl LinuxKernel for FakeKernel {
         self.chroot
     }
 
-    fn copy_mounts(&mut self, owner: &crate::ns::user::UserNsRef) -> Result<std::sync::Arc<crate::ns::MntNs>, Errno> {
+    fn copy_mounts(
+        &mut self,
+        owner: &crate::ns::user::UserNsRef,
+        _to_slave: bool,
+    ) -> Result<std::sync::Arc<crate::ns::MntNs>, Errno> {
         let id = 1000 + self.mount_copies.len() as u32;
         self.mount_copies.push(id);
         Ok(crate::ns::MntNs::new(owner, id))

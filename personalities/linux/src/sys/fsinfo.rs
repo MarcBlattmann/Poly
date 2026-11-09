@@ -28,6 +28,7 @@ pub const FILE_SYSTEM_TYPES: &[(&str, bool)] = &[
     ("ext4", false),
     ("squashfs", false),
     ("overlay", false),
+    ("fuse", true),
 ];
 
 /// sysfs(option, ...): option 1, the index of the type named by the

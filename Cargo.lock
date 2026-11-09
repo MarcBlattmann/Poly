@@ -223,6 +223,13 @@ name = "poly-font"
 version = "0.0.1"
 
 [[package]]
+name = "poly-fuse"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
 name = "poly-gdi"
 version = "0.0.1"
 dependencies = [

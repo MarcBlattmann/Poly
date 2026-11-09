@@ -128,6 +128,13 @@ pub trait FileSystem: Send + Sync {
         Ok(())
     }
 
+    /// A remount changes the size limits (tmpfs(5) `size`, `nr_inodes`;
+    /// 0: no limit). `EOPNOTSUPP` for a file system without such limits.
+    fn set_limits(&self, bytes: Option<u64>, inodes: Option<u64>) -> Result<()> {
+        let _ = (bytes, inodes);
+        Err(Errno::EOPNOTSUPP)
+    }
+
     /// Reads from a regular file at `offset`; 0 at or after the end.
     fn read(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> Result<usize>;
 

@@ -70,6 +70,12 @@ pub struct SignalSets {
 /// Facts about one process.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProcessInfo {
+    /// The process's number in every pid namespace from the one the reader
+    /// sees it from down to its own (`NSpid`), and its group's and
+    /// session's (`NSpgid`, `NSsid`); empty: just the one number.
+    pub ns_pids: Vec<u32>,
+    pub ns_pgids: Vec<u32>,
+    pub ns_sids: Vec<u32>,
     pub pid: u32,
     pub ppid: u32,
     pub pgrp: u32,
@@ -212,6 +218,11 @@ pub struct MountEntry {
     pub sb_options: Vec<u8>,
     /// The file system as a whole is read-only.
     pub sb_read_only: bool,
+    /// Mount propagation: the peer group (0: none), the group it is a slave
+    /// of (0: none), and whether it is unbindable.
+    pub peer_group: u32,
+    pub master_group: u32,
+    pub unbindable: bool,
 }
 
 /// CPU time of the system in nanoseconds, by what it was spent on

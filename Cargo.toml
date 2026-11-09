@@ -22,6 +22,7 @@ members = [
     "crates/poly-ext2",
     "crates/poly-fbdev",
     "crates/poly-files",
+    "crates/poly-fuse",
     "crates/poly-cpio",
     "crates/poly-dbus",
     "crates/poly-drm",
@@ -124,6 +125,7 @@ poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-fbdev = { path = "crates/poly-fbdev" }
 poly-files = { path = "crates/poly-files" }
+poly-fuse = { path = "crates/poly-fuse" }
 poly-cpio = { path = "crates/poly-cpio" }
 poly-dbus = { path = "crates/poly-dbus" }
 poly-drm = { path = "crates/poly-drm" }

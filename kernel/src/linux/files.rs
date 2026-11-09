@@ -565,7 +565,7 @@ impl Thread<'_> {
 /// `/proc/uptime`, `/proc/loadavg`). Sizes in bytes (`mem_unit` 1).
 pub(super) fn system_info() -> poly_personality_linux::fs::SysInfo {
     use poly_procfs::ProcSource;
-    let s = fs::proc::KernelProc.system();
+    let s = fs::proc::KernelProc::default().system();
     poly_personality_linux::fs::SysInfo {
         uptime: (s.uptime_ns / crate::time::NANOS_PER_SEC) as i64,
         loads: s.loads,

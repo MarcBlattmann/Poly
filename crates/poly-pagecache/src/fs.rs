@@ -321,6 +321,10 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
         self.st.inner.prepare_write(ino)
     }
 
+    fn set_limits(&self, bytes: Option<u64>, inodes: Option<u64>) -> Result<()> {
+        self.st.inner.set_limits(bytes, inodes)
+    }
+
     fn lookup(&self, dir: Ino, name: &[u8]) -> Result<Ino> {
         self.st.inner.lookup(dir, name)
     }

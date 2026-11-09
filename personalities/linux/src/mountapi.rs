@@ -314,8 +314,9 @@ pub struct CreateRequest {
 pub trait SuperblockOps {
     /// Make the superblock.
     fn create(&mut self, req: &CreateRequest) -> Result<(), Errno>;
-    /// Apply `read_only` (`ro`/`rw`, if given) to the picked superblock.
-    fn reconfigure(&mut self, read_only: Option<bool>) -> Result<(), Errno>;
+    /// Apply `read_only` (`ro`/`rw`, if given) and the parameters given
+    /// (`data`, as `mount(2)` data) to the superblock.
+    fn reconfigure(&mut self, read_only: Option<bool>, data: &[u8]) -> Result<(), Errno>;
 }
 
 /// A file system context: the state behind an `fsopen(2)` / `fspick(2)`
@@ -357,6 +358,7 @@ fn known_key(fs: FsType, key: &[u8]) -> bool {
         FsType::Ext2 => true,
         FsType::Squashfs => false,
         FsType::Overlay => true,
+        FsType::Fuse => true,
     }
 }
 
@@ -431,11 +433,14 @@ impl FsContext {
 
     /// `fsconfig(2)`: one command on the context.
     pub fn config(&mut self, cmd: &Command<'_>, ops: &mut dyn SuperblockOps) -> Result<(), Errno> {
-        if self.phase != Phase::Open {
+        // Once mounted, a context takes parameters and a reconfigure.
+        let reconf = self.phase == Phase::Mounted;
+        if self.phase != Phase::Open && !reconf {
             return Err(Errno::EBUSY);
         }
         match *cmd {
             Command::Set { key, value } => self.set(key, value),
+            Command::Create | Command::CreateExcl if reconf => Err(Errno::EBUSY),
             Command::Create | Command::CreateExcl => {
                 if self.purpose != Purpose::Create {
                     return Err(Errno::EBUSY);
@@ -462,10 +467,11 @@ impl FsContext {
                 }
             }
             Command::Reconfigure => {
-                if self.purpose != Purpose::Reconfigure {
+                if self.purpose != Purpose::Reconfigure && !reconf {
                     return Err(Errno::EBUSY);
                 }
-                match ops.reconfigure(self.read_only.take()) {
+                let data = self.data();
+                match ops.reconfigure(self.read_only.take(), &data) {
                     Ok(()) => {
                         self.options.clear();
                         Ok(())
@@ -830,7 +836,7 @@ mod tests {
             self.created = Some(req.clone());
             Ok(())
         }
-        fn reconfigure(&mut self, read_only: Option<bool>) -> Result<(), Errno> {
+        fn reconfigure(&mut self, read_only: Option<bool>, _data: &[u8]) -> Result<(), Errno> {
             if let Some(e) = self.fail {
                 return Err(e);
             }

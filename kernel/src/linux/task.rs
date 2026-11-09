@@ -332,7 +332,7 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
             let new = req.flags & ns::NEW_NAMESPACES;
             if new != 0 {
                 let (mut n, mut c) = linux.with(|p| (p.ns.clone(), p.thread(pid as i32).creds.clone()));
-                ns::make(&mut n, &mut c, new, true, names, &mut |owner| copy_mounts(&files, owner))?;
+                ns::make(&mut n, &mut c, new, true, names, &mut |owner, slave| copy_mounts(&files, owner, slave))?;
                 linux.with(|p| {
                     p.ns = n;
                     p.thread_mut(pid as i32).creds = c;
@@ -422,8 +422,8 @@ fn out_of_line<R>(f: impl FnOnce() -> R) -> R {
 
 /// A copy of `files`' mount namespace, which `files` moves to, as the
 /// personality's mount namespace owned by `owner`.
-pub fn copy_mounts(files: &crate::fs::Files, owner: &UserNsRef) -> Result<Arc<ns::MntNs>, Errno> {
-    let base = files.copy_mount_namespace().map_err(super::services::vfs_errno)?;
+pub fn copy_mounts(files: &crate::fs::Files, owner: &UserNsRef, to_slave: bool) -> Result<Arc<ns::MntNs>, Errno> {
+    let base = files.copy_mount_namespace(to_slave).map_err(super::services::vfs_errno)?;
     Ok(ns::MntNs::new(owner, base))
 }
 

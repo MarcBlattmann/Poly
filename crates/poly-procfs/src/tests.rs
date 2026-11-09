@@ -126,6 +126,9 @@ impl ProcSource for Fake {
             return None;
         }
         Some(ProcessInfo {
+            ns_pids: Vec::new(),
+            ns_pgids: Vec::new(),
+            ns_sids: Vec::new(),
             pid,
             ppid: 1,
             pgrp: pid,

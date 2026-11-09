@@ -54,8 +54,9 @@ const LAST_COOKIE: u64 = DIR_END - 1;
 pub struct Tmpfs {
     inner: SpinMutex<Inner>,
     clock: Arc<dyn Clock>,
-    /// Data pages the file system may hold, if limited (`ENOSPC` beyond).
-    page_limit: Option<u64>,
+    /// Data pages the file system may hold (`ENOSPC` beyond); `u64::MAX`:
+    /// no limit. A remount can change it ([`FileSystem::set_limits`]).
+    page_limit: core::sync::atomic::AtomicU64,
     /// This instance's number, part of its file handles
     /// ([`crate::fileattr`]): a handle made by another tmpfs does not
     /// decode here.
@@ -310,7 +311,7 @@ impl Tmpfs {
         Tmpfs {
             inner: SpinMutex::new(Inner { nodes, next_ino: ROOT + 1, pages: 0, inode_limit }),
             clock,
-            page_limit,
+            page_limit: core::sync::atomic::AtomicU64::new(page_limit.unwrap_or(u64::MAX)),
             instance,
             kind: ("tmpfs", crate::TMPFS_MAGIC),
         }
@@ -624,10 +625,8 @@ impl Tmpfs {
     }
 
     fn check_space(&self, inner: &Inner, new_pages: u64) -> Result<()> {
-        match self.page_limit {
-            Some(limit) if inner.pages + new_pages > limit => Err(Errno::ENOSPC),
-            _ => Ok(()),
-        }
+        let limit = self.page_limit.load(core::sync::atomic::Ordering::Relaxed);
+        if limit != u64::MAX && inner.pages + new_pages > limit { Err(Errno::ENOSPC) } else { Ok(()) }
     }
 
     /// Writes `buf` at `offset`; `touch` sets the modification and change
@@ -652,6 +651,17 @@ impl Tmpfs {
 }
 
 impl FileSystem for Tmpfs {
+    fn set_limits(&self, bytes: Option<u64>, inodes: Option<u64>) -> Result<()> {
+        if let Some(b) = bytes {
+            let pages = if b == 0 { u64::MAX } else { b / PAGE };
+            self.page_limit.store(pages, core::sync::atomic::Ordering::Relaxed);
+        }
+        if let Some(n) = inodes {
+            self.inner.lock().inode_limit = if n == 0 { None } else { Some(n) };
+        }
+        Ok(())
+    }
+
     fn info(&self) -> FsInfo {
         FsInfo { name: self.kind.0, read_only: false, cache_lookups: false }
     }
@@ -670,7 +680,8 @@ impl FileSystem for Tmpfs {
     /// the count of free ones is the room left in the inode numbers.
     fn statfs(&self) -> Result<crate::FsStats> {
         let inner = self.inner.lock();
-        let total = self.page_limit.unwrap_or(inner.pages).max(inner.pages);
+        let limit = self.page_limit.load(core::sync::atomic::Ordering::Relaxed);
+        let total = if limit == u64::MAX { inner.pages } else { limit }.max(inner.pages);
         let free = total - inner.pages;
         let used = inner.nodes.len() as u64;
         // Without a limit, as many inodes as an inode count can hold.

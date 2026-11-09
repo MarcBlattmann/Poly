@@ -28,7 +28,9 @@ impl Vfs {
         let info = fs.info();
         let mut table = self.mounts.lock();
         let sb = table.superblock(fs, info);
-        Ok(table.add(sb, root, Some((target.mount.clone(), target.ino)), flags).id)
+        let m = table.add(sb, root, Some((target.mount.clone(), target.ino)), flags);
+        self.propagate_mount(&mut table, &target.mount, target.ino, &m);
+        Ok(m.id)
     }
 
     /// A bind mount (`mount --bind`): what `source` names becomes visible at
@@ -55,8 +57,13 @@ impl Vfs {
             return Err(Errno::ENOTDIR);
         }
         let sb = src.mount.sb.clone();
+        let (peer, master) = self.bind_inherit(&src.mount)?;
         let mut table = self.mounts.lock();
-        Ok(table.add(sb, src.ino, Some((dst.mount.clone(), dst.ino)), flags).id)
+        let m = table.add(sb, src.ino, Some((dst.mount.clone(), dst.ino)), flags);
+        m.set_attrs(src.mount.attrs());
+        m.set_groups(peer, master);
+        self.propagate_mount(&mut table, &dst.mount, dst.ino, &m);
+        Ok(m.id)
     }
 
     /// `umount2(2)`: `path` must be the root of a mount (`EINVAL`). Without
@@ -69,7 +76,12 @@ impl Vfs {
         if !cred.has(cap::SYS_ADMIN) {
             return Err(Errno::EPERM);
         }
-        let loc = self.resolve(ctx, cred, at, path, true)?;
+        let loc = match self.resolve(ctx, cred, at, path, true) {
+            // A file system that cannot answer (a FUSE server that is gone)
+            // can still be unmounted: found by its mount point instead.
+            Err(Errno::ENOTCONN) => self.dead_mount_root(ctx, cred, at, path)?,
+            r => r?,
+        };
         if !loc.is_mount_root() {
             return Err(Errno::EINVAL);
         }
@@ -86,7 +98,51 @@ impl Vfs {
                 return Err(Errno::EBUSY);
             }
         }
+        if let Some((pm, ino)) = mount.parent() {
+            self.propagate_umount(&mut table, &pm, ino, &mount);
+        }
         table.remove_tree(mount.id)
+    }
+
+    /// The root of the mount on the directory `path` names, found without
+    /// asking the mounted file system (which does not answer).
+    fn dead_mount_root(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8]) -> Result<Location> {
+        let p = self.parent_of(ctx, cred, at, path)?;
+        let crate::path::Last::Name(name) = &p.last else { return Err(Errno::ENOTCONN) };
+        let ino = p.dir.mount.sb.fs.lookup(p.dir.ino, name)?;
+        let table = self.mounts.lock();
+        let m = table.covering(p.dir.mount.id, ino).cloned().ok_or(Errno::EINVAL)?;
+        Ok(Location { ino: m.root, mount: m })
+    }
+
+    /// `umount2(2)` with `MNT_EXPIRE`: an idle mount is marked by the first
+    /// call (`EAGAIN`) and unmounted by the second; anything that changed a
+    /// name in between takes the mark away again.
+    pub fn umount_expire(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8]) -> Result<()> {
+        if !cred.has(cap::SYS_ADMIN) {
+            return Err(Errno::EPERM);
+        }
+        let loc = self.resolve(ctx, cred, at, path, true)?;
+        if !loc.is_mount_root() {
+            return Err(Errno::EINVAL);
+        }
+        let mount = loc.mount.clone();
+        drop(loc);
+        if mount.parent().is_none() {
+            return Err(Errno::EBUSY);
+        }
+        let mut table = self.mounts.lock();
+        if table.has_children(mount.id) || Arc::strong_count(&mount) > 2 {
+            return Err(Errno::EBUSY);
+        }
+        let now = self.namespace_generation() + 1;
+        if mount.expire.swap(now, core::sync::atomic::Ordering::AcqRel) == now {
+            if let Some((pm, ino)) = mount.parent() {
+                self.propagate_umount(&mut table, &pm, ino, &mount);
+            }
+            return table.remove_tree(mount.id);
+        }
+        Err(Errno::EAGAIN)
     }
 
     /// `mount(2)` with `MS_REMOUNT`: the mount whose root `path` names gets
@@ -131,7 +187,10 @@ impl Vfs {
     /// mount point), as a `Vfs::mounts` entry: what `umount` callers check
     /// before unmounting a mount the kernel tracks itself (a disk).
     pub fn mount_at(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], follow: bool) -> Result<MountId> {
-        let loc = self.resolve(ctx, cred, at, path, follow)?;
+        let loc = match self.resolve(ctx, cred, at, path, follow) {
+            Err(Errno::ENOTCONN) => self.dead_mount_root(ctx, cred, at, path)?,
+            r => r?,
+        };
         if !loc.is_mount_root() {
             return Err(Errno::EINVAL);
         }
@@ -176,7 +235,7 @@ impl Vfs {
     /// moves `ctx`'s root and working directory to the same places in the
     /// copy (a working directory in another tree stays). Returns the new
     /// namespace. The flags of each mount are copied.
-    pub fn copy_namespace(&self, ctx: &mut FsContext) -> Result<MountId> {
+    pub fn copy_namespace(&self, ctx: &mut FsContext, to_slave: bool) -> Result<MountId> {
         let base = self.namespace_of(ctx);
         let mut copies: BTreeMap<MountId, Arc<Mount>> = BTreeMap::new();
         let new_base = {
@@ -195,7 +254,15 @@ impl Vfs {
                 let is_base = parent.is_none();
                 let copy = table.add(m.sb.clone(), m.root, parent, m.flags());
                 copy.set_attrs(m.attrs());
-                copy.set_propagation(m.propagation());
+                // A copy keeps the original's groups (its mounts are peers
+                // of theirs); made for another user namespace, shared
+                // mounts become slaves instead.
+                if to_slave && m.peer_group() != 0 {
+                    copy.set_groups(0, m.peer_group());
+                } else {
+                    copy.set_groups(m.peer_group(), m.master_group());
+                }
+                copy.set_unbindable(m.is_unbindable());
                 if is_base {
                     new_base = Some(copy.id);
                 }

@@ -160,6 +160,8 @@ pub fn mount(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if let MountRequest::New { fstype, .. } = &req
         && in_user_ns
         && !USERNS_MOUNTABLE.contains(&fstype.as_slice())
+        && !fstype.starts_with(b"fuse.")
+        && fstype.as_slice() != b"fuse"
     {
         return Err(Errno::EPERM);
     }
@@ -169,8 +171,8 @@ pub fn mount(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// umount2(target, flags): `MNT_DETACH` and `UMOUNT_NOFOLLOW` are
 /// honoured; `MNT_FORCE` asks to abort pending requests, which Poly's file
 /// systems never leave, so it unmounts like a plain unmount;
-/// `MNT_EXPIRE` is not supported (`EAGAIN` would need two calls, and with
-/// `MNT_FORCE` or `MNT_DETACH` it is `EINVAL`).
+/// `MNT_EXPIRE` marks an idle mount (`EAGAIN`) and unmounts it the second
+/// time; with `MNT_FORCE` or `MNT_DETACH` it is `EINVAL`.
 pub fn umount2(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let flags = a.uint(1);
     if flags & !(mnt::FORCE | mnt::DETACH | mnt::EXPIRE | mnt::UMOUNT_NOFOLLOW) != 0 {
@@ -182,7 +184,7 @@ pub fn umount2(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     require_mount(k)?;
     let target = nonempty_path(k, a.ptr(0))?;
     if flags & mnt::EXPIRE != 0 {
-        return Err(Errno::EINVAL);
+        return admin(k)?.umount_expire(&target).map(|()| 0);
     }
     admin(k)?.umount(&target, flags & mnt::DETACH != 0, flags & mnt::UMOUNT_NOFOLLOW == 0).map(|()| 0)
 }

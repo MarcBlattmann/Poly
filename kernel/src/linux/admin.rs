@@ -112,6 +112,92 @@ impl Thread<'_> {
         Ok(())
     }
 
+    /// mount(2) of a FUSE file system (ADR 0168): `fd=` names an open
+    /// `/dev/fuse` not bound yet; the kernel then asks the server with
+    /// `FUSE_INIT`.
+    fn mount_fuse(
+        &mut self,
+        source: &[u8],
+        target: &[u8],
+        fstype: &[u8],
+        flags: admin::MountFlags,
+        data: &[u8],
+    ) -> Result<(), Errno> {
+        use poly_fuse::{Caller, FuseFs, Options};
+        let files = &self.process().files;
+        let tnode = files.lookupat(AT_FDCWD, target, true).map_err(vfs_errno)?;
+        if tnode.attr().map_err(vfs_errno)?.kind != FileType::Directory {
+            return Err(Errno::ENOTDIR);
+        }
+        let num = |v: Option<&[u8]>, radix: u32| -> Result<u32, Errno> {
+            let t = core::str::from_utf8(v.ok_or(Errno::EINVAL)?).map_err(|_| Errno::EINVAL)?;
+            u32::from_str_radix(t, radix).map_err(|_| Errno::EINVAL)
+        };
+        let (mut fd, mut root_mode, mut user_id, mut group_id) = (None, None, None, None);
+        let mut opts = Options::default();
+        let mut subtype: Option<Vec<u8>> = None;
+        for (name, value) in admin::options(data) {
+            match name {
+                b"fd" => fd = Some(num(value, 10)?),
+                b"rootmode" => root_mode = Some(num(value, 8)?),
+                b"user_id" => user_id = Some(num(value, 10)?),
+                b"group_id" => group_id = Some(num(value, 10)?),
+                b"max_read" => opts.max_read = num(value, 10)?,
+                b"default_permissions" => opts.default_permissions = true,
+                b"allow_other" => opts.allow_other = true,
+                b"subtype" => subtype = Some(value.ok_or(Errno::EINVAL)?.to_vec()),
+                b"blksize" | b"max_pages" => {}
+                _ => return Err(Errno::EINVAL),
+            }
+        }
+        let (Some(fd), Some(root_mode), Some(user_id), Some(group_id)) = (fd, root_mode, user_id, group_id) else {
+            return Err(Errno::EINVAL);
+        };
+        if root_mode & 0o170000 != 0o040000 {
+            return Err(Errno::EINVAL);
+        }
+        opts.root_mode = root_mode;
+        opts.user_id = user_id;
+        opts.group_id = group_id;
+        let file = files.file(fd as i32).map_err(|_| Errno::EINVAL)?;
+        let conn = file
+            .device()
+            .and_then(|d| d.as_any())
+            .and_then(|a| a.downcast_ref::<crate::fuse::FuseFile>())
+            .map(|f| f.conn().clone())
+            .ok_or(Errno::EINVAL)?;
+        let cred = files.cred();
+        conn.bind(Caller { uid: cred.uid, gid: cred.gid, pid: self.process().pid }).map_err(vfs_errno)?;
+        let name = match (&subtype, fstype) {
+            (Some(s), _) => {
+                let mut n = b"fuse.".to_vec();
+                n.extend_from_slice(s);
+                crate::fuse::type_name(&n)
+            }
+            (None, t) => crate::fuse::type_name(t),
+        };
+        let fs =
+            alloc::sync::Arc::new(FuseFs::new(conn, alloc::sync::Arc::new(crate::fuse::KernelEnv), opts.clone(), name));
+        let made = files.mount_fs(target, fs.clone(), vfs_flags(flags));
+        fs.finish_mount();
+        let id = made.map_err(vfs_errno)?;
+        let mut sb = alloc::format!("user_id={user_id},group_id={group_id}").into_bytes();
+        if opts.default_permissions {
+            sb.extend_from_slice(b",default_permissions");
+        }
+        if opts.allow_other {
+            sb.extend_from_slice(b",allow_other");
+        }
+        if opts.max_read != 0 {
+            sb.extend_from_slice(alloc::format!(",max_read={}", opts.max_read).as_bytes());
+        }
+        mounts::record_source(id, source);
+        if let Some(m) = crate::fs::vfs().mount_by_id(id) {
+            m.set_sb_info(source, &sb);
+        }
+        Ok(())
+    }
+
     /// mount(2) of an overlay (ADR 0168): the layers named in `data`, looked
     /// up as the options come (a missing directory is `ENOENT` even when a
     /// later option is wrong), then checked against each other.
@@ -220,8 +306,17 @@ impl Thread<'_> {
         if fs == FsType::Overlay {
             return self.mount_overlay(source, target, flags, data);
         }
-        let root = admin::mount_options(fs, data)?;
+        if fs == FsType::Fuse {
+            return self.mount_fuse(source, target, fstype, flags, data);
+        }
+        let mut root = admin::mount_options(fs, data)?;
         let files = &self.process().files;
+        if matches!(fs, FsType::Tmpfs) {
+            // The top directory belongs to the mounter (tmpfs(5)).
+            let cred = files.cred();
+            root.uid.get_or_insert(cred.uid);
+            root.gid.get_or_insert(cred.gid);
+        }
         let flags = vfs_flags(flags);
         let id = if fs.needs_device() {
             if source.is_empty() {
@@ -310,9 +405,7 @@ impl LinuxAdmin for Thread<'_> {
                 let vfs = crate::fs::vfs();
                 let m = vfs.mount_by_id(id).ok_or(Errno::EINVAL)?;
                 let change = poly_personality_linux::mountapi::AttrChange { propagation: *kind, ..Default::default() };
-                for m in vfs.mount_subtree(&m, *recursive) {
-                    m.set_propagation(change.propagation_of(u64::from(m.propagation())) as u32);
-                }
+                vfs.set_propagation(&vfs.mount_subtree(&m, *recursive), change.propagation);
                 Ok(())
             }
             MountRequest::Move { source, target } => {
@@ -321,6 +414,10 @@ impl LinuxAdmin for Thread<'_> {
                 crate::fs::vfs().move_mount(&files.cred(), &src, &dst).map_err(vfs_errno)
             }
         }
+    }
+
+    fn umount_expire(&mut self, target: &[u8]) -> Result<(), Errno> {
+        self.process().files.umount_expire(target).map_err(vfs_errno)
     }
 
     fn umount(&mut self, target: &[u8], detach: bool, follow: bool) -> Result<(), Errno> {

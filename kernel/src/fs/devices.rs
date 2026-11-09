@@ -194,6 +194,11 @@ pub fn install(vfs: &Vfs, ctx: &FsContext) {
     }
     // /dev/loop-control (ADR 0168).
     crate::loopdev::install(vfs);
+    crate::fuse::install(vfs);
+    let _ = created(
+        vfs.mknod(&ctx, &root, At::Cwd, b"/dev/fuse", FileType::CharDevice, 0o666, crate::fuse::FUSE_DEV),
+        b"/dev/fuse",
+    );
     let _ = created(
         vfs.mknod(&ctx, &root, At::Cwd, b"/dev/loop-control", FileType::CharDevice, 0o660, poly_loop::CONTROL),
         b"/dev/loop-control",

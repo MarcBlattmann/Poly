@@ -90,6 +90,7 @@ mod object;
 mod path;
 pub mod pipe;
 pub mod poll;
+pub mod propagation;
 mod sync;
 pub mod timerfd;
 mod tmpfs;
