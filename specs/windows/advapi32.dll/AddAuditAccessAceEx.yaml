@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/AddAuditAccessAceEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Like AddAuditAccessAce with an ACE flags argument: the stored flags are
+  the argument OR 0x40 for audit_success and OR 0x80 for audit_failure. The
+  flags argument may already contain 0x40 and 0x80; the bit 0x20 and
+  anything above 0xFF are rejected with ERROR_INVALID_FLAGS.
+interface:
+  signature: "BOOL AddAuditAccessAceEx(PACL acl, DWORD acl_revision, DWORD ace_flags, DWORD access_mask, PSID sid, BOOL audit_success, BOOL audit_failure)"
+  layout: "ACL (winnt.h): an 8-byte header {Revision (byte), Sbz1 (byte, 0), AclSize (16 bits), AceCount (16 bits), Sbz2 (16 bits)} followed by the ACEs one after the other, all fields little-endian. Each ACE starts with {AceType (byte), AceFlags (byte), AceSize (16 bits)}; access-allowed (type 0), access-denied (1), system-audit (2) and mandatory-label (0x11) ACEs continue with a 32-bit mask (the policy for a label) and the SID, so their size is 8 + the SID length (20 for the 12-byte S-1-1-0 and S-1-1-0-like SIDs, 24 for S-1-5-32-544, 76 for a 15-sub-authority SID). ACL revisions 2, 3 and 4 are the valid ones. Buffers in the tests are 8-byte aligned unless noted."
+  sid: "SIDs are valid when the revision byte is 1 and the sub-authority count at most 15 (see IsValidSid)."
+rules:
+  flags: "on a revision 4 ACL, for flags 0, 1, 2, 3, 4, 8, 0x10, 0x1F and (s,f) = (0,0), (1,0), (0,1), (1,1) the stored flags are flags | (s ? 0x40 : 0) | (f ? 0x80 : 0) (flags 0x1F gives 0x1F, 0x5F, 0x9F, 0xDF); flags 0x40 stays 0x40 with (0,0) and (1,0) and becomes 0xC0 with failure; flags 0x80 stays 0x80 and becomes 0xC0 with success; flags 0xC0 and 0xDF are stored as they are with any (s,f); flags 0x20, 0x60, 0xA0, 0xE0, 0x3F, 0xFF, 0x100 and 0xFFFFFFFF fail for all four (s,f) combinations; a revision 2 ACL with flags 0x12 and success gives flags 0x52"
+  ace_bytes: "the ACE is 8 bytes plus the SID length (stored in bytes 2..3): S-1-1-0 gives 20, S-1-5-18 20, S-1-5-32-544 24, S-1-5-5-0-12345 28, S-1-5-21-111-222-333-1001 36, a 15-sub-authority SID 76; the SID bytes follow the mask unchanged; the header's AclSize stays and bytes after the new ACE are untouched; the ACE count goes up by one; successive adds append in call order (four adds with masks 1, 2, 4, 8 give ACEs at offsets 8, 28, 48, 72 with those masks); ACE type 2, flags 0xC0 when both are requested"
+  revision: "after a successful add the revision of the ACL is the larger of its own and the argument: on a revision 2 ACL the arguments 0, 1, 2 give 2, 3 gives 3 and 4 gives 4; on revision 3 the arguments 0..3 give 3 and 4 gives 4; on revision 4 the arguments 0..4 give 4 (0 and 1 are accepted); the arguments 5, 6, 0xFF, 0x100, 0x10002 and 0xFFFFFFFF fail on every ACL and leave it untouched (the whole 32-bit value is compared); two adds in a row with arguments (2, 3), (3, 2), (2, 4), (4, 2), (3, 4), (4, 3) leave the ACL at 3, 3, 4, 4, 4, 4 (after the first add its revision is the first argument)"
+  space: "the ACE needs 20 bytes of free room: an ACL with AclSize 28 or more takes the first add (initialised with 28..31, rounded down to 28) and every smaller size tried (8 up to the size below) fails; the second add needs AclSize 48 (initialised with 48, 49 stores 48; the sizes just below fail); all failures are FALSE with ERROR_ALLOTTED_SPACE_EXCEEDED (1344), the ACL stays as it was and bytes beyond AclSize are never written"
+  header: "damaged ACL headers: revision byte 0 or 1: FALSE, ERROR_INVALID_ACL (1336); revision byte 5 or 255: FALSE, ERROR_REVISION_MISMATCH (1306); AclSize field 0, 4 or 7: FALSE, ERROR_INVALID_ACL (1336); AclSize 8 (no room): FALSE, ERROR_ALLOTTED_SPACE_EXCEEDED (1344); count 1, 200 or 0xFFFF with no ACE present: FALSE, ERROR_INVALID_ACL (1336); Sbz1 or Sbz2 = 1 and an AclSize of 1000: success"
+errors:
+  flags: "flags with the bit 0x20 or above 0xFF: FALSE, ERROR_INVALID_FLAGS (1004)"
+  sid: "SID with revision 0, 2, 3 or 255 (count 1), or count 16, 17, 100, 255 (revision 1), or revision 0 with count 0: FALSE, ERROR_INVALID_SID (1337), the ACL is unchanged; revision 1 with counts 0, 1 and 15 are accepted (ACE sizes 16, 20, 76)"
+  space: "no room: FALSE, ERROR_ALLOTTED_SPACE_EXCEEDED (1344)"
+  revision: "revision argument above 4: FALSE, ERROR_REVISION_MISMATCH (1306)"
+  acl: "damaged ACL: see header"
+side_effects: "appends an ACE to the ACL, may raise its revision"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Adding to ACLs that are shared with kernel objects or security descriptors
+  (see the descriptor functions), auditing semantics (the audit ACEs are
+  only stored). Domain accounts and domain-relative well-known SIDs of a
+  real domain, AppContainer and capability SIDs beyond their string forms,
+  auditing (SACL entries are only stored, never evaluated), remote systems
+  (the system-name arguments), Kerberos or NTLM logon tokens, tokens of
+  other users.

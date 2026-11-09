@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_setacl_classes",
+      "exe_sha256": "7562994a67f396ab760201901d26ca8265a6709c741fcb341362d92d87183054",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xhc3MgMDogc3RhdHVzPTB4YzAwMDAwMDMgcmV2aXNpb24gbm93IDIKY2xhc3MgMTogc3RhdHVzPTB4MDAwMDAwMDAgcmV2aXNpb24gbm93IDMKY2xhc3MgMjogc3RhdHVzPTB4YzAwMDAwMDMgcmV2aXNpb24gbm93IDIKY2xhc3MgMzogc3RhdHVzPTB4YzAwMDAwMDMgcmV2aXNpb24gbm93IDIKY2xhc3MgNDogc3RhdHVzPTB4YzAwMDAwMDMgcmV2aXNpb24gbm93IDIKY2xhc3MgOTk6IHN0YXR1cz0weGMwMDAwMDAzIHJldmlzaW9uIG5vdyAyCmNsYXNzIDQyOTQ5NjcyOTU6IHN0YXR1cz0weGMwMDAwMDAzIHJldmlzaW9uIG5vdyAyCnJldmlzaW9uIDQgQUNMIHdpdGggYW4gQUNFIG9mIHR5cGUgMHgwLCBzZXQgMjogc3RhdHVzPTB4YzAwMDAwMGQgcmV2aXNpb24gbm93IDQKcmV2aXNpb24gNCBBQ0wgd2l0aCBhbiBBQ0Ugb2YgdHlwZSAweDUsIHNldCAyOiBzdGF0dXM9MHhjMDAwMDAwZCByZXZpc2lvbiBub3cgNApyZXZpc2lvbiA0IEFDTCB3aXRoIGFuIEFDRSBvZiB0eXBlIDB4Niwgc2V0IDI6IHN0YXR1cz0weGMwMDAwMDBkIHJldmlzaW9uIG5vdyA0CnJldmlzaW9uIDQgQUNMIHdpdGggYW4gQUNFIG9mIHR5cGUgMHgxMSwgc2V0IDI6IHN0YXR1cz0weGMwMDAwMDBkIHJldmlzaW9uIG5vdyA0CmRhbWFnZWQgQUNMIHJldmlzaW9uIDAsIHNldCAzOiBzdGF0dXM9MHhjMDAwMDAwZCByZXZpc2lvbiBub3cgMApkYW1hZ2VkIEFDTCByZXZpc2lvbiAxLCBzZXQgMzogc3RhdHVzPTB4YzAwMDAwMGQgcmV2aXNpb24gbm93IDEKZGFtYWdlZCBBQ0wgcmV2aXNpb24gNSwgc2V0IDM6IHN0YXR1cz0weGMwMDAwMDBkIHJldmlzaW9uIG5vdyA1CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "class 0: status=0xc0000003 revision now 2\nclass 1: status=0x00000000 revision now 3\nclass 2: status=0xc0000003 revision now 2\nclass 3: status=0xc0000003 revision now 2\nclass 4: status=0xc0000003 revision now 2\nclass 99: status=0xc0000003 revision now 2\nclass 4294967295: status=0xc0000003 revision now 2\nrevision 4 ACL with an ACE of type 0x0, set 2: status=0xc000000d revision now 4\nrevision 4 ACL with an ACE of type 0x5, set 2: status=0xc000000d revision now 4\nrevision 4 ACL with an ACE of type 0x6, set 2: status=0xc000000d revision now 4\nrevision 4 ACL with an ACE of type 0x11, set 2: status=0xc000000d revision now 4\ndamaged ACL revision 0, set 3: status=0xc000000d revision now 0\ndamaged ACL revision 1, set 3: status=0xc000000d revision now 1\ndamaged ACL revision 5, set 3: status=0xc000000d revision now 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

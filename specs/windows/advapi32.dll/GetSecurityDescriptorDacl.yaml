@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/GetSecurityDescriptorDacl
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Reports whether the descriptor has a DACL (SE_DACL_PRESENT), the ACL
+  pointer, and SE_DACL_DEFAULTED. NULL DACL and absent DACL are told apart
+  by the present flag.
+interface:
+  signature: "BOOL GetSecurityDescriptorDacl(PSECURITY_DESCRIPTOR pSecurityDescriptor, LPBOOL lpbDaclPresent, PACL* pDacl, LPBOOL lpbDaclDefaulted)"
+  layout: "SECURITY_DESCRIPTOR, absolute form (winnt.h, x64, 40 bytes): byte 0 Revision (1), byte 1 Sbz1, bytes 2..3 Control (little-endian 16-bit), bytes 4..7 padding, then four 8-byte pointers: Owner at 8, Group at 16, Sacl at 24, Dacl at 32. Self-relative form: the same first 4 bytes, with SE_SELF_RELATIVE (0x8000) in Control, then four 32-bit offsets from the start of the descriptor: Owner at 4, Group at 8, Sacl at 12, Dacl at 16 (header 20 bytes); an offset of 0 means the part is absent (or, for the ACLs, a NULL ACL when the PRESENT bit is set)."
+  acl: "ACL (winnt.h): byte 0 revision, byte 1 Sbz1, bytes 2..3 AclSize, bytes 4..5 AceCount, bytes 6..7 Sbz2, then the ACEs; an ACCESS_ALLOWED/DENIED/AUDIT/MANDATORY_LABEL ACE is type, flags, 16-bit size (8 + SID length), 32-bit mask, SID."
+rules:
+  absent: "present FALSE: success, defaulted written as FALSE, the ACL pointer output is NOT written (it keeps the value it had)"
+  null: "SE_DACL_PRESENT with a NULL slot (also set by hand): present TRUE, pointer NULL"
+  present_acl: "present TRUE and the stored pointer (the very pointer passed to SetSecurityDescriptorDacl); defaulted TRUE with SE_DACL_DEFAULTED; with the slot set but SE_DACL_PRESENT cleared by hand the result is present FALSE and the pointer output untouched"
+  self_relative: "for SDDL descriptors: \"O:BA\" present FALSE; \"D:NO_ACCESS_CONTROL\" present TRUE with a NULL pointer; \"D:\" present TRUE, pointer descriptor + 20, an ACL of size 8 with 0 ACEs; \"D:P\" likewise (control 0x9004); \"D:(A;;GA;;;WD)\" + 20, ACL size 28, one allow ACE mask 0x10000000 for S-1-1-0; \"O:BAG:SYD:AI(A;;GA;;;SY)(D;;GW;;;WD)\" + 20, ACL size 48 with 2 ACEs, control 0x8404; \"S:(AU;SAFA;GA;;;WD)\" present FALSE; DACL and SACL together \"D:(A;;GA;;;WD)S:(AU;SAFA;GA;;;WD)\" DACL at + 48, SACL at + 20"
+  not_validated: "an ACL with revision 77 is returned as stored (TRUE)"
+errors:
+  revision: "a revision byte of 0, 2, 3 or 255 and an all-zero buffer: FALSE, last error ERROR_UNKNOWN_REVISION (1305); all three outputs are left as they were"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "2d24da3f08a2",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:57:44Z",
+  "tests": [
+    {
+      "name": "ntott_other_threads",
+      "exe_sha256": "31553cc61f223b4f3b508c69480a380a646283a1131b52688e32712a6f408c8c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gdG9rZW46IGFzX3NlbGY9MDogMHhjMDAwMDA3YyBhc19zZWxmPTE6IDB4YzAwMDAwN2MgCm5vIHRva2VuLCBUSFJFQURfUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTjogYXNfc2VsZj0wOiAweGMwMDAwMDdjIGFzX3NlbGY9MTogMHhjMDAwMDA3YyAKbm8gdG9rZW4sIFRIUkVBRF9RVUVSWV9JTkZPUk1BVElPTjogYXNfc2VsZj0wOiAweGMwMDAwMDdjIGFzX3NlbGY9MTogMHhjMDAwMDA3YyAKbm8gdG9rZW4sIFRIUkVBRF9TRVRfVEhSRUFEX1RPS0VOOiBhc19zZWxmPTA6IDB4YzAwMDAwMjIgYXNfc2VsZj0xOiAweGMwMDAwMDIyIApubyB0b2tlbiwgU1lOQ0hST05JWkU6IGFzX3NlbGY9MDogMHhjMDAwMDAyMiBhc19zZWxmPTE6IDB4YzAwMDAwMjIgCm5vIHRva2VuLCBhY2Nlc3MgMDogYXNfc2VsZj0wOiAweGMwMDAwMDIyIGFzX3NlbGY9MTogMHhjMDAwMDAyMiAKbm8gdG9rZW4sIFRIUkVBRF9BTExfQUNDRVNTOiBhc19zZWxmPTA6IDB4YzAwMDAwN2MgYXNfc2VsZj0xOiAweGMwMDAwMDdjIApTZXRUaHJlYWRUb2tlbiBvbiB0aGUgb3RoZXIgdGhyZWFkOiAxCnRva2VuIHNldDogYXNfc2VsZj0wOiBvayhsZXZlbCAyIGdyYW50ZWQgMHg4KSBhc19zZWxmPTE6IG9rKGxldmVsIDIgZ3JhbnRlZCAweDgpIAp0b2tlbiBzZXQsIFRIUkVBRF9RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OOiBhc19zZWxmPTA6IG9rKGxldmVsIDIgZ3JhbnRlZCAweDgpIGFzX3NlbGY9MTogb2sobGV2ZWwgMiBncmFudGVkIDB4OCkgCnRva2VuIHNldCwgVEhSRUFEX1FVRVJZX0lORk9STUFUSU9OOiBhc19zZWxmPTA6IG9rKGxldmVsIDIgZ3JhbnRlZCAweDgpIGFzX3NlbGY9MTogb2sobGV2ZWwgMiBncmFudGVkIDB4OCkgCnRva2VuIHNldCwgVEhSRUFEX1NFVF9USFJFQURfVE9LRU46IGFzX3NlbGY9MDogMHhjMDAwMDAyMiBhc19zZWxmPTE6IDB4YzAwMDAwMjIgCnRva2VuIHNldCwgU1lOQ0hST05JWkU6IGFzX3NlbGY9MDogMHhjMDAwMDAyMiBhc19zZWxmPTE6IDB4YzAwMDAwMjIgCnRva2VuIHNldCwgYWNjZXNzIDA6IGFzX3NlbGY9MDogMHhjMDAwMDAyMiBhc19zZWxmPTE6IDB4YzAwMDAwMjIgCnRva2VuIHNldCwgVEhSRUFEX0FMTF9BQ0NFU1M6IGFzX3NlbGY9MDogb2sobGV2ZWwgMiBncmFudGVkIDB4OCkgYXNfc2VsZj0xOiBvayhsZXZlbCAyIGdyYW50ZWQgMHg4KSAKZXZlbnQgaGFuZGxlOiBhc19zZWxmPTA6IDB4YzAwMDAwMjQgYXNfc2VsZj0xOiAweGMwMDAwMDI0IApwcm9jZXNzIHBzZXVkby1oYW5kbGU6IGFzX3NlbGY9MDogMHhjMDAwMDAyNCBhc19zZWxmPTE6IDB4YzAwMDAwMjQgCk5VTEwgaGFuZGxlOiBhc19zZWxmPTA6IDB4YzAwMDAwMDggYXNfc2VsZj0xOiAweGMwMDAwMDA4IApjbG9zZWQgaGFuZGxlOiBhc19zZWxmPTA6IDB4YzAwMDAwMDggYXNfc2VsZj0xOiAweGMwMDAwMDA4IApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no token: as_self=0: 0xc000007c as_self=1: 0xc000007c \nno token, THREAD_QUERY_LIMITED_INFORMATION: as_self=0: 0xc000007c as_self=1: 0xc000007c \nno token, THREAD_QUERY_INFORMATION: as_self=0: 0xc000007c as_self=1: 0xc000007c \nno token, THREAD_SET_THREAD_TOKEN: as_self=0: 0xc0000022 as_self=1: 0xc0000022 \nno token, SYNCHRONIZE: as_self=0: 0xc0000022 as_self=1: 0xc0000022 \nno token, access 0: as_self=0: 0xc0000022 as_self=1: 0xc0000022 \nno token, THREAD_ALL_ACCESS: as_self=0: 0xc000007c as_self=1: 0xc000007c \nSetThreadToken on the other thread: 1\ntoken set: as_self=0: ok(level 2 granted 0x8) as_self=1: ok(level 2 granted 0x8) \ntoken set, THREAD_QUERY_LIMITED_INFORMATION: as_self=0: ok(level 2 granted 0x8) as_self=1: ok(level 2 granted 0x8) \ntoken set, THREAD_QUERY_INFORMATION: as_self=0: ok(level 2 granted 0x8) as_self=1: ok(level 2 granted 0x8) \ntoken set, THREAD_SET_THREAD_TOKEN: as_self=0: 0xc0000022 as_self=1: 0xc0000022 \ntoken set, SYNCHRONIZE: as_self=0: 0xc0000022 as_self=1: 0xc0000022 \ntoken set, access 0: as_self=0: 0xc0000022 as_self=1: 0xc0000022 \ntoken set, THREAD_ALL_ACCESS: as_self=0: ok(level 2 granted 0x8) as_self=1: ok(level 2 granted 0x8) \nevent handle: as_self=0: 0xc0000024 as_self=1: 0xc0000024 \nprocess pseudo-handle: as_self=0: 0xc0000024 as_self=1: 0xc0000024 \nNULL handle: as_self=0: 0xc0000008 as_self=1: 0xc0000008 \nclosed handle: as_self=0: 0xc0000008 as_self=1: 0xc0000008 \nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

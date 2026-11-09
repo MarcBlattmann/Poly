@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_anygranted_table",
+      "exe_sha256": "af1a8237c59a2aea82fe9cf8bae496c84397d7e66d124bce1c2c3f48c6837d01",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Z3JhbnRlZCAweDAwMDAwMDAwIGRlc2lyZWQgMHgwMDAwMDAwMDogMApncmFudGVkIDB4MDAwMDAwMDAgZGVzaXJlZCAweDAwMDAwMDAxOiAwCmdyYW50ZWQgMHgwMDAwMDAwMSBkZXNpcmVkIDB4MDAwMDAwMDA6IDAKZ3JhbnRlZCAweDAwMDAwMDAxIGRlc2lyZWQgMHgwMDAwMDAwMTogMQpncmFudGVkIDB4MDAwMDAwMDMgZGVzaXJlZCAweDAwMDAwMDAxOiAxCmdyYW50ZWQgMHgwMDAwMDAwMSBkZXNpcmVkIDB4MDAwMDAwMDM6IDEKZ3JhbnRlZCAweDAwMDAwMDAyIGRlc2lyZWQgMHgwMDAwMDAwMTogMApncmFudGVkIDB4MDAwMDAwMTIgZGVzaXJlZCAweDAwMDAwMDEwOiAxCmdyYW50ZWQgMHgwMDAwMDAxMiBkZXNpcmVkIDB4MDAwMDAwMDE6IDAKZ3JhbnRlZCAweDAwMWYwMWZmIGRlc2lyZWQgMHgwMDEyMDA4OTogMQpncmFudGVkIDB4MDAxMjAwODkgZGVzaXJlZCAweDAwMWYwMWZmOiAxCmdyYW50ZWQgMHhmZmZmZmZmZiBkZXNpcmVkIDB4MDAwMDAwMDA6IDAKZ3JhbnRlZCAweDAwMDAwMDAwIGRlc2lyZWQgMHhmZmZmZmZmZjogMApncmFudGVkIDB4ZmZmZmZmZmYgZGVzaXJlZCAweGZmZmZmZmZmOiAxCmdyYW50ZWQgMHg4MDAwMDAwMCBkZXNpcmVkIDB4N2ZmZmZmZmY6IDAKZ3JhbnRlZCAweDgwMDAwMDAwIGRlc2lyZWQgMHg4MDAwMDAwMTogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "granted 0x00000000 desired 0x00000000: 0\ngranted 0x00000000 desired 0x00000001: 0\ngranted 0x00000001 desired 0x00000000: 0\ngranted 0x00000001 desired 0x00000001: 1\ngranted 0x00000003 desired 0x00000001: 1\ngranted 0x00000001 desired 0x00000003: 1\ngranted 0x00000002 desired 0x00000001: 0\ngranted 0x00000012 desired 0x00000010: 1\ngranted 0x00000012 desired 0x00000001: 0\ngranted 0x001f01ff desired 0x00120089: 1\ngranted 0x00120089 desired 0x001f01ff: 1\ngranted 0xffffffff desired 0x00000000: 0\ngranted 0x00000000 desired 0xffffffff: 0\ngranted 0xffffffff desired 0xffffffff: 1\ngranted 0x80000000 desired 0x7fffffff: 0\ngranted 0x80000000 desired 0x80000001: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_setdacl_basic",
+      "exe_sha256": "01fa5ac16e792d8399b841c24b275436907d2a9b7c0423fcc9490127e011e84d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHJlc2VudCAweDEgYWNsIHRydWUgZGVmYXVsdGVkIDB4MDogc3RhdHVzPTB4MDAwMDAwMDAgY29udHJvbD0weDAwMDQgZGFjbD1hY2wrMApwcmVzZW50IDB4MSBhY2wgdHJ1ZSBkZWZhdWx0ZWQgMHgxOiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MDAwYyBkYWNsPWFjbCswCnByZXNlbnQgMHgwIGFjbCB0cnVlIGRlZmF1bHRlZCAweDA6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHgwMDAwIGRhY2w9bnVsbApwcmVzZW50IDB4MCBhY2wgdHJ1ZSBkZWZhdWx0ZWQgMHgxOiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MDAwMCBkYWNsPW51bGwKcHJlc2VudCAweDEgYWNsIGZhbHNlIGRlZmF1bHRlZCAweDA6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHgwMDA0IGRhY2w9bnVsbApwcmVzZW50IDB4MCBhY2wgZmFsc2UgZGVmYXVsdGVkIDB4MDogc3RhdHVzPTB4MDAwMDAwMDAgY29udHJvbD0weDAwMDAgZGFjbD1udWxsCnByZXNlbnQgMHgxIGFjbCBmYWxzZSBkZWZhdWx0ZWQgMHgxOiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MDAwYyBkYWNsPW51bGwKcHJlc2VudCAweDAgYWNsIGZhbHNlIGRlZmF1bHRlZCAweDE6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHgwMDAwIGRhY2w9bnVsbApwcmVzZW50IDB4MiBhY2wgdHJ1ZSBkZWZhdWx0ZWQgMHgwOiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MDAwNCBkYWNsPWFjbCswCnByZXNlbnQgMHhmZiBhY2wgdHJ1ZSBkZWZhdWx0ZWQgMHgwOiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MDAwNCBkYWNsPWFjbCswCnByZXNlbnQgMHgxIGFjbCB0cnVlIGRlZmF1bHRlZCAweDI6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHgwMDBjIGRhY2w9YWNsKzAKcHJlc2VudCAweDEgYWNsIHRydWUgZGVmYXVsdGVkIDB4ZmY6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHgwMDBjIGRhY2w9YWNsKzAKc2VxdWVuY2U6IHNldCwgZGVmYXVsdGVkOiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MDAwYyBkYWNsPWFjbCswCnNlcXVlbmNlOiBQcmVzZW50IEZBTFNFIHdpdGggYW4gQUNMIChjbGVhcnMgYml0cywga2VlcHMgcG9pbnRlcj8pOiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MDAwOCBkYWNsPWFjbCswCnNlcXVlbmNlOiBOVUxMIEFDTCBwcmVzZW50OiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MDAwNCBkYWNsPW51bGwKb3RoZXIgY29udHJvbCBiaXRzIDB4N2ZmMyBrZXB0OiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4N2ZmNyBkYWNsPWFjbCswCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "present 0x1 acl true defaulted 0x0: status=0x00000000 control=0x0004 dacl=acl+0\npresent 0x1 acl true defaulted 0x1: status=0x00000000 control=0x000c dacl=acl+0\npresent 0x0 acl true defaulted 0x0: status=0x00000000 control=0x0000 dacl=null\npresent 0x0 acl true defaulted 0x1: status=0x00000000 control=0x0000 dacl=null\npresent 0x1 acl false defaulted 0x0: status=0x00000000 control=0x0004 dacl=null\npresent 0x0 acl false defaulted 0x0: status=0x00000000 control=0x0000 dacl=null\npresent 0x1 acl false defaulted 0x1: status=0x00000000 control=0x000c dacl=null\npresent 0x0 acl false defaulted 0x1: status=0x00000000 control=0x0000 dacl=null\npresent 0x2 acl true defaulted 0x0: status=0x00000000 control=0x0004 dacl=acl+0\npresent 0xff acl true defaulted 0x0: status=0x00000000 control=0x0004 dacl=acl+0\npresent 0x1 acl true defaulted 0x2: status=0x00000000 control=0x000c dacl=acl+0\npresent 0x1 acl true defaulted 0xff: status=0x00000000 control=0x000c dacl=acl+0\nsequence: set, defaulted: status=0x00000000 control=0x000c dacl=acl+0\nsequence: Present FALSE with an ACL (clears bits, keeps pointer?): status=0x00000000 control=0x0008 dacl=acl+0\nsequence: NULL ACL present: status=0x00000000 control=0x0004 dacl=null\nother control bits 0x7ff3 kept: status=0x00000000 control=0x7ff7 dacl=acl+0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}
