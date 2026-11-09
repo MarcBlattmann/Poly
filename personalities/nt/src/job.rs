@@ -355,6 +355,9 @@ pub fn is_process_in_job<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
 /// The structure a query class returns, by class number: its exact size
 /// (`None`: variable). Classes in this table that are not answered fail
 /// with `STATUS_INFO_LENGTH_MISMATCH` as the spec sheet observed.
+/// The last class of `JOBOBJECTINFOCLASS` the query answers with a length
+/// error rather than a bad class.
+const MAX_CLASS: u32 = 36;
 const BASIC_ACCOUNTING: u32 = 1;
 const BASIC_LIMIT: u32 = 2;
 const PROCESS_ID_LIST: u32 = 3;
@@ -375,7 +378,7 @@ pub fn query_information_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) 
     let caller = k.caller();
     let bytes = k.with_state(|sys, _, _| -> Result<Vec<u8>> {
         let cookie = job_of(sys, &caller, h, JOB_OBJECT_QUERY)?;
-        if class == 0 || class > 15 && class != 0 {
+        if class == 0 || class > MAX_CLASS {
             return Err(STATUS_INVALID_INFO_CLASS);
         }
         let j = sys.jobs.job(cookie).ok_or(STATUS_INVALID_HANDLE)?;

@@ -119,6 +119,8 @@ impl ObjectType {
             // A handle to a section can be asked to wait (the standard
             // `SYNCHRONIZE` right is valid for every object).
             ObjectType::Section => self.generic_mapping().all | SYNCHRONIZE,
+            // The specific rights a port does not have are accepted too (the spec sheet).
+            ObjectType::IoCompletion => self.generic_mapping().all | 0xFFFF,
             _ => self.generic_mapping().all,
         }
     }

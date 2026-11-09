@@ -502,3 +502,17 @@ fn files_on_a_port_post_packets_when_requests_complete() {
     t.close(s);
     assert_eq!(t.depth(p), 0);
 }
+
+#[test]
+fn ports_accept_odd_rights_and_refuse_a_name_without_a_leaf() {
+    let mut t = setup();
+    let out = t.f.alloc(8);
+    // A right the type does not have is accepted.
+    assert_eq!(t.f.call(Service::CreateIoCompletion, &[out, 0x8000 | 0x3, 0, 0]), STATUS_SUCCESS);
+    // GENERIC_READ and GENERIC_WRITE map to the query and modify rights.
+    assert_eq!(t.f.call(Service::CreateIoCompletion, &[out, 0x8000_0000, 0, 1]), STATUS_SUCCESS);
+    // A directory name with no leaf is no name.
+    let oa = t.f.attrs(r"\BaseNamedObjects\", CI);
+    let s = t.f.call(Service::CreateIoCompletion, &[out, 0x1F0003, oa, 0]);
+    assert_eq!(s, STATUS_OBJECT_NAME_INVALID);
+}

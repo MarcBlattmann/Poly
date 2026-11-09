@@ -172,7 +172,7 @@ pub fn fs_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
                     }
                     FSCTL_PIPE_PEEK => {
                         if out_len < super::npfs::PEEK_HEADER {
-                            return refuse(sys, irp, STATUS_INFO_LENGTH_MISMATCH);
+                            return refuse(sys, irp, STATUS_INVALID_PARAMETER);
                         }
                         let max = out_len - super::npfs::PEEK_HEADER;
                         return match sys.io.np_peek(file.1, max) {
