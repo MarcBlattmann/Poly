@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "iscaw_index",
+      "exe_sha256": "7a12513f4f9f466cfe087c49b701d57195dbc2b472d7092e4057f06e38fdbff3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "PT0gZGVmYXVsdApnZXQgaW5kZXggMCBiZWZvcmUgYW55IHNldDogb2s9MCBpbmRleD0weGFhIHN0eWxlPTB4YWEgcG9zPTcsOApnZXQgaW5kZXggMSBiZWZvcmUgYW55IHNldDogb2s9MCBpbmRleD0weGFhIHN0eWxlPTB4YWEgcG9zPTcsOApnZXQgaW5kZXggMiBiZWZvcmUgYW55IHNldDogb2s9MCBpbmRleD0weGFhIHN0eWxlPTB4YWEgcG9zPTcsOApnZXQgaW5kZXggMyBiZWZvcmUgYW55IHNldDogb2s9MCBpbmRleD0weGFhIHN0eWxlPTB4YWEgcG9zPTcsOApzZXQgaW5kZXggMCBzdHlsZSAweDQwOiBvaz0xIGxhc3QgZXJyb3IgMHgwCnNldCBpbmRleCAxIHN0eWxlIDB4ODA6IG9rPTEgbGFzdCBlcnJvciAweDAKc2V0IGluZGV4IDIgc3R5bGUgMHg0MDogb2s9MSBsYXN0IGVycm9yIDB4MApzZXQgaW5kZXggMyBzdHlsZSAweDA6IG9rPTEgbGFzdCBlcnJvciAweDAKZ2V0IGluZGV4IDA6IG9rPTEgaW5kZXg9MHgwIHN0eWxlPTB4NDAgcG9zPTExLDIyIGFyZWE9NSw2LDUwLDYwCmdldCBpbmRleCAxOiBvaz0xIGluZGV4PTB4MSBzdHlsZT0weDgwIHBvcz0xMiwyMiBhcmVhPTUsNiw1MCw2MApnZXQgaW5kZXggMjogb2s9MSBpbmRleD0weDIgc3R5bGU9MHg0MCBwb3M9MTMsMjIgYXJlYT01LDYsNTAsNjAKZ2V0IGluZGV4IDM6IG9rPTEgaW5kZXg9MHgzIHN0eWxlPTB4MCBwb3M9MTQsMjIgYXJlYT01LDYsNTAsNjAKc2V0IGluZGV4IDB4NDogb2s9MCBsYXN0IGVycm9yIDB4MTIzNApzZXQgaW5kZXggMHg1OiBvaz0wIGxhc3QgZXJyb3IgMHgxMjM0CnNldCBpbmRleCAweDFmOiBvaz0wIGxhc3QgZXJyb3IgMHgxMjM0CnNldCBpbmRleCAweDIwOiBvaz0wIGxhc3QgZXJyb3IgMHgxMjM0CnNldCBpbmRleCAweDEwMDogb2s9MCBsYXN0IGVycm9yIDB4MTIzNAo9PSBvd24KZ2V0IGluZGV4IDAgYmVmb3JlIGFueSBzZXQ6IG9rPTAgaW5kZXg9MHhhYSBzdHlsZT0weGFhIHBvcz03LDgKZ2V0IGluZGV4IDEgYmVmb3JlIGFueSBzZXQ6IG9rPTAgaW5kZXg9MHhhYSBzdHlsZT0weGFhIHBvcz03LDgKZ2V0IGluZGV4IDIgYmVmb3JlIGFueSBzZXQ6IG9rPTAgaW5kZXg9MHhhYSBzdHlsZT0weGFhIHBvcz03LDgKZ2V0IGluZGV4IDMgYmVmb3JlIGFueSBzZXQ6IG9rPTAgaW5kZXg9MHhhYSBzdHlsZT0weGFhIHBvcz03LDgKc2V0IGluZGV4IDAgc3R5bGUgMHg0MDogb2s9MSBsYXN0IGVycm9yIDB4MApzZXQgaW5kZXggMSBzdHlsZSAweDgwOiBvaz0xIGxhc3QgZXJyb3IgMHgwCnNldCBpbmRleCAyIHN0eWxlIDB4NDA6IG9rPTEgbGFzdCBlcnJvciAweDAKc2V0IGluZGV4IDMgc3R5bGUgMHgwOiBvaz0xIGxhc3QgZXJyb3IgMHgwCmdldCBpbmRleCAwOiBvaz0xIGluZGV4PTB4MCBzdHlsZT0weDQwIHBvcz0xMSwyMiBhcmVhPTUsNiw1MCw2MApnZXQgaW5kZXggMTogb2s9MSBpbmRleD0weDEgc3R5bGU9MHg4MCBwb3M9MTIsMjIgYXJlYT01LDYsNTAsNjAKZ2V0IGluZGV4IDI6IG9rPTEgaW5kZXg9MHgyIHN0eWxlPTB4NDAgcG9zPTEzLDIyIGFyZWE9NSw2LDUwLDYwCmdldCBpbmRleCAzOiBvaz0xIGluZGV4PTB4MyBzdHlsZT0weDAgcG9zPTE0LDIyIGFyZWE9NSw2LDUwLDYwCnNldCBpbmRleCAweDQ6IG9rPTAgbGFzdCBlcnJvciAweDEyMzQKc2V0IGluZGV4IDB4NTogb2s9MCBsYXN0IGVycm9yIDB4MTIzNApzZXQgaW5kZXggMHgxZjogb2s9MCBsYXN0IGVycm9yIDB4MTIzNApzZXQgaW5kZXggMHgyMDogb2s9MCBsYXN0IGVycm9yIDB4MTIzNApzZXQgaW5kZXggMHgxMDA6IG9rPTAgbGFzdCBlcnJvciAweDEyMzQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "== default\nget index 0 before any set: ok=0 index=0xaa style=0xaa pos=7,8\nget index 1 before any set: ok=0 index=0xaa style=0xaa pos=7,8\nget index 2 before any set: ok=0 index=0xaa style=0xaa pos=7,8\nget index 3 before any set: ok=0 index=0xaa style=0xaa pos=7,8\nset index 0 style 0x40: ok=1 last error 0x0\nset index 1 style 0x80: ok=1 last error 0x0\nset index 2 style 0x40: ok=1 last error 0x0\nset index 3 style 0x0: ok=1 last error 0x0\nget index 0: ok=1 index=0x0 style=0x40 pos=11,22 area=5,6,50,60\nget index 1: ok=1 index=0x1 style=0x80 pos=12,22 area=5,6,50,60\nget index 2: ok=1 index=0x2 style=0x40 pos=13,22 area=5,6,50,60\nget index 3: ok=1 index=0x3 style=0x0 pos=14,22 area=5,6,50,60\nset index 0x4: ok=0 last error 0x1234\nset index 0x5: ok=0 last error 0x1234\nset index 0x1f: ok=0 last error 0x1234\nset index 0x20: ok=0 last error 0x1234\nset index 0x100: ok=0 last error 0x1234\n== own\nget index 0 before any set: ok=0 index=0xaa style=0xaa pos=7,8\nget index 1 before any set: ok=0 index=0xaa style=0xaa pos=7,8\nget index 2 before any set: ok=0 index=0xaa style=0xaa pos=7,8\nget index 3 before any set: ok=0 index=0xaa style=0xaa pos=7,8\nset index 0 style 0x40: ok=1 last error 0x0\nset index 1 style 0x80: ok=1 last error 0x0\nset index 2 style 0x40: ok=1 last error 0x0\nset index 3 style 0x0: ok=1 last error 0x0\nget index 0: ok=1 index=0x0 style=0x40 pos=11,22 area=5,6,50,60\nget index 1: ok=1 index=0x1 style=0x80 pos=12,22 area=5,6,50,60\nget index 2: ok=1 index=0x2 style=0x40 pos=13,22 area=5,6,50,60\nget index 3: ok=1 index=0x3 style=0x0 pos=14,22 area=5,6,50,60\nset index 0x4: ok=0 last error 0x1234\nset index 0x5: ok=0 last error 0x1234\nset index 0x1f: ok=0 last error 0x1234\nset index 0x20: ok=0 last error 0x1234\nset index 0x100: ok=0 last error 0x1234\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 221
+    }
+  ]
+}

@@ -373,3 +373,17 @@ pub unsafe extern "system" fn WinHttpTimeToSystemTime(text: *const u16, time: *m
     };
     TRUE
 }
+
+/// `WinHttpGetIEProxyConfigForCurrentUser(pProxyConfig)` (ADR 0155): the user's Internet Explorer
+/// proxy settings, `WINHTTP_CURRENT_USER_IE_PROXY_CONFIG` (x64, 32 bytes: `fAutoDetect` at 0,
+/// `lpszAutoConfigUrl` 8, `lpszProxy` 16, `lpszProxyBypass` 24). Poly has no proxy settings: no
+/// automatic detection, no script, no proxy, no bypass list: connections go straight out.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WinHttpGetIEProxyConfigForCurrentUser(config: *mut u8) -> i32 {
+    if config.is_null() {
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    // SAFETY: the caller's structure of 32 bytes.
+    unsafe { core::ptr::write_bytes(config, 0, 32) };
+    TRUE
+}

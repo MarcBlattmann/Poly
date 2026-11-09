@@ -1,0 +1,66 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/IsValidAcl
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Checks an ACL in memory: the revision is 2, 3 or 4, the ACE headers walked
+  by their size fields stay inside the ACL, each ACE size is a multiple of 4
+  and large enough for what the ACE holds, and the SIDs inside the ACEs the
+  function knows are valid. The reserved bytes, flags and masks are not
+  checked. FALSE sets ERROR_INVALID_ACL (1336).
+interface:
+  signature: "BOOL IsValidAcl(PACL acl)"
+  layout: "ACL (winnt.h): an 8-byte header {Revision (byte), Sbz1 (byte, 0), AclSize (16 bits), AceCount (16 bits), Sbz2 (16 bits)} followed by the ACEs one after the other, all fields little-endian. Each ACE starts with {AceType (byte), AceFlags (byte), AceSize (16 bits)}; access-allowed (type 0), access-denied (1), system-audit (2) and mandatory-label (0x11) ACEs continue with a 32-bit mask (the policy for a label) and the SID, so their size is 8 + the SID length (20 for the 12-byte S-1-1-0 and S-1-1-0-like SIDs, 24 for S-1-5-32-544, 76 for a 15-sub-authority SID). ACL revisions 2, 3 and 4 are the valid ones. Buffers in the tests are 8-byte aligned unless noted."
+rules:
+  fresh: "ACLs from InitializeAcl are valid for revisions 2, 3, 4 and lengths 8, 12, 16, 64, 1000"
+  revision: "on an ACL with three ACEs (and on an empty one) only the revision bytes 2, 3 and 4 are valid; 0, 1, 5, 6, 7, 8, 9, 0x10, 0x80, 0xFF are not"
+  reserved: "Sbz1 = 1 or 0xFF and Sbz2 = 1 or 0x80 leave it valid"
+  acl_size: "for a three-ACE ACL whose ACEs end at offset 72, an AclSize field of 0..71 is invalid and 72 and above are valid: 72, 73, 74, 75, 76, 127, 128, 129, 130, 131, 132, 1000, 1100, 2000, 65535 (the field need not be a multiple of 4 and may exceed the memory the test buffer has)"
+  count: "the count is compared with the real ACEs: with three real ACEs a count of 0, 1, 2 and 3 is valid, counts 4, 5, 6, 50, 100, 200, 4096 and 65535 are invalid (the walk runs into zero bytes)"
+  ace_size: "changing the first ACE's size field (20) to anything else in that ACL (0, 1, 2, 3, 4, 5, 7, 8, 12, 16, 19, 21, 22, 23, 24, 28, 100, 108, 120, 121, 124, 4096, 65535) makes it invalid, because the following ACE headers are then read at the wrong place; changing the second ACE's size (20) to 0, 4, 8, 19, 21, 24, 60, 80, 81, 100, 65535 likewise"
+  last_ace_size: "the last ACE (a 24-byte ACE with a 16-byte SID, in an ACL of 128 bytes) is valid with sizes 24, 28, 32 and 80 and invalid with 0, 4, 8, 12, 15, 16, 20 (too small for header, mask and SID), with 23, 25, 30, 31, 33 (not a multiple of 4) and with 81 and 65535 (ends after the ACL)"
+  ace_end: "with the AclSize field S and the last ACE sized S - 48: S = 72, 76, 80, 100, 128, 132, 300, 1100, 2000 are valid and S = 73, 75, 90 and 129 are invalid (ACE sizes must be multiples of 4; an ACE ending exactly at the ACL size is valid)"
+  types: "for an ACE laid out as an access ACE (mask then SID at offset 8, size 20) the valid types in ACLs of revision 2, 3 and 4 alike are 0, 1, 2, 3, 9, 0xA, 0xD, 0xE, 0x11, 0x13, 0x14, 0x17 and 0x18 and above (tried 0x18..0x29, 0x55, 0x7F, 0x80, 0xC0, 0xFE, 0xFF); invalid are 4, 5, 6, 7, 8, 0xB, 0xC, 0xF, 0x10, 0x12, 0x15, 0x16"
+  object_types: "the object ACE types 5, 6, 7, 8, 0xB, 0xC, 0xF, 0x10 are valid only in a revision 4 ACL and then only with the object layout (a 32-bit flags field at offset 8, here 0, then the SID at offset 12): a 36-byte ACE with that layout is valid for those types in revision 4 and invalid in revisions 2 and 3; a 56-byte ACE with room for two GUIDs and the SID at offset 44 is invalid for every type below 0x18; the compound type 4 was invalid in all three layouts; types 0x18 and above are valid in every layout (their contents are not checked); the SID is checked where the type's layout puts it (types 9, 0xA, 0xD, 0xE are not valid in the object layout)"
+  sid_in_ace: "in the first ACE of the three-ACE ACL a SID with revision 0 or 2, count 16 or count 5 (the SID would not fit in the 20-byte ACE) is invalid; count 0 is valid; flags 0xFF and mask 0xFFFFFFFF are valid"
+errors:
+  invalid: "FALSE with last error ERROR_INVALID_ACL (1336) for every invalid case above"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  A NULL pointer or an unreadable ACL (the caller is expected to pass
+  readable memory). the tests print the last error only after a failure;
+  what a success leaves in it is not specified here. Domain accounts and
+  domain-relative well-known SIDs of a real domain, AppContainer and
+  capability SIDs beyond their string forms, auditing (SACL entries are only
+  stored, never evaluated), remote systems (the system-name arguments),
+  Kerberos or NTLM logon tokens, tokens of other users.

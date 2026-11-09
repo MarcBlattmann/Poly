@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/SetSecurityInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Sets owner, group, DACL and/or SACL of an object through a handle from SID
+  and ACL pointers and returns the status directly (0 on success).
+  Protection flags in SecurityInfo set or clear SE_DACL_PROTECTED.
+interface:
+  signature: "DWORD SetSecurityInfo(HANDLE handle, SE_OBJECT_TYPE ObjectType, SECURITY_INFORMATION SecurityInfo, PSID psidOwner, PSID psidGroup, PACL pDacl, PACL pSacl)"
+  objects: "Objects used: named events, mutexes and job objects (unique names \"PolySecSd<pid>_<n>\", closed after use), unnamed ones, a duplicate of the process token, and the process / thread pseudo handles. Tests that depend on the oracle token say so: the SSH session runs as a local administrator with the elevated token (High integrity, Administrators group enabled, privileges present); the AccessCheck tests use an impersonation copy of it with every privilege disabled unless a test enables one on purpose."
+rules:
+  dacl: "an ACL with ACEs for BA (0x1f0003) and Everyone (0x100002) is stored (read back \"D:(A;;0x1f0003;;;BA)(A;;0x100002;;;WD)\"); a NULL pointer with DACL information stores a NULL DACL and marks it protected (\"D:PNO_ACCESS_CONTROL\"); an empty ACL gives \"D:\"; DACL|PROTECTED (0x80000000) adds the P flag; DACL|UNPROTECTED (0x20000000) clears it; PROTECTED alone (without the DACL bit) is accepted and changes nothing; PROTECTED|UNPROTECTED|DACL gives P"
+  owner_group: "with the process token owner = the user, Administrators, SYSTEM, Users and S-1-5-99-1 and group SYSTEM / S-1-5-99-1 are accepted (return 0); information 3 with owner BA group BU works and information 7 sets all three; with a copy of the token whose privileges are all disabled impersonated, the owner = the user and Administrators succeed and Users, SYSTEM and S-1-5-99-1 return ERROR_INVALID_OWNER (1307); group SYSTEM and S-1-5-99-1 still succeed"
+  label: "LABEL_SECURITY_INFORMATION with a SACL holding one ML ACE: Low NW stored (text \"S:(ML;;NW;;;LW)\", SACL pointer returned by GetSecurityInfo is descriptor + 20), Low NWNRNX, Medium, High, Untrusted (S-1-16-0), policy 0, RID 4097 and two ML ACEs are stored as given; System (S-1-16-16384) returns 1299 (ERROR_INVALID_LABEL) and keeps the old label; a SACL with only an audit ACE and an empty SACL store an empty ACL (text \"S:\"); a NULL SACL with the label information leaves an empty protected ACL (\"S:P\"); SACL information (0x8, also with 0x10) on a full-access event handle returns ERROR_ACCESS_DENIED (5), with a NULL SACL too; the label through a WRITE_DAC handle: 5, through a WRITE_OWNER handle: 0"
+  errors_params: "information 0 (with or without pointers): 0; owner or group information with the pointer NULL or only given in the wrong argument: ERROR_INVALID_PARAMETER (87); DACL information with an owner pointer too: 0; a SID with revision 9 or count 16: 87; an ACL with revision 77 or size 4: ERROR_INVALID_ACL (1336); information bit 0x20: 0; 0x40 and 0xFFFFFFFF: ERROR_ACCESS_DENIED (5)"
+  rights: "DACL through READ_CONTROL or WRITE_OWNER handles: 5; owner through WRITE_DAC: 5, through WRITE_OWNER: 0; group through WRITE_OWNER: 0; DACL through WRITE_DAC: 0"
+  object_types: "type 0: 87; types 1 and 6 work on an event; types 2, 3, 4: ERROR_INVALID_HANDLE (6); types 7 and 11 returned 0 on an event handle, types 8, 9, 10, 12 to 15 and 99 returned 87 (test secinfo_set_other_object_types; type 5 (SE_LMSHARE) raised an access violation in a probe and is not part of the tests)"
+  token_copy: "on a duplicate of the process token (not the process token): setting a DACL with BA (TOKEN_ALL_ACCESS) and Everyone (TOKEN_QUERY|READ_CONTROL) returns 0 and reads back \"O:BAD:(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;SWRC;;;WD)\" (the token query mask prints in the SDDL alias set); a DACL of only TOKEN_QUERY gives \"D:(A;;SW;;;WD)\"; the handle's granted access (TOKEN_ALL_ACCESS) is unchanged"
+errors:
+  handle: "NULL and 0x1234: ERROR_INVALID_HANDLE (6)"
+  owner: "ERROR_INVALID_OWNER (1307)"
+  acl: "ERROR_INVALID_ACL (1336)"
+  rights: "ERROR_ACCESS_DENIED (5)"
+  parameters: "ERROR_INVALID_PARAMETER (87)"
+  label: "ERROR_INVALID_LABEL (1299) for a label above the caller's integrity level"
+side_effects: "changes the object's descriptor"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

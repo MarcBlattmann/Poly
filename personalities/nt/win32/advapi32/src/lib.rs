@@ -11,6 +11,8 @@
 
 extern crate alloc;
 
+mod etw;
+
 use alloc::vec::Vec;
 use poly_security::{sddl, sid, token};
 use poly_win32_rt as _;

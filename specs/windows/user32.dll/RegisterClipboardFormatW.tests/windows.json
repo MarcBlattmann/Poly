@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "rcf_basic",
+      "exe_sha256": "a10e7d94616b7d75c4e35a326cebb95555207c81f8fee6c113954bf9e3e3bcc7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmFuZ2UgdHJ1ZQpzYW1lIG5hbWUgc2FtZSBpZCB0cnVlIG90aGVyIGNhc2Ugc2FtZSBpZCB0cnVlCmRpZmZlcmVudCBuYW1lIGRpZmZlcmVudCBpZCB0cnVlIHRyYWlsaW5nIHNwYWNlIGRpZmZlcmVudCB0cnVlCm5vbi1BU0NJSSBuYW1lOiByYW5nZSB0cnVlIHNhbWUgdHJ1ZSBvdGhlciBjYXNlIHNhbWUgZmFsc2UKJ0NGX1RFWFQnIGlzIGEgcmVnaXN0ZXJlZCBmb3JtYXQgdHJ1ZSAnSFRNTCBGb3JtYXQnIHJhbmdlIHRydWUgY2FzZSB0cnVlCm9uZS1sZXR0ZXIgbmFtZTogcmFuZ2UgdHJ1ZQoyNTUgdW5pdHM6IHJhbmdlIHRydWUgMjU0IHVuaXRzOiByYW5nZSB0cnVlIGRpc3RpbmN0IHRydWUKdXNhYmxlOiBTZXQgcmV0dXJuZWQgdGhlIGhhbmRsZSB0cnVlIGF2YWlsYWJsZSAxCiAgZm9ybWF0czogMSBbcmVnaXN0ZXJlZF0Kb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "range true\nsame name same id true other case same id true\ndifferent name different id true trailing space different true\nnon-ASCII name: range true same true other case same false\n'CF_TEXT' is a registered format true 'HTML Format' range true case true\none-letter name: range true\n255 units: range true 254 units: range true distinct true\nusable: Set returned the handle true available 1\n  formats: 1 [registered]\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 68
+    },
+    {
+      "name": "rcf_errors",
+      "exe_sha256": "af63f297ee38c35024456e911581018824ed088b6f11d0c0fde922ae8c1969ab",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW1wdHkgbmFtZTogMCBlcnIgMHgxMjM0Ck5VTEwgbmFtZTogMCBlcnIgODcKMjU0IHVuaXRzOiByZWdpc3RlcmVkCjI1NSB1bml0czogcmVnaXN0ZXJlZAoyNTYgdW5pdHM6IDAgZXJyIDIzNAoyNTcgdW5pdHM6IDAgZXJyIDIzNAozMDAgdW5pdHM6IDAgZXJyIDIzNApjb250cm9sIGNoYXJhY3RlcnMgaW4gdGhlIG5hbWU6IHJlZ2lzdGVyZWQgdHJ1ZQphIHNpbmdsZSBzcGFjZTogcmVnaXN0ZXJlZCB0cnVlCm9rIGRvbmUKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "empty name: 0 err 0x1234\nNULL name: 0 err 87\n254 units: registered\n255 units: registered\n256 units: 0 err 234\n257 units: 0 err 234\n300 units: 0 err 234\ncontrol characters in the name: registered true\na single space: registered true\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

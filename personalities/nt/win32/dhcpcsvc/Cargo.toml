@@ -1,0 +1,18 @@
+[package]
+name = "dhcpcsvc"
+description = "Our dhcpcsvc.dll (ADR 0155): the DHCP client API as a system whose adapters are statically configured sees it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "dhcpcsvc"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-netrt = { path = "../netrt" }
+
+[lints]
+workspace = true

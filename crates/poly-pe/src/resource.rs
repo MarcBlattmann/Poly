@@ -124,6 +124,13 @@ pub struct ResourceDirectory<'a> {
 }
 
 impl<'a> ResourceDirectory<'a> {
+    /// The root table of a resource tree whose bytes are `tree` (the
+    /// resource directory's data, starting at its table): for a caller that
+    /// has read only the resource section of a file, not the whole image.
+    pub fn from_tree(tree: &'a [u8]) -> Result<Self, Error> {
+        Self::at(tree, 0)
+    }
+
     fn at(tree: &'a [u8], offset: u32) -> Result<Self, Error> {
         let b = bytes(tree, offset as usize, TABLE).ok_or(Error::Truncated)?;
         let u16 = |o| u16_at(b, o).unwrap_or(0);

@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e1df20b984fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:53:24Z",
+  "tests": [
+    {
+      "name": "dup_access",
+      "exe_sha256": "06ced4474692819f25fb1b9e67bef53face0d4c59237f86e947aae5b19acf192",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MDogb2sgZ3JhbnRlZD0weGYwMWZmClFVRVJZOiBvayBncmFudGVkPTB4OApBTExfQUNDRVNTOiBvayBncmFudGVkPTB4ZjAxZmYKTUFYSU1VTV9BTExPV0VEOiBvayBncmFudGVkPTB4ZjAxZmYKUkVBRDogb2sgZ3JhbnRlZD0weDIwMDA4CldSSVRFOiBvayBncmFudGVkPTB4MjAwZTAKUVVFUll8RFVQTElDQVRFOiBvayBncmFudGVkPTB4YQpHRU5FUklDX0FMTDogb2sgZ3JhbnRlZD0weGYwMWZmCkFTU0lHTl9QUklNQVJZfERVUExJQ0FURXxRVUVSWTogb2sgZ3JhbnRlZD0weGIKc291cmNlIFFVRVJZIG9ubHk6IG9rPTAgZXJyPTUKc291cmNlIERVUExJQ0FURSBvbmx5OiBvaz0xIGVycj0tMQpzb3VyY2UgRFVQTElDQVRFIG9ubHk6IG5ldyBoYW5kbGUgZ3JhbnRlZD0weDIKc291cmNlIElNUEVSU09OQVRFOiBvaz0wIGVycj01CnNvdXJjZSBBU1NJR05fUFJJTUFSWTogb2s9MCBlcnI9NQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "0: ok granted=0xf01ff\nQUERY: ok granted=0x8\nALL_ACCESS: ok granted=0xf01ff\nMAXIMUM_ALLOWED: ok granted=0xf01ff\nREAD: ok granted=0x20008\nWRITE: ok granted=0x200e0\nQUERY|DUPLICATE: ok granted=0xa\nGENERIC_ALL: ok granted=0xf01ff\nASSIGN_PRIMARY|DUPLICATE|QUERY: ok granted=0xb\nsource QUERY only: ok=0 err=5\nsource DUPLICATE only: ok=1 err=-1\nsource DUPLICATE only: new handle granted=0x2\nsource IMPERSONATE: ok=0 err=5\nsource ASSIGN_PRIMARY: ok=0 err=5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "dup_handle_attrs",
+      "exe_sha256": "41ba9c33565ac6c6f3dfc805b77af240608b679b70093c309a33cb15a28a71bd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bnVsbCBhdHRyaWJ1dGVzOiBvaz0xIGluaGVyaXRhYmxlPTAKaW5oZXJpdCBGQUxTRTogb2s9MSBpbmhlcml0YWJsZT0wCmluaGVyaXQgVFJVRTogb2s9MSBpbmhlcml0YWJsZT0xCmVtcHR5IERBQ0wgb24gdGhlIG5ldyB0b2tlbjogb2s9MSBncmFudGVkPTB4YQpxdWVyeSB0aHJvdWdoIHRoZSBoYW5kbGU6IG9rPXRydWUgdHlwZT0yIGVycj01NzAwNQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "null attributes: ok=1 inheritable=0\ninherit FALSE: ok=1 inheritable=0\ninherit TRUE: ok=1 inheritable=1\nempty DACL on the new token: ok=1 granted=0xa\nquery through the handle: ok=true type=2 err=57005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "dup_matrix",
+      "exe_sha256": "39475841d452f624f3d729d5821d8e55ef79713ddfcc647916a87d36a468c2f3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZnJvbSBwcmltYXJ5IHRvIGtpbmQgMDogTDA6ZXJyODcgTDE6ZXJyODcgTDI6ZXJyODcgTDM6ZXJyODcgTDQ6ZXJyODcgCmZyb20gcHJpbWFyeSB0byBraW5kIDE6IEwwOm9rKHR5cGUxIGxldmVsLTEpIEwxOm9rKHR5cGUxIGxldmVsLTEpIEwyOm9rKHR5cGUxIGxldmVsLTEpIEwzOm9rKHR5cGUxIGxldmVsLTEpIEw0OmVycjEzNDYgCmZyb20gcHJpbWFyeSB0byBraW5kIDI6IEwwOm9rKHR5cGUyIGxldmVsMCkgTDE6b2sodHlwZTIgbGV2ZWwxKSBMMjpvayh0eXBlMiBsZXZlbDIpIEwzOm9rKHR5cGUyIGxldmVsMykgTDQ6ZXJyMTM0NiAKZnJvbSBwcmltYXJ5IHRvIGtpbmQgMzogTDA6ZXJyODcgTDE6ZXJyODcgTDI6ZXJyODcgTDM6ZXJyODcgTDQ6ZXJyODcgCmZyb20gYW5vbnltb3VzIHRvIGtpbmQgMDogTDA6ZXJyODcgTDE6ZXJyODcgTDI6ZXJyODcgTDM6ZXJyODcgTDQ6ZXJyODcgCmZyb20gYW5vbnltb3VzIHRvIGtpbmQgMTogTDA6ZXJyMTM0NiBMMTplcnIxMzQ2IEwyOmVycjEzNDYgTDM6ZXJyMTM0NiBMNDplcnIxMzQ2IApmcm9tIGFub255bW91cyB0byBraW5kIDI6IEwwOm9rKHR5cGUyIGxldmVsMCkgTDE6ZXJyMTM0NiBMMjplcnIxMzQ2IEwzOmVycjEzNDYgTDQ6ZXJyMTM0NiAKZnJvbSBhbm9ueW1vdXMgdG8ga2luZCAzOiBMMDplcnI4NyBMMTplcnI4NyBMMjplcnI4NyBMMzplcnI4NyBMNDplcnI4NyAKZnJvbSBpZGVudGlmaWNhdGlvbiB0byBraW5kIDA6IEwwOmVycjg3IEwxOmVycjg3IEwyOmVycjg3IEwzOmVycjg3IEw0OmVycjg3IApmcm9tIGlkZW50aWZpY2F0aW9uIHRvIGtpbmQgMTogTDA6ZXJyMTM0NiBMMTplcnIxMzQ2IEwyOmVycjEzNDYgTDM6ZXJyMTM0NiBMNDplcnIxMzQ2IApmcm9tIGlkZW50aWZpY2F0aW9uIHRvIGtpbmQgMjogTDA6b2sodHlwZTIgbGV2ZWwwKSBMMTpvayh0eXBlMiBsZXZlbDEpIEwyOmVycjEzNDYgTDM6ZXJyMTM0NiBMNDplcnIxMzQ2IApmcm9tIGlkZW50aWZpY2F0aW9uIHRvIGtpbmQgMzogTDA6ZXJyODcgTDE6ZXJyODcgTDI6ZXJyODcgTDM6ZXJyODcgTDQ6ZXJyODcgCmZyb20gaW1wZXJzb25hdGlvbiB0byBraW5kIDA6IEwwOmVycjg3IEwxOmVycjg3IEwyOmVycjg3IEwzOmVycjg3IEw0OmVycjg3IApmcm9tIGltcGVyc29uYXRpb24gdG8ga2luZCAxOiBMMDpvayh0eXBlMSBsZXZlbC0xKSBMMTpvayh0eXBlMSBsZXZlbC0xKSBMMjpvayh0eXBlMSBsZXZlbC0xKSBMMzpvayh0eXBlMSBsZXZlbC0xKSBMNDplcnIxMzQ2IApmcm9tIGltcGVyc29uYXRpb24gdG8ga2luZCAyOiBMMDpvayh0eXBlMiBsZXZlbDApIEwxOm9rKHR5cGUyIGxldmVsMSkgTDI6b2sodHlwZTIgbGV2ZWwyKSBMMzplcnIxMzQ2IEw0OmVycjEzNDYgCmZyb20gaW1wZXJzb25hdGlvbiB0byBraW5kIDM6IEwwOmVycjg3IEwxOmVycjg3IEwyOmVycjg3IEwzOmVycjg3IEw0OmVycjg3IApmcm9tIGRlbGVnYXRpb24gdG8ga2luZCAwOiBMMDplcnI4NyBMMTplcnI4NyBMMjplcnI4NyBMMzplcnI4NyBMNDplcnI4NyAKZnJvbSBkZWxlZ2F0aW9uIHRvIGtpbmQgMTogTDA6b2sodHlwZTEgbGV2ZWwtMSkgTDE6b2sodHlwZTEgbGV2ZWwtMSkgTDI6b2sodHlwZTEgbGV2ZWwtMSkgTDM6b2sodHlwZTEgbGV2ZWwtMSkgTDQ6ZXJyMTM0NiAKZnJvbSBkZWxlZ2F0aW9uIHRvIGtpbmQgMjogTDA6b2sodHlwZTIgbGV2ZWwwKSBMMTpvayh0eXBlMiBsZXZlbDEpIEwyOm9rKHR5cGUyIGxldmVsMikgTDM6b2sodHlwZTIgbGV2ZWwzKSBMNDplcnIxMzQ2IApmcm9tIGRlbGVnYXRpb24gdG8ga2luZCAzOiBMMDplcnI4NyBMMTplcnI4NyBMMjplcnI4NyBMMzplcnI4NyBMNDplcnI4NyAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "from primary to kind 0: L0:err87 L1:err87 L2:err87 L3:err87 L4:err87 \nfrom primary to kind 1: L0:ok(type1 level-1) L1:ok(type1 level-1) L2:ok(type1 level-1) L3:ok(type1 level-1) L4:err1346 \nfrom primary to kind 2: L0:ok(type2 level0) L1:ok(type2 level1) L2:ok(type2 level2) L3:ok(type2 level3) L4:err1346 \nfrom primary to kind 3: L0:err87 L1:err87 L2:err87 L3:err87 L4:err87 \nfrom anonymous to kind 0: L0:err87 L1:err87 L2:err87 L3:err87 L4:err87 \nfrom anonymous to kind 1: L0:err1346 L1:err1346 L2:err1346 L3:err1346 L4:err1346 \nfrom anonymous to kind 2: L0:ok(type2 level0) L1:err1346 L2:err1346 L3:err1346 L4:err1346 \nfrom anonymous to kind 3: L0:err87 L1:err87 L2:err87 L3:err87 L4:err87 \nfrom identification to kind 0: L0:err87 L1:err87 L2:err87 L3:err87 L4:err87 \nfrom identification to kind 1: L0:err1346 L1:err1346 L2:err1346 L3:err1346 L4:err1346 \nfrom identification to kind 2: L0:ok(type2 level0) L1:ok(type2 level1) L2:err1346 L3:err1346 L4:err1346 \nfrom identification to kind 3: L0:err87 L1:err87 L2:err87 L3:err87 L4:err87 \nfrom impersonation to kind 0: L0:err87 L1:err87 L2:err87 L3:err87 L4:err87 \nfrom impersonation to kind 1: L0:ok(type1 level-1) L1:ok(type1 level-1) L2:ok(type1 level-1) L3:ok(type1 level-1) L4:err1346 \nfrom impersonation to kind 2: L0:ok(type2 level0) L1:ok(type2 level1) L2:ok(type2 level2) L3:err1346 L4:err1346 \nfrom impersonation to kind 3: L0:err87 L1:err87 L2:err87 L3:err87 L4:err87 \nfrom delegation to kind 0: L0:err87 L1:err87 L2:err87 L3:err87 L4:err87 \nfrom delegation to kind 1: L0:ok(type1 level-1) L1:ok(type1 level-1) L2:ok(type1 level-1) L3:ok(type1 level-1) L4:err1346 \nfrom delegation to kind 2: L0:ok(type2 level0) L1:ok(type2 level1) L2:ok(type2 level2) L3:ok(type2 level3) L4:err1346 \nfrom delegation to kind 3: L0:err87 L1:err87 L2:err87 L3:err87 L4:err87 \nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

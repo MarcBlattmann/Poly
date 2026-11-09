@@ -1,0 +1,19 @@
+[package]
+name = "b35test"
+description = "The program the kernel's ring-3 test for Chrome's batches 3 and 5 runs (ADR 0155): ETW without a listener, RegNotifyChangeKeyValue, iphlpapi, netapi32, secur32, dhcpcsvc, dbghelp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "b35test"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

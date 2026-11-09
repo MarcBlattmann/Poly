@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "iace_children",
+      "exe_sha256": "e50b73f04a9a47a3bd6244548a4118f92bfe8ceea1255a652254ea6c89dd7ad5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhcnQ6IHc9ZGVmYXVsdCBjMT1kZWZhdWx0IGMyPWRlZmF1bHQgZzE9ZGVmYXVsdCBnMj1kZWZhdWx0IGdnYz1kZWZhdWx0IG93bmVkIHBvcHVwPWRlZmF1bHQKRXgodywgb3duLCBDSElMRFJFTik6IHc9b3duIGMxPW93biBjMj1vd24gZzE9b3duIGcyPW93biBnZ2M9b3duIG93bmVkIHBvcHVwPWRlZmF1bHQKRXgodywgTlVMTCwgREVGQVVMVHxDSElMRFJFTik6IHc9ZGVmYXVsdCBjMT1kZWZhdWx0IGMyPWRlZmF1bHQgZzE9ZGVmYXVsdCBnMj1kZWZhdWx0IGdnYz1kZWZhdWx0IG93bmVkIHBvcHVwPWRlZmF1bHQKYzEgYW5kIGcyIHdpdGhvdXQgY29udGV4dDogdz1kZWZhdWx0IGMxPW51bGwgYzI9ZGVmYXVsdCBnMT1kZWZhdWx0IGcyPW51bGwgZ2djPWRlZmF1bHQgb3duZWQgcG9wdXA9ZGVmYXVsdApFeCh3LCBvd24sIENISUxEUkVOfElHTk9SRU5PQ09OVEVYVCk6IHc9b3duIGMxPW51bGwgYzI9b3duIGcxPW93biBnMj1udWxsIGdnYz1vd24gb3duZWQgcG9wdXA9ZGVmYXVsdApFeChjMiwgTlVMTCwgQ0hJTERSRU4pOiB3PW93biBjMT1udWxsIGMyPW51bGwgZzE9b3duIGcyPW51bGwgZ2djPW93biBvd25lZCBwb3B1cD1kZWZhdWx0CmFmdGVyIGRlc3Ryb3lpbmcgZzEgYW5kIGNyZWF0aW5nIGczIHVuZGVyIGMxOiBnMz1kZWZhdWx0LCB3PW93bgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "start: w=default c1=default c2=default g1=default g2=default ggc=default owned popup=default\nEx(w, own, CHILDREN): w=own c1=own c2=own g1=own g2=own ggc=own owned popup=default\nEx(w, NULL, DEFAULT|CHILDREN): w=default c1=default c2=default g1=default g2=default ggc=default owned popup=default\nc1 and g2 without context: w=default c1=null c2=default g1=default g2=null ggc=default owned popup=default\nEx(w, own, CHILDREN|IGNORENOCONTEXT): w=own c1=null c2=own g1=own g2=null ggc=own owned popup=default\nEx(c2, NULL, CHILDREN): w=own c1=null c2=null g1=own g2=null ggc=own owned popup=default\nafter destroying g1 and creating g3 under c1: g3=default, w=own\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 240
+    },
+    {
+      "name": "iace_errors",
+      "exe_sha256": "d405231c729805ed6fe7ef6de0345e1d6832b0bfcdd93c1b31cc494fdc8a2421",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTCB3aW5kb3csIGZsYWdzIDB4MTA6IDAgbGFzdCBlcnJvciAweDU3OApOVUxMIHdpbmRvdywgZmxhZ3MgMHgwOiAwIGxhc3QgZXJyb3IgMHg1NzgKTlVMTCB3aW5kb3csIGZsYWdzIDB4MTE6IDAgbGFzdCBlcnJvciAweDU3OAptYWRlLXVwIHdpbmRvdywgZmxhZ3MgMHgxMDogMCBsYXN0IGVycm9yIDB4NTc4Cm1hZGUtdXAgd2luZG93LCBmbGFncyAweDA6IDAgbGFzdCBlcnJvciAweDU3OAptYWRlLXVwIHdpbmRvdywgZmxhZ3MgMHgxMTogMCBsYXN0IGVycm9yIDB4NTc4CmRlc3Ryb3llZCB3aW5kb3csIGZsYWdzIDB4MTA6IDAgbGFzdCBlcnJvciAweDU3OApkZXN0cm95ZWQgd2luZG93LCBmbGFncyAweDA6IDAgbGFzdCBlcnJvciAweDU3OApkZXN0cm95ZWQgd2luZG93LCBmbGFncyAweDExOiAwIGxhc3QgZXJyb3IgMHg1NzgKZGVza3RvcCB3aW5kb3csIGZsYWdzIDB4MTA6IDAgbGFzdCBlcnJvciAweDUKZGVza3RvcCB3aW5kb3csIGZsYWdzIDB4MDogMCBsYXN0IGVycm9yIDB4NQpkZXNrdG9wIHdpbmRvdywgZmxhZ3MgMHgxMTogMCBsYXN0IGVycm9yIDB4NQpzdWNjZXNzOiAxIGxhc3QgZXJyb3IgMHgwCihJbW1Bc3NvY2lhdGVDb250ZXh0IHN1Y2Nlc3MgbGVhdmVzIGl0OiBsYXN0IGVycm9yIDB4MTIzNCwgcHJldmlvdXMgbm9uLW51bGwpCm90aGVyIHRocmVhZCdzIHdpbmRvdywgREVGQVVMVDogMSBsYXN0IGVycm9yIDB4MApvdGhlciB0aHJlYWQncyB3aW5kb3csIG93biBjb250ZXh0OiAwIGxhc3QgZXJyb3IgMHg1Cm90aGVyIHRocmVhZCdzIHdpbmRvdywgTlVMTCBjb250ZXh0OiAxIGxhc3QgZXJyb3IgMHgwOyBpdHMgY29udGV4dCBub3cgbnVsbApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL window, flags 0x10: 0 last error 0x578\nNULL window, flags 0x0: 0 last error 0x578\nNULL window, flags 0x11: 0 last error 0x578\nmade-up window, flags 0x10: 0 last error 0x578\nmade-up window, flags 0x0: 0 last error 0x578\nmade-up window, flags 0x11: 0 last error 0x578\ndestroyed window, flags 0x10: 0 last error 0x578\ndestroyed window, flags 0x0: 0 last error 0x578\ndestroyed window, flags 0x11: 0 last error 0x578\ndesktop window, flags 0x10: 0 last error 0x5\ndesktop window, flags 0x0: 0 last error 0x5\ndesktop window, flags 0x11: 0 last error 0x5\nsuccess: 1 last error 0x0\n(ImmAssociateContext success leaves it: last error 0x1234, previous non-null)\nother thread's window, DEFAULT: 1 last error 0x0\nother thread's window, own context: 0 last error 0x5\nother thread's window, NULL context: 1 last error 0x0; its context now null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 284
+    }
+  ]
+}

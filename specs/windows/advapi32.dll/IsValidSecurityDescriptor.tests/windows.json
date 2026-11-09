@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "69970d4f91fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:01:49Z",
+  "tests": [
+    {
+      "name": "sd_valid_basic",
+      "exe_sha256": "ac4325785c2b769abe24b3ef7e3e86b414ad6495c578490bde4bbe26d69f3ab8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW1wdHkgYWJzb2x1dGU6IHZhbGlkPTEgZXJyPS0xCm93bmVyOiB2YWxpZD0xIGVycj0tMQpvd25lcitncm91cDogdmFsaWQ9MSBlcnI9LTEKb3duZXIrZ3JvdXArZGFjbDogdmFsaWQ9MSBlcnI9LTEKb3duZXIrZ3JvdXArZGFjbCtzYWNsOiB2YWxpZD0xIGVycj0tMQpOVUxMIGRhY2wgb25seTogdmFsaWQ9MSBlcnI9LTEKc2VsZi1yZWxhdGl2ZSBmcm9tIFNEREwgIiIgKDIwIGJ5dGVzKTogdmFsaWQ9MSBlcnI9LTEKc2VsZi1yZWxhdGl2ZSBmcm9tIFNEREwgIk86QkEiICgzNiBieXRlcyk6IHZhbGlkPTEgZXJyPS0xCnNlbGYtcmVsYXRpdmUgZnJvbSBTRERMICJHOlNZIiAoMzIgYnl0ZXMpOiB2YWxpZD0xIGVycj0tMQpzZWxmLXJlbGF0aXZlIGZyb20gU0RETCAiRDoiICgyOCBieXRlcyk6IHZhbGlkPTEgZXJyPS0xCnNlbGYtcmVsYXRpdmUgZnJvbSBTRERMICJEOihBOztHQTs7O1dEKSIgKDQ4IGJ5dGVzKTogdmFsaWQ9MSBlcnI9LTEKc2VsZi1yZWxhdGl2ZSBmcm9tIFNEREwgIlM6KEFVO1NBRkE7R0E7OztXRCkiICg0OCBieXRlcyk6IHZhbGlkPTEgZXJyPS0xCnNlbGYtcmVsYXRpdmUgZnJvbSBTRERMICJPOkJBRzpTWUQ6UChBOztHQTs7O1NZKShEOztHVzs7O1dEKVM6KE1MOztOVzs7O0xXKSIgKDEyNCBieXRlcyk6IHZhbGlkPTEgZXJyPS0xCnNlbGYtcmVsYXRpdmUgZnJvbSBTRERMICJEOk5PX0FDQ0VTU19DT05UUk9MIiAoMjAgYnl0ZXMpOiB2YWxpZD0xIGVycj0tMQpNYWtlU2VsZlJlbGF0aXZlU0Qgb2YgdGhlIGFic29sdXRlIG9uZTogb2s9MSBsZW49NTEyCm1hZGUgc2VsZi1yZWxhdGl2ZTogdmFsaWQ9MSBlcnI9LTEKY29udmVydGVkIGFnYWluOiB2YWxpZD0xIGVycj0tMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "empty absolute: valid=1 err=-1\nowner: valid=1 err=-1\nowner+group: valid=1 err=-1\nowner+group+dacl: valid=1 err=-1\nowner+group+dacl+sacl: valid=1 err=-1\nNULL dacl only: valid=1 err=-1\nself-relative from SDDL \"\" (20 bytes): valid=1 err=-1\nself-relative from SDDL \"O:BA\" (36 bytes): valid=1 err=-1\nself-relative from SDDL \"G:SY\" (32 bytes): valid=1 err=-1\nself-relative from SDDL \"D:\" (28 bytes): valid=1 err=-1\nself-relative from SDDL \"D:(A;;GA;;;WD)\" (48 bytes): valid=1 err=-1\nself-relative from SDDL \"S:(AU;SAFA;GA;;;WD)\" (48 bytes): valid=1 err=-1\nself-relative from SDDL \"O:BAG:SYD:P(A;;GA;;;SY)(D;;GW;;;WD)S:(ML;;NW;;;LW)\" (124 bytes): valid=1 err=-1\nself-relative from SDDL \"D:NO_ACCESS_CONTROL\" (20 bytes): valid=1 err=-1\nMakeSelfRelativeSD of the absolute one: ok=1 len=512\nmade self-relative: valid=1 err=-1\nconverted again: valid=1 err=-1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "sd_valid_invalid",
+      "exe_sha256": "f15345b61f4e91d9fe1097ff4cfb02d26dfbd5bce1821b69ffbf59656dbcbfa3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dW5jaGFuZ2VkOiB2YWxpZD0xIGVycj0tMQpyZXZpc2lvbiAwOiB2YWxpZD0wIGVycj0xMzM4CnJldmlzaW9uIDI6IHZhbGlkPTAgZXJyPTEzMzgKc2J6MSA9IDE6IHZhbGlkPTEgZXJyPS0xCm93bmVyIFNJRCByZXZpc2lvbiAwOiB2YWxpZD0wIGVycj0xMzM4Cm93bmVyIFNJRCBjb3VudCAxNjogdmFsaWQ9MCBlcnI9MTMzOApvd25lciBTSUQgY291bnQgMTU6IHZhbGlkPTEgZXJyPS0xCmdyb3VwIFNJRCByZXZpc2lvbiAyOiB2YWxpZD0wIGVycj0xMzM4Cmdyb3VwIFNJRCBjb3VudCAxNjogdmFsaWQ9MCBlcnI9MTMzOApEQUNMIHJldmlzaW9uIDA6IHZhbGlkPTAgZXJyPTEzMzgKREFDTCByZXZpc2lvbiAxOiB2YWxpZD0wIGVycj0xMzM4CkRBQ0wgcmV2aXNpb24gMzogdmFsaWQ9MSBlcnI9LTEKREFDTCByZXZpc2lvbiA0OiB2YWxpZD0xIGVycj0tMQpEQUNMIHJldmlzaW9uIDU6IHZhbGlkPTAgZXJyPTEzMzgKREFDTCBzaXplIDQ6IHZhbGlkPTAgZXJyPTEzMzgKREFDTCBhY2UgY291bnQgMiBidXQgb25lIEFDRTogdmFsaWQ9MCBlcnI9MTMzOApEQUNMIGFjZSBzaXplIDA6IHZhbGlkPTAgZXJyPTEzMzgKU0FDTCByZXZpc2lvbiA5OiB2YWxpZD0wIGVycj0xMzM4Cm93bmVyIG9mZnNldCBtaXNhbGlnbmVkICgrMSk6IHZhbGlkPTAgZXJyPTEzMzgKb3duZXIgb2Zmc2V0IDAgKG5vIG93bmVyKTogdmFsaWQ9MSBlcnI9LTEKREFDTF9QUkVTRU5UIGNsZWFyZWQ6IHZhbGlkPTEgZXJyPS0xClNBQ0xfUFJFU0VOVCBjbGVhcmVkOiB2YWxpZD0xIGVycj0tMQpEQUNMIG9mZnNldCAwIHdpdGggREFDTF9QUkVTRU5UIChOVUxMIGRhY2wpOiB2YWxpZD0xIGVycj0tMQpTRUxGX1JFTEFUSVZFIGNsZWFyZWQgb24gYSBzZWxmLXJlbGF0aXZlIGRlc2NyaXB0b3I6IHZhbGlkPTAgZXJyPTEzMzgKYWJzb2x1dGUsIG93bmVyIFNJRCBjb3VudCAxNjogc2V0IG9rPTEgdmFsaWQ9MCBlcnI9MTMzOAphYnNvbHV0ZSwgREFDTCBzaXplIDQ6IHNldCBvaz0xIHZhbGlkPTAgZXJyPTEzMzgKYWJzb2x1dGUsIHJldmlzaW9uIDI6IHZhbGlkPTAgZXJyPTEzMzgKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "unchanged: valid=1 err=-1\nrevision 0: valid=0 err=1338\nrevision 2: valid=0 err=1338\nsbz1 = 1: valid=1 err=-1\nowner SID revision 0: valid=0 err=1338\nowner SID count 16: valid=0 err=1338\nowner SID count 15: valid=1 err=-1\ngroup SID revision 2: valid=0 err=1338\ngroup SID count 16: valid=0 err=1338\nDACL revision 0: valid=0 err=1338\nDACL revision 1: valid=0 err=1338\nDACL revision 3: valid=1 err=-1\nDACL revision 4: valid=1 err=-1\nDACL revision 5: valid=0 err=1338\nDACL size 4: valid=0 err=1338\nDACL ace count 2 but one ACE: valid=0 err=1338\nDACL ace size 0: valid=0 err=1338\nSACL revision 9: valid=0 err=1338\nowner offset misaligned (+1): valid=0 err=1338\nowner offset 0 (no owner): valid=1 err=-1\nDACL_PRESENT cleared: valid=1 err=-1\nSACL_PRESENT cleared: valid=1 err=-1\nDACL offset 0 with DACL_PRESENT (NULL dacl): valid=1 err=-1\nSELF_RELATIVE cleared on a self-relative descriptor: valid=0 err=1338\nabsolute, owner SID count 16: set ok=1 valid=0 err=1338\nabsolute, DACL size 4: set ok=1 valid=0 err=1338\nabsolute, revision 2: valid=0 err=1338\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e1df20b984fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:53:24Z",
+  "tests": [
+    {
+      "name": "ptok_access",
+      "exe_sha256": "a160c5a90a3182d3c72d1764fa907ad059e61dead398fc37217691093dde0b25",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VE9LRU5fUVVFUlkgKDB4OCk6IG9rIGdyYW50ZWQ9MHg4ClFVRVJZfERVUExJQ0FURSAoMHhhKTogb2sgZ3JhbnRlZD0weGEKQURKVVNUX1BSSVZJTEVHRVN8UVVFUlkgKDB4MjgpOiBvayBncmFudGVkPTB4MjgKQVNTSUdOX1BSSU1BUlkgKDB4MSk6IG9rIGdyYW50ZWQ9MHgxCklNUEVSU09OQVRFICgweDQpOiBvayBncmFudGVkPTB4NApRVUVSWV9TT1VSQ0UgKDB4MTApOiBvayBncmFudGVkPTB4MTAKVE9LRU5fQUxMX0FDQ0VTUyAoMHhmMDFmZik6IG9rIGdyYW50ZWQ9MHhmMDFmZgpUT0tFTl9SRUFEICgweDIwMDA4KTogb2sgZ3JhbnRlZD0weDIwMDA4ClRPS0VOX1dSSVRFICgweDIwMGUwKTogb2sgZ3JhbnRlZD0weDIwMGUwClRPS0VOX0VYRUNVVEUgKDB4MjAwMDApOiBvayBncmFudGVkPTB4MjAwMDAKTUFYSU1VTV9BTExPV0VEICgweDIwMDAwMDApOiBvayBncmFudGVkPTB4ZjAxZmYKUkVBRF9DT05UUk9MICgweDIwMDAwKTogb2sgZ3JhbnRlZD0weDIwMDAwCkdFTkVSSUNfQUxMICgweDEwMDAwMDAwKTogb2sgZ3JhbnRlZD0weGYwMWZmCkFDQ0VTU19TWVNURU1fU0VDVVJJVFkgKDB4MTAwMDAwMCk6IG9rIGdyYW50ZWQ9MHgxMDAwMDAwCmFjY2VzcyAwOiBvaz0wIGVycj01CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "TOKEN_QUERY (0x8): ok granted=0x8\nQUERY|DUPLICATE (0xa): ok granted=0xa\nADJUST_PRIVILEGES|QUERY (0x28): ok granted=0x28\nASSIGN_PRIMARY (0x1): ok granted=0x1\nIMPERSONATE (0x4): ok granted=0x4\nQUERY_SOURCE (0x10): ok granted=0x10\nTOKEN_ALL_ACCESS (0xf01ff): ok granted=0xf01ff\nTOKEN_READ (0x20008): ok granted=0x20008\nTOKEN_WRITE (0x200e0): ok granted=0x200e0\nTOKEN_EXECUTE (0x20000): ok granted=0x20000\nMAXIMUM_ALLOWED (0x2000000): ok granted=0xf01ff\nREAD_CONTROL (0x20000): ok granted=0x20000\nGENERIC_ALL (0x10000000): ok granted=0xf01ff\nACCESS_SYSTEM_SECURITY (0x1000000): ok granted=0x1000000\naccess 0: ok=0 err=5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "ptok_handles",
+      "exe_sha256": "932a23b018a2e7ad77eb0a80f5f947f9b65e1db56a887e0318e8d38653c3c855",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTCBwcm9jZXNzOiBvaz0wIGVycj02CnBzZXVkbyBwcm9jZXNzICgtMSk6IG9rPTEgZXJyPS0xCnRocmVhZCBwc2V1ZG8taGFuZGxlIGFzIHByb2Nlc3M6IG9rPTAgZXJyPTYKUFJPQ0VTU19RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OOiBvaz0xIGVycj0tMQpQUk9DRVNTX1FVRVJZX0lORk9STUFUSU9OOiBvaz0xIGVycj0tMQpQUk9DRVNTX1RFUk1JTkFURTogb2s9MCBlcnI9NQpTWU5DSFJPTklaRTogb2s9MCBlcnI9NQpQUk9DRVNTX0FMTF9BQ0NFU1M6IG9rPTEgZXJyPS0xCmJhZCBoYW5kbGU6IG9rPTAgZXJyPTYKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL process: ok=0 err=6\npseudo process (-1): ok=1 err=-1\nthread pseudo-handle as process: ok=0 err=6\nPROCESS_QUERY_LIMITED_INFORMATION: ok=1 err=-1\nPROCESS_QUERY_INFORMATION: ok=1 err=-1\nPROCESS_TERMINATE: ok=0 err=5\nSYNCHRONIZE: ok=0 err=5\nPROCESS_ALL_ACCESS: ok=1 err=-1\nbad handle: ok=0 err=6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 40
+    }
+  ]
+}

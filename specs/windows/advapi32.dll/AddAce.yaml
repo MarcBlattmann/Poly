@@ -1,0 +1,73 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/AddAce
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Copies ace_list_length bytes of ACEs (one or more complete ACEs, back to
+  back) into the ACL so that the first one becomes ACE number start_index,
+  moving the later ones up; an index at or beyond the count appends. The
+  ACL's revision becomes the larger of its revision and the low byte of the
+  revision argument, which is not validated; the ACE types 4 to 8 need a
+  high enough revision argument. A list that does not fit is rejected as a
+  whole.
+interface:
+  signature: "BOOL AddAce(PACL acl, DWORD acl_revision, DWORD start_index, LPVOID ace_list, DWORD ace_list_length)"
+  layout: "ACL (winnt.h): an 8-byte header {Revision (byte), Sbz1 (byte, 0), AclSize (16 bits), AceCount (16 bits), Sbz2 (16 bits)} followed by the ACEs one after the other, all fields little-endian. Each ACE starts with {AceType (byte), AceFlags (byte), AceSize (16 bits)}; access-allowed (type 0), access-denied (1), system-audit (2) and mandatory-label (0x11) ACEs continue with a 32-bit mask (the policy for a label) and the SID, so their size is 8 + the SID length (20 for the 12-byte S-1-1-0 and S-1-1-0-like SIDs, 24 for S-1-5-32-544, 76 for a 15-sub-authority SID). ACL revisions 2, 3 and 4 are the valid ones. Buffers in the tests are 8-byte aligned unless noted."
+rules:
+  start_index: "in a 400-byte revision 2 ACL, twelve single-ACE adds with start 0, 0, 1, 3 (the count), 0xFFFFFFFF, 6 (the count), 20, 0xFFFFFFFE, 0x10000, 0x80000000, 2 and 1 all succeed; an index at or above the count appends at the end, an index below inserts before the ACE that held it and moves the later ACEs up (the ACEs' masks 0x100+n in call order end up as ACE 0: 0x101, ACE 1: 0x10b, ACE 2: 0x102, ACE 3: 0x10a, ACE 4: 0x100, ..); the count grows by one each time and IsValidAcl stays TRUE"
+  list_count: "with a list of three ACEs (20 + 20 + 24 bytes) a length of 20 adds one ACE, 40 adds two, 64 adds three, and 0 succeeds and adds nothing (count 0); the length counts bytes of the list"
+  start_with_list: "three ACEs added at start 0 into an ACL with two ACEs sit before them; at start 1 between the two; at start 2, 3 and 0xFFFFFFFF after them (count 5 in each case)"
+  revision_argument: "the revision argument is not validated: on a revision 2 ACL arguments 0, 1, 2 leave 2, 3 gives 3, 4 gives 4, 5 gives 5, 6 gives 6, 0xFF gives 255; the argument 0x100 changes nothing (low byte 0) and 0xFFFFFFFF gives 255; an ACL of revision 3 or 4 never goes down (arguments 0..2 leave 3; 0..3 leave 4)"
+  type_revision: "with an ACE of the access layout (20 bytes, type in byte 0): types 0, 1, 2, 3 and 9..0x20 are accepted with any revision argument (also 2); type 4 is rejected with argument 2 and accepted with 3 and 4; types 5, 6, 7, 8 are rejected with arguments 2 and 3 and accepted with 4; the check is on the argument, not the ACL: an ACL of revision 4 with argument 2 rejects types 4 to 8, and an ACL of revision 2 with argument 4 accepts them and becomes revision 4"
+  types_not_checked: "ACE types 0x11, 0x12, 0x55 and 0xFF of 20 bytes are copied unchanged"
+  space: "an ACL of 28 bytes (initialised with 28..31) takes one 20-byte ACE and fails the second; 48 bytes (48, 49) take two; 72 bytes (72..75) take the list of three ACEs (64 bytes) as a whole while 68 (71) takes none of them (count stays 0); bytes after the ACL's size are never written"
+  damaged_header: "a revision byte of 0, 1, 5 or 255, an AclSize of 0 or 7, or a count of 1 or 200 with no ACE behind it make the add fail (error 87); an AclSize of 8 has no room (error 122); Sbz1 = 1 and an AclSize of 1000 do not matter (the add succeeds); the same cases give the codes 1336 / 1306 / 1344 with the AddAccessAllowedAce family"
+errors:
+  space: "not enough free room for the whole list: FALSE, ERROR_INSUFFICIENT_BUFFER (122) (not ERROR_ALLOTTED_SPACE_EXCEEDED, which the AddAccess*Ace functions use), nothing is written"
+  list: "a list length that is not the sum of whole ACE sizes from the start of the list (lengths 1, 3, 4, 8, 19, 21, 23, 24, 39, 41, 43, 44, 45, 63 for ACEs of 20, 20, 24 bytes), an ACE size field of 1, 4, 100 or 0xFFFF in a single 20-byte ACE, or a second ACE sized 4: FALSE, ERROR_INVALID_PARAMETER (87), nothing added"
+  type: "ACE type 4 with revision argument below 3, types 5 to 8 with an argument below 4: FALSE, ERROR_INVALID_PARAMETER (87)"
+  header: "damaged ACL header (revision byte 0, 1, 5, 255; AclSize 0, 7; count 1 or 200 without ACEs): FALSE, ERROR_INVALID_PARAMETER (87); AclSize 8: FALSE, ERROR_INSUFFICIENT_BUFFER (122)"
+side_effects: "writes the ACEs into the ACL, changes its count and possibly its revision"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Lists whose length does not end on an ACE boundary beyond the last ACE
+  (trailing bytes, such as a 65, 68 or 100 byte length for the 64-byte list)
+  and ACE size fields of 2 or 3 (and, with the other bytes of the test list,
+  8 for the first ACE or the second ACE): these calls did not return on the
+  oracle within the test runner's time limit, so they are not tested. Adding
+  to ACLs that are shared with kernel objects or security descriptors (see
+  the descriptor functions), auditing semantics (the audit ACEs are only
+  stored). Domain accounts and domain-relative well-known SIDs of a real
+  domain, AppContainer and capability SIDs beyond their string forms,
+  auditing (SACL entries are only stored, never evaluated), remote systems
+  (the system-name arguments), Kerberos or NTLM logon tokens, tokens of
+  other users.
