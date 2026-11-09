@@ -882,19 +882,14 @@ fn fixtures(tool: &Path, work: &Path) -> Result<Vec<(String, u16, Vec<u8>)>> {
 
 // ----- the boot test -----------------------------------------------------------------------
 
-/// The boot test (see the module docs): every step.
-pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
-    boot_test_part(kernel, syms, 0, 1)
-}
-
-/// The steps of the boot test that CI's second job runs (`7zip-b`): every
-/// second step. The first job runs the others (`7zip`); each step is a boot
-/// of its own, so the halves do not depend on one another.
+/// The boot test (see the module docs), in two halves: every step is a boot
+/// of its own, so `7zip` runs the even steps and `7zip-b` the odd ones.
+/// The odd steps (`7zip-b`).
 pub fn boot_test_b(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     boot_test_part(kernel, syms, 1, 2)
 }
 
-/// The first half of the steps (`7zip`, see [`boot_test_b`]).
+/// The even steps (`7zip`).
 pub fn boot_test_a(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     boot_test_part(kernel, syms, 0, 2)
 }
