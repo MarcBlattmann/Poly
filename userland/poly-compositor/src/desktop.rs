@@ -27,6 +27,26 @@ pub const SHELL_FONTS: &str = "/usr/share/poly/fonts";
 /// (`poly_shell::picture` files, ADR 0127).
 pub const WALLPAPERS: &str = "/usr/share/poly/wallpapers";
 
+/// The icon theme's files for the shell's app icons (ADR 0146): what
+/// `poly_shell::appicon` reads, from the disk. Files over the shell's size
+/// limit are not read at all.
+#[derive(Debug, Default)]
+pub struct DiskIcons;
+
+impl poly_shell::appicon::IconFiles for DiskIcons {
+    fn read(&self, path: &str) -> Option<Vec<u8>> {
+        let meta = poly_rt::fs::metadata(path).ok()?;
+        if !meta.is_file() || meta.len() > poly_shell::appicon::MAX_FILE as u64 {
+            return None;
+        }
+        poly_rt::fs::read(path).ok()
+    }
+
+    fn list(&self, dir: &str) -> Vec<String> {
+        poly_rt::fs::read_dir(dir).map(|entries| entries.into_iter().map(|e| e.name).collect()).unwrap_or_default()
+    }
+}
+
 /// Whether an empty desktop should show the launcher after the last window
 /// disappears or a no-window app exits.
 pub fn launcher_should_reopen(launcher_visible: bool, has_windows: bool, had_windows: bool, app_exited: bool) -> bool {

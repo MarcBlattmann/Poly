@@ -135,6 +135,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-png"
+version = "0.0.1"
+
+[[package]]
 name = "poly-rt"
 version = "0.0.1"
 dependencies = [
@@ -150,6 +154,7 @@ dependencies = [
  "poly-font",
  "poly-gfx",
  "poly-input",
+ "poly-png",
  "poly-wayland",
 ]
 
