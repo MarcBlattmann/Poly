@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/IsProcessInJob.yaml
+id: windows/api/kernel32.dll/IsProcessInJob
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: IsProcessInJob, Job Objects, Process Security and Access Rights. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Tells whether a process is in a given job (or in any job when the job handle is NULL). Membership is true for processes assigned later, for children of members, and for processes created with the JOB_LIST attribute from their first instruction; it stays a fact of a process that has ended.
+interface:
+  signature: "BOOL IsProcessInJob(HANDLE process, HANDLE job, PBOOL result)"
+rules:
+  membership: "false before the assignment, true after; false for another job; true for a NULL job once the process is in any job."
+  nested: "a process assigned to two jobs reports true for each (see AssignProcessToJobObject)."
+  this_process: "the calling process is not in a job the test made; the pseudo-handle -1 is accepted as the process."
+  ended: "after the process ended it still reports its membership (true)."
+  job_list: "a process created with the JOB_LIST attribute is a member while still suspended."
+  children: "see CreateJobObjectW: children of members join; with breakaway they do not."
+  rights: "a process handle with only SYNCHRONIZE: FALSE with ERROR_ACCESS_DENIED (5)."
+errors:
+  no_query_right: "ERROR_ACCESS_DENIED (5)"
+  not_a_process_or_job: "an event handle in either position: ERROR_INVALID_HANDLE (6)"
+side_effects: "none"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  AppContainer (SECURITY_CAPABILITIES) and other attributes that need a profile or a token, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS effects, jobs with CPU/memory/IO rate limits, job time limits and their notifications, UI restrictions.

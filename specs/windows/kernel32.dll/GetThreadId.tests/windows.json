@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "gti_errors",
+      "exe_sha256": "737b582eed8adb8e6b01a3d584fb73db3e83cdb1e5ae2158cb2113c264e68ca6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZXZlbnRfZ2l2ZXNfemVybwpvayBldmVudF9lcnJvcgpvayBiYWRfaGFuZGxlX2dpdmVzX3plcm8Kb2sgYmFkX2hhbmRsZV9lcnJvcgpvayBudWxsX2dpdmVzX3plcm8Kb2sgbnVsbF9lcnJvcgpvayBwcm9jZXNzX3BzZXVkb19oYW5kbGVfZ2l2ZXNfemVybwp2YWx1ZSBwcm9jZXNzX3BzZXVkb19oYW5kbGVfZXJyb3IgNgpvayBjaGlsZF9tYWluX3RocmVhZF9pZF9ub256ZXJvCm9rIGNoaWxkX21haW5fdGhyZWFkX2lkX2RpZmZlcnNfZnJvbV9wcm9jZXNzX2lkCm9rIGdldF9wcm9jZXNzX2lkX29mX2NoaWxkCnZhbHVlIHByb2Nlc3NfaWRfb2ZfdGhyZWFkX2hhbmRsZSAwCnZhbHVlIHByb2Nlc3NfaWRfb2ZfdGhyZWFkX2hhbmRsZV9lcnJvciA2Cm9rIHRocmVhZF9pZF9vZl9wcm9jZXNzX2hhbmRsZV9naXZlc196ZXJvCnZhbHVlIHRocmVhZF9pZF9vZl9wcm9jZXNzX2hhbmRsZV9lcnJvciA2Cm9rIGVuZGVkX3RocmVhZF9oYW5kbGVfc3RpbGxfYW5zd2VycwpzdW1tYXJ5IDEyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok event_gives_zero\nok event_error\nok bad_handle_gives_zero\nok bad_handle_error\nok null_gives_zero\nok null_error\nok process_pseudo_handle_gives_zero\nvalue process_pseudo_handle_error 6\nok child_main_thread_id_nonzero\nok child_main_thread_id_differs_from_process_id\nok get_process_id_of_child\nvalue process_id_of_thread_handle 0\nvalue process_id_of_thread_handle_error 6\nok thread_id_of_process_handle_gives_zero\nvalue thread_id_of_process_handle_error 6\nok ended_thread_handle_still_answers\nsummary 12 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

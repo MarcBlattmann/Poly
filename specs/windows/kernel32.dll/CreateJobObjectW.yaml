@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateJobObjectW.yaml
+id: windows/api/kernel32.dll/CreateJobObjectW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CreateJobObjectW, OpenJobObjectW, Job Objects, JOBOBJECT_EXTENDED_LIMIT_INFORMATION, CreateProcessW (creation flags). Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Creates a job object, or opens the existing one of that name. A job collects processes; its limits apply to all members; its members' children join it unless the job allows breakaway. With JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE the members are terminated when the last handle to the job closes.
+interface:
+  signature: "HANDLE CreateJobObjectW(LPSECURITY_ATTRIBUTES sa, LPCWSTR name)"
+rules:
+  unnamed: "each call returns a separate job; last error is 0."
+  named: "the first call with a name returns a handle with last error 0; the same name again returns another handle value to the same job and last error ERROR_ALREADY_EXISTS (183); a limit set through one handle is visible through the other. A different name is a different job."
+  open: "OpenJobObjectW with the name returns a handle; a missing name: NULL, ERROR_FILE_NOT_FOUND (2); a handle opened with JOB_OBJECT_QUERY only can read the limits but not set them (ERROR_ACCESS_DENIED)."
+  name_collision: "a name used by an event: CreateJobObjectW fails with ERROR_INVALID_HANDLE (6)."
+  kill_on_close: "with KILL_ON_JOB_CLOSE set: a member stays alive while any handle to the job exists (a second handle seen) and is terminated, exit code 0, when the last is closed."
+  children_join: "a process created by a job member joins the job (total and active counts 2 with a grandchild); closing the job with kill-on-close ends both."
+  breakaway: "CREATE_BREAKAWAY_FROM_JOB in a member's CreateProcessW fails with ERROR_ACCESS_DENIED (5) unless the job has JOB_OBJECT_LIMIT_BREAKAWAY_OK; with it the new process is outside the job (only the member counted); with JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK children are outside the job without any flag."
+errors:
+  name_collision: "ERROR_INVALID_HANDLE (6)"
+  open_missing: "ERROR_FILE_NOT_FOUND (2)"
+  open_with_less_rights_set: "ERROR_ACCESS_DENIED (5)"
+  breakaway_not_allowed: "ERROR_ACCESS_DENIED (5) from CreateProcessW"
+side_effects: "creates an object; with kill-on-close closing the last handle terminates members"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  AppContainer (SECURITY_CAPABILITIES) and other attributes that need a profile or a token, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS effects, jobs with CPU/memory/IO rate limits, job time limits and their notifications, UI restrictions.

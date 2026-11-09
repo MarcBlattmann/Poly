@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "cjo_basic",
+      "exe_sha256": "8b7ee83f5c3950bf8aab73847df39bd896921728e22518b6e9a24f38897bc6fd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgdW5uYW1lZF9jcmVhdGVkCm9rIHNlY29uZF91bm5hbWVkX2NyZWF0ZWQKb2sgY3JlYXRlZF93aXRob3V0X2Vycm9yX2NvZGUKb2sgbmFtZWRfY3JlYXRlZApvayBuYW1lZF9maXJzdF9lcnJvcl9jb2RlX3plcm8Kb2sgbmFtZWRfYWdhaW5fZ2l2ZXNfaGFuZGxlCm9rIG5hbWVkX2FnYWluX2Vycm9yX2NvZGUKb2sgbmFtZWRfYWdhaW5faXNfYW5vdGhlcl9oYW5kbGVfdmFsdWUKb2sgc2V0X2xpbWl0X29rCm9rIHF1ZXJ5X29rCm9rIHF1ZXJ5X3JldHVybmVkX2xlbmd0aApvayBsaW1pdF92aXNpYmxlX3Rocm91Z2hfb3RoZXJfaGFuZGxlCm9rIG90aGVyX25hbWVfY3JlYXRlZApvayBvcGVuX25hbWVkX2pvYgpvayBvcGVuX21pc3Npbmdfam9iX2ZhaWxzCm9rIG9wZW5fbWlzc2luZ19qb2JfZXJyb3IKb2sgb3Blbl9xdWVyeV9vbmx5Cm9rIHNldF93aXRoX3F1ZXJ5X2FjY2Vzc19mYWlscwpvayBzZXRfd2l0aF9xdWVyeV9hY2Nlc3NfZXJyb3IKb2sgbmFtZWRfZXZlbnRfY3JlYXRlZApvayBqb2Jfd2l0aF9ldmVudF9uYW1lX2ZhaWxzCm9rIGpvYl93aXRoX2V2ZW50X25hbWVfZXJyb3IKb2sgYXNzaWduX2NoaWxkCm9rIGNoaWxkX2FsaXZlX3doaWxlX2FfaGFuZGxlX3JlbWFpbnMKb2sgY2hpbGRfa2lsbGVkX3doZW5fbGFzdF9oYW5kbGVfY2xvc2VzCm9rIGtpbGxlZF9jaGlsZF9leGl0X2NvZGVfaXNfbm90X2l0c19vd24KdmFsdWUga2lsbGVkX2NoaWxkX2V4aXRfY29kZSAwCnN1bW1hcnkgMjYgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok unnamed_created\nok second_unnamed_created\nok created_without_error_code\nok named_created\nok named_first_error_code_zero\nok named_again_gives_handle\nok named_again_error_code\nok named_again_is_another_handle_value\nok set_limit_ok\nok query_ok\nok query_returned_length\nok limit_visible_through_other_handle\nok other_name_created\nok open_named_job\nok open_missing_job_fails\nok open_missing_job_error\nok open_query_only\nok set_with_query_access_fails\nok set_with_query_access_error\nok named_event_created\nok job_with_event_name_fails\nok job_with_event_name_error\nok assign_child\nok child_alive_while_a_handle_remains\nok child_killed_when_last_handle_closes\nok killed_child_exit_code_is_not_its_own\nvalue killed_child_exit_code 0\nsummary 26 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 386
+    }
+  ]
+}

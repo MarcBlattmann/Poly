@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/AssignProcessToJobObject.yaml
+id: windows/api/kernel32.dll/AssignProcessToJobObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: AssignProcessToJobObject, Job Objects, Nested Jobs, Process Security and Access Rights. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Puts a process into a job. A child created suspended is the usual target, but a running process works too. A process can be in several jobs when they nest (assigned to a second job it is in both). Needs JOB_OBJECT_ASSIGN_PROCESS on the job and PROCESS_SET_QUOTA and PROCESS_TERMINATE on the process.
+interface:
+  signature: "BOOL AssignProcessToJobObject(HANDLE job, HANDLE process)"
+rules:
+  assign: "a suspended or a running child: TRUE; the job's total and active process counts become 1, the process id list holds the process, IsProcessInJob is true."
+  same_job_again: "assigning to the same job again: TRUE."
+  second_job: "assigning to a second job: TRUE; the process is then in both jobs and counted in each."
+  limits_after: "a limit set after the assignment applies to members (kill-on-close ended the running member when the job was closed)."
+  active_limit: "with an active-process limit of 1: the first process is assigned, the second fails with ERROR_NOT_ENOUGH_QUOTA (1816)."
+  rights: "a process handle without PROCESS_SET_QUOTA/TERMINATE (query and synchronize only): ERROR_ACCESS_DENIED (5); a job handle with only JOB_OBJECT_QUERY: ERROR_ACCESS_DENIED."
+  ended_process: "a process that already exited or was terminated: FALSE, ERROR_ACCESS_DENIED (5)."
+  pseudo_handle: "the pseudo-handle -1 names the calling process; tests do not assign it."
+errors:
+  not_enough_quota: "ERROR_NOT_ENOUGH_QUOTA (1816)"
+  access_denied: "ERROR_ACCESS_DENIED (5)"
+  not_a_process_or_job: "an event handle as process or as job: ERROR_INVALID_HANDLE (6)"
+side_effects: "the process becomes subject to the job's limits"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  AppContainer (SECURITY_CAPABILITIES) and other attributes that need a profile or a token, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS effects, jobs with CPU/memory/IO rate limits, job time limits and their notifications, UI restrictions.

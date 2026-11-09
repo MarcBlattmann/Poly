@@ -1,5 +1,6 @@
 /target
 /kernel/target
+/kernel/src/arch/aarch64/target
 /.vendor
 *.img
 *.iso

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "cioex_basic",
+      "exe_sha256": "424c28d47c824bc354f28f3df7bb802321f3d7510d1566f23536cd69f320e044",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgbm90aGluZ19wZW5kaW5nX2FsbF9mYWlscwpvayBub3RoaW5nX3BlbmRpbmdfYWxsX2Vycm9yCm9rIG5vdGhpbmdfcGVuZGluZ19vbmVfZmFpbHMKb2sgbm90aGluZ19wZW5kaW5nX29uZV9lcnJvcgpvayBjYW5jZWxfb25lX29rCm9rIGNhbmNlbGxlZF9wYWNrZXQKb2sgY2FuY2VsbGVkX3BhY2tldF9lcnJvcgpvayBvdGhlcnNfc3RpbGxfcGVuZGluZwpvayBmaXJzdF9zdGlsbF9pbmNvbXBsZXRlCm9rIGNhbmNlbF9hZ2Fpbl9mYWlscwpvayBjYW5jZWxfYWdhaW5fZXJyb3IKb2sgZmlyc3RfcmVhZF9nZXRzX3RoZV9kYXRhCm9rIGZpcnN0X3JlYWRfZGF0YQpvayBjYW5jZWxfYWxsX29rCm9rIGxhc3RfY2FuY2VsbGVkX3BhY2tldApvayBsYXN0X2NhbmNlbGxlZF9wYWNrZXRfZXJyb3IKb2sgY2FuY2VsX2NvbXBsZXRlZF9mYWlscwpvayBjYW5jZWxfY29tcGxldGVkX2Vycm9yCm9rIGNhbmNlbF9vdGhlcl9oYW5kbGVzX3JlcXVlc3RfZmFpbHMKb2sgY2FuY2VsX290aGVyX2hhbmRsZXNfcmVxdWVzdF9lcnJvcgpvayBjYW5jZWxfb25fcmlnaHRfaGFuZGxlX29rCm9rIGludmFsaWRfaGFuZGxlX2ZhaWxzCm9rIGludmFsaWRfaGFuZGxlX2Vycm9yCnN1bW1hcnkgMjMgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok nothing_pending_all_fails\nok nothing_pending_all_error\nok nothing_pending_one_fails\nok nothing_pending_one_error\nok cancel_one_ok\nok cancelled_packet\nok cancelled_packet_error\nok others_still_pending\nok first_still_incomplete\nok cancel_again_fails\nok cancel_again_error\nok first_read_gets_the_data\nok first_read_data\nok cancel_all_ok\nok last_cancelled_packet\nok last_cancelled_packet_error\nok cancel_completed_fails\nok cancel_completed_error\nok cancel_other_handles_request_fails\nok cancel_other_handles_request_error\nok cancel_on_right_handle_ok\nok invalid_handle_fails\nok invalid_handle_error\nsummary 23 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 103
+    }
+  ]
+}
