@@ -64,6 +64,9 @@ pub const TEB_SELF: u64 = 0x30;
 pub const TEB_CLIENT_ID: u64 = 0x40;
 pub const TEB_PEB: u64 = 0x60;
 pub const PEB_BEING_DEBUGGED: u64 = 0x02;
+/// `PEB.ImageBaseAddress` (`winternl.h`): where the executable is mapped. Programs read it
+/// straight from the PEB (Chrome's `chrome_elf.dll` does; with 0 it faulted at address 0x10).
+pub const PEB_IMAGE_BASE_ADDRESS: u64 = 0x10;
 
 /// The `ntdll` exports the kernel enters (ADR 0071).
 pub const NTDLL_THREAD_START: &[u8] = b"LdrInitializeThunk";
@@ -83,7 +86,8 @@ impl NtdllEntries {
     /// the image (not a forwarder). A DLL without them is not our `ntdll`:
     /// `STATUS_INVALID_IMAGE_FORMAT`.
     pub fn of(image: &ImageSection) -> Result<NtdllEntries, NtStatus> {
-        let pe = poly_pe::Pe::parse_mapped(&image.image).map_err(|_| STATUS_INVALID_IMAGE_FORMAT)?;
+        let held = image.image.held().ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
+        let pe = poly_pe::Pe::parse_mapped(held).map_err(|_| STATUS_INVALID_IMAGE_FORMAT)?;
         let exports = pe.exports().ok().flatten().ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
         let rva = |name: &[u8]| match exports.by_name(name) {
             Ok(Some(poly_pe::ExportTarget::Rva(r))) if u64::from(r) < image.size => Ok(r),
@@ -291,6 +295,7 @@ pub fn start_process_from(
     let anywhere_top = MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN;
     let (peb, _) = proc.vm.allocate(b, 0, PAGE_SIZE, 0, anywhere_top, rw)?;
     let (teb, _) = proc.vm.allocate(b, 0, TEB_SIZE, 0, anywhere_top, rw)?;
+    b.write(peb + PEB_IMAGE_BASE_ADDRESS, &image_base.to_le_bytes())?;
 
     let stack = make_stack(proc, b, reserve, commit)?;
     let client = crate::kernel::ClientId { process: proc.pid, thread };

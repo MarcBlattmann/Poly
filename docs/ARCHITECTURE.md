@@ -1123,6 +1123,9 @@ and Poly's first shell (Phase 6, [ADR 0107](adr/0107-desktop-fbdev-input-routing
   files and built-ins) over them.
 - `cargo xtask desktop` boots into it; boot group `desktop` drives it with
   QMP (screenshots, typing, a client launched, clicks, a drag).
+  `cargo xtask desktop --chromium` (the dev menu's default, ADR 0147) boots
+  the same desktop from Chromium's Debian disk with Poly's apps copied onto
+  it at boot and Chromium the default browser (`mimeapps.list`).
 
 ## Screen terminal
 

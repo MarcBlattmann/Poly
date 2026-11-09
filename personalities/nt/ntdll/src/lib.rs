@@ -32,6 +32,42 @@ mod veh;
 use poly_ldr::{Callout, CalloutKind, Config, Loader};
 use poly_ntobj::NtStatus;
 
+/// Log `text` on the kernel log with this process's id (ADR 0155).
+pub(crate) fn debug_print(text: &str) {
+    // SAFETY: the service reads `length` bytes of `text`.
+    unsafe { syscalls::PolyDebugPrint(text.as_ptr(), text.len()) };
+}
+
+/// Log the imports the loader bound to stubs since the last report
+/// (ADR 0155), a few to a line.
+pub(crate) fn report_stubbed() {
+    use alloc::string::String;
+    let lines = with_loader(|l, _| l.take_stubbed());
+    const HEAD: &str = "ldr: bound to stubs: ";
+    let mut chunk = String::from(HEAD);
+    for line in lines {
+        if chunk.len() + line.len() + 2 > 480 && chunk.len() > HEAD.len() {
+            debug_print(&chunk);
+            chunk = String::from(HEAD);
+        }
+        chunk.push_str(&line);
+        chunk.push_str("; ");
+    }
+    if chunk.len() > HEAD.len() {
+        debug_print(&chunk);
+    }
+}
+
+/// Log why the last load failed, if the loader knows (ADR 0155).
+pub(crate) fn report_load_failure(what: &str, status: NtStatus) {
+    use alloc::format;
+    let note = with_loader(|l, _| l.take_note());
+    match note {
+        Some(note) => debug_print(&format!("ldr: {what} failed ({:#x}): {note}", status.0)),
+        None => debug_print(&format!("ldr: {what} failed ({:#x})", status.0)),
+    }
+}
+
 #[global_allocator]
 static ALLOC: heap::ProcessHeapAlloc = heap::ProcessHeapAlloc;
 

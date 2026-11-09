@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "igos_window",
+      "exe_sha256": "e0d2999e2c8205f3508478b6b7b9d031bc6394bc557dd6591754b82bf3c549fc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2luZG93IHdpdGggZGVmYXVsdCBjb250ZXh0OiAwCndpbmRvdyB3aXRob3V0IGNvbnRleHQ6IDAgKGNvbnRleHQgbnVsbCkKd2luZG93IHdpdGggb3duIGNvbnRleHQ6IDAKb3RoZXIgdGhyZWFkJ3Mgd2luZG93OiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "window with default context: 0\nwindow without context: 0 (context null)\nwindow with own context: 0\nother thread's window: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 267
+    }
+  ]
+}

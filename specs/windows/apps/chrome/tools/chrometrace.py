@@ -36,11 +36,11 @@ HOME = re.compile(r'[A-Za-z]:\\Users\\[^\\]+', re.I)
 
 def norm_str(x):
     """Machine- and run-independent form of a path / name a call was given."""
-    x = re.sub(r'[A-Za-z]:\\Users\\[^\\]+\\pc\\ud\\[^\\]+', '<profile>', x, flags=re.I)
-    x = re.sub(r'[A-Za-z]:\\Users\\[^\\]+\\pc\\(chrome|orig|kit)', '<app>', x, flags=re.I)
-    x = re.sub(r'[A-Za-z]:\\Users\\[^\\]+\\pc\\tr\\[^\\]+', '<trace>', x, flags=re.I)
-    x = re.sub(r'[A-Za-z]:\\Users\\[^\\]+\\pc\\pages', '<pages>', x, flags=re.I)
-    x = re.sub(r'[A-Za-z]:\\Users\\[^\\]+\\pc', '<work>', x, flags=re.I)
+    x = re.sub(r'[A-Za-z]:\\Users\\[^\\]+\\pc2?\\(?:ud\\[^\\]+|ud-[^\\]+|fr\\[^\\]+\\ud)', '<profile>', x, flags=re.I)
+    x = re.sub(r'[A-Za-z]:\\Users\\[^\\]+\\pc2?\\(chrome|orig|kit[a-z0-9]*)', '<app>', x, flags=re.I)
+    x = re.sub(r'[A-Za-z]:\\Users\\[^\\]+\\pc2?\\(?:tr\\[^\\]+|[a-z]+[0-9]+[a-z]?|fr\\[^\\]+)(?=\\|$)', '<trace>', x, flags=re.I)
+    x = re.sub(r'[A-Za-z]:\\Users\\[^\\]+\\pc2?\\pages', '<pages>', x, flags=re.I)
+    x = re.sub(r'[A-Za-z]:\\Users\\[^\\]+\\pc2?', '<work>', x, flags=re.I)
     x = re.sub(r'[A-Za-z]:\\Users\\MARC~1\.BLA', '<home>', x)
     x = HOME.sub('<home>', x)
     x = re.sub(r'\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}', '{<guid>}', x)

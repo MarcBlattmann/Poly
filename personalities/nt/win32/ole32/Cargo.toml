@@ -1,0 +1,18 @@
+[package]
+name = "ole32"
+description = "Our ole32.dll (ADR 0155): COM apartments, task memory, GUID text, the Windows Runtime's initialisation and HSTRINGs; hosts the winrt and com API sets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "ole32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-com = { path = "../../../../crates/poly-com" }
+
+[lints]
+workspace = true

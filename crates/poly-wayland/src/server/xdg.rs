@@ -669,6 +669,8 @@ impl Server {
         self.surface_entered(c, surface);
         if toplevel {
             self.activate(c, role, false);
+            // The app has a window: its launch, if any, is over.
+            self.client_window_mapped(c);
         }
     }
 

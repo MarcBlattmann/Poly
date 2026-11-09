@@ -1,0 +1,91 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/UpdateLayeredWindow
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-c
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About the
+  Clipboard", "Using the Clipboard", "Clipboard Formats", "Standard
+  Clipboard Formats", "High DPI Desktop Application Development on Windows",
+  "DPI_AWARENESS_CONTEXT", "Multiple Display Monitors", "Window Features"
+  (layered windows, window regions), "About Cursors", "About Icons",
+  "Desktop Window Manager" (dwmapi), "Input Method Manager" (imm32), "About
+  Messages and Message Queues"; winuser.h, wingdi.h, windef.h, winbase.h,
+  dwmapi.h, imm.h, shellscalingapi.h and winerror.h for constants and
+  layouts. The conformance tests of Wine were consulted only where the own
+  sources line of an entry says so, for ideas of what to observe; no code or
+  expected value of theirs is used (every value in these sheets was observed
+  on the machine above). Learn pages "Layered Windows" (Window Features),
+  "Using Cursors", "About Icons", "SetLayeredWindowAttributes",
+  "UpdateLayeredWindow", "BLENDFUNCTION", "SetWindowRgn", "LoadImage",
+  "CreateIconIndirect", "ICONINFO", "CURSORINFO"; the pixel values were read
+  back from the screen with GetPixel on the screen DC after DwmFlush (BitBlt
+  with and without CAPTUREBLT gives the same). The test programs have no
+  application manifest (they are console executables built without one), so
+  behaviour that depends on the manifest's declared Windows version (layered
+  child windows) is that of an application not declaring Windows 8 support.
+summary: >
+  Sets the content, position and size of a layered window from a source
+  device context (a memory DC with a bitmap selected). The window rectangle
+  becomes pptDst/psize (each optional), the content is the part of the
+  source starting at pptSrc, blended with the screen according to pblend
+  (ULW_ALPHA, per-pixel alpha when AC_SRC_ALPHA, premultiplied), a colour
+  key (ULW_COLORKEY) or opaque. The call does not show or hide the window.
+interface:
+  signature: "BOOL UpdateLayeredWindow(HWND hWnd, HDC hdcDst, POINT *pptDst, SIZE *psize, HDC hdcSrc, POINT *pptSrc, COLORREF crKey, BLENDFUNCTION *pblend, DWORD dwFlags)"
+  BLENDFUNCTION: "BYTE BlendOp (AC_SRC_OVER 0), BYTE BlendFlags (0), BYTE SourceConstantAlpha, BYTE AlphaFormat (AC_SRC_ALPHA 1); 4 bytes (wingdi.h)"
+  flags: "ULW_COLORKEY 1, ULW_ALPHA 2, ULW_OPAQUE 4, ULW_EX_NORESIZE 8 (winuser.h)"
+rules:
+  rectangle: "pptDst and psize both given: the window rectangle becomes exactly that (client rectangle 0,0,cx,cy). Only pptDst: the size is kept. Only psize: the position is kept. Neither: unchanged. A psize larger or smaller than the source bitmap is accepted and applied (100x70 from a 40x30 bitmap, 20x10). The window is not shown by the call: a hidden window stays hidden, a visible one stays visible with the new rectangle."
+  refused_sizes: "psize with a negative side (-5x10, 10x-5) fails with ERROR_INVALID_PARAMETER (87); 0x0 and 0x10 fail with ERROR_GEN_FAILURE (31); the rectangle is not changed by a refused call."
+  flags: "Flags 0 (with or without pblend), ULW_OPAQUE, ULW_COLORKEY (pblend NULL), ULW_COLORKEY|ULW_ALPHA with pblend and ULW_ALPHA with pblend succeed. ULW_ALPHA with pblend NULL fails with ERROR_GEN_FAILURE (31). ULW_EX_NORESIZE (8) fails with 87, so does any unknown bit (0x10, 0xFFFFFFFF). The blend operation (5), blend flags (1) and alpha format (7) values are not validated: the call succeeds."
+  source_dc: "hdcSrc a memory DC holding a 32-bit DIB section works. The screen DC as hdcSrc succeeds, hdcSrc NULL with ULW_ALPHA or with flags 0 succeeds. A memory DC with only its default 1x1 bitmap and a made-up DC fail with ERROR_GEN_FAILURE (31). pptSrc NULL, (1000,1000) outside the bitmap and (-10,-10) succeed."
+  destination_dc: "hdcDst may be NULL or the screen DC (both succeed, with or without pptDst/psize)."
+  per_pixel_alpha: "With ULW_ALPHA and AC_SRC_ALPHA the bitmap is premultiplied: over the blue popup an opaque green pixel 0xFF00FF00 shows 0x00FF00, the pixel 0x80800000 (50% red) shows 0x80007F, a pixel with colour above alpha (0x80FF0000) shows 0xFF007F (saturated sum), a pixel with alpha 0 but colour 0xFF0000 shows 0xFF00FF (the colour is added), an all-zero pixel shows the blue below."
+  constant_alpha: "SourceConstantAlpha scales the pixel: 128 on opaque green shows 0x00807F, on the 50% red pixel 0x4000BF. Without AC_SRC_ALPHA the bitmap alpha is ignored: opaque green with constant alpha 255 shows 0x00FF00, the 0x80800000 pixel shows its colour 0x800000 (constant 255) or 0x40007F (constant 128)."
+  colorkey_and_opaque: "ULW_COLORKEY: pixels equal to crKey (a COLORREF) show the blue below, others as they are (key green 0x0000FF00 hides the green half; key 0x000000FF, which is red, hides the red pixels). ULW_OPAQUE shows opaque pixels as they are; for 0x80800000 pixels the result is still 0x80007F."
+  source_point: "pptSrc picks the part of the bitmap: a 40x30 window from source (30,0) of a bitmap whose x<50 is green and the rest red shows green for x 0..19 and red for x 20..39."
+  hit_testing: "WindowFromPoint passes through pixels whose alpha is 0 (all-zero bitmap, alpha-0 pixel with colour) and returns the layered window over opaque pixels."
+  ordering_with_set: "UpdateLayeredWindow after SetLayeredWindowAttributes fails with 87 (the attributes stay); SetLayeredWindowAttributes after UpdateLayeredWindow succeeds, and a second UpdateLayeredWindow after that fails with 87. GetLayeredWindowAttributes after UpdateLayeredWindow only fails without a last error."
+  style: "A window without WS_EX_LAYERED, or whose style was removed with SetWindowLong, fails with 87. The style bit stays set after a successful call."
+errors:
+  not_layered: "FALSE, ERROR_INVALID_PARAMETER (87)"
+  bad_window: "NULL window or a WS_CHILD window creation failure: FALSE, ERROR_INVALID_WINDOW_HANDLE (1400)"
+  gen_failure: "ERROR_GEN_FAILURE (31): ULW_ALPHA without pblend, a source DC with no usable bitmap, a made-up source DC, psize 0x0 or 0x10"
+  invalid_parameter: "87: negative psize, ULW_EX_NORESIZE, unknown flag bits, window not layered, ordering after Set"
+side_effects: "Changes the window rectangle and its composed content; paints nothing through WM_PAINT."
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
+  needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants); run with
+  poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because
+  painting, input and the clipboard need the visible desktop. Window
+  procedures log documented messages only: never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels and closed within seconds; the cursor is parked
+  at (1500, 600) at the start and put back at the end; the clipboard is
+  emptied at the end of every test that touches it; a test changes no system
+  setting (only the state of its own process and windows).
+not_covered: >
+  UpdateLayeredWindowIndirect, ULW_EX_NORESIZE through
+  UpdateLayeredWindowIndirect, layered child windows (manifest), layered
+  windows partly off the screen. Several monitors, other system DPIs (the
+  oracle is one 1920x1080 monitor at 96 DPI, scale 100%), a manifest (the
+  tests have none: awareness is set with the API), other keyboard layouts
+  than German, installed input methods (the oracle has none active), touch
+  and pen, hooks, menus and dialogs, comctl32 controls, themed (visual
+  style) painting, clipboard contents put there by other programs or by the
+  cloud clipboard and clipboard history.

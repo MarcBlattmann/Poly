@@ -13,7 +13,10 @@ poly-ext2.workspace = true
 poly-font.workspace = true
 poly-gfx.workspace = true
 poly-kernelbase.workspace = true
+poly-com.workspace = true
 poly-ldr.workspace = true
+poly-macho.workspace = true
+poly-stubs.workspace = true
 poly-crt.workspace = true
 poly-crypto.workspace = true
 poly-shell.workspace = true
@@ -30,6 +33,10 @@ poly-term.workspace = true
 poly-vfs.workspace = true
 rustc-demangle.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+# The Files app's choice of an app, for the default browser's test (chromium.rs).
+poly-files.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 # The terminal's raw mode and size for `cargo xtask start` (term.rs).

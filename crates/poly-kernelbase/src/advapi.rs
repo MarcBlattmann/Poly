@@ -49,6 +49,8 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
     ("RegCloseKey", REGISTRY),
     ("RegFlushKey", REGISTRY),
     ("RegQueryInfoKeyW", REGISTRY),
+    // ADR 0155: Chrome watches keys in every process.
+    ("RegNotifyChangeKeyValue", REGISTRY),
     // Tokens (processthreadsapi.h, securitybaseapi.h).
     ("OpenProcessToken", PROCESS_THREADS),
     ("OpenThreadToken", PROCESS_THREADS),

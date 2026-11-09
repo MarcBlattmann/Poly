@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtDuplicateObject.yaml
+id: windows/api/ntdll.dll/NtDuplicateObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: DuplicateHandle function, ZwDuplicateObject, Handle Inheritance, Standard Access Rights, Process Security and Access Rights. kernel32's DuplicateHandle is claimed by another agent; the tests call both and compare. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Makes a new handle to the same object in the same or another process, with the same or different access and attributes, and optionally closes the source handle. Between two processes the caller needs PROCESS_DUP_HANDLE on the process handles. kernel32's DuplicateHandle is a thin wrapper and gives the same results.
+interface:
+  signature: "NTSTATUS NtDuplicateObject(HANDLE sourceProcess, HANDLE source, HANDLE targetProcess, PHANDLE target, ACCESS_MASK access, ULONG attributes, ULONG options)"
+rules:
+  same_access: "DUPLICATE_SAME_ACCESS (2): the new handle has the source's granted access (an event: 0x1F0003). Object handle counts go up by one per handle; closing handles brings them back."
+  reduced_access: "without SAME_ACCESS the new handle has exactly the access asked for (SYNCHRONIZE only seen): it can wait but not reset the event (ERROR_ACCESS_DENIED)."
+  more_access: "within one process nothing stops a duplicate from asking for more rights than the source handle has (a SYNCHRONIZE-only handle duplicated with EVENT_ALL_ACCESS succeeds and has all of it)."
+  attributes: "OBJ_INHERIT (2) in the attributes makes the new handle inheritable; with DUPLICATE_SAME_ATTRIBUTES (4) it copies the source's flag; without either the new handle is not inheritable even when the source is."
+  close_source: "DUPLICATE_CLOSE_SOURCE (1): the source handle is closed as part of the call; the handle count of the object stays as it was (the new handle may even get the freed value). With a NULL target pointer only the close happens (the count drops by one)."
+  same_object: "the new handle names the same object: signalling through one is seen through the other."
+  push_into_process: "to push a handle into a child: NtDuplicateObject(this process, handle, child process handle, ...) returns the handle value in the child's table; the child can use it (full access: wait and reset; SYNCHRONIZE-only duplicate: wait works, reset fails with ERROR_ACCESS_DENIED); the object is shared (the child's reset is seen here). The target process handle needs PROCESS_DUP_HANDLE: without it STATUS_ACCESS_DENIED (kernel32: ERROR_ACCESS_DENIED)."
+  pull_from_process: "NtDuplicateObject(child process handle, child's handle value, this process, ...) takes a copy of the child's handle (needs PROCESS_DUP_HANDLE on the child); with CLOSE_SOURCE the handle is closed in the child (its GetHandleInformation then fails with ERROR_INVALID_HANDLE) and the object lives on through the new handle; pulling the closed handle again: STATUS_INVALID_HANDLE (kernel32 ERROR_INVALID_HANDLE)."
+  exited_target: "pushing into a process that has exited: STATUS_PROCESS_IS_TERMINATING (0xC000010A)."
+errors:
+  bad_source_handle: "STATUS_INVALID_HANDLE (0xC0000008); kernel32: ERROR_INVALID_HANDLE (6)"
+  bad_process_handle: "STATUS_INVALID_HANDLE for either process handle"
+  no_dup_right: "STATUS_ACCESS_DENIED; kernel32: ERROR_ACCESS_DENIED (5)"
+  exited_target_process: "STATUS_PROCESS_IS_TERMINATING (0xC000010A)"
+side_effects: "adds a handle (and possibly removes the source handle)"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Image sections (SEC_IMAGE), large pages, section offsets in the megabytes, physical memory, sections of other users' processes, security descriptors.

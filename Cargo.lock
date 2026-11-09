@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "a64diff"
+version = "0.0.1"
+dependencies = [
+ "poly-a64",
+]
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -58,6 +65,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "poly-a64"
+version = "0.0.1"
+
+[[package]]
 name = "poly-abi"
 version = "0.0.1"
 
@@ -101,6 +112,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-bpf"
+version = "0.0.1"
+
+[[package]]
+name = "poly-com"
 version = "0.0.1"
 
 [[package]]
@@ -170,6 +185,10 @@ name = "poly-elf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-etw"
+version = "0.0.1"
+
+[[package]]
 name = "poly-ext2"
 version = "0.0.1"
 dependencies = [
@@ -207,6 +226,10 @@ version = "0.0.1"
 [[package]]
 name = "poly-gdi"
 version = "0.0.1"
+dependencies = [
+ "poly-font",
+ "poly-gfx",
+]
 
 [[package]]
 name = "poly-gfx"
@@ -232,6 +255,10 @@ name = "poly-input"
 version = "0.0.1"
 
 [[package]]
+name = "poly-iphlp"
+version = "0.0.1"
+
+[[package]]
 name = "poly-irq"
 version = "0.0.1"
 dependencies = [
@@ -245,6 +272,7 @@ dependencies = [
  "poly-ldr",
  "poly-nls",
  "poly-ntobj",
+ "poly-pe",
  "poly-rtl",
 ]
 
@@ -265,11 +293,19 @@ name = "poly-line"
 version = "0.0.1"
 
 [[package]]
+name = "poly-macho"
+version = "0.0.1"
+
+[[package]]
 name = "poly-mem"
 version = "0.0.1"
 
 [[package]]
 name = "poly-net"
+version = "0.0.1"
+
+[[package]]
+name = "poly-netapi"
 version = "0.0.1"
 
 [[package]]
@@ -338,6 +374,7 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-console",
+ "poly-iphlp",
  "poly-ldr",
  "poly-net",
  "poly-ntobj",
@@ -442,6 +479,14 @@ name = "poly-smp"
 version = "0.0.1"
 dependencies = [
  "poly-sched",
+]
+
+[[package]]
+name = "poly-stubs"
+version = "0.0.1"
+dependencies = [
+ "poly-ldr",
+ "poly-pe",
 ]
 
 [[package]]
@@ -683,19 +728,23 @@ dependencies = [
  "lzma-rs",
  "poly-binfmt",
  "poly-block",
+ "poly-com",
  "poly-cpio",
  "poly-crt",
  "poly-crypto",
  "poly-elf",
  "poly-ext2",
+ "poly-files",
  "poly-font",
  "poly-gfx",
  "poly-http",
  "poly-kernelbase",
  "poly-ldr",
+ "poly-macho",
  "poly-pe",
  "poly-personality-native",
  "poly-shell",
+ "poly-stubs",
  "poly-term",
  "poly-vfs",
  "poly-win32k",

@@ -98,6 +98,46 @@ pub fn unprotect(master: &[u8], blob: &[u8], entropy: &[u8]) -> Result<(Vec<u8>,
     Ok((data, desc))
 }
 
+// ----- CryptProtectMemory (ADR 0155) ------------------------------------------------------
+
+/// `CRYPTPROTECTMEMORY_BLOCK_SIZE`: the data's size must be a multiple of it (`dpapi.h`).
+pub const CRYPTPROTECTMEMORY_BLOCK_SIZE: usize = 16;
+/// `CRYPTPROTECTMEMORY_SAME_PROCESS`, `_CROSS_PROCESS`, `_SAME_LOGON`.
+pub const CRYPTPROTECTMEMORY_SAME_PROCESS: u32 = 0;
+pub const CRYPTPROTECTMEMORY_CROSS_PROCESS: u32 = 1;
+pub const CRYPTPROTECTMEMORY_SAME_LOGON: u32 = 2;
+
+const MEMORY_LABEL: &[u8] = b"Poly CryptProtectMemory v1";
+
+/// `CryptProtectMemory` / `CryptUnprotectMemory` (Learn): encrypt or decrypt `data` in place. The
+/// key comes from `secret` and the flag: for `SAME_PROCESS` the secret is the process's own random
+/// key (only this process can decrypt), for `CROSS_PROCESS` and `SAME_LOGON` it is the user's master
+/// key (any process of the user can). AES-256 in CBC mode without padding, so the size stays the
+/// same; the IV is derived with the key (the data is memory protected against being read from a
+/// dump, not stored). A size that is not a multiple of 16, or a flag Learn does not list, is
+/// `ERROR_INVALID_PARAMETER`.
+pub fn protect_memory(secret: &[u8], flags: u32, data: &mut [u8], encrypt: bool) -> Result<(), u32> {
+    if flags > CRYPTPROTECTMEMORY_SAME_LOGON || !data.len().is_multiple_of(CRYPTPROTECTMEMORY_BLOCK_SIZE) {
+        return Err(ERROR_INVALID_PARAMETER);
+    }
+    let derive = |extra: &[u8]| {
+        let mut m = poly_crypto::Hmac::new(HashAlg::Sha256, secret);
+        m.update(MEMORY_LABEL);
+        m.update(&[flags as u8]);
+        m.update(extra);
+        m.finish()
+    };
+    let aes = Aes::new(&derive(b"key")).expect("a 32-byte AES key");
+    let mut iv = [0u8; 16];
+    iv.copy_from_slice(&derive(b"iv")[..16]);
+    let ok = if encrypt {
+        poly_crypto::modes::cbc_encrypt(&aes, &mut iv, data)
+    } else {
+        poly_crypto::modes::cbc_decrypt(&aes, &mut iv, data)
+    };
+    if ok { Ok(()) } else { Err(ERROR_INVALID_PARAMETER) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,5 +159,35 @@ mod tests {
         let m = protect(&master, b"", &[], b"", true, &[4; 28]);
         assert!(is_machine_blob(&m));
         assert_eq!(unprotect(&master, &m, b"").unwrap().0, b"");
+    }
+
+    #[test]
+    fn memory_protection_round_trips_in_place_and_depends_on_key_and_flag() {
+        let secret = [5u8; 32];
+        let plain = *b"0123456789abcdef0123456789abcdef";
+        let mut d = plain;
+        protect_memory(&secret, CRYPTPROTECTMEMORY_SAME_PROCESS, &mut d, true).unwrap();
+        assert_ne!(d, plain);
+        // Same blocks of plain text do not give the same cipher text (CBC).
+        assert_ne!(d[..16], d[16..]);
+        let enc = d;
+        protect_memory(&secret, CRYPTPROTECTMEMORY_SAME_PROCESS, &mut d, false).unwrap();
+        assert_eq!(d, plain);
+        // Another flag or another secret gives other bytes, and does not decrypt.
+        let mut e = plain;
+        protect_memory(&secret, CRYPTPROTECTMEMORY_SAME_LOGON, &mut e, true).unwrap();
+        assert_ne!(e, enc);
+        let mut f = enc;
+        protect_memory(&[6u8; 32], CRYPTPROTECTMEMORY_SAME_PROCESS, &mut f, false).unwrap();
+        assert_ne!(f, plain);
+    }
+
+    #[test]
+    fn memory_protection_checks_size_and_flags() {
+        let mut d = [0u8; 20];
+        assert_eq!(protect_memory(&[1; 32], 0, &mut d, true), Err(ERROR_INVALID_PARAMETER));
+        assert_eq!(protect_memory(&[1; 32], 0, &mut d[..16], true), Ok(()));
+        assert_eq!(protect_memory(&[1; 32], 3, &mut d[..16], true), Err(ERROR_INVALID_PARAMETER));
+        assert_eq!(protect_memory(&[1; 32], 1, &mut [], false), Ok(()));
     }
 }

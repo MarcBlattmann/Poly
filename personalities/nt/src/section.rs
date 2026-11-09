@@ -178,7 +178,7 @@ fn io_file_section(
         if access & (FILE_READ_DATA | FILE_EXECUTE) == 0 {
             return Err(STATUS_ACCESS_DENIED);
         }
-        let img = ImageSection::from_file(&sys.io.read_all(key)?)?;
+        let img = ImageSection::from_reader(alloc::sync::Arc::new(crate::image::VfsFile(sys.io.open_file(key)?)))?;
         return Ok((img.size, Some(img), None));
     }
     let writes = protect.allows_shared_write();
@@ -369,6 +369,7 @@ pub fn map_section(
             return Err(STATUS_INVALID_PARAMETER_6);
         }
         let pages: alloc::vec::Vec<PageState> = img.pages.iter().map(|&p| PageState::Committed(p)).collect();
+        let pages = crate::pagemap::PageMap::from_states(&pages);
         let info = ViewInfo {
             section: key,
             object,
@@ -422,9 +423,9 @@ pub fn map_section(
         let first = (start / PAGE_SIZE) as usize;
         let n = (size / PAGE_SIZE) as usize;
         let commit_pages = (page_up(req.commit_size).unwrap_or(size).min(size) / PAGE_SIZE) as usize;
-        let pages =
-            match &section.kind {
-                SectionKind::Pagefile { committed: Some(c) } => (0..n)
+        let pages = match &section.kind {
+            SectionKind::Pagefile { committed: Some(c) } => {
+                let states: alloc::vec::Vec<PageState> = (0..n)
                     .map(|i| {
                         if c[first + i] || i < commit_pages {
                             PageState::Committed(protect)
@@ -432,9 +433,11 @@ pub fn map_section(
                             PageState::Reserved
                         }
                     })
-                    .collect(),
-                _ => vec![PageState::Committed(protect); n],
-            };
+                    .collect();
+                crate::pagemap::PageMap::from_states(&states)
+            }
+            _ => crate::pagemap::PageMap::new(n, PageState::Committed(protect)),
+        };
         let info = ViewInfo {
             section: key,
             object,
@@ -464,7 +467,7 @@ pub fn map_section(
         let img = section.image().expect("an image");
         match img.relocated(base) {
             Ok(bytes) => {
-                source = ViewSource::Bytes(bytes);
+                source = ViewSource::Image(bytes);
                 status = STATUS_SUCCESS;
             }
             Err(e) => {

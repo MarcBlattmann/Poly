@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/BuildTrusteeWithSidW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-chrome-win-2
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Fills a TRUSTEE_W for a SID: form TRUSTEE_IS_SID, type unknown, no
+  multiple trustee, and the SID pointer in ptstrName. It does not look at
+  the SID.
+interface:
+  signature: "void BuildTrusteeWithSidW(PTRUSTEE_W trustee, PSID sid)"
+  trustee_w: "TRUSTEE_W (accctrl.h), 32 bytes on x64: pMultipleTrustee pointer @0, MultipleTrusteeOperation u32 @8, TrusteeForm u32 @12, TrusteeType u32 @16, 4 bytes padding @20, ptstrName pointer @24"
+  enumerations: "ACCESS_MODE: NOT_USED_ACCESS 0, GRANT_ACCESS 1, SET_ACCESS 2, DENY_ACCESS 3, REVOKE_ACCESS 4, SET_AUDIT_SUCCESS 5, SET_AUDIT_FAILURE 6; TRUSTEE_FORM: TRUSTEE_IS_SID 0, TRUSTEE_IS_NAME 1, TRUSTEE_BAD_FORM 2, TRUSTEE_IS_OBJECTS_AND_SID 3, TRUSTEE_IS_OBJECTS_AND_NAME 4; TRUSTEE_TYPE: UNKNOWN 0, USER 1, GROUP 2, DOMAIN 3, ALIAS 4, WELL_KNOWN_GROUP 5, DELETED_ACCOUNT 6, INVALID 7, COMPUTER 8; inheritance: NO_INHERITANCE 0, SUB_OBJECTS_ONLY_INHERIT 1 (= OBJECT_INHERIT_ACE), SUB_CONTAINERS_ONLY_INHERIT 2 (= CONTAINER_INHERIT_ACE), SUB_CONTAINERS_AND_OBJECTS_INHERIT 3, INHERIT_NO_PROPAGATE 4, INHERIT_ONLY 8 (accctrl.h, winnt.h)"
+rules:
+  fields: "TrusteeForm 0 (TRUSTEE_IS_SID), TrusteeType 0 (TRUSTEE_IS_UNKNOWN), MultipleTrusteeOperation 0, pMultipleTrustee NULL, ptstrName = the pointer passed (not a copy)"
+  overwrites: "a trustee that held other values is overwritten completely in those fields: a trustee that was {pMultipleTrustee 0x1234, operation 5, form 6, type 7} afterwards has multiple NULL and operation 0; a trustee built by name earlier has form 0 again"
+  padding: "the padding at offset 20 is not written (0xAAAAAAAA stays)"
+  null_sid: "a NULL SID is stored: form 0, type 0, name NULL"
+  use: "handed to SetEntriesInAclW the SID becomes the ACE's SID whatever the trustee type (unknown, user, 99): one ACE of size 24 for S-1-5-32-544 with mask 0x120089; an all-zero SID or a revision-2 SID makes SetEntriesInAclW fail with ERROR_INVALID_PARAMETER (87); the type field set to 99 afterwards is accepted"
+errors:
+  none: "the function returns nothing and cannot fail; invalid SIDs are only detected by later calls (87)"
+side_effects: "none beyond the 32 bytes of the structure"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

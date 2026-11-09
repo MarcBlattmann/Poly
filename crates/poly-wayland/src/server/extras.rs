@@ -8,7 +8,9 @@
 //!   token, hands it to another (an app it starts, through
 //!   `XDG_ACTIVATION_TOKEN`), which activates its toplevel with it. Tokens
 //!   are issued to anyone (Poly does not check the serial yet), used once,
-//!   and the 32 newest are kept.
+//!   and the 32 newest are kept. A token the shell made for a launched app
+//!   also ends that launch's busy pointer when it is used (`startup.rs`,
+//!   ADR 0167).
 
 use super::{ClientId, Data, Res, Server, error};
 use crate::protocol::{
@@ -84,6 +86,8 @@ impl Server {
                 self.client(c).insert(id, iface, 1, Data::ActivationToken(Box::default()));
             }
             xdg_activation_v1::Request::Activate { token, surface } => {
+                // A launch waiting for this token is over, whatever else.
+                self.token_activated(&token);
                 let Some(i) = self.tokens.iter().position(|t| *t == token) else { return Ok(()) };
                 self.tokens.remove(i);
                 let main = self.main_surface(c, surface);
@@ -123,10 +127,7 @@ impl Server {
                 t.committed = true;
                 self.token_serial += 1;
                 let token = format!("poly-activation-{}-{}", c.0, self.token_serial);
-                if self.tokens.len() == TOKENS {
-                    self.tokens.remove(0);
-                }
-                self.tokens.push(token.clone());
+                self.remember_token(&token);
                 self.client(c).send(id, xdg_activation_token_v1::Event::Done { token });
             }
             xdg_activation_token_v1::Request::SetSerial { .. } | xdg_activation_token_v1::Request::Destroy => {}
@@ -139,10 +140,16 @@ impl Server {
     pub fn activation_token(&mut self) -> String {
         self.token_serial += 1;
         let token = format!("poly-activation-0-{}", self.token_serial);
+        self.remember_token(&token);
+        token
+    }
+
+    /// `token` can be used to activate a surface (once); the oldest unused
+    /// ones are forgotten past [`TOKENS`].
+    pub(super) fn remember_token(&mut self, token: &str) {
         if self.tokens.len() == TOKENS {
             self.tokens.remove(0);
         }
-        self.tokens.push(token.clone());
-        token
+        self.tokens.push(token.into());
     }
 }

@@ -48,6 +48,8 @@ pub struct Surface {
     pub shown: bool,
     pub buffer: Option<BufferInfo>,
     pub state: WindowState,
+    /// The process of the window's app (0: not told).
+    pub pid: u32,
 }
 
 /// The output as the compositor reported it.
@@ -157,6 +159,7 @@ impl Desktop {
                 shown: false,
                 buffer: None,
                 state: WindowState::Normal,
+                pid: 0,
             },
         );
         self.send(ToCompositor::Create { surface: id, kind, owner, framed });
@@ -177,6 +180,17 @@ impl Desktop {
             (s.rect != (x, y, width, height)).then(|| {
                 s.rect = (x, y, width, height);
                 ToCompositor::Geometry { surface: id, x, y, width, height }
+            })
+        })
+    }
+
+    /// The process whose window the surface is; the compositor uses it to
+    /// end the busy pointer of the app it launched (ADR 0167).
+    pub fn set_process(&mut self, id: SurfaceId, pid: u32) -> bool {
+        self.with(id, |s| {
+            (pid != 0 && s.pid != pid).then(|| {
+                s.pid = pid;
+                ToCompositor::Process { surface: id, pid }
             })
         })
     }
@@ -360,6 +374,9 @@ impl Desktop {
         for (&id, s) in &self.surfaces {
             let mut put = |r: ToCompositor| r.encode(&mut out);
             put(ToCompositor::Create { surface: id, kind: s.kind, owner: s.owner, framed: s.framed });
+            if s.pid != 0 {
+                put(ToCompositor::Process { surface: id, pid: s.pid });
+            }
             let (x, y, width, height) = s.rect;
             put(ToCompositor::Geometry { surface: id, x, y, width, height });
             if !s.title.is_empty() {
@@ -524,6 +541,28 @@ mod tests {
         let replay = records(&d.take_output());
         assert!(replay.contains(&ToCompositor::Title { surface: s, text: String::from("Renamed") }));
         assert!(replay.iter().any(|r| matches!(r, ToCompositor::Buffer { buffer, .. } if *buffer == b3)));
+    }
+
+    #[test]
+    fn the_process_of_a_window_is_told_once_and_replayed() {
+        let mut d = Desktop::new();
+        d.receive(&hello());
+        d.take_output();
+        let s = d.create(SurfaceKind::TopLevel, 0, true);
+        // Unknown (0) says nothing; a process is told once.
+        d.set_process(s, 0);
+        d.set_process(s, 31);
+        d.set_process(s, 31);
+        assert_eq!(
+            records(&d.take_output()),
+            vec![
+                ToCompositor::Create { surface: s, kind: SurfaceKind::TopLevel, owner: 0, framed: true },
+                ToCompositor::Process { surface: s, pid: 31 },
+            ]
+        );
+        d.disconnect();
+        d.receive(&hello());
+        assert!(records(&d.take_output()).contains(&ToCompositor::Process { surface: s, pid: 31 }));
     }
 
     #[test]

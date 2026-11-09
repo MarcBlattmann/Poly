@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "spi_errors",
+      "exe_sha256": "4d6a50da38677306361a7ba3ce8bad94f3cd89825954f3d31d71f19b4ae84d46",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Tk9OQ0xJRU5UTUVUUklDUyBjYlNpemUgMCB1aVBhcmFtIDA6IG9rIDAgY2FwdGlvbiAweDAKTk9OQ0xJRU5UTUVUUklDUyBjYlNpemUgNCB1aVBhcmFtIDQ6IG9rIDAgY2FwdGlvbiAweDAKTk9OQ0xJRU5UTUVUUklDUyBjYlNpemUgNTAwIHVpUGFyYW0gNTAwOiBvayAxIGNhcHRpb24gMzZ4MjIKTk9OQ0xJRU5UTUVUUklDUyBjYlNpemUgNTA0IHVpUGFyYW0gNTA0OiBvayAxIGNhcHRpb24gMzZ4MjIKTk9OQ0xJRU5UTUVUUklDUyBjYlNpemUgNTA4IHVpUGFyYW0gNTA4OiBvayAwIGNhcHRpb24gMHgwCk5PTkNMSUVOVE1FVFJJQ1MgY2JTaXplIDUwNCB1aVBhcmFtIDA6IG9rIDEgY2FwdGlvbiAzNngyMgpOT05DTElFTlRNRVRSSUNTIGNiU2l6ZSA1MDQgdWlQYXJhbSA1MDA6IG9rIDEgY2FwdGlvbiAzNngyMgpOT05DTElFTlRNRVRSSUNTIGNiU2l6ZSAwIHVpUGFyYW0gNTA0OiBvayAwIGNhcHRpb24gMHgwCmFjdGlvbiAweDc3Nzc6IG9rIDAgbGFzdCBlcnJvciA4NwphY3Rpb24gMHgxZmZmOiBvayAwIGxhc3QgZXJyb3IgODcKYWN0aW9uIDB4MTI6IG9rIDAgbGFzdCBlcnJvciAxNDM5CmFjdGlvbiAweDJmZmY6IG9rIDAgbGFzdCBlcnJvciA4NwphY3Rpb24gMHgwOiBvayAwIGxhc3QgZXJyb3IgMTQzOQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NONCLIENTMETRICS cbSize 0 uiParam 0: ok 0 caption 0x0\nNONCLIENTMETRICS cbSize 4 uiParam 4: ok 0 caption 0x0\nNONCLIENTMETRICS cbSize 500 uiParam 500: ok 1 caption 36x22\nNONCLIENTMETRICS cbSize 504 uiParam 504: ok 1 caption 36x22\nNONCLIENTMETRICS cbSize 508 uiParam 508: ok 0 caption 0x0\nNONCLIENTMETRICS cbSize 504 uiParam 0: ok 1 caption 36x22\nNONCLIENTMETRICS cbSize 504 uiParam 500: ok 1 caption 36x22\nNONCLIENTMETRICS cbSize 0 uiParam 504: ok 0 caption 0x0\naction 0x7777: ok 0 last error 87\naction 0x1fff: ok 0 last error 87\naction 0x12: ok 0 last error 1439\naction 0x2fff: ok 0 last error 87\naction 0x0: ok 0 last error 1439\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    },
+    {
+      "name": "spi_metrics",
+      "exe_sha256": "2fbcf6c648744ec1560c385213eb39b2df7ac85ef01e238e4d5087ec59c38043",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U1BJX0dFVFdPUktBUkVBOiBvayAxIHdvcmsgYXJlYSAwLDI0LDE5MjAsMTA4MCBsYXN0IGVycm9yIC0xClNQSV9HRVROT05DTElFTlRNRVRSSUNTOiBvayAxIGxhc3QgZXJyb3IgLTEgYm9yZGVyIDEgc2Nyb2xsIDE3eDE3IGNhcHRpb24gMzZ4MjIgc21hbGwgY2FwdGlvbiAyMngyMiBtZW51IDE5eDE5IHBhZGRlZCA0CiAgZXF1YWwgdG8gR2V0U3lzdGVtTWV0cmljczogYm9yZGVyIHRydWUgc2Nyb2xsIHRydWUgY2FwdGlvbiBoZWlnaHQgdHJ1ZSBtZW51IHRydWUgcGFkZGVkIHRydWUgc21hbGwgY2FwdGlvbiB0cnVlCiAgY2FwdGlvbiBmb250OiBoZWlnaHQgLTEyIHdpZHRoIDAgd2VpZ2h0IDQwMCBpdGFsaWMgMCBjaGFyc2V0IDEgcXVhbGl0eSAwIHBpdGNoL2ZhbWlseSAweDAgZmFjZSBTZWdvZSBVSQogIHNtYWxsIGNhcHRpb24gZm9udDogaGVpZ2h0IC0xMiB3aWR0aCAwIHdlaWdodCA0MDAgaXRhbGljIDAgY2hhcnNldCAxIHF1YWxpdHkgMCBwaXRjaC9mYW1pbHkgMHgwIGZhY2UgU2Vnb2UgVUkKICBtZW51IGZvbnQ6IGhlaWdodCAtMTIgd2lkdGggMCB3ZWlnaHQgNDAwIGl0YWxpYyAwIGNoYXJzZXQgMSBxdWFsaXR5IDAgcGl0Y2gvZmFtaWx5IDB4MCBmYWNlIFNlZ29lIFVJCiAgc3RhdHVzIGZvbnQ6IGhlaWdodCAtMTIgd2lkdGggMCB3ZWlnaHQgNDAwIGl0YWxpYyAwIGNoYXJzZXQgMSBxdWFsaXR5IDAgcGl0Y2gvZmFtaWx5IDB4MCBmYWNlIFNlZ29lIFVJCiAgbWVzc2FnZSBmb250OiBoZWlnaHQgLTEyIHdpZHRoIDAgd2VpZ2h0IDQwMCBpdGFsaWMgMCBjaGFyc2V0IDEgcXVhbGl0eSAwIHBpdGNoL2ZhbWlseSAweDAgZmFjZSBTZWdvZSBVSQpTUElfR0VUSUNPTk1FVFJJQ1MgKGNiU2l6ZSAxMDgpOiBvayAxIGxhc3QgZXJyb3IgLTEgaG9yaXpvbnRhbCA3NSB2ZXJ0aWNhbCA3NSB3cmFwIDEgZm9udCBoZWlnaHQgLTEyClNQSV9HRVRBTklNQVRJT046IG9rIDEgbGFzdCBlcnJvciAweDEyMzQgY2JTaXplIDggTWluQW5pbWF0ZSAxClNQSV9HRVRISUdIQ09OVFJBU1Q6IG9rIDEgbGFzdCBlcnJvciAweDEyMzQgY2JTaXplIDE2IGZsYWdzIDB4N2UKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SPI_GETWORKAREA: ok 1 work area 0,24,1920,1080 last error -1\nSPI_GETNONCLIENTMETRICS: ok 1 last error -1 border 1 scroll 17x17 caption 36x22 small caption 22x22 menu 19x19 padded 4\n  equal to GetSystemMetrics: border true scroll true caption height true menu true padded true small caption true\n  caption font: height -12 width 0 weight 400 italic 0 charset 1 quality 0 pitch/family 0x0 face Segoe UI\n  small caption font: height -12 width 0 weight 400 italic 0 charset 1 quality 0 pitch/family 0x0 face Segoe UI\n  menu font: height -12 width 0 weight 400 italic 0 charset 1 quality 0 pitch/family 0x0 face Segoe UI\n  status font: height -12 width 0 weight 400 italic 0 charset 1 quality 0 pitch/family 0x0 face Segoe UI\n  message font: height -12 width 0 weight 400 italic 0 charset 1 quality 0 pitch/family 0x0 face Segoe UI\nSPI_GETICONMETRICS (cbSize 108): ok 1 last error -1 horizontal 75 vertical 75 wrap 1 font height -12\nSPI_GETANIMATION: ok 1 last error 0x1234 cbSize 8 MinAnimate 1\nSPI_GETHIGHCONTRAST: ok 1 last error 0x1234 cbSize 16 flags 0x7e\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

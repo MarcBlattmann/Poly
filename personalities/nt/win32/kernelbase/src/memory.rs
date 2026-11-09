@@ -170,3 +170,99 @@ pub unsafe extern "system" fn LocalSize(mem: *mut u8) -> usize {
     let n = unsafe { nt::RtlSizeHeap(process_heap(), 0, mem) };
     if n == usize::MAX { fail(ERROR_INVALID_HANDLE, 0) } else { n }
 }
+
+// ----- ReadProcessMemory, WriteProcessMemory ---------------------------------------------
+
+/// Copy between this process's memory and `buf`, region by region: a region that cannot be
+/// read (or, for a write, opened for writing) ends the copy with `ERROR_PARTIAL_COPY` and the
+/// bytes done so far. Only the calling process is supported (`ERROR_NOT_SUPPORTED` otherwise):
+/// there is no cross-process memory service yet.
+unsafe fn copy_self(process: isize, base: usize, buf: *mut u8, size: usize, done: *mut usize, write: bool) -> i32 {
+    if process != nt::CURRENT_PROCESS as isize {
+        // SAFETY: plain calls; `process` is only looked at.
+        let id = unsafe { crate::spawn::GetProcessId(process as _) };
+        if id == 0 {
+            // Not a process handle: GetProcessId set the error (ERROR_INVALID_HANDLE).
+            return FALSE;
+        }
+        if id != crate::process::GetCurrentProcessId() {
+            return fail(ERROR_NOT_SUPPORTED, FALSE);
+        }
+    }
+    let mut copied = 0usize;
+    let mut ok = true;
+    while copied < size {
+        let at = base.wrapping_add(copied);
+        let mut info = [0u8; 48];
+        // SAFETY: a 48-byte MEMORY_BASIC_INFORMATION buffer.
+        let q = unsafe { VirtualQuery(at as *const u8, info.as_mut_ptr(), 48) };
+        if q == 0 {
+            ok = false;
+            break;
+        }
+        let region_base = u64::from_le_bytes(info[0..8].try_into().expect("8")) as usize;
+        let region_size = u64::from_le_bytes(info[24..32].try_into().expect("8")) as usize;
+        let state = u32::from_le_bytes(info[32..36].try_into().expect("4"));
+        let protect = u32::from_le_bytes(info[36..40].try_into().expect("4"));
+        if !region_readable(state, protect) {
+            ok = false;
+            break;
+        }
+        let n = (size - copied).min(region_base + region_size - at);
+        let mut restore = None;
+        if write && !protect_writable(protect) {
+            let mut old = 0u32;
+            // SAFETY: the pages of this process's own region.
+            if unsafe { VirtualProtect(at as *mut u8, n, protect_for_write(protect), &mut old) } == FALSE {
+                ok = false;
+                break;
+            }
+            restore = Some(old);
+        }
+        // SAFETY: `n` bytes inside a committed, now accessible region; the caller's buffer holds `size`.
+        unsafe {
+            if write {
+                core::ptr::copy(buf.add(copied), at as *mut u8, n);
+            } else {
+                core::ptr::copy(at as *const u8, buf.add(copied), n);
+            }
+        }
+        if let Some(old) = restore {
+            let mut ignored = 0u32;
+            // SAFETY: as above.
+            unsafe { VirtualProtect(at as *mut u8, n, old, &mut ignored) };
+        }
+        copied += n;
+    }
+    if !done.is_null() {
+        // SAFETY: the caller's out parameter.
+        unsafe { *done = copied };
+    }
+    if ok { TRUE } else { fail(ERROR_PARTIAL_COPY, FALSE) }
+}
+
+/// `ReadProcessMemory`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ReadProcessMemory(
+    process: isize,
+    base: *const u8,
+    buf: *mut u8,
+    size: usize,
+    read: *mut usize,
+) -> i32 {
+    // SAFETY: the caller's pointers; copy_self checks the source.
+    unsafe { copy_self(process, base as usize, buf, size, read, false) }
+}
+
+/// `WriteProcessMemory`: a read-only or code region is made writable for the copy and put back.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WriteProcessMemory(
+    process: isize,
+    base: *mut u8,
+    buf: *const u8,
+    size: usize,
+    written: *mut usize,
+) -> i32 {
+    // SAFETY: the caller's pointers; copy_self checks the target.
+    unsafe { copy_self(process, base as usize, buf as *mut u8, size, written, true) }
+}

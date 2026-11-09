@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "idc_assoc",
+      "exe_sha256": "ae9ae8de54e9e61fda872536f26a264140a1c9ee58ec3507b4394f436b655f82",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YT1vd24gYj1vd24KZGVzdHJveSBvd24gd2hpbGUgdHdvIHdpbmRvd3MgdXNlIGl0OiAxCmFmdGVyd2FyZHMgYT1kZWZhdWx0IGI9ZGVmYXVsdApvcGVuIHN0YXR1cyBvZiBhJ3MgY29udGV4dDogMApkZXN0cm95IG93biBjb250ZXh0IGFmdGVyIGl0cyB3aW5kb3cgd2FzIGRlc3Ryb3llZDogMQphc3NvY2lhdGluZyBhIGRlc3Ryb3llZCBjb250ZXh0OiBwcmV2aW91cyBudWxsIGxhc3QgZXJyb3IgMHg2OyBhIG5vdyBkZWZhdWx0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a=own b=own\ndestroy own while two windows use it: 1\nafterwards a=default b=default\nopen status of a's context: 0\ndestroy own context after its window was destroyed: 1\nassociating a destroyed context: previous null last error 0x6; a now default\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 224
+    }
+  ]
+}

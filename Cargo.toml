@@ -6,6 +6,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/poly-a64",
     "crates/poly-abi",
     "crates/poly-acpi",
     "crates/poly-audio",
@@ -17,9 +18,11 @@ members = [
     "crates/poly-crt",
     "crates/poly-crypto",
     "crates/poly-elf",
+    "crates/poly-etw",
     "crates/poly-ext2",
     "crates/poly-fbdev",
     "crates/poly-files",
+    "crates/poly-com",
     "crates/poly-cpio",
     "crates/poly-dbus",
     "crates/poly-drm",
@@ -31,14 +34,17 @@ members = [
     "crates/poly-heap",
     "crates/poly-http",
     "crates/poly-input",
+    "crates/poly-iphlp",
     "crates/poly-irq",
     "crates/poly-kernelbase",
     "crates/poly-ldr",
     "crates/poly-libm",
     "crates/poly-line",
+    "crates/poly-macho",
     "crates/poly-mem",
     "crates/poly-ntobj",
     "crates/poly-net",
+    "crates/poly-netapi",
     "crates/poly-nls",
     "crates/poly-pagecache",
     "crates/poly-paging",
@@ -57,6 +63,7 @@ members = [
     "crates/poly-seh",
     "crates/poly-cxxeh",
     "crates/poly-smp",
+    "crates/poly-stubs",
     "crates/poly-term",
     "crates/poly-tty",
     "crates/poly-unix",
@@ -80,6 +87,7 @@ members = [
     "personalities/native",
     "personalities/nt",
     "personalities/xnu",
+    "tools/a64diff",
     "tools/coverage",
     "tools/pipeline",
     "tools/xtask",
@@ -100,6 +108,7 @@ repository = "https://github.com/MarcBlattmann/Poly"
 rust-version = "1.97"
 
 [workspace.dependencies]
+poly-a64 = { path = "crates/poly-a64" }
 poly-abi = { path = "crates/poly-abi" }
 poly-acpi = { path = "crates/poly-acpi" }
 poly-audio = { path = "crates/poly-audio" }
@@ -111,6 +120,7 @@ poly-console = { path = "crates/poly-console" }
 poly-crt = { path = "crates/poly-crt" }
 poly-crypto = { path = "crates/poly-crypto" }
 poly-elf = { path = "crates/poly-elf" }
+poly-etw = { path = "crates/poly-etw" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-fbdev = { path = "crates/poly-fbdev" }
 poly-files = { path = "crates/poly-files" }
@@ -125,14 +135,19 @@ poly-hda = { path = "crates/poly-hda" }
 poly-heap = { path = "crates/poly-heap" }
 poly-http = { path = "crates/poly-http" }
 poly-input = { path = "crates/poly-input" }
+poly-iphlp = { path = "crates/poly-iphlp" }
 poly-irq = { path = "crates/poly-irq" }
 poly-kernelbase = { path = "crates/poly-kernelbase" }
 poly-ldr = { path = "crates/poly-ldr" }
+poly-com = { path = "crates/poly-com" }
+poly-stubs = { path = "crates/poly-stubs" }
 poly-libm = { path = "crates/poly-libm" }
 poly-line = { path = "crates/poly-line" }
+poly-macho = { path = "crates/poly-macho" }
 poly-mem = { path = "crates/poly-mem" }
 poly-ntobj = { path = "crates/poly-ntobj" }
 poly-net = { path = "crates/poly-net" }
+poly-netapi = { path = "crates/poly-netapi" }
 poly-nls = { path = "crates/poly-nls" }
 poly-pagecache = { path = "crates/poly-pagecache" }
 poly-paging = { path = "crates/poly-paging" }

@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/kernel32.dll/GetProcessMitigationPolicy
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-chrome-win-2
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Reads one mitigation policy of a process into a structure of the size that
+  policy needs. Chrome's processes call it on themselves to check what the
+  sandbox applied.
+interface:
+  signature: "BOOL GetProcessMitigationPolicy(HANDLE process, PROCESS_MITIGATION_POLICY policy, PVOID buffer, SIZE_T length)"
+  policies: "PROCESS_MITIGATION_POLICY values (winnt.h): ProcessDEPPolicy 0, ProcessASLRPolicy 1, ProcessDynamicCodePolicy 2, ProcessStrictHandleCheckPolicy 3, ProcessSystemCallDisablePolicy 4, ProcessMitigationOptionsMask 5, ProcessExtensionPointDisablePolicy 6, ProcessControlFlowGuardPolicy 7, ProcessSignaturePolicy 8, ProcessFontDisablePolicy 9, ProcessImageLoadPolicy 10, ProcessSystemCallFilterPolicy 11, ProcessPayloadRestrictionPolicy 12, ProcessChildProcessPolicy 13, ProcessSideChannelIsolationPolicy 14, ProcessUserShadowStackPolicy 15, ProcessRedirectionTrustPolicy 16, ProcessUserPointerAuthPolicy 17, ProcessSEHOPPolicy 18"
+rules:
+  sizes: "each policy accepts exactly one length: 4 bytes for ASLR (1), DynamicCode (2), StrictHandleCheck (3), SystemCallDisable (4), ExtensionPointDisable (6), ControlFlowGuard (7), Signature (8), FontDisable (9), ImageLoad (10), SystemCallFilter (11), PayloadRestriction (12), ChildProcess (13), SideChannelIsolation (14), UserShadowStack (15), RedirectionTrust (16), SEHOP (18); 8 bytes for DEP (0); ProcessMitigationOptionsMask (5) accepts 8, 9, 12, 16, 24, 32, 64 and 128 (two 64-bit masks of the policies the system supports; at 64 bytes more than the first 8 bytes are written, the first word was 0x33333303); any other length fails with 87"
+  class_17: "ProcessUserPointerAuthPolicy (17) is not supported on this system: length 4 fails with ERROR_NOT_SUPPORTED (50), other lengths 87; classes 19, 20, 100 and 0xFFFFFFFF fail with 87 for every length"
+  handles: "the pseudo-handle of the current process, and real handles with PROCESS_QUERY_INFORMATION (0x400) or PROCESS_QUERY_LIMITED_INFORMATION (0x1000) work; SYNCHRONIZE only and PROCESS_TERMINATE only fail with ERROR_ACCESS_DENIED (5); a NULL handle, -2 and a handle value that is not open fail with ERROR_INVALID_HANDLE (6)"
+  null_buffer: "a NULL buffer with length 0 fails with ERROR_INVALID_PARAMETER (87)"
+errors:
+  invalid_parameter: "87: unknown class or a length the class does not accept, NULL buffer"
+  not_supported: "50: class 17 with length 4"
+  invalid_handle: "6"
+  access_denied: "5: handle without query rights"
+side_effects: "none"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  the values of the policies of a default process (they depend on the system
+  settings and on the executable), other processes. Domain accounts and
+  domain-relative well-known SIDs of a real domain, AppContainer and
+  capability SIDs beyond their string forms, auditing (SACL entries are only
+  stored, never evaluated), remote systems (the system-name arguments),
+  Kerberos or NTLM logon tokens, tokens of other users.

@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/InitializeProcThreadAttributeList.yaml
+id: windows/api/kernel32.dll/InitializeProcThreadAttributeList
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: InitializeProcThreadAttributeList, UpdateProcThreadAttribute, STARTUPINFOEXW, CreateProcessW. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Prepares caller-allocated memory as an attribute list for a number of attributes. The two-step use: call with a NULL list to learn the size (the call fails with ERROR_INSUFFICIENT_BUFFER and writes the size), allocate, call again. An initialised list, even an empty one, can be passed to CreateProcessW in STARTUPINFOEXW with EXTENDED_STARTUPINFO_PRESENT.
+interface:
+  signature: "BOOL InitializeProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST list, DWORD attributeCount, DWORD flags, PSIZE_T size)"
+rules:
+  attribute_numbers: "Attribute numbers (winbase.h): PROC_THREAD_ATTRIBUTE_PARENT_PROCESS 0x20000, HANDLE_LIST 0x20002, MITIGATION_POLICY 0x20007, SECURITY_CAPABILITIES 0x20009, JOB_LIST 0x2000D, CHILD_PROCESS_POLICY 0x2000E."
+  size_query: "list NULL: FALSE, ERROR_INSUFFICIENT_BUFFER (122), *size set to the bytes needed (non-zero, a multiple of 8, under 1024 for up to 5 attributes)."
+  size_grows: "the size grows strictly with the attribute count (1 < 2 < 3 < 5 seen). The exact sizes are not part of the contract."
+  buffer_sizes: "a buffer of exactly the needed size works; one byte less, or size 0, fails with ERROR_INSUFFICIENT_BUFFER and *size is set to the needed size; a larger buffer works and *size is rewritten to the needed size."
+  counts: "attribute counts 0, 27 and 28 all give the size-query result (FALSE, 122, a size written); counts are not validated by the size query."
+  flags: "flags other than 0 (1 and 0xFFFFFFFF seen): FALSE, ERROR_INVALID_PARAMETER (87)."
+  empty_list_in_createprocess: "an initialised list with no attribute updates, in a STARTUPINFOEXW with EXTENDED_STARTUPINFO_PRESENT, starts a child normally."
+  startupinfo_size: "EXTENDED_STARTUPINFO_PRESENT with a STARTUPINFO whose cb is the plain STARTUPINFOW size fails in CreateProcessW with ERROR_INVALID_PARAMETER (87); an extended-size structure without the flag is accepted (the list is ignored); the flag with a NULL attribute list in a correctly sized structure is accepted."
+  reinit: "a list can be deleted and initialised again in the same memory, repeatedly, with different counts."
+errors:
+  insufficient_buffer: "ERROR_INSUFFICIENT_BUFFER (122) with the needed size"
+  bad_flags: "ERROR_INVALID_PARAMETER (87)"
+  plain_startupinfo_with_extended_flag: "CreateProcessW fails with ERROR_INVALID_PARAMETER (87)"
+side_effects: "writes the list header into the caller's memory"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  AppContainer (SECURITY_CAPABILITIES) and other attributes that need a profile or a token, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS effects, jobs with CPU/memory/IO rate limits, job time limits and their notifications, UI restrictions.

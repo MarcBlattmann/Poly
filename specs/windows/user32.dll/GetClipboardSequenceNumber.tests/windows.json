@@ -1,0 +1,57 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "seq_close",
+      "exe_sha256": "cc33c10edd51b551089323d1d1ef4b83f94f273f50eb635a60766e9a2470be3f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dW5pY29kZTogY2xvc2UgKzMKYW5zaTogY2xvc2UgKzMKb2VtOiBjbG9zZSArMwphbnNpICsgdW5pY29kZTogY2xvc2UgKzIKYW5zaSArIHVuaWNvZGUgKyBvZW06IGNsb3NlICsxCmFsbCBmb3VyOiBjbG9zZSArMAp1bmljb2RlICsgbG9jYWxlOiBjbG9zZSArMgpiaXRtYXA6IGNsb3NlICsyCnByaXZhdGU6IGNsb3NlICswCnByaXZhdGUgKyB1bmljb2RlOiBjbG9zZSArMwpkZWxheWVkIHVuaWNvZGU6IGNsb3NlICszCm5vdGhpbmc6IGNsb3NlICswCm9rIGRvbmUKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "unicode: close +3\nansi: close +3\noem: close +3\nansi + unicode: close +2\nansi + unicode + oem: close +1\nall four: close +0\nunicode + locale: close +2\nbitmap: close +2\nprivate: close +0\nprivate + unicode: close +3\ndelayed unicode: close +3\nnothing: close +0\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 71
+    },
+    {
+      "name": "seq_delayed",
+      "exe_sha256": "25797482fe1a2b8552f7bd9f2bba35e33320bfa84b023dbd90599e705693edda",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVuZGVyIGJ5IEdldDogKzAgY2xvc2UgYWZ0ZXIgdGhlIHJlbmRlcjogKzAKU2V0IHdoaWxlIGNsb3NlZDogbnVsbCB0cnVlIHNlcXVlbmNlICswClNldCB3aXRoIGFuIGVtcHR5IGJsb2NrOiBudWxsIHRydWUgc2VxdWVuY2UgKzAKU2V0IGZvcm1hdCAwOiBudWxsIHRydWUgc2VxdWVuY2UgKzAKb3duZXIgZGVzdHJveWVkIG92ZXIgYSBkZWxheWVkIGZvcm1hdDogKzEKb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "render by Get: +0 close after the render: +0\nSet while closed: null true sequence +0\nSet with an empty block: null true sequence +0\nSet format 0: null true sequence +0\nowner destroyed over a delayed format: +1\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 70
+    },
+    {
+      "name": "seq_threads",
+      "exe_sha256": "6f253afc29e52843a44d45a598d067650dc806176b5ac6079ed2163117d63b73",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhyZWFkIHNlZXMgdGhlIG1haW4gdGhyZWFkJ3MgbnVtYmVyOiArMCBlcnIgMHgxMjM0CnRocmVhZCdzIG93biBjaGFuZ2UgKEVtcHR5LCBTZXQsIENsb3NlKTogKzIKbWFpbiBzZWVzIHRoZSB0aHJlYWQncyBjaGFuZ2U6ICsyCm93bmVyIGRlc3Ryb3llZCAoaXRzIFdNX1JFTkRFUkFMTEZPUk1BVFMgaGFuZGxlciBwdXRzIHRleHQgb24gdGhlIGNsaXBib2FyZCk6ICs0CjIwIHRpbWVzIG9wZW4rRW1wdHkrY2xvc2U6IGV2ZXJ5IHRpbWUgKzEgdHJ1ZQpvayBkb25lCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "thread sees the main thread's number: +0 err 0x1234\nthread's own change (Empty, Set, Close): +2\nmain sees the thread's change: +2\nowner destroyed (its WM_RENDERALLFORMATS handler puts text on the clipboard): +4\n20 times open+Empty+close: every time +1 true\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 82
+    }
+  ]
+}
