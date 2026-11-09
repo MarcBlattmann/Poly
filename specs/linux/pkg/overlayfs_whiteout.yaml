@@ -1,0 +1,72 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/pkg/overlayfs_whiteout.yaml
+id: linux/api/pkg/overlayfs_whiteout
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64; tests run as root inside a private mount namespace; layers are directories on tmpfs mounts made by the test; index=off, metacopy=off, redirect_dir=off; umask 022"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  Whiteouts and opaque directories are how an overlay (see overlayfs_mount)
+  represents deletion of names that a lower layer has. A whiteout is a
+  character device node with device number 0:0 (lstat: S_IFCHR, st_rdev 0,
+  permission bits 0 when overlayfs makes it) in a higher layer; it hides the
+  same name in all layers below it, for files, symlinks, fifos and directories
+  alike, and is itself never listed or reachable through the merged view
+  (ENOENT). A whiteout in the lowest layer hides nothing and is not listed
+  either. A character device with another number is an ordinary node and is
+  shown.
+  A directory is opaque when it carries the extended attribute
+  "trusted.overlay.opaque" with the value "y" (one byte): nothing of the layers
+  below it shows through at that name (only its own entries do). The attribute
+  is hidden from getxattr (ENODATA) and listxattr through the merged view.
+  Both markers work in the upper layer and in lower layers above others, and
+  may be prepared before the mount.
+  unlink of a lower name (also one in the second of several lowers, also one
+  present in several lowers) makes a whiteout in the upper layer; removing a
+  copied-up name also leaves one; removing an upper-only name leaves nothing.
+  unlink of a name that is whited out is ENOENT. Creating the name again
+  replaces the whiteout with the new object (any type; the lower object stays
+  hidden). rmdir of an empty lower directory leaves a whiteout; rmdir of a
+  merged directory that still shows any lower entry is ENOTEMPTY; after every
+  lower entry was removed (each leaves a whiteout inside a copy of the
+  directory) rmdir succeeds and the upper layer ends up with one whiteout in
+  place of the directory (no directory). rmdir of a file is ENOTDIR and unlink
+  of a directory EISDIR. A directory made over a whiteout of a directory, or
+  over the whiteout of a non-directory, is created opaque
+  ("trusted.overlay.opaque" = "y" on the upper directory) and shows only what
+  is created in it; its mode is the mkdir mode minus umask.
+  renameat2(RENAME_WHITEOUT) (overlayfs itself uses it on the upper
+  filesystem; tested on tmpfs): moves the source to the target name and leaves
+  a whiteout under the source name in one step; it works for files and
+  directories and replaces an existing target like a plain rename; with
+  RENAME_NOREPLACE it fails with EEXIST for an existing target; with
+  RENAME_EXCHANGE it is EINVAL; a missing source is ENOENT. A normal user may
+  use it on tmpfs and may create a 0:0 character device with mknod, while any
+  other device node needs CAP_MKNOD (EPERM). Opening a whiteout node is ENXIO;
+  it can be unlinked or renamed like any directory entry.
+returns:
+  whiteout_node: "lstat: S_IFCHR, st_rdev == 0, permission bits 0"
+  readdir: "whiteouts and the names they hide are not listed"
+errors:
+  enotempty: "ENOTEMPTY (39): rmdir of a merged directory that shows at least one entry"
+  enotdir: "ENOTDIR (20): rmdir of a file"
+  eisdir: "EISDIR (21): unlink of a directory"
+  enoent: "ENOENT (2): any use of a whited-out name; unlink of it; stat"
+  rename_whiteout_flags: "EINVAL (22): RENAME_WHITEOUT together with RENAME_EXCHANGE; EEXIST (17): with RENAME_NOREPLACE onto an existing name"
+  enxio: "ENXIO (6): open() of a whiteout node"
+  mknod_perm: "EPERM (1): mknod of a device node other than 0:0 without CAP_MKNOD"
+side_effects: "Whiteouts appear in the upper layer; lower layers are never changed."
+threading: "ordinary filesystem semantics"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+# Notes: the tests prepare lower layers directly (they are plain directories
+# on tmpfs before the mount) and look into the upper layer after changes.
+# trusted.* attributes need root. Directory listing order is not specified:
+# tests sort names. With redirect_dir=on further markers exist (see
+# overlayfs_copyup).

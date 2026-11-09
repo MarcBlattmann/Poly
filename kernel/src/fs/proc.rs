@@ -479,6 +479,7 @@ impl ProcSource for KernelProc {
             ino: file.node().ino(),
             read: file.readable(),
             write: file.writable(),
+            extra: file.object().map(|o| o.fdinfo().into_bytes()).unwrap_or_default(),
         })
     }
 
@@ -562,10 +563,10 @@ impl ProcSource for KernelProc {
     }
 
     fn filesystems(&self) -> Vec<(String, bool)> {
-        ["sysfs", "tmpfs", "proc"]
+        // The list sysfs(2) numbers.
+        poly_personality_linux::sys::fsinfo::FILE_SYSTEM_TYPES
             .iter()
-            .map(|n| (String::from(*n), true))
-            .chain(["ext2", "ext3", "ext4"].iter().map(|n| (String::from(*n), false)))
+            .map(|&(n, nodev)| (String::from(n), nodev))
             .collect()
     }
 

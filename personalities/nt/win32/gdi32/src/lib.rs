@@ -14,6 +14,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use poly_gdi::gdi::{Gdi, Rect};
+use poly_gdi::region::Region;
 use poly_win32_gui::{SpinLock, set_last_error, wide};
 use poly_win32_rt as _;
 
@@ -26,7 +27,9 @@ unsafe extern "system" {
 const MEM_COMMIT_RESERVE: u32 = 0x3000;
 const MEM_RELEASE: u32 = 0x8000;
 const PAGE_READWRITE: u32 = 0x04;
+// winerror.h
 const ERROR_INVALID_HANDLE: u32 = 6;
+const ERROR_INVALID_PARAMETER: u32 = 87;
 
 static GDI: SpinLock<Option<Gdi>> = SpinLock::new(None);
 
@@ -199,16 +202,6 @@ pub unsafe extern "system" fn CreateDIBSection(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn CreateRectRgn(l: i32, t: i32, r: i32, b: i32) -> H {
-    gdi(|g| g.create_rect_rgn(Rect::new(l, t, r, b))) as H
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn SelectClipRgn(hdc: H, rgn: H) -> i32 {
-    gdi(|g| g.select_clip_rgn(hdc as u64, rgn as u64))
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn CreateFontIndirectW(lf: *const u8) -> H {
     if lf.is_null() {
         return 0;
@@ -216,6 +209,162 @@ pub unsafe extern "system" fn CreateFontIndirectW(lf: *const u8) -> H {
     // SAFETY: a LOGFONTW (92 bytes).
     let b = unsafe { core::slice::from_raw_parts(lf, 92) };
     gdi(|g| g.create_font(b)) as H
+}
+
+// ----- regions
+
+/// A (kind, error) result: the error, if any, becomes the last error.
+fn kind_or_error((kind, err): (i32, u32)) -> i32 {
+    if err != 0 {
+        set_last_error(err);
+    }
+    kind
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn CreateRectRgn(l: i32, t: i32, r: i32, b: i32) -> H {
+    match gdi(|g| g.create_rect_rgn(Rect::new(l, t, r, b))) {
+        Ok(h) => h as H,
+        Err(e) => {
+            set_last_error(e);
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateRectRgnIndirect(rect: *const i32) -> H {
+    if rect.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's RECT.
+    let r = unsafe { read_rect(rect) };
+    CreateRectRgn(r.left, r.top, r.right, r.bottom)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetRectRgn(rgn: H, l: i32, t: i32, r: i32, b: i32) -> i32 {
+    i32::from(gdi(|g| g.set_rect_rgn(rgn as u64, Rect::new(l, t, r, b))))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn CombineRgn(dst: H, src1: H, src2: H, mode: i32) -> i32 {
+    kind_or_error(gdi(|g| g.combine_rgn(dst as u64, src1 as u64, src2 as u64, mode)))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetRgnBox(rgn: H, rect: *mut i32) -> i32 {
+    let Some((kind, r)) = gdi(|g| g.rgn_box(rgn as u64)) else { return 0 };
+    if !rect.is_null() {
+        // SAFETY: the caller's RECT.
+        unsafe { write_rect(rect, r) };
+    }
+    kind
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn OffsetRgn(rgn: H, dx: i32, dy: i32) -> i32 {
+    gdi(|g| g.offset_rgn(rgn as u64, dx, dy))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn EqualRgn(a: H, b: H) -> i32 {
+    gdi(|g| g.equal_rgn(a as u64, b as u64))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn PtInRegion(rgn: H, x: i32, y: i32) -> i32 {
+    match gdi(|g| g.pt_in_region(rgn as u64, x, y)) {
+        Ok(inside) => i32::from(inside),
+        Err(e) => {
+            set_last_error(e);
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RectInRegion(rgn: H, rect: *const i32) -> i32 {
+    if rect.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller's RECT.
+    let r = unsafe { read_rect(rect) };
+    i32::from(gdi(|g| g.rect_in_region(rgn as u64, r)).unwrap_or(false))
+}
+
+/// `GetRegionData` (Learn): the size needed for a NULL buffer, `count`
+/// when it was large enough, else 0.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetRegionData(rgn: H, count: u32, data: *mut u8) -> u32 {
+    let Some(bytes) = gdi(|g| g.region_data(rgn as u64)) else { return 0 };
+    if data.is_null() {
+        return bytes.len() as u32;
+    }
+    if (count as usize) < bytes.len() {
+        return 0;
+    }
+    // SAFETY: the caller's buffer holds `count` bytes, at least these.
+    unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), data, bytes.len()) };
+    count
+}
+
+// ----- clipping
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SelectClipRgn(hdc: H, rgn: H) -> i32 {
+    kind_or_error(gdi(|g| g.select_clip_rgn(hdc as u64, rgn as u64)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn ExtSelectClipRgn(hdc: H, rgn: H, mode: i32) -> i32 {
+    kind_or_error(gdi(|g| g.ext_select_clip_rgn(hdc as u64, rgn as u64, mode)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetClipRgn(hdc: H, rgn: H) -> i32 {
+    kind_or_error(gdi(|g| g.clip_rgn(hdc as u64, rgn as u64)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn IntersectClipRect(hdc: H, l: i32, t: i32, r: i32, b: i32) -> i32 {
+    kind_or_error(gdi(|g| g.clip_rect(hdc as u64, Rect::new(l, t, r, b), false)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn ExcludeClipRect(hdc: H, l: i32, t: i32, r: i32, b: i32) -> i32 {
+    kind_or_error(gdi(|g| g.clip_rect(hdc as u64, Rect::new(l, t, r, b), true)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetRandomRgn(hdc: H, rgn: H, which: i32) -> i32 {
+    gdi(|g| g.random_rgn(hdc as u64, rgn as u64, which))
+}
+
+/// `SetViewportOrgEx` (`viewport`) / `SetWindowOrgEx`.
+unsafe fn set_origin(hdc: H, viewport: bool, x: i32, y: i32, old: *mut i32) -> i32 {
+    let Some((ox, oy)) = gdi(|g| g.set_origin(hdc as u64, viewport, x, y)) else { return 0 };
+    if !old.is_null() {
+        // SAFETY: the caller's POINT.
+        unsafe {
+            *old = ox;
+            *old.add(1) = oy;
+        }
+    }
+    1
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetViewportOrgEx(hdc: H, x: i32, y: i32, old: *mut i32) -> i32 {
+    // SAFETY: the caller's POINT or NULL.
+    unsafe { set_origin(hdc, true, x, y, old) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetWindowOrgEx(hdc: H, x: i32, y: i32, old: *mut i32) -> i32 {
+    // SAFETY: the caller's POINT or NULL.
+    unsafe { set_origin(hdc, false, x, y, old) }
 }
 
 // ----- attributes
@@ -269,7 +418,9 @@ pub unsafe extern "system" fn MoveToEx(hdc: H, x: i32, y: i32, old: *mut i32) ->
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetClipBox(hdc: H, rect: *mut i32) -> i32 {
     let (kind, r) = gdi(|g| g.clip_box(hdc as u64));
-    if kind != 0 && !rect.is_null() {
+    if kind == 0 {
+        set_last_error(ERROR_INVALID_HANDLE);
+    } else if !rect.is_null() {
         // SAFETY: the caller's RECT.
         unsafe { write_rect(rect, r) };
     }
@@ -420,6 +571,86 @@ pub extern "system" fn PolyGdiReleaseDisplayDC(hdc: H) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "system" fn PolyGdiDeleteDisplayDC(hdc: H) -> i32 {
     i32::from(gdi(|g| g.delete_dc(hdc as u64).0))
+}
+
+/// `count` RECTs at `p` (none for NULL).
+unsafe fn read_rects(p: *const i32, count: u32) -> Vec<Rect> {
+    if p.is_null() {
+        return Vec::new();
+    }
+    // SAFETY: the caller passes `count` RECTs.
+    (0..count as usize).map(|i| unsafe { read_rect(p.add(4 * i)) }).collect()
+}
+
+/// What window DC `hdc` can draw on (user32's `GetDC`/`GetWindowDC`):
+/// its device 0,0 is at (`x`, `y`) on the screen, and it reaches the
+/// union of the `n_include` RECTs at `include` less the union of the
+/// `n_exclude` RECTs at `exclude`, in screen coordinates. 1 on success.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiSetDisplayGeometry(
+    hdc: H,
+    x: i32,
+    y: i32,
+    include: *const i32,
+    n_include: u32,
+    exclude: *const i32,
+    n_exclude: u32,
+) -> i32 {
+    // SAFETY: the caller's arrays of RECTs.
+    let (inc, exc) = unsafe { (read_rects(include, n_include), read_rects(exclude, n_exclude)) };
+    i32::from(gdi(|g| g.set_display_geometry(hdc as u64, (x, y), &inc, &exc)))
+}
+
+/// Set window DC `hdc`'s system clip to the union of the `n` RECTs at
+/// `rects` (device, i.e. client or window, coordinates), as `BeginPaint`
+/// limits its DC to the update region: drawing and `GetClipBox` honour it
+/// on top of the visible region and any clip region, `GetClipRgn` does not
+/// see it. NULL `rects` removes it; the next `GetDC`/`GetWindowDC` of the
+/// DC removes it too. 1 on success.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiSetSystemClip(hdc: H, rects: *const i32, n: u32) -> i32 {
+    let clip = if rects.is_null() {
+        None
+    } else {
+        // SAFETY: the caller's array of RECTs.
+        let rs = unsafe { read_rects(rects, n) };
+        Some(solid_union(&rs))
+    };
+    i32::from(gdi(|g| g.set_system_clip(hdc as u64, clip)))
+}
+
+/// The union of rectangles, empty and inverted ones counting as nothing.
+fn solid_union(rs: &[Rect]) -> Region {
+    let solid: Vec<Rect> = rs.iter().filter(|r| !r.is_empty()).copied().collect();
+    Region::from_rects(&solid)
+}
+
+/// Region `hrgn`'s rectangles in canonical band order (`GetRegionData`'s)
+/// as (left, top, right, bottom) quadruples into `out`, at most `cap` of
+/// them: the total count (`cap` 0 asks for it), -1 when `hrgn` is not a
+/// region.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiGetRegionRects(hrgn: H, out: *mut i32, cap: u32) -> i32 {
+    let Some(rects) = gdi(|g| g.region(hrgn as u64).map(|r| r.rects().to_vec())) else { return -1 };
+    if !out.is_null() {
+        for (i, r) in rects.iter().take(cap as usize).enumerate() {
+            // SAFETY: the caller's buffer holds `cap` RECTs.
+            unsafe { write_rect(out.add(4 * i), *r) };
+        }
+    }
+    rects.len() as i32
+}
+
+/// Replace region `hrgn`'s contents by the union of the `n` RECTs at
+/// `rects` (empty or inverted ones count as nothing): the new kind
+/// (NULLREGION 1, SIMPLEREGION 2, COMPLEXREGION 3), ERROR 0 when `hrgn` is
+/// not a region.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiSetRegionRects(hrgn: H, rects: *const i32, n: u32) -> i32 {
+    // SAFETY: the caller's array of RECTs (or NULL: none).
+    let rs = unsafe { read_rects(rects, n) };
+    let rgn = solid_union(&rs);
+    gdi(|g| g.set_region(hrgn as u64, rgn))
 }
 
 /// The desktop link's surface DIBs (ADR 0131): per window, a top-down

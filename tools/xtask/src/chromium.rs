@@ -69,7 +69,8 @@ use crate::rootdisk::{self, Contents, RootTree};
 use crate::symbols::Symbols;
 use crate::{Result, compositor, root};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::io::Write;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -111,12 +112,13 @@ pub const ARCHIVES: [Archive; 2] = [
 /// What Poly's disk is made from: Chromium, its setuid sandbox helper
 /// (`chrome-sandbox`, used where user namespaces are not available), and
 /// what Debian takes for granted (Essential packages are nobody's
-/// dependency): the shells Chromium's start script and the console need,
-/// coreutils, findutils and grep (the start script uses them), and
-/// `util-linux` for `setpriv` and `findmnt`.
+/// dependency): `ca-certificates` for HTTPS, the shells Chromium's start
+/// script and the console need, coreutils, findutils and grep (the start
+/// script uses them), and `util-linux` for `setpriv` and `findmnt`.
 pub const DISK_SEEDS: &[&str] = &[
     "chromium",
     "chromium-sandbox",
+    "ca-certificates",
     "base-files",
     "bash",
     "dash",
@@ -212,7 +214,10 @@ U=/run/user/1000
 mkdir -p \"$U\" /home/poly
 chown poly:poly \"$U\" /home/poly && chmod 700 \"$U\"
 S=\"$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY\"
-if [ -S \"$S\" ] && [ ! -e \"$U/$WAYLAND_DISPLAY\" ]; then
+# A new name every time: the disk outlives boots (`chromium run`), and a link
+# left by an earlier boot names a socket nobody listens on any more.
+if [ -S \"$S\" ]; then
+    rm -f \"$U/$WAYLAND_DISPLAY\"
     ln \"$S\" \"$U/$WAYLAND_DISPLAY\" && chown poly:poly \"$U/$WAYLAND_DISPLAY\"
 fi
 cd /home/poly
@@ -954,6 +959,8 @@ pub const GROUP: &str = "root:x:0:\nnogroup:x:65534:\npoly:x:1000:\n";
 fn configure(tree: &mut RootTree) {
     tree.file("etc/passwd", 0o644, PASSWD.as_bytes());
     tree.file("etc/group", 0o644, GROUP.as_bytes());
+    // QEMU user networking's built-in DNS resolver (poly.net=qemu).
+    tree.file("etc/resolv.conf", 0o644, b"nameserver 10.0.2.3\n");
     // A fixed machine id (machine-id(5)): D-Bus and Chromium read it.
     tree.file("etc/machine-id", 0o444, b"504f4c59636872006f6d69756d000001\n");
     for (path, data) in PAGES {
@@ -966,11 +973,88 @@ fn configure(tree: &mut RootTree) {
     tree.dir("home/poly", 0o755);
 }
 
-/// The launcher's desktop file for Chromium: as `poly`, sandbox on.
+// ---- the trust store -------------------------------------------------------
+
+/// Where Debian's `ca-certificates` package puts the certificates it trusts.
+const CA_DIR: &str = "usr/share/ca-certificates";
+/// The bundle `update-ca-certificates(8)` writes (the file TLS clients, curl
+/// and OpenSSL among them, read).
+const CA_BUNDLE: &str = "etc/ssl/certs/ca-certificates.crt";
+
+/// The bundle `update-ca-certificates` would write for the certificate files
+/// `certs` (paths below [`CA_DIR`], e.g. `mozilla/ISRG_Root_X1.crt`, with
+/// their contents): every file in path order, PEM text, each ending in a
+/// newline. Debian's postinst enables every certificate of the package in
+/// `/etc/ca-certificates.conf`; the maintainer scripts do not run here.
+fn ca_bundle(certs: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
+    let mut sorted: Vec<&(String, Vec<u8>)> = certs.iter().collect();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut out = Vec::new();
+    for (name, pem) in sorted {
+        let text = std::str::from_utf8(pem).map_err(|_| format!("{name}: not PEM text"))?;
+        if !text.contains("-----BEGIN CERTIFICATE-----") || !text.contains("-----END CERTIFICATE-----") {
+            return Err(format!("{name}: no PEM certificate in it"));
+        }
+        out.extend_from_slice(pem);
+        if !pem.ends_with(b"\n") {
+            out.push(b'\n');
+        }
+    }
+    if out.is_empty() {
+        return Err("no certificates to trust".into());
+    }
+    Ok(out)
+}
+
+/// The name `update-ca-certificates` links a certificate under in
+/// `/etc/ssl/certs`: its file name with `.pem` for `.crt`, blanks as `_`.
+fn ca_link_name(path: &str) -> String {
+    let file = path.rsplit('/').next().unwrap_or(path);
+    let stem = file.strip_suffix(".crt").unwrap_or(file);
+    format!("{}.pem", stem.replace(' ', "_"))
+}
+
+/// Add the trust store `update-ca-certificates` would have made to `tree`:
+/// the bundle, a link in `/etc/ssl/certs` per certificate, and the
+/// configuration naming them. `certs`: path below [`CA_DIR`] and contents.
+fn add_trust_store(tree: &mut RootTree, certs: &[(String, Vec<u8>)]) -> Result {
+    tree.file(CA_BUNDLE, 0o644, &ca_bundle(certs)?);
+    let mut names: Vec<&str> = certs.iter().map(|(n, _)| n.as_str()).collect();
+    names.sort_unstable();
+    let mut conf = String::new();
+    for name in &names {
+        conf.push_str(name);
+        conf.push('\n');
+        tree.symlink(&format!("etc/ssl/certs/{}", ca_link_name(name)), &format!("/{CA_DIR}/{name}"));
+    }
+    tree.file("etc/ca-certificates.conf", 0o644, conf.as_bytes());
+    Ok(())
+}
+
+/// The certificate files among the unpacked entries, read from their blobs.
+fn unpacked_certs(entries: &[Unpacked], blobs: &Path) -> Result<Vec<(String, Vec<u8>)>> {
+    let mut out = Vec::new();
+    for e in entries {
+        if let Unpacked::File { path, blob, .. } = e
+            && let Some(name) = path.strip_prefix(CA_DIR).and_then(|r| r.strip_prefix('/'))
+            && name.ends_with(".crt")
+        {
+            let at = blobs.join(blob.to_string());
+            out.push((name.to_string(), std::fs::read(&at).map_err(|e| format!("{}: {e}", at.display()))?));
+        }
+    }
+    Ok(out)
+}
+
+/// The launcher's desktop file for Chromium: bash runs `poly-chromium`,
+/// which starts it as `poly`, sandbox on. `Icon=chromium` is Debian's name
+/// for its logo, which the package ships as hicolor PNGs (16 to 256
+/// pixels): the launcher draws it (ADR 0146).
 fn desktop_file() -> String {
     format!(
         "[Desktop Entry]\nType=Application\nName=Chromium\nComment=Web browser (Debian's Chromium)\n\
-         Exec=/usr/local/bin/poly-chromium {WINDOW_ARGS} file:///{PAGES_DIR}/input.html\n"
+         Keywords=browser;chrome;web;\nIcon=chromium\n\
+         Exec=/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS} file:///{PAGES_DIR}/input.html\n"
     )
 }
 
@@ -984,10 +1068,15 @@ pub fn collect() -> std::result::Result<Contents, String> {
         tree.dir(target, 0o755);
         tree.symlink(link, target);
     }
+    let certs = unpacked_certs(&entries, &blobs)?;
     for e in entries {
         match e {
             Unpacked::Dir { path, mode } => tree.dir(&path, mode),
             Unpacked::Symlink { path, target } => tree.symlink(&path, &target),
+            // Debian's launcher entry runs `chromium` as the compositor's
+            // user, root, which Chromium refuses: the launcher shows only
+            // Poly's entry (as `poly`, sandbox on).
+            Unpacked::File { path, .. } if path.ends_with("share/applications/chromium.desktop") => {}
             Unpacked::File { path, mode, mtime, blob } => {
                 tree.host_file(&path, mode, &blobs.join(blob.to_string()), mtime);
             }
@@ -995,6 +1084,7 @@ pub fn collect() -> std::result::Result<Contents, String> {
     }
     contents.have.insert("chromium");
     configure(tree);
+    add_trust_store(tree, &certs)?;
     tree.file("usr/local/bin/poly-compositor", 0o755, &compositor::build_compositor()?);
     for (path, data) in crate::fonts::shell_tree() {
         tree.file(&path, 0o644, &data);
@@ -1058,22 +1148,34 @@ pub const MEMORY: &str = "4G";
 /// TCG emulates each CPU on a host thread of its own).
 pub const CPUS: Option<u32> = Some(4);
 
-/// `cargo xtask chromium run [--release] [--fresh-disk]`: the desktop in
+/// `cargo xtask chromium run [--release] [--fresh-disk] [--memory=SIZE] [--cpus=N]`: the desktop in
 /// QEMU's window with Chromium in the launcher, the disk's bash on this
 /// terminal (Ctrl-A X quits). Any host.
 fn run(args: &[String]) -> Result {
     let release = args.iter().any(|a| a == "--release");
     let kernel = crate::build_kernel(release)?;
-    let image = root().join("target").join(FILE_NAME);
-    if args.iter().any(|a| a == "--fresh-disk") || !image.exists() {
-        make(FILE_NAME)?;
-    }
+    let image = disk_image(args.iter().any(|a| a == "--fresh-disk"))?;
     let initrd = write_initramfs()?;
-    let append = format!("{INIT_ARGS} console=ttyS0 poly.terminal=off");
-    let mut cmd = crate::qemu(&kernel, MEMORY, &append, crate::Devices::None, "mon:stdio");
+    // POLY_CHROMIUM_APPEND: more kernel arguments (`poly.debug.profile`, ...).
+    let more = std::env::var("POLY_CHROMIUM_APPEND").unwrap_or_default();
+    let append = format!("{INIT_ARGS} console=ttyS0 poly.terminal=off poly.net=qemu {more}");
+    let res = crate::resources::Resources::from_args(args)?;
+    let cpus = CPUS.unwrap_or(crate::QEMU_CPUS);
+    eprintln!("{}", res.describe(MEMORY, cpus));
+    let mut cmd = crate::qemu_with(
+        &kernel,
+        &res.memory(MEMORY),
+        res.cpus_or(cpus),
+        append.trim_end(),
+        crate::Devices::None,
+        "mon:stdio",
+    );
     cmd.args(rootdisk::drive_args(&image)).arg("-initrd").arg(&initrd).args(crate::desktop::devices());
-    if let Some(n) = CPUS {
-        cmd.args(["-smp", &n.to_string()]);
+    cmd.args(crate::net::nic_args(None, false));
+    // POLY_CHROMIUM_QMP: a QMP server for driving the boot by hand or by a
+    // script (`tcp:127.0.0.1:4444`, any host).
+    if let Ok(qmp) = std::env::var("POLY_CHROMIUM_QMP") {
+        cmd.args(["-qmp", &format!("{qmp},server=on,wait=off")]);
     }
     eprintln!(
         "==> the desktop is in QEMU's window (the Windows key or Ctrl+Space opens the launcher: type \"chromium\"); \
@@ -1084,6 +1186,27 @@ fn run(args: &[String]) -> Result {
     let _ = crate::desktop::window_display(&mut cmd);
     let _ = cmd.status().map_err(|e| format!("qemu: {e}"))?;
     Ok(())
+}
+
+/// The disk `run` and a driven boot use: [`FILE_NAME`], made if missing or
+/// `fresh`. With `POLY_CHROMIUM_PROBE_DIR` (a directory of scripts to try
+/// things with) a fresh image of its own with them in `/root/probe/`.
+fn disk_image(fresh: bool) -> Result<PathBuf> {
+    let image = root().join("target").join(FILE_NAME);
+    if let Ok(dir) = std::env::var("POLY_CHROMIUM_PROBE_DIR") {
+        let mut contents = collect()?;
+        for e in std::fs::read_dir(&dir).map_err(|e| format!("{dir}: {e}"))?.flatten() {
+            let data = std::fs::read(e.path()).map_err(|e| e.to_string())?;
+            contents.tree.file(&format!("root/probe/{}", e.file_name().to_string_lossy()), 0o755, &data);
+        }
+        let probe = root().join("target/poly-chromium-probe.img");
+        rootdisk::write_image_poly_ext2(&contents.tree, &probe)?;
+        return Ok(probe);
+    }
+    if fresh || !image.exists() {
+        make(FILE_NAME)?;
+    }
+    Ok(image)
 }
 
 /// `cargo xtask chromium <lock|fetch [--reference]|disk|run|root
@@ -1124,20 +1247,7 @@ pub fn command(args: &[String]) -> Result {
     fetch(false)?;
     let kernel = crate::build_kernel(release)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
-    let mut image = root().join("target").join(FILE_NAME);
-    // POLY_CHROMIUM_PROBE_DIR: a directory of scripts to try things with,
-    // copied to /root/probe/ on a fresh image of its own.
-    if let Ok(dir) = std::env::var("POLY_CHROMIUM_PROBE_DIR") {
-        let mut contents = collect()?;
-        for e in std::fs::read_dir(&dir).map_err(|e| format!("{dir}: {e}"))?.flatten() {
-            let data = std::fs::read(e.path()).map_err(|e| e.to_string())?;
-            contents.tree.file(&format!("root/probe/{}", e.file_name().to_string_lossy()), 0o755, &data);
-        }
-        image = root().join("target/poly-chromium-probe.img");
-        rootdisk::write_image_poly_ext2(&contents.tree, &image)?;
-    } else if fresh || !image.exists() {
-        make(FILE_NAME)?;
-    }
+    let image = disk_image(fresh)?;
     let initrd = write_initramfs()?;
     let mut m = crate::toolkits::Machine::boot_with_init(
         &kernel,
@@ -1513,7 +1623,135 @@ fn apptest(args: &[String]) -> Result {
 /// What the console runs Chromium with: as `poly`, with the sandbox,
 /// headless.
 fn headless(args: &str, page: &str) -> String {
-    format!("/usr/local/bin/poly-chromium --headless=new --log-level=3 {args} file:///{PAGES_DIR}/{page}")
+    headless_url(args, &format!("file:///{PAGES_DIR}/{page}"))
+}
+
+/// Run Chromium headless against an absolute URL.
+fn headless_url(args: &str, url: &str) -> String {
+    format!("/usr/local/bin/poly-chromium --headless=new --log-level=3 {args} {url}")
+}
+
+/// An HTTP server on the host loopback, reached from QEMU user networking
+/// as 10.0.2.2 (QEMU's documented host address).
+struct HostHttpPage {
+    port: u16,
+}
+
+impl HostHttpPage {
+    fn start() -> Result<HostHttpPage> {
+        const BODY: &str = "<!doctype html><html><head><meta charset=utf-8><title>Poly host HTTP page</title></head>\
+                            <body><h1>served by the xtask host over QEMU user networking</h1>\
+                            <p id=source>10.0.2.2</p></body></html>\n";
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("host HTTP page: {e}"))?;
+        let port = listener.local_addr().map_err(|e| format!("host HTTP page: {e}"))?.port();
+        std::thread::spawn(move || {
+            for incoming in listener.incoming() {
+                let Ok(mut stream) = incoming else { break };
+                let mut request = [0; 4096];
+                if stream.read(&mut request).is_err() {
+                    continue;
+                }
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{BODY}",
+                    BODY.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+        Ok(HostHttpPage { port })
+    }
+}
+
+/// How long a step of the windowed scenario may take: Chromium starts in
+/// about a minute with a hypervisor, several under QEMU's emulator.
+const WINDOW_WAIT: Duration = Duration::from_secs(1200);
+/// How long a click or typing may take to show.
+const INPUT_WAIT: Duration = Duration::from_secs(180);
+
+/// Whether the launcher is shown, from the compositor's last word on it
+/// in the console's text (it is shown on an empty desktop at start).
+fn launcher_shown(text: &str) -> bool {
+    let at = |needle: &str| text.rfind(needle);
+    let shown = at("launcher shown");
+    let hidden = [at("launcher hidden"), at("poly-compositor: launched ")].into_iter().flatten().max();
+    shown > hidden
+}
+
+/// The windowed scenario (docs/chromium-linux-gaps.md, "The windowed
+/// scenario"): Chromium from the launcher, as `poly` with its sandbox, on
+/// Poly's desktop through Wayland; its page `input.html` fills the window
+/// with [`INPUT_BEFORE`]; a click turns it [`INPUT_AFTER`], a second one
+/// back; typing "poly" into its text field makes the title "typed poly"
+/// (read from the compositor's window list, asked for on its control
+/// pipe). Every wait is generous: under QEMU's emulator Chromium is slow,
+/// so each check polls until its deadline.
+fn window_scenario(m: &mut crate::toolkits::Machine) -> Result {
+    use crate::toolkits::find_colour;
+    if !launcher_shown(&m.text()) {
+        m.key("meta_l")?;
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    let from = m.text_len();
+    m.type_text("chromium")?;
+    m.seen(from, "launcher query \"chromium\"", Duration::from_secs(60))?;
+    std::thread::sleep(Duration::from_millis(500));
+    let from = m.text_len();
+    m.key("ret")?;
+    let started = std::time::Instant::now();
+    m.seen(from, "poly-compositor: launched Chromium", Duration::from_secs(60))?;
+    let rest = m.seen(from, "poly-compositor: window ", WINDOW_WAIT)?;
+    let place @ (_, _, w, h) =
+        crate::toolkits::window_place(&rest).ok_or_else(|| format!("unreadable window line {rest:?}"))?;
+    eprintln!("==> Chromium's window shown after {} s: {rest}", started.elapsed().as_secs());
+    // The page drawn: most of the window its colour.
+    let ((x0, y0, x1, y1), n) = poll(WINDOW_WAIT, || {
+        let img = m.shot("chromium-shown")?;
+        Ok(find_colour(&img, INPUT_BEFORE, 3, place).filter(|f| f.1 as i64 * 3 >= i64::from(w) * i64::from(h)))
+    })
+    .map_err(|e| format!("the window at {place:?} never showed {INPUT_BEFORE:02x?}: {e}"))?;
+    eprintln!("==> the page is drawn after {} s", started.elapsed().as_secs());
+    let page = (x0 as i32, y0 as i32, (x1 - x0 + 1) as i32, (y1 - y0 + 1) as i32);
+    let centre = (((x0 + x1) / 2) as i32, ((y0 + y1) / 2) as i32);
+    for (i, colour) in [(1, INPUT_AFTER), (2, INPUT_BEFORE)] {
+        m.click(centre.0, centre.1)?;
+        poll(INPUT_WAIT, || {
+            let img = m.shot(&format!("chromium-clicked-{i}"))?;
+            Ok(find_colour(&img, colour, 3, page).filter(|f| f.1 * 4 >= n * 3))
+        })
+        .map_err(|e| format!("click {i} did not turn the page {colour:02x?}: {e}"))?;
+        eprintln!("==> click {i} turned the page {colour:02x?}");
+    }
+    // The text field is at 10,10 of the page (input.html), 300x30.
+    m.click(page.0 + 60, page.1 + 25)?;
+    std::thread::sleep(Duration::from_secs(1));
+    m.type_text("poly")?;
+    let ask = ". /etc/poly-desktop.env; echo dump > \"$XDG_RUNTIME_DIR/poly-compositor.ctl\"";
+    // Chromium writes to the console as well (more so with a network): the
+    // prompt is not waited for, only the compositor's answer.
+    poll(INPUT_WAIT, || {
+        let from = m.text_len();
+        m.send_line(ask)?;
+        Ok(m.seen(from, "window \"typed poly", Duration::from_secs(10)).ok())
+    })
+    .map_err(|e| format!("typing \"poly\" did not change the title: {e}"))?;
+    eprintln!("==> typing changed the title to \"typed poly\"");
+    m.shot("chromium-typed")?;
+    Ok(())
+}
+
+/// `check` every few seconds until it gives a value or `wait` is over.
+fn poll<T>(wait: Duration, mut check: impl FnMut() -> Result<Option<T>>) -> Result<T> {
+    let deadline = std::time::Instant::now() + wait;
+    loop {
+        if let Some(v) = check()? {
+            return Ok(v);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(format!("not within {} s", wait.as_secs()));
+        }
+        std::thread::sleep(Duration::from_secs(3));
+    }
 }
 
 /// The boot test of the milestone (see the module documentation). Every
@@ -1532,18 +1770,22 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         );
         return Ok(());
     }
+    let http = HostHttpPage::start()?;
     let initrd = write_initramfs()?;
     let (image, _) = make(TEST_FILE_NAME)?;
     eprintln!("==> boot test: Chromium headless and on the desktop with its sandbox, from its root disk");
-    let mut m = crate::toolkits::Machine::boot_with_init(
+    let init = format!("{INIT_ARGS} poly.net=qemu");
+    let network_args = crate::net::nic_args(None, false);
+    let mut m = crate::toolkits::Machine::boot_with_init_args(
         kernel,
         syms,
         &image,
         &initrd,
         "chromium-test",
         MEMORY,
-        INIT_ARGS,
+        &init,
         CPUS,
+        &network_args,
     )?;
     m.set_timeouts(Duration::from_secs(600), Duration::from_secs(3600));
     m.desktop_up()?;
@@ -1561,10 +1803,28 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             failed.push(format!("--screenshot of colours.html: {out:?}"));
         }
     }
-    // 3. Windowed with the sandbox, from the launcher: a click turns the
-    // page's colour.
+    // 3. Headless over the guest's virtio-net interface to a page served on
+    // the host. QEMU user networking exposes the host as 10.0.2.2.
+    if failed.is_empty() {
+        let url = format!("http://10.0.2.2:{}/", http.port);
+        let out = m.run(&headless_url("--dump-dom", &url))?;
+        if !out.contains("served by the xtask host over QEMU user networking") {
+            failed.push(format!("HTTP page from {url}: {out:?}"));
+        }
+    }
+    // 4. DNS resolution, TLS and Debian's CA bundle: load a public HTTPS page.
+    if failed.is_empty() {
+        let url = "https://example.com/";
+        let out = m.run(&headless_url("--dump-dom", url))?;
+        // The title and the notice have stayed through the site's redesigns.
+        if !out.contains("<title>Example Domain</title>") || !out.contains("documentation examples") {
+            failed.push(format!("HTTPS page from {url}: {out:?}"));
+        }
+    }
+    // 5. Windowed with the sandbox, from the launcher: clicks turn the
+    // page's colour and back, typing changes its title.
     if failed.is_empty()
-        && let Err(e) = m.launch_and_click("chromium", "Chromium", INPUT_BEFORE, INPUT_AFTER)
+        && let Err(e) = window_scenario(&mut m)
     {
         failed.push(format!("Chromium on the desktop: {e}"));
     }
@@ -1769,6 +2029,40 @@ mod tests {
     }
 
     #[test]
+    fn the_trust_store_is_what_update_ca_certificates_makes() {
+        let pem = |n: &str| format!("-----BEGIN CERTIFICATE-----\n{n}\n-----END CERTIFICATE-----").into_bytes();
+        let certs = vec![
+            ("mozilla/B Root.crt".to_string(), pem("b")),
+            ("mozilla/A_Root.crt".to_string(), [pem("a"), b"\n".to_vec()].concat()),
+        ];
+        let bundle = String::from_utf8(ca_bundle(&certs).unwrap()).unwrap();
+        // In path order, every certificate ending in exactly one newline.
+        assert_eq!(
+            bundle,
+            "-----BEGIN CERTIFICATE-----\na\n-----END CERTIFICATE-----\n\
+             -----BEGIN CERTIFICATE-----\nb\n-----END CERTIFICATE-----\n"
+        );
+        assert!(ca_bundle(&[]).is_err());
+        assert!(ca_bundle(&[("mozilla/x.crt".into(), b"hello".to_vec())]).is_err());
+        assert_eq!(ca_link_name("mozilla/B Root.crt"), "B_Root.pem");
+        let mut tree = RootTree::default();
+        add_trust_store(&mut tree, &certs).unwrap();
+        let has = |p: &str| tree.entries.contains_key(p);
+        assert!(has(CA_BUNDLE) && has("etc/ca-certificates.conf"));
+        assert!(has("etc/ssl/certs/A_Root.pem") && has("etc/ssl/certs/B_Root.pem"));
+    }
+
+    #[test]
+    fn the_launcher_state_comes_from_the_compositors_last_word() {
+        let ready = "poly-compositor: desktop ready (first frame drawn in 9 ms; launcher shown)\n";
+        assert!(launcher_shown(ready));
+        assert!(!launcher_shown(&format!("{ready}poly-compositor: launcher hidden\n")));
+        assert!(!launcher_shown(&format!("{ready}poly-compositor: launched Chromium (pid 40)\n")));
+        assert!(launcher_shown(&format!("{ready}poly-compositor: launcher hidden\npoly-compositor: launcher shown\n")));
+        assert!(!launcher_shown("nothing yet"));
+    }
+
+    #[test]
     fn pages_and_the_launcher_name_what_the_checks_look_for() {
         assert!(PAGES[0].1.contains("6 * 7"));
         assert!(PAGES[1].1.contains("#ffff00"));
@@ -1777,6 +2071,11 @@ mod tests {
             desktop_file().contains("Name=Chromium\n")
                 && desktop_file().contains("poly-chromium --ozone-platform=wayland")
         );
+        // The launcher's icon is Debian's, a hicolor PNG name.
+        assert!(desktop_file().contains("\nIcon=chromium\n"));
         assert!(LAUNCH_SCRIPT.contains("setpriv --reuid=1000"));
+        // The socket's name for `poly` is made again at every launch: the
+        // disk (and so `/run/user/1000`) outlives a boot.
+        assert!(LAUNCH_SCRIPT.contains("rm -f \"$U/$WAYLAND_DISPLAY\"\n    ln \"$S\""));
     }
 }

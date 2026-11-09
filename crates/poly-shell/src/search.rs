@@ -101,6 +101,7 @@ mod tests {
             keywords: keywords.iter().map(|k| (*k).into()).collect(),
             argv: vec![prog.into()],
             id: String::new(),
+            icon: None,
         }
     }
 
@@ -110,12 +111,12 @@ mod tests {
 
     #[test]
     fn tiers() {
-        assert_eq!(tier("demo", "Demo"), 6);
-        assert_eq!(tier("po", "Poly Demo"), 5);
-        assert_eq!(tier("de", "Poly Demo"), 4);
-        assert_eq!(tier("ly", "Poly Demo"), 3);
-        assert_eq!(tier("pdm", "Poly Demo"), 2);
-        assert_eq!(tier("x", "Poly Demo"), 0);
+        assert_eq!(tier("viewer", "Viewer"), 6);
+        assert_eq!(tier("ph", "Photo Viewer"), 5);
+        assert_eq!(tier("vi", "Photo Viewer"), 4);
+        assert_eq!(tier("ot", "Photo Viewer"), 3);
+        assert_eq!(tier("pvr", "Photo Viewer"), 2);
+        assert_eq!(tier("x", "Photo Viewer"), 0);
     }
 
     #[test]
@@ -123,7 +124,7 @@ mod tests {
         let apps = vec![
             app("Files", &["folder", "explorer"], "/usr/bin/nautilus"),
             app("Firefox", &["web", "browser"], "/usr/bin/firefox"),
-            app("Poly Demo", &["demo"], "/bin/wl-demo"),
+            app("Photo Viewer", &["image"], "/bin/viewer"),
             app("Settings", &["preferences"], "/usr/bin/settings"),
             app("Terminal", &[], "/usr/bin/foot"),
         ];
@@ -135,10 +136,10 @@ mod tests {
         assert_eq!(names(&search(&apps, "browser", 8)), ["Firefox"]);
         assert_eq!(names(&search(&apps, "foot", 8)), ["Terminal"]);
         // A word start beats a match in the middle.
-        assert_eq!(names(&search(&apps, "demo", 8))[0], "Poly Demo");
+        assert_eq!(names(&search(&apps, "viewer", 8))[0], "Photo Viewer");
         // Every word must match, in any order.
-        assert_eq!(names(&search(&apps, "demo poly", 8)), ["Poly Demo"]);
-        assert!(search(&apps, "poly zzz", 8).is_empty());
+        assert_eq!(names(&search(&apps, "viewer photo", 8)), ["Photo Viewer"]);
+        assert!(search(&apps, "photo zzz", 8).is_empty());
         // Letters in order.
         assert_eq!(names(&search(&apps, "trml", 8)), ["Terminal"]);
         assert_eq!(search(&apps, "e", 2).len(), 2, "the limit");
@@ -149,11 +150,11 @@ mod tests {
     #[test]
     fn a_window_matches_on_its_title_only() {
         let apps = vec![
-            crate::apps::window_entry(1, "Poly Demo", "wl-demo"),
+            crate::apps::window_entry(1, "Photo Viewer", "viewer"),
             app("Send Test Notification", &[], "/bin/notify-send"),
         ];
         assert_eq!(names(&search(&apps, "send", 8)), ["Send Test Notification"]);
-        assert_eq!(names(&search(&apps, "demo", 8)), ["Poly Demo"]);
+        assert_eq!(names(&search(&apps, "viewer", 8)), ["Photo Viewer"]);
     }
 
     /// Poly's own Files and Terminal are found by what people call them.

@@ -51,6 +51,13 @@ impl NodeRef {
         &self.loc.mount
     }
 
+    /// Whether an open file (any process's) writes this inode: what
+    /// makes running it as a program, or loading it as a kernel module,
+    /// `ETXTBSY`.
+    pub fn has_writers(&self) -> bool {
+        self.loc.mount.sb.has_text_writers(self.loc.ino)
+    }
+
     /// The file system the inode is on.
     pub(crate) fn fs(&self) -> &dyn crate::FileSystem {
         &*self.loc.mount.sb.fs

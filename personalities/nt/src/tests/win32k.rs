@@ -104,7 +104,7 @@ fn unknown_numbers_are_unimplemented_and_named_when_known() {
 #[test]
 fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
     use poly_win32k::frame::{FrameMetrics, Rect};
-    use poly_win32k::link::{FromCompositor, Stream, ToCompositor, VERSION, encode_all};
+    use poly_win32k::link::{FromCompositor, Request as LinkRequest, Stream, ToCompositor, VERSION, encode_all};
     use poly_win32k::proto::{ClassRef, CreateSpec};
     let mut f = Fake::new();
     let call = |f: &mut Fake, req: Request| user_call(f, &req, 4096).1.expect("a reply");
@@ -134,7 +134,10 @@ fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
     // is replayed with a client-sized buffer.
     let hello =
         FromCompositor::Hello { version: VERSION, width: 1280, height: 800, scale: 1, frame: FrameMetrics::POLY };
-    f.with_state(|sys, _, _| sys.win32k.link_receive(&encode_all(&[hello])));
+    f.with_state(|sys, _, _| {
+        let (win32k, objects) = (&mut sys.win32k, &mut sys.objects);
+        win32k.link_receive(objects, &encode_all(&[hello]));
+    });
     let (w, hgt) = (20u64, 10u64);
     assert_eq!(call(&mut f, Request::Surface { hwnd: h }), Reply::Value { value: w | (hgt << 32) });
     let records = |f: &mut Fake| {
@@ -172,4 +175,28 @@ fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
         raw(&mut f, commit, &[u64::from(h), p, w - 1, hgt, stride]).1,
         poly_ntobj::status::STATUS_INVALID_PARAMETER.0
     );
+
+    // A compositor move updates Win32's screen geometry; its title-bar
+    // close is queued as WM_CLOSE on the owning GUI thread.
+    let surface = f.with_state(|sys, _, _| sys.win32k.surfaces.surface(h)).expect("a Windows surface");
+    let configure = FromCompositor::Configure { surface, x: 200, y: 300, width: 20, height: 10 };
+    f.with_state(|sys, _, _| {
+        let (win32k, objects) = (&mut sys.win32k, &mut sys.objects);
+        win32k.link_receive(objects, &encode_all(&[configure]));
+    });
+    let Reply::Window { info } = call(&mut f, Request::Window { hwnd: u64::from(h) }) else { panic!() };
+    assert_eq!(info.client, Rect::new(200, 300, 220, 310));
+    assert_eq!(info.window, Rect::new(199, 275, 221, 311));
+
+    let close = FromCompositor::Request { surface, request: LinkRequest::Close };
+    f.with_state(|sys, _, _| {
+        let (win32k, objects) = (&mut sys.win32k, &mut sys.objects);
+        win32k.link_receive(objects, &encode_all(&[close]));
+    });
+    let Reply::Message { msg } =
+        call(&mut f, Request::Peek { filter: 0, min: 0, max: 0, flags: poly_win32k::wm::PM_REMOVE })
+    else {
+        panic!("the desktop close request did not reach the GUI thread")
+    };
+    assert_eq!((msg.hwnd, msg.msg), (h, poly_win32k::user::WM_CLOSE));
 }

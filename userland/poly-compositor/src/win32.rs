@@ -65,6 +65,7 @@ pub enum Action {
 struct Surface {
     window: WindowId,
     buffer: Option<(BufferId, u32, u32, u32, PixelFormat)>,
+    geometry: (i32, i32, u32, u32),
 }
 
 /// Windows surfaces in the scene.
@@ -92,6 +93,30 @@ impl WindowsSurfaces {
     /// The surface a scene window shows, if it is a Windows one.
     pub fn surface_of(&self, window: WindowId) -> Option<SurfaceId> {
         self.surfaces.iter().find(|(_, s)| s.window == window).map(|(&id, _)| id)
+    }
+
+    /// Configure records for Windows surfaces moved or resized in the
+    /// scene. Their cached geometry suppresses duplicate records.
+    pub fn sync_geometry(&mut self, scene: &Scene) -> Vec<FromCompositor> {
+        let mut moved = Vec::new();
+        for (&surface, s) in &self.surfaces {
+            let Some(win) = scene.window(s.window) else { continue };
+            let (x, y) = win.position();
+            let (width, height) = win.content().logical_size();
+            let geometry = (x, y, width.max(0) as u32, height.max(0) as u32);
+            if s.geometry != geometry {
+                moved.push((surface, geometry));
+            }
+        }
+        for (surface, (x, y, width, height)) in &moved {
+            if let Some(s) = self.surfaces.get_mut(surface) {
+                s.geometry = (*x, *y, *width, *height);
+            }
+        }
+        moved
+            .into_iter()
+            .map(|(surface, (x, y, width, height))| FromCompositor::Configure { surface, x, y, width, height })
+            .collect()
     }
 
     /// win32k's connection ended: its windows leave the scene.
@@ -125,11 +150,14 @@ impl WindowsSurfaces {
                 if let Some(owner) = self.window(owner) {
                     scene.set_parent(window, Some(owner));
                 }
-                self.surfaces.insert(surface, Surface { window, buffer: None });
+                self.surfaces.insert(surface, Surface { window, buffer: None, geometry: (0, 0, 0, 0) });
             }
-            ToCompositor::Geometry { surface, x, y, .. } => {
+            ToCompositor::Geometry { surface, x, y, width, height } => {
                 if let Some(w) = self.window(surface) {
                     scene.set_position(w, x, y);
+                }
+                if let Some(s) = self.surfaces.get_mut(&surface) {
+                    s.geometry = (x, y, width, height);
                 }
             }
             ToCompositor::Title { surface, ref text } => {
@@ -153,7 +181,7 @@ impl WindowsSurfaces {
                 }
             }
             ToCompositor::Damage { surface, x, y, width, height } => {
-                if let Some(&Surface { window, buffer: Some((b, bw, bh, stride, format)) }) =
+                if let Some(&Surface { window, buffer: Some((b, bw, bh, stride, format)), .. }) =
                     self.surfaces.get(&surface)
                     && let Some(bytes) = buffers.bytes(b)
                 {
@@ -289,6 +317,97 @@ impl Link {
     /// The surfaces in the scene.
     pub fn surfaces(&self) -> &WindowsSurfaces {
         &self.surfaces
+    }
+
+    /// Input for a Windows surface's scene window (the server's internal
+    /// events of adopted windows): forwarded to win32k. False when the
+    /// event is not about one of ours.
+    pub fn input(&mut self, ev: &poly_wayland::server::InternalEvent) -> bool {
+        use poly_wayland::server::InternalEvent as E;
+        let window = match *ev {
+            E::Motion { window, .. }
+            | E::Button { window, .. }
+            | E::Axis { window, .. }
+            | E::Key { window, .. }
+            | E::Resize { window, .. } => window,
+            E::Leave(window) | E::Close(window) => window,
+        };
+        let Some(surface) = self.surfaces.surface_of(window) else { return false };
+        let time = (os::monotonic_ns() / 1_000_000) as u32;
+        let records: Vec<FromCompositor> = match *ev {
+            E::Motion { x, y, .. } => vec![FromCompositor::Pointer { surface, x, y, time }],
+            E::Button { x, y, button, pressed, .. } => vec![
+                FromCompositor::Pointer { surface, x, y, time },
+                FromCompositor::Button { surface, button: button as u16, pressed, time },
+            ],
+            E::Axis { horizontal, value, .. } => {
+                // 15 logical pixels a step, WHEEL_DELTA (120) a notch, up positive.
+                let notches = -value * 120 / 15;
+                vec![FromCompositor::Axis {
+                    surface,
+                    vertical: if horizontal { 0 } else { notches },
+                    horizontal: if horizontal { notches } else { 0 },
+                    time,
+                }]
+            }
+            E::Key { key, pressed, .. } => vec![FromCompositor::Key { code: key as u16, pressed, time }],
+            E::Leave(_) => vec![FromCompositor::Leave { surface }],
+            E::Close(_) => vec![FromCompositor::Request { surface, request: poly_win32k::link::Request::Close }],
+            E::Resize { .. } => Vec::new(),
+        };
+        let mut out = Vec::new();
+        for r in &records {
+            r.encode(&mut out);
+        }
+        if !out.is_empty()
+            && let Err(e) = os::write(self.fd, &out)
+        {
+            eprintln!("poly-compositor: {DEVICE}: {e}");
+        }
+        true
+    }
+
+    /// Read what win32k sent and apply it to the scene, adopting shown
+    /// Windows windows into the server's focus and input as internal
+    /// windows.
+    pub fn pump_server(&mut self, server: &mut poly_wayland::server::Server) {
+        let before: Vec<WindowId> = self.surfaces.surfaces.values().map(|s| s.window).collect();
+        self.pump(server.scene_mut());
+        let after: Vec<(WindowId, bool)> = self
+            .surfaces
+            .surfaces
+            .values()
+            .map(|s| (s.window, server.scene().window(s.window).is_some_and(|w| w.is_visible())))
+            .collect();
+        for &(w, visible) in &after {
+            if visible && !server.is_internal(w) {
+                server.adopt_internal_window(w, "windows", true);
+            }
+        }
+        for w in before {
+            if !after.iter().any(|a| a.0 == w) {
+                server.release_internal_window(w);
+            }
+        }
+    }
+
+    /// Tell win32k where the compositor moved or resized a Windows
+    /// surface. This keeps the app's GetWindowRect and later input in
+    /// step with Poly's frame. (Closing needs no path of its own: the
+    /// server reports a close of an adopted window as an internal event,
+    /// which [`Link::input`] forwards.)
+    pub fn sync_geometry(&mut self, scene: &Scene) {
+        for record in self.surfaces.sync_geometry(scene) {
+            self.send(record);
+        }
+    }
+
+    fn send(&mut self, record: FromCompositor) {
+        let mut bytes = Vec::new();
+        record.encode(&mut bytes);
+        if let Err(e) = os::write(self.fd, &bytes) {
+            eprintln!("poly-compositor: {DEVICE}: {e}");
+        }
     }
 
     /// Read what win32k sent and apply it to the scene.
@@ -448,6 +567,15 @@ mod tests {
         assert_eq!(c.pixels[0], 0xFF10_2030);
         assert_eq!(c.pixels[7], 0xFFFF_FFFF);
         assert_eq!(c.pixels[1], 0xFF00_0000);
+
+        // The compositor reports moved client geometry once.
+        assert!(ws.sync_geometry(&scene).is_empty());
+        scene.set_position(w, 75, 120);
+        assert_eq!(
+            ws.sync_geometry(&scene),
+            vec![FromCompositor::Configure { surface: s, x: 75, y: 120, width: 4, height: 2 }]
+        );
+        assert!(ws.sync_geometry(&scene).is_empty(), "unchanged geometry is not resent");
 
         // A new buffer releases the old one back to win32k, which frees it.
         let b2 = d.attach_buffer(s, 8, 4, 32, PixelFormat::Xrgb8888).unwrap();

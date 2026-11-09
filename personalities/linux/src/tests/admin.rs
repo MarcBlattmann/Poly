@@ -246,6 +246,76 @@ fn reboot_commands() {
 }
 
 #[test]
+fn reboot_checks_the_capability_first() {
+    let (mut k, log) = kernel();
+    *k.creds_mut() = Creds::user(1000, 1000);
+    let call = |k: &mut FakeKernel, magic: u64, magic2: u64, cmd: u64| sys(k, nr::REBOOT, &[magic, magic2, cmd, 0]);
+    assert_eq!(call(&mut k, 0, 0, 0), Err(Errno::EPERM));
+    assert_eq!(call(&mut k, MAGIC1.into(), MAGIC2[0].into(), 0x1234_5678), Err(Errno::EPERM));
+    assert_eq!(call(&mut k, MAGIC1.into(), MAGIC2[0].into(), admin::cmd::RESTART.into()), Err(Errno::EPERM));
+    assert!(log.lock().unwrap().reboots.is_empty());
+    // Root: the magic numbers come next, the high bits of the arguments do not count.
+    *k.creds_mut() = Creds::root();
+    assert_eq!(call(&mut k, 0, 0, 0), Err(Errno::EINVAL));
+    assert_eq!(
+        call(
+            &mut k,
+            1 << 32 | u64::from(MAGIC1),
+            u64::MAX << 32 | u64::from(MAGIC2[3]),
+            5 << 32 | u64::from(admin::cmd::CAD_ON)
+        ),
+        Ok(0)
+    );
+}
+
+#[test]
+fn reboot_in_a_pid_namespace_ends_the_namespace() {
+    use crate::abi::signal::{SIGHUP, SIGINT, SIGKILL};
+    use crate::ns::pid::{self, PidNs};
+    use crate::tests::fake::Exit;
+    let setup = || {
+        let (mut k, log) = kernel();
+        let ns = Some(PidNs::new(&None, None).unwrap());
+        pid::attach(&ns, k.pid, true).unwrap();
+        k.me().ns.pid = ns;
+        (k, log)
+    };
+    let call =
+        |k: &mut FakeKernel, magic2: u32, cmd: u32| sys(k, nr::REBOOT, &[MAGIC1.into(), magic2.into(), cmd.into(), 0]);
+    // The init itself: killed by SIGHUP for a restart, SIGINT for a halt.
+    for (cmd, signal) in [
+        (admin::cmd::RESTART, SIGHUP),
+        (admin::cmd::RESTART2, SIGHUP),
+        (admin::cmd::HALT, SIGINT),
+        (admin::cmd::POWER_OFF, SIGINT),
+    ] {
+        let (mut k, log) = setup();
+        assert_eq!(call(&mut k, MAGIC2[1], cmd), Ok(0));
+        assert!(matches!(k.exit, Some(Exit::Signal(s, false)) if s == signal), "{cmd:#x}");
+        assert!(log.lock().unwrap().reboots.is_empty(), "the machine stays up");
+    }
+    // Other commands fail and the caller goes on.
+    let (mut k, log) = setup();
+    for cmd in [admin::cmd::CAD_ON, admin::cmd::CAD_OFF, admin::cmd::SW_SUSPEND, admin::cmd::KEXEC, 0x1234_5678] {
+        assert_eq!(call(&mut k, MAGIC2[0], cmd), Err(Errno::EINVAL), "{cmd:#x}");
+    }
+    assert!(k.exit.is_none());
+    assert!(log.lock().unwrap().reboots.is_empty() && log.lock().unwrap().cad.is_empty());
+    // A member other than init makes the init take the signal and ends too.
+    let (mut k, _) = setup();
+    let init = k.pid;
+    let ns = k.me().ns.pid.clone();
+    k.add_process(init + 10, 0, 1, 1);
+    k.proc_state(init + 10).ns.pid = ns.clone();
+    pid::attach(&ns, init + 10, true).unwrap();
+    k.pid = init + 10;
+    k.tid = init + 10;
+    *k.creds_mut() = Creds::root();
+    assert_eq!(call(&mut k, MAGIC2[0], admin::cmd::RESTART), Ok(0));
+    assert!(matches!(k.exit, Some(Exit::Signal(SIGKILL, false))));
+}
+
+#[test]
 fn without_the_service_the_calls_are_enosys() {
     let mut k = FakeKernel::new();
     *k.creds_mut() = Creds::root();

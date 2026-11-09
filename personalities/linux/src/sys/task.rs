@@ -45,6 +45,8 @@ fn spawn(k: &mut dyn LinuxKernel, req: &CloneRequest) -> SysResult {
         return Err(Errno::EAGAIN);
     }
     let child = k.clone_task(req)?;
+    // ptrace(2): a traced vfork parent stops once its child let it go.
+    crate::sys::ptrace::vfork_done(k, child, req.flags);
     seen(k, child)
 }
 
@@ -121,6 +123,9 @@ pub fn execve(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     crate::sys::aio::left_address_space(k, old_space);
     let pid = k.pid();
     let _ = with_tree(k, |t| t.exec(pid));
+    // modify_ldt(2): the table does not survive the exec.
+    crate::signal::deliver::with_own(k, |p| p.ldt.clear());
+    crate::sys::ptrace::exec_event(k, pid);
     Ok(0)
 }
 
@@ -181,6 +186,9 @@ pub fn execveat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     crate::sys::aio::left_address_space(k, old_space);
     let pid = k.pid();
     let _ = with_tree(k, |t| t.exec(pid));
+    // modify_ldt(2): the table does not survive the exec.
+    crate::signal::deliver::with_own(k, |p| p.ldt.clear());
+    crate::sys::ptrace::exec_event(k, pid);
     Ok(0)
 }
 

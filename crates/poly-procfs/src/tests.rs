@@ -202,6 +202,7 @@ impl ProcSource for Fake {
             ino: 100 + u64::from(fd),
             read: true,
             write: fd != 0,
+            extra: Vec::new(),
         })
     }
 

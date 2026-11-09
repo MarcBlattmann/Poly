@@ -59,7 +59,8 @@ impl Link {
         let early = core::mem::take(&mut *self.early.lock());
         let more = with_existing(|s| {
             if !early.is_empty() {
-                s.sys.win32k.link_receive(&early);
+                let sys = &mut s.sys;
+                sys.win32k.link_receive(&mut sys.objects, &early);
             }
             s.sys.win32k.link_output()
         });
@@ -122,12 +123,22 @@ impl CharDevice for LinkFile {
 
     fn write(&self, _: u64, buf: &[u8], _: bool) -> poly_vfs::Result<usize> {
         let mut early = self.0.early.lock();
-        let handled = early.is_empty() && with_existing(|s| s.sys.win32k.link_receive(buf)).is_some();
+        let handled = early.is_empty()
+            && with_existing(|s| {
+                let sys = &mut s.sys;
+                sys.win32k.link_receive(&mut sys.objects, buf);
+            })
+            .is_some();
         if !handled {
             early.extend_from_slice(buf);
         }
         drop(early);
-        if self.0.pump() {
+        let readable = self.0.pump();
+        // The records may have signalled a GUI thread's event (a close
+        // request): its wait is satisfied, but only a system call's end
+        // wakes the thread, and this is not one.
+        super::sched::drain_wakes();
+        if readable {
             self.0.queue.notify(PollEvents::READABLE);
         }
         Ok(buf.len())

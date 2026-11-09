@@ -45,12 +45,6 @@ fn admin(k: &mut dyn LinuxKernel) -> Result<&mut dyn LinuxAdmin, Errno> {
     k.admin().ok_or(Errno::ENOSYS)
 }
 
-/// `capability` in the initial user namespace: for what is the whole
-/// system's (device nodes, rebooting).
-fn require_initial(k: &mut dyn LinuxKernel, capability: u32) -> Result<(), Errno> {
-    if cred::current(k).capable_initial(capability) { Ok(()) } else { Err(Errno::EPERM) }
-}
-
 /// mount(2), umount2(2): `CAP_SYS_ADMIN` in the user namespace that owns
 /// the caller's mount namespace (mount_namespaces(7), user_namespaces(7);
 /// ADR 0054). Returns whether the caller is outside the initial user
@@ -321,17 +315,34 @@ pub fn setdomainname(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub const MAGIC1: u32 = 0xfee1_dead;
 pub const MAGIC2: [u32; 4] = [672_274_793, 85_072_278, 369_367_448, 537_993_216];
 
-/// reboot(magic, magic2, cmd, arg): `EINVAL` for wrong magic numbers or an
-/// unknown command, `EPERM` without `CAP_SYS_BOOT`. `CAD_ON` / `CAD_OFF`
-/// set what Ctrl-Alt-Del does; `RESTART`, `RESTART2` (its command string
-/// is ignored), `HALT` and `POWER_OFF` do not return when they work.
+/// reboot(magic, magic2, cmd, arg). Order of the checks (the spec sheet):
+/// `CAP_SYS_BOOT` in the user namespace that owns the caller's pid
+/// namespace (`EPERM`, whatever the other arguments), the magic numbers
+/// (`EINVAL`), then the command. In a pid namespace other than the
+/// initial one the machine is never touched: `RESTART`, `RESTART2`,
+/// `HALT` and `POWER_OFF` end the namespace ([`end_namespace`]), every
+/// other command is `EINVAL`. In the initial one `CAD_ON` / `CAD_OFF` set
+/// what Ctrl-Alt-Del does; `RESTART`, `RESTART2` (its command string is
+/// ignored), `HALT` and `POWER_OFF` do not return when they work.
 /// Suspending to disk and kexec are not supported (`EINVAL`, as on a
 /// kernel without them). reboot(2): the call does not sync the disks
 /// itself; Poly's kernel writes back and unmounts its disk file systems
 /// before the machine goes down anyway.
 pub fn reboot(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let pid_ns = k.pid_ns();
+    let creds = cred::current(k);
+    let allowed = match &pid_ns {
+        None => creds.capable_initial(cap::SYS_BOOT),
+        Some(ns) => crate::ns::user::ns_capable(&creds, ns.owner(), cap::SYS_BOOT),
+    };
+    if !allowed {
+        return Err(Errno::EPERM);
+    }
     if a.uint(0) != MAGIC1 || !MAGIC2.contains(&a.uint(1)) {
         return Err(Errno::EINVAL);
+    }
+    if let Some(ns) = pid_ns {
+        return end_namespace(k, &ns, a.uint(2));
     }
     let how = match a.uint(2) {
         cmd::CAD_ON | cmd::CAD_OFF => None,
@@ -340,7 +351,6 @@ pub fn reboot(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         cmd::POWER_OFF => Some(Reboot::PowerOff),
         _ => return Err(Errno::EINVAL),
     };
-    require_initial(k, cap::SYS_BOOT)?;
     if cmd::RESTART2 == a.uint(2) {
         // The command string must at least be readable.
         let mut buf = bounce(256)?;
@@ -357,4 +367,30 @@ pub fn reboot(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         }
         Some(how) => Err(admin.reboot(how)),
     }
+}
+
+/// reboot(2) in a pid namespace other than the initial one (pid_namespaces
+/// (7)): the machine stays up and the namespace ends. `RESTART` and
+/// `RESTART2` end its init as killed by `SIGHUP`, `HALT` and `POWER_OFF` by
+/// `SIGINT` (what its parent's wait(2) reports); the ending of the init
+/// kills every other member with `SIGKILL`. Any other command is
+/// `EINVAL` and the caller goes on. The call does not return: the caller
+/// is the init and ends that way itself, or another member that makes
+/// the init take the signal and ends too.
+fn end_namespace(k: &mut dyn LinuxKernel, ns: &crate::ns::pid::PidNs, command: u32) -> SysResult {
+    use crate::abi::SigInfo;
+    use crate::abi::signal::{SI_KERNEL, SIGHUP, SIGINT, SIGKILL};
+    let signal = match command {
+        cmd::RESTART | cmd::RESTART2 => SIGHUP,
+        cmd::HALT | cmd::POWER_OFF => SIGINT,
+        _ => return Err(Errno::EINVAL),
+    };
+    match ns.init() {
+        Some(init) if init != k.pid() => {
+            crate::task::signal_process(k, init, SigInfo::new(signal, SI_KERNEL));
+            k.kill_process(SIGKILL, false);
+        }
+        _ => k.kill_process(signal, false),
+    }
+    Ok(0)
 }

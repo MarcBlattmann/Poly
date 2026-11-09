@@ -62,6 +62,14 @@ impl Env for TestEnv {
     }
     fn fill_rect(&self, _: u64, _: CRect, _: u64) {}
     fn delete_dc(&self, _: u64) {}
+    fn paint_dc(&self, _: u32, _: Option<&[Rect]>) -> u64 {
+        0x77
+    }
+    fn release_dc(&self, _: u32, _: u64) {}
+    fn make_region(&self, _: &[Rect]) -> u64 {
+        0x99
+    }
+    fn delete_object(&self, _: u64) {}
 }
 
 fn with_env(f: impl FnOnce(&TestEnv)) {
@@ -152,6 +160,10 @@ extern "system" fn logging_proc(h: u64, msg: u32, w: u64, l: u64) -> u64 {
             log(format!("{t} WM_PARENTNOTIFY event={ev} id={} l={}", w >> 16, u8::from(l != 0)));
         }
         WM_SHOWWINDOW => log(format!("{t} WM_SHOWWINDOW w={w:#x} l={l:#x}")),
+        WM_NCHITTEST => log(format!("{t} WM_NCHITTEST screen={},{}", l as u16 as i16, (l >> 16) as u16 as i16)),
+        input::WM_SETCURSOR => {
+            log(format!("{t} WM_SETCURSOR window={} hit={} msg={}", tag(w), l & 0xFFFF, (l >> 16) & 0xFFFF))
+        }
         WM_DESTROY => log(format!("{t} WM_DESTROY")),
         WM_NCDESTROY => log(format!("{t} WM_NCDESTROY")),
         _ => {}
@@ -295,6 +307,118 @@ fn set_window_pos_on_a_hidden_child() {
 }
 
 #[test]
+fn minimize_nccalcsize_drops_show_and_nozorder_flags() {
+    with_env(|e| {
+        register(e, "Min");
+        let style = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | 0x0003_0000;
+        let h = create(e, 'M', 0, "Min", style, 50, 40, 300, 200, 0, 0);
+        take_log();
+
+        show_window(e, h, SW_MINIMIZE);
+
+        assert!(
+            take_log()
+                .iter()
+                .any(|entry| { entry == "M WM_NCCALCSIZE 1 new=0,740,160,768 pos=0,740,160,28 flags=0x9920" })
+        );
+    });
+}
+
+#[test]
+fn rtl_children_inherit_layout_and_map_points_mirror_horizontally() {
+    with_env(|e| {
+        register(e, "Rtl");
+        let rtl = create(e, 'R', WS_EX_NOACTIVATE | WS_EX_LAYOUTRTL, "Rtl", WS_POPUP, 650, 100, 200, 150, 0, 0);
+        let s = create(e, 'S', 0, "Rtl", WS_CHILD | WS_VISIBLE, 10, 20, 60, 40, rtl, 1);
+        let n = create(e, 'N', WS_EX_NOINHERITLAYOUT, "Rtl", WS_CHILD | WS_VISIBLE, 100, 20, 60, 40, rtl, 2);
+        let Reply::Window { info: r } = e.call(Request::Window { hwnd: rtl }) else { panic!() };
+        let Reply::Window { info: s } = e.call(Request::Window { hwnd: s }) else { panic!() };
+        let Reply::Window { info: n } = e.call(Request::Window { hwnd: n }) else { panic!() };
+
+        assert_eq!(s.ex_style, WS_EX_LAYOUTRTL);
+        assert_eq!(n.ex_style, WS_EX_LAYOUTRTL | WS_EX_NOINHERITLAYOUT);
+        assert_eq!(s.window, Rect::new(780, 120, 840, 160));
+        assert_eq!(n.window, Rect::new(690, 120, 750, 160));
+
+        let r_origin = MapOrigin { x: r.client.right, y: r.client.top, rtl: true };
+        let screen = MapOrigin::default();
+        let mut single = [(10, 5)];
+        assert_eq!(map_points(r_origin, screen, &mut single), 0x0064_fcae_u32 as i32);
+        assert_eq!(single, [(840, 105)]);
+        let mut rect = [(10, 5), (50, 25)];
+        assert_eq!(map_points(r_origin, screen, &mut rect), 0x0064_fcae_u32 as i32);
+        assert_eq!(rect, [(800, 105), (840, 125)]);
+    });
+}
+
+#[test]
+fn client_mouse_move_sends_nchittest_before_setcursor() {
+    with_env(|e| {
+        register(e, "MouseMove");
+        let h = create(e, 'A', 0, "MouseMove", WS_POPUP | WS_VISIBLE, 0, 0, 100, 100, 0, 0);
+        take_log();
+        let mut message =
+            CMsg { hwnd: h, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 50), ..CMsg::default() };
+
+        assert!(input::mouse_retrieved(e, &mut message));
+
+        assert_eq!(take_log(), ["A WM_NCHITTEST screen=50,50", "A WM_SETCURSOR window=A hit=1 msg=512"]);
+        assert_eq!(message.l, makelparam(50, 50));
+    });
+}
+
+#[test]
+fn nonclient_mouse_move_uses_geometric_hit_without_nchittest_callout() {
+    with_env(|e| {
+        register(e, "MouseMoveNc");
+        let h = create(e, 'A', 0, "MouseMoveNc", WS_POPUP | WS_VISIBLE | WS_CAPTION, 0, 0, 100, 100, 0, 0);
+        take_log();
+        let mut message =
+            CMsg { hwnd: h, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 5), ..CMsg::default() };
+
+        assert!(input::mouse_retrieved(e, &mut message));
+
+        assert_eq!(take_log(), ["A WM_SETCURSOR window=A hit=2 msg=512"]);
+        assert_eq!(message.message, 0x00A0);
+        assert_eq!(message.w, 2);
+        assert_eq!(message.l, makelparam(50, 5));
+    });
+}
+
+#[test]
+fn background_focus_activation_does_not_send_windowposchanged() {
+    with_env(|e| {
+        register(e, "FocusBackground");
+        let a = create(e, 'A', 0, "FocusBackground", WS_POPUP | WS_VISIBLE, 50, 50, 100, 100, 0, 0);
+        e.call(Request::SetInput {
+            active: a as u32,
+            focus: a as u32,
+            capture: 0,
+            which: crate::wm::input::SET_ACTIVE | crate::wm::input::SET_FOCUS | crate::wm::input::SET_FOREGROUND,
+        });
+
+        e.tid.set(2);
+        let t = create(e, 'T', 0, "FocusBackground", WS_POPUP | WS_VISIBLE, 200, 50, 100, 100, 0, 0);
+        e.call(Request::SetInput {
+            active: t as u32,
+            focus: t as u32,
+            capture: 0,
+            which: crate::wm::input::SET_ACTIVE | crate::wm::input::SET_FOCUS | crate::wm::input::SET_FOREGROUND,
+        });
+        e.tid.set(1);
+        take_log();
+
+        assert_eq!(focus::set_focus(e, a), a);
+
+        let log = take_log();
+        assert!(log.iter().any(|line| line == "A WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x3"));
+        assert!(!log.iter().any(|line| line.starts_with("A WM_WINDOWPOSCHANGED")));
+        assert!(matches!(e.call(Request::InputState {}), Reply::Input { active, focus, foreground, .. }
+            if u64::from(active) == a && u64::from(focus) == a && u64::from(foreground) == t));
+    });
+}
+
+#[test]
 fn destroy_goes_down_then_back_up() {
     with_env(|e| {
         register(e, "D");
@@ -321,5 +445,77 @@ fn destroy_goes_down_then_back_up() {
             ]
         );
         assert!(!e.wm.borrow().is_window(p));
+    });
+}
+
+fn from_point(e: &TestEnv, x: i32, y: i32, below: u32) -> u32 {
+    let Reply::Handle { hwnd } = e.call(Request::WindowFromPoint { x, y, below }) else { panic!() };
+    hwnd
+}
+
+#[test]
+fn topmost_windows_stay_above_later_created_ones() {
+    with_env(|e| {
+        register(e, "Z");
+        let top = create(e, 'T', crate::metrics::WS_EX_TOPMOST, "Z", WS_POPUP | WS_VISIBLE, 10, 10, 100, 100, 0, 0);
+        let plain = create(e, 'P', 0, "Z", WS_POPUP | WS_VISIBLE, 10, 10, 100, 100, 0, 0);
+        // WindowFromPoint.yaml wfp_toplevel: a later created window does not
+        // cover a topmost one; HWND_TOP leaves it below the topmost band.
+        assert_eq!(u64::from(from_point(e, 50, 50, 0)), top);
+        assert!(matches!(
+            e.call(Request::ZOrder { hwnd: plain as u32, after: HWND_TOP, apply: true }),
+            Reply::Bool { .. }
+        ));
+        assert_eq!(u64::from(from_point(e, 50, 50, 0)), top);
+        // A window answering HTTRANSPARENT passes to the one below it.
+        assert_eq!(u64::from(from_point(e, 50, 50, top as u32)), plain);
+        assert_ne!(from_point(e, 50, 50, plain as u32), plain as u32);
+    });
+}
+
+#[test]
+fn a_new_capture_drops_the_synthesized_move_of_a_release() {
+    with_env(|e| {
+        register(e, "Cap");
+        let a = create(e, 'A', 0, "Cap", WS_POPUP | WS_VISIBLE, 0, 0, 200, 200, 0, 0);
+        let set = |capture: u32| {
+            e.call(Request::SetInput { active: 0, focus: 0, capture, which: crate::wm::input::SET_CAPTURE });
+        };
+        e.call(Request::Cursor { set: true, x: 50, y: 50 });
+        let drain = || {
+            let mut n = 0;
+            while let Reply::Message { .. } =
+                e.call(Request::Peek { filter: 0, min: 0x200, max: 0x20E, flags: PM_REMOVE })
+            {
+                n += 1;
+            }
+            n
+        };
+        assert_eq!(drain(), 1);
+        set(a as u32);
+        set(0);
+        set(a as u32);
+        assert_eq!(drain(), 0);
+        set(0);
+        assert_eq!(drain(), 1);
+    });
+}
+
+#[test]
+fn a_minimized_window_with_a_minimize_box_sits_at_the_bottom_left_on_the_interactive_screen() {
+    with_env(|e| {
+        e.wm.borrow_mut().set_display(crate::metrics::Display::INTERACTIVE);
+        register(e, "Min");
+        let style = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | crate::metrics::WS_MINIMIZEBOX;
+        let h = create(e, 'M', 0, "Min", style, 300, 100, 300, 200, 0, 0);
+        let p = create(e, 'N', 0, "Min", WS_POPUP | WS_CAPTION, 500, 100, 150, 100, 0, 0);
+        show_window(e, h, SW_SHOWMINNOACTIVE);
+        show_window(e, p, SW_SHOWMINNOACTIVE);
+        // ClientToScreen.yaml cts_states: 0,1052 on 1080 rows; GetForegroundWindow.yaml
+        // gfw_show: a caption-only popup is parked at -32000,-32000.
+        let Reply::Window { info } = e.call(Request::Window { hwnd: h }) else { panic!() };
+        assert_eq!((info.window.left, info.window.top), (0, 1052));
+        let Reply::Window { info } = e.call(Request::Window { hwnd: p }) else { panic!() };
+        assert_eq!((info.window.left, info.window.top), (-32000, -32000));
     });
 }

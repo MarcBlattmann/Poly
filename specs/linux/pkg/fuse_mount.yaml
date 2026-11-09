@@ -1,0 +1,115 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/pkg/fuse_mount.yaml. A feature entry (package formats, ADR 0132): the
+# kernel interface, not one API symbol, so it has no coverage-map entry.
+id: linux/api/pkg/fuse_mount
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (the unprivileged cases in a child that drops to uid/gid 65534 and makes a user and a mount namespace); umask 022; the container has its own mount namespace; /dev/fuse is a character device 10:229, mode 0666"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  Mounting a FUSE (file system in user space) file system and the life of
+  its connection, as AppImage's FUSE runtime, squashfuse-like tools and
+  Flatpak's document portal need it. The server opens /dev/fuse (character
+  device major 10 minor 229, O_RDWR) and passes the descriptor to
+  mount(source, target, "fuse", flags,
+  "fd=N,rootmode=40000,user_id=U,group_id=G[,options]"). The type may be
+  "fuse" or "fuse.NAME"; the file system is then shown as fuse.NAME in
+  /proc/self/mountinfo. The mount call returns at once and sends nothing
+  to the server; the server's first read of the descriptor returns the
+  FUSE_INIT request (see fuse_init). Mount options (names exact): fd=
+  (required, decimal, an open /dev/fuse file not yet bound to a mount),
+  rootmode= (required, octal; its file type bits give the root's type,
+  040000 for a directory; permission bits are accepted, 40755 works),
+  user_id= and group_id= (required, decimal: the owner of the mount; any
+  value for a privileged mounter, only ids mapped in the mounter's user
+  namespace otherwise), max_read=N (decimal), default_permissions,
+  allow_other, subtype=NAME. The type fuseblk is a different file system
+  (not covered). /proc/self/mountinfo shows the mount with file system
+  type fuse (or fuse.NAME), source = the mount call's source string, and
+  super options rw,user_id=U,group_id=G followed by default_permissions,
+  allow_other and max_read=N, in that order, when given. statfs reports
+  f_type 0x65735546 (FUSE_SUPER_MAGIC) and otherwise what the server
+  answered to FUSE_STATFS (blocks, bfree, bavail, files, ffree, bsize,
+  namelen, frsize); f_flags shows ST_RDONLY (1), ST_NOSUID (2), ST_NODEV
+  (4) of the mount. /proc/filesystems lists fuse as a nodev file system.
+  The /dev/fuse descriptor before it is bound to a mount: read and write
+  fail with EPERM. After the mount: poll(POLLIN) reports a waiting
+  request; read needs a buffer of at least 8192 bytes (EINVAL below that
+  while the INIT request is queued, and the request stays queued; once
+  the server accepted a larger max_write the buffer must be larger, about
+  max_write plus 4096, so servers use big buffers) and returns exactly one
+  request; with nothing queued read blocks, or with O_NONBLOCK fails with
+  EAGAIN. A write shorter than a struct fuse_out_header (16 bytes) is
+  EINVAL. When the server's descriptor goes away (the server process ends)
+  every operation on the mount fails with ENOTCONN (107), including stat of
+  the mount root, but the mount stays until it is unmounted; umount2 of
+  such a mount succeeds. umount2 of a live mount with an open file or
+  directory, or with a process whose working directory is inside, is
+  EBUSY; otherwise it succeeds and the server's next read of /dev/fuse
+  fails with ENODEV (19). The kernel sent no FUSE_DESTROY request at
+  unmount in the observed runs (do not rely on it either way). MNT_DETACH
+  succeeds with open files: the mount leaves the tree at once, the open
+  file keeps reading, and the mount point is an ordinary empty directory
+  again. A fuse mount made read-only (MS_RDONLY at mount, or
+  MS_REMOUNT|MS_RDONLY) refuses every change with EROFS in the kernel
+  without a request to the server (MKDIR, CREATE, UNLINK, SETATTR and
+  write-mode OPEN are never sent), while reads work; MS_REMOUNT without
+  MS_RDONLY makes the same mount writable with no new connection. An
+  unprivileged user that made a user and a mount namespace and mapped its
+  ids there (after dropping privileges the process must be dumpable to
+  write uid_map: prctl(PR_SET_DUMPABLE, 1)) may mount fuse in that mount
+  namespace, with or without MS_NOSUID|MS_NODEV and with allow_other;
+  user_id and group_id must be mapped ids there. The same caller outside a
+  user namespace gets EPERM from mount (opening /dev/fuse is allowed).
+returns:
+  mount: "0; the server's descriptor must stay open while the mount is in use"
+  mountinfo: "' - fuse pk rw,user_id=0,group_id=0,default_permissions,allow_other,max_read=65536' for source pk with those options; ' - fuse.NAME pk rw,user_id=0,group_id=0' for type fuse.NAME or option subtype=NAME; the per-mount options show nosuid,nodev,relatime as given"
+  statfs: "f_type 0x65735546; the numbers of the server's FUSE_STATFS answer; f_flags includes ST_RDONLY, ST_NOSUID, ST_NODEV when the mount has them"
+  device_poll: "poll(POLLIN) returns 1 with POLLIN while a request is queued, 0 when idle"
+  device_read: "one request: struct fuse_in_header {u32 len (total bytes read), u32 opcode, u64 unique, u64 nodeid, u32 uid, u32 gid, u32 pid, u16 total_extlen, u16 padding} (40 bytes) plus the body"
+  umount: "0 for an idle mount (also for a connection that already ended); the server's read then returns ENODEV"
+errors:
+  no_fd: "EINVAL (22): no fd= option, fd= not a number, the fd not open, or not an open /dev/fuse file (/dev/null, a /proc file)"
+  missing_options: "EINVAL (22): no rootmode=, user_id= or group_id=; rootmode not octal; rootmode whose type bits are none or a symbolic link (777, 120000)"
+  rootmode_type: "ENOTDIR (20): rootmode with a regular-file (100000) or character-device (20000) type over a directory mount point (valid root types: regular, directory, character, block, fifo, socket)"
+  unknown_option: "EINVAL (22): an unknown option (bogus=1), max_read= not a number, blksize= on type fuse (it belongs to fuseblk)"
+  user_ids: "EINVAL (22): user_id= or group_id= not mapped in the mounter's user namespace (unprivileged case); a privileged mounter may give any ids"
+  unknown_type: "ENODEV (19): a file system type that is not fuse or fuse.NAME (fuse2)"
+  type_empty_subtype: "EINVAL (22): type 'fuse.' (empty subtype)"
+  bad_mountpoint: "ENOENT (2): mount point does not exist; EINVAL (22): MS_REMOUNT of a directory that is not a mount point"
+  same_fd_twice: "not specified and not tested: a descriptor that already belongs to a mount, given to a second mount call, gave 0 once and EBUSY (16) after the first mount was detached, on the oracle"
+  device_unbound: "EPERM (1): read or write on a /dev/fuse descriptor that is not bound to a mount (also size 0)"
+  device_small_read: "EINVAL (22): read buffer below 8192 bytes while the INIT request is queued (nothing consumed)"
+  device_short_write: "EINVAL (22): write shorter than 16 bytes"
+  after_abort: "ENOTCONN (107): any operation on a mount whose server connection ended"
+  busy: "EBUSY (16): umount2 without MNT_DETACH while a file, directory or working directory of the mount is in use"
+  unprivileged: "EPERM (1): mount by a user that has no user namespace of its own (no CAP_SYS_ADMIN)"
+side_effects: >
+  A mount adds a file system to the caller's mount namespace; the
+  descriptor becomes the connection. Unmounting or the server's death ends
+  the connection; requests in flight fail with ENOTCONN.
+threading: >
+  Several processes may use the mount at once; the server answers every
+  request. The tests run the server as a child process that reads and
+  answers sequentially.
+ordering:
+  - "mount(2) returns before any request is read; INIT is the first request of a connection"
+  - "at unmount the server's read of ENODEV comes after the RELEASE requests of files that were open"
+timing:
+  typical: "microseconds to a few hundred microseconds per request round trip"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: opcodes, struct layouts and option names from the public
+# linux/fuse.h and the kernel's public fuse documentation;
+# FUSE_SUPER_MAGIC from linux/magic.h. Every test is a client (the test
+# process) plus a tiny server (a forked child) that reads /dev/fuse and
+# answers from an in-memory tree; the server logs each request into shared
+# memory and the client checks the log. Tests make a private mount
+# namespace, mount on a directory under /tmp and unmount on every path.
+# All need root (poly-diff: needs=root) and compare output only
+# (syscalls=off, several processes). The helper is
+# tests/linux/include/p_fuse.h. The same descriptor used for two mounts is
+# not tested (see errors.same_fd_twice).

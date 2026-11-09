@@ -117,6 +117,8 @@ pub const fn status_word(event: ChildEvent) -> u32 {
         ChildEvent::Ended(Termination::Exited(code)) => (code as u32) << 8,
         ChildEvent::Ended(Termination::Killed { signal, core }) => (signal & 0x7f) | if core { 0x80 } else { 0 },
         ChildEvent::Stopped(signal) => ((signal & 0xff) << 8) | 0x7f,
+        // ptrace(2): the event number in bits 16..23.
+        ChildEvent::Trapped(code) => ((code & 0xffff) << 8) | 0x7f,
         ChildEvent::Continued => 0xffff,
     }
 }
@@ -130,6 +132,7 @@ pub const fn code_and_status(event: ChildEvent) -> (i32, i32) {
         ChildEvent::Ended(Termination::Killed { signal, core: false }) => (CLD_KILLED, signal as i32),
         ChildEvent::Ended(Termination::Killed { signal, core: true }) => (CLD_DUMPED, signal as i32),
         ChildEvent::Stopped(signal) => (CLD_STOPPED, signal as i32),
+        ChildEvent::Trapped(code) => (CLD_TRAPPED, (code & 0xff) as i32),
         ChildEvent::Continued => (CLD_CONTINUED, crate::abi::signal::SIGCONT as i32),
     }
 }

@@ -8,12 +8,16 @@
 //! drives the message sequences ([`crate::user`]). Behaviour follows the
 //! spec sheets of the first Phase 7 slice (`specs/windows/user32.dll/`).
 
-use crate::frame::Rect;
+use crate::frame::{FrameMetrics, Rect};
 use crate::metrics::*;
 use crate::proto::*;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec;
 use alloc::vec::Vec;
+
+pub mod input;
+pub mod paint;
+pub mod raw;
 
 // Win32 errors (`winerror.h`).
 pub const ERROR_INVALID_HANDLE: u32 = 6;
@@ -38,6 +42,7 @@ pub const QS_SENDMESSAGE: u32 = 0x0040;
 
 pub const WM_TIMER: u32 = 0x0113;
 pub const WM_QUIT: u32 = 0x0012;
+pub const WM_PAINT: u32 = 0x000F;
 pub const PM_REMOVE: u32 = 0x0001;
 
 /// `CW_USEDEFAULT` (`winuser.h`).
@@ -139,6 +144,8 @@ struct Window {
     own_dc: u64,
     size_move_pending: bool,
     seq: u64,
+    /// Update region, pending erase and frame (`paint`).
+    paint: paint::Paint,
 }
 
 #[derive(Debug, Default)]
@@ -150,6 +157,12 @@ struct Queue {
     changed: u32,
     /// The last message retrieved: time and position.
     last: (u32, i32, i32),
+    /// Active, focus and capture window (`input`).
+    input: input::InputState,
+    /// Input messages waiting (`raw`).
+    raw: VecDeque<Msg>,
+    /// The thread's own key state after SetKeyboardState (`raw`).
+    keys: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]
@@ -189,10 +202,31 @@ pub struct Wm {
     timers: Vec<Timer>,
     next_thread_timer: u64,
     screen: (i32, i32),
+    /// The session's screen (ADR 0131).
+    display: Display,
     desktop: u32,
     message: u32,
     seq: u64,
     cascade: i32,
+    /// The foreground window (`input`).
+    foreground: u32,
+    /// The interactive session's window of another process (`input`).
+    keeper: u32,
+    /// AttachThreadInput: a thread to the queue whose input it shares.
+    attached: BTreeMap<Key, Key>,
+    /// The cursor position (screen coordinates).
+    cursor: (i32, i32),
+    /// The physical key state, keys pressed since GetAsyncKeyState last
+    /// looked, the state as of the input messages retrieved (`raw`).
+    async_keys: Vec<u8>,
+    async_new: Vec<bool>,
+    sync_keys: Vec<u8>,
+    /// TrackMouseEvent's leave tracking: (window, flags) (`raw`).
+    tracking: Vec<(u32, u32)>,
+    /// TrackMouseEvent's hover tracking: (window, ms, since).
+    hover: Option<(u32, u32, u64)>,
+    /// The time of the last request (ms), for input from the desktop link.
+    now: u64,
 }
 
 impl Default for Wm {
@@ -232,10 +266,21 @@ impl Wm {
             timers: Vec::new(),
             next_thread_timer: 0x7FEF,
             screen: DEFAULT_SCREEN,
+            display: Display::SERVICE,
             desktop: 0,
             message: 0,
             seq: 0,
             cascade: 0,
+            foreground: 0,
+            keeper: 0,
+            attached: BTreeMap::new(),
+            cursor: (0, 0),
+            async_keys: raw::blank_keys(),
+            async_new: alloc::vec![false; 256],
+            sync_keys: raw::blank_keys(),
+            tracking: Vec::new(),
+            hover: None,
+            now: 0,
         };
         // Index 0 is never a window.
         wm.slots.push(None);
@@ -278,9 +323,28 @@ impl Wm {
         wm
     }
 
+    /// The session's screen: the interactive session of the slice B oracle
+    /// (the kernel's `poly.win32k.session=interactive`) or a compositor's
+    /// output.
+    pub fn set_display(&mut self, d: Display) {
+        self.display = d;
+        self.set_screen(d.width, d.height);
+        if d.interactive {
+            self.make_keeper();
+            // Where the oracle's runner parks it before each test.
+            self.cursor = (1500.min(d.width - 1), 600.min(d.height - 1));
+        }
+    }
+
+    pub fn display(&self) -> Display {
+        self.display
+    }
+
     /// The output's size (from the desktop link when a compositor greets).
     pub fn set_screen(&mut self, w: i32, h: i32) {
         self.screen = (w, h);
+        self.display.width = w;
+        self.display.height = h;
         let d = self.desktop;
         if let Some(win) = self.get_mut(u64::from(d)) {
             win.window_rel = Rect::new(0, 0, w, h);
@@ -565,7 +629,9 @@ impl Wm {
             // No menus exist yet, so no value is a menu handle.
             return err(ERROR_INVALID_MENU_HANDLE);
         }
-        let overlapped = !child && s.style & WS_POPUP == 0 && parent == self.desktop;
+        // A message-only window of style 0 is overlapped too (its client
+        // area is inside a caption frame, ClientToScreen.yaml cts_states).
+        let overlapped = !child && s.style & WS_POPUP == 0 && (parent == self.desktop || parent == self.message);
         let (mut x, mut y, mut cx, mut cy) = (s.x, s.y, s.cx, s.cy);
         let default_size = overlapped && s.cx == CW_USEDEFAULT;
         if overlapped {
@@ -596,6 +662,13 @@ impl Wm {
             }
         }
         let mut ex = s.ex_style;
+        if child
+            && self
+                .get(u64::from(parent))
+                .is_some_and(|p| p.ex_style & (WS_EX_LAYOUTRTL | WS_EX_NOINHERITLAYOUT) == WS_EX_LAYOUTRTL)
+        {
+            ex |= WS_EX_LAYOUTRTL;
+        }
         if s.style & (WS_DLGFRAME | WS_THICKFRAME) != 0 || ex & WS_EX_DLGMODALFRAME != 0 {
             ex |= WS_EX_WINDOWEDGE;
         } else {
@@ -626,11 +699,13 @@ impl Wm {
         let hwnd = self.alloc(win);
         // Top-level windows go on top; children below their siblings
         // (`SetWindowPos.yaml`: GW_CHILD is the first created).
+        // A top-level window that is not topmost goes below the topmost band.
+        let at = self.band_start(parent, ex & WS_EX_TOPMOST != 0);
         let p = self.get_mut(u64::from(parent)).expect("valid parent");
         if child {
             p.children.push(hwnd);
         } else {
-            p.children.insert(0, hwnd);
+            p.children.insert(at, hwnd);
         }
         self.queue(ctx.key());
         Reply::Created {
@@ -697,6 +772,7 @@ impl Wm {
         if let Some(c) = self.classes[w.class].as_mut() {
             c.windows = c.windows.saturating_sub(1);
         }
+        self.forget_input(hwnd);
         for q in self.queues.values_mut() {
             q.posted.retain(|m| m.hwnd != hwnd);
         }
@@ -809,9 +885,25 @@ impl Wm {
         Reply::Value { value: u64::from(stored) }
     }
 
+    /// Where a window that is (`topmost`) or is not in the topmost band goes
+    /// at the top of its band among `parent`'s children: only the desktop's
+    /// children have bands (the windows with WS_EX_TOPMOST lead the list).
+    fn band_start(&self, parent: u32, topmost: bool) -> usize {
+        if parent != self.desktop || topmost {
+            return 0;
+        }
+        self.get(u64::from(parent)).map_or(0, |p| {
+            p.children
+                .iter()
+                .take_while(|&&c| self.get(u64::from(c)).is_some_and(|k| k.ex_style & WS_EX_TOPMOST != 0))
+                .count()
+        })
+    }
+
     fn z_order(&mut self, hwnd: u32, after: u64, apply: bool) -> Reply {
         let Some(w) = self.get(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
         let parent = w.parent;
+        let in_topmost_band = w.ex_style & WS_EX_TOPMOST != 0;
         let Some(p) = self.get(u64::from(parent)) else { return Reply::Bool { value: false } };
         let old = p.children.clone();
         let mut new: Vec<u32> = old.iter().copied().filter(|&c| c != hwnd).collect();
@@ -822,9 +914,19 @@ impl Wm {
                 let owned: Vec<u32> =
                     new.iter().copied().filter(|&c| self.get(u64::from(c)).is_some_and(|o| o.owner == hwnd)).collect();
                 new.retain(|c| !owned.contains(c));
-                new.insert(0, hwnd);
+                // Top of its band: a window outside the topmost band goes
+                // below the topmost windows (HWND_TOPMOST / HWND_NOTOPMOST
+                // leave the style to the caller).
+                let band = if parent == self.desktop && !in_topmost_band {
+                    new.iter()
+                        .take_while(|&&c| self.get(u64::from(c)).is_some_and(|k| k.ex_style & WS_EX_TOPMOST != 0))
+                        .count()
+                } else {
+                    0
+                };
+                new.insert(band, hwnd);
                 for (i, o) in owned.into_iter().enumerate() {
-                    new.insert(i, o);
+                    new.insert(band + i, o);
                 }
             }
             HWND_BOTTOM => new.push(hwnd),
@@ -991,6 +1093,7 @@ impl Wm {
 
     #[allow(clippy::too_many_arguments)]
     fn post(&mut self, ctx: Ctx, to: Key, hwnd: u32, msg: u32, w: u64, l: u64, fx: &mut Effects) -> Reply {
+        let cursor = self.cursor;
         if POINTER_MESSAGES.contains(&msg) {
             return err(ERROR_MESSAGE_SYNC_ONLY);
         }
@@ -998,10 +1101,39 @@ impl Wm {
         if q.posted.len() >= QUEUE_LIMIT {
             return err(ERROR_NOT_ENOUGH_QUOTA);
         }
-        q.posted.push_back(Msg { hwnd, msg, w, l, time: ctx.now as u32, x: 0, y: 0 });
+        q.posted.push_back(Msg { hwnd, msg, w, l, time: ctx.now as u32, x: cursor.0, y: cursor.1, private: 0 });
         q.changed |= QS_POSTMESSAGE;
         fx.wake.push(to);
         Reply::Ok {}
+    }
+
+    /// Post a message generated by the desktop link to the window's own
+    /// thread. Unlike `PostMessageW`, this is trusted compositor input.
+    pub fn post_system_message(&mut self, hwnd: u32, msg: u32, now: u64, fx: &mut Effects) -> bool {
+        let Some(window) = self.get(u64::from(hwnd)) else { return false };
+        let to = window.thread;
+        let ctx = Ctx { pid: to.0, tid: to.1, now };
+        matches!(self.post(ctx, to, hwnd, msg, 0, 0, fx), Reply::Ok {})
+    }
+
+    /// Apply a compositor-moved or resized client rectangle to a top-level
+    /// window's Win32 geometry. `client` is in screen coordinates, as the
+    /// desktop link's `Configure` record is.
+    pub fn configure_from_desktop(&mut self, hwnd: u32, client: Rect, frame: FrameMetrics) -> bool {
+        if self.get(u64::from(hwnd)).is_none() {
+            return false;
+        }
+        let (ox, oy) = self.parent_origin(hwnd);
+        let outer = frame.window_from_surface(client);
+        let window_rel = Rect::new(outer.left - ox, outer.top - oy, outer.right - ox, outer.bottom - oy);
+        let client_rel = Rect::new(client.left - ox, client.top - oy, client.right - ox, client.bottom - oy);
+        let Some(window) = self.get_mut(u64::from(hwnd)) else { return false };
+        window.window_rel = window_rel;
+        window.client_rel = client_rel;
+        if !window.maximized && !window.minimized {
+            window.normal = window_rel;
+        }
+        true
     }
 
     /// Mark the caller's timers that fell due (once each) in `changed`.
@@ -1031,10 +1163,12 @@ impl Wm {
         if self.timers.iter().any(|t| t.thread == key && t.due <= now) {
             bits |= QS_TIMER;
         }
-        bits
+        bits | self.paint_status(key) | self.raw_status(key)
     }
 
     fn peek(&mut self, ctx: Ctx, filter: u64, min: u32, max: u32, flags: u32) -> Reply {
+        self.check_hover(ctx, &mut Effects::default());
+        let cursor = self.cursor;
         let key = ctx.key();
         let thread_only = filter as u32 == u32::MAX;
         if filter != 0 && !thread_only && !self.is_window(filter) {
@@ -1066,9 +1200,29 @@ impl Wm {
                     q.quit = None;
                 }
                 return Reply::Message {
-                    msg: Msg { hwnd: 0, msg: WM_QUIT, w: u64::from(code), l: 0, time: ctx.now as u32, x: 0, y: 0 },
+                    msg: Msg {
+                        hwnd: 0,
+                        msg: WM_QUIT,
+                        w: u64::from(code),
+                        l: 0,
+                        time: ctx.now as u32,
+                        x: cursor.0,
+                        y: cursor.1,
+                        private: 0,
+                    },
                 };
             }
+        }
+        if (want(raw::QS_KEY) || want(raw::QS_MOUSEMOVE) || want(raw::QS_MOUSEBUTTON))
+            && let Some(m) = self.raw_message(key, if thread_only { u64::MAX } else { filter }, &in_range, remove)
+        {
+            return Reply::Message { msg: m };
+        }
+        if want(QS_PAINT)
+            && in_range(WM_PAINT)
+            && let Some(m) = self.paint_message(ctx, filter, thread_only)
+        {
+            return Reply::Message { msg: m };
         }
         if want(QS_TIMER) && in_range(WM_TIMER) {
             let due = self
@@ -1084,7 +1238,16 @@ impl Wm {
                 .map(|(i, _)| i);
             if let Some(i) = due {
                 let t = &mut self.timers[i];
-                let m = Msg { hwnd: t.hwnd, msg: WM_TIMER, w: t.id, l: t.proc_, time: ctx.now as u32, x: 0, y: 0 };
+                let m = Msg {
+                    hwnd: t.hwnd,
+                    msg: WM_TIMER,
+                    w: t.id,
+                    l: t.proc_,
+                    time: ctx.now as u32,
+                    x: cursor.0,
+                    y: cursor.1,
+                    private: 0,
+                };
                 if remove {
                     t.due = ctx.now + t.period;
                     t.flagged = false;
@@ -1093,6 +1256,10 @@ impl Wm {
             }
         }
         let next = self.timers.iter().filter(|t| t.thread == key).map(|t| t.due.saturating_sub(ctx.now)).min();
+        let next = match (next, self.hover_due(ctx.now)) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
         Reply::Empty { next_timer_ms: next }
     }
 
@@ -1102,7 +1269,7 @@ impl Wm {
         let (wndproc, unicode) = (win.wndproc, win.unicode);
         // The desktop and the message window have no thread of their own:
         // their default procedure runs in the sender.
-        if to == ctx.key() || to.0 == SYSTEM_DESKTOP_PID {
+        if to == ctx.key() || to.0 == SYSTEM_DESKTOP_PID || to == input::KEEPER {
             return Reply::SameThread { wndproc, unicode, hwnd: hwnd as u32 };
         }
         let id = self.next_send;
@@ -1281,7 +1448,9 @@ impl Wm {
     /// Whether a thread has something its event should report: posted or
     /// sent messages, a quit request, a reply to its send.
     pub fn has_pending(&self, key: Key) -> bool {
-        self.queues.get(&key).is_some_and(|q| !q.posted.is_empty() || !q.sent.is_empty() || q.quit.is_some())
+        self.queues
+            .get(&key)
+            .is_some_and(|q| !q.posted.is_empty() || !q.sent.is_empty() || q.quit.is_some() || !q.raw.is_empty())
             || self.sends.values().any(|s| s.from == key && s.result.is_some())
     }
 
@@ -1295,12 +1464,15 @@ impl Wm {
     /// Run one request of thread `ctx`.
     pub fn handle(&mut self, ctx: Ctx, req: Request, fx: &mut Effects) -> Reply {
         self.queue(ctx.key());
+        self.now = self.now.max(ctx.now);
         match req {
             Request::Desktop {} => Reply::Desktop {
                 desktop: self.desktop,
                 message: self.message,
                 width: self.screen.0,
                 height: self.screen.1,
+                work: self.display.work,
+                interactive: self.display.interactive,
             },
             Request::RegisterEvent { .. } | Request::Queue {} => Reply::Ok {},
             Request::RegisterClass { spec } => self.register_class(ctx, spec),
@@ -1324,6 +1496,9 @@ impl Wm {
                 }
                 if let Some(r) = client_rel {
                     w.client_rel = r;
+                    // What is invalid stays inside the client area.
+                    let client = crate::rgn::Rgn::rect(Rect::new(0, 0, r.width().max(0), r.height().max(0)));
+                    w.paint.upd = w.paint.upd.intersect(&client);
                 }
                 Reply::Ok {}
             }
@@ -1357,6 +1532,7 @@ impl Wm {
             Request::SetParent { hwnd, parent } => self.set_parent(hwnd, parent),
             Request::SetState { hwnd, visible, minimized, maximized, normal, size_move_pending } => {
                 let Some(w) = self.get_mut(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
+                let was_visible = w.style & WS_VISIBLE != 0;
                 if let Some(v) = visible {
                     if v {
                         w.style |= WS_VISIBLE;
@@ -1364,6 +1540,12 @@ impl Wm {
                         w.style &= !WS_VISIBLE;
                     }
                 }
+                match visible {
+                    Some(false) if was_visible => self.clear_paint_tree(hwnd),
+                    Some(true) if !was_visible => self.shown(hwnd, fx),
+                    _ => {}
+                }
+                let Some(w) = self.get_mut(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
                 if let Some(m) = minimized {
                     w.minimized = m;
                     if m {
@@ -1437,6 +1619,68 @@ impl Wm {
             }
             // The surfaces are the NT personality's (`crate::surfaces`).
             Request::Surface { .. } => Reply::Value { value: 0 },
+            Request::Redraw { hwnd, rects, whole, flags } => {
+                if !self.is_window(u64::from(hwnd)) {
+                    return err(ERROR_INVALID_WINDOW_HANDLE);
+                }
+                let area = if whole { None } else { Some(crate::rgn::Rgn::from_rects(&rects)) };
+                self.redraw(hwnd, area, flags, fx);
+                Reply::Ok {}
+            }
+            Request::Update { hwnd } => self.update_of(hwnd),
+            Request::Painted { hwnd, what, ferase } => {
+                self.painted(hwnd, what, ferase);
+                Reply::Ok {}
+            }
+            Request::InputState {} => self.input_reply(ctx.key()),
+            Request::SetInput { active, focus, capture, which } => {
+                let had_capture = self.input_of(ctx.key()).capture;
+                self.set_input(ctx.key(), active, focus, capture, which);
+                // Releasing the capture synthesizes a move to the window under
+                // the cursor (SetCapture.yaml ordering).
+                if which & input::SET_CAPTURE != 0 && capture == 0 && had_capture != 0 {
+                    self.queue_mouse(ctx, raw::WM_MOUSEMOVE, 0, fx);
+                    self.mark_synthetic_move(ctx.key());
+                } else if which & input::SET_CAPTURE != 0 && capture != 0 {
+                    // A new capture takes the unretrieved synthesized move
+                    // with it (ReleaseCapture.yaml rc_nocapture: no captured
+                    // WM_MOUSEMOVE before the next release).
+                    self.drop_synthetic_move(ctx.key());
+                }
+                Reply::Ok {}
+            }
+            Request::ThreadInput { tid } => self.thread_input(ctx.pid, tid),
+            Request::GiveForeground { hwnd } => {
+                self.give_foreground(hwnd);
+                Reply::Ok {}
+            }
+            Request::AttachInput { tid, attach } => self.attach_input(ctx.key(), tid, attach),
+            Request::SendInput { events } => Reply::Value { value: u64::from(self.send_input(ctx, &events, fx)) },
+            Request::KeyboardState {} => Reply::Keys { keys: self.keys_of(ctx.key()) },
+            Request::SetKeyboardState { keys } => {
+                self.set_keys(ctx.key(), keys);
+                Reply::Ok {}
+            }
+            Request::AsyncKeyState { vk } => Reply::Value { value: u64::from(self.async_key(vk)) },
+            Request::WindowFromPoint { x, y, below } => {
+                let h = self.window_from_point_below(x, y, true, below);
+                // Nothing of ours there: another process's window.
+                let h = if h == self.desktop && self.keeper != 0 { self.keeper } else { h };
+                Reply::Handle { hwnd: h }
+            }
+            Request::TrackMouse { hwnd, flags, hover } => self.track_mouse(ctx, hwnd, flags, hover, fx),
+            Request::Cursor { set, x, y } => {
+                if set {
+                    self.cursor = (x.clamp(0, self.screen.0 - 1), y.clamp(0, self.screen.1 - 1));
+                    // A move to the window under it, even to the same point
+                    // (SetCursorPos.yaml).
+                    self.queue_mouse(ctx, raw::WM_MOUSEMOVE, 0, fx);
+                }
+                Reply::Value { value: u64::from(self.cursor.0 as u32) | (u64::from(self.cursor.1 as u32) << 32) }
+            }
+            Request::PaintOrder { root } => {
+                Reply::Windows { hwnds: self.paint_order(ctx.key(), (root != 0).then_some(root)) }
+            }
             Request::MessageInfo {} => {
                 let (t, x, y) = self.queue(ctx.key()).last;
                 Reply::Value { value: u64::from(t) | (u64::from(x as u16) << 32) | (u64::from(y as u16) << 48) }
@@ -1505,6 +1749,7 @@ impl Window {
             own_dc: 0,
             size_move_pending: false,
             seq: 0,
+            paint: paint::Paint::default(),
         }
     }
 }
@@ -1635,6 +1880,29 @@ mod tests {
             wm.handle(at(50), Request::Peek { filter: 0, min: 0, max: 0, flags: PM_REMOVE }, &mut Effects::default()),
             Reply::Empty { next_timer_ms: Some(10) }
         ));
+    }
+
+    #[test]
+    fn desktop_moves_update_win32_geometry_and_close_is_posted_to_its_thread() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let hwnd = create(&mut wm, A, "C", WS_POPUP, 0, 0);
+        let client = Rect::new(200, 300, 584, 561);
+        assert!(wm.configure_from_desktop(hwnd, client, FrameMetrics::POLY));
+        let info = wm.info(hwnd).unwrap();
+        assert_eq!(info.client, client);
+        assert_eq!(info.window, Rect::new(199, 275, 585, 562));
+        assert_eq!(info.window_rel, info.window);
+
+        let mut fx = Effects::default();
+        assert!(wm.post_system_message(hwnd, crate::user::WM_CLOSE, 77, &mut fx));
+        assert_eq!(fx.wake, [(A.pid, A.tid)]);
+        let Reply::Message { msg } =
+            wm.handle(Ctx { now: 77, ..A }, Request::Peek { filter: 0, min: 0, max: 0, flags: PM_REMOVE }, &mut fx)
+        else {
+            panic!("the compositor close request was not queued")
+        };
+        assert_eq!((msg.hwnd, msg.msg, msg.time), (hwnd, crate::user::WM_CLOSE, 77));
     }
 
     #[test]

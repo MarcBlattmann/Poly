@@ -44,6 +44,7 @@ members = [
     "crates/poly-paging",
     "crates/poly-pci",
     "crates/poly-pe",
+    "crates/poly-png",
     "crates/poly-procfs",
     "crates/poly-random",
     "crates/poly-registry",
@@ -137,6 +138,7 @@ poly-pagecache = { path = "crates/poly-pagecache" }
 poly-paging = { path = "crates/poly-paging" }
 poly-pci = { path = "crates/poly-pci" }
 poly-pe = { path = "crates/poly-pe" }
+poly-png = { path = "crates/poly-png" }
 poly-procfs = { path = "crates/poly-procfs" }
 poly-random = { path = "crates/poly-random" }
 poly-registry = { path = "crates/poly-registry" }

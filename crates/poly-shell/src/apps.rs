@@ -3,7 +3,8 @@
 //! `Type`, `Name`, `GenericName`, `Comment`, `Exec` with its quoting and
 //! field codes, `NoDisplay`, `Hidden`, `Terminal`, `Keywords`) and Poly's
 //! built-ins, Files and Terminal among them (ADR 0134). An entry with
-//! `Terminal=true` runs in Poly's Terminal (`poly-terminal -e ...`).
+//! `Terminal=true` runs in Poly's Terminal (`poly-terminal -e ...`). The
+//! `Icon` key is kept for the launcher to draw ([`crate::appicon`], ADR 0146).
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -21,6 +22,11 @@ pub struct App {
     /// The desktop file's ID (`foo.desktop`), or `poly:<name>` for a
     /// built-in.
     pub id: String,
+    /// The desktop file's `Icon`: a name for the icon theme or an absolute
+    /// path; Poly's own apps have `poly-<name>`, artwork compiled into the
+    /// shell. `None` for open windows without one: the shell draws its own
+    /// glyph.
+    pub icon: Option<String>,
 }
 
 /// Why a desktop file is not offered.
@@ -41,6 +47,7 @@ pub fn parse_desktop_entry(id: &str, text: &str) -> Result<App, Skip> {
     let mut in_entry = false;
     let mut seen_entry = false;
     let (mut name, mut generic, mut comment, mut exec, mut kind) = (None, None, None, None, None);
+    let mut icon = None;
     let mut keywords = Vec::new();
     let (mut hidden, mut terminal) = (false, false);
     for line in text.lines() {
@@ -66,6 +73,7 @@ pub fn parse_desktop_entry(id: &str, text: &str) -> Result<App, Skip> {
             "GenericName" => generic = Some(value),
             "Comment" => comment = Some(value),
             "Exec" => exec = Some(value),
+            "Icon" => icon = Some(value).filter(|v| !v.is_empty()),
             "Keywords" => keywords = value.split(';').filter(|k| !k.is_empty()).map(ToString::to_string).collect(),
             "NoDisplay" | "Hidden" => hidden |= value == "true",
             "Terminal" => terminal = value == "true",
@@ -92,7 +100,7 @@ pub fn parse_desktop_entry(id: &str, text: &str) -> Result<App, Skip> {
         argv.splice(0..0, [String::from(TERMINAL), String::from("-e")]);
     }
     let comment = comment.or(generic).unwrap_or_default();
-    Ok(App { name, comment, keywords, argv, id: id.into() })
+    Ok(App { name, comment, keywords, argv, id: id.into(), icon })
 }
 
 /// The escapes of string values: `\s` space, `\n`, `\t`, `\r`, `\\`.
@@ -124,8 +132,8 @@ fn unescape(v: &str) -> String {
 /// `Exec`'s arguments: separated by spaces, double quotes around an
 /// argument with `\"`, `` \` ``, `\$` and `\\` inside; the field codes
 /// that stand for files or URLs (`%f %F %u %U`) and the deprecated ones
-/// dropped, `%i`, `%c`, `%k` dropped too (no icons, no translated names,
-/// no file location), `%%` a percent sign. `None` for an unclosed quote.
+/// dropped, `%i`, `%c`, `%k` dropped too (the icon is the `Icon` key's, no
+/// translated names, no file location), `%%` a percent sign. `None` for an unclosed quote.
 pub fn parse_exec(exec: &str) -> Option<Vec<String>> {
     let mut args = Vec::new();
     let mut cur = String::new();
@@ -172,46 +180,46 @@ pub fn parse_exec(exec: &str) -> Option<Vec<String>> {
     Some(args)
 }
 
-/// Poly's own apps, offered whatever is installed.
+/// Poly's own apps, offered whatever is installed. Test fixtures (the demo
+/// clients) are not among them: a desktop that wants them gets them from
+/// desktop files, which `cargo xtask desktop --test-apps` puts in the image.
 pub fn builtins() -> Vec<App> {
-    let app = |name: &str, comment: &str, keywords: &[&str], argv: &[&str]| App {
+    let app = |name: &str, comment: &str, keywords: &[&str], argv: &[&str], icon: &str| App {
         name: name.into(),
         comment: comment.into(),
         keywords: keywords.iter().map(|k| (*k).into()).collect(),
         argv: argv.iter().map(|a| (*a).into()).collect(),
         id: alloc::format!("poly:{name}"),
+        icon: Some(icon.into()),
     };
     alloc::vec![
-        app(
-            "Poly Demo",
-            "A Wayland window drawn by a small native client",
-            &["demo", "wayland", "test"],
-            &["/bin/wl-demo"]
-        ),
-        app(
-            "Wayland Test Client",
-            "The compositor's protocol test (exits when done)",
-            &["test", "client"],
-            &["/bin/wl-client"]
-        ),
         app(
             "Settings",
             "Display, keyboard, wallpaper, sound, time zone",
             &["preferences", "volume", "keyboard", "layout", "wallpaper", "display", "scale", "timezone", "about"],
-            &[SETTINGS]
+            &[SETTINGS],
+            "poly-settings"
         ),
-        app("Notifications", "What came in, newest first", &["history", "messages"], &[NOTIFICATIONS]),
+        app(
+            "Notifications",
+            "What came in, newest first",
+            &["history", "messages"],
+            &[NOTIFICATIONS],
+            "poly-notifications"
+        ),
         app(
             "Files",
             "Browse and organise your files",
             &["file", "explorer", "folder", "directory", "manager", "browse", "documents", "downloads", "trash"],
-            &[FILES]
+            &[FILES],
+            "poly-files"
         ),
         app(
             "Terminal",
             "A shell in a window",
             &["shell", "console", "command", "prompt", "bash", "sh", "cli", "tty"],
-            &[TERMINAL]
+            &[TERMINAL],
+            "poly-terminal"
         ),
     ]
 }
@@ -236,6 +244,7 @@ pub fn window_entry(id: u32, title: &str, app_id: &str) -> App {
         keywords: Vec::new(),
         argv: alloc::vec![alloc::format!("{WINDOW}{id}")],
         id: alloc::format!("{WINDOW}{id}"),
+        icon: None,
     }
 }
 
@@ -263,6 +272,24 @@ pub fn catalog(desktop: Vec<App>) -> Vec<App> {
     all
 }
 
+/// Desktop-file apps for the shell's tests, standing in for what an image
+/// carries: not Poly's built-ins and not test fixtures.
+#[cfg(test)]
+pub(crate) fn sample_apps() -> Vec<App> {
+    let app = |name: &str, keywords: &[&str], prog: &str| App {
+        name: name.into(),
+        comment: String::new(),
+        keywords: keywords.iter().map(|k| (*k).into()).collect(),
+        argv: alloc::vec![prog.into()],
+        id: alloc::format!("{prog}.desktop"),
+        icon: None,
+    };
+    catalog(alloc::vec![
+        app("Pixel Viewer", &["picture", "image"], "/bin/viewer"),
+        app("Quill Editor", &["write", "text"], "/bin/editor"),
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,6 +306,7 @@ mod tests {
         assert_eq!(app.argv, ["gedit", "--new-window"]);
         assert_eq!(app.keywords, ["Text", "Plain"]);
         assert_eq!(app.id, "org.gnome.gedit.desktop");
+        assert_eq!(app.icon.as_deref(), Some("gedit"));
     }
 
     #[test]
@@ -316,17 +344,24 @@ mod tests {
             keywords: vec![],
             argv: vec!["x".into()],
             id: "f.desktop".into(),
+            icon: None,
         };
-        let all = catalog(vec![file("zebra"), file("Poly Demo"), file("apple")]);
+        let all = catalog(vec![file("zebra"), file("Settings"), file("apple")]);
         let names: Vec<&str> = all.iter().map(|a| a.name.as_str()).collect();
-        assert_eq!(
-            names,
-            ["apple", "Files", "Notifications", "Poly Demo", "Settings", "Terminal", "Wayland Test Client", "zebra"]
-        );
+        assert_eq!(names, ["apple", "Files", "Notifications", "Settings", "Terminal", "zebra"]);
         assert_eq!(all[3].id, "f.desktop", "the desktop file replaced the built-in");
-        assert_eq!(all[4].internal(), Some(SETTINGS));
+        assert_eq!(all[2].internal(), Some(NOTIFICATIONS));
         assert_eq!(all[3].internal(), None);
         assert_eq!(all[1].argv, [FILES]);
-        assert_eq!(all[5].argv, [TERMINAL]);
+        assert_eq!(all[4].argv, [TERMINAL]);
+    }
+
+    #[test]
+    fn the_demo_clients_are_not_built_in() {
+        // Test fixtures arrive only as desktop files an image carries.
+        let all = catalog(Vec::new());
+        let names: Vec<&str> = all.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["Files", "Notifications", "Settings", "Terminal"]);
+        assert!(all.iter().all(|a| !a.argv.iter().any(|p| p.contains("wl-demo") || p.contains("wl-client"))));
     }
 }

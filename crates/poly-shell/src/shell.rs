@@ -26,6 +26,7 @@
 mod panels;
 mod wallpaper;
 
+use crate::appicon::{AppIcons, IconFiles};
 use crate::apps::App;
 use crate::chrome::{Geometry, Motion};
 use crate::draw::{self, Face, Style, Text, fill, rounded_outline, rounded_rect};
@@ -160,6 +161,8 @@ pub struct Shell {
     wall: core::cell::RefCell<Option<wallpaper::Cache>>,
     /// The wallpapers' pictures (Alpine Shell's), by preset.
     pictures: crate::picture::Pictures,
+    /// The icons of installed apps, loaded as they are first drawn.
+    icons: core::cell::RefCell<AppIcons>,
     /// The settings window's state (its contents are the shell's).
     pub settings_window: SettingsWindow,
 }
@@ -199,6 +202,7 @@ impl Shell {
             changes: Vec::new(),
             wall: core::cell::RefCell::new(None),
             pictures: crate::picture::Pictures::new(),
+            icons: core::cell::RefCell::new(AppIcons::default()),
             settings_window: SettingsWindow::default(),
         };
         let rows = s.room_for_rows();
@@ -385,11 +389,43 @@ impl Shell {
         self.damage.push(self.screen());
     }
 
+    /// Where the icons of installed apps are read from (the compositor
+    /// gives the disk, ADR 0146). Without it the shell draws its glyphs.
+    pub fn set_icon_files(&mut self, files: alloc::boxed::Box<dyn IconFiles>) {
+        self.icons.get_mut().set_files(files);
+        self.damage.push(self.screen());
+    }
+
+    /// The icon of the app that owns windows with this app ID: the `Icon`
+    /// of its desktop file (the file named after the ID, or the one that
+    /// runs a program of that name), else the ID as an icon name, as the
+    /// Desktop Entry Specification's `StartupWMClass` matching would find
+    /// for most apps. `None` for Poly's own apps, which keep their glyphs.
+    fn icon_for_app_id(&self, app_id: &str) -> Option<String> {
+        if app_id.is_empty() {
+            return None;
+        }
+        let same = |a: &str| a.eq_ignore_ascii_case(app_id);
+        let owner = self.base_apps.iter().find(|a| {
+            same(&a.id)
+                || a.id.strip_suffix(".desktop").is_some_and(same)
+                || a.argv.first().and_then(|p| p.rsplit('/').next()).is_some_and(same)
+        });
+        match owner {
+            Some(a) => a.icon.clone(),
+            None => Some(app_id.into()),
+        }
+    }
+
     /// The open windows (ID, title, app ID): the launcher lists them, as
     /// Alpine does, and Enter or a click switches to one.
     pub fn set_windows(&mut self, windows: &[(u32, String, String)]) {
         let mut apps = self.base_apps.clone();
-        apps.extend(windows.iter().map(|(id, title, app)| crate::apps::window_entry(*id, title, app)));
+        apps.extend(windows.iter().map(|(id, title, app)| {
+            let mut entry = crate::apps::window_entry(*id, title, app);
+            entry.icon = self.icon_for_app_id(app);
+            entry
+        }));
         if apps != self.apps {
             self.apps = apps;
             self.launcher.requery(&self.apps);
@@ -1191,6 +1227,12 @@ impl Shell {
             // The icon: a Lucide glyph at 40 % in the 28-pixel box.
             let ib = lt::ICON_BOX * s;
             let icon = Rect::new(row.x + lt::ROW_PADDING * s, row.y + (row.height - ib) / 2, ib, ib);
+            // An installed app's own icon, if its file is there: the whole
+            // box, scaled to it.
+            let own = app.icon.as_deref().and_then(|name| self.icons.borrow_mut().get(name, ib as u32));
+            if let Some(bitmap) = &own {
+                bitmap.draw(fb, clip, icon.x, icon.y, ib);
+            }
             let glyph = match app.internal() {
                 _ if app.window().is_some() => lucide::APP_WINDOW,
                 Some(crate::apps::SETTINGS) => lucide::SETTINGS,
@@ -1203,7 +1245,9 @@ impl Shell {
             };
             let gsz = lt::GLYPH * s;
             let (gx, gy) = (icon.x + (ib - gsz) / 2, icon.y + (ib - gsz) / 2);
-            glyph.draw(fb, clip, gx as f32, gy as f32, gsz as f32, fg(), ink::ICON);
+            if own.is_none() {
+                glyph.draw(fb, clip, gx as f32, gy as f32, gsz as f32, fg(), ink::ICON);
+            }
             // Name and description: 13 px over 11 px at 50 %.
             let tx = (icon.right() + lt::ROW_ICON_GAP * s) as f32;
             let tst = Style::new(Face::Sans, lt::TITLE_SIZE).scaled(s);
@@ -1260,7 +1304,13 @@ impl Shell {
             }
             // The name row: an app glyph and the title.
             let isz = sw::ICON * s;
-            lucide::APP_WINDOW.draw(fb, clip, (c.x + 6 * s) as f32, (c.y + 6 * s) as f32, isz as f32, fg(), 200);
+            let own = self.icon_for_app_id(&e.app_id).and_then(|name| self.icons.borrow_mut().get(&name, isz as u32));
+            match own {
+                Some(bitmap) => bitmap.draw(fb, clip, c.x + 6 * s, c.y + 6 * s, isz),
+                None => {
+                    lucide::APP_WINDOW.draw(fb, clip, (c.x + 6 * s) as f32, (c.y + 6 * s) as f32, isz as f32, fg(), 200)
+                }
+            }
             let base = self.text.centre(c.y, sw::HEADER * s, st);
             let alpha = if e.minimized { 153 } else { 255 };
             let tx = (c.x + 6 * s + isz + 8 * s) as f32;

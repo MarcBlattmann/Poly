@@ -27,6 +27,32 @@ pub const SHELL_FONTS: &str = "/usr/share/poly/fonts";
 /// (`poly_shell::picture` files, ADR 0127).
 pub const WALLPAPERS: &str = "/usr/share/poly/wallpapers";
 
+/// The icon theme's files for the shell's app icons (ADR 0146): what
+/// `poly_shell::appicon` reads, from the disk. Files over the shell's size
+/// limit are not read at all.
+#[derive(Debug, Default)]
+pub struct DiskIcons;
+
+impl poly_shell::appicon::IconFiles for DiskIcons {
+    fn read(&self, path: &str) -> Option<Vec<u8>> {
+        let meta = poly_rt::fs::metadata(path).ok()?;
+        if !meta.is_file() || meta.len() > poly_shell::appicon::MAX_FILE as u64 {
+            return None;
+        }
+        poly_rt::fs::read(path).ok()
+    }
+
+    fn list(&self, dir: &str) -> Vec<String> {
+        poly_rt::fs::read_dir(dir).map(|entries| entries.into_iter().map(|e| e.name).collect()).unwrap_or_default()
+    }
+}
+
+/// Whether an empty desktop should show the launcher after the last window
+/// disappears or a no-window app exits.
+pub fn launcher_should_reopen(launcher_visible: bool, has_windows: bool, had_windows: bool, app_exited: bool) -> bool {
+    !launcher_visible && !has_windows && (had_windows || app_exited)
+}
+
 /// Give the shell the wallpapers' pictures that are on the disk.
 pub fn load_wallpapers(shell: &mut poly_shell::Shell) {
     for (id, _, _, _, _) in poly_shell::theme::wallpaper::PRESETS {
@@ -258,5 +284,14 @@ mod tests {
     fn keymap_files_and_desktop_files_need_the_kernel() {
         assert!(desktop_files("/usr/share/applications").is_empty());
         assert!(keymap_file("/run/user/0", &US).is_err());
+    }
+
+    #[test]
+    fn an_empty_desktop_returns_to_the_launcher_after_an_app_exits() {
+        assert!(launcher_should_reopen(false, false, false, true), "no-window apps such as notify-send");
+        assert!(launcher_should_reopen(false, false, true, false), "the last window closed");
+        assert!(!launcher_should_reopen(true, false, false, true), "do not toggle a visible launcher off");
+        assert!(!launcher_should_reopen(false, true, true, true), "another window is still open");
+        assert!(!launcher_should_reopen(false, false, false, false), "a live app has not opened a window yet");
     }
 }

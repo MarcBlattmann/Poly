@@ -417,6 +417,14 @@ impl LinuxFs for Thread<'_> {
         self.process().files.fstatfs(fd).map(statfs).map_err(vfs_errno)
     }
 
+    fn open_for_writing(&mut self, fd: i32) -> Result<bool, Errno> {
+        self.process().files.has_writers(fd).map_err(vfs_errno)
+    }
+
+    fn statfs_dev(&mut self, major: u32, minor: u32) -> Result<StatFs, Errno> {
+        self.process().files.statfs_dev(poly_vfs::DeviceId::new(major, minor)).map(statfs).map_err(vfs_errno)
+    }
+
     fn set_fd_limit(&mut self, target: Target, limit: u64) -> Result<(), Errno> {
         let limit = usize::try_from(limit).unwrap_or(usize::MAX);
         match target {
