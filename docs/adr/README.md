@@ -133,6 +133,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0150](0150-ci-in-equal-sized-jobs.md) | CI jobs of equal length (about 7 minutes in all): boot test shards and `polycheck` slices combined into jobs by the workflow (`ci lint` checks every one runs), the Win32 modules and the apt packages' .deb files cached, prose-only pull requests skip the jobs that run programs, per-group times in the job summaries | Accepted |
 | [0151](0151-macos-plan-arm64-translator-and-aarch64-port.md) | macOS plan (owner decision): an arm64 → x86-64 translator first, so arm64-only Mac apps run on x86 PCs, in user space in the translated process on a shared A64 decoder (interpreter, then JIT); an aarch64 kernel port as groundwork (a boot stub on QEMU `virt` in CI, then the kernel's x86-64 code behind `crate::arch`); the order, the costs and the clean-room limits | Accepted |
 | [0154](0154-aarch64-boot-stub.md) | An aarch64 boot stub in its own package on QEMU `virt`: devicetree, PL011, vectors, MMU, semihosting exit, a CI part | Accepted |
+| [0156](0156-ci-builds-once.md) | CI builds the kernel, native programs, xtask, the pipeline tool and the Windows test programs once in two `build` jobs; the boot and pipeline jobs unpack them (`POLY_PREBUILT=1`) and only boot; the traced 7-Zip scenario runs on TCG (its 8 MB of serial output takes 3 minutes through a nested hypervisor); shards and slices rebalanced | Accepted |
 
 ## Decided by the owner
 
