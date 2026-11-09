@@ -83,8 +83,6 @@ unsafe extern "system" {
     fn CreateFileMappingW(file: Handle, sa: *mut u8, protect: u32, high: u32, low: u32, name: *const u16) -> Handle;
     fn MapViewOfFile(map: Handle, access: u32, high: u32, low: u32, bytes: usize) -> *mut u8;
     fn GetEnvironmentVariableW(name: *const u16, buf: *mut u16, size: u32) -> u32;
-    fn OutputDebugStringA(text: *const u8);
-    fn SetEnvironmentVariableW(name: *const u16, value: *const u16) -> i32;
     fn InitializeCriticalSection(cs: *mut CriticalSection);
     fn EnterCriticalSection(cs: *mut CriticalSection);
     fn LeaveCriticalSection(cs: *mut CriticalSection);
@@ -165,9 +163,6 @@ const BUFFER: usize = 1 << 18;
 
 /// `pt_enter`'s cookie for a call that is only counted (the counting logger).
 const COUNT_ONLY: u64 = 0x8000_0000;
-/// `pt_enter`'s cookie for a call whose real function is not called (an injected
-/// failure, [`ctl`]); the thunk of the counting kit (`proxy/common_agg.rs`) tests it.
-const SKIP_CALL: u64 = ctl::SKIP;
 
 static TLS: AtomicU32 = AtomicU32::new(TLS_OUT_OF_INDEXES);
 static FILE: AtomicIsize = AtomicIsize::new(INVALID_HANDLE_VALUE);
@@ -455,19 +450,6 @@ pub unsafe extern "C" fn pt_enter(f: &Func, regs: *const u64, stack: *const u64,
             if agg::due(seq + 1) || f.flags & (NORETURN | FLUSH) != 0 {
                 agg::snapshot();
             }
-            if f.flags & (NORETURN | TAIL) == 0 && ctl::wanted(f) {
-                // `regs` is the thunk's frame from `rsp + 0xA0`; its slot at `rsp + 0x108` is
-                // `rax` after the call, the one at `rsp + 0x110` is `xmm0`.
-                if let Some((ret, e)) = ctl::act(f, regs as *mut u64, stack) {
-                    let frame = regs as *mut u64;
-                    *frame.add(13) = ret;
-                    *frame.add(14) = 0;
-                    *frame.add(15) = 0;
-                    leave_logger(tls, t);
-                    SetLastError(e);
-                    return SKIP_CALL | ((err as u64) << 32);
-                }
-            }
             if !full && f.flags & (NORETURN | TAIL) == 0 {
                 // Counted only; `pt_leave` counts the result.
                 leave_logger(tls, t);
@@ -509,7 +491,7 @@ pub unsafe extern "C" fn pt_leave(f: &Func, cookie: u64, ret: u64, scratch: *mut
     // SAFETY: (whole function) the thunk passes what the doc says.
     unsafe {
         let err = GetLastError();
-        if cookie as u32 == COUNT_ONLY as u32 || cookie as u32 == SKIP_CALL as u32 {
+        if cookie as u32 == COUNT_ONLY as u32 {
             agg::on_leave(f, ret, (cookie >> 32) as u32, err);
             return;
         }
@@ -572,7 +554,7 @@ mod agg {
     }
 
     #[allow(clippy::declare_interior_mutable_const)]
-    pub(super) const Z: AtomicU64 = AtomicU64::new(0);
+    const Z: AtomicU64 = AtomicU64::new(0);
 
     impl Hist4 {
         const fn new() -> Hist4 {
@@ -612,8 +594,6 @@ mod agg {
 
     pub struct Stat {
         f: AtomicUsize,
-        /// [`ctl`]: 0 not looked at, 1 no rule, k + 2 rule k.
-        pub(super) ctl: AtomicU32,
         n: AtomicU64,
         first: AtomicU64,
         zero: AtomicU64,
@@ -626,7 +606,6 @@ mod agg {
     #[allow(clippy::declare_interior_mutable_const)]
     const STAT: Stat = Stat {
         f: AtomicUsize::new(0),
-        ctl: AtomicU32::new(0),
         n: Z,
         first: Z,
         zero: Z,
@@ -639,7 +618,7 @@ mod agg {
     static SEEN: [AtomicU64; DEDUP] = [Z; DEDUP];
 
     /// The counters of `f` (claimed on first use).
-    pub(super) fn stat(f: &Func) -> Option<&'static Stat> {
+    fn stat(f: &Func) -> Option<&'static Stat> {
         let key = f as *const Func as usize;
         let mut i = (key >> 3).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> (usize::BITS as usize - 13);
         for _ in 0..TABLE {
@@ -946,14 +925,6 @@ mod agg {
             } else if name == b"CreateWindowExA" && *f.name.add(15) == 0 {
                 CWE_A.store(f as *const Func as usize, Ordering::Relaxed);
             }
-            let cpau = b"CreateProcessAsUserW";
-            if core::slice::from_raw_parts(f.name, cpau.len()) == cpau && *f.name.add(cpau.len()) == 0 {
-                ctl::CPAU.store(f as *const Func as usize, Ordering::Relaxed);
-            }
-            let upta = b"UpdateProcThreadAttribute";
-            if core::slice::from_raw_parts(f.name, upta.len()) == upta && *f.name.add(upta.len()) == 0 {
-                ctl::UPTA.store(f as *const Func as usize, Ordering::Relaxed);
-            }
         }
     }
 
@@ -1119,536 +1090,6 @@ mod agg {
     }
 }
 
-/// Opt-in control of the traced program (the Chrome kit; nothing happens unless the
-/// environment asks): fault injection per API and a probe of the process-creation
-/// attributes. Set before the program starts, read at `DLL_PROCESS_ATTACH` (before a
-/// sandbox can take the environment away); child processes inherit the variables.
-///
-/// * `POLYTRACE_FAULT=<fn>:<ret>:<err>[:<after>[:<count>]];...`: the real function
-///   `<fn>` (name only, in every proxy that exports it) is **not called** after its first
-///   `<after>` calls (default 0); it returns `<ret>` and sets the last error `<err>`;
-///   `<count>` calls at most are failed (default all). Numbers are decimal or `0x` hex.
-/// * `POLYTRACE_FAULT_IN=<text>`: the rules apply only in a process whose command line
-///   contains `<text>` (`browser`: no `--type=`); default every process.
-/// * `POLYTRACE_INHERIT=1`: for every child the program makes with `CreateProcessAsUserW` and a
-///   process-attribute handle list (a sandbox target), make a file-backed section (the trace file of
-///   the child, `POLYTRACE_OUT` with `%p` replaced by `c<serial>`), add its inheritable handle to the
-///   list and give the child its value in `POLYTRACE_HANDLE`. A child that cannot make a file of its own
-///   (a confined renderer: `CreateFileW` fails with `ERROR_ACCESS_DENIED`) maps that section instead.
-/// * `POLYTRACE_RELAX=<mask0>[,<mask1>]`: bits cleared from the 64-bit words of a
-///   process-creation mitigation policy (attribute `0x20007`,
-///   `PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY`, `winbase.h`) that the program gives to
-///   `UpdateProcThreadAttribute`. Windows' code integrity refuses the unsigned proxy DLLs
-///   in a child created with `PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_*`;
-///   clearing that field lets a sandboxed child be traced. The attribute's words
-///   and every other attribute's first bytes are logged either way (`"mitigation"`, `"attr"`).
-mod ctl {
-    use super::*;
-    use core::sync::atomic::AtomicBool;
-
-    /// Low half of `pt_enter`'s cookie: do not call the real function.
-    pub const SKIP: u64 = 0x4000_0000;
-    const MAX_RULES: usize = 40;
-    const NAME: usize = 40;
-    /// `Stat::ctl` value: this function has no rule.
-    const NONE: u32 = 1;
-
-    /// The `Func` of `UpdateProcThreadAttribute` (set when first called).
-    pub static UPTA: AtomicUsize = AtomicUsize::new(0);
-    /// The `Func` of `CreateProcessAsUserW`.
-    pub static CPAU: AtomicUsize = AtomicUsize::new(0);
-    static INHERIT: AtomicBool = AtomicBool::new(false);
-    const LISTS: usize = 16;
-    const MAXH: usize = 48;
-    /// Handle lists being built: the attribute list's address and the section handle added to it.
-    static LIST_KEY: [AtomicU64; LISTS] = [agg::Z; LISTS];
-    static LIST_H: [AtomicU64; LISTS] = [agg::Z; LISTS];
-    static LIST_NEXT: AtomicUsize = AtomicUsize::new(0);
-    static POOL: Shared<[[u64; MAXH]; LISTS]> = Shared(UnsafeCell::new([[0; MAXH]; LISTS]));
-    const ENVBUF: usize = 16384;
-    static ENVPOOL: Shared<[[u16; ENVBUF]; 8]> = Shared(UnsafeCell::new([[0; ENVBUF]; 8]));
-    static ENV_NEXT: AtomicUsize = AtomicUsize::new(0);
-    static SERIAL: AtomicU32 = AtomicU32::new(0);
-    static OUT16: Shared<[u16; 560]> = Shared(UnsafeCell::new([0; 560]));
-    static RULES_ACTIVE: AtomicBool = AtomicBool::new(false);
-    static RELAX: [AtomicU64; 2] = [AtomicU64::new(0), AtomicU64::new(0)];
-    static NRULES: AtomicUsize = AtomicUsize::new(0);
-
-    struct Rule {
-        name: [u8; NAME],
-        nlen: usize,
-        ret: u64,
-        err: u32,
-        after: u32,
-        count: u32,
-    }
-    const R0: Rule = Rule { name: [0; NAME], nlen: 0, ret: 0, err: 0, after: 0, count: 0 };
-    static RULES: Shared<[Rule; MAX_RULES]> = Shared(UnsafeCell::new([R0; MAX_RULES]));
-    #[allow(clippy::declare_interior_mutable_const)]
-    const U0: AtomicU32 = AtomicU32::new(0);
-    static CALLS: [AtomicU32; MAX_RULES] = [U0; MAX_RULES];
-    static HITS: [AtomicU32; MAX_RULES] = [U0; MAX_RULES];
-    /// The attributes already logged (hash of the id and the first bytes).
-    static ATTRS: [AtomicU64; 64] = [agg::Z; 64];
-
-    static ENV16: Shared<[u16; 1100]> = Shared(UnsafeCell::new([0; 1100]));
-    static ENV8: Shared<[u8; 1100]> = Shared(UnsafeCell::new([0; 1100]));
-
-    /// The variable `name` as ASCII (non-ASCII units become `?`) in `ENV8`; its length.
-    unsafe fn env(name: &[u8]) -> usize {
-        // SAFETY: attach time, single-threaded; the buffers are static.
-        unsafe {
-            let mut w = [0u16; 40];
-            for (i, &c) in name.iter().enumerate() {
-                w[i] = c as u16;
-            }
-            let b16 = &mut *ENV16.0.get();
-            let n = GetEnvironmentVariableW(w.as_ptr(), b16.as_mut_ptr(), b16.len() as u32) as usize;
-            if n == 0 || n >= b16.len() {
-                return 0;
-            }
-            let b8 = &mut *ENV8.0.get();
-            for i in 0..n {
-                b8[i] = if b16[i] < 0x80 { b16[i] as u8 } else { b'?' };
-            }
-            n
-        }
-    }
-
-    fn number(t: &[u8]) -> u64 {
-        let (digits, radix) = match t {
-            [b'0', b'x' | b'X', rest @ ..] => (rest, 16u64),
-            _ => (t, 10u64),
-        };
-        let mut v = 0u64;
-        for &c in digits {
-            let d = match c {
-                b'0'..=b'9' => (c - b'0') as u64,
-                b'a'..=b'f' => (c - b'a') as u64 + 10,
-                b'A'..=b'F' => (c - b'A') as u64 + 10,
-                _ => break,
-            };
-            v = v.wrapping_mul(radix).wrapping_add(d);
-        }
-        v
-    }
-
-    /// Does the process's command line contain `needle` (ASCII)?
-    unsafe fn cmd_contains(needle: &[u8]) -> bool {
-        // SAFETY: the command line is NUL-terminated.
-        unsafe {
-            let cmd = agg::command_line();
-            let mut i = 0;
-            while *cmd.add(i) != 0 {
-                if (0..needle.len()).all(|k| *cmd.add(i + k) == needle[k] as u16) {
-                    return true;
-                }
-                i += 1;
-            }
-            false
-        }
-    }
-
-    /// Read the environment (`DLL_PROCESS_ATTACH`) and log what is on.
-    pub unsafe fn init() {
-        // SAFETY: attach time, single-threaded.
-        unsafe {
-            let n = env(b"POLYTRACE_RELAX");
-            if n > 0 {
-                let t = &(&*ENV8.0.get())[..n];
-                let mut parts = t.split(|&c| c == b',');
-                RELAX[0].store(number(parts.next().unwrap_or(&[])), Ordering::Relaxed);
-                RELAX[1].store(number(parts.next().unwrap_or(&[])), Ordering::Relaxed);
-            }
-            if env(b"POLYTRACE_INHERIT") > 0 {
-                INHERIT.store(true, Ordering::Relaxed);
-            }
-            let mut filter_ok = true;
-            let n = env(b"POLYTRACE_FAULT_IN");
-            if n > 0 {
-                let mut f = [0u8; 200];
-                let m = n.min(f.len());
-                f[..m].copy_from_slice(&(&*ENV8.0.get())[..m]);
-                filter_ok = if &f[..m] == b"browser" { !cmd_contains(b"--type=") } else { cmd_contains(&f[..m]) };
-            }
-            let n = env(b"POLYTRACE_FAULT");
-            let mut count = 0;
-            if n > 0 && filter_ok {
-                let t = &(&*ENV8.0.get())[..n];
-                let rules = &mut *RULES.0.get();
-                for item in t.split(|&c| c == b';') {
-                    if count == MAX_RULES || item.is_empty() {
-                        continue;
-                    }
-                    let mut it = item.split(|&c| c == b':');
-                    let name = it.next().unwrap_or(&[]);
-                    if name.is_empty() || name.len() >= NAME {
-                        continue;
-                    }
-                    let r = &mut rules[count];
-                    r.name[..name.len()].copy_from_slice(name);
-                    r.nlen = name.len();
-                    r.ret = number(it.next().unwrap_or(&[]));
-                    r.err = number(it.next().unwrap_or(&[])) as u32;
-                    r.after = number(it.next().unwrap_or(&[])) as u32;
-                    r.count = number(it.next().unwrap_or(&[])) as u32;
-                    count += 1;
-                }
-            }
-            NRULES.store(count, Ordering::Release);
-            RULES_ACTIVE.store(count > 0, Ordering::Release);
-            if count > 0
-                || INHERIT.load(Ordering::Relaxed)
-                || RELAX[0].load(Ordering::Relaxed) | RELAX[1].load(Ordering::Relaxed) != 0
-            {
-                let mut line = [0u8; 200];
-                let mut w = W { p: line.as_mut_ptr(), len: 0, cap: line.len(), full: false };
-                w.bytes(b"{\"ctl\":1,\"rules\":");
-                w.dec(count as u64);
-                w.bytes(b",\"relax0\":");
-                w.hex(RELAX[0].load(Ordering::Relaxed));
-                w.bytes(b",\"relax1\":");
-                w.hex(RELAX[1].load(Ordering::Relaxed));
-                w.bytes(b"}\n");
-                append(core::slice::from_raw_parts(line.as_ptr(), w.len), true);
-            }
-        }
-    }
-
-    /// Is there anything to do for a call of `f`?
-    #[inline]
-    pub fn wanted(f: &Func) -> bool {
-        RULES_ACTIVE.load(Ordering::Relaxed)
-            || f as *const Func as usize == UPTA.load(Ordering::Relaxed)
-            || (INHERIT.load(Ordering::Relaxed) && f as *const Func as usize == CPAU.load(Ordering::Relaxed))
-    }
-
-    fn matches(f: &Func, r: &Rule) -> bool {
-        // SAFETY: the generator's NUL-terminated name.
-        unsafe {
-            for i in 0..r.nlen {
-                if *f.name.add(i) != r.name[i] {
-                    return false;
-                }
-            }
-            *f.name.add(r.nlen) == 0
-        }
-    }
-
-    /// Called before every call of a wanted function: probes the process-creation attributes
-    /// (and may clear bits of the mitigation policy), or decides to fail the call:
-    /// `Some((result, last error))` = do not call the real function.
-    pub unsafe fn act(f: &Func, regs: *mut u64, stack: *const u64) -> Option<(u64, u32)> {
-        // SAFETY: (whole function) `regs` holds four, `stack` sixteen values.
-        unsafe {
-            if f as *const Func as usize == UPTA.load(Ordering::Relaxed) {
-                let attr = *regs.add(2) as u32;
-                probe_attribute(attr, *regs.add(3) as usize, *stack as usize);
-                if attr == 0x20002 && INHERIT.load(Ordering::Relaxed) {
-                    extend_handle_list(regs, stack as *mut u64);
-                }
-                return None;
-            }
-            if f as *const Func as usize == CPAU.load(Ordering::Relaxed) {
-                if INHERIT.load(Ordering::Relaxed) {
-                    adopt_environment(stack as *mut u64);
-                }
-                return None;
-            }
-            let s = agg::stat(f)?;
-            let mut k = s.ctl.load(Ordering::Relaxed);
-            if k == 0 {
-                k = NONE;
-                let rules = &*RULES.0.get();
-                for i in 0..NRULES.load(Ordering::Acquire) {
-                    if matches(f, &rules[i]) {
-                        k = i as u32 + 2;
-                        break;
-                    }
-                }
-                s.ctl.store(k, Ordering::Relaxed);
-            }
-            if k == NONE {
-                return None;
-            }
-            let i = (k - 2) as usize;
-            let r = &(*RULES.0.get())[i];
-            let calls = CALLS[i].fetch_add(1, Ordering::Relaxed);
-            if calls < r.after || (r.count != 0 && HITS[i].load(Ordering::Relaxed) >= r.count) {
-                return None;
-            }
-            let n = HITS[i].fetch_add(1, Ordering::Relaxed);
-            if n < 8 {
-                let mut line = [0u8; 200];
-                let mut w = W { p: line.as_mut_ptr(), len: 0, cap: line.len(), full: false };
-                w.bytes(b"{\"inject\":1,\"dll\":\"");
-                w.cstr(f.dll);
-                w.bytes(b"\",\"fn\":\"");
-                w.cstr(f.name);
-                w.bytes(b"\",\"ret\":");
-                w.dec(r.ret);
-                w.bytes(b",\"err\":");
-                w.dec(r.err as u64);
-                w.bytes(b",\"call\":");
-                w.dec(calls as u64);
-                w.bytes(b"}\n");
-                append(core::slice::from_raw_parts(line.as_ptr(), w.len), false);
-            }
-            Some((r.ret, r.err))
-        }
-    }
-
-    /// The trace file of the next child as an inheritable file-backed section; its handle.
-    unsafe fn make_section() -> Option<Handle> {
-        // SAFETY: (whole function) static buffers, real kernel32 calls with valid arguments.
-        unsafe {
-            let n = env(b"POLYTRACE_OUT");
-            let out = &mut *OUT16.0.get();
-            let serial = SERIAL.fetch_add(1, Ordering::Relaxed) + 1;
-            let mut o = 0;
-            let mut put = |c: u16, o: &mut usize| {
-                if *o < 540 {
-                    out[*o] = c;
-                    *o += 1;
-                }
-            };
-            let b8 = &*ENV8.0.get();
-            let template: &[u8] = if n > 0 { &b8[..n] } else { &b"polytrace-%p.jsonl"[..] };
-            let mut i = 0;
-            while i < template.len() {
-                if template[i] == b'%' && i + 1 < template.len() && template[i + 1] == b'p' {
-                    put(b'c' as u16, &mut o);
-                    let mut d = [0u8; 10];
-                    let mut k = d.len();
-                    let mut v = serial;
-                    loop {
-                        k -= 1;
-                        d[k] = b'0' + (v % 10) as u8;
-                        v /= 10;
-                        if v == 0 {
-                            break;
-                        }
-                    }
-                    for &c in &d[k..] {
-                        put(c as u16, &mut o);
-                    }
-                    i += 2;
-                } else {
-                    put(template[i] as u16, &mut o);
-                    i += 1;
-                }
-            }
-            out[o] = 0;
-            // GENERIC_READ | GENERIC_WRITE, share read | write, CREATE_ALWAYS.
-            let file = CreateFileW(
-                out.as_ptr(),
-                0xC000_0000,
-                3,
-                core::ptr::null_mut(),
-                CREATE_ALWAYS,
-                FILE_ATTRIBUTE_NORMAL,
-                0,
-            );
-            if file == INVALID_HANDLE_VALUE {
-                debug_failure(5, GetLastError());
-                return None;
-            }
-            // SECURITY_ATTRIBUTES { nLength, lpSecurityDescriptor, bInheritHandle }: the handle is inheritable.
-            let sa: [u64; 3] = [24, 0, 1];
-            let map = CreateFileMappingW(file, sa.as_ptr() as *mut u8, 4, 0, VIEW_SIZE as u32, core::ptr::null());
-            CloseHandle(file);
-            if map == 0 {
-                debug_failure(6, GetLastError());
-                return None;
-            }
-            Some(map)
-        }
-    }
-
-    /// `UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, handles, size, ..)`: add a
-    /// section of ours to the handles the child inherits (the call gets a longer copy of the array).
-    unsafe fn extend_handle_list(regs: *mut u64, stack: *mut u64) {
-        // SAFETY: the array has `size` readable bytes (the caller's contract); the pool slot is ours.
-        unsafe {
-            let size = *stack as usize;
-            let value = *regs.add(3) as *const u64;
-            if size == 0 || size % 8 != 0 || size / 8 + 1 > MAXH || (value as usize) < 0x10000 {
-                return;
-            }
-            let Some(h) = make_section() else { return };
-            let n = size / 8;
-            let slot = LIST_NEXT.fetch_add(1, Ordering::Relaxed) % LISTS;
-            let buf = &mut (*POOL.0.get())[slot];
-            for i in 0..n {
-                buf[i] = value.add(i).read_unaligned();
-            }
-            buf[n] = h as u64;
-            *regs.add(3) = buf.as_ptr() as u64;
-            *stack = (size + 8) as u64;
-            LIST_H[slot].store(h as u64, Ordering::Relaxed);
-            LIST_KEY[slot].store(*regs, Ordering::Release);
-            let mut line = [0u8; 120];
-            let mut w = W { p: line.as_mut_ptr(), len: 0, cap: line.len(), full: false };
-            w.bytes(b"{\"inherit\":1,\"list\":");
-            w.hex(*regs);
-            w.bytes(b",\"handle\":");
-            w.dec(h as u64);
-            w.bytes(b",\"handles\":");
-            w.dec(n as u64 + 1);
-            w.bytes(b"}\n");
-            append(core::slice::from_raw_parts(line.as_ptr(), w.len), false);
-        }
-    }
-
-    /// `CreateProcessAsUserW(.., flags, env, cwd, startup_info, ..)`: if the child's attribute list got a
-    /// section from [`extend_handle_list`], tell the child its handle value in `POLYTRACE_HANDLE`.
-    /// `stack` is the copy of arguments five and up: inherit, flags, environment, directory, startup info.
-    unsafe fn adopt_environment(stack: *mut u64) {
-        // SAFETY: the startup info is a STARTUPINFOEXW when `EXTENDED_STARTUPINFO_PRESENT` is set and its
-        // `cb` says so (`winbase.h`: the attribute list is the field after the 104-byte STARTUPINFOW).
-        unsafe {
-            let flags = *stack.add(2) as u32;
-            let env_ptr = *stack.add(3) as *const u16;
-            let si = *stack.add(5) as *const u8;
-            if flags & 0x8_0000 == 0 || (si as usize) < 0x10000 || (si as *const u32).read_unaligned() < 112 {
-                return;
-            }
-            let list = (si.add(104) as *const u64).read_unaligned();
-            let mut handle = 0;
-            for slot in 0..LISTS {
-                if LIST_KEY[slot].load(Ordering::Acquire) == list && list != 0 {
-                    handle = LIST_H[slot].load(Ordering::Relaxed);
-                    LIST_KEY[slot].store(0, Ordering::Release);
-                    break;
-                }
-            }
-            if handle == 0 {
-                return;
-            }
-            let mut name = [0u16; 20];
-            for (i, c) in b"POLYTRACE_HANDLE".iter().enumerate() {
-                name[i] = *c as u16;
-            }
-            let mut digits = [0u16; 24];
-            let mut k = digits.len() - 1;
-            let mut v = handle;
-            loop {
-                k -= 1;
-                digits[k] = b'0' as u16 + (v % 10) as u16;
-                v /= 10;
-                if v == 0 {
-                    break;
-                }
-            }
-            let value = &digits[k..];
-            if env_ptr.is_null() || flags & 0x400 == 0 {
-                // the child inherits this process's own environment
-                SetEnvironmentVariableW(name.as_ptr(), value.as_ptr());
-                return;
-            }
-            // a Unicode environment block: "A=B\0C=D\0\0"; ours goes in front
-            let mut len = 0;
-            while !(*env_ptr.add(len) == 0 && *env_ptr.add(len + 1) == 0) {
-                len += 1;
-            }
-            len += 1; // the NUL that ends the last string
-            let ours = 16 + 1 + (value.len() - 1) + 1;
-            if len + ours + 1 > ENVBUF {
-                return;
-            }
-            let slot = ENV_NEXT.fetch_add(1, Ordering::Relaxed) % 8;
-            let buf = &mut (*ENVPOOL.0.get())[slot];
-            let mut o = 0;
-            for i in 0..16 {
-                buf[o] = name[i];
-                o += 1;
-            }
-            buf[o] = b'=' as u16;
-            o += 1;
-            for i in 0..value.len() - 1 {
-                buf[o] = value[i];
-                o += 1;
-            }
-            buf[o] = 0;
-            o += 1;
-            for i in 0..len {
-                buf[o] = *env_ptr.add(i);
-                o += 1;
-            }
-            buf[o] = 0;
-            *stack.add(3) = buf.as_ptr() as u64;
-        }
-    }
-
-    /// Log (once per distinct content) an attribute given to `UpdateProcThreadAttribute`; clear
-    /// the `POLYTRACE_RELAX` bits of a mitigation policy.
-    unsafe fn probe_attribute(attr: u32, value: usize, size: usize) {
-        // SAFETY: the caller of `UpdateProcThreadAttribute` passes `size` readable bytes at `value`.
-        unsafe {
-            if value < 0x10000 || size == 0 || size > 4096 {
-                return;
-            }
-            let bytes = value as *const u8;
-            let shown = size.min(48);
-            let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ attr as u64;
-            for i in 0..shown {
-                h = (h ^ *bytes.add(i) as u64).wrapping_mul(0x0000_0100_0000_01b3);
-            }
-            let h = h | 1;
-            let mut fresh = false;
-            for a in ATTRS.iter() {
-                let cur = a.load(Ordering::Relaxed);
-                if cur == h {
-                    break;
-                }
-                if cur == 0 && a.compare_exchange(0, h, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
-                    fresh = true;
-                    break;
-                }
-            }
-            let relax0 = RELAX[0].load(Ordering::Relaxed);
-            let relax1 = RELAX[1].load(Ordering::Relaxed);
-            let mut line = [0u8; 400];
-            let mut w = W { p: line.as_mut_ptr(), len: 0, cap: line.len(), full: false };
-            if attr == 0x20007 && size >= 8 {
-                let q = value as *mut u64;
-                let q0 = q.read_unaligned();
-                let q1 = if size >= 16 { q.add(1).read_unaligned() } else { 0 };
-                if fresh {
-                    w.bytes(b"{\"mitigation\":1,\"size\":");
-                    w.dec(size as u64);
-                    w.bytes(b",\"q0\":");
-                    w.hex(q0);
-                    w.bytes(b",\"q1\":");
-                    w.hex(q1);
-                    w.bytes(b"}\n");
-                    append(core::slice::from_raw_parts(line.as_ptr(), w.len), false);
-                }
-                if (relax0 != 0 && q0 & relax0 != 0) || (relax1 != 0 && size >= 16 && q1 & relax1 != 0) {
-                    q.write_unaligned(q0 & !relax0);
-                    if size >= 16 {
-                        q.add(1).write_unaligned(q1 & !relax1);
-                    }
-                }
-            } else if fresh {
-                w.bytes(b"{\"attr\":1,\"id\":");
-                w.hex(attr as u64);
-                w.bytes(b",\"size\":");
-                w.dec(size as u64);
-                w.bytes(b",\"hex\":\"");
-                for i in 0..shown {
-                    let b = *bytes.add(i);
-                    for n in [b >> 4, b & 15] {
-                        w.byte(if n < 10 { b'0' + n } else { b'a' + n - 10 });
-                    }
-                }
-                w.bytes(b"\"}\n");
-                append(core::slice::from_raw_parts(line.as_ptr(), w.len), false);
-            }
-        }
-    }
-}
-
 /// UTF-16 of an ASCII string literal, NUL-terminated, at compile time.
 macro_rules! wide {
     ($s:literal) => {{
@@ -1666,24 +1107,6 @@ macro_rules! wide {
         };
         &W
     }};
-}
-
-/// The trace file could not be made (`step`: 1 create the file, 2 create the mapping, 3 map the
-/// view): say so with `OutputDebugStringA`, which a sandboxed process may still call (a debug
-/// listener, or a debugger, sees `polytrace[<pid>]: step=<n> error=<code>`).
-#[inline(never)]
-unsafe fn debug_failure(step: u32, error: u32) {
-    let mut line = [0u8; 80];
-    let mut w = W { p: line.as_mut_ptr(), len: 0, cap: line.len() - 1, full: false };
-    w.bytes(b"polytrace[");
-    w.dec(agg::pid() as u64);
-    w.bytes(b"]: step=");
-    w.dec(step as u64);
-    w.bytes(b" error=");
-    w.dec(error as u64);
-    w.byte(10);
-    // SAFETY: `line` is NUL-terminated (it was zeroed and one byte stays free).
-    unsafe { OutputDebugStringA(line.as_ptr()) };
 }
 
 /// Open the trace file (`POLYTRACE_OUT` or `polytrace.jsonl`).
@@ -1727,27 +1150,6 @@ unsafe fn open() {
         }
         expanded.as_ptr()
     };
-    // A confined child gets its trace file as an inherited section (`ctl`, POLYTRACE_INHERIT).
-    // SAFETY: the name is NUL-terminated; `path` holds 520 units.
-    let hn =
-        unsafe { GetEnvironmentVariableW(wide!("POLYTRACE_HANDLE").as_ptr(), path.as_mut_ptr(), path.len() as u32) };
-    if hn > 0 && (hn as usize) < path.len() {
-        let mut h: usize = 0;
-        for &c in &path[..hn as usize] {
-            if (b'0' as u16..=b'9' as u16).contains(&c) {
-                h = h.wrapping_mul(10).wrapping_add((c - b'0' as u16) as usize);
-            }
-        }
-        // SAFETY: a mapping view of an inherited section handle; failure is reported.
-        let view = unsafe { MapViewOfFile(h as Handle, 2, 0, 0, VIEW_SIZE) };
-        if !view.is_null() {
-            VIEW.store(view as usize, Ordering::Release);
-            FILE.store(1, Ordering::Relaxed);
-            return;
-        }
-        // SAFETY: no arguments.
-        unsafe { debug_failure(4, GetLastError()) };
-    }
     // SAFETY: `name` is NUL-terminated.
     let file = unsafe {
         CreateFileW(
@@ -1760,24 +1162,12 @@ unsafe fn open() {
             0,
         )
     };
-    if file == INVALID_HANDLE_VALUE {
-        // SAFETY: no arguments.
-        unsafe { debug_failure(1, GetLastError()) };
-    }
     if file != INVALID_HANDLE_VALUE {
         // PAGE_READWRITE = 4, FILE_MAP_WRITE = 2 (`memoryapi.h`); the file
         // takes the size of the view.
         let map = unsafe { CreateFileMappingW(file, core::ptr::null_mut(), 4, 0, VIEW_SIZE as u32, core::ptr::null()) };
-        if map == 0 {
-            // SAFETY: no arguments.
-            unsafe { debug_failure(2, GetLastError()) };
-        }
         if map != 0 {
             let view = unsafe { MapViewOfFile(map, 2, 0, 0, VIEW_SIZE) };
-            if view.is_null() {
-                // SAFETY: no arguments.
-                unsafe { debug_failure(3, GetLastError()) };
-            }
             VIEW.store(view as usize, Ordering::Release);
             // SAFETY: the view keeps the file's section alive.
             unsafe { CloseHandle(map) };
@@ -1814,7 +1204,6 @@ pub unsafe extern "system" fn polytrace_main(module: usize, reason: u32, _reserv
                     }
                     TLS.store(TlsAlloc(), Ordering::Release);
                     agg::preload(module as Handle);
-                    ctl::init();
                 }
                 SetLastError(err);
             }

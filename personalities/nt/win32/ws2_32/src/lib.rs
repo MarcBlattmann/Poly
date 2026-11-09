@@ -20,6 +20,10 @@
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
+// The ordinals are pinned by build.rs with /EXPORT, and rustc's own /DEF names the same functions:
+// lld-link keeps the first (the ordinal) and says "duplicate export" for each. That is the design
+// (build.rs), not a problem, so the linker's message is not shown (ADR 0155).
+#![allow(linker_messages)]
 
 extern crate alloc;
 
