@@ -67,7 +67,7 @@
 
 use crate::rootdisk::{self, Contents, RootTree};
 use crate::symbols::Symbols;
-use crate::{Result, compositor, root};
+use crate::{Result, root};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -144,6 +144,8 @@ pub const LOCK: &str = "tools/xtask/chromium.lock";
 
 /// The disk image `cargo xtask chromium` boots (kept between runs).
 pub const FILE_NAME: &str = "poly-chromium-disk.img";
+/// About how big that image is (the dev menu says so before the first start).
+pub const DISK_SIZE: &str = "1.3 GB";
 /// The image the boot test makes afresh.
 pub const TEST_FILE_NAME: &str = "poly-chromium-disk-test.img";
 
@@ -211,6 +213,11 @@ pub const LAUNCH_SCRIPT: &str = "#!/bin/bash
 # Chromium as user poly on the desktop (tools/xtask/src/chromium.rs).
 . /etc/poly-desktop.env
 U=/run/user/1000
+# The desktop shows nothing for about a minute while Chromium starts (more
+# without a hypervisor): say so, unless it runs already and only opens a window.
+if [ -x /bin/notify-send ] && ! /usr/local/lib/poly/busybox pidof chromium >/dev/null 2>&1; then
+    /bin/notify-send -a Chromium \"Chromium is starting\" \"Its window opens in about a minute.\" >/dev/null 2>&1 &
+fi
 mkdir -p \"$U\" /home/poly
 chown poly:poly \"$U\" /home/poly && chmod 700 \"$U\"
 S=\"$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY\"
@@ -447,12 +454,21 @@ fn download(url: &str, to: &Path) -> Result {
         return Err(format!("{url}: not HTTPS"));
     }
     let partial = to.with_extension("part");
-    let ok = Command::new("curl")
-        .args(["-fsSL", "--retry", "3", "-o"])
-        .arg(&partial)
-        .arg(url)
-        .status()
-        .is_ok_and(|s| s.success());
+    // snapshot.debian.org answers 504 now and then: curl retries those
+    // itself; a few more tries, a little later each, cover what outlasts it.
+    let mut ok = false;
+    for attempt in 1..=5u64 {
+        ok = Command::new("curl")
+            .args(["-fsSL", "--retry", "3", "-o"])
+            .arg(&partial)
+            .arg(url)
+            .status()
+            .is_ok_and(|s| s.success());
+        if ok {
+            break;
+        }
+        std::thread::sleep(Duration::from_secs(5 * attempt));
+    }
     if !ok {
         let _ = std::fs::remove_file(&partial);
         return Err(format!("downloading {url} failed (curl)"));
@@ -569,7 +585,7 @@ pub fn fetch(reference: bool) -> Result {
     let sets: &[&str] = if reference { &["disk", "boot", "reference"] } else { &BUILD_SETS };
     let todo = missing(&locked, sets);
     let wanted = locked.iter().filter(|p| sets.contains(&p.set.as_str())).count();
-    eprintln!("==> {} of {wanted} locked packages to download", todo.len());
+    crate::progress::note(&format!("{} of {wanted} locked packages to download", todo.len()));
     for p in todo {
         let file = dir.join(p.file_name());
         download(&p.url()?, &file)?;
@@ -578,7 +594,7 @@ pub fn fetch(reference: bool) -> Result {
             return Err(format!("{}: not as locked (size {}, SHA-256 {})", p.file_name(), p.size, p.sha256));
         }
     }
-    eprintln!("==> {wanted} packages in {} as locked", dir.display());
+    crate::progress::note(&format!("{wanted} packages in {} as locked", dir.display()));
     Ok(())
 }
 
@@ -1046,20 +1062,173 @@ fn unpacked_certs(entries: &[Unpacked], blobs: &Path) -> Result<Vec<(String, Vec
     Ok(out)
 }
 
+/// What Chromium opens: web pages and links (the MIME types of the
+/// `MimeType=` key of its desktop file, which Files and `xdg-open` find it by).
+const BROWSER_MIME_TYPES: [&str; 4] =
+    ["text/html", "application/xhtml+xml", "x-scheme-handler/http", "x-scheme-handler/https"];
+
+/// The desktop file ID of Poly's Chromium entry ([`desktop_file`]).
+pub const DESKTOP_ID: &str = "poly-chromium.desktop";
+
 /// The launcher's desktop file for Chromium: bash runs `poly-chromium`,
-/// which starts it as `poly`, sandbox on. `Icon=chromium` is Debian's name
-/// for its logo, which the package ships as hicolor PNGs (16 to 256
-/// pixels): the launcher draws it (ADR 0146).
-fn desktop_file() -> String {
+/// which starts it as `poly`, sandbox on. `%U` is the pages and links it is
+/// asked to open (Desktop Entry Specification, "Exec"). `start_page`: a
+/// test page to open instead of the new tab page (the boot tests').
+/// `Icon=chromium` is Debian's name for its logo, which the package ships as
+/// hicolor PNGs (16 to 256 pixels): the launcher draws it (ADR 0146).
+fn desktop_file(start_page: Option<&str>) -> String {
+    let url = start_page.map_or_else(|| "%U".to_string(), |page| format!("file:///{PAGES_DIR}/{page}"));
     format!(
-        "[Desktop Entry]\nType=Application\nName=Chromium\nComment=Web browser (Debian's Chromium)\n\
-         Keywords=browser;chrome;web;\nIcon=chromium\n\
-         Exec=/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS} file:///{PAGES_DIR}/input.html\n"
+        "[Desktop Entry]\nType=Application\nName=Chromium\nGenericName=Web Browser\n\
+         Comment=Web browser (Debian's Chromium)\nKeywords=browser;chrome;web;internet;\nIcon=chromium\n\
+         Exec=/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS} {url}\nMimeType={};\n",
+        BROWSER_MIME_TYPES.join(";")
     )
 }
 
-/// Collect Chromium's disk: the unpacked packages and the desktop.
-pub fn collect() -> std::result::Result<Contents, String> {
+/// `/etc/xdg/mimeapps.list`: Chromium is the default browser. The MIME
+/// Applications Associations specification reads `$XDG_CONFIG_DIRS/mimeapps.list`
+/// (the system's choices) after the user's own (`$XDG_CONFIG_HOME`), so a
+/// user changes the default by writing theirs. Poly's Files reads it for
+/// "open with" and `xdg-open` (xdg-utils) for links and pages.
+pub fn mimeapps_list() -> String {
+    let mut text = String::from(
+        "# Chromium is the default browser (tools/xtask/src/chromium.rs, ADR 0147).\n[Default Applications]\n",
+    );
+    for mime in BROWSER_MIME_TYPES {
+        text.push_str(&format!("{mime}={DESKTOP_ID}\n"));
+    }
+    text
+}
+
+/// `/usr/local/sbin/poly-desktop`: the compositor on the screen, started by
+/// init (as the toolkits' script, ADR 0120) with the arguments in
+/// `/etc/poly-desktop.args` (`cargo xtask desktop --chromium`: `--scale N`
+/// and `--settings PATH`, which a first program of the compositor's own
+/// gets on the kernel's command line instead). No `--xwayland-lazy`: the disk
+/// has no Xwayland, and with an X display offered (and `DISPLAY` set for the
+/// apps) `xdg-open` runs `xprop`, which keeps connecting to a display nothing
+/// serves. The plain desktop has none either.
+pub const DESKTOP_SCRIPT: &str = "#!/bin/bash
+# Started by init on Chromium's disk (tools/xtask/src/chromium.rs).
+. /etc/poly-desktop.env
+mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"
+mkdir -p \"$XDG_CONFIG_HOME\" \"$XDG_DATA_HOME\" \"$XDG_CACHE_HOME\" \"$XDG_STATE_HOME\"
+cd /root
+ARGS=
+[ -r /etc/poly-desktop.args ] && ARGS=$(cat /etc/poly-desktop.args)
+exec /usr/local/bin/poly-compositor --desktop $ARGS
+";
+
+/// `/etc/poly-desktop.env`: the toolkits' desktop environment, and the
+/// browser `xdg-open` falls back on where `mimeapps.list` does not name one
+/// (it would try Debian's `chromium`, which refuses to run as root).
+fn desktop_env() -> String {
+    format!(
+        "{}# Where mimeapps.list names no browser (xdg-open).\nexport BROWSER=\"/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS}\"\n",
+        crate::toolkits::DESKTOP_ENV
+    )
+}
+
+/// What decides which of Poly's own files Chromium's disk and initramfs get.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PolyFiles {
+    /// `--test-apps`: the Wayland test clients, the Windows test program and
+    /// their launcher entries (`desktop.rs`).
+    pub test_apps: bool,
+    /// The compositor's arguments (`/etc/poly-desktop.args`).
+    pub compositor_args: Vec<String>,
+    /// The launcher's Chromium opens this test page ([`PAGES`]), as the
+    /// boot tests need; else its new tab page (or what it is given).
+    pub test_page: Option<&'static str>,
+}
+
+/// Poly's own files on Chromium's disk, as paths below its root: the
+/// desktop's programs (the compositor, `notify-send`, Files and Terminal:
+/// the same the desktop's initramfs has in `/bin`, which is `/usr/bin`
+/// here), the desktop and Chromium's scripts and desktop file, the default
+/// browser. They are on the disk when it is made ([`collect`]) and in the
+/// initramfs, which copies them onto the disk at every boot
+/// ([`overlay_script`]), so they follow the checkout while the disk, with
+/// Chromium's profile on it, is kept.
+pub fn poly_files(opts: &PolyFiles) -> Result<crate::initramfs::Tree> {
+    let built = crate::native::build()?;
+    let program = |name: &str| {
+        built
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, elf)| elf.clone())
+            .ok_or_else(|| format!("no native program {name}"))
+    };
+    let mut tree = crate::initramfs::Tree::default();
+    let mut file = |path: &str, mode: u16, data: Vec<u8>| tree.files.push((path.to_string(), mode, data));
+    file("usr/local/bin/poly-compositor", 0o755, program("poly-compositor")?);
+    let apps = crate::desktop::PROGRAMS.iter().filter(|name| **name != "poly-compositor");
+    let tests: &[&str] = if opts.test_apps { &crate::desktop::TEST_PROGRAMS } else { &[] };
+    for name in apps.chain(tests) {
+        file(&format!("usr/bin/{name}"), 0o755, program(name)?);
+    }
+    for (path, mode, data) in crate::desktop::test_app_files(opts.test_apps) {
+        file(&path, mode, data);
+    }
+    file("usr/local/sbin/poly-desktop", 0o755, DESKTOP_SCRIPT.as_bytes().to_vec());
+    file("usr/local/bin/poly-chromium", 0o755, LAUNCH_SCRIPT.as_bytes().to_vec());
+    file("etc/poly-desktop.env", 0o644, desktop_env().into_bytes());
+    file("etc/poly-desktop.args", 0o644, format!("{}\n", opts.compositor_args.join(" ")).into_bytes());
+    file("etc/xdg/mimeapps.list", 0o644, mimeapps_list().into_bytes());
+    file(&format!("usr/share/applications/{DESKTOP_ID}"), 0o644, desktop_file(opts.test_page).into_bytes());
+    // Debian's `gawk` makes `awk` an alternative in a maintainer script;
+    // xdg-mime (xdg-open) runs awk.
+    for (path, target) in OVERLAY_LINKS {
+        tree.symlinks.push((path.to_string(), target.to_string()));
+    }
+    Ok(tree)
+}
+
+/// The links among Poly's files (path, target): `cp -a` cannot replace a
+/// link that is there already, so the overlay script removes them first.
+const OVERLAY_LINKS: [(&str, &str); 1] = [("usr/bin/awk", "gawk")];
+
+/// Where the initramfs keeps Poly's files for the disk ([`poly_files`]).
+pub const OVERLAY_DIR: &str = "poly-overlay";
+
+/// `/etc/init.d/overlay` of the initramfs, run by its `switch-root` with the
+/// disk mounted on `$1`: what the last boot's test apps left (and the links
+/// of [`OVERLAY_LINKS`]) is removed, the
+/// files of [`OVERLAY_DIR`] are copied onto the disk (`cp -a`: modes, links
+/// and times kept), and the settings disk, if there is one on `/settings`
+/// (`poly.mount=virtio1:/settings`), is bound into the disk, where the
+/// compositor reads and writes its settings.
+pub fn overlay_script() -> String {
+    let stale: Vec<String> = crate::desktop::TEST_ONLY_PATHS
+        .iter()
+        .copied()
+        .chain(OVERLAY_LINKS.iter().map(|(path, _)| *path))
+        .map(|p| format!("\"$D/{p}\""))
+        .collect();
+    format!(
+        "#!/bin/sh
+# Run by switch-root (tools/xtask/src/initramfs.rs) with the disk on $1
+# (tools/xtask/src/chromium.rs, ADR 0147).
+D=$1
+rm -f {}
+if cp -a /{OVERLAY_DIR}/. \"$D/\"; then
+    echo \"overlay: Poly's files are on the disk\"
+else
+    echo \"overlay: copying Poly's files failed\"
+fi
+if grep -q ' /settings ' /proc/mounts; then
+    mkdir -p \"$D/settings\" && mount -o bind /settings \"$D/settings\" || echo \"overlay: /settings is not bound\"
+fi
+",
+        stale.join(" ")
+    )
+}
+
+/// Collect Chromium's disk: the unpacked packages and the desktop, with
+/// Poly's own files ([`poly_files`] of `files`) in it, so that the disk
+/// boots by itself too.
+pub fn collect(files: &PolyFiles) -> std::result::Result<Contents, String> {
     let entries = unpack_disk()?;
     let blobs = unpack_dir().join("blobs");
     let mut contents = Contents::default();
@@ -1085,18 +1254,21 @@ pub fn collect() -> std::result::Result<Contents, String> {
     contents.have.insert("chromium");
     configure(tree);
     add_trust_store(tree, &certs)?;
-    tree.file("usr/local/bin/poly-compositor", 0o755, &compositor::build_compositor()?);
+    let poly = poly_files(files)?;
+    for (path, mode, data) in &poly.files {
+        tree.file(path, *mode, data);
+    }
+    for (path, target) in &poly.symlinks {
+        tree.symlink(path, target);
+    }
     for (path, data) in crate::fonts::shell_tree() {
         tree.file(&path, 0o644, &data);
     }
     for (path, data) in crate::wallpapers::tree().map_err(|e| e.to_string())? {
         tree.file(&path, 0o644, &data);
     }
-    tree.file("etc/poly-desktop.env", 0o644, crate::toolkits::DESKTOP_ENV.as_bytes());
     let profile = format!("{}. /etc/poly-desktop.env\n", rootdisk::PROFILE);
     tree.file("etc/profile", 0o644, profile.as_bytes());
-    tree.file("usr/local/sbin/poly-desktop", 0o755, crate::toolkits::DESKTOP_SCRIPT.as_bytes());
-    tree.file("usr/local/bin/poly-chromium", 0o755, LAUNCH_SCRIPT.as_bytes());
     // Debian's poweroff and reboot are systemd's (systemd-sysv comes with
     // the dependencies), which is not running: the root disk's own, first
     // in PATH (ADR 0059), signal BusyBox's init.
@@ -1107,7 +1279,6 @@ pub fn collect() -> std::result::Result<Contents, String> {
     tree.file(crate::initramfs::DISK_BUSYBOX, 0o755, &package_file("busybox-static", "usr/bin/busybox")?);
     tree.symlink("usr/local/lib/poly/cttyhack", "busybox");
     tree.file("etc/inittab", 0o644, INITTAB.as_bytes());
-    tree.file("usr/share/applications/poly-chromium.desktop", 0o644, desktop_file().as_bytes());
     for d in ["root/.config", "root/.cache", "root/.local/share", "run/user"] {
         tree.dir(d, 0o755);
     }
@@ -1116,24 +1287,37 @@ pub fn collect() -> std::result::Result<Contents, String> {
 
 /// Collect the disk and write it to `target/<name>` with `poly-ext2`'s
 /// formatter (the same image on every host).
-pub fn make(name: &str) -> std::result::Result<(PathBuf, Contents), String> {
-    let contents = collect()?;
+pub fn make(name: &str, files: &PolyFiles) -> std::result::Result<(PathBuf, Contents), String> {
+    let contents = collect(files)?;
     for note in &contents.notes {
-        eprintln!("==> note: chromium disk: {note}");
+        crate::progress::note(&format!("note: chromium disk: {note}"));
     }
     let path = root().join("target").join(name);
     rootdisk::write_image_poly_ext2(&contents.tree, &path)?;
-    eprintln!("==> chromium disk {} (poly-ext2's format): {} entries", path.display(), contents.tree.entries.len());
+    crate::progress::note(&format!(
+        "chromium disk {} (poly-ext2's format): {} entries",
+        path.display(),
+        contents.tree.entries.len()
+    ));
     Ok((path, contents))
 }
 
 /// The initramfs: BusyBox (Debian's `busybox-static` from the lock), whose
-/// shell is the first program: it mounts the disk and switches to it as the
-/// root (`initramfs::SWITCH_ROOT_SCRIPT`), where BusyBox's init runs
-/// [`INITTAB`]. Booted with [`INIT_ARGS`].
-pub fn write_initramfs() -> Result<PathBuf> {
+/// shell is the first program: it mounts the disk, copies Poly's own files
+/// ([`poly_files`] of `files`, in [`OVERLAY_DIR`]) onto it ([`overlay_script`])
+/// and switches to it as the root (`initramfs::SWITCH_ROOT_SCRIPT`), where
+/// BusyBox's init runs [`INITTAB`]. Booted with [`INIT_ARGS`].
+pub fn write_initramfs(files: &PolyFiles) -> Result<PathBuf> {
     let busybox = package_file("busybox-static", "usr/bin/busybox")?;
-    let image = crate::initramfs::switch_root_image(&busybox);
+    let mut extra = poly_files(files)?;
+    for (path, _, _) in &mut extra.files {
+        *path = format!("{OVERLAY_DIR}/{path}");
+    }
+    for (path, _) in &mut extra.symlinks {
+        *path = format!("{OVERLAY_DIR}/{path}");
+    }
+    extra.files.push(("etc/init.d/overlay".into(), 0o755, overlay_script().into_bytes()));
+    let image = crate::initramfs::switch_root_image(&busybox, &extra);
     crate::initramfs::write(&root(), "poly-chromium-initramfs.cpio", &image)
 }
 
@@ -1155,7 +1339,7 @@ fn run(args: &[String]) -> Result {
     let release = args.iter().any(|a| a == "--release");
     let kernel = crate::build_kernel(release)?;
     let image = disk_image(args.iter().any(|a| a == "--fresh-disk"))?;
-    let initrd = write_initramfs()?;
+    let initrd = write_initramfs(&PolyFiles::default())?;
     // POLY_CHROMIUM_APPEND: more kernel arguments (`poly.debug.profile`, ...).
     let more = std::env::var("POLY_CHROMIUM_APPEND").unwrap_or_default();
     let append = format!("{INIT_ARGS} console=ttyS0 poly.terminal=off poly.net=qemu {more}");
@@ -1194,7 +1378,7 @@ fn run(args: &[String]) -> Result {
 fn disk_image(fresh: bool) -> Result<PathBuf> {
     let image = root().join("target").join(FILE_NAME);
     if let Ok(dir) = std::env::var("POLY_CHROMIUM_PROBE_DIR") {
-        let mut contents = collect()?;
+        let mut contents = collect(&PolyFiles::default())?;
         for e in std::fs::read_dir(&dir).map_err(|e| format!("{dir}: {e}"))?.flatten() {
             let data = std::fs::read(e.path()).map_err(|e| e.to_string())?;
             contents.tree.file(&format!("root/probe/{}", e.file_name().to_string_lossy()), 0o755, &data);
@@ -1204,11 +1388,36 @@ fn disk_image(fresh: bool) -> Result<PathBuf> {
         return Ok(probe);
     }
     if fresh || !image.exists() {
-        make(FILE_NAME)?;
+        make(FILE_NAME, &PolyFiles::default())?;
     }
     Ok(image)
 }
 
+/// What `cargo xtask desktop --chromium` boots (ADR 0147): Chromium's disk,
+/// kept between runs (made first if it is not there yet, or `fresh_disk`),
+/// and the initramfs that carries `files` onto it.
+pub struct DesktopParts {
+    pub disk: PathBuf,
+    pub initrd: PathBuf,
+}
+
+/// Download Chromium's packages if they are not here, make its disk if there
+/// is none, and write the initramfs for `files`: three steps of the build
+/// table ([`crate::progress`]).
+pub fn desktop_parts(files: &PolyFiles, fresh_disk: bool) -> Result<DesktopParts> {
+    crate::progress::task("Chromium's packages (a download the first time)", || fetch(false))?;
+    let disk = crate::progress::task("Chromium's disk image (made once, then kept)", || disk_image(fresh_disk))?;
+    let initrd = crate::progress::task("Chromium's initramfs", || write_initramfs(files))?;
+    Ok(DesktopParts { disk, initrd })
+}
+
+/// What starting Chromium's desktop the first time costs, for the menu: the
+/// bytes of packages still to download (`None` if the lock cannot be read)
+/// and whether the disk image is there.
+pub fn first_start() -> (Option<u64>, bool) {
+    let download = lock().ok().map(|locked| missing(&locked, &BUILD_SETS).iter().map(|p| p.size).sum());
+    (download, root().join("target").join(FILE_NAME).is_file())
+}
 /// `cargo xtask chromium <lock|fetch [--reference]|disk|run|root
 /// --reference>` or `cargo xtask chromium [--release] [--fresh-disk]
 /// [STEP...]` (a boot driven by steps as `cargo xtask toolkits`).
@@ -1223,7 +1432,7 @@ pub fn command(args: &[String]) -> Result {
         }
         Some("disk") => {
             fetch(false)?;
-            let (path, _) = make(FILE_NAME)?;
+            let (path, _) = make(FILE_NAME, &PolyFiles::default())?;
             println!("{}", path.display());
             return Ok(());
         }
@@ -1248,7 +1457,7 @@ pub fn command(args: &[String]) -> Result {
     let kernel = crate::build_kernel(release)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
     let image = disk_image(fresh)?;
-    let initrd = write_initramfs()?;
+    let initrd = write_initramfs(&PolyFiles::default())?;
     // POLY_CHROMIUM_APPEND: more kernel arguments (`poly.strace=chromium`, ...).
     // The boot has QEMU user networking, as `run` and the boot test.
     let more = std::env::var("POLY_CHROMIUM_APPEND").unwrap_or_default();
@@ -1520,13 +1729,13 @@ fn run_poly(tests: &[AppTest], release: bool) -> Result<BTreeMap<String, Outcome
     fetch(false)?;
     let kernel = crate::build_kernel(release)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
-    let mut contents = collect()?;
+    let mut contents = collect(&PolyFiles::default())?;
     for t in tests {
         contents.tree.file(&format!("poly-apptests/{}.sh", t.name), 0o755, t.script().as_bytes());
     }
     let image = root().join("target/poly-chromium-apptest.img");
     rootdisk::write_image_poly_ext2(&contents.tree, &image)?;
-    let initrd = write_initramfs()?;
+    let initrd = write_initramfs(&PolyFiles::default())?;
     let mut m = crate::toolkits::Machine::boot_with_init(
         &kernel,
         &syms,
@@ -1673,6 +1882,12 @@ impl HostHttpPage {
     }
 }
 
+/// Poly's files of the boot tests: the launcher's Chromium opens the test
+/// page the windowed scenario clicks into.
+fn test_files() -> PolyFiles {
+    PolyFiles { test_page: Some("input.html"), ..PolyFiles::default() }
+}
+
 /// How long a step of the windowed scenario may take: Chromium starts in
 /// about a minute with a hypervisor, several under QEMU's emulator.
 const WINDOW_WAIT: Duration = Duration::from_secs(1200);
@@ -1781,8 +1996,9 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         return Ok(());
     }
     let http = HostHttpPage::start()?;
-    let initrd = write_initramfs()?;
-    let (image, _) = make(TEST_FILE_NAME)?;
+    let files = test_files();
+    let initrd = write_initramfs(&files)?;
+    let (image, _) = make(TEST_FILE_NAME, &files)?;
     eprintln!("==> boot test: Chromium headless and on the desktop with its sandbox, from its root disk");
     let init = format!("{INIT_ARGS} poly.net=qemu");
     let network_args = crate::net::nic_args(None, false);
@@ -1846,6 +2062,135 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     } else {
         eprintln!("==> the console's output is in {}", log.display());
         Err(format!("Chromium on Poly: {}", failed.join("; ")))
+    }
+}
+
+/// Boot group `chromium-desktop` (ADR 0147): `cargo xtask desktop
+/// --chromium`'s boot, from Chromium's disk with Poly's own files copied
+/// onto it. Every app of the normal desktop is there (Terminal from the
+/// launcher gets its window), the settings disk is bound into the disk,
+/// Chromium is the default browser for `xdg-mime` and `xdg-open`, which
+/// starts it on a web page. Skips itself where the packages are not
+/// downloaded or the host has no Unix sockets.
+pub fn desktop_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    if !cfg!(unix) {
+        eprintln!("==> skipped: the chromium-desktop boot test needs a Unix host (QMP)");
+        return Ok(());
+    }
+    let locked = lock()?;
+    let absent = missing(&locked, &BUILD_SETS);
+    if !absent.is_empty() {
+        eprintln!(
+            "==> skipped: the chromium-desktop boot test: {} locked Debian packages not downloaded (cargo xtask chromium fetch)",
+            absent.len()
+        );
+        return Ok(());
+    }
+    // The disk as `chromium run` makes it; the boot brings the test apps, the
+    // way a disk kept from an earlier boot gets them.
+    let (image, _) = make(TEST_FILE_NAME, &test_files())?;
+    let files = PolyFiles {
+        test_apps: true,
+        compositor_args: vec!["--settings".into(), "/settings/poly/shell.conf".into()],
+        ..test_files()
+    };
+    let initrd = write_initramfs(&files)?;
+    let state = root().join("target/poly-chromium-desktop-state.img");
+    std::fs::write(&state, crate::ext2disk::image()?).map_err(|e| format!("{}: {e}", state.display()))?;
+    eprintln!("==> boot test: the desktop from Chromium's disk: Poly's apps, the settings disk, the default browser");
+    let init = format!("{INIT_ARGS} poly.net=qemu poly.mount=virtio1:/settings");
+    let mut qemu_args = crate::net::nic_args(None, false);
+    qemu_args.extend(crate::desktop::state_drive(&state));
+    let mut m = crate::toolkits::Machine::boot_with_init_args(
+        kernel,
+        syms,
+        &image,
+        &initrd,
+        "chromium-desktop-test",
+        MEMORY,
+        &init,
+        CPUS,
+        &qemu_args,
+    )?;
+    m.set_timeouts(Duration::from_secs(600), Duration::from_secs(3600));
+    m.desktop_up()?;
+    let mut failed = Vec::new();
+    // 1. Every program of the normal desktop's launcher, the test apps
+    // (--test-apps) too, and the overlay's word on it.
+    let apps = "/bin/poly-terminal /bin/poly-files /bin/notify-send /bin/wl-demo /bin/wl-client";
+    let out = m.run(&format!("ls {apps} && echo apps-\"there\""))?;
+    if !out.contains("apps-there") {
+        failed.push(format!("the desktop's programs are not on the disk: {out:?}"));
+    }
+    // Every launcher entry names a program that is there (the launcher
+    // runs its first word, which the compositor looks up in PATH).
+    let out = m.run(
+        "for f in /usr/share/applications/*.desktop; do x=$(sed -n 's/^Exec=\\([^ ]*\\).*/\\1/p' $f | head -n 1); \
+         [ -x \"$x\" ] || command -v \"$x\" >/dev/null || echo entry-\"missing $f: $x\"; done; echo entries-\"checked\"",
+    )?;
+    if !out.contains("entries-checked") || out.contains("entry-missing") {
+        failed.push(format!("a launcher entry names a program that is not there: {out:?}"));
+    }
+    if !m.text().contains("overlay: Poly's files are on the disk") {
+        failed.push("the initramfs's overlay script did not report".to_string());
+    }
+    // 2. Chromium is the default for what a browser opens (xdg-utils, from
+    // the same lists Files reads).
+    let out =
+        m.run("for t in text/html x-scheme-handler/http x-scheme-handler/https; do xdg-mime query default $t; done")?;
+    if out.lines().filter(|l| l.trim() == DESKTOP_ID).count() != 3 {
+        failed.push(format!("xdg-mime does not name {DESKTOP_ID} for html, http and https: {out:?}"));
+    }
+    // 3. The settings disk is bound into the disk.
+    let out = m.run("grep -c ' /settings ' /proc/mounts && echo settings-\"bound\"")?;
+    if !out.contains("settings-bound") {
+        failed.push(format!("/settings is not mounted on the disk: {out:?}"));
+    }
+    // 4. Terminal from the launcher: its window, a shell in it.
+    if failed.is_empty() {
+        if !launcher_shown(&m.text()) {
+            m.key("meta_l")?;
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        let from = m.text_len();
+        m.type_text("terminal")?;
+        m.seen(from, "launcher query \"terminal\"", Duration::from_secs(60))?;
+        std::thread::sleep(Duration::from_millis(500));
+        m.key("ret")?;
+        m.seen(from, "poly-compositor: launched Terminal", Duration::from_secs(60))?;
+        m.seen(from, "window \"Terminal\" shown at", Duration::from_secs(300))?;
+        let shell = m.seen(from, "poly-terminal: ", Duration::from_secs(60))?;
+        if !shell.contains(" on /dev/pts/") {
+            failed.push(format!("Terminal did not start a shell: {shell:?}"));
+        }
+        if m.text().contains("/bin/poly-terminal: not found") {
+            failed.push("the launcher could not find /bin/poly-terminal".to_string());
+        }
+    }
+    // 5. A page opened by xdg-open starts Chromium, as `poly`, sandbox on:
+    // its window is shown. (That a page is drawn in it is the `chromium`
+    // group's check: the first navigation of a Chromium that has just started
+    // can wait a long time under the emulator, and this test is not about it.)
+    if failed.is_empty() {
+        let from = m.text_len();
+        m.send_line(&format!("xdg-open file:///{PAGES_DIR}/input.html > /tmp/xdg-open.log 2>&1 &"))?;
+        let started = std::time::Instant::now();
+        match m.seen(from, "Chromium\" shown at", WINDOW_WAIT) {
+            Err(e) => {
+                let said = m.run("cat /tmp/xdg-open.log").unwrap_or_default();
+                failed.push(format!("xdg-open did not start Chromium: {e}; xdg-open said {said:?}"));
+            }
+            Ok(rest) => eprintln!("==> Chromium's window shown after {} s: {rest}", started.elapsed().as_secs()),
+        }
+    }
+    let log = root().join("target/poly-chromium-desktop-boot.log");
+    let _ = std::fs::write(&log, m.text());
+    let _ = m.poweroff();
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        eprintln!("==> the console's output is in {}", log.display());
+        Err(format!("the desktop from Chromium's disk: {}", failed.join("; ")))
     }
 }
 
@@ -2077,15 +2422,70 @@ mod tests {
         assert!(PAGES[0].1.contains("6 * 7"));
         assert!(PAGES[1].1.contains("#ffff00"));
         assert!(PAGES[2].1.contains("#b03a2a") && PAGES[2].1.contains("#2a6fb0"));
-        assert!(
-            desktop_file().contains("Name=Chromium\n")
-                && desktop_file().contains("poly-chromium --ozone-platform=wayland")
-        );
+        let entry = desktop_file(None);
+        assert!(entry.contains("Name=Chromium\n") && entry.contains("poly-chromium --ozone-platform=wayland"));
+        assert!(entry.contains(" %U\n"), "the launcher's entry opens what it is given");
+        assert!(!entry.contains("input.html"));
+        assert!(desktop_file(Some("input.html")).contains(" file:///usr/share/poly/chromium/input.html\n"));
         // The launcher's icon is Debian's, a hicolor PNG name.
-        assert!(desktop_file().contains("\nIcon=chromium\n"));
+        assert!(entry.contains("\nIcon=chromium\n"));
         assert!(LAUNCH_SCRIPT.contains("setpriv --reuid=1000"));
         // The socket's name for `poly` is made again at every launch: the
         // disk (and so `/run/user/1000`) outlives a boot.
         assert!(LAUNCH_SCRIPT.contains("rm -f \"$U/$WAYLAND_DISPLAY\"\n    ln \"$S\""));
+    }
+
+    /// Poly's Files picks the app for a web page by the same lists `xdg-open`
+    /// reads: with these, Chromium's desktop file and the system's
+    /// `mimeapps.list` make it the default for pages and links, and the
+    /// command it gets is the one `desktop_file` writes.
+    #[test]
+    fn chromium_is_the_default_browser_for_files_and_xdg_open() {
+        use poly_files::apps::{choose, command_for, handler_from_desktop_entry};
+        let chromium = handler_from_desktop_entry(DESKTOP_ID, &desktop_file(None)).expect("a handler");
+        // An app that would win by its name without the list.
+        let editor = handler_from_desktop_entry(
+            "aaa-editor.desktop",
+            "[Desktop Entry]\nType=Application\nName=Editor\nExec=editor %F\nMimeType=text/html;\n",
+        )
+        .unwrap();
+        let handlers = [editor, chromium];
+        let list = mimeapps_list();
+        for mime in ["text/html", "application/xhtml+xml", "x-scheme-handler/http", "x-scheme-handler/https"] {
+            assert_eq!(choose(&handlers, mime, Some(&list)).map(|h| h.id.as_str()), Some(DESKTOP_ID), "{mime}");
+        }
+        assert_eq!(choose(&handlers, "text/html", None).map(|h| h.id.as_str()), Some("aaa-editor.desktop"));
+        let h = choose(&handlers, "text/html", Some(&list)).unwrap();
+        let argv = command_for(h, &["/home/poly/page.html"]);
+        assert_eq!(&argv[..2], ["/bin/bash", "/usr/local/bin/poly-chromium"]);
+        assert_eq!(argv.last().map(String::as_str), Some("/home/poly/page.html"));
+        assert!(argv.iter().any(|a| a == "--ozone-platform=wayland"));
+        // A link: the URL is the last argument too.
+        assert_eq!(command_for(h, &["https://example.com/"]).last().map(String::as_str), Some("https://example.com/"));
+        // xdg-utils finds the system list and the entry in the standard
+        // places, and its fallback is the same command.
+        assert!(desktop_env().contains("export XDG_CONFIG_DIRS=/etc/xdg\n"));
+        assert!(
+            desktop_env().contains("export BROWSER=\"/bin/bash /usr/local/bin/poly-chromium --ozone-platform=wayland")
+        );
+    }
+
+    /// The initramfs of `cargo xtask desktop --chromium` carries Poly's files
+    /// for the disk, and its `overlay` script copies them and removes what an
+    /// earlier boot's test apps left.
+    #[test]
+    fn the_overlay_script_installs_and_cleans() {
+        let script = overlay_script();
+        assert!(script.contains("cp -a /poly-overlay/. \"$D/\""));
+        for path in crate::desktop::TEST_ONLY_PATHS {
+            assert!(script.contains(&format!("\"$D/{path}\"")), "{path}");
+        }
+        assert!(script.contains("mount -o bind /settings \"$D/settings\""));
+        // Every path the test apps add is one the script removes.
+        let added: Vec<String> = ["wl-demo", "wl-client"].iter().map(|p| format!("usr/bin/{p}")).collect();
+        assert!(added.iter().all(|p| crate::desktop::TEST_ONLY_PATHS.contains(&p.as_str())));
+        assert!(DESKTOP_SCRIPT.contains("/etc/poly-desktop.args"));
+        assert!(DESKTOP_SCRIPT.contains("poly-compositor --desktop $ARGS"));
+        assert!(!DESKTOP_SCRIPT.contains("xwayland"), "no Xwayland on this disk");
     }
 }

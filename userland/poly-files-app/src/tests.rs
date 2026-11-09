@@ -291,6 +291,97 @@ fn opening_files_uses_their_apps() {
     assert_eq!(s.launched.borrow().last().unwrap(), &["/bin/poly-terminal", "--dir", "/home/m/Documents"]);
 }
 
+/// The `mimeapps.list` files of the spec's locations are read, the user's
+/// before the system's (`$XDG_CONFIG_DIRS`, where Chromium's desktop names
+/// its browser the default).
+#[test]
+fn the_default_browser_comes_from_the_system_list_and_the_user_can_change_it() {
+    let mut s = setup();
+    let app = |name: &str, exec: &str, mime: &str| {
+        std::fs::write(
+            s.root.join(std::format!("usr/share/applications/{name}.desktop")),
+            std::format!(
+                "[Desktop Entry]
+Type=Application
+Name={name}
+Exec={exec}
+MimeType={mime}
+"
+            ),
+        )
+        .unwrap();
+    };
+    app("browser", "/bin/bash /usr/local/bin/browser --window %U", "text/html;x-scheme-handler/https;");
+    app("aaa-editor", "editor %F", "text/html;");
+    std::fs::write(s.root.join("home/m/page.html"), "<!DOCTYPE html><title>x</title>").unwrap();
+    let reload = |s: &mut Setup| {
+        let fs = StdFs(s.root.clone());
+        s.app.handlers = crate::load_handlers(&fs, &["/usr/share/applications".into()]);
+        let lists = crate::mimeapps_paths("/home/m/.config", None, "/home/m/.local/share", None);
+        s.app.defaults = crate::load_mimeapps(&fs, &lists);
+    };
+    // No list: the first handler by id.
+    reload(&mut s);
+    assert_eq!(s.app.defaults, None);
+    s.app.open_path("/home/m/page.html");
+    assert_eq!(s.launched.borrow().last().unwrap(), &["editor", "/home/m/page.html"]);
+    // The system's list (/etc/xdg) names the browser.
+    std::fs::create_dir_all(s.root.join("etc/xdg")).unwrap();
+    std::fs::write(
+        s.root.join("etc/xdg/mimeapps.list"),
+        "[Default Applications]
+text/html=browser.desktop
+x-scheme-handler/https=browser.desktop
+",
+    )
+    .unwrap();
+    reload(&mut s);
+    s.app.open_path("/home/m/page.html");
+    assert_eq!(
+        s.launched.borrow().last().unwrap(),
+        &["/bin/bash", "/usr/local/bin/browser", "--window", "/home/m/page.html"]
+    );
+    // The user's own list wins over it.
+    std::fs::create_dir_all(s.root.join("home/m/.config")).unwrap();
+    std::fs::write(
+        s.root.join("home/m/.config/mimeapps.list"),
+        "[Default Applications]
+text/html=aaa-editor.desktop
+",
+    )
+    .unwrap();
+    reload(&mut s);
+    s.app.open_path("/home/m/page.html");
+    assert_eq!(s.launched.borrow().last().unwrap(), &["editor", "/home/m/page.html"]);
+}
+
+#[test]
+fn mimeapps_lists_are_looked_up_in_the_specs_order() {
+    assert_eq!(
+        crate::mimeapps_paths("/home/m/.config", None, "/home/m/.local/share", None),
+        [
+            "/home/m/.config/mimeapps.list",
+            "/etc/xdg/mimeapps.list",
+            "/home/m/.local/share/applications/mimeapps.list",
+            "/usr/local/share/applications/mimeapps.list",
+            "/usr/share/applications/mimeapps.list",
+        ]
+    );
+    // Variables with several directories (relative ones ignored), in order.
+    assert_eq!(
+        crate::mimeapps_paths("/c", Some("/a:rel:/b"), "/d", Some("/x")),
+        [
+            "/c/mimeapps.list",
+            "/a/mimeapps.list",
+            "/b/mimeapps.list",
+            "/d/applications/mimeapps.list",
+            "/x/applications/mimeapps.list"
+        ]
+    );
+    // An empty variable is the default.
+    assert_eq!(crate::mimeapps_paths("/c", Some(""), "/d", Some(""))[1], "/etc/xdg/mimeapps.list");
+}
+
 #[test]
 fn clicks_select_and_double_clicks_open() {
     let mut s = setup();

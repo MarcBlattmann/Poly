@@ -214,7 +214,9 @@ pub fn generate_with(dir: &Path, repo: &Path, proxies: &[Proxy], agg: bool) -> R
             "polytrace",
         ),
     )?;
-    let common = tracer.join("proxy/common.rs");
+    // The counting kit has its own thunk (it can skip the real call: fault injection);
+    // the 7-Zip kit's proxies keep `common.rs`, byte for byte.
+    let common = tracer.join(if agg { "proxy/common_agg.rs" } else { "proxy/common.rs" });
     for p in proxies {
         let d = dir.join(&p.crate_name);
         write(d.join("Cargo.toml"), package_toml(&p.crate_name, "src/lib.rs", "build.rs", &p.crate_name))?;

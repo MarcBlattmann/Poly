@@ -11,8 +11,10 @@
 //! picker of Phase 8 reuses; this crate is the window ([`view`]) and the
 //! native file system ([`native_fs`]). Files open with the app their
 //! desktop entry's `MimeType=` names (`/usr/share/applications`,
-//! `~/.local/share/applications`, `mimeapps.list` defaults), programs and
-//! `.desktop` files launch, folders open in Terminal from the menu.
+//! `~/.local/share/applications`, the `mimeapps.list` files of the MIME
+//! Applications Associations specification: the user's, then the system's in
+//! `$XDG_CONFIG_DIRS`, as `xdg-open` reads them), programs and `.desktop`
+//! files launch, folders open in Terminal from the menu.
 
 #![no_std]
 
@@ -35,6 +37,47 @@ pub fn application_dirs(home: &str, data_home: Option<&str>) -> Vec<String> {
         None => poly_files::path::join(home, ".local/share/applications"),
     };
     alloc::vec![user, "/usr/local/share/applications".into(), "/usr/share/applications".into()]
+}
+
+/// The `mimeapps.list` files to read, most important first (MIME
+/// Applications Associations specification, "File locations", without the
+/// desktop-specific `$desktop-mimeapps.list` of a desktop Poly is not):
+/// `$XDG_CONFIG_HOME`, each of `$XDG_CONFIG_DIRS` (default `/etc/xdg`), then
+/// the deprecated `applications/` of `$XDG_DATA_HOME` and each of
+/// `$XDG_DATA_DIRS` (default `/usr/local/share:/usr/share`).
+pub fn mimeapps_paths(
+    config_home: &str,
+    config_dirs: Option<&str>,
+    data_home: &str,
+    data_dirs: Option<&str>,
+) -> Vec<String> {
+    let dirs = |list: Option<&str>, default: &'static str| -> Vec<String> {
+        list.filter(|l| !l.is_empty())
+            .unwrap_or(default)
+            .split(':')
+            .filter(|d| d.starts_with('/'))
+            .map(String::from)
+            .collect()
+    };
+    let apps = |d: &str| poly_files::path::join(&poly_files::path::join(d, "applications"), "mimeapps.list");
+    let mut out = alloc::vec![poly_files::path::join(config_home, "mimeapps.list")];
+    out.extend(dirs(config_dirs, "/etc/xdg").iter().map(|d| poly_files::path::join(d, "mimeapps.list")));
+    out.push(apps(data_home));
+    out.extend(dirs(data_dirs, "/usr/local/share:/usr/share").iter().map(|d| apps(d)));
+    out
+}
+
+/// What the `mimeapps.list` files in `paths` (most important first) say,
+/// as one text (the order [`poly_files::apps::handlers_for`] reads it in);
+/// `None` if there is none.
+pub fn load_mimeapps(fs: &dyn poly_files::Fs, paths: &[String]) -> Option<String> {
+    let texts: Vec<String> = paths.iter().filter_map(|p| fs.read_to_string(p).ok()).collect();
+    (!texts.is_empty()).then(|| {
+        texts.join(
+            "
+",
+        )
+    })
 }
 
 /// Every desktop entry in `dirs` that opens files (earlier folders win for
@@ -114,7 +157,17 @@ pub fn main() -> i32 {
     let trash = poly_files::trash::trash_dir(&home, data_home);
     let mut app = view::FilesApp::new(Box::new(fs), &home, &trash, places, Box::new(spawn));
     app.handlers = load_handlers(&fs, &application_dirs(&home, data_home));
-    app.defaults = native_fs::read_text(&poly_rt::fs::join(&config, "mimeapps.list"));
+    let data_home_dir = match data_home.filter(|d| d.starts_with('/')) {
+        Some(d) => String::from(d),
+        None => poly_files::path::join(&home, ".local/share"),
+    };
+    let lists = mimeapps_paths(
+        &config,
+        poly_rt::env::var("XDG_CONFIG_DIRS"),
+        &data_home_dir,
+        poly_rt::env::var("XDG_DATA_DIRS"),
+    );
+    app.defaults = load_mimeapps(&fs, &lists);
     app.clock = Box::new(|| poly_rt::time::since_epoch().as_secs());
     let start = poly_rt::env::args_str().nth(1).map(String::from).unwrap_or_else(|| home.clone());
     if !app.go(&start) && !app.go(&home) {

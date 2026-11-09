@@ -33,6 +33,10 @@ poly-vfs.workspace = true
 rustc-demangle.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+# The Files app's choice of an app, for the default browser's test (chromium.rs).
+poly-files.workspace = true
+
 [target.'cfg(unix)'.dependencies]
 # The terminal's raw mode and size for `cargo xtask start` (term.rs).
 libc.workspace = true
