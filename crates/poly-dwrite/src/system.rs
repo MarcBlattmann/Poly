@@ -166,6 +166,21 @@ pub fn in_charset(set: Option<&[(u32, u32)]>, cp: u32) -> bool {
     set.is_none_or(|s| s.iter().any(|&(a, b)| (a..=b).contains(&cp)))
 }
 
+/// The code points in both sets of ranges (`a` sorted and merged).
+pub fn intersect(a: &[(u32, u32)], b: &[(u32, u32)]) -> alloc::vec::Vec<(u32, u32)> {
+    let mut out = alloc::vec::Vec::new();
+    for &(a0, a1) in a {
+        for &(b0, b1) in b {
+            let (lo, hi) = (a0.max(b0), a1.min(b1));
+            if lo <= hi {
+                out.push((lo, hi));
+            }
+        }
+    }
+    out.sort_unstable();
+    out
+}
+
 /// The font families (by name) the fallback tries for a code point, in
 /// order: the first that covers it wins.
 pub fn fallback_families(cp: u32) -> &'static [&'static str] {
@@ -196,6 +211,12 @@ mod tests {
         assert!(in_charset(None, 0x416));
         assert!(!in_charset(Some(&NO_EMOJI), 0x1F600));
         assert!(in_charset(Some(&NO_EMOJI), 0x3B1));
+    }
+
+    #[test]
+    fn intersecting_ranges() {
+        let got = intersect(&[(0, 0x7F), (0x400, 0x4FF)], &[(0x20, 0x7E), (0x450, 0x460)]);
+        assert_eq!(got, [(0x20, 0x7E), (0x450, 0x460)]);
     }
 
     #[test]

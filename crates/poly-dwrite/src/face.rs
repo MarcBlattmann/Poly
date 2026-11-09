@@ -64,6 +64,21 @@ pub struct FaceInfo {
     pub face: Localized,
     pub typo_ascender: i32,
     pub typo_descender: i32,
+    /// The extras of `DWRITE_FONT_METRICS1`.
+    pub extra: Metrics1,
+    /// `hhea` caret slope rise and run and offset.
+    pub caret: [i16; 3],
+}
+
+/// The fields `DWRITE_FONT_METRICS1` adds to `DWRITE_FONT_METRICS`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Metrics1 {
+    /// Left, top (the highest point), right, bottom of the font's box.
+    pub glyph_box: [i16; 4],
+    /// Subscript position x, y and size x, y.
+    pub subscript: [i16; 4],
+    pub superscript: [i16; 4],
+    pub has_typographic_metrics: bool,
 }
 
 impl FaceInfo {
@@ -188,6 +203,25 @@ impl FaceInfo {
             face,
             typo_ascender: typo_asc,
             typo_descender: typo_desc,
+            extra: Metrics1 {
+                glyph_box: [
+                    be16s(head, 36).unwrap_or(0),
+                    be16s(head, 42).unwrap_or(0),
+                    be16s(head, 40).unwrap_or(0),
+                    be16s(head, 38).unwrap_or(0),
+                ],
+                // OS/2: subscript size x,y then offset x,y; superscript likewise.
+                subscript: os2.map_or([0; 4], |t| {
+                    [be16s(t, 14), be16s(t, 16), be16s(t, 10), be16s(t, 12)].map(|v| v.unwrap_or(0))
+                }),
+                superscript: os2.map_or([0; 4], |t| {
+                    [be16s(t, 22), be16s(t, 24), be16s(t, 18), be16s(t, 20)].map(|v| v.unwrap_or(0))
+                }),
+                has_typographic_metrics: os2.is_some() && fs_selection & 0x80 != 0,
+            },
+            caret: hhea.map_or([0, 1, 0], |t| {
+                [be16s(t, 18).unwrap_or(1), be16s(t, 20).unwrap_or(0), be16s(t, 22).unwrap_or(0)]
+            }),
         })
     }
 
@@ -295,6 +329,44 @@ impl<'a> Cmap<'a> {
         } else {
             0
         }
+    }
+
+    /// The code point ranges the character map covers, merged and sorted
+    /// (the segments of a format 4 table, the groups of a format 12 one).
+    pub fn ranges(&self) -> Vec<(u32, u32)> {
+        let s = self.sub;
+        let mut out: Vec<(u32, u32)> = Vec::new();
+        match be16(s, 0) {
+            Some(4) => {
+                let segx2 = usize::from(be16(s, 6).unwrap_or(0));
+                for i in 0..segx2 / 2 {
+                    let end = be16(s, 14 + 2 * i).unwrap_or(0);
+                    let start = be16(s, 16 + segx2 + 2 * i).unwrap_or(1);
+                    if start <= end && !(start == 0xFFFF && end == 0xFFFF) {
+                        out.push((u32::from(start), u32::from(end)));
+                    }
+                }
+            }
+            Some(12) => {
+                for i in 0..be32(s, 12).unwrap_or(0) as usize {
+                    if let (Some(a), Some(b)) = (be32(s, 16 + 12 * i), be32(s, 20 + 12 * i))
+                        && a <= b
+                    {
+                        out.push((a, b));
+                    }
+                }
+            }
+            _ => {}
+        }
+        out.sort_unstable();
+        let mut merged: Vec<(u32, u32)> = Vec::new();
+        for (a, b) in out {
+            match merged.last_mut() {
+                Some(last) if a <= last.1.saturating_add(1) => last.1 = last.1.max(b),
+                _ => merged.push((a, b)),
+            }
+        }
+        merged
     }
 
     fn lookup(&self, cp: u32) -> u16 {

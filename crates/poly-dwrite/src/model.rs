@@ -362,6 +362,8 @@ mod tests {
             face: Localized::en_us(face),
             typo_ascender: 0,
             typo_descender: 0,
+            extra: Default::default(),
+            caret: [0, 1, 0],
         };
         FaceEntry::new(file, 0, Arc::new(info))
     }

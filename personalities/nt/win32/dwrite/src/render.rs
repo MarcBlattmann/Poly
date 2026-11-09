@@ -11,7 +11,7 @@ use poly_font::{Font, Segment};
 
 use crate::abi::*;
 use crate::com::*;
-use crate::face::{face_ref, is_face, write_glyph_metrics, write_metrics};
+use crate::face::{face_ref, is_face, write_glyph_metrics, write_metrics, write_metrics_1};
 
 // ----- rendering parameters
 
@@ -269,6 +269,10 @@ unsafe fn run_polys(run: &GlyphRun, ppd: f32, m: &Matrix, origin: (f32, f32)) ->
                 r::shear(&mut segs, 0.25);
             }
             r::flatten(&segs, p.x, p.y, &total, &mut polys);
+            if face.sims & 1 != 0 {
+                // The bold simulation: the outline smeared by 1/32 em.
+                r::flatten(&segs, p.x + em_px / 32.0, p.y, &total, &mut polys);
+            }
         }
         Ok(polys)
     }
@@ -693,4 +697,92 @@ pub unsafe extern "system" fn gdi_glyph_metrics(
         }
     }
     S_OK
+}
+
+/// `IDWriteFontFace1::GetGdiCompatibleMetrics`: the same into a
+/// `DWRITE_FONT_METRICS1`.
+pub unsafe extern "system" fn gdi_metrics_1(
+    this: *mut c_void,
+    em: f32,
+    ppd: f32,
+    transform: *mut c_void,
+    out: *mut c_void,
+) -> HRESULT {
+    // SAFETY: our face; the transform is the caller's.
+    unsafe {
+        if !r::positive(em) || !r::positive(ppd) {
+            return E_INVALIDARG;
+        }
+        let f = face_ref(this);
+        let ppem = em * ppd * read_matrix(transform).scale();
+        write_metrics_1(out, &f.info, &r::gdi_metrics(&f.info.metrics, ppem));
+    }
+    S_OK
+}
+
+/// `IDWriteFontFace1::GetGdiCompatibleGlyphAdvances`: advances in design
+/// units, whole pixels at the size.
+pub unsafe extern "system" fn gdi_glyph_advances(
+    this: *mut c_void,
+    em: f32,
+    ppd: f32,
+    transform: *mut c_void,
+    natural: i32,
+    _sideways: i32,
+    count: u32,
+    glyphs: *mut c_void,
+    out: *mut c_void,
+) -> HRESULT {
+    // SAFETY: our face; arrays of `count` elements.
+    unsafe {
+        if !r::positive(em) || !r::positive(ppd) {
+            return E_INVALIDARG;
+        }
+        let f = face_ref(this);
+        let Some(sf) = f.sfnt() else { return DWRITE_E_FILEFORMAT };
+        let ppem = em * ppd * read_matrix(transform).scale();
+        let upem = f32::from(f.info.metrics.design_units_per_em);
+        for (i, &g) in slice::<u16>(glyphs, count).iter().enumerate() {
+            let g = if g >= f.info.num_glyphs { 0 } else { g };
+            let exact = f32::from(poly_dwrite::face::advance(&sf, g)) * ppem / upem;
+            let px = if natural != 0 { r::round(exact) } else { r::ceil(exact - 0.5) };
+            *(out as *mut i32).add(i) = r::round(px * upem / ppem) as i32;
+        }
+    }
+    S_OK
+}
+
+/// `IDWriteFontFace1::GetRecommendedRenderingMode` (DPI form).
+pub unsafe extern "system" fn recommended_mode_1(
+    _this: *mut c_void,
+    em: f32,
+    dpi_x: f32,
+    _dpi_y: f32,
+    transform: *mut c_void,
+    _sideways: i32,
+    _outline_threshold: u32,
+    measuring: u32,
+    params: *mut c_void,
+    out: *mut c_void,
+) -> HRESULT {
+    // SAFETY: the transform and parameters are the caller's.
+    unsafe {
+        let px = em * dpi_x / 96.0 * read_matrix(transform).scale();
+        let pmode = if params.is_null() {
+            0
+        } else {
+            let v = vtbl::<IDWriteRenderingParamsVtbl>(params);
+            (v.GetRenderingMode)(params)
+        };
+        match r::recommended_mode(px, 1.0, measuring, pmode) {
+            Some(m) => {
+                put_val(out, m);
+                S_OK
+            }
+            None => {
+                put_val(out, 0u32);
+                E_INVALIDARG
+            }
+        }
+    }
 }

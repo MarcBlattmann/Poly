@@ -57,16 +57,16 @@ static VTBL: IDWriteFontFace1Vtbl = IDWriteFontFace1Vtbl {
         GetGdiCompatibleMetrics: crate::render::gdi_metrics,
         GetGdiCompatibleGlyphMetrics: crate::render::gdi_glyph_metrics,
     },
-    GetMetrics_1: get_metrics,
-    GetGdiCompatibleMetrics_1: crate::render::gdi_metrics,
-    GetCaretMetrics: crate::com::noop_void,
-    GetUnicodeRanges: crate::stub!(),
+    GetMetrics_1: get_metrics_1,
+    GetGdiCompatibleMetrics_1: crate::render::gdi_metrics_1,
+    GetCaretMetrics: caret_metrics,
+    GetUnicodeRanges: unicode_ranges,
     IsMonospacedFont: is_monospaced,
     GetDesignGlyphAdvances: design_advances,
-    GetGdiCompatibleGlyphAdvances: crate::stub!(),
+    GetGdiCompatibleGlyphAdvances: crate::render::gdi_glyph_advances,
     GetKerningPairAdjustments: crate::stub!(),
     HasKerningPairs: zero_i32,
-    GetRecommendedRenderingMode_1: crate::stub!(),
+    GetRecommendedRenderingMode_1: crate::render::recommended_mode_1,
     GetVerticalGlyphVariants: crate::stub!(),
     HasVerticalGlyphVariants: zero_i32,
 };
@@ -338,3 +338,70 @@ unsafe extern "system" fn is_monospaced(this: *mut c_void) -> i32 {
 
 #[allow(dead_code)]
 fn _unused(_: &[u16]) {}
+
+unsafe extern "system" fn unicode_ranges(
+    this: *mut c_void,
+    max: u32,
+    ranges: *mut c_void,
+    actual: *mut c_void,
+) -> HRESULT {
+    // SAFETY: our face; the output array holds `max` ranges.
+    unsafe {
+        let f = me(this);
+        let Some(sf) = f.sfnt() else { return DWRITE_E_FILEFORMAT };
+        let covered = Cmap::of(&sf).ranges();
+        let all = match f.charset {
+            None => covered,
+            Some(set) => poly_dwrite::system::intersect(&covered, set),
+        };
+        put_val(actual, all.len() as u32);
+        if ranges.is_null() || (max as usize) < all.len() {
+            return E_INSUFFICIENT_BUFFER;
+        }
+        for (i, (a, b)) in all.iter().enumerate() {
+            let p = (ranges as *mut u32).add(2 * i);
+            *p = *a;
+            *p.add(1) = *b;
+        }
+    }
+    S_OK
+}
+
+/// Write a `DWRITE_FONT_METRICS1`: the metrics, then the font's box, the
+/// subscript and superscript placement and whether the typographic metrics
+/// are in use.
+pub unsafe fn write_metrics_1(out: *mut c_void, info: &FaceInfo, m: &poly_dwrite::face::Metrics) {
+    if out.is_null() {
+        return;
+    }
+    // SAFETY: the caller passes a `DWRITE_FONT_METRICS1` (48 bytes).
+    unsafe {
+        write_metrics(out, m);
+        let p = (out as *mut i16).add(10);
+        for (i, v) in
+            info.extra.glyph_box.iter().chain(&info.extra.subscript).chain(&info.extra.superscript).enumerate()
+        {
+            *p.add(i) = *v;
+        }
+        *(out as *mut i32).add(11) = i32::from(info.extra.has_typographic_metrics);
+    }
+}
+
+unsafe extern "system" fn get_metrics_1(this: *mut c_void, out: *mut c_void) {
+    // SAFETY: our face.
+    unsafe {
+        let f = me(this);
+        write_metrics_1(out, &f.info, &f.info.metrics);
+    }
+}
+
+unsafe extern "system" fn caret_metrics(this: *mut c_void, out: *mut c_void) {
+    // SAFETY: our face; `out` is a `DWRITE_CARET_METRICS` (three `INT16`s).
+    unsafe {
+        let c = me(this).info.caret;
+        let p = out as *mut i16;
+        *p = c[0];
+        *p.add(1) = c[1];
+        *p.add(2) = c[2];
+    }
+}

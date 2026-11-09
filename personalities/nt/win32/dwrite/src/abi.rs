@@ -1138,8 +1138,18 @@ pub struct IDWriteFontFace1Vtbl {
         unsafe extern "system" fn(*mut c_void, f32, f32, *mut c_void, i32, i32, u32, *mut c_void, *mut c_void) -> i32,
     pub GetKerningPairAdjustments: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub HasKerningPairs: unsafe extern "system" fn(*mut c_void) -> i32,
-    pub GetRecommendedRenderingMode_1:
-        unsafe extern "system" fn(*mut c_void, f32, f32, f32, u32, u32, *mut c_void, *mut c_void) -> i32,
+    pub GetRecommendedRenderingMode_1: unsafe extern "system" fn(
+        *mut c_void,
+        f32,
+        f32,
+        f32,
+        *mut c_void,
+        i32,
+        u32,
+        u32,
+        *mut c_void,
+        *mut c_void,
+    ) -> i32,
     pub GetVerticalGlyphVariants: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut c_void) -> i32,
     pub HasVerticalGlyphVariants: unsafe extern "system" fn(*mut c_void) -> i32,
 }

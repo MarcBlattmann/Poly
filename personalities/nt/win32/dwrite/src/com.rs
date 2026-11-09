@@ -167,6 +167,3 @@ macro_rules! stub {
         unsafe { core::mem::transmute::<unsafe extern "system" fn() -> i32, _>($crate::com::not_implemented) }
     };
 }
-
-/// A void slot that takes a pointer argument and does nothing.
-pub unsafe extern "system" fn noop_void(_: *mut c_void, _: *mut c_void) {}

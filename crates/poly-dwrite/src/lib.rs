@@ -23,3 +23,7 @@ pub mod names;
 pub mod render;
 pub mod sfnt;
 pub mod system;
+#[cfg(test)]
+mod testfont;
+#[cfg(test)]
+mod tests;

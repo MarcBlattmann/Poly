@@ -101,23 +101,33 @@ first of `GetMatchingFonts` is `GetFirstMatchingFont`.
 The system collection is built on first use from the font files in
 `C:\Windows\Fonts` (the DejaVu fonts, ADR 0105), once per process.
 Every file's fonts are also grouped under the Windows family names that stand
-for them (`poly_dwrite::system::ALIASES`), with the face names `Regular`,
-`Bold`, `Italic`, `Bold Italic` Windows families use and the same files:
+for them (`poly_dwrite::system::ALIASES`: the 78 families of a default
+Windows 11 installation, so that the collection has 81 families with DejaVu's
+three, as on the reference machine), with the face names `Regular`, `Bold`,
+`Italic`, `Bold Italic` Windows families use (in German, English, Spanish,
+French, Italian, Dutch and Portuguese, as Windows' fonts carry them) and the
+same files:
 
 | DejaVu family | Windows names |
 |---|---|
-| DejaVu Sans | Arial, Arial Unicode MS, Calibri, Candara, Corbel, Franklin Gothic Medium, Lucida Sans Unicode, Malgun Gothic, Microsoft Sans Serif, Microsoft YaHei UI, Nirmala UI, Leelawadee UI, Segoe UI, Segoe UI Symbol, Segoe UI Emoji, Symbol, Tahoma, Trebuchet MS, Verdana, Webdings, Wingdings, Yu Gothic UI |
-| DejaVu Serif | Book Antiqua, Cambria, Constantia, Georgia, Palatino Linotype, Times New Roman |
-| DejaVu Sans Mono | Cascadia Code, Cascadia Mono, Consolas, Courier New, Lucida Console, Lucida Sans Typewriter |
+| DejaVu Sans | Arial, Segoe UI (and its Emoji, Symbol, Historic, Variable ones), Calibri, Candara, Corbel, Tahoma, Verdana, Trebuchet MS, Comic Sans MS, Impact, Microsoft Sans Serif, the Yu Gothic, Microsoft YaHei, JhengHei, Malgun Gothic, Nirmala UI, Leelawadee UI, Sitka, MS Gothic, Symbol, Wingdings, Webdings, Marlett, ... (61) |
+| DejaVu Serif | Times New Roman, Georgia, Cambria, Cambria Math, Constantia, Palatino Linotype, Sylfaen, SimSun, NSimSun, MingLiU, PMingLiU, MS Mincho (12) |
+| DejaVu Sans Mono | Courier New, Consolas, Lucida Console, Cascadia Code, Cascadia Mono (5) |
 
-`Symbol`, `Wingdings` and `Webdings` report `IsSymbolFont` TRUE; `Segoe UI
-Emoji` claims only Latin-1, the euro sign, symbols and the emoji planes. The
-DejaVu families keep their own names too. Real Windows fonts dropped into the
-folder appear under their own names. The system fallback
+`Arial` also has a `Black` face (Windows' Arial Black is a weight of the
+family): DejaVu Sans Bold reported at weight 900, so Arial has the eight fonts
+it has on Windows. `Symbol`, `Wingdings`, `Webdings` and `Marlett` report
+`IsSymbolFont` TRUE; `Segoe UI Emoji` claims only Latin-1, the euro sign,
+symbols and the emoji planes, `Segoe UI Symbol` everything DejaVu has, every
+other alias everything but the emoji planes (Windows' Arial has no U+1F600).
+The DejaVu families keep their own names too. Real Windows fonts dropped into
+the folder appear under their own names. The system fallback
 (`GetSystemFontFallback`, `MapCharacters`) tries Segoe UI (then Arial and the
 DejaVu families) for the character, Segoe UI Emoji and Symbol for emoji and
 symbols; a character no font has gets a run of its length with no font.
-Scripts DejaVu lacks (CJK, Devanagari, Thai) therefore map to no font.
+Scripts DejaVu lacks (CJK, Devanagari, Thai) therefore map to no font. A
+custom fallback's run ends where the set of mappings and ranges that cover the
+next character changes.
 
 ### 6. Faces, metrics, glyphs
 
@@ -142,15 +152,24 @@ sample at each pixel centre. The bounds are the pixels with a non-zero
 result. This reproduces the recorded bounds and the stripe values of a
 straight edge; byte-exact agreement on curved edges was not reached (the
 recorded rows of the triangle differ by up to three levels). The oblique
-simulation shears by 0.25; the bold simulation is not drawn yet.
+simulation shears by 0.25; the bold simulation draws the outline twice, 1/32 em apart
+(not in `GetGlyphRunOutline`).
 `GetGlyphRunOutline` delivers `SetFillMode(WINDING)`, then per contour
 `BeginFigure`, `AddLines`/`AddBeziers` (quadratics become cubics) and
 `EndFigure(CLOSED)`, in pixels with y down; right-to-left runs extend to the
 left, sideways glyphs are turned a quarter. `GetGdiCompatibleMetrics` rounds
 each value to whole pixels (half down) and back to design units; the
 glyph-metric variant is approximate. `GetRecommendedRenderingMode` is
-natural-symmetric up to 72 px per em, GDI classic/natural for those measuring
+natural-symmetric below 100 px per em, GDI classic/natural for those measuring
 modes, outline from 100.
+
+## The pipeline
+
+`cargo xtask pipeline win poly` boots each test with an initramfs; a test that
+imports `dwrite.dll` gets the fetched DejaVu fonts (`cargo xtask fonts fetch`,
+or `$POLY_FONT_DIR`) in it as `nt/c/Windows/Fonts/*.ttf`, which is `C:\Windows\Fonts` on a boot
+without a disk (ADR 0073), so the system-collection tests see the fonts a
+Poly install has. Without the fonts those tests fail.
 
 ## To be confirmed by the spec agent against real Windows
 
