@@ -8,6 +8,11 @@
 //!                       choice (target/poly-start.json), so Enter runs it again; --last runs it
 //!                       without the menu, --print shows the command it would run (start.rs)
 //!   build [--release]   build the native programs (userland/native, native.rs) and the kernel
+//!   prebuild <kernel|tools> [--list <file>]
+//!                       CI's build jobs: build the kernel and native programs, or the
+//!                       xtask, pipeline tool and Windows test programs, and list their
+//!                       files for the artifact; the other jobs run with POLY_PREBUILT=1
+//!                       to take them instead of building (prebuilt.rs, ADR 0156)
 //!   run   [--release] [--gdb] [--no-disk] [--headless] [--virtio-gpu] [--memory=SIZE] [--cpus=N] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
 //!                       with the test devices and a virtio-net NIC on QEMU's user
@@ -118,6 +123,7 @@ mod native;
 mod net;
 mod nls;
 mod ntdll;
+mod prebuilt;
 mod programs;
 mod progress;
 mod resources;
@@ -212,8 +218,9 @@ fn main() -> ExitCode {
 }
 
 /// The commands [`dispatch`] runs (besides `start` and `pipeline`).
-const COMMANDS: [&str; 24] = [
+const COMMANDS: [&str; 25] = [
     "build",
+    "prebuild",
     "run",
     "screenshot",
     "desktop",
@@ -246,6 +253,7 @@ fn dispatch(args: &[String]) -> Result {
     let rest = args.get(1..).unwrap_or_default();
     match args.first().map(String::as_str) {
         Some("build") => build_kernel(release).map(|_| ()),
+        Some("prebuild") => prebuilt::command(rest),
         Some("run") => run(rest),
         Some("screenshot") => screenshot(rest),
         Some("desktop") => desktop::command(rest),
@@ -314,21 +322,30 @@ fn kernel_cargo() -> Result<Command> {
 /// they build at the same time (their own target directory, so the two
 /// cargo runs do not wait for each other's lock).
 fn build_kernel(release: bool) -> Result<PathBuf> {
+    // CI's boot jobs take the build job's kernel and programs (prebuilt.rs).
+    if prebuilt::skip("the kernel and the native programs", &[kernel_elf(release)])? {
+        native::build()?;
+        return Ok(kernel_elf(release));
+    }
     let (native, kernel) = thread::scope(|s| {
         let native = s.spawn(native::build);
-        let kernel = (|| {
-            let mut cmd = kernel_cargo()?;
-            cmd.arg("build");
-            if release {
-                cmd.arg("--release");
-            }
-            step("build kernel", &mut cmd)
-        })();
+        let kernel = build_kernel_only(release);
         (native.join().unwrap_or_else(|_| Err("building the native programs panicked".into())), kernel)
     });
     native?;
     kernel?;
     Ok(kernel_elf(release))
+}
+
+/// The kernel alone (the prebuild's `kernel` part builds the native programs
+/// in a job of its own).
+fn build_kernel_only(release: bool) -> Result {
+    let mut cmd = kernel_cargo()?;
+    cmd.arg("build");
+    if release {
+        cmd.arg("--release");
+    }
+    step("build kernel", &mut cmd)
 }
 
 /// Where `build_kernel` puts the kernel ELF.
@@ -1542,7 +1559,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 37] = [
+const BOOT_GROUPS: [BootGroup; 38] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1567,7 +1584,10 @@ const BOOT_GROUPS: [BootGroup; 37] = [
     ("rootdisk", rootdisk::boot_test),
     // 7-Zip's command line on the NT personality, skipped without the
     // cached 7za.exe (sevenzip.rs, ADR 0087).
-    ("7zip", sevenzip::boot_test),
+    // One boot per step: every second step in each of two groups, which CI
+    // runs in two jobs (shards `sevenzip` and `sevenzip-b`).
+    ("7zip", sevenzip::boot_test_a),
+    ("7zip-b", sevenzip::boot_test_b),
     // The 7-Zip scenario under the Windows API tracer, each step's trace
     // compared with the committed Windows reference, required (ADR 0114:
     // TRACE_REQUIRED; sevenzip_trace.rs, ADR 0110).
@@ -1651,22 +1671,30 @@ const BOOT_GROUPS: [BootGroup; 37] = [
 /// The slices of the boot tests that CI's jobs run
 /// (`cargo xtask boot-tests --shard <name>[,<name>...]`): every group is in
 /// exactly one shard, and `.github/workflows/ci.yml` lists, per job, the
-/// shards it runs (`shards:`), each at least once. Every job builds the
-/// kernel first (about two minutes), so a job's boots, roughly equal in
-/// time across jobs (the times of a CI run on KVM are in the comments),
-/// decide how long the slowest job takes: the shards are small so the
-/// workflow can combine them as the times change without moving groups.
+/// shards it runs (`shards:`), each at least once. The kernel and the
+/// programs are built once by the `build` jobs (ADR 0156), so a job is its
+/// boots plus about half a minute of setup: the shards are small so the
+/// workflow can combine them into jobs of equal length as the times change
+/// without moving groups (the times of a CI run on KVM are in the comments).
 /// `cargo xtask ci lint` checks that the workflow runs exactly these.
-const CI_BOOT_SHARDS: [(&str, &[&str]); 7] = [
+const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    // About 3 minutes: Linux programs, the root disk and 7-Zip.
-    ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "7zip", "toolkits", "chromium"]),
-    // The traced 7-Zip scenario, one long boot: 3 to 4 minutes.
+    // About 75 s: Linux programs and the root disk.
+    ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "toolkits", "chromium"]),
+    // About 60 s each: 7-Zip's command line on the NT personality, one boot per
+    // step, every second step in each.
+    ("sevenzip", &["7zip"]),
+    ("sevenzip-b", &["7zip-b"]),
+    // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
-    // About 3 minutes: the compositor and the desktop.
-    ("desktop", &["wayland", "wayland-kms", "desktop", "desktop-shell", "desktop-win32", "desktop-apps"]),
-    // X11 apps through Xwayland and Mesa: about 75 s.
+    // About 60 s: the compositor and the desktop.
+    ("desktop", &["wayland", "wayland-kms", "desktop", "desktop-win32"]),
+    // About 55 s: window management, notifications and the settings window.
+    ("desktop-shell", &["desktop-shell"]),
+    // About 85 s: Poly's own Files and Terminal on the desktop.
+    ("desktop-apps", &["desktop-apps"]),
+    // X11 apps through Xwayland and Mesa: about 85 s.
     ("x11", &["xwayland", "mesa"]),
     // About 50 s.
     (
@@ -1691,9 +1719,13 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 7] = [
 
 /// The groups `selectors` name, in [`BOOT_GROUPS`] order: a selector is a
 /// group's name or the part of names before a `-` (`selftest` is every
-/// `selftest-*` group).
+/// `selftest-*` group); `=name` is that group alone (the groups of a CI
+/// shard: `desktop` would also be `desktop-shell`).
 fn select_boot_groups(selectors: &[String]) -> Result<Vec<BootGroup>> {
-    let matches = |sel: &str, name: &str| name == sel || name.strip_prefix(sel).is_some_and(|r| r.starts_with('-'));
+    let matches = |sel: &str, name: &str| match sel.strip_prefix('=') {
+        Some(exact) => name == exact,
+        None => name == sel || name.strip_prefix(sel).is_some_and(|r| r.starts_with('-')),
+    };
     if let Some(bad) = selectors.iter().find(|sel| !BOOT_GROUPS.iter().any(|(n, _)| matches(sel, n))) {
         let names: Vec<_> = BOOT_GROUPS.iter().map(|(n, _)| *n).collect();
         return Err(format!("no boot test group {bad:?}; the groups are {}", names.join(", ")));
@@ -1779,13 +1811,14 @@ fn boot_tests_command(args: &[String]) -> Result {
             }
             "--shard" => {
                 for name in it.next().ok_or("--shard needs a name")?.split(',') {
-                    selectors.extend(shard_groups(name.trim())?.iter().map(|g| g.to_string()));
+                    selectors.extend(shard_groups(name.trim())?.iter().map(|g| format!("={g}")));
                 }
             }
             flag if flag.starts_with("--") => return Err(format!("boot-tests: unknown option {flag}")),
             group => selectors.push(group.to_string()),
         }
     }
+    prebuilt::check_stamps(&["kernel", "tools"])?;
     if selectors.is_empty() {
         return boot_tests();
     }
@@ -1894,14 +1927,28 @@ fn announced<'a>(output: &'a str, prefix: &str) -> Result<&'a str> {
 }
 
 fn host_tests() -> Result {
-    let mut cmd = cargo();
-    cmd.current_dir(root()).args(["test", "--workspace"]);
     // poly-font's tests on the bundled fonts run when they are fetched
     // (`cargo xtask fonts fetch`) and skip, saying so, when not.
-    if let Some(dir) = fonts::cached() {
-        cmd.env(fonts::TEST_ENV, dir);
-    }
-    step("host tests", &mut cmd)
+    let fonts = fonts::cached();
+    let cargo_test = |extra: &[&str]| {
+        let mut cmd = cargo();
+        cmd.current_dir(root()).arg("test").args(extra);
+        if let Some(dir) = &fonts {
+            cmd.env(fonts::TEST_ENV, dir);
+        }
+        cmd
+    };
+    // Build every test once, then run poly-ext2's long ones (the journal and
+    // ext4 tests: 70 s) beside the rest: cargo runs test binaries one after
+    // the other, and the machine has cores to spare.
+    step("build the host tests", &mut cargo_test(&["--workspace", "--no-run"]))?;
+    let (ext2, rest) = thread::scope(|s| {
+        let ext2 = s.spawn(|| step("host tests (poly-ext2)", &mut cargo_test(&["--package", "poly-ext2"])));
+        let rest = step("host tests", &mut cargo_test(&["--workspace", "--exclude", "poly-ext2"]));
+        (ext2.join().unwrap_or_else(|_| Err("the poly-ext2 tests panicked".into())), rest)
+    });
+    rest?;
+    ext2
 }
 
 fn test() -> Result {
@@ -1913,27 +1960,41 @@ fn test() -> Result {
 fn lint() -> Result {
     step("fmt (host)", cargo().current_dir(root()).args(["fmt", "--all", "--check"]))?;
     step("fmt (kernel)", cargo().current_dir(kernel_dir()).args(["fmt", "--check"]))?;
-    step(
-        "clippy (host)",
-        cargo().current_dir(root()).args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
-    )?;
-    step("clippy (kernel)", kernel_cargo()?.args(["clippy", "--", "-D", "warnings"]))?;
-    // xtask itself on Windows, so building and booting work on a Windows
-    // host too (hostfs.rs has the stand-ins for what needs Linux).
-    step(
-        "clippy (xtask for Windows)",
-        cargo().current_dir(root()).args([
-            "clippy",
-            "--package",
-            "xtask",
-            "--all-targets",
-            "--target",
-            "x86_64-pc-windows-msvc",
-            "--",
-            "-D",
-            "warnings",
-        ]),
-    )?;
+    // The three clippy runs that build apart (host and Windows xtask share
+    // `target/`, the kernel has its own, the native programs theirs) run
+    // side by side: a minute of a two-minute job.
+    let (host, kernel, native) = thread::scope(|s| {
+        let host = s.spawn(|| -> Result {
+            step(
+                "clippy (host)",
+                cargo().current_dir(root()).args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
+            )?;
+            // xtask itself on Windows, so building and booting work on a Windows
+            // host too (hostfs.rs has the stand-ins for what needs Linux).
+            step(
+                "clippy (xtask for Windows)",
+                cargo().current_dir(root()).args([
+                    "clippy",
+                    "--package",
+                    "xtask",
+                    "--all-targets",
+                    "--target",
+                    "x86_64-pc-windows-msvc",
+                    "--",
+                    "-D",
+                    "warnings",
+                ]),
+            )
+        });
+        let kernel = s.spawn(|| step("clippy (kernel)", kernel_cargo()?.args(["clippy", "--", "-D", "warnings"])));
+        // The native programs and poly-rt for the native target (ADR 0125).
+        let native = native::lint();
+        let join = |h: thread::ScopedJoinHandle<'_, Result>| h.join().unwrap_or_else(|_| Err("a lint panicked".into()));
+        (join(host), join(kernel), native)
+    });
+    host?;
+    kernel?;
+    native?;
     step(
         "fmt (ntdll)",
         cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
@@ -1944,8 +2005,6 @@ fn lint() -> Result {
             .args(["fmt", "--all", "--check", "--manifest-path"])
             .arg(root().join("personalities/nt/win32/Cargo.toml")),
     )?;
-    // The native programs and poly-rt for the native target (ADR 0125).
-    native::lint()?;
     // The Windows API tracer's DLL sources (no manifest of their own: the
     // kit's generated workspace builds them, wintrace.rs).
     step(
@@ -1998,20 +2057,27 @@ fn coverage_checks() -> Result {
 
 /// The slices CI runs the agent pipeline's checks in, one job each
 /// (`cargo xtask ci pipeline --shard I/N`, I from 1 to N): `polycheck`, the
-/// longest, runs a slice of the corpus in each; the first also runs the
-/// rest. `cargo xtask ci lint` checks that the workflow runs every slice.
-const PIPELINE_SHARDS: usize = 3;
+/// longest, runs a slice of the corpus in each; `--shard extras` runs the
+/// rest (selfcheck, win polycheck). `cargo xtask ci lint` checks that the
+/// workflow runs every slice and the extras.
+const PIPELINE_SHARDS: usize = 4;
 
 /// The slice of the pipeline checks to run, `I/N` (`ci pipeline --shard`);
 /// unset: all of them.
 static PIPELINE_SHARD: std::sync::OnceLock<(usize, usize)> = std::sync::OnceLock::new();
 
+/// `ci pipeline --shard extras`: only the checks that are not sliced.
+static PIPELINE_EXTRAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// The agent pipeline's checks against the reference OS (or one slice of
 /// them, [`PIPELINE_SHARD`]).
 fn pipeline_checks() -> Result {
+    prebuilt::check_stamps(&["kernel", "tools"])?;
     let shard = PIPELINE_SHARD.get().copied();
-    // Slice 1 (or no slicing) runs the checks that are not sliced.
-    let first = shard.is_none_or(|(i, _)| i == 1);
+    // No slicing, or `extras`, runs the checks that are not sliced; with
+    // `extras` they are all it runs.
+    let extras = PIPELINE_EXTRAS.load(std::sync::atomic::Ordering::Relaxed);
+    let first = shard.is_none();
     if first {
         // The test corpus on Linux against itself: the tracer and the diff
         // runner must find no differences. Takes a few seconds; skips itself
@@ -2026,7 +2092,9 @@ fn pipeline_checks() -> Result {
     if let Some((i, n)) = shard {
         polycheck.extend(["--shard".to_string(), format!("{i}/{n}")]);
     }
-    pipeline(&polycheck)?;
+    if !extras {
+        pipeline(&polycheck)?;
+    }
     if first {
         // The visible tests of every green Windows entry on Poly against
         // their recorded Windows results (ADR 0099). Skips itself without
@@ -2085,8 +2153,8 @@ fn workflow_boot_entries(text: &str) -> Vec<(String, Vec<String>)> {
 fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
     let mut problems = Vec::new();
     for (part, _) in CI_PARTS.iter().filter(|(p, _)| *p != "boot-tests") {
-        if !text.contains(&format!("cargo xtask ci {part}")) {
-            problems.push(format!("no job runs `cargo xtask ci {part}`"));
+        if !text.contains(&format!("xtask ci {part}")) {
+            problems.push(format!("no job runs `xtask ci {part}`"));
         }
     }
     let entries = workflow_boot_entries(text);
@@ -2104,11 +2172,13 @@ fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
     if !entries.iter().any(|(a, s)| a == "tcg" && s == &[TCG_SHARD]) {
         problems.push(format!("the matrix does not run shard {TCG_SHARD} alone with `accel: tcg`"));
     }
-    if !text.contains("cargo xtask boot-tests --shard ${{ matrix.shards }}") {
-        problems.push("no job runs `cargo xtask boot-tests --shard ${{ matrix.shards }}`".into());
+    if !text.contains("boot-tests --shard ${{ matrix.shards }}") {
+        problems.push("no job runs `boot-tests --shard ${{ matrix.shards }}`".into());
     }
     let slices = text.lines().map(str::trim).find_map(|l| l.strip_prefix("slice: [")?.strip_suffix(']'));
-    let want_slices: Vec<String> = (1..=PIPELINE_SHARDS).map(|i| format!("{i}/{PIPELINE_SHARDS}")).collect();
+    let want_slices: Vec<String> = std::iter::once("extras".to_string())
+        .chain((1..=PIPELINE_SHARDS).map(|i| format!("{i}/{PIPELINE_SHARDS}")))
+        .collect();
     match slices {
         None => problems.push("no pipeline matrix line `slice: [...]`".into()),
         Some(list) => {
@@ -2118,8 +2188,15 @@ fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
             }
         }
     }
-    if !text.contains("cargo xtask ci pipeline --shard ${{ matrix.slice }}") {
-        problems.push("no job runs `cargo xtask ci pipeline --shard ${{ matrix.slice }}`".into());
+    if !text.contains("ci pipeline --shard ${{ matrix.slice }}") {
+        problems.push("no job runs `ci pipeline --shard ${{ matrix.slice }}`".into());
+    }
+    // The build jobs make what the others take (ADR 0156).
+    if !text.contains("part: [kernel, tools]") || !text.contains("cargo xtask prebuild ${{ matrix.part }}") {
+        problems.push("no `build` job runs `cargo xtask prebuild ${{ matrix.part }}` for part: [kernel, tools]".into());
+    }
+    if text.matches("POLY_PREBUILT: 1").count() < 2 || text.matches("./.github/actions/prebuilt").count() < 2 {
+        problems.push("the boot and pipeline jobs must unpack the build jobs' files and set POLY_PREBUILT: 1".into());
     }
     // The 7zip boot test's binary is fetched and cached by version (ADR 0087).
     if !text.contains("cargo xtask win fetch-7zip") || !text.contains(&format!("key: 7zip-{}", sevenzip::VERSION)) {
@@ -2137,7 +2214,11 @@ fn ci(args: &[String]) -> Result {
     while let Some(a) = it.next() {
         if a == "--shard" {
             let text = it.next().ok_or("ci: --shard needs I/N")?;
-            let bad = || format!("ci: --shard {text}: expected I/N with 1 <= I <= N, like 2/3");
+            if text == "extras" {
+                PIPELINE_EXTRAS.store(true, std::sync::atomic::Ordering::Relaxed);
+                continue;
+            }
+            let bad = || format!("ci: --shard {text}: expected I/N with 1 <= I <= N, like 2/4, or extras");
             let (i, n) = text.split_once('/').ok_or_else(bad)?;
             let (i, n): (usize, usize) = (i.parse().map_err(|_| bad())?, n.parse().map_err(|_| bad())?);
             if i == 0 || i > n {
@@ -2152,8 +2233,10 @@ fn ci(args: &[String]) -> Result {
     if let Some(bad) = parts.iter().find(|a| !names.contains(&a.as_str())) {
         return Err(format!("ci: no part {bad:?}; the parts are {}", names.join(", ")));
     }
-    if PIPELINE_SHARD.get().is_some() && !parts.iter().any(|a| a.as_str() == "pipeline") {
-        return Err("ci: --shard slices the pipeline part: name it (`ci pipeline --shard 1/3`)".into());
+    if (PIPELINE_SHARD.get().is_some() || PIPELINE_EXTRAS.load(std::sync::atomic::Ordering::Relaxed))
+        && !parts.iter().any(|a| a.as_str() == "pipeline")
+    {
+        return Err("ci: --shard slices the pipeline part: name it (`ci pipeline --shard 1/4`)".into());
     }
     let started = Instant::now();
     let mut took = Vec::new();
@@ -2167,13 +2250,16 @@ fn ci(args: &[String]) -> Result {
 }
 
 fn pipeline(args: &[String]) -> Result {
-    let mut cmd = cargo();
-    cmd.current_dir(root()).args(["run", "--quiet", "--package", "poly-pipeline", "--"]).args(args);
+    let mut cmd = prebuilt::pipeline_tool();
+    cmd.args(args);
     // The commands that build the kernel (`--build-kernel`, or a missing
     // one) build it as `kernel_cargo` does, with our ntdll.dll: the same
-    // kernel as the boot tests', so neither build undoes the other.
+    // kernel as the boot tests', so neither build undoes the other. (With
+    // a prebuilt kernel nothing is built.)
     let first_two: Vec<&str> = args.iter().take(2).map(String::as_str).collect();
-    if matches!(first_two.first(), Some(&("polycheck" | "diff" | "polyrun"))) || first_two == ["win", "polycheck"] {
+    if !prebuilt::active()
+        && (matches!(first_two.first(), Some(&("polycheck" | "diff" | "polyrun"))) || first_two == ["win", "polycheck"])
+    {
         cmd.env(ntdll::KERNEL_ENV, ntdll::ensure()?);
         cmd.env(win32::KERNEL_ENV, win32::ensure()?);
     }
@@ -2183,8 +2269,7 @@ fn pipeline(args: &[String]) -> Result {
 /// `cargo xtask pipeline ...` exits with the tool's own status: callers
 /// act on it (`diff` exits 1 when a test fails).
 fn pipeline_command(args: &[String]) -> ExitCode {
-    let status =
-        cargo().current_dir(root()).args(["run", "--quiet", "--package", "poly-pipeline", "--"]).args(args).status();
+    let status = prebuilt::pipeline_tool().args(args).status();
     match status {
         Ok(s) => exit_code(s.code()),
         Err(e) => {
@@ -2271,6 +2356,9 @@ mod tests {
         assert_eq!(names(&["selftest"]), ["selftest-default", "selftest-2g", "selftest-polled", "selftest-max"]);
         // In BOOT_GROUPS order, whatever order they were asked for in.
         assert_eq!(names(&["shell", "selftest-max", "smp"]), ["selftest-max", "smp", "shell"]);
+        // `=name` is that group and no other with the name as a prefix.
+        assert_eq!(names(&["=desktop"]), ["desktop"]);
+        assert_eq!(names(&["desktop"]), ["desktop", "desktop-shell", "desktop-win32", "desktop-apps"]);
         assert!(select_boot_groups(&["self".into()]).is_err());
         assert!(select_boot_groups(&["nope".into()]).is_err());
     }
