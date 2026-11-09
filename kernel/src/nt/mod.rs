@@ -106,6 +106,10 @@ pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"
 /// by [`layout`]; empty without `xtask`.
 pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bcryptprimitives.dll"));
 
+/// Our `ole32.dll` (ADR 0155, batch 4): COM apartments, the Windows Runtime's
+/// strings; hosts the `winrt` and `com` API sets. Installed by [`layout`].
+pub static OLE32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ole32.dll"));
+
 mod test_crypto;
 
 /// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in

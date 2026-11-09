@@ -143,6 +143,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("win32u.dll", super::WIN32U),
         // ADR 0155.
         ("bcryptprimitives.dll", super::BCRYPTPRIMITIVES),
+        ("ole32.dll", super::OLE32),
     ] {
         if bytes.is_empty() {
             continue;
