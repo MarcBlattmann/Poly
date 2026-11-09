@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "gfff_found",
+      "exe_sha256": "fd0d0a8de60b233b85c2e321d316eb9ade497955f356d1274a21009a87eaad7d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2xvdCAwIGZhY2UgMHgwMDAwMDAwMCAtPiAweDAwMDAwMDAwOiB3NDAwIHM1IHN0MCBzaW0wIGVuLXVzPVJlZ3VsYXIKc2xvdCAxIGZhY2UgMHgwMDAwMDAwMCAtPiAweDAwMDAwMDAwOiB3NzAwIHM1IHN0MCBzaW0wIGVuLXVzPUJvbGQKc2xvdCAyIGZhY2UgMHgwMDAwMDAwMCAtPiAweDAwMDAwMDAwOiB3NDAwIHM1IHN0MiBzaW0wIGVuLXVzPUl0YWxpYwpzbG90IDMgZmFjZSAweDAwMDAwMDAwIC0+IDB4MDAwMDAwMDA6IHc3MDAgczUgc3QyIHNpbTAgZW4tdXM9Qm9sZCBJdGFsaWMKc2xvdCA0IGZhY2UgMHgwMDAwMDAwMCAtPiAweDAwMDAwMDAwOiB3MzAwIHM1IHN0MCBzaW0wIGVuLXVzPUxpZ2h0CnNsb3QgNSBmYWNlIDB4MDAwMDAwMDAgLT4gMHgwMDAwMDAwMDogdzQwMCBzNSBzdDAgc2ltMCBlbi11cz1SZWd1bGFyCnNsb3QgNiBmYWNlIDB4MDAwMDAwMDAgLT4gMHgwMDAwMDAwMDogdzkwMCBzNSBzdDAgc2ltMCBlbi11cz1CbGFjawpzbG90IDcgZmFjZSAweDAwMDAwMDAwIC0+IDB4MDAwMDAwMDA6IHc0MDAgczMgc3QwIHNpbTAgZW4tdXM9Q29uZGVuc2VkCnNsb3QgMCB3aXRoIGJvbGQgc2ltdWxhdGlvbiAtPiAweDAwMDAwMDAwOiB3NzAwIHM1IHN0MCBzaW0xIGVuLXVzPUJvbGQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "slot 0 face 0x00000000 -> 0x00000000: w400 s5 st0 sim0 en-us=Regular\nslot 1 face 0x00000000 -> 0x00000000: w700 s5 st0 sim0 en-us=Bold\nslot 2 face 0x00000000 -> 0x00000000: w400 s5 st2 sim0 en-us=Italic\nslot 3 face 0x00000000 -> 0x00000000: w700 s5 st2 sim0 en-us=Bold Italic\nslot 4 face 0x00000000 -> 0x00000000: w300 s5 st0 sim0 en-us=Light\nslot 5 face 0x00000000 -> 0x00000000: w400 s5 st0 sim0 en-us=Regular\nslot 6 face 0x00000000 -> 0x00000000: w900 s5 st0 sim0 en-us=Black\nslot 7 face 0x00000000 -> 0x00000000: w400 s3 st0 sim0 en-us=Condensed\nslot 0 with bold simulation -> 0x00000000: w700 s5 st0 sim1 en-us=Bold\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

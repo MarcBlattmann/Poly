@@ -17,6 +17,10 @@
       "description": "Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents",
       "revision": "ADR 0132"
     },
+    "ms-learn-dwrite": {
+      "description": "Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method)",
+      "revision": "Windows SDK 10.0.26100.0"
+    },
     "wine-spec": {
       "description": "Wine .spec export lists (wine-mirror/wine dlls/*/*.spec)",
       "revision": "840a939ee526137639665ff5f587224d6a36403f"
