@@ -11,6 +11,8 @@
  * of the handler it had (a launcher does, before it execs) must not leave
  * those flags to the program it execs.
  *
+ * poly-diff: syscalls=off (several processes: the children's checks interleave with the parent's wait4)
+ *
  * The test runs as itself (no arguments) and, through execve of
  * /proc/self/exe, as "exec-child". Checks the parent makes on a child read
  * the child's exit status.
