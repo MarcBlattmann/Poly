@@ -294,6 +294,19 @@ impl NtKernel for Fake {
         (vec![[10, 0, 2, 3]], "polytest".into())
     }
 
+    fn net_interfaces(&self) -> Vec<poly_iphlp::IfInfo> {
+        let mut nic = poly_iphlp::IfInfo::loopback();
+        nic.index = 2;
+        nic.kind = poly_iphlp::Kind::Ethernet;
+        nic.mac = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+        nic.mtu = 1500;
+        nic.ipv4 = Some(([10, 0, 2, 15], 24));
+        nic.gateway = Some([10, 0, 2, 2]);
+        nic.dns = vec![[10, 0, 2, 3]];
+        nic.ipv6 = None;
+        vec![poly_iphlp::IfInfo::loopback(), nic]
+    }
+
     fn process_times(&self, pid: ProcessId) -> Option<[u64; 3]> {
         // A creation time, kernel and user time for the test's own process.
         (pid == self.proc.pid).then_some([0x01D9_0000_0000_0000, 20_000, 30_000])

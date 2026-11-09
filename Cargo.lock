@@ -115,6 +115,10 @@ name = "poly-bpf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-com"
+version = "0.0.1"
+
+[[package]]
 name = "poly-compositor"
 version = "0.0.1"
 dependencies = [
@@ -178,6 +182,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-elf"
+version = "0.0.1"
+
+[[package]]
+name = "poly-etw"
 version = "0.0.1"
 
 [[package]]
@@ -247,6 +255,10 @@ name = "poly-input"
 version = "0.0.1"
 
 [[package]]
+name = "poly-iphlp"
+version = "0.0.1"
+
+[[package]]
 name = "poly-irq"
 version = "0.0.1"
 dependencies = [
@@ -260,6 +272,7 @@ dependencies = [
  "poly-ldr",
  "poly-nls",
  "poly-ntobj",
+ "poly-pe",
  "poly-rtl",
 ]
 
@@ -289,6 +302,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-net"
+version = "0.0.1"
+
+[[package]]
+name = "poly-netapi"
 version = "0.0.1"
 
 [[package]]
@@ -354,6 +371,7 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-console",
+ "poly-iphlp",
  "poly-ldr",
  "poly-net",
  "poly-ntobj",
@@ -708,6 +726,7 @@ dependencies = [
  "lzma-rs",
  "poly-binfmt",
  "poly-block",
+ "poly-com",
  "poly-cpio",
  "poly-crt",
  "poly-crypto",

@@ -120,3 +120,55 @@ mod tests {
         assert_eq!(local_realloc_flags(LMEM_ZEROINIT), HEAP_ZERO_MEMORY | HEAP_REALLOC_IN_PLACE_ONLY);
     }
 }
+
+// ----- another process's memory, or one's own (ReadProcessMemory, WriteProcessMemory) -------
+
+/// `PAGE_*` protections (`winnt.h`).
+pub const PAGE_NOACCESS: u32 = 0x01;
+pub const PAGE_READWRITE: u32 = 0x04;
+pub const PAGE_WRITECOPY: u32 = 0x08;
+pub const PAGE_EXECUTE: u32 = 0x10;
+pub const PAGE_EXECUTE_READWRITE: u32 = 0x40;
+pub const PAGE_EXECUTE_WRITECOPY: u32 = 0x80;
+pub const PAGE_GUARD: u32 = 0x100;
+
+/// Whether `ReadProcessMemory` may read a region: committed, not `PAGE_NOACCESS`, not a guard page.
+pub fn region_readable(state: u32, protect: u32) -> bool {
+    state == MEM_COMMIT && protect != 0 && protect & (PAGE_NOACCESS | PAGE_GUARD) == 0
+}
+
+/// Whether a protection already allows writing.
+pub fn protect_writable(protect: u32) -> bool {
+    protect & (PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY) != 0
+}
+
+/// The protection `WriteProcessMemory` gives a region that is not writable while it copies
+/// (Learn: it "changes the protection ... for the duration"): read/write, and executable when it
+/// was, so code can be patched.
+pub fn protect_for_write(protect: u32) -> u32 {
+    if protect & (PAGE_EXECUTE | 0x20 | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY) != 0 {
+        PAGE_EXECUTE_READWRITE
+    } else {
+        PAGE_READWRITE
+    }
+}
+
+#[cfg(test)]
+mod procmem_tests {
+    use super::*;
+
+    #[test]
+    fn what_may_be_read_and_how_a_region_is_opened_for_writing() {
+        assert!(region_readable(MEM_COMMIT, 0x02));
+        assert!(region_readable(MEM_COMMIT, 0x20));
+        assert!(!region_readable(MEM_RESERVE, 0x02));
+        assert!(!region_readable(MEM_COMMIT, PAGE_NOACCESS));
+        assert!(!region_readable(MEM_COMMIT, 0x02 | PAGE_GUARD));
+        assert!(!region_readable(MEM_COMMIT, 0));
+        assert!(protect_writable(PAGE_READWRITE) && protect_writable(PAGE_EXECUTE_READWRITE));
+        assert!(!protect_writable(0x02) && !protect_writable(0x20));
+        assert_eq!(protect_for_write(0x02), PAGE_READWRITE);
+        assert_eq!(protect_for_write(0x20), PAGE_EXECUTE_READWRITE);
+        assert_eq!(protect_for_write(PAGE_EXECUTE), PAGE_EXECUTE_READWRITE);
+    }
+}

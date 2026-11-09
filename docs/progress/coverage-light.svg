@@ -1372,7 +1372,7 @@
 <g><title>advapi32: 0 / 589 done (0.0%)</title>
 <rect x="346.6" y="548.4" width="31.5" height="35.5" fill="#e6eaef"/>
 <rect x="346.6" y="548.4" width="0.1" height="35.5" fill="#d4a72c"/>
-<rect x="346.7" y="548.4" width="5.9" height="35.5" fill="#218bff"/>
+<rect x="346.7" y="548.4" width="6.8" height="35.5" fill="#218bff"/>
 <rect x="345.6" y="547.4" width="33.5" height="37.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>gdi32: 14 / 545 done (2.6%)</title>
@@ -1447,6 +1447,7 @@
 </g>
 <g><title>netapi32: 0 / 300 done (0.0%)</title>
 <rect x="406.8" y="498.7" width="25.2" height="21.6" fill="#e6eaef"/>
+<rect x="406.8" y="498.7" width="0.6" height="21.6" fill="#218bff"/>
 <rect x="405.8" y="497.7" width="27.2" height="23.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>winsqlite3: 0 / 296 done (0.0%)</title>
@@ -1485,7 +1486,7 @@
 </g>
 <g><title>crypt32: 0 / 246 done (0.0%)</title>
 <rect x="406.8" y="574.3" width="18.9" height="23.1" fill="#e6eaef"/>
-<rect x="406.8" y="574.3" width="2.5" height="23.1" fill="#218bff"/>
+<rect x="406.8" y="574.3" width="2.8" height="23.1" fill="#218bff"/>
 <rect x="405.8" y="573.3" width="20.9" height="25.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wldap32: 0 / 245 done (0.0%)</title>
@@ -1506,6 +1507,7 @@
 </g>
 <g><title>dbghelp: 0 / 201 done (0.0%)</title>
 <rect x="427.7" y="522.3" width="18.8" height="18.7" fill="#e6eaef"/>
+<rect x="427.7" y="522.3" width="1.4" height="18.7" fill="#218bff"/>
 <rect x="426.7" y="521.3" width="20.8" height="20.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>webservices: 0 / 193 done (0.0%)</title>
@@ -1550,6 +1552,7 @@
 </g>
 <g><title>iphlpapi: 0 / 181 done (0.0%)</title>
 <rect x="427.7" y="606.6" width="16.5" height="18.8" fill="#e6eaef"/>
+<rect x="427.7" y="606.6" width="1.4" height="18.8" fill="#218bff"/>
 <rect x="426.7" y="605.6" width="18.5" height="20.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msvcm90: 0 / 181 done (0.0%)</title>
@@ -1590,6 +1593,7 @@
 </g>
 <g><title>dnsapi: 0 / 142 done (0.0%)</title>
 <rect x="554.1" y="542.9" width="14.1" height="16.8" fill="#e6eaef"/>
+<rect x="554.1" y="542.9" width="0.3" height="16.8" fill="#218bff"/>
 <rect x="553.1" y="541.9" width="16.1" height="18.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>dx8vb: 0 / 139 done (0.0%)</title>
@@ -1602,7 +1606,7 @@
 </g>
 <g><title>ws2_32: 0 / 136 done (0.0%)</title>
 <rect x="446.3" y="578.5" width="15.6" height="14.5" fill="#e6eaef"/>
-<rect x="446.3" y="578.5" width="7.8" height="14.5" fill="#218bff"/>
+<rect x="446.3" y="578.5" width="8.5" height="14.5" fill="#218bff"/>
 <rect x="445.3" y="577.5" width="17.6" height="16.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>imm32: 0 / 135 done (0.0%)</title>
@@ -1735,6 +1739,7 @@
 </g>
 <g><title>secur32: 0 / 82 done (0.0%)</title>
 <rect x="479.7" y="634.2" width="10.5" height="12.0" fill="#e6eaef"/>
+<rect x="479.7" y="634.2" width="1.5" height="12.0" fill="#218bff"/>
 <rect x="478.7" y="633.2" width="12.5" height="14.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>advpack: 0 / 81 done (0.0%)</title>
@@ -1892,7 +1897,7 @@
 </g>
 <g><title>winhttp: 0 / 49 done (0.0%)</title>
 <rect x="514.2" y="624.3" width="7.4" height="9.1" fill="#e6eaef"/>
-<rect x="514.2" y="624.3" width="2.6" height="9.1" fill="#218bff"/>
+<rect x="514.2" y="624.3" width="2.7" height="9.1" fill="#218bff"/>
 <rect x="513.2" y="623.3" width="9.4" height="11.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>cryptui: 0 / 48 done (0.0%)</title>
@@ -1925,6 +1930,7 @@
 </g>
 <g><title>dhcpcsvc: 0 / 45 done (0.0%)</title>
 <rect x="544.6" y="624.3" width="8.3" height="7.3" fill="#e6eaef"/>
+<rect x="544.6" y="624.3" width="0.6" height="7.3" fill="#218bff"/>
 <rect x="543.6" y="623.3" width="10.3" height="9.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>snmpapi: 0 / 45 done (0.0%)</title>

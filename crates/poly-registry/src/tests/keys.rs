@@ -33,7 +33,13 @@ fn create_only_the_last_component() {
     assert_eq!(r.resolve(root, &wide("a"), false), Ok(Resolved::Found(a)));
     assert_eq!(r.resolve(root, &wide(""), false), Ok(Resolved::Found(root)));
     assert_eq!(r.resolve(root, &wide("a\\\\b"), false), Err(STATUS_OBJECT_NAME_INVALID));
-    assert_eq!(r.resolve(root, &wide("a\\"), false), Err(STATUS_OBJECT_NAME_INVALID));
+    // One trailing `\` means nothing (Chrome's chrome_elf creates `\REGISTRY\USER\<sid>\`);
+    // two are an empty component.
+    assert_eq!(r.resolve(root, &wide("a\\"), false), Ok(Resolved::Found(a)));
+    assert_eq!(r.resolve(root, &wide("\\a\\"), false), Ok(Resolved::Found(a)));
+    assert_eq!(r.resolve(root, &wide("a\\b\\"), false), Ok(Resolved::Missing { parent: a, name: wide("b") }));
+    assert_eq!(r.resolve(root, &wide("a\\\\"), false), Err(STATUS_OBJECT_NAME_INVALID));
+    assert_eq!(r.resolve(root, &wide("\\"), false), Ok(Resolved::Found(root)));
 }
 
 #[test]

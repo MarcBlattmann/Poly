@@ -172,6 +172,8 @@ pub const HOSTENT_SIZE: usize = 32;
 // ----- WSA error codes (winerror.h)
 
 pub const WSA_INVALID_HANDLE: u32 = 6;
+/// `WSA_E_NO_MORE` (`winerror.h`): `WSALookupServiceNext` has no more results.
+pub const WSA_E_NO_MORE: u32 = 10110;
 pub const WSA_NOT_ENOUGH_MEMORY: u32 = 8;
 pub const WSA_INVALID_PARAMETER: u32 = 87;
 pub const WSA_OPERATION_ABORTED: u32 = 995;

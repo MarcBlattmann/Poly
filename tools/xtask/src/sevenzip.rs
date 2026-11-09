@@ -224,10 +224,12 @@ pub fn command(args: &[String]) -> Result {
         // The Windows API tracer (wintrace.rs, ADR 0090).
         Some("trace-kit") => crate::wintrace::trace_kit_command(&args[1..]),
         Some("trace-diff") => crate::wintrace::trace_diff_command(&args[1..]),
+        // Poly's call trace of Chrome against the committed Windows reduction (chrometrace.rs, ADR 0155).
+        Some("chrome-trace") => crate::chrometrace::command(&args[1..]),
         // The traced scenario (sevenzip_trace.rs, ADR 0110).
         Some("7zip-trace") => crate::sevenzip_trace::command(&args[1..]),
         _ => Err("usage: cargo xtask win <fetch-7zip | imports <exe | 7zip> [--markdown <file>] [--check] | \
-                  7zip-diff [--kernel <elf>] [--build-kernel] [--markdown <file>] [--target <poly.json>] | \
+                  chrome-trace [<poly.ptrace.jsonl>] [--stage s1] [--process browser] [--kit <kit.json>] [--all] | \n                  7zip-diff [--kernel <elf>] [--build-kernel] [--markdown <file>] [--target <poly.json>] | \
                   trace-kit <exe | 7zip> [--out <dir>] | trace-diff <a.jsonl> <b.jsonl> | \
                   7zip-trace <stage | record <windows.json>... | diff [--kernel <elf>] [--markdown <file>] [--check]>>"
             .into()),

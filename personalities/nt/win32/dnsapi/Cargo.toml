@@ -1,0 +1,18 @@
+[package]
+name = "dnsapi"
+description = "Our dnsapi.dll (ADR 0155): the few functions Chrome looks up"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "dnsapi"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-netrt = { path = "../netrt" }
+
+[lints]
+workspace = true
