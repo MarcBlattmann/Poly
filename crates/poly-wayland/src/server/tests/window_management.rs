@@ -277,3 +277,154 @@ fn internal_windows_get_events_and_frames() {
     assert_eq!(srv.keyboard_focus(), Some((p.id, a.surface)));
     assert!(srv.managed_windows().iter().all(|i| !i.internal));
 }
+
+// --- The output changes size (ADR 0145) -----------------------------------------
+
+fn resize_output(srv: &mut Server, width: u32, height: u32) {
+    let out = OutputConfig { width, height, ..srv.output().clone() };
+    srv.set_output(out);
+}
+
+#[test]
+fn a_resized_output_reconfigures_a_maximized_window() {
+    let (mut srv, shared) = server();
+    srv.scene_mut().set_reserved_top(24);
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let w = mapped(&mut p, &mut srv, &g, "m", 100, 80, 0);
+    p.take();
+    let win = srv.scene().windows()[0].id();
+    srv.set_maximized(win, true);
+    p.read(&mut srv);
+    let e = p.take();
+    ack_and_commit(&mut p, &mut srv, &g, &w, &e);
+    p.take();
+    assert_eq!(configure(&e).0, 640 - 2 * BORDER);
+    // The window the screen is shown in gets bigger.
+    resize_output(&mut srv, 1000, 700);
+    p.read(&mut srv);
+    let e = p.take();
+    let (cw, ch, states) = configure(&e);
+    assert_eq!((cw, ch), (1000 - 2 * BORDER, 700 - 24 - TITLE_HEIGHT - 2 * BORDER));
+    assert!(states.contains(&xdg_toplevel::State::MAXIMIZED.0));
+    ack_and_commit(&mut p, &mut srv, &g, &w, &e);
+    let win = &srv.scene().windows()[0];
+    assert_eq!(win.position(), (BORDER, 24 + TITLE_HEIGHT + BORDER));
+    assert!(win.is_maximized());
+    // And smaller again.
+    resize_output(&mut srv, 800, 500);
+    p.read(&mut srv);
+    let (cw, ch, _) = configure(&p.take());
+    assert_eq!((cw, ch), (800 - 2 * BORDER, 500 - 24 - TITLE_HEIGHT - 2 * BORDER));
+}
+
+#[test]
+fn a_resized_output_keeps_a_tile_its_share_of_the_work_area() {
+    let (mut srv, shared) = server();
+    srv.scene_mut().set_reserved_top(24);
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let w = mapped(&mut p, &mut srv, &g, "t", 100, 80, 0);
+    p.take();
+    let win = srv.scene().windows()[0].id();
+    // The right half of the work area (y 24..480).
+    srv.tile_window(win, Rect::new(320, 24, 320, 456));
+    p.read(&mut srv);
+    let e = p.take();
+    ack_and_commit(&mut p, &mut srv, &g, &w, &e);
+    p.take();
+    resize_output(&mut srv, 1000, 624);
+    p.read(&mut srv);
+    let e = p.take();
+    // Still the right half, of a work area 1000 x 600.
+    let right = Rect::new(500, 24, 500, 600);
+    let (cw, ch, states) = configure(&e);
+    assert_eq!((cw, ch), (500 - 2 * BORDER, 600 - TITLE_HEIGHT - 2 * BORDER));
+    assert!(states.contains(&xdg_toplevel::State::TILED_RIGHT.0));
+    assert!(!states.contains(&xdg_toplevel::State::TILED_LEFT.0));
+    ack_and_commit(&mut p, &mut srv, &g, &w, &e);
+    let win = &srv.scene().windows()[0];
+    assert_eq!(srv.scene().frame_rect(win.id()), Some(right));
+    assert_eq!(srv.managed_windows()[0].tiled, Some(right));
+}
+
+#[test]
+fn a_shrunk_output_keeps_floating_windows_on_it_at_their_size() {
+    let (mut srv, shared) = server();
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let _w = mapped(&mut p, &mut srv, &g, "f", 300, 200, 0);
+    p.take();
+    let id = srv.scene().windows()[0].id();
+    // Dragged to the bottom right of the 640 x 480 output.
+    srv.scene_mut().set_position(id, 330, 270);
+    resize_output(&mut srv, 400, 300);
+    p.read(&mut srv);
+    // No configure: a floating window keeps its size.
+    assert!(!p.take().iter().any(|e| e.name() == ("xdg_toplevel", "configure")));
+    let win = srv.scene().window(id).unwrap();
+    let outer = srv.scene().frame_rect(id).unwrap();
+    assert_eq!(win.bounds().width, 300);
+    assert!(outer.right() <= 400 && outer.bottom() <= 300, "{outer:?}");
+    assert!(outer.x >= 0 && outer.y >= 0);
+    // A window larger than the output keeps its top left on it.
+    resize_output(&mut srv, 200, 150);
+    let outer = srv.scene().frame_rect(id).unwrap();
+    assert_eq!((outer.x, outer.y), (0, 0));
+    // Growing again moves nothing.
+    let at = srv.scene().window(id).unwrap().position();
+    resize_output(&mut srv, 1000, 800);
+    assert_eq!(srv.scene().window(id).unwrap().position(), at);
+}
+
+#[test]
+fn a_resized_output_resizes_fullscreen_and_internal_windows_and_the_pointer() {
+    let (mut srv, shared) = server();
+    srv.scene_mut().set_reserved_top(24);
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let w = mapped(&mut p, &mut srv, &g, "full", 100, 80, 0);
+    p.send(&mut srv, w.toplevel, xdg_toplevel::Request::SetFullscreen { output: None });
+    p.read(&mut srv);
+    let e = p.take();
+    ack_and_commit(&mut p, &mut srv, &g, &w, &e);
+    p.take();
+    let s = srv.add_internal_window("Settings", "poly.settings", 200, 100);
+    srv.set_maximized(s, true);
+    srv.take_internal_events();
+    motion(&mut srv, 600, 450);
+    resize_output(&mut srv, 1280, 800);
+    p.read(&mut srv);
+    let (cw, ch, states) = configure(&p.take());
+    assert_eq!((cw, ch), (1280, 800));
+    assert!(states.contains(&xdg_toplevel::State::FULLSCREEN.0));
+    // The compositor's own maximized window: its owner is told the new size.
+    assert_eq!(
+        srv.take_internal_events(),
+        [InternalEvent::Resize { window: s, width: 1280 - 2 * BORDER, height: 800 - 24 - TITLE_HEIGHT - 2 * BORDER }]
+    );
+    // The pointer stays on a smaller output.
+    motion(&mut srv, 1200, 700);
+    resize_output(&mut srv, 640, 480);
+    let (x, y) = srv.pointer();
+    assert!(x.0 / 256 < 640 && y.0 / 256 < 480, "{x:?} {y:?}");
+}
+
+#[test]
+fn an_unchanged_work_area_configures_nothing() {
+    let (mut srv, shared) = server();
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let w = mapped(&mut p, &mut srv, &g, "m", 100, 80, 0);
+    let win = srv.scene().windows()[0].id();
+    srv.set_maximized(win, true);
+    p.read(&mut srv);
+    let e = p.take();
+    ack_and_commit(&mut p, &mut srv, &g, &w, &e);
+    p.take();
+    // The same size (a refresh rate or physical size changed): no configure.
+    let out = OutputConfig { refresh_mhz: 75_000, ..srv.output().clone() };
+    srv.set_output(out);
+    p.read(&mut srv);
+    assert!(!p.take().iter().any(|e| e.name() == ("xdg_toplevel", "configure")));
+}

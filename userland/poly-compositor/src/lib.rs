@@ -114,6 +114,12 @@ use poly_wayland::wire::Fd;
 /// The shortest time between two frames: 60 Hz.
 const FRAME_NS: u64 = 1_000_000_000 / 60;
 
+/// How long after a display change (ADR 0145) the screen follows it: a
+/// window dragged to another size sends a change at every step, and the
+/// screen takes the size it has when this has passed (then the next one
+/// the same way), instead of every step.
+const RESIZE_SETTLE_MS: u64 = 100;
+
 #[derive(Debug)]
 struct Options {
     socket: String,
@@ -476,6 +482,27 @@ fn choose_scale(asked: Option<u32>, screen: &Screen) -> u32 {
     }
 }
 
+/// The screen got another size (KMS followed the display, ADR 0145): the
+/// server advertises it (`wl_output` mode and geometry) and lays its windows
+/// out again, and the shell lays out for the new logical size (the ridge,
+/// the launcher, the wallpaper) with everything drawn again.
+fn screen_resized(server: &mut Server, shell: Option<&mut poly_shell::Shell>, out: &kms::Output) {
+    let (width, height) = out.size();
+    let config = OutputConfig {
+        width,
+        height,
+        refresh_mhz: out.refresh_mhz(),
+        physical_mm: (out.mm.0 as i32, out.mm.1 as i32),
+        ..server.output().clone()
+    };
+    server.set_output(config);
+    let (lw, lh) = server.scene().logical_size();
+    if let Some(shell) = shell {
+        shell.resize(lw, lh);
+    }
+    server.scene_mut().damage_all();
+}
+
 /// The picture as a binary PPM (netpbm's `P6`).
 fn ppm(fb: &mut dyn Framebuffer) -> Vec<u8> {
     let (w, h) = (fb.width(), fb.height());
@@ -591,7 +618,7 @@ fn run(args: &[String]) -> Result<u8, String> {
     } else {
         Screen::Memory(MemoryFramebuffer::new(o.width, o.height))
     };
-    let (width, height) = (screen.fb().width(), screen.fb().height());
+    let (mut width, mut height) = (screen.fb().width(), screen.fb().height());
     let scale = choose_scale(o.scale, &screen);
     let mut host = os::UnixHost::default();
     let keymap = host.keymap.clone();
@@ -664,6 +691,8 @@ fn run(args: &[String]) -> Result<u8, String> {
         conns.insert(id, Connection { stream, out: Vec::new(), out_fds: Vec::new() });
     }
     let mut next_frame = 0u64;
+    // When the screen follows a display change (ADR 0145), if one is waiting.
+    let mut resize_due: Option<u64> = None;
     let mut stats = FrameStats::default();
     let mut buf = vec![0u8; 4096];
     loop {
@@ -686,8 +715,9 @@ fn run(args: &[String]) -> Result<u8, String> {
         fds.extend(os::child_poll_fds());
         let control_at = fds.len();
         fds.push(os::PollFd::readable(control.fd()));
-        // The card's flip events.
+        // The card's events: flips and display changes.
         let card_fd = screen.kms().and_then(|k| k.fd());
+        let card_at = fds.len();
         if let Some(fd) = card_fd {
             fds.push(os::PollFd::readable(fd));
         }
@@ -710,6 +740,14 @@ fn run(args: &[String]) -> Result<u8, String> {
             d.timeout_ms()
         } else {
             -1
+        };
+        // A display change to follow wakes the loop when it has settled.
+        let timeout = match resize_due {
+            Some(due) => {
+                let wait = due.saturating_sub(now / 1_000_000).min(i32::MAX as u64) as i32;
+                if timeout < 0 { wait } else { timeout.min(wait) }
+            }
+            None => timeout,
         };
         os::poll(&mut fds, timeout).map_err(|e| format!("poll: {e}"))?;
         // What ended is reaped below (the desktop's apps in `sync`,
@@ -745,8 +783,9 @@ fn run(args: &[String]) -> Result<u8, String> {
         // A flip completed: the frame it showed is on the screen since its
         // vblank; its frame callbacks and feedback are answered with that
         // time and sequence (vsync).
+        let card_ready = card_fd.is_some() && fds[card_at].revents & os::POLLIN != 0;
         if let Some(k) = screen.kms()
-            && k.is_pending()
+            && (k.is_pending() || card_ready)
         {
             match k.dispatch() {
                 Ok(Some(flip)) => {
@@ -756,6 +795,33 @@ fn run(args: &[String]) -> Result<u8, String> {
                 }
                 Ok(None) => {}
                 Err(e) => return Err(format!("{}: reading events: {e}", o.drm)),
+            }
+        }
+
+        // The display changed (the window showing the screen was resized):
+        // once it has settled and no flip is in flight, the screen takes the
+        // connector's new preferred size (new buffers and mode set), and the
+        // server and the shell lay out for it (ADR 0145).
+        if let Some(k) = screen.kms() {
+            if k.take_hotplug() {
+                resize_due.get_or_insert(os::monotonic_ns() / 1_000_000 + RESIZE_SETTLE_MS);
+            }
+            if resize_due.is_some_and(|due| os::monotonic_ns() / 1_000_000 >= due) && !k.is_pending() {
+                resize_due = None;
+                match k.follow_display() {
+                    Ok(true) => {
+                        let out = k.output().clone();
+                        (width, height) = out.size();
+                        println!(
+                            "poly-compositor: screen resized to {width}x{height} at {}.{:03} Hz",
+                            out.refresh_mhz() / 1000,
+                            out.refresh_mhz() % 1000
+                        );
+                        screen_resized(&mut server, desk.as_mut().map(|d| &mut d.shell), &out);
+                    }
+                    Ok(false) => {}
+                    Err(e) => eprintln!("poly-compositor: following the display: {e}"),
+                }
             }
         }
 
@@ -983,6 +1049,31 @@ mod tests {
         assert!(env.contains(&"POLY_COMPOSITOR_CONTROL=/run/user/0/poly-compositor.ctl".to_string()));
         assert!(env.contains(&"DBUS_SESSION_BUS_ADDRESS=unix:path=/b".to_string()));
         assert_eq!(env.iter().filter(|v| v.starts_with("WAYLAND_DISPLAY=")).count(), 1);
+    }
+
+    /// The screen's size changes (ADR 0145): the server's output, the
+    /// scene, the shell's layout and the next picture all follow.
+    #[test]
+    fn a_resized_screen_lays_the_desktop_out_again() {
+        let host = os::UnixHost::default();
+        let output = OutputConfig { width: 800, height: 600, ..OutputConfig::default() };
+        let mut server = Server::new(Config { output, ..Config::default() }, Box::new(host));
+        let mut shell =
+            poly_shell::Shell::new(800, 600, poly_shell::apps::builtins(), poly_shell::draw::Text::new(None));
+        let mode = poly_drm::uapi::ModeInfo { hdisplay: 1313, vdisplay: 877, vrefresh: 60, ..Default::default() };
+        let out = kms::Output { connector: 1, crtc: 2, mode, mm: (347, 231) };
+        let mut fb = MemoryFramebuffer::new(800, 600);
+        server.render_with(&mut fb, Some(&shell.below()), Some(&shell.above()));
+        screen_resized(&mut server, Some(&mut shell), &out);
+        let o = server.output();
+        assert_eq!((o.width, o.height, o.refresh_mhz, o.physical_mm), (1313, 877, 60_000, (347, 231)));
+        assert_eq!(server.scene().logical_size(), (1313, 877));
+        // The ridge spans the new width and the whole screen is drawn again.
+        let mut fb = MemoryFramebuffer::new(1313, 877);
+        let drawn = server.render_with(&mut fb, Some(&shell.below()), Some(&shell.above()));
+        assert_eq!(drawn, [whole(1313, 877)]);
+        assert_eq!(fb.pixel(1300, 5), Some(0x20_20_20), "the ridge reaches the new right edge");
+        assert_eq!(shell.ridge_rect().width, 1313);
     }
 
     /// The desktop's layers through the scene into memory: the ridge, the
