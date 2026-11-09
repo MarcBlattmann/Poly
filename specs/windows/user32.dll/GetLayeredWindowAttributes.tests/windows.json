@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "glwa_basic",
+      "exe_sha256": "afeb477704e2508b91460c569820d838cd21c28032e04579ee29dde078bbb548",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bmV2ZXIgc2V0OiBGQUxTRSBlcnJvciAweDEyMzQga2V5IDB4YWFhYWFhYWEgYWxwaGEgMTcwIGZsYWdzIDB4YWFhYWFhYWEKU2V0IGFscGhhIDEwIC0+IFRSVUU7IEdldCBUUlVFIGVycm9yIDB4MTIzNCBrZXkgMHgwIGFscGhhIDEwIGZsYWdzIDB4MgpTZXQga2V5IG9ubHkgLT4gVFJVRTsgR2V0IFRSVUUgZXJyb3IgMHgxMjM0IGtleSAweGFhYmJjYyBhbHBoYSAxMCBmbGFncyAweDEKU2V0IGJvdGggLT4gVFJVRTsgR2V0IFRSVUUgZXJyb3IgMHgxMjM0IGtleSAweDExMjIzMyBhbHBoYSAzMCBmbGFncyAweDMKU2V0IGFscGhhIDI1NSAtPiBUUlVFOyBHZXQgVFJVRSBlcnJvciAweDEyMzQga2V5IDB4MTEyMjMzIGFscGhhIDI1NSBmbGFncyAweDIKU2V0IGFscGhhIDAgLT4gVFJVRTsgR2V0IFRSVUUgZXJyb3IgMHgxMjM0IGtleSAweDExMjIzMyBhbHBoYSAwIGZsYWdzIDB4MgphbGwgdGhyZWUgTlVMTDogVFJVRSBlcnJvciAweDEyMzQKa2V5IG9ubHk6IFRSVUUga2V5IDB4MTEyMjMzIChhbHBoYSwgZmxhZ3MgdW50b3VjaGVkIDB4YWEgMHhhYWFhYWFhYSkKYWxwaGEgb25seTogVFJVRSBhbHBoYSAwIChmbGFncyB1bnRvdWNoZWQgMHhhYWFhYWFhYSkKZmxhZ3Mgb25seTogVFJVRSBmbGFncyAweDIKbm9uLWxheWVyZWQgd2luZG93OiBGQUxTRSBlcnJvciA4Nwpub24tbGF5ZXJlZCB3aW5kb3csIGFsbCBOVUxMOiBGQUxTRSBlcnJvciA4NwpOVUxMIHdpbmRvdzogRkFMU0UgZXJyb3IgMTQwMAptYWRlLXVwIHdpbmRvdyBoYW5kbGU6IEZBTFNFIGVycm9yIDE0MDAKZGVzdHJveWVkIHdpbmRvdzogRkFMU0UgZXJyb3IgMTQwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "never set: FALSE error 0x1234 key 0xaaaaaaaa alpha 170 flags 0xaaaaaaaa\nSet alpha 10 -> TRUE; Get TRUE error 0x1234 key 0x0 alpha 10 flags 0x2\nSet key only -> TRUE; Get TRUE error 0x1234 key 0xaabbcc alpha 10 flags 0x1\nSet both -> TRUE; Get TRUE error 0x1234 key 0x112233 alpha 30 flags 0x3\nSet alpha 255 -> TRUE; Get TRUE error 0x1234 key 0x112233 alpha 255 flags 0x2\nSet alpha 0 -> TRUE; Get TRUE error 0x1234 key 0x112233 alpha 0 flags 0x2\nall three NULL: TRUE error 0x1234\nkey only: TRUE key 0x112233 (alpha, flags untouched 0xaa 0xaaaaaaaa)\nalpha only: TRUE alpha 0 (flags untouched 0xaaaaaaaa)\nflags only: TRUE flags 0x2\nnon-layered window: FALSE error 87\nnon-layered window, all NULL: FALSE error 87\nNULL window: FALSE error 1400\nmade-up window handle: FALSE error 1400\ndestroyed window: FALSE error 1400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    }
+  ]
+}
