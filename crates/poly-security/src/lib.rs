@@ -31,15 +31,21 @@
 
 extern crate alloc;
 
+pub mod access;
 pub mod acl;
+pub mod err;
 pub mod error;
 pub mod sd;
 pub mod sddl;
+pub mod sdops;
+pub mod sdstr;
 pub mod sid;
+pub mod status;
 pub mod token;
+pub mod wellknown;
 
-pub use poly_ntobj::NtStatus;
 pub use sid::Sid;
+pub use status::NtStatus;
 
 /// Poly's single user's name (the default hives' `POLY_USER_NAME`, ADR 0066).
 pub const POLY_USER_NAME: &str = "poly";

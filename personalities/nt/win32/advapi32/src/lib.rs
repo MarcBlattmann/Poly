@@ -12,7 +12,8 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use poly_security::{sddl, sid, token};
+use poly_security::sd::{self, SdPtr};
+use poly_security::{sddl, sdstr, sid, token};
 use poly_win32_rt as _;
 
 type Handle = isize;
@@ -212,8 +213,8 @@ fn string_to_sid(text: Option<&[u16]>, out: *mut *mut u8) -> i32 {
     if out.is_null() {
         return fail(ERROR_INVALID_PARAMETER);
     }
-    let Some(s) = sddl::parse(text) else { return fail(poly_security::error::ERROR_INVALID_SID) };
-    match local_copy(&s.to_bytes()) {
+    let Some(s) = sddl::parse_bytes(text) else { return fail(poly_security::error::ERROR_INVALID_SID) };
+    match local_copy(&s) {
         Some(p) => {
             // SAFETY: checked non-null.
             unsafe { out.write(p) };
@@ -237,6 +238,269 @@ pub unsafe extern "system" fn ConvertStringSidToSidA(text: *const u8, out: *mut 
     // SAFETY: the caller's string or null.
     let text = unsafe { ansi(text) };
     string_to_sid(text.as_deref(), out)
+}
+
+// ----- security descriptor strings ------------------------------------------------------
+
+/// `ConvertStringSecurityDescriptorToSecurityDescriptorW`: the SDDL string
+/// as a self-relative descriptor in `LocalAlloc` memory (revision 1 only).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
+    text: *const u16,
+    revision: u32,
+    out: *mut *mut u8,
+    size: *mut u32,
+) -> i32 {
+    // SAFETY: the caller's string or null.
+    let Some(text) = (unsafe { wide(text) }) else { return fail(ERROR_INVALID_PARAMETER) };
+    if revision != u32::from(sd::SECURITY_DESCRIPTOR_REVISION) {
+        return fail(poly_security::error::ERROR_UNKNOWN_REVISION);
+    }
+    match sdstr::parse(text) {
+        Ok(bytes) => match local_copy(&bytes) {
+            Some(p) => {
+                // SAFETY: the caller's variables (the size one may be null).
+                unsafe {
+                    out.write(p);
+                    if !size.is_null() {
+                        size.write(bytes.len() as u32);
+                    }
+                }
+                TRUE
+            }
+            None => fail(ERROR_NOT_ENOUGH_MEMORY),
+        },
+        Err(e) => {
+            if !size.is_null() {
+                // SAFETY: the caller's variable.
+                unsafe { size.write(0) };
+            }
+            fail(e.win32())
+        }
+    }
+}
+
+/// `ConvertSecurityDescriptorToStringSecurityDescriptorW`: the SDDL text of
+/// the parts `information` names, in `LocalAlloc` memory.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ConvertSecurityDescriptorToStringSecurityDescriptorW(
+    descriptor: *mut u8,
+    revision: u32,
+    information: u32,
+    out: *mut *mut u16,
+    length: *mut u32,
+) -> i32 {
+    if revision != u32::from(sd::SECURITY_DESCRIPTOR_REVISION) {
+        return fail(poly_security::error::ERROR_UNKNOWN_REVISION);
+    }
+    let d = SdPtr(descriptor);
+    // A NULL descriptor has no parts: the empty string.
+    // SAFETY: the caller's descriptor.
+    let (text, len) = if descriptor.is_null() {
+        (alloc::string::String::new(), 0)
+    } else {
+        if unsafe { d.revision() } != sd::SECURITY_DESCRIPTOR_REVISION {
+            return fail(poly_security::error::ERROR_UNKNOWN_REVISION);
+        }
+        // SAFETY: the caller's descriptor.
+        let parts = unsafe { sd::Parts::read(d) };
+        match sdstr::format(&parts, information) {
+            Ok(t) => t,
+            Err(e) => return fail(e.win32()),
+        }
+    };
+    let bytes: Vec<u8> = text.encode_utf16().chain([0]).flat_map(|c| c.to_le_bytes()).collect();
+    match local_copy(&bytes) {
+        Some(p) => {
+            // SAFETY: the caller's variables (the length one may be null).
+            unsafe {
+                out.write(p.cast());
+                if !length.is_null() {
+                    length.write(len as u32);
+                }
+            }
+            TRUE
+        }
+        None => fail(ERROR_NOT_ENOUGH_MEMORY),
+    }
+}
+
+// ----- security information through a handle --------------------------------------------
+
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn NtQuerySecurityObject(handle: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> u32;
+    fn NtSetSecurityObject(handle: Handle, info: u32, sd: *const u8) -> u32;
+    fn RtlNtStatusToDosError(status: u32) -> u32;
+}
+
+/// `SE_OBJECT_TYPE` (`accctrl.h`): the kinds `GetSecurityInfo` and
+/// `SetSecurityInfo` work on through a handle here. `SE_FILE_OBJECT` and
+/// `SE_KERNEL_OBJECT` are handles to kernel objects; the service, printer
+/// and registry key types are other handles (`ERROR_INVALID_HANDLE`).
+fn object_type_ok(ty: u32) -> Result<(), u32> {
+    match ty {
+        1 | 6 | 7 | 11 => Ok(()),
+        2..=4 => Err(6),
+        _ => Err(ERROR_INVALID_PARAMETER),
+    }
+}
+
+fn status_error(st: u32) -> u32 {
+    // SAFETY: a pure ntdll function.
+    unsafe { RtlNtStatusToDosError(st) }
+}
+
+/// `GetSecurityInfo(handle, ObjectType, SecurityInfo, **owner, **group,
+/// **dacl, **sacl, **descriptor)`: returns the error code. The descriptor
+/// is a `LocalAlloc`ed self-relative copy; the SID and ACL pointers point
+/// into it. A part asked for needs its own pointer or the descriptor's.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetSecurityInfo(
+    handle: Handle,
+    object_type: u32,
+    info: u32,
+    owner: *mut *mut u8,
+    group: *mut *mut u8,
+    dacl: *mut *mut u8,
+    sacl: *mut *mut u8,
+    descriptor: *mut *mut u8,
+) -> u32 {
+    if handle == 0 {
+        return 6;
+    }
+    if let Err(e) = object_type_ok(object_type) {
+        return e;
+    }
+    // A requested part has to have somewhere to go.
+    let wants = [(info & 1 != 0, owner), (info & 2 != 0, group), (info & 4 != 0, dacl), (info & 0x10 != 0, sacl)];
+    if wants.iter().any(|&(w, p)| w && p.is_null() && descriptor.is_null()) {
+        return ERROR_INVALID_PARAMETER;
+    }
+    let mut needed = 0u32;
+    // SAFETY: a size probe.
+    let st = unsafe { NtQuerySecurityObject(handle, info, core::ptr::null_mut(), 0, &mut needed) };
+    if st != 0 && st != 0xC000_0023 {
+        return status_error(st);
+    }
+    // SAFETY: no preconditions.
+    let sd = unsafe { LocalAlloc(LMEM_FIXED, needed.max(20) as usize) };
+    if sd.is_null() {
+        return ERROR_NOT_ENOUGH_MEMORY;
+    }
+    // SAFETY: `sd` holds `needed` bytes.
+    let st = unsafe { NtQuerySecurityObject(handle, info, sd, needed.max(20), &mut needed) };
+    if st != 0 {
+        // SAFETY: our block.
+        unsafe { LocalFree(sd) };
+        return status_error(st);
+    }
+    // SAFETY: a self-relative descriptor of `needed` bytes at `sd`.
+    unsafe {
+        let off =
+            |at: usize| u32::from_le_bytes([*sd.add(at), *sd.add(at + 1), *sd.add(at + 2), *sd.add(at + 3)]) as usize;
+        let part = |at: usize| if off(at) == 0 { core::ptr::null_mut() } else { sd.add(off(at)) };
+        if !owner.is_null() && info & 1 != 0 {
+            owner.write(part(4));
+        }
+        if !group.is_null() && info & 2 != 0 {
+            group.write(part(8));
+        }
+        if !dacl.is_null() && info & 4 != 0 {
+            dacl.write(part(16));
+        }
+        if !sacl.is_null() && info & 0x10 != 0 {
+            sacl.write(part(12));
+        }
+        // Without a descriptor pointer the block is never freed: the parts the
+        // caller asked for point into it (Learn: free the descriptor with LocalFree).
+        if !descriptor.is_null() {
+            descriptor.write(sd);
+        }
+    }
+    0
+}
+
+/// `SetSecurityInfo(handle, ObjectType, SecurityInfo, owner, group, dacl,
+/// sacl)`: returns the error code. The parts become a self-relative
+/// descriptor for `NtSetSecurityObject`; a NULL DACL with the DACL
+/// information is stored protected.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetSecurityInfo(
+    handle: Handle,
+    object_type: u32,
+    info: u32,
+    owner: *const u8,
+    group: *const u8,
+    dacl: *const u8,
+    sacl: *const u8,
+) -> u32 {
+    use poly_security::acl::{self, AclPtr};
+    if handle == 0 {
+        return 6;
+    }
+    if let Err(e) = object_type_ok(object_type) {
+        return e;
+    }
+    if object_type != 1 && object_type != 6 {
+        return if object_type == 7 || object_type == 11 { 0 } else { ERROR_INVALID_PARAMETER };
+    }
+    let mut parts = sd::Parts { revision: sd::SECURITY_DESCRIPTOR_REVISION, ..sd::Parts::default() };
+    // SAFETY: the caller's SIDs and ACLs.
+    unsafe {
+        let sid_of = |p: *const u8| -> Result<Vec<u8>, u32> {
+            if p.is_null() {
+                return Err(ERROR_INVALID_PARAMETER);
+            }
+            let h = core::slice::from_raw_parts(p, 2);
+            if h[0] != sid::SID_REVISION || usize::from(h[1]) > sid::SID_MAX_SUB_AUTHORITIES {
+                return Err(ERROR_INVALID_PARAMETER);
+            }
+            Ok(core::slice::from_raw_parts(p, sid::length_required(h[1]) as usize).to_vec())
+        };
+        if info & 1 != 0 {
+            match sid_of(owner) {
+                Ok(s) => parts.owner = Some(s),
+                Err(e) => return e,
+            }
+        }
+        if info & 2 != 0 {
+            match sid_of(group) {
+                Ok(s) => parts.group = Some(s),
+                Err(e) => return e,
+            }
+        }
+        let acl_of = |p: *const u8| -> Result<Vec<u8>, u32> {
+            if !acl::is_valid(AclPtr(p as *mut u8)) {
+                return Err(poly_security::error::ERROR_INVALID_ACL);
+            }
+            let size = AclPtr(p as *mut u8).size();
+            Ok(core::slice::from_raw_parts(p, size).to_vec())
+        };
+        if info & 4 != 0 {
+            parts.control |= sd::SE_DACL_PRESENT;
+            if dacl.is_null() {
+                parts.control |= sd::SE_DACL_PROTECTED;
+            } else {
+                match acl_of(dacl) {
+                    Ok(a) => parts.dacl = Some(a),
+                    Err(e) => return e,
+                }
+            }
+        }
+        if info & 0x18 != 0 {
+            parts.control |= sd::SE_SACL_PRESENT;
+            if !sacl.is_null() {
+                match acl_of(sacl) {
+                    Ok(a) => parts.sacl = Some(a),
+                    Err(e) => return e,
+                }
+            }
+        }
+    }
+    let rel = parts.to_relative();
+    // SAFETY: a local self-relative descriptor.
+    status_error(unsafe { NtSetSecurityObject(handle, info, rel.as_ptr()) })
 }
 
 // ----- the user ---------------------------------------------------------------------------
@@ -341,7 +605,11 @@ pub unsafe extern "system" fn LookupPrivilegeValueW(_system: *const u16, name: *
             }
             TRUE
         }
-        None => fail(ERROR_NO_SUCH_PRIVILEGE),
+        None => {
+            // SAFETY: checked non-null; the failed call sets the LUID to 0:0.
+            unsafe { luid.write(0) };
+            fail(ERROR_NO_SUCH_PRIVILEGE)
+        }
     }
 }
 

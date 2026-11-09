@@ -732,8 +732,12 @@ pub fn set_information_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resul
                     let (_, dir) = file_handle(sys, &caller, Handle(root), 0)?;
                     RenameTo::Relative { dir, path: name }
                 } else if name.first() == Some(&(b'\\' as u16)) {
-                    let attrs =
-                        Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE };
+                    let attrs = Attributes {
+                        root: None,
+                        name: Some(name),
+                        attributes: poly_ntobj::OBJ_CASE_INSENSITIVE,
+                        security: None,
+                    };
                     let (volume, path) =
                         sys.io.resolve_device_path(&mut sys.objects, &caller, &attrs.as_object_attributes())?;
                     RenameTo::Volume { volume, path }

@@ -147,9 +147,33 @@ impl ObjectType {
                 (FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE, FILE_ALL_ACCESS)
             }
             ObjectType::Key => (KEY_READ, KEY_WRITE, KEY_EXECUTE, KEY_ALL_ACCESS),
-            ObjectType::Process => (R, W, X | SYNCHRONIZE, PROCESS_ALL_ACCESS),
-            ObjectType::Thread => (R, W, X | SYNCHRONIZE, THREAD_ALL_ACCESS),
-            ObjectType::Token => (TOKEN_READ, TOKEN_WRITE, TOKEN_EXECUTE, TOKEN_ALL_ACCESS),
+            // Read: VM read and query; write: the rights that change the process or
+            // thread; execute: terminate, wait and the limited query (spec sheets: the
+            // default descriptors of a process and a thread).
+            ObjectType::Process => (
+                R | PROCESS_VM_READ | PROCESS_QUERY_INFORMATION,
+                W | PROCESS_CREATE_THREAD
+                    | PROCESS_VM_OPERATION
+                    | PROCESS_VM_WRITE
+                    | PROCESS_DUP_HANDLE
+                    | PROCESS_CREATE_PROCESS
+                    | PROCESS_SET_QUOTA
+                    | PROCESS_SET_INFORMATION
+                    | PROCESS_SUSPEND_RESUME,
+                X | SYNCHRONIZE | PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
+                PROCESS_ALL_ACCESS,
+            ),
+            ObjectType::Thread => (
+                R | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION | THREAD_QUERY_LIMITED_INFORMATION,
+                W | THREAD_TERMINATE
+                    | THREAD_SUSPEND_RESUME
+                    | THREAD_SET_CONTEXT
+                    | THREAD_SET_INFORMATION
+                    | THREAD_SET_LIMITED_INFORMATION,
+                X | SYNCHRONIZE | THREAD_RESUME,
+                THREAD_ALL_ACCESS,
+            ),
+            ObjectType::Token => (0x2_001A, 0x2_01E0, 0x2_0005, TOKEN_ALL_ACCESS),
         };
         GenericMapping { read, write, execute, all }
     }

@@ -104,7 +104,17 @@ impl ObjectManager {
         self.check_exclusive(id, caller.process, attributes)?;
         let h = &self.obj(id).header;
         let force = attributes & OBJ_FORCE_ACCESS_CHECK != 0;
-        let granted = access::grant(h.kind, desired, h.allowed, caller.mode, force, caller.privileges)?;
+        let privileges = self.effective_privileges(caller);
+        let mut granted = access::grant(h.kind, desired, h.allowed, caller.mode, force, privileges)?;
+        // The descriptor and the caller's token (ADR 0171).
+        if let Some(r) = self.dacl_grant(caller, id, desired, force) {
+            let from_dacl = r?;
+            granted = if h.kind.generic_mapping().map(desired) & MAXIMUM_ALLOWED != 0 {
+                granted & from_dacl
+            } else {
+                from_dacl
+            };
+        }
         let flags = HandleFlags { inherit: attributes & OBJ_INHERIT != 0, protect_from_close: false };
         self.new_handle(Self::target_table(caller, attributes), id, granted, flags, caller.process)
     }
@@ -161,6 +171,7 @@ impl ObjectManager {
         if name.is_empty() {
             let id = self.insert(object);
             self.add_pointer(id);
+            self.assign_new_security(caller, id, kind, attrs.security, false);
             let handle = self.new_handle(table, id, granted, flags, caller.process);
             self.release_pointer(id);
             return handle.map(|handle| Created { handle, object: id, status: STATUS_SUCCESS });
@@ -218,6 +229,7 @@ impl ObjectManager {
                 self.link(parent, &name, id);
                 self.release_pointer(parent);
                 self.add_pointer(id);
+                self.assign_new_security(caller, id, kind, attrs.security, true);
                 let handle = self.new_handle(table, id, granted, flags, caller.process);
                 self.release_pointer(id);
                 handle.map(|handle| Created { handle, object: id, status: STATUS_SUCCESS })

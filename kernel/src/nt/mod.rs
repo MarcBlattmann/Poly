@@ -595,6 +595,8 @@ struct HandlesFor {
     process_access: u32,
     thread_access: u32,
     inherit_handles: bool,
+    /// The primary token it gets, else a copy of the creator's (ADR 0171).
+    token: Option<u64>,
 }
 
 /// Handles to a new process and its first thread.
@@ -639,6 +641,21 @@ fn start_params(
         };
         let start = exec::start_process_from(&mut s.sys, proc, &mut b, file, NTDLL, None, thread, inherit_from);
         let start = start.and_then(|ps| {
+            // Its token (a copy of its creator's, or the one given) and the
+            // descriptors of its objects (ADR 0171).
+            poly_personality_nt::security::inherit_token(
+                &mut s.sys,
+                pid,
+                handles.map(|h| h.caller.process),
+                handles.and_then(|h| h.token),
+                thread,
+            )?;
+            poly_personality_nt::security::assign_process_security(
+                &mut s.sys,
+                handles.map(|h| &h.caller),
+                proc.object,
+                proc.threads.first().map(|t| t.object),
+            );
             // The process parameters: image path, command line,
             // environment and current directory (ADR 0073, 0079).
             let base = poly_personality_nt::params::write(proc, &mut b, ps.peb, params)?;
@@ -713,6 +730,7 @@ fn create_process(
         process_access: req.process_access,
         thread_access: req.thread_access,
         inherit_handles: req.inherit_handles,
+        token: req.token,
     };
     let (start, handles) = start_params(&process, &memory, &req.image, pid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");

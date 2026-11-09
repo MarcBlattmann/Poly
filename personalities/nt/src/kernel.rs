@@ -116,6 +116,9 @@ pub struct ProcessCreate {
     /// Its first thread starts suspended, until `NtResumeThread` (ADR
     /// 0089: `CREATE_SUSPENDED`).
     pub suspended: bool,
+    /// The primary token the new process gets (`CreateProcessAsUserW`, ADR
+    /// 0171); `None`: a copy of its creator's.
+    pub token: Option<u64>,
 }
 
 /// What [`NtKernel::create_process`] produced: handles in the caller's

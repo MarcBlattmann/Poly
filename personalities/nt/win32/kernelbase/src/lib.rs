@@ -34,6 +34,7 @@ mod pipe;
 mod privilege;
 mod process;
 mod registry;
+mod secdata;
 mod security;
 mod spawn;
 mod sync;

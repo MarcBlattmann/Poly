@@ -517,6 +517,7 @@ pub fn open_for_process(
             root,
             name: Some(poly_ntobj::name::wide(name)),
             attributes: poly_ntobj::OBJ_CASE_INSENSITIVE,
+            security: None,
         };
         let access = FILE_GENERIC_READ | FILE_GENERIC_WRITE;
         let share = FILE_SHARE_READ | FILE_SHARE_WRITE;

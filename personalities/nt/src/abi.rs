@@ -141,11 +141,18 @@ pub struct Attributes {
     pub root: Option<Handle>,
     pub name: Option<Vec<u16>>,
     pub attributes: u32,
+    /// The security descriptor (self-relative), if the caller gave one.
+    pub security: Option<Vec<u8>>,
 }
 
 impl Attributes {
     pub fn as_object_attributes(&self) -> poly_ntobj::ObjectAttributes<'_> {
-        poly_ntobj::ObjectAttributes { root: self.root, name: self.name.as_deref(), attributes: self.attributes }
+        poly_ntobj::ObjectAttributes {
+            root: self.root,
+            name: self.name.as_deref(),
+            attributes: self.attributes,
+            security: self.security.as_deref(),
+        }
     }
 }
 
@@ -169,7 +176,73 @@ pub fn read_attributes<K: NtKernel>(k: &mut K, addr: u64) -> Result<Attributes, 
     let name = q(16);
     let attributes = u32::from_le_bytes(b[24..28].try_into().expect("4 bytes"));
     let name = if name == 0 { None } else { Some(read_unicode(k, name)?) };
-    Ok(Attributes { root: (root != 0).then_some(Handle(root)), name, attributes })
+    let descriptor = q(32);
+    let security = if descriptor == 0 { None } else { Some(read_security_descriptor(k, descriptor)?) };
+    Ok(Attributes { root: (root != 0).then_some(Handle(root)), name, attributes, security })
+}
+
+/// Capture the security descriptor at `addr` (absolute or self-relative)
+/// as self-relative bytes (ADR 0171): revision 1 required
+/// (`STATUS_UNKNOWN_REVISION`), SIDs and ACLs as far as their headers say.
+pub fn read_security_descriptor<K: NtKernel>(k: &mut K, addr: u64) -> Result<Vec<u8>, NtStatus> {
+    use poly_security::sd::{self, Parts};
+    let mut h = [0u8; sd::RELATIVE_HEADER];
+    read(k, addr, &mut h)?;
+    if h[0] != sd::SECURITY_DESCRIPTOR_REVISION {
+        return Err(NtStatus(0xC000_0058));
+    }
+    let control = u16::from_le_bytes([h[2], h[3]]);
+    let relative = control & sd::SE_SELF_RELATIVE != 0;
+    let mut ptrs = [0u64; 4]; // owner, group, sacl, dacl
+    if relative {
+        for (i, at) in [sd::REL_OWNER, sd::REL_GROUP, sd::REL_SACL, sd::REL_DACL].into_iter().enumerate() {
+            let off = u32::from_le_bytes([h[at], h[at + 1], h[at + 2], h[at + 3]]);
+            ptrs[i] = if off == 0 { 0 } else { addr + u64::from(off) };
+        }
+    } else {
+        let mut rest = [0u8; sd::SECURITY_DESCRIPTOR_MIN_LENGTH - sd::RELATIVE_HEADER];
+        read(k, addr + sd::RELATIVE_HEADER as u64, &mut rest)?;
+        let mut full = [0u8; sd::SECURITY_DESCRIPTOR_MIN_LENGTH];
+        full[..sd::RELATIVE_HEADER].copy_from_slice(&h);
+        full[sd::RELATIVE_HEADER..].copy_from_slice(&rest);
+        for (i, at) in [sd::ABS_OWNER, sd::ABS_GROUP, sd::ABS_SACL, sd::ABS_DACL].into_iter().enumerate() {
+            ptrs[i] = u64::from_le_bytes(full[at..at + 8].try_into().expect("8 bytes"));
+        }
+    }
+    let sid_at = |k: &mut K, p: u64| -> Result<Option<Vec<u8>>, NtStatus> {
+        if p == 0 {
+            return Ok(None);
+        }
+        let mut hd = [0u8; 8];
+        read(k, p, &mut hd)?;
+        if hd[0] != poly_security::sid::SID_REVISION || usize::from(hd[1]) > poly_security::sid::SID_MAX_SUB_AUTHORITIES
+        {
+            return Err(NtStatus(0xC000_0078));
+        }
+        let mut b = alloc::vec![0u8; poly_security::sid::length_required(hd[1]) as usize];
+        read(k, p, &mut b)?;
+        Ok(Some(b))
+    };
+    let owner = sid_at(k, ptrs[0])?;
+    let group = sid_at(k, ptrs[1])?;
+    let acl_at = |k: &mut K, p: u64, present: bool| -> Result<Option<Vec<u8>>, NtStatus> {
+        if p == 0 || !present {
+            return Ok(None);
+        }
+        let mut hd = [0u8; 8];
+        read(k, p, &mut hd)?;
+        let size = usize::from(u16::from_le_bytes([hd[2], hd[3]]));
+        if size < 8 || !(2..=4).contains(&hd[0]) {
+            return Err(NtStatus(0xC000_0077));
+        }
+        let mut b = alloc::vec![0u8; size];
+        read(k, p, &mut b)?;
+        Ok(Some(b))
+    };
+    let sacl = acl_at(k, ptrs[2], control & sd::SE_SACL_PRESENT != 0)?;
+    let dacl = acl_at(k, ptrs[3], control & sd::SE_DACL_PRESENT != 0)?;
+    Ok(Parts { revision: h[0], sbz1: h[1], control: control & !sd::SE_SELF_RELATIVE, owner, group, sacl, dacl }
+        .to_relative())
 }
 
 /// UTF-16 code units as little-endian bytes.

@@ -139,7 +139,8 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
     }
     let params = crate::params::read(params_at, &mut |addr, buf| abi::read(k, addr, buf))?;
     let name = image_nt_name(&params.image_path)?;
-    let attrs = abi::Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE };
+    let attrs =
+        abi::Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE, security: None };
     let image = crate::io::services::with_named(
         k,
         &attrs,
@@ -148,6 +149,24 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         |sys, cookie| sys.io.read_all(cookie),
     )?;
     let all = |a: u32, all: u32| if a == 0 { all } else { a };
+    // Poly's own flag: CreateInfo is a handle to the primary token to give it.
+    let given_token = if process_flags & PROCESS_CREATE_FLAGS_POLY_TOKEN != 0 {
+        let h = abi::arg(k, regs, 9)?;
+        let id = crate::security::token_of(
+            k,
+            h,
+            poly_security::token::TOKEN_ASSIGN_PRIMARY
+                | poly_security::token::TOKEN_DUPLICATE
+                | poly_security::token::TOKEN_QUERY,
+        )?;
+        let kind = k.with_state(|sys, _, _| sys.objects.security.token(id).map(|t| t.kind));
+        if kind != Some(poly_security::token::TOKEN_PRIMARY) {
+            return Err(poly_ntobj::NtStatus(0xC000_00A8));
+        }
+        Some(id)
+    } else {
+        None
+    };
     let req = crate::kernel::ProcessCreate {
         image,
         params,
@@ -155,6 +174,7 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         thread_access: all(thread_access, poly_ntobj::access::THREAD_ALL_ACCESS),
         inherit_handles: process_flags & PROCESS_CREATE_FLAGS_INHERIT_HANDLES != 0,
         suspended: thread_flags & THREAD_CREATE_FLAGS_CREATE_SUSPENDED != 0,
+        token: given_token,
     };
     let created = k.create_process(req)?;
     return_handle(k, process_out, created.process)?;
