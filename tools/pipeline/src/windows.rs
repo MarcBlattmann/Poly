@@ -36,9 +36,10 @@ pub const CORPUS_DIR: &str = "tests/windows";
 pub const SUPPORT_CRATE: &str = "tests/windows/support";
 pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// The only DLLs a test program may import from (by name): the native
-/// API, `kernel32`, and the GUI's `user32` and `gdi32` (Phase 7's window,
-/// message and painting entries).
-pub const ALLOWED_DLLS: &[&str] = &["ntdll.dll", "kernel32.dll", "user32.dll", "gdi32.dll"];
+/// API, `kernel32`, the GUI's `user32` and `gdi32` (Phase 7's window,
+/// message and painting entries), `advapi32` (the security model: tokens, SIDs, ACLs,
+/// security descriptors, account lookup) and `userenv` (AppContainer SIDs).
+pub const ALLOWED_DLLS: &[&str] = &["ntdll.dll", "kernel32.dll", "user32.dll", "gdi32.dll", "advapi32.dll", "userenv.dll"];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
 
