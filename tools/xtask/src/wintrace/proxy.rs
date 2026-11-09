@@ -184,8 +184,9 @@ fn package_toml(name: &str, lib: &str, build: &str, lib_name: &str) -> String {
 
 /// Write the generated workspace (the logger and every proxy) into `dir`;
 /// `agg` takes the counting logger `tools/wintrace/polytrace-agg` (the
-/// Chrome kit) instead of `polytrace`.
-pub fn generate_with(dir: &Path, repo: &Path, proxies: &[Proxy], agg: bool) -> Result<()> {
+/// Chrome kit) instead of `polytrace`; `sync` takes `polytrace-sync` (the
+/// Poly bring-up kit, ADR 0155: caller addresses, records written at once).
+pub fn generate_with(dir: &Path, repo: &Path, proxies: &[Proxy], agg: bool, sync: bool) -> Result<()> {
     let write = |path: PathBuf, text: String| -> Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -194,7 +195,13 @@ pub fn generate_with(dir: &Path, repo: &Path, proxies: &[Proxy], agg: bool) -> R
     };
     let _ = std::fs::remove_dir_all(dir);
     let tracer = repo.join("tools/wintrace");
-    let logger = if agg { "polytrace-agg" } else { "polytrace" };
+    let logger = if agg {
+        "polytrace-agg"
+    } else if sync {
+        "polytrace-sync"
+    } else {
+        "polytrace"
+    };
     let mut members = vec!["\"polytrace\"".to_string()];
     members.extend(proxies.iter().map(|p| format!("{:?}", p.crate_name)));
     write(
