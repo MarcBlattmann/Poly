@@ -23,9 +23,18 @@ implementation is **observed behaviour** written up as a spec.
 | **Held-out** tests | writes them | ❌ never |
 | Open-source code under permissive licences (XNU/APSL, BSD, MIT) for *behaviour* | ✅ read | ❌ |
 | Linux source (GPL), Wine source (LGPL), ReactOS (GPL) for *behaviour* | ✅ read | ❌ |
+| Running third-party tools as black boxes: compilers, linkers and assemblers (clang, lld, gcc) to build test programs and fixtures; emulators (QEMU, qemu-user) to run them; comparing only their inputs and outputs | ✅ | ✅ (outputs only, never their source) |
+| Third-party apps under test (Chrome, 7-Zip, ...): running them, their logs, their import/export *names*; downloaded at build time, never committed or redistributed | ✅ | ✅ (running on Poly; not their source) |
 | Decompiling, disassembling or debugging Microsoft/Apple binaries' internals | ❌ | ❌ |
 | Leaked source code of any kind | ❌ | ❌ |
 | Copying code from any project into this repo | ❌ | ❌ |
+
+Tools used as black boxes are not inputs to our code: what they produce is
+either a test artefact (a fixture, a test program) or an observation (an
+output to compare against), never something copied into Poly. Their licences
+(GPL for QEMU and gcc) do not reach Poly because nothing of them is linked or
+copied in. Their *source* stays off limits to implementers like any other
+third-party source.
 
 ## Role separation
 

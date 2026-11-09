@@ -103,7 +103,7 @@ kernel, and all three share one core. More detail in
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 0 | 0 | 35 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 3 | 1,808 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,155 | 72 | 4 | 2,826 | 53,977 | 0 | 73,276 |
+| Windows | user-mode DLL exports | 130,198 | 72 | 4 | 2,866 | 53,980 | 0 | 73,276 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 0 | 517 | 0 | 0 |
 | macOS | framework API | 741,217 | 0 | 0 | 0 | 741,217 | 0 | 0 |
 
@@ -114,6 +114,7 @@ Seeded from (names only):
 - `chrome-win-trace`: Calls Chrome for Testing 157.0.8103.38 (win64) made on real Windows, recorded with the API tracer (specs/windows/apps/chrome) @ `157.0.8103.38`
 - `linux-syscall-tbl`: Linux arch/x86/entry/syscalls/syscall_64.tbl @ `f47d223627f80cb7a1eb14c585fe6cb35de5e984`
 - `macos-sdk`: macOS SDK .tbd stubs (exported symbols and Objective-C classes) @ `macOS SDK 27.0 (26A425)`
+- `ms-learn-dwrite`: Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `poly-adr-0132`: Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents @ `ADR 0132`
 - `wine-spec`: Wine .spec export lists (wine-mirror/wine dlls/*/*.spec) @ `840a939ee526137639665ff5f587224d6a36403f`
 - `xnu-mach-traps`: XNU osfmk/kern/syscall_sw.c mach_trap_table @ `f6217f891ac0bb64f3d375211650a4c1ff8ca1ea`
@@ -131,9 +132,11 @@ statically linked BusyBox from the host (`busybox-static` on Debian and
 Ubuntu) or builds the pinned release.
 
 ```sh
-cargo xtask start   # a menu of everything that boots: the desktop, Chromium, the shells, boot tests, CI
+cargo xtask start   # a menu of everything that boots: the desktop (with Chromium, on by default), the shells, boot tests, CI
                     # (it remembers your choice: next time Enter runs it again; --last skips the menu)
-cargo xtask desktop # boot Poly's desktop in QEMU's window (no test apps in the image or the launcher)
+cargo xtask desktop --chromium # Poly's desktop with Chromium, the default browser (the menu's default; the first
+                    # start downloads about 230 MB of Debian packages and makes a 1.3 GB disk image, kept after that)
+cargo xtask desktop # the desktop without Chromium, from a small initramfs (no test apps in the image or the launcher)
 cargo xtask desktop --test-apps # add the test apps: Poly Demo, Wayland Test Client, Demo Window, Poly Fill, Send Test Notification
 cargo xtask run     # boot the kernel in QEMU (Ctrl-A X to quit)
 cargo xtask run --busybox   # boot into BusyBox's init and shell (`poweroff` quits; add console=tty1 for the screen)

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "gfacen_custom",
+      "exe_sha256": "2154b96c42a1a462aee8ff2a539bf6de835c571631ffd91bab4735ca4cdc4f31",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QWxwaGEgZm9udCAwIHNpbSAwOiAweDAwMDAwMDAwIGVuLXVzPVJlZ3VsYXIKQWxwaGEgZm9udCAxIHNpbSAwOiAweDAwMDAwMDAwIGVuLXVzPUl0YWxpYwpBbHBoYSBmb250IDIgc2ltIDA6IDB4MDAwMDAwMDAgZW4tdXM9Qm9sZApBbHBoYSBmb250IDMgc2ltIDA6IDB4MDAwMDAwMDAgZW4tdXM9Qm9sZCBJdGFsaWMKQWxwaGEgZm9udCA0IHNpbSAyOiAweDAwMDAwMDAwIGVuLXVzPU9ibGlxdWUKQWxwaGEgZm9udCA1IHNpbSAyOiAweDAwMDAwMDAwIGVuLXVzPUJvbGQgT2JsaXF1ZQogQmV0YSBmb250IDAgc2ltIDA6IDB4MDAwMDAwMDAgZW4tdXM9TGlnaHQKIEJldGEgZm9udCAxIHNpbSAwOiAweDAwMDAwMDAwIGVuLXVzPVJlZ3VsYXIKIEJldGEgZm9udCAyIHNpbSAwOiAweDAwMDAwMDAwIGVuLXVzPUNvbmRlbnNlZAogQmV0YSBmb250IDMgc2ltIDA6IDB4MDAwMDAwMDAgZW4tdXM9QmxhY2sKIEJldGEgZm9udCA0IHNpbSAyOiAweDAwMDAwMDAwIGVuLXVzPUxpZ2h0IE9ibGlxdWUKIEJldGEgZm9udCA1IHNpbSAyOiAweDAwMDAwMDAwIGVuLXVzPU9ibGlxdWUKIEJldGEgZm9udCA2IHNpbSAyOiAweDAwMDAwMDAwIGVuLXVzPUNvbmRlbnNlZCBPYmxpcXVlCiBCZXRhIGZvbnQgNyBzaW0gMTogMHgwMDAwMDAwMCBlbi11cz1Db25kZW5zZWQgQm9sZAogQmV0YSBmb250IDggc2ltIDM6IDB4MDAwMDAwMDAgZW4tdXM9Q29uZGVuc2VkIEJvbGQgT2JsaXF1ZQogQmV0YSBmb250IDkgc2ltIDI6IDB4MDAwMDAwMDAgZW4tdXM9QmxhY2sgT2JsaXF1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Alpha font 0 sim 0: 0x00000000 en-us=Regular\nAlpha font 1 sim 0: 0x00000000 en-us=Italic\nAlpha font 2 sim 0: 0x00000000 en-us=Bold\nAlpha font 3 sim 0: 0x00000000 en-us=Bold Italic\nAlpha font 4 sim 2: 0x00000000 en-us=Oblique\nAlpha font 5 sim 2: 0x00000000 en-us=Bold Oblique\n Beta font 0 sim 0: 0x00000000 en-us=Light\n Beta font 1 sim 0: 0x00000000 en-us=Regular\n Beta font 2 sim 0: 0x00000000 en-us=Condensed\n Beta font 3 sim 0: 0x00000000 en-us=Black\n Beta font 4 sim 2: 0x00000000 en-us=Light Oblique\n Beta font 5 sim 2: 0x00000000 en-us=Oblique\n Beta font 6 sim 2: 0x00000000 en-us=Condensed Oblique\n Beta font 7 sim 1: 0x00000000 en-us=Condensed Bold\n Beta font 8 sim 3: 0x00000000 en-us=Condensed Bold Oblique\n Beta font 9 sim 2: 0x00000000 en-us=Black Oblique\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}

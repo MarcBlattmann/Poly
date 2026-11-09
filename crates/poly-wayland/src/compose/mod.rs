@@ -13,6 +13,7 @@
 //! (HiDPI): a window whose buffer scale equals the output's is copied pixel
 //! for pixel, others are scaled by nearest neighbour.
 
+mod busy;
 mod frame;
 pub mod paint;
 mod render;
@@ -21,7 +22,8 @@ mod text;
 
 pub use frame::{BORDER, BUTTON_GAP, CLOSE_SIZE, CORNER_RADIUS, TITLE_HEIGHT, Theme};
 pub use scene::{
-    Backdrop, CURSOR_SIZE, Content, CursorLook, Hit, Placement, Scene, View, Window, WindowId, buffer_point,
+    BUSY_PHASES, BUSY_SIZE, Backdrop, CURSOR_SIZE, Content, CursorLook, Hit, Placement, Scene, View, Window, WindowId,
+    buffer_point,
 };
 pub use text::{BitmapFont, TextRenderer};
 

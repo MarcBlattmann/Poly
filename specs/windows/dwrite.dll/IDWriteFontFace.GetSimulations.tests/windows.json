@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "gface_props",
+      "exe_sha256": "e7bea59b7606d105d716a4218267e59a116489f92778b6a14a25594ffdda2ab4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2ltdWxhdGlvbnMgMHgwOiAweDAwMDAwMDAwIC0+IHR5cGUgMSBpbmRleCAwIHNpbXVsYXRpb25zIDAgc3ltYm9sIDAgZ2x5cGhzIDgKc2ltdWxhdGlvbnMgMHgxOiAweDAwMDAwMDAwIC0+IHR5cGUgMSBpbmRleCAwIHNpbXVsYXRpb25zIDEgc3ltYm9sIDAgZ2x5cGhzIDgKc2ltdWxhdGlvbnMgMHgyOiAweDAwMDAwMDAwIC0+IHR5cGUgMSBpbmRleCAwIHNpbXVsYXRpb25zIDIgc3ltYm9sIDAgZ2x5cGhzIDgKc2ltdWxhdGlvbnMgMHgzOiAweDAwMDAwMDAwIC0+IHR5cGUgMSBpbmRleCAwIHNpbXVsYXRpb25zIDMgc3ltYm9sIDAgZ2x5cGhzIDgKc2ltdWxhdGlvbnMgMHg0OiAweDgwMDcwMDU3IG91dF91bnRvdWNoZWQ9ZmFsc2Ugb3V0X251bGw9dHJ1ZQpzaW11bGF0aW9ucyAweDg6IDB4ODAwNzAwNTcgb3V0X3VudG91Y2hlZD1mYWxzZSBvdXRfbnVsbD10cnVlCnNpbXVsYXRpb25zIDB4ZmY6IDB4ODAwNzAwNTcgb3V0X3VudG91Y2hlZD1mYWxzZSBvdXRfbnVsbD10cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "simulations 0x0: 0x00000000 -> type 1 index 0 simulations 0 symbol 0 glyphs 8\nsimulations 0x1: 0x00000000 -> type 1 index 0 simulations 1 symbol 0 glyphs 8\nsimulations 0x2: 0x00000000 -> type 1 index 0 simulations 2 symbol 0 glyphs 8\nsimulations 0x3: 0x00000000 -> type 1 index 0 simulations 3 symbol 0 glyphs 8\nsimulations 0x4: 0x80070057 out_untouched=false out_null=true\nsimulations 0x8: 0x80070057 out_untouched=false out_null=true\nsimulations 0xff: 0x80070057 out_untouched=false out_null=true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "gface_symbol",
+      "exe_sha256": "eed550b0522f7ead8d64b742e90d67fe89c06281e94c9ee103a58af67e6dd2c4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2xvdCAwOiAweDAwMDAwMDAwIElzU3ltYm9sRm9udCAwIGdseXBoIGluZGljZXMgWzEsIDIsIDQsIDAsIDAsIDAsIDVdCnNsb3QgMTogMHgwMDAwMDAwMCBJc1N5bWJvbEZvbnQgMSBnbHlwaCBpbmRpY2VzIFsxLCAyLCA0LCAxLCAyLCA0LCA1XQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "slot 0: 0x00000000 IsSymbolFont 0 glyph indices [1, 2, 4, 0, 0, 0, 5]\nslot 1: 0x00000000 IsSymbolFont 1 glyph indices [1, 2, 4, 1, 2, 4, 5]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

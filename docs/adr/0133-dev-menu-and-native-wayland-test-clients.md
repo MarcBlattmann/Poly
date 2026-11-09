@@ -36,7 +36,9 @@ Enter, or else I can change them. Run things in parallel where possible."
 - **This host's limits are shown, not hidden.** What cannot run here is
   greyed out with the reason ("needs a Linux host: run it in the poly-dev
   container or WSL"). What needs something made first says so, and Start
-  makes it first (Chromium's disk before `chromium run`).
+  makes it first. (ADR 0147: the Desktop's "With Chromium" switch, on by
+  default, replaced the entry "Desktop with Chromium"; the desktop itself
+  downloads and builds Chromium's disk, so nothing is made first for it.)
 - **It remembers.** The settings are saved in `target/poly-start.json` on
   each Start (per checkout, git-ignored with `target/`). The menu opens on
   them with Start focused, so Enter repeats the last run. A file that is

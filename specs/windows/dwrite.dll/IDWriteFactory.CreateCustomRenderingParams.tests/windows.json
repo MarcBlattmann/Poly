@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "rp_basic",
+      "exe_sha256": "f072ef8d176b202de82660bba54b44c6bf0ea9b64450d9e7043b0e3014866c83",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlUmVuZGVyaW5nUGFyYW1zIDB4MDAwMDAwMDA6IGdhbW1hIGluIDEuLjMgdHJ1ZSBjb250cmFzdCBpbiAwLi4yIHRydWUgY2xlYXJ0eXBlIGxldmVsIDAuLjEgdHJ1ZSBwaXhlbCBnZW9tZXRyeSA8PSAyIHRydWUgcmVuZGVyaW5nIG1vZGUgPD0gNiB0cnVlCmN1c3RvbSB0eXBpY2FsOiAweDAwMDAwMDAwIGdhbW1hIDE4MDAgY29udHJhc3QgNTAwIGNsZWFydHlwZSBsZXZlbCAxMDAwIHBpeGVsIGdlb21ldHJ5IDEgcmVuZGVyaW5nIG1vZGUgNApjdXN0b20gZ2FtbWEgMTogMHgwMDAwMDAwMCBnYW1tYSAxMDAwIGNvbnRyYXN0IDAgY2xlYXJ0eXBlIGxldmVsIDAgcGl4ZWwgZ2VvbWV0cnkgMCByZW5kZXJpbmcgbW9kZSAxCmN1c3RvbSBnYW1tYSAyLjIgZmxhdDogMHgwMDAwMDAwMCBnYW1tYSAyMjAwIGNvbnRyYXN0IDI1MCBjbGVhcnR5cGUgbGV2ZWwgNTAwIHBpeGVsIGdlb21ldHJ5IDIgcmVuZGVyaW5nIG1vZGUgMApjdXN0b20gcmVuZGVyaW5nIG1vZGUgNjogMHgwMDAwMDAwMCBnYW1tYSAyMDAwIGNvbnRyYXN0IDEwMDAgY2xlYXJ0eXBlIGxldmVsIDEwMDAgcGl4ZWwgZ2VvbWV0cnkgMSByZW5kZXJpbmcgbW9kZSA2CmN1c3RvbSBjb250cmFzdCAxMDogMHgwMDAwMDAwMCBnYW1tYSAyMDAwIGNvbnRyYXN0IDEwMDAwIGNsZWFydHlwZSBsZXZlbCAxMDAwIHBpeGVsIGdlb21ldHJ5IDEgcmVuZGVyaW5nIG1vZGUgNApjdXN0b20gZ2FtbWEgMDogMHg4MDA3MDA1NyBvdXRfbnVsbCB0cnVlCmN1c3RvbSBnYW1tYSBuZWdhdGl2ZTogMHg4MDA3MDA1NyBvdXRfbnVsbCB0cnVlCmN1c3RvbSBjb250cmFzdCBuZWdhdGl2ZTogMHg4MDA3MDA1NyBvdXRfbnVsbCB0cnVlCmN1c3RvbSBjbGVhcnR5cGUgbGV2ZWwgMS41OiAweDAwMDAwMDAwIG91dF9udWxsIGZhbHNlCmN1c3RvbSBjbGVhcnR5cGUgbGV2ZWwgLTAuMTogMHg4MDA3MDA1NyBvdXRfbnVsbCB0cnVlCmN1c3RvbSBwaXhlbCBnZW9tZXRyeSAzOiAweDgwMDcwMDU3IG91dF9udWxsIHRydWUKY3VzdG9tIHJlbmRlcmluZyBtb2RlIDc6IDB4ODAwNzAwNTcgb3V0X251bGwgdHJ1ZQpjdXN0b20gcmVuZGVyaW5nIG1vZGUgMTAwOiAweDgwMDcwMDU3IG91dF9udWxsIHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateRenderingParams 0x00000000: gamma in 1..3 true contrast in 0..2 true cleartype level 0..1 true pixel geometry <= 2 true rendering mode <= 6 true\ncustom typical: 0x00000000 gamma 1800 contrast 500 cleartype level 1000 pixel geometry 1 rendering mode 4\ncustom gamma 1: 0x00000000 gamma 1000 contrast 0 cleartype level 0 pixel geometry 0 rendering mode 1\ncustom gamma 2.2 flat: 0x00000000 gamma 2200 contrast 250 cleartype level 500 pixel geometry 2 rendering mode 0\ncustom rendering mode 6: 0x00000000 gamma 2000 contrast 1000 cleartype level 1000 pixel geometry 1 rendering mode 6\ncustom contrast 10: 0x00000000 gamma 2000 contrast 10000 cleartype level 1000 pixel geometry 1 rendering mode 4\ncustom gamma 0: 0x80070057 out_null true\ncustom gamma negative: 0x80070057 out_null true\ncustom contrast negative: 0x80070057 out_null true\ncustom cleartype level 1.5: 0x00000000 out_null false\ncustom cleartype level -0.1: 0x80070057 out_null true\ncustom pixel geometry 3: 0x80070057 out_null true\ncustom rendering mode 7: 0x80070057 out_null true\ncustom rendering mode 100: 0x80070057 out_null true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

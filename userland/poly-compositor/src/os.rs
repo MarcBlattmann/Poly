@@ -414,6 +414,13 @@ pub fn terminate(pid: Pid) {
     let _ = Child::from_pid(pid).terminate();
 }
 
+/// The parent of process `pid`, from `/proc/<pid>/stat` (the startup
+/// feedback follows a window's process up to the app that was launched).
+pub fn parent_pid(pid: Pid) -> Option<Pid> {
+    let text = poly_rt::fs::read_to_string(&format!("/proc/{pid}/stat")).ok()?;
+    poly_wayland::launch::parent_from_stat(&text)
+}
+
 /// Whether a process with id `pid` exists.
 pub fn alive(pid: Pid) -> bool {
     poly_rt::process::alive(pid)

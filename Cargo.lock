@@ -218,6 +218,10 @@ version = "0.0.1"
 [[package]]
 name = "poly-gdi"
 version = "0.0.1"
+dependencies = [
+ "poly-font",
+ "poly-gfx",
+]
 
 [[package]]
 name = "poly-gfx"
@@ -709,6 +713,7 @@ dependencies = [
  "poly-crypto",
  "poly-elf",
  "poly-ext2",
+ "poly-files",
  "poly-font",
  "poly-gfx",
  "poly-http",

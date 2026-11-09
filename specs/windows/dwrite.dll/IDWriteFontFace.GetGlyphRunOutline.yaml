@@ -1,0 +1,78 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwrite.dll/IDWriteFontFace.GetGlyphRunOutline
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64, dwrite.dll 10.0.26100.1"
+  machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
+  observed_by: spec-win-dwrite
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: the DirectWrite reference pages of the interfaces and methods named
+  here ("Programming Guide for DirectWrite", "Font Collections", "Custom
+  Font Sets"); dwrite.h, dwrite_1.h, dwrite_2.h, dwrite_3.h for constants,
+  structure layouts and the order of the methods in the vtables; winerror.h
+  for the HRESULTs; the OpenType specification (head, hhea, hmtx, maxp,
+  cmap, glyf, loca, name, OS/2, post) for the font tables the tests write.
+  Wine's tests were not read.
+summary: >
+  Delivers the outline of the glyphs to the application's geometry sink
+  (ID2D1SimplifiedGeometrySink: SetFillMode, SetSegmentFlags, BeginFigure,
+  AddLines, AddBeziers, EndFigure, Close): coordinates in pixels (em size
+  scaling the em to emSize), origin at the baseline start, y downwards (the
+  font's y up is flipped). TrueType quadratic curves arrive as cubic Bezier
+  segments. A run advances by the font's advances (or those given). The test
+  font has eight glyphs: 0 .notdef (a box 50..450 by 0..700), 1 space (no
+  outline), 2 a square 100..900 by 0..800 (U+0041), 3 a triangle (0,0)
+  (500,800) (1000,0), 4 a rounded shape through (500,0), (0,400), (500,800),
+  (1000,400) with off-curve corner points, 5 a box 200..600 by 0..500, 6 a
+  box 50..550 by -200..300, 7 a box 100..900 by 100..700; units per em 1000.
+  Pixel coordinates of textures and bounds have x to the right and y down,
+  the baseline origin at (0,0).
+interface:
+  signature: "HRESULT IDWriteFontFace::GetGlyphRunOutline(FLOAT emSize, const UINT16* glyphIndices, const FLOAT* glyphAdvances, const DWRITE_GLYPH_OFFSET* glyphOffsets, UINT32 glyphCount, BOOL isSideways, BOOL isRightToLeft, IDWriteGeometrySink* geometrySink)"
+  sink: "the sink receives SetFillMode(1: winding) once first (no SetSegmentFlags call), then per contour BeginFigure(start, FIGURE_BEGIN_FILLED 0), AddLines or AddBeziers, EndFigure(FIGURE_END_CLOSED 1), and nothing more: DirectWrite does not call Close() (the caller does); a point is two FLOATs, a Bezier segment six"
+  hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+rules:
+  lines: "square at em 100: fill1, M(10,0) L(10,-80) L(90,-80) L(90,0) E1 (the closing line back to the start is not delivered; the first point of the TrueType contour is the start); triangle at em 50: M(0,0) L(25,-40) L(50,0); box below the baseline at em 10: M(0.5,2) L(0.5,-3) L(5.5,-3) L(5.5,2)"
+  curves: "rounded shape at em 100: M(50,0) then four cubic segments C(16.667,0 0,-13.333 0,-40) C(0,-66.667 16.667,-80 50,-80) C(83.333,-80 100,-66.667 100,-40) C(100,-13.333 83.333,0 50,0), E1 (each quadratic curve with one off-curve point became a cubic with control points 2/3 of the way)"
+  empty: "space: SetFillMode only (no figures); no glyphs: the same"
+  notdef: "glyph 99 gives the outline of glyph 0"
+  run_positions: "two glyphs (2, 5) at em 10 without advances: the second starts at the first glyph's advance (10): M(1,0).. M(12,0)..; with advances 20 and 30: M(22,0)..; right to left with advances 20 and 30: the run is placed to the left of the origin: first glyph at x -9..-1, second at -25..-21; without advances right-to-left likewise"
+  sideways: "isSideways: the glyph is rotated a quarter turn: square at em 10 M(7.5,4) L(-0.5,4) L(-0.5,-4) L(7.5,-4)"
+  errors: "em size 0: E_INVALIDARG"
+errors:
+  E_INVALIDARG: "em size 0"
+side_effects: "none beyond the rules above"
+threading: "the objects are used from one thread; the shared factory and the system collection may be used from several, which is not tested"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every
+  test carries its own declarations: the COM vtable layouts (from the SDK
+  headers), the enumeration constants and a writer for small TrueType fonts.
+  The test fonts are written by the test itself (eight glyphs: .notdef,
+  space, a square, a triangle, a rounded shape, a small box, a box below the
+  baseline and a box for a code point outside the BMP) with names, weights,
+  widths, styles and metrics chosen per test, and are served to DirectWrite
+  from memory through loader objects the test implements
+  (IDWriteFontFileLoader with its stream, IDWriteFontCollectionLoader with
+  its enumerator) or, where a path is the point, from a file the test writes
+  beside itself. So the results do not depend on the oracle's font list.
+  Tests of the system collection print or check only what every Windows
+  installation provides (Arial, Segoe UI, Times New Roman and similar
+  families exist; their standard faces exist; relations between values) and
+  never the metrics or file names of those fonts. The eight font slots, the
+  loaders and the calls the loaders receive are in the test file.
+not_covered: >
+  glyph offsets; fonts with composite glyphs; CFF outlines; quadratic curves
+  with several consecutive off-curve points. the system collection's full
+  font list; downloadable (remote) fonts; collections with font files that
+  are TrueType collections or CFF fonts; variable fonts; colour fonts;
+  several threads; failure injection inside the loaders; behaviour of
+  different Windows versions (the oracle is one build).
