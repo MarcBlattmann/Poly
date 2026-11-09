@@ -42,6 +42,11 @@ fn plain_name(name: &str) -> bool {
 /// The proxies for a program's imports (in the order the DLLs first
 /// appear); `data` adds names to treat as variables.
 pub fn plan(imports: &[Import], data: &[String]) -> Result<Vec<Proxy>> {
+    plan_ex(imports, data, false)
+}
+
+/// [`plan`]; `chrome` adds [`CHROME_SIGNATURES`].
+pub fn plan_ex(imports: &[Import], data: &[String], chrome: bool) -> Result<Vec<Proxy>> {
     let mut out: Vec<Proxy> = Vec::new();
     for imp in imports {
         let real = imp.dll.to_ascii_lowercase();
@@ -75,7 +80,7 @@ pub fn plan(imports: &[Import], data: &[String]) -> Result<Vec<Proxy>> {
             }
             sym => {
                 if !p.funcs.iter().any(|f| &f.sym == sym) {
-                    let sig = signature(&real, sym).unwrap_or("").to_string();
+                    let sig = signature_ex(&real, sym, chrome).unwrap_or("").to_string();
                     p.funcs.push(ProxyFunc { sym: sym.clone(), sig, flags: flags_of(sym) });
                 }
             }
@@ -177,8 +182,10 @@ fn package_toml(name: &str, lib: &str, build: &str, lib_name: &str) -> String {
     )
 }
 
-/// Write the generated workspace (the logger and every proxy) into `dir`.
-pub fn generate(dir: &Path, repo: &Path, proxies: &[Proxy]) -> Result<()> {
+/// Write the generated workspace (the logger and every proxy) into `dir`;
+/// `agg` takes the counting logger `tools/wintrace/polytrace-agg` (the
+/// Chrome kit) instead of `polytrace`.
+pub fn generate_with(dir: &Path, repo: &Path, proxies: &[Proxy], agg: bool) -> Result<()> {
     let write = |path: PathBuf, text: String| -> Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -187,6 +194,7 @@ pub fn generate(dir: &Path, repo: &Path, proxies: &[Proxy]) -> Result<()> {
     };
     let _ = std::fs::remove_dir_all(dir);
     let tracer = repo.join("tools/wintrace");
+    let logger = if agg { "polytrace-agg" } else { "polytrace" };
     let mut members = vec!["\"polytrace\"".to_string()];
     members.extend(proxies.iter().map(|p| format!("{:?}", p.crate_name)));
     write(
@@ -201,8 +209,8 @@ pub fn generate(dir: &Path, repo: &Path, proxies: &[Proxy]) -> Result<()> {
         dir.join("polytrace/Cargo.toml"),
         package_toml(
             "polytrace",
-            &tracer.join("polytrace/src/lib.rs").to_string_lossy(),
-            &tracer.join("polytrace/build.rs").to_string_lossy(),
+            &tracer.join(logger).join("src/lib.rs").to_string_lossy(),
+            &tracer.join(logger).join("build.rs").to_string_lossy(),
             "polytrace",
         ),
     )?;

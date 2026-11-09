@@ -26,6 +26,11 @@ fn output_of(cmd: &mut Command) -> Result<String> {
 /// Build the logger and the proxies of `proxies` (`-Zbuild-std`, as ADR
 /// 0075's test programs); returns the directory with the DLLs.
 pub(super) fn build(proxies: &[Proxy]) -> Result<PathBuf> {
+    build_with(proxies, false)
+}
+
+/// [`build`]; `agg` builds the counting logger.
+fn build_with(proxies: &[Proxy], agg: bool) -> Result<PathBuf> {
     let repo = crate::root();
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
     let sysroot = PathBuf::from(output_of(Command::new(&rustc).current_dir(&repo).args(["--print", "sysroot"]))?);
@@ -34,8 +39,8 @@ pub(super) fn build(proxies: &[Proxy]) -> Result<PathBuf> {
         return Err(format!("{} not found: the rust-src component is needed", vendor.display()));
     }
     let gen_dir = work_dir().join("build");
-    generate(&gen_dir, &repo, proxies)?;
-    let target_dir = work_dir().join("cargo");
+    generate_with(&gen_dir, &repo, proxies, agg)?;
+    let target_dir = work_dir().join(if agg { "cargo-agg" } else { "cargo" });
     let flags = [
         "-Clinker=rust-lld".to_string(),
         "-Clinker-flavor=lld-link".into(),
@@ -131,4 +136,104 @@ pub fn build_kit(exe: &Path, out: &Path, data: &[String]) -> Result<Kit> {
     let text = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())? + "\n";
     std::fs::write(out.join(KIT_FILE), text).map_err(|e| format!("{KIT_FILE}: {e}"))?;
     Ok(Kit { dir: out.to_path_buf(), exe: name, proxies })
+}
+
+/// The Chrome kit (`trace-kit --agg`): the programs `exes` (the files of
+/// one application, in one directory) get the import names of every
+/// system DLL they import changed to a proxy's, and one set of proxies
+/// serves them all. A DLL that is one of `exes` (the application's own),
+/// is named in `skip`, or is not a `.dll` (`.drv`, `.cpl`) keeps its
+/// name and is not traced. With `agg` the logger counts instead of
+/// writing every call (`tools/wintrace/polytrace-agg`).
+pub fn build_kit_multi(exes: &[PathBuf], out: &Path, data: &[String], agg: bool, skip: &[String]) -> Result<Kit> {
+    let own: Vec<String> =
+        exes.iter().filter_map(|e| e.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase())).collect();
+    let traced = |low: &str| {
+        low.ends_with(".dll") && !own.iter().any(|o| o == low) && !skip.iter().any(|s| s.eq_ignore_ascii_case(low))
+    };
+    let mut imports: Vec<Import> = Vec::new();
+    let mut untraced: Vec<String> = Vec::new();
+    let mut programs: Vec<(String, Vec<u8>)> = Vec::new();
+    for exe in exes {
+        let bytes = std::fs::read(exe).map_err(|e| format!("{}: {e}", exe.display()))?;
+        let name = exe.file_name().ok_or("no file name")?.to_string_lossy().into_owned();
+        for imp in crate::winimports::imports_of(&bytes)? {
+            let low = imp.dll.to_ascii_lowercase();
+            if traced(&low) {
+                imports.push(imp);
+            } else {
+                untraced.push(low);
+            }
+        }
+        programs.push((name, bytes));
+    }
+    untraced.sort();
+    untraced.dedup();
+    let proxies = plan_ex(&imports, data, agg)?;
+    let mut renamed = Vec::new();
+    for (name, bytes) in &programs {
+        let r = rename_imports(bytes, |dll| {
+            let low = dll.to_ascii_lowercase();
+            proxies.iter().find(|p| p.real == low).map(|p| p.file.clone())
+        })
+        .map_err(|e| format!("{name}: {e}"))?;
+        renamed.push((name.clone(), r));
+    }
+    let built = build_with(&proxies, agg)?;
+    let _ = std::fs::remove_dir_all(out);
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    for (name, bytes) in &renamed {
+        std::fs::write(out.join(name), bytes).map_err(|e| format!("{}: {e}", out.display()))?;
+    }
+    let copy = |from: &str, to: &str| -> Result<()> {
+        std::fs::copy(built.join(from), out.join(to)).map(|_| ()).map_err(|e| format!("{from}: {e}"))
+    };
+    copy("polytrace.dll", "polytrace.dll")?;
+    for p in &proxies {
+        copy(&format!("{}.dll", p.crate_name), &p.file)?;
+    }
+    let mut files = serde_json::Map::new();
+    for f in renamed
+        .iter()
+        .map(|(n, _)| n.clone())
+        .chain(["polytrace.dll".to_string()])
+        .chain(proxies.iter().map(|p| p.file.clone()))
+    {
+        files.insert(f.clone(), Value::String(sha256_hex(&out.join(&f))));
+    }
+    let originals: Vec<Value> = exes
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "name": e.file_name().map(|n| n.to_string_lossy().into_owned()),
+                "sha256": sha256_hex(e),
+            })
+        })
+        .collect();
+    let manifest = serde_json::json!({
+        "format": "polytrace-kit/2",
+        "mode": if agg { "agg" } else { "full" },
+        "programs": originals,
+        "files": files,
+        "untraced_dlls": untraced,
+        "proxies": proxies.iter().map(|p| serde_json::json!({
+            "dll": p.real,
+            "file": p.file,
+            "functions": p.funcs.iter().map(|f| serde_json::json!({
+                "name": f.sym.to_string(),
+                "signature": f.sig,
+                "flags": f.flags,
+            })).collect::<Vec<_>>(),
+            "forwarded": p.data,
+        })).collect::<Vec<_>>(),
+        "run": "overlay this directory on a copy of the application; every process writes polytrace-<pid>.jsonl (POLYTRACE_OUT names another file, %p is the process id)",
+    });
+    let text = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())? + "\n";
+    std::fs::write(out.join(KIT_FILE), text).map_err(|e| format!("{KIT_FILE}: {e}"))?;
+    // The counting logger loads these in a confined child process, before its
+    // sandbox narrows the DLL search path (`polytrace-agg`, `agg::preload`).
+    let preload: String = proxies.iter().map(|p| format!("{}\n", p.file)).collect();
+    std::fs::write(out.join("polytrace-preload.txt"), preload).map_err(|e| format!("polytrace-preload.txt: {e}"))?;
+    let exe = renamed.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(", ");
+    Ok(Kit { dir: out.to_path_buf(), exe, proxies })
 }

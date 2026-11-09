@@ -1,0 +1,76 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/pidns_init              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; the container has its own pid namespace and /proc shows it; unprivileged user namespaces allowed"
+  observed_by: spec-linux-pkg
+  date: 2026-11-09
+summary: >
+  The first process of a PID namespace (the "init" of Flatpak, bubblewrap,
+  Chrome's sandbox and container runtimes). A namespace is made by
+  clone(CLONE_NEWPID), or by unshare(CLONE_NEWPID), after which only the
+  caller's later children are born in it; both need CAP_SYS_ADMIN in the user namespace that owns the
+  caller's current PID namespace. The child made that way is pid 1 and tid 1
+  of the new namespace, its parent shows as 0 (getppid), its children are
+  numbered 2, 3, 4 ... in creation order, wait4 by those numbers returns
+  their exit statuses, and after all of them were waited for wait4(-1) is
+  ECHILD, kill(2, 0) is ESRCH and kill(1, 0) (itself) is 0. Its
+  /proc/self/ns/pid is another namespace than its parent's (a different inode)
+  and equals its /proc/self/ns/pid_for_children. Seen through a procfs that was
+  mounted by the ancestor namespace (the one the test keeps using), the same
+  process has other numbers: /proc/self/status has "NSpid:" with two numbers
+  (the outer one first, 1 last), "NSpgid:" and "NSsid:" with two, "Pid:" equal to
+  the first NSpid number and not 1, "PPid:" equal to the creator's own number.
+  pidfd_open works for numbers of the namespace (2) and is ESRCH for a number
+  that does not exist in it (the creator's outer number is not visible there).
+  Namespaces nest: a process of level 1 makes level 2 the same way. In level 2
+  the init is pid 1 with parent 0; the first child the level-1 init makes is
+  pid 2 in level 1, so the level-2 init is pid 2 from level 1. Through the
+  initial /proc, /proc/self/status of the level-2 init has "NSpid:" with
+  three numbers (the number in the initial namespace first and equal to
+  "Pid:", then 2, then 1) and that of the level-1 init two; inside level 2 the
+  number 2 does not exist (kill is ESRCH) and the level-1 init cannot be
+  named at all. The three namespaces are three different inodes.
+  Init semantics. When pid 1 exits, every other process of the namespace is
+  killed with SIGKILL (a process blocked in read ends "killed by 9"; a process
+  that had been reparented to pid 1 and a process created by a thread of pid 1
+  that outlives the main thread's exit_group are killed as well); the creator
+  sees pid 1's own exit status. PR_SET_CHILD_SUBREAPER on a non-init process
+  inside the namespace takes the orphans of its descendants: a grandchild whose
+  parent exited has getppid() equal to the subreaper's pid (not 1) and
+  PR_GET_CHILD_SUBREAPER reads 1 for the subreaper. A child of pid 1 whose parent exits is
+  reparented to pid 1 (getppid() reads 1). Signals: a SIGKILL sent from the
+  ancestor namespace kills pid 1 (the wait status shows "killed by 9") and,
+  while it has a child, that child goes with it; with a handler installed,
+  SIGUSR1 sent from the ancestor namespace is delivered to pid 1 (a blocked
+  read returns EINTR and the handler ran); pid 1 itself can kill its children
+  with SIGTERM or SIGKILL, and their wait statuses show the signals. (A traced pid 1
+  also receives the signals it would otherwise ignore; that case is not tested.)
+returns:
+  creation: "clone(CLONE_NEWPID) returns the child's number in the creator's namespace (a number above 1); in the child getpid() is 1, gettid() 1, getppid() 0"
+  numbering: "children of the new init are 2, 3, 4 ... in order; the same process seen from the ancestor has NSpid with one more number per level"
+  namespace_files: "/proc/self/ns/pid differs from the parent's inode; /proc/self/ns/pid_for_children equals it inside; after unshare(CLONE_NEWPID) in the creator pid_for_children names the new namespace only once its init exists"
+  nested: "level 2 init: getpid 1, getppid 0, NSpid three numbers (outer, 2, 1)"
+  init_exit: "all other processes of the namespace die by SIGKILL; the outer parent sees pid 1's exit status"
+errors:
+  permission: "EPERM (1): CLONE_NEWPID without CAP_SYS_ADMIN in the owning user namespace (also alone for an unprivileged user; with CLONE_NEWUSER in the same call it works)"
+  esrch_inside: "ESRCH (3): kill or pidfd_open of a number that does not exist in the caller's namespace"
+  echild: "ECHILD (10): wait4(-1) after all children were waited for"
+side_effects: >
+  Processes of the namespace die when its init dies. The namespace is
+  destroyed when its last process is gone.
+threading: "a thread of init that outlives the main thread's exit_group is killed too"
+ordering:
+  - "children numbers are handed out in creation order starting at 2"
+  - "init exit kills the rest before the parent's wait returns"
+timing:
+  typical: "microseconds to create"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: CLONE_NEWPID 0x20000000 (linux/sched.h); PR_SET_CHILD_SUBREAPER 36,
+# PR_GET_CHILD_SUBREAPER 37 (linux/prctl.h). Every test is needs=root and
+# runs several processes, so syscall traces are not compared (syscalls=off);
+# the outputs are compared exactly.

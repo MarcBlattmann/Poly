@@ -131,6 +131,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0144](0144-client-side-frames-for-apps-that-ask.md) | A toplevel whose client asks for `client_side` (`zxdg_toplevel_decoration_v1.set_mode`) gets `configure(client_side)` and no Poly frame, its maximized and tiled sizes the whole area; every other toplevel keeps Poly's neutral frame (ADR 0106); Chromium shows one title bar instead of two | Accepted |
 | [0146](0146-app-icons-from-the-icon-theme-and-a-png-decoder.md) | Installed apps show their own icons: `poly-png` (a PNG decoder with its own inflater, every colour type and depth, Adam7, CRC and truncation checks, bounded memory), `Icon=` looked up in the hicolor theme and pixmaps (Icon Theme Specification) by `poly-shell::appicon`, scaled and cached, drawn in the launcher and the window switcher; Poly's own apps get original icons compiled into the shell, SVG-only apps keep their Lucide glyph; Chromium's entry has `Icon=chromium` | Accepted |
 | [0150](0150-ci-in-equal-sized-jobs.md) | CI jobs of equal length (about 7 minutes in all): boot test shards and `polycheck` slices combined into jobs by the workflow (`ci lint` checks every one runs), the Win32 modules and the apt packages' .deb files cached, prose-only pull requests skip the jobs that run programs, per-group times in the job summaries | Accepted |
+| [0151](0151-macos-plan-arm64-translator-and-aarch64-port.md) | macOS plan (owner decision): an arm64 → x86-64 translator first, so arm64-only Mac apps run on x86 PCs, in user space in the translated process on a shared A64 decoder (interpreter, then JIT); an aarch64 kernel port as groundwork (a boot stub on QEMU `virt` in CI, then the kernel's x86-64 code behind `crate::arch`); the order, the costs and the clean-room limits | Accepted |
 
 ## Decided by the owner
 
@@ -139,10 +140,12 @@ accepted ADR. Supersede it with a new one and link both ways.
 - **Menus:** per-window menus for every app; Mac apps' menu bars are drawn as
   a strip under Poly's neutral title bar, and the top ridge stays a pure status
   strip with nothing dropping down from it ([ADR 0107](0107-desktop-fbdev-input-routing-and-shell.md)).
+- **aarch64 and arm64 Mac apps:** both an arm64 → x86-64 translator, first, so
+  arm64-only Mac apps run on x86 PCs, and an aarch64 kernel port as groundwork
+  ([ADR 0151](0151-macos-plan-arm64-translator-and-aarch64-port.md)).
 
 ## Open decisions
 
 These are also marked ⚖️ in [ROADMAP.md](../ROADMAP.md) at the point where they block work.
 
-- **aarch64:** port the kernel to 64-bit ARM, or stay x86-64 only. Modern Mac apps
-  are increasingly arm64-only, so this decides how much of macOS is reachable.
+None at the moment.

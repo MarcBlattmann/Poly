@@ -63,6 +63,7 @@
 {"symbol":"DnsIsDynamicRegistrationEnabled","src":["wine-spec"]},
 {"symbol":"DnsIsStatusRcode","src":["wine-spec"]},
 {"symbol":"DnsIsStringCountValidForTextType","src":["wine-spec"]},
+{"symbol":"DnsIsZtEnabled","src":["chrome-win-trace"]},
 {"symbol":"DnsMapRcodeToStatus","src":["wine-spec"]},
 {"symbol":"DnsModifyRecordSet_A","src":["wine-spec"]},
 {"symbol":"DnsModifyRecordSet_UTF8","src":["wine-spec"]},
