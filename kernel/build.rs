@@ -58,6 +58,8 @@ fn embed_win32() {
         // ADR 0128.
         "gdi32.dll",
         "win32u.dll",
+        // ADR 0170.
+        "dwrite.dll",
     ] {
         match &dir {
             Some(d) => {

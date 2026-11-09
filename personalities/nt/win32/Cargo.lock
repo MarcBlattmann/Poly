@@ -73,6 +73,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dwrite"
+version = "0.0.1"
+dependencies = [
+ "poly-dwrite",
+ "poly-font",
+ "poly-win32-gui",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "gdi32"
 version = "0.0.1"
 dependencies = [
@@ -156,6 +166,17 @@ version = "0.0.1"
 dependencies = [
  "poly-seh",
 ]
+
+[[package]]
+name = "poly-dwrite"
+version = "0.0.1"
+dependencies = [
+ "poly-font",
+]
+
+[[package]]
+name = "poly-font"
+version = "0.0.1"
 
 [[package]]
 name = "poly-gdi"

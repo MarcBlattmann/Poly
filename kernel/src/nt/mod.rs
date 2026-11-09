@@ -102,6 +102,10 @@ pub static OLEAUT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleaut32.
 pub static GDI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/gdi32.dll"));
 pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"));
 
+/// Our `dwrite.dll` (ADR 0170), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
+pub static DWRITE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dwrite.dll"));
+
 mod test_crypto;
 
 /// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in

@@ -36,7 +36,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 23] = [
+pub const OUTPUTS: [&str; 24] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -63,6 +63,8 @@ pub const OUTPUTS: [&str; 23] = [
     // ADR 0128.
     "gdi32.dll",
     "win32u.dll",
+    // ADR 0170.
+    "dwrite.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -163,6 +165,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/gui",
             "personalities/nt/win32/gdi32",
             "personalities/nt/win32/win32u",
+            "personalities/nt/win32/dwrite",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
