@@ -270,6 +270,28 @@ pub fn resume_apc(tid: ThreadRef) -> NtStatus {
     match saved {
         Some(regs) => {
             let status = NtStatus(regs.rax as u32);
+            // A wait that returns `STATUS_USER_APC` runs every user APC that
+            // is queued before it returns (Learn: "Asynchronous Procedure
+            // Calls"): the next one starts now, with the same context saved.
+            if status == STATUS_USER_APC {
+                let next = with(|s| {
+                    let dispatcher = s.processes.values().find(|p| p.thread(tid).is_some()).map(|p| p.apc_dispatcher)?;
+                    let apc = s.ctl.get_mut(&tid)?.apcs.pop_front()?;
+                    s.ctl.get_mut(&tid)?.apc_saved = Some(regs);
+                    Some((dispatcher, apc))
+                });
+                if let Some((dispatcher, apc)) = next {
+                    let mut frame = regs;
+                    frame.rip = dispatcher;
+                    frame.r11 = apc.routine;
+                    frame.rcx = apc.arg1;
+                    frame.rdx = apc.arg2;
+                    frame.r8 = apc.arg3;
+                    frame.rsp = regs.rsp & !0xF;
+                    let _ = user::set_registers(&frame);
+                    return status;
+                }
+            }
             let _ = user::set_registers(&regs);
             status
         }

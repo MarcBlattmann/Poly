@@ -279,12 +279,16 @@ pub fn open_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
     let pid = ProcessId(abi::read_u64(k, client_ptr)? as u32);
     // No access at all is refused (Learn: "OpenProcess"); id 4 is Windows'
     // System process, which Poly does not have and nobody may open.
-    if access as u32 == 0 || pid.0 == SYSTEM_PROCESS_ID {
+    if access as u32 == 0 {
         return Err(STATUS_ACCESS_DENIED);
     }
     let caller = k.caller();
     let h = k.with_state(|sys, _, _| {
-        let id = sys.objects.process_object(pid).ok_or(STATUS_INVALID_CID)?;
+        let id = sys.objects.process_object(pid).ok_or(if pid.0 == SYSTEM_PROCESS_ID {
+            STATUS_ACCESS_DENIED
+        } else {
+            STATUS_INVALID_CID
+        })?;
         sys.objects.open_by_pointer(&caller, id, access as u32, attrs.attributes & poly_ntobj::OBJ_INHERIT)
     })?;
     return_handle(k, out, h)?;
@@ -292,7 +296,8 @@ pub fn open_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
 }
 
 /// The process id Windows gives its System process; Poly has none, and
-/// refuses to open it (the spec sheet of `OpenProcess`).
+/// where no process has that id the open is refused rather than not found
+/// (the spec sheet of `OpenProcess`).
 const SYSTEM_PROCESS_ID: u32 = 4;
 
 /// `NtOpenThread(ThreadHandle*, DesiredAccess, ObjectAttributes*,
