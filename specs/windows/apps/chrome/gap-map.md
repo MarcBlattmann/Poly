@@ -1242,3 +1242,14 @@ cannot be set (DEP 50, CFG and shadow stack 5, strict handle checks need both fl
   `C:/Users/Marc.Blattmann/poly-dev/handoff/spec-chrome-win-s3-window-1.png`.
 * Never run: anything of Chrome on Poly (it does not start yet), `polyd` boot tests (no kernel change), the implementer-side
   comparison of `poly-chrometrace/1` (no comparer yet).
+
+### Round 2 (`spec-chrome-win-2`)
+
+* Branch `spec-chrome-win-2` (from `origin/main`), pushed; nothing merged, no PR opened.
+* New: `tools/wintrace/proxy/common_agg.rs`, the `ctl` module of `tools/wintrace/polytrace-agg` (fault injection, mitigation probe/relax,
+  inherited trace sections, `OutputDebugString` diagnostics), `tools/sandboxdiff.py`, `traces/s2-sandboxed.trace.json`,
+  `traces/s2-sandbox-targets.json`, `traces/s1-fault-injection.csv`, sections 4a, 6a and 10a above, 12 spec sheets with tests under
+  `specs/windows/{advapi32.dll,kernel32.dll,userenv.dll}/` (27 tests: 14 visible, 13 held out), `tools/pipeline/src/windows.rs` allows
+  `advapi32.dll` and `userenv.dll` imports (the line also changes in `spec-win-sec`: merge by taking the union).
+* Machine: homeserver2 for everything (Windows 11 Home 25H2, 26200.9711, elevated administrator over SSH); the owner's PC only to build the kits.
+  The homeserver2 sshd reset connections for about an hour while the 220-run fault batch was running (it is the batch's load).
