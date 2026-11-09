@@ -207,7 +207,7 @@ in a run.
      from the Arm ARM's encoding fields (by an encoder that does not use
      poly-a64's decoder), and writes a 1,312-byte record of all registers,
      the flags and a 512-byte memory window. The two outputs are compared
-     record by record. Fifty-six families cover the classes above; branches
+     record by record. Fifty-four families cover the classes above; branches
      and exclusives are short assembly sequences. If poly-a64 stops in a
      block, the tool notes it and resumes at the next block. If qemu rejects
      a block (a mistake in the generator), the tool finds it by bisection and
