@@ -2013,6 +2013,8 @@ fn lint() -> Result {
             [
                 "tools/wintrace/polytrace/src/lib.rs",
                 "tools/wintrace/polytrace/build.rs",
+                "tools/wintrace/polytrace-agg/src/lib.rs",
+                "tools/wintrace/polytrace-agg/build.rs",
                 "tools/wintrace/proxy/common.rs",
             ]
             .map(|f| root().join(f)),

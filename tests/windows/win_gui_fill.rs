@@ -1,10 +1,12 @@
-//! A Windows GUI program for the desktop link's boot test (ADR 0131, boot
-//! group `desktop-win32`): it registers a class, creates an overlapped
-//! window "Poly Fill" at (40, 400), 400 x 300, shows it, fills its client
-//! area with one colour through GetDC / FillRect / ReleaseDC (WM_PAINT is
-//! a later slice), and keeps it up for a minute of messages before it
-//! destroys it and ends. On Poly's desktop the window shows up framed by
-//! Poly, its client area in the colour (`FILL`).
+//! A Windows GUI program for the desktop link's boot test (ADR 0131, ADR
+//! 0136, boot group `desktop-win32`): it registers a class, creates an
+//! overlapped window "Poly Fill" at (40, 400), 400 x 300, shows it, fills
+//! its client area with one colour through GetDC / FillRect / ReleaseDC,
+//! and keeps it up for a minute of messages before it destroys it and
+//! ends. A left click turns the fill green (`CLICKED`); typed characters
+//! are drawn at the top left, black on white, by its WM_PAINT handler. On
+//! Poly's desktop the window shows up framed by Poly, its client area in
+//! the colour (`FILL`), and repaints as the mouse and keyboard reach it.
 #![no_std]
 #![no_main]
 #![allow(non_camel_case_types)]
@@ -75,6 +77,9 @@ struct MSG {
 }
 
 const WM_DESTROY: u32 = 0x0002;
+const WM_PAINT: u32 = 0x000F;
+const WM_CHAR: u32 = 0x0102;
+const WM_LBUTTONDOWN: u32 = 0x0201;
 const WM_TIMER: u32 = 0x0113;
 const WS_OVERLAPPEDWINDOW: u32 = 0x00CF_0000;
 const SW_SHOW: i32 = 5;
@@ -82,6 +87,28 @@ const SW_SHOW: i32 = 5;
 /// The colour the client area is filled with: RGB(0x8A, 0x47, 0xC0), a
 /// COLORREF (0x00BBGGRR).
 const FILL: u32 = 0x00C0_478A;
+/// The fill after a left click: RGB(0x22, 0xAA, 0x44).
+const CLICKED: u32 = 0x0044_AA22;
+/// `PAINTSTRUCT` (winuser.h): 72 bytes on x64.
+#[repr(C)]
+struct PAINTSTRUCT {
+    hdc: HDC,
+    erase: BOOL,
+    paint: RECT,
+    restore: BOOL,
+    inc_update: BOOL,
+    reserved: [u8; 32],
+}
+
+/// What the window procedure keeps: the fill and the typed characters.
+struct State {
+    fill: u32,
+    typed: [u16; 64],
+    len: usize,
+}
+
+static mut STATE: State = State { fill: FILL, typed: [0; 64], len: 0 };
+
 /// How long the window stays up.
 const SHOW_MS: u32 = 60_000;
 
@@ -115,22 +142,64 @@ unsafe extern "system" {
     fn SetTimer(hwnd: HWND, id: usize, ms: u32, func: *mut c_void) -> usize;
     fn GetMessageW(msg: *mut MSG, hwnd: HWND, min: u32, max: u32) -> BOOL;
     fn DispatchMessageW(msg: *const MSG) -> LRESULT;
+    fn TranslateMessage(msg: *const MSG) -> BOOL;
     fn DestroyWindow(hwnd: HWND) -> BOOL;
     fn PostQuitMessage(code: i32);
     fn DefWindowProcW(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT;
+    fn BeginPaint(hwnd: HWND, ps: *mut PAINTSTRUCT) -> HDC;
+    fn EndPaint(hwnd: HWND, ps: *const PAINTSTRUCT) -> BOOL;
+    fn InvalidateRect(hwnd: HWND, rect: *const RECT, erase: BOOL) -> BOOL;
 }
 
 #[link(name = "gdi32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn CreateSolidBrush(color: u32) -> HBRUSH;
     fn DeleteObject(obj: *mut c_void) -> BOOL;
+    fn TextOutW(hdc: HDC, x: i32, y: i32, text: *const u16, len: i32) -> BOOL;
 }
 
 unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
-    if msg == WM_DESTROY {
-        // SAFETY: ends this thread's message loop.
-        unsafe { PostQuitMessage(0) };
-        return 0;
+    // SAFETY: one thread runs the procedure; STATE is only touched here.
+    let st = unsafe { &mut *core::ptr::addr_of_mut!(STATE) };
+    match msg {
+        WM_DESTROY => {
+            // SAFETY: ends this thread's message loop.
+            unsafe { PostQuitMessage(0) };
+            return 0;
+        }
+        WM_LBUTTONDOWN => {
+            st.fill = CLICKED;
+            // SAFETY: our window.
+            unsafe { InvalidateRect(hwnd, core::ptr::null(), 0) };
+            return 0;
+        }
+        WM_CHAR => {
+            if st.len < st.typed.len() && w >= 0x20 {
+                st.typed[st.len] = w as u16;
+                st.len += 1;
+            }
+            // SAFETY: our window.
+            unsafe { InvalidateRect(hwnd, core::ptr::null(), 0) };
+            return 0;
+        }
+        WM_PAINT => {
+            // SAFETY: our window; the PAINTSTRUCT lives across the calls.
+            unsafe {
+                let mut ps: PAINTSTRUCT = core::mem::zeroed();
+                let dc = BeginPaint(hwnd, &mut ps);
+                let mut r = RECT::default();
+                GetClientRect(hwnd, &mut r);
+                let brush = CreateSolidBrush(st.fill);
+                FillRect(dc, &r, brush);
+                DeleteObject(brush);
+                if st.len > 0 {
+                    TextOutW(dc, 10, 10, st.typed.as_ptr(), st.len as i32);
+                }
+                EndPaint(hwnd, &ps);
+            }
+            return 0;
+        }
+        _ => {}
     }
     // SAFETY: the default handling.
     unsafe { DefWindowProcW(hwnd, msg, w, l) }
@@ -208,6 +277,7 @@ fn test(t: &mut Test) {
                 DestroyWindow(h);
                 continue;
             }
+            TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
