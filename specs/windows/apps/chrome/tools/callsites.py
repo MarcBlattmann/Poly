@@ -190,7 +190,11 @@ class Run:
                 v = hexval(o.get("v"))
                 if v not in (None, 0) and not str(o.get("c", "")).startswith("stack"):
                     produced[v] = n
-                outs.append(nout(o))
+                no = nout(o)
+                if r["fn"] in ("ReadProcessMemory", "WriteProcessMemory"):
+                    # the bytes moved are a system DLL's code: only how many, not what
+                    no.pop("b", None)
+                outs.append(no)
             rec = OrderedDict()
             rec["fn"] = r["fn"]
             rec["dll"] = r["dll"]

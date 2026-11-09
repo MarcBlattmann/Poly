@@ -184,7 +184,7 @@ returned pointer or handle; and for about 100 functions `out`, what the call lef
 (`NtQueryValueKey`, `NtSetValueKey`, `RegQueryValueExW`: type, length, data), structures (`SYSTEM_INFO`, `OSVERSIONINFOEXW`,
 `STARTUPINFOW`, `MEMORY_BASIC_INFORMATION`, `RTL_CRITICAL_SECTION`, `VS_FIXEDFILEINFO`, `CPINFO`), out handles and pointers
 (`DuplicateHandle`, `NtOpenKeyEx`, `ConvertStringSecurityDescriptorToSecurityDescriptorW`), version resources (`GetFileVersionInfo*`,
-`VerQueryValueW`), the bytes `ReadProcessMemory`/`WriteProcessMemory` move, and the frames of `RtlCaptureStackBackTrace`. Memory is read
+`VerQueryValueW`), the bytes `ReadProcessMemory`/`WriteProcessMemory` move (the committed files keep how many, not which: they are a system DLL's code), and the frames of `RtlCaptureStackBackTrace`. Memory is read
 through `ReadProcessMemory` on the own process, which reports a bad pointer instead of faulting. Pointers and handles are **classes**,
 never values: `null`, `-1`, `stack`, `private`, `mapped`, `handle`, `int:<n>`, `image:<module>[+0x<offset>]` (the offset only for
 chrome.exe, chrome_elf.dll, chrome.dll).

@@ -52,7 +52,7 @@
    1811
   ],
   "same_functions_and_sites_in_every_run": true,
-  "fields_that_differ_between_runs": 144
+  "fields_that_differ_between_runs": 143
  },
  "how_to_compare": [
   "Run the same kit on Poly (chrome-win run --kit chrome_elf.dll,chrome.exe) and read polytrace.jsonl as this file's `calls`:",
@@ -1838,9 +1838,9 @@
   {"n":364,"fn":"GetModuleHandleW","dll":"kernel32.dll","at":"chrome_elf.dll+0x44ba5","args":[{"w":"ntdll.dll"}],"ret":"handle","out":[{"a":"ret","module":"ntdll.dll"}]},
   {"n":365,"fn":"VirtualProtect","dll":"kernel32.dll","at":"chrome_elf.dll+0x1d265","args":["image:chrome_elf.dll+0x2e6000",128,64,"stack"],"ret":1,"out":[{"a":0,"c":"image:chrome_elf.dll+0x2e6000"},{"a":3,"u32":2}]},
   {"n":366,"fn":"GetModuleHandleW","dll":"kernel32.dll","at":"chrome_elf.dll+0x1d27a","args":[{"w":"ntdll.dll"}],"ret":"handle","out":[{"a":"ret","module":"ntdll.dll"}]},
-  {"n":367,"fn":"ReadProcessMemory","dll":"kernel32.dll","at":"chrome_elf.dll+0x44dcd","args":["-1","image:ntdll.dll","stack",32,"stack"],"ret":1,"out":[{"a":0,"h":"-1"},{"a":1,"c":"image:ntdll.dll"},{"a":4,"u64":"0x20"},{"a":2,"b":"4c8bd1b828000000f604250803fe7f0175030f05c3cd2ec30f1f840000000000","n":32}]},
-  {"n":368,"fn":"WriteProcessMemory","dll":"kernel32.dll","at":"chrome_elf.dll+0x44f52","args":["-1","image:chrome_elf.dll+0x2e6000","private",32,"stack"],"ret":1,"out":[{"a":0,"h":"-1"},{"a":1,"c":"image:chrome_elf.dll+0x2e6000"},{"a":2,"b":"4c8bd1b828000000f604250803fe7f0175030f05c3cd2ec30f1f840000000000","n":32},{"a":4,"u64":"0x20"}]},
-  {"n":369,"fn":"WriteProcessMemory","dll":"kernel32.dll","at":"chrome_elf.dll+0x44fbe","args":["-1","image:ntdll.dll","stack",16,"stack"],"ret":1,"out":[{"a":0,"h":"-1"},{"a":1,"c":"image:ntdll.dll"},{"a":2,"b":"<var>","n":16},{"a":4,"u64":"0x10"}]},
+  {"n":367,"fn":"ReadProcessMemory","dll":"kernel32.dll","at":"chrome_elf.dll+0x44dcd","args":["-1","image:ntdll.dll","stack",32,"stack"],"ret":1,"out":[{"a":0,"h":"-1"},{"a":1,"c":"image:ntdll.dll"},{"a":4,"u64":"0x20"},{"a":2,"n":32}]},
+  {"n":368,"fn":"WriteProcessMemory","dll":"kernel32.dll","at":"chrome_elf.dll+0x44f52","args":["-1","image:chrome_elf.dll+0x2e6000","private",32,"stack"],"ret":1,"out":[{"a":0,"h":"-1"},{"a":1,"c":"image:chrome_elf.dll+0x2e6000"},{"a":2,"n":32},{"a":4,"u64":"0x20"}]},
+  {"n":369,"fn":"WriteProcessMemory","dll":"kernel32.dll","at":"chrome_elf.dll+0x44fbe","args":["-1","image:ntdll.dll","stack",16,"stack"],"ret":1,"out":[{"a":0,"h":"-1"},{"a":1,"c":"image:ntdll.dll"},{"a":2,"n":16},{"a":4,"u64":"0x10"}]},
   {"n":370,"fn":"VirtualProtect","dll":"kernel32.dll","at":"chrome_elf.dll+0x1d2cd","args":["image:chrome_elf.dll+0x2e6000",128,32,"stack"],"ret":1,"out":[{"a":0,"c":"image:chrome_elf.dll+0x2e6000"},{"a":3,"u32":64}]},
   {"n":371,"fn":"InitializeCriticalSectionEx","dll":"kernel32.dll","at":"chrome.exe+0x1fb556","args":["image:chrome.exe+0x38aa00",4000,0],"ret":1,"out":[{"a":0,"cs":{"dbg":"-1","lock":-1,"rec":0,"owner":"null","sem":"null","spin":4000}}]},
   {"n":372,"fn":"FlsAlloc","dll":"kernel32.dll","at":"chrome.exe+0x1f79a1","args":["image:chrome.exe+0x1f7b70"],"ret":4},
