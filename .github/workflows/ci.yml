@@ -306,7 +306,7 @@ jobs:
       - run: cargo xtask ci coverage
 
   pipeline:
-    name: "pipeline (${{ matrix.slice }}, selfcheck, polycheck, win polycheck)"
+    name: "pipeline (${{ matrix.slice }})"
     needs: [changes, build]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
@@ -317,9 +317,9 @@ jobs:
       fail-fast: false
       matrix:
         # Exactly xtask's PIPELINE_SHARDS (`ci lint` checks): `polycheck`, a
-        # QEMU boot per test, runs a third of the corpus in each; the first
-        # slice also runs selfcheck and win polycheck.
-        slice: [1/3, 2/3, 3/3]
+        # QEMU boot per test, runs a quarter of the corpus in each; `extras`
+        # runs selfcheck and win polycheck.
+        slice: [extras, 1/4, 2/4, 3/4, 4/4]
     steps:
       - uses: actions/checkout@v4
       # clang++, lld-link and llvm-dlltool build the C++ Windows tests of

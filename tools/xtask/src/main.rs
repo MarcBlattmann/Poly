@@ -2018,21 +2018,27 @@ fn coverage_checks() -> Result {
 
 /// The slices CI runs the agent pipeline's checks in, one job each
 /// (`cargo xtask ci pipeline --shard I/N`, I from 1 to N): `polycheck`, the
-/// longest, runs a slice of the corpus in each; the first also runs the
-/// rest. `cargo xtask ci lint` checks that the workflow runs every slice.
-const PIPELINE_SHARDS: usize = 3;
+/// longest, runs a slice of the corpus in each; `--shard extras` runs the
+/// rest (selfcheck, win polycheck). `cargo xtask ci lint` checks that the
+/// workflow runs every slice and the extras.
+const PIPELINE_SHARDS: usize = 4;
 
 /// The slice of the pipeline checks to run, `I/N` (`ci pipeline --shard`);
 /// unset: all of them.
 static PIPELINE_SHARD: std::sync::OnceLock<(usize, usize)> = std::sync::OnceLock::new();
+
+/// `ci pipeline --shard extras`: only the checks that are not sliced.
+static PIPELINE_EXTRAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// The agent pipeline's checks against the reference OS (or one slice of
 /// them, [`PIPELINE_SHARD`]).
 fn pipeline_checks() -> Result {
     prebuilt::check_stamps(&["kernel", "tools"])?;
     let shard = PIPELINE_SHARD.get().copied();
-    // Slice 1 (or no slicing) runs the checks that are not sliced.
-    let first = shard.is_none_or(|(i, _)| i == 1);
+    // No slicing, or `extras`, runs the checks that are not sliced; with
+    // `extras` they are all it runs.
+    let extras = PIPELINE_EXTRAS.load(std::sync::atomic::Ordering::Relaxed);
+    let first = shard.is_none();
     if first {
         // The test corpus on Linux against itself: the tracer and the diff
         // runner must find no differences. Takes a few seconds; skips itself
@@ -2047,7 +2053,9 @@ fn pipeline_checks() -> Result {
     if let Some((i, n)) = shard {
         polycheck.extend(["--shard".to_string(), format!("{i}/{n}")]);
     }
-    pipeline(&polycheck)?;
+    if !extras {
+        pipeline(&polycheck)?;
+    }
     if first {
         // The visible tests of every green Windows entry on Poly against
         // their recorded Windows results (ADR 0099). Skips itself without
@@ -2129,7 +2137,8 @@ fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
         problems.push("no job runs `boot-tests --shard ${{ matrix.shards }}`".into());
     }
     let slices = text.lines().map(str::trim).find_map(|l| l.strip_prefix("slice: [")?.strip_suffix(']'));
-    let want_slices: Vec<String> = (1..=PIPELINE_SHARDS).map(|i| format!("{i}/{PIPELINE_SHARDS}")).collect();
+    let want_slices: Vec<String> =
+        std::iter::once("extras".to_string()).chain((1..=PIPELINE_SHARDS).map(|i| format!("{i}/{PIPELINE_SHARDS}"))).collect();
     match slices {
         None => problems.push("no pipeline matrix line `slice: [...]`".into()),
         Some(list) => {
@@ -2165,7 +2174,11 @@ fn ci(args: &[String]) -> Result {
     while let Some(a) = it.next() {
         if a == "--shard" {
             let text = it.next().ok_or("ci: --shard needs I/N")?;
-            let bad = || format!("ci: --shard {text}: expected I/N with 1 <= I <= N, like 2/3");
+            if text == "extras" {
+                PIPELINE_EXTRAS.store(true, std::sync::atomic::Ordering::Relaxed);
+                continue;
+            }
+            let bad = || format!("ci: --shard {text}: expected I/N with 1 <= I <= N, like 2/4, or extras");
             let (i, n) = text.split_once('/').ok_or_else(bad)?;
             let (i, n): (usize, usize) = (i.parse().map_err(|_| bad())?, n.parse().map_err(|_| bad())?);
             if i == 0 || i > n {
@@ -2180,8 +2193,9 @@ fn ci(args: &[String]) -> Result {
     if let Some(bad) = parts.iter().find(|a| !names.contains(&a.as_str())) {
         return Err(format!("ci: no part {bad:?}; the parts are {}", names.join(", ")));
     }
-    if PIPELINE_SHARD.get().is_some() && !parts.iter().any(|a| a.as_str() == "pipeline") {
-        return Err("ci: --shard slices the pipeline part: name it (`ci pipeline --shard 1/3`)".into());
+    if (PIPELINE_SHARD.get().is_some() || PIPELINE_EXTRAS.load(std::sync::atomic::Ordering::Relaxed))
+        && !parts.iter().any(|a| a.as_str() == "pipeline") {
+        return Err("ci: --shard slices the pipeline part: name it (`ci pipeline --shard 1/4`)".into());
     }
     let started = Instant::now();
     let mut took = Vec::new();
