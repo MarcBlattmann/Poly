@@ -90,6 +90,7 @@ pub mod system;
 pub mod text;
 pub mod time;
 pub mod tls;
+pub mod verinfo;
 pub mod version;
 
 pub use poly_ntobj::NtStatus;

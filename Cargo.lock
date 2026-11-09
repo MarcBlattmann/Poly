@@ -245,6 +245,7 @@ dependencies = [
  "poly-ldr",
  "poly-nls",
  "poly-ntobj",
+ "poly-pe",
  "poly-rtl",
 ]
 
