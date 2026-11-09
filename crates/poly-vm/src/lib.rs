@@ -1448,6 +1448,42 @@ impl<F: Clone + PartialEq> VmMap<F> {
         }
     }
 
+    /// Decide what a forced write at `addr` means: a debugger's write
+    /// (ptrace(2) `PTRACE_POKEDATA`) into a private region, whatever its
+    /// protection. The page becomes the region's own copy, mapped with the
+    /// region's protection (a read-only page stays read-only for the
+    /// process); the caller then writes it through the kernel. A shared
+    /// region that does not allow writing is a `SEGV_ACCERR` (its pages
+    /// are the file's or the other users'); an address in no region a
+    /// `SEGV_MAPERR`. The stack does not grow.
+    pub fn fault_forced(&mut self, addr: u64, page: PageState) -> FaultAction<F> {
+        let page_addr = page_down(addr);
+        let Some(vma) = self.find(addr) else { return FaultAction::Segv(SegvCode::MapErr) };
+        if vma.prot.allows(Access::Write) {
+            return self.fault(addr, Access::Write, page);
+        }
+        if vma.is_shared() {
+            return FaultAction::Segv(SegvCode::AccErr);
+        }
+        match page {
+            PageState::Absent => match &vma.backing {
+                Backing::Anonymous => FaultAction::ZeroFill { page: page_addr, prot: vma.prot },
+                Backing::File { file, offset, .. } => {
+                    let offset = offset + (page_addr - vma.start);
+                    FaultAction::ReadFile {
+                        page: page_addr,
+                        file: file.clone(),
+                        offset,
+                        prot: vma.prot,
+                        private_copy: true,
+                    }
+                }
+            },
+            PageState::Present { refs } if refs > 1 => FaultAction::CopyOnWrite { page: page_addr, prot: vma.prot },
+            PageState::Present { refs } => FaultAction::SetPermissions { page: page_addr, prot: vma.page_prot(refs) },
+        }
+    }
+
     /// Grow the stack region above `page` down to it, if the rules allow.
     /// Returns the region's new start (its key).
     fn grow_stack(&mut self, page: u64, access: Access) -> Result<u64, SegvCode> {

@@ -15,7 +15,9 @@
 //!
 //! Output, one line per check: `ok <check>` or `not ok <check> (...)`,
 //! then `summary <passed> passed, <failed> failed` and, if all passed,
-//! `wl-client: ok`. Exit status 0 when every check passed.
+//! `wl-client: ok`. Exit status 0 when every check passed. With
+//! `--interactive`, it keeps the drawn test surface and exits on
+//! `xdg_toplevel.close`, so the launcher can show, move and close it.
 
 use crate::demo::Shared;
 use crate::wire::{Arg, Conn, DISPLAY, Event, bind_args};
@@ -95,6 +97,7 @@ struct State {
     frame_deleted: bool,
     entered: bool,
     protocol_error: bool,
+    closed: bool,
     configure_serial: u32,
     decoration_mode: u32,
     preferred_scale: u32,
@@ -109,6 +112,8 @@ struct Test {
     s: State,
     passed: u32,
     failed: u32,
+    /// Keep the shared buffer mapped while the interactive test window is open.
+    shared: Option<crate::demo::Shared>,
 }
 
 impl Test {
@@ -154,6 +159,8 @@ impl Test {
             let _ = self.c.flush();
         } else if e.object == s.surface && e.opcode == 0 {
             s.entered = true;
+        } else if e.object == s.toplevel && e.opcode == 1 {
+            s.closed = true;
         } else if e.object == s.surface && e.opcode == 2 {
             s.preferred_scale = e.arg(0);
         } else if e.object == s.xdg_surface && e.opcode == 0 {
@@ -246,7 +253,7 @@ impl Test {
         self.check(ok, "a request to an unknown object is an invalid_object error", &why);
     }
 
-    fn run(&mut self) -> Result<(), String> {
+    fn run(&mut self, interactive: bool) -> Result<(), String> {
         self.s.registry = self.c.new_id();
         let registry = self.s.registry;
         self.c.request(DISPLAY, 1, &[Arg::U(registry)]); // get_registry
@@ -325,15 +332,38 @@ impl Test {
         println!("wl-client: window {WIDTH}x{HEIGHT} mapped, title \"wl-client\"");
         self.check_composed();
         self.check_unknown_object();
-        drop(shared);
+        if interactive {
+            self.shared = Some(shared);
+        }
+        Ok(())
+    }
+
+    /// Keep the mapped test surface alive until the compositor closes it.
+    fn wait_for_close(&mut self) -> Result<(), String> {
+        if self.shared.is_none() {
+            return Err("the interactive buffer was released".into());
+        }
+        println!("wl-client: interactive window ready");
+        while !self.s.closed {
+            let Some(e) = self.c.next_event(None) else { return Err("the compositor went away".into()) };
+            self.handle(&e);
+        }
+        println!("wl-client: closed");
         Ok(())
     }
 }
 
 /// The program.
 pub fn main() -> i32 {
+    let interactive = poly_rt::env::args_str().skip(1).any(|arg| arg == "--interactive");
     let mut t = match Conn::connect() {
-        Ok(c) => Test { c, s: State { preferred_scale: 1, output_scale: 1, ..State::default() }, passed: 0, failed: 0 },
+        Ok(c) => Test {
+            c,
+            s: State { preferred_scale: 1, output_scale: 1, ..State::default() },
+            passed: 0,
+            failed: 0,
+            shared: None,
+        },
         Err(e) => {
             println!("not ok connect to the compositor ({e})");
             println!("summary 0 passed, 1 failed");
@@ -341,12 +371,16 @@ pub fn main() -> i32 {
         }
     };
     t.check(true, "connected to the compositor", "");
-    if let Err(e) = t.run() {
+    if let Err(e) = t.run(interactive) {
         t.check(false, "the test ran to the end", &e);
     }
     println!("summary {} passed, {} failed", t.passed, t.failed);
     if t.failed == 0 {
         println!("wl-client: ok");
+        if interactive && let Err(e) = t.wait_for_close() {
+            println!("wl-client: {e}");
+            return 1;
+        }
     }
     i32::from(t.failed != 0)
 }

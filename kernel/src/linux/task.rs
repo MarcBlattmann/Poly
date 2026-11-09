@@ -236,7 +236,10 @@ pub fn wait_tree(k: &Thread<'_>, generation: u64) -> Wakeup {
 /// `parent_tid`: `LinuxProcess::fork`, and with `clear_handlers`
 /// (`CLONE_CLEAR_SIGHAND`) every caught signal back at `SIG_DFL`.
 fn child_state(parent: &LinuxState, parent_tid: u32, child: u32, clear_handlers: bool) -> LinuxState {
-    let mut state = parent.with(|p| p.fork(parent_tid as i32, child as i32));
+    // Fork state is a few KiB; build it behind a box instead of keeping both
+    // the parent copy and child result on the 16 KiB kernel stack.
+    let mut state = parent.with(|p| alloc::boxed::Box::new(p.fork(parent_tid as i32, child as i32)));
+    state.started_ns = crate::time::now_ns();
     if clear_handlers {
         for signal in 1..=NSIG {
             let a = state.actions.get(signal);
@@ -313,6 +316,12 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
             // CLONE_FS: its root, working directory and umask.
             let files = k.process.files.clone_for(req.shares_files(), req.shares_fs());
             let linux = child_state(k.linux, k.tid, pid, req.clears_handlers());
+            // CLONE_UNTRACED: a tracer of the caller (the test run's too)
+            // does not follow the child (ptrace(2), ADR 0135).
+            let untraced = req.flags & poly_personality_linux::task::clone::CLONE_UNTRACED != 0;
+            if untraced {
+                linux.with(|p| p.traced = false);
+            }
             // CLONE_SIGHAND: the handlers are copied, but kcmp(2) sees one
             // table (ADR 0121).
             if req.flags & CLONE_SIGHAND != 0 {
@@ -366,15 +375,22 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
             };
             crate::fs::proc::record_fork(k.process.pid, pid, &memory);
             linux.with(|p| p.thread_mut(pid as i32).clear_child_tid = clear_child_tid);
-            let child = Process::new_linux_child(pid, k.process.pid, k.process.format, k.process.traced, files, linux);
+            let traced_run = k.process.traced && !untraced;
+            let child = Process::new_linux_child(pid, k.process.pid, k.process.format, traced_run, files, linux);
             let me = k.process.pid as i32;
+            let creator = k.tid as i32;
             let uid = k.credentials().uid;
             let reaper = pid_ns::reaper_of_new(&child_ns, pid as i32);
-            with_tree(|t| {
+            let ptraced = with_tree(|t| {
                 let parent = if req.sibling() { t.parent(me).unwrap_or(0) } else { me };
                 t.insert_child(me, parent, pid as i32, req.exit_signal, uid);
                 t.set_reaper(pid as i32, reaper);
+                // A traced caller's tracer may follow the child from its start.
+                poly_personality_linux::sys::ptrace::trace_new_child(t, creator, pid as i32, req.flags, req.exit_signal)
             });
+            if ptraced && let Some(state) = child.linux.as_ref() {
+                state.with(|p| p.ptraced = true);
+            }
             let (parent_sees, child_sees) =
                 (pid_ns::local_or_zero(&own_ns, pid as i32), pid_ns::local_or_zero(&child_ns, pid as i32));
             store_tids(k, req, parent_sees, child_sees, (!req.shares_memory()).then_some(&memory));
@@ -389,6 +405,14 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
                 VFORKS.lock().remove(&pid);
                 return Err(Errno::EAGAIN);
             }
+            if ptraced {
+                // Its first stop comes before it runs much: on its first
+                // way back to user mode.
+                k.notify_signal(pid as i32);
+            }
+            // ptrace(2): the caller's fork / vfork / clone event stop, before
+            // a vfork parent waits.
+            poly_personality_linux::sys::ptrace::clone_event(k, pid as i32, req.flags, req.exit_signal);
             start(started, done, k)?;
             Ok(pid)
         })?

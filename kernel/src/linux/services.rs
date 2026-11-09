@@ -391,6 +391,11 @@ impl LinuxKernel for Thread<'_> {
                     let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(source), start, r.shared);
                     return map_placed(&memory, req, r);
                 }
+                // A perf event's ring (perf_event_open(2), ADR 0135).
+                if let Some(found) = super::perf::mapping(&file, offset, r.len, r.shared) {
+                    let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(found?), 0, r.shared);
+                    return map_placed(&memory, req, r);
+                }
                 // An io_uring's rings and SQEs.
                 if let Some(found) = super::uring::mapping(&file, offset, r.len) {
                     let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(found?), 0, r.shared);
@@ -1092,6 +1097,54 @@ impl LinuxKernel for Thread<'_> {
         super::procaccess::memory(pid)?.write(addr, data).map_err(|_| Errno::EFAULT)
     }
 
+    fn ptrace_peek(&mut self, pid: i32, addr: u64, buf: &mut [u8]) -> Result<(), Errno> {
+        super::procaccess::memory(pid)?.read(addr, buf).map_err(|_| Errno::EIO)
+    }
+
+    fn ptrace_poke(&mut self, pid: i32, addr: u64, data: &[u8]) -> Result<(), Errno> {
+        super::procaccess::memory(pid)?.write_forced(addr, data).map_err(|_| Errno::EIO)
+    }
+
+    fn cpu_count(&self) -> u32 {
+        crate::thread::online_cpus().len() as u32
+    }
+
+    fn perf_source(&mut self, pid: i32) -> Result<Arc<dyn poly_personality_linux::perf::PerfSource>, Errno> {
+        super::perf::source(self, pid)
+    }
+
+    fn perf_install(
+        &mut self,
+        counter: Arc<poly_personality_linux::perf::Counter>,
+        cloexec: bool,
+    ) -> Result<i32, Errno> {
+        super::perf::install(self, counter, cloexec)
+    }
+
+    fn perf_counter(&mut self, fd: i32) -> Result<Option<Arc<poly_personality_linux::perf::Counter>>, Errno> {
+        super::perf::counter(self, fd)
+    }
+
+    fn acct_open(&mut self, path: &[u8]) -> Result<Arc<dyn poly_personality_linux::acct::Sink>, Errno> {
+        super::acct::open(self, path)
+    }
+
+    fn hangup_terminal(&mut self, sid: i32) {
+        crate::tty::vhangup(sid);
+    }
+
+    fn bpf_install(&mut self, object: poly_personality_linux::bpf::Object, cloexec: bool) -> Result<i32, Errno> {
+        super::bpf::install(self, object, cloexec)
+    }
+
+    fn bpf_object(&mut self, fd: i32) -> Result<Option<poly_personality_linux::bpf::Object>, Errno> {
+        super::bpf::object(self, fd)
+    }
+
+    fn exiting(&self) -> bool {
+        self.process.is_exiting() || self.flags.killed.load(Ordering::SeqCst)
+    }
+
     fn take_fd(&mut self, pid: i32, fd: i32) -> Result<i32, Errno> {
         let file = super::procaccess::live_process(pid)?.files.file(fd).map_err(vfs_errno)?;
         self.process.files.install(file, true).map_err(vfs_errno)
@@ -1129,5 +1182,30 @@ impl LinuxKernel for Thread<'_> {
         op: poly_personality_linux::sys::userfaultfd::UffdOp<'_>,
     ) -> Option<Result<poly_personality_linux::sys::userfaultfd::UffdReply, Errno>> {
         super::uffd::op(self, fd, op)
+    }
+
+    fn memory_regions(
+        &mut self,
+        pid: i32,
+        start: u64,
+        end: u64,
+    ) -> Result<Vec<poly_personality_linux::kernel::MemRegion>, Errno> {
+        super::numa::regions(self.process.pid as i32, pid, start, end)
+    }
+
+    fn page_query(&mut self, pid: i32, addr: u64) -> Result<poly_personality_linux::kernel::PageQuery, Errno> {
+        super::numa::page_query(self.process.pid as i32, pid, addr)
+    }
+
+    fn remap_shared(&mut self, start: u64, len: u64, offset: u64) -> Result<(), Errno> {
+        super::numa::remap_shared(start, len, offset)
+    }
+
+    fn ntp(&self) -> poly_personality_linux::sys::timex::Ntp {
+        super::numa::ntp()
+    }
+
+    fn set_ntp(&mut self, ntp: &poly_personality_linux::sys::timex::Ntp) {
+        super::numa::set_ntp(ntp);
     }
 }

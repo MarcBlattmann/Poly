@@ -155,6 +155,21 @@ impl Files {
         self.file(fd)?.node().statfs()
     }
 
+    /// Whether an open file writes the file `fd` is open on
+    /// (finit_module(2): `ETXTBSY`).
+    pub fn has_writers(&self, fd: Fd) -> Result<bool> {
+        Ok(self.file(fd)?.node().has_writers())
+    }
+
+    /// `ustat(2)`: the statfs of the mounted file system with device
+    /// number `dev`; `EINVAL` if none is mounted.
+    pub fn statfs_dev(&self, dev: poly_vfs::DeviceId) -> Result<FsStats> {
+        let vfs = vfs();
+        let info = vfs.mounts().into_iter().find(|m| m.dev == dev).ok_or(Errno::EINVAL)?;
+        let mount = vfs.mount_by_id(info.id).ok_or(Errno::EINVAL)?;
+        vfs.mount_root_node(&mount)?.statfs()
+    }
+
     /// `syncfs(2)`: the file system `fd` is on.
     pub fn syncfs(&self, fd: Fd) -> Result<()> {
         self.file(fd)?.node().mount().fs().sync()

@@ -431,7 +431,7 @@ pub(crate) fn write_initramfs() -> Result<std::result::Result<PathBuf, String>> 
 }
 
 /// Guest memory: GTK 4, Qt and VLC side by side.
-const MEMORY: &str = "2G";
+pub const MEMORY: &str = "2G";
 /// The screen.
 pub const SIZE: (u32, u32) = crate::desktop::SIZE;
 /// What the compositor prints when the desktop is up.
@@ -559,6 +559,23 @@ impl Machine {
         init: &str,
         cpus: Option<u32>,
     ) -> Result<Machine> {
+        Machine::boot_with_init_args(kernel, syms, image, initrd, tag, memory, init, cpus, &[])
+    }
+
+    /// [`Machine::boot_with_init`] with additional QEMU arguments (e.g. a
+    /// virtio-net device on user networking).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn boot_with_init_args(
+        kernel: &Path,
+        syms: &Arc<Symbols>,
+        image: &Path,
+        initrd: &Path,
+        tag: &str,
+        memory: &str,
+        init: &str,
+        cpus: Option<u32>,
+        qemu_args: &[String],
+    ) -> Result<Machine> {
         let qmp_path = std::env::temp_dir().join(format!("poly-toolkits-qmp-{}-{tag}.sock", std::process::id()));
         let _ = std::fs::remove_file(&qmp_path);
         let wav = root().join(format!("target/poly-toolkits-{tag}.wav"));
@@ -578,6 +595,7 @@ impl Machine {
             .args(["-device", "virtio-sound-pci,audiodev=snd0"])
             // A later -smp overrides crate::qemu's.
             .args(cpus.map(|n| vec!["-smp".to_string(), n.to_string()]).unwrap_or_default())
+            .args(qemu_args)
             .args(["-qmp", &format!("unix:{},server=on,wait=off", qmp_path.display())]);
         let mut s = Session::spawn(cmd, syms)?;
         s.set_timeouts(Duration::from_secs(600), Duration::from_secs(3600));
@@ -593,19 +611,19 @@ impl Machine {
         Ok(())
     }
 
-    fn click(&mut self, x: i32, y: i32) -> Result {
+    pub(crate) fn click(&mut self, x: i32, y: i32) -> Result {
         self.send_events(&abs_events(x, y))?;
         std::thread::sleep(Duration::from_millis(300));
         self.send_events(&[button_event(true)])?;
         self.send_events(&[button_event(false)])
     }
 
-    fn key(&mut self, qcode: &str) -> Result {
+    pub(crate) fn key(&mut self, qcode: &str) -> Result {
         self.send_events(&[key_event(qcode, true)])?;
         self.send_events(&[key_event(qcode, false)])
     }
 
-    fn type_text(&mut self, text: &str) -> Result {
+    pub(crate) fn type_text(&mut self, text: &str) -> Result {
         for c in text.chars() {
             self.key(&qcode(c).ok_or_else(|| format!("cannot type {c:?}"))?)?;
         }
@@ -613,14 +631,14 @@ impl Machine {
     }
 
     /// How much console text there is so far (for [`Machine::seen`]).
-    fn text_len(&mut self) -> usize {
+    pub(crate) fn text_len(&mut self) -> usize {
         self.s.text().len()
     }
 
     /// Wait until `needle` is in the console text after `from`, in any
     /// order with other lines (an app and the compositor print at once);
     /// the rest of its line once the line is complete.
-    fn seen(&mut self, from: usize, needle: &str, timeout: Duration) -> Result<String> {
+    pub(crate) fn seen(&mut self, from: usize, needle: &str, timeout: Duration) -> Result<String> {
         self.seen_any(from, &[needle], timeout).map(|(_, rest)| rest)
     }
 
@@ -649,7 +667,7 @@ impl Machine {
     }
 
     /// A screenshot (PNG for the record, read back from a PPM).
-    fn shot(&mut self, what: &str) -> Result<screen::Image> {
+    pub(crate) fn shot(&mut self, what: &str) -> Result<screen::Image> {
         self.shot_no += 1;
         let png = self.shots.join(format!("toolkits-{:02}-{what}.png", self.shot_no));
         let ppm = png.with_extension("ppm");
@@ -704,49 +722,16 @@ impl Machine {
         self.s.run(line)
     }
 
-    pub(crate) fn set_timeouts(&mut self, step: Duration, session: Duration) {
-        self.s.set_timeouts(step, session);
+    /// Type a command line on the console without waiting for the prompt
+    /// (for a console that is busy with an app's output: the prompt may
+    /// come anywhere in it, and a caller that only wants the command's
+    /// effect looks for that with [`Machine::seen`]).
+    pub(crate) fn send_line(&mut self, line: &str) -> Result {
+        self.s.send(&format!("{line}\r"))
     }
 
-    /// Start an app from the launcher by `query`; once its window is shown
-    /// (the compositor's log: `launched <launcher_name>`, `window ... shown
-    /// at`), its content must be mostly `before`, and a click in its middle
-    /// must turn it `after` (Chromium's input page, `chromium.rs`).
-    pub(crate) fn launch_and_click(
-        &mut self,
-        query: &str,
-        launcher_name: &str,
-        before: [u8; 3],
-        after: [u8; 3],
-    ) -> Result {
-        self.key("meta_l")?;
-        std::thread::sleep(Duration::from_millis(500));
-        self.type_text(query)?;
-        self.s.expect(&format!("launcher query {query:?}"))?;
-        std::thread::sleep(Duration::from_millis(500));
-        let from = self.text_len();
-        self.key("ret")?;
-        let wait = Duration::from_secs(600);
-        self.seen(from, &format!("poly-compositor: launched {launcher_name}"), wait)?;
-        let rest = self.seen(from, "poly-compositor: window ", wait)?;
-        let place @ (_, _, w, h) = window_place(&rest).ok_or_else(|| format!("unreadable window line {rest:?}"))?;
-        let deadline = Instant::now() + wait;
-        let ((x0, y0, x1, y1), n) = loop {
-            std::thread::sleep(Duration::from_secs(3));
-            let img = self.shot(&format!("{query}-shown"))?;
-            if let Some(found) = find_colour(&img, before, 3, place)
-                && found.1 as i64 * 3 >= i64::from(w) * i64::from(h)
-            {
-                break found;
-            }
-            expect(&format!("the window at {place:?} shows {before:02x?}"), Instant::now() < deadline)?;
-        };
-        self.click(((x0 + x1) / 2) as i32, ((y0 + y1) / 2) as i32)?;
-        std::thread::sleep(Duration::from_secs(3));
-        let img = self.shot(&format!("{query}-clicked"))?;
-        let area = (x0 as i32, y0 as i32, (x1 - x0 + 1) as i32, (y1 - y0 + 1) as i32);
-        let now = find_colour(&img, after, 3, area).map_or(0, |(_, n)| n);
-        expect(&format!("the click turned the window {after:02x?} ({now} of {n} pixels)"), now * 4 >= n * 3)
+    pub(crate) fn set_timeouts(&mut self, step: Duration, session: Duration) {
+        self.s.set_timeouts(step, session);
     }
 
     /// Power off and wait for QEMU to end.
@@ -770,7 +755,8 @@ fn shots_dir() -> PathBuf {
     std::env::var_os("POLY_TOOLKITS_SHOTS").map_or_else(|| root().join("target").join("toolkits"), PathBuf::from)
 }
 
-/// `cargo xtask toolkits [--release] [--fresh-disk] [STEP...]`: boot the
+/// `cargo xtask toolkits [--release] [--fresh-disk] [--memory=SIZE] [--cpus=N]
+/// [STEP...]`: boot the
 /// toolkits' disk to the desktop and the console's bash, run the steps,
 /// power off.
 pub fn command(args: &[String]) -> Result {
@@ -784,7 +770,18 @@ pub fn command(args: &[String]) -> Result {
         make(FILE_NAME)?;
     }
     let initrd = write_initramfs()?.map_err(|why| format!("toolkits: {why}"))?;
-    let mut m = Machine::boot(&kernel, &syms, &image, &initrd, "probe")?;
+    let res = crate::resources::Resources::from_args(args)?;
+    eprintln!("{}", res.describe(MEMORY, crate::QEMU_CPUS));
+    let mut m = Machine::boot_with_init(
+        &kernel,
+        &syms,
+        &image,
+        &initrd,
+        "probe",
+        &res.memory(MEMORY),
+        crate::busybox::INIT_ARGS,
+        res.cpus,
+    )?;
     let started = Instant::now();
     m.s.expect("rootdisk: /dev/vda mounted on /mnt/root")?;
     m.s.expect(READY)?;
@@ -867,7 +864,7 @@ const TITLE_SEARCH: u32 = 90;
 
 /// A window's place from the compositor's line `window "T" shown at X,Y
 /// size WxH` (the part after the title).
-fn window_place(rest: &str) -> Option<(i32, i32, i32, i32)> {
+pub(crate) fn window_place(rest: &str) -> Option<(i32, i32, i32, i32)> {
     let rest = rest.split(" shown at ").nth(1)?;
     let (pos, size) = rest.split_once(" size ")?;
     let (x, y) = pos.split_once(',')?;
@@ -883,7 +880,7 @@ fn near(a: [u8; 3], b: [u8; 3], tolerance: u8) -> bool {
 /// The pixels of `colour` (within `tolerance`) inside the rectangle
 /// `(x, y, w, h)`: their bounding box `(x0, y0, x1, y1)` (inclusive) and
 /// how many there are.
-fn find_colour(
+pub(crate) fn find_colour(
     img: &screen::Image,
     colour: [u8; 3],
     tolerance: u8,

@@ -467,8 +467,13 @@ kernel_test! {
         if refused(b"/test/hello.txt") != Some(ExecPathError::Open(poly_vfs::Errno::EACCES)) {
             return Err("a file without execute permission was not EACCES");
         }
-        if !matches!(refused(b"/test/script.sh"), Some(ExecPathError::Unsupported(_))) {
-            return Err("a #! script was not refused as unsupported");
+        // A `#!` script runs its interpreter (`/bin/sh`, which this
+        // initramfs may not have: then opening it is ENOENT).
+        let script: [&[u8]; 1] = [b"/test/script.sh"];
+        match program::exec_path(b"/test/script.sh", &script, &[], false) {
+            Ok(process) => drop(wait(&process)?),
+            Err(ExecPathError::Open(poly_vfs::Errno::ENOENT)) => {}
+            Err(_) => return Err("a #! script did not go to its interpreter"),
         }
         Ok(())
     }

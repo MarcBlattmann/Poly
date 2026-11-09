@@ -316,6 +316,7 @@ pub fn maps(entries: &[MapEntry]) -> Vec<u8> {
 pub fn fdinfo(f: &FdInfo) -> Vec<u8> {
     let mut o = Out::default();
     let _ = write!(o, "pos:\t{}\nflags:\t0{:o}\nmnt_id:\t{}\nino:\t{}\n", f.pos, f.flags, f.mnt_id, f.ino);
+    o.0.extend_from_slice(&f.extra);
     o.0
 }
 

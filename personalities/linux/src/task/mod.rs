@@ -13,6 +13,7 @@
 pub mod clone;
 pub mod exec;
 pub mod jobs;
+pub mod ptrace;
 pub mod sched;
 pub mod tree;
 pub mod wait;
@@ -78,6 +79,11 @@ fn queue_signal(k: &mut dyn LinuxKernel, pid: i32, info: SigInfo) -> Option<crat
 fn end_namespace(k: &mut dyn LinuxKernel, pid: i32) {
     let ns = k.pid_ns();
     let members = crate::ns::pid::init_ended(&ns, pid);
+    if ns.as_ref().is_some_and(|n| n.is_dead()) {
+        // Its init ended: the namespace is over, and its accounting file
+        // is closed (the init's own record is in it already).
+        crate::acct::forget(&ns);
+    }
     for member in members {
         let kill = with_target(k, Target::Process(member), |p, t| {
             if t.zombie {
@@ -102,6 +108,10 @@ fn end_namespace(k: &mut dyn LinuxKernel, pid: i32) {
 pub fn process_exited(k: &mut dyn LinuxKernel, how: Termination) {
     let pid = k.pid();
     let uid = k.credentials().uid;
+    // ptrace(2): its tracees go free, its tracer hears of its end.
+    crate::sys::ptrace::process_exited(k, pid, how);
+    // acct(2): the record is in the file before the parent can wait for it.
+    crate::acct::process_exited(k, how);
     end_namespace(k, pid);
     let children = with_tree(k, |t| t.children(pid)).unwrap_or_default();
     let Ok(Some(parent)) = with_tree(k, |t| t.parent(pid)) else { return };

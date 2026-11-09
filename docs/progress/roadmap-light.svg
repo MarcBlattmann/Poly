@@ -256,7 +256,7 @@
 <g><title>✔ ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)</title>
 <rect x="340.0" y="233.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>✔ ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app</title>
+<g><title>✔ ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app; apps that ask to draw their own (Chromium) get none (ADR 0144)</title>
 <rect x="362.7" y="233.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ virtio-gpu driver: modesetting and 2D framebuffer</title>

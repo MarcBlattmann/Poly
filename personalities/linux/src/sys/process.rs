@@ -12,6 +12,7 @@ use crate::signal::deliver::with_own;
 /// _exit() system call terminates only the calling thread"); the parent
 /// sees `status & 0377`.
 pub fn exit(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    crate::sys::ptrace::exit_event(k, u64::from(a.int(0) as u8) << 8);
     k.exit_thread(a.int(0) as u8);
     Ok(0)
 }
@@ -20,6 +21,8 @@ pub fn exit(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// thread group" (exit_group(2)); the status is `status & 0377` as for
 /// exit.
 pub fn exit_group(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    // ptrace(2) PTRACE_EVENT_EXIT: the wait status as the message.
+    crate::sys::ptrace::exit_event(k, u64::from(a.int(0) as u8) << 8);
     k.exit_group(a.int(0) as u8);
     Ok(0)
 }

@@ -28,8 +28,10 @@
 //! to the personality by `with_process`. One futex table serves every
 //! process ([`FUTEXES`]).
 
+mod acct;
 pub mod admin;
 mod admin_tests;
+mod bpf;
 pub mod cred;
 mod cred_tests;
 mod fifo;
@@ -43,6 +45,8 @@ mod mountapi;
 mod mqueue;
 pub mod net;
 mod ns_tests;
+mod numa;
+mod perf;
 mod pidfd;
 mod procaccess;
 mod services;
@@ -67,6 +71,7 @@ use crate::sync::SpinLock;
 use crate::user::memory::SegvCode;
 use crate::user::{self, Fault, FaultError};
 use crate::{kprintln, testrun};
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
 use poly_abi::{Outcome, SyscallRegs};
@@ -84,7 +89,12 @@ static FUTEXES: SpinLock<FutexTable> = SpinLock::new(FutexTable::new());
 /// What the kernel keeps for the Linux personality per process.
 #[derive(Debug)]
 pub struct LinuxState {
-    process: SpinLock<LinuxProcess>,
+    /// On the heap: a `LinuxProcess` is several KiB, and held inline it
+    /// made the frames of `Process::new_linux` and everything that moves a
+    /// `Process` by value so large that spawning a program overflowed its
+    /// 16 KiB kernel stack in a release build when the program's file was
+    /// not cached yet (the disk read is the deepest path under it).
+    process: SpinLock<Box<LinuxProcess>>,
     /// Some thread of the process has seccomp state (ADR 0054): the
     /// dispatcher checks every call. Never cleared; copied to children.
     pub(crate) seccomp: AtomicBool,
@@ -96,7 +106,9 @@ impl LinuxState {
     pub fn new(pid: u32) -> LinuxState {
         // A process the kernel starts: the root of a process tree.
         task::register_root(pid);
-        LinuxState { process: SpinLock::new(LinuxProcess::new(pid as i32)), seccomp: AtomicBool::new(false) }
+        let mut process = new_process(pid as i32);
+        process.started_ns = crate::time::now_ns();
+        LinuxState { process: SpinLock::new(process), seccomp: AtomicBool::new(false) }
     }
 
     /// A thread `tid` was started (the main thread is there from the start):
@@ -111,7 +123,7 @@ impl LinuxState {
         let parent = p.thread_ids().next();
         match parent {
             Some(parent) => p.add_thread(parent, tid, true),
-            None => first_thread(&mut p, tid),
+            None => first_thread(p.as_mut(), tid),
         }
     }
 
@@ -132,8 +144,15 @@ impl LinuxState {
 
     /// Run `f` on the personality's state, locked. `f` must not block.
     pub fn with<R>(&self, f: impl FnOnce(&mut LinuxProcess) -> R) -> R {
-        f(&mut self.process.lock())
+        f(self.process.lock().as_mut())
     }
+}
+
+/// A `LinuxProcess` on the heap, made in a frame of its own so that its
+/// callers' frames stay small (see [`LinuxState::process`]).
+#[inline(never)]
+fn new_process(pid: i32) -> Box<LinuxProcess> {
+    Box::new(LinuxProcess::new(pid))
 }
 
 /// A process's first thread: its personality state starts afresh. Out of
@@ -143,7 +162,9 @@ impl LinuxState {
 #[cold]
 #[inline(never)]
 fn first_thread(p: &mut LinuxProcess, tid: i32) {
+    let started_ns = p.started_ns;
     *p = LinuxProcess::new(tid);
+    p.started_ns = started_ns;
 }
 
 /// What the thread does after the personality acted on its signals.

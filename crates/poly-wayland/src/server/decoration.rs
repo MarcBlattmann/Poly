@@ -1,11 +1,11 @@
 //! `zxdg_decoration_manager_v1`: every toplevel is decorated by the server.
 //!
-//! The owner decided on one neutral frame drawn by Poly for every app
-//! (ADR 0106), so whatever mode a client asks for (`set_mode`,
-//! `unset_mode`), the answer is `server_side`; the protocol lets the
-//! compositor enforce a mode ("The compositor can decide not to use the
-//! client's mode and enforce a different mode instead"). Toplevels of
-//! clients that never ask are framed too.
+//! Poly draws one neutral frame around every app (ADR 0106): toplevels of
+//! clients that never ask, or ask for `server_side` or `unset_mode`, are
+//! framed. A client that explicitly asks for `client_side` draws its own
+//! frame (Chromium's tab strip with its window buttons), and Poly answers
+//! `client_side` and draws none, so the window has one title bar, not two
+//! (ADR 0144).
 
 use super::{ClientId, Data, Res, Server, error};
 use crate::protocol::{zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1};
@@ -52,6 +52,7 @@ impl Server {
                 if let Some(Data::Toplevel(t)) = self.client(c).data_mut(toplevel) {
                     t.decoration = None;
                     t.decoration_due = false;
+                    t.client_side = false;
                 }
             }
             zxdg_toplevel_decoration_v1::Request::SetMode { mode } => {
@@ -61,14 +62,24 @@ impl Server {
                     let code = zxdg_toplevel_decoration_v1::Error::INVALID_MODE.0;
                     return Err(error(id, code, format!("decoration mode {mode}")));
                 }
+                let client_side =
+                    zxdg_toplevel_decoration_v1::Mode(mode) == zxdg_toplevel_decoration_v1::Mode::CLIENT_SIDE;
+                if let Some(Data::Toplevel(t)) = self.client(c).data_mut(toplevel) {
+                    t.client_side = client_side;
+                }
                 self.decoration_due(c, toplevel, Some(id));
             }
-            zxdg_toplevel_decoration_v1::Request::UnsetMode => self.decoration_due(c, toplevel, Some(id)),
+            zxdg_toplevel_decoration_v1::Request::UnsetMode => {
+                if let Some(Data::Toplevel(t)) = self.client(c).data_mut(toplevel) {
+                    t.client_side = false;
+                }
+                self.decoration_due(c, toplevel, Some(id));
+            }
         }
         Ok(())
     }
 
-    /// A `configure` with the (always server-side) mode is due: now, with
+    /// A `configure` with the decoration mode is due: now, with
     /// a configure sequence, if the toplevel was configured before;
     /// otherwise with its first.
     fn decoration_due(&mut self, c: ClientId, toplevel: ObjectId, decoration: Option<ObjectId>) {

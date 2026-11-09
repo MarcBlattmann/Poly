@@ -782,6 +782,9 @@ fn run(args: &[String]) -> Result<u8, String> {
                         Err(e) => eprintln!("poly-compositor: {}: {e}", app.argv[0]),
                     }
                 }
+                if let Some(link) = &mut winlink {
+                    link.sync_geometry(server.scene());
+                }
             }
             d.sync(&mut server);
         }

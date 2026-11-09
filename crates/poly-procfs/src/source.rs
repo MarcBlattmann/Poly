@@ -183,6 +183,8 @@ pub struct FdInfo {
     /// Whether it is open for reading and for writing (the link's mode).
     pub read: bool,
     pub write: bool,
+    /// What the object behind the descriptor adds to its `fdinfo`.
+    pub extra: Vec<u8>,
 }
 
 /// One mount, for `/proc/<pid>/mounts` and `mountinfo`.

@@ -8,6 +8,7 @@ use crate::ldisc::INPUT_BUFFER;
 use crate::pty::{MASTER_BUFFER, PTMX, PTY_SLAVE_MAJOR, Ptys};
 use crate::sig::{SIGCONT, SIGHUP, SIGINT, SIGWINCH};
 use crate::termios::{Termios, Winsize, cc, lflag};
+use crate::tty::Ttys;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -31,6 +32,7 @@ impl Clock for Epoch {
 struct Env {
     host: Arc<FakeHost>,
     ptys: Arc<Ptys>,
+    ttys: Arc<Ttys>,
     vfs: &'static Vfs,
     ctx: FsContext,
 }
@@ -40,7 +42,8 @@ impl Env {
         let host = FakeHost::new();
         let vfs: &'static Vfs = Box::leak(Box::new(Vfs::new(Arc::new(Tmpfs::new(Arc::new(Epoch))))));
         let ctx = vfs.root_context().unwrap();
-        let ptys = Ptys::new(&host.ttys(), vfs);
+        let ttys = host.ttys();
+        let ptys = Ptys::new(&ttys, vfs);
         let root = Cred::root();
         vfs.register_char_device(PTMX, ptys.ptmx()).unwrap();
         vfs.mkdir(&ctx, &root, At::Cwd, b"/dev", 0o755).unwrap();
@@ -49,7 +52,7 @@ impl Env {
         let devpts = Arc::new(DevPts::new(ptys.clone()));
         vfs.mount(&ctx, &root, At::Cwd, b"/dev/pts", devpts, MountFlags::default()).unwrap();
         act_as(Some(caller(10, 10, 10)));
-        Env { host, ptys, vfs, ctx }
+        Env { host, ptys, ttys, vfs, ctx }
     }
 
     fn open(&self, path: &str, flags: OpenFlags) -> Result<Arc<OpenFile>, Errno> {
@@ -291,4 +294,35 @@ fn signals_and_window_size_through_the_master() {
     assert_eq!(m.ioctl(TIOCSIG, 10), Ok(0));
     assert_eq!(env.host.take_signals(), [(Target::Group(10), 10)]);
     assert_eq!(m.ioctl(TIOCSIG, 0), Err(Errno::EINVAL));
+}
+
+#[test]
+fn vhangup_kills_the_open_files_but_not_the_terminal() {
+    let env = Env::new();
+    let (m, n) = env.master();
+    env.host.groups.lock().unwrap().insert(10, 10);
+    let old = env.slave(n, OpenFlags::RDWR).unwrap();
+    assert_eq!(old.ioctl(TIOCGSID, USER), Ok(0), "the slave is the session's controlling terminal");
+    env.host.take_signals();
+    env.ttys.vhangup(10);
+    // The leader is in the foreground group: one SIGHUP, and SIGCONT.
+    assert_eq!(
+        env.host.take_signals(),
+        [(Target::Group(10), SIGHUP), (Target::Group(10), SIGCONT)],
+        "the leader is in the foreground group: one SIGHUP"
+    );
+    // Files opened before are dead.
+    assert_eq!(read_some(&old, 10), Ok(vec![]));
+    assert_eq!(old.write(b"x"), Err(Errno::EIO));
+    assert_eq!(old.ioctl(TIOCGSID, USER), Err(Errno::EIO));
+    assert!(old.poll().contains(PollEvents::HUP));
+    // The session has no controlling terminal any more.
+    assert!(env.ttys.of_session(10).is_none());
+    // The terminal lives: a file opened afterwards works.
+    let new = env.slave(n, OpenFlags::RDWR | OpenFlags::NOCTTY).unwrap();
+    assert_eq!(new.write(b"y"), Ok(1));
+    assert_eq!(read_some(&m, 10), Ok(b"y".to_vec()));
+    // A session without a terminal: nothing happens.
+    env.ttys.vhangup(10);
+    assert!(env.host.take_signals().is_empty());
 }

@@ -12,8 +12,10 @@
 //!                                                (N tests at a time; 1 by default); as the user running it,
 //!                                                tests that need root are checked on Poly as root alone
 //! selfcheck                                      Linux against Linux must be clean (CI)
-//! polycheck                                      Linux against Poly: the tests of tests/linux/poly-pass.txt and the
-//!                                                visible spec tests of every green entry pass (CI)
+//! polycheck [--shard I/N]                         Linux against Poly: the tests of tests/linux/poly-pass.txt and the
+//!                                                visible spec tests of every green entry pass (CI); with
+//!                                                --shard, only the I-th of N slices of the corpus (CI runs the slices
+//!                                                in parallel jobs)
 //! polyrun <test>... [--tests-dir DIR]... [--kernel ELF] [--build-kernel] [--print]
 //!                                                run tests on Poly only (no reference): output and app-mode events
 //! initramfs <binary> --out FILE | --list FILE    write (or list) a test initramfs
@@ -580,6 +582,23 @@ fn poly_pass_list(repo: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
+/// `I/N` of `--shard`: the 1-based index of a slice and the number of slices.
+fn parse_shard(text: &str) -> Result<(usize, usize)> {
+    let bad = || format!("--shard {text}: expected I/N with 1 <= I <= N, like 2/3");
+    let (i, n) = text.split_once('/').ok_or_else(bad)?;
+    let (i, n): (usize, usize) = (i.trim().parse().map_err(|_| bad())?, n.trim().parse().map_err(|_| bad())?);
+    if i == 0 || i > n { Err(bad()) } else { Ok((i, n)) }
+}
+
+/// Slice `index` of `count` (1-based) of `names`: sorted by name, every
+/// `count`-th one from `index - 1`, so slices are about equal and every
+/// name is in exactly one.
+fn shard_slice(names: &[&str], index: usize, count: usize) -> Vec<String> {
+    let mut sorted: Vec<&str> = names.to_vec();
+    sorted.sort_unstable();
+    sorted.into_iter().skip(index - 1).step_by(count).map(String::from).collect()
+}
+
 /// Poly test runs at a time in `polycheck`: each QEMU (TCG, two vCPUs)
 /// keeps about two cores busy, and CI runners have four.
 const POLYCHECK_MAX_JOBS: usize = 4;
@@ -590,7 +609,9 @@ const POLYCHECK_MAX_JOBS: usize = 4;
 /// entry stays green. Skipped, successfully, like `selfcheck`: without a C
 /// compiler, where ptrace is not permitted, without QEMU, and for
 /// implementer agents (it runs the reference OS).
-fn polycheck(repo: &Path) -> Result<u8> {
+fn polycheck(repo: &Path, a: &Args) -> Result<u8> {
+    a.only(&["shard"])?;
+    let shard = a.opt("shard").map(parse_shard).transpose()?;
     if oracle_guard("polycheck").is_err() {
         println!("pipeline polycheck: skipped (implementer agents do not run programs on the reference OS)");
         return Ok(0);
@@ -608,7 +629,7 @@ fn polycheck(repo: &Path) -> Result<u8> {
     let bin = base.join("bin");
     let green = green::entries(repo)?;
     let dirs: Vec<PathBuf> = green.iter().map(|g| repo.join(&g.tests_dir)).collect();
-    corpus::build_with(repo, &bin, &cc, &dirs)?;
+    let manifest = corpus::build_with(repo, &bin, &cc, &dirs)?;
     if let Err(e) = ptrace::trace(&bin.join("hello"), "hello", DEFAULT_TIMEOUT)
         && e.contains("not permitted")
     {
@@ -618,11 +639,27 @@ fn polycheck(repo: &Path) -> Result<u8> {
     let run_dir = base.join("run");
     let _ = std::fs::remove_dir_all(&run_dir);
     let jobs = util::default_jobs(POLYCHECK_MAX_JOBS).to_string();
-    let args: Vec<String> = ["--target", "poly", "--build-kernel", "--jobs", &jobs, "--bin-dir"]
+    let mut args: Vec<String> = ["--target", "poly", "--build-kernel", "--jobs", &jobs, "--bin-dir"]
         .iter()
         .map(|s| s.to_string())
         .chain([bin.display().to_string(), "--run-dir".into(), run_dir.display().to_string()])
         .collect();
+    // A shard runs its slice of the corpus (every test and app test in
+    // exactly one slice) and checks the pass list and the green entries'
+    // tests that are in it.
+    let mut slice: Option<Vec<String>> = None;
+    if let Some((index, count)) = shard {
+        let mut all: Vec<&str> = manifest.tests.iter().map(|t| t.name.as_str()).collect();
+        all.extend(manifest.apps.iter().map(|t| t.name.as_str()));
+        let mine = shard_slice(&all, index, count);
+        println!("pipeline polycheck: shard {index}/{count}: {} of the {} tests", mine.len(), all.len());
+        if mine.is_empty() {
+            return Ok(0);
+        }
+        args.extend(["--tests".to_string(), mine.join(",")]);
+        slice = Some(mine);
+    }
+    let in_shard = |name: &str| slice.as_ref().is_none_or(|s| s.iter().any(|t| t == name));
     // Failures of tests not on the list are expected: they are reported in
     // the table, and the list and the green entries decide.
     //
@@ -634,6 +671,14 @@ fn polycheck(repo: &Path) -> Result<u8> {
     // reference is not root is checked the same way (the fallback of
     // diff_with), and named below. The full comparison of every test runs
     // where the reference is root.
+    let green: Vec<green::GreenEntry> = green
+        .into_iter()
+        .map(|mut g| {
+            g.tests.retain(|t| in_shard(t));
+            g
+        })
+        .filter(|g| !g.tests.is_empty())
+        .collect();
     let green_tests: Vec<String> = green.iter().flat_map(|g| g.tests.iter().cloned()).collect();
     diff_with(repo, &Args::parse(&args, &["strict", "build-kernel"])?, &green_tests)?;
     let summary: Summary = util::read_json(&run_dir.join("summary.json"))?;
@@ -658,7 +703,8 @@ fn polycheck(repo: &Path) -> Result<u8> {
             names(&as_user)
         );
     }
-    let expected = poly_pass_list(repo)?;
+    let mut expected = poly_pass_list(repo)?;
+    expected.retain(|t| in_shard(t));
     // App tests this host cannot run as the reference (no chroot allowed,
     // a program not installed) say nothing about Poly: skipped, like the
     // whole check where ptrace is not permitted.
@@ -1330,7 +1376,7 @@ fn run(args: &[String]) -> Result<u8> {
         "trace" => trace_cmd(&repo, &a),
         "diff" => diff_cmd(&repo, &a),
         "selfcheck" => selfcheck(&repo),
-        "polycheck" => polycheck(&repo),
+        "polycheck" => polycheck(&repo, &a),
         "initramfs" => initramfs(&a),
         "polyrun" => polyrun(&repo, &a),
         "spec" => spec(&repo, &a),
@@ -1357,6 +1403,28 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shards_partition_the_names() {
+        let names = ["d", "a", "e", "c", "b", "f", "g"];
+        let mut all: Vec<String> = (1..=3).flat_map(|i| shard_slice(&names, i, 3)).collect();
+        assert_eq!(shard_slice(&names, 1, 3), ["a", "d", "g"]);
+        assert_eq!(shard_slice(&names, 2, 3), ["b", "e"]);
+        assert_eq!(shard_slice(&names, 3, 3), ["c", "f"]);
+        all.sort();
+        assert_eq!(all, ["a", "b", "c", "d", "e", "f", "g"]);
+        assert_eq!(shard_slice(&names, 4, 5), ["d"]);
+        assert!(shard_slice(&["a"], 2, 3).is_empty());
+    }
+
+    #[test]
+    fn parses_a_shard() {
+        assert_eq!(parse_shard("2/3"), Ok((2, 3)));
+        assert_eq!(parse_shard("1/1"), Ok((1, 1)));
+        for bad in ["0/3", "4/3", "2", "a/b", "2/", "/3", "2/0"] {
+            assert!(parse_shard(bad).is_err(), "{bad}");
+        }
+    }
 
     /// The real tracer on the real hello world, where a C compiler exists.
     #[test]
