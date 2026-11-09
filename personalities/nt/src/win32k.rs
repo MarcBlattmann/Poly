@@ -27,6 +27,8 @@ use poly_abi::{Outcome, SyscallRegs};
 use poly_ntobj::status::{STATUS_BUFFER_TOO_SMALL, STATUS_INVALID_PARAMETER, STATUS_SUCCESS};
 use poly_ntobj::{Handle, NtStatus, ObjectId, ObjectType};
 use poly_win32k::desktop::Desktop;
+use poly_win32k::frame::Rect;
+use poly_win32k::link::{FromCompositor, Request as DesktopRequest};
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::services::Win32kService;
 use poly_win32k::surfaces::{MAX_SIDE, Surfaces};
@@ -91,14 +93,14 @@ impl Win32k {
     /// The device: bytes the compositor wrote (its greeting brings the
     /// surfaces of the windows there are already).
     pub fn link_receive(&mut self, objects: &mut poly_ntobj::ObjectManager, bytes: &[u8]) {
-        use poly_win32k::link::FromCompositor;
         let events = self.desktop.receive(bytes);
-        // Input from the desktop: the pointer over a surface (relative to
-        // its top left, the window's client area), buttons, keys
-        // (ADR 0136); the shell's requests come later.
         let mut fx = Effects::default();
-        for e in events {
-            match e {
+        let frame = self.desktop.frame();
+        for event in events {
+            match event {
+                // Input from the desktop: the pointer over a surface
+                // (relative to its top left, the window's client area),
+                // buttons and keys (ADR 0136).
                 FromCompositor::Pointer { surface, x, y, .. } => {
                     if let Some(i) = self.surfaces.hwnd_of(surface).and_then(|h| self.wm.info(h)) {
                         self.wm.link_pointer(i.client.left + x, i.client.top + y, &mut fx);
@@ -106,6 +108,21 @@ impl Win32k {
                 }
                 FromCompositor::Button { button, pressed, .. } => self.wm.link_button(button, pressed, &mut fx),
                 FromCompositor::Key { code, pressed, .. } => self.wm.link_key(code, pressed, &mut fx),
+                // The shell's request to close a window: its thread gets
+                // `WM_CLOSE`, as from a click on a caption close button.
+                FromCompositor::Request { surface, request: DesktopRequest::Close } => {
+                    if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
+                        self.wm.post_system_message(hwnd, poly_win32k::user::WM_CLOSE, 0, &mut fx);
+                    }
+                }
+                // The compositor moved or resized the window's surface.
+                FromCompositor::Configure { surface, x, y, width, height } => {
+                    if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
+                        let (width, height) = (width.min(i32::MAX as u32) as i32, height.min(i32::MAX as u32) as i32);
+                        let client = Rect::new(x, y, x.saturating_add(width), y.saturating_add(height));
+                        self.wm.configure_from_desktop(hwnd, client, frame);
+                    }
+                }
                 _ => {}
             }
         }
