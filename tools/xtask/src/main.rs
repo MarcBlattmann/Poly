@@ -2062,6 +2062,7 @@ fn lint() -> Result {
                 "tools/wintrace/polytrace-agg/src/lib.rs",
                 "tools/wintrace/polytrace-agg/build.rs",
                 "tools/wintrace/proxy/common.rs",
+                "tools/wintrace/proxy/common_agg.rs",
             ]
             .map(|f| root().join(f)),
         ),
