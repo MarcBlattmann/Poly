@@ -58,6 +58,7 @@ pub mod kernel;
 pub mod layout;
 pub mod memory;
 pub mod objects;
+pub mod pagemap;
 pub mod params;
 pub mod pe_writer;
 pub mod protect;
