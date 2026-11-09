@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CancelIoEx.yaml
+id: windows/api/kernel32.dll/CancelIoEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CancelIoEx, GetQueuedCompletionStatus. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Cancels one pending request (by its OVERLAPPED) or all pending requests on a handle, whichever thread issued them. Cancelled requests complete with ERROR_OPERATION_ABORTED and 0 bytes and queue their completion packet. Cancelling something that is not pending is ERROR_NOT_FOUND.
+interface:
+  signature: "BOOL CancelIoEx(HANDLE file, LPOVERLAPPED overlapped)"
+rules:
+  nothing_pending: "FALSE with ERROR_NOT_FOUND (1168), with or without an OVERLAPPED."
+  one_request: "of three pending reads, cancelling the middle one by its OVERLAPPED: TRUE; its packet is FALSE with ERROR_OPERATION_ABORTED, that OVERLAPPED, the key, 0 bytes; the other two stay pending (no packets, GetOverlappedResult says incomplete)."
+  again: "cancelling the same request a second time: FALSE with ERROR_NOT_FOUND."
+  all_requests: "OVERLAPPED NULL cancels every pending request on the handle (the last remaining read completed aborted)."
+  completed: "a request that already completed (a small write that finished at once, a read that got its data) cannot be cancelled: FALSE, ERROR_NOT_FOUND."
+  wrong_handle: "an OVERLAPPED that belongs to a request on another handle: FALSE, ERROR_NOT_FOUND; on the right handle: TRUE."
+  writes: "a write bigger than the pipe buffer (4096 bytes into a 16-byte buffer, no reader) stays pending, its event unsignalled; cancelling it completes it with ERROR_OPERATION_ABORTED and 0 bytes reported."
+  connect: "a pending overlapped ConnectNamedPipe cancelled: ERROR_OPERATION_ABORTED; the instance is still listening afterwards (a client can open it, and a new ConnectNamedPipe reports ERROR_PIPE_CONNECTED)."
+  other_thread: "cancels a request issued by another thread (see CancelIo)."
+errors:
+  not_pending: "ERROR_NOT_FOUND (1168)"
+  bad_handle: "INVALID_HANDLE_VALUE: ERROR_INVALID_HANDLE (6)"
+side_effects: "completes the cancelled requests with ERROR_OPERATION_ABORTED"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Files other than named pipes (the packets and errors are the same mechanism; pipes were used as the I/O source), remote machines, completion ports with several competing threads under load, the concurrency limit's effect on wake-up order.

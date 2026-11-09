@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "nticp_remove_io",
+      "exe_sha256": "46dae6245f735671dc12c66c73587776279b97b5836eb77f83de436b10175043",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVhZF9wYWNrZXRfc3RhdHVzCm9rIHJlYWRfcGFja2V0X2tleQpvayByZWFkX3BhY2tldF9hcGNfY29udGV4dF9pc190aGVfb3ZlcmxhcHBlZApvayByZWFkX3BhY2tldF9pb3NiX3N0YXR1cwpvayByZWFkX3BhY2tldF9pb3NiX2luZm9ybWF0aW9uCm9rIG92ZXJsYXBwZWRfaW50ZXJuYWxfaXNfdGhlX3N0YXR1cwpvayBvdmVybGFwcGVkX2ludGVybmFsX2hpZ2hfaXNfdGhlX2J5dGVfY291bnQKb2sgZmFpbGVkX3BhY2tldF9zdGF0dXMKb2sgZmFpbGVkX3BhY2tldF9jb250ZXh0Cm9rIGZhaWxlZF9wYWNrZXRfaW9zYl9zdGF0dXNfaXNfcGlwZV9icm9rZW4Kb2sgZmFpbGVkX3BhY2tldF9pb3NiX2luZm9ybWF0aW9uCm9rIG92ZXJsYXBwZWRfaW50ZXJuYWxfb2ZfZmFpbGVkCm9rIGNhbmNlbGxlZF9wYWNrZXRfc3RhdHVzCm9rIGNhbmNlbGxlZF9wYWNrZXRfY29udGV4dApvayBjYW5jZWxsZWRfcGFja2V0X2lvc2Jfc3RhdHVzCm9rIG92ZXJmbG93X3BhY2tldF9zdGF0dXMKb2sgb3ZlcmZsb3dfcGFja2V0X2tleQpvayBvdmVyZmxvd19wYWNrZXRfaW9zYl9zdGF0dXMKb2sgb3ZlcmZsb3dfcGFja2V0X2luZm9ybWF0aW9uCm9rIG92ZXJmbG93X2dldF9vdmVybGFwcGVkX3Jlc3VsdF9mYWlscwpvayBvdmVyZmxvd19nZXRfb3ZlcmxhcHBlZF9yZXN1bHRfZXJyb3IKc3VtbWFyeSAyMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok read_packet_status\nok read_packet_key\nok read_packet_apc_context_is_the_overlapped\nok read_packet_iosb_status\nok read_packet_iosb_information\nok overlapped_internal_is_the_status\nok overlapped_internal_high_is_the_byte_count\nok failed_packet_status\nok failed_packet_context\nok failed_packet_iosb_status_is_pipe_broken\nok failed_packet_iosb_information\nok overlapped_internal_of_failed\nok cancelled_packet_status\nok cancelled_packet_context\nok cancelled_packet_iosb_status\nok overflow_packet_status\nok overflow_packet_key\nok overflow_packet_iosb_status\nok overflow_packet_information\nok overflow_get_overlapped_result_fails\nok overflow_get_overlapped_result_error\nsummary 21 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

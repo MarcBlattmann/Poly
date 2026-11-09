@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "pqcs_access",
+      "exe_sha256": "6da2bb6883e0e3cd732fb3dd5a8e3957eb73423c4db705890d87596d11541c02",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZHVwbGljYXRlX3dpdGhfbW9kaWZ5X3N0YXRlCm9rIHBvc3Rfd2l0aF9tb2RpZnlfc3RhdGVfb2sKb2sgZ2V0X3dpdGhfbW9kaWZ5X3N0YXRlX29rCm9rIGR1cGxpY2F0ZV9zeW5jaHJvbml6ZV9vbmx5Cm9rIHBvc3Rfd2l0aG91dF9tb2RpZnlfc3RhdGVfZmFpbHMKb2sgcG9zdF93aXRob3V0X21vZGlmeV9zdGF0ZV9lcnJvcgpvayBnZXRfd2l0aG91dF9tb2RpZnlfc3RhdGVfZmFpbHMKdmFsdWUgZ2V0X3dpdGhvdXRfbW9kaWZ5X3N0YXRlX2Vycm9yIDUKb2sgcGFja2V0X25vdF9jb25zdW1lZF9ieV9yZWZ1c2VkX2dldApvayBkdXBsaWNhdGVfbm9fYWNjZXNzCm9rIHBvc3Rfbm9fYWNjZXNzX2ZhaWxzCm9rIHBvc3Rfbm9fYWNjZXNzX2Vycm9yCm9rIGR1cGxpY2F0ZV9rZWVwc19wb3J0X2FsaXZlCm9rIGR1cGxpY2F0ZV9zdGlsbF9kZXF1ZXVlcwpzdW1tYXJ5IDEzIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok duplicate_with_modify_state\nok post_with_modify_state_ok\nok get_with_modify_state_ok\nok duplicate_synchronize_only\nok post_without_modify_state_fails\nok post_without_modify_state_error\nok get_without_modify_state_fails\nvalue get_without_modify_state_error 5\nok packet_not_consumed_by_refused_get\nok duplicate_no_access\nok post_no_access_fails\nok post_no_access_error\nok duplicate_keeps_port_alive\nok duplicate_still_dequeues\nsummary 13 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

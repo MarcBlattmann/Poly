@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "gor_basic",
+      "exe_sha256": "c9d1b9f083f7448853a1ec3f4aafccb3790d35031f4e91b0541afa075dd38b3b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVhZF9wZW5kaW5nCm9rIGluY29tcGxldGVfZmFpbHMKb2sgaW5jb21wbGV0ZV9lcnJvcgpvayBpbmNvbXBsZXRlX2J5dGVzCm9rIGV2ZW50X25vdF9zaWduYWxsZWQKb2sgd2FpdF90cnVlX29rCm9rIHdhaXRfdHJ1ZV9ieXRlcwpvayB3YWl0X3RydWVfd2FpdGVkCm9rIHdhaXRfdHJ1ZV9kYXRhCm9rIHdyaXRlcl9vawpvayBhZ2Fpbl9vawpvayBldmVudF9zdGlsbF9zaWduYWxsZWQKb2sgaW1tZWRpYXRlX3JlYWQKb2sgaW1tZWRpYXRlX3Jlc3VsdF9vawpvayByZXNldF9yZWFkX3BlbmRpbmcKb2sgZXZlbnRfcmVzZXRfYnlfbmV3X3JlcXVlc3QKb2sgcmVzZXRfcmVhZF9kb25lCm9rIG5vX2V2ZW50X3JlYWRfcGVuZGluZwpvayBub19ldmVudF9pbmNvbXBsZXRlCm9rIG5vX2V2ZW50X3dhaXRfb2sKb2sgZmFpbF9yZWFkX3BlbmRpbmcKb2sgZmFpbGVkX3JlcXVlc3RfZmFpbHMKb2sgZmFpbGVkX3JlcXVlc3RfZXJyb3IKb2sgZmFpbGVkX3JlcXVlc3RfYnl0ZXMKc3VtbWFyeSAyNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok read_pending\nok incomplete_fails\nok incomplete_error\nok incomplete_bytes\nok event_not_signalled\nok wait_true_ok\nok wait_true_bytes\nok wait_true_waited\nok wait_true_data\nok writer_ok\nok again_ok\nok event_still_signalled\nok immediate_read\nok immediate_result_ok\nok reset_read_pending\nok event_reset_by_new_request\nok reset_read_done\nok no_event_read_pending\nok no_event_incomplete\nok no_event_wait_ok\nok fail_read_pending\nok failed_request_fails\nok failed_request_error\nok failed_request_bytes\nsummary 24 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 198
+    }
+  ]
+}

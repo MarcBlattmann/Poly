@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateNamedPipeW.yaml
+id: windows/api/kernel32.dll/CreateNamedPipeW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CreateNamedPipeW, Named Pipe Type, Read, and Wait Modes, Named Pipe Names, Named Pipe Security and Access Rights. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Creates a named pipe instance (the server end) and returns a handle to it; creating further instances of an existing name adds instances up to the maximum the first instance set. The handle can read and/or write according to the open mode; clients open the pipe with CreateFileW and are limited by the same direction. Mode flags set the pipe's type and the server handle's read and wait mode.
+interface:
+  signature: "HANDLE CreateNamedPipeW(LPCWSTR name, DWORD openMode, DWORD pipeMode, DWORD maxInstances, DWORD outBufferSize, DWORD inBufferSize, DWORD defaultTimeout, LPSECURITY_ATTRIBUTES sa)"
+rules:
+  life: "A server instance is created with CreateNamedPipeW and starts listening. It becomes connected when a client opens the pipe with CreateFileW (whether or not ConnectNamedPipe was called) or when ConnectNamedPipe completes. When the client closes its handle the instance stays taken (closing) until the server calls DisconnectNamedPipe; a new client meanwhile gets ERROR_PIPE_BUSY. After DisconnectNamedPipe the instance is not yet listening: clients still get ERROR_PIPE_BUSY until the server calls ConnectNamedPipe again."
+  first_instance: "the first instance leaves last error 0. A further instance of the same name returns a valid handle and leaves last error ERROR_ALREADY_EXISTS (183): a success with that code, not a failure."
+  max_instances: "nMaxInstances 1..254 is the limit, PIPE_UNLIMITED_INSTANCES (255) is unlimited and GetNamedPipeInfo reports it as 255. When as many instances exist as the first instance allowed, a further CreateNamedPipeW fails with ERROR_PIPE_BUSY; closing one instance makes room again."
+  first_pipe_instance: "FILE_FLAG_FIRST_PIPE_INSTANCE fails with ERROR_ACCESS_DENIED if any instance of the name exists; without the flag a further instance is fine; after every instance is closed the name is free and the flag works again."
+  direction: "PIPE_ACCESS_INBOUND/OUTBOUND/DUPLEX of a further instance must equal the first instance's direction, otherwise it fails with ERROR_ACCESS_DENIED. Pipe type, read mode, wait mode, maximum instances, FILE_FLAG_OVERLAPPED and FILE_FLAG_WRITE_THROUGH may differ between instances: the instance is created (up to the instance limit)."
+  server_access: "the server handle can only read on an inbound pipe, only write on an outbound pipe, both on a duplex pipe; the wrong direction fails with ERROR_ACCESS_DENIED. GetNamedPipeInfo on the write-only server handle of an outbound pipe fails with ERROR_ACCESS_DENIED."
+  client_access: "a client may ask for at most the directions the pipe allows: GENERIC_READ on an inbound pipe and GENERIC_WRITE on an outbound pipe fail with ERROR_ACCESS_DENIED at CreateFileW; on a duplex pipe either one or both work; a handle with only attribute access (FILE_READ_ATTRIBUTES) opens too. A write-only client handle cannot read (ReadFile fails with ERROR_ACCESS_DENIED)."
+  info_flags: "GetNamedPipeInfo on the server handle reports PIPE_SERVER_END (1), plus PIPE_TYPE_MESSAGE (4) for a message-type pipe, plus 8 when PIPE_REJECT_REMOTE_CLIENTS was given. The buffer sizes are reported exactly as given (0, 7, 300, 100000 all seen) and the maximum as given."
+  modes: "PIPE_READMODE_MESSAGE on a PIPE_TYPE_BYTE pipe fails with ERROR_INVALID_PARAMETER; PIPE_TYPE_MESSAGE with PIPE_READMODE_BYTE is allowed. PIPE_NOWAIT shows in GetNamedPipeHandleStateW (state 1) and PIPE_READMODE_MESSAGE as 2. A client handle from CreateFileW always starts in byte read mode (state 0), also on a message-type pipe, and in wait mode."
+  buffers: "with a buffer size of 0 there is no buffering: a write waits (an overlapped write stays pending) until the reader has read the data; with buffers a small write completes at once."
+  names: "the name must be \\\\.\\pipe\\<name>; \\\\.\\pipe\\ with nothing after it fails with ERROR_INVALID_NAME (123) and a name outside the pipe directory (\\\\.\\something) with ERROR_FILE_NOT_FOUND (2). CreateFileW on a pipe name nobody created fails with ERROR_FILE_NOT_FOUND."
+errors:
+  max_instances_out_of_range: "nMaxInstances 0 or 256 or more: ERROR_INVALID_PARAMETER (87)"
+  open_mode_zero: "no direction bits: ERROR_INVALID_PARAMETER (87)"
+  message_read_on_byte_pipe: "ERROR_INVALID_PARAMETER (87)"
+  direction_mismatch: "ERROR_ACCESS_DENIED (5)"
+  first_instance_exists: "ERROR_ACCESS_DENIED (5)"
+  instance_limit_reached: "ERROR_PIPE_BUSY (231)"
+  empty_name: "ERROR_INVALID_NAME (123)"
+  name_outside_pipe_directory: "ERROR_FILE_NOT_FOUND (2)"
+side_effects: "creates a named object in \\Device\\NamedPipe that lives until its last instance is closed"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Remote clients and other machines, security descriptors on the pipe, impersonation, several sessions.
