@@ -86,12 +86,15 @@ pub mod process;
 pub mod registry;
 pub mod slist;
 pub mod sync;
+pub mod sysex;
 pub mod sysmsg;
 pub mod system;
 pub mod text;
 pub mod time;
 pub mod tls;
+pub mod tz;
 pub mod version;
+pub mod waitreg;
 
 pub use poly_ntobj::NtStatus;
 
