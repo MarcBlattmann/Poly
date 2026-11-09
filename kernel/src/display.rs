@@ -515,6 +515,19 @@ pub fn console_yielded() -> bool {
     matches!(DISPLAY.lock().as_ref().map(|d| &d.output), Some(Output::VirtioGpu(g)) if g.yielded)
 }
 
+/// Take the device's display-change event (§5.7.4.2) while a DRM client has
+/// the display. The console does not flush then, so nobody else reads
+/// `events_read`: [`crate::drm`] asks here, and tells its clients (a
+/// hotplug event) when the display configuration changed. Without a DRM
+/// client the console follows the change itself ([`Display::poll_gpu_events`]).
+/// True if there was a change to tell.
+pub fn take_display_event_for_drm() -> bool {
+    let mut guard = DISPLAY.lock();
+    let Some(d) = guard.as_mut() else { return false };
+    let Output::VirtioGpu(g) = &mut d.output else { return false };
+    g.yielded && !g.gpu.is_broken() && g.gpu.take_events() & poly_virtio_gpu::event::DISPLAY != 0
+}
+
 /// The DRM client let go of the display: plan the console's scanouts
 /// again (the display may have changed meanwhile), show its resource on
 /// them and flush all of it.
