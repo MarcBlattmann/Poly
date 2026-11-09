@@ -249,7 +249,7 @@ jobs:
       - run: cargo xtask ci coverage
 
   pipeline:
-    name: pipeline (${{ matrix.slice }}: selfcheck, polycheck, win polycheck)
+    name: "pipeline (${{ matrix.slice }}, selfcheck, polycheck, win polycheck)"
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
