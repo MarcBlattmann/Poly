@@ -882,8 +882,25 @@ fn fixtures(tool: &Path, work: &Path) -> Result<Vec<(String, u16, Vec<u8>)>> {
 
 // ----- the boot test -----------------------------------------------------------------------
 
-/// The boot test (see the module docs).
+/// The boot test (see the module docs): every step.
 pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    boot_test_part(kernel, syms, 0, 1)
+}
+
+/// The steps of the boot test that CI's second job runs (`7zip-b`): every
+/// second step. The first job runs the others (`7zip`); each step is a boot
+/// of its own, so the halves do not depend on one another.
+pub fn boot_test_b(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    boot_test_part(kernel, syms, 1, 2)
+}
+
+/// The first half of the steps (`7zip`, see [`boot_test_b`]).
+pub fn boot_test_a(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    boot_test_part(kernel, syms, 0, 2)
+}
+
+/// The steps whose number leaves `part` when divided by `parts`.
+fn boot_test_part(kernel: &Path, syms: &Arc<Symbols>, part: usize, parts: usize) -> Result {
     eprintln!("==> boot test: 7-Zip's command line (7za.exe, x64) runs on the NT personality (ADR 0087, 0091)");
     let Some(exe) = cached() else {
         eprintln!(
@@ -919,8 +936,8 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         std::env::var("POLY_7ZIP_STEPS").ok().map(|v| v.split(',').map(str::to_string).collect());
     let mut failed = Vec::new();
     let mut summary = Vec::new();
-    for step in STEPS {
-        if only.as_ref().is_some_and(|o| !o.iter().any(|n| n == step.name)) {
+    for (index, step) in STEPS.iter().enumerate() {
+        if only.as_ref().is_some_and(|o| !o.iter().any(|n| n == step.name)) || index % parts != part {
             continue;
         }
         let mut append = format!("poly.qemu_exit poly.init=/{DIR}/7za.exe");

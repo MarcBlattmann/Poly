@@ -204,32 +204,36 @@ jobs:
         # (`cargo xtask boot-tests --list` shows the groups of each); `ci
         # lint` checks that every shard is in exactly one entry. The entries
         # take about the same time (their groups' boots, in seconds on KVM:
-        # devices 85, sevenzip 87, x11 97, apps 115, userland 115, desktop
-        # 115). `x11` is true where the root disk wants Xwayland and Mesa;
-        # `sevenzip` where 7-Zip is fetched.
+        # 80 to 105). `x11` is true where the root disk wants Xwayland and
+        # Mesa; `sevenzip` where 7-Zip is fetched.
         include:
-          - boot: devices
-            shards: devices,faults
-            accel: auto
-          - boot: userland
-            shards: userland,selftest
-            accel: auto
-            x11: true
-          - boot: sevenzip
-            shards: sevenzip
-            accel: auto
-            sevenzip: true
-          - boot: desktop
-            shards: desktop,desktop-shell
+          - boot: x11
+            shards: x11
             accel: auto
             x11: true
           - boot: apps
-            shards: desktop-apps,wintrace
+            shards: desktop-apps
+            accel: auto
+            x11: true
+          - boot: desktop
+            shards: desktop
+            accel: auto
+            x11: true
+          - boot: userland
+            shards: userland,wintrace
             accel: auto
             x11: true
             sevenzip: true
-          - boot: x11
-            shards: x11
+          - boot: sevenzip
+            shards: sevenzip,selftest
+            accel: auto
+            sevenzip: true
+          - boot: sevenzip-b
+            shards: sevenzip-b,faults
+            accel: auto
+            sevenzip: true
+          - boot: shell
+            shards: desktop-shell,devices
             accel: auto
             x11: true
           # The self-test boots on TCG too, so paths only the emulator takes

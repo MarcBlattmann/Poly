@@ -1559,7 +1559,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 37] = [
+const BOOT_GROUPS: [BootGroup; 38] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1584,7 +1584,10 @@ const BOOT_GROUPS: [BootGroup; 37] = [
     ("rootdisk", rootdisk::boot_test),
     // 7-Zip's command line on the NT personality, skipped without the
     // cached 7za.exe (sevenzip.rs, ADR 0087).
-    ("7zip", sevenzip::boot_test),
+    // One boot per step: every second step in each of two groups, which CI
+    // runs in two jobs (shards `sevenzip` and `sevenzip-b`).
+    ("7zip", sevenzip::boot_test_a),
+    ("7zip-b", sevenzip::boot_test_b),
     // The 7-Zip scenario under the Windows API tracer, each step's trace
     // compared with the committed Windows reference, required (ADR 0114:
     // TRACE_REQUIRED; sevenzip_trace.rs, ADR 0110).
@@ -1674,13 +1677,15 @@ const BOOT_GROUPS: [BootGroup; 37] = [
 /// workflow can combine them into jobs of equal length as the times change
 /// without moving groups (the times of a CI run on KVM are in the comments).
 /// `cargo xtask ci lint` checks that the workflow runs exactly these.
-const CI_BOOT_SHARDS: [(&str, &[&str]); 10] = [
+const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     // About 75 s: Linux programs and the root disk.
     ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "toolkits", "chromium"]),
-    // About 130 s: 7-Zip's command line on the NT personality, one boot per step.
+    // About 60 s each: 7-Zip's command line on the NT personality, one boot per
+    // step, every second step in each.
     ("sevenzip", &["7zip"]),
+    ("sevenzip-b", &["7zip-b"]),
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
     // About 60 s: the compositor and the desktop.
