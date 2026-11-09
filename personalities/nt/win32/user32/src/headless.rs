@@ -781,3 +781,66 @@ pub extern "system" fn DestroyIcon(icon: H) -> i32 {
         0
     }
 }
+
+// ----- the per-monitor DPI functions (`api-ms-win-shcore-scaling-*`)
+
+const E_INVALIDARG: i32 = 0x8007_0057_u32 as i32;
+const E_ACCESSDENIED: i32 = 0x8007_0005_u32 as i32;
+
+/// `GetDpiForMonitor`: 96 in both directions for every `MONITOR_DPI_TYPE`
+/// (effective, angular, raw) of the one monitor.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetDpiForMonitor(monitor: H, kind: u32, dpi_x: *mut u32, dpi_y: *mut u32) -> i32 {
+    if monitor != PRIMARY_MONITOR || kind > 2 || dpi_x.is_null() || dpi_y.is_null() {
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's out parameters.
+    unsafe {
+        *dpi_x = 96;
+        *dpi_y = 96;
+    }
+    0
+}
+
+/// `GetScaleFactorForMonitor`: `SCALE_100_PERCENT`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetScaleFactorForMonitor(monitor: H, scale: *mut i32) -> i32 {
+    if monitor != PRIMARY_MONITOR || scale.is_null() {
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's out parameter.
+    unsafe { *scale = 100 };
+    0
+}
+
+/// `SetProcessDpiAwareness(PROCESS_DPI_AWARENESS)`: 0 unaware, 1 system, 2
+/// per monitor; once per process (`E_ACCESSDENIED` after that).
+#[unsafe(no_mangle)]
+pub extern "system" fn SetProcessDpiAwareness(awareness: u32) -> i32 {
+    let ctx = match awareness {
+        0 => CTX_UNAWARE,
+        1 => CTX_SYSTEM_AWARE,
+        2 => CTX_PER_MONITOR,
+        _ => return E_INVALIDARG,
+    };
+    match PROCESS_DPI.compare_exchange(0, ctx, Ordering::AcqRel, Ordering::Acquire) {
+        Ok(_) => 0,
+        Err(_) => E_ACCESSDENIED,
+    }
+}
+
+/// `GetProcessDpiAwareness`: the awareness set, unaware by default.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetProcessDpiAwareness(_process: usize, awareness: *mut u32) -> i32 {
+    if awareness.is_null() {
+        return E_INVALIDARG;
+    }
+    let a = match PROCESS_DPI.load(Ordering::Relaxed) {
+        CTX_SYSTEM_AWARE => 1,
+        CTX_PER_MONITOR | CTX_PER_MONITOR_V2 => 2,
+        _ => 0,
+    };
+    // SAFETY: the caller's out parameter.
+    unsafe { *awareness = a };
+    0
+}

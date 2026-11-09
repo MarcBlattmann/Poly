@@ -131,6 +131,17 @@ unsafe extern "system" {
     fn UnregisterPowerSettingNotification(h: usize) -> i32;
 }
 
+#[link(name = "api-ms-win-shcore-scaling-l1-1-1", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GetDpiForMonitor(monitor: usize, kind: u32, x: *mut u32, y: *mut u32) -> Hresult;
+    fn GetProcessDpiAwareness(process: usize, awareness: *mut u32) -> Hresult;
+}
+
+#[link(name = "user32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn MonitorFromWindow(h: Hwnd, flags: u32) -> usize;
+}
+
 #[link(name = "gdi32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn GetStockObject(i: i32) -> usize;
@@ -536,6 +547,16 @@ unsafe fn system() {
     check_fail(SetProcessDpiAwarenessContext(-3) as usize, ERROR_ACCESS_DENIED);
     check_eq(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), -4) as usize, 1);
     check_eq(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), -1) as usize, 0);
+    // The per-monitor functions come through the shcore contract (user32 here).
+    let mon = MonitorFromWindow(0, 1); // MONITOR_DEFAULTTOPRIMARY
+    check_got(mon != 0, 0);
+    let (mut dx, mut dy) = (0u32, 0u32);
+    check_hr(GetDpiForMonitor(mon, 0, &mut dx, &mut dy), S_OK);
+    check_got(dx == 96 && dy == 96, dx);
+    check_hr(GetDpiForMonitor(mon, 9, &mut dx, &mut dy), 0x8007_0057);
+    let mut aw = 9u32;
+    check_hr(GetProcessDpiAwareness(0, &mut aw), S_OK);
+    check_eq(aw as usize, 2); // per monitor, set above
 }
 
 // ----- GDI: fonts, text metrics, device caps -----------------------------------------

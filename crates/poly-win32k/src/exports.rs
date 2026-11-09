@@ -206,6 +206,10 @@ pub const USER32_EXPORTS: &[&str] = &[
     "LoadImageW",
     "CreateIconIndirect",
     "DestroyIcon",
+    "GetDpiForMonitor",
+    "GetScaleFactorForMonitor",
+    "SetProcessDpiAwareness",
+    "GetProcessDpiAwareness",
 ];
 
 /// `user32.dll` functions that are stubs for now (painting through update

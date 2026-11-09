@@ -21,6 +21,8 @@ pub const TABLE: &[(&str, Option<&str>)] = &[
     // COM and the Windows Runtime live in combase.dll on Windows; ours are in ole32.dll (ADR 0155).
     ("api-ms-win-core-winrt-", Some("ole32.dll")),
     ("api-ms-win-core-com-", Some("ole32.dll")),
+    // The per-monitor DPI functions (shcore.dll on Windows) are user32's here.
+    ("api-ms-win-shcore-scaling-", Some("user32.dll")),
     ("api-ms-win-core-", Some("kernelbase.dll")),
     ("api-ms-win-security-", Some("advapi32.dll")),
     ("api-ms-win-eventing-", Some("advapi32.dll")),
@@ -105,6 +107,7 @@ mod tests {
         assert_eq!(resolve(&w("api-ms-win-core-winrt-l1-1-0.dll")), ApiSet::Host("ole32.dll"));
         assert_eq!(resolve(&w("api-ms-win-core-winrt-string-l1-1-0.dll")), ApiSet::Host("ole32.dll"));
         assert_eq!(resolve(&w("api-ms-win-core-com-l1-1-3.dll")), ApiSet::Host("ole32.dll"));
+        assert_eq!(resolve(&w("api-ms-win-shcore-scaling-l1-1-1.dll")), ApiSet::Host("user32.dll"));
         assert_eq!(resolve(&w("ext-ms-win-ntuser-window-l1-1-0.dll")), ApiSet::Absent);
         assert_eq!(resolve(&w("api-ms-win-unknown-l1-1-0.dll")), ApiSet::Absent);
         assert_eq!(resolve(&w("kernel32.dll")), ApiSet::NotApiSet);

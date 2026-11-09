@@ -502,6 +502,7 @@ fn verify_ole32(dir: &Path) -> Result {
             "gdi32.dll",
             "api-ms-win-core-winrt-l1-1-0.dll",
             "api-ms-win-core-winrt-string-l1-1-0.dll",
+            "api-ms-win-shcore-scaling-l1-1-1.dll",
         ],
     )
 }
