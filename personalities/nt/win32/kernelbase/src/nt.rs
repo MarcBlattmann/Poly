@@ -105,6 +105,81 @@ unsafe extern "system" {
         output_len: u32,
     ) -> NtStatus;
 
+    pub fn NtFsControlFile(
+        handle: Handle,
+        event: Handle,
+        apc: *const u8,
+        apc_context: *const u8,
+        iosb: *mut IoStatusBlock,
+        code: u32,
+        input: *const u8,
+        input_len: u32,
+        output: *mut u8,
+        output_len: u32,
+    ) -> NtStatus;
+    pub fn NtCreateNamedPipeFile(
+        handle: *mut Handle,
+        access: u32,
+        attributes: *const ObjectAttributes,
+        iosb: *mut IoStatusBlock,
+        share: u32,
+        disposition: u32,
+        options: u32,
+        pipe_type: u32,
+        read_mode: u32,
+        completion_mode: u32,
+        max_instances: u32,
+        inbound_quota: u32,
+        outbound_quota: u32,
+        default_timeout: *const i64,
+    ) -> NtStatus;
+    pub fn NtCancelIoFile(handle: Handle, iosb: *mut IoStatusBlock) -> NtStatus;
+    pub fn NtCancelIoFileEx(handle: Handle, request: *const IoStatusBlock, iosb: *mut IoStatusBlock) -> NtStatus;
+    pub fn NtCancelSynchronousIoFile(thread: Handle, request: *const IoStatusBlock, iosb: *mut IoStatusBlock)
+    -> NtStatus;
+    pub fn NtCreateIoCompletion(
+        handle: *mut Handle,
+        access: u32,
+        attributes: *const ObjectAttributes,
+        concurrent: u32,
+    ) -> NtStatus;
+    pub fn NtSetIoCompletion(handle: Handle, key: usize, context: usize, status: NtStatus, information: usize)
+    -> NtStatus;
+    pub fn NtRemoveIoCompletion(
+        handle: Handle,
+        key: *mut usize,
+        context: *mut usize,
+        iosb: *mut IoStatusBlock,
+        timeout: *const i64,
+    ) -> NtStatus;
+    pub fn NtRemoveIoCompletionEx(
+        handle: Handle,
+        info: *mut u8,
+        count: u32,
+        removed: *mut u32,
+        timeout: *const i64,
+        alertable: u8,
+    ) -> NtStatus;
+    pub fn NtOpenProcess(
+        handle: *mut Handle,
+        access: u32,
+        attributes: *const ObjectAttributes,
+        client: *const [usize; 2],
+    ) -> NtStatus;
+    pub fn NtOpenThread(
+        handle: *mut Handle,
+        access: u32,
+        attributes: *const ObjectAttributes,
+        client: *const [usize; 2],
+    ) -> NtStatus;
+    pub fn NtQueueApcThread(
+        thread: Handle,
+        routine: usize,
+        arg1: usize,
+        arg2: usize,
+        arg3: usize,
+    ) -> NtStatus;
+    pub fn NtTestAlert() -> NtStatus;
     pub fn NtCreateEvent(
         handle: *mut Handle,
         access: u32,
@@ -357,6 +432,8 @@ pub struct IoStatusBlock {
 
 /// `STATUS_*` values `kernelbase` looks at (`ntstatus.h`).
 pub const STATUS_PENDING: NtStatus = NtStatus(0x103);
+pub const STATUS_TIMEOUT: NtStatus = NtStatus(0x102);
+pub const STATUS_USER_APC: NtStatus = NtStatus(0xC0);
 pub const STATUS_OBJECT_NAME_EXISTS: NtStatus = NtStatus(0x4000_0000);
 pub const STATUS_NO_MORE_FILES: NtStatus = NtStatus(0x8000_0006);
 pub const STATUS_END_OF_FILE: NtStatus = NtStatus(0xC000_0011);

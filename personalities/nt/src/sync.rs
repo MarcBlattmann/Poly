@@ -316,11 +316,7 @@ fn signal_object(sys: &mut crate::system::NtSystem, caller: &poly_ntobj::Caller,
 
 pub fn queue_apc_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, routine, arg1, arg2, arg3] = abi::args::<K, 5>(k, regs)?;
-    let caller = k.caller();
-    let thread = k.with_state(|sys, _, _| {
-        let id = sys.objects.object_by_handle(&caller, Handle(h), THREAD_SET_CONTEXT, Some(ObjectType::Thread))?;
-        Ok::<_, NtStatus>(poly_ntobj::ThreadRef(sys.objects.cookie(id).expect("live thread object")))
-    })?;
+    let thread = crate::threads::thread_of(k, Handle(h), THREAD_SET_CONTEXT)?;
     k.queue_apc(thread, Apc { routine, arg1, arg2, arg3 })?;
     Ok(STATUS_SUCCESS)
 }

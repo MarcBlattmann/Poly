@@ -17,6 +17,38 @@
 /// `(function, contract)`: `kernel32!function` forwards to
 /// `contract.function`.
 pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
+    // Named pipes, completion ports and overlapped I/O (ADR 0169).
+    ("CreateNamedPipeW", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("ConnectNamedPipe", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("DisconnectNamedPipe", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("PeekNamedPipe", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeInfo", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeHandleStateW", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("SetNamedPipeHandleState", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("TransactNamedPipe", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("CallNamedPipeW", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("WaitNamedPipeW", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeClientProcessId", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeServerProcessId", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeClientSessionId", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeServerSessionId", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("CancelIo", "api-ms-win-core-io-l1-1-0"),
+    ("CancelIoEx", "api-ms-win-core-io-l1-1-0"),
+    ("CancelSynchronousIo", "api-ms-win-core-io-l1-1-0"),
+    ("CreateIoCompletionPort", "api-ms-win-core-io-l1-1-0"),
+    ("GetOverlappedResult", "api-ms-win-core-io-l1-1-0"),
+    ("GetOverlappedResultEx", "api-ms-win-core-io-l1-1-0"),
+    ("GetQueuedCompletionStatus", "api-ms-win-core-io-l1-1-0"),
+    ("GetQueuedCompletionStatusEx", "api-ms-win-core-io-l1-1-0"),
+    ("PostQueuedCompletionStatus", "api-ms-win-core-io-l1-1-0"),
+    ("ReadFileEx", "api-ms-win-core-file-l1-1-0"),
+    ("WriteFileEx", "api-ms-win-core-file-l1-1-0"),
+    ("SetFileCompletionNotificationModes", "api-ms-win-core-file-l1-1-0"),
+    ("OpenProcess", "api-ms-win-core-processthreads-l1-1-0"),
+    ("OpenThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadId", "api-ms-win-core-processthreads-l1-1-0"),
+    ("QueueUserAPC", "api-ms-win-core-processthreads-l1-1-0"),
+
     // Files (fileapi.h).
     ("CreateFileW", "api-ms-win-core-file-l1-1-0"),
     ("CreateFileA", "api-ms-win-core-file-l1-1-0"),
