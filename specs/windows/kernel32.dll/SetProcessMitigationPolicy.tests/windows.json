@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "db56e24d0ac3",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T17:08:29Z",
+  "tests": [
+    {
+      "name": "smp_policies",
+      "exe_sha256": "b79047c9112b6c57fb169fec6f9db51cbb32214343f82dcb8b691c39dca1c719",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U3RyaWN0SGFuZGxlQ2hlY2sgZmxhZ3M9MTogc2V0X29rPTAgZ2V0X29rPTEgcmVhZGJhY2s9MHgwIHNldF9lcnJvcj04NwpTdHJpY3RIYW5kbGVDaGVjayBmbGFncz0yOiBzZXRfb2s9MCBnZXRfb2s9MSByZWFkYmFjaz0weDAgc2V0X2Vycm9yPTg3ClN0cmljdEhhbmRsZUNoZWNrIGZsYWdzPTM6IHNldF9vaz0xIGdldF9vaz0xIHJlYWRiYWNrPTB4MyBzZXRfZXJyb3I9MApEeW5hbWljQ29kZSBQcm9oaWJpdER5bmFtaWNDb2RlPTEsIHRoZW4gVmlydHVhbEFsbG9jKFJXWCk6IHNldF9vaz0xIGdldF9vaz0xIHJlYWRiYWNrPTB4MSBzZXRfZXJyb3I9MCBhbGxvY19vaz0wIGFsbG9jX2ZhaWxlZD0xIGFsbG9jX2Vycm9yX2xvd19uaWJibGU9NwpFeHRlbnNpb25Qb2ludERpc2FibGUgZmxhZ3M9MTogc2V0X29rPTEgZ2V0X29rPTEgcmVhZGJhY2s9MHgxIHNldF9lcnJvcj0wCkltYWdlTG9hZCBmbGFncz03OiBzZXRfb2s9MSBnZXRfb2s9MSByZWFkYmFjaz0weDcgc2V0X2Vycm9yPTAKRm9udERpc2FibGUgZmxhZ3M9MTogc2V0X29rPTEgZ2V0X29rPTEgcmVhZGJhY2s9MHgxIHNldF9lcnJvcj0wClN5c3RlbUNhbGxEaXNhYmxlIGZsYWdzPTE6IHNldF9vaz0xIGdldF9vaz0xIHJlYWRiYWNrPTB4MSBzZXRfZXJyb3I9MApDaGlsZFByb2Nlc3MgZmxhZ3M9MTogc2V0X29rPTEgZ2V0X29rPTEgcmVhZGJhY2s9MHgxIHNldF9lcnJvcj0wClNpZ25hdHVyZSBmbGFncz0xOiBzZXRfb2s9MSBnZXRfb2s9MSByZWFkYmFjaz0weDUgc2V0X2Vycm9yPTAKREVQIGZsYWdzPTEgKDggYnl0ZXMpOiBzZXRfb2s9MCBnZXRfb2s9MSByZWFkYmFjaz0weDMgc2V0X2Vycm9yPTUwCkFTTFIgZmxhZ3M9MTogc2V0X29rPTEgZ2V0X29rPTEgcmVhZGJhY2s9MHg1IHNldF9lcnJvcj0wCkNvbnRyb2xGbG93R3VhcmQgZmxhZ3M9MTogc2V0X29rPTAgZ2V0X29rPTEgcmVhZGJhY2s9MHgwIHNldF9lcnJvcj01ClBheWxvYWRSZXN0cmljdGlvbiBmbGFncz0xOiBzZXRfb2s9MCBnZXRfb2s9MSByZWFkYmFjaz0weDAgc2V0X2Vycm9yPTg3ClNpZGVDaGFubmVsSXNvbGF0aW9uIGZsYWdzPTE6IHNldF9vaz0xIGdldF9vaz0xIHJlYWRiYWNrPTB4MSBzZXRfZXJyb3I9MApVc2VyU2hhZG93U3RhY2sgZmxhZ3M9MTogc2V0X29rPTAgZ2V0X29rPTEgcmVhZGJhY2s9MHgwIHNldF9lcnJvcj01ClJlZGlyZWN0aW9uVHJ1c3QgZmxhZ3M9MTogc2V0X29rPTEgZ2V0X29rPTEgcmVhZGJhY2s9MHgxIHNldF9lcnJvcj0wCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "StrictHandleCheck flags=1: set_ok=0 get_ok=1 readback=0x0 set_error=87\nStrictHandleCheck flags=2: set_ok=0 get_ok=1 readback=0x0 set_error=87\nStrictHandleCheck flags=3: set_ok=1 get_ok=1 readback=0x3 set_error=0\nDynamicCode ProhibitDynamicCode=1, then VirtualAlloc(RWX): set_ok=1 get_ok=1 readback=0x1 set_error=0 alloc_ok=0 alloc_failed=1 alloc_error_low_nibble=7\nExtensionPointDisable flags=1: set_ok=1 get_ok=1 readback=0x1 set_error=0\nImageLoad flags=7: set_ok=1 get_ok=1 readback=0x7 set_error=0\nFontDisable flags=1: set_ok=1 get_ok=1 readback=0x1 set_error=0\nSystemCallDisable flags=1: set_ok=1 get_ok=1 readback=0x1 set_error=0\nChildProcess flags=1: set_ok=1 get_ok=1 readback=0x1 set_error=0\nSignature flags=1: set_ok=1 get_ok=1 readback=0x5 set_error=0\nDEP flags=1 (8 bytes): set_ok=0 get_ok=1 readback=0x3 set_error=50\nASLR flags=1: set_ok=1 get_ok=1 readback=0x5 set_error=0\nControlFlowGuard flags=1: set_ok=0 get_ok=1 readback=0x0 set_error=5\nPayloadRestriction flags=1: set_ok=0 get_ok=1 readback=0x0 set_error=87\nSideChannelIsolation flags=1: set_ok=1 get_ok=1 readback=0x1 set_error=0\nUserShadowStack flags=1: set_ok=0 get_ok=1 readback=0x0 set_error=5\nRedirectionTrust flags=1: set_ok=1 get_ok=1 readback=0x1 set_error=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 395
+    }
+  ]
+}

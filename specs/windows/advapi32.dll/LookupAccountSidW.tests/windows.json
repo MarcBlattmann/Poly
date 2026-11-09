@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "db56e24d0ac3",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T17:08:29Z",
+  "tests": [
+    {
+      "name": "las_sizes",
+      "exe_sha256": "642ef8bf604fc28990cecebfda3b6d86e113ca8b75334692d981354c4447b4bd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZXhhY3QgZml0IChTWVNURU06IDYgKyAxMik6IG9rPTEgZXJyPS0xIGNjaF9uYW1lPTYgY2NoX2RvbWFpbj0xMiB1c2U9MHg1IG5hbWUwPTB4NTMgZG9tMD0weDRlIG5hbWU9IlNZU1RFTSIKbmFtZSBidWZmZXIgb25lIHRvbyBzbWFsbDogb2s9MCBlcnI9MTIyIGNjaF9uYW1lPTcgY2NoX2RvbWFpbj0xMyB1c2U9MHhkZWFkIG5hbWUwPTB4YWFhYSBkb20wPTB4YWFhYSBuYW1lPSIiCmRvbWFpbiBidWZmZXIgb25lIHRvbyBzbWFsbDogb2s9MCBlcnI9MTIyIGNjaF9uYW1lPTcgY2NoX2RvbWFpbj0xMyB1c2U9MHhkZWFkIG5hbWUwPTB4YWFhYSBkb20wPTB4YWFhYSBuYW1lPSIiCmJvdGggemVybywgYnVmZmVycyBnaXZlbjogb2s9MCBlcnI9MTIyIGNjaF9uYW1lPTcgY2NoX2RvbWFpbj0xMyB1c2U9MHhkZWFkIG5hbWUwPTB4YWFhYSBkb20wPTB4YWFhYSBuYW1lPSIiCmJvdGggemVybywgYnVmZmVycyBudWxsOiBvaz0wIGVycj0xMjIgY2NoX25hbWU9NyBjY2hfZG9tYWluPTEzIHVzZT0weGRlYWQgbmFtZTA9MHhhYWFhIGRvbTA9MHhhYWFhIG5hbWU9IiIKRXZlcnlvbmUgKGVtcHR5IGRvbWFpbik6IG9rPTEgZXJyPS0xIGNjaF9uYW1lPTggY2NoX2RvbWFpbj0wIHVzZT0weDUgbmFtZTA9MHg0NSBkb20wPTB4MCBuYW1lPSJFdmVyeW9uZSIKRXZlcnlvbmUsIGRvbWFpbiBzaXplIDA6IG9rPTAgZXJyPTEyMiBjY2hfbmFtZT05IGNjaF9kb21haW49MSB1c2U9MHhkZWFkIG5hbWUwPTB4YWFhYSBkb20wPTB4YWFhYSBuYW1lPSIiCmludmFsaWQgU0lEICh0b28gbWFueSBzdWItYXV0aG9yaXRpZXMpOiBvaz0wIGVycj04NyBjY2hfbmFtZT02NCBjY2hfZG9tYWluPTY0IHVzZT0weGRlYWQgbmFtZTA9MHhhYWFhIGRvbTA9MHhhYWFhIG5hbWU9IiIKU0lEIHJldmlzaW9uIDI6IG9rPTAgZXJyPTg3IGNjaF9uYW1lPTY0IGNjaF9kb21haW49NjQgdXNlPTB4ZGVhZCBuYW1lMD0weGFhYWEgZG9tMD0weGFhYWEgbmFtZT0iIgpTSUQgd2l0aCB1bmtub3duIGF1dGhvcml0eSA3Nzogb2s9MCBlcnI9MTMzMiBjY2hfbmFtZT02NCBjY2hfZG9tYWluPTY0IHVzZT0weGRlYWQgbmFtZTA9MHhhYWFhIGRvbTA9MHhhYWFhIG5hbWU9IiIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "exact fit (SYSTEM: 6 + 12): ok=1 err=-1 cch_name=6 cch_domain=12 use=0x5 name0=0x53 dom0=0x4e name=\"SYSTEM\"\nname buffer one too small: ok=0 err=122 cch_name=7 cch_domain=13 use=0xdead name0=0xaaaa dom0=0xaaaa name=\"\"\ndomain buffer one too small: ok=0 err=122 cch_name=7 cch_domain=13 use=0xdead name0=0xaaaa dom0=0xaaaa name=\"\"\nboth zero, buffers given: ok=0 err=122 cch_name=7 cch_domain=13 use=0xdead name0=0xaaaa dom0=0xaaaa name=\"\"\nboth zero, buffers null: ok=0 err=122 cch_name=7 cch_domain=13 use=0xdead name0=0xaaaa dom0=0xaaaa name=\"\"\nEveryone (empty domain): ok=1 err=-1 cch_name=8 cch_domain=0 use=0x5 name0=0x45 dom0=0x0 name=\"Everyone\"\nEveryone, domain size 0: ok=0 err=122 cch_name=9 cch_domain=1 use=0xdead name0=0xaaaa dom0=0xaaaa name=\"\"\ninvalid SID (too many sub-authorities): ok=0 err=87 cch_name=64 cch_domain=64 use=0xdead name0=0xaaaa dom0=0xaaaa name=\"\"\nSID revision 2: ok=0 err=87 cch_name=64 cch_domain=64 use=0xdead name0=0xaaaa dom0=0xaaaa name=\"\"\nSID with unknown authority 77: ok=0 err=1332 cch_name=64 cch_domain=64 use=0xdead name0=0xaaaa dom0=0xaaaa name=\"\"\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    }
+  ]
+}

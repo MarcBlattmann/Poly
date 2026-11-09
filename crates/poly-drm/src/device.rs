@@ -293,6 +293,9 @@ pub struct Device<H: Hardware> {
     next_magic: u32,
     pub(crate) master: Option<FileId>,
     pub(crate) display_taken: bool,
+    /// Display changes reported so far ([`Device::display_changed`]): the
+    /// sequence of the next hotplug event.
+    hotplugs: u32,
     /// The `IN_FORMATS` blob every plane shares.
     pub(crate) in_formats: u32,
     /// What the hardware offers for 3D, and the capsets fetched so far.
@@ -413,6 +416,7 @@ impl<H: Hardware> Device<H> {
             next_magic: 1,
             master: None,
             display_taken: false,
+            hotplugs: 0,
             in_formats: 0,
             gpu_caps,
             capsets: BTreeMap::new(),
@@ -479,12 +483,14 @@ impl<H: Hardware> Device<H> {
     }
 
     /// Take what the hardware reports about its outputs: connection, modes,
-    /// EDID blobs.
-    pub(crate) fn apply_outputs(&mut self, outputs: Vec<Output>) {
+    /// EDID blobs. Whether any output differs from what was known.
+    pub(crate) fn apply_outputs(&mut self, outputs: Vec<Output>) -> bool {
+        let mut changed = false;
         for (i, out) in outputs.into_iter().enumerate().take(self.connectors.len()) {
             if self.connectors[i].output == out && !self.connectors[i].modes.is_empty() {
                 continue;
             }
+            changed |= self.connectors[i].output != out;
             let (modes, mm) = if out.connected {
                 crate::modes::output_modes((out.width, out.height), out.edid.as_deref())
             } else {
@@ -502,6 +508,34 @@ impl<H: Hardware> Device<H> {
             c.mm = mm;
             c.edid_blob = blob;
         }
+        changed
+    }
+
+    /// The hardware says its display configuration changed (a window
+    /// showing the screen was resized, a monitor came or went): probe the
+    /// outputs again and tell every file of the primary node with a hotplug
+    /// event ([`uapi::event::HOTPLUG`]), which a compositor answers by
+    /// reading the connectors again, as it does on a udev hotplug event
+    /// from Linux. A file that has not read the last one yet gets no second
+    /// (it will probe afresh when it does). Returns how many files were
+    /// told.
+    pub fn display_changed(&mut self, now: u64) -> usize {
+        let outputs = self.hw.probe();
+        self.apply_outputs(outputs);
+        self.hotplugs = self.hotplugs.wrapping_add(1);
+        let mut bytes = [0u8; uapi::event::LEN];
+        uapi::EventHotplug { ty: uapi::event::HOTPLUG, length: uapi::event::LEN as u32, sequence: self.hotplugs }
+            .encode(&mut bytes);
+        let mut told = 0;
+        for f in self.files.values_mut().filter(|f| f.node == Node::Primary) {
+            let pending = f.events.iter().any(|e| e.bytes[..4] == uapi::event::HOTPLUG.to_le_bytes());
+            if pending || f.event_bytes() + uapi::event::LEN > EVENT_SPACE {
+                continue;
+            }
+            f.queue(Event { due: now, bytes });
+            told += 1;
+        }
+        told
     }
 
     /// The hardware (for the kernel's own tests and statistics).

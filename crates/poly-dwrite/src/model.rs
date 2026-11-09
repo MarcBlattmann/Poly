@@ -58,6 +58,33 @@ impl FaceEntry {
         FaceEntry { file, index, info, family: None, face: None, symbol: None, charset: None, variant: 0, weight: None }
     }
 
+    /// `GetInformationalStrings`: the font's own, except that an alias
+    /// (a family name of ours over another family's file) answers for its
+    /// own names: the family and face (ids 11, 12), a full name ("Arial
+    /// Bold") and a PostScript name ("Arial-Bold"); it has no typographic
+    /// or WWS names.
+    pub fn informational(&self, id: u32) -> Option<Localized> {
+        let Some(family) = &self.family else { return self.info.informational(id) };
+        let fam = family.primary().map(crate::names::to_string).unwrap_or_default();
+        let face = self.face.as_ref().and_then(Localized::primary).map(crate::names::to_string).unwrap_or_default();
+        let regular = face.is_empty() || face == "Regular";
+        match id {
+            11 => Some(family.clone()),
+            12 => self.face.clone(),
+            13 | 14 | 19 => None,
+            16 => Some(Localized::en_us(&if regular { fam } else { alloc::format!("{fam} {face}") })),
+            17 => {
+                let compact = |t: &str| t.chars().filter(|c| *c != ' ').collect::<String>();
+                Some(Localized::en_us(&if regular {
+                    compact(&fam)
+                } else {
+                    alloc::format!("{}-{}", compact(&fam), compact(&face))
+                }))
+            }
+            _ => self.info.informational(id),
+        }
+    }
+
     fn family_names(&self) -> &Localized {
         self.family.as_ref().unwrap_or(&self.info.family)
     }
@@ -600,6 +627,19 @@ mod tests {
                 "w700 s5 st2 sim1 Italic Bold"
             ]
         );
+    }
+
+    #[test]
+    fn aliases_answer_informational_strings_for_themselves() {
+        let mut e = entry(0, "DejaVu Sans", "Book", 700, 5, 2);
+        e.family = Some(Localized::en_us("Arial"));
+        e.face = Some(Localized::en_us("Bold Italic"));
+        let text = |id| crate::names::to_string(e.informational(id).unwrap().primary().unwrap());
+        assert_eq!(
+            (text(11), text(12), text(16), text(17)),
+            ("Arial".into(), "Bold Italic".into(), "Arial Bold Italic".into(), "Arial-BoldItalic".into())
+        );
+        assert!(e.informational(13).is_none() && e.informational(19).is_none());
     }
 
     #[test]

@@ -73,6 +73,7 @@ pub mod env;
 pub mod error;
 pub mod exports;
 pub mod file;
+pub mod locale;
 pub mod mapping;
 pub mod memory;
 pub mod message;

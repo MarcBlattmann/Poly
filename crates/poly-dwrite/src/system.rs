@@ -41,8 +41,12 @@ pub const MONO: &str = "DejaVu Sans Mono";
 pub static EMOJI_SET: [(u32, u32); 6] =
     [(0x20, 0x7E), (0xA0, 0xFF), (0x20AC, 0x20AC), (0x2190, 0x2BFF), (0x1F000, 0x1FAFF), (0xFE00, 0xFE0F)];
 
-/// Everything but the emoji planes and what lies beyond.
-pub static NO_EMOJI: [(u32, u32); 2] = [(0, 0xFFFF), (0x10000, 0x1EFFF)];
+/// Everything but the private use area, the emoji planes and what lies
+/// beyond.
+pub static NO_EMOJI: [(u32, u32); 3] = [(0, 0xDFFF), (0xF900, 0xFFFF), (0x10000, 0x1EFFF)];
+
+/// Everything but the private use areas.
+pub static NO_PUA: [(u32, u32); 2] = [(0, 0xDFFF), (0xF900, 0xEFFFF)];
 
 const fn a(name: &'static str, target: &'static str) -> Alias {
     Alias { name, target, symbol: false, charset: Some(&NO_EMOJI), black: false }
@@ -97,7 +101,7 @@ pub static ALIASES: &[Alias] = &[
     a("Segoe UI", SANS),
     Alias { name: "Segoe UI Emoji", target: SANS, symbol: false, charset: Some(&EMOJI_SET), black: false },
     a("Segoe UI Historic", SANS),
-    Alias { name: "Segoe UI Symbol", target: SANS, symbol: false, charset: None, black: false },
+    Alias { name: "Segoe UI Symbol", target: SANS, symbol: false, charset: Some(&NO_PUA), black: false },
     a("Segoe UI Variable Display", SANS),
     a("Segoe UI Variable Small", SANS),
     a("Segoe UI Variable Text", SANS),
@@ -211,6 +215,7 @@ mod tests {
         assert!(in_charset(None, 0x416));
         assert!(!in_charset(Some(&NO_EMOJI), 0x1F600));
         assert!(in_charset(Some(&NO_EMOJI), 0x3B1));
+        assert!(!in_charset(Some(&NO_EMOJI), 0xE000) && !in_charset(Some(&NO_PUA), 0xE000));
     }
 
     #[test]

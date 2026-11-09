@@ -22,6 +22,8 @@ pub struct Spec {
     pub format12: bool,
     pub strike: [i16; 2],
     pub underline: [i16; 2],
+    /// List the rounded glyph's points starting at an off-curve one.
+    pub rotate_rounded: bool,
 }
 
 impl Default for Spec {
@@ -43,6 +45,7 @@ impl Default for Spec {
             format12: false,
             strike: [40, 250],
             underline: [-100, 50],
+            rotate_rounded: false,
         }
     }
 }
@@ -83,17 +86,17 @@ pub fn build(s: &Spec) -> Vec<u8> {
         u16b(&mut t, v as u16);
     }
     t.extend_from_slice(&[0; 24]);
-    u16b(&mut t, 3);
+    u16b(&mut t, 4);
     tables.push((*b"hhea", t));
     // maxp
     let mut t = Vec::new();
     u32b(&mut t, 0x0001_0000);
-    u16b(&mut t, 3);
+    u16b(&mut t, 4);
     t.extend_from_slice(&[0; 26]);
     tables.push((*b"maxp", t));
     // hmtx: advances 500, 300, 1000
     let mut t = Vec::new();
-    for (a, l) in [(500u16, 50i16), (300, 0), (1000, 100)] {
+    for (a, l) in [(500u16, 50i16), (300, 0), (1000, 100), (1000, 0)] {
         u16b(&mut t, a);
         u16b(&mut t, l as u16);
     }
@@ -116,8 +119,39 @@ pub fn build(s: &Spec) -> Vec<u8> {
     while g.len() % 4 != 0 {
         g.push(0);
     }
+    let square_end = g.len() as u32;
+    // glyph 3: a rounded shape through (500,0), (0,400), (500,800), (1000,400)
+    // with off-curve points at the corners
+    let pts: [(i16, i16, u8); 8] =
+        [(500, 0, 1), (0, 0, 0), (0, 400, 1), (0, 800, 0), (500, 800, 1), (1000, 800, 0), (1000, 400, 1), (1000, 0, 0)];
+    let mut pts = pts;
+    if s.rotate_rounded {
+        pts.rotate_left(1);
+    }
+    u16b(&mut g, 1);
+    for v in [0i16, 0, 1000, 800] {
+        u16b(&mut g, v as u16);
+    }
+    u16b(&mut g, 7);
+    u16b(&mut g, 0);
+    for p in pts {
+        g.push(p.2);
+    }
+    let mut prev = 0i16;
+    for p in pts {
+        u16b(&mut g, (p.0 - prev) as u16);
+        prev = p.0;
+    }
+    prev = 0;
+    for p in pts {
+        u16b(&mut g, (p.1 - prev) as u16);
+        prev = p.1;
+    }
+    while g.len() % 4 != 0 {
+        g.push(0);
+    }
     let mut loca = Vec::new();
-    for off in [0u32, 0, 0, g.len() as u32] {
+    for off in [0u32, 0, 0, square_end, g.len() as u32] {
         u32b(&mut loca, off);
     }
     tables.push((*b"loca", loca));

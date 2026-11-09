@@ -37,8 +37,11 @@ pub const SUPPORT_CRATE: &str = "tests/windows/support";
 pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// The only DLLs a test program may import from (by name): the native
 /// API, `kernel32`, the GUI's `user32` and `gdi32` (Phase 7's window,
-/// message and painting entries) and `dwrite` (DirectWrite's entries).
-pub const ALLOWED_DLLS: &[&str] = &["ntdll.dll", "kernel32.dll", "user32.dll", "gdi32.dll", "dwrite.dll"];
+/// message and painting entries), `dwrite` (DirectWrite's entries), `advapi32`
+/// (the security model: tokens, SIDs, ACLs, security descriptors, account lookup)
+/// and `userenv` (AppContainer SIDs).
+pub const ALLOWED_DLLS: &[&str] =
+    &["ntdll.dll", "kernel32.dll", "user32.dll", "gdi32.dll", "dwrite.dll", "advapi32.dll", "userenv.dll"];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
 
@@ -833,11 +836,23 @@ fn system_fonts() -> Vec<(String, Vec<u8>)> {
 /// serial logs. Tests run `jobs` at a time.
 pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &Path, jobs: usize) -> Result<RunFile> {
     let started = util::now_utc();
+    // A DirectWrite test finds the system fonts in `C:\Windows\Fonts` (ADR
+    // 0170): the DejaVu fonts. Without them the system collection is empty
+    // and most of those tests fail in confusing ways, so refuse to run.
+    let fonts = if manifest.tests.iter().any(|t| t.imports.contains_key("dwrite.dll")) {
+        let f = system_fonts();
+        if f.is_empty() {
+            return Err("tests that import dwrite.dll need the system fonts in C:\\Windows\\Fonts, but no DejaVu fonts were found: \
+                run `cargo xtask fonts fetch` (target/fonts/dejavu-*) or set POLY_FONT_DIR to a directory with them"
+                .into());
+        }
+        f
+    } else {
+        Vec::new()
+    };
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
-        // A DirectWrite test finds the system fonts in `C:\Windows\Fonts`
-        // (ADR 0170): the DejaVu fonts, when they are fetched.
-        let fonts = if t.imports.contains_key("dwrite.dll") { system_fonts() } else { Vec::new() };
+        let fonts = if t.imports.contains_key("dwrite.dll") { fonts.clone() } else { Vec::new() };
         let image = poly::initramfs_with(&bytes, &fonts)?;
         let args = format!("{}{}", poly_kernel_args(), session_kernel_args(t.session.as_deref()));
         let (done, log, _) = target.boot_log(&t.name, &image, work, &args)?;

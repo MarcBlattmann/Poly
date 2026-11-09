@@ -466,7 +466,7 @@ unsafe extern "system" fn font_info_strings(
         put::<c_void>(out, core::ptr::null_mut());
         put_val(exists, 0i32);
         let (f, c) = fnt(this);
-        if let Some(l) = c.data.entries[f.desc.entry].info.informational(id) {
+        if let Some(l) = c.data.entries[f.desc.entry].informational(id) {
             put(out, new_strings(l));
             put_val(exists, 1i32);
         }

@@ -1070,5 +1070,6 @@ fn removing_a_client_frees_its_windows_and_memory() {
 }
 mod input_routing;
 mod protocols;
+mod startup;
 mod window_management;
 mod xwayland;

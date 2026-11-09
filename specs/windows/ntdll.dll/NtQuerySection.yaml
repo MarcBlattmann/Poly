@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtQuerySection.yaml
+id: windows/api/ntdll.dll/NtQuerySection
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: ZwQuerySection, SECTION_BASIC_INFORMATION, CreateFileMappingW function. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Reads a section's basic information: the base address (0 for data sections), the allocation attributes and the maximum size. It needs the SECTION_QUERY right on the handle.
+interface:
+  signature: "NTSTATUS NtQuerySection(HANDLE section, SECTION_INFORMATION_CLASS class, PVOID info, SIZE_T length, PSIZE_T returnLength)"
+rules:
+  basic: "class 0, 24 bytes: base address 0, allocation attributes (0x8000000 = SEC_COMMIT for an anonymous section, 0x800000 = SEC_FILE for a file section), maximum size as a 64-bit number (65536 seen, 4 GiB + 4096 seen). The returned length is 24; a longer buffer works and still returns 24; a 16-byte, 2-byte or 0-byte buffer: STATUS_INFO_LENGTH_MISMATCH (0xC0000004) with the buffer untouched; the return-length pointer may be NULL."
+  other_classes: "class 99: STATUS_INVALID_INFO_CLASS (0xC0000003); classes 1, 2 and 3 on a data section: see the visible tests (statuses recorded)."
+  rights: "a handle with only SECTION_MAP_READ: STATUS_ACCESS_DENIED; with SECTION_QUERY: success."
+  not_a_section: "an event handle: STATUS_OBJECT_TYPE_MISMATCH; a bad handle value: STATUS_INVALID_HANDLE."
+  file_backed: "a mapping of a file of 5000 bytes with size 0: maximum size 5000 (not rounded), allocation attributes with SEC_FILE (0x800000); a view of it is a page long, bytes beyond the file read zero; asking for 12000 bytes extends the file to 12000 and the section reports 12000; asking for 3000 reports 3000; an empty file with size 0 fails in CreateFileMappingW with ERROR_FILE_INVALID (1006)."
+errors:
+  length: "STATUS_INFO_LENGTH_MISMATCH"
+  class: "STATUS_INVALID_INFO_CLASS"
+  no_query_right: "STATUS_ACCESS_DENIED"
+  type: "STATUS_OBJECT_TYPE_MISMATCH"
+side_effects: "none"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Image sections (SEC_IMAGE), large pages, section offsets in the megabytes, physical memory, sections of other users' processes, security descriptors.

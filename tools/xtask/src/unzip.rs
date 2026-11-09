@@ -9,15 +9,27 @@
 //! fixed Huffman and dynamic Huffman blocks. Members are checked against
 //! the CRC-32 the archive gives.
 
-/// One member of an archive: its name and where its data starts.
+/// One member of an archive, as its central directory lists it: its name,
+/// size and Unix mode, and where its data starts.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Entry {
-    name: String,
+pub struct Member {
+    pub name: String,
+    /// The size of the unpacked data.
+    pub size: usize,
+    /// The Unix mode (`st_mode`) from the high 16 bits of the external
+    /// file attributes, 0 when the archive was not made on Unix.
+    pub mode: u32,
     method: u16,
     crc: u32,
     compressed: usize,
-    size: usize,
     local_header: usize,
+}
+
+impl Member {
+    /// Whether the member is a symbolic link (its data is the target).
+    pub fn is_symlink(&self) -> bool {
+        self.mode & 0o170000 == 0o120000
+    }
 }
 
 fn u16_at(d: &[u8], at: usize) -> Option<u16> {
@@ -29,7 +41,7 @@ fn u32_at(d: &[u8], at: usize) -> Option<u32> {
 }
 
 /// The central directory's entries.
-fn entries(zip: &[u8]) -> Result<Vec<Entry>, String> {
+pub fn members(zip: &[u8]) -> Result<Vec<Member>, String> {
     // The end of central directory record: signature 0x06054b50, within
     // the last 22 + 65535 bytes (its comment may be that long).
     let lowest = zip.len().saturating_sub(22 + 0xffff);
@@ -50,14 +62,16 @@ fn entries(zip: &[u8]) -> Result<Vec<Entry>, String> {
         let compressed = u32_at(zip, at + 20).ok_or("truncated")? as usize;
         let size = u32_at(zip, at + 24).ok_or("truncated")? as usize;
         let (name_len, extra_len, comment_len) = (field(28)? as usize, field(30)? as usize, field(32)? as usize);
+        let external = u32_at(zip, at + 38).ok_or("truncated")?;
         let local_header = u32_at(zip, at + 42).ok_or("truncated")? as usize;
         let name = zip.get(at + 46..at + 46 + name_len).ok_or("truncated")?;
-        out.push(Entry {
+        out.push(Member {
             name: String::from_utf8_lossy(name).into_owned(),
+            size,
+            mode: external >> 16,
             method,
             crc,
             compressed,
-            size,
             local_header,
         });
         at += 46 + name_len + extra_len + comment_len;
@@ -67,20 +81,39 @@ fn entries(zip: &[u8]) -> Result<Vec<Entry>, String> {
 
 /// The data of member `name`.
 pub fn extract(zip: &[u8], name: &str) -> Result<Vec<u8>, String> {
-    let e = entries(zip)?.into_iter().find(|e| e.name == name).ok_or_else(|| format!("{name}: not in the archive"))?;
-    let h = e.local_header;
+    let m = members(zip)?.into_iter().find(|e| e.name == name).ok_or_else(|| format!("{name}: not in the archive"))?;
+    read(zip, &m)
+}
+
+/// Every file member (not directories) with its data, handed to `each` one
+/// at a time so a large archive is never all in memory at once.
+pub fn for_each(zip: &[u8], mut each: impl FnMut(&str, Vec<u8>) -> Result<(), String>) -> Result<(), String> {
+    for m in members(zip)? {
+        if m.name.ends_with('/') {
+            continue;
+        }
+        let data = read(zip, &m)?;
+        each(&m.name, data)?;
+    }
+    Ok(())
+}
+
+/// The data of member `m` (from [`members`] of the same archive).
+pub fn read(zip: &[u8], m: &Member) -> Result<Vec<u8>, String> {
+    let name = &m.name;
+    let h = m.local_header;
     if u32_at(zip, h) != Some(0x0403_4b50) {
         return Err(format!("{name}: a bad local file header"));
     }
     let start =
         h + 30 + u16_at(zip, h + 26).ok_or("truncated")? as usize + u16_at(zip, h + 28).ok_or("truncated")? as usize;
-    let data = zip.get(start..start + e.compressed).ok_or_else(|| format!("{name}: truncated"))?;
-    let out = match e.method {
+    let data = zip.get(start..start + m.compressed).ok_or_else(|| format!("{name}: truncated"))?;
+    let out = match m.method {
         0 => data.to_vec(),
-        8 => inflate(data, e.size)?,
-        m => return Err(format!("{name}: compression method {m} is not supported")),
+        8 => inflate(data, m.size)?,
+        x => return Err(format!("{name}: compression method {x} is not supported")),
     };
-    if out.len() != e.size || crc32(&out) != e.crc {
+    if out.len() != m.size || crc32(&out) != m.crc {
         return Err(format!("{name}: the CRC-32 or size does not match"));
     }
     Ok(out)

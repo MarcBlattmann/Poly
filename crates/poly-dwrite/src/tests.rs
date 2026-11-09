@@ -166,3 +166,27 @@ fn rendering_a_glyph_of_the_test_font() {
     assert_eq!(b, [-0.5, -4.0, 7.5, 4.0]);
     let _ = (utf16(""), Vec::<u8>::new());
 }
+
+#[test]
+fn a_rounded_glyph_becomes_four_quadratics_from_its_first_point() {
+    use poly_font::{Point, Segment};
+    let data = build(&Spec::default());
+    let font = poly_font::Font::parse(&data).unwrap();
+    let info = FaceInfo::parse(&data, 0).unwrap();
+    let segs = crate::render::glyph_segments(&font, &info, 3, 100.0, false);
+    assert_eq!(segs[0], Segment::MoveTo(Point::new(50.0, 0.0)));
+    let quads = segs.iter().filter(|s| matches!(s, Segment::QuadTo(..))).count();
+    assert_eq!(quads, 4, "{segs:?}");
+    assert_eq!(segs[1], Segment::QuadTo(Point::new(0.0, 0.0), Point::new(0.0, -40.0)));
+    assert_eq!(*segs.last().unwrap(), Segment::Close);
+}
+
+#[test]
+fn a_contour_listed_from_an_off_curve_point_starts_at_the_on_curve_one() {
+    use poly_font::{Point, Segment};
+    let data = build(&Spec { rotate_rounded: true, ..Spec::default() });
+    let font = poly_font::Font::parse(&data).unwrap();
+    let info = FaceInfo::parse(&data, 0).unwrap();
+    let segs = crate::render::glyph_segments(&font, &info, 3, 100.0, false);
+    assert_eq!(segs[0], Segment::MoveTo(Point::new(50.0, 0.0)), "{segs:?}");
+}
