@@ -360,7 +360,7 @@ pub fn compare(
                 // Only a value that looks like a failure code counts (a status code with the high
                 // bit, or a small error number): the result of a function whose signature the
                 // kit does not know may be anything.
-                Status::NeverOk => r != 0 && r <= u64::from(u32::MAX) && (r >= 0x8000_0000 || r < 0x1_0000),
+                Status::NeverOk => r != 0 && r <= u64::from(u32::MAX) && !(0x1_0000..0x8000_0000).contains(&r),
                 Status::Mixed => false,
             };
             if bad && !findings.iter().any(|f| f.kind == Kind::FailsOnPoly && f.text.starts_with(&label)) {
