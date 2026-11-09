@@ -49,6 +49,12 @@
 //! through its WM_PAINT handler ([`win32_boot_test`], ADR 0136). Skipped
 //! where the Windows test programs cannot be built.
 //!
+//! Boot group `desktop-resize` (ADR 0145) resizes the screen while the
+//! desktop runs (a VNC client's `SetDesktopSize`, which QEMU hands to the
+//! virtio GPU as a resized window would be) and checks that the desktop
+//! follows: the ridge, a maximized and a floating window
+//! ([`resize_boot_test`]).
+//!
 //! Screenshots go to `$POLY_DESKTOP_SHOTS` (default `target/desktop/`) as
 //! PNGs, one per step.
 
@@ -601,7 +607,12 @@ fn button(down: bool) -> String {
 /// A tablet position for logical pixel (`x`, `y`) of the screen: the
 /// compositor scales 0..0x7fff onto 0..size-1.
 fn abs(x: i32, y: i32) -> Vec<String> {
-    let (w, h) = (SIZE.0 as i64 - 1, SIZE.1 as i64 - 1);
+    abs_in(SIZE, x, y)
+}
+
+/// [`abs`] on a screen of another size.
+fn abs_in(size: (u32, u32), x: i32, y: i32) -> Vec<String> {
+    let (w, h) = (i64::from(size.0) - 1, i64::from(size.1) - 1);
     let ax = (i64::from(x) * 0x7fff + w - 1) / w;
     let ay = (i64::from(y) * 0x7fff + h - 1) / h;
     vec![
@@ -1264,6 +1275,202 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         }
         None => Err("the desktop boot test did not finish".into()),
     }
+}
+
+/// Boot group `desktop-resize` (ADR 0145): the window showing the screen is
+/// resized while the desktop runs, and the desktop follows. A VNC client
+/// (QEMU's VNC server hands `SetDesktopSize` to the display device as the
+/// size to take, as a window resize does) asks for other sizes; the virtio
+/// GPU raises its display event, the kernel tells the compositor (a DRM
+/// hotplug event), the compositor sets the new mode, and the shell, the
+/// wallpaper and the windows lay out again:
+///
+/// 1. a maximized demo window fills the work area of a smaller screen
+///    (1100x700), then of a larger one (1500x900), the ridge across the
+///    whole width each time;
+/// 2. restored, a floating window on a screen smaller than its place is
+///    shifted onto the screen (700x500);
+/// 3. a burst of sizes in a row ends on the last, and a sliver of a window
+///    (320x240) gets the smallest screen (640x400).
+///
+/// A real window resize cannot be automated on this host's CI; the chain
+/// from the device's event onward is what runs (a real SDL window resize
+/// was tried by hand, see the ADR).
+pub fn resize_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    if cfg!(not(unix)) {
+        eprintln!("==> skipped: the desktop-resize boot test needs a Unix host (QMP, a VNC socket)");
+        return Ok(());
+    }
+    let image = image(true)?;
+    eprintln!("==> boot test: the desktop follows the display's size (maximized and floating windows, the ridge)");
+    let pid = std::process::id();
+    let socket = std::env::temp_dir().join(format!("poly-resize-qmp-{pid}.sock"));
+    let vnc = std::env::temp_dir().join(format!("poly-resize-vnc-{pid}.sock"));
+    let _ = std::fs::remove_file(&socket);
+    let _ = std::fs::remove_file(&vnc);
+    let mut qemu_args = vec![
+        "-initrd".to_string(),
+        image.display().to_string(),
+        "-qmp".to_string(),
+        format!("unix:{},server=on,wait=off", socket.display()),
+        "-vnc".to_string(),
+        format!("unix:{}", vnc.display()),
+    ];
+    qemu_args.extend(devices());
+    let lines: Lines = Arc::default();
+    let result: Arc<Mutex<Option<std::result::Result<(), String>>>> = Arc::default();
+    let (seen, outcome, (path, vnc_path)) = (Arc::clone(&lines), Arc::clone(&result), (socket.clone(), vnc.clone()));
+    let mut started = false;
+    let on_line = move |line: &str| {
+        seen.lock().unwrap_or_else(|e| e.into_inner()).push(line.to_string());
+        if !started && line.contains(READY) {
+            started = true;
+            let (lines, outcome, path, vnc_path) =
+                (Arc::clone(&seen), Arc::clone(&outcome), path.clone(), vnc_path.clone());
+            thread::spawn(move || {
+                let r = drive_resize(&path, &vnc_path, lines);
+                *outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+            });
+        }
+    };
+    let b: Result<Boot> = super::with_boot_timeout(Duration::from_secs(420), || {
+        boot_with(kernel, syms, MEMORY, &append(""), super::Devices::None, &qemu_args, None, on_line)
+    });
+    let _ = std::fs::remove_file(&socket);
+    let _ = std::fs::remove_file(&vnc);
+    let b = b?;
+    match result.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        Some(Ok(())) => Ok(()),
+        Some(Err(e)) => Err(e),
+        None if !b.output.contains(READY) => {
+            Err(format!("the desktop never came up (QEMU status {:?}, timed out: {})", b.status, b.timed_out))
+        }
+        None => Err("the desktop-resize boot test did not finish".into()),
+    }
+}
+
+/// Ask the display for a screen of `w` x `h` (the request only).
+#[cfg(unix)]
+fn ask_size(vnc: &Path, w: u32, h: u32) -> std::result::Result<(), String> {
+    crate::rfb::request_size_at(vnc, w as u16, h as u16).map(|_| ())
+}
+
+#[cfg(not(unix))]
+fn ask_size(_: &Path, _: u32, _: u32) -> std::result::Result<(), String> {
+    Err("a VNC socket needs a Unix host".into())
+}
+
+/// Ask for a screen of `w` x `h` and wait until the compositor has it.
+#[cfg(unix)]
+fn resize_to(d: &Driver, vnc: &Path, w: u32, h: u32) -> std::result::Result<(), String> {
+    let seen = count(&d.lines, "poly-compositor: screen resized to");
+    ask_size(vnc, w, h)?;
+    let line = wait_nth_line(&d.lines, "poly-compositor: screen resized to", seen + 1, 60)?;
+    expect(
+        &format!("the screen resized to {w}x{h} (the compositor says {line:?})"),
+        line.contains(&format!("screen resized to {w}x{h} ")),
+    )
+}
+
+#[cfg(not(unix))]
+fn resize_to(_: &Driver, _: &Path, _: u32, _: u32) -> std::result::Result<(), String> {
+    Err("a VNC socket needs a Unix host".into())
+}
+
+/// The steps of `desktop-resize`.
+fn drive_resize(socket: &Path, vnc: &Path, lines: Lines) -> std::result::Result<(), String> {
+    let shots = shots_dir();
+    std::fs::create_dir_all(&shots).map_err(|e| format!("{}: {e}", shots.display()))?;
+    let qmp = screen::Qmp::connect(socket, Duration::from_secs(20))?;
+    let mut d = Driver { qmp, lines, shots, step: 300 };
+    thread::sleep(Duration::from_millis(500));
+    let img = d.shot("start")?;
+    expect("the screen starts at 1280x800", (img.width, img.height) == SIZE)?;
+
+    // The demo window, maximized with the frame's middle button.
+    d.type_text(&["d", "e", "m", "o"])?;
+    d.wait("launcher query \"demo\"", 30)?;
+    d.type_text(&["ret"])?;
+    let (x, y, w, h) = shown(&d, "Poly Demo", 90)?;
+    thread::sleep(Duration::from_millis(1000));
+    click(&mut d, x + w - 4 - 8 - 22, y - 12)?;
+    d.wait(MAXIMIZED, 30)?;
+
+    // A smaller screen: the maximized window is configured for its work
+    // area (the ridge's 24 rows and the frame less), and the ridge spans it.
+    let (sw, sh) = (1100u32, 700u32);
+    resize_to(&d, vnc, sw, sh)?;
+    d.wait(&format!("wl-demo: size {}x{}", sw - 2, sh - 50), 30)?;
+    let filled = |img: &screen::Image| {
+        (img.width, img.height) == (sw, sh) && img.pixel(40, 60) == DEMO_A && img.pixel(sw - 40, sh - 40) == DEMO_A
+    };
+    let img = d.shot_until("smaller", 30, filled)?;
+    expect(&format!("the screen is {sw}x{sh}"), (img.width, img.height) == (sw, sh))?;
+    expect("the maximized window fills the smaller work area", filled(&img))?;
+    expect("the ridge spans the new width", img.pixel(sw - 10, 6) == RIDGE && img.pixel(10, 6) == RIDGE)?;
+
+    // A larger one.
+    let (lw, lh) = (1500u32, 900u32);
+    resize_to(&d, vnc, lw, lh)?;
+    d.wait(&format!("wl-demo: size {}x{}", lw - 2, lh - 50), 30)?;
+    let filled = |img: &screen::Image| {
+        (img.width, img.height) == (lw, lh) && img.pixel(40, 60) == DEMO_A && img.pixel(lw - 40, lh - 40) == DEMO_A
+    };
+    let img = d.shot_until("larger", 30, filled)?;
+    expect("the maximized window fills the larger work area", filled(&img))?;
+    expect("the ridge spans the new width again", img.pixel(lw - 10, 6) == RIDGE)?;
+
+    // The pointer is routed by the new size: a double click on the title
+    // restores the window (its title bar is at the top of the work area).
+    let before = count(&d.lines, "wl-demo: size 360x240");
+    d.send(&abs_in((lw, lh), 400, 24 + 12))?;
+    for down in [true, false, true, false] {
+        d.send(&[button(down)])?;
+    }
+    wait_nth(&d.lines, "wl-demo: size 360x240", before + 1, 30)?;
+
+    // A screen smaller than the place the window goes back to: it is
+    // shifted onto the screen, at its own size.
+    let (tw, th) = (700u32, 500u32);
+    resize_to(&d, vnc, tw, th)?;
+    let (nx, ny) = (tw as i32 - (w + 1), th as i32 - (h + 1));
+    let on_screen = |img: &screen::Image| {
+        (img.width, img.height) == (tw, th) && img.pixel((nx + 20) as u32, (ny + 20) as u32) == DEMO_A
+    };
+    let img = d.shot_until("shifted", 30, on_screen)?;
+    expect(
+        &format!("the floating window ({w}x{h}) was shifted onto the {tw}x{th} screen, to {nx},{ny}"),
+        on_screen(&img),
+    )?;
+
+    // A window dragged over many sizes: the requests come far faster than the
+    // compositor follows (it takes the size that is there once things have
+    // settled), and it ends on the last one, still drawing.
+    let before = count(&d.lines, "poly-compositor: screen resized to");
+    let burst = [(900u32, 600u32), (960, 640), (1024, 680), (1100, 720), (1180, 760), (1280, 800)];
+    for &(w, h) in &burst {
+        ask_size(vnc, w, h)?;
+    }
+    wait_nth(&d.lines, "poly-compositor: screen resized to 1280x800 ", 1, 60)?;
+    let followed = count(&d.lines, "poly-compositor: screen resized to") - before;
+    expect(
+        &format!("a burst of {} sizes took {followed} mode sets", burst.len()),
+        (1..=burst.len()).contains(&followed),
+    )?;
+    let img = d.shot_until("burst", 30, |img: &screen::Image| {
+        (img.width, img.height) == SIZE && img.pixel(SIZE.0 - 10, 6) == RIDGE
+    })?;
+    expect("the screen is 1280x800 after the burst", (img.width, img.height) == SIZE)?;
+
+    // A sliver of a window: the screen keeps to the smallest size.
+    ask_size(vnc, 320, 240)?;
+    wait_nth(&d.lines, "poly-compositor: screen resized to 640x400 ", 1, 60)?;
+    let img = d.shot_until("smallest", 30, |img: &screen::Image| {
+        (img.width, img.height) == (640, 400) && img.pixel(630, 6) == RIDGE
+    })?;
+    expect("the screen stops at 640x400 with the ridge across it", (img.width, img.height) == (640, 400))?;
+    d.qmp.quit();
+    Ok(())
 }
 
 /// The Windows GUI program of `desktop-win32` (`tests/windows/<name>.rs`).

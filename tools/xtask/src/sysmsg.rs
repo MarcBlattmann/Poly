@@ -20,7 +20,9 @@
 //! - `crates/poly-kernelbase/data/system-messages.tsv`: the extracted data,
 //!   one code per line: `code<TAB>name<TAB>text`, by code.
 //! - `crates/poly-kernelbase/src/sysmsg.rs`: the same as a table the crate
-//!   compiles in (codes, end offsets, one string).
+//!   compiles in (codes, end offsets, one string), with the texts of each
+//!   page in `crates/poly-kernelbase/src/sysmsg/LO-HI.txt` (the string is
+//!   their concatenation, by `include_str!`).
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -44,6 +46,8 @@ const PAGES: &[(u32, u32)] = &[
 
 const DATA: &str = "crates/poly-kernelbase/data/system-messages.tsv";
 const TABLE: &str = "crates/poly-kernelbase/src/sysmsg.rs";
+/// The directory of the texts, one file per page.
+const TEXTS: &str = "crates/poly-kernelbase/src/sysmsg";
 
 /// One code: its number, constant name and message text.
 #[derive(Debug, PartialEq)]
@@ -84,6 +88,12 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     std::fs::write(&data, tsv(&all)).map_err(|e| format!("{}: {e}", data.display()))?;
     let table = root.join(TABLE);
     std::fs::write(&table, rust(&all)).map_err(|e| format!("{}: {e}", table.display()))?;
+    let texts = root.join(TEXTS);
+    std::fs::create_dir_all(&texts).map_err(|e| e.to_string())?;
+    for (name, text) in page_texts(&all) {
+        let path = texts.join(name);
+        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    }
     eprintln!("==> {} system messages: wrote {} and {}", all.len(), data.display(), table.display());
     Ok(())
 }
@@ -216,7 +226,8 @@ fn rust(all: &[Entry]) -> String {
 //! `data/system-messages.tsv`. Do not edit.
 //!
 //! Message `CODES[i]` is `TEXT[ENDS[i - 1]..ENDS[i]]` (from 0 for the
-//! first), without the CR LF a message ends with.
+//! first), without the CR LF a message ends with. `TEXT` is the texts of
+//! each page, one file per page (`sysmsg/LO-HI.txt`), one after the other.
 
 #![allow(clippy::unreadable_literal)]
 
@@ -247,12 +258,26 @@ fn rust(all: &[Entry]) -> String {
         let line: Vec<String> = chunk.iter().map(usize::to_string).collect();
         let _ = writeln!(s, "    {},", line.join(", "));
     }
-    s.push_str("];\n\n/// The texts, one after the other.\n#[rustfmt::skip]\npub static TEXT: &str = concat!(\n");
-    for e in all {
-        let _ = writeln!(s, "    // {} {}\n    {:?},", e.code, e.name, e.text);
+    s.push_str(
+        "];\n\n/// The texts of each page, one after the other.\n#[rustfmt::skip]\npub static TEXT: &str = concat!(\n",
+    );
+    for &(lo, hi) in PAGES {
+        let _ = writeln!(s, "    include_str!(\"sysmsg/{lo}-{hi}.txt\"),");
     }
     s.push_str(");\n");
     s
+}
+
+/// The messages' texts of each page, one after the other, as (file name,
+/// contents): `TEXT` is these in page order.
+fn page_texts(all: &[Entry]) -> Vec<(String, String)> {
+    PAGES
+        .iter()
+        .map(|&(lo, hi)| {
+            let text: String = all.iter().filter(|e| e.code >= lo && e.code <= hi).map(|e| e.text.as_str()).collect();
+            (format!("{lo}-{hi}.txt"), text)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -288,7 +313,28 @@ mod tests {
         let r = rust(&all);
         assert!(r.contains("#[rustfmt::skip]\npub static CODES: [u16; 2] = [\n    0, 7,\n];"));
         assert!(r.contains("#[rustfmt::skip]\npub static ENDS: [u32; 2] = [\n    2, 5,\n];"));
-        assert!(r.contains("    \"c\\\"d\",\n"));
+        assert!(r.contains("    include_str!(\"sysmsg/0-499.txt\"),\n"));
+        assert_eq!(page_texts(&all)[0], ("0-499.txt".to_string(), "abc\"d".to_string()));
+        assert!(page_texts(&all)[1].1.is_empty());
         assert_eq!(tsv(&all), "0\tA\tab\n7\tB\tc\"d\n");
+    }
+
+    /// The checked-in table is what the generator makes from the checked-in data.
+    #[test]
+    fn the_table_is_what_the_data_makes() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let data = std::fs::read_to_string(root.join(DATA)).unwrap();
+        let all: Vec<Entry> = data
+            .lines()
+            .map(|l| {
+                let mut f = l.splitn(3, '\t');
+                let code = f.next().unwrap().parse().unwrap();
+                Entry { code, name: f.next().unwrap().into(), text: f.next().unwrap().into() }
+            })
+            .collect();
+        assert_eq!(std::fs::read_to_string(root.join(TABLE)).unwrap(), rust(&all));
+        for (name, text) in page_texts(&all) {
+            assert_eq!(std::fs::read_to_string(root.join(TEXTS).join(&name)).unwrap(), text, "{name}");
+        }
     }
 }
