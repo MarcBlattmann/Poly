@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "2d24da3f08a2",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:57:44Z",
+  "tests": [
+    {
+      "name": "ntotte_attrs",
+      "exe_sha256": "1139470d5d6c737c128c35b76775e00497640c418f2846469fcdb4d96da4ed4f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gdGhyZWFkIHRva2VuLCAwOiBzdGF0dXM9MHhjMDAwMDA3YwpubyB0aHJlYWQgdG9rZW4sIE9CSl9JTkhFUklUOiBzdGF0dXM9MHhjMDAwMDA3YwpubyB0aHJlYWQgdG9rZW4sIE9CSl9DQVNFX0lOU0VOU0lUSVZFOiBzdGF0dXM9MHhjMDAwMDA3YwpubyB0aHJlYWQgdG9rZW4sIE9CSl9LRVJORUxfSEFORExFOiBzdGF0dXM9MHhjMDAwMDA3YwpubyB0aHJlYWQgdG9rZW4sIE9CSl9QRVJNQU5FTlQ6IHN0YXR1cz0weGMwMDAwMDdjCm5vIHRocmVhZCB0b2tlbiwgT0JKX09QRU5JRjogc3RhdHVzPTB4YzAwMDAwN2MKbm8gdGhyZWFkIHRva2VuLCBPQkpfRk9SQ0VfQUNDRVNTX0NIRUNLOiBzdGF0dXM9MHhjMDAwMDA3YwpubyB0aHJlYWQgdG9rZW4sIDB4NDogc3RhdHVzPTB4YzAwMDAwN2MKbm8gdGhyZWFkIHRva2VuLCAweDgwMDAwMDAwOiBzdGF0dXM9MHhjMDAwMDA3YwppbXBlcnNvbmF0aW5nLCAwOiBzdGF0dXM9MHgwMDAwMDAwMCBoYW5kbGVfZmxhZ3M9MCBncmFudGVkPTB4OAppbXBlcnNvbmF0aW5nLCBPQkpfSU5IRVJJVDogc3RhdHVzPTB4MDAwMDAwMDAgaGFuZGxlX2ZsYWdzPTEgZ3JhbnRlZD0weDgKaW1wZXJzb25hdGluZywgT0JKX0NBU0VfSU5TRU5TSVRJVkU6IHN0YXR1cz0weDAwMDAwMDAwIGhhbmRsZV9mbGFncz0wIGdyYW50ZWQ9MHg4CmltcGVyc29uYXRpbmcsIE9CSl9LRVJORUxfSEFORExFOiBzdGF0dXM9MHgwMDAwMDAwMCBoYW5kbGVfZmxhZ3M9MCBncmFudGVkPTB4OAppbXBlcnNvbmF0aW5nLCBPQkpfUEVSTUFORU5UOiBzdGF0dXM9MHgwMDAwMDAwMCBoYW5kbGVfZmxhZ3M9MCBncmFudGVkPTB4OAppbXBlcnNvbmF0aW5nLCBPQkpfT1BFTklGOiBzdGF0dXM9MHgwMDAwMDAwMCBoYW5kbGVfZmxhZ3M9MCBncmFudGVkPTB4OAppbXBlcnNvbmF0aW5nLCBPQkpfRk9SQ0VfQUNDRVNTX0NIRUNLOiBzdGF0dXM9MHgwMDAwMDAwMCBoYW5kbGVfZmxhZ3M9MCBncmFudGVkPTB4OAppbXBlcnNvbmF0aW5nLCAweDQ6IHN0YXR1cz0weDAwMDAwMDAwIGhhbmRsZV9mbGFncz0wIGdyYW50ZWQ9MHg4CmltcGVyc29uYXRpbmcsIDB4ODAwMDAwMDA6IHN0YXR1cz0weDAwMDAwMDAwIGhhbmRsZV9mbGFncz0wIGdyYW50ZWQ9MHg4CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no thread token, 0: status=0xc000007c\nno thread token, OBJ_INHERIT: status=0xc000007c\nno thread token, OBJ_CASE_INSENSITIVE: status=0xc000007c\nno thread token, OBJ_KERNEL_HANDLE: status=0xc000007c\nno thread token, OBJ_PERMANENT: status=0xc000007c\nno thread token, OBJ_OPENIF: status=0xc000007c\nno thread token, OBJ_FORCE_ACCESS_CHECK: status=0xc000007c\nno thread token, 0x4: status=0xc000007c\nno thread token, 0x80000000: status=0xc000007c\nimpersonating, 0: status=0x00000000 handle_flags=0 granted=0x8\nimpersonating, OBJ_INHERIT: status=0x00000000 handle_flags=1 granted=0x8\nimpersonating, OBJ_CASE_INSENSITIVE: status=0x00000000 handle_flags=0 granted=0x8\nimpersonating, OBJ_KERNEL_HANDLE: status=0x00000000 handle_flags=0 granted=0x8\nimpersonating, OBJ_PERMANENT: status=0x00000000 handle_flags=0 granted=0x8\nimpersonating, OBJ_OPENIF: status=0x00000000 handle_flags=0 granted=0x8\nimpersonating, OBJ_FORCE_ACCESS_CHECK: status=0x00000000 handle_flags=0 granted=0x8\nimpersonating, 0x4: status=0x00000000 handle_flags=0 granted=0x8\nimpersonating, 0x80000000: status=0x00000000 handle_flags=0 granted=0x8\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

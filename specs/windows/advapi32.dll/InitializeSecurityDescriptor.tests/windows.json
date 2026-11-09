@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "69970d4f91fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:01:49Z",
+  "tests": [
+    {
+      "name": "sd_init_basic",
+      "exe_sha256": "3bc6b4e380ae0fa72cbdba59f090e838812d43ddb6885c9ff86fc00103187452",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5pdDogb2s9MSBlcnI9LTEKYnl0ZXMgMC4uNDg6IDAxMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwY2NjY2NjY2NjY2NjY2NjYwpsZWFkaW5nIGJ5dGVzIGNoYW5nZWQ6IDQwCmhlYWRlcjogYWJzb2x1dGUgcmV2PTEgc2J6MT0wIGNvbnRyb2w9MHgwMDAwIFstXSBwYWQ9MDAwMDAwMDAgb3duZXI9bnVsbCBncm91cD1udWxsIHNhY2w9bnVsbCBkYWNsPW51bGwKY29udHJvbDogb2s9MSBjb250cm9sPTB4MDAwMCBbLV0gcmV2aXNpb249MHgxIGVycj0tMQpJc1ZhbGlkU2VjdXJpdHlEZXNjcmlwdG9yPTEgR2V0U2VjdXJpdHlEZXNjcmlwdG9yTGVuZ3RoPTQwCm93bmVyOiBvaz0xIHdoZXJlPW51bGwgc2lkPShudWxsKSBkZWZhdWx0ZWQ9MApncm91cDogb2s9MSB3aGVyZT1udWxsIHNpZD0obnVsbCkgZGVmYXVsdGVkPTAKZGFjbDogb2s9MSBwcmVzZW50PTAgd2hlcmU9dW5jaGFuZ2VkIGRlZmF1bHRlZD0wCnNhY2w6IG9rPTEgcHJlc2VudD0wIHdoZXJlPXVuY2hhbmdlZCBkZWZhdWx0ZWQ9MApTRERMIG93bmVyK2dyb3VwK2RhY2wrc2FjbDogb2s9MSB0ZXh0PSBsZW49MCB1bml0cz0wCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "init: ok=1 err=-1\nbytes 0..48: 01000000000000000000000000000000000000000000000000000000000000000000000000000000cccccccccccccccc\nleading bytes changed: 40\nheader: absolute rev=1 sbz1=0 control=0x0000 [-] pad=00000000 owner=null group=null sacl=null dacl=null\ncontrol: ok=1 control=0x0000 [-] revision=0x1 err=-1\nIsValidSecurityDescriptor=1 GetSecurityDescriptorLength=40\nowner: ok=1 where=null sid=(null) defaulted=0\ngroup: ok=1 where=null sid=(null) defaulted=0\ndacl: ok=1 present=0 where=unchanged defaulted=0\nsacl: ok=1 present=0 where=unchanged defaulted=0\nSDDL owner+group+dacl+sacl: ok=1 text= len=0 units=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "sd_init_reset",
+      "exe_sha256": "322a2e7c1412ce1484e280acaad3ff199a079f14f3898d291477de4e1b23d4ec",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmlsbGVkIGluOiBhYnNvbHV0ZSByZXY9MSBzYnoxPTAgY29udHJvbD0weDExMTUgW09XTkVSX0RFRkFVTFRFRHxEQUNMX1BSRVNFTlR8U0FDTF9QUkVTRU5UfERBQ0xfQVVUT19JTkhFUklUX1JFUXxEQUNMX1BST1RFQ1RFRF0gcGFkPTAwMDAwMDAwIG93bmVyPXNldCBncm91cD1zZXQgc2FjbD1zZXQgZGFjbD1zZXQKaW5pdCBhZ2Fpbjogb2s9MQphZnRlciBpbml0OiBhYnNvbHV0ZSByZXY9MSBzYnoxPTAgY29udHJvbD0weDAwMDAgWy1dIHBhZD0wMDAwMDAwMCBvd25lcj1udWxsIGdyb3VwPW51bGwgc2FjbD1udWxsIGRhY2w9bnVsbApkYWNsIGFmdGVyIGluaXQ6IG9rPTEgcHJlc2VudD0wIHdoZXJlPXVuY2hhbmdlZCBkZWZhdWx0ZWQ9MApzZWxmLXJlbGF0aXZlOiBzZWxmLXJlbGF0aXZlIHJldj0xIHNiejE9MCBjb250cm9sPTB4ODAwNCBbREFDTF9QUkVTRU5UfFNFTEZfUkVMQVRJVkVdIG93bmVyPTQ4IGdyb3VwPTY0IHNhY2w9MCBkYWNsPTIwCmluaXQgb3ZlciBpdDogb2s9MQphZnRlciBpbml0OiBhYnNvbHV0ZSByZXY9MSBzYnoxPTAgY29udHJvbD0weDAwMDAgWy1dIHBhZD0wMDAwMDAwMCBvd25lcj1udWxsIGdyb3VwPW51bGwgc2FjbD1udWxsIGRhY2w9bnVsbApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "filled in: absolute rev=1 sbz1=0 control=0x1115 [OWNER_DEFAULTED|DACL_PRESENT|SACL_PRESENT|DACL_AUTO_INHERIT_REQ|DACL_PROTECTED] pad=00000000 owner=set group=set sacl=set dacl=set\ninit again: ok=1\nafter init: absolute rev=1 sbz1=0 control=0x0000 [-] pad=00000000 owner=null group=null sacl=null dacl=null\ndacl after init: ok=1 present=0 where=unchanged defaulted=0\nself-relative: self-relative rev=1 sbz1=0 control=0x8004 [DACL_PRESENT|SELF_RELATIVE] owner=48 group=64 sacl=0 dacl=20\ninit over it: ok=1\nafter init: absolute rev=1 sbz1=0 control=0x0000 [-] pad=00000000 owner=null group=null sacl=null dacl=null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

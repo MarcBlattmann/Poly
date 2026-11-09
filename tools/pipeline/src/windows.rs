@@ -37,8 +37,10 @@ pub const SUPPORT_CRATE: &str = "tests/windows/support";
 pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// The only DLLs a test program may import from (by name): the native
 /// API, `kernel32`, the GUI's `user32` and `gdi32` (Phase 7's window,
-/// message and painting entries) and `dwrite` (DirectWrite's entries).
-pub const ALLOWED_DLLS: &[&str] = &["ntdll.dll", "kernel32.dll", "user32.dll", "gdi32.dll", "dwrite.dll"];
+/// message and painting entries), `dwrite` (DirectWrite's entries) and `advapi32` (its
+/// security model: tokens, SIDs, ACLs, security descriptors).
+pub const ALLOWED_DLLS: &[&str] =
+    &["ntdll.dll", "kernel32.dll", "user32.dll", "gdi32.dll", "dwrite.dll", "advapi32.dll"];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
 
@@ -1245,6 +1247,9 @@ mod tests {
         // DirectWrite tests import dwrite.dll.
         let dw = image(&[("DWRITE.dll", &["DWriteCreateFactory"])], 3);
         assert_eq!(check_image(&dw).unwrap()["dwrite.dll"], ["DWriteCreateFactory"]);
+        // The security model's tests import advapi32.
+        let security = image(&[("ADVAPI32.dll", &["OpenProcessToken"])], 3);
+        assert_eq!(check_image(&security).unwrap()["advapi32.dll"], ["OpenProcessToken"]);
         let other = image(&[("shell32.dll", &["SHGetFolderPathW"])], 3);
         assert!(check_image(&other).unwrap_err().contains("shell32.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);

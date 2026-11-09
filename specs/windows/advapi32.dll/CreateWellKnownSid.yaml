@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/CreateWellKnownSid
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Builds the SID of a WELL_KNOWN_SID_TYPE (winnt.h, values 0 to 121) into
+  the caller's buffer. The domain-relative types (the domain administrator,
+  guest, domain users...) append their RID to a domain SID given as the
+  second argument. *size is the buffer capacity on input and the SID's
+  length on output.
+interface:
+  signature: "BOOL CreateWellKnownSid(WELL_KNOWN_SID_TYPE type, PSID domain_sid, PSID sid, DWORD* size)"
+  layout: "SID (winnt.h): byte 0 Revision (1), byte 1 SubAuthorityCount (0..15 valid), bytes 2..7 IdentifierAuthority (six bytes, big-endian value), then SubAuthority[count] as little-endian 32-bit values; length 8 + 4 * count (at most 68). SECURITY_MAX_SID_SIZE is 68."
+  size: "*size is set to the SID's length on success and on ERROR_INSUFFICIENT_BUFFER; the buffer is unchanged when too small"
+rules:
+  table: "without a domain, these types succeed (type: SID): 0 S-1-0-0, 1 S-1-1-0, 2 S-1-2-0, 3 S-1-3-0, 4 S-1-3-1, 5 S-1-3-2, 6 S-1-3-3, 7 S-1-5 (length 8), 8 S-1-5-1, 9 S-1-5-2, 10 S-1-5-3, 11 S-1-5-4, 12 S-1-5-6, 13 S-1-5-7, 14 S-1-5-8, 15 S-1-5-9, 16 S-1-5-10, 17 S-1-5-11, 18 S-1-5-12, 19 S-1-5-13, 20 S-1-5-14, 22 S-1-5-18, 23 S-1-5-19, 24 S-1-5-20, 25 S-1-5-32, 26 S-1-5-32-544, 27 -545, 28 -546, 29 -547, 30 -548, 31 -549, 32 -550, 33 -551, 34 -552, 35 -554, 36 -555, 37 -556, 51 S-1-5-64-10, 52 S-1-5-64-21, 53 S-1-5-64-14, 54 S-1-5-15, 55 S-1-5-1000, 56 S-1-5-32-557, 57 -558, 58 -559, 59 -560, 60 -561, 61 -562, 62 -568, 63 S-1-5-17, 64 S-1-5-32-569, 65 S-1-16-0, 66 S-1-16-4096, 67 S-1-16-8192, 68 S-1-16-12288, 69 S-1-16-16384, 70 S-1-5-33, 71 S-1-3-4, 74 S-1-5-22, 76 S-1-5-32-573, 78 S-1-5-32-574, 79 S-1-16-8448, 81 S-1-2-1, 82 S-1-5-65-1, 84 S-1-15-2-1, 85 S-1-15-3-1, 86 -2, 87 -3, 88 -4, 89 -5, 90 -6, 91 -7, 92 S-1-15-3-9, 93 S-1-15-3-8, 94 S-1-15-3-10, 95 S-1-5-32-575, 96 -576, 97 -577, 98 S-1-5-84-0-0-0-0-0 (length 32), 99 S-1-5-32-578, 101 -579, 102 -580, 103 S-1-18-1, 104 S-1-18-2, 105 S-1-5-113, 106 S-1-5-114, 108 S-1-15-3-11, 109 S-1-15-3-12, 111 S-1-5-32-581, 112 -582, 115 S-1-18-4, 116 S-1-18-5, 117 S-1-18-6, 118 S-1-18-3, 119 S-1-5-32-583, 120 -584, 121 -585"
+  needs_domain: "without a domain these fail with ERROR_INVALID_PARAMETER (87): 21 (WinLogonIdsSid), 38..50, 72, 73, 75, 77, 80, 83, 100, 107, 110, 113, 114 and every type from 122 up; with the domain SID S-1-5-21-111-222-333 the domain-relative ones build the domain SID plus a RID (length 28): 38 -500, 39 -501, 40 -502, 41 -512, 42 -513, 43 -514, 44 -515, 45 -516, 46 -517, 47 -518, 48 -519, 49 -520, 50 -553, 72 -571, 73 -572, 75 -521, 77 -498, 100 -522, 107 -525, 110 -503, 113 -526, 114 -527; 21, 80, 83 and 122 up still fail with 87"
+  domain_ignored: "with a domain SID, every type that works without one gives the same SID as without"
+  domain_unchecked: "the domain SID is not validated as a domain: type 38 with domain S-1-5-18 builds S-1-5-18-500 (16 bytes) and with S-1-5-21-1-2-3-4 builds S-1-5-21-1-2-3-4-500 (32 bytes)"
+  buffer: "a *size smaller than the SID's length (for world 12: sizes 0, 1, 7, 8, 11; for builtin administrators 16: sizes up to 15) fails with ERROR_INSUFFICIENT_BUFFER (122) and sets *size to the length needed; sizes from the length up (also 68 and 1000) succeed and set *size to the length"
+errors:
+  type: "a type that needs a domain without one, or an unknown type: FALSE, ERROR_INVALID_PARAMETER (87)"
+  size: "buffer too small: FALSE, ERROR_INSUFFICIENT_BUFFER (122)"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

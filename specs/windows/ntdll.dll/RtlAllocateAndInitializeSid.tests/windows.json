@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_alloc_sid_counts",
+      "exe_sha256": "07fdf0914ce1130461eac6e047ba52db4ead93f1180f389b13798afbb320dd78",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y291bnQgMDogc3RhdHVzPTB4MDAwMDAwMDAgc2lkX251bGw9ZmFsc2UKY291bnQgMDogdmFsaWQ9MSBsZW5ndGg9OCBieXRlcz0wMTAwMDAwMDAwMDAwMDA1CmNvdW50IDE6IHN0YXR1cz0weDAwMDAwMDAwIHNpZF9udWxsPWZhbHNlCmNvdW50IDE6IHZhbGlkPTEgbGVuZ3RoPTEyIGJ5dGVzPTAxMDEwMDAwMDAwMDAwMDUwYjAwMDAwMApjb3VudCAyOiBzdGF0dXM9MHgwMDAwMDAwMCBzaWRfbnVsbD1mYWxzZQpjb3VudCAyOiB2YWxpZD0xIGxlbmd0aD0xNiBieXRlcz0wMTAyMDAwMDAwMDAwMDA1MGIwMDAwMDAxNjAwMDAwMApjb3VudCAzOiBzdGF0dXM9MHgwMDAwMDAwMCBzaWRfbnVsbD1mYWxzZQpjb3VudCAzOiB2YWxpZD0xIGxlbmd0aD0yMCBieXRlcz0wMTAzMDAwMDAwMDAwMDA1MGIwMDAwMDAxNjAwMDAwMDIxMDAwMDAwCmNvdW50IDQ6IHN0YXR1cz0weDAwMDAwMDAwIHNpZF9udWxsPWZhbHNlCmNvdW50IDQ6IHZhbGlkPTEgbGVuZ3RoPTI0IGJ5dGVzPTAxMDQwMDAwMDAwMDAwMDUwYjAwMDAwMDE2MDAwMDAwMjEwMDAwMDAyYzAwMDAwMApjb3VudCA1OiBzdGF0dXM9MHgwMDAwMDAwMCBzaWRfbnVsbD1mYWxzZQpjb3VudCA1OiB2YWxpZD0xIGxlbmd0aD0yOCBieXRlcz0wMTA1MDAwMDAwMDAwMDA1MGIwMDAwMDAxNjAwMDAwMDIxMDAwMDAwMmMwMDAwMDAzNzAwMDAwMApjb3VudCA2OiBzdGF0dXM9MHgwMDAwMDAwMCBzaWRfbnVsbD1mYWxzZQpjb3VudCA2OiB2YWxpZD0xIGxlbmd0aD0zMiBieXRlcz0wMTA2MDAwMDAwMDAwMDA1MGIwMDAwMDAxNjAwMDAwMDIxMDAwMDAwMmMwMDAwMDAzNzAwMDAwMDQyMDAwMDAwCmNvdW50IDc6IHN0YXR1cz0weDAwMDAwMDAwIHNpZF9udWxsPWZhbHNlCmNvdW50IDc6IHZhbGlkPTEgbGVuZ3RoPTM2IGJ5dGVzPTAxMDcwMDAwMDAwMDAwMDUwYjAwMDAwMDE2MDAwMDAwMjEwMDAwMDAyYzAwMDAwMDM3MDAwMDAwNDIwMDAwMDA0ZDAwMDAwMApjb3VudCA4OiBzdGF0dXM9MHgwMDAwMDAwMCBzaWRfbnVsbD1mYWxzZQpjb3VudCA4OiB2YWxpZD0xIGxlbmd0aD00MCBieXRlcz0wMTA4MDAwMDAwMDAwMDA1MGIwMDAwMDAxNjAwMDAwMDIxMDAwMDAwMmMwMDAwMDAzNzAwMDAwMDQyMDAwMDAwNGQwMDAwMDA1ODAwMDAwMApjb3VudCA5OiBzdGF0dXM9MHhjMDAwMDA3OCBzaWRfbnVsbD10cnVlCmNvdW50IDEwOiBzdGF0dXM9MHhjMDAwMDA3OCBzaWRfbnVsbD10cnVlCmNvdW50IDE1OiBzdGF0dXM9MHhjMDAwMDA3OCBzaWRfbnVsbD10cnVlCmNvdW50IDE2OiBzdGF0dXM9MHhjMDAwMDA3OCBzaWRfbnVsbD10cnVlCmNvdW50IDI1NTogc3RhdHVzPTB4YzAwMDAwNzggc2lkX251bGw9dHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "count 0: status=0x00000000 sid_null=false\ncount 0: valid=1 length=8 bytes=0100000000000005\ncount 1: status=0x00000000 sid_null=false\ncount 1: valid=1 length=12 bytes=01010000000000050b000000\ncount 2: status=0x00000000 sid_null=false\ncount 2: valid=1 length=16 bytes=01020000000000050b00000016000000\ncount 3: status=0x00000000 sid_null=false\ncount 3: valid=1 length=20 bytes=01030000000000050b0000001600000021000000\ncount 4: status=0x00000000 sid_null=false\ncount 4: valid=1 length=24 bytes=01040000000000050b00000016000000210000002c000000\ncount 5: status=0x00000000 sid_null=false\ncount 5: valid=1 length=28 bytes=01050000000000050b00000016000000210000002c00000037000000\ncount 6: status=0x00000000 sid_null=false\ncount 6: valid=1 length=32 bytes=01060000000000050b00000016000000210000002c0000003700000042000000\ncount 7: status=0x00000000 sid_null=false\ncount 7: valid=1 length=36 bytes=01070000000000050b00000016000000210000002c00000037000000420000004d000000\ncount 8: status=0x00000000 sid_null=false\ncount 8: valid=1 length=40 bytes=01080000000000050b00000016000000210000002c00000037000000420000004d00000058000000\ncount 9: status=0xc0000078 sid_null=true\ncount 10: status=0xc0000078 sid_null=true\ncount 15: status=0xc0000078 sid_null=true\ncount 16: status=0xc0000078 sid_null=true\ncount 255: status=0xc0000078 sid_null=true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

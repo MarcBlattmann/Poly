@@ -1,0 +1,81 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/CreateProcessAsUserW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Starts a process whose primary token is the given token. The oracle
+  account is an elevated administrator without
+  SeAssignPrimaryTokenPrivilege, and the call still works for tokens that
+  are copies or restrictions of the caller's own token: plain primary
+  duplicates, the process token itself, restricted tokens
+  (DISABLE_MAX_PRIVILEGE, disabled groups, restricting SIDs) and tokens with
+  a lowered integrity level. The token handle needs TOKEN_QUERY and
+  TOKEN_ASSIGN_PRIMARY (TOKEN_DUPLICATE is not required). The child gets
+  exactly the given token (same user), a thread impersonation token of the
+  caller is ignored. Chrome's broker sequence (job with limits, restricted
+  Low token, CREATE_SUSPENDED, assign, resume) works.
+interface:
+  signature: "BOOL CreateProcessAsUserW(HANDLE token, LPCWSTR application, LPWSTR command_line, LPSECURITY_ATTRIBUTES process_attributes, LPSECURITY_ATTRIBUTES thread_attributes, BOOL inherit_handles, DWORD flags, LPVOID environment, LPCWSTR current_directory, LPSTARTUPINFOW startup_info, LPPROCESS_INFORMATION process_information)"
+  child_report: "the tests start a copy of the test executable (\"--child report\") with the token and read the child's own token facts through an inherited pipe; user SID shown masked"
+  ambient: "the oracle token: High integrity 0x3000, 24 privileges (24 enabled), Administrators group enabled (attributes 0xf), elevation type 1"
+rules:
+  plain_duplicate: "a primary duplicate of the process token (TOKEN_ALL_ACCESS): child has the same token facts as the parent: type 1, integrity 0x3000, 24 privileges enabled, same user, admins attributes 0xf, no restrictions; the same for the process token itself and for tokens opened with exactly QUERY|DUPLICATE|ASSIGN_PRIMARY or QUERY|ASSIGN_PRIMARY"
+  token_rights: "token without TOKEN_ASSIGN_PRIMARY, without TOKEN_QUERY, only ASSIGN_PRIMARY, only QUERY, READ|EXECUTE: CreateProcessAsUserW fails with error 5; QUERY|ASSIGN_PRIMARY (no DUPLICATE) works"
+  impersonation: "an impersonation token at SecurityImpersonation or SecurityDelegation is accepted and the child gets a primary token (type 1) with the same facts; at SecurityIdentification or SecurityAnonymous the call fails with error 1346 (ERROR_BAD_IMPERSONATION_LEVEL); a primary token made with DuplicateTokenEx from an impersonation token works"
+  null_token: "a NULL token behaves like CreateProcessW (the child ran and exited with 7)"
+  thread_token: "a thread impersonation token (Low) on the calling thread does not change the child: integrity 0x3000, for both CreateProcessW and CreateProcessAsUserW"
+  restricted: "DISABLE_MAX_PRIVILEGE: child has 1 privilege (enabled), has_restrictions=1, integrity 0x3000, Administrators still 0xf; with Administrators disabled the group shows 0x10 (deny-only); disabled Administrators and Users with privileges kept: privileges 24, both 0x10; LUA_TOKEN: 5 privileges, Administrators 0x10; SANDBOX_INERT: no change in the facts (24 privileges); all flags 0xf: 1 privilege, admins 0x10; the user SID is the parent's in every case"
+  restricting_sids: "restricting SIDs {Everyone} or {Users, Everyone}: the child starts, but cannot open its own token or the file beside the executable (token queries fail, create_file status 0xc0000022) and exits 0; restricting {Users, Everyone, Administrators, user, logon SID} with Administrators disabled: the child runs normally, is_restricted=1, restricting_sids=5; WRITE_RESTRICTED with {Everyone}: is_restricted=1, 24 privileges, can read but create_file fails 0xc0000022"
+  integrity: "Medium (0x2000): child integrity 0x2000, can create a file beside the executable (status 0x0), privileges 24 (17 enabled); Low (0x1000) and Untrusted (0): the child shows 0x1000 / 0 and 3 enabled privileges, creating the file fails with 0xc0000022 (the High parent succeeds, status 0x0); a restricted token (1 privilege) lowered to Low or Untrusted: the same, has_restrictions=1"
+  broker: "job with extended KILL_ON_JOB_CLOSE|ACTIVE_PROCESS (1), UI restrictions 0xff, a restricted Low token, CREATE_SUSPENDED: the child is not in the job; assign ok; in_job 1, total=1 active=1; ResumeThread previous count 1; the child (Low, 1 privilege) exits 0; a second child assigned and resumed runs (active=1); a third assign fails with 1816; closing the job handle ends the second child (exit code 0) while the third (never in the job) stays alive"
+  suspended: "CREATE_SUSPENDED: the child exists with exit code 259 (STILL_ACTIVE), ResumeThread returns 1 and later 0, then it runs to its exit code 7"
+  process_information: "with process attributes inherit=TRUE the process handle is inheritable (1), the thread handle is not (0); the process handle has access 0x1fffff and its id matches the structure"
+  names: "the application name with a quoted full path and arguments, no application name with \"cmd.exe /c exit 4\" (searched) or \"cmd /c exit 5\" (extension added), application name only (no command line), application name cmd.exe with a command line starting with another name: all run (exit codes 3, 4, 5, 0, 6)"
+  environment: "an environment block with CREATE_UNICODE_ENVIRONMENT is used (a variable of it is expanded by cmd, exit code 9)"
+  inheritance: "inherit_handles TRUE: an inheritable event is valid in the child, a non-inheritable one is not (0x106 = ERROR_INVALID_HANDLE reported by the child); inherit FALSE: not valid; with a PROC_THREAD_ATTRIBUTE_HANDLE_LIST (EXTENDED_STARTUPINFO_PRESENT) of one handle: the listed handle is valid in the child and another inheritable handle is not"
+  breakaway: "ambient: CREATE_BREAKAWAY_FROM_JOB works from the oracle process (its job allows breakaway); the child is outside any job"
+errors:
+  token_handles: "an event, an invalid value, INVALID_HANDLE_VALUE or a closed token handle: error 6"
+  token_rights: "missing TOKEN_ASSIGN_PRIMARY or TOKEN_QUERY: error 5"
+  level: "impersonation token at Identification/Anonymous level: error 1346"
+  program: "application name or command line naming a program that does not exist: error 2"
+  no_command: "neither application name nor command line, or an empty command line without name: error 87"
+  directory: "a current directory that does not exist: error 267 (ERROR_DIRECTORY)"
+  environment_flag: "a wide environment block without CREATE_UNICODE_ENVIRONMENT: error 87"
+  handle_list: "a handle list containing a non-inheritable handle: error 87; a handle list with inherit_handles FALSE: 87; EXTENDED_STARTUPINFO_PRESENT with a startup info whose cb is the size of STARTUPINFOW: 87"
+side_effects: "creates a process (and its main thread); with inherit TRUE handles are duplicated into it"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

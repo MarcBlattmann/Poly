@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "69970d4f91fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:01:49Z",
+  "tests": [
+    {
+      "name": "sd_getgroup_absolute",
+      "exe_sha256": "c359d54b21b421eba521da4db4e16d201b67c781d77db76fae7f706d4617b194",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gZ3JvdXA6IG9rPTEgd2hlcmU9bnVsbCBzaWQ9KG51bGwpIGRlZmF1bHRlZD0wCmdyb3VwIHVzZXJzOiBvaz0xIHdoZXJlPWVsc2V3aGVyZSBzaWQ9Uy0xLTUtMzItNTQ1IGRlZmF1bHRlZD0wCnNhbWUgcG9pbnRlciBhcyB0aGUgU0lEIHBhc3NlZCBpbjogdHJ1ZQpncm91cCBzeXN0ZW0sIGRlZmF1bHRlZDogb2s9MSB3aGVyZT1lbHNld2hlcmUgc2lkPVMtMS01LTE4IGRlZmF1bHRlZD0xCk5VTEwgZ3JvdXAsIGRlZmF1bHRlZCBmbGFnIHNldDogb2s9MSB3aGVyZT1udWxsIHNpZD0obnVsbCkgZGVmYXVsdGVkPTEKTlVMTCBncm91cCwgZGVmYXVsdGVkIGZsYWcgY2xlYXI6IG9rPTEgd2hlcmU9bnVsbCBzaWQ9KG51bGwpIGRlZmF1bHRlZD0wCmdyb3VwIGFmdGVyIHNldHRpbmcgdGhlIG93bmVyOiBvaz0xIHdoZXJlPW51bGwgc2lkPShudWxsKSBkZWZhdWx0ZWQ9MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no group: ok=1 where=null sid=(null) defaulted=0\ngroup users: ok=1 where=elsewhere sid=S-1-5-32-545 defaulted=0\nsame pointer as the SID passed in: true\ngroup system, defaulted: ok=1 where=elsewhere sid=S-1-5-18 defaulted=1\nNULL group, defaulted flag set: ok=1 where=null sid=(null) defaulted=1\nNULL group, defaulted flag clear: ok=1 where=null sid=(null) defaulted=0\ngroup after setting the owner: ok=1 where=null sid=(null) defaulted=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "sd_getgroup_relative",
+      "exe_sha256": "7931d81fb8f25a4083bedf432d895a1b4542ae5167c81c919daac82dfc35061a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Ikc6U1kiOiBzZWxmLXJlbGF0aXZlIHJldj0xIHNiejE9MCBjb250cm9sPTB4ODAwMCBbU0VMRl9SRUxBVElWRV0gb3duZXI9MCBncm91cD0yMCBzYWNsPTAgZGFjbD0wCiAgZ3JvdXA6IG9rPTEgd2hlcmU9aW5zaWRlKzIwIHNpZD1TLTEtNS0xOCBkZWZhdWx0ZWQ9MAoiTzpCQUc6U1kiOiBzZWxmLXJlbGF0aXZlIHJldj0xIHNiejE9MCBjb250cm9sPTB4ODAwMCBbU0VMRl9SRUxBVElWRV0gb3duZXI9MjAgZ3JvdXA9MzYgc2FjbD0wIGRhY2w9MAogIGdyb3VwOiBvaz0xIHdoZXJlPWluc2lkZSszNiBzaWQ9Uy0xLTUtMTggZGVmYXVsdGVkPTAKIk86QkEiOiBzZWxmLXJlbGF0aXZlIHJldj0xIHNiejE9MCBjb250cm9sPTB4ODAwMCBbU0VMRl9SRUxBVElWRV0gb3duZXI9MjAgZ3JvdXA9MCBzYWNsPTAgZGFjbD0wCiAgZ3JvdXA6IG9rPTEgd2hlcmU9bnVsbCBzaWQ9KG51bGwpIGRlZmF1bHRlZD0wCiJPOlNZRzpCQUQ6KEE7O0dBOzs7V0QpIjogc2VsZi1yZWxhdGl2ZSByZXY9MSBzYnoxPTAgY29udHJvbD0weDgwMDQgW0RBQ0xfUFJFU0VOVHxTRUxGX1JFTEFUSVZFXSBvd25lcj00OCBncm91cD02MCBzYWNsPTAgZGFjbD0yMAogIGdyb3VwOiBvaz0xIHdoZXJlPWluc2lkZSs2MCBzaWQ9Uy0xLTUtMzItNTQ0IGRlZmF1bHRlZD0wCiJEOihBOztHQTs7O1dEKSI6IHNlbGYtcmVsYXRpdmUgcmV2PTEgc2J6MT0wIGNvbnRyb2w9MHg4MDA0IFtEQUNMX1BSRVNFTlR8U0VMRl9SRUxBVElWRV0gb3duZXI9MCBncm91cD0wIHNhY2w9MCBkYWNsPTIwCiAgZ3JvdXA6IG9rPTEgd2hlcmU9bnVsbCBzaWQ9KG51bGwpIGRlZmF1bHRlZD0wCiJHOlMtMS01LTIxLTEtMi0zLTUxMyI6IHNlbGYtcmVsYXRpdmUgcmV2PTEgc2J6MT0wIGNvbnRyb2w9MHg4MDAwIFtTRUxGX1JFTEFUSVZFXSBvd25lcj0wIGdyb3VwPTIwIHNhY2w9MCBkYWNsPTAKICBncm91cDogb2s9MSB3aGVyZT1pbnNpZGUrMjAgc2lkPVMtMS01LTIxLTxtYWNoaW5lPi01MTMgZGVmYXVsdGVkPTAKR1JPVVBfREVGQVVMVEVEIHNldCBieSBoYW5kOiBvaz0xIHdoZXJlPWluc2lkZSszNiBzaWQ9Uy0xLTUtMTggZGVmYXVsdGVkPTEKT1dORVJfREVGQVVMVEVEIG9ubHk6IG9rPTEgd2hlcmU9aW5zaWRlKzM2IHNpZD1TLTEtNS0xOCBkZWZhdWx0ZWQ9MApncm91cCBvZmZzZXQgMDogb2s9MSB3aGVyZT1udWxsIHNpZD0obnVsbCkgZGVmYXVsdGVkPTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "\"G:SY\": self-relative rev=1 sbz1=0 control=0x8000 [SELF_RELATIVE] owner=0 group=20 sacl=0 dacl=0\n  group: ok=1 where=inside+20 sid=S-1-5-18 defaulted=0\n\"O:BAG:SY\": self-relative rev=1 sbz1=0 control=0x8000 [SELF_RELATIVE] owner=20 group=36 sacl=0 dacl=0\n  group: ok=1 where=inside+36 sid=S-1-5-18 defaulted=0\n\"O:BA\": self-relative rev=1 sbz1=0 control=0x8000 [SELF_RELATIVE] owner=20 group=0 sacl=0 dacl=0\n  group: ok=1 where=null sid=(null) defaulted=0\n\"O:SYG:BAD:(A;;GA;;;WD)\": self-relative rev=1 sbz1=0 control=0x8004 [DACL_PRESENT|SELF_RELATIVE] owner=48 group=60 sacl=0 dacl=20\n  group: ok=1 where=inside+60 sid=S-1-5-32-544 defaulted=0\n\"D:(A;;GA;;;WD)\": self-relative rev=1 sbz1=0 control=0x8004 [DACL_PRESENT|SELF_RELATIVE] owner=0 group=0 sacl=0 dacl=20\n  group: ok=1 where=null sid=(null) defaulted=0\n\"G:S-1-5-21-1-2-3-513\": self-relative rev=1 sbz1=0 control=0x8000 [SELF_RELATIVE] owner=0 group=20 sacl=0 dacl=0\n  group: ok=1 where=inside+20 sid=S-1-5-21-<machine>-513 defaulted=0\nGROUP_DEFAULTED set by hand: ok=1 where=inside+36 sid=S-1-5-18 defaulted=1\nOWNER_DEFAULTED only: ok=1 where=inside+36 sid=S-1-5-18 defaulted=0\ngroup offset 0: ok=1 where=null sid=(null) defaulted=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

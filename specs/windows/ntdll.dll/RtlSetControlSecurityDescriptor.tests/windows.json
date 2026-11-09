@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_setcontrol_bits",
+      "exe_sha256": "589d17d27d2d54cdb194899b811cbce241d1b6939f99824bf157d3c828855f4c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Yml0IDB4MDAwMTogc2V0IG9uIGVtcHR5OiBzdGF0dXM9MHhjMDAwMDAwZCBjb250cm9sPTB4MDAwMDsgY2xlYXIgb24gMHhmZmZmOiBzdGF0dXM9MHhjMDAwMDAwZCBjb250cm9sPTB4ZmZmZgpiaXQgMHgwMDAyOiBzZXQgb24gZW1wdHk6IHN0YXR1cz0weGMwMDAwMDBkIGNvbnRyb2w9MHgwMDAwOyBjbGVhciBvbiAweGZmZmY6IHN0YXR1cz0weGMwMDAwMDBkIGNvbnRyb2w9MHhmZmZmCmJpdCAweDAwMDQ6IHNldCBvbiBlbXB0eTogc3RhdHVzPTB4YzAwMDAwMGQgY29udHJvbD0weDAwMDA7IGNsZWFyIG9uIDB4ZmZmZjogc3RhdHVzPTB4YzAwMDAwMGQgY29udHJvbD0weGZmZmYKYml0IDB4MDAwODogc2V0IG9uIGVtcHR5OiBzdGF0dXM9MHhjMDAwMDAwZCBjb250cm9sPTB4MDAwMDsgY2xlYXIgb24gMHhmZmZmOiBzdGF0dXM9MHhjMDAwMDAwZCBjb250cm9sPTB4ZmZmZgpiaXQgMHgwMDEwOiBzZXQgb24gZW1wdHk6IHN0YXR1cz0weGMwMDAwMDBkIGNvbnRyb2w9MHgwMDAwOyBjbGVhciBvbiAweGZmZmY6IHN0YXR1cz0weGMwMDAwMDBkIGNvbnRyb2w9MHhmZmZmCmJpdCAweDAwMjA6IHNldCBvbiBlbXB0eTogc3RhdHVzPTB4YzAwMDAwMGQgY29udHJvbD0weDAwMDA7IGNsZWFyIG9uIDB4ZmZmZjogc3RhdHVzPTB4YzAwMDAwMGQgY29udHJvbD0weGZmZmYKYml0IDB4MDA0MDogc2V0IG9uIGVtcHR5OiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MDA0MDsgY2xlYXIgb24gMHhmZmZmOiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4ZmZiZgpiaXQgMHgwMDgwOiBzZXQgb24gZW1wdHk6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHgwMDgwOyBjbGVhciBvbiAweGZmZmY6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHhmZjdmCmJpdCAweDAxMDA6IHNldCBvbiBlbXB0eTogc3RhdHVzPTB4MDAwMDAwMDAgY29udHJvbD0weDAxMDA7IGNsZWFyIG9uIDB4ZmZmZjogc3RhdHVzPTB4MDAwMDAwMDAgY29udHJvbD0weGZlZmYKYml0IDB4MDIwMDogc2V0IG9uIGVtcHR5OiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MDIwMDsgY2xlYXIgb24gMHhmZmZmOiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4ZmRmZgpiaXQgMHgwNDAwOiBzZXQgb24gZW1wdHk6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHgwNDAwOyBjbGVhciBvbiAweGZmZmY6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHhmYmZmCmJpdCAweDA4MDA6IHNldCBvbiBlbXB0eTogc3RhdHVzPTB4MDAwMDAwMDAgY29udHJvbD0weDA4MDA7IGNsZWFyIG9uIDB4ZmZmZjogc3RhdHVzPTB4MDAwMDAwMDAgY29udHJvbD0weGY3ZmYKYml0IDB4MTAwMDogc2V0IG9uIGVtcHR5OiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4MTAwMDsgY2xlYXIgb24gMHhmZmZmOiBzdGF0dXM9MHgwMDAwMDAwMCBjb250cm9sPTB4ZWZmZgpiaXQgMHgyMDAwOiBzZXQgb24gZW1wdHk6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHgyMDAwOyBjbGVhciBvbiAweGZmZmY6IHN0YXR1cz0weDAwMDAwMDAwIGNvbnRyb2w9MHhkZmZmCmJpdCAweDQwMDA6IHNldCBvbiBlbXB0eTogc3RhdHVzPTB4YzAwMDAwMGQgY29udHJvbD0weDAwMDA7IGNsZWFyIG9uIDB4ZmZmZjogc3RhdHVzPTB4YzAwMDAwMGQgY29udHJvbD0weGZmZmYKYml0IDB4ODAwMDogc2V0IG9uIGVtcHR5OiBzdGF0dXM9MHhjMDAwMDAwZCBjb250cm9sPTB4MDAwMDsgY2xlYXIgb24gMHhmZmZmOiBzdGF0dXM9MHhjMDAwMDAwZCBjb250cm9sPTB4ZmZmZgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "bit 0x0001: set on empty: status=0xc000000d control=0x0000; clear on 0xffff: status=0xc000000d control=0xffff\nbit 0x0002: set on empty: status=0xc000000d control=0x0000; clear on 0xffff: status=0xc000000d control=0xffff\nbit 0x0004: set on empty: status=0xc000000d control=0x0000; clear on 0xffff: status=0xc000000d control=0xffff\nbit 0x0008: set on empty: status=0xc000000d control=0x0000; clear on 0xffff: status=0xc000000d control=0xffff\nbit 0x0010: set on empty: status=0xc000000d control=0x0000; clear on 0xffff: status=0xc000000d control=0xffff\nbit 0x0020: set on empty: status=0xc000000d control=0x0000; clear on 0xffff: status=0xc000000d control=0xffff\nbit 0x0040: set on empty: status=0x00000000 control=0x0040; clear on 0xffff: status=0x00000000 control=0xffbf\nbit 0x0080: set on empty: status=0x00000000 control=0x0080; clear on 0xffff: status=0x00000000 control=0xff7f\nbit 0x0100: set on empty: status=0x00000000 control=0x0100; clear on 0xffff: status=0x00000000 control=0xfeff\nbit 0x0200: set on empty: status=0x00000000 control=0x0200; clear on 0xffff: status=0x00000000 control=0xfdff\nbit 0x0400: set on empty: status=0x00000000 control=0x0400; clear on 0xffff: status=0x00000000 control=0xfbff\nbit 0x0800: set on empty: status=0x00000000 control=0x0800; clear on 0xffff: status=0x00000000 control=0xf7ff\nbit 0x1000: set on empty: status=0x00000000 control=0x1000; clear on 0xffff: status=0x00000000 control=0xefff\nbit 0x2000: set on empty: status=0x00000000 control=0x2000; clear on 0xffff: status=0x00000000 control=0xdfff\nbit 0x4000: set on empty: status=0xc000000d control=0x0000; clear on 0xffff: status=0xc000000d control=0xffff\nbit 0x8000: set on empty: status=0xc000000d control=0x0000; clear on 0xffff: status=0xc000000d control=0xffff\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    }
+  ]
+}

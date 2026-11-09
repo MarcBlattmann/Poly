@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/SetSecurityDescriptorOwner
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Stores the caller's SID pointer (not a copy) in the owner slot of an
+  absolute descriptor and sets or clears SE_OWNER_DEFAULTED. NULL removes
+  the owner. The SID is not validated.
+interface:
+  signature: "BOOL SetSecurityDescriptorOwner(PSECURITY_DESCRIPTOR pSecurityDescriptor, PSID pOwner, BOOL bOwnerDefaulted)"
+  layout: "SECURITY_DESCRIPTOR, absolute form (winnt.h, x64, 40 bytes): byte 0 Revision (1), byte 1 Sbz1, bytes 2..3 Control (little-endian 16-bit), bytes 4..7 padding, then four 8-byte pointers: Owner at 8, Group at 16, Sacl at 24, Dacl at 32. Self-relative form: the same first 4 bytes, with SE_SELF_RELATIVE (0x8000) in Control, then four 32-bit offsets from the start of the descriptor: Owner at 4, Group at 8, Sacl at 12, Dacl at 16 (header 20 bytes); an offset of 0 means the part is absent (or, for the ACLs, a NULL ACL when the PRESENT bit is set)."
+  control: "SECURITY_DESCRIPTOR_CONTROL bits: 0x0001 SE_OWNER_DEFAULTED, 0x0002 SE_GROUP_DEFAULTED, 0x0004 SE_DACL_PRESENT, 0x0008 SE_DACL_DEFAULTED, 0x0010 SE_SACL_PRESENT, 0x0020 SE_SACL_DEFAULTED, 0x0040 SE_DACL_UNTRUSTED, 0x0080 SE_SERVER_SECURITY, 0x0100 SE_DACL_AUTO_INHERIT_REQ, 0x0200 SE_SACL_AUTO_INHERIT_REQ, 0x0400 SE_DACL_AUTO_INHERITED, 0x0800 SE_SACL_AUTO_INHERITED, 0x1000 SE_DACL_PROTECTED, 0x2000 SE_SACL_PROTECTED, 0x4000 SE_RM_CONTROL_VALID, 0x8000 SE_SELF_RELATIVE."
+rules:
+  pointer: "the slot becomes non-NULL and GetSecurityDescriptorOwner returns the very pointer that was passed"
+  defaulted: "bDefaulted TRUE sets SE_OWNER_DEFAULTED (control 0x0001), FALSE clears it; the value 2 acts like TRUE; setting a different SID with FALSE after TRUE clears the bit again"
+  null_owner: "a NULL owner is accepted and empties the slot; the defaulted bit still follows the argument (NULL with TRUE gives control 0x0001, NULL with FALSE 0)"
+  not_validated: "a SID with revision 9 and count 40 is accepted (TRUE) and stored"
+  other_fields: "only the owner slot and bit 0x0001 change: a descriptor with group, DACL and SACL set and control 0x3996 (group defaulted, DACL and SACL present, server security, DACL auto-inherit required, SACL auto-inherited, both protected) goes to 0x3997 with owner defaulted and back to 0x3996 with FALSE; group, DACL and SACL stay"
+errors:
+  revision: "a revision byte of 0, 2, 3 or 255, and an all-zero buffer: FALSE, last error ERROR_UNKNOWN_REVISION (1305), the header is not changed"
+  self_relative: "a self-relative descriptor: FALSE, last error ERROR_INVALID_SECURITY_DESCR (1338), the header is not changed"
+side_effects: "writes the owner slot and SE_OWNER_DEFAULTED"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

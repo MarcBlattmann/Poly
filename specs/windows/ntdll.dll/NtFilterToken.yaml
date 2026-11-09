@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtFilterToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Creates a restricted copy of a token: groups made deny-only, privileges
+  deleted, restricting SIDs added, with the flags DISABLE_MAX_PRIVILEGE (1),
+  SANDBOX_INERT (2), LUA_TOKEN (4), WRITE_RESTRICTED (8). The copy has the
+  type and impersonation level of the source. CreateRestrictedToken calls
+  it. (The signature is worked out from CreateRestrictedToken: the SID lists
+  are TOKEN_GROUPS structures.)
+interface:
+  signature: "NTSTATUS NtFilterToken(HANDLE ExistingTokenHandle, ULONG Flags, PTOKEN_GROUPS SidsToDisable, PTOKEN_PRIVILEGES PrivilegesToDelete, PTOKEN_GROUPS RestrictedSids, PHANDLE NewTokenHandle)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87."
+rules:
+  flags: "on the elevated administrator token: flags 0, SANDBOX_INERT (2), 0x10 and 0x80000000 give a token like the source (0 privileges dropped, no restrictions); DISABLE_MAX_PRIVILEGE (1) drops 23 of 24 privileges and sets TokenHasRestrictions 1; LUA_TOKEN (4) drops 19 privileges, makes Administrators deny-only (attributes 16) and sets TokenHasRestrictions 1; WRITE_RESTRICTED (8) sets TokenHasRestrictions 1 and, with a restricting SID Everyone, IsTokenRestricted 1; flags 0xF drop 23 and make Administrators deny-only; 0xFFFFFFFF behaves like 0xF; SANDBOX_INERT is accepted but TokenSandBoxInert reads 0; the integrity level (0x3000), the elevation type 1 and the token type (1) are unchanged"
+  disable_sids: "a group in SidsToDisable gets attributes 16 (SE_GROUP_USE_FOR_DENY_ONLY): Administrators 15 -> 16, Users 7 -> 16, Everyone 7 -> 16, any number of them; TokenHasRestrictions becomes 1 but IsTokenRestricted stays 0; a SID the token lacks (SYSTEM) is ignored and the token has no restrictions; the same SID twice works; the attributes in the list entries are ignored (0x7 given: same result); a count of 0 changes nothing; the user SID in the list leaves all group attributes unchanged (Administrators 15, Users 7) and sets TokenHasRestrictions to 1"
+  restricting_sids: "RestrictedSids adds restricting SIDs with attributes 0x7: Everyone -> 1 SID, Everyone and S-1-5-12 -> 2 (in order), Users, and an unknown S-1-5-99-1 -> 1; IsTokenRestricted 1, TokenHasRestrictions 1, the normal groups unchanged (Administrators 15); an entry with attributes 0x17 returns STATUS_INVALID_PARAMETER (0xC000000D); a count of 0 changes nothing"
+  privileges: "PrivilegesToDelete removes the privileges (backup and restore: count drops by 2, SeShutdown stays); a privilege the token lacks (SeTcb) is ignored; the same one twice drops 1; a count of 0 drops nothing"
+  combination: "DISABLE_MAX_PRIVILEGE with a disabled Users group, a deleted SeBackup and a restricting Everyone gives privilege count 1, Users attributes 16, one restricting SID, backup absent"
+  sources: "the result keeps the source's type and level: primary -> primary, anonymous -> type 2 level 0, identification -> level 1, impersonation -> 2, delegation -> 3; the handle granted is 0xf01ff; the source needs TOKEN_DUPLICATE and TOKEN_QUERY: only TOKEN_QUERY, only TOKEN_IMPERSONATE give STATUS_ACCESS_DENIED, DUPLICATE alone gives a handle granted 0x2, QUERY|DUPLICATE 0xa, QUERY|DUPLICATE|ASSIGN_PRIMARY 0xb"
+  restricted_again: "filtering an already restricted token with restricting SIDs: the first call works; the second call (restricting S-1-5-12 on the result) returns STATUS_INVALID_PARAMETER and creates no token"
+errors:
+  handles: "NULL and a closed handle: STATUS_INVALID_HANDLE; the process pseudo-handle and an event: STATUS_OBJECT_TYPE_MISMATCH"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.
