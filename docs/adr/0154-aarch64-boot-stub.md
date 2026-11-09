@@ -28,7 +28,7 @@ host workspace by living under `kernel/`, which already is. It depends only on
 shared host-tested crates that build for aarch64: `poly-mem` (the buddy frame
 allocator) and `poly-heap` (the heap), the two the x86 kernel uses. No
 third-party crates. Everything that touches no hardware is a library target
-(`poly_a64`) of the same package, built for the host too, where its unit tests
+(`poly_aarch64_stub`) of the same package, built for the host too, where its unit tests
 run: a devicetree reader, `MIDR_EL1`/`ESR_ELx` decoding, page table entries,
 the PL011's register model, the semihosting call block, the self-test report.
 `main.rs` and its modules hold what cannot be tested on the host: the assembly,
@@ -102,7 +102,7 @@ a requirement of the `ci` job; `ci lint` runs rustfmt and clippy on the package.
 - The stub is a second copy of the little a kernel needs first (boot,
   console, exceptions, heap). **M5 folds it in:** the module split already
   follows `crate::arch` (`boot`, `cpu`, `exceptions`, `paging`, `uart`,
-  `semihosting`), `poly_a64`'s pure parts move to shared crates (or stay a
+  `semihosting`), `poly_aarch64_stub`'s pure parts move to shared crates (or stay a
   `poly-arch-aarch64` crate), the stub's `a64_main` becomes the aarch64 producer
   of `BootInfo`, and the package, its linker script and the xtask target go away
   once `poly-kernel` builds for both targets.

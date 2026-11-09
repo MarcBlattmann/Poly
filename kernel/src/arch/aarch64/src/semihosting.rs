@@ -8,8 +8,8 @@
 use crate::cpu;
 use core::arch::asm;
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use poly_a64::psci::{self, Conduit};
-use poly_a64::semihost;
+use poly_aarch64_stub::psci::{self, Conduit};
+use poly_aarch64_stub::semihost;
 
 static EXITING: AtomicBool = AtomicBool::new(false);
 static CONDUIT: AtomicU8 = AtomicU8::new(0);

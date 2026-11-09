@@ -5,7 +5,7 @@
 
 use core::fmt;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use poly_a64::pl011::*;
+use poly_aarch64_stub::pl011::*;
 
 /// Where QEMU's `virt` board puts the first PL011 (QEMU documentation, "Arm
 /// Virt": device locations may change between versions, so a guest should

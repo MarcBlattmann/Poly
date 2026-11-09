@@ -1,5 +1,5 @@
 //! The boot self-test: each check prints `ok <name>` or `not ok <name>`, then a
-//! verdict line (`poly_a64::report`). `cargo xtask aarch64 test` lists the
+//! verdict line (`poly_aarch64_stub::report`). `cargo xtask aarch64 test` lists the
 //! names it requires (`tools/xtask/src/aarch64.rs`); keep the two in step.
 
 use crate::boot::{self, BootInfo};
@@ -10,9 +10,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::arch::asm;
-use poly_a64::mmu as a64_mmu;
-use poly_a64::regs::{self, ec};
-use poly_a64::report::Tally;
+use poly_aarch64_stub::mmu as a64_mmu;
+use poly_aarch64_stub::regs::{self, ec};
+use poly_aarch64_stub::report::Tally;
 
 /// Where the checks put their results.
 struct Run {

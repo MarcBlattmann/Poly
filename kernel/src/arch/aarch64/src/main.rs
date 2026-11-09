@@ -1,7 +1,7 @@
 //! The aarch64 boot stub (ADR 0154): boots on QEMU's `virt` machine, prints to
 //! its PL011, runs a small self-test and ends QEMU with a status through Arm
 //! semihosting. Everything specific to the architecture lives here and in the
-//! sibling modules; the logic that touches no hardware is `poly_a64` (lib.rs).
+//! sibling modules; the logic that touches no hardware is `poly_aarch64_stub` (lib.rs).
 
 #![no_std]
 #![no_main]
@@ -19,9 +19,9 @@ mod uart;
 
 use boot::BootInfo;
 use core::fmt::Write as _;
-use poly_a64::cmdline::has_flag;
-use poly_a64::regs::{self, Midr};
-use poly_a64::semihost::status;
+use poly_aarch64_stub::cmdline::has_flag;
+use poly_aarch64_stub::regs::{self, Midr};
+use poly_aarch64_stub::semihost::status;
 use poly_mem::{MemoryMap, Region, RegionKind};
 
 /// Named on the command line (`-append`) to make the boot end in a panic, to

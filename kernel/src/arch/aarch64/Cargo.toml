@@ -16,7 +16,7 @@ publish = false
 # page table entries, report format. It builds for the host too, where its
 # unit tests run (`cargo xtask aarch64 test`).
 [lib]
-name = "poly_a64"
+name = "poly_aarch64_stub"
 
 [[bin]]
 name = "poly-kernel-aarch64"

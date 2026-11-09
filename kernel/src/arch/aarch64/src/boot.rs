@@ -14,7 +14,7 @@
 //! set the stack and the vector table, clear `.bss`, call [`crate::a64_main`].
 
 use core::arch::global_asm;
-use poly_a64::fdt::{self, Fdt};
+use poly_aarch64_stub::fdt::{self, Fdt};
 
 global_asm!(
     r#"
@@ -142,7 +142,7 @@ pub struct BootInfo {
     pub ram: Option<(u64, u64)>,
     pub uart: Option<u64>,
     pub bootargs: Option<&'static str>,
-    pub psci: Option<poly_a64::psci::Conduit>,
+    pub psci: Option<poly_aarch64_stub::psci::Conduit>,
 }
 
 impl BootInfo {
@@ -161,7 +161,7 @@ impl BootInfo {
         info.ram = fdt.memory().map(|r| (r.base, r.size));
         info.uart = fdt.find_compatible("arm,pl011").and_then(|n| n.reg()).map(|r| r.base);
         info.bootargs = fdt.bootargs();
-        info.psci = fdt.psci_method().and_then(poly_a64::psci::Conduit::parse);
+        info.psci = fdt.psci_method().and_then(poly_aarch64_stub::psci::Conduit::parse);
         info
     }
 }

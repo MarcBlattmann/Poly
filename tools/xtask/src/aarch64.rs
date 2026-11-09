@@ -57,9 +57,9 @@ const REQUIRED: [&str; 22] = [
     "heap-large-freed",
 ];
 
-/// Must match `poly_a64::report`.
+/// Must match `poly_aarch64_stub::report`.
 const PASS_MARKER: &str = "POLY-A64-SELFTEST: PASS";
-/// Must match `poly_a64::semihost::status`.
+/// Must match `poly_aarch64_stub::semihost::status`.
 const STATUS_PASS: i32 = 0;
 const STATUS_PANIC: i32 = 2;
 /// The kernel command line that makes the stub panic at the end.

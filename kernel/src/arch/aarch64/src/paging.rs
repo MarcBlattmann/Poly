@@ -1,4 +1,4 @@
-//! Turning the MMU on with the identity map of `poly_a64::mmu`.
+//! Turning the MMU on with the identity map of `poly_aarch64_stub::mmu`.
 //!
 //! The sequence follows the Arm ARM (D8, "enabling the stage 1 MMU"): program
 //! `MAIR_EL1`, `TCR_EL1` and `TTBR0_EL1`, synchronise, invalidate the TLB,
@@ -9,8 +9,8 @@
 use crate::cpu;
 use core::arch::asm;
 use core::cell::UnsafeCell;
-use poly_a64::mmu::{self, L1_ENTRIES};
-use poly_a64::regs;
+use poly_aarch64_stub::mmu::{self, L1_ENTRIES};
+use poly_aarch64_stub::regs;
 
 /// `SCTLR_EL1.M`: the stage 1 MMU is on.
 const SCTLR_M: u64 = 1 << 0;

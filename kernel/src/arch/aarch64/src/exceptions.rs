@@ -16,8 +16,8 @@ use crate::semihosting;
 use crate::{cpu, kprintln};
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicU64, Ordering};
-use poly_a64::regs::{self, ec};
-use poly_a64::semihost::status;
+use poly_aarch64_stub::regs::{self, ec};
+use poly_aarch64_stub::semihost::status;
 
 /// The registers an entry saves: `x0..=x30`, then the exception state.
 #[repr(C)]
