@@ -505,6 +505,7 @@ pub unsafe extern "C" fn LdrLoadDll(
     LOADER_LOCK.leave(&SysPlatform);
     match r {
         Ok((_, base, op)) => {
+            crate::report_stubbed();
             if run_callouts(&op.callouts).is_err() {
                 return NtStatus(0xC000_0142);
             }
@@ -514,7 +515,11 @@ pub unsafe extern "C" fn LdrLoadDll(
             }
             SUCCESS
         }
-        Err(e) => e,
+        Err(e) => {
+            let what = alloc::format!("LdrLoadDll({})", alloc::string::String::from_utf16_lossy(&name));
+            crate::report_load_failure(&what, e);
+            e
+        }
     }
 }
 
@@ -654,10 +659,20 @@ pub unsafe extern "C" fn LdrResolveDelayLoadedAPI(
     match r {
         Ok((addr, op)) => {
             let _ = run_callouts(&op.callouts);
+            crate::report_stubbed();
             addr as *mut u8
         }
         // A failure raises; the helper does not return a sentinel.
-        Err(_f) => {
+        Err(f) => {
+            let what = alloc::format!(
+                "delay-load {}!{}",
+                alloc::string::String::from_utf8_lossy(&f.dll),
+                match &f.name {
+                    Some(n) => alloc::string::String::from_utf8_lossy(n).into_owned(),
+                    None => alloc::format!("#{}", f.ordinal),
+                }
+            );
+            crate::report_load_failure(&what, f.status);
             // SAFETY: a fail-fast; does not return.
             unsafe { core::arch::asm!("int 0x29", in("ecx") 4u32, options(noreturn)) }
         }

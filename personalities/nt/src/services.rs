@@ -298,6 +298,11 @@ pub enum Service {
     /// thread had when the APC interrupted it, which it kept (ADR 0065,
     /// 0071). Never returns to the caller.
     PolyResumeApc,
+    /// `PolyDebugPrint(Text, Length)`: logs up to 512 bytes of text on the
+    /// kernel log with the process id (ADR 0155: the loader says which
+    /// import did not bind; a debugging aid, not an interface). Returns
+    /// `STATUS_SUCCESS`.
+    PolyDebugPrint,
 
     // ----- exceptions (ADR 0068)
     /// `NtRaiseException(ExceptionRecord*, ContextRecord*, FirstChance)`:
@@ -349,7 +354,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 76] = [
+pub const SERVICES: [(Service, u32, &str); 77] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -426,6 +431,7 @@ pub const SERVICES: [(Service, u32, &str); 76] = [
     (Service::QueryFullAttributesFile, 0x0CF, "NtQueryFullAttributesFile"),
     (Service::PolyTrace, TABLE_POLY << 12, "PolyTrace"),
     (Service::PolyResumeApc, (TABLE_POLY << 12) | 1, "PolyResumeApc"),
+    (Service::PolyDebugPrint, (TABLE_POLY << 12) | 2, "PolyDebugPrint"),
 ];
 
 /// The registry services (ADR 0066), kept in their own table so the

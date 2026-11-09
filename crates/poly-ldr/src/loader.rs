@@ -44,6 +44,8 @@ use crate::ldrdata::{self, EntryData};
 use crate::path::{self, Dirs};
 use crate::status::*;
 use crate::{PAGE_SIZE, Process, page, read_u64, reason, write_u32, write_u64};
+use alloc::format;
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use poly_ntobj::NtStatus;
@@ -219,6 +221,15 @@ enum Sym {
     Ordinal(u16),
 }
 
+impl core::fmt::Display for Sym {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Sym::Name { name, .. } => f.write_str(&String::from_utf8_lossy(name)),
+            Sym::Ordinal(o) => write!(f, "#{o}"),
+        }
+    }
+}
+
 impl Sym {
     fn from(s: ImportSymbol<'_>) -> Sym {
         match s {
@@ -326,6 +337,15 @@ pub struct Loader {
     ldr: u64,
     tls_slots: Vec<Option<ModuleId>>,
     threads: Vec<ThreadTls>,
+    /// Why the last load failed, in words (the first import that did not
+    /// bind, the DLL that was not found): for the process's log, which
+    /// otherwise only has an `NTSTATUS` (ADR 0155).
+    note: Option<String>,
+    /// The imports bound to stubs since the last [`Loader::take_stubbed`]:
+    /// `importer: dll!name`.
+    stubbed: Vec<String>,
+    /// [`crate::STUB_DLL`] was looked for and is not there.
+    stub_absent: bool,
 }
 
 impl Loader {
@@ -338,6 +358,63 @@ impl Loader {
     pub fn init_ldr_data(&mut self, p: &mut dyn Process, peb: u64) -> Result<u64, NtStatus> {
         self.ldr = ldrdata::create(p, peb)?;
         Ok(self.ldr)
+    }
+
+    /// The reason the last load failed, once (ADR 0155).
+    pub fn take_note(&mut self) -> Option<String> {
+        self.note.take()
+    }
+
+    /// Remember why a load failed (the first reason stays).
+    fn note_failure(&mut self, text: String) {
+        if self.note.is_none() {
+            self.note = Some(text);
+        }
+    }
+
+    /// The imports bound to stubs since the last call, once (ADR 0155).
+    pub fn take_stubbed(&mut self) -> Vec<String> {
+        core::mem::take(&mut self.stubbed)
+    }
+
+    /// The stub DLL, loaded as part of `op`, if the search path has one.
+    fn stub_module(&mut self, p: &mut dyn Process, op: &mut LoadOp) -> Option<ModuleId> {
+        if self.stub_absent {
+            return None;
+        }
+        match self.dependency(p, &path::wide(crate::STUB_DLL), op) {
+            Ok(id) => Some(id),
+            Err(_) => {
+                self.stub_absent = true;
+                None
+            }
+        }
+    }
+
+    /// The address of the stub for `sym` of `dll` (as module `importer`
+    /// names it), if the stub DLL has one; the stub DLL becomes a
+    /// dependency of `importer` and the binding is remembered for the log.
+    fn stub_for(
+        &mut self,
+        p: &mut dyn Process,
+        importer: ModuleId,
+        dll: &[u8],
+        sym: &Sym,
+        op: &mut LoadOp,
+    ) -> Option<u64> {
+        let stub = self.stub_module(p, op)?;
+        let key = crate::stub_key(dll, &format!("{sym}"));
+        let wanted = Sym::Name { hint: 0, name: key.into_bytes() };
+        let addr = self.export_address(p, importer, stub, &wanted, op, 0).ok().flatten()?;
+        self.add_edge(Some(importer), stub, op);
+        let line = format!("{}: {}!{sym}", self.name_of(importer), String::from_utf8_lossy(dll));
+        self.stubbed.push(line);
+        Some(addr)
+    }
+
+    /// A module's name as text, for notes.
+    fn name_of(&self, id: ModuleId) -> String {
+        String::from_utf16_lossy(&self.m(id).name)
     }
 
     /// The `PEB_LDR_DATA` address.
@@ -657,7 +734,32 @@ impl Loader {
         let (imports, bound) = gather_imports(p.memory(base, size as usize)?)?;
         let mut addrs: Vec<Vec<u64>> = Vec::new();
         for dll in &imports {
-            let dep = self.dependency(p, &ascii_wide(&dll.name), op)?;
+            let dep = match self.dependency(p, &ascii_wide(&dll.name), op) {
+                Ok(dep) => dep,
+                Err(STATUS_DLL_NOT_FOUND) if self.stub_module(p, op).is_some() => {
+                    // The DLL is missing: each of its imports binds to a
+                    // stub (ADR 0155).
+                    let mut v = Vec::new();
+                    for s in &dll.symbols {
+                        match self.stub_for(p, id, &dll.name, s, op) {
+                            Some(addr) => v.push(addr),
+                            None => {
+                                let (importer, wanted) =
+                                    (self.name_of(id), String::from_utf8_lossy(&dll.name).into_owned());
+                                self.note_failure(format!("{importer}: cannot load {wanted} and has no stub for {s}"));
+                                return Err(STATUS_DLL_NOT_FOUND);
+                            }
+                        }
+                    }
+                    addrs.push(v);
+                    continue;
+                }
+                Err(e) => {
+                    let (importer, wanted) = (self.name_of(id), String::from_utf8_lossy(&dll.name).into_owned());
+                    self.note_failure(format!("{importer}: cannot load {wanted} ({:#x})", e.0));
+                    return Err(e);
+                }
+            };
             self.add_edge(Some(id), dep, op);
             if self.bound_still_valid(dll, &bound, dep) {
                 let mut v = Vec::new();
@@ -669,7 +771,19 @@ impl Loader {
             }
             let mut v = Vec::new();
             for s in &dll.symbols {
-                v.push(self.export_address(p, id, dep, s, op, 0)?.ok_or(s.missing())?);
+                // Poly lacks the function: a stub stands in (ADR 0155).
+                let found = match self.export_address(p, id, dep, s, op, 0)? {
+                    Some(addr) => Some(addr),
+                    None => self.stub_for(p, id, &dll.name, s, op),
+                };
+                match found {
+                    Some(addr) => v.push(addr),
+                    None => {
+                        let (importer, from) = (self.name_of(id), String::from_utf8_lossy(&dll.name).into_owned());
+                        self.note_failure(format!("{importer}: {from}!{s} not found ({:#x})", s.missing().0));
+                        return Err(s.missing());
+                    }
+                }
             }
             addrs.push(v);
         }
@@ -921,6 +1035,7 @@ impl Loader {
     /// TLS index, and return the `DLL_PROCESS_ATTACH` callouts (the DLLs in
     /// dependency order, then the executable's TLS callbacks).
     pub fn process_init(&mut self, p: &mut dyn Process, exe: ModuleId, teb: u64) -> Result<Vec<Callout>, NtStatus> {
+        self.note = None;
         self.thread_register(p, teb)?;
         let mut op = LoadOp::default();
         let (base, size) = (self.m(exe).base, self.m(exe).size);
@@ -947,6 +1062,7 @@ impl Loader {
         name: &[u16],
         search_path: Option<&[u16]>,
     ) -> Result<(ModuleId, u64, LoadOp), NtStatus> {
+        self.note = None;
         let mut op = LoadOp::default();
         let id = match self.locate(p, name, search_path)? {
             Found::Loaded(id) => id,
@@ -1191,13 +1307,32 @@ impl Loader {
                     }
                     d
                 }
+                Err(STATUS_DLL_NOT_FOUND) => {
+                    // The DLL is missing: this function becomes a stub
+                    // (ADR 0155). The DLL's handle slot stays empty, so
+                    // another function of it asks again.
+                    if let Some(a) = self.stub_for(p, pid, &dll, &sym, &mut op) {
+                        if self.attach(p, &mut op, 0).is_err() {
+                            return Err(fail(STATUS_NO_MEMORY, dll, Some(&sym), op, false));
+                        }
+                        return match self.write_slot(p, pid, slot, a) {
+                            Ok(()) => Ok((a, op)),
+                            Err(e) => Err(fail(e, dll, Some(&sym), op, false)),
+                        };
+                    }
+                    self.rollback(p, &op);
+                    return Err(fail(STATUS_DLL_NOT_FOUND, dll, Some(&sym), LoadOp::default(), true));
+                }
                 Err(e) => {
                     self.rollback(p, &op);
                     return Err(fail(e, dll, Some(&sym), LoadOp::default(), true));
                 }
             },
         };
-        let resolved = self.export_address(p, pid, dep, &sym, &mut op, 0);
+        let mut resolved = self.export_address(p, pid, dep, &sym, &mut op, 0);
+        if matches!(resolved, Ok(None)) {
+            resolved = Ok(self.stub_for(p, pid, &dll, &sym, &mut op));
+        }
         if self.attach(p, &mut op, 0).is_err() {
             return Err(fail(STATUS_NO_MEMORY, dll, Some(&sym), op, false));
         }

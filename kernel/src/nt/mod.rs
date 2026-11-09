@@ -420,6 +420,10 @@ impl NtKernel for Kernel {
         crate::kprintln!("nt: pid {} PolyTrace {:#x} {:#x} {:#x}", self.pid.0, values[0], values[1], values[2]);
     }
 
+    fn debug_print(&mut self, text: &[u8]) {
+        crate::kprintln!("nt: pid {}: {}", self.pid.0, alloc::string::String::from_utf8_lossy(text).trim_end());
+    }
+
     fn system_time(&self) -> u64 {
         registry::filetime_now()
     }

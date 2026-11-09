@@ -438,6 +438,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-stubs"
+version = "0.0.1"
+dependencies = [
+ "poly-ldr",
+ "poly-pe",
+]
+
+[[package]]
 name = "poly-term"
 version = "0.0.1"
 dependencies = [
@@ -689,6 +697,7 @@ dependencies = [
  "poly-pe",
  "poly-personality-native",
  "poly-shell",
+ "poly-stubs",
  "poly-term",
  "poly-vfs",
  "poly-win32k",

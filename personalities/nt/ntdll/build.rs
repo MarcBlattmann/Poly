@@ -55,6 +55,8 @@ fn main() {
     println!("cargo:rustc-env=NTDLL_SYSCALLS={}", out.display());
     assert!(seen.len() > 40, "only {} Nt* services found", seen.len());
     assert!(seen.iter().any(|n| n == "PolyResumeApc"), "no PolyResumeApc service found");
+    // The diagnostics service is exported for Poly's own stub DLLs (ADR 0155).
+    println!("cargo:rustc-link-arg=/EXPORT:PolyDebugPrint");
     // RtlCaptureContext is assembly too (ADR 0087).
     let exports = ["/EXPORT:LdrInitializeThunk", "/EXPORT:KiUserApcDispatcher", "/EXPORT:RtlCaptureContext"];
     for link in ["/NOENTRY", "/BASE:0x7FF000000000"].into_iter().chain(exports) {
