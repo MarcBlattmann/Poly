@@ -705,6 +705,7 @@
 {"symbol":"SetWindowToolbar","src":["macos-sdk"]},
 {"symbol":"ShowControl","src":["macos-sdk"]},
 {"symbol":"ShowHide","src":["macos-sdk"]},
+{"symbol":"ShowHideProcess","src":["macos-sdk"]},
 {"symbol":"ShowHideWindowToolbar","src":["macos-sdk"]},
 {"symbol":"ShowMenuBar","src":["macos-sdk"]},
 {"symbol":"ShowSheetWindow","src":["macos-sdk"]},

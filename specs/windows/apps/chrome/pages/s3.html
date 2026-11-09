@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>poly-s3 clicks=0 keys= moved=0</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  #pad { position: fixed; inset: 0; background: #fff8e0; font: 28px Georgia, serif; color: #202020; padding: 24px; box-sizing: border-box; }
+  h1 { font: bold 40px Arial, sans-serif; margin: 0 0 12px 0; }
+  code { font: 24px Consolas, monospace; background: #ddd; }
+</style>
+</head>
+<body>
+<div id="pad">
+  <h1>Poly Chrome S3</h1>
+  <p>The quick brown fox jumps over the lazy dog 0123456789.</p>
+  <p><code>fn main() { println!("hello"); }</code></p>
+  <p lang="de">Grüezi mitenand — Größe, Äpfel, Öl, Über.</p>
+</div>
+<script>
+  let keys = '', clicks = 0, moves = 0;
+  function upd() { document.title = 'poly-s3 clicks=' + clicks + ' keys=' + keys + ' moved=' + (moves > 0 ? 1 : 0); }
+  addEventListener('keydown', e => { if (e.key.length === 1) keys += e.key; upd(); });
+  addEventListener('click', () => { clicks++; upd(); });
+  addEventListener('mousemove', () => { moves++; upd(); });
+  upd();
+</script>
+</body>
+</html>
