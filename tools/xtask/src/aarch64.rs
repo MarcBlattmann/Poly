@@ -152,6 +152,10 @@ fn qemu(elf: &std::path::Path, machine: &str, cpus: u32, append: &str, serial: &
     let mut cmd = Command::new(QEMU);
     cmd.args(["-machine", machine, "-cpu", "cortex-a72", "-smp", &cpus.to_string(), "-m", "256M"])
         .args(["-display", "none", "-monitor", "none", "-no-reboot", "-serial", serial])
+        // No network card: the stub has no use for one, and `virt`'s default
+        // virtio NIC needs a ROM (`efi-virtio.rom`) that a QEMU installed
+        // without its recommended packages (as in CI) does not have.
+        .args(["-nic", "none"])
         .args(["-semihosting-config", "enable=on,target=native"])
         .arg("-kernel")
         .arg(elf);
