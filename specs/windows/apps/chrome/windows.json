@@ -1,0 +1,428 @@
+{
+ "format": "poly-chromerecording/1",
+ "app": {
+  "version": "157.0.8103.38",
+  "zip_sha256": "ae0deef27d449e1d7529df7705d609bab102de48464da13567ed3dd2ee1a0586"
+ },
+ "pages": {
+  "s1.html": "00d020319b5232ddf6d28611e5e026ef343e2241486aab5473100735d7780723",
+  "s3.html": "d2ad363d00f9453a72ff05fc94a068d5e5c3142939b839fb8f25426d293a8cfc",
+  "s4.html": "94a2a77403581fec9a57e6f26da76b49f55fad729e6fe901f237232a468d42a1"
+ },
+ "note": "titles: the real window title has an EN DASH (U+2013) before \"Google Chrome for Testing\"; written as \"-\" here",
+ "stages": {
+  "s1": {
+   "machine": "owner PC",
+   "runs": [
+    {
+     "untraced": true,
+     "exit_code": 0,
+     "stdout_bytes": 440,
+     "stdout_sha256": "7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b"
+    },
+    {
+     "untraced": true,
+     "exit_code": 0,
+     "stdout_bytes": 440,
+     "stdout_sha256": "7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b"
+    }
+   ]
+  },
+  "s2": {
+   "machine": "owner PC",
+   "runs": [
+    {
+     "untraced": true,
+     "exit_code": 0,
+     "stdout_bytes": 440,
+     "stdout_sha256": "7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b"
+    },
+    {
+     "untraced": true,
+     "exit_code": 0,
+     "stdout_bytes": 440,
+     "stdout_sha256": "7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b"
+    }
+   ]
+  },
+  "s4-headless": {
+   "machine": "owner PC",
+   "runs": [
+    {
+     "traced": true,
+     "exit_code": 0,
+     "stdout_bytes": 831,
+     "stdout_sha256": "568f0bdf95669b4059e1d571bef70b61eb2e4756f8545b2cf1e344d2c02330be"
+    },
+    {
+     "traced": true,
+     "exit_code": 0,
+     "stdout_bytes": 831,
+     "stdout_sha256": "568f0bdf95669b4059e1d571bef70b61eb2e4756f8545b2cf1e344d2c02330be"
+    }
+   ]
+  },
+  "s5": {
+   "machine": "owner PC",
+   "runs": [
+    {
+     "traced": true,
+     "exit_code": 0,
+     "stdout_bytes": 440,
+     "stdout_sha256": "7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b"
+    },
+    {
+     "traced": true,
+     "exit_code": 0,
+     "stdout_bytes": 440,
+     "stdout_sha256": "7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b"
+    }
+   ]
+  },
+  "s1-traced": {
+   "machine": "owner PC",
+   "runs": [
+    {
+     "traced": true,
+     "exit_code": 0,
+     "stdout_bytes": 440,
+     "stdout_sha256": "7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b"
+    },
+    {
+     "traced": true,
+     "exit_code": 0,
+     "stdout_bytes": 440,
+     "stdout_sha256": "7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b"
+    }
+   ]
+  },
+  "s3-window": {
+   "machine": "homeserver2",
+   "runs": [
+    {
+     "stage": "s3",
+     "window_seconds": 2,
+     "title_initial": "poly-s3 clicks=0 keys= moved=0 - Google Chrome for Testing",
+     "window_class": "Chrome_WidgetWin_1",
+     "rect": "40,40,940,540",
+     "title_after_input": "poly-s3 clicks=1 keys=poly moved=1 - Google Chrome for Testing",
+     "input_ok": true,
+     "screenshot": "s3-window.png",
+     "dark_pixels_sampled": 2229,
+     "pixels_sampled": 57050,
+     "text_rendered": true,
+     "close": "exited",
+     "exit_code": 0,
+     "total_seconds": 10.8,
+     "traced": false
+    },
+    {
+     "stage": "s3",
+     "window_seconds": 1,
+     "title_initial": "poly-s3 clicks=0 keys= moved=0 - Google Chrome for Testing",
+     "window_class": "Chrome_WidgetWin_1",
+     "rect": "40,40,940,540",
+     "title_after_input": "poly-s3 clicks=1 keys=poly moved=1 - Google Chrome for Testing",
+     "input_ok": true,
+     "screenshot": "s3-window.png",
+     "dark_pixels_sampled": 2229,
+     "pixels_sampled": 57050,
+     "text_rendered": true,
+     "close": "exited",
+     "exit_code": 0,
+     "total_seconds": 9.5,
+     "traced": false
+    },
+    {
+     "stage": "s3",
+     "window_seconds": 0.9,
+     "title_initial": "poly-s3 clicks=0 keys= moved=0 - Google Chrome for Testing",
+     "window_class": "Chrome_WidgetWin_1",
+     "rect": "40,40,940,540",
+     "title_after_input": "poly-s3 clicks=1 keys=poly moved=1 - Google Chrome for Testing",
+     "input_ok": true,
+     "screenshot": "s3-window.png",
+     "dark_pixels_sampled": 2347,
+     "pixels_sampled": 57050,
+     "text_rendered": true,
+     "close": "exited",
+     "exit_code": 0,
+     "total_seconds": 10.4,
+     "traced": true
+    },
+    {
+     "stage": "s3",
+     "window_seconds": 0.9,
+     "title_initial": "poly-s3 clicks=0 keys= moved=0 - Google Chrome for Testing",
+     "window_class": "Chrome_WidgetWin_1",
+     "rect": "40,40,940,540",
+     "title_after_input": "poly-s3 clicks=1 keys=poly moved=1 - Google Chrome for Testing",
+     "input_ok": true,
+     "screenshot": "s3-window.png",
+     "dark_pixels_sampled": 2347,
+     "pixels_sampled": 57050,
+     "text_rendered": true,
+     "close": "exited",
+     "exit_code": 0,
+     "total_seconds": 10.4,
+     "traced": true
+    }
+   ]
+  },
+  "s4-window": {
+   "machine": "homeserver2",
+   "runs": [
+    {
+     "stage": "s4",
+     "window_seconds": 2.4,
+     "title_initial": "Example Domain - Google Chrome for Testing",
+     "window_class": "Chrome_WidgetWin_1",
+     "rect": "40,40,940,540",
+     "title_http": "Example Domain - Google Chrome for Testing",
+     "http_ok": true,
+     "title_https": "Internet Assigned Numbers Authority - Google Chrome for Testing",
+     "https_ok": true,
+     "input_ok": true,
+     "screenshot": "s4-window.png",
+     "dark_pixels_sampled": 0,
+     "pixels_sampled": 57050,
+     "text_rendered": false,
+     "close": "exited",
+     "exit_code": 0,
+     "total_seconds": 13.4,
+     "traced": false
+    },
+    {
+     "stage": "s4",
+     "window_seconds": 1.4,
+     "title_initial": "Example Domain - Google Chrome for Testing",
+     "window_class": "Chrome_WidgetWin_1",
+     "rect": "40,40,940,540",
+     "title_http": "Example Domain - Google Chrome for Testing",
+     "http_ok": true,
+     "title_https": "Internet Assigned Numbers Authority - Google Chrome for Testing",
+     "https_ok": true,
+     "input_ok": true,
+     "screenshot": "s4-window.png",
+     "dark_pixels_sampled": 0,
+     "pixels_sampled": 57050,
+     "text_rendered": false,
+     "close": "exited",
+     "exit_code": 0,
+     "total_seconds": 12.4,
+     "traced": false
+    },
+    {
+     "stage": "s4",
+     "window_seconds": 1.9,
+     "title_initial": "Example Domain - Google Chrome for Testing",
+     "window_class": "Chrome_WidgetWin_1",
+     "rect": "40,40,940,540",
+     "title_http": "Example Domain - Google Chrome for Testing",
+     "http_ok": true,
+     "title_https": "Internet Assigned Numbers Authority - Google Chrome for Testing",
+     "https_ok": true,
+     "input_ok": true,
+     "screenshot": "s4-window.png",
+     "dark_pixels_sampled": 122,
+     "pixels_sampled": 57050,
+     "text_rendered": false,
+     "close": "exited",
+     "exit_code": 0,
+     "total_seconds": 13.2,
+     "traced": true
+    },
+    {
+     "stage": "s4",
+     "window_seconds": 1.5,
+     "title_initial": "Example Domain - Google Chrome for Testing",
+     "window_class": "Chrome_WidgetWin_1",
+     "rect": "40,40,940,540",
+     "title_http": "Example Domain - Google Chrome for Testing",
+     "http_ok": true,
+     "title_https": "Internet Assigned Numbers Authority - Google Chrome for Testing",
+     "https_ok": true,
+     "input_ok": true,
+     "screenshot": "s4-window.png",
+     "dark_pixels_sampled": 122,
+     "pixels_sampled": 57050,
+     "text_rendered": false,
+     "close": "exited",
+     "exit_code": 0,
+     "total_seconds": 12.4,
+     "traced": true
+    }
+   ]
+  }
+ },
+ "ablation_s1_delay_loaded_dll_missing": [
+  {
+   "dll": "advapi32.dll",
+   "exit_code": -1066598274,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "api-ms-win-core-realtime-l1-1-1.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "api-ms-win-core-winrt-l1-1-0.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "api-ms-win-core-winrt-string-l1-1-0.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "api-ms-win-power-base-l1-1-0.dll",
+   "exit_code": -1,
+   "timeout": true,
+   "dom_ok": false
+  },
+  {
+   "dll": "api-ms-win-shcore-scaling-l1-1-1.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "bcryptprimitives.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "comctl32.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "dhcpcsvc.dll",
+   "exit_code": 0,
+   "timeout": false,
+   "dom_ok": true
+  },
+  {
+   "dll": "dwmapi.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "gdi32.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "imm32.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "iphlpapi.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "mfplat.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "netapi32.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "ole32.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "oleacc.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "oleaut32.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "secur32.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "shell32.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "shlwapi.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "uiautomationcore.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "user32.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "userenv.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "winhttp.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "wtsapi32.dll",
+   "exit_code": -2147483645,
+   "timeout": false,
+   "dom_ok": false
+  },
+  {
+   "dll": "pdh.dll",
+   "exit_code": 0,
+   "timeout": false,
+   "dom_ok": true
+  },
+  {
+   "dll": "setupapi.dll",
+   "exit_code": 0,
+   "timeout": false,
+   "dom_ok": true
+  }
+ ]
+}
