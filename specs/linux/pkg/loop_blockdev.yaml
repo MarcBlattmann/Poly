@@ -60,6 +60,6 @@ timing:
   typical: "microseconds per sector"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
 # Notes: LOOP_MAJOR 7 (linux/major.h); BLK* request numbers from linux/fs.h.

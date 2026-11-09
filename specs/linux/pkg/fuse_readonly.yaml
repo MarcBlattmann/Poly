@@ -98,8 +98,8 @@ timing:
   typical: "microseconds to a few hundred microseconds per request round trip"
   guarantees: "none; cache tests space their stats by 40 ms, which is irrelevant for validity 0 and 1000 s"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 # Notes: same setup and helper (tests/linux/include/p_fuse.h) as fuse_mount.
 # The served tree is described at the top of that header: /hello 16 bytes,
 # /dir, /dir/inner 6 bytes, /link -> hello, /big 300000 bytes of a

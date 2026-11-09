@@ -82,8 +82,8 @@ timing:
   typical: "copy-up of a small file in microseconds; of larger files proportional to size"
   guarantees: none
 tests:
-  visible: 0
-  held_out: 0
+  visible: 4
+  held_out: 2
 # Notes: the tests look into the upper directory directly (a path on the
 # tmpfs below the overlay) to see what was copied; inode and device numbers
 # are never printed. trusted.* attributes need CAP_SYS_ADMIN (root). With

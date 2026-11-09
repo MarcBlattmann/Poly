@@ -113,8 +113,8 @@ timing:
   typical: "microseconds per call; a notification round trip tens of microseconds"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 # Notes: constants from linux/seccomp.h, linux/sched.h (CLONE_*), linux/audit.h,
 # asm-generic/ioctls.h (TIOCSTI 0x5412, TCGETS 0x5401), asm-generic/socket.h
 # and linux/socket.h (AF_UNIX 1, AF_NETLINK 16), linux/personality.h.

@@ -49,7 +49,7 @@ timing:
   typical: "reading a few KiB takes microseconds"
   guarantees: none
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 # Notes: compression ids and superblock layout are in the public squashfs documentation. Poly needs
 # at least gzip, xz, lz4, lzo and zstd decompressors for AppImages and distribution images.

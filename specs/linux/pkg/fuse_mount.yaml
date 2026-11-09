@@ -100,8 +100,8 @@ timing:
   typical: "microseconds to a few hundred microseconds per request round trip"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 # Notes: opcodes, struct layouts and option names from the public
 # linux/fuse.h and the kernel's public fuse documentation;
 # FUSE_SUPER_MAGIC from linux/magic.h. Every test is a client (the test

@@ -96,8 +96,8 @@ timing:
   typical: "microseconds to a few hundred microseconds per request round trip"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
 # Notes: same setup and helper (tests/linux/include/p_fuse.h) as fuse_mount.
 # The served tree is described at the top of that header. The tests
 # store written data in the server and check checksums of the bytes the

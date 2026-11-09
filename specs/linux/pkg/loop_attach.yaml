@@ -70,8 +70,8 @@ timing:
   typical: "microseconds"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 # Notes: request numbers and struct loop_config / loop_info64 from linux/loop.h. The tests
 # bind devices numbered from 600000 (LOOP_CTL_ADD with an explicit number) so that they never
 # take a device another process on the machine is using.

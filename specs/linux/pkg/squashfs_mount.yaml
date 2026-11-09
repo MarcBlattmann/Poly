@@ -77,8 +77,8 @@ timing:
   typical: "a mount of a small image takes well under a millisecond"
   guarantees: none
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
 # Notes: squashfs on-disk format is public (the squashfs-tools documentation and kernel
 # Documentation/filesystems/squashfs.rst describe the superblock layout); MS_*/MNT_* from
 # linux/mount.h; ST_RDONLY 1 from sys/statvfs.h.

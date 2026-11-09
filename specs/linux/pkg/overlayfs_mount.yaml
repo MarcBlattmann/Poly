@@ -76,8 +76,8 @@ timing:
   typical: "mount in well under a millisecond on tmpfs layers"
   guarantees: none
 tests:
-  visible: 0
-  held_out: 0
+  visible: 3
+  held_out: 2
 # Notes: constants from linux/mount.h (MS_*, MNT_DETACH), linux/magic.h
 # (OVERLAYFS_SUPER_MAGIC), linux/sched.h (CLONE_NEWUSER, CLONE_NEWNS).
 # Every test makes its own tmpfs under /tmp/pk_ovm_* in a private mount

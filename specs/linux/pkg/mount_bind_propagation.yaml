@@ -93,8 +93,8 @@ timing:
   typical: "microseconds"
   guarantees: none
 tests:
-  visible: 0
-  held_out: 0
+  visible: 4
+  held_out: 2
 # Notes: constants from linux/mount.h (MS_*, MNT_*, UMOUNT_NOFOLLOW) and
 # linux/statfs.h (ST_*). Tests that use two namespaces take turns through
 # pipes.

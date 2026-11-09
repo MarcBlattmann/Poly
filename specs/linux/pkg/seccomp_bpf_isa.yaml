@@ -92,8 +92,8 @@ timing:
   typical: "microseconds per filtered call"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 # Notes: constants from linux/bpf_common.h, linux/filter.h, linux/seccomp.h,
 # linux/audit.h. Observed by installing programs in children and reading the
 # probed call's result (sched_yield, which returns 0 when it runs; ERRNO

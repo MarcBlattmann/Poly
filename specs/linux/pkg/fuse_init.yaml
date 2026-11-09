@@ -77,8 +77,8 @@ timing:
   typical: "INIT arrives within milliseconds after mount(2)"
   guarantees: "none; a test waits up to 3 s"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 # Notes: opcodes, struct layouts and init flag names from the public
 # linux/fuse.h (FUSE_KERNEL_VERSION 7, the header of the oracle's
 # userland says minor 39; the kernel itself sent 45). Same test setup as

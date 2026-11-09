@@ -58,8 +58,8 @@ timing:
   typical: "microseconds"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
 # Notes: ioctl numbers from linux/loop.h (LOOP_CTL_ADD 0x4C80, LOOP_CTL_REMOVE 0x4C81,
 # LOOP_CTL_GET_FREE 0x4C82); character major/minor 10:237 (misc major 10, LOOP_CTRL_MINOR 237,
 # linux/miscdevice.h). Tests use device numbers from 600000 up for devices of their own.

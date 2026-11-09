@@ -74,8 +74,8 @@ timing:
   typical: "microseconds per read"
   guarantees: none
 tests:
-  visible: 0
-  held_out: 0
+  visible: 4
+  held_out: 2
 # Notes: proc(5) documents the format (public). Mount ids, parent ids, peer
 # group numbers and device numbers vary and are never printed or compared as
 # values; tests check structure, text fields and relations between ids of

@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/mntapi_fsmount              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (the unprivileged cases as uid/gid 65534 without capabilities); umask 022; unprivileged user namespaces allowed; every test makes a mount namespace of its own, makes / MS_REC|MS_PRIVATE and mounts a tmpfs on a private directory below /tmp"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  fsmount(fs_fd, flags, attr_flags) (syscall 432) turns a created filesystem
+  context (CMD_CREATE done) into a detached mount and returns a descriptor
+  for the mount's root directory: the lowest free descriptor, with
+  FD_CLOEXEC only when flags has FSMOUNT_CLOEXEC (1); other flag bits are
+  EINVAL. attr_flags (32 bits) sets the mount's options: MOUNT_ATTR_RDONLY
+  0x01, NOSUID 0x02, NODEV 0x04, NOEXEC 0x08, the atime mode in 0x70
+  (RELATIME 0 = default, NOATIME 0x10, STRICTATIME 0x20), NODIRATIME 0x80,
+  NOSYMFOLLOW 0x200000. statfs f_flags of the mount shows them as ST_RDONLY
+  1, NOSUID 2, NODEV 4, NOEXEC 8, NOATIME 0x400, NODIRATIME 0x800, RELATIME
+  0x1000 (set when the atime mode is relatime, the default), NOSYMFOLLOW
+  0x2000 (f_flags also carries a kernel-internal 0x20 bit). Both atime
+  values together (0x30), the undefined atime values 0x40 0x50 0x70, bits
+  0x400 0x1000 and 31, and MOUNT_ATTR_IDMAP (0x100000, which cannot be given
+  here) are EINVAL. Effects: RDONLY gives EROFS for creating files; NODEV
+  makes opening a device node EACCES; NOEXEC makes execve EACCES (elsewhere
+  a file that is no program is ENOEXEC); NOSYMFOLLOW makes a path through a
+  symbolic link ELOOP. The mount is in no namespace: its files are reachable
+  through the descriptor (openat, mkdirat, newfstatat relative to it, fchdir
+  into it, fstat, fstatfs) and move_mount (429) with MOVE_MOUNT_F_EMPTY_PATH
+  attaches it, after which the same files appear at the target. A mount that
+  is never attached disappears when its descriptor is closed; closing the
+  context descriptor changes nothing. A context can be mounted once (a
+  second fsmount is EBUSY, also for contexts from fspick, which describe an
+  existing superblock). The caller needs CAP_SYS_ADMIN (EPERM). The root
+  directory of a tmpfs created with mode=0711 is 040711. tmpfs, proc and
+  overlay were mounted this way; an overlay without upperdir is read-only
+  (EROFS) and shows the union of its lower directories with the first one
+  winning; two mounts attached at one place stack, the later hides the
+  earlier, and unmounting the top shows the earlier again.
+returns:
+  success: "descriptor >= 3 for the mount's root directory; fstat gives S_IFDIR with the filesystem's root mode"
+  fstatfs: "the new filesystem (tmpfs f_type 0x01021994, size=1m gives f_blocks 256; proc 0x9fa0; overlay 0x794c7630)"
+errors:
+  not_created: "EINVAL (22): the context was not created yet, or its create failed"
+  already_mounted: "EBUSY (16): second fsmount; fsmount on a context from fspick"
+  bad_flags: "EINVAL (22): flags other than 1 (2, 0x100, ~0)"
+  bad_attr: "EINVAL (22): see the summary"
+  bad_fd: "EBADF (9): fs_fd not open, -1, or the mount descriptor from fsmount; EINVAL: fs_fd is some other file or stdin"
+  permission: "EPERM (1): no CAP_SYS_ADMIN"
+  retry: "a rejected call leaves the context usable (a later fsmount with good arguments succeeds)"
+side_effects: >
+  Creates a detached mount owned by the descriptor; nothing is visible in
+  the namespace until move_mount.
+threading: "descriptors are per process (shared file table); no other thread-specific behaviour"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: FSMOUNT_CLOEXEC 1, MOUNT_ATTR_* from linux/mount.h; ST_* from sys/statvfs.h; PROC_SUPER_MAGIC 0x9fa0,
+# OVERLAYFS_SUPER_MAGIC 0x794c7630 from linux/magic.h.

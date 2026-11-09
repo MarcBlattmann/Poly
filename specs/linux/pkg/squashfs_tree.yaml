@@ -72,8 +72,8 @@ timing:
   typical: "cached reads at memory speed"
   guarantees: none
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
 # Notes: the tests embed tree1.sqsh (4730 bytes) as a byte array. To recreate it: make the tree as
 # root (ownerships and modes above, mknod chr c 1 3 and blk b 7 42, mkfifo fifo, the setfattr
 # calls for xa), touch every entry with -h -d @0, run the mksquashfs command above.

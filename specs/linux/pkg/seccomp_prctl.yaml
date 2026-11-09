@@ -95,8 +95,8 @@ timing:
   typical: "microseconds per call"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
 # Notes: option numbers from linux/prctl.h (PR_GET_SECCOMP 21, PR_SET_SECCOMP
 # 22, PR_CAPBSET_READ 23, PR_CAPBSET_DROP 24, PR_GET_SECUREBITS 27,
 # PR_SET_SECUREBITS 28, PR_SET_NO_NEW_PRIVS 38, PR_GET_NO_NEW_PRIVS 39,

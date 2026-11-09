@@ -63,8 +63,8 @@ timing:
   typical: "microseconds"
   guarantees: none
 tests:
-  visible: 0
-  held_out: 0
+  visible: 3
+  held_out: 1
 # Notes: the tests prepare lower layers directly (they are plain directories
 # on tmpfs before the mount) and look into the upper layer after changes.
 # trusted.* attributes need root. Directory listing order is not specified:

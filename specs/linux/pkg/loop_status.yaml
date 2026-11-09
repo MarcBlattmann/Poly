@@ -67,7 +67,7 @@ timing:
   typical: "microseconds"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
 # Notes: linux/loop.h (struct loop_info64, LO_FLAGS_*, request numbers), linux/fs.h (BLKGETSIZE64,
 # BLKGETSIZE, BLKSSZGET).
