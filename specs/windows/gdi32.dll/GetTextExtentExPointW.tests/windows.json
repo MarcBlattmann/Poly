@@ -6,23 +6,23 @@
     "build": "26200.9711",
     "arch": "AMD64"
   },
-  "bundle": "c7e925aa9346",
+  "bundle": "8a396a60cdf0",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-09T17:41:45Z",
+  "started": "2026-11-09T18:09:27Z",
   "tests": [
     {
-      "name": "gte_ex_edges",
-      "exe_sha256": "2dcf4fc8209b8abea1f28fd4d814fdc69e5dfd970a8ba53325bd41d077762e82",
+      "name": "gte_fit",
+      "exe_sha256": "291da9a0cfe61a1d593d995dbf9856b5cc7a7db28d7c3819e913e67aa185974b",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
-      "output_b64": "bmVnYXRpdmUgbWF4IC0xOiBtYXggLTE6IHJldHVybmVkIDAgc2l6ZSAtMXgtMSBmaXQgMjMxMzAgZHhbMC4uNV0gPSAyMzEzMCAyMzEzMCAyMzEzMCAyMzEzMCAyMzEzMApmaXQgb25seTogbWF4IDMwOiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDMKZHggb25seTogbWF4IDMwOiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZHhbMC4uNV0gPSAxMiAyMCAyNiAzNiA0MApuZWl0aGVyOiBtYXggMzA6IHJldHVybmVkIDEgc2l6ZSA0MHgxNgplbXB0eTogbWF4IDMwOiByZXR1cm5lZCAxIHNpemUgMHgwIGZpdCAwIGR4WzAuLjBdID0KZW1wdHksIG1heCAwOiBtYXggMDogcmV0dXJuZWQgMSBzaXplIDB4MCBmaXQgMCBkeFswLi4wXSA9Cm9uZSBjaGFyOiBtYXggMTY6IHJldHVybmVkIDEgc2l6ZSAxNngxNiBmaXQgMSBkeFswLi4xXSA9IDE2Cm9uZSBjaGFyLCB0b28gbmFycm93OiBtYXggMTU6IHJldHVybmVkIDEgc2l6ZSAxNngxNiBmaXQgMCBkeFswLi4wXSA9Cm5lZ2F0aXZlIG1heDogbWF4IC01OiByZXR1cm5lZCAwIHNpemUgLTF4LTEgZml0IDIzMTMwIGR4WzAuLjVdID0gMjMxMzAgMjMxMzAgMjMxMzAgMjMxMzAgMjMxMzAKTlVMTCBEQzogcmV0dXJuZWQgMCBlcnJvciAwCm9rIE5VTEwgREMgZmFpbHMKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "output_b64": "QUIgZ2k6IG1heCAtMTogcmV0dXJuZWQgMCBzaXplIC0xeC0xIGZpdCAyMzEzMCBkeFswLi41XSA9IDIzMTMwIDIzMTMwIDIzMTMwIDIzMTMwIDIzMTMwCkFCIGdpOiBtYXggMDogcmV0dXJuZWQgMSBzaXplIDQweDE2IGZpdCAwIGR4WzAuLjBdID0KQUIgZ2k6IG1heCAxOiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDAgZHhbMC4uMF0gPQpBQiBnaTogbWF4IDExOiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDAgZHhbMC4uMF0gPQpBQiBnaTogbWF4IDEyOiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDEgZHhbMC4uMV0gPSAxMgpBQiBnaTogbWF4IDEzOiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDEgZHhbMC4uMV0gPSAxMgpBQiBnaTogbWF4IDE5OiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDEgZHhbMC4uMV0gPSAxMgpBQiBnaTogbWF4IDIwOiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDIgZHhbMC4uMl0gPSAxMiAyMApBQiBnaTogbWF4IDI1OiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDIgZHhbMC4uMl0gPSAxMiAyMApBQiBnaTogbWF4IDI2OiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDMgZHhbMC4uM10gPSAxMiAyMCAyNgpBQiBnaTogbWF4IDM1OiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDMgZHhbMC4uM10gPSAxMiAyMCAyNgpBQiBnaTogbWF4IDM2OiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDQgZHhbMC4uNF0gPSAxMiAyMCAyNiAzNgpBQiBnaTogbWF4IDM5OiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDQgZHhbMC4uNF0gPSAxMiAyMCAyNiAzNgpBQiBnaTogbWF4IDQwOiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDUgZHhbMC4uNV0gPSAxMiAyMCAyNiAzNiA0MApBQiBnaTogbWF4IDQxOiByZXR1cm5lZCAxIHNpemUgNDB4MTYgZml0IDUgZHhbMC4uNV0gPSAxMiAyMCAyNiAzNiA0MApBQiBnaTogbWF4IDEwMDA6IHJldHVybmVkIDEgc2l6ZSA0MHgxNiBmaXQgNSBkeFswLi41XSA9IDEyIDIwIDI2IDM2IDQwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
       "stdout_b64": "",
       "stderr_b64": "",
-      "output": "negative max -1: max -1: returned 0 size -1x-1 fit 23130 dx[0..5] = 23130 23130 23130 23130 23130\nfit only: max 30: returned 1 size 40x16 fit 3\ndx only: max 30: returned 1 size 40x16 dx[0..5] = 12 20 26 36 40\nneither: max 30: returned 1 size 40x16\nempty: max 30: returned 1 size 0x0 fit 0 dx[0..0] =\nempty, max 0: max 0: returned 1 size 0x0 fit 0 dx[0..0] =\none char: max 16: returned 1 size 16x16 fit 1 dx[0..1] = 16\none char, too narrow: max 15: returned 1 size 16x16 fit 0 dx[0..0] =\nnegative max: max -5: returned 0 size -1x-1 fit 23130 dx[0..5] = 23130 23130 23130 23130 23130\nNULL DC: returned 0 error 0\nok NULL DC fails\nsummary 1 passed, 0 failed\n",
+      "output": "AB gi: max -1: returned 0 size -1x-1 fit 23130 dx[0..5] = 23130 23130 23130 23130 23130\nAB gi: max 0: returned 1 size 40x16 fit 0 dx[0..0] =\nAB gi: max 1: returned 1 size 40x16 fit 0 dx[0..0] =\nAB gi: max 11: returned 1 size 40x16 fit 0 dx[0..0] =\nAB gi: max 12: returned 1 size 40x16 fit 1 dx[0..1] = 12\nAB gi: max 13: returned 1 size 40x16 fit 1 dx[0..1] = 12\nAB gi: max 19: returned 1 size 40x16 fit 1 dx[0..1] = 12\nAB gi: max 20: returned 1 size 40x16 fit 2 dx[0..2] = 12 20\nAB gi: max 25: returned 1 size 40x16 fit 2 dx[0..2] = 12 20\nAB gi: max 26: returned 1 size 40x16 fit 3 dx[0..3] = 12 20 26\nAB gi: max 35: returned 1 size 40x16 fit 3 dx[0..3] = 12 20 26\nAB gi: max 36: returned 1 size 40x16 fit 4 dx[0..4] = 12 20 26 36\nAB gi: max 39: returned 1 size 40x16 fit 4 dx[0..4] = 12 20 26 36\nAB gi: max 40: returned 1 size 40x16 fit 5 dx[0..5] = 12 20 26 36 40\nAB gi: max 41: returned 1 size 40x16 fit 5 dx[0..5] = 12 20 26 36 40\nAB gi: max 1000: returned 1 size 40x16 fit 5 dx[0..5] = 12 20 26 36 40\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 60
+      "ms": 58
     }
   ]
 }

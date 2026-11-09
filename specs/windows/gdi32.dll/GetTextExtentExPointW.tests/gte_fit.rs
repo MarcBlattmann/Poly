@@ -1,6 +1,6 @@
-//! RemoveFontMemResourceEx while a font created from the family still exists
-//! and is selected into a DC: the call succeeds; what the existing HFONT measures
-//! afterwards, and what a new request for the family gets, is reported.
+//! GetTextExtentExPointW with PolyTest Sans at lfHeight -16: the running extent of each
+//! character (lpDx), the number of characters that fit a maximum extent (lpnFit), the size of
+//! the characters that fit and a maximum equal to a running total.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1386,44 +1386,49 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn measure(t: &mut Test, label: &str, dc: HDC) -> bool {
-    let (ax, ay) = exta(dc, "A");
-    let (bx, _) = exta(dc, "AB");
-    let m = tm_of(dc);
-    let (fb, _) = face_of(dc);
-    let ok = upto_nul(&fb) == upto_nul(&wchars("PolyTest Sans"));
-    if ok {
-        say!(t, "{label}: face '{}' 'A' {ax}x{ay} 'AB' {bx} height {} ascent {}", W16(upto_nul(&fb)), m.height, m.ascent);
-    } else {
-        say!(t, "{label}: a different face than PolyTest Sans (a substitute)");
+fn run(t: &mut Test, dc: HDC, label: &str, text: &[u16], max: i32, want_fit: bool, want_dx: bool) {
+    let mut fit = 0x5A5Ai32;
+    let mut dx = [0x5A5Ai32; 16];
+    let mut z = SIZE { cx: -1, cy: -1 };
+    // SAFETY: text valid for its length; out pointers valid or NULL on purpose.
+    let r = unsafe {
+        GetTextExtentExPointW(
+            dc,
+            text.as_ptr(),
+            text.len() as i32,
+            max,
+            if want_fit { &mut fit } else { core::ptr::null_mut() },
+            if want_dx { dx.as_mut_ptr() } else { core::ptr::null_mut() },
+            &mut z,
+        )
+    };
+    let mut line = Buf::<300>::new();
+    let _ = write!(line, "{label}: max {max}: returned {r} size {}x{}", z.cx, z.cy);
+    if want_fit {
+        let _ = write!(line, " fit {fit}");
     }
-    ok
+    if want_dx {
+        let n = if want_fit && fit >= 0 && fit <= 16 { fit as usize } else { text.len() };
+        let _ = write!(line, " dx[0..{n}] =");
+        for v in &dx[..n.min(16)] {
+            let _ = write!(line, " {v}");
+        }
+    }
+    t.line(line.as_str());
 }
 
 fn test(t: &mut Test) {
-    let (h, c) = add_mem(&SANS, 0);
-    t.check("added", !h.is_null() && c == 1, c as i64);
-    let s = Surf::new(40, 24);
+    setup_fonts();
+    let s = Surf::new(8, 8);
     let f = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
     let old = sel(s.dc, f);
-    let a0 = measure(t, "before removing", s.dc);
-    // SAFETY: handle from AddFontMemResourceEx.
-    let r = unsafe { RemoveFontMemResourceEx(h) };
-    say!(t, "RemoveFontMemResourceEx with the font selected: returned {r}");
-    t.expect("the remove succeeds", r as i64, 1);
-    let a1 = measure(t, "the selected font after removing", s.dc);
-    // a new font object made after the removal
-    let g = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
-    let old2 = sel(s.dc, g);
-    let a2 = measure(t, "a font made after removing", s.dc);
-    say!(t, "family face before {a0}, selected font after {a1}, new font after {a2}");
-    t.check("a font made after the removal does not get the removed face", !a2, a2 as i64);
-    sel(s.dc, old2);
-    // SAFETY: our fonts.
-    unsafe {
-        DeleteObject(g);
-        sel(s.dc, old);
-        DeleteObject(f);
+    // A=12 B=8 space=6 g=10 i=4 : "AB gi" running 12 20 26 36 40
+    let text = [0x41u16, 0x42, 0x20, 0x67, 0x69];
+    for max in [-1, 0, 1, 11, 12, 13, 19, 20, 25, 26, 35, 36, 39, 40, 41, 1000] {
+        run(t, s.dc, "AB gi", &text, max, true, true);
     }
+    sel(s.dc, old);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
     s.free();
 }

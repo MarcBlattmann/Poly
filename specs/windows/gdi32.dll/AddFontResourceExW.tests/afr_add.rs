@@ -1,7 +1,8 @@
-//! ExtTextOutW with lpDx: the distance from each character's origin to the next one, in
-//! pixels, instead of the advance widths. Where the "AAA" glyph boxes land for different
-//! arrays, how TA_RIGHT / TA_CENTER use the sum of the array, the width of the OPAQUE cell,
-//! and the current position after a TA_UPDATECP call.
+//! AddFontResourceExW and RemoveFontResourceExW with FR_PRIVATE: a font file the test
+//! writes beside itself is added (the return value is the number of fonts), its family
+//! becomes selectable, and RemoveFontResourceExW takes it away again; a missing file adds
+//! nothing; a remove without an add fails. The font stays loaded when its file is deleted,
+//! but then the remove cannot find the file.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1387,69 +1388,80 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-/// The column runs of text-colour pixels in row `y`: "start-end" pairs.
-fn runs(s: &Surf, y: i32, out: &mut Buf<200>) {
-    let mut inrun = false;
-    for x in 0..s.w {
-        let on = s.px(x, y) == v_fg();
-        if on && !inrun {
-            let _ = write!(out, " {x}");
-            inrun = true;
-        } else if !on && inrun {
-            let _ = write!(out, "-{x}");
-            inrun = false;
-        }
-    }
-}
-
-fn run(t: &mut Test, s: &Surf, label: &str, mode: i32, align: u32, opts: u32, text: &str, x: i32, y: i32, dx: Option<&[i32]>, move_to: Option<(i32, i32)>) {
-    let tx = txt(text);
-    let f = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
-    let old = prep(s, f, mode, align);
-    if let Some((mx, my)) = move_to {
-        // SAFETY: GDI call on our DC.
-        unsafe { MoveToEx(s.dc, mx, my, core::ptr::null_mut()) };
-    }
-    // SAFETY: dx has at least `count` values in every call below.
-    let r = unsafe { ExtTextOutW(s.dc, x, y, opts, core::ptr::null(), tx.u.as_ptr(), tx.n as u32, dx.map_or(core::ptr::null(), |d| d.as_ptr())) };
-    let mut p = POINT { x: -1, y: -1 };
-    // SAFETY: GDI call on our DC.
-    unsafe { GetCurrentPositionEx(s.dc, &mut p) };
-    let mut line = Buf::<200>::new();
-    runs(s, y + 6, &mut line);
-    let (bl, bt, br, bb, bn) = bk_box(s);
-    say!(t, "{label}: returned {r}; text-colour runs in row {}:{}; background box {bl},{bt},{br},{bb} ({bn}); current position {},{}", y + 6, line.as_str(), p.x, p.y);
-    sel(s.dc, old);
+fn available(dc: HDC) -> bool {
+    let f = mkfont("PolyTest Tall", -16, NONANTIALIASED_QUALITY);
+    let old = sel(dc, f);
+    let (fb, _) = face_of(dc);
+    let m = tm_of(dc);
+    let ok = upto_nul(&fb) == upto_nul(&wchars("PolyTest Tall")) && m.height == 19;
+    sel(dc, old);
     // SAFETY: our font.
     unsafe { DeleteObject(f) };
+    ok
+}
+
+fn rm(t: &mut Test, label: &str, path: &DosPath) -> i32 {
+    // SAFETY: path is NUL-terminated.
+    let r = unsafe {
+        SetLastError(0);
+        RemoveFontResourceExW(path.ptr(), FR_PRIVATE, core::ptr::null_mut())
+    };
+    // SAFETY: thread-local last error.
+    let e = unsafe { GetLastError() };
+    say!(t, "{label}: RemoveFontResourceExW(FR_PRIVATE) returned {r} error {e}");
+    r
 }
 
 fn test(t: &mut Test) {
-    setup_fonts();
-    let s = Surf::new(120, 40);
-    let natural = [12, 12, 12];
-    let wide = [20, 14, 30];
-    let tight = [4, 4, 4];
-    let zero = [0, 0, 0];
-    let neg = [-4, 12, 12];
-    run(t, &s, "no lpDx", TRANSPARENT, TA_LEFT | TA_TOP, 0, "AAA", 4, 8, None, None);
-    run(t, &s, "lpDx = the natural advances", TRANSPARENT, TA_LEFT | TA_TOP, 0, "AAA", 4, 8, Some(&natural), None);
-    run(t, &s, "lpDx 20,14,30", TRANSPARENT, TA_LEFT | TA_TOP, 0, "AAA", 4, 8, Some(&wide), None);
-    run(t, &s, "lpDx 4,4,4 (overlapping)", TRANSPARENT, TA_LEFT | TA_TOP, 0, "AAA", 4, 8, Some(&tight), None);
-    run(t, &s, "lpDx 0,0,0", TRANSPARENT, TA_LEFT | TA_TOP, 0, "AAA", 4, 8, Some(&zero), None);
-    run(t, &s, "lpDx -4,12,12", TRANSPARENT, TA_LEFT | TA_TOP, 0, "AAA", 20, 8, Some(&neg), None);
-    run(t, &s, "lpDx 20,14,30, OPAQUE mode", OPAQUE, TA_LEFT | TA_TOP, 0, "AAA", 4, 8, Some(&wide), None);
-    run(t, &s, "lpDx 20,14,30, TA_RIGHT at x=100", TRANSPARENT, TA_RIGHT | TA_TOP, 0, "AAA", 100, 8, Some(&wide), None);
-    run(t, &s, "no lpDx, TA_RIGHT at x=100", TRANSPARENT, TA_RIGHT | TA_TOP, 0, "AAA", 100, 8, None, None);
-    run(t, &s, "lpDx 20,14,30, TA_CENTER at x=60", TRANSPARENT, TA_CENTER | TA_TOP, 0, "AAA", 60, 8, Some(&wide), None);
-    run(t, &s, "lpDx 20,14,30, TA_UPDATECP from (10,0)", TRANSPARENT, TA_LEFT | TA_TOP | TA_UPDATECP, 0, "AAA", 99, 8, Some(&wide), Some((10, 0)));
-    run(t, &s, "no lpDx, TA_UPDATECP from (10,0)", TRANSPARENT, TA_LEFT | TA_TOP | TA_UPDATECP, 0, "AAA", 99, 8, None, Some((10, 0)));
-    run(t, &s, "lpDx 20,14,30, TA_RIGHT|TA_UPDATECP from (90,0)", TRANSPARENT, TA_RIGHT | TA_TOP | TA_UPDATECP, 0, "AAA", 99, 8, Some(&wide), Some((90, 0)));
-    run(t, &s, "no lpDx, no TA_UPDATECP: current position untouched", TRANSPARENT, TA_LEFT | TA_TOP, 0, "AAA", 4, 8, None, Some((7, 9)));
-    // lpDx on a single character and on mixed characters
-    let one = [30];
-    run(t, &s, "one character, lpDx 30", OPAQUE, TA_LEFT | TA_TOP, 0, "A", 4, 8, Some(&one), None);
-    let mixed = [5, 7, 9, 11];
-    run(t, &s, "mixed 'BiAg', lpDx 5,7,9,11", TRANSPARENT, TA_LEFT | TA_TOP, 0, "BiAg", 4, 8, Some(&mixed), None);
+    let s = Surf::new(8, 8);
+    let name = wz!("polytest-tall.ttf");
+    let bytes = font_file(&TALL, 0);
+    let path = write_scratch(name, bytes);
+    let a = available(s.dc);
+    t.check("not available before adding", !a, a as i64);
+    // SAFETY: path is NUL-terminated.
+    let n = unsafe {
+        SetLastError(0);
+        AddFontResourceExW(path.ptr(), FR_PRIVATE, core::ptr::null_mut())
+    };
+    // SAFETY: thread-local last error.
+    let e = unsafe { GetLastError() };
+    say!(t, "AddFontResourceExW(FR_PRIVATE) returned {n} error {e}");
+    t.expect("one font added", n as i64, 1);
+    let a = available(s.dc);
+    t.check("available after adding", a, a as i64);
+    let r = rm(t, "first", &path);
+    t.expect("remove succeeds", r as i64, 1);
+    let a = available(s.dc);
+    t.check("gone after removing", !a, a as i64);
+    let r = rm(t, "second", &path);
+    t.expect("a second remove fails", r as i64, 0);
+    // the file deleted while the font is loaded
+    // SAFETY: path is NUL-terminated.
+    let n = unsafe { AddFontResourceExW(path.ptr(), FR_PRIVATE, core::ptr::null_mut()) };
+    t.expect("added again", n as i64, 1);
+    delete_scratch(name);
+    let a = available(s.dc);
+    say!(t, "available after the file was deleted: {a}");
+    let r = rm(t, "file gone", &path);
+    let a2 = available(s.dc);
+    say!(t, "available after the failed remove: {a2}");
+    write_scratch(name, bytes);
+    let r2 = rm(t, "file back", &path);
+    say!(t, "remove with the file deleted returned {r}; with the file back {r2}");
+    let a3 = available(s.dc);
+    t.check("gone after the final remove", !a3, a3 as i64);
+    delete_scratch(name);
+    // a file that does not exist
+    let miss = scratch_path(wz!("no-such-font.ttf"));
+    // SAFETY: path is NUL-terminated.
+    let n = unsafe {
+        SetLastError(0);
+        AddFontResourceExW(miss.ptr(), FR_PRIVATE, core::ptr::null_mut())
+    };
+    // SAFETY: thread-local last error.
+    let e = unsafe { GetLastError() };
+    say!(t, "missing file: AddFontResourceExW returned {n} error {e}");
+    t.expect("a missing file adds no font", n as i64, 0);
     s.free();
 }

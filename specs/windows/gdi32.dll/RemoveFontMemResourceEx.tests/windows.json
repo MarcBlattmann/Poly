@@ -6,23 +6,23 @@
     "build": "26200.9711",
     "arch": "AMD64"
   },
-  "bundle": "c7e925aa9346",
+  "bundle": "8a396a60cdf0",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-09T17:41:45Z",
+  "started": "2026-11-09T18:09:27Z",
   "tests": [
     {
-      "name": "rfm_inuse",
-      "exe_sha256": "c515ad0e214b065c341463affd940952e88b93eb9025a021ef43b46952af21de",
+      "name": "rfm_basic",
+      "exe_sha256": "99d020b0ac5009a9521d80207693ac0aee849ef99136d22434ab7b4cf69ba55a",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
-      "output_b64": "b2sgYWRkZWQKYmVmb3JlIHJlbW92aW5nOiBmYWNlICdQb2x5VGVzdCBTYW5zJyAnQScgMTJ4MTYgJ0FCJyAyMCBoZWlnaHQgMTYgYXNjZW50IDEyClJlbW92ZUZvbnRNZW1SZXNvdXJjZUV4IHdpdGggdGhlIGZvbnQgc2VsZWN0ZWQ6IHJldHVybmVkIDEKb2sgdGhlIHJlbW92ZSBzdWNjZWVkcwp0aGUgc2VsZWN0ZWQgZm9udCBhZnRlciByZW1vdmluZzogYSBkaWZmZXJlbnQgZmFjZSB0aGFuIFBvbHlUZXN0IFNhbnMgKGEgc3Vic3RpdHV0ZSkKYSBmb250IG1hZGUgYWZ0ZXIgcmVtb3Zpbmc6IGEgZGlmZmVyZW50IGZhY2UgdGhhbiBQb2x5VGVzdCBTYW5zIChhIHN1YnN0aXR1dGUpCmZhbWlseSBmYWNlIGJlZm9yZSB0cnVlLCBzZWxlY3RlZCBmb250IGFmdGVyIGZhbHNlLCBuZXcgZm9udCBhZnRlciBmYWxzZQpvayBhIGZvbnQgbWFkZSBhZnRlciB0aGUgcmVtb3ZhbCBkb2VzIG5vdCBnZXQgdGhlIHJlbW92ZWQgZmFjZQpzdW1tYXJ5IDMgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "output_b64": "b2sgYWRkZWQKZmlyc3QgcmVtb3ZlOiByZXR1cm5lZCAxIGVycm9yIDAKb2sgZmlyc3QgcmVtb3ZlIHN1Y2NlZWRzCnNlY29uZCByZW1vdmUgb2YgdGhlIHNhbWUgaGFuZGxlOiByZXR1cm5lZCAwIGVycm9yIDAKb2sgc2Vjb25kIHJlbW92ZSBmYWlscwpOVUxMOiByZXR1cm5lZCAwIGVycm9yIDg3Cm9rIE5VTEwgZmFpbHMKMHgxMjM0OiByZXR1cm5lZCAwIGVycm9yIDAKb2sgYW4gaW52ZW50ZWQgdmFsdWUgZmFpbHMKLTE6IHJldHVybmVkIDAgZXJyb3IgMApvayBJTlZBTElEX0hBTkRMRV9WQUxVRSBmYWlscwpyZW1vdmUgdGhlIHNlY29uZCBmb250IGZpcnN0OiByZXR1cm5lZCAxIGVycm9yIDAKdGhlbiB0aGUgZmlyc3Q6IHJldHVybmVkIDEgZXJyb3IgMApvayBib3RoIHJlbW92ZXMgc3VjY2VlZCBpbiBhbnkgb3JkZXIKc3VtbWFyeSA3IHBhc3NlZCwgMCBmYWlsZWQK",
       "stdout_b64": "",
       "stderr_b64": "",
-      "output": "ok added\nbefore removing: face 'PolyTest Sans' 'A' 12x16 'AB' 20 height 16 ascent 12\nRemoveFontMemResourceEx with the font selected: returned 1\nok the remove succeeds\nthe selected font after removing: a different face than PolyTest Sans (a substitute)\na font made after removing: a different face than PolyTest Sans (a substitute)\nfamily face before true, selected font after false, new font after false\nok a font made after the removal does not get the removed face\nsummary 3 passed, 0 failed\n",
+      "output": "ok added\nfirst remove: returned 1 error 0\nok first remove succeeds\nsecond remove of the same handle: returned 0 error 0\nok second remove fails\nNULL: returned 0 error 87\nok NULL fails\n0x1234: returned 0 error 0\nok an invented value fails\n-1: returned 0 error 0\nok INVALID_HANDLE_VALUE fails\nremove the second font first: returned 1 error 0\nthen the first: returned 1 error 0\nok both removes succeed in any order\nsummary 7 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 55
+      "ms": 51
     }
   ]
 }

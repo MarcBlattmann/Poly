@@ -1,7 +1,9 @@
-//! GetCharWidth32W on bad input: first greater than last, NULL and deleted DCs, a range
-//! reaching past U+FFFF, a one-element range at the end of the Basic Multilingual Plane, a
-//! NULL buffer; results are reported with the last error. Buffers are sized generously so
-//! that a successful call cannot write out of bounds.
+//! ExtTextOutW and the background: ETO_OPAQUE fills the rectangle with the background colour
+//! before the text is drawn (also for an empty string and in TRANSPARENT mode); without it the
+//! background mode decides (OPAQUE fills the text cell, TRANSPARENT leaves the surface);
+//! the text is drawn in the text colour; a rectangle smaller than the text does not clip it;
+//! empty, inverted and partly off-surface rectangles. PolyTest Sans at lfHeight -16 (cell
+//! 16, "AB" 20 wide), bi-level text: white on dark blue over a grey surface.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1387,46 +1389,55 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn call(t: &mut Test, dc: HDC, label: &str, first: u32, last: u32, out: &mut [i32]) -> i32 {
-    out.fill(0x5A5A);
-    // SAFETY: `out` is large enough for every range this test passes.
-    let (r, e) = unsafe {
-        SetLastError(0);
-        let r = GetCharWidth32W(dc, first, last, out.as_mut_ptr());
-        (r, GetLastError())
-    };
-    say!(t, "{label}: [{first:#x}..{last:#x}] returned {r} error {e} first value {}", out[0]);
-    r
+fn run(t: &mut Test, s: &Surf, label: &str, mode: i32, opts: u32, rc: Option<RECT>, text: &str, x: i32, y: i32) {
+    let tx = txt(text);
+    let f = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
+    let old = prep(s, f, mode, TA_LEFT | TA_TOP);
+    // SAFETY: GDI call on our DC with valid pointers.
+    let r = unsafe { ExtTextOutW(s.dc, x, y, opts, rc.as_ref().map_or(core::ptr::null(), |r| r as *const RECT), tx.u.as_ptr(), tx.n as i32 as u32, core::ptr::null()) };
+    let (cl, ct, cr, cb, _) = changed(s);
+    let (fgn, bkn, other) = counts(s, whole(s));
+    let (bl, bt, br, bb, _) = bk_box(s);
+    let (fl, ft, fr, fb, _) = fg_box(s);
+    say!(
+        t,
+        "{label}: returned {r}; changed box {cl},{ct},{cr},{cb}; text-colour pixels {fgn} in {fl},{ft},{fr},{fb}; background pixels {bkn} in {bl},{bt},{br},{bb}; other {other}"
+    );
+    sel(s.dc, old);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
 }
 
 fn test(t: &mut Test) {
     setup_fonts();
-    let s = Surf::new(8, 8);
+    let s = Surf::new(80, 48);
+    let big = RECT { left: 10, top: 10, right: 60, bottom: 40 };
+    run(t, &s, "OPAQUE mode, no option", OPAQUE, 0, None, "AB", 12, 12);
+    run(t, &s, "OPAQUE mode, rect given but no option", OPAQUE, 0, Some(big), "AB", 12, 12);
+    run(t, &s, "TRANSPARENT mode, no option", TRANSPARENT, 0, None, "AB", 12, 12);
+    run(t, &s, "OPAQUE mode, ETO_OPAQUE, big rect", OPAQUE, ETO_OPAQUE, Some(big), "AB", 12, 12);
+    run(t, &s, "TRANSPARENT mode, ETO_OPAQUE, big rect", TRANSPARENT, ETO_OPAQUE, Some(big), "AB", 12, 12);
+    run(t, &s, "ETO_OPAQUE, text starts left of the rect", OPAQUE, ETO_OPAQUE, Some(big), "AB", 4, 12);
+    let small = RECT { left: 12, top: 12, right: 22, bottom: 20 };
+    run(t, &s, "ETO_OPAQUE, rect smaller than the text, not clipped", TRANSPARENT, ETO_OPAQUE, Some(small), "ABAB", 12, 12);
+    run(t, &s, "ETO_OPAQUE, empty string (count 0)", TRANSPARENT, ETO_OPAQUE, Some(big), "", 12, 12);
+    run(t, &s, "no option, empty string", OPAQUE, 0, None, "", 12, 12);
+    let empty = RECT { left: 20, top: 20, right: 20, bottom: 30 };
+    run(t, &s, "ETO_OPAQUE, empty rect", TRANSPARENT, ETO_OPAQUE, Some(empty), "A", 20, 20);
+    let inverted = RECT { left: 40, top: 30, right: 20, bottom: 12 };
+    run(t, &s, "ETO_OPAQUE, inverted rect", TRANSPARENT, ETO_OPAQUE, Some(inverted), "A", 20, 12);
+    let off = RECT { left: -10, top: -10, right: 15, bottom: 15 };
+    run(t, &s, "ETO_OPAQUE, rect partly off the surface", TRANSPARENT, ETO_OPAQUE, Some(off), "A", 2, 2);
+    run(t, &s, "ETO_OPAQUE with a NULL rect", TRANSPARENT, ETO_OPAQUE, None, "A", 2, 2);
+    run(t, &s, "ETO_CLIPPED with a NULL rect", TRANSPARENT, ETO_CLIPPED, None, "A", 2, 2);
+    // exact rows of one opaque case
     let f = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
-    let old = sel(s.dc, f);
-    let mut out = [0i32; 70000];
-    let r = call(t, s.dc, "first > last", 0x42, 0x41, &mut out);
-    t.expect("first > last fails", r as i64, 0);
-    // SAFETY: NULL DC on purpose.
-    let (r, e) = unsafe {
-        SetLastError(0);
-        let r = GetCharWidth32W(core::ptr::null_mut(), 0x41, 0x42, out.as_mut_ptr());
-        (r, GetLastError())
-    };
-    say!(t, "really NULL DC: returned {r} error {e}");
-    t.expect("NULL DC fails", r as i64, 0);
-    call(t, s.dc, "U+FFFF alone", 0xFFFF, 0xFFFF, &mut out);
-    call(t, s.dc, "U+FFFE..U+FFFF", 0xFFFE, 0xFFFF, &mut out);
-    call(t, s.dc, "U+10000", 0x10000, 0x10000, &mut out);
-    call(t, s.dc, "U+FFFF..U+10000", 0xFFFF, 0x10000, &mut out);
-    call(t, s.dc, "the whole BMP", 0, 0xFFFF, &mut out);
-    let sum: i64 = out[..0x10000].iter().map(|&v| v as i64).sum();
-    let nonzero = out[..0x10000].iter().filter(|&&v| v != 0).count();
-    say!(t, "whole BMP: sum of widths {sum}, nonzero entries {nonzero}");
-    // SAFETY: a NULL buffer on purpose is not passed: a one-value buffer is.
-    let mut one = [0i32; 1];
-    let r = call(t, s.dc, "single char into a 1-value buffer", 0x41, 0x41, &mut one);
-    t.expect("a single character works", r as i64, 1);
+    let old = prep(&s, f, TRANSPARENT, TA_LEFT | TA_TOP);
+    let rc = RECT { left: 4, top: 4, right: 30, bottom: 24 };
+    let tx = txt("Ai");
+    // SAFETY: GDI call on our DC.
+    unsafe { ExtTextOutW(s.dc, 6, 6, ETO_OPAQUE, &rc, tx.u.as_ptr(), tx.n as u32, core::ptr::null()) };
+    rows3(&s, t, RECT { left: 2, top: 2, right: 34, bottom: 26 });
     sel(s.dc, old);
     // SAFETY: our font.
     unsafe { DeleteObject(f) };

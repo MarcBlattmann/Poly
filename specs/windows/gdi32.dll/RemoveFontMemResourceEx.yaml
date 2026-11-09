@@ -16,7 +16,7 @@ rules:
   remove: "TRUE for a handle AddFontMemResourceEx returned; afterwards the family is unknown to new requests (a request is answered with a substitute)."
   again: "A second remove of the same handle: FALSE (last error not set)."
   order: "With two fonts added, the handles can be removed in either order."
-  in_use: "A font selected into a DC does not stop the remove (TRUE); the already created and selected font then also stops using the removed face, and a font made after the remove does not get it (rfm_inuse)."
+  in_use: "A font selected into a DC does not stop the remove (TRUE); the already created and selected font then also stops using the removed face, and a font made after the remove does not get it."
 errors:
   null: "NULL: FALSE, ERROR_INVALID_PARAMETER (87)."
   invented: "0x1234 and INVALID_HANDLE_VALUE: FALSE, last error not set."

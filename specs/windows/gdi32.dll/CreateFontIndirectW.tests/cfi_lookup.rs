@@ -1,7 +1,8 @@
-//! AddFontResourceExW with files that are not usable fonts: an empty file, a file of
-//! junk, a font cut short, a directory-less relative name that does not exist, flags
-//! values other than FR_PRIVATE / FR_NOT_ENUM. Each reports the return value and the
-//! last error; fonts that were added are removed again.
+//! How CreateFontIndirectW matches lfFaceName: exact and case-insensitive family names,
+//! trailing and leading blanks, full face names, the '@' vertical prefix, names that do
+//! not exist (what the font mapper falls back to, shown through GetTextFaceW,
+//! GetTextMetricsW and the widths of 'i' and 'W' for each lfPitchAndFamily hint),
+//! an empty name, a name of 31 and of 32 characters, lfCharSet and lfOutPrecision.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1387,48 +1388,132 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn add(t: &mut Test, label: &str, path: &DosPath, flags: u32) -> i32 {
-    // SAFETY: path is NUL-terminated.
-    let n = unsafe {
-        SetLastError(0);
-        AddFontResourceExW(path.ptr(), flags, core::ptr::null_mut())
-    };
-    // SAFETY: thread-local last error.
-    let e = unsafe { GetLastError() };
-    say!(t, "{label}: returned {n} error {e}");
-    if n > 0 {
-        // SAFETY: path is NUL-terminated.
-        unsafe { RemoveFontResourceExW(path.ptr(), flags, core::ptr::null_mut()) };
+fn probe(t: &mut Test, s: &Surf, label: &str, lf: &LOGFONTW) {
+    // SAFETY: filled LOGFONTW.
+    let f = unsafe { CreateFontIndirectW(lf) };
+    let old = sel(s.dc, f);
+    let m = tm_of(s.dc);
+    let (fb, n) = face_of(s.dc);
+    let (iw, _) = exta(s.dc, "i");
+    let (ww, _) = exta(s.dc, "W");
+    let name = upto_nul(&fb);
+    let private = name.len() >= 8 && name[..8] == wchars("PolyTest")[..8];
+    if private {
+        say!(
+            t,
+            "{label}: face '{}' ({n}) weight {} pitchfam 0x{:02x} charset {} height {} intlead {} | i {iw} W {ww}",
+            W16(name),
+            m.weight,
+            m.pitch_and_family,
+            m.char_set,
+            m.height,
+            m.internal_leading
+        );
+    } else {
+        say!(
+            t,
+            "{label}: a substitute face (name not shown): non-empty {} truetype {} fixed-width {}",
+            !name.is_empty(),
+            m.pitch_and_family & TMPF_TRUETYPE != 0,
+            iw == ww
+        );
     }
-    n
+    sel(s.dc, old);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
+}
+
+/// Does a request for `face` get a font whose reported name is `want`?
+fn gets(t: &mut Test, s: &Surf, face: &str, want: &str) {
+    let f = mkfont(face, -16, CLEARTYPE_QUALITY);
+    let old = sel(s.dc, f);
+    let (fb, _) = face_of(s.dc);
+    let ok = upto_nul(&fb) == upto_nul(&wchars(want));
+    say!(t, "family '{face}' is found under the name '{want}': {ok}");
+    sel(s.dc, old);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
+}
+
+fn named(face: &str) -> LOGFONTW {
+    logfont(face, -16, NONANTIALIASED_QUALITY)
 }
 
 fn test(t: &mut Test) {
-    let good = font_file(&SANS, 0);
-    let p = write_scratch(wz!("good.ttf"), good);
-    add(t, "valid file, FR_PRIVATE", &p, FR_PRIVATE);
-    add(t, "valid file, FR_PRIVATE|FR_NOT_ENUM", &p, FR_PRIVATE | FR_NOT_ENUM);
-    add(t, "valid file, flags 0", &p, 0);
-    add(t, "valid file, FR_NOT_ENUM only", &p, FR_NOT_ENUM);
-    add(t, "valid file, flags 1", &p, 1);
-    add(t, "valid file, flags 0xFFFF", &p, 0xFFFF);
-    let e = write_scratch(wz!("empty.ttf"), &[]);
-    let n = add(t, "empty file", &e, FR_PRIVATE);
-    t.expect("an empty file adds nothing", n as i64, 0);
-    let mut junk = [0u8; 700];
-    for (i, b) in junk.iter_mut().enumerate() {
-        *b = (i * 13 + 5) as u8;
+    add_mem(&SANS, 0);
+    add_mem(&SANS_BOLD, 1);
+    add_mem(&SANS_ITALIC, 2);
+    add_mem(&TALL, 3);
+    add_mem(&MONO, 4);
+    let s = Surf::new(8, 8);
+    for nm in [
+        "PolyTest Sans",
+        "polytest sans",
+        "POLYTEST SANS",
+        "PolyTest Sans ",
+        "PolyTest Sans   ",
+        " PolyTest Sans",
+        "PolyTest  Sans",
+        "PolyTest Sans Bold",
+        "PolyTest Sans Italic",
+        "PolyTest",
+        "PolyTest Sans Extra",
+        "PolyTest Mono",
+        "PolyTest Tall",
+        "",
+    ] {
+        probe(t, &s, nm, &named(nm));
     }
-    let j = write_scratch(wz!("junk.ttf"), &junk);
-    let n = add(t, "junk file", &j, FR_PRIVATE);
-    t.expect("a junk file adds nothing", n as i64, 0);
-    let cut = write_scratch(wz!("cut.ttf"), &good[..good.len() / 2]);
-    add(t, "font cut in half", &cut, FR_PRIVATE);
-    let m = scratch_path(wz!("absent.ttf"));
-    let n = add(t, "file not there", &m, FR_PRIVATE);
-    t.expect("a missing file adds nothing", n as i64, 0);
-    let names: [&[u16]; 4] = [wz!("good.ttf"), wz!("empty.ttf"), wz!("junk.ttf"), wz!("cut.ttf")];
-    for nm in names {
-        delete_scratch(nm);
+    // 31 and 32 character names (the field holds 32 units)
+    let long31 = "abcdefghijklmnopqrstuvwxyz01234";
+    probe(t, &s, "31 characters, no such family", &named(long31));
+    let mut lf = named("");
+    for (i, c) in "abcdefghijklmnopqrstuvwxyz012345".encode_utf16().enumerate() {
+        lf.face[i] = c;
     }
+    probe(t, &s, "32 characters, no terminator, no such family", &lf);
+    // fallback by pitch and family
+    let mut lf = named("NoSuchFamilyAnywhere");
+    for (label, pf) in [
+        ("default pitch, FF_DONTCARE", DEFAULT_PITCH | FF_DONTCARE),
+        ("variable pitch, FF_SWISS", VARIABLE_PITCH | FF_SWISS),
+        ("variable pitch, FF_ROMAN", VARIABLE_PITCH | FF_ROMAN),
+        ("fixed pitch, FF_MODERN", FIXED_PITCH | FF_MODERN),
+        ("fixed pitch, FF_DONTCARE", FIXED_PITCH | FF_DONTCARE),
+        ("default pitch, FF_MODERN", DEFAULT_PITCH | FF_MODERN),
+        ("default pitch, FF_ROMAN", DEFAULT_PITCH | FF_ROMAN),
+        ("default pitch, FF_SWISS", DEFAULT_PITCH | FF_SWISS),
+    ] {
+        lf.pitch_and_family = pf;
+        probe(t, &s, label, &lf);
+    }
+    // an empty name with hints
+    let mut lf = named("");
+    for (label, pf) in [("empty name, fixed pitch FF_MODERN", FIXED_PITCH | FF_MODERN), ("empty name, variable FF_ROMAN", VARIABLE_PITCH | FF_ROMAN)] {
+        lf.pitch_and_family = pf;
+        probe(t, &s, label, &lf);
+    }
+    // the hint also steers a name that exists? (PolyTest Mono is fixed pitch, asked as variable)
+    let mut lf = named("PolyTest Mono");
+    lf.pitch_and_family = VARIABLE_PITCH | FF_ROMAN;
+    probe(t, &s, "PolyTest Mono asked as variable FF_ROMAN", &lf);
+    // character sets
+    for (label, cs) in [("charset ANSI", ANSI_CHARSET), ("charset DEFAULT", DEFAULT_CHARSET)] {
+        let mut lf = named("PolyTest Sans");
+        lf.char_set = cs;
+        probe(t, &s, label, &lf);
+    }
+    // output precision: TrueType only
+    let mut lf = named("PolyTest Sans");
+    lf.out_precision = OUT_TT_ONLY_PRECIS;
+    probe(t, &s, "OUT_TT_ONLY_PRECIS", &lf);
+    // well-known families: the request finds a font of that name
+    for nm in ["Arial", "arial", "Times New Roman", "Courier New", "Segoe UI", "Tahoma", "Verdana", "Consolas", "Georgia", "Calibri", "Microsoft Sans Serif", "MS Shell Dlg", "MS Sans Serif", "MS Serif", "System", "Terminal", "Fixedsys", "Courier", "Small Fonts"] {
+        let want = match nm {
+            "arial" => "Arial",
+            x => x,
+        };
+        gets(t, &s, nm, want);
+    }
+    s.free();
 }

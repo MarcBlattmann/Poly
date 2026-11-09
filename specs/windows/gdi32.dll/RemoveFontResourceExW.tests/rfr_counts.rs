@@ -1,7 +1,6 @@
-//! GetTextExtentExPointW edge cases with PolyTest Sans at lfHeight -16: NULL fit and dx
-//! pointers (alone and together), an empty string, a one-character string that is too wide
-//! for the maximum, a negative maximum (the call fails and leaves the outputs alone), and a
-//! NULL DC.
+//! RemoveFontResourceExW and the reference count of a font file: adding the same file twice
+//! needs two removes before the family is gone; the flags of the remove must match those of
+//! the add; the return value of AddFontResourceExW for a file with one font is 1 each time.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1387,65 +1386,64 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn run(t: &mut Test, dc: HDC, label: &str, text: &[u16], max: i32, want_fit: bool, want_dx: bool) {
-    let mut fit = 0x5A5Ai32;
-    let mut dx = [0x5A5Ai32; 16];
-    let mut z = SIZE { cx: -1, cy: -1 };
-    // SAFETY: text valid for its length; out pointers valid or NULL on purpose.
+fn available(dc: HDC) -> bool {
+    let f = mkfont("PolyTest Mono", -16, NONANTIALIASED_QUALITY);
+    let old = sel(dc, f);
+    let (fb, _) = face_of(dc);
+    let ok = upto_nul(&fb) == upto_nul(&wchars("PolyTest Mono"));
+    sel(dc, old);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
+    ok
+}
+
+fn add(p: &DosPath, flags: u32) -> i32 {
+    // SAFETY: path is NUL-terminated.
+    unsafe { AddFontResourceExW(p.ptr(), flags, core::ptr::null_mut()) }
+}
+
+fn rm(t: &mut Test, label: &str, p: &DosPath, flags: u32) -> i32 {
+    // SAFETY: path is NUL-terminated.
     let r = unsafe {
-        GetTextExtentExPointW(
-            dc,
-            text.as_ptr(),
-            text.len() as i32,
-            max,
-            if want_fit { &mut fit } else { core::ptr::null_mut() },
-            if want_dx { dx.as_mut_ptr() } else { core::ptr::null_mut() },
-            &mut z,
-        )
+        SetLastError(0);
+        RemoveFontResourceExW(p.ptr(), flags, core::ptr::null_mut())
     };
-    let mut line = Buf::<300>::new();
-    let _ = write!(line, "{label}: max {max}: returned {r} size {}x{}", z.cx, z.cy);
-    if want_fit {
-        let _ = write!(line, " fit {fit}");
-    }
-    if want_dx {
-        let n = if want_fit && fit >= 0 && fit <= 16 { fit as usize } else { text.len() };
-        let _ = write!(line, " dx[0..{n}] =");
-        for v in &dx[..n.min(16)] {
-            let _ = write!(line, " {v}");
-        }
-    }
-    t.line(line.as_str());
+    // SAFETY: thread-local last error.
+    let e = unsafe { GetLastError() };
+    say!(t, "{label}: returned {r} error {e}");
+    r
 }
 
 fn test(t: &mut Test) {
-    setup_fonts();
     let s = Surf::new(8, 8);
-    let f = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
-    let old = sel(s.dc, f);
-    let text = [0x41u16, 0x42, 0x20, 0x67, 0x69];
-    run(t, s.dc, "negative max -1", &text, -1, true, true);
-    run(t, s.dc, "fit only", &text, 30, true, false);
-    run(t, s.dc, "dx only", &text, 30, false, true);
-    run(t, s.dc, "neither", &text, 30, false, false);
-    run(t, s.dc, "empty", &[], 30, true, true);
-    run(t, s.dc, "empty, max 0", &[], 0, true, true);
-    run(t, s.dc, "one char", &[0x57], 16, true, true);
-    run(t, s.dc, "one char, too narrow", &[0x57], 15, true, true);
-    // a negative maximum other than -1
-    run(t, s.dc, "negative max", &text, -5, true, true);
-    // bad DC
-    let mut z = SIZE { cx: -1, cy: -1 };
-    // SAFETY: NULL DC on purpose.
-    let (r, e) = unsafe {
-        SetLastError(0);
-        let r = GetTextExtentExPointW(core::ptr::null_mut(), text.as_ptr(), 5, 0, core::ptr::null_mut(), core::ptr::null_mut(), &mut z);
-        (r, GetLastError())
-    };
-    say!(t, "NULL DC: returned {r} error {e}");
-    t.expect("NULL DC fails", r as i64, 0);
-    sel(s.dc, old);
-    // SAFETY: our font.
-    unsafe { DeleteObject(f) };
+    let name = wz!("counted.ttf");
+    let p = write_scratch(name, font_file(&MONO, 0));
+    let n1 = add(&p, FR_PRIVATE);
+    let n2 = add(&p, FR_PRIVATE);
+    say!(t, "two adds returned {n1} and {n2}");
+    t.expect("the first add returns 1", n1 as i64, 1);
+    t.expect("the second add returns 1", n2 as i64, 1);
+    t.check("available after two adds", available(s.dc), 0);
+    rm(t, "first remove", &p, FR_PRIVATE);
+    let a = available(s.dc);
+    say!(t, "available after one remove of two adds: {a}");
+    t.check("still available after one of two removes", a, 0);
+    rm(t, "second remove", &p, FR_PRIVATE);
+    let a = available(s.dc);
+    say!(t, "available after both removes: {a}");
+    t.check("gone after both removes", !a, 0);
+    let r = rm(t, "third remove", &p, FR_PRIVATE);
+    t.expect("a third remove fails", r as i64, 0);
+    // flags must match
+    add(&p, FR_PRIVATE);
+    let r = rm(t, "remove with flags 0 after an FR_PRIVATE add", &p, 0);
+    let a = available(s.dc);
+    say!(t, "available after the mismatching remove: {a}");
+    let _ = r;
+    rm(t, "remove with the matching flags", &p, FR_PRIVATE);
+    // flags 0 (a font for every process)? only reported through a remove that must fail without a matching add
+    let a3 = available(s.dc);
+    t.check("gone at the end", !a3, 0);
+    delete_scratch(name);
     s.free();
 }

@@ -1,8 +1,8 @@
-//! DrawTextW flags that matter less: DT_EDITCONTROL (a partial last line is not shown),
-//! DT_INTERNAL (system font metrics), DT_RTLREADING with DT_RIGHT, DT_NOFULLWIDTHCHARBREAK,
-//! DT_TABSTOP drawn, DT_EXPANDTABS drawn, the return value when the text is cut by DT_NOCLIP-less
-//! clipping, the rectangle passed in and out for plain drawing (unchanged), and the effect of
-//! the text colour and background mode on the returned value (none).
+//! CreateFontW: every argument ends up in the matching LOGFONTW field (GetObjectW shows
+//! them): the integer arguments as given, the DWORD flags italic / underline / strike-out
+//! narrowed to a byte, the face name copied (31 characters at most, a longer name is cut),
+//! a NULL face name leaves the field empty. The font behaves like the one
+//! CreateFontIndirectW makes from the same values.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1388,56 +1388,75 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn run(t: &mut Test, s: &Surf, label: &str, text: &str, rc: RECT, flags: u32) {
-    let f = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
-    let mut tx = txt(text);
-    let old = prep(s, f, OPAQUE, 0);
-    let mut r = rc;
-    // SAFETY: the buffer holds the text.
-    let ret = unsafe { DrawTextW(s.dc, tx.u.as_mut_ptr(), tx.n as i32, &mut r, flags) };
-    let (bl, bt, br, bb, bn) = bk_box(s);
-    prep(s, f, TRANSPARENT, 0);
-    let mut r2 = rc;
-    // SAFETY: as above.
-    unsafe { DrawTextW(s.dc, tx.u.as_mut_ptr(), tx.n as i32, &mut r2, flags) };
-    let (il, it, ir, ib, inn) = fg_box(s);
+fn dump(t: &mut Test, label: &str, f: HFONT) {
+    let mut lf: LOGFONTW = zeroed();
+    // SAFETY: lf is writable for 92 bytes.
+    let n = unsafe { GetObjectW(f, 92, &mut lf as *mut _ as *mut c_void) };
     say!(
         t,
-        "{label}: returned {ret}; rect after {},{},{},{}; cell {bl},{bt},{br},{bb} ({bn}); ink {il},{it},{ir},{ib} ({inn})",
-        r.left,
-        r.top,
-        r.right,
-        r.bottom
+        "{label}: GetObjectW {n}: h={} w={} esc={} orient={} weight={} italic={} underline={} strike={} charset={} outprec={} clipprec={} quality={} pitchfam=0x{:02x} face='{}'",
+        lf.height,
+        lf.width,
+        lf.escapement,
+        lf.orientation,
+        lf.weight,
+        lf.italic,
+        lf.underline,
+        lf.strike_out,
+        lf.char_set,
+        lf.out_precision,
+        lf.clip_precision,
+        lf.quality,
+        lf.pitch_and_family,
+        W16(upto_nul(&lf.face))
     );
-    sel(s.dc, old);
-    // SAFETY: our font.
-    unsafe { DeleteObject(f) };
 }
 
 fn test(t: &mut Test) {
     setup_fonts();
-    let s = Surf::new(140, 90);
-    let tall = RECT { left: 10, top: 10, right: 130, bottom: 10 + 40 };
-    let short = RECT { left: 10, top: 10, right: 130, bottom: 10 + 24 };
-    // DT_EDITCONTROL: a line that does not fit in the height is not drawn
-    run(t, &s, "three lines, rect of 24 high", "AB\nAB\nAB", short, 0);
-    run(t, &s, "three lines, rect of 24 high, DT_EDITCONTROL", "AB\nAB\nAB", short, DT_EDITCONTROL);
-    run(t, &s, "three lines, rect of 40 high, DT_EDITCONTROL", "AB\nAB\nAB", tall, DT_EDITCONTROL);
-    run(t, &s, "wrapped to three lines, rect of 24 high, DT_EDITCONTROL|DT_WORDBREAK", "AAAA BBBB AAAA BBBB", RECT { left: 10, top: 10, right: 50, bottom: 34 }, DT_EDITCONTROL | DT_WORDBREAK);
-    // DT_INTERNAL: system font metrics for the layout, our font for the glyphs? (reported)
-    run(t, &s, "DT_INTERNAL", "AB", tall, DT_INTERNAL);
-    // DT_RTLREADING
-    run(t, &s, "DT_RTLREADING", "AB", tall, DT_RTLREADING);
-    run(t, &s, "DT_RTLREADING|DT_RIGHT", "AB", tall, DT_RTLREADING | DT_RIGHT);
-    run(t, &s, "DT_RTLREADING|DT_CENTER", "AB", tall, DT_RTLREADING | DT_CENTER);
-    run(t, &s, "DT_NOFULLWIDTHCHARBREAK|DT_WORDBREAK", "AB AB", RECT { left: 10, top: 10, right: 30, bottom: 50 }, DT_NOFULLWIDTHCHARBREAK | DT_WORDBREAK);
-    // tabs drawn
-    run(t, &s, "A tab B (no DT_EXPANDTABS)", "A\tB", tall, 0);
-    run(t, &s, "A tab B, DT_EXPANDTABS", "A\tB", tall, DT_EXPANDTABS);
-    run(t, &s, "A euro B", "A\u{20ac}B", tall, 0);
-    // line terminators
-    run(t, &s, "AB CR LF AB", "AB\r\nAB", tall, 0);
-    run(t, &s, "AB CR AB", "AB\rAB", tall, 0);
-    run(t, &s, "AB LF CR AB", "AB\n\rAB", tall, 0);
+    let face = wz!("PolyTest Sans");
+    // SAFETY: face is NUL-terminated; all arguments are plain integers.
+    let f = unsafe { CreateFontW(-13, 7, 0, 0, 600, 1, 1, 1, 0, 4, 2, 3, 0x22, face.as_ptr()) };
+    t.check("a font comes back", !f.is_null(), 0);
+    dump(t, "all arguments set", f);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
+    // SAFETY: as above; the flags are DWORDs larger than 1.
+    let f = unsafe { CreateFontW(0, 0, 450, 900, 0, 5, 256, 2, 255, 255, 255, 255, 0xFF, face.as_ptr()) };
+    dump(t, "flags 5/256/2, odd values", f);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
+    // SAFETY: a NULL face name is allowed.
+    let f = unsafe { CreateFontW(-16, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 0, 0, core::ptr::null()) };
+    t.check("a NULL face name still gives a font", !f.is_null(), 0);
+    dump(t, "NULL face name", f);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
+    let long = wz!("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP");
+    // SAFETY: long is NUL-terminated.
+    let f = unsafe { CreateFontW(-16, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 0, 0, long.as_ptr()) };
+    dump(t, "52-character face name", f);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
+    // same metrics as CreateFontIndirectW
+    let s = Surf::new(8, 8);
+    // SAFETY: as above.
+    let fw = unsafe { CreateFontW(-16, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 3, 0, face.as_ptr()) };
+    let fi = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
+    let old = sel(s.dc, fw);
+    let mw = tm_of(s.dc);
+    let (ew, _) = exta(s.dc, "AB gi");
+    sel(s.dc, fi);
+    let mi = tm_of(s.dc);
+    let (ei, _) = exta(s.dc, "AB gi");
+    sel(s.dc, old);
+    let same = mw.height == mi.height && mw.ascent == mi.ascent && mw.ave_char_width == mi.ave_char_width && ew == ei;
+    say!(t, "CreateFontW and CreateFontIndirectW agree on metrics and widths: {same}");
+    t.check("same metrics as CreateFontIndirectW", same, 0);
+    // SAFETY: our fonts.
+    unsafe {
+        DeleteObject(fw);
+        DeleteObject(fi);
+    }
     s.free();
 }

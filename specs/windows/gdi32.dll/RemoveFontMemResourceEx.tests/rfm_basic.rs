@@ -1,8 +1,6 @@
-//! EnumFontFamiliesExW on the installed fonts: listing one family returns only faces of that
-//! family, with TrueType font type; Arial, Times New Roman and Courier New are there with
-//! their regular, bold and italic faces; the pitch of Courier New is fixed; the callback
-//! gets the logfont's lfHeight as 0 for TrueType; the enumeration with an empty name lists
-//! many families, none twice. Only invariants are printed, never the font list.
+//! RemoveFontMemResourceEx: TRUE for a handle AddFontMemResourceEx returned, FALSE (with
+//! an error code) for NULL, for a handle already removed and for a value that was
+//! never a handle.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1388,93 +1386,35 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-struct Acc {
-    n: u32,
-    other_family: u32,
-    ttf: u32,
-    bold: u32,
-    italic: u32,
-    height_zero: u32,
-    fixed: u32,
-    want: [u16; 32],
-}
-static ACC: Global<Acc> = Global::new(Acc { n: 0, other_family: 0, ttf: 0, bold: 0, italic: 0, height_zero: 0, fixed: 0, want: [0; 32] });
-
-unsafe extern "system" fn cb(lf: *const ENUMLOGFONTEXW, _tm: *const c_void, ftype: u32, _lp: isize) -> i32 {
-    // SAFETY: GDI passes a valid ENUMLOGFONTEXW.
-    let e = unsafe { &*lf };
-    let a = ACC.get();
-    a.n += 1;
-    if upto_nul(&e.lf.face) != upto_nul(&a.want) {
-        a.other_family += 1;
-    }
-    if ftype & TRUETYPE_FONTTYPE != 0 {
-        a.ttf += 1;
-    }
-    if e.lf.weight >= 700 {
-        a.bold += 1;
-    }
-    if e.lf.italic != 0 {
-        a.italic += 1;
-    }
-    if e.lf.height == 0 {
-        a.height_zero += 1;
-    }
-    if e.lf.pitch_and_family & 3 == FIXED_PITCH {
-        a.fixed += 1;
-    }
-    1
-}
-
-fn family(t: &mut Test, dc: HDC, name: &str) -> bool {
-    let a = ACC.get();
-    *a = Acc { n: 0, other_family: 0, ttf: 0, bold: 0, italic: 0, height_zero: 0, fixed: 0, want: [0; 32] };
-    wide(name, &mut a.want);
-    let lf = logfont(name, 0, DEFAULT_QUALITY);
-    // SAFETY: lf filled; cb has the right signature.
-    let r = unsafe { EnumFontFamiliesExW(dc, &lf, cb, 0, 0) };
-    let a = ACC.get();
-    let ok = a.n >= 1 && a.other_family == 0 && a.ttf == a.n;
-    say!(
-        t,
-        "{name}: at least one face listed {}, only this family {}, all TrueType {}, has bold {}, has italic {}, has fixed pitch faces {}; returned nonzero {}",
-        a.n >= 1,
-        a.other_family == 0,
-        a.ttf == a.n,
-        a.bold > 0,
-        a.italic > 0,
-        a.fixed > 0,
-        r != 0
-    );
-    ok
+fn rm(t: &mut Test, label: &str, h: HANDLE) -> i32 {
+    // SAFETY: arbitrary handle values are passed on purpose; the call validates them.
+    let r = unsafe {
+        SetLastError(0);
+        RemoveFontMemResourceEx(h)
+    };
+    // SAFETY: thread-local last error.
+    let e = unsafe { GetLastError() };
+    say!(t, "{label}: returned {r} error {e}");
+    r
 }
 
 fn test(t: &mut Test) {
-    let s = Surf::new(8, 8);
-    for name in ["Arial", "Times New Roman", "Courier New"] {
-        let ok = family(t, s.dc, name);
-        t.check("the family is listed with only its own TrueType faces", ok, 0);
-        let a = ACC.get();
-        t.check("the family has a bold and an italic face", a.bold > 0 && a.italic > 0, a.n as i64);
-    }
-    family(t, s.dc, "Courier New");
-    let a = ACC.get();
-    t.check("Courier New faces are fixed pitch", a.fixed == a.n, a.fixed as i64);
-    family(t, s.dc, "Arial");
-    let a = ACC.get();
-    t.check("Arial faces are not fixed pitch", a.fixed == 0, a.fixed as i64);
-    let ok = family(t, s.dc, "NoSuchFamilyAnywhere");
-    let a = ACC.get();
-    t.check("an unknown family lists nothing", a.n == 0, a.n as i64);
-    let _ = ok;
-    // all families: many, no duplicates in the first 64 family names
-    let a = ACC.get();
-    *a = Acc { n: 0, other_family: 0, ttf: 0, bold: 0, italic: 0, height_zero: 0, fixed: 0, want: [0; 32] };
-    let lf = logfont("", 0, DEFAULT_QUALITY);
-    // SAFETY: lf filled; cb has the right signature.
-    unsafe { EnumFontFamiliesExW(s.dc, &lf, cb, 0, 0) };
-    let a = ACC.get();
-    say!(t, "all families: more than 10 listed: {}", a.n > 10);
-    t.check("many families are listed", a.n > 10, a.n as i64);
-    s.free();
+    let (h, c) = add_mem(&SANS, 0);
+    t.check("added", !h.is_null() && c == 1, c as i64);
+    let r = rm(t, "first remove", h);
+    t.expect("first remove succeeds", r as i64, 1);
+    let r = rm(t, "second remove of the same handle", h);
+    t.expect("second remove fails", r as i64, 0);
+    let r = rm(t, "NULL", core::ptr::null_mut());
+    t.expect("NULL fails", r as i64, 0);
+    let r = rm(t, "0x1234", 0x1234usize as HANDLE);
+    t.expect("an invented value fails", r as i64, 0);
+    let r = rm(t, "-1", usize::MAX as HANDLE);
+    t.expect("INVALID_HANDLE_VALUE fails", r as i64, 0);
+    // two fonts added, each removed once in the other order
+    let (a, _) = add_mem(&SANS, 0);
+    let (b, _) = add_mem(&TALL, 1);
+    let rb = rm(t, "remove the second font first", b);
+    let ra = rm(t, "then the first", a);
+    t.check("both removes succeed in any order", rb == 1 && ra == 1, (rb * 10 + ra) as i64);
 }

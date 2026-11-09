@@ -1,8 +1,7 @@
-//! GetTextExtentPoint32W / GetTextExtentPointW on bad input: NULL and deleted DCs fail
-//! (ERROR_INVALID_HANDLE), a negative count fails, count 0 with a NULL string succeeds with
-//! a zero width, a count larger than 8192? is measured as given, and the size is left alone
-//! on failure. Also the measurement does not depend on the text colour, background mode
-//! or alignment of the DC.
+//! Picking a face inside a family: PolyTest Sans has Regular, Bold and Italic faces whose 'A'
+//! is 12, 13 and 14 pixels wide at lfHeight -16. Which face a request gets (lfWeight
+//! 0..900, lfItalic), the face name and metrics reported, and what happens when a face
+//! for the requested weight or slant does not exist (PolyTest Tall has only Regular).
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1388,70 +1387,45 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn test(t: &mut Test) {
-    setup_fonts();
-    let s = Surf::new(8, 8);
-    let f = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
+fn probe(t: &mut Test, s: &Surf, face: &str, weight: i32, italic: u8) {
+    let mut lf = logfont(face, -16, NONANTIALIASED_QUALITY);
+    lf.weight = weight;
+    lf.italic = italic;
+    // SAFETY: filled LOGFONTW.
+    let f = unsafe { CreateFontIndirectW(&lf) };
     let old = sel(s.dc, f);
-    let a = [0x41u16, 0x42];
-    let mut z = SIZE { cx: 0x4242, cy: 0x4242 };
-    // SAFETY: NULL DC on purpose.
-    let (r, e) = unsafe {
-        SetLastError(0);
-        let r = GetTextExtentPoint32W(core::ptr::null_mut(), a.as_ptr(), 2, &mut z);
-        (r, GetLastError())
-    };
-    say!(t, "NULL DC: returned {r} error {e} size {}x{}", z.cx, z.cy);
-    t.expect("NULL DC fails", r as i64, 0);
-    // negative count
-    z = SIZE { cx: 0x4242, cy: 0x4242 };
-    // SAFETY: valid pointers; the count is invalid on purpose.
-    let (r, e) = unsafe {
-        SetLastError(0);
-        let r = GetTextExtentPoint32W(s.dc, a.as_ptr(), -1, &mut z);
-        (r, GetLastError())
-    };
-    say!(t, "count -1: returned {r} error {e} size {}x{}", z.cx, z.cy);
-    z = SIZE { cx: 0x4242, cy: 0x4242 };
-    // SAFETY: as above.
-    let (r, e) = unsafe {
-        SetLastError(0);
-        let r = GetTextExtentPoint32W(s.dc, a.as_ptr(), -5, &mut z);
-        (r, GetLastError())
-    };
-    say!(t, "count -5: returned {r} error {e} size {}x{}", z.cx, z.cy);
-    // count 0 with NULL string
-    z = SIZE { cx: 0x4242, cy: 0x4242 };
-    // SAFETY: count 0 never reads the string.
-    let (r, e) = unsafe {
-        SetLastError(0);
-        let r = GetTextExtentPoint32W(s.dc, core::ptr::null(), 0, &mut z);
-        (r, GetLastError())
-    };
-    say!(t, "count 0, NULL string: returned {r} error {e} size {}x{}", z.cx, z.cy);
-    // very long text: 9000 'A's
-    let long = [0x41u16; 9000];
-    z = SIZE { cx: 0x4242, cy: 0x4242 };
-    // SAFETY: 9000 units valid.
-    let (r, e) = unsafe {
-        SetLastError(0);
-        let r = GetTextExtentPoint32W(s.dc, long.as_ptr(), 9000, &mut z);
-        (r, GetLastError())
-    };
-    say!(t, "9000 characters: returned {r} error {e} size {}x{}", z.cx, z.cy);
-    // measurement ignores colour, mode and alignment
-    let (w0, h0) = ext(s.dc, &a);
-    // SAFETY: DC calls.
-    unsafe {
-        SetTextColor(s.dc, rgb(255, 0, 0));
-        SetBkMode(s.dc, OPAQUE);
-        SetTextAlign(s.dc, TA_RIGHT | TA_BOTTOM);
-    }
-    let (w1, h1) = ext(s.dc, &a);
-    say!(t, "size {w0}x{h0} and with other colour, mode, alignment {w1}x{h1}");
-    t.check("the measurement does not depend on colour, mode or alignment", w0 == w1 && h0 == h1, w1 as i64);
+    let m = tm_of(s.dc);
+    let (fb, _) = face_of(s.dc);
+    let (ax, _) = exta(s.dc, "A");
+    say!(
+        t,
+        "{face} weight {weight} italic {italic}: face '{}' 'A' {ax} tmWeight {} tmItalic {} height {}",
+        W16(upto_nul(&fb)),
+        m.weight,
+        m.italic,
+        m.height
+    );
     sel(s.dc, old);
     // SAFETY: our font.
     unsafe { DeleteObject(f) };
+}
+
+fn test(t: &mut Test) {
+    add_mem(&SANS, 0);
+    add_mem(&SANS_BOLD, 1);
+    add_mem(&SANS_ITALIC, 2);
+    add_mem(&TALL, 3);
+    let s = Surf::new(8, 8);
+    for w in [0, 100, 300, 400, 500, 550, 600, 650, 700, 800, 900] {
+        probe(t, &s, "PolyTest Sans", w, 0);
+    }
+    for w in [0, 400, 700, 900] {
+        probe(t, &s, "PolyTest Sans", w, 1);
+    }
+    for w in [0, 400, 700] {
+        for it in [0, 1] {
+            probe(t, &s, "PolyTest Tall", w, it);
+        }
+    }
     s.free();
 }

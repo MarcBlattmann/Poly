@@ -15,7 +15,7 @@ interface:
 rules:
   remove: "TRUE for a file that was added; the family is gone for new requests. A third remove after two adds of the same file fails: each add needs its own remove, and the family stays until the last one (rfr_counts)."
   flags: "The flags of the remove must match those of the add: a remove with flags 0 after an FR_PRIVATE add returned FALSE and the font stayed."
-  file_must_exist: "The remove looks the file up: with the file deleted it fails with ERROR_FILE_NOT_FOUND (2) and the font stays loaded; with the file back it succeeds (afr_file)."
+  file_must_exist: "The remove looks the file up: with the file deleted it fails with ERROR_FILE_NOT_FOUND (2) and the font stays loaded; with the file back it succeeds (afr_add)."
 errors:
   never_added: "A file that exists but was never added: FALSE, last error not set."
   missing: "A file that does not exist: FALSE, error 2."

@@ -1,4 +1,7 @@
-//! GetTextFaceW for the stock fonts, for the default font of a new DC and for a NULL DC.
+//! Relations of GetTextExtentPoint32W for any TrueType font, on installed families at several
+//! sizes: the extent of a string is the sum of the extents of its characters (no kerning), the
+//! height is tmHeight, a longer string is never narrower, the extent scales with the size, and
+//! GetTextExtentExPointW's last running extent equals the total. Only relations are printed.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1384,29 +1387,75 @@ impl Txt {
 poly_wtest::main!(test);
 
 
+fn units(s: &str, out: &mut [u16; 64]) -> usize {
+    wide(s, out)
+}
+
+fn one(t: &mut Test, s: &Surf, face: &str, h: i32) -> bool {
+    let f = mkfont(face, h, CLEARTYPE_QUALITY);
+    let old = sel(s.dc, f);
+    let m = tm_of(s.dc);
+    let mut buf = [0u16; 64];
+    let n = units("Hello, World! gjpqy 0123", &mut buf);
+    let text = &buf[..n];
+    let (total, th) = ext(s.dc, text);
+    let mut sum = 0;
+    for c in text {
+        sum += ext(s.dc, &[*c]).0;
+    }
+    let mut prev = 0;
+    let mut mono = true;
+    for k in 1..=n {
+        let w = ext(s.dc, &text[..k]).0;
+        mono &= w >= prev;
+        prev = w;
+    }
+    // ExPoint
+    let mut dx = [0i32; 64];
+    let mut fit = 0i32;
+    let mut z = SIZE::default();
+    // SAFETY: text valid; out arrays valid.
+    unsafe { GetTextExtentExPointW(s.dc, text.as_ptr(), n as i32, 100000, &mut fit, dx.as_mut_ptr(), &mut z) };
+    let running = dx[n - 1] == total && z.cx == total && fit == n as i32;
+    // GetCharWidth32W of the same characters
+    let mut cw = [0i32; 16];
+    // SAFETY: the buffer holds 16 values.
+    let r = unsafe { GetCharWidth32W(s.dc, 'a' as u32, 'a' as u32 + 3, cw.as_mut_ptr()) };
+    let cwok = r != 0 && cw[0] == ext(s.dc, &['a' as u16]).0 && cw[3] == ext(s.dc, &['d' as u16]).0;
+    let ok = total == sum && th == m.height && mono && running && cwok;
+    say!(t, "{face} lfHeight {h}: sum of characters == string {} height == tmHeight {} monotone {mono} ExPoint running total {running} GetCharWidth32W {cwok}", total == sum, th == m.height);
+    sel(s.dc, old);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
+    ok
+}
+
 fn test(t: &mut Test) {
     let s = Surf::new(8, 8);
-    // stock fonts
-    for (name, id) in [("SYSTEM_FONT", SYSTEM_FONT), ("DEFAULT_GUI_FONT", DEFAULT_GUI_FONT), ("ANSI_FIXED_FONT", ANSI_FIXED_FONT), ("ANSI_VAR_FONT", ANSI_VAR_FONT), ("OEM_FIXED_FONT", OEM_FIXED_FONT)] {
-        // SAFETY: stock object.
-        let sf = unsafe { GetStockObject(id) };
-        let o = sel(s.dc, sf);
-        let (fb, n) = face_of(s.dc);
-        say!(t, "{name}: face '{}' ({n})", W16(upto_nul(&fb)));
-        sel(s.dc, o);
+    let mut all = true;
+    for face in ["Arial", "Times New Roman", "Courier New", "Segoe UI", "Tahoma", "Verdana", "Consolas"] {
+        for h in [-9, -11, -12, -13, -16, -20, -24, -32] {
+            all &= one(t, &s, face, h);
+        }
     }
-    // the default font of a new DC
-    let (fb, n) = face_of(s.dc);
-    say!(t, "a new DC: face '{}' ({n})", W16(upto_nul(&fb)));
-    // a bad DC
-    let mut b = [0u16; 10];
-    // SAFETY: NULL DC on purpose.
-    let (r, e) = unsafe {
-        SetLastError(0);
-        let r = GetTextFaceW(core::ptr::null_mut(), 10, b.as_mut_ptr());
-        (r, GetLastError())
-    };
-    say!(t, "NULL DC: returned {r} error {e}");
-    t.expect("NULL DC returns 0", r as i64, 0);
+    t.check("the relations hold for every family and size", all, 0);
+    // scaling: twice the size is about twice the width (within a pixel per character)
+    for face in ["Arial", "Times New Roman", "Courier New"] {
+        let f1 = mkfont(face, -12, CLEARTYPE_QUALITY);
+        let old = sel(s.dc, f1);
+        let (w1, _) = exta(s.dc, "The quick brown fox");
+        let f2 = mkfont(face, -24, CLEARTYPE_QUALITY);
+        sel(s.dc, f2);
+        let (w2, _) = exta(s.dc, "The quick brown fox");
+        let ok = (w2 - 2 * w1).abs() <= 19;
+        say!(t, "{face}: width at -24 is twice the width at -12 within one pixel per character: {ok}");
+        t.check("extents scale with the size", ok, (w2 - 2 * w1) as i64);
+        sel(s.dc, old);
+        // SAFETY: our fonts.
+        unsafe {
+            DeleteObject(f1);
+            DeleteObject(f2);
+        }
+    }
     s.free();
 }

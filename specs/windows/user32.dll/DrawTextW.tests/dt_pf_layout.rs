@@ -1,5 +1,8 @@
-//! RemoveFontResourceExW with nothing to remove: a file that was never added, a missing file,
-//! an empty path, flags values that do not exist; the return value and the last error of each.
+//! DrawTextW with DT_CALCRECT and the private font (PolyTest Sans, lfHeight -16: cell 16,
+//! external leading 2, advances A 12, B 8, space 6, g 10, i 4, W 16, '.' 4, '-' 6):
+//! the rectangle and the return value for single lines, line breaks, DT_SINGLELINE,
+//! DT_WORDBREAK at several widths, tabs (DT_EXPANDTABS), trailing and leading
+//! blanks, empty strings, the count argument, DT_EXTERNALLEADING and the alignment flags.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1385,35 +1388,104 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn rm(t: &mut Test, label: &str, path: *const u16, flags: u32) -> i32 {
-    // SAFETY: the pointer is NUL-terminated or empty.
-    let r = unsafe {
-        SetLastError(0);
-        RemoveFontResourceExW(path, flags, core::ptr::null_mut())
-    };
-    // SAFETY: thread-local last error.
-    let e = unsafe { GetLastError() };
-    say!(t, "{label}: returned {r} error {e}");
-    r
+fn calc(t: &mut Test, dc: HDC, label: &str, text: &str, count: i32, rc: RECT, flags: u32) {
+    let mut tx = txt(text);
+    let mut r = rc;
+    // SAFETY: the buffer holds the text; the rectangle is ours.
+    let ret = unsafe { DrawTextW(dc, tx.u.as_mut_ptr(), if count == -2 { tx.n as i32 } else { count }, &mut r, flags | DT_CALCRECT) };
+    say!(t, "{label}: returned {ret}; rect {},{},{},{} (size {}x{})", r.left, r.top, r.right, r.bottom, r.right - r.left, r.bottom - r.top);
 }
 
 fn test(t: &mut Test) {
-    let name = wz!("never-added.ttf");
-    let p = write_scratch(name, font_file(&SANS, 0));
-    let r = rm(t, "a file that exists but was never added", p.ptr(), FR_PRIVATE);
-    t.expect("removing what was not added fails", r as i64, 0);
-    let r = rm(t, "same, flags 0", p.ptr(), 0);
-    t.expect("removing what was not added with flags 0 fails", r as i64, 0);
-    let m = scratch_path(wz!("no-such-file.ttf"));
-    let r = rm(t, "a file that does not exist", m.ptr(), FR_PRIVATE);
-    t.expect("a missing file fails", r as i64, 0);
-    let r = rm(t, "an empty path", wz!("").as_ptr(), FR_PRIVATE);
-    t.expect("an empty path fails", r as i64, 0);
-    let r = rm(t, "flags 1", p.ptr(), 1);
-    t.expect("flags 1 fail", r as i64, 0);
-    let r = rm(t, "flags 0xFFFF", p.ptr(), 0xFFFF);
-    t.expect("flags 0xFFFF fail", r as i64, 0);
-    let r = rm(t, "a name with a wildcard", wz!("*.ttf").as_ptr(), FR_PRIVATE);
-    let _ = r;
-    delete_scratch(name);
+    setup_fonts();
+    let s = Surf::new(8, 8);
+    let f = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
+    let old = sel(s.dc, f);
+    let wide = RECT { left: 10, top: 10, right: 210, bottom: 90 };
+    let w = |n: i32| RECT { left: 10, top: 10, right: 10 + n, bottom: 90 };
+    // lines
+    for (label, text) in [
+        ("AB", "AB"),
+        ("A", "A"),
+        ("empty", ""),
+        ("AB LF AB", "AB\nAB"),
+        ("AB CR LF AB", "AB\r\nAB"),
+        ("AB CR AB", "AB\rAB"),
+        ("AB LF", "AB\n"),
+        ("LF", "\n"),
+        ("LF LF", "\n\n"),
+        ("AB LF LF AB", "AB\n\nAB"),
+        ("AB LF W", "AB\nW"),
+        ("trailing blanks", "AB   "),
+        ("leading blanks", "   AB"),
+        ("only blanks", "   "),
+        ("g and i", "gi"),
+        ("AB LF AB LF AB", "AB\nAB\nAB"),
+    ] {
+        calc(t, s.dc, label, text, -2, wide, 0);
+        calc(t, s.dc, label, text, -2, wide, DT_SINGLELINE);
+    }
+    // DT_CALCRECT keeps the left and top, grows to the right and down
+    calc(t, s.dc, "AB, rect at (30,40)", "AB", -2, RECT { left: 30, top: 40, right: 31, bottom: 41 }, 0);
+    // word break at several widths
+    for width in [200, 60, 50, 40, 31, 30, 24, 20, 12, 5, 1, 0] {
+        calc(t, s.dc, &fmt_w("AAAA BBBB AAAA wrapped at ", width), "AAAA BBBB AAAA", -2, w(width), DT_WORDBREAK);
+        calc(t, s.dc, &fmt_w("AB AB AB AB wrapped at ", width), "AB AB AB AB", -2, w(width), DT_WORDBREAK);
+    }
+    calc(t, s.dc, "one long word, width 40, DT_WORDBREAK", "AAAAAAAAAA", -2, w(40), DT_WORDBREAK);
+    calc(t, s.dc, "blanks only wrapped", "      ", -2, w(20), DT_WORDBREAK);
+    calc(t, s.dc, "trailing blanks wrapped at 30", "AB     AB", -2, w(30), DT_WORDBREAK);
+    calc(t, s.dc, "LF and wrap", "AAAA BBBB\nAAAA BBBB", -2, w(60), DT_WORDBREAK);
+    calc(t, s.dc, "DT_WORDBREAK|DT_SINGLELINE", "AAAA BBBB AAAA", -2, w(60), DT_WORDBREAK | DT_SINGLELINE);
+    // tabs
+    calc(t, s.dc, "A tab B", "A\tB", -2, wide, 0);
+    calc(t, s.dc, "A tab B, DT_EXPANDTABS", "A\tB", -2, wide, DT_EXPANDTABS);
+    calc(t, s.dc, "AAAAAAAA tab B, DT_EXPANDTABS", "AAAAAAAA\tB", -2, wide, DT_EXPANDTABS);
+    calc(t, s.dc, "tab tab B, DT_EXPANDTABS", "\t\tB", -2, wide, DT_EXPANDTABS);
+    // count
+    calc(t, s.dc, "count -1 on 'AB' (NUL-terminated)", "AB", -1, wide, 0);
+    calc(t, s.dc, "count 1 on 'AB'", "AB", 1, wide, 0);
+    calc(t, s.dc, "count 0 on 'AB'", "AB", 0, wide, 0);
+    // external leading
+    calc(t, s.dc, "AB, DT_EXTERNALLEADING", "AB", -2, wide, DT_EXTERNALLEADING);
+    calc(t, s.dc, "AB LF AB, DT_EXTERNALLEADING", "AB\nAB", -2, wide, DT_EXTERNALLEADING);
+    // alignment flags with DT_CALCRECT
+    for (label, fl) in [("DT_RIGHT", DT_RIGHT), ("DT_CENTER", DT_CENTER), ("DT_VCENTER", DT_VCENTER), ("DT_BOTTOM", DT_BOTTOM), ("DT_VCENTER|DT_SINGLELINE", DT_VCENTER | DT_SINGLELINE), ("DT_BOTTOM|DT_SINGLELINE", DT_BOTTOM | DT_SINGLELINE), ("DT_RIGHT|DT_SINGLELINE|DT_VCENTER", DT_RIGHT | DT_SINGLELINE | DT_VCENTER)] {
+        calc(t, s.dc, label, "AB", -2, wide, fl);
+    }
+    // degenerate rectangles
+    calc(t, s.dc, "empty rect", "AB", -2, RECT { left: 10, top: 10, right: 10, bottom: 10 }, 0);
+    calc(t, s.dc, "inverted rect", "AB", -2, RECT { left: 50, top: 50, right: 10, bottom: 10 }, 0);
+    calc(t, s.dc, "inverted rect, DT_WORDBREAK", "AB AB", -2, RECT { left: 50, top: 50, right: 10, bottom: 10 }, DT_WORDBREAK);
+    // prefix characters
+    calc(t, s.dc, "&A", "&A", -2, wide, 0);
+    calc(t, s.dc, "&A, DT_NOPREFIX", "&A", -2, wide, DT_NOPREFIX);
+    calc(t, s.dc, "A&&B", "A&&B", -2, wide, 0);
+    calc(t, s.dc, "A&&B, DT_NOPREFIX", "A&&B", -2, wide, DT_NOPREFIX);
+    calc(t, s.dc, "A&", "A&", -2, wide, 0);
+    calc(t, s.dc, "&", "&", -2, wide, 0);
+    calc(t, s.dc, "&&&A", "&&&A", -2, wide, 0);
+    calc(t, s.dc, "A&B&A", "A&B&A", -2, wide, 0);
+    calc(t, s.dc, "&A, DT_HIDEPREFIX", "&A", -2, wide, DT_HIDEPREFIX);
+    calc(t, s.dc, "&A, DT_PREFIXONLY", "&A", -2, wide, DT_PREFIXONLY);
+    sel(s.dc, old);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
+    s.free();
+}
+
+/// "<a><n>" as a label.
+fn fmt_w(a: &str, n: i32) -> LabelBuf {
+    let mut l = LabelBuf { b: Buf::<120>::new() };
+    let _ = write!(l.b, "{a}{n}");
+    l
+}
+struct LabelBuf {
+    b: Buf<120>,
+}
+impl core::ops::Deref for LabelBuf {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.b.as_str()
+    }
 }

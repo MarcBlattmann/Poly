@@ -6,9 +6,9 @@
     "build": "26200.9711",
     "arch": "AMD64"
   },
-  "bundle": "c7e925aa9346",
+  "bundle": "8a396a60cdf0",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-09T17:41:45Z",
+  "started": "2026-11-09T18:09:27Z",
   "tests": [
     {
       "name": "dtx_params",
@@ -22,7 +22,7 @@
       "output": "NULL parameters: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn -1; cell 10,10,30,26 (176); ink 12,10,29,22 (144)\nzero margins: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 10,10,30,26 (176); ink 12,10,29,22 (144)\nleft margin 10: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 20,10,40,26 (176); ink 22,10,39,22 (144)\nleft margin 10, DT_RIGHT: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 110,10,130,26 (176); ink 112,10,129,22 (144)\nright margin 10, DT_RIGHT: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 100,10,120,26 (176); ink 102,10,119,22 (144)\nboth margins 10, DT_CENTER: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 60,10,80,26 (176); ink 62,10,79,22 (144)\nleft margin 10, DT_CALCRECT: returned 16 error 0; rect after 10,10,40,26; uiLengthDrawn 2; cell 0,0,0,0 (0); ink 0,0,0,0 (0)\nright margin 10, DT_CALCRECT: returned 16 error 0; rect after 10,10,40,26; uiLengthDrawn 2; cell 0,0,0,0 (0); ink 0,0,0,0 (0)\nmargins 5/7, DT_CALCRECT: returned 16 error 0; rect after 10,10,42,26; uiLengthDrawn 2; cell 0,0,0,0 (0); ink 0,0,0,0 (0)\nmargins and DT_WORDBREAK in 60 wide, 10/10: returned 48 error 0; rect after 10,10,70,80; uiLengthDrawn 14; cell 20,10,68,58 (1184); ink 21,10,66,54 (960)\nnegative margins: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 10,10,25,26 (132); ink 10,10,24,22 (108)\nmargins wider than the rectangle: returned 16 error 0; rect after 10,10,30,60; uiLengthDrawn 2; cell 0,0,0,0 (0); ink 0,0,0,0 (0)\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 58
+      "ms": 57
     },
     {
       "name": "dtx_tabs",

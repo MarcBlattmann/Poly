@@ -19,7 +19,7 @@ rules:
   line_breaks: "Tab, line feed and carriage return have zero width."
   long: "9000 characters of 'A' measure 108000x16: there is no limit at 8192."
   independent: "The measurement does not depend on the text colour, background mode or alignment of the DC."
-  relations: "For installed TrueType families at sizes -9 to -32: the width of a string is the sum of the widths of its characters, its height is tmHeight, a longer prefix is never narrower, GetTextExtentExPointW's last running extent is the total, GetCharWidth32W equals the one-character extent, and the width at twice the size is twice the width within one pixel per character (gte_system)."
+  relations: "For installed TrueType families at sizes -9 to -32: the width of a string is the sum of the widths of its characters, its height is tmHeight, a longer prefix is never narrower, GetTextExtentExPointW's last running extent is the total, GetCharWidth32W equals the one-character extent, and the width at twice the size is twice the width within one pixel per character (gte_scale)."
 errors:
   bad_dc: "A NULL DC: FALSE, ERROR_INVALID_PARAMETER (87); the size is left alone."
   negative_count: "A count of -1 or -5: FALSE, error 87; the size is left alone."

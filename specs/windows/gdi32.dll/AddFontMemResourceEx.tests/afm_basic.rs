@@ -1,7 +1,7 @@
-//! lfEscapement and lfOrientation: text drawn with TextOutW along a rotated baseline
-//! (tenths of a degree, counter-clockwise). The extent GetTextExtentPoint32W reports stays
-//! the unrotated one; the ink of "AB" drawn with the reference point at (30,30) is boxed.
-//! Bi-level text, black on white; the glyphs are rectangles, so quarter turns are exact.
+//! AddFontMemResourceEx and RemoveFontMemResourceEx: a TrueType font the test writes
+//! itself is added from memory, becomes selectable by its family name (GetTextFaceW
+//! reports it, the font's metrics and advance widths apply) and is gone again after
+//! RemoveFontMemResourceEx. The font is private to the process.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1387,37 +1387,45 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn test(t: &mut Test) {
-    setup_fonts();
-    let s = Surf::new(64, 64);
-    for esc in [0, 900, 1800, 2700, 3600, -900] {
-        for orient in [0, 900] {
-            if orient != 0 && esc != 900 && esc != 0 {
-                continue;
-            }
-            let mut lf = logfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
-            lf.escapement = esc;
-            lf.orientation = orient;
-            // SAFETY: filled LOGFONTW.
-            let f = unsafe { CreateFontIndirectW(&lf) };
-            s.clear(0x00FF_FFFF);
-            let old = sel(s.dc, f);
-            let (ex, _) = exta(s.dc, "AB");
-            // SAFETY: GDI calls on our DC.
-            unsafe {
-                SetTextColor(s.dc, 0);
-                SetBkMode(s.dc, TRANSPARENT);
-                TextOutW(s.dc, 30, 30, wz!("AB").as_ptr(), 2);
-            }
-            let (l, tp, r, b, n) = s.ink(0x00FF_FFFF);
-            say!(t, "escapement {esc} orientation {orient}: extent width {ex}; ink {l},{tp},{r},{b} n={n}");
-            if esc == 900 && orient == 0 {
-                s.rows(t, RECT { left: 8, top: 8, right: 52, bottom: 40 }, 0x00FF_FFFF, 0);
-            }
-            sel(s.dc, old);
-            // SAFETY: our font.
-            unsafe { DeleteObject(f) };
-        }
+/// Make a font named `ask`, report what GetTextFaceW says and whether it equals `want`.
+fn probe(t: &mut Test, label: &str, ask: &str, want: &str) -> bool {
+    let s = Surf::new(8, 8);
+    let f = mkfont(ask, -16, NONANTIALIASED_QUALITY);
+    let old = sel(s.dc, f);
+    let (fb, n) = face_of(s.dc);
+    let m = tm_of(s.dc);
+    let (ax, _) = exta(s.dc, "A");
+    let (ex, ey) = exta(s.dc, "AB gi");
+    let w = wchars(want);
+    let same = upto_nul(&fb) == upto_nul(&w);
+    if same {
+        say!(t, "{label}: face '{}' ({n}); height {} ascent {} 'A' {ax} 'AB gi' {ex}x{ey}", W16(upto_nul(&fb)), m.height, m.ascent);
+    } else {
+        say!(t, "{label}: a different face than '{want}' (a substitute)");
     }
+    sel(s.dc, old);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
     s.free();
+    same
+}
+
+fn test(t: &mut Test) {
+    let before = probe(t, "before adding", "PolyTest Mono", "PolyTest Mono");
+    t.check("the family is unknown before the font is added", !before, before as i64);
+    let (h, count) = add_mem(&MONO, 2);
+    say!(t, "AddFontMemResourceEx: handle {} fonts added {}", if h.is_null() { "NULL" } else { "non-NULL" }, count);
+    t.check("a handle comes back", !h.is_null(), 0);
+    t.expect("one font was added", count as i64, 1);
+    let during = probe(t, "after adding", "PolyTest Mono", "PolyTest Mono");
+    t.check("the family is selectable by name after adding", during, during as i64);
+    // a request in other letter case finds the font; the face name reported is the font's own spelling
+    let lower = probe(t, "lower case request", "polytest mono", "PolyTest Mono");
+    t.check("a lower case request finds the font and reports its own spelling", lower, lower as i64);
+    // SAFETY: the handle came from AddFontMemResourceEx.
+    let r = unsafe { RemoveFontMemResourceEx(h) };
+    say!(t, "RemoveFontMemResourceEx returned {r}");
+    t.expect("remove succeeds", r as i64, 1);
+    let after = probe(t, "after removing", "PolyTest Mono", "PolyTest Mono");
+    t.check("the family is unknown again after removing", !after, after as i64);
 }

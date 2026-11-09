@@ -1,7 +1,8 @@
-//! CreateFontIndirectW with unusual input: a NULL LOGFONTW, extreme heights and widths,
-//! negative width, lfEscapement and lfOrientation values, quality and precision values
-//! that are not defined. Each reports whether a font came back and, selected into a DC,
-//! the metrics it measures.
+//! GetTextFaceW: the face name of the font in a DC. The return value counts the characters
+//! copied including the terminating NUL; a count of 0 returns the length needed (with the
+//! NUL) and a NULL buffer is allowed then; a short buffer gets a truncated, NUL-terminated
+//! name; a negative count fails. Also the face names of the stock fonts and of a
+//! font whose requested name was changed by the mapper.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1387,79 +1388,36 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn probe(t: &mut Test, s: &Surf, label: &str, lf: &LOGFONTW) {
-    // SAFETY: filled LOGFONTW.
-    let f = unsafe { CreateFontIndirectW(lf) };
-    if f.is_null() {
-        say!(t, "{label}: no font");
-        return;
+fn get(t: &mut Test, dc: HDC, label: &str, n: i32, buf_units: usize) {
+    let mut b = [0x7777u16; 100];
+    // SAFETY: the buffer holds 100 units; n <= buf_units <= 100 unless a failing case.
+    let (r, e) = unsafe {
+        SetLastError(0);
+        let r = GetTextFaceW(dc, n, if buf_units == 0 { core::ptr::null_mut() } else { b.as_mut_ptr() });
+        (r, GetLastError())
+    };
+    let upto = b.iter().position(|&c| c == 0x7777).unwrap_or(100);
+    if r > 0 {
+        let nul_at = b[..upto].iter().position(|&c| c == 0);
+        say!(t, "{label}: count {n} returned {r} error {e}; text '{}' NUL at {:?}; units written {}", W16(upto_nul(&b)), nul_at, upto);
+    } else {
+        say!(t, "{label}: count {n} returned {r} error {e}; buffer untouched {}", upto == 0);
     }
-    let old = sel(s.dc, f);
-    let m = tm_of(s.dc);
-    let (fb, _) = face_of(s.dc);
-    let (ax, _) = exta(s.dc, "A");
-    say!(t, "{label}: font; face '{}' height {} ascent {} avew {} 'A' {ax}", W16(upto_nul(&fb)), m.height, m.ascent, m.ave_char_width);
-    sel(s.dc, old);
-    // SAFETY: our font.
-    unsafe { DeleteObject(f) };
 }
 
 fn test(t: &mut Test) {
     setup_fonts();
-    // SAFETY: NULL on purpose.
-    let f = unsafe {
-        SetLastError(0);
-        CreateFontIndirectW(core::ptr::null())
-    };
-    // SAFETY: thread-local last error.
-    let e = unsafe { GetLastError() };
-    say!(t, "CreateFontIndirectW(NULL): {} error {e}", if f.is_null() { "NULL" } else { "font" });
     let s = Surf::new(8, 8);
-    let base = || logfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
-    for h in [-1000, -500, 500, 1000] {
-        let mut lf = base();
-        lf.height = h;
-        let label = {
-            let mut b = Buf::<40>::new();
-            let _ = write!(b, "lfHeight {h}");
-            b
-        };
-        probe(t, &s, label.as_str(), &lf);
+    let f = mkfont("PolyTest Sans", -16, NONANTIALIASED_QUALITY);
+    let old = sel(s.dc, f);
+    for n in [100, 14, 13, 12, 5, 2, 1, 0] {
+        get(t, s.dc, "PolyTest Sans (13 characters)", n, 100);
     }
-    for w in [-1, -16, 1000] {
-        let mut lf = base();
-        lf.width = w;
-        let mut b = Buf::<40>::new();
-        let _ = write!(b, "lfWidth {w}");
-        probe(t, &s, b.as_str(), &lf);
-    }
-    for q in [6u8, 7, 100, 255] {
-        let mut lf = base();
-        lf.quality = q;
-        let mut b = Buf::<40>::new();
-        let _ = write!(b, "lfQuality {q}");
-        probe(t, &s, b.as_str(), &lf);
-    }
-    for p in [1u8, 8, 9, 100, 255] {
-        let mut lf = base();
-        lf.out_precision = p;
-        let mut b = Buf::<40>::new();
-        let _ = write!(b, "lfOutPrecision {p}");
-        probe(t, &s, b.as_str(), &lf);
-    }
-    for p in [1u8, 2, 16, 128, 255] {
-        let mut lf = base();
-        lf.clip_precision = p;
-        let mut b = Buf::<40>::new();
-        let _ = write!(b, "lfClipPrecision {p}");
-        probe(t, &s, b.as_str(), &lf);
-    }
-    for w in [-1, 1000, 1001] {
-        let mut lf = base();
-        lf.weight = w;
-        let mut b = Buf::<40>::new();
-        let _ = write!(b, "lfWeight {w}");
-        probe(t, &s, b.as_str(), &lf);
-    }
+    get(t, s.dc, "count 0, NULL buffer", 0, 0);
+    get(t, s.dc, "count -1", -1, 100);
+    get(t, s.dc, "count -100", -100, 100);
+    sel(s.dc, old);
+    // SAFETY: our font.
+    unsafe { DeleteObject(f) };
     s.free();
 }

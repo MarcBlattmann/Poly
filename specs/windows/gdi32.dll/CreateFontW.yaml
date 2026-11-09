@@ -14,7 +14,7 @@ interface:
   signature: "HFONT CreateFontW(int cHeight, int cWidth, int cEscapement, int cOrientation, int cWeight, DWORD bItalic, DWORD bUnderline, DWORD bStrikeOut, DWORD iCharSet, DWORD iOutPrecision, DWORD iClipPrecision, DWORD iQuality, DWORD iPitchAndFamily, LPCWSTR pszFaceName)"
 rules:
   fields: "Each argument lands in the LOGFONTW field of the same position (GetObjectW shows them): the integers as given; bItalic, bUnderline and bStrikeOut narrowed to a byte (5 gives 5, 256 gives 0, 2 gives 2); the face name copied, cut at 31 characters (a 52-character name gives its first 32 characters (LOGFONTW holds 32 units, no terminator)); a NULL face name gives an empty field."
-  same_font: "The font behaves exactly like the one CreateFontIndirectW makes from the same values: the same TEXTMETRICW fields and the same advances for three fonts, seven heights, five width / weight / slant combinations and two qualities (cfw_same)."
+  same_font: "The font behaves exactly like the one CreateFontIndirectW makes from the same values: the same TEXTMETRICW fields and the same advances for three fonts, seven heights, five width / weight / slant combinations and two qualities."
 errors:
   none: "no failing case observed (a NULL face name still gives a font)"
 side_effects: "none beyond the rules above"

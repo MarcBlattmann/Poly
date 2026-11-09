@@ -19,7 +19,7 @@ rules:
   stop: "A callback that returns 0 ends the enumeration, and EnumFontFamiliesExW returns 0; otherwise it returns the last callback value (1)."
   all: "An empty name lists every family (many callbacks, among them the private ones added from files with FR_PRIVATE)."
   private: "Fonts added with AddFontResourceExW(FR_PRIVATE) are listed; with FR_PRIVATE|FR_NOT_ENUM they are not (but can be used); fonts added from memory are not listed (enum_notenum)."
-  installed: "Arial, Times New Roman and Courier New: only faces of that family are listed, all TrueType, with bold and italic faces among them; Courier New's are fixed pitch, Arial's are not; an unknown family lists nothing; the full list has well over ten entries (enum_system)."
+  installed: "Arial, Times New Roman and Courier New: only faces of that family are listed, all TrueType, with bold and italic faces among them; Courier New's are fixed pitch, Arial's are not; an unknown family lists nothing; the full list has well over ten entries."
 errors:
   none: "no failing case observed"
 side_effects: "none beyond the rules above"

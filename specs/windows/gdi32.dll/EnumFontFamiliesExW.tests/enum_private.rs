@@ -1,6 +1,9 @@
-//! CreateFontW and CreateFontIndirectW with the same values give the same font: the metrics
-//! and the advances agree for the private fonts at many heights, weights, slants and
-//! widths; the arguments of CreateFontW are the LOGFONTW fields in declaration order.
+//! EnumFontFamiliesExW with fonts the test adds from files with FR_PRIVATE (fonts added from
+//! memory with AddFontMemResourceEx are usable but not listed, see enum_notenum): a family name in lfFaceName lists the faces
+//! of that family (PolyTest Sans: Regular, Bold, Italic), with the face's LOGFONTW fields,
+//! full name, style, font type and script; an empty name lists one entry per family; a
+//! charset filter; the callback's return value 0 stops the enumeration; the function returns
+//! the last value the callback returned.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1386,63 +1389,158 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn same(t: &mut Test, s: &Surf, face: &str, h: i32, w: i32, weight: i32, italic: u32, under: u32, strike: u32, q: u32) -> bool {
-    let f = wchars(face);
-    // SAFETY: f is NUL-terminated; all arguments are plain integers.
-    let a = unsafe { CreateFontW(h, w, 0, 0, weight, italic, under, strike, 1, 0, 0, q, 0, f.as_ptr()) };
-    let mut lf = logfont(face, h, q as u8);
-    lf.width = w;
-    lf.weight = weight;
-    lf.italic = italic as u8;
-    lf.underline = under as u8;
-    lf.strike_out = strike as u8;
-    // SAFETY: filled LOGFONTW.
-    let b = unsafe { CreateFontIndirectW(&lf) };
-    let old = sel(s.dc, a);
-    let ma = tm_of(s.dc);
-    let (wa, _) = exta(s.dc, "AB gi");
-    sel(s.dc, b);
-    let mb = tm_of(s.dc);
-    let (wb, _) = exta(s.dc, "AB gi");
-    sel(s.dc, old);
-    // SAFETY: our fonts.
-    unsafe {
-        DeleteObject(a);
-        DeleteObject(b);
+struct Seen {
+    n: usize,
+    stop_after: usize,
+    names: [[u16; 32]; 64],
+    full: [[u16; 64]; 64],
+    style: [[u16; 32]; 64],
+    script: [[u16; 32]; 64],
+    ftype: [u32; 64],
+    weight: [i32; 64],
+    italic: [u8; 64],
+    charset: [u8; 64],
+    pitch: [u8; 64],
+}
+
+static FOUND: Global<[u32; 3]> = Global::new([0; 3]);
+
+static SEEN: Global<Seen> = Global::new(Seen {
+    n: 0,
+    stop_after: 0,
+    names: [[0; 32]; 64],
+    full: [[0; 64]; 64],
+    style: [[0; 32]; 64],
+    script: [[0; 32]; 64],
+    ftype: [0; 64],
+    weight: [0; 64],
+    italic: [0; 64],
+    charset: [0; 64],
+    pitch: [0; 64],
+});
+
+unsafe extern "system" fn cb(lf: *const ENUMLOGFONTEXW, _tm: *const c_void, ftype: u32, _lp: isize) -> i32 {
+    let s = SEEN.get();
+    // SAFETY: GDI passes a valid ENUMLOGFONTEXW.
+    let e = unsafe { &*lf };
+    for (i, nm) in ["PolyTest Sans", "PolyTest Tall", "PolyTest Mono"].iter().enumerate() {
+        if upto_nul(&e.lf.face) == upto_nul(&wchars(nm)) {
+            FOUND.get()[i] += 1;
+        }
     }
-    let ok = ma.height == mb.height
-        && ma.ascent == mb.ascent
-        && ma.descent == mb.descent
-        && ma.internal_leading == mb.internal_leading
-        && ma.external_leading == mb.external_leading
-        && ma.ave_char_width == mb.ave_char_width
-        && ma.max_char_width == mb.max_char_width
-        && ma.weight == mb.weight
-        && ma.italic == mb.italic
-        && ma.underlined == mb.underlined
-        && ma.struck_out == mb.struck_out
-        && wa == wb;
-    let _ = t;
-    ok
+    if s.n < 64 {
+        let k = s.n;
+        s.names[k] = e.lf.face;
+        s.full[k] = e.full_name;
+        s.style[k] = e.style;
+        s.script[k] = e.script;
+        s.ftype[k] = ftype;
+        s.weight[k] = e.lf.weight;
+        s.italic[k] = e.lf.italic;
+        s.charset[k] = e.lf.char_set;
+        s.pitch[k] = e.lf.pitch_and_family;
+    }
+    s.n += 1;
+    if s.stop_after != 0 && s.n >= s.stop_after {
+        0
+    } else {
+        1
+    }
+}
+
+fn enumerate(dc: HDC, face: &str, charset: u8, stop_after: usize) -> (i32, usize) {
+    let s = SEEN.get();
+    s.n = 0;
+    s.stop_after = stop_after;
+    let lf = logfont(face, 0, DEFAULT_QUALITY);
+    let mut lf = lf;
+    lf.char_set = charset;
+    // SAFETY: lf filled; cb has the right signature.
+    let r = unsafe { EnumFontFamiliesExW(dc, &lf, cb, 0, 0) };
+    (r, s.n)
+}
+
+fn dump(t: &mut Test, label: &str, r: i32, n: usize) {
+    let s = SEEN.get();
+    say!(t, "{label}: EnumFontFamiliesExW returned {r}, callback called {n} times");
+    for k in 0..n.min(64) {
+        say!(
+            t,
+            "  [{k}] face '{}' full '{}' style '{}' script '{}' type {} weight {} italic {} charset {} pitchfam 0x{:02x}",
+            W16(upto_nul(&s.names[k])),
+            W16(upto_nul(&s.full[k])),
+            W16(upto_nul(&s.style[k])),
+            W16(upto_nul(&s.script[k])),
+            s.ftype[k],
+            s.weight[k],
+            s.italic[k],
+            s.charset[k],
+            s.pitch[k]
+        );
+    }
+}
+
+fn add_file(def: &FontDef, slot: usize, name: &[u16]) -> DosPath {
+    let p = write_scratch(name, font_file(def, slot));
+    // SAFETY: path is NUL-terminated.
+    let n = unsafe { AddFontResourceExW(p.ptr(), FR_PRIVATE, core::ptr::null_mut()) };
+    let _ = n;
+    p
+}
+
+fn remove_file(p: &DosPath, name: &[u16]) {
+    // SAFETY: path is NUL-terminated.
+    unsafe { RemoveFontResourceExW(p.ptr(), FR_PRIVATE, core::ptr::null_mut()) };
+    delete_scratch(name);
 }
 
 fn test(t: &mut Test) {
-    setup_fonts();
+    let n1: &[u16] = wz!("e1.ttf");
+    let n2: &[u16] = wz!("e2.ttf");
+    let n3: &[u16] = wz!("e3.ttf");
+    let n4: &[u16] = wz!("e4.ttf");
+    let n5: &[u16] = wz!("e5.ttf");
+    let p1 = add_file(&SANS, 0, n1);
+    let p2 = add_file(&SANS_BOLD, 1, n2);
+    let p3 = add_file(&SANS_ITALIC, 2, n3);
+    let p4 = add_file(&TALL, 3, n4);
+    let p5 = add_file(&MONO, 4, n5);
     let s = Surf::new(8, 8);
-    let mut all = true;
-    let mut n = 0;
-    for face in ["PolyTest Sans", "PolyTest Tall", "PolyTest Mono"] {
-        for h in [-8, -12, -16, -24, 12, 16, 0] {
-            for (w, weight, it) in [(0, 400, 0), (0, 700, 0), (0, 400, 1), (10, 400, 0), (6, 700, 1)] {
-                for q in [3u32, 4] {
-                    all &= same(t, &s, face, h, w, weight, it, 0, 0, q);
-                    n += 1;
-                }
-            }
-        }
-    }
-    all &= same(t, &s, "PolyTest Sans", -16, 0, 400, 0, 1, 1, 3);
-    say!(t, "{n} combinations: CreateFontW and CreateFontIndirectW agree on every metric and the advances: {all}");
-    t.check("the two calls agree for every combination", all, 0);
+    let (r, n) = enumerate(s.dc, "PolyTest Sans", DEFAULT_CHARSET, 0);
+    dump(t, "PolyTest Sans, DEFAULT_CHARSET", r, n);
+    t.expect("PolyTest Sans has three faces", n as i64, 3);
+    let (r, n) = enumerate(s.dc, "PolyTest Tall", DEFAULT_CHARSET, 0);
+    dump(t, "PolyTest Tall, DEFAULT_CHARSET", r, n);
+    t.expect("PolyTest Tall has one face", n as i64, 1);
+    let (r, n) = enumerate(s.dc, "PolyTest Mono", ANSI_CHARSET, 0);
+    dump(t, "PolyTest Mono, ANSI_CHARSET", r, n);
+    let (r, n) = enumerate(s.dc, "PolyTest Mono", SYMBOL_CHARSET, 0);
+    dump(t, "PolyTest Mono, SYMBOL_CHARSET", r, n);
+    let (r, n) = enumerate(s.dc, "polytest tall", DEFAULT_CHARSET, 0);
+    dump(t, "lower case name", r, n);
+    let (r, n) = enumerate(s.dc, "PolyTest", DEFAULT_CHARSET, 0);
+    dump(t, "prefix of a name", r, n);
+    let (r, n) = enumerate(s.dc, "NoSuchFamilyAnywhere", DEFAULT_CHARSET, 0);
+    dump(t, "no such family", r, n);
+    t.expect("an unknown family is never called back", n as i64, 0);
+    // stop after the first call
+    let (r, n) = enumerate(s.dc, "PolyTest Sans", DEFAULT_CHARSET, 1);
+    dump(t, "stop after the first call", r, n);
+    t.expect("returning 0 stops the enumeration", n as i64, 1);
+    // all families
+    *FOUND.get() = [0; 3];
+    let (r, n) = enumerate(s.dc, "", DEFAULT_CHARSET, 0);
+    let found = {
+        let f = FOUND.get();
+        [f[0] > 0, f[1] > 0, f[2] > 0]
+    };
+    let dup = false;
+    say!(t, "all families (empty name): returned {r}, more than 3 callbacks: {}, PolyTest families found {:?}", n > 3, found);
+    t.check("the three private families are among the families listed", found[0] && found[1] && found[2], 0);
     s.free();
+    remove_file(&p1, n1);
+    remove_file(&p2, n2);
+    remove_file(&p3, n3);
+    remove_file(&p4, n4);
+    remove_file(&p5, n5);
 }

@@ -1,7 +1,7 @@
-//! AddFontMemResourceEx with arguments that are not a font: NULL, length 0, bytes that
-//! are not a font, a font cut short, a missing count pointer, a non-zero reserved
-//! argument. Each case reports the return value (NULL or not), the count and the
-//! last error; a font that was added is removed again.
+//! GetCharWidth32W with PolyTest Sans (and Mono, Tall): single characters, a range that
+//! includes characters the font lacks, the same widths as GetTextExtentPoint32W of the
+//! single character, the width of a character beyond the Basic Latin block, and the older
+//! GetCharWidthW for comparison.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_snake_case, non_camel_case_types, unused_imports, unused_macros, unused_mut, clippy::all)]
@@ -1387,61 +1387,66 @@ impl Txt {
 poly_wtest::main!(test);
 
 
-fn try_add(t: &mut Test, label: &str, data: *const u8, len: u32, reserved: *mut c_void, with_count: bool) {
-    let mut count = 0x7777u32;
-    // SAFETY: data/len describe memory of this test or are NULL/0 on purpose.
-    let h = unsafe {
+fn range(t: &mut Test, dc: HDC, label: &str, first: u32, last: u32) {
+    let mut out = [0x5A5Ai32; 300];
+    // SAFETY: the buffer holds 300 values; the callers keep (last-first+1) <= 300.
+    let (r, e) = unsafe {
         SetLastError(0);
-        AddFontMemResourceEx(data as *const c_void, len, reserved, if with_count { &mut count } else { core::ptr::null_mut() })
+        let r = GetCharWidth32W(dc, first, last, out.as_mut_ptr());
+        (r, GetLastError())
     };
-    // SAFETY: thread-local last error.
-    let e = unsafe { GetLastError() };
-    say!(t, "{label}: handle {} count {} error {e}", if h.is_null() { "NULL" } else { "non-NULL" }, count);
-    if !h.is_null() {
-        // SAFETY: the handle came from AddFontMemResourceEx.
-        unsafe { RemoveFontMemResourceEx(h) };
+    let n = if r != 0 { (last - first + 1) as usize } else { 0 };
+    let mut line = Buf::<400>::new();
+    let _ = write!(line, "{label} [{first:#x}..{last:#x}]: returned {r} error {e}:");
+    for v in &out[..n.min(40)] {
+        let _ = write!(line, " {v}");
     }
+    if n > 40 {
+        let _ = write!(line, " ...");
+    }
+    t.line(line.as_str());
 }
 
 fn test(t: &mut Test) {
-    let f = font_file(&SANS, 0);
-    let (p, n) = (f.as_ptr(), f.len() as u32);
-    try_add(t, "valid font", p, n, core::ptr::null_mut(), true);
-    try_add(t, "NULL data", core::ptr::null(), n, core::ptr::null_mut(), true);
-    try_add(t, "length 0", p, 0, core::ptr::null_mut(), true);
-    try_add(t, "length 1", p, 1, core::ptr::null_mut(), true);
-    try_add(t, "first 100 bytes only", p, 100, core::ptr::null_mut(), true);
-    try_add(t, "first half only", p, n / 2, core::ptr::null_mut(), true);
-    try_add(t, "valid font, count pointer NULL", p, n, core::ptr::null_mut(), false);
-    let mut junk = [0u8; 600];
-    for (i, b) in junk.iter_mut().enumerate() {
-        *b = (i * 7 + 3) as u8;
-    }
-    try_add(t, "bytes that are not a font", junk.as_ptr(), junk.len() as u32, core::ptr::null_mut(), true);
-    let zeros = [0u8; 600];
-    try_add(t, "600 zero bytes", zeros.as_ptr(), zeros.len() as u32, core::ptr::null_mut(), true);
-    let mut dummy = 0u32;
-    try_add(t, "valid font, reserved argument non-NULL", p, n, &mut dummy as *mut u32 as *mut c_void, true);
-    // a font whose first four bytes (the sfnt version) are wrong
-    let mut bad = [0u8; FONT_SLOT_BYTES];
-    bad[..f.len()].copy_from_slice(f);
-    bad[0] = 0x7F;
-    try_add(t, "valid font with a wrong sfnt version", bad.as_ptr(), n, core::ptr::null_mut(), true);
-    // a font with a wrong table checksum (head's checkSumAdjustment)
-    let mut bad2 = [0u8; FONT_SLOT_BYTES];
-    bad2[..f.len()].copy_from_slice(f);
-    for i in 12..12 + 160 {
-        // the directory entry of 'head' holds its offset at +8
-        if &bad2[i..i + 4] == b"head" {
-            let off = u32::from_be_bytes([bad2[i + 8], bad2[i + 9], bad2[i + 10], bad2[i + 11]]) as usize;
-            bad2[off + 8] ^= 0xFF;
-            break;
+    setup_fonts();
+    let s = Surf::new(8, 8);
+    for (face, h) in [("PolyTest Sans", -16), ("PolyTest Sans", -12), ("PolyTest Mono", -16), ("PolyTest Tall", -16)] {
+        let f = mkfont(face, h, NONANTIALIASED_QUALITY);
+        let old = sel(s.dc, f);
+        let mut b = Buf::<60>::new();
+        let _ = write!(b, "{face} {h}");
+        range(t, s.dc, b.as_str(), 0x41, 0x41);
+        range(t, s.dc, b.as_str(), 0x41, 0x42);
+        range(t, s.dc, b.as_str(), 0x41, 0x4D);
+        range(t, s.dc, b.as_str(), 0x20, 0x2E);
+        range(t, s.dc, b.as_str(), 0x5A, 0x5A);
+        range(t, s.dc, b.as_str(), 0xE9, 0xE9);
+        range(t, s.dc, b.as_str(), 0x20AC, 0x20AC);
+        range(t, s.dc, b.as_str(), 0x20AB, 0x20AD);
+        range(t, s.dc, b.as_str(), 0x00, 0x1F);
+        range(t, s.dc, b.as_str(), 0xFF, 0x101);
+        // every width equals the single-character extent
+        let mut same = true;
+        for cp in [0x20u32, 0x26, 0x2D, 0x2E, 0x41, 0x42, 0x4D, 0x57, 0x5C, 0x67, 0x69, 0xE9, 0x20AC] {
+            let mut w = [0i32; 1];
+            // SAFETY: one value fits.
+            unsafe { GetCharWidth32W(s.dc, cp, cp, w.as_mut_ptr()) };
+            same &= w[0] == ext(s.dc, &[cp as u16]).0;
         }
+        say!(t, "{b} widths equal GetTextExtentPoint32W of the character: {same}", b = b.as_str());
+        t.check("GetCharWidth32W equals the one-character extent", same, 0);
+        // GetCharWidthW
+        let mut w1 = [0i32; 2];
+        let mut w2 = [0i32; 2];
+        // SAFETY: two values fit.
+        unsafe {
+            GetCharWidthW(s.dc, 0x41, 0x42, w1.as_mut_ptr());
+            GetCharWidth32W(s.dc, 0x41, 0x42, w2.as_mut_ptr());
+        }
+        say!(t, "GetCharWidthW A,B = {},{}; GetCharWidth32W A,B = {},{}", w1[0], w1[1], w2[0], w2[1]);
+        sel(s.dc, old);
+        // SAFETY: our font.
+        unsafe { DeleteObject(f) };
     }
-    try_add(t, "valid font with a wrong checkSumAdjustment", bad2.as_ptr(), n, core::ptr::null_mut(), true);
-    // the font is still usable afterwards, and nothing of the failed adds remains
-    let (h, c) = add_mem(&SANS, 0);
-    t.check("a valid add still works afterwards", !h.is_null() && c == 1, c as i64);
-    // SAFETY: handle from AddFontMemResourceEx.
-    unsafe { RemoveFontMemResourceEx(h) };
+    s.free();
 }
