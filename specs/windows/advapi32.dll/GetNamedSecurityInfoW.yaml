@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/GetNamedSecurityInfoW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-chrome-win-2
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Reads the security of an object found by name (file, registry key, ...). A
+  self-relative descriptor is allocated with LocalAlloc and returned in *sd;
+  the owner, group, DACL and SACL pointers point inside it. The result is a
+  Win32 error code (0 on success).
+interface:
+  signature: "DWORD GetNamedSecurityInfoW(LPCWSTR object_name, SE_OBJECT_TYPE object_type, SECURITY_INFORMATION info, PSID* owner, PSID* group, PACL* dacl, PACL* sacl, PSECURITY_DESCRIPTOR* sd)"
+  object_types: "SE_FILE_OBJECT 1, SE_SERVICE 2, SE_PRINTER 3, SE_REGISTRY_KEY 4, SE_LMSHARE 5, SE_KERNEL_OBJECT 6, SE_WINDOW_OBJECT 7 (accctrl.h)"
+  security_information: "OWNER 1, GROUP 2, DACL 4, SACL 8, LABEL 0x10, PROTECTED_DACL 0x80000000, UNPROTECTED_DACL 0x20000000 (winnt.h)"
+rules:
+  pointers: "only the output pointers matching the requested information are written: with DACL only, owner, group and sacl are left untouched and the dacl and sd pointers are set; with OWNER|GROUP, dacl and sacl stay untouched; the sd pointer is set whenever the call succeeds, also with information 0"
+  sacl_and_label: "a request for the SACL or the LABEL on a file by an elevated administrator (with SeSecurityPrivilege available) succeeds and returns a NULL SACL pointer when there is no SACL; unknown information bits (0x100) are ignored (result 0)"
+  file_dacl: "for a file or directory whose DACL was set with SetNamedSecurityInfoW the ACEs come back exactly: [allow SYSTEM 0x1F01FF, allow Administrators 0x1F01FF, allow Everyone 0x120089] with flags 0 on the file and flags 3 (OBJECT_INHERIT|CONTAINER_INHERIT) on the directory; ACL revision 2, size 72"
+  owner_group: "a file created by an elevated administrator has owner BUILTIN\\Administrators (S-1-5-32-544) and primary group S-1-5-21-<machine>-513 (\"None\")"
+  registry: "registry keys are named \"MACHINE\\SOFTWARE\", \"CLASSES_ROOT\", \"CURRENT_USER\", \"USERS\": the DACL and (for HKLM\\SOFTWARE) the owner come back; a missing key fails with 2; an unknown root (\"NOSUCHROOT\\SOFTWARE\") fails with 87"
+  file_names: "drive roots (\"C:\\\\\") and device paths (\"\\\\\\\\.\\\\C:\") are accepted for files"
+errors:
+  missing_file: "ERROR_FILE_NOT_FOUND (2); a missing directory in the path: ERROR_PATH_NOT_FOUND (3)"
+  empty_name: "ERROR_INVALID_NAME (123) for a file, ERROR_INVALID_PARAMETER (87) for a registry key"
+  object_type: "type 0, type 99 and the registry type for a file path: ERROR_INVALID_PARAMETER (87)"
+  kernel_name: "SE_KERNEL_OBJECT with a name (\"Local\\\\PolyNoSuchEvent\"): ERROR_FILE_NOT_FOUND (2)"
+side_effects: "allocates the descriptor (LocalAlloc) that the caller frees with LocalFree"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  services, printers, shares, window objects, the DS, remote names, owner
+  and group SIDs of other users. Domain accounts and domain-relative
+  well-known SIDs of a real domain, AppContainer and capability SIDs beyond
+  their string forms, auditing (SACL entries are only stored, never
+  evaluated), remote systems (the system-name arguments), Kerberos or NTLM
+  logon tokens, tokens of other users.

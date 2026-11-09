@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "db56e24d0ac3",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T17:08:29Z",
+  "tests": [
+    {
+      "name": "lan_sizes",
+      "exe_sha256": "65199c259cd165fab973b409b3ae19d1c40e8282b555ddcacf227bd77d5e3402",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U1lTVEVNIGV4YWN0ICgxMiArIDEyICsgTlVMKTogb2s9MSBlcnI9LTEgY2Jfc2lkPTEyIGNjaF9kb21haW49MTIgdXNlPTB4NSBzaWQwPTB4MSBkb20wPTB4NGUKU0lEIGJ1ZmZlciBvbmUgdG9vIHNtYWxsOiBvaz0wIGVycj0xMjIgY2Jfc2lkPTEyIGNjaF9kb21haW49MTMgdXNlPTB4ZGVhZCBzaWQwPTB4MCBkb20wPTB4YWFhYQpkb21haW4gYnVmZmVyIG9uZSB0b28gc21hbGw6IG9rPTAgZXJyPTEyMiBjYl9zaWQ9MTIgY2NoX2RvbWFpbj0xMyB1c2U9MHhkZWFkIHNpZDA9MHgwIGRvbTA9MHhhYWFhCmJvdGggemVybzogb2s9MCBlcnI9MTIyIGNiX3NpZD0xMiBjY2hfZG9tYWluPTEzIHVzZT0weGRlYWQgc2lkMD0weDAgZG9tMD0weGFhYWEKYm90aCB6ZXJvLCBudWxsIGJ1ZmZlcnM6IG9rPTAgZXJyPTEyMiBjYl9zaWQ9MTIgY2NoX2RvbWFpbj0xMyB1c2U9MHhkZWFkIHNpZDA9MHgwIGRvbTA9MHhhYWFhCkV2ZXJ5b25lOiBlbXB0eSBkb21haW46IG9rPTEgZXJyPS0xIGNiX3NpZD02NCBjY2hfZG9tYWluPTAgdXNlPTB4NSBzaWQwPTB4MSBkb20wPTB4MApFdmVyeW9uZTogZG9tYWluIHNpemUgemVybzogb2s9MCBlcnI9MTIyIGNiX3NpZD0xMiBjY2hfZG9tYWluPTEgdXNlPTB4ZGVhZCBzaWQwPTB4MCBkb20wPTB4YWFhYQp1bmtub3duIG5hbWU6IG9rPTAgZXJyPTEzMzIgY2Jfc2lkPTY0IGNjaF9kb21haW49NjQgdXNlPTB4ZGVhZCBzaWQwPTB4MCBkb20wPTB4YWFhYQp1bmtub3duIG5hbWUsIHplcm8gc2l6ZXM6IG9rPTAgZXJyPTEzMzIgY2Jfc2lkPTAgY2NoX2RvbWFpbj0wIHVzZT0weGRlYWQgc2lkMD0weDAgZG9tMD0weGFhYWEKdW5rbm93biBkb21haW4gcHJlZml4OiBvaz0wIGVycj0xMzMyIGNiX3NpZD02NCBjY2hfZG9tYWluPTY0IHVzZT0weGRlYWQgc2lkMD0weDAgZG9tMD0weGFhYWEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SYSTEM exact (12 + 12 + NUL): ok=1 err=-1 cb_sid=12 cch_domain=12 use=0x5 sid0=0x1 dom0=0x4e\nSID buffer one too small: ok=0 err=122 cb_sid=12 cch_domain=13 use=0xdead sid0=0x0 dom0=0xaaaa\ndomain buffer one too small: ok=0 err=122 cb_sid=12 cch_domain=13 use=0xdead sid0=0x0 dom0=0xaaaa\nboth zero: ok=0 err=122 cb_sid=12 cch_domain=13 use=0xdead sid0=0x0 dom0=0xaaaa\nboth zero, null buffers: ok=0 err=122 cb_sid=12 cch_domain=13 use=0xdead sid0=0x0 dom0=0xaaaa\nEveryone: empty domain: ok=1 err=-1 cb_sid=64 cch_domain=0 use=0x5 sid0=0x1 dom0=0x0\nEveryone: domain size zero: ok=0 err=122 cb_sid=12 cch_domain=1 use=0xdead sid0=0x0 dom0=0xaaaa\nunknown name: ok=0 err=1332 cb_sid=64 cch_domain=64 use=0xdead sid0=0x0 dom0=0xaaaa\nunknown name, zero sizes: ok=0 err=1332 cb_sid=0 cch_domain=0 use=0xdead sid0=0x0 dom0=0xaaaa\nunknown domain prefix: ok=0 err=1332 cb_sid=64 cch_domain=64 use=0xdead sid0=0x0 dom0=0xaaaa\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}
