@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "ntpipe_open",
+      "exe_sha256": "3ba940ab318c86853dc3d6b2ea4db2848427d8bce5b6971df6648c3798e94c8c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgbWlzc2luZ19zdGF0dXMKb2sgbWlzc2luZ19ub19oYW5kbGUKb2sgc2VydmVyX2NyZWF0ZWQKb2sgbGlzdGVuaW5nX29wZW5fc3RhdHVzCm9rIGNsaWVudF9zdGFydHNfYnl0ZV93YWl0Cm9rIGJ1c3lfb3Blbl9zdGF0dXMKb2sgYnVzeV9ub19oYW5kbGUKb2sgY2xvc2luZ19vcGVuX3N0YXR1cwpvayBjbG9zaW5nX25vX2hhbmRsZQp2YWx1ZSByZWFkZXJfb25faW5ib3VuZF9zdGF0dXMgMHhjMDAwMDAyMgpvayByZWFkZXJfb25faW5ib3VuZF9ub19oYW5kbGUKb2sgd3JpdGVyX29uX2luYm91bmRfc3RhdHVzCnZhbHVlIHN1cGVyc2VkZV9zdGF0dXMgMHgwCnZhbHVlIGNyZWF0ZV9zdGF0dXMgMHgwCnZhbHVlIG9wZW5faWZfc3RhdHVzIDB4MAp2YWx1ZSBvdmVyd3JpdGVfc3RhdHVzIDB4MAp2YWx1ZSBvdmVyd3JpdGVfaWZfc3RhdHVzIDB4MApvayBrMzJfb3Blbl9zdGF0dXMKb2sgazMyX2NsaWVudF9pbmZvX29rCm9rIGszMl9jbGllbnRfaW5mb19mbGFncwpvayBrMzJfd3JpdGUKb2sgazMyX3JlYWQKc3VtbWFyeSAxNiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok missing_status\nok missing_no_handle\nok server_created\nok listening_open_status\nok client_starts_byte_wait\nok busy_open_status\nok busy_no_handle\nok closing_open_status\nok closing_no_handle\nvalue reader_on_inbound_status 0xc0000022\nok reader_on_inbound_no_handle\nok writer_on_inbound_status\nvalue supersede_status 0x0\nvalue create_status 0x0\nvalue open_if_status 0x0\nvalue overwrite_status 0x0\nvalue overwrite_if_status 0x0\nok k32_open_status\nok k32_client_info_ok\nok k32_client_info_flags\nok k32_write\nok k32_read\nsummary 16 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

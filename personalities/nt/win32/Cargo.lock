@@ -28,6 +28,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bcryptprimitives"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-cryptrt",
+]
+
+[[package]]
 name = "contest"
 version = "0.0.1"
 dependencies = [

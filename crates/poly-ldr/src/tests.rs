@@ -408,12 +408,16 @@ fn missing_dlls_and_symbols_fail_and_leave_nothing() {
     assert_eq!(w.l.load(&mut w.p, &wide("nothere.dll"), None).unwrap_err(), STATUS_DLL_NOT_FOUND);
     w.p.file("C:\\app\\n.dll", needs(Sym::name("Real")).write());
     assert_eq!(w.l.load(&mut w.p, &wide("n.dll"), None).unwrap_err(), STATUS_DLL_NOT_FOUND, "t.dll is missing");
+    assert!(w.l.take_note().unwrap().contains("n.dll: cannot load t.dll"));
     assert_eq!((w.p.images(), w.p.heap_blocks()), (images, heap), "n.dll was taken back");
     w.p.file("C:\\app\\t.dll", t.write());
     w.p.file("C:\\app\\n.dll", needs(Sym::name("Unreal")).write());
     assert_eq!(w.l.load(&mut w.p, &wide("n.dll"), None).unwrap_err(), STATUS_ENTRYPOINT_NOT_FOUND);
+    let note = w.l.take_note().unwrap();
+    assert!(note.contains("t.dll!Unreal not found") && note.contains("n.dll"), "{note}");
     w.p.file("C:\\app\\n.dll", needs(Sym::Ordinal(77)).write());
     assert_eq!(w.l.load(&mut w.p, &wide("n.dll"), None).unwrap_err(), STATUS_ORDINAL_NOT_FOUND);
+    assert!(w.l.take_note().unwrap().contains("t.dll!#77"));
     assert_eq!((w.p.images(), w.p.heap_blocks()), (images, heap), "t.dll and n.dll were both taken back");
     assert_eq!(w.l.modules().len(), 2);
     let ldr = w.l.ldr_data();
@@ -421,6 +425,9 @@ fn missing_dlls_and_symbols_fail_and_leave_nothing() {
     // A process whose static import is missing cannot start.
     let mut w = world(&exe(vec![imports("gone.dll", &[Sym::name("X")])]).write());
     assert_eq!(w.l.process_init(&mut w.p, w.exe, TEB).unwrap_err(), STATUS_DLL_NOT_FOUND);
+    let note = w.l.take_note().unwrap();
+    assert!(note.contains("cannot load gone.dll"), "{note}");
+    assert_eq!(w.l.take_note(), None, "a note is given once");
 }
 
 #[test]
@@ -785,4 +792,65 @@ fn ldr_entries_carry_names_and_headers() {
     assert_eq!(read_u64(&mut w.p, e + ENTRY_SIZE_OF_IMAGE).unwrap(), w.l.module(w.ntdll).unwrap().size);
     assert_eq!(read_u32(&mut w.p, e + ENTRY_TIME_DATE_STAMP).unwrap(), 0x5000_0000);
     assert_eq!(w.l.module(w.ntdll).unwrap().record, e);
+}
+
+#[test]
+fn imports_that_do_not_bind_go_to_stubs_when_the_stub_dll_is_there() {
+    // t.dll lacks `Unreal`; gone.dll does not exist; polystub.dll has a
+    // stub for each, named as the loader asks (ADR 0155).
+    let t = dll("t.dll", 0x1_8300_0000, named(&[("Real", 0x1080)]), vec![]);
+    let stubs = dll(
+        "polystub.dll",
+        0x1_8900_0000,
+        named(&[("gone$#7", 0x1100), ("gone$X", 0x1090), ("t$Unreal", 0x10a0)]),
+        vec![],
+    );
+    let e = exe(vec![
+        imports("gone.dll", &[Sym::name("X"), Sym::Ordinal(7)]),
+        imports("T.DLL", &[Sym::name("Real"), Sym::name("Unreal")]),
+    ]);
+    let mut w = world(&e.write());
+    w.p.file("C:\\app\\t.dll", t.write());
+    // Without the stub DLL the import fails as before.
+    assert_eq!(w.l.process_init(&mut w.p, w.exe, TEB).unwrap_err(), STATUS_DLL_NOT_FOUND);
+    let mut w = world(&e.write());
+    w.p.file("C:\\app\\t.dll", t.write());
+    w.p.file("C:\\app\\polystub.dll", stubs.write());
+    w.l.process_init(&mut w.p, w.exe, TEB).unwrap();
+    let sb = base_of(&w, "polystub.dll");
+    assert_eq!(iat(&mut w, &e, 0, 0), sb + 0x1090);
+    assert_eq!(iat(&mut w, &e, 0, 1), sb + 0x1100);
+    assert_eq!(iat(&mut w, &e, 1, 0), base_of(&w, "t.dll") + 0x1080, "a function Poly has is not stubbed");
+    assert_eq!(iat(&mut w, &e, 1, 1), sb + 0x10a0);
+    assert_eq!(w.l.take_stubbed(), ["test.exe: gone.dll!X", "test.exe: gone.dll!#7", "test.exe: T.DLL!Unreal"]);
+    // A function the stub DLL lacks still fails the load.
+    let e2 = exe(vec![imports("gone.dll", &[Sym::name("Unknown")])]);
+    let mut w = world(&e2.write());
+    w.p.file("C:\\app\\polystub.dll", stubs.write());
+    assert_eq!(w.l.process_init(&mut w.p, w.exe, TEB).unwrap_err(), STATUS_DLL_NOT_FOUND);
+}
+
+#[test]
+fn delay_load_imports_go_to_stubs_too() {
+    let stubs = dll("polystub.dll", 0x1_8900_0000, named(&[("late$Add", 0x1090), ("late$Mul", 0x10a0)]), vec![]);
+    let e = PeBuilder {
+        delay_imports: vec![Import {
+            dll: "late.dll".into(),
+            symbols: vec![Sym::name("Mul"), Sym::name("Add")],
+            bound: None,
+            delay_thunks: vec![0x1040, 0x1048],
+        }],
+        ..exe(vec![])
+    };
+    let mut w = world(&e.write());
+    w.p.file("C:\\app\\polystub.dll", stubs.write());
+    w.l.process_init(&mut w.p, w.exe, TEB).unwrap();
+    let l = e.layout();
+    let parent = e.image_base;
+    let descriptor = parent + u64::from(l.delay_descriptors[0]);
+    let slot = parent + u64::from(l.delay_iat[0][0]);
+    let (addr, _op) = w.l.resolve_delay(&mut w.p, parent, descriptor, slot).map_err(|f| f.status).unwrap();
+    assert_eq!(addr, base_of(&w, "polystub.dll") + 0x10a0);
+    assert_eq!(read_u64(&mut w.p, slot).unwrap(), addr, "the slot holds the stub");
+    assert_eq!(w.l.take_stubbed(), ["test.exe: late.dll!Mul"]);
 }

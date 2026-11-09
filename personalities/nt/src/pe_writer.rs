@@ -220,9 +220,9 @@ mod tests {
         let prot: Vec<u32> = img.pages.iter().map(|p| p.value()).collect();
         assert_eq!(prot, [PAGE_READONLY, PAGE_EXECUTE_READ, PAGE_WRITECOPY, PAGE_WRITECOPY, PAGE_READONLY]);
         let moved = img.relocated(0x2_0000_0000).unwrap();
-        let slot = u64::from_le_bytes(moved[0x2008..0x2010].try_into().unwrap());
+        let slot = u64::from_le_bytes(moved.held().unwrap()[0x2008..0x2010].try_into().unwrap());
         assert_eq!(slot, 0x2_0000_1000);
-        assert_eq!(&img.image[0x2008..0x2010], &0x1_4000_1000u64.to_le_bytes());
+        assert_eq!(&img.image.held().unwrap()[0x2008..0x2010], &0x1_4000_1000u64.to_le_bytes());
     }
 
     #[test]
@@ -239,5 +239,71 @@ mod tests {
         let img = ImageSection::from_file(&sample(true).write()).unwrap();
         assert!(!img.relocatable());
         assert!(img.relocated(0x2_0000_0000).is_err());
+    }
+
+    /// A big image is read a page at a time (ADR 0155): the lazy image
+    /// reads exactly as the one laid out in memory, at its preferred base
+    /// and relocated, including a value that crosses a page boundary and a
+    /// relocation of a 4-byte value.
+    #[test]
+    fn a_lazy_image_reads_like_a_held_one() {
+        use crate::image::{FileBytes, ImageBytes};
+        let mut data = vec![0u8; 0x3000];
+        for (i, b) in data.iter_mut().enumerate() {
+            *b = (i % 251) as u8;
+        }
+        data[0x8..0x10].copy_from_slice(&(0x1_4000_1000u64).to_le_bytes());
+        // A value that crosses into the next page, and one that fills the
+        // end of a page.
+        data[0xffc..0x1004].copy_from_slice(&(0x1_4000_2222u64).to_le_bytes());
+        data[0x1ff8..0x2000].copy_from_slice(&(0x1_4000_3333u64).to_le_bytes());
+        let img = PeImage {
+            image_base: 0x1_4000_0000,
+            entry: 0x1000,
+            sections: vec![
+                PeSection { name: *b".text   ", data: vec![0xC3; 0x20], virtual_size: 0x20, characteristics: TEXT },
+                PeSection { name: *b".data   ", data, virtual_size: 0x4000, characteristics: DATA },
+            ],
+            relocations: vec![0x2008, 0x2ffc, 0x3ff8],
+            fixed: false,
+            stack_reserve: 0x10_0000,
+            stack_commit: 0x1000,
+        };
+        let file = img.write();
+        let held = ImageSection::from_file(&file).unwrap();
+        let lazy = ImageSection::lazy(alloc::sync::Arc::new(FileBytes(file.into()))).unwrap();
+        assert_eq!((held.size, &held.pages), (lazy.size, &lazy.pages));
+        let all = |i: &dyn ImageBytes| {
+            let mut v = vec![0u8; i.len() as usize];
+            assert_eq!(i.read_at(0, &mut v), v.len());
+            v
+        };
+        let same = |what: &str, a: Vec<u8>, b: Vec<u8>| {
+            assert_eq!(a.len(), b.len(), "{what}: lengths");
+            let first = a.iter().zip(&b).position(|(x, y)| x != y);
+            assert!(
+                first.is_none(),
+                "{what}: first difference at {:#x} ({:#x} vs {:#x})",
+                first.unwrap_or(0),
+                a[first.unwrap_or(0)],
+                b[first.unwrap_or(0)]
+            );
+        };
+        same("at the preferred base", all(held.image.as_ref()), all(lazy.image.as_ref()));
+        for base in [0x2_0000_0000u64, 0x1_3fff_f000, 0x7ff0_0000_0000] {
+            let (a, b) = (held.relocated(base).unwrap(), lazy.relocated(base).unwrap());
+            same(&alloc::format!("relocated to {base:#x}"), all(a.as_ref()), all(b.as_ref()));
+            // And read in odd pieces.
+            let mut piece = [0u8; 100];
+            assert_eq!(b.read_at(0xff0, &mut piece), 100);
+            assert_eq!(&piece[..], &all(a.as_ref())[0xff0..0xff0 + 100]);
+        }
+        // The value across the boundary was moved whole.
+        let moved = lazy.relocated(0x2_0000_0000).unwrap();
+        let mut v = [0u8; 8];
+        moved.read_at(0x2ffc, &mut v);
+        assert_eq!(u64::from_le_bytes(v), 0x1_4000_2222 + (0x2_0000_0000 - 0x1_4000_0000));
+        // Past the end reads nothing.
+        assert_eq!(moved.read_at(lazy.size, &mut v), 0);
     }
 }

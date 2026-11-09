@@ -146,6 +146,16 @@ impl<'a> Pe<'a> {
     /// aligned, in ascending order, do not overlap and end within
     /// `SizeOfImage`; their file-backed bytes are inside the data.
     pub fn load_plan(&self) -> Result<LoadPlan<'a>, Error> {
+        self.load_plan_in(self.data().len() as u64)
+    }
+
+    /// [`load_plan`](Self::load_plan) for a [`Pe`] parsed from the first
+    /// bytes of a file that is `file_len` bytes long: the checks that
+    /// sections lie inside the file use `file_len`, not the bytes at hand
+    /// (an image too big to hold, ADR 0155: only its headers are read, the
+    /// pages come from the file on demand). The headers must be in the
+    /// bytes at hand.
+    pub fn load_plan_in(&self, file_len: u64) -> Result<LoadPlan<'a>, Error> {
         let info = self.info();
         let opt = &info.optional;
         let (sa, fa) = (opt.section_alignment, opt.file_alignment);
@@ -174,7 +184,7 @@ impl<'a> Pe<'a> {
             return Err(Error::BadLayout("SizeOfHeaders does not cover the section table"));
         }
         let data = self.data();
-        if soh as usize > data.len() {
+        if soh as usize > data.len() || u64::from(soh) > file_len {
             return Err(Error::Truncated);
         }
         let mut prev_end = align_up(soh, sa).ok_or(Error::BadLayout("SizeOfHeaders overflows"))?;
@@ -200,7 +210,7 @@ impl<'a> Pe<'a> {
                 Layout::File => s.pointer_to_raw_data as usize,
                 Layout::Mapped => va as usize,
             };
-            if copy > 0 && src.checked_add(copy).is_none_or(|e| e > data.len()) {
+            if copy > 0 && src.checked_add(copy).is_none_or(|e| e as u64 > file_len) {
                 return Err(Error::Truncated);
             }
             prev_end = end;

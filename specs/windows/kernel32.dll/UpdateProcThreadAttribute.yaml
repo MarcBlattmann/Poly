@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/UpdateProcThreadAttribute.yaml
+id: windows/api/kernel32.dll/UpdateProcThreadAttribute
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: UpdateProcThreadAttribute, CreateProcessW, Handle Inheritance, Process Mitigation Options, Job Objects. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Adds one attribute to an initialised list: the value is a pointer and size that must stay valid until the process is created. The Chrome launcher's attributes work as follows: HANDLE_LIST makes CreateProcessW inherit exactly the listed inheritable handles; MITIGATION_POLICY applies creation-time mitigations to the child; JOB_LIST puts the child into the listed jobs from the start.
+interface:
+  signature: "BOOL UpdateProcThreadAttribute(LPPROC_THREAD_ATTRIBUTE_LIST list, DWORD flags, DWORD_PTR attribute, PVOID value, SIZE_T size, PVOID previousValue, PSIZE_T returnSize)"
+rules:
+  attribute_numbers: "Attribute numbers (winbase.h): PROC_THREAD_ATTRIBUTE_PARENT_PROCESS 0x20000, HANDLE_LIST 0x20002, MITIGATION_POLICY 0x20007, SECURITY_CAPABILITIES 0x20009, JOB_LIST 0x2000D, CHILD_PROCESS_POLICY 0x2000E."
+  handle_list_inherit: "HANDLE_LIST with bInheritHandles = TRUE: the child gets exactly the listed handles, with the same handle values, however many other inheritable handles the parent has (listed first only, second only and both seen). Without a list, bInheritHandles = TRUE inherits every inheritable handle; bInheritHandles = FALSE inherits none."
+  handle_list_needs_inherit_true: "a list with bInheritHandles = FALSE: CreateProcessW fails with ERROR_INVALID_PARAMETER (87)."
+  handle_list_not_inheritable: "a listed handle that is not inheritable (not marked HANDLE_FLAG_INHERIT) makes CreateProcessW fail with ERROR_INVALID_PARAMETER (87) (the update call itself succeeds); so does a value that is no handle, and the same handle listed twice."
+  handle_list_size: "the size must be a multiple of the handle size: 0 and 12 fail at the update with ERROR_BAD_LENGTH (24)."
+  mitigation: "MITIGATION_POLICY accepts a 32-bit (size 4) or 64-bit (size 8) value; other sizes (0, 3, 12) fail with ERROR_BAD_LENGTH (24). With PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON (1 << 36) the child can allocate read-write memory but VirtualAlloc with PAGE_EXECUTE_READWRITE fails with ERROR_DYNAMIC_CODE_BLOCKED (1655); with no policy, or with DEP_ENABLE (1), both work. A value with bits no Windows defines (1 << 62): the update succeeds, CreateProcessW fails with ERROR_INVALID_PARAMETER (87)."
+  job_list: "JOB_LIST with a job handle that has JOB_OBJECT_ASSIGN_PROCESS: the child starts inside that job (IsProcessInJob true while still suspended; the job's active-process count is 1); with two jobs it is in both (nested). A job handle without the assign right makes CreateProcessW fail with ERROR_ACCESS_DENIED (5); a handle that is no job (an event) with ERROR_INVALID_HANDLE (6). A size of 12 fails at the update with ERROR_BAD_LENGTH."
+  duplicate_attribute: "the same attribute updated twice: FALSE, ERROR_OBJECT_NAME_EXISTS (698)."
+  flags_and_previous: "flags other than 0, or a non-NULL previous-value pointer: FALSE, ERROR_INVALID_PARAMETER (87)."
+  list_full: "a third attribute in a list made for two: FALSE, ERROR_GEN_FAILURE (31)."
+  unknown_attribute: "an attribute number nothing defines (0x20FFF), 0, or a thread attribute (0x28004): FALSE, ERROR_NOT_SUPPORTED (50)."
+  null_value: "a NULL value pointer with size 8 is accepted by the update call (it would be read when the process is created)."
+  other_attributes_accept_documented_sizes: "CHILD_PROCESS_POLICY with 4 bytes and PARENT_PROCESS with 8 bytes are accepted; a fifth attribute (SECURITY_CAPABILITIES) in a list made for four is refused with ERROR_GEN_FAILURE (31)."
+errors:
+  duplicate_attribute: "ERROR_OBJECT_NAME_EXISTS (698)"
+  list_full: "ERROR_GEN_FAILURE (31)"
+  unknown_attribute: "ERROR_NOT_SUPPORTED (50)"
+  bad_size: "ERROR_BAD_LENGTH (24)"
+  createprocess_with_bad_handle_list: "ERROR_INVALID_PARAMETER (87) from CreateProcessW"
+  job_list_no_assign_right: "ERROR_ACCESS_DENIED (5) from CreateProcessW"
+  job_list_not_a_job: "ERROR_INVALID_HANDLE (6) from CreateProcessW"
+side_effects: "the list now refers to the caller's value memory"
+threading: "a list is not thread-safe"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  AppContainer (SECURITY_CAPABILITIES) and other attributes that need a profile or a token, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS effects, jobs with CPU/memory/IO rate limits, job time limits and their notifications, UI restrictions.

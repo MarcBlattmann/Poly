@@ -18,6 +18,10 @@ pub const ERROR_OUTOFMEMORY: u32 = 14;
 pub const ERROR_FILE_EXISTS: u32 = 80;
 /// `ERROR_NEGATIVE_SEEK` (`winerror.h`).
 pub const ERROR_NEGATIVE_SEEK: u32 = 131;
+/// `ERROR_BAD_ARGUMENTS` (`winerror.h`).
+pub const ERROR_BAD_ARGUMENTS: u32 = 160;
+/// `ERROR_OLD_WIN_VERSION` (`winerror.h`).
+pub const ERROR_OLD_WIN_VERSION: u32 = 1150;
 /// `ERROR_INVALID_FLAGS` (`winerror.h`).
 pub const ERROR_INVALID_FLAGS: u32 = 1004;
 /// `ERROR_RESOURCE_TYPE_NOT_FOUND` (`winerror.h`).
