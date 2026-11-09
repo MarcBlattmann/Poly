@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/userns_mount              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests start as root and become uid/gid 65534; umask 022; unprivileged user namespaces allowed; every test mounts below /tmp in a mount namespace of its own"
+  observed_by: spec-linux-pkg
+  date: 2026-11-09
+summary: >
+  What the root of a user namespace may mount, and which mounts it inherits
+  (the rules rootless sandboxes live by). A process with uid 65534 and no
+  capabilities makes unshare(CLONE_NEWUSER | CLONE_NEWNS), maps itself to root
+  ("0 65534 1", setgroups denied) and makes its mounts private. Before the
+  unshare the same mount of a tmpfs is EPERM. After it: a tmpfs, a ramfs and a
+  devpts instance can be mounted (0) on a directory of the old tree; the top
+  directory of the tmpfs belongs to the mounter, so stat shows uid 0, gid 0
+  and mode 040755 for "mode=0755", and a file made in it is owned by 0;
+  file systems that need the initial user namespace are refused with EPERM
+  before the source is looked at (ext4, squashfs, devtmpfs, cgroup2, with the
+  source /dev/null); a character device node cannot be made (mknod EPERM, also
+  on the tmpfs it mounted) while a fifo and a regular file can; sethostname in
+  the inherited UTS namespace is EPERM; chroot into the tmpfs works.
+  Inherited mounts are locked. For mounts that existed when the user
+  namespace and mount namespace were made (one mounted read-only, nosuid and
+  nodev; one with no flags): umount2, also with MNT_DETACH, is EINVAL.
+  Remounting the first as a bind mount (MS_BIND | MS_REMOUNT) with the same
+  flags works (0), also with noexec added (and that bit can be taken away
+  again, 0), but clearing read-only, nosuid or nodev is EPERM. The second can
+  be remounted read-only and then read-write (neither flag was set at the
+  start); a remount that is not a bind remount (it would change the
+  superblock) is EPERM. A mount that the namespace's root makes itself is not
+  locked: mounting a tmpfs (0), remounting it any way (0) and unmounting it (0)
+  all work.
+returns:
+  tmpfs_in_userns: "0; top directory owned by ns-root (uid 0, gid 0 inside)"
+  locked_remount_same_flags: "0"
+  own_mount_lifecycle: "mount 0, bind remounts 0, umount2 0"
+errors:
+  needs_init_userns: "EPERM (1): mounting ext4, squashfs, devtmpfs or cgroup2 from a user namespace; tmpfs before the unshare"
+  mknod_device: "EPERM (1): mknod of a character or block device node"
+  hostname: "EPERM (1): sethostname in a UTS namespace owned by an outer user namespace"
+  locked_umount: "EINVAL (22): umount2 (with or without MNT_DETACH) of an inherited mount"
+  locked_flags: "EPERM (1): clearing a flag (ro, nosuid, nodev) that the inherited mount had; a non-bind remount of an inherited mount"
+side_effects: >
+  Mounts in the new mount namespace are private to it.
+threading: "mount namespace is shared by threads of the process"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: MS_* values are from linux/mount.h (MS_RDONLY 1, MS_NOSUID 2,
+# MS_NODEV 4, MS_NOEXEC 8, MS_REMOUNT 32, MS_BIND 4096, MS_REC 16384,
+# MS_PRIVATE 1<<18). Both tests are needs=root (they start as root and
+# become uid 65534; user namespaces may be disabled on a host) and use
+# several processes (syscalls=off). procfs is deliberately not tested here:
+# whether a container's /proc counts as fully visible depends on the host.

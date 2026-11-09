@@ -30,7 +30,7 @@ pub fn exit(code: u32) -> ! {
         // on this stack frame for the call. The host either ends the
         // machine or, with semihosting off, the instruction is an
         // exception that comes back through the vector table.
-        unsafe { asm!("hlt #0xf000", in("x0") semihost::SYS_EXIT, in("x1") block.as_ptr(), options(nostack)) };
+        unsafe { asm!("hlt #0xf000", inout("x0") semihost::SYS_EXIT => _, in("x1") block.as_ptr(), options(nostack)) };
     }
     system_off();
     cpu::park()

@@ -1,0 +1,112 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/pkg/fuse_readonly.yaml. A feature entry (package formats, ADR 0132): the
+# kernel interface, not one API symbol, so it has no coverage-map entry.
+id: linux/api/pkg/fuse_readonly
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; the tests' server answers INIT with major 7, minor 31, max_write 65536, no flags"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  What a client sees of a mounted FUSE file system, and the requests the
+  kernel sends to the server for read-only operations (opcodes and struct
+  layouts from linux/fuse.h; the node id of the mount's root is 1, the
+  server hands out the others). Path walk: for every component below the
+  root the kernel sends FUSE_LOOKUP (1) with the parent's node id and the
+  name (a NUL-terminated string body), unless the name is cached. The
+  reply is struct fuse_entry_out {u64 nodeid, u64 generation, u64
+  entry_valid, u64 attr_valid, u32 entry_valid_nsec, u32 attr_valid_nsec,
+  struct fuse_attr {u64 ino, size, blocks, atime, mtime, ctime; u32
+  atimensec, mtimensec, ctimensec, mode, nlink, uid, gid, rdev, blksize,
+  flags}}: stat shows st_ino = attr.ino, st_mode, st_nlink, st_uid,
+  st_gid, st_rdev, st_size, st_blocks (512-byte units), st_blksize and the
+  times from the reply. The request header carries the caller's uid and
+  gid. An error reply is the call's error (ENOENT, EIO, EACCES, as given).
+  A component below a regular file is ENOTDIR without a request. A symlink
+  node (mode S_IFLNK) is followed by stat; readlink sends FUSE_READLINK
+  (5) for its node and returns the reply's bytes without a NUL, cut to the
+  caller's buffer; readlink of a non-link is EINVAL (no request).
+  Cache validity: entry_valid and attr_valid (seconds + nanoseconds) say
+  how long the kernel may reuse the answer. With 0 every stat asks again
+  (LOOKUP per path component, GETATTR (3) for attributes); with a long
+  validity repeated stats send nothing after the first LOOKUP; with a long
+  entry_valid and attr_valid 0 the name is looked up once and GETATTR is
+  asked each stat; with entry_valid 0 and attr_valid long every stat looks
+  the name up again and never sends GETATTR. A name that does not exist is
+  cached only when the server replies to the LOOKUP with success, node id 0
+  and entry_valid > 0 (then a second stat of that name sends nothing and
+  is ENOENT); an error reply (ENOENT) is never cached. fstat of an open
+  file asks FUSE_GETATTR for its node when the attributes are not valid;
+  an error reply (ESTALE 116) is the call's error. Opening a file:
+  FUSE_OPEN (14) {u32 flags (the open flags, access mode in the low two
+  bits), u32 open_flags} for the file's node, reply struct fuse_open_out
+  {u64 fh, u32 open_flags, u32 padding}; the fh comes back in every READ,
+  FLUSH and RELEASE of that open file; two opens of one file get their own
+  fh (the server chooses them). FUSE_READ (15) {u64 fh, u64 offset, u32
+  size, u32 read_flags, u64 lock_owner, u32 flags, u32 padding} asks for at
+  least what the caller asked (the kernel may ask for more as readahead,
+  a page-aligned first request such as 4096 or 16384 is normal) at the
+  file offset; the reply body is the data; a read at or past the end of
+  the file returns 0 without a request or with an empty reply. A reply
+  shorter than asked ends the data of that request (a read of 8192 that the
+  server answered with 1000 bytes returned 1000 bytes, and the kernel did
+  not ask again for the rest of that call). pread and lseek+read work on
+  the same file; mmap(MAP_PRIVATE, PROT_READ) of a file reads it through
+  READ requests and shows its bytes, zero beyond the end of the file in
+  the last page. close sends FUSE_FLUSH (25) {u64 fh, ...} for each close
+  of a descriptor, and the RELEASE (18) {u64 fh, u32 flags, u32
+  release_flags, u64 lock_owner} when the last reference to the open file
+  is gone (also after the descriptor was closed by exit); RELEASE
+  follows FLUSH. A server error reply to OPEN (EACCES, ENOENT, EIO) fails
+  the open with that error; to READ (EIO) fails the read. If the server
+  answers OPEN with -ENOSYS the open succeeds, the kernel remembers it and
+  sends no OPEN again for any file (later opens send nothing); READ and
+  FLUSH then carry fh 0 and no RELEASE is sent. Directories: FUSE_OPENDIR
+  (27, same body and reply as OPEN, for the directory's node), FUSE_READDIR
+  (28, body like READ: fh, offset to continue from, maximum size) whose
+  reply is a sequence of struct fuse_dirent {u64 ino, u64 off, u32 namelen,
+  u32 type, name} each padded to 8 bytes, in the server's order,
+  and FUSE_RELEASEDIR (29) when the directory is closed. getdents returns
+  the entries as given: d_ino = ino, d_off = off, d_type = type (DT_*),
+  d_name; "." and ".." appear only if the server lists them; a 300 entry
+  directory is delivered in as many READDIR requests as needed with the
+  continuation offset = the last returned off. lseek(fd, 0) restarts
+  (READDIR at offset 0); lseek(fd, off) continues after that entry
+  (READDIR at offset off). open(O_DIRECTORY) of a file is ENOTDIR without
+  a request; an error reply to OPENDIR is the open's error; to READDIR
+  (EIO) is getdents' error; ENOSYS to OPENDIR makes the open succeed, later
+  READDIR carry fh 0. statfs sends FUSE_STATFS (17) and returns the
+  reply's numbers (the node id of the request is not tested).
+returns:
+  entries: "see the summary; attributes map one to one"
+  read: "count of bytes in the reply, at most what was asked; 0 at end of file"
+errors:
+  server_errors: "the server's negative errno is the call's errno for LOOKUP, GETATTR, OPEN, OPENDIR, READ, READDIR, READLINK"
+  enotdir: "ENOTDIR (20): a path component below a file; open(O_DIRECTORY) of a file; no request sent"
+  einval_readlink: "EINVAL (22): readlink of a node that is not a symbolic link (no request)"
+  enosys_open: "OPEN or OPENDIR answered with ENOSYS: the call succeeds, later calls send no request of that kind"
+side_effects: >
+  READ and open send requests; the kernel caches data and attributes
+  according to the validity values.
+threading: >
+  Requests of different processes are independent; each carries the
+  caller's uid, gid and pid. The tests use one client process.
+ordering:
+  - "LOOKUP for a name precedes OPEN of it; OPEN precedes READ; FLUSH precedes RELEASE"
+  - "READDIR requests of one listing carry increasing offsets, each the last off of the reply before"
+timing:
+  typical: "microseconds to a few hundred microseconds per request round trip"
+  guarantees: "none; cache tests space their stats by 40 ms, which is irrelevant for validity 0 and 1000 s"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: same setup and helper (tests/linux/include/p_fuse.h) as fuse_mount.
+# The served tree is described at the top of that header: /hello 16 bytes,
+# /dir, /dir/inner 6 bytes, /link -> hello, /big 300000 bytes of a
+# formula, /many with 300 names. The first request kinds the kernel sends
+# for one stat or open (an extra GETATTR with the file's fh while
+# opening, an extra LOOKUP while resolving) differ between kernels; the
+# tests count LOOKUP/GETATTR only where validity is the point, and assert
+# lower bounds for READ sizes. Not asserted: readahead sizes, the order of
+# FLUSH/RELEASE against asynchronous FORGET requests, whether a stat of a
+# freshly opened file sends GETATTR with the fh.

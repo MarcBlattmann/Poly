@@ -50,7 +50,7 @@ pub unsafe fn enable(ram_base: u64, ram_end: u64) -> Result<(), mmu::MapError> {
         cpu::set_mair_el1(mmu::MAIR_EL1);
         cpu::set_tcr_el1(mmu::tcr_el1(ips));
         cpu::set_ttbr0_el1(L1.0.get() as u64);
-        asm!("dsb ishst", "tlbi vmalle1", "dsb nsh", "isb", options(nostack));
+        asm!("dsb ishst", "tlbi vmalle1", "dsb ish", "isb", options(nostack));
         cpu::set_sctlr_el1(cpu::sctlr_el1() | SCTLR_M | SCTLR_C | SCTLR_I);
     }
     cpu::isb();

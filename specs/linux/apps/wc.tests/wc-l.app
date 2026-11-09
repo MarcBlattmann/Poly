@@ -1,9 +1,9 @@
 {
-  "description": "wc -l counts lines",
+  "description": "wc -L prints the length of the longest line",
   "steps": [
     [
       "wc",
-      "-l",
+      "-L",
       "fruit.txt"
     ]
   ],

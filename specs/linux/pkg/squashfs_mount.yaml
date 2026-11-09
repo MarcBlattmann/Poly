@@ -1,0 +1,84 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/squashfs_mount              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; /tmp is the container's overlay file system; loop devices, /dev/loop-control and squashfs (gzip, xz, lzo, lz4; NOT zstd, NOT legacy lzma) are in the kernel; mksquashfs 4.6.1 builds the images"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  mount(source, target, "squashfs", flags, NULL) mounts a squashfs image from a block device, in
+  practice a loop device bound to the image file (the tests use loop devices only; an
+  AppImage is an image at an offset inside a larger file, see below). Needs CAP_SYS_ADMIN.
+  squashfs is always read-only: MS_RDONLY is not required (a mount without it works), statfs
+  f_flags has ST_RDONLY (1) either way; a remount without MS_RDONLY returns 0 and changes
+  nothing (opening for writing is still EROFS); MS_REMOUNT|MS_RDONLY also returns 0. The mounted
+  root is a directory with the mode, owner and times of the image's root inode (0755 for the
+  test image, nlink = 2 + number of subdirectories: 3 for it).
+  Superblock (little endian, at the start of the device): magic u32 at 0 (0x73717368), inode
+  count u32 at 4, modification time u32 at 8, block size u32 at 12, fragment count u32 at 16,
+  compression id u16 at 20 (1 gzip, 2 lzma, 3 lzo, 4 xz, 5 lz4, 6 zstd), block log u16 at 22,
+  flags u16 at 24, id count u16 at 26, major version u16 at 28 (4), minor version u16 at 30 (0),
+  root inode reference u64 at 32, bytes used u64 at 40, then table offsets.
+  statfs of the mount: f_type 0x73717368, f_bsize = the image's block size (4096 here), f_blocks =
+  bytes used divided by the block size rounded up (1 for a 493-byte image), f_bfree = f_bavail =
+  0, f_files = the inode count of the superblock (6 for the test image: root, d, hello.txt,
+  inner.txt, l, pattern.txt), f_ffree 0, f_namelen 256, f_frsize = f_bsize. The same device mounted
+  again on the same directory is EBUSY; mounted on another directory it is the same file system
+  (same st_dev and the same inode numbers); two loop devices over one image file are two file
+  systems (different st_dev). A directory's earlier contents are hidden while it is a mount point and
+  visible again after the umount. umount of a mount with an open file is EBUSY; umount2 with
+  MNT_DETACH works, the open file stays readable until it is closed, and the path no longer
+  resolves (ENOENT for the file below it); umount of a directory that is not a mount point is EINVAL.
+  A loop device with a mounted file system is in use: open with O_EXCL is EBUSY (EBUSY is not
+  returned while it is only bound), LOOP_CTL_REMOVE EBUSY, LOOP_SET_FD EBUSY; LOOP_CLR_FD returns 0
+  but leaves the device bound with LO_FLAGS_AUTOCLEAR set and the files readable; after the
+  umount the device is unbound.
+  Image inside a larger file (AppImage): the superblock is read from the start of the loop device,
+  so lo_offset (LOOP_SET_STATUS64 after LOOP_SET_FD, or LOOP_CONFIGURE) must point at the image;
+  it need not be sector aligned (3000 and 100003 work); an offset one byte off (2999, 3001), no
+  offset, or a sector-aligned wrong one (4096) is EINVAL (bad magic). A size limit that cuts the
+  image (100 or 512 bytes of a 493-byte image) is EIO; one that covers it (4096) or exceeds the file
+  works. The offset of a device with a mounted file system may be reset to 0 and the mount keeps
+  working.
+  Images that do not mount (the loop device stays bound and usable after each): wrong magic (also the
+  byte-swapped one) EINVAL; major version other than 4 (3 or 5) EINVAL; block log not equal to
+  log2(block size) EINVAL; block size not a power of two (5000), below 4096 (2048) or above 1 MiB
+  (2 MiB) EINVAL; compression id 0, 99 or 2 EINVAL; bytes used far above the device size (1 GiB)
+  EINVAL; a device filled with zeros EINVAL; a device of size 0 (a file of 0, 100 or 511 bytes) EIO; a
+  device shorter than 4096 bytes (a 512-byte file holding the whole 493-byte image: the file system
+  reads whole 4096-byte blocks) EIO.
+  Source and target errors: source a regular file, a directory or a character device ENOTBLK
+  (15); missing source ENOENT; unknown file system type ENODEV; NULL type EINVAL; target a regular
+  file ENOTDIR; missing target ENOENT.
+  The test image "small" is built with mksquashfs 4.6.1: mksquashfs small small.sqsh -b 4096 -comp gzip
+  -noappend -no-progress -quiet -mkfs-time 0 -all-time 0 -processors 1 -all-root, from a tree with
+  hello.txt = "hello squashfs\n", d/inner.txt = "inner\n", the symlink l -> hello.txt and
+  pattern.txt = 9000 bytes of the 17-byte line "0123456789abcdef\n" repeated, all with time 0. It is
+  493 bytes long; the tests embed it as a byte array and write it to a file padded with zeros to a
+  multiple of 4096 bytes.
+returns:
+  mount: "0"
+  statfs: "f_type 0x73717368, f_bsize 4096, f_blocks 1, f_bfree 0, f_bavail 0, f_files 6, f_ffree 0, f_namelen 256, ST_RDONLY set"
+  remount: "0, still read-only"
+errors:
+  bad_image: "EINVAL (22): magic, major version, block size or log, compression id, bytes used, zero-filled device"
+  device_too_small: "EIO (5): device of size 0, device or size limit shorter than the image's 4096-byte block"
+  not_block_device: "ENOTBLK (15)"
+  busy: "EBUSY (16): second mount of the same device on the same directory; umount of a busy mount"
+  not_a_mount_point: "EINVAL (22)"
+  unknown_type: "ENODEV (19)"
+  no_type: "EINVAL (22)"
+  target: "ENOTDIR (20) a regular file, ENOENT (2) a missing path"
+side_effects: reads the image through the device; nothing is written
+threading: the file system may be read from any thread
+ordering: []
+timing:
+  typical: "a mount of a small image takes well under a millisecond"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: squashfs on-disk format is public (the squashfs-tools documentation and kernel
+# Documentation/filesystems/squashfs.rst describe the superblock layout); MS_*/MNT_* from
+# linux/mount.h; ST_RDONLY 1 from sys/statvfs.h.

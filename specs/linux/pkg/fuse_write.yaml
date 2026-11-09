@@ -1,0 +1,111 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/pkg/fuse_write.yaml. A feature entry (package formats, ADR 0132): the
+# kernel interface, not one API symbol, so it has no coverage-map entry.
+id: linux/api/pkg/fuse_write
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; the tests' server answers INIT with major 7, minor 31, no flags (no writeback cache, no atomic open-truncate unless a test sets it), max_write 65536 unless a test lowers it"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  The modifying requests the kernel sends to a FUSE server (opcodes and
+  layouts from linux/fuse.h; server answers modelled by the tests) and what
+  the client sees. Names: creat/open(O_CREAT) of a new name sends
+  FUSE_LOOKUP (answered ENOENT) then FUSE_CREATE (35) for the parent node:
+  struct fuse_create_in {u32 flags (open flags with O_CREAT/O_EXCL, access
+  mode in the low two bits), u32 mode (S_IFREG | permissions with the
+  umask applied: 0666 and umask 022 give 0644), u32 umask (022), u32
+  open_flags} + the name; the reply is a fuse_entry_out followed by a
+  fuse_open_out; the file is open at once (no OPEN request) and its fh
+  is the reply's. mkdir: FUSE_MKDIR (9) {u32 mode (0777 with umask 022
+  becomes 0755; the type bits are absent), u32 umask} + name. mknod:
+  FUSE_MKNOD (8) {u32 mode (type bits and permissions with the umask
+  applied: fifo 0666 gives S_IFIFO|0644, char 0600 stays), u32 rdev (the
+  old encoding major<<8 | minor, 0x103 for 1:3), u32 umask, u32 padding}
+  + name. symlink: FUSE_SYMLINK (6) with name NUL target NUL. link:
+  FUSE_LINK (13) {u64 oldnodeid} + the new name, node = the new parent.
+  unlink: FUSE_UNLINK (10) and rmdir FUSE_RMDIR (11), both with the parent's
+  node and the name. rename: FUSE_RENAME (12) {u64 newdir} + old name NUL
+  new name NUL, node = the old parent; renameat2 with RENAME_EXCHANGE:
+  FUSE_RENAME2 (45) {u64 newdir, u32 flags 2, u32 padding} + the names;
+  RENAME_NOREPLACE onto an existing name is EEXIST decided by the kernel
+  from its lookup, no request; plain rename over an existing name replaces
+  it (the node of the source answers at the new name, the same st_ino).
+  A name that was removed or renamed away is ENOENT afterwards (the kernel
+  asks LOOKUP again and the server answers ENOENT). After a create, link
+  or mkdir the new name is seen at once with the attributes of the reply
+  (mode, nlink 2 after a link, symlink size = target length, the same
+  st_ino for both hard link names). An error reply (EEXIST from CREATE or
+  MKDIR, ENOSPC, EACCES, EBUSY, ENOTEMPTY from RMDIR, ENOSYS from UNLINK)
+  is the call's error. unlink of an open file succeeds; the open
+  file keeps reading through its node. Attributes: chmod sends FUSE_SETATTR (4)
+  {u32 valid, u32 padding, u64 fh, u64 size, u64 lock_owner, u64 atime,
+  u64 mtime, u64 ctime, u32 atimensec, mtimensec, ctimensec, mode,
+  unused4, uid, gid, unused5} for the file's node with valid FATTR_MODE
+  (1) and the new mode; chown FATTR_UID (2) and/or FATTR_GID (4) (only the
+  ones changed; chown(path, -1, g) sets only GID); truncate(path) and
+  ftruncate FATTR_SIZE (8) and the new size (ftruncate adds FATTR_FH (64)
+  and the fh of the open file, and the kernel may add FATTR_LOCKOWNER
+  (512)); utimensat FATTR_ATIME (16) and/or FATTR_MTIME (32) with seconds
+  (and nanoseconds), UTIME_NOW as FATTR_ATIME_NOW (128) (FATTR_MTIME_NOW
+  256 for the mtime), UTIME_OMIT leaves the field out. The reply's
+  attributes become the file's: the next stat shows the new mode, uid, gid,
+  size and mtime. The server's error is the call's error (EPERM, EROFS,
+  EIO) and the file is unchanged. open(O_TRUNC) of an existing file: when
+  the INIT reply did not set FUSE_ATOMIC_O_TRUNC (bit 3) the kernel sends
+  SETATTR with FATTR_SIZE and size 0 and then OPEN without O_TRUNC; when it
+  did, the OPEN carries O_TRUNC and no SETATTR is sent. Data: without a
+  writeback cache every write(2) goes to the server before it returns:
+  FUSE_WRITE (16) {u64 fh, u64 offset, u32 size, u32 write_flags, u64
+  lock_owner, u32 flags, u32 padding} + the bytes, node = the file's, fh =
+  the open's, write_flags 0. pwrite uses its own offset and leaves the
+  file position alone; plain write uses and advances the position;
+  O_APPEND writes start at the end of the file as the kernel knows it (the
+  size the server last reported plus own writes; offsets 6 then 8 for two
+  appends to a 6-byte file). A write larger than max_write is sent as
+  several requests of at most max_write bytes at consecutive offsets
+  covering exactly the data. The reply struct fuse_write_out {u32 size,
+  u32 padding} gives the byte count the write(2) returns: a reply of 4 to
+  a 10-byte write returns 4 to the caller (a short write). A write past the
+  end grows the file: stat shows the new size at once. An error reply to
+  WRITE is the write's error (EIO, ENOSPC); to OPEN for writing the open's
+  error. fsync sends FUSE_FSYNC (20) {u64 fh, u32 fsync_flags (0 for
+  fsync, 1 for fdatasync), u32 padding}; close sends FLUSH (25) then, when
+  the last reference is gone, RELEASE (18), with the open's fh. MAP_SHARED
+  mappings with write access of a fuse file were not tested.
+returns:
+  create: "a new descriptor for CREATE (open), 0 for the others; the file exists with the reply's attributes"
+  write: "the byte count of the WRITE reply for the last request; the full count when every request was fully written"
+errors:
+  server_errors: "the server's negative errno is the call's errno for CREATE, MKDIR, MKNOD, SYMLINK, LINK, UNLINK, RMDIR, RENAME, SETATTR, WRITE, OPEN"
+  eexist: "EEXIST (17): creating an existing name with O_EXCL, mkdir or link onto an existing name (kernel, no request); noreplace rename onto an existing name"
+  enoent: "ENOENT (2): rename or unlink of a name that does not exist (from the lookup)"
+  enotempty: "ENOTEMPTY (39): rmdir of a directory the server says is not empty (server's answer)"
+  enotdir_eisdir: "ENOTDIR (20): rmdir of a file; EISDIR (21): unlink of a directory (both decided by the kernel from the attributes)"
+side_effects: >
+  The server's state changes (new nodes, removed names, sizes, modes); the
+  kernel's cached attributes follow the replies.
+threading: >
+  One client process in the tests; requests are sequential.
+ordering:
+  - "LOOKUP (ENOENT) precedes CREATE, MKDIR, MKNOD, SYMLINK and LINK of a new name"
+  - "SETATTR(size 0) precedes OPEN of an O_TRUNC open when atomic truncation is not negotiated"
+  - "WRITE requests of one write call have increasing contiguous offsets"
+  - "FLUSH precedes RELEASE at close"
+timing:
+  typical: "microseconds to a few hundred microseconds per request round trip"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: same setup and helper (tests/linux/include/p_fuse.h) as fuse_mount.
+# The served tree is described at the top of that header. The tests
+# store written data in the server and check checksums of the bytes the
+# server received, not only the sizes. Not asserted: extra GETATTR or
+# GETXATTR (the kernel asked for security.capability, answered ENOSYS, on
+# the first write on the oracle) requests between the interesting ones,
+# the order of an asynchronous FORGET relative to the others, the exact
+# open flag bits besides access mode, O_CREAT, O_EXCL, O_TRUNC, writes
+# of mmap(MAP_SHARED) mappings, the writeback cache. The CREATE request's
+# mode and umask are asserted as observed (the kernel applied the umask
+# itself and also passed it).
