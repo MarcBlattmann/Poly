@@ -222,7 +222,8 @@ in a run.
 
    On the first full run the tool found one bug (square root of subnormal
    inputs lost precision); it is fixed and has a unit test. Afterwards
-   about 200,000 blocks from eight seeds all matched. A deliberate bug
+   more than 200,000 blocks from nine seeds all matched (114,000 of them on
+   the final code), and the five hand-written programs pass. A deliberate bug
    injected in `CSINC` was caught by the first run of its family.
 
    The tool needs Linux (qemu-user, clang, lld, the `poly-dev` image has
