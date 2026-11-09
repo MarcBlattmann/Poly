@@ -255,12 +255,19 @@ fn build_image(
 fn image_files(test_apps: bool) -> Result<initramfs::Tree> {
     let mut tree = initramfs::Tree::default();
     tree.files.extend(application_files(test_apps));
-    let font = crate::fonts::cache_dir().join("DejaVuSans.ttf");
-    match std::fs::read(&font) {
-        Ok(data) => tree.files.push(("usr/share/fonts/truetype/dejavu/DejaVuSans.ttf".into(), 0o644, data)),
-        Err(_) => {
-            crate::progress::note("no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font")
+    // The font store (ADR 0105): the shell uses DejaVu Sans, Windows
+    // programs' logical fonts map onto all twelve files (ADR 0142; their
+    // gdi32 looks in `C:\Windows\Fonts` and then here).
+    let fonts = crate::fonts::cache_dir();
+    let mut found = 0;
+    for (name, _, _) in crate::fonts::FILES {
+        if let Ok(data) = std::fs::read(fonts.join(name)) {
+            tree.files.push((format!("{}/{name}", crate::fonts::STORE_DIR), 0o644, data));
+            found += 1;
         }
+    }
+    if found == 0 {
+        crate::progress::note("no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font")
     }
     // Alpine Shell's wallpapers and fonts (ADR 0127).
     for (path, data) in crate::wallpapers::tree()? {
@@ -1419,6 +1426,25 @@ fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
         expect(&format!("the client area is filled at +{dx},+{dy} (got {:?})", at(dx, dy)), at(dx, dy) == WIN32_FILL)?;
     }
     expect("nothing filled outside the client area", at(w + 6, h / 2) != WIN32_FILL && at(w / 2, h + 6) != WIN32_FILL)?;
+    // The program draws white text in logical fonts (CreateFontW, ADR 0142)
+    // below its typed characters. With the DejaVu fonts in the image these
+    // are outlines in grey scale: white pixels and pixels between the fill
+    // and white; without, the bitmap faces' white pixels only.
+    let (mut white, mut mixed) = (0, 0);
+    for py in 40..130 {
+        for px in 10..240 {
+            let p = at(px, py);
+            if p == [255, 255, 255] {
+                white += 1;
+            } else if p != WIN32_FILL && (0..3).all(|c| p[c] >= WIN32_FILL[c]) {
+                mixed += 1;
+            }
+        }
+    }
+    expect(&format!("the client area shows text ({white} white pixels)"), white > 100)?;
+    if crate::fonts::cached().is_some() {
+        expect(&format!("the text is antialiased ({mixed} pixels between the fill and white)"), mixed > 100)?;
+    }
     // Poly's frame: the title bar above the client area is drawn (not the
     // wallpaper of before, not the fill).
     let title = ((x + w / 2) as u32, (y - 12) as u32);

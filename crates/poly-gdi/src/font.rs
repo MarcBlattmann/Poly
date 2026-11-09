@@ -4,6 +4,7 @@
 //! `crate::sysfont`). TrueType faces through `poly-font` come with the GDI
 //! text slice.
 
+use crate::bitfont;
 use crate::sysfont::GLYPHS;
 
 /// Which stock font a font object is.
@@ -178,26 +179,41 @@ impl Face {
         }
     }
 
-    /// The glyph rows of `c` (top to bottom) and its width; characters the
-    /// font does not have are a box.
+    /// The glyph rows of `c` (top to bottom, bit 15 the leftmost pixel) and
+    /// its advance. The system font's ASCII glyphs are the oracle's recorded
+    /// pixels where a sheet gives them and drawn for Poly otherwise
+    /// (`sysfont`); everything else comes from Spleen 8x16 (`bitfont`): the
+    /// fixed faces cropped to their cell, the GUI face fitted to its
+    /// advance widths, the system font's other characters lowered one row to its ascent.
+    /// Characters Spleen lacks are a box.
     pub fn glyph(self, c: u16) -> (i32, [u16; 16]) {
         let w = self.width(c);
-        if (0x20..=0x7E).contains(&c) {
-            return (w, GLYPHS[usize::from(c - 0x20)].1);
-        }
         if c < 0x20 {
             return (w, [0; 16]);
         }
-        // A box for everything else.
-        let mut rows = [0u16; 16];
-        let wbits = (w - 2).clamp(1, 14) as u32;
-        let full: u16 = !(0xFFFFu16 >> wbits) >> 1;
-        let edges: u16 = (1 << 14) | (1 << (15 - wbits));
-        for (r, row) in rows.iter_mut().enumerate().take(13).skip(3) {
-            *row = if r == 3 || r == 12 { full } else { edges };
+        let (ascent, height) = (self.metrics().ascent as usize, self.metrics().height as usize);
+        match self {
+            Face::System if c <= 0x7E => (w, GLYPHS[usize::from(c - 0x20)].1),
+            Face::System => match bitfont::lookup(c) {
+                Some(rows) => (w, bitfont::lower_for_system(rows)),
+                None => (w, system_box(w)),
+            },
+            Face::Gui => (w, bitfont::fit(bitfont::cell(c, ascent, height), w)),
+            Face::AnsiFixed | Face::OemFixed => (w, bitfont::cell(c, ascent, height)),
         }
-        (w, rows)
     }
+}
+
+/// The box the system font shows for a character nothing has a glyph for.
+fn system_box(w: i32) -> [u16; 16] {
+    let mut rows = [0u16; 16];
+    let wbits = (w - 2).clamp(1, 14) as u32;
+    let full: u16 = !(0xFFFFu16 >> wbits) >> 1;
+    let edges: u16 = (1 << 14) | (1 << (15 - wbits));
+    for (r, row) in rows.iter_mut().enumerate().take(13).skip(3) {
+        *row = if r == 3 || r == 12 { full } else { edges };
+    }
+    rows
 }
 
 fn system_width(c: u16) -> i32 {
@@ -243,5 +259,72 @@ mod tests {
             extent(Face::Gui, &v).0
         };
         assert_eq!((gw("A"), gw("i"), gw("W"), gw("Hello, world"), gw(" ")), (7, 2, 11, 55, 3));
+    }
+
+    fn ink_rows(rows: &[u16; 16]) -> Option<(usize, usize)> {
+        let first = rows.iter().position(|&r| r != 0)?;
+        let last = rows.iter().rposition(|&r| r != 0)?;
+        Some((first, last))
+    }
+
+    #[test]
+    fn glyphs_stay_inside_their_advance_with_a_gap() {
+        for face in [Face::Gui, Face::AnsiFixed, Face::OemFixed] {
+            for c in (0x20u16..0x7F).chain(0xA0..0x180) {
+                let (w, rows) = face.glyph(c);
+                let wide: u16 = if w >= 16 { 0 } else { 0xFFFF >> w };
+                for (y, &r) in rows.iter().enumerate() {
+                    assert_eq!(r & wide, 0, "{face:?} U+{c:04X} row {y} passes its advance {w}");
+                }
+                if face == Face::Gui && w >= 2 {
+                    for (y, &r) in rows.iter().enumerate() {
+                        assert_eq!(r & (0x8000 >> (w - 1)), 0, "{face:?} U+{c:04X} row {y} has no gap");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn glyphs_sit_on_the_faces_baseline() {
+        for face in [Face::Gui, Face::AnsiFixed, Face::OemFixed] {
+            let tm = face.metrics();
+            let (asc, h) = (tm.ascent as usize, tm.height as usize);
+            // Capitals and digits end on the baseline.
+            for c in "HEZ0".chars() {
+                let (_, rows) = face.glyph(c as u16);
+                let (first, last) = ink_rows(&rows).unwrap();
+                assert_eq!(last, asc - 1, "{face:?} {c}");
+                assert!(first < asc - 6, "{face:?} {c} cap height");
+            }
+            // Descenders reach below it, inside the cell.
+            for c in "gpqy".chars() {
+                let (_, rows) = face.glyph(c as u16);
+                let (_, last) = ink_rows(&rows).unwrap();
+                assert!(last >= asc && last < h, "{face:?} {c} descends to row {last}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_face_has_latin_1_letters() {
+        for face in [Face::System, Face::Gui, Face::AnsiFixed, Face::OemFixed] {
+            let plain = face.glyph(u16::from(b'a')).1;
+            for c in "äöüéèêçñÄÖÜß€™".chars() {
+                let (w, rows) = face.glyph(c as u16);
+                assert!(w >= 1);
+                assert!(ink_rows(&rows).is_some(), "{face:?} {c} is blank");
+                assert_ne!(rows, plain, "{face:?} {c} looks like a plain a");
+            }
+        }
+    }
+
+    #[test]
+    fn characters_no_font_has_are_a_box() {
+        // U+4E2D has no glyph in Spleen.
+        for face in [Face::System, Face::Gui, Face::AnsiFixed, Face::OemFixed] {
+            let (_, rows) = face.glyph(0x4E2D);
+            assert!(ink_rows(&rows).is_some(), "{face:?}");
+        }
     }
 }
