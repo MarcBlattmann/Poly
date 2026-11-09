@@ -114,6 +114,13 @@ mod test_s1;
 
 /// The program the headless-surface ring-3 test runs (`test_s1`).
 pub static S1TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s1test.exe"));
+/// The network and identity DLLs of Chrome's batch 3/5 (ADR 0155).
+pub static IPHLPAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/iphlpapi.dll"));
+pub static NETAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/netapi32.dll"));
+pub static SECUR32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/secur32.dll"));
+pub static DHCPCSVC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dhcpcsvc.dll"));
+pub static DNSAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dnsapi.dll"));
+pub static DBGHELP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dbghelp.dll"));
 
 mod test_crypto;
 
@@ -500,6 +507,10 @@ impl NtKernel for Kernel {
 
     fn net_info(&self) -> (Vec<[u8; 4]>, String) {
         afd::net_info()
+    }
+
+    fn net_interfaces(&self) -> Vec<poly_personality_nt::afd::IfInfo> {
+        afd::net_interfaces()
     }
 }
 

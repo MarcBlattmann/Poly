@@ -319,6 +319,12 @@ pub trait NtKernel {
         (alloc::vec::Vec::new(), alloc::string::String::from("poly"))
     }
 
+    /// The network interfaces `iphlpapi` lists (`poly_winsock::afd::IF_LIST`,
+    /// ADR 0155): by default only the loopback inside the stack.
+    fn net_interfaces(&self) -> alloc::vec::Vec<poly_iphlp::IfInfo> {
+        alloc::vec![poly_iphlp::IfInfo::loopback()]
+    }
+
     /// Make the calling thread resume user mode with the registers of `ctx`
     /// that `flags` selects (`CONTEXT_CONTROL`, `CONTEXT_INTEGER`,
     /// `CONTEXT_FLOATING_POINT`), once the current call or exception returns

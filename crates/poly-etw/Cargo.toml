@@ -1,0 +1,13 @@
+[package]
+name = "poly-etw"
+description = "Event Tracing for Windows without a listener (ADR 0155): provider registrations, activity ids and the documented results when no trace session is enabled"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

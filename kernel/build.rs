@@ -62,6 +62,12 @@ fn embed_win32() {
         "bcryptprimitives.dll",
         "ole32.dll",
         "s1test.exe",
+        "iphlpapi.dll",
+        "netapi32.dll",
+        "secur32.dll",
+        "dhcpcsvc.dll",
+        "dnsapi.dll",
+        "dbghelp.dll",
     ] {
         match &dir {
             Some(d) => {

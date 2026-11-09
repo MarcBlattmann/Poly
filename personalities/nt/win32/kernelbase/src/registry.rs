@@ -15,7 +15,7 @@
 use crate::base::{self, ansi_arg, close, wide_arg};
 use crate::nt::{Handle, OBJ_CASE_INSENSITIVE, OBJ_INHERIT, ObjectAttributes, UnicodeString};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicIsize, Ordering};
+use core::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
 use poly_kernelbase::error::*;
 use poly_kernelbase::registry::{self as reg, Predefined};
 use poly_ntobj::NtStatus;
@@ -61,6 +61,19 @@ unsafe extern "system" {
         size: u32,
     ) -> NtStatus;
     fn NtFlushKey(handle: Handle) -> NtStatus;
+    #[allow(clippy::too_many_arguments)]
+    fn NtNotifyChangeKey(
+        handle: Handle,
+        event: Handle,
+        apc: *const u8,
+        apc_context: *const u8,
+        iosb: *mut IoStatus,
+        filter: u32,
+        watch_tree: u8,
+        buffer: *mut u8,
+        size: u32,
+        asynchronous: u8,
+    ) -> NtStatus;
 }
 
 type HKey = isize;
@@ -388,6 +401,115 @@ pub extern "system" fn RegFlushKey(hkey: HKey) -> u32 {
         let st = unsafe { NtFlushKey(h) };
         if st.is_success() { Ok(()) } else { Err(err(st)) }
     }))
+}
+
+// ----- change notification --------------------------------------------------------------
+
+/// `IO_STATUS_BLOCK` (`wdm.h`): the status, then `Information`.
+#[repr(C)]
+struct IoStatus {
+    status: AtomicUsize,
+    information: AtomicUsize,
+}
+
+/// `STATUS_PENDING` (`ntstatus.h`).
+const STATUS_PENDING: usize = 0x103;
+
+/// The status blocks of asynchronous notifications. Learn
+/// ("RegNotifyChangeKeyValue") lets the caller return before the change
+/// and the kernel writes the block when it happens, so the block cannot be
+/// on the caller's stack; Windows keeps it inside the call's own state. A
+/// slot is free until a request marks it pending and again once the kernel
+/// has written its result. Chrome watches a dozen keys per process and
+/// re-arms each after it fires.
+static NOTIFY_BLOCKS: [IoStatus; 256] =
+    [const { IoStatus { status: AtomicUsize::new(0), information: AtomicUsize::new(0) } }; 256];
+
+/// A free status block, marked pending.
+fn take_notify_block() -> Option<&'static IoStatus> {
+    for b in &NOTIFY_BLOCKS {
+        let s = b.status.load(Ordering::Acquire);
+        if s != STATUS_PENDING
+            && b.status.compare_exchange(s, STATUS_PENDING, Ordering::AcqRel, Ordering::Acquire).is_ok()
+        {
+            return Some(b);
+        }
+    }
+    None
+}
+
+/// `RegNotifyChangeKeyValue` (Learn): watch `hkey` (and its subkeys if
+/// `watch_subtree`) for the changes `filter` names
+/// (`REG_NOTIFY_CHANGE_NAME`, `_ATTRIBUTES`, `_LAST_SET`, `_SECURITY`;
+/// `REG_NOTIFY_THREAD_AGNOSTIC` is accepted). Asynchronously (`fAsynchronous`
+/// true) the call returns at once and `event` is signalled at the change,
+/// which needs a valid event handle (`ERROR_INVALID_PARAMETER` otherwise);
+/// synchronously it returns at the change and `event` is ignored. The key
+/// handle needs `KEY_NOTIFY`. The call is `NtNotifyChangeKey`.
+#[unsafe(no_mangle)]
+pub extern "system" fn RegNotifyChangeKeyValue(
+    hkey: HKey,
+    watch_subtree: i32,
+    filter: u32,
+    event: Handle,
+    asynchronous: i32,
+) -> u32 {
+    /// `winnt.h`: `REG_NOTIFY_CHANGE_*`, `REG_NOTIFY_THREAD_AGNOSTIC`.
+    const CHANGE_MASK: u32 = 0x0F;
+    const THREAD_AGNOSTIC: u32 = 0x1000_0000;
+    if filter & !(CHANGE_MASK | THREAD_AGNOSTIC) != 0 || filter & CHANGE_MASK == 0 {
+        return ERROR_INVALID_PARAMETER;
+    }
+    let asynchronous = asynchronous != 0;
+    if asynchronous && event == 0 {
+        return ERROR_INVALID_PARAMETER;
+    }
+    let h = match handle_of(hkey) {
+        Ok(h) => h,
+        Err(e) => return e,
+    };
+    let filter = filter & CHANGE_MASK;
+    if !asynchronous {
+        let block = IoStatus { status: AtomicUsize::new(STATUS_PENDING), information: AtomicUsize::new(0) };
+        // SAFETY: the block outlives the call, which returns when the request is done.
+        let st = unsafe {
+            NtNotifyChangeKey(
+                h,
+                0,
+                core::ptr::null(),
+                core::ptr::null(),
+                &block as *const IoStatus as *mut IoStatus,
+                filter,
+                u8::from(watch_subtree != 0),
+                core::ptr::null_mut(),
+                0,
+                0,
+            )
+        };
+        return if st.is_success() { ERROR_SUCCESS } else { err(st) };
+    }
+    let Some(block) = take_notify_block() else { return ERROR_NOT_ENOUGH_MEMORY };
+    // SAFETY: `block` is static, so the kernel may write it whenever the change comes.
+    let st = unsafe {
+        NtNotifyChangeKey(
+            h,
+            event,
+            core::ptr::null(),
+            core::ptr::null(),
+            block as *const IoStatus as *mut IoStatus,
+            filter,
+            u8::from(watch_subtree != 0),
+            core::ptr::null_mut(),
+            0,
+            1,
+        )
+    };
+    if st.is_success() || st == NtStatus(STATUS_PENDING as u32) {
+        return ERROR_SUCCESS;
+    }
+    // Refused at once: the slot is free again.
+    block.status.store(0, Ordering::Release);
+    err(st)
 }
 
 // ----- delete ---------------------------------------------------------------------------
