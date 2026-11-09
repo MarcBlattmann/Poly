@@ -25,7 +25,7 @@
 //!   `wl_data_device_manager` (clipboard, drag and drop), `xdg_wm_base`/
 //!   `xdg_positioner` (constraint adjustment)/`xdg_surface`/`xdg_toplevel`
 //!   (interactive move and resize)/`xdg_popup` (grabs),
-//!   `zxdg_decoration_manager_v1` (always server-side), `wp_presentation`
+//!   `zxdg_decoration_manager_v1` (server-side unless the client draws its own), `wp_presentation`
 //!   (paced by page flips when the display has them),
 //!   `wp_fractional_scale_v1` and `xdg_activation_v1`; and an API for window
 //!   managers outside xdg-shell, and `xwayland_shell_v1` with X windows as
