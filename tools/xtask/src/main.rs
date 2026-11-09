@@ -1593,7 +1593,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 39] = [
+const BOOT_GROUPS: &[BootGroup] = &[
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1771,7 +1771,7 @@ fn select_boot_groups(selectors: &[String]) -> Result<Vec<BootGroup>> {
         let names: Vec<_> = BOOT_GROUPS.iter().map(|(n, _)| *n).collect();
         return Err(format!("no boot test group {bad:?}; the groups are {}", names.join(", ")));
     }
-    Ok(BOOT_GROUPS.into_iter().filter(|(n, _)| selectors.iter().any(|sel| matches(sel, n))).collect())
+    Ok(BOOT_GROUPS.iter().copied().filter(|(n, _)| selectors.iter().any(|sel| matches(sel, n))).collect())
 }
 
 /// Build the kernel and run the boot test groups `selectors` name

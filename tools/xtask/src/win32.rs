@@ -191,7 +191,6 @@ fn cache_key(root: &Path) -> Result<u64> {
             "crates/poly-etw",
             "crates/poly-iphlp",
             "crates/poly-netapi",
-            "personalities/nt/win32/version",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
