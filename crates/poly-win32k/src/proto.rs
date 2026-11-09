@@ -162,6 +162,9 @@ crate::wire_struct! {
         pub creating: bool,
         /// The input-context association (`ime::Assoc::code`).
         pub ime: u32,
+        /// Not a layered window, or one that has had its attributes (or
+        /// `UpdateLayeredWindow`) set: it paints.
+        pub lay_ready: bool,
     }
 }
 
@@ -308,6 +311,8 @@ crate::wire_enum! {
         /// `RegisterWindowMessageW`: an `Atom`.
         /// An input-context operation (ADR 0172): an `Ime`.
         /// The system cursor (`IDC_*`) to show over a top-level window's surface.
+        /// What the screen shows at a point: a `Value`, the `COLORREF`.
+        108 => ScreenPixel { x: i32, y: i32 },
         107 => CursorShape { hwnd: u32, idc: u16 },
         105 => Ime { op: crate::ime::ImeOp },
         /// Set a window's input-context association (`ime::Assoc::code`): a `Value` with the previous code.

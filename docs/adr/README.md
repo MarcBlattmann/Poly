@@ -139,6 +139,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0154](0154-aarch64-boot-stub.md) | An aarch64 boot stub in its own package on QEMU `virt`: devicetree, PL011, vectors, MMU, semihosting exit, a CI part | Accepted |
 | [0156](0156-ci-builds-once.md) | CI builds the kernel, native programs, xtask, the pipeline tool and the Windows test programs once in two `build` jobs; the boot and pipeline jobs unpack them (`POLY_PREBUILT=1`) and only boot; the traced 7-Zip scenario runs on TCG (its 8 MB of serial output takes 3 minutes through a nested hypervisor); shards and slices rebalanced | Accepted |
 | [0163](0163-macos-map-credits-re-exports.md) | The macOS framework map credits re-exports: private libraries inlined in a public library's `.tbd` count as that library's API, `reexports:` lists count like `exports:`; re-seeded from SDK 27.0 (+28,652 entries, AVFoundation now mapped) | Accepted |
+| [0172](0172-windows-gui-slice-c-clipboard-dpi-monitors-layered-windows-icons-dwm-and-ime.md) | The third Windows GUI slice: the clipboard, DPI awareness and monitors, layered windows and regions, icons and cursors, `dwmapi`, `imm32` with no IME, `shcore`, and the S3 delta of the Chrome gap map | Accepted |
 
 ## Decided by the owner
 

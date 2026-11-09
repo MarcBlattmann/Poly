@@ -51,6 +51,12 @@ pub extern "system" fn SetLayeredWindowAttributes(hwnd: H, key: u32, alpha: u8, 
     }
     match layered(hwnd, 0, key, alpha, flags) {
         Reply::Ok {} => 1,
+        // The first attributes make the window paint.
+        Reply::Value { .. } => {
+            // SAFETY: no regions or rectangles passed.
+            unsafe { super::RedrawWindow(hwnd, core::ptr::null(), 0, 0x1 | 0x4 | 0x400) };
+            1
+        }
         r => fail(r),
     }
 }

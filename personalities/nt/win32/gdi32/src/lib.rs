@@ -727,9 +727,37 @@ pub extern "system" fn SetPixelV(hdc: H, x: i32, y: i32, c: u32) -> i32 {
     i32::from(SetPixel(hdc, x, y, c) != poly_gdi::gdi::CLR_INVALID)
 }
 
+#[link(name = "win32u", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn PolyUserCall(req: *const u8, len: u64, out: *mut u8, cap: u64, out_len: *mut u64) -> u32;
+}
+
+/// What the screen shows at a point (win32k composes the surfaces,
+/// ADR 0172), for the screen DC.
+fn screen_pixel(x: i32, y: i32) -> u32 {
+    use poly_win32k::proto::{Reply, Request};
+    let bytes = poly_win32k::wire::encode(&Request::ScreenPixel { x, y });
+    let mut out = [0u8; 64];
+    let mut len = 0u64;
+    // SAFETY: the buffers are ours and sized as passed.
+    let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+    if s != 0 {
+        return 0xFFFF_FFFF;
+    }
+    match poly_win32k::wire::decode::<Reply>(&out[..len as usize]) {
+        Some(Reply::Value { value }) => value as u32,
+        _ => 0xFFFF_FFFF,
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetPixel(hdc: H, x: i32, y: i32) -> u32 {
-    gdi(|g| g.get_pixel(hdc as u64, x, y))
+    let r = gdi(|g| g.get_pixel(hdc as u64, x, y));
+    // The screen DC draws nowhere itself: it reads what the windows show.
+    if r == 0xFFFF_FFFF && gdi(|g| g.display_hwnd(hdc as u64)) == Some(0) {
+        return screen_pixel(x, y);
+    }
+    r
 }
 
 #[unsafe(no_mangle)]
@@ -1132,6 +1160,19 @@ pub unsafe extern "system" fn PolyGdiSetSystemClip(hdc: H, rects: *const i32, n:
 fn solid_union(rs: &[Rect]) -> Region {
     let solid: Vec<Rect> = rs.iter().filter(|r| !r.is_empty()).copied().collect();
     Region::from_rects(&solid)
+}
+
+/// A bitmap's pixels (`B, G, R, A` rows, top-down) into `out` (`cap`
+/// bytes) and its size: width in the low 32 bits, height above; 0 for a
+/// handle that is no bitmap. `out` may be NULL to ask the size.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiBitmapPixels(hbm: H, out: *mut u8, cap: usize) -> u64 {
+    let Some((w, h, px)) = gdi(|g| g.bitmap_bgra(hbm as u64)) else { return 0 };
+    if !out.is_null() && px.len() <= cap {
+        // SAFETY: the caller's buffer of `cap` bytes.
+        unsafe { core::ptr::copy_nonoverlapping(px.as_ptr(), out, px.len()) };
+    }
+    u64::from(w as u32) | u64::from(h as u32) << 32
 }
 
 /// The window of a display DC (`WindowFromDC`): 0 for the screen's,

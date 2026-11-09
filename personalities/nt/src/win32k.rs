@@ -210,6 +210,32 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
                 let size = w.surfaces.size(&w.desktop, hwnd).map_or(0, |(x, y)| u64::from(x) | (u64::from(y) << 32));
                 return Reply::Value { value: size };
             }
+            // A layered window passes the hit through where it shows nothing.
+            Request::WindowFromPoint { x, y, below } => {
+                let mut below = below;
+                let mut fx = Effects::default();
+                loop {
+                    let r = sys.win32k.wm.handle(ctx, Request::WindowFromPoint { x, y, below }, &mut fx);
+                    let Reply::Handle { hwnd } = r else { return r };
+                    let w = &sys.win32k;
+                    let mut top = hwnd;
+                    while let Some(i) = w.wm.info(top) {
+                        if i.parent == 0 || w.wm.info(i.parent).is_none_or(|p| p.desktop) {
+                            break;
+                        }
+                        top = i.parent;
+                    }
+                    if top != 0 && w.surfaces.hit_passes(&w.wm, &w.desktop, top, x, y) {
+                        below = top;
+                        continue;
+                    }
+                    return r;
+                }
+            }
+            Request::ScreenPixel { x, y } => {
+                let w = &sys.win32k;
+                return Reply::Value { value: u64::from(w.surfaces.screen_pixel(&w.wm, &w.desktop, x, y)) };
+            }
             // A system cursor over a top-level window's surface (ADR 0172).
             Request::CursorShape { hwnd, idc } => {
                 let w = &mut sys.win32k;

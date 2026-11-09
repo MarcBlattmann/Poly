@@ -467,6 +467,20 @@ impl Wm {
         self.get(u64::from(self.desktop)).map_or_else(Vec::new, |d| d.children.clone())
     }
 
+    /// A window's layered attributes: (colour key, alpha, flags, any
+    /// `SetLayeredWindowAttributes`, `UpdateLayeredWindow` used), for a
+    /// window with `WS_EX_LAYERED`.
+    pub fn layered_of(&self, h: u32) -> Option<(u32, u8, u32, bool, bool)> {
+        let w = self.get(u64::from(h))?;
+        (w.ex_style & guic::WS_EX_LAYERED != 0).then_some((
+            w.lay.key,
+            w.lay.alpha,
+            w.lay.flags,
+            w.lay.attrs,
+            w.lay.update,
+        ))
+    }
+
     /// A window's text.
     pub fn text(&self, h: u32) -> Option<&[u16]> {
         self.get(u64::from(h)).map(|w| w.text.as_slice())
@@ -509,6 +523,7 @@ impl Wm {
             dpi: if h == self.desktop { guic::AWARE_PER_MONITOR } else { w.dpi },
             creating: w.state == State::Creating,
             ime: w.ime,
+            lay_ready: w.ex_style & guic::WS_EX_LAYERED == 0 || w.lay.attrs || w.lay.update,
         })
     }
 
@@ -1174,8 +1189,10 @@ impl Wm {
                     l.alpha = alpha;
                 }
                 l.flags = flags;
+                let first = !l.attrs && !l.update;
                 l.attrs = true;
-                Reply::Ok {}
+                // The first attributes make the window paint.
+                if first { Reply::Value { value: 1 } } else { Reply::Ok {} }
             }
             1 => {
                 if !l.attrs {
@@ -1776,7 +1793,7 @@ impl Wm {
                 Some(w) => Reply::Value { value: u64::from(core::mem::replace(&mut w.ime, code)) },
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
-            Request::CursorShape { .. } => Reply::Ok {},
+            Request::CursorShape { .. } | Request::ScreenPixel { .. } => Reply::Ok {},
             Request::RegisterMessage { name } => Reply::Atom { atom: self.atom_for(&name) },
             Request::Prop { hwnd, op, key, value } => self.prop_op(hwnd, op, key, value),
             Request::Dpi { set, process, awareness } => self.dpi_op(ctx, set, process, awareness),

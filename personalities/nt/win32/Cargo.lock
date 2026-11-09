@@ -87,6 +87,7 @@ dependencies = [
  "poly-gdi",
  "poly-win32-gui",
  "poly-win32-rt",
+ "poly-win32k",
 ]
 
 [[package]]

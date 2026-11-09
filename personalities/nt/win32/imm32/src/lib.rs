@@ -187,7 +187,8 @@ pub extern "system" fn ImmAssociateContext(hwnd: usize, himc: usize) -> usize {
     call(Request::ImeAssoc { hwnd: i.hwnd, code: new.code() });
     let _ = old_code;
     let now = info(hwnd).map(|n| context_of(&n)).unwrap_or(0);
-    if now != prev && announce(&i) {
+    if now != prev {
+        announce(&i);
         set_last_error(0);
     }
     prev as usize

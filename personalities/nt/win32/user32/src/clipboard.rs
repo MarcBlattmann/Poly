@@ -21,12 +21,7 @@ unsafe extern "system" {
 
 #[link(name = "gdi32", kind = "raw-dylib")]
 unsafe extern "system" {
-    fn GetObjectW(obj: usize, size: i32, out: *mut u8) -> i32;
-    fn CreateCompatibleDC(dc: usize) -> usize;
-    fn SelectObject(dc: usize, obj: usize) -> usize;
-    fn DeleteDC(dc: usize) -> i32;
-    fn DeleteObject(obj: usize) -> i32;
-    fn BitBlt(dst: usize, x: i32, y: i32, w: i32, h: i32, src: usize, sx: i32, sy: i32, rop: u32) -> i32;
+    fn PolyGdiBitmapPixels(hbm: usize, out: *mut u8, cap: usize) -> u64;
     fn CreateDIBSection(
         dc: usize,
         bmi: *const u8,
@@ -38,7 +33,6 @@ unsafe extern "system" {
 }
 
 const GMEM_MOVEABLE: u32 = 0x0002;
-const SRCCOPY: u32 = 0x00CC_0020;
 
 /// Blocks made for synthesized formats and other processes' data: freed
 /// when the clipboard has changed since (the system owns them).
@@ -150,46 +144,16 @@ pub(crate) fn bitmap_to_dib(hbm: usize) -> Option<Vec<u8>> {
 
 /// A bitmap's size and its `B, G, R, A` pixels, top-down.
 pub(crate) fn bitmap_pixels(hbm: usize) -> Option<(i32, i32, Vec<u8>)> {
-    let mut bm = [0u8; 32];
-    // SAFETY: a BITMAP's worth of space.
-    if unsafe { GetObjectW(hbm, 32, bm.as_mut_ptr()) } < 24 {
+    // SAFETY: gdi32 checks the handle.
+    let size = unsafe { PolyGdiBitmapPixels(hbm, core::ptr::null_mut(), 0) };
+    let (w, h) = (size as u32 as i32, (size >> 32) as u32 as i32);
+    if w <= 0 || h <= 0 {
         return None;
     }
-    let w = i32::from_le_bytes([bm[4], bm[5], bm[6], bm[7]]);
-    let h = i32::from_le_bytes([bm[8], bm[9], bm[10], bm[11]]);
-    if w <= 0 || h <= 0 || w > 1 << 14 || h > 1 << 14 {
-        return None;
-    }
-    // A top-down 32-bit DIB section to copy the bitmap into.
-    let mut bmi = [0u8; 40];
-    bmi[0..4].copy_from_slice(&40u32.to_le_bytes());
-    bmi[4..8].copy_from_slice(&w.to_le_bytes());
-    bmi[8..12].copy_from_slice(&(-h).to_le_bytes());
-    bmi[12..14].copy_from_slice(&1u16.to_le_bytes());
-    bmi[14..16].copy_from_slice(&32u16.to_le_bytes());
-    let mut bits: *mut u8 = core::ptr::null_mut();
-    // SAFETY: a valid BITMAPINFOHEADER and an out pointer.
-    let sec = unsafe { CreateDIBSection(0, bmi.as_ptr(), 0, &mut bits, 0, 0) };
-    if sec == 0 || bits.is_null() {
-        return None;
-    }
-    // SAFETY: our own DCs and objects.
-    let out = unsafe {
-        let src = CreateCompatibleDC(0);
-        let dst = CreateCompatibleDC(0);
-        let a = SelectObject(src, hbm);
-        let b = SelectObject(dst, sec);
-        BitBlt(dst, 0, 0, w, h, src, 0, 0, SRCCOPY);
-        let px = core::slice::from_raw_parts(bits, (w * h * 4) as usize).to_vec();
-        SelectObject(src, a);
-        SelectObject(dst, b);
-        DeleteDC(src);
-        DeleteDC(dst);
-        px
-    };
-    // SAFETY: our section.
-    unsafe { DeleteObject(sec) };
-    Some((w, h, out))
+    let mut px = alloc::vec![0u8; (w as usize) * (h as usize) * 4];
+    // SAFETY: `px` has the room asked.
+    unsafe { PolyGdiBitmapPixels(hbm, px.as_mut_ptr(), px.len()) };
+    Some((w, h, px))
 }
 
 /// A 32-bit bitmap holding a packed DIB's pixels.
@@ -310,10 +274,7 @@ fn build(format: u32, from: u32, bytes: &[u8]) -> usize {
     match (format, from) {
         (CF_BITMAP, _) => {
             let dib = if from == CF_DIBV5 { dib::from_v5(bytes) } else { Some(bytes.to_vec()) };
-            match dib.and_then(|d| dib_to_bitmap(&d)) {
-                Some(b) => b,
-                None => 0,
-            }
+            dib.and_then(|d| dib_to_bitmap(&d)).unwrap_or_default()
         }
         (CF_DIB, CF_BITMAP) => make_block(bytes),
         (CF_DIB, CF_DIBV5) => dib::from_v5(bytes).map_or(0, |d| make_block(&d)),

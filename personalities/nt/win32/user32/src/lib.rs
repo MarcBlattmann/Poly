@@ -546,7 +546,7 @@ fn ime_hook(hwnd: H) {
         // SAFETY: kernel32 queries with NUL-terminated names.
         f = unsafe {
             let m = GetModuleHandleW(name.as_ptr());
-            if m == 0 { 0 } else { GetProcAddress(m, b"PolyImmWindowCreated\0".as_ptr()) }
+            if m == 0 { 0 } else { GetProcAddress(m, c"PolyImmWindowCreated".as_ptr().cast()) }
         };
         HOOK.store(f, core::sync::atomic::Ordering::Relaxed);
     }

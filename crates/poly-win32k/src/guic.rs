@@ -35,7 +35,7 @@ pub fn dpi_awareness(a: u8) -> i32 {
 /// `-1..=-5` and the values the real handles have (`GetThreadDpiAwarenessContext.yaml`).
 pub fn context_awareness(h: i64) -> Option<u8> {
     // Real handles carry flag bits above the context: bit 31 is ignored.
-    let h = if h >= 0 || h < -5 { i64::from((h as u32) & 0x7FFF_FFFF) } else { h };
+    let h = if !(-5..0).contains(&h) { i64::from((h as u32) & 0x7FFF_FFFF) } else { h };
     Some(match h {
         -1 | 0x6010 => AWARE_UNAWARE,
         -2 | 0x6011 => AWARE_SYSTEM,

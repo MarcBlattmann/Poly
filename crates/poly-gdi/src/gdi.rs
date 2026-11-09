@@ -439,6 +439,26 @@ impl Gdi {
         }
     }
 
+    /// A bitmap's size and `B, G, R, A` pixels, top-down, whatever DC it is
+    /// selected into (the icon and clipboard calls copy bitmaps with it).
+    pub fn bitmap_bgra(&self, h: u64) -> Option<(i32, i32, Vec<u8>)> {
+        let Some(Obj::Bitmap { bmp, .. }) = self.obj(h) else { return None };
+        let (w, ht) = (bmp.width, bmp.height);
+        if w <= 0 || ht <= 0 || w > 1 << 14 || ht > 1 << 14 {
+            return None;
+        }
+        let mut out = Vec::with_capacity((w * ht * 4) as usize);
+        for y in 0..ht {
+            for x in 0..w {
+                let raw = bmp.raw(x, y);
+                let c = bmp.to_rgb(raw).colorref();
+                let a = if bmp.bpp == 32 { (raw >> 24) as u8 } else { 255 };
+                out.extend_from_slice(&[(c >> 16) as u8, (c >> 8) as u8, c as u8, a]);
+            }
+        }
+        Some((w, ht, out))
+    }
+
     /// A display DC's origin on the screen (`None`: not a display DC).
     pub fn display_origin(&self, h: u64) -> Option<(i32, i32)> {
         let d = self.dc(h)?;

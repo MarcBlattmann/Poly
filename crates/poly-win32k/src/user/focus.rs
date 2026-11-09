@@ -349,7 +349,18 @@ pub fn after_hide<E: Env + ?Sized>(env: &E, i: &WinInfo) {
             Some(o) if o.visible && o.style & WS_DISABLED == 0 && o.tid == env.tid() => {
                 activate(env, o.hwnd, false, true);
             }
-            _ => deactivate_away(env, false),
+            // Else the next window of the thread in z order that can have it
+            // (ImmGetContext.yaml igc_activation: A takes over from B).
+            _ => match tops_of(env, env.tid()).into_iter().filter(|&t| t != i.hwnd).find_map(|t| {
+                info(env, u64::from(t))
+                    .filter(|w| w.visible && w.style & WS_DISABLED == 0 && w.ex_style & WS_EX_NOACTIVATE == 0)
+                    .filter(|w| w.owner == 0)
+            }) {
+                Some(next) => {
+                    activate(env, next.hwnd, false, true);
+                }
+                None => deactivate_away(env, false),
+            },
         }
     } else if st.focus != 0 && i.style & WS_CHILD != 0 && is_within(env, st.focus, i.hwnd) {
         let parent = i.parent;

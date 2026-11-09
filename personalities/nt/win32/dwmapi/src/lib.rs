@@ -21,6 +21,12 @@ unsafe extern "system" {
     fn SendMessageW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
 }
 
+#[link(name = "gdi32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn CreateRectRgn(l: i32, t: i32, r: i32, b: i32) -> usize;
+    fn DeleteObject(h: usize) -> i32;
+}
+
 #[link(name = "kernel32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn Sleep(ms: u32);
@@ -153,13 +159,24 @@ fn round_trip(attr: u32) -> bool {
     matches!(attr, 16 | 20 | 33 | 38)
 }
 
-/// Whether non-client rendering is in effect: the policy, else the style.
+/// The attribute number the effective non-client rendering state is kept under.
+const NC_EFFECTIVE: u32 = 90;
+
+/// Whether non-client rendering is in effect: the last valid policy's
+/// state (a policy out of range changes nothing), else the style.
+fn effective(hwnd: usize) -> bool {
+    match stored(hwnd, NC_EFFECTIVE) {
+        Some(v) => v != 0,
+        None => style(hwnd) & WS_CAPTION == WS_CAPTION,
+    }
+}
+
+/// What `DwmGetWindowAttribute(NCRENDERING_ENABLED)` reads: 0 after a
+/// policy out of range.
 fn nc_enabled(hwnd: usize) -> bool {
     match stored(hwnd, NCRENDERING_POLICY) {
-        Some(1) => false,
-        Some(2) => true,
-        Some(0) | None => style(hwnd) & WS_CAPTION == WS_CAPTION,
-        Some(_) => false,
+        Some(p) if p > 2 => false,
+        _ => effective(hwnd),
     }
 }
 
@@ -194,10 +211,14 @@ fn nc_changed(hwnd: usize, enabled: bool) {
     // SAFETY: messages to a window with structures that outlive the calls.
     unsafe {
         SendMessageW(hwnd, WM_NCCALCSIZE, 1, &mut calc1 as *mut NcCalcSize as isize);
-        SendMessageW(hwnd, WM_NCPAINT, 1, 0);
+        let rgn = CreateRectRgn(r[0], r[1], r[2], r[3]);
+        SendMessageW(hwnd, WM_NCPAINT, if rgn != 0 { rgn } else { 1 }, 0);
         SendMessageW(hwnd, WM_WINDOWPOSCHANGED, 0, &mut p1 as *mut WindowPos as isize);
         SendMessageW(hwnd, WM_NCCALCSIZE, 1, &mut calc2 as *mut NcCalcSize as isize);
-        SendMessageW(hwnd, WM_NCPAINT, 1, 0);
+        SendMessageW(hwnd, WM_NCPAINT, if rgn != 0 { rgn } else { 1 }, 0);
+        if rgn != 0 {
+            DeleteObject(rgn);
+        }
         SendMessageW(hwnd, WM_DWMNCRENDERINGCHANGED, usize::from(enabled), 0);
     }
 }
@@ -245,10 +266,16 @@ pub unsafe extern "system" fn DwmSetWindowAttribute(hwnd: usize, attr: u32, valu
         _ => v,
     };
     if attr == NCRENDERING_POLICY {
-        let before = nc_enabled(hwnd);
+        let before = effective(hwnd);
         store(hwnd, attr, v);
-        let after = nc_enabled(hwnd);
-        if before != after && v <= 2 {
+        let after = match v {
+            0 => style(hwnd) & WS_CAPTION == WS_CAPTION,
+            1 => false,
+            2 => true,
+            _ => before,
+        };
+        store(hwnd, NC_EFFECTIVE, u32::from(after));
+        if before != after {
             nc_changed(hwnd, after);
         }
         return S_OK;
@@ -288,6 +315,9 @@ pub unsafe extern "system" fn DwmGetWindowAttribute(hwnd: usize, attr: u32, out:
     let rect = matches!(attr, CAPTION_BUTTON_BOUNDS | EXTENDED_FRAME_BOUNDS);
     if (rect && size < 16) || (attr == 40 && size == 4) {
         return E_INSUFFICIENT;
+    }
+    if attr == 40 {
+        return E_INVALIDARG;
     }
     let put = |v: u32| {
         // SAFETY: at least four bytes.

@@ -127,6 +127,80 @@ impl Surfaces {
         }
     }
 
+    /// What the screen shows at (`x`, `y`) as a `COLORREF`: the topmost
+    /// visible top-level window's client pixel there, a layered window
+    /// blended with what is below it as `(src * a + below * (255 - a)) / 255`
+    /// per channel, its colour key showing what is below, and a layered
+    /// window never given attributes showing nothing
+    /// (`SetLayeredWindowAttributes.yaml`). Black where no window is.
+    pub fn screen_pixel(&self, wm: &Wm, desktop: &Desktop, x: i32, y: i32) -> u32 {
+        self.pixel_below(wm, desktop, &wm.top_levels(), x, y)
+    }
+
+    /// Whether a point on layered top-level window `top` hits what is below
+    /// it: alpha 0, or a colour key whose red and blue parts are equal and
+    /// the pixel is the key (`SetLayeredWindowAttributes.yaml`
+    /// `hit_testing_*`).
+    pub fn hit_passes(&self, wm: &Wm, desktop: &Desktop, top: u32, x: i32, y: i32) -> bool {
+        let Some((key, alpha, flags, attrs, _)) = wm.layered_of(top) else { return false };
+        if !attrs {
+            return false;
+        }
+        if flags & 2 != 0 && alpha == 0 {
+            return true;
+        }
+        let Some(i) = wm.info(top) else { return false };
+        if flags & 1 != 0 && (key & 0xFF) == ((key >> 16) & 0xFF) {
+            return self.client_pixel(desktop, top, x - i.client.left, y - i.client.top) == Some(key & 0x00FF_FFFF);
+        }
+        false
+    }
+
+    fn pixel_below(&self, wm: &Wm, desktop: &Desktop, order: &[u32], x: i32, y: i32) -> u32 {
+        for (k, &h) in order.iter().enumerate() {
+            let Some(i) = wm.info(h) else { continue };
+            if !i.visible || i.minimized || i.message_only || !i.client.contains(x, y) {
+                continue;
+            }
+            let Some(pix) = self.client_pixel(desktop, h, x - i.client.left, y - i.client.top) else { continue };
+            let Some((key, alpha, flags, attrs, update)) = wm.layered_of(h) else { return pix };
+            if !attrs && !update {
+                continue;
+            }
+            if !attrs {
+                return pix;
+            }
+            if flags & 1 != 0 && pix == key & 0x00FF_FFFF {
+                continue;
+            }
+            if flags & 2 == 0 {
+                return pix;
+            }
+            let below = self.pixel_below(wm, desktop, &order[k + 1..], x, y);
+            let a = u32::from(alpha);
+            let mix = |s: u32, d: u32| (s * a + d * (255 - a)) / 255;
+            let ch = |c: u32, sh: u32| (c >> sh) & 255;
+            return mix(ch(pix, 0), ch(below, 0))
+                | mix(ch(pix, 8), ch(below, 8)) << 8
+                | mix(ch(pix, 16), ch(below, 16)) << 16;
+        }
+        0
+    }
+
+    /// The `COLORREF` of window `hwnd`'s surface at (`x`, `y`) in client
+    /// coordinates.
+    fn client_pixel(&self, desktop: &Desktop, hwnd: u32, x: i32, y: i32) -> Option<u32> {
+        let s = self.surface(hwnd)?;
+        let b = desktop.surface(s)?.buffer?;
+        let buf = self.buffers.get(&b.id)?;
+        if x < 0 || y < 0 || x as u32 >= buf.width || y as u32 >= buf.height {
+            return None;
+        }
+        let at = (y as usize * buf.width as usize + x as usize) * 4;
+        let p = buf.bytes.get(at..at + 3)?;
+        Some(u32::from(p[2]) | u32::from(p[1]) << 8 | u32::from(p[0]) << 16)
+    }
+
     /// The size of window `hwnd`'s surface buffer, for its DCs.
     pub fn size(&self, desktop: &Desktop, hwnd: u32) -> Option<(u32, u32)> {
         let s = self.surface(hwnd)?;

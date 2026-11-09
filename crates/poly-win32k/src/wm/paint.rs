@@ -67,7 +67,12 @@ impl Wm {
 
     /// Whether `h` is to get a `WM_PAINT`.
     pub(super) fn needs_paint(&self, h: u32) -> bool {
-        self.visible(h) && self.get(u64::from(h)).is_some_and(|w| !w.paint.upd.is_empty() || w.paint.internal)
+        // A layered window nobody gave attributes paints nothing.
+        self.visible(h)
+            && self.get(u64::from(h)).is_some_and(|w| {
+                (w.ex_style & crate::guic::WS_EX_LAYERED == 0 || w.lay.attrs || w.lay.update)
+                    && (!w.paint.upd.is_empty() || w.paint.internal)
+            })
     }
 
     fn thread_needs_paint(&self, key: Key) -> bool {

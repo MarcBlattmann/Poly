@@ -662,6 +662,11 @@ fn show<E: Env + ?Sized>(env: &E, i: &WinInfo, kind: ShowKind) {
         // WM_WINDOWPOSCHANGED of every show but a WS_EX_NOACTIVATE window's
         // creation; creating a visible window activates it even then.
         extra = if !activatable && matches!(kind, ShowKind::Create) { 0 } else { 0x1000_0000 };
+        // A layered window is composed, not drawn: it has no such bit
+        // (SetLayeredWindowAttributes.yaml: 0x1857).
+        if i.ex_style & crate::guic::WS_EX_LAYERED != 0 {
+            extra = 0;
+        }
     }
     let activate = (activatable || (interactive && matches!(kind, ShowKind::Create))) && flags & SWP_NOACTIVATE == 0;
     // An overlapped window shown by its creation enters the z order

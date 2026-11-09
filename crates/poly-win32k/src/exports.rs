@@ -383,6 +383,7 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "PolyGdiDrawTextEx",
     "PolyGdiDisplayOrigin",
     "PolyGdiDisplayWindow",
+    "PolyGdiBitmapPixels",
 ];
 
 /// `gdi32.dll` functions that are stubs for now.

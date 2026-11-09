@@ -82,6 +82,10 @@ fn send_frame<E: Env + ?Sized>(env: &E, i: &WinInfo, p: &Pending) {
 /// erase, RDW_ERASENOW, a window being shown): the update region stays.
 pub fn erase_now<E: Env + ?Sized>(env: &E, hwnd: u32) {
     let Some(i) = info(env, u64::from(hwnd)) else { return };
+    // A layered window nobody gave attributes shows, and paints, nothing.
+    if !i.lay_ready {
+        return;
+    }
     let Some(p) = pending(env, hwnd) else { return };
     if !p.visible {
         return;

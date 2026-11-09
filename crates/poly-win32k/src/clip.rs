@@ -329,7 +329,7 @@ impl Clipboard {
         if format == 0 || self.open.is_none() {
             return err(ERROR_CLIPBOARD_NOT_OPEN);
         }
-        if format >= FIRST_REGISTERED && format <= 0xFFFF && (format - FIRST_REGISTERED) as usize >= self.names.len() {
+        if (FIRST_REGISTERED..=0xFFFF).contains(&format) && (format - FIRST_REGISTERED) as usize >= self.names.len() {
             return err(ERROR_INVALID_HANDLE);
         }
         let content = match data {

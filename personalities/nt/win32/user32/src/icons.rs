@@ -89,7 +89,7 @@ fn blank(w: i32, h: i32, cursor: bool, hot: (i32, i32)) -> Image {
 }
 
 fn is_system_icon(h: usize) -> bool {
-    h >= ICON_BASE && h < ICON_BASE + SYSTEM_ICONS
+    (ICON_BASE..ICON_BASE + SYSTEM_ICONS).contains(&h)
 }
 
 /// A system icon: 32x32 with a filled disc (the artwork is Poly's).
@@ -667,7 +667,7 @@ fn load_file(name: *const u16, kind: u32, cx: i32, cy: i32, flags: u32) -> usize
     let as_cursor = kind == 2;
     // A cursor takes the directory's fields as the hotspot (an .ico's
     // planes and bit count too); an icon's hotspot is its centre.
-    let obj = if as_cursor {
+    if as_cursor {
         let mut c = img;
         let src_hot = pick.hot;
         let _ = ftype;
@@ -678,8 +678,7 @@ fn load_file(name: *const u16, kind: u32, cx: i32, cy: i32, flags: u32) -> usize
         obj_from_image(c, true, false)
     } else {
         obj_from_image(img, false, true)
-    };
-    obj
+    }
 }
 
 // ----- DrawIconEx
