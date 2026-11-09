@@ -1,0 +1,94 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/userns_idmap              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and become uid/gid 65534 or 1000 in children; umask 022; unprivileged user namespaces allowed"
+  observed_by: spec-linux-pkg
+  date: 2026-11-09
+summary: >
+  User namespaces and their id mappings, as rootless containers, Flatpak,
+  bubblewrap and Chrome use them. unshare(CLONE_NEWUSER) or
+  clone(CLONE_NEWUSER) needs no privilege; the process holds every
+  capability in the new namespace (capget: effective and permitted all
+  32 low bits set, bits above 31 too, inheritable empty; the version request
+  0x20080522 is the preferred one and an unknown one is EINVAL with the
+  preferred version written back) and none in the namespace it came
+  from (a lower nice value is EACCES, sethostname on the inherited UTS
+  namespace EPERM). After capset to the empty set it cannot unshare a UTS
+  namespace (EPERM) and cannot get capabilities back (capset EPERM).
+  Maps: /proc/self/uid_map, gid_map and setgroups. The initial namespace
+  maps everything to itself: uid_map reads exactly "         0          0
+  4294967295\n" (three numbers, each in a field ten characters wide,
+  separated by one blank) and setgroups "allow\n". In a new namespace the
+  maps read empty until written, setgroups reads "allow\n", and ids read as
+  65534 (the overflow id) until mapped. A write of "0 0 1" (with or without
+  the final newline) is accepted and reads back in the ten-wide format; a
+  second write is EPERM. A process inside the namespace cannot write
+  gid_map before it wrote "deny" to setgroups (EPERM). setgroups takes
+  "allow" or "deny" (newline optional, anything else EINVAL); "deny" reads
+  back "deny\n"; "allow" after "deny" is EPERM; "deny" is EPERM once gid_map
+  was written (by the parent, which needs no "deny"). Several lines can be
+  written in one write and read back as several lines.
+  Who may write what. An unprivileged user (uid/gid 65534, no capabilities)
+  from inside may map exactly its own effective id: a single line with
+  outside id equal to its effective id and count 1 (anything else EPERM);
+  gid_map needs "deny" written first. A process whose ids changed must
+  prctl(PR_SET_DUMPABLE, 1) or its /proc/self files belong to root and cannot
+  be written. With the map "0 65534 1" the process is uid 0 inside:
+  setresuid to an unmapped id is EINVAL, chown to one is EINVAL, setgroups(0)
+  is EPERM after "deny", a file it creates is owned by 0 inside, it may signal
+  a process of its own kernel uid outside (kill(.., 0) is 0) but not init
+  (EPERM). The root parent (CAP_SETUID and CAP_SETGID in the namespace the
+  child came from) writes the child's maps from outside while the child waits:
+  before the maps exist the child's ids read 65534 and its uid_map is empty;
+  the parent reads the child's maps translated into its own ids. With
+  "0 1000 1" the child is uid/gid 0 inside; a file made there is owned by
+  1000 outside, a file owned by 1000 outside is owned by 0 inside (the child
+  may open it), a root-owned file is owned by 65534 inside and a mode 0600
+  one cannot be opened (EACCES) although the child is uid 0; chown to an
+  unmapped id is EINVAL; kill(parent, 0) is EPERM; the child may call
+  setgroups; /proc/<child>/status shows the child's ids as the parent sees
+  them (1000).
+  What the parent's write accepts: each line is "inside outside count";
+  the numbers are decimal, separated by blanks or tabs; a line with count 0,
+  with fewer or more than three numbers, with text, with a negative number
+  or with an id of 4294967295 is EINVAL; so are ranges that overlap on
+  the inside or on the outside, ranges that do not fit in 32 bits
+  (inside + count or outside + count above 4294967296), and more than 340
+  lines; exactly 340 lines and the whole range "0 0 4294967295" are
+  accepted. The parent may map to any ids, also ones that are not its own.
+  Nesting: a process with uid 0 in namespace C (mapped "0 1000 1" and
+  "1 100000 999" by its root parent) makes namespace B and maps B's ids to ids of
+  C ("0 0 1" and "1 500 100"; an id that C does not map, like 2000, is
+  EPERM). Ids read translated at each level: C's file stat shows the C
+  id (506 for B's 7), the initial namespace the kernel id (100505), and C
+  reading B's uid_map sees C's ids.
+returns:
+  uid_map_initial: "\"         0          0 4294967295\\n\""
+  setgroups_read: "\"allow\\n\" or \"deny\\n\""
+  unmapped_id: "65534 (overflow uid/gid) for every id with no mapping"
+  capabilities_in_new_ns: "all capabilities in effective and permitted"
+errors:
+  second_write: "EPERM (1): a second write to uid_map or gid_map"
+  no_deny: "EPERM (1): gid_map written by the process itself before setgroups was set to deny"
+  not_own_id: "EPERM (1): a line whose outside id is not the unprivileged writer's own effective id or whose count is not 1"
+  bad_line: "EINVAL (22): count 0, wrong number of fields, text, negative number, id 4294967295, overlapping ranges, 32-bit overflow, more than 340 lines"
+  unmapped_chown: "EINVAL (22): chown or setresuid to an id with no mapping"
+  access_unmapped_owner: "EACCES (13): opening a root-owned 0600 file as ns-root with root unmapped"
+  setgroups_after_deny: "EPERM (1): setgroups call after \"deny\"; writing \"allow\" after \"deny\""
+  capget_version: "EINVAL (22): unknown version; the preferred version 0x20080522 is written back"
+side_effects: >
+  A user namespace is destroyed when its last process, namespace file and
+  child namespace are gone.
+threading: "the maps are per namespace, not per thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: all tests are needs=root: they start as root (the maps for another
+# uid need CAP_SETUID in the parent namespace; user namespaces may be
+# disabled on a host) and use several processes (syscalls=off).
