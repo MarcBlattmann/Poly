@@ -1,0 +1,89 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwrite.dll/IDWriteFactory.CreateGlyphRunAnalysis
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64, dwrite.dll 10.0.26100.1"
+  machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
+  observed_by: spec-win-dwrite
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: the DirectWrite reference pages of the interfaces and methods named
+  here ("Programming Guide for DirectWrite", "Font Collections", "Custom
+  Font Sets"); dwrite.h, dwrite_1.h, dwrite_2.h, dwrite_3.h for constants,
+  structure layouts and the order of the methods in the vtables; winerror.h
+  for the HRESULTs; the OpenType specification (head, hhea, hmtx, maxp,
+  cmap, glyf, loca, name, OS/2, post) for the font tables the tests write.
+  Wine's tests were not read.
+summary: >
+  Rasterises a run of glyphs the way Skia asks DirectWrite for glyph
+  bitmaps. The analysis is made for one rendering mode; an ALIASED analysis
+  (mode 1) has an aliased texture (one byte per pixel, 0 or 255) and no
+  ClearType one, every other mode (2..5) has a ClearType texture (three
+  bytes per pixel: coverage under the red, green and blue stripes, 0..255)
+  and no aliased one; asking for the other kind gives empty bounds.
+  Coordinates are pixels, y down, relative to the baseline origin (the
+  baseline origin given is added). The test font has eight glyphs: 0 .notdef
+  (a box 50..450 by 0..700), 1 space (no outline), 2 a square 100..900 by
+  0..800 (U+0041), 3 a triangle (0,0) (500,800) (1000,0), 4 a rounded shape
+  through (500,0), (0,400), (500,800), (1000,400) with off-curve corner
+  points, 5 a box 200..600 by 0..500, 6 a box 50..550 by -200..300, 7 a box
+  100..900 by 100..700; units per em 1000. Pixel coordinates of textures and
+  bounds have x to the right and y down, the baseline origin at (0,0).
+interface:
+  signature: "HRESULT IDWriteFactory::CreateGlyphRunAnalysis(const DWRITE_GLYPH_RUN* glyphRun, FLOAT pixelsPerDip, const DWRITE_MATRIX* transform, DWRITE_RENDERING_MODE renderingMode, DWRITE_MEASURING_MODE measuringMode, FLOAT baselineOriginX, FLOAT baselineOriginY, IDWriteGlyphRunAnalysis** glyphRunAnalysis); and the methods IDWriteGlyphRunAnalysis::GetAlphaTextureBounds(DWRITE_TEXTURE_TYPE, RECT*), CreateAlphaTexture(DWRITE_TEXTURE_TYPE, const RECT*, BYTE* alphaValues, UINT32 bufferSize), GetAlphaBlendParams(IDWriteRenderingParams*, FLOAT* blendGamma, FLOAT* blendEnhancedContrast, FLOAT* blendClearTypeLevel)"
+  DWRITE_RENDERING_MODE: "DEFAULT 0, ALIASED 1, GDI_CLASSIC 2, GDI_NATURAL 3, NATURAL 4, NATURAL_SYMMETRIC 5, OUTLINE 6 (dwrite.h)"
+  DWRITE_MEASURING_MODE: "NATURAL 0, GDI_CLASSIC 1, GDI_NATURAL 2 (dcommon.h)"
+  DWRITE_TEXTURE_TYPE: "ALIASED_1x1 0, CLEARTYPE_3x1 1 (dwrite.h)"
+  DWRITE_GLYPH_RUN: "fontFace, fontEmSize FLOAT, glyphCount, glyphIndices, glyphAdvances (null: the font's), glyphOffsets, isSideways, bidiLevel (dwrite.h)"
+  hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+rules:
+  modes_and_texture: "a run made with mode 1 (ALIASED): GetAlphaTextureBounds(ALIASED_1x1) gives the glyph box and GetAlphaTextureBounds(CLEARTYPE_3x1) gives [0,0 - 0,0]; made with modes 2 (GDI_CLASSIC), 5 (NATURAL_SYMMETRIC) (3 and 4 were not tried): ClearType bounds as below and aliased bounds [0,0 - 0,0]"
+  square_bounds: "the square (glyph 2, 100..900 by 0..800 of 1000) at em 10: aliased [1,-8 - 9,0]; ClearType [0,-8 - 10,0]; at em 20: aliased [2,-16 - 18,0], ClearType [1,-16 - 19,0]; at em 100: aliased [10,-80 - 90,0], ClearType [9,-80 - 91,0]; at em 33 aliased [3,-26 - 30,0], ClearType with mode 5 [3,-27 - 30,0] and with mode 2 [3,-26 - 30,0]. The ClearType box is the aliased one grown by the 3x1 filter (about one pixel on each side, less when the edge is a whole pixel)"
+  other_glyphs: "ClearType bounds at em 40: triangle [-1,-32 - 41,0]; rounded [-1,-32 - 41,0]; small box (glyph 5) [7,-20 - 25,0]; box below the baseline (glyph 6) [1,-12 - 23,8]; space [0,0 - 0,0]; notdef [1,-28 - 19,0]; glyph index 99 is the notdef glyph (same bounds); a run of glyphs 2, 3, 6 without advances uses the font's advances: [3,-32 - 103,8]"
+  origin: "the baseline origin moves the bounds and rounds the way the filter does: em 20 square with origin (0,0): ClearType [1,-16 - 19,0]; (0.5,0): [2,-16 - 19,0]; (0,0.5): [1,-16 - 19,1]; (0.25,0.75): [2,-16 - 19,1]; (0.49,0.51): [2,-16 - 19,1]; (10,20): [11,4 - 29,20]; (-3,-4): [-2,-20 - 16,-4]"
+  transform: "the transform is applied to the outline: triangle em 20 with identity [-1,-16 - 21,0]; scale 2 [-1,-32 - 41,0]; rotate 90 degrees (m11 0, m12 1, m21 -1, m22 0) [-1,0 - 17,20]; flip y [-1,0 - 21,16]; shear x 0.25 (m21 0.25) [-1,-16 - 21,0]; translate (dx 7, dy 3) [6,-13 - 28,3]"
+  measuring_mode: "the measuring mode (0, 1, 2) does not change the bounds of the rounded glyph at em 20 with mode 5: [-1,-16 - 21,0]"
+  creation_errors: "rendering mode 100 or OUTLINE (6), measuring mode 100, and a negative em size: E_INVALIDARG (0x80070057), null analysis; em size 0: S_OK with empty bounds"
+  textures_aliased: "CreateAlphaTexture(ALIASED_1x1) writes one byte per pixel, 255 where the glyph covers the pixel and 0 elsewhere (no grey values): em 10 square (bounds [1,-8 - 9,0]): 8 rows of 8 bytes 0xFF; em 10 triangle (bounds [0,-8 - 10,0]) rows, top to bottom, in hex: 00000000ff0000000000, 00000000ffff00000000, 000000ffffffff000000 (twice), 0000ffffffffffff0000 (twice), 00ffffffffffffffff00, ffffffffffffffffffff; em 12 rounded shape (bounds [0,-10 - 12,0]): 00000000ffffffff00000000, 0000ffffffffffffffff0000, 00ffffffffffffffffffff00, ffffffffffffffffffffffff (five times), 00ffffffffffffffffffff00, 000000ffffffffffff000000"
+  textures_cleartype: "CreateAlphaTexture(CLEARTYPE_3x1) writes three bytes per pixel (coverage for the red, green, blue stripe), filtered across neighbouring stripes, so edges spread over the stripes next to them: the em 10 square (bounds [0,-8 - 10,0]) has in every row the pixels (hex, three bytes each) 000055 aaffff ffffff ffffff ffffff ffffff ffffff ffffff ffffaa 550000; the em 10 triangle (bounds [-1,-8 - 11,0]) has as its top row 000000 000000 000000 000000 000000 0f5596 96500f 000000 000000 000000 000000 000000 and as its bottom row 000014 5aaff0 ffffff ffffff ffffff ffffff ffffff ffffff ffffff ffffff f0af5a 140000; the rounded shape at em 12 (bounds [-1,-10 - 13,0]) has graded values along its curves; the complete bytes are in the tests"
+  buffer: "CreateAlphaTexture with a buffer smaller than the rectangle needs (0, 1 or size-1 bytes): ERROR_INSUFFICIENT_BUFFER as HRESULT (0x8007007A) and nothing is written; exactly the size: S_OK; a bigger buffer (size+1, 1024): S_OK and the whole buffer is written, the surplus as zeros"
+  rectangles: "a rectangle larger than the bounds: S_OK, the part outside the glyph box is 0 (a 12x12 rectangle around the 8x8 square: 144 bytes written, 80 of them 0); a smaller rectangle inside the bounds: S_OK, only that part (6x6, 36 bytes); an empty rectangle or one with right < left or bottom < top: E_INVALIDARG; texture type 2, 3, 7 or 100 (also for GetAlphaTextureBounds): E_INVALIDARG"
+  blend_params: "GetAlphaBlendParams(params, &gamma, &contrast, &level) returns the values of the rendering params object (gamma 1.8, contrast 0.5, level 1.0 for typical custom params; 1.0/0/0; 2.2/1.0/0.5); with the default params the values equal the params' own getters"
+errors:
+  E_INVALIDARG: "unsupported mode or texture type, bad rectangle, negative em size"
+  E_INSUFFICIENT_BUFFER (0x8007007A): "buffer smaller than the rectangle"
+side_effects: "none beyond the rules above"
+threading: "the objects are used from one thread; the shared factory and the system collection may be used from several, which is not tested"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every
+  test carries its own declarations: the COM vtable layouts (from the SDK
+  headers), the enumeration constants and a writer for small TrueType fonts.
+  The test fonts are written by the test itself (eight glyphs: .notdef,
+  space, a square, a triangle, a rounded shape, a small box, a box below the
+  baseline and a box for a code point outside the BMP) with names, weights,
+  widths, styles and metrics chosen per test, and are served to DirectWrite
+  from memory through loader objects the test implements
+  (IDWriteFontFileLoader with its stream, IDWriteFontCollectionLoader with
+  its enumerator) or, where a path is the point, from a file the test writes
+  beside itself. So the results do not depend on the oracle's font list.
+  Tests of the system collection print or check only what every Windows
+  installation provides (Arial, Segoe UI, Times New Roman and similar
+  families exist; their standard faces exist; relations between values) and
+  never the metrics or file names of those fonts. The eight font slots, the
+  loaders and the calls the loaders receive are in the test file.
+not_covered: >
+  several-glyph runs with explicit advances and offsets, bidi levels,
+  sideways runs, huge sizes, IDWriteFactory2/3 CreateGlyphRunAnalysis
+  overloads with grid-fit and antialias modes, colour glyph runs. the system
+  collection's full font list; downloadable (remote) fonts; collections with
+  font files that are TrueType collections or CFF fonts; variable fonts;
+  colour fonts; several threads; failure injection inside the loaders;
+  behaviour of different Windows versions (the oracle is one build).

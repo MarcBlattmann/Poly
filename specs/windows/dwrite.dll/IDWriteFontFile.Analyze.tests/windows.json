@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "ffile_analyze",
+      "exe_sha256": "6a490816c4f629bea88dfa7903b649644b47deac331416bdb39546d0a1bcb268",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBmb250OiByZWZlcmVuY2UgMHgwMDAwMDAwMCBBbmFseXplIDB4MDAwMDAwMDAgc3VwcG9ydGVkIDEgZmlsZSB0eXBlIDIgZmFjZSB0eXBlIDEgZmFjZXMgMQp0ZXh0OiByZWZlcmVuY2UgMHgwMDAwMDAwMCBBbmFseXplIDB4MDAwMDAwMDAgc3VwcG9ydGVkIDAgZmlsZSB0eXBlIDAgZmFjZSB0eXBlIDYgZmFjZXMgMAphIGZvbnQgY3V0IGFmdGVyIDEwMCBieXRlczogcmVmZXJlbmNlIDB4MDAwMDAwMDAgQW5hbHl6ZSAweDAwMDAwMDAwIHN1cHBvcnRlZCAwIGZpbGUgdHlwZSAwIGZhY2UgdHlwZSA2IGZhY2VzIDAKYSBmb250IHdpdGggYSB3cm9uZyB2ZXJzaW9uIHRhZzogcmVmZXJlbmNlIDB4MDAwMDAwMDAgQW5hbHl6ZSAweDAwMDAwMDAwIHN1cHBvcnRlZCAwIGZpbGUgdHlwZSAwIGZhY2UgdHlwZSA2IGZhY2VzIDAKZm91ciBieXRlcyBvZiBhIFRydWVUeXBlIGhlYWRlcjogcmVmZXJlbmNlIDB4MDAwMDAwMDAgQW5hbHl6ZSAweDAwMDAwMDAwIHN1cHBvcnRlZCAwIGZpbGUgdHlwZSAwIGZhY2UgdHlwZSA2IGZhY2VzIDAKYW4gT3BlblR5cGUgaGVhZGVyLCBubyB0YWJsZXM6IHJlZmVyZW5jZSAweDAwMDAwMDAwIEFuYWx5emUgMHgwMDAwMDAwMCBzdXBwb3J0ZWQgMCBmaWxlIHR5cGUgMCBmYWNlIHR5cGUgNiBmYWNlcyAwCmEgY29sbGVjdGlvbiBoZWFkZXIsIG5vIGZvbnRzOiByZWZlcmVuY2UgMHgwMDAwMDAwMCBBbmFseXplIDB4MDAwMDAwMDAgc3VwcG9ydGVkIDAgZmlsZSB0eXBlIDAgZmFjZSB0eXBlIDYgZmFjZXMgMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a font: reference 0x00000000 Analyze 0x00000000 supported 1 file type 2 face type 1 faces 1\ntext: reference 0x00000000 Analyze 0x00000000 supported 0 file type 0 face type 6 faces 0\na font cut after 100 bytes: reference 0x00000000 Analyze 0x00000000 supported 0 file type 0 face type 6 faces 0\na font with a wrong version tag: reference 0x00000000 Analyze 0x00000000 supported 0 file type 0 face type 6 faces 0\nfour bytes of a TrueType header: reference 0x00000000 Analyze 0x00000000 supported 0 file type 0 face type 6 faces 0\nan OpenType header, no tables: reference 0x00000000 Analyze 0x00000000 supported 0 file type 0 face type 6 faces 0\na collection header, no fonts: reference 0x00000000 Analyze 0x00000000 supported 0 file type 0 face type 6 faces 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "coll_register",
+      "exe_sha256": "510031556a75acd1ab5fa27809c00958785c7faa23000036fc21d31b89356c85",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29sbGVjdGlvbiBiZWZvcmUgcmVnaXN0ZXJpbmc6IDB4ODAwNzAwNTcgbnVsbCB0cnVlClVucmVnaXN0ZXIgYmVmb3JlIHJlZ2lzdGVyaW5nOiAweDgwMDcwMDU3ClJlZ2lzdGVyOiAweDAwMDAwMDAwClJlZ2lzdGVyIGFnYWluOiAweDg4OTg1MDA2CmNvbGxlY3Rpb246IDB4MDAwMDAwMDAgbnVsbCBmYWxzZSBlbnVtZXJhdG9ycyBjcmVhdGVkIDEKVW5yZWdpc3RlcjogMHgwMDAwMDAwMAp0aGUgY29sbGVjdGlvbiBtYWRlIGJlZm9yZSBVbnJlZ2lzdGVyIHN0aWxsIGhhcyAxIGZhbWlsaWVzClVucmVnaXN0ZXIgYWdhaW46IDB4ODAwNzAwNTcKY29sbGVjdGlvbiBhZnRlciBVbnJlZ2lzdGVyOiAweDgwMDcwMDU3IG51bGwgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "collection before registering: 0x80070057 null true\nUnregister before registering: 0x80070057\nRegister: 0x00000000\nRegister again: 0x88985006\ncollection: 0x00000000 null false enumerators created 1\nUnregister: 0x00000000\nthe collection made before Unregister still has 1 families\nUnregister again: 0x80070057\ncollection after Unregister: 0x80070057 null true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

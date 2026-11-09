@@ -1,0 +1,68 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwrite.dll/IDWriteFont.GetWeight
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64, dwrite.dll 10.0.26100.1"
+  machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
+  observed_by: spec-win-dwrite
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: the DirectWrite reference pages of the interfaces and methods named
+  here ("Programming Guide for DirectWrite", "Font Collections", "Custom
+  Font Sets"); dwrite.h, dwrite_1.h, dwrite_2.h, dwrite_3.h for constants,
+  structure layouts and the order of the methods in the vtables; winerror.h
+  for the HRESULTs; the OpenType specification (head, hhea, hmtx, maxp,
+  cmap, glyf, loca, name, OS/2, post) for the font tables the tests write.
+  Wine's tests were not read.
+summary: >
+  The weight of a font: the font's OS/2 usWeightClass, with the values 1..9
+  taken as hundreds, 0 as 1 and 1000 or more as 999. A font whose OS/2
+  selection has the bold flag but whose weight class is below 700 reports
+  700. The custom collection of the tests (poly_env) holds eight test fonts
+  served from memory: family "PolyTest Alpha" (name IDs 1 and 2 only:
+  Regular 400, Bold 700 with the bold flag, Italic 400 with the italic flag,
+  Bold Italic 700) and family "PolyTest Beta" whose faces name their family
+  through name ID 16 and subfamily through ID 17 (Light 300, Regular 400,
+  Black 900, and Condensed 400 with usWidthClass 3).
+interface:
+  signature: "DWRITE_FONT_WEIGHT IDWriteFont::GetWeight()"
+  hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+rules:
+  class: "usWeightClass 1..9 gives 100..900 (class 5 gives 500); 0 gives 1; 10, 11, 50, 99, 100, 101, 150, 199, 250, 350, 399, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 999 are returned as they are"
+  clamp: "usWeightClass 1000, 1001, 1500 and 65535 give 999"
+  system: "Regular faces of Arial, Segoe UI, Times New Roman, Courier New and Verdana report 400 and their Bold faces 700"
+errors:
+  none: "no error cases"
+side_effects: "none beyond the rules above"
+threading: "the objects are used from one thread; the shared factory and the system collection may be used from several, which is not tested"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every
+  test carries its own declarations: the COM vtable layouts (from the SDK
+  headers), the enumeration constants and a writer for small TrueType fonts.
+  The test fonts are written by the test itself (eight glyphs: .notdef,
+  space, a square, a triangle, a rounded shape, a small box, a box below the
+  baseline and a box for a code point outside the BMP) with names, weights,
+  widths, styles and metrics chosen per test, and are served to DirectWrite
+  from memory through loader objects the test implements
+  (IDWriteFontFileLoader with its stream, IDWriteFontCollectionLoader with
+  its enumerator) or, where a path is the point, from a file the test writes
+  beside itself. So the results do not depend on the oracle's font list.
+  Tests of the system collection print or check only what every Windows
+  installation provides (Arial, Segoe UI, Times New Roman and similar
+  families exist; their standard faces exist; relations between values) and
+  never the metrics or file names of those fonts. The eight font slots, the
+  loaders and the calls the loaders receive are in the test file.
+not_covered: >
+  the system collection's full font list; downloadable (remote) fonts;
+  collections with font files that are TrueType collections or CFF fonts;
+  variable fonts; colour fonts; several threads; failure injection inside
+  the loaders; behaviour of different Windows versions (the oracle is one
+  build).

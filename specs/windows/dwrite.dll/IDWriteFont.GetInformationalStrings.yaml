@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwrite.dll/IDWriteFont.GetInformationalStrings
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64, dwrite.dll 10.0.26100.1"
+  machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
+  observed_by: spec-win-dwrite
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: the DirectWrite reference pages of the interfaces and methods named
+  here ("Programming Guide for DirectWrite", "Font Collections", "Custom
+  Font Sets"); dwrite.h, dwrite_1.h, dwrite_2.h, dwrite_3.h for constants,
+  structure layouts and the order of the methods in the vtables; winerror.h
+  for the HRESULTs; the OpenType specification (head, hhea, hmtx, maxp,
+  cmap, glyf, loca, name, OS/2, post) for the font tables the tests write.
+  Wine's tests were not read.
+summary: >
+  Reads a name table entry of the font by DWRITE_INFORMATIONAL_STRING_ID. If
+  the font has no such entry exists is FALSE and the output is null (S_OK).
+  The ids map to OpenType name IDs as listed in the rules.
+interface:
+  signature: "HRESULT IDWriteFont::GetInformationalStrings(DWRITE_INFORMATIONAL_STRING_ID informationalStringID, IDWriteLocalizedStrings** informationalStrings, BOOL* exists)"
+  DWRITE_INFORMATIONAL_STRING_ID: "NONE 0, COPYRIGHT_NOTICE 1, VERSION_STRINGS 2, TRADEMARK 3, MANUFACTURER 4, DESIGNER 5, DESIGNER_URL 6, DESCRIPTION 7, FONT_VENDOR_URL 8, LICENSE_DESCRIPTION 9, LICENSE_INFO_URL 10, WIN32_FAMILY_NAMES 11, WIN32_SUBFAMILY_NAMES 12, TYPOGRAPHIC_FAMILY_NAMES 13 (= PREFERRED_FAMILY_NAMES), TYPOGRAPHIC_SUBFAMILY_NAMES 14 (= PREFERRED_SUBFAMILY_NAMES), SAMPLE_TEXT 15, FULL_NAME 16, POSTSCRIPT_NAME 17, POSTSCRIPT_CID_NAME 18, WEIGHT_STRETCH_STYLE_FAMILY_NAME 19 (= WWS_FAMILY_NAME), DESIGN_SCRIPT_LANGUAGE_TAG 20, SUPPORTED_SCRIPT_LANGUAGE_TAG 21 (dwrite.h)"
+  hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+rules:
+  mapping: "ids 1..10 read name IDs 0 (copyright), 5 (version), 7 (trademark), 8 (manufacturer), 9 (designer), 12 (designer URL), 10 (description), 11 (vendor URL), 13 (license), 14 (license URL); 11 and 12 read name IDs 1 and 2; 13 and 14 read 16 and 17; 15 reads 19 (sample text); 16 reads 4 (full name); 17 reads 6 (PostScript name); 18 reads 20 (CID name); 19 reads 21 (WWS family name)"
+  absent: "ids with no entry in the font (id 0 NONE, ids 13/14 when the font has no name IDs 16/17, id 18 and 19 when missing, and unknown ids 22..24): S_OK, exists FALSE (the test passes 7: it becomes 0), output null"
+  wws: "a font with name IDs 21 and 22: the family is found under the WWS family name; the typographic ones (16, 17) are still readable as ids 13 and 14 and the WWS family as id 19; id 15 (sample text) is absent without ID 19"
+  system: "Arial (Regular and Bold Italic), Segoe UI and Times New Roman: id 11 (family name) en-us, id 16 (full name) present and containing the family name, id 17 (PostScript name) present and without spaces"
+errors:
+  none: "a missing string is S_OK with exists FALSE"
+side_effects: "none beyond the rules above"
+threading: "the objects are used from one thread; the shared factory and the system collection may be used from several, which is not tested"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every
+  test carries its own declarations: the COM vtable layouts (from the SDK
+  headers), the enumeration constants and a writer for small TrueType fonts.
+  The test fonts are written by the test itself (eight glyphs: .notdef,
+  space, a square, a triangle, a rounded shape, a small box, a box below the
+  baseline and a box for a code point outside the BMP) with names, weights,
+  widths, styles and metrics chosen per test, and are served to DirectWrite
+  from memory through loader objects the test implements
+  (IDWriteFontFileLoader with its stream, IDWriteFontCollectionLoader with
+  its enumerator) or, where a path is the point, from a file the test writes
+  beside itself. So the results do not depend on the oracle's font list.
+  Tests of the system collection print or check only what every Windows
+  installation provides (Arial, Segoe UI, Times New Roman and similar
+  families exist; their standard faces exist; relations between values) and
+  never the metrics or file names of those fonts. The eight font slots, the
+  loaders and the calls the loaders receive are in the test file.
+not_covered: >
+  languages other than en-us in these tests (see GetFaceNames); name table
+  platforms other than 3/1. the system collection's full font list;
+  downloadable (remote) fonts; collections with font files that are TrueType
+  collections or CFF fonts; variable fonts; colour fonts; several threads;
+  failure injection inside the loaders; behaviour of different Windows
+  versions (the oracle is one build).
