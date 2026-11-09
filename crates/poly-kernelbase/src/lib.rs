@@ -75,6 +75,7 @@ pub mod error;
 pub mod exports;
 pub mod file;
 pub mod fileex;
+pub mod kuser;
 pub mod locale;
 pub mod mapping;
 pub mod memory;

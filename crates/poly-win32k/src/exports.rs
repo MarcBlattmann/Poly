@@ -165,6 +165,7 @@ pub const USER32_EXPORTS: &[&str] = &[
     "WindowFromPoint",
     "ChildWindowFromPoint",
     "TrackMouseEvent",
+    "WindowFromDC",
     // ADR 0155 batch 4: the calls of a headless browser.
     "SetPropW",
     "GetPropW",
