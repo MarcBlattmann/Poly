@@ -30,7 +30,14 @@
 //!    place);
 //! 5. Q closes the client, and the launcher comes back on the empty
 //!    desktop; the launcher then starts the interactive native protocol
-//!    test client and checks its two-colour shared buffer.
+//!    test client and checks its two-colour shared buffer;
+//! 6. startup feedback (ADR 0167): a slow-starting app ("Slow Window",
+//!    `wl-demo --delay`) makes the pointer on the empty desktop the busy
+//!    arrow with a turning spinner (two screenshots, and the compositor
+//!    logs `busy pointer on`) until its window is mapped (`busy pointer
+//!    off`, the spinner gone); a second one ("Slow Activated") ends it by
+//!    activating its window with the `XDG_ACTIVATION_TOKEN` the launcher
+//!    gave it.
 //!
 //! Boot group `desktop-shell` (ADR 0117) boots the same desktop with a
 //! virtio-sound card (the mixer) and an ext2 disk mounted on `/mnt` for
@@ -72,6 +79,13 @@ const DEMO_FILE: &str = "[Desktop Entry]\nType=Application\nName=Poly Demo\n\
     Comment=A Wayland window drawn by a small native client\nExec=/bin/wl-demo\nKeywords=demo;wayland;test;\n";
 const DESKTOP_FILE: &str = "[Desktop Entry]\nType=Application\nName=Demo Window\n\
     Comment=The demo client, from a desktop file\nExec=/bin/wl-demo\nKeywords=demo;sample;\n";
+/// Apps that start slowly, for the busy pointer (ADR 0167): one is known
+/// by its process, the other activates its window with its launch's token.
+const SLOW_FILE: &str = "[Desktop Entry]\nType=Application\nName=Slow Window\n\
+    Comment=The demo client, ready after four seconds\nExec=/bin/wl-demo --delay 4000\nKeywords=slow;busy;\n";
+const SLOW_ACTIVATED_FILE: &str = "[Desktop Entry]\nType=Application\nName=Slow Activated\n\
+    Comment=The demo client, ready after three seconds, activating with its token\n\
+    Exec=/bin/wl-demo --delay 3000 --activate\nKeywords=slow;busy;activation;\n";
 /// The interactive launcher entry for the protocol test client.
 const WL_CLIENT_FILE: &str = "[Desktop Entry]\nType=Application\nName=Wayland Test Client\n\
     Comment=An interactive native Wayland protocol test window\nExec=/bin/wl-client --interactive\nKeywords=wayland;test;client;\n";
@@ -146,6 +160,8 @@ fn application_files(test_apps: bool) -> Vec<(String, u16, Vec<u8>)> {
     [
         ("usr/share/applications/poly-demo.desktop", DEMO_FILE),
         ("usr/share/applications/demo-window.desktop", DESKTOP_FILE),
+        ("usr/share/applications/slow-window.desktop", SLOW_FILE),
+        ("usr/share/applications/slow-activated.desktop", SLOW_ACTIVATED_FILE),
         ("usr/share/applications/wayland-test-client.desktop", WL_CLIENT_FILE),
         ("usr/share/applications/notify-test.desktop", NOTIFY_FILE),
     ]
@@ -164,6 +180,8 @@ pub fn launcher_apps(test_apps: bool) -> Vec<(String, String)> {
         (DEMO_FILE, "/bin/wl-demo"),
         (WL_CLIENT_FILE, "/bin/wl-client --interactive"),
         (DESKTOP_FILE, "/bin/wl-demo"),
+        (SLOW_FILE, "/bin/wl-demo --delay 4000"),
+        (SLOW_ACTIVATED_FILE, "/bin/wl-demo --delay 3000 --activate"),
         (NOTIFY_FILE, "/bin/notify-send"),
     ]
     .into_iter()
@@ -679,6 +697,8 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let img = d.shot("empty-again")?;
     expect("the launcher is back on the empty desktop", img.pixel(900, 40) == RIDGE)?;
 
+    startup_feedback(&mut d)?;
+
     // The built-in entry is a distinct launcher path from "Demo Window";
     // it must also draw, move, and close.
     d.wait(LAUNCHER_SHOWN, 30)?;
@@ -747,6 +767,92 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     d.wait("wl-client: closed", 30)?;
     wait_nth(&d.lines, "Wayland Test Client (pid", 2, 30)?;
     d.qmp.quit();
+    Ok(())
+}
+
+/// Where the busy pointer is held in [`startup_feedback`]: the desktop,
+/// clear of the window that appears in the middle.
+const BUSY_AT: (i32, i32) = (900, 600);
+
+/// How many pixels of the busy pointer's spinner area (to the arrow's
+/// lower right, ADR 0167) differ between two screenshots.
+fn spinner_diff(a: &screen::Image, b: &screen::Image) -> usize {
+    let mut n = 0;
+    for y in BUSY_AT.1 + 8..BUSY_AT.1 + 28 {
+        for x in BUSY_AT.0 + 10..BUSY_AT.0 + 27 {
+            n += usize::from(a.pixel(x as u32, y as u32) != b.pixel(x as u32, y as u32));
+        }
+    }
+    n
+}
+
+/// Step 6: startup feedback (ADR 0167). A slow app is started from the
+/// launcher; until its window is mapped the pointer over the empty desktop
+/// is the arrow with a turning spinner, and the compositor says so.
+fn startup_feedback(d: &mut Driver) -> std::result::Result<(), String> {
+    let off = count(&d.lines, "busy pointer off");
+    let shown_before = count(&d.lines, "window \"Poly Demo\" shown at");
+    let launcher_before = count(&d.lines, LAUNCHER_SHOWN);
+    d.wait(LAUNCHER_SHOWN, 30)?;
+    d.type_text(&["s", "l", "o", "w", "spc", "w", "i", "n", "d", "o", "w"])?;
+    d.wait("launcher query \"slow window\"", 30)?;
+    d.type_text(&["ret"])?;
+    d.wait("poly-compositor: launched Slow Window", 30)?;
+    wait_nth(&d.lines, "busy pointer on: launching Slow Window", 1, 30)?;
+    // The pointer on the empty desktop, away from where the window will be.
+    d.send(&abs(BUSY_AT.0, BUSY_AT.1))?;
+    let busy_a = d.shot("busy-pointer")?;
+    thread::sleep(Duration::from_millis(250));
+    let busy_b = d.shot("busy-pointer-later")?;
+    expect("the app has no window yet (the pointer is still busy)", count(&d.lines, "busy pointer off") == off)?;
+    // The arrow is there (its white inside) ...
+    let tip = (BUSY_AT.0 as u32 + 2, BUSY_AT.1 as u32 + 4);
+    expect("the busy pointer is the arrow", busy_a.pixel(tip.0, tip.1) == [0xff, 0xff, 0xff])?;
+    // ... and its spinner turns (the pictures differ at its lower right).
+    let turned = spinner_diff(&busy_a, &busy_b);
+    expect(&format!("the spinner turns ({turned} pixels differ)"), turned >= 4)?;
+    // The window maps: the busy pointer ends, by the process (not a token).
+    let line = d.wait("launch Slow Window:", 90)?;
+    expect(&format!("the launch ended by its window ({line})"), line.contains("window mapped by pid"))?;
+    wait_nth(&d.lines, "busy pointer off", off + 1, 30)?;
+    let line = wait_nth_line(&d.lines, "window \"Poly Demo\" shown at", shown_before + 1, 90)?;
+    let (x, y, w, _h) = window_place(&line).ok_or_else(|| format!("unreadable window line {line:?}"))?;
+    expect("the window is clear of the busy pointer", x + w + 40 < BUSY_AT.0 || y + 300 < BUSY_AT.1)?;
+    thread::sleep(Duration::from_millis(800));
+    let normal = d.shot("normal-pointer")?;
+    expect("the arrow stays", normal.pixel(tip.0, tip.1) == [0xff, 0xff, 0xff])?;
+    let gone = spinner_diff(&busy_a, &normal);
+    expect(&format!("the spinner is gone ({gone} pixels differ)"), gone >= 4)?;
+    let calm = spinner_diff(&normal, &d.shot("normal-pointer-later")?);
+    expect(&format!("nothing turns any more ({calm} pixels differ)"), calm == 0)?;
+    let closed = count(&d.lines, "wl-demo: closed");
+    d.send(&abs(x + w / 2, y + 30))?;
+    d.type_text(&["q"])?;
+    wait_nth(&d.lines, "wl-demo: closed", closed + 1, 30)?;
+    wait_nth(&d.lines, "Slow Window (pid", 1, 30)?;
+    wait_nth(&d.lines, LAUNCHER_SHOWN, launcher_before + 1, 30)?;
+
+    // The token path: the app activates its window with the token it was
+    // launched with, which ends the wait.
+    let off = count(&d.lines, "busy pointer off");
+    let shown_before = count(&d.lines, "window \"Poly Demo\" shown at");
+    d.type_text(&["s", "l", "o", "w", "spc", "a", "c", "t", "i", "v", "a", "t", "e", "d"])?;
+    d.wait("launcher query \"slow activated\"", 30)?;
+    d.type_text(&["ret"])?;
+    wait_nth(&d.lines, "busy pointer on: launching Slow Activated", 1, 30)?;
+    d.wait("wl-demo: activating with token poly-activation-", 90)?;
+    let line = d.wait("launch Slow Activated:", 90)?;
+    expect(&format!("the launch ended by its token ({line})"), line.contains("activated by its token"))?;
+    expect("the busy pointer ended", count(&d.lines, "busy pointer off") == off + 1)?;
+    let line = wait_nth_line(&d.lines, "window \"Poly Demo\" shown at", shown_before + 1, 90)?;
+    let (x, y, w, _h) = window_place(&line).ok_or_else(|| format!("unreadable window line {line:?}"))?;
+    thread::sleep(Duration::from_millis(800));
+    let closed = count(&d.lines, "wl-demo: closed");
+    d.send(&abs(x + w / 2, y + 30))?;
+    d.type_text(&["q"])?;
+    wait_nth(&d.lines, "wl-demo: closed", closed + 1, 30)?;
+    wait_nth(&d.lines, "Slow Activated (pid", 1, 30)?;
+    thread::sleep(Duration::from_millis(1000));
     Ok(())
 }
 
@@ -1204,6 +1310,11 @@ fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
         &format!("the window is at its client rectangle {WIN32_CLIENT:?} (got {:?})", (x, y, w, h)),
         (x, y, w, h) == WIN32_CLIENT,
     )?;
+    // The busy pointer of its launch ended by the window of its process
+    // (win32k's link tells the compositor the process, ADR 0167), not by
+    // the timeout.
+    let line = d.wait("launch Poly Fill:", 60)?;
+    expect(&format!("the Windows app's launch ended by its window ({line})"), line.contains("window mapped by pid"))?;
     // The fill comes with the first commit; give the frame time.
     thread::sleep(Duration::from_millis(3000));
     let img = d.shot("win32-window")?;

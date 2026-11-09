@@ -181,6 +181,10 @@ pub enum ToCompositor {
     State { surface: SurfaceId, state: WindowState },
     /// The surface is gone (its buffers with it).
     Destroy { surface: SurfaceId },
+    /// The process that owns the surface's window (sent after `Create`, and
+    /// replayed with it): the compositor ends the startup feedback of the
+    /// app it launched when this process shows its first window (ADR 0167).
+    Process { surface: SurfaceId, pid: u32 },
 }
 
 /// compositor → win32k.
@@ -348,6 +352,7 @@ mod kind {
     pub const BEGIN_RESIZE: u16 = 0x000B;
     pub const STATE: u16 = 0x000C;
     pub const DESTROY: u16 = 0x000D;
+    pub const PROCESS: u16 = 0x000E;
 
     pub const HELLO: u16 = 0x8001;
     pub const OUTPUT: u16 = 0x8002;
@@ -430,6 +435,7 @@ impl Record for ToCompositor {
             BeginResize { surface, edges } => Out::new(out, kind::BEGIN_RESIZE).u32(*surface).u8(edges.0).done(),
             State { surface, state } => Out::new(out, kind::STATE).u32(*surface).u8(state_of(*state)).done(),
             Destroy { surface } => Out::new(out, kind::DESTROY).u32(*surface).done(),
+            Process { surface, pid } => Out::new(out, kind::PROCESS).u32(*surface).u32(*pid).done(),
         }
     }
 
@@ -487,6 +493,7 @@ impl Record for ToCompositor {
                 },
             },
             kind::DESTROY => Destroy { surface: b.u32()? },
+            kind::PROCESS => Process { surface: b.u32()?, pid: b.u32()? },
             other => return Err(Error::UnknownKind(other)),
         })
     }
@@ -659,6 +666,7 @@ mod tests {
             BeginResize { surface: 1, edges: Edges::LEFT.union(Edges::BOTTOM) },
             State { surface: 1, state: WindowState::Maximized },
             Destroy { surface: 2 },
+            Process { surface: 1, pid: 4242 },
         ]
     }
 

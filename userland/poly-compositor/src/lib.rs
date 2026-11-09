@@ -107,6 +107,7 @@ use alloc::collections::BTreeMap;
 use poly_rt::fs;
 use poly_rt::net::{UnixListener, UnixStream};
 use poly_wayland::compose::{Framebuffer, MemoryFramebuffer, Rect};
+use poly_wayland::launch;
 use poly_wayland::seat::InputSource;
 use poly_wayland::server::{ClientId, Config, FrameTime, OutputConfig, Server, present_flags};
 use poly_wayland::wire::Fd;
@@ -616,6 +617,9 @@ fn run(args: &[String]) -> Result<u8, String> {
         );
     }
     let mut server = Server::new(Config { output, ..Config::default() }, Box::new(host));
+    // The busy pointer ends when a window of the launched app (or of a
+    // process it started) shows (ADR 0167).
+    server.set_pid_parent(os::parent_pid);
     println!("poly-compositor: listening on {path} ({width}x{height}, scale {scale})");
 
     let mut desk = if o.desktop {
@@ -701,7 +705,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             fds.push(os::PollFd::readable(l.fd()));
         }
         let now = os::monotonic_ns();
-        let timeout = if server.wants_frame() && !flip_pending {
+        let mut timeout = if server.wants_frame() && !flip_pending {
             (next_frame.saturating_sub(now) / 1_000_000) as i32
         } else if flip_pending && card_fd.is_none() {
             1
@@ -711,18 +715,41 @@ fn run(args: &[String]) -> Result<u8, String> {
         } else {
             -1
         };
+        // The busy pointer's spinner turns, and a launch may time out.
+        if let Some(ms) = server.launch_wait_ms() {
+            let ms = ms.min(i32::MAX as u64) as i32;
+            timeout = if timeout < 0 { ms } else { timeout.min(ms) };
+        }
         os::poll(&mut fds, timeout).map_err(|e| format!("poll: {e}"))?;
+        server.launch_clock(os::monotonic_ns() / 1_000_000);
         // What ended is reaped below (the desktop's apps in `sync`,
         // Xwayland in `reap`, the client to run at the end).
         let mut dump = false;
         if fds[control_at].revents != 0 {
-            dump = control.take_lines().iter().any(|l| l.trim() == "dump");
+            for line in control.take_lines() {
+                if line.trim() == "dump" {
+                    dump = true;
+                } else if let Some(c) = launch::Control::parse(&line) {
+                    // A program that starts apps (Files) says so.
+                    match c {
+                        launch::Control::Launch { token, name } => {
+                            server.adopt_launch(&name, &token);
+                        }
+                        launch::Control::Pid { token, pid } => server.launch_pid_by_token(&token, pid),
+                        launch::Control::Cancel { token } => server.cancel_launch_token(&token),
+                    }
+                }
+            }
         }
 
         if fds[0].revents & os::POLLIN != 0 {
             match listener.accept() {
                 Ok(stream) => {
                     let id = server.add_client();
+                    // Which process it is, for the launch it may end.
+                    if let Ok(peer) = stream.peer() {
+                        server.set_client_pid(id, peer.pid);
+                    }
                     conns.insert(id, Connection { stream, out: Vec::new(), out_fds: Vec::new() });
                 }
                 Err(e) => eprintln!("poly-compositor: accept: {e}"),
@@ -774,12 +801,24 @@ fn run(args: &[String]) -> Result<u8, String> {
                     if d.open_internal(&app, &mut server) {
                         continue;
                     }
-                    match os::spawn(&app.argv, &env) {
+                    // The app finds its launch's token in its environment
+                    // (xdg-activation-v1; startup-notification's name too).
+                    let (launch, token) = server.begin_launch(&app.name);
+                    let mut app_env = env.clone();
+                    app_env
+                        .retain(|v| !v.starts_with("XDG_ACTIVATION_TOKEN=") && !v.starts_with("DESKTOP_STARTUP_ID="));
+                    app_env.push(format!("XDG_ACTIVATION_TOKEN={token}"));
+                    app_env.push(format!("DESKTOP_STARTUP_ID={token}"));
+                    match os::spawn(&app.argv, &app_env) {
                         Ok(pid) => {
                             println!("poly-compositor: launched {} (pid {pid})", app.name);
+                            server.launch_pid(launch, pid);
                             d.children.push((pid, app.name.clone()));
                         }
-                        Err(e) => eprintln!("poly-compositor: {}: {e}", app.argv[0]),
+                        Err(e) => {
+                            eprintln!("poly-compositor: {}: {e}", app.argv[0]);
+                            server.cancel_launch(launch);
+                        }
                     }
                 }
                 if let Some(link) = &mut winlink {
@@ -875,6 +914,13 @@ fn run(args: &[String]) -> Result<u8, String> {
                 d.ready = true;
                 let ms = (shown - now) / 1_000_000;
                 println!("poly-compositor: desktop ready (first frame drawn in {ms} ms; launcher shown)");
+            }
+        }
+
+        // The busy pointer's launches: what began and ended, for the log.
+        for event in server.take_launch_events() {
+            for line in event.describe() {
+                println!("poly-compositor: {line}");
             }
         }
 
