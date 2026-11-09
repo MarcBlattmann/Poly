@@ -603,6 +603,23 @@ fn read_and_write_file_on_a_socket() {
 }
 
 #[test]
+fn if_list_reports_the_kernels_interfaces() {
+    let mut t = setup();
+    let (_, h) = t.open(afd::ENDPOINT);
+    let want = poly_iphlp::wire::HEADER_SIZE + 2 * poly_iphlp::wire::RECORD_SIZE;
+    let (s, info, out) = t.ioctl(h, afd::IF_LIST, &[], 1024);
+    assert_eq!((s, info as usize), (STATUS_SUCCESS, want));
+    let list = poly_iphlp::wire::decode(&out[..want]).unwrap();
+    assert_eq!(list.len(), 2);
+    assert_eq!(list[0].index, 1);
+    assert_eq!(list[1].ipv4, Some(([10, 0, 2, 15], 24)));
+    assert_eq!(list[1].dns, [[10u8, 0, 2, 3]]);
+    // An output buffer too small is refused, as for the other requests.
+    let (s, _, _) = t.ioctl(h, afd::IF_LIST, &[], 8);
+    assert_eq!(werr::wsa_of_status(s.0), WSAEFAULT);
+}
+
+#[test]
 fn net_info() {
     let mut t = setup();
     let (_, h) = t.open(afd::ENDPOINT);

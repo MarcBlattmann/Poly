@@ -52,6 +52,11 @@ pub fn slot(index: u32) -> Option<Slot> {
     }
 }
 
+/// FLS indices taken before a program runs: Windows' loader holds index 0, and the browser
+/// process of Chrome recorded on Windows never got 0 from any of its six `FlsAlloc` calls
+/// (programs use 0 as "not allocated"). The first index `FlsAlloc` returns is 1.
+pub const FLS_RESERVED: u32 = 1;
+
 /// A set of indices handed out lowest first.
 #[derive(Clone, Debug)]
 pub struct Indices {
@@ -61,6 +66,16 @@ pub struct Indices {
 impl Indices {
     pub fn new(count: u32) -> Indices {
         Indices { used: vec![false; count as usize] }
+    }
+
+    /// A set whose first `reserved` indices are taken and cannot be freed by a program's
+    /// `free` of an index it never got (it can still be freed: Windows' own would be).
+    pub fn with_reserved(count: u32, reserved: u32) -> Indices {
+        let mut i = Indices::new(count);
+        for _ in 0..reserved {
+            i.alloc();
+        }
+        i
     }
 
     /// The lowest free index, now taken.
@@ -100,6 +115,19 @@ mod tests {
         assert_eq!(slot(1088), None);
         // The 64 slots end before the expansion pointer.
         const { assert!(TEB_TLS_SLOTS + 64 * 8 <= TEB_TLS_EXPANSION_SLOTS) };
+    }
+
+    #[test]
+    fn fls_starts_above_the_loaders_index() {
+        let mut f = Indices::with_reserved(FLS_MAXIMUM_AVAILABLE, FLS_RESERVED);
+        assert_eq!(f.alloc(), Some(1));
+        assert_eq!(f.alloc(), Some(2));
+        assert!(f.is_allocated(0));
+        let mut n = 3;
+        while f.alloc().is_some() {
+            n += 1;
+        }
+        assert_eq!(n, FLS_MAXIMUM_AVAILABLE);
     }
 
     #[test]

@@ -30,6 +30,11 @@ use poly_wincrypt::store::{self, AddAction, FindPara, Location, Provider};
 use poly_x509::Certificate;
 use poly_x509::chain::{self, error as trust};
 
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn CreateEventW(sa: *const u8, manual: i32, initial: i32, name: *const u16) -> isize;
+}
+
 type Bool = i32;
 const TRUE: Bool = 1;
 
@@ -127,6 +132,20 @@ struct Store {
     /// Where added certificates are written (system stores).
     dir: Option<String>,
     readonly: bool,
+    /// A collection store (`CERT_STORE_PROV_COLLECTION`, ADR 0155): its contexts are those of its
+    /// siblings, which it holds a reference to.
+    collection: bool,
+    siblings: Vec<Sibling>,
+}
+
+/// A store added to a collection with `CertAddStoreToCollection`.
+#[derive(Clone, Copy)]
+struct Sibling {
+    store: usize,
+    /// `CERT_PHYSICAL_STORE_ADD_ENABLE_FLAG` (1) lets additions to the collection land here.
+    flags: u32,
+    /// Higher priority comes first.
+    priority: i32,
 }
 
 static STORES: Handles = Handles::new();
@@ -178,7 +197,7 @@ fn load_system(l: Location, name: &str) -> (Vec<Certificate>, Option<String>) {
 }
 
 fn new_store(certs: Vec<Certificate>, dir: Option<String>, readonly: bool) -> usize {
-    let h = STORES.add(Store { refs: 1, certs: Vec::new(), dir, readonly });
+    let h = STORES.add(Store { refs: 1, certs: Vec::new(), dir, readonly, collection: false, siblings: Vec::new() });
     let ctxs: Vec<usize> = certs.into_iter().map(|c| new_ctx(c, h)).collect();
     // SAFETY: just made.
     if let Some(s) = unsafe { store_obj(h) } {
@@ -226,7 +245,137 @@ pub unsafe extern "system" fn CertOpenStore(
             let (certs, dir) = load_system(store::location(flags), &name);
             new_store(certs, dir, readonly)
         }
-        Some(Provider::Collection) | None => fail(ERROR_FILE_NOT_FOUND),
+        Some(Provider::Collection) => {
+            let h = new_store(Vec::new(), None, readonly);
+            // SAFETY: just made.
+            if let Some(s) = unsafe { store_obj(h) } {
+                s.collection = true;
+            }
+            h
+        }
+        None => fail(ERROR_FILE_NOT_FOUND),
+    }
+}
+
+/// The contexts a store shows, with the lock held: its own, and for a collection those of its siblings
+/// by priority (highest first), recursively (at most 8 levels).
+unsafe fn visible(h: usize, depth: u32) -> Vec<usize> {
+    // SAFETY: the caller holds the lock.
+    let Some(s) = (unsafe { store_obj(h) }) else { return Vec::new() };
+    let mut v = s.certs.clone();
+    if s.collection && depth < 8 {
+        let mut sibs = s.siblings.clone();
+        sibs.sort_by_key(|x| core::cmp::Reverse(x.priority));
+        for sib in sibs {
+            // SAFETY: as above.
+            v.extend(unsafe { visible(sib.store, depth + 1) });
+        }
+    }
+    v
+}
+
+/// The store an addition to `h` lands in: `h` itself, or for a collection the first sibling that
+/// allows additions (`None`: `ERROR_ACCESS_DENIED` for the caller).
+fn add_target(h: usize) -> Option<usize> {
+    let mut at = h;
+    for _ in 0..8 {
+        let next = LOCK.with(|_| {
+            // SAFETY: under the lock.
+            let s = unsafe { store_obj(at) }?;
+            if !s.collection {
+                return Some(None);
+            }
+            let mut sibs = s.siblings.clone();
+            sibs.sort_by_key(|x| core::cmp::Reverse(x.priority));
+            sibs.iter().find(|x| x.flags & 1 != 0).map(|x| Some(x.store))
+        });
+        match next {
+            Some(None) => return Some(at),
+            Some(Some(n)) => at = n,
+            None => return None,
+        }
+    }
+    None
+}
+
+/// `CertAddStoreToCollection(hCollectionStore, hSiblingStore, dwUpdateFlags, dwPriority)`: the
+/// collection shows the sibling's certificates too, and keeps its own reference to the sibling.
+#[unsafe(no_mangle)]
+pub extern "system" fn CertAddStoreToCollection(collection: usize, sibling: usize, flags: u32, priority: i32) -> Bool {
+    let r = LOCK.with(|_| {
+        // SAFETY: under the lock.
+        let (Some(c), true) = (unsafe { store_obj(collection) }, STORES.contains(sibling)) else {
+            return Err(ERROR_INVALID_HANDLE);
+        };
+        if !c.collection || collection == sibling {
+            return Err(E_INVALIDARG);
+        }
+        if c.siblings.iter().any(|x| x.store == sibling) {
+            return Ok(());
+        }
+        c.siblings.push(Sibling { store: sibling, flags, priority });
+        // SAFETY: checked above.
+        if let Some(s) = unsafe { store_obj(sibling) } {
+            s.refs += 1;
+        }
+        Ok(())
+    });
+    match r {
+        Ok(()) => TRUE,
+        Err(e) => fail(e),
+    }
+}
+
+/// `CertRemoveStoreFromCollection(hCollectionStore, hSiblingStore)`.
+#[unsafe(no_mangle)]
+pub extern "system" fn CertRemoveStoreFromCollection(collection: usize, sibling: usize) {
+    let removed = LOCK.with(|_| {
+        // SAFETY: under the lock.
+        let c = unsafe { store_obj(collection) }?;
+        let i = c.siblings.iter().position(|x| x.store == sibling)?;
+        c.siblings.remove(i);
+        Some(())
+    });
+    if removed.is_some() {
+        CertCloseStore(sibling, 0);
+    }
+}
+
+/// `CertControlStore(hCertStore, dwFlags, dwCtrlType, pvCtrlPara)`: Poly's stores are files read when
+/// the store is opened and changed only through this module, so `CERT_STORE_CTRL_RESYNC`, `_COMMIT`
+/// and `_AUTO_RESYNC` succeed without anything to do. `CERT_STORE_CTRL_NOTIFY_CHANGE` hands back an
+/// event object (made when `*pvCtrlPara` is NULL) that is never set: nothing changes the files
+/// behind a program's back. `CERT_STORE_CTRL_CANCEL_NOTIFY` succeeds.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CertControlStore(h: usize, _flags: u32, ctrl_type: u32, para: *mut isize) -> Bool {
+    // SAFETY: only checked.
+    if unsafe { store_obj(h) }.is_none() {
+        return fail(ERROR_INVALID_HANDLE);
+    }
+    const RESYNC: u32 = 1;
+    const NOTIFY_CHANGE: u32 = 2;
+    const COMMIT: u32 = 3;
+    const AUTO_RESYNC: u32 = 4;
+    const CANCEL_NOTIFY: u32 = 5;
+    match ctrl_type {
+        NOTIFY_CHANGE => {
+            if para.is_null() {
+                return fail(E_INVALIDARG);
+            }
+            // SAFETY: the caller's HANDLE variable.
+            unsafe {
+                if para.read() == 0 {
+                    let ev = CreateEventW(core::ptr::null(), 1, 0, core::ptr::null());
+                    if ev == 0 {
+                        return fail(ERROR_NOT_ENOUGH_MEMORY);
+                    }
+                    para.write(ev);
+                }
+            }
+            TRUE
+        }
+        RESYNC | COMMIT | AUTO_RESYNC | CANCEL_NOTIFY => TRUE,
+        _ => fail(E_INVALIDARG),
     }
 }
 
@@ -302,6 +451,9 @@ pub extern "system" fn CertCloseStore(h: usize, _flags: u32) -> Bool {
             for c in s.certs {
                 ctx_release(c);
             }
+            for sib in s.siblings {
+                CertCloseStore(sib.store, 0);
+            }
             TRUE
         }
     }
@@ -312,10 +464,11 @@ pub extern "system" fn CertCloseStore(h: usize, _flags: u32) -> Bool {
 fn next_in_store(h: usize, prev: usize, pick: &dyn Fn(&Certificate) -> bool) -> usize {
     let found = LOCK.with(|_| {
         // SAFETY: under the lock.
-        let s = unsafe { store_obj(h) }?;
-        let start =
-            if prev == 0 { 0 } else { s.certs.iter().position(|&c| c == prev).map_or(s.certs.len(), |i| i + 1) };
-        s.certs[start..].iter().copied().find(|&c| {
+        unsafe { store_obj(h) }?;
+        // SAFETY: under the lock.
+        let all = unsafe { visible(h, 0) };
+        let start = if prev == 0 { 0 } else { all.iter().position(|&c| c == prev).map_or(all.len(), |i| i + 1) };
+        all[start..].iter().copied().find(|&c| {
             // SAFETY: a context the store holds.
             unsafe { ctx(c) }.is_some_and(|x| pick(&x.cert))
         })
@@ -428,6 +581,12 @@ pub unsafe extern "system" fn CertFindCertificateInStore(
 /// Add a parsed certificate to a store with a disposition; the store's
 /// context (with a new reference for the caller when `out` is given).
 fn add_to_store(h: usize, cert: Certificate, disposition: u32, out: *mut usize) -> Bool {
+    // SAFETY: only checked.
+    if unsafe { store_obj(h) }.is_none() {
+        return fail(ERROR_INVALID_HANDLE);
+    }
+    // An addition to a collection lands in a sibling that allows it.
+    let Some(h) = add_target(h) else { return fail(ERROR_ACCESS_DENIED) };
     // SAFETY: only read.
     let Some(s) = (unsafe { store_obj(h) }) else { return fail(ERROR_INVALID_HANDLE) };
     if s.readonly {
@@ -1091,8 +1250,11 @@ const HCCE_LOCAL_MACHINE: usize = 1;
 fn store_certs(h: usize) -> Vec<Certificate> {
     LOCK.with(|_| {
         // SAFETY: under the lock.
-        let Some(s) = (unsafe { store_obj(h) }) else { return Vec::new() };
-        s.certs
+        if unsafe { store_obj(h) }.is_none() {
+            return Vec::new();
+        }
+        // SAFETY: under the lock.
+        unsafe { visible(h, 0) }
             .iter()
             .filter_map(|&c| {
                 // SAFETY: a context the store holds.
@@ -1424,6 +1586,61 @@ pub unsafe extern "system" fn CryptUnprotectData(
     }
     // SAFETY: the caller's output blob.
     if unsafe { set_blob(out, &data) } { TRUE } else { fail(ERROR_NOT_ENOUGH_MEMORY) }
+}
+
+/// The key of `CRYPTPROTECTMEMORY_SAME_PROCESS`: random, made at first use, known to this process only.
+static PROCESS_KEY: SpinLock<Option<[u8; 32]>> = SpinLock::new(None);
+
+fn process_key() -> Option<[u8; 32]> {
+    PROCESS_KEY.with(|k| {
+        if k.is_none() {
+            let mut n = [0u8; 32];
+            if !rt::random(&mut n) {
+                return None;
+            }
+            *k = Some(n);
+        }
+        *k
+    })
+}
+
+/// `CryptProtectMemory` / `CryptUnprotectMemory`'s common part (`poly_wincrypt::dpapi::protect_memory`).
+unsafe fn protect_memory(data: *mut u8, len: u32, flags: u32, encrypt: bool) -> Bool {
+    use poly_wincrypt::dpapi::*;
+    if data.is_null() && len != 0 {
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    let secret: Vec<u8> = if flags == CRYPTPROTECTMEMORY_SAME_PROCESS {
+        match process_key() {
+            Some(k) => k.to_vec(),
+            None => return fail(NTE_BAD_DATA),
+        }
+    } else {
+        match master_key(false) {
+            Some(k) => k,
+            None => return fail(ERROR_ACCESS_DENIED),
+        }
+    };
+    // SAFETY: the caller's buffer of `len` bytes.
+    let buf = unsafe { rt::bytes_mut(data, len as usize) };
+    match poly_wincrypt::dpapi::protect_memory(&secret, flags, buf, encrypt) {
+        Ok(()) => TRUE,
+        Err(e) => fail(e),
+    }
+}
+
+/// `CryptProtectMemory(pDataIn, cbDataIn, dwFlags)`: in place; the size is a multiple of 16.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CryptProtectMemory(data: *mut u8, len: u32, flags: u32) -> Bool {
+    // SAFETY: the caller's buffer.
+    unsafe { protect_memory(data, len, flags, true) }
+}
+
+/// `CryptUnprotectMemory(pDataIn, cbDataIn, dwFlags)`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CryptUnprotectMemory(data: *mut u8, len: u32, flags: u32) -> Bool {
+    // SAFETY: the caller's buffer.
+    unsafe { protect_memory(data, len, flags, false) }
 }
 
 /// The entry point (`DllMain`): nothing to set up.

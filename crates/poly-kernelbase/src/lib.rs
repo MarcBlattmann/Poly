@@ -73,6 +73,7 @@ pub mod env;
 pub mod error;
 pub mod exports;
 pub mod file;
+pub mod fileex;
 pub mod locale;
 pub mod mapping;
 pub mod memory;
@@ -85,12 +86,16 @@ pub mod process;
 pub mod registry;
 pub mod slist;
 pub mod sync;
+pub mod sysex;
 pub mod sysmsg;
 pub mod system;
 pub mod text;
 pub mod time;
 pub mod tls;
+pub mod tz;
+pub mod verinfo;
 pub mod version;
+pub mod waitreg;
 
 pub use poly_ntobj::NtStatus;
 

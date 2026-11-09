@@ -157,6 +157,12 @@ pub const SOFTWARE_KEYS: &[DefaultKey] = &[
             ("CurrentVersion", Sz("6.3")),
             ("CurrentBuild", Sz(BUILD)),
             ("CurrentBuildNumber", Sz(BUILD)),
+            // The release the build belongs to (Windows 10 22H2, `19045.2006` and later): programs
+            // that report the OS version read these (Chrome's browser process, on Windows,
+            // queries `UBR`, `DisplayVersion` and `ReleaseId`, the traces of ADR 0155).
+            ("UBR", Dword(2006)),
+            ("DisplayVersion", Sz("22H2")),
+            ("ReleaseId", Sz("2009")),
             ("InstallationType", Sz("Client")),
             ("SystemRoot", Sz("C:\\Windows")),
             ("RegisteredOwner", Sz(POLY_USER_NAME)),
