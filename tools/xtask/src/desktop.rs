@@ -607,6 +607,17 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     expect("the launcher hangs from the ridge", img.pixel(900, 40) == RIDGE && img.pixel(581, 64) == RIDGE)?;
     expect("not outside the launcher", img.pixel(200, 40) != RIDGE && img.pixel(640, 90) != RIDGE)?;
 
+    // Poly's own apps have their own icons (ADR 0146): the Files row's icon
+    // box (x 296..324, y 114..142) shows the artwork's blue tile, not the
+    // launcher's glyph. At its bottom, clear of the white folder.
+    d.type_text(&["f", "i", "l", "e", "s"])?;
+    d.wait("launcher query \"files\"", 30)?;
+    thread::sleep(Duration::from_millis(800));
+    let img = d.shot("own-icon")?;
+    let tile = img.pixel(310, 140);
+    expect("Files shows its own icon (a blue tile)", tile[2] >= 0xc0 && tile[2] > tile[0] + 0x40)?;
+    d.type_text(&["backspace"; 5])?;
+
     // 2. Type, list, launch.
     d.type_text(&["d", "e", "m", "o"])?;
     d.wait("launcher query \"demo\"", 30)?;

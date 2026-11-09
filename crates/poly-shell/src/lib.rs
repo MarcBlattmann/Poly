@@ -19,8 +19,10 @@
 //!   [`switcher`]: the switcher's order, state and cards; [`wm`]: snap
 //!   zones and Super+arrow; [`settings`]: the settings and their file;
 //!   [`settings_ui`]: the settings window; [`draw`]: text in Alpine's fonts
-//!   (`poly-font`) and shapes; [`icons`]: Lucide's icons; [`theme`]: the
-//!   measurements and tokens.
+//!   (`poly-font`) and shapes; [`icons`]: Lucide's icons; [`appicon`]: the
+//!   icons of installed apps (`Icon=` found in the icon theme, decoded with
+//!   `poly-png`, scaled and cached, ADR 0146); [`theme`]: the measurements
+//!   and tokens.
 //!
 //! `no_std` with `alloc` and host-tested: the compositor
 //! (`userland/poly-compositor`) owns the I/O (reading desktop files and
@@ -32,6 +34,7 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+pub mod appicon;
 pub mod apps;
 pub mod chrome;
 pub mod clock;
