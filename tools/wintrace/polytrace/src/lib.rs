@@ -559,7 +559,8 @@ pub unsafe extern "system" fn polytrace_main(_module: usize, reason: u32, _reser
                 open();
                 let mut probe = [0u16; 4];
                 SYNC.store(
-                    GetEnvironmentVariableW(wide!("POLYTRACE_SYNC").as_ptr(), probe.as_mut_ptr(), probe.len() as u32) > 0,
+                    GetEnvironmentVariableW(wide!("POLYTRACE_SYNC").as_ptr(), probe.as_mut_ptr(), probe.len() as u32)
+                        > 0,
                     Ordering::Relaxed,
                 );
                 if FILE.load(Ordering::Relaxed) != INVALID_HANDLE_VALUE {

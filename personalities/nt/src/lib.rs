@@ -50,6 +50,7 @@ pub mod backend;
 pub mod console;
 pub mod consts;
 pub mod context;
+pub mod diag;
 pub mod exception;
 pub mod exec;
 pub mod image;
@@ -82,6 +83,7 @@ pub use context::NtContext;
 pub use kernel::{
     Apc, ClientId, NtKernel, NtTimeout, ProcessCreate, ProcessCreated, ThreadCreate, ThreadCreated, UserFault,
 };
+pub use poly_kernelbase::{cpu::CpuId, kuser};
 pub use protect::HwProt;
 pub use services::Service;
 pub use system::{NtProcess, NtSystem};

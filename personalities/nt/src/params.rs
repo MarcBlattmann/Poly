@@ -54,6 +54,41 @@ pub const PP_CURRENT_DIRECTORY: u64 = 0x90;
 /// The bytes kept for the structure (zero past the fields above).
 pub const PARAMETERS_SIZE: u64 = 0x400;
 
+/// The fields `winternl.h`/`ntddk.h` give `RTL_USER_PROCESS_PARAMETERS` (x64), which Poly fills
+/// besides its own above, because programs read them straight from memory (ADR 0155):
+/// `MaximumLength`, `Length`, `Flags`, `CurrentDirectory.DosPath` (a `UNICODE_STRING`), `DllPath`,
+/// and `EnvironmentSize` (`SIZE_T`, at the end of the 0x400 bytes kept).
+pub const PP_MAXIMUM_LENGTH: u64 = 0x00;
+pub const PP_LENGTH: u64 = 0x04;
+pub const PP_FLAGS: u64 = 0x08;
+pub const PP_DOS_CURRENT_DIRECTORY: u64 = 0x38;
+pub const PP_DLL_PATH: u64 = 0x50;
+pub const PP_ENVIRONMENT_SIZE_FIELD: u64 = 0x3F0;
+/// `RTL_USER_PROC_PARAMS_NORMALIZED` (`ntddk.h`): the strings are pointers, not offsets.
+pub const RTL_USER_PROC_PARAMS_NORMALIZED: u32 = 0x01;
+/// What follows the application directory in `DllPath`.
+const DLL_PATH_TAIL: &str = ";C:\\Windows\\System32;C:\\Windows";
+/// The backslash.
+const BACKSLASH: u16 = b'\\' as u16;
+
+/// The current directory with its trailing backslash: the given one, else the executable's
+/// directory (`PP_CURRENT_DIRECTORY` empty).
+fn dos_current_directory(p: &Parameters) -> Vec<u16> {
+    let mut dir: Vec<u16> = if p.current_dir.is_empty() {
+        let cut = p.image_path.iter().rposition(|&c| c == BACKSLASH).map_or(0, |i| i + 1);
+        p.image_path[..cut].to_vec()
+    } else {
+        p.current_dir.clone()
+    };
+    if dir.is_empty() {
+        dir = "C:".encode_utf16().collect();
+    }
+    if dir.last() != Some(&BACKSLASH) {
+        dir.push(BACKSLASH);
+    }
+    dir
+}
+
 /// Poly's own (ADR 0080): the console connection handle (0: none) in the
 /// first pointer of `winternl.h`'s `Reserved2[10]` (+ 0x10), and the three
 /// standard handles (input, output, error) in its third to fifth
@@ -217,9 +252,30 @@ pub fn image(base: u64, p: &Parameters) -> Result<Vec<u8>, NtStatus> {
     for (i, h) in p.std_handles.iter().enumerate() {
         put_u64(&mut buf, PP_STANDARD_INPUT + 8 * i as u64, *h);
     }
+    // The documented `RTL_USER_PROCESS_PARAMETERS` fields programs read directly: the current
+    // directory (always with a trailing backslash) and the DLL search path.
+    let dos = dos_current_directory(p);
+    let dos_at = base + buf.len() as u64;
+    push_wide(&mut buf, &dos);
+    buf.extend_from_slice(&[0, 0]);
+    align(&mut buf, 8);
+    let dll_path: Vec<u16> = dos[..dos.len() - 1].iter().copied().chain(DLL_PATH_TAIL.encode_utf16()).collect();
+    let dll_at = base + buf.len() as u64;
+    push_wide(&mut buf, &dll_path);
+    buf.extend_from_slice(&[0, 0]);
     align(&mut buf, 16);
     let env_at = base + buf.len() as u64;
     push_wide(&mut buf, &p.environment);
+    // `MaximumLength` and `Length` are the whole allocation, `Flags` says the strings are
+    // pointers (`RTL_USER_PROC_PARAMS_NORMALIZED`).
+    let total = u32::try_from(buf.len()).map_err(|_| STATUS_INVALID_PARAMETER)?;
+    buf[PP_MAXIMUM_LENGTH as usize..][..4].copy_from_slice(&total.to_le_bytes());
+    buf[PP_LENGTH as usize..][..4].copy_from_slice(&total.to_le_bytes());
+    buf[PP_FLAGS as usize..][..4].copy_from_slice(&RTL_USER_PROC_PARAMS_NORMALIZED.to_le_bytes());
+    put_string(&mut buf, PP_DOS_CURRENT_DIRECTORY, dos_at, dos.len())?;
+    put_string(&mut buf, PP_DLL_PATH, dll_at, dll_path.len())?;
+    let env_size = (p.environment.len() * 2) as u64;
+    put_u64(&mut buf, PP_ENVIRONMENT_SIZE_FIELD, env_size);
     put_string(&mut buf, PP_IMAGE_PATH_NAME, image_at, p.image_path.len())?;
     put_string(&mut buf, PP_COMMAND_LINE, command_at, p.command_line.len())?;
     put_string(&mut buf, PP_CURRENT_DIRECTORY, current_at, p.current_dir.len())?;
@@ -490,7 +546,13 @@ mod tests {
                 [PP_IMAGE_PATH_NAME, PP_COMMAND_LINE, PP_ENVIRONMENT, PP_ENVIRONMENT_SIZE, PP_CURRENT_DIRECTORY]
                     .iter()
                     .any(|&f| (f..f + 16).contains(&i) && (f != PP_ENVIRONMENT || i < f + 8));
-            if !field {
+            // The documented fields added besides Poly's own: the lengths and flags, the
+            // current directory, the DLL path, the environment size.
+            let documented = i < 12
+                || (PP_DOS_CURRENT_DIRECTORY..PP_DOS_CURRENT_DIRECTORY + 16).contains(&i)
+                || (PP_DLL_PATH..PP_DLL_PATH + 16).contains(&i)
+                || (PP_ENVIRONMENT_SIZE_FIELD..PP_ENVIRONMENT_SIZE_FIELD + 8).contains(&i);
+            if !field && !documented {
                 assert_eq!(byte, 0, "byte {i:#x}");
             }
         }
@@ -523,5 +585,47 @@ mod tests {
         // Too long for a UNICODE_STRING.
         let long = Parameters { image_path: alloc::vec![b'a' as u16; 40_000], ..Parameters::default() };
         assert_eq!(image(base, &long), Err(STATUS_INVALID_PARAMETER));
+    }
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().collect()
+    }
+
+    /// The `UNICODE_STRING` at `at` of an image placed at `base`, as text.
+    fn string_at(img: &[u8], base: u64, at: u64) -> String {
+        let at = at as usize;
+        let len = usize::from(u16::from_le_bytes([img[at], img[at + 1]]));
+        let ptr = u64::from_le_bytes(img[at + 8..at + 16].try_into().unwrap());
+        let off = (ptr - base) as usize;
+        let units: Vec<u16> = img[off..off + len].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        String::from_utf16(&units).unwrap()
+    }
+
+    #[test]
+    fn the_documented_fields_are_filled_in() {
+        let p = for_program("C:\\Program Files\\Chrome\\chrome.exe", &["--headless"], wide("A=1\0\0"));
+        let base = 0x81_0000;
+        let img = image(base, &p).unwrap();
+        let u32_at = |o: u64| u32::from_le_bytes(img[o as usize..o as usize + 4].try_into().unwrap());
+        assert_eq!(u32_at(PP_MAXIMUM_LENGTH) as usize, img.len());
+        assert_eq!(u32_at(PP_LENGTH) as usize, img.len());
+        assert_eq!(u32_at(PP_FLAGS), RTL_USER_PROC_PARAMS_NORMALIZED);
+        // No directory was given: the executable's, with its trailing backslash.
+        assert_eq!(string_at(&img, base, PP_DOS_CURRENT_DIRECTORY), "C:\\Program Files\\Chrome\\");
+        assert_eq!(string_at(&img, base, PP_DLL_PATH), "C:\\Program Files\\Chrome;C:\\Windows\\System32;C:\\Windows");
+        assert_eq!(string_at(&img, base, PP_IMAGE_PATH_NAME), "C:\\Program Files\\Chrome\\chrome.exe");
+        let size = u64::from_le_bytes(img[PP_ENVIRONMENT_SIZE_FIELD as usize..][..8].try_into().unwrap());
+        assert_eq!(size, 10);
+    }
+
+    #[test]
+    fn a_given_current_directory_gets_a_trailing_backslash() {
+        let mut p = for_program("C:\\a\\b.exe", &[], wide("\0"));
+        p.current_dir = wide("D:\\work");
+        let img = image(0x1000, &p).unwrap();
+        assert_eq!(string_at(&img, 0x1000, PP_DOS_CURRENT_DIRECTORY), "D:\\work\\");
+        p.current_dir = wide("D:\\work\\");
+        let img = image(0x1000, &p).unwrap();
+        assert_eq!(string_at(&img, 0x1000, PP_DOS_CURRENT_DIRECTORY), "D:\\work\\");
     }
 }
