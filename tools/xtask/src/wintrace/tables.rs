@@ -602,8 +602,8 @@ pub const CHROME_SIGNATURES: &[(&str, &str)] = &[
     ("WSASetLastError", "v=i"),
     // spec-chrome-win-3: the calls chrome_elf's start-up makes that no table above lists
     // (version.dll, VerifyVersionInfoW, the CRT's start-up helpers).
-    ("VerSetConditionMask", "p=pic"),
-    ("VerifyVersionInfoW", "i=pip"),
+    ("VerSetConditionMask", "q=qic"),
+    ("VerifyVersionInfoW", "i=piq"),
     ("GetVersionExW", "i=p"),
     ("RtlGetVersion", "i=p"),
     ("GetFileVersionInfoSizeW", "i=wp"),
@@ -616,6 +616,10 @@ pub const CHROME_SIGNATURES: &[(&str, &str)] = &[
     ("InitializeSListHead", "v=p"),
     ("GetCPInfo", "i=ip"),
     ("GetStringTypeW", "i=ipip"),
+    ("IsValidCodePage", "i=i"),
+    ("GetProductInfo", "i=iiiip"),
+    ("GetUserDefaultLangID", "s="),
+    ("BuildSecurityDescriptorW", "i=ppipipppp"),
 ];
 
 /// Functions that do not return: their record is written when they begin

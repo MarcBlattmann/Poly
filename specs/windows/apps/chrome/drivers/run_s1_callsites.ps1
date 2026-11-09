@@ -16,6 +16,9 @@ if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Force $out | Out-Null
 $ud = "$Work\ud\$Tag-$Run"
 if (Test-Path $ud) { Remove-Item $ud -Recurse -Force }
+# The parent of the profile directory exists before the run: Chrome's RecursiveDirectoryCreate would
+# otherwise make it in the first run only (two more calls: GetFileAttributesW, CreateDirectoryW).
+New-Item -ItemType Directory -Force "$Work\ud" | Out-Null
 $page = 'file:///' + ($Work -replace '\\', '/') + '/pages/s1.html'
 $env:POLYTRACE_SYNC = '1'
 $env:POLYTRACE_OUT = "$out\polytrace.jsonl"
