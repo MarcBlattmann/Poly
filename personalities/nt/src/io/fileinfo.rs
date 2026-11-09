@@ -120,7 +120,7 @@ impl IoState {
                 ..Default::default()
             },
             // A console or an inherited file: nothing on a volume (ADR 0080).
-            Target::Console(_) | Target::Host(_) | Target::Socket(_) => {
+            Target::Console(_) | Target::Host(_) | Target::Socket(_) | Target::NamedPipe(_) | Target::PipeRoot => {
                 info::Facts { links: 1, attributes: FILE_ATTRIBUTE_NORMAL, ..Default::default() }
             }
         };
@@ -476,7 +476,7 @@ impl IoState {
             // an inherited file is what its node is (ADR 0080).
             let kind = match &rec.target {
                 Target::Disk(_) => FILE_DEVICE_DISK,
-                Target::Pipe(_) => FILE_DEVICE_NAMED_PIPE,
+                Target::Pipe(_) | Target::NamedPipe(_) | Target::PipeRoot => FILE_DEVICE_NAMED_PIPE,
                 Target::Console(_) => poly_console::ioctl::FILE_DEVICE_CONSOLE,
                 // A socket (ADR 0095): GetFileType's FILE_TYPE_PIPE.
                 Target::Socket(_) => FILE_DEVICE_NAMED_PIPE,

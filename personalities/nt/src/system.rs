@@ -169,10 +169,15 @@ impl NtSystem {
                     self.io.file_closed(d.cookie);
                 }
                 ObjectType::Key => self.registry.object_deleted(d.cookie, &mut self.objects),
+                ObjectType::IoCompletion => self.io.port_deleted(d.cookie),
                 ObjectType::Process => {
                     self.process_exits.remove(&ProcessId(d.cookie as u32));
                 }
                 _ => {}
+            }
+            // A closed file object's reference on its completion port.
+            for port in core::mem::take(&mut self.io.released) {
+                let _ = self.objects.dereference(port);
             }
         }
     }

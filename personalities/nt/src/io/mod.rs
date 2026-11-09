@@ -60,9 +60,12 @@ pub mod create;
 pub mod dir;
 pub mod fileinfo;
 pub mod info;
+pub mod iocp;
 pub mod irp;
 pub mod locks;
 pub mod names;
+pub mod npfs;
+pub mod npservices;
 pub mod services;
 pub mod share;
 pub mod walk;
@@ -159,6 +162,8 @@ pub enum Device {
     Console,
     /// `\Device\Afd`, the sockets of `ws2_32` (ADR 0095, [`crate::afd`]).
     Afd,
+    /// `\Device\NamedPipe`, reached as `\??\pipe` ([`npfs`], ADR 0169).
+    NamedPipe,
 }
 
 /// A file object's target on a volume.
@@ -189,6 +194,11 @@ pub enum Target {
     Host(Arc<OpenFile>),
     /// A socket endpoint on `\Device\Afd` (ADR 0095).
     Socket(crate::afd::Endpoint),
+    /// One end of a named pipe instance (ADR 0169).
+    NamedPipe(npfs::NpEnd),
+    /// The root of the named pipe device (`\??\pipe\`), opened for
+    /// `FSCTL_PIPE_WAIT`.
+    PipeRoot,
 }
 
 /// The kernel's data for one file object.
@@ -208,6 +218,11 @@ pub struct FileRecord {
     pub delete_on_close: bool,
     /// The directory scan of `NtQueryDirectoryFile`.
     pub scan: Option<dir::Scan>,
+    /// The completion port this file object is associated with (ADR 0169).
+    pub port: Option<iocp::PortAssoc>,
+    /// `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS`, `FILE_SKIP_SET_EVENT_ON_HANDLE`.
+    pub skip_port: bool,
+    pub skip_event: bool,
 }
 
 impl FileRecord {
@@ -268,6 +283,13 @@ pub struct IoState {
     pub(crate) nodes: BTreeMap<NodeKey, NodeState>,
     pub locks: LockTable,
     pub(crate) pipes: BTreeMap<Vec<u16>, Pipe>,
+    /// The named pipe file system (ADR 0169).
+    pub(crate) np: npfs::Npfs,
+    /// The completion ports, by their object's cookie (ADR 0169).
+    pub(crate) ports: BTreeMap<u64, iocp::Port>,
+    /// Port objects whose reference a closed file object held; the
+    /// object manager drops them ([`crate::NtSystem::reap`]).
+    pub(crate) released: Vec<ObjectId>,
     pub(crate) irps: BTreeMap<u64, Irp>,
     pub(crate) queues: BTreeMap<u32, VecDeque<u64>>,
     pub(crate) kicks: BTreeSet<u32>,
@@ -361,6 +383,9 @@ impl IoState {
             nodes: BTreeMap::new(),
             locks: LockTable::default(),
             pipes: BTreeMap::new(),
+            np: npfs::Npfs::default(),
+            ports: BTreeMap::new(),
+            released: Vec::new(),
             irps: BTreeMap::new(),
             queues: BTreeMap::new(),
             kicks: BTreeSet::new(),
@@ -448,6 +473,12 @@ impl IoState {
             NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
         )?;
         self.devices.insert(cookie, Device::Afd);
+        // Named pipes: `\Device\NamedPipe`, and `\??\pipe` for `\\.\pipe\`.
+        let cookie = self.cookie();
+        let np = wide("\\Device\\NamedPipe");
+        add_named(om, &kernel, &np, NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true })?;
+        self.devices.insert(cookie, Device::NamedPipe);
+        add_named(om, &kernel, &wide("\\??\\pipe"), NewObject::SymbolicLink { target: &np })?;
         self.root = Some(VfsRoot::new(vfs, ctx, cred));
         Ok(())
     }
@@ -556,9 +587,18 @@ impl IoState {
     pub fn file_closed(&mut self, cookie: u64) {
         let Some(rec) = self.files.get(&cookie) else { return };
         let _ = rec;
-        self.cancel_where(|irp| irp.file == cookie, true);
+        // A named pipe end closing fails what waits on it as a broken pipe
+        // (Learn: "ReadFile": "the write handle has been closed"), the others
+        // are cancelled.
+        let status = if self.np_end(cookie).is_some() { STATUS_PIPE_BROKEN } else { STATUS_CANCELLED };
+        self.cancel_where_status(|irp| irp.file == cookie, self.np_end(cookie).is_none(), status);
         let rec = self.files.remove(&cookie).expect("checked");
+        if let Some(port) = rec.port {
+            self.released.push(port.object);
+        }
         match rec.target {
+            Target::NamedPipe(end) => self.np_closed(cookie, end),
+            Target::PipeRoot => {}
             Target::Console(t) => self.console_file_closed(cookie, t),
             Target::Host(_) => {}
             Target::Socket(e) => crate::afd::services::endpoint_closed(e),

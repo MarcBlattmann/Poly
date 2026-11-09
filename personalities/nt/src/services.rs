@@ -346,6 +346,35 @@ pub enum Service {
     /// NewState*, BufferLength, PreviousState*, ReturnLength*)`: not in the
     /// WDK; `AdjustTokenPrivileges`' parameters in its order (ADR 0114).
     AdjustPrivilegesToken,
+
+    // ----- named pipes and completion ports (ADR 0169)
+    /// `NtFsControlFile(FileHandle, Event, ApcRoutine, ApcContext,
+    /// IoStatusBlock*, FsControlCode, InputBuffer, InputBufferLength,
+    /// OutputBuffer, OutputBufferLength)`.
+    FsControlFile,
+    /// `NtCreateNamedPipeFile(FileHandle*, DesiredAccess, ObjectAttributes*,
+    /// IoStatusBlock*, ShareAccess, CreateDisposition, CreateOptions,
+    /// NamedPipeType, ReadMode, CompletionMode, MaximumInstances,
+    /// InboundQuota, OutboundQuota, DefaultTimeout*)`.
+    CreateNamedPipeFile,
+    /// `NtCancelSynchronousIoFile(ThreadHandle, IoRequestToCancel*,
+    /// IoStatusBlock*)`.
+    CancelSynchronousIoFile,
+    /// `NtCreateIoCompletion(IoCompletionHandle*, DesiredAccess,
+    /// ObjectAttributes*, NumberOfConcurrentThreads)`.
+    CreateIoCompletion,
+    /// `NtSetIoCompletion(IoCompletionHandle, KeyContext, ApcContext,
+    /// IoStatus, IoStatusInformation)`.
+    SetIoCompletion,
+    /// `NtRemoveIoCompletion(IoCompletionHandle, KeyContext*, ApcContext*,
+    /// IoStatusBlock*, Timeout*)`.
+    RemoveIoCompletion,
+    /// `NtRemoveIoCompletionEx(IoCompletionHandle, IoCompletionInformation*,
+    /// Count, NumEntriesRemoved*, Timeout*, Alertable)`.
+    RemoveIoCompletionEx,
+    /// `NtQueryIoCompletion(IoCompletionHandle, IoCompletionInformationClass,
+    /// IoCompletionInformation, Length, ReturnLength*)`.
+    QueryIoCompletion,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -482,6 +511,18 @@ pub const SECURITY_SERVICES: [(Service, u32, &str); 6] = [
     (Service::AdjustPrivilegesToken, 0x185, "NtAdjustPrivilegesToken"),
 ];
 
+/// Named pipes and I/O completion ports (ADR 0169), in the file I/O group.
+pub const IPC_SERVICES: [(Service, u32, &str); 8] = [
+    (Service::FsControlFile, 0x0D1, "NtFsControlFile"),
+    (Service::CreateNamedPipeFile, 0x0D2, "NtCreateNamedPipeFile"),
+    (Service::CancelSynchronousIoFile, 0x0D3, "NtCancelSynchronousIoFile"),
+    (Service::CreateIoCompletion, 0x0D4, "NtCreateIoCompletion"),
+    (Service::SetIoCompletion, 0x0D5, "NtSetIoCompletion"),
+    (Service::RemoveIoCompletion, 0x0D6, "NtRemoveIoCompletion"),
+    (Service::RemoveIoCompletionEx, 0x0D7, "NtRemoveIoCompletionEx"),
+    (Service::QueryIoCompletion, 0x0D8, "NtQueryIoCompletion"),
+];
+
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
     SERVICES
@@ -492,6 +533,7 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(DEVICE_SERVICES.iter())
         .chain(SECURITY_SERVICES.iter())
         .chain(HANDLE_SERVICES.iter())
+        .chain(IPC_SERVICES.iter())
 }
 
 impl Service {
@@ -548,6 +590,7 @@ mod tests {
         assert!((0xA0..0xB0).contains(&Service::Continue.number()));
         assert!(SYSINFO_SERVICES.iter().all(|s| (0x140..0x180).contains(&s.1)));
         assert!(DEVICE_SERVICES.iter().all(|s| (0xC0..0x100).contains(&s.1)));
+        assert!(IPC_SERVICES.iter().all(|s| (0xC0..0x100).contains(&s.1)));
         assert!(SECURITY_SERVICES.iter().all(|s| (0x180..0x1C0).contains(&s.1)));
         assert!(HANDLE_SERVICES.iter().all(|s| s.1 < 0x40));
     }

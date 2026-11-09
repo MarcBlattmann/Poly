@@ -24,10 +24,12 @@
 //! `STATUS_CANCELLED` (Learn: "NtCancelIoFile", "Canceling IRPs"). A
 //! request whose thread has ended completes without its APC.
 //!
-//! I/O completion ports are not modelled yet (no `NtCreateIoCompletion`);
-//! a request completes through its event, its file object and its APC.
+//! A request on a file object associated with an I/O completion port also
+//! makes a completion packet, queued by [`IoState::finish`] after the
+//! caller's memory is written ([`super::iocp`], ADR 0169).
 
 use super::consts::*;
+use super::iocp::{PacketPost, PortAssoc};
 use super::locks::{ByteLock, LockOwner};
 use super::{IoState, NodeKey, Target};
 use crate::kernel::Apc;
@@ -75,6 +77,15 @@ pub struct Irp {
     pub apc: Option<Apc>,
     /// The caller waits for it (a synchronous file object).
     pub sync: bool,
+    /// `ApcContext`: with no APC routine, what a completion packet carries
+    /// (kernel32 passes the `OVERLAPPED` pointer).
+    pub apc_context: u64,
+    /// The completion port of the file object when the request was made.
+    pub port: Option<PortAssoc>,
+    /// `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS` / `FILE_SKIP_SET_EVENT_ON_HANDLE`
+    /// of the file object when the request was made.
+    pub skip_port: bool,
+    pub skip_event: bool,
     pub op: IrpOp,
     pub state: IrpState,
 }
@@ -146,6 +157,8 @@ pub struct Completion {
     pub file_object: Option<ObjectId>,
     pub apc: Option<Apc>,
     pub sync: bool,
+    /// The completion packet to queue on the file object's port.
+    pub packet: Option<PacketPost>,
 }
 
 impl Completion {
@@ -266,11 +279,22 @@ impl IoState {
     /// Finish request `id` with `status`: it leaves the table and a
     /// [`Completion`] is queued.
     pub fn complete(&mut self, id: u64, status: NtStatus, information: u64, data: Option<(u64, Vec<u8>)>) {
-        self.complete_with(id, status, information, data, true);
+        self.complete_with(id, status, information, data, true, false);
     }
 
-    fn complete_with(&mut self, id: u64, status: NtStatus, info: u64, data: Option<(u64, Vec<u8>)>, apc: bool) {
+    fn complete_with(
+        &mut self,
+        id: u64,
+        status: NtStatus,
+        info: u64,
+        data: Option<(u64, Vec<u8>)>,
+        apc: bool,
+        immediate: bool,
+    ) {
         let Some(irp) = self.irps.remove(&id) else { return };
+        if self.np_end(irp.file).is_some() {
+            self.np_forget_irp(irp.file, id);
+        }
         if let IrpState::Queued(dev) = irp.state
             && let Some(q) = self.queues.get_mut(&dev)
         {
@@ -281,6 +305,14 @@ impl IoState {
         {
             p.readers.retain(|&i| i != id);
         }
+        // A packet for the file object's port: not for a request with an APC
+        // routine or no context, and not for a request that succeeded at once
+        // when the file object asked to skip those.
+        let packet = irp
+            .port
+            .filter(|_| irp.apc.is_none() && irp.apc_context != 0)
+            .filter(|_| !(immediate && irp.skip_port && status == STATUS_SUCCESS))
+            .map(|port| PacketPost { port, context: irp.apc_context, status, information: info });
         self.completions.push_back(Completion {
             irp: id,
             process: irp.process,
@@ -290,9 +322,10 @@ impl IoState {
             information: info,
             data,
             event: irp.event,
-            file_object: (irp.event.is_none() || irp.sync).then_some(irp.object),
+            file_object: ((irp.event.is_none() || irp.sync) && !(immediate && irp.skip_event)).then_some(irp.object),
             apc: if apc { irp.apc } else { None },
             sync: irp.sync,
+            packet,
         });
     }
 
@@ -301,17 +334,27 @@ impl IoState {
     pub fn complete_now(&mut self, irp: Irp, status: NtStatus, information: u64, data: Option<(u64, Vec<u8>)>) {
         let id = irp.id;
         self.irps.insert(id, irp);
-        self.complete(id, status, information, data);
+        self.complete_with(id, status, information, data, true, true);
     }
 
     /// Cancel every queued or waiting request `pred` selects (running ones
     /// finish on their own). `thread_gone` drops their APCs. Returns how
     /// many were cancelled.
-    pub fn cancel_where(&mut self, mut pred: impl FnMut(&Irp) -> bool, thread_gone: bool) -> usize {
+    pub fn cancel_where(&mut self, pred: impl FnMut(&Irp) -> bool, thread_gone: bool) -> usize {
+        self.cancel_where_status(pred, thread_gone, STATUS_CANCELLED)
+    }
+
+    /// [`Self::cancel_where`] completing the requests with `status`.
+    pub fn cancel_where_status(
+        &mut self,
+        mut pred: impl FnMut(&Irp) -> bool,
+        thread_gone: bool,
+        status: NtStatus,
+    ) -> usize {
         let ids: Vec<u64> =
             self.irps.values().filter(|i| i.state != IrpState::Running && pred(i)).map(|i| i.id).collect();
         for &id in &ids {
-            self.complete_with(id, STATUS_CANCELLED, 0, None, !thread_gone);
+            self.complete_with(id, status, 0, None, !thread_gone, false);
         }
         ids.len()
     }
@@ -368,6 +411,9 @@ impl IoState {
     /// its file object and note a synchronous request's result. Returns the
     /// APC to queue, and on which thread.
     pub fn finish(&mut self, om: &mut ObjectManager, c: &Completion) -> Option<(ThreadRef, Apc)> {
+        if let Some(post) = &c.packet {
+            self.port_post_for(om, post);
+        }
         if let Some(e) = c.event {
             let _ = om.set_event(e);
             let _ = om.dereference(e);

@@ -76,6 +76,19 @@ pub const KEY_READ: AccessMask = 0x0002_0019;
 pub const KEY_WRITE: AccessMask = 0x0002_0006;
 pub const KEY_EXECUTE: AccessMask = 0x0002_0019;
 
+// I/O completion port rights (`wdm.h`/`ntifs.h`) and job object rights
+// (`winnt.h`; ADR 0169).
+pub const IO_COMPLETION_QUERY_STATE: AccessMask = 0x0001;
+pub const IO_COMPLETION_MODIFY_STATE: AccessMask = 0x0002;
+pub const IO_COMPLETION_ALL_ACCESS: AccessMask = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x3;
+pub const JOB_OBJECT_ASSIGN_PROCESS: AccessMask = 0x0001;
+pub const JOB_OBJECT_SET_ATTRIBUTES: AccessMask = 0x0002;
+pub const JOB_OBJECT_QUERY: AccessMask = 0x0004;
+pub const JOB_OBJECT_TERMINATE: AccessMask = 0x0008;
+pub const JOB_OBJECT_SET_SECURITY_ATTRIBUTES: AccessMask = 0x0010;
+pub const JOB_OBJECT_IMPERSONATE: AccessMask = 0x0020;
+pub const JOB_OBJECT_ALL_ACCESS: AccessMask = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x3F;
+
 // Access-token rights (`winnt.h`; ADR 0083). `TOKEN_READ` is
 // `STANDARD_RIGHTS_READ | TOKEN_QUERY`, `TOKEN_WRITE` is
 // `STANDARD_RIGHTS_WRITE` with the three adjust rights, `TOKEN_EXECUTE` is
