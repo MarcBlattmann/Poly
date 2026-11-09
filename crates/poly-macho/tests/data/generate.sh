@@ -5,9 +5,9 @@
 # Needs LLVM's clang, ld64.lld and llvm-lipo (18.1.x), and no Apple SDK:
 # the C sources are freestanding and the linker is told the platform itself.
 #
-#   docker run --rm -v "$PWD":/w poly-dev:local bash /w/crates/poly-macho/tests/data/generate.sh
+#   bash crates/poly-macho/tests/data/generate.sh   (e.g. on Ubuntu 24.04 with clang, lld, llvm)
 #
-# (Inside the dev image the tools live in /usr/lib/llvm-18/bin.)
+# (On Ubuntu the tools live in /usr/lib/llvm-18/bin.)
 set -euo pipefail
 export PATH=/usr/lib/llvm-18/bin:$PATH
 here=$(cd "$(dirname "$0")" && pwd)

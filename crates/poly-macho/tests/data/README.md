@@ -38,15 +38,15 @@ themselves (`tests/support`, `tests/synthetic.rs`), from the bit layouts of
 
 ## How they were made
 
-On the dev image (`poly-dev:local`, Ubuntu 24.04 aarch64), from the repository
+On Ubuntu 24.04 (aarch64 was used; the output does not depend on the host)
+with the `clang`, `lld` and `llvm` packages installed, from the repository
 root:
 
 ```sh
-docker run --rm -v "$PWD":/w poly-dev:local \
-    bash /w/crates/poly-macho/tests/data/generate.sh
+bash crates/poly-macho/tests/data/generate.sh
 ```
 
-Tools, as installed by that image's packages (`clang`, `lld`, `llvm`):
+Tools, as installed by those packages (`clang`, `lld`, `llvm`):
 
 | Tool | Version |
 |---|---|
