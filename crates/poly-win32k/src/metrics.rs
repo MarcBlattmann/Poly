@@ -129,7 +129,13 @@ pub fn system_metric(index: i32, d: &Display) -> Option<i32> {
         60 => h + 20,                          // SM_CYMAXTRACK
         61 => ww + 16,                         // SM_CXMAXIMIZED
         62 => wh + 16,                         // SM_CYMAXIMIZED
-        63 => 1,                               // SM_NETWORK (bit 0)
+        63 => {
+            if d.interactive {
+                3
+            } else {
+                1
+            }
+        } // SM_NETWORK (bits)
         64..=66 => 0,                          // reserved
         67 => 0,                               // SM_CLEANBOOT
         68 | 69 => 4,                          // SM_CXDRAG, SM_CYDRAG
@@ -152,6 +158,8 @@ pub fn system_metric(index: i32, d: &Display) -> Option<i32> {
         90 => 0,                               // reserved
         91 => 0,                               // SM_MOUSEHORIZONTALWHEELPRESENT
         92 => 4,                               // SM_CXPADDEDBORDER
+        85 => 4,                               // undefined in winuser.h (same on the oracle)
+        93 => 516,                             // undefined in winuser.h (same on the oracle)
         94 => 0,                               // SM_DIGITIZER
         95 => 0,                               // SM_MAXIMUMTOUCHES
         96 => 0,                               // reserved
@@ -166,47 +174,6 @@ pub fn system_metric(index: i32, d: &Display) -> Option<i32> {
     })
 }
 
-/// `GetSystemMetricsForDpi(index, dpi)`: the sizes scaled as the oracle
-/// listed (GetSystemMetrics.yaml `for_dpi`), the rest as at 96 DPI.
-pub fn system_metric_for_dpi(index: i32, dpi: u32, d: &Display) -> Option<i32> {
-    let base = system_metric(index, d)?;
-    let scaled = |v: i32| -> i32 { ((i64::from(v) * i64::from(dpi) + 48) / 96) as i32 };
-    // Values the oracle listed at 96/120/144/192 that plain rounding does
-    // not give.
-    let table = |v: [i32; 4]| -> i32 {
-        match dpi {
-            96 => v[0],
-            120 => v[1],
-            144 => v[2],
-            192 => v[3],
-            _ => scaled(v[0]),
-        }
-    };
-    Some(match index {
-        2 | 3 | 9 | 10 | 20 | 21 => table([17, 21, 26, 34]),
-        4 | 51 => match dpi {
-            1 => 24,
-            48 => 12,
-            1000 => 230,
-            _ => table([23, 29, 34, 45]),
-        },
-        11 | 12 => table([32, 40, 48, 64]),
-        13 | 14 => table([32, 32, 48, 64]),
-        15 => table([20, 25, 30, 39]),
-        28 | 34 => table([136, 166, 198, 258]),
-        29 | 35 => table([39, 47, 56, 71]),
-        30 => table([36, 46, 54, 72]),
-        31 | 52 | 53 => table([22, 28, 33, 44]),
-        32 | 33 => table([4, 4, 5, 5]),
-        38 | 39 => table([75, 94, 113, 150]),
-        49 | 50 => table([16, 20, 24, 32]),
-        54 | 55 => table([19, 24, 29, 38]),
-        71 | 72 => table([15, 19, 25, 31]),
-        92 => table([4, 5, 6, 8]),
-        _ => base,
-    })
-}
-
 /// What a frame adds on each side.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Insets {
@@ -216,6 +183,85 @@ pub struct Insets {
     pub bottom: i32,
 }
 
+/// The DPIs the sheet (`GetSystemMetricsForDpi.yaml` `scaling_table`)
+/// lists values for.
+const DPIS: [u32; 8] = [96, 120, 144, 168, 192, 240, 288, 384];
+
+/// `round(v * dpi / 96)`, halves up.
+fn scale(v: i64, dpi: u32) -> i32 {
+    ((v * i64::from(dpi) + 48) / 96).clamp(i64::MIN / 2, i64::from(i32::MAX)) as i32
+}
+
+/// A metric that grows with the DPI: the sheet's value at one of the
+/// listed DPIs, else `v96` scaled.
+fn listed(dpi: u32, row: [i32; 8], v96: i64) -> i32 {
+    match DPIS.iter().position(|&d| d == dpi) {
+        Some(k) => row[k],
+        None => scale(v96, dpi),
+    }
+}
+
+/// The caption height (`SM_CYCAPTION`) at `dpi`: a 22-pixel button
+/// height scaled, plus the 1-pixel border; the tiny DPIs 1 and 2 give 24.
+pub fn caption_for_dpi(dpi: u32) -> i32 {
+    if dpi <= 2 { 24 } else { scale(22, dpi).saturating_add(1) }
+}
+
+/// `SM_CXFRAME` at `dpi`: 3 and the scaled border (round(dpi / 96)).
+pub fn frame_for_dpi(dpi: u32) -> i32 {
+    3 + scale(1, dpi)
+}
+
+/// `SM_CXPADDEDBORDER` at `dpi` (capped at 100).
+pub fn padded_for_dpi(dpi: u32) -> i32 {
+    scale(4, dpi).min(100)
+}
+
+/// `SM_CYMENU` at `dpi`: the scaled 19 plus the 1-pixel border.
+pub fn menu_for_dpi(dpi: u32) -> i32 {
+    match dpi {
+        0..=2 => 24,
+        24 => 7,
+        47 => 11,
+        _ => scale(19, dpi).saturating_add(1),
+    }
+}
+
+/// The cursor size at `dpi` (`SM_CXCURSOR`): 32, 48, 64, 96 or 128.
+pub fn cursor_for_dpi(dpi: u32) -> i32 {
+    match dpi {
+        0..=143 => 32,
+        144..=191 => 48,
+        192..=287 => 64,
+        288..=383 => 96,
+        _ => 128,
+    }
+}
+
+/// `GetSystemMetricsForDpi(index, dpi)`: the sizes scaled as the oracle
+/// listed them (`GetSystemMetricsForDpi.yaml`), the rest as at 96 DPI.
+pub fn system_metric_for_dpi(index: i32, dpi: u32, d: &Display) -> Option<i32> {
+    let base = system_metric(index, d)?;
+    Some(match index {
+        2 | 3 | 9 | 10 | 20 | 21 => scale(17, dpi),
+        4 | 51 => caption_for_dpi(dpi),
+        11 | 12 => scale(32, dpi),
+        13 | 14 => cursor_for_dpi(dpi),
+        15 => menu_for_dpi(dpi),
+        28 | 34 => listed(dpi, [136, 166, 198, 232, 258, 324, 384, 510], 136),
+        29 | 35 => listed(dpi, [39, 47, 56, 64, 71, 88, 103, 135], 39),
+        30 => listed(dpi, [36, 46, 54, 64, 72, 91, 109, 145], 36),
+        31 | 52 | 53 => scale(22, dpi),
+        32 | 33 => frame_for_dpi(dpi),
+        38 | 39 => scale(75, dpi),
+        49 | 50 => scale(16, dpi),
+        54 | 55 => scale(19, dpi),
+        71 | 72 => listed(dpi, [15, 19, 25, 29, 31, 41, 47, 65], 15),
+        92 => padded_for_dpi(dpi),
+        _ => base,
+    })
+}
+
 /// Whether a style has a caption (both `WS_BORDER` and `WS_DLGFRAME`).
 pub fn has_caption(style: u32) -> bool {
     style & WS_CAPTION == WS_CAPTION
@@ -223,14 +269,22 @@ pub fn has_caption(style: u32) -> bool {
 
 /// The width of the frame on each side for `style`/`ex_style`.
 fn side(style: u32, ex: u32) -> i32 {
+    side_dpi(style, ex, 96)
+}
+
+/// The frame width on each side at `dpi` (`AdjustWindowRectExForDpi.yaml`):
+/// a caption or thick frame with a border is the frame plus the padded
+/// border, a thick frame alone one less.
+fn side_dpi(style: u32, ex: u32, dpi: u32) -> i32 {
+    let fp = frame_for_dpi(dpi).saturating_add(padded_for_dpi(dpi));
     let caption = has_caption(style);
     let thick = style & WS_THICKFRAME != 0;
     let border = style & WS_BORDER != 0;
     let dlg = style & WS_DLGFRAME != 0 || ex & WS_EX_DLGMODALFRAME != 0;
     let outer = if caption || (thick && border) {
-        8
+        fp
     } else if thick {
-        7
+        fp - 1
     } else if dlg {
         3
     } else if border {
@@ -241,21 +295,26 @@ fn side(style: u32, ex: u32) -> i32 {
     let client = if ex & WS_EX_CLIENTEDGE != 0 { 2 } else { 0 };
     let mut stat = if ex & WS_EX_STATICEDGE != 0 { 1 } else { 0 };
     // Observed: a dialog frame with both edges adds 4 in all, not 6.
-    if stat != 0 && dlg && !caption && !thick && client != 0 {
-        stat = -1;
+    if stat != 0 && client != 0 {
+        stat = if dlg && !caption && !thick { -1 } else { 0 };
     }
     outer + client + stat
 }
 
 /// `AdjustWindowRectEx`'s insets: the frame, the caption, a menu bar.
 pub fn frame_insets(style: u32, menu: bool, ex: u32) -> Insets {
-    let s = side(style, ex);
+    frame_insets_dpi(style, menu, ex, 96)
+}
+
+/// [`frame_insets`] at `dpi` (`AdjustWindowRectExForDpi`).
+pub fn frame_insets_dpi(style: u32, menu: bool, ex: u32, dpi: u32) -> Insets {
+    let s = side_dpi(style, ex, dpi);
     let mut top = s;
     if has_caption(style) {
-        top += CAPTION;
+        top += caption_for_dpi(dpi);
     }
     if menu {
-        top += MENU;
+        top += menu_for_dpi(dpi);
     }
     Insets { left: s, top, right: s, bottom: s }
 }
@@ -271,6 +330,18 @@ pub fn client_insets(style: u32, ex: u32, menu: bool) -> Insets {
         i.bottom += SCROLLBAR;
     }
     i
+}
+
+/// `AdjustWindowRectExForDpi`: the amounts added with wrap-around
+/// arithmetic, as observed for rectangles at the edge of the range.
+pub fn adjust_window_rect_dpi(r: Rect, style: u32, menu: bool, ex: u32, dpi: u32) -> Rect {
+    let i = frame_insets_dpi(style, menu, ex, dpi);
+    Rect::new(
+        r.left.wrapping_sub(i.left),
+        r.top.wrapping_sub(i.top),
+        r.right.wrapping_add(i.right),
+        r.bottom.wrapping_add(i.bottom),
+    )
 }
 
 /// `AdjustWindowRectEx`.

@@ -439,6 +439,12 @@ impl Gdi {
         }
     }
 
+    /// A display DC's origin on the screen (`None`: not a display DC).
+    pub fn display_origin(&self, h: u64) -> Option<(i32, i32)> {
+        let d = self.dc(h)?;
+        matches!(d.kind, DcKind::Display { .. }).then_some(d.vis_origin)
+    }
+
     fn free_dc(&mut self, h: u64, zombie: bool) {
         let Some(i) = self.index_of(h) else { return };
         let Some(Obj::Dc(d)) = self.objs[i].take() else { return };

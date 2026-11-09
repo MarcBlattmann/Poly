@@ -210,6 +210,14 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
                 let size = w.surfaces.size(&w.desktop, hwnd).map_or(0, |(x, y)| u64::from(x) | (u64::from(y) << 32));
                 return Reply::Value { value: size };
             }
+            // A system cursor over a top-level window's surface (ADR 0172).
+            Request::CursorShape { hwnd, idc } => {
+                let w = &mut sys.win32k;
+                if let Some(id) = w.surfaces.surface(hwnd) {
+                    w.desktop.set_cursor(id, poly_win32k::link::CursorShape::Standard(idc));
+                }
+                return Reply::Ok {};
+            }
             _ => {}
         }
         let mut fx = Effects::default();

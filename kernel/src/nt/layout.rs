@@ -141,6 +141,10 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         // ADR 0128.
         ("gdi32.dll", super::GDI32),
         ("win32u.dll", super::WIN32U),
+        // ADR 0172.
+        ("shcore.dll", super::SHCORE),
+        ("dwmapi.dll", super::DWMAPI),
+        ("imm32.dll", super::IMM32),
     ] {
         if bytes.is_empty() {
             continue;

@@ -101,6 +101,10 @@ pub static OLEAUT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleaut32.
 /// `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static GDI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/gdi32.dll"));
 pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"));
+/// Our `shcore.dll`, `dwmapi.dll` and `imm32.dll` (ADR 0172).
+pub static SHCORE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shcore.dll"));
+pub static DWMAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dwmapi.dll"));
+pub static IMM32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/imm32.dll"));
 
 mod test_crypto;
 

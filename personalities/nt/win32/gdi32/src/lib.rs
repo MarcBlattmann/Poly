@@ -481,6 +481,56 @@ pub unsafe extern "system" fn CreateRectRgnIndirect(rect: *const i32) -> H {
     CreateRectRgn(r.left, r.top, r.right, r.bottom)
 }
 
+/// `CreateEllipticRgn`: the ellipse inscribed in the rectangle, one pixel
+/// narrower and shorter than the bounds given (GDI's regions of ellipses are
+/// 59x39 for 0,0,60,40; `GetWindowRgnBox.yaml`).
+#[unsafe(no_mangle)]
+pub extern "system" fn CreateEllipticRgn(l: i32, t: i32, r: i32, b: i32) -> H {
+    let (w, h) = (i64::from(r) - i64::from(l) - 1, i64::from(b) - i64::from(t) - 1);
+    let rgn = CreateRectRgn(0, 0, 1, 1);
+    if rgn == 0 {
+        return 0;
+    }
+    let mut rects = Vec::new();
+    if w > 0 && h > 0 {
+        // Integer arithmetic on twice the coordinates keeps the rounding exact.
+        let (a2, b2) = (w, h); // semi-axes times two
+        for y in 0..h {
+            let dy = 2 * y + 1 - h; // twice the distance of the row's centre from the middle
+            // x extent: |2x+1-w| <= a2 * sqrt(1 - (dy/b2)^2)
+            let num = (b2 * b2 - dy * dy).max(0);
+            // half-width squared, times b2^2: a2^2 * num / b2^2
+            let hw2 = (a2 * a2 * num) as f64 / (b2 * b2) as f64;
+            let hw = libm_sqrt(hw2);
+            let left = ((w as f64 - hw) / 2.0 + 0.5) as i64;
+            let right = ((w as f64 + hw) / 2.0 + 0.5) as i64;
+            if right > left {
+                rects.push(Rect::new(
+                    l.wrapping_add(left as i32),
+                    t.wrapping_add(y as i32),
+                    l.wrapping_add(right as i32),
+                    t.wrapping_add(y as i32 + 1),
+                ));
+            }
+        }
+    }
+    let region = Region::from_rects(&rects);
+    gdi(|g| g.set_region(rgn as u64, region));
+    rgn
+}
+
+/// A square root without `std` (Newton's method on a positive double).
+fn libm_sqrt(x: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let mut g = if x > 1.0 { x / 2.0 } else { 1.0 };
+    for _ in 0..40 {
+        g = 0.5 * (g + x / g);
+    }
+    g
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn SetRectRgn(rgn: H, l: i32, t: i32, r: i32, b: i32) -> i32 {
     i32::from(gdi(|g| g.set_rect_rgn(rgn as u64, Rect::new(l, t, r, b))))
@@ -1082,6 +1132,32 @@ pub unsafe extern "system" fn PolyGdiSetSystemClip(hdc: H, rects: *const i32, n:
 fn solid_union(rs: &[Rect]) -> Region {
     let solid: Vec<Rect> = rs.iter().filter(|r| !r.is_empty()).copied().collect();
     Region::from_rects(&solid)
+}
+
+/// The window of a display DC (`WindowFromDC`): 0 for the screen's,
+/// `usize::MAX` for a memory DC or a handle that is no DC.
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiDisplayWindow(hdc: H) -> H {
+    gdi(|g| g.display_hwnd(hdc as u64)).map_or(usize::MAX, |h| h as H)
+}
+
+/// A display DC's origin on the screen into `out` (x, y): 1; 0 for a
+/// memory DC or a handle that is no DC (`EnumDisplayMonitors`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiDisplayOrigin(hdc: H, out: *mut i32) -> i32 {
+    match gdi(|g| g.display_origin(hdc as u64)) {
+        Some((x, y)) => {
+            if !out.is_null() {
+                // SAFETY: two i32 of the caller.
+                unsafe {
+                    *out = x;
+                    *out.add(1) = y;
+                }
+            }
+            1
+        }
+        None => 0,
+    }
 }
 
 /// Region `hrgn`'s rectangles in canonical band order (`GetRegionData`'s)

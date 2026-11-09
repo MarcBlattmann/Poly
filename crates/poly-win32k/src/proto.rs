@@ -156,6 +156,12 @@ crate::wire_struct! {
         pub size_move_pending: bool,
         pub desktop: bool,
         pub message_only: bool,
+        /// DPI awareness the window was created under (`guic::AWARE_*`).
+        pub dpi: u8,
+        /// Between `CreateWindow` and `FinishCreate`.
+        pub creating: bool,
+        /// The input-context association (`ime::Assoc::code`).
+        pub ime: u32,
     }
 }
 
@@ -292,6 +298,24 @@ crate::wire_enum! {
         /// TrackMouseEvent: `flags` TME_* (TME_QUERY answers a `Value`:
         /// flags | hwnd << 32 ... see `wm::raw`), `hover` ms.
         59 => TrackMouse { hwnd: u32, flags: u32, hover: u32 },
+        /// A clipboard operation (ADR 0172): a `Clip`.
+        100 => Clip { op: crate::clip::ClipOp },
+        /// DPI awareness (`awareness` is `guic::AWARE_*`): without `set` a
+        /// `Value` with the calling thread's; with `set` for the process an
+        /// `Ok` (once) or for the thread a `Value` with the previous one.
+        /// Window properties: `op` 0 get, 1 set, 2 remove, 3 count; a `Value`.
+        /// Layered attributes: `op` 0 set, 1 get (a `Value`: key, alpha << 32, flags << 40), 2 mark UpdateLayeredWindow.
+        /// `RegisterWindowMessageW`: an `Atom`.
+        /// An input-context operation (ADR 0172): an `Ime`.
+        /// The system cursor (`IDC_*`) to show over a top-level window's surface.
+        107 => CursorShape { hwnd: u32, idc: u16 },
+        105 => Ime { op: crate::ime::ImeOp },
+        /// Set a window's input-context association (`ime::Assoc::code`): a `Value` with the previous code.
+        106 => ImeAssoc { hwnd: u32, code: u32 },
+        104 => RegisterMessage { name: Vec<u16> },
+        103 => Layered { hwnd: u32, op: u8, key: u32, alpha: u8, flags: u32 },
+        102 => Prop { hwnd: u64, op: u8, key: ClassRef, value: u64 },
+        101 => Dpi { set: bool, process: bool, awareness: u8 },
     }
 }
 
@@ -326,6 +350,8 @@ crate::wire_enum! {
         22 => Windows { hwnds: Vec<u32> },
         23 => Input { active: u32, focus: u32, capture: u32, foreground: u32, fg_mine: bool },
         24 => Keys { keys: Vec<u8> },
+        100 => Clip { res: crate::clip::ClipRes },
+        105 => Ime { res: crate::ime::ImeRes },
     }
 }
 
@@ -362,6 +388,17 @@ mod tests {
         assert_eq!(decode::<Request>(&encode(&r)), Some(r));
         let p = Reply::Window { info: WinInfo { hwnd: 0x10010, window: Rect::new(1, 2, 3, 4), ..WinInfo::default() } };
         assert_eq!(decode::<Reply>(&encode(&p)), Some(p));
+        for r in [
+            Request::Ime { op: crate::ime::ImeOp::Create {} },
+            Request::Clip { op: crate::clip::ClipOp::Set { format: 13, handle: 5, data: Some(vec![1, 2]) } },
+            Request::Dpi { set: true, process: false, awareness: 2 },
+            Request::Layered { hwnd: 1, op: 0, key: 2, alpha: 3, flags: 3 },
+            Request::Prop { hwnd: 1, op: 1, key: ClassRef::Name { name: vec![65] }, value: 9 },
+        ] {
+            assert_eq!(decode::<Request>(&encode(&r)), Some(r));
+        }
+        let r = Reply::Ime { res: crate::ime::ImeRes::Val { value: 7 } };
+        assert_eq!(decode::<Reply>(&encode(&r)), Some(r));
         let e = Reply::Empty { next_timer_ms: Some(5) };
         assert_eq!(decode::<Reply>(&encode(&e)), Some(e));
     }

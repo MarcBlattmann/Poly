@@ -171,6 +171,13 @@ name = "poly-net"
 version = "0.0.1"
 
 [[package]]
+name = "poly-nls"
+version = "0.0.1"
+dependencies = [
+ "poly-rtl",
+]
+
+[[package]]
 name = "poly-ntobj"
 version = "0.0.1"
 
@@ -254,6 +261,13 @@ dependencies = [
 [[package]]
 name = "poly-rtc"
 version = "0.0.1"
+
+[[package]]
+name = "poly-rtl"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
 
 [[package]]
 name = "poly-sched"
@@ -364,6 +378,9 @@ version = "0.0.1"
 [[package]]
 name = "poly-win32k"
 version = "0.0.1"
+dependencies = [
+ "poly-nls",
+]
 
 [[package]]
 name = "poly-winsock"

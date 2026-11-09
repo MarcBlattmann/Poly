@@ -294,6 +294,16 @@ pub fn resized_paint<E: Env + ?Sized>(env: &E, hwnd: u32, old_client: Rect, new_
     erase_now(env, hwnd);
 }
 
+/// A frame change that redraws everything (`SetWindowRgn(NULL)`,
+/// `SetWindowRgn.yaml`): the client invalid and erased at once, the frame
+/// repainted as a region.
+pub fn frame_redraw<E: Env + ?Sized>(env: &E, hwnd: u32) {
+    redraw(env, hwnd, None, RDW_INVALIDATE | RDW_ERASE | RDW_NOCHILDREN);
+    redraw(env, hwnd, Some(&[]), RDW_INVALIDATE | RDW_FRAME | RDW_NOCHILDREN);
+    mark_frame_partial(env, hwnd);
+    erase_now(env, hwnd);
+}
+
 /// The frame pending for a part of the window only (WM_NCPAINT with a
 /// region rather than 1).
 fn mark_frame_partial<E: Env + ?Sized>(env: &E, hwnd: u32) {

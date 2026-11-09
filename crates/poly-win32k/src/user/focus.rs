@@ -22,6 +22,32 @@ pub const WM_ENABLE: u32 = 0x000A;
 pub const WM_ACTIVATEAPP: u32 = 0x001C;
 pub const WM_CANCELMODE: u32 = 0x001F;
 pub const WM_NCACTIVATE: u32 = 0x0086;
+pub const WM_IME_SETCONTEXT: u32 = 0x0281;
+pub const WM_IME_NOTIFY: u32 = 0x0282;
+/// `WM_IME_SETCONTEXT`'s lParam: ISC_SHOWUICOMPOSITIONWINDOW | ISC_SHOWUIGUIDELINE
+/// | ISC_SHOWUIALLCANDIDATEWINDOW (`imm.h`).
+const ISC_SHOWUIALL: u64 = 0xC000_000F;
+const IMN_CLOSESTATUSWINDOW: u64 = 1;
+const IMN_OPENSTATUSWINDOW: u64 = 2;
+
+/// The input-method messages of an activation change (`ImmGetContext.yaml`):
+/// the window losing it gets `WM_IME_SETCONTEXT(0)`, the one gaining it
+/// `WM_IME_SETCONTEXT(1)`, then the old one `WM_IME_NOTIFY(IMN_CLOSESTATUSWINDOW)`
+/// and the new one `WM_IME_NOTIFY(IMN_OPENSTATUSWINDOW)`.
+fn ime_switch<E: Env + ?Sized>(env: &E, old: u32, new: u32) {
+    if old != 0 {
+        send(env, u64::from(old), WM_IME_SETCONTEXT, 0, ISC_SHOWUIALL);
+    }
+    if new != 0 {
+        send(env, u64::from(new), WM_IME_SETCONTEXT, 1, ISC_SHOWUIALL);
+    }
+    if old != 0 {
+        send(env, u64::from(old), WM_IME_NOTIFY, IMN_CLOSESTATUSWINDOW, 0);
+    }
+    if new != 0 {
+        send(env, u64::from(new), WM_IME_NOTIFY, IMN_OPENSTATUSWINDOW, 0);
+    }
+}
 /// `WA_INACTIVE` / `WA_ACTIVE` (winuser.h).
 pub const WA_INACTIVE: u64 = 0;
 pub const WA_ACTIVE: u64 = 1;
@@ -235,6 +261,7 @@ pub fn activate<E: Env + ?Sized>(env: &E, y: u32, in_show: bool, foreground: boo
         if old_focus != 0 && old_focus != y {
             send(env, u64::from(old_focus), WM_KILLFOCUS, u64::from(y), 0);
         }
+        ime_switch(env, if xi.is_some() { x } else { 0 }, y);
         set(env, 0, y, SET_FOCUS);
         send(env, u64::from(y), WM_SETFOCUS, u64::from(old_focus), 0);
     }
@@ -267,6 +294,9 @@ pub fn deactivate_away<E: Env + ?Sized>(env: &E, focus_done: bool) {
     }
     if !focus_done && st.focus != 0 {
         send(env, u64::from(st.focus), WM_KILLFOCUS, 0, 0);
+    }
+    if st.active != 0 {
+        ime_switch(env, st.active, 0);
     }
     let fg = if st.fg_mine { SET_FOREGROUND } else { 0 };
     set(env, 0, 0, SET_ACTIVE | SET_FOCUS | fg);

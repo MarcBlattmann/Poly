@@ -79,6 +79,14 @@ pub unsafe extern "system" fn GlobalSize(mem: *mut u8) -> usize {
     unsafe { LocalSize(mem) }
 }
 
+/// `GetUserDefaultLCID`: the user's locale, English (United States)
+/// (`poly_nls`'s default; `GetClipboardData.yaml` compares `CF_LOCALE`
+/// with it).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetUserDefaultLCID() -> u32 {
+    0x0409
+}
+
 /// `GlobalLock`: the block's address (blocks never move in Poly).
 #[unsafe(no_mangle)]
 pub extern "system" fn GlobalLock(mem: *mut u8) -> *mut u8 {

@@ -52,6 +52,14 @@ pub const WM_SYSCOMMAND: u32 = 0x0112;
 pub const WM_RBUTTONUP: u32 = 0x0205;
 pub const WM_MOUSEWHEEL: u32 = 0x020A;
 pub const WM_PARENTNOTIFY: u32 = 0x0210;
+pub const WM_DWMNCRENDERINGCHANGED: u32 = 0x031F;
+/// Set by `SetWindowRgn(NULL)`: the next frame change redraws everything.
+pub static FRAME_REDRAW: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+/// A private marker of `swp`'s `extra`: the z order counts as changed.
+const FORCE_Z: u32 = 0x2000_0000;
+pub const WM_RENDERFORMAT: u32 = 0x0305;
+pub const WM_RENDERALLFORMATS: u32 = 0x0306;
+pub const WM_DESTROYCLIPBOARD: u32 = 0x0307;
 
 // SetWindowPos flags (`winuser.h`); 0x800 and 0x1000 are the "client
 // keeps its size / position" bits the sheets observed in WM_WINDOWPOSCHANGED.
@@ -467,7 +475,22 @@ pub fn destroy_window<E: Env + ?Sized>(env: &E, hwnd: u64) -> bool {
         return false;
     }
     destroy_tree(env, i.hwnd, true);
+    // The IME window goes with the thread's last window.
+    let tops = focus::tops_of(env, env.tid());
+    if !tops.is_empty() && tops.iter().all(|&t| is_ime_window(env, t)) {
+        for t in tops {
+            destroy_tree(env, t, true);
+        }
+    }
     true
+}
+
+/// Whether a window is the "IME" window `imm32` made for its thread.
+fn is_ime_window<E: Env + ?Sized>(env: &E, hwnd: u32) -> bool {
+    match env.call(Request::ClassName { hwnd: u64::from(hwnd) }) {
+        Reply::Text { text } => text.len() == 3 && text.iter().zip([73u16, 77, 69]).all(|(a, b)| *a == b),
+        _ => false,
+    }
 }
 
 fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
@@ -486,7 +509,10 @@ fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
     }
     if let Reply::Relatives { owned, .. } = env.call(Request::Relatives { hwnd }) {
         for o in owned {
-            destroy_tree(env, o, false);
+            // The thread's hidden IME window outlives its first window.
+            if !is_ime_window(env, o) {
+                destroy_tree(env, o, false);
+            }
         }
     }
     send_destroy(env, hwnd);
@@ -494,6 +520,14 @@ fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
 }
 
 fn send_destroy<E: Env + ?Sized>(env: &E, hwnd: u32) {
+    // The clipboard's owner renders everything it promised first, and
+    // goes without WM_DESTROYCLIPBOARD (OpenClipboard.yaml owner_destroyed).
+    if let Reply::Clip { res: crate::clip::ClipRes::Val { value: 1 } } =
+        env.call(Request::Clip { op: crate::clip::ClipOp::Destroying { hwnd } })
+    {
+        send(env, u64::from(hwnd), WM_RENDERALLFORMATS, 0, 0);
+        env.call(Request::Clip { op: crate::clip::ClipOp::RenderedAll { hwnd } });
+    }
     send(env, u64::from(hwnd), WM_DESTROY, 0, 0);
     if let Reply::Relatives { children, .. } = env.call(Request::Relatives { hwnd }) {
         for c in children {
@@ -630,7 +664,18 @@ fn show<E: Env + ?Sized>(env: &E, i: &WinInfo, kind: ShowKind) {
         extra = if !activatable && matches!(kind, ShowKind::Create) { 0 } else { 0x1000_0000 };
     }
     let activate = (activatable || (interactive && matches!(kind, ShowKind::Create))) && flags & SWP_NOACTIVATE == 0;
+    // An overlapped window shown by its creation enters the z order
+    // (DwmSetWindowAttribute.yaml dsa_ncpolicy: 0x10001843).
+    let overlapped_create = interactive && matches!(kind, ShowKind::Create) && i.style & WS_POPUP == 0;
+    if overlapped_create {
+        extra |= FORCE_Z;
+    }
     swp(env, i.hwnd, HWND_TOP, 0, 0, 0, 0, flags, extra, activate);
+    if overlapped_create && has_caption(i.style) {
+        // The desktop window manager tells a new framed window its
+        // non-client rendering is on (queued, WM_DWMNCRENDERINGCHANGED).
+        env.call(Request::Post { hwnd: u64::from(i.hwnd), msg: WM_DWMNCRENDERINGCHANGED, w: 1, l: 0 });
+    }
     if i.size_move_pending {
         env.call(Request::SetState {
             hwnd: i.hwnd,
@@ -809,6 +854,8 @@ fn swp<E: Env + ?Sized>(
     activate: bool,
 ) -> bool {
     let h = u64::from(hwnd);
+    let force_z = extra & FORCE_Z != 0;
+    let extra = extra & !FORCE_Z;
     let Some(i) = info(env, h) else { return false };
     let mut wp = WindowPos { hwnd: h, insert_after: after, x, y, cx: cx.max(0), cy: cy.max(0), flags };
     if flags & SWP_NOSENDCHANGING == 0 {
@@ -877,7 +924,8 @@ fn swp<E: Env + ?Sized>(
         && (matches!(
             env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
             Reply::Bool { value: true }
-        ) || (show && interactive && !activate && f & SWP_STATECHANGED != 0));
+        ) || (show && interactive && !activate && f & SWP_STATECHANGED != 0)
+            || (show && force_z));
     let hide = f & SWP_HIDEWINDOW != 0 && styled_visible;
     let frame = f & SWP_FRAMECHANGED != 0;
     if !(moved || sized || zchanged || show || hide || frame) {
@@ -974,6 +1022,8 @@ fn swp<E: Env + ?Sized>(
             paint::shown_paint(env, &now);
         } else if vis_before && vis_after && sized {
             paint::resized_paint(env, hwnd, old_client, new_client);
+        } else if frame && vis_before && vis_after && FRAME_REDRAW.swap(false, core::sync::atomic::Ordering::Relaxed) {
+            paint::frame_redraw(env, hwnd);
         }
     }
     let mut done = WindowPos { hwnd: h, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };

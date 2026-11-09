@@ -9,6 +9,7 @@
 //! spec sheets of the first Phase 7 slice (`specs/windows/user32.dll/`).
 
 use crate::frame::{FrameMetrics, Rect};
+use crate::guic;
 use crate::metrics::*;
 use crate::proto::*;
 use alloc::collections::{BTreeMap, VecDeque};
@@ -20,6 +21,7 @@ pub mod paint;
 pub mod raw;
 
 // Win32 errors (`winerror.h`).
+pub const ERROR_ACCESS_DENIED: u32 = 5;
 pub const ERROR_INVALID_HANDLE: u32 = 6;
 pub const ERROR_INVALID_PARAMETER: u32 = 87;
 pub const ERROR_INVALID_WINDOW_HANDLE: u32 = 1400;
@@ -146,6 +148,14 @@ struct Window {
     seq: u64,
     /// Update region, pending erase and frame (`paint`).
     paint: paint::Paint,
+    /// The DPI awareness it was created under (`guic::AWARE_*`).
+    dpi: u8,
+    /// Window properties (`SetPropW`), keyed by atom or upper-cased name.
+    props: Vec<(ClassRef, u64)>,
+    /// Layered-window attributes (`WS_EX_LAYERED`, ADR 0172).
+    lay: guic::Layered,
+    /// The input-context association (`ime::Assoc::code`).
+    ime: u32,
 }
 
 #[derive(Debug, Default)]
@@ -227,6 +237,13 @@ pub struct Wm {
     hover: Option<(u32, u32, u64)>,
     /// The time of the last request (ms), for input from the desktop link.
     now: u64,
+    /// The session's clipboard (ADR 0172).
+    clip: crate::clip::Clipboard,
+    /// Input contexts (`ime`).
+    ime: crate::ime::Ime,
+    /// DPI awareness: processes that set theirs, and threads' own (`guic`).
+    proc_dpi: BTreeMap<u32, u8>,
+    thread_dpi: BTreeMap<Key, u8>,
 }
 
 impl Default for Wm {
@@ -281,6 +298,10 @@ impl Wm {
             tracking: Vec::new(),
             hover: None,
             now: 0,
+            clip: crate::clip::Clipboard::new(),
+            ime: crate::ime::Ime::default(),
+            proc_dpi: BTreeMap::new(),
+            thread_dpi: BTreeMap::new(),
         };
         // Index 0 is never a window.
         wm.slots.push(None);
@@ -485,6 +506,9 @@ impl Wm {
             size_move_pending: w.size_move_pending,
             desktop: h == self.desktop,
             message_only: w.parent == self.message,
+            dpi: if h == self.desktop { guic::AWARE_PER_MONITOR } else { w.dpi },
+            creating: w.state == State::Creating,
+            ime: w.ime,
         })
     }
 
@@ -694,6 +718,8 @@ impl Wm {
         win.id = if child { s.menu } else { 0 };
         win.extra = vec![0; extra];
         win.state = State::Creating;
+        win.dpi =
+            if child { self.get(u64::from(parent)).map_or(0, |p| p.dpi) } else { self.thread_awareness(ctx.key()) };
         self.seq += 1;
         win.seq = self.seq;
         let hwnd = self.alloc(win);
@@ -773,6 +799,7 @@ impl Wm {
             c.windows = c.windows.saturating_sub(1);
         }
         self.forget_input(hwnd);
+        self.clip.window_gone(hwnd);
         for q in self.queues.values_mut() {
             q.posted.retain(|m| m.hwnd != hwnd);
         }
@@ -857,7 +884,10 @@ impl Wm {
                 core::mem::replace(&mut w.id, value)
             }
             -16 => u64::from(core::mem::replace(&mut w.style, value as u32)),
-            -20 => u64::from(core::mem::replace(&mut w.ex_style, value as u32)),
+            -20 => {
+                let new = guic::filter_ex_style(w.style, w.ex_style, value as u32, &mut w.lay);
+                u64::from(core::mem::replace(&mut w.ex_style, new))
+            }
             -21 => core::mem::replace(&mut w.userdata, value),
             -2 => 0,
             i if i >= 0 && (i as usize) + usize::from(size) <= w.extra.len() => {
@@ -879,8 +909,9 @@ impl Wm {
             w.style = v;
             v
         } else {
-            w.ex_style = value;
-            value
+            let new = guic::filter_ex_style(w.style, w.ex_style, value, &mut w.lay);
+            w.ex_style = new;
+            new
         };
         Reply::Value { value: u64::from(stored) }
     }
@@ -949,6 +980,14 @@ impl Wm {
         }
         let Some(w) = self.get(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
         let old = w.parent;
+        // Windows of different DPI awareness kinds cannot be parent and
+        // child (GetWindowDpiAwarenessContext.yaml set_parent).
+        if new_parent != self.desktop
+            && let Some(np) = self.get(u64::from(new_parent))
+            && guic::kind(np.dpi) != guic::kind(w.dpi)
+        {
+            return err(guic::ERROR_INVALID_STATE);
+        }
         if let Some(p) = self.get_mut(u64::from(old)) {
             p.children.retain(|&c| c != hwnd);
         }
@@ -1092,6 +1131,141 @@ impl Wm {
     // ----- messages
 
     #[allow(clippy::too_many_arguments)]
+    /// `SetPropW` (`op` 1), `GetPropW` (0), `RemovePropW` (2) and the count
+    /// of properties (3): a `Value` (0 when there is none).
+    fn prop_op(&mut self, hwnd: u64, op: u8, key: ClassRef, value: u64) -> Reply {
+        let key = match key {
+            ClassRef::Name { name } => ClassRef::Name { name: upcase(&name) },
+            a => a,
+        };
+        let Some(w) = self.get_mut(hwnd) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
+        let at = w.props.iter().position(|p| p.0 == key);
+        match op {
+            0 => Reply::Value { value: at.map_or(0, |i| w.props[i].1) },
+            1 => {
+                match at {
+                    Some(i) => w.props[i].1 = value,
+                    None => w.props.push((key, value)),
+                }
+                Reply::Ok {}
+            }
+            2 => Reply::Value { value: at.map_or(0, |i| w.props.remove(i).1) },
+            _ => Reply::Value { value: w.props.len() as u64 },
+        }
+    }
+
+    /// Layered-window attributes (`SetLayeredWindowAttributes`, `GetLayeredWindowAttributes`
+    /// and the mark `UpdateLayeredWindow` leaves; `Layered.yaml` sheets): see [`guic::Layered`].
+    fn layered_op(&mut self, hwnd: u32, op: u8, key: u32, alpha: u8, flags: u32) -> Reply {
+        let Some(w) = self.get_mut(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
+        if w.ex_style & guic::WS_EX_LAYERED == 0 {
+            return err(ERROR_INVALID_PARAMETER);
+        }
+        let l = &mut w.lay;
+        match op {
+            0 => {
+                if flags & !3 != 0 {
+                    return err(ERROR_INVALID_PARAMETER);
+                }
+                if flags & 1 != 0 {
+                    l.key = key;
+                }
+                if flags & 2 != 0 {
+                    l.alpha = alpha;
+                }
+                l.flags = flags;
+                l.attrs = true;
+                Reply::Ok {}
+            }
+            1 => {
+                if !l.attrs {
+                    return err(0);
+                }
+                Reply::Value { value: u64::from(l.key) | u64::from(l.alpha) << 32 | u64::from(l.flags) << 40 }
+            }
+            _ => {
+                if l.attrs {
+                    return err(ERROR_INVALID_PARAMETER);
+                }
+                l.update = true;
+                Reply::Ok {}
+            }
+        }
+    }
+
+    /// A thread's DPI awareness: its own, else its process's, else unaware.
+    pub(crate) fn thread_awareness(&self, key: Key) -> u8 {
+        self.thread_dpi.get(&key).or_else(|| self.proc_dpi.get(&key.0)).copied().unwrap_or(guic::AWARE_UNAWARE)
+    }
+
+    /// DPI awareness (`SetProcessDpiAwarenessContext`, `SetThreadDpiAwarenessContext`,
+    /// `GetThreadDpiAwarenessContext`; ADR 0172): the process may set it
+    /// once; a thread's own wins over the process's.
+    fn dpi_op(&mut self, ctx: Ctx, set: bool, process: bool, awareness: u8) -> Reply {
+        let prev = self.thread_awareness(ctx.key());
+        if !set {
+            return Reply::Value { value: u64::from(prev) };
+        }
+        if process && self.proc_dpi.contains_key(&ctx.pid) {
+            return err(ERROR_ACCESS_DENIED);
+        }
+        if awareness > guic::AWARE_GDI_SCALED {
+            return err(ERROR_INVALID_PARAMETER);
+        }
+        if process {
+            self.proc_dpi.insert(ctx.pid, awareness);
+            // The windows made before report the process's awareness now
+            // (SetProcessDpiAwarenessContext.yaml mixed_observations).
+            let desktop = self.desktop;
+            for (i, slot) in self.slots.iter_mut().enumerate() {
+                if let Some(w) = slot
+                    && w.thread.0 == ctx.pid
+                    && (u32::from(self.gens[i]) << 16 | i as u32) != desktop
+                {
+                    w.dpi = awareness;
+                }
+            }
+            Reply::Ok {}
+        } else {
+            self.thread_dpi.insert(ctx.key(), awareness);
+            Reply::Value { value: u64::from(prev) }
+        }
+    }
+
+    /// One clipboard operation (ADR 0172): the window checks here, the rules
+    /// in [`crate::clip`], `WM_CLIPBOARDUPDATE` posted to the listeners when a
+    /// close changed something.
+    fn clip_op(&mut self, ctx: Ctx, op: crate::clip::ClipOp, fx: &mut Effects) -> Reply {
+        use crate::clip::{ClipOp, ClipRes, ERROR_CLIPBOARD_NOT_OPEN, WM_CLIPBOARDUPDATE};
+        match &op {
+            ClipOp::Open { hwnd } if *hwnd != 0 && !self.is_window(u64::from(*hwnd)) => {
+                return Reply::Clip { res: ClipRes::Err { code: ERROR_INVALID_WINDOW_HANDLE } };
+            }
+            ClipOp::Listener { hwnd, .. } => {
+                if !self.is_window(u64::from(*hwnd)) {
+                    return Reply::Clip { res: ClipRes::Err { code: ERROR_INVALID_WINDOW_HANDLE } };
+                }
+                if *hwnd == self.desktop {
+                    // The desktop window: the call returns 5 and leaves the
+                    // last error (AddClipboardFormatListener.yaml).
+                    return Reply::Clip { res: ClipRes::Val { value: 5 } };
+                }
+            }
+            _ => {}
+        }
+        let _ = ERROR_CLIPBOARD_NOT_OPEN;
+        let mut notify = false;
+        let res = self.clip.run(ctx.pid, ctx.tid, op, &mut notify);
+        if notify {
+            for l in self.clip.listeners_newest_first() {
+                if let Some(to) = self.get(u64::from(l)).map(|w| w.thread) {
+                    self.post(ctx, to, l, WM_CLIPBOARDUPDATE, 0, 0, fx);
+                }
+            }
+        }
+        Reply::Clip { res }
+    }
+
     fn post(&mut self, ctx: Ctx, to: Key, hwnd: u32, msg: u32, w: u64, l: u64, fx: &mut Effects) -> Reply {
         let cursor = self.cursor;
         if POINTER_MESSAGES.contains(&msg) {
@@ -1414,6 +1588,8 @@ impl Wm {
             }
         }
         self.timers.retain(|t| t.thread != key);
+        self.clip.thread_gone(pid, tid);
+        self.ime.thread_gone(key);
         if let Some(q) = self.queues.remove(&key) {
             for id in q.sent.iter().chain(q.receiving.iter()) {
                 if let Some(s) = self.sends.get_mut(id) {
@@ -1427,6 +1603,7 @@ impl Wm {
 
     /// A process ended: its threads' state and its classes go.
     pub fn process_exited(&mut self, pid: u32, fx: &mut Effects) {
+        self.clip.process_gone(pid);
         let threads: Vec<u32> = self.queues.keys().filter(|k| k.0 == pid).map(|k| k.1).collect();
         for t in threads {
             self.thread_exited(pid, t, fx);
@@ -1592,6 +1769,17 @@ impl Wm {
                 }
                 Reply::Ok {}
             }
+            Request::Clip { op } => self.clip_op(ctx, op, fx),
+            Request::Layered { hwnd, op, key, alpha, flags } => self.layered_op(hwnd, op, key, alpha, flags),
+            Request::Ime { op } => Reply::Ime { res: self.ime.run(ctx.key(), op) },
+            Request::ImeAssoc { hwnd, code } => match self.get_mut(u64::from(hwnd)) {
+                Some(w) => Reply::Value { value: u64::from(core::mem::replace(&mut w.ime, code)) },
+                None => err(ERROR_INVALID_WINDOW_HANDLE),
+            },
+            Request::CursorShape { .. } => Reply::Ok {},
+            Request::RegisterMessage { name } => Reply::Atom { atom: self.atom_for(&name) },
+            Request::Prop { hwnd, op, key, value } => self.prop_op(hwnd, op, key, value),
+            Request::Dpi { set, process, awareness } => self.dpi_op(ctx, set, process, awareness),
             Request::Post { hwnd, msg, w, l } => {
                 if hwnd == 0 {
                     return self.post(ctx, ctx.key(), 0, msg, w, l, fx);
@@ -1750,6 +1938,10 @@ impl Window {
             size_move_pending: false,
             seq: 0,
             paint: paint::Paint::default(),
+            dpi: 0,
+            props: Vec::new(),
+            lay: guic::Layered::default(),
+            ime: u32::MAX,
         }
     }
 }

@@ -10,6 +10,13 @@
 
 extern crate alloc;
 
+mod clipboard;
+mod display;
+mod icons;
+mod layered;
+mod misc;
+mod s3;
+
 use alloc::vec;
 use alloc::vec::Vec;
 use poly_win32_gui::{SpinLock, set_last_error, wide};
@@ -125,6 +132,7 @@ impl Env for Sys {
                 | Request::ClassName { .. }
                 | Request::ClassInfo { .. }
                 | Request::Window { .. }
+                | Request::Clip { .. }
         );
         let mut out = vec![0u8; 4096];
         loop {
@@ -515,7 +523,38 @@ pub unsafe extern "system" fn CreateWindowExW(
         menu: menu as u64,
         instance: instance as u64,
     };
-    u::create_window(&SYS, spec, name as u64, param as u64) as H
+    let h = u::create_window(&SYS, spec, name as u64, param as u64) as H;
+    if h != 0 && ex_style & 0x0400_0000 == 0 {
+        ime_hook(h);
+    }
+    h
+}
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GetModuleHandleW(name: *const u16) -> usize;
+    fn GetProcAddress(module: usize, name: *const u8) -> usize;
+}
+
+/// A process that has `imm32.dll` loaded gets each thread's hidden "IME"
+/// window with the thread's first window (ImmGetDefaultIMEWnd.yaml).
+fn ime_hook(hwnd: H) {
+    static HOOK: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(1);
+    let mut f = HOOK.load(core::sync::atomic::Ordering::Relaxed);
+    if f == 1 {
+        let name: [u16; 10] = [105, 109, 109, 51, 50, 46, 100, 108, 108, 0];
+        // SAFETY: kernel32 queries with NUL-terminated names.
+        f = unsafe {
+            let m = GetModuleHandleW(name.as_ptr());
+            if m == 0 { 0 } else { GetProcAddress(m, b"PolyImmWindowCreated\0".as_ptr()) }
+        };
+        HOOK.store(f, core::sync::atomic::Ordering::Relaxed);
+    }
+    if f != 0 {
+        // SAFETY: imm32's export of this shape.
+        let call: extern "system" fn(usize) = unsafe { core::mem::transmute(f) };
+        call(hwnd);
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -1121,11 +1160,19 @@ pub extern "system" fn GetSystemMetrics(index: i32) -> i32 {
 /// undefined index 0 with the error unchanged.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSystemMetricsForDpi(index: i32, dpi: u32) -> i32 {
-    if dpi == 0 {
+    // 0, 0x10000 and 0xFFFFFFFF fail; larger values count as 0xFFFF.
+    if dpi == 0 || dpi == 0x10000 || dpi == u32::MAX {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
-    metrics::system_metric_for_dpi(index, dpi, &u::screen(&SYS)).unwrap_or(0)
+    let dpi = dpi.min(0xFFFF);
+    match metrics::system_metric_for_dpi(index, dpi, &u::screen(&SYS)) {
+        Some(v) => v,
+        None => {
+            set_last_error(ERROR_INVALID_PARAMETER);
+            0
+        }
+    }
 }
 
 // ----- DPI and monitors (one monitor, DPI-unaware processes: 96)
@@ -1141,8 +1188,6 @@ const MONITORINFOF_PRIMARY: u32 = 1;
 /// `ERROR_INVALID_FLAGS`, `ERROR_INVALID_MONITOR_HANDLE` (winerror.h).
 const ERROR_INVALID_FLAGS: u32 = 1004;
 const ERROR_INVALID_MONITOR_HANDLE: u32 = 1461;
-/// `SPI_GETWORKAREA` (winuser.h).
-const SPI_GETWORKAREA: u32 = 0x0030;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiForSystem() -> u32 {
@@ -1256,19 +1301,6 @@ pub unsafe extern "system" fn GetMonitorInfoW(monitor: H, mi: *mut u8) -> i32 {
     1
 }
 
-/// Only SPI_GETWORKAREA is answered: the work area.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn SystemParametersInfoW(action: u32, _param: u32, pv: *mut u8, _ini: u32) -> i32 {
-    if action != SPI_GETWORKAREA || pv.is_null() {
-        set_last_error(ERROR_INVALID_PARAMETER);
-        return 0;
-    }
-    let w = u::screen(&SYS).work;
-    // SAFETY: the caller's RECT.
-    unsafe { put_rect(pv as *mut i32, w) };
-    1
-}
-
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn AdjustWindowRectEx(rect: *mut i32, style: u32, menu: i32, ex: u32) -> i32 {
     if rect.is_null() {
@@ -1288,28 +1320,6 @@ pub unsafe extern "system" fn AdjustWindowRect(rect: *mut i32, style: u32, menu:
     unsafe { AdjustWindowRectEx(rect, style, menu, 0) }
 }
 
-/// `GetSysColor`: Windows 10's default colours.
-#[unsafe(no_mangle)]
-pub extern "system" fn GetSysColor(index: i32) -> u32 {
-    match index {
-        0 => 0x00C8_C8C8,    // COLOR_SCROLLBAR
-        1 => 0,              // COLOR_BACKGROUND
-        2 => 0x00D1_B499,    // COLOR_ACTIVECAPTION
-        3 => 0x00DB_CDBF,    // COLOR_INACTIVECAPTION
-        4 => 0x00F0_F0F0,    // COLOR_MENU
-        5 => 0x00FF_FFFF,    // COLOR_WINDOW
-        6 => 0x0064_6464,    // COLOR_WINDOWFRAME
-        7 | 8 | 9 | 18 => 0, // menu, window, caption, button text
-        13 => 0x00D7_7800,   // COLOR_HIGHLIGHT
-        14 => 0x00FF_FFFF,   // COLOR_HIGHLIGHTTEXT
-        15 => 0x00F0_F0F0,   // COLOR_BTNFACE
-        16 => 0x00A0_A0A0,   // COLOR_BTNSHADOW
-        17 => 0x006D_6D6D,   // COLOR_GRAYTEXT
-        20 => 0x00FF_FFFF,   // COLOR_BTNHIGHLIGHT
-        _ => 0x00F0_F0F0,
-    }
-}
-
 // ----- painting with GDI
 
 #[unsafe(no_mangle)]
@@ -1317,8 +1327,16 @@ pub extern "system" fn GetDC(hwnd: H) -> H {
     const CS_OWNDC: u32 = 0x20;
     const CS_CLASSDC: u32 = 0x40;
     if hwnd == 0 {
+        // The screen: all of it is visible.
+        let d = u::screen(&SYS);
+        let all = [0, 0, d.width, d.height];
         // SAFETY: our gdi32.
-        return unsafe { PolyGdiCreateDisplayDC(0, 0) };
+        let dc = unsafe { PolyGdiCreateDisplayDC(0, 0) };
+        if dc != 0 {
+            // SAFETY: one RECT.
+            unsafe { PolyGdiSetDisplayGeometry(dc, 0, 0, all.as_ptr(), 1, core::ptr::null(), 0) };
+        }
+        return dc;
     }
     let Some(i) = info(hwnd) else { return bad_window() };
     let (persistent, class) = if i.class_style & CS_OWNDC != 0 {
@@ -1419,7 +1437,7 @@ pub extern "system" fn ReleaseDC(hwnd: H, hdc: H) -> i32 {
 fn fill(hdc: H, rect: &[i32; 4], brush: H) -> i32 {
     // A system colour index + 1 as the brush.
     let (b, color) = if (1..=31).contains(&brush) {
-        (0, GetSysColor(brush as i32 - 1))
+        (0, display::GetSysColor(brush as i32 - 1))
     } else if brush == 0 {
         // NULL: the DC's brush (observed: white on a fresh DC).
         (0, 0xFFFF_FFFF)
@@ -1900,7 +1918,7 @@ pub unsafe extern "system" fn GetCursorPos(pt: *mut i32) -> i32 {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
-    let (x, y) = cursor(None);
+    let (x, y) = self::cursor(None);
     // SAFETY: the caller's POINT.
     unsafe {
         *pt = x;
@@ -2148,11 +2166,6 @@ poly_win32_gui::not_implemented_stubs! {
     CallNextHookEx(hook, code, w, l) => 0;
 }
 
-poly_win32_gui::not_implemented_stubs! {
-    /// `LoadIconW(hInstance, lpIconName)`: NULL on failure.
-    LoadIconW(instance, name) => 0;
-}
-
 // ----- cursors, capture, the window under a point (slice B)
 
 /// The system cursors (LoadCursorW.yaml): IDC_* id, hot spot, colour.
@@ -2253,47 +2266,27 @@ pub extern "system" fn GetCursor() -> H {
 /// Sets the shape; the previous one (SetCursor.yaml).
 #[unsafe(no_mangle)]
 pub extern "system" fn SetCursor(cursor: H) -> H {
-    if cursor != 0 && cursor_index(cursor).is_none() {
+    if cursor != 0 && !icons::is_cursor(cursor) {
         set_last_error(ERROR_INVALID_CURSOR_HANDLE);
         return 0;
     }
-    with_cursor(|c| core::mem::replace(c, cursor))
+    let prev = with_cursor(|c| core::mem::replace(c, cursor));
+    show_cursor_shape(cursor);
+    prev
 }
 
-#[link(name = "gdi32", kind = "raw-dylib")]
-unsafe extern "system" {
-    fn CreateBitmap(w: i32, h: i32, planes: u32, bpp: u32, bits: *const u8) -> usize;
-}
-
-/// `ICONINFO` (winuser.h): fIcon, xHotspot, yHotspot, hbmMask, hbmColor.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetIconInfo(icon: H, ii: *mut u8) -> i32 {
-    let Some(i) = cursor_index(icon) else {
-        set_last_error(ERROR_INVALID_CURSOR_HANDLE);
-        return 0;
-    };
-    if ii.is_null() {
-        set_last_error(ERROR_INVALID_PARAMETER);
-        return 0;
+/// Tell the compositor which system cursor to show over the window under
+/// the pointer (created cursors and NULL keep the previous look).
+fn show_cursor_shape(shape: H) {
+    let Some(i) = cursor_index(shape) else { return };
+    let (x, y) = self::cursor(None);
+    if let Reply::Handle { hwnd } = call(Request::WindowFromPoint { x, y, below: 0 })
+        && hwnd != 0
+        && let Reply::Handle { hwnd: root } = call(Request::Ancestor { hwnd: u64::from(hwnd), flags: 2 })
+        && root != 0
+    {
+        call(Request::CursorShape { hwnd: root, idc: CURSORS[i].0 });
     }
-    let (_, hx, hy, colour) = CURSORS[i];
-    // SAFETY: our gdi32 makes the bitmaps.
-    let (mask, color) = unsafe {
-        if colour {
-            (CreateBitmap(32, 32, 1, 1, core::ptr::null()), CreateBitmap(32, 32, 1, 32, core::ptr::null()))
-        } else {
-            (CreateBitmap(32, 64, 1, 1, core::ptr::null()), 0)
-        }
-    };
-    // SAFETY: the caller's ICONINFO (32 bytes on x64).
-    unsafe {
-        core::ptr::write_unaligned(ii as *mut u32, 0);
-        core::ptr::write_unaligned(ii.add(4) as *mut u32, hx);
-        core::ptr::write_unaligned(ii.add(8) as *mut u32, hy);
-        core::ptr::write_unaligned(ii.add(16) as *mut u64, mask as u64);
-        core::ptr::write_unaligned(ii.add(24) as *mut u64, color as u64);
-    }
-    1
 }
 
 /// `WM_CAPTURECHANGED` (winuser.h).
