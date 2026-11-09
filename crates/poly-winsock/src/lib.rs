@@ -19,6 +19,8 @@
 //!   numeric hosts, `localhost`, service names, the results' order.
 //! - [`exports`]: the names `ws2_32.dll` exports.
 //! - [`poll`]: `select` and `WSAPoll` events over the device's readiness.
+//! - [`events`]: `WSAEventSelect`'s and `WSAEnumNetworkEvents`' rules (ADR 0155).
+//! - [`dup`]: `WSADuplicateSocketW`'s protocol-info record (ADR 0155).
 //!
 //! Sources (clean room, CLEAN_ROOM.md): Microsoft Learn's Winsock
 //! reference (each function's page, "Winsock Error Codes", "SOL_SOCKET
@@ -37,7 +39,9 @@ pub mod addr;
 pub mod afd;
 pub mod consts;
 pub mod dns;
+pub mod dup;
 pub mod error;
+pub mod events;
 pub mod exports;
 pub mod poll;
 pub mod resolve;

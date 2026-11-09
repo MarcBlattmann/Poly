@@ -91,7 +91,7 @@ pub fn trace_kit_command(args: &[String]) -> Result {
         let first = PathBuf::from(exe.ok_or(USAGE)?);
         let exes: Vec<PathBuf> = std::iter::once(first).chain(extra).collect();
         let out = out.unwrap_or_else(|| work_dir().join("kit"));
-        let kit = build_kit_multi(&exes, &out, &data, agg, &skip)?;
+        let kit = build_kit_multi(&exes, &out, &data, agg, false, &skip)?;
         for p in &kit.proxies {
             eprintln!(
                 "    {} for {}: {} functions, {} forwarded variables",

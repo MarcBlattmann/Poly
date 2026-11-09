@@ -1,0 +1,13 @@
+[package]
+name = "poly-com"
+description = "The logic of our ole32.dll: COM apartment bookkeeping, GUID text, HRESULTs, and the Windows Runtime's HSTRINGs (ADR 0155)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

@@ -70,6 +70,9 @@ pub const READABLE: u32 = code(0x80C);
 pub const POLL: u32 = code(0x80D);
 pub const NET_INFO: u32 = code(0x80E);
 pub const INFO: u32 = code(0x80F);
+/// The network interfaces and their addresses, for `iphlpapi.dll`
+/// (`poly_iphlp::wire`; ADR 0155). Takes nothing; the output is the list.
+pub const IF_LIST: u32 = code(0x810);
 
 /// Pend instead of waiting ([`SEND`], [`RECV`]).
 pub const FLAG_OVERLAPPED: u32 = 0x1;

@@ -40,6 +40,25 @@ pub fn from_readiness(readable: bool, writable: bool, error: bool, hangup: bool)
     r
 }
 
+/// The device's bits as `(readable, writable, error, hangup)`.
+pub fn flags(revents: u32) -> (bool, bool, bool, bool) {
+    (revents & RDNORM != 0, revents & WRNORM != 0, revents & ERR != 0, revents & HUP != 0)
+}
+
+/// What the event-select helper asks the device to watch: data and writability only while an event
+/// can be recorded for them (else the call would return at once and spin), always the end of the
+/// connection and errors.
+pub fn events_interest(read: bool, write: bool) -> u32 {
+    let mut e = HUP | ERR;
+    if read {
+        e |= RDNORM;
+    }
+    if write {
+        e |= WRNORM;
+    }
+    e
+}
+
 /// What `select` asks the device to watch for a socket in the sets.
 pub fn select_interest(read: bool, write: bool, except: bool) -> u32 {
     let mut e = 0;
