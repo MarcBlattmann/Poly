@@ -36,7 +36,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 32] = [
+pub const OUTPUTS: [&str; 33] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -73,6 +73,7 @@ pub const OUTPUTS: [&str; 32] = [
     "dhcpcsvc.dll",
     "dnsapi.dll",
     "dbghelp.dll",
+    "version.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -187,6 +188,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "crates/poly-etw",
             "crates/poly-iphlp",
             "crates/poly-netapi",
+            "personalities/nt/win32/version",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",

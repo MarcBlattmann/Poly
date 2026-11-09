@@ -68,6 +68,8 @@ fn embed_win32() {
         "dhcpcsvc.dll",
         "dnsapi.dll",
         "dbghelp.dll",
+        // ADR 0155: file version information.
+        "version.dll",
     ] {
         match &dir {
             Some(d) => {
