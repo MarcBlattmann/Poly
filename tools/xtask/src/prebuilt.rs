@@ -186,6 +186,8 @@ fn tools_files() -> Result<Vec<PathBuf>> {
     let mut files = vec![xtask, root().join("target/debug/pipeline")];
     crate::native::build()?;
     files.extend(native_files());
+    // The Linux hello worlds and test programs of the boot groups.
+    files.extend(crate::programs::prebuild()?);
     // The traced scenario's kit and driver, the 7-Zip scenario's driver and
     // the desktop's Windows test program.
     crate::sevenzip_trace::stage()?;

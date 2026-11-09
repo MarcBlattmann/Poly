@@ -236,9 +236,6 @@ jobs:
       POLY_PREBUILT: 1
     steps:
       - uses: actions/checkout@v4
-      # Rust installs while the packages and the artifacts come in.
-      - name: Start installing Rust
-        run: .github/scripts/rust-start.sh
       - name: Install QEMU and a static BusyBox (the BusyBox and root disk boots)
         uses: ./.github/actions/apt-install
         with:
@@ -265,10 +262,7 @@ jobs:
           else
             echo "::warning::no /dev/kvm on this runner: QEMU runs on TCG (several times slower)"
           fi
-      # The boot tests build a few small programs with rustc (the Linux
-      # hello worlds); everything big comes from the build jobs.
-      - name: Wait for Rust
-        run: .github/scripts/rust-wait.sh
+      # Everything the boot tests build, the build jobs built: no Rust here.
       - uses: ./.github/actions/prebuilt
       # 7-Zip's 7za.exe and Linux 7zz for the `7zip` and `wintrace` boot tests
       # (ADR 0087, 0091): downloaded and checked against its pinned SHA-256
@@ -326,8 +320,10 @@ jobs:
         slice: [extras, 1/4, 2/4, 3/4, 4/4]
     steps:
       - uses: actions/checkout@v4
-      # Rust installs while the packages and the artifacts come in.
+      # Rust installs while the packages and the artifacts come in (only
+      # where something is built: `extras` builds Windows test programs).
       - name: Start installing Rust
+        if: matrix.slice == 'extras'
         run: .github/scripts/rust-start.sh
       # clang++, lld-link and llvm-dlltool build the C++ Windows tests of
       # green Windows entries for `win polycheck` (ADR 0098, 0099).
@@ -348,6 +344,7 @@ jobs:
           fi
       # `win polycheck` builds Windows test programs with cargo.
       - name: Wait for Rust
+        if: matrix.slice == 'extras'
         run: .github/scripts/rust-wait.sh
       - uses: ./.github/actions/prebuilt
       - run: target/debug/xtask ci pipeline --shard ${{ matrix.slice }}

@@ -1,4 +1,4 @@
-﻿//! Linux programs for the kernel's boot tests, and those tests: a static
+//! Linux programs for the kernel's boot tests, and those tests: a static
 //! "hello world" runs as the first process (`poly.init=/bin/<name>`) and
 //! exits cleanly (roadmap Phase 3, ADR 0038).
 //!
@@ -106,6 +106,10 @@ fn nolibc_program(source: &str, name: &str) -> Result<Vec<u8>> {
     let out = out_dir();
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let binary = out.join(name);
+    // CI's boot jobs take the build job's programs (prebuilt.rs).
+    if crate::prebuilt::skip(&format!("the nolibc program {name}"), std::slice::from_ref(&binary))? {
+        return std::fs::read(&binary).map_err(|e| format!("{}: {e}", binary.display()));
+    }
     let status = Command::new("rustc")
         .current_dir(root())
         .args(RUSTC_FLAGS)
@@ -142,6 +146,12 @@ pub fn evtest() -> Result<Vec<u8>> {
 /// a C compiler.
 pub fn c_hellos() -> (Vec<(String, Vec<u8>)>, Option<String>) {
     let dir = out_dir().join("corpus");
+    // CI's boot jobs take the two programs from the build job instead of
+    // compiling the whole corpus (prebuilt.rs).
+    if crate::prebuilt::active() && dir.join("hello").is_file() {
+        eprintln!("==> prebuilt: the C hello worlds");
+        return read_c_hellos(&dir);
+    }
     let built = crate::prebuilt::pipeline_tool().args(["build", "--out"]).arg(&dir).output();
     match built {
         Ok(o) if o.status.success() => {}
@@ -151,6 +161,11 @@ pub fn c_hellos() -> (Vec<(String, Vec<u8>)>, Option<String>) {
         }
         Err(e) => return (Vec::new(), Some(format!("pipeline build: {e}"))),
     }
+    read_c_hellos(&dir)
+}
+
+/// The built `hello` and `libc-hello` of `dir`, as far as they are there.
+fn read_c_hellos(dir: &Path) -> (Vec<(String, Vec<u8>)>, Option<String>) {
     let mut out = Vec::new();
     let mut missing = None;
     for (file, name) in [("hello", "hello-c"), ("libc-hello", "hello-libc")] {
@@ -299,4 +314,24 @@ fn tty_test(kernel: &Path, syms: &Arc<Symbols>, image: &Path) -> Result {
         return Err(format!("/bin/ttyinit on the serial console: QEMU status {:?}", b.status));
     }
     Ok(())
+}
+
+/// The files the prebuild ships: the nolibc programs, built here, and the
+/// two C hello worlds.
+pub fn prebuild() -> Result<Vec<PathBuf>> {
+    nolibc_hello()?;
+    nolibc_forkexec()?;
+    nolibc_ttyinit()?;
+    time_test()?;
+    socket_test()?;
+    evtest()?;
+    let (_, why) = c_hellos();
+    if let Some(why) = why {
+        crate::progress::note(&why);
+    }
+    let out = out_dir();
+    let mut files: Vec<PathBuf> =
+        ["hello", "forkexec", "ttyinit", "time-test", "socket-test", "evtest"].iter().map(|n| out.join(n)).collect();
+    files.extend(["hello", "libc-hello"].iter().map(|n| out.join("corpus").join(n)).filter(|p| p.is_file()));
+    Ok(files)
 }
