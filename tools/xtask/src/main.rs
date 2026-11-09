@@ -61,6 +61,11 @@
 //!                       boot the toolkits' root disk (GTK, Qt, VLC; toolkits.rs, ADR 0120)
 //!                       to the desktop and the console's bash, and run the steps
 //!                       (run:LINE send:LINE expect:TEXT shot:NAME click:X,Y key:QCODE sleep:S)
+//!   a64-diff [list | run [NAME...] | fuzz [--seed N] [--blocks N] [--family NAME]]
+//!                       poly-a64 (the arm64 interpreter, ADR 0152) against qemu-aarch64: static
+//!                       arm64 test programs (tests/a64) and generated one-instruction blocks, run
+//!                       by both and compared; Linux with qemu-user, clang and lld only (elsewhere
+//!                       it says so and succeeds); not part of `ci`
 //!   chromium lock|fetch|root [--reference]|disk
 //!                       Chromium's root disk from pinned Debian packages (chromium.rs):
 //!                       write the lock, download and check the packages, unpack them
@@ -212,7 +217,7 @@ fn main() -> ExitCode {
 }
 
 /// The commands [`dispatch`] runs (besides `start` and `pipeline`).
-const COMMANDS: [&str; 24] = [
+const COMMANDS: [&str; 25] = [
     "build",
     "run",
     "screenshot",
@@ -237,6 +242,7 @@ const COMMANDS: [&str; 24] = [
     "root-disk-test",
     "toolkits",
     "chromium",
+    "a64-diff",
 ];
 
 /// Run `cargo xtask <args>`: the same functions for the command line and
@@ -269,8 +275,20 @@ fn dispatch(args: &[String]) -> Result {
         Some("root-disk-test") => root_disk_test(),
         Some("toolkits") => toolkits::command(rest),
         Some("chromium") => chromium::command(rest),
+        Some("a64-diff") => a64_diff(rest),
         other => Err(format!("no command {other:?}")),
     }
+}
+
+/// `cargo xtask a64-diff [list | run [NAME...] | fuzz [--seed N] [--blocks N] [--family NAME]]`: the
+/// differential tester of poly-a64 against `qemu-aarch64` (tools/a64diff, ADR 0152). Needs Linux, qemu-user,
+/// clang and lld; elsewhere it says so and succeeds. Not part of `cargo xtask ci`.
+fn a64_diff(args: &[String]) -> Result {
+    let args: &[String] = if args.is_empty() { &["run".to_string()] } else { args };
+    step(
+        "a64-diff",
+        cargo().current_dir(root()).args(["run", "--quiet", "--package", "a64diff", "--"]).args(args),
+    )
 }
 
 fn root() -> PathBuf {
