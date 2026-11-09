@@ -298,6 +298,56 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("MoveFileW", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("FileTimeToDosDateTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("DosDateTimeToFileTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
+    // ----- Chrome batch 2 (chrome-win-b2, ADR 0155). Files (fileapi.h,
+    // winbase.h, minwinbase.h); the contracts are the ones the pages list.
+    ("FindFirstFileExW", "api-ms-win-core-file-l1-1-0"),
+    ("GetFileAttributesExW", "api-ms-win-core-file-l1-1-0"),
+    ("GetFileInformationByHandleEx", "api-ms-win-core-file-l2-1-1"),
+    ("SetFileInformationByHandle", "api-ms-win-core-file-l2-1-1"),
+    ("LockFileEx", "api-ms-win-core-file-l1-1-0"),
+    ("UnlockFileEx", "api-ms-win-core-file-l1-1-0"),
+    ("ReplaceFileW", "api-ms-win-core-file-l1-2-0"),
+    ("GetFinalPathNameByHandleW", "api-ms-win-core-file-l2-1-0"),
+    ("GetLongPathNameW", "api-ms-win-core-file-l1-1-0"),
+    ("GetSystemDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("GetWindowsDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("GetSystemWindowsDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
+    // Loader and debugging (libloaderapi.h, werapi.h, processthreadsapi.h).
+    ("GetModuleHandleExA", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("GetModuleHandleExW", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("WerRegisterRuntimeExceptionModule", "api-ms-win-core-windowserrorreporting-l1-1-0"),
+    ("WerUnregisterRuntimeExceptionModule", "api-ms-win-core-windowserrorreporting-l1-1-0"),
+    ("SetThreadDescription", "api-ms-win-core-processthreads-l1-1-3"),
+    ("GetThreadDescription", "api-ms-win-core-processthreads-l1-1-3"),
+    // Memory (memoryapi.h, heapapi.h). `VirtualAlloc2`, `MapViewOfFile3` and
+    // `UnmapViewOfFile2` are `kernelbase` exports only (Learn lists no
+    // `kernel32` export for them).
+    ("DiscardVirtualMemory", "api-ms-win-core-memory-l1-1-3"),
+    ("PrefetchVirtualMemory", "api-ms-win-core-memory-l1-1-4"),
+    ("HeapSetInformation", "api-ms-win-core-heap-l2-1-0"),
+    // Synchronisation (synchapi.h, threadpoollegacyapiset.h, processthreadsapi.h).
+    ("RegisterWaitForSingleObject", "api-ms-win-core-threadpool-legacy-l1-1-0"),
+    ("UnregisterWait", "api-ms-win-core-threadpool-legacy-l1-1-0"),
+    ("UnregisterWaitEx", "api-ms-win-core-threadpool-legacy-l1-1-0"),
+    ("SwitchToThread", "api-ms-win-core-processthreads-l1-1-0"),
+    // Locale, geography, time zones, system information (winnls.h,
+    // timezoneapi.h, sysinfoapi.h, winbase.h, wow64apiset.h).
+    ("GetLocaleInfoEx", "api-ms-win-core-localization-l1-2-0"),
+    ("IsValidLocaleName", "api-ms-win-core-localization-l1-2-0"),
+    ("GetUserGeoID", "api-ms-win-core-localization-l1-2-0"),
+    ("GetGeoInfoW", "api-ms-win-core-localization-l1-2-0"),
+    ("GetTimeZoneInformation", "api-ms-win-core-timezone-l1-1-0"),
+    ("GetDynamicTimeZoneInformation", "api-ms-win-core-timezone-l1-1-0"),
+    ("SystemTimeToTzSpecificLocalTime", "api-ms-win-core-timezone-l1-1-0"),
+    ("TzSpecificLocalTimeToSystemTime", "api-ms-win-core-timezone-l1-1-0"),
+    ("SystemTimeToTzSpecificLocalTimeEx", "api-ms-win-core-timezone-l1-1-0"),
+    ("TzSpecificLocalTimeToSystemTimeEx", "api-ms-win-core-timezone-l1-1-0"),
+    ("GetLogicalProcessorInformation", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("GetLogicalProcessorInformationEx", "api-ms-win-core-sysinfo-l1-2-0"),
+    ("GetComputerNameExW", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("GetComputerNameW", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("IsWow64Process2", "api-ms-win-core-wow64-l1-1-1"),
+    ("GetSystemPowerStatus", "api-ms-win-core-sysinfo-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our
@@ -351,6 +401,9 @@ pub const KERNEL32_OWN: &[&str] = &[
     // (winbase.h) name no API set.
     "GetActiveProcessorGroupCount",
     "GetActiveProcessorCount",
+    // Chrome batch 2: the ANSI comparisons (winbase.h) name no API set.
+    "lstrcmpA",
+    "lstrcmpiA",
 ];
 
 /// Every function `kernelbase.dll` must export: each one `kernel32` or

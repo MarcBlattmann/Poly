@@ -220,6 +220,8 @@ macro_rules! w {
     }};
 }
 
+mod chrome2;
+
 const GENERIC_READ: u32 = 0x8000_0000;
 const GENERIC_WRITE: u32 = 0x4000_0000;
 const CREATE_NEW: u32 = 1;
@@ -476,6 +478,7 @@ pub extern "system" fn k32test_main(_peb: *mut u8) -> u32 {
         seven_zip_imports();
         processes();
         inheritance_and_startup();
+        chrome2::run();
         out(b"k32test: all ");
         out_num(STEP.load(Ordering::Relaxed));
         out(b" checks passed\n");
