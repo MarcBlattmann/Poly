@@ -83,7 +83,8 @@ impl NtdllEntries {
     /// the image (not a forwarder). A DLL without them is not our `ntdll`:
     /// `STATUS_INVALID_IMAGE_FORMAT`.
     pub fn of(image: &ImageSection) -> Result<NtdllEntries, NtStatus> {
-        let pe = poly_pe::Pe::parse_mapped(&image.image).map_err(|_| STATUS_INVALID_IMAGE_FORMAT)?;
+        let held = image.image.held().ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
+        let pe = poly_pe::Pe::parse_mapped(held).map_err(|_| STATUS_INVALID_IMAGE_FORMAT)?;
         let exports = pe.exports().ok().flatten().ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
         let rva = |name: &[u8]| match exports.by_name(name) {
             Ok(Some(poly_pe::ExportTarget::Rva(r))) if u64::from(r) < image.size => Ok(r),

@@ -1,0 +1,17 @@
+[package]
+name = "poly-stubs"
+description = "polystub.dll: a generated DLL whose exports log the call and fail with the documented error, what an import binds to when Poly lacks the function (ADR 0155)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-ldr = { workspace = true }
+
+[dev-dependencies]
+poly-pe = { workspace = true }
+
+[lints]
+workspace = true

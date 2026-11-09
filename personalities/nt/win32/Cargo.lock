@@ -28,6 +28,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bcryptprimitives"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-cryptrt",
+]
+
+[[package]]
 name = "contest"
 version = "0.0.1"
 dependencies = [
@@ -158,7 +165,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-font"
+version = "0.0.1"
+
+[[package]]
 name = "poly-gdi"
+version = "0.0.1"
+dependencies = [
+ "poly-font",
+ "poly-gfx",
+]
+
+[[package]]
+name = "poly-gfx"
 version = "0.0.1"
 
 [[package]]

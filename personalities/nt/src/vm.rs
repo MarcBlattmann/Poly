@@ -37,9 +37,9 @@
 
 use crate::backend::{Backend, ViewSource};
 use crate::consts::*;
+use crate::pagemap::PageMap;
 use crate::protect::{HwProt, Protection};
 use alloc::collections::BTreeMap;
-use alloc::vec;
 use alloc::vec::Vec;
 use core::result::Result;
 use poly_ntobj::status::*;
@@ -123,7 +123,7 @@ pub struct Allocation {
     pub kind: AllocKind,
     /// A thread's stack: its guard page grows it.
     pub stack: bool,
-    pub pages: Vec<PageState>,
+    pub pages: PageMap,
 }
 
 impl Allocation {
@@ -162,7 +162,7 @@ impl Allocation {
 
     /// The page at `addr`.
     pub fn page(&self, addr: u64) -> PageState {
-        self.pages[self.index(addr)]
+        self.pages.get(self.index(addr))
     }
 }
 
@@ -217,7 +217,7 @@ pub struct NewView {
     /// `AllocationProtect`.
     pub protect: u32,
     pub info: ViewInfo,
-    pub pages: Vec<PageState>,
+    pub pages: PageMap,
 }
 
 /// The address space of one NT process. See the module docs.
@@ -246,30 +246,6 @@ pub fn zero_bits_limit(zero_bits: u64) -> Result<u64, NtStatus> {
         0 => Ok(u64::MAX),
         1..=20 => Ok(1 << (64 - zero_bits)),
         _ => Err(STATUS_INVALID_PARAMETER_3),
-    }
-}
-
-/// Call `f(first, count, key)` for each run of consecutive indices in
-/// `range` whose `key` is the same `Some`.
-fn runs<K: PartialEq + Copy>(
-    range: core::ops::Range<usize>,
-    mut key: impl FnMut(usize) -> Option<K>,
-    mut f: impl FnMut(usize, usize, K),
-) {
-    let mut current: Option<(usize, K)> = None;
-    for i in range.clone() {
-        let k = key(i);
-        match (current, k) {
-            (Some((_, c)), Some(k)) if c == k => {}
-            (Some((start, c)), _) => {
-                f(start, i - start, c);
-                current = k.map(|k| (i, k));
-            }
-            (None, k) => current = k.map(|k| (i, k)),
-        }
-    }
-    if let Some((start, c)) = current {
-        f(start, range.end - start, c);
     }
 }
 
@@ -431,7 +407,7 @@ impl VirtualMemory {
         if alloc_type & MEM_RESERVE != 0 || base == 0 {
             let (start, len) = self.place(base, size, alloc_type & MEM_TOP_DOWN != 0, zero_bits)?;
             let state = if commit { PageState::Committed(prot) } else { PageState::Reserved };
-            let pages = vec![state; (len / PAGE_SIZE) as usize];
+            let pages = PageMap::new((len / PAGE_SIZE) as usize, state);
             let allocation =
                 Allocation { base: start, size: len, protect, kind: AllocKind::Private, stack: false, pages };
             if commit {
@@ -462,7 +438,7 @@ impl VirtualMemory {
         }
         let (start, end) = self.page_range(base, size)?;
         let a = self.allocation(start).expect("checked by page_range");
-        if (a.index(start)..a.index(end - 1) + 1).any(|i| a.pages[i] == PageState::Reserved) {
+        if a.pages.contains(a.index(start)..a.index(end - 1) + 1, &PageState::Reserved) {
             return Err(STATUS_NOT_COMMITTED);
         }
         Ok((start, end - start))
@@ -483,30 +459,24 @@ impl VirtualMemory {
                 // Fresh pages first: if the kernel runs out of memory nothing
                 // has changed but the pages committed so far, which stay.
                 let pages = a.pages.clone();
+                let ranges = |keep: &dyn Fn(PageState) -> bool| -> Vec<core::ops::Range<usize>> {
+                    pages.runs_in(first..last).filter(|&(_, s)| keep(s)).map(|(r, _)| r).collect()
+                };
                 let mut result = Ok(());
-                runs(
-                    first..last,
-                    |i| (pages[i] == PageState::Reserved).then_some(()),
-                    |i, n, ()| {
+                for r in ranges(&|s| s == PageState::Reserved) {
+                    if result.is_ok() {
+                        let at = base + r.start as u64 * PAGE_SIZE;
+                        result = b.commit(at, r.len() as u64 * PAGE_SIZE, prot.hw(false));
                         if result.is_ok() {
-                            let at = base + i as u64 * PAGE_SIZE;
-                            result = b.commit(at, n as u64 * PAGE_SIZE, prot.hw(false));
-                            if result.is_ok() {
-                                self.allocation_mut(base).expect("live").pages[i..i + n]
-                                    .fill(PageState::Committed(prot));
-                            }
+                            self.allocation_mut(base).expect("live").pages.fill(r, PageState::Committed(prot));
                         }
-                    },
-                );
+                    }
+                }
                 result?;
-                runs(
-                    first..last,
-                    |i| (pages[i] != PageState::Reserved && pages[i] != PageState::Committed(prot)).then_some(()),
-                    |i, n, ()| {
-                        b.protect(base + i as u64 * PAGE_SIZE, n as u64 * PAGE_SIZE, prot.hw(false));
-                    },
-                );
-                self.allocation_mut(base).expect("live").pages[first..last].fill(PageState::Committed(prot));
+                for r in ranges(&|s| s != PageState::Reserved && s != PageState::Committed(prot)) {
+                    b.protect(base + r.start as u64 * PAGE_SIZE, r.len() as u64 * PAGE_SIZE, prot.hw(false));
+                }
+                self.allocation_mut(base).expect("live").pages.fill(first..last, PageState::Committed(prot));
             }
             AllocKind::View(v) if v.reserve && !v.image => {
                 if v.max.is_some_and(|max| !crate::protect::view_allowed(max, prot)) {
@@ -515,11 +485,11 @@ impl VirtualMemory {
                 let offset = v.offset + (start - base);
                 b.commit_section(v.backing, offset, end - start);
                 b.protect(start, end - start, prot.hw(v.shared));
-                self.allocation_mut(base).expect("live").pages[first..last].fill(PageState::Committed(prot));
+                self.allocation_mut(base).expect("live").pages.fill(first..last, PageState::Committed(prot));
                 self.section_committed(v.section, base, offset, end - start);
             }
             AllocKind::View(_) => {
-                if a.pages[first..last].contains(&PageState::Reserved) {
+                if a.pages.contains(first..last, &PageState::Reserved) {
                     return Err(STATUS_CONFLICTING_ADDRESSES);
                 }
             }
@@ -542,11 +512,7 @@ impl VirtualMemory {
             }
             let Ok(prot) = Protection::new(a.protect, false) else { continue };
             let (first, last) = (((lo - v.offset) / PAGE_SIZE) as usize, ((hi - v.offset) / PAGE_SIZE) as usize);
-            for p in &mut a.pages[first..last] {
-                if *p == PageState::Reserved {
-                    *p = PageState::Committed(prot);
-                }
-            }
+            a.pages.replace(first..last, PageState::Reserved, PageState::Committed(prot));
         }
     }
 
@@ -599,7 +565,7 @@ impl VirtualMemory {
         b.release(start, end - start);
         let a = self.allocation_mut(start).expect("checked above");
         let (first, last) = (a.index(start), a.index(end - 1) + 1);
-        a.pages[first..last].fill(PageState::Reserved);
+        a.pages.fill(first..last, PageState::Reserved);
         Ok((start, end - start))
     }
 
@@ -642,16 +608,16 @@ impl VirtualMemory {
             return Err(STATUS_SECTION_PROTECTION);
         }
         let (first, last) = (a.index(start), a.index(end - 1) + 1);
-        let old = match a.pages[first] {
+        let old = match a.pages.get(first) {
             PageState::Committed(p) => p.value(),
             PageState::Reserved => return Err(STATUS_NOT_COMMITTED),
         };
-        if a.pages[first..last].contains(&PageState::Reserved) {
+        if a.pages.contains(first..last, &PageState::Reserved) {
             return Err(STATUS_NOT_COMMITTED);
         }
         let shared = a.shared();
         b.protect(start, end - start, prot.hw(shared));
-        self.allocation_mut(start).expect("checked").pages[first..last].fill(PageState::Committed(prot));
+        self.allocation_mut(start).expect("checked").pages.fill(first..last, PageState::Committed(prot));
         Ok((start, end - start, old))
     }
 
@@ -678,8 +644,8 @@ impl VirtualMemory {
             });
         };
         let i = a.index(page);
-        let state = a.pages[i];
-        let n = a.pages[i..].iter().take_while(|p| **p == state).count();
+        let state = a.pages.get(i);
+        let n = a.pages.run_length_from(i);
         let (state, protect) = match state {
             PageState::Reserved => (MEM_RESERVE, 0),
             PageState::Committed(p) => (MEM_COMMIT, p.value()),
@@ -705,14 +671,14 @@ impl VirtualMemory {
             return AccessFault::Exception(STATUS_ACCESS_VIOLATION);
         };
         let i = a.index(page);
-        let PageState::Committed(p) = a.pages[i] else {
+        let PageState::Committed(p) = a.pages.get(i) else {
             return AccessFault::Exception(STATUS_ACCESS_VIOLATION);
         };
         if !p.is_guard() {
             return AccessFault::Exception(STATUS_ACCESS_VIOLATION);
         }
         let unguarded = p.without_guard();
-        a.pages[i] = PageState::Committed(unguarded);
+        a.pages.fill(i..i + 1, PageState::Committed(unguarded));
         let shared = a.shared();
         let (stack, base) = (a.stack, a.base);
         b.protect(page, PAGE_SIZE, unguarded.hw(shared));
@@ -725,11 +691,14 @@ impl VirtualMemory {
         }
         let below = page - PAGE_SIZE;
         let a = self.allocation_mut(base).expect("live");
-        if a.pages[i - 1] == PageState::Reserved {
+        if a.pages.get(i - 1) == PageState::Reserved {
             if b.commit(below, PAGE_SIZE, HwProt::NONE).is_err() {
                 return AccessFault::Exception(STATUS_STACK_OVERFLOW);
             }
-            a.pages[i - 1] = PageState::Committed(Protection::new(unguarded.value() | PAGE_GUARD, true).unwrap_or(p));
+            a.pages.fill(
+                i - 1..i,
+                PageState::Committed(Protection::new(unguarded.value() | PAGE_GUARD, true).unwrap_or(p)),
+            );
         }
         AccessFault::StackGrown { limit: page }
     }
@@ -788,23 +757,32 @@ pub fn map_view_pages(b: &mut dyn Backend, a: &Allocation, source: &ViewSource) 
     let v = a.view().expect("a view");
     let fallback = Protection::new(a.protect, false).unwrap_or(Protection::new(PAGE_NOACCESS, false).expect("valid"));
     let mut result = Ok(());
-    runs(
-        0..a.pages.len(),
-        |i| {
-            Some(match a.pages[i] {
-                PageState::Committed(p) => p.hw(v.shared),
-                PageState::Reserved => fallback.hw(v.shared),
-            })
-        },
-        |i, n, prot| {
-            if result.is_err() {
-                return;
-            }
-            let at = i as u64 * PAGE_SIZE;
+    // Runs of equal hardware protection (two page states can map alike).
+    let mut pending: Option<(usize, usize, HwProt)> = None;
+    let map_run = |b: &mut dyn Backend, (first, n, prot): (usize, usize, HwProt), result: &mut Result<(), NtStatus>| {
+        if result.is_ok() {
+            let at = first as u64 * PAGE_SIZE;
             let map = crate::backend::ViewMap { source: source.clone(), offset: v.offset + at, prot, shared: v.shared };
-            result = b.map_view(a.base + at, n as u64 * PAGE_SIZE, &map);
-        },
-    );
+            *result = b.map_view(a.base + at, n as u64 * PAGE_SIZE, &map);
+        }
+    };
+    for (range, state) in a.pages.runs_in(0..a.pages.len()) {
+        let prot = match state {
+            PageState::Committed(p) => p.hw(v.shared),
+            PageState::Reserved => fallback.hw(v.shared),
+        };
+        pending = match pending {
+            Some((first, n, p)) if p == prot => Some((first, n + range.len(), p)),
+            Some(run) => {
+                map_run(b, run, &mut result);
+                Some((range.start, range.len(), prot))
+            }
+            None => Some((range.start, range.len(), prot)),
+        };
+    }
+    if let Some(run) = pending {
+        map_run(b, run, &mut result);
+    }
     if result.is_err() {
         b.release(a.base, a.size);
     }
