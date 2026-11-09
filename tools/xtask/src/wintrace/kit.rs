@@ -183,7 +183,7 @@ pub fn build_kit_multi(
     }
     untraced.sort();
     untraced.dedup();
-    let proxies = plan_ex(&imports, data, agg)?;
+    let proxies = plan_ex(&imports, data, agg || sync)?;
     let mut renamed = Vec::new();
     for (name, bytes) in &programs {
         let r = rename_imports(bytes, |dll| {
