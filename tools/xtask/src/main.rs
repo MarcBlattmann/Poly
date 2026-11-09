@@ -1595,7 +1595,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 40] = [
+const BOOT_GROUPS: &[BootGroup] = &[
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1774,7 +1774,7 @@ fn select_boot_groups(selectors: &[String]) -> Result<Vec<BootGroup>> {
         let names: Vec<_> = BOOT_GROUPS.iter().map(|(n, _)| *n).collect();
         return Err(format!("no boot test group {bad:?}; the groups are {}", names.join(", ")));
     }
-    Ok(BOOT_GROUPS.into_iter().filter(|(n, _)| selectors.iter().any(|sel| matches(sel, n))).collect())
+    Ok(BOOT_GROUPS.iter().copied().filter(|(n, _)| selectors.iter().any(|sel| matches(sel, n))).collect())
 }
 
 /// Build the kernel and run the boot test groups `selectors` name
@@ -1848,7 +1848,7 @@ fn boot_tests_command(args: &[String]) -> Result {
         match a.as_str() {
             "--list" => {
                 for (name, _) in BOOT_GROUPS {
-                    let shard = CI_BOOT_SHARDS.iter().find(|(_, g)| g.contains(&name)).map_or("-", |(s, _)| s);
+                    let shard = CI_BOOT_SHARDS.iter().find(|(_, g)| g.contains(name)).map_or("-", |(s, _)| s);
                     println!("{name:<18} CI shard {shard}");
                 }
                 return Ok(());
@@ -2378,7 +2378,7 @@ mod tests {
     #[test]
     fn every_boot_group_is_in_one_ci_shard() {
         for (name, _) in BOOT_GROUPS {
-            let n = CI_BOOT_SHARDS.iter().filter(|(_, g)| g.contains(&name)).count();
+            let n = CI_BOOT_SHARDS.iter().filter(|(_, g)| g.contains(name)).count();
             assert_eq!(n, 1, "boot test group {name} is in {n} CI shards");
         }
         for (shard, groups) in CI_BOOT_SHARDS {
