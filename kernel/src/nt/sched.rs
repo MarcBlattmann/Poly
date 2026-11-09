@@ -275,7 +275,8 @@ pub fn resume_apc(tid: ThreadRef) -> NtStatus {
             // Calls"): the next one starts now, with the same context saved.
             if status == STATUS_USER_APC {
                 let next = with(|s| {
-                    let dispatcher = s.processes.values().find(|p| p.thread(tid).is_some()).map(|p| p.apc_dispatcher)?;
+                    let dispatcher =
+                        s.processes.values().find(|p| p.thread(tid).is_some()).map(|p| p.apc_dispatcher)?;
                     let apc = s.ctl.get_mut(&tid)?.apcs.pop_front()?;
                     s.ctl.get_mut(&tid)?.apc_saved = Some(regs);
                     Some((dispatcher, apc))

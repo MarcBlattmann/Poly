@@ -135,16 +135,24 @@ unsafe extern "system" {
     ) -> NtStatus;
     pub fn NtCancelIoFile(handle: Handle, iosb: *mut IoStatusBlock) -> NtStatus;
     pub fn NtCancelIoFileEx(handle: Handle, request: *const IoStatusBlock, iosb: *mut IoStatusBlock) -> NtStatus;
-    pub fn NtCancelSynchronousIoFile(thread: Handle, request: *const IoStatusBlock, iosb: *mut IoStatusBlock)
-    -> NtStatus;
+    pub fn NtCancelSynchronousIoFile(
+        thread: Handle,
+        request: *const IoStatusBlock,
+        iosb: *mut IoStatusBlock,
+    ) -> NtStatus;
     pub fn NtCreateIoCompletion(
         handle: *mut Handle,
         access: u32,
         attributes: *const ObjectAttributes,
         concurrent: u32,
     ) -> NtStatus;
-    pub fn NtSetIoCompletion(handle: Handle, key: usize, context: usize, status: NtStatus, information: usize)
-    -> NtStatus;
+    pub fn NtSetIoCompletion(
+        handle: Handle,
+        key: usize,
+        context: usize,
+        status: NtStatus,
+        information: usize,
+    ) -> NtStatus;
     pub fn NtRemoveIoCompletion(
         handle: Handle,
         key: *mut usize,
@@ -172,13 +180,7 @@ unsafe extern "system" {
         attributes: *const ObjectAttributes,
         client: *const [usize; 2],
     ) -> NtStatus;
-    pub fn NtQueueApcThread(
-        thread: Handle,
-        routine: usize,
-        arg1: usize,
-        arg2: usize,
-        arg3: usize,
-    ) -> NtStatus;
+    pub fn NtQueueApcThread(thread: Handle, routine: usize, arg1: usize, arg2: usize, arg3: usize) -> NtStatus;
     pub fn NtTestAlert() -> NtStatus;
     pub fn NtCreateJobObject(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
     pub fn NtOpenJobObject(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;

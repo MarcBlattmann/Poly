@@ -59,7 +59,6 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("OpenThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetThreadId", "api-ms-win-core-processthreads-l1-1-0"),
     ("QueueUserAPC", "api-ms-win-core-processthreads-l1-1-0"),
-
     // Files (fileapi.h).
     ("CreateFileW", "api-ms-win-core-file-l1-1-0"),
     ("CreateFileA", "api-ms-win-core-file-l1-1-0"),

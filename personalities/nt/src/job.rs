@@ -27,9 +27,7 @@ use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::access::*;
 use poly_ntobj::status::*;
-use poly_ntobj::{
-    Handle, NewObject, NoParse, NtStatus, ObjectId, ObjectManager, ObjectType, OBJ_OPENIF, ProcessId,
-};
+use poly_ntobj::{Handle, NewObject, NoParse, NtStatus, OBJ_OPENIF, ObjectId, ObjectManager, ObjectType, ProcessId};
 
 pub type Result<T> = core::result::Result<T, NtStatus>;
 
@@ -132,10 +130,7 @@ impl Jobs {
 
     fn post(&self, io: &mut crate::io::IoState, om: &mut ObjectManager, job: u64, message: u64, pid: u64) {
         let Some(port) = self.jobs.get(&job).and_then(|j| j.port) else { return };
-        io.port_post_for(
-            om,
-            &PacketPost { port, context: pid, status: STATUS_SUCCESS, information: message },
-        );
+        io.port_post_for(om, &PacketPost { port, context: pid, status: STATUS_SUCCESS, information: message });
     }
 
     /// Put `pid` into `job` (`NtAssignProcessToJobObject`, and the join of a
@@ -300,7 +295,13 @@ pub fn open_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
     let attrs = abi::read_attributes(k, attrs)?;
     let caller = k.caller();
     let h = k.with_state(|sys, _, _| {
-        sys.objects.open_object(&caller, &attrs.as_object_attributes(), access as u32, Some(ObjectType::Job), &mut NoParse)
+        sys.objects.open_object(
+            &caller,
+            &attrs.as_object_attributes(),
+            access as u32,
+            Some(ObjectType::Job),
+            &mut NoParse,
+        )
     })?;
     return_handle(k, out, h)?;
     Ok(STATUS_SUCCESS)

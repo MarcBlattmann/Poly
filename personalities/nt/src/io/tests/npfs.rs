@@ -56,7 +56,8 @@ impl T {
     }
 
     fn np_client(&mut self, name: &str, options: u32) -> u64 {
-        let (s, h, _) = self.create(&alloc::format!("{PIPE}{name}"), RW | SYNCHRONIZE, SHARE_ALL, FILE_OPEN, options, 0);
+        let (s, h, _) =
+            self.create(&alloc::format!("{PIPE}{name}"), RW | SYNCHRONIZE, SHARE_ALL, FILE_OPEN, options, 0);
         assert_eq!(s, STATUS_SUCCESS, "{name}");
         h
     }
@@ -71,7 +72,14 @@ impl T {
         (s, out, info)
     }
 
-    fn fsctl_ev(&mut self, h: u64, event: u64, code: u32, input: &[u8], out_len: usize) -> (NtStatus, Vec<u8>, u64, u64) {
+    fn fsctl_ev(
+        &mut self,
+        h: u64,
+        event: u64,
+        code: u32,
+        input: &[u8],
+        out_len: usize,
+    ) -> (NtStatus, Vec<u8>, u64, u64) {
         let iosb = self.f.alloc(16);
         let inp = if input.is_empty() { 0 } else { self.f.put(input) };
         let out = self.f.alloc(out_len.max(1));

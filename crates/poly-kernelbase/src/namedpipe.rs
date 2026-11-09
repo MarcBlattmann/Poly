@@ -87,8 +87,7 @@ pub fn server_params(
     if direction == 0 || open_mode & !known != 0 {
         return Err(ERROR_INVALID_PARAMETER);
     }
-    let known_modes =
-        PIPE_NOWAIT | PIPE_READMODE_MESSAGE | PIPE_TYPE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS;
+    let known_modes = PIPE_NOWAIT | PIPE_READMODE_MESSAGE | PIPE_TYPE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS;
     if pipe_mode & !known_modes != 0 {
         return Err(ERROR_INVALID_PARAMETER);
     }
@@ -307,16 +306,30 @@ mod tests {
 
     #[test]
     fn create_named_pipe_arguments() {
-        let p = server_params(PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE, 255, 1, 2, 0)
-            .unwrap();
+        let p = server_params(
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
+            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE,
+            255,
+            1,
+            2,
+            0,
+        )
+        .unwrap();
         assert_eq!(p.share, 3);
         assert_eq!(p.options, 0);
         assert_eq!((p.pipe_type, p.read_mode, p.completion_mode), (1, 1, 0));
         assert_eq!(p.max_instances, u32::MAX);
         assert_eq!((p.inbound_quota, p.outbound_quota), (2, 1));
         assert_eq!(p.timeout, -500_000);
-        let p = server_params(PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_NOWAIT | PIPE_REJECT_REMOTE_CLIENTS, 3, 0, 0, 7)
-            .unwrap();
+        let p = server_params(
+            PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_NOWAIT | PIPE_REJECT_REMOTE_CLIENTS,
+            3,
+            0,
+            0,
+            7,
+        )
+        .unwrap();
         assert_eq!((p.share, p.disposition, p.options), (2, 2, 0x20));
         assert_eq!((p.pipe_type, p.completion_mode, p.max_instances, p.timeout), (2, 1, 3, -70_000));
         assert_eq!(server_params(0, 0, 1, 0, 0, 0), Err(ERROR_INVALID_PARAMETER));

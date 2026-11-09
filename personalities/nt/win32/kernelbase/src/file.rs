@@ -144,29 +144,9 @@ unsafe fn transfer(handle: Handle, buf: *mut u8, len: u32, done: *mut u32, ov: *
     // SAFETY: the caller's buffer of `len` bytes; valid pointers.
     let mut st = unsafe {
         if write {
-            nt::NtWriteFile(
-                handle,
-                event,
-                core::ptr::null(),
-                context,
-                iosb,
-                buf,
-                len,
-                offset_ptr,
-                core::ptr::null(),
-            )
+            nt::NtWriteFile(handle, event, core::ptr::null(), context, iosb, buf, len, offset_ptr, core::ptr::null())
         } else {
-            nt::NtReadFile(
-                handle,
-                event,
-                core::ptr::null(),
-                context,
-                iosb,
-                buf,
-                len,
-                offset_ptr,
-                core::ptr::null(),
-            )
+            nt::NtReadFile(handle, event, core::ptr::null(), context, iosb, buf, len, offset_ptr, core::ptr::null())
         }
     };
     if st == nt::STATUS_PENDING {

@@ -407,15 +407,7 @@ pub unsafe extern "system" fn CallNamedPipeW(
     let pipe = loop {
         // SAFETY: the caller's string.
         let h = unsafe {
-            crate::file::CreateFileW(
-                name,
-                GENERIC_READ | GENERIC_WRITE,
-                0,
-                core::ptr::null(),
-                OPEN_EXISTING,
-                0,
-                0,
-            )
+            crate::file::CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, core::ptr::null(), OPEN_EXISTING, 0, 0)
         };
         if h != INVALID_HANDLE_VALUE {
             break h;

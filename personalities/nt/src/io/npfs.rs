@@ -45,13 +45,18 @@
 //! `STATUS_PIPE_CLOSING` and a read, once the data is gone, with
 //! `STATUS_PIPE_BROKEN`.
 
+#![allow(
+    clippy::result_large_err,
+    reason = "a refused request is given back with its status so its event reference can go"
+)]
+
 use super::consts::*;
 use super::irp::{Irp, IrpOp};
 use super::{IoState, Target};
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
-use poly_ntobj::status::*;
 use poly_ntobj::NtStatus;
+use poly_ntobj::status::*;
 
 /// An instance's state (`NamedPipeState`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -604,11 +609,8 @@ impl IoState {
             return Err(s);
         }
         let available = chan.available();
-        let (messages, first) = if inst.message {
-            (chan.entries.len(), chan.entries.front().map_or(0, Entry::remaining))
-        } else {
-            (0, 0)
-        };
+        let (messages, first) =
+            if inst.message { (chan.entries.len(), chan.entries.front().map_or(0, Entry::remaining)) } else { (0, 0) };
         let visible = if inst.message { first } else { available };
         let mut data = Vec::new();
         for e in &chan.entries {
@@ -733,7 +735,8 @@ impl IoState {
             if inst.client_file.is_some() {
                 // The client's reads end when its data is gone, its writes fail.
                 failed.extend(inst.to_client.readers.drain(..).map(|i| (i, STATUS_PIPE_BROKEN)));
-                failed.extend(inst.to_server.entries.drain(..).filter_map(|e| e.writer).map(|i| (i, STATUS_PIPE_BROKEN)));
+                failed
+                    .extend(inst.to_server.entries.drain(..).filter_map(|e| e.writer).map(|i| (i, STATUS_PIPE_BROKEN)));
                 inst.to_server.used = 0;
                 failed.extend(inst.listeners.drain(..).map(|i| (i, STATUS_CANCELLED)));
             } else {
@@ -757,7 +760,8 @@ impl IoState {
             } else {
                 inst.state = PipeState::Closing;
                 failed.extend(inst.to_server.readers.drain(..).map(|i| (i, STATUS_PIPE_BROKEN)));
-                failed.extend(inst.to_client.entries.drain(..).filter_map(|e| e.writer).map(|i| (i, STATUS_PIPE_BROKEN)));
+                failed
+                    .extend(inst.to_client.entries.drain(..).filter_map(|e| e.writer).map(|i| (i, STATUS_PIPE_BROKEN)));
                 inst.to_client.used = 0;
                 // What the server wrote and the client did not read is gone.
                 inst.to_client.entries.clear();
@@ -785,17 +789,8 @@ impl IoState {
         if end.server && inst.reject_remote {
             ty |= FILE_PIPE_REJECT_REMOTE_CLIENTS;
         }
-        let values = [
-            ty,
-            config,
-            max,
-            current,
-            inbound,
-            outbound,
-            chan.available() as u32,
-            state.code(),
-            u32::from(end.server),
-        ];
+        let values =
+            [ty, config, max, current, inbound, outbound, chan.available() as u32, state.code(), u32::from(end.server)];
         Ok(values.iter().flat_map(|v| v.to_le_bytes()).collect())
     }
 

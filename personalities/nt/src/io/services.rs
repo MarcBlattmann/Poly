@@ -713,7 +713,14 @@ pub fn flush_buffers_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<
 // ----- information
 
 /// Copy a variable-length answer into a buffer of `len` bytes.
-pub(crate) fn put_info<K: NtKernel>(k: &mut K, iosb: u64, out: u64, len: usize, bytes: &[u8], fixed: usize) -> Result<NtStatus> {
+pub(crate) fn put_info<K: NtKernel>(
+    k: &mut K,
+    iosb: u64,
+    out: u64,
+    len: usize,
+    bytes: &[u8],
+    fixed: usize,
+) -> Result<NtStatus> {
     if len < fixed {
         return Err(STATUS_INFO_LENGTH_MISMATCH);
     }

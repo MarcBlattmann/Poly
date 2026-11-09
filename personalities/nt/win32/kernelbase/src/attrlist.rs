@@ -133,9 +133,8 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
         for i in 0..count {
             let (attribute, size, value) =
                 (records.add(i * 3).read(), records.add(i * 3 + 1).read(), records.add(i * 3 + 2).read());
-            let words = || -> Vec<usize> {
-                (0..size / 8).map(|j| (value as *const usize).add(j).read_unaligned()).collect()
-            };
+            let words =
+                || -> Vec<usize> { (0..size / 8).map(|j| (value as *const usize).add(j).read_unaligned()).collect() };
             match attribute {
                 HANDLE_LIST => out.handle_list = Some(words()),
                 JOB_LIST => out.jobs = words(),

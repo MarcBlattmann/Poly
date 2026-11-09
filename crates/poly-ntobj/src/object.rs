@@ -165,9 +165,12 @@ impl ObjectType {
             ObjectType::Process => (R, W, X | SYNCHRONIZE, PROCESS_ALL_ACCESS),
             ObjectType::Thread => (R, W, X | SYNCHRONIZE, THREAD_ALL_ACCESS),
             ObjectType::Token => (TOKEN_READ, TOKEN_WRITE, TOKEN_EXECUTE, TOKEN_ALL_ACCESS),
-            ObjectType::IoCompletion => {
-                (R | IO_COMPLETION_QUERY_STATE, W | IO_COMPLETION_MODIFY_STATE, X | SYNCHRONIZE, IO_COMPLETION_ALL_ACCESS)
-            }
+            ObjectType::IoCompletion => (
+                R | IO_COMPLETION_QUERY_STATE,
+                W | IO_COMPLETION_MODIFY_STATE,
+                X | SYNCHRONIZE,
+                IO_COMPLETION_ALL_ACCESS,
+            ),
             ObjectType::Job => (
                 R | JOB_OBJECT_QUERY,
                 W | JOB_OBJECT_ASSIGN_PROCESS | JOB_OBJECT_SET_ATTRIBUTES | JOB_OBJECT_TERMINATE,

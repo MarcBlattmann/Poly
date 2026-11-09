@@ -476,7 +476,12 @@ impl IoState {
         // Named pipes: `\Device\NamedPipe`, and `\??\pipe` for `\\.\pipe\`.
         let cookie = self.cookie();
         let np = wide("\\Device\\NamedPipe");
-        add_named(om, &kernel, &np, NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true })?;
+        add_named(
+            om,
+            &kernel,
+            &np,
+            NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
+        )?;
         self.devices.insert(cookie, Device::NamedPipe);
         add_named(om, &kernel, &wide("\\??\\pipe"), NewObject::SymbolicLink { target: &np })?;
         self.root = Some(VfsRoot::new(vfs, ctx, cred));

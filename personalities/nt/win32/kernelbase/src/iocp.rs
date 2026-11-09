@@ -223,7 +223,14 @@ fn wait_object(file: Handle, ov: *mut Overlapped) -> Handle {
 
 /// `GetOverlappedResult` and `Ex`: `ms` is the wait (`INFINITE` for ever,
 /// 0 not at all).
-unsafe fn overlapped_result(file: Handle, ov: *mut Overlapped, bytes: *mut u32, ms: u32, alertable: bool, ex: bool) -> i32 {
+unsafe fn overlapped_result(
+    file: Handle,
+    ov: *mut Overlapped,
+    bytes: *mut u32,
+    ms: u32,
+    alertable: bool,
+    ex: bool,
+) -> i32 {
     if ov.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
@@ -269,7 +276,12 @@ unsafe fn overlapped_result(file: Handle, ov: *mut Overlapped, bytes: *mut u32, 
 
 /// `GetOverlappedResult`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetOverlappedResult(file: Handle, ov: *mut Overlapped, bytes: *mut u32, wait: i32) -> i32 {
+pub unsafe extern "system" fn GetOverlappedResult(
+    file: Handle,
+    ov: *mut Overlapped,
+    bytes: *mut u32,
+    wait: i32,
+) -> i32 {
     // SAFETY: the caller's pointers.
     unsafe { overlapped_result(file, ov, bytes, if wait != 0 { u32::MAX } else { 0 }, false, false) }
 }
@@ -373,9 +385,29 @@ unsafe fn read_write_ex(
     // SAFETY: the caller's buffer of `len` bytes; the record outlives the request.
     let st = unsafe {
         if write {
-            nt::NtWriteFile(file, 0, apc, record as *const u8, ov as *mut IoStatusBlock, buffer, len, &offset, core::ptr::null())
+            nt::NtWriteFile(
+                file,
+                0,
+                apc,
+                record as *const u8,
+                ov as *mut IoStatusBlock,
+                buffer,
+                len,
+                &offset,
+                core::ptr::null(),
+            )
         } else {
-            nt::NtReadFile(file, 0, apc, record as *const u8, ov as *mut IoStatusBlock, buffer, len, &offset, core::ptr::null())
+            nt::NtReadFile(
+                file,
+                0,
+                apc,
+                record as *const u8,
+                ov as *mut IoStatusBlock,
+                buffer,
+                len,
+                &offset,
+                core::ptr::null(),
+            )
         }
     };
     if st == nt::STATUS_PENDING || st.is_success() || st == nt::STATUS_END_OF_FILE {
@@ -456,11 +488,7 @@ pub extern "system" fn GetThreadId(thread: Handle) -> u32 {
     let mut ret = 0u32;
     // SAFETY: valid pointers; THREAD_BASIC_INFORMATION is 48 bytes.
     let st = unsafe { nt::NtQueryInformationThread(thread, 0, b.as_mut_ptr(), 48, &mut ret) };
-    if st.is_success() {
-        u64::from_le_bytes(b[24..32].try_into().expect("8 bytes")) as u32
-    } else {
-        fail_status(st, 0)
-    }
+    if st.is_success() { u64::from_le_bytes(b[24..32].try_into().expect("8 bytes")) as u32 } else { fail_status(st, 0) }
 }
 
 /// `QueueUserAPC`: the routine runs on `thread` in an alertable wait.

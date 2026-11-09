@@ -34,9 +34,7 @@ use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::access::{IO_COMPLETION_MODIFY_STATE, IO_COMPLETION_QUERY_STATE};
 use poly_ntobj::status::*;
-use poly_ntobj::{
-    Handle, NewObject, NoParse, NtStatus, ObjectId, ObjectManager, ObjectType, WaitOutcome, WaitType,
-};
+use poly_ntobj::{Handle, NewObject, NoParse, NtStatus, ObjectId, ObjectManager, ObjectType, WaitOutcome, WaitType};
 
 pub type Result<T> = core::result::Result<T, NtStatus>;
 
@@ -158,8 +156,12 @@ impl IoState {
             om.object_by_handle(caller, Handle(port_handle), 0, Some(ObjectType::IoCompletion))?;
             return Err(STATUS_INVALID_PARAMETER);
         }
-        let object =
-            om.reference_by_handle(caller, Handle(port_handle), IO_COMPLETION_MODIFY_STATE, Some(ObjectType::IoCompletion))?;
+        let object = om.reference_by_handle(
+            caller,
+            Handle(port_handle),
+            IO_COMPLETION_MODIFY_STATE,
+            Some(ObjectType::IoCompletion),
+        )?;
         let cookie = om.cookie(object).ok_or(STATUS_INVALID_HANDLE)?;
         self.files.get_mut(&file).expect("checked").port = Some(PortAssoc { object, cookie, key });
         Ok(())

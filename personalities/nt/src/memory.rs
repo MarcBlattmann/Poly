@@ -332,7 +332,8 @@ pub fn terminate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
             proc.exit_status.get_or_insert(status);
             return Ok(None);
         }
-        let id = sys.objects.object_by_handle(&caller, Handle(process), PROCESS_TERMINATE, Some(ObjectType::Process))?;
+        let id =
+            sys.objects.object_by_handle(&caller, Handle(process), PROCESS_TERMINATE, Some(ObjectType::Process))?;
         if proc.object == Some(id) {
             // The first termination's status is the process's (ADR 0079).
             proc.exit_status.get_or_insert(status);

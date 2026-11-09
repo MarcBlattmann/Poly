@@ -64,7 +64,8 @@ pub fn create_named_pipe_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Res
         timeout,
     };
     let caller = k.caller();
-    let (h, info, _) = k.with_state(|sys, _, b| open_in_with(sys, b, &caller, &attrs, desired as u32, params, Some(np)))?;
+    let (h, info, _) =
+        k.with_state(|sys, _, b| open_in_with(sys, b, &caller, &attrs, desired as u32, params, Some(np)))?;
     return_handle(k, out, h)?;
     write_iosb(k, iosb, STATUS_SUCCESS, info)?;
     Ok(STATUS_SUCCESS)
@@ -136,7 +137,7 @@ pub fn fs_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
                 let timeout = i64::from_le_bytes(data[0..8].try_into().expect("8 bytes"));
                 let name_len = u32::from_le_bytes(data[8..12].try_into().expect("4 bytes")) as usize;
                 let specified = data[12] != 0;
-                if name_len % 2 != 0 || 16 + name_len > data.len() {
+                if !name_len.is_multiple_of(2) || 16 + name_len > data.len() {
                     return Err(STATUS_INVALID_PARAMETER);
                 }
                 let name: Vec<u16> =

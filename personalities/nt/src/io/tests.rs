@@ -201,5 +201,5 @@ mod dir;
 mod info;
 mod locks_async;
 mod namespace;
-mod process;
 mod npfs;
+mod process;

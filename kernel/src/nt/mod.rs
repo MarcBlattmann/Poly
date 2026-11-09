@@ -671,8 +671,7 @@ fn start_params(
             console: handles.and_then(|h| s.sys.io.console_of_process(h.caller.process)),
         };
         let only = handles.and_then(|h| h.inherit_only.as_deref());
-        let start =
-            exec::start_process_listed(&mut s.sys, proc, &mut b, file, NTDLL, None, thread, inherit_from, only);
+        let start = exec::start_process_listed(&mut s.sys, proc, &mut b, file, NTDLL, None, thread, inherit_from, only);
         let start = start.and_then(|ps| {
             // Its creator's jobs and the ones it was made for (ADR 0169).
             if let Some(h) = handles {
