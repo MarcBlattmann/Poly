@@ -194,18 +194,25 @@ impl CalibrationConfig {
     /// What [`calibrate_with_retries`] tries, in order: the standard
     /// settings twice, then a tolerance ten times looser (5000 ppm), then
     /// that tolerance over windows five times longer (50 ms), which a
-    /// bracket of the same width disturbs five times less.
+    /// bracket of the same width disturbs five times less, then over
+    /// windows 25 times longer (250 ms).
     ///
     /// The looser attempts are for hypervisors on which reading a device's
     /// counter is a VM exit: under KVM, reading the local APIC timer or the
     /// HPET takes microseconds (more on a busy host, or nested), which can
-    /// widen every bracket past the standard 5 us.
-    pub const fn retries(reference_hz: u64) -> [CalibrationConfig; 4] {
+    /// widen every bracket past the standard 5 us. On a loaded CI runner
+    /// HPET reads were seen taking ~250 us: 5000 ppm brackets even on 50 ms
+    /// windows, about 1000 ppm on 250 ms ones. That last attempt costs
+    /// 1.5 s of boot, and only when every other one failed.
+    pub const fn retries(reference_hz: u64) -> [CalibrationConfig; 5] {
         let strict = CalibrationConfig::for_reference(reference_hz);
         let loose = CalibrationConfig { tolerance_ppm: 5_000, ..strict };
         let window = strict.window.saturating_mul(5);
         let long = CalibrationConfig { window, max_spins: window.saturating_mul(64).saturating_add(100_000), ..loose };
-        [strict, strict, loose, long]
+        let window = strict.window.saturating_mul(25);
+        let longer =
+            CalibrationConfig { window, max_spins: window.saturating_mul(64).saturating_add(100_000), ..loose };
+        [strict, strict, loose, long, longer]
     }
 }
 
@@ -426,7 +433,7 @@ fn calibrate_into<T: Counter, R: Counter>(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Retried {
     pub result: Result<Calibration, CalibrationError>,
-    /// Attempts made, 1 to 4 (see [`CalibrationConfig::retries`]).
+    /// Attempts made, 1 to 5 (see [`CalibrationConfig::retries`]).
     pub attempts: usize,
     /// The measurements of the last attempt.
     pub report: CalibrationReport,
@@ -857,12 +864,15 @@ mod tests {
         assert_eq!((configs[2].tolerance_ppm, configs[2].window), (5_000, configs[0].window));
         assert_eq!((configs[3].tolerance_ppm, configs[3].window), (5_000, 5 * configs[0].window));
         assert!(configs[3].max_spins > configs[3].window);
+        assert_eq!((configs[4].tolerance_ppm, configs[4].window), (5_000, 25 * configs[0].window));
+        assert!(configs[4].max_spins > configs[4].window);
 
         // Reference reads that take 20 us (an HPET read that exits to the
         // VMM of a busy host): 2000 ppm brackets on 10 ms windows, too wide
         // for the standard tolerance, fine for the loose one.
-        // 120 us reads (12000 ppm) need the long windows (2400 ppm).
-        for (read_us, attempts) in [(0, 1), (20, 3), (120, 4)] {
+        // 120 us reads (12000 ppm) need the long windows (2400 ppm);
+        // 300 us reads (30000 ppm, 6000 on 50 ms) the longer ones (1200).
+        for (read_us, attempts) in [(0, 1), (20, 3), (120, 4), (300, 5)] {
             let clock = SimClock::new(17).read_cost(30_000, 20_000);
             let tsc = FakeTsc::new(&clock, TSC_HZ);
             // 32 bits wide: one register read per counter read.
@@ -891,7 +901,7 @@ mod tests {
             calls += 1;
             (Err(CalibrationError::Inconsistent), CalibrationReport::new(*cfg))
         });
-        assert_eq!((r.result, r.attempts, calls), (Err(CalibrationError::Inconsistent), 4, 4));
+        assert_eq!((r.result, r.attempts, calls), (Err(CalibrationError::Inconsistent), 5, 5));
     }
 
     #[test]

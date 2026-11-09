@@ -29,6 +29,7 @@ STAGES = {
     's4': ('headless --no-sandbox --disable-gpu --dump-dom pages/s4.html (http + https frames)', PC, 's4'),
     's4-window': ('visible window, --no-sandbox --disable-gpu --no-first-run, http://example.com/ then https://www.iana.org/ through the address bar', HS2, 's4h'),
     's5': ('headless --no-sandbox (GPU flags at their defaults) --dump-dom pages/s1.html', PC, 's5'),
+    's5-window': ('visible window as S3 but with the GPU flags at their defaults (no --disable-gpu), --no-sandbox', HS2, 's5w'),
 }
 kitinfo = {'format': kit['format'], 'mode': kit['mode'], 'files_sha256': kit['files'],
            'proxies': len(kit['proxies']), 'proxied_functions': sum(len(p['functions']) for p in kit['proxies']),

@@ -1,0 +1,11 @@
+[package]
+name = "poly-png"
+description = "A PNG decoder from the specification (W3C PNG 3rd edition, RFC 1950 and 1951): every colour type and bit depth, palettes and tRNS, Adam7, the five filters, CRC and Adler-32 checks, bounded memory. no_std with alloc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

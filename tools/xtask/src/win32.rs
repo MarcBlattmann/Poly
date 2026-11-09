@@ -81,6 +81,12 @@ const CACHE_KEEP: usize = 6;
 /// workspace for the Windows target instead (into `target/win32-clippy`,
 /// deleted afterwards).
 pub fn command(args: &[String]) -> Result {
+    // The name the modules are cached under, a hash of their inputs (CI
+    // keys its cache of `target/win32-cache` with it).
+    if args.iter().any(|a| a == "--cache-key") {
+        println!("win32-{:016x}", cache_key(&root())?);
+        return Ok(());
+    }
     if args.iter().any(|a| a == "--clippy") {
         let target = root().join("target").join("win32-clippy");
         let mut cmd = cargo_for(&target, "clippy")?;
@@ -102,8 +108,41 @@ pub fn command(args: &[String]) -> Result {
 /// verified and cached.
 pub fn ensure() -> Result<PathBuf> {
     let root = root();
+    let key = cache_key(&root)?;
+    let cache = cache_dir(&root);
+    let cached = cache.join(format!("win32-{key:016x}"));
+    if OUTPUTS.iter().all(|f| cached.join(f).is_file()) {
+        return Ok(cached);
+    }
+    let target = root.join("target").join("win32");
+    let started = std::time::Instant::now();
+    let built = build(&target)?;
+    verify(&built)?;
+    std::fs::create_dir_all(&cache).map_err(|e| format!("{}: {e}", cache.display()))?;
+    // Fill a private directory and rename it, so a parallel worktree never
+    // sees half a set.
+    let tmp = cache.join(format!(".win32-{key:016x}.{}.tmp", std::process::id()));
+    std::fs::create_dir_all(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    for f in OUTPUTS {
+        std::fs::copy(built.join(f), tmp.join(f)).map_err(|e| format!("{f}: {e}"))?;
+    }
+    if std::fs::rename(&tmp, &cached).is_err() {
+        // Another worktree cached the same version first.
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+    if std::env::var_os("POLY_WIN32_KEEP_BUILD").is_none() {
+        let _ = std::fs::remove_dir_all(&target);
+    }
+    prune(&cache);
+    crate::progress::note(&format!("Win32 modules built in {:.0?}, cached as {}", started.elapsed(), cached.display()));
+    Ok(cached)
+}
+
+/// The hash of everything the modules are built from: the name they are
+/// cached under.
+fn cache_key(root: &Path) -> Result<u64> {
     let files = crate::ntdll::inputs_from(
-        &root,
+        root,
         &[
             "personalities/nt/win32/rt",
             "personalities/nt/win32/kernelbase",
@@ -156,34 +195,7 @@ pub fn ensure() -> Result<PathBuf> {
             "rust-toolchain.toml",
         ],
     )?;
-    let key = crate::ntdll::hash_files(&root, RUSTFLAGS, &files)?;
-    let cache = cache_dir(&root);
-    let cached = cache.join(format!("win32-{key:016x}"));
-    if OUTPUTS.iter().all(|f| cached.join(f).is_file()) {
-        return Ok(cached);
-    }
-    let target = root.join("target").join("win32");
-    let started = std::time::Instant::now();
-    let built = build(&target)?;
-    verify(&built)?;
-    std::fs::create_dir_all(&cache).map_err(|e| format!("{}: {e}", cache.display()))?;
-    // Fill a private directory and rename it, so a parallel worktree never
-    // sees half a set.
-    let tmp = cache.join(format!(".win32-{key:016x}.{}.tmp", std::process::id()));
-    std::fs::create_dir_all(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    for f in OUTPUTS {
-        std::fs::copy(built.join(f), tmp.join(f)).map_err(|e| format!("{f}: {e}"))?;
-    }
-    if std::fs::rename(&tmp, &cached).is_err() {
-        // Another worktree cached the same version first.
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
-    if std::env::var_os("POLY_WIN32_KEEP_BUILD").is_none() {
-        let _ = std::fs::remove_dir_all(&target);
-    }
-    prune(&cache);
-    crate::progress::note(&format!("Win32 modules built in {:.0?}, cached as {}", started.elapsed(), cached.display()));
-    Ok(cached)
+    crate::ntdll::hash_files(root, RUSTFLAGS, &files)
 }
 
 /// `win32-cache`, beside `ntdll`'s cache.
