@@ -1,0 +1,17 @@
+[package]
+name = "a64diff"
+description = "Host tool (not shipped): runs static arm64 Linux test programs under qemu-aarch64 and under poly-a64 and diffs their output (ADR 0152)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "a64diff"
+path = "src/main.rs"
+
+[dependencies]
+poly-a64.workspace = true
+
+[lints]
+workspace = true
