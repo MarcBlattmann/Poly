@@ -1245,7 +1245,10 @@ mod tests {
         // GUI tests (Phase 7) import user32 and gdi32, still as console programs.
         let gui_dlls = image(&[("USER32.dll", &["CreateWindowExW"]), ("gdi32.dll", &["BitBlt"])], 3);
         assert_eq!(check_image(&gui_dlls).unwrap()["user32.dll"], ["CreateWindowExW"]);
-        let more = image(&[("dwmapi.dll", &["DwmFlush"]), ("IMM32.dll", &["ImmGetContext"]), ("SHCORE.dll", &["GetDpiForMonitor"])], 3);
+        let more = image(
+            &[("dwmapi.dll", &["DwmFlush"]), ("IMM32.dll", &["ImmGetContext"]), ("SHCORE.dll", &["GetDpiForMonitor"])],
+            3,
+        );
         assert_eq!(check_image(&more).unwrap()["dwmapi.dll"], ["DwmFlush"]);
         let other = image(&[("shell32.dll", &["SHGetFolderPathW"])], 3);
         assert!(check_image(&other).unwrap_err().contains("shell32.dll"));

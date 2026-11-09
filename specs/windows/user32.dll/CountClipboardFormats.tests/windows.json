@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "cnt_synthesis",
+      "exe_sha256": "95271ad4ea1a231a6681c9576f6803169cbadbd7ab95aba26e89599324df31f5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dW5pY29kZTogb3BlbiAxIGNsb3NlZCA0IGNsb3NlIGFkZGVkIDMgdG8gdGhlIHNlcXVlbmNlCmFuc2k6IG9wZW4gMSBjbG9zZWQgNCBjbG9zZSBhZGRlZCAzIHRvIHRoZSBzZXF1ZW5jZQpvZW06IG9wZW4gMSBjbG9zZWQgNCBjbG9zZSBhZGRlZCAzIHRvIHRoZSBzZXF1ZW5jZQp1bmljb2RlIGFuZCBhbnNpOiBvcGVuIDIgY2xvc2VkIDQgY2xvc2UgYWRkZWQgMiB0byB0aGUgc2VxdWVuY2UKdW5pY29kZSwgYW5zaSwgb2VtLCBsb2NhbGU6IG9wZW4gNCBjbG9zZWQgNCBjbG9zZSBhZGRlZCAwIHRvIHRoZSBzZXF1ZW5jZQpiaXRtYXA6IG9wZW4gMSBjbG9zZWQgMyBjbG9zZSBhZGRlZCAyIHRvIHRoZSBzZXF1ZW5jZQpwcml2YXRlIG9ubHk6IG9wZW4gMSBjbG9zZWQgMSBjbG9zZSBhZGRlZCAwIHRvIHRoZSBzZXF1ZW5jZQp0ZXh0IGFuZCBiaXRtYXAgYW5kIHByaXZhdGU6IG9wZW4gMyBjbG9zZWQgOCBjbG9zZSBhZGRlZCA1IHRvIHRoZSBzZXF1ZW5jZQpvayBkb25lCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "unicode: open 1 closed 4 close added 3 to the sequence\nansi: open 1 closed 4 close added 3 to the sequence\noem: open 1 closed 4 close added 3 to the sequence\nunicode and ansi: open 2 closed 4 close added 2 to the sequence\nunicode, ansi, oem, locale: open 4 closed 4 close added 0 to the sequence\nbitmap: open 1 closed 3 close added 2 to the sequence\nprivate only: open 1 closed 1 close added 0 to the sequence\ntext and bitmap and private: open 3 closed 8 close added 5 to the sequence\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 69
+    }
+  ]
+}

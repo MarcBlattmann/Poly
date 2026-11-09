@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "defica_errors",
+      "exe_sha256": "45fa34a66df28c4985bbc3f1f48688b322abe453c7547e1f000b78d6a750f6a2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hpbGQgd2luZG93OiBocj1FX0lOVkFMSURBUkcgbGFzdCBlcnJvciAweDEyMzQKTlVMTDogaHI9RV9JTlZBTElEQVJHIGxhc3QgZXJyb3IgMHg1NzgKbWFkZS11cCBoYW5kbGU6IGhyPUVfSU5WQUxJREFSRyBsYXN0IGVycm9yIDB4NTc4CmRlc3Ryb3llZCB3aW5kb3c6IGhyPUVfSU5WQUxJREFSRyBsYXN0IGVycm9yIDB4NTc4CmRlc2t0b3Agd2luZG93OiBocj1FX0lOVkFMSURBUkcgbGFzdCBlcnJvciAweDEyMzQKY2hpbGQgcmVjdCA2Myw4NiwxMTMsMTM2IGNsaWVudCAwLDAsNTAsNTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "child window: hr=E_INVALIDARG last error 0x1234\nNULL: hr=E_INVALIDARG last error 0x578\nmade-up handle: hr=E_INVALIDARG last error 0x578\ndestroyed window: hr=E_INVALIDARG last error 0x578\ndesktop window: hr=E_INVALIDARG last error 0x1234\nchild rect 63,86,113,136 client 0,0,50,50\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 240
+    },
+    {
+      "name": "defica_thread",
+      "exe_sha256": "b02932922f2d781edd230bca6048c5b825b572f24caa492be054ed030e8516bf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3RoZXIgdGhyZWFkJ3Mgd2luZG93IGNyZWF0ZWQ6IHRydWUKb3RoZXIgdGhyZWFkJ3Mgd2luZG93LCAtMTogaHI9U19PSwpvdGhlciB0aHJlYWQncyB3aW5kb3csIC0xIGFnYWluOiBocj1TX09LCm90aGVyIHRocmVhZCdzIHdpbmRvdywgMDogaHI9U19PSwpyZWN0IDYwMCwzMDAsOTAwLDUwMCBjbGllbnQgMCwwLDI4NCwxNjEKYWZ0ZXIgdGhlIHRocmVhZCBlbmRlZCAod2luZG93IGRlc3Ryb3llZCk6IGhyPUVfSU5WQUxJREFSRwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "other thread's window created: true\nother thread's window, -1: hr=S_OK\nother thread's window, -1 again: hr=S_OK\nother thread's window, 0: hr=S_OK\nrect 600,300,900,500 client 0,0,284,161\nafter the thread ended (window destroyed): hr=E_INVALIDARG\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 126
+    }
+  ]
+}

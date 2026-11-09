@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "gcfn_errors",
+      "exe_sha256": "5a820f87c5bfe784f2a263d565242d875187d153caa19b833837f91b2d58174b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q0ZfVEVYVDogcmV0dXJucyAwIGVyciA4NyBidWZmZXIgd3JpdHRlbiBmYWxzZQpDRl9VTklDT0RFVEVYVDogcmV0dXJucyAwIGVyciA4NyBidWZmZXIgd3JpdHRlbiBmYWxzZQpDRl9ESUI6IHJldHVybnMgMCBlcnIgODcgYnVmZmVyIHdyaXR0ZW4gZmFsc2UKQ0ZfSERST1A6IHJldHVybnMgMCBlcnIgODcgYnVmZmVyIHdyaXR0ZW4gZmFsc2UKMDogcmV0dXJucyAwIGVyciA4NyBidWZmZXIgd3JpdHRlbiBmYWxzZQpwcml2YXRlOiByZXR1cm5zIDAgZXJyIDg3IGJ1ZmZlciB3cml0dGVuIGZhbHNlCkNGX09XTkVSRElTUExBWTogcmV0dXJucyAwIGVyciA4NyBidWZmZXIgd3JpdHRlbiBmYWxzZQoweDEyMzQ6IHJldHVybnMgMCBlcnIgODcgYnVmZmVyIHdyaXR0ZW4gZmFsc2UKMHhCRkZGOiByZXR1cm5zIDAgZXJyIDg3IGJ1ZmZlciB3cml0dGVuIGZhbHNlCjB4RkZGRiAobm90IHJlZ2lzdGVyZWQpOiByZXR1cm5zIDAgZXJyIDYgYnVmZmVyIHdyaXR0ZW4gZmFsc2UKLTE6IHJldHVybnMgMCBlcnIgNiBidWZmZXIgd3JpdHRlbiBmYWxzZQoweDEwMDAwOiByZXR1cm5zIDAgZXJyIDg3IGJ1ZmZlciB3cml0dGVuIGZhbHNlCnZhbGlkIGZvcm1hdCwgc2l6ZSAtMTogcmV0dXJucyAwIGVyciA5OTggYnVmZmVyIHdyaXR0ZW4gZmFsc2UKdmFsaWQgZm9ybWF0LCBzaXplIDA6IHJldHVybnMgMCBlcnIgMTIyIGJ1ZmZlciB3cml0dGVuIGZhbHNlCnZhbGlkIGZvcm1hdCwgc2l6ZSAxOiByZXR1cm5zIDAgZXJyIDEyMiBidWZmZXIgd3JpdHRlbiBmYWxzZQpvayBkb25lCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CF_TEXT: returns 0 err 87 buffer written false\nCF_UNICODETEXT: returns 0 err 87 buffer written false\nCF_DIB: returns 0 err 87 buffer written false\nCF_HDROP: returns 0 err 87 buffer written false\n0: returns 0 err 87 buffer written false\nprivate: returns 0 err 87 buffer written false\nCF_OWNERDISPLAY: returns 0 err 87 buffer written false\n0x1234: returns 0 err 87 buffer written false\n0xBFFF: returns 0 err 87 buffer written false\n0xFFFF (not registered): returns 0 err 6 buffer written false\n-1: returns 0 err 6 buffer written false\n0x10000: returns 0 err 87 buffer written false\nvalid format, size -1: returns 0 err 998 buffer written false\nvalid format, size 0: returns 0 err 122 buffer written false\nvalid format, size 1: returns 0 err 122 buffer written false\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}
