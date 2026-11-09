@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "sources": {
+    "chrome-win-trace": {
+      "description": "Calls Chrome for Testing 157.0.8103.38 (win64) made on real Windows, recorded with the API tracer (specs/windows/apps/chrome)",
+      "revision": "157.0.8103.38"
+    },
     "linux-syscall-tbl": {
       "description": "Linux arch/x86/entry/syscalls/syscall_64.tbl",
       "revision": "f47d223627f80cb7a1eb14c585fe6cb35de5e984"
@@ -8,6 +12,10 @@
     "macos-sdk": {
       "description": "macOS SDK .tbd stubs (exported symbols and Objective-C classes)",
       "revision": "macOS SDK 27.0 (26A425)"
+    },
+    "poly-adr-0132": {
+      "description": "Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents",
+      "revision": "ADR 0132"
     },
     "wine-spec": {
       "description": "Wine .spec export lists (wine-mirror/wine dlls/*/*.spec)",

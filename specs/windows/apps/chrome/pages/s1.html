@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Poly Chrome Test</title></head>
+<body>
+<h1 id="h">Hello Chrome</h1>
+<p id="p">static</p>
+<div id="b" style="width:200px;height:50px"></div>
+<script>
+document.getElementById('p').textContent = 'script-ran ' + (6 * 7);
+document.getElementById('b').textContent = 'box ' + document.getElementById('b').getBoundingClientRect().width;
+</script>
+</body>
+</html>

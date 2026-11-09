@@ -1,0 +1,86 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/ns_uts_ipc              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (one test becomes uid/gid 65534); umask 022; the container has its own uts/ipc/mnt/net/pid namespaces; unprivileged user namespaces allowed"
+  observed_by: spec-linux-pkg
+  date: 2026-11-09
+summary: >
+  UTS and IPC namespaces, which sandboxes create with CLONE_NEWUTS and
+  CLONE_NEWIPC to give an app a private host name and private System V and
+  POSIX IPC objects.
+  UTS. A child made with clone(CLONE_NEWUTS) starts with copies of its
+  parent's host name and domain name; setting them there (sethostname,
+  setdomainname) changes what uname and /proc/sys/kernel/{hostname,
+  domainname} show in that namespace and nowhere else. A plain fork child
+  shares the namespace, so its change is seen by its parent. A namespace
+  made inside another one starts with the creator's current names; later
+  changes on either side stay on that side. Writing a name to
+  /proc/sys/kernel/hostname has the same effect as sethostname (the write
+  returns the number of bytes written). A name of 64
+  bytes is accepted (the length is the argument; no NUL needed) and reads back
+  whole; 65 bytes is EINVAL for both calls; length 0 is accepted and makes the
+  name empty; a NULL pointer with a non-zero length is EFAULT. The other
+  uname fields (sysname, release, version, machine) are the same in every
+  namespace. /proc/sys/kernel/hostname reads "name\n".
+  IPC, System V. A child made with clone(CLONE_NEWIPC) starts with no
+  message queues, shared memory segments or semaphore sets: its first object of
+  each kind has id 0; /proc/sysvipc/{msg,shm,sem} list the header line and
+  only that object; a lookup (msgget, shmget, semget with flag 0) of a key
+  that exists in the namespace it came from is ENOENT; creating an object
+  with that key makes another one. Objects of the outer namespace are not
+  reachable by id (msgctl IPC_STAT with the id of a second outer queue is
+  EINVAL while the inner namespace has only id 0); removing the inner object
+  leaves the outer one; messages are received only in the namespace that has
+  the queue; the outer queue still holds its message after the inner
+  namespace is left. Processes sharing the namespace (fork) see each
+  other's objects.
+  IPC, POSIX queues and limits. In a namespace made with CLONE_NEWIPC |
+  CLONE_NEWNS (mounts private), a queue made with mq_open("name", O_CREAT |
+  O_RDWR, 0600) shows up as a regular file of mode 0600 with that name in a
+  mqueue file system mounted there (type "mqueue"; a new one lists nothing).
+  A process in a further IPC namespace gets ENOENT from mq_open of that name;
+  a mqueue mounted there lists nothing, while a mount made earlier keeps
+  showing the old namespace's queues (a mqueue mount belongs to the IPC
+  namespace of its mounter). A queue of the same name can be created in the
+  inner namespace and is a different queue (mq_unlink there leaves the
+  outer one). /proc/sys/kernel/msgmni and /proc/sys/fs/mqueue/msg_max are per
+  namespace: a value written in the inner namespace is read back there and the
+  outer one keeps its own.
+  Ownership. A namespace is administered by the user namespace that created
+  it. A process with uid 65534 and no capabilities after unshare(CLONE_NEWUSER
+  | CLONE_NEWNS) and mapping itself to root: its UTS, IPC and network
+  namespaces still belong to the initial user namespace, so sethostname and
+  setdomainname are EPERM, and mounting mqueue and sysfs is EPERM, while a
+  devpts instance can be mounted. When the same unshare also asks for
+  CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNET the new namespaces belong to the
+  new user namespace and the same calls work: sethostname and setdomainname
+  (the names read back through uname), mounting mqueue, sysfs and devpts (0).
+  The names set there are not seen by the parent.
+returns:
+  uts_copy: "a new UTS namespace starts with the creator's names"
+  first_sysv_id: "0 for the first message queue, shared memory segment and semaphore set of a namespace"
+  proc_sysvipc: "header line plus one line per object of the namespace"
+  mqueue_listing: "regular files, mode 0600, one per queue of the mounter's IPC namespace"
+errors:
+  name_too_long: "EINVAL (22): sethostname or setdomainname with length 65"
+  name_fault: "EFAULT (14): NULL name with non-zero length"
+  lookup_other_ns: "ENOENT (2): msgget, shmget, semget with flag 0 or mq_open without O_CREAT for an object of another namespace"
+  id_other_ns: "EINVAL (22): msgctl IPC_STAT with an id the namespace does not have"
+  not_owner: "EPERM (1): sethostname, setdomainname, mount of mqueue or sysfs in a namespace owned by an outer user namespace"
+side_effects: >
+  Objects of a namespace are destroyed with it.
+threading: "none"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: CLONE_NEWUTS 0x04000000, CLONE_NEWIPC 0x08000000 (linux/sched.h);
+# System V numbers and IPC_* flags from linux/ipc.h, linux/msg.h. All tests are
+# needs=root (new namespaces, mounts) and use several processes (syscalls=off).
+# The System V ids are only compared with 0 and 1, which hold for the default
+# id sequence. Writing /proc/sys values needs a writable /proc/sys.

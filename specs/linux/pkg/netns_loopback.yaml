@@ -1,0 +1,82 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/netns_loopback              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (the unprivileged cases as uid/gid 65534); umask 022; unprivileged user namespaces allowed"
+  observed_by: spec-linux-pkg
+  date: 2026-11-09
+summary: >
+  A network namespace made by clone(CLONE_NEWNET) or unshare(CLONE_NEWNET),
+  as sandboxes use it to cut an app off the network. It has one device,
+  "lo", and it is down. /proc/self/net/dev lists only lo with all counters
+  0 (two header lines and one device line). The interface ioctls on an
+  AF_INET datagram socket: SIOCGIFFLAGS gives IFF_LOOPBACK (0x8) only;
+  SIOCGIFADDR is EADDRNOTAVAIL while the device has no address; SIOCGIFINDEX
+  1, SIOCGIFMTU 65536, SIOCGIFHWADDR family ARPHRD_LOOPBACK (772) with a zero
+  address; SIOCGIFNAME of index 1 is "lo", of 2 ENODEV; an unknown name
+  ("eth0") is ENODEV; SIOCGIFCONF lists no interface. SIOCSIFFLAGS with
+  IFF_UP|IFF_LOOPBACK|IFF_RUNNING (0x49; what bubblewrap does) brings it
+  up: flags then read 0x49, the address is 127.0.0.1 with netmask 255.0.0.0,
+  SIOCGIFCONF lists "lo" (one entry of 40 bytes with 127.0.0.1), and
+  /proc/self/net/route starts with its header line. Setting flags 0 puts it
+  down again (flags 0x8). Without CAP_NET_ADMIN SIOCSIFFLAGS is EPERM while
+  the getters work.
+  Traffic. With lo down: bind to 127.0.0.1 works, connecting to 127.0.0.1 or
+  to 10.0.0.1 is ENETUNREACH; socketpair and Unix sockets (path and
+  abstract) work. After lo is up TCP and UDP on 127.0.0.1 work (listen on
+  port 0, getsockname, connect, accept, data in both directions;
+  sendto/recvfrom), connecting to 127.0.0.1 on a port nobody listens on is
+  ECONNREFUSED, to 10.0.0.1 ENETUNREACH. The namespace is private: a process
+  outside connecting to the TCP port the child listens on gets
+  ECONNREFUSED (or ENETUNREACH if its own lo were down) and to the child's
+  abstract Unix socket ECONNREFUSED, while a Unix socket bound to a file
+  system path is reachable from outside (connect returns 0).
+  rtnetlink (socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE), as ip(8) and
+  bubblewrap use it). RTM_GETLINK with NLM_F_REQUEST|NLM_F_DUMP (0x301)
+  answers one RTM_NEWLINK message (type 16) for index 1 with IFLA_IFNAME
+  "lo" (attribute length 7), IFLA_MTU 65536 and IFF_UP clear, then
+  NLMSG_DONE (type 3). RTM_NEWLINK with NLM_F_REQUEST|NLM_F_ACK (0x5),
+  ifi_index 1, ifi_flags = ifi_change = IFF_UP is acknowledged by an
+  NLMSG_ERROR message (type 2, length 36: the error 0 and the request's
+  header) and the device is up afterwards; an unknown index (99) is
+  acknowledged with error -ENODEV. RTM_GETADDR (22) for AF_INET with the
+  dump flags then answers one RTM_NEWADDR (20): prefix length 8, scope host
+  (254), index 1, IFA_ADDRESS 127.0.0.1 and IFA_LABEL "lo", then NLMSG_DONE.
+  A process without CAP_NET_ADMIN can dump but its RTM_NEWLINK is
+  acknowledged with error -EPERM.
+  Ownership. A process with uid 65534 and no capabilities in the initial
+  user namespace: raw sockets (socket(AF_INET, SOCK_RAW, 255),
+  socket(AF_PACKET, SOCK_RAW, 0x300)) are EPERM, datagram and rtnetlink
+  sockets work, SIOCSIFFLAGS on lo is EPERM. After unshare(CLONE_NEWUSER)
+  (mapped to root) the network namespace is still owned by the initial user
+  namespace: raw sockets and SIOCSIFFLAGS stay EPERM. After
+  unshare(CLONE_NEWUSER | CLONE_NEWNET) the new network namespace is owned
+  by the new user namespace: raw sockets work, lo can be brought up (flags
+  0x49), and a second unshare of CLONE_NEWNET gives yet another namespace
+  with the same single device. /proc/net is a link to "self/net".
+returns:
+  new_namespace: "one device lo, down, flags 0x8, index 1, mtu 65536, no address"
+  bring_up: "SIOCSIFFLAGS 0x49 returns 0; lo has 127.0.0.1/8 afterwards"
+  netlink_ack: "NLMSG_ERROR (type 2, length 36) with error 0 or -errno of the request"
+errors:
+  unreachable: "ENETUNREACH (101): connect to 127.0.0.1 with lo down, or to 10.0.0.1 always"
+  refused: "ECONNREFUSED (111): connect to a loopback port nobody listens on, or into another namespace's abstract socket"
+  no_addr: "EADDRNOTAVAIL (99): SIOCGIFADDR on a device without address"
+  no_device: "ENODEV (19): SIOCGIFFLAGS and others on an unknown name; SIOCGIFNAME of index 2"
+  permission: "EPERM (1): SIOCSIFFLAGS, raw sockets and RTM_NEWLINK without CAP_NET_ADMIN in the namespace's owning user namespace"
+side_effects: >
+  The namespace is destroyed when its last process, socket and bind mount
+  of its namespace file are gone.
+threading: "none"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: all tests are needs=root (a new network namespace; the tests that
+# become uid 65534 start as root). ARPHRD_LOOPBACK, IFF_*, SIOC* and
+# netlink numbers are from linux/if.h, linux/sockios.h, linux/rtnetlink.h.
+# The traffic and ownership tests use several processes (syscalls=off).

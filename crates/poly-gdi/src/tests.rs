@@ -125,6 +125,11 @@ fn objects_live_and_die_as_observed() {
         assert_eq!(px[1], 0x00FF_FFFF);
         assert!(g.fill_rect(dc, Rect::new(9, 0, 10, 1), red));
         assert_eq!(&px[8..11], &[0x00FF_FFFF, 0x00FF_0000, 0x00FF_FFFF]);
+        // Inverted: filled with its sides swapped; empty: nothing.
+        assert!(g.fill_rect(dc, Rect::new(5, 1, 4, 0), red));
+        assert_eq!(&px[3..6], &[0x00FF_FFFF, 0x00FF_0000, 0x00FF_FFFF]);
+        assert!(g.fill_rect(dc, Rect::new(7, 0, 7, 1), red));
+        assert_eq!(px[7], 0x00FF_FFFF);
     }
     // A bitmap busy in one DC; free after that DC goes.
     let (dc, _px) = dib32(&mut g, 2, 2);
@@ -134,13 +139,16 @@ fn objects_live_and_die_as_observed() {
     g.delete_dc(dc);
     let prev = g.select_object(other, u64::from(bmp)).unwrap();
     assert_eq!(g.object_type(u64::from(prev)), OBJ_BITMAP);
-    // A selected brush deleted: painting on, gone once replaced.
-    let (dc, px) = dib32(&mut g, 1, 1);
+    // A selected brush deleted: it paints no more, and is gone once
+    // replaced (DeleteObject do_basic on the oracle).
+    let (dc, mut px) = dib32(&mut g, 1, 1);
+    px[0] = 0x00FF_FFFF;
     let red = u64::from(g.create_solid_brush(0xFF));
     g.select_object(dc, red).unwrap();
     assert!(g.delete_object(red));
+    assert_eq!(g.object_type(red), OBJ_BRUSH);
     g.pat_blt(dc, 0, 0, 1, 1, 0x00F0_0021);
-    assert_eq!(px[0], 0x00FF_0000);
+    assert_eq!(px[0], 0x00FF_FFFF);
     g.select_object(dc, u64::from(g.stock(WHITE_BRUSH))).unwrap();
     assert_eq!(g.object_type(red), 0);
     // Its slot used again: the old handle names nothing, selecting it
@@ -179,4 +187,202 @@ fn text_cells_and_glyphs() {
     assert_eq!(changed.iter().map(|p| p.0).max(), Some(22));
     assert_eq!(changed.iter().map(|p| p.1).min(), Some(6));
     assert_eq!(changed.iter().map(|p| p.1).max(), Some(15));
+}
+
+/// The rectangles of region `h`.
+fn rgn_rects(g: &Gdi, h: u64) -> Vec<Rect> {
+    g.region(h).unwrap().rects().to_vec()
+}
+
+#[test]
+fn region_handles_create_combine_and_fail_as_observed() {
+    let mut g = Gdi::new();
+    // CreateRectRgn.yaml: limits.
+    assert!(g.create_rect_rgn(Rect::new(-(1 << 27), -(1 << 27), (1 << 27) - 1, (1 << 27) - 1)).is_ok());
+    assert_eq!(g.create_rect_rgn(Rect::new(0, 0, 1 << 27, 1 << 27)), Err(ERROR_INVALID_PARAMETER));
+    assert_eq!(g.create_rect_rgn(Rect::new(i32::MIN, 0, 10, 10)), Err(ERROR_INVALID_PARAMETER));
+    let r = u64::from(g.create_rect_rgn(Rect::new(1, 2, 3, 4)).unwrap());
+    assert_eq!(g.object_type(r), OBJ_REGION);
+    assert!(g.set_rect_rgn(r, Rect::new(i32::MIN, i32::MIN, i32::MAX, i32::MAX)));
+    assert_eq!(g.rgn_box(r), Some((2, Rect::new(i32::MIN, i32::MIN, i32::MAX, i32::MAX))));
+    assert!(g.set_rect_rgn(r, Rect::new(5, 5, 5, 9)));
+    assert_eq!(g.rgn_box(r), Some((1, Rect::default())));
+    // CombineRgn.yaml: aliasing and errors.
+    let a = u64::from(g.create_rect_rgn(Rect::new(0, 0, 20, 20)).unwrap());
+    let d = u64::from(g.create_rect_rgn(Rect::new(10, 10, 30, 30)).unwrap());
+    assert_eq!(g.combine_rgn(d, a, d, 2), (3, 0));
+    assert_eq!(rgn_rects(&g, d), [Rect::new(0, 0, 20, 10), Rect::new(0, 10, 30, 20), Rect::new(10, 20, 30, 30)]);
+    assert_eq!(g.combine_rgn(d, d, d, 3), (1, 0));
+    g.set_rect_rgn(d, Rect::new(5, 5, 6, 6));
+    let gone = u64::from(g.create_rect_rgn(Rect::new(1, 1, 2, 2)).unwrap());
+    assert!(g.delete_object(gone));
+    assert!(!g.delete_object(gone));
+    assert_eq!(g.combine_rgn(d, a, gone, 5), (2, 0));
+    assert_eq!(rgn_rects(&g, d), [Rect::new(0, 0, 20, 20)]);
+    g.set_rect_rgn(d, Rect::new(5, 5, 6, 6));
+    for (dst, s1, s2, mode, err) in [
+        (d, a, 0, 2, ERROR_INVALID_HANDLE),
+        (d, a, gone, 1, ERROR_INVALID_HANDLE),
+        (0, a, a, 2, ERROR_INVALID_HANDLE),
+        (gone, a, a, 2, ERROR_INVALID_HANDLE),
+        (d, 0, a, 2, ERROR_INVALID_HANDLE),
+        (d, 0x0bad_0bad, 0, 5, ERROR_INVALID_HANDLE),
+        (d, a, a, 0, ERROR_INVALID_PARAMETER),
+        (d, a, a, 6, ERROR_INVALID_PARAMETER),
+    ] {
+        assert_eq!(g.combine_rgn(dst, s1, s2, mode), (0, err));
+        assert_eq!(rgn_rects(&g, d), [Rect::new(5, 5, 6, 6)]);
+    }
+    // GetRegionData's layout.
+    let data = g.region_data(a).unwrap();
+    assert_eq!(data.len(), 48);
+    assert_eq!(&data[0..16], &[32, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 16, 0, 0, 0]);
+    assert_eq!(&data[32..48], &[0, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 20, 0, 0, 0]);
+    assert_eq!(g.region_data(u64::from(g.stock(WHITE_BRUSH))), None);
+    // PtInRegion / RectInRegion on something else.
+    assert_eq!(g.pt_in_region(0, 1, 1), Err(ERROR_INVALID_HANDLE));
+    assert_eq!(g.rect_in_region(u64::from(g.stock(BLACK_BRUSH)), Rect::new(1, 1, 2, 2)), None);
+    // OffsetRgn past 2^27-1 fails and leaves the region.
+    g.set_rect_rgn(d, Rect::new(0, 0, 117_440_427, 10));
+    assert_eq!(g.offset_rgn(d, 0x0200_0000, 0), 0);
+    assert_eq!(g.rgn_box(d), Some((2, Rect::new(0, 0, 117_440_427, 10))));
+    assert_eq!(g.offset_rgn(d, 1, 1), 2);
+    assert_eq!(g.equal_rgn(a, a), 1);
+    assert_eq!(g.equal_rgn(a, d), 0);
+}
+
+#[test]
+fn clip_regions_limit_drawing_in_device_coordinates() {
+    let mut g = Gdi::new();
+    let (dc, mut px) = dib32(&mut g, 20, 10);
+    px.fill(0x00FF_FFFF);
+    let key = [(0x00FF_FFFF, '.'), (0, '#')];
+    let black = u64::from(g.stock(BLACK_BRUSH));
+    let a = u64::from(g.create_rect_rgn(Rect::new(2, 2, 8, 6)).unwrap());
+    let b = u64::from(g.create_rect_rgn(Rect::new(12, 4, 18, 9)).unwrap());
+    let c = u64::from(g.create_rect_rgn(Rect::new(0, 0, 0, 0)).unwrap());
+    g.combine_rgn(c, a, b, 2);
+    assert_eq!(g.select_clip_rgn(dc, c), (3, 0));
+    assert!(g.delete_object(c));
+    g.fill_rect(dc, Rect::new(0, 0, 20, 10), black);
+    let r = rows(&px, 20, &key);
+    assert_eq!(r[2], "..######............");
+    assert_eq!(r[4], "..######....######..");
+    assert_eq!(r[8], "............######..");
+    // A clip larger than the surface; then none.
+    let big = u64::from(g.create_rect_rgn(Rect::new(-10, -10, 100, 100)).unwrap());
+    assert_eq!(g.select_clip_rgn(dc, big), (2, 0));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(0, 0, 20, 10)));
+    assert_eq!(g.select_clip_rgn(dc, 0), (2, 0));
+    let r0 = u64::from(g.create_rect_rgn(Rect::new(0, 0, 0, 0)).unwrap());
+    assert_eq!(g.clip_rgn(dc, r0), (0, 0));
+    assert_eq!(g.clip_rgn(0x0bad_0bad, r0), (-1, ERROR_INVALID_PARAMETER));
+    // A made-up region: ERROR, no error code, clip unchanged.
+    assert_eq!(g.select_clip_rgn(dc, a), (2, 0));
+    assert_eq!(g.select_clip_rgn(dc, 0x0bad_0bad), (0, 0));
+    assert_eq!(g.clip_rgn(dc, r0), (1, 0));
+    assert_eq!(rgn_rects(&g, r0), [Rect::new(2, 2, 8, 6)]);
+    assert_eq!(g.select_clip_rgn(0x0bad_0bad, a), (0, ERROR_INVALID_HANDLE));
+    // The viewport origin moves drawing, not the clip.
+    px.fill(0x00FF_FFFF);
+    assert_eq!(g.set_origin(dc, true, 5, 2), Some((0, 0)));
+    g.fill_rect(dc, Rect::new(0, 0, 20, 10), black);
+    let r = rows(&px, 20, &key);
+    assert_eq!(r[1], "....................");
+    assert_eq!(r[2], ".....###............");
+    assert_eq!(r[5], ".....###............");
+    assert_eq!(g.clip_box(dc), (2, Rect::new(-3, 0, 3, 4)));
+    assert_eq!(g.set_pixel(dc, 0, 0, 0), 0);
+    assert_eq!(g.get_pixel(dc, 0, 0), 0);
+    assert_eq!(px[2 * 20 + 5], 0);
+}
+
+#[test]
+fn clip_rectangles_and_origins_in_clip_boxes() {
+    let mut g = Gdi::new();
+    let plain = u64::from(g.create_compatible_dc(0));
+    assert_eq!(g.clip_box(plain), (2, Rect::new(0, 0, 1, 1)));
+    let (dc, _px) = dib32(&mut g, 40, 30);
+    assert_eq!(g.clip_box(dc), (2, Rect::new(0, 0, 40, 30)));
+    assert_eq!(g.clip_rect(dc, Rect::new(5, 5, 30, 20), false), (3, 0));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(5, 5, 30, 20)));
+    assert_eq!(g.clip_rect(dc, Rect::new(5, 5, 30, 10), true), (3, 0));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(5, 10, 30, 20)));
+    assert_eq!(g.clip_rect(dc, Rect::new(10, 12, 15, 15), true), (3, 0));
+    assert_eq!(g.clip_box(dc), (3, Rect::new(5, 10, 30, 20)));
+    assert_eq!(g.clip_rect(dc, Rect::new(100, 100, 110, 110), false), (1, 0));
+    assert_eq!(g.clip_box(dc), (1, Rect::default()));
+    g.select_clip_rgn(dc, 0);
+    g.set_origin(dc, false, 10, 20);
+    assert_eq!(g.clip_box(dc), (2, Rect::new(10, 20, 50, 50)));
+    g.set_origin(dc, false, 0, 0);
+    g.set_origin(dc, true, 10, 20);
+    assert_eq!(g.clip_box(dc), (2, Rect::new(-10, -20, 30, 10)));
+    g.set_origin(dc, true, 0, 0);
+    // ExtSelectClipRgn without a clip region works on the whole surface.
+    let b = u64::from(g.create_rect_rgn(Rect::new(10, 10, 30, 25)).unwrap());
+    assert_eq!(g.ext_select_clip_rgn(dc, b, 2), (2, 0));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(0, 0, 40, 30)));
+    g.select_clip_rgn(dc, 0);
+    assert_eq!(g.ext_select_clip_rgn(dc, b, 4), (3, 0));
+    assert_eq!(g.ext_select_clip_rgn(dc, 0, 1), (0, 0));
+    assert_eq!(g.ext_select_clip_rgn(dc, b, 9), (0, ERROR_INVALID_PARAMETER));
+    assert_eq!(g.ext_select_clip_rgn(dc, 0, 5), (2, 0));
+    // SaveDC keeps the clip region.
+    g.clip_rect(dc, Rect::new(1, 1, 2, 2), false);
+    let level = g.save_dc(dc);
+    g.select_clip_rgn(dc, 0);
+    assert!(g.restore_dc(dc, level));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(1, 1, 2, 2)));
+    let dead = u64::from(g.create_compatible_dc(0));
+    g.delete_dc(dead);
+    assert_eq!(g.clip_box(dead).0, 0);
+}
+
+#[test]
+fn window_dcs_clip_to_their_visible_region() {
+    let mut g = Gdi::new();
+    // No geometry: the screen.
+    let dc = u64::from(g.create_display_dc(7, false));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(0, 0, 1024, 768)));
+    // A popup at -50,100, 200x100, with the screen's left edge cut off.
+    assert!(g.set_display_geometry(dc, (-50, 100), &[Rect::new(0, 100, 150, 200)], &[]));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(50, 0, 200, 100)));
+    let r = u64::from(g.create_rect_rgn(Rect::new(0, 0, 0, 0)).unwrap());
+    assert_eq!(g.random_rgn(dc, r, SYSRGN), 1);
+    assert_eq!(rgn_rects(&g, r), [Rect::new(0, 100, 150, 200)]);
+    // WS_CLIPCHILDREN: the child is left out, the box stays.
+    assert!(g.set_display_geometry(dc, (100, 300), &[Rect::new(100, 300, 300, 400)], &[Rect::new(250, 350, 350, 450)]));
+    assert_eq!(g.clip_box(dc), (3, Rect::new(0, 0, 200, 100)));
+    g.random_rgn(dc, r, SYSRGN);
+    assert_eq!(rgn_rects(&g, r), [Rect::new(100, 300, 300, 350), Rect::new(100, 350, 250, 400)]);
+    // A clip region in client coordinates, kept as given.
+    assert!(g.set_display_geometry(dc, (100, 100), &[Rect::new(100, 100, 300, 200)], &[]));
+    let big = u64::from(g.create_rect_rgn(Rect::new(150, 50, 400, 300)).unwrap());
+    assert_eq!(g.select_clip_rgn(dc, big), (2, 0));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(150, 50, 200, 100)));
+    g.clip_rgn(dc, r);
+    assert_eq!(rgn_rects(&g, r), [Rect::new(150, 50, 400, 300)]);
+    let out = u64::from(g.create_rect_rgn(Rect::new(300, 300, 400, 400)).unwrap());
+    assert_eq!(g.select_clip_rgn(dc, out), (1, 0));
+    assert_eq!(g.clip_box(dc), (1, Rect::default()));
+    // Hidden: nothing.
+    assert!(g.set_display_geometry(dc, (100, 300), &[], &[]));
+    g.select_clip_rgn(dc, 0);
+    assert_eq!(g.clip_box(dc), (1, Rect::default()));
+    // An update region narrows what can be drawn.
+    assert!(g.set_display_geometry(dc, (0, 0), &[Rect::new(0, 0, 200, 100)], &[]));
+    let two = crate::region::Region::from_rects(&[Rect::new(10, 10, 30, 20), Rect::new(100, 60, 150, 90)]);
+    assert!(g.set_system_clip(dc, Some(two)));
+    assert_eq!(g.clip_box(dc), (3, Rect::new(10, 10, 150, 90)));
+    assert_eq!(g.clip_rgn(dc, r), (0, 0));
+    assert!(g.set_system_clip(dc, None));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(0, 0, 200, 100)));
+    assert!(g.set_system_clip(dc, Some(crate::region::Region::from_rect(Rect::new(10, 20, 40, 50)))));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(10, 20, 40, 50)));
+    // A new GetDC on the same (own) DC is not limited any more.
+    assert!(g.set_display_geometry(dc, (0, 0), &[Rect::new(0, 0, 200, 100)], &[]));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(0, 0, 200, 100)));
+    let mem = u64::from(g.create_compatible_dc(0));
+    assert!(!g.set_display_geometry(mem, (0, 0), &[], &[]));
 }

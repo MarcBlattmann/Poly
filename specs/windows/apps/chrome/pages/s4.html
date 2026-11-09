@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Poly Chrome S4</title></head>
+<body>
+<p id="r">waiting</p>
+<iframe id="a" width="300" height="100"></iframe>
+<iframe id="b" width="300" height="100"></iframe>
+<script>
+// Loads one http and one https page over the network; the load event of the window waits for both frames.
+var done = { a: 0, b: 0 };
+function mark(k) { done[k] = 1; document.getElementById('r').textContent = 'http=' + done.a + ' https=' + done.b; }
+document.getElementById('a').onload = function () { mark('a'); };
+document.getElementById('b').onload = function () { mark('b'); };
+document.getElementById('a').src = 'http://example.com/';
+document.getElementById('b').src = 'https://www.iana.org/';
+</script>
+</body>
+</html>
