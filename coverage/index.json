@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "sources": {
+    "chrome-win-trace": {
+      "description": "Calls Chrome for Testing 157.0.8103.38 (win64) made on real Windows, recorded with the API tracer (specs/windows/apps/chrome)",
+      "revision": "157.0.8103.38"
+    },
     "linux-syscall-tbl": {
       "description": "Linux arch/x86/entry/syscalls/syscall_64.tbl",
       "revision": "f47d223627f80cb7a1eb14c585fe6cb35de5e984"
