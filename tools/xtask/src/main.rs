@@ -1927,14 +1927,28 @@ fn announced<'a>(output: &'a str, prefix: &str) -> Result<&'a str> {
 }
 
 fn host_tests() -> Result {
-    let mut cmd = cargo();
-    cmd.current_dir(root()).args(["test", "--workspace"]);
     // poly-font's tests on the bundled fonts run when they are fetched
     // (`cargo xtask fonts fetch`) and skip, saying so, when not.
-    if let Some(dir) = fonts::cached() {
-        cmd.env(fonts::TEST_ENV, dir);
-    }
-    step("host tests", &mut cmd)
+    let fonts = fonts::cached();
+    let cargo_test = |extra: &[&str]| {
+        let mut cmd = cargo();
+        cmd.current_dir(root()).arg("test").args(extra);
+        if let Some(dir) = &fonts {
+            cmd.env(fonts::TEST_ENV, dir);
+        }
+        cmd
+    };
+    // Build every test once, then run poly-ext2's long ones (the journal and
+    // ext4 tests: 70 s) beside the rest: cargo runs test binaries one after
+    // the other, and the machine has cores to spare.
+    step("build the host tests", &mut cargo_test(&["--workspace", "--no-run"]))?;
+    let (ext2, rest) = thread::scope(|s| {
+        let ext2 = s.spawn(|| step("host tests (poly-ext2)", &mut cargo_test(&["--package", "poly-ext2"])));
+        let rest = step("host tests", &mut cargo_test(&["--workspace", "--exclude", "poly-ext2"]));
+        (ext2.join().unwrap_or_else(|_| Err("the poly-ext2 tests panicked".into())), rest)
+    });
+    rest?;
+    ext2
 }
 
 fn test() -> Result {
@@ -1946,27 +1960,41 @@ fn test() -> Result {
 fn lint() -> Result {
     step("fmt (host)", cargo().current_dir(root()).args(["fmt", "--all", "--check"]))?;
     step("fmt (kernel)", cargo().current_dir(kernel_dir()).args(["fmt", "--check"]))?;
-    step(
-        "clippy (host)",
-        cargo().current_dir(root()).args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
-    )?;
-    step("clippy (kernel)", kernel_cargo()?.args(["clippy", "--", "-D", "warnings"]))?;
-    // xtask itself on Windows, so building and booting work on a Windows
-    // host too (hostfs.rs has the stand-ins for what needs Linux).
-    step(
-        "clippy (xtask for Windows)",
-        cargo().current_dir(root()).args([
-            "clippy",
-            "--package",
-            "xtask",
-            "--all-targets",
-            "--target",
-            "x86_64-pc-windows-msvc",
-            "--",
-            "-D",
-            "warnings",
-        ]),
-    )?;
+    // The three clippy runs that build apart (host and Windows xtask share
+    // `target/`, the kernel has its own, the native programs theirs) run
+    // side by side: a minute of a two-minute job.
+    let (host, kernel, native) = thread::scope(|s| {
+        let host = s.spawn(|| -> Result {
+            step(
+                "clippy (host)",
+                cargo().current_dir(root()).args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
+            )?;
+            // xtask itself on Windows, so building and booting work on a Windows
+            // host too (hostfs.rs has the stand-ins for what needs Linux).
+            step(
+                "clippy (xtask for Windows)",
+                cargo().current_dir(root()).args([
+                    "clippy",
+                    "--package",
+                    "xtask",
+                    "--all-targets",
+                    "--target",
+                    "x86_64-pc-windows-msvc",
+                    "--",
+                    "-D",
+                    "warnings",
+                ]),
+            )
+        });
+        let kernel = s.spawn(|| step("clippy (kernel)", kernel_cargo()?.args(["clippy", "--", "-D", "warnings"])));
+        // The native programs and poly-rt for the native target (ADR 0125).
+        let native = native::lint();
+        let join = |h: thread::ScopedJoinHandle<'_, Result>| h.join().unwrap_or_else(|_| Err("a lint panicked".into()));
+        (join(host), join(kernel), native)
+    });
+    host?;
+    kernel?;
+    native?;
     step(
         "fmt (ntdll)",
         cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
@@ -1977,8 +2005,6 @@ fn lint() -> Result {
             .args(["fmt", "--all", "--check", "--manifest-path"])
             .arg(root().join("personalities/nt/win32/Cargo.toml")),
     )?;
-    // The native programs and poly-rt for the native target (ADR 0125).
-    native::lint()?;
     // The Windows API tracer's DLL sources (no manifest of their own: the
     // kit's generated workspace builds them, wintrace.rs).
     step(

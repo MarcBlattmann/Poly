@@ -129,6 +129,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0141](0141-memory-and-cpus-for-interactive-boots-and-the-dev-menu.md) | `--memory` and `--cpus` for the interactive boots and a resources section in the dev menu: no RAM limit in the kernel, 16 CPUs at most, the host's limits greyed with the reason, boot tests keep fixed sizes | Accepted |
 | [0144](0144-client-side-frames-for-apps-that-ask.md) | A toplevel whose client asks for `client_side` (`zxdg_toplevel_decoration_v1.set_mode`) gets `configure(client_side)` and no Poly frame, its maximized and tiled sizes the whole area; every other toplevel keeps Poly's neutral frame (ADR 0106); Chromium shows one title bar instead of two | Accepted |
 | [0150](0150-ci-in-equal-sized-jobs.md) | CI jobs of equal length (about 7 minutes in all): boot test shards and `polycheck` slices combined into jobs by the workflow (`ci lint` checks every one runs), the Win32 modules and the apt packages' .deb files cached, prose-only pull requests skip the jobs that run programs, per-group times in the job summaries | Accepted |
+| [0156](0156-ci-builds-once.md) | CI builds the kernel, native programs, xtask, the pipeline tool and the Windows test programs once in two `build` jobs; the boot and pipeline jobs unpack them (`POLY_PREBUILT=1`) and only boot; the traced 7-Zip scenario runs on TCG (its 8 MB of serial output takes 3 minutes through a nested hypervisor); shards and slices rebalanced | Accepted |
 
 ## Decided by the owner
 

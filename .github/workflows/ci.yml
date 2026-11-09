@@ -82,13 +82,20 @@ jobs:
             kernel
       # The kernel embeds our ntdll.dll; xtask caches it in target/ntdll-cache
       # under a hash of its inputs. This job saves it, the others restore it.
-      - name: ntdll.dll's cache key
-        id: ntdll
-        run: echo "key=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
+      - name: ntdll.dll's and the Win32 modules' cache keys
+        id: keys
+        run: |
+          echo "ntdll=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
+          echo "win32=$(cargo xtask win32 --cache-key)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         with:
           path: target/ntdll-cache
-          key: ${{ steps.ntdll.outputs.key }}
+          key: ${{ steps.keys.outputs.ntdll }}
+      # clippy (kernel) embeds the Win32 modules too: 30 s to build them.
+      - uses: actions/cache@v4
+        with:
+          path: target/win32-cache
+          key: ${{ steps.keys.outputs.win32 }}
       - run: cargo xtask ci lint
 
   host-tests:
