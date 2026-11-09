@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "8a396a60cdf0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T18:09:27Z",
+  "tests": [
+    {
+      "name": "gtf_basic",
+      "exe_sha256": "9d1c874242af440d89eafdac5c7b5bdab79d8459c4003bd49e6de81e2776297c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UG9seVRlc3QgU2FucyAoMTMgY2hhcmFjdGVycyk6IGNvdW50IDEwMCByZXR1cm5lZCAxNCBlcnJvciAwOyB0ZXh0ICdQb2x5VGVzdCBTYW5zJyBOVUwgYXQgU29tZSgxMyk7IHVuaXRzIHdyaXR0ZW4gMTQKUG9seVRlc3QgU2FucyAoMTMgY2hhcmFjdGVycyk6IGNvdW50IDE0IHJldHVybmVkIDE0IGVycm9yIDA7IHRleHQgJ1BvbHlUZXN0IFNhbnMnIE5VTCBhdCBTb21lKDEzKTsgdW5pdHMgd3JpdHRlbiAxNApQb2x5VGVzdCBTYW5zICgxMyBjaGFyYWN0ZXJzKTogY291bnQgMTMgcmV0dXJuZWQgMTMgZXJyb3IgMDsgdGV4dCAnUG9seVRlc3QgU2FuJyBOVUwgYXQgU29tZSgxMik7IHVuaXRzIHdyaXR0ZW4gMTMKUG9seVRlc3QgU2FucyAoMTMgY2hhcmFjdGVycyk6IGNvdW50IDEyIHJldHVybmVkIDEyIGVycm9yIDA7IHRleHQgJ1BvbHlUZXN0IFNhJyBOVUwgYXQgU29tZSgxMSk7IHVuaXRzIHdyaXR0ZW4gMTIKUG9seVRlc3QgU2FucyAoMTMgY2hhcmFjdGVycyk6IGNvdW50IDUgcmV0dXJuZWQgNSBlcnJvciAwOyB0ZXh0ICdQb2x5JyBOVUwgYXQgU29tZSg0KTsgdW5pdHMgd3JpdHRlbiA1ClBvbHlUZXN0IFNhbnMgKDEzIGNoYXJhY3RlcnMpOiBjb3VudCAyIHJldHVybmVkIDIgZXJyb3IgMDsgdGV4dCAnUCcgTlVMIGF0IFNvbWUoMSk7IHVuaXRzIHdyaXR0ZW4gMgpQb2x5VGVzdCBTYW5zICgxMyBjaGFyYWN0ZXJzKTogY291bnQgMSByZXR1cm5lZCAxIGVycm9yIDA7IHRleHQgJycgTlVMIGF0IFNvbWUoMCk7IHVuaXRzIHdyaXR0ZW4gMQpQb2x5VGVzdCBTYW5zICgxMyBjaGFyYWN0ZXJzKTogY291bnQgMCByZXR1cm5lZCAwIGVycm9yIDg3OyBidWZmZXIgdW50b3VjaGVkIHRydWUKY291bnQgMCwgTlVMTCBidWZmZXI6IGNvdW50IDAgcmV0dXJuZWQgMTQgZXJyb3IgMDsgdGV4dCAnXHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3N31cdXs3Nzc3fVx1ezc3Nzd9XHV7Nzc3Nwpjb3VudCAtMTogY291bnQgLTEgcmV0dXJuZWQgMCBlcnJvciA4NzsgYnVmZmVyIHVudG91Y2hlZCB0cnVlCmNvdW50IC0xMDA6IGNvdW50IC0xMDAgcmV0dXJuZWQgMCBlcnJvciA4NzsgYnVmZmVyIHVudG91Y2hlZCB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "PolyTest Sans (13 characters): count 100 returned 14 error 0; text 'PolyTest Sans' NUL at Some(13); units written 14\nPolyTest Sans (13 characters): count 14 returned 14 error 0; text 'PolyTest Sans' NUL at Some(13); units written 14\nPolyTest Sans (13 characters): count 13 returned 13 error 0; text 'PolyTest San' NUL at Some(12); units written 13\nPolyTest Sans (13 characters): count 12 returned 12 error 0; text 'PolyTest Sa' NUL at Some(11); units written 12\nPolyTest Sans (13 characters): count 5 returned 5 error 0; text 'Poly' NUL at Some(4); units written 5\nPolyTest Sans (13 characters): count 2 returned 2 error 0; text 'P' NUL at Some(1); units written 2\nPolyTest Sans (13 characters): count 1 returned 1 error 0; text '' NUL at Some(0); units written 1\nPolyTest Sans (13 characters): count 0 returned 0 error 87; buffer untouched true\ncount 0, NULL buffer: count 0 returned 14 error 0; text '\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777}\\u{7777\ncount -1: count -1 returned 0 error 87; buffer untouched true\ncount -100: count -100 returned 0 error 87; buffer untouched true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    }
+  ]
+}
