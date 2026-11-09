@@ -61,6 +61,11 @@
 //!                       boot the toolkits' root disk (GTK, Qt, VLC; toolkits.rs, ADR 0120)
 //!                       to the desktop and the console's bash, and run the steps
 //!                       (run:LINE send:LINE expect:TEXT shot:NAME click:X,Y key:QCODE sleep:S)
+//!   macos fetch-chrome [x64|arm64]
+//!                       download the pinned Chrome for Testing for macOS into the cache (macimports.rs)
+//!   macos imports <app|zip|file|chrome-x64|chrome-arm64>... [--report <file.md>]
+//!                       what a macOS app's Mach-O files link and import, by name, against the
+//!                       SDK framework map in coverage/macos (ADR 0157; docs/macos/chrome-mac-imports.md)
 //!   chromium lock|fetch|root [--reference]|disk
 //!                       Chromium's root disk from pinned Debian packages (chromium.rs):
 //!                       write the lock, download and check the packages, unpack them
@@ -113,6 +118,7 @@ mod initramfs;
 mod input;
 mod ktest;
 mod libsearch;
+mod macimports;
 mod mesa;
 mod native;
 mod net;
@@ -212,7 +218,7 @@ fn main() -> ExitCode {
 }
 
 /// The commands [`dispatch`] runs (besides `start` and `pipeline`).
-const COMMANDS: [&str; 24] = [
+const COMMANDS: [&str; 25] = [
     "build",
     "run",
     "screenshot",
@@ -237,6 +243,7 @@ const COMMANDS: [&str; 24] = [
     "root-disk-test",
     "toolkits",
     "chromium",
+    "macos",
 ];
 
 /// Run `cargo xtask <args>`: the same functions for the command line and
@@ -269,6 +276,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("root-disk-test") => root_disk_test(),
         Some("toolkits") => toolkits::command(rest),
         Some("chromium") => chromium::command(rest),
+        Some("macos") => macimports::command(rest),
         other => Err(format!("no command {other:?}")),
     }
 }
