@@ -1,0 +1,72 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/SetEntriesInAclW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-chrome-win-2
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Builds a new ACL from an array of EXPLICIT_ACCESS_W entries and,
+  optionally, an existing ACL: a Win32 error code is returned (0 on
+  success), the new ACL is allocated with LocalAlloc and freed by the caller
+  with LocalFree.
+interface:
+  signature: "DWORD SetEntriesInAclW(ULONG count, PEXPLICIT_ACCESS_W entries, PACL old_acl, PACL* new_acl)"
+  explicit_access_w: "EXPLICIT_ACCESS_W (accctrl.h), 48 bytes on x64: access u32 @0, mode u32 @4, inherit u32 @8, 4 bytes padding @12, TRUSTEE_W @16..48"
+  trustee_w: "TRUSTEE_W (accctrl.h), 32 bytes on x64: pMultipleTrustee pointer @0, MultipleTrusteeOperation u32 @8, TrusteeForm u32 @12, TrusteeType u32 @16, 4 bytes padding @20, ptstrName pointer @24"
+  enumerations: "ACCESS_MODE: NOT_USED_ACCESS 0, GRANT_ACCESS 1, SET_ACCESS 2, DENY_ACCESS 3, REVOKE_ACCESS 4, SET_AUDIT_SUCCESS 5, SET_AUDIT_FAILURE 6; TRUSTEE_FORM: TRUSTEE_IS_SID 0, TRUSTEE_IS_NAME 1, TRUSTEE_BAD_FORM 2, TRUSTEE_IS_OBJECTS_AND_SID 3, TRUSTEE_IS_OBJECTS_AND_NAME 4; TRUSTEE_TYPE: UNKNOWN 0, USER 1, GROUP 2, DOMAIN 3, ALIAS 4, WELL_KNOWN_GROUP 5, DELETED_ACCOUNT 6, INVALID 7, COMPUTER 8; inheritance: NO_INHERITANCE 0, SUB_OBJECTS_ONLY_INHERIT 1 (= OBJECT_INHERIT_ACE), SUB_CONTAINERS_ONLY_INHERIT 2 (= CONTAINER_INHERIT_ACE), SUB_CONTAINERS_AND_OBJECTS_INHERIT 3, INHERIT_NO_PROPAGATE 4, INHERIT_ONLY 8 (accctrl.h, winnt.h)"
+  ace_layout: "ACCESS_ALLOWED_ACE / ACCESS_DENIED_ACE / SYSTEM_AUDIT_ACE: type u8 @0 (0 allowed, 1 denied, 2 audit), flags u8 @1, size u16 @2, mask u32 @4, SID @8 (winnt.h); audit flags SUCCESSFUL_ACCESS_ACE_FLAG 0x40, FAILED_ACCESS_ACE_FLAG 0x80"
+rules:
+  result: "a new ACL of revision 2 (ACL_REVISION) with exactly the needed size when there is no old ACL: one ACE for Everyone is 28 bytes (8 + 20), three ACEs 72 bytes; one ACE per entry in the order of the entries (allows), access masks stored verbatim (0x80000000, 0 and 0xFFFFFFFF too: no generic mapping)"
+  canonical_order: "deny ACEs are placed before allow ACEs: {grant Everyone 0x120089, deny SYSTEM 0x1F01FF} gives [deny SYSTEM, allow Everyone]"
+  modes: "GRANT_ACCESS (1) and SET_ACCESS (2) produce an allow ACE (type 0), DENY_ACCESS (3) a deny ACE (type 1), SET_AUDIT_SUCCESS (5) a system-audit ACE (type 2) with flags 0x40, SET_AUDIT_FAILURE (6) a type-2 ACE with flags 0x80; REVOKE_ACCESS (4) with no old ACL gives an empty ACL (size 8, 0 ACEs); NOT_USED_ACCESS (0), 7 and 100 fail with ERROR_INVALID_PARAMETER (87) and set *new_acl NULL"
+  inheritance: "inheritance 0..15 become the ACE flags unchanged (1 OBJECT_INHERIT, 2 CONTAINER_INHERIT, 4 NO_PROPAGATE, 8 INHERIT_ONLY, any combination), for allow and deny; inheritance 0x10 (INHERITED_ACE) produces no ACE at all (result 0, ACE count 0); 0x20, 0x40, 0x80, 0xFF, 0x100 and 0x10000 fail with 87"
+  old_acl_grant: "GRANT_ACCESS with an old ACL copies the old ACEs in canonical order and adds a new allow ACE, even for a trustee that already has an ACE (no merging of masks: the same SID appears twice, with the same or other bits and the same or other inheritance); the new ACL has the old ACL's AclSize (1024 for the 1024-byte old ACL) and is a new allocation; the old ACL is not modified"
+  old_acl_set: "SET_ACCESS removes the trustee's existing allow ACEs and puts the new ACE after the old deny ACEs (old [allow Everyone, allow SYSTEM (flags 3), deny Users] + set SYSTEM 0x1 gave [allow Everyone, deny Users, allow SYSTEM 0x1 flags 0]); for a new trustee it adds an ACE"
+  old_acl_deny: "DENY_ACCESS adds a deny ACE in front of everything (for a trustee that has an allow ACE, the allow is kept behind it)"
+  old_acl_revoke: "REVOKE_ACCESS removes the trustee's allow ACEs (the new ACL's AclSize is smaller by the size of the removed ACE: 1004 for 1024 - 20); it does not remove the trustee's deny ACEs; for a trustee without ACEs the ACL is copied"
+  old_acl_audit: "SET_AUDIT_SUCCESS on an ACL without audit ACEs puts a type-2 ACE (flags 0x40) first"
+  names: "a TRUSTEE_IS_NAME trustee is resolved with the account database: \"Everyone\", \"everyone\" -> S-1-1-0; \"SYSTEM\", \"NT AUTHORITY\\SYSTEM\" -> S-1-5-18; \"BUILTIN\\Administrators\", \"Administrators\" -> S-1-5-32-544; \"BUILTIN\\Users\", \"Users\" -> S-1-5-32-545; \"LOCAL SERVICE\" S-1-5-19; \"NETWORK SERVICE\" S-1-5-20; \"RESTRICTED\", \"NT AUTHORITY\\RESTRICTED\" S-1-5-12; \"ALL APPLICATION PACKAGES\" S-1-15-2-1; the empty name \"\" resolves to S-1-5-32 (BUILTIN domain) and gives an ACE"
+  zero_entries: "count 0 with a NULL entries pointer and no old ACL returns 0 and *new_acl NULL"
+errors:
+  invalid_mode: "mode 0 (NOT_USED_ACCESS), 7 or 100: ERROR_INVALID_PARAMETER (87), *new_acl NULL"
+  invalid_inheritance: "inheritance bits 0x20 and above (other than 0x10): 87"
+  invalid_trustee_form: "TrusteeForm TRUSTEE_BAD_FORM (2), 5 or 0xFFFF: 87"
+  unknown_name: "a name that does not exist (\"No Such Account Name Poly\") and \"ALL RESTRICTED APPLICATION PACKAGES\" and a SID string \"S-1-1-0\" used as a name: ERROR_NONE_MAPPED (1332)"
+  invalid_sid: "a SID-form trustee with an all-zero or revision-2 SID: 87 (see BuildTrusteeWithSidW)"
+side_effects: "allocates the new ACL (LocalAlloc); the old ACL and the entries are not changed"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  TRUSTEE_IS_OBJECTS_AND_SID / _NAME forms (they read a structure through
+  the name pointer), multiple trustees, remote systems, ACLs with more ACEs
+  than fit, object ACEs, mandatory-label ACEs in the old ACL. Domain
+  accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

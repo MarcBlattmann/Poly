@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "db56e24d0ac3",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T17:08:29Z",
+  "tests": [
+    {
+      "name": "btn_use",
+      "exe_sha256": "052e78c597e641d03c76923e2d788ba3492531f04ae4c2179d480de5aa32c94f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bmFtZSAiRXZlcnlvbmUiOiBhY2wgcmV2PTIgc2J6MT0wIHNpemU9MjggY291bnQ9MSBzYnoyPTAKbmFtZSAiRXZlcnlvbmUiOiBhY2UgMCBvZmY9OCB0eXBlPTB4MCBmbGFncz0weDAgc2l6ZT0yMCBtYXNrPTB4MTIwMDg5IHNpZD1TLTEtMS0wCm5hbWUgIlNZU1RFTSAiOiByZXN1bHQgMTMzMgpuYW1lICIgU1lTVEVNIjogcmVzdWx0IDEzMzIKbmFtZSAic3lzdGVtIjogYWNsIHJldj0yIHNiejE9MCBzaXplPTI4IGNvdW50PTEgc2J6Mj0wCm5hbWUgInN5c3RlbSI6IGFjZSAwIG9mZj04IHR5cGU9MHgwIGZsYWdzPTB4MCBzaXplPTIwIG1hc2s9MHgxMjAwODkgc2lkPVMtMS01LTE4Cm5hbWUgIk5UIEFVVEhPUklUWVxcc3lzdGVtIjogYWNsIHJldj0yIHNiejE9MCBzaXplPTI4IGNvdW50PTEgc2J6Mj0wCm5hbWUgIk5UIEFVVEhPUklUWVxcc3lzdGVtIjogYWNlIDAgb2ZmPTggdHlwZT0weDAgZmxhZ3M9MHgwIHNpemU9MjAgbWFzaz0weDEyMDA4OSBzaWQ9Uy0xLTUtMTgKbmFtZSAiQlVJTFRJTlxcQURNSU5JU1RSQVRPUlMiOiBhY2wgcmV2PTIgc2J6MT0wIHNpemU9MzIgY291bnQ9MSBzYnoyPTAKbmFtZSAiQlVJTFRJTlxcQURNSU5JU1RSQVRPUlMiOiBhY2UgMCBvZmY9OCB0eXBlPTB4MCBmbGFncz0weDAgc2l6ZT0yNCBtYXNrPTB4MTIwMDg5IHNpZD1TLTEtNS0zMi01NDQKbmFtZSAiQXV0aGVudGljYXRlZCBVc2VycyI6IGFjbCByZXY9MiBzYnoxPTAgc2l6ZT0yOCBjb3VudD0xIHNiejI9MApuYW1lICJBdXRoZW50aWNhdGVkIFVzZXJzIjogYWNlIDAgb2ZmPTggdHlwZT0weDAgZmxhZ3M9MHgwIHNpemU9MjAgbWFzaz0weDEyMDA4OSBzaWQ9Uy0xLTUtMTEKbmFtZSAiSU5URVJBQ1RJVkUiOiBhY2wgcmV2PTIgc2J6MT0wIHNpemU9MjggY291bnQ9MSBzYnoyPTAKbmFtZSAiSU5URVJBQ1RJVkUiOiBhY2UgMCBvZmY9OCB0eXBlPTB4MCBmbGFncz0weDAgc2l6ZT0yMCBtYXNrPTB4MTIwMDg5IHNpZD1TLTEtNS00Cm5hbWUgIkxvY2FsIGFjY291bnQiOiBhY2wgcmV2PTIgc2J6MT0wIHNpemU9MjggY291bnQ9MSBzYnoyPTAKbmFtZSAiTG9jYWwgYWNjb3VudCI6IGFjZSAwIG9mZj04IHR5cGU9MHgwIGZsYWdzPTB4MCBzaXplPTIwIG1hc2s9MHgxMjAwODkgc2lkPVMtMS01LTExMwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "name \"Everyone\": acl rev=2 sbz1=0 size=28 count=1 sbz2=0\nname \"Everyone\": ace 0 off=8 type=0x0 flags=0x0 size=20 mask=0x120089 sid=S-1-1-0\nname \"SYSTEM \": result 1332\nname \" SYSTEM\": result 1332\nname \"system\": acl rev=2 sbz1=0 size=28 count=1 sbz2=0\nname \"system\": ace 0 off=8 type=0x0 flags=0x0 size=20 mask=0x120089 sid=S-1-5-18\nname \"NT AUTHORITY\\\\system\": acl rev=2 sbz1=0 size=28 count=1 sbz2=0\nname \"NT AUTHORITY\\\\system\": ace 0 off=8 type=0x0 flags=0x0 size=20 mask=0x120089 sid=S-1-5-18\nname \"BUILTIN\\\\ADMINISTRATORS\": acl rev=2 sbz1=0 size=32 count=1 sbz2=0\nname \"BUILTIN\\\\ADMINISTRATORS\": ace 0 off=8 type=0x0 flags=0x0 size=24 mask=0x120089 sid=S-1-5-32-544\nname \"Authenticated Users\": acl rev=2 sbz1=0 size=28 count=1 sbz2=0\nname \"Authenticated Users\": ace 0 off=8 type=0x0 flags=0x0 size=20 mask=0x120089 sid=S-1-5-11\nname \"INTERACTIVE\": acl rev=2 sbz1=0 size=28 count=1 sbz2=0\nname \"INTERACTIVE\": ace 0 off=8 type=0x0 flags=0x0 size=20 mask=0x120089 sid=S-1-5-4\nname \"Local account\": acl rev=2 sbz1=0 size=28 count=1 sbz2=0\nname \"Local account\": ace 0 off=8 type=0x0 flags=0x0 size=20 mask=0x120089 sid=S-1-5-113\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}
