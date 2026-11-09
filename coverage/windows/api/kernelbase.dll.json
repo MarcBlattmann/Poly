@@ -499,7 +499,7 @@
 {"symbol":"GetNumberOfConsoleMouseButtons","src":["wine-spec"]},
 {"symbol":"GetOEMCP","status":"claimed","claimed_by":"kernel32-2","src":["wine-spec"],"seeds":["wine:kernel32/tests/console.c:test_FreeConsole"]},
 {"symbol":"GetOverlappedResult","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:kernel32/tests/pipe.c:test_overlapped_error","wine:kernel32/tests/comm.c:test_WaitRx","wine:kernel32/tests/file.c:test_overlapped_read","wine:kernel32/tests/comm.c:test_WaitCommEvent","wine:kernel32/tests/comm.c:test_WaitDcd","wine:kernel32/tests/comm.c:test_WaitDsr","wine:kernel32/tests/comm.c:test_WaitRing","wine:kernel32/tests/pipe.c:test_nowait"]},
-{"symbol":"GetOverlappedResultEx","status":"claimed","claimed_by":"impl-win-ipc","src":["wine-spec"],"seeds":["wine:kernel32/tests/pipe.c:test_GetOverlappedResultEx","wine:kernel32/tests/file.c:test_overlapped"]},
+{"symbol":"GetOverlappedResultEx","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:kernel32/tests/pipe.c:test_GetOverlappedResultEx","wine:kernel32/tests/file.c:test_overlapped"]},
 {"symbol":"GetPackageFamilyName","src":["wine-spec"]},
 {"symbol":"GetPackageFullName","src":["wine-spec"]},
 {"symbol":"GetPackagePathByFullName","src":["wine-spec"]},
