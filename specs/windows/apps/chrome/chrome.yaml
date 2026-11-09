@@ -60,6 +60,7 @@ stages:
   s5:
     command: "chrome.exe --headless --no-sandbox --dump-dom file:///<dir>/pages/s1.html (GPU flags at their defaults)"
     results:
+      - "the S3 window without --disable-gpu gives the same title sequence and exit code; its GPU process adds display-configuration queries (QueryDisplayConfig, GetMonitorInfoW, MonitorFromWindow) to S3's"
       - "the same 440 bytes and exit code as S1; the GPU process makes 23 more distinct API calls (traces/s5.trace.json); with a window (S3) it creates a D3D11 device, a DXGI factory and a DirectComposition device"
 errors:
   missing_optional_module: "LoadLibraryExW of optimization_guide_internal.dll fails (not in the zip); tolerated"
