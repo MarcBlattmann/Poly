@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtCreateNamedPipeFile.yaml
+id: windows/api/ntdll.dll/NtCreateNamedPipeFile
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CreateNamedPipeW function (NtCreateNamedPipeFile is what it calls; the prototype is in ntifs.h), Named Pipe Type, Read, and Wait Modes. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Creates a named pipe instance under \??\pipe\<name> with a create disposition, share access, pipe type, read and completion mode, instance limit, quotas and default time-out. FILE_CREATE makes the first instance and fails when the name exists; FILE_OPEN_IF adds instances up to the limit.
+interface:
+  signature: "NTSTATUS NtCreateNamedPipeFile(PHANDLE h, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes, PIO_STATUS_BLOCK iosb, ULONG shareAccess, ULONG createDisposition, ULONG createOptions, ULONG pipeType, ULONG readMode, ULONG completionMode, ULONG maxInstances, ULONG inboundQuota, ULONG outboundQuota, PLARGE_INTEGER defaultTimeout)"
+rules:
+  first_instance: "FILE_CREATE with a new name: STATUS_SUCCESS, IO_STATUS_BLOCK information FILE_CREATED (2). kernel32 sees an ordinary server end: GetNamedPipeInfo flags 5 (server, message) for a message pipe, the quotas as given, the maximum, GetNamedPipeHandleState read mode message, instances 1; CreateFileW opens it."
+  name_exists: "FILE_CREATE on an existing name: STATUS_ACCESS_DENIED (0xC0000022)."
+  further_instances: "FILE_OPEN_IF on an existing name adds an instance (STATUS_SUCCESS, information FILE_OPENED (1)); beyond the maximum: STATUS_INSTANCE_NOT_AVAILABLE (0xC00000AB), no handle. FILE_OPEN_IF on a missing name creates it (information FILE_CREATED). FILE_OPEN on a missing name: STATUS_OBJECT_NAME_NOT_FOUND (0xC0000034)."
+  parameters: "type byte (0) with message read mode (1): STATUS_INVALID_PARAMETER; maximum instances 0: STATUS_INVALID_PARAMETER; completion mode 2 and FILE_SUPERSEDE: STATUS_INVALID_PARAMETER; pipe type 2 was accepted; completion mode 1 gives PIPE_NOWAIT in GetNamedPipeHandleState."
+  not_in_pipe_device: "a path outside the pipe device (\\??\\C:\\...): STATUS_INVALID_DEVICE_REQUEST (0xC0000010)."
+  client_side: "the client opens with NtCreateFile on the same \\??\\pipe\\ path: a missing pipe is STATUS_OBJECT_NAME_NOT_FOUND; a listening instance opens (STATUS_SUCCESS; the handle starts in byte read mode and wait mode, kernel32 reports client flags 0 and reads/writes work); a busy or closing one gives STATUS_PIPE_NOT_AVAILABLE (0xC00000AC); the share access given to NtCreateNamedPipeFile follows the direction as CreateNamedPipeW sets it (inbound 2, outbound 1, duplex 3) and with it a reading client of an inbound pipe is refused with STATUS_ACCESS_DENIED while a writing one opens; every create disposition (supersede, create, open-if, overwrite, overwrite-if) opened a listening instance successfully."
+errors:
+  name_exists: "STATUS_ACCESS_DENIED"
+  instance_limit: "STATUS_INSTANCE_NOT_AVAILABLE"
+  bad_parameter: "STATUS_INVALID_PARAMETER"
+  not_found: "STATUS_OBJECT_NAME_NOT_FOUND"
+side_effects: "creates a pipe instance"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Named I/O completion ports (object names), file handles associated through NtSetInformationFile(FileCompletionInformation), non-pipe files, remote pipes, security descriptors.

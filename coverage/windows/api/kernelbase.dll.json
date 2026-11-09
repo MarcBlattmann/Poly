@@ -579,7 +579,7 @@
 {"symbol":"GetThreadErrorMode","src":["wine-spec"],"seeds":["wine:kernel32/tests/thread.c:test_ThreadErrorMode"]},
 {"symbol":"GetThreadGroupAffinity","src":["wine-spec"],"seeds":["wine:kernel32/tests/thread.c:test_thread_processor","wine:kernel32/tests/thread.c:thread_ex_proc"]},
 {"symbol":"GetThreadIOPendingFlag","src":["wine-spec"]},
-{"symbol":"GetThreadId","src":["wine-spec"],"seeds":["wine:ntdll/tests/om.c:test_get_next_thread"]},
+{"symbol":"GetThreadId","status":"claimed","claimed_by":"spec-win-ipc","src":["wine-spec"],"seeds":["wine:ntdll/tests/om.c:test_get_next_thread"]},
 {"symbol":"GetThreadIdealProcessorEx","src":["wine-spec"]},
 {"symbol":"GetThreadLocale","src":["wine-spec"],"seeds":["wine:kernel32/tests/codepage.c:test_threadcp","wine:vbscript/tests/run.c:test_setlocale_does_not_touch_thread_locale","wine:setupapi/tests/stringtable.c:test_stringtable_layout","wine:ole32/tests/moniker.c:test_bind_context","wine:winmm/tests/mci.c:test_openCloseWAVE","wine:user32/tests/msg.c:test_unicode_wm_char","wine:user32/tests/resource.c:test_LoadStringW","wine:advapi32/tests/lsa.c:test_LsaLookupNames2"]},
 {"symbol":"GetThreadPreferredUILanguages","src":["wine-spec"],"seeds":["wine:kernel32/tests/locale.c:test_GetThreadPreferredUILanguages"]},
