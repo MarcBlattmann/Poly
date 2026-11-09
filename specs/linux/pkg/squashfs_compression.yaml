@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/squashfs_compression              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; /tmp is the container's overlay file system; loop devices, /dev/loop-control and squashfs (gzip, xz, lzo, lz4; NOT zstd, NOT legacy lzma) are in the kernel; mksquashfs 4.6.1 builds the images"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  Compression schemes and layout options of squashfs images, as seen by mount and by the data
+  read back. The compression id is the u16 at offset 20 of the superblock: 1 gzip (zlib stream), 2
+  lzma (legacy), 3 lzo, 4 xz, 5 lz4, 6 zstd. Images of the "small" tree (hello.txt, d/inner.txt, the
+  symlink l, pattern.txt of 9000 bytes; see squashfs_mount) built with mksquashfs 4.6.1 mount and read
+  back identically (same modes, sizes, symlink target, the 9000-byte pattern byte for byte, also
+  across 4096-byte block boundaries; statfs f_type 0x73717368, f_files 6) for gzip, xz, lzo, lz4 (these
+  carry a compression-options block after the superblock) and for an image built with -noD -noI -noF -noX
+  (data blocks, inodes, fragments and xattrs stored uncompressed: the superblock flags have the
+  matching "uncompressed" bits; the image is 9519 bytes and is read without a decompressor).
+  zstd images (id 6): the reference kernel had no zstd support in squashfs (mount fails with EINVAL,
+  the kernel logs "compression not supported"); the tests accept that failure or a correct mount
+  (Poly should mount them). Legacy lzma (id 2): mount fails with EINVAL and the loop device stays bound.
+  A gzip image whose superblock names xz (id 4) is not accepted: the metadata cannot be decompressed and
+  mount returns EIO. A failed mount leaves no state: a good image mounts right after.
+  Block size (mksquashfs -b): 4096, 131072 and 1048576 (the largest allowed) are accepted: f_bsize
+  reports it, f_blocks is 1 for these tiny images, contents are unchanged, st_blksize of an inode
+  is 1024 whatever the block size. With -no-fragments (fragment count 0 in the superblock) every file
+  tail is a block of its own; everything reads back the same and f_bsize is 4096. Duplicate files:
+  with duplicate removal (the default) three files of the same content share their data, with
+  -no-duplicates each has its own; either way the file system has five inodes (f_files 5), the
+  three files are separate inodes (different st_ino, nlink 1), each reads its content ("same content
+  here\n", 18 bytes, mode 0644) and the fourth file its own ("other\n").
+  Build commands: every image was built with -noappend -no-progress -quiet -mkfs-time 0 -all-time 0
+  -processors 1 -all-root -b <block> -comp <name> from a tree whose timestamps were set to 0, adding -noD
+  -noI -noF -noX (uncompressed), -no-fragments or -no-duplicates where named; "dups" is the tree
+  one, two, three (the same 18 bytes) and four (6 bytes). The images are embedded in the tests as byte
+  arrays; sizes in bytes: gzip 493, xz 766, zstd 487, lz4 523, lzo 475, lzma 556, uncompressed 9519,
+  128 KiB blocks 403, 1 MiB blocks 403, no fragments 478, dups 291, no-duplicates 302.
+returns:
+  mount_ok: "0 for gzip, xz, lzo, lz4, uncompressed, block sizes 4096..1 MiB, with or without fragments and duplicate removal"
+  statfs: "f_bsize = the image's block size; f_files 6 for the small tree, 5 for the dups tree"
+errors:
+  lzma_legacy: "EINVAL (22), device stays bound"
+  zstd: "EINVAL (22) on the reference kernel (no zstd); success also accepted"
+  wrong_compressor_id: "EIO (5): the superblock names another compressor than the data uses"
+side_effects: none
+threading: decompression may run on several CPUs
+ordering: []
+timing:
+  typical: "reading a few KiB takes microseconds"
+  guarantees: none
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: compression ids and superblock layout are in the public squashfs documentation. Poly needs
+# at least gzip, xz, lz4, lzo and zstd decompressors for AppImages and distribution images.

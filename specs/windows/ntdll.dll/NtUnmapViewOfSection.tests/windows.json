@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "ntsec_unmap",
+      "exe_sha256": "cc1c1fe559253ecb79b6a54fd9dbad4afa15fe8102cf3e146043b143bee04bd7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgbWFwX3N0YXR1cwpvayBtYXBwZWRfYmVmb3JlCm9rIHVubWFwX3N0YXR1cwpvayBmcmVlX2FmdGVyX3VubWFwCm9rIHVubWFwX2FnYWluX3N0YXR1cwpvayB1bm1hcF93cml0ZXJfdmlldwpvayBkYXRhX3N1cnZpdmVzX3VubWFwX2FuZF9yZW1hcApvayB1bm1hcF9pbnNpZGVfdmlld19zdGF0dXMKb2sgd2hvbGVfdmlld19nb25lX2FmdGVyX2lubmVyX3VubWFwCm9rIGJhc2VfaXNfbm90X21hcHBlZF9hbnlfbW9yZQpvayB1bm1hcF91bmFsaWduZWRfaW5zaWRlX3ZpZXcKb2sgdW5tYXBfbnVsbF9zdGF0dXMKb2sgdW5tYXBfdW5tYXBwZWRfaGlnaF9hZGRyZXNzX3N0YXR1cwpvayB2aXJ0dWFsX2FsbG9jX29rCm9rIHVubWFwX3ZpcnR1YWxfYWxsb2Nfc3RhdHVzCm9rIHZpcnR1YWxfYWxsb2Nfc3RpbGxfdGhlcmUKb2sgbWFwX3ZpZXdfb2ZfZmlsZV9vawpvayB1bm1hcF92aWV3X29mX2ZpbGVfb2sKb2sgdW5tYXBfdmlld19vZl9maWxlX2FnYWluX2ZhaWxzCm9rIHVubWFwX3ZpZXdfb2ZfZmlsZV9hZ2Fpbl9lcnJvcgpvayB1bm1hcF92aWV3X29mX2ZpbGVfbnVsbF9mYWlscwpvayB1bm1hcF92aWV3X29mX2ZpbGVfbnVsbF9lcnJvcgpzdW1tYXJ5IDIyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok map_status\nok mapped_before\nok unmap_status\nok free_after_unmap\nok unmap_again_status\nok unmap_writer_view\nok data_survives_unmap_and_remap\nok unmap_inside_view_status\nok whole_view_gone_after_inner_unmap\nok base_is_not_mapped_any_more\nok unmap_unaligned_inside_view\nok unmap_null_status\nok unmap_unmapped_high_address_status\nok virtual_alloc_ok\nok unmap_virtual_alloc_status\nok virtual_alloc_still_there\nok map_view_of_file_ok\nok unmap_view_of_file_ok\nok unmap_view_of_file_again_fails\nok unmap_view_of_file_again_error\nok unmap_view_of_file_null_fails\nok unmap_view_of_file_null_error\nsummary 22 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

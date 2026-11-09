@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtUnmapViewOfSection.yaml
+id: windows/api/ntdll.dll/NtUnmapViewOfSection
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: ZwUnmapViewOfSection, UnmapViewOfFile function, VirtualQuery function. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Removes a mapped view from a process. Any address inside the view unmaps the whole view; addresses that are not in a view give STATUS_NOT_MAPPED_VIEW. Data written through the view stays in the section.
+interface:
+  signature: "NTSTATUS NtUnmapViewOfSection(HANDLE process, PVOID baseAddress)"
+rules:
+  unmap: "the view's base: STATUS_SUCCESS; VirtualQuery then reports MEM_FREE; unmapping the base again: STATUS_NOT_MAPPED_VIEW (0xC0000019)."
+  inside_the_view: "an address inside the view (base + 4096, base + 1) unmaps the whole view (STATUS_SUCCESS; the range is MEM_FREE)."
+  not_a_view: "NULL, an unused high address (0x100000000000) and memory from VirtualAlloc: STATUS_NOT_MAPPED_VIEW; the VirtualAlloc memory stays committed."
+  data_survives: "bytes written through a view are there when the section is mapped again."
+  kernel32: "UnmapViewOfFile on a view base: TRUE; again or with NULL: FALSE with ERROR_INVALID_ADDRESS (487)."
+  other_process: "with a process handle that has PROCESS_VM_OPERATION, the view is removed from the other process (the child then sees MEM_FREE); the same address again: STATUS_NOT_MAPPED_VIEW; the parent's own view is untouched; after the child exited: STATUS_PROCESS_IS_TERMINATING (0xC000010A)."
+errors:
+  not_mapped: "STATUS_NOT_MAPPED_VIEW (0xC0000019); kernel32 ERROR_INVALID_ADDRESS (487)"
+  exited_process: "STATUS_PROCESS_IS_TERMINATING (0xC000010A)"
+side_effects: "frees the view's address range"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Image sections (SEC_IMAGE), large pages, section offsets in the megabytes, physical memory, sections of other users' processes, security descriptors.

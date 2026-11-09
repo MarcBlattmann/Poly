@@ -1811,3 +1811,131 @@ fn without_3d_resources_are_2d_and_transfers_go_one_way() {
     let card = t.dev.open(Node::Primary);
     assert_eq!(t.getparam(card, vg::param::THREE_D_FEATURES), Ok(0));
 }
+
+// --- Display changes (ADR 0145) ----------------------------------------------
+
+impl T {
+    /// The hardware's output 0 is now `w` x `h` (a window was resized).
+    fn resize_output(&mut self, w: u32, h: u32) {
+        self.dev.hardware().outputs[0] = output(w, h);
+    }
+
+    fn hotplug_events(&mut self, file: FileId) -> Vec<EventHotplug> {
+        let bytes = self.read(file).unwrap_or_default();
+        bytes.chunks_exact(event::LEN).map(EventHotplug::decode).collect()
+    }
+}
+
+#[test]
+fn a_display_change_probes_again_and_tells_every_primary_file() {
+    let mut t = T::one();
+    let (a, b) = (t.dev.open(Node::Primary), t.dev.open(Node::Primary));
+    let render = t.dev.open(Node::Render);
+    let (_, conn, _) = t.ids(a);
+    assert_eq!(t.connector(a, conn).1[0].hdisplay, 1024);
+    t.resize_output(1313, 877);
+    // Nothing is told until the kernel says the display changed.
+    assert_eq!(t.read(a), Err(Errno::EAGAIN));
+    assert_eq!(t.dev.display_changed(t.now), 2);
+    let e = t.hotplug_events(a);
+    assert_eq!(e.len(), 1);
+    assert_eq!((e[0].ty, e[0].length, e[0].sequence), (event::HOTPLUG, 32, 1));
+    assert_eq!(t.hotplug_events(b).len(), 1);
+    // The render node gets none.
+    assert_eq!(t.read(render), Err(Errno::EAGAIN));
+    // The connector reports the new preferred mode without another probe by
+    // the client: the device probed.
+    let modes = t.connector(a, conn).1;
+    let preferred = modes.iter().find(|m| m.ty & mode::TYPE_PREFERRED != 0).unwrap();
+    assert_eq!((preferred.hdisplay, preferred.vdisplay), (1313, 877));
+}
+
+#[test]
+fn a_file_that_has_not_read_the_last_hotplug_gets_no_second_one() {
+    let mut t = T::one();
+    let f = t.dev.open(Node::Primary);
+    t.resize_output(1100, 700);
+    assert_eq!(t.dev.display_changed(t.now), 1);
+    t.resize_output(1200, 800);
+    // Coalesced: the file will probe afresh when it reads the first.
+    assert_eq!(t.dev.display_changed(t.now), 0);
+    assert_eq!(t.hotplug_events(f).len(), 1);
+    // Read: the next change is told again, with the next sequence.
+    t.resize_output(1300, 900);
+    assert_eq!(t.dev.display_changed(t.now), 1);
+    let e = t.hotplug_events(f);
+    assert_eq!((e.len(), e[0].sequence), (1, 3));
+}
+
+#[test]
+fn a_probe_by_another_client_does_not_lose_the_hotplug_event() {
+    let mut t = T::one();
+    let (compositor, other) = (t.dev.open(Node::Primary), t.dev.open(Node::Primary));
+    let (_, conn, _) = t.ids(other);
+    t.resize_output(1500, 900);
+    // `other` probes the connector (modetest, a Mesa client) before the
+    // kernel reports the change: the device already knows the new size.
+    assert_eq!(t.connector(other, conn).1[0].hdisplay, 1500);
+    // The event still goes out: it is the hardware's report, not a diff.
+    assert_eq!(t.dev.display_changed(t.now), 2);
+    assert_eq!(t.hotplug_events(compositor).len(), 1);
+}
+
+#[test]
+fn hotplug_events_sit_in_the_queue_with_flip_events_and_unknown_types_are_skippable() {
+    let mut t = T::one();
+    let (f, crtc, _conn, fb, _) = t.showing();
+    let mut p =
+        PageFlip { crtc_id: crtc, fb_id: fb, flags: mode::PAGE_FLIP_EVENT, user_data: 7, ..PageFlip::default() }
+            .to_bytes();
+    t.ok(f, ioctl::MODE_PAGE_FLIP, &mut p);
+    t.resize_output(1280, 720);
+    t.dev.display_changed(t.now);
+    t.now += 100 * MS;
+    let bytes = t.read(f).unwrap();
+    // Every event is 32 bytes and says so; a client walks them by length.
+    let mut types = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        let (ty, len) = (
+            u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()),
+            u32::from_le_bytes(bytes[at + 4..at + 8].try_into().unwrap()),
+        );
+        types.push(ty);
+        at += len as usize;
+    }
+    assert!(types.contains(&event::HOTPLUG));
+    assert!(types.contains(&event::FLIP_COMPLETE));
+    const { assert!(event::HOTPLUG & 0x8000_0000 != 0) };
+}
+
+#[test]
+fn a_client_follows_a_resize_with_new_buffers_and_a_new_mode() {
+    let mut t = T::one();
+    let (f, crtc, conn, old_fb, _) = t.showing();
+    t.calls();
+    t.resize_output(1313, 877);
+    t.dev.display_changed(t.now);
+    let modes = t.connector(f, conn).1;
+    let preferred = *modes.iter().find(|m| m.ty & mode::TYPE_PREFERRED != 0).unwrap();
+    assert_eq!((preferred.hdisplay, preferred.vdisplay), (1313, 877));
+    // New buffers of the new size, the mode set on the first, the old
+    // framebuffers removed.
+    let d = t.dumb(f, 1313, 877);
+    let fb = t.addfb2(f, &d, 1313, 877).unwrap();
+    assert_eq!(t.setcrtc(f, crtc, fb, conn, Some(preferred)), Ok(Reply::Done(0)));
+    let mut rm = old_fb.to_ne_bytes();
+    t.ok(f, ioctl::MODE_RMFB, &mut rm);
+    let calls = t.calls();
+    assert!(
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::Scanout(0, Some((id, r))) if *id == fb && (r.width, r.height) == (1313, 877)))
+    );
+    assert!(calls.contains(&Call::DestroyFb(old_fb)));
+    // The CRTC is showing the new mode.
+    let mut g = ModeCrtc { crtc_id: crtc, ..ModeCrtc::default() }.to_bytes();
+    t.ok(f, ioctl::MODE_GETCRTC, &mut g);
+    let c = ModeCrtc::decode(&g);
+    assert_eq!((c.fb_id, c.mode.hdisplay, c.mode.vdisplay), (fb, 1313, 877));
+}

@@ -1,0 +1,90 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/proc_ns_ioctl              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; unprivileged user namespaces allowed; the tests that use mount make a mount namespace of their own"
+  observed_by: spec-linux-pkg
+  date: 2026-11-09
+summary: >
+  The namespace files /proc/<pid>/ns/<type> and the ioctls on them (the
+  interface of ip-netns, nsenter, bubblewrap and container runtimes; numbers
+  from linux/nsfs.h).
+  Files of another process: for a child that made UTS, network and IPC
+  namespaces, readlink gives "<type>:[<inode>]" with the inode of the opened
+  file, different from the caller's for the namespaces the child made and
+  equal for the ones it shares (mnt, user, pid, cgroup); lstat shows a
+  symbolic link of mode 0777 and size 0, stat the regular file of mode 0444;
+  opening it for writing (O_WRONLY, O_RDWR) is EPERM. A process with another
+  uid (65534) may read its own links but may not follow another user's
+  (readlink EACCES). Another root process joins the child's namespaces
+  through the files (setns): its host name becomes the child's and its
+  network and IPC namespace inodes are the child's. A descriptor kept open
+  keeps the namespace usable after the child has ended and been waited for,
+  while /proc/<pid>/ns itself is gone (ENOENT).
+  ioctl on a namespace file: NS_GET_NSTYPE (0xb703) returns the CLONE_NEW*
+  constant of the namespace's type (user 0x10000000, net 0x40000000, mnt
+  0x20000, uts 0x04000000, ipc 0x08000000, pid and pid_for_children
+  0x20000000, cgroup 0x02000000, time and time_for_children 0x80).
+  NS_GET_USERNS (0xb701) returns a new descriptor (close-on-exec set) for the
+  user namespace that owns the namespace (for the net namespace of an
+  initial-user process: the user namespace the process is in, same inode). On
+  the initial user namespace NS_GET_USERNS and on the initial pid namespace
+  NS_GET_PARENT fail with EPERM; NS_GET_PARENT on a net namespace is EINVAL.
+  NS_GET_OWNER_UID (0xb704) stores the owner's uid in an unsigned int for a
+  user namespace and is EINVAL for any other type. NS_GET_MNTNS_ID
+  (0x8008b705) stores a non-zero 64-bit id for a mount namespace, the same on
+  every call and different after unshare(CLONE_NEWNS); other types: EINVAL.
+  An unknown request number (0xb7ff) is ENOTTY. The descriptors work opened
+  O_RDONLY.
+  Hierarchy: the parent namespace's process asks about a child's
+  namespaces: for a process with uid 1000 that made a user namespace (mapped
+  "0 1000 1" by its root parent), NS_GET_PARENT and NS_GET_USERNS of its user
+  namespace file (opened through /proc/<pid>/ns/user) give the parent's own
+  user namespace (same inode as the parent's /proc/self/ns/user);
+  NS_GET_OWNER_UID is 1000 there, and 0 for the initial user namespace. From
+  inside the namespace the same questions about its own user namespace are
+  EPERM (the answer would be outside the caller's scope), while NS_GET_OWNER_UID
+  of its own namespace works and is 0. A network namespace made inside it is
+  owned by it: NS_GET_USERNS gives the same inode as /proc/self/user. For a
+  pid namespace made by clone(CLONE_NEWPID) the creator asking through
+  /proc/<pid>/ns/pid gets its own pid namespace as NS_GET_PARENT; the process
+  inside the new namespace gets EPERM for the same question.
+  Persisting a namespace: bind-mounting a namespace file onto a regular file
+  keeps the namespace alive (what "ip netns add" does). The bind mount works
+  (MS_BIND of /proc/self/ns/uts onto a regular file), onto a directory it is
+  ENOTDIR. The mounted file is a regular file of mode 0444 whose inode number
+  is the namespace's; opening it after its creator is gone and calling setns on
+  the descriptor (nstype 0 or the type) joins the namespace (the host name
+  reads what the creator set; /proc/self/ns/net has the recorded inode); the
+  caller's other namespaces are unchanged. After umount2 the file is the plain
+  empty file again and setns on it is EINVAL.
+returns:
+  readlink: "\"uts:[4026531838]\"-style text; the inode differs per namespace and is stable for a namespace"
+  ns_get_nstype: "the CLONE_NEW* constant of the type"
+  ns_get_userns: "a new descriptor, O_CLOEXEC"
+  ns_get_owner_uid: "0 for the initial user namespace; the creator's kernel uid for others"
+  ns_get_mntns_id: "a non-zero 64-bit id, stable per mount namespace"
+errors:
+  open_write: "EPERM (1): opening a namespace file for writing"
+  get_userns_initial: "EPERM (1): NS_GET_USERNS on the initial user namespace; NS_GET_PARENT on the initial pid namespace or on the caller's own child namespace seen from inside"
+  wrong_type: "EINVAL (22): NS_GET_PARENT on a net namespace; NS_GET_OWNER_UID and NS_GET_MNTNS_ID on a type that has none; setns on an unmounted placeholder file"
+  unknown_request: "ENOTTY (25): request 0xb7ff"
+  follow_other_users_link: "EACCES (13): readlink of another user's /proc/<pid>/ns/<type> by uid 65534"
+  bind_onto_dir: "ENOTDIR (20): mounting a namespace file onto a directory"
+  gone: "ENOENT (2): /proc/<pid>/ns after the process was waited for"
+side_effects: >
+  A bind-mounted namespace file keeps the namespace alive until
+  unmounted. NS_GET_USERNS and NS_GET_PARENT create descriptors.
+threading: "none"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: nsfs request numbers are from linux/nsfs.h. All tests are needs=root
+# (new namespaces, setns and mount need CAP_SYS_ADMIN). The inode numbers
+# differ per run and are only compared with each other; ids and descriptor
+# numbers are not printed (syscalls=names or off).
