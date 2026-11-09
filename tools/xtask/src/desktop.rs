@@ -1233,6 +1233,16 @@ fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     Ok(())
 }
 
+/// The prebuild's part: build the Windows GUI test program of
+/// `desktop-win32`; the files it made.
+pub fn prebuild_windows_app() -> Result<Vec<PathBuf>> {
+    let built = crate::sevenzip::pipeline(&["win", "build", "--tests", WIN32_TEST, "--out", WIN32_BIN])?;
+    if !built.success() {
+        return Err(format!("building {WIN32_TEST}.exe failed ({built})"));
+    }
+    Ok(crate::prebuilt::dir_files(&root().join(WIN32_BIN)))
+}
+
 /// Boot group `desktop-win32`: a Windows GUI program's window on Poly's
 /// desktop through win32k's desktop link (ADR 0131).
 pub fn win32_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
@@ -1240,7 +1250,15 @@ pub fn win32_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         eprintln!("==> skipped: the desktop-win32 boot test needs a Unix host (QMP)");
         return Ok(());
     }
-    match crate::sevenzip::pipeline(&["win", "build", "--tests", WIN32_TEST, "--out", WIN32_BIN]) {
+    let built = if crate::prebuilt::skip(
+        "the desktop's Windows test program",
+        &[root().join(WIN32_BIN).join(format!("{WIN32_TEST}.exe"))],
+    )? {
+        Ok(std::process::ExitStatus::default())
+    } else {
+        crate::sevenzip::pipeline(&["win", "build", "--tests", WIN32_TEST, "--out", WIN32_BIN])
+    };
+    match built {
         Ok(s) if s.success() => {}
         Ok(s) => {
             eprintln!("==> skipped: the desktop-win32 boot test: building {WIN32_TEST}.exe failed ({s})");

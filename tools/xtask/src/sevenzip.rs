@@ -251,17 +251,16 @@ const SCENARIO_REQUIRED: bool = true;
 
 /// `cargo run --package poly-pipeline -- <args>`; its exit status.
 pub(crate) fn pipeline(args: &[&str]) -> Result<std::process::ExitStatus> {
-    crate::cargo()
-        .current_dir(root())
-        .args(["run", "--quiet", "--package", "poly-pipeline", "--"])
-        .args(args)
-        .status()
-        .map_err(|e| format!("pipeline: {e}"))
+    crate::prebuilt::pipeline_tool().args(args).status().map_err(|e| format!("pipeline: {e}"))
 }
 
 /// Put `7za.exe` where the driver's data files go and build the driver.
 fn stage_scenario(exe: &Path) -> Result {
     let data = root().join(SCENARIO_DATA).join(SCENARIO_TEST);
+    let driver = root().join(SCENARIO_BIN).join(format!("{SCENARIO_TEST}.exe"));
+    if crate::prebuilt::skip("the 7-Zip scenario's driver", &[driver, data.join(EXE)])? {
+        return Ok(());
+    }
     std::fs::create_dir_all(&data).map_err(|e| format!("{}: {e}", data.display()))?;
     std::fs::copy(exe, data.join(EXE)).map_err(|e| format!("{}: {e}", data.display()))?;
     let built = pipeline(&["win", "build", "--tests", SCENARIO_TEST, "--out", SCENARIO_BIN])?;
@@ -269,6 +268,15 @@ fn stage_scenario(exe: &Path) -> Result {
         return Err(format!("building {SCENARIO_TEST}.exe failed ({built})"));
     }
     Ok(())
+}
+
+/// The prebuild's part: stage the scenario's driver; the files it made.
+pub fn stage_prebuild() -> Result<Vec<PathBuf>> {
+    let exe = cached().ok_or("7za.exe is not in the cache; run `cargo xtask win fetch-7zip`")?;
+    stage_scenario(&exe)?;
+    let mut files = crate::prebuilt::dir_files(&root().join(SCENARIO_BIN));
+    files.extend(crate::prebuilt::dir_files(&root().join(SCENARIO_DATA).join(SCENARIO_TEST)));
+    Ok(files)
 }
 
 /// `pipeline win scenario diff` against the recording, with `extra`

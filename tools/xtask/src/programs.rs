@@ -1,4 +1,4 @@
-//! Linux programs for the kernel's boot tests, and those tests: a static
+﻿//! Linux programs for the kernel's boot tests, and those tests: a static
 //! "hello world" runs as the first process (`poly.init=/bin/<name>`) and
 //! exits cleanly (roadmap Phase 3, ADR 0038).
 //!
@@ -45,7 +45,7 @@
 //! Builds are reproducible: fixed flags, no debug info, symbols stripped,
 //! no build id, so the same toolchain gives the same bytes.
 
-use super::{Boot, DEFAULT_MEMORY, Devices, QEMU_SUCCESS, Result, boot_on, boot_typing, cargo, initramfs, root};
+use super::{Boot, DEFAULT_MEMORY, Devices, QEMU_SUCCESS, Result, boot_on, boot_typing, initramfs, root};
 use crate::symbols::Symbols;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -142,11 +142,7 @@ pub fn evtest() -> Result<Vec<u8>> {
 /// a C compiler.
 pub fn c_hellos() -> (Vec<(String, Vec<u8>)>, Option<String>) {
     let dir = out_dir().join("corpus");
-    let built = cargo()
-        .current_dir(root())
-        .args(["run", "--quiet", "--package", "poly-pipeline", "--", "build", "--out"])
-        .arg(&dir)
-        .output();
+    let built = crate::prebuilt::pipeline_tool().args(["build", "--out"]).arg(&dir).output();
     match built {
         Ok(o) if o.status.success() => {}
         Ok(o) => {

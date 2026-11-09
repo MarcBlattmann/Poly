@@ -880,6 +880,12 @@ fn oracle_guard(what: &str) -> Result {
 pub fn stage() -> Result {
     let exe = crate::sevenzip::cached().ok_or("7za.exe is not in the cache; run `cargo xtask win fetch-7zip`")?;
     let data = root().join(DATA).join(TEST);
+    if crate::prebuilt::skip(
+        "the traced 7-Zip scenario's kit and driver",
+        &[root().join(BIN).join(format!("{TEST}.exe")), data.join(wintrace::KIT_FILE)],
+    )? {
+        return Ok(());
+    }
     let kit = wintrace::build_kit(&exe, &data, &[])?;
     eprintln!("==> trace kit for {} staged in {} ({} proxies)", kit.exe, data.display(), kit.proxies.len());
     let built = crate::sevenzip::pipeline(&["win", "build", "--tests", TEST, "--out", BIN])?;
@@ -887,6 +893,13 @@ pub fn stage() -> Result {
         return Err(format!("building {TEST}.exe failed ({built})"));
     }
     Ok(())
+}
+
+/// The files [`stage`] made (the prebuild packs them).
+pub fn staged_files() -> Vec<PathBuf> {
+    let mut files = crate::prebuilt::dir_files(&root().join(BIN));
+    files.extend(crate::prebuilt::dir_files(&root().join(DATA).join(TEST)));
+    files
 }
 
 /// Run the driver on Poly (`pipeline win scenario poly`); the result file.

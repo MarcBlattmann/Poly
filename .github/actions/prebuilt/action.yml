@@ -1,0 +1,22 @@
+name: Take the build jobs' files
+description: >
+  Downloads the artifacts of the `build` jobs (the kernel and native programs,
+  and xtask, the pipeline tool and the Windows test programs; ADR 0151) and
+  unpacks them into the checkout. The job then runs with POLY_PREBUILT=1,
+  which makes xtask use them instead of building (tools/xtask/src/prebuilt.rs).
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: prebuilt-*
+        merge-multiple: true
+    - name: Unpack
+      shell: bash
+      run: |
+        for f in prebuilt-*.tar.zst; do
+          tar --zstd -xf "$f"
+          rm "$f"
+        done
+        ls -l target/debug/xtask target/debug/pipeline kernel/target/x86_64-unknown-none/debug/poly-kernel
