@@ -23,8 +23,9 @@ pub struct App {
     /// built-in.
     pub id: String,
     /// The desktop file's `Icon`: a name for the icon theme or an absolute
-    /// path. `None` for Poly's own apps and open windows without one: the
-    /// shell draws its own glyph.
+    /// path; Poly's own apps have `poly-<name>`, artwork compiled into the
+    /// shell. `None` for open windows without one: the shell draws its own
+    /// glyph.
     pub icon: Option<String>,
 }
 
@@ -183,33 +184,42 @@ pub fn parse_exec(exec: &str) -> Option<Vec<String>> {
 /// clients) are not among them: a desktop that wants them gets them from
 /// desktop files, which `cargo xtask desktop --test-apps` puts in the image.
 pub fn builtins() -> Vec<App> {
-    let app = |name: &str, comment: &str, keywords: &[&str], argv: &[&str]| App {
+    let app = |name: &str, comment: &str, keywords: &[&str], argv: &[&str], icon: &str| App {
         name: name.into(),
         comment: comment.into(),
         keywords: keywords.iter().map(|k| (*k).into()).collect(),
         argv: argv.iter().map(|a| (*a).into()).collect(),
         id: alloc::format!("poly:{name}"),
-        icon: None,
+        icon: Some(icon.into()),
     };
     alloc::vec![
         app(
             "Settings",
             "Display, keyboard, wallpaper, sound, time zone",
             &["preferences", "volume", "keyboard", "layout", "wallpaper", "display", "scale", "timezone", "about"],
-            &[SETTINGS]
+            &[SETTINGS],
+            "poly-settings"
         ),
-        app("Notifications", "What came in, newest first", &["history", "messages"], &[NOTIFICATIONS]),
+        app(
+            "Notifications",
+            "What came in, newest first",
+            &["history", "messages"],
+            &[NOTIFICATIONS],
+            "poly-notifications"
+        ),
         app(
             "Files",
             "Browse and organise your files",
             &["file", "explorer", "folder", "directory", "manager", "browse", "documents", "downloads", "trash"],
-            &[FILES]
+            &[FILES],
+            "poly-files"
         ),
         app(
             "Terminal",
             "A shell in a window",
             &["shell", "console", "command", "prompt", "bash", "sh", "cli", "tty"],
-            &[TERMINAL]
+            &[TERMINAL],
+            "poly-terminal"
         ),
     ]
 }

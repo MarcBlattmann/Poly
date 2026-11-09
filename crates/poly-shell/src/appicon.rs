@@ -235,6 +235,19 @@ impl Bitmap {
     }
 }
 
+/// The icons of Poly's own apps (original artwork, `icons/generate.py`),
+/// compiled in under the `Icon` names the built-in apps have: they need no
+/// disk and cannot be shadowed by a package.
+pub fn builtin_icon(name: &str) -> Option<&'static [u8]> {
+    Some(match name {
+        "poly-terminal" => include_bytes!("../icons/poly-terminal.png"),
+        "poly-files" => include_bytes!("../icons/poly-files.png"),
+        "poly-settings" => include_bytes!("../icons/poly-settings.png"),
+        "poly-notifications" => include_bytes!("../icons/poly-notifications.png"),
+        _ => return None,
+    })
+}
+
 /// The icons the shell has loaded.
 #[derive(Default)]
 pub struct AppIcons {
@@ -259,8 +272,8 @@ impl fmt::Debug for AppIcons {
 }
 
 impl AppIcons {
-    /// Where icons are read from; without it there are none (the shell
-    /// draws its glyphs).
+    /// Where icons are read from; without it only Poly's own apps have icons
+    /// (the shell draws its glyphs for the rest).
     pub fn set_files(&mut self, files: Box<dyn IconFiles>) {
         self.files = Some(files);
         self.sizes = None;
@@ -269,7 +282,7 @@ impl AppIcons {
         self.bytes = 0;
     }
 
-    /// Whether icons can be loaded at all.
+    /// Whether icons can be loaded from a disk at all.
     pub fn is_enabled(&self) -> bool {
         self.files.is_some()
     }
@@ -282,11 +295,22 @@ impl AppIcons {
     /// Icon `icon` (a `Icon=` value) at `size` pixels: loaded the first
     /// time, `None` if there is none (or it is not a PNG).
     pub fn get(&mut self, icon: &str, size: u32) -> Option<Rc<Bitmap>> {
-        let files = self.files.as_ref()?;
         let key = (icon.to_string(), size);
         if let Some(hit) = self.cache.get(&key) {
             return hit.clone();
         }
+        let found = match builtin_icon(icon) {
+            Some(data) => poly_png::decode(data).ok().map(|img| Rc::new(Bitmap::fit(&img, size))),
+            None => self.find(icon, size)?,
+        };
+        self.insert(key, found.clone());
+        found
+    }
+
+    /// The theme's file for `icon`, decoded and scaled. `None`: there is no
+    /// disk (nothing to remember); `Some(None)`: the disk has no such icon.
+    fn find(&mut self, icon: &str, size: u32) -> Option<Option<Rc<Bitmap>>> {
+        let files = self.files.as_ref()?;
         let sizes = self.sizes.get_or_insert_with(|| {
             let mut names = Vec::new();
             for base in ICON_DIRS {
@@ -308,8 +332,7 @@ impl AppIcons {
                 break;
             }
         }
-        self.insert(key, found.clone());
-        found
+        Some(found)
     }
 
     fn insert(&mut self, key: (String, u32), value: Option<Rc<Bitmap>>) {
@@ -648,5 +671,27 @@ mod tests {
         // Off the edge of the screen: no panic.
         b.draw(&mut fb2, Rect::new(0, 0, 10, 10), 9, 9, 3);
         b.draw(&mut fb2, Rect::new(0, 0, 10, 10), -5, -5, 3);
+    }
+
+    #[test]
+    fn poly_s_own_icons_decode_and_are_rounded_tiles() {
+        for name in ["poly-terminal", "poly-files", "poly-settings", "poly-notifications"] {
+            let img = poly_png::decode(builtin_icon(name).unwrap()).unwrap();
+            assert_eq!((img.width, img.height), (128, 128), "{name}");
+            let at = |x: usize, y: usize| img.pixels[y * 128 + x];
+            // Transparent corners (a rounded tile), an opaque body.
+            assert_eq!(at(0, 0) >> 24, 0, "{name}");
+            assert_eq!(at(127, 127) >> 24, 0, "{name}");
+            assert_eq!(at(64, 12) >> 24, 0xff, "{name}");
+            assert_eq!(at(10, 64) >> 24, 0xff, "{name}");
+        }
+        // They load with no disk, scaled to what is asked, and are cached.
+        let mut icons = AppIcons::default();
+        let small = icons.get("poly-terminal", 28).unwrap();
+        assert_eq!((small.width, small.height), (28, 28));
+        assert_eq!(icons.cached().0, 1);
+        icons.get("poly-terminal", 28).unwrap();
+        assert_eq!(icons.cached().0, 1);
+        assert!(icons.get("poly-unknown", 28).is_none());
     }
 }

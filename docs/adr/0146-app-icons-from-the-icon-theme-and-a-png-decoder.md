@@ -55,10 +55,18 @@ no PNG reader (`poly-font` only writes PNGs, stored, for its own tests).
   box, at `28 x scale` pixels, in place of the glyph. Open windows are listed
   with their app's icon: the `Icon` of the desktop file that matches the
   window's app ID (by file name, or by the program it runs), else the app ID as
-  an icon name. The window switcher's cards (16 pixels) do the same. Poly's own
-  apps (Settings, Notifications, Files, Terminal and their windows) have no
-  `Icon` and keep their Lucide glyphs; so does anything whose icon is not found.
-  There is no dock or taskbar.
+  an icon name. The window switcher's cards (16 pixels) do the same. Anything
+  whose icon is not found keeps its Lucide glyph. There is no dock or taskbar.
+- **Poly's own apps** (Settings, Notifications, Files, Terminal, and the
+  windows of the last two) have original artwork made for Poly: a rounded
+  tile with a vertical gradient and one white glyph, the same shape and weight
+  for each, as 128-pixel PNGs in `crates/poly-shell/icons/`
+  (`poly-settings`, `poly-notifications`, `poly-files`, `poly-terminal`),
+  drawn by `icons/generate.py` (distance functions, standard library only; run
+  it to redraw them). They are compiled into the shell (`include_bytes!`) under
+  the built-in apps' `Icon` names, looked up before any theme, so they need no
+  disk and no package can shadow them. They go through the same decode, scale
+  and cache as the others.
 - **Chromium:** Poly's launcher entry (`desktop_file()` in
   `tools/xtask/src/chromium.rs`) has `Icon=chromium`, Debian's name for its
   logo, which the package ships as hicolor PNGs from 16 to 256 pixels.

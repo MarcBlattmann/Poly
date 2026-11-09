@@ -552,21 +552,30 @@ fn an_installed_apps_own_icon_is_drawn_in_the_launcher() {
 }
 
 #[test]
-fn poly_s_own_apps_keep_their_glyphs() {
-    // Even a theme icon called "poly-files" or "Settings" does not replace
-    // the built-ins' Lucide glyphs: they have no `Icon`.
+fn poly_s_own_apps_draw_their_own_artwork() {
+    // The built-ins' icons are compiled in: a theme icon called "poly-files"
+    // or "Files" does not replace them, and they show with no disk at all.
     let mut s = shell_with_icons();
     s.set_icon_files(alloc::boxed::Box::new(disk(&[
         ("/usr/share/icons/hicolor/32x32/apps/Files.png", png(32, 32, [255, 0, 0, 255])),
         ("/usr/share/icons/hicolor/32x32/apps/poly-files.png", png(32, 32, [255, 0, 0, 255])),
-        ("/usr/share/icons/hicolor/32x32/apps/Settings.png", png(32, 32, [255, 0, 0, 255])),
     ])));
     for c in "files".chars() {
         s.key(Key::Char(c));
     }
     let (x, y) = icon_centre(&s, 0);
-    assert_eq!(s.apps()[s.launcher().results()[0]].name, "Files");
-    assert_ne!(render(&s).pixel(x, y), Some(0xff_0000));
+    let app = &s.apps()[s.launcher().results()[0]];
+    assert_eq!(app.name, "Files");
+    assert_eq!(app.icon.as_deref(), Some("poly-files"));
+    let lit = render(&s).pixel(x, y).unwrap();
+    assert_ne!(lit, 0xff_0000);
+    // The folder's white on the artwork's blue tile, not the glyph's grey.
+    assert!(lit & 0xff >= 0xf0 && (lit >> 16) & 0xff >= 0xf0, "{lit:06x}");
+    // All four are there.
+    for name in ["poly-files", "poly-terminal", "poly-settings", "poly-notifications"] {
+        assert!(crate::appicon::builtin_icon(name).is_some(), "{name}");
+        assert!(crate::apps::builtins().iter().any(|a| a.icon.as_deref() == Some(name)), "{name}");
+    }
 }
 
 #[test]
@@ -581,8 +590,8 @@ fn windows_take_their_apps_icon() {
     let icon = |id: u32| s.apps().iter().find(|a| a.window() == Some(id)).unwrap().icon.clone();
     // The desktop file that runs a program of that name: its Icon.
     assert_eq!(icon(1).as_deref(), Some("viewer"));
-    // Poly's own app: no Icon, its glyph stays.
-    assert_eq!(icon(2), None);
+    // Poly's own app: the artwork of the built-in that runs that program.
+    assert_eq!(icon(2).as_deref(), Some("poly-files"));
     // No desktop file: the app ID as an icon name.
     assert_eq!(icon(3).as_deref(), Some("chromium"));
     assert_eq!(icon(4), None);
