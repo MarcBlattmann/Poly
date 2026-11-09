@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "sfcnm_skip",
+      "exe_sha256": "31643622750fe0f21b5bc1c332a08ce317a2e882abcf1fce542ba8c020bf8488",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZGVmYXVsdF9yZWFkX2NvbXBsZXRlc19hdF9vbmNlCm9rIGRlZmF1bHRfcGFja2V0X3F1ZXVlZApvayBzZXRfc2tpcF9wb3J0X29rCm9rIHNraXBfcmVhZF9jb21wbGV0ZXNfYXRfb25jZQpvayBza2lwX25vX3BhY2tldApvayBza2lwX25vX3BhY2tldF9lcnJvcgpvayBza2lwX3BlbmRpbmdfcmVhZApvayBza2lwX3BlbmRpbmdfcmVhZF9wYWNrZXQKb2sgc2tpcF9wZW5kaW5nX3JlYWRfMgpvayBza2lwX2xhdGVyX2ZhaWx1cmVfcGFja2V0Cm9rIHNraXBfbGF0ZXJfZmFpbHVyZV9lcnJvcgpvayBldmVudF9kZWZhdWx0X3JlYWRfYXRfb25jZQpvayBldmVudF9kZWZhdWx0X2hhbmRsZV9zaWduYWxsZWQKb2sgc2V0X3NraXBfZXZlbnRfb2sKb2sgc2tpcF9ldmVudF9yZWFkX2F0X29uY2UKb2sgc2tpcF9ldmVudF9oYW5kbGVfbm90X3NpZ25hbGxlZApzdW1tYXJ5IDE2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok default_read_completes_at_once\nok default_packet_queued\nok set_skip_port_ok\nok skip_read_completes_at_once\nok skip_no_packet\nok skip_no_packet_error\nok skip_pending_read\nok skip_pending_read_packet\nok skip_pending_read_2\nok skip_later_failure_packet\nok skip_later_failure_error\nok event_default_read_at_once\nok event_default_handle_signalled\nok set_skip_event_ok\nok skip_event_read_at_once\nok skip_event_handle_not_signalled\nsummary 16 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 158
+    }
+  ]
+}

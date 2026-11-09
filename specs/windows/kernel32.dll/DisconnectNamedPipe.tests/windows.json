@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "dnp_basic",
+      "exe_sha256": "050919ddf75f9a4bfef07c95f797aeb5e0d85194822c8ec67eadfa66eff50c61",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgY2xpZW50X3dyaXRlc19iZWZvcmVfZGlzY29ubmVjdApvayBkaXNjb25uZWN0X29rCm9rIGNsaWVudF9yZWFkX2ZhaWxzCm9rIGNsaWVudF9yZWFkX2Vycm9yCm9rIGNsaWVudF93cml0ZV9mYWlscwpvayBjbGllbnRfd3JpdGVfZXJyb3IKb2sgc2VydmVyX3JlYWRfZmFpbHMKb2sgc2VydmVyX3JlYWRfZXJyb3IKb2sgc2VydmVyX3dyaXRlX2ZhaWxzCm9rIHNlcnZlcl93cml0ZV9lcnJvcgpvayBzZWNvbmRfZGlzY29ubmVjdF9mYWlscwpvayBzZWNvbmRfZGlzY29ubmVjdF9lcnJvcgpvayBvcGVuX2JlZm9yZV9yZWNvbm5lY3RfYnVzeQpvayBvcGVuX2JlZm9yZV9yZWNvbm5lY3RfZXJyb3IKb2sgcmVjb25uZWN0X3BlbmRzCm9rIHJlY29ubmVjdF9wZW5kc19lcnJvcgpvayBuZXdfY2xpZW50X29wZW5zCm9rIHJlY29ubmVjdF9jb21wbGV0ZXMKb2sgbmV3X2NsaWVudF93cml0ZXMKb2sgc2VydmVyX3JlYWRzX29ubHlfbmV3Cm9rIGRpc2Nvbm5lY3RfbGlzdGVuaW5nX29rCm9rIGRpc2Nvbm5lY3RlZF9saXN0ZW5pbmdfaW5zdGFuY2VfYnVzeQpvayBkaXNjb25uZWN0ZWRfbGlzdGVuaW5nX2luc3RhbmNlX2J1c3lfZXJyb3IKb2sgZGlzY29ubmVjdF9jbGllbnRfZW5kX2ZhaWxzCm9rIGRpc2Nvbm5lY3RfY2xpZW50X2VuZF9lcnJvcgpvayBkaXNjb25uZWN0X2FmdGVyX2NsaWVudF9jbG9zZWRfb2sKb2sgZGlzY29ubmVjdF9pbnZhbGlkX2hhbmRsZV9mYWlscwpvayBkaXNjb25uZWN0X2ludmFsaWRfaGFuZGxlX2Vycm9yCm9rIGRpc2Nvbm5lY3RfZXZlbnRfZmFpbHMKb2sgZGlzY29ubmVjdF9ldmVudF9lcnJvcgpzdW1tYXJ5IDMwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok client_writes_before_disconnect\nok disconnect_ok\nok client_read_fails\nok client_read_error\nok client_write_fails\nok client_write_error\nok server_read_fails\nok server_read_error\nok server_write_fails\nok server_write_error\nok second_disconnect_fails\nok second_disconnect_error\nok open_before_reconnect_busy\nok open_before_reconnect_error\nok reconnect_pends\nok reconnect_pends_error\nok new_client_opens\nok reconnect_completes\nok new_client_writes\nok server_reads_only_new\nok disconnect_listening_ok\nok disconnected_listening_instance_busy\nok disconnected_listening_instance_busy_error\nok disconnect_client_end_fails\nok disconnect_client_end_error\nok disconnect_after_client_closed_ok\nok disconnect_invalid_handle_fails\nok disconnect_invalid_handle_error\nok disconnect_event_fails\nok disconnect_event_error\nsummary 30 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 63
+    }
+  ]
+}
