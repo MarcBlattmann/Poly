@@ -124,6 +124,29 @@ impl Output {
     }
 }
 
+/// The smallest and the largest screen the compositor follows a display
+/// change to (ADR 0145): a window dragged very small still gets a desktop
+/// that lays out, and a huge one does not ask the device for gigabytes of
+/// dumb buffers. The host's window shows the picture scaled if it is another
+/// size than this.
+pub const MIN_SCREEN: (u32, u32) = (640, 400);
+pub const MAX_SCREEN: (u32, u32) = (5120, 5120);
+
+/// `output` kept within [`MIN_SCREEN`] and [`MAX_SCREEN`]: a size outside
+/// them gets a generated mode of the nearest size in range (CVT reduced
+/// blanking at the same refresh rate), another size is left alone.
+pub fn clamped(mut output: Output) -> Output {
+    let (w, h) = output.size();
+    let (cw, ch) = (w.clamp(MIN_SCREEN.0, MAX_SCREEN.0), h.clamp(MIN_SCREEN.1, MAX_SCREEN.1));
+    if (cw, ch) != (w, h) {
+        let hz = poly_drm::modes::refresh(&output.mode).clamp(24, 240);
+        let mut mode = poly_drm::modes::cvt_rb(cw, ch, hz);
+        mode.ty = output.mode.ty;
+        output.mode = mode;
+    }
+    output
+}
+
 /// The integer scale for a screen `px` pixels wide that is `mm`
 /// millimetres wide: its density over 96 dots per inch (the density
 /// logical pixels are meant for), rounded, 1 to 4; 1 if the size is not
@@ -330,7 +353,7 @@ impl<D: Drm> Kms<D> {
         if self.pending {
             return Err(io::Error::new(io::ErrorKind::WouldBlock, "a flip is pending"));
         }
-        let next = probe(&mut self.drm)?;
+        let next = clamped(probe(&mut self.drm)?);
         if next.size() == self.output.size() && (next.connector, next.crtc) == (self.output.connector, self.output.crtc)
         {
             // The same screen (its refresh rate or physical size may have
@@ -936,9 +959,38 @@ mod tests {
         assert!(kms.take_hotplug() && kms.follow_display().unwrap());
         assert_eq!(kms.output().size(), (900, 600));
         assert_eq!(dev.borrow().object_counts(), (2, 2));
+        // A sliver of a window: the screen keeps to the smallest size, and
+        // asking again for it changes nothing.
+        dev.borrow_mut().hardware().size = Some((200, 100));
+        dev.borrow_mut().display_changed(*now.borrow());
+        kms.dispatch().unwrap();
+        assert!(kms.take_hotplug() && kms.follow_display().unwrap());
+        assert_eq!(kms.output().size(), MIN_SCREEN);
+        assert!(!kms.follow_display().unwrap(), "already at the limit");
+        assert_eq!(dev.borrow().object_counts(), (2, 2));
         drop(kms);
         dev.borrow_mut().close(file, *now.borrow());
         assert_eq!(dev.borrow().object_counts(), (0, 0));
+    }
+
+    /// Sizes outside the limits get the nearest size in range; the others
+    /// stay as the device described them.
+    #[test]
+    fn a_display_size_is_kept_within_limits() {
+        let mode = |w, h| poly_drm::modes::cvt_rb(w, h, 60);
+        let out = |w, h| Output { connector: 1, crtc: 2, mode: mode(w, h), mm: (300, 200) };
+        assert_eq!(clamped(out(1313, 877)), out(1313, 877));
+        assert_eq!(clamped(out(640, 400)).size(), (640, 400));
+        assert_eq!(clamped(out(5120, 5120)).size(), (5120, 5120));
+        assert_eq!(clamped(out(100, 80)).size(), MIN_SCREEN);
+        assert_eq!(clamped(out(1, 1)).size(), MIN_SCREEN);
+        assert_eq!(clamped(out(300, 900)).size(), (640, 900));
+        assert_eq!(clamped(out(8000, 3000)).size(), (5120, 3000));
+        let c = clamped(out(300, 900));
+        assert_eq!(poly_drm::modes::refresh(&c.mode), 60, "the refresh rate stays");
+        assert!(poly_drm::modes::valid(&c.mode));
+        assert_eq!((c.connector, c.crtc, c.mm), (1, 2, (300, 200)));
+        assert_eq!(c.size(), (640, 900));
     }
 
     /// A resize waits for the flip in flight, and one that cannot be done

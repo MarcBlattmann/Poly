@@ -80,6 +80,20 @@ Checked link by link, on a Windows host with QEMU 11.1, WHPX and `-display sdl`:
   size) and redraws everything. It logs `screen resized to WxH at R Hz`.
   The scale does not change (it is the user's choice, and a window made
   bigger on the same screen has the same density).
+- **Sane sizes.** The screen the compositor follows to is kept between 640x400
+  and 5120x5120 (`kms::clamped`): a size outside gets a generated CVT
+  reduced-blanking mode of the nearest size in range at the same refresh rate,
+  so a window dragged to a sliver still has a desktop that lays out, and a huge
+  one does not ask for gigabytes of dumb buffers (QEMU shows the picture scaled
+  if its window is another size). A mode set or buffer allocation that fails
+  leaves the screen as it was. Rapid resizing costs a mode set about ten times a
+  second at most (the 100 ms settle), never one per step, and never while a flip
+  is in flight.
+- **Without virtio-gpu nothing changes.** The bochs/dispi fallback has no DRM
+  device, so the compositor runs on the framebuffer at the size it booted with
+  (`take_display_event_for_drm` ignores any other output; the kernel's console
+  follows a change itself while it owns the display). A fixed size there is
+  fine and nothing in this change touches that path.
 - **Windows follow the work area.** `Server::set_output` lays the managed
   windows out again when the work area changes (also for a scale change, which
   did not before): maximized and fullscreen toplevels get a configure for the
@@ -107,11 +121,20 @@ Checked link by link, on a Windows host with QEMU 11.1, WHPX and `-display sdl`:
   the compositor's KMS backend against `poly-drm`'s device (follows to a
   larger and a smaller size, buffers and framebuffers released, waits for a
   flip, out of memory changes nothing, the picture draws the new size, the
-  desktop lays out again) and `rfb.rs` (message bytes, handshake errors).
+  desktop lays out again; sizes outside the limits are clamped, also through a
+  follow) and `rfb.rs` (message bytes, handshake errors).
 - Boot group `desktop-resize` (Unix hosts): a maximized demo window fills the
   work area of 1100x700, then of 1500x900, the ridge across the width each
   time; restored by a double click routed by the new size; on a 700x500 screen
-  the floating window is shifted onto it. The group is in the `userland` shard.
+  the floating window is shifted onto it; then a burst of six sizes in a row
+  ends on the last (1280x800, taken in fewer mode sets than sizes), and a
+  320x240 request gets the smallest screen, 640x400, with the ridge across it.
+  The group is in the `userland` shard. The VNC client waits for QEMU's answer
+  to its `SetDesktopSize` before it goes away: on a loaded host (TCG) a request
+  from a client that left at once was sometimes never carried out (one run in
+  three failed before, none in eight after). QEMU's result code in that answer
+  is not a yes or no (a request it carried out came back with 4), so only that
+  the answer came counts.
 - By hand, on the owner's setup (Windows 11, QEMU 11.1, WHPX, `-display sdl`,
   `cargo xtask desktop --release`, a main screen of 2880x1800): the guest
   followed the real window. A window resize by `SetWindowPos` to 1500x900

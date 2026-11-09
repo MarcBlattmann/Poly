@@ -1179,7 +1179,9 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
 ///    (1100x700), then of a larger one (1500x900), the ridge across the
 ///    whole width each time;
 /// 2. restored, a floating window on a screen smaller than its place is
-///    shifted onto the screen (700x500).
+///    shifted onto the screen (700x500);
+/// 3. a burst of sizes in a row ends on the last, and a sliver of a window
+///    (320x240) gets the smallest screen (640x400).
 ///
 /// A real window resize cannot be automated on this host's CI; the chain
 /// from the device's event onward is what runs (a real SDL window resize
@@ -1237,11 +1239,22 @@ pub fn resize_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
 }
 
+/// Ask the display for a screen of `w` x `h` (the request only).
+#[cfg(unix)]
+fn ask_size(vnc: &Path, w: u32, h: u32) -> std::result::Result<(), String> {
+    crate::rfb::request_size_at(vnc, w as u16, h as u16).map(|_| ())
+}
+
+#[cfg(not(unix))]
+fn ask_size(_: &Path, _: u32, _: u32) -> std::result::Result<(), String> {
+    Err("a VNC socket needs a Unix host".into())
+}
+
 /// Ask for a screen of `w` x `h` and wait until the compositor has it.
 #[cfg(unix)]
 fn resize_to(d: &Driver, vnc: &Path, w: u32, h: u32) -> std::result::Result<(), String> {
     let seen = count(&d.lines, "poly-compositor: screen resized to");
-    crate::rfb::request_size_at(vnc, w as u16, h as u16)?;
+    ask_size(vnc, w, h)?;
     let line = wait_nth_line(&d.lines, "poly-compositor: screen resized to", seen + 1, 60)?;
     expect(
         &format!("the screen resized to {w}x{h} (the compositor says {line:?})"),
@@ -1319,6 +1332,33 @@ fn drive_resize(socket: &Path, vnc: &Path, lines: Lines) -> std::result::Result<
         &format!("the floating window ({w}x{h}) was shifted onto the {tw}x{th} screen, to {nx},{ny}"),
         on_screen(&img),
     )?;
+
+    // A window dragged over many sizes: the requests come far faster than the
+    // compositor follows (it takes the size that is there once things have
+    // settled), and it ends on the last one, still drawing.
+    let before = count(&d.lines, "poly-compositor: screen resized to");
+    let burst = [(900u32, 600u32), (960, 640), (1024, 680), (1100, 720), (1180, 760), (1280, 800)];
+    for &(w, h) in &burst {
+        ask_size(vnc, w, h)?;
+    }
+    wait_nth(&d.lines, "poly-compositor: screen resized to 1280x800 ", 1, 60)?;
+    let followed = count(&d.lines, "poly-compositor: screen resized to") - before;
+    expect(
+        &format!("a burst of {} sizes took {followed} mode sets", burst.len()),
+        (1..=burst.len()).contains(&followed),
+    )?;
+    let img = d.shot_until("burst", 30, |img: &screen::Image| {
+        (img.width, img.height) == SIZE && img.pixel(SIZE.0 - 10, 6) == RIDGE
+    })?;
+    expect("the screen is 1280x800 after the burst", (img.width, img.height) == SIZE)?;
+
+    // A sliver of a window: the screen keeps to the smallest size.
+    ask_size(vnc, 320, 240)?;
+    wait_nth(&d.lines, "poly-compositor: screen resized to 640x400 ", 1, 60)?;
+    let img = d.shot_until("smallest", 30, |img: &screen::Image| {
+        (img.width, img.height) == (640, 400) && img.pixel(630, 6) == RIDGE
+    })?;
+    expect("the screen stops at 640x400 with the ridge across it", (img.width, img.height) == (640, 400))?;
     d.qmp.quit();
     Ok(())
 }

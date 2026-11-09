@@ -99,20 +99,45 @@ pub fn update_request(width: u16, height: u16) -> Vec<u8> {
     m
 }
 
+/// The result code of the server's answer to a client's `SetDesktopSize` in
+/// `data` (what the server sent so far): an `ExtendedDesktopSize` rectangle
+/// whose x is the reason 1 ("the client asked", RFB's registry of encodings)
+/// and whose y is the result. `None` if it is not there (yet).
+pub fn resize_reply(data: &[u8]) -> Option<u16> {
+    const ENCODING: [u8; 4] = (-308i32).to_be_bytes();
+    // A rectangle: x, y, width, height (two bytes each), the encoding.
+    (8..data.len().saturating_sub(3))
+        .filter(|&i| data[i..i + 4] == ENCODING)
+        .find(|&i| data[i - 8..i - 6] == [0, 1])
+        .map(|i| u16::from_be_bytes([data[i - 6], data[i - 5]]))
+}
+
 /// On `s`: the handshake, say we take size changes, and ask for a `width` x
-/// `height` desktop. Returns the size the server had. The server's reply (a
-/// framebuffer update) is read a little and dropped, so that the request has
-/// been taken when this returns.
+/// `height` desktop. Returns the size the server had. Waits for the server's
+/// answer to the request (a server that is slow to take it, a busy emulator,
+/// may lose a request from a client that goes away at once). QEMU's result
+/// code in it is not a reliable yes or no (a request it carried out came back
+/// with a nonzero one), so only that it came counts; a server that never
+/// answers (a canned one in a test, the stream ending) is not an error.
 pub fn request_size<S: Read + Write>(mut s: S, width: u16, height: u16) -> Result<(u16, u16), String> {
     let before = handshake(&mut s)?;
     s.write_all(&set_encodings()).map_err(|e| format!("VNC: {e}"))?;
-    s.write_all(&update_request(before.0, before.1)).map_err(|e| format!("VNC: {e}"))?;
+    // A small region: the server answers a client that has asked for
+    // something, and the answer is not to be a whole screen of pixels.
+    s.write_all(&update_request(1, 1)).map_err(|e| format!("VNC: {e}"))?;
     s.write_all(&set_desktop_size(width, height)).map_err(|e| format!("VNC: {e}"))?;
     s.flush().map_err(|e| format!("VNC: {e}"))?;
-    let mut reply = [0u8; 64];
-    // The first bytes of the update (or a timeout, or the end of a canned
-    // server in a test): the answer does not matter, that it came does.
-    let _ = s.read(&mut reply);
+    let mut seen = Vec::new();
+    let mut chunk = [0u8; 4096];
+    while seen.len() < 1 << 20 {
+        match s.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => seen.extend_from_slice(&chunk[..n]),
+        }
+        if resize_reply(&seen).is_some() {
+            break;
+        }
+    }
     Ok(before)
 }
 
@@ -187,9 +212,38 @@ mod tests {
         let mut want = b"RFB 003.008\n".to_vec();
         want.extend([1, 1]);
         want.extend(set_encodings());
-        want.extend(update_request(1280, 800));
+        want.extend(update_request(1, 1));
         want.extend(set_desktop_size(1024, 640));
         assert_eq!(p.sent, want);
+    }
+
+    #[test]
+    fn the_servers_answer_to_a_resize_is_found_in_what_it_sent() {
+        let rect = |reason: u16, result: u16| {
+            let mut r = reason.to_be_bytes().to_vec();
+            r.extend(result.to_be_bytes());
+            r.extend(1024u16.to_be_bytes());
+            r.extend(640u16.to_be_bytes());
+            r.extend((-308i32).to_be_bytes());
+            r
+        };
+        assert_eq!(resize_reply(&[]), None);
+        assert_eq!(resize_reply(&rect(0, 0)), None, "the server's own report is not the answer");
+        assert_eq!(resize_reply(&rect(1, 0)), Some(0));
+        assert_eq!(resize_reply(&rect(1, 3)), Some(3));
+        let mut both = vec![0u8; 40];
+        both.extend(rect(0, 0));
+        both.extend(rect(1, 0));
+        assert_eq!(resize_reply(&both), Some(0));
+        // Any answer to the request is the end of waiting.
+        let mut input = server(&[1], 0);
+        input.extend(rect(1, 3));
+        let mut p = Pipe { input: Cursor::new(input), sent: Vec::new() };
+        assert_eq!(request_size(&mut p, 1024, 640), Ok((1280, 800)));
+        let mut input = server(&[1], 0);
+        input.extend(rect(1, 0));
+        let mut p = Pipe { input: Cursor::new(input), sent: Vec::new() };
+        assert_eq!(request_size(&mut p, 1024, 640), Ok((1280, 800)));
     }
 
     #[test]
