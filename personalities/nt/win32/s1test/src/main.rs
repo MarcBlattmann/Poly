@@ -38,6 +38,7 @@ unsafe extern "system" {
     fn GetStdHandle(which: u32) -> Handle;
     fn WriteFile(h: Handle, buf: *const u8, len: u32, written: *mut u32, ov: *mut u8) -> i32;
     fn GetCurrentThreadId() -> u32;
+    fn GetCurrentThreadStackLimits(low: *mut usize, high: *mut usize);
     fn GetCurrentProcessId() -> u32;
     fn GetCurrentProcess() -> isize;
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
@@ -588,6 +589,15 @@ unsafe fn system() {
 
 // ----- GDI: fonts, text metrics, device caps -----------------------------------------
 
+/// GetCurrentThreadStackLimits: the stack this code runs on lies between the limits.
+unsafe fn stack_limits() {
+    let (mut low, mut high) = (0usize, 0usize);
+    GetCurrentThreadStackLimits(&mut low, &mut high);
+    let here = &low as *const usize as usize;
+    check_got(low != 0 && low < here && here < high, 0);
+    check_eq(high % 16, 0);
+}
+
 /// ReadProcessMemory / WriteProcessMemory on the calling process (Chrome's chrome_elf reads and
 /// patches ntdll's stubs this way).
 unsafe fn process_memory() {
@@ -657,6 +667,7 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         system();
         gdi();
         process_memory();
+        stack_limits();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));
         out(b" checks passed\n");

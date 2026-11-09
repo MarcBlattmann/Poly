@@ -63,6 +63,9 @@ pub const TEB_SELF: u64 = 0x30;
 /// `TEB.ClientId` (`winternl.h`): two `HANDLE`s, the process and thread id.
 pub const TEB_CLIENT_ID: u64 = 0x40;
 pub const TEB_PEB: u64 = 0x60;
+/// `TEB.DeallocationStack` (`ntpebteb.h`): the base of the stack's reservation, the low limit
+/// `GetCurrentThreadStackLimits` reports.
+pub const TEB_DEALLOCATION_STACK: u64 = 0x1478;
 pub const PEB_BEING_DEBUGGED: u64 = 0x02;
 /// `PEB.ImageBaseAddress` (`winternl.h`): where the executable is mapped. Programs read it
 /// straight from the PEB (Chrome's `chrome_elf.dll` does; with 0 it faulted at address 0x10).
@@ -182,7 +185,8 @@ fn write_teb(
     tib[TEB_CLIENT_ID as usize..][..8].copy_from_slice(&u64::from(client.process.0).to_le_bytes());
     tib[TEB_CLIENT_ID as usize + 8..][..8].copy_from_slice(&client.thread.0.to_le_bytes());
     tib[TEB_PEB as usize..][..8].copy_from_slice(&peb.to_le_bytes());
-    b.write(teb, &tib)
+    b.write(teb, &tib)?;
+    b.write(teb + TEB_DEALLOCATION_STACK, &stack.alloc.to_le_bytes())
 }
 
 /// Map `image` as an image section view in `proc` (at its preferred base,

@@ -63,6 +63,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetCurrentProcessId", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetCurrentThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetCurrentThreadId", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetCurrentThreadStackLimits", "api-ms-win-core-processthreads-l1-1-0"),
     ("ExitProcess", "api-ms-win-core-processthreads-l1-1-0"),
     ("TerminateProcess", "api-ms-win-core-processthreads-l1-1-0"),
     ("CreateThread", "api-ms-win-core-processthreads-l1-1-0"),
