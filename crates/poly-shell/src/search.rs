@@ -101,6 +101,7 @@ mod tests {
             keywords: keywords.iter().map(|k| (*k).into()).collect(),
             argv: vec![prog.into()],
             id: String::new(),
+            icon: None,
         }
     }
 

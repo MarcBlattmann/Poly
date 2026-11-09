@@ -54,10 +54,6 @@ pub struct Desktop {
     shell_button: bool,
     /// Apps started from the launcher, not reaped yet.
     pub children: Vec<(os::Pid, String)>,
-    /// Windows a keyboard shortcut asked to close. Wayland clients get
-    /// their close from the server; a window of another kind (a Windows
-    /// program's, over `/dev/win32k`) is closed by whoever owns it.
-    pub close_requests: Vec<WindowId>,
     /// Windows seen, to log new ones and to bring the launcher back when
     /// the last one goes.
     windows: BTreeSet<u32>,
@@ -74,6 +70,9 @@ pub struct Desktop {
     mixer: Option<Mixer>,
     pub bus: Option<SessionBus>,
     next_status_ms: u64,
+    /// Internal events of windows the desktop does not draw (Windows apps'
+    /// surfaces, ADR 0136), for their owner.
+    pub foreign: Vec<InternalEvent>,
 }
 
 /// Seconds on the wall clock.
@@ -127,6 +126,7 @@ impl Desktop {
         let title_font = fonts.sans;
         let mut shell = Shell::new(lw, lh, apps, poly_shell::draw::Text::with_fonts(fonts));
         desktop::load_wallpapers(&mut shell);
+        shell.set_icon_files(Box::new(desktop::DiskIcons));
         if let Some(f) = title_font {
             // Window titles in the shell's font, 12 pixels as Windows 11's.
             server.scene_mut().set_text(Box::new(poly_shell::draw::TitleFont::new(f, 12.0, 16)));
@@ -232,7 +232,6 @@ impl Desktop {
             dir: o.dir.to_string(),
             shell_button: false,
             children: Vec::new(),
-            close_requests: Vec::new(),
             windows: BTreeSet::new(),
             window_list: Vec::new(),
             ready: false,
@@ -245,6 +244,7 @@ impl Desktop {
             mixer,
             bus,
             next_status_ms: 0,
+            foreign: Vec::new(),
         };
         d.info = d.system_info(server);
         d.shell.set_sound_card(d.info.sound.clone());
@@ -492,7 +492,6 @@ impl Desktop {
             Hit::SwitchCancel => self.shell.switcher_cancel(),
             Hit::Close => {
                 if let Some(w) = server.active_window() {
-                    self.close_requests.push(w);
                     server.request_close(w);
                 }
             }
@@ -594,6 +593,11 @@ impl Desktop {
     /// Events of the internal windows.
     fn internal_events(&mut self, server: &mut Server) {
         for ev in server.take_internal_events() {
+            let mine = self.settings_win.as_ref().is_some_and(|w| Some(w.id) == internal_window(&ev));
+            if !mine {
+                self.foreign.push(ev);
+                continue;
+            }
             let Some(win) = &self.settings_win else { continue };
             let (id, (w, h)) = (win.id, win.size);
             let utc = realtime_secs();
@@ -913,4 +917,16 @@ impl Size for MemoryFramebuffer {
     fn height_px(&self) -> u32 {
         poly_wayland::compose::Framebuffer::height(self)
     }
+}
+
+/// The window an internal event is about.
+fn internal_window(ev: &InternalEvent) -> Option<WindowId> {
+    Some(match *ev {
+        InternalEvent::Motion { window, .. }
+        | InternalEvent::Button { window, .. }
+        | InternalEvent::Axis { window, .. }
+        | InternalEvent::Key { window, .. }
+        | InternalEvent::Resize { window, .. } => window,
+        InternalEvent::Leave(window) | InternalEvent::Close(window) => window,
+    })
 }
