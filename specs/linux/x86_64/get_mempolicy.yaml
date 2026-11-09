@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/get_mempolicy        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, CONFIG_NUMA=y, one NUMA node (node 0, possible = online = 0); tests run as root and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  get_mempolicy(int *mode, unsigned long *nmask, unsigned long maxnode,
+  void *addr, unsigned long flags) (syscall 239) reports a NUMA memory
+  policy. With flags 0 it reports the calling thread's policy (set by
+  set_mempolicy): *mode receives the mode ORed with its mode flags
+  (MPOL_F_STATIC_NODES 0x8000, MPOL_F_RELATIVE_NODES 0x4000,
+  MPOL_F_NUMA_BALANCING 0x2000) and nmask the node mask. A process that
+  never set a policy has MPOL_DEFAULT (0) and an empty mask. With
+  MPOL_F_ADDR (2) it reports the policy of the mapping that holds addr
+  (set by mbind; a mapping without one reports MPOL_DEFAULT and an empty
+  mask, regardless of the task policy). mode and nmask may each be NULL.
+  maxnode is the mask size in bits plus one: the call writes
+  ceil((maxnode - 1) / 64) unsigned longs to nmask and nothing beyond
+  (maxnode 1: nothing; 2..65: one long; 66..129: two; 130: three); bits
+  for nodes that do not exist are zero. Which mask is reported: with
+  STATIC or RELATIVE the mask exactly as the caller gave it (also bits of
+  nodes that do not exist); otherwise the effective mask (existing nodes
+  only), and for MPOL_PREFERRED only the first node of the given mask;
+  MPOL_DEFAULT and MPOL_LOCAL report an empty mask.
+returns:
+  success: "0"
+  default_process: "mode 0, mask all zero"
+  maxnode_bits: "writes ceil((maxnode-1)/64) longs; maxnode 32769 is the largest accepted"
+  f_mems_allowed: "flags MPOL_F_MEMS_ALLOWED (4): nmask = nodes the process may use ({0} here); mode is not meaningful"
+  f_node: "flags MPOL_F_NODE (1) alone: only under an MPOL_INTERLEAVE task policy; *mode = the next interleave node (0 here)"
+  f_addr_f_node: "flags MPOL_F_ADDR|MPOL_F_NODE: *mode = node of the page at addr (0 here); a page not touched yet is faulted in and reports its node too"
+  inheritance: "fork copies the task policy and the per-mapping policies; get_mempolicy in the child reports them"
+errors:
+  maxnode_zero: "EINVAL (22): nmask != NULL and maxnode 0 (more generally maxnode below the number of possible node ids; 1 is fine with one node)"
+  maxnode_large: "EINVAL (22): maxnode > 32769 (one page of bits + 1), e.g. 32770, 65536, 2^40; nmask untouched"
+  flags: "EINVAL (22): unknown flag bits (8); MPOL_F_MEMS_ALLOWED with MPOL_F_ADDR or MPOL_F_NODE; addr != 0 without MPOL_F_ADDR; MPOL_F_NODE without MPOL_F_ADDR while the task policy is not interleave"
+  addr_unmapped: "EFAULT (14): MPOL_F_ADDR and addr not in any mapping"
+  fault: "EFAULT (14): mode or nmask not writable"
+side_effects: "MPOL_F_ADDR|MPOL_F_NODE may populate the page at addr"
+threading: "the task policy is per thread; mapping policies are per address space"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/mempolicy.h. The tests assume exactly one
+# NUMA node (node 0): node 1 and up do not exist, as on the reference and
+# under Poly (QEMU, one node). On a multi-node machine the effective masks
+# and "missing node" errors differ. MAX_NUMNODES on the reference is 1024
+# (CONFIG_NODES_SHIFT=10): bits at or above it matter only for
+# set_mempolicy/mbind (EINVAL when set); the tests avoid them.

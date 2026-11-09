@@ -127,6 +127,53 @@ pub fn wait(
     }
 }
 
+/// futex_waitv(2): wait on every word of `words` (address, key, expected
+/// value) at once, while each holds its value, until a wake of any of them
+/// (each counts as bitset all ones), `deadline`, or a signal. Returns the
+/// index of the word whose wake ended the wait. `EAGAIN` if any word
+/// holds another value, `EFAULT` if one cannot be read, `ETIMEDOUT`.
+pub fn wait_many(
+    k: &mut dyn LinuxKernel,
+    words: &[(UserPtr, FutexKey, u32)],
+    deadline: Option<Deadline>,
+) -> Result<u32, WaitError> {
+    let tid = k.tid();
+    for &(addr, _, _) in words {
+        k.futex_load(addr)?;
+    }
+    let keys: Vec<FutexKey> = words.iter().map(|w| w.1).collect();
+    with_futexes(k, |t, k| {
+        for &(addr, _, val) in words {
+            if k.futex_load(addr)? != val {
+                return Err(Errno::EAGAIN);
+            }
+        }
+        let queued = t.enqueue_all(&keys, tid, FUTEX_BITSET_MATCH_ANY);
+        debug_assert!(queued, "a thread waits once at a time");
+        Ok(())
+    })?;
+    loop {
+        let why = k.block(deadline);
+        let (still_queued, slot) = with_futexes(k, |t, _| {
+            // A wake records the slot; take it before `remove` forgets it.
+            let slot = t.take_woken_slot(tid);
+            let queued = match why {
+                Wakeup::Woken => t.key_of(tid).is_some(),
+                Wakeup::TimedOut | Wakeup::Signal => t.remove(tid),
+            };
+            (queued, slot)
+        });
+        if !still_queued {
+            return Ok(slot.unwrap_or(0));
+        }
+        match why {
+            Wakeup::Woken => {}
+            Wakeup::TimedOut => return Err(Errno::ETIMEDOUT.into()),
+            Wakeup::Signal => return Err(WaitError::Interrupted),
+        }
+    }
+}
+
 /// Wake up to `max` waiters on `key` that match `bitset`; returns how many.
 pub fn wake(k: &mut dyn LinuxKernel, key: FutexKey, max: usize, bitset: u32) -> usize {
     let mut woken = Vec::new();

@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/GetWindowTextW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  Copies a window's text: for windows of the process it sends WM_GETTEXT
+  (wParam = the buffer size) and returns what the procedure returns;
+  DefWindowProc copies the stored text, truncated and always NUL-terminated.
+interface:
+  signature: "int GetWindowTextW(HWND hwnd, LPWSTR buffer, int max_count)"
+rules:
+  message: "WM_GETTEXT(nMaxCount, buffer) to the window (to its thread when it is another one)"
+  truncation: "stored \"Hello\": max 32 or 6 -> 5; max 3 -> 2 (\"He\" + NUL); max 1 -> 0 (just NUL); max 0 -> 0, no message, buffer untouched"
+  custom: "a procedure answering WM_GETTEXT decides text and count; GetWindowTextLengthW sends WM_GETTEXTLENGTH and returns its answer"
+  no_text: "returns 0 and writes a NUL"
+  other_thread: "a window of another thread of the process: the messages run on that thread (while it waits in GetMessageW) and the result comes back"
+  defwindowproc: "DefWindowProcW(WM_GETTEXT, 3, buf) copies 2 characters and a NUL, returns 2"
+errors:
+  bad_handle: "0, ERROR_INVALID_WINDOW_HANDLE (1400); buffer[0] set to 0"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

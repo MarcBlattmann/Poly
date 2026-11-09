@@ -1,60 +1,44 @@
 # Spec sheet. Describes behaviour only: no code, no internals.
 # Path: specs/<os>/<component>/<symbol>.yaml
-id: linux/syscall/x86_64/open_tree           # must match coverage.json
+id: linux/syscall/x86_64/open_tree            # must match coverage.json
 oracle:                                       # where the behaviour was observed
   os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
-  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (the unprivileged cases as uid/gid 65534 without capabilities); umask 022; unprivileged user namespaces allowed; every test makes a mount namespace of its own, makes / MS_REC|MS_PRIVATE and mounts a tmpfs on a private directory below /tmp"
-  observed_by: spec-linux-pkg
-  date: 2026-11-06
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 (plain open_tree), children dropping to uid/gid 1000; umask 022; tmpfs instances mounted under /tmp"
+  observed_by: spec-linux-e
+  date: 2026-11-01
 summary: >
-  open_tree(dfd, path, flags) (syscall 428) opens a mount tree. Without
-  OPEN_TREE_CLONE it returns an O_PATH-style descriptor for the object at
-  path (like open with O_PATH: fstat, openat relative to a directory and
-  fchdir work; read and write are EBADF); it needs no privilege and a final
-  symbolic link is followed unless AT_SYMLINK_NOFOLLOW (the descriptor is
-  then the link). With AT_EMPTY_PATH and an empty path it duplicates dfd (an
-  empty path without it is ENOENT). With OPEN_TREE_CLONE (1) it makes a
-  detached bind mount of the mount at path and returns a descriptor for its
-  top: path need not be a mount point (a plain directory or a regular file
-  is cloned the same way and is the clone's top), the clone is in no
-  namespace until move_mount attaches it (attaching it again where it
-  already is gives ELOOP), shares the files of the original (changes are
-  visible on both sides) and keeps its mount options (a read-only mount
-  clones read-only), is discarded when the descriptor of an unattached clone
-  is closed, and can be unmounted alone after attaching. Only the mount at
-  path is copied unless AT_RECURSIVE (0x8000, only with OPEN_TREE_CLONE;
-  alone it is EINVAL) copies every mount below it as well; a mount below
-  that is marked unbindable is left out of a recursive clone, and cloning an
-  unbindable mount itself is EINVAL. A recursive clone attached with
-  move_mount brings all its mounts along; plain umount2 of its top is EBUSY
-  while mounts are below, MNT_DETACH removes all. Flags: OPEN_TREE_CLOEXEC
-  (O_CLOEXEC, 0x80000) sets FD_CLOEXEC; descriptors are the lowest free;
-  AT_NO_AUTOMOUNT is accepted; other bits (2, 0x40000000, ~0) are EINVAL.
-  AT_EMPTY_PATH with a directory descriptor clones that directory. An
-  absolute path ignores dfd (even an invalid one); a relative one needs a
-  valid dfd. OPEN_TREE_CLONE needs CAP_SYS_ADMIN in the user namespace of
-  the caller's mount namespace (EPERM before the path is looked at, even for
-  a missing path); a user who made a user and mount namespace can clone the
-  mounts there.
+  open_tree(dfd, path, flags) (syscall 428) returns an O_PATH descriptor
+  (lowest free; FD_CLOEXEC only with OPEN_TREE_CLOEXEC = O_CLOEXEC). flags
+  also take AT_EMPTY_PATH (path "" means dfd), AT_SYMLINK_NOFOLLOW (open a
+  final symlink itself), AT_NO_AUTOMOUNT, AT_RECURSIVE (only with
+  OPEN_TREE_CLONE) and OPEN_TREE_CLONE (1). Without OPEN_TREE_CLONE it is
+  the same as openat(dfd, path, O_PATH): any user may call it, the result
+  works as a dirfd and with fstat/statx. With OPEN_TREE_CLONE (needs
+  CAP_SYS_ADMIN) it makes a detached copy of the mount at path, or, when
+  path is a plain directory, of the subtree rooted there (like a bind
+  mount source), and returns a descriptor of its root: the copy shares the
+  file system (changes are seen both ways), does not include submounts
+  unless AT_RECURSIVE, can be attached with move_mount, and is discarded
+  when its last descriptor closes without being attached (the source is
+  not affected).
 returns:
-  success: "descriptor >= 3 (O_PATH style for plain, mount root for CLONE)"
-  clone_content: "same files as the original; statfs of the attached clone is the original filesystem's (tmpfs size 1m: f_blocks 256)"
-  recursive: "recursive clone attached: sub-mounts keep their own filesystems (f_blocks 512 and 768 for 2m and 3m tmpfs); non-recursive clone: the sub directory is empty and shows the parent filesystem (f_blocks of the parent)"
+  success: "a new O_PATH fd; FD_CLOEXEC iff OPEN_TREE_CLOEXEC"
+  clone: "a detached copy of the mount (or directory subtree); AT_RECURSIVE copies submounts too"
 errors:
-  permission: "EPERM (1): OPEN_TREE_CLONE without CAP_SYS_ADMIN, checked first (a missing path too); plain open_tree: ENOENT for a missing path as a normal user"
-  missing: "ENOENT (2): missing path; empty path without AT_EMPTY_PATH"
-  bad_flags: "EINVAL (22): unknown bits; AT_RECURSIVE without OPEN_TREE_CLONE; OPEN_TREE_CLONE of an unbindable mount"
-  bad_pointer: "EFAULT (14): NULL or invalid path"
-  bad_dfd: "EBADF (9): invalid dfd with a relative path or with AT_EMPTY_PATH (also -1)"
-side_effects: >
-  A clone adds a detached mount; closing the descriptor of an unattached
-  clone discards it.
-threading: "descriptors are per process (shared file table); no other thread-specific behaviour"
+  flags: "EINVAL (22): unknown flag bits (0x2); AT_RECURSIVE without OPEN_TREE_CLONE"
+  perm: "EPERM (1): OPEN_TREE_CLONE without CAP_SYS_ADMIN"
+  missing: "ENOENT (2): path does not exist; \"\" without AT_EMPTY_PATH"
+  fault: "EFAULT (14): path unreadable"
+  bad_fd: "EBADF (9): dfd not open (relative path)"
+  fds: "EMFILE (24): no free descriptor; not tested"
+side_effects: "OPEN_TREE_CLONE creates a detached mount owned by the descriptor"
+threading: "none specific"
 ordering: []
 timing:
   typical: "microseconds"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
-# Notes: OPEN_TREE_CLONE 1, OPEN_TREE_CLOEXEC O_CLOEXEC, AT_RECURSIVE 0x8000 from linux/mount.h and linux/fcntl.h.
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/mount.h and linux/fcntl.h. The plain test
+# runs as any user; the clone tests need root.

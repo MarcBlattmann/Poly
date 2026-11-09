@@ -1,9 +1,13 @@
-//! Which QEMU accelerator the boots run on: KVM when `/dev/kvm` can be
-//! opened (much faster: the guest runs on the host CPU), QEMU's emulator
-//! (TCG) otherwise. `POLY_QEMU_ACCEL` overrides it: `tcg` always emulates,
-//! `kvm` requires KVM (an error without it), `auto` (or unset) chooses.
+//! Which QEMU accelerator the boots run on: the host's hypervisor when QEMU
+//! can use it (much faster: the guest runs on the host CPU), QEMU's
+//! emulator (TCG) otherwise. On Linux that is KVM (`/dev/kvm` can be
+//! opened); on Windows the Windows Hypervisor Platform (WHPX, the optional
+//! Windows feature of that name; QEMU is asked once whether it can start
+//! it). `POLY_QEMU_ACCEL` overrides it: `tcg` always emulates, `kvm` or
+//! `whpx` requires that hypervisor (an error without it), `auto` (or unset)
+//! chooses.
 //!
-//! The CPU model is the same on both: QEMU's default (`qemu64`) unless a
+//! The CPU model is the same on all: QEMU's default (`qemu64`) unless a
 //! boot asks for another with `-cpu`, so the guest sees the same features
 //! whichever runs it. Under KVM, QEMU adds x2APIC (in-kernel APIC) and the
 //! guest's TSC is the host's (the kernel treats a hypervisor's TSC as
@@ -20,6 +24,7 @@ pub const ENV: &str = "POLY_QEMU_ACCEL";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Accel {
     Kvm,
+    Whpx,
     Tcg,
 }
 
@@ -28,6 +33,7 @@ impl Accel {
     pub fn qemu_args(self) -> [&'static str; 2] {
         match self {
             Accel::Kvm => ["-accel", "kvm"],
+            Accel::Whpx => ["-accel", "whpx"],
             Accel::Tcg => ["-accel", "tcg"],
         }
     }
@@ -35,6 +41,7 @@ impl Accel {
     pub fn name(self) -> &'static str {
         match self {
             Accel::Kvm => "KVM",
+            Accel::Whpx => "WHPX",
             Accel::Tcg => "TCG",
         }
     }
@@ -49,41 +56,109 @@ pub fn kvm_usable() -> std::result::Result<(), String> {
     std::fs::OpenOptions::new().read(true).write(true).open("/dev/kvm").map(drop).map_err(|e| format!("/dev/kvm: {e}"))
 }
 
-/// The accelerator for `POLY_QEMU_ACCEL=<var>` (None: unset) given whether
-/// KVM is usable, and a line saying why.
-pub fn choose(var: Option<&str>, kvm: std::result::Result<(), String>) -> std::result::Result<(Accel, String), String> {
+/// Whether QEMU can start the Windows Hypervisor Platform, or why not: a
+/// QEMU with a machine that never runs (`-S`; WHPX needs an x86 one). QEMU
+/// sets the accelerator up before anything else and exits at once when it
+/// cannot, so one still running after [`WHPX_PROBE`] has it (and is
+/// killed). Windows' QEMU reads no monitor commands from a pipe, so it
+/// cannot be told to quit.
+pub fn whpx_usable() -> std::result::Result<(), String> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    use std::time::Instant;
+    if !cfg!(windows) {
+        return Err("WHPX is Windows only".into());
+    }
+    let mut child = Command::new("qemu-system-x86_64")
+        .args(["-accel", "whpx", "-machine", "q35", "-S", "-display", "none", "-nodefaults"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("qemu-system-x86_64: {e}"))?;
+    let deadline = Instant::now() + WHPX_PROBE;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(std::time::Duration::from_millis(20)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Ok(());
+            }
+        }
+    }
+    let mut err = String::new();
+    if let Some(mut stderr) = child.stderr.take() {
+        let _ = stderr.read_to_string(&mut err);
+    }
+    let line = err.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("QEMU could not start it").trim();
+    Err(format!("{line} (turn on the Windows feature \"Windows Hypervisor Platform\")"))
+}
+
+/// How long a QEMU asked for WHPX must keep running to count as having it.
+const WHPX_PROBE: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// The host's hypervisor and whether QEMU can use it: KVM on Linux, WHPX
+/// on Windows.
+fn host_hypervisor() -> (Accel, std::result::Result<(), String>) {
+    if cfg!(windows) { (Accel::Whpx, whpx_usable()) } else { (Accel::Kvm, kvm_usable()) }
+}
+
+/// The accelerator for `POLY_QEMU_ACCEL=<var>` (None: unset) given the
+/// host's hypervisor (`host`) and whether it is usable, and a line saying
+/// why.
+pub fn choose(
+    var: Option<&str>,
+    host: Accel,
+    usable: std::result::Result<(), String>,
+) -> std::result::Result<(Accel, String), String> {
+    let name = host.name();
     match var.map(str::trim) {
-        None | Some("" | "auto") => Ok(match kvm {
-            Ok(()) => (Accel::Kvm, "KVM (/dev/kvm is usable; POLY_QEMU_ACCEL=tcg emulates)".into()),
-            Err(why) => (Accel::Tcg, format!("TCG, QEMU's emulator (no KVM: {why})")),
+        None | Some("" | "auto") => Ok(match usable {
+            Ok(()) => (host, format!("{name}, the host's hypervisor (POLY_QEMU_ACCEL=tcg emulates)")),
+            Err(why) => (Accel::Tcg, format!("TCG, QEMU's emulator, much slower (no {name}: {why})")),
         }),
         Some("tcg") => Ok((Accel::Tcg, "TCG, QEMU's emulator (POLY_QEMU_ACCEL=tcg)".into())),
-        Some("kvm") => match kvm {
-            Ok(()) => Ok((Accel::Kvm, "KVM (POLY_QEMU_ACCEL=kvm)".into())),
-            Err(why) => Err(format!("{ENV}=kvm, but KVM is not usable: {why}")),
+        Some(v @ ("kvm" | "whpx")) if !v.eq_ignore_ascii_case(name) => {
+            Err(format!("{ENV}={v}, but this host's hypervisor is {name}"))
+        }
+        Some(v @ ("kvm" | "whpx")) => match usable {
+            Ok(()) => Ok((host, format!("{name} ({ENV}={v})"))),
+            Err(why) => Err(format!("{ENV}={v}, but {name} is not usable: {why}")),
         },
-        Some(other) => Err(format!("{ENV}={other}: expected kvm, tcg or auto")),
+        Some(other) => Err(format!("{ENV}={other}: expected kvm, whpx, tcg or auto")),
     }
 }
 
 static CHOSEN: OnceLock<(Accel, String)> = OnceLock::new();
 
-/// Choose the accelerator from the environment (once; `main` calls it
-/// first, so a bad `POLY_QEMU_ACCEL` stops every command).
+/// Check `POLY_QEMU_ACCEL`'s value (`main` calls it first, so a bad value
+/// stops every command). Which accelerator is usable is found out on the
+/// first boot ([`get`]): asking QEMU about WHPX takes a moment, which
+/// commands that boot nothing should not pay.
 pub fn init() -> std::result::Result<(), String> {
-    if CHOSEN.get().is_none() {
-        let var = std::env::var(ENV).ok();
-        let chosen = choose(var.as_deref(), kvm_usable())?;
-        let _ = CHOSEN.set(chosen);
+    match std::env::var(ENV).ok().as_deref().map(str::trim) {
+        None | Some("" | "auto" | "tcg" | "kvm" | "whpx") => Ok(()),
+        Some(other) => Err(format!("{ENV}={other}: expected kvm, whpx, tcg or auto")),
     }
-    Ok(())
 }
 
-/// The accelerator chosen by [`init`] (TCG if it was never called). The
-/// first call says which it is.
+/// The accelerator to boot on, chosen on the first call (which says which
+/// it is). `POLY_QEMU_ACCEL=kvm|whpx` without that hypervisor stops xtask.
 pub fn get() -> Accel {
     static SAID: Once = Once::new();
-    let (accel, why) = CHOSEN.get_or_init(|| (Accel::Tcg, "TCG, QEMU's emulator".into()));
+    let (accel, why) = CHOSEN.get_or_init(|| {
+        let var = std::env::var(ENV).ok();
+        let (host, usable) = match var.as_deref().map(str::trim) {
+            Some("tcg") => (Accel::Tcg, Err(String::new())),
+            _ => host_hypervisor(),
+        };
+        choose(var.as_deref(), host, usable).unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            std::process::exit(1)
+        })
+    });
     SAID.call_once(|| eprintln!("==> QEMU accelerator: {why}"));
     *accel
 }
@@ -96,16 +171,32 @@ mod tests {
     fn chooses_kvm_when_usable_unless_told_otherwise() {
         let yes = || Ok(());
         let no = || Err("/dev/kvm: No such file or directory".to_string());
+        let kvm = Accel::Kvm;
         for var in [None, Some(""), Some("auto"), Some(" auto ")] {
-            assert_eq!(choose(var, yes()).unwrap().0, Accel::Kvm, "{var:?}");
-            assert_eq!(choose(var, no()).unwrap().0, Accel::Tcg, "{var:?}");
+            assert_eq!(choose(var, kvm, yes()).unwrap().0, Accel::Kvm, "{var:?}");
+            assert_eq!(choose(var, kvm, no()).unwrap().0, Accel::Tcg, "{var:?}");
         }
-        assert_eq!(choose(Some("tcg"), yes()).unwrap().0, Accel::Tcg);
-        assert_eq!(choose(Some("tcg"), no()).unwrap().0, Accel::Tcg);
-        assert_eq!(choose(Some("kvm"), yes()).unwrap().0, Accel::Kvm);
-        assert!(choose(Some("kvm"), no()).unwrap_err().contains("not usable"));
-        assert!(choose(Some("hvf"), yes()).is_err());
+        assert_eq!(choose(Some("tcg"), kvm, yes()).unwrap().0, Accel::Tcg);
+        assert_eq!(choose(Some("tcg"), kvm, no()).unwrap().0, Accel::Tcg);
+        assert_eq!(choose(Some("kvm"), kvm, yes()).unwrap().0, Accel::Kvm);
+        assert!(choose(Some("kvm"), kvm, no()).unwrap_err().contains("not usable"));
+        assert!(choose(Some("whpx"), kvm, yes()).unwrap_err().contains("hypervisor is KVM"));
+        assert!(choose(Some("hvf"), kvm, yes()).is_err());
         assert_eq!(Accel::Kvm.qemu_args(), ["-accel", "kvm"]);
         assert_eq!(Accel::Tcg.qemu_args(), ["-accel", "tcg"]);
+    }
+
+    #[test]
+    fn chooses_whpx_on_windows_when_usable() {
+        let whpx = Accel::Whpx;
+        assert_eq!(choose(None, whpx, Ok(())).unwrap().0, Accel::Whpx);
+        let (accel, why) = choose(None, whpx, Err("WHPX: No accelerator found".into())).unwrap();
+        assert_eq!(accel, Accel::Tcg);
+        assert!(why.contains("no WHPX"), "{why}");
+        assert_eq!(choose(Some("whpx"), whpx, Ok(())).unwrap().0, Accel::Whpx);
+        assert!(choose(Some("whpx"), whpx, Err("off".into())).unwrap_err().contains("not usable"));
+        assert!(choose(Some("kvm"), whpx, Ok(())).unwrap_err().contains("hypervisor is WHPX"));
+        assert_eq!(choose(Some("tcg"), whpx, Ok(())).unwrap().0, Accel::Tcg);
+        assert_eq!(Accel::Whpx.qemu_args(), ["-accel", "whpx"]);
     }
 }

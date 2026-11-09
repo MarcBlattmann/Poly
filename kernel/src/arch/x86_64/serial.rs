@@ -117,6 +117,16 @@ impl SerialReceiver {
         }
     }
 
+    /// No more receive interrupts (flow control, ADR 0123): what arrives
+    /// stays in the receive FIFO, which is kept. Once it is full QEMU's
+    /// UART takes no more from its character device, which holds the rest
+    /// back; a real one without hardware flow control would overrun.
+    pub fn disable_interrupt(&mut self) {
+        // SAFETY: IER of a UART this receiver owns; the transmitter does
+        // not use its interrupt (it polls LSR).
+        unsafe { outb(self.base + IER, 0) };
+    }
+
     /// The next received byte, if one is waiting. Reading the last one
     /// clears the receive interrupt.
     pub fn read(&mut self) -> Option<u8> {

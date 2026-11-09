@@ -1,0 +1,20 @@
+[package]
+name = "poly-terminal-native"
+description = "/bin/poly-terminal: Poly's own terminal emulator (userland/poly-terminal) as a native Poly program (ADR 0134)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "poly-terminal"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-terminal = { path = "../../poly-terminal" }
+poly-rt = { path = "../../../crates/poly-rt" }
+
+[lints]
+workspace = true

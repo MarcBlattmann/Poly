@@ -14,11 +14,12 @@
 //! for pixel, others are scaled by nearest neighbour.
 
 mod frame;
+pub mod paint;
 mod render;
 mod scene;
 mod text;
 
-pub use frame::{BORDER, BUTTON_GAP, CLOSE_SIZE, TITLE_HEIGHT, Theme};
+pub use frame::{BORDER, BUTTON_GAP, CLOSE_SIZE, CORNER_RADIUS, TITLE_HEIGHT, Theme};
 pub use scene::{
     Backdrop, CURSOR_SIZE, Content, CursorLook, Hit, Placement, Scene, View, Window, WindowId, buffer_point,
 };

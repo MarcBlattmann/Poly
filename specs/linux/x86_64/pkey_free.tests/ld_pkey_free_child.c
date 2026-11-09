@@ -50,8 +50,11 @@ int test_main(void) {
 
     static volatile i32 done;
     i64 c = a_spawn(0, &done, vm_child, 0);
+    /* Wait for the child's end without system calls before reporting
+     * anything, so its calls always come before the parent's next one. */
+    int ended = c > 0 && a_spin_until(&done, 0, A_SPIN_LIMIT);
     check("spawn", c > 0, c);
-    check("vm_child_done", a_spin_until(&done, 0, A_SPIN_LIMIT), done);
+    check("vm_child_done", ended, done);
     expect("vm_child", result, 0);
     expect("reap", syscall4(SYS_wait4, c, &status, 0, 0), c);
     return finish();

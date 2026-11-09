@@ -3,7 +3,8 @@
 //! and its test program `a32test.exe` (ADR 0083), the C runtime (ADR 0084),
 //! `user32.dll` and `oleaut32.dll` (ADR 0087), `bcrypt.dll`, `crypt32.dll`
 //! and `cryptest.exe` (ADR 0096), `ws2_32.dll`, `winhttp.dll`, `wininet.dll`
-//! and their test programs (ADR 0095) — and check them.
+//! and their test programs (ADR 0095), `gdi32.dll` and `win32u.dll` (ADR
+//! 0128) — and check them.
 //!
 //! They are one Cargo workspace, `personalities/nt/win32`, built the way
 //! `ntdll` is (ADR 0071, `ntdll.rs`): `no_std` Rust for
@@ -35,7 +36,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 21] = [
+pub const OUTPUTS: [&str; 23] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -59,6 +60,9 @@ pub const OUTPUTS: [&str; 21] = [
     "winhttp.dll",
     "wininet.dll",
     "httptest.exe",
+    // ADR 0128.
+    "gdi32.dll",
+    "win32u.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -117,11 +121,16 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/winhttp",
             "personalities/nt/win32/wininet",
             "personalities/nt/win32/httptest",
+            "personalities/nt/win32/gui",
+            "personalities/nt/win32/gdi32",
+            "personalities/nt/win32/win32u",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
             "personalities/nt/win32/Cargo.lock",
             "personalities/nt/src/services.rs",
+            // win32u's stubs come from win32k's table (ADR 0128).
+            "crates/poly-win32k/src/services.rs",
             "rust-toolchain.toml",
         ],
     )?;
@@ -151,7 +160,7 @@ pub fn ensure() -> Result<PathBuf> {
         let _ = std::fs::remove_dir_all(&target);
     }
     prune(&cache);
-    eprintln!("==> Win32 modules built in {:.0?}, cached as {}", started.elapsed(), cached.display());
+    crate::progress::note(&format!("Win32 modules built in {:.0?}, cached as {}", started.elapsed(), cached.display()));
     Ok(cached)
 }
 
@@ -271,7 +280,59 @@ fn verify(dir: &Path) -> Result {
     verify_crt(dir)?;
     verify_user32_oleaut32(dir)?;
     verify_crypto(dir)?;
-    verify_ws2_32(dir)
+    verify_ws2_32(dir)?;
+    verify_gui(dir)
+}
+
+/// The GUI modules (ADR 0128): `user32` and `gdi32` export the first
+/// slice's functions (stubs for now) as code; `win32u` exports exactly the
+/// win32k service table, each export the system-call stub of its number.
+fn verify_gui(dir: &Path) -> Result {
+    use poly_pe::ExportTarget;
+    use poly_win32k::exports::{GDI32_EXPORTS, GDI32_STUBS, USER32_EXPORTS, USER32_STUBS};
+    use poly_win32k::services::{WIN32K_SERVICES, stub_bytes};
+    for (file, names) in [
+        ("user32.dll", USER32_STUBS),
+        ("user32.dll", USER32_EXPORTS),
+        ("gdi32.dll", GDI32_STUBS),
+        ("gdi32.dll", GDI32_EXPORTS),
+    ] {
+        let bytes = read(&dir.join(file))?;
+        let dll = parse(&bytes)?;
+        let exports =
+            dll.exports().map_err(|e| format!("{file} exports: {e:?}"))?.ok_or(format!("{file}: no exports"))?;
+        for name in names {
+            if !matches!(exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?, Some(ExportTarget::Rva(_))) {
+                return Err(format!("{file} lacks {name}"));
+            }
+        }
+    }
+    let bytes = read(&dir.join("win32u.dll"))?;
+    let dll = parse(&bytes)?;
+    let exports = dll.exports().map_err(|e| format!("win32u exports: {e:?}"))?.ok_or("win32u: no exports")?;
+    // Poly's services and nothing of Windows' (`NtUser*`, `NtGdi*`); the
+    // entry point and `_fltused` are exported too, as from every module.
+    let mut poly = 0;
+    for n in exports.names() {
+        let (name, _) = n.map_err(|e| format!("win32u exports: {e:?}"))?;
+        if name.starts_with(b"Nt") {
+            return Err(format!("win32u.dll exports Windows' {}", String::from_utf8_lossy(name)));
+        }
+        poly += usize::from(name.starts_with(b"Poly"));
+    }
+    if poly != WIN32K_SERVICES.len() {
+        return Err(format!("win32u.dll exports {poly} Poly names, the win32k table has {}", WIN32K_SERVICES.len()));
+    }
+    for &(_, number, name) in &WIN32K_SERVICES {
+        let Some(ExportTarget::Rva(rva)) = exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))? else {
+            return Err(format!("win32u.dll lacks {name}"));
+        };
+        let code = dll.bytes_at_rva(rva, 11).map_err(|e| format!("win32u!{name}: {e:?}"))?;
+        if code != stub_bytes(number) {
+            return Err(format!("win32u!{name} is not the stub of service {number:#x}: {code:02x?}"));
+        }
+    }
+    Ok(())
 }
 
 /// `bcrypt` and `crypt32` export their functions by name; `cryptest.exe`

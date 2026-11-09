@@ -47,13 +47,13 @@ use poly_personality_linux::errno::Errno;
 use poly_personality_linux::futex::{FutexKey, FutexTable};
 use poly_personality_linux::ipc::shm::ShmMemory;
 use poly_personality_linux::kernel::{
-    Backing, Clock, CpuTimes, CpuTimesOf, Credentials, Deadline, FpuState, LinuxKernel, MapRequest, Placement,
-    ProcessInfo, ProcessSelector, Prot, RandomMode, Target, UserContext, UserPtr, Wakeup,
+    Backing, Clock, CpuTimes, CpuTimesOf, Credentials, Deadline, FpuState, LinuxKernel, LockedMemory, MapRequest,
+    MemLock, Placement, ProcessInfo, ProcessSelector, Prot, RandomMode, Target, UserContext, UserPtr, Wakeup,
 };
 use poly_personality_linux::signal::LinuxProcess;
 use poly_personality_linux::time::TimerWakeup;
 use poly_vfs::FileType;
-use poly_vm::Access;
+use poly_vm::{Access, FutureLock};
 
 mod fileio;
 mod ptypeer;
@@ -391,6 +391,16 @@ impl LinuxKernel for Thread<'_> {
                     let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(source), start, r.shared);
                     return map_placed(&memory, req, r);
                 }
+                // A perf event's ring (perf_event_open(2), ADR 0135).
+                if let Some(found) = super::perf::mapping(&file, offset, r.len, r.shared) {
+                    let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(found?), 0, r.shared);
+                    return map_placed(&memory, req, r);
+                }
+                // An io_uring's rings and SQEs.
+                if let Some(found) = super::uring::mapping(&file, offset, r.len) {
+                    let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(found?), 0, r.shared);
+                    return map_placed(&memory, req, r);
+                }
                 // Pipes and event files have nothing to map.
                 if file.object().is_some() {
                     return Err(Errno::ENODEV);
@@ -543,8 +553,25 @@ impl LinuxKernel for Thread<'_> {
 
     fn mprotect(&mut self, addr: u64, len: u64, prot: Prot) -> Result<(), Errno> {
         // PROT_GROWSDOWN would extend the change to the start of a stack
-        // region; it is applied to the given range only for now.
-        self.memory()?.protect(addr, len, vm_prot(prot)).map_err(memory_errno)
+        // region; it is applied to the given range only for now. Only a
+        // stack grows down, nothing grows up (EINVAL, mprotect(2)).
+        const GROWSDOWN: u32 = 0x0100_0000;
+        const GROWSUP: u32 = 0x0200_0000;
+        let memory = self.memory()?;
+        if prot.0 & (GROWSDOWN | GROWSUP) != 0 {
+            match memory.kind_at(addr) {
+                None => return Err(Errno::ENOMEM),
+                Some(kind) if prot.0 & GROWSUP != 0 || kind != poly_vm::Kind::Stack => return Err(Errno::EINVAL),
+                Some(_) => {}
+            }
+        }
+        memory.protect(addr, len, vm_prot(prot)).map_err(memory_errno)
+    }
+
+    fn name_anon(&mut self, addr: u64, len: u64, name: Option<&[u8]>) -> Result<(), Errno> {
+        // The personality let only printable ASCII through.
+        let name = name.map(|n| core::str::from_utf8(n).map_err(|_| Errno::EINVAL)).transpose()?;
+        self.memory()?.set_anon_name(addr, len, name).map_err(memory_errno)
     }
 
     fn madvise(
@@ -566,8 +593,31 @@ impl LinuxKernel for Thread<'_> {
         self.memory()?.advise(addr, len, what).map_err(|e| Errno::new(e.linux_errno()).unwrap_or(Errno::EINVAL))
     }
 
-    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
-        self.memory()?.populate(addr, len, lock).map_err(|_| Errno::ENOMEM)
+    fn mlock(&mut self, addr: u64, len: u64, how: MemLock) -> Result<(), Errno> {
+        let (lock, populate) = match how {
+            MemLock::Unlock => (false, false),
+            MemLock::Lock => (true, true),
+            MemLock::LockOnFault => (true, false),
+        };
+        self.memory()?.lock(addr, len, lock, populate).map_err(|_| Errno::ENOMEM)
+    }
+
+    fn mlockall(&mut self, current: Option<MemLock>, future: Option<MemLock>) -> Result<(), Errno> {
+        let future = future.map(|f| if f == MemLock::Lock { FutureLock::Populate } else { FutureLock::OnFault });
+        self.memory()?.lock_all(current.map(|c| c == MemLock::Lock), future);
+        Ok(())
+    }
+
+    fn munlockall(&mut self) -> Result<(), Errno> {
+        self.memory()?.unlock_all();
+        Ok(())
+    }
+
+    fn locked_memory(&self, addr: u64, len: u64) -> LockedMemory {
+        let Some(m) = user::current_memory() else { return LockedMemory::default() };
+        let (locked, in_range, mapped, future) = m.locked(addr, len);
+        let future = future.map(|f| if f == FutureLock::Populate { MemLock::Lock } else { MemLock::LockOnFault });
+        LockedMemory { locked, in_range, mapped, future }
     }
 
     fn mincore(&mut self, addr: u64, vec: &mut [u8]) -> Result<(), Errno> {
@@ -796,7 +846,7 @@ impl LinuxKernel for Thread<'_> {
         // Bring the page in writable first if that may block here; under the
         // futex table's lock (interrupts off) it must be present already.
         if crate::arch::cpu::interrupts_enabled() {
-            let _ = user::page_fault(addr.0, Access::Write);
+            let _ = user::page_fault_in(addr.0, Access::Write, true);
         }
         // Atomic on the user word: other threads of the process may run on
         // other CPUs meanwhile.
@@ -930,6 +980,10 @@ impl LinuxKernel for Thread<'_> {
         super::task::execve(self, req)
     }
 
+    fn exec_lookup(&mut self, req: &poly_personality_linux::task::exec::ExecRequest<'_>) -> Result<(), Errno> {
+        self.process.files.open_exec_with(req.dirfd, req.path, req.follow).map(drop).map_err(vfs_errno)
+    }
+
     fn with_tree(
         &mut self,
         f: &mut dyn FnMut(&mut poly_personality_linux::task::tree::ProcessTree),
@@ -970,6 +1024,10 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn net(&mut self) -> Option<&mut dyn poly_personality_linux::net::LinuxNet> {
+        Some(self)
+    }
+
+    fn uring(&mut self) -> Option<&mut dyn poly_personality_linux::uring::UringKernel> {
         Some(self)
     }
 
@@ -1015,11 +1073,139 @@ impl LinuxKernel for Thread<'_> {
 
     fn namespace_of_fd(&mut self, fd: i32) -> Result<(u32, poly_personality_linux::ns::Kind), Errno> {
         let file = self.process.files.file(fd).map_err(vfs_errno)?;
+        // setns' spec sheet: a descriptor opened with O_PATH is EBADF.
+        if file.is_path_only() {
+            return Err(Errno::EBADF);
+        }
         if file.node().mount().fs().info().name != "proc" {
             return Err(Errno::EINVAL);
         }
         let (inum, kind) = poly_procfs::namespace_file(file.node().ino()).ok_or(Errno::EINVAL)?;
         let kind = poly_personality_linux::ns::Kind::from_index(kind as u32).ok_or(Errno::EINVAL)?;
         Ok((inum, kind))
+    }
+
+    fn kcmp_id(&mut self, pid: i32, what: poly_personality_linux::kernel::KcmpResource) -> Result<u64, Errno> {
+        super::procaccess::kcmp_id(pid, what)
+    }
+
+    fn process_vm_read(&mut self, pid: i32, addr: u64, buf: &mut [u8]) -> Result<(), Errno> {
+        super::procaccess::memory(pid)?.read(addr, buf).map_err(|_| Errno::EFAULT)
+    }
+
+    fn process_vm_write(&mut self, pid: i32, addr: u64, data: &[u8]) -> Result<(), Errno> {
+        super::procaccess::memory(pid)?.write(addr, data).map_err(|_| Errno::EFAULT)
+    }
+
+    fn ptrace_peek(&mut self, pid: i32, addr: u64, buf: &mut [u8]) -> Result<(), Errno> {
+        super::procaccess::memory(pid)?.read(addr, buf).map_err(|_| Errno::EIO)
+    }
+
+    fn ptrace_poke(&mut self, pid: i32, addr: u64, data: &[u8]) -> Result<(), Errno> {
+        super::procaccess::memory(pid)?.write_forced(addr, data).map_err(|_| Errno::EIO)
+    }
+
+    fn cpu_count(&self) -> u32 {
+        crate::thread::online_cpus().len() as u32
+    }
+
+    fn perf_source(&mut self, pid: i32) -> Result<Arc<dyn poly_personality_linux::perf::PerfSource>, Errno> {
+        super::perf::source(self, pid)
+    }
+
+    fn perf_install(
+        &mut self,
+        counter: Arc<poly_personality_linux::perf::Counter>,
+        cloexec: bool,
+    ) -> Result<i32, Errno> {
+        super::perf::install(self, counter, cloexec)
+    }
+
+    fn perf_counter(&mut self, fd: i32) -> Result<Option<Arc<poly_personality_linux::perf::Counter>>, Errno> {
+        super::perf::counter(self, fd)
+    }
+
+    fn acct_open(&mut self, path: &[u8]) -> Result<Arc<dyn poly_personality_linux::acct::Sink>, Errno> {
+        super::acct::open(self, path)
+    }
+
+    fn hangup_terminal(&mut self, sid: i32) {
+        crate::tty::vhangup(sid);
+    }
+
+    fn bpf_install(&mut self, object: poly_personality_linux::bpf::Object, cloexec: bool) -> Result<i32, Errno> {
+        super::bpf::install(self, object, cloexec)
+    }
+
+    fn bpf_object(&mut self, fd: i32) -> Result<Option<poly_personality_linux::bpf::Object>, Errno> {
+        super::bpf::object(self, fd)
+    }
+
+    fn exiting(&self) -> bool {
+        self.process.is_exiting() || self.flags.killed.load(Ordering::SeqCst)
+    }
+
+    fn take_fd(&mut self, pid: i32, fd: i32) -> Result<i32, Errno> {
+        let file = super::procaccess::live_process(pid)?.files.file(fd).map_err(vfs_errno)?;
+        self.process.files.install(file, true).map_err(vfs_errno)
+    }
+
+    fn memory_shared(&mut self) -> bool {
+        // As for set_tid_address(2) at thread exit: other threads, or
+        // another process (CLONE_VM).
+        self.process.thread_count() > 1 || user::current_memory().is_some_and(|m| Arc::strong_count(&m) > 2)
+    }
+
+    fn seccomp_listener(&mut self) -> Result<i32, Errno> {
+        self.seccomp_listener_fd()
+    }
+
+    fn mseal(&mut self, addr: u64, len: u64) -> Result<(), Errno> {
+        self.memory()?.seal(addr, len).map_err(memory_errno)
+    }
+
+    fn memfd_secret(&mut self, cloexec: bool) -> Result<i32, Errno> {
+        super::memcalls::memfd_secret(self, cloexec)
+    }
+
+    fn cachestat(&mut self, fd: i32, first: u64, end: u64) -> Result<u64, Errno> {
+        super::memcalls::cachestat(self, fd, first, end)
+    }
+
+    fn userfaultfd(&mut self, nonblock: bool, cloexec: bool, user_mode_only: bool) -> Result<i32, Errno> {
+        super::uffd::create(self, nonblock, cloexec, user_mode_only)
+    }
+
+    fn userfaultfd_op(
+        &mut self,
+        fd: i32,
+        op: poly_personality_linux::sys::userfaultfd::UffdOp<'_>,
+    ) -> Option<Result<poly_personality_linux::sys::userfaultfd::UffdReply, Errno>> {
+        super::uffd::op(self, fd, op)
+    }
+
+    fn memory_regions(
+        &mut self,
+        pid: i32,
+        start: u64,
+        end: u64,
+    ) -> Result<Vec<poly_personality_linux::kernel::MemRegion>, Errno> {
+        super::numa::regions(self.process.pid as i32, pid, start, end)
+    }
+
+    fn page_query(&mut self, pid: i32, addr: u64) -> Result<poly_personality_linux::kernel::PageQuery, Errno> {
+        super::numa::page_query(self.process.pid as i32, pid, addr)
+    }
+
+    fn remap_shared(&mut self, start: u64, len: u64, offset: u64) -> Result<(), Errno> {
+        super::numa::remap_shared(start, len, offset)
+    }
+
+    fn ntp(&self) -> poly_personality_linux::sys::timex::Ntp {
+        super::numa::ntp()
+    }
+
+    fn set_ntp(&mut self, ntp: &poly_personality_linux::sys::timex::Ntp) {
+        super::numa::set_ntp(ntp);
     }
 }

@@ -11,6 +11,7 @@ mod memory;
 mod objects;
 mod registry;
 mod sections;
+mod win32k;
 
 use crate::backend::{Backend, SectionSource, ViewMap, ViewSource};
 use crate::context::NtContext;

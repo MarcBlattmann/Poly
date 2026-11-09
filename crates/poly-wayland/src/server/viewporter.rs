@@ -65,12 +65,19 @@ impl Server {
     }
 
     /// A surface went away: its viewport has none any more, its
-    /// fractional scale object neither.
+    /// fractional scale object and its role objects (`wl_subsurface`,
+    /// `xwayland_surface_v1`) neither: they are inert, and the surface's ID,
+    /// which the client may use again once `delete_id` came, no longer
+    /// leads anywhere from them.
     pub(super) fn viewport_surface_gone(&mut self, c: ClientId, surface: ObjectId) {
         let client = self.client(c);
         for o in client.objects.values_mut() {
             match &mut o.data {
-                Data::Viewport(s) | Data::Fractional(s) if *s == Some(surface) => *s = None,
+                Data::Viewport(s) | Data::Fractional(s) | Data::Subsurface(s) | Data::XwaylandSurface(s)
+                    if *s == Some(surface) =>
+                {
+                    *s = None
+                }
                 _ => {}
             }
         }

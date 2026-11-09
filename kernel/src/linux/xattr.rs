@@ -16,15 +16,21 @@ fn target(t: &Thread<'_>, target: XattrTarget<'_>) -> Result<(NodeRef, Cred), Er
     let files = &t.process().files;
     let node = match target {
         XattrTarget::Path { path, follow } => files.lookupat(AT_FDCWD, path, follow).map_err(vfs_errno)?,
-        XattrTarget::Fd(fd) => {
-            let file = files.file(fd).map_err(vfs_errno)?;
-            if file.is_path_only() {
-                return Err(Errno::EBADF);
-            }
-            file.node().clone()
-        }
+        XattrTarget::Fd(fd) => open_node(files, fd)?,
+        XattrTarget::At { dirfd: AT_FDCWD, path: b"", .. } => files.node_at(AT_FDCWD).map_err(vfs_errno)?,
+        XattrTarget::At { dirfd, path: b"", .. } => open_node(files, dirfd)?,
+        XattrTarget::At { dirfd, path, follow } => files.lookupat(dirfd, path, follow).map_err(vfs_errno)?,
     };
     Ok((node, files.cred()))
+}
+
+/// The node descriptor `fd` is open on, not with `O_PATH` (`EBADF`).
+fn open_node(files: &crate::fs::Files, fd: i32) -> Result<NodeRef, Errno> {
+    let file = files.file(fd).map_err(vfs_errno)?;
+    if file.is_path_only() {
+        return Err(Errno::EBADF);
+    }
+    Ok(file.node().clone())
 }
 
 pub(super) fn get(t: &Thread<'_>, at: XattrTarget<'_>, name: &[u8]) -> Result<Vec<u8>, Errno> {

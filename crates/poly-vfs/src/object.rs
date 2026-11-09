@@ -29,6 +29,16 @@ pub trait FileObject: Any + Send + Sync {
     /// What the object is ready for now.
     fn poll(&self) -> PollEvents;
 
+    /// What the object is ready for now through an open file whose
+    /// current status flags have `O_NONBLOCK` (`nonblock`) or not; most
+    /// objects do not care ([`poll`](Self::poll)). A userfaultfd reports
+    /// `POLLERR` on a blocking file (its spec sheet), whatever flags it
+    /// was made with, so a later `fcntl(F_SETFL)` counts.
+    fn poll_as(&self, nonblock: bool) -> PollEvents {
+        let _ = nonblock;
+        self.poll()
+    }
+
     /// Where waiters for a change of [`poll`](Self::poll) register; `None`
     /// for an object whose readiness never changes.
     fn wait_queue(&self) -> Option<&Arc<WaitQueue>>;
@@ -64,6 +74,12 @@ pub trait FileObject: Any + Send + Sync {
     /// instance). Such a file's `fstat` mode has no file type bits.
     fn anon_name(&self) -> Option<&'static str> {
         None
+    }
+
+    /// Lines this object adds to `/proc/<pid>/fdinfo/<fd>` after the
+    /// common ones (a bpf map's `map_type`, `key_size`, ...).
+    fn fdinfo(&self) -> alloc::string::String {
+        alloc::string::String::new()
     }
 
     /// For an object that seeks like a file of this many bytes (a dma-buf:

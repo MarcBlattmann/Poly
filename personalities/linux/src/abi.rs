@@ -263,6 +263,24 @@ pub mod futex {
     pub const ROBUST_LIST_HEAD_SIZE: u64 = 24;
     pub const FUTEX_BITSET_MATCH_ANY: u32 = 0xffff_ffff;
 
+    // futex2 (futex_wait(2), futex_wake(2), futex_waitv(2),
+    // futex_requeue(2)), `linux/futex.h`.
+    pub const FUTEX2_SIZE_U8: u32 = 0x00;
+    pub const FUTEX2_SIZE_U16: u32 = 0x01;
+    pub const FUTEX2_SIZE_U32: u32 = 0x02;
+    pub const FUTEX2_SIZE_U64: u32 = 0x03;
+    pub const FUTEX2_SIZE_MASK: u32 = 0x03;
+    pub const FUTEX2_NUMA: u32 = 0x04;
+    pub const FUTEX2_MPOL: u32 = 0x08;
+    pub const FUTEX2_PRIVATE: u32 = FUTEX_PRIVATE_FLAG;
+    /// Every futex2 flag bit.
+    pub const FUTEX2_VALID_MASK: u32 = FUTEX2_SIZE_MASK | FUTEX2_NUMA | FUTEX2_MPOL | FUTEX2_PRIVATE;
+    /// `FUTEX_WAITV_MAX`: entries futex_waitv(2) takes at most.
+    pub const FUTEX_WAITV_MAX: u32 = 128;
+    /// `sizeof(struct futex_waitv)`: `u64 val, u64 uaddr, u32 flags, u32
+    /// __reserved`.
+    pub const FUTEX_WAITV_SIZE: usize = 24;
+
     pub const FUTEX_OP_SET: u32 = 0;
     pub const FUTEX_OP_ADD: u32 = 1;
     pub const FUTEX_OP_OR: u32 = 2;

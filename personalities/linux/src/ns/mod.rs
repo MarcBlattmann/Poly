@@ -18,10 +18,12 @@
 //!   only a loopback interface that is down, so its sockets reach nothing
 //!   ([`NetNs`]), an IPC namespace holds its System V shared memory
 //!   segments, semaphore sets and message queues ([`IpcNs::shm`],
-//!   [`IpcNs::sem`], [`IpcNs::msg`]). Cgroup and time namespaces are not
-//!   supported: their flags are `EINVAL`, as clone(2) and unshare(2)
-//!   document for a kernel built
-//!   without them.
+//!   [`IpcNs::sem`], [`IpcNs::msg`]). Cgroup and time namespaces
+//!   ([`CgroupNs`], [`TimeNs`]) have an identity only: Poly has no control
+//!   groups and no clock offsets. unshare(2) and setns(2) make and join
+//!   them (a time namespace, like a pid namespace, is the one the
+//!   process's children go to: `time_for_children`); clone(2) does not
+//!   take their flags yet.
 //! - **Identity.** Each namespace has an inode number ([`inum`]):
 //!   `/proc/[pid]/ns/<kind>` reads as `<kind>:[<inum>]` and a descriptor
 //!   on it names the namespace for setns(2) ([`lookup`]). The numbers are
@@ -56,12 +58,27 @@ pub enum Kind {
     PidForChildren,
     User,
     Uts,
+    Cgroup,
+    Time,
+    /// The time namespace the process's children go to
+    /// (`time_for_children`).
+    TimeForChildren,
 }
 
 impl Kind {
-    /// Every kind, in the order `/proc/[pid]/ns` lists them.
-    pub const ALL: [Kind; 7] =
-        [Kind::Ipc, Kind::Mnt, Kind::Net, Kind::Pid, Kind::PidForChildren, Kind::User, Kind::Uts];
+    /// Every kind, by [`Kind::index`].
+    pub const ALL: [Kind; 10] = [
+        Kind::Ipc,
+        Kind::Mnt,
+        Kind::Net,
+        Kind::Pid,
+        Kind::PidForChildren,
+        Kind::User,
+        Kind::Uts,
+        Kind::Cgroup,
+        Kind::Time,
+        Kind::TimeForChildren,
+    ];
 
     /// The entry's name in `/proc/[pid]/ns`.
     pub const fn entry(self) -> &'static str {
@@ -73,15 +90,25 @@ impl Kind {
             Kind::PidForChildren => "pid_for_children",
             Kind::User => "user",
             Kind::Uts => "uts",
+            Kind::Cgroup => "cgroup",
+            Kind::Time => "time",
+            Kind::TimeForChildren => "time_for_children",
         }
     }
 
     /// The type in the link's text (`net:[...]`): `pid` for both pid
-    /// entries.
+    /// entries, `time` for both time entries.
     pub const fn type_name(self) -> &'static str {
+        self.base().entry()
+    }
+
+    /// The kind of namespace an entry names: [`Kind::Pid`] for
+    /// `pid_for_children`, [`Kind::Time`] for `time_for_children`.
+    pub const fn base(self) -> Kind {
         match self {
-            Kind::PidForChildren => "pid",
-            k => k.entry(),
+            Kind::PidForChildren => Kind::Pid,
+            Kind::TimeForChildren => Kind::Time,
+            k => k,
         }
     }
 
@@ -94,12 +121,15 @@ impl Kind {
             Kind::Pid | Kind::PidForChildren => CLONE_NEWPID,
             Kind::User => CLONE_NEWUSER,
             Kind::Uts => CLONE_NEWUTS,
+            Kind::Cgroup => CLONE_NEWCGROUP,
+            Kind::Time | Kind::TimeForChildren => CLONE_NEWTIME,
         }
     }
 
-    /// The kind a link text's type names (`pid` is [`Kind::Pid`]).
+    /// The kind a link text's type names (`pid` is [`Kind::Pid`], `time`
+    /// [`Kind::Time`]).
     pub fn from_type_name(name: &[u8]) -> Option<Kind> {
-        Kind::ALL.into_iter().filter(|k| *k != Kind::PidForChildren).find(|k| k.type_name().as_bytes() == name)
+        Kind::ALL.into_iter().filter(|k| k.base() == *k).find(|k| k.type_name().as_bytes() == name)
     }
 
     /// A small number for each kind (inode numbers of the initial
@@ -116,11 +146,7 @@ impl Kind {
 /// The inode numbers of the initial namespaces: Poly's, below the dynamic
 /// ones.
 pub const fn initial_inum(kind: Kind) -> u32 {
-    let k = match kind {
-        Kind::PidForChildren => Kind::Pid,
-        k => k,
-    };
-    0xefff_fff0 + k.index()
+    0xefff_fff0 + kind.base().index()
 }
 
 /// Where the numbers of new namespaces start.
@@ -224,6 +250,22 @@ pub struct NetNs {
     common: Common,
 }
 
+/// A cgroup namespace (cgroup_namespaces(7)). Poly has no control groups,
+/// so one holds nothing but its identity (every process's cgroup is the
+/// root of its hierarchy, whichever namespace it is in).
+#[derive(Debug)]
+pub struct CgroupNs {
+    common: Common,
+}
+
+/// A time namespace (time_namespaces(7)). Poly keeps no clock offsets
+/// (`/proc/[pid]/timens_offsets` is not there): one holds its identity
+/// only, so every time namespace reads the same clocks.
+#[derive(Debug)]
+pub struct TimeNs {
+    common: Common,
+}
+
 /// A mount namespace (mount_namespaces(7)): the kernel's copy of the mount
 /// table it names.
 #[derive(Debug)]
@@ -284,7 +326,7 @@ macro_rules! namespace {
     )*};
 }
 
-namespace!(UtsNs, IpcNs, NetNs, MntNs);
+namespace!(UtsNs, IpcNs, NetNs, MntNs, CgroupNs, TimeNs);
 
 /// The namespaces of a process other than its user namespace; `None` is
 /// the initial namespace of the kind.
@@ -298,13 +340,19 @@ pub struct Namespaces {
     pub pid: PidNsRef,
     /// Where its children go (unshare(2) and setns(2) change it).
     pub pid_for_children: PidNsRef,
+    pub cgroup: Option<Arc<CgroupNs>>,
+    /// The process's time namespace, fixed for its life.
+    pub time: Option<Arc<TimeNs>>,
+    /// The time namespace its children go to (unshare(2) and setns(2)
+    /// change it).
+    pub time_for_children: Option<Arc<TimeNs>>,
 }
 
 impl Namespaces {
     /// What a child process of fork(2) starts with: the same namespaces,
     /// its own pid namespace being the parent's `pid_for_children`.
     pub fn for_child(&self) -> Namespaces {
-        Namespaces { pid: self.pid_for_children.clone(), ..self.clone() }
+        Namespaces { pid: self.pid_for_children.clone(), time: self.time_for_children.clone(), ..self.clone() }
     }
 
     /// The inode number of the kind's namespace (`user` from `user_ns`).
@@ -317,8 +365,26 @@ impl Namespaces {
             Kind::PidForChildren => self.pid_for_children.as_ref().map(|n| n.inum()),
             Kind::User => user_ns.as_ref().map(|n| n.inum()),
             Kind::Uts => self.uts.as_ref().map(|n| n.inum()),
+            Kind::Cgroup => self.cgroup.as_ref().map(|n| n.inum()),
+            Kind::Time => self.time.as_ref().map(|n| n.inum()),
+            Kind::TimeForChildren => self.time_for_children.as_ref().map(|n| n.inum()),
         };
         dynamic.unwrap_or(initial_inum(kind))
+    }
+
+    /// The inode number `/proc/[pid]/ns/<kind>` shows, if the entry can be
+    /// opened: `pid_for_children` cannot while it names a pid namespace
+    /// that has not had a first process yet (unshare's spec sheet:
+    /// `ENOENT` "until the first child is created").
+    pub fn entry_inum(&self, kind: Kind, user_ns: &UserNsRef) -> Option<u32> {
+        if kind == Kind::PidForChildren
+            && let Some(p) = &self.pid_for_children
+            && p.init().is_none()
+            && !p.is_dead()
+        {
+            return None;
+        }
+        Some(self.inum(kind, user_ns))
     }
 
     /// The user namespace that owns the mount namespace (mount(2)'s
@@ -345,6 +411,8 @@ pub enum Handle {
     Ipc(Option<Arc<IpcNs>>),
     Net(Option<Arc<NetNs>>),
     Mnt(Option<Arc<MntNs>>),
+    Cgroup(Option<Arc<CgroupNs>>),
+    Time(Option<Arc<TimeNs>>),
 }
 
 impl Handle {
@@ -356,6 +424,8 @@ impl Handle {
             Handle::Ipc(_) => Kind::Ipc,
             Handle::Net(_) => Kind::Net,
             Handle::Mnt(_) => Kind::Mnt,
+            Handle::Cgroup(_) => Kind::Cgroup,
+            Handle::Time(_) => Kind::Time,
         }
     }
 
@@ -368,12 +438,15 @@ impl Handle {
             Handle::Ipc(n) => n.as_ref().and_then(|n| n.owner().clone()),
             Handle::Net(n) => n.as_ref().and_then(|n| n.owner().clone()),
             Handle::Mnt(n) => n.as_ref().and_then(|n| n.owner().clone()),
+            Handle::Cgroup(n) => n.as_ref().and_then(|n| n.owner().clone()),
+            Handle::Time(n) => n.as_ref().and_then(|n| n.owner().clone()),
         }
     }
 }
 
 /// What the registry keeps: weak references, so a namespace goes when its
-/// last member does (a descriptor on its `/proc` file does not keep it).
+/// last member and the last open descriptor of its `/proc` file ([`pin`])
+/// do.
 #[derive(Debug)]
 enum Weakly {
     User(Weak<UserNs>),
@@ -382,6 +455,8 @@ enum Weakly {
     Ipc(Weak<IpcNs>),
     Net(Weak<NetNs>),
     Mnt(Weak<MntNs>),
+    Cgroup(Weak<CgroupNs>),
+    Time(Weak<TimeNs>),
 }
 
 impl Weakly {
@@ -393,6 +468,8 @@ impl Weakly {
             Handle::Ipc(n) => Weakly::Ipc(Arc::downgrade(n.as_ref()?)),
             Handle::Net(n) => Weakly::Net(Arc::downgrade(n.as_ref()?)),
             Handle::Mnt(n) => Weakly::Mnt(Arc::downgrade(n.as_ref()?)),
+            Handle::Cgroup(n) => Weakly::Cgroup(Arc::downgrade(n.as_ref()?)),
+            Handle::Time(n) => Weakly::Time(Arc::downgrade(n.as_ref()?)),
         })
     }
 
@@ -404,6 +481,8 @@ impl Weakly {
             Weakly::Ipc(w) => Handle::Ipc(Some(w.upgrade()?)),
             Weakly::Net(w) => Handle::Net(Some(w.upgrade()?)),
             Weakly::Mnt(w) => Handle::Mnt(Some(w.upgrade()?)),
+            Weakly::Cgroup(w) => Handle::Cgroup(Some(w.upgrade()?)),
+            Weakly::Time(w) => Handle::Time(Some(w.upgrade()?)),
         })
     }
 
@@ -415,6 +494,8 @@ impl Weakly {
             Weakly::Ipc(w) => w.strong_count() > 0,
             Weakly::Net(w) => w.strong_count() > 0,
             Weakly::Mnt(w) => w.strong_count() > 0,
+            Weakly::Cgroup(w) => w.strong_count() > 0,
+            Weakly::Time(w) => w.strong_count() > 0,
         }
     }
 }
@@ -433,7 +514,7 @@ fn register(inum: u32, h: Handle) {
 /// The namespace with inode number `inum` of type `kind` (the initial
 /// ones included); `None` if there is none (any more).
 pub fn lookup(inum: u32, kind: Kind) -> Option<Handle> {
-    let kind = if kind == Kind::PidForChildren { Kind::Pid } else { kind };
+    let kind = kind.base();
     if inum == initial_inum(kind) {
         return Some(match kind {
             Kind::User => Handle::User(None),
@@ -442,10 +523,43 @@ pub fn lookup(inum: u32, kind: Kind) -> Option<Handle> {
             Kind::Ipc => Handle::Ipc(None),
             Kind::Net => Handle::Net(None),
             Kind::Mnt => Handle::Mnt(None),
+            Kind::Cgroup => Handle::Cgroup(None),
+            Kind::Time | Kind::TimeForChildren => Handle::Time(None),
         });
     }
     let h = REGISTRY.lock().get(&inum)?.upgrade()?;
     (h.kind() == kind).then_some(h)
+}
+
+/// Open descriptors of `/proc/[pid]/ns` files, by inode number: each holds
+/// its namespace alive (setns' spec sheet: "A namespace stays alive while
+/// a descriptor of its ns file is open, also after its last process has
+/// exited").
+static PINS: Mutex<BTreeMap<u32, (Handle, usize)>> = Mutex::new(BTreeMap::new());
+
+/// Pin (`pin`) or unpin the namespace with inode number `inum` of kind
+/// `kind`, for a reference the kernel holds to its `/proc` file. Pins
+/// count; the initial namespaces need none.
+pub fn pin(inum: u32, kind: Kind, pin: bool) {
+    let mut pins = PINS.lock();
+    if pin {
+        if let Some(entry) = pins.get_mut(&inum) {
+            entry.1 += 1;
+        } else if let Some(h) = lookup(inum, kind)
+            && Weakly::of(&h).is_some()
+        {
+            pins.insert(inum, (h, 1));
+        }
+    } else if let Some(entry) = pins.get_mut(&inum) {
+        entry.1 -= 1;
+        if entry.1 == 0 {
+            // Dropped after the lock is released: dropping a mount
+            // namespace calls into the kernel.
+            let gone = pins.remove(&inum);
+            drop(pins);
+            drop(gone);
+        }
+    }
 }
 
 /// Whether a namespace with inode number `inum` exists.
@@ -476,8 +590,12 @@ fn enter_user(creds: &mut Creds, ns: Arc<UserNs>) {
     creds.keep_caps = false;
 }
 
-/// The flags of clone(2) and unshare(2) that make namespaces.
+/// The flags of clone(2) that make namespaces.
 pub const NEW_NAMESPACES: u64 = CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNET;
+
+/// Every `CLONE_NEW*` flag: unshare(2)'s namespaces, setns(2)'s types
+/// (clone(2) does not take the cgroup and time ones, [`NEW_NAMESPACES`]).
+pub const ALL_NAMESPACES: u64 = NEW_NAMESPACES | CLONE_NEWCGROUP | CLONE_NEWTIME;
 
 /// Make the namespaces `flags` asks for (already checked) for a process
 /// with namespaces `ns` and its thread's credentials `creds` (both
@@ -506,7 +624,7 @@ pub fn make(
         let user = new_user(&c)?;
         enter_user(&mut c, user);
     }
-    let others = flags & NEW_NAMESPACES & !CLONE_NEWUSER;
+    let others = flags & ALL_NAMESPACES & !CLONE_NEWUSER;
     if others != 0 && !c.capable(cap::SYS_ADMIN) {
         return Err(Errno::EPERM);
     }
@@ -532,6 +650,21 @@ pub fn make(
         let net = Arc::new(NetNs { common: Common::new(&owner) });
         register(net.inum(), Handle::Net(Some(net.clone())));
         n.net = Some(net);
+    }
+    if flags & CLONE_NEWCGROUP != 0 {
+        let cgroup = Arc::new(CgroupNs { common: Common::new(&owner) });
+        register(cgroup.inum(), Handle::Cgroup(Some(cgroup.clone())));
+        n.cgroup = Some(cgroup);
+    }
+    if flags & CLONE_NEWTIME != 0 {
+        // Like a pid namespace: unshare(2) "does not move the calling
+        // process into the new namespace"; its children go there.
+        let time = Arc::new(TimeNs { common: Common::new(&owner) });
+        register(time.inum(), Handle::Time(Some(time.clone())));
+        if for_child {
+            n.time = Some(time.clone());
+        }
+        n.time_for_children = Some(time);
     }
     // Last: the kernel's copy cannot be taken back.
     if flags & CLONE_NEWNS != 0 {
@@ -576,26 +709,36 @@ pub const UNSHARE_FLAGS: u64 = CLONE_FILES
     | CLONE_THREAD
     | CLONE_VM;
 
-/// What unshare(2) will do with `flags`, for a process with `threads`
-/// threads whose root `chrooted` is not its mount namespace's root.
-/// unshare(2):
+/// What the caller of unshare(2) shares, for [`check_unshare`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Sharing {
+    /// Threads in the calling process (they share its signal handlers).
+    pub threads: usize,
+    /// Its memory has other users: threads or processes made with
+    /// `CLONE_VM`.
+    pub memory: bool,
+    /// Its root is not its mount namespace's root.
+    pub chrooted: bool,
+}
+
+/// What unshare(2) will do with `flags` (all 64 bits), for a caller that
+/// shares what `sharing` says. unshare(2) and its spec sheet:
 ///
-/// - unknown flags, and `CLONE_NEWCGROUP` / `CLONE_NEWTIME` (not
-///   supported): `EINVAL`;
+/// - unknown flags: `EINVAL`, before anything else;
 /// - "CLONE_NEWUSER ... implies CLONE_THREAD", "CLONE_NEWNS implies
 ///   CLONE_FS", "CLONE_VM implies CLONE_SIGHAND", "CLONE_SIGHAND implies
-///   CLONE_THREAD"; `CLONE_THREAD`, `CLONE_SIGHAND` and `CLONE_VM` "can be
-///   specified ... if the caller is single threaded" (else `EINVAL`);
-/// - `CLONE_FILES` and `CLONE_FS` unshare what a process already owns
-///   alone in Poly (its descriptor table and directories): nothing to do
-///   for a single thread; with other threads Poly cannot split them
-///   (`EINVAL`, Poly's choice); `CLONE_SYSVSEM` has nothing to undo;
+///   CLONE_THREAD"; `CLONE_THREAD` and `CLONE_SIGHAND` need a
+///   single-threaded process, `CLONE_VM` memory nobody else uses (else
+///   `EINVAL`);
+/// - `CLONE_FILES`, `CLONE_FS` and `CLONE_SYSVSEM` work with threads too
+///   (the caller does them);
 /// - "EPERM CLONE_NEWUSER was specified in flags and the caller is in a
 ///   chroot environment".
 ///
-/// Returns the namespace flags to make.
-pub fn check_unshare(flags: u64, threads: usize, chrooted: bool) -> Result<u64, Errno> {
-    if flags & !UNSHARE_FLAGS != 0 || flags & (CLONE_NEWCGROUP | CLONE_NEWTIME) != 0 {
+/// Returns the namespace flags to make; the privilege is checked by
+/// [`check_privilege`].
+pub fn check_unshare(flags: u64, sharing: Sharing) -> Result<u64, Errno> {
+    if flags & !UNSHARE_FLAGS != 0 {
         return Err(Errno::EINVAL);
     }
     let mut implied = flags;
@@ -611,13 +754,28 @@ pub fn check_unshare(flags: u64, threads: usize, chrooted: bool) -> Result<u64, 
     if implied & CLONE_SIGHAND != 0 {
         implied |= CLONE_THREAD;
     }
-    if threads > 1 && implied & (CLONE_THREAD | CLONE_SIGHAND | CLONE_VM | CLONE_FILES | CLONE_FS) != 0 {
+    if sharing.threads > 1 && implied & (CLONE_THREAD | CLONE_SIGHAND) != 0 {
         return Err(Errno::EINVAL);
     }
-    if flags & CLONE_NEWUSER != 0 && chrooted {
+    if sharing.memory && implied & CLONE_VM != 0 {
+        return Err(Errno::EINVAL);
+    }
+    if flags & CLONE_NEWUSER != 0 && sharing.chrooted {
         return Err(Errno::EPERM);
     }
-    Ok(flags & NEW_NAMESPACES)
+    Ok(flags & ALL_NAMESPACES)
+}
+
+/// The privilege [`make`] will need for the namespaces `flags` asks for,
+/// checked before anything is changed: `CAP_SYS_ADMIN` in the caller's
+/// user namespace for every kind but a user namespace, unless a new user
+/// namespace made in the same call owns them (`EPERM`).
+pub fn check_privilege(creds: &Creds, flags: u64) -> Result<(), Errno> {
+    let others = flags & ALL_NAMESPACES & !CLONE_NEWUSER;
+    if others != 0 && flags & CLONE_NEWUSER == 0 && !creds.capable(cap::SYS_ADMIN) {
+        return Err(Errno::EPERM);
+    }
+    Ok(())
 }
 
 /// What setns(2) changes.
@@ -675,11 +833,22 @@ pub fn join(
         enter_user(&mut c, u.clone());
         return Ok(Join::User(c));
     }
+    // setns' spec sheet: a time namespace in a process with more than one
+    // thread is EUSERS, checked before the privilege.
+    if let Handle::Time(_) = target
+        && threads > 1
+    {
+        return Err(Errno::EUSERS);
+    }
     if !creds.capable(cap::SYS_ADMIN) || !user::ns_capable(creds, &target.owner(), cap::SYS_ADMIN) {
         return Err(Errno::EPERM);
     }
     let mut n = ns.clone();
     match target {
+        Handle::Cgroup(c) => n.cgroup = c.clone(),
+        // Like a pid namespace: the namespace of the children made from
+        // now on.
+        Handle::Time(t) => n.time_for_children = t.clone(),
         Handle::Mnt(m) => {
             if !creds.capable(cap::SYS_CHROOT) {
                 return Err(Errno::EPERM);

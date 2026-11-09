@@ -22,9 +22,11 @@ fn ids(k: &mut FakeKernel) -> [u64; 4] {
 fn unshare_checks_its_flags() {
     let mut k = FakeKernel::new();
     assert_eq!(unshare(&mut k, 0), Ok(0));
-    assert_eq!(unshare(&mut k, CLONE_NEWCGROUP), Err(Errno::EINVAL), "not supported");
-    assert_eq!(unshare(&mut k, CLONE_NEWTIME), Err(Errno::EINVAL));
     assert_eq!(unshare(&mut k, CLONE_PTRACE), Err(Errno::EINVAL), "not an unshare flag");
+    assert_eq!(unshare(&mut k, 1 << 32), Err(Errno::EINVAL), "all 64 bits count");
+    assert_eq!(unshare(&mut k, CLONE_NEWUTS | 1), Err(Errno::EINVAL), "bad flags before privilege");
+    assert_eq!(unshare(&mut k, CLONE_NEWCGROUP), Err(Errno::EPERM));
+    assert_eq!(unshare(&mut k, CLONE_NEWTIME), Err(Errno::EPERM));
     assert_eq!(unshare(&mut k, CLONE_FS | CLONE_FILES), Ok(0), "a single thread owns them already");
     // Without CAP_SYS_ADMIN only a user namespace can be made.
     assert_eq!(unshare(&mut k, CLONE_NEWUTS), Err(Errno::EPERM));
@@ -39,6 +41,8 @@ fn unshare_checks_its_flags() {
     k.add_thread(101);
     assert_eq!(unshare(&mut k, CLONE_NEWUSER), Err(Errno::EINVAL));
     assert_eq!(unshare(&mut k, CLONE_VM), Err(Errno::EINVAL));
+    assert_eq!(unshare(&mut k, CLONE_SIGHAND), Err(Errno::EINVAL));
+    assert_eq!(unshare(&mut k, CLONE_FS | CLONE_FILES | CLONE_SYSVSEM), Ok(0), "the caller's own");
     assert!(k.creds().user_ns.is_none());
 }
 
@@ -170,7 +174,7 @@ fn unshare_of_a_pid_namespace_is_for_the_children() {
     // Each namespace has its own inode number.
     let user = k.creds().user_ns.clone();
     let numbers: alloc::collections::BTreeSet<u32> = Kind::ALL.iter().map(|&kind| n.inum(kind, &user)).collect();
-    assert_eq!(numbers.len(), 7, "two initial (pid, uts), five new: all different");
+    assert_eq!(numbers.len(), 9, "four initial (pid, uts, cgroup, time), five new: all different");
     assert_eq!(n.inum(Kind::Pid, &user), initial_inum(Kind::Pid));
     assert!(matches!(ns::lookup(n.inum(Kind::Net, &user), Kind::Net), Some(ns::Handle::Net(Some(_)))));
     assert!(ns::lookup(n.inum(Kind::Net, &user), Kind::Ipc).is_none(), "the wrong kind");
@@ -280,4 +284,103 @@ fn a_user_namespace_can_be_joined_by_its_owner() {
     assert_eq!(ns::join(&none, &Creds::user(1000, 1000), 2, false, &handle, 0).err(), Some(Errno::EINVAL));
     assert_eq!(ns::join(&none, &Creds::user(1000, 1000), 1, true, &handle, 0).err(), Some(Errno::EPERM), "chroot");
     assert!(ns::join(&none, &Creds::user(1000, 1000), 1, false, &handle, 0).is_ok());
+}
+
+#[test]
+fn cgroup_and_time_namespaces() {
+    let mut k = FakeKernel::new();
+    *k.creds_mut() = Creds::root();
+    assert_eq!(unshare(&mut k, CLONE_NEWCGROUP | CLONE_NEWTIME), Ok(0));
+    let n = k.me().ns.clone();
+    let user = k.creds().user_ns.clone();
+    assert!(n.cgroup.is_some(), "the caller moves into a new cgroup namespace");
+    assert!(n.time.is_none(), "but not into the time namespace");
+    let t = n.time_for_children.clone().expect("its children's");
+    assert_eq!(n.inum(Kind::TimeForChildren, &user), t.inum());
+    assert_eq!(n.inum(Kind::Time, &user), initial_inum(Kind::Time));
+    assert!(n.for_child().time.as_ref().is_some_and(|c| alloc::sync::Arc::ptr_eq(c, &t)));
+    // A second time namespace is fine (unlike a pid namespace).
+    assert_eq!(unshare(&mut k, CLONE_NEWTIME), Ok(0));
+    assert_eq!(Kind::from_type_name(b"time"), Some(Kind::Time));
+    assert_eq!(Kind::TimeForChildren.type_name(), "time");
+    assert_eq!(Kind::TimeForChildren.flag(), CLONE_NEWTIME);
+    // setns of the initial time namespace sets the children's; with
+    // threads it is EUSERS, before the privilege.
+    k.ns_fds.insert(5, (initial_inum(Kind::Time), Kind::Time));
+    assert_eq!(sys(&mut k, nr::SETNS, &[5, CLONE_NEWTIME]), Ok(0));
+    assert!(k.me().ns.time_for_children.is_none());
+    k.add_thread(101);
+    k.creds_mut().caps = crate::cred::Caps::NONE;
+    assert_eq!(sys(&mut k, nr::SETNS, &[5, 0]), Err(Errno::EUSERS));
+    k.ns_fds.insert(6, (initial_inum(Kind::Cgroup), Kind::Cgroup));
+    assert_eq!(sys(&mut k, nr::SETNS, &[6, 0]), Err(Errno::EPERM));
+}
+
+#[test]
+fn a_second_pid_namespace_is_refused_and_its_file_waits_for_a_child() {
+    let mut k = FakeKernel::new();
+    *k.creds_mut() = Creds::root();
+    assert_eq!(unshare(&mut k, CLONE_NEWPID), Ok(0));
+    assert_eq!(unshare(&mut k, CLONE_NEWPID), Err(Errno::EINVAL));
+    let n = k.me().ns.clone();
+    let user = k.creds().user_ns.clone();
+    assert_eq!(n.entry_inum(Kind::PidForChildren, &user), None, "no first process yet");
+    assert_eq!(n.entry_inum(Kind::Pid, &user), Some(initial_inum(Kind::Pid)));
+    let p = n.pid_for_children.clone().unwrap();
+    pid::attach(&Some(p.clone()), 4242, true).unwrap();
+    assert_eq!(n.entry_inum(Kind::PidForChildren, &user), Some(p.inum()));
+}
+
+#[test]
+fn an_open_namespace_file_keeps_its_namespace() {
+    let mut k = FakeKernel::new();
+    *k.creds_mut() = Creds::root();
+    assert_eq!(unshare(&mut k, CLONE_NEWUTS), Ok(0));
+    let inum = k.me().ns.uts.as_ref().unwrap().inum();
+    ns::pin(inum, Kind::Uts, true);
+    ns::pin(inum, Kind::Uts, true);
+    // The process leaves it: the pins hold it.
+    k.me().ns.uts = None;
+    assert!(ns::lookup(inum, Kind::Uts).is_some());
+    ns::pin(inum, Kind::Uts, false);
+    assert!(ns::lookup(inum, Kind::Uts).is_some());
+    ns::pin(inum, Kind::Uts, false);
+    assert!(ns::lookup(inum, Kind::Uts).is_none(), "gone with the last pin");
+}
+
+#[test]
+fn setns_through_a_pidfd_joins_several_at_once() {
+    let mut k = FakeKernel::new();
+    *k.creds_mut() = Creds::root();
+    assert_eq!(unshare(&mut k, CLONE_NEWUTS | CLONE_NEWIPC), Ok(0));
+    let theirs = k.me().ns.clone();
+    let user = k.creds().user_ns.clone();
+    let targets = crate::sys::ns::pidfd_targets(&theirs, &user, CLONE_NEWUTS | CLONE_NEWIPC);
+    assert_eq!(targets.len(), 2);
+    let none = ns::Namespaces::default();
+    let (_, joined, mounts) = crate::sys::ns::join_all(&none, &Creds::root(), 1, false, &targets).unwrap();
+    assert_eq!(joined.uts, theirs.uts);
+    assert_eq!(joined.ipc, theirs.ipc);
+    assert!(mounts.is_none());
+    // Its own user namespace: EINVAL; no privilege: EPERM, all or nothing.
+    let user_target = crate::sys::ns::pidfd_targets(&theirs, &user, CLONE_NEWUSER);
+    assert_eq!(crate::sys::ns::join_all(&none, &Creds::root(), 1, false, &user_target).err(), Some(Errno::EINVAL));
+    let plain = Creds::user(1000, 1000);
+    assert_eq!(crate::sys::ns::join_all(&none, &plain, 1, false, &targets).err(), Some(Errno::EPERM));
+    assert_eq!(sys(&mut k, nr::SETNS, &[77, CLONE_NEWUTS]), Err(Errno::EBADF));
+}
+
+#[test]
+fn host_name_rules() {
+    use crate::sys::admin::sysctl_name;
+    assert_eq!(sysctl_name(b"from-proc\n"), b"from-proc");
+    assert_eq!(sysctl_name(b"a\0b"), b"a");
+    assert_eq!(sysctl_name(&[b'x'; 80]).len(), 64);
+    let mut k = FakeKernel::new();
+    k.poke(DATA, b"hijklm");
+    // The privilege comes first; only the low 32 bits of the length count.
+    k.creds_mut().caps = crate::cred::Caps::NONE;
+    assert_eq!(sys(&mut k, nr::SETHOSTNAME, &[DATA, 65]), Err(Errno::EPERM));
+    *k.creds_mut() = Creds::root();
+    assert_eq!(sys(&mut k, nr::SETHOSTNAME, &[DATA, 0xffff_ffff]), Err(Errno::EINVAL));
 }

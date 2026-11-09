@@ -4,6 +4,7 @@
 //!
 //! ```text
 //! /sys/devices/system/cpu/{online,possible,present}   "0-3\n": the CPUs running (no hot-plug)
+//! /sys/devices/system/cpu/kernel_max                  "15\n": the highest CPU number the kernel supports
 //! /sys/devices/system/cpu/cpu<n>/
 //! /sys/devices/virtual/mem/{null,zero,full,random,urandom}/dev   "major:minor\n"
 //! /sys/devices/virtual/tty/{console,tty}/dev
@@ -40,6 +41,10 @@ pub fn build() -> Arc<StaticFs> {
     for cpu in cpus.iter() {
         b.dir(&format!("devices/system/cpu/cpu{cpu}"));
     }
+    // sysfs-devices-system-cpu (the kernel's ABI documentation): "kernel_max:
+    // the maximum CPU index allowed by the kernel configuration"
+    // (Chromium reads it, docs/chromium-linux-gaps.md A19).
+    b.text("devices/system/cpu/kernel_max", &format!("{}\n", crate::thread::MAX_CPUS - 1));
     let devices = [
         ("mem", "null", NULL),
         ("mem", "zero", ZERO),

@@ -2,6 +2,8 @@
 //! [`fake::FakeKernel`].
 
 mod admin;
+mod aio;
+mod bpf;
 mod cred;
 mod fake;
 mod fileio;
@@ -9,11 +11,15 @@ mod fileops;
 mod files;
 mod futex;
 mod io;
+mod keys;
 mod madvise;
 mod mem;
 mod memfd;
+mod mountapi;
 mod msg;
 mod ns;
+mod numa;
+mod persona;
 mod process;
 mod process_ids;
 mod rseq;
@@ -27,10 +33,12 @@ mod signal_trace;
 mod socket;
 mod spec_a;
 mod spec_b;
+mod spec_d_files;
 mod startup;
 mod task;
 mod time;
 mod userland;
+mod xattrat;
 
 use crate::{ENOSYS, Errno, Linux, err, nr};
 use fake::{FakeKernel, call, sys};
@@ -47,7 +55,7 @@ fn unimplemented_returns_negative_enosys() {
 #[test]
 fn dispatch_with_kernel_reports_unimplemented_calls() {
     let mut k = FakeKernel::new();
-    for number in [nr::SWAPON, nr::RSEQ_SLICE_YIELD, 400, 472, 473, 0x4000_0000, u64::MAX] {
+    for number in [nr::KEXEC_LOAD, nr::RSEQ_SLICE_YIELD, 400, 472, 473, 0x4000_0000, u64::MAX] {
         let (outcome, rax) = call(&mut k, number, &[1, 2, 3]);
         assert_eq!(outcome, Outcome::Unimplemented { table: "linux", number });
         assert_eq!(rax as i64, -38);
@@ -78,6 +86,10 @@ fn every_implemented_call_reports_handled() {
     // Arguments that make each call fail early or do nothing harmful: the
     // point is the outcome, not the result.
     for (number, _) in crate::table::implemented() {
+        // pause(2) sleeps until a signal: tests::persona covers it.
+        if number == nr::PAUSE {
+            continue;
+        }
         let mut k = FakeKernel::new();
         let (outcome, _) = call(&mut k, number, &[u64::MAX, 0, 0, 0, u64::MAX, 0]);
         assert_eq!(outcome, Outcome::Handled, "{:?}", crate::table::name(number));

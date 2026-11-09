@@ -58,12 +58,14 @@ impl Server {
             stack.push(surface);
             p.pending.stack = Some(stack);
         }
-        self.client(c).insert(id, &wl_subsurface::INTERFACE, 1, Data::Subsurface(surface));
+        self.client(c).insert(id, &wl_subsurface::INTERFACE, 1, Data::Subsurface(Some(surface)));
         Ok(())
     }
 
     pub(super) fn subsurface_request(&mut self, c: ClientId, id: ObjectId, req: wl_subsurface::Request) -> Res {
-        let Some(Data::Subsurface(surface)) = self.client(c).data(id) else { return Ok(()) };
+        // Inert once its surface is gone (the surface's ID may be another
+        // surface's by now).
+        let Some(Data::Subsurface(Some(surface))) = self.client(c).data(id) else { return Ok(()) };
         let surface = *surface;
         let Some(sub) = self.surface_ref(c, surface).and_then(|s| s.sub) else { return Ok(()) };
         let parent = sub.parent;

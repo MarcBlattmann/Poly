@@ -125,6 +125,7 @@ dependencies = [
  "poly-pci",
  "poly-pe",
  "poly-personality-linux",
+ "poly-personality-native",
  "poly-personality-nt",
  "poly-personality-xnu",
  "poly-procfs",
@@ -146,6 +147,7 @@ dependencies = [
  "poly-virtio-net",
  "poly-virtio-sound",
  "poly-vm",
+ "poly-win32k",
 ]
 
 [[package]]
@@ -200,6 +202,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-personality-native"
+version = "0.0.1"
+dependencies = [
+ "poly-abi",
+ "poly-binfmt",
+]
+
+[[package]]
 name = "poly-personality-nt"
 version = "0.0.1"
 dependencies = [
@@ -212,6 +222,7 @@ dependencies = [
  "poly-security",
  "poly-seh",
  "poly-vfs",
+ "poly-win32k",
  "poly-winsock",
 ]
 
@@ -348,6 +359,10 @@ dependencies = [
 
 [[package]]
 name = "poly-vm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-win32k"
 version = "0.0.1"
 
 [[package]]

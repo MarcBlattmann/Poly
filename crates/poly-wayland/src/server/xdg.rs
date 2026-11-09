@@ -70,6 +70,9 @@ pub(crate) struct Toplevel {
     pub decoration: Option<ObjectId>,
     /// A decoration configure is due with the next configure sequence.
     pub decoration_due: bool,
+    /// The client asked to draw its own frame (`set_mode(client_side)`,
+    /// ADR 0144): Poly draws none around it.
+    pub client_side: bool,
     /// `wm_capabilities` went out (once, before the first configure).
     pub capabilities_sent: bool,
 }
@@ -484,10 +487,12 @@ impl Server {
         }
     }
 
-    /// The area a maximized window's frame may fill, and its bounds inside.
-    fn work_area(&self) -> (i32, i32) {
+    /// The area a maximized window's frame may fill, and its bounds inside
+    /// (all of it for a window that draws its own frame).
+    fn work_area(&self, client_side: bool) -> (i32, i32) {
         let a = self.scene.work_area();
-        (a.width - 2 * BORDER, a.height - TITLE_HEIGHT - 2 * BORDER)
+        let (x, y) = frame_insets(client_side);
+        (a.width - 2 * x, a.height - y - x)
     }
 
     /// `configure_bounds`, `wm_capabilities` (once), the decoration mode if
@@ -495,7 +500,8 @@ impl Server {
     pub(super) fn configure_toplevel(&mut self, c: ClientId, tl: ObjectId) {
         let active = self.active == Some((c, tl));
         let (ow, oh) = self.scene.logical_size();
-        let work = self.work_area();
+        let client_side = self.toplevel(c, tl).is_some_and(|t| t.client_side);
+        let work = self.work_area(client_side);
         let Some(t) = self.toplevel(c, tl) else { return };
         let xid = t.xdg;
         let mapped = matches!(self.client(c).data(xid), Some(Data::XdgSurface(x)) if x.mapped);
@@ -523,7 +529,8 @@ impl Server {
         } else if let Some(outer) = t.want_tile {
             // Tiled (ADR 0117): the bounds the frame leaves.
             tile = Some(outer);
-            (outer.width - 2 * BORDER, outer.height - TITLE_HEIGHT - 2 * BORDER)
+            let (x, y) = frame_insets(client_side);
+            (outer.width - 2 * x, outer.height - y - x)
         } else if t.maximized || t.fullscreen || t.tile.is_some() {
             // Going back to floating: the size it had.
             t.floating.unwrap_or((0, 0))
@@ -552,7 +559,11 @@ impl Server {
             client.send(tl, xdg_toplevel::Event::WmCapabilities { capabilities: u32_array(&caps) });
         }
         if let Some(d) = decoration {
-            let mode = zxdg_toplevel_decoration_v1::Mode::SERVER_SIDE.0;
+            let mode = if client_side {
+                zxdg_toplevel_decoration_v1::Mode::CLIENT_SIDE.0
+            } else {
+                zxdg_toplevel_decoration_v1::Mode::SERVER_SIDE.0
+            };
             client.send(d, zxdg_toplevel_decoration_v1::Event::Configure { mode });
         }
         client.send(tl, xdg_toplevel::Event::Configure { width: size.0, height: size.1, states: u32_array(&states) });
@@ -718,7 +729,9 @@ impl Server {
         let Some(t) = self.toplevel(c, role) else { return };
         let title = t.title.clone();
         let mut position = anchored.filter(|p| *p != pos);
-        let mut decorated = !t.fullscreen;
+        let client_side = t.client_side;
+        let (inset_x, inset_y) = frame_insets(client_side);
+        let mut decorated = !t.fullscreen && !client_side;
         let want = (t.want_maximized, t.want_fullscreen, t.want_tile);
         if acked_all && (t.maximized, t.fullscreen, t.tile) != want {
             if !t.maximized && !t.fullscreen && t.tile.is_none() {
@@ -726,13 +739,13 @@ impl Server {
                 t.restore = Some(pos);
             }
             (t.maximized, t.fullscreen, t.tile) = want;
-            decorated = !t.fullscreen;
+            decorated = !t.fullscreen && !client_side;
             position = Some(if t.fullscreen {
                 (-g.x, -g.y)
             } else if t.maximized {
-                (BORDER - g.x, top + TITLE_HEIGHT + BORDER - g.y)
+                (inset_x - g.x, top + inset_y - g.y)
             } else if let Some(outer) = t.tile {
-                (outer.x + BORDER - g.x, outer.y + TITLE_HEIGHT + BORDER - g.y)
+                (outer.x + inset_x - g.x, outer.y + inset_y - g.y)
             } else {
                 t.restore.take().unwrap_or(pos)
             });
@@ -755,7 +768,11 @@ impl Server {
         }
         let previous = self.active.replace((c, tl));
         if previous == Some((c, tl)) {
+            // It may have been given the focus before it had a window (an
+            // activation request before the first map): the window is
+            // shown active now.
             if let Some(w) = self.toplevel_window(c, tl) {
+                self.scene.set_active(w, true);
                 self.scene.raise(w);
             }
             return;
@@ -966,4 +983,11 @@ impl Server {
 /// 32-bit values in the host's byte order, as `array` arguments carry them.
 pub(super) fn u32_array(values: &[u32]) -> Vec<u8> {
     values.iter().flat_map(|v| v.to_ne_bytes()).collect()
+}
+
+/// How far a window's content sits inside its frame: left (and right and
+/// bottom) border, and top (title bar plus border); none for a window that
+/// draws its own frame.
+fn frame_insets(client_side: bool) -> (i32, i32) {
+    if client_side { (0, 0) } else { (BORDER, TITLE_HEIGHT + BORDER) }
 }

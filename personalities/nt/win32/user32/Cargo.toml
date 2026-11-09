@@ -1,6 +1,6 @@
 [package]
 name = "user32"
-description = "Our user32.dll (ADR 0087): its first string functions; windows come with Phase 6"
+description = "Our user32.dll (ADR 0087, 0128): windows, messages and the default window procedure over win32k, and the first string functions"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,6 +12,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 poly-win32-rt = { path = "../rt" }
+poly-win32-gui = { path = "../gui" }
+poly-win32k = { path = "../../../../crates/poly-win32k" }
 poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
 
 [lints]

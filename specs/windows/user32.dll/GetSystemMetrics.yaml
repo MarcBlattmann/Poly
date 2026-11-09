@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/GetSystemMetrics
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read. "GetSystemMetrics", "GetSystemMetricsForDpi",
+  "GetDoubleClickTime".
+summary: >
+  Returns a system metric or configuration value for an SM_* index
+  (winuser.h); 0 for an index it does not know. In a DPI-unaware process the
+  sizes are those of 96 DPI. GetSystemMetricsForDpi returns the same sizes
+  scaled for a given DPI.
+interface:
+  signature: "int GetSystemMetrics(int index)"
+  GetSystemMetricsForDpi: "int GetSystemMetricsForDpi(int index, UINT dpi): the size for that DPI (rounded as listed); screen and other non-size values do not scale"
+  session: "Values are those of the interactive session (one 1920x1080 monitor at 96 DPI, taskbar 24 pixels high at the top); slice A's sheets recorded the SSH session (session 0: 1024x768)."
+rules:
+  screen: "SM_CXSCREEN 1920, SM_CYSCREEN 1080 (= GetDeviceCaps HORZRES/VERTRES of the screen DC); SM_XVIRTUALSCREEN 0, SM_YVIRTUALSCREEN 0, SM_CXVIRTUALSCREEN 1920, SM_CYVIRTUALSCREEN 1080, SM_CMONITORS 1, SM_SAMEDISPLAYFORMAT 1"
+  work_area_sizes: "the work area is 0,24,1920,1080; SM_CXFULLSCREEN 1920, SM_CYFULLSCREEN 1033 (work height minus SM_CYCAPTION); SM_CXMAXIMIZED 1936, SM_CYMAXIMIZED 1072 (work area plus 16 each way); SM_CXMAXTRACK 1940, SM_CYMAXTRACK 1100 (virtual screen plus 20); SM_CXMINTRACK 136, SM_CYMINTRACK 39"
+  sizes_96: "SM_CXVSCROLL/SM_CYHSCROLL/SM_CYVSCROLL/SM_CXHSCROLL/SM_CYVTHUMB/SM_CXHTHUMB 17, SM_CYCAPTION 23, SM_CXBORDER/SM_CYBORDER 1, SM_CXDLGFRAME/SM_CYDLGFRAME 3, SM_CXICON/SM_CYICON 32, SM_CXCURSOR/SM_CYCURSOR 32, SM_CYMENU 20, SM_CYKANJIWINDOW 0, SM_CXMIN 136, SM_CYMIN 39, SM_CXSIZE 36, SM_CYSIZE 22, SM_CXFRAME/SM_CYFRAME (= SM_CXSIZEFRAME, index 32) 4, SM_CXDOUBLECLK/SM_CYDOUBLECLK 4, SM_CXICONSPACING/SM_CYICONSPACING 75, SM_CXEDGE/SM_CYEDGE 2, SM_CXMINSPACING 160, SM_CYMINSPACING 28, SM_CXSMICON/SM_CYSMICON 16, SM_CYSMCAPTION 23, SM_CXSMSIZE/SM_CYSMSIZE 22, SM_CXMENUSIZE/SM_CYMENUSIZE 19, SM_CXMINIMIZED 160, SM_CYMINIMIZED 28, SM_CXDRAG/SM_CYDRAG 4, SM_CXMENUCHECK/SM_CYMENUCHECK 15, SM_CXFOCUSBORDER/SM_CYFOCUSBORDER 1, SM_CXPADDEDBORDER 4; GetDoubleClickTime 500"
+  for_dpi: "GetSystemMetricsForDpi at 96/120/144/192: scroll bars and thumbs 17/21/26/34, SM_CYCAPTION and SM_CYSMCAPTION 23/29/34/45, icons 32/40/48/64, cursors 32/32/48/64, SM_CYMENU 20/25/30/39, SM_CXMIN 136/166/198/258, SM_CYMIN 39/47/56/71, SM_CXSIZE 36/46/54/72, SM_CYSIZE and small caption buttons 22/28/33/44, SM_CXFRAME 4/4/5/5, icon spacing 75/94/113/150, small icons 16/20/24/32, menu bar buttons 19/24/29/38, menu check 15/19/25/31, SM_CXPADDEDBORDER 4/5/6/8; unchanged at every DPI: borders 1, dialog frames 3, edges 2, double-click and drag rectangles 4, focus borders 1, minimized sizes 160x28, min spacing 160x28, SM_CYKANJIWINDOW 0, the screen, the virtual screen and SM_CXMAXIMIZED; at the system DPI (96) it equals GetSystemMetrics; SM_CYCAPTION at DPI 1 is 24, at 48 is 12, at 1000 is 230"
+  flags: "SM_MOUSEPRESENT 0, SM_CMOUSEBUTTONS 0 and SM_MOUSEWHEELPRESENT 0 (the oracle has no mouse attached; SendInput still moves the cursor), SM_DEBUG 0, SM_SWAPBUTTON 0, SM_MENUDROPALIGNMENT 0, SM_PENWINDOWS 0, SM_DBCSENABLED 0, SM_SECURE 0, SM_ARRANGE 8 (ARW_HIDE, winuser.h: minimized windows are hidden), SM_CLEANBOOT 0, SM_SHOWSOUNDS 0, SM_SLOWMACHINE 0, SM_MIDEASTENABLED 0, SM_IMMENABLED 1, SM_TABLETPC 0, SM_MEDIACENTER 0, SM_STARTER 0, SM_SERVERR2 0, SM_MOUSEHORIZONTALWHEELPRESENT 0, SM_DIGITIZER 0, SM_MAXIMUMTOUCHES 0, SM_REMOTESESSION 0, SM_SHUTTINGDOWN 0, SM_REMOTECONTROL 0, SM_CARETBLINKINGENABLED 1, SM_CONVERTIBLESLATEMODE 0, SM_SYSTEMDOCKED 0, SM_NETWORK bit 0 set"
+errors:
+  undefined: "an index winuser.h does not define returns 0. The last error: ERROR_INVALID_PARAMETER (87) for negative indices, 97, 0x1001 and 0x7FFFFFFF; unchanged (0) for 24..27, 64..66, 90, 96 and 0x2005"
+  for_dpi: "GetSystemMetricsForDpi with DPI 0: 0, ERROR_INVALID_PARAMETER (87); with an undefined index (64) or SM_REMOTESESSION: 0, error unchanged"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Other screen sizes, several monitors, a mouse being attached, values after
+  the user changes settings (SystemParametersInfo), indices 85 and 93 (not
+  in winuser.h). DPI awareness other than unaware (the tests have no
+  manifest), several monitors, other keyboard layouts than German, IME,
+  touch and pen, hooks, menus and the menu loop.

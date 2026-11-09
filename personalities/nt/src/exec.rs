@@ -440,6 +440,8 @@ pub fn thread_exit(
     };
     let t = proc.threads.remove(pos);
     proc.exited.insert(thread, status);
+    // Its windows, queue and timers go (ADR 0128).
+    sys.win32k.thread_exited(&mut sys.objects, proc.pid.0, thread.0 as u32);
     // Tell the dispatcher the thread is gone (abandon its mutants, drop its
     // waits), then signal its object so waiters on it wake.
     sys.objects.thread_terminated(thread);
@@ -461,6 +463,7 @@ pub fn thread_exit(
 /// handle in its table. Its memory itself goes with the kernel's memory
 /// map; `b` is only used to free section pages.
 pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backend) {
+    sys.win32k.process_exited(&mut sys.objects, proc.pid.0);
     for a in proc.vm.clear() {
         if let Some(v) = a.view() {
             let _ = sys.objects.dereference(v.object);

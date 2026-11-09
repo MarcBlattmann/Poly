@@ -27,7 +27,10 @@ mod pci;
 mod queue;
 
 pub use common::{COMMON_CFG_MIN_LEN, CommonCfg, Configuring, FeatureNegotiation, InitError, NO_VECTOR, begin};
-pub use pci::{Isr, Notifier, PciCfgWindow, PciTransport, Region, TransportError, Width, cfg_type};
+pub use pci::{
+    Isr, Notifier, PciCfgWindow, PciTransport, Region, SharedMemory, TransportError, Width, cfg_type,
+    find_shared_memory,
+};
 pub use queue::{AddError, Buffer, DescState, Layout, QueueAddresses, SetupError, SplitQueue, Used, UsedError};
 
 use poly_pci::Header;

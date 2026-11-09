@@ -49,4 +49,4 @@ pub use font::{Error, Font, GlyphId, HMetrics, OutlineFormat, StyleInfo, VMetric
 pub use layout::{LayoutOptions, Line, PositionedGlyph, TextLayout, layout, render_layout};
 pub use path::{Bounds, Path, Point, Segment};
 pub use raster::Rasterizer;
-pub use render::{Bitmap, Image, MAX_SIZE_PX, RenderMode, render_glyph};
+pub use render::{Bitmap, Image, MAX_SIZE_PX, RenderMode, render_glyph, render_glyph_scaled};

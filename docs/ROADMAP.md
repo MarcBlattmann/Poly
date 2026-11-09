@@ -118,18 +118,26 @@ programs (and later the real desktop) exist. The drivers stay for good.
 ## Phase 6: Graphics, input, audio and the desktop
 
 - [x] ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)
-- [x] ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app
+- [x] ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app; apps that ask to draw their own (Chromium) get none (ADR 0144)
 - [x] virtio-gpu driver: modesetting and 2D framebuffer
 - [x] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
 - [x] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged (ADR 0108, ADR 0115: kmscube renders with Mesa's kms_swrast on `/dev/dri/card0`, boot group `mesa`)
-- [ ] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa
+- [x] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa (ADR 0119: unmodified Mesa's virgl renders `eglinfo`, `gl-readback` and `kmscube` on QEMU's `virtio-gpu-gl-pci`; Venus runs `vulkaninfo` and `vk-clear` on QEMU 9.2's `venus=on`; boot group `virgl`, skipped where the host has no render node)
 - [x] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface
 - [x] Compositor: Wayland server, surface composition, HiDPI scaling, vsync (ADR 0106, 0107, 0116)
 - [x] Shell: launcher, window management, notifications, settings (own non-glass design) (ADR 0107, ADR 0117)
 - [x] Compositor exposes the content behind each window (needed later for Liquid Glass) (ADR 0116)
 - [x] XWayland for X11 apps (ADR 0118)
 - [x] Fonts: font store, rasterisation, fontconfig-compatible discovery
-- [ ] **Milestone:** GTK and Qt apps run; VLC plays a video with sound
+- [x] ⚖️ Decided (owner, ADR 0124): the desktop becomes native Poly user space, looks 1:1 like Alpine Shell (its assets reused), and everything that ships builds on Windows and Linux hosts
+- [x] Native user space: Poly's own system call interface and a Rust runtime; a native program, linked by `rust-lld`, builds on Windows and Linux and runs on Poly (boot test) (ADR 0125: ELF programs with Poly's ABI note run in the native personality; handles are the kernel's shared open files; `poly-rt` with `poly-heap` as its allocator; `/bin/native-hello` prints, allocates, keeps time, uses files and spawns native and Linux children; boot group `native`, passing on Windows and Linux hosts)
+- [x] The desktop (compositor, shell, notifications, settings) runs as native Poly processes; Linux apps' Wayland and X11 windows still reach it (the desktop and toolkits boot groups pass) (ADR 0126: ABI version 2 with sockets, handle passing, mappings, memory objects, process handles; `poly-compositor` and `notify-send` are native programs, Linux programs may `execve` them; boot groups `wayland`, `wayland-kms`, `desktop`, `desktop-shell`, `xwayland` and `toolkits` pass)
+- [x] The shell looks 1:1 like Alpine Shell: ridge with panels extending from it, centred launcher, notifications at the top right, settings window, its fonts, icons, colours, soft shadows and blur (screenshots match Alpine Shell's references) (ADR 0127: surfaces hanging from the ridge, Alpine's fonts, Lucide icons and tokens, light and dark themes, the settings app in its current layout; compared with the live Alpine Shell and its screenshots, only intended differences left)
+- [x] `cargo xtask desktop` builds and boots the desktop on a Windows host as well as on Linux (ADR 0126: the glibc build is gone, the C test clients are optional in its image)
+- [x] **Milestone:** GTK and Qt apps run; VLC plays a video with sound (ADR 0120, 0123: GTK 3, GTK 4 and Qt 6 apps from the launcher, clicked and typed into; `cvlc` plays the test video with its sound through ALSA; VLC's Qt interface through Xwayland shows it; boot group `toolkits`)
+- [x] Files: Poly's own file explorer (native, Alpine look; its browsing core later the shared file picker) (owner request, 2026-11-02) (ADR 0134: `/bin/poly-files` over `poly-files`, the UI-free browsing core with places, MIME, open-with, file operations and the freedesktop trash; boot group `desktop-apps`)
+- [x] Terminal: Poly's own terminal emulator (native, Alpine look) (owner request, 2026-11-02) (ADR 0134: `/bin/poly-terminal` on a Linux-personality pty with the user's shell and job control, `poly-vt`'s VT/xterm emulation in Geist Mono; boot group `desktop-apps`)
+- [ ] **Milestone:** Chromium (the Linux build) runs on the desktop with its sandbox enabled: opens pages, renders, takes input (owner request, 2026-11-02)
 
 ## Phase 7: Windows GUI apps
 
@@ -154,6 +162,16 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Drag and drop between app worlds
 - [ ] One file picker for every app world, mapped to each OS's path conventions
 - [ ] Unified notifications, app launcher entries and file associations
+- [ ] A preinstalled browser (Chromium) downloads and installs Linux and Windows apps, which then appear in the launcher
+- [ ] What Linux package formats need from the kernel: squashfs, loop devices, `/dev/fuse`, overlayfs, user/mount/PID/network namespaces with `pivot_root` and `setns`, seccomp filters (ADR 0132)
+- [ ] One installer for every Linux package format, as on macOS or Windows: opening a downloaded package shows what it is and installs it with one click; it appears in the launcher, updates through its own channel and uninstalls from the launcher or Settings (ADR 0132)
+- [ ] AppImages install and run, without FUSE (Poly mounts their squashfs) (ADR 0132)
+- [x] ⚖️ Decided (owner, ADR 0132): `.deb` installs go into Debian stable or Ubuntu LTS bases (chosen from the package's dependencies), `.rpm` into a Fedora base
+- [ ] `.deb` packages install with their dependencies and maintainer scripts (the distribution's own `apt` and `dpkg` in a shared base root) (ADR 0132)
+- [ ] `.rpm` packages install with their dependencies (`dnf` and `rpm` in a shared base root) (ADR 0132)
+- [ ] Flatpak: Flathub apps install and run sandboxed (`flatpak` and `bubblewrap` unchanged; the desktop portals answered by Poly's shell) (ADR 0132)
+- [x] ⚖️ Decided (owner, ADR 0132): no Snap support; apps shipped as snaps are installed from Flathub or their `.deb`/`.rpm` instead
+- [ ] Windows installers (`.exe`, `.msi`), and later macOS `.dmg` and `.pkg`, go through the same installer (ADR 0132)
 - [ ] Shared fonts, HiDPI settings, keyboard layouts and input methods (IME)
 - [ ] One user home visible as `~`, `C:\Users\<name>` and `/Users/<name>`
 

@@ -19,10 +19,12 @@ members = [
     "crates/poly-elf",
     "crates/poly-ext2",
     "crates/poly-fbdev",
+    "crates/poly-files",
     "crates/poly-cpio",
     "crates/poly-dbus",
     "crates/poly-drm",
     "crates/poly-font",
+    "crates/poly-gdi",
     "crates/poly-bochs-vbe",
     "crates/poly-gfx",
     "crates/poly-hda",
@@ -45,6 +47,7 @@ members = [
     "crates/poly-procfs",
     "crates/poly-random",
     "crates/poly-registry",
+    "crates/poly-rt",
     "crates/poly-rtc",
     "crates/poly-rtl",
     "crates/poly-sched",
@@ -56,6 +59,7 @@ members = [
     "crates/poly-term",
     "crates/poly-tty",
     "crates/poly-unix",
+    "crates/poly-vt",
     "crates/poly-virtio",
     "crates/poly-virtio-blk",
     "crates/poly-virtio-gpu",
@@ -65,21 +69,27 @@ members = [
     "crates/poly-vdso",
     "crates/poly-vm",
     "crates/poly-vfs",
+    "crates/poly-win32k",
     "crates/poly-wincrypt",
     "crates/poly-x509",
     "crates/poly-winsock",
     "crates/poly-wayland",
     "crates/poly-x11",
     "personalities/linux",
+    "personalities/native",
     "personalities/nt",
     "personalities/xnu",
     "tools/coverage",
     "tools/pipeline",
     "tools/xtask",
+    "userland/poly-app",
     "userland/poly-compositor",
+    "userland/poly-files-app",
     "userland/poly-notify",
+    "userland/poly-terminal",
+    "userland/poly-wl-demo",
 ]
-exclude = ["kernel", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
+exclude = ["kernel", "userland/native", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 
 [workspace.package]
 version = "0.0.1"
@@ -102,10 +112,12 @@ poly-crypto = { path = "crates/poly-crypto" }
 poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-fbdev = { path = "crates/poly-fbdev" }
+poly-files = { path = "crates/poly-files" }
 poly-cpio = { path = "crates/poly-cpio" }
 poly-dbus = { path = "crates/poly-dbus" }
 poly-drm = { path = "crates/poly-drm" }
 poly-font = { path = "crates/poly-font" }
+poly-gdi = { path = "crates/poly-gdi" }
 poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
 poly-gfx = { path = "crates/poly-gfx" }
 poly-hda = { path = "crates/poly-hda" }
@@ -128,10 +140,14 @@ poly-pe = { path = "crates/poly-pe" }
 poly-procfs = { path = "crates/poly-procfs" }
 poly-random = { path = "crates/poly-random" }
 poly-registry = { path = "crates/poly-registry" }
+poly-rt = { path = "crates/poly-rt" }
 poly-rtc = { path = "crates/poly-rtc" }
 poly-rtl = { path = "crates/poly-rtl" }
 poly-sched = { path = "crates/poly-sched" }
 poly-shell = { path = "crates/poly-shell" }
+poly-app = { path = "userland/poly-app" }
+poly-files-app = { path = "userland/poly-files-app" }
+poly-terminal = { path = "userland/poly-terminal" }
 poly-security = { path = "crates/poly-security" }
 poly-seh = { path = "crates/poly-seh" }
 poly-cxxeh = { path = "crates/poly-cxxeh" }
@@ -139,6 +155,7 @@ poly-smp = { path = "crates/poly-smp" }
 poly-term = { path = "crates/poly-term" }
 poly-tty = { path = "crates/poly-tty" }
 poly-unix = { path = "crates/poly-unix" }
+poly-vt = { path = "crates/poly-vt" }
 poly-virtio = { path = "crates/poly-virtio" }
 poly-virtio-blk = { path = "crates/poly-virtio-blk" }
 poly-virtio-gpu = { path = "crates/poly-virtio-gpu" }
@@ -148,18 +165,22 @@ poly-virtio-sound = { path = "crates/poly-virtio-sound" }
 poly-vdso = { path = "crates/poly-vdso" }
 poly-vm = { path = "crates/poly-vm" }
 poly-vfs = { path = "crates/poly-vfs" }
+poly-win32k = { path = "crates/poly-win32k" }
 poly-wincrypt = { path = "crates/poly-wincrypt" }
 poly-x509 = { path = "crates/poly-x509" }
 poly-winsock = { path = "crates/poly-winsock" }
 poly-wayland = { path = "crates/poly-wayland" }
 poly-x11 = { path = "crates/poly-x11" }
 poly-personality-linux = { path = "personalities/linux" }
+poly-personality-native = { path = "personalities/native" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }
 libc = "0.2.177"
 rustc-demangle = "0.1.28"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
+jpeg-decoder = { version = "0.3", default-features = false }
+lzma-rs = "0.3"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

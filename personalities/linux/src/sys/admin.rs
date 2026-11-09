@@ -45,16 +45,6 @@ fn admin(k: &mut dyn LinuxKernel) -> Result<&mut dyn LinuxAdmin, Errno> {
     k.admin().ok_or(Errno::ENOSYS)
 }
 
-fn require(k: &mut dyn LinuxKernel, capability: u32) -> Result<(), Errno> {
-    if cred::current(k).capable(capability) { Ok(()) } else { Err(Errno::EPERM) }
-}
-
-/// `capability` in the initial user namespace: for what is the whole
-/// system's (device nodes, rebooting).
-fn require_initial(k: &mut dyn LinuxKernel, capability: u32) -> Result<(), Errno> {
-    if cred::current(k).capable_initial(capability) { Ok(()) } else { Err(Errno::EPERM) }
-}
-
 /// mount(2), umount2(2): `CAP_SYS_ADMIN` in the user namespace that owns
 /// the caller's mount namespace (mount_namespaces(7), user_namespaces(7);
 /// ADR 0054). Returns whether the caller is outside the initial user
@@ -121,8 +111,9 @@ pub fn mount_request(
     let per_mount = MountFlags::from_bits(flags);
     if flags & ms::REMOUNT != 0 {
         let target = nonempty_path(k, target)?;
-        let data = if flags & ms::BIND != 0 { Vec::new() } else { data_arg(k, data)? };
-        return Ok(MountRequest::Remount { target, flags: per_mount, data });
+        let bind = flags & ms::BIND != 0;
+        let data = if bind { Vec::new() } else { data_arg(k, data)? };
+        return Ok(MountRequest::Remount { target, flags: per_mount, data, bind });
     }
     if flags & ms::BIND != 0 {
         let source = nonempty_path(k, source)?;
@@ -134,7 +125,11 @@ pub fn mount_request(
         if (flags & ms::PROPAGATION).count_ones() != 1 {
             return Err(Errno::EINVAL);
         }
-        return Ok(MountRequest::Propagation { target: nonempty_path(k, target)? });
+        return Ok(MountRequest::Propagation {
+            target: nonempty_path(k, target)?,
+            kind: flags & ms::PROPAGATION,
+            recursive: flags & ms::REC != 0,
+        });
     }
     if flags & ms::MOVE != 0 {
         let source = nonempty_path(k, source)?;
@@ -194,6 +189,7 @@ pub fn umount2(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 const S_IFMT: u32 = 0o170000;
 const S_IFSOCK: u32 = 0o140000;
 const S_IFREG: u32 = 0o100000;
+const S_IFDIR: u32 = 0o040000;
 const S_IFBLK: u32 = 0o060000;
 const S_IFCHR: u32 = 0o020000;
 const S_IFIFO: u32 = 0o010000;
@@ -202,19 +198,35 @@ fn mknod_common(k: &mut dyn LinuxKernel, dirfd: i32, p: UserPtr, mode: u32, dev:
     // mknod(2): "zero file type is equivalent to type S_IFREG".
     let mode = if mode & S_IFMT == 0 { mode | S_IFREG } else { mode };
     match mode & S_IFMT {
-        S_IFREG | S_IFIFO | S_IFSOCK => {}
-        // "EPERM mode requested creation of something other than a regular
-        // file, FIFO (named pipe), or UNIX domain socket, and the caller is
-        // not privileged (Linux: does not have the CAP_MKNOD capability)".
-        S_IFCHR | S_IFBLK => require_initial(k, cap::MKNOD)?,
+        S_IFREG | S_IFIFO | S_IFSOCK | S_IFCHR | S_IFBLK => {}
+        // mknod's spec sheet: a directory is EPERM (mknod(2): "EPERM ...
+        // if the file system containing pathname does not support the type
+        // of node requested"), checked before anything else.
+        S_IFDIR => return Err(Errno::EPERM),
         // "EINVAL mode requested creation of something other than a
         // regular file, device special file, FIFO or socket."
         _ => return Err(Errno::EINVAL),
     }
     let path = nonempty_path(k, p)?;
+    {
+        use crate::landlock::abi::*;
+        let make = match mode & S_IFMT {
+            S_IFIFO => LANDLOCK_ACCESS_FS_MAKE_FIFO,
+            S_IFSOCK => LANDLOCK_ACCESS_FS_MAKE_SOCK,
+            S_IFCHR => LANDLOCK_ACCESS_FS_MAKE_CHAR,
+            S_IFBLK => LANDLOCK_ACCESS_FS_MAKE_BLOCK,
+            _ => LANDLOCK_ACCESS_FS_MAKE_REG,
+        };
+        crate::sys::landlock::check_parent(k, dirfd, &path, make)?;
+    }
+    // "EPERM mode requested creation of something other than a regular
+    // file, FIFO (named pipe), or UNIX domain socket, and the caller is
+    // not privileged (Linux: does not have the CAP_MKNOD capability)":
+    // decided by the kernel after the lookup (the spec sheet's order).
+    let may_mknod = cred::current(k).capable_initial(cap::MKNOD);
     // The system call's `dev` is an `unsigned int`.
     let dev = dev & 0xffff_ffff;
-    admin(k)?.mknodat(dirfd, &path, mode & (S_IFMT | 0o7777), dev).map(|()| 0)
+    admin(k)?.mknodat(dirfd, &path, mode & (S_IFMT | 0o7777), dev, may_mknod).map(|()| 0)
 }
 
 /// mknodat(dirfd, pathname, mode, dev)
@@ -227,33 +239,37 @@ pub fn mknod(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     mknod_common(k, AT_FDCWD, a.ptr(0), a.uint(1), a.ulong(2))
 }
 
-/// chroot(path): `CAP_SYS_CHROOT` (`EPERM`).
+/// chroot(path): `CAP_SYS_CHROOT` (`EPERM`), checked by the kernel after
+/// the lookup (chroot's spec sheet: "the lookup errors are the same for
+/// every caller").
 pub fn chroot(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    require(k, cap::SYS_CHROOT)?;
     let path = path_arg(k, a.ptr(0))?;
     if path.is_empty() {
         return Err(Errno::ENOENT);
     }
-    admin(k)?.chroot(&path).map(|()| 0)
+    let may_chroot = cred::current(k).capable(cap::SYS_CHROOT);
+    admin(k)?.chroot(&path, may_chroot).map(|()| 0)
 }
 
 // ---- names ------------------------------------------------------------
 
 fn set_name(k: &mut dyn LinuxKernel, a: &Args, which: SystemName) -> SysResult {
-    // sethostname(2): "EINVAL len is negative or ... len is larger than the
-    // maximum allowed size"; "EPERM the caller did not have the
-    // CAP_SYS_ADMIN capability"; "EFAULT name is an invalid address".
-    let len = a.long(1);
-    if len < 0 || len as usize > NAME_MAX_LEN {
-        return Err(Errno::EINVAL);
-    }
+    // sethostname(2): "EPERM the caller did not have the CAP_SYS_ADMIN
+    // capability"; "EINVAL len is negative or ... len is larger than the
+    // maximum allowed size"; "EFAULT name is an invalid address", in this
+    // order (the spec sheets). `len` is an int: the upper half of the
+    // register does not count.
+    //
     // uts_namespaces(7): the names are the caller's UTS namespace's;
     // changing them needs CAP_SYS_ADMIN in the user namespace that owns it.
     let creds = cred::current(k);
     let uts = with_own(k, |p| p.ns.uts.clone());
-    let owner = uts.as_ref().and_then(|u| u.owner().clone());
-    if !crate::ns::user::ns_capable(&creds, &owner, cap::SYS_ADMIN) {
+    if !may_set_names(&creds, &uts) {
         return Err(Errno::EPERM);
+    }
+    let len = a.int(1);
+    if len < 0 || len as usize > NAME_MAX_LEN {
+        return Err(Errno::EINVAL);
     }
     let mut name = alloc::vec![0u8; len as usize];
     k.copy_from_user(a.ptr(0), &mut name)?;
@@ -263,6 +279,23 @@ fn set_name(k: &mut dyn LinuxKernel, a: &Args, which: SystemName) -> SysResult {
         (None, _) => return admin(k)?.set_system_name(which, &name).map(|()| 0),
     }
     Ok(0)
+}
+
+/// What a write of `data` to `/proc/sys/kernel/hostname` or `domainname`
+/// sets the name to (sethostname's spec sheet: "writing \"name\\n\" to it
+/// sets the name (the newline is dropped)"): the bytes up to the first
+/// newline or NUL, at most [`NAME_MAX_LEN`] of them.
+pub fn sysctl_name(data: &[u8]) -> &[u8] {
+    let end = data.iter().position(|&b| b == b'\n' || b == 0).unwrap_or(data.len());
+    &data[..end.min(NAME_MAX_LEN)]
+}
+
+/// May a thread with `creds` change the names of the UTS namespace `uts`
+/// (`None`: the initial one)? `CAP_SYS_ADMIN` in the user namespace that
+/// owns it (uts_namespaces(7)).
+pub fn may_set_names(creds: &cred::Creds, uts: &Option<alloc::sync::Arc<crate::ns::UtsNs>>) -> bool {
+    let owner = uts.as_ref().and_then(|u| u.owner().clone());
+    crate::ns::user::ns_capable(creds, &owner, cap::SYS_ADMIN)
 }
 
 /// sethostname(name, len)
@@ -282,17 +315,34 @@ pub fn setdomainname(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub const MAGIC1: u32 = 0xfee1_dead;
 pub const MAGIC2: [u32; 4] = [672_274_793, 85_072_278, 369_367_448, 537_993_216];
 
-/// reboot(magic, magic2, cmd, arg): `EINVAL` for wrong magic numbers or an
-/// unknown command, `EPERM` without `CAP_SYS_BOOT`. `CAD_ON` / `CAD_OFF`
-/// set what Ctrl-Alt-Del does; `RESTART`, `RESTART2` (its command string
-/// is ignored), `HALT` and `POWER_OFF` do not return when they work.
+/// reboot(magic, magic2, cmd, arg). Order of the checks (the spec sheet):
+/// `CAP_SYS_BOOT` in the user namespace that owns the caller's pid
+/// namespace (`EPERM`, whatever the other arguments), the magic numbers
+/// (`EINVAL`), then the command. In a pid namespace other than the
+/// initial one the machine is never touched: `RESTART`, `RESTART2`,
+/// `HALT` and `POWER_OFF` end the namespace ([`end_namespace`]), every
+/// other command is `EINVAL`. In the initial one `CAD_ON` / `CAD_OFF` set
+/// what Ctrl-Alt-Del does; `RESTART`, `RESTART2` (its command string is
+/// ignored), `HALT` and `POWER_OFF` do not return when they work.
 /// Suspending to disk and kexec are not supported (`EINVAL`, as on a
 /// kernel without them). reboot(2): the call does not sync the disks
 /// itself; Poly's kernel writes back and unmounts its disk file systems
 /// before the machine goes down anyway.
 pub fn reboot(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let pid_ns = k.pid_ns();
+    let creds = cred::current(k);
+    let allowed = match &pid_ns {
+        None => creds.capable_initial(cap::SYS_BOOT),
+        Some(ns) => crate::ns::user::ns_capable(&creds, ns.owner(), cap::SYS_BOOT),
+    };
+    if !allowed {
+        return Err(Errno::EPERM);
+    }
     if a.uint(0) != MAGIC1 || !MAGIC2.contains(&a.uint(1)) {
         return Err(Errno::EINVAL);
+    }
+    if let Some(ns) = pid_ns {
+        return end_namespace(k, &ns, a.uint(2));
     }
     let how = match a.uint(2) {
         cmd::CAD_ON | cmd::CAD_OFF => None,
@@ -301,7 +351,6 @@ pub fn reboot(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         cmd::POWER_OFF => Some(Reboot::PowerOff),
         _ => return Err(Errno::EINVAL),
     };
-    require_initial(k, cap::SYS_BOOT)?;
     if cmd::RESTART2 == a.uint(2) {
         // The command string must at least be readable.
         let mut buf = bounce(256)?;
@@ -318,4 +367,30 @@ pub fn reboot(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         }
         Some(how) => Err(admin.reboot(how)),
     }
+}
+
+/// reboot(2) in a pid namespace other than the initial one (pid_namespaces
+/// (7)): the machine stays up and the namespace ends. `RESTART` and
+/// `RESTART2` end its init as killed by `SIGHUP`, `HALT` and `POWER_OFF` by
+/// `SIGINT` (what its parent's wait(2) reports); the ending of the init
+/// kills every other member with `SIGKILL`. Any other command is
+/// `EINVAL` and the caller goes on. The call does not return: the caller
+/// is the init and ends that way itself, or another member that makes
+/// the init take the signal and ends too.
+fn end_namespace(k: &mut dyn LinuxKernel, ns: &crate::ns::pid::PidNs, command: u32) -> SysResult {
+    use crate::abi::SigInfo;
+    use crate::abi::signal::{SI_KERNEL, SIGHUP, SIGINT, SIGKILL};
+    let signal = match command {
+        cmd::RESTART | cmd::RESTART2 => SIGHUP,
+        cmd::HALT | cmd::POWER_OFF => SIGINT,
+        _ => return Err(Errno::EINVAL),
+    };
+    match ns.init() {
+        Some(init) if init != k.pid() => {
+            crate::task::signal_process(k, init, SigInfo::new(signal, SI_KERNEL));
+            k.kill_process(SIGKILL, false);
+        }
+        _ => k.kill_process(signal, false),
+    }
+    Ok(0)
 }

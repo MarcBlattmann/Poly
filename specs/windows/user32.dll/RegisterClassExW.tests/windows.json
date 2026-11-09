@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "rc_basic",
+      "exe_sha256": "cf2c8f053e7112f1a484f8067286f2cb3c43127763d35bf05ab3d887c067598e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgYXRvbV9ub256ZXJvCm9rIGF0b21faW5fc3RyaW5nX3JhbmdlCm9rIGluZm9fYnlfbG93ZXJjYXNlX25hbWUKb2sgaW5mb19yZXR1cm5zX3RoZV9hdG9tCm9rIGluZm9fc3R5bGUKb2sgaW5mb193bmRfZXh0cmEKb2sgaW5mb19jbHNfZXh0cmEKb2sgaW5mb19wcm9jCm9rIGluZm9fYnJ1c2gKb2sgaW5mb19pbnN0YW5jZQpvayBpbmZvX21lbnVfbmFtZV9udWxsCm9rIGluZm9fY2xhc3NfbmFtZV9pc190aGVfYXJndW1lbnQKb2sgaW5mb19ieV9hdG9tCm9rIGluZm9fYnlfYXRvbV93bmRfZXh0cmEKb2sgd2luZG93X2J5X3VwcGVyY2FzZV9uYW1lCm9rIHByb2NfY2FsbGVkX2R1cmluZ19jcmVhdGUKb2sgY2xhc3NfYXRvbQpvayBjbGFzc19zdHlsZQpvayBjbGFzc193bmRfZXh0cmEKb2sgY2xhc3NfY2xzX2V4dHJhCm9rIGNsYXNzX2JydXNoCm9rIGNsYXNzX25hbWVfbGVuZ3RoCm9rIGNsYXNzX25hbWVfYXNfcmVnaXN0ZXJlZApvayBjbGFzc19uYW1lX3RydW5jYXRlZF9sZW5ndGgKb2sgY2xhc3NfbmFtZV90cnVuY2F0ZWRfdGV4dApvayBkZXN0cm95ZWQKb2sgbm9fc3VjaF9jbGFzc19mYWlscwpvayBub19zdWNoX2NsYXNzX2Vycm9yCm9rIHdpbmRvd19ieV9hdG9tCnN1bW1hcnkgMjkgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok atom_nonzero\nok atom_in_string_range\nok info_by_lowercase_name\nok info_returns_the_atom\nok info_style\nok info_wnd_extra\nok info_cls_extra\nok info_proc\nok info_brush\nok info_instance\nok info_menu_name_null\nok info_class_name_is_the_argument\nok info_by_atom\nok info_by_atom_wnd_extra\nok window_by_uppercase_name\nok proc_called_during_create\nok class_atom\nok class_style\nok class_wnd_extra\nok class_cls_extra\nok class_brush\nok class_name_length\nok class_name_as_registered\nok class_name_truncated_length\nok class_name_truncated_text\nok destroyed\nok no_such_class_fails\nok no_such_class_error\nok window_by_atom\nsummary 29 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    },
+    {
+      "name": "rc_lookup",
+      "exe_sha256": "083339b9c8b342dfa13c5fb0e3fbc60346ee2e64ab09de7efc19a0da62156e15",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bmV2ZXJfcmVnaXN0ZXJlZDogZm91bmQ9MCBlcnJvcj0xNDExCmJ1dHRvbl9udWxsX2luc3RhbmNlOiBmb3VuZD0xIGVycm9yPS0xCmJ1dHRvbjogc3R5bGU9MHg4YiB3bmRfZXh0cmE9OCBjbHNfZXh0cmE9MApidXR0b25fb3VyX2luc3RhbmNlOiBmb3VuZD0xIGVycm9yPS0xCnN0YXRpY19udWxsX2luc3RhbmNlOiBmb3VuZD0xIGVycm9yPS0xCmVkaXRfbnVsbF9pbnN0YW5jZTogZm91bmQ9MSBlcnJvcj0tMQpvayBudWxsX2luc3RhbmNlX3JlZ2lzdGVycwpudWxsX2luc3RhbmNlX2NsYXNzX2J5X251bGw6IGZvdW5kPTEgZXJyb3I9LTEKbnVsbC1pbnN0YW5jZSBjbGFzcyByZXBvcnRzIGluc3RhbmNlOiBudWxsIDEgZXhlIDAKb2sgZ2xvYmFsX2NsYXNzX3N0eWxlX2tlcHQKb2sgY2xzX2V4dHJhX2tlcHQKbnVsbF9pbnN0YW5jZV9jbGFzc19ieV9leGU6IGZvdW5kPTEgZXJyb3I9LTEKb2sgd2luZG93X2NyZWF0ZWQKb2sgd2luZG93X2lzX3VuaWNvZGUKb2sgY2xhc3NfZXh0cmFfMF9zdGFydHNfemVybwpvayBjbGFzc19leHRyYV84X3N0YXJ0c196ZXJvCmNsYXNzX2V4dHJhX3Bhc3RfZW5kOiB2YWx1ZT0wIGVycm9yPTE0MTMKb2sgaGluc3RhbmNlX29mX3dpbmRvdwpvayB1bnJlZ2lzdGVyX251bGxfaW5zdGFuY2UKc3VtbWFyeSA5IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "never_registered: found=0 error=1411\nbutton_null_instance: found=1 error=-1\nbutton: style=0x8b wnd_extra=8 cls_extra=0\nbutton_our_instance: found=1 error=-1\nstatic_null_instance: found=1 error=-1\nedit_null_instance: found=1 error=-1\nok null_instance_registers\nnull_instance_class_by_null: found=1 error=-1\nnull-instance class reports instance: null 1 exe 0\nok global_class_style_kept\nok cls_extra_kept\nnull_instance_class_by_exe: found=1 error=-1\nok window_created\nok window_is_unicode\nok class_extra_0_starts_zero\nok class_extra_8_starts_zero\nclass_extra_past_end: value=0 error=1413\nok hinstance_of_window\nok unregister_null_instance\nsummary 9 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mq_notify            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  mq_notify(mqdes, sevp) (syscall 244) registers the calling process to
+  be notified when a message arrives on the queue while it is empty, or
+  removes its registration (sevp NULL). sevp is struct sigevent (64 bytes:
+  sigval sigev_value (8), int sigev_signo, int sigev_notify, then union).
+  sigev_notify: SIGEV_SIGNAL 0 (send sigev_signo; 0 is accepted and sends
+  nothing visible; above 64 is EINVAL), SIGEV_NONE 1 (register, no
+  signal), SIGEV_THREAD 2 (the raw call expects a netlink socket in
+  sigev_signo and a cookie address in sigev_value; outside this sheet);
+  others EINVAL. Only one process can be registered per queue: any further
+  registration (also by the same process) is EBUSY. A notification fires
+  when a message is sent to an empty queue and no process is blocked in
+  mq_timedreceive on it (otherwise the receiver gets the message and the
+  registration stays); it sends sigev_signo to the registered process
+  with si_code SI_MESGQ (-3), si_value = sigev_value, si_pid and si_uid of
+  the sender, and removes the registration (it must be renewed). A
+  message arriving on a non-empty queue fires nothing. The registration is
+  also removed when the registered process closes the descriptor it
+  registered through, and when it exits. sevp NULL removes the caller's
+  registration and succeeds also when there is none (or another process
+  is registered). While registered, the status line read from the queue
+  descriptor shows NOTIFY:<sigev_notify> SIGNO:<sigev_signo>
+  NOTIFY_PID:<pid>.
+returns:
+  success: "0"
+  fired_signal: "sigev_signo delivered with si_code -3 (SI_MESGQ), si_value = sigev_value, si_pid = sender's pid, si_uid = sender's uid"
+errors:
+  busy: "EBUSY (16): a process (this one or another) is already registered"
+  notify_type: "EINVAL (22): unknown sigev_notify"
+  signo: "EINVAL (22): SIGEV_SIGNAL with sigev_signo > 64"
+  bad_fd: "EBADF (9): mqdes not open or not a message queue"
+  fault: "EFAULT (14): sevp unreadable (or, SIGEV_THREAD, the cookie unreadable)"
+  order: "sevp copy (EFAULT), sevp validation (EINVAL: a bad signal with a bad fd is EINVAL), descriptor (EBADF), then EBUSY"
+side_effects: "stores or removes the queue's single registration"
+threading: "the registration belongs to the process"
+ordering:
+  - "the signal is sent during the mq_timedsend that made the queue non-empty, before that call returns"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct sigevent and SIGEV_* from asm-generic/siginfo.h; SI_MESGQ
+# likewise. The signal test reads the status line, which carries the
+# registering pid (syscalls=names).

@@ -1,0 +1,102 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/ptrace               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; Yama LSM active with kernel.yama.ptrace_scope = 1; fs.suid_dumpable 0"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  ptrace(request, pid, addr, data) (syscall 101) lets a tracer observe and
+  control a tracee (crashpad's handler, gdb, strace). Requests and their
+  numbers are those of linux/ptrace.h and asm/ptrace-abi.h. The raw system
+  call returns 0 or -errno for every request; PEEKTEXT/PEEKDATA/PEEKUSER
+  store the word read at *data (the C library wrapper is what returns the
+  word). Attaching: PTRACE_TRACEME (the caller becomes traced by its
+  parent), PTRACE_ATTACH (sends SIGSTOP; the tracee reports a SIGSTOP
+  stop), PTRACE_SEIZE (no stop; addr must be 0, data = options). Most
+  requests need the tracee to be in a ptrace-stop and fail with ESRCH
+  otherwise (also PTRACE_CONT, PTRACE_DETACH, PTRACE_GETREGS, peeks);
+  PTRACE_KILL and PTRACE_INTERRUPT do not. Stops are reported to the
+  tracer by wait4/waitpid (__WALL for non-children of the tracer's own
+  threads) as "stopped" statuses: (sig << 8) | 0x7f, with an event number
+  in bits 16..23 for event stops (status >> 16). Kinds of stop:
+  signal-delivery stop (every signal except SIGKILL, WSTOPSIG = the
+  signal; the signal given to the restarting request is delivered
+  instead, 0 suppresses it); syscall stops after PTRACE_SYSCALL (WSTOPSIG
+  SIGTRAP, or SIGTRAP|0x80 with PTRACE_O_TRACESYSGOOD; one at entry, one at
+  exit); exec stop (no PTRACE_O_TRACEEXEC: a plain SIGTRAP signal stop
+  after the new image is loaded, siginfo si_code 0 (SI_USER)); event
+  stops (SIGTRAP | event << 8): PTRACE_EVENT_FORK 1, VFORK 2, CLONE 3,
+  EXEC 4, VFORK_DONE 5, EXIT 6, and PTRACE_EVENT_STOP 128 (PTRACE_INTERRUPT
+  of a seized tracee, and the first stop of an auto-attached child of a
+  seized tracee). PTRACE_GETEVENTMSG gives: the new pid for FORK/VFORK/
+  CLONE and VFORK_DONE, the former thread id for EXEC, the wait status
+  (code << 8) for EXIT. Auto-attach: with PTRACE_O_TRACEFORK/VFORK/CLONE
+  the new child is traced by the same tracer from its start and its exit is
+  reported to the tracer; the real parent still reaps it. A tracer's exit
+  detaches its tracees. A tracer that is not the tracee's parent still
+  gets its exit status from wait; the parent reaps it afterwards.
+returns:
+  success: "0 for every request (PTRACE_GET_SYSCALL_INFO: a size, below)"
+  peek: "PEEKTEXT/PEEKDATA/PEEKUSER: 0, the word stored at *data"
+  traceme_exec: "child TRACEME + execve: tracer sees stopped SIGTRAP (status 0x57f), event 0; GETSIGINFO si_signo SIGTRAP, si_code 0"
+  traceexec: "with PTRACE_O_TRACEEXEC: status SIGTRAP | (4 << 8); GETEVENTMSG = pid before exec; si_code SIGTRAP | (4 << 8)"
+  attach: "PTRACE_ATTACH: 0, tracee then stops with SIGSTOP"
+  seize_interrupt: "PTRACE_SEIZE: 0, tracee keeps running; PTRACE_INTERRUPT: 0, tracee stops with WSTOPSIG SIGTRAP, event 128; GETSIGINFO si_signo SIGTRAP, si_code SIGTRAP | (128 << 8). A tracee blocked in read(2) resumes the read after PTRACE_CONT without EINTR"
+  signal_stop: "kill(tracee, SIGUSR1): stopped SIGUSR1, event 0; GETSIGINFO si_signo SIGUSR1, si_code SI_USER (0), si_pid = sender. PTRACE_CONT(sig=0) drops it; PTRACE_CONT(sig=SIGUSR1) at a SIGUSR2 stop runs the SIGUSR1 handler and not the SIGUSR2 one"
+  sigkill: "SIGKILL kills a (stopped) tracee without any stop; PTRACE_KILL of a stopped tracee: 0, it dies of SIGKILL"
+  exit_event: "PTRACE_O_TRACEEXIT: stop SIGTRAP | (6 << 8) before exit; GETEVENTMSG = exit code << 8 (exit 42 -> 10752)"
+  fork_events: "PTRACE_O_TRACEFORK: stop SIGTRAP | (1 << 8), GETEVENTMSG = child pid; the child (of a seized parent) starts in a stop with WSTOPSIG SIGTRAP, event 128. VFORK: event 2, child likewise; after the vfork child exits the parent stops with event 5 (VFORK_DONE), GETEVENTMSG = that child's pid. SIGCHLD to the traced parent gives ordinary SIGCHLD signal-delivery stops in between"
+  regs: "at the SIGSTOP stop of a child that called kill(self, SIGSTOP): GETREGS (struct user_regs_struct, 27 x u64 = 216 bytes, order r15 r14 r13 r12 rbp rbx r11 r10 r9 r8 rax rcx rdx rsi rdi orig_rax rip cs eflags rsp ss fs_base gs_base ds es fs gs) shows orig_rax 62, rax 0, cs 0x33, ss 0x2b and the child's other registers. SETREGS changes them (the child continues with the new values)"
+  regset: "GETREGSET NT_PRSTATUS (1) with iovec: copies min(iov_len, 216) bytes, sets iov_len to that (1000 -> 216, 16 -> 16); NT_PRFPREG (2): the 512-byte fxsave area, same as GETFPREGS (MXCSR 0x1f80 in a fresh process); unknown note type (0x999): EINVAL"
+  peekuser: "offsets into struct user (asm/user.h; regs at offset 0, so REG offset = index * 8): cs reads 0x33, ss 0x2b"
+  pokedata: "writes a word; also into a read-only private mapping (the tracee's copy changes, the tracer's does not)"
+  syscall_stops: "PTRACE_SYSCALL with TRACESYSGOOD: stop sig SIGTRAP|0x80 (0x85); GETSIGINFO si_signo SIGTRAP, si_code 0x85. At entry orig_rax = number, rax = -ENOSYS; at exit rax = result. POKEUSER of rax at exit changes the result the tracee sees. POKEUSER orig_rax = -1 at entry skips the call; the tracee gets the rax the tracer set; an exit stop still follows (op EXIT, rval = that rax)"
+  get_syscall_info: "PTRACE_GET_SYSCALL_INFO (0x420e, addr = buffer size, data = struct ptrace_syscall_info): returns 24 with op NONE (0) outside syscall stops, 80 with op ENTRY (1: nr, args[6]), 33 with op EXIT (2: rval, is_error); arch AUDIT_ARCH_X86_64 0xc000003e; instruction_pointer, stack_pointer filled"
+  sigmask: "PTRACE_GETSIGMASK (addr = 8, data = u64 *): the tracee's blocked mask; PTRACE_SETSIGMASK sets it"
+  detach: "PTRACE_DETACH(sig 0) of a stopped tracee: 0, it runs on; it is then no longer a tracee (ESRCH)"
+errors:
+  esrch_missing: "ESRCH (3): no such pid (PTRACE_ATTACH, PEEKDATA)"
+  esrch_not_tracee: "ESRCH (3): pid is not traced by the caller (PEEKDATA, CONT, DETACH); after DETACH"
+  esrch_running: "ESRCH (3): tracee not in a ptrace-stop (PEEKDATA, GETREGS, CONT, DETACH)"
+  eperm_self: "EPERM (1): ATTACH or SEIZE of the caller itself"
+  eperm_traced: "EPERM (1): target already traced (by the caller or another process: ATTACH, SEIZE); PTRACE_TRACEME when already traced"
+  eperm_zombie: "EPERM (1): ATTACH or SEIZE of a zombie (exited, not yet reaped); after reaping ESRCH"
+  eperm_access: "EPERM (1): unprivileged caller and a target of another uid, or a non-dumpable target (PR_SET_DUMPABLE 0; changing uids makes a process non-dumpable when fs.suid_dumpable is 0). Root (CAP_SYS_PTRACE) may attach to either. With Yama ptrace_scope 1 (the oracle) an unprivileged caller may only attach to its descendants"
+  eio_request: "EIO (5): unknown request (0x7777, -5) on a stopped tracee; PTRACE_INTERRUPT of a tracee attached with PTRACE_ATTACH; PTRACE_SEIZE with addr != 0 or an unknown option bit; restarting with a signal number > 64"
+  eio_address: "EIO (5): PEEK/POKE of an unmapped tracee address; PEEKUSER offset unaligned, negative or past struct user"
+  einval: "EINVAL (22): PTRACE_SETOPTIONS with an unknown option bit; GETREGSET of an unknown note type; GETSIGMASK/SETSIGMASK with size != 8"
+  efault: "EFAULT (14): data pointer unwritable (PEEKDATA, GETREGS, GETSIGINFO)"
+side_effects: >
+  The tracee's real parent is unchanged (wait results go to the tracer
+  first). A tracer exiting detaches its tracees. POKEDATA into read-only
+  private memory breaks sharing (copy-on-write) in the tracee only.
+threading: "A tracee is a thread; the tracer is the thread that attached. Tests use single-threaded tracers and tracees."
+ordering:
+  - "PTRACE_O_TRACEFORK: parent's FORK event stop, then the child's first stop; the tracer may see them in either order of waiting"
+  - "VFORK: VFORK event, child runs and exits, then the parent's VFORK_DONE stop"
+  - "TRACEEXIT: EXIT event stop before the final exit status"
+timing:
+  typical: "microseconds per request"
+  guarantees: "none"
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+# Notes:
+# - The diff runner's reference tracer ptraces the test and follows forks
+#   and clones. Every tracee in the tests is therefore created with
+#   clone(CLONE_UNTRACED | SIGCHLD) (linux/sched.h 0x00800000): the outer
+#   tracer does not follow it, so the test can trace it. Poly must accept
+#   CLONE_UNTRACED (as a plain fork when nothing traces the caller). All
+#   tests are syscalls=off (the outer tracer does not see those children).
+# - A test process traced by the reference's tracer would get EPERM from
+#   its own PTRACE_TRACEME; tests only call TRACEME in untraced children.
+# - Yama (ptrace_scope 1) is active on the oracle; tests only attach to
+#   their own descendants unprivileged, so Poly without Yama gives the same
+#   results. The permission test (needs=root) attaches only as root to a
+#   non-descendant. Not tested: attaching to init or kernel threads.
+# - Exec test: the program runs itself again with execve(AT_EXECFN).
+# - Not covered: SINGLESTEP, hardware debug registers (PEEKUSER of
+#   u_debugreg), seccomp events, PTRACE_LISTEN, multi-threaded tracees,
+#   group-stop semantics in detail.

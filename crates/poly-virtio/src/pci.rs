@@ -164,6 +164,58 @@ impl PciTransport {
     }
 }
 
+/// Length of `struct virtio_pci_cap64` (§4.1.4.7): the common capability
+/// fields plus `offset_hi` and `length_hi`.
+const CAP64_LEN: usize = 24;
+
+/// A shared memory region (§2.10, §4.1.4.7): memory of the device the
+/// driver maps, in a BAR, named by its `shmid` (the capability's `id`
+/// byte). Offset and length are 64-bit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SharedMemory {
+    pub id: u8,
+    pub bar: u8,
+    pub offset: u64,
+    pub length: u64,
+}
+
+impl SharedMemory {
+    /// Bus address of the region, if it lies inside its BAR.
+    pub fn address(&self, bars: &[Option<Bar>; 6]) -> Option<u64> {
+        let bar = bars.get(self.bar as usize).copied().flatten()?;
+        if !bar.contains(self.offset, self.length) {
+            return None;
+        }
+        bar.address.checked_add(self.offset)
+    }
+}
+
+/// The shared memory region `id` of a function (`VIRTIO_PCI_CAP_SHARED_MEMORY_CFG`
+/// capabilities, §4.1.4.7), the first usable one if the device lists it
+/// more than once. Kept apart from [`PciTransport::discover`]: only some
+/// device types have shared memory (the GPU's host-visible region, §5.7.4).
+pub fn find_shared_memory<C: ConfigSpace + ?Sized>(cfg: &C, header: &Header, id: u8) -> Option<SharedMemory> {
+    let bdf = header.bdf;
+    Capabilities::new(cfg, header).filter(|c| c.id == cap_id::VENDOR_SPECIFIC).find_map(|cap| {
+        if !cap.fits(CAP64_LEN) {
+            return None;
+        }
+        let base = cap.offset as u16;
+        let head = cfg.read32(bdf, base);
+        let cap_len = (head >> 16) as u8 as usize;
+        if (head >> 24) as u8 != cfg_type::SHARED_MEMORY || cap_len < CAP64_LEN {
+            return None;
+        }
+        let bar = cfg.read8(bdf, base + 4);
+        if bar > 5 || cfg.read8(bdf, base + 5) != id {
+            return None;
+        }
+        let lo_hi = |at: u16| cfg.read32(bdf, base + at) as u64 | (cfg.read32(bdf, base + at + 8) as u64) << 32;
+        let region = SharedMemory { id, bar, offset: lo_hi(8), length: lo_hi(12) };
+        (region.length != 0).then_some(region)
+    })
+}
+
 /// Tells the device a queue has new buffers (§4.1.5.2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Notifier {
@@ -369,6 +421,42 @@ mod tests {
         assert_eq!(t.notify_off_multiplier, 0);
         assert_eq!(t.isr, Region { bar: 0, offset: 0x300, length: 1 });
         assert_eq!((t.device, t.pci_cfg), (None, None));
+    }
+
+    /// A `virtio_pci_cap64` shared memory capability.
+    #[allow(clippy::too_many_arguments)]
+    fn shm_cap(c: &Config, at: u8, next: u8, len: u8, bar: u8, id: u8, offset: u64, length: u64) {
+        c.put(at, &[0x09, next, len, cfg_type::SHARED_MEMORY, bar, id, 0, 0]);
+        c.put(at + 8, &(offset as u32).to_le_bytes());
+        c.put(at + 12, &(length as u32).to_le_bytes());
+        c.put(at + 16, &((offset >> 32) as u32).to_le_bytes());
+        c.put(at + 20, &((length >> 32) as u32).to_le_bytes());
+    }
+
+    #[test]
+    fn finds_shared_memory_regions() {
+        let (c, h) = header(0x40);
+        // Region 2 first; a capability too short for the 64-bit fields; a
+        // reserved BAR; then region 1 with 64-bit offset and length.
+        shm_cap(&c, 0x40, 0x58, 24, 2, 2, 0x1000, 0x2000);
+        shm_cap(&c, 0x58, 0x70, 16, 2, 1, 0, 0x1000);
+        shm_cap(&c, 0x70, 0x88, 24, 6, 1, 0, 0x1000);
+        shm_cap(&c, 0x88, 0x00, 24, 2, 1, 0x1_0000_0000, 0x2_0000_0000);
+        assert_eq!(
+            find_shared_memory(&c, &h, 1),
+            Some(SharedMemory { id: 1, bar: 2, offset: 0x1_0000_0000, length: 0x2_0000_0000 })
+        );
+        assert_eq!(find_shared_memory(&c, &h, 2).map(|s| (s.offset, s.length)), Some((0x1000, 0x2000)));
+        assert_eq!(find_shared_memory(&c, &h, 3), None);
+        let shm = find_shared_memory(&c, &h, 2).unwrap();
+        let mut bars = [None; 6];
+        bars[2] = Some(Bar { kind: BarKind::Memory64, address: 0x8_0000_0000, size: 0x4000, prefetchable: true });
+        assert_eq!(shm.address(&bars), Some(0x8_0000_1000));
+        bars[2] = Some(Bar { kind: BarKind::Memory64, address: 0x8_0000_0000, size: 0x2000, prefetchable: true });
+        assert_eq!(shm.address(&bars), None);
+        // The ordinary structures do not see it.
+        let (c, h) = qemu_like();
+        assert_eq!(find_shared_memory(&c, &h, 1), None);
     }
 
     #[test]

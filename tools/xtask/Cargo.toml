@@ -15,14 +15,25 @@ poly-gfx.workspace = true
 poly-kernelbase.workspace = true
 poly-ldr.workspace = true
 poly-crt.workspace = true
+poly-crypto.workspace = true
+poly-shell.workspace = true
+jpeg-decoder.workspace = true
+lzma-rs.workspace = true
 poly-http.workspace = true
 poly-pe.workspace = true
+poly-binfmt.workspace = true
+poly-personality-native.workspace = true
+poly-win32k.workspace = true
 poly-wincrypt.workspace = true
 poly-winsock.workspace = true
 poly-term.workspace = true
 poly-vfs.workspace = true
 rustc-demangle.workspace = true
 serde_json.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+# The terminal's raw mode and size for `cargo xtask start` (term.rs).
+libc.workspace = true
 
 [lints]
 workspace = true

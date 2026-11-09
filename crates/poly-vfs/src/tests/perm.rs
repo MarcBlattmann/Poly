@@ -240,12 +240,16 @@ fn device_nodes_need_root() {
     let env = Env::new();
     let c = DeviceId::new(1, 3);
     let ctx = &env.ctx;
-    assert_eq!(env.vfs.mknod(ctx, &alice(), At::Cwd, b"/null", FileType::CharDevice, 0o666, c), Err(Errno::EPERM));
+    // The directory's permission comes before CAP_MKNOD (mknod's spec
+    // sheet), and an existing name before both.
+    assert_eq!(env.vfs.mknod(ctx, &alice(), At::Cwd, b"/null", FileType::CharDevice, 0o666, c), Err(Errno::EACCES));
     env.vfs.mknod(ctx, &env.root, At::Cwd, b"/null", FileType::CharDevice, 0o666, c).unwrap();
+    assert_eq!(env.vfs.mknod(ctx, &alice(), At::Cwd, b"/null", FileType::CharDevice, 0o666, c), Err(Errno::EEXIST));
     assert_eq!(env.stat("/null").unwrap().rdev, c);
     assert_eq!(env.vfs.mknod(ctx, &env.root, At::Cwd, b"/d", FileType::Directory, 0o755, c), Err(Errno::EINVAL));
     // FIFOs and sockets: anyone who may write the directory.
     env.chmod("/", 0o777);
+    assert_eq!(env.vfs.mknod(ctx, &alice(), At::Cwd, b"/zero", FileType::CharDevice, 0o666, c), Err(Errno::EPERM));
     env.vfs.mknod(ctx, &alice(), At::Cwd, b"/fifo", FileType::Fifo, 0o644, c).unwrap();
     assert_eq!(env.stat("/fifo").unwrap().rdev, DeviceId::default());
 }

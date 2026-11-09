@@ -21,7 +21,7 @@
 
 mod netlink;
 
-pub use netlink::NetlinkFile;
+pub use netlink::{NetlinkFile, interfaces};
 
 use super::Thread;
 use super::services::vfs_errno;
@@ -47,7 +47,7 @@ use poly_vfs::poll::{self, Timeout, WaitQueue};
 use poly_vfs::{At, FileObject, PollEvents};
 
 /// The system's Unix socket names and descriptors in flight.
-fn namespace() -> &'static Arc<Namespace> {
+pub(crate) fn namespace() -> &'static Arc<Namespace> {
     static NS: SetOnce<Arc<Namespace>> = SetOnce::new();
     if let Some(ns) = NS.get() {
         return ns;
@@ -798,6 +798,8 @@ fn inet_setsockopt(s: &InetSocket, opt: SockOpt) -> Result<(), Errno> {
             s.with(|st, h| st.set_ip_options(h, ttl, tos)).map_err(nerr)?;
         }
         SockOpt::Ipv6V6Only(v) if !v4 => s.update(|st| st.v6only = v),
+        SockOpt::IpRecvErr(v) if v4 => s.update(|st| st.recverr = v),
+        SockOpt::Ipv6RecvErr(v) if !v4 => s.update(|st| st.recverr = v),
         // SO_PASSCRED means nothing to an Internet socket; accepted.
         SockOpt::PassCred(_) => {}
         o => {
@@ -861,6 +863,8 @@ fn inet_getsockopt(s: &InetSocket, name: OptName) -> Result<OptValue, Errno> {
         }
         OptName::IpTos if v4 => OptValue::Int(i32::from(s.with(|x, h| x.ip_options(h)).map_err(nerr)?.1)),
         OptName::Ipv6V6Only if !v4 => bool_opt(st.v6only),
+        OptName::IpRecvErr if v4 => bool_opt(st.recverr),
+        OptName::Ipv6RecvErr if !v4 => bool_opt(st.recverr),
         n => generic_get(&st.options, n).ok_or(Errno::ENOPROTOOPT)?,
     })
 }

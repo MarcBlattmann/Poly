@@ -72,6 +72,27 @@ pub struct LinuxThread {
     /// fork(2) child keeps it, other new threads start without one,
     /// execve(2) drops it.
     pub rseq: Option<crate::sys::rseq::Registration>,
+    /// ioprio_set(2): the I/O priority (class << 13 | hint << 3 | level),
+    /// 0 for none; copied to the threads and processes it creates.
+    pub ioprio: u16,
+    /// personality(2): the execution domain and flags. Per thread; new
+    /// threads and fork(2) children start with their creator's; execve(2)
+    /// keeps it but for `READ_IMPLIES_EXEC`
+    /// ([`crate::sys::personality::after_exec`]).
+    pub personality: u32,
+    /// set_mempolicy(2): the thread's NUMA memory policy
+    /// ([`crate::sys::numa`]); copied to the threads and processes it
+    /// creates, kept by execve(2).
+    pub mempolicy: crate::sys::numa::MemPolicy,
+    /// The thread's keyrings and request-key default (keyrings(7),
+    /// [`crate::keys`]): a new thread starts without a thread keyring, a
+    /// fork(2) child also without a process keyring.
+    pub keys: crate::keys::ThreadKeys,
+    /// prctl(2) `PR_SET_SPECULATION_CTRL` per feature (store bypass,
+    /// indirect branch, L1D flush): 0 for the default (enabled), else the
+    /// `PR_SPEC_*` value set. Inherited by fork(2) and clone(2);
+    /// `PR_SPEC_DISABLE_NOEXEC` goes back to 0 at execve(2).
+    pub spec_ctrl: [u8; 3],
 }
 
 impl LinuxThread {
@@ -132,11 +153,47 @@ pub struct LinuxProcess {
     /// discarding it when it is generated, so the taking is seen
     /// ([`LinuxProcess::send`]). Inherited by fork, kept by exec.
     pub traced: bool,
+    /// A tracer ptrace(2)s it (ADR 0135): like [`Self::traced`], it keeps
+    /// ignored signals, which stop it on their way. Not inherited.
+    pub ptraced: bool,
+    /// perf_event_open(2) counters it opened or counts into (ADR 0135).
+    pub perf: crate::perf::Links,
+    /// modify_ldt(2): the raw descriptors of the local descriptor table
+    /// (ADR 0135). Shared by the threads, copied by fork, dropped by exec.
+    pub ldt: alloc::vec::Vec<u64>,
+    /// acct(2) (ADR 0135): a fork(2) child that has not exec'd (`AFORK`).
+    pub forked: bool,
+    /// When the process started, nanoseconds after boot; 0 if unknown.
+    pub started_ns: u64,
+    /// The command name of the last thread to end, for a process that is
+    /// gone (acct(2)).
+    exited_comm: [u8; 16],
     /// prctl(2) `PR_SET_DUMPABLE`: whether the process may be dumped and
     /// looked at by others of its user without `CAP_SYS_PTRACE`
     /// (ptrace(2) "ptrace access mode checking"). 1 at start; inherited by
     /// fork; execve(2) sets it again.
     pub dumpable: bool,
+    /// What identifies the signal handler table for kcmp(2)
+    /// `KCMP_SIGHAND`: a fresh value per process, the creator's for a
+    /// child made with `CLONE_SIGHAND` (the kernel sets it at clone(2)),
+    /// a fresh one again after execve(2).
+    /// Poly copies the actions to such a child instead of sharing them.
+    pub sighand: u64,
+    /// mbind(2): the NUMA memory policies of page ranges of the address
+    /// space ([`crate::sys::numa`]); copied by fork, dropped by execve(2).
+    pub mempolicies: crate::sys::numa::RangePolicies,
+    /// `/proc/<pid>/oom_score_adj` (proc_pid_oom_score_adj(5)), -1000 to
+    /// 1000: 0 at start; inherited by fork(2) (Chromium sets its
+    /// children's) and kept by execve(2). Poly never kills for memory,
+    /// so it is only shown.
+    pub oom_score_adj: i16,
+}
+
+/// A signal handler table identity no process has had
+/// ([`LinuxProcess::sighand`]).
+fn new_sighand_id() -> u64 {
+    static NEXT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
 }
 
 impl LinuxProcess {
@@ -156,7 +213,16 @@ impl LinuxProcess {
             timers: crate::time::timers::Timers::new(),
             ns: crate::ns::Namespaces::default(),
             traced: false,
+            ptraced: false,
+            perf: crate::perf::Links::default(),
+            ldt: alloc::vec::Vec::new(),
+            forked: false,
+            started_ns: 0,
+            exited_comm: [0; 16],
             dumpable: true,
+            sighand: new_sighand_id(),
+            mempolicies: Default::default(),
+            oom_score_adj: 0,
         }
     }
 
@@ -182,6 +248,11 @@ impl LinuxProcess {
             seccomp: parent.seccomp.clone(),
             sched: parent.sched.for_child(),
             rseq: parent.rseq,
+            ioprio: parent.ioprio,
+            personality: parent.personality,
+            mempolicy: parent.mempolicy,
+            keys: parent.keys.for_fork(),
+            spec_ctrl: parent.spec_ctrl,
             ..LinuxThread::default()
         };
         let mut threads = BTreeMap::new();
@@ -199,7 +270,16 @@ impl LinuxProcess {
             timers,
             ns: self.ns.for_child(),
             traced: self.traced,
+            ptraced: false,
+            perf: self.perf.for_child(),
+            ldt: self.ldt.clone(),
+            forked: true,
+            started_ns: 0,
+            exited_comm: [0; 16],
             dumpable: self.dumpable,
+            sighand: new_sighand_id(),
+            mempolicies: self.mempolicies.clone(),
+            oom_score_adj: self.oom_score_adj,
         }
     }
 
@@ -210,6 +290,8 @@ impl LinuxProcess {
     /// alternate signal stack is not preserved". The robust list and
     /// `clear_child_tid` belong to the old program and are dropped.
     pub fn exec(&mut self, tid: i32) {
+        // execve(2) gives a process that shared its handlers its own.
+        self.sighand = new_sighand_id();
         for signal in 1..=crate::abi::signal::NSIG {
             let action = self.actions.get(signal);
             if action.handler != SIG_DFL && action.handler != SIG_IGN {
@@ -224,12 +306,20 @@ impl LinuxProcess {
         thread.saved_mask = None;
         thread.restart = None;
         thread.restart_block = None;
+        thread.personality = crate::sys::personality::after_exec(thread.personality);
+        for s in &mut thread.spec_ctrl {
+            if u64::from(*s) == crate::sys::prctl::PR_SPEC_DISABLE_NOEXEC {
+                *s = 0;
+            }
+        }
         self.threads.clear();
         self.threads.insert(tid, thread);
         // timer_create(2): POSIX timers are deleted; setitimer(2): interval
         // timers are preserved.
         self.timers.exec();
         self.dumpable = true;
+        self.mempolicies.clear();
+        self.forked = false;
     }
 
     /// A new thread `tid` created by `parent_tid` with clone(2). It
@@ -248,6 +338,11 @@ impl LinuxProcess {
             comm: parent.comm,
             seccomp: parent.seccomp.clone(),
             sched: parent.sched.for_child(),
+            ioprio: parent.ioprio,
+            personality: parent.personality,
+            mempolicy: parent.mempolicy,
+            keys: parent.keys.for_thread(),
+            spec_ctrl: parent.spec_ctrl,
             ..LinuxThread::default()
         };
         self.threads.insert(tid, thread);
@@ -259,6 +354,9 @@ impl LinuxProcess {
         let thread = self.threads.remove(&tid);
         if self.threads.is_empty() {
             self.exited_creds = thread.as_ref().map(|t| t.creds.clone());
+            if let Some(t) = &thread {
+                self.exited_comm = t.comm;
+            }
             self.exited_sched = thread.as_ref().map(|t| t.sched);
         }
         thread
@@ -284,6 +382,12 @@ impl LinuxProcess {
             Some(t) => Some(&t.creds),
             None => self.threads.values().next().map(|t| &t.creds).or(self.exited_creds.as_ref()),
         }
+    }
+
+    /// The command name of the process: its oldest thread's, or the last
+    /// one's once every thread has gone.
+    pub fn last_comm(&self) -> [u8; 16] {
+        self.threads.values().next().map_or(self.exited_comm, |t| t.comm)
     }
 
     /// Whether the process has a thread `tid`.
@@ -403,7 +507,7 @@ impl LinuxProcess {
             Disposition::Ignore | Disposition::Default(DefaultAction::Ignore | DefaultAction::Continue) => !blocked,
             _ => false,
         };
-        if ignored && !self.traced {
+        if ignored && !self.traced && !self.ptraced {
             return Ok(sent);
         }
         let queue_limit = self.queue_limit;
@@ -426,7 +530,13 @@ impl LinuxProcess {
             sent.notify = self.threads.keys().copied().collect();
         } else {
             match dest {
-                Dest::Thread(tid) if !blocked => sent.notify.push(tid),
+                // A thread waiting for the signal in rt_sigtimedwait(2)
+                // counts as blocking it for the rules above (it stays
+                // pending and kills nobody), but has it unmasked for the
+                // wait and must be woken to take it.
+                Dest::Thread(tid) if !self.blocked(signal, dest) || self.waited_for(signal, dest) => {
+                    sent.notify.push(tid)
+                }
                 Dest::Thread(_) => {}
                 Dest::Process => {
                     sent.notify.extend(self.threads.iter().find(|(_, t)| !t.mask.contains(signal)).map(|(&tid, _)| tid))
@@ -468,6 +578,15 @@ impl LinuxProcess {
     /// Whether thread `tid` has a pending signal it does not block.
     pub fn has_deliverable(&self, tid: i32) -> bool {
         !self.pending(tid).without(self.thread(tid).mask).is_empty()
+    }
+
+    /// Whether thread `tid` has a pending signal it does not block whose
+    /// delivery does something: runs a handler, stops or kills. A traced
+    /// process keeps ignored signals until a thread takes them
+    /// ([`Self::traced`]); taking those does nothing, so a wait they end
+    /// continues as if they had never been sent.
+    pub fn has_acting(&self, tid: i32) -> bool {
+        self.pending(tid).without(self.thread(tid).mask).iter().any(|s| !is_ignored(s, &self.actions.get(s)))
     }
 
     /// Prepare a signal the kernel raises for thread `tid` itself (a fault,
@@ -524,6 +643,27 @@ mod tests {
         assert_eq!(p.dequeue(101), None, "taken once");
     }
 
+    /// pthread_kill(3) of a thread that waits for the signal in sigwait(3)
+    /// (VLC's main thread at exit) wakes it.
+    #[test]
+    fn a_thread_waiting_for_a_signal_sent_to_it_is_woken() {
+        let mut p = three_threads();
+        for tid in [100, 101, 102] {
+            p.thread_mut(tid).mask.insert(SIGTERM);
+        }
+        // As rt_sigtimedwait leaves the waiter: the set unblocked, waited for.
+        let t = p.thread_mut(100);
+        t.mask = t.mask.without(SigSet::only(SIGTERM));
+        t.sigwait = SigSet::only(SIGTERM);
+        let sent = p.send(SigInfo::from_process(SIGTERM, SI_TKILL, 100, 1000), Dest::Thread(100), false).unwrap();
+        assert!(sent.queued);
+        assert_eq!(sent.notify, [100], "only the waiter, and the signal is not fatal");
+        assert_eq!(p.dequeue_from(100, SigSet::only(SIGTERM)).map(|i| i.signal()), Some(SIGTERM));
+        // A thread that blocks it without waiting is not woken.
+        let sent = p.send(SigInfo::from_process(SIGTERM, SI_TKILL, 100, 1000), Dest::Thread(101), false).unwrap();
+        assert!(sent.queued && sent.notify.is_empty());
+    }
+
     #[test]
     fn blocked_everywhere_stays_pending() {
         let mut p = three_threads();
@@ -570,6 +710,31 @@ mod tests {
         p.send(user(SIGTERM), Dest::Thread(1), false).unwrap();
         p.set_action(SIGTERM, SigAction { handler: SIG_IGN, ..SigAction::default() });
         assert!(p.pending(1).is_empty(), "blocked and pending, then ignored: discarded");
+    }
+
+    /// A traced process keeps an ignored signal (the default-ignored
+    /// SIGCHLD of a child's exit) until it is taken: deliverable, but
+    /// taking it does nothing.
+    #[test]
+    fn a_traced_processes_ignored_signal_is_deliverable_but_does_not_act() {
+        let mut p = LinuxProcess::new(1);
+        p.traced = true;
+        assert!(p.send(user(SIGCHLD), Dest::Process, false).unwrap().queued);
+        assert!(p.has_deliverable(1) && !p.has_acting(1));
+        p.set_action(SIGUSR1, handler());
+        p.send(user(SIGUSR1), Dest::Process, false).unwrap();
+        assert!(p.has_acting(1), "a handler runs");
+        p.thread_mut(1).mask.insert(SIGUSR1);
+        assert!(!p.has_acting(1), "blocked");
+        p.send(user(SIGSTOP), Dest::Process, false).unwrap();
+        assert!(p.has_acting(1), "a stop");
+        let mut q = LinuxProcess::new(1);
+        q.traced = true;
+        q.send(user(SIGTERM), Dest::Process, false).unwrap();
+        assert!(q.has_acting(1), "the default action kills");
+        q.set_action(SIGTERM, SigAction { handler: SIG_IGN, ..SigAction::default() });
+        q.send(user(SIGTERM), Dest::Process, false).unwrap();
+        assert!(q.has_deliverable(1) && !q.has_acting(1), "SIG_IGN");
     }
 
     #[test]

@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/listxattrat          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 (children dropping to uid/gid 1000); umask 022; /tmp on overlayfs (ext4 upper), /dev/shm tmpfs"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  listxattrat(dfd, path, at_flags, list, size) (syscall 465) is listxattr
+  with a directory fd and flags (AT_SYMLINK_NOFOLLOW, AT_EMPTY_PATH; others
+  EINVAL). It stores the names of the file's extended attributes that the
+  caller may see, each NUL-terminated, back to back, and returns the total
+  length; size 0 returns the length needed (list may be NULL); a buffer
+  too small is ERANGE. trusted.* names are listed only for callers with
+  CAP_SYS_ADMIN (another user sees only user.* and the length shrinks
+  accordingly on tmpfs). The order of names is file-system specific
+  (insertion order on overlayfs/ext4 here, reverse on tmpfs); callers must
+  not rely on it. A file without attributes, or a symlink itself, gives 0.
+returns:
+  success: "total length of the NUL-terminated names (user.alpha, user.bb, user.c -> 26)"
+  query: "size 0: the length needed"
+errors:
+  at_flags: "EINVAL (22): at_flags other than AT_SYMLINK_NOFOLLOW|AT_EMPTY_PATH"
+  range: "ERANGE (34): size > 0 but smaller than the list"
+  fault: "EFAULT (14): list not writable"
+  path: "ENOENT (2): missing file, or \"\" without AT_EMPTY_PATH; EBADF (9): closed dirfd"
+  big_size: "a size above XATTR_LIST_MAX is fine when the list fits (1 MiB accepted)"
+side_effects: none
+threading: "none specific"
+ordering:
+  - "name order is not specified"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

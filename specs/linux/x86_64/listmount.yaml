@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/listmount            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; tmpfs instances mounted under /tmp"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  listmount(req, mnt_ids, nr_mnt_ids, flags) (syscall 458) lists the
+  unique 64-bit ids of the mounts below a mount: all of them (children and
+  their submounts, at any depth), not the mount itself. req is struct
+  mnt_id_req (as for statmount: u32 size 24 or 32, u32 spare 0, u64
+  mnt_id, u64 param, u64 mnt_ns_id); mnt_id names the mount (LSMT_ROOT =
+  ~0 means the namespace's root, and then the list starts with the root
+  mount's own id); param is an id to continue after (0 = from the start).
+  Ids come in ascending order (newer mounts have larger ids), or
+  descending with LISTMOUNT_REVERSE (1), in which case param continues
+  downwards. At most nr_mnt_ids are stored; the return value is how many.
+  Any user may list mounts of their namespace.
+returns:
+  success: "number of ids stored in mnt_ids (0..nr_mnt_ids)"
+  example: "tmpfs at D with tmpfs at D/a, D/b, D/c (made in that order) and D/a/deep: listing D gives a, b, c, deep; reverse gives deep, c, b, a; param a gives b, c, deep; reverse with param c gives b, a; nr 2 gives a, b; listing D/a gives deep; listing D/b gives 0"
+  nr_zero: "nr_mnt_ids 0 returns 0"
+errors:
+  req_size: "EINVAL (22): req->size not 24 or 32"
+  spare: "EINVAL (22): req->spare != 0"
+  flags: "EINVAL (22): flags other than LISTMOUNT_REVERSE"
+  id_zero: "EINVAL (22): mnt_id 0"
+  unknown_id: "ENOENT (2): no mount with that id in the namespace"
+  fault: "EFAULT (14): req unreadable or mnt_ids unwritable"
+  too_many: "EOVERFLOW (75): nr_mnt_ids absurdly large (1000000000)"
+side_effects: none
+threading: "none specific"
+ordering:
+  - "ids ascending (or descending with LISTMOUNT_REVERSE)"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

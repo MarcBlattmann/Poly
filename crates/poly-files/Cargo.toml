@@ -1,0 +1,14 @@
+[package]
+name = "poly-files"
+description = "The browsing core of Poly's Files app and, later, of the one file picker every app world uses: paths, places, directory listings with sorting, filtering and selection, MIME types by name and content, which app opens a file, the freedesktop.org trash, file operations; no_std + alloc over a file system trait, tested on the host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-shell.workspace = true
+
+[lints]
+workspace = true

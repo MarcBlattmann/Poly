@@ -12,19 +12,33 @@
 //! as a path or name are shown as strings, read before the call runs.
 //! `poly.strace=<name>` limits the lines to processes whose `comm` (the
 //! file name of the program, as `/proc/<pid>/comm` shows it) is `<name>`.
+//!
+//! `poly.strace.slow=<ms>` writes only the calls that took at least `<ms>`
+//! milliseconds (of any process, or of `<name>`'s with `poly.strace=<name>`
+//! too), with the thread and the time they took, for finding what a slow
+//! program waits for:
+//!
+//! ```text
+//! strace: pid 37 tid 52 epoll_wait(0x5, 0x7f.., 0x20, 0xffffffff, ..) = 1 [2134 ms]
+//! ```
 
 use crate::process::Process;
 use crate::sync::SpinLock;
 use crate::{log, user};
 use alloc::string::String;
 use core::fmt::Write;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use poly_personality_linux::errno::Errno;
 
 /// Kernel argument: trace system calls (`poly.strace` or `poly.strace=<comm>`).
 pub const STRACE_ARG: &str = "poly.strace";
 
+/// Kernel argument: trace only calls that took this many milliseconds.
+pub const SLOW_ARG: &str = "poly.strace.slow";
+
 static ON: AtomicBool = AtomicBool::new(false);
+/// [`SLOW_ARG`] in nanoseconds; 0: every call.
+static SLOW_NS: AtomicU64 = AtomicU64::new(0);
 /// The program name to trace, empty for every process.
 static ONLY: SpinLock<String> = SpinLock::new(String::new());
 
@@ -40,9 +54,14 @@ pub fn verbose() -> bool {
 
 /// Turn tracing on if the command line asks for it.
 pub fn configure(boot: &crate::boot_info::BootInfo) {
+    let slow = boot.arg(SLOW_ARG).and_then(|ms| ms.parse::<u64>().ok());
+    if let Some(ms) = slow {
+        SLOW_NS.store(ms.max(1) * 1_000_000, Ordering::Relaxed);
+        crate::kprintln!("strace: only calls of {ms} ms and longer");
+    }
     let name = match boot.arg(STRACE_ARG) {
         Some(name) => name,
-        None if boot.has_flag(STRACE_ARG) => "",
+        None if boot.has_flag(STRACE_ARG) || slow.is_some() => "",
         None => return,
     };
     *ONLY.lock() = String::from(name);
@@ -53,22 +72,32 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
     );
 }
 
+/// A call being traced: the start of its line and when it started.
+pub struct Trace {
+    line: String,
+    start_ns: u64,
+}
+
 /// The start of a trace line for call `number` with `args` of `process`'s
-/// running thread, or `None` if it is not traced. Called before the call
-/// runs, so its string arguments are read as the caller passed them.
-pub fn enter(process: &Process, number: u64, args: &[u64; 6]) -> Option<String> {
+/// running thread `tid`, or `None` if it is not traced. Called before the
+/// call runs, so its string arguments are read as the caller passed them.
+pub fn enter(process: &Process, tid: u32, number: u64, args: &[u64; 6]) -> Option<Trace> {
     if !ON.load(Ordering::Acquire) {
         return None;
     }
-    {
-        let only = ONLY.lock();
-        if !only.is_empty() && crate::fs::proc::comm(process.pid).as_deref() != Some(only.as_bytes()) {
-            return None;
-        }
+    // The name is copied out first: `comm` takes a sleeping lock, which
+    // must not be waited for under the spinlock.
+    let only = ONLY.lock().clone();
+    if !only.is_empty() && crate::fs::proc::comm(process.pid).as_deref() != Some(only.as_bytes()) {
+        return None;
     }
     let mut line = String::with_capacity(128);
     let name = poly_personality_linux::table::name(number);
-    let _ = write!(line, "strace: pid {} ", process.pid);
+    if SLOW_NS.load(Ordering::Relaxed) != 0 {
+        let _ = write!(line, "strace: pid {} tid {tid} ", process.pid);
+    } else {
+        let _ = write!(line, "strace: pid {} ", process.pid);
+    }
     match name {
         Some(n) => line.push_str(n),
         None => {
@@ -88,11 +117,18 @@ pub fn enter(process: &Process, number: u64, args: &[u64; 6]) -> Option<String> 
         }
     }
     line.push_str(", ..)");
-    Some(line)
+    Some(Trace { line, start_ns: crate::time::now_ns() })
 }
 
-/// Finish and write `line` with the call's result (`None`: it does not return).
-pub fn exit(mut line: String, ret: Option<u64>) {
+/// Finish and write the trace line with the call's result (`None`: it
+/// does not return), unless it was quicker than `poly.strace.slow`.
+pub fn exit(trace: Trace, ret: Option<u64>) {
+    let Trace { mut line, start_ns } = trace;
+    let slow = SLOW_NS.load(Ordering::Relaxed);
+    let took = crate::time::now_ns().saturating_sub(start_ns);
+    if slow != 0 && took < slow {
+        return;
+    }
     match ret {
         Some(r) => match Errno::from_rax(r) {
             Some(e) => {
@@ -106,6 +142,10 @@ pub fn exit(mut line: String, ret: Option<u64>) {
             }
         },
         None => line.push_str(" = ?\n"),
+    }
+    if slow != 0 {
+        line.pop();
+        let _ = writeln!(line, " [{} ms]", took / 1_000_000);
     }
     log::write_console(&line);
 }

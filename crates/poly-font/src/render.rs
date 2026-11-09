@@ -73,18 +73,35 @@ const MAX_SIDE: f32 = 4096.0;
 /// `dx` pixels (a subpixel offset, `0.0 <= dx < 1.0`, for positioning
 /// between pixels). A glyph without an outline gives an empty bitmap.
 pub fn render_glyph(font: &Font<'_>, glyph: GlyphId, size_px: f32, dx: f32, mode: RenderMode) -> Bitmap {
+    render_glyph_scaled(font, glyph, size_px, size_px, dx, mode)
+}
+
+/// [`render_glyph`] with different horizontal and vertical sizes (pixels
+/// per em): a caller that hints by fitting the x-height to whole pixels
+/// scales the outline vertically by a little more or less than
+/// horizontally, keeping the advances.
+pub fn render_glyph_scaled(
+    font: &Font<'_>,
+    glyph: GlyphId,
+    size_x: f32,
+    size_y: f32,
+    dx: f32,
+    mode: RenderMode,
+) -> Bitmap {
     let empty = Bitmap { mode, ..Bitmap::default() };
-    if !(size_px > 0.0 && size_px <= MAX_SIZE_PX) || !dx.is_finite() {
+    let ok = |s: f32| s > 0.0 && s <= MAX_SIZE_PX;
+    if !(ok(size_x) && ok(size_y)) || !dx.is_finite() {
         return empty;
     }
     let Some(path) = font.outline(glyph) else { return empty };
     let Some(b) = path.bounds() else { return empty };
-    let scale = size_px / f32::from(font.units_per_em());
+    let upem = f32::from(font.units_per_em());
+    let (sx, sy) = (size_x / upem, size_y / upem);
     let pad = if mode == RenderMode::Lcd { 1.0 } else { 0.0 };
-    let left = floor(b.x_min * scale + dx) - pad;
-    let right = ceil(b.x_max * scale + dx) + pad;
-    let top = floor(-b.y_max * scale);
-    let bottom = ceil(-b.y_min * scale);
+    let left = floor(b.x_min * sx + dx) - pad;
+    let right = ceil(b.x_max * sx + dx) + pad;
+    let top = floor(-b.y_max * sy);
+    let bottom = ceil(-b.y_min * sy);
     let (w, h) = (right - left, bottom - top);
     if !(w > 0.0 && h > 0.0 && w <= MAX_SIDE && h <= MAX_SIDE) {
         return empty;
@@ -93,12 +110,12 @@ pub fn render_glyph(font: &Font<'_>, glyph: GlyphId, size_px: f32, dx: f32, mode
     let data = match mode {
         RenderMode::Gray => {
             let mut r = Rasterizer::new(w, h);
-            r.path(&path, |p| Point::new(p.x * scale + dx - left, -p.y * scale - top));
+            r.path(&path, |p| Point::new(p.x * sx + dx - left, -p.y * sy - top));
             r.coverage()
         }
         RenderMode::Lcd => {
             let mut r = Rasterizer::new(w * 3, h);
-            r.path(&path, |p| Point::new((p.x * scale + dx - left) * 3.0, -p.y * scale - top));
+            r.path(&path, |p| Point::new((p.x * sx + dx - left) * 3.0, -p.y * sy - top));
             lcd_filter(&r.coverage_f32(), w, h)
         }
     };
@@ -179,6 +196,17 @@ impl Image {
 mod tests {
     use super::*;
     use crate::testfont;
+
+    #[test]
+    fn a_taller_vertical_size_stretches_only_vertically() {
+        let data = testfont::build();
+        let font = Font::parse(&data).unwrap();
+        let even = render_glyph(&font, GlyphId(1), 20.0, 0.0, RenderMode::Gray);
+        let tall = render_glyph_scaled(&font, GlyphId(1), 20.0, 30.0, 0.0, RenderMode::Gray);
+        assert_eq!(tall.width, even.width);
+        assert!(tall.height > even.height);
+        assert!(render_glyph_scaled(&font, GlyphId(1), 20.0, 0.0, 0.0, RenderMode::Gray).is_empty());
+    }
 
     #[test]
     fn bitmaps_are_placed_around_the_origin() {

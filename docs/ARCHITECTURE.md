@@ -12,6 +12,7 @@ what exists **today** and how it fits that plan.
    personalities/linux    personalities/nt        personalities/xnu
    -errno in rax          NTSTATUS in rax         CF + errno / kern_return_t
    └──────────────────────┼────────────────────────┘
+                          │  native programs (poly-rt) ──► personalities/native: Poly's own calls, -error in rax (ADR 0125)
                           │  poly-abi: Personality, SyscallRegs, SyscallDispatch
                  kernel/src/syscall.rs  ← routes by the process's personality tag
                  kernel/src/linux       ← LinuxKernel for the running thread: files, memory, signals, futexes;
@@ -1301,6 +1302,30 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   and `sysinfo` reads what procfs shows (ADR 0043).
   Host tests run every call, and scripted startup sequences of real static
   binaries, against a fake kernel.
+- **Native** ([ADR 0125](adr/0125-native-system-call-interface-and-poly-rt.md)):
+  Poly's own interface, for programs written for Poly (the desktop is moving
+  here, ADR 0124). An ELF with Poly's ABI note (`poly-binfmt`,
+  `Format::Native`) is loaded as a static ELF into a process made by
+  `Process::new_native`; its calls go to `native::syscall`
+  (`Native::dispatch_with` over `NativeKernel`, `personalities/native`,
+  host-tested against a fake kernel): number in `rax`, arguments in `rdi,
+  rsi, rdx, r10, r8, r9`, a value or `-error` (Poly's own 22 errors) back in
+  `rax`. Handles are descriptors of the process's `fs::Files`, the same open
+  files Linux processes hold; `spawn` starts native, Linux or Windows
+  programs (`program::prepare`) and `wait` reaps them. Native programs link
+  `poly-rt` (`crates/poly-rt`: entry point, calls, `poly-heap` over `map`,
+  panics, output, args) and live in `userland/native`, built for
+  `x86_64-unknown-poly` (`x86_64-unknown-none` with SSE2 floats, ADR 0126) by `rust-lld` on any host. ABI version 2
+  ([ADR 0126](adr/0126-the-desktop-on-the-native-runtime.md)) adds device
+  requests (`control`), `poll`, mappings of handles, memory objects, the
+  file calls, AF_UNIX sockets in the Linux personality's name space (handles
+  passed with the bytes, the peer's identity), process handles and
+  `signal`; `poly-rt` wraps them as `net`, `poll`, `fs`, `mem`, `process`
+  and `system`. A Linux process may `execve` a native program
+  (`NativeState::activate`: its calls become native, its Linux state
+  stays). The desktop runs on it: `userland/poly-compositor` and
+  `userland/poly-notify` are host-tested libraries, `userland/native/*`
+  their native binaries.
 - **Linux signals and futexes**
   ([ADR 0031](adr/0031-linux-signals-and-futexes.md)): the personality
   owns each process's signal state (`LinuxProcess`: dispositions, pending
@@ -1712,6 +1737,23 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   (`localhost`, numeric hosts, a UDP stub resolver). `winhttp.dll` and
   `wininet.dll` make plain HTTP/1.1 requests over it (`crates/poly-http`,
   `personalities/nt/win32/inet`); `https` waits for TLS.
+- **win32k and the GUI DLLs** (`crates/poly-win32k`, `crates/poly-gdi`,
+  `personalities/nt/src/win32k.rs`, `personalities/nt/win32/{user32,gdi32,win32u}`,
+  `userland/poly-compositor/src/win32.rs`, ADR 0128, 0131): table 1 of the NT
+  system calls is Poly's own `PolyUserCall`, one `poly_win32k::proto` request
+  in and its reply out, run against the session's window manager
+  (`poly_win32k::wm`: classes, windows, queues, sends between threads,
+  timers) after the per-process win32k lockdown check. `user32` drives the
+  message sequences that call window procedures (`poly_win32k::user`,
+  host-tested) and blocks on a per-thread event win32k sets; GDI draws in the
+  process (`poly-gdi`: objects, DIB sections, raster operations, the stock
+  fonts). Each shown top-level window becomes one surface of the native
+  compositor over the desktop link (`poly_win32k::link` records through the
+  `/dev/win32k` device, `kernel/src/nt/link.rs`; `poly_win32k::surfaces` and
+  `desktop::Desktop` on win32k's side, `win32::Link` and
+  `win32::WindowsSurfaces` on the compositor's): its client area, drawn by
+  window DCs into a DIB that `ReleaseDC` commits (`PolyUserCommitSurface`).
+  Painting through update regions is stubbed until its slice.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →

@@ -32,6 +32,8 @@ pub const UNAME_MACHINE: &str = "x86_64";
 /// uname(buf): fills `struct new_utsname`; `EFAULT` if `buf` cannot be
 /// written ("EFAULT buf is not valid").
 pub fn uname(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    // personality(2): PER_LINUX32 and UNAME26 change what is reported.
+    let persona = crate::sys::personality::current(k);
     // The names sethostname(2) and setdomainname(2) set, where the kernel
     // keeps them (ADR 0051), or the caller's UTS namespace (ADR 0054).
     let uts = crate::signal::deliver::with_own(k, |p| p.ns.uts.clone());
@@ -46,14 +48,10 @@ pub fn uname(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         Some((h, d)) => (h.as_slice(), d.as_slice()),
         None => (k.hostname(), k.domainname()),
     };
-    let bytes = utsname_bytes([
-        UNAME_SYSNAME.as_bytes(),
-        host,
-        UNAME_RELEASE.as_bytes(),
-        UNAME_VERSION.as_bytes(),
-        UNAME_MACHINE.as_bytes(),
-        domain,
-    ]);
+    let release = crate::sys::personality::uname_release(persona, UNAME_RELEASE);
+    let machine = crate::sys::personality::uname_machine(persona, UNAME_MACHINE);
+    let bytes =
+        utsname_bytes([UNAME_SYSNAME.as_bytes(), host, &release, UNAME_VERSION.as_bytes(), machine.as_bytes(), domain]);
     k.copy_to_user(a.ptr(0), &bytes)?;
     Ok(0)
 }

@@ -214,7 +214,8 @@ shell grows (settings, notifications).
   the screen's height above the exact centre, so the list has room below.
   This is the owner's direction; Alpine's launcher hangs from its bar.
 - **Search.** Typing filters the apps: built-ins ("Poly Demo", "Wayland
-  Test Client") plus every `.desktop` file in `/usr/share/applications`
+  Test Client"; ADR 0133 later took these two out: test apps come only from
+  desktop files an image carries) plus every `.desktop` file in `/usr/share/applications`
   (the Desktop Entry Specification 1.5: `Type`, `Name`, `Comment` or
   `GenericName`, `Keywords`, `Exec` with its quoting and field codes,
   `NoDisplay`/`Hidden`; `Terminal=true` entries are skipped because there

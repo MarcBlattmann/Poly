@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/statmount            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; tmpfs instances mounted under /tmp"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  statmount(req, buf, bufsize, flags) (syscall 457) describes one mount of
+  the caller's mount namespace. req points at struct mnt_id_req {u32 size;
+  u32 spare (must be 0); u64 mnt_id; u64 param (the STATMOUNT_* mask of
+  what to return); u64 mnt_ns_id (VER1)}; size must be 24 (VER0) or 32
+  (VER1). mnt_id is the unique 64-bit mount id (statx with
+  STATX_MNT_ID_UNIQUE 0x4000 gives it in stx_mnt_id; such ids start at
+  2^31). flags must be 0. buf receives struct statmount (linux/mount.h): u32
+  size (bytes written, including strings), u32 mnt_opts, u64 mask (what
+  was filled), u32 sb_dev_major, sb_dev_minor, u64 sb_magic, u32 sb_flags
+  (SB_RDONLY 1, ...), u32 fs_type, u64 mnt_id, mnt_parent_id, u32
+  mnt_id_old, mnt_parent_id_old (legacy ids), u64 mnt_attr (MOUNT_ATTR_*),
+  mnt_propagation (MS_PRIVATE / MS_SHARED / MS_SLAVE / MS_UNBINDABLE),
+  mnt_peer_group, mnt_master, propagate_from, u32 mnt_root, mnt_point, u64
+  mnt_ns_id, u32 fs_subtype, sb_source, opt_num, opt_array, opt_sec_num,
+  opt_sec_array, u64 supported_mask, u32 mnt_uidmap_num, mnt_gidmap_num,
+  mnt_uidmap, mnt_gidmap, spare, then char str[]: the u32 string fields
+  are byte offsets into str of NUL-terminated strings. Masks:
+  SB_BASIC 0x1 (sb_dev_*, sb_magic, sb_flags), MNT_BASIC 0x2 (mnt_id,
+  parent, old ids, mnt_attr, propagation, peer group, master),
+  PROPAGATE_FROM 0x4, MNT_ROOT 0x8 (path of the mount's root inside its
+  file system), MNT_POINT 0x10 (mount point path as seen from the caller's
+  root), FS_TYPE 0x20, MNT_NS_ID 0x40, MNT_OPTS 0x80 (file system options,
+  comma separated, as /proc/self/mountinfo's super options without
+  rw/ro), FS_SUBTYPE 0x100, SB_SOURCE 0x200, OPT_ARRAY 0x400,
+  OPT_SEC_ARRAY 0x800, SUPPORTED_MASK 0x1000 (Linux 6.18 reports 0x7fff),
+  MNT_UIDMAP 0x2000, MNT_GIDMAP 0x4000. Parts not asked for are left zero;
+  unknown mask bits (and a mask of 0) are ignored (mask returned 0). Any
+  user may call it for mounts in their namespace.
+returns:
+  success: "0; buf filled; mask = the parts filled; size = bytes used"
+  tmpfs_example: "tmpfs mounted at D with source e_source, MS_NOSUID|MS_NODEV, size=1m,mode=755, private: sb_magic 0x01021994, fs_type \"tmpfs\", mnt_root \"/\", mnt_point D, sb_source \"e_source\", mnt_opts \"size=1024k,mode=755\", mnt_attr 0x6, mnt_propagation MS_PRIVATE (0x40000), mnt_parent_id = statx mount id of /tmp"
+  root_mount: "the namespace root: mnt_point \"/\", mnt_root \"/\""
+  rdonly: "after a read-only remount sb_flags has bit 0 (SB_RDONLY) and mnt_attr has MOUNT_ATTR_RDONLY"
+errors:
+  req_size: "EINVAL (22): req->size not 24 or 32"
+  spare: "EINVAL (22): req->spare != 0"
+  flags: "EINVAL (22): flags != 0"
+  id_zero: "EINVAL (22): mnt_id 0 (ids below 2^31)"
+  unknown_id: "ENOENT (2): no mount with that id in the namespace (also LSMT_ROOT, and a mount that was unmounted)"
+  fault: "EFAULT (14): req unreadable or buf unwritable"
+  overflow: "EOVERFLOW (75): bufsize too small for the fixed part plus the requested strings"
+  perm: "EPERM (1): querying another namespace without privilege; not tested"
+side_effects: none
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: layouts from linux/mount.h (struct statmount is 512 bytes before
+# str[] on 6.18). The errors test runs as any user and only relies on the
+# root mount's own id; the tmpfs test needs root.

@@ -134,6 +134,14 @@ impl Epoll {
         self.len() == 0
     }
 
+    /// The open file of the `nth` live entry registered as descriptor
+    /// `fd` (kcmp(2) `KCMP_EPOLL_TFD`), entries with the same number in a
+    /// fixed order.
+    pub fn target(&self, fd: i32, nth: usize) -> Option<Arc<OpenFile>> {
+        let s = self.state.lock();
+        s.items.range((fd, 0)..=(fd, usize::MAX)).filter_map(|(_, e)| e.item.file.upgrade()).nth(nth)
+    }
+
     /// Put entry `key` on the ready list (once) and wake the waiters.
     fn mark_ready(&self, key: Key) {
         {

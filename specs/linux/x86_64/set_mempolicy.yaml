@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/set_mempolicy        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, CONFIG_NUMA=y, one NUMA node (node 0); tests run as root and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  set_mempolicy(int mode, const unsigned long *nmask, unsigned long
+  maxnode) (syscall 238) sets the calling thread's NUMA memory policy,
+  read back with get_mempolicy(flags 0). mode is one of MPOL_DEFAULT (0),
+  MPOL_PREFERRED (1), MPOL_BIND (2), MPOL_INTERLEAVE (3), MPOL_LOCAL (4),
+  MPOL_PREFERRED_MANY (5), MPOL_WEIGHTED_INTERLEAVE (6), optionally ORed
+  with MPOL_F_STATIC_NODES (0x8000), MPOL_F_RELATIVE_NODES (0x4000) or
+  MPOL_F_NUMA_BALANCING (0x2000). nmask holds maxnode - 1 bits (maxnode 1:
+  empty mask); NULL means empty. Bits of nodes that do not exist are
+  dropped unless STATIC/RELATIVE keep the caller's mask for reporting.
+  Mask rules per mode - DEFAULT: mask must be empty (NULL or all zero);
+  mode flags are ignored. PREFERRED: a non-empty mask selects its first
+  existing node; an empty or NULL mask turns the policy into MPOL_LOCAL
+  (mode 4 read back). BIND, INTERLEAVE, PREFERRED_MANY,
+  WEIGHTED_INTERLEAVE: the mask must contain at least one existing node.
+  LOCAL: mask must be empty. Mode flags - STATIC and RELATIVE: allowed
+  with PREFERRED, BIND, INTERLEAVE, PREFERRED_MANY, WEIGHTED_INTERLEAVE;
+  not both; not with an empty mask; STATIC needs an existing node in the
+  mask, RELATIVE does not (relative node numbers fold onto the allowed
+  nodes, e.g. {1} works with one node). NUMA_BALANCING: only with BIND and
+  PREFERRED_MANY (may combine with STATIC). Any other high bit: EINVAL.
+  A failed call leaves the previous policy unchanged. A forked child
+  starts with a copy of the policy; later changes on either side are
+  independent.
+returns:
+  success: "0"
+  readback_examples: "BIND {0,1} -> mode 2 mask {0}; BIND|STATIC {0,1} -> mode 0x8002 mask {0,1}; PREFERRED {0,1} -> mode 1 mask {0}; PREFERRED NULL -> mode 4; BIND|RELATIVE {1} -> mode 0x4002 mask {1}"
+errors:
+  mode: "EINVAL (22): mode 7 and up, negative, or unknown flag bits (0x1000, 0x10000)"
+  mask_rules: "EINVAL (22): DEFAULT or LOCAL with a non-empty mask; BIND/INTERLEAVE/PREFERRED_MANY/WEIGHTED_INTERLEAVE with an empty mask, NULL, maxnode 1, or only nodes that do not exist"
+  flags: "EINVAL (22): STATIC and RELATIVE together; STATIC/RELATIVE with an empty mask or with PREFERRED NULL or LOCAL; STATIC with no existing node; NUMA_BALANCING with PREFERRED, INTERLEAVE, LOCAL (and WEIGHTED_INTERLEAVE)"
+  maxnode: "EINVAL (22): maxnode above one page of bits (65536, 2^40)"
+  fault: "EFAULT (14): nmask not readable (the policy is unchanged)"
+side_effects: "future page allocations of the thread follow the policy; existing pages do not move"
+threading: "per thread; inherited by fork and clone"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/mempolicy.h. Tests assume one node (node 0);
+# "a node that does not exist" is node 1 (and 5000 where used). Mask bits
+# at or above MAX_NUMNODES (1024 on the reference) give EINVAL when set;
+# not tested. Weighted interleave weights come from
+# /sys/kernel/mm/mempolicy/weighted_interleave (node0 weight 1, auto true
+# on the reference); not tested.

@@ -119,3 +119,51 @@ fn a_memfd_path_carries_any_name() {
     assert_eq!(Memfd::new(b"", 0).path(), b"/memfd: (deleted)");
     assert_eq!(Memfd::new(b"a/b c", 0).path(), b"/memfd:a/b c (deleted)");
 }
+
+#[test]
+fn secret_memory_files_are_sized_once_and_map_shared_only() {
+    let m = Memfd::secret();
+    assert!(m.is_secret());
+    assert_eq!(m.path(), b"/secretmem (deleted)");
+    assert_eq!(m.add_seals(crate::memfd::seal::GROW), Err(Errno::EPERM), "no seals");
+    assert_eq!(m.check_truncate(0, 8192), Ok(()));
+    assert_eq!(m.check_truncate(8192, 4096), Err(Errno::EINVAL));
+    assert_eq!(m.check_truncate(8192, 16384), Err(Errno::EINVAL));
+    assert!(matches!(m.map(false, true), Err(Errno::EINVAL)));
+    assert!(m.map(true, true).is_ok());
+    assert!(!Memfd::new(b"x", 0).is_secret());
+}
+
+#[test]
+fn secret_memory_files_refuse_reads_writes_and_seeks() {
+    let env = Env::new();
+    let mount = env.vfs.detached_mount(tmpfs());
+    let f = env.vfs.memfd_file(&mount, &env.root, 0o600, Memfd::secret()).unwrap();
+    assert!(f.secret());
+    assert_eq!(f.stat().unwrap().mode, S_IFREG | 0o600);
+    f.truncate(8192).unwrap();
+    assert_eq!(f.truncate(4096), Err(Errno::EINVAL), "the size is set once");
+    assert_eq!(f.stat().unwrap().size, 8192);
+    assert_eq!(f.read(&mut [0u8; 4]), Err(Errno::EINVAL));
+    assert_eq!(f.write(b"x"), Err(Errno::EINVAL));
+    assert_eq!(f.read_at(0, &mut [0u8; 4]), Err(Errno::ESPIPE));
+    assert_eq!(f.write_at(0, b"x"), Err(Errno::ESPIPE));
+    assert_eq!(f.seek(0, crate::Whence::Set), Err(Errno::ESPIPE));
+    assert_eq!(f.fallocate(0, 0, 4096), Err(Errno::EOPNOTSUPP));
+}
+
+#[test]
+fn tmpfs_data_pages_leave_out_holes() {
+    let fs = tmpfs();
+    let reg = NewNode { kind: FileType::Regular, perm: 0o644, uid: 0, gid: 0, rdev: DeviceId::new(0, 0) };
+    let ino = fs.create(fs.root(), b"f", &reg).unwrap();
+    fs.write(ino, 0, b"a").unwrap();
+    fs.write(ino, 65536, b"b").unwrap();
+    fs.truncate(ino, 1 << 20).unwrap();
+    assert_eq!(fs.data_pages(ino, 0, u64::MAX), Some(alloc::vec![0, 16]));
+    assert_eq!(fs.data_pages(ino, 1, 16), Some(alloc::vec![]));
+    assert_eq!(fs.data_pages(ino, 16, 17), Some(alloc::vec![16]));
+    fs.truncate(ino, 0).unwrap();
+    assert_eq!(fs.data_pages(ino, 0, u64::MAX), Some(alloc::vec![]));
+    assert_eq!(fs.data_pages(fs.root(), 0, u64::MAX), None, "a directory");
+}

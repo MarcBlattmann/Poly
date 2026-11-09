@@ -17,9 +17,11 @@
 //! are opened and closed.
 
 use crate::format;
-use crate::source::{IdMapFile, Owner, ProcSource, ProcessInfo};
+use crate::source::{IdMapFile, KernelName, MagicLink, Owner, ProcSource, ProcessInfo};
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use poly_vfs::lock::{Lock, RawSpinLock};
 use poly_vfs::{
     Attr, DeviceId, DirEntry, Errno, FileSystem, FileType, FsInfo, FsStats, Ino, NewNode, PROC_SUPER_MAGIC,
     RenameFlags, Result, SetAttr, Timespec,
@@ -60,6 +62,10 @@ enum G {
     EntropyAvail,
     Poolsize,
     NrOpen,
+    CapLastCap,
+    InotifyWatches,
+    InotifyInstances,
+    InotifyQueued,
 }
 
 /// No parent: in the root.
@@ -67,31 +73,55 @@ const TOP: usize = usize::MAX;
 
 /// The fixed tree: name, parent (an index here, or [`TOP`]), contents.
 const GLOBALS: &[(&[u8], usize, G)] = &[
-    (b"self", TOP, G::SelfLink),             // 0
-    (b"mounts", TOP, G::MountsLink),         // 1
-    (b"cpuinfo", TOP, G::Cpuinfo),           // 2
-    (b"meminfo", TOP, G::Meminfo),           // 3
-    (b"uptime", TOP, G::Uptime),             // 4
-    (b"loadavg", TOP, G::Loadavg),           // 5
-    (b"version", TOP, G::Version),           // 6
-    (b"stat", TOP, G::Stat),                 // 7
-    (b"filesystems", TOP, G::Filesystems),   // 8
-    (b"sys", TOP, G::Dir),                   // 9
-    (b"kernel", 9, G::Dir),                  // 10
-    (b"ostype", 10, G::Ostype),              // 11
-    (b"osrelease", 10, G::Osrelease),        // 12
-    (b"version", 10, G::KernelVersion),      // 13
-    (b"hostname", 10, G::Hostname),          // 14
-    (b"domainname", 10, G::Domainname),      // 15
-    (b"pid_max", 10, G::PidMax),             // 16
-    (b"random", 10, G::Dir),                 // 17
-    (b"boot_id", 17, G::BootId),             // 18
-    (b"uuid", 17, G::Uuid),                  // 19
-    (b"entropy_avail", 17, G::EntropyAvail), // 20
-    (b"poolsize", 17, G::Poolsize),          // 21
-    (b"fs", 9, G::Dir),                      // 22
-    (b"nr_open", 22, G::NrOpen),             // 23
+    (b"self", TOP, G::SelfLink),                      // 0
+    (b"mounts", TOP, G::MountsLink),                  // 1
+    (b"cpuinfo", TOP, G::Cpuinfo),                    // 2
+    (b"meminfo", TOP, G::Meminfo),                    // 3
+    (b"uptime", TOP, G::Uptime),                      // 4
+    (b"loadavg", TOP, G::Loadavg),                    // 5
+    (b"version", TOP, G::Version),                    // 6
+    (b"stat", TOP, G::Stat),                          // 7
+    (b"filesystems", TOP, G::Filesystems),            // 8
+    (b"sys", TOP, G::Dir),                            // 9
+    (b"kernel", 9, G::Dir),                           // 10
+    (b"ostype", 10, G::Ostype),                       // 11
+    (b"osrelease", 10, G::Osrelease),                 // 12
+    (b"version", 10, G::KernelVersion),               // 13
+    (b"hostname", 10, G::Hostname),                   // 14
+    (b"domainname", 10, G::Domainname),               // 15
+    (b"pid_max", 10, G::PidMax),                      // 16
+    (b"random", 10, G::Dir),                          // 17
+    (b"boot_id", 17, G::BootId),                      // 18
+    (b"uuid", 17, G::Uuid),                           // 19
+    (b"entropy_avail", 17, G::EntropyAvail),          // 20
+    (b"poolsize", 17, G::Poolsize),                   // 21
+    (b"fs", 9, G::Dir),                               // 22
+    (b"nr_open", 22, G::NrOpen),                      // 23
+    (b"cap_last_cap", 10, G::CapLastCap),             // 24
+    (b"inotify", 22, G::Dir),                         // 25
+    (b"max_user_watches", 25, G::InotifyWatches),     // 26
+    (b"max_user_instances", 25, G::InotifyInstances), // 27
+    (b"max_queued_events", 25, G::InotifyQueued),     // 28
 ];
+
+/// `/proc/sys/kernel/cap_last_cap`: the highest capability number
+/// (`CAP_CHECKPOINT_RESTORE`, 40, `linux/capability.h`; proc_sys_kernel(5)).
+pub const CAP_LAST_CAP: u32 = 40;
+
+/// `/proc/sys/fs/inotify/max_queued_events`: the events an inotify queue
+/// holds before `IN_Q_OVERFLOW` (poly-vfs's `inotify::MAX_QUEUED_EVENTS`).
+pub const INOTIFY_MAX_QUEUED_EVENTS: u32 = 16384;
+
+/// `/proc/sys/fs/inotify/max_user_watches` and `max_user_instances`
+/// (inotify(7), "/proc interfaces"): what Poly reports. It does not count
+/// watches or instances per user, so these are ceilings it never enforces.
+pub const INOTIFY_MAX_USER_WATCHES: u32 = 65536;
+pub const INOTIFY_MAX_USER_INSTANCES: u32 = 128;
+
+/// The range of `/proc/<pid>/oom_score_adj` (proc_pid_oom_score_adj(5):
+/// "-1000 (OOM_SCORE_ADJ_MIN) to +1000 (OOM_SCORE_ADJ_MAX)").
+pub const OOM_SCORE_ADJ_MIN: i32 = -1000;
+pub const OOM_SCORE_ADJ_MAX: i32 = 1000;
 
 /// What a file in a process directory holds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,6 +145,9 @@ enum E {
     GidMap,
     Setgroups,
     TaskDir,
+    OomScoreAdj,
+    OomScore,
+    ClearRefs,
 }
 
 impl E {
@@ -130,16 +163,30 @@ impl E {
 }
 
 /// The entries of `/proc/<pid>/ns`, in listing order: what namespaces(7)
-/// lists that Poly has. A kind's index here is what [`ProcSource`] gets.
-/// Their links' texts use the type name: `pid` for `pid_for_children`.
-pub const NS_KINDS: [&str; 7] = ["ipc", "mnt", "net", "pid", "pid_for_children", "user", "uts"];
+/// lists. A kind's index here is what [`ProcSource`] gets. Their links'
+/// texts use the type name: `pid` for `pid_for_children`, `time` for
+/// `time_for_children`.
+pub const NS_KINDS: [&str; 10] =
+    ["ipc", "mnt", "net", "pid", "pid_for_children", "user", "uts", "cgroup", "time", "time_for_children"];
 
-/// The index of `pid_for_children`, whose type is `pid`.
+/// The indexes of `pid_for_children` and `time_for_children`, whose types
+/// are `pid` and `time`.
 const PID_FOR_CHILDREN: usize = 4;
 const PID_KIND: usize = 3;
+const TIME_FOR_CHILDREN: usize = 9;
+const TIME_KIND: usize = 8;
+
+/// The kind of namespace an entry names (`pid` for `pid_for_children`).
+const fn ns_base(kind: usize) -> usize {
+    match kind {
+        PID_FOR_CHILDREN => PID_KIND,
+        TIME_FOR_CHILDREN => TIME_KIND,
+        k => k,
+    }
+}
 
 fn ns_type(kind: usize) -> &'static str {
-    if kind == PID_FOR_CHILDREN { NS_KINDS[PID_KIND] } else { NS_KINDS[kind] }
+    NS_KINDS[ns_base(kind)]
 }
 
 /// A link text `<type>:[<inum>]`: the type's index and the number.
@@ -147,13 +194,14 @@ fn parse_ns_name(name: &[u8]) -> Option<(usize, u32)> {
     let open = name.iter().position(|&b| b == b':')?;
     let (ty, rest) = name.split_at(open);
     let num = rest.strip_prefix(b":[")?.strip_suffix(b"]")?;
-    let kind = NS_KINDS.iter().position(|k| k.as_bytes() == ty).filter(|&k| k != PID_FOR_CHILDREN)?;
+    let kind = NS_KINDS.iter().position(|k| k.as_bytes() == ty).filter(|&k| ns_base(k) == k)?;
     Some((kind, parse_number(num)?))
 }
 
 /// The namespace an open procfs file is on, if it is one of the hidden
 /// files `/proc/<pid>/ns/<kind>` links to: its inode number and kind (an
-/// index into [`NS_KINDS`], never `pid_for_children`).
+/// index into [`NS_KINDS`], never `pid_for_children` or
+/// `time_for_children`).
 pub fn namespace_file(ino: Ino) -> Option<(u32, usize)> {
     match Node::from_ino(ino)? {
         Node::NsFile(inum, kind) => Some((inum, kind)),
@@ -191,7 +239,13 @@ const PID_ENTRIES: &[(&[u8], E, u16)] = &[
     (b"gid_map", E::GidMap, 0o644),
     (b"setgroups", E::Setgroups, 0o644),
     (b"task", E::TaskDir, 0o555),
+    (b"oom_score_adj", E::OomScoreAdj, 0o644),
+    (b"oom_score", E::OomScore, 0o444),
+    (b"clear_refs", E::ClearRefs, 0o200),
 ];
+
+/// The files of `/proc/<pid>/task/<tid>`, in listing order.
+const TASK_ENTRIES: [&[u8]; 3] = [b"comm", b"stat", b"status"];
 
 /// A node of the tree, decoded from its inode number.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -210,6 +264,9 @@ enum Node {
     Task(u32, u32),
     /// `/proc/<pid>/task/<tid>/comm`: the thread's name.
     TaskComm(u32, u32),
+    /// `/proc/<pid>/task/<tid>/stat` and `status`: the thread's.
+    TaskStat(u32, u32),
+    TaskStatus(u32, u32),
 }
 
 const K_ROOT: u64 = 1;
@@ -223,6 +280,8 @@ const K_NS: u64 = 7;
 const K_NSFILE: u64 = 8;
 const K_TASK: u64 = 9;
 const K_TASKCOMM: u64 = 10;
+const K_TASKSTAT: u64 = 11;
+const K_TASKSTATUS: u64 = 12;
 const INDEX_MASK: u64 = (1 << 24) - 1;
 
 impl Node {
@@ -238,6 +297,8 @@ impl Node {
             Node::NsFile(inum, k) => (inum, K_NSFILE, k as u64),
             Node::Task(p, t) => (p, K_TASK, u64::from(t)),
             Node::TaskComm(p, t) => (p, K_TASKCOMM, u64::from(t)),
+            Node::TaskStat(p, t) => (p, K_TASKSTAT, u64::from(t)),
+            Node::TaskStatus(p, t) => (p, K_TASKSTATUS, u64::from(t)),
         };
         (u64::from(pid) << 32) | (kind << 24) | (index & INDEX_MASK)
     }
@@ -253,11 +314,13 @@ impl Node {
             K_FD if pid != 0 => Node::Fd(pid, index as u32),
             K_FDINFO if pid != 0 => Node::FdInfo(pid, index as u32),
             K_NS if pid != 0 && (index as usize) < NS_KINDS.len() => Node::Ns(pid, index as usize),
-            K_NSFILE if pid != 0 && (index as usize) < NS_KINDS.len() && index as usize != PID_FOR_CHILDREN => {
+            K_NSFILE if pid != 0 && (index as usize) < NS_KINDS.len() && ns_base(index as usize) == index as usize => {
                 Node::NsFile(pid, index as usize)
             }
             K_TASK if pid != 0 && index != 0 => Node::Task(pid, index as u32),
             K_TASKCOMM if pid != 0 && index != 0 => Node::TaskComm(pid, index as u32),
+            K_TASKSTAT if pid != 0 && index != 0 => Node::TaskStat(pid, index as u32),
+            K_TASKSTATUS if pid != 0 && index != 0 => Node::TaskStatus(pid, index as u32),
             _ => return None,
         })
     }
@@ -269,7 +332,23 @@ const MAX_FD: u32 = INDEX_MASK as u32;
 /// procfs over a [`ProcSource`].
 pub struct ProcFs {
     src: Arc<dyn ProcSource>,
+    /// The contents of files as their last read from the start made them,
+    /// per reading process: a read further on continues in them, as a
+    /// Linux procfs file read in pieces continues where it left off,
+    /// instead of making the file again for every piece (a process with
+    /// thousands of regions reads its `maps` 1 KiB at a time).
+    snapshots: Lock<RawSpinLock, VecDeque<Snapshot>>,
 }
+
+/// A file's contents made for a read from offset 0.
+struct Snapshot {
+    ino: Ino,
+    reader: Option<u32>,
+    data: Arc<Vec<u8>>,
+}
+
+/// How many [`Snapshot`]s are kept (the oldest goes).
+const SNAPSHOTS: usize = 32;
 
 impl core::fmt::Debug for ProcFs {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -304,7 +383,30 @@ pub fn copy_at(data: &[u8], offset: u64, buf: &mut [u8]) -> usize {
 
 impl ProcFs {
     pub fn new(src: Arc<dyn ProcSource>) -> ProcFs {
-        ProcFs { src }
+        ProcFs { src, snapshots: Lock::new(VecDeque::new()) }
+    }
+
+    /// The contents of `node` for a read at `offset` by the caller: made
+    /// afresh at offset 0 (and kept), else the kept ones if the caller
+    /// read this file from the start before.
+    fn contents_at(&self, ino: Ino, node: Node, offset: u64) -> Result<Arc<Vec<u8>>> {
+        let reader = self.src.current_pid();
+        if offset > 0 {
+            let snaps = self.snapshots.lock();
+            if let Some(s) = snaps.iter().find(|s| s.ino == ino && s.reader == reader)
+                && offset <= s.data.len() as u64
+            {
+                return Ok(s.data.clone());
+            }
+        }
+        let data = Arc::new(self.contents(node)?);
+        let mut snaps = self.snapshots.lock();
+        snaps.retain(|s| !(s.ino == ino && s.reader == reader));
+        if snaps.len() >= SNAPSHOTS {
+            snaps.pop_front();
+        }
+        snaps.push_back(Snapshot { ino, reader, data: data.clone() });
+        Ok(data)
     }
 
     fn node(&self, ino: Ino) -> Result<Node> {
@@ -337,7 +439,9 @@ impl ProcFs {
                 _ => FileType::Regular,
             },
             Node::Fd(..) | Node::Ns(..) => FileType::Symlink,
-            Node::FdInfo(..) | Node::NsFile(..) | Node::TaskComm(..) => FileType::Regular,
+            Node::FdInfo(..) | Node::NsFile(..) | Node::TaskComm(..) | Node::TaskStat(..) | Node::TaskStatus(..) => {
+                FileType::Regular
+            }
         }
     }
 
@@ -355,7 +459,7 @@ impl ProcFs {
             Node::Ns(p, _) => Node::Entry(p, entry_index(E::NsDir)),
             Node::NsFile(..) => Node::Root,
             Node::Task(p, _) => Node::Entry(p, entry_index(E::TaskDir)),
-            Node::TaskComm(p, t) => Node::Task(p, t),
+            Node::TaskComm(p, t) | Node::TaskStat(p, t) | Node::TaskStatus(p, t) => Node::Task(p, t),
         }
     }
 
@@ -422,7 +526,10 @@ impl ProcFs {
             }
             Node::Task(p, t) => {
                 self.owner(p)?;
-                fixed(&mut out, &mut core::iter::once((b"comm".to_vec(), Node::TaskComm(p, t))))
+                fixed(
+                    &mut out,
+                    &mut TASK_ENTRIES.iter().filter_map(|&name| Some((name.to_vec(), Self::task_entry(p, t, name)?))),
+                )
             }
             Node::Entry(p, i) if matches!(PID_ENTRIES[i].1, E::FdDir | E::FdinfoDir) => {
                 self.owner(p)?;
@@ -451,7 +558,9 @@ impl ProcFs {
             Node::Fd(p, fd) | Node::FdInfo(p, fd) => self.has_fd(p, fd),
             Node::Ns(p, k) => self.src.namespace(p, k).is_some(),
             Node::NsFile(inum, k) => self.src.namespace_exists(inum, k),
-            Node::Task(p, t) | Node::TaskComm(p, t) => self.src.threads(p).contains(&t),
+            Node::Task(p, t) | Node::TaskComm(p, t) | Node::TaskStat(p, t) | Node::TaskStatus(p, t) => {
+                self.src.threads(p).contains(&t)
+            }
         }
     }
 
@@ -480,14 +589,18 @@ impl ProcFs {
                 // value 4096."
                 G::Poolsize => format::line(b"4096"),
                 G::NrOpen => format::line(&decimal(NR_OPEN)),
+                G::CapLastCap => format::line(&decimal(u64::from(CAP_LAST_CAP))),
+                G::InotifyWatches => format::line(&decimal(u64::from(INOTIFY_MAX_USER_WATCHES))),
+                G::InotifyInstances => format::line(&decimal(u64::from(INOTIFY_MAX_USER_INSTANCES))),
+                G::InotifyQueued => format::line(&decimal(u64::from(INOTIFY_MAX_QUEUED_EVENTS))),
                 G::Dir | G::SelfLink | G::MountsLink => return Err(Errno::EINVAL),
             },
             Node::Entry(p, i) => {
                 let info = self.process(p)?;
                 match PID_ENTRIES[i].1 {
-                    E::Stat => format::stat(&info, &src.maps(p), &src.system()),
-                    E::Statm => format::statm(&info, &src.maps(p)),
-                    E::Status => format::status(&info, &src.maps(p)),
+                    E::Stat => format::stat(&info, &src.size_maps(p), &src.system()),
+                    E::Statm => format::statm(&info, &src.size_maps(p)),
+                    E::Status => format::status(&info, &src.size_maps(p)),
                     E::Maps => format::maps(&src.maps(p)),
                     E::Cmdline => src.cmdline(p),
                     E::Environ => src.environ(p),
@@ -497,6 +610,13 @@ impl ProcFs {
                     E::UidMap => src.id_map(p, IdMapFile::Uid),
                     E::GidMap => src.id_map(p, IdMapFile::Gid),
                     E::Setgroups => src.id_map(p, IdMapFile::Setgroups),
+                    E::OomScoreAdj => format::line(alloc::format!("{}", src.oom_score_adj(p)).as_bytes()),
+                    // proc_pid_oom_score(5): the badness, 0..1000 with the
+                    // adjustment added. Poly does not kill for memory: only
+                    // the adjustment counts.
+                    E::OomScore => format::line(&decimal(src.oom_score_adj(p).clamp(0, 1000) as u64)),
+                    // Write-only (proc_pid_clear_refs(5)).
+                    E::ClearRefs => return Err(Errno::EINVAL),
                     E::Exe | E::Cwd | E::Root | E::FdDir | E::FdinfoDir | E::NsDir | E::TaskDir => {
                         return Err(Errno::EINVAL);
                     }
@@ -510,10 +630,93 @@ impl ProcFs {
                 };
                 format::line(format::comm(&comm))
             }
+            Node::TaskStat(p, t) | Node::TaskStatus(p, t) => {
+                let mut info = self.process(p)?;
+                if let Some(comm) = src.thread_comm(p, t) {
+                    info.comm = comm;
+                }
+                match node {
+                    Node::TaskStat(..) => format::thread_stat(&info, t, &src.size_maps(p), &src.system()),
+                    _ => format::thread_status(&info, t, &src.size_maps(p)),
+                }
+            }
             Node::Root | Node::Pid(_) | Node::Task(..) => return Err(Errno::EISDIR),
             // A namespace file has no contents (read(2) on Linux's: EINVAL).
             Node::Fd(..) | Node::Ns(..) | Node::NsFile(..) => return Err(Errno::EINVAL),
         })
+    }
+
+    /// `/proc/sys/kernel/hostname` and `domainname`, which a write sets.
+    fn kernel_name_file(node: Node) -> Option<KernelName> {
+        match node {
+            Node::Global(i) => match GLOBALS[i].2 {
+                G::Hostname => Some(KernelName::Host),
+                G::Domainname => Some(KernelName::Domain),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// `/proc/<pid>/task/<tid>/<name>`.
+    fn task_entry(p: u32, t: u32, name: &[u8]) -> Option<Node> {
+        match name {
+            b"comm" => Some(Node::TaskComm(p, t)),
+            b"stat" => Some(Node::TaskStat(p, t)),
+            b"status" => Some(Node::TaskStatus(p, t)),
+            _ => None,
+        }
+    }
+
+    /// The process files a write changes: `oom_score_adj`, `clear_refs`.
+    fn process_setting(node: Node) -> Option<(u32, E)> {
+        match node {
+            Node::Entry(p, i) if matches!(PID_ENTRIES[i].1, E::OomScoreAdj | E::ClearRefs) => {
+                Some((p, PID_ENTRIES[i].1))
+            }
+            _ => None,
+        }
+    }
+
+    /// A write to `oom_score_adj` or `clear_refs` of process `p`.
+    ///
+    /// - `oom_score_adj` takes a decimal number in
+    ///   [`OOM_SCORE_ADJ_MIN`]..=[`OOM_SCORE_ADJ_MAX`] (surrounding white
+    ///   space allowed), else `EINVAL`; the source decides who may set it.
+    /// - `clear_refs` takes 1 to 5 (proc_pid_clear_refs(5): clear the
+    ///   referenced and soft-dirty bits, reset the peak RSS), else
+    ///   `EINVAL`. Poly keeps none of those bits, so a valid value
+    ///   changes nothing.
+    fn write_setting(&self, p: u32, e: E, data: &[u8]) -> Result<usize> {
+        let text = core::str::from_utf8(data).map_err(|_| Errno::EINVAL)?.trim();
+        let value: i64 = text.parse().map_err(|_| Errno::EINVAL)?;
+        match e {
+            E::OomScoreAdj => {
+                let v = i32::try_from(value)
+                    .ok()
+                    .filter(|v| (OOM_SCORE_ADJ_MIN..=OOM_SCORE_ADJ_MAX).contains(v))
+                    .ok_or(Errno::EINVAL)?;
+                self.src.set_oom_score_adj(p, v)?;
+            }
+            _ => {
+                if !(1..=5).contains(&value) {
+                    return Err(Errno::EINVAL);
+                }
+                self.owner(p)?;
+            }
+        }
+        Ok(data.len())
+    }
+
+    /// `st_nlink` of a node: a directory has 2 (its name and `.`), a
+    /// process's `task` directory one more per thread (each thread's `..`;
+    /// 3 for a single-threaded process, as Linux shows it), other files 1.
+    fn link_count(&self, node: Node, kind: FileType) -> u32 {
+        match node {
+            Node::Entry(p, i) if PID_ENTRIES[i].1 == E::TaskDir => 2 + self.src.threads(p).len() as u32,
+            _ if kind == FileType::Directory => 2,
+            _ => 1,
+        }
     }
 
     /// The writable files: a process's user namespace files.
@@ -569,7 +772,7 @@ impl FileSystem for ProcFs {
             Node::Entry(p, i) if PID_ENTRIES[i].1 == E::TaskDir => parse_number(name)
                 .filter(|&t| t != 0 && u64::from(t) <= INDEX_MASK && self.src.threads(p).contains(&t))
                 .map(|t| Node::Task(p, t)),
-            Node::Task(p, t) => (name == b"comm").then_some(Node::TaskComm(p, t)),
+            Node::Task(p, t) => Self::task_entry(p, t, name),
             Node::Entry(p, i) => parse_number(name)
                 .filter(|&fd| fd <= MAX_FD && self.has_fd(p, fd))
                 .map(|fd| if PID_ENTRIES[i].1 == E::FdinfoDir { Node::FdInfo(p, fd) } else { Node::Fd(p, fd) }),
@@ -590,7 +793,9 @@ impl FileSystem for ProcFs {
             | Node::FdInfo(p, _)
             | Node::Ns(p, _)
             | Node::Task(p, _)
-            | Node::TaskComm(p, _) => {
+            | Node::TaskComm(p, _)
+            | Node::TaskStat(p, _)
+            | Node::TaskStatus(p, _) => {
                 let info = self.owner(p)?;
                 let start = info.start_ns;
                 let time =
@@ -605,9 +810,11 @@ impl FileSystem for ProcFs {
         let perm = match node {
             Node::Root | Node::Pid(_) | Node::Task(..) => 0o555,
             Node::TaskComm(..) => 0o644,
+            Node::TaskStat(..) | Node::TaskStatus(..) => 0o444,
             Node::Global(i) => match GLOBALS[i].2 {
                 G::Dir => 0o555,
                 G::SelfLink | G::MountsLink => 0o777,
+                G::Hostname | G::Domainname => 0o644,
                 _ => 0o444,
             },
             Node::Entry(_, i) => PID_ENTRIES[i].2,
@@ -618,11 +825,17 @@ impl FileSystem for ProcFs {
             Node::FdInfo(..) | Node::NsFile(..) => 0o444,
             Node::Ns(..) => 0o777,
         };
+        // A namespace file's inode number is the namespace's (namespaces(7):
+        // "the inode number of the namespace", what its link shows).
+        let shown_ino = match node {
+            Node::NsFile(inum, _) => u64::from(inum),
+            _ => ino,
+        };
         Ok(Attr {
-            ino,
+            ino: shown_ino,
             kind,
             perm,
-            nlink: if kind == FileType::Directory { 2 } else { 1 },
+            nlink: self.link_count(node, kind),
             uid,
             gid,
             // proc(5) files have no size: readers read to the end.
@@ -702,7 +915,34 @@ impl FileSystem for ProcFs {
     }
 
     fn writable_file(&self, ino: Ino) -> bool {
-        Node::from_ino(ino).and_then(Self::id_map_file).is_some()
+        Node::from_ino(ino).is_some_and(|n| {
+            Self::id_map_file(n).is_some() || Self::kernel_name_file(n).is_some() || Self::process_setting(n).is_some()
+        })
+    }
+
+    /// A process's `exe`, `cwd`, `root`, `fd/<n>` and `ns/<kind>` name
+    /// what the kernel holds, not a path of their own (proc_pid_fd(5)
+    /// calls them magic links).
+    fn is_magic_link(&self, ino: Ino) -> bool {
+        match Node::from_ino(ino) {
+            Some(Node::Fd(..) | Node::Ns(..)) => true,
+            Some(Node::Entry(_, i)) => matches!(PID_ENTRIES[i].1, E::Exe | E::Cwd | E::Root),
+            _ => false,
+        }
+    }
+
+    fn magic_target(&self, ino: Ino) -> Option<poly_vfs::MagicTarget> {
+        let (pid, link) = match Node::from_ino(ino)? {
+            Node::Fd(p, fd) => (p, MagicLink::Fd(fd)),
+            Node::Entry(p, i) => match PID_ENTRIES[i].1 {
+                E::Exe => (p, MagicLink::Exe),
+                E::Cwd => (p, MagicLink::Cwd),
+                E::Root => (p, MagicLink::Root),
+                _ => return None,
+            },
+            _ => return None,
+        };
+        self.src.magic_target(pid, link)
     }
 
     fn read(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> Result<usize> {
@@ -710,16 +950,57 @@ impl FileSystem for ProcFs {
         if Self::kind(node) == FileType::Directory {
             return Err(Errno::EISDIR);
         }
-        Ok(copy_at(&self.contents(node)?, offset, buf))
+        Ok(copy_at(&self.contents_at(ino, node, offset)?, offset, buf))
     }
 
     fn write(&self, ino: Ino, offset: u64, data: &[u8]) -> Result<usize> {
-        match Self::id_map_file(self.node(ino)?) {
+        let node = self.node(ino)?;
+        if let Some(which) = Self::kernel_name_file(node) {
+            return self.src.write_kernel_name(which, offset, data);
+        }
+        if let Some((p, e)) = Self::process_setting(node) {
+            return self.write_setting(p, e, data);
+        }
+        match Self::id_map_file(node) {
             Some((p, file)) => {
                 self.owner(p)?;
                 self.src.write_id_map(p, file, offset, data)
             }
             None => Err(Errno::EROFS),
+        }
+    }
+
+    fn truncate(&self, ino: Ino, _size: u64) -> Result<()> {
+        // `O_TRUNC` on the writable sysctl and process files changes
+        // nothing; the write that follows sets the value (Chromium opens
+        // `oom_score_adj` with creat(2)).
+        let node = self.node(ino)?;
+        if Self::kernel_name_file(node).is_some() || Self::process_setting(node).is_some() {
+            Ok(())
+        } else {
+            Err(Errno::EROFS)
+        }
+    }
+
+    /// Pins a node. Every lookup checked that its node exists, so this does
+    /// not check again: a node pinned once (a process's root or working
+    /// directory, an open file) must stay pinnable after its process is
+    /// gone, as the VFS re-pins it when it copies a reference (Chromium's
+    /// sandbox makes `/proc/<helper>/fdinfo` its root and the helper
+    /// exits, docs/chromium-linux-gaps.md C4); reading it then fails with
+    /// `ENOENT`.
+    fn open(&self, ino: Ino) -> Result<()> {
+        let node = self.node(ino)?;
+        // A reference to a namespace file holds its namespace (setns(2)).
+        if let Node::NsFile(inum, k) = node {
+            self.src.pin_namespace(inum, k, true);
+        }
+        Ok(())
+    }
+
+    fn release(&self, ino: Ino) {
+        if let Some(Node::NsFile(inum, k)) = Node::from_ino(ino) {
+            self.src.pin_namespace(inum, k, false);
         }
     }
 

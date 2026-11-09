@@ -98,7 +98,7 @@ impl Owned {
 }
 
 /// An attribute name: 1 to [`XATTR_NAME_MAX`] bytes before the NUL.
-fn name_arg(k: &dyn LinuxKernel, p: UserPtr) -> Result<Vec<u8>, Errno> {
+pub(crate) fn name_arg(k: &dyn LinuxKernel, p: UserPtr) -> Result<Vec<u8>, Errno> {
     let mut buf = bounce(XATTR_NAME_MAX + 1)?;
     let n = match k.strncpy_from_user(p, &mut buf) {
         Err(Errno::ENAMETOOLONG) => return Err(Errno::ERANGE),
@@ -116,7 +116,7 @@ fn name_arg(k: &dyn LinuxKernel, p: UserPtr) -> Result<Vec<u8>, Errno> {
 /// only; a size above `max` counts as `max`. Data longer than the buffer
 /// is `ERANGE`, or `E2BIG` when the buffer is `max` bytes already (a name
 /// list longer than `XATTR_LIST_MAX` can never be returned).
-fn reply(k: &mut dyn LinuxKernel, data: &[u8], buf: UserPtr, size: u64, max: u64) -> SysResult {
+pub(crate) fn reply(k: &mut dyn LinuxKernel, data: &[u8], buf: UserPtr, size: u64, max: u64) -> SysResult {
     let len = data.len() as u64;
     if size == 0 {
         return Ok(len);

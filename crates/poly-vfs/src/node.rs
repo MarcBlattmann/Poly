@@ -51,6 +51,13 @@ impl NodeRef {
         &self.loc.mount
     }
 
+    /// Whether an open file (any process's) writes this inode: what
+    /// makes running it as a program, or loading it as a kernel module,
+    /// `ETXTBSY`.
+    pub fn has_writers(&self) -> bool {
+        self.loc.mount.sb.has_text_writers(self.loc.ino)
+    }
+
     /// The file system the inode is on.
     pub(crate) fn fs(&self) -> &dyn crate::FileSystem {
         &*self.loc.mount.sb.fs
@@ -106,7 +113,9 @@ impl NodeRef {
         .iter()
         .filter(|(on, _)| *on)
         .fold(0, |acc, (_, bit)| acc | bit);
+        st.flags |= crate::fs::st_flags_of_attrs(mount.attrs());
         let dev = mount.dev();
+
         st.fsid = [dev.major, dev.minor];
         Ok(st)
     }
@@ -129,6 +138,11 @@ impl NodeRef {
     /// this will not cause an error to be returned."
     pub fn chmod(&self, cred: &Cred, perm: u16) -> Result<()> {
         let attr = self.attr()?;
+        // A symbolic link's mode cannot be changed, on any file system
+        // (fchmodat2's spec sheet: `EOPNOTSUPP`, before the ownership).
+        if attr.kind == FileType::Symlink {
+            return Err(Errno::EOPNOTSUPP);
+        }
         self.writable_mount()?;
         if !cred.owns(&attr) {
             return Err(Errno::EPERM);
@@ -357,14 +371,16 @@ impl FsContext {
     /// (`ENOTDIR`) the caller may search. The working directory is left
     /// alone, as in Linux.
     pub fn set_root(&mut self, cred: &Cred, dir: NodeRef) -> Result<()> {
-        if !cred.has(cap::SYS_CHROOT) {
-            return Err(Errno::EPERM);
-        }
+        // chroot's spec sheet: the lookup errors and the search permission
+        // on the directory come before the capability.
         let attr = dir.attr()?;
         if attr.kind != FileType::Directory {
             return Err(Errno::ENOTDIR);
         }
         cred.check(&attr, Access::EXEC)?;
+        if !cred.has(cap::SYS_CHROOT) {
+            return Err(Errno::EPERM);
+        }
         self.root = dir;
         Ok(())
     }

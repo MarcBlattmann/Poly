@@ -1,0 +1,61 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_setup             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 32 CPUs; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; /tmp on overlayfs; fs.aio-max-nr 65536"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  io_setup(nr_events, ctx_idp) (syscall 206) creates a native ("Linux
+  AIO") asynchronous I/O context able to hold at least nr_events
+  completions, and stores its id in the 64-bit word *ctx_idp. nr_events
+  is an unsigned 32-bit value (upper register half ignored). The word at
+  ctx_idp is read first and must be 0. The id is the user address of a
+  completion ring the kernel maps into the caller (shared, read-write,
+  page-aligned, at least one page; /proc/self/maps names it "/[aio]
+  (deleted)"). The ring starts with a 32-byte header of eight unsigned
+  32-bit fields that libaio reads directly: id (an index of the context
+  within the process, 0 for the first), nr (number of event slots, at least
+  nr_events; Linux sizes it from the CPU count, 383 slots here for any
+  request up to 128), head (next slot user space reaps), tail (next slot
+  the kernel fills), magic 0xa10a10a1, compat_features 1,
+  incompat_features 0, header_length 32. The header is followed by nr
+  struct io_event slots (32 bytes each: u64 data, u64 obj, s64 res, s64
+  res2). Completions are written at tail (then tail advances, modulo nr);
+  io_getevents copies from head and advances head. No file descriptor is
+  used. The context belongs to the address space: a forked child cannot
+  use or destroy it (EINVAL), and unmapping the ring destroys it.
+returns:
+  success: "0, *ctx_idp = the new context id (non-zero, page-aligned address of the ring; distinct for every live context)"
+  ring_header: "magic 0xa10a10a1, compat_features 1, incompat_features 0, header_length 32, head 0, tail 0, nr >= nr_events"
+  capacity: "at least nr_events completions can be outstanding (unreaped) before io_submit says EAGAIN; Linux allows more (nr - 1 here)"
+  high_bits: "nr_events with bits above 31 set uses the low 32 bits (1 | 1<<32 asks for 1)"
+errors:
+  efault: "EFAULT (14): ctx_idp not readable/writable (NULL, or an unmapped address); checked first"
+  ctx_not_zero: "EINVAL (22): *ctx_idp != 0 on entry; the word is left as it was"
+  zero: "EINVAL (22): nr_events == 0"
+  too_many_absurd: "EINVAL (22): nr_events so large the ring could not be sized (more than about 4 million; 0x7fffffff and 0xffffffff here)"
+  over_limit: "EAGAIN (11): nr_events (plus contexts already in use system-wide) above /proc/sys/fs/aio-max-nr (65536); 70000 here"
+  no_memory: "ENOMEM (12): could not allocate or map the ring; not tested"
+  order: "EFAULT (reading *ctx_idp), then EINVAL (*ctx_idp != 0 or nr_events == 0), then EINVAL (absurd size), then EAGAIN (limit)"
+  failure_leaves_word: "on every failure *ctx_idp is not written"
+side_effects: >
+  Maps the ring into the caller's address space (it is not inherited by
+  fork: the child does not have it and cannot use the context). The
+  system-wide count /proc/sys/fs/aio-nr grows. Unmapping the ring
+  (munmap of its address) destroys the context as io_destroy would.
+threading: "a context is shared by all threads of the process (same address space)"
+ordering:
+  - "completions appear in the ring in the order operations completed; synchronous operations (file reads/writes) complete inside io_submit, in array order"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct iocb, struct io_event, struct __aio_sigset and IOCB_CMD_*
+# from linux/aio_abi.h; the ring header layout is the one libaio reads
+# (its magic and fields are what user space checks before reaping without
+# a system call). Tests use the raw syscalls (no libaio). Related sheets:
+# io_submit, io_getevents, io_pgetevents, io_cancel, io_destroy.

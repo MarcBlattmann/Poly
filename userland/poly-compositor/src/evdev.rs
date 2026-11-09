@@ -18,11 +18,11 @@
 //! event layout, the codes, the `EVIOC*` request numbers) and the kernel's
 //! input documentation (`input.rst`, `event-codes.rst`).
 
+use crate::os::{self, RawFd};
+use crate::prelude::*;
+use poly_wayland::seat::InputEventQueue;
 use poly_wayland::seat::{Capabilities, InputEvent, InputSource};
 use poly_wayland::wire::Fixed;
-use std::collections::VecDeque;
-use std::ffi::CString;
-use std::os::fd::RawFd;
 
 const EV_SYN: u16 = 0;
 const EV_KEY: u16 = 1;
@@ -37,7 +37,7 @@ const REL_WHEEL: u16 = 8;
 const ABS_X: u16 = 0;
 const ABS_Y: u16 = 1;
 /// `BTN_MISC` to `BTN_GEAR_UP`: the button codes; keys are below.
-const BUTTONS: std::ops::Range<u16> = 0x100..0x160;
+const BUTTONS: core::ops::Range<u16> = 0x100..0x160;
 const KEY_A: u16 = 30;
 /// How far one wheel step scrolls, logical pixels.
 pub const WHEEL_STEP: i32 = 15;
@@ -196,18 +196,13 @@ pub struct Device {
 fn ioctl_buf(fd: RawFd, request: u32, buf: &mut [u8]) -> bool {
     // SAFETY: `buf` is as long as the size `request` encodes (each caller
     // builds the request from `buf.len()`).
-    unsafe { libc::ioctl(fd, request as libc::c_ulong, buf.as_mut_ptr()) >= 0 }
+    unsafe { os::control(fd, request, buf.as_mut_ptr() as u64) }.is_ok()
 }
 
 impl Device {
     /// Open and describe `path`; `None` if it is nothing the seat uses.
     pub fn open(path: &str) -> Option<Device> {
-        let c = CString::new(path).ok()?;
-        // SAFETY: a NUL-terminated path.
-        let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC) };
-        if fd < 0 {
-            return None;
-        }
+        let fd = os::open_device(path, false, true).ok()?;
         let mut types = [0u8; 4];
         let mut keys = [0u8; 96];
         let mut rels = [0u8; 4];
@@ -235,20 +230,20 @@ impl Device {
             (true, Some(true)) => Kind::Mouse,
             (true, Some(false)) => Kind::Keyboard,
             _ => {
-                crate::unix::close(fd);
+                os::close(fd);
                 return None;
             }
         };
         // Our events alone (the kernel console would read keys too).
         // SAFETY: EVIOCGRAB takes its argument by value.
-        unsafe { libc::ioctl(fd, EVIOCGRAB as libc::c_ulong, 1 as libc::c_ulong) };
+        let _ = unsafe { os::control(fd, EVIOCGRAB, 1) };
         Some(Device { fd, name, translator: Translator::new(kind) })
     }
 }
 
 impl Drop for Device {
     fn drop(&mut self) {
-        crate::unix::close(self.fd);
+        os::close(self.fd);
     }
 }
 
@@ -256,14 +251,14 @@ impl Drop for Device {
 #[derive(Debug, Default)]
 pub struct Evdev {
     pub devices: Vec<Device>,
-    queue: VecDeque<InputEvent>,
+    queue: InputEventQueue,
 }
 
 impl Evdev {
     /// Open `/dev/input/event0` to `event31`.
     pub fn open_all() -> Evdev {
         let devices = (0..32).filter_map(|n| Device::open(&format!("/dev/input/event{n}"))).collect();
-        Evdev { devices, queue: VecDeque::new() }
+        Evdev { devices, queue: InputEventQueue::default() }
     }
 
     /// Read what device `index` has (it was readable); `size` is the
@@ -273,18 +268,17 @@ impl Evdev {
         let mut buf = [0u8; EVENT_SIZE * 64];
         let mut out = Vec::new();
         loop {
-            // SAFETY: `buf` is a live buffer of the length given.
-            let n = unsafe { libc::read(dev.fd, buf.as_mut_ptr().cast(), buf.len()) };
-            if n <= 0 {
+            let n = os::read(dev.fd, &mut buf).unwrap_or(0);
+            if n == 0 {
                 break;
             }
-            for e in buf[..n as usize].chunks_exact(EVENT_SIZE) {
+            for e in buf[..n].chunks_exact(EVENT_SIZE) {
                 let ty = u16::from_le_bytes([e[16], e[17]]);
                 let code = u16::from_le_bytes([e[18], e[19]]);
                 let value = i32::from_le_bytes([e[20], e[21], e[22], e[23]]);
                 dev.translator.feed(ty, code, value, time, size, &mut out);
             }
-            if (n as usize) < buf.len() {
+            if n < buf.len() {
                 break;
             }
         }

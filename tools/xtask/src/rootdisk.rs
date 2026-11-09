@@ -194,6 +194,12 @@ impl RootTree {
         self.insert(path, Entry::File { mode, source: Source::Bytes(data.to_vec()), mtime: MTIME });
     }
 
+    /// A file of the host, at `path` in the image (Chromium's disk adds a
+    /// whole unpacked tree this way, `chromium.rs`).
+    pub fn host_file(&mut self, path: &str, mode: u16, host: &Path, mtime: i64) {
+        self.insert(path, Entry::File { mode, source: Source::Host(host.to_path_buf()), mtime });
+    }
+
     pub fn dir(&mut self, path: &str, mode: u16) {
         self.insert(path, Entry::Dir(mode));
     }
@@ -247,8 +253,7 @@ fn host_location(path: &Path) -> Option<PathBuf> {
 }
 
 fn mtime_of(meta: &std::fs::Metadata) -> i64 {
-    use std::os::unix::fs::MetadataExt;
-    meta.mtime()
+    crate::hostfs::mtime(meta)
 }
 
 impl Collector {
@@ -290,20 +295,24 @@ impl Collector {
             return self.add_depth(&resolved, depth + 1);
         }
         if meta.is_dir() {
-            use std::os::unix::fs::PermissionsExt;
-            self.tree.dir(&image_path, (meta.permissions().mode() & 0o7777) as u16);
+            self.tree.dir(&image_path, crate::hostfs::mode(&meta) as u16);
             return Ok(());
         }
         if !meta.is_file() {
             return Err(format!("{}: not a regular file, directory or link", at.display()));
         }
-        use std::os::unix::fs::PermissionsExt;
-        let mode = (meta.permissions().mode() & 0o7777) as u16;
+        let mode = crate::hostfs::mode(&meta) as u16;
         self.tree.insert(&image_path, Entry::File { mode, source: Source::Host(at.clone()), mtime: mtime_of(&meta) });
         if is_elf(&at) {
             self.elves.push_back(at);
         }
         Ok(())
+    }
+
+    /// Add the shared objects the host's ELF file at `path` needs (not the
+    /// file itself: the caller puts it somewhere else).
+    pub(crate) fn add_elf_needs(&mut self, path: &Path) {
+        self.elves.push_back(path.to_path_buf());
     }
 
     /// Add a directory and everything under it, leaving out the names in
@@ -478,9 +487,9 @@ cd \"$HOME\"
 ";
 
 /// `/usr/local/sbin/poweroff` of the image: asks init (outside the chroot).
-const POWEROFF: &str = "#!/bin/bash\n# BusyBox's init (pid 1) powers off on SIGUSR2.\nsync\nkill -USR2 1\n";
+pub(crate) const POWEROFF: &str = "#!/bin/bash\n# BusyBox's init (pid 1) powers off on SIGUSR2.\nsync\nkill -USR2 1\n";
 /// `/usr/local/sbin/reboot` of the image.
-const REBOOT: &str = "#!/bin/bash\n# BusyBox's init (pid 1) reboots on SIGTERM.\nsync\nkill -TERM 1\n";
+pub(crate) const REBOOT: &str = "#!/bin/bash\n# BusyBox's init (pid 1) reboots on SIGTERM.\nsync\nkill -TERM 1\n";
 
 /// `/etc/inputrc`: readline without bracketed paste (the boot test types
 /// into the shell; the sequences would only clutter its output).
@@ -722,6 +731,15 @@ int main(int argc, char **argv) {\n\
 
 /// Collect what the image holds (see the module documentation).
 pub fn collect() -> Result<Contents, String> {
+    collect_with(|_, _, _| Ok(()))
+}
+
+/// [`collect`] with more from `extra` (the toolkits' disk, `toolkits.rs`):
+/// it adds host files to the collector (their shared objects are added
+/// after it returns), the programs it found and notes.
+pub(crate) fn collect_with(
+    extra: impl FnOnce(&mut Collector, &mut BTreeSet<&'static str>, &mut Vec<String>) -> Result<(), String>,
+) -> Result<Contents, String> {
     let mut c = Collector::new();
     let mut have = BTreeSet::new();
     let mut notes = Vec::new();
@@ -814,7 +832,11 @@ pub fn collect() -> Result<Contents, String> {
     crate::mesa::add_to_root(&mut c, &mut have, &mut notes)?;
     // Xwayland and X11 programs with their data (ADR 0118, xwayland.rs).
     crate::xwayland::add_to_root(&mut c, &mut have, &mut notes)?;
+    // Mesa with its virgl and Venus drivers, eglinfo, kmscube, vulkaninfo
+    // (virgl.rs, ADR 0119).
+    crate::virgl::add_to_root(&mut c, &mut have, &mut notes)?;
 
+    extra(&mut c, &mut have, &mut notes)?;
     c.add_needed()?;
 
     let mut tree = c.tree;
@@ -946,8 +968,7 @@ fn gcc_parts() -> Result<GccParts, String> {
 
 /// Whether this process runs as root (`/proc/self` belongs to its user).
 fn running_as_root() -> bool {
-    use std::os::unix::fs::MetadataExt;
-    std::fs::metadata("/proc/self").is_ok_and(|m| m.uid() == 0)
+    crate::hostfs::running_as_root()
 }
 
 /// Whether `mke2fs` can be run.
@@ -998,8 +1019,17 @@ pub fn write_image(tree: &RootTree, image: &Path) -> Result<&'static str, String
     }
 }
 
+/// Write `tree` as an ext4 image to `image` with `poly-ext2`'s formatter on
+/// any host, whatever tools it has: the modes are the tree's own (a host
+/// file's mode is not looked at, unlike `mke2fs -d`), so a tree made from
+/// archive entries keeps theirs (Chromium's disk, `chromium.rs`).
+pub fn write_image_poly_ext2(tree: &RootTree, image: &Path) -> Result<(), String> {
+    let (size, _) = image_size(tree);
+    let _ = std::fs::remove_file(image);
+    with_poly_ext2(tree, image, size)
+}
+
 fn with_mke2fs(tree: &RootTree, image: &Path, size: u64, inodes: u64) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
     let target = super::root().join("target");
     let stage = target.join(format!("poly-rootdisk-stage-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&stage);
@@ -1014,7 +1044,7 @@ fn with_mke2fs(tree: &RootTree, image: &Path, size: u64, inodes: u64) -> Result<
                     std::fs::create_dir_all(&at).map_err(|e| err(&at, e))?;
                     dirs.push((at, *mode));
                 }
-                Entry::Symlink(t) => std::os::unix::fs::symlink(t, &at).map_err(|e| err(&at, e))?,
+                Entry::Symlink(t) => crate::hostfs::symlink(t, &at).map_err(|e| err(&at, e))?,
                 Entry::File { mode, source, mtime } => {
                     match source {
                         // A hard link costs no space; the host's file is
@@ -1027,8 +1057,7 @@ fn with_mke2fs(tree: &RootTree, image: &Path, size: u64, inodes: u64) -> Result<
                         }
                         Source::Bytes(b) => {
                             std::fs::write(&at, b).map_err(|e| err(&at, e))?;
-                            std::fs::set_permissions(&at, std::fs::Permissions::from_mode(u32::from(*mode)))
-                                .map_err(|e| err(&at, e))?;
+                            crate::hostfs::set_mode(&at, u32::from(*mode)).map_err(|e| err(&at, e))?;
                             set_mtime(&at, *mtime)?;
                         }
                     }
@@ -1036,7 +1065,7 @@ fn with_mke2fs(tree: &RootTree, image: &Path, size: u64, inodes: u64) -> Result<
             }
         }
         for (at, mode) in dirs.iter().rev() {
-            std::fs::set_permissions(at, std::fs::Permissions::from_mode(u32::from(*mode))).map_err(|e| err(at, e))?;
+            crate::hostfs::set_mode(at, u32::from(*mode)).map_err(|e| err(at, e))?;
         }
         let conf = stage.with_extension("mke2fs.conf");
         std::fs::write(&conf, MKE2FS_CONF).map_err(|e| err(&conf, e))?;
@@ -1307,7 +1336,7 @@ fn second_boot(s: &mut crate::busybox::Session, compiled: bool) -> super::Result
 
 /// The file at `path` on the ext4 image, read with `poly-ext2` (from a
 /// copy in memory; the image is not changed).
-fn read_back(image: &Path, path: &str) -> super::Result<Vec<u8>> {
+pub(crate) fn read_back(image: &Path, path: &str) -> super::Result<Vec<u8>> {
     use poly_ext2::{DeviceIo, Ext2, MountOptions};
     use poly_vfs::FileSystem;
     let mut mem = std::fs::read(image).map_err(|e| format!("{}: {e}", image.display()))?;

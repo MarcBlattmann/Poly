@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/name_to_handle_at    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; tests use /dev/shm (tmpfs; overlayfs /tmp has no handles here: EOPNOTSUPP)"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  name_to_handle_at(dirfd, pathname, handle, mount_id, flags) (syscall
+  303) returns an opaque, persistent handle for a file. handle points at
+  struct file_handle {u32 handle_bytes; s32 handle_type; unsigned char
+  f_handle[]}: handle_bytes is the size of f_handle on entry (at most
+  MAX_HANDLE_SZ 128) and the handle's size on return; handle_type and the
+  bytes are file-system specific (tmpfs here: 12 bytes, type 1). The file
+  is (dirfd, pathname) resolved like the *at calls; a final symlink is NOT
+  followed unless AT_SYMLINK_FOLLOW (0x400); AT_EMPTY_PATH with ""
+  names dirfd (any open file). *mount_id (int) receives the mount id (the
+  legacy id of /proc/self/mountinfo); with AT_HANDLE_MNT_ID_UNIQUE (0x1)
+  mount_id points at a u64 that receives the unique 64-bit mount id (as
+  statx STATX_MNT_ID_UNIQUE). AT_HANDLE_FID (0x200) asks for a handle
+  usable only for identification (on tmpfs identical to the normal one);
+  AT_HANDLE_CONNECTABLE (0x2) is also accepted. The same file always gives
+  the same handle (also after a rename within the file system); another
+  file (also a new file under the old name) a different one. Any user may
+  call it (no permission beyond path lookup).
+returns:
+  success: "0; handle filled (handle_bytes, handle_type, bytes); *mount_id set"
+  stable: "repeated calls for the same file give identical handles"
+errors:
+  overflow: "EOVERFLOW (75): handle_bytes smaller than the handle (0 is a size query); handle_bytes is set to the size needed"
+  too_big: "EINVAL (22): handle_bytes > 128"
+  flags: "EINVAL (22): unknown flags (0x8000)"
+  fault: "EFAULT (14): handle or mount_id unwritable (or handle unreadable)"
+  missing: "ENOENT (2): path does not exist"
+  unsupported: "EOPNOTSUPP (95): the file system cannot make handles (procfs, a pipe via AT_EMPTY_PATH, overlayfs without nfs_export)"
+  bad_fd: "EBADF (9): dirfd not open (relative path)"
+side_effects: none
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct file_handle, MAX_HANDLE_SZ and AT_HANDLE_* from
+# linux/fcntl.h / fcntl.h. Tests never compare handle bytes with fixed
+# values, only with other handles of the same run.

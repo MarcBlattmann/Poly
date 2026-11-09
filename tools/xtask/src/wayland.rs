@@ -142,11 +142,9 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     if stale.is_empty() { Ok(()) } else { Err(format!("out of date, run `cargo xtask wayland`: {}", stale.join(", "))) }
 }
 
-/// The SHA-256 of a file (`sha256sum`), or `None` without the tool.
+/// The SHA-256 of a file, or `None`.
 fn sha256(path: &Path) -> Option<String> {
-    let out = Command::new("sha256sum").arg(path).stderr(Stdio::null()).output().ok()?;
-    let text = String::from_utf8(out.stdout).ok()?;
-    Some(text.split_whitespace().next()?.to_string())
+    crate::sha256::file(path)
 }
 
 /// `source` formatted with the repository's `rustfmt.toml`.

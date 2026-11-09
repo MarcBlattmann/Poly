@@ -9,7 +9,7 @@ use crate::inotify;
 use crate::mount::{Mount, MountFlags, MountId, MountInfo, MountTable};
 use crate::node::{FsContext, Location, NodeRef, is_fs_object};
 use crate::object::AnonFs;
-use crate::path::{Found, Last, PATH_MAX, Parent, PathArg, Walk, check_path};
+use crate::path::{Found, Last, PATH_MAX, Parent, PathArg, Resolve, Walk, check_path};
 use crate::sync::SpinMutex;
 use crate::{Attr, DeviceId, Errno, FileType, Ino, PERM_MASK, Result, S_ISGID, S_ISUID, S_ISVTX, S_IXGRP, Stat};
 use alloc::collections::BTreeMap;
@@ -34,7 +34,22 @@ pub struct Vfs {
     fifos: crate::fifo::Fifos,
     /// Counts every change of a name ([`namespace_generation`](Self::namespace_generation)).
     names_changed: core::sync::atomic::AtomicU64,
+    /// Names found by scanning directories ([`Vfs::name_in`]), for naming
+    /// paths (`/proc/<pid>/maps` names every mapped file): right while the
+    /// namespace generation has not moved.
+    names: SpinMutex<DirNames>,
 }
+
+/// Names of inodes in directories: `(device, directory, child)` to the
+/// name, all made at `generation`.
+#[derive(Default)]
+struct DirNames {
+    generation: u64,
+    map: BTreeMap<(u32, u32, Ino, Ino), Vec<u8>>,
+}
+
+/// The most names [`DirNames`] keeps (it starts again when full).
+const NAME_CACHE_MAX: usize = 4096;
 
 impl core::fmt::Debug for Vfs {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -64,6 +79,7 @@ impl Vfs {
             anon: (anon_fs, anon_mount),
             fifos: crate::fifo::Fifos::default(),
             names_changed: core::sync::atomic::AtomicU64::new(0),
+            names: SpinMutex::new(DirNames::default()),
         }
     }
 
@@ -179,13 +195,22 @@ impl Vfs {
     /// root of the topmost one (repeatedly).
     pub(crate) fn follow_mounts(&self, mut loc: Location) -> Location {
         let table = self.mounts.lock();
-        for _ in 0..=table.mounts.len() {
-            match table.covering(loc.mount.id, loc.ino) {
-                Some(m) => loc = Location { mount: m.clone(), ino: m.root },
+        for _ in 0..=table.mounts.len() + 64 {
+            match Self::covering_of(&table, &loc) {
+                Some(m) => loc = Location { ino: m.root, mount: m },
                 None => break,
             }
         }
         loc
+    }
+
+    /// The topmost mount on `loc`: in the table, or among the mounts a
+    /// detached tree keeps ([`Mount::detached_covering`]).
+    pub(crate) fn covering_of(table: &crate::mount::MountTable, loc: &Location) -> Option<Arc<Mount>> {
+        match table.covering(loc.mount.id, loc.ino) {
+            Some(m) => Some(m.clone()),
+            None => loc.mount.detached_covering(loc.ino),
+        }
     }
 
     /// Looks `name` up in `dir`, without following mounts.
@@ -200,7 +225,7 @@ impl Vfs {
     }
 
     fn is_mount_point(&self, loc: &Location) -> bool {
-        self.mounts.lock().covering(loc.mount.id, loc.ino).is_some()
+        Self::covering_of(&self.mounts.lock(), loc).is_some()
     }
 
     fn start(ctx: &FsContext, at: At<'_>) -> Location {
@@ -314,6 +339,24 @@ impl Vfs {
         flags: OpenFlags,
         mode: u16,
     ) -> Result<Arc<OpenFile>> {
+        self.open_resolve(ctx, cred, at, path, flags, mode, Resolve::empty())
+    }
+
+    /// openat2(2): [`open`](Self::open) with the walk restricted by
+    /// `resolve` ([`Resolve`]). With [`Resolve::IN_ROOT`] or
+    /// [`Resolve::BENEATH`], `at` is the directory the walk is rooted at
+    /// or must stay below, also for an absolute `path`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_resolve(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        at: At<'_>,
+        path: &[u8],
+        flags: OpenFlags,
+        mode: u16,
+        resolve: Resolve,
+    ) -> Result<Arc<OpenFile>> {
         let mut flags = flags;
         if flags.contains(OpenFlags::PATH) {
             flags = flags.intersection(OpenFlags::PATH | OpenFlags::DIRECTORY | OpenFlags::NOFOLLOW);
@@ -327,8 +370,8 @@ impl Vfs {
         }
         let follow = !flags.contains(OpenFlags::NOFOLLOW);
         check_path(path)?;
-        let mut walk = self.walk(ctx, cred);
         let start = Self::start(ctx, at);
+        let mut walk = Walk::restricted(self, cred, ctx.root.loc().clone(), &start, resolve);
         let ((loc, named), created) = if !flags.contains(OpenFlags::CREAT) {
             (walk.resolve_named(start, path, follow)?, false)
         } else {
@@ -390,6 +433,8 @@ impl Vfs {
             if flags.contains(OpenFlags::NOATIME) && !cred.owns(&attr) {
                 return Err(Errno::EPERM);
             }
+            // An append-only or immutable inode (`crate::fileattr`).
+            crate::fileattr::check_open(&loc, flags, write)?;
         }
         let backend = match attr.kind {
             FileType::Regular | FileType::Directory => Backend::Inode,
@@ -422,7 +467,11 @@ impl Vfs {
                 node.truncate_unchecked(0)?;
             }
         }
-        let file = Arc::new(OpenFile::new(node, attr.kind, backend, flags).with_origin(origin));
+        let mut file = OpenFile::new(node, attr.kind, backend, flags).with_origin(origin);
+        if attr.kind == FileType::Regular && flags.writable() && !flags.contains(OpenFlags::PATH) {
+            file = file.counting_text_writer();
+        }
+        let file = Arc::new(file);
         inotify::file_event(&file, inotify::mask::IN_OPEN);
         Ok(file)
     }
@@ -474,7 +523,7 @@ impl Vfs {
         let mut p = walk.parent(start, path)?;
         loop {
             let Last::Name(name) = &p.last else { return Err(Errno::EISDIR) };
-            match self.child(&p.dir, name) {
+            match walk.child(&p.dir, name) {
                 Ok(_) if flags.contains(OpenFlags::EXCL) => return Err(Errno::EEXIST),
                 Ok(loc) => {
                     let kind = loc.attr()?.kind;
@@ -493,7 +542,15 @@ impl Vfs {
                     if flags.contains(OpenFlags::NOFOLLOW) {
                         return Err(Errno::ELOOP);
                     }
-                    let mut target = walk.link_target(&loc)?;
+                    let mut target = match walk.link_target(&loc)? {
+                        crate::path::LinkTarget::Path(t) => t,
+                        crate::path::LinkTarget::Jump(found) => {
+                            if p.trailing_slash && found.0.attr()?.kind != FileType::Directory {
+                                return Err(Errno::ENOTDIR);
+                            }
+                            return Ok((found, false));
+                        }
+                    };
                     if p.trailing_slash {
                         target.push(b'/');
                     }
@@ -519,18 +576,51 @@ impl Vfs {
     /// Opens a file for `execve`: a regular file (`EACCES` otherwise) the
     /// caller may execute, not on a `noexec` mount (`EACCES`).
     pub fn open_exec(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8]) -> Result<Arc<OpenFile>> {
+        self.open_exec_with(ctx, cred, at, path, true)
+    }
+
+    /// [`open_exec`](Self::open_exec), following a final symbolic link
+    /// only with `follow` (execveat(2) `AT_SYMLINK_NOFOLLOW`: `ELOOP` for
+    /// a link).
+    pub fn open_exec_with(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        at: At<'_>,
+        path: &[u8],
+        follow: bool,
+    ) -> Result<Arc<OpenFile>> {
         check_path(path)?;
-        let (loc, named) = self.walk(ctx, cred).resolve_named(Self::start(ctx, at), path, true)?;
+        let (loc, named) = self.walk(ctx, cred).resolve_named(Self::start(ctx, at), path, follow)?;
         let origin = named.map(|(dir, name)| Origin {
             mount: Arc::downgrade(&dir.mount),
             dir: dir.ino,
             name: name.into_boxed_slice(),
         });
+        Self::exec_file(cred, loc, origin)
+    }
+
+    /// Opens the file `file` is open on for `execve` (execveat(2) with
+    /// `AT_EMPTY_PATH`): the checks of [`open_exec`](Self::open_exec); a
+    /// descriptor of a symbolic link (`O_PATH | O_NOFOLLOW`) is `ELOOP`.
+    pub fn open_exec_file(&self, cred: &Cred, file: &OpenFile) -> Result<Arc<OpenFile>> {
+        Self::exec_file(cred, file.node().loc().clone(), file.origin().cloned())
+    }
+
+    fn exec_file(cred: &Cred, loc: Location, origin: Option<Origin>) -> Result<Arc<OpenFile>> {
         let attr = loc.attr()?;
+        if attr.kind == FileType::Symlink {
+            return Err(Errno::ELOOP);
+        }
         if attr.kind != FileType::Regular || loc.mount.flags().no_exec {
             return Err(Errno::EACCES);
         }
         cred.check(&attr, Access::EXEC)?;
+        // execve(2): "ETXTBSY The specified executable was open for
+        // writing by one or more processes."
+        if loc.mount.sb.has_text_writers(loc.ino) {
+            return Err(Errno::ETXTBSY);
+        }
         let file = OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin);
         Ok(Arc::new(file.denying_write()))
     }
@@ -561,10 +651,8 @@ impl Vfs {
         mode: u16,
         rdev: DeviceId,
     ) -> Result<()> {
-        match kind {
-            FileType::Directory | FileType::Symlink => return Err(Errno::EINVAL),
-            FileType::CharDevice | FileType::BlockDevice if !cred.has(cap::MKNOD) => return Err(Errno::EPERM),
-            _ => {}
+        if matches!(kind, FileType::Directory | FileType::Symlink) {
+            return Err(Errno::EINVAL);
         }
         let p = self.parent_of(ctx, cred, at, path)?;
         let name = self.new_name(&p)?;
@@ -572,6 +660,11 @@ impl Vfs {
             return Err(Errno::ENOENT);
         }
         let dir_attr = self.may_change(cred, &p.dir)?;
+        // A device node needs CAP_MKNOD, checked after the lookup and the
+        // directory's permission (mknod's spec sheet).
+        if matches!(kind, FileType::CharDevice | FileType::BlockDevice) && !cred.has(cap::MKNOD) {
+            return Err(Errno::EPERM);
+        }
         let (uid, gid, perm) = Self::new_owner(cred, &dir_attr, mode & !ctx.umask, false);
         let rdev =
             if matches!(kind, FileType::CharDevice | FileType::BlockDevice) { rdev } else { DeviceId::default() };
@@ -733,6 +826,7 @@ impl Vfs {
         if vattr.kind == FileType::Directory {
             return Err(Errno::EISDIR);
         }
+        crate::fileattr::check_remove(&victim)?;
         if self.is_mount_point(&victim) {
             return Err(Errno::EBUSY);
         }
@@ -767,6 +861,7 @@ impl Vfs {
         if vattr.kind != FileType::Directory {
             return Err(Errno::ENOTDIR);
         }
+        crate::fileattr::check_remove(&victim)?;
         if self.is_mount_point(&victim) || victim.same(ctx.root.loc()) {
             return Err(Errno::EBUSY);
         }
@@ -1063,8 +1158,18 @@ impl Vfs {
     }
 
     /// `getcwd(2)`: the working directory's path from the process root.
+    /// A working directory outside the root (after a chroot(2) that left
+    /// it there) is `(unreachable)` followed by its path from the topmost
+    /// root (chroot's spec sheet; getcwd(3) describes the prefix).
     pub fn getcwd(&self, ctx: &FsContext) -> Result<Vec<u8>> {
-        self.path_of(ctx, &ctx.cwd)
+        match self.path_from_root(ctx, &ctx.cwd)? {
+            (path, true) => Ok(path),
+            (path, false) => {
+                let mut out = b"(unreachable)".to_vec();
+                out.extend_from_slice(&path);
+                Ok(out)
+            }
+        }
     }
 
     /// The absolute path of `node` as seen from `ctx`'s root, found by
@@ -1073,20 +1178,31 @@ impl Vfs {
     /// if it is not a directory and has no name in the scanned parents.
     /// Meant for directories (getcwd, `/proc/self/cwd`).
     pub fn path_of(&self, ctx: &FsContext, node: &NodeRef) -> Result<Vec<u8>> {
+        match self.path_from_root(ctx, node)? {
+            (path, true) => Ok(path),
+            (_, false) => Err(Errno::ENOENT),
+        }
+    }
+
+    /// [`path_of`](Self::path_of), and for a node outside the process root
+    /// its path from the topmost root instead; the flag says whether the
+    /// process root was met.
+    fn path_from_root(&self, ctx: &FsContext, node: &NodeRef) -> Result<(Vec<u8>, bool)> {
         let cred = Cred::root();
         let walk = self.walk(ctx, &cred);
         let mut cur = self.follow_mounts(node.loc().clone());
         let mut names: Vec<Vec<u8>> = Vec::new();
         let mut total = 0;
+        let mut reachable = true;
         loop {
             if cur.same(walk.top_root()) || cur.same(ctx.root.loc()) {
                 break;
             }
             if cur.is_mount_root() {
-                match &cur.mount.parent {
+                match cur.mount.parent() {
                     Some((m, ino)) => {
                         // Name the mount point, not the mounted root.
-                        cur = Location { mount: m.clone(), ino: *ino };
+                        cur = Location { mount: m, ino };
                         if cur.same(walk.top_root()) || cur.same(ctx.root.loc()) {
                             break;
                         }
@@ -1094,14 +1210,19 @@ impl Vfs {
                             continue;
                         }
                     }
-                    None => return Err(Errno::ENOENT),
+                    // The topmost root without meeting the process root:
+                    // the node is outside it.
+                    None => {
+                        reachable = false;
+                        break;
+                    }
                 }
             }
             if cur.attr()?.nlink == 0 {
                 return Err(Errno::ENOENT);
             }
             let parent = cur.mount.sb.fs.lookup(cur.ino, b"..")?;
-            let name = Self::name_in(&cur.mount, parent, cur.ino)?;
+            let name = self.name_in(&cur.mount, parent, cur.ino)?;
             total += name.len() + 1;
             if total >= PATH_MAX {
                 return Err(Errno::ENAMETOOLONG);
@@ -1117,7 +1238,7 @@ impl Vfs {
         if path.is_empty() {
             path.push(b'/');
         }
-        Ok(path)
+        Ok((path, reachable))
     }
 
     /// The absolute path of the file `file` is open on, as seen from
@@ -1148,7 +1269,7 @@ impl Vfs {
         let linked = node.attr()?.nlink > 0;
         let same = self.child(dir.loc(), &origin.name).is_ok_and(|l| l.same(node.loc()));
         let name = if linked && !same && Arc::ptr_eq(dir.mount(), node.mount()) {
-            Self::name_in(dir.mount(), dir.ino(), node.ino()).ok()
+            self.name_in(dir.mount(), dir.ino(), node.ino()).ok()
         } else {
             None
         };
@@ -1159,8 +1280,22 @@ impl Vfs {
         Ok(path)
     }
 
-    /// The name `child` has in directory `dir`.
-    fn name_in(mount: &Mount, dir: Ino, child: Ino) -> Result<Vec<u8>> {
+    /// The name `child` has in directory `dir`: a scan of the directory,
+    /// remembered until a name changes anywhere (file systems whose
+    /// entries come and go on their own, `cache_lookups` false, are always
+    /// scanned).
+    fn name_in(&self, mount: &Mount, dir: Ino, child: Ino) -> Result<Vec<u8>> {
+        let cacheable = mount.sb.info.cache_lookups;
+        let key = (mount.sb.dev.major, mount.sb.dev.minor, dir, child);
+        let generation = self.namespace_generation();
+        if cacheable {
+            let names = self.names.lock();
+            if names.generation == generation
+                && let Some(n) = names.map.get(&key)
+            {
+                return Ok(n.clone());
+            }
+        }
         let mut found = None;
         mount.sb.fs.readdir(dir, 0, &mut |e| {
             if e.ino == child && e.name != b"." && e.name != b".." {
@@ -1169,7 +1304,16 @@ impl Vfs {
             }
             true
         })?;
-        found.ok_or(Errno::ENOENT)
+        let name = found.ok_or(Errno::ENOENT)?;
+        if cacheable {
+            let mut names = self.names.lock();
+            if names.generation != generation || names.map.len() >= NAME_CACHE_MAX {
+                names.map.clear();
+                names.generation = generation;
+            }
+            names.map.insert(key, name.clone());
+        }
+        Ok(name)
     }
 
     // ----- mounting -----
@@ -1246,7 +1390,7 @@ impl Vfs {
         }
         let mount = loc.mount.clone();
         drop(loc);
-        if mount.parent.is_none() {
+        if mount.parent().is_none() {
             return Err(Errno::EBUSY);
         }
         let mut table = self.mounts.lock();
@@ -1264,7 +1408,23 @@ impl Vfs {
     /// new per-mount flags (`CAP_SYS_ADMIN`, else `EPERM`; not the root of
     /// a mount, `EINVAL`). A file system that is read-only itself stays
     /// so whatever the flags say.
-    pub fn remount(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], flags: MountFlags) -> Result<()> {
+    ///
+    /// Going read-only is `EBUSY` while something writes (mount(2)'s
+    /// spec sheet, `busy_writers`): with `bind` (`MS_BIND`, this mount
+    /// only) a file open for writing through this mount
+    /// ([`Mount::busy_for_read_only`]); without it (the whole file system)
+    /// a file open for writing through any of its mounts, or an unlinked
+    /// file still open ([`Mount::sb_busy_for_read_only`]). A refused
+    /// remount changes nothing.
+    pub fn remount(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        at: At<'_>,
+        path: &[u8],
+        flags: MountFlags,
+        bind: bool,
+    ) -> Result<()> {
         if !cred.has(cap::SYS_ADMIN) {
             return Err(Errno::EPERM);
         }
@@ -1272,7 +1432,13 @@ impl Vfs {
         if !loc.is_mount_root() {
             return Err(Errno::EINVAL);
         }
-        loc.mount.set_flags(flags);
+        let mount = loc.mount.clone();
+        drop(loc);
+        let busy = if bind { mount.busy_for_read_only() } else { mount.sb_busy_for_read_only() };
+        if flags.read_only && busy {
+            return Err(Errno::EBUSY);
+        }
+        mount.set_flags(flags);
         Ok(())
     }
 
@@ -1314,7 +1480,7 @@ impl Vfs {
     /// namespace's first mount, or what is mounted over it, is not.
     pub fn is_chrooted(&self, ctx: &FsContext) -> bool {
         let mut first = ctx.root.loc().mount.clone();
-        while let Some((p, _)) = first.parent.clone() {
+        while let Some((p, _)) = first.parent() {
             first = p;
         }
         let top = self.follow_mounts(Location { ino: first.root, mount: first });
@@ -1332,17 +1498,19 @@ impl Vfs {
             let mut table = self.mounts.lock();
             let mut new_base = None;
             for m in table.tree(base) {
-                let parent = match &m.parent {
+                let parent = match m.parent() {
                     None => None,
                     // A parent that left the table (a lazy unmount) takes
                     // its subtree with it.
                     Some((p, ino)) => match copies.get(&p.id) {
-                        Some(c) => Some((c.clone(), *ino)),
+                        Some(c) => Some((c.clone(), ino)),
                         None => continue,
                     },
                 };
                 let is_base = parent.is_none();
                 let copy = table.add(m.sb.clone(), m.root, parent, m.flags());
+                copy.set_attrs(m.attrs());
+                copy.set_propagation(m.propagation());
                 if is_base {
                     new_base = Some(copy.id);
                 }
@@ -1370,14 +1538,10 @@ impl Vfs {
     /// `setns(2)` into mount namespace `base`: `ctx`'s root and working
     /// directory become its root. `EINVAL` if there is no such namespace.
     pub fn enter_namespace(&self, ctx: &mut FsContext, base: MountId) -> Result<()> {
-        let first = self
-            .mounts
-            .lock()
-            .mounts
-            .iter()
-            .find(|m| m.id == base && m.parent.is_none())
-            .cloned()
-            .ok_or(Errno::EINVAL)?;
+        let table = self.mounts.lock();
+        let base = table.current_base(base);
+        let first = table.mounts.iter().find(|m| m.id == base && m.parent().is_none()).cloned().ok_or(Errno::EINVAL)?;
+        drop(table);
         let root = Location { ino: first.root, mount: first }.pin()?;
         ctx.cwd = root.clone();
         ctx.root = root;
@@ -1392,17 +1556,24 @@ impl Vfs {
         if table.mounts.first().is_some_and(|m| m.id == base) {
             return Err(Errno::EBUSY);
         }
+        let name = base;
+        let base = table.current_base(name);
         let doomed: Vec<MountId> = table.tree(base).iter().map(|m| m.id).collect();
         if doomed.is_empty() {
             return Err(Errno::EINVAL);
         }
         table.mounts.retain(|m| !doomed.contains(&m.id));
+        table.forget_alias(name);
         Ok(())
     }
 
     /// The mounts of namespace `base`, in mount order.
     pub fn namespace_mounts(&self, base: MountId) -> Vec<MountInfo> {
-        let ids: Vec<MountId> = self.mounts.lock().tree(base).iter().map(|m| m.id).collect();
+        let ids: Vec<MountId> = {
+            let table = self.mounts.lock();
+            table.tree(table.current_base(base)).iter().map(|m| m.id).collect()
+        };
+
         self.mounts().into_iter().filter(|m| ids.contains(&m.id)).collect()
     }
 
@@ -1414,7 +1585,7 @@ impl Vfs {
             .iter()
             .map(|m| MountInfo {
                 id: m.id,
-                parent: m.parent.as_ref().map(|(p, ino)| (p.id, *ino)),
+                parent: m.parent().map(|(p, ino)| (p.id, ino)),
                 fs_name: m.sb.info.name,
                 dev: m.sb.dev,
                 root: m.root,

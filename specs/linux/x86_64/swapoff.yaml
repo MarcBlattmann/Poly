@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/swapoff              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534, children dropping to uid/gid 1000; umask 022; files on /dev/shm (tmpfs); the host's active swap partition is never touched"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  swapoff(path) (syscall 168) deactivates the swap area at path. Order:
+  (1) CAP_SYS_ADMIN, else EPERM before the path is read (NULL or
+  unreadable paths are EPERM too); (2) the path is resolved, following
+  symbolic links (ENOENT for missing or "", EFAULT, ENOTDIR,
+  ENAMETOOLONG); a directory is EISDIR (also /proc); (3) the target must
+  be an active swap area, else EINVAL: regular files (empty, zero-filled,
+  with a swap header, one whose swapon just failed, one kept open
+  elsewhere), character devices such as /dev/null, a symlink to such a
+  file.
+returns:
+  success: "0 after the area's pages were brought back into memory (not observed: no swap area the tests may own)"
+errors:
+  perm: "EPERM (1): no CAP_SYS_ADMIN; checked first"
+  missing: "ENOENT (2): path missing or empty"
+  fault: "EFAULT (14): path NULL or unreadable"
+  notdir: "ENOTDIR (20): a path component is not a directory"
+  toolong: "ENAMETOOLONG (36): path longer than PATH_MAX"
+  isdir: "EISDIR (21): path is a directory"
+  notswap: "EINVAL (22): not an active swap area"
+  nomem: "ENOMEM (12): the swapped-out pages do not fit in memory; not tested"
+side_effects: "on success the area disappears from /proc/swaps"
+threading: "none specific"
+ordering:
+  - "capability, then path lookup, then the active-area check"
+timing:
+  typical: "microseconds for errors; a real swapoff can take seconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: Poly has no swap: every existing non-directory target is EINVAL.

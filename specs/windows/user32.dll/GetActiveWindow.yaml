@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/GetActiveWindow
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read. "Window Features" (active window, owned
+  windows), "Dialog Boxes" (owner disabled while a modal dialog box is
+  shown).
+summary: >
+  Returns the active top-level window of the calling thread's input queue,
+  or NULL (also when another thread is in the foreground and the input is
+  not attached).
+interface:
+  signature: "HWND GetActiveWindow(void)"
+rules:
+  hide_active: "ShowWindow(A, SW_HIDE) of the active window, with another of the thread's visible topmost popups B (shown with SW_SHOWNA, never active): A WM_SHOWWINDOW(0), WINDOWPOSCHANGING(0x83), CHANGED(0x20001883), WM_NCACTIVATE(0, l=0), WM_ACTIVATE(0, other=NULL), WM_ACTIVATEAPP(0) to A and to B, A WM_KILLFOCUS(other=NULL); GetActiveWindow NULL; the activation goes to another process's window, not to B"
+  show_again: "ShowWindow(A, SW_SHOW): WM_SHOWWINDOW(1), WM_WINDOWPOSCHANGING(0x43), (0x3), WM_ACTIVATEAPP(1) to A and B, A WM_NCACTIVATE(1), WM_ACTIVATE(1, other=NULL), WM_SETFOCUS(other=NULL), WM_WINDOWPOSCHANGED(0x10001843, without SWP_NOZORDER since a window of another process (the runner keeper) was activated and raised above A meanwhile): active A"
+  destroy_active: "DestroyWindow(A): the same as hiding it (B is not activated): active NULL"
+  minimize_inactive: "SW_MINIMIZE of the inactive B: moved to -32000,-32000 (160x28, flags 0x8170 / 0x8130); no activation"
+  owned_shown: "ShowWindow(O, SW_SHOW) of a popup owned by the active A: O activated (A WM_WINDOWPOSCHANGING 0x13 twice: the owner follows its owned window in the z order)"
+  owned_destroyed: "destroying or hiding the active owned popup activates its owner A again (A WM_NCACTIVATE(1), WM_ACTIVATE(1, other=O), WM_SETFOCUS(other=O))"
+  owner_disabled: "EnableWindow(A, FALSE) of the active window: A stays active (focus NULL); an owned popup shown then is activated and gets the focus; destroying it while A is disabled leaves the thread with no active window (WM_ACTIVATEAPP(0) to it and A): the activation goes to another process; enabling A again does not activate it"
+  other_thread: "a thread whose window is not in the foreground: NULL (see GetFocus)"
+errors:
+  none: "GetActiveWindow has no error case"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering:
+  - "Activation from window X to window Y of the same thread, both ours: X WM_NCACTIVATE(0), X WM_ACTIVATE(WA_INACTIVE, other=Y), Y WM_WINDOWPOSCHANGING(SWP_NOMOVE|SWP_NOSIZE = 0x3; brought to the top), Y WM_WINDOWPOSCHANGED (only when the z order changed), Y WM_NCACTIVATE(1), Y WM_ACTIVATE(WA_ACTIVE, other=X), X's focus window WM_KILLFOCUS(other=Y), Y WM_SETFOCUS(other=that window). WM_NCACTIVATE's lParam is nonzero between two windows of the thread and 0 when the other window is in another thread or process. When the thread gains or loses the foreground, WM_ACTIVATEAPP (1 or 0) goes to every top-level window of the thread, between WM_WINDOWPOSCHANGING and WM_NCACTIVATE when gaining, after WM_ACTIVATE(0) when losing."
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test. Every
+  test first makes its window A the foreground window with
+  SetForegroundWindow (the test program may: the previous test passed the
+  right on with AllowSetForegroundWindow(ASFW_ANY), or it is the first
+  program the runner starts). "other" below is a window of another process
+  (on the oracle a console window); "ours" a window of the test without a
+  tag.
+not_covered: >
+  DPI awareness other than unaware (the tests have no manifest), several
+  monitors, other keyboard layouts than German, IME, touch and pen, hooks,
+  menus and the menu loop.

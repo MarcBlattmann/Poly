@@ -15,15 +15,20 @@
 //! - gives it DMA memory ([`DmaBuffer`]) for the control queue and the
 //!   command buffers, and a monotonic clock for the command timeout.
 //!
-//! No interrupts: every command is waited for by polling (the console
-//! draws with interrupts off), and display-change events are read from the
-//! device configuration when the display flushes ([`crate::display`]). The
-//! framebuffer memory itself belongs to the display, which hands it to the
-//! device with `RESOURCE_ATTACH_BACKING`. Everything here lives as long as
-//! the kernel.
+//! Synchronous commands are waited for by polling (the console draws with
+//! interrupts off), and display-change events are read from the device
+//! configuration when the display flushes ([`crate::display`]). With MSI-X
+//! the control queue interrupts through entry 0 when the device gives
+//! buffers back, which is how 3D fences complete (ADR 0119: [`crate::drm`]
+//! connects the entry, [`connect_interrupt`]); without it they are polled.
+//! The host-visible shared memory region (blobs are mapped into it) is
+//! found here too ([`hostmem`]). The framebuffer memory itself belongs to
+//! the display, which hands it to the device with
+//! `RESOURCE_ATTACH_BACKING`. Everything here lives as long as the kernel.
 
 use crate::dma::DmaBuffer;
-use crate::pci::{self, Device, MapError, MmioRegion};
+use crate::pci::{self, Device, IrqError, MapError, MmioRegion, MsixVectors};
+use crate::sync::SpinLock;
 use crate::{kprintln, time};
 use alloc::boxed::Box;
 use alloc::vec;
@@ -35,9 +40,12 @@ use poly_virtio_gpu::{COMMAND_MEMORY_LEN, Clock, DmaRegion, Setup};
 /// The driver as the kernel instantiates it.
 pub type Driver = poly_virtio_gpu::VirtioGpu<'static, MmioRegion, MmioRegion, MmioRegion>;
 
-/// Entries of the control queue (the driver needs 4: a transfer and its
-/// flush, two descriptors each).
-const QUEUE_ENTRIES: u16 = 4;
+/// Entries of the control queue: room for every slot of the driver with a
+/// request, a command stream in a piece or two, and the response (the
+/// driver needs at least 4: a transfer and its flush).
+const QUEUE_ENTRIES: u16 = 64;
+/// The MSI-X table entry the control queue interrupts through.
+const MSIX_ENTRY: u16 = 0;
 /// Status reads after a reset before giving up on the device.
 const RESET_POLLS: u32 = 1_000_000;
 /// How long one command may take. A full-screen transfer under TCG takes
@@ -63,6 +71,35 @@ pub struct Gpu {
     pub driver: Driver,
 }
 
+/// The host-visible shared memory region: its bus address and length.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HostMem {
+    pub phys: u64,
+    pub len: u64,
+}
+
+/// The device's MSI-X (on, function masked until [`connect_interrupt`]),
+/// if the control queue was set up to interrupt.
+static MSIX: SpinLock<Option<MsixVectors>> = SpinLock::new(None);
+/// The device's host-visible region, if it has one.
+static HOSTMEM: SpinLock<Option<HostMem>> = SpinLock::new(None);
+
+/// The host-visible shared memory region of the device [`probe`] brought up.
+pub fn hostmem() -> Option<HostMem> {
+    *HOSTMEM.lock()
+}
+
+/// Point the control queue's MSI-X entry at `handler(data)` and let the
+/// function interrupt. Returns the kernel vector; an error if the queue
+/// was set up polled.
+pub fn connect_interrupt(handler: crate::arch::irq::Handler, data: usize) -> Result<u8, IrqError> {
+    let mut guard = MSIX.lock();
+    let msix = guard.as_mut().ok_or(IrqError::NoCapability)?;
+    let vector = msix.attach(MSIX_ENTRY, handler, data)?;
+    msix.set_function_masked(false);
+    Ok(vector)
+}
+
 fn map_region(dev: &Device, r: Region) -> Result<MmioRegion, Error> {
     let bar = dev.map_bar(r.bar as usize).map_err(Error::Bar)?;
     bar.subregion(r.offset as usize, r.length as usize).ok_or(Error::Transport(TransportError::OutsideBar))
@@ -76,8 +113,9 @@ pub fn is_virtio_gpu(d: &Device) -> bool {
     poly_virtio::device_id_of(&d.header) == Some(device_id::GPU)
 }
 
-/// Bring the device up and hand it to `poly-virtio-gpu`.
-fn bring_up(dev: &Device) -> Result<Driver, Error> {
+/// Bring the device up and hand it to `poly-virtio-gpu`, its control queue
+/// interrupting through MSI-X entry `vector` if given.
+fn bring_up(dev: &Device, vector: Option<u16>) -> Result<Driver, Error> {
     let cfg = dev.config();
     let bdf = dev.bdf();
     let t = PciTransport::discover(cfg, &dev.header).map_err(Error::Transport)?;
@@ -109,6 +147,7 @@ fn bring_up(dev: &Device) -> Result<Driver, Error> {
         commands: region(&commands),
         desc,
         clock: Clock { now_ns: time::now_ns, timeout_ns: COMMAND_TIMEOUT_NS },
+        queue_vector: vector,
     };
     let memory = [ring, commands];
     // SAFETY: both DMA buffers are fresh, zeroed, direct-mapped blocks of
@@ -143,22 +182,55 @@ pub fn probe() -> Option<Gpu> {
         kprintln!("virtio-gpu: {}: ignored, only one device is driven for now", other.bdf());
     }
     let bdf = dev.bdf();
-    let mut driver = match bring_up(dev) {
+    // MSI-X on but masked: the control queue gets entry 0, which DRM
+    // connects once it has 3D work whose fences an interrupt completes.
+    let mut msix = match dev.msix() {
+        Some(Ok(_)) => dev.enable_msix().ok(),
+        _ => None,
+    };
+    let mut result = bring_up(dev, msix.as_ref().map(|_| MSIX_ENTRY));
+    if let Err(e) = &result
+        && let Some(m) = msix.take()
+    {
+        kprintln!("virtio-gpu: {bdf}: bring-up with MSI-X failed ({e:?}); trying again, polled");
+        m.disable();
+        result = bring_up(dev, None);
+    }
+    let mut driver = match result {
         Ok(d) => d,
         Err(e) => {
             kprintln!("virtio-gpu: {bdf}: bring-up failed: {e:?}");
+            if let Some(m) = msix {
+                m.disable();
+            }
             return None;
         }
     };
     let c = driver.config();
     kprintln!(
-        "virtio-gpu: {bdf}: features {:#x}{}, {} scanout(s), {} capset(s), control queue {} entries, polled",
+        "virtio-gpu: {bdf}: features {:#x}{}{}{}{}, {} scanout(s), {} capset(s), control queue {} entries, {}",
         driver.features(),
         if driver.has_edid() { " (EDID)" } else { "" },
+        if driver.has_virgl() { " (3D)" } else { "" },
+        if driver.has_blob() { " (blobs)" } else { "" },
+        if driver.has_context_init() { " (context init)" } else { "" },
         c.num_scanouts,
         c.num_capsets,
         driver.queue_size(),
+        if driver.interrupts() { "MSI-X" } else { "polled" },
     );
+    *MSIX.lock() = msix;
+    let shm =
+        poly_virtio::find_shared_memory(dev.config(), &dev.header, poly_virtio_gpu::protocol::SHM_ID_HOST_VISIBLE);
+    if let Some(region) = shm {
+        match region.address(&dev.bars) {
+            Some(phys) => {
+                kprintln!("virtio-gpu: {bdf}: host-visible region {:#x}, {} MiB", phys, region.length >> 20);
+                *HOSTMEM.lock() = Some(HostMem { phys, len: region.length });
+            }
+            None => kprintln!("virtio-gpu: {bdf}: host-visible region outside its BAR; blobs are not mappable"),
+        }
+    }
     match driver.display_info() {
         Ok(info) => {
             let mut any = false;

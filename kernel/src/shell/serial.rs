@@ -3,8 +3,13 @@
 //!
 //! ISA IRQ 4 is routed through the I/O APIC to a vector of its own
 //! (`arch::irq::route_isa_irq`, ADR 0016). The handler drains the UART into
-//! a ring buffer (single producer: the handler, which never nests; single
-//! consumer: the one [`SerialConsole`]) and wakes the reader. The reader
+//! a ring buffer (`poly_tty::rx::RxRing`; single producer: the handler,
+//! which never nests, or a reader holding [`RECEIVER`]; single consumer:
+//! the one [`SerialConsole`]) and wakes the reader. A full ring is not
+//! overrun: the handler leaves the rest in the UART and switches its
+//! receive interrupt off, so QEMU holds the input back, and the reader
+//! drains the UART again and switches the interrupt on once it has taken
+//! the ring down to half (flow control, ADR 0123). The reader
 //! decodes the terminal's byte stream into edits with
 //! `poly_line::TermDecoder`. If the IRQ cannot be routed, the reader polls
 //! the UART every 10 ms instead.
@@ -25,22 +30,19 @@ use crate::sync::SpinLock;
 use crate::thread::WaitQueue;
 use crate::{kprintln, log, thread, time};
 use core::fmt;
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use core::time::Duration;
 use poly_line::{Edit, TermDecoder};
+use poly_tty::rx::RxRing;
 
 // SAFETY: COM1's receive side is only driven through this lock.
 static RECEIVER: SpinLock<SerialReceiver> = SpinLock::new(unsafe { SerialReceiver::new(COM1) });
 
-/// Received bytes not read yet. `HEAD` counts bytes ever written, `TAIL`
-/// bytes ever read; both only grow (wrapping), and `HEAD - TAIL` is the
-/// fill level.
+/// Received bytes not read yet.
 const RX_SIZE: usize = 256;
-static RX: [AtomicU8; RX_SIZE] = [const { AtomicU8::new(0) }; RX_SIZE];
-static RX_HEAD: AtomicUsize = AtomicUsize::new(0);
-static RX_TAIL: AtomicUsize = AtomicUsize::new(0);
-/// Bytes dropped because the ring was full.
-static RX_DROPPED: AtomicU64 = AtomicU64::new(0);
+static RX: RxRing<RX_SIZE> = RxRing::new();
+/// How often the UART was held back because the ring was full.
+static RX_THROTTLED: AtomicU64 = AtomicU64::new(0);
 /// The reader waits here for bytes.
 static RX_WAIT: WaitQueue = WaitQueue::new();
 /// Taken by whoever takes bytes out of the ring: the shell's console or
@@ -68,44 +70,50 @@ pub fn vector() -> Option<u8> {
     }
 }
 
-/// Producer side: called with interrupts off (the handler, or setup holding
-/// [`RECEIVER`]).
-fn push(byte: u8) {
-    let head = RX_HEAD.load(Ordering::Relaxed);
-    if head.wrapping_sub(RX_TAIL.load(Ordering::Acquire)) == RX_SIZE {
-        RX_DROPPED.fetch_add(1, Ordering::Relaxed);
-        return;
-    }
-    RX[head % RX_SIZE].store(byte, Ordering::Relaxed);
-    RX_HEAD.store(head.wrapping_add(1), Ordering::Release);
-}
-
 /// Consumer side: the [`SerialConsole`] or the terminal, holding
-/// [`CONSUMER`].
+/// [`CONSUMER`]. Taking bytes may let the UART go again.
 fn pop() -> Option<u8> {
-    let _consumer = CONSUMER.lock();
-    let tail = RX_TAIL.load(Ordering::Relaxed);
-    if tail == RX_HEAD.load(Ordering::Acquire) {
-        return None;
-    }
-    let byte = RX[tail % RX_SIZE].load(Ordering::Relaxed);
-    RX_TAIL.store(tail.wrapping_add(1), Ordering::Release);
-    Some(byte)
+    let byte = {
+        let _consumer = CONSUMER.lock();
+        RX.pop()
+    };
+    resume_if_due();
+    byte
 }
 
 fn available() -> bool {
-    RX_TAIL.load(Ordering::Relaxed) != RX_HEAD.load(Ordering::Acquire)
+    !RX.is_empty()
 }
 
-/// Move what the UART holds into the ring. The caller holds [`RECEIVER`].
+/// Move what the UART holds into the ring while there is room; a full ring
+/// holds the UART back (its receive interrupt off). The caller holds
+/// [`RECEIVER`], so it is the only producer.
 fn drain(rx: &mut SerialReceiver) -> bool {
-    let mut any = false;
-    for _ in 0..DRAIN_LIMIT {
-        let Some(b) = rx.read() else { break };
-        push(b);
-        any = true;
+    let f = RX.fill(|| rx.read(), DRAIN_LIMIT);
+    if f.full {
+        rx.disable_interrupt();
+        RX_THROTTLED.fetch_add(1, Ordering::Relaxed);
     }
-    any
+    f.moved > 0
+}
+
+/// The ring was full and is down to half: drain the UART again and, if the
+/// ring took all of it, switch the receive interrupt back on. The readers
+/// call this after taking bytes and before waiting.
+fn resume_if_due() {
+    if vector().is_none() || !RX.take_resume() {
+        return;
+    }
+    let mut rx = RECEIVER.lock();
+    let f = RX.fill(|| rx.read(), RX_SIZE);
+    if !f.full {
+        rx.enable_interrupt();
+    }
+    // Full again: still throttled, the interrupt stays off.
+    drop(rx);
+    if f.moved > 0 {
+        RX_WAIT.wake_all();
+    }
 }
 
 /// COM1's receive interrupt.
@@ -154,6 +162,7 @@ pub fn wait_for_input(deadline_ns: u64) {
     if vector().is_none() {
         thread::sleep(Duration::from_millis(10));
     } else {
+        resume_if_due();
         RX_WAIT.wait_until_deadline(available, deadline_ns);
     }
 }
@@ -198,6 +207,7 @@ impl SerialConsole {
             if let Some(b) = pop() {
                 return Some(b);
             }
+            resume_if_due();
             let deadline = time::now_ns() + REDRAW_CHECK_NS;
             RX_WAIT.wait_until_deadline(|| available() || log::prompt_disturbed(), deadline);
         }
@@ -238,26 +248,37 @@ impl Console for SerialConsole {
 // --- Tests ------------------------------------------------------------------
 
 crate::kernel_test! {
-    fn ring_buffer_keeps_order_and_drops_when_full() -> TestResult {
+    fn ring_buffer_keeps_order_and_holds_back_when_full() -> TestResult {
         // Only before the console exists, and while no program has the
-        // terminal open: they are the ring's consumers.
-        if TAKEN.load(Ordering::Relaxed) || crate::tty::serial_in_use() {
+        // terminal open: they are the ring's consumers (and the UART's
+        // interrupt is not on yet).
+        if TAKEN.load(Ordering::Relaxed) || crate::tty::serial_in_use() || vector().is_some() {
             return Ok(());
         }
-        let dropped = RX_DROPPED.load(Ordering::Relaxed);
-        {
+        let mut next = 0usize;
+        let f = {
             // As the handler would: interrupts off while producing.
             let _rx = RECEIVER.lock();
-            for i in 0..RX_SIZE + 3 {
-                push(i as u8);
-            }
+            RX.fill(
+                || {
+                    next += 1;
+                    Some((next - 1) as u8)
+                },
+                RX_SIZE + 3,
+            )
+        };
+        // Nothing taken past the room: the source keeps the rest.
+        if !f.full || f.moved != RX_SIZE || next != RX_SIZE || !RX.is_throttled() {
+            return Err("a full ring did not stop taking bytes and hold the source back");
         }
         let all_kept = (0..RX_SIZE).all(|i| pop() == Some(i as u8));
         if !all_kept || pop().is_some() || available() {
             return Err("the ring lost or reordered bytes");
         }
-        if RX_DROPPED.load(Ordering::Relaxed) != dropped + 3 {
-            return Err("bytes past a full ring were not counted as dropped");
+        // Without the interrupt the readers poll the UART: the ring only
+        // forgets that it was throttled.
+        if !RX.take_resume() || RX.is_throttled() {
+            return Err("an emptied ring was not resumed");
         }
         Ok(())
     }

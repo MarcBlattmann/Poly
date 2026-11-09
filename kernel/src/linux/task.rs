@@ -31,10 +31,12 @@
 //!   reaped, and a process is adopted by the init of its namespace.
 //!
 //! `CLONE_FILES` between *processes* (without `CLONE_THREAD`) shares the
-//! descriptor table (`Files::share_table`, ADR 0111). Not done yet:
-//! `CLONE_FS` and `CLONE_SIGHAND` between processes copy instead of
-//! sharing, since a process owns its directories and signal state;
-//! threads share all three.
+//! descriptor table (`Files::share_table`, ADR 0111), and `CLONE_FS` its
+//! root, working directory and umask (`Files::clone_for`, ADR 0121). Not
+//! done yet: `CLONE_SIGHAND` between processes copies the signal
+//! handlers instead of sharing them, since a process owns its signal
+//! state (kcmp(2) still reports them shared, see `procaccess.rs`);
+//! threads share everything.
 //! `CLONE_PTRACE`, `CLONE_IO`, `CLONE_SYSVSEM` have no effect. Resource
 //! usage (`wait4`'s `rusage`) is all zero.
 
@@ -60,7 +62,7 @@ use poly_personality_linux::ns::pid as pid_ns;
 use poly_personality_linux::ns::user::UserNsRef;
 use poly_personality_linux::ns::{self, UtsNames};
 use poly_personality_linux::sys::ns::initial_names;
-use poly_personality_linux::task::clone::{CLONE_NEWUTS, CloneRequest};
+use poly_personality_linux::task::clone::{CLONE_NEWUTS, CLONE_SIGHAND, CloneRequest};
 use poly_personality_linux::task::exec::{ELOOP, ExecRequest, MAX_SCRIPT_DEPTH, parse_shebang, script_argv};
 use poly_personality_linux::task::tree::{ProcessTree, Termination};
 
@@ -170,6 +172,7 @@ pub fn release_mount_namespaces() {
 /// Install the kernel's side of the personality's namespaces (ADR 0054).
 pub fn init_namespaces() {
     poly_personality_linux::ns::on_mounts_released(mounts_released);
+    super::landlock::init();
 }
 
 /// Make `generation` (the tree's, read with it locked) the published one
@@ -233,7 +236,10 @@ pub fn wait_tree(k: &Thread<'_>, generation: u64) -> Wakeup {
 /// `parent_tid`: `LinuxProcess::fork`, and with `clear_handlers`
 /// (`CLONE_CLEAR_SIGHAND`) every caught signal back at `SIG_DFL`.
 fn child_state(parent: &LinuxState, parent_tid: u32, child: u32, clear_handlers: bool) -> LinuxState {
-    let mut state = parent.with(|p| p.fork(parent_tid as i32, child as i32));
+    // Fork state is a few KiB; build it behind a box instead of keeping both
+    // the parent copy and child result on the 16 KiB kernel stack.
+    let mut state = parent.with(|p| alloc::boxed::Box::new(p.fork(parent_tid as i32, child as i32)));
+    state.started_ns = crate::time::now_ns();
     if clear_handlers {
         for signal in 1..=NSIG {
             let a = state.actions.get(signal);
@@ -306,9 +312,22 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
         out_of_line(move || -> Result<u32, Errno> {
             let names = if req.flags & CLONE_NEWUTS != 0 { initial_names(k) } else { UtsNames::default() };
             let pid = process::alloc_pid();
-            // CLONE_FILES: the child shares the caller's descriptor table.
-            let files = if req.shares_files() { k.process.files.share_table() } else { k.process.files.fork() };
+            // CLONE_FILES: the child shares the caller's descriptor table;
+            // CLONE_FS: its root, working directory and umask.
+            let files = k.process.files.clone_for(req.shares_files(), req.shares_fs());
             let linux = child_state(k.linux, k.tid, pid, req.clears_handlers());
+            // CLONE_UNTRACED: a tracer of the caller (the test run's too)
+            // does not follow the child (ptrace(2), ADR 0135).
+            let untraced = req.flags & poly_personality_linux::task::clone::CLONE_UNTRACED != 0;
+            if untraced {
+                linux.with(|p| p.traced = false);
+            }
+            // CLONE_SIGHAND: the handlers are copied, but kcmp(2) sees one
+            // table (ADR 0121).
+            if req.flags & CLONE_SIGHAND != 0 {
+                let parent = k.linux.with(|p| p.sighand);
+                linux.with(|c| c.sighand = parent);
+            }
             // A child sharing the memory starts without an rseq(2) area: the
             // parent's is the parent's (ADR 0111).
             if req.shares_memory() {
@@ -356,15 +375,22 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
             };
             crate::fs::proc::record_fork(k.process.pid, pid, &memory);
             linux.with(|p| p.thread_mut(pid as i32).clear_child_tid = clear_child_tid);
-            let child = Process::new_linux_child(pid, k.process.pid, k.process.format, k.process.traced, files, linux);
+            let traced_run = k.process.traced && !untraced;
+            let child = Process::new_linux_child(pid, k.process.pid, k.process.format, traced_run, files, linux);
             let me = k.process.pid as i32;
+            let creator = k.tid as i32;
             let uid = k.credentials().uid;
             let reaper = pid_ns::reaper_of_new(&child_ns, pid as i32);
-            with_tree(|t| {
+            let ptraced = with_tree(|t| {
                 let parent = if req.sibling() { t.parent(me).unwrap_or(0) } else { me };
                 t.insert_child(me, parent, pid as i32, req.exit_signal, uid);
                 t.set_reaper(pid as i32, reaper);
+                // A traced caller's tracer may follow the child from its start.
+                poly_personality_linux::sys::ptrace::trace_new_child(t, creator, pid as i32, req.flags, req.exit_signal)
             });
+            if ptraced && let Some(state) = child.linux.as_ref() {
+                state.with(|p| p.ptraced = true);
+            }
             let (parent_sees, child_sees) =
                 (pid_ns::local_or_zero(&own_ns, pid as i32), pid_ns::local_or_zero(&child_ns, pid as i32));
             store_tids(k, req, parent_sees, child_sees, (!req.shares_memory()).then_some(&memory));
@@ -379,6 +405,14 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
                 VFORKS.lock().remove(&pid);
                 return Err(Errno::EAGAIN);
             }
+            if ptraced {
+                // Its first stop comes before it runs much: on its first
+                // way back to user mode.
+                k.notify_signal(pid as i32);
+            }
+            // ptrace(2): the caller's fork / vfork / clone event stop, before
+            // a vfork parent waits.
+            poly_personality_linux::sys::ptrace::clone_event(k, pid as i32, req.flags, req.exit_signal);
             start(started, done, k)?;
             Ok(pid)
         })?
@@ -483,8 +517,16 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     let mut argv = req.argv.to_vec();
     let mut dirfd = req.dirfd;
     let mut depth = 0;
+    // A native program (ADR 0125): the process becomes native at the point
+    // of no return, keeping its Linux state (tree, parent, signals).
+    let mut native = false;
     let file = loop {
-        let file = k.process.files.open_exec_at(dirfd, &path).map_err(vfs_errno)?;
+        let file = if depth == 0 {
+            k.process.files.open_exec_with(dirfd, &path, req.follow)
+        } else {
+            k.process.files.open_exec_at(dirfd, &path)
+        };
+        let file = file.map_err(vfs_errno)?;
         let mut header = alloc::vec![0u8; HEADER_BYTES];
         let mut len = 0;
         while len < header.len() {
@@ -497,21 +539,41 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
         let Some(script) = parse_shebang(&header[..len])? else {
             match poly_binfmt::detect(&header[..len]).map(|f| f.personality()) {
                 Ok(Some(Personality::Linux)) => break file,
+                Ok(Some(Personality::Native)) => {
+                    let abi = match poly_binfmt::detect(&header[..len]) {
+                        Ok(poly_binfmt::Format::Native { abi, .. }) => abi,
+                        _ => 0,
+                    };
+                    if !(1..=poly_personality_native::abi::ABI_VERSION).contains(&abi) {
+                        return Err(Errno::ENOEXEC);
+                    }
+                    native = true;
+                    break file;
+                }
                 _ => return Err(Errno::ENOEXEC),
             }
         };
+        // The interpreter opens the script by its name; through a
+        // descriptor the exec closes, it could not (execveat's spec sheet).
+        if depth == 0 && !req.script_reachable {
+            return Err(Errno::ENOENT);
+        }
+        // The first script is passed on by the name the caller knows it by.
+        let name = if depth == 0 { req.name } else { &path };
+        argv = script_argv(&script, name, &argv);
         depth += 1;
         if depth > MAX_SCRIPT_DEPTH {
             return Err(ELOOP);
         }
-        argv = script_argv(&script, &path, &argv);
         path = script.interpreter;
         // The interpreter's path is the system's, not relative to dirfd.
         dirfd = crate::fs::AT_FDCWD;
     };
     let argv_refs: Vec<&[u8]> = argv.iter().map(Vec::as_slice).collect();
     let envp_refs: Vec<&[u8]> = req.envp.iter().map(Vec::as_slice).collect();
-    let mut params = ExecParams::new(&argv_refs, &envp_refs, &path);
+    // AT_EXECFN: the name the program was started by, not that of a
+    // script's interpreter.
+    let mut params = ExecParams::new(&argv_refs, &envp_refs, req.name);
     // The credentials the program will run with (set-user-ID and
     // set-group-ID bits of the executable, not of a script; capabilities):
     // computed now for the auxiliary vector, installed past the point of
@@ -553,7 +615,10 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
         k.tid = pid;
     }
     k.linux.with(|p| p.exec(pid as i32));
-    super::cred::commit_exec(k, pid, creds, req.path);
+    if native {
+        k.process.native.activate();
+    }
+    super::cred::commit_exec(k, pid, creds, req.name);
     let old = user::replace_memory(image.memory);
     // Dropping the old memory may take file system locks: fine here.
     drop(old);

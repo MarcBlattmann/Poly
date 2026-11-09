@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_pgetevents        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 32 CPUs; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; /tmp on overlayfs"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  io_pgetevents(ctx_id, min_nr, nr, events, timeout, usig) (syscall 333)
+  is io_getevents (see its sheet: same counts, same waiting, same events,
+  same EINVAL cases) with an optional signal mask installed for the
+  duration of the wait, as ppoll/pselect do. usig points at struct
+  __aio_sigset {const sigset_t *sigmask; size_t sigsetsize} (16 bytes).
+  usig NULL, or a NULL sigmask (sigsetsize is then not looked at), means
+  no mask change. Otherwise sigsetsize must be 8; the mask replaces the
+  thread's signal mask while the call runs and the old mask is restored
+  when it returns. A signal that is pending and unblocked by that mask is
+  delivered: its handler runs (with the old mask restored as for ppoll)
+  and the call fails with EINTR.
+returns:
+  success: "as io_getevents: number of events copied (0..nr)"
+  no_mask: "usig NULL or sigmask NULL: exactly io_getevents"
+errors:
+  timeout_fault: "EFAULT (14): timeout not readable; checked first of all"
+  usig_fault: "EFAULT (14): usig not readable, or sigmask (non-NULL) not readable"
+  sigsetsize: "EINVAL (22): sigmask non-NULL and sigsetsize != 8"
+  getevents_errors: "then the io_getevents errors: EINVAL for an unknown context, min_nr < 0, nr < 0 or min_nr > nr; EFAULT for unwritable events with an event available"
+  interrupted: "EINTR (4): a signal was delivered during the call (also one already pending that the new mask unblocks)"
+  order: "timeout copy (EFAULT), usig copy (EFAULT), sigmask size (EINVAL) and copy (EFAULT), then context/counts (EINVAL)"
+side_effects: "temporarily changes the signal mask; advances the ring head like io_getevents"
+threading: "the mask is the calling thread's"
+ordering:
+  - "the mask is in force before the wait starts, so a pending signal it unblocks interrupts the call at once"
+  - "after the call the caller's original mask is in force again (a signal still blocked by it stays pending)"
+timing:
+  typical: "as io_getevents"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct __aio_sigset from linux/aio_abi.h; sigset_t is 8 bytes on
+# x86-64 (kernel ABI).

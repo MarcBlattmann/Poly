@@ -1,7 +1,8 @@
 //! Drawing one damaged rectangle: the desktop, then every window bottom to
 //! top — its frame, then its content over it — clipped to the rectangle.
 
-use super::frame::{FrameLayout, Glyph, glyph_covers};
+use super::frame::{BORDER, CORNER_RADIUS, FrameLayout, Glyph, glyph_covers};
+use super::paint::{self, Radii, ShadowCache};
 use super::scene::{Backdrop, Content, CursorLook, Scene, Window, WindowId};
 use super::{CURSOR_SIZE, Framebuffer, Layer, Rect, over, with_alpha};
 use alloc::collections::BTreeMap;
@@ -19,6 +20,7 @@ pub(super) fn draw(
     below: Option<&dyn Layer>,
     above: Option<&dyn Layer>,
     backdrops: &mut BTreeMap<WindowId, Backdrop>,
+    shadows: &mut ShadowCache,
 ) {
     let s = scene.output().2 as i32;
     match below {
@@ -26,13 +28,14 @@ pub(super) fn draw(
         None => fill(fb, clip, clip, scene.theme().background),
     }
     for w in scene.windows().iter().filter(|w| w.is_visible()) {
-        if w.extent().scale(s).intersect(&clip).is_empty() {
+        if scene.drawn_extent(w).scale(s).intersect(&clip).is_empty() {
             continue;
         }
         if let Some(b) = backdrops.get_mut(&w.id()) {
             b.capture(fb, clip);
         }
         if let Some(f) = w.frame() {
+            draw_shadow(scene, shadows, fb, clip, w, &f, s);
             draw_frame(scene, fb, clip, w, &f, s);
         }
         draw_content(fb, clip, w, s);
@@ -110,10 +113,19 @@ fn draw_frame(scene: &Scene, fb: &mut dyn Framebuffer, clip: Rect, w: &Window, f
     } else {
         (theme.title_inactive, theme.text_inactive, theme.border_inactive)
     };
-    for strip in f.border() {
-        fill(fb, clip, strip.scale(s), border);
+    // The top: border and title bar with rounded corners; then the border's
+    // sides and bottom along the content.
+    let outer = f.outer.scale(s);
+    let r = (CORNER_RADIUS * s) as f32;
+    let top = Rect::new(outer.x, outer.y, outer.width, (BORDER + f.title.height) * s);
+    paint::fill_rounded(fb, clip, top, Radii::top(r), border, 255);
+    paint::fill_rounded(fb, clip, f.title.scale(s), Radii::top(r - (BORDER * s) as f32), title_bg, 255);
+    for strip in &f.border()[1..] {
+        let strip = strip.scale(s);
+        let below =
+            Rect::new(strip.x, strip.y.max(top.bottom()), strip.width, strip.bottom() - strip.y.max(top.bottom()));
+        fill(fb, clip, below, border);
     }
-    fill(fb, clip, f.title.scale(s), title_bg);
     draw_title(scene, fb, clip, f, w.title(), text, s);
     // The buttons: glyphs in the title text's colour.
     let middle = if w.is_maximized() { Glyph::Restore } else { Glyph::Maximize };
@@ -129,6 +141,27 @@ fn draw_frame(scene: &Scene, fb: &mut dyn Framebuffer, clip: Rect, w: &Window, f
             }
         }
     }
+}
+
+/// The frame's soft shadow (the theme's, for an active or inactive
+/// window), not under the frame itself and not over the rows a shell
+/// keeps for itself (its strip is under the windows).
+fn draw_shadow(
+    scene: &Scene,
+    shadows: &mut ShadowCache,
+    fb: &mut dyn Framebuffer,
+    clip: Rect,
+    w: &Window,
+    f: &FrameLayout,
+    s: i32,
+) {
+    let Some(shadow) = scene.theme().shadow(w.is_active()) else { return };
+    let top = scene.reserved_top() * s;
+    let clip = clip.intersect(&Rect::new(clip.x, top, clip.width, (clip.bottom() - top).max(0)));
+    let outer = f.outer.scale(s);
+    let r = CORNER_RADIUS * s;
+    let occluder = Rect::new(outer.x, outer.y + r, outer.width, outer.height - r);
+    shadow.scaled(s).draw_cached(shadows, fb, clip, outer, Radii::top(r as f32), occluder);
 }
 
 /// The title, from the left of the text area, vertically centred, cut off

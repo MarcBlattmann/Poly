@@ -1,5 +1,7 @@
-//! The virtio GPU device (VIRTIO 1.2 §5.7), 2D only: modesetting and a
-//! framebuffer in guest memory.
+//! The virtio GPU device (VIRTIO 1.2 §5.7): modesetting and a framebuffer
+//! in guest memory (2D), and the 3D interface Mesa's virgl and Venus
+//! drivers use (contexts, capsets, 3D resources and transfers, command
+//! submission, blob resources, fences).
 //!
 //! - [`protocol`] is the wire format of the control queue (§5.7.6.7):
 //!   request encoding for `GET_DISPLAY_INFO`, `GET_EDID`,
@@ -32,11 +34,21 @@
 //! `TRANSFER_TO_HOST_2D` + `RESOURCE_FLUSH`). The kernel's console display
 //! is one user of it: one resource, mirrored on every enabled scanout.
 //!
+//! # 3D
+//!
+//! With VIRTIO_GPU_F_VIRGL (and RESOURCE_BLOB, CONTEXT_INIT) negotiated,
+//! the driver also creates 3D contexts for a capset (virgl, Venus),
+//! fetches capsets, creates 3D and blob resources, maps host blobs into the
+//! host-visible shared memory region, and submits command streams. The
+//! command streams themselves are the client's (Mesa's): the driver
+//! carries them, as the kernel's DRM layer carries them from user space
+//! (ADR 0119). Submissions and 3D transfers complete asynchronously
+//! ([`Ticket`]s), optionally with an interrupt.
+//!
 //! # Not here
 //!
-//! 3D (VIRTIO_GPU_F_VIRGL, contexts, capsets), blob resources, resource
-//! UUIDs, context init and the cursor queue: none of these features are
-//! accepted, so the device does not expect them (§5.7.3).
+//! Resource UUIDs, `SET_SCANOUT_BLOB` and the cursor queue: those features
+//! are not accepted or not used (§5.7.3).
 //!
 //! What the device reports is untrusted: response types, lengths, fence
 //! IDs, scanout counts and rectangles are checked, and a device that
@@ -46,39 +58,50 @@
 
 mod driver;
 pub mod edid;
+pub mod hostmem;
 pub mod modes;
 pub mod protocol;
 
 pub use driver::{
-    COMMAND_MEMORY_LEN, Clock, DmaRegion, Error, Framebuffer, InitError, MAX_BACKING_ENTRIES, Setup, Stats, VirtioGpu,
-    init,
+    COMMAND_MEMORY_LEN, Clock, DmaRegion, Error, Framebuffer, InitError, MAX_BACKING_ENTRIES, MAX_BLOB_ENTRIES,
+    MAX_DATA_BUFFERS, SLOTS, Setup, Stats, Ticket, VirtioGpu, init,
 };
-pub use protocol::{DisplayInfo, EdidBlob, MemEntry, Rect, ScanoutInfo};
+pub use poly_virtio::Buffer;
+pub use protocol::{
+    Box3d, CapsetInfo, Create3d, CreateBlob, DisplayInfo, EdidBlob, MemEntry, Rect, ScanoutInfo, Transfer3d,
+};
 
 use poly_pci::Mmio;
 use poly_virtio::CommonCfg;
 
 /// Device feature bits (§5.7.3).
 pub mod feature {
-    /// 3D mode (virgl). Not accepted.
+    /// 3D mode: contexts, 3D resources, command submission (virgl and,
+    /// with context init, other capsets).
     pub const VIRGL: u64 = 1 << 0;
     /// `GET_EDID` is supported.
     pub const EDID: u64 = 1 << 1;
     /// `RESOURCE_ASSIGN_UUID` is supported. Not accepted.
     pub const RESOURCE_UUID: u64 = 1 << 2;
-    /// Blob resources. Not accepted.
+    /// Blob resources (and the host-visible shared memory region).
     pub const RESOURCE_BLOB: u64 = 1 << 3;
-    /// Multiple context types. Not accepted.
+    /// Contexts of a chosen capset, fences on per-context rings.
     pub const CONTEXT_INIT: u64 = 1 << 4;
 }
 
-/// Features this driver uses when offered: EDID, plus EVENT_IDX and
-/// ACCESS_PLATFORM (a device offering the latter may refuse to work
-/// without it, §6.1; with no IOMMU programmed, bus addresses are physical
-/// addresses anyway). [`poly_virtio::FeatureNegotiation::accept`] adds
+/// Features this driver uses when offered: EDID, 3D (VIRGL), blob
+/// resources and context init, plus EVENT_IDX and ACCESS_PLATFORM (a
+/// device offering the latter may refuse to work without it, §6.1; with no
+/// IOMMU programmed, bus addresses are physical addresses anyway). The 2D
+/// commands work the same with 3D negotiated. Resource UUIDs are not
+/// taken. [`poly_virtio::FeatureNegotiation::accept`] adds
 /// VIRTIO_F_VERSION_1.
-pub const DRIVER_FEATURES: u64 =
-    feature::EDID | poly_virtio::feature::EVENT_IDX | poly_virtio::feature::ACCESS_PLATFORM;
+pub const DRIVER_FEATURES: u64 = feature::EDID
+    | feature::VIRGL
+    | feature::RESOURCE_BLOB
+    | feature::CONTEXT_INIT
+    | poly_virtio::feature::EVENT_IDX
+    | poly_virtio::feature::ACCESS_PLATFORM;
 
 /// The features to accept of those `offered`.
 pub const fn select_features(offered: u64) -> u64 {

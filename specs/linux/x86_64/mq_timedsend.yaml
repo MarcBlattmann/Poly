@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mq_timedsend         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  mq_timedsend(mqdes, msg_ptr, msg_len, msg_prio, abs_timeout) (syscall
+  242) adds a message of msg_len bytes (0 to mq_msgsize; content copied as
+  is, NUL bytes included, boundaries kept) with priority msg_prio (0 to
+  32767) to the queue. Messages are kept ordered by priority, highest
+  first, and FIFO within a priority. If abs_timeout is non-NULL it is
+  read and validated first, before anything else (also when the queue has
+  room): tv_nsec outside 0..999999999 or a negative tv_sec is EINVAL, an
+  unreadable one EFAULT. When the queue is full (mq_curmsgs ==
+  mq_maxmsg): with O_NONBLOCK on the descriptor it fails with EAGAIN;
+  otherwise it sleeps until a message is received (room) or until the
+  absolute CLOCK_REALTIME time abs_timeout (ETIMEDOUT; a time already past
+  expires at once; NULL waits forever). If a receiver is blocked on an
+  empty queue the message is handed to it directly. Sending to an empty
+  queue with a notification registered and no blocked receiver fires the
+  notification (see mq_notify). A caught signal ends the sleep: EINTR, or,
+  with SA_RESTART, the call is restarted with the same absolute deadline.
+returns:
+  success: "0; mq_curmsgs grows by one"
+  order: "receive order: highest msg_prio first, FIFO within a priority"
+errors:
+  bad_fd: "EBADF (9): mqdes not open, not a message queue (stdout, pipe), or not open for writing"
+  too_long: "EMSGSIZE (90): msg_len > mq_msgsize"
+  prio: "EINVAL (22): msg_prio >= 32768"
+  timeout_invalid: "EINVAL (22): abs_timeout given and invalid (tv_nsec >= 1e9 or < 0, tv_sec < 0), even if the queue has room"
+  timeout_fault: "EFAULT (14): abs_timeout unreadable"
+  msg_fault: "EFAULT (14): msg_ptr unreadable"
+  full_nonblock: "EAGAIN (11): queue full and O_NONBLOCK"
+  timed_out: "ETIMEDOUT (110): queue stayed full until abs_timeout"
+  interrupted: "EINTR (4): a handler without SA_RESTART ran during the sleep"
+  order: "abs_timeout (EFAULT/EINVAL), msg_prio (EINVAL), descriptor (EBADF), msg_len (EMSGSIZE), message copy (EFAULT), then full/wait"
+side_effects: "queues the message; may wake a blocked receiver; may fire and clear a notification registration"
+threading: "senders blocked on a full queue are woken one per freed slot"
+ordering:
+  - "a receiver blocked before the send gets the message (not a later receiver)"
+timing:
+  typical: "microseconds"
+  guarantees: "with a full queue, returns no earlier than abs_timeout unless room appears"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

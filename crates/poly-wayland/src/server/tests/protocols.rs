@@ -179,6 +179,111 @@ fn subsurface_errors() {
     let _ = c;
 }
 
+/// VLC's Qt interface on Wayland (ADR 0120, 0123): a video surface and its
+/// subsurface made, destroyed and made again right away, the client
+/// reusing the freed IDs crosswise (the new `wl_subsurface` gets the old
+/// surface's ID), then a viewport for the new surface. The server's table
+/// follows `delete_id` exactly: the viewport is made, the new subsurface
+/// shows. Only a client that names the *old* surface's ID (a stale
+/// pointer, as VLC's video output keeps one) is told that the ID is a
+/// `wl_subsurface` now: the protocol error VLC was cut off with.
+#[test]
+fn ids_reused_crosswise_after_a_subsurface_is_remade_name_the_new_objects() {
+    let (mut srv, shared) = server();
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let sc = p.bind(&mut srv, registry, &wl_subcompositor::INTERFACE, 1);
+    let viewporter = p.bind(&mut srv, registry, &wp_viewporter::INTERFACE, 1);
+    let window = mapped(&mut p, &mut srv, &g, "VLC", 60, 40, 0);
+    let video = surface(&mut p, &mut srv, &g);
+    let sub = p.new_id(&wl_subsurface::INTERFACE);
+    p.send(&mut srv, sc, wl_subcompositor::Request::GetSubsurface { id: sub, surface: video, parent: window.surface });
+    p.send(&mut srv, sub, wl_subsurface::Request::SetDesync);
+    p.send(&mut srv, sub, wl_subsurface::Request::SetPosition { x: 0, y: 18 });
+    p.send(&mut srv, video, wl_surface::Request::Commit);
+    p.send(&mut srv, sub, wl_subsurface::Request::Destroy);
+    p.send(&mut srv, video, wl_surface::Request::Destroy);
+    let deleted: Vec<Arg> =
+        p.take().into_iter().filter(|e| e.name() == ("wl_display", "delete_id")).map(|e| e.args[0].clone()).collect();
+    assert_eq!(deleted, [Arg::Uint(sub.0), Arg::Uint(video.0)]);
+    // Made again, the IDs crosswise.
+    let video2 = p.reuse_id(sub, &wl_surface::INTERFACE);
+    p.send(&mut srv, g.compositor, wl_compositor::Request::CreateSurface { id: video2 });
+    let sub2 = p.reuse_id(video, &wl_subsurface::INTERFACE);
+    p.send(
+        &mut srv,
+        sc,
+        wl_subcompositor::Request::GetSubsurface { id: sub2, surface: video2, parent: window.surface },
+    );
+    p.send(&mut srv, sub2, wl_subsurface::Request::SetDesync);
+    p.send(&mut srv, window.surface, wl_surface::Request::Commit);
+    let vp = p.new_id(&wp_viewport::INTERFACE);
+    p.send(&mut srv, viewporter, wp_viewporter::Request::GetViewport { id: vp, surface: video2 });
+    p.send(&mut srv, vp, wp_viewport::Request::SetDestination { width: 30, height: 20 });
+    let (b, _) = buffer(&mut p, &mut srv, &g, 8, 8, 0x00ff_0000, 1);
+    attach(&mut p, &mut srv, video2, b);
+    assert!(p.error().is_none(), "{:?}", p.error());
+    let shown = srv.surface_window(p.id, video2).expect("the new subsurface is shown");
+    assert_eq!(srv.scene().window(shown).unwrap().content().logical_size(), (30, 20));
+    // The stale ID names the new wl_subsurface.
+    let vp2 = p.new_id(&wp_viewport::INTERFACE);
+    p.send(&mut srv, viewporter, wp_viewporter::Request::GetViewport { id: vp2, surface: video });
+    let (_, code, message) = p.error().expect("an error");
+    assert_eq!(code, wl_display::Error::INVALID_OBJECT.0);
+    assert!(message.contains("is a wl_subsurface, not a wl_surface"), "{message}");
+}
+
+/// A surface destroyed before its `wl_subsurface` leaves the subsurface
+/// inert: once the client made a new surface with the freed ID, requests
+/// on the old subsurface (and its destruction) do not touch the new one.
+#[test]
+fn an_inert_subsurface_does_not_reach_a_new_surface_with_its_old_surfaces_id() {
+    let (mut srv, shared) = server();
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let sc = p.bind(&mut srv, registry, &wl_subcompositor::INTERFACE, 1);
+    let window = mapped(&mut p, &mut srv, &g, "w", 60, 40, 0);
+    let old = surface(&mut p, &mut srv, &g);
+    let old_sub = p.new_id(&wl_subsurface::INTERFACE);
+    p.send(
+        &mut srv,
+        sc,
+        wl_subcompositor::Request::GetSubsurface { id: old_sub, surface: old, parent: window.surface },
+    );
+    p.send(&mut srv, old_sub, wl_subsurface::Request::SetDesync);
+    // The surface goes first; its subsurface stays, inert.
+    p.send(&mut srv, old, wl_surface::Request::Destroy);
+    p.take();
+    let new = p.reuse_id(old, &wl_surface::INTERFACE);
+    p.send(&mut srv, g.compositor, wl_compositor::Request::CreateSurface { id: new });
+    let new_sub = p.new_id(&wl_subsurface::INTERFACE);
+    p.send(
+        &mut srv,
+        sc,
+        wl_subcompositor::Request::GetSubsurface { id: new_sub, surface: new, parent: window.surface },
+    );
+    p.send(&mut srv, new_sub, wl_subsurface::Request::SetDesync);
+    p.send(&mut srv, new_sub, wl_subsurface::Request::SetPosition { x: 5, y: 6 });
+    p.send(&mut srv, window.surface, wl_surface::Request::Commit);
+    let (b, _) = buffer(&mut p, &mut srv, &g, 8, 8, 0x0000_ff00, 1);
+    attach(&mut p, &mut srv, new, b);
+    let win = srv.surface_window(p.id, new).expect("shown");
+    let (wx, wy) = srv.scene().windows()[0].position();
+    assert_eq!(srv.scene().window(win).unwrap().position(), (wx + 5, wy + 6));
+    // The old subsurface's requests go nowhere.
+    p.send(&mut srv, old_sub, wl_subsurface::Request::SetPosition { x: 30, y: 30 });
+    p.send(&mut srv, old_sub, wl_subsurface::Request::SetSync);
+    p.send(&mut srv, old_sub, wl_subsurface::Request::Destroy);
+    p.send(&mut srv, window.surface, wl_surface::Request::Commit);
+    assert!(p.error().is_none(), "{:?}", p.error());
+    let win = srv.surface_window(p.id, new).expect("still shown");
+    assert_eq!(srv.scene().window(win).unwrap().position(), (wx + 5, wy + 6), "not moved");
+    // Still desynchronized: a commit shows at once.
+    let (b2, _) = buffer(&mut p, &mut srv, &g, 4, 4, 0x0000_00ff, 1);
+    attach(&mut p, &mut srv, new, b2);
+    assert_eq!(srv.scene().window(win).unwrap().content().logical_size(), (4, 4));
+}
+
 // ---------------------------------------------------------------------
 // Viewports and transforms.
 
@@ -857,6 +962,52 @@ fn activation_tokens_activate_a_toplevel_once() {
     assert_eq!(srv.active, Some((p.id, b.toplevel)));
     p.send(&mut srv, token, xdg_activation_token_v1::Request::Commit);
     assert_eq!(p.code(), Some((token, xdg_activation_token_v1::Error::ALREADY_USED.0)));
+}
+
+/// A window that asks for the focus before it is first shown (as GTK and
+/// Qt present a new window), launched after another app's window closed:
+/// it is drawn active once mapped, and a click on it keeps it so. (It was
+/// drawn inactive for good: the server thought it active already, so the
+/// map and later clicks changed nothing, though keys reached it.)
+#[test]
+fn a_window_activated_before_its_first_map_is_drawn_active() {
+    let (mut srv, shared) = server();
+    // The first app: shown, active, then closed.
+    let (mut p1, registry1) = connect(&mut srv, &shared);
+    let g1 = globals(&mut p1, &mut srv, registry1);
+    let first = mapped(&mut p1, &mut srv, &g1, "first", 40, 40, 0);
+    assert_eq!(srv.active, Some((p1.id, first.toplevel)));
+    srv.remove_client(p1.id);
+    assert_eq!(srv.active, None);
+    // The second app activates its toplevel before the first commit with a
+    // buffer.
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let activation = p.bind(&mut srv, registry, &xdg_activation_v1::INTERFACE, 1);
+    let (surface, xdg, toplevel, events) = toplevel(&mut p, &mut srv, &g, "second");
+    let token = p.new_id(&xdg_activation_token_v1::INTERFACE);
+    p.send(&mut srv, activation, xdg_activation_v1::Request::GetActivationToken { id: token });
+    p.send(&mut srv, token, xdg_activation_token_v1::Request::SetSurface { surface });
+    p.send(&mut srv, token, xdg_activation_token_v1::Request::Commit);
+    let e = p.take();
+    let done = e.iter().find(|e| e.name() == ("xdg_activation_token_v1", "done")).expect("done");
+    let Arg::Str(Some(t)) = &done.args[0] else { panic!() };
+    p.send(&mut srv, activation, xdg_activation_v1::Request::Activate { token: t.clone(), surface });
+    assert_eq!(srv.active, Some((p.id, toplevel)));
+    p.send(&mut srv, xdg, xdg_surface::Request::AckConfigure { serial: configure_serial(&events) });
+    let (buffer, _) = buffer(&mut p, &mut srv, &g, 40, 40, 0, wl_shm::Format::XRGB8888.0);
+    p.send(&mut srv, surface, wl_surface::Request::Attach { buffer: Some(buffer), x: 0, y: 0 });
+    p.send(&mut srv, surface, wl_surface::Request::Commit);
+    let win = srv.surface_window(p.id, surface).expect("mapped");
+    assert!(srv.scene().window(win).unwrap().is_active(), "the new window is drawn active");
+    assert_eq!(srv.active_window(), Some(win));
+    assert!(srv.managed_windows().iter().any(|w| w.window == win && w.active));
+    // A click on its content keeps it active.
+    let (x, y) = srv.scene().window(win).unwrap().position();
+    motion(&mut srv, x + 10, y + 10);
+    button(&mut srv, true);
+    button(&mut srv, false);
+    assert!(srv.scene().window(win).unwrap().is_active());
 }
 
 // ---------------------------------------------------------------------

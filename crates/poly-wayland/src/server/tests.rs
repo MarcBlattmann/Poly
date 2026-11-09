@@ -141,6 +141,14 @@ impl Peer {
         ObjectId(self.next)
     }
 
+    /// An ID the server freed (`wl_display.delete_id` came) for a new
+    /// object, as libwayland's client reuses them.
+    fn reuse_id(&mut self, id: ObjectId, interface: &'static Interface) -> ObjectId {
+        assert!(!self.objects.contains_key(&id.0), "{id} was not freed by delete_id");
+        self.objects.insert(id.0, interface);
+        id
+    }
+
     /// Send a request (and its file descriptors), then read what comes back.
     fn send(&mut self, srv: &mut Server, object: ObjectId, req: impl Message) {
         let (mut bytes, mut fds) = (Vec::new(), Vec::new());
@@ -534,7 +542,7 @@ fn a_toplevel_is_configured_mapped_framed_and_composed() {
     assert_eq!(fb.pixel(x as u32, y as u32), Some(0x33_66_99));
     assert_eq!(fb.pixel((x + 99) as u32, (y + 49) as u32), Some(0x33_66_99));
     assert_eq!(fb.pixel((x + 50) as u32, (y - 2) as u32), Some(Theme::NEUTRAL.title_active));
-    assert_eq!(fb.pixel(5, 5), Some(Theme::NEUTRAL.background));
+    assert_eq!(fb.pixel(630, 470), Some(Theme::NEUTRAL.background));
     // The frame callback fires with the frame, then is gone.
     assert!(srv.wants_frame());
     srv.frame_presented(super::FrameTime { monotonic_ns: 5_000_000_000 });
@@ -751,7 +759,7 @@ fn hidpi_outputs_and_buffer_scales() {
 }
 
 #[test]
-fn decorations_are_always_server_side() {
+fn decorations_are_server_side_unless_the_client_draws_its_own() {
     let (mut srv, shared) = server();
     let (mut p, registry) = connect(&mut srv, &shared);
     let g = globals(&mut p, &mut srv, registry);
@@ -764,9 +772,9 @@ fn decorations_are_always_server_side() {
     p.send(&mut srv, xdg, xdg_surface::Request::GetToplevel { id: tl });
     let deco = p.new_id(&zxdg_toplevel_decoration_v1::INTERFACE);
     p.send(&mut srv, manager, zxdg_decoration_manager_v1::Request::GetToplevelDecoration { id: deco, toplevel: tl });
-    // Asking for client-side decorations changes nothing.
-    let client_side = zxdg_toplevel_decoration_v1::Mode::CLIENT_SIDE.0;
-    p.send(&mut srv, deco, zxdg_toplevel_decoration_v1::Request::SetMode { mode: client_side });
+    // Asking for server-side decorations: Poly draws the frame.
+    let server_mode = zxdg_toplevel_decoration_v1::Mode::SERVER_SIDE.0;
+    p.send(&mut srv, deco, zxdg_toplevel_decoration_v1::Request::SetMode { mode: server_mode });
     assert!(p.take().is_empty(), "nothing before the initial commit");
     p.send(&mut srv, surface, wl_surface::Request::Commit);
     let e = p.take();
@@ -777,7 +785,12 @@ fn decorations_are_always_server_side() {
     let order: Vec<_> = e.iter().map(|e| e.name().1).collect();
     assert_eq!(order[order.len() - 3..], ["configure", "configure", "configure"]);
     assert_eq!(e[e.len() - 3].object, deco);
-    // Later requests get a new configure sequence, still server-side.
+    // A client that draws its own frame (Chromium) gets client-side.
+    let client_side = zxdg_toplevel_decoration_v1::Mode::CLIENT_SIDE.0;
+    p.send(&mut srv, deco, zxdg_toplevel_decoration_v1::Request::SetMode { mode: client_side });
+    let e = p.take();
+    assert_eq!(e.iter().find(|e| e.object == deco).unwrap().args, [Arg::Uint(client_side)]);
+    // Later requests get a new configure sequence; no preference is server-side.
     p.send(&mut srv, deco, zxdg_toplevel_decoration_v1::Request::UnsetMode);
     let e = p.take();
     assert_eq!(e.iter().find(|e| e.object == deco).unwrap().args, [server_side]);
@@ -901,6 +914,39 @@ fn maximize_and_fullscreen() {
     p.send(&mut srv, w.surface, wl_surface::Request::Commit);
     let win = &srv.scene().windows()[0];
     assert_eq!((win.position(), win.is_decorated()), (before, true));
+}
+
+#[test]
+fn a_client_side_window_has_no_poly_frame() {
+    let (mut srv, shared) = server();
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let manager = p.bind(&mut srv, registry, &zxdg_decoration_manager_v1::INTERFACE, 2);
+    let w = mapped(&mut p, &mut srv, &g, "c", 50, 50, 0);
+    assert!(srv.scene().windows()[0].is_decorated());
+    let deco = p.new_id(&zxdg_toplevel_decoration_v1::INTERFACE);
+    p.send(
+        &mut srv,
+        manager,
+        zxdg_decoration_manager_v1::Request::GetToplevelDecoration { id: deco, toplevel: w.toplevel },
+    );
+    let client_side = zxdg_toplevel_decoration_v1::Mode::CLIENT_SIDE.0;
+    p.send(&mut srv, deco, zxdg_toplevel_decoration_v1::Request::SetMode { mode: client_side });
+    let e = p.take();
+    p.send(&mut srv, w.xdg, xdg_surface::Request::AckConfigure { serial: configure_serial(&e) });
+    p.send(&mut srv, w.surface, wl_surface::Request::Commit);
+    assert!(!srv.scene().windows()[0].is_decorated());
+    // Maximized, it fills the whole work area: no room kept for a frame.
+    p.send(&mut srv, w.toplevel, xdg_toplevel::Request::SetMaximized);
+    let e = p.take();
+    let c = e.iter().find(|e| e.name() == ("xdg_toplevel", "configure")).unwrap();
+    assert_eq!(c.args[..2], [Arg::Int(640), Arg::Int(480)]);
+    p.send(&mut srv, w.xdg, xdg_surface::Request::AckConfigure { serial: configure_serial(&e) });
+    let (big, _) = buffer(&mut p, &mut srv, &g, 640, 480, 0, 1);
+    p.send(&mut srv, w.surface, wl_surface::Request::Attach { buffer: Some(big), x: 0, y: 0 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Commit);
+    let win = &srv.scene().windows()[0];
+    assert_eq!((win.position(), win.is_decorated()), ((0, 0), false));
 }
 
 #[test]

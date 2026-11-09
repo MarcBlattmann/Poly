@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/landlock_restrict_self # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; Landlock enabled (ABI 7); tests run as root with all capabilities and as uid/gid 65534 (children dropping to uid/gid 1000); umask 022; /tmp on overlayfs"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  landlock_restrict_self(ruleset_fd, flags) (syscall 446) enforces a
+  ruleset on the calling thread: from then on the accesses the ruleset
+  handles are denied (EACCES for file opens and binds, EPERM for scoped
+  signals) unless a rule allows them. It cannot be undone; children
+  created afterwards inherit it; enforcing more rulesets stacks (each
+  layer must allow an access). The ruleset fd may be closed afterwards.
+  Accesses not handled are not affected. A caller without CAP_SYS_ADMIN
+  must have set no_new_privs (prctl PR_SET_NO_NEW_PRIVS) first; this is
+  checked before the flags and the descriptor. flags (ABI 7):
+  LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF 1, LOG_NEW_EXEC_ON 2,
+  LOG_SUBDOMAINS_OFF 4 (audit logging); with LOG_SUBDOMAINS_OFF alone
+  ruleset_fd may be -1 (only that setting changes). With
+  LANDLOCK_SCOPE_SIGNAL handled, signals to processes outside the domain
+  (the parent) are EPERM, to itself and to its own later children allowed.
+returns:
+  success: "0"
+  effect_example: "READ_FILE handled, rule for directory A: open of files in A works, /etc/hostname EACCES; a second layer allowing only A/f makes A/g EACCES too; a child forked afterwards is restricted the same way; the parent is unaffected"
+errors:
+  nnp: "EPERM (1): neither no_new_privs nor CAP_SYS_ADMIN (before any other check)"
+  flags: "EINVAL (22): unknown flags (8)"
+  bad_fd: "EBADF (9): ruleset_fd not open, or -1 without LOG_SUBDOMAINS_OFF"
+  not_ruleset: "EBADFD (77): ruleset_fd is not a ruleset"
+  limits: "E2BIG (7): more than 16 stacked layers; not tested"
+side_effects: "restricts the calling thread (and its future children) permanently"
+threading: "only the calling thread (use LANDLOCK_RESTRICT_SELF_TSYNC where available to cover all threads; not in 6.18's ABI 7)"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

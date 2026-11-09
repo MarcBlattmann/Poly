@@ -100,10 +100,9 @@ fn cache_dir() -> PathBuf {
     ntdll.parent().map_or_else(|| root().join("target"), Path::to_path_buf).join("7zip").join(VERSION)
 }
 
-/// The SHA-256 of a file (`sha256sum`), or `None`.
+/// The SHA-256 of a file, or `None`.
 fn sha256(path: &Path) -> Option<String> {
-    let out = Command::new("sha256sum").arg(path).stderr(Stdio::null()).output().ok()?;
-    String::from_utf8_lossy(&out.stdout).split_whitespace().next().map(str::to_string)
+    crate::sha256::file(path)
 }
 
 /// Whether `path` is the pinned file (size first, then the hash).
@@ -156,7 +155,7 @@ pub fn fetch() -> Result<PathBuf> {
         eprintln!("==> {} is the pinned 7-Zip {VERSION} 7za.exe (x64)", cache_dir().join(EXE).display());
         return Ok(cache_dir().join(EXE));
     }
-    for tool in ["curl", "sha256sum", "tar", "xz"] {
+    for tool in ["curl", "tar", "xz"] {
         if Command::new(tool).arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_err() {
             return Err(format!("fetching 7-Zip needs `{tool}`"));
         }
@@ -818,9 +817,7 @@ fn fixtures(tool: &Path, work: &Path) -> Result<Vec<(String, u16, Vec<u8>)>> {
         std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
         let file = std::fs::File::options().write(true).open(&path).map_err(|e| e.to_string())?;
         file.set_modified(when).map_err(|e| e.to_string())?;
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(u32::from(*mode)))
-            .map_err(|e| e.to_string())?;
+        crate::hostfs::set_mode(&path, u32::from(*mode)).map_err(|e| e.to_string())?;
     }
     for d in dirs.iter().rev() {
         if let Ok(dir) = std::fs::File::open(d) {
@@ -838,7 +835,7 @@ fn fixtures(tool: &Path, work: &Path) -> Result<Vec<(String, u16, Vec<u8>)>> {
         if let Some(p) = path.parent() {
             std::fs::create_dir_all(p).map_err(|e| format!("{}: {e}", p.display()))?;
         }
-        std::os::unix::fs::symlink(target, &path).map_err(|e| format!("{}: {e}", path.display()))?;
+        crate::hostfs::symlink(target, &path).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     for args in MADE_BY_7ZZ {
         let made = Command::new(tool)

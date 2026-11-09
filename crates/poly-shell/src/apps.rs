@@ -2,7 +2,8 @@
 //! Desktop Entry Specification, version 1.5: the `[Desktop Entry]` group,
 //! `Type`, `Name`, `GenericName`, `Comment`, `Exec` with its quoting and
 //! field codes, `NoDisplay`, `Hidden`, `Terminal`, `Keywords`) and Poly's
-//! built-ins.
+//! built-ins, Files and Terminal among them (ADR 0134). An entry with
+//! `Terminal=true` runs in Poly's Terminal (`poly-terminal -e ...`).
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -31,8 +32,6 @@ pub enum Skip {
     NotAnApplication,
     /// `NoDisplay=true` or `Hidden=true`.
     Hidden,
-    /// `Terminal=true`: there is no terminal emulator yet.
-    NeedsTerminal,
     /// `Exec` is malformed (an unclosed quote).
     BadExec,
 }
@@ -83,12 +82,14 @@ pub fn parse_desktop_entry(id: &str, text: &str) -> Result<App, Skip> {
         return Err(Skip::Hidden);
     }
     let (Some(name), Some(exec)) = (name, exec) else { return Err(Skip::Incomplete) };
-    if terminal {
-        return Err(Skip::NeedsTerminal);
-    }
-    let argv = parse_exec(&exec).ok_or(Skip::BadExec)?;
+    let mut argv = parse_exec(&exec).ok_or(Skip::BadExec)?;
     if argv.is_empty() {
         return Err(Skip::Incomplete);
+    }
+    if terminal {
+        // The program runs in Poly's Terminal, which runs what follows
+        // `-e` instead of the shell (as xterm's `-e`).
+        argv.splice(0..0, [String::from(TERMINAL), String::from("-e")]);
     }
     let comment = comment.or(generic).unwrap_or_default();
     Ok(App { name, comment, keywords, argv, id: id.into() })
@@ -171,7 +172,9 @@ pub fn parse_exec(exec: &str) -> Option<Vec<String>> {
     Some(args)
 }
 
-/// Poly's own apps, offered whatever is installed.
+/// Poly's own apps, offered whatever is installed. Test fixtures (the demo
+/// clients) are not among them: a desktop that wants them gets them from
+/// desktop files, which `cargo xtask desktop --test-apps` puts in the image.
 pub fn builtins() -> Vec<App> {
     let app = |name: &str, comment: &str, keywords: &[&str], argv: &[&str]| App {
         name: name.into(),
@@ -181,13 +184,6 @@ pub fn builtins() -> Vec<App> {
         id: alloc::format!("poly:{name}"),
     };
     alloc::vec![
-        app("Poly Demo", "A Wayland window drawn by a small C client", &["demo", "wayland", "test"], &["/bin/wl-demo"]),
-        app(
-            "Wayland Test Client",
-            "The compositor's protocol test (exits when done)",
-            &["test", "client"],
-            &["/bin/wl-client"]
-        ),
         app(
             "Settings",
             "Display, keyboard, wallpaper, sound, time zone",
@@ -195,14 +191,50 @@ pub fn builtins() -> Vec<App> {
             &[SETTINGS]
         ),
         app("Notifications", "What came in, newest first", &["history", "messages"], &[NOTIFICATIONS]),
+        app(
+            "Files",
+            "Browse and organise your files",
+            &["file", "explorer", "folder", "directory", "manager", "browse", "documents", "downloads", "trash"],
+            &[FILES]
+        ),
+        app(
+            "Terminal",
+            "A shell in a window",
+            &["shell", "console", "command", "prompt", "bash", "sh", "cli", "tty"],
+            &[TERMINAL]
+        ),
     ]
 }
+
+/// Poly's own apps, native programs (ADR 0134).
+pub const FILES: &str = "/bin/poly-files";
+pub const TERMINAL: &str = "/bin/poly-terminal";
 
 /// The `argv` of the built-ins the shell itself opens (ADR 0117).
 pub const SETTINGS: &str = "poly-shell:settings";
 pub const NOTIFICATIONS: &str = "poly-shell:notifications";
 
+/// The `argv` prefix of an open window listed in the launcher (Alpine lists
+/// windows with the apps); the window's ID follows.
+pub const WINDOW: &str = "poly-shell:window:";
+
+/// A launcher entry for open window `id` titled `title` (of app `app_id`).
+pub fn window_entry(id: u32, title: &str, app_id: &str) -> App {
+    App {
+        name: if title.is_empty() { app_id.into() } else { title.into() },
+        comment: if app_id.is_empty() { "Window".into() } else { app_id.into() },
+        keywords: Vec::new(),
+        argv: alloc::vec![alloc::format!("{WINDOW}{id}")],
+        id: alloc::format!("{WINDOW}{id}"),
+    }
+}
+
 impl App {
+    /// The open window this entry stands for, if it is one.
+    pub fn window(&self) -> Option<u32> {
+        self.argv.first()?.strip_prefix(WINDOW)?.parse().ok()
+    }
+
     /// The shell's own part this app opens, if it is one.
     pub fn internal(&self) -> Option<&str> {
         self.argv.first().map(String::as_str).filter(|a| a.starts_with("poly-shell:"))
@@ -219,6 +251,23 @@ pub fn catalog(desktop: Vec<App>) -> Vec<App> {
     }
     all.sort_by_key(|a| a.name.to_lowercase());
     all
+}
+
+/// Desktop-file apps for the shell's tests, standing in for what an image
+/// carries: not Poly's built-ins and not test fixtures.
+#[cfg(test)]
+pub(crate) fn sample_apps() -> Vec<App> {
+    let app = |name: &str, keywords: &[&str], prog: &str| App {
+        name: name.into(),
+        comment: String::new(),
+        keywords: keywords.iter().map(|k| (*k).into()).collect(),
+        argv: alloc::vec![prog.into()],
+        id: alloc::format!("{prog}.desktop"),
+    };
+    catalog(alloc::vec![
+        app("Pixel Viewer", &["picture", "image"], "/bin/viewer"),
+        app("Quill Editor", &["write", "text"], "/bin/editor"),
+    ])
 }
 
 #[cfg(test)]
@@ -245,7 +294,8 @@ mod tests {
         assert_eq!(e("Type=Link\nName=A\nURL=x"), Err(Skip::NotAnApplication));
         assert_eq!(e("Type=Application\nName=A\nExec=a\nNoDisplay=true"), Err(Skip::Hidden));
         assert_eq!(e("Type=Application\nName=A\nExec=a\nHidden=true"), Err(Skip::Hidden));
-        assert_eq!(e("Type=Application\nName=A\nExec=vim\nTerminal=true"), Err(Skip::NeedsTerminal));
+        let vim = e("Type=Application\nName=A\nExec=vim %F\nTerminal=true").unwrap();
+        assert_eq!(vim.argv, ["/bin/poly-terminal", "-e", "vim"], "Terminal=true runs in Poly's Terminal");
         assert_eq!(e("Type=Application\nName=A"), Err(Skip::Incomplete));
         assert_eq!(e("Type=Application\nName=A\nExec=\"a"), Err(Skip::BadExec));
         assert_eq!(parse_desktop_entry("x", "Name=A\nExec=a"), Err(Skip::Incomplete));
@@ -274,11 +324,22 @@ mod tests {
             argv: vec!["x".into()],
             id: "f.desktop".into(),
         };
-        let all = catalog(vec![file("zebra"), file("Poly Demo"), file("apple")]);
+        let all = catalog(vec![file("zebra"), file("Settings"), file("apple")]);
         let names: Vec<&str> = all.iter().map(|a| a.name.as_str()).collect();
-        assert_eq!(names, ["apple", "Notifications", "Poly Demo", "Settings", "Wayland Test Client", "zebra"]);
-        assert_eq!(all[2].id, "f.desktop", "the desktop file replaced the built-in");
-        assert_eq!(all[3].internal(), Some(SETTINGS));
-        assert_eq!(all[2].internal(), None);
+        assert_eq!(names, ["apple", "Files", "Notifications", "Settings", "Terminal", "zebra"]);
+        assert_eq!(all[3].id, "f.desktop", "the desktop file replaced the built-in");
+        assert_eq!(all[2].internal(), Some(NOTIFICATIONS));
+        assert_eq!(all[3].internal(), None);
+        assert_eq!(all[1].argv, [FILES]);
+        assert_eq!(all[4].argv, [TERMINAL]);
+    }
+
+    #[test]
+    fn the_demo_clients_are_not_built_in() {
+        // Test fixtures arrive only as desktop files an image carries.
+        let all = catalog(Vec::new());
+        let names: Vec<&str> = all.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["Files", "Notifications", "Settings", "Terminal"]);
+        assert!(all.iter().all(|a| !a.argv.iter().any(|p| p.contains("wl-demo") || p.contains("wl-client"))));
     }
 }

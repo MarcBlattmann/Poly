@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sysfs                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root and as uid/gid 65534"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  sysfs(option, ...) (syscall 139, obsolete; CONFIG_SYSFS_SYSCALL) queries
+  the registered file system types, the same list in the same order as
+  /proc/filesystems. Option 1 (fsname): returns the 0-based index of the
+  type named by the string fsname (exact, case-sensitive match). Option 2
+  (fs_index, buf): writes that type's name with its terminating NUL into
+  buf (no length; names are short) and returns 0; fs_index is taken as a
+  32-bit unsigned value (0x100000000 is 0, -1 is 4294967295). Option 3:
+  returns the number of types (37 here); further arguments are ignored.
+  Every user may call it.
+returns:
+  option_1: "index >= 0"
+  option_2: "0, name in buf"
+  option_3: "count > 0"
+  example: "here: 0 sysfs, 1 tmpfs, 2 proc, ... 36 rpc_pipefs"
+errors:
+  option: "EINVAL (22): option not 1, 2 or 3"
+  unknown_name: "EINVAL (22): option 1, no type of that name"
+  empty_name: "ENOENT (2): option 1, empty string"
+  long_name: "ENAMETOOLONG (36): option 1, string of 4096 bytes or more"
+  name_fault: "EFAULT (14): option 1, string unreadable"
+  index: "EINVAL (22): option 2, index >= count (checked before buf)"
+  buf_fault: "EFAULT (14): option 2, valid index, buf unwritable"
+side_effects: none
+threading: "none specific"
+ordering:
+  - "option 2: index check, then the copy"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the set and order of types are the kernel's; tests compare sysfs(2)
+# against /proc/filesystems and check round trips and that proc, tmpfs and
+# sysfs exist, never indices.

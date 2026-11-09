@@ -41,11 +41,17 @@ impl LinuxAdmin for Recorder {
         self.log.lock().unwrap().umounts.push((target.to_vec(), detach, follow));
         Ok(())
     }
-    fn mknodat(&mut self, dirfd: i32, path: &[u8], mode: u32, dev: u64) -> Result<(), Errno> {
+    fn mknodat(&mut self, dirfd: i32, path: &[u8], mode: u32, dev: u64, may_mknod: bool) -> Result<(), Errno> {
+        if !may_mknod && matches!(mode & 0o170000, 0o020000 | 0o060000) {
+            return Err(Errno::EPERM);
+        }
         self.log.lock().unwrap().nodes.push((dirfd, path.to_vec(), mode, dev));
         Ok(())
     }
-    fn chroot(&mut self, path: &[u8]) -> Result<(), Errno> {
+    fn chroot(&mut self, path: &[u8], may_chroot: bool) -> Result<(), Errno> {
+        if !may_chroot {
+            return Err(Errno::EPERM);
+        }
         self.log.lock().unwrap().roots.push(path.to_vec());
         Ok(())
     }
@@ -120,7 +126,8 @@ fn mount_decodes_the_operation_from_the_flags() {
             MountRequest::Remount {
                 target: b"/mnt".to_vec(),
                 flags: MountFlags { read_only: true, ..MountFlags::default() },
-                data: Vec::new()
+                data: Vec::new(),
+                bind: false
             },
             MountRequest::Bind {
                 source: b"/mnt".to_vec(),
@@ -128,7 +135,7 @@ fn mount_decodes_the_operation_from_the_flags() {
                 flags: MountFlags::default(),
                 recursive: true
             },
-            MountRequest::Propagation { target: b"/mnt".to_vec() },
+            MountRequest::Propagation { target: b"/mnt".to_vec(), kind: admin::ms::PRIVATE, recursive: true },
             MountRequest::Move { source: b"/mnt".to_vec(), target: b"/mnt".to_vec() },
         ]
     );
@@ -185,7 +192,12 @@ fn mknod_types_and_device_numbers() {
     // a regular file.
     assert_eq!(sys(&mut k, nr::MKNODAT, &[(-100i64) as u64, p[0], 0o020660, 0x440]), Ok(0));
     assert_eq!(sys(&mut k, nr::MKNOD, &[p[0], 0o644, 0]), Ok(0));
-    assert_eq!(sys(&mut k, nr::MKNOD, &[p[0], 0o040755, 0]), Err(Errno::EINVAL));
+    // A directory is EPERM, a symbolic link or an unused type EINVAL,
+    // before the path is read.
+    assert_eq!(sys(&mut k, nr::MKNOD, &[p[0], 0o040755, 0]), Err(Errno::EPERM));
+    assert_eq!(sys(&mut k, nr::MKNOD, &[0, 0o040755, 0]), Err(Errno::EPERM));
+    assert_eq!(sys(&mut k, nr::MKNOD, &[0, 0o120777, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::MKNOD, &[0, 0o030777, 0]), Err(Errno::EINVAL));
     let nodes = &log.lock().unwrap().nodes;
     assert_eq!(nodes[0], (-100, b"node".to_vec(), 0o020660, 0x440));
     assert_eq!((crate::fs::major(nodes[0].3), crate::fs::minor(nodes[0].3)), (4, 64));
@@ -234,6 +246,76 @@ fn reboot_commands() {
 }
 
 #[test]
+fn reboot_checks_the_capability_first() {
+    let (mut k, log) = kernel();
+    *k.creds_mut() = Creds::user(1000, 1000);
+    let call = |k: &mut FakeKernel, magic: u64, magic2: u64, cmd: u64| sys(k, nr::REBOOT, &[magic, magic2, cmd, 0]);
+    assert_eq!(call(&mut k, 0, 0, 0), Err(Errno::EPERM));
+    assert_eq!(call(&mut k, MAGIC1.into(), MAGIC2[0].into(), 0x1234_5678), Err(Errno::EPERM));
+    assert_eq!(call(&mut k, MAGIC1.into(), MAGIC2[0].into(), admin::cmd::RESTART.into()), Err(Errno::EPERM));
+    assert!(log.lock().unwrap().reboots.is_empty());
+    // Root: the magic numbers come next, the high bits of the arguments do not count.
+    *k.creds_mut() = Creds::root();
+    assert_eq!(call(&mut k, 0, 0, 0), Err(Errno::EINVAL));
+    assert_eq!(
+        call(
+            &mut k,
+            1 << 32 | u64::from(MAGIC1),
+            u64::MAX << 32 | u64::from(MAGIC2[3]),
+            5 << 32 | u64::from(admin::cmd::CAD_ON)
+        ),
+        Ok(0)
+    );
+}
+
+#[test]
+fn reboot_in_a_pid_namespace_ends_the_namespace() {
+    use crate::abi::signal::{SIGHUP, SIGINT, SIGKILL};
+    use crate::ns::pid::{self, PidNs};
+    use crate::tests::fake::Exit;
+    let setup = || {
+        let (mut k, log) = kernel();
+        let ns = Some(PidNs::new(&None, None).unwrap());
+        pid::attach(&ns, k.pid, true).unwrap();
+        k.me().ns.pid = ns;
+        (k, log)
+    };
+    let call =
+        |k: &mut FakeKernel, magic2: u32, cmd: u32| sys(k, nr::REBOOT, &[MAGIC1.into(), magic2.into(), cmd.into(), 0]);
+    // The init itself: killed by SIGHUP for a restart, SIGINT for a halt.
+    for (cmd, signal) in [
+        (admin::cmd::RESTART, SIGHUP),
+        (admin::cmd::RESTART2, SIGHUP),
+        (admin::cmd::HALT, SIGINT),
+        (admin::cmd::POWER_OFF, SIGINT),
+    ] {
+        let (mut k, log) = setup();
+        assert_eq!(call(&mut k, MAGIC2[1], cmd), Ok(0));
+        assert!(matches!(k.exit, Some(Exit::Signal(s, false)) if s == signal), "{cmd:#x}");
+        assert!(log.lock().unwrap().reboots.is_empty(), "the machine stays up");
+    }
+    // Other commands fail and the caller goes on.
+    let (mut k, log) = setup();
+    for cmd in [admin::cmd::CAD_ON, admin::cmd::CAD_OFF, admin::cmd::SW_SUSPEND, admin::cmd::KEXEC, 0x1234_5678] {
+        assert_eq!(call(&mut k, MAGIC2[0], cmd), Err(Errno::EINVAL), "{cmd:#x}");
+    }
+    assert!(k.exit.is_none());
+    assert!(log.lock().unwrap().reboots.is_empty() && log.lock().unwrap().cad.is_empty());
+    // A member other than init makes the init take the signal and ends too.
+    let (mut k, _) = setup();
+    let init = k.pid;
+    let ns = k.me().ns.pid.clone();
+    k.add_process(init + 10, 0, 1, 1);
+    k.proc_state(init + 10).ns.pid = ns.clone();
+    pid::attach(&ns, init + 10, true).unwrap();
+    k.pid = init + 10;
+    k.tid = init + 10;
+    *k.creds_mut() = Creds::root();
+    assert_eq!(call(&mut k, MAGIC2[0], admin::cmd::RESTART), Ok(0));
+    assert!(matches!(k.exit, Some(Exit::Signal(SIGKILL, false))));
+}
+
+#[test]
 fn without_the_service_the_calls_are_enosys() {
     let mut k = FakeKernel::new();
     *k.creds_mut() = Creds::root();
@@ -273,6 +355,18 @@ fn file_system_types_and_options() {
     assert!(admin::mount_options(FsType::Proc, b"hidepid=2,gid=10").is_ok());
     assert_eq!(admin::mount_options(FsType::Sysfs, b"anything"), Err(Errno::EINVAL));
     assert!(admin::mount_options(FsType::Ext2, b"errors=remount-ro,user_xattr").is_ok());
+}
+
+/// mount's spec sheet, `remount_bad_option`: a tmpfs remount with an
+/// option tmpfs does not take is EINVAL; other types are not checked.
+#[test]
+fn remount_options_are_checked_for_tmpfs() {
+    assert_eq!(admin::check_remount_options("tmpfs", b"bogus=1"), Err(Errno::EINVAL));
+    assert_eq!(admin::check_remount_options("tmpfs", b"size=abc"), Err(Errno::EINVAL));
+    assert_eq!(admin::check_remount_options("tmpfs", b"size=1m,nr_inodes=10"), Ok(()));
+    assert_eq!(admin::check_remount_options("tmpfs", b""), Ok(()));
+    assert_eq!(admin::check_remount_options("ext4", b"bogus=1"), Ok(()));
+    assert_eq!(admin::check_remount_options("proc", b"bogus=1"), Ok(()));
 }
 
 // ---- priorities and scheduling ------------------------------------------

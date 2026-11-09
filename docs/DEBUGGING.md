@@ -957,7 +957,7 @@ init: /test-binary (pid 2) ended: exit status 0
 
 A file that cannot run says why: `POLY-INIT: unsupported /bin/x: ENOENT`,
 `... its interpreter (PT_INTERP) cannot be opened: ENOENT`,
-`... #! scripts are not supported yet`. Every call without a handler logs
+`... a #! script without an interpreter` (a `#!` script runs its interpreter, up to 4 deep). Every call without a handler logs
 `syscall: pid P linux/linux #N name not implemented` (the first time in a
 boot; `poly.strace` shows every call) and returns `-ENOSYS`: that list is
 the work queue for the program. A fault that kills a Linux
@@ -1250,7 +1250,8 @@ in one:
   `RESTART_IF_SA_RESTART` inside the kernel: the call is restarted under
   `SA_RESTART` (`rip` back at the `syscall`) or fails with `EINTR`;
   `poll` / `select` are never restarted after a handler, `epoll_wait`
-  never at all.
+  never after a handler or a stop (only after signals that are ignored,
+  which a traced test process keeps until they are taken).
 
 The kernel tests run with `poly.test=linux::fileio_tests`; the host tests
 are `cargo test -p poly-vfs objects` and `cargo test -p

@@ -315,14 +315,21 @@ fn randomized_futex_model() {
                         !take
                     });
                     let mut moved = Vec::new();
-                    model.retain(|&(t, mw, b)| {
-                        let take = moved.len() < nr_ as usize && mw == w;
-                        if take {
-                            moved.push((t, to, b));
-                        }
-                        !take
-                    });
-                    let n = expect.len() + moved.len();
+                    // Requeued onto itself, waiters keep their places and
+                    // are only counted (futex_requeue's spec sheet).
+                    let n_moved = if to == w {
+                        (nr_ as usize).min(model.iter().filter(|e| e.1 == w).count())
+                    } else {
+                        model.retain(|&(t, mw, b)| {
+                            let take = moved.len() < nr_ as usize && mw == w;
+                            if take {
+                                moved.push((t, to, b));
+                            }
+                            !take
+                        });
+                        moved.len()
+                    };
+                    let n = expect.len() + n_moved;
                     model.extend(moved);
                     assert_eq!(r, Ok(n as u64), "seed {seed} step {step}");
                     let mut got = woken(&mut k);
@@ -469,7 +476,9 @@ fn a_timed_wait_fails_with_eintr_after_a_handler() {
     let t = timeout(&mut k, 5, 0);
     run(&mut k, nr::FUTEX, &[WORD, op(FUTEX_WAIT), 0, t]);
     assert_eq!(saved_rip_rax(&k), (SYSCALL_RIP, Errno::EINTR.to_rax()));
-    assert_eq!(k.thread_state().restart_block, None);
+    // The block stays while the handler runs (restart_syscall(2) there
+    // resumes the wait); rt_sigreturn(2) drops it.
+    assert!(k.thread_state().restart_block.is_some());
     // An absolute timeout (FUTEX_WAIT_BITSET) is simply restarted.
     let mut k = FakeKernel::new();
     install(&mut k, SIGUSR1, SA_RESTART);
@@ -642,4 +651,130 @@ fn blocked_signals_do_not_interrupt_a_wait() {
     });
     assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, op(FUTEX_WAIT), 0, 0]), Ok(0));
     assert!(k.me().pending(100).contains(SIGUSR1));
+}
+
+// ---- futex2: futex_wait, futex_wake, futex_waitv, futex_requeue ----------
+
+const F2_PRIVATE: u64 = (FUTEX2_SIZE_U32 | FUTEX2_PRIVATE) as u64;
+const F2_SHARED: u64 = FUTEX2_SIZE_U32 as u64;
+const ANY: u64 = 0xffff_ffff;
+const WAITV: u64 = DATA + 0x400;
+
+/// Write `struct futex_waitv` entries (val, uaddr, flags) at `WAITV`.
+fn waitv(k: &mut FakeKernel, entries: &[(u64, u64, u32)]) -> u64 {
+    for (i, &(val, uaddr, flags)) in entries.iter().enumerate() {
+        let mut b = [0u8; FUTEX_WAITV_SIZE];
+        b[0..8].copy_from_slice(&val.to_le_bytes());
+        b[8..16].copy_from_slice(&uaddr.to_le_bytes());
+        b[16..20].copy_from_slice(&flags.to_le_bytes());
+        k.poke(WAITV + (i * FUTEX_WAITV_SIZE) as u64, &b);
+    }
+    WAITV
+}
+
+#[test]
+fn futex2_wait_argument_order() {
+    let mut k = FakeKernel::new();
+    k.poke(WORD, &7u32.to_le_bytes());
+    let w = nr::FUTEX_WAIT;
+    assert_eq!(sys(&mut k, w, &[WORD, 7, ANY, 0x1, 0, 0]), Err(Errno::EINVAL), "size u16");
+    assert_eq!(sys(&mut k, w, &[WORD, 7, ANY, F2_PRIVATE | 0x100, 0, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, w, &[WORD, 8, ANY, F2_PRIVATE | (1 << 40), 0, 0]), Err(Errno::EAGAIN), "high bits ignored");
+    let t = timeout(&mut k, 0, 0);
+    assert_eq!(sys(&mut k, w, &[WORD, 7, ANY, F2_PRIVATE, t, 7]), Err(Errno::EINVAL), "CLOCK_BOOTTIME");
+    assert_eq!(sys(&mut k, w, &[WORD, 8, ANY, F2_PRIVATE, 0, 7]), Err(Errno::EAGAIN), "no timeout: clock ignored");
+    assert_eq!(sys(&mut k, w, &[WORD, 1 << 32, ANY, F2_PRIVATE, UNMAPPED, 1]), Err(Errno::EINVAL), "val first");
+    assert_eq!(sys(&mut k, w, &[WORD, 7, 0, F2_PRIVATE, UNMAPPED, 1]), Err(Errno::EFAULT), "timeout before mask");
+    assert_eq!(sys(&mut k, w, &[WORD, 7, 0, F2_PRIVATE, 0, 0]), Err(Errno::EINVAL), "mask 0");
+    assert_eq!(sys(&mut k, w, &[WORD, 7, 1 << 32, F2_PRIVATE, 0, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, w, &[WORD + 2, 7, ANY, F2_PRIVATE, 0, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, w, &[UNMAPPED, 7, ANY, F2_PRIVATE, 0, 0]), Err(Errno::EFAULT));
+    let past = timeout(&mut k, 0, 30_000_000);
+    assert_eq!(sys(&mut k, w, &[WORD, 8, ANY, F2_PRIVATE, past, 1]), Err(Errno::EAGAIN), "value before deadline");
+    assert_eq!(sys(&mut k, w, &[WORD, 7, ANY, F2_PRIVATE, past, 1]), Err(Errno::ETIMEDOUT));
+    let abs = Deadline { clock: Clock::Monotonic, at: Timespec { sec: 0, nsec: 30_000_000 } };
+    assert_eq!(k.deadlines.last(), Some(&Some(abs)), "absolute");
+    assert!(k.futexes.is_empty());
+}
+
+#[test]
+fn futex2_wake_counts_masks_and_kinds() {
+    let mut k = FakeKernel::new();
+    waiting(&mut k, WORD, [1, 2, 3], 0b01);
+    waiting(&mut k, WORD, [4], 0b10);
+    let wake = nr::FUTEX_WAKE;
+    assert_eq!(sys(&mut k, wake, &[WORD, 0, 1, F2_PRIVATE]), Err(Errno::EINVAL), "mask 0");
+    assert_eq!(sys(&mut k, wake, &[0, ANY, 1, 0x3]), Err(Errno::EINVAL), "flags before address");
+    assert_eq!(sys(&mut k, wake, &[WORD, 0b10, 5, F2_PRIVATE]), Ok(1));
+    assert_eq!(sys(&mut k, wake, &[WORD, ANY, 0, F2_PRIVATE]), Ok(0));
+    assert_eq!(sys(&mut k, wake, &[WORD, ANY, (-1i64) as u64, F2_PRIVATE]), Ok(1), "negative wakes one");
+    assert_eq!(woken(&mut k), [1, 4]);
+    assert_eq!(sys(&mut k, wake, &[WORD, ANY, 9, F2_SHARED]), Ok(0), "a shared wake misses private waiters");
+    assert_eq!(sys(&mut k, wake, &[0, ANY, 1, F2_PRIVATE]), Ok(0), "private: not looked up");
+    assert_eq!(sys(&mut k, wake, &[0, ANY, 1, F2_SHARED]), Err(Errno::EFAULT));
+}
+
+#[test]
+fn futex2_numa_node_word() {
+    let mut k = FakeKernel::new();
+    let numa = F2_PRIVATE | FUTEX2_NUMA as u64;
+    k.poke(WORD + 4, &u32::MAX.to_le_bytes());
+    assert_eq!(sys(&mut k, nr::FUTEX_WAKE, &[WORD + 4, ANY, 1, numa]), Err(Errno::EINVAL), "pairs are 8-aligned");
+    assert_eq!(sys(&mut k, nr::FUTEX_WAKE, &[WORD, ANY, 1, numa]), Ok(0));
+    assert_eq!(k.peek_u32(WORD + 4), 0, "-1 became node 0");
+    k.poke(WORD + 4, &4096u32.to_le_bytes());
+    assert_eq!(sys(&mut k, nr::FUTEX_WAKE, &[WORD, ANY, 1, numa]), Err(Errno::EINVAL));
+}
+
+#[test]
+fn futex2_waitv_returns_the_woken_index() {
+    let mut k = FakeKernel::new();
+    k.add_thread(101);
+    k.poke(WORD, &1u32.to_le_bytes());
+    k.poke(WORD2, &2u32.to_le_bytes());
+    let array = waitv(&mut k, &[(1, WORD, 0x82), (2, WORD2, 0x82)]);
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| assert_eq!(sys(k, nr::FUTEX, &[WORD2, op(FUTEX_WAKE), 1]), Ok(1)));
+    });
+    assert_eq!(sys(&mut k, nr::FUTEX_WAITV, &[array, 2, 0, 0, 0]), Ok(1));
+    assert!(k.futexes.is_empty(), "off every futex");
+    assert_eq!(sys(&mut k, nr::FUTEX_WAITV, &[array, 0, 0, 0, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::FUTEX_WAITV, &[array, 129, 0, 0, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::FUTEX_WAITV, &[array, 2, 1, 0, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::FUTEX_WAITV, &[0, 2, 0, 0, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::FUTEX_WAITV, &[UNMAPPED, 2, 0, 0, 0]), Err(Errno::EFAULT));
+    // A bad entry later beats a fault earlier; a fault later beats a
+    // value mismatch earlier.
+    let array = waitv(&mut k, &[(1, UNMAPPED, 0x82), (2, WORD2 + 1, 0x82)]);
+    assert_eq!(sys(&mut k, nr::FUTEX_WAITV, &[array, 2, 0, 0, 0]), Err(Errno::EINVAL));
+    let array = waitv(&mut k, &[(9, WORD, 0x82), (2, UNMAPPED, 0x82)]);
+    assert_eq!(sys(&mut k, nr::FUTEX_WAITV, &[array, 2, 0, 0, 0]), Err(Errno::EFAULT));
+    let array = waitv(&mut k, &[(1, WORD, 0x82), (3, WORD2, 0x82)]);
+    assert_eq!(sys(&mut k, nr::FUTEX_WAITV, &[array, 2, 0, 0, 0]), Err(Errno::EAGAIN));
+}
+
+#[test]
+fn futex2_requeue_moves_and_checks() {
+    let mut k = FakeKernel::new();
+    k.poke(WORD, &5u32.to_le_bytes());
+    waiting(&mut k, WORD, [1, 2, 3, 4], u32::MAX);
+    let req = nr::FUTEX_REQUEUE;
+    let array = waitv(&mut k, &[(5, WORD, 0x82), (0, WORD2, 0x82)]);
+    assert_eq!(sys(&mut k, req, &[array, 1, 1, 1]), Err(Errno::EINVAL), "flags");
+    assert_eq!(sys(&mut k, req, &[array, 0, (-1i64) as u64, 1]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, req, &[0, 0, 1, 1]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, req, &[UNMAPPED, 0, 1, 1]), Err(Errno::EFAULT));
+    let mixed = waitv(&mut k, &[(5, WORD, 0x82), (0, WORD2, 0x02)]);
+    assert_eq!(sys(&mut k, req, &[mixed, 0, 1, 1]), Err(Errno::EINVAL), "kinds differ");
+    let differs = waitv(&mut k, &[(6, WORD, 0x82), (0, WORD2, 0x82)]);
+    assert_eq!(sys(&mut k, req, &[differs, 0, 1, 1]), Err(Errno::EAGAIN));
+    let array = waitv(&mut k, &[(5, WORD, 0x82), (0, WORD2, 0x82)]);
+    assert_eq!(sys(&mut k, req, &[array, 0, 1, 2]), Ok(3));
+    assert_eq!(woken(&mut k), [1]);
+    assert_eq!(k.futexes.waiters(key(WORD)).collect::<Vec<_>>(), [4]);
+    assert_eq!(k.futexes.waiters(key(WORD2)).collect::<Vec<_>>(), [2, 3]);
+    k.poke(WORD2, &5u32.to_le_bytes());
+    let onto_itself = waitv(&mut k, &[(5, WORD2, 0x82), (0, WORD2, 0x82)]);
+    assert_eq!(sys(&mut k, req, &[onto_itself, 0, 0, 9]), Ok(2), "counts sleepers");
+    assert_eq!(k.futexes.waiters(key(WORD2)).collect::<Vec<_>>(), [2, 3]);
 }

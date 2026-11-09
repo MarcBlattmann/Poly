@@ -30,6 +30,9 @@ pub mod cap {
     pub const FOWNER: u32 = 3;
     /// Keep set-user-ID and set-group-ID bits where they would be cleared.
     pub const FSETID: u32 = 4;
+    /// Set and clear the append-only and immutable inode flags
+    /// ([`crate::fileattr`]).
+    pub const LINUX_IMMUTABLE: u32 = 9;
     /// Create device nodes (mknod(2)).
     pub const MKNOD: u32 = 27;
     /// chroot(2).

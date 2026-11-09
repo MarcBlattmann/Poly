@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/process_mrelease     # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  process_mrelease(int pidfd, unsigned int flags) (syscall 448) releases
+  the memory of a process that is being killed (SIGKILL sent, exit not
+  finished) without waiting for its exit, and returns 0. Checks in order:
+  flags != 0 is EINVAL (before anything else, also for a closed or non-
+  pidfd descriptor); a descriptor that is not a pidfd is EBADF; a target
+  whose memory is already gone (it exited and is a zombie, or was reaped)
+  is ESRCH; a target that is alive and not dying (a running or sleeping
+  process, the caller itself) is EINVAL. Right after kill(SIGKILL) the
+  result is 0 if the process still had its memory or ESRCH if its exit
+  had already released it; both are correct and timing decides. Needs no
+  privilege beyond holding the pidfd.
+returns:
+  success: "0"
+errors:
+  flags: "EINVAL (22): flags != 0 (checked first)"
+  fd: "EBADF (9): fd not open, -1, or not a pidfd (/dev/null, a pipe)"
+  alive: "EINVAL (22): target alive and not being killed (also the caller's own pidfd, PIDFD_NONBLOCK pidfds alike)"
+  gone: "ESRCH (3): target has no memory any more (zombie after exit or SIGKILL, reaped)"
+side_effects: "the dying process's anonymous memory is freed early"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds (proportional to the memory freed)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the "just killed" check accepts 0 or ESRCH. A zombie is made
+# deterministic with waitid(WEXITED|WNOWAIT) before the call.

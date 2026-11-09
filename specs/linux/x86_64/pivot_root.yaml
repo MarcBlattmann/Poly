@@ -3,71 +3,43 @@
 id: linux/syscall/x86_64/pivot_root           # must match coverage.json
 oracle:                                       # where the behaviour was observed
   os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
-  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (the unprivileged cases as uid/gid 65534 without capabilities); umask 022; the container has its own uts/ipc/mnt/net/pid/cgroup namespaces and its root is an overlay mount; unprivileged user namespaces allowed; every test makes a mount namespace of its own and makes / MS_REC|MS_PRIVATE first"
-  observed_by: spec-linux-pkg
-  date: 2026-11-06
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities (children dropping to uid/gid 1000); umask 022; every pivot happens in a child after unshare(CLONE_NEWNS) and mount(\"/\", MS_REC|MS_PRIVATE)"
+  observed_by: spec-linux-e
+  date: 2026-11-01
 summary: >
-  pivot_root(new_root, put_old) (syscall 155; both arguments are NUL
-  terminated path names) changes the root mount of the calling process's
-  mount namespace: new_root becomes the root, and the old root mount is
-  moved to put_old, a directory at or below new_root. It is the step that
-  container runtimes (bubblewrap, Flatpak, runc) use after building a new
-  tree in a private mount namespace. It needs CAP_SYS_ADMIN in the user
-  namespace that owns the mount namespace. new_root must be the top
-  directory of a mount (a tmpfs, or a directory bind mounted onto itself)
-  that is not the namespace's current root mount. put_old must be new_root
-  itself or a directory below it, and may itself be a mount point; a put_old
-  that is new_root is allowed and stacks the old root on new_root, hidden by
-  it. The usual sequences work: (1) chdir(new_root); pivot_root(".", ".");
-  umount2(".", MNT_DETACH): the new tree is "/" at once, the old root is
-  stacked under it at the same place and is removed by the detaching umount,
-  after which nothing of the old tree is reachable by name, not even
-  through ".." (".." of "/" is "/"); a second pivot_root(".", ".") is EBUSY.
-  (2) pivot_root(new_root, new_root/old) with an existing directory: the old
-  tree is reachable at /old (for example /old/tmp), umount2("/old",
-  MNT_DETACH) leaves an empty directory that rmdir removes. Process state:
-  the calling process's root and working directory, and those of every
-  other process in the mount namespace, are changed only where they were
-  exactly the top directory of the old root mount: such a root or working
-  directory becomes the top of the new root (getcwd then gives "/", and
-  relative names resolve in the new tree). A working directory below the old
-  root stays in the old tree, which is now below put_old (getcwd gives
-  "/old/tmp" for a former /tmp when put_old is /old); a process that
-  chroot()ed into a directory of the old tree keeps that root and sees the old
-  tree's files, not the new root's. Mounts that were below the old root move
-  with it. Everything is per mount namespace; the effect is not seen outside.
+  pivot_root(new_root, put_old) (syscall 155) changes the root mount of
+  the caller's mount namespace: new_root (a directory that is a mount
+  point, not on the current root mount) becomes the root mount, and the
+  old root mount is moved to put_old (a directory at or below new_root).
+  Every process in the namespace whose root (or cwd) was the old root
+  directory gets new_root instead; so after chdir(new_root) and
+  pivot_root(".", "old") the caller's cwd is "/" (getcwd), the new
+  file system's files are at "/", and the old tree is at /old until it is
+  unmounted (umount2 MNT_DETACH). pivot_root(".", ".") from inside
+  new_root stacks the old root on top of the new one; umount2(".",
+  MNT_DETACH) then leaves just the new root. Requires CAP_SYS_ADMIN. The
+  propagation of the mounts involved must not be shared (tests make "/"
+  recursively private first).
 returns:
   success: "0"
-  stacked: "pivot_root('.', '.') with the cwd in new_root: 0; / is new_root's tree at once; /tmp of the old root is ENOENT (hidden); access('f') and access('/f') both work; umount2('.', MNT_DETACH) = 0 afterwards"
-  put_old_subdir: "0; the old root's /tmp is /old/tmp and its mount point of new_root is /old<path>; cwd '/' (old root top) becomes '/' of the new root"
-  put_old_is_new_root: "0; the old root is hidden below new_root; /tmp is ENOENT, new_root's files are at /"
-  other_processes: "a process with cwd == the old root's top: moved to the new root; cwd /tmp: getcwd '/old/tmp'; chroot('/tmp') process: its / unchanged ('/<base dir name>' still exists, '/old' does not)"
-  rootless: "in a user + mount namespace made by an unprivileged user (mapped to root, setgroups denied, tmpfs mounted there, / MS_PRIVATE): the sequence of (1) works"
+  effects: "getcwd \"/\" after pivot from inside new_root; files of new_root at \"/\"; old root reachable under put_old"
 errors:
-  permission: "EPERM (1): no CAP_SYS_ADMIN (checked first: also when both names do not exist)"
-  busy_root_mount: "EBUSY (16): new_root is on the namespace's root mount (new_root = '/' or any path on it, including '/tmp' when it is not a mount), or put_old is on the root mount (put_old = '/' or '/tmp'), or new_root is already the root mount of the namespace (a second pivot_root('.', '.') after a first)"
-  not_mount_top: "EINVAL (22): new_root is on another mount but is not that mount's top directory (a directory inside a tmpfs)"
-  put_old_elsewhere: "EINVAL (22): put_old is on a mount that is not new_root's mount and not below it (another tmpfs mounted outside new_root), or put_old is on an ancestor of new_root (new_root is a mount below, put_old is in the mount above)"
-  shared: "EINVAL (22): new_root's mount is shared (MS_SHARED), or put_old is a mount point whose mount is shared, or the mount that new_root is attached to is shared (made by / MS_REC|MS_SHARED); the same call works after the mounts are made MS_PRIVATE"
-  missing: "ENOENT (2): new_root or put_old does not exist, or is the empty string"
-  not_directory: "ENOTDIR (20): new_root or put_old is a regular file"
-  bad_pointer: "EFAULT (14): a NULL or invalid name pointer"
-  name_too_long: "ENAMETOOLONG (36): a name over PATH_MAX"
-  order: "EPERM > name lookup errors (ENOENT, ENOTDIR, EFAULT, ENAMETOOLONG) > EBUSY > EINVAL (not a mount top, put_old not below new_root, shared); a failing call changes nothing"
-side_effects: >
-  The namespace's root mount and the root/cwd of its processes change as
-  described. The old root's mounts stay mounted until unmounted (at put_old).
-threading: "root and cwd are per process (shared by threads that share fs state); the mount namespace is shared by all of its processes"
+  perm: "EPERM (1): no CAP_SYS_ADMIN"
+  missing: "ENOENT (2): new_root or put_old does not exist"
+  not_dir: "ENOTDIR (20): new_root or put_old is not a directory"
+  fault: "EFAULT (14): a path unreadable"
+  busy: "EBUSY (16): new_root or put_old is on the current root mount (also \"/\", \"/\"); a second pivot to the already-root mount"
+  invalid: "EINVAL (22): new_root is not a mount point (and not on the root mount); put_old is not at or under new_root; shared propagation on the mounts involved"
+  order: "EPERM, path lookups (EFAULT/ENOENT/ENOTDIR), then mount checks (EBUSY before EINVAL)"
+side_effects: "changes the namespace's root mount and the root/cwd of processes that used the old root"
+threading: "affects all threads and processes sharing the mount namespace"
 ordering: []
 timing:
   typical: "microseconds"
   guarantees: "none"
 tests:
-  visible: 0  # count in <symbol>.tests/
-  held_out: 0  # count kept by the diff runner
-# Notes: MNT_DETACH is 2 (umount2); MS_SHARED 1<<20, MS_PRIVATE 1<<18,
-# MS_REC 0x4000 (linux/mount.h). The tests run the body in a forked child that
-# unshares CLONE_NEWNS and mounts a tmpfs on a private directory below /tmp; the
-# working directory of a test is "/" (the old root's top). The rootless test
-# first drops to uid 65534 (prctl PR_SET_DUMPABLE 1 so /proc/self/uid_map can be
-# written) and needs unprivileged user namespaces; all tests are needs=root.
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the tests need unshare(CLONE_NEWNS) (a private mount namespace in
+# a child) so that nothing outside the test changes; without it a
+# successful pivot_root would replace the root of the whole system.

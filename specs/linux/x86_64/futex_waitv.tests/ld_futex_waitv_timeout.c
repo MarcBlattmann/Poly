@@ -56,10 +56,14 @@ int test_main(void) {
     timed("real_three", CLOCK_REALTIME, 3);
 
     struct a_timespec small = {0, 30000000}, before, after;
+    /* Only the two calls sit between the clock reads; their results are
+     * checked afterwards, so the test's own output is not timed. */
     syscall2(SYS_clock_gettime, CLOCK_MONOTONIC, &before);
-    expect("small_value_is_past", SC5(SYS_futex_waitv, v, 3, 0, &small, CLOCK_MONOTONIC), -ETIMEDOUT);
-    expect("small_value_is_past_realtime", SC5(SYS_futex_waitv, v, 3, 0, &small, CLOCK_REALTIME), -ETIMEDOUT);
+    i64 r_mono = SC5(SYS_futex_waitv, v, 3, 0, &small, CLOCK_MONOTONIC);
+    i64 r_real = SC5(SYS_futex_waitv, v, 3, 0, &small, CLOCK_REALTIME);
     syscall2(SYS_clock_gettime, CLOCK_MONOTONIC, &after);
+    expect("small_value_is_past", r_mono, -ETIMEDOUT);
+    expect("small_value_is_past_realtime", r_real, -ETIMEDOUT);
     check("past_returns_quickly", ns_of(&after) - ns_of(&before) < 25000000L, 0);
 
     word[4] = 31;

@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/DefWindowProcW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  The default handling of window messages. This sheet pins down its results
+  for common messages and what it sends in turn (close, context menu, wheel,
+  position changes).
+interface:
+  signature: "LRESULT DefWindowProcW(HWND hwnd, UINT msg, WPARAM w, LPARAM l)"
+rules:
+  results: "WM_NULL, WM_CREATE, WM_MOVE, WM_SIZE, WM_SHOWWINDOW, WM_PAINT (nothing invalid), WM_GETICON, WM_GETFONT, WM_SETFONT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_LBUTTONDOWN, WM_SETCURSOR, WM_CANCELMODE, WM_USER, WM_APP, 0x7fff, WM_DESTROY: 0; WM_GETTEXTLENGTH: the text length; WM_QUERYENDSESSION: 1; WM_NOTIFYFORMAT: 2 (NFR_UNICODE); WM_MOUSEACTIVATE: 1 (MA_ACTIVATE) for top-level and child; WM_NCHITTEST: HTCLIENT (1) in the client area, HTNOWHERE (0) outside; WM_ERASEBKGND with no class brush: 0"
+  destroy_not: "DefWindowProc(WM_DESTROY) does not destroy"
+  close: "WM_CLOSE: DestroyWindow (WM_DESTROY, WM_NCDESTROY), returns 0"
+  syscommand_close: "WM_SYSCOMMAND SC_CLOSE: sends WM_CLOSE (also for a CS_NOCLOSE class), returns 0"
+  alt_f4: "a sent WM_SYSKEYDOWN VK_F4 with the Alt context bit: nothing more (no WM_SYSCOMMAND)"
+  rbuttonup: "WM_RBUTTONUP sends WM_CONTEXTMENU(wParam = the window, lParam = the point in screen coordinates) to the window; a child's WM_CONTEXTMENU goes on to the parent with wParam = the child; (-1,-1) is passed on unchanged"
+  mousewheel: "a child's WM_MOUSEWHEEL goes on to the parent unchanged"
+  no_parentnotify: "sent mouse messages cause no WM_PARENTNOTIFY"
+  windowposchanged: "WM_WINDOWPOSCHANGED sends WM_MOVE (client origin in screen / parent coordinates) then WM_SIZE(SIZE_RESTORED, client size) from the current rectangle, whatever the WINDOWPOS says (also with SWP_NOMOVE|SWP_NOSIZE)"
+  nccalcsize: "WM_NCCALCSIZE(FALSE, rect): returns 0, the rect becomes the client rect in screen coordinates"
+  getminmaxinfo: "WM_GETMINMAXINFO: leaves the MINMAXINFO as passed (the system fills it before)"
+errors:
+  none: "no error cases observed"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

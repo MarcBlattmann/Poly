@@ -24,13 +24,20 @@ struct Tally {
     weight_green: f64,
 }
 
+/// Whether an entry counts toward the percentages: not app-provided and
+/// not applicable by design.
+pub fn counted(s: Status) -> bool {
+    !matches!(s, Status::AppProvided | Status::BlockedByDesign)
+}
+
 impl Tally {
-    /// App-provided entries are counted but carry no weight: they are not
-    /// ours to build (ADR 0055).
+    /// App-provided entries (not ours to build, ADR 0055) and entries not
+    /// applicable by design (Poly answers them as the reference OS does where
+    /// it lacks them) are counted but carry no weight.
     fn add(&mut self, e: &Entry) {
         self.total += 1;
         *self.by_status.entry(e.status).or_default() += 1;
-        if e.status == Status::AppProvided {
+        if !counted(e.status) {
             return;
         }
         self.weight += e.weight;
@@ -45,7 +52,7 @@ impl Tally {
 
     /// Entries that are ours to build: the percentages' denominator.
     fn ours(&self) -> u64 {
-        self.total - self.count(Status::AppProvided)
+        self.total - self.count(Status::AppProvided) - self.count(Status::BlockedByDesign)
     }
 
     fn raw(&self) -> f64 {
@@ -166,7 +173,7 @@ pub fn render(c: &Coverage, r: &Roadmap) -> String {
             traces.total
         );
     }
-    out.push_str("\n| OS | Layer | Entries | Green | Stub | Claimed | Missing | Blocked | App-provided |\n");
+    out.push_str("\n| OS | Layer | Entries | Green | Stub | Claimed | Missing | N/A by design | App-provided |\n");
     out.push_str("|---|---|---:|---:|---:|---:|---:|---:|---:|\n");
     for os in Os::ALL {
         for layer in [Layer::Syscall, Layer::Api] {
@@ -200,7 +207,9 @@ pub fn render(c: &Coverage, r: &Roadmap) -> String {
     out.push_str(
         "\n*API coverage* is green entries out of the entries that are ours to build: *app-provided* entries \
          (libraries the application or its installer supplies, ADR 0055) are listed under *Entries* but left \
-         out of the percentages. *App-weighted* counts each API by how often the target apps call it; it is \
+         out of the percentages, and so are entries *not applicable by design* (calls the reference OS \
+         itself does not offer on x86-64, or that would replace the running kernel; Poly answers them as \
+         the reference does). *App-weighted* counts each API by how often the target apps call it; it is \
          the number that tracks real progress and appears once the call tracer exists.\n",
     );
     if !c.sources.is_empty() {
@@ -309,6 +318,20 @@ mod tests {
         assert!(section.contains("| Windows | 50.0% | 25.0% |"), "{section}");
         assert!(section.contains("| Windows | user-mode DLL exports | 5 | 1 | 0 | 0 | 1 | 0 | 3 |"), "{section}");
         assert!(section.contains("Windows API coverage: 50.0%"));
+    }
+
+    #[test]
+    fn not_applicable_by_design_is_left_out_of_percentages() {
+        let mut t = Tally::default();
+        for (i, st) in
+            [Status::Green, Status::Missing, Status::BlockedByDesign, Status::BlockedByDesign].into_iter().enumerate()
+        {
+            let mut e = Entry::new(Os::Linux, Layer::Syscall, "x86_64", &format!("s{i}"), "t");
+            e.status = st;
+            t.add(&e);
+        }
+        assert_eq!((t.total, t.ours()), (4, 2));
+        assert_eq!(t.raw(), 50.0);
     }
 
     #[test]

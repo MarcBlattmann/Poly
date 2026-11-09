@@ -51,6 +51,9 @@ impl Errno {
     pub const ERANGE: Errno = Errno(34);
     pub const ENAMETOOLONG: Errno = Errno(36);
     pub const ENOSYS: Errno = Errno(38);
+    /// `ELOOP` (`asm-generic/errno.h`): "Too many symbolic links
+    /// encountered"; also openat2(2)'s refusal to follow a link.
+    pub const ELOOP: Errno = Errno(40);
     /// `ENOMSG` (`asm-generic/errno.h`): "No message of desired type"
     /// (msgrcv(2) with `IPC_NOWAIT`).
     pub const ENOMSG: Errno = Errno(42);
@@ -69,6 +72,9 @@ impl Errno {
     pub const EUSERS: Errno = Errno(87);
     pub const EOPNOTSUPP: Errno = Errno(95);
     pub const ETIMEDOUT: Errno = Errno(110);
+    /// `ESTALE` (`asm-generic/errno.h`): "Stale file handle";
+    /// open_by_handle_at(2) with a handle that names no live file.
+    pub const ESTALE: Errno = Errno(116);
 
     // ---- internal: never returned to user space -----------------------
     //
@@ -171,6 +177,7 @@ impl Errno {
             34 => "ERANGE",
             36 => "ENAMETOOLONG",
             38 => "ENOSYS",
+            40 => "ELOOP",
             42 => "ENOMSG",
             43 => "EIDRM",
             61 => "ENODATA",
@@ -179,6 +186,7 @@ impl Errno {
             87 => "EUSERS",
             95 => "EOPNOTSUPP",
             110 => "ETIMEDOUT",
+            116 => "ESTALE",
             3840 => "RESTART_IF_SA_RESTART",
             3841 => "RESTART_ALWAYS",
             3842 => "RESTART_IF_NO_HANDLER",

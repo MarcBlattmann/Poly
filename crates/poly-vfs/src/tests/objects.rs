@@ -622,6 +622,22 @@ fn wait_now(ep: &Epoll, max: usize) -> Vec<EpollEvent> {
 }
 
 #[test]
+fn epoll_targets_by_number_and_offset() {
+    let env = Env::new();
+    let (ep, _) = epoll_file(&env);
+    let (r, w) = pipe_files(&env, OpenFlags::NONBLOCK, false);
+    let (r2, _w2) = pipe_files(&env, OpenFlags::NONBLOCK, false);
+    ep.ctl(EpollOp::Add, 3, &r, ev(PollEvents::IN, 0, 1)).unwrap();
+    ep.ctl(EpollOp::Add, 3, &r2, ev(PollEvents::IN, 0, 2)).unwrap();
+    ep.ctl(EpollOp::Add, 4, &w, ev(PollEvents::OUT, 0, 3)).unwrap();
+    assert!(Arc::ptr_eq(&ep.target(4, 0).unwrap(), &w));
+    let both = [ep.target(3, 0).unwrap(), ep.target(3, 1).unwrap()];
+    assert!(both.iter().any(|f| Arc::ptr_eq(f, &r)) && both.iter().any(|f| Arc::ptr_eq(f, &r2)));
+    assert!(ep.target(3, 2).is_none());
+    assert!(ep.target(5, 0).is_none());
+}
+
+#[test]
 fn epoll_level_triggered_reports_while_ready() {
     let env = Env::new();
     let (ep, _) = epoll_file(&env);
@@ -731,6 +747,61 @@ fn nested_epoll_sets_pass_readiness_up() {
     assert_eq!(inner_f.poll(), PollEvents::READABLE);
     assert_eq!(wait_now(&outer, 4), vec![EpollEvent { events: PollEvents::IN.bits(), data: 2 }]);
     assert_eq!(wait_now(&inner, 4), vec![EpollEvent { events: PollEvents::IN.bits(), data: 1 }]);
+}
+
+/// The read end of a pipe whose writers are gone, as poll and epoll
+/// report it (poll's and epoll_wait's spec sheets): `POLLHUP` alone when
+/// empty, `POLLIN | POLLHUP` while data remains, whether the last writer
+/// went before the wait or during it.
+#[test]
+fn a_pipe_without_writers_is_hup_and_readable_only_with_data() {
+    let event = |events: PollEvents, data| EpollEvent { events: events.bits(), data };
+    let (hup, in_hup) = (PollEvents::HUP, PollEvents::IN | PollEvents::HUP);
+    for data in [false, true] {
+        let want = if data { in_hup } else { hup };
+        // Gone before the wait.
+        let env = Env::new();
+        let (lt, _) = epoll_file(&env);
+        let (et, _) = epoll_file(&env);
+        let (r, w) = pipe_files(&env, OpenFlags::NONBLOCK, false);
+        lt.ctl(EpollOp::Add, 3, &r, ev(PollEvents::IN, 0, 1)).unwrap();
+        et.ctl(EpollOp::Add, 3, &r, ev(PollEvents::IN, EPOLLET, 2)).unwrap();
+        if data {
+            w.write(b"x").unwrap();
+        }
+        drop(w);
+        let mut entries = vec![PollEntry::new(PollTarget::File(r.clone()), PollEvents::IN)];
+        assert_eq!(poll::poll(&mut entries, &mut TestBlocker::default(), Timeout::Now), Ok(1));
+        assert_eq!(entries[0].revents, want, "poll, data: {data}");
+        assert_eq!(wait_now(&lt, 4), vec![event(want, 1)], "level-triggered, data: {data}");
+        assert_eq!(wait_now(&lt, 4), vec![event(want, 1)], "again while it holds");
+        assert_eq!(wait_now(&et, 4), vec![event(want, 2)], "edge-triggered, data: {data}");
+        assert!(wait_now(&et, 4).is_empty(), "once");
+        if data {
+            r.read(&mut [0u8; 4]).unwrap();
+            assert_eq!(wait_now(&lt, 4), vec![event(hup, 1)], "drained: HUP alone");
+            assert_eq!(r.poll(), hup);
+        }
+
+        // Gone during the wait (data written before it).
+        let (lt, _) = epoll_file(&env);
+        let (et, _) = epoll_file(&env);
+        let (r, w) = pipe_files(&env, OpenFlags::NONBLOCK, false);
+        lt.ctl(EpollOp::Add, 4, &r, ev(PollEvents::IN, 0, 3)).unwrap();
+        et.ctl(EpollOp::Add, 4, &r, ev(PollEvents::IN, EPOLLET, 4)).unwrap();
+        if data {
+            w.write(b"x").unwrap();
+            assert_eq!(wait_now(&lt, 4), vec![event(PollEvents::IN, 3)]);
+            assert_eq!(wait_now(&et, 4), vec![event(PollEvents::IN, 4)]);
+        }
+        let et2 = et.clone();
+        let waiter = thread::spawn(move || et2.wait(4, &mut TestBlocker::default(), Timeout::Never));
+        eventually(|| !et.wait_queue().unwrap().is_empty());
+        drop(w);
+        assert_eq!(waiter.join().unwrap(), Ok(vec![event(want, 4)]), "edge-triggered, data: {data}");
+        assert_eq!(wait_now(&lt, 4), vec![event(want, 3)], "level-triggered, data: {data}");
+        assert_eq!(r.poll() & (PollEvents::IN | PollEvents::ALWAYS), want, "poll, data: {data}");
+    }
 }
 
 #[test]
@@ -928,4 +999,39 @@ fn a_blocking_fifo_open_waits_for_the_other_side() {
     });
     assert_eq!(lone.object_as::<PipeEnd>().unwrap().wait_for_peer(&mut blocker), Err(Errno::EINTR));
     t.join().unwrap();
+}
+
+// ---- readiness that depends on the file's status flags -------------------
+
+/// An object that, like a userfaultfd, reports `POLLERR` through a file
+/// that is not `O_NONBLOCK`.
+struct ErrUnlessNonblock;
+
+impl FileObject for ErrUnlessNonblock {
+    fn read(&self, _buf: &mut [u8]) -> Result<usize> {
+        Err(Errno::EAGAIN)
+    }
+    fn write(&self, _buf: &[u8]) -> Result<usize> {
+        Err(Errno::EINVAL)
+    }
+    fn poll(&self) -> PollEvents {
+        PollEvents::IN
+    }
+    fn poll_as(&self, nonblock: bool) -> PollEvents {
+        if nonblock { self.poll() } else { PollEvents::ERR }
+    }
+    fn wait_queue(&self) -> Option<&Arc<poll::WaitQueue>> {
+        None
+    }
+}
+
+#[test]
+fn poll_sees_the_current_nonblock_flag() {
+    let env = Env::new();
+    let f = object_file(&env, Arc::new(ErrUnlessNonblock), OpenFlags::RDONLY);
+    assert_eq!(f.poll(), PollEvents::ERR, "made blocking");
+    f.set_flags(OpenFlags::NONBLOCK);
+    assert_eq!(f.poll(), PollEvents::IN, "fcntl(F_SETFL, O_NONBLOCK) afterwards");
+    f.set_flags(OpenFlags::RDONLY);
+    assert_eq!(f.poll(), PollEvents::ERR, "and back");
 }

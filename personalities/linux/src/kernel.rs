@@ -142,6 +142,33 @@ pub struct MapHints {
     pub no_reserve: bool,
 }
 
+/// What [`LinuxKernel::mlock`] and [`LinuxKernel::mlockall`] do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MemLock {
+    /// Unlock (munlock(2)).
+    Unlock,
+    /// Lock and bring every page in now.
+    Lock,
+    /// Lock, bringing pages in only as they are touched (`MLOCK_ONFAULT`,
+    /// `MCL_ONFAULT`).
+    LockOnFault,
+}
+
+/// The locked memory of an address space, in bytes
+/// ([`LinuxKernel::locked_memory`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LockedMemory {
+    /// Locked in all (`VmLck`).
+    pub locked: u64,
+    /// Locked in the range asked about.
+    pub in_range: u64,
+    /// Mapped in all (`VmSize`).
+    pub mapped: u64,
+    /// The mlockall(2) `MCL_FUTURE` setting: [`MemLock::Lock`] or
+    /// [`MemLock::LockOnFault`] for new mappings, `None` when off.
+    pub future: Option<MemLock>,
+}
+
 /// A validated `mmap` request. The personality has already checked the
 /// flags, the alignment of `addr` (for fixed placements) and of the file
 /// offset, and rounded `len` up to whole pages.
@@ -563,6 +590,16 @@ pub trait LinuxKernel {
         Err(Errno::ENOSYS)
     }
 
+    /// prctl(2) `PR_SET_VMA_ANON_NAME`: name the regions of `[addr, addr +
+    /// len)` (`addr` page aligned; `len` rounded up to a page) `name`, or
+    /// remove their names (`None`). `ENOMEM` if a page of the range is not
+    /// mapped, `EBADF` if a region of it is not anonymous memory; nothing
+    /// changes then. `ENOSYS` by default.
+    fn name_anon(&mut self, addr: u64, len: u64, name: Option<&[u8]>) -> Result<(), Errno> {
+        let _ = (addr, len, name);
+        Err(Errno::ENOSYS)
+    }
+
     /// madvise(2) on `[addr, addr + len)` (both page aligned, `len`
     /// non-zero, no overflow) with the advice the personality decoded
     /// ([`crate::sys::madvise::Advice`]): apply it to the mapped parts and
@@ -574,13 +611,37 @@ pub trait LinuxKernel {
         Err(Errno::ENOSYS)
     }
 
-    /// mlock(2) (`lock`) or munlock(2) of `[addr, addr + len)` (both page
-    /// aligned, `len` non-zero, no overflow): `ENOMEM` if part of it is not
-    /// mapped, or, to lock, is `PROT_NONE`; locking brings every page in.
-    /// `ENOSYS` by default.
-    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
-        let _ = (addr, len, lock);
+    /// mlock(2), mlock2(2) or munlock(2) of `[addr, addr + len)` (both page
+    /// aligned, `len` non-zero, no overflow): the regions are marked
+    /// locked (or unlocked) up to the first hole, which makes it `ENOMEM`;
+    /// [`MemLock::Lock`] then brings every page in, `ENOMEM` if a region
+    /// is `PROT_NONE` (it stays marked); [`MemLock::LockOnFault`] brings
+    /// nothing in. `ENOSYS` by default.
+    fn mlock(&mut self, addr: u64, len: u64, how: MemLock) -> Result<(), Errno> {
+        let _ = (addr, len, how);
         Err(Errno::ENOSYS)
+    }
+
+    /// mlockall(2): with `current`, mark every region locked (bringing
+    /// its pages in for [`MemLock::Lock`], skipping what cannot come in);
+    /// `future` replaces the "lock new mappings" setting (`None` ends it).
+    /// `ENOSYS` by default.
+    fn mlockall(&mut self, current: Option<MemLock>, future: Option<MemLock>) -> Result<(), Errno> {
+        let _ = (current, future);
+        Err(Errno::ENOSYS)
+    }
+
+    /// munlockall(2): unlock every region and end the "lock new mappings"
+    /// setting. `ENOSYS` by default.
+    fn munlockall(&mut self) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// How much of the address space is locked, and how much of
+    /// `[addr, addr + len)`. All zero by default.
+    fn locked_memory(&self, addr: u64, len: u64) -> LockedMemory {
+        let _ = (addr, len);
+        LockedMemory::default()
     }
 
     /// mincore(2) of `[addr, addr + vec.len() pages)` (`addr` page
@@ -848,6 +909,16 @@ pub trait LinuxKernel {
         Err(Errno::ENOSYS)
     }
 
+    /// execveat(2) before it reads `argv` and `envp`: look up the program
+    /// of `req` (its `argv` and `envp` are empty here) and check it as
+    /// [`execve`](Self::execve) would (`EBADF`, `ENOTDIR`, `ENOENT`,
+    /// `ELOOP`, `EACCES`, `ETXTBSY`), changing nothing. The default:
+    /// nothing to check.
+    fn exec_lookup(&mut self, req: &crate::task::exec::ExecRequest<'_>) -> Result<(), Errno> {
+        let _ = req;
+        Ok(())
+    }
+
     /// Run `f` with the system's process tree locked
     /// ([`crate::task::tree::ProcessTree`]); `f` never blocks and never
     /// calls back into the kernel. The kernel lets go of the records of
@@ -1110,10 +1181,279 @@ pub trait LinuxKernel {
     }
 
     /// The namespace descriptor `fd` refers to (opened from
-    /// `/proc/[pid]/ns/<kind>`): its inode number and kind. `EBADF`,
-    /// `EINVAL` for another file. `EINVAL` by default.
+    /// `/proc/[pid]/ns/<kind>`): its inode number and kind. `EBADF` (also
+    /// for an `O_PATH` descriptor), `EINVAL` for another file. `EINVAL` by
+    /// default.
     fn namespace_of_fd(&mut self, fd: i32) -> Result<(u32, crate::ns::Kind), Errno> {
         let _ = fd;
         Err(Errno::EINVAL)
     }
+
+    // ---- other processes' resources (ADR 0121) -------------------------
+
+    /// kcmp(2): an identity of resource `what` of process `pid` (a global
+    /// thread group id, alive or a zombie): equal identities mean the same
+    /// kernel object, and they order the objects consistently. `EBADF`
+    /// for a descriptor `pid` does not have open; for
+    /// [`KcmpResource::EpollTarget`] also `EINVAL` (not an epoll
+    /// descriptor) and `ENOENT` (no such registration). `ENOSYS` by
+    /// default.
+    fn kcmp_id(&mut self, pid: i32, what: KcmpResource) -> Result<u64, Errno> {
+        let _ = (pid, what);
+        Err(Errno::ENOSYS)
+    }
+
+    /// process_vm_readv(2): copy `buf.len()` bytes from `addr` in the
+    /// memory of process `pid` (a global thread group id; the caller
+    /// itself included), as a read by that process would (unmapped or
+    /// unreadable memory: `EFAULT`, nothing promised about `buf`). The
+    /// personality never asks for a range that crosses a page boundary.
+    /// `EFAULT` by default.
+    fn process_vm_read(&mut self, pid: i32, addr: u64, buf: &mut [u8]) -> Result<(), Errno> {
+        let _ = (pid, addr, buf);
+        Err(Errno::EFAULT)
+    }
+
+    /// process_vm_writev(2): copy `data` to `addr` in the memory of
+    /// process `pid`, as a write by that process would (no forced write
+    /// to read-only memory: `EFAULT`); see
+    /// [`process_vm_read`](Self::process_vm_read). `EFAULT` by default.
+    fn process_vm_write(&mut self, pid: i32, addr: u64, data: &[u8]) -> Result<(), Errno> {
+        let _ = (pid, addr, data);
+        Err(Errno::EFAULT)
+    }
+
+    /// ptrace(2) `PTRACE_PEEKTEXT` / `PEEKDATA`: read the memory of
+    /// process `pid` (`EIO` where it is not mapped or not readable).
+    fn ptrace_peek(&mut self, pid: i32, addr: u64, buf: &mut [u8]) -> Result<(), Errno> {
+        self.process_vm_read(pid, addr, buf).map_err(|_| Errno::EIO)
+    }
+
+    /// ptrace(2) `PTRACE_POKETEXT` / `POKEDATA`: write the memory of
+    /// process `pid`, also where it is mapped read-only and private (the
+    /// page becomes the process's own copy); `EIO` where it is not mapped.
+    fn ptrace_poke(&mut self, pid: i32, addr: u64, data: &[u8]) -> Result<(), Errno> {
+        self.process_vm_write(pid, addr, data).map_err(|_| Errno::EIO)
+    }
+
+    /// The number of CPUs (perf_event_open(2) `cpu` must be below it).
+    fn cpu_count(&self) -> u32 {
+        1
+    }
+
+    /// What a perf_event_open(2) counter of process `pid` (global; 0: the
+    /// caller's) counts from. `ESRCH` if there is none.
+    fn perf_source(&mut self, pid: i32) -> Result<alloc::sync::Arc<dyn crate::perf::PerfSource>, Errno> {
+        let _ = pid;
+        Err(Errno::ENOENT)
+    }
+
+    /// A new descriptor (`anon_inode:[perf_event]`, read-write) on
+    /// `counter`, with `FD_CLOEXEC` if `cloexec`.
+    fn perf_install(&mut self, counter: alloc::sync::Arc<crate::perf::Counter>, cloexec: bool) -> Result<i32, Errno> {
+        let _ = (counter, cloexec);
+        Err(Errno::ENODEV)
+    }
+
+    /// The counter behind descriptor `fd` (`None` if it is no perf event;
+    /// `EBADF` if it is not open).
+    fn perf_counter(&mut self, fd: i32) -> Result<Option<alloc::sync::Arc<crate::perf::Counter>>, Errno> {
+        let _ = fd;
+        Ok(None)
+    }
+
+    /// acct(2): open `path` for appending accounting records (the file is
+    /// known to exist and be a regular file).
+    fn acct_open(&mut self, path: &[u8]) -> Result<alloc::sync::Arc<dyn crate::acct::Sink>, Errno> {
+        let _ = path;
+        Err(Errno::ENOSYS)
+    }
+
+    /// vhangup(2): the controlling terminal of session `sid` is hung up
+    /// (SIGHUP to its session leader and foreground group, the session
+    /// loses it, descriptors opened on it so far are dead). Nothing without
+    /// terminals.
+    fn hangup_terminal(&mut self, sid: i32) {
+        let _ = sid;
+    }
+
+    /// A new descriptor (`anon_inode:bpf-map` or `bpf-prog`, read-write)
+    /// on a bpf(2) object, with `FD_CLOEXEC` if `cloexec`.
+    fn bpf_install(&mut self, object: crate::bpf::Object, cloexec: bool) -> Result<i32, Errno> {
+        let _ = (object, cloexec);
+        Err(Errno::ENOSYS)
+    }
+
+    /// The bpf(2) object behind descriptor `fd` (`None` if it is no map
+    /// or program; `EBADF` if it is not open).
+    fn bpf_object(&mut self, fd: i32) -> Result<Option<crate::bpf::Object>, Errno> {
+        let _ = fd;
+        Err(Errno::EBADF)
+    }
+
+    /// The calling thread's process is ending (a group exit or a kill is
+    /// under way): a thread waiting in a ptrace-stop must go.
+    fn exiting(&self) -> bool {
+        false
+    }
+
+    /// pidfd_getfd(2): put the open file description behind descriptor
+    /// `fd` of process `pid` on the caller's lowest free descriptor, with
+    /// `FD_CLOEXEC`; returns it. `EBADF` if `pid` has no such descriptor,
+    /// `EMFILE` past the caller's `RLIMIT_NOFILE`. `EBADF` by default.
+    fn take_fd(&mut self, pid: i32, fd: i32) -> Result<i32, Errno> {
+        let _ = (pid, fd);
+        Err(Errno::EBADF)
+    }
+
+    /// Whether the calling thread's memory has other users (other threads,
+    /// or processes made with `CLONE_VM`): unshare(2) `CLONE_VM` is then
+    /// `EINVAL`. By default, whether the process has other threads.
+    fn memory_shared(&mut self) -> bool {
+        let mut threads = 0;
+        let _ = self.with_process(Target::Current, &mut |p, _| threads = p.thread_ids().count());
+        threads > 1
+    }
+
+    /// seccomp(2) `SECCOMP_FILTER_FLAG_NEW_LISTENER`: a new notification
+    /// descriptor on the lowest free number, open `O_RDWR`, close-on-exec,
+    /// an anonymous inode named `seccomp notify`. `ENOSYS` by default.
+    fn seccomp_listener(&mut self) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// mseal(2): seal the page-aligned, non-empty range `[addr, addr +
+    /// len)` (`ENOMEM` if part of it is unmapped, nothing sealed then).
+    fn mseal(&mut self, _addr: u64, _len: u64) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// memfd_secret(2): a new secret memory file
+    /// ([`crate::sys::secretmem`]); returns its descriptor.
+    fn memfd_secret(&mut self, _cloexec: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// cachestat(2): how many of the pages `[first, end)` of the file
+    /// behind `fd` hold data (`end` may be `u64::MAX`: to the end of the
+    /// file); 0 for descriptors without pages of their own. `EBADF` for a
+    /// descriptor that is not open or is `O_PATH`.
+    fn cachestat(&mut self, _fd: i32, _first: u64, _end: u64) -> Result<u64, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// userfaultfd(2): a new userfaultfd object for the caller's memory
+    /// ([`crate::sys::userfaultfd`]); returns its descriptor.
+    /// `user_mode_only`: made with `UFFD_USER_MODE_ONLY`.
+    fn userfaultfd(&mut self, _nonblock: bool, _cloexec: bool, _user_mode_only: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// Carry out `op` on the userfaultfd object behind `fd`; `None` if
+    /// `fd` is not one.
+    fn userfaultfd_op(
+        &mut self,
+        _fd: i32,
+        _op: crate::sys::userfaultfd::UffdOp<'_>,
+    ) -> Option<Result<crate::sys::userfaultfd::UffdReply, Errno>> {
+        None
+    }
+
+    /// io_uring's kernel services ([`crate::uring`]); `None` (the calls
+    /// fail with `ENOSYS`) by default.
+    fn uring(&mut self) -> Option<&mut dyn crate::uring::UringKernel> {
+        None
+    }
+
+    // ---- NUMA, page queries and the clock discipline (sys::numa,
+    // sys::procmem, sys::timex) ------------------------------------------
+
+    /// The mapped parts of `[start, end)` in the memory of process `pid`
+    /// (a global thread group id, the caller's own included), in address
+    /// order, one entry per region. `ESRCH` if the process has no memory
+    /// any more (it has ended or is ending). `ENOSYS` by default.
+    fn memory_regions(&mut self, pid: i32, start: u64, end: u64) -> Result<Vec<MemRegion>, Errno> {
+        let _ = (pid, start, end);
+        Err(Errno::ENOSYS)
+    }
+
+    /// What is at the page holding `addr` in the memory of process `pid`
+    /// (as [`memory_regions`](Self::memory_regions)); nothing is brought
+    /// in. `ENOSYS` by default.
+    fn page_query(&mut self, pid: i32, addr: u64) -> Result<PageQuery, Errno> {
+        let _ = (pid, addr);
+        Err(Errno::ENOSYS)
+    }
+
+    /// remap_file_pages(2): make `[start, start + len)` (page aligned,
+    /// inside shared regions of one object, as the personality checked)
+    /// show the object of the region at `start` from byte `offset` on,
+    /// with that region's protection. `ENOSYS` by default.
+    fn remap_shared(&mut self, start: u64, len: u64, offset: u64) -> Result<(), Errno> {
+        let _ = (start, len, offset);
+        Err(Errno::ENOSYS)
+    }
+
+    /// adjtimex(2): the system's clock discipline. By default the state
+    /// of a clock no time daemon synchronises
+    /// ([`Ntp::default`](crate::sys::timex::Ntp)).
+    fn ntp(&self) -> crate::sys::timex::Ntp {
+        crate::sys::timex::Ntp::default()
+    }
+
+    /// Store the system's clock discipline. Ignored by default.
+    fn set_ntp(&mut self, ntp: &crate::sys::timex::Ntp) {
+        let _ = ntp;
+    }
+}
+
+/// A mapped range of an address space ([`LinuxKernel::memory_regions`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MemRegion {
+    pub start: u64,
+    pub end: u64,
+    pub prot: Prot,
+    /// `MAP_SHARED` (shared anonymous memory too).
+    pub shared: bool,
+    /// What backs it: 0 for private anonymous memory, else an identity of
+    /// the file or memory object, equal for regions of the same one.
+    pub object: u64,
+}
+
+/// What is at one page of an address space ([`LinuxKernel::page_query`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageQuery {
+    /// Nothing is mapped there.
+    Unmapped,
+    /// Mapped, but no page has been brought in.
+    Absent,
+    /// Private anonymous memory that was only read: it reads as zeros and
+    /// has no page of its own yet (move_pages(2) reports it like an
+    /// unmapped address).
+    Zero,
+    /// A page of memory, on NUMA node 0 (the only node).
+    Present,
+}
+
+/// A resource kcmp(2) compares ([`LinuxKernel::kcmp_id`]); the types of
+/// `linux/kcmp.h`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KcmpResource {
+    /// `KCMP_FILE`: the open file description behind a descriptor.
+    File(i32),
+    /// `KCMP_VM`: the address space.
+    Vm,
+    /// `KCMP_FILES`: the descriptor table.
+    Files,
+    /// `KCMP_FS`: root and working directory, umask.
+    Fs,
+    /// `KCMP_SIGHAND`: the signal dispositions.
+    Sighand,
+    /// `KCMP_IO`: the I/O context.
+    Io,
+    /// `KCMP_SYSVSEM`: the System V semaphore undo list.
+    SysvSem,
+    /// `KCMP_EPOLL_TFD`: the file registered as descriptor `tfd` (the
+    /// `toff`-th registration with that number) in epoll descriptor `efd`.
+    EpollTarget { efd: i32, tfd: i32, toff: u32 },
 }

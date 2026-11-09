@@ -206,6 +206,20 @@ pub struct Mapping {
     pub prot: Prot,
     /// Whether the space owns (and will free) the frame.
     pub owned: bool,
+    /// Whether the page was written through this mapping (the entry's
+    /// dirty bit, which changing the page's rights keeps).
+    pub dirty: bool,
+}
+
+impl Mapping {
+    fn of(t: &poly_paging::Translation) -> Mapping {
+        Mapping {
+            phys: t.phys,
+            prot: Prot::of(t.flags),
+            owned: t.flags.contains(OWNED),
+            dirty: t.flags.contains(PageFlags::DIRTY),
+        }
+    }
 }
 
 /// Whether CR4.PCIDE is set.
@@ -486,7 +500,7 @@ impl AddressSpace {
         let (start, end) = (start.max(USER_START), end.min(USER_END));
         let tables = self.tables.lock();
         tables.mapped(start, end, |virt, t| {
-            out.push((virt, Mapping { phys: t.phys, prot: Prot::of(t.flags), owned: t.flags.contains(OWNED) }));
+            out.push((virt, Mapping::of(&t)));
         });
         out
     }
@@ -548,13 +562,16 @@ impl AddressSpace {
     }
 
     /// Unmap every page of `[virt, virt + len)` that is mapped (holes are
-    /// skipped), free the frames the space owns and the page tables that
-    /// became empty.
+    /// skipped, found by walking only the page tables that exist, so a
+    /// terabyte reservation with a few pages in it is cheap), free the
+    /// frames the space owns and the page tables that became empty.
     pub fn unmap(&self, virt: u64, len: u64) -> Result<(), MapError> {
         let end = check_range(virt, len)?;
         let mut tables = self.tables.lock();
         let mut reclaim = Reclaim::new();
-        for page in (virt..end).step_by(PAGE_SIZE as usize) {
+        let mut pages = alloc::vec::Vec::new();
+        tables.mapped(virt, end, |page, _| pages.push(page));
+        for page in pages {
             self.unmap_page(&mut tables, &mut reclaim, page);
         }
         reclaim.finish(self);
@@ -572,8 +589,9 @@ impl AddressSpace {
         }
         let mut flush = Flush::None;
         for page in (virt..end).step_by(PAGE_SIZE as usize) {
-            let owned = tables.translate(page).expect("checked above").flags & OWNED;
-            tables.update_flags(page, flags | owned).expect("checked above");
+            // Ownership and whether the page was written stay.
+            let kept = tables.translate(page).expect("checked above").flags & (OWNED | PageFlags::DIRTY);
+            tables.update_flags(page, flags | kept).expect("checked above");
             flush.add_page(page);
         }
         self.sync_tlb(flush);
@@ -586,7 +604,7 @@ impl AddressSpace {
             return None;
         }
         let t = self.tables.lock().translate(virt).ok()?;
-        Some(Mapping { phys: t.phys, prot: Prot::of(t.flags), owned: t.flags.contains(OWNED) })
+        Some(Mapping::of(&t))
     }
 
     /// Copy `data` to the user address `virt` of this space, through the
@@ -816,10 +834,9 @@ fn check_range(virt: u64, len: u64) -> Result<u64, MapError> {
 /// Fail with [`MapError::AlreadyMapped`] if any page of `[virt, end)` is
 /// mapped.
 fn free_slots(tables: &PageTables<KernelPhysMemory>, virt: u64, end: u64) -> Result<(), MapError> {
-    match (virt..end).step_by(PAGE_SIZE as usize).any(|page| tables.translate(page).is_ok()) {
-        true => Err(MapError::AlreadyMapped),
-        false => Ok(()),
-    }
+    let mut any = false;
+    tables.mapped(virt, end, |_, _| any = true);
+    if any { Err(MapError::AlreadyMapped) } else { Ok(()) }
 }
 
 /// Call `f(kernel, n, offset)` for each piece of the user range

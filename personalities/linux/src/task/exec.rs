@@ -49,15 +49,58 @@ pub const ELOOP: Errno = match Errno::new(40) {
     None => panic!("40 is a valid errno"),
 };
 
-/// What execve(2) asks of the kernel: run `path` (relative to `dirfd`'s
-/// directory or the working directory for `AT_FDCWD`) with `argv` and
-/// `envp`, already read from user memory.
+/// What execve(2) and execveat(2) ask of the kernel: run `path`
+/// (relative to `dirfd`'s directory or the working directory for
+/// `AT_FDCWD`; empty: the file `dirfd` is open on, execveat's
+/// `AT_EMPTY_PATH`) with `argv` and `envp`, already read from user memory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ExecRequest<'a> {
     pub dirfd: i32,
     pub path: &'a [u8],
     pub argv: &'a [Vec<u8>],
     pub envp: &'a [Vec<u8>],
+    /// Follow a final symbolic link (execveat without
+    /// `AT_SYMLINK_NOFOLLOW`; a link is `ELOOP` otherwise).
+    pub follow: bool,
+    /// The name the new image is known by: its `AT_EXECFN`, and the path
+    /// a script's interpreter gets ([`exec_name`]).
+    pub name: &'a [u8],
+    /// Whether an interpreter could open a script by [`name`](Self::name):
+    /// not when the descriptor it goes through has `FD_CLOEXEC`
+    /// (execveat's spec sheet), and a script is then `ENOENT`.
+    pub script_reachable: bool,
+}
+
+impl<'a> ExecRequest<'a> {
+    /// execve(2): `path` from the working directory, known by that name.
+    pub fn new(path: &'a [u8], argv: &'a [Vec<u8>], envp: &'a [Vec<u8>]) -> ExecRequest<'a> {
+        ExecRequest {
+            dirfd: crate::fs::at::AT_FDCWD,
+            path,
+            argv,
+            envp,
+            follow: true,
+            name: path,
+            script_reachable: true,
+        }
+    }
+}
+
+/// The name execveat(2) records for the program `path` from `dirfd`
+/// (execveat's spec sheet): the path itself when it is absolute or
+/// `dirfd` is `AT_FDCWD`, `/dev/fd/<dirfd>` for an empty path
+/// (`AT_EMPTY_PATH`), else `/dev/fd/<dirfd>/<path>`. Only a string:
+/// nothing needs to exist at `/dev/fd`.
+pub fn exec_name(dirfd: i32, path: &[u8]) -> Vec<u8> {
+    if path.first() == Some(&b'/') || dirfd == crate::fs::at::AT_FDCWD {
+        return path.to_vec();
+    }
+    let mut name = alloc::format!("/dev/fd/{dirfd}").into_bytes();
+    if !path.is_empty() {
+        name.push(b'/');
+        name.extend_from_slice(path);
+    }
+    name
 }
 
 /// Read the path argument: `ENAMETOOLONG` past `PATH_MAX`, `ENOENT` if
@@ -163,6 +206,15 @@ mod tests {
         long.extend(core::iter::repeat_n(b'a', 400));
         let s = parse_shebang(&long).unwrap().unwrap();
         assert_eq!(s.arg.unwrap().len(), SHEBANG_MAX - 9, "the line is cut");
+    }
+
+    #[test]
+    fn execveat_names() {
+        assert_eq!(exec_name(3, b"script"), b"/dev/fd/3/script");
+        assert_eq!(exec_name(3, b""), b"/dev/fd/3");
+        assert_eq!(exec_name(12, b"a/b"), b"/dev/fd/12/a/b");
+        assert_eq!(exec_name(3, b"/bin/sh"), b"/bin/sh", "absolute: dirfd ignored");
+        assert_eq!(exec_name(crate::fs::at::AT_FDCWD, b"prog"), b"prog");
     }
 
     #[test]

@@ -1,0 +1,112 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/keyctl               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; every test first joins an anonymous session keyring of its own"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  keyctl(operation, arg2, arg3, arg4, arg5) (syscall 250) manipulates keys
+  and keyrings (see add_key.yaml for key types, special keyring ids and
+  default permissions). An unknown operation is EOPNOTSUPP. Key id 0 is
+  EINVAL where a key is expected; a serial that names no key is ENOKEY.
+  Possession: a key is possessed when it can be found by searching from
+  the caller's thread, process and session keyrings, which needs SEARCH
+  permission on the key and the keyrings on the way; the possessor byte of
+  the permissions then adds to the owner's. READ of a possessed key works
+  without the READ bit; a key with possessor VIEW but no SEARCH is not
+  possessed (owner byte 01 = VIEW only by default: DESCRIBE by the owner
+  works, READ does not).
+  Operations (linux/keyctl.h numbers):
+  GET_KEYRING_ID (0, id, create): resolves a special id to a serial;
+  thread/process keyrings give ENOKEY unless create != 0; group (-6) and
+  ids below -8 EINVAL; -7/-8 ENOKEY outside a request-key upcall; an
+  ordinary key id gives itself.
+  JOIN_SESSION_KEYRING (1, name): NULL makes a new anonymous keyring
+  "_ses" (perm 3f030000) and makes it the session keyring, every call a
+  new one; a name makes or joins the keyring of that name (perm 3f130000);
+  "" EINVAL, '.' prefix EPERM, unreadable EFAULT; returns the serial.
+  UPDATE (2, id, payload, plen): user/logon replace the payload (empty
+  EINVAL, unreadable EFAULT, payload kept on failure); keyrings
+  EOPNOTSUPP; needs WRITE.
+  REVOKE (3, id): later READ, DESCRIBE, UPDATE, REVOKE, SETPERM,
+  GET_KEYRING_ID and SEARCH say EKEYREVOKED (the key stays until the
+  garbage collector removes it after gc_delay); needs WRITE or SETATTR.
+  CHOWN (4, id, uid, gid): -1 means unchanged; (-1, -1) succeeds always;
+  a real change needs SETATTR (EACCES) and, for another uid, CAP_SYS_ADMIN.
+  SETPERM (5, id, perm): four bytes of VIEW 01 READ 02 WRITE 04 SEARCH 08
+  LINK 10 SETATTR 20; other bits EINVAL; needs SETATTR (EACCES).
+  DESCRIBE (6, id, buf, buflen) and READ (11, id, buf, buflen): return
+  the full length (DESCRIBE: "type;uid;gid;perm;description" with NUL;
+  READ: the payload; a keyring's READ: its keys' serials as 32-bit numbers
+  in the keyring's own order, not link order); a NULL buffer or buflen
+  smaller than the length writes nothing; unwritable buffer EFAULT; READ of
+  logon keys EOPNOTSUPP.
+  CLEAR (7, keyring): unlinks everything; a non-keyring ENOTDIR.
+  LINK (8, key, keyring): appends a link (linking again changes nothing);
+  target not a keyring ENOTDIR; a keyring into itself or a cycle EDEADLK;
+  needs LINK on the key and WRITE on the keyring.
+  UNLINK (9, key, keyring): ENOENT if not linked there; ENOTDIR for a
+  non-keyring.
+  SEARCH (10, keyring, type, description, dest): recursive search below
+  the keyring (not its parents); returns the serial and links the key into
+  dest if dest != 0; miss, other type, unknown type or empty description
+  ENOKEY; empty type EINVAL; start or dest not a keyring ENOTDIR;
+  unreadable strings EFAULT; a revoked match EKEYREVOKED, an expired one
+  EKEYEXPIRED.
+  INSTANTIATE (12), NEGATE (13), REJECT (19), INSTANTIATE_IOV (20): EPERM
+  without the authority of a request-key upcall.
+  SET_REQKEY_KEYRING (14, which): returns the previous default (0 at
+  start); -1 only reports it; 0..7 set it; others EINVAL.
+  SET_TIMEOUT (15, id, seconds): the key expires that many seconds later
+  (wall-clock seconds), 0 removes the expiry; expired keys give
+  EKEYEXPIRED to READ, DESCRIBE, SEARCH, UPDATE, SET_TIMEOUT, REVOKE and
+  INVALIDATE, and request_key skips them.
+  ASSUME_AUTHORITY (16, id): 0 drops authority (0), negative EINVAL, an
+  ordinary key ENOKEY.
+  INVALIDATE (21, id): the key becomes unusable at once and is unlinked
+  from all keyrings soon after by the garbage collector; DESCRIBE by the
+  owner then says ENOKEY.
+  GET_PERSISTENT (22): EOPNOTSUPP on the oracle (kernel without persistent
+  keyrings); Poly behaves the same.
+  MOVE (30, key, from, to, flags): relinks; ENOENT if not in from; with
+  KEYCTL_MOVE_EXCL (1) EEXIST if to already holds it (without, the move
+  just drops the from link); other flags EINVAL; to not a keyring ENOTDIR.
+returns:
+  success: "0, or a serial (GET_KEYRING_ID, JOIN, SEARCH), or a length (DESCRIBE, READ), or the previous default (SET_REQKEY_KEYRING)"
+errors:
+  unknown_op: "EOPNOTSUPP (95): unknown operation (9999, -1); GET_PERSISTENT; UPDATE of a keyring; READ of a logon key"
+  no_key: "ENOKEY (126): no such key (also invalidated); thread/process keyring without create"
+  id_zero: "EINVAL (22): key id 0"
+  revoked: "EKEYREVOKED (128): key revoked"
+  expired: "EKEYEXPIRED (127): key expired"
+  permission: "EACCES (13): permission missing (see summary)"
+  no_authority: "EPERM (1): INSTANTIATE, NEGATE, REJECT, INSTANTIATE_IOV outside an upcall; JOIN with a '.' name"
+  not_keyring: "ENOTDIR (20): keyring argument is not a keyring"
+  cycle: "EDEADLK (35): LINK would create a cycle"
+  not_linked: "ENOENT (2): UNLINK or MOVE of a key that is not in the keyring"
+  exists: "EEXIST (17): MOVE with KEYCTL_MOVE_EXCL onto a keyring that holds the key"
+  fault: "EFAULT (14): unreadable or unwritable user memory"
+  invalid: "EINVAL (22): bad permission bits, bad MOVE flags, SET_REQKEY_KEYRING > 7, empty payload, empty name or type"
+side_effects: "changes keys and keyrings as described"
+threading: "keys are shared kernel objects; the thread keyring is per thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "SET_TIMEOUT n: the key is still valid right after the call and expired n seconds plus at most one second later (wall clock, whole seconds)"
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes:
+# - Tests avoid SESSION_TO_PARENT (changes the parent's keyrings: the
+#   tracer on the reference), CAPABILITIES and GET_SECURITY (depend on the
+#   kernel's configuration and active LSMs; on the oracle CAPABILITIES
+#   returns 2 bytes).
+# - Garbage collection is asynchronous: after INVALIDATE or after the last
+#   link goes, a key may disappear from keyrings at any moment. Checks
+#   whose result would depend on that race are left out (READ of an
+#   invalidated key gives ENOKEY, or EACCES once it is unlinked and no
+#   longer possessed).
+# - Oracle sysctls: kernel.keys.gc_delay 300, maxkeys 10000, maxbytes
+#   700000, root_maxkeys 1000000, root_maxbytes 25000000.

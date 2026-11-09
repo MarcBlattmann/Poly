@@ -218,6 +218,37 @@ pub unsafe extern "system" fn InternetOpenUrlW(
     }))
 }
 
+// ----- URL_COMPONENTS: InternetCrackUrlW and InternetCreateUrlW
+
+pub use poly_win32_inet::UrlComponents;
+
+/// `InternetCrackUrlW`: `URL_COMPONENTS` filled from `url` (the same
+/// shared code as `WinHttpCrackUrl`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn InternetCrackUrlW(
+    url: *const u16,
+    len: u32,
+    flags: u32,
+    components: *mut UrlComponents,
+) -> i32 {
+    // SAFETY: the caller's URL and structure.
+    ret(unsafe { inet::crack_url(url, len, flags, components) })
+}
+
+/// `InternetCreateUrlW`: a URL from `URL_COMPONENTS`; a buffer too small
+/// (or none) is `ERROR_INSUFFICIENT_BUFFER` with the characters needed,
+/// the terminator included.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn InternetCreateUrlW(
+    components: *const UrlComponents,
+    flags: u32,
+    out: *mut u16,
+    len: *mut u32,
+) -> i32 {
+    // SAFETY: the caller's structure, buffer and length.
+    ret(unsafe { inet::create_url(components, flags, out, len) })
+}
+
 /// `InternetReadFile`: body bytes (`*read` 0 at the end).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InternetReadFile(req: Handle, buf: *mut u8, n: u32, read: *mut u32) -> i32 {

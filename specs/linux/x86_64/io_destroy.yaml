@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_destroy           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 32 CPUs; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; /tmp on overlayfs"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  io_destroy(ctx_id) (syscall 207) removes an AIO context of the calling
+  process. Pending operations (polls) are cancelled, completed but unreaped
+  events are discarded, the call waits until in-flight I/O has finished,
+  then the ring mapping is removed from the address space (the ring
+  address is unmapped afterwards) and the id becomes invalid. The context
+  also goes away when its ring is unmapped (munmap) or the process's
+  address space ends (exit, execve).
+returns:
+  success: "0"
+errors:
+  bad_ctx: "EINVAL (22): ctx_id is not a live context of this process: 0, a random number, an ordinary mapped page, an already destroyed context, one whose ring was unmapped, or the parent's context in a forked child"
+  fault: "EFAULT (14) is listed by the man page for a bad ctx_id address; Linux 6.18 says EINVAL for every bad id observed"
+side_effects: >
+  Unmaps the ring (msync on its address then says ENOMEM). Later
+  io_submit/io_getevents/io_cancel/io_destroy with the id fail with
+  EINVAL. Files used by pending operations are unaffected (a pipe that had
+  a pending poll works as before). Other contexts are unaffected.
+threading: "a thread blocked in io_getevents on the context is woken"
+ordering:
+  - "returns only after the context's operations are finished or cancelled"
+timing:
+  typical: "microseconds when nothing is in flight"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

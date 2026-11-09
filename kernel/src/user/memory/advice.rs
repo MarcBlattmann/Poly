@@ -41,14 +41,19 @@ pub enum AdviceError {
     WrongKind,
     /// The advice is valid for the range but Poly cannot carry it out.
     Unsupported,
+    /// The advice would discard sealed memory (mseal(2)): private
+    /// anonymous memory without write permission. Nothing changes.
+    Sealed,
 }
 
 impl AdviceError {
     /// The Linux errno (madvise(2) ERRORS; values from
     /// `asm-generic/errno-base.h` and `asm-generic/errno.h`): `ENOMEM`
-    /// (12), `EINVAL` (22), `EOPNOTSUPP` (95).
+    /// (12), `EINVAL` (22), `EOPNOTSUPP` (95), and `EPERM` (1) for sealed
+    /// memory (mseal(2)).
     pub const fn linux_errno(self) -> u16 {
         match self {
+            AdviceError::Sealed => 1,
             AdviceError::NotMapped => 12,
             AdviceError::WrongKind => 22,
             AdviceError::Unsupported => 95,
@@ -76,6 +81,13 @@ impl Memory {
             })
             .collect();
         let anonymous = |v: &Vma<super::FileRef>| matches!(v.backing, Backing::Anonymous);
+        let discards = matches!(
+            advice,
+            Advice::Discard | Advice::DiscardAnonymous | Advice::FreeBacking | Advice::WipeOnFork(true)
+        );
+        if discards && inner.map.discard_refused(addr, end) {
+            return Err(AdviceError::Sealed);
+        }
         if let Advice::WipeOnFork(on) = advice {
             return match inner.map.set_wipe_on_fork(addr, len, on) {
                 Ok(()) => Ok(()),

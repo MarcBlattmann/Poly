@@ -1,0 +1,61 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/SetTimer
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  Starts a timer that makes WM_TIMER messages when the queue is read after
+  it falls due. Window timers are named by the caller's id; thread timers
+  (hwnd NULL) get a system-chosen id.
+interface:
+  signature: "UINT_PTR SetTimer(HWND hwnd, UINT_PTR id, UINT elapse_ms, TIMERPROC func)"
+rules:
+  window_timer: "returns the caller's id (42 -> 42; id 0 -> 1 observed); WM_TIMER has hwnd = the window, wParam = id, lParam = 0 (no callback)"
+  not_immediate: "no WM_TIMER right after SetTimer"
+  coalesced: "however long nobody reads, one WM_TIMER per timer waits"
+  repeat: "it comes again after each period"
+  replace: "SetTimer with the same window and id replaces the period"
+  thread_timer: "hwnd NULL: nonzero id (not the caller's), distinct per timer; WM_TIMER with hwnd NULL"
+  callback: "with a TIMERPROC: WM_TIMER's lParam is the callback; DispatchMessageW calls it with (hwnd, WM_TIMER, id, a recent tick count); the window procedure sees nothing; thread timers too"
+  minimum: "a 0 ms timer fires repeatedly, at most about every 10 ms"
+  self_kill: "a callback that kills its own timer is called once"
+  priority: "posted messages, also ones posted after it fell due, come before WM_TIMER"
+  queue_status: "QS_TIMER is set once it is due"
+  destroyed_window: "no WM_TIMER after its window is destroyed"
+errors:
+  bad_window: "0, ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "WM_TIMER within a few tens of ms after the period on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

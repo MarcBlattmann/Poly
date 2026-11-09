@@ -1,11 +1,13 @@
-//! The contract between the shared kernel core and the three personalities.
+//! The contract between the shared kernel core and the personalities: the
+//! three guest worlds and Poly's own native interface (ADR 0125).
 //!
-//! All three worlds enter the kernel through the same x86-64 `syscall`
+//! All of them enter the kernel through the same x86-64 `syscall`
 //! instruction. The core saves the registers into a [`SyscallRegs`], looks up
 //! the calling process's [`Personality`] tag and hands the registers to that
 //! personality's dispatcher. Each personality reads arguments and writes its
 //! result using its own conventions (Linux: `-errno` in `rax`; NT: an
-//! `NTSTATUS`; XNU: carry flag + `errno`, or a `kern_return_t` for Mach traps).
+//! `NTSTATUS`; XNU: carry flag + `errno`, or a `kern_return_t` for Mach traps;
+//! native: a negative Poly error code in `rax`).
 
 #![no_std]
 
@@ -16,16 +18,20 @@ pub enum Personality {
     Linux,
     Nt,
     Xnu,
+    /// Poly's own system call interface: native programs such as the
+    /// desktop (ADR 0124, ADR 0125), recognised by their ELF note.
+    Native,
 }
 
 impl Personality {
-    pub const ALL: [Personality; 3] = [Personality::Linux, Personality::Nt, Personality::Xnu];
+    pub const ALL: [Personality; 4] = [Personality::Linux, Personality::Nt, Personality::Xnu, Personality::Native];
 
     pub const fn name(self) -> &'static str {
         match self {
             Personality::Linux => "linux",
             Personality::Nt => "nt",
             Personality::Xnu => "xnu",
+            Personality::Native => "native",
         }
     }
 }

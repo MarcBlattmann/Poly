@@ -254,6 +254,10 @@ pub struct Creds {
     /// The ids above are kernel ids; the capability sets are what the
     /// thread has in this namespace ([`crate::ns::user`]).
     pub user_ns: UserNsRef,
+    /// The thread's Landlock domain (`landlock_restrict_self`), if any:
+    /// inherited, kept across execve(2), never removed
+    /// ([`crate::landlock`]).
+    pub landlock: Option<Arc<crate::landlock::Domain>>,
 }
 
 impl Default for Creds {
@@ -307,6 +311,7 @@ impl Creds {
             keep_caps: false,
             no_new_privs: false,
             user_ns: None,
+            landlock: None,
         }
     }
 
@@ -652,7 +657,18 @@ pub fn current(k: &mut dyn LinuxKernel) -> Creds {
 /// alone when it fails.
 pub fn change<R>(k: &mut dyn LinuxKernel, f: impl FnOnce(&mut Creds) -> R) -> R {
     let tid = k.tid();
-    with_own(k, |p| f(&mut p.thread_mut(tid).creds))
+    with_own(k, |p| {
+        let c = &mut p.thread_mut(tid).creds;
+        let before = (c.euid, c.egid, c.fsuid, c.fsgid);
+        let r = f(c);
+        // prctl(2) PR_SET_DUMPABLE: a change of the effective or file
+        // system ids resets the flag to fs.suid_dumpable, 0 (ptrace's spec
+        // sheet: "changing uids makes a process non-dumpable").
+        if (c.euid, c.egid, c.fsuid, c.fsgid) != before {
+            p.dumpable = false;
+        }
+        r
+    })
 }
 
 /// setreuid(2) / setregid(2) on `(real, effective, saved)`.

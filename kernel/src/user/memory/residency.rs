@@ -1,6 +1,8 @@
 //! Which pages are in, and bringing them in (ADR 0064): what mincore(2)
 //! reports and what mlock(2) does. Nothing is ever paged out, so a page
-//! that is in stays in and a lock has nothing more to do.
+//! that is in stays in: a lock is a mark on the region (for `VmLck`, the
+//! memory-lock limit and fork) plus, unless it is "on fault", bringing
+//! the pages in.
 //!
 //! A page is resident when it has a frame here (mapped, parked under
 //! `PROT_NONE`, or a shared frame), or when it is a page of a file
@@ -9,8 +11,22 @@
 //! for a device: tmpfs, or a page just written).
 
 use super::{Access, Backing, Memory, PAGE_SIZE, Prot};
+use poly_vm::FutureLock;
 
-/// Why [`Memory::populate`] or [`Memory::residency`] failed.
+/// What is at a page ([`Memory::page_kind`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageKind {
+    /// No region.
+    Unmapped,
+    /// A region, no page yet.
+    Absent,
+    /// A page of private anonymous memory that was never written.
+    Zero,
+    /// A page.
+    Present,
+}
+
+/// Why [`Memory::lock`] or [`Memory::residency`] failed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RangeError {
     /// Part of the range is not mapped (or, to populate it, is `PROT_NONE`).
@@ -35,26 +51,86 @@ impl Memory {
         at >= end
     }
 
-    /// mlock(2) of `[addr, addr + len)` (page aligned) with `populate`, or
-    /// munlock(2) without: the range must be mapped, and to populate it
-    /// accessible (not `PROT_NONE`); its pages are then brought in as a
-    /// read would. Pages past the end of a mapped file stay out.
-    pub fn populate(&self, addr: u64, len: u64, populate: bool) -> Result<(), RangeError> {
-        let end = addr.checked_add(len).ok_or(RangeError::NotMapped)?;
-        let accessible = |p: Prot| !populate || p != Prot::NONE;
-        if !self.covered(addr, end, accessible) {
-            return Err(RangeError::NotMapped);
+    /// Bring the pages of `[addr, end)` in as a read would. A page wholly
+    /// past the end of its file cannot come in (it would be SIGBUS) and is
+    /// skipped, like pages that fail.
+    fn bring_in(&self, addr: u64, end: u64) {
+        let mut page = addr;
+        while page < end {
+            let _ = self.fault(page, Access::Read);
+            page += PAGE_SIZE;
         }
-        if populate {
-            let mut page = addr;
-            while page < end {
-                // A page wholly past the end of its file cannot come in
-                // (it would be SIGBUS); the lock still succeeds.
-                let _ = self.fault(page, Access::Read);
-                page += PAGE_SIZE;
+    }
+
+    /// mlock(2) / mlock2(2) (`lock`) or munlock(2) of `[addr, addr + len)`
+    /// (page aligned, `len` non-zero): the regions are marked locked or
+    /// unlocked in the region map up to the first hole, which is
+    /// [`RangeError::NotMapped`] with nothing brought in. With `populate`
+    /// every page is then brought in, unless a region is `PROT_NONE`
+    /// (`NotMapped`, the lock stays).
+    pub fn lock(&self, addr: u64, len: u64, lock: bool, populate: bool) -> Result<(), RangeError> {
+        let end = addr.checked_add(len).ok_or(RangeError::NotMapped)?;
+        self.inner.lock().map.set_locked(addr, len, lock).map_err(|_| RangeError::NotMapped)?;
+        if lock && populate {
+            if !self.covered(addr, end, |p| p != Prot::NONE) {
+                return Err(RangeError::NotMapped);
             }
+            self.bring_in(addr, end);
         }
         Ok(())
+    }
+
+    /// mlockall(2): with `current` (`Some(populate)`) every region is
+    /// locked and, with `populate`, the pages of every accessible region
+    /// brought in; `future` becomes the `MCL_FUTURE` setting.
+    pub fn lock_all(&self, current: Option<bool>, future: Option<FutureLock>) {
+        let ranges: alloc::vec::Vec<(u64, u64)> = {
+            let mut inner = self.inner.lock();
+            inner.map.set_lock_future(future);
+            if current.is_none() {
+                return;
+            }
+            inner.map.set_all_locked(true);
+            inner.map.regions().filter(|v| v.prot != Prot::NONE).map(|v| (v.start, v.end)).collect()
+        };
+        if current == Some(true) {
+            for (start, end) in ranges {
+                self.bring_in(start, end);
+            }
+        }
+    }
+
+    /// munlockall(2): every region unlocked, `MCL_FUTURE` ended.
+    pub fn unlock_all(&self) {
+        let mut inner = self.inner.lock();
+        inner.map.set_all_locked(false);
+        inner.map.set_lock_future(None);
+    }
+
+    /// Bytes locked in all, bytes locked in `[addr, addr + len)`, bytes
+    /// mapped, and the `MCL_FUTURE` setting.
+    pub fn locked(&self, addr: u64, len: u64) -> (u64, u64, u64, Option<FutureLock>) {
+        let inner = self.inner.lock();
+        let in_range = if len == 0 { 0 } else { inner.map.locked_bytes_in(addr, addr.saturating_add(len)) };
+        (inner.map.locked_bytes(), in_range, inner.map.mapped_bytes(), inner.map.lock_future())
+    }
+
+    /// What is at the page holding `addr`, for move_pages(2); nothing is
+    /// brought in.
+    pub fn page_kind(&self, addr: u64) -> PageKind {
+        let page = poly_vm::page_down(addr);
+        let inner = self.inner.lock();
+        let Some(v) = inner.map.find(page) else { return PageKind::Unmapped };
+        if inner.parked.contains_key(&page) || inner.shared.contains_key(&page) || inner.cached.contains_key(&page) {
+            return PageKind::Present;
+        }
+        match self.space.translate(page) {
+            None => PageKind::Absent,
+            // Private anonymous memory never written: it only reads as
+            // zeros so far (Linux maps its shared zero page there).
+            Some(m) if matches!(v.backing, Backing::Anonymous) && m.owned && !m.dirty => PageKind::Zero,
+            Some(_) => PageKind::Present,
+        }
     }
 
     /// mincore(2): 1 or 0 into `out[i]` for whether page `i` from `addr`

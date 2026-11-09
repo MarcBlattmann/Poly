@@ -1,0 +1,13 @@
+[package]
+name = "poly-vt"
+description = "The terminal emulator core of Poly's Terminal app: a VT100/xterm parser and a resizable screen model (colours, cursor, scroll regions, alternate screen, scrollback, modes, replies), key and paste encoding; no_std + alloc, tested on the host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

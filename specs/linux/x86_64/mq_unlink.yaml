@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mq_unlink            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace (mqueue root directory mode 1777)"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  mq_unlink(name) (syscall 241) removes the name of a POSIX message queue
+  (name without the leading slash, as for mq_open). The name is gone at
+  once: mq_open without O_CREAT then fails with ENOENT, and O_CREAT makes
+  a new, independent queue under that name. The old queue keeps existing,
+  with its messages, for descriptors that are already open (they can send
+  and receive as before) and is destroyed when the last one is closed. The
+  queue directory is sticky and world-writable (like /tmp): a user may
+  remove only queues they own; root (CAP_FOWNER) any.
+returns:
+  success: "0"
+errors:
+  missing: "ENOENT (2): no queue with that name (also after it was unlinked)"
+  empty: "ENOENT (2): empty name"
+  slash: "EACCES (13): name contains '/' (also a leading one), '.' or '..'"
+  long: "ENAMETOOLONG (36): name longer than 255 bytes"
+  fault: "EFAULT (14): name unreadable"
+  not_owner: "EPERM (1): the caller does not own the queue (and lacks CAP_FOWNER), whatever the queue's mode"
+side_effects: "removes the name; the queue object lives on while descriptors to it are open"
+threading: "none specific"
+ordering:
+  - "after unlink returns, opens of the name see no queue (or the new one)"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -104,8 +104,17 @@ impl Launcher {
             .into_iter()
             .filter_map(|a| apps.iter().position(|x| core::ptr::eq(x, a)))
             .collect();
+        // Open windows first, in their own section (Alpine's order).
+        self.results.sort_by_key(|&i| apps[i].window().is_none());
         self.selected = 0;
         self.hover = None;
+    }
+
+    /// The catalog changed (windows opened or closed): filter again.
+    pub fn requery(&mut self, apps: &[App]) {
+        if self.visible && !self.query.is_empty() {
+            self.refilter(apps);
+        }
     }
 
     /// The row under the pointer (`None`: none).
@@ -187,7 +196,7 @@ impl Launcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::apps::builtins;
+    use crate::apps::sample_apps;
 
     fn typed(l: &mut Launcher, apps: &[App], s: &str) {
         for c in s.chars() {
@@ -197,17 +206,17 @@ mod tests {
 
     #[test]
     fn typing_filters_and_enter_launches() {
-        let apps = builtins();
+        let apps = sample_apps();
         let mut l = Launcher::new(8);
         assert_eq!(l.key(&apps, Key::Char('x')), Outcome::Unchanged, "hidden: keys do nothing");
         l.show();
         assert!(l.results().is_empty(), "an empty query lists nothing");
-        typed(&mut l, &apps, "dem");
-        assert_eq!(l.query(), "dem");
+        typed(&mut l, &apps, "pix");
+        assert_eq!(l.query(), "pix");
         assert_eq!(l.results().len(), 1);
-        assert_eq!(apps[l.results()[0]].name, "Poly Demo");
+        assert_eq!(apps[l.results()[0]].name, "Pixel Viewer");
         match l.key(&apps, Key::Enter) {
-            Outcome::Launch(app) => assert_eq!(app.argv, ["/bin/wl-demo"]),
+            Outcome::Launch(app) => assert_eq!(app.argv, ["/bin/viewer"]),
             o => panic!("{o:?}"),
         }
         assert!(!l.is_visible());
@@ -215,11 +224,11 @@ mod tests {
 
     #[test]
     fn selection_editing_and_escape() {
-        let apps = builtins()[..2].to_vec();
+        let apps: Vec<App> = sample_apps().into_iter().filter(|a| a.id.ends_with(".desktop")).collect();
         let mut l = Launcher::new(8);
         l.toggle();
-        typed(&mut l, &apps, "t");
-        // "t" is in both built-ins ("Wayland Test Client" by a word start).
+        typed(&mut l, &apps, "i");
+        // "i" is in both ("Pixel Viewer" in the middle, "Quill Editor" at a letter).
         assert_eq!(l.results().len(), 2);
         assert_eq!(l.selected(), Some(0));
         l.key(&apps, Key::Down);
@@ -235,9 +244,9 @@ mod tests {
         assert_eq!(l.key(&apps, Key::Backspace), Outcome::Changed);
         assert_eq!(l.query(), "");
         assert_eq!(l.key(&apps, Key::Backspace), Outcome::Unchanged);
-        typed(&mut l, &apps, "poly de");
+        typed(&mut l, &apps, "pixel vi");
         l.key(&apps, Key::BackspaceWord);
-        assert_eq!(l.query(), "poly ");
+        assert_eq!(l.query(), "pixel ");
         l.key(&apps, Key::Clear);
         assert_eq!(l.query(), "");
         assert_eq!(l.key(&apps, Key::Char('\u{8}')), Outcome::Unchanged, "control characters are not text");

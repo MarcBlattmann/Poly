@@ -76,6 +76,7 @@ fn open_common(k: &mut dyn LinuxKernel, dirfd: i32, p: UserPtr, flags: u32, mode
     // On x86-64 every open is a large-file open: F_GETFL reports
     // O_LARGEFILE for all but O_PATH descriptors (the spec of fcntl).
     let flags = if flags & O_PATH == 0 { flags | O_LARGEFILE } else { flags };
+    crate::sys::landlock::check_open(k, dirfd, &path, flags)?;
     fs(k)?.openat(dirfd, &path, flags, mode).map(|fd| fd as u64)
 }
 
@@ -87,6 +88,97 @@ pub fn openat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// open(pathname, flags, mode)
 pub fn open(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     open_common(k, AT_FDCWD, a.ptr(0), a.uint(1), a.uint(2))
+}
+
+/// `sizeof(struct open_how)` of the first version (`OPEN_HOW_SIZE_VER0`,
+/// `linux/openat2.h`): `u64 flags, mode, resolve`.
+pub const OPEN_HOW_SIZE_VER0: usize = 24;
+/// The largest `struct open_how` openat2(2) takes: a page (openat2's spec
+/// sheet: larger is `E2BIG`).
+const OPEN_HOW_SIZE_MAX: u64 = 4096;
+/// Every `O_*` flag of `asm-generic/fcntl.h`: the access mode and bits 6
+/// (`O_CREAT`) to 22 (`__O_TMPFILE`), each of which is a flag.
+const O_VALID: u64 = 0o3 | 0o37777700;
+const O_ACCMODE: u64 = 0o3;
+const O_TRUNC: u64 = 0o1000;
+const O_DIRECTORY: u64 = 0o200000;
+const O_NOFOLLOW: u64 = 0o400000;
+const O_CLOEXEC: u64 = 0o2000000;
+/// `RESOLVE_*` (`linux/openat2.h`).
+pub mod resolve {
+    pub const NO_XDEV: u64 = 0x01;
+    pub const NO_MAGICLINKS: u64 = 0x02;
+    pub const NO_SYMLINKS: u64 = 0x04;
+    pub const BENEATH: u64 = 0x08;
+    pub const IN_ROOT: u64 = 0x10;
+    pub const CACHED: u64 = 0x20;
+    pub const ALL: u64 = 0x3f;
+}
+
+/// The checks openat2(2) makes on a `struct open_how` (openat2's spec
+/// sheet, in its order): unknown flags, `O_PATH` with flags other than
+/// `O_DIRECTORY`, `O_NOFOLLOW` and `O_CLOEXEC`, `O_TMPFILE` without write
+/// access, `O_DIRECTORY | O_CREAT`, a mode without `O_CREAT` /
+/// `O_TMPFILE` or with bits outside 07777, unknown resolve bits and
+/// `RESOLVE_BENEATH | RESOLVE_IN_ROOT` are `EINVAL`; `RESOLVE_CACHED`
+/// with a flag that creates or truncates is `EAGAIN`.
+pub fn check_open_how(flags: u64, mode: u64, res: u64) -> Result<(), Errno> {
+    let tmpfile = u64::from(O_TMPFILE_BIT);
+    let creat = u64::from(O_CREAT);
+    if flags & !O_VALID != 0 {
+        return Err(Errno::EINVAL);
+    }
+    if flags & u64::from(O_PATH) != 0 && flags & !(u64::from(O_PATH) | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) != 0 {
+        return Err(Errno::EINVAL);
+    }
+    if flags & tmpfile != 0 && !matches!(flags & O_ACCMODE, 1 | 2) {
+        return Err(Errno::EINVAL);
+    }
+    if flags & O_DIRECTORY != 0 && flags & creat != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let mode_ok = if flags & (creat | tmpfile) != 0 { mode & !0o7777 == 0 } else { mode == 0 };
+    if !mode_ok {
+        return Err(Errno::EINVAL);
+    }
+    if res & !resolve::ALL != 0 || res & (resolve::BENEATH | resolve::IN_ROOT) == resolve::BENEATH | resolve::IN_ROOT {
+        return Err(Errno::EINVAL);
+    }
+    if res & resolve::CACHED != 0 && flags & (creat | O_TRUNC | tmpfile) != 0 {
+        return Err(Errno::EAGAIN);
+    }
+    Ok(())
+}
+
+/// openat2(dirfd, pathname, how, size): openat with its parameters in a
+/// `struct open_how` of `size` bytes and `resolve` restrictions on the
+/// walk. `size` below [`OPEN_HOW_SIZE_VER0`] is `EINVAL`, above a page
+/// `E2BIG`; bytes past the known fields must be zero (`E2BIG`). Then the
+/// fields' checks ([`check_open_how`]), the pathname, the descriptor limit
+/// and the kernel, which carries out the restrictions.
+pub fn openat2(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let size = a.ulong(3);
+    if size < OPEN_HOW_SIZE_VER0 as u64 {
+        return Err(Errno::EINVAL);
+    }
+    if size > OPEN_HOW_SIZE_MAX {
+        return Err(Errno::E2BIG);
+    }
+    let mut how = alloc::vec![0u8; size as usize];
+    k.copy_from_user(a.ptr(2), &mut how)?;
+    if how[OPEN_HOW_SIZE_VER0..].iter().any(|&b| b != 0) {
+        return Err(Errno::E2BIG);
+    }
+    let field = |i: usize| u64::from_le_bytes(how[i * 8..i * 8 + 8].try_into().unwrap_or_default());
+    let (flags, mode, res) = (field(0), field(1), field(2));
+    check_open_how(flags, mode, res)?;
+    let path = nonempty_path(k, a.ptr(1))?;
+    fs(k)?.check_fd_free()?;
+    let flags = flags as u32;
+    let flags = if flags & O_PATH == 0 { flags | O_LARGEFILE } else { flags };
+    // Landlock's file access rights apply as for openat(2).
+    crate::sys::landlock::check_open(k, a.fd(0), &path, flags)?;
+    fs(k)?.openat2(a.fd(0), &path, flags, mode as u32, res).map(|fd| fd as u64)
 }
 
 /// creat(pathname, mode): open(2) "equivalent to open() with flags equal
@@ -163,8 +255,16 @@ pub fn statx(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::EINVAL);
     }
     let path = maybe_empty_path(k, p, flags)?;
-    let st = fs(k)?.statat(dirfd, &path, flags & AT_SYMLINK_NOFOLLOW == 0)?;
-    k.copy_to_user(buf, &st.to_statx(statx::STATX_BASIC_STATS | statx::STATX_MNT_ID))?;
+    let mut st = fs(k)?.statat(dirfd, &path, flags & AT_SYMLINK_NOFOLLOW == 0)?;
+    // `STATX_MNT_ID_UNIQUE` asked for: the unique 64-bit id in
+    // `stx_mnt_id` instead of the legacy one (statx(2)).
+    let id_bit = if mask & statx::STATX_MNT_ID_UNIQUE != 0 {
+        st.mount_id = crate::mountapi::unique_id(st.mount_id);
+        statx::STATX_MNT_ID_UNIQUE
+    } else {
+        statx::STATX_MNT_ID
+    };
+    k.copy_to_user(buf, &st.to_statx(statx::STATX_BASIC_STATS | id_bit))?;
     Ok(0)
 }
 
@@ -200,6 +300,7 @@ fn symlink_common(k: &mut dyn LinuxKernel, target: UserPtr, dirfd: i32, p: UserP
     // symlink(2): "ENOENT ... target or linkpath is an empty string."
     let target = nonempty_path(k, target)?;
     let path = nonempty_path(k, p)?;
+    crate::sys::landlock::check_parent(k, dirfd, &path, crate::landlock::abi::LANDLOCK_ACCESS_FS_MAKE_SYM)?;
     fs(k)?.symlinkat(&target, dirfd, &path).map(|()| 0)
 }
 
@@ -228,6 +329,9 @@ fn link_common(
     // newpath's string errors come after every error of oldpath, which the
     // kernel finds (linkat's path_order_two_paths).
     let new = nonempty_path(k, new);
+    if let Ok(n) = &new {
+        crate::sys::landlock::check_move(k, olddirfd, &old, newdirfd, n, false)?;
+    }
     fs(k)?.linkat(olddirfd, &old, newdirfd, new.as_deref().map_err(|&e| e), flags & AT_SYMLINK_FOLLOW != 0).map(|()| 0)
 }
 
@@ -278,12 +382,14 @@ pub fn faccessat2(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// mkdirat(dirfd, pathname, mode)
 pub fn mkdirat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(1))?;
+    crate::sys::landlock::check_parent(k, a.fd(0), &path, crate::landlock::abi::LANDLOCK_ACCESS_FS_MAKE_DIR)?;
     fs(k)?.mkdirat(a.fd(0), &path, a.uint(2) & 0o7777).map(|()| 0)
 }
 
 /// mkdir(pathname, mode)
 pub fn mkdir(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(0))?;
+    crate::sys::landlock::check_parent(k, AT_FDCWD, &path, crate::landlock::abi::LANDLOCK_ACCESS_FS_MAKE_DIR)?;
     fs(k)?.mkdirat(AT_FDCWD, &path, a.uint(1) & 0o7777).map(|()| 0)
 }
 
@@ -295,18 +401,21 @@ pub fn unlinkat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::EINVAL);
     }
     let path = nonempty_path(k, a.ptr(1))?;
+    crate::sys::landlock::check_remove(k, a.fd(0), &path, flags & AT_REMOVEDIR != 0)?;
     fs(k)?.unlinkat(a.fd(0), &path, flags & AT_REMOVEDIR != 0).map(|()| 0)
 }
 
 /// unlink(pathname)
 pub fn unlink(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(0))?;
+    crate::sys::landlock::check_remove(k, AT_FDCWD, &path, false)?;
     fs(k)?.unlinkat(AT_FDCWD, &path, false).map(|()| 0)
 }
 
 /// rmdir(pathname)
 pub fn rmdir(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(0))?;
+    crate::sys::landlock::check_remove(k, AT_FDCWD, &path, true)?;
     fs(k)?.unlinkat(AT_FDCWD, &path, true).map(|()| 0)
 }
 
@@ -322,6 +431,9 @@ fn rename_common(
     // newpath's string errors come after oldpath's directories, which the
     // kernel walks (renameat2's path_order_two_paths).
     let new = nonempty_path(k, new);
+    if let Ok(n) = &new {
+        crate::sys::landlock::check_move(k, olddirfd, &old, newdirfd, n, true)?;
+    }
     fs(k)?.renameat(olddirfd, &old, newdirfd, new.as_deref().map_err(|&e| e), flags).map(|()| 0)
 }
 
@@ -353,6 +465,20 @@ pub fn chmod(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn fchmodat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(1))?;
     fs(k)?.fchmodat(a.fd(0), &path, a.uint(2) & 0o7777).map(|()| 0)
+}
+
+/// fchmodat2(dirfd, pathname, mode, flags): fchmodat with
+/// `AT_SYMLINK_NOFOLLOW` and `AT_EMPTY_PATH` (fchmodat2's spec sheet; any
+/// other flag bit is `EINVAL`, first). The pathname is read even with
+/// `AT_EMPTY_PATH` (NULL is `EFAULT`).
+pub fn fchmodat2(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let flags = a.uint(3);
+    if flags & !(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH) != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let path = if flags & AT_EMPTY_PATH != 0 { path_arg(k, a.ptr(1))? } else { nonempty_path(k, a.ptr(1))? };
+    let follow = flags & AT_SYMLINK_NOFOLLOW == 0;
+    fs(k)?.fchmodat2(a.fd(0), &path, a.uint(2) & 0o7777, follow).map(|()| 0)
 }
 
 /// fchmod(fd, mode)
@@ -387,6 +513,7 @@ pub fn truncate(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             return crate::sys::fsize::too_big_signal(k);
         }
     }
+    crate::sys::landlock::check_object(k, AT_FDCWD, &path, true, crate::landlock::abi::LANDLOCK_ACCESS_FS_TRUNCATE)?;
     fs(k)?.truncate(&path, len).map(|()| 0)
 }
 

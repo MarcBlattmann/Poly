@@ -134,7 +134,7 @@ kernel_test! {
             let _ = sys(p, nr::UNLINKAT, &[AT_FDCWD, fifo, 0]);
             check!(6, sys(p, nr::MKNOD, &[fifo, 0o010600, 0]) == Ok(0));
             check!(7, mode(p, "/tmp/adm-fifo") == Ok(0o010600));
-            check!(8, sys(p, nr::MKNOD, &[cstr(9, "/tmp/adm-dir"), 0o040755, 0]) == Err(Errno::EINVAL));
+            check!(8, sys(p, nr::MKNOD, &[cstr(9, "/tmp/adm-dir"), 0o040755, 0]) == Err(Errno::EPERM));
             // chroot: "/" is the new root from then on.
             check!(9, mkdir(p, "/tmp/adm-root").is_ok());
             let fd = create(p, "/tmp/adm-root/inside", "jailed").map_err(|_| 10u64)?;

@@ -1,0 +1,102 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_uring_enter       # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 32 CPUs; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; /tmp on overlayfs; kernel.io_uring_disabled 0"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  io_uring_enter(fd, to_submit, min_complete, flags, argp, argsz) (syscall
+  426) submits SQEs and/or waits for CQEs on the io_uring instance fd (see
+  io_uring_setup for the ring layout). Submission: the kernel takes entries
+  from the SQ ring between its head and the user's tail, at most
+  to_submit, each naming an SQE through the SQ array; it advances the SQ
+  head past every entry it looked at and returns how many SQEs it
+  consumed (an SQ array value >= sq_entries is dropped: skipped, not
+  counted, no CQE, the SQ ring's dropped counter grows). Every consumed
+  SQE produces exactly one CQE (unless IOSQE_CQE_SKIP_SUCCESS and it
+  succeeds), also when the request fails: errors are reported in the
+  CQE's res as -errno, not by io_uring_enter. Waiting: with
+  IORING_ENTER_GETEVENTS (1) the call returns once at least min_complete
+  CQEs are in the CQ ring (counting ones already there); without it, it
+  never waits. A caught signal ends a wait with EINTR. argp: without
+  IORING_ENTER_EXT_ARG it is an optional sigset_t pointer (argsz = its
+  size, 8) installed during the wait like ppoll; with EXT_ARG (8) it
+  points at struct io_uring_getevents_arg (24 bytes: u64 sigmask, u32
+  sigmask_sz, u32 min_wait_usec, u64 ts) and argsz must be 24; ts points
+  at a struct __kernel_timespec wait limit, and an expired wait returns
+  ETIME. CQ overflow: when a CQE does not fit, it is kept
+  (IORING_FEAT_NODROP), IORING_SQ_CQ_OVERFLOW (2) is set in the SQ ring
+  flags, and kept CQEs are moved into the ring, in order, as space frees
+  (on the next io_uring_enter); the flag clears when none are left.
+  SQE layout (64 bytes): u8 opcode, u8 flags (IOSQE_FIXED_FILE 1,
+  IO_DRAIN 2, IO_LINK 4, IO_HARDLINK 8, ASYNC 16, BUFFER_SELECT 32,
+  CQE_SKIP_SUCCESS 64; bit 7 is EINVAL), u16 ioprio, s32 fd, u64 off,
+  u64 addr, u32 len, u32 op flags, u64 user_data, u16 buf_index, u16
+  personality, s32 file_index, u64 addr3, u64 pad. CQE: user_data copied
+  from the SQE, res, flags (IORING_CQE_F_MORE 2 when more CQEs will follow
+  for the same SQE). Opcodes covered here (number, fields, CQE res):
+  NOP 0 (res 0); READV 1 / WRITEV 2 (fd, addr = iovec array, len =
+  count, off; bytes); FSYNC 3 (fd, op flags 0 or IORING_FSYNC_DATASYNC 1,
+  others -EINVAL; 0); READ_FIXED 4 / WRITE_FIXED 5 (addr within
+  registered buffer buf_index; bytes, -EFAULT outside it); POLL_ADD 6 (fd,
+  op flags = 32-bit poll mask, len = IORING_POLL_ADD_MULTI 1 for
+  multishot; res = ready events masked by the request plus
+  POLLERR/POLLHUP; multishot CQEs carry F_MORE, the final one does not);
+  POLL_REMOVE 7 (addr = user_data of the poll; 0, -ENOENT if none; the
+  poll completes -ECANCELED); TIMEOUT 11 (addr = timespec, len must be 1,
+  off = completion count, op flags IORING_TIMEOUT_ABS 1 ...; -ETIME when
+  the time passes, 0 when off other CQEs were posted first); TIMEOUT_REMOVE
+  12 (addr = user_data; 0 and the timeout -ECANCELED, or -ENOENT);
+  ACCEPT 13 (fd = listener, addr = sockaddr or 0, off = address of
+  socklen_t, op flags = accept4 flags; the new fd); ASYNC_CANCEL 14 (addr
+  = user_data of a pending request; 0 and the request -ECANCELED, or
+  -ENOENT); CONNECT 16 (fd, addr = sockaddr, off = its length; 0); OPENAT
+  18 (fd = dirfd, addr = path, op flags = open flags, len = mode; the new
+  fd, lowest free); CLOSE 19 (fd; 0 or -EBADF); STATX 21 (fd = dirfd,
+  addr = path, len = mask, op flags = AT_* flags, off = struct statx
+  address; 0); READ 22 / WRITE 23 (fd, addr = buffer, len, off; off -1
+  means the file position, which then advances, as IORING_FEAT_RW_CUR_POS
+  promises; an explicit off leaves the position alone; bytes); SEND 26 /
+  RECV 27 (fd, addr, len, op flags = MSG_* flags; bytes, 0 at EOF).
+  Requests that cannot finish at once (a read of an empty pipe, a recv
+  without data, an accept without a client, a poll) wait and complete
+  later. IOSQE_IO_LINK makes the next SQE start after this one completes;
+  a failure (negative res, or a short read/write) completes the rest of
+  the chain with -ECANCELED; IOSQE_IO_HARDLINK does not break the chain on
+  failure. IOSQE_FIXED_FILE: fd is an index into the registered file table
+  (-EBADF if empty, out of range or no table).
+returns:
+  success: "number of SQEs consumed (0..to_submit); 0 when nothing is queued"
+  wait_done: "with GETEVENTS: returns when min_complete CQEs are available; the return value is still the submit count"
+  cqe_order: "synchronous requests submitted together complete in submission order (NOPs, file reads/writes); asynchronous ones in the order they finish"
+  cur_pos: "READ/WRITE with off = -1 use and advance the file position"
+  overflow: "no CQE is lost when the CQ ring is full; IORING_SQ_CQ_OVERFLOW is set while some are kept back"
+errors:
+  bad_fd: "EBADF (9): fd not open"
+  not_uring: "EOPNOTSUPP (95): fd is not an io_uring (a pipe, a tty)"
+  flags: "EINVAL (22): unknown flag bits (0x100, bit 31 observed)"
+  ext_arg_fault: "EFAULT (14): EXT_ARG argument unreadable (when a wait needs it)"
+  ext_arg_size: "EINVAL (22): EXT_ARG with argsz other than 24 (16 observed) when a wait needs it"
+  interrupted: "EINTR (4): a signal handler ran during a GETEVENTS wait (also one pending and unblocked by the argp sigmask)"
+  timed_out: "ETIME (62): EXT_ARG ts expired before min_complete CQEs arrived"
+  idle: "SQ_WAKEUP / SQ_WAIT without SQPOLL, EXT_ARG with no wait needed, or a sigmask with min_complete 0 just return 0"
+  cqe_errors: "per-SQE errors in res: unknown opcode -EINVAL; unknown IOSQE bit -EINVAL; bad fd -EBADF; write on read-only fd -EBADF; unwritable buffer -EFAULT; TIMEOUT with len != 1 -EINVAL; FSYNC with unknown flags -EINVAL; OPENAT -EEXIST/-ENOENT as openat; RECV with MSG_DONTWAIT and no data -EAGAIN; SEND on a non-socket -ENOTSOCK; cancelled -ECANCELED"
+side_effects: "advances the SQ head, posts CQEs at the CQ tail; operations have the side effects of the matching system calls (files written, descriptors opened/closed, connections made)"
+threading: "the instance may be used from several threads/processes (also a forked child) as long as user space serialises its own ring updates"
+ordering:
+  - "an SQE's CQE never appears before io_uring_enter consumed it"
+  - "linked SQEs run one after the other; the CQEs of a chain appear in chain order"
+  - "kept-back (overflowed) CQEs appear in the order they were produced"
+timing:
+  typical: "microseconds per SQE for synchronous work"
+  guarantees: "TIMEOUT completes no earlier than its time"
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+# Notes: struct io_uring_getevents_arg and all constants from
+# linux/io_uring.h. Linux runs some requests on kernel worker threads; they
+# are invisible to ptrace and not part of the comparison. The net test
+# uses an ephemeral loopback port (syscalls=names); the waiting test uses
+# a timer and a child (syscalls=off).

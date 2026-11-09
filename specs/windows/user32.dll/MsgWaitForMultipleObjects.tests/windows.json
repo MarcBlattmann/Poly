@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "mwait_basic",
+      "exe_sha256": "37223949eb0df7dacd8dbeb2299b96beb75c1569b8288f460744303e96a640eb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAplbXB0eSwgbm8gaGFuZGxlcywgNTAgbXM6IFdBSVRfVElNRU9VVApuZXcgcG9zdGVkIG1lc3NhZ2U6IFdBSVRfT0JKRUNUXzArMApzYW1lIG1lc3NhZ2UsIG5vdCByZWFkOiBXQUlUX09CSkVDVF8wKzAKYWZ0ZXIgUGVla01lc3NhZ2UgTk9SRU1PVkU6IFdBSVRfVElNRU9VVApFeCB3aXRoIE1XTU9fSU5QVVRBVkFJTEFCTEU6IDAKcG9zdGVkIG1lc3NhZ2UsIG1hc2sgUVNfUEFJTlQ6IFdBSVRfVElNRU9VVApldmVudCBzaWduYWxsZWQsIG9uZSBoYW5kbGU6IFdBSVRfT0JKRUNUXzArMApldmVudCBzaWduYWxsZWQgYW5kIGEgbmV3IG1lc3NhZ2U6IFdBSVRfT0JKRUNUXzArMQp0aW1lciwgbWFzayBRU19USU1FUjogV0FJVF9PQkpFQ1RfMCswCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nempty, no handles, 50 ms: WAIT_TIMEOUT\nnew posted message: WAIT_OBJECT_0+0\nsame message, not read: WAIT_OBJECT_0+0\nafter PeekMessage NOREMOVE: WAIT_TIMEOUT\nEx with MWMO_INPUTAVAILABLE: 0\nposted message, mask QS_PAINT: WAIT_TIMEOUT\nevent signalled, one handle: WAIT_OBJECT_0+0\nevent signalled and a new message: WAIT_OBJECT_0+1\ntimer, mask QS_TIMER: WAIT_OBJECT_0+0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 446
+    }
+  ]
+}

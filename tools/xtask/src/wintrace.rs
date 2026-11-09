@@ -776,10 +776,7 @@ fn work_dir() -> PathBuf {
 }
 
 fn sha256_hex(path: &Path) -> String {
-    let out = Command::new("sha256sum").arg(path).output();
-    out.ok()
-        .and_then(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().next().map(str::to_string))
-        .unwrap_or_default()
+    crate::sha256::file(path).unwrap_or_default()
 }
 
 fn output_of(cmd: &mut Command) -> Result<String> {

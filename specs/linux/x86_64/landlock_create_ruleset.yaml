@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/landlock_create_ruleset # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; Landlock enabled (ABI 7); tests run as root with all capabilities and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  landlock_create_ruleset(attr, size, flags) (syscall 444). With flags
+  LANDLOCK_CREATE_RULESET_VERSION (1), attr NULL and size 0 it returns the
+  highest Landlock ABI version supported (7 on Linux 6.18; 6 added scopes,
+  7 the restrict_self logging flags); with LANDLOCK_CREATE_RULESET_ERRATA
+  (2) a bitmask of fixed errata (15 here). With flags 0 it creates a
+  ruleset from struct landlock_ruleset_attr {u64 handled_access_fs; u64
+  handled_access_net; u64 scoped} (24 bytes; sizes 8 and 16 from older ABIs
+  are accepted, a larger size needs a zero tail) and returns a descriptor
+  for it (lowest free; always FD_CLOEXEC; F_GETFL O_RDWR; an anon inode
+  named [landlock-ruleset]; read is EINVAL). handled_access_fs bits: EXECUTE
+  0x1, WRITE_FILE 0x2, READ_FILE 0x4, READ_DIR 0x8, REMOVE_DIR 0x10,
+  REMOVE_FILE 0x20, MAKE_CHAR 0x40, MAKE_DIR 0x80, MAKE_REG 0x100,
+  MAKE_SOCK 0x200, MAKE_FIFO 0x400, MAKE_BLOCK 0x800, MAKE_SYM 0x1000,
+  REFER 0x2000, TRUNCATE 0x4000, IOCTL_DEV 0x8000; handled_access_net:
+  BIND_TCP 0x1, CONNECT_TCP 0x2; scoped: ABSTRACT_UNIX_SOCKET 0x1, SIGNAL
+  0x2. Only handled accesses are restricted once the ruleset is enforced
+  (landlock_restrict_self); everything not handled stays allowed. Any user
+  may create rulesets.
+returns:
+  version: "ABI version (7 here; >= 6 required by the tests)"
+  errata: "a non-negative bitmask"
+  ruleset: "a new fd, FD_CLOEXEC, O_RDWR"
+errors:
+  version_args: "EINVAL (22): VERSION or ERRATA with attr non-NULL or size non-zero"
+  flags: "EINVAL (22): unknown flags (4)"
+  size_small: "EINVAL (22): size < 8 (0 and 4)"
+  size_big: "E2BIG (7): size > 24 with non-zero bytes past 24, or size > 4096"
+  fault: "EFAULT (14): attr NULL or unreadable (with a size)"
+  empty: "ENOMSG (42): nothing handled (all three fields 0)"
+  unknown_bits: "EINVAL (22): unknown bits in handled_access_fs, handled_access_net or scoped"
+  disabled: "EOPNOTSUPP (95) when Landlock is built in but disabled at boot; ENOSYS when not built; not the case here"
+side_effects: "uses one fd"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants and layouts from linux/landlock.h. Enforcement tests
+# run in children (restrictions cannot be undone).

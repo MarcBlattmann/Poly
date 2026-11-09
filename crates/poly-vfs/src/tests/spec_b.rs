@@ -44,7 +44,7 @@ impl Env {
         self.vfs.mount(&self.ctx, &self.root, At::Cwd, path.as_bytes(), fs, MountFlags::default()).unwrap();
         if read_only {
             let flags = MountFlags { read_only: true, ..MountFlags::default() };
-            self.vfs.remount(&self.ctx, &self.root, At::Cwd, path.as_bytes(), flags).unwrap();
+            self.vfs.remount(&self.ctx, &self.root, At::Cwd, path.as_bytes(), flags, true).unwrap();
         }
     }
 }
@@ -248,6 +248,28 @@ fn a_running_program_cannot_be_written_or_truncated() {
     drop(exe);
     assert!(env.open("/prog", OpenFlags::WRONLY).is_ok());
     assert_eq!(env.vfs.truncate(&env.ctx, &env.root, At::Cwd, b"/prog", 0), Ok(()));
+}
+
+#[test]
+fn a_file_open_for_writing_cannot_be_run() {
+    let env = Env::new();
+    env.write("/prog", b"#!/bin/sh\n");
+    env.chmod_b("/prog", 0o755);
+    let writer = env.open("/prog", OpenFlags::WRONLY).unwrap();
+    let run = |env: &Env| env.vfs.open_exec(&env.ctx, &env.root, At::Cwd, b"/prog").map(|_| ());
+    assert_eq!(run(&env), Err(Errno::ETXTBSY));
+    drop(writer);
+    assert_eq!(run(&env), Ok(()));
+    // execveat(2): AT_SYMLINK_NOFOLLOW on a link is ELOOP; the file a
+    // descriptor is open on runs as a program by itself.
+    env.vfs.symlink(&env.ctx, &env.root, b"prog", At::Cwd, b"/link").unwrap();
+    let nofollow = env.vfs.open_exec_with(&env.ctx, &env.root, At::Cwd, b"/link", false);
+    assert_eq!(nofollow.map(|_| ()), Err(Errno::ELOOP));
+    assert!(env.vfs.open_exec_with(&env.ctx, &env.root, At::Cwd, b"/link", true).is_ok());
+    let file = env.open("/prog", OpenFlags::RDONLY).unwrap();
+    assert!(env.vfs.open_exec_file(&env.root, &file).is_ok());
+    let dir = env.open("/", OpenFlags::RDONLY).unwrap();
+    assert_eq!(env.vfs.open_exec_file(&env.root, &dir).map(|_| ()), Err(Errno::EACCES));
 }
 
 #[test]

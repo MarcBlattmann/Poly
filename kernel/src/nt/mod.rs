@@ -37,6 +37,8 @@ pub mod registry;
 mod test_registry;
 
 pub mod layout;
+/// `/dev/win32k`, the desktop link's device (ADR 0131).
+pub mod link;
 mod test_layout;
 
 mod test_ldr;
@@ -94,6 +96,11 @@ pub static CRTIOTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crtiotes
 /// installed in `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static USER32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/user32.dll"));
 pub static OLEAUT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleaut32.dll"));
+
+/// Our `gdi32.dll` and `win32u.dll` (ADR 0128), installed in
+/// `C:\Windows\System32` by [`layout`]; empty without `xtask`.
+pub static GDI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/gdi32.dll"));
+pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"));
 
 mod test_crypto;
 
@@ -476,6 +483,8 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     io::after_call();
     // Console output and events (ADR 0080).
     console::drive();
+    // What win32k has for the compositor (ADR 0131).
+    link::after_call();
     if let Some(status) = k.exit {
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));
     } else if let Some(status) = k.exit_thread {

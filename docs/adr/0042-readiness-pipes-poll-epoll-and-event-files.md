@@ -116,7 +116,10 @@ exact events in that case), writes back the time left (`ppoll`,
   runs with the call's mask and the old one returns after it).
 - `poll` and `select` variants: `RESTART_IF_NO_HANDLER` (signal(7):
   never restarted after a handler, restarted after a stop). `epoll_wait`
-  and `epoll_pwait`: plain `EINTR` (in both of signal(7)'s lists). Reads
+  and `epoll_pwait`: plain `EINTR` (in both of signal(7)'s lists) when
+  a pending signal acts (a handler, a stop, a kill); a wait ended only by
+  signals whose delivery does nothing (the default-ignored `SIGCHLD` a
+  traced process keeps until it is taken) is restarted. Reads
   and writes interrupted before any byte moved: `RESTART_IF_SA_RESTART`
   ("slow" devices).
 - `write` / `writev` failing with `EPIPE` raise `SIGPIPE` for the writing

@@ -58,6 +58,10 @@ pub struct Process {
     /// ([`Process::new`]): their system calls go to the personality
     /// without kernel services, and a fault kills only the faulting thread.
     pub linux: Option<LinuxState>,
+    /// The native personality's state (ADR 0125): whether the process's
+    /// calls are native (a native program, or one a Linux process
+    /// `execve`d) and its children not waited for yet.
+    pub native: crate::native::NativeState,
     /// The process reports its system calls, output, signals and exit on
     /// the serial port (`poly.test.capture`, ADR 0027).
     pub traced: bool,
@@ -159,6 +163,8 @@ struct Threads {
     /// ([`Process::thread_exiting`]): the process's status without a group
     /// exit.
     last_exiting: Option<ExitStatus>,
+    /// Live threads that have started to exit ([`Process::thread_exiting`]).
+    exiting: Vec<u32>,
     /// Set when the last thread has gone.
     status: Option<ExitStatus>,
 }
@@ -214,6 +220,16 @@ impl Process {
         Process::with_state(pid, 0, Personality::Nt, format, None, traced, files)
     }
 
+    /// A native Poly process (ADR 0125): its system calls go to the native
+    /// personality (`crate::native`), the console on fds 0, 1 and 2 (the
+    /// kernel's log console when `traced`).
+    pub fn new_native(pid: u32, ppid: u32, format: binfmt::Format, traced: bool) -> Process {
+        let files = if traced { crate::tty::log_console_files() } else { crate::fs::Files::with_console() };
+        let p = Process::with_state(pid, ppid, Personality::Native, format, None, traced, files);
+        p.native.activate();
+        p
+    }
+
     /// A Linux process made by `fork` / `clone` (`linux::task`): its files
     /// and personality state come from the parent.
     pub fn new_linux_child(
@@ -243,6 +259,7 @@ impl Process {
             format,
             files,
             linux,
+            native: crate::native::NativeState::new(),
             traced,
             cpu: crate::cputime::ProcessCpu::default(),
             threads: SpinLock::new(Threads::default()),
@@ -332,6 +349,7 @@ impl Process {
         let status = {
             let mut t = self.threads.lock();
             t.live.retain(|(id, _)| *id != tid);
+            t.exiting.retain(|&id| id != tid);
             self.live.store(t.live.len() as u32, Ordering::SeqCst);
             if !t.live.is_empty() || t.status.is_some() {
                 drop(t);
@@ -364,7 +382,22 @@ impl Process {
         let mut t = self.threads.lock();
         if t.live.iter().any(|(id, _)| *id == tid) {
             t.last_exiting = Some(own);
+            if !t.exiting.contains(&tid) {
+                t.exiting.push(tid);
+            }
         }
+    }
+
+    /// Whether the process has ended or every live thread has started to
+    /// exit (it no longer runs user code: pidfd_getfd(2) and
+    /// process_vm_readv(2) treat it as gone, as once its last thread has
+    /// cleared its `clear_child_tid` word).
+    pub fn is_ending(&self) -> bool {
+        if self.has_ended() {
+            return true;
+        }
+        let t = self.threads.lock();
+        t.status.is_some() || t.live.iter().all(|(id, _)| t.exiting.contains(id))
     }
 
     /// The process's exit is complete (after [`detach_thread`] and the
@@ -376,6 +409,8 @@ impl Process {
     pub fn ended(&self) {
         self.ended.store(true, Ordering::SeqCst);
         EVENTS.wake_all();
+        // Native process handles of it turn readable (ADR 0125).
+        crate::native::process_ended();
     }
 
     /// End the whole process with `status` (exit_group(2), a fatal signal):

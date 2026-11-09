@@ -1,6 +1,6 @@
 [package]
 name = "poly-virtio-gpu"
-description = "virtio GPU device driver (2D): control-queue commands and responses, display info and EDID, scanout planning, and a synchronous driver over a split virtqueue"
+description = "virtio GPU device driver: 2D (display info, EDID, scanout planning) and 3D (contexts, capsets, 3D and blob resources, command submission with fences) over a split virtqueue"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

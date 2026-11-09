@@ -62,7 +62,7 @@ pub const CALLS: &[(u64, Handler)] = &[
 ];
 
 /// The widest of `tz_minuteswest` settimeofday accepts: 15 hours either
-/// way (Poly's bound; to be confirmed by the diff runner).
+/// way (settimeofday's spec sheet).
 pub const MAX_MINUTESWEST: i32 = 15 * 60;
 
 fn read<const N: usize>(k: &mut dyn LinuxKernel, at: UserPtr) -> Result<[u8; N], Errno> {
@@ -138,23 +138,35 @@ pub fn clock_getres(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     Ok(0)
 }
 
-/// clock_settime(clockid, tp): set the wall clock. clock_settime(2):
-/// `EINVAL` for a clock that does not exist or cannot be set (every clock
-/// but `CLOCK_REALTIME`), a `tp` out of range, or a time below the
-/// monotonic clock; `EPERM` without privilege; `EFAULT`. Poly checks the
-/// clock, copies, checks the clock is settable and the value, then the
-/// privilege.
+/// The largest number of seconds the wall clock can be set to: its time
+/// in nanoseconds must fit in an `i64`, with a second to spare (Poly's
+/// bound; the sheets' example of a time too large is `0x7fffffffffff`).
+pub const MAX_SET_SECONDS: i64 = i64::MAX / NANOS_PER_SEC as i64 - 1;
+
+/// clock_settime(clockid, tp): set the wall clock. Checks in the sheet's
+/// order: the clock (every clock but `CLOCK_REALTIME` and every unknown
+/// id is `EINVAL`, before `tp` is read; a CPU-time clock is `EPERM` for
+/// everybody), `tp` (`EFAULT`), its value (`EINVAL`: nanoseconds outside
+/// 0-999999999, negative seconds, beyond [`MAX_SET_SECONDS`]), the
+/// privilege (`EPERM`). A time below the monotonic clock is `EINVAL`
+/// (the kernel's check). The clock discipline becomes unsynchronised.
 pub fn clock_settime(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let clockid = a.int(0);
-    clock_for(clockid).ok_or(Errno::EINVAL)?;
+    if clockid != id::CLOCK_REALTIME {
+        return match crate::time::cpuclock::decode(k, clockid) {
+            Some(Ok(_)) => Err(Errno::EPERM),
+            _ => Err(Errno::EINVAL),
+        };
+    }
     let t = read_timespec(k, a.ptr(1))?;
-    if clockid != id::CLOCK_REALTIME || !t.is_valid() {
+    if !t.is_valid() || t.sec > MAX_SET_SECONDS {
         return Err(Errno::EINVAL);
     }
     if !may_set_time(k) {
         return Err(Errno::EPERM);
     }
     k.set_realtime(t)?;
+    crate::sys::timex::clock_was_set(k);
     Ok(0)
 }
 
@@ -175,31 +187,41 @@ pub fn gettimeofday(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 
 /// settimeofday(tv, tz): set the wall clock and/or the time zone (either
 /// may be null: settimeofday(2), "If either tv or tz is NULL, the
-/// corresponding structure is not set"). `EFAULT`; `EINVAL` for a `tv`
-/// out of range (negative seconds, microseconds outside 0-999999), a time
-/// below the monotonic clock, or a time zone beyond
-/// [`MAX_MINUTESWEST`]; `EPERM` without privilege. Poly copies both,
-/// checks both, then the privilege.
+/// corresponding structure is not set"). Checks in the sheet's order:
+/// `tv` read (`EFAULT`) and checked (`EINVAL`: negative seconds,
+/// microseconds outside 0-999999), `tz` read (`EFAULT`), `tv` within the
+/// clock's range ([`MAX_SET_SECONDS`]: `EINVAL`), the privilege (`EPERM`,
+/// also with both null), `tz_minuteswest` within [`MAX_MINUTESWEST`]
+/// (`EINVAL`). Then the time zone is stored and the clock set (a time
+/// below the monotonic clock: `EINVAL`, the kernel's check); the clock
+/// discipline becomes unsynchronised.
 pub fn settimeofday(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let tv = match a.ptr(0).is_null() {
         true => None,
         false => Some(Timeval::from_bytes(&read(k, a.ptr(0))?)),
     };
+    if tv.is_some_and(|t| !t.is_valid()) {
+        return Err(Errno::EINVAL);
+    }
     let tz = match a.ptr(1).is_null() {
         true => None,
         false => Some(Timezone::from_bytes(&read(k, a.ptr(1))?)),
     };
-    if tv.is_some_and(|t| !t.is_valid()) || tz.is_some_and(|z| z.minuteswest.abs() > MAX_MINUTESWEST) {
+    if tv.is_some_and(|t| t.sec > MAX_SET_SECONDS) {
         return Err(Errno::EINVAL);
     }
-    if (tv.is_some() || tz.is_some()) && !may_set_time(k) {
+    if !may_set_time(k) {
         return Err(Errno::EPERM);
     }
-    if let Some(tv) = tv {
-        k.set_realtime(Timespec { sec: tv.sec, nsec: tv.usec * 1000 })?;
+    if tz.is_some_and(|z| z.minuteswest.abs() > MAX_MINUTESWEST) {
+        return Err(Errno::EINVAL);
     }
     if let Some(tz) = tz {
         k.set_timezone(tz.minuteswest, tz.dsttime);
+    }
+    if let Some(tv) = tv {
+        k.set_realtime(Timespec { sec: tv.sec, nsec: tv.usec * 1000 })?;
+        crate::sys::timex::clock_was_set(k);
     }
     Ok(0)
 }

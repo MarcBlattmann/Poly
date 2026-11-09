@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/LoadCursorW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read. Learn: LoadCursorW, GetIconInfo, ICONINFO,
+  "About Cursors".
+summary: >
+  With a NULL instance and an IDC_* id (MAKEINTRESOURCE) it returns the
+  shared system cursor: the same handle on every call. With a module, it
+  loads a cursor resource of that module.
+interface:
+  signature: "HCURSOR LoadCursorW(HINSTANCE instance, LPCWSTR name)"
+  ids: "IDC_* values from winuser.h: 32512..32516, 32640..32651, 32671, 32672"
+rules:
+  standard: "IDC_ARROW 32512, IBEAM 32513, WAIT 32514, CROSS 32515, UPARROW 32516, SIZENWSE 32642, SIZENESW 32643, SIZEWE 32644, SIZENS 32645, SIZEALL 32646, NO 32648, HAND 32649, APPSTARTING 32650, HELP 32651, PIN 32671, PERSON 32672: a cursor each, error 0, the same handle on a second call, all distinct"
+  obsolete: "IDC_SIZE 32640 and IDC_ICON 32641: NULL with last error 0 (unchanged)"
+  string_id: "the string \"#32512\" with a NULL instance gives the arrow"
+  icon_info: "GetIconInfo: fIcon 0 for all; hotspots: ARROW 0,0; IBEAM 8,9; WAIT 16,16; CROSS 16,16; UPARROW 4,0; SIZENWSE 8,8; SIZENESW 8,8; SIZEWE 11,4; SIZENS 4,11; SIZEALL 11,11; NO 8,8; HAND 6,0; APPSTARTING 0,8; HELP 0,0; PIN 6,0; PERSON 6,0; IBEAM and CROSS are monochrome (mask 32x64 1 bpp, no colour bitmap), the others mask 32x32 1 bpp plus colour 32x32 32 bpp"
+  size: "SM_CXCURSOR and SM_CYCURSOR are 32"
+errors:
+  unknown_system_id: "NULL instance with id 1, 32517, 32700 or a name (\"NoSuchCursor\"): NULL, ERROR_RESOURCE_NAME_NOT_FOUND (1814)"
+  module_without_resources: "the test's executable (no resources) with IDC_ARROW, id 1 or a name: NULL, ERROR_RESOURCE_DATA_NOT_FOUND (1812)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Cursor resources of a module (.cur in a resource section), LoadImage,
+  animated cursors, cursor sizes other than the default. DPI awareness other
+  than unaware (the tests have no manifest), several monitors, other
+  keyboard layouts than German, IME, touch and pen, hooks, menus and the
+  menu loop.

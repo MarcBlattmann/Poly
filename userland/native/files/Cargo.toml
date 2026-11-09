@@ -1,0 +1,20 @@
+[package]
+name = "poly-files-native"
+description = "/bin/poly-files: Poly's own file explorer, Files (userland/poly-files-app) as a native Poly program (ADR 0134)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "poly-files"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-files-app = { path = "../../poly-files-app" }
+poly-rt = { path = "../../../crates/poly-rt" }
+
+[lints]
+workspace = true

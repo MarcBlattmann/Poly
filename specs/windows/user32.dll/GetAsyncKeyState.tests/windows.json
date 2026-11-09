@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "gaks_lag",
+      "exe_sha256": "70b78d4456fcb55c1e77eaacc0d8c8024c6337dd1fe891a1e2de03b4db364b4a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCmJlZm9yZTogYXN5bmM9MHgwMDAwIEdldEtleVN0YXRlIGRvd249MCBRU19LRVkgbm93PTAgbmV3PTAKYmVmb3JlLCBhZ2FpbjogYXN5bmM9MHgwMDAwIEdldEtleVN0YXRlIGRvd249MCBRU19LRVkgbm93PTAgbmV3PTAKQiBkb3duOiAxCmRvd24sIG5vdCByZXRyaWV2ZWQ6IGFzeW5jPTB4ODAwMSBHZXRLZXlTdGF0ZSBkb3duPTAgUVNfS0VZIG5vdz0xIG5ldz0xCmRvd24sIG5vdCByZXRyaWV2ZWQsIGFnYWluOiBhc3luYz0weDgwMDAgR2V0S2V5U3RhdGUgZG93bj0wIFFTX0tFWSBub3c9MSBuZXc9MAogIEEgV01fS0VZRE9XTiB2az0weDQyIGw9MHgwMDMwMDAwMQogIEEgV01fQ0hBUiBjaD0weDAwNjIgbD0weDAwMzAwMDAxCmRvd24sIHJldHJpZXZlZDogYXN5bmM9MHg4MDAwIEdldEtleVN0YXRlIGRvd249MSBRU19LRVkgbm93PTAgbmV3PTAKQiB1cDogMQp1cCwgbm90IHJldHJpZXZlZDogYXN5bmM9MHgwMDAwIEdldEtleVN0YXRlIGRvd249MSBRU19LRVkgbm93PTEgbmV3PTEKICBBIFdNX0tFWVVQIHZrPTB4NDIgbD0weGMwMzAwMDAxCnVwLCByZXRyaWV2ZWQ6IGFzeW5jPTB4MDAwMCBHZXRLZXlTdGF0ZSBkb3duPTAgUVNfS0VZIG5vdz0wIG5ldz0wCnN1bW1hcnkgMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\nbefore: async=0x0000 GetKeyState down=0 QS_KEY now=0 new=0\nbefore, again: async=0x0000 GetKeyState down=0 QS_KEY now=0 new=0\nB down: 1\ndown, not retrieved: async=0x8001 GetKeyState down=0 QS_KEY now=1 new=1\ndown, not retrieved, again: async=0x8000 GetKeyState down=0 QS_KEY now=1 new=0\n  A WM_KEYDOWN vk=0x42 l=0x00300001\n  A WM_CHAR ch=0x0062 l=0x00300001\ndown, retrieved: async=0x8000 GetKeyState down=1 QS_KEY now=0 new=0\nB up: 1\nup, not retrieved: async=0x0000 GetKeyState down=1 QS_KEY now=1 new=1\n  A WM_KEYUP vk=0x42 l=0xc0300001\nup, retrieved: async=0x0000 GetKeyState down=0 QS_KEY now=0 new=0\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 680
+    },
+    {
+      "name": "gaks_sides",
+      "exe_sha256": "6375ec34abe7b5ff405475d91308fde83d99c0607d3fbb5485d65dbce7d26c0b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kClZLX0xTSElGVCBzY2FuIDB4MmEgZG93biAoMSk6CiAgICBBIFdNX0tFWURPV04gdms9MHgxMCBsPTB4MDAyYTAwMDEKICAgIGFzeW5jIGdlbmVyaWM9MSBsZWZ0PTEgcmlnaHQ9MDsgR2V0S2V5U3RhdGUgZ2VuZXJpYz0xIGxlZnQ9MSByaWdodD0wCiAgICBBIFdNX0tFWVVQIHZrPTB4MTAgbD0weGMwMmEwMDAxCiAgcmVsZWFzZWQ6CiAgICBhc3luYyBnZW5lcmljPTAgbGVmdD0wIHJpZ2h0PTA7IEdldEtleVN0YXRlIGdlbmVyaWM9MCBsZWZ0PTAgcmlnaHQ9MApWS19SU0hJRlQgc2NhbiAweDM2IGRvd24gKDEpOgogICAgQSBXTV9LRVlET1dOIHZrPTB4MTAgbD0weDAwMzYwMDAxCiAgICBhc3luYyBnZW5lcmljPTEgbGVmdD0wIHJpZ2h0PTE7IEdldEtleVN0YXRlIGdlbmVyaWM9MSBsZWZ0PTAgcmlnaHQ9MQogICAgQSBXTV9LRVlVUCB2az0weDEwIGw9MHhjMDM2MDAwMQogIHJlbGVhc2VkOgogICAgYXN5bmMgZ2VuZXJpYz0wIGxlZnQ9MCByaWdodD0wOyBHZXRLZXlTdGF0ZSBnZW5lcmljPTAgbGVmdD0wIHJpZ2h0PTAKVktfU0hJRlQgc2NhbiAweDJhIGRvd24gKDEpOgogICAgQSBXTV9LRVlET1dOIHZrPTB4MTAgbD0weDAwMmEwMDAxCiAgICBhc3luYyBnZW5lcmljPTEgbGVmdD0xIHJpZ2h0PTA7IEdldEtleVN0YXRlIGdlbmVyaWM9MSBsZWZ0PTEgcmlnaHQ9MAogICAgQSBXTV9LRVlVUCB2az0weDEwIGw9MHhjMDJhMDAwMQogIHJlbGVhc2VkOgogICAgYXN5bmMgZ2VuZXJpYz0wIGxlZnQ9MCByaWdodD0wOyBHZXRLZXlTdGF0ZSBnZW5lcmljPTAgbGVmdD0wIHJpZ2h0PTAKVktfU0hJRlQgc2NhbiAweDM2IGRvd24gKDEpOgogICAgQSBXTV9LRVlET1dOIHZrPTB4MTAgbD0weDAwMzYwMDAxCiAgICBhc3luYyBnZW5lcmljPTEgbGVmdD0wIHJpZ2h0PTE7IEdldEtleVN0YXRlIGdlbmVyaWM9MSBsZWZ0PTAgcmlnaHQ9MQogICAgQSBXTV9LRVlVUCB2az0weDEwIGw9MHhjMDM2MDAwMQogIHJlbGVhc2VkOgogICAgYXN5bmMgZ2VuZXJpYz0wIGxlZnQ9MCByaWdodD0wOyBHZXRLZXlTdGF0ZSBnZW5lcmljPTAgbGVmdD0wIHJpZ2h0PTAKVktfTENPTlRST0wgc2NhbiAweDFkIGRvd24gKDEpOgogICAgQSBXTV9LRVlET1dOIHZrPTB4MTEgbD0weDAwMWQwMDAxCiAgICBhc3luYyBnZW5lcmljPTEgbGVmdD0xIHJpZ2h0PTA7IEdldEtleVN0YXRlIGdlbmVyaWM9MSBsZWZ0PTEgcmlnaHQ9MAogICAgQSBXTV9LRVlVUCB2az0weDExIGw9MHhjMDFkMDAwMQogIHJlbGVhc2VkOgogICAgYXN5bmMgZ2VuZXJpYz0wIGxlZnQ9MCByaWdodD0wOyBHZXRLZXlTdGF0ZSBnZW5lcmljPTAgbGVmdD0wIHJpZ2h0PTAKVktfUkNPTlRST0wgc2NhbiAweDFkIGV4dGVuZGVkIGRvd24gKDEpOgogICAgQSBXTV9LRVlET1dOIHZrPTB4MTEgbD0weDAxMWQwMDAxCiAgICBhc3luYyBnZW5lcmljPTEgbGVmdD0wIHJpZ2h0PTE7IEdldEtleVN0YXRlIGdlbmVyaWM9MSBsZWZ0PTAgcmlnaHQ9MQogICAgQSBXTV9LRVlVUCB2az0weDExIGw9MHhjMTFkMDAwMQogIHJlbGVhc2VkOgogICAgYXN5bmMgZ2VuZXJpYz0wIGxlZnQ9MCByaWdodD0wOyBHZXRLZXlTdGF0ZSBnZW5lcmljPTAgbGVmdD0wIHJpZ2h0PTAKVktfQ09OVFJPTCBzY2FuIDB4MWQgZG93biAoMSk6CiAgICBBIFdNX0tFWURPV04gdms9MHgxMSBsPTB4MDAxZDAwMDEKICAgIGFzeW5jIGdlbmVyaWM9MSBsZWZ0PTEgcmlnaHQ9MDsgR2V0S2V5U3RhdGUgZ2VuZXJpYz0xIGxlZnQ9MSByaWdodD0wCiAgICBBIFdNX0tFWVVQIHZrPTB4MTEgbD0weGMwMWQwMDAxCiAgcmVsZWFzZWQ6CiAgICBhc3luYyBnZW5lcmljPTAgbGVmdD0wIHJpZ2h0PTA7IEdldEtleVN0YXRlIGdlbmVyaWM9MCBsZWZ0PTAgcmlnaHQ9MApHZXRBc3luY0tleVN0YXRlKDB4MCkgPSAweDAwMDAKR2V0QXN5bmNLZXlTdGF0ZSgweGZmKSA9IDB4MDAwMApHZXRBc3luY0tleVN0YXRlKDB4MTQxKSA9IDB4MDAwMApzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\nVK_LSHIFT scan 0x2a down (1):\n    A WM_KEYDOWN vk=0x10 l=0x002a0001\n    async generic=1 left=1 right=0; GetKeyState generic=1 left=1 right=0\n    A WM_KEYUP vk=0x10 l=0xc02a0001\n  released:\n    async generic=0 left=0 right=0; GetKeyState generic=0 left=0 right=0\nVK_RSHIFT scan 0x36 down (1):\n    A WM_KEYDOWN vk=0x10 l=0x00360001\n    async generic=1 left=0 right=1; GetKeyState generic=1 left=0 right=1\n    A WM_KEYUP vk=0x10 l=0xc0360001\n  released:\n    async generic=0 left=0 right=0; GetKeyState generic=0 left=0 right=0\nVK_SHIFT scan 0x2a down (1):\n    A WM_KEYDOWN vk=0x10 l=0x002a0001\n    async generic=1 left=1 right=0; GetKeyState generic=1 left=1 right=0\n    A WM_KEYUP vk=0x10 l=0xc02a0001\n  released:\n    async generic=0 left=0 right=0; GetKeyState generic=0 left=0 right=0\nVK_SHIFT scan 0x36 down (1):\n    A WM_KEYDOWN vk=0x10 l=0x00360001\n    async generic=1 left=0 right=1; GetKeyState generic=1 left=0 right=1\n    A WM_KEYUP vk=0x10 l=0xc0360001\n  released:\n    async generic=0 left=0 right=0; GetKeyState generic=0 left=0 right=0\nVK_LCONTROL scan 0x1d down (1):\n    A WM_KEYDOWN vk=0x11 l=0x001d0001\n    async generic=1 left=1 right=0; GetKeyState generic=1 left=1 right=0\n    A WM_KEYUP vk=0x11 l=0xc01d0001\n  released:\n    async generic=0 left=0 right=0; GetKeyState generic=0 left=0 right=0\nVK_RCONTROL scan 0x1d extended down (1):\n    A WM_KEYDOWN vk=0x11 l=0x011d0001\n    async generic=1 left=0 right=1; GetKeyState generic=1 left=0 right=1\n    A WM_KEYUP vk=0x11 l=0xc11d0001\n  released:\n    async generic=0 left=0 right=0; GetKeyState generic=0 left=0 right=0\nVK_CONTROL scan 0x1d down (1):\n    A WM_KEYDOWN vk=0x11 l=0x001d0001\n    async generic=1 left=1 right=0; GetKeyState generic=1 left=1 right=0\n    A WM_KEYUP vk=0x11 l=0xc01d0001\n  released:\n    async generic=0 left=0 right=0; GetKeyState generic=0 left=0 right=0\nGetAsyncKeyState(0x0) = 0x0000\nGetAsyncKeyState(0xff) = 0x0000\nGetAsyncKeyState(0x141) = 0x0000\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1892
+    }
+  ]
+}

@@ -47,11 +47,21 @@ pub fn utimes(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     fs(k)?.utimensat(AT_FDCWD, Some(&path), Some(atime), Some(mtime), true).map(|()| 0)
 }
 
-/// futimesat(dirfd, path, times[2]): utimes(2) relative to `dirfd`.
+/// futimesat(dirfd, path, times[2]): utimes(2) relative to `dirfd`. A
+/// null `path` means the file `dirfd` refers to (any descriptor), but not
+/// the working directory: with `AT_FDCWD` it is `EFAULT` (futimesat's
+/// spec sheet). The times are read and checked first.
 pub fn futimesat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let (atime, mtime) = timevals(k, a, 2)?;
+    let dirfd = a.fd(0);
+    if a.ptr(1).is_null() {
+        if dirfd == AT_FDCWD {
+            return Err(Errno::EFAULT);
+        }
+        return fs(k)?.utimensat(dirfd, None, Some(atime), Some(mtime), true).map(|()| 0);
+    }
     let path = nonempty_path(k, a.ptr(1))?;
-    fs(k)?.utimensat(a.fd(0), Some(&path), Some(atime), Some(mtime), true).map(|()| 0)
+    fs(k)?.utimensat(dirfd, Some(&path), Some(atime), Some(mtime), true).map(|()| 0)
 }
 
 /// utime(path, times): `struct utimbuf` is `actime`, `modtime`, whole

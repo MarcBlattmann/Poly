@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "swp_child",
+      "exe_sha256": "0b2e34727c89f530eb6dcc346f9e8bc71c69682be08e1a53211651b26ecb2df0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAotLSBtb3ZlIHRvIDIwLDMwOiByZXR1cm5lZCAxCkMgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTIwLDMwIHNpemU9MCwwIGZsYWdzPTB4MTUKQyBXTV9XSU5ET1dQT1NDSEFOR0VEIHBvcz0yMCwzMCBzaXplPTUwLDUwIGZsYWdzPTB4ODFkCkMgV01fTU9WRSB3PTAgbD0yMCwzMAogICBub3cgYXQgMjAsMzAgc2l6ZSA1MHg1MAotLSByZXNpemUgdG8gNzB4NDA6IHJldHVybmVkIDEKQyBXTV9XSU5ET1dQT1NDSEFOR0lORyBwb3M9MCwwIHNpemU9NzAsNDAgZmxhZ3M9MHgxNgpDIFdNX05DQ0FMQ1NJWkUgMSBuZXc9MjAsMzAsOTAsNzAgcG9zPTIwLDMwLDcwLDQwIGZsYWdzPTB4MTgxZQpDIFdNX1dJTkRPV1BPU0NIQU5HRUQgcG9zPTIwLDMwIHNpemU9NzAsNDAgZmxhZ3M9MHgxMDFlCkMgV01fU0laRSB3PTAgbD03MCw0MAogICBub3cgYXQgMjAsMzAgc2l6ZSA3MHg0MAotLSBtb3ZlIGFuZCByZXNpemU6IHJldHVybmVkIDEKQyBXTV9XSU5ET1dQT1NDSEFOR0lORyBwb3M9NSw2IHNpemU9ODAsOTAgZmxhZ3M9MHgxNApDIFdNX05DQ0FMQ1NJWkUgMSBuZXc9NSw2LDg1LDk2IHBvcz01LDYsODAsOTAgZmxhZ3M9MHgxODFjCkMgV01fV0lORE9XUE9TQ0hBTkdFRCBwb3M9NSw2IHNpemU9ODAsOTAgZmxhZ3M9MHgxYwpDIFdNX01PVkUgdz0wIGw9NSw2CkMgV01fU0laRSB3PTAgbD04MCw5MAogICBub3cgYXQgNSw2IHNpemUgODB4OTAKLS0gc2FtZSBwb3NpdGlvbiBhbmQgc2l6ZTogcmV0dXJuZWQgMQpDIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz01LDYgc2l6ZT04MCw5MCBmbGFncz0weDE0CiAgIG5vdyBhdCA1LDYgc2l6ZSA4MHg5MAotLSBOT01PVkV8Tk9TSVpFOiByZXR1cm5lZCAxCkMgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDE3CiAgIG5vdyBhdCA1LDYgc2l6ZSA4MHg5MAotLSBtb3ZlIHdpdGggTk9TRU5EQ0hBTkdJTkc6IHJldHVybmVkIDEKQyBXTV9XSU5ET1dQT1NDSEFOR0VEIHBvcz03LDggc2l6ZT04MCw5MCBmbGFncz0weGMxZApDIFdNX01PVkUgdz0wIGw9Nyw4CiAgIG5vdyBhdCA3LDggc2l6ZSA4MHg5MAotLSBGUkFNRUNIQU5HRUQgb25seTogcmV0dXJuZWQgMQpDIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHgzNwpDIFdNX05DQ0FMQ1NJWkUgMSBuZXc9Nyw4LDg3LDk4IHBvcz03LDgsODAsOTAgZmxhZ3M9MHgxODNmCkMgV01fV0lORE9XUE9TQ0hBTkdFRCBwb3M9Nyw4IHNpemU9ODAsOTAgZmxhZ3M9MHgxODNmCiAgIG5vdyBhdCA3LDggc2l6ZSA4MHg5MAotLSBTSE9XV0lORE9XOiByZXR1cm5lZCAxCkMgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDU3CkMgV01fV0lORE9XUE9TQ0hBTkdFRCBwb3M9Nyw4IHNpemU9ODAsOTAgZmxhZ3M9MHgxODVmCiAgIG5vdyBhdCA3LDggc2l6ZSA4MHg5MAotLSBtb3ZlIHdoaWxlIHZpc2libGU6IHJldHVybmVkIDEKQyBXTV9XSU5ET1dQT1NDSEFOR0lORyBwb3M9OSw5IHNpemU9MCwwIGZsYWdzPTB4MTUKQyBXTV9XSU5ET1dQT1NDSEFOR0VEIHBvcz05LDkgc2l6ZT04MCw5MCBmbGFncz0weDgxZApDIFdNX01PVkUgdz0wIGw9OSw5CiAgIG5vdyBhdCA5LDkgc2l6ZSA4MHg5MAotLSBISURFV0lORE9XOiByZXR1cm5lZCAxCkMgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDk3CkMgV01fV0lORE9XUE9TQ0hBTkdFRCBwb3M9OSw5IHNpemU9ODAsOTAgZmxhZ3M9MHgxODlmCiAgIG5vdyBhdCA5LDkgc2l6ZSA4MHg5MAotLSBuZWdhdGl2ZSBzaXplOiByZXR1cm5lZCAxCkMgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDE2CkMgV01fTkNDQUxDU0laRSAxIG5ldz05LDksOSw5IHBvcz05LDksMCwwIGZsYWdzPTB4MTgxZQpDIFdNX1dJTkRPV1BPU0NIQU5HRUQgcG9zPTksOSBzaXplPTAsMCBmbGFncz0weDEwMWUKQyBXTV9TSVpFIHc9MCBsPTAsMAogICBub3cgYXQgOSw5IHNpemUgMHgwCi0tIHNpemUgMHgwOiByZXR1cm5lZCAxCkMgV01fV0lORE9XUE9TQ0hBTkdJTkcgcG9zPTAsMCBzaXplPTAsMCBmbGFncz0weDE2CiAgIG5vdyBhdCA5LDkgc2l6ZSAweDAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n-- move to 20,30: returned 1\nC WM_WINDOWPOSCHANGING pos=20,30 size=0,0 flags=0x15\nC WM_WINDOWPOSCHANGED pos=20,30 size=50,50 flags=0x81d\nC WM_MOVE w=0 l=20,30\n   now at 20,30 size 50x50\n-- resize to 70x40: returned 1\nC WM_WINDOWPOSCHANGING pos=0,0 size=70,40 flags=0x16\nC WM_NCCALCSIZE 1 new=20,30,90,70 pos=20,30,70,40 flags=0x181e\nC WM_WINDOWPOSCHANGED pos=20,30 size=70,40 flags=0x101e\nC WM_SIZE w=0 l=70,40\n   now at 20,30 size 70x40\n-- move and resize: returned 1\nC WM_WINDOWPOSCHANGING pos=5,6 size=80,90 flags=0x14\nC WM_NCCALCSIZE 1 new=5,6,85,96 pos=5,6,80,90 flags=0x181c\nC WM_WINDOWPOSCHANGED pos=5,6 size=80,90 flags=0x1c\nC WM_MOVE w=0 l=5,6\nC WM_SIZE w=0 l=80,90\n   now at 5,6 size 80x90\n-- same position and size: returned 1\nC WM_WINDOWPOSCHANGING pos=5,6 size=80,90 flags=0x14\n   now at 5,6 size 80x90\n-- NOMOVE|NOSIZE: returned 1\nC WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x17\n   now at 5,6 size 80x90\n-- move with NOSENDCHANGING: returned 1\nC WM_WINDOWPOSCHANGED pos=7,8 size=80,90 flags=0xc1d\nC WM_MOVE w=0 l=7,8\n   now at 7,8 size 80x90\n-- FRAMECHANGED only: returned 1\nC WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x37\nC WM_NCCALCSIZE 1 new=7,8,87,98 pos=7,8,80,90 flags=0x183f\nC WM_WINDOWPOSCHANGED pos=7,8 size=80,90 flags=0x183f\n   now at 7,8 size 80x90\n-- SHOWWINDOW: returned 1\nC WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x57\nC WM_WINDOWPOSCHANGED pos=7,8 size=80,90 flags=0x185f\n   now at 7,8 size 80x90\n-- move while visible: returned 1\nC WM_WINDOWPOSCHANGING pos=9,9 size=0,0 flags=0x15\nC WM_WINDOWPOSCHANGED pos=9,9 size=80,90 flags=0x81d\nC WM_MOVE w=0 l=9,9\n   now at 9,9 size 80x90\n-- HIDEWINDOW: returned 1\nC WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x97\nC WM_WINDOWPOSCHANGED pos=9,9 size=80,90 flags=0x189f\n   now at 9,9 size 80x90\n-- negative size: returned 1\nC WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x16\nC WM_NCCALCSIZE 1 new=9,9,9,9 pos=9,9,0,0 flags=0x181e\nC WM_WINDOWPOSCHANGED pos=9,9 size=0,0 flags=0x101e\nC WM_SIZE w=0 l=0,0\n   now at 9,9 size 0x0\n-- size 0x0: returned 1\nC WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x16\n   now at 9,9 size 0x0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    },
+    {
+      "name": "swp_zorder",
+      "exe_sha256": "2d7e881b86deb04bc51686b87cc868e09cbe187023a96df88dd6e9767c0810be",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAphZnRlciBjcmVhdGluZyBBIEIgQyAodG9wIGZpcnN0KTogQSBCIEMKb2sgbGFzdF9pc19jCm9rIGZpcnN0X2lzX2EKb2sgcHJldl9vZl9jX2lzX2IKb2sgcHJldl9vZl9hX2lzX251bGwKICBDIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHgxMwpDIHRvIGJvdHRvbTogQSBCIEMKICBBIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHgxMwpBIHRvIHRvcDogQSBCIEMKICBDIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHgxMwogIEMgV01fV0lORE9XUE9TQ0hBTkdFRCBwb3M9MCwwIHNpemU9MTAsMTAgZmxhZ3M9MHgxODFiCkMgYWZ0ZXIgQTogQSBDIEIKICBBIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHgxMwpBIHRvIHRvcCB3aGVuIGFscmVhZHkgdGhlcmU6IEEgQyBCCnN1bW1hcnkgNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nafter creating A B C (top first): A B C\nok last_is_c\nok first_is_a\nok prev_of_c_is_b\nok prev_of_a_is_null\n  C WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x13\nC to bottom: A B C\n  A WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x13\nA to top: A B C\n  C WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x13\n  C WM_WINDOWPOSCHANGED pos=0,0 size=10,10 flags=0x181b\nC after A: A C B\n  A WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x13\nA to top when already there: A C B\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

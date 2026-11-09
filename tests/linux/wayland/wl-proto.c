@@ -24,7 +24,8 @@
  *              goes through a pipe from one client to the other.
  *
  * After each scenario's frame is on the screen it asks the compositor
- * for a picture (SIGUSR1; $POLY_COMPOSITOR_DUMP) and counts its colours,
+ * for a picture (a "dump" line on $POLY_COMPOSITOR_CONTROL;
+ * $POLY_COMPOSITOR_DUMP) and counts its colours,
  * then prints "wl-proto: show <name>" and waits for a line on standard
  * input: the boot test takes a screenshot through QMP and answers.
  *
@@ -575,8 +576,20 @@ static void destroy_window(struct window *w) {
 
 /* ---- Pictures --------------------------------------------------------------------- */
 
-/* Ask the compositor for a picture (SIGUSR1) and count the pixels of each
- * of `colours`. Returns 0 if there is no picture. */
+/* Ask the compositor that started us for a picture: a "dump" line on its
+ * control pipe. */
+static void request_dump(void) {
+    const char *ctl = getenv("POLY_COMPOSITOR_CONTROL");
+    int fd = ctl ? open(ctl, O_WRONLY | O_NONBLOCK) : -1;
+    if (fd >= 0) {
+        if (write(fd, "dump\n", 5) != 5)
+            printf("wl-proto: the control pipe took no request\n");
+        close(fd);
+    }
+}
+
+/* Ask the compositor for a picture and count the pixels of each of
+ * `colours`. Returns 0 if there is no picture. */
 static int count_colours(const uint32_t *colours, long *counts, int n) {
     const char *path = getenv("POLY_COMPOSITOR_DUMP");
     struct stat st;
@@ -585,7 +598,7 @@ static int count_colours(const uint32_t *colours, long *counts, int n) {
     if (!path)
         return 0;
     unlink(path);
-    kill(getppid(), SIGUSR1);
+    request_dump();
     for (int waited = 0; stat(path, &st) < 0 && waited < 20000; waited += 20)
         usleep(20000);
     FILE *f = fopen(path, "rb");

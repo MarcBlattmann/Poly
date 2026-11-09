@@ -1,30 +1,40 @@
 //! Developer and CI entry point: `cargo xtask <command>`.
 //!
 //! Commands:
-//!   build [--release]   build the kernel
-//!   run   [--release] [--gdb] [--no-disk] [--headless] [--virtio-gpu] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
+//!   start [--last | --print]
+//!                       a menu in the terminal of everything below that boots or checks
+//!                       (the desktop, Chromium's and the toolkits' disks, the kernel's shells,
+//!                       boot test groups, CI parts) with their options; it remembers the last
+//!                       choice (target/poly-start.json), so Enter runs it again; --last runs it
+//!                       without the menu, --print shows the command it would run (start.rs)
+//!   build [--release]   build the native programs (userland/native, native.rs) and the kernel
+//!   run   [--release] [--gdb] [--no-disk] [--headless] [--virtio-gpu] [--memory=SIZE] [--cpus=N] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
 //!                       with the test devices and a virtio-net NIC on QEMU's user
 //!                       networking attached (--no-disk: without them),
 //!                       the screen in a window when there is a desktop (--headless:
 //!                       never); --gdb waits for a debugger on localhost:1234
 //!                       (docs/DEBUGGING.md); the root file system is a small
-//!                       initramfs (--initrd=<file>: that cpio archive instead,
+//!                       initramfs with the native programs in /bin
+//!                       (poly.init=/bin/native-hello runs one first; --initrd=<file>: that cpio archive instead,
 //!                       --no-initrd: none; --busybox: BusyBox's image, booting into
 //!                       BusyBox's init and a shell on the console, see busybox.rs;
 //!                       add console=tty1 for the screen; --disk-root [--fresh-disk]: BusyBox's
 //!                       init mounts the root disk (made if missing) and runs its bash, see
 //!                       rootdisk.rs); --virtio-gpu: a virtio GPU instead of the
-//!                       standard VGA (ADR 0102)
+//!                       standard VGA (ADR 0102); --memory=SIZE (4G, 3072M) and --cpus=N: the
+//!                       guest's RAM and virtual CPUs instead of the defaults, as on desktop,
+//!                       chromium run and toolkits (resources.rs, ADR 0141)
 //!   screenshot [--release] [--virtio-gpu] [--out <file>] [--wait <text>] [kernel args...]
 //!                       boot headless, wait for a serial line containing <text>
 //!                       (default: the self-test's verdict), save the screen to <file>
 //!                       (default target/poly-screen.png; .ppm for PPM) and quit;
 //!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
-//!   desktop [--release] [kernel args...]
+//!   desktop [--release] [--test-apps] [--fresh-state] [--memory=SIZE] [--cpus=N] [kernel args...]
 //!                       boot straight into Poly's desktop: the Wayland compositor and shell on a
 //!                       virtio GPU through DRM/KMS, a virtio keyboard and tablet (desktop.rs,
-//!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop
+//!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop; the settings
+//!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   boot-tests [--list] [--shard <name>]... [group...]
 //!                       the boot tests alone: all, the groups named (`selftest` is
@@ -47,6 +57,16 @@
 //!   root-disk           write the persistent root disk image target/poly-root-disk.img
 //!                       (the host's bash, coreutils, Python, gcc; rootdisk.rs)
 //!   root-disk-test      only the root disk boot test of `test` (rootdisk.rs)
+//!   toolkits [--release] [--fresh-disk] [--memory=SIZE] [--cpus=N] [STEP...]
+//!                       boot the toolkits' root disk (GTK, Qt, VLC; toolkits.rs, ADR 0120)
+//!                       to the desktop and the console's bash, and run the steps
+//!                       (run:LINE send:LINE expect:TEXT shot:NAME click:X,Y key:QCODE sleep:S)
+//!   chromium lock|fetch|root [--reference]|disk
+//!                       Chromium's root disk from pinned Debian packages (chromium.rs):
+//!                       write the lock, download and check the packages, unpack them
+//!                       (Linux), make target/poly-chromium-disk.img
+//!   chromium [--release] [--fresh-disk] [STEP...]
+//!                       boot Chromium's disk to the desktop, steps as for toolkits
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
@@ -75,6 +95,7 @@
 mod accel;
 mod asmlabels;
 mod busybox;
+mod chromium;
 mod compositor;
 mod compositor_kms;
 mod conflicts;
@@ -86,31 +107,44 @@ mod ext2disk;
 mod ext4disk;
 mod font;
 mod fonts;
+mod hostfs;
+mod hostscreen;
 mod initramfs;
 mod input;
 mod ktest;
 mod libsearch;
 mod mesa;
+mod native;
 mod net;
 mod nls;
 mod ntdll;
 mod programs;
+mod progress;
+mod resources;
 mod rootdisk;
 mod screen;
 mod sevenzip;
 mod sevenzip_trace;
+mod sha256;
 mod sound;
+mod start;
 mod symbols;
 mod sysmsg;
+mod term;
 mod terminal;
+mod toolkits;
+mod unzip;
+mod virgl;
+mod wallpapers;
 mod wayland;
 mod win32;
+mod winapp;
 mod winimports;
 mod wintrace;
 mod xwayland;
 
+use hostfs::UnixStream;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::sync::{Arc, mpsc};
@@ -154,39 +188,17 @@ const QEMU_CPUS: u32 = 2;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let release = args.iter().any(|a| a == "--release");
     if let Err(e) = accel::init() {
         eprintln!("xtask: error: {e}");
         return ExitCode::FAILURE;
     }
     let result = match args.first().map(String::as_str) {
-        Some("build") => build_kernel(release).map(|_| ()),
-        Some("run") => run(&args[1..]),
-        Some("screenshot") => screenshot(&args[1..]),
-        Some("desktop") => desktop::command(&args[1..]),
-        Some("test") => test(),
-        Some("ci") => ci(&args[1..]),
-        Some("boot-tests") => boot_tests_command(&args[1..]),
-        Some("symbolize") => symbolize(&args[1..]),
-        Some("coverage") => coverage(&args[1..]),
         Some("pipeline") => return pipeline_command(&args[1..]),
-        Some("font") => font::run(&root(), &args[1..]),
-        Some("nls-tables") => nls::run(&root(), &args[1..]),
-        Some("system-messages") => sysmsg::run(&root(), &args[1..]),
-        Some("fonts") => fonts::command(&args[1..]),
-        Some("wayland") => wayland::run(&root(), &args[1..]),
-        Some("ntdll") => ntdll::command(&args[1..]),
-        Some("win32") => win32::command(&args[1..]),
-        Some("win") => sevenzip::command(&args[1..]),
-        Some("dynamic-initramfs") => dynamic::command(),
-        Some("busybox-initramfs") => busybox::command(),
-        Some("busybox-test") => busybox_test(),
-        Some("root-disk") => rootdisk::command(),
-        Some("root-disk-test") => root_disk_test(),
+        Some("start") => start::command(&args[1..]),
+        Some(name) if COMMANDS.contains(&name) => dispatch(&args),
         _ => {
-            eprintln!(
-                "usage: cargo xtask <build|run|screenshot|desktop|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
-            );
+            eprintln!("usage: cargo xtask <start|{}|pipeline> [--release]", COMMANDS.join("|"));
+            eprintln!("       cargo xtask start: a menu of what to build and boot, remembering the last choice");
             return ExitCode::from(2);
         }
     };
@@ -196,6 +208,68 @@ fn main() -> ExitCode {
             eprintln!("xtask: error: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// The commands [`dispatch`] runs (besides `start` and `pipeline`).
+const COMMANDS: [&str; 24] = [
+    "build",
+    "run",
+    "screenshot",
+    "desktop",
+    "test",
+    "boot-tests",
+    "ci",
+    "symbolize",
+    "coverage",
+    "font",
+    "fonts",
+    "wayland",
+    "nls-tables",
+    "system-messages",
+    "ntdll",
+    "win32",
+    "win",
+    "dynamic-initramfs",
+    "busybox-initramfs",
+    "busybox-test",
+    "root-disk",
+    "root-disk-test",
+    "toolkits",
+    "chromium",
+];
+
+/// Run `cargo xtask <args>`: the same functions for the command line and
+/// for `cargo xtask start`'s menu.
+fn dispatch(args: &[String]) -> Result {
+    let release = args.iter().any(|a| a == "--release");
+    let rest = args.get(1..).unwrap_or_default();
+    match args.first().map(String::as_str) {
+        Some("build") => build_kernel(release).map(|_| ()),
+        Some("run") => run(rest),
+        Some("screenshot") => screenshot(rest),
+        Some("desktop") => desktop::command(rest),
+        Some("test") => test(),
+        Some("ci") => ci(rest),
+        Some("boot-tests") => boot_tests_command(rest),
+        Some("symbolize") => symbolize(rest),
+        Some("coverage") => coverage(rest),
+        Some("font") => font::run(&root(), rest),
+        Some("nls-tables") => nls::run(&root(), rest),
+        Some("system-messages") => sysmsg::run(&root(), rest),
+        Some("fonts") => fonts::command(rest),
+        Some("wayland") => wayland::run(&root(), rest),
+        Some("ntdll") => ntdll::command(rest),
+        Some("win32") => win32::command(rest),
+        Some("win") => sevenzip::command(rest),
+        Some("dynamic-initramfs") => dynamic::command(),
+        Some("busybox-initramfs") => busybox::command(),
+        Some("busybox-test") => busybox_test(),
+        Some("root-disk") => rootdisk::command(),
+        Some("root-disk-test") => root_disk_test(),
+        Some("toolkits") => toolkits::command(rest),
+        Some("chromium") => chromium::command(rest),
+        other => Err(format!("no command {other:?}")),
     }
 }
 
@@ -211,31 +285,49 @@ fn cargo() -> Command {
     Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
 }
 
+/// Run `cmd`, a build step called `name`: its output on the terminal, or
+/// in a log shown by `cargo xtask start`'s progress table ([`progress`]).
 fn step(name: &str, cmd: &mut Command) -> Result {
-    eprintln!("==> {name}");
-    let status = cmd.status().map_err(|e| format!("{name}: {e}"))?;
-    if status.success() { Ok(()) } else { Err(format!("{name} failed ({status})")) }
+    progress::step(name, cmd)
 }
 
 /// `cargo` run inside kernel/ (so kernel/.cargo/config.toml, target and
-/// flags, applies), with our `ntdll.dll` up to date and named in the
-/// environment for the kernel's `build.rs` to embed (ADR 0071).
+/// flags, applies), with our `ntdll.dll` and the Win32 DLLs up to date and
+/// named in the environment for the kernel's `build.rs` to embed (ADR
+/// 0071). The two are made at the same time (each its own cargo build in a
+/// target directory of its own, or taken from the cache).
 fn kernel_cargo() -> Result<Command> {
-    let dll = ntdll::ensure()?;
-    let win32 = win32::ensure()?;
+    let (dll, win32) = thread::scope(|s| {
+        let dll = s.spawn(ntdll::ensure);
+        let win32 = win32::ensure();
+        (dll.join().unwrap_or_else(|_| Err("building ntdll.dll panicked".into())), win32)
+    });
+    let (dll, win32) = (dll?, win32?);
     let mut cmd = cargo();
     cmd.current_dir(kernel_dir()).env(ntdll::KERNEL_ENV, dll).env(win32::KERNEL_ENV, win32);
     Ok(cmd)
 }
 
 /// Builds from inside kernel/ so kernel/.cargo/config.toml (target, flags) applies.
+/// The native programs (`userland/native/`, ADR 0125) are built too: they
+/// ship with the kernel, on every host. The kernel does not need them, so
+/// they build at the same time (their own target directory, so the two
+/// cargo runs do not wait for each other's lock).
 fn build_kernel(release: bool) -> Result<PathBuf> {
-    let mut cmd = kernel_cargo()?;
-    cmd.arg("build");
-    if release {
-        cmd.arg("--release");
-    }
-    step("build kernel", &mut cmd)?;
+    let (native, kernel) = thread::scope(|s| {
+        let native = s.spawn(native::build);
+        let kernel = (|| {
+            let mut cmd = kernel_cargo()?;
+            cmd.arg("build");
+            if release {
+                cmd.arg("--release");
+            }
+            step("build kernel", &mut cmd)
+        })();
+        (native.join().unwrap_or_else(|_| Err("building the native programs panicked".into())), kernel)
+    });
+    native?;
+    kernel?;
     Ok(kernel_elf(release))
 }
 
@@ -353,10 +445,18 @@ impl Devices<'_> {
 /// character device) and `devices` attached. The machine has QEMU's standard VGA; add
 /// `-display none` for no window.
 fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial: &str) -> Command {
+    qemu_with(kernel, memory, QEMU_CPUS, append, devices, serial)
+}
+
+/// [`qemu`] with `cpus` virtual CPUs. The interactive boots (`desktop`, `run`,
+/// `chromium run`, `toolkits`) call this with the memory and CPUs of
+/// [`resources::Resources`] (`--memory=`, `--cpus=`, ADR 0141); the boot
+/// tests call [`qemu`], whose sizes are fixed.
+fn qemu_with(kernel: &Path, memory: &str, cpus: u32, append: &str, devices: Devices<'_>, serial: &str) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
     cmd.args(accel::get().qemu_args())
         .args(["-machine", "q35", "-m", memory, "-serial", serial, "-no-reboot"])
-        .args(["-smp", &QEMU_CPUS.to_string()])
+        .args(["-smp", &cpus.to_string()])
         .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
         .arg("-kernel")
         .arg(kernel)
@@ -412,14 +512,17 @@ fn run(args: &[String]) -> Result {
             "--disk-root" => disk_root = true,
             "--fresh-disk" => fresh_disk = true,
             "--virtio-gpu" => virtio_gpu = true,
+            // Read below by `Resources::from_args`.
+            flag if resources::is_flag(flag) => {}
             flag if flag.starts_with("--initrd=") => initrd = Some(PathBuf::from(&flag["--initrd=".len()..])),
             flag if flag.starts_with("--") => return Err(format!("run: unknown option {flag}")),
             arg => cmdline.push(arg),
         }
     }
+    let res = resources::Resources::from_args(args)?;
     let kernel = build_kernel(release)?;
     if disk_root {
-        return run_disk_root(&kernel, fresh_disk, gdb, &cmdline);
+        return run_disk_root(&kernel, fresh_disk, gdb, &cmdline, &res);
     }
     let disk = if with_disk { Some(test_disk()?) } else { None };
     let devices = disk.as_deref().map_or(Devices::None, Devices::Test);
@@ -435,7 +538,7 @@ fn run(args: &[String]) -> Result {
             cmdline.push(busybox::INIT_ARGS);
         }
     } else if initrd.as_deref() == Some(Path::new("")) {
-        initrd = Some(initramfs::write(&root(), "poly-initramfs.cpio", &initramfs::default_image())?);
+        initrd = Some(native::run_image()?);
     }
     // A virtio-net device on QEMU's user networking with its addresses
     // (an earlier poly.net= on the command line wins).
@@ -444,7 +547,15 @@ fn run(args: &[String]) -> Result {
     }
     // `mon:stdio` shares the terminal between the serial port and QEMU's
     // monitor: Ctrl-A C switches between them, Ctrl-A X quits.
-    let mut cmd = qemu(&kernel, DEFAULT_MEMORY, &cmdline.join(" "), devices, "mon:stdio");
+    eprintln!("{}", res.describe(DEFAULT_MEMORY, QEMU_CPUS));
+    let mut cmd = qemu_with(
+        &kernel,
+        &res.memory(DEFAULT_MEMORY),
+        res.cpus_or(QEMU_CPUS),
+        &cmdline.join(" "),
+        devices,
+        "mon:stdio",
+    );
     if with_disk {
         cmd.args(net::nic_args(None, false));
     }
@@ -482,7 +593,7 @@ fn run(args: &[String]) -> Result {
 /// (`target/poly-root-disk.img`, made if missing or with `--fresh-disk`)
 /// and runs its bash on the serial console (rootdisk.rs). No window, no
 /// test devices; the network on QEMU's user networking.
-fn run_disk_root(kernel: &Path, fresh: bool, gdb: bool, cmdline: &[&str]) -> Result {
+fn run_disk_root(kernel: &Path, fresh: bool, gdb: bool, cmdline: &[&str], res: &resources::Resources) -> Result {
     let image = root().join("target").join(rootdisk::FILE_NAME);
     if fresh || !image.exists() {
         rootdisk::make(rootdisk::FILE_NAME)?;
@@ -498,7 +609,9 @@ fn run_disk_root(kernel: &Path, fresh: bool, gdb: bool, cmdline: &[&str]) -> Res
         append.push(' ');
         append.push_str(a);
     }
-    let mut cmd = qemu(kernel, rootdisk::MEMORY, &append, Devices::None, "mon:stdio");
+    eprintln!("{}", res.describe(rootdisk::MEMORY, QEMU_CPUS));
+    let mut cmd =
+        qemu_with(kernel, &res.memory(rootdisk::MEMORY), res.cpus_or(QEMU_CPUS), &append, Devices::None, "mon:stdio");
     cmd.args(rootdisk::drive_args(&image)).args(net::nic_args(None, false));
     cmd.arg("-initrd").arg(&initrd).args(["-display", "none"]);
     if gdb {
@@ -952,6 +1065,9 @@ fn boot_typing_once(
     Ok(Boot { status, output: rest, timed_out })
 }
 
+/// How long the long line [`shell_test`] types is, in bytes.
+const LONG_LINE: usize = 700;
+
 /// Type commands into the kernel shell on the serial port and check what
 /// they print; `reboot` ends the boot (QEMU runs with `-no-reboot`).
 fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
@@ -960,6 +1076,15 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let append = format!("poly.qemu_exit {SHELL_FLAG} poly.test=shell:: {}", devices.flags());
     let initrd = programs::test_initramfs()?;
     let qemu_args = ["-initrd".to_string(), initrd.display().to_string()];
+    // A line far longer than the kernel's serial input ring (256 bytes),
+    // typed ahead while the shell is busy with a kernel test that spins
+    // for a fifth of a second at least: it must arrive whole, the UART held
+    // back while the ring is full (ADR 0123). The empty step takes the
+    // prompt after the test, so the next command is sent after the line's
+    // prompt.
+    let long_text: String =
+        (0..LONG_LINE).map(|i| char::from(b"0123456789abcdefghijklmnopqrstuvwxyz"[i % 36])).collect();
+    let typed_ahead = format!("test timer_ticks_at_the_expected_rate\recho {long_text}\r");
     let commands = [
         "help\r",
         "uptime\r",
@@ -972,6 +1097,8 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         "ls /test\r",
         "cat /etc/motd\r",
         "run /bin/hello\r",
+        typed_ahead.as_str(),
+        "",
         "reboot\r",
     ];
     let steps: Vec<_> = commands.iter().map(|&c| (console::PROMPT, c)).collect();
@@ -988,7 +1115,7 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         ));
     }
     let out = |i: usize| ex[i].output;
-    let checks: [(&str, bool); 11] = [
+    let checks: [(&str, bool); 13] = [
         (
             "help lists the commands",
             ["uptime ", "lspci ", "reboot ", "list the commands"].iter().all(|s| out(0).contains(s)),
@@ -1014,10 +1141,19 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             "run starts /bin/hello and reports its exit",
             out(9).contains(programs::HELLO_OUTPUT) && out(9).ends_with("/bin/hello: exit status 0\n"),
         ),
-        ("reboot uses the ACPI reset register", out(10).contains("reboot: ACPI reset register")),
+        ("the tests run again", out(10).contains("test result: ok.")),
+        ("a line typed ahead, longer than the serial input ring, arrives whole", out(11).trim_end() == long_text),
+        ("reboot uses the ACPI reset register", out(12).contains("reboot: ACPI reset register")),
     ];
     for (what, ok) in checks {
         if !ok {
+            if what.starts_with("a line typed ahead") {
+                let got = out(11).trim_end();
+                return Err(format!(
+                    "shell over the serial port: {what} failed ({} of {LONG_LINE} bytes: {got:?})",
+                    got.len()
+                ));
+            }
             return Err(format!("shell over the serial port: {what} failed"));
         }
     }
@@ -1406,7 +1542,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 31] = [
+const BOOT_GROUPS: [BootGroup; 37] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1419,6 +1555,9 @@ const BOOT_GROUPS: [BootGroup; 31] = [
     }),
     // Static Linux hello worlds as the first process (poly.init).
     ("programs", programs::boot_tests),
+    // Native Poly programs on poly-rt as the first process: output, heap,
+    // time, files, native and Linux children (native.rs, ADR 0125).
+    ("native", native::boot_test),
     // Dynamically linked glibc programs through glibc's own ld.so (dynamic.rs).
     ("dynamic", dynamic::boot_tests),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
@@ -1446,9 +1585,22 @@ const BOOT_GROUPS: [BootGroup; 31] = [
     // window, then the settings read back in a second boot (desktop.rs,
     // ADR 0117).
     ("desktop-shell", desktop::shell_boot_test),
+    // A Windows GUI program's window on the desktop through win32k's
+    // desktop link, /dev/win32k (desktop.rs, ADR 0131).
+    ("desktop-win32", desktop::win32_boot_test),
+    // Poly's own Files and Terminal on the desktop: a shell command typed
+    // into the Terminal, its file found in Files (desktop.rs, ADR 0134).
+    ("desktop-apps", desktop::apps_boot_test),
     // X11 apps through Xwayland on the desktop, from the root disk
     // (xwayland.rs, ADR 0118).
     ("xwayland", xwayland::boot_test),
+    // GTK 3, GTK 4 and Qt apps on the desktop from the toolkits' root disk,
+    // and VLC playing a video with sound (toolkits.rs, ADR 0120).
+    ("toolkits", toolkits::boot_test),
+    // Chromium from pinned Debian packages, headless and on the desktop with
+    // its sandbox; skipped until its packages are fetched (chromium.rs,
+    // docs/chromium-linux-gaps.md).
+    ("chromium", chromium::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1477,6 +1629,10 @@ const BOOT_GROUPS: [BootGroup; 31] = [
     // sets a mode, kmscube renders with kms_swrast (llvmpipe) through GBM
     // and EGL, checked by screenshots (mesa.rs, ADR 0115).
     ("mesa", mesa::boot_test),
+    // 3D: Mesa's virgl driver (eglinfo, kmscube with hardware GL, screenshots
+    // through VNC) and Venus on a virtio GPU with virgl, skipped where the
+    // host cannot run QEMU's OpenGL display (virgl.rs, ADR 0119).
+    ("virgl", virgl::boot_test),
     // The screen terminal: a command typed on the keyboard runs in the shell
     // on the screen, whose output and status bar show up.
     ("terminal", |k, s| {
@@ -1504,6 +1660,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
         "userland",
         &[
             "programs",
+            "native",
             "dynamic",
             "busybox",
             "rootdisk",
@@ -1513,13 +1670,29 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
             "wayland-kms",
             "desktop",
             "desktop-shell",
+            "desktop-win32",
+            "desktop-apps",
             "mesa",
             "xwayland",
+            "toolkits",
+            "chromium",
         ],
     ),
     (
         "devices",
-        &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "drm", "terminal", "input"],
+        &[
+            "net",
+            "sound",
+            "ext2",
+            "ext4",
+            "missing-devices",
+            "screen",
+            "virtio-gpu",
+            "drm",
+            "virgl",
+            "terminal",
+            "input",
+        ],
     ),
     ("faults", &["faults", "failures"]),
 ];
@@ -1716,6 +1889,22 @@ fn lint() -> Result {
         cargo().current_dir(root()).args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
     )?;
     step("clippy (kernel)", kernel_cargo()?.args(["clippy", "--", "-D", "warnings"]))?;
+    // xtask itself on Windows, so building and booting work on a Windows
+    // host too (hostfs.rs has the stand-ins for what needs Linux).
+    step(
+        "clippy (xtask for Windows)",
+        cargo().current_dir(root()).args([
+            "clippy",
+            "--package",
+            "xtask",
+            "--all-targets",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--",
+            "-D",
+            "warnings",
+        ]),
+    )?;
     step(
         "fmt (ntdll)",
         cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
@@ -1726,6 +1915,8 @@ fn lint() -> Result {
             .args(["fmt", "--all", "--check", "--manifest-path"])
             .arg(root().join("personalities/nt/win32/Cargo.toml")),
     )?;
+    // The native programs and poly-rt for the native target (ADR 0125).
+    native::lint()?;
     // The Windows API tracer's DLL sources (no manifest of their own: the
     // kit's generated workspace builds them, wintrace.rs).
     step(
@@ -1752,11 +1943,11 @@ fn lint() -> Result {
 }
 
 /// The boot tests a second time on QEMU's emulator, when the first ran on
-/// KVM: the self-test boots, so code paths only TCG takes (and TCG's own
+/// a hypervisor: the self-test boots, so code paths only TCG takes (and TCG's own
 /// quirks) stay tested. A separate xtask, since the accelerator is chosen
 /// once per process.
 fn tcg_boot_tests() -> Result {
-    if accel::get() != accel::Accel::Kvm {
+    if accel::get() == accel::Accel::Tcg {
         return Ok(());
     }
     let xtask = std::env::current_exe().map_err(|e| format!("the xtask binary: {e}"))?;

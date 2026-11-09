@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/open_by_handle_at    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities (children dropping to uid/gid 1000); umask 022; tests use /dev/shm (tmpfs)"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  open_by_handle_at(mount_fd, handle, flags) (syscall 304) opens the file
+  named by a handle from name_to_handle_at. mount_fd is any open
+  descriptor on the file system the handle belongs to (a directory or a
+  file there; AT_FDCWD means the cwd's file system); flags are open flags
+  (O_RDONLY, O_WRONLY, O_RDWR, O_PATH, O_CLOEXEC, O_DIRECTORY, ...; O_CREAT
+  is ignored). The result is a new descriptor (lowest free) for the file,
+  whatever its current name (renames do not matter); a directory handle
+  gives a directory usable as a dirfd. A deleted file can still be opened
+  while some descriptor keeps it alive; once it is gone the handle is
+  stale. Requires CAP_DAC_READ_SEARCH (checked after the handle size).
+returns:
+  success: "a new fd (F_GETFL shows the access mode | O_LARGEFILE; FD_CLOEXEC iff O_CLOEXEC)"
+errors:
+  bytes: "EINVAL (22): handle_bytes 0 or > 128 (checked before the capability)"
+  fault: "EFAULT (14): handle unreadable"
+  perm: "EPERM (1): no CAP_DAC_READ_SEARCH"
+  bad_fd: "EBADF (9): mount_fd not open"
+  stale: "ESTALE (116): the handle does not name a live file on mount_fd's file system: mount_fd on another file system (procfs, or AT_FDCWD elsewhere), corrupted handle bytes, a deleted file no longer open"
+  open_errors: "the usual open errors for the access asked (EISDIR, EACCES never for root, ...); not tested"
+side_effects: "opens a descriptor"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: handle_type is not validated by tmpfs on Linux 6.18 (a wrong type
+# with correct bytes still opens); tests do not depend on that.

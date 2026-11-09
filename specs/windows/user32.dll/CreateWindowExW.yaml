@@ -1,0 +1,82 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/CreateWindowExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  Creates a window of a registered class and sends it its creation messages
+  synchronously, in a fixed order, before returning the handle. Top-level
+  windows get WM_GETMINMAXINFO first when they have a thick frame or
+  caption; then WM_NCCREATE, WM_NCCALCSIZE(FALSE), WM_CREATE; then WM_SIZE
+  and WM_MOVE (except for hidden top-level windows, which get them when
+  first shown or sized); a WS_VISIBLE window is then shown (WM_SHOWWINDOW
+  and the WM_WINDOWPOS* pair); a child's parent gets
+  WM_PARENTNOTIFY(WM_CREATE) after the child's WM_MOVE. Styles are adjusted
+  on the way (WS_CLIPSIBLINGS for top-level windows, WS_CAPTION for
+  overlapped ones, WS_EX_WINDOWEDGE for framed ones).
+interface:
+  signature: "HWND CreateWindowExW(DWORD ex_style, LPCWSTR class, LPCWSTR name, DWORD style, int x, int y, int w, int h, HWND parent, HMENU menu, HINSTANCE instance, LPVOID param)"
+  createstruct: "WM_NCCREATE and WM_CREATE get a CREATESTRUCTW: lpCreateParams = lpParam; hMenu = the child id or menu; hInstance; hwndParent; cy, cx, y, x as given (CW_USEDEFAULT resolved, see rules); style as given; lpszName = the caller's pointer (NULL stays NULL); lpszClass = NOT the caller's pointer; dwExStyle with WS_EX_WINDOWEDGE already added"
+  return: "the window handle, or NULL"
+rules:
+  sequence_overlapped_hidden: "WS_OVERLAPPEDWINDOW at 100,100 300x200, not visible: WM_GETMINMAXINFO (maxsize 1040,784 maxpos -8,-8 mintrack 136,39 maxtrack 1044,788), WM_NCCREATE (style 0xcf0000 ex 0x100), WM_NCCALCSIZE(FALSE, rect 100,100,400,300), WM_CREATE; no WM_SIZE/WM_MOVE; nothing posted"
+  sequence_popup_hidden: "WS_POPUP: WM_NCCREATE, WM_NCCALCSIZE(FALSE, the window rect in screen coordinates), WM_CREATE, WM_SIZE(SIZE_RESTORED, client size), WM_MOVE(client origin in screen coordinates); no WM_GETMINMAXINFO"
+  sequence_child: "WS_CHILD at 10,20 50x40 of a popup at 40,30: WM_NCCREATE, WM_NCCALCSIZE(FALSE, rect 50,50,100,90 = screen coordinates), WM_CREATE, WM_SIZE 50,40, WM_MOVE 10,20 (parent client coordinates), then the parent gets WM_PARENTNOTIFY(wParam LOWORD WM_CREATE, HIWORD the child id, lParam the child); WS_VISIBLE: then WM_SHOWWINDOW(1,0) to the child (no WM_WINDOWPOS*); WS_EX_NOPARENTNOTIFY: no WM_PARENTNOTIFY to its parent, but its own children notify it"
+  sequence_visible_popup: "WS_POPUP|WS_VISIBLE (with or without WS_EX_NOACTIVATE): after WM_MOVE, WM_SHOWWINDOW(1,0), WM_WINDOWPOSCHANGING(flags 0x43), [without WS_EX_NOACTIVATE a second WM_WINDOWPOSCHANGING flags 0x13], WM_WINDOWPOSCHANGED(the window rect, flags 0x1847)"
+  styles: "stored GWL_STYLE/GWL_EXSTYLE after creation: WS_OVERLAPPED 0 -> 0x04c00000/0x100; WS_OVERLAPPEDWINDOW -> 0x04cf0000/0x100; WS_OVERLAPPED|WS_DISABLED -> 0x0cc00000/0x100; WS_CAPTION -> 0x04c00000/0x100; top-level WS_POPUP gets WS_CLIPSIBLINGS (0x84000000); WS_EX_WINDOWEDGE is added (already in WM_NCCREATE) for WS_CAPTION, WS_THICKFRAME, WS_DLGFRAME and WS_EX_DLGMODALFRAME windows, also children with a caption, and removed when asked for without such a frame (for WS_OVERLAPPED alone it is added after WM_CREATE); WS_CLIPSIBLINGS and WS_CAPTION are added after WM_CREATE (the CREATESTRUCT shows the style as given); children keep their style; WS_EX_TOPMOST/WS_EX_APPWINDOW on a child are kept"
+  cw_usedefault: "overlapped top-level: x CW_USEDEFAULT -> the system picks the position (y ignored) and WM_NCCREATE already shows the chosen position; cx CW_USEDEFAULT -> default size 768x555 on a 1024x768 screen (3/4 of the screen less a cascade step) when the position is default too; with an explicit position the default size grows with the desktop's cascade state; default positions cascade across the desktop (not reproducible per run); WS_POPUP and WS_CHILD: CW_USEDEFAULT means 0 (position and size)"
+  minimum_size: "a window with a caption or thick frame is created no smaller than the minimum track size (136x39), e.g. 0x0 or 4x4 asked"
+  params: "lpParam reaches lpCreateParams of both messages; a child's hMenu becomes GWLP_ID; the window text is set by DefWindowProc's WM_NCCREATE from lpszName (empty when the procedure answers WM_NCCREATE itself with TRUE, or when lpszName is NULL)"
+  owner: "hWndParent for WS_POPUP / overlapped windows is the owner (GW_OWNER, GWLP_HWNDPARENT); a child given as owner makes its top-level ancestor the owner; the parent of top-level windows is the desktop; HWND_MESSAGE makes a message-only window (GA_PARENT is the message parent, not the desktop)"
+  wm_create_result: "only -1 from WM_CREATE fails the creation (-2 does not)"
+errors:
+  unknown_class: "NULL, ERROR_CANNOT_FIND_WND_CLASS (1407)"
+  child_without_parent: "NULL, ERROR_TLW_WITH_WSCHILD (1406)"
+  bad_parent_or_owner: "NULL, ERROR_INVALID_WINDOW_HANDLE (1400)"
+  menu_not_a_menu: "a non-child with hMenu 1 (not a menu): NULL, ERROR_INVALID_MENU_HANDLE (1401)"
+  nccreate_false: "NULL, last error 0; the window gets only WM_NCDESTROY after its WM_NCCREATE"
+  create_minus_1: "NULL, last error 0; the window gets WM_DESTROY then WM_NCDESTROY (no WM_SIZE/WM_MOVE); a child's parent first gets WM_PARENTNOTIFY(WM_DESTROY, id)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering:
+  - "WM_GETMINMAXINFO (framed top-level only) < WM_NCCREATE < WM_NCCALCSIZE(FALSE) < WM_CREATE < WM_SIZE < WM_MOVE < parent WM_PARENTNOTIFY(WM_CREATE) < WM_SHOWWINDOW < WM_WINDOWPOSCHANGING < WM_WINDOWPOSCHANGED"
+  - "the handle is a window (IsWindow 1) from WM_GETMINMAXINFO on"
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there. WINDOWPOS flags as observed: the caller's SWP_* bits plus
+  0x800 (client area keeps its size) and 0x1000 (client area does not move)
+  in WM_WINDOWPOSCHANGED and WM_NCCALCSIZE where true; 0x8000 when the
+  minimized/maximized state changes; a WM_WINDOWPOSCHANGING for a show/hide
+  carries pos 0,0 size 0,0 with SWP_NOMOVE|SWP_NOSIZE. GetWindowRect during
+  creation: 0,0,0,0 in WM_GETMINMAXINFO, the final window rect from
+  WM_NCCREATE on; GetClientRect 0,0,0,0 until WM_CREATE, the client size
+  from WM_CREATE on.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

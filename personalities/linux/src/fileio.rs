@@ -13,6 +13,7 @@
 use crate::abi::Timespec;
 use crate::errno::Errno;
 use crate::kernel::{Clock, Deadline, SigSet};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 /// Flag values from UAPI `asm-generic/fcntl.h` (x86-64 uses them), which
@@ -345,6 +346,68 @@ pub trait FileIo {
     fn pipe_peek(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno> {
         let _ = (fd, buf);
         Err(Errno::EINVAL)
+    }
+
+    /// landlock_create_ruleset(2): put `ruleset` on the lowest free
+    /// descriptor (`FD_CLOEXEC`, `O_RDWR`, an anonymous inode
+    /// `[landlock-ruleset]` whose reads and writes are `EINVAL`).
+    fn landlock_ruleset_fd(&mut self, ruleset: alloc::sync::Arc<crate::landlock::Ruleset>) -> Result<i32, Errno> {
+        let _ = ruleset;
+        Err(Errno::ENOSYS)
+    }
+
+    /// The ruleset `fd` is open on; `None` if it is something else,
+    /// `EBADF` if it is not open.
+    fn landlock_ruleset(&mut self, fd: i32) -> Result<Option<alloc::sync::Arc<crate::landlock::Ruleset>>, Errno> {
+        let _ = fd;
+        Err(Errno::ENOSYS)
+    }
+
+    /// fanotify_init(2) with validated `flags` and `event_f_flags`:
+    /// a new group on the lowest free descriptor (`O_RDWR`, plus what
+    /// `fd` asks for); `privileged` if the caller has `CAP_SYS_ADMIN`.
+    fn fanotify_init(&mut self, flags: u32, event_flags: u32, privileged: bool, fd: NewFd) -> Result<i32, Errno> {
+        let _ = (flags, event_flags, privileged, fd);
+        Err(Errno::ENOSYS)
+    }
+
+    /// The `fanotify_init` flags of the group `fd` is open on and whether
+    /// it was made with `CAP_SYS_ADMIN`; `None` if it is no group, `EBADF`
+    /// if it is not open.
+    fn fanotify_group(&mut self, fd: i32) -> Result<Option<(u32, bool)>, Errno> {
+        let _ = fd;
+        Err(Errno::ENOSYS)
+    }
+
+    /// fanotify_mark(2) once the arguments are checked.
+    fn fanotify_mark(&mut self, fd: i32, req: &crate::sys::fanotify::MarkRequest<'_>) -> Result<(), Errno> {
+        let _ = (fd, req);
+        Err(Errno::ENOSYS)
+    }
+
+    /// Whether `fd` is an eventfd (io_submit's `IOCB_FLAG_RESFD`); `EBADF`
+    /// if it is not open.
+    fn is_eventfd(&mut self, fd: i32) -> Result<bool, Errno> {
+        let _ = fd;
+        Err(Errno::EBADF)
+    }
+
+    /// mq_open(2): open `queue` on the lowest free descriptor, always
+    /// close-on-exec, with `flags` (access mode and `O_NONBLOCK`) as its
+    /// status flags, on an inode that `fstat` shows as a regular file with
+    /// the queue's mode and owner. Reading it gives
+    /// [`Queue::status_line`](crate::ipc::mqueue::Queue::status_line),
+    /// writing is `EINVAL`. `EMFILE` if no descriptor is free.
+    fn mq_install(&mut self, queue: Arc<crate::ipc::mqueue::Queue>, flags: u32) -> Result<i32, Errno> {
+        let _ = (queue, flags);
+        Err(Errno::ENOSYS)
+    }
+
+    /// The queue descriptor `fd` (`None` if it is open on something else);
+    /// `EBADF` if it is not open.
+    fn mq_file(&mut self, fd: i32) -> Result<Option<crate::ipc::mqueue::MqFd>, Errno> {
+        let _ = fd;
+        Ok(None)
     }
 }
 

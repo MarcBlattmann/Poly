@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mseal                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  mseal(addr, len, flags) (syscall 462) seals the mappings in [addr,
+  addr+len) (len rounded up to whole pages) so they can no longer be
+  changed for the life of the address space: afterwards munmap, mprotect,
+  mremap and mmap(MAP_FIXED) touching any sealed page fail with EPERM, and
+  nothing changes even for the unsealed parts of such a request.
+  madvise calls that would discard data the process could not write back
+  (MADV_DONTNEED and similar on private anonymous mappings without write
+  permission) also fail with EPERM; on writable private mappings and on
+  shared mappings they are allowed (a writable private page is zeroed as
+  usual), and advisory calls (MADV_WILLNEED) are always allowed. The
+  memory stays readable and writable as its protection allows. Sealing an
+  already sealed range again succeeds. A forked child inherits the seal.
+  flags must be 0. Any user may seal their own mappings.
+returns:
+  success: "0 (also for len 0)"
+  effects: "munmap/mprotect/mremap/mmap(MAP_FIXED) over sealed pages: -1 EPERM, nothing changed; neighbours unaffected"
+errors:
+  flags: "EINVAL (22): flags != 0"
+  align: "EINVAL (22): addr not page-aligned"
+  wrap: "EINVAL (22): addr + len wraps around"
+  unmapped: "ENOMEM (12): any part of the range unmapped (a hole, or nothing mapped); nothing is sealed then"
+side_effects: "marks the mappings sealed (also visible as \"sl\" in /proc/self/smaps VmFlags)"
+threading: "applies to the whole address space"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

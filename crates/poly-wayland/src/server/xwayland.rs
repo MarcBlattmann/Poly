@@ -420,7 +420,7 @@ impl Server {
         if let Some(serial) = x.pending_serials.remove(&surface.0) {
             if !x.serialised.insert(surface.0) {
                 let code = xwayland_surface_v1::Error::ALREADY_ASSOCIATED.0;
-                let role = self.client(c).ids_where(|d| matches!(d, Data::XwaylandSurface(s) if *s == surface));
+                let role = self.client(c).ids_where(|d| matches!(d, Data::XwaylandSurface(s) if *s == Some(surface)));
                 let object = role.first().copied().unwrap_or(surface);
                 return Err(error(object, code, "the surface committed a serial before"));
             }
@@ -475,7 +475,7 @@ impl Server {
                     return Err(error(surface, code, "the surface has another role"));
                 }
                 s.role = Role::Xwayland;
-                self.client(c).insert(id, &xwayland_surface_v1::INTERFACE, 1, Data::XwaylandSurface(surface));
+                self.client(c).insert(id, &xwayland_surface_v1::INTERFACE, 1, Data::XwaylandSurface(Some(surface)));
             }
             xwayland_shell_v1::Request::Destroy => {}
         }
@@ -488,7 +488,7 @@ impl Server {
         id: ObjectId,
         req: xwayland_surface_v1::Request,
     ) -> Res {
-        let Some(Data::XwaylandSurface(surface)) = self.client(c).data(id) else { return Ok(()) };
+        let Some(Data::XwaylandSurface(Some(surface))) = self.client(c).data(id) else { return Ok(()) };
         let surface = *surface;
         match req {
             xwayland_surface_v1::Request::SetSerial { serial_lo, serial_hi } => {

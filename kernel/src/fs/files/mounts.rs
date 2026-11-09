@@ -22,9 +22,10 @@ impl Files {
         vfs().bind(&ctx, &cred, poly_vfs::At::Cwd, source, poly_vfs::At::Cwd, target, flags)
     }
 
-    /// mount(2) with `MS_REMOUNT`.
-    pub fn remount(&self, target: &[u8], flags: MountFlags) -> Result<()> {
-        self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.remount(ctx, &self.cred(), at, target, flags))
+    /// mount(2) with `MS_REMOUNT` (`bind`: with `MS_BIND`, this mount
+    /// only; see `Vfs::remount` for when going read-only is `EBUSY`).
+    pub fn remount(&self, target: &[u8], flags: MountFlags, bind: bool) -> Result<()> {
+        self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.remount(ctx, &self.cred(), at, target, flags, bind))
     }
 
     /// The mount whose root `target` names (`EINVAL` if it is not one).
@@ -43,32 +44,67 @@ impl Files {
     }
 
     /// mknodat(2): `mode` is the permission bits (the umask applies).
-    pub fn mknodat(&self, dirfd: Fd, path: &[u8], kind: FileType, mode: u16, rdev: DeviceId) -> Result<()> {
-        self.at(dirfd, path, |vfs, ctx, at| vfs.mknod(ctx, &self.cred(), at, path, kind, mode, rdev))
+    /// Without `may_mknod` (the personality's `CAP_MKNOD` check) a device
+    /// node is refused, after the lookup.
+    pub fn mknodat(
+        &self,
+        dirfd: Fd,
+        path: &[u8],
+        kind: FileType,
+        mode: u16,
+        rdev: DeviceId,
+        may_mknod: bool,
+    ) -> Result<()> {
+        let mut cred = self.cred();
+        if !may_mknod {
+            cred.caps = cred.caps.without(poly_vfs::cap::MKNOD);
+        }
+        self.at(dirfd, path, |vfs, ctx, at| vfs.mknod(ctx, &cred, at, path, kind, mode, rdev))
     }
 
     /// unshare(2) / clone(2) `CLONE_NEWNS` (ADR 0054): the process moves to a copy of
     /// its mount namespace; returns the copy.
     pub fn copy_mount_namespace(&self) -> Result<MountId> {
-        vfs().copy_namespace(&mut self.ctx.lock())
+        vfs().copy_namespace(&mut self.ctx().lock())
     }
 
     /// setns(2) into mount namespace `base`: root and working directory
     /// move to its root.
     pub fn enter_mount_namespace(&self, base: MountId) -> Result<()> {
-        vfs().enter_namespace(&mut self.ctx.lock(), base)
+        vfs().enter_namespace(&mut self.ctx().lock(), base)
+    }
+
+    /// pivot_root(2) (ADR 0122): `new_root`'s mount becomes the first of
+    /// the process's mount namespace, the old one moves to `put_old`; the
+    /// root and working directory move with it where they were the old
+    /// root, and so do those of every other process that used the old
+    /// root (the same mount: processes of the namespace).
+    pub fn pivot_root(&self, new_root: &poly_vfs::NodeRef, put_old: &poly_vfs::NodeRef) -> Result<()> {
+        let cred = self.cred();
+        let (old, new) = vfs().pivot_root(&mut self.ctx().lock(), &cred, new_root, put_old)?;
+        for p in crate::process::all() {
+            if !core::ptr::eq(&p.files, self) {
+                poly_vfs::Vfs::repoint_context(&mut p.files.ctx().lock(), &old, &new);
+            }
+        }
+        Ok(())
     }
 
     /// Whether the root directory is not its mount namespace's root
     /// (chroot(2) moved it).
     pub fn chrooted(&self) -> bool {
-        vfs().is_chrooted(&self.ctx.lock())
+        vfs().is_chrooted(&self.ctx().lock())
     }
 
-    /// chroot(2).
-    pub fn chroot(&self, path: &[u8]) -> Result<()> {
+    /// chroot(2); without `may_chroot` (the personality's
+    /// `CAP_SYS_CHROOT` check) `EPERM` after the lookup.
+    pub fn chroot(&self, path: &[u8], may_chroot: bool) -> Result<()> {
         // Resolved unlocked, like chdir.
         let dir = self.lookupat(AT_FDCWD, path, true)?;
-        self.ctx.lock().set_root(&self.cred(), dir)
+        let mut cred = self.cred();
+        if !may_chroot {
+            cred.caps = cred.caps.without(poly_vfs::cap::SYS_CHROOT);
+        }
+        self.ctx().lock().set_root(&cred, dir)
     }
 }

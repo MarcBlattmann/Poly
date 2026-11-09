@@ -29,7 +29,7 @@ use crate::fileio::NewFd;
 use crate::kernel::{Clock, LinuxKernel, Target, UserPtr};
 use crate::net::abi::{self, MsgHdr, SockAddr, Ucred};
 use crate::net::{Family, Kind, LinuxNet, OptName, OptValue, RecvMsg, RecvReq, SendMsg, Shutdown, SockOpt, SockType};
-use crate::signal::deliver::send as send_signal;
+use crate::signal::deliver::{eintr_if_acting, send as send_signal};
 use crate::sys::io::bounce;
 use crate::table::Handler;
 use crate::table::nr;
@@ -85,12 +85,14 @@ fn fd_arg(a: &Args, i: usize) -> Result<i32, Errno> {
 }
 
 /// A call that a signal interrupted: restarted under `SA_RESTART`, unless
-/// the socket has a timeout in that direction (signal(7)).
+/// the socket has a timeout in that direction (signal(7)): then `EINTR`
+/// after a handler or a stop, and on as if nothing happened after a
+/// signal that is ignored ([`eintr_if_acting`]).
 fn interrupted(k: &mut dyn LinuxKernel, fd: i32, send: bool, e: Errno) -> Errno {
     if e != Errno::EINTR {
         return e;
     }
-    if k.net().is_some_and(|n| n.timed(fd, send)) { Errno::EINTR } else { Errno::RESTART_IF_SA_RESTART }
+    if k.net().is_some_and(|n| n.timed(fd, send)) { eintr_if_acting(k) } else { Errno::RESTART_IF_SA_RESTART }
 }
 
 /// `SIGPIPE` for the calling thread after `EPIPE` (socket(7)).
@@ -201,6 +203,7 @@ pub fn bind(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if addr == SockAddr::Unspec {
         addr = unspec_bind(k, fd, a.ptr(1), a.int(2))?;
     }
+    crate::sys::landlock::check_socket(k, fd, &addr, false)?;
     net(k)?.bind(fd, &addr).map(|()| 0)
 }
 
@@ -278,6 +281,7 @@ fn do_accept(k: &mut dyn LinuxKernel, a: &Args, flags: u32) -> SysResult {
 pub fn connect(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let addr = read_addr(k, a.ptr(1), a.int(2))?;
+    crate::sys::landlock::check_socket(k, fd, &addr, true)?;
     let r = net(k)?.connect(fd, &addr);
     r.map(|()| 0).map_err(|e| interrupted(k, fd, true, e))
 }
@@ -435,12 +439,18 @@ fn parse_control(k: &mut dyn LinuxKernel, ptr: UserPtr, len: u64) -> Result<Cont
                     return Err(Errno::EPERM);
                 }
                 // Another process's id must name one (sendmsg's spec
-                // sheet: ESRCH).
-                if u.pid != own {
+                // sheet: ESRCH). The id travels as the global one and is
+                // shown to the receiver as its pid namespace sees it
+                // (docs/chromium-linux-gaps.md D7: a zygote that is pid 1
+                // of its namespace reports to the browser).
+                let global = if u.pid == own {
+                    k.pid()
+                } else {
                     let pid = crate::ns::pid::find(k, u.pid)?;
                     crate::signal::deliver::with_target(k, Target::Process(pid), |_, _| ())?;
-                }
-                c.creds = Some(u);
+                    pid
+                };
+                c.creds = Some(Ucred { pid: global, ..u });
             }
             _ => return Err(Errno::EINVAL),
         }
@@ -690,7 +700,12 @@ fn recvmsg_one(k: &mut dyn LinuxKernel, fd: i32, msg_ptr: UserPtr, flags: u32) -
     }
     let (iovs, total) = load_iovecs(k, UserPtr(m.iov), m.iovlen)?;
     let controllen = if m.control == 0 { 0 } else { m.controllen };
-    let (got, ret) = recv_data(k, fd, &iovs, total, flags, rights_room(controllen))?;
+    let (mut got, ret) = recv_data(k, fd, &iovs, total, flags, rights_room(controllen))?;
+    // The sender's id as the receiver's pid namespace sees it (0 if it
+    // sees none), unix(7) / pid_namespaces(7).
+    if let Some(c) = got.creds.as_mut() {
+        c.pid = crate::ns::pid::view(k, c.pid);
+    }
     let (control, ctrunc) = build_control(&got, controllen as usize);
     let mut out_flags = 0;
     if got.full_len > got.len {
@@ -901,6 +916,8 @@ fn decode_opt(k: &mut dyn LinuxKernel, level: i32, name: i32, val: UserPtr, len:
         },
         (abi::SOL_IP, abi::IP_TTL) => SockOpt::IpTtl(hops(int(k)?)?),
         (abi::SOL_IP, abi::IP_TOS) => SockOpt::IpTos((int(k)? & 0xff) as u8),
+        (abi::SOL_IP, abi::IP_RECVERR) => SockOpt::IpRecvErr(flag(k)?),
+        (abi::SOL_IPV6, abi::IPV6_RECVERR) => SockOpt::Ipv6RecvErr(flag(k)?),
         (abi::SOL_IPV6, abi::IPV6_V6ONLY) => SockOpt::Ipv6V6Only(flag(k)?),
         (abi::SOL_IPV6, abi::IPV6_UNICAST_HOPS) => SockOpt::Ipv6UnicastHops(hops(int(k)?)?),
         (abi::SOL_NETLINK, abi::NETLINK_ADD_MEMBERSHIP) => SockOpt::NetlinkAddMembership(int(k)? as u32),
@@ -964,6 +981,8 @@ fn opt_name(level: i32, name: i32) -> Result<OptName, Errno> {
         (abi::SOL_TCP, abi::TCP_MAXSEG) => OptName::TcpMaxSeg,
         (abi::SOL_IP, abi::IP_TTL) => OptName::IpTtl,
         (abi::SOL_IP, abi::IP_TOS) => OptName::IpTos,
+        (abi::SOL_IP, abi::IP_RECVERR) => OptName::IpRecvErr,
+        (abi::SOL_IPV6, abi::IPV6_RECVERR) => OptName::Ipv6RecvErr,
         (abi::SOL_IPV6, abi::IPV6_V6ONLY) => OptName::Ipv6V6Only,
         (abi::SOL_IPV6, abi::IPV6_UNICAST_HOPS) => OptName::Ipv6UnicastHops,
         _ => return Err(Errno::ENOPROTOOPT),
@@ -1003,7 +1022,11 @@ pub fn getsockopt(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     net(k)?.getsockopt(fd, OptName::Type)?;
     check_level(k, fd, a.int(1))?;
     let name = opt_name(a.int(1), a.int(2))?;
-    let value = net(k)?.getsockopt(fd, name)?;
+    let value = match net(k)?.getsockopt(fd, name)? {
+        // SO_PEERCRED's pid as the caller's pid namespace sees it.
+        OptValue::Ucred(u) if u.pid > 0 => OptValue::Ucred(Ucred { pid: crate::ns::pid::view(k, u.pid), ..u }),
+        v => v,
+    };
     let bytes = encode_value(value);
     let n = bytes.len().min(room as usize);
     k.copy_to_user(a.ptr(3), &bytes[..n])?;

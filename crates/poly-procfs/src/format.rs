@@ -54,6 +54,8 @@ pub struct VmSizes {
     pub data: u64,
     /// The stack (`VmStk`).
     pub stack: u64,
+    /// Locked mappings (`VmLck`).
+    pub locked: u64,
     /// Executable mappings of the program file (`VmExe`).
     pub exe: u64,
     /// Executable mappings of other files (`VmLib`).
@@ -70,6 +72,9 @@ pub fn vm_sizes(maps: &[MapEntry], exe: Option<&[u8]>) -> VmSizes {
     for m in maps {
         let size = m.size();
         v.size += size;
+        if m.locked {
+            v.locked += size;
+        }
         let of_exe = matches!((&m.name, exe), (MapName::Path(p), Some(e)) if p.as_slice() == e);
         match m.name {
             MapName::Stack => v.stack += size,
@@ -102,10 +107,17 @@ pub fn vm_sizes(maps: &[MapEntry], exe: Option<&[u8]>) -> VmSizes {
 /// pointer, wait channel, swap) are 0; the scheduling policy is
 /// `SCHED_OTHER` (0) and the nice value 0, so `priority` is 20.
 pub fn stat(p: &ProcessInfo, maps: &[MapEntry], sys: &SystemInfo) -> Vec<u8> {
+    thread_stat(p, p.pid, maps, sys)
+}
+
+/// `/proc/<pid>/task/<tid>/stat`: the process's line with the thread's id
+/// in the first field (`p.comm` is the thread's name: the caller puts it
+/// there).
+pub fn thread_stat(p: &ProcessInfo, tid: u32, maps: &[MapEntry], sys: &SystemInfo) -> Vec<u8> {
     let _ = sys;
     let v = vm_sizes(maps, p.exe.as_deref());
     let mut o = Out::default();
-    let _ = write!(o, "{} (", p.pid);
+    let _ = write!(o, "{tid} (");
     o.bytes(comm(&p.comm));
     let _ = writeln!(
         o,
@@ -169,6 +181,13 @@ fn kb(o: &mut Out, name: &str, bytes: u64) {
 /// `/proc/<pid>/status` (proc_pid_status(5)): the fields of the manual's
 /// example, in its order, `Key:\tvalue` per line.
 pub fn status(p: &ProcessInfo, maps: &[MapEntry]) -> Vec<u8> {
+    thread_status(p, p.pid, maps)
+}
+
+/// `/proc/<pid>/task/<tid>/status`: the process's, with the thread's id in
+/// `Pid` and `NSpid` (`Tgid` stays the process's; `p.comm` is the thread's
+/// name: the caller puts it there).
+pub fn thread_status(p: &ProcessInfo, tid: u32, maps: &[MapEntry]) -> Vec<u8> {
     let v = vm_sizes(maps, p.exe.as_deref());
     let rss = p.resident_pages * PAGE;
     let rss_file = p.resident_file_pages.min(p.resident_pages) * PAGE;
@@ -179,9 +198,9 @@ pub fn status(p: &ProcessInfo, maps: &[MapEntry]) -> Vec<u8> {
     let [g0, g1, g2, g3] = p.gids;
     let _ = write!(
         o,
-        "\nUmask:\t{:04o}\nState:\t{}\nTgid:\t{pid}\nNgid:\t0\nPid:\t{pid}\nPPid:\t{}\nTracerPid:\t0\n\
+        "\nUmask:\t{:04o}\nState:\t{}\nTgid:\t{pid}\nNgid:\t0\nPid:\t{tid}\nPPid:\t{}\nTracerPid:\t0\n\
          Uid:\t{u0}\t{u1}\t{u2}\t{u3}\nGid:\t{g0}\t{g1}\t{g2}\t{g3}\nFDSize:\t{}\nGroups:\t\n\
-         NStgid:\t{pid}\nNSpid:\t{pid}\nNSpgid:\t{}\nNSsid:\t{}\n",
+         NStgid:\t{pid}\nNSpid:\t{tid}\nNSpgid:\t{}\nNSsid:\t{}\n",
         p.umask,
         p.state.status(),
         p.ppid,
@@ -192,7 +211,7 @@ pub fn status(p: &ProcessInfo, maps: &[MapEntry]) -> Vec<u8> {
     );
     kb(&mut o, "VmPeak", v.size);
     kb(&mut o, "VmSize", v.size);
-    kb(&mut o, "VmLck", 0);
+    kb(&mut o, "VmLck", v.locked);
     kb(&mut o, "VmPin", 0);
     kb(&mut o, "VmHWM", rss);
     kb(&mut o, "VmRSS", rss);
@@ -297,6 +316,7 @@ pub fn maps(entries: &[MapEntry]) -> Vec<u8> {
 pub fn fdinfo(f: &FdInfo) -> Vec<u8> {
     let mut o = Out::default();
     let _ = write!(o, "pos:\t{}\nflags:\t0{:o}\nmnt_id:\t{}\nino:\t{}\n", f.pos, f.flags, f.mnt_id, f.ino);
+    o.0.extend_from_slice(&f.extra);
     o.0
 }
 

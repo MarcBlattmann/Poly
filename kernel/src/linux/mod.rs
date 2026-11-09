@@ -28,17 +28,27 @@
 //! to the personality by `with_process`. One futex table serves every
 //! process ([`FUTEXES`]).
 
+mod acct;
 pub mod admin;
 mod admin_tests;
+mod bpf;
 pub mod cred;
 mod cred_tests;
 mod fifo;
+mod fileattr;
 mod fileio_tests;
 mod files;
 mod files_tests;
+pub mod landlock;
+mod memcalls;
+mod mountapi;
+mod mqueue;
 pub mod net;
 mod ns_tests;
+mod numa;
+mod perf;
 mod pidfd;
+mod procaccess;
 mod services;
 mod shm;
 mod shm_tests;
@@ -49,6 +59,8 @@ pub mod task;
 mod task_tests;
 mod tests;
 pub mod timers;
+pub mod uffd;
+pub mod uring;
 mod xattr;
 mod xattr_tests;
 
@@ -59,6 +71,7 @@ use crate::sync::SpinLock;
 use crate::user::memory::SegvCode;
 use crate::user::{self, Fault, FaultError};
 use crate::{kprintln, testrun};
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
 use poly_abi::{Outcome, SyscallRegs};
@@ -76,7 +89,12 @@ static FUTEXES: SpinLock<FutexTable> = SpinLock::new(FutexTable::new());
 /// What the kernel keeps for the Linux personality per process.
 #[derive(Debug)]
 pub struct LinuxState {
-    process: SpinLock<LinuxProcess>,
+    /// On the heap: a `LinuxProcess` is several KiB, and held inline it
+    /// made the frames of `Process::new_linux` and everything that moves a
+    /// `Process` by value so large that spawning a program overflowed its
+    /// 16 KiB kernel stack in a release build when the program's file was
+    /// not cached yet (the disk read is the deepest path under it).
+    process: SpinLock<Box<LinuxProcess>>,
     /// Some thread of the process has seccomp state (ADR 0054): the
     /// dispatcher checks every call. Never cleared; copied to children.
     pub(crate) seccomp: AtomicBool,
@@ -88,7 +106,9 @@ impl LinuxState {
     pub fn new(pid: u32) -> LinuxState {
         // A process the kernel starts: the root of a process tree.
         task::register_root(pid);
-        LinuxState { process: SpinLock::new(LinuxProcess::new(pid as i32)), seccomp: AtomicBool::new(false) }
+        let mut process = new_process(pid as i32);
+        process.started_ns = crate::time::now_ns();
+        LinuxState { process: SpinLock::new(process), seccomp: AtomicBool::new(false) }
     }
 
     /// A thread `tid` was started (the main thread is there from the start):
@@ -103,7 +123,7 @@ impl LinuxState {
         let parent = p.thread_ids().next();
         match parent {
             Some(parent) => p.add_thread(parent, tid, true),
-            None => first_thread(&mut p, tid),
+            None => first_thread(p.as_mut(), tid),
         }
     }
 
@@ -124,8 +144,15 @@ impl LinuxState {
 
     /// Run `f` on the personality's state, locked. `f` must not block.
     pub fn with<R>(&self, f: impl FnOnce(&mut LinuxProcess) -> R) -> R {
-        f(&mut self.process.lock())
+        f(self.process.lock().as_mut())
     }
+}
+
+/// A `LinuxProcess` on the heap, made in a frame of its own so that its
+/// callers' frames stay small (see [`LinuxState::process`]).
+#[inline(never)]
+fn new_process(pid: i32) -> Box<LinuxProcess> {
+    Box::new(LinuxProcess::new(pid))
 }
 
 /// A process's first thread: its personality state starts afresh. Out of
@@ -135,7 +162,9 @@ impl LinuxState {
 #[cold]
 #[inline(never)]
 fn first_thread(p: &mut LinuxProcess, tid: i32) {
+    let started_ns = p.started_ns;
     *p = LinuxProcess::new(tid);
+    p.started_ns = started_ns;
 }
 
 /// What the thread does after the personality acted on its signals.
@@ -168,8 +197,8 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     };
     let number = regs.rax;
     let args = [regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9];
-    let strace = strace::enter(process, number, &args);
     let tid = k.tid;
+    let strace = strace::enter(process, tid, number, &args);
     if process.traced && testrun::starts_task(number) {
         testrun::enter(process.pid, tid, number, &args);
     }
@@ -178,7 +207,14 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     k.set_result(regs.rax);
     let exit = k.take_exit();
     if process.traced {
-        let ret = exit.is_none().then(|| Linux::traced_result(&mut k, regs.rax));
+        let ret = match exit {
+            None => Some(Linux::traced_result(&mut k, regs.rax)),
+            // seccomp(2) killed the process at this call (the only way a
+            // call ends in a signal): a tracer still reads its registers,
+            // which are as at entry (`rax` the call's number).
+            Some(crate::process::ExitStatus::Signaled { .. }) => Some(regs.rax),
+            Some(_) => None,
+        };
         testrun::syscall_of(process.pid, tid, number, &args, ret);
     }
     if let Some(line) = strace {
@@ -187,6 +223,11 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     if let Some(status) = exit {
         let _ = user::request_exit(status);
         return outcome;
+    }
+    // io_uring requests waiting for a file this call may have made ready
+    // (ADR 0122).
+    if Linux::background_pending() {
+        Linux::background(&mut k);
     }
     // rseq(2) (ADR 0111): the thread was switched out during the call.
     if k.flags.rseq_notify.load(Ordering::Relaxed) && k.flags.rseq_notify.swap(false, Ordering::Relaxed) {
@@ -210,6 +251,15 @@ pub fn exit_to_user(process: &Process) -> Leave {
     match Thread::current(process) {
         Some(mut k) => Linux::exit_to_user(&mut k).into(),
         None => Leave::Return,
+    }
+}
+
+/// The running thread of `process` is about to return to user mode after
+/// an interrupt while io_uring requests wait somewhere
+/// ([`Linux::background_pending`]): its process's run if they can.
+pub fn background(process: &Process) {
+    if let Some(mut k) = Thread::current(process) {
+        Linux::background(&mut k);
     }
 }
 

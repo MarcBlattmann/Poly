@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_getevents         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 32 CPUs; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; /tmp on overlayfs"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  io_getevents(ctx_id, min_nr, nr, events, timeout) (syscall 208) reaps
+  completed operations of an AIO context: it copies up to nr struct
+  io_event (32 bytes: data, obj, res, res2) from the ring's head into
+  events, oldest first, advances the ring's head and returns how many it
+  copied. min_nr and nr are signed longs. It waits until at least min_nr
+  events are available or the timeout (a relative struct timespec)
+  expires, then returns what is there (0 to nr; a timeout is not an
+  error). timeout NULL waits without limit; {0, 0} or min_nr == 0 never
+  waits. The timespec is not validated: tv_nsec of 1000000000 counts as
+  one more second, and a negative tv_sec means "no limit" (it waits
+  forever). A caught signal ends a wait with EINTR (never restarted,
+  whatever SA_RESTART says); blocked signals do not.
+returns:
+  success: "number of events copied, 0..nr; events in completion order"
+  timeout: "0 (or the fewer-than-min_nr events present) after the timeout; no ETIMEDOUT"
+  nr_zero: "nr == 0 (and min_nr 0): returns 0 at once"
+  events_unwritable_empty: "events unwritable but no event available: 0, no error"
+errors:
+  bad_counts: "EINVAL (22): min_nr < 0, nr < 0, or min_nr > nr"
+  bad_ctx: "EINVAL (22): ctx_id not a live context of this process (0, random, destroyed, ring unmapped)"
+  timeout_fault: "EFAULT (14): timeout not readable"
+  events_fault: "EFAULT (14): an event is available but events is not writable; the event is not consumed (a later call gets it)"
+  interrupted: "EINTR (4): a signal handler ran during the wait; events already gathered are not lost"
+  order: "the timeout copy (EFAULT) first, then the context and the counts (both EINVAL), then the wait"
+side_effects: "advances the ring's head by the number of events returned"
+threading: "several threads may wait on one context; each event goes to one of them"
+ordering:
+  - "events come out in the order they were posted (synchronous submissions: array order)"
+timing:
+  typical: "microseconds without waiting"
+  guarantees: "with min_nr > available, waits at least the timeout (not shorter; scheduler latency may add)"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: one test uses ITIMER_REAL and a forked writer and compares only
+# output (syscalls=off). Structures from linux/aio_abi.h.

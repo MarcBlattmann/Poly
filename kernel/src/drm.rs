@@ -13,6 +13,13 @@
 //!   scanout `SET_SCANOUT`, a flush `RESOURCE_FLUSH`, all through
 //!   [`display::with_gpu`]. Taking the display and giving it back are
 //!   [`display::console_yield`] and [`display::console_restore`].
+//!   The screen shows one more resource, the [`Mirror`]: a plain 2D
+//!   framebuffer's pixels are copied into it (only the rectangles the
+//!   device was told changed) and it is what the scanout shows for good,
+//!   so a page flip does not switch the host's display from one resource
+//!   to another (which rebuilds QEMU's whole display surface) and does not
+//!   transfer the whole screen again: one `TRANSFER_TO_HOST_2D` and
+//!   `RESOURCE_FLUSH` of the damage, sent together.
 //! - the device nodes: char 226:0 and 226:128 (Linux's DRM major and
 //!   minors), whose every open is a file of the device ([`DrmFile`]):
 //!   ioctls (copying through the user's memory; a blocking vblank wait
@@ -24,24 +31,35 @@
 //! - PRIME: a dma-buf is a file object ([`DmaBuf`]) holding the buffer;
 //!   `lseek(SEEK_END)` gives its size and `DMA_BUF_IOCTL_SYNC` is accepted.
 //! - the vblank thread, which wakes readers when their events come due.
+//! - 3D (ADR 0119): the `Hardware` 3D methods on the virtio-gpu driver
+//!   (contexts, capsets, 3D and blob resources whose guest memory is a
+//!   [`DumbMemory`] too, or a window of the host-visible region for a
+//!   mappable host blob), with the fences, sync files and the interrupt in
+//!   [`crate::gpu3d`]. A framebuffer on a buffer with a 3D resource scans
+//!   that resource out instead of a 2D copy (the host rendered it). A
+//!   blocking `VIRTGPU_WAIT` (or an `EXECBUFFER` behind its in-fence)
+//!   sleeps until the fence signals and asks again.
 //!
 //! Files that close (and dma-bufs) while the device's lock is taken, or
 //! where sleeping is not allowed, are handed to the device later
 //! ([`DEFERRED`]).
 
-use crate::display;
 use crate::fs::{self, OpenFile};
 use crate::sync::{Mutex, SpinLock};
 use crate::thread::{self, WaitQueue};
 use crate::user::memory::{IoError, PageSource, SharedFrame};
 use crate::{arch, frames, kprintln, time};
+use crate::{display, gpu3d};
 use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicU64, Ordering::SeqCst};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::SeqCst};
 use poly_drm::uapi::fourcc;
-use poly_drm::{BoId, Ctx, Device, DriverInfo, FbLayout, FileId, Hardware, HwError, Node, Output, Rect, Reply};
+use poly_drm::{
+    BoId, Ctx, Device, DriverInfo, FbLayout, FileId, GpuCaps, Hardware, HwError, Node, Output, Rect, Reply,
+    ResourceKind, Transfer,
+};
 use poly_mem::PAGE_SIZE;
 use poly_vfs::device::CharDevice;
 use poly_vfs::{At, Cred, DeviceId, Errno, FileObject, FileType, OpenFlags, PollEvents};
@@ -56,6 +74,8 @@ pub const RENDER: DeviceId = DeviceId::new(DRM_MAJOR, 128);
 /// A framebuffer's virtio resource is this plus its object ID (the
 /// console's are 1 and 2).
 const RESOURCE_BASE: u32 = 0x1000;
+/// The mirror's resource (just under the framebuffers').
+const MIRROR_RESOURCE: u32 = RESOURCE_BASE - 1;
 /// `DMA_BUF_IOCTL_SYNC` (linux/dma-buf.h: `_IOW('b', 0, struct
 /// dma_buf_sync)`, one `__u64 flags`) and its flags.
 const DMA_BUF_IOCTL_SYNC: u32 = 0x4008_6200;
@@ -79,29 +99,49 @@ static WAITERS: SpinLock<BTreeMap<FileId, Weak<poly_vfs::WaitQueue>>> = SpinLock
 static NEXT: AtomicU64 = AtomicU64::new(u64::MAX);
 static WAKE: WaitQueue = WaitQueue::new();
 
-/// The memory of a dumb buffer: physically contiguous frames, zeroed,
-/// freed with the last reference (a GEM object, a mapping, a dma-buf).
+/// The memory of a GEM object: physically contiguous frames, zeroed, freed
+/// with the last reference (a GEM object, a mapping, a dma-buf); or a
+/// window of the virtio GPU's host-visible region (a mapped host blob),
+/// given back with the last reference.
 #[derive(Debug)]
 pub struct DumbMemory {
     phys: u64,
     frames: u64,
     len: u64,
+    /// The host-visible region's offset of a window (`None`: frames).
+    window: Option<u64>,
+    /// The 3D resource on this memory (0: none): a framebuffer on it shows
+    /// that resource.
+    resource: AtomicU32,
 }
 
 impl DumbMemory {
-    fn bytes(&self) -> &[u8] {
-        let virt = arch::phys_to_virt(self.phys).expect("dumb buffer outside the direct map");
+    /// A window of `len` bytes at bus address `phys`, `offset` into the
+    /// host-visible region.
+    fn window(phys: u64, len: u64, offset: u64) -> DumbMemory {
+        DumbMemory { phys, frames: len.div_ceil(PAGE_SIZE), len, window: Some(offset), resource: AtomicU32::new(0) }
+    }
+
+    /// The bytes, if the CPU reaches them through the direct map (not a
+    /// window: those are only mapped page by page).
+    fn bytes(&self) -> Option<&[u8]> {
+        if self.window.is_some() {
+            return None;
+        }
+        let virt = arch::phys_to_virt(self.phys)?;
         // SAFETY: the frames stay allocated while `self` lives and the
         // direct map maps them, contiguously. Users write them through
         // their mappings meanwhile; bytes have no invalid values, so a read
         // racing a write sees old or new bytes.
-        unsafe { core::slice::from_raw_parts(virt as *const u8, self.len as usize) }
+        Some(unsafe { core::slice::from_raw_parts(virt as *const u8, self.len as usize) })
     }
 }
 
 impl Drop for DumbMemory {
     fn drop(&mut self) {
-        if let Err(e) = frames::free_contiguous(self.phys, self.frames) {
+        if let Some(offset) = self.window {
+            gpu3d::release_window(offset);
+        } else if let Err(e) = frames::free_contiguous(self.phys, self.frames) {
             kprintln!("drm: cannot free a dumb buffer at {:#x}: {e:?}", self.phys);
         }
     }
@@ -119,7 +159,7 @@ impl PageSource for DumbPages {
     }
 
     fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<usize, IoError> {
-        let bytes = self.memory.bytes();
+        let bytes = self.memory.bytes().ok_or(IoError)?;
         let start = (offset as usize).min(bytes.len());
         let n = buf.len().min(bytes.len() - start);
         buf[..n].copy_from_slice(&bytes[start..start + n]);
@@ -146,10 +186,168 @@ impl PageSource for DumbPages {
 
 /// The virtio GPU as the device's hardware.
 #[derive(Debug, Default)]
-pub struct KernelHw;
+pub struct KernelHw {
+    /// What the device offers for 3D.
+    caps: GpuCaps,
+    /// Framebuffers shown straight from a 3D resource: framebuffer ->
+    /// resource.
+    fb_on_res: BTreeMap<u32, u32>,
+    /// Blob resources, and whether each is mapped into the host-visible
+    /// region.
+    blobs: BTreeMap<u32, bool>,
+    /// The plain 2D framebuffers: their memory and layout.
+    fb_mem: BTreeMap<u32, (Arc<DumbMemory>, FbLayout)>,
+    /// What the screen shows for those.
+    mirror: Option<Mirror>,
+}
+
+/// The one resource that 2D framebuffers are shown through: guest memory of
+/// the screen's size that the damage of the framebuffer being flipped to is
+/// copied into, scanned out by the outputs that show such a framebuffer.
+#[derive(Debug)]
+struct Mirror {
+    memory: Arc<DumbMemory>,
+    layout: FbLayout,
+    /// The outputs scanning it out.
+    on: Vec<usize>,
+    /// Copied into the memory but not transferred to the host yet.
+    pending: Option<Rect>,
+}
+
+impl Mirror {
+    fn matches(&self, l: &FbLayout) -> bool {
+        (self.layout.width, self.layout.height, self.layout.pitch, self.layout.format)
+            == (l.width, l.height, l.pitch, l.format)
+    }
+
+    fn framebuffer(&self) -> poly_virtio_gpu::Framebuffer {
+        poly_virtio_gpu::Framebuffer {
+            resource_id: MIRROR_RESOURCE,
+            width: self.layout.width,
+            height: self.layout.height,
+            stride: self.layout.pitch,
+        }
+    }
+}
+
+/// The bounding rectangle of `a` and `b`.
+fn bounding(a: Rect, b: Rect) -> Rect {
+    if a.is_empty() {
+        return b;
+    }
+    if b.is_empty() {
+        return a;
+    }
+    let (x, y) = (a.x.min(b.x), a.y.min(b.y));
+    let right = (a.x + a.width).max(b.x + b.width);
+    let bottom = (a.y + a.height).max(b.y + b.height);
+    Rect::new(x, y, right - x, bottom - y)
+}
 
 fn resource(fb: u32) -> u32 {
     RESOURCE_BASE + fb
+}
+
+impl KernelHw {
+    /// The resource framebuffer `fb` shows.
+    fn res_of(&self, fb: u32) -> u32 {
+        self.fb_on_res.get(&fb).copied().unwrap_or_else(|| resource(fb))
+    }
+
+    /// Whether `fb` is shown through the mirror (a plain 2D framebuffer).
+    fn is_mirrored(&self, fb: u32) -> bool {
+        self.fb_mem.contains_key(&fb) && !self.fb_on_res.contains_key(&fb)
+    }
+
+    /// Make the mirror for framebuffers of `layout`, replacing one of
+    /// another size. Returns whether it is new (empty).
+    fn ensure_mirror(&mut self, layout: &FbLayout) -> Result<bool, HwError> {
+        if self.mirror.as_ref().is_some_and(|m| m.matches(layout)) {
+            return Ok(false);
+        }
+        self.drop_mirror();
+        let format = virtio_format(layout.format).ok_or(HwError)?;
+        let size = layout.pitch as u64 * layout.height as u64;
+        let frames = size.div_ceil(PAGE_SIZE);
+        let phys = frames::allocate_contiguous(frames).ok_or(HwError)?;
+        let Some(virt) = arch::phys_range_to_virt(phys, frames * PAGE_SIZE) else {
+            let _ = frames::free_contiguous(phys, frames);
+            return Err(HwError);
+        };
+        // SAFETY: the frames were just allocated for this buffer alone and
+        // are mapped writable and contiguous by the direct map.
+        unsafe { core::ptr::write_bytes(virt as *mut u8, 0, (frames * PAGE_SIZE) as usize) };
+        // Freed with the last reference, unless the device may still read it.
+        let memory = Arc::new(DumbMemory { phys, frames, len: size, window: None, resource: AtomicU32::new(0) });
+        let entry = MemEntry { addr: phys, length: layout.pitch * layout.height };
+        gpu(|g| {
+            g.create_2d(MIRROR_RESOURCE, format, layout.pitch / 4, layout.height)?;
+            if let Err(e) = g.attach_backing(MIRROR_RESOURCE, &[entry]) {
+                let _ = g.unref(MIRROR_RESOURCE);
+                return Err(e);
+            }
+            Ok(())
+        })?;
+        self.mirror = Some(Mirror { memory, layout: *layout, on: Vec::new(), pending: None });
+        Ok(true)
+    }
+
+    /// Forget the mirror (its outputs are turned off first).
+    fn drop_mirror(&mut self) {
+        let Some(m) = self.mirror.take() else { return };
+        let off = poly_virtio_gpu::Rect::ZERO;
+        let freed = gpu(|g| {
+            for &i in &m.on {
+                g.set_scanout(i as u32, 0, off)?;
+            }
+            g.detach_backing(MIRROR_RESOURCE)?;
+            g.unref(MIRROR_RESOURCE)
+        });
+        if freed.is_err() {
+            // The device may still read the memory: never free it.
+            core::mem::forget(m.memory);
+        }
+    }
+
+    /// Copy `rect` of a framebuffer's pixels into the mirror's memory; the
+    /// host gets them with the next [`KernelHw::flush_mirror`].
+    fn copy_to_mirror(&mut self, memory: &Arc<DumbMemory>, layout: &FbLayout, rect: Rect) -> Result<(), HwError> {
+        let new = self.ensure_mirror(layout)?;
+        let m = self.mirror.as_mut().ok_or(HwError)?;
+        // A mirror just made holds nothing yet: it takes all of it.
+        let rect = if new { Rect::new(0, 0, layout.width, layout.height) } else { rect };
+        let rect = rect.clip(layout.width, layout.height);
+        if rect.is_empty() {
+            return Ok(());
+        }
+        let src = arch::phys_to_virt(memory.phys + layout.offset).ok_or(HwError)? as usize;
+        let dst = arch::phys_to_virt(m.memory.phys).ok_or(HwError)? as usize;
+        let (pitch, row_bytes) = (layout.pitch as usize, rect.width as usize * 4);
+        for y in rect.y..rect.y + rect.height {
+            let at = y as usize * pitch + rect.x as usize * 4;
+            // SAFETY: the rectangle is inside the framebuffer (`clip`), which
+            // the device checked fits its buffer, and the mirror has the same
+            // pitch and height, so both ranges are inside their allocations,
+            // which live as long as the `Arc`s held here; they are different
+            // allocations, so the ranges do not overlap. A client writing the
+            // framebuffer meanwhile only changes which bytes are copied.
+            unsafe { core::ptr::copy_nonoverlapping((src + at) as *const u8, (dst + at) as *mut u8, row_bytes) };
+        }
+        m.pending = Some(bounding(m.pending.unwrap_or_default(), rect));
+        Ok(())
+    }
+
+    /// Send the copied rectangles and `rect` to the host and show them:
+    /// `TRANSFER_TO_HOST_2D` and `RESOURCE_FLUSH` in one notification.
+    fn flush_mirror(&mut self, rect: Rect) -> Result<(), HwError> {
+        let Some(m) = self.mirror.as_mut() else { return Err(HwError) };
+        let rect = bounding(m.pending.take().unwrap_or_default(), rect.clip(m.layout.width, m.layout.height));
+        if rect.is_empty() {
+            return Ok(());
+        }
+        let fb = m.framebuffer();
+        gpu(|g| g.update(&fb, gpu_rect(rect)))
+    }
 }
 
 fn gpu_rect(r: Rect) -> poly_virtio_gpu::Rect {
@@ -211,10 +409,16 @@ impl Hardware for KernelHw {
         // SAFETY: the frames were just allocated for this buffer alone and
         // are mapped writable and contiguous by the direct map.
         unsafe { core::ptr::write_bytes(virt as *mut u8, 0, (frames * PAGE_SIZE) as usize) };
-        Some(Arc::new(DumbMemory { phys, frames, len: size }))
+        Some(Arc::new(DumbMemory { phys, frames, len: size, window: None, resource: AtomicU32::new(0) }))
     }
 
     fn create_fb(&mut self, fb: u32, layout: &FbLayout, buffer: &Arc<DumbMemory>) -> Result<(), HwError> {
+        // A buffer the host renders into (a 3D resource): show it as it is.
+        let on = buffer.resource.load(SeqCst);
+        if on != 0 {
+            self.fb_on_res.insert(fb, on);
+            return Ok(());
+        }
         let format = virtio_format(layout.format).ok_or(HwError)?;
         let id = resource(fb);
         let entry = MemEntry { addr: buffer.phys + layout.offset, length: layout.pitch * layout.height };
@@ -225,10 +429,18 @@ impl Hardware for KernelHw {
                 return Err(e);
             }
             Ok(())
-        })
+        })?;
+        if buffer.window.is_none() {
+            self.fb_mem.insert(fb, (buffer.clone(), *layout));
+        }
+        Ok(())
     }
 
     fn destroy_fb(&mut self, fb: u32, buffer: &Arc<DumbMemory>) -> Result<(), HwError> {
+        if self.fb_on_res.remove(&fb).is_some() {
+            return Ok(());
+        }
+        self.fb_mem.remove(&fb);
         let id = resource(fb);
         let r = gpu(|g| {
             g.detach_backing(id)?;
@@ -242,17 +454,54 @@ impl Hardware for KernelHw {
     }
 
     fn upload(&mut self, fb: u32, layout: &FbLayout, rect: Rect) -> Result<(), HwError> {
+        if self.fb_on_res.contains_key(&fb) {
+            // The host has the picture already.
+            return Ok(());
+        }
+        if let Some((memory, layout)) = self.fb_mem.get(&fb).cloned() {
+            return self.copy_to_mirror(&memory, &layout, rect);
+        }
         let offset = rect.y as u64 * layout.pitch as u64 + rect.x as u64 * 4;
         gpu(|g| g.transfer_to_host_2d(resource(fb), gpu_rect(rect), offset))
     }
 
     fn scanout(&mut self, index: usize, show: Option<(u32, Rect)>) -> Result<(), HwError> {
-        let (id, rect) = show.map_or((0, poly_virtio_gpu::Rect::ZERO), |(fb, r)| (resource(fb), gpu_rect(r)));
-        gpu(|g| g.set_scanout(index as u32, id, rect))
+        match show {
+            Some((fb, r)) if self.is_mirrored(fb) => {
+                let m = self.mirror.as_mut().ok_or(HwError)?;
+                // Already scanning the mirror out: what it shows is what the
+                // copies since keep up to date.
+                if !m.on.contains(&index) {
+                    gpu(|g| g.set_scanout(index as u32, MIRROR_RESOURCE, gpu_rect(r)))?;
+                    m.on.push(index);
+                }
+                Ok(())
+            }
+            other => {
+                if let Some(m) = self.mirror.as_mut() {
+                    m.on.retain(|&i| i != index);
+                }
+                let (id, rect) =
+                    other.map_or((0, poly_virtio_gpu::Rect::ZERO), |(fb, r)| (self.res_of(fb), gpu_rect(r)));
+                gpu(|g| g.set_scanout(index as u32, id, rect))
+            }
+        }
     }
 
     fn flush(&mut self, fb: u32, rect: Rect) -> Result<(), HwError> {
-        gpu(|g| g.flush(resource(fb), gpu_rect(rect)))
+        if self.is_mirrored(fb) {
+            return self.flush_mirror(rect);
+        }
+        let id = self.res_of(fb);
+        gpu(|g| g.flush(id, gpu_rect(rect)))
+    }
+
+    fn now_ns(&self) -> Option<u64> {
+        Some(time::now_ns())
+    }
+
+    fn scanout_keeps_picture(&self, fb: u32) -> bool {
+        self.is_mirrored(fb)
     }
 
     fn take_display(&mut self) {
@@ -261,6 +510,163 @@ impl Hardware for KernelHw {
 
     fn give_back_display(&mut self) {
         display::console_restore();
+    }
+
+    fn gpu_caps(&mut self) -> GpuCaps {
+        self.caps.clone()
+    }
+
+    fn capset(&mut self, id: u32, version: u32) -> Result<Vec<u8>, HwError> {
+        let max = self.caps.capsets.iter().find(|c| c.id == id).ok_or(HwError)?.max_size;
+        gpu3d::capset(id, version, max)
+    }
+
+    fn ctx_create(&mut self, ctx: u32, capset: u32, name: &[u8]) -> Result<(), HwError> {
+        gpu(|g| g.ctx_create(ctx, capset, name))
+    }
+
+    fn ctx_destroy(&mut self, ctx: u32) {
+        let _ = gpu(|g| g.ctx_destroy(ctx));
+    }
+
+    fn ctx_attach(&mut self, ctx: u32, res: u32) -> Result<(), HwError> {
+        gpu(|g| g.ctx_attach(ctx, res))
+    }
+
+    fn ctx_detach(&mut self, ctx: u32, res: u32) {
+        let _ = gpu(|g| g.ctx_detach(ctx, res));
+    }
+
+    fn create_resource(
+        &mut self,
+        res: u32,
+        ctx: Option<u32>,
+        kind: &ResourceKind,
+        backing: Option<&Arc<DumbMemory>>,
+    ) -> Result<Option<Arc<DumbMemory>>, HwError> {
+        use poly_drm::uapi::virtgpu::blob;
+        let entry = backing.map(|b| MemEntry { addr: b.phys, length: (b.frames * PAGE_SIZE) as u32 });
+        let attach = |g: &mut crate::virtio_gpu::Driver| match entry {
+            Some(e) => g.attach_backing(res, &[e]).inspect_err(|_| {
+                let _ = g.unref(res);
+            }),
+            None => Ok(()),
+        };
+        match *kind {
+            ResourceKind::Simple { format, width, height } => {
+                gpu(|g| g.create_2d(res, format, width, height).and_then(|()| attach(g)))?;
+                Ok(None)
+            }
+            ResourceKind::ThreeD(c) => {
+                let c = poly_virtio_gpu::Create3d {
+                    resource_id: res,
+                    target: c.target,
+                    format: c.format,
+                    bind: c.bind,
+                    width: c.width,
+                    height: c.height,
+                    depth: c.depth,
+                    array_size: c.array_size,
+                    last_level: c.last_level,
+                    nr_samples: c.nr_samples,
+                    flags: c.flags,
+                };
+                gpu(|g| g.create_3d(&c).and_then(|()| attach(g)))?;
+                if let Some(b) = backing {
+                    b.resource.store(res, SeqCst);
+                }
+                Ok(None)
+            }
+            ResourceKind::Blob { mem, flags, blob_id, size } => {
+                let b =
+                    poly_virtio_gpu::CreateBlob { resource_id: res, blob_mem: mem, blob_flags: flags, blob_id, size };
+                let entries = entry.as_slice();
+                gpu(|g| g.create_blob(ctx.unwrap_or(0), &b, entries)).inspect_err(|_| {
+                    kprintln!("drm: blob {res:#x}: memory {mem}, flags {flags:#x}, ID {blob_id}, {size} bytes, context {ctx:?}, {} entries", entries.len());
+                })?;
+                self.blobs.insert(res, false);
+                let host = mem != blob::MEM_GUEST;
+                if host && flags & blob::FLAG_USE_MAPPABLE != 0 {
+                    match gpu3d::map_window(res, size) {
+                        Ok((phys, offset)) => {
+                            self.blobs.insert(res, true);
+                            let m = Arc::new(DumbMemory::window(phys, size, offset));
+                            m.resource.store(res, SeqCst);
+                            return Ok(Some(m));
+                        }
+                        Err(e) => {
+                            self.blobs.remove(&res);
+                            let _ = gpu(|g| g.unref(res));
+                            return Err(e);
+                        }
+                    }
+                }
+                if host && let Some(b) = backing {
+                    b.resource.store(res, SeqCst);
+                }
+                Ok(None)
+            }
+        }
+    }
+
+    fn destroy_resource(&mut self, res: u32, memory: Option<&Arc<DumbMemory>>) {
+        // A blob goes asynchronously, its memory kept until the device let
+        // go of it (`gpu3d::retire_blob`).
+        if let Some(mapped) = self.blobs.remove(&res) {
+            let keep = memory.map(|m| m.clone() as gpu3d::Keep);
+            if gpu3d::retire_blob(res, mapped, keep.clone()).is_err() {
+                // The device may still use the memory: never free it.
+                core::mem::forget(keep);
+            }
+            if let Some(m) = memory {
+                m.resource.store(0, SeqCst);
+            }
+            return;
+        }
+        // Guest memory is detached first.
+        let r = gpu(|g| {
+            if memory.is_some() {
+                g.detach_backing(res)?;
+            }
+            g.unref(res)
+        });
+        if let Some(m) = memory {
+            m.resource.store(0, SeqCst);
+            if r.is_err() {
+                // The device may still use the memory: never free it.
+                core::mem::forget(m.clone());
+            }
+        }
+    }
+
+    fn submit(&mut self, ctx: u32, ring: Option<u32>, commands: &[u8]) -> Result<u64, HwError> {
+        gpu3d::submit(ctx, ring, commands)
+    }
+
+    fn transfer(&mut self, to_host: bool, ctx: Option<u32>, res: u32, t: &Transfer) -> Result<u64, HwError> {
+        match ctx {
+            Some(ctx) => {
+                let region = poly_virtio_gpu::Box3d { x: t.x, y: t.y, z: t.z, w: t.w, h: t.h, d: t.d };
+                let t = poly_virtio_gpu::Transfer3d {
+                    resource_id: res,
+                    region,
+                    offset: t.offset,
+                    level: t.level,
+                    stride: t.stride,
+                    layer_stride: t.layer_stride,
+                };
+                gpu3d::transfer(to_host, ctx, t)
+            }
+            None if to_host => {
+                let rect = poly_virtio_gpu::Rect::new(t.x, t.y, t.w, t.h);
+                gpu(|g| g.transfer_to_host_2d(res, rect, t.offset)).map(|()| 0)
+            }
+            None => Err(HwError),
+        }
+    }
+
+    fn fence_done(&mut self, fence: u64) -> bool {
+        gpu3d::fence_done(fence)
     }
 }
 
@@ -338,6 +744,14 @@ impl poly_drm::Fds<Arc<DumbMemory>> for ProcessFds {
         let process = crate::user::current_process().ok_or(poly_drm::Errno::EBADF)?;
         let file = process.files.file(fd).map_err(|_| poly_drm::Errno::EBADF)?;
         file.object_as::<DmaBuf>().map(|b| b.bo).ok_or(poly_drm::Errno::EINVAL)
+    }
+
+    fn export_fence(&mut self, fences: &[u64]) -> poly_drm::Result<i32> {
+        gpu3d::export_fence(fences).map_err(|e| poly_drm::Errno(e.code()))
+    }
+
+    fn import_fence(&mut self, fd: i32) -> poly_drm::Result<Vec<u64>> {
+        gpu3d::import_fence(fd).map_err(|e| poly_drm::Errno(e.code()))
     }
 }
 
@@ -426,6 +840,8 @@ impl CharDevice for DrmFile {
                 // A blocking vblank wait (rewritten to an absolute one), or
                 // a blocking commit behind a pending flip: ask again then.
                 Reply::Sleep { until_ns } => thread::sleep_until(until_ns.max(now + 1)),
+                // A busy buffer or an in-fence: ask again once it signalled.
+                Reply::WaitFence { fence } => gpu3d::wait_fence(fence),
             }
         }
     }
@@ -576,16 +992,21 @@ pub fn init() {
         kprintln!("drm: no virtio GPU display; no /dev/dri");
         return;
     }
+    // The name Mesa's loader picks its virtio-gpu drivers by (virgl for
+    // OpenGL, Venus for Vulkan; without 3D they fail and the software
+    // drivers take over, as on Linux).
+    let caps = gpu3d::caps();
     let info = DriverInfo {
         name: "virtio_gpu",
-        desc: "virtio GPU (Poly, 2D)",
+        desc: if caps.virgl { "virtio GPU (Poly, 3D)" } else { "virtio GPU (Poly, 2D)" },
         date: "0",
         version: (0, 1, 0),
         unique: unique(),
     };
-    let device = Device::new(KernelHw, info);
+    let device = Device::new(KernelHw { caps: caps.clone(), ..KernelHw::default() }, info);
     let crtcs = device.crtc_count();
     *DRM.lock() = Some(device);
+    gpu3d::init(&caps);
     let vfs = fs::vfs();
     let Ok(mut ctx) = vfs.root_context() else { return };
     ctx.set_umask(0);
@@ -714,7 +1135,7 @@ kernel_test! {
         if !require(env)? {
             return Ok(());
         }
-        let mut hw = KernelHw;
+        let mut hw = KernelHw::default();
         let out = hw.probe();
         let first = out.first().ok_or("no outputs")?;
         let (w, h) = (first.width.max(64), first.height.max(64));

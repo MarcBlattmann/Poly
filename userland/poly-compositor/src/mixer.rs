@@ -9,17 +9,17 @@
 //! are found by name, as ALSA's control-name conventions call them:
 //! "Master Playback Volume" and "Master Playback Switch".
 
-use std::ffi::CString;
-use std::io;
-use std::os::fd::RawFd;
+use crate::io;
+use crate::os::{self, RawFd};
+use crate::prelude::*;
 
 /// `SNDRV_CTL_IOCTL_*`.
 mod ioctl {
-    pub const CARD_INFO: u64 = 0x8178_5501;
-    pub const ELEM_INFO: u64 = 0xc110_5511;
-    pub const ELEM_READ: u64 = 0xc4c8_5512;
-    pub const ELEM_WRITE: u64 = 0xc4c8_5513;
-    pub const SUBSCRIBE_EVENTS: u64 = 0xc004_5516;
+    pub const CARD_INFO: u32 = 0x8178_5501;
+    pub const ELEM_INFO: u32 = 0xc110_5511;
+    pub const ELEM_READ: u32 = 0xc4c8_5512;
+    pub const ELEM_WRITE: u32 = 0xc4c8_5513;
+    pub const SUBSCRIBE_EVENTS: u32 = 0xc004_5516;
 }
 
 /// The structures' sizes.
@@ -97,19 +97,14 @@ pub struct Mixer {
 
 impl Drop for Mixer {
     fn drop(&mut self) {
-        crate::unix::close(self.fd);
+        os::close(self.fd);
     }
 }
 
 impl Mixer {
     /// Open the control device and find the master controls.
     pub fn open(path: &str) -> io::Result<Mixer> {
-        let c = CString::new(path).map_err(|_| io::ErrorKind::InvalidInput)?;
-        // SAFETY: a NUL-terminated path.
-        let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDWR | libc::O_CLOEXEC | libc::O_NONBLOCK) };
-        if fd < 0 {
-            return Err(io::Error::last_os_error());
-        }
+        let fd = os::open_device(path, true, true)?;
         let mut m = Mixer {
             fd,
             card: String::new(),
@@ -136,11 +131,10 @@ impl Mixer {
         self.fd
     }
 
-    fn ioctl(&self, request: u64, arg: *mut u8) -> io::Result<()> {
+    fn ioctl(&self, request: u32, arg: *mut u8) -> io::Result<()> {
         // SAFETY: `arg` points at a buffer of the size `request` encodes,
         // owned by the caller for the call.
-        let r = unsafe { libc::ioctl(self.fd, request as _, arg) };
-        if r < 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
+        unsafe { os::control(self.fd, request, arg as u64) }.map(|_| ())
     }
 
     fn info(&self, name: &str) -> io::Result<ElemInfo> {
@@ -191,8 +185,7 @@ impl Mixer {
     pub fn drain_events(&self) -> bool {
         let mut any = false;
         let mut ev = [0u8; EVENT_LEN];
-        // SAFETY: reading into a buffer of the length given.
-        while unsafe { libc::read(self.fd, ev.as_mut_ptr().cast(), EVENT_LEN) } > 0 {
+        while os::read(self.fd, &mut ev).is_ok_and(|n| n > 0) {
             any = true;
         }
         any

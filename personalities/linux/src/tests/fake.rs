@@ -63,6 +63,8 @@ pub struct File {
     pub max_write: Option<usize>,
     /// Fail every write once this many bytes have been written.
     pub fail_after: Option<(usize, Errno)>,
+    /// Fail every read with this.
+    pub read_error: Option<Errno>,
 }
 
 impl File {
@@ -75,6 +77,7 @@ impl File {
             input: Vec::new(),
             max_write: None,
             fail_after: None,
+            read_error: None,
         }
     }
 }
@@ -114,6 +117,8 @@ pub struct FakeKernel {
     pub fs_base: u64,
     pub gs_base: u64,
     pub exit: Option<Exit>,
+    /// The bpf(2) objects the fake's descriptors are open on.
+    pub bpf_fds: BTreeMap<i32, crate::bpf::Object>,
     pub pid: i32,
     pub tid: i32,
     pub ppid: i32,
@@ -136,8 +141,13 @@ pub struct FakeKernel {
     pub cpus: u32,
     /// Every madvise that reached the kernel (ADR 0049).
     pub advised: Vec<(u64, u64, crate::sys::madvise::Advice)>,
+    /// Every PR_SET_VMA_ANON_NAME that reached the kernel.
+    pub named: Vec<(u64, u64, Option<Vec<u8>>)>,
     /// mlock (`true`) and munlock calls: address, length.
-    pub locked: Vec<(u64, u64, bool)>,
+    pub locked: Vec<(u64, u64, crate::kernel::MemLock)>,
+    /// Locked pages (by page number) and the mlockall(2) future setting.
+    pub locked_pages: alloc::collections::BTreeSet<u64>,
+    pub lock_future: Option<crate::kernel::MemLock>,
     /// mremap calls: old, old length, new length, placement.
     pub remapped: Vec<(u64, u64, u64, crate::kernel::Remap)>,
     /// msync calls: address, length, sync.
@@ -223,6 +233,7 @@ impl FakeKernel {
             fs_base: 0,
             gs_base: 0,
             exit: None,
+            bpf_fds: BTreeMap::new(),
             pid: 100,
             tid: 100,
             ppid: 1,
@@ -234,7 +245,10 @@ impl FakeKernel {
             ioctls: Vec::new(),
             protects: Vec::new(),
             advised: Vec::new(),
+            named: Vec::new(),
             locked: Vec::new(),
+            locked_pages: alloc::collections::BTreeSet::new(),
+            lock_future: None,
             remapped: Vec::new(),
             synced_maps: Vec::new(),
             on_cpu: 0,
@@ -550,6 +564,9 @@ impl LinuxKernel for FakeKernel {
         if !f.readable {
             return Err(Errno::EBADF);
         }
+        if let Some(e) = f.read_error {
+            return Err(e);
+        }
         let n = buf.len().min(f.input.len());
         buf[..n].copy_from_slice(&f.input[..n]);
         f.input.drain(..n);
@@ -705,13 +722,47 @@ impl LinuxKernel for FakeKernel {
         })
     }
 
-    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
-        self.locked.push((addr, len, lock));
-        let pages = addr / PAGE_SIZE..(addr + len).div_ceil(PAGE_SIZE);
-        if pages.into_iter().any(|p| !self.pages.contains_key(&p)) {
-            return Err(Errno::ENOMEM);
+    fn mlock(&mut self, addr: u64, len: u64, how: crate::kernel::MemLock) -> Result<(), Errno> {
+        self.locked.push((addr, len, how));
+        for p in addr / PAGE_SIZE..(addr + len).div_ceil(PAGE_SIZE) {
+            if !self.pages.contains_key(&p) {
+                return Err(Errno::ENOMEM);
+            }
+            if how == crate::kernel::MemLock::Unlock {
+                self.locked_pages.remove(&p);
+            } else {
+                self.locked_pages.insert(p);
+            }
         }
         Ok(())
+    }
+
+    fn mlockall(
+        &mut self,
+        current: Option<crate::kernel::MemLock>,
+        future: Option<crate::kernel::MemLock>,
+    ) -> Result<(), Errno> {
+        if current.is_some() {
+            self.locked_pages.extend(self.pages.keys().copied());
+        }
+        self.lock_future = future;
+        Ok(())
+    }
+
+    fn munlockall(&mut self) -> Result<(), Errno> {
+        self.locked_pages.clear();
+        self.lock_future = None;
+        Ok(())
+    }
+
+    fn locked_memory(&self, addr: u64, len: u64) -> crate::kernel::LockedMemory {
+        let range = addr / PAGE_SIZE..(addr.saturating_add(len)).div_ceil(PAGE_SIZE);
+        crate::kernel::LockedMemory {
+            locked: self.locked_pages.len() as u64 * PAGE_SIZE,
+            in_range: self.locked_pages.range(range).count() as u64 * PAGE_SIZE,
+            mapped: self.pages.len() as u64 * PAGE_SIZE,
+            future: self.lock_future,
+        }
     }
 
     fn mincore(&mut self, addr: u64, vec: &mut [u8]) -> Result<(), Errno> {
@@ -723,6 +774,45 @@ impl LinuxKernel for FakeKernel {
             // Pages the fake has are all "resident".
             *byte = 1;
         }
+        Ok(())
+    }
+
+    fn memory_regions(&mut self, pid: i32, start: u64, end: u64) -> Result<Vec<crate::kernel::MemRegion>, Errno> {
+        // Every live process of the fake sees the fake's one memory.
+        if !self.procs.get(&pid).is_some_and(|p| !p.info.zombie) {
+            return Err(Errno::ESRCH);
+        }
+        let mut out: Vec<crate::kernel::MemRegion> = Vec::new();
+        if start >= end {
+            return Ok(out);
+        }
+        for (&page, p) in self.pages.range(start / PAGE_SIZE..end.div_ceil(PAGE_SIZE)) {
+            let at = page * PAGE_SIZE;
+            match out.last_mut() {
+                Some(r) if r.end == at && r.prot == Prot(p.prot) => r.end = at + PAGE_SIZE,
+                _ => out.push(crate::kernel::MemRegion {
+                    start: at,
+                    end: at + PAGE_SIZE,
+                    prot: Prot(p.prot),
+                    shared: false,
+                    object: 0,
+                }),
+            }
+        }
+        Ok(out)
+    }
+
+    fn page_query(&mut self, pid: i32, addr: u64) -> Result<crate::kernel::PageQuery, Errno> {
+        self.memory_regions(pid, 0, 0)?;
+        // Pages the fake has are all present.
+        Ok(match self.pages.contains_key(&(addr / PAGE_SIZE)) {
+            true => crate::kernel::PageQuery::Present,
+            false => crate::kernel::PageQuery::Unmapped,
+        })
+    }
+
+    fn name_anon(&mut self, addr: u64, len: u64, name: Option<&[u8]>) -> Result<(), Errno> {
+        self.named.push((addr, len, name.map(<[u8]>::to_vec)));
         Ok(())
     }
 
@@ -922,8 +1012,27 @@ impl LinuxKernel for FakeKernel {
         self.seccomp_on = true;
     }
 
+    fn seccomp_listener(&mut self) -> Result<i32, Errno> {
+        Ok(3)
+    }
+
     fn seccomp_log(&mut self, number: u64, ret: u32) {
         self.seccomp_logged.push((number, ret));
+    }
+
+    fn bpf_install(&mut self, object: crate::bpf::Object, cloexec: bool) -> Result<i32, Errno> {
+        let _ = cloexec;
+        let fd = 100 + self.bpf_fds.len() as i32;
+        self.bpf_fds.insert(fd, object);
+        Ok(fd)
+    }
+
+    fn bpf_object(&mut self, fd: i32) -> Result<Option<crate::bpf::Object>, Errno> {
+        if let Some(o) = self.bpf_fds.get(&fd) {
+            return Ok(Some(o.clone()));
+        }
+        // Another descriptor: open or not.
+        if self.files.contains_key(&fd) { Ok(None) } else { Err(Errno::EBADF) }
     }
 
     fn pid_ns(&self) -> crate::ns::pid::PidNsRef {

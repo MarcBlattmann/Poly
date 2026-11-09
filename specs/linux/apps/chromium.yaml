@@ -1,0 +1,117 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/apps/chromium.yaml. An app test entry: the program, not an
+# API symbol, so it has no coverage-map entry. What Chromium needs of the
+# kernel, call by call, is in docs/chromium-linux-gaps.md.
+id: linux/api/apps/chromium
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04) on WSL2, 32 CPUs; Chromium's Debian 13 root (target/chromium/root-reference, every package of tools/xtask/chromium.lock) entered with pivot_root in a mount namespace of its own (proc, sysfs, the host's /dev, tmpfs /tmp, /run and a 1 GiB /dev/shm); unprivileged user namespaces allowed; kernel.yama.ptrace_scope 1"
+  observed_by: spec-linux-chromium
+  date: 2026-11-02
+summary: >
+  Chromium 156.0.8078.73 (Debian 13's open-source build, chromium
+  156.0.8078.73-1~deb13u1 from trixie-security, with exactly the Debian
+  packages it depends on, pinned in tools/xtask/chromium.lock) runs headless
+  (--headless=new) and windowed. Headless it loads a local file:// page, runs
+  its scripts in a sandboxed renderer process and prints the serialised DOM
+  (--dump-dom) or writes a PNG of the rendered page (--screenshot), then
+  exits 0. As root it refuses to start its sandbox ("Running as root without
+  --no-sandbox is not supported", exit 1) unless --no-sandbox is given; as an
+  ordinary user (uid 1000) it sandboxes its zygote, renderer and utility
+  processes: with the user-namespace sandbox where the process may make a
+  user namespace, else (a chrooted process may not, nor where user
+  namespaces are disabled) with the set-user-ID helper
+  /usr/lib/chromium/chrome-sandbox (mode 4755, owner root). The start script
+  /usr/bin/chromium (a POSIX shell script) checks /proc/cpuinfo for "sse3" or
+  "pni", sources /etc/chromium.d/* (findmnt of /dev/shm decides
+  --disable-dev-shm-usage below 3.8 GB) and execs /usr/lib/chromium/chromium.
+environment: >
+  Each case is a scenario test in the pipeline's app test format
+  (docs/AGENT_PIPELINE.md, "App tests": description, steps, env, files),
+  run by `cargo xtask chromium apptest` on Chromium's root disk instead of a
+  tree of host programs: every step names a program of that disk, runs in
+  /work (where the case's files are, owned by root, files 0644) as root with
+  umask 022, stdin empty, the environment PATH=/usr/bin:/bin HOME=/work
+  LANG=C TZ=UTC plus the case's env, nothing else (env -i). Steps that run
+  Chromium as user poly (uid/gid 1000) use setpriv(1) (util-linux)
+  --reuid=1000 --regid=1000 --clear-groups and env HOME=/tmp/poly-home (a
+  fresh directory of that user; Chromium writes its profile below HOME).
+  /etc/passwd lists root, nobody and poly; /etc/machine-id is fixed; there is
+  no D-Bus, no network but loopback, no /etc/resolv.conf, no GPU (Chromium
+  falls back to software: SwiftShader is not used with --disable-gpu, and
+  headless needs no GPU), the only fonts are Debian's fonts-dejavu-core
+  through Debian's fontconfig configuration. On Poly the disk is
+  target/poly-chromium-disk.img (`cargo xtask chromium disk`), booted by
+  BusyBox's init, which mounts it and chroots into it (so Chromium takes its
+  set-user-ID sandbox there; see docs/chromium-linux-gaps.md, "Which
+  sandbox").
+comparison: >
+  Exit status of the last step and stdout of all steps, byte for byte.
+  Stderr is not compared (Chromium's log lines carry pids and times; with
+  --log-level=3 only fatal errors are logged, and GLib's warnings about
+  missing GSettings schemas and D-Bus are printed on both systems). System
+  calls are not compared (a run is about 15 processes and 250 threads
+  whose calls interleave by scheduling; poly-diff: syscalls=off), but
+  docs/chromium-linux-gaps.md lists what they are. Run with `cargo xtask
+  chromium apptest [--target linux|poly|both|linux-twice] [--tests-dir
+  DIR]...`; Linux against Linux (linux-twice) is clean for every case.
+returns:
+  version: "\"Chromium 156.0.8078.73 built on Debian GNU/Linux 13 (trixie)\\n\", exit 0 (through the start script, as root: --version starts no sandbox)"
+  dumpdom: "the document after the load event as HTML: the doctype line, the elements as parsed (a script's DOM changes included: \"<p id=\\\"p\\\">script ran: 42</p>\"), the parser's \"\\n\\n\" before </body>, then </html> followed by exactly one newline (stdout ends with the bytes \"</html>\\n\", for this page 261 bytes; a page given without a trailing newline, \"<p>x</p>\", also ends \"</html>\\n\", 48 bytes); exit 0; the same as root with --no-sandbox, as poly with either sandbox, through the start script or the binary"
+  script: "V8 results are IEEE doubles and ES2024: [..].sort() orders by UTF-16 code units, JSON.stringify gives {\"n\":42,\"list\":[1,4,9],\"s\":\"café\"}, (0.1+0.2).toFixed(17) is 0.30000000000000004, Math.sqrt(2) prints 1.4142135623730951"
+  canvas: "a 2D canvas read back with getImageData in the sandboxed renderer: opaque fills exact (255 0 0 255; 0 128 255 255), 50% black over them 127 0 0 255 and 0 64 127 255"
+  screenshot: "--screenshot=FILE --window-size=400,300 --hide-scrollbars writes a 400x300 8-bit RGB PNG (IHDR width 0x190, height 0x12c) and prints \"1089 bytes written to file FILE\" on stderr; colours.html's quadrants are exactly ff0000, 00ff00, 0000ff, ffff00 (pixels (10,10), (390,10), (10,290), (390,290); (199,149) red, (200,150) yellow); its SHA-256 is 61634a69661862491a7084ce0a9b9bde05a87c3d6f815776b9b0582a13badaeb, the same in every run"
+  text: "DejaVu Sans at 20px: \"Hello, Poly!\" is 112x24 CSS pixels, \"Ärger über ß – € 42\" 193x24; document.fonts.check() true"
+  storage: "a file: page in a fresh profile: localStorage and sessionStorage work (\"v5 1\", \"b\"); document.cookie stays empty (file: pages keep no cookies)"
+  worker: "a dedicated worker from a blob: URL runs (sum 1..1000 = 500500) within --virtual-time-budget=5000"
+  timers: "with --virtual-time-budget: sync, microtask, timeout 0, frame (requestAnimationFrame), timeout 50, in that order"
+  missing: "--dump-dom of a file that does not exist prints nothing on stdout and exits 0 (the error page is not dumped)"
+errors:
+  root_sandbox: "as root without --no-sandbox: \"Running as root without --no-sandbox is not supported. See https://crbug.com/638180.\" on stderr, exit 1 (not a case: its message carries a pid)"
+  find_missing: "without findutils the start script prints \"/usr/bin/chromium: 72: find: not found\" and goes on"
+system_calls:                                 # observed on the reference; details in docs/chromium-linux-gaps.md
+  - >
+    Processes of a headless --dump-dom run: the browser, two crashpad
+    handlers (chrome_crashpad_handler, exec'd), the zygote without sandbox
+    (--type=zygote --no-zygote-sandbox) and the sandboxed zygote (exec'd
+    through chrome-sandbox in the set-user-ID case), from which the other
+    children (renderer, GPU process) are forked, not exec'd; the network
+    service (--type=utility --utility-sub-type=network.mojom.NetworkService,
+    exec'd as /proc/self/exe); about 15 processes and 250 threads. Each
+    child's /proc/PID/oom_score_adj is written (opened with creat(2)) by the
+    browser, or in the set-user-ID case by `chrome-sandbox --adjust-oom-score
+    PID SCORE`, exec'd once per child.
+  - >
+    User-namespace sandbox: clone(CLONE_NEWUSER|SIGCHLD) probe, then
+    clone(CLONE_NEWUSER|CLONE_NEWPID|CLONE_NEWNET|SIGCHLD) for the zygote,
+    which writes /proc/self/setgroups "deny" and uid_map/gid_map "1000 1000 1",
+    sets capabilities with capset (CAP_SYS_ADMIN only, later none), changes
+    its root to /proc/self/fdinfo/ with chroot from a clone(CLONE_FS)
+    helper, and makes each renderer pid 1 of a new pid namespace with
+    clone(CLONE_NEWPID|SIGCHLD). Set-user-ID sandbox: execve of
+    chrome-sandbox (mode 4755) gives euid 0; it does
+    clone(CLONE_NEWPID|CLONE_NEWNET|SIGCHLD), prctl(PR_SET_DUMPABLE, 0),
+    setresgid/setresuid(1000, 1000, 1000) and execs the zygote, whose
+    clone(CLONE_FS) helper chroots to /proc/self/fdinfo on request.
+  - >
+    seccomp: probes seccomp(SECCOMP_SET_MODE_FILTER, TSYNC or SPEC_ALLOW,
+    NULL) and prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, NULL), each -1
+    EFAULT; then PR_SET_NO_NEW_PRIVS and filters of 617..662 instructions
+    with SECCOMP_FILTER_FLAG_SPEC_ALLOW; filtered calls are answered with
+    SIGSYS (si_code SYS_SECCOMP, si_errno = the filter's data, handled by a
+    SA_SIGINFO|SA_NODEFER handler that returns the result through
+    rt_sigreturn) or an errno (clone3 -1 ENOSYS, madvise -1 EPERM).
+side_effects: "a profile under $HOME/.config/chromium-headless/ (temporary, removed at exit) and $HOME/.config/chromium/Crash Reports/; SingletonLock/Socket/Cookie symbolic links in a /tmp/org.chromium.Chromium.XXXXXX directory, removed at exit; the screenshot file"
+threading: "multi-process and multi-threaded (see system_calls)"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "0.5 to 1.5 s per headless case on the host; minutes on Poly under QEMU (TCG)"
+  guarantees: none
+tests:
+  visible: 8  # count in chromium.tests/
+  held_out: 4  # count kept by the diff runner
+# Windowed cases (Chromium on Poly's desktop through Wayland with its
+# sandbox, clicked and typed into) are not app tests: they need the desktop
+# and input. They are the boot test `chromium` (tools/xtask/src/chromium.rs)
+# and are described in docs/chromium-linux-gaps.md ("The windowed
+# scenario"), with what the reference showed on Xvfb and weston.

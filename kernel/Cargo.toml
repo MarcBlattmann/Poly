@@ -50,11 +50,15 @@ poly-tty = { path = "../crates/poly-tty" }
 poly-unix = { path = "../crates/poly-unix" }
 poly-vfs = { path = "../crates/poly-vfs" }
 poly-personality-linux = { path = "../personalities/linux" }
+# Poly's own system call interface (ADR 0125).
+poly-personality-native = { path = "../personalities/native" }
 poly-ntobj = { path = "../crates/poly-ntobj" }
 poly-pe = { path = "../crates/poly-pe" }
 # The PE builder of the ring-3 loader tests (ADR 0071).
 poly-ldr = { path = "../crates/poly-ldr" }
 poly-personality-nt = { path = "../personalities/nt" }
+# The desktop link's records and device numbers (/dev/win32k, ADR 0131).
+poly-win32k = { path = "../crates/poly-win32k" }
 poly-personality-xnu = { path = "../personalities/xnu" }
 poly-virtio = { path = "../crates/poly-virtio" }
 poly-virtio-blk = { path = "../crates/poly-virtio-blk" }

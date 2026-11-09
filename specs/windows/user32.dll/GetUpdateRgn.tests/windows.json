@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "gurg_children",
+      "exe_sha256": "c6c254f86750d07a135b3200ae4bbac7a93c7e7650b4c721de41122c978f74fa",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBwYXJlbnQgd2l0aG91dCBXU19DTElQQ0hJTERSRU4KLS0gY2hpbGQgYSBtb3ZlZCBmcm9tIDEwLDEwIHRvIDE1LDE1CiAgc2VudDogUCBXTV9FUkFTRUJLR05ECiAgcGFyZW50IGtpbmQgMzogMTAsMTAsNDAsMTUgKyAxMCwxNSwxNSw0MAogIGEga2luZCAxOiBlbXB0eQogIGIga2luZCAxOiBlbXB0eQogIGMga2luZCAxOiBlbXB0eQogIHB1bXBlZDogUCBXTV9QQUlOVAotLSBjaGlsZCBiIGhpZGRlbgogIHNlbnQ6IFAgV01fRVJBU0VCS0dORAogIHBhcmVudCBraW5kIDI6IDYwLDEwLDkwLDQwCiAgYSBraW5kIDE6IGVtcHR5CiAgYiBraW5kIDE6IGVtcHR5CiAgYyBraW5kIDE6IGVtcHR5CiAgcHVtcGVkOiBQIFdNX1BBSU5UCi0tIGNoaWxkIGMgc2hvd24KICBzZW50OiBQIFdNX0VSQVNFQktHTkQKICBwYXJlbnQga2luZCAyOiAxMCw2MCw0MCw5MAogIGEga2luZCAxOiBlbXB0eQogIGIga2luZCAxOiBlbXB0eQogIGMga2luZCAyOiAwLDAsMzAsMzAKICBwdW1wZWQ6IFAgV01fUEFJTlQKICBwdW1wZWQ6IGMgV01fUEFJTlQKICBwdW1wZWQ6IGMgV01fTkNQQUlOVCByZ249MQogIHB1bXBlZDogYyBXTV9FUkFTRUJLR05ECi0tIGNoaWxkIGMgZGVzdHJveWVkCiAgc2VudDogUCBXTV9FUkFTRUJLR05ECiAgcGFyZW50IGtpbmQgMjogMTAsNjAsNDAsOTAKICBhIGtpbmQgMTogZW1wdHkKICBiIGtpbmQgMTogZW1wdHkKICBwdW1wZWQ6IFAgV01fUEFJTlQKPT0gcGFyZW50IHdpdGggV1NfQ0xJUENISUxEUkVOCi0tIGNoaWxkIGEgbW92ZWQgZnJvbSAxMCwxMCB0byAxNSwxNQogIHNlbnQ6IFEgV01fRVJBU0VCS0dORAogIHBhcmVudCBraW5kIDM6IDEwLDEwLDQwLDE1ICsgMTAsMTUsMTUsNDAKICBhIGtpbmQgMTogZW1wdHkKICBiIGtpbmQgMTogZW1wdHkKICBjIGtpbmQgMTogZW1wdHkKICBwdW1wZWQ6IFEgV01fUEFJTlQKLS0gY2hpbGQgYiBoaWRkZW4KICBzZW50OiBRIFdNX0VSQVNFQktHTkQKICBwYXJlbnQga2luZCAyOiA2MCwxMCw5MCw0MAogIGEga2luZCAxOiBlbXB0eQogIGIga2luZCAxOiBlbXB0eQogIGMga2luZCAxOiBlbXB0eQogIHB1bXBlZDogUSBXTV9QQUlOVAotLSBjaGlsZCBjIHNob3duCiAgc2VudDogUSBXTV9FUkFTRUJLR05ECiAgc2VudDogYyBXTV9OQ1BBSU5UIHJnbj0xCiAgc2VudDogYyBXTV9FUkFTRUJLR05ECiAgcGFyZW50IGtpbmQgMjogMTAsNjAsNDAsOTAKICBhIGtpbmQgMTogZW1wdHkKICBiIGtpbmQgMTogZW1wdHkKICBjIGtpbmQgMjogMCwwLDMwLDMwCiAgcHVtcGVkOiBRIFdNX1BBSU5UCiAgcHVtcGVkOiBjIFdNX1BBSU5UCi0tIGNoaWxkIGMgZGVzdHJveWVkCiAgc2VudDogUSBXTV9FUkFTRUJLR05ECiAgcGFyZW50IGtpbmQgMjogMTAsNjAsNDAsOTAKICBhIGtpbmQgMTogZW1wdHkKICBiIGtpbmQgMTogZW1wdHkKICBwdW1wZWQ6IFEgV01fUEFJTlQKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== parent without WS_CLIPCHILDREN\n-- child a moved from 10,10 to 15,15\n  sent: P WM_ERASEBKGND\n  parent kind 3: 10,10,40,15 + 10,15,15,40\n  a kind 1: empty\n  b kind 1: empty\n  c kind 1: empty\n  pumped: P WM_PAINT\n-- child b hidden\n  sent: P WM_ERASEBKGND\n  parent kind 2: 60,10,90,40\n  a kind 1: empty\n  b kind 1: empty\n  c kind 1: empty\n  pumped: P WM_PAINT\n-- child c shown\n  sent: P WM_ERASEBKGND\n  parent kind 2: 10,60,40,90\n  a kind 1: empty\n  b kind 1: empty\n  c kind 2: 0,0,30,30\n  pumped: P WM_PAINT\n  pumped: c WM_PAINT\n  pumped: c WM_NCPAINT rgn=1\n  pumped: c WM_ERASEBKGND\n-- child c destroyed\n  sent: P WM_ERASEBKGND\n  parent kind 2: 10,60,40,90\n  a kind 1: empty\n  b kind 1: empty\n  pumped: P WM_PAINT\n== parent with WS_CLIPCHILDREN\n-- child a moved from 10,10 to 15,15\n  sent: Q WM_ERASEBKGND\n  parent kind 3: 10,10,40,15 + 10,15,15,40\n  a kind 1: empty\n  b kind 1: empty\n  c kind 1: empty\n  pumped: Q WM_PAINT\n-- child b hidden\n  sent: Q WM_ERASEBKGND\n  parent kind 2: 60,10,90,40\n  a kind 1: empty\n  b kind 1: empty\n  c kind 1: empty\n  pumped: Q WM_PAINT\n-- child c shown\n  sent: Q WM_ERASEBKGND\n  sent: c WM_NCPAINT rgn=1\n  sent: c WM_ERASEBKGND\n  parent kind 2: 10,60,40,90\n  a kind 1: empty\n  b kind 1: empty\n  c kind 2: 0,0,30,30\n  pumped: Q WM_PAINT\n  pumped: c WM_PAINT\n-- child c destroyed\n  sent: Q WM_ERASEBKGND\n  parent kind 2: 10,60,40,90\n  a kind 1: empty\n  b kind 1: empty\n  pumped: Q WM_PAINT\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 410
+    },
+    {
+      "name": "gurg_kinds",
+      "exe_sha256": "9940e907303eee0cc15a33f0d9961c9aa74b956ed84bfd10a5b220a12ea1251a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApub3RoaW5nIGludmFsaWQgKHJlZ2lvbiBoZWxkIDEsMiwzLDQpOiBraW5kIDEgcmVnaW9uIGVtcHR5IGJveCAxIDAsMCwwLDAKMTAsMTAsMzAsMjA6IGtpbmQgMiByZWdpb24gMTAsMTAsMzAsMjAgYm94IDIgMTAsMTAsMzAsMjAKcGx1cyAyMCwxNSw0MCwyNSAob3ZlcmxhcHBpbmcpOiBraW5kIDMgcmVnaW9uIDEwLDEwLDMwLDE1ICsgMTAsMTUsNDAsMjAgKyAyMCwyMCw0MCwyNSBib3ggMyAxMCwxMCw0MCwyNQpwbHVzIDQwLDEwLDUwLDI1ICh0b3VjaGluZyBvbiB0aGUgcmlnaHQpOiBraW5kIDMgcmVnaW9uIDEwLDEwLDMwLDE1ICsgNDAsMTAsNTAsMTUgKyAxMCwxNSw1MCwyMCArIDIwLDIwLDUwLDI1IGJveCAzIDEwLDEwLDUwLDI1CnBsdXMgMTAsMjAsMzAsNDAgKGJlbG93IHRoZSBmaXJzdCk6IGtpbmQgMyByZWdpb24gMTAsMTAsMzAsMTUgKyA0MCwxMCw1MCwxNSArIDEwLDE1LDUwLDI1ICsgMTAsMjUsMzAsNDAgYm94IDMgMTAsMTAsNTAsNDAKMCwwLDUwLDQwIHBsdXMgMCw0MCw1MCw4MCAoc3RhY2tlZCwgc2FtZSB3aWR0aCk6IGtpbmQgMiByZWdpb24gMCwwLDUwLDgwIGJveCAyIDAsMCw1MCw4MAp3aG9sZSwgZXJhc2UgcGVuZGluZywgYkVyYXNlIFRSVUU6IGtpbmQgMiByZWdpb24gMCwwLDEwMCw4MCBib3ggMiAwLDAsMTAwLDgwCiAgc2VudDogQSBXTV9FUkFTRUJLR05ECmZyYW1lZCB3aW5kb3cgNSw1LDE1LDE1OiBraW5kIDIgcmVnaW9uIDUsNSwxNSwxNSBib3ggMiA1LDUsMTUsMTUKZnJhbWVkIHdpbmRvdyBhZnRlciBSRFdfSU5WQUxJREFURXxSRFdfRlJBTUU6IGtpbmQgMiByZWdpb24gMCwwLDEzNCw4MSBib3ggMiAwLDAsMTM0LDgxCmNsaWVudCAwLDAsMTM0LDgxCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nnothing invalid (region held 1,2,3,4): kind 1 region empty box 1 0,0,0,0\n10,10,30,20: kind 2 region 10,10,30,20 box 2 10,10,30,20\nplus 20,15,40,25 (overlapping): kind 3 region 10,10,30,15 + 10,15,40,20 + 20,20,40,25 box 3 10,10,40,25\nplus 40,10,50,25 (touching on the right): kind 3 region 10,10,30,15 + 40,10,50,15 + 10,15,50,20 + 20,20,50,25 box 3 10,10,50,25\nplus 10,20,30,40 (below the first): kind 3 region 10,10,30,15 + 40,10,50,15 + 10,15,50,25 + 10,25,30,40 box 3 10,10,50,40\n0,0,50,40 plus 0,40,50,80 (stacked, same width): kind 2 region 0,0,50,80 box 2 0,0,50,80\nwhole, erase pending, bErase TRUE: kind 2 region 0,0,100,80 box 2 0,0,100,80\n  sent: A WM_ERASEBKGND\nframed window 5,5,15,15: kind 2 region 5,5,15,15 box 2 5,5,15,15\nframed window after RDW_INVALIDATE|RDW_FRAME: kind 2 region 0,0,134,81 box 2 0,0,134,81\nclient 0,0,134,81\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 222
+    }
+  ]
+}

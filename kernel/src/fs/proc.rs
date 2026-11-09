@@ -25,10 +25,11 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use poly_personality_linux::admin::SystemName;
 use poly_personality_linux::ns;
 use poly_procfs::{
-    CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, MapEntry, MapName, MountEntry, Owner, ProcFs, ProcSource,
-    ProcState, ProcessInfo, SignalSets, SystemInfo,
+    CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, KernelName, MagicLink, MapEntry, MapName, MountEntry, Owner,
+    ProcFs, ProcSource, ProcState, ProcessInfo, SignalSets, SystemInfo,
 };
 use poly_vfs::{At, Cred, FileType, FsContext, MountFlags, OpenFile, Vfs};
 
@@ -147,7 +148,7 @@ pub fn comm(pid: u32) -> Option<Vec<u8>> {
 
 /// The memory map of process `pid`: the caller's own, or the one recorded
 /// at exec.
-fn memory_of(pid: u32) -> Option<Arc<Memory>> {
+pub(crate) fn memory_of(pid: u32) -> Option<Arc<Memory>> {
     if user::current_process().is_some_and(|p| p.pid == pid) {
         return user::current_memory();
     }
@@ -167,12 +168,20 @@ fn anonymous_target(file: &OpenFile) -> Vec<u8> {
     alloc::format!("{what}:[{}]", file.node().ino()).into_bytes()
 }
 
+/// A mapping's name in `maps`, its device and inode number.
+type Named = (MapName, (u32, u32), u64);
+
 /// `MapName` for a mapping of `vma`.
-fn map_name(vma: &Vma<FileRef>, ctx: Option<&FsContext>) -> (MapName, (u32, u32), u64) {
+fn map_name(vma: &Vma<FileRef>, ctx: Option<&FsContext>) -> Named {
     match (&vma.backing, vma.kind) {
         (_, Kind::Heap) => (MapName::Heap, (0, 0), 0),
         (_, Kind::Stack) => (MapName::Stack, (0, 0), 0),
-        (Backing::Anonymous, _) => (MapName::None, (0, 0), 0),
+        // proc_pid_maps(5): "[anon:<name>]" for memory named with
+        // prctl(PR_SET_VMA_ANON_NAME).
+        (Backing::Anonymous, _) => match &vma.name {
+            Some(name) => (MapName::Label(alloc::format!("[anon:{name}]")), (0, 0), 0),
+            None => (MapName::None, (0, 0), 0),
+        },
         (Backing::File { file, .. }, _) => {
             let source = file.source();
             if let Some(open) = source.file() {
@@ -316,11 +325,30 @@ impl ProcSource for KernelProc {
     fn maps(&self, pid: u32) -> Vec<MapEntry> {
         let Some(memory) = memory_of(pid) else { return Vec::new() };
         let ctx = root();
+        // A file mapped as several regions (a library's segments, the parts
+        // mprotect split) is named once: naming walks directories.
+        let mut named: Vec<(*const OpenFile, Named)> = Vec::new();
         memory
             .regions()
             .iter()
             .map(|vma| {
-                let (name, dev, ino) = map_name(vma, ctx.as_ref());
+                let open = match &vma.backing {
+                    Backing::File { file, .. } => file.source().file().map(Arc::as_ptr),
+                    Backing::Anonymous => None,
+                };
+                let known = open
+                    .filter(|_| vma.kind == Kind::Normal)
+                    .and_then(|p| named.iter().find(|(q, _)| *q == p).map(|(_, n)| n.clone()));
+                let (name, dev, ino) = match known {
+                    Some(n) => n,
+                    None => {
+                        let n = map_name(vma, ctx.as_ref());
+                        if let Some(p) = open {
+                            named.push((p, n.clone()));
+                        }
+                        n
+                    }
+                };
                 let offset = match vma.backing {
                     Backing::File { offset, .. } => offset,
                     Backing::Anonymous => 0,
@@ -336,6 +364,65 @@ impl ProcSource for KernelProc {
                     dev,
                     ino,
                     name,
+                    locked: vma.locked,
+                }
+            })
+            .collect()
+    }
+
+    /// Every descriptor's file is followed to its node (a socket's or an
+    /// event file's too, which stat(2) then describes), but a pipe's: its
+    /// node would open as a named FIFO, not as the pipe, so its link keeps
+    /// its text (`pipe:[<ino>]`, which names nothing).
+    fn magic_target(&self, pid: u32, link: MagicLink) -> Option<poly_vfs::MagicTarget> {
+        use poly_vfs::MagicTarget;
+        let p = find(pid)?;
+        match link {
+            MagicLink::Fd(fd) => {
+                let (_, file, _) = p.files.fd_list().into_iter().find(|(n, _, _)| *n as u32 == fd)?;
+                let pipe = file.object().is_some() && file.kind() == FileType::Fifo;
+                (!pipe).then_some(MagicTarget::File(file))
+            }
+            MagicLink::Exe => with_record(pid, |r| r.exe_file.upgrade()).flatten().map(MagicTarget::File),
+            MagicLink::Cwd => Some(MagicTarget::Node(p.files.context().cwd().clone())),
+            MagicLink::Root => Some(MagicTarget::Node(p.files.context().root().clone())),
+        }
+    }
+
+    /// No file is named but the program: its regions get the program's
+    /// path (from the record), other files a placeholder.
+    fn size_maps(&self, pid: u32) -> Vec<MapEntry> {
+        let Some(memory) = memory_of(pid) else { return Vec::new() };
+        let exe = with_record(pid, |r| (r.exe_file.upgrade(), r.exe.clone()));
+        let (exe_file, exe_path) = exe.unwrap_or((None, Vec::new()));
+        let exe_node = exe_file.as_ref().map(|f| (f.node().mount().dev(), f.node().ino()));
+        let exe_path = self.exe(pid).unwrap_or(exe_path);
+        memory
+            .regions()
+            .iter()
+            .map(|vma| {
+                let name = match (&vma.backing, vma.kind) {
+                    (_, Kind::Heap) => MapName::Heap,
+                    (_, Kind::Stack) => MapName::Stack,
+                    (Backing::Anonymous, _) => MapName::None,
+                    (Backing::File { file, .. }, _) => match file.source().file() {
+                        Some(f) if Some((f.node().mount().dev(), f.node().ino())) == exe_node => {
+                            MapName::Path(exe_path.clone())
+                        }
+                        Some(_) => MapName::Path(b"?".to_vec()),
+                        None => MapName::None,
+                    },
+                };
+                MapEntry {
+                    start: vma.start,
+                    end: vma.end,
+                    read: vma.prot.contains(Prot::READ),
+                    write: vma.prot.contains(Prot::WRITE),
+                    exec: vma.prot.contains(Prot::EXEC),
+                    shared: vma.is_shared(),
+                    name,
+                    locked: vma.locked,
+                    ..MapEntry::default()
                 }
             })
             .collect()
@@ -392,6 +479,7 @@ impl ProcSource for KernelProc {
             ino: file.node().ino(),
             read: file.readable(),
             write: file.writable(),
+            extra: file.object().map(|o| o.fdinfo().into_bytes()).unwrap_or_default(),
         })
     }
 
@@ -475,10 +563,10 @@ impl ProcSource for KernelProc {
     }
 
     fn filesystems(&self) -> Vec<(String, bool)> {
-        ["sysfs", "tmpfs", "proc"]
+        // The list sysfs(2) numbers.
+        poly_personality_linux::sys::fsinfo::FILE_SYSTEM_TYPES
             .iter()
-            .map(|n| (String::from(*n), true))
-            .chain(["ext2", "ext3", "ext4"].iter().map(|n| (String::from(*n), false)))
+            .map(|&(n, nodev)| (String::from(n), nodev))
             .collect()
     }
 
@@ -520,11 +608,36 @@ impl ProcSource for KernelProc {
         let kind = ns::Kind::from_index(kind as u32)?;
         let p = find(pid)?;
         let (namespaces, user_ns) = namespaces_of(&p)?;
-        Some(namespaces.inum(kind, &user_ns))
+        namespaces.entry_inum(kind, &user_ns)
     }
 
     fn namespace_exists(&self, inum: u32, kind: usize) -> bool {
         ns::Kind::from_index(kind as u32).is_some_and(|k| ns::lookup(inum, k).is_some())
+    }
+
+    fn pin_namespace(&self, inum: u32, kind: usize, pin: bool) {
+        if let Some(k) = ns::Kind::from_index(kind as u32) {
+            ns::pin(inum, k, pin);
+        }
+    }
+
+    fn write_kernel_name(&self, which: KernelName, _offset: u64, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        use poly_personality_linux::sys::admin::{may_set_names, sysctl_name};
+        // The writer's UTS namespace, with sethostname(2)'s privilege
+        // (sethostname's spec sheet: "with the same permission").
+        let creds = crate::linux::cred::current_creds().ok_or(poly_vfs::Errno::EPERM)?;
+        let uts = user::current_process().and_then(|p| p.linux.as_ref().and_then(|l| l.with(|s| s.ns.uts.clone())));
+        if !may_set_names(&creds, &uts) {
+            return Err(poly_vfs::Errno::EPERM);
+        }
+        let name = sysctl_name(data);
+        match (uts, which) {
+            (Some(u), KernelName::Host) => u.set_hostname(name),
+            (Some(u), KernelName::Domain) => u.set_domainname(name),
+            (None, KernelName::Host) => crate::linux::admin::set_name(SystemName::Host, name),
+            (None, KernelName::Domain) => crate::linux::admin::set_name(SystemName::Domain, name),
+        }
+        Ok(data.len())
     }
 
     fn id_map(&self, pid: u32, file: IdMapFile) -> Vec<u8> {
@@ -535,6 +648,30 @@ impl ProcSource for KernelProc {
             IdMapFile::Gid => ns::user::format_map(&target, ns::user::IdKind::Gid, &reader),
             IdMapFile::Setgroups => ns::user::format_setgroups(&target),
         }
+    }
+
+    fn oom_score_adj(&self, pid: u32) -> i32 {
+        let Some(p) = find(pid) else { return 0 };
+        p.linux.as_ref().map_or(0, |l| l.with(|s| i32::from(s.oom_score_adj)))
+    }
+
+    /// Raising the value is open to whoever may write the file (its owner,
+    /// or a caller that overrides file permissions); lowering it needs
+    /// `CAP_SYS_RESOURCE` (proc_pid_oom_score_adj(5), with oom_adj's
+    /// "processes need CAP_SYS_RESOURCE to lower the value"): `EACCES`.
+    fn set_oom_score_adj(&self, pid: u32, value: i32) -> Result<(), poly_vfs::Errno> {
+        let p = find(pid).ok_or(poly_vfs::Errno::ESRCH)?;
+        let linux = p.linux.as_ref().ok_or(poly_vfs::Errno::ESRCH)?;
+        let may_lower = crate::linux::cred::current_creds()
+            .is_some_and(|c| c.capable(poly_personality_linux::cred::cap::SYS_RESOURCE));
+        let value = value as i16;
+        linux.with(|s| {
+            if value < s.oom_score_adj && !may_lower {
+                return Err(poly_vfs::Errno::EACCES);
+            }
+            s.oom_score_adj = value;
+            Ok(())
+        })
     }
 
     fn write_id_map(&self, pid: u32, file: IdMapFile, offset: u64, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
@@ -585,33 +722,43 @@ pub fn new_procfs() -> Arc<dyn poly_vfs::FileSystem> {
     Arc::new(ProcFs::new(Arc::new(KernelProc)))
 }
 
-/// Mount procfs on `/proc`, sysfs on `/sys` and a tmpfs on `/dev/shm`
-/// (each directory made if missing). Called once at boot by `fs::init`.
+/// A file system mounted at boot: path, file system, mode of its root,
+/// `MS_NOEXEC`.
+type BootMount = (&'static [u8], Arc<dyn poly_vfs::FileSystem>, u16, bool);
+
+/// The memory file systems a Linux system has at boot (ADR 0122): procfs
+/// on `/proc`, sysfs on `/sys`, tmpfs on `/dev/shm`, the POSIX message
+/// queue file system on `/dev/mqueue` (mq_overview(7); a tmpfs named
+/// `mqueue`), tmpfs on `/run` and `/run/lock`. Each directory is made if
+/// missing, in this order (`/run/lock` on the new `/run`). Called once at
+/// boot by `fs::init`.
 pub fn mount_all(vfs: &Vfs, ctx: &FsContext) {
     let root = Cred::root();
     let mut made = ctx.clone();
     made.set_umask(0);
-    for (path, perm) in [(&b"/proc"[..], 0o555), (b"/sys", 0o555), (b"/dev/shm", 0o1777)] {
-        let _ = vfs.mkdir(&made, &root, At::Cwd, path, perm);
-    }
-    let mounts: [(&[u8], Arc<dyn poly_vfs::FileSystem>); 3] = [
-        (b"/proc", new_procfs()),
-        (b"/sys", super::sysfs::build()),
-        (b"/dev/shm", super::memfs::cached(super::memfs::new_tmpfs(super::clock()))),
+    let clock = super::clock;
+    let tmpfs = || -> Arc<dyn poly_vfs::FileSystem> { super::memfs::cached(super::memfs::new_tmpfs(clock())) };
+    let mounts: [BootMount; 6] = [
+        (b"/proc", new_procfs(), 0o555, true),
+        (b"/sys", super::sysfs::build(), 0o555, true),
+        (b"/dev/shm", tmpfs(), 0o1777, false),
+        (b"/dev/mqueue", Arc::new(poly_vfs::Tmpfs::new(clock()).named("mqueue", poly_vfs::MQUEUE_MAGIC)), 0o1777, true),
+        (b"/run", tmpfs(), 0o755, false),
+        (b"/run/lock", tmpfs(), 0o1777, true),
     ];
+    let total = mounts.len();
     let mut ok = 0;
-    for (path, fs) in mounts {
-        let flags = MountFlags { no_suid: true, no_dev: true, no_exec: path != b"/dev/shm", read_only: false };
+    for (path, fs, perm, no_exec) in mounts {
+        let _ = vfs.mkdir(&made, &root, At::Cwd, path, perm);
+        let flags = MountFlags { no_suid: true, no_dev: true, no_exec, read_only: false };
         match vfs.mount(ctx, &root, At::Cwd, path, fs, flags) {
             Ok(_) => {
                 ok += 1;
-                if path == b"/dev/shm" {
-                    // A new tmpfs's root is 0755; shared memory is for everyone.
-                    let _ = vfs.chmod(ctx, &root, At::Cwd, path, 0o1777, true);
-                }
+                // A new tmpfs's root is 0755; set what the directory is for.
+                let _ = vfs.chmod(ctx, &root, At::Cwd, path, perm, true);
             }
             Err(e) => kprintln!("fs: mounting on {}: {}", String::from_utf8_lossy(path), e.name()),
         }
     }
-    kprintln!("fs: proc on /proc, sysfs on /sys, tmpfs on /dev/shm; {ok} of 3 mounted");
+    kprintln!("fs: proc, sysfs, tmpfs on /dev/shm, /run, /run/lock, mqueue on /dev/mqueue; {ok} of {total} mounted");
 }
