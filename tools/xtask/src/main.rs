@@ -36,7 +36,7 @@
 //!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop; the settings
 //!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs
 //!   test                host unit tests + kernel boot tests in QEMU
-//!   boot-tests [--list] [--shard <name>]... [group...]
+//!   boot-tests [--list] [--shard <name>[,<name>...]]... [group...]
 //!                       the boot tests alone: all, the groups named (`selftest` is
 //!                       every `selftest-*`), or a CI shard's; --list lists them
 //!   ci [part...]        everything CI checks: fmt, clippy, tests, coverage; or the
@@ -1663,36 +1663,27 @@ const BOOT_GROUPS: [BootGroup; 37] = [
     ("failures", failure_tests),
 ];
 
-/// The boot test jobs of CI: `.github/workflows/ci.yml` runs one job per
-/// shard (`cargo xtask boot-tests --shard <name>`). Every group is in
-/// exactly one. Each job builds the kernel first (a few minutes), so a few
-/// shards of about a minute of boots each (on TCG) keep the slowest job
-/// short without many builds. `cargo xtask ci lint` checks that the
-/// workflow's matrix lists exactly these.
-const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
+/// The slices of the boot tests that CI's jobs run
+/// (`cargo xtask boot-tests --shard <name>[,<name>...]`): every group is in
+/// exactly one shard, and `.github/workflows/ci.yml` lists, per job, the
+/// shards it runs (`shards:`), each at least once. Every job builds the
+/// kernel first (about two minutes), so a job's boots, roughly equal in
+/// time across jobs (the times of a CI run on KVM are in the comments),
+/// decide how long the slowest job takes: the shards are small so the
+/// workflow can combine them as the times change without moving groups.
+/// `cargo xtask ci lint` checks that the workflow runs exactly these.
+const CI_BOOT_SHARDS: [(&str, &[&str]); 7] = [
+    // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    (
-        "userland",
-        &[
-            "programs",
-            "native",
-            "dynamic",
-            "busybox",
-            "rootdisk",
-            "7zip",
-            "wintrace",
-            "wayland",
-            "wayland-kms",
-            "desktop",
-            "desktop-shell",
-            "desktop-win32",
-            "desktop-apps",
-            "mesa",
-            "xwayland",
-            "toolkits",
-            "chromium",
-        ],
-    ),
+    // About 3 minutes: Linux programs, the root disk and 7-Zip.
+    ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "7zip", "toolkits", "chromium"]),
+    // The traced 7-Zip scenario, one long boot: 3 to 4 minutes.
+    ("wintrace", &["wintrace"]),
+    // About 3 minutes: the compositor and the desktop.
+    ("desktop", &["wayland", "wayland-kms", "desktop", "desktop-shell", "desktop-win32", "desktop-apps"]),
+    // X11 apps through Xwayland and Mesa: about 75 s.
+    ("x11", &["xwayland", "mesa"]),
+    // About 50 s.
     (
         "devices",
         &[
@@ -1709,6 +1700,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
             "input",
         ],
     ),
+    // About 30 s.
     ("faults", &["faults", "failures"]),
 ];
 
@@ -1728,18 +1720,54 @@ fn select_boot_groups(selectors: &[String]) -> Result<Vec<BootGroup>> {
 /// ([`select_boot_groups`]), saying how long each took.
 fn run_boot_groups(selectors: &[String]) -> Result {
     let groups = select_boot_groups(selectors)?;
+    let build_started = Instant::now();
     let kernel = build_kernel(false)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
+    let built = build_started.elapsed();
     let started = Instant::now();
     let mut took = Vec::new();
     for (name, run) in groups {
         eprintln!("==> boot test group {name} (QEMU on {})", accel::get().name());
         let t = Instant::now();
-        run(&kernel, &syms).map_err(|e| format!("boot test group {name}: {e}"))?;
-        took.push(format!("{name} {:.0?}", t.elapsed()));
+        let result = run(&kernel, &syms).map_err(|e| format!("boot test group {name}: {e}"));
+        // The time of each group as soon as it ends, so a run that fails or
+        // is cancelled still shows where the time went.
+        let d = t.elapsed();
+        eprintln!("==> boot test group {name} took {d:.0?}");
+        took.push((name, d));
+        if let Err(e) = result {
+            timing_summary(selectors, built, &took, Some(name));
+            return Err(e);
+        }
     }
-    eprintln!("==> boot tests passed in {:.0?} ({})", started.elapsed(), took.join(", "));
+    let line: Vec<String> = took.iter().map(|(n, d)| format!("{n} {d:.0?}")).collect();
+    eprintln!("==> boot tests passed in {:.0?} ({})", started.elapsed(), line.join(", "));
+    timing_summary(selectors, built, &took, None);
     Ok(())
+}
+
+/// Add the build and group times to the job summary of a GitHub Actions
+/// run (`$GITHUB_STEP_SUMMARY`), where the times of every job are one click
+/// away; does nothing elsewhere.
+fn timing_summary(
+    selectors: &[String],
+    built: std::time::Duration,
+    took: &[(&str, std::time::Duration)],
+    failed: Option<&str>,
+) {
+    use std::fmt::Write as _;
+    use std::io::Write as _;
+    let Some(path) = std::env::var_os("GITHUB_STEP_SUMMARY") else { return };
+    let mut text = format!("#### Boot tests `{}` on {}\n\n", selectors.join(" "), accel::get().name());
+    text.push_str("| step | time |\n|---|---|\n");
+    let _ = writeln!(text, "| build the kernel and test programs | {built:.0?} |");
+    for (name, d) in took {
+        let _ = writeln!(text, "| {name}{} | {d:.0?} |", if failed == Some(name) { " (failed)" } else { "" });
+    }
+    text.push('\n');
+    if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open(path) {
+        let _ = f.write_all(text.as_bytes());
+    }
 }
 
 /// The groups of the CI shard `name`.
@@ -1750,8 +1778,8 @@ fn shard_groups(name: &str) -> Result<&'static [&'static str]> {
     })
 }
 
-/// `boot-tests [--list] [--shard <name>]... [group...]`: every boot test,
-/// or the groups named, or those of CI shards ([`CI_BOOT_SHARDS`]).
+/// `boot-tests [--list] [--shard <name>[,<name>...]]... [group...]`: every boot
+/// test, or the groups named, or those of CI shards ([`CI_BOOT_SHARDS`]).
 fn boot_tests_command(args: &[String]) -> Result {
     let mut selectors = Vec::new();
     let mut it = args.iter();
@@ -1765,8 +1793,9 @@ fn boot_tests_command(args: &[String]) -> Result {
                 return Ok(());
             }
             "--shard" => {
-                let groups = shard_groups(it.next().ok_or("--shard needs a name")?)?;
-                selectors.extend(groups.iter().map(|g| g.to_string()));
+                for name in it.next().ok_or("--shard needs a name")?.split(',') {
+                    selectors.extend(shard_groups(name.trim())?.iter().map(|g| g.to_string()));
+                }
             }
             flag if flag.starts_with("--") => return Err(format!("boot-tests: unknown option {flag}")),
             group => selectors.push(group.to_string()),
@@ -1980,21 +2009,44 @@ fn coverage_checks() -> Result {
     coverage(&["readme".into(), "--check".into()])
 }
 
-/// The agent pipeline's checks against the reference OS.
+/// The slices CI runs the agent pipeline's checks in, one job each
+/// (`cargo xtask ci pipeline --shard I/N`, I from 1 to N): `polycheck`, the
+/// longest, runs a slice of the corpus in each; the first also runs the
+/// rest. `cargo xtask ci lint` checks that the workflow runs every slice.
+const PIPELINE_SHARDS: usize = 3;
+
+/// The slice of the pipeline checks to run, `I/N` (`ci pipeline --shard`);
+/// unset: all of them.
+static PIPELINE_SHARD: std::sync::OnceLock<(usize, usize)> = std::sync::OnceLock::new();
+
+/// The agent pipeline's checks against the reference OS (or one slice of
+/// them, [`PIPELINE_SHARD`]).
 fn pipeline_checks() -> Result {
-    // The test corpus on Linux against itself: the tracer and the diff
-    // runner must find no differences. Takes a few seconds; skips itself
-    // without a C compiler or where ptrace is not permitted.
-    pipeline(&["selfcheck".into()])?;
+    let shard = PIPELINE_SHARD.get().copied();
+    // Slice 1 (or no slicing) runs the checks that are not sliced.
+    let first = shard.is_none_or(|(i, _)| i == 1);
+    if first {
+        // The test corpus on Linux against itself: the tracer and the diff
+        // runner must find no differences. Takes a few seconds; skips itself
+        // without a C compiler or where ptrace is not permitted.
+        pipeline(&["selfcheck".into()])?;
+    }
     // The corpus and the visible spec tests of every green coverage entry
     // on Poly against Linux (one QEMU boot per test, several at a time):
     // the tests of tests/linux/poly-pass.txt and of the green entries must
     // pass. Skips itself like selfcheck, and without QEMU.
-    pipeline(&["polycheck".into()])?;
-    // The visible tests of every green Windows entry on Poly against their
-    // recorded Windows results (ADR 0099). Skips itself without QEMU, and
-    // without clang++/lld-link/llvm-dlltool for C++ tests.
-    pipeline(&["win".into(), "polycheck".into()])
+    let mut polycheck = vec!["polycheck".to_string()];
+    if let Some((i, n)) = shard {
+        polycheck.extend(["--shard".to_string(), format!("{i}/{n}")]);
+    }
+    pipeline(&polycheck)?;
+    if first {
+        // The visible tests of every green Windows entry on Poly against
+        // their recorded Windows results (ADR 0099). Skips itself without
+        // QEMU, and without clang++/lld-link/llvm-dlltool for C++ tests.
+        pipeline(&["win".into(), "polycheck".into()])?;
+    }
+    Ok(())
 }
 
 /// A part of CI: its name (`cargo xtask ci <name>`) and what it runs.
@@ -2016,11 +2068,31 @@ const CI_PARTS: [CiPart; 5] = [
 const WORKFLOW: &str = ".github/workflows/ci.yml";
 
 /// Check that the workflow at `path` runs every part of `cargo xtask ci`
-/// (but the boot tests, which run by shard), and exactly the boot test
-/// shards of [`CI_BOOT_SHARDS`] in its matrix, a line `shard: [a, b, ...]`.
+/// (but the boot tests, which run by shard), the boot test shards of
+/// [`CI_BOOT_SHARDS`] (the `shards:` of the matrix entries that start with
+/// `- boot:`, each shard in at least one entry on the default accelerator,
+/// the entry with `accel: tcg` running exactly [`TCG_SHARD`]), and every
+/// slice of the pipeline checks (a line `slice: [1/3, 2/3, ...]`).
 fn check_workflow(path: &Path) -> Result {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     workflow_problems(&text).map_err(|p| format!("{}: {}", path.display(), p.join("; ")))
+}
+
+/// The matrix entries of the boot job: `(accelerator, shards)`.
+fn workflow_boot_entries(text: &str) -> Vec<(String, Vec<String>)> {
+    let mut entries: Vec<(String, Vec<String>)> = Vec::new();
+    for line in text.lines().map(str::trim) {
+        if line.starts_with("- boot:") {
+            entries.push(("auto".into(), Vec::new()));
+        } else if let Some(entry) = entries.last_mut() {
+            if let Some(list) = line.strip_prefix("shards:") {
+                entry.1 = list.split(',').map(|s| s.trim().trim_matches('"').to_string()).collect();
+            } else if let Some(accel) = line.strip_prefix("accel:") {
+                entry.0 = accel.trim().to_string();
+            }
+        }
+    }
+    entries
 }
 
 fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
@@ -2030,39 +2102,75 @@ fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
             problems.push(format!("no job runs `cargo xtask ci {part}`"));
         }
     }
-    let line = text.lines().map(str::trim).find_map(|l| l.strip_prefix("shard: [")?.strip_suffix(']'));
-    match line {
-        None => problems.push("no boot test matrix line `shard: [...]`".into()),
+    let entries = workflow_boot_entries(text);
+    if entries.is_empty() {
+        problems.push("no boot test matrix entry `- boot: <name>` with `shards:`".into());
+    }
+    let mut listed: Vec<&str> =
+        entries.iter().filter(|(a, _)| a != "tcg").flat_map(|(_, s)| s.iter().map(String::as_str)).collect();
+    listed.sort_unstable();
+    let mut want: Vec<&str> = CI_BOOT_SHARDS.iter().map(|(s, _)| *s).collect();
+    want.sort_unstable();
+    if listed != want {
+        problems.push(format!("the boot test matrix runs shards {listed:?}, xtask has {want:?} (each exactly once)"));
+    }
+    if !entries.iter().any(|(a, s)| a == "tcg" && s == &[TCG_SHARD]) {
+        problems.push(format!("the matrix does not run shard {TCG_SHARD} alone with `accel: tcg`"));
+    }
+    if !text.contains("cargo xtask boot-tests --shard ${{ matrix.shards }}") {
+        problems.push("no job runs `cargo xtask boot-tests --shard ${{ matrix.shards }}`".into());
+    }
+    let slices = text.lines().map(str::trim).find_map(|l| l.strip_prefix("slice: [")?.strip_suffix(']'));
+    let want_slices: Vec<String> = (1..=PIPELINE_SHARDS).map(|i| format!("{i}/{PIPELINE_SHARDS}")).collect();
+    match slices {
+        None => problems.push("no pipeline matrix line `slice: [...]`".into()),
         Some(list) => {
-            let listed: Vec<&str> = list.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
-            let want: Vec<&str> = CI_BOOT_SHARDS.iter().map(|(s, _)| *s).collect();
-            if listed != want {
-                problems.push(format!("the boot test matrix lists shards {listed:?}, xtask has {want:?}"));
+            let listed: Vec<&str> = list.split(',').map(str::trim).collect();
+            if listed != want_slices {
+                problems.push(format!("the pipeline matrix lists slices {listed:?}, xtask has {want_slices:?}"));
             }
         }
     }
-    if !text.contains("cargo xtask boot-tests --shard ${{ matrix.shard }}") {
-        problems.push("no job runs `cargo xtask boot-tests --shard ${{ matrix.shard }}`".into());
+    if !text.contains("cargo xtask ci pipeline --shard ${{ matrix.slice }}") {
+        problems.push("no job runs `cargo xtask ci pipeline --shard ${{ matrix.slice }}`".into());
     }
     // The 7zip boot test's binary is fetched and cached by version (ADR 0087).
     if !text.contains("cargo xtask win fetch-7zip") || !text.contains(&format!("key: 7zip-{}", sevenzip::VERSION)) {
         problems.push(format!("no job fetches 7-Zip {} into a cache keyed 7zip-{0}", sevenzip::VERSION));
     }
-    if !text.contains(&format!("shard: {TCG_SHARD}")) || !text.contains("accel: tcg") {
-        problems.push(format!("the matrix does not run shard {TCG_SHARD} with `accel: tcg`"));
-    }
     if problems.is_empty() { Ok(()) } else { Err(problems) }
 }
 
-/// `ci [part...]`: every part of CI ([`CI_PARTS`]), or the ones named.
+/// `ci [part...] [--shard I/N]`: every part of CI ([`CI_PARTS`]), or the
+/// ones named; with `--shard`, only slice I of N of the pipeline part
+/// ([`PIPELINE_SHARD`]), the slices the workflow runs in parallel.
 fn ci(args: &[String]) -> Result {
+    let mut parts: Vec<&String> = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        if a == "--shard" {
+            let text = it.next().ok_or("ci: --shard needs I/N")?;
+            let bad = || format!("ci: --shard {text}: expected I/N with 1 <= I <= N, like 2/3");
+            let (i, n) = text.split_once('/').ok_or_else(bad)?;
+            let (i, n): (usize, usize) = (i.parse().map_err(|_| bad())?, n.parse().map_err(|_| bad())?);
+            if i == 0 || i > n {
+                return Err(bad());
+            }
+            PIPELINE_SHARD.set((i, n)).map_err(|_| "ci: --shard twice".to_string())?;
+        } else {
+            parts.push(a);
+        }
+    }
     let names: Vec<&str> = CI_PARTS.iter().map(|(n, _)| *n).collect();
-    if let Some(bad) = args.iter().find(|a| !names.contains(&a.as_str())) {
+    if let Some(bad) = parts.iter().find(|a| !names.contains(&a.as_str())) {
         return Err(format!("ci: no part {bad:?}; the parts are {}", names.join(", ")));
+    }
+    if PIPELINE_SHARD.get().is_some() && !parts.iter().any(|a| a.as_str() == "pipeline") {
+        return Err("ci: --shard slices the pipeline part: name it (`ci pipeline --shard 1/3`)".into());
     }
     let started = Instant::now();
     let mut took = Vec::new();
-    for (name, run) in CI_PARTS.iter().filter(|(n, _)| args.is_empty() || args.iter().any(|a| a == n)) {
+    for (name, run) in CI_PARTS.iter().filter(|(n, _)| parts.is_empty() || parts.iter().any(|a| a.as_str() == *n)) {
         let t = Instant::now();
         run().map_err(|e| format!("ci {name}: {e}"))?;
         took.push(format!("{name} {:.0?}", t.elapsed()));
@@ -2186,9 +2294,9 @@ mod tests {
     fn the_ci_workflow_runs_every_part_and_shard() {
         let text = std::fs::read_to_string(root().join(WORKFLOW)).unwrap();
         workflow_problems(&text).unwrap();
-        let shards: Vec<&str> = CI_BOOT_SHARDS.iter().map(|(s, _)| *s).collect();
-        let lost = text.replace(&format!("shard: [{}]", shards.join(", ")), "shard: [selftest]");
-        assert!(workflow_problems(&lost).unwrap_err()[0].contains("the boot test matrix lists shards"));
+        let lost = text.replacen(",faults", "", 1);
+        assert_ne!(lost, text, "the workflow lists the faults shard after another in an entry");
+        assert!(workflow_problems(&lost).unwrap_err()[0].contains("the boot test matrix runs shards"));
         let no_lint = text.replace("cargo xtask ci lint", "cargo xtask lint");
         assert!(workflow_problems(&no_lint).unwrap_err()[0].contains("ci lint"));
     }
