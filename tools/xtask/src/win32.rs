@@ -36,7 +36,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 24] = [
+pub const OUTPUTS: [&str; 30] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -65,6 +65,12 @@ pub const OUTPUTS: [&str; 24] = [
     "win32u.dll",
     // ADR 0155.
     "bcryptprimitives.dll",
+    "iphlpapi.dll",
+    "netapi32.dll",
+    "secur32.dll",
+    "dhcpcsvc.dll",
+    "dnsapi.dll",
+    "dbghelp.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -127,6 +133,17 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/gdi32",
             "personalities/nt/win32/win32u",
             "personalities/nt/win32/bcryptprimitives",
+            "personalities/nt/win32/netrt",
+            "personalities/nt/win32/iphlpapi",
+            "personalities/nt/win32/netapi32",
+            "personalities/nt/win32/secur32",
+            "personalities/nt/win32/dhcpcsvc",
+            "personalities/nt/win32/dnsapi",
+            "personalities/nt/win32/dbghelp",
+            // Host crates the new DLLs link (ADR 0155).
+            "crates/poly-etw",
+            "crates/poly-iphlp",
+            "crates/poly-netapi",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -192,7 +209,7 @@ fn prune(dir: &Path) {
 fn build(target_dir: &Path) -> Result<PathBuf> {
     let mut cmd = cargo_for(target_dir, "build")?;
     step(
-        "build kernelbase.dll, kernel32.dll, advapi32.dll, ucrtbase.dll, msvcrt.dll, bcryptprimitives.dll and the test programs",
+        "build kernelbase.dll, kernel32.dll, advapi32.dll, ucrtbase.dll, msvcrt.dll, bcryptprimitives.dll, iphlpapi.dll and the other network DLLs and the test programs",
         &mut cmd,
     )?;
     let out = target_dir.join("x86_64-pc-windows-msvc/release");

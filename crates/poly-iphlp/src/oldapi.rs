@@ -130,6 +130,37 @@ pub fn name_to_index(ifs: &[IfInfo], name: &str) -> u32 {
     ifs.iter().find(|f| index_to_name(ifs, f.index).as_deref() == Some(name)).map_or(0, |f| f.index)
 }
 
+/// `GetBestInterface`: the interface that reaches IPv4 `dest` best: the one
+/// whose subnet holds it (longest prefix), else the one with a default gateway,
+/// else `None` (`ERROR_NETWORK_UNREACHABLE`, 1231). The loopback range goes to the loopback.
+pub fn best_interface_v4(ifs: &[IfInfo], dest: [u8; 4]) -> Option<u32> {
+    let d = u32::from_be_bytes(dest);
+    let mut best: Option<(u8, u32)> = None;
+    for f in ifs.iter().filter(|f| f.up) {
+        if let Some((a, plen)) = f.ipv4 {
+            let m = u32::from_be_bytes(mask(plen));
+            if u32::from_be_bytes(a) & m == d & m && best.is_none_or(|(p, _)| plen > p) {
+                best = Some((plen, f.index));
+            }
+        }
+    }
+    best.map(|(_, i)| i).or_else(|| ifs.iter().find(|f| f.up && f.gateway.is_some()).map(|f| f.index))
+}
+
+/// `GetBestInterfaceEx` for an IPv6 destination: the loopback for `::1`, else the interface with
+/// an IPv6 address (the link-local scope) or `None`.
+pub fn best_interface_v6(ifs: &[IfInfo], dest: [u8; 16]) -> Option<u32> {
+    let mut lo = [0u8; 16];
+    lo[15] = 1;
+    if dest == lo {
+        return ifs.iter().find(|f| f.kind == Kind::Loopback).map(|f| f.index);
+    }
+    if dest[0] == 0xfe && dest[1] & 0xc0 == 0x80 {
+        return ifs.iter().find(|f| f.up && f.kind == Kind::Ethernet && f.ipv6.is_some()).map(|f| f.index);
+    }
+    None
+}
+
 #[allow(dead_code)]
 const _: u32 = NO_ERROR;
 
@@ -178,6 +209,27 @@ mod tests {
         assert_eq!(wide_at(&b, 8), "\\DEVICE\\TCPIP_{504F4C59-0002-4000-8000-525400123456}");
         assert_eq!(interface_info_call(&[eth()], 4), Err((crate::ERROR_INSUFFICIENT_BUFFER, 264)));
         assert!(interface_info_call(&[eth()], 264).is_ok());
+    }
+
+    #[test]
+    fn the_best_interface_is_the_longest_matching_prefix_or_the_gateway() {
+        let ifs = [IfInfo::loopback(), eth()];
+        assert_eq!(best_interface_v4(&ifs, [127, 0, 0, 1]), Some(1));
+        assert_eq!(best_interface_v4(&ifs, [10, 0, 2, 3]), Some(2));
+        // Off-link: the default gateway's interface.
+        assert_eq!(best_interface_v4(&ifs, [93, 184, 216, 34]), Some(2));
+        assert_eq!(best_interface_v4(&[IfInfo::loopback()], [93, 184, 216, 34]), None);
+        let mut down = eth();
+        down.up = false;
+        assert_eq!(best_interface_v4(&[IfInfo::loopback(), down], [10, 0, 2, 3]), None);
+        let mut lo6 = [0u8; 16];
+        lo6[15] = 1;
+        assert_eq!(best_interface_v6(&ifs, lo6), Some(1));
+        let mut ll = [0u8; 16];
+        ll[0] = 0xfe;
+        ll[1] = 0x80;
+        assert_eq!(best_interface_v6(&ifs, ll), Some(2));
+        assert_eq!(best_interface_v6(&ifs, [0x20; 16]), None);
     }
 
     #[test]

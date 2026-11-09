@@ -60,6 +60,12 @@ fn embed_win32() {
         "win32u.dll",
         // ADR 0155.
         "bcryptprimitives.dll",
+        "iphlpapi.dll",
+        "netapi32.dll",
+        "secur32.dll",
+        "dhcpcsvc.dll",
+        "dnsapi.dll",
+        "dbghelp.dll",
     ] {
         match &dir {
             Some(d) => {

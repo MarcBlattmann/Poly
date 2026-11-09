@@ -40,6 +40,7 @@ use alloc::vec::Vec;
 use core::net::SocketAddr;
 use poly_ntobj::NtStatus;
 
+pub use poly_iphlp::{IfInfo, Kind as IfKind};
 pub use poly_net::{Domain, Errno, Protocol, Readiness, RecvInfo, Shutdown, SockType};
 
 /// How long a socket call may wait.

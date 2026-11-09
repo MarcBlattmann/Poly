@@ -281,6 +281,10 @@ name = "poly-net"
 version = "0.0.1"
 
 [[package]]
+name = "poly-netapi"
+version = "0.0.1"
+
+[[package]]
 name = "poly-nls"
 version = "0.0.1"
 dependencies = [
@@ -343,6 +347,7 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-console",
+ "poly-iphlp",
  "poly-ldr",
  "poly-net",
  "poly-ntobj",

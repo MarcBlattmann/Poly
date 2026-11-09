@@ -1,0 +1,13 @@
+[package]
+name = "poly-netapi"
+description = "secur32 and netapi32 without the machine (ADR 0155): the names GetUserNameExW gives, USER_INFO_* for NetUserGetInfo, the workgroup answers of NetGetJoinInformation and DsRoleGetPrimaryDomainInformation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

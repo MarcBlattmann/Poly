@@ -106,6 +106,14 @@ pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"
 /// by [`layout`]; empty without `xtask`.
 pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bcryptprimitives.dll"));
 
+/// The network and identity DLLs of Chrome's batch 3/5 (ADR 0155).
+pub static IPHLPAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/iphlpapi.dll"));
+pub static NETAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/netapi32.dll"));
+pub static SECUR32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/secur32.dll"));
+pub static DHCPCSVC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dhcpcsvc.dll"));
+pub static DNSAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dnsapi.dll"));
+pub static DBGHELP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dbghelp.dll"));
+
 mod test_crypto;
 
 /// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in
@@ -473,6 +481,10 @@ impl NtKernel for Kernel {
 
     fn net_info(&self) -> (Vec<[u8; 4]>, String) {
         afd::net_info()
+    }
+
+    fn net_interfaces(&self) -> Vec<poly_personality_nt::afd::IfInfo> {
+        afd::net_interfaces()
     }
 }
 
