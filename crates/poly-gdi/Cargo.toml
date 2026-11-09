@@ -8,6 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+poly-font = { path = "../poly-font" }
 poly-gfx = { path = "../poly-gfx" }
 
 [lints]

@@ -208,6 +208,7 @@ version = "0.0.1"
 name = "poly-gdi"
 version = "0.0.1"
 dependencies = [
+ "poly-font",
  "poly-gfx",
 ]
 

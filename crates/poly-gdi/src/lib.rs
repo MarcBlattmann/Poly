@@ -12,6 +12,9 @@
 //! - [`font`]: the stock fonts' metrics and widths, and their glyphs (the
 //!   system font's own in `sysfont`, the rest from Spleen in `bitfont`).
 //! - [`fontmap`]: the font mapper, `LOGFONTW` to Poly's fonts (ADR 0142).
+//! - [`outline`]: logical fonts drawn from the font store through `poly-font`
+//!   (grey scale antialiasing), and `Typeface`, which measures and draws with
+//!   either those or the stock bitmap faces (ADR 0142).
 //! - [`text`]: `DrawTextW`'s layout.
 //! - [`region`]: region algebra (rectangles in canonical bands), for
 //!   `HRGN`s, clipping, and the window manager's update regions.
@@ -22,12 +25,15 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(test)]
+extern crate std;
 
 mod bitfont;
 pub mod bitmap;
 pub mod font;
 pub mod fontmap;
 pub mod gdi;
+pub mod outline;
 pub mod region;
 mod sysfont;
 pub mod text;

@@ -7,12 +7,12 @@
 //! The same table is what `crates/poly-font/fonts.conf` does for Linux
 //! programs, so a name means the same thing on both sides.
 //!
-//! Until the TrueType path exists (it needs spec sheets for
-//! `CreateFontIndirectW`, `GetTextMetricsW` on outline faces and the
-//! extents of outline text) the class picks one of the four bitmap
-//! [`Face`]s, see [`bitmap_face`]. Names and constants are from the public
-//! documentation: `LOGFONTW` and the pitch and family constants of
-//! `wingdi.h`, and the font names Microsoft documents for its fonts.
+//! The class picks the outline font ([`crate::outline`] rasterises it with
+//! `poly-font`); where that font's files are not there, or for the raster
+//! font names, one of the four bitmap [`Face`]s draws instead, see
+//! [`bitmap_face`]. Names and constants are from the public documentation:
+//! `LOGFONTW` and the pitch and family constants of `wingdi.h`, and the font
+//! names Microsoft documents for its fonts.
 
 use crate::font::Face;
 
@@ -51,8 +51,15 @@ pub const LOGFONT_SIZE: usize = 92;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogFont {
     pub height: i32,
+    /// `lfWidth`: the average character width in logical units; 0 keeps the
+    /// font's natural proportions.
+    pub width: i32,
+    pub escapement: i32,
+    pub orientation: i32,
     pub weight: i32,
     pub italic: bool,
+    pub underline: bool,
+    pub strike_out: bool,
     pub char_set: u8,
     pub pitch_and_family: u8,
     face: [u16; 32],
@@ -75,8 +82,13 @@ impl LogFont {
         }
         Some(LogFont {
             height: int(0),
+            width: int(4),
+            escapement: int(8),
+            orientation: int(12),
             weight: int(16),
             italic: b[20] != 0,
+            underline: b[21] != 0,
+            strike_out: b[22] != 0,
             char_set: b[23],
             pitch_and_family: b[27],
             face,
@@ -284,6 +296,7 @@ mod tests {
         }
         let l = LogFont::parse(&b).unwrap();
         assert_eq!((l.height, l.weight, l.italic, l.char_set, l.pitch_and_family), (-12, 700, true, 2, 0x31));
+        assert_eq!((l.width, l.escapement, l.orientation, l.underline, l.strike_out), (0, 0, 0, false, false));
         assert_eq!(l.face_name(), "Segoe UI".encode_utf16().collect::<Vec<_>>().as_slice());
         assert!(LogFont::parse(&b[..91]).is_none());
     }

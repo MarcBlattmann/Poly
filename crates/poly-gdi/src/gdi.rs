@@ -5,12 +5,15 @@
 //! the export sets (0: none).
 
 use crate::bitmap::{Bitmap, Rgb, Storage, rop3};
-use crate::font::{self, Face, TextMetric};
+use crate::font::{Face, TextMetric};
 use crate::fontmap::{self, LogFont};
+use crate::outline::{FontFiles, Outline, Typeface};
 pub use crate::region::Rect;
 use crate::region::{COMPLEXREGION, NULLREGION, RGN_AND, RGN_COPY, Region, SIMPLEREGION};
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
+use poly_font::GlyphCache;
 
 // Object types (`wingdi.h`).
 pub const OBJ_PEN: u32 = 1;
@@ -25,6 +28,10 @@ pub const OBJ_MEMDC: u32 = 10;
 pub const ERROR_INVALID_HANDLE: u32 = 6;
 pub const ERROR_INVALID_PARAMETER: u32 = 87;
 pub const CLR_INVALID: u32 = 0xFFFF_FFFF;
+
+/// `ExtTextOutW` options (`wingdi.h`).
+pub const ETO_OPAQUE: u32 = 0x0002;
+pub const ETO_CLIPPED: u32 = 0x0004;
 
 pub const TRANSPARENT: i32 = 1;
 pub const OPAQUE: i32 = 2;
@@ -139,7 +146,10 @@ enum Obj {
         delete_pending: bool,
     },
     Font {
+        /// The bitmap face: the font itself for stock fonts, the stand-in
+        /// where `outline` is `None`.
         face: Face,
+        outline: Option<Outline>,
         stock: bool,
         logfont: Vec<u8>,
         delete_pending: bool,
@@ -181,11 +191,56 @@ pub struct Gdi {
     /// Each slot's generation (the handle's top byte).
     gens: Vec<u8>,
     pub screen: Screen,
+    /// The font files and the rendered glyphs of outline fonts.
+    text: TextState,
 }
+
+/// What outline text needs besides the font objects.
+struct TextState {
+    files: FontFiles,
+    glyphs: Option<GlyphCache>,
+}
+
+impl core::fmt::Debug for TextState {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TextState")
+            .field("glyph_bytes", &self.glyphs.as_ref().map(GlyphCache::bytes))
+            .finish_non_exhaustive()
+    }
+}
+
+/// The glyph cache's budget: enough for a few hundred glyphs at
+/// ordinary sizes.
+const GLYPH_CACHE_BYTES: usize = 1 << 20;
 
 impl Default for Gdi {
     fn default() -> Self {
         Gdi::new()
+    }
+}
+
+/// The font a DC has selected, with the file of an outline font.
+pub(crate) struct FontSel {
+    face: Face,
+    outline: Option<Outline>,
+    data: Option<Arc<Vec<u8>>>,
+    underline: bool,
+    strike: bool,
+}
+
+impl FontSel {
+    /// To measure and draw with.
+    pub(crate) fn typeface(&self) -> Typeface<'_> {
+        Typeface::new(self.face, self.outline, self.data.as_deref().map(Vec::as_slice))
+    }
+
+    /// `TEXTMETRICW` of the font, with the `LOGFONTW`'s underline and
+    /// strike-out where a bitmap face stands in.
+    pub(crate) fn metrics(&self) -> TextMetric {
+        let mut tm = self.typeface().metrics();
+        tm.underlined |= u8::from(self.underline);
+        tm.struck_out |= u8::from(self.strike);
+        tm
     }
 }
 
@@ -197,7 +252,12 @@ struct Src<'a> {
 
 impl Gdi {
     pub fn new() -> Gdi {
-        let mut g = Gdi { objs: Vec::new(), gens: Vec::new(), screen: Screen { width: 1024, height: 768 } };
+        let mut g = Gdi {
+            objs: Vec::new(),
+            gens: Vec::new(),
+            screen: Screen { width: 1024, height: 768 },
+            text: TextState { files: FontFiles::new(), glyphs: Some(GlyphCache::new(GLYPH_CACHE_BYTES)) },
+        };
         g.objs.push(None); // index 0 is never a handle
         let brush = |c: u32, style: u32| Obj::Brush {
             style,
@@ -208,7 +268,8 @@ impl Gdi {
             delete_pending: false,
         };
         let pen = |c: u32, style: u32| Obj::Pen { style, width: 1, color: c, stock: true, delete_pending: false };
-        let font = |f: Face| Obj::Font { face: f, stock: true, logfont: Vec::new(), delete_pending: false };
+        let font =
+            |f: Face| Obj::Font { face: f, outline: None, stock: true, logfont: Vec::new(), delete_pending: false };
         let stock: [Obj; STOCK_COUNT as usize] = [
             brush(0x00FF_FFFF, BS_SOLID), // WHITE_BRUSH
             brush(0x00C0_C0C0, BS_SOLID), // LTGRAY_BRUSH
@@ -621,11 +682,20 @@ impl Gdi {
     }
 
     /// `CreateFontIndirectW`: the font mapper (ADR 0142, `crate::fontmap`)
-    /// picks the face from the face name, pitch and family and height. A
-    /// `LOGFONTW` that is too short gives the system font's face.
+    /// picks the font from the face name, pitch and family and the height:
+    /// an outline font of Poly's font store when its file is there (see
+    /// [`Gdi::set_font_loader`]), else a bitmap face. A `LOGFONTW` that is
+    /// too short gives the system font's face.
     pub fn create_font(&mut self, logfont: &[u8]) -> u32 {
-        let face = LogFont::parse(logfont).map_or(Face::System, |lf| fontmap::bitmap_face(&lf));
-        self.add(Obj::Font { face, stock: false, logfont: logfont.to_vec(), delete_pending: false })
+        let (face, outline) = match LogFont::parse(logfont) {
+            None => (Face::System, None),
+            Some(lf) => {
+                let m = fontmap::map(&lf);
+                let outline = if m.raster.is_some() { None } else { Outline::new(&mut self.text.files, &lf, &m) };
+                (fontmap::bitmap_face(&lf), outline)
+            }
+        };
+        self.add(Obj::Font { face, outline, stock: false, logfont: logfont.to_vec(), delete_pending: false })
     }
 
     /// `CreateBitmap`: monochrome for 1 bit per pixel, else 32 bits;
@@ -1413,36 +1483,131 @@ impl Gdi {
 
     // ----- text
 
-    pub(crate) fn face_of(&self, dc: u64) -> Face {
-        let Some(d) = self.dc(dc) else { return Face::System };
+    /// Where the font files of outline fonts come from (ADR 0142).
+    pub fn set_font_loader(&mut self, loader: crate::outline::Loader) {
+        self.text.files.set_loader(loader);
+    }
+
+    /// Put a font file in the store directly (hosts without a loader).
+    pub fn add_font_file(&mut self, class: crate::fontmap::Class, bold: bool, italic: bool, data: Vec<u8>) -> bool {
+        self.text.files.add(class, bold, italic, data)
+    }
+
+    /// The font a DC has selected (the system font for a bad DC).
+    pub(crate) fn font_sel(&self, dc: u64) -> FontSel {
+        let sel = |face, outline: Option<Outline>, logfont: &[u8]| {
+            let data = outline.and_then(|o| self.text.files.data(o.slot));
+            FontSel {
+                face,
+                outline: outline.filter(|_| data.is_some()),
+                data,
+                underline: logfont.get(21).is_some_and(|&b| b != 0),
+                strike: logfont.get(22).is_some_and(|&b| b != 0),
+            }
+        };
+        let Some(d) = self.dc(dc) else { return sel(Face::System, None, &[]) };
         match self.obj(u64::from(d.state.font)) {
-            Some(Obj::Font { face, .. }) => *face,
-            _ => Face::System,
+            Some(Obj::Font { face, outline, logfont, .. }) => sel(*face, *outline, logfont),
+            _ => sel(Face::System, None, &[]),
         }
     }
 
     /// `GetTextMetricsW`.
     pub fn text_metrics(&self, dc: u64) -> Option<TextMetric> {
         self.dc(dc)?;
-        Some(self.face_of(dc).metrics())
+        Some(self.font_sel(dc).metrics())
     }
 
     /// `GetTextExtentPoint32W`.
     pub fn text_extent(&self, dc: u64, text: &[u16]) -> Option<(i32, i32)> {
         self.dc(dc)?;
-        Some(font::extent(self.face_of(dc), text))
+        Some(self.font_sel(dc).typeface().extent(text))
+    }
+
+    /// `GetTextExtentExPointW`: the extent, how many characters fit in
+    /// `max_width`, and for every character the width of the text up to and
+    /// including it.
+    pub fn text_extent_ex(&self, dc: u64, text: &[u16], max_width: i32) -> Option<((i32, i32), usize, Vec<i32>)> {
+        self.dc(dc)?;
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        let mut total = 0;
+        let mut running = Vec::with_capacity(text.len());
+        for &c in text {
+            total += tf.width(c);
+            running.push(total);
+        }
+        let fit = running.iter().take_while(|&&w| w <= max_width).count();
+        Some((tf.extent(text), fit, running))
+    }
+
+    /// `GetCharWidth32W`: the advance of each character `first..=last`.
+    pub fn char_widths(&self, dc: u64, first: u32, last: u32) -> Option<Vec<i32>> {
+        self.dc(dc)?;
+        if first > last || last > 0xFFFF {
+            return None;
+        }
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        Some((first..=last).map(|c| tf.width(c as u16)).collect())
+    }
+
+    /// `GetTextFaceW`: the face name of the selected font (the name the
+    /// program asked for, also where Poly draws it with a font of its own).
+    pub fn text_face(&self, dc: u64) -> Option<Vec<u16>> {
+        let d = self.dc(dc)?;
+        let name = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+        Some(match self.obj(u64::from(d.state.font)) {
+            Some(Obj::Font { logfont, face, .. }) => match LogFont::parse(logfont) {
+                Some(lf) if !lf.face_name().is_empty() => lf.face_name().to_vec(),
+                _ => name(match face {
+                    Face::System => "System",
+                    Face::Gui => "MS Shell Dlg",
+                    Face::AnsiFixed => "Courier",
+                    Face::OemFixed => "Terminal",
+                }),
+            },
+            _ => name("System"),
+        })
     }
 
     /// `TextOutW` (`TextOutW.yaml`): false for a bad DC.
     pub fn text_out(&mut self, dc: u64, x: i32, y: i32, text: &[u16]) -> bool {
+        self.ext_text_out(dc, x, y, 0, None, text, None)
+    }
+
+    /// `ExtTextOutW`: `options` are `ETO_OPAQUE` (the rectangle is filled
+    /// with the background colour first) and `ETO_CLIPPED` (the text is
+    /// clipped to it); `advances` are `lpDx`, the distance from each
+    /// character's origin to the next. False for a bad DC.
+    #[allow(clippy::too_many_arguments)]
+    pub fn ext_text_out(
+        &mut self,
+        dc: u64,
+        x: i32,
+        y: i32,
+        options: u32,
+        rect: Option<Rect>,
+        text: &[u16],
+        advances: Option<&[i32]>,
+    ) -> bool {
         let Some(d) = self.dc(dc) else { return false };
+        let state = d.state.clone();
+        if options & ETO_OPAQUE != 0
+            && let Some(r) = rect
+        {
+            self.fill_rect_color(dc, r, state.bk);
+        }
         if text.is_empty() {
             return true;
         }
-        let state = d.state.clone();
-        let face = self.face_of(dc);
-        let tm = face.metrics();
-        let (cx, _) = font::extent(face, text);
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        let tm = tf.metrics();
+        let cx = match advances {
+            Some(a) => text.iter().enumerate().map(|(i, &c)| a.get(i).copied().unwrap_or_else(|| tf.width(c))).sum(),
+            None => tf.extent(text).0,
+        };
         let (rx, ry) = if state.align & TA_UPDATECP != 0 { state.pos } else { (x, y) };
         let x0 = match state.align & TA_CENTER {
             TA_RIGHT => rx - cx,
@@ -1454,7 +1619,8 @@ impl Gdi {
             TA_BASELINE => ry - tm.ascent,
             _ => ry,
         };
-        self.draw_text_run(dc, x0, y0, text, None);
+        let clip = if options & ETO_CLIPPED != 0 { rect } else { None };
+        self.draw_text_run(dc, x0, y0, text, clip, advances);
         if state.align & TA_UPDATECP != 0
             && let Some(s) = self.state(dc)
         {
@@ -1468,19 +1634,37 @@ impl Gdi {
     }
 
     /// Draw `text` with its cell's top left at (`x0`, `y0`), clipped to
-    /// `clip` too when given (`DrawTextW`).
-    pub fn draw_text_run(&mut self, dc: u64, x0: i32, y0: i32, text: &[u16], clip: Option<Rect>) {
-        let face = self.face_of(dc);
-        let tm = face.metrics();
+    /// `clip` too when given. A glyph of an outline font is blended into
+    /// the surface by its coverage (grey scale antialiasing); a bitmap
+    /// face's pixels are set. Underline and strike-out follow the
+    /// `LOGFONTW`.
+    pub(crate) fn draw_text_run(
+        &mut self,
+        dc: u64,
+        x0: i32,
+        y0: i32,
+        text: &[u16],
+        clip: Option<Rect>,
+        advances: Option<&[i32]>,
+    ) {
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        let tm = tf.metrics();
         let (x0, y0) = self.device_point(dc, x0, y0);
         let clip = clip.map(|c| self.device_rect(dc, c));
+        let cx = match advances {
+            Some(a) => text.iter().enumerate().map(|(i, &c)| a.get(i).copied().unwrap_or_else(|| tf.width(c))).sum(),
+            None => tf.extent(text).0,
+        };
+        let (under, strike) = tf.line_metrics();
+        let mut cache = self.text.glyphs.take().unwrap_or_else(|| GlyphCache::new(GLYPH_CACHE_BYTES));
         self.with_target(dc, |b, state, dclip, _| {
             let clip = match clip {
                 Some(c) => dclip.intersect_rect(c),
                 None => dclip.clone(),
             };
-            let fg = b.from_rgb(Rgb::from_colorref(state.text));
-            let (cx, _) = font::extent(face, text);
+            let fg_rgb = Rgb::from_colorref(state.text);
+            let fg = b.from_rgb(fg_rgb);
             if state.bk_mode != TRANSPARENT {
                 Self::fill(
                     b,
@@ -1490,25 +1674,82 @@ impl Gdi {
                     Some(Rgb::from_colorref(state.bk)),
                 );
             }
-            let mut x = x0;
-            for &c in text {
-                let (w, rows) = face.glyph(c);
-                for (r, &row) in rows.iter().enumerate().take(tm.height as usize) {
-                    if row == 0 {
-                        continue;
+            let baseline = y0 + tm.ascent;
+            if tf.is_outline() {
+                tf.draw_outline(&mut cache, text, x0, baseline, advances, |px, py, a| {
+                    if clip.contains_point(px, py) {
+                        Self::blend(b, px, py, fg_rgb, a);
                     }
-                    for col in 0..w.min(16) {
-                        if row & (0x8000 >> col) != 0 {
-                            let (px, py) = (x + col, y0 + r as i32);
-                            if clip.contains_point(px, py) {
-                                b.set_raw(px, py, fg);
+                });
+            } else {
+                let mut x = x0;
+                for (i, &c) in text.iter().enumerate() {
+                    let (w, rows) = tf.face.glyph(c);
+                    for (r, &row) in rows.iter().enumerate().take(tm.height as usize) {
+                        if row == 0 {
+                            continue;
+                        }
+                        for col in 0..w.min(16) {
+                            if row & (0x8000 >> col) != 0 {
+                                let (px, py) = (x + col, y0 + r as i32);
+                                if clip.contains_point(px, py) {
+                                    b.set_raw(px, py, fg);
+                                }
                             }
                         }
                     }
+                    x += advances.and_then(|a| a.get(i).copied()).unwrap_or(w);
                 }
-                x += w;
+            }
+            if sel.underline {
+                let r = Rect::new(x0, baseline + under.0, x0 + cx, baseline + under.0 + under.1);
+                Self::fill(b, &clip, r, 0xF0, Some(fg_rgb));
+            }
+            if sel.strike {
+                let r = Rect::new(x0, baseline + strike.0, x0 + cx, baseline + strike.0 + strike.1);
+                Self::fill(b, &clip, r, 0xF0, Some(fg_rgb));
             }
         });
+        self.text.glyphs = Some(cache);
+    }
+
+    /// `DrawText`'s mnemonic underline: `w` pixels wide at `x`, for the
+    /// cell whose top is `y` (logical coordinates).
+    pub(crate) fn draw_underline(&mut self, dc: u64, x: i32, w: i32, y: i32, clip: Option<Rect>) {
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        let ((top, thick), _) = tf.line_metrics();
+        let baseline = y + tf.metrics().ascent;
+        let (x, y) = self.device_point(dc, x, baseline + top);
+        let clip = clip.map(|c| self.device_rect(dc, c));
+        self.with_target(dc, |b, state, dclip, _| {
+            let clip = match clip {
+                Some(c) => dclip.intersect_rect(c),
+                None => dclip.clone(),
+            };
+            Self::fill(b, &clip, Rect::new(x, y, x + w, y + thick), 0xF0, Some(Rgb::from_colorref(state.text)));
+        });
+    }
+
+    /// Paint `fg` over the pixel with `alpha` (1 to 255) of coverage.
+    fn blend(b: &mut Bitmap, x: i32, y: i32, fg: Rgb, alpha: u8) {
+        if !b.contains(x, y) {
+            return;
+        }
+        let a = u32::from(alpha);
+        if b.bpp <= 8 {
+            // Too few colours to mix: ink above half coverage.
+            if a >= 128 {
+                let v = b.from_rgb(fg);
+                b.set_raw(x, y, v);
+            }
+            return;
+        }
+        let d = b.to_rgb(b.raw(x, y));
+        let mix = |f: u8, d: u8| ((u32::from(f) * a + u32::from(d) * (255 - a) + 127) / 255) as u8;
+        let out = Rgb { r: mix(fg.r, d.r), g: mix(fg.g, d.g), b: mix(fg.b, d.b) };
+        let v = b.from_rgb(out);
+        b.set_raw(x, y, v);
     }
 
     /// Point a display DC at a window surface bitmap (the desktop link):
