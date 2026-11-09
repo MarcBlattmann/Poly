@@ -37,6 +37,9 @@
 //!   backdrop, for Liquid Glass later), behind the [`compose::Framebuffer`]
 //!   trait.
 //! - [`seat`]: what the input stack plugs into; `server` routes it to clients.
+//! - [`launch`]: startup feedback (ADR 0167): which launched apps have no
+//!   window yet, ended by an `xdg_activation_v1` token, a window of the
+//!   process, or a timeout; the pointer is busy meanwhile.
 //!
 //! `no_std` with `alloc`: nothing here needs an operating system, so all of
 //! it is tested on the host, and the kernel could use it.
@@ -48,6 +51,7 @@ extern crate alloc;
 extern crate std;
 
 pub mod compose;
+pub mod launch;
 pub mod protocol;
 pub mod seat;
 pub mod server;
