@@ -1,0 +1,57 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "stdac_sequence",
+      "exe_sha256": "6beab3832ad87a1e689bacbd80103a9d4edb4fa27dced0a55155decb7b1c925e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0VGhyZWFkRHBpQXdhcmVuZXNzQ29udGV4dChTWVNURU1fQVdBUkUpIHJldHVybnMgVU5BV0FSRSA7IGVycm9yIDB4MTIzNCA7IHRocmVhZCBub3cgU1lTVEVNX0FXQVJFClNldFRocmVhZERwaUF3YXJlbmVzc0NvbnRleHQoUEVSX01PTklUT1JfQVdBUkUpIHJldHVybnMgU1lTVEVNX0FXQVJFIDsgZXJyb3IgMHgxMjM0IDsgdGhyZWFkIG5vdyBQRVJfTU9OSVRPUl9BV0FSRQpTZXRUaHJlYWREcGlBd2FyZW5lc3NDb250ZXh0KFBFUl9NT05JVE9SX0FXQVJFX1YyKSByZXR1cm5zIFBFUl9NT05JVE9SX0FXQVJFIDsgZXJyb3IgMHgxMjM0IDsgdGhyZWFkIG5vdyBQRVJfTU9OSVRPUl9BV0FSRV9WMgpTZXRUaHJlYWREcGlBd2FyZW5lc3NDb250ZXh0KFVOQVdBUkVfR0RJU0NBTEVEKSByZXR1cm5zIFBFUl9NT05JVE9SX0FXQVJFX1YyIDsgZXJyb3IgMHgxMjM0IDsgdGhyZWFkIG5vdyBVTkFXQVJFX0dESVNDQUxFRApTZXRUaHJlYWREcGlBd2FyZW5lc3NDb250ZXh0KFVOQVdBUkUpIHJldHVybnMgVU5BV0FSRV9HRElTQ0FMRUQgOyBlcnJvciAweDEyMzQgOyB0aHJlYWQgbm93IFVOQVdBUkUKU2V0VGhyZWFkRHBpQXdhcmVuZXNzQ29udGV4dChVTkFXQVJFKSByZXR1cm5zIFVOQVdBUkUgOyBlcnJvciAweDEyMzQgOyB0aHJlYWQgbm93IFVOQVdBUkUKU2V0VGhyZWFkRHBpQXdhcmVuZXNzQ29udGV4dChQRVJfTU9OSVRPUl9BV0FSRV9WMikgcmV0dXJucyBVTkFXQVJFIDsgZXJyb3IgMHgxMjM0IDsgdGhyZWFkIG5vdyBQRVJfTU9OSVRPUl9BV0FSRV9WMgpTZXRUaHJlYWREcGlBd2FyZW5lc3NDb250ZXh0KFBFUl9NT05JVE9SX0FXQVJFX1YyKSByZXR1cm5zIFBFUl9NT05JVE9SX0FXQVJFX1YyIDsgZXJyb3IgMHgxMjM0IDsgdGhyZWFkIG5vdyBQRVJfTU9OSVRPUl9BV0FSRV9WMgpzYXZlZCBQRVJfTU9OSVRPUl9BV0FSRV9WMgpyZXN0b3JlZCB0aHJvdWdoIHRoZSBzYXZlZCBoYW5kbGU6IHJldHVybmVkIFNZU1RFTV9BV0FSRSA7IHRocmVhZCBub3cgUEVSX01PTklUT1JfQVdBUkVfVjIKd2luZG93IG1hZGUgYWZ0ZXIgcmVzdG9yaW5nOiBQRVJfTU9OSVRPUl9BV0FSRV9WMgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetThreadDpiAwarenessContext(SYSTEM_AWARE) returns UNAWARE ; error 0x1234 ; thread now SYSTEM_AWARE\nSetThreadDpiAwarenessContext(PER_MONITOR_AWARE) returns SYSTEM_AWARE ; error 0x1234 ; thread now PER_MONITOR_AWARE\nSetThreadDpiAwarenessContext(PER_MONITOR_AWARE_V2) returns PER_MONITOR_AWARE ; error 0x1234 ; thread now PER_MONITOR_AWARE_V2\nSetThreadDpiAwarenessContext(UNAWARE_GDISCALED) returns PER_MONITOR_AWARE_V2 ; error 0x1234 ; thread now UNAWARE_GDISCALED\nSetThreadDpiAwarenessContext(UNAWARE) returns UNAWARE_GDISCALED ; error 0x1234 ; thread now UNAWARE\nSetThreadDpiAwarenessContext(UNAWARE) returns UNAWARE ; error 0x1234 ; thread now UNAWARE\nSetThreadDpiAwarenessContext(PER_MONITOR_AWARE_V2) returns UNAWARE ; error 0x1234 ; thread now PER_MONITOR_AWARE_V2\nSetThreadDpiAwarenessContext(PER_MONITOR_AWARE_V2) returns PER_MONITOR_AWARE_V2 ; error 0x1234 ; thread now PER_MONITOR_AWARE_V2\nsaved PER_MONITOR_AWARE_V2\nrestored through the saved handle: returned SYSTEM_AWARE ; thread now PER_MONITOR_AWARE_V2\nwindow made after restoring: PER_MONITOR_AWARE_V2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "stdac_threads",
+      "exe_sha256": "dc6cdd37ffa88abbf189c60c93eee84b4cbe1ee50980fe39587fc6630e746c3a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFpbiB0aHJlYWQgc2V0IHRvIFNZU1RFTV9BV0FSRQptYWluIHRocmVhZCBjb250ZXh0IHdoaWxlIHRoZSBvdGhlciBydW5zOiBTWVNURU1fQVdBUkUKICB0aHJlYWQgc3RhcnRzIHdpdGggVU5BV0FSRQogICAgU2V0VGhyZWFkRHBpQXdhcmVuZXNzQ29udGV4dChQRVJfTU9OSVRPUl9BV0FSRSkgcmV0dXJucyBVTkFXQVJFCiAgICBpdHMgd2luZG93OiBQRVJfTU9OSVRPUl9BV0FSRQogICAgdGhyZWFkIGNvbnRleHQgc3RpbGwgUEVSX01PTklUT1JfQVdBUkUKbWFpbiB0aHJlYWQgY29udGV4dCBhdCB0aGUgZW5kOiBTWVNURU1fQVdBUkUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "main thread set to SYSTEM_AWARE\nmain thread context while the other runs: SYSTEM_AWARE\n  thread starts with UNAWARE\n    SetThreadDpiAwarenessContext(PER_MONITOR_AWARE) returns UNAWARE\n    its window: PER_MONITOR_AWARE\n    thread context still PER_MONITOR_AWARE\nmain thread context at the end: SYSTEM_AWARE\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    },
+    {
+      "name": "stdac_windows",
+      "exe_sha256": "eae791a18042e114c1fddc4bd85e56624de4fd27650421b3d9994dbd169f4295",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlZCB1bmRlciBVTkFXQVJFOiB3aW5kb3cgVU5BV0FSRSBHZXREcGlGb3JXaW5kb3cgOTYKICBhZnRlciB0aGUgdGhyZWFkIHN3aXRjaGVkIHRvIFVOQVdBUkU6IHdpbmRvdyBVTkFXQVJFIEdldERwaUZvcldpbmRvdyA5NgogIGNoaWxkIGNyZWF0ZWQgdW5kZXIgVU5BV0FSRTogVU5BV0FSRQogIG93bmVkIHdpbmRvdyBjcmVhdGVkIHVuZGVyIFBFUl9NT05JVE9SX0FXQVJFX1YyOiBQRVJfTU9OSVRPUl9BV0FSRV9WMgpjcmVhdGVkIHVuZGVyIFNZU1RFTV9BV0FSRTogd2luZG93IFNZU1RFTV9BV0FSRSBHZXREcGlGb3JXaW5kb3cgOTYKICBhZnRlciB0aGUgdGhyZWFkIHN3aXRjaGVkIHRvIFVOQVdBUkU6IHdpbmRvdyBTWVNURU1fQVdBUkUgR2V0RHBpRm9yV2luZG93IDk2CiAgY2hpbGQgY3JlYXRlZCB1bmRlciBVTkFXQVJFOiBTWVNURU1fQVdBUkUKICBvd25lZCB3aW5kb3cgY3JlYXRlZCB1bmRlciBQRVJfTU9OSVRPUl9BV0FSRV9WMjogUEVSX01PTklUT1JfQVdBUkVfVjIKY3JlYXRlZCB1bmRlciBQRVJfTU9OSVRPUl9BV0FSRTogd2luZG93IFBFUl9NT05JVE9SX0FXQVJFIEdldERwaUZvcldpbmRvdyA5NgogIGFmdGVyIHRoZSB0aHJlYWQgc3dpdGNoZWQgdG8gVU5BV0FSRTogd2luZG93IFBFUl9NT05JVE9SX0FXQVJFIEdldERwaUZvcldpbmRvdyA5NgogIGNoaWxkIGNyZWF0ZWQgdW5kZXIgVU5BV0FSRTogUEVSX01PTklUT1JfQVdBUkUKICBvd25lZCB3aW5kb3cgY3JlYXRlZCB1bmRlciBQRVJfTU9OSVRPUl9BV0FSRV9WMjogUEVSX01PTklUT1JfQVdBUkVfVjIKY3JlYXRlZCB1bmRlciBQRVJfTU9OSVRPUl9BV0FSRV9WMjogd2luZG93IFBFUl9NT05JVE9SX0FXQVJFX1YyIEdldERwaUZvcldpbmRvdyA5NgogIGFmdGVyIHRoZSB0aHJlYWQgc3dpdGNoZWQgdG8gVU5BV0FSRTogd2luZG93IFBFUl9NT05JVE9SX0FXQVJFX1YyIEdldERwaUZvcldpbmRvdyA5NgogIGNoaWxkIGNyZWF0ZWQgdW5kZXIgVU5BV0FSRTogUEVSX01PTklUT1JfQVdBUkVfVjIKICBvd25lZCB3aW5kb3cgY3JlYXRlZCB1bmRlciBQRVJfTU9OSVRPUl9BV0FSRV9WMjogUEVSX01PTklUT1JfQVdBUkVfVjIKY3JlYXRlZCB1bmRlciBVTkFXQVJFX0dESVNDQUxFRDogd2luZG93IFVOQVdBUkVfR0RJU0NBTEVEIEdldERwaUZvcldpbmRvdyA5NgogIGFmdGVyIHRoZSB0aHJlYWQgc3dpdGNoZWQgdG8gVU5BV0FSRTogd2luZG93IFVOQVdBUkVfR0RJU0NBTEVEIEdldERwaUZvcldpbmRvdyA5NgogIGNoaWxkIGNyZWF0ZWQgdW5kZXIgVU5BV0FSRTogVU5BV0FSRV9HRElTQ0FMRUQKICBvd25lZCB3aW5kb3cgY3JlYXRlZCB1bmRlciBQRVJfTU9OSVRPUl9BV0FSRV9WMjogUEVSX01PTklUT1JfQVdBUkVfVjIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "created under UNAWARE: window UNAWARE GetDpiForWindow 96\n  after the thread switched to UNAWARE: window UNAWARE GetDpiForWindow 96\n  child created under UNAWARE: UNAWARE\n  owned window created under PER_MONITOR_AWARE_V2: PER_MONITOR_AWARE_V2\ncreated under SYSTEM_AWARE: window SYSTEM_AWARE GetDpiForWindow 96\n  after the thread switched to UNAWARE: window SYSTEM_AWARE GetDpiForWindow 96\n  child created under UNAWARE: SYSTEM_AWARE\n  owned window created under PER_MONITOR_AWARE_V2: PER_MONITOR_AWARE_V2\ncreated under PER_MONITOR_AWARE: window PER_MONITOR_AWARE GetDpiForWindow 96\n  after the thread switched to UNAWARE: window PER_MONITOR_AWARE GetDpiForWindow 96\n  child created under UNAWARE: PER_MONITOR_AWARE\n  owned window created under PER_MONITOR_AWARE_V2: PER_MONITOR_AWARE_V2\ncreated under PER_MONITOR_AWARE_V2: window PER_MONITOR_AWARE_V2 GetDpiForWindow 96\n  after the thread switched to UNAWARE: window PER_MONITOR_AWARE_V2 GetDpiForWindow 96\n  child created under UNAWARE: PER_MONITOR_AWARE_V2\n  owned window created under PER_MONITOR_AWARE_V2: PER_MONITOR_AWARE_V2\ncreated under UNAWARE_GDISCALED: window UNAWARE_GDISCALED GetDpiForWindow 96\n  after the thread switched to UNAWARE: window UNAWARE_GDISCALED GetDpiForWindow 96\n  child created under UNAWARE: UNAWARE_GDISCALED\n  owned window created under PER_MONITOR_AWARE_V2: PER_MONITOR_AWARE_V2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 69
+    }
+  ]
+}

@@ -37,15 +37,19 @@ pub const SUPPORT_CRATE: &str = "tests/windows/support";
 pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// The only DLLs a test program may import from (by name): the native
 /// API, `kernel32`, the GUI's `user32` and `gdi32` (Phase 7's window,
-/// message and painting entries), `dwrite` (DirectWrite's entries), `advapi32`
-/// (the security model: tokens, SIDs, ACLs, security descriptors, account lookup),
-/// `userenv` (AppContainer SIDs) and `version` (version resources; Chrome's
-/// stage-9 probe).
+/// message and painting entries), `dwmapi` (the window manager's frame and
+/// attribute calls), `imm32` (input method contexts), `shcore` (per monitor
+/// DPI), `dwrite` (DirectWrite's entries), `advapi32` (the security model:
+/// tokens, SIDs, ACLs, security descriptors, account lookup), `userenv`
+/// (AppContainer SIDs) and `version` (version resources; Chrome's stage-9 probe).
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
     "user32.dll",
     "gdi32.dll",
+    "dwmapi.dll",
+    "imm32.dll",
+    "shcore.dll",
     "dwrite.dll",
     "advapi32.dll",
     "userenv.dll",
@@ -1257,6 +1261,11 @@ mod tests {
         // DirectWrite tests import dwrite.dll.
         let dw = image(&[("DWRITE.dll", &["DWriteCreateFactory"])], 3);
         assert_eq!(check_image(&dw).unwrap()["dwrite.dll"], ["DWriteCreateFactory"]);
+        let more = image(
+            &[("dwmapi.dll", &["DwmFlush"]), ("IMM32.dll", &["ImmGetContext"]), ("SHCORE.dll", &["GetDpiForMonitor"])],
+            3,
+        );
+        assert_eq!(check_image(&more).unwrap()["dwmapi.dll"], ["DwmFlush"]);
         // The security model's tests import advapi32.
         let security = image(&[("ADVAPI32.dll", &["OpenProcessToken"])], 3);
         assert_eq!(check_image(&security).unwrap()["advapi32.dll"], ["OpenProcessToken"]);

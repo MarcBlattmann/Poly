@@ -1,0 +1,81 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwmapi.dll/DwmSetWindowAttribute
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-c
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About the
+  Clipboard", "Using the Clipboard", "Clipboard Formats", "Standard
+  Clipboard Formats", "High DPI Desktop Application Development on Windows",
+  "DPI_AWARENESS_CONTEXT", "Multiple Display Monitors", "Window Features"
+  (layered windows, window regions), "About Cursors", "About Icons",
+  "Desktop Window Manager" (dwmapi), "Input Method Manager" (imm32), "About
+  Messages and Message Queues"; winuser.h, wingdi.h, windef.h, winbase.h,
+  dwmapi.h, imm.h, shellscalingapi.h and winerror.h for constants and
+  layouts. The conformance tests of Wine were consulted only where the own
+  sources line of an entry says so, for ideas of what to observe; no code or
+  expected value of theirs is used (every value in these sheets was observed
+  on the machine above). dwmapi.h (DWMWINDOWATTRIBUTE, MARGINS,
+  DWM_TIMING_INFO, DWMNCRENDERINGPOLICY); Learn pages "Desktop Window
+  Manager", "DWMWINDOWATTRIBUTE", "Extending frames into the client area".
+summary: >
+  Sets a per-window DWM attribute. Of the attributes in DWMWINDOWATTRIBUTE
+  2, 3, 4, 6, 7, 10, 11, 12, 13, 17, 34, 35, 36 and 39 can only be set
+  (reading gives E_INVALIDARG), 16, 20, 33 and 38 can be set and read back,
+  and 1, 5, 8, 9, 14, 15 and 37 refuse the set. Only NCRENDERING_POLICY (2)
+  has an effect that shows in the window messages and NCRENDERING_ENABLED;
+  CLOAK (13) shows in CLOAKED.
+interface:
+  signature: "HRESULT DwmSetWindowAttribute(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)"
+  attributes: "1 NCRENDERING_ENABLED, 2 NCRENDERING_POLICY, 3 TRANSITIONS_FORCEDISABLED, 4 ALLOW_NCPAINT, 5 CAPTION_BUTTON_BOUNDS, 6 NONCLIENT_RTL_LAYOUT, 7 FORCE_ICONIC_REPRESENTATION, 8 FLIP3D_POLICY, 9 EXTENDED_FRAME_BOUNDS, 10 HAS_ICONIC_BITMAP, 11 DISALLOW_PEEK, 12 EXCLUDED_FROM_PEEK, 13 CLOAK, 14 CLOAKED, 15 FREEZE_REPRESENTATION, 16 PASSIVE_UPDATE_MODE, 17 USE_HOSTBACKDROPBRUSH, 20 USE_IMMERSIVE_DARK_MODE, 33 WINDOW_CORNER_PREFERENCE, 34 BORDER_COLOR, 35 CAPTION_COLOR, 36 TEXT_COLOR, 37 VISIBLE_FRAME_BORDER_THICKNESS, 38 SYSTEMBACKDROP_TYPE (dwmapi.h)"
+  returns: "HRESULTs: S_OK 0, E_INVALIDARG 0x80070057, E_HANDLE 0x80070006, ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; every attribute value is a 4-byte DWORD/BOOL/COLORREF"
+rules:
+  write_only: "S_OK for 2, 3, 4, 6, 7, 10, 11, 12, 13, 17, 34, 35, 36 and 39 with value 0 or 1; DwmGetWindowAttribute of the same numbers gives E_INVALIDARG and leaves its buffer alone"
+  round_trip: "16 PASSIVE_UPDATE_MODE and 20 USE_IMMERSIVE_DARK_MODE: the value read back is 1 for any non-zero value (2 and 0xFFFFFFFF give 1); 33 WINDOW_CORNER_PREFERENCE: 0..4 read back as set, 100 is refused (E_INVALIDARG) and the old value stays; 38 SYSTEMBACKDROP_TYPE: 0..5 and 100 read back as set"
+  read_only: "1, 8, 14, 15, 37 and the rectangles 5 and 9 give E_INVALIDARG (5 and 9 give 0x8007007A first: the check of the size comes before the check that they are not settable); the value does not change; attribute numbers 0, 45 and 0x7fff give E_INVALIDARG"
+  ncrendering_policy: "DISABLED (1) makes NCRENDERING_ENABLED read 0 and ENABLED (2) makes it read 1; USEWINDOWSTYLE (0) reads 1 for a window with a caption; out-of-range values (3, 7, 0x10000) read 0 (no messages); a change of the effective state sends the window WM_NCCALCSIZE (wParam TRUE, with SWP flags 0x1837), WM_NCPAINT (region), WM_WINDOWPOSCHANGED (flags 0x1837), a second WM_NCCALCSIZE (flags 0x1001837), WM_NCPAINT and WM_DWMNCRENDERINGCHANGED (wParam = the new state 0 or 1); setting the state that is already effective sends nothing; the window and client rectangles do not change"
+  cloak: "CLOAK 1 (and 2, 0xFFFFFFFF) makes DWMWA_CLOAKED read 1 (DWM_CLOAKED_APP) while IsWindowVisible stays TRUE, the style and rectangles do not change and no message is sent; CLOAK 0 uncloaks; a hidden window can be cloaked; a cloaked window can be destroyed"
+  colors: "34 BORDER_COLOR, 35 CAPTION_COLOR and 36 TEXT_COLOR accept a COLORREF (0x00BBGGRR), 0xFFFFFFFF (DWMWA_COLOR_NONE) and, for 34 and 35, 0xFFFFFFFE (DWMWA_COLOR_DEFAULT); 36 refuses 0xFFFFFFFE; all three refuse 0x01000000 (a bit above the colour) with E_INVALIDARG; the colour cannot be read back; popups behave the same; rectangles and messages do not change"
+  size: "cbAttribute 0, 1, 2 or 3 gives E_INVALIDARG; 4, 5, 8 and 16 succeed for the 4-byte attributes (the first 4 bytes are used); for the colours only exactly 4 is accepted (3 and 8 give E_INVALIDARG)"
+  windows: "also works on a window of another thread of the process"
+errors:
+  bad_window: "E_HANDLE for NULL, a made-up handle, the desktop window and a destroyed window; the last error is set to ERROR_INVALID_HANDLE (6)"
+  bad_value_pointer: "NULL pvAttribute: E_INVALIDARG (last error not touched)"
+  bad_size_last_error: "cbAttribute 0 sets the last error to 0; 1, 2 and 3 leave it"
+  bad_attribute: "a number that is no attribute gives E_INVALIDARG even for a NULL window handle"
+side_effects: "changes only DWM state of the window; the window rectangle, style and Z order do not change"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
+  needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants); run with
+  poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because
+  painting, input and the clipboard need the visible desktop. Window
+  procedures log documented messages only: never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels and closed within seconds; the cursor is parked
+  at (1500, 600) at the start and put back at the end; the clipboard is
+  emptied at the end of every test that touches it; a test changes no system
+  setting (only the state of its own process and windows).
+not_covered: >
+  the visual effect of colours, corner preference, backdrop and dark mode;
+  ordering of the attribute check against the handle check for the settable
+  attributes with a made-up handle. Several monitors, other system DPIs (the
+  oracle is one 1920x1080 monitor at 96 DPI, scale 100%), a manifest (the
+  tests have none: awareness is set with the API), other keyboard layouts
+  than German, installed input methods (the oracle has none active), touch
+  and pen, hooks, menus and dialogs, comctl32 controls, themed (visual
+  style) painting, clipboard contents put there by other programs or by the
+  cloud clipboard and clipboard history.

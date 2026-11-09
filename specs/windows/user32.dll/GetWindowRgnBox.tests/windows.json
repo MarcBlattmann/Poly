@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "gwrb_basic",
+      "exe_sha256": "38a5e134cf1914d91426fd8308b0143b484fb4ef86e736bb7f56a63354d2e0e5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gcmVnaW9uOiAtPiAwIGVycm9yIDB4MTIzNCByZWN0IC03LC03LC03LC03CnJlY3QgMTAsMTAsNTAsNDA6IC0+IDIgZXJyb3IgMHgxMjM0IHJlY3QgMTAsMTAsNTAsNDAKcmVjdCAtMjAsLTMwLDQwMCw1MDA6IC0+IDIgZXJyb3IgMHgxMjM0IHJlY3QgLTIwLC0zMCw0MDAsNTAwCnR3byByZWN0YW5nbGVzOiAtPiAzIGVycm9yIDB4MTIzNCByZWN0IDAsMCw2MCw1MAplbGxpcHNlIDAsMCw2MCw0MDogLT4gMyBlcnJvciAweDEyMzQgcmVjdCAwLDAsNTksMzkKZW1wdHkgcmVnaW9uIGF0IHdpbmRvdyAzMDAsMzAwOiAtPiAxIGVycm9yIDB4MTIzNCByZWN0IC0zMDAsLTMwMCwtMzAwLC0zMDAKZW1wdHkgcmVnaW9uIGFmdGVyIG1vdmluZyB0aGUgd2luZG93IHRvIDEyMCw5MDogLT4gMSBlcnJvciAweDEyMzQgcmVjdCAtMTIwLC05MCwtMTIwLC05MApyZWN0IDcsOCwxNywxOCBhZnRlciBtb3ZpbmcgdGhlIHdpbmRvdzogLT4gMiBlcnJvciAweDEyMzQgcmVjdCA3LDgsMTcsMTgKaGlkZGVuOiAtPiAyIGVycm9yIDB4MTIzNCByZWN0IDcsOCwxNywxOApyZWdpb24gcmVtb3ZlZDogLT4gMCBlcnJvciAweDEyMzQgcmVjdCAtNywtNywtNywtNwpOVUxMIHJlY3RhbmdsZTogMCBlcnJvciAweDEyMzQKTlVMTCB3aW5kb3c6IDAgZXJyb3IgMTQwMCByZWN0IC03LC03LC03LC03Cm1hZGUtdXAgd2luZG93OiAwIGVycm9yIDE0MDAKY2hpbGQgcmVjdCAwLDAsMjAsMjA6IC0+IDIgZXJyb3IgMHgxMjM0IHJlY3QgMCwwLDIwLDIwCmRlc3Ryb3llZCBjaGlsZDogMCBlcnJvciAxNDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no region: -> 0 error 0x1234 rect -7,-7,-7,-7\nrect 10,10,50,40: -> 2 error 0x1234 rect 10,10,50,40\nrect -20,-30,400,500: -> 2 error 0x1234 rect -20,-30,400,500\ntwo rectangles: -> 3 error 0x1234 rect 0,0,60,50\nellipse 0,0,60,40: -> 3 error 0x1234 rect 0,0,59,39\nempty region at window 300,300: -> 1 error 0x1234 rect -300,-300,-300,-300\nempty region after moving the window to 120,90: -> 1 error 0x1234 rect -120,-90,-120,-90\nrect 7,8,17,18 after moving the window: -> 2 error 0x1234 rect 7,8,17,18\nhidden: -> 2 error 0x1234 rect 7,8,17,18\nregion removed: -> 0 error 0x1234 rect -7,-7,-7,-7\nNULL rectangle: 0 error 0x1234\nNULL window: 0 error 1400 rect -7,-7,-7,-7\nmade-up window: 0 error 1400\nchild rect 0,0,20,20: -> 2 error 0x1234 rect 0,0,20,20\ndestroyed child: 0 error 1400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 71
+    }
+  ]
+}
