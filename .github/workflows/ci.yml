@@ -289,10 +289,10 @@ jobs:
           d=$(ls -d target/pipeline/runs/*scenario-poly | tail -1)
           rm -f /tmp/ser.log
           start=$(date +%s)
-          qemu-system-x86_64 -accel kvm -machine q35 -m 256M -smp 2 -display none -serial file:/tmp/ser.log -no-reboot             -device isa-debug-exit,iobase=0xf4,iosize=0x04 -kernel kernel/target/x86_64-unknown-none/debug/poly-kernel             -initrd "$d/sevenzip_trace.initramfs.cpio"             -append "poly.qemu_exit poly.init=/sevenzip_trace/sevenzip_trace.exe poly.test.stdout=/sevenzip_trace/poly-test.out" &
+          qemu-system-x86_64 -accel tcg -machine q35 -m 256M -smp 2 -display none -serial file:/tmp/ser.log -no-reboot             -device isa-debug-exit,iobase=0xf4,iosize=0x04 -kernel kernel/target/x86_64-unknown-none/debug/poly-kernel             -initrd "$d/sevenzip_trace.initramfs.cpio"             -append "poly.qemu_exit poly.init=/sevenzip_trace/sevenzip_trace.exe poly.test.stdout=/sevenzip_trace/poly-test.out" &
           q=$!
           while kill -0 $q 2>/dev/null; do
-            sleep 3
+            sleep 5
             echo "$(( $(date +%s)-start ))s $(stat -c %s /tmp/ser.log 2>/dev/null) $(grep -c '^POLY-OUT' /tmp/ser.log 2>/dev/null)"
           done
           echo "total $(( $(date +%s)-start ))s"
