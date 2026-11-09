@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateIoCompletionPort.yaml
+id: windows/api/kernel32.dll/CreateIoCompletionPort
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CreateIoCompletionPort, I/O Completion Ports, OVERLAPPED structure. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Makes a completion port (file handle INVALID_HANDLE_VALUE, no existing port) or associates an overlapped file handle with a port under a completion key. Afterwards every I/O request on the handle that completes queues a packet on the port: the key of the handle, the OVERLAPPED pointer and the byte count. A handle belongs to one port and only once; handles not opened with FILE_FLAG_OVERLAPPED cannot be associated.
+interface:
+  signature: "HANDLE CreateIoCompletionPort(HANDLE fileHandle, HANDLE existingPort, ULONG_PTR key, DWORD concurrentThreads)"
+rules:
+  new_port: "(INVALID_HANDLE_VALUE, NULL, key, n) returns a port handle for n = 0, 1, 8 and 65535 (separate ports, distinct handle values). A port handle is not a file: GetNamedPipeInfo on it fails with ERROR_INVALID_HANDLE."
+  associate: "(overlapped file handle, port, key, _) returns the same handle value as the port that was passed. Server and client ends of one pipe can both be associated, with different keys; the packets carry the key of the handle the request was made on."
+  once: "a handle that is already associated cannot be associated again, with the same port or another: NULL and ERROR_INVALID_PARAMETER (87)."
+  overlapped_only: "a handle opened without FILE_FLAG_OVERLAPPED (pipe server, pipe client, regular file) fails with ERROR_INVALID_PARAMETER (87)."
+  create_and_associate: "(overlapped file, NULL, key, n) makes a new port and associates the file with it; the returned handle is the new port, not the file; a packet posted to it is dequeued normally."
+  handle_errors: "an event as file handle: ERROR_INVALID_HANDLE (6); an event as port handle: 6; INVALID_HANDLE_VALUE as the file with an existing port: ERROR_INVALID_PARAMETER (87); NULL file with an existing port: 6; NULL file with NULL port: 6; a valid file with INVALID_HANDLE_VALUE as the port: 6; a closed port handle: 6."
+  packet_contents: "a read that completes at once on an associated handle returns TRUE and queues a packet too (bytes, the handle's key, the pointer of the OVERLAPPED that was passed). A request that has to wait queues its packet when it completes; nothing is queued before."
+  event_and_packet: "if the OVERLAPPED has an event handle, the event is signalled and a packet is queued. If the low-order bit of the event handle value is set, no packet is queued (the event is still signalled and GetOverlappedResult works)."
+  port_lifetime: "the port lives until its last handle is closed (a duplicated handle keeps it)."
+errors:
+  already_associated: "ERROR_INVALID_PARAMETER (87)"
+  synchronous_handle: "ERROR_INVALID_PARAMETER (87)"
+  invalid_handle_value_with_port: "ERROR_INVALID_PARAMETER (87)"
+  not_a_handle_or_port: "ERROR_INVALID_HANDLE (6)"
+side_effects: "the handle's later completions go to the port"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Files other than named pipes (the packets and errors are the same mechanism; pipes were used as the I/O source), remote machines, completion ports with several competing threads under load, the concurrency limit's effect on wake-up order.

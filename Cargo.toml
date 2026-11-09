@@ -6,6 +6,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/poly-a64",
     "crates/poly-abi",
     "crates/poly-acpi",
     "crates/poly-audio",
@@ -58,6 +59,7 @@ members = [
     "crates/poly-seh",
     "crates/poly-cxxeh",
     "crates/poly-smp",
+    "crates/poly-stubs",
     "crates/poly-term",
     "crates/poly-tty",
     "crates/poly-unix",
@@ -81,6 +83,7 @@ members = [
     "personalities/native",
     "personalities/nt",
     "personalities/xnu",
+    "tools/a64diff",
     "tools/coverage",
     "tools/pipeline",
     "tools/xtask",
@@ -101,6 +104,7 @@ repository = "https://github.com/MarcBlattmann/Poly"
 rust-version = "1.97"
 
 [workspace.dependencies]
+poly-a64 = { path = "crates/poly-a64" }
 poly-abi = { path = "crates/poly-abi" }
 poly-acpi = { path = "crates/poly-acpi" }
 poly-audio = { path = "crates/poly-audio" }
@@ -129,6 +133,7 @@ poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
 poly-kernelbase = { path = "crates/poly-kernelbase" }
 poly-ldr = { path = "crates/poly-ldr" }
+poly-stubs = { path = "crates/poly-stubs" }
 poly-libm = { path = "crates/poly-libm" }
 poly-line = { path = "crates/poly-line" }
 poly-macho = { path = "crates/poly-macho" }

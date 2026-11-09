@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "upa_errors",
+      "exe_sha256": "fe2620b8e555af23855db73eae0c91d40e25091f0ab9410bbe2aa54b0fb37731",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaW5pdF90d29fb2sKb2sgZmlyc3RfYXR0cmlidXRlX29rCm9rIHNhbWVfYXR0cmlidXRlX3R3aWNlX2ZhaWxzCm9rIHNhbWVfYXR0cmlidXRlX3R3aWNlX2Vycm9yCm9rIHNlY29uZF9hdHRyaWJ1dGVfb2sKb2sgdGhpcmRfYXR0cmlidXRlX2ZhaWxzCm9rIHRoaXJkX2F0dHJpYnV0ZV9lcnJvcgpvayB1bmtub3duX2F0dHJpYnV0ZV9mYWlscwpvayB1bmtub3duX2F0dHJpYnV0ZV9lcnJvcgpvayBhdHRyaWJ1dGVfemVyb19mYWlscwpvayBhdHRyaWJ1dGVfemVyb19lcnJvcgpvayB0aHJlYWRfYXR0cmlidXRlX2ZhaWxzCm9rIHRocmVhZF9hdHRyaWJ1dGVfZXJyb3IKb2sgbWl0aWdhdGlvbl9zaXplXzBfZmFpbHMKb2sgbWl0aWdhdGlvbl9zaXplXzBfZXJyb3IKb2sgbWl0aWdhdGlvbl9zaXplXzNfZmFpbHMKb2sgbWl0aWdhdGlvbl9zaXplXzNfZXJyb3IKb2sgbWl0aWdhdGlvbl9zaXplXzEyX2ZhaWxzCm9rIG1pdGlnYXRpb25fc2l6ZV8xMl9lcnJvcgpvayBtaXRpZ2F0aW9uX3NpemVfNF9vawpvayBudWxsX3ZhbHVlX3VwZGF0ZV9vawp2YWx1ZSBub256ZXJvX2ZsYWdzX29rIDAKdmFsdWUgbm9uemVyb19mbGFnc19lcnJvciA4Nwp2YWx1ZSBwcmV2aW91c192YWx1ZV9wb2ludGVyX29rIDAKdmFsdWUgcHJldmlvdXNfdmFsdWVfcG9pbnRlcl9lcnJvciA4NwpvayBtaXRpZ2F0aW9uXzhfb2sKb2sgam9iX2xpc3Rfd2l0aF9ldmVudF9oYW5kbGVfdXBkYXRlX29rCm9rIGNoaWxkX3Byb2Nlc3NfcG9saWN5XzRfb2sKb2sgcGFyZW50X3Byb2Nlc3NfOF9vawp2YWx1ZSBzZWN1cml0eV9jYXBhYmlsaXRpZXNfZmlmdGhfYXR0cmlidXRlX29rIDAKdmFsdWUgc2VjdXJpdHlfY2FwYWJpbGl0aWVzX2ZpZnRoX2F0dHJpYnV0ZV9lcnJvciAzMQpzdW1tYXJ5IDI1IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok init_two_ok\nok first_attribute_ok\nok same_attribute_twice_fails\nok same_attribute_twice_error\nok second_attribute_ok\nok third_attribute_fails\nok third_attribute_error\nok unknown_attribute_fails\nok unknown_attribute_error\nok attribute_zero_fails\nok attribute_zero_error\nok thread_attribute_fails\nok thread_attribute_error\nok mitigation_size_0_fails\nok mitigation_size_0_error\nok mitigation_size_3_fails\nok mitigation_size_3_error\nok mitigation_size_12_fails\nok mitigation_size_12_error\nok mitigation_size_4_ok\nok null_value_update_ok\nvalue nonzero_flags_ok 0\nvalue nonzero_flags_error 87\nvalue previous_value_pointer_ok 0\nvalue previous_value_pointer_error 87\nok mitigation_8_ok\nok job_list_with_event_handle_update_ok\nok child_process_policy_4_ok\nok parent_process_8_ok\nvalue security_capabilities_fifth_attribute_ok 0\nvalue security_capabilities_fifth_attribute_error 31\nsummary 25 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "upa_handle_list",
+      "exe_sha256": "1310ff257481f9c66047fe829a28ccc39540d9fe321a42fca3a883a32e176500",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgbm9fbGlzdF9pbmhlcml0X3N0YXJ0ZWQKb2sgbm9fbGlzdF9pbmhlcml0X21hc2sKb2sgbm9fbGlzdF9ub19pbmhlcml0X3N0YXJ0ZWQKb2sgbm9fbGlzdF9ub19pbmhlcml0X21hc2sKb2sgbGlzdF9lMV9vawpvayBsaXN0X2UxX3N0YXJ0ZWQKb2sgbGlzdF9lMV9tYXNrCm9rIGxpc3RfZTJfb2sKb2sgbGlzdF9lMl9zdGFydGVkCm9rIGxpc3RfZTJfbWFzawpvayBsaXN0X2JvdGhfb2sKb2sgbGlzdF9ib3RoX3N0YXJ0ZWQKb2sgbGlzdF9ib3RoX21hc2sKb2sgbGlzdF93aXRob3V0X2luaGVyaXRfZmFpbHMKb2sgbGlzdF93aXRob3V0X2luaGVyaXRfZXJyb3IKb2sgbGlzdF9ub25faW5oZXJpdGFibGVfdXBkYXRlX29rCm9rIGxpc3Rfbm9uX2luaGVyaXRhYmxlX2NyZWF0ZV9mYWlscwpvayBsaXN0X25vbl9pbmhlcml0YWJsZV9jcmVhdGVfZXJyb3IKb2sgbGlzdF9qdW5rX3VwZGF0ZV9vawpvayBsaXN0X2p1bmtfY3JlYXRlX2ZhaWxzCm9rIGxpc3RfanVua19jcmVhdGVfZXJyb3IKb2sgZW1wdHlfbGlzdF91cGRhdGVfZmFpbHMKb2sgZW1wdHlfbGlzdF91cGRhdGVfZXJyb3IKb2sgb2RkX3NpemVfdXBkYXRlX2ZhaWxzCm9rIG9kZF9zaXplX3VwZGF0ZV9lcnJvcgpvayBkdXBsaWNhdGVfZW50cmllc191cGRhdGVfb2sKb2sgZHVwbGljYXRlX2VudHJpZXNfY3JlYXRlX2ZhaWxzCm9rIGR1cGxpY2F0ZV9lbnRyaWVzX2NyZWF0ZV9lcnJvcgpzdW1tYXJ5IDI4IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok no_list_inherit_started\nok no_list_inherit_mask\nok no_list_no_inherit_started\nok no_list_no_inherit_mask\nok list_e1_ok\nok list_e1_started\nok list_e1_mask\nok list_e2_ok\nok list_e2_started\nok list_e2_mask\nok list_both_ok\nok list_both_started\nok list_both_mask\nok list_without_inherit_fails\nok list_without_inherit_error\nok list_non_inheritable_update_ok\nok list_non_inheritable_create_fails\nok list_non_inheritable_create_error\nok list_junk_update_ok\nok list_junk_create_fails\nok list_junk_create_error\nok empty_list_update_fails\nok empty_list_update_error\nok odd_size_update_fails\nok odd_size_update_error\nok duplicate_entries_update_ok\nok duplicate_entries_create_fails\nok duplicate_entries_create_error\nsummary 28 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 78
+    },
+    {
+      "name": "upa_job_list",
+      "exe_sha256": "66960ab5f0f2fd53ae69bba7a5be5ec28b54d8acaeb1202d7baeaebfea68ce31",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgam9iX2xpc3RfdXBkYXRlX29rCm9rIGNoaWxkX3dpdGhfam9iX2xpc3Rfc3RhcnRlZApvayBjaGlsZF9pbl9saXN0ZWRfam9iCm9rIGNoaWxkX25vdF9pbl9vdGhlcl9qb2IKb2sgam9iX2NvdW50c190aGVfY2hpbGQKb2sgdHdvX2pvYnNfdXBkYXRlX29rCnZhbHVlIHR3b19qb2JzX2NoaWxkX3N0YXJ0ZWQgMQp2YWx1ZSB0d29fam9ic19jaGlsZF9lcnJvciAwCnZhbHVlIHR3b19qb2JzX2luX2ZpcnN0IDEKdmFsdWUgdHdvX2pvYnNfaW5fc2Vjb25kIDEKb2sgZXZlbnRfaW5fam9iX2xpc3RfdXBkYXRlX29rCm9rIGV2ZW50X2luX2pvYl9saXN0X2NyZWF0ZV9mYWlscwp2YWx1ZSBldmVudF9pbl9qb2JfbGlzdF9jcmVhdGVfZXJyb3IgNgpvayBqb2Jfd2l0aG91dF9hc3NpZ25fcmlnaHRfY3JlYXRlX2ZhaWxzCnZhbHVlIGpvYl93aXRob3V0X2Fzc2lnbl9yaWdodF9jcmVhdGVfZXJyb3IgNQpvayBqb2Jfd2l0aF9hc3NpZ25fcmlnaHRfY3JlYXRlX29rCnZhbHVlIG9kZF9zaXplX3VwZGF0ZV9vayAwCnZhbHVlIG9kZF9zaXplX3VwZGF0ZV9lcnJvciAyNApzdW1tYXJ5IDEwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok job_list_update_ok\nok child_with_job_list_started\nok child_in_listed_job\nok child_not_in_other_job\nok job_counts_the_child\nok two_jobs_update_ok\nvalue two_jobs_child_started 1\nvalue two_jobs_child_error 0\nvalue two_jobs_in_first 1\nvalue two_jobs_in_second 1\nok event_in_job_list_update_ok\nok event_in_job_list_create_fails\nvalue event_in_job_list_create_error 6\nok job_without_assign_right_create_fails\nvalue job_without_assign_right_create_error 5\nok job_with_assign_right_create_ok\nvalue odd_size_update_ok 0\nvalue odd_size_update_error 24\nsummary 10 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

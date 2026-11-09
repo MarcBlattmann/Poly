@@ -116,6 +116,14 @@ impl Mem {
         self.sections.values().filter(|s| !s.deleted).count()
     }
 
+    /// The pages of an image, read through its `read_at` as the kernel does.
+    fn pages_of_image(image: &dyn crate::image::ImageBytes) -> Vec<Frame> {
+        let mut bytes = vec![0u8; image.len() as usize];
+        let n = image.read_at(0, &mut bytes);
+        assert_eq!(n, bytes.len());
+        Mem::pages_of(&bytes)
+    }
+
     fn pages_of(bytes: &[u8]) -> Vec<Frame> {
         bytes
             .chunks(PAGE_SIZE as usize)
@@ -158,7 +166,7 @@ impl Backend for Mem {
                 assert!(!s.deleted, "mapping a deleted section");
                 (s.pages.clone(), Some(*id))
             }
-            ViewSource::Bytes(b) => (Mem::pages_of(b), None),
+            ViewSource::Image(image) => (Mem::pages_of_image(image.as_ref()), None),
         };
         for (n, a) in (addr..addr + len).step_by(PAGE_SIZE as usize).enumerate() {
             assert!(!self.pages.contains_key(&a), "view over a mapped page at {a:#x}");
@@ -182,8 +190,8 @@ impl Backend for Mem {
                 let n = size.div_ceil(PAGE_SIZE) as usize;
                 ((0..n).map(|_| frame()).collect(), vec![*committed; n])
             }
-            SectionSource::Image(bytes) => {
-                let p = Mem::pages_of(bytes);
+            SectionSource::Image(image) => {
+                let p = Mem::pages_of_image(image.as_ref());
                 let n = p.len();
                 (p, vec![true; n])
             }

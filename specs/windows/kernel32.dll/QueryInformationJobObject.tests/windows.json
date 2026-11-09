@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "qij_basic",
+      "exe_sha256": "6d37fe6ced1d508ae888f4f9c1bea30b956fc8cf57884f98fcdea4069efb1b4b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgYWNjb3VudGluZ19vawpvayBhY2NvdW50aW5nX2xlbmd0aApvayBlbXB0eV90b3RhbF9wcm9jZXNzZXMKb2sgZW1wdHlfYWN0aXZlX3Byb2Nlc3NlcwpvayBhc3NpZ25fb2sKb2sgdG90YWxfcHJvY2Vzc2VzXzEKb2sgYWN0aXZlX3Byb2Nlc3Nlc18xCm9rIHRlcm1pbmF0ZWRfcHJvY2Vzc2VzXzAKb2sgaWRfbGlzdF9vawpvayBpZF9saXN0X2Fzc2lnbmVkCm9rIGlkX2xpc3RfaW5fbGlzdApvayBpZF9saXN0X2hhc19jaGlsZF9waWQKb2sgaWRfbGlzdF9yZXR1cm5lZF9sZW5ndGgKb2sgaWRfbGlzdF9oZWFkZXJfb25seV9mYWlscwpvayBpZF9saXN0X2hlYWRlcl9vbmx5X2Vycm9yCm9rIGlkX2xpc3RfMTJfYnl0ZXNfZmFpbHMKdmFsdWUgaWRfbGlzdF8xMl9ieXRlc19lcnJvciAyNApvayBpZF9saXN0X3Rvb19zbWFsbF9mYWlscwp2YWx1ZSBpZF9saXN0X3Rvb19zbWFsbF9lcnJvciAyNApvayB0d29fYWN0aXZlCm9rIHNlY29uZF9jaGlsZF9leGl0Cm9rIHRvdGFsXzJfYWZ0ZXJfZXhpdApvayBhY3RpdmVfMV9hZnRlcl9leGl0Cm9rIHRlcm1pbmF0ZWRfMF9hZnRlcl9ub3JtYWxfZXhpdApvayBhY3RpdmVfMF9hZnRlcl9raWxsCnZhbHVlIHRlcm1pbmF0ZWRfY291bnRfYWZ0ZXJfdGVybWluYXRlIDAKb2sgYWNjb3VudGluZ19zaG9ydF9idWZmZXJfZmFpbHMKb2sgYWNjb3VudGluZ19zaG9ydF9idWZmZXJfZXJyb3IKdmFsdWUgYWNjb3VudGluZ19sb25nX2J1ZmZlcl9vayAwCnZhbHVlIGFjY291bnRpbmdfbG9uZ19idWZmZXJfZXJyb3IgMjQKdmFsdWUgYWNjb3VudGluZ19sb25nX2J1ZmZlcl9sZW5ndGggNDM2OTAKb2sgYmFzaWNfbGltaXRfb2sKb2sgYmFzaWNfbGltaXRfbGVuZ3RoCm9rIGJhc2ljX2xpbWl0X25vX2ZsYWdzCm9rIGV4dGVuZGVkX2xpbWl0X29rCm9rIGV4dGVuZGVkX2xpbWl0X2xlbmd0aApvayBleHRlbmRlZF9saW1pdF9ub19mbGFncwpvayBleHRlbmRlZF9saW1pdF9zaG9ydF9mYWlscwpvayBleHRlbmRlZF9saW1pdF9zaG9ydF9lcnJvcgpvayBjbGFzc18wX2ZhaWxzCm9rIGNsYXNzXzBfZXJyb3IKb2sgY2xhc3NfOTlfZmFpbHMKb2sgY2xhc3NfOTlfZXJyb3IKb2sgaW52YWxpZF9oYW5kbGVfZmFpbHMKb2sgaW52YWxpZF9oYW5kbGVfZXJyb3IKb2sgZXZlbnRfaGFuZGxlX2ZhaWxzCm9rIGV2ZW50X2hhbmRsZV9lcnJvcgpzdW1tYXJ5IDQxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok accounting_ok\nok accounting_length\nok empty_total_processes\nok empty_active_processes\nok assign_ok\nok total_processes_1\nok active_processes_1\nok terminated_processes_0\nok id_list_ok\nok id_list_assigned\nok id_list_in_list\nok id_list_has_child_pid\nok id_list_returned_length\nok id_list_header_only_fails\nok id_list_header_only_error\nok id_list_12_bytes_fails\nvalue id_list_12_bytes_error 24\nok id_list_too_small_fails\nvalue id_list_too_small_error 24\nok two_active\nok second_child_exit\nok total_2_after_exit\nok active_1_after_exit\nok terminated_0_after_normal_exit\nok active_0_after_kill\nvalue terminated_count_after_terminate 0\nok accounting_short_buffer_fails\nok accounting_short_buffer_error\nvalue accounting_long_buffer_ok 0\nvalue accounting_long_buffer_error 24\nvalue accounting_long_buffer_length 43690\nok basic_limit_ok\nok basic_limit_length\nok basic_limit_no_flags\nok extended_limit_ok\nok extended_limit_length\nok extended_limit_no_flags\nok extended_limit_short_fails\nok extended_limit_short_error\nok class_0_fails\nok class_0_error\nok class_99_fails\nok class_99_error\nok invalid_handle_fails\nok invalid_handle_error\nok event_handle_fails\nok event_handle_error\nsummary 41 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "gqcs_basic",
+      "exe_sha256": "c8a21aa19ba5c6ede7b3ecb91ac1564af96f0b37400fab6bc3f67229d961c78b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZW1wdHlfemVyb190aW1lb3V0X2ZhaWxzCm9rIGVtcHR5X3plcm9fdGltZW91dF9lcnJvcgpvayBlbXB0eV9vdmVybGFwcGVkX251bGwKb2sgZW1wdHlfYnl0ZXNfemVybwpvayBlbXB0eV9rZXlfemVybwpvayBlbXB0eV8xMDBtc190aW1lb3V0X2ZhaWxzCm9rIGVtcHR5XzEwMG1zX3RpbWVvdXRfZXJyb3IKb2sgZW1wdHlfMTAwbXNfd2FpdGVkX2Fib3V0X3RoYXRfbG9uZwpvayBwb3N0XzEKb2sgcG9zdF8yCm9rIHBvc3RfMwpvayBnZXRfMQpvayBnZXRfMgpvayBnZXRfMwpvayBkcmFpbmVkCm9rIGRyYWluZWRfZXJyb3IKb2sgcG9zdF9leHRyZW1lCm9rIGdldF9leHRyZW1lCm9rIHdva2VuX2J5X3Bvc3QKb2sgd29rZW5fcXVpY2tseQpvayBwb3N0ZXJfb2sKb2sgZXZlbnRfaGFuZGxlX2ZhaWxzCm9rIGV2ZW50X2hhbmRsZV9lcnJvcgpvayBpbnZhbGlkX2hhbmRsZV9mYWlscwpvayBpbnZhbGlkX2hhbmRsZV9lcnJvcgpvayBjbG9zZWRfcG9ydF9mYWlscwpvayBjbG9zZWRfcG9ydF9lcnJvcgpzdW1tYXJ5IDI3IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok empty_zero_timeout_fails\nok empty_zero_timeout_error\nok empty_overlapped_null\nok empty_bytes_zero\nok empty_key_zero\nok empty_100ms_timeout_fails\nok empty_100ms_timeout_error\nok empty_100ms_waited_about_that_long\nok post_1\nok post_2\nok post_3\nok get_1\nok get_2\nok get_3\nok drained\nok drained_error\nok post_extreme\nok get_extreme\nok woken_by_post\nok woken_quickly\nok poster_ok\nok event_handle_fails\nok event_handle_error\nok invalid_handle_fails\nok invalid_handle_error\nok closed_port_fails\nok closed_port_error\nsummary 27 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 277
+    },
+    {
+      "name": "gqcs_failed",
+      "exe_sha256": "6a32ed7e7e4a740fc86ddc42e69654c92087f5e272af5f06dc8de7dd5c643367",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVhZF9wZW5kaW5nCm9rIGZhaWxlZF9wYWNrZXRfaXNfZmFsc2UKb2sgZmFpbGVkX3BhY2tldF9lcnJvcgpvayBmYWlsZWRfcGFja2V0X292ZXJsYXBwZWQKb2sgZmFpbGVkX3BhY2tldF9ieXRlcwpvayBmYWlsZWRfcGFja2V0X2tleQpvayBmYWlsZWRfcGFja2V0X3Jlc3VsdF9mYWlscwpvayBmYWlsZWRfcGFja2V0X3Jlc3VsdF9lcnJvcgpvayBjYW5jZWxfcmVhZF9wZW5kaW5nCm9rIGNhbmNlbF9vawpvayBjYW5jZWxsZWRfcGFja2V0X2lzX2ZhbHNlCm9rIGNhbmNlbGxlZF9wYWNrZXRfZXJyb3IKb2sgY2FuY2VsbGVkX3BhY2tldF9vdmVybGFwcGVkCm9rIGNhbmNlbGxlZF9wYWNrZXRfYnl0ZXMKb2sgY2FuY2VsbGVkX3BhY2tldF9rZXkKb2sgY2xvc2VfcmVhZF9wZW5kaW5nCm9rIGNsb3NlZF9oYW5kbGVfcGFja2V0X2lzX2ZhbHNlCm9rIGNsb3NlZF9oYW5kbGVfcGFja2V0X2Vycm9yX2lzX2Jyb2tlbl9waXBlCm9rIGNsb3NlZF9oYW5kbGVfcGFja2V0X292ZXJsYXBwZWQKb2sgY2xvc2VkX2hhbmRsZV9wYWNrZXRfa2V5Cm9rIGltbWVkaWF0ZV9mYWlsdXJlCm9rIGltbWVkaWF0ZV9mYWlsdXJlX2Vycm9yCm9rIGltbWVkaWF0ZV9mYWlsdXJlX3F1ZXVlc19ub3RoaW5nCm9rIGltbWVkaWF0ZV9mYWlsdXJlX3RpbWVvdXQKc3VtbWFyeSAyNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok read_pending\nok failed_packet_is_false\nok failed_packet_error\nok failed_packet_overlapped\nok failed_packet_bytes\nok failed_packet_key\nok failed_packet_result_fails\nok failed_packet_result_error\nok cancel_read_pending\nok cancel_ok\nok cancelled_packet_is_false\nok cancelled_packet_error\nok cancelled_packet_overlapped\nok cancelled_packet_bytes\nok cancelled_packet_key\nok close_read_pending\nok closed_handle_packet_is_false\nok closed_handle_packet_error_is_broken_pipe\nok closed_handle_packet_overlapped\nok closed_handle_packet_key\nok immediate_failure\nok immediate_failure_error\nok immediate_failure_queues_nothing\nok immediate_failure_timeout\nsummary 24 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 151
+    }
+  ]
+}

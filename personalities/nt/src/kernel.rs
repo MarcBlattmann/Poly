@@ -241,6 +241,9 @@ pub trait NtKernel {
     /// Log three values for a test program (`PolyTrace`).
     fn trace(&mut self, values: [u64; 3]);
 
+    /// Log text for the calling process (`PolyDebugPrint`, ADR 0155).
+    fn debug_print(&mut self, _text: &[u8]) {}
+
     /// The system time as a `FILETIME` (100 ns since 1601-01-01 UTC), for
     /// registry last-write times (ADR 0066). A kernel without a clock
     /// answers 0.

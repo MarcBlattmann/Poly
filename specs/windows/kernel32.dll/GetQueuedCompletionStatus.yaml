@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetQueuedCompletionStatus.yaml
+id: windows/api/kernel32.dll/GetQueuedCompletionStatus
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: GetQueuedCompletionStatus, PostQueuedCompletionStatus, I/O Completion Ports. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Removes one packet from a completion port, waiting up to a timeout. Packets come out first in, first out. A packet of a failed or cancelled I/O request returns FALSE but with a non-NULL OVERLAPPED pointer, the request's error in GetLastError and 0 bytes; a timeout returns FALSE with a NULL OVERLAPPED and WAIT_TIMEOUT.
+interface:
+  signature: "BOOL GetQueuedCompletionStatus(HANDLE port, LPDWORD bytes, PULONG_PTR key, LPOVERLAPPED *overlapped, DWORD milliseconds)"
+rules:
+  timeout: "empty port: FALSE, GetLastError WAIT_TIMEOUT (258), *overlapped NULL; with 100 ms it waited at least 80 ms; with 0 it returns at once."
+  fifo: "packets posted with PostQueuedCompletionStatus come out in posting order with the values posted, including 0xFFFFFFFF bytes, a key of ULONG_PTR maximum and a fake OVERLAPPED pointer value; 2000 posted packets all come out in order."
+  wakeup: "a thread blocked in the call returns as soon as another thread posts a packet (within about a second in the test, timeout 5000 ms)."
+  two_threads: "two threads waiting, two packets posted: each thread gets exactly one packet."
+  port_closed_while_waiting: "closing the only handle of the port while a thread waits makes its call return FALSE at once with ERROR_ABANDONED_WAIT_0 (735)."
+  failed_io: "a read pending on an associated handle when the peer closes: the packet returns FALSE, GetLastError ERROR_BROKEN_PIPE (109), *overlapped is the request's OVERLAPPED, 0 bytes, the handle's key; GetOverlappedResult on that OVERLAPPED reports the same error."
+  cancelled_io: "a request cancelled with CancelIoEx: FALSE with ERROR_OPERATION_ABORTED (995), the OVERLAPPED, 0 bytes and the key."
+  closed_handle: "closing the file handle with a read pending completes the request with ERROR_BROKEN_PIPE (109) (the packet is FALSE with the OVERLAPPED and the key)."
+  immediate_failure: "a request that fails inside ReadFile (a disconnected pipe: ERROR_PIPE_NOT_CONNECTED) queues no packet."
+errors:
+  timeout: "WAIT_TIMEOUT (258) with a NULL OVERLAPPED"
+  port_abandoned: "ERROR_ABANDONED_WAIT_0 (735)"
+  not_a_port: "an event, INVALID_HANDLE_VALUE or a closed handle: ERROR_INVALID_HANDLE (6)"
+  failed_request: "the request's own error with a non-NULL OVERLAPPED"
+side_effects: "removes the packet"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Files other than named pipes (the packets and errors are the same mechanism; pipes were used as the I/O source), remote machines, completion ports with several competing threads under load, the concurrency limit's effect on wake-up order.
