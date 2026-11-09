@@ -226,6 +226,14 @@ pub const IN_FAULT_CACHE: u32 = 1001;
 pub const IN_FAULT_COPY: u32 = 1002;
 pub const IN_FAULT: u32 = 1003;
 
+/// The first argument of the system call each thread is in.
+static ARG: [AtomicU64; crate::thread::MAX_THREADS] = [const { AtomicU64::new(0) }; crate::thread::MAX_THREADS];
+
+/// The running thread's system call has `arg` as its first argument.
+pub fn set_arg(arg: u64) {
+    ARG[crate::thread::current().slot()].store(arg, Ordering::Relaxed);
+}
+
 /// The running thread starts `what`; returns what it was in before.
 pub fn enter(what: u32) -> u32 {
     WHAT[crate::thread::current().slot()].swap(what, Ordering::Relaxed)
@@ -263,10 +271,68 @@ fn start_sampler() {
     }
 }
 
+/// Kernel argument: every this many seconds the sampler prints what every
+/// user thread is doing (`profile: threads ...`), for finding where a stuck
+/// program waits.
+pub const THREADS_ARG: &str = "poly.debug.threads";
+static THREADS_EVERY_NS: AtomicU64 = AtomicU64::new(0);
+
+/// One line per process: its threads with their state and the system call
+/// (or page fault) they are in.
+fn dump_threads() {
+    use alloc::collections::BTreeMap;
+    use alloc::string::String;
+    let mut by_process: BTreeMap<u32, String> = BTreeMap::new();
+    for t in crate::thread::list() {
+        let slot = t.id.slot();
+        let Some((pid, tid)) = crate::cputime::ids(slot) else { continue };
+        let what = WHAT[slot].load(Ordering::Relaxed);
+        let state = match t.state {
+            crate::thread::State::Running => "run",
+            crate::thread::State::Runnable => "ready",
+            crate::thread::State::Blocked => "wait",
+            crate::thread::State::Exited => continue,
+        };
+        let line = by_process.entry(pid).or_default();
+        let _ = match what {
+            0 => write!(line, " {tid}:{state}"),
+            n if n >= IN_FAULT_LOCK => write!(line, " {tid}:{state}:fault"),
+            n => {
+                let name = poly_personality_linux::table::name(u64::from(n - 1)).unwrap_or("?");
+                write!(line, " {tid}:{state}:{name}@{:#x}", ARG[slot].load(Ordering::Relaxed))
+            }
+        };
+    }
+    let now = crate::time::now_ns() / 1_000_000;
+    for (pid, line) in by_process {
+        // What kind of process: Chromium's `--type=` and `--utility-sub-type=`.
+        let mut kind = String::new();
+        for arg in crate::fs::proc::cmdline_of(pid).split(|&b| b == 0) {
+            if arg.starts_with(b"--type=") || arg.starts_with(b"--utility-sub-type=") {
+                kind.push(' ');
+                kind.push_str(&String::from_utf8_lossy(arg));
+            }
+        }
+        crate::kprintln!("profile: threads at {now} ms: pid {pid}{kind}:{line}");
+    }
+}
+
 fn sampler_main(_: usize) -> usize {
+    let mut next_dump = u64::MAX;
     loop {
         let deadline = crate::time::now_ns().saturating_add(SAMPLE_NS);
         SAMPLER_WAIT.wait_until_deadline(|| false, deadline);
+        let every = THREADS_EVERY_NS.load(Ordering::Relaxed);
+        if every != 0 {
+            let now = crate::time::now_ns();
+            if next_dump == u64::MAX {
+                next_dump = now + every;
+            }
+            if now >= next_dump {
+                next_dump = now + every;
+                dump_threads();
+            }
+        }
         for t in crate::thread::list() {
             let slot = t.id.slot();
             let Some((pid, tid)) = crate::cputime::ids(slot) else { continue };
@@ -345,6 +411,9 @@ pub const MEMBENCH_FLAG: &str = "poly.debug.membench";
 pub fn init(boot: &BootInfo) {
     ON.store(boot.has_flag(PROFILE_FLAG), Ordering::Relaxed);
     if boot.has_flag(PROFILE_FLAG) {
+        if let Some(secs) = boot.arg(THREADS_ARG).and_then(|v| v.parse::<u64>().ok()) {
+            THREADS_EVERY_NS.store(secs.saturating_mul(1_000_000_000), Ordering::Relaxed);
+        }
         start_sampler();
     }
     if boot.has_flag(MEMBENCH_FLAG) {
