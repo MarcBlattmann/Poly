@@ -85,6 +85,19 @@ pub fn extract(zip: &[u8], name: &str) -> Result<Vec<u8>, String> {
     read(zip, &m)
 }
 
+/// Every file member (not directories) with its data, handed to `each` one
+/// at a time so a large archive is never all in memory at once.
+pub fn for_each(zip: &[u8], mut each: impl FnMut(&str, Vec<u8>) -> Result<(), String>) -> Result<(), String> {
+    for m in members(zip)? {
+        if m.name.ends_with('/') {
+            continue;
+        }
+        let data = read(zip, &m)?;
+        each(&m.name, data)?;
+    }
+    Ok(())
+}
+
 /// The data of member `m` (from [`members`] of the same archive).
 pub fn read(zip: &[u8], m: &Member) -> Result<Vec<u8>, String> {
     let name = &m.name;

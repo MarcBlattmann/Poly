@@ -22,8 +22,8 @@ pub enum SectionSource {
     /// [`Backend::commit_section`] may be touched (`SEC_RESERVE`).
     Pagefile { size: u64, committed: bool },
     /// An image laid out as it is mapped (`SEC_IMAGE`): views map private
-    /// copies of its pages.
-    Image(Arc<[u8]>),
+    /// copies of its pages, read from it as they are touched (ADR 0155).
+    Image(Arc<dyn crate::image::ImageBytes>),
     /// The pages of a file object (a data file mapping), by the kernel's
     /// key for the file (the minimal file objects of ADR 0063).
     File { file: u64 },
@@ -39,8 +39,8 @@ pub enum ViewSource {
     /// A section's pages, by the backing id [`Backend::create_section`]
     /// returned.
     Section(u64),
-    /// Bytes of their own: an image relocated for this view.
-    Bytes(Arc<[u8]>),
+    /// An image relocated for this view (ADR 0155).
+    Image(Arc<dyn crate::image::ImageBytes>),
 }
 
 /// One piece of a view to map.

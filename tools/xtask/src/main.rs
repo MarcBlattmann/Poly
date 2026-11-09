@@ -115,6 +115,7 @@ mod aarch64;
 mod accel;
 mod asmlabels;
 mod busybox;
+mod chromewin;
 mod chromium;
 mod compositor;
 mod compositor_kms;
@@ -235,7 +236,7 @@ fn main() -> ExitCode {
 }
 
 /// The commands [`dispatch`] runs (besides `start` and `pipeline`).
-const COMMANDS: [&str; 28] = [
+const COMMANDS: &[&str] = &[
     "build",
     "aarch64",
     "prebuild",
@@ -263,6 +264,7 @@ const COMMANDS: [&str; 28] = [
     "toolkits",
     "chromium",
     "a64-diff",
+    "chrome-win",
     "macos",
 ];
 
@@ -299,6 +301,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("toolkits") => toolkits::command(rest),
         Some("chromium") => chromium::command(rest),
         Some("a64-diff") => a64_diff(rest),
+        Some("chrome-win") => chromewin::command(rest),
         Some("macos") => macimports::command(rest),
         other => Err(format!("no command {other:?}")),
     }
