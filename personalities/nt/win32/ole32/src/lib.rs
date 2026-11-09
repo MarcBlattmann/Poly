@@ -752,7 +752,11 @@ pub unsafe extern "system" fn WindowsSubstring(h: HString, start: u32, out: *mut
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn WindowsPreallocateStringBuffer(len: u32, chars: *mut *mut u16, buffer: *mut HString) -> Hresult {
+pub unsafe extern "system" fn WindowsPreallocateStringBuffer(
+    len: u32,
+    chars: *mut *mut u16,
+    buffer: *mut HString,
+) -> Hresult {
     if chars.is_null() || buffer.is_null() {
         return E_POINTER;
     }

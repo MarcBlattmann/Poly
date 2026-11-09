@@ -46,7 +46,13 @@ unsafe extern "system" {
     fn CoInitializeEx(reserved: *mut c_void, co_init: u32) -> Hresult;
     fn CoUninitialize();
     fn CoGetApartmentType(kind: *mut i32, qualifier: *mut i32) -> Hresult;
-    fn CoCreateInstance(clsid: *const [u8; 16], outer: *mut c_void, ctx: u32, iid: *const [u8; 16], ppv: *mut *mut c_void) -> Hresult;
+    fn CoCreateInstance(
+        clsid: *const [u8; 16],
+        outer: *mut c_void,
+        ctx: u32,
+        iid: *const [u8; 16],
+        ppv: *mut *mut c_void,
+    ) -> Hresult;
     fn CoTaskMemAlloc(cb: usize) -> *mut u8;
     fn CoTaskMemRealloc(p: *mut u8, cb: usize) -> *mut u8;
     fn CoTaskMemFree(p: *mut u8);
@@ -245,7 +251,8 @@ const HWND_MESSAGE: Hwnd = -3isize as usize;
 /// `IID_IUnknown`.
 const IID_IUNKNOWN: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0xC0, 0, 0, 0, 0, 0, 0, 0x46];
 /// Some CLSID that is registered nowhere ({11111111-2222-3333-4444-555555555555}).
-const CLSID_NOWHERE: [u8; 16] = [0x11, 0x11, 0x11, 0x11, 0x22, 0x22, 0x33, 0x33, 0x44, 0x44, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55];
+const CLSID_NOWHERE: [u8; 16] =
+    [0x11, 0x11, 0x11, 0x11, 0x22, 0x22, 0x33, 0x33, 0x44, 0x44, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55];
 
 // ----- COM ----------------------------------------------------------------------------
 
@@ -283,7 +290,8 @@ unsafe fn com() {
     check_hr(CoCreateFreeThreadedMarshaler(core::ptr::null_mut(), &mut m), S_OK);
     check_got(!m.is_null(), 0);
     let vtbl = *(m as *const *const usize);
-    let qi: unsafe extern "system" fn(*mut c_void, *const [u8; 16], *mut *mut c_void) -> Hresult = core::mem::transmute(*vtbl);
+    let qi: unsafe extern "system" fn(*mut c_void, *const [u8; 16], *mut *mut c_void) -> Hresult =
+        core::mem::transmute(*vtbl);
     let add_ref: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*vtbl.add(1));
     let release: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*vtbl.add(2));
     let mut q: *mut c_void = core::ptr::null_mut();
@@ -420,7 +428,20 @@ unsafe fn windows() {
 
     // A message-only window.
     let title = w::<7>("hidden");
-    let hwnd = CreateWindowExW(0, class_name.as_ptr(), title.as_ptr(), 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, core::ptr::null_mut());
+    let hwnd = CreateWindowExW(
+        0,
+        class_name.as_ptr(),
+        title.as_ptr(),
+        0,
+        0,
+        0,
+        0,
+        0,
+        HWND_MESSAGE,
+        0,
+        0,
+        core::ptr::null_mut(),
+    );
     check_got(hwnd != 0, GetLastError());
     check_eq(IsWindow(hwnd) as usize, 1);
     check_eq(IsWindowVisible(hwnd) as usize, 0);

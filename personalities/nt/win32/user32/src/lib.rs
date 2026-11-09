@@ -1277,33 +1277,33 @@ pub unsafe extern "system" fn AdjustWindowRect(rect: *mut i32, style: u32, menu:
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSysColor(index: i32) -> u32 {
     match index {
-        0 => 0x00C8_C8C8,    // COLOR_SCROLLBAR
-        1 => 0,              // COLOR_BACKGROUND
-        2 => 0x00D1_B499,    // COLOR_ACTIVECAPTION
-        3 => 0x00DB_CDBF,    // COLOR_INACTIVECAPTION
-        4 => 0x00F0_F0F0,    // COLOR_MENU
-        5 => 0x00FF_FFFF,    // COLOR_WINDOW
-        6 => 0x0064_6464,    // COLOR_WINDOWFRAME
-        7 | 8 | 9 | 18 => 0, // menu, window, caption, button text
-        10 => 0x00B4_B4B4,   // COLOR_ACTIVEBORDER
-        11 => 0x00FC_F7F4,   // COLOR_INACTIVEBORDER
-        12 => 0x00AB_ABAB,   // COLOR_APPWORKSPACE
-        19 => 0x0054_4E43,   // COLOR_INACTIVECAPTIONTEXT
-        21 => 0x0069_6969,   // COLOR_3DDKSHADOW
-        22 => 0x00E3_E3E3,   // COLOR_3DLIGHT
-        23 => 0,             // COLOR_INFOTEXT
-        24 => 0x00E1_FFFF,   // COLOR_INFOBK
-        26 => 0x00CC_6600,   // COLOR_HOTLIGHT
-        27 => 0x00EA_D1B9,   // COLOR_GRADIENTACTIVECAPTION
-        28 => 0x00F2_E4D7,   // COLOR_GRADIENTINACTIVECAPTION
-        29 => 0x00D7_7800,   // COLOR_MENUHILIGHT
-        30 => 0x00F0_F0F0,   // COLOR_MENUBAR
-        13 => 0x00D7_7800,   // COLOR_HIGHLIGHT
-        14 => 0x00FF_FFFF,   // COLOR_HIGHLIGHTTEXT
-        15 => 0x00F0_F0F0,   // COLOR_BTNFACE
-        16 => 0x00A0_A0A0,   // COLOR_BTNSHADOW
-        17 => 0x006D_6D6D,   // COLOR_GRAYTEXT
-        20 => 0x00FF_FFFF,   // COLOR_BTNHIGHLIGHT
+        0 => 0x00C8_C8C8,                   // COLOR_SCROLLBAR
+        1 => 0,                             // COLOR_BACKGROUND
+        2 => 0x00D1_B499,                   // COLOR_ACTIVECAPTION
+        3 => 0x00DB_CDBF,                   // COLOR_INACTIVECAPTION
+        4 => 0x00F0_F0F0,                   // COLOR_MENU
+        5 => 0x00FF_FFFF,                   // COLOR_WINDOW
+        6 => 0x0064_6464,                   // COLOR_WINDOWFRAME
+        7 | 8 | 9 | 18 => 0,                // menu, window, caption, button text
+        10 => 0x00B4_B4B4,                  // COLOR_ACTIVEBORDER
+        11 => 0x00FC_F7F4,                  // COLOR_INACTIVEBORDER
+        12 => 0x00AB_ABAB,                  // COLOR_APPWORKSPACE
+        19 => 0x0054_4E43,                  // COLOR_INACTIVECAPTIONTEXT
+        21 => 0x0069_6969,                  // COLOR_3DDKSHADOW
+        22 => 0x00E3_E3E3,                  // COLOR_3DLIGHT
+        23 => 0,                            // COLOR_INFOTEXT
+        24 => 0x00E1_FFFF,                  // COLOR_INFOBK
+        26 => 0x00CC_6600,                  // COLOR_HOTLIGHT
+        27 => 0x00EA_D1B9,                  // COLOR_GRADIENTACTIVECAPTION
+        28 => 0x00F2_E4D7,                  // COLOR_GRADIENTINACTIVECAPTION
+        29 => 0x00D7_7800,                  // COLOR_MENUHILIGHT
+        30 => 0x00F0_F0F0,                  // COLOR_MENUBAR
+        13 => 0x00D7_7800,                  // COLOR_HIGHLIGHT
+        14 => 0x00FF_FFFF,                  // COLOR_HIGHLIGHTTEXT
+        15 => 0x00F0_F0F0,                  // COLOR_BTNFACE
+        16 => 0x00A0_A0A0,                  // COLOR_BTNSHADOW
+        17 => 0x006D_6D6D,                  // COLOR_GRAYTEXT
+        20 => 0x00FF_FFFF,                  // COLOR_BTNHIGHLIGHT
         i32::MIN..=-1 | 31..=i32::MAX => 0, // not a colour index
         _ => 0x00F0_F0F0,
     }

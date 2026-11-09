@@ -183,7 +183,12 @@ pub unsafe extern "system" fn EnumDisplayDevicesW(device: *const u16, index: u32
             "PCI\\VEN_1234&DEV_1111",
         )
     } else {
-        ("\\\\.\\DISPLAY1\\Monitor0", "Generic PnP Monitor", DISPLAY_DEVICE_ACTIVE | DISPLAY_DEVICE_ATTACHED, "MONITOR\\POL0001")
+        (
+            "\\\\.\\DISPLAY1\\Monitor0",
+            "Generic PnP Monitor",
+            DISPLAY_DEVICE_ACTIVE | DISPLAY_DEVICE_ATTACHED,
+            "MONITOR\\POL0001",
+        )
     };
     // SAFETY: the caller's 840-byte structure.
     unsafe {
@@ -223,7 +228,10 @@ pub unsafe extern "system" fn EnumDisplaySettingsW(device: *const u16, mode: u32
         put_wide(dm, 32, "\\\\.\\DISPLAY1");
         core::ptr::write_unaligned(dm.add(64) as *mut u16, 0x0401); // dmSpecVersion
         core::ptr::write_unaligned(dm.add(68) as *mut u16, 220); // dmSize
-        core::ptr::write_unaligned(dm.add(72) as *mut u32, 0x20 | 0x4_0000 | 0x8_0000 | 0x10_0000 | 0x20_0000 | 0x40_0000);
+        core::ptr::write_unaligned(
+            dm.add(72) as *mut u32,
+            0x20 | 0x4_0000 | 0x8_0000 | 0x10_0000 | 0x20_0000 | 0x40_0000,
+        );
         core::ptr::write_unaligned(dm.add(168) as *mut u32, 32); // dmBitsPerPel
         core::ptr::write_unaligned(dm.add(172) as *mut u32, d.width as u32);
         core::ptr::write_unaligned(dm.add(176) as *mut u32, d.height as u32);
@@ -601,7 +609,13 @@ pub unsafe extern "system" fn GetAutoRotationState(state: *mut u32) -> i32 {
 
 /// `AdjustWindowRectExForDpi`: the frame is Windows' at 96 DPI whatever the DPI.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn AdjustWindowRectExForDpi(rect: *mut i32, style: u32, menu: i32, ex: u32, dpi: u32) -> i32 {
+pub unsafe extern "system" fn AdjustWindowRectExForDpi(
+    rect: *mut i32,
+    style: u32,
+    menu: i32,
+    ex: u32,
+    dpi: u32,
+) -> i32 {
     if dpi == 0 {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
@@ -645,7 +659,13 @@ pub unsafe fn system_parameters_info(action: u32, ui_param: u32, pv: *mut u8) ->
 
 /// `SystemParametersInfoForDpi`: as `SystemParametersInfoW`; every DPI is 96 here.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn SystemParametersInfoForDpi(action: u32, ui_param: u32, pv: *mut u8, _ini: u32, dpi: u32) -> i32 {
+pub unsafe extern "system" fn SystemParametersInfoForDpi(
+    action: u32,
+    ui_param: u32,
+    pv: *mut u8,
+    _ini: u32,
+    dpi: u32,
+) -> i32 {
     if dpi == 0 {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
@@ -720,7 +740,14 @@ pub unsafe extern "system" fn LoadIconW(instance: H, name: *const u16) -> H {
 /// module's icon or cursor as the application icon / the arrow (the
 /// resource is not read); bitmaps and files are not loaded.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn LoadImageW(instance: H, name: *const u16, kind: u32, _cx: i32, _cy: i32, flags: u32) -> H {
+pub unsafe extern "system" fn LoadImageW(
+    instance: H,
+    name: *const u16,
+    kind: u32,
+    _cx: i32,
+    _cy: i32,
+    flags: u32,
+) -> H {
     const LR_LOADFROMFILE: u32 = 0x10;
     if flags & LR_LOADFROMFILE != 0 {
         set_last_error(2); // ERROR_FILE_NOT_FOUND
