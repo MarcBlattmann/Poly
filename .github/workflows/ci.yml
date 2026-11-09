@@ -37,7 +37,7 @@ jobs:
   # A pull request that only changes prose (ADRs, Markdown files, the
   # generated progress charts) skips the jobs that run programs: host tests,
   # the boot tests and the pipeline. Lint and coverage always run (the
-  # coverage job checks README.md and docs/ROADMAP.md against coverage/).
+  # lint job checks README.md and docs/ROADMAP.md against coverage/).
   changes:
     name: changes (code or prose)
     runs-on: ubuntu-24.04
@@ -66,7 +66,7 @@ jobs:
           fi
 
   lint:
-    name: lint (fmt, clippy, source checks)
+    name: lint (fmt, clippy, source checks, coverage map)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -97,6 +97,9 @@ jobs:
           path: target/win32-cache
           key: ${{ steps.keys.outputs.win32 }}
       - run: cargo xtask ci lint
+      # The coverage map's checks (README and ROADMAP against coverage/) are
+      # a minute: with lint, which ends sooner than the boots.
+      - run: cargo xtask ci coverage
 
   host-tests:
     name: host tests
@@ -232,17 +235,20 @@ jobs:
             x11: true
             sevenzip: true
           - boot: sevenzip
-            shards: sevenzip,selftest
+            shards: sevenzip,faults
             accel: auto
             sevenzip: true
           - boot: sevenzip-b
-            shards: sevenzip-b,faults
+            shards: sevenzip-b
             accel: auto
             sevenzip: true
           - boot: shell
-            shards: desktop-shell,devices
+            shards: desktop-shell
             accel: auto
             x11: true
+          - boot: devices
+            shards: devices,selftest
+            accel: auto
           # The self-test boots on TCG too, so paths only the emulator takes
           # (and its quirks) stay tested.
           - boot: selftest
@@ -306,20 +312,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  coverage:
-    name: coverage (map, README)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust (version from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: coverage
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo xtask ci coverage
-
   pipeline:
     name: "pipeline (${{ matrix.slice }})"
     needs: [changes, build]
@@ -382,7 +374,7 @@ jobs:
   # only when the change is prose alone (`changes`).
   ci:
     if: always()
-    needs: [changes, lint, host-tests, build, boot, coverage, pipeline]
+    needs: [changes, lint, host-tests, build, boot, pipeline]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
