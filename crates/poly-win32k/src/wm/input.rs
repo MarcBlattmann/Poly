@@ -71,7 +71,65 @@ impl Wm {
             q.input.capture = capture;
         }
         if which & SET_FOREGROUND != 0 {
-            self.take_foreground(k, if active != 0 { active } else { self.keeper });
+            if active != 0 {
+                self.take_foreground(k, active);
+            } else {
+                self.hand_foreground_over(Some(k));
+            }
+        }
+    }
+
+    /// The window that gets the foreground when the foreground window of
+    /// queue `from` goes (`None`: its queue is gone): the topmost visible,
+    /// enabled, activatable top-level window of another queue, which is
+    /// another thread of our process or the keeper (GetForegroundWindow.yaml
+    /// `destroy_foreground`; GetActiveWindow.yaml `hide_active`: not a
+    /// window of the same thread, B).
+    fn next_foreground(&self, from: Option<Key>) -> u32 {
+        let Some(d) = self.get(u64::from(self.desktop)) else { return 0 };
+        d.children
+            .iter()
+            .copied()
+            .find(|&h| {
+                self.get(u64::from(h)).is_some_and(|w| {
+                    h != self.message
+                        && self.visible(h)
+                        && w.style & (WS_DISABLED | WS_MINIMIZE) == 0
+                        && !w.minimized
+                        && w.ex_style & WS_EX_NOACTIVATE == 0
+                        && from.is_none_or(|k| self.input_key(w.thread) != self.input_key(k))
+                })
+            })
+            .unwrap_or(0)
+    }
+
+    /// Nobody of the calling queue is in the foreground any more: another
+    /// thread's window takes it with its active and focus (or the keeper).
+    fn hand_foreground_over(&mut self, from: Option<Key>) {
+        let next = self.next_foreground(from);
+        if next != 0 && next != self.keeper {
+            self.give_foreground(next);
+        } else {
+            self.foreground = self.keeper;
+            self.raise_keeper();
+        }
+    }
+
+    /// The keeper took the foreground: as any activated window it comes to the
+    /// top of its band, above our topmost windows (GetActiveWindow.yaml
+    /// `show_again`: "a window of another process (the runner keeper) was
+    /// activated and raised above A meanwhile"; GetFocus.yaml `restore`).
+    pub(super) fn raise_keeper(&mut self) {
+        let (d, k) = (self.desktop, self.keeper);
+        if k == 0 {
+            return;
+        }
+        if let Some(dw) = self.get_mut(u64::from(d))
+            && let Some(i) = dw.children.iter().position(|&c| c == k)
+            && i != 0
+        {
+            dw.children.remove(i);
+            dw.children.insert(0, k);
         }
     }
 
@@ -147,7 +205,7 @@ impl Wm {
             }
         }
         if self.foreground == h {
-            self.foreground = self.keeper;
+            self.hand_foreground_over(None);
         }
     }
 
