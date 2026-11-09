@@ -251,17 +251,16 @@ const SCENARIO_REQUIRED: bool = true;
 
 /// `cargo run --package poly-pipeline -- <args>`; its exit status.
 pub(crate) fn pipeline(args: &[&str]) -> Result<std::process::ExitStatus> {
-    crate::cargo()
-        .current_dir(root())
-        .args(["run", "--quiet", "--package", "poly-pipeline", "--"])
-        .args(args)
-        .status()
-        .map_err(|e| format!("pipeline: {e}"))
+    crate::prebuilt::pipeline_tool().args(args).status().map_err(|e| format!("pipeline: {e}"))
 }
 
 /// Put `7za.exe` where the driver's data files go and build the driver.
 fn stage_scenario(exe: &Path) -> Result {
     let data = root().join(SCENARIO_DATA).join(SCENARIO_TEST);
+    let driver = root().join(SCENARIO_BIN).join(format!("{SCENARIO_TEST}.exe"));
+    if crate::prebuilt::skip("the 7-Zip scenario's driver", &[driver, data.join(EXE)])? {
+        return Ok(());
+    }
     std::fs::create_dir_all(&data).map_err(|e| format!("{}: {e}", data.display()))?;
     std::fs::copy(exe, data.join(EXE)).map_err(|e| format!("{}: {e}", data.display()))?;
     let built = pipeline(&["win", "build", "--tests", SCENARIO_TEST, "--out", SCENARIO_BIN])?;
@@ -269,6 +268,15 @@ fn stage_scenario(exe: &Path) -> Result {
         return Err(format!("building {SCENARIO_TEST}.exe failed ({built})"));
     }
     Ok(())
+}
+
+/// The prebuild's part: stage the scenario's driver; the files it made.
+pub fn stage_prebuild() -> Result<Vec<PathBuf>> {
+    let exe = cached().ok_or("7za.exe is not in the cache; run `cargo xtask win fetch-7zip`")?;
+    stage_scenario(&exe)?;
+    let mut files = crate::prebuilt::dir_files(&root().join(SCENARIO_BIN));
+    files.extend(crate::prebuilt::dir_files(&root().join(SCENARIO_DATA).join(SCENARIO_TEST)));
+    Ok(files)
 }
 
 /// `pipeline win scenario diff` against the recording, with `extra`
@@ -874,8 +882,20 @@ fn fixtures(tool: &Path, work: &Path) -> Result<Vec<(String, u16, Vec<u8>)>> {
 
 // ----- the boot test -----------------------------------------------------------------------
 
-/// The boot test (see the module docs).
-pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+/// The boot test (see the module docs), in two halves: every step is a boot
+/// of its own, so `7zip` runs the even steps and `7zip-b` the odd ones.
+/// The odd steps (`7zip-b`).
+pub fn boot_test_b(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    boot_test_part(kernel, syms, 1, 2)
+}
+
+/// The even steps (`7zip`).
+pub fn boot_test_a(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    boot_test_part(kernel, syms, 0, 2)
+}
+
+/// The steps whose number leaves `part` when divided by `parts`.
+fn boot_test_part(kernel: &Path, syms: &Arc<Symbols>, part: usize, parts: usize) -> Result {
     eprintln!("==> boot test: 7-Zip's command line (7za.exe, x64) runs on the NT personality (ADR 0087, 0091)");
     let Some(exe) = cached() else {
         eprintln!(
@@ -911,8 +931,8 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         std::env::var("POLY_7ZIP_STEPS").ok().map(|v| v.split(',').map(str::to_string).collect());
     let mut failed = Vec::new();
     let mut summary = Vec::new();
-    for step in STEPS {
-        if only.as_ref().is_some_and(|o| !o.iter().any(|n| n == step.name)) {
+    for (index, step) in STEPS.iter().enumerate() {
+        if only.as_ref().is_some_and(|o| !o.iter().any(|n| n == step.name)) || index % parts != part {
             continue;
         }
         let mut append = format!("poly.qemu_exit poly.init=/{DIR}/7za.exe");

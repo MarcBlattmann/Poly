@@ -1229,6 +1229,7 @@
 {"symbol":"MXErrorDomain","src":["macos-sdk"]},
 {"symbol":"MetricKitVersionNumber","src":["macos-sdk"]},
 {"symbol":"MetricKitVersionString","src":["macos-sdk"]},
+{"symbol":"_MXSignpostMetricsSnapshot","src":["macos-sdk"]},
 {"symbol":"_swift_FORCE_LOAD_$_swiftMetricKit","src":["macos-sdk"]},
 {"symbol":"objc:MXAnimationMetric","src":["macos-sdk"]},
 {"symbol":"objc:MXAppExitMetric","src":["macos-sdk"]},
