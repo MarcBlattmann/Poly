@@ -14,6 +14,7 @@ poly-font.workspace = true
 poly-gfx.workspace = true
 poly-kernelbase.workspace = true
 poly-ldr.workspace = true
+poly-macho.workspace = true
 poly-crt.workspace = true
 poly-crypto.workspace = true
 poly-shell.workspace = true

@@ -75,6 +75,11 @@
 //!                       arm64 test programs (tests/a64) and generated one-instruction blocks, run
 //!                       by both and compared; Linux with qemu-user, clang and lld only (elsewhere
 //!                       it says so and succeeds); not part of `ci`
+//!   macos fetch-chrome [x64|arm64]
+//!                       download the pinned Chrome for Testing for macOS into the cache (macimports.rs)
+//!   macos imports <app|zip|file|chrome-x64|chrome-arm64>... [--report <file.md>]
+//!                       what a macOS app's Mach-O files link and import, by name, against the
+//!                       SDK framework map in coverage/macos (ADR 0157; docs/macos/chrome-mac-imports.md)
 //!   chromium lock|fetch|root [--reference]|disk
 //!                       Chromium's root disk from pinned Debian packages (chromium.rs):
 //!                       write the lock, download and check the packages, unpack them
@@ -128,6 +133,7 @@ mod initramfs;
 mod input;
 mod ktest;
 mod libsearch;
+mod macimports;
 mod mesa;
 mod native;
 mod net;
@@ -229,7 +235,7 @@ fn main() -> ExitCode {
 }
 
 /// The commands [`dispatch`] runs (besides `start` and `pipeline`).
-const COMMANDS: [&str; 27] = [
+const COMMANDS: [&str; 28] = [
     "build",
     "aarch64",
     "prebuild",
@@ -257,6 +263,7 @@ const COMMANDS: [&str; 27] = [
     "toolkits",
     "chromium",
     "a64-diff",
+    "macos",
 ];
 
 /// Run `cargo xtask <args>`: the same functions for the command line and
@@ -292,6 +299,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("toolkits") => toolkits::command(rest),
         Some("chromium") => chromium::command(rest),
         Some("a64-diff") => a64_diff(rest),
+        Some("macos") => macimports::command(rest),
         other => Err(format!("no command {other:?}")),
     }
 }
