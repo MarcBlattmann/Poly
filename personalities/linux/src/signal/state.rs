@@ -285,19 +285,14 @@ impl LinuxProcess {
 
     /// execve(2) by thread `tid`, which becomes the only thread. execve(2):
     /// "The dispositions of any signals that are being caught are reset to
-    /// the default", ignored signals stay ignored, "the process's set of
-    /// pending signals" and "signal mask" are preserved, and "any
+    /// the default" ([`Self::reset_handlers`]), ignored signals stay
+    /// ignored, "the process's set of pending signals" and "signal mask" are preserved, and "any
     /// alternate signal stack is not preserved". The robust list and
     /// `clear_child_tid` belong to the old program and are dropped.
     pub fn exec(&mut self, tid: i32) {
         // execve(2) gives a process that shared its handlers its own.
         self.sighand = new_sighand_id();
-        for signal in 1..=crate::abi::signal::NSIG {
-            let action = self.actions.get(signal);
-            if action.handler != SIG_DFL && action.handler != SIG_IGN {
-                self.actions.set(signal, SigAction::default());
-            }
-        }
+        self.reset_handlers();
         let mut thread = self.threads.remove(&tid).unwrap_or_default();
         thread.altstack = AltStack::DISABLED;
         thread.robust_list = UserPtr::NULL;
@@ -320,6 +315,24 @@ impl LinuxProcess {
         self.dumpable = true;
         self.mempolicies.clear();
         self.forked = false;
+    }
+
+    /// Every signal that is not ignored goes back to the action of a new
+    /// process: `SIG_DFL`, no flags, an empty mask, no restorer. This is what
+    /// execve(2) and `CLONE_CLEAR_SIGHAND` do to the handlers. Not only
+    /// the caught signals are touched: a program that set a signal to
+    /// `SIG_DFL` again (as a launcher does before it execs) leaves its flags
+    /// (`SA_SIGINFO`, `SA_ONSTACK`, ...) behind, and the new program asking
+    /// sigaction(2) for the old action must not see them. Chromium's
+    /// seccomp-bpf sandbox takes such flags on `SIGSYS` for a handler of
+    /// someone else's and logs "Existing signal handler when trying to
+    /// install SIGSYS".
+    pub fn reset_handlers(&mut self) {
+        for signal in 1..=crate::abi::signal::NSIG {
+            if self.actions.get(signal).handler != SIG_IGN {
+                self.actions.set(signal, SigAction::default());
+            }
+        }
     }
 
     /// A new thread `tid` created by `parent_tid` with clone(2). It
@@ -837,6 +850,109 @@ mod tests {
         assert_eq!(p.thread(11).mask, SigSet::only(SIGHUP));
         assert_eq!(p.remove_thread(11).map(|t| t.mask), Some(SigSet::only(SIGHUP)));
         assert!(!p.has_thread(11));
+    }
+
+    /// The action Chromium's crash handler installs (SA_SIGINFO, SA_ONSTACK,
+    /// SA_RESTORER, SA_EXPOSE_TAGBITS) and the one its sandbox expects to
+    /// find under it: none.
+    fn sigsys_handler() -> SigAction {
+        SigAction {
+            handler: 0x40_2000,
+            flags: SA_SIGINFO | SA_ONSTACK | SA_RESTORER | SA_EXPOSE_TAGBITS,
+            restorer: 0x40_3000,
+            mask: SigSet::only(SIGUSR1).0,
+        }
+    }
+
+    #[test]
+    fn sigsys_starts_at_the_default_and_follows_fork() {
+        // sigaction(2): "initially SIG_DFL, flags 0, mask 0".
+        let mut p = LinuxProcess::new(10);
+        assert_eq!(p.actions.get(SIGSYS), SigAction::default());
+        assert_eq!(disposition(SIGSYS, &p.actions.get(SIGSYS)), Disposition::Default(DefaultAction::Core));
+        p.set_action(SIGSYS, sigsys_handler());
+        // fork(2): the child has copies of the parent's dispositions, and a
+        // change made later by either does not reach the other.
+        let mut child = p.fork(10, 20);
+        assert_eq!(child.actions.get(SIGSYS), sigsys_handler());
+        child.set_action(SIGSYS, SigAction::default());
+        assert_eq!(p.actions.get(SIGSYS), sigsys_handler(), "the parent keeps its own");
+        p.set_action(SIGSYS, SigAction { handler: SIG_IGN, ..SigAction::default() });
+        assert_eq!(child.actions.get(SIGSYS), SigAction::default(), "the child keeps its own");
+    }
+
+    #[test]
+    fn exec_leaves_no_flags_on_a_default_action() {
+        // A launcher puts a signal back to SIG_DFL with the old flags (it
+        // reads the action, changes the handler, installs the rest again),
+        // then execs. The new program asks for SIGSYS before it installs a
+        // handler of its own and must find a new process's action.
+        let mut p = LinuxProcess::new(10);
+        p.set_action(SIGSYS, sigsys_handler());
+        let reset = SigAction { handler: SIG_DFL, ..sigsys_handler() };
+        p.set_action(SIGSYS, reset);
+        assert_eq!(p.actions.get(SIGSYS).handler, SIG_DFL);
+        assert_ne!(p.actions.get(SIGSYS).flags, 0, "kept until the exec");
+        p.exec(10);
+        assert_eq!(p.actions.get(SIGSYS), SigAction::default(), "flags, mask and restorer too");
+        // A caught signal and a signal left with flags alike.
+        p.set_action(SIGUSR1, sigsys_handler());
+        p.set_action(SIGSYS, sigsys_handler());
+        p.exec(10);
+        for sig in [SIGUSR1, SIGSYS] {
+            assert_eq!(p.actions.get(sig), SigAction::default(), "signal {sig}");
+        }
+    }
+
+    #[test]
+    fn exec_keeps_what_is_ignored() {
+        let ign = SigAction { handler: SIG_IGN, ..SigAction::default() };
+        let mut p = LinuxProcess::new(10);
+        p.set_action(SIGSYS, ign);
+        p.set_action(SIGPIPE, ign);
+        p.exec(10);
+        assert_eq!(p.actions.get(SIGSYS), ign);
+        assert_eq!(p.actions.get(SIGPIPE), ign);
+    }
+
+    #[test]
+    fn fork_then_exec_gives_the_child_defaults_and_leaves_the_parent() {
+        let mut p = LinuxProcess::new(10);
+        p.set_action(SIGSYS, sigsys_handler());
+        let mut child = p.fork(10, 20);
+        child.exec(20);
+        assert_eq!(child.actions.get(SIGSYS), SigAction::default());
+        assert_eq!(p.actions.get(SIGSYS), sigsys_handler());
+    }
+
+    #[test]
+    fn clear_sighand_resets_like_exec_but_keeps_the_table_of_the_parent() {
+        // clone3(2) CLONE_CLEAR_SIGHAND: "all signal handlers in the child
+        // are reset to default" (ignored ones stay ignored, as in exec).
+        let ign = SigAction { handler: SIG_IGN, ..SigAction::default() };
+        let mut p = LinuxProcess::new(10);
+        p.set_action(SIGSYS, sigsys_handler());
+        p.set_action(SIGPIPE, ign);
+        let mut child = p.fork(10, 20);
+        child.reset_handlers();
+        assert_eq!(child.actions.get(SIGSYS), SigAction::default());
+        assert_eq!(child.actions.get(SIGPIPE), ign);
+        assert_eq!(p.actions.get(SIGSYS), sigsys_handler());
+    }
+
+    #[test]
+    fn threads_of_a_process_share_the_actions() {
+        // clone(2) CLONE_THREAD needs CLONE_SIGHAND: one table for all of
+        // them (here: one `actions` of the process).
+        let mut p = LinuxProcess::new(10);
+        p.add_thread(10, 11, false);
+        p.set_action(SIGSYS, sigsys_handler());
+        assert_eq!(p.thread_ids().count(), 2);
+        assert_eq!(p.actions.get(SIGSYS), sigsys_handler(), "seen by whichever thread asks");
+        // execve(2) in one of them ends the other and resets the table.
+        p.exec(11);
+        assert_eq!(p.thread_ids().collect::<Vec<_>>(), [11]);
+        assert_eq!(p.actions.get(SIGSYS), SigAction::default());
     }
 
     #[test]
