@@ -545,7 +545,8 @@ impl ProcSource for KernelProc {
                     id: m.id,
                     parent: m.parent.map_or(m.id, |(p, _)| p),
                     dev: (m.dev.major, m.dev.minor),
-                    root: b"/".to_vec(),
+                    // A bind mount of a subdirectory shows where in its file system it is.
+                    root: mount.as_ref().and_then(|mm| vfs().mount_root_path(mm).ok()).unwrap_or_else(|| b"/".to_vec()),
                     mount_point: at,
                     source: super::mounts::source(m.id)
                         .unwrap_or_else(|| super::disk::source_of(m.id, m.fs_name).into_bytes()),

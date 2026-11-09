@@ -79,7 +79,7 @@ impl Vfs {
         let loc = match self.resolve(ctx, cred, at, path, true) {
             // A file system that cannot answer (a FUSE server that is gone)
             // can still be unmounted: found by its mount point instead.
-            Err(Errno::ENOTCONN) => self.dead_mount_root(ctx, cred, at, path)?,
+            Err(Errno::ENOTCONN | Errno::ECONNREFUSED) => self.dead_mount_root(ctx, cred, at, path)?,
             r => r?,
         };
         if !loc.is_mount_root() {
@@ -188,7 +188,7 @@ impl Vfs {
     /// before unmounting a mount the kernel tracks itself (a disk).
     pub fn mount_at(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], follow: bool) -> Result<MountId> {
         let loc = match self.resolve(ctx, cred, at, path, follow) {
-            Err(Errno::ENOTCONN) => self.dead_mount_root(ctx, cred, at, path)?,
+            Err(Errno::ENOTCONN | Errno::ECONNREFUSED) => self.dead_mount_root(ctx, cred, at, path)?,
             r => r?,
         };
         if !loc.is_mount_root() {

@@ -91,6 +91,88 @@ impl core::fmt::Write for Log {
     }
 }
 
+/// The overlay the options in `data` describe: the layers are looked up as
+/// the options come (a missing directory is `ENOENT` even when a later option
+/// is wrong) and checked against each other. Read-only without an upper
+/// layer.
+pub(super) fn build_overlay(
+    files: &crate::fs::Files,
+    data: &[u8],
+) -> Result<(alloc::sync::Arc<dyn poly_vfs::FileSystem>, bool), Errno> {
+    use poly_overlayfs::{Config, Layer, Overlay, Redirect, is_inside};
+    let layer_of = |path: &[u8]| -> Result<Layer, Errno> {
+        let node = files.lookupat(AT_FDCWD, path, true).map_err(vfs_errno)?;
+        if node.attr().map_err(vfs_errno)?.kind != FileType::Directory {
+            return Err(Errno::EINVAL);
+        }
+        Ok(Layer { fs: node.mount().fs().clone(), root: node.ino() })
+    };
+    let mut lowers: Vec<Layer> = Vec::new();
+    let (mut upper, mut work) = (None, None);
+    let (mut userxattr, mut redirect) = (false, Redirect::Off);
+    for (name, value) in admin::options(data) {
+        match (name, value) {
+            (b"lowerdir", Some(v)) => {
+                for part in v.split(|&b| b == b':') {
+                    lowers.push(layer_of(part)?);
+                }
+            }
+            (b"upperdir", Some(v)) => upper = Some(layer_of(v)?),
+            (b"workdir", Some(v)) => work = Some(layer_of(v)?),
+            (b"userxattr", None) => userxattr = true,
+            (b"redirect_dir", Some(v)) => redirect = Redirect::from_value(v).map_err(vfs_errno)?,
+            (b"index" | b"metacopy" | b"nfs_export", Some(b"on" | b"off")) => {}
+            (b"xino", Some(b"on" | b"off" | b"auto")) => {}
+            (b"volatile" | b"default_permissions", None) => {}
+            _ => return Err(Errno::EINVAL),
+        }
+    }
+    if lowers.is_empty() {
+        return Err(Errno::EINVAL);
+    }
+    match (&upper, &work) {
+        (None, _) => {
+            // Without an upper layer the mount is read-only and needs two layers.
+            if lowers.len() < 2 {
+                return Err(Errno::EINVAL);
+            }
+            work = None;
+        }
+        (Some(u), None) => {
+            let _ = u;
+            return Err(Errno::EINVAL);
+        }
+        (Some(u), Some(w)) => {
+            if !alloc::sync::Arc::ptr_eq(&u.fs, &w.fs)
+                || (u.root == w.root)
+                || is_inside(&*w.fs, w.root, u.root)
+                || is_inside(&*u.fs, u.root, w.root)
+            {
+                return Err(Errno::EINVAL);
+            }
+        }
+    }
+    let same = |a: &Layer, b: &Layer| alloc::sync::Arc::ptr_eq(&a.fs, &b.fs) && a.root == b.root;
+    for (i, l) in lowers.iter().enumerate() {
+        if let Some(u) = &upper
+            && (same(l, u) || (alloc::sync::Arc::ptr_eq(&l.fs, &u.fs) && is_inside(&*l.fs, l.root, u.root)))
+        {
+            return Err(Errno::ELOOP);
+        }
+        if lowers[..i].iter().any(|o| same(o, l)) {
+            return Err(Errno::ELOOP);
+        }
+    }
+    let _ = work;
+    let read_only = upper.is_none();
+    let overlay =
+        Overlay::<crate::sync::RawMutex>::new(Config { upper, lowers, userxattr, redirect }).map_err(vfs_errno)?;
+    // Not behind the page cache: writes reach the upper layer at once,
+    // where the layers can be looked at directly.
+    let fs: alloc::sync::Arc<dyn poly_vfs::FileSystem> = alloc::sync::Arc::new(overlay);
+    Ok((fs, read_only))
+}
+
 impl Thread<'_> {
     /// mount(2) of a squashfs image from a loop device (ADR 0168): the
     /// device's file system (the same one when it is mounted already), never
@@ -208,82 +290,12 @@ impl Thread<'_> {
         flags: admin::MountFlags,
         data: &[u8],
     ) -> Result<(), Errno> {
-        use poly_overlayfs::{Config, Layer, Overlay, Redirect, is_inside};
         let files = &self.process().files;
         let tnode = files.lookupat(AT_FDCWD, target, true).map_err(vfs_errno)?;
         if tnode.attr().map_err(vfs_errno)?.kind != FileType::Directory {
             return Err(Errno::ENOTDIR);
         }
-        let layer_of = |path: &[u8]| -> Result<Layer, Errno> {
-            let node = files.lookupat(AT_FDCWD, path, true).map_err(vfs_errno)?;
-            if node.attr().map_err(vfs_errno)?.kind != FileType::Directory {
-                return Err(Errno::EINVAL);
-            }
-            Ok(Layer { fs: node.mount().fs().clone(), root: node.ino() })
-        };
-        let mut lowers: Vec<Layer> = Vec::new();
-        let (mut upper, mut work) = (None, None);
-        let (mut userxattr, mut redirect) = (false, Redirect::Off);
-        for (name, value) in admin::options(data) {
-            match (name, value) {
-                (b"lowerdir", Some(v)) => {
-                    for part in v.split(|&b| b == b':') {
-                        lowers.push(layer_of(part)?);
-                    }
-                }
-                (b"upperdir", Some(v)) => upper = Some(layer_of(v)?),
-                (b"workdir", Some(v)) => work = Some(layer_of(v)?),
-                (b"userxattr", None) => userxattr = true,
-                (b"redirect_dir", Some(v)) => redirect = Redirect::from_value(v).map_err(vfs_errno)?,
-                (b"index" | b"metacopy" | b"nfs_export", Some(b"on" | b"off")) => {}
-                (b"xino", Some(b"on" | b"off" | b"auto")) => {}
-                (b"volatile" | b"default_permissions", None) => {}
-                _ => return Err(Errno::EINVAL),
-            }
-        }
-        if lowers.is_empty() {
-            return Err(Errno::EINVAL);
-        }
-        match (&upper, &work) {
-            (None, _) => {
-                // Without an upper layer the mount is read-only and needs two layers.
-                if lowers.len() < 2 {
-                    return Err(Errno::EINVAL);
-                }
-                work = None;
-            }
-            (Some(u), None) => {
-                let _ = u;
-                return Err(Errno::EINVAL);
-            }
-            (Some(u), Some(w)) => {
-                if !alloc::sync::Arc::ptr_eq(&u.fs, &w.fs)
-                    || (u.root == w.root)
-                    || is_inside(&*w.fs, w.root, u.root)
-                    || is_inside(&*u.fs, u.root, w.root)
-                {
-                    return Err(Errno::EINVAL);
-                }
-            }
-        }
-        let same = |a: &Layer, b: &Layer| alloc::sync::Arc::ptr_eq(&a.fs, &b.fs) && a.root == b.root;
-        for (i, l) in lowers.iter().enumerate() {
-            if let Some(u) = &upper
-                && (same(l, u) || (alloc::sync::Arc::ptr_eq(&l.fs, &u.fs) && is_inside(&*l.fs, l.root, u.root)))
-            {
-                return Err(Errno::ELOOP);
-            }
-            if lowers[..i].iter().any(|o| same(o, l)) {
-                return Err(Errno::ELOOP);
-            }
-        }
-        let _ = work;
-        let read_only = upper.is_none();
-        let overlay =
-            Overlay::<crate::sync::RawMutex>::new(Config { upper, lowers, userxattr, redirect }).map_err(vfs_errno)?;
-        // Not behind the page cache: writes reach the upper layer at once,
-        // where the layers can be looked at directly.
-        let fs: alloc::sync::Arc<dyn poly_vfs::FileSystem> = alloc::sync::Arc::new(overlay);
+        let (fs, read_only) = build_overlay(files, data)?;
         let mut mflags = vfs_flags(flags);
         mflags.read_only |= read_only;
         let id = files.mount_fs(target, fs, mflags).map_err(vfs_errno)?;

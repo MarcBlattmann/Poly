@@ -16,7 +16,7 @@ use crate::fs::{self, mounts};
 use crate::sync::Mutex;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use poly_personality_linux::admin;
+use poly_personality_linux::admin::{self, FsType};
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::mountapi::{
     AttrChange, Command, CreateRequest, FsContext, MountDesc, MountLink, PathAt, SuperblockOps, join_attrs,
@@ -87,10 +87,20 @@ impl FileObject for ContextFile {
 /// [`SuperblockOps`] on a context's [`Made`].
 struct Ops<'a> {
     made: &'a mut Made,
+    files: &'a crate::fs::Files,
 }
 
 impl SuperblockOps for Ops<'_> {
     fn create(&mut self, req: &CreateRequest) -> Result<(), Errno> {
+        if req.fstype == FsType::Overlay {
+            // The layers named by the parameters, looked up now.
+            let (fs, read_only) = super::admin::build_overlay(self.files, &req.data)?;
+            self.made.fs = Some(fs);
+            self.made.source = if req.source == b"none" { b"overlay".to_vec() } else { req.source.clone() };
+            self.made.options = req.data.clone();
+            self.made.read_only = req.read_only || read_only;
+            return Ok(());
+        }
         let fs = mounts::new_virtual(req.fstype, req.root).map_err(vfs_errno)?;
         self.made.fs = Some(fs);
         self.made.source = req.source.clone();
@@ -214,7 +224,7 @@ impl Thread<'_> {
         let obj = self.context_file(fd)?;
         let mut state = obj.state.lock();
         let mut made = obj.made.lock();
-        state.config(cmd, &mut Ops { made: &mut made })
+        state.config(cmd, &mut Ops { made: &mut made, files: &self.process().files })
     }
 
     pub(super) fn mnt_fsmount(&mut self, fd: i32, attrs: u64, cloexec: bool) -> Result<i32, Errno> {
