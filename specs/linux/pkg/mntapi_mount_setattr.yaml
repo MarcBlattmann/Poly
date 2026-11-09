@@ -1,0 +1,69 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/mntapi_mount_setattr              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (the unprivileged cases as uid/gid 65534 without capabilities); umask 022; unprivileged user namespaces allowed; every test makes a mount namespace of its own, makes / MS_REC|MS_PRIVATE and mounts a tmpfs on a private directory below /tmp"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  mount_setattr(dfd, path, flags, attr, size) (syscall 442) changes the
+  options of the mount at path (its top directory; a directory inside a
+  mount or a file is EINVAL, a missing name ENOENT) with struct mount_attr {
+  u64 attr_set; u64 attr_clr; u64 propagation; u64 userns_fd; } (32 bytes,
+  MOUNT_ATTR_SIZE_VER0). Bits of attr_clr are cleared first, then bits of
+  attr_set are set (a bit in both ends up set). The bits: RDONLY 0x01 (EROFS
+  on creating a file), NOSUID 0x02, NODEV 0x04 (opening a device node is
+  EACCES), NOEXEC 0x08 (execve EACCES), the atime mode in 0x70 (RELATIME 0,
+  NOATIME 0x10, STRICTATIME 0x20: to change it attr_clr must contain all of
+  0x70 whenever attr_set has a non-zero value, else EINVAL; clearing alone
+  gives RELATIME), NODIRATIME 0x80, IDMAP 0x100000 (needs userns_fd for a
+  user namespace and cannot be in attr_clr), NOSYMFOLLOW 0x200000 (a path
+  through a symbolic link is ELOOP). Other bits in attr_set or attr_clr are
+  EINVAL and change nothing. statfs f_flags shows them (ST_RDONLY 1, NOSUID
+  2, NODEV 4, NOEXEC 8, NOATIME 0x400, NODIRATIME 0x800, RELATIME 0x1000,
+  NOSYMFOLLOW 0x2000; the kernel's 0x20 bit is set always). Only this mount
+  changes, not other mounts of the same filesystem (a bind mount keeps its
+  flags). Propagation (MS_SHARED 1<<20, MS_SLAVE 1<<19, MS_PRIVATE 1<<18,
+  MS_UNBINDABLE 1<<17; 0 changes nothing; two together or another value
+  EINVAL) acts like mount(2): a bind mount of a shared mount is a peer so
+  mounts below one appear below the other, after MS_SLAVE the slave receives
+  but does not send, after MS_PRIVATE it receives nothing new, and an
+  unbindable mount cannot be bind mounted (EINVAL). Flags:
+  AT_SYMLINK_NOFOLLOW 0x100, AT_NO_AUTOMOUNT 0x800, AT_EMPTY_PATH 0x1000
+  (path empty: dfd itself, also an fsmount or open_tree descriptor, i.e. a
+  detached mount), AT_RECURSIVE 0x8000 (the mount and every mount below it;
+  setting RDONLY fails with EBUSY, changing nothing, when a file on one of
+  them is open for writing); other bits EINVAL; an empty path without
+  AT_EMPTY_PATH is ENOENT. size: below 32 is EINVAL; above 32 is accepted
+  when every byte after the first 32 is zero, else E2BIG; above 4096 is
+  E2BIG. An invalid dfd is EBADF (ignored for absolute paths); a NULL or
+  invalid attr or path pointer is EFAULT. Needs CAP_SYS_ADMIN (EPERM first,
+  even for a NULL attr or a missing path).
+returns:
+  success: "0"
+  detached: "on an open_tree clone or fsmount descriptor the options are set before it is attached and stay; the original mount of a clone is unchanged"
+  idmap: "MOUNT_ATTR_IDMAP with userns_fd a descriptor that is not a user namespace: EINVAL; not open: EBADF; without userns_fd: EINVAL; userns_fd is ignored without the flag"
+errors:
+  bad_attr: "EINVAL (22): unknown bits; an atime value without clearing 0x70; two atime values; 0x40"
+  bad_propagation: "EINVAL (22): two propagation types, or a value other than the four"
+  bad_size: "EINVAL (22): size < 32; E2BIG (7): non-zero tail beyond 32 bytes, or size > 4096"
+  bad_flags: "EINVAL (22): flags with bits outside the four"
+  not_mount_top: "EINVAL (22): path is a directory inside a mount or a regular file; ENOENT (2): missing"
+  busy: "EBUSY (16): MOUNT_ATTR_RDONLY on a mount (also recursive) with a file open for writing; nothing changes"
+  bad_dfd: "EBADF (9): invalid dfd with a relative or empty path"
+  bad_pointer: "EFAULT (14): NULL or invalid attr or path"
+  permission: "EPERM (1): no CAP_SYS_ADMIN; checked before every other argument"
+side_effects: >
+  Changes the options and propagation of mounts in the caller's mount
+  namespace (or of a detached mount).
+threading: "descriptors are per process (shared file table); no other thread-specific behaviour"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: MOUNT_ATTR_*, struct mount_attr from linux/mount.h; AT_* from linux/fcntl.h. An id-mapped mount
+# (MOUNT_ATTR_IDMAP with a real user namespace) is not tested.

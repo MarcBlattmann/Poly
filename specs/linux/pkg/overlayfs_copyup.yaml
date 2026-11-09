@@ -1,0 +1,91 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/pkg/overlayfs_copyup.yaml
+id: linux/api/pkg/overlayfs_copyup
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64; tests run as root inside a private mount namespace; overlay layers are directories on tmpfs mounts made by the test; mounted with index=off, metacopy=off and redirect_dir=off unless a test sets otherwise; umask 022"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  Copy-up: an overlay mount (see overlayfs_mount) never changes a lower layer.
+  When a lower-layer file or directory is modified through the merged view it
+  is first copied to the upper layer (with metacopy=off the data are copied
+  too), keeping mode, owner, times, extended attributes and content; then the
+  change is applied to the upper copy, and the merged view shows the upper
+  copy from then on.
+  Triggers: opening a regular file with O_WRONLY or O_RDWR copies it at open
+  time (before any write, even if nothing is written); O_TRUNC, truncate(2),
+  ftruncate(2), write at an offset, O_APPEND writes, a MAP_SHARED writable
+  mapping of a file opened O_RDWR, chmod/fchmod, chown/fchown/lchown (also on
+  a descriptor opened O_RDONLY), utimensat, setxattr and removexattr copy the
+  object up first. chown by root clears set-user-ID on a regular file. Lower
+  objects are not copied by stat, access, readlink, readdir, opening O_RDONLY,
+  reading, or MAP_PRIVATE read mappings.
+  The copy has the lower object's mode, owner and size (and times, except where
+  the change sets them); sparse files are copied with holes reading as zeros;
+  the copy of a lower file larger than one page reads the same as before. A
+  symlink is copied as a symlink (target text kept); the file it points to is
+  not copied. Special files (fifo, device node) of a lower layer show through
+  with their type and device number.
+  Directories: changing a directory's metadata copies it up empty (its lower
+  children still show through the merged view); creating anything inside a
+  lower-only directory first copies every missing directory on the path as an
+  empty directory with the lower directory's mode and owner (not the
+  creator's), one per level; siblings and other children are not copied. New
+  entries (file, directory, symlink, fifo, device) exist only in the upper
+  layer and get the creator's ids and mode minus umask, or, inside a
+  set-group-ID directory, the directory's group (and for a directory the
+  set-group-ID bit as well).
+  Deleting: removing a name that exists in a lower layer, including one that
+  was copied up earlier, leaves a whiteout in the upper layer (see
+  overlayfs_whiteout); removing an upper-only name leaves nothing; a file
+  unlinked while open stays readable through the descriptor.
+  Hard links: with index=off a lower file with two names is not kept as one
+  inode after copy-up: writing through one name copies that name up and the
+  other name keeps the old content (nlink of the merged file before the change
+  is 2, as in the lower layer). link(2) of a lower file inside the merged view
+  copies the file up and creates the new name in the upper layer; both names
+  then share the upper inode (nlink 2; a write through one is seen through the
+  other).
+  Rename: renaming a lower file moves its (copied-up) upper copy to the new
+  name and leaves a whiteout under the old name; the lower layer is untouched;
+  renaming over an existing name replaces it in the merged view (a lower file
+  of that name is hidden, not changed); renaming an upper-only file leaves no
+  whiteout; across directories it works the same. renameat2 flags:
+  RENAME_NOREPLACE gives EEXIST for an existing target (also a lower one),
+  RENAME_EXCHANGE of two files swaps them (ENOENT if one is missing),
+  RENAME_WHITEOUT is EINVAL. Renaming a directory that exists in a lower layer:
+  EXDEV with redirect_dir=off or follow; with redirect_dir=on it succeeds: the
+  merged view shows the directory with all its content under the new name, the
+  old name is gone, the upper layer has an empty directory under the new name
+  carrying "trusted.overlay.redirect" (value: the old name alone when the
+  directory stays in the same parent, "/path" from the overlay root when it
+  moves to another directory) and a whiteout under the old name; a second
+  rename keeps pointing at the original lower path; changes below the renamed
+  directory are copied up under the new name; a directory that is only in the
+  upper layer can always be renamed. Extended attributes named
+  "trusted.overlay.*" are hidden from getxattr (ENODATA) and listxattr through
+  the merged view; other attributes of the lower and upper object are visible,
+  and removing a lower attribute is done on the copy.
+returns:
+  copy_up: "0 for the triggering call; the upper layer then has the object (visible by looking at the upper directory directly)"
+  open_for_write: "a descriptor; the upper copy exists already and still has the old content"
+errors:
+  rename_dir_exdev: "EXDEV (18): rename of a directory that exists in a lower layer, redirect_dir off or follow"
+  rename_exists: "EEXIST (17): RENAME_NOREPLACE onto an existing name"
+  rename_whiteout: "EINVAL (22): RENAME_WHITEOUT on an overlay"
+  xattr_hidden: "ENODATA (61): getxattr of trusted.overlay.* through the merged view"
+side_effects: "The upper directory gains the copied objects and whiteouts; lower directories are never changed."
+threading: "ordinary filesystem semantics"
+ordering: "the copy exists before the first byte of a write lands (open with O_RDWR or O_WRONLY copies at open)"
+timing:
+  typical: "copy-up of a small file in microseconds; of larger files proportional to size"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+# Notes: the tests look into the upper directory directly (a path on the
+# tmpfs below the overlay) to see what was copied; inode and device numbers
+# are never printed. trusted.* attributes need CAP_SYS_ADMIN (root). With
+# metacopy=on a metadata-only change would copy only the metadata: Poly may
+# leave metacopy unsupported (the tests mount with metacopy=off).
