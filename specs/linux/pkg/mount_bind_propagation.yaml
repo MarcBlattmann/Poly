@@ -1,0 +1,100 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/pkg/mount_bind_propagation.yaml
+id: linux/api/pkg/mount_bind_propagation
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64; tests run as root inside a mount namespace of their own (unshare(CLONE_NEWNS), MS_REC|MS_PRIVATE on /), on tmpfs mounts they make themselves; umask 022"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  The parts of mount(2) and umount2(2) (syscalls 165 and 166) that
+  bubblewrap, container runtimes and installers use to build a root: bind
+  mounts, mount flags on them, moving mounts, propagation types and unmounting.
+  Bind (MS_BIND): makes a directory or file visible at a second path; same
+  inodes (st_dev, st_ino), writes through either path show in the other, statfs
+  reports the same filesystem; file onto file works (bubblewrap binds single
+  files); mixed kinds are ENOTDIR; missing source or target ENOENT; the
+  filesystem type argument is ignored; a directory bound onto itself becomes a
+  mount point; stacked mounts on one path show the last, and each umount2
+  uncovers the previous. A plain bind shows the source directory without the
+  mounts below it (a submount's directory looks like the empty mount-point
+  directory); MS_BIND|MS_REC copies the whole tree of mounts below the source,
+  except submounts that are unbindable. Remounting the top of a recursive bind
+  does not touch the copies of the submounts.
+  Per-mount flags: mount(NULL, path, NULL, MS_REMOUNT|MS_BIND|flags, NULL) on a
+  mount point changes that mount only: MS_RDONLY, MS_NOSUID, MS_NODEV,
+  MS_NOEXEC (statfs f_flags ST_*), MS_NOATIME, MS_NODIRATIME, MS_RELATIME,
+  MS_STRICTATIME; the flags given replace the earlier ones (a remount with none
+  clears them). The source path and other binds of the same filesystem keep
+  theirs. A read-only bind returns EROFS for writes, creates and unlinks
+  through it while the source stays writable. MS_REMOUNT without MS_BIND
+  changes the filesystem (superblock) for every mount of it (all see EROFS
+  after MS_RDONLY). Remounting something that is not a mount point is EINVAL;
+  a missing path ENOENT.
+  Move (MS_MOVE): moves a mount point (and mounts below it) to another
+  directory; files stay reachable, open files keep working, the old path is the
+  plain directory it covered; the mount's flags are kept; the target may be a
+  mount point (the moved mount is stacked on it). Errors: source not a mount
+  point EINVAL, missing source or target ENOENT, target inside the moved mount
+  ELOOP, parent mount shared EINVAL (works after it is made private).
+  Propagation: MS_SHARED, MS_PRIVATE, MS_SLAVE, MS_UNBINDABLE (each optionally
+  with MS_REC for the whole tree below) set the type of the mount at the path
+  (a mount point; otherwise EINVAL; exactly one type per call, else EINVAL;
+  source and fstype arguments ignored; missing path ENOENT). A bind of a shared
+  mount is its peer: a mount or umount below one appears below the other. After
+  MS_PRIVATE nothing propagates; after MS_SLAVE the mount still receives events
+  from its former peers but sends none; MS_SLAVE on a private mount changes
+  nothing. A mount made below a shared mount is shared as well. Mounts that
+  existed before are not reached without MS_REC. MS_UNBINDABLE makes a bind of
+  that mount EINVAL (also with MS_REC), unaffected submounts can still be bound;
+  made private again it can be bound.
+  Across namespaces: unshare(CLONE_NEWNS) copies the mount table; mounts that
+  are shared remain peers of the original namespace's mounts, so a mount or
+  umount below one (also of a mount that existed before the copy) appears in
+  both; if the child makes it a slave the parent's events reach the child but
+  not the reverse; if private, or if it was never shared, nothing crosses.
+  umount2(path, flags): flag 0 unmounts the top mount at the path; EINVAL if
+  the path is not a mount point (also after the last was removed), ENOENT if it
+  does not exist, EBUSY with an open file on it, the caller's working directory
+  on it or another mount below it (unmount that first). MNT_FORCE on an idle
+  mount is a plain unmount, also EBUSY if busy. MNT_DETACH removes the mount
+  (and the mounts below it) from the namespace at once even if busy; an open
+  file keeps working. MNT_EXPIRE: EINVAL with MNT_FORCE or MNT_DETACH; EBUSY on
+  a busy mount; on an idle one the first call only marks it and returns EAGAIN
+  and the second call unmounts it; using the mount in between (creating a file
+  on it) resets the mark, so the next call returns EAGAIN again and the one
+  after it unmounts.
+  UMOUNT_NOFOLLOW (8): a symbolic link to a mount point is not followed (EINVAL);
+  without it the link is followed. Unknown flag bits are EINVAL. A caller
+  without CAP_SYS_ADMIN gets EPERM.
+returns:
+  success: "0"
+  bind_view: "same st_dev and st_ino as the source; the same file contents"
+  statfs: "f_flags reports the per-mount ST_RDONLY|ST_NOSUID|ST_NODEV|ST_NOEXEC of the path's mount"
+errors:
+  bind_kinds: "ENOTDIR (20): directory onto file or file onto directory"
+  missing: "ENOENT (2): source or target (or the path of a remount, a propagation change, umount) missing"
+  not_mountpoint: "EINVAL (22): remount, propagation change, MS_MOVE source or umount2 of a path that is not a mount point"
+  unbindable: "EINVAL (22): MS_BIND (also with MS_REC) of an unbindable mount"
+  two_types: "EINVAL (22): more than one of MS_SHARED, MS_PRIVATE, MS_SLAVE, MS_UNBINDABLE in one call"
+  move_loop: "ELOOP (40): MS_MOVE into the moved mount itself"
+  move_shared: "EINVAL (22): MS_MOVE of a mount whose parent mount is shared"
+  busy: "EBUSY (16): umount2 with an open file, the cwd, or a submount (flag 0, MNT_FORCE, MNT_EXPIRE)"
+  expire_flags: "EINVAL (22): MNT_EXPIRE with MNT_FORCE or MNT_DETACH"
+  expire_first: "EAGAIN (11): first MNT_EXPIRE call on an idle mount (and the first after the mount was used)"
+  nofollow: "EINVAL (22): UMOUNT_NOFOLLOW on a symbolic link"
+  bad_flags: "EINVAL (22): unknown umount2 flag bits"
+  erofs: "EROFS (30): writes through a read-only mount"
+  permission: "EPERM (1): umount2 or mount without CAP_SYS_ADMIN"
+side_effects: "mounts appear, change and disappear in the caller's mount namespace (and in peers')"
+threading: "per mount namespace"
+ordering: "events propagate before the mount call returns"
+timing:
+  typical: "microseconds"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+# Notes: constants from linux/mount.h (MS_*, MNT_*, UMOUNT_NOFOLLOW) and
+# linux/statfs.h (ST_*). Tests that use two namespaces take turns through
+# pipes.
