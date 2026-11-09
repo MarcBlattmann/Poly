@@ -285,10 +285,7 @@ fn dispatch(args: &[String]) -> Result {
 /// clang and lld; elsewhere it says so and succeeds. Not part of `cargo xtask ci`.
 fn a64_diff(args: &[String]) -> Result {
     let args: &[String] = if args.is_empty() { &["run".to_string()] } else { args };
-    step(
-        "a64-diff",
-        cargo().current_dir(root()).args(["run", "--quiet", "--package", "a64diff", "--"]).args(args),
-    )
+    step("a64-diff", cargo().current_dir(root()).args(["run", "--quiet", "--package", "a64diff", "--"]).args(args))
 }
 
 fn root() -> PathBuf {
