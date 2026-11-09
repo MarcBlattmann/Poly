@@ -203,6 +203,10 @@ extern "system" fn logging_proc(h: u64, msg: u32, w: u64, l: u64) -> u64 {
         focus::WM_KILLFOCUS => log(format!("{t} WM_KILLFOCUS")),
         focus::WM_CANCELMODE => log(format!("{t} WM_CANCELMODE")),
         0x0215 => log(format!("{t} WM_CAPTURECHANGED lparam={}", if l == 0 { '0' } else { tag(l) })),
+        0x0200 => log(format!("{t} WM_MOUSEMOVE client={},{}", l as u16 as i16, (l >> 16) as u16 as i16)),
+        0x00A0 => log(format!("{t} WM_NCMOUSEMOVE hit={w}")),
+        0x02A3 => log(format!("{t} WM_MOUSELEAVE")),
+        0x02A2 => log(format!("{t} WM_NCMOUSELEAVE")),
         WM_DESTROY => log(format!("{t} WM_DESTROY")),
         WM_NCDESTROY => log(format!("{t} WM_NCDESTROY")),
         _ => {}

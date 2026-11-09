@@ -377,3 +377,66 @@ fn session_zero_minimize_flags_follow_the_command_and_the_visibility() {
         );
     });
 }
+
+#[test]
+fn set_foreground_window_across_threads_follows_the_sheet() {
+    // SetForegroundWindow.yaml `other_thread`: the target's thread gets the
+    // activation itself, whichever other windows are visible meanwhile.
+    use crate::user::focus::set_foreground_window;
+    with_env(|e| {
+        interactive(e);
+        register(e, "Sfw");
+        let a = create(e, 'A', TOP, "Sfw", WS_POPUP | WS_VISIBLE, 50, 50, 200, 150, 0, 0);
+        e.tid.set(2);
+        let t = create(e, 'T', 0, "Sfw", WS_POPUP | WS_VISIBLE, 300, 50, 150, 100, 0, 0);
+        e.tid.set(3);
+        let u = create(e, 'U', 0, "Sfw", WS_POPUP | WS_VISIBLE, 500, 50, 150, 100, 0, 0);
+        e.tid.set(1);
+        take_log();
+        // A to T: A is deactivated (and loses the focus), T is active with the focus.
+        assert!(set_foreground_window(e, t));
+        assert_eq!(
+            take_log(),
+            ["A WM_NCACTIVATE w=0x0", "A WM_ACTIVATE w=0x0", "A WM_ACTIVATEAPP w=0x0", "A WM_KILLFOCUS",]
+        );
+        assert_eq!(fg(e), t as u32);
+        assert_eq!(input_state(e), (0, 0, 0));
+        e.tid.set(3);
+        assert_eq!(input_state(e), (0, 0, 0), "the window above T was not handed the foreground on the way");
+        e.tid.set(2);
+        assert_eq!(input_state(e), (t as u32, t as u32, 0));
+        // Again: nothing.
+        assert!(set_foreground_window(e, t));
+        assert!(take_log().is_empty());
+        // Back to A from the main thread: A gets the whole activation sequence.
+        e.tid.set(1);
+        assert!(set_foreground_window(e, a));
+        let log = take_log();
+        // A is topmost and T is not: A needs no z-order change (no WM_WINDOWPOSCHANGED).
+        assert_eq!(
+            log,
+            [
+                "A WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x3",
+                "A WM_ACTIVATEAPP w=0x1",
+                "A WM_NCACTIVATE w=0x1",
+                "A WM_ACTIVATE w=0x1",
+                "A WM_SETFOCUS",
+            ]
+        );
+        assert!(log.iter().any(|l| l == "A WM_ACTIVATEAPP w=0x1"), "{log:?}");
+        assert!(log.iter().any(|l| l == "A WM_NCACTIVATE w=0x1"), "{log:?}");
+        assert!(log.iter().any(|l| l == "A WM_ACTIVATE w=0x1"), "{log:?}");
+        assert!(log.iter().any(|l| l == "A WM_SETFOCUS"), "{log:?}");
+        assert_eq!(fg(e), a as u32);
+        // To U (a third thread's window) from A's thread, and U never took a
+        // detour through another thread's window.
+        e.tid.set(1);
+        take_log();
+        assert!(set_foreground_window(e, u));
+        assert_eq!(fg(e), u as u32);
+        e.tid.set(3);
+        assert_eq!(input_state(e), (u as u32, u as u32, 0));
+        e.tid.set(2);
+        assert_eq!(input_state(e), (0, 0, 0), "T was not handed the foreground on the way");
+    });
+}

@@ -253,6 +253,12 @@ pub fn in_background<E: Env + ?Sized>(env: &E, pid: u32) -> bool {
 /// WM_ACTIVATE(WA_INACTIVE), WM_ACTIVATEAPP(0) to every top-level window
 /// of the thread, WM_KILLFOCUS (unless `focus_first` killed it already).
 pub fn deactivate_away<E: Env + ?Sized>(env: &E, focus_done: bool) {
+    deactivate(env, focus_done, false);
+}
+
+/// As [`deactivate_away`]; with `names_next` the foreground is left alone: the caller
+/// gives it to a window it names.
+fn deactivate<E: Env + ?Sized>(env: &E, focus_done: bool, names_next: bool) {
     let st = input(env);
     if st.active != 0
         && let Some(xi) = info(env, u64::from(st.active))
@@ -268,7 +274,9 @@ pub fn deactivate_away<E: Env + ?Sized>(env: &E, focus_done: bool) {
     if !focus_done && st.focus != 0 {
         send(env, u64::from(st.focus), WM_KILLFOCUS, 0, 0);
     }
-    let fg = if st.fg_mine { SET_FOREGROUND } else { 0 };
+    // `names_next`: the caller names the new foreground window itself (SetForegroundWindow):
+    // nothing is handed over meanwhile, and no keeper is raised over the windows of the thread.
+    let fg = if st.fg_mine && !names_next { SET_FOREGROUND } else { 0 };
     set(env, 0, 0, SET_ACTIVE | SET_FOCUS | fg);
 }
 
@@ -478,7 +486,7 @@ pub fn set_foreground_window<E: Env + ?Sized>(env: &E, hwnd: u64) -> bool {
         return true;
     }
     if foreign(env, &i) {
-        deactivate_away(env, false);
+        deactivate(env, false, true);
         env.call(Request::GiveForeground { hwnd: i.hwnd });
         return true;
     }

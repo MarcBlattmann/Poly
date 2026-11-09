@@ -116,3 +116,59 @@ fn a_child_is_hit_only_inside_its_parents_client_area() {
         assert_eq!(at(101, 400), f, "the left frame");
     });
 }
+
+/// Dispatch every message the thread has queued (mouse messages through
+/// the retrieval steps `GetMessage` does).
+fn pump(e: &TestEnv) {
+    let mut m = CMsg::default();
+    while peek_message(e, &mut m, 0, 0, 0, PM_REMOVE) {
+        dispatch_message(e, &m);
+    }
+}
+
+fn move_to(e: &TestEnv, x: i32, y: i32) {
+    e.call(Request::Cursor { set: true, x, y });
+    pump(e);
+}
+
+#[test]
+fn leaving_the_client_area_ends_the_client_tracking_also_for_the_frame_and_the_desktop() {
+    // TrackMouseEvent.yaml `leave`, `nonclient`: a client TME_LEAVE ends when the cursor goes
+    // into the window's own caption (WM_MOUSELEAVE after WM_NCMOUSEMOVE) or over no window;
+    // moving from the caption into the client area ends DefWindowProc's tracking of the frame.
+    with_env(|e| {
+        interactive(e);
+        register(e, "Nc");
+        let ow = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | 0x0003_0000;
+        let f = create(e, 'F', WS_EX_NOACTIVATE | WS_EX_TOPMOST, "Nc", ow | WS_VISIBLE, 100, 100, 300, 200, 0, 0);
+        move_to(e, 500, 500);
+        let track = |flags: u32| {
+            e.call(Request::TrackMouse { hwnd: f as u32, flags, hover: 0 });
+        };
+        move_to(e, 200, 250);
+        take_log();
+        track(0x2);
+        move_to(e, 200, 112);
+        assert_eq!(take_log(), ["F WM_SETCURSOR window=F hit=2 msg=512", "F WM_NCMOUSEMOVE hit=2", "F WM_MOUSELEAVE"]);
+        move_to(e, 210, 250);
+        assert_eq!(
+            take_log(),
+            [
+                "F WM_NCHITTEST screen=210,250",
+                "F WM_SETCURSOR window=F hit=1 msg=512",
+                "F WM_MOUSEMOVE client=102,119",
+                "F WM_NCMOUSELEAVE"
+            ]
+        );
+        // Tracked again in the client area, the cursor goes to the empty desktop.
+        track(0x2);
+        move_to(e, 1500, 600);
+        assert_eq!(take_log(), ["F WM_MOUSELEAVE"]);
+        // A hover that was over the window ends there too.
+        move_to(e, 210, 250);
+        take_log();
+        e.call(Request::TrackMouse { hwnd: f as u32, flags: 0x1, hover: 100 });
+        move_to(e, 1500, 600);
+        assert_eq!(e.call(Request::TrackMouse { hwnd: 0, flags: 0x4000_0000, hover: 0 }), Reply::Value { value: 0 });
+    });
+}

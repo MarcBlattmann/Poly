@@ -457,10 +457,19 @@ impl Wm {
         let (x, y) = self.cursor;
         let target = self.mouse_target(x, y);
         if target == 0 {
+            // The cursor is over no window: every tracked window was left
+            // (TrackMouseEvent.yaml `leave`), the hover is over.
+            if msg == WM_MOUSEMOVE {
+                self.end_tracking(ctx, 0, (x, y), fx);
+            }
             return;
         }
         let Some(thread) = self.thread_of(target) else { return };
         if thread.0 == 0 || thread == super::input::KEEPER {
+            // The desktop, or a window of no process of ours.
+            if msg == WM_MOUSEMOVE {
+                self.end_tracking(ctx, 0, (x, y), fx);
+            }
             return;
         }
         let keys = self.mouse_keys();
@@ -491,19 +500,38 @@ impl Wm {
         fx.wake.push(key);
         // Tracked windows the cursor left get WM_MOUSELEAVE after the move's
         // messages (TrackMouseEvent.yaml `leave`).
-        if msg == WM_MOUSEMOVE && !self.tracking.is_empty() {
-            let left: Vec<u32> = self.tracking.iter().filter(|t| t.0 != target).map(|t| t.0).collect();
-            self.tracking.retain(|t| t.0 == target);
+        if msg == WM_MOUSEMOVE {
+            self.end_tracking(ctx, target, (x, y), fx);
+        }
+    }
+
+    /// A move of the cursor to `at`, over window `target` (0: none): the
+    /// windows whose client area it left get WM_MOUSELEAVE after the move's
+    /// messages (leaving for the window's own frame counts: the tracking is
+    /// of the client area; TrackMouseEvent.yaml `leave`, `nonclient`), and a
+    /// hover that was not over the new place ends.
+    fn end_tracking(&mut self, ctx: Ctx, target: u32, at: (i32, i32), fx: &mut Effects) {
+        let outside = |wm: &Wm, h: u32| h != target || !wm.in_client(h, at);
+        if !self.tracking.is_empty() {
+            let left: Vec<u32> = self.tracking.iter().filter(|t| outside(self, t.0)).map(|t| t.0).collect();
+            self.tracking.retain(|t| !left.contains(&t.0));
             for h in left {
                 self.queue_leave(ctx, h, fx);
             }
         }
-        if msg == WM_MOUSEMOVE
-            && let Some((hw, _, _)) = self.hover
-            && hw != target
+        if let Some((hw, _, _)) = self.hover
+            && outside(self, hw)
         {
             self.hover = None;
         }
+    }
+
+    /// Whether screen point `at` is in window `h`'s client area.
+    fn in_client(&self, h: u32, at: (i32, i32)) -> bool {
+        let Some(w) = self.get(u64::from(h)) else { return false };
+        let (ox, oy) = self.client_origin(h);
+        let c = w.client_rel;
+        at.0 >= ox && at.1 >= oy && at.0 < ox + c.width() && at.1 < oy + c.height()
     }
 
     /// A button-down that is the second of a double click on a window whose
