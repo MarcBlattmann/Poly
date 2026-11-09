@@ -141,10 +141,10 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         // ADR 0128.
         ("gdi32.dll", super::GDI32),
         ("win32u.dll", super::WIN32U),
-        // ADR 0170.
-        ("dwrite.dll", super::DWRITE),
         // ADR 0155.
         ("bcryptprimitives.dll", super::BCRYPTPRIMITIVES),
+        // ADR 0170.
+        ("dwrite.dll", super::DWRITE),
     ] {
         if bytes.is_empty() {
             continue;
