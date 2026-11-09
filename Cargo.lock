@@ -714,6 +714,7 @@ dependencies = [
  "poly-http",
  "poly-kernelbase",
  "poly-ldr",
+ "poly-macho",
  "poly-pe",
  "poly-personality-native",
  "poly-shell",
