@@ -224,7 +224,7 @@ fn main() -> ExitCode {
 }
 
 /// The commands [`dispatch`] runs (besides `start` and `pipeline`).
-const COMMANDS: [&str; 25] = [
+const COMMANDS: [&str; 26] = [
     "build",
     "prebuild",
     "run",
