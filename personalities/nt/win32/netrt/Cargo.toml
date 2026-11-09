@@ -1,0 +1,15 @@
+[package]
+name = "poly-win32-netrt"
+description = "What iphlpapi, netapi32, secur32, dhcpcsvc, dnsapi and dbghelp share (ADR 0155): the process heap as allocator, the last error, and requests to \\Device\\Afd for the interface list and the host name"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-iphlp = { path = "../../../../crates/poly-iphlp" }
+poly-winsock = { path = "../../../../crates/poly-winsock" }
+
+[lints]
+workspace = true

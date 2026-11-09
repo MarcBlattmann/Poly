@@ -14,5 +14,8 @@ crate-type = ["cdylib"]
 poly-win32-rt = { path = "../rt" }
 poly-winsock = { path = "../../../../crates/poly-winsock" }
 
+[build-dependencies]
+poly-winsock = { path = "../../../../crates/poly-winsock" }
+
 [lints]
 workspace = true

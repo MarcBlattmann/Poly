@@ -411,6 +411,20 @@ pub fn terminate_process_by_id(target: ProcessId, status: NtStatus) -> Result<()
     Ok(())
 }
 
+/// `ExitProcess` / `NtTerminateProcess` of the caller's own process (ADR 0155): every other thread
+/// of the process ends at its next return to user mode, as Learn says ("all of the threads in the
+/// process terminate"). A thread that stays behind (a helper that polls sockets) would keep the
+/// process's memory alive for ever.
+pub fn terminate_siblings(pid: ProcessId, self_tid: ThreadRef, status: NtStatus) {
+    let Some(process) = find(pid) else { return };
+    for tid in process.live_thread_ids() {
+        let t = ThreadRef(u64::from(tid));
+        if t != self_tid {
+            let _ = terminate_other(pid, t, status);
+        }
+    }
+}
+
 /// The NT process `thread` belongs to: the caller's `pid` unless another
 /// process has it (a child's first thread, ADR 0089).
 fn owner_of(pid: ProcessId, thread: ThreadRef) -> ProcessId {

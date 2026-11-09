@@ -201,14 +201,14 @@ pub unsafe extern "system" fn WriteFile(
 }
 
 /// Query `class` of an open file into `out`.
-fn query(handle: Handle, class: u32, out: &mut [u8]) -> Result<(), NtStatus> {
+pub(crate) fn query(handle: Handle, class: u32, out: &mut [u8]) -> Result<(), NtStatus> {
     let mut iosb = IoStatusBlock::default();
     // SAFETY: valid pointers; `out` is the class's size.
     let st = unsafe { nt::NtQueryInformationFile(handle, &mut iosb, out.as_mut_ptr(), out.len() as u32, class) };
     if st.is_success() { Ok(()) } else { Err(st) }
 }
 
-fn set_info(handle: Handle, class: u32, info: &[u8]) -> Result<(), NtStatus> {
+pub(crate) fn set_info(handle: Handle, class: u32, info: &[u8]) -> Result<(), NtStatus> {
     let mut iosb = IoStatusBlock::default();
     // SAFETY: valid pointers.
     let st = unsafe { nt::NtSetInformationFile(handle, &mut iosb, info.as_ptr(), info.len() as u32, class) };
@@ -367,7 +367,7 @@ pub extern "system" fn GetFileType(handle: Handle) -> u32 {
 }
 
 /// Open `win32` for a delete or rename: `DELETE | SYNCHRONIZE`.
-fn open_for(win32: &[u16], access: u32, options: u32) -> Result<Handle, u32> {
+pub(crate) fn open_for(win32: &[u16], access: u32, options: u32) -> Result<Handle, u32> {
     let name = nt_name(win32)?;
     let oa = name.attributes();
     let mut h: Handle = 0;
@@ -652,6 +652,8 @@ struct Find {
     entries: Vec<usize>,
     next: usize,
     streams: Option<VecDeque<[u8; FIND_STREAM_DATA_SIZE]>>,
+    /// `FindExInfoBasic`: no short names.
+    basic: bool,
 }
 
 /// A buffer for several `FILE_BOTH_DIR_INFORMATION` entries.
@@ -704,6 +706,13 @@ impl Find {
 /// directory `ERROR_PATH_NOT_FOUND`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn FindFirstFileW(pattern: *const u16, data: *mut u8) -> Handle {
+    // SAFETY: the caller's arguments.
+    unsafe { find_first(pattern, data, false) }
+}
+
+/// `FindFirstFileW` / `FindFirstFileExW`: with `basic` (`FindExInfoBasic`)
+/// the short name of `WIN32_FIND_DATAW` stays empty.
+pub(crate) unsafe fn find_first(pattern: *const u16, data: *mut u8, basic: bool) -> Handle {
     // SAFETY: the caller's string.
     let Some(pattern) = (unsafe { wide_arg(pattern) }) else {
         return fail(ERROR_INVALID_PARAMETER, INVALID_HANDLE_VALUE);
@@ -719,10 +728,13 @@ pub unsafe extern "system" fn FindFirstFileW(pattern: *const u16, data: *mut u8)
         Ok(h) => h,
         Err(e) => return fail(e, INVALID_HANDLE_VALUE),
     };
-    let mut find = Box::new(Find { dir, mask, buf: Vec::new(), entries: Vec::new(), next: 0, streams: None });
+    let mut find = Box::new(Find { dir, mask, buf: Vec::new(), entries: Vec::new(), next: 0, streams: None, basic });
     let first = find.fill(true).and_then(|()| find.next());
     match first {
-        Ok(d) => {
+        Ok(mut d) => {
+            if basic {
+                poly_kernelbase::fileex::drop_alternate_name(&mut d);
+            }
             // SAFETY: the caller's WIN32_FIND_DATAW.
             unsafe { core::ptr::copy_nonoverlapping(d.as_ptr(), data, d.len()) };
             // A success leaves the last error alone (ADR 0110's trace of
@@ -758,8 +770,12 @@ pub unsafe extern "system" fn FindNextFileW(handle: Handle, data: *mut u8) -> i3
     let Some(find) = find_of(handle).filter(|f| f.streams.is_none()) else {
         return fail(ERROR_INVALID_HANDLE, FALSE);
     };
+    let basic = find.basic;
     match find.next() {
-        Ok(d) => {
+        Ok(mut d) => {
+            if basic {
+                poly_kernelbase::fileex::drop_alternate_name(&mut d);
+            }
             // SAFETY: the caller's WIN32_FIND_DATAW.
             unsafe { core::ptr::copy_nonoverlapping(d.as_ptr(), data, d.len()) };
             TRUE
@@ -787,7 +803,15 @@ pub unsafe extern "system" fn FindClose(handle: Handle) -> i32 {
 /// A find handle for `FindFirstStreamW` over the streams after the first
 /// (Learn: `FindClose` closes it).
 pub(crate) fn stream_find_handle(rest: VecDeque<[u8; FIND_STREAM_DATA_SIZE]>) -> Handle {
-    let find = Find { dir: 0, mask: Vec::new(), buf: Vec::new(), entries: Vec::new(), next: 0, streams: Some(rest) };
+    let find = Find {
+        dir: 0,
+        mask: Vec::new(),
+        buf: Vec::new(),
+        entries: Vec::new(),
+        next: 0,
+        streams: Some(rest),
+        basic: false,
+    };
     Box::into_raw(Box::new(find)) as Handle
 }
 

@@ -106,6 +106,31 @@ pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"
 /// by [`layout`]; empty without `xtask`.
 pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bcryptprimitives.dll"));
 
+/// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
+pub static VERSION: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/version.dll"));
+/// Our `ole32.dll` (ADR 0155, batch 4): COM apartments, the Windows Runtime's
+/// strings; hosts the `winrt` and `com` API sets. Installed by [`layout`].
+pub static OLE32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ole32.dll"));
+
+mod test_s1;
+
+/// The program the headless-surface ring-3 test runs (`test_s1`).
+pub static S1TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s1test.exe"));
+/// The network and identity DLLs of Chrome's batch 3/5 (ADR 0155).
+pub static IPHLPAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/iphlpapi.dll"));
+pub static NETAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/netapi32.dll"));
+pub static SECUR32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/secur32.dll"));
+pub static DHCPCSVC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dhcpcsvc.dll"));
+pub static DNSAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dnsapi.dll"));
+pub static DBGHELP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dbghelp.dll"));
+
+mod test_b35;
+
+/// The program the Chrome batch 3/5 ring-3 test runs (`test_b35`). Empty without `xtask`.
+pub static B35TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/b35test.exe"));
+/// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
 mod test_crypto;
 
 /// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in
@@ -213,8 +238,19 @@ static INTERACTIVE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicB
 /// The kernel argument naming the Windows session win32k reproduces.
 pub const SESSION_ARG: &str = "poly.win32k.session";
 
+/// `poly.nt.trace` (`poly.nt.trace=all` for the noisy services too): one
+/// serial line per system call (`poly_personality_nt::trace`). 0 off, 1 on, 2 all.
+static TRACE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
 /// Read the NT personality's kernel arguments (before the first program).
 pub fn configure(boot: &crate::boot_info::BootInfo) {
+    if boot.arg(poly_personality_nt::trace::FLAG) == Some("all") {
+        TRACE.store(2, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("nt: tracing every system call (poly.nt.trace=all)");
+    } else if boot.has_flag(poly_personality_nt::trace::FLAG) {
+        TRACE.store(1, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("nt: tracing system calls (poly.nt.trace)");
+    }
     if boot.arg(SESSION_ARG) == Some("interactive") {
         INTERACTIVE.store(true, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: win32k reproduces the interactive desktop session (1920x1080)");
@@ -509,6 +545,10 @@ impl NtKernel for Kernel {
     fn net_info(&self) -> (Vec<[u8; 4]>, String) {
         afd::net_info()
     }
+
+    fn net_interfaces(&self) -> Vec<poly_personality_nt::afd::IfInfo> {
+        afd::net_interfaces()
+    }
 }
 
 /// Route an NT process's system call (its `SyscallHook`).
@@ -519,7 +559,15 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     };
     let tid = user::current_tid().unwrap_or(process.pid);
     let mut k = Kernel::new(ProcessId(process.pid), ThreadRef(u64::from(tid)), memory);
+    let trace = TRACE.load(core::sync::atomic::Ordering::Relaxed);
+    let traced = (trace != 0).then(|| poly_personality_nt::trace::begin(&mut k, regs));
     let outcome = poly_personality_nt::dispatch_with(&mut k, regs);
+    if let Some(call) = traced {
+        let status = regs.rax as u32;
+        if poly_personality_nt::trace::wanted(&call, status, trace == 2) {
+            crate::kprintln!("{}", poly_personality_nt::trace::render(process.pid, tid, &call, status));
+        }
+    }
     // Any wait a signalling call satisfied: wake those threads.
     sched::drain_wakes();
     // File I/O requests it queued or completed (ADR 0067).
@@ -529,6 +577,7 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     // What win32k has for the compositor (ADR 0131).
     link::after_call();
     if let Some(status) = k.exit {
+        sched::terminate_siblings(ProcessId(process.pid), ThreadRef(u64::from(tid)), status);
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));
     } else if let Some(status) = k.exit_thread {
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));

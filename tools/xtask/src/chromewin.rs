@@ -318,12 +318,44 @@ pub const TEST_ON_DISK: &str = "poly/nt/c/poly-test";
 pub const LAUNCHER: &str = "chrome_launch";
 /// `C:\Windows\System32` on the disk: `polystub.dll` goes there.
 pub const SYSTEM32_ON_DISK: &str = "poly/nt/c/Windows/System32";
-/// The first page (stages 1 and 2): a script sets the text.
-pub const DOM_PAGE: &str = "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>poly</title></head>\n\
-<body><p id=\"m\">before</p>\n<script>document.getElementById('m').textContent = 'poly ' + (6 * 7);</script>\n\
-</body></html>\n";
+/// The spec's first page (stages 1 and 2), `specs/windows/apps/chrome/pages/s1.html`:
+/// a script sets a paragraph's text and a box's size from its layout.
+pub const S1_PAGE_PATH: &str = "specs/windows/apps/chrome/pages/s1.html";
 /// What the dumped DOM holds when the script ran.
-pub const DOM_EXPECT: &str = "<p id=\"m\">poly 42</p>";
+pub const DOM_EXPECT: &str = "<p id=\"p\">script-ran 42</p>";
+/// The recorded results of the stages, with the SHA-256 of the page and of
+/// each stage's standard output.
+pub const SPEC_RESULTS_PATH: &str = "specs/windows/apps/chrome/windows.json";
+
+/// The page's bytes with LF line ends whatever the checkout did to them
+/// (the recorded DOM depends on them).
+pub fn s1_page() -> Result<Vec<u8>> {
+    let path = crate::root().join(S1_PAGE_PATH);
+    let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut out = Vec::with_capacity(bytes.len());
+    for (i, &b) in bytes.iter().enumerate() {
+        if b == b'\r' && bytes.get(i + 1) == Some(&b'\n') {
+            continue;
+        }
+        out.push(b);
+    }
+    Ok(out)
+}
+
+/// A stage's recorded standard output (`windows.json`): its length and
+/// SHA-256 as lower-case hex. `stage` is the key under `stages`
+/// (`"s1"`, `"s2"`).
+pub fn spec_stdout(stage: &str) -> Result<(u64, String)> {
+    let path = crate::root().join(SPEC_RESULTS_PATH);
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let json: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let run = &json["stages"][stage]["runs"][0];
+    let bytes =
+        run["stdout_bytes"].as_u64().ok_or_else(|| format!("{}: no stdout_bytes for {stage}", path.display()))?;
+    let sha =
+        run["stdout_sha256"].as_str().ok_or_else(|| format!("{}: no stdout_sha256 for {stage}", path.display()))?;
+    Ok((bytes, sha.to_string()))
+}
 
 // ---- the stage ladder ------------------------------------------------------
 
@@ -331,6 +363,9 @@ pub const DOM_EXPECT: &str = "<p id=\"m\">poly 42</p>";
 pub struct Stage {
     pub number: u32,
     pub name: &'static str,
+    /// The program: `None` is Chrome, `Some(name)` a test program beside the launcher
+    /// (`tests/windows/<name>.rs`, e.g. the probe of stage 9).
+    pub program: Option<&'static str>,
     /// Chrome's command line after the program.
     pub args: &'static [&'static str],
     /// A line the stage's output must contain to pass.
@@ -339,27 +374,56 @@ pub struct Stage {
     pub seconds: u32,
 }
 
-pub const STAGES: [Stage; 2] = [
+pub const STAGES: [Stage; 3] = [
     Stage {
         number: 1,
         name: "headless dump-dom, no sandbox, no GPU",
-        args: &["--headless", "--no-sandbox", "--disable-gpu", "--dump-dom", "file:///C:/poly-test/dom.html"],
+        program: None,
+        args: &[
+            "--headless",
+            "--no-sandbox",
+            "--disable-gpu",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--dump-dom",
+            "file:///C:/poly-test/s1.html",
+        ],
         expect: DOM_EXPECT,
         seconds: 300,
     },
     Stage {
         number: 2,
         name: "headless dump-dom, sandbox on, no GPU",
-        args: &["--headless", "--disable-gpu", "--dump-dom", "file:///C:/poly-test/dom.html"],
+        program: None,
+        args: &[
+            "--headless",
+            "--disable-gpu",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--dump-dom",
+            "file:///C:/poly-test/s1.html",
+        ],
         expect: DOM_EXPECT,
         seconds: 300,
     },
+    Stage {
+        number: 9,
+        name: "probe: what Chrome's start-up asks of version.dll, on Chrome's own files",
+        program: Some(PROBE),
+        args: &[],
+        expect: "PROBE file C:\\Program Files\\Chrome\\chrome_elf.dll",
+        seconds: 60,
+    },
 ];
+
+/// The probe of stage 9 (`tests/windows/chrome_probe.rs`).
+pub const PROBE: &str = "chrome_probe";
 
 /// `stage<N>.cmd` for the launcher: the program, its command line, its
 /// directory, the seconds to wait (see `tests/windows/chrome_launch.rs`).
 pub fn stage_cmd(stage: &Stage) -> String {
-    let exe = format!("{APP_DOS}\\chrome.exe");
+    let exe = match stage.program {
+        Some(p) => format!("C:\\poly-test\\{p}.exe"),
+        None => format!("{APP_DOS}\\chrome.exe"),
+    };
     let mut cmdline = format!("\"{exe}\"");
     for a in stage.args {
         cmdline.push(' ');
@@ -368,26 +432,51 @@ pub fn stage_cmd(stage: &Stage) -> String {
     format!("{exe}\n{cmdline}\n{APP_DOS}\n{}\n", stage.seconds)
 }
 
+/// The kit's trace file, written by `polytrace.dll` in Chrome's directory.
+pub const TRACE_FILE: &str = "polytrace.jsonl";
+
+/// [`stage_cmd`] for a run with the Poly-side call tracer: the logger writes every record when
+/// its call returns (`POLYTRACE_SYNC`, so a process that dies leaves its trace) and the launcher
+/// sends the trace file to the kernel log afterwards.
+pub fn stage_cmd_traced(stage: &Stage) -> String {
+    format!("{}POLYTRACE_SYNC=1\n{TRACE_FILE}\n", stage_cmd(stage))
+}
+
 /// The tree of the disk: Chrome, the launcher, the stages, the test
 /// pages, the hives' directory and, when given, `polystub.dll`.
-pub fn tree(launcher: &[u8], polystub: &[u8]) -> Result<crate::rootdisk::RootTree> {
+pub fn tree(launcher: &[u8], probe: &[u8], polystub: &[u8], kit: Option<&Path>) -> Result<crate::rootdisk::RootTree> {
     let app = fetch()?;
     let mut tree = crate::rootdisk::RootTree::default();
     tree.dir("poly", 0o755);
     tree.dir("poly/nt", 0o755);
     tree.dir("poly/nt/registry", 0o755);
     tree.dir("poly/nt/c", 0o755);
+    // The tracing kit (`cargo xtask chrome-win trace`): its copies of the traced programs replace
+    // Chrome's, its proxies and the logger are added beside them.
+    let kit_files: Vec<(String, PathBuf)> = match kit {
+        Some(dir) => walk(dir)?.into_iter().filter(|(rel, _)| !rel.ends_with(".json")).collect(),
+        None => Vec::new(),
+    };
     for (rel, path) in walk(&app)? {
+        if kit_files.iter().any(|(k, _)| k.eq_ignore_ascii_case(&rel)) {
+            continue;
+        }
         let meta = std::fs::metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         let low = rel.to_ascii_lowercase();
         let mode = if low.ends_with(".exe") || low.ends_with(".dll") { 0o755 } else { 0o644 };
         tree.host_file(&format!("{APP_ON_DISK}/{rel}"), mode, &path, crate::hostfs::mtime(&meta));
     }
-    tree.file(&format!("{TEST_ON_DISK}/dom.html"), 0o644, DOM_PAGE.as_bytes());
+    for (rel, path) in &kit_files {
+        let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        tree.host_file(&format!("{APP_ON_DISK}/{rel}"), 0o755, path, crate::hostfs::mtime(&meta));
+    }
+    tree.file(&format!("{TEST_ON_DISK}/s1.html"), 0o644, &s1_page()?);
     for stage in &STAGES {
-        tree.file(&format!("{TEST_ON_DISK}/stage{}.cmd", stage.number), 0o644, stage_cmd(stage).as_bytes());
+        let cmd = if kit.is_some() { stage_cmd_traced(stage) } else { stage_cmd(stage) };
+        tree.file(&format!("{TEST_ON_DISK}/stage{}.cmd", stage.number), 0o644, cmd.as_bytes());
     }
     tree.file(&format!("{TEST_ON_DISK}/{LAUNCHER}.exe"), 0o755, launcher);
+    tree.file(&format!("{TEST_ON_DISK}/{PROBE}.exe"), 0o755, probe);
     tree.file(&format!("{SYSTEM32_ON_DISK}/{}", poly_stubs::STUB_DLL), 0o755, polystub);
     Ok(tree)
 }
@@ -432,17 +521,34 @@ fn fingerprint(parts: &[&[u8]]) -> String {
 /// `cargo xtask chrome-win disk [--fresh-disk]`: the disk image, made again
 /// when the launcher, `polystub.dll` or a stage changed (or on request).
 pub fn disk(fresh: bool) -> Result<PathBuf> {
-    let image = crate::root().join("target").join(DISK_FILE);
+    disk_with(fresh, None)
+}
+
+/// [`disk`] with a tracing kit laid over Chrome's directory (another image file).
+pub fn disk_with(fresh: bool, kit: Option<&Path>) -> Result<PathBuf> {
+    let name = if kit.is_some() { "poly-chrome-win-trace-disk.img" } else { DISK_FILE };
+    let image = crate::root().join("target").join(name);
     let stamp = image.with_extension("stamp");
-    let built = crate::winapp::build(&[LAUNCHER])?;
-    let (_, launcher) = built.into_iter().next().ok_or("the launcher was not built")?;
+    let built = crate::winapp::build(&[LAUNCHER, PROBE])?;
+    let find = |n: &str| built.iter().find(|(name, _)| name.trim_end_matches(".exe") == n).map(|(_, b)| b.clone());
+    let launcher = find(LAUNCHER).ok_or("the launcher was not built")?;
+    let probe = find(PROBE).ok_or("the probe was not built")?;
     let stubs = polystub()?;
-    let stages: String = STAGES.iter().map(stage_cmd).collect();
-    let print = fingerprint(&[VERSION.as_bytes(), &launcher, &stubs, stages.as_bytes(), DOM_PAGE.as_bytes()]);
+    let stages: String =
+        STAGES.iter().map(|s| if kit.is_some() { stage_cmd_traced(s) } else { stage_cmd(s) }).collect();
+    let mut kit_bytes: Vec<u8> = Vec::new();
+    if let Some(dir) = kit {
+        for (rel, path) in walk(dir)? {
+            kit_bytes.extend_from_slice(rel.as_bytes());
+            kit_bytes.extend_from_slice(&std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?);
+        }
+    }
+    let print =
+        fingerprint(&[VERSION.as_bytes(), &launcher, &stubs, stages.as_bytes(), &s1_page()?, &probe, &kit_bytes]);
     if !fresh && image.exists() && std::fs::read_to_string(&stamp).is_ok_and(|s| s.trim() == print) {
         return Ok(image);
     }
-    let tree = tree(&launcher, &stubs)?;
+    let tree = tree(&launcher, &probe, &stubs, kit)?;
     let started = std::time::Instant::now();
     crate::rootdisk::write_image_poly_ext2(&tree, &image)?;
     std::fs::write(&stamp, &print).map_err(|e| format!("{}: {e}", stamp.display()))?;
@@ -464,6 +570,10 @@ pub struct Summary {
     /// The whole program ended (`POLY-EXIT`).
     pub done: bool,
     pub expected: bool,
+    /// The launcher's count of the bytes Chrome wrote to its standard
+    /// output and their SHA-256 (`LAUNCH-DIGEST` / `LAUNCH-SHA256` lines).
+    pub stdout_bytes: Option<u64>,
+    pub stdout_sha256: Option<String>,
     /// Lines of the kernel log that name a fault or an unsupported call.
     pub faults: Vec<String>,
 }
@@ -487,6 +597,12 @@ impl Summary {
                 let rest = line[at + 12..].trim().to_string();
                 s.code = rest.strip_prefix("code=0x").and_then(|h| u32::from_str_radix(h.trim(), 16).ok());
                 s.exit = Some(rest);
+            }
+            if let Some(at) = line.find("LAUNCH-DIGEST stdout bytes=") {
+                s.stdout_bytes = line[at + 27..].trim().parse().ok();
+            }
+            if let Some(at) = line.find("LAUNCH-SHA256 stdout ") {
+                s.stdout_sha256 = Some(line[at + 21..].trim().to_string());
             }
             if line.contains("POLY-EXIT:") {
                 s.done = true;
@@ -520,6 +636,7 @@ pub const CPUS: u32 = 4;
 /// every host (no QMP).
 fn run(args: &[String]) -> Result {
     let (mut stage, mut trace, mut release, mut fresh, mut timeout) = (1u32, false, false, false, 900u64);
+    let mut kit_names: Vec<String> = Vec::new();
     let mut rest: Vec<String> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -528,6 +645,14 @@ fn run(args: &[String]) -> Result {
                 stage = it.next().ok_or("--stage needs a number")?.parse().map_err(|e| format!("--stage: {e}"))?
             }
             "--trace" => trace = true,
+            "--kit" => {
+                kit_names = it
+                    .next()
+                    .ok_or("--kit needs file names (chrome_elf.dll,chrome.exe)")?
+                    .split(',')
+                    .map(str::to_string)
+                    .collect()
+            }
             "--release" => release = true,
             "--fresh-disk" => fresh = true,
             "--timeout" => {
@@ -543,7 +668,141 @@ fn run(args: &[String]) -> Result {
     eprintln!("==> stage {}: {}", st.number, st.name);
     fetch()?;
     let kernel = crate::build_kernel(release)?;
-    let image = disk(fresh)?;
+    let kit = if kit_names.is_empty() { None } else { Some(build_kit(&kit_names)?) };
+    let outcome = boot_stage(&kernel, st, &Options { trace, fresh, timeout, rest, kit })?;
+    outcome.report(st);
+    if outcome.passed {
+        println!("STAGE {} PASSED", st.number);
+        Ok(())
+    } else {
+        Err(format!("stage {} did not pass (see {})", st.number, outcome.log.display()))
+    }
+}
+
+/// The call-tracing kit (`cargo xtask win trace-kit`, ADR 0090) for the named files of the
+/// package: copies whose imports go through proxies that log every call, in
+/// `target/chrome-kit`. Only the files named are traced (a program that makes millions of calls
+/// per second is too much to trace whole).
+pub fn build_kit(names: &[String]) -> Result<PathBuf> {
+    let app = fetch()?;
+    let exes: Vec<PathBuf> = names.iter().map(|n| app.join(n)).collect();
+    if let Some(missing) = exes.iter().find(|p| !p.is_file()) {
+        return Err(format!("{}: not in the package", missing.display()));
+    }
+    let out = crate::root().join("target/chrome-kit");
+    crate::wintrace::build_kit_multi(&exes, &out, &[], false, &[])?;
+    Ok(out)
+}
+
+/// How a stage is run.
+pub struct Options {
+    /// Ask the kernel for the NT call trace (`poly.nt.trace`).
+    pub trace: bool,
+    /// Make the disk again.
+    pub fresh: bool,
+    /// Seconds before QEMU is stopped.
+    pub timeout: u64,
+    /// Arguments for `resources::Resources` (`--memory=`, `--cpus=`).
+    pub rest: Vec<String>,
+    /// A tracing kit to lay over Chrome's directory (`cargo xtask chrome-win trace`).
+    pub kit: Option<PathBuf>,
+}
+
+/// What a boot of a stage gave.
+pub struct Outcome {
+    pub summary: Summary,
+    pub elapsed: std::time::Duration,
+    pub timed_out: bool,
+    pub log: PathBuf,
+    /// Chrome ended with exit code 0, printed what the stage expects and,
+    /// where the spec recorded it, exactly the recorded standard output.
+    pub passed: bool,
+    /// Why the recorded standard output was not matched, when it was not.
+    pub digest_note: Option<String>,
+    /// The Poly-side call trace the kit's logger wrote (`ptrace:` lines of the kernel log,
+    /// joined), when the run had a kit.
+    pub trace: Option<PathBuf>,
+}
+
+/// The records of the `ptrace:` / `ptrace+` lines of a kernel log (the launcher's
+/// `PolyDebugPrint` of the trace file): one per line, continuations joined.
+pub fn ptrace_records(log: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in log.lines() {
+        let line = crate::console::strip_ansi(line);
+        let Some(at) = line.find("ptrace") else { continue };
+        let rest = &line[at + 6..];
+        if let Some(text) = rest.strip_prefix(": ") {
+            out.push(text.trim_end_matches('\r').to_string());
+        } else if let Some(text) = rest.strip_prefix("+ ")
+            && let Some(last) = out.last_mut()
+        {
+            last.push_str(text.trim_end_matches('\r'));
+        }
+    }
+    out
+}
+
+impl Outcome {
+    /// Print what happened.
+    pub fn report(&self, st: &Stage) {
+        println!(
+            "stage {} ({}): {:.0?}{}",
+            st.number,
+            st.name,
+            self.elapsed,
+            if self.timed_out { ", TIMED OUT" } else { "" }
+        );
+        println!("serial log: {}", self.log.display());
+        for l in &self.summary.loader {
+            println!("  {l}");
+        }
+        for s in &self.summary.stubs {
+            println!("  stub hit: {s}");
+        }
+        for f in &self.summary.faults {
+            println!("  fault: {f}");
+        }
+        println!(
+            "  chrome: {:?}, program ended: {}, expected output: {}",
+            self.summary.exit, self.summary.done, self.summary.expected
+        );
+        match (&self.summary.stdout_bytes, &self.summary.stdout_sha256) {
+            (Some(n), Some(sha)) => println!("  stdout: {n} bytes, SHA-256 {sha}"),
+            _ => println!("  stdout: no digest from the launcher"),
+        }
+        if let Some(note) = &self.digest_note {
+            println!("  stdout digest: {note}");
+        }
+        if let Some(t) = &self.trace {
+            println!("  poly-side call trace: {}", t.display());
+        }
+    }
+}
+
+/// Whether the standard output the launcher digested is the one the spec
+/// recorded for the stage (`windows.json`); `None` when it is, else why not.
+fn digest_note(st: &Stage, summary: &Summary) -> Option<String> {
+    if st.program.is_some() {
+        return None;
+    }
+    let (want_bytes, want_sha) = match spec_stdout(&format!("s{}", st.number)) {
+        Ok(v) => v,
+        Err(e) => return Some(e),
+    };
+    match (summary.stdout_bytes, summary.stdout_sha256.as_deref()) {
+        (Some(b), Some(sha)) if b == want_bytes && sha == want_sha => None,
+        (Some(b), Some(sha)) => {
+            Some(format!("{b} bytes, SHA-256 {sha}; the spec records {want_bytes} bytes, {want_sha}"))
+        }
+        _ => Some(format!("the launcher printed no digest; the spec records {want_bytes} bytes, {want_sha}")),
+    }
+}
+
+/// Boot a stage with `kernel` and read what its serial log says.
+pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
+    let stage = st.number;
+    let image = disk_with(o.fresh, o.kit.as_deref())?;
     // A copy for the run: the hives and the profile are written to it.
     let work = crate::root().join("target/chrome-win");
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
@@ -551,9 +810,9 @@ fn run(args: &[String]) -> Result {
     std::fs::copy(&image, &run_image).map_err(|e| format!("{}: {e}", run_image.display()))?;
     let log = work.join(format!("stage{stage}.serial.log"));
     let _ = std::fs::remove_file(&log);
-    let res = crate::resources::Resources::from_args(&rest)?;
+    let res = crate::resources::Resources::from_args(&o.rest)?;
     eprintln!("{}", res.describe(MEMORY, CPUS));
-    let more = if trace { " poly.nt.trace" } else { "" };
+    let more = if o.trace { " poly.nt.trace" } else { "" };
     // The kernel mounts the disk and runs the launcher (NT programs are the
     // first program's business, a Linux shell cannot exec one): no
     // initramfs. The launcher's path has no space; Chrome's does not matter.
@@ -562,7 +821,7 @@ fn run(args: &[String]) -> Result {
          poly.qemu_exit console=ttyS0 poly.terminal=off poly.net=qemu{more}"
     );
     let mut cmd = crate::qemu_with(
-        &kernel,
+        kernel,
         &res.memory(MEMORY),
         res.cpus_or(CPUS),
         &append,
@@ -574,7 +833,7 @@ fn run(args: &[String]) -> Result {
     cmd.args(["-display", "none"]).stdin(std::process::Stdio::null());
     let started = std::time::Instant::now();
     let mut child = cmd.spawn().map_err(|e| format!("qemu: {e}"))?;
-    let limit = std::time::Duration::from_secs(timeout);
+    let limit = std::time::Duration::from_secs(o.timeout);
     let mut timed_out = false;
     loop {
         if child.try_wait().map_err(|e| e.to_string())?.is_some() {
@@ -590,31 +849,63 @@ fn run(args: &[String]) -> Result {
     }
     let text = std::fs::read(&log).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
     let summary = Summary::parse(&text, st.expect);
-    println!(
-        "stage {} ({}): {:.0?}{}",
-        st.number,
-        st.name,
-        started.elapsed(),
-        if timed_out { ", TIMED OUT" } else { "" }
+    let digest_note = digest_note(st, &summary);
+    let passed = summary.expected && summary.code == Some(0) && digest_note.is_none();
+    let trace = if o.kit.is_some() {
+        let records = ptrace_records(&text);
+        let file = work.join(format!("stage{stage}.ptrace.jsonl"));
+        let mut body = records.join("\n");
+        body.push('\n');
+        std::fs::write(&file, body).map_err(|e| format!("{}: {e}", file.display()))?;
+        Some(file)
+    } else {
+        None
+    };
+    Ok(Outcome { summary, elapsed: started.elapsed(), timed_out, log, passed, digest_note, trace })
+}
+
+/// The boot test group `chrome-win` (ADR 0155): stage 1, Chrome's headless
+/// `--dump-dom`, on the NT personality. Like the 7-Zip group it is skipped
+/// when the program is not in the cache (`cargo xtask chrome-win fetch`
+/// downloads the 210 MB package; CI has none). Stage 1 does not pass yet
+/// ([`S1_REQUIRED`]): until it does the group reports how far Chrome got
+/// and succeeds, so `cargo xtask ci` on a machine with the cache keeps
+/// passing for everyone else's changes; `POLY_CHROME_REQUIRED=1` makes the
+/// outcome the group's result.
+pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
+    eprintln!(
+        "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom (stage 1) on the NT personality (ADR 0155)"
     );
-    println!("serial log: {}", log.display());
-    for l in &summary.loader {
-        println!("  {l}");
+    if !fetched() {
+        eprintln!(
+            "==> skipped: Chrome {VERSION} is not in the cache ({}); `cargo xtask chrome-win fetch` downloads it",
+            cache_dir().display()
+        );
+        return Ok(());
     }
-    for s in &summary.stubs {
-        println!("  stub hit: {s}");
-    }
-    for f in &summary.faults {
-        println!("  fault: {f}");
-    }
-    println!("  chrome: {:?}, program ended: {}, expected output: {}", summary.exit, summary.done, summary.expected);
-    if summary.expected && summary.code == Some(0) {
+    let st = &STAGES[0];
+    let outcome =
+        boot_stage(kernel, st, &Options { trace: false, fresh: false, timeout: 600, rest: Vec::new(), kit: None })?;
+    outcome.report(st);
+    let required = S1_REQUIRED || std::env::var("POLY_CHROME_REQUIRED").is_ok_and(|v| v == "1");
+    if outcome.passed {
         println!("STAGE {} PASSED", st.number);
         Ok(())
+    } else if required {
+        Err(format!("stage {} did not pass (see {})", st.number, outcome.log.display()))
     } else {
-        Err(format!("stage {} did not pass (see {})", st.number, log.display()))
+        eprintln!(
+            "==> stage {} did not pass yet (not required: see S1_REQUIRED in tools/xtask/src/chromewin.rs); log {}",
+            st.number,
+            outcome.log.display()
+        );
+        Ok(())
     }
 }
+
+/// Whether the `chrome-win` boot test group fails when stage 1 does not
+/// pass. Set to `true` by the change that makes stage 1 pass.
+pub const S1_REQUIRED: bool = false;
 
 /// `cargo xtask chrome-win <fetch | imports | disk | run>`.
 pub fn command(args: &[String]) -> Result {
@@ -624,7 +915,7 @@ pub fn command(args: &[String]) -> Result {
         Some("disk") => disk(args.iter().any(|a| a == "--fresh-disk")).map(|p| println!("{}", p.display())),
         Some("run") => run(&args[1..]),
         _ => Err("usage: cargo xtask chrome-win <fetch | imports [--markdown FILE] | disk [--fresh-disk] | \
-                  run [--stage N] [--trace] [--release] [--timeout SECS]>"
+                  run [--stage N] [--trace] [--kit FILES] [--release] [--timeout SECS]>"
             .into()),
     }
 }
@@ -677,7 +968,7 @@ mod tests {
         let lines: Vec<&str> = cmd.lines().collect();
         assert_eq!(lines[0], "C:\\Program Files\\Chrome\\chrome.exe");
         assert!(lines[1].starts_with("\"C:\\Program Files\\Chrome\\chrome.exe\" --headless --no-sandbox"), "{cmd}");
-        assert!(lines[1].ends_with("--dump-dom file:///C:/poly-test/dom.html"), "{cmd}");
+        assert!(lines[1].ends_with("--dump-dom file:///C:/poly-test/s1.html"), "{cmd}");
         assert_eq!(lines[2], "C:\\Program Files\\Chrome");
         assert_eq!(lines[3], "300");
         // The sandbox stage is the same without the flag.
@@ -694,11 +985,48 @@ mod tests {
         assert_eq!(s.stubs, ["user32!SetFoo"]);
         assert_eq!(s.code, Some(3));
         assert!(s.done && !s.expected);
-        let ok = Summary::parse("<html><p id=\"m\">poly 42</p>\nLAUNCH-EXIT code=0x0\n", DOM_EXPECT);
+        let ok = Summary::parse(
+            "<html><p id=\"p\">script-ran 42</p>\nLAUNCH-DIGEST stdout bytes=440\nLAUNCH-SHA256 stdout abc123\nLAUNCH-EXIT code=0x0\n",
+            DOM_EXPECT,
+        );
         assert!(ok.expected && ok.code == Some(0));
+        assert_eq!((ok.stdout_bytes, ok.stdout_sha256.as_deref()), (Some(440), Some("abc123")));
         let late = Summary::parse("LAUNCH-EXIT timeout seconds=300\n", DOM_EXPECT);
         assert_eq!(late.exit.as_deref(), Some("timeout seconds=300"));
         assert_eq!(late.code, None);
+    }
+
+    #[test]
+    fn the_spec_records_stage_one_and_its_page() {
+        let (bytes, sha) = spec_stdout("s1").unwrap();
+        assert_eq!(bytes, 440);
+        assert_eq!(sha, "7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b");
+        // Stage 2 records the same output; the page is the one the digest is of.
+        assert_eq!(spec_stdout("s2").unwrap(), (bytes, sha));
+        let text = std::fs::read_to_string(crate::root().join(SPEC_RESULTS_PATH)).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let page = json["pages"]["s1.html"].as_str().unwrap();
+        assert_eq!(crate::sha256::hex(&s1_page().unwrap()), page);
+        assert!(spec_stdout("s9").is_err());
+    }
+
+    #[test]
+    fn stage_one_and_two_run_the_specs_page() {
+        for st in STAGES.iter().filter(|s| s.program.is_none()) {
+            assert!(st.args.contains(&"file:///C:/poly-test/s1.html"));
+            assert!(st.args.iter().any(|a| a.starts_with("--user-data-dir=")));
+            assert!(st.expect.contains("script-ran 42"));
+        }
+    }
+
+    #[test]
+    fn a_digest_other_than_the_recorded_one_is_not_a_pass() {
+        let mut s = Summary { stdout_bytes: Some(440), stdout_sha256: Some("00".into()), ..Summary::default() };
+        assert!(digest_note(&STAGES[0], &s).unwrap().contains("the spec records 440 bytes"));
+        s.stdout_sha256 = Some(spec_stdout("s1").unwrap().1);
+        assert_eq!(digest_note(&STAGES[0], &s), None);
+        s.stdout_bytes = None;
+        assert!(digest_note(&STAGES[0], &s).unwrap().contains("no digest"));
     }
 
     #[test]

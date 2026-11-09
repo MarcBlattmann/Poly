@@ -448,6 +448,13 @@ pub unsafe extern "C" fn pt_enter(f: &Func, regs: *const u64, stack: *const u64,
             w = W { p: scratch, len: 0, cap: SCRATCH - SUFFIX, full: false };
             begin(&mut w, f, t, seq, regs, stack, false);
         }
+        if SYNC.load(Ordering::Relaxed) {
+            // The caller's return address (`pt_common`'s frame: the return address is 0x888
+            // bytes above the saved argument registers `regs` points at): which code made the
+            // call, for reading a program's behaviour on Poly (ADR 0155).
+            w.bytes(b",\"ra\":");
+            w.hex(*regs.cast::<u8>().add(0x888).cast::<u64>());
+        }
         let mut cookie = (w.len as u64) | ((err as u64) << 32);
         if f.flags & (NORETURN | TAIL) != 0 {
             w.cap = SCRATCH;
@@ -488,11 +495,16 @@ pub unsafe extern "C" fn pt_leave(f: &Func, cookie: u64, ret: u64, scratch: *mut
             w.dec(err as u64);
         }
         w.bytes(b"}\n");
-        append(core::slice::from_raw_parts(scratch, w.len), false);
+        append(core::slice::from_raw_parts(scratch, w.len), SYNC.load(Ordering::Relaxed));
         leave_logger(tls, t);
         SetLastError(err);
     }
 }
+
+/// `POLYTRACE_SYNC` is set: every record is written when its call returns, so a process that
+/// dies on an unhandled exception leaves its trace up to the last call (bring-up of a program on
+/// Poly, ADR 0155). Off by default: the buffering is what makes a trace cheap.
+static SYNC: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 /// UTF-16 of an ASCII string literal, NUL-terminated, at compile time.
 macro_rules! wide {
@@ -545,6 +557,11 @@ pub unsafe extern "system" fn polytrace_main(_module: usize, reason: u32, _reser
                 let err = GetLastError();
                 InitializeCriticalSection(LOCK.0.get());
                 open();
+                let mut probe = [0u16; 4];
+                SYNC.store(
+                    GetEnvironmentVariableW(wide!("POLYTRACE_SYNC").as_ptr(), probe.as_mut_ptr(), probe.len() as u32) > 0,
+                    Ordering::Relaxed,
+                );
                 if FILE.load(Ordering::Relaxed) != INVALID_HANDLE_VALUE {
                     append(b"{\"format\":\"polytrace/1\"}\n", false);
                     TLS.store(TlsAlloc(), Ordering::Release);

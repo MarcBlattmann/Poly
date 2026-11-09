@@ -200,7 +200,10 @@ pub extern "system" fn TlsSetValue(index: u32, value: *mut u8) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "system" fn FlsAlloc(callback: Option<FlsCallback>) -> u32 {
     let r = with(|s| {
-        let i = s.fls.get_or_insert_with(|| Indices::new(tls::FLS_MAXIMUM_AVAILABLE)).alloc()?;
+        let i = s
+            .fls
+            .get_or_insert_with(|| Indices::with_reserved(tls::FLS_MAXIMUM_AVAILABLE, tls::FLS_RESERVED))
+            .alloc()?;
         match callback {
             Some(cb) => s.callbacks.insert(i, cb as usize),
             None => s.callbacks.remove(&i),
