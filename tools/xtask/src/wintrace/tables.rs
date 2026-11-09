@@ -600,6 +600,26 @@ pub const CHROME_SIGNATURES: &[(&str, &str)] = &[
     ("ioctlsocket", "i=qip"),
     ("WSAGetLastError", "i="),
     ("WSASetLastError", "v=i"),
+    // spec-chrome-win-3: the calls chrome_elf's start-up makes that no table above lists
+    // (version.dll, VerifyVersionInfoW, the CRT's start-up helpers).
+    ("VerSetConditionMask", "q=qic"),
+    ("VerifyVersionInfoW", "i=piq"),
+    ("GetVersionExW", "i=p"),
+    ("RtlGetVersion", "i=p"),
+    ("GetFileVersionInfoSizeW", "i=wp"),
+    ("GetFileVersionInfoSizeExW", "i=iwp"),
+    ("GetFileVersionInfoW", "i=wiip"),
+    ("GetFileVersionInfoExW", "i=iwiip"),
+    ("VerQueryValueW", "i=pwpp"),
+    ("GetEnvironmentStringsW", "p="),
+    ("FreeEnvironmentStringsW", "i=p"),
+    ("InitializeSListHead", "v=p"),
+    ("GetCPInfo", "i=ip"),
+    ("GetStringTypeW", "i=ipip"),
+    ("IsValidCodePage", "i=i"),
+    ("GetProductInfo", "i=iiiip"),
+    ("GetUserDefaultLangID", "s="),
+    ("BuildSecurityDescriptorW", "i=ppipipppp"),
 ];
 
 /// Functions that do not return: their record is written when they begin
