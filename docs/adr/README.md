@@ -128,6 +128,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0140](0140-damage-limited-page-flips-and-a-single-scanout-resource.md) | Moving a window on the desktop was laggy (13-14 frames per second at 2560x1600 scale 2): window shadows blurred once per size and kept (`Shadow::draw_cached`); `DIRTYFB` on the back buffer says what a page flip must copy (`poly-drm`, the compositor sends what `begin_frame` copied plus what it drew); the kernel shows plain 2D framebuffers through one scanout resource (a mirror) so a flip no longer rebuilds QEMU's display surface; same picture | Accepted |
 | [0141](0141-memory-and-cpus-for-interactive-boots-and-the-dev-menu.md) | `--memory` and `--cpus` for the interactive boots and a resources section in the dev menu: no RAM limit in the kernel, 16 CPUs at most, the host's limits greyed with the reason, boot tests keep fixed sizes | Accepted |
 | [0144](0144-client-side-frames-for-apps-that-ask.md) | A toplevel whose client asks for `client_side` (`zxdg_toplevel_decoration_v1.set_mode`) gets `configure(client_side)` and no Poly frame, its maximized and tiled sizes the whole area; every other toplevel keeps Poly's neutral frame (ADR 0106); Chromium shows one title bar instead of two | Accepted |
+| [0151](0151-macos-plan-arm64-translator-and-aarch64-port.md) | macOS plan (owner decision): an arm64 → x86-64 translator first, so arm64-only Mac apps run on x86 PCs, in user space in the translated process on a shared A64 decoder (interpreter, then JIT); an aarch64 kernel port as groundwork (a boot stub on QEMU `virt` in CI, then the kernel's x86-64 code behind `crate::arch`); the order, the costs and the clean-room limits | Accepted |
 
 ## Decided by the owner
 
@@ -136,10 +137,12 @@ accepted ADR. Supersede it with a new one and link both ways.
 - **Menus:** per-window menus for every app; Mac apps' menu bars are drawn as
   a strip under Poly's neutral title bar, and the top ridge stays a pure status
   strip with nothing dropping down from it ([ADR 0107](0107-desktop-fbdev-input-routing-and-shell.md)).
+- **aarch64 and arm64 Mac apps:** both an arm64 → x86-64 translator, first, so
+  arm64-only Mac apps run on x86 PCs, and an aarch64 kernel port as groundwork
+  ([ADR 0151](0151-macos-plan-arm64-translator-and-aarch64-port.md)).
 
 ## Open decisions
 
 These are also marked ⚖️ in [ROADMAP.md](../ROADMAP.md) at the point where they block work.
 
-- **aarch64:** port the kernel to 64-bit ARM, or stay x86-64 only. Modern Mac apps
-  are increasingly arm64-only, so this decides how much of macOS is reachable.
+None at the moment.
