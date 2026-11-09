@@ -103,7 +103,7 @@ kernel, and all three share one core. More detail in
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 0 | 0 | 35 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 3 | 1,808 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,198 | 72 | 4 | 3,143 | 53,703 | 0 | 73,276 |
+| Windows | user-mode DLL exports | 130,198 | 81 | 4 | 3,134 | 53,703 | 0 | 73,276 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 0 | 517 | 0 | 0 |
 | macOS | framework API | 741,217 | 0 | 0 | 0 | 741,217 | 0 | 0 |
 
@@ -132,9 +132,11 @@ statically linked BusyBox from the host (`busybox-static` on Debian and
 Ubuntu) or builds the pinned release.
 
 ```sh
-cargo xtask start   # a menu of everything that boots: the desktop, Chromium, the shells, boot tests, CI
+cargo xtask start   # a menu of everything that boots: the desktop (with Chromium, on by default), the shells, boot tests, CI
                     # (it remembers your choice: next time Enter runs it again; --last skips the menu)
-cargo xtask desktop # boot Poly's desktop in QEMU's window (no test apps in the image or the launcher)
+cargo xtask desktop --chromium # Poly's desktop with Chromium, the default browser (the menu's default; the first
+                    # start downloads about 230 MB of Debian packages and makes a 1.3 GB disk image, kept after that)
+cargo xtask desktop # the desktop without Chromium, from a small initramfs (no test apps in the image or the launcher)
 cargo xtask desktop --test-apps # add the test apps: Poly Demo, Wayland Test Client, Demo Window, Poly Fill, Send Test Notification
 cargo xtask run     # boot the kernel in QEMU (Ctrl-A X to quit)
 cargo xtask run --busybox   # boot into BusyBox's init and shell (`poweroff` quits; add console=tty1 for the screen)
