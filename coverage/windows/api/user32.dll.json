@@ -931,7 +931,7 @@
 {"symbol":"ToAsciiEx","src":["wine-spec"],"seeds":["wine:user32/tests/input.c:test_ToAscii"]},
 {"symbol":"ToUnicode","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:user32/tests/input.c:test_ToUnicode","wine:user32/tests/input.c:test_ToAscii"]},
 {"symbol":"ToUnicodeEx","src":["wine-spec"],"seeds":["wine:user32/tests/input.c:test_ToUnicode","wine:user32/tests/input.c:get_test_scan"]},
-{"symbol":"TrackMouseEvent","status":"claimed","claimed_by":"impl-win-gui-a","src":["wine-spec"],"seeds":["wine:user32/tests/msg.c:test_TrackMouseEvent","wine:user32/tests/msg.c:track_mouse_event_query_thread"]},
+{"symbol":"TrackMouseEvent","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:user32/tests/msg.c:test_TrackMouseEvent","wine:user32/tests/msg.c:track_mouse_event_query_thread"]},
 {"symbol":"TrackPopupMenu","src":["wine-spec"],"seeds":["wine:user32/tests/msg.c:test_TrackPopupMenu","wine:user32/tests/msg.c:test_TrackPopupMenuEmpty","wine:user32/tests/menu.c:test_emptypopup","wine:user32/tests/menu.c:test_menu_trackagain","wine:user32/tests/menu.c:test_menualign","wine:user32/tests/menu.c:test_subpopup_locked_by_menu","wine:user32/tests/win.c:test_capture_4","wine:user32/tests/menu.c:test_menu_cancelmode"]},
 {"symbol":"TrackPopupMenuEx","src":["wine-spec"]},
 {"symbol":"TranslateAccelerator","src":["wine-spec"]},
