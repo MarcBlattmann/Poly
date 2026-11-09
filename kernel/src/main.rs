@@ -172,6 +172,8 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     if tty::console_is_screen(&boot) {
         terminal::bring_up(&boot);
     }
+    // The NT personality's arguments (the Windows session win32k is).
+    nt::configure(&boot);
     program::run_init(&boot);
 
     // The shell's `test` command runs the tests again later.

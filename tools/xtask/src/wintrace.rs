@@ -753,13 +753,7 @@ pub fn ordinal_name(dll: &str, ordinal: u16) -> Option<&'static str> {
     poly_kernelbase::exports::OLEAUT32_EXPORTS.iter().find(|&&(_, o)| o == ordinal).map(|&(n, _)| n)
 }
 
-/// A function's signature, if [`SIGNATURES`] has it.
-#[cfg_attr(not(test), allow(dead_code))]
-pub fn signature(dll: &str, sym: &Sym) -> Option<&'static str> {
-    signature_ex(dll, sym, false)
-}
-
-/// [`signature`]; `chrome` also consults [`CHROME_SIGNATURES`].
+/// A function's signature, if [`SIGNATURES`] has it; `chrome` also consults [`CHROME_SIGNATURES`].
 pub fn signature_ex(dll: &str, sym: &Sym, chrome: bool) -> Option<&'static str> {
     let name = match sym {
         Sym::Name(n) => n.as_str(),

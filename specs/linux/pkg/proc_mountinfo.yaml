@@ -1,0 +1,85 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/pkg/proc_mountinfo.yaml
+id: linux/api/pkg/proc_mountinfo
+oracle:
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64; tests run as root inside a mount namespace of their own on tmpfs mounts they make themselves; umask 022"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  /proc/self/mountinfo and /proc/<pid>/mountinfo (read by libmount, findmnt,
+  bubblewrap, Flatpak, systemd, container runtimes) list the mounts of the
+  process's mount namespace, one line per mount, newline terminated, fields
+  separated by single spaces:
+  "id parent major:minor root mountpoint options [optional-fields...] -
+  fstype source superoptions". id and parent are decimal mount ids (parent
+  of the top mount of the namespace is the id of a mount outside what the
+  process sees, still numeric); major:minor is the device (anonymous
+  filesystems such as tmpfs: "0:<n>"); root is the directory of the filesystem
+  that is mounted here ("/" for a whole filesystem, "/sub" for a bind mount of
+  a subdirectory); mountpoint is relative to the reading process's root;
+  options are the per-mount options: "rw" or "ro", then nosuid, nodev, noexec,
+  then the access-time mode: "relatime" by default, "noatime" and/or
+  "nodiratime" if set, nothing for MS_STRICTATIME. Optional fields: none for a
+  private mount; "shared:N" for a shared one; "master:N" for a slave;
+  "shared:M master:N" (in this order) for a slave that is shared again;
+  "unbindable" for an unbindable mount (N, M are peer group numbers: peers share
+  N, a slave's master:N equals the shared:N of the group it follows). After
+  the "-": fstype (tmpfs, proc, overlay, ...), the source string given to
+  mount(2) and the superblock options ("rw" or "ro" first, then the
+  filesystem's own, e.g. "rw,size=1024k,nr_inodes=100,mode=700" for a tmpfs
+  mounted with data "size=1m,mode=700,nr_inodes=100"; "sync" appears there for
+  MS_SYNCHRONOUS). A line has 10 fields without optional fields, one more per
+  optional field. Reading the file in small pieces gives the same text; it is
+  a regular file of mode 0444 and size 0; /proc/<own pid>/mountinfo equals
+  /proc/self/mountinfo; a mount shows up at once and is gone after umount.
+  Escaping: space, tab, newline and backslash in root, mountpoint and source
+  are written as the octal escapes \040, \011, \012 and \134; '#' in the source
+  as \043; other characters (including '#' in a path, quotes, non-ASCII bytes)
+  as they are. Superblock options are not escaped.
+  Relations: the parent id of a mount is the id of the mount it was made on
+  (a mount on a directory of another mount has that mount as parent; a mount
+  made on top of another at the same mount point has the covered mount as
+  parent; a bind mount's parent is the mount at the target path). Binds share
+  device, source and superblock options with the original; per-mount options
+  are separate: a remount of the filesystem (MS_REMOUNT without MS_BIND, via
+  any of its mounts) changes the superblock options of all mounts of it (to
+  "ro,...") but the per-mount options only of the mount it was called on
+  (that mount's options gain "ro", the others keep "rw").
+  Namespaces: a new mount namespace (unshare(CLONE_NEWNS)) lists the same
+  mounts (mount points, options, filesystems) under new ids; a mount made in
+  one namespace is absent from the other's file unless propagation carries it;
+  /proc/<pid>/mountinfo of another process shows that process's namespace.
+  Root directory: a process whose root was changed by chroot sees only mounts
+  at or below its root, with mount points relative to it: after chroot into
+  the root of a mount that mount is listed as "/" (root field "/"), a bind of
+  a subdirectory keeps its subdirectory as root field, and mounts above or
+  beside the new root are not listed; when the new root is a plain
+  subdirectory of a mount, that mount is not listed and the mounts below the
+  new root are.
+  /proc/self/mounts (and /proc/mounts, a symlink to "self/mounts"; mode
+  0444): the old format, one line per mount: "source mountpoint fstype
+  options 0 0" with the same escapes; options are the per-mount options
+  (rw/ro, nosuid, nodev, noexec, relatime...) followed by the superblock's
+  without repeating rw or ro (tmpfs: "rw,relatime,size=1024k,..."); after a
+  filesystem remount to read-only the line shows "ro" for every mount of it.
+returns:
+  file: "a regular file of mode 0444, size reported as 0, read through read(2); content as described"
+errors:
+  stat: "ENOENT (2) when /proc is not mounted"
+side_effects: none
+threading: "the content is a consistent snapshot per read of one namespace; tests do not rely on it across concurrent changes"
+ordering: "mounts are listed in the order they were made (a covering mount after the mount it covers); not relied upon beyond that"
+timing:
+  typical: "microseconds per read"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+# Notes: proc(5) documents the format (public). Mount ids, parent ids, peer
+# group numbers and device numbers vary and are never printed or compared as
+# values; tests check structure, text fields and relations between ids of
+# lines of the same file. The kernel configuration decides which other
+# mounts the container has; tests only look at mount points below their own
+# /tmp/pk_mi* directories, plus "/" and "/proc" as present. The container
+# root's own line is not compared.

@@ -1047,11 +1047,13 @@ fn unpacked_certs(entries: &[Unpacked], blobs: &Path) -> Result<Vec<(String, Vec
 }
 
 /// The launcher's desktop file for Chromium: bash runs `poly-chromium`,
-/// which starts it as `poly`, sandbox on.
+/// which starts it as `poly`, sandbox on. `Icon=chromium` is Debian's name
+/// for its logo, which the package ships as hicolor PNGs (16 to 256
+/// pixels): the launcher draws it (ADR 0146).
 fn desktop_file() -> String {
     format!(
         "[Desktop Entry]\nType=Application\nName=Chromium\nComment=Web browser (Debian's Chromium)\n\
-         Keywords=browser;chrome;web;\n\
+         Keywords=browser;chrome;web;\nIcon=chromium\n\
          Exec=/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS} file:///{PAGES_DIR}/input.html\n"
     )
 }
@@ -2069,6 +2071,8 @@ mod tests {
             desktop_file().contains("Name=Chromium\n")
                 && desktop_file().contains("poly-chromium --ozone-platform=wayland")
         );
+        // The launcher's icon is Debian's, a hicolor PNG name.
+        assert!(desktop_file().contains("\nIcon=chromium\n"));
         assert!(LAUNCH_SCRIPT.contains("setpriv --reuid=1000"));
         // The socket's name for `poly` is made again at every launch: the
         // disk (and so `/run/user/1000`) outlives a boot.

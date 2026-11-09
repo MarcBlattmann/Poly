@@ -210,6 +210,21 @@ struct NtState {
 
 static STATE: Mutex<Option<NtState>> = Mutex::new(None);
 
+/// `poly.win32k.session=interactive`: win32k reproduces the interactive
+/// desktop session of the slice B oracle instead of session 0 (ADR 0131).
+static INTERACTIVE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// The kernel argument naming the Windows session win32k reproduces.
+pub const SESSION_ARG: &str = "poly.win32k.session";
+
+/// Read the NT personality's kernel arguments (before the first program).
+pub fn configure(boot: &crate::boot_info::BootInfo) {
+    if boot.arg(SESSION_ARG) == Some("interactive") {
+        INTERACTIVE.store(true, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("nt: win32k reproduces the interactive desktop session (1920x1080)");
+    }
+}
+
 /// The full `NTSTATUS` the processes the test-run protocol watches ended
 /// with ([`watch_exit_status`]; the process's own `ExitStatus` keeps only
 /// its low 8 bits): `(status, final)`, final once `NtTerminateProcess`
@@ -263,6 +278,9 @@ fn make_state(slot: &mut Option<NtState>) {
     layout::prepare(&mut state.sys);
     // File I/O: the VFS's volumes and drive letters (ADR 0067).
     io::attach(&mut state.sys);
+    if INTERACTIVE.load(core::sync::atomic::Ordering::Relaxed) {
+        state.sys.win32k.wm.set_display(poly_win32k::metrics::Display::INTERACTIVE);
+    }
     *slot = Some(state);
 }
 

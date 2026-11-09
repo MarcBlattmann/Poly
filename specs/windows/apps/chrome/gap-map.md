@@ -56,21 +56,21 @@ The README of `specs/windows/apps/chrome/` is the long form. Short:
 | S2 | the same, sandbox on | identical stdout and exit 0 untraced (2.3 s); **traced: renderers die, the run stalls** (see above) |
 | S3 | visible window, `--disable-gpu --no-first-run`, local page, mouse + keys, `WM_CLOSE` | title `poly-s3 clicks=1 keys=poly moved=1 - Google Chrome for Testing`, text drawn (screenshot `s3-window.png`), exit 0, 11 s; traced the same |
 | S4 | window: `http://example.com/` then `https://www.iana.org/`; headless: both in frames | `Example Domain`, then `Internet Assigned Numbers Authority`; DOM `http=1 https=1` |
-| S5 | headless, default GPU flags | S1's DOM; the GPU process makes 23 more distinct calls (D3D11 path appears with a window: S3's GPU process calls `D3D11CreateDevice`, `CreateDXGIFactory1`, `DCompositionCreateDevice`) |
+| S5 | default GPU flags: headless, and a window (traced, `--no-sandbox`) | headless: S1's DOM, the GPU process makes 23 more distinct calls; window: the same S3 result. With `--disable-gpu` (S1-S4) the GPU process still calls `D3D11CreateDevice`, `DCompositionCreateDevice`, `DwmGetCompositionTimingInfo`; with the GPU on it adds display queries instead (`QueryDisplayConfig`, `GetDisplayConfigBufferSizes`, `DisplayConfigGetDeviceInfo`, `GetMonitorInfoW`, `MonitorFromWindow`, `GetDC`, `WindowFromDC`). The actual D3D11/DXGI work happens in `libGLESv2.dll`/`libEGL.dll` (ANGLE), `D3DCompiler_47.dll`, `dxcompiler.dll`, `vk_swiftshader.dll`: they import only `kernel32`/`advapi32`/`user32` and load `d3d11.dll`, `dxgi.dll` by name, and are **not in this kit** (their calls into D3D are untraced) |
 
 Process census, `processes per run (run 1 + run 2) / stable distinct APIs`:
 
-| Process type | s1 | s2 | s3 | s4 (headless) | s4 (window) | s5 |
-|---|---|---|---|---|---|---|
-| browser | 1+1 / 413 | 1+1 / 437 | 1+1 / 485 | 1+1 / 415 | 1+1 / 490 | 1+1 / 413 |
-| renderer | 4+4 / 159 | - | 5+5 / 168 | 6+6 / 173 | 8+7 / 163 | 4+4 / 158 |
-| renderer (extension) | 2+2 / 152 | - | 2+2 / 144 | 2+2 / 149 | 2+2 / 144 | 2+2 / 149 |
-| renderer (top-chrome WebUI) | 1+1 / 161 | - | 1+1 / 160 | 1+1 / 164 | 1+1 / 160 | 1+1 / 164 |
-| GPU process | 1+1 / 159 | 1+1 / 164 | 1+1 / 178 | 1+1 / 161 | 1+1 / 177 | 1+1 / 182 |
-| network service | 1+1 / 214 | 1+1 / 214 | 1+1 / 213 | 1+1 / 213 | 1+1 / 212 | 1+1 / 213 |
-| storage service | 1+1 / 133 | - | 1+1 / 131 | 1+1 / 135 | 1+1 / 131 | 1+1 / 133 |
-| processor-metrics utility | - | 1+1 / 136 | 1+1 / 131 | - | 1+1 / 131 | - |
-| crashpad handler | 1+2 / 118 | 2+1 / 103 | 1+2 / 117 | 1+2 / 118 | 2+1 / 117 | 2+1 / 118 |
+| Process type | s1 | s2 | s3 | s4 (headless) | s4 (window) | s5 | s5 (window) |
+|---|---|---|---|---|---|---|---|
+| browser | 1+1 / 413 | 1+1 / 437 | 1+1 / 485 | 1+1 / 415 | 1+1 / 490 | 1+1 / 413 | 1+1 / 484 |
+| renderer | 4+4 / 159 | - | 5+5 / 168 | 6+6 / 173 | 8+7 / 163 | 4+4 / 158 | 5+5 / 156 |
+| renderer (extension) | 2+2 / 152 | - | 2+2 / 144 | 2+2 / 149 | 2+2 / 144 | 2+2 / 149 | 2+2 / 144 |
+| renderer (top-chrome WebUI) | 1+1 / 161 | - | 1+1 / 160 | 1+1 / 164 | 1+1 / 160 | 1+1 / 164 | 1+1 / 160 |
+| GPU process | 1+1 / 159 | 1+1 / 164 | 1+1 / 178 | 1+1 / 161 | 1+1 / 177 | 1+1 / 182 | 1+1 / 184 |
+| network service | 1+1 / 214 | 1+1 / 214 | 1+1 / 213 | 1+1 / 213 | 1+1 / 212 | 1+1 / 213 | 1+1 / 211 |
+| storage service | 1+1 / 133 | - | 1+1 / 131 | 1+1 / 135 | 1+1 / 131 | 1+1 / 133 | 1+1 / 131 |
+| processor-metrics utility | - | 1+1 / 136 | 1+1 / 131 | - | 1+1 / 131 | - | 1+1 / 131 |
+| crashpad handler | 1+2 / 118 | 2+1 / 103 | 1+2 / 117 | 1+2 / 118 | 2+1 / 117 | 2+1 / 118 | 2+1 / 117 |
 
 Run to run, the processes differ only in number (renderers, crashpad handlers) and in a handful of calls (`unstable`
 in the traces); everything else above is identical in both runs.
@@ -79,29 +79,29 @@ in the traces); everything else above is identical in both runs.
 
 Chrome's browser process is the sandbox's broker; everything it does to create a confined child is a call through
 `kernel32`/`advapi32`/`user32` and was traced. For each confined child (GPU process, network service, storage service, every
-renderer; five were created in the S2 runs: the renderers never became usable) it does, in this order (counts are per run, run 1):
+renderer; five were created in the S2 runs: the renderers never became usable) it does, in this order (counts are the browser's calls in one S2 run, equal in both runs; the children that died were started again, so 12 `CreateProcessAsUserW` are about 7 distinct children):
 
 1. `CreateWindowStationW` (1) and `CreateDesktopW` (1): **an alternate window station and desktop** for the targets
    (`GetProcessWindowStation`, `SetProcessWindowStation`, `GetThreadDesktop`, `GetUserObjectInformationW`).
-2. Tokens: `OpenProcessToken(self, TOKEN_ADJUST_PRIVILEGES|TOKEN_QUERY...)`, `DuplicateTokenEx` (12; access 136 or 983551 =
+2. Tokens: `OpenProcessToken(self, TOKEN_ADJUST_PRIVILEGES|TOKEN_QUERY...)`, `DuplicateTokenEx` (17; access 136 or 983551 =
    `TOKEN_ALL_ACCESS`; levels 0..2, primary and impersonation), **`CreateRestrictedToken` (22**, flags 0 and 1 =
-   `DISABLE_MAX_PRIVILEGE`, 7 or 11 SIDs to disable, 1 to 12 restricting SIDs), `SetTokenInformation` (45: class 25
-   `TokenIntegrityLevel`, class 6 `TokenDefaultDacl`), `GetTokenInformation` (277; the first call with a NULL buffer fails
-   with `ERROR_INSUFFICIENT_BUFFER` 122, 106 times: size probing), `CheckTokenMembership`, `AdjustTokenPrivileges`,
-   `SetThreadToken`/`OpenThreadToken` (10 each), `AddMandatoryAce`, `SetEntriesInAclW`,
+   `DISABLE_MAX_PRIVILEGE`, 7 or 11 SIDs to disable, 1 to 12 restricting SIDs), `SetTokenInformation` (47: class 25
+   `TokenIntegrityLevel`, class 6 `TokenDefaultDacl`), `GetTokenInformation` (295; a call with a NULL buffer fails
+   with `ERROR_INSUFFICIENT_BUFFER` 122: size probing), `CheckTokenMembership`, `AdjustTokenPrivileges`,
+   `SetThreadToken`/`OpenThreadToken` (12 each), `AddMandatoryAce`, `SetEntriesInAclW` (31),
    `ConvertStringSecurityDescriptorToSecurityDescriptorW` with `D:(A;;GA;;;SY)(A;;GWGR;;;S-1-15-2-1)S:(ML;;;;;S-1-16-0)` and
    `D:P(A;;0x1F0003;;;SY)(A;;0x1F0003;;;IU)`, `DeriveAppContainerSidFromAppContainerName` (an AppContainer for some service).
-3. Jobs: `CreateJobObjectW` (12), `SetInformationJobObject` (43: class 9 `JobObjectExtendedLimitInformation` 144 bytes, class 4
+3. Jobs: `CreateJobObjectW` (12), `SetInformationJobObject` (48: class 9 `JobObjectExtendedLimitInformation` 144 bytes, class 4
    `JobObjectBasicUIRestrictions`, class 7 completion-port association), `QueryInformationJobObject`,
    `AssignProcessToJobObject`, `TerminateJobObject`.
 4. The process: `InitializeProcThreadAttributeList` (called twice per child: the sizing call fails with 122, then it fills; 5 or
-   6 attributes), `UpdateProcThreadAttribute` with `0x20002` (handle list, 24 bytes = 3 handles), `0x20007` (mitigation policy,
+   6 attributes), `UpdateProcThreadAttribute` (62) with `0x20002` (handle list, 24 bytes = 3 handles), `0x20007` (mitigation policy,
    16 bytes = two 64-bit masks), `0x2000E` (child process policy, 4 bytes), `0x2001A` (number 26, 4 bytes; its name to be read
-   from `winbase.h`); **`CreateProcessAsUserW` (11 in the run; inherit handles = TRUE; creation flags 525324 = 0x8040C =
+   from `winbase.h`); **`CreateProcessAsUserW` (12; inherit handles = TRUE; creation flags 525324 = 0x8040C =
    `EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | DETACHED_PROCESS | CREATE_SUSPENDED`; application name,
    command line `"chrome.exe" --type=... --service-sandbox-type=...`)**, then `AssignProcessToJobObject`, `DuplicateHandle`
-   (693 to 906 per run: the handle hand-over), `ResumeThread` (430 per run: also the stack-sampling profiler, see
-   `SuspendThread` 418 and `GetThreadContext` 579 in the tables), `SetProcessMitigationPolicy` (self, policy 2) and
+   (692 to 696 in the browser, up to 906 over all processes: the handle hand-over), `ResumeThread` (430: mostly Chrome's
+   stack-sampling profiler, which also makes 418 `SuspendThread` and 418 `GetThreadContext` calls in the browser), `SetProcessMitigationPolicy` (self, policy 2) and
    `GetProcessMitigationPolicy`. The unconfined children (crashpad handler, processor-metrics utility) use plain
    `CreateProcessW` with `EXTENDED_STARTUPINFO_PRESENT` (0x80000) and inherit handles = TRUE.
 5. The target side (lowering the token, closing handles) happens inside the child and could not be traced for renderers.
@@ -120,21 +120,15 @@ ordered. Not covered by either as far as their hand-offs show: `CreateRestricted
 
 | DLL (map) | Name resolved with `GetProcAddress` | Poly | By |
 |---|---|---|---|
-| ? | `AppContainerRegisterSid` | NOT LISTED (no entry in any DLL file) | B |
 | ? | `ChromeMain` | NOT LISTED (no entry in any DLL file) | BGMNRS |
-| ? | `CreateAppContainerToken` | NOT LISTED (no entry in any DLL file) | B |
 | ? | `DWriteCoreCreateFactory` | NOT LISTED (no entry in any DLL file) | R |
-| ? | `DnsIsZtEnabled` | NOT LISTED (no entry in any DLL file) | B |
-| ? | `FlsGetValue2` | NOT LISTED (no entry in any DLL file) | BCGMNRS |
 | ? | `GetHandleVerifier` | NOT LISTED (no entry in any DLL file) | BCGMNRS |
-| ? | `IsDeviceRegisteredWithManagement` | NOT LISTED (no entry in any DLL file) | B |
-| ? | `IsEnclaveTypeSupported` | NOT LISTED (no entry in any DLL file) | M |
 | ? | `IsSandboxedProcess` | NOT LISTED (no entry in any DLL file) | B |
-| ? | `IsUserCetAvailableInEnvironment` | NOT LISTED (no entry in any DLL file) | MR |
 | crtdll.dll | `signal` | MISSING | BGMNRS |
 | d3dcompiler_40.dll | `D3DCompile` | MISSING (app-provided) | G |
 | d3dcompiler_40.dll | `D3DDisassemble` | MISSING (app-provided) | G |
 | dcomp.dll | `DCompositionCreateDevice3` | MISSING | G |
+| dnsapi.dll | `DnsIsZtEnabled` | MISSING | B |
 | dxcore.dll | `DXCoreCreateAdapterFactory` | MISSING | G |
 | dxgi.dll | `CreateDXGIFactory2` | MISSING | G |
 | dxgi.dll | `DXGIGetDebugInterface1` | MISSING | G |
@@ -144,10 +138,16 @@ ordered. Not covered by either as far as their hand-offs show: `CreateRestricted
 | kernel32.dll | `IsWow64Process2` | MISSING | BCGMNRS |
 | kernel32.dll | `RegisterApplicationRestart` | MISSING | B |
 | kernel32.dll | `SetThreadDescription` | MISSING | BCGMNRS |
+| kernelbase.dll | `AppContainerRegisterSid` | MISSING | B |
 | kernelbase.dll | `AppPolicyGetProcessTerminationMethod` | MISSING | BC |
+| kernelbase.dll | `CreateAppContainerToken` | MISSING | B |
+| kernelbase.dll | `FlsGetValue2` | MISSING | BCGMNRS |
+| kernelbase.dll | `IsEnclaveTypeSupported` | MISSING | M |
+| kernelbase.dll | `IsUserCetAvailableInEnvironment` | MISSING | MR |
 | kernelbase.dll | `MapViewOfFile3` | MISSING | R |
 | kernelbase.dll | `UnmapViewOfFile2` | MISSING | R |
 | kernelbase.dll | `VirtualAlloc2` | MISSING | R |
+| mdmregistration.dll | `IsDeviceRegisteredWithManagement` | MISSING | B |
 | msctf.dll | `SetInputScope` | MISSING | B |
 | ntdll.dll | `LdrRegisterDllNotification` | MISSING | BR |
 | ntdll.dll | `LdrUnregisterDllNotification` | MISSING | B |
@@ -169,8 +169,8 @@ Modules Chrome loads by name (besides the proxies): `chrome.dll`, `kernel32.dll`
 `netapi32.dll`, `MDMRegistration.dll`, the GPU process: `d3d11.dll`, `dxgi.dll`, `dcomp.dll`, `dwmapi.dll`, `DXCore.dll`,
 `mf.dll`, `D3DCompiler_47.dll`, `dxcompiler.dll` (from the app directory); renderers: `dwrite.dll`, `DWriteCore.dll`; the
 browser also tries `optimization_guide_internal.dll` (not in the zip: the failure is tolerated). Third-party DLLs that appear
-in the PC's trace (`AcLayers.dll`, `easyhook*.dll`, `kwsui64.dll`, `sftldr.dll`, `tmmon64.dll` ...) are the corporate
-security software's injections into the PC's processes, not Chrome's.
+in the PC's trace (`AcLayers.dll`, `easyhook*.dll`, `kwsui64.dll`, `sftldr.dll`, `tmmon64.dll` ...) look like
+injections of security software into the PC's processes, not Chrome's own loads.
 
 ## 6. Required to succeed, or may fail
 
@@ -185,15 +185,15 @@ Three kinds of evidence, in this order of weight:
 2. **Failures Windows itself returned** (last column of the tables): an API that failed on Windows in a run that still gave
    the right result is tolerated *in that situation* (`CancelIoEx` -> `NOT_FOUND`, `ConnectNamedPipe` -> `PIPE_CONNECTED`,
    `GetQueuedCompletionStatus` -> `WAIT_TIMEOUT`/`BROKEN_PIPE`, `CreateNamedPipeW` -> `ALREADY_EXISTS`,
-   `InitializeProcThreadAttributeList` -> `INSUFFICIENT_BUFFER` (the sizing call), `DuplicateHandle` -> `ACCESS_DENIED`
-   (28 times, closing a handle already gone), `GetFileAttributesW`, `RegOpenKeyExW` -> `FILE_NOT_FOUND`).
+   `InitializeProcThreadAttributeList` -> `INSUFFICIENT_BUFFER` (the sizing call), `DuplicateHandle` -> `ACCESS_DENIED`,
+   `GetFileAttributesW` and `RegOpenKeyExW` -> `FILE_NOT_FOUND`; see the last column for each API).
 3. **Optional by nature, an API Chrome asks for after a feature check:** accessibility (`oleacc`, `uiautomationcore`),
-   devices (`setupapi`, `cfgmgr32`, `hid`), performance counters (`pdh`), ETW (`EventRegister`, `TraceEvent`, `RegisterTraceGuidsW`,
-   ... they return success but nothing is read back), power/session notifications (`Register*Notification`, `WTS*`),
+   devices (`setupapi`, `cfgmgr32`, `hid`), performance counters (`pdh`), ETW (`EventRegister`, `TraceEvent`, `RegisterTraceGuidsW`, ...: Chrome registers providers and writes events,
+   nothing it reads back was seen), power/session notifications (`Register*Notification`, `WTS*`),
    `Shell_NotifyIconW`, drag and drop, IME, `DwmSetWindowAttribute`. Expect a stub that returns failure to work for these;
    **this was not verified per API** (no fault injection in the tracer yet).
 
-Everything else is **required to succeed**: process creation, pipes, IOCP, sections, handles, `VirtualAlloc`/`VirtualProtect`
+Everything else is **assumed to be required to succeed** (not tested): process creation, pipes, IOCP, sections, handles, `VirtualAlloc`/`VirtualProtect`
 (V8 and PartitionAlloc), SRW locks, TLS/FLS, file and registry basics, the code page and locale functions, the clock.
 
 ## 7. Window messages (S3, browser UI thread; counts of the two runs)
@@ -277,760 +277,766 @@ name is in Poly's source), **By** (B browser, R renderers, G GPU, N network serv
 C crashpad), the stages in which it was called in **both** runs, the highest call count in any run, and the failures
 Windows returned. **Stub-safe candidates** are the rows with a failure column or in the optional areas of section 6.
 
-Totals over every stage: 578 APIs; claimed 239, green 27, MISSING 309, NOT LISTED 3.
+Totals over every stage: 579 APIs; claimed 239, green 27, MISSING 311, NOT LISTED 2.
 
 ### process / thread / IPC  (62 APIs: claimed 23, MISSING 39)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| advapi32.dll | `CreateProcessAsUserW` | MISSING | B | . x . . . . | 12 |  |
-| kernel32.dll | `CancelIoEx` | MISSING | BGMNRS | x x x x x x | 20 | NOT_FOUND |
-| kernel32.dll | `ConnectNamedPipe` | MISSING | BCR | x x x x x x | 46 | PIPE_CONNECTED |
-| kernel32.dll | `CreateFileMappingW` | claimed (kernel32-2 in tree) | BGMNRS | x x x x x x | 221 |  |
-| kernel32.dll | `CreateIoCompletionPort` | MISSING | BCGMNRS | x x x x x x | 79 |  |
-| kernel32.dll | `CreateNamedPipeW` | MISSING | BCR | x x x x x x | 47 | ALREADY_EXISTS |
-| kernel32.dll | `CreateProcessW` | claimed (kernel32-2 in tree) | B | x x x x x x | 16 |  |
-| kernel32.dll | `CreateThread` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 98 |  |
-| kernel32.dll | `CreateToolhelp32Snapshot` | MISSING | BR | x x x x x x | 8 |  |
-| kernel32.dll | `DeleteProcThreadAttributeList` | MISSING | B | x x x x x x | 15 |  |
-| kernel32.dll | `DisconnectNamedPipe` | MISSING | C | x x x x x x | 17 |  |
-| kernel32.dll | `DuplicateHandle` | claimed (impl-createprocess in tree) | BCGMNRS | x x x x x x | 1333 | ACCESS_DENIED |
-| kernel32.dll | `FlushViewOfFile` | claimed (kernel32-2 in tree) | BN | x x x x x x | 23 |  |
-| kernel32.dll | `GetCurrentProcess` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 5308 |  |
-| kernel32.dll | `GetCurrentProcessId` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 802 |  |
-| kernel32.dll | `GetCurrentThread` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 702 |  |
-| kernel32.dll | `GetCurrentThreadId` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 216006 |  |
-| kernel32.dll | `GetCurrentThreadStackLimits` | MISSING | BGMNRS | x x x x x x | 65 |  |
-| kernel32.dll | `GetExitCodeProcess` | claimed (kernel32-2 in tree) | BC | x x x x x x | 16 |  |
-| kernel32.dll | `GetHandleInformation` | claimed (impl-createprocess in tree) | CGMNRS | x x x x x x | 173 |  |
-| kernel32.dll | `GetPriorityClass` | MISSING | BR | x x x x x x | 327 |  |
-| kernel32.dll | `GetProcessId` | claimed (kernel32-2 in tree) | BC | x x x x x x | 77 |  |
-| kernel32.dll | `GetProcessTimes` | claimed (7zip in tree) | BCGMNRS | x x x x x x | 14 |  |
-| kernel32.dll | `GetQueuedCompletionStatus` | MISSING | BCGMNRS | x x x x x x | 18187 | BROKEN_PIPE, WAIT_TIMEOUT, OPERATION_ABORTED |
-| kernel32.dll | `GetThreadContext` | MISSING | BGNR | x x x x x x | 579 |  |
-| kernel32.dll | `GetThreadId` | MISSING | BCGMN | x x x x x x | 6 |  |
-| kernel32.dll | `GetThreadPreferredUILanguages` | MISSING | B | x x x x x x | 2 |  |
-| kernel32.dll | `GetThreadPriority` | MISSING | BCGMNRS | x x x x x x | 34 | returned 0/NULL 8 x |
-| kernel32.dll | `GetThreadPriorityBoost` | MISSING | BGNR | x x x x x x | 579 |  |
-| kernel32.dll | `InitializeProcThreadAttributeList` | MISSING | BC | x x x x x x | 30 | INSUFFICIENT_BUFFER |
-| kernel32.dll | `K32EnumProcessModules` | MISSING | B | . x . . . . | 4 |  |
-| kernel32.dll | `K32GetMappedFileNameW` | MISSING | B | x x x x x x | 1377 |  |
-| kernel32.dll | `K32GetModuleFileNameExW` | MISSING | B | . . x . x . | 351 |  |
-| kernel32.dll | `K32GetModuleInformation` | MISSING | BGNR | x x x x x x | 368 |  |
-| kernel32.dll | `K32GetProcessMemoryInfo` | MISSING | BGNRS | x x x x x x | 33 |  |
-| kernel32.dll | `MapViewOfFile` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 268 |  |
-| kernel32.dll | `Module32FirstW` | MISSING | BR | x x x x x x | 8 |  |
-| kernel32.dll | `Module32NextW` | MISSING | BR | x x x x x x | 490 | NO_MORE_FILES |
-| kernel32.dll | `OpenProcess` | MISSING | BC | x x x x x x | 18 |  |
-| kernel32.dll | `PostQueuedCompletionStatus` | MISSING | BCGMNRS | x x x x x x | 1577 |  |
-| kernel32.dll | `QueryFullProcessImageNameW` | MISSING | B | . x x . x . | 1 |  |
-| kernel32.dll | `QueryProcessCycleTime` | MISSING | B | x x x x x x | 90 |  |
-| kernel32.dll | `QueryThreadCycleTime` | MISSING | BGNR | x x x x x x | 317 |  |
-| kernel32.dll | `ReadDirectoryChangesW` | MISSING | BN | x x x x x x | 1 |  |
-| kernel32.dll | `ReadProcessMemory` | MISSING | B | x x x x x x | 703 |  |
-| kernel32.dll | `ResumeThread` | claimed (7zip in tree) | BGNR | x x x x x x | 579 |  |
-| kernel32.dll | `SetHandleInformation` | claimed (impl-createprocess in tree) | B | x x x x x x | 61 |  |
-| kernel32.dll | `SetNamedPipeHandleState` | MISSING | BCGMNRS | x x x x x x | 8 |  |
-| kernel32.dll | `SetPriorityClass` | MISSING | BG | x x x x x x | 21 |  |
-| kernel32.dll | `SetThreadPriority` | MISSING | BGMNRS | x x x x x x | 171 | INVALID_PARAMETER, 400, 401 |
-| kernel32.dll | `SetThreadPriorityBoost` | MISSING | BGNR | x x x x x x | 1158 |  |
-| kernel32.dll | `SuspendThread` | claimed (7zip in tree) | BGNR | x x x x x x | 579 | returned 0/NULL 579 x |
-| kernel32.dll | `TerminateProcess` | claimed (kernel32 in tree) | BGMNR | x x x x x x | 9 | ACCESS_DENIED |
-| kernel32.dll | `TransactNamedPipe` | MISSING | BCGMNRS | x x x x x x | 8 |  |
-| kernel32.dll | `UnmapViewOfFile` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 235 |  |
-| kernel32.dll | `UpdateProcThreadAttribute` | MISSING | BC | x x x x x x | 62 |  |
-| kernel32.dll | `WriteProcessMemory` | MISSING | B | x x x x x x | 377 |  |
-| ntdll.dll | `NtClose` | claimed (syscall in service table) | BCGMNRS | x x x x x x | 48 | returned 0/NULL 48 x |
-| ntdll.dll | `NtQueryInformationProcess` | claimed (syscall in service table) | B | . x x . x . | 11 | returned 0/NULL 11 x |
-| ntdll.dll | `NtQueryObject` | claimed (syscall in service table) | BGMNRS | x x x x x x | 256 | returned 0/NULL 256 x |
-| ntdll.dll | `NtQuerySystemInformation` | claimed (syscall in service table) | B | x x x x x x | 4 | returned 0/NULL 2 x |
-| user32.dll | `GetThreadDesktop` | MISSING | B | . x . . . . | 2 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| advapi32.dll | `CreateProcessAsUserW` | MISSING | B | . x . . . . . | 12 |  |
+| kernel32.dll | `CancelIoEx` | MISSING | BGMNRS | x x x x x x x | 20 | NOT_FOUND |
+| kernel32.dll | `ConnectNamedPipe` | MISSING | BCR | x x x x x x x | 46 | PIPE_CONNECTED |
+| kernel32.dll | `CreateFileMappingW` | claimed (kernel32-2 in tree) | BGMNRS | x x x x x x x | 221 |  |
+| kernel32.dll | `CreateIoCompletionPort` | MISSING | BCGMNRS | x x x x x x x | 79 |  |
+| kernel32.dll | `CreateNamedPipeW` | MISSING | BCR | x x x x x x x | 47 | ALREADY_EXISTS |
+| kernel32.dll | `CreateProcessW` | claimed (kernel32-2 in tree) | B | x x x x x x x | 16 |  |
+| kernel32.dll | `CreateThread` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 98 |  |
+| kernel32.dll | `CreateToolhelp32Snapshot` | MISSING | BR | x x x x x x x | 8 |  |
+| kernel32.dll | `DeleteProcThreadAttributeList` | MISSING | B | x x x x x x x | 15 |  |
+| kernel32.dll | `DisconnectNamedPipe` | MISSING | C | x x x x x x x | 17 |  |
+| kernel32.dll | `DuplicateHandle` | claimed (impl-createprocess in tree) | BCGMNRS | x x x x x x x | 1333 | ACCESS_DENIED |
+| kernel32.dll | `FlushViewOfFile` | claimed (kernel32-2 in tree) | BN | x x x x x x x | 23 |  |
+| kernel32.dll | `GetCurrentProcess` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 5308 |  |
+| kernel32.dll | `GetCurrentProcessId` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 802 |  |
+| kernel32.dll | `GetCurrentThread` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 702 |  |
+| kernel32.dll | `GetCurrentThreadId` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 216006 |  |
+| kernel32.dll | `GetCurrentThreadStackLimits` | MISSING | BGMNRS | x x x x x x x | 65 |  |
+| kernel32.dll | `GetExitCodeProcess` | claimed (kernel32-2 in tree) | BC | x x x x x x x | 16 |  |
+| kernel32.dll | `GetHandleInformation` | claimed (impl-createprocess in tree) | CGMNRS | x x x x x x x | 173 |  |
+| kernel32.dll | `GetPriorityClass` | MISSING | BR | x x x x x x x | 327 |  |
+| kernel32.dll | `GetProcessId` | claimed (kernel32-2 in tree) | BC | x x x x x x x | 77 |  |
+| kernel32.dll | `GetProcessTimes` | claimed (7zip in tree) | BCGMNRS | x x x x x x x | 14 |  |
+| kernel32.dll | `GetQueuedCompletionStatus` | MISSING | BCGMNRS | x x x x x x x | 18187 | BROKEN_PIPE, WAIT_TIMEOUT, OPERATION_ABORTED |
+| kernel32.dll | `GetThreadContext` | MISSING | BGNR | x x x x x x x | 579 |  |
+| kernel32.dll | `GetThreadId` | MISSING | BCGMN | x x x x x x x | 6 |  |
+| kernel32.dll | `GetThreadPreferredUILanguages` | MISSING | B | x x x x x x x | 2 |  |
+| kernel32.dll | `GetThreadPriority` | MISSING | BCGMNRS | x x x x x x x | 34 | returned 0/NULL 8 x |
+| kernel32.dll | `GetThreadPriorityBoost` | MISSING | BGNR | x x x x x x x | 579 |  |
+| kernel32.dll | `InitializeProcThreadAttributeList` | MISSING | BC | x x x x x x x | 30 | INSUFFICIENT_BUFFER |
+| kernel32.dll | `K32EnumProcessModules` | MISSING | B | . x . . . . . | 4 |  |
+| kernel32.dll | `K32GetMappedFileNameW` | MISSING | B | x x x x x x x | 1377 |  |
+| kernel32.dll | `K32GetModuleFileNameExW` | MISSING | B | . . x . x . x | 351 |  |
+| kernel32.dll | `K32GetModuleInformation` | MISSING | BGNR | x x x x x x x | 368 |  |
+| kernel32.dll | `K32GetProcessMemoryInfo` | MISSING | BGNRS | x x x x x x x | 33 |  |
+| kernel32.dll | `MapViewOfFile` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 268 |  |
+| kernel32.dll | `Module32FirstW` | MISSING | BR | x x x x x x x | 8 |  |
+| kernel32.dll | `Module32NextW` | MISSING | BR | x x x x x x x | 490 | NO_MORE_FILES |
+| kernel32.dll | `OpenProcess` | MISSING | BC | x x x x x x x | 18 |  |
+| kernel32.dll | `PostQueuedCompletionStatus` | MISSING | BCGMNRS | x x x x x x x | 1577 |  |
+| kernel32.dll | `QueryFullProcessImageNameW` | MISSING | B | . x x . x . x | 1 |  |
+| kernel32.dll | `QueryProcessCycleTime` | MISSING | B | x x x x x x x | 90 |  |
+| kernel32.dll | `QueryThreadCycleTime` | MISSING | BGNR | x x x x x x x | 317 |  |
+| kernel32.dll | `ReadDirectoryChangesW` | MISSING | BN | x x x x x x x | 1 |  |
+| kernel32.dll | `ReadProcessMemory` | MISSING | B | x x x x x x x | 703 |  |
+| kernel32.dll | `ResumeThread` | claimed (7zip in tree) | BGNR | x x x x x x x | 579 |  |
+| kernel32.dll | `SetHandleInformation` | claimed (impl-createprocess in tree) | B | x x x x x x x | 61 |  |
+| kernel32.dll | `SetNamedPipeHandleState` | MISSING | BCGMNRS | x x x x x x x | 8 |  |
+| kernel32.dll | `SetPriorityClass` | MISSING | BG | x x x x x x x | 21 |  |
+| kernel32.dll | `SetThreadPriority` | MISSING | BGMNRS | x x x x x x x | 171 | INVALID_PARAMETER, 400, 401 |
+| kernel32.dll | `SetThreadPriorityBoost` | MISSING | BGNR | x x x x x x x | 1158 |  |
+| kernel32.dll | `SuspendThread` | claimed (7zip in tree) | BGNR | x x x x x x x | 579 | returned 0/NULL 579 x |
+| kernel32.dll | `TerminateProcess` | claimed (kernel32 in tree) | BGMNR | x x x x x x x | 9 | ACCESS_DENIED |
+| kernel32.dll | `TransactNamedPipe` | MISSING | BCGMNRS | x x x x x x x | 8 |  |
+| kernel32.dll | `UnmapViewOfFile` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 235 |  |
+| kernel32.dll | `UpdateProcThreadAttribute` | MISSING | BC | x x x x x x x | 62 |  |
+| kernel32.dll | `WriteProcessMemory` | MISSING | B | x x x x x x x | 377 |  |
+| ntdll.dll | `NtClose` | claimed (syscall in service table) | BCGMNRS | x x x x x x x | 48 | returned 0/NULL 48 x |
+| ntdll.dll | `NtQueryInformationProcess` | claimed (syscall in service table) | B | . x x . x . x | 11 | returned 0/NULL 11 x |
+| ntdll.dll | `NtQueryObject` | claimed (syscall in service table) | BGMNRS | x x x x x x x | 256 | returned 0/NULL 256 x |
+| ntdll.dll | `NtQuerySystemInformation` | claimed (syscall in service table) | B | x x x x x x x | 4 | returned 0/NULL 2 x |
+| user32.dll | `GetThreadDesktop` | MISSING | B | . x . . . . . | 2 |  |
 
 ### sync / TLS  (43 APIs: claimed 38, MISSING 5)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| kernel32.dll | `AcquireSRWLockExclusive` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 172179 |  |
-| kernel32.dll | `AcquireSRWLockShared` | claimed (kernel32 in tree) | BNR | x x x x x x | 316 |  |
-| kernel32.dll | `CreateEventW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 518 |  |
-| kernel32.dll | `CreateMutexW` | claimed (kernel32 in tree) | BG | x x x x x x | 4 | ALREADY_EXISTS |
-| kernel32.dll | `CreateSemaphoreA` | MISSING | R | x . x x x x | 8 |  |
-| kernel32.dll | `CreateSemaphoreW` | claimed (kernel32 in tree) | CR | x x x x x x | 9 |  |
-| kernel32.dll | `DeleteCriticalSection` | claimed (kernel32 in tree) | BCGNRS | x x x x x x | 35 |  |
-| kernel32.dll | `EnterCriticalSection` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 247841 |  |
-| kernel32.dll | `FlsAlloc` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 48 |  |
-| kernel32.dll | `FlsFree` | claimed (kernel32-2 in tree) | BC | x . x x x x | 4 |  |
-| kernel32.dll | `FlsGetValue` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 236 | INVALID_PARAMETER |
-| kernel32.dll | `FlsSetValue` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 920 |  |
-| kernel32.dll | `InitializeConditionVariable` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 1789 |  |
-| kernel32.dll | `InitializeCriticalSection` | claimed (kernel32 in tree) | BGMNRS | x x x x x x | 428 |  |
-| kernel32.dll | `InitializeCriticalSectionEx` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 1992 |  |
-| kernel32.dll | `InitializeSListHead` | claimed (7zip in tree) | BCGMNRS | x x x x x x | 24 |  |
-| kernel32.dll | `InitializeSRWLock` | claimed (kernel32 in tree) | BR | x . x x x x | 5 |  |
-| kernel32.dll | `InitOnceExecuteOnce` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 43474 |  |
-| kernel32.dll | `InterlockedFlushSList` | claimed (7zip in tree) | BC | x . x x x x | 2 | returned 0/NULL 2 x |
-| kernel32.dll | `InterlockedPushEntrySList` | claimed (7zip in tree) | BR | x x x x x x | 4 | returned 0/NULL 1 x |
-| kernel32.dll | `LeaveCriticalSection` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 247841 |  |
-| kernel32.dll | `RegisterWaitForSingleObject` | MISSING | BCNR | x x x x x x | 412 |  |
-| kernel32.dll | `ReleaseMutex` | claimed (kernel32 in tree) | B | x x x x x x | 1377 |  |
-| kernel32.dll | `ReleaseSemaphore` | claimed (kernel32 in tree) | CR | x . x x x x | 44 |  |
-| kernel32.dll | `ReleaseSRWLockExclusive` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 533631 |  |
-| kernel32.dll | `ReleaseSRWLockShared` | claimed (kernel32 in tree) | BNR | x x x x x x | 316 |  |
-| kernel32.dll | `ResetEvent` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 3150 |  |
-| kernel32.dll | `SetEvent` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 2821 |  |
-| kernel32.dll | `Sleep` | claimed (kernel32 in tree) | G | . . x . x . | 4 |  |
-| kernel32.dll | `SleepConditionVariableSRW` | claimed (kernel32-2 in tree) | BGNR | x x x x x x | 112 |  |
-| kernel32.dll | `SwitchToThread` | MISSING | R | x . x x x x | 31188 | returned 0/NULL 30937 x |
-| kernel32.dll | `TlsAlloc` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 40 |  |
-| kernel32.dll | `TlsGetValue` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 20097 | returned 0/NULL 896 x |
-| kernel32.dll | `TlsSetValue` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 339 |  |
-| kernel32.dll | `TryAcquireSRWLockExclusive` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 501705 | returned 0/NULL 9134 x |
-| kernel32.dll | `UnregisterWaitEx` | MISSING | BCN | x x x x x x | 409 | IO_PENDING |
-| kernel32.dll | `WaitForMultipleObjects` | claimed (kernel32 in tree) | CRS | x . x x x x | 13 | returned 0/NULL 8 x |
-| kernel32.dll | `WaitForSingleObject` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 3322 | returned 0/NULL 2825 x |
-| kernel32.dll | `WakeAllConditionVariable` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 4712 |  |
-| kernel32.dll | `WakeConditionVariable` | claimed (kernel32-2 in tree) | BGR | x x x x x x | 328 |  |
-| user32.dll | `MsgWaitForMultipleObjectsEx` | MISSING (name appears in tree) | BGN | x x x x x x | 1765 | returned 0/NULL 1429 x |
-| ws2_32.dll | `WSACreateEvent` | claimed (impl-winsock in tree) | BN | x x x x x x | 53 |  |
-| ws2_32.dll | `WSAResetEvent` | claimed (impl-winsock in tree) | N | x x x x x x | 60 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| kernel32.dll | `AcquireSRWLockExclusive` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 172179 |  |
+| kernel32.dll | `AcquireSRWLockShared` | claimed (kernel32 in tree) | BNR | x x x x x x x | 316 |  |
+| kernel32.dll | `CreateEventW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 518 |  |
+| kernel32.dll | `CreateMutexW` | claimed (kernel32 in tree) | BG | x x x x x x x | 4 | ALREADY_EXISTS |
+| kernel32.dll | `CreateSemaphoreA` | MISSING | R | x . x x x x x | 8 |  |
+| kernel32.dll | `CreateSemaphoreW` | claimed (kernel32 in tree) | CR | x x x x x x x | 9 |  |
+| kernel32.dll | `DeleteCriticalSection` | claimed (kernel32 in tree) | BCGNRS | x x x x x x x | 54 |  |
+| kernel32.dll | `EnterCriticalSection` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 247841 |  |
+| kernel32.dll | `FlsAlloc` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 48 |  |
+| kernel32.dll | `FlsFree` | claimed (kernel32-2 in tree) | BC | x . x x x x x | 4 |  |
+| kernel32.dll | `FlsGetValue` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 236 | INVALID_PARAMETER |
+| kernel32.dll | `FlsSetValue` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 920 |  |
+| kernel32.dll | `InitializeConditionVariable` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 1789 |  |
+| kernel32.dll | `InitializeCriticalSection` | claimed (kernel32 in tree) | BGMNRS | x x x x x x x | 428 |  |
+| kernel32.dll | `InitializeCriticalSectionEx` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 1992 |  |
+| kernel32.dll | `InitializeSListHead` | claimed (7zip in tree) | BCGMNRS | x x x x x x x | 24 |  |
+| kernel32.dll | `InitializeSRWLock` | claimed (kernel32 in tree) | BR | x . x x x x x | 5 |  |
+| kernel32.dll | `InitOnceExecuteOnce` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 43474 |  |
+| kernel32.dll | `InterlockedFlushSList` | claimed (7zip in tree) | BC | x . x x x x x | 2 | returned 0/NULL 2 x |
+| kernel32.dll | `InterlockedPushEntrySList` | claimed (7zip in tree) | BR | x x x x x x x | 4 | returned 0/NULL 1 x |
+| kernel32.dll | `LeaveCriticalSection` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 247841 |  |
+| kernel32.dll | `RegisterWaitForSingleObject` | MISSING | BCNR | x x x x x x x | 412 |  |
+| kernel32.dll | `ReleaseMutex` | claimed (kernel32 in tree) | B | x x x x x x x | 1377 |  |
+| kernel32.dll | `ReleaseSemaphore` | claimed (kernel32 in tree) | CR | x . x x x x x | 44 |  |
+| kernel32.dll | `ReleaseSRWLockExclusive` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 533631 |  |
+| kernel32.dll | `ReleaseSRWLockShared` | claimed (kernel32 in tree) | BNR | x x x x x x x | 316 |  |
+| kernel32.dll | `ResetEvent` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 3150 |  |
+| kernel32.dll | `SetEvent` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 2821 |  |
+| kernel32.dll | `Sleep` | claimed (kernel32 in tree) | G | . . x . x . x | 4 |  |
+| kernel32.dll | `SleepConditionVariableSRW` | claimed (kernel32-2 in tree) | BGNR | x x x x x x x | 112 |  |
+| kernel32.dll | `SwitchToThread` | MISSING | R | x . x x x x x | 31188 | returned 0/NULL 30937 x |
+| kernel32.dll | `TlsAlloc` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 40 |  |
+| kernel32.dll | `TlsGetValue` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 20097 | returned 0/NULL 896 x |
+| kernel32.dll | `TlsSetValue` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 339 |  |
+| kernel32.dll | `TryAcquireSRWLockExclusive` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 501705 | returned 0/NULL 9134 x |
+| kernel32.dll | `UnregisterWaitEx` | MISSING | BCN | x x x x x x x | 409 | IO_PENDING |
+| kernel32.dll | `WaitForMultipleObjects` | claimed (kernel32 in tree) | CRS | x . x x x x x | 13 | returned 0/NULL 8 x |
+| kernel32.dll | `WaitForSingleObject` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 3322 | returned 0/NULL 2825 x |
+| kernel32.dll | `WakeAllConditionVariable` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 4712 |  |
+| kernel32.dll | `WakeConditionVariable` | claimed (kernel32-2 in tree) | BGR | x x x x x x x | 328 |  |
+| user32.dll | `MsgWaitForMultipleObjectsEx` | MISSING (name appears in tree) | BGN | x x x x x x x | 1765 | returned 0/NULL 1429 x |
+| ws2_32.dll | `WSACreateEvent` | claimed (impl-winsock in tree) | BN | x x x x x x x | 53 |  |
+| ws2_32.dll | `WSAResetEvent` | claimed (impl-winsock in tree) | N | x x x x x x x | 60 |  |
 
 ### memory  (14 APIs: claimed 9, MISSING 5)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| kernel32.dll | `DiscardVirtualMemory` | MISSING | NR | x . x x x x | 6 | NOT_LOCKED |
-| kernel32.dll | `GetProcessHeap` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 24 |  |
-| kernel32.dll | `GlobalMemoryStatusEx` | claimed (7zip in tree) | BGRS | x x x x x x | 71 |  |
-| kernel32.dll | `HeapSetInformation` | MISSING | BGMNRS | x x x x x x | 8 |  |
-| kernel32.dll | `LocalFree` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 138 | returned 0/NULL 138 x |
-| kernel32.dll | `PrefetchVirtualMemory` | MISSING | B | x x x x x x | 2 |  |
-| kernel32.dll | `RtlVirtualUnwind` | claimed (7zip) | BGNR | x x x x x x | 8115 | returned 0/NULL 8115 x |
-| kernel32.dll | `VirtualAlloc` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 12438 | INVALID_PARAMETER, 487 |
-| kernel32.dll | `VirtualAllocEx` | MISSING | B | . x . . . . | 34 |  |
-| kernel32.dll | `VirtualFree` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 1764 |  |
-| kernel32.dll | `VirtualProtect` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 696 |  |
-| kernel32.dll | `VirtualProtectEx` | MISSING | B | . x . . . . | 238 |  |
-| kernel32.dll | `VirtualQuery` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 2939 |  |
-| user32.dll | `MapVirtualKeyW` | claimed (spec-win-gui-b in tree) | B | x x x x x x | 2 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| kernel32.dll | `DiscardVirtualMemory` | MISSING | NR | x . x x x x x | 6 | NOT_LOCKED |
+| kernel32.dll | `GetProcessHeap` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 24 |  |
+| kernel32.dll | `GlobalMemoryStatusEx` | claimed (7zip in tree) | BGRS | x x x x x x x | 71 |  |
+| kernel32.dll | `HeapSetInformation` | MISSING | BGMNRS | x x x x x x x | 8 |  |
+| kernel32.dll | `LocalFree` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 138 | returned 0/NULL 138 x |
+| kernel32.dll | `PrefetchVirtualMemory` | MISSING | B | x x x x x x x | 2 |  |
+| kernel32.dll | `RtlVirtualUnwind` | claimed (7zip) | BGNR | x x x x x x x | 8115 | returned 0/NULL 8115 x |
+| kernel32.dll | `VirtualAlloc` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 12438 | INVALID_PARAMETER, 487 |
+| kernel32.dll | `VirtualAllocEx` | MISSING | B | . x . . . . . | 34 |  |
+| kernel32.dll | `VirtualFree` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 1764 |  |
+| kernel32.dll | `VirtualProtect` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 696 |  |
+| kernel32.dll | `VirtualProtectEx` | MISSING | B | . x . . . . . | 238 |  |
+| kernel32.dll | `VirtualQuery` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 2939 |  |
+| user32.dll | `MapVirtualKeyW` | claimed (spec-win-gui-b in tree) | B | x x x x x x x | 2 |  |
 
 ### loader / exceptions / debug  (22 APIs: claimed 14, MISSING 8)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| kernel32.dll | `AddVectoredExceptionHandler` | MISSING | BGMNRS | x x x x x x | 16 |  |
-| kernel32.dll | `ExitProcess` | claimed (kernel32 in tree) | BC | x . x x x x | 2 |  |
-| kernel32.dll | `FreeLibrary` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 37 |  |
-| kernel32.dll | `GetLastError` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 24280 | returned 0/NULL 16572 x |
-| kernel32.dll | `GetModuleFileNameA` | MISSING | G | . . . . . x | 2 |  |
-| kernel32.dll | `GetModuleFileNameW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 514 |  |
-| kernel32.dll | `GetModuleHandleA` | claimed (7zip in tree) | BGMNRS | x x x x x x | 8 | MOD_NOT_FOUND |
-| kernel32.dll | `GetModuleHandleExA` | MISSING | BG | x x x x x x | 5 |  |
-| kernel32.dll | `GetModuleHandleExW` | MISSING | BCGNR | x x x x x x | 40 | MOD_NOT_FOUND |
-| kernel32.dll | `GetModuleHandleW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 151 | MOD_NOT_FOUND |
-| kernel32.dll | `GetProcAddress` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 5003 | PROC_NOT_FOUND |
-| kernel32.dll | `IsDebuggerPresent` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 106 | returned 0/NULL 106 x |
-| kernel32.dll | `LoadLibraryExA` | MISSING | BCGMNRS | x x x x x x | 41 | MOD_NOT_FOUND, ENVVAR_NOT_FOUND, SXS_KEY_NOT_FOUND |
-| kernel32.dll | `LoadLibraryExW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 183 | INVALID_PARAMETER, MOD_NOT_FOUND |
-| kernel32.dll | `LoadLibraryW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 64 | returned 0/NULL 8 x |
-| kernel32.dll | `OutputDebugStringW` | MISSING | B | x x x x x x | 1 |  |
-| kernel32.dll | `RtlCaptureStackBackTrace` | MISSING | BCGMNRS | x x x x x x | 526 |  |
-| kernel32.dll | `RtlLookupFunctionEntry` | claimed (7zip) | BGNR | x x x x x x | 8115 | returned 0/NULL 3 x |
-| kernel32.dll | `SetLastError` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 26383 |  |
-| kernel32.dll | `SetUnhandledExceptionFilter` | claimed (7zip in tree) | BCGMNRS | x x x x x x | 24 | returned 0/NULL 8 x |
-| kernel32.dll | `WerRegisterRuntimeExceptionModule` | MISSING | BGMNRS | x x x x x x | 8 | returned 0/NULL 8 x |
-| ws2_32.dll | `WSAGetLastError (#111)` | claimed (impl-winsock in tree) | BN | x x x x x x | 638 | returned 0/NULL 273 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| kernel32.dll | `AddVectoredExceptionHandler` | MISSING | BGMNRS | x x x x x x x | 16 |  |
+| kernel32.dll | `ExitProcess` | claimed (kernel32 in tree) | BC | x . x x x x x | 2 |  |
+| kernel32.dll | `FreeLibrary` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 37 |  |
+| kernel32.dll | `GetLastError` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 24280 | returned 0/NULL 16572 x |
+| kernel32.dll | `GetModuleFileNameA` | MISSING | G | . . . . . x x | 2 |  |
+| kernel32.dll | `GetModuleFileNameW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 514 |  |
+| kernel32.dll | `GetModuleHandleA` | claimed (7zip in tree) | BGMNRS | x x x x x x x | 8 | MOD_NOT_FOUND |
+| kernel32.dll | `GetModuleHandleExA` | MISSING | BG | x x x x x x x | 5 |  |
+| kernel32.dll | `GetModuleHandleExW` | MISSING | BCGNR | x x x x x x x | 40 | MOD_NOT_FOUND |
+| kernel32.dll | `GetModuleHandleW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 151 | MOD_NOT_FOUND |
+| kernel32.dll | `GetProcAddress` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 5003 | PROC_NOT_FOUND |
+| kernel32.dll | `IsDebuggerPresent` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 106 | returned 0/NULL 106 x |
+| kernel32.dll | `LoadLibraryExA` | MISSING | BCGMNRS | x x x x x x x | 41 | MOD_NOT_FOUND, ENVVAR_NOT_FOUND, SXS_KEY_NOT_FOUND |
+| kernel32.dll | `LoadLibraryExW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 183 | INVALID_PARAMETER, MOD_NOT_FOUND |
+| kernel32.dll | `LoadLibraryW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 64 | returned 0/NULL 8 x |
+| kernel32.dll | `OutputDebugStringW` | MISSING | B | x x x x x x x | 1 |  |
+| kernel32.dll | `RtlCaptureStackBackTrace` | MISSING | BCGMNRS | x x x x x x x | 526 |  |
+| kernel32.dll | `RtlLookupFunctionEntry` | claimed (7zip) | BGNR | x x x x x x x | 8115 | returned 0/NULL 3 x |
+| kernel32.dll | `SetLastError` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 26383 |  |
+| kernel32.dll | `SetUnhandledExceptionFilter` | claimed (7zip in tree) | BCGMNRS | x x x x x x x | 24 | returned 0/NULL 8 x |
+| kernel32.dll | `WerRegisterRuntimeExceptionModule` | MISSING | BGMNRS | x x x x x x x | 8 | returned 0/NULL 8 x |
+| ws2_32.dll | `WSAGetLastError (#111)` | claimed (impl-winsock in tree) | BN | x x x x x x x | 638 | returned 0/NULL 273 x |
 
 ### file system  (45 APIs: claimed 28, MISSING 17)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| imm32.dll | `ImmGetIMEFileNameW` | MISSING | B | x x x x x x | 3 | returned 0/NULL 3 x |
-| kernel32.dll | `CreateDirectoryW` | claimed (kernel32 in tree) | BCN | x x x x x x | 97 | ALREADY_EXISTS |
-| kernel32.dll | `CreateFileW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 481 | FILE_NOT_FOUND, PATH_NOT_FOUND, ALREADY_EXISTS |
-| kernel32.dll | `DeleteFileW` | claimed (kernel32 in tree) | BN | x x x x x x | 15 |  |
-| kernel32.dll | `DeviceIoControl` | claimed (7zip in tree) | B | x x x x x x | 59 | 31 |
-| kernel32.dll | `FileTimeToSystemTime` | claimed (kernel32-2 in tree) | B | x x x x x x | 163 |  |
-| kernel32.dll | `FindClose` | claimed (kernel32 in tree) | BN | x x x x x x | 107 |  |
-| kernel32.dll | `FindFirstFileExW` | MISSING | BN | x x x x x x | 144 | FILE_NOT_FOUND, PATH_NOT_FOUND |
-| kernel32.dll | `FindNextFileW` | claimed (kernel32 in tree) | BN | x x x x x x | 386 | NO_MORE_FILES |
-| kernel32.dll | `FlushFileBuffers` | claimed (kernel32 in tree) | BGNS | x x x x x x | 234 |  |
-| kernel32.dll | `GetCurrentDirectoryW` | claimed (kernel32 in tree) | B | x x x x x x | 3 |  |
-| kernel32.dll | `GetDiskFreeSpaceExW` | claimed (7zip in tree) | BN | x x x x x x | 4 | PATH_NOT_FOUND |
-| kernel32.dll | `GetFileAttributesExW` | MISSING | BN | x x x x x x | 117 | FILE_NOT_FOUND |
-| kernel32.dll | `GetFileAttributesW` | claimed (kernel32 in tree) | BMNRS | x x x x x x | 570 | FILE_NOT_FOUND, PATH_NOT_FOUND |
-| kernel32.dll | `GetFileInformationByHandle` | claimed (kernel32-2 in tree) | BN | x x x x x x | 5 |  |
-| kernel32.dll | `GetFileInformationByHandleEx` | MISSING | BCGR | x x x x x x | 2 |  |
-| kernel32.dll | `GetFileSize` | claimed (kernel32 in tree) | BN | x x x x x x | 257 | returned 0/NULL 232 x |
-| kernel32.dll | `GetFileSizeEx` | claimed (kernel32 in tree) | BGMNRS | x x x x x x | 119 |  |
-| kernel32.dll | `GetFileType` | claimed (kernel32 in tree) | BCN | x x x x x x | 17 | INVALID_HANDLE |
-| kernel32.dll | `GetFinalPathNameByHandleW` | MISSING | B | x x x x x x | 1 |  |
-| kernel32.dll | `GetFullPathNameW` | claimed (kernel32 in tree) | BGMNRS | x x x x x x | 42 |  |
-| kernel32.dll | `GetLongPathNameW` | MISSING | BN | x x x x x x | 112 | ACCESS_DENIED |
-| kernel32.dll | `GetSystemDirectoryW` | MISSING | BGN | x x x x x x | 5 |  |
-| kernel32.dll | `GetSystemTimeAsFileTime` | claimed (kernel32 in tree) | BCNR | x x x x x x | 70 |  |
-| kernel32.dll | `GetSystemTimePreciseAsFileTime` | claimed (kernel32 in tree) | BGMNRS | x x x x x x | 8 |  |
-| kernel32.dll | `GetTempPathW` | claimed (kernel32 in tree) | B | x x x x x x | 12 |  |
-| kernel32.dll | `LockFileEx` | MISSING | BGNS | x x x x x x | 203 |  |
-| kernel32.dll | `MoveFileW` | claimed (7zip in tree) | BN | x x x x x x | 20 | returned 0/NULL 3 x |
-| kernel32.dll | `ReadFile` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 3922 | HANDLE_EOF, BROKEN_PIPE, IO_PENDING |
-| kernel32.dll | `RemoveDirectoryW` | claimed (kernel32 in tree) | B | x x x x x x | 5 | returned 0/NULL 2 x |
-| kernel32.dll | `ReplaceFileW` | MISSING | BN | x x x x x x | 19 | FILE_NOT_FOUND, ENVVAR_NOT_FOUND |
-| kernel32.dll | `SetCurrentDirectoryW` | claimed (kernel32 in tree) | BGMNRS | x x x x x x | 8 |  |
-| kernel32.dll | `SetEndOfFile` | claimed (kernel32 in tree) | BGNS | x x x x x x | 81 |  |
-| kernel32.dll | `SetFileInformationByHandle` | MISSING | BN | x x x x x x | 19 |  |
-| kernel32.dll | `SetFilePointer` | claimed (kernel32 in tree) | BN | x x x x x x | 58 | returned 0/NULL 58 x |
-| kernel32.dll | `SetFilePointerEx` | claimed (kernel32 in tree) | BGNS | x x x x x x | 99 |  |
-| kernel32.dll | `SystemTimeToFileTime` | claimed (kernel32-2 in tree) | BN | x x x x x x | 128 |  |
-| kernel32.dll | `UnlockFileEx` | MISSING | BNS | x x x x x x | 203 | NOT_LOCKED |
-| kernel32.dll | `WriteFile` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 6932 | INVALID_HANDLE, NO_DATA, IO_PENDING |
-| shell32.dll | `SHGetFolderPathW` | MISSING | B | x x x x x x | 6 | NO_TOKEN |
-| shell32.dll | `SHGetKnownFolderPath` | MISSING | B | x x x x x x | 2 | FILE_NOT_FOUND, NO_TOKEN |
-| shell32.dll | `SHGetSpecialFolderPathW` | MISSING | B | . . . . x . | 1 | NO_TOKEN |
-| shlwapi.dll | `PathMatchSpecW` | MISSING | B | x x x x x x | 164 |  |
-| version.dll | `GetFileVersionInfoSizeW` | MISSING | B | x x x x x x | 2 |  |
-| version.dll | `GetFileVersionInfoW` | MISSING | B | x x x x x x | 2 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| imm32.dll | `ImmGetIMEFileNameW` | MISSING | B | x x x x x x x | 3 | returned 0/NULL 3 x |
+| kernel32.dll | `CreateDirectoryW` | claimed (kernel32 in tree) | BCN | x x x x x x x | 97 | ALREADY_EXISTS |
+| kernel32.dll | `CreateFileW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 481 | FILE_NOT_FOUND, PATH_NOT_FOUND, ALREADY_EXISTS |
+| kernel32.dll | `DeleteFileW` | claimed (kernel32 in tree) | BN | x x x x x x x | 15 |  |
+| kernel32.dll | `DeviceIoControl` | claimed (7zip in tree) | B | x x x x x x x | 59 | 31 |
+| kernel32.dll | `FileTimeToSystemTime` | claimed (kernel32-2 in tree) | B | x x x x x x x | 163 |  |
+| kernel32.dll | `FindClose` | claimed (kernel32 in tree) | BN | x x x x x x x | 107 |  |
+| kernel32.dll | `FindFirstFileExW` | MISSING | BN | x x x x x x x | 144 | FILE_NOT_FOUND, PATH_NOT_FOUND |
+| kernel32.dll | `FindNextFileW` | claimed (kernel32 in tree) | BN | x x x x x x x | 386 | NO_MORE_FILES |
+| kernel32.dll | `FlushFileBuffers` | claimed (kernel32 in tree) | BGNS | x x x x x x x | 234 |  |
+| kernel32.dll | `GetCurrentDirectoryW` | claimed (kernel32 in tree) | B | x x x x x x x | 3 |  |
+| kernel32.dll | `GetDiskFreeSpaceExW` | claimed (7zip in tree) | BN | x x x x x x x | 4 | PATH_NOT_FOUND |
+| kernel32.dll | `GetFileAttributesExW` | MISSING | BN | x x x x x x x | 117 | FILE_NOT_FOUND |
+| kernel32.dll | `GetFileAttributesW` | claimed (kernel32 in tree) | BMNRS | x x x x x x x | 570 | FILE_NOT_FOUND, PATH_NOT_FOUND |
+| kernel32.dll | `GetFileInformationByHandle` | claimed (kernel32-2 in tree) | BN | x x x x x x x | 5 |  |
+| kernel32.dll | `GetFileInformationByHandleEx` | MISSING | BCGR | x x x x x x x | 2 |  |
+| kernel32.dll | `GetFileSize` | claimed (kernel32 in tree) | BN | x x x x x x x | 257 | returned 0/NULL 232 x |
+| kernel32.dll | `GetFileSizeEx` | claimed (kernel32 in tree) | BGMNRS | x x x x x x x | 119 |  |
+| kernel32.dll | `GetFileType` | claimed (kernel32 in tree) | BCN | x x x x x x x | 17 | INVALID_HANDLE |
+| kernel32.dll | `GetFinalPathNameByHandleW` | MISSING | B | x x x x x x x | 1 |  |
+| kernel32.dll | `GetFullPathNameW` | claimed (kernel32 in tree) | BGMNRS | x x x x x x x | 42 |  |
+| kernel32.dll | `GetLongPathNameW` | MISSING | BN | x x x x x x x | 112 | ACCESS_DENIED |
+| kernel32.dll | `GetSystemDirectoryW` | MISSING | BGN | x x x x x x x | 5 |  |
+| kernel32.dll | `GetSystemTimeAsFileTime` | claimed (kernel32 in tree) | BCNR | x x x x x x x | 70 |  |
+| kernel32.dll | `GetSystemTimePreciseAsFileTime` | claimed (kernel32 in tree) | BGMNRS | x x x x x x x | 8 |  |
+| kernel32.dll | `GetTempPathW` | claimed (kernel32 in tree) | B | x x x x x x x | 12 |  |
+| kernel32.dll | `LockFileEx` | MISSING | BGNS | x x x x x x x | 203 |  |
+| kernel32.dll | `MoveFileW` | claimed (7zip in tree) | BN | x x x x x x x | 20 | returned 0/NULL 3 x |
+| kernel32.dll | `ReadFile` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 3922 | HANDLE_EOF, BROKEN_PIPE, IO_PENDING |
+| kernel32.dll | `RemoveDirectoryW` | claimed (kernel32 in tree) | B | x x x x x x x | 5 | returned 0/NULL 2 x |
+| kernel32.dll | `ReplaceFileW` | MISSING | BN | x x x x x x x | 19 | FILE_NOT_FOUND, ENVVAR_NOT_FOUND |
+| kernel32.dll | `SetCurrentDirectoryW` | claimed (kernel32 in tree) | BGMNRS | x x x x x x x | 8 |  |
+| kernel32.dll | `SetEndOfFile` | claimed (kernel32 in tree) | BGNS | x x x x x x x | 81 |  |
+| kernel32.dll | `SetFileInformationByHandle` | MISSING | BN | x x x x x x x | 19 |  |
+| kernel32.dll | `SetFilePointer` | claimed (kernel32 in tree) | BN | x x x x x x x | 58 | returned 0/NULL 58 x |
+| kernel32.dll | `SetFilePointerEx` | claimed (kernel32 in tree) | BGNS | x x x x x x x | 99 |  |
+| kernel32.dll | `SystemTimeToFileTime` | claimed (kernel32-2 in tree) | BN | x x x x x x x | 128 |  |
+| kernel32.dll | `UnlockFileEx` | MISSING | BNS | x x x x x x x | 203 | NOT_LOCKED |
+| kernel32.dll | `WriteFile` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 6932 | INVALID_HANDLE, NO_DATA, IO_PENDING |
+| shell32.dll | `SHGetFolderPathW` | MISSING | B | x x x x x x x | 6 | NO_TOKEN |
+| shell32.dll | `SHGetKnownFolderPath` | MISSING | B | x x x x x x x | 2 | FILE_NOT_FOUND, NO_TOKEN |
+| shell32.dll | `SHGetSpecialFolderPathW` | MISSING | B | . . . . x . . | 1 | NO_TOKEN |
+| shlwapi.dll | `PathMatchSpecW` | MISSING | B | x x x x x x x | 164 |  |
+| version.dll | `GetFileVersionInfoSizeW` | MISSING | B | x x x x x x x | 2 |  |
+| version.dll | `GetFileVersionInfoW` | MISSING | B | x x x x x x x | 2 |  |
 
 ### registry  (19 APIs: claimed 16, MISSING 3)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| advapi32.dll | `RegCloseKey` | claimed (advapi32) | BCGMNRS | x x x x x x | 270 | returned 0/NULL 270 x |
-| advapi32.dll | `RegCreateKeyExW` | claimed (advapi32) | B | x x x x x x | 26 | returned 0/NULL 25 x |
-| advapi32.dll | `RegDeleteKeyExW` | claimed (advapi32 in tree) | B | x x x x x x | 1 | returned 0/NULL 1 x |
-| advapi32.dll | `RegDeleteValueW` | claimed (advapi32) | B | x x x x x x | 4 | returned 0/NULL 2 x |
-| advapi32.dll | `RegDisablePredefinedCache` | MISSING | GN | . x . . . . | 1 | returned 0/NULL 1 x |
-| advapi32.dll | `RegEnumKeyExW` | claimed (advapi32) | BN | x x x x x x | 102 | returned 0/NULL 102 x |
-| advapi32.dll | `RegEnumValueW` | claimed (advapi32) | B | x x x x x x | 37 | returned 0/NULL 37 x |
-| advapi32.dll | `RegNotifyChangeKeyValue` | MISSING | BNR | x x x x x x | 24 | returned 0/NULL 24 x |
-| advapi32.dll | `RegOpenKeyExA` | claimed (advapi32) | R | x . x x x x | 8 | returned 0/NULL 8 x |
-| advapi32.dll | `RegOpenKeyExW` | claimed (advapi32) | BCGMNRS | x x x x x x | 339 | returned 0/NULL 266 x |
-| advapi32.dll | `RegQueryInfoKeyW` | claimed (advapi32) | BN | x x x x x x | 29 | returned 0/NULL 28 x |
-| advapi32.dll | `RegQueryValueExA` | claimed (advapi32) | GR | x . x x x x | 8 | returned 0/NULL 8 x |
-| advapi32.dll | `RegQueryValueExW` | claimed (advapi32) | BCGMNRS | x x x x x x | 276 | returned 0/NULL 188 x |
-| advapi32.dll | `RegSetValueExW` | claimed (advapi32) | B | x x x x x x | 13 | returned 0/NULL 13 x |
-| ntdll.dll | `NtCreateKey` | claimed (syscall in service table) | BGMNRS | x x x x x x | 40 | returned 0/NULL 40 x |
-| ntdll.dll | `NtOpenKeyEx` | claimed (syscall in service table) | BCGMNRS | x x x x x x | 18 | returned 0/NULL 8 x |
-| ntdll.dll | `NtQueryValueKey` | claimed (syscall in service table) | BCGMNRS | x x x x x x | 24 | returned 0/NULL 8 x |
-| ntdll.dll | `NtSetValueKey` | claimed (syscall in service table) | B | x x x x x x | 8 | returned 0/NULL 8 x |
-| ntdll.dll | `RtlFormatCurrentUserKeyPath` | MISSING | BCGMNRS | x x x x x x | 8 | returned 0/NULL 8 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| advapi32.dll | `RegCloseKey` | claimed (advapi32) | BCGMNRS | x x x x x x x | 270 | returned 0/NULL 270 x |
+| advapi32.dll | `RegCreateKeyExW` | claimed (advapi32) | B | x x x x x x x | 26 | returned 0/NULL 25 x |
+| advapi32.dll | `RegDeleteKeyExW` | claimed (advapi32 in tree) | B | x x x x x x x | 1 | returned 0/NULL 1 x |
+| advapi32.dll | `RegDeleteValueW` | claimed (advapi32) | B | x x x x x x x | 4 | returned 0/NULL 2 x |
+| advapi32.dll | `RegDisablePredefinedCache` | MISSING | GN | . x . . . . . | 1 | returned 0/NULL 1 x |
+| advapi32.dll | `RegEnumKeyExW` | claimed (advapi32) | BN | x x x x x x x | 102 | returned 0/NULL 102 x |
+| advapi32.dll | `RegEnumValueW` | claimed (advapi32) | B | x x x x x x x | 37 | returned 0/NULL 37 x |
+| advapi32.dll | `RegNotifyChangeKeyValue` | MISSING | BNR | x x x x x x x | 24 | returned 0/NULL 24 x |
+| advapi32.dll | `RegOpenKeyExA` | claimed (advapi32) | R | x . x x x x x | 8 | returned 0/NULL 8 x |
+| advapi32.dll | `RegOpenKeyExW` | claimed (advapi32) | BCGMNRS | x x x x x x x | 339 | returned 0/NULL 266 x |
+| advapi32.dll | `RegQueryInfoKeyW` | claimed (advapi32) | BN | x x x x x x x | 29 | returned 0/NULL 28 x |
+| advapi32.dll | `RegQueryValueExA` | claimed (advapi32) | GR | x . x x x x x | 8 | returned 0/NULL 8 x |
+| advapi32.dll | `RegQueryValueExW` | claimed (advapi32) | BCGMNRS | x x x x x x x | 276 | returned 0/NULL 188 x |
+| advapi32.dll | `RegSetValueExW` | claimed (advapi32) | B | x x x x x x x | 13 | returned 0/NULL 13 x |
+| ntdll.dll | `NtCreateKey` | claimed (syscall in service table) | BGMNRS | x x x x x x x | 40 | returned 0/NULL 40 x |
+| ntdll.dll | `NtOpenKeyEx` | claimed (syscall in service table) | BCGMNRS | x x x x x x x | 18 | returned 0/NULL 8 x |
+| ntdll.dll | `NtQueryValueKey` | claimed (syscall in service table) | BCGMNRS | x x x x x x x | 24 | returned 0/NULL 8 x |
+| ntdll.dll | `NtSetValueKey` | claimed (syscall in service table) | B | x x x x x x x | 8 | returned 0/NULL 8 x |
+| ntdll.dll | `RtlFormatCurrentUserKeyPath` | MISSING | BCGMNRS | x x x x x x x | 8 | returned 0/NULL 8 x |
 
 ### console / process environment  (11 APIs: claimed 11)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| kernel32.dll | `AttachConsole` | claimed (console in tree) | G | x x . x . x | 1 | INVALID_HANDLE |
-| kernel32.dll | `ExpandEnvironmentStringsW` | claimed (kernel32 in tree) | B | . x x . x . | 27 |  |
-| kernel32.dll | `FreeEnvironmentStringsW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 24 |  |
-| kernel32.dll | `GetCommandLineA` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 24 |  |
-| kernel32.dll | `GetCommandLineW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 64 |  |
-| kernel32.dll | `GetEnvironmentStringsW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 24 |  |
-| kernel32.dll | `GetEnvironmentVariableW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 49 | ENVVAR_NOT_FOUND |
-| kernel32.dll | `GetStartupInfoW` | claimed (7zip in tree) | BCGMNRS | x x x x x x | 32 |  |
-| kernel32.dll | `GetStdHandle` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 72 | returned 0/NULL 72 x |
-| kernel32.dll | `SetConsoleCtrlHandler` | claimed (console in tree) | BCGMNRS | x x x x x x | 8 |  |
-| kernel32.dll | `SetEnvironmentVariableW` | claimed (kernel32 in tree) | B | x x x x x x | 1 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| kernel32.dll | `AttachConsole` | claimed (console in tree) | G | x x . x . x . | 1 | INVALID_HANDLE |
+| kernel32.dll | `ExpandEnvironmentStringsW` | claimed (kernel32 in tree) | B | . x x . x . x | 27 |  |
+| kernel32.dll | `FreeEnvironmentStringsW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 24 |  |
+| kernel32.dll | `GetCommandLineA` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 24 |  |
+| kernel32.dll | `GetCommandLineW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 64 |  |
+| kernel32.dll | `GetEnvironmentStringsW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 24 |  |
+| kernel32.dll | `GetEnvironmentVariableW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 49 | ENVVAR_NOT_FOUND |
+| kernel32.dll | `GetStartupInfoW` | claimed (7zip in tree) | BCGMNRS | x x x x x x x | 32 |  |
+| kernel32.dll | `GetStdHandle` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 72 | returned 0/NULL 72 x |
+| kernel32.dll | `SetConsoleCtrlHandler` | claimed (console in tree) | BCGMNRS | x x x x x x x | 8 |  |
+| kernel32.dll | `SetEnvironmentVariableW` | claimed (kernel32 in tree) | B | x x x x x x x | 1 |  |
 
 ### NLS / text  (16 APIs: claimed 8, MISSING 8)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| kernel32.dll | `FormatMessageW` | claimed (kernel32 in tree) | B | x x x x x x | 5 |  |
-| kernel32.dll | `GetACP` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 24 |  |
-| kernel32.dll | `GetCPInfo` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 48 |  |
-| kernel32.dll | `GetGeoInfoW` | MISSING | BR | x x x x x x | 2 |  |
-| kernel32.dll | `GetLocaleInfoEx` | MISSING | BGMNRS | x x x x x x | 8 |  |
-| kernel32.dll | `GetStringTypeW` | MISSING | BCGMNRS | x x x x x x | 24 |  |
-| kernel32.dll | `GetUserDefaultLangID` | MISSING | BGN | x x x x x x | 4 |  |
-| kernel32.dll | `GetUserDefaultLCID` | MISSING | GN | . x . . . . | 1 |  |
-| kernel32.dll | `GetUserDefaultLocaleName` | MISSING | GN | . x . . . . | 1 |  |
-| kernel32.dll | `GetUserGeoID` | MISSING | BR | x x x x x x | 2 |  |
-| kernel32.dll | `IsValidCodePage` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 24 |  |
-| kernel32.dll | `lstrcmpiA` | MISSING | GMNRS | x x x x x x | 128 |  |
-| kernel32.dll | `lstrcmpW` | claimed (kernel32-2 in tree) | B | x x x x x x | 14 | INVALID_PARAMETER |
-| kernel32.dll | `MultiByteToWideChar` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 774 |  |
-| kernel32.dll | `WideCharToMultiByte` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x | 5690 |  |
-| user32.dll | `CharUpperW` | claimed (7zip in tree) | B | x x x x x x | 14230 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| kernel32.dll | `FormatMessageW` | claimed (kernel32 in tree) | B | x x x x x x x | 5 |  |
+| kernel32.dll | `GetACP` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 24 |  |
+| kernel32.dll | `GetCPInfo` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 48 |  |
+| kernel32.dll | `GetGeoInfoW` | MISSING | BR | x x x x x x x | 2 |  |
+| kernel32.dll | `GetLocaleInfoEx` | MISSING | BGMNRS | x x x x x x x | 8 |  |
+| kernel32.dll | `GetStringTypeW` | MISSING | BCGMNRS | x x x x x x x | 24 |  |
+| kernel32.dll | `GetUserDefaultLangID` | MISSING | BGN | x x x x x x x | 4 |  |
+| kernel32.dll | `GetUserDefaultLCID` | MISSING | GN | . x . . . . . | 1 |  |
+| kernel32.dll | `GetUserDefaultLocaleName` | MISSING | GN | . x . . . . . | 1 |  |
+| kernel32.dll | `GetUserGeoID` | MISSING | BR | x x x x x x x | 2 |  |
+| kernel32.dll | `IsValidCodePage` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 24 |  |
+| kernel32.dll | `lstrcmpiA` | MISSING | GMNRS | x x x x x x x | 128 |  |
+| kernel32.dll | `lstrcmpW` | claimed (kernel32-2 in tree) | B | x x x x x x x | 14 | INVALID_PARAMETER |
+| kernel32.dll | `MultiByteToWideChar` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 774 |  |
+| kernel32.dll | `WideCharToMultiByte` | claimed (kernel32-2 in tree) | BCGMNRS | x x x x x x x | 5690 |  |
+| user32.dll | `CharUpperW` | claimed (7zip in tree) | B | x x x x x x x | 14230 |  |
 
 ### time  (14 APIs: claimed 5, MISSING 9)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| api-ms-win-core-realtime-l1-1-1.dll | `QueryUnbiasedInterruptTimePrecise` | MISSING | B | x x x x x x | 40 |  |
-| kernel32.dll | `GetDynamicTimeZoneInformation` | MISSING | BR | x . x x x x | 1 |  |
-| kernel32.dll | `GetLocalTime` | claimed (kernel32-2 in tree) | BGMNRS | x x x x x x | 329 |  |
-| kernel32.dll | `GetSystemTime` | claimed (kernel32-2 in tree) | BGN | x x x x x x | 1 |  |
-| kernel32.dll | `GetTickCount` | claimed (kernel32 in tree) | BGN | x x x x x x | 70 |  |
-| kernel32.dll | `GetTimeZoneInformation` | MISSING | BNR | x x x x x x | 3 |  |
-| kernel32.dll | `QueryPerformanceCounter` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 247057 |  |
-| kernel32.dll | `QueryPerformanceFrequency` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 116 |  |
-| kernel32.dll | `SystemTimeToTzSpecificLocalTime` | MISSING | B | x x x x x x | 151 |  |
-| kernel32.dll | `TzSpecificLocalTimeToSystemTime` | MISSING | B | x x x x x x | 123 |  |
-| user32.dll | `GetCaretBlinkTime` | MISSING | BR | x x x x x x | 8 |  |
-| user32.dll | `GetDoubleClickTime` | MISSING (name appears in tree) | B | x x x x x x | 4 |  |
-| user32.dll | `GetMessageTime` | MISSING (name appears in tree) | B | . . x . x . | 70 |  |
-| winmm.dll | `timeGetTime` | MISSING | R | x . x x x x | 2584 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| api-ms-win-core-realtime-l1-1-1.dll | `QueryUnbiasedInterruptTimePrecise` | MISSING | B | x x x x x x x | 40 |  |
+| kernel32.dll | `GetDynamicTimeZoneInformation` | MISSING | BR | x . x x x x x | 1 |  |
+| kernel32.dll | `GetLocalTime` | claimed (kernel32-2 in tree) | BGMNRS | x x x x x x x | 329 |  |
+| kernel32.dll | `GetSystemTime` | claimed (kernel32-2 in tree) | BGN | x x x x x x x | 1 |  |
+| kernel32.dll | `GetTickCount` | claimed (kernel32 in tree) | BGN | x x x x x x x | 70 |  |
+| kernel32.dll | `GetTimeZoneInformation` | MISSING | BNR | x x x x x x x | 3 |  |
+| kernel32.dll | `QueryPerformanceCounter` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 247057 |  |
+| kernel32.dll | `QueryPerformanceFrequency` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 116 |  |
+| kernel32.dll | `SystemTimeToTzSpecificLocalTime` | MISSING | B | x x x x x x x | 151 |  |
+| kernel32.dll | `TzSpecificLocalTimeToSystemTime` | MISSING | B | x x x x x x x | 123 |  |
+| user32.dll | `GetCaretBlinkTime` | MISSING | BR | x x x x x x x | 8 |  |
+| user32.dll | `GetDoubleClickTime` | MISSING (name appears in tree) | B | x x x x x x x | 4 |  |
+| user32.dll | `GetMessageTime` | MISSING (name appears in tree) | B | . . x . x . x | 70 |  |
+| winmm.dll | `timeGetTime` | MISSING | R | x . x x x x x | 2584 |  |
 
 ### system information  (11 APIs: claimed 3, MISSING 8)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| kernel32.dll | `GetComputerNameExW` | MISSING | BN | x x x x x x | 3 | ENVVAR_NOT_FOUND |
-| kernel32.dll | `GetComputerNameW` | MISSING | B | x x x x x x | 2 | ENVVAR_NOT_FOUND |
-| kernel32.dll | `GetLogicalProcessorInformation` | MISSING | BGR | x x x x x x | 9 | INSUFFICIENT_BUFFER |
-| kernel32.dll | `GetLogicalProcessorInformationEx` | MISSING | BGMNRS | x x x x x x | 8 |  |
-| kernel32.dll | `GetNativeSystemInfo` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 40 |  |
-| kernel32.dll | `GetProductInfo` | MISSING | BCGMNRS | x x x x x x | 16 |  |
-| kernel32.dll | `GetSystemInfo` | claimed (kernel32 in tree) | BGNRS | x x x x x x | 26 |  |
-| kernel32.dll | `GetSystemPowerStatus` | MISSING | B | x x x x x x | 4 |  |
-| kernel32.dll | `GetVersionExW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 16 |  |
-| kernel32.dll | `VerifyVersionInfoW` | MISSING | BGMNRS | x x x x x x | 15 |  |
-| kernel32.dll | `VerSetConditionMask` | MISSING | BGMNRS | x x x x x x | 45 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| kernel32.dll | `GetComputerNameExW` | MISSING | BN | x x x x x x x | 3 | ENVVAR_NOT_FOUND |
+| kernel32.dll | `GetComputerNameW` | MISSING | B | x x x x x x x | 2 | ENVVAR_NOT_FOUND |
+| kernel32.dll | `GetLogicalProcessorInformation` | MISSING | BGR | x x x x x x x | 9 | INSUFFICIENT_BUFFER |
+| kernel32.dll | `GetLogicalProcessorInformationEx` | MISSING | BGMNRS | x x x x x x x | 8 |  |
+| kernel32.dll | `GetNativeSystemInfo` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 40 |  |
+| kernel32.dll | `GetProductInfo` | MISSING | BCGMNRS | x x x x x x x | 16 |  |
+| kernel32.dll | `GetSystemInfo` | claimed (kernel32 in tree) | BGNRS | x x x x x x x | 26 |  |
+| kernel32.dll | `GetSystemPowerStatus` | MISSING | B | x x x x x x x | 4 |  |
+| kernel32.dll | `GetVersionExW` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 16 |  |
+| kernel32.dll | `VerifyVersionInfoW` | MISSING | BGMNRS | x x x x x x x | 15 |  |
+| kernel32.dll | `VerSetConditionMask` | MISSING | BGMNRS | x x x x x x x | 45 |  |
 
-### security: tokens / ACLs / SIDs  (43 APIs: claimed 23, MISSING 19, NOT LISTED 1)
+### security: tokens / ACLs / SIDs  (43 APIs: claimed 23, MISSING 20)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| advapi32.dll | `AccessCheck` | MISSING | B | . x . . . . | 2 |  |
-| advapi32.dll | `AddMandatoryAce` | MISSING | B | . x . . . . | 1 |  |
-| advapi32.dll | `AdjustTokenPrivileges` | claimed (impl-7zip-trace) | B | . x . . . . | 10 |  |
-| advapi32.dll | `BuildExplicitAccessWithNameW` | MISSING | B | x x x x x x | 1 |  |
-| advapi32.dll | `BuildSecurityDescriptorW` | MISSING | B | x x x x x x | 1 | INSUFFICIENT_BUFFER |
-| advapi32.dll | `BuildTrusteeWithSidW` | MISSING | B | x x x x x x | 59 |  |
-| advapi32.dll | `CheckTokenMembership` | claimed (advapi32) | B | x x x x x x | 17 |  |
-| advapi32.dll | `ConvertSidToStringSidA` | claimed (advapi32 in tree) | B | x x x x x x | 1 |  |
-| advapi32.dll | `ConvertSidToStringSidW` | claimed (advapi32 in tree) | BGMNRS | x x x x x x | 8 |  |
-| advapi32.dll | `ConvertStringSecurityDescriptorToSecurityDescriptorW` | MISSING | B | x x x x x x | 3 |  |
-| advapi32.dll | `ConvertStringSidToSidW` | claimed (advapi32 in tree) | B | x x x x x x | 16 |  |
-| advapi32.dll | `CreateRestrictedToken` | MISSING | B | . x . . . . | 22 |  |
-| advapi32.dll | `DuplicateTokenEx` | MISSING | B | . x . . . . | 17 |  |
-| advapi32.dll | `EqualSid` | claimed (advapi32) | B | . x . . . . | 27 | returned 0/NULL 24 x |
-| advapi32.dll | `FreeSid` | claimed (advapi32) | B | . x . . . . | 1 | returned 0/NULL 1 x |
-| advapi32.dll | `GetAce` | claimed (advapi32) | B | x x x x x x | 19 |  |
-| advapi32.dll | `GetLengthSid` | claimed (advapi32) | BGMNRS | x x x x x x | 406 |  |
-| advapi32.dll | `GetNamedSecurityInfoW` | MISSING | B | x x x x x x | 22 | INVALID_PARAMETER, NO_TOKEN |
-| advapi32.dll | `GetSecurityDescriptorControl` | claimed (advapi32) | B | x x x x x x | 23 |  |
-| advapi32.dll | `GetSecurityDescriptorDacl` | claimed (advapi32) | B | x x x x x x | 23 |  |
-| advapi32.dll | `GetSecurityDescriptorGroup` | claimed (advapi32) | B | x x x x x x | 23 |  |
-| advapi32.dll | `GetSecurityDescriptorOwner` | claimed (advapi32) | B | x x x x x x | 23 |  |
-| advapi32.dll | `GetSecurityDescriptorSacl` | claimed (advapi32) | B | x x x x x x | 23 |  |
-| advapi32.dll | `GetSecurityInfo` | MISSING | B | x x x x x x | 5 | INSUFFICIENT_BUFFER |
-| advapi32.dll | `GetTokenInformation` | claimed (advapi32 in tree) | BGMNRS | x x x x x x | 295 | INSUFFICIENT_BUFFER |
-| advapi32.dll | `InitializeAcl` | claimed (advapi32) | BGNR | x x x x x x | 181 |  |
-| advapi32.dll | `InitializeSecurityDescriptor` | claimed (advapi32) | BGNR | x x x x x x | 181 |  |
-| advapi32.dll | `IsValidAcl` | claimed (advapi32) | B | x x x x x x | 40 |  |
-| advapi32.dll | `IsValidSecurityDescriptor` | claimed (advapi32) | B | x x x x x x | 23 |  |
-| advapi32.dll | `IsValidSid` | claimed (advapi32) | BGMNRS | x x x x x x | 405 |  |
-| advapi32.dll | `LogonUserW` | MISSING | B | . . x . x . | 1 | 1326 |
-| advapi32.dll | `LookupAccountNameW` | MISSING | B | x x x x x x | 1 |  |
-| advapi32.dll | `MapGenericMask` | MISSING | B | . x . . . . | 2 |  |
-| advapi32.dll | `OpenProcessToken` | claimed (advapi32) | BGMNRS | x x x x x x | 36 |  |
-| advapi32.dll | `OpenThreadToken` | claimed (advapi32) | B | . x . . . . | 12 |  |
-| advapi32.dll | `RevertToSelf` | MISSING | GN | . x . . . . | 1 |  |
-| advapi32.dll | `SetEntriesInAclW` | MISSING | B | x x x x x x | 31 | returned 0/NULL 31 x |
-| advapi32.dll | `SetNamedSecurityInfoW` | MISSING | B | x x x x x x | 3 | NO_TOKEN |
-| advapi32.dll | `SetSecurityDescriptorDacl` | claimed (advapi32) | BGNR | x x x x x x | 181 |  |
-| advapi32.dll | `SetSecurityInfo` | MISSING | B | x x x x x x | 17 | returned 0/NULL 17 x |
-| advapi32.dll | `SetThreadToken` | MISSING | B | . x . . . . | 12 |  |
-| advapi32.dll | `SetTokenInformation` | MISSING | B | . x . . . . | 47 |  |
-| userenv.dll | `DeriveAppContainerSidFromAppContainerName` | NOT LISTED (no entry) | B | . x . . . . | 1 | returned 0/NULL 1 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| advapi32.dll | `AccessCheck` | MISSING | B | . x . . . . . | 2 |  |
+| advapi32.dll | `AddMandatoryAce` | MISSING | B | . x . . . . . | 1 |  |
+| advapi32.dll | `AdjustTokenPrivileges` | claimed (impl-7zip-trace) | B | . x . . . . . | 10 |  |
+| advapi32.dll | `BuildExplicitAccessWithNameW` | MISSING | B | x x x x x x x | 1 |  |
+| advapi32.dll | `BuildSecurityDescriptorW` | MISSING | B | x x x x x x x | 1 | INSUFFICIENT_BUFFER |
+| advapi32.dll | `BuildTrusteeWithSidW` | MISSING | B | x x x x x x x | 59 |  |
+| advapi32.dll | `CheckTokenMembership` | claimed (advapi32) | B | x x x x x x x | 17 |  |
+| advapi32.dll | `ConvertSidToStringSidA` | claimed (advapi32 in tree) | B | x x x x x x x | 1 |  |
+| advapi32.dll | `ConvertSidToStringSidW` | claimed (advapi32 in tree) | BGMNRS | x x x x x x x | 8 |  |
+| advapi32.dll | `ConvertStringSecurityDescriptorToSecurityDescriptorW` | MISSING | B | x x x x x x x | 3 |  |
+| advapi32.dll | `ConvertStringSidToSidW` | claimed (advapi32 in tree) | B | x x x x x x x | 16 |  |
+| advapi32.dll | `CreateRestrictedToken` | MISSING | B | . x . . . . . | 22 |  |
+| advapi32.dll | `DuplicateTokenEx` | MISSING | B | . x . . . . . | 17 |  |
+| advapi32.dll | `EqualSid` | claimed (advapi32) | B | . x . . . . . | 27 | returned 0/NULL 24 x |
+| advapi32.dll | `FreeSid` | claimed (advapi32) | B | . x . . . . . | 1 | returned 0/NULL 1 x |
+| advapi32.dll | `GetAce` | claimed (advapi32) | B | x x x x x x x | 19 |  |
+| advapi32.dll | `GetLengthSid` | claimed (advapi32) | BGMNRS | x x x x x x x | 406 |  |
+| advapi32.dll | `GetNamedSecurityInfoW` | MISSING | B | x x x x x x x | 22 | INVALID_PARAMETER, NO_TOKEN |
+| advapi32.dll | `GetSecurityDescriptorControl` | claimed (advapi32) | B | x x x x x x x | 23 |  |
+| advapi32.dll | `GetSecurityDescriptorDacl` | claimed (advapi32) | B | x x x x x x x | 23 |  |
+| advapi32.dll | `GetSecurityDescriptorGroup` | claimed (advapi32) | B | x x x x x x x | 23 |  |
+| advapi32.dll | `GetSecurityDescriptorOwner` | claimed (advapi32) | B | x x x x x x x | 23 |  |
+| advapi32.dll | `GetSecurityDescriptorSacl` | claimed (advapi32) | B | x x x x x x x | 23 |  |
+| advapi32.dll | `GetSecurityInfo` | MISSING | B | x x x x x x x | 5 | INSUFFICIENT_BUFFER |
+| advapi32.dll | `GetTokenInformation` | claimed (advapi32 in tree) | BGMNRS | x x x x x x x | 295 | INSUFFICIENT_BUFFER |
+| advapi32.dll | `InitializeAcl` | claimed (advapi32) | BGNR | x x x x x x x | 181 |  |
+| advapi32.dll | `InitializeSecurityDescriptor` | claimed (advapi32) | BGNR | x x x x x x x | 181 |  |
+| advapi32.dll | `IsValidAcl` | claimed (advapi32) | B | x x x x x x x | 40 |  |
+| advapi32.dll | `IsValidSecurityDescriptor` | claimed (advapi32) | B | x x x x x x x | 23 |  |
+| advapi32.dll | `IsValidSid` | claimed (advapi32) | BGMNRS | x x x x x x x | 405 |  |
+| advapi32.dll | `LogonUserW` | MISSING | B | . . x . x . x | 1 | 1326 |
+| advapi32.dll | `LookupAccountNameW` | MISSING | B | x x x x x x x | 1 |  |
+| advapi32.dll | `MapGenericMask` | MISSING | B | . x . . . . . | 2 |  |
+| advapi32.dll | `OpenProcessToken` | claimed (advapi32) | BGMNRS | x x x x x x x | 36 |  |
+| advapi32.dll | `OpenThreadToken` | claimed (advapi32) | B | . x . . . . . | 12 |  |
+| advapi32.dll | `RevertToSelf` | MISSING | GN | . x . . . . . | 1 |  |
+| advapi32.dll | `SetEntriesInAclW` | MISSING | B | x x x x x x x | 31 | returned 0/NULL 31 x |
+| advapi32.dll | `SetNamedSecurityInfoW` | MISSING | B | x x x x x x x | 3 | NO_TOKEN |
+| advapi32.dll | `SetSecurityDescriptorDacl` | claimed (advapi32) | BGNR | x x x x x x x | 181 |  |
+| advapi32.dll | `SetSecurityInfo` | MISSING | B | x x x x x x x | 17 | returned 0/NULL 17 x |
+| advapi32.dll | `SetThreadToken` | MISSING | B | . x . . . . . | 12 |  |
+| advapi32.dll | `SetTokenInformation` | MISSING | B | . x . . . . . | 47 |  |
+| userenv.dll | `DeriveAppContainerSidFromAppContainerName` | MISSING | B | . x . . . . . | 1 | returned 0/NULL 1 x |
 
 ### security: jobs  (5 APIs: MISSING 5)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| kernel32.dll | `AssignProcessToJobObject` | MISSING | B | x . x x x x | 1 |  |
-| kernel32.dll | `CreateJobObjectW` | MISSING | B | x x x x x x | 12 |  |
-| kernel32.dll | `QueryInformationJobObject` | MISSING | B | . x . . . . | 12 |  |
-| kernel32.dll | `SetInformationJobObject` | MISSING | B | x x x x x x | 48 |  |
-| kernel32.dll | `TerminateJobObject` | MISSING | B | . x . . . . | 9 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| kernel32.dll | `AssignProcessToJobObject` | MISSING | B | x . x x x x x | 1 |  |
+| kernel32.dll | `CreateJobObjectW` | MISSING | B | x x x x x x x | 12 |  |
+| kernel32.dll | `QueryInformationJobObject` | MISSING | B | . x . . . . . | 12 |  |
+| kernel32.dll | `SetInformationJobObject` | MISSING | B | x x x x x x x | 48 |  |
+| kernel32.dll | `TerminateJobObject` | MISSING | B | . x . . . . . | 9 |  |
 
 ### security: mitigations / process policy  (8 APIs: claimed 1, MISSING 7)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| kernel32.dll | `GetProcessInformation` | MISSING | BGR | x x x x x x | 300 |  |
-| kernel32.dll | `GetProcessMitigationPolicy` | MISSING | BGMNRS | x x x x x x | 8 |  |
-| kernel32.dll | `SetDefaultDllDirectories` | claimed (impl-7zip-trace in tree) | GN | . x . . . . | 1 |  |
-| kernel32.dll | `SetErrorMode` | MISSING | BGMNRS | x x x x x x | 24 | returned 0/NULL 1 x |
-| kernel32.dll | `SetProcessInformation` | MISSING | BG | x x x x x x | 21 |  |
-| kernel32.dll | `SetProcessMitigationPolicy` | MISSING | BGN | . x . . . . | 3 |  |
-| kernel32.dll | `SetProcessShutdownParameters` | MISSING | CGMNRS | x x x x x x | 8 |  |
-| kernel32.dll | `SetThreadInformation` | MISSING | BGMNRS | x x x x x x | 89 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| kernel32.dll | `GetProcessInformation` | MISSING | BGR | x x x x x x x | 300 |  |
+| kernel32.dll | `GetProcessMitigationPolicy` | MISSING | BGMNRS | x x x x x x x | 8 |  |
+| kernel32.dll | `SetDefaultDllDirectories` | claimed (impl-7zip-trace in tree) | GN | . x . . . . . | 1 |  |
+| kernel32.dll | `SetErrorMode` | MISSING | BGMNRS | x x x x x x x | 24 | returned 0/NULL 1 x |
+| kernel32.dll | `SetProcessInformation` | MISSING | BG | x x x x x x x | 21 |  |
+| kernel32.dll | `SetProcessMitigationPolicy` | MISSING | BGN | . x . . . . . | 3 |  |
+| kernel32.dll | `SetProcessShutdownParameters` | MISSING | CGMNRS | x x x x x x x | 8 |  |
+| kernel32.dll | `SetThreadInformation` | MISSING | BGMNRS | x x x x x x x | 89 |  |
 
 ### COM  (20 APIs: claimed 3, MISSING 17)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| ole32.dll | `CLSIDFromString` | MISSING | B | . x . . . . | 2 | returned 0/NULL 2 x |
-| ole32.dll | `CoCreateFreeThreadedMarshaler` | MISSING | B | x x x x x x | 11 | returned 0/NULL 11 x |
-| ole32.dll | `CoCreateInstance` | MISSING | BMN | x x x x x x | 44 | INVALID_PARAMETER, PROC_NOT_FOUND, SXS_KEY_NOT_FOUND |
-| ole32.dll | `CoGetApartmentType` | MISSING | B | . x x . x . | 2 | returned 0/NULL 2 x |
-| ole32.dll | `CoGetClassObject` | MISSING | B | . x x . x . | 1 | returned 0/NULL 1 x |
-| ole32.dll | `CoInitializeEx` | MISSING | BGMN | x x x x x x | 10 | returned 0/NULL 7 x |
-| ole32.dll | `CoRegisterMessageFilter` | MISSING | B | . x x . x . | 4 | returned 0/NULL 4 x |
-| ole32.dll | `CoSetProxyBlanket` | MISSING | M | . x x . x . | 1 | NO_TOKEN |
-| ole32.dll | `CoTaskMemAlloc` | MISSING | B | x x x x x x | 16 |  |
-| ole32.dll | `CoTaskMemFree` | MISSING | B | x x x x x x | 5 |  |
-| ole32.dll | `CoUninitialize` | MISSING | BM | x x x x x x | 5 | returned 0/NULL 4 x |
-| ole32.dll | `OleInitialize` | MISSING | B | x x x x x x | 1 | returned 0/NULL 1 x |
-| ole32.dll | `OleUninitialize` | MISSING | B | x . x x x x | 1 | returned 0/NULL 1 x |
-| ole32.dll | `PropVariantClear` | MISSING | B | x x x x x x | 10 | returned 0/NULL 10 x |
-| ole32.dll | `RegisterDragDrop` | MISSING | B | x x x x x x | 1 | returned 0/NULL 1 x |
-| ole32.dll | `RevokeDragDrop` | MISSING | B | x . x x x x | 1 | FILE_NOT_FOUND |
-| ole32.dll | `StringFromCLSID` | MISSING | B | . . x . x . | 2 | returned 0/NULL 2 x |
-| oleaut32.dll | `SysAllocStringLen (#4)` | claimed (7zip in tree) | BM | . x x . x . | 44 |  |
-| oleaut32.dll | `SysFreeString (#6)` | claimed (7zip in tree) | BM | x x x x x x | 636 |  |
-| oleaut32.dll | `VariantClear (#9)` | claimed (7zip in tree) | BM | x x x x x x | 685 | returned 0/NULL 685 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| ole32.dll | `CLSIDFromString` | MISSING | B | . x . . . . . | 2 | returned 0/NULL 2 x |
+| ole32.dll | `CoCreateFreeThreadedMarshaler` | MISSING | B | x x x x x x x | 11 | returned 0/NULL 11 x |
+| ole32.dll | `CoCreateInstance` | MISSING | BMN | x x x x x x x | 44 | INVALID_PARAMETER, PROC_NOT_FOUND, SXS_KEY_NOT_FOUND |
+| ole32.dll | `CoGetApartmentType` | MISSING | B | . x x . x . x | 2 | returned 0/NULL 2 x |
+| ole32.dll | `CoGetClassObject` | MISSING | B | . x x . x . x | 1 | returned 0/NULL 1 x |
+| ole32.dll | `CoInitializeEx` | MISSING | BGMN | x x x x x x x | 10 | returned 0/NULL 7 x |
+| ole32.dll | `CoRegisterMessageFilter` | MISSING | B | . x x . x . x | 4 | returned 0/NULL 4 x |
+| ole32.dll | `CoSetProxyBlanket` | MISSING | M | . x x . x . x | 1 | NO_TOKEN |
+| ole32.dll | `CoTaskMemAlloc` | MISSING | B | x x x x x x x | 16 |  |
+| ole32.dll | `CoTaskMemFree` | MISSING | B | x x x x x x x | 5 |  |
+| ole32.dll | `CoUninitialize` | MISSING | BM | x x x x x x x | 5 | returned 0/NULL 4 x |
+| ole32.dll | `OleInitialize` | MISSING | B | x x x x x x x | 1 | returned 0/NULL 1 x |
+| ole32.dll | `OleUninitialize` | MISSING | B | x . x x x x x | 1 | returned 0/NULL 1 x |
+| ole32.dll | `PropVariantClear` | MISSING | B | x x x x x x x | 10 | returned 0/NULL 10 x |
+| ole32.dll | `RegisterDragDrop` | MISSING | B | x x x x x x x | 1 | returned 0/NULL 1 x |
+| ole32.dll | `RevokeDragDrop` | MISSING | B | x . x x x x x | 1 | FILE_NOT_FOUND |
+| ole32.dll | `StringFromCLSID` | MISSING | B | . . x . x . x | 2 | returned 0/NULL 2 x |
+| oleaut32.dll | `SysAllocStringLen (#4)` | claimed (7zip in tree) | BM | . x x . x . x | 44 |  |
+| oleaut32.dll | `SysFreeString (#6)` | claimed (7zip in tree) | BM | x x x x x x x | 636 |  |
+| oleaut32.dll | `VariantClear (#9)` | claimed (7zip in tree) | BM | x x x x x x x | 685 | returned 0/NULL 685 x |
 
 ### DirectWrite / fonts  (1 APIs: MISSING 1)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| dwrite.dll | `DWriteCreateFactory` | MISSING | B | x x x x x x | 2 | returned 0/NULL 2 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| dwrite.dll | `DWriteCreateFactory` | MISSING | B | x x x x x x x | 2 | returned 0/NULL 2 x |
 
 ### GPU / DXGI  (3 APIs: MISSING 3)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| d3d11.dll | `D3D11CreateDevice` | MISSING | G | . . x . x . | 1 | returned 0/NULL 1 x |
-| dcomp.dll | `DCompositionCreateDevice` | MISSING | G | . . x . x . | 1 | returned 0/NULL 1 x |
-| dxgi.dll | `CreateDXGIFactory1` | MISSING | G | . . x . x x | 5 | FILE_NOT_FOUND |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| d3d11.dll | `D3D11CreateDevice` | MISSING | G | . . x . x . . | 1 | returned 0/NULL 1 x |
+| dcomp.dll | `DCompositionCreateDevice` | MISSING | G | . . x . x . . | 1 | returned 0/NULL 1 x |
+| dxgi.dll | `CreateDXGIFactory1` | MISSING | G | . . x . x x x | 8 | FILE_NOT_FOUND |
 
 ### accessibility  (5 APIs: MISSING 5)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| oleacc.dll | `CreateStdAccessibleObject` | MISSING | B | x x x x x x | 7 | FILE_NOT_FOUND |
-| oleacc.dll | `LresultFromObject` | MISSING | B | x . . x . x | 1 |  |
-| uiautomationcore.dll | `UiaDisconnectProvider` | MISSING | B | x . . x . x | 4 | 298 |
-| uiautomationcore.dll | `UiaHostProviderFromHwnd` | MISSING | B | x . . x . x | 2 | returned 0/NULL 2 x |
-| uiautomationcore.dll | `UiaReturnRawElementProvider` | MISSING | B | x . . x . x | 5 | returned 0/NULL 4 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| oleacc.dll | `CreateStdAccessibleObject` | MISSING | B | x x x x x x x | 7 | FILE_NOT_FOUND |
+| oleacc.dll | `LresultFromObject` | MISSING | B | x . . x . x . | 1 |  |
+| uiautomationcore.dll | `UiaDisconnectProvider` | MISSING | B | x . . x . x . | 4 | 298 |
+| uiautomationcore.dll | `UiaHostProviderFromHwnd` | MISSING | B | x . . x . x . | 2 | returned 0/NULL 2 x |
+| uiautomationcore.dll | `UiaReturnRawElementProvider` | MISSING | B | x . . x . x . | 5 | returned 0/NULL 4 x |
 
 ### crypto  (11 APIs: claimed 5, MISSING 6)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| bcryptprimitives.dll | `ProcessPrng` | MISSING | BR | x x x x x x | 1 |  |
-| crypt32.dll | `CertAddStoreToCollection` | MISSING | B | x x x x x x | 19 |  |
-| crypt32.dll | `CertCloseStore` | claimed (impl-crypto in tree) | B | x x x x x x | 17 |  |
-| crypt32.dll | `CertControlStore` | MISSING | B | x x x x x x | 4 | 2148081668 |
-| crypt32.dll | `CertFindCertificateInStore` | claimed (impl-crypto in tree) | B | x x x x x x | 172 | 2148081668 |
-| crypt32.dll | `CertOpenStore` | claimed (impl-crypto in tree) | B | x x x x x x | 23 | FILE_NOT_FOUND, 2148081668 |
-| crypt32.dll | `CryptProtectData` | claimed (impl-crypto in tree) | B | x x x x x x | 1 |  |
-| crypt32.dll | `CryptProtectMemory` | MISSING | BN | x x x x x x | 9 |  |
-| crypt32.dll | `CryptUnprotectData` | claimed (impl-crypto in tree) | B | x x x x x x | 1 |  |
-| crypt32.dll | `CryptUnprotectMemory` | MISSING | BN | x x x x x x | 95 |  |
-| secur32.dll | `GetUserNameExW` | MISSING | B | x x x x x x | 2 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| bcryptprimitives.dll | `ProcessPrng` | MISSING | BR | x x x x x x x | 1 |  |
+| crypt32.dll | `CertAddStoreToCollection` | MISSING | B | x x x x x x x | 19 |  |
+| crypt32.dll | `CertCloseStore` | claimed (impl-crypto in tree) | B | x x x x x x x | 17 |  |
+| crypt32.dll | `CertControlStore` | MISSING | B | x x x x x x x | 4 | 2148081668 |
+| crypt32.dll | `CertFindCertificateInStore` | claimed (impl-crypto in tree) | B | x x x x x x x | 172 | 2148081668 |
+| crypt32.dll | `CertOpenStore` | claimed (impl-crypto in tree) | B | x x x x x x x | 23 | FILE_NOT_FOUND, 2148081668 |
+| crypt32.dll | `CryptProtectData` | claimed (impl-crypto in tree) | B | x x x x x x x | 1 |  |
+| crypt32.dll | `CryptProtectMemory` | MISSING | BN | x x x x x x x | 9 |  |
+| crypt32.dll | `CryptUnprotectData` | claimed (impl-crypto in tree) | B | x x x x x x x | 1 |  |
+| crypt32.dll | `CryptUnprotectMemory` | MISSING | BN | x x x x x x x | 95 |  |
+| secur32.dll | `GetUserNameExW` | MISSING | B | x x x x x x x | 2 |  |
 
 ### devices  (8 APIs: MISSING 8)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| setupapi.dll | `SetupDiCreateDeviceInfoList` | MISSING | B | . x . . . . | 5 |  |
-| setupapi.dll | `SetupDiDestroyDeviceInfoList` | MISSING | B | . x x . x . | 16 |  |
-| setupapi.dll | `SetupDiEnumDeviceInterfaces` | MISSING | B | . x x . x . | 19 | NO_MORE_ITEMS |
-| setupapi.dll | `SetupDiGetClassDevsW` | MISSING | B | . x x . x . | 11 |  |
-| setupapi.dll | `SetupDiGetDeviceInterfaceDetailW` | MISSING | B | . x x . x . | 32 | INSUFFICIENT_BUFFER |
-| setupapi.dll | `SetupDiGetDevicePropertyW` | MISSING | B | . x x . x . | 66 | INSUFFICIENT_BUFFER, NOT_FOUND |
-| setupapi.dll | `SetupDiOpenDeviceInfoW` | MISSING | B | . x . . . . | 5 |  |
-| setupapi.dll | `SetupDiOpenDevRegKey` | MISSING | B | . x . . . . | 2 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| setupapi.dll | `SetupDiCreateDeviceInfoList` | MISSING | B | . x . . . . . | 5 |  |
+| setupapi.dll | `SetupDiDestroyDeviceInfoList` | MISSING | B | . x x . x . x | 16 |  |
+| setupapi.dll | `SetupDiEnumDeviceInterfaces` | MISSING | B | . x x . x . x | 19 | NO_MORE_ITEMS |
+| setupapi.dll | `SetupDiGetClassDevsW` | MISSING | B | . x x . x . x | 11 |  |
+| setupapi.dll | `SetupDiGetDeviceInterfaceDetailW` | MISSING | B | . x x . x . x | 32 | INSUFFICIENT_BUFFER |
+| setupapi.dll | `SetupDiGetDevicePropertyW` | MISSING | B | . x x . x . x | 66 | INSUFFICIENT_BUFFER, NOT_FOUND |
+| setupapi.dll | `SetupDiOpenDeviceInfoW` | MISSING | B | . x . . . . . | 5 |  |
+| setupapi.dll | `SetupDiOpenDevRegKey` | MISSING | B | . x . . . . . | 2 |  |
 
 ### diagnostics  (5 APIs: MISSING 5)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| pdh.dll | `PdhAddEnglishCounterW` | MISSING | B | . x x . x . | 2 | ENVVAR_NOT_FOUND |
-| pdh.dll | `PdhCloseQuery` | MISSING | B | . . x . x . | 2 | returned 0/NULL 2 x |
-| pdh.dll | `PdhCollectQueryData` | MISSING | B | . x x . x . | 5 | returned 0/NULL 5 x |
-| pdh.dll | `PdhGetFormattedCounterValue` | MISSING | B | . x . . . . | 1 | returned 0/NULL 1 x |
-| pdh.dll | `PdhOpenQueryW` | MISSING | B | . x x . x . | 2 | returned 0/NULL 2 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| pdh.dll | `PdhAddEnglishCounterW` | MISSING | B | . x x . x . x | 2 | ENVVAR_NOT_FOUND |
+| pdh.dll | `PdhCloseQuery` | MISSING | B | . . x . x . x | 2 | returned 0/NULL 2 x |
+| pdh.dll | `PdhCollectQueryData` | MISSING | B | . x x . x . x | 5 | returned 0/NULL 5 x |
+| pdh.dll | `PdhGetFormattedCounterValue` | MISSING | B | . x . . . . . | 1 | returned 0/NULL 1 x |
+| pdh.dll | `PdhOpenQueryW` | MISSING | B | . x x . x . x | 2 | returned 0/NULL 2 x |
 
 ### media  (3 APIs: MISSING 3)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| mfplat.dll | `MFStartup` | MISSING | G | x . x x x x | 1 | returned 0/NULL 1 x |
-| winmm.dll | `timeBeginPeriod` | MISSING | BGR | x x x x x x | 585 | returned 0/NULL 585 x |
-| winmm.dll | `timeEndPeriod` | MISSING | BGR | x x x x x x | 585 | returned 0/NULL 585 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| mfplat.dll | `MFStartup` | MISSING | G | x . x x x x x | 1 | returned 0/NULL 1 x |
+| winmm.dll | `timeBeginPeriod` | MISSING | BGR | x x x x x x x | 585 | returned 0/NULL 585 x |
+| winmm.dll | `timeEndPeriod` | MISSING | BGR | x x x x x x x | 585 | returned 0/NULL 585 x |
 
 ### misc (advapi32.dll)  (9 APIs: claimed 1, MISSING 8)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| advapi32.dll | `EventRegister` | MISSING | BGMNRS | x x x x x x | 16 | returned 0/NULL 16 x |
-| advapi32.dll | `EventSetInformation` | MISSING | BGMNRS | x x x x x x | 16 | returned 0/NULL 16 x |
-| advapi32.dll | `GetTraceEnableFlags` | MISSING | BGMNRS | x x . x . x | 6 |  |
-| advapi32.dll | `GetTraceEnableLevel` | MISSING | BGMNRS | x x . x . x | 6 |  |
-| advapi32.dll | `GetTraceLoggerHandle` | MISSING | BGMNRS | x x . x . x | 6 |  |
-| advapi32.dll | `GetUserNameW` | claimed (advapi32 in tree) | B | . x x . x . | 2 |  |
-| advapi32.dll | `RegisterTraceGuidsW` | MISSING | BGMNRS | x x x x x x | 8 | returned 0/NULL 8 x |
-| advapi32.dll | `TraceEvent` | MISSING | BGMNRS | x x . x . x | 329 | returned 0/NULL 329 x |
-| advapi32.dll | `UnregisterTraceGuids` | MISSING | BMN | x x x x x x | 1 | returned 0/NULL 1 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| advapi32.dll | `EventRegister` | MISSING | BGMNRS | x x x x x x x | 16 | returned 0/NULL 16 x |
+| advapi32.dll | `EventSetInformation` | MISSING | BGMNRS | x x x x x x x | 16 | returned 0/NULL 16 x |
+| advapi32.dll | `GetTraceEnableFlags` | MISSING | BGMNRS | x x . x . x . | 6 |  |
+| advapi32.dll | `GetTraceEnableLevel` | MISSING | BGMNRS | x x . x . x . | 6 |  |
+| advapi32.dll | `GetTraceLoggerHandle` | MISSING | BGMNRS | x x . x . x . | 6 |  |
+| advapi32.dll | `GetUserNameW` | claimed (advapi32 in tree) | B | . x x . x . x | 2 |  |
+| advapi32.dll | `RegisterTraceGuidsW` | MISSING | BGMNRS | x x x x x x x | 8 | returned 0/NULL 8 x |
+| advapi32.dll | `TraceEvent` | MISSING | BGMNRS | x x . x . x . | 329 | returned 0/NULL 329 x |
+| advapi32.dll | `UnregisterTraceGuids` | MISSING | BMN | x x x x x x x | 1 | returned 0/NULL 1 x |
+
+### misc (api-ms-win-core-handle-l1-1-0.dll)  (1 APIs: MISSING 1)
+
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| api-ms-win-core-handle-l1-1-0.dll | `CompareObjectHandles` | MISSING | G | . . . . . . x | 12 | 1656 |
 
 ### misc (api-ms-win-core-winrt-l1-1-0.dll)  (4 APIs: MISSING 4)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| api-ms-win-core-winrt-l1-1-0.dll | `RoActivateInstance` | MISSING | BR | x x x x x x | 8 | returned 0/NULL 2 x |
-| api-ms-win-core-winrt-l1-1-0.dll | `RoGetActivationFactory` | MISSING | BR | x x x x x x | 13 | returned 0/NULL 13 x |
-| api-ms-win-core-winrt-l1-1-0.dll | `RoInitialize` | MISSING | B | x x x x x x | 26 | returned 0/NULL 26 x |
-| api-ms-win-core-winrt-l1-1-0.dll | `RoUninitialize` | MISSING | B | x . x x x x | 2 | returned 0/NULL 2 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| api-ms-win-core-winrt-l1-1-0.dll | `RoActivateInstance` | MISSING | BR | x x x x x x x | 8 | returned 0/NULL 2 x |
+| api-ms-win-core-winrt-l1-1-0.dll | `RoGetActivationFactory` | MISSING | BR | x x x x x x x | 13 | returned 0/NULL 13 x |
+| api-ms-win-core-winrt-l1-1-0.dll | `RoInitialize` | MISSING | B | x x x x x x x | 26 | returned 0/NULL 26 x |
+| api-ms-win-core-winrt-l1-1-0.dll | `RoUninitialize` | MISSING | B | x . x x x x . | 2 | returned 0/NULL 2 x |
 
 ### misc (api-ms-win-core-winrt-string-l1-1-0.dll)  (4 APIs: MISSING 4)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| api-ms-win-core-winrt-string-l1-1-0.dll | `WindowsCreateString` | MISSING | BR | x x x x x x | 16 | returned 0/NULL 16 x |
-| api-ms-win-core-winrt-string-l1-1-0.dll | `WindowsCreateStringReference` | MISSING | BR | x x x x x x | 8 | returned 0/NULL 8 x |
-| api-ms-win-core-winrt-string-l1-1-0.dll | `WindowsDeleteString` | MISSING | BR | x x x x x x | 17 | returned 0/NULL 17 x |
-| api-ms-win-core-winrt-string-l1-1-0.dll | `WindowsGetStringRawBuffer` | MISSING | B | . . x . x . | 1 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| api-ms-win-core-winrt-string-l1-1-0.dll | `WindowsCreateString` | MISSING | BR | x x x x x x x | 16 | returned 0/NULL 16 x |
+| api-ms-win-core-winrt-string-l1-1-0.dll | `WindowsCreateStringReference` | MISSING | BR | x x x x x x x | 8 | returned 0/NULL 8 x |
+| api-ms-win-core-winrt-string-l1-1-0.dll | `WindowsDeleteString` | MISSING | BR | x x x x x x x | 17 | returned 0/NULL 17 x |
+| api-ms-win-core-winrt-string-l1-1-0.dll | `WindowsGetStringRawBuffer` | MISSING | B | . . x . x . x | 1 |  |
 
 ### misc (api-ms-win-power-base-l1-1-0.dll)  (1 APIs: MISSING 1)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| api-ms-win-power-base-l1-1-0.dll | `CallNtPowerInformation` | MISSING | B | x x x x x x | 40 | 1300 |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| api-ms-win-power-base-l1-1-0.dll | `CallNtPowerInformation` | MISSING | B | x x x x x x x | 40 | 1300 |
 
 ### misc (api-ms-win-shcore-scaling-l1-1-1.dll)  (1 APIs: MISSING 1)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| api-ms-win-shcore-scaling-l1-1-1.dll | `GetDpiForMonitor` | MISSING | B | x x x x x x | 8 | returned 0/NULL 8 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| api-ms-win-shcore-scaling-l1-1-1.dll | `GetDpiForMonitor` | MISSING | B | x x x x x x x | 8 | returned 0/NULL 8 x |
 
 ### misc (kernel32.dll)  (1 APIs: claimed 1)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| kernel32.dll | `CloseHandle` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x | 1246 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| kernel32.dll | `CloseHandle` | claimed (kernel32 in tree) | BCGMNRS | x x x x x x x | 1246 |  |
 
 ### misc (ntdll.dll)  (2 APIs: claimed 2)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| ntdll.dll | `RtlFreeUnicodeString` | claimed (ntdll in tree) | BCGMNRS | x x x x x x | 8 |  |
-| ntdll.dll | `RtlInitUnicodeString` | claimed (ntdll in tree) | BCGMNRS | x x x x x x | 70 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| ntdll.dll | `RtlFreeUnicodeString` | claimed (ntdll in tree) | BCGMNRS | x x x x x x x | 8 |  |
+| ntdll.dll | `RtlInitUnicodeString` | claimed (ntdll in tree) | BCGMNRS | x x x x x x x | 70 |  |
 
 ### misc: version  (1 APIs: MISSING 1)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| version.dll | `VerQueryValueW` | MISSING | B | x x x x x x | 13 | RESOURCE_TYPE_NOT_FOUND |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| version.dll | `VerQueryValueW` | MISSING | B | x x x x x x x | 13 | RESOURCE_TYPE_NOT_FOUND |
 
 ### network  (34 APIs: claimed 18, MISSING 16)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| dhcpcsvc.dll | `DhcpCApiInitialize` | MISSING | N | x x x x x x | 1 | returned 0/NULL 1 x |
-| dhcpcsvc.dll | `DhcpRequestParams` | MISSING | N | x x x x x x | 4 | returned 0/NULL 4 x |
-| iphlpapi.dll | `CancelIPChangeNotify` | MISSING | BN | x . x x x x | 1 |  |
-| iphlpapi.dll | `FreeMibTable` | MISSING | B | x x x x x x | 1 |  |
-| iphlpapi.dll | `GetAdaptersAddresses` | MISSING | BN | x x x x x x | 9 | returned 0/NULL 9 x |
-| iphlpapi.dll | `GetIfTable2` | MISSING | B | x x x x x x | 1 | returned 0/NULL 1 x |
-| iphlpapi.dll | `NotifyAddrChange` | MISSING | BN | x x x x x x | 1 | IO_PENDING |
-| netapi32.dll | `NetApiBufferFree` | MISSING | B | . . x . x . | 1 | returned 0/NULL 1 x |
-| netapi32.dll | `NetUserGetInfo` | MISSING | B | x . x x x x | 1 | returned 0/NULL 1 x |
-| winhttp.dll | `WinHttpGetIEProxyConfigForCurrentUser` | MISSING | B | x x x x x x | 2 |  |
-| ws2_32.dll | `closesocket (#3)` | claimed (impl-winsock in tree) | BN | x x x x x x | 29 | returned 0/NULL 29 x |
-| ws2_32.dll | `connect (#4)` | claimed (impl-winsock in tree) | N | x x x x x x | 29 | 10035, 10051 |
-| ws2_32.dll | `freeaddrinfo` | claimed (impl-winsock in tree) | N | x x x x x x | 17 |  |
-| ws2_32.dll | `getaddrinfo` | claimed (impl-winsock in tree) | N | x x x x x x | 17 | 11001 |
-| ws2_32.dll | `getsockname (#6)` | claimed (impl-winsock in tree) | N | x x x x x x | 48 | returned 0/NULL 48 x |
-| ws2_32.dll | `getsockopt (#7)` | claimed (impl-winsock in tree) | N | x x x x x x | 12 | returned 0/NULL 12 x |
-| ws2_32.dll | `htons (#9)` | claimed (impl-winsock in tree) | N | x x x x x x | 107 |  |
-| ws2_32.dll | `ioctlsocket (#10)` | claimed (impl-winsock in tree) | BN | x x x x x x | 19 | returned 0/NULL 19 x |
-| ws2_32.dll | `ntohs (#15)` | claimed (impl-winsock in tree) | N | x x x x x x | 2536 |  |
-| ws2_32.dll | `recv (#16)` | claimed (impl-winsock in tree) | N | x x x x x x | 216 | 10035 |
-| ws2_32.dll | `sendto (#20)` | claimed (impl-winsock in tree) | N | x x x x x x | 357 |  |
-| ws2_32.dll | `setsockopt (#21)` | claimed (impl-winsock in tree) | BN | x x x x x x | 91 | returned 0/NULL 91 x |
-| ws2_32.dll | `shutdown (#22)` | claimed (impl-winsock in tree) | N | x x x x x x | 19 | 10057 |
-| ws2_32.dll | `WSACloseEvent` | claimed (impl-winsock in tree) | BN | x x x x x x | 47 |  |
-| ws2_32.dll | `WSADuplicateSocketW` | MISSING | B | . . x . x . | 5 | returned 0/NULL 5 x |
-| ws2_32.dll | `WSAEnumNetworkEvents` | MISSING | N | x x x x x x | 395 | returned 0/NULL 395 x |
-| ws2_32.dll | `WSAEventSelect` | MISSING | N | x x x x x x | 42 | returned 0/NULL 42 x |
-| ws2_32.dll | `WSAIoctl` | claimed (impl-winsock in tree) | N | x x x x x x | 25 | returned 0/NULL 25 x |
-| ws2_32.dll | `WSALookupServiceBeginW` | MISSING | BN | x x x x x x | 1 | returned 0/NULL 1 x |
-| ws2_32.dll | `WSALookupServiceEnd` | MISSING | BN | x x x x x x | 1 | returned 0/NULL 1 x |
-| ws2_32.dll | `WSALookupServiceNextW` | MISSING | BN | x x x x x x | 1 | returned 0/NULL 1 x |
-| ws2_32.dll | `WSASend` | claimed (impl-winsock in tree) | N | x x x x x x | 60 | returned 0/NULL 60 x |
-| ws2_32.dll | `WSASocketW` | claimed (impl-winsock in tree) | BN | x x x x x x | 29 |  |
-| ws2_32.dll | `WSAStartup (#115)` | claimed (impl-winsock in tree) | BN | x x x x x x | 1 | returned 0/NULL 1 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| dhcpcsvc.dll | `DhcpCApiInitialize` | MISSING | N | x x x x x x x | 1 | returned 0/NULL 1 x |
+| dhcpcsvc.dll | `DhcpRequestParams` | MISSING | N | x x x x x x x | 4 | returned 0/NULL 4 x |
+| iphlpapi.dll | `CancelIPChangeNotify` | MISSING | BN | x . x x x x x | 1 |  |
+| iphlpapi.dll | `FreeMibTable` | MISSING | B | x x x x x x x | 1 |  |
+| iphlpapi.dll | `GetAdaptersAddresses` | MISSING | BN | x x x x x x x | 9 | returned 0/NULL 9 x |
+| iphlpapi.dll | `GetIfTable2` | MISSING | B | x x x x x x x | 1 | returned 0/NULL 1 x |
+| iphlpapi.dll | `NotifyAddrChange` | MISSING | BN | x x x x x x x | 1 | IO_PENDING |
+| netapi32.dll | `NetApiBufferFree` | MISSING | B | . . x . x . x | 1 | returned 0/NULL 1 x |
+| netapi32.dll | `NetUserGetInfo` | MISSING | B | x . x x x x x | 1 | returned 0/NULL 1 x |
+| winhttp.dll | `WinHttpGetIEProxyConfigForCurrentUser` | MISSING | B | x x x x x x x | 2 |  |
+| ws2_32.dll | `closesocket (#3)` | claimed (impl-winsock in tree) | BN | x x x x x x x | 29 | returned 0/NULL 29 x |
+| ws2_32.dll | `connect (#4)` | claimed (impl-winsock in tree) | N | x x x x x x x | 29 | 10035, 10051 |
+| ws2_32.dll | `freeaddrinfo` | claimed (impl-winsock in tree) | N | x x x x x x x | 17 |  |
+| ws2_32.dll | `getaddrinfo` | claimed (impl-winsock in tree) | N | x x x x x x x | 17 | 11001 |
+| ws2_32.dll | `getsockname (#6)` | claimed (impl-winsock in tree) | N | x x x x x x x | 48 | returned 0/NULL 48 x |
+| ws2_32.dll | `getsockopt (#7)` | claimed (impl-winsock in tree) | N | x x x x x x x | 12 | returned 0/NULL 12 x |
+| ws2_32.dll | `htons (#9)` | claimed (impl-winsock in tree) | N | x x x x x x x | 107 |  |
+| ws2_32.dll | `ioctlsocket (#10)` | claimed (impl-winsock in tree) | BN | x x x x x x x | 19 | returned 0/NULL 19 x |
+| ws2_32.dll | `ntohs (#15)` | claimed (impl-winsock in tree) | N | x x x x x x x | 2536 |  |
+| ws2_32.dll | `recv (#16)` | claimed (impl-winsock in tree) | N | x x x x x x x | 216 | 10035 |
+| ws2_32.dll | `sendto (#20)` | claimed (impl-winsock in tree) | N | x x x x x x x | 357 |  |
+| ws2_32.dll | `setsockopt (#21)` | claimed (impl-winsock in tree) | BN | x x x x x x x | 91 | returned 0/NULL 91 x |
+| ws2_32.dll | `shutdown (#22)` | claimed (impl-winsock in tree) | N | x x x x x x x | 19 | 10057 |
+| ws2_32.dll | `WSACloseEvent` | claimed (impl-winsock in tree) | BN | x x x x x x x | 47 |  |
+| ws2_32.dll | `WSADuplicateSocketW` | MISSING | B | . . x . x . x | 7 | returned 0/NULL 7 x |
+| ws2_32.dll | `WSAEnumNetworkEvents` | MISSING | N | x x x x x x x | 395 | returned 0/NULL 395 x |
+| ws2_32.dll | `WSAEventSelect` | MISSING | N | x x x x x x x | 42 | returned 0/NULL 42 x |
+| ws2_32.dll | `WSAIoctl` | claimed (impl-winsock in tree) | N | x x x x x x x | 25 | returned 0/NULL 25 x |
+| ws2_32.dll | `WSALookupServiceBeginW` | MISSING | BN | x x x x x x x | 1 | returned 0/NULL 1 x |
+| ws2_32.dll | `WSALookupServiceEnd` | MISSING | BN | x x x x x x x | 1 | returned 0/NULL 1 x |
+| ws2_32.dll | `WSALookupServiceNextW` | MISSING | BN | x x x x x x x | 1 | returned 0/NULL 1 x |
+| ws2_32.dll | `WSASend` | claimed (impl-winsock in tree) | N | x x x x x x x | 60 | returned 0/NULL 60 x |
+| ws2_32.dll | `WSASocketW` | claimed (impl-winsock in tree) | BN | x x x x x x x | 29 |  |
+| ws2_32.dll | `WSAStartup (#115)` | claimed (impl-winsock in tree) | BN | x x x x x x x | 1 | returned 0/NULL 1 x |
 
 ### shell  (13 APIs: MISSING 11, NOT LISTED 2)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| shell32.dll | `SHCreateAssociationRegistration` | MISSING | B | . x x . x . | 2 | returned 0/NULL 2 x |
-| shell32.dll | `SHCreateItemFromParsingName` | MISSING | B | . x . . . . | 1 | returned 0/NULL 1 x |
-| shell32.dll | `Shell_NotifyIconW` | MISSING | B | x x x x x x | 4 |  |
-| shell32.dll | `SHGetPropertyStoreForWindow` | MISSING | B | x x x x x x | 2 | returned 0/NULL 2 x |
-| shlwapi.dll | `#219` | NOT LISTED (no entry) | B | x . . x . x | 119 | returned 0/NULL 11 x |
-| shlwapi.dll | `#437` | NOT LISTED (no entry) | B | x x x x x x | 1 | returned 0/NULL 1 x |
-| userenv.dll | `GetProfileType` | MISSING | B | x x x x x x | 1 |  |
-| userenv.dll | `RegisterGPNotification` | MISSING | B | x x x x x x | 2 |  |
-| userenv.dll | `UnregisterGPNotification` | MISSING | B | . . x . x . | 2 |  |
-| wtsapi32.dll | `WTSFreeMemory` | MISSING | B | x x x x x x | 2 | returned 0/NULL 2 x |
-| wtsapi32.dll | `WTSQuerySessionInformationW` | MISSING | B | x x x x x x | 2 |  |
-| wtsapi32.dll | `WTSRegisterSessionNotification` | MISSING | B | x x x x x x | 2 |  |
-| wtsapi32.dll | `WTSUnRegisterSessionNotification` | MISSING | B | x . x x x x | 1 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| shell32.dll | `SHCreateAssociationRegistration` | MISSING | B | . x x . x . x | 2 | returned 0/NULL 2 x |
+| shell32.dll | `SHCreateItemFromParsingName` | MISSING | B | . x . . . . . | 1 | returned 0/NULL 1 x |
+| shell32.dll | `Shell_NotifyIconW` | MISSING | B | x x x x x x x | 4 |  |
+| shell32.dll | `SHGetPropertyStoreForWindow` | MISSING | B | x x x x x x x | 2 | returned 0/NULL 2 x |
+| shlwapi.dll | `#219` | NOT LISTED (no entry) | B | x . . x . x . | 119 | returned 0/NULL 11 x |
+| shlwapi.dll | `#437` | NOT LISTED (no entry) | B | x x x x x x x | 1 | returned 0/NULL 1 x |
+| userenv.dll | `GetProfileType` | MISSING | B | x x x x x x x | 1 |  |
+| userenv.dll | `RegisterGPNotification` | MISSING | B | x x x x x x x | 2 |  |
+| userenv.dll | `UnregisterGPNotification` | MISSING | B | . . x . x . x | 2 |  |
+| wtsapi32.dll | `WTSFreeMemory` | MISSING | B | x x x x x x x | 2 | returned 0/NULL 2 x |
+| wtsapi32.dll | `WTSQuerySessionInformationW` | MISSING | B | x x x x x x x | 2 |  |
+| wtsapi32.dll | `WTSRegisterSessionNotification` | MISSING | B | x x x x x x x | 2 |  |
+| wtsapi32.dll | `WTSUnRegisterSessionNotification` | MISSING | B | x . x x x x x | 1 |  |
 
 ### win32k: common controls  (1 APIs: MISSING 1)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| comctl32.dll | `InitCommonControlsEx` | MISSING | B | x x x x x x | 1 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| comctl32.dll | `InitCommonControlsEx` | MISSING | B | x x x x x x x | 1 |  |
 
 ### win32k: dwm  (4 APIs: MISSING 4)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| dwmapi.dll | `DwmExtendFrameIntoClientArea` | MISSING | B | . . x . x . | 1 | returned 0/NULL 1 x |
-| dwmapi.dll | `DwmGetCompositionTimingInfo` | MISSING | G | . . x . x . | 121 | returned 0/NULL 121 x |
-| dwmapi.dll | `DwmGetWindowAttribute` | MISSING | B | . . x . x . | 55 | returned 0/NULL 55 x |
-| dwmapi.dll | `DwmSetWindowAttribute` | MISSING | B | x x x x x x | 7 | returned 0/NULL 7 x |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| dwmapi.dll | `DwmExtendFrameIntoClientArea` | MISSING | B | . . x . x . x | 1 | returned 0/NULL 1 x |
+| dwmapi.dll | `DwmGetCompositionTimingInfo` | MISSING | G | . . x . x . . | 121 | returned 0/NULL 121 x |
+| dwmapi.dll | `DwmGetWindowAttribute` | MISSING | B | . . x . x . x | 55 | returned 0/NULL 55 x |
+| dwmapi.dll | `DwmSetWindowAttribute` | MISSING | B | x x x x x x x | 7 | returned 0/NULL 7 x |
 
 ### win32k: gdi32  (17 APIs: claimed 4, green 3, MISSING 10)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| gdi32.dll | `CombineRgn` | claimed (spec-win-gui-b) | B | . . x . x . | 1 |  |
-| gdi32.dll | `CreateBitmap` | MISSING (name appears in tree) | B | x x x x x x | 1 |  |
-| gdi32.dll | `CreateDCW` | MISSING | B | . . x . x . | 1 |  |
-| gdi32.dll | `CreateDIBSection` | green (in tree) | B | x x x x x x | 1 | 2012 |
-| gdi32.dll | `CreateFontIndirectW` | MISSING (name appears in tree) | B | x x x x x x | 5 |  |
-| gdi32.dll | `CreateRectRgn` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 1 |  |
-| gdi32.dll | `CreateRectRgnIndirect` | MISSING | B | . . x . x . | 2 |  |
-| gdi32.dll | `CreateSolidBrush` | green (in tree) | B | x x x x x x | 4 |  |
-| gdi32.dll | `DeleteDC` | MISSING (name appears in tree) | B | . . x . x . | 1 |  |
-| gdi32.dll | `DeleteObject` | claimed (impl-win-gui-a in tree) | B | x x x x x x | 14 |  |
-| gdi32.dll | `GetDeviceCaps` | MISSING (name appears in tree) | B | x x x x x x | 3 |  |
-| gdi32.dll | `GetICMProfileW` | MISSING | B | . . x . x . | 1 | 2012 |
-| gdi32.dll | `GetObjectW` | MISSING (name appears in tree) | B | x x x x x x | 5 |  |
-| gdi32.dll | `GetStockObject` | MISSING (name appears in tree) | BG | x x x x x x | 3 |  |
-| gdi32.dll | `GetTextMetricsW` | MISSING (name appears in tree) | B | x x x x x x | 5 |  |
-| gdi32.dll | `SelectClipRgn` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 1 |  |
-| gdi32.dll | `SelectObject` | green (in tree) | B | x x x x x x | 10 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| gdi32.dll | `CombineRgn` | claimed (spec-win-gui-b) | B | . . x . x . x | 1 |  |
+| gdi32.dll | `CreateBitmap` | MISSING (name appears in tree) | B | x x x x x x x | 1 |  |
+| gdi32.dll | `CreateDCW` | MISSING | B | . . x . x . x | 1 |  |
+| gdi32.dll | `CreateDIBSection` | green (in tree) | B | x x x x x x x | 1 | 2012 |
+| gdi32.dll | `CreateFontIndirectW` | MISSING (name appears in tree) | B | x x x x x x x | 5 |  |
+| gdi32.dll | `CreateRectRgn` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 1 |  |
+| gdi32.dll | `CreateRectRgnIndirect` | MISSING | B | . . x . x . x | 2 |  |
+| gdi32.dll | `CreateSolidBrush` | green (in tree) | B | x x x x x x x | 4 |  |
+| gdi32.dll | `DeleteDC` | MISSING (name appears in tree) | B | . . x . x . x | 1 |  |
+| gdi32.dll | `DeleteObject` | claimed (impl-win-gui-a in tree) | B | x x x x x x x | 14 |  |
+| gdi32.dll | `GetDeviceCaps` | MISSING (name appears in tree) | B | x x x x x x x | 3 |  |
+| gdi32.dll | `GetICMProfileW` | MISSING | B | . . x . x . x | 1 | 2012 |
+| gdi32.dll | `GetObjectW` | MISSING (name appears in tree) | B | x x x x x x x | 5 |  |
+| gdi32.dll | `GetStockObject` | MISSING (name appears in tree) | BG | x x x x x x x | 3 |  |
+| gdi32.dll | `GetTextMetricsW` | MISSING (name appears in tree) | B | x x x x x x x | 5 |  |
+| gdi32.dll | `SelectClipRgn` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 1 |  |
+| gdi32.dll | `SelectObject` | green (in tree) | B | x x x x x x x | 10 |  |
 
 ### win32k: user32  (117 APIs: claimed 26, green 24, MISSING 67)
 
-| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 | Max calls | Failures seen on Windows |
-|---|---|---|---|---|---|---|---|---|---|---:|---|
-| user32.dll | `BeginPaint` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 9 |  |
-| user32.dll | `ClientToScreen` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 928 |  |
-| user32.dll | `CreateDesktopW` | MISSING | B | . x . . . . | 1 |  |
-| user32.dll | `CreateIconIndirect` | MISSING | B | x x x x x x | 1 |  |
-| user32.dll | `CreateWindowExW` | green (in tree) | BCG | x x x x x x | 15 |  |
-| user32.dll | `CreateWindowStationW` | MISSING | B | . x . . . . | 1 |  |
-| user32.dll | `DefWindowProcW` | green (in tree) | BCG | x x x x x x | 416 | INVALID_HANDLE |
-| user32.dll | `DestroyIcon` | MISSING | B | x . x x x x | 1 |  |
-| user32.dll | `DestroyWindow` | green (in tree) | BG | x x x x x x | 12 | IO_PENDING, INVALID_WINDOW_HANDLE |
-| user32.dll | `DispatchMessageW` | green (in tree) | BC | x x x x x x | 150 | ACCESS_DENIED, IO_PENDING |
-| user32.dll | `DisplayConfigGetDeviceInfo` | MISSING | BG | . . x . x x | 130 | returned 0/NULL 130 x |
-| user32.dll | `EnableWindow` | claimed (spec-win-gui-b in tree) | BG | x x x x x x | 1 | returned 0/NULL 1 x |
-| user32.dll | `EndPaint` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 9 |  |
-| user32.dll | `EnumDisplayDevicesW` | MISSING | B | x x x x x x | 5 |  |
-| user32.dll | `EnumDisplayMonitors` | MISSING | B | . . x . x . | 4 | 2012 |
-| user32.dll | `EnumDisplaySettingsW` | MISSING | B | . . x . x . | 3 |  |
-| user32.dll | `EnumThreadWindows` | MISSING | B | x x x x x x | 26 |  |
-| user32.dll | `EnumWindows` | MISSING (name appears in tree) | B | . . x . x . | 6 |  |
-| user32.dll | `FillRect` | claimed (impl-win-gui-a in tree) | B | . . x . x . | 1 |  |
-| user32.dll | `FindWindowExW` | MISSING (name appears in tree) | B | x x x x x x | 2 | returned 0/NULL 2 x |
-| user32.dll | `GetActiveWindow` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 85 | returned 0/NULL 4 x |
-| user32.dll | `GetAncestor` | MISSING (name appears in tree) | B | x x x x x x | 153 |  |
-| user32.dll | `GetCapture` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 24 | returned 0/NULL 23 x |
-| user32.dll | `GetClassNameW` | MISSING (name appears in tree) | B | x x x x x x | 84 |  |
-| user32.dll | `GetClientRect` | green (in tree) | B | x x x x x x | 914 |  |
-| user32.dll | `GetCursorPos` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 45 |  |
-| user32.dll | `GetDC` | green (in tree) | BG | x x x x x x | 8 |  |
-| user32.dll | `GetDesktopWindow` | MISSING (name appears in tree) | BG | x x x x x x | 10 |  |
-| user32.dll | `GetDisplayConfigBufferSizes` | MISSING | BG | . . x . x x | 130 | returned 0/NULL 130 x |
-| user32.dll | `GetForegroundWindow` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 2 | returned 0/NULL 1 x |
-| user32.dll | `GetKeyboardLayout` | MISSING | B | x x x x x x | 61 |  |
-| user32.dll | `GetKeyboardLayoutList` | MISSING | B | x x x x x x | 4 |  |
-| user32.dll | `GetKeyboardLayoutNameW` | MISSING | B | x x x x x x | 1 |  |
-| user32.dll | `GetKeyboardState` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 1 |  |
-| user32.dll | `GetKeyState` | claimed (spec-win-gui-b in tree) | B | x x x x x x | 1089 | returned 0/NULL 972 x |
-| user32.dll | `GetLastInputInfo` | MISSING | B | x x x x x x | 2 |  |
-| user32.dll | `GetLayeredWindowAttributes` | MISSING | B | . . x . x . | 6 |  |
-| user32.dll | `GetMessageExtraInfo` | MISSING (name appears in tree) | B | . . x . x . | 62 | returned 0/NULL 62 x |
-| user32.dll | `GetMessageW` | green (in tree) | C | x x x x x x | 4 |  |
-| user32.dll | `GetMonitorInfoW` | claimed (spec-win-gui-b) | BG | x x x x x x | 130 |  |
-| user32.dll | `GetParent` | green (in tree) | B | x x x x x x | 177 | returned 0/NULL 10 x |
-| user32.dll | `GetPointerDevices` | MISSING | B | x x x x x x | 8 |  |
-| user32.dll | `GetProcessWindowStation` | MISSING | B | . x . . . . | 2 |  |
-| user32.dll | `GetPropW` | MISSING | B | . . x . x . | 1 | FILE_NOT_FOUND |
-| user32.dll | `GetQueueStatus` | green (in tree) | BG | x x x x x x | 471 | returned 0/NULL 418 x |
-| user32.dll | `GetSysColor` | MISSING (name appears in tree) | BR | x x x x x x | 96 | returned 0/NULL 16 x |
-| user32.dll | `GetSystemMenu` | MISSING | B | x x x x x x | 1 |  |
-| user32.dll | `GetSystemMetrics` | claimed (spec-win-gui-b in tree) | B | x x x x x x | 865 | returned 0/NULL 22 x |
-| user32.dll | `GetUserObjectInformationW` | MISSING | B | . x . . . . | 44 | INSUFFICIENT_BUFFER |
-| user32.dll | `GetWindow` | MISSING (name appears in tree) | B | x x x x x x | 146 | returned 0/NULL 104 x |
-| user32.dll | `GetWindowDC` | MISSING (name appears in tree) | B | . . x . x . | 1 |  |
-| user32.dll | `GetWindowDisplayAffinity` | MISSING | B | x x x x x x | 2 |  |
-| user32.dll | `GetWindowLongPtrW` | green (in tree) | BCG | x x x x x x | 644 | returned 0/NULL 8 x |
-| user32.dll | `GetWindowLongW` | MISSING (name appears in tree) | B | x x x x x x | 138 |  |
-| user32.dll | `GetWindowPlacement` | MISSING | B | . . x . x . | 5 |  |
-| user32.dll | `GetWindowRect` | green (in tree) | B | x x x x x x | 90 |  |
-| user32.dll | `GetWindowRgnBox` | MISSING | B | . . x . x . | 34 | returned 0/NULL 28 x |
-| user32.dll | `GetWindowTextLengthW` | MISSING (name appears in tree) | B | x x x x x x | 9 | returned 0/NULL 1 x |
-| user32.dll | `GetWindowTextW` | green (in tree) | B | x . x x x x | 6 |  |
-| user32.dll | `GetWindowThreadProcessId` | MISSING (name appears in tree) | BG | x x x x x x | 651 |  |
-| user32.dll | `IsChild` | MISSING (name appears in tree) | B | . . x . x . | 4 | INVALID_WINDOW_HANDLE |
-| user32.dll | `IsIconic` | MISSING (name appears in tree) | B | . . x . x . | 606 | returned 0/NULL 600 x |
-| user32.dll | `IsRectEmpty` | MISSING (name appears in tree) | B | . . x . x . | 20 | returned 0/NULL 16 x |
-| user32.dll | `IsWindow` | green (in tree) | BG | x x x x x x | 768 | returned 0/NULL 11 x |
-| user32.dll | `IsWindowArranged` | MISSING | B | . . x . x . | 1 | returned 0/NULL 1 x |
-| user32.dll | `IsWindowVisible` | MISSING (name appears in tree) | B | x x x x x x | 657 | returned 0/NULL 520 x |
-| user32.dll | `IsZoomed` | MISSING (name appears in tree) | B | . . x . x . | 1162 | returned 0/NULL 1162 x |
-| user32.dll | `LoadCursorW` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 3 |  |
-| user32.dll | `LoadIconW` | MISSING (name appears in tree) | B | x x x x x x | 1 |  |
-| user32.dll | `LoadImageW` | MISSING | B | x x x x x x | 1 |  |
-| user32.dll | `MapWindowPoints` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 72 |  |
-| user32.dll | `MonitorFromPoint` | claimed (spec-win-gui-b) | B | x x x x x x | 56 |  |
-| user32.dll | `MonitorFromRect` | MISSING | B | x x x x x x | 21 |  |
-| user32.dll | `MonitorFromWindow` | claimed (spec-win-gui-b) | BG | x x x x x x | 1330 | INVALID_WINDOW_HANDLE |
-| user32.dll | `NotifyWinEvent` | MISSING | B | x x x x x x | 282 |  |
-| user32.dll | `OffsetRect` | MISSING (name appears in tree) | B | . . x . x . | 1 |  |
-| user32.dll | `PeekMessageW` | green (in tree) | BGMNRS | x x x x x x | 723 | FILE_NOT_FOUND |
-| user32.dll | `PostMessageW` | green (in tree) | B | x x x x x x | 1 |  |
-| user32.dll | `PostThreadMessageW` | green (in tree) | GMNRS | x x x x x x | 8 |  |
-| user32.dll | `QueryDisplayConfig` | MISSING | BG | . . x . x x | 130 | returned 0/NULL 130 x |
-| user32.dll | `RedrawWindow` | claimed (spec-win-gui-b) | B | x x x x x x | 2 |  |
-| user32.dll | `RegisterClassExW` | green (in tree) | BG | x x x x x x | 6 |  |
-| user32.dll | `RegisterClassW` | MISSING (name appears in tree) | C | x x x x x x | 2 |  |
-| user32.dll | `RegisterDeviceNotificationW` | MISSING | B | x x x x x x | 2 |  |
-| user32.dll | `RegisterPointerDeviceNotifications` | MISSING | B | x x x x x x | 1 |  |
-| user32.dll | `RegisterPowerSettingNotification` | MISSING | B | x x x x x x | 3 |  |
-| user32.dll | `RegisterSuspendResumeNotification` | MISSING | B | x x x x x x | 1 |  |
-| user32.dll | `RegisterWindowMessageW` | MISSING | B | x x x x x x | 1 |  |
-| user32.dll | `ReleaseCapture` | claimed (spec-win-gui-b in tree) | B | . . x . x . | 1 |  |
-| user32.dll | `ReleaseDC` | green (in tree) | B | x x x x x x | 9 |  |
-| user32.dll | `RemovePropW` | MISSING | B | x x x x x x | 10 | returned 0/NULL 2 x |
-| user32.dll | `SendMessageW` | green (in tree) | B | x x x x x x | 1 | returned 0/NULL 1 x |
-| user32.dll | `SetCapture` | claimed (spec-win-gui-b) | B | . . x . x . | 1 | returned 0/NULL 1 x |
-| user32.dll | `SetCursor` | claimed (spec-win-gui-b) | B | . . x . x . | 36 | returned 0/NULL 5 x |
-| user32.dll | `SetFocus` | claimed (spec-win-gui-b) | B | . . . . x . | 2 |  |
-| user32.dll | `SetForegroundWindow` | claimed (spec-win-gui-b) | B | . . x . x . | 2 |  |
-| user32.dll | `SetKeyboardState` | MISSING | B | . . x . x . | 1 |  |
-| user32.dll | `SetParent` | MISSING (name appears in tree) | B | x x x x x x | 8 |  |
-| user32.dll | `SetProcessWindowStation` | MISSING | B | . x . . . . | 2 |  |
-| user32.dll | `SetPropW` | MISSING | B | x x x x x x | 8 |  |
-| user32.dll | `SetRect` | MISSING (name appears in tree) | B | . . . . x . | 67 |  |
-| user32.dll | `SetWindowLongPtrW` | green (in tree) | BCG | x x x x x x | 18 | returned 0/NULL 18 x |
-| user32.dll | `SetWindowLongW` | MISSING (name appears in tree) | B | x x x x x x | 21 |  |
-| user32.dll | `SetWindowPos` | green (in tree) | BG | x x x x x x | 61 |  |
-| user32.dll | `SetWindowTextW` | green (in tree) | B | x x x x x x | 6 |  |
-| user32.dll | `SetWinEventHook` | MISSING | B | . . x . x . | 11 |  |
-| user32.dll | `ShowWindow` | claimed (impl-win-gui-a in tree) | B | x x x x x x | 30 | returned 0/NULL 11 x |
-| user32.dll | `SystemParametersInfoW` | MISSING | BR | x x x x x x | 9 |  |
-| user32.dll | `ToUnicodeEx` | MISSING | B | . . x . x . | 4108 | returned 0/NULL 3416 x |
-| user32.dll | `TrackMouseEvent` | claimed (spec-win-gui-b) | B | . . x . x . | 6 |  |
-| user32.dll | `TranslateMessage` | green (in tree) | BC | x x x x x x | 150 | returned 0/NULL 102 x |
-| user32.dll | `UnhookWinEvent` | MISSING | B | . . x . x . | 11 |  |
-| user32.dll | `UnregisterClassW` | green (in tree) | B | x . x x x x | 2 |  |
-| user32.dll | `UnregisterDeviceNotification` | MISSING | B | x . x x x x | 2 |  |
-| user32.dll | `UnregisterPowerSettingNotification` | MISSING | B | x . x x x x | 3 |  |
-| user32.dll | `WindowFromDC` | MISSING | G | . . . . . x | 2 |  |
-| user32.dll | `WindowFromPoint` | claimed (spec-win-gui-b) | B | . . x . x . | 21 |  |
+| DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
+|---|---|---|---|---|---|---|---|---|---|---|---:|---|
+| user32.dll | `BeginPaint` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 9 |  |
+| user32.dll | `ClientToScreen` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 928 |  |
+| user32.dll | `CreateDesktopW` | MISSING | B | . x . . . . . | 1 |  |
+| user32.dll | `CreateIconIndirect` | MISSING | B | x x x x x x x | 1 |  |
+| user32.dll | `CreateWindowExW` | green (in tree) | BCG | x x x x x x x | 15 |  |
+| user32.dll | `CreateWindowStationW` | MISSING | B | . x . . . . . | 1 |  |
+| user32.dll | `DefWindowProcW` | green (in tree) | BCG | x x x x x x x | 416 | INVALID_HANDLE |
+| user32.dll | `DestroyIcon` | MISSING | B | x . x x x x x | 1 |  |
+| user32.dll | `DestroyWindow` | green (in tree) | BG | x x x x x x x | 12 | IO_PENDING, INVALID_WINDOW_HANDLE |
+| user32.dll | `DispatchMessageW` | green (in tree) | BC | x x x x x x x | 150 | ACCESS_DENIED, IO_PENDING |
+| user32.dll | `DisplayConfigGetDeviceInfo` | MISSING | BG | . . x . x x x | 130 | returned 0/NULL 130 x |
+| user32.dll | `EnableWindow` | claimed (spec-win-gui-b in tree) | BG | x x x x x x x | 1 | returned 0/NULL 1 x |
+| user32.dll | `EndPaint` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 9 |  |
+| user32.dll | `EnumDisplayDevicesW` | MISSING | B | x x x x x x x | 5 |  |
+| user32.dll | `EnumDisplayMonitors` | MISSING | B | . . x . x . x | 4 | 2012 |
+| user32.dll | `EnumDisplaySettingsW` | MISSING | B | . . x . x . x | 3 |  |
+| user32.dll | `EnumThreadWindows` | MISSING | B | x x x x x x x | 26 |  |
+| user32.dll | `EnumWindows` | MISSING (name appears in tree) | B | . . x . x . x | 6 |  |
+| user32.dll | `FillRect` | claimed (impl-win-gui-a in tree) | B | . . x . x . x | 1 |  |
+| user32.dll | `FindWindowExW` | MISSING (name appears in tree) | B | x x x x x x x | 2 | returned 0/NULL 2 x |
+| user32.dll | `GetActiveWindow` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 85 | returned 0/NULL 4 x |
+| user32.dll | `GetAncestor` | MISSING (name appears in tree) | B | x x x x x x x | 153 |  |
+| user32.dll | `GetCapture` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 24 | returned 0/NULL 23 x |
+| user32.dll | `GetClassNameW` | MISSING (name appears in tree) | B | x x x x x x x | 84 |  |
+| user32.dll | `GetClientRect` | green (in tree) | B | x x x x x x x | 914 |  |
+| user32.dll | `GetCursorPos` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 45 |  |
+| user32.dll | `GetDC` | green (in tree) | BG | x x x x x x x | 8 |  |
+| user32.dll | `GetDesktopWindow` | MISSING (name appears in tree) | BG | x x x x x x x | 10 |  |
+| user32.dll | `GetDisplayConfigBufferSizes` | MISSING | BG | . . x . x x x | 130 | returned 0/NULL 130 x |
+| user32.dll | `GetForegroundWindow` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 2 | returned 0/NULL 1 x |
+| user32.dll | `GetKeyboardLayout` | MISSING | B | x x x x x x x | 61 |  |
+| user32.dll | `GetKeyboardLayoutList` | MISSING | B | x x x x x x x | 4 |  |
+| user32.dll | `GetKeyboardLayoutNameW` | MISSING | B | x x x x x x x | 1 |  |
+| user32.dll | `GetKeyboardState` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 1 |  |
+| user32.dll | `GetKeyState` | claimed (spec-win-gui-b in tree) | B | x x x x x x x | 1089 | returned 0/NULL 972 x |
+| user32.dll | `GetLastInputInfo` | MISSING | B | x x x x x x x | 2 |  |
+| user32.dll | `GetLayeredWindowAttributes` | MISSING | B | . . x . x . x | 6 |  |
+| user32.dll | `GetMessageExtraInfo` | MISSING (name appears in tree) | B | . . x . x . x | 62 | returned 0/NULL 62 x |
+| user32.dll | `GetMessageW` | green (in tree) | C | x x x x x x x | 4 |  |
+| user32.dll | `GetMonitorInfoW` | claimed (spec-win-gui-b) | BG | x x x x x x x | 130 |  |
+| user32.dll | `GetParent` | green (in tree) | B | x x x x x x x | 177 | returned 0/NULL 10 x |
+| user32.dll | `GetPointerDevices` | MISSING | B | x x x x x x x | 8 |  |
+| user32.dll | `GetProcessWindowStation` | MISSING | B | . x . . . . . | 2 |  |
+| user32.dll | `GetPropW` | MISSING | B | . . x . x . x | 1 | FILE_NOT_FOUND |
+| user32.dll | `GetQueueStatus` | green (in tree) | BG | x x x x x x x | 471 | returned 0/NULL 418 x |
+| user32.dll | `GetSysColor` | MISSING (name appears in tree) | BR | x x x x x x x | 96 | returned 0/NULL 16 x |
+| user32.dll | `GetSystemMenu` | MISSING | B | x x x x x x x | 1 |  |
+| user32.dll | `GetSystemMetrics` | claimed (spec-win-gui-b in tree) | B | x x x x x x x | 865 | returned 0/NULL 22 x |
+| user32.dll | `GetUserObjectInformationW` | MISSING | B | . x . . . . . | 44 | INSUFFICIENT_BUFFER |
+| user32.dll | `GetWindow` | MISSING (name appears in tree) | B | x x x x x x x | 146 | returned 0/NULL 104 x |
+| user32.dll | `GetWindowDC` | MISSING (name appears in tree) | B | . . x . x . x | 1 |  |
+| user32.dll | `GetWindowDisplayAffinity` | MISSING | B | x x x x x x x | 2 |  |
+| user32.dll | `GetWindowLongPtrW` | green (in tree) | BCG | x x x x x x x | 644 | returned 0/NULL 8 x |
+| user32.dll | `GetWindowLongW` | MISSING (name appears in tree) | B | x x x x x x x | 138 |  |
+| user32.dll | `GetWindowPlacement` | MISSING | B | . . x . x . x | 5 |  |
+| user32.dll | `GetWindowRect` | green (in tree) | B | x x x x x x x | 90 |  |
+| user32.dll | `GetWindowRgnBox` | MISSING | B | . . x . x . x | 34 | returned 0/NULL 28 x |
+| user32.dll | `GetWindowTextLengthW` | MISSING (name appears in tree) | B | x x x x x x x | 9 | returned 0/NULL 1 x |
+| user32.dll | `GetWindowTextW` | green (in tree) | B | x . x x x x x | 6 |  |
+| user32.dll | `GetWindowThreadProcessId` | MISSING (name appears in tree) | BG | x x x x x x x | 651 |  |
+| user32.dll | `IsChild` | MISSING (name appears in tree) | B | . . x . x . x | 4 | INVALID_WINDOW_HANDLE |
+| user32.dll | `IsIconic` | MISSING (name appears in tree) | B | . . x . x . x | 606 | returned 0/NULL 600 x |
+| user32.dll | `IsRectEmpty` | MISSING (name appears in tree) | B | . . x . x . x | 20 | returned 0/NULL 16 x |
+| user32.dll | `IsWindow` | green (in tree) | BG | x x x x x x x | 768 | returned 0/NULL 11 x |
+| user32.dll | `IsWindowArranged` | MISSING | B | . . x . x . x | 1 | returned 0/NULL 1 x |
+| user32.dll | `IsWindowVisible` | MISSING (name appears in tree) | B | x x x x x x x | 657 | returned 0/NULL 520 x |
+| user32.dll | `IsZoomed` | MISSING (name appears in tree) | B | . . x . x . x | 1162 | returned 0/NULL 1162 x |
+| user32.dll | `LoadCursorW` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 3 |  |
+| user32.dll | `LoadIconW` | MISSING (name appears in tree) | B | x x x x x x x | 1 |  |
+| user32.dll | `LoadImageW` | MISSING | B | x x x x x x x | 1 |  |
+| user32.dll | `MapWindowPoints` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 72 |  |
+| user32.dll | `MonitorFromPoint` | claimed (spec-win-gui-b) | B | x x x x x x x | 56 |  |
+| user32.dll | `MonitorFromRect` | MISSING | B | x x x x x x x | 21 |  |
+| user32.dll | `MonitorFromWindow` | claimed (spec-win-gui-b) | BG | x x x x x x x | 1330 | INVALID_WINDOW_HANDLE |
+| user32.dll | `NotifyWinEvent` | MISSING | B | x x x x x x x | 282 |  |
+| user32.dll | `OffsetRect` | MISSING (name appears in tree) | B | . . x . x . x | 1 |  |
+| user32.dll | `PeekMessageW` | green (in tree) | BGMNRS | x x x x x x x | 723 | FILE_NOT_FOUND |
+| user32.dll | `PostMessageW` | green (in tree) | B | x x x x x x x | 1 |  |
+| user32.dll | `PostThreadMessageW` | green (in tree) | GMNRS | x x x x x x x | 8 |  |
+| user32.dll | `QueryDisplayConfig` | MISSING | BG | . . x . x x x | 130 | returned 0/NULL 130 x |
+| user32.dll | `RedrawWindow` | claimed (spec-win-gui-b) | B | x x x x x x x | 2 |  |
+| user32.dll | `RegisterClassExW` | green (in tree) | BG | x x x x x x x | 6 |  |
+| user32.dll | `RegisterClassW` | MISSING (name appears in tree) | C | x x x x x x x | 2 |  |
+| user32.dll | `RegisterDeviceNotificationW` | MISSING | B | x x x x x x x | 2 |  |
+| user32.dll | `RegisterPointerDeviceNotifications` | MISSING | B | x x x x x x x | 1 |  |
+| user32.dll | `RegisterPowerSettingNotification` | MISSING | B | x x x x x x x | 3 |  |
+| user32.dll | `RegisterSuspendResumeNotification` | MISSING | B | x x x x x x x | 1 |  |
+| user32.dll | `RegisterWindowMessageW` | MISSING | B | x x x x x x x | 1 |  |
+| user32.dll | `ReleaseCapture` | claimed (spec-win-gui-b in tree) | B | . . x . x . x | 1 |  |
+| user32.dll | `ReleaseDC` | green (in tree) | B | x x x x x x x | 9 |  |
+| user32.dll | `RemovePropW` | MISSING | B | x x x x x x x | 10 | returned 0/NULL 2 x |
+| user32.dll | `SendMessageW` | green (in tree) | B | x x x x x x x | 1 | returned 0/NULL 1 x |
+| user32.dll | `SetCapture` | claimed (spec-win-gui-b) | B | . . x . x . x | 1 | returned 0/NULL 1 x |
+| user32.dll | `SetCursor` | claimed (spec-win-gui-b) | B | . . x . x . x | 36 | returned 0/NULL 5 x |
+| user32.dll | `SetFocus` | claimed (spec-win-gui-b) | B | . . . . x . . | 2 |  |
+| user32.dll | `SetForegroundWindow` | claimed (spec-win-gui-b) | B | . . x . x . x | 2 |  |
+| user32.dll | `SetKeyboardState` | MISSING | B | . . x . x . x | 1 |  |
+| user32.dll | `SetParent` | MISSING (name appears in tree) | B | x x x x x x x | 8 |  |
+| user32.dll | `SetProcessWindowStation` | MISSING | B | . x . . . . . | 2 |  |
+| user32.dll | `SetPropW` | MISSING | B | x x x x x x x | 8 |  |
+| user32.dll | `SetRect` | MISSING (name appears in tree) | B | . . . . x . . | 67 |  |
+| user32.dll | `SetWindowLongPtrW` | green (in tree) | BCG | x x x x x x x | 18 | returned 0/NULL 18 x |
+| user32.dll | `SetWindowLongW` | MISSING (name appears in tree) | B | x x x x x x x | 21 |  |
+| user32.dll | `SetWindowPos` | green (in tree) | BG | x x x x x x x | 61 |  |
+| user32.dll | `SetWindowTextW` | green (in tree) | B | x x x x x x x | 6 |  |
+| user32.dll | `SetWinEventHook` | MISSING | B | . . x . x . x | 11 |  |
+| user32.dll | `ShowWindow` | claimed (impl-win-gui-a in tree) | B | x x x x x x x | 30 | returned 0/NULL 11 x |
+| user32.dll | `SystemParametersInfoW` | MISSING | BR | x x x x x x x | 9 |  |
+| user32.dll | `ToUnicodeEx` | MISSING | B | . . x . x . x | 4108 | returned 0/NULL 3416 x |
+| user32.dll | `TrackMouseEvent` | claimed (spec-win-gui-b) | B | . . x . x . x | 6 |  |
+| user32.dll | `TranslateMessage` | green (in tree) | BC | x x x x x x x | 150 | returned 0/NULL 102 x |
+| user32.dll | `UnhookWinEvent` | MISSING | B | . . x . x . x | 11 |  |
+| user32.dll | `UnregisterClassW` | green (in tree) | B | x . x x x x x | 2 |  |
+| user32.dll | `UnregisterDeviceNotification` | MISSING | B | x . x x x x x | 2 |  |
+| user32.dll | `UnregisterPowerSettingNotification` | MISSING | B | x . x x x x x | 3 |  |
+| user32.dll | `WindowFromDC` | MISSING | G | . . . . . x x | 2 |  |
+| user32.dll | `WindowFromPoint` | claimed (spec-win-gui-b) | B | . . x . x . x | 21 |  |
 
 
 ## 9. Proposed batches (each one PR for an implementer; smallest first)
@@ -1071,3 +1077,22 @@ The gate of every batch is a check that exists or is part of the batch; the S-nu
   no Poly-side comparer yet: `tools/chrometrace.py` reads both sides' runs; `cargo xtask win chrome-trace` is the follow-up.
 * Nothing of Chrome, Windows or any other third-party binary was read, decompiled or disassembled; import and export
   *names* and the traces' observations only.
+
+## 12. Hand-back record
+
+* Branch `spec-chrome-win`, pushed (`origin/spec-chrome-win`); the head is in the final reply. Nothing merged, no PR opened.
+* New: `specs/windows/apps/chrome/` (README, `chrome.yaml`, `gap-map.md` = this file, pages, drivers, tools, 7 reduced traces,
+  `windows.json`), `tools/wintrace/polytrace-agg/` (the counting logger; added to `ci lint`'s `fmt (wintrace)` list),
+  `tools/xtask/src/wintrace.rs` (`trace-kit` with several programs, `--agg`, `--skip`; the Chrome signature table
+  `CHROME_SIGNATURES`; the generated `polytrace-preload.txt`), 8 coverage entries and the source `chrome-win-trace`
+  (`coverage/index.json`), README progress section regenerated.
+* Commands and results: `cargo xtask win trace-kit chrome.exe chrome.dll chrome_elf.dll --agg` (built natively on Windows,
+  63 proxies, about 6 minutes; the default kit's `polytrace.dll` is byte-identical before and after, checked);
+  `cargo test -p xtask wintrace` 9 passed, 0 failed; `cargo xtask coverage check` ok (845,418 entries);
+  `cargo xtask coverage readme` updated; `polyd 'cargo xtask ci lint'`: passed (1,748 s; it failed once on a dead-code warning in `wintrace.rs`, fixed).
+  Recording: `drivers/run_stage.ps1` (S1, S2, S4, S5 headless, 2 runs each, traced and untraced), `drivers/remote_run.ps1`
+  through `interactive_task.ps1` on homeserver2 (S3, S4 window, S5 window: untraced and traced, 2 runs each), `drivers/ablate.ps1`
+  (28 runs). Screenshot of S3 on homeserver2 (sandbox on, untraced):
+  `C:/Users/Marc.Blattmann/poly-dev/handoff/spec-chrome-win-s3-window-1.png`.
+* Never run: anything of Chrome on Poly (it does not start yet), `polyd` boot tests (no kernel change), the implementer-side
+  comparison of `poly-chrometrace/1` (no comparer yet).

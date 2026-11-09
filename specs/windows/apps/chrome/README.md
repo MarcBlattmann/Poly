@@ -28,7 +28,7 @@ Each stage is a scenario with observable results. The pages are in `pages/` (SHA
 | **S2** | S1 without `--no-sandbox` | the same stdout (same bytes), exit code 0, in 2-4 s |
 | **S3** | `chrome.exe --disable-gpu --no-first-run --user-data-dir=<fresh> --window-position=40,40 --window-size=900,500 file:///<dir>/pages/s3.html`, driven by `drivers/s3_driver.ps1` | a top-level `Chrome_WidgetWin_1` window titled `poly-s3 clicks=0 keys= moved=0 - Google Chrome for Testing`; after a mouse move, one click and the keys p-o-l-y: `poly-s3 clicks=1 keys=poly moved=1 - ...`; the screenshot shows the page's text (Georgia, Arial bold, Consolas, German umlauts); `WM_CLOSE` to the window ends the browser with exit code 0 |
 | **S4** | S3 with `http://example.com/`, then `https://www.iana.org/` through the address bar (`Ctrl+L`); headless: `pages/s4.html` frames both | titles `Example Domain - ...` then `Internet Assigned Numbers Authority - ...`; headless DOM `<p id="r">http=1 https=1</p>` (831 bytes) |
-| **S5** | headless without `--disable-gpu` (default GPU flags) | the same DOM as S1; only the GPU process differs (see the gap map) |
+| **S5** | headless without `--disable-gpu` (default GPU flags); and the S3 window without it | the same DOM / title as before; only the GPU process differs (see the gap map) |
 
 S1's DOM (CRLF line ends, as Windows' console/pipe writes them):
 
