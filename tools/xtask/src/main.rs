@@ -12,7 +12,7 @@
 //!                       CI's build jobs: build the kernel and native programs, or the
 //!                       xtask, pipeline tool and Windows test programs, and list their
 //!                       files for the artifact; the other jobs run with POLY_PREBUILT=1
-//!                       to take them instead of building (prebuilt.rs, ADR 0151)
+//!                       to take them instead of building (prebuilt.rs, ADR 0156)
 //!   run   [--release] [--gdb] [--no-disk] [--headless] [--virtio-gpu] [--memory=SIZE] [--cpus=N] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
 //!                       with the test devices and a virtio-net NIC on QEMU's user
@@ -1665,7 +1665,7 @@ const BOOT_GROUPS: [BootGroup; 37] = [
 /// (`cargo xtask boot-tests --shard <name>[,<name>...]`): every group is in
 /// exactly one shard, and `.github/workflows/ci.yml` lists, per job, the
 /// shards it runs (`shards:`), each at least once. The kernel and the
-/// programs are built once by the `build` jobs (ADR 0151), so a job is its
+/// programs are built once by the `build` jobs (ADR 0156), so a job is its
 /// boots plus about half a minute of setup: the shards are small so the
 /// workflow can combine them into jobs of equal length as the times change
 /// without moving groups (the times of a CI run on KVM are in the comments).
@@ -2137,8 +2137,9 @@ fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
         problems.push("no job runs `boot-tests --shard ${{ matrix.shards }}`".into());
     }
     let slices = text.lines().map(str::trim).find_map(|l| l.strip_prefix("slice: [")?.strip_suffix(']'));
-    let want_slices: Vec<String> =
-        std::iter::once("extras".to_string()).chain((1..=PIPELINE_SHARDS).map(|i| format!("{i}/{PIPELINE_SHARDS}"))).collect();
+    let want_slices: Vec<String> = std::iter::once("extras".to_string())
+        .chain((1..=PIPELINE_SHARDS).map(|i| format!("{i}/{PIPELINE_SHARDS}")))
+        .collect();
     match slices {
         None => problems.push("no pipeline matrix line `slice: [...]`".into()),
         Some(list) => {
@@ -2151,7 +2152,7 @@ fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
     if !text.contains("ci pipeline --shard ${{ matrix.slice }}") {
         problems.push("no job runs `ci pipeline --shard ${{ matrix.slice }}`".into());
     }
-    // The build jobs make what the others take (ADR 0151).
+    // The build jobs make what the others take (ADR 0156).
     if !text.contains("part: [kernel, tools]") || !text.contains("cargo xtask prebuild ${{ matrix.part }}") {
         problems.push("no `build` job runs `cargo xtask prebuild ${{ matrix.part }}` for part: [kernel, tools]".into());
     }
@@ -2194,7 +2195,8 @@ fn ci(args: &[String]) -> Result {
         return Err(format!("ci: no part {bad:?}; the parts are {}", names.join(", ")));
     }
     if (PIPELINE_SHARD.get().is_some() || PIPELINE_EXTRAS.load(std::sync::atomic::Ordering::Relaxed))
-        && !parts.iter().any(|a| a.as_str() == "pipeline") {
+        && !parts.iter().any(|a| a.as_str() == "pipeline")
+    {
         return Err("ci: --shard slices the pipeline part: name it (`ci pipeline --shard 1/4`)".into());
     }
     let started = Instant::now();

@@ -1,7 +1,7 @@
 name: Take the build jobs' files
 description: >
   Downloads the artifacts of the `build` jobs (the kernel and native programs,
-  and xtask, the pipeline tool and the Windows test programs; ADR 0151) and
+  and xtask, the pipeline tool and the Windows test programs; ADR 0156) and
   unpacks them into the checkout. The job then runs with POLY_PREBUILT=1,
   which makes xtask use them instead of building (tools/xtask/src/prebuilt.rs).
 

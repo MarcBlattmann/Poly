@@ -7,7 +7,7 @@ name: CI
 # every other job passed: it is the required status check, so keep its name.
 #
 # The kernel, the native programs, xtask, the pipeline tool and the Windows
-# test programs are built once, by the two `build` jobs (ADR 0151), and the
+# test programs are built once, by the two `build` jobs (ADR 0156), and the
 # boot and pipeline jobs only unpack them (`POLY_PREBUILT=1`) and boot. Every
 # job takes about the same time (ADR 0150): the boot tests and the pipeline's
 # polycheck are cut into shards and slices. `cargo xtask ci lint` checks
@@ -117,7 +117,7 @@ jobs:
         run: cargo xtask fonts fetch || echo "::warning::could not fetch the fonts; poly-font's tests on them are skipped"
       - run: cargo xtask ci host-tests
 
-  # Builds, once, what the boot and pipeline jobs boot (ADR 0151): `kernel`
+  # Builds, once, what the boot and pipeline jobs boot (ADR 0156): `kernel`
   # the kernel with our ntdll.dll and Win32 modules and the native programs,
   # `tools` xtask, the pipeline tool and the Windows test programs. Each
   # packs its files (the list `cargo xtask prebuild` writes) into an artifact

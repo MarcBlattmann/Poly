@@ -1,4 +1,4 @@
-//! Prebuilt CI artifacts (ADR 0151): build once, boot many times.
+//! Prebuilt CI artifacts (ADR 0156): build once, boot many times.
 //!
 //! The boot and pipeline jobs of CI used to build the same kernel, native
 //! programs and Windows test programs each (about two minutes of a four-core

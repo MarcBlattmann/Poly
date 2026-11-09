@@ -312,7 +312,7 @@ pub fn default_kernel(root: &Path) -> PathBuf {
 /// (ADR 0071): a bare `cargo build` in `kernel/` makes a kernel that
 /// cannot start Windows programs.
 pub fn build_kernel(root: &Path) -> Result {
-    // CI's build job made the kernel (xtask's `prebuilt.rs`, ADR 0151): do
+    // CI's build job made the kernel (xtask's `prebuilt.rs`, ADR 0156): do
     // not build xtask just to find it up to date.
     if std::env::var_os("POLY_PREBUILT").is_some_and(|v| v == "1") && default_kernel(root).is_file() {
         eprintln!("==> prebuilt: the kernel");
