@@ -101,10 +101,14 @@ pub fn build() -> Result<Programs> {
 pub type Programs = Vec<(String, Vec<u8>)>;
 
 fn build_now() -> Result<Programs> {
-    let mut cmd = native_cargo();
-    cmd.args(["build", "--release", "--target-dir"]).arg(target_dir());
-    step("build native programs (userland/native)", &mut cmd)?;
     let dir = target_dir().join("x86_64-unknown-poly").join("release");
+    // CI's boot jobs take the build job's programs (prebuilt.rs).
+    let outputs: Vec<PathBuf> = PROGRAMS.iter().map(|name| dir.join(name)).collect();
+    if !crate::prebuilt::skip("the native programs", &outputs)? {
+        let mut cmd = native_cargo();
+        cmd.args(["build", "--release", "--target-dir"]).arg(target_dir());
+        step("build native programs (userland/native)", &mut cmd)?;
+    }
     PROGRAMS
         .iter()
         .map(|name| {

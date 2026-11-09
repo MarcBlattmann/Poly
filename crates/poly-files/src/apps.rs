@@ -167,6 +167,7 @@ pub fn handler_from_desktop_entry(id: &str, text: &str) -> Option<Handler> {
                 keywords: e.keywords.clone(),
                 argv,
                 id: id.into(),
+                icon: None,
             }
         }
     };

@@ -98,13 +98,26 @@ impl Win32k {
         let frame = self.desktop.frame();
         for event in events {
             match event {
+                // Input from the desktop: the pointer over a surface
+                // (relative to its top left, the window's client area),
+                // buttons and keys (ADR 0136).
+                FromCompositor::Pointer { surface, x, y, .. } => {
+                    if let Some(i) = self.surfaces.hwnd_of(surface).and_then(|h| self.wm.info(h)) {
+                        self.wm.link_pointer(i.client.left + x, i.client.top + y, &mut fx);
+                    }
+                }
+                FromCompositor::Button { button, pressed, .. } => self.wm.link_button(button, pressed, &mut fx),
+                FromCompositor::Key { code, pressed, .. } => self.wm.link_key(code, pressed, &mut fx),
+                // The shell's request to close a window: its thread gets
+                // `WM_CLOSE`, as from a click on a caption close button.
                 FromCompositor::Request { surface, request: DesktopRequest::Close } => {
-                    if let Some(hwnd) = self.surfaces.hwnd(surface) {
+                    if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
                         self.wm.post_system_message(hwnd, poly_win32k::user::WM_CLOSE, 0, &mut fx);
                     }
                 }
+                // The compositor moved or resized the window's surface.
                 FromCompositor::Configure { surface, x, y, width, height } => {
-                    if let Some(hwnd) = self.surfaces.hwnd(surface) {
+                    if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
                         let (width, height) = (width.min(i32::MAX as u32) as i32, height.min(i32::MAX as u32) as i32);
                         let client = Rect::new(x, y, x.saturating_add(width), y.saturating_add(height));
                         self.wm.configure_from_desktop(hwnd, client, frame);
@@ -114,6 +127,13 @@ impl Win32k {
             }
         }
         self.wake(objects, &fx);
+        // With a compositor the session is interactive, its screen the
+        // output, the work area below Poly's 24-pixel ridge.
+        if let Some(o) = self.desktop.output()
+            && !self.wm.display().interactive
+        {
+            self.wm.set_display(poly_win32k::metrics::Display::desktop(o.width as i32, o.height as i32, 24));
+        }
         self.sync();
     }
 

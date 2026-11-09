@@ -108,8 +108,11 @@ observed); colour↔monochrome blits use the source's background and the
 destination's text and background colours. The observed object
 lifetimes are kept: a deleted DC answers `OBJ_DC`, a deleted unselected
 solid brush stays readable and can be selected again (the old selection
-comes back) but paints nothing, a selected brush or bitmap goes when it is deselected or
-its DC is deleted. GDI handles carry a generation (the top byte), so a
+comes back) but paints nothing, a brush deleted while selected paints
+nothing from then on and goes when it is deselected, a selected bitmap
+goes when its DC is deleted. `FillRect` fills an inverted rectangle with
+its sides swapped (the oracle, against the sheet's "draw nothing"); an
+empty one draws nothing. GDI handles carry a generation (the top byte), so a
 deleted object's handle never names the object that reuses its slot.
 
 **Fonts.** The stock fonts report the sheets' `TEXTMETRICW`. The system
@@ -182,8 +185,12 @@ ADR 0128's Decision 3, made concrete for this slice:
    dialog frame (ours: additive except that one observed case).
 4. Thread timer ids (ours: from 0x7FEF up); `DispatchMessageW` returns
    22 after a timer callback, as observed, without a documented reason.
-5. Minimize, maximize and restore in full (ours: the sheet's rectangles,
-   simplified flags); `SendNotifyMessageW` to another thread (ours: posted).
+5. Minimize, maximize and restore in full. Confirmed for minimizing a
+   300x200 overlapped window to `0,740,160,768`: the `WM_NCCALCSIZE(TRUE)`
+   `WINDOWPOS` (`0,740,160,28`) has flags `0x9920`, without
+   `SWP_SHOWWINDOW` (`0x0040`) or `SWP_NOZORDER` (`0x0004`) from `winuser.h`.
+   Other minimize/maximize/restore details remain open; `SendNotifyMessageW`
+   to another thread remains posted here.
 6. `"The quick brown fox"`'s exact glyph pixels: only the extent and the
    recorded rows are reproducible from the sheets.
 
