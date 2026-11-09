@@ -11,6 +11,7 @@ param(
   [string]$Page,                             # default: <Work>\pages\s3.html
   [string]$Ud,                               # default: <Work>\ud\<stage>
   [ValidateSet('s3', 's4')][string]$Stage = 's3',
+  [switch]$Gpu,                              # S5: leave the GPU flags at their defaults (no --disable-gpu)
   [switch]$NoSandbox                         # the traced kit cannot run sandboxed renderers (see the gap map)
 )
 $ErrorActionPreference = 'Stop'
@@ -78,6 +79,7 @@ $startUrl = if ($Stage -eq 's4') { 'http://example.com/' } else { $Page }
 $titlePrefix = if ($Stage -eq 's4') { 'Example Domain*' } else { 'poly-s3*' }
 $args2 = @('--disable-gpu', '--no-first-run', "--user-data-dir=$Ud", '--window-position=40,40', '--window-size=900,500', $startUrl)
 if ($NoSandbox) { $args2 = @('--no-sandbox') + $args2 }
+if ($Gpu) { $args2 = @($args2 | Where-Object { $_ -ne '--disable-gpu' }) }
 $proc = Start-Process -FilePath "$ChromeDir\chrome.exe" -ArgumentList $args2 -PassThru
 $null = $proc.Handle
 if ($TraceDir) { Remove-Item Env:POLYTRACE_OUT }

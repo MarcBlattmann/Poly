@@ -7,7 +7,7 @@ import covmap, chrometrace
 work = sys.argv[1]
 tr = os.path.join(work, 'tr')
 imports = json.load(open(sys.argv[2]))   # pe_imports.py output
-STAGES = [('s1', 's1'), ('s2', 's2'), ('s3', 's3'), ('s4 (headless)', 's4'), ('s4 (window)', 's4h'), ('s5', 's5')]
+STAGES = [('s1', 's1'), ('s2', 's2'), ('s3', 's3'), ('s4 (headless)', 's4'), ('s4 (window)', 's4h'), ('s5', 's5'), ('s5 (window)', 's5w')]
 out = {}
 
 # --- census
