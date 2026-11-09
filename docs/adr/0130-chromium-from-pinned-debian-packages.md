@@ -109,3 +109,11 @@ toolkits' disk still chroot.
   through `chroot`). The set-user-ID helper is still on the disk
   (mode 4755): `--disable-namespace-sandbox` (the `chromium-setuid-sandbox`
   scenario test) still takes it.
+
+## Amendment: the desktop boots from this disk by default
+
+ADR 0147: `cargo xtask desktop --chromium` (the dev menu's "With Chromium",
+on by default) boots this disk and this initramfs with Poly's own apps,
+settings and the default browser; the initramfs's `switch-root` runs an
+`overlay` script before the switch, so Poly's files on the kept disk follow
+the checkout.

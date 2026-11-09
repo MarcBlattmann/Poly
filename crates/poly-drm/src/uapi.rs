@@ -232,6 +232,13 @@ pub mod event {
     pub const FLIP_COMPLETE: u32 = 0x02;
     /// `DRM_EVENT_CRTC_SEQUENCE`
     pub const CRTC_SEQUENCE: u32 = 0x03;
+    /// Poly's hotplug event ([`super::EventHotplug`], ADR 0145): the
+    /// display configuration changed, read the connectors again. Linux has
+    /// no such event on the card's file (it announces hotplugs with a udev
+    /// event); the DRM documentation keeps types from `0x8000_0000` up for
+    /// a driver's own events, which a client that does not know one skips
+    /// by its length, as libdrm's event loop does.
+    pub const HOTPLUG: u32 = 0x8000_0001;
     /// `struct drm_event_vblank` and `struct drm_event_crtc_sequence`: 32
     /// bytes each.
     pub const LEN: usize = 32;
@@ -692,6 +699,13 @@ layout! {
 layout! {
     /// `struct drm_mode_create_blob`.
     CreateBlob [16] { data: u64 = 0, length: u32 = 8, blob_id: u32 = 12 }
+}
+
+layout! {
+    /// Poly's hotplug event: a `struct drm_event` (type, length) and the
+    /// number of display changes so far, padded to the 32 bytes every event
+    /// of the queue takes.
+    EventHotplug [32] { ty: u32 = 0, length: u32 = 4, sequence: u32 = 8 }
 }
 
 layout! {

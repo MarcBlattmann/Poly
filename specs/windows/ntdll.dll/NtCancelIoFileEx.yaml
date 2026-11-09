@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtCancelIoFileEx.yaml
+id: windows/api/ntdll.dll/NtCancelIoFileEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CancelIoEx function, OVERLAPPED structure. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Cancels one pending request, named by its IO_STATUS_BLOCK (the first two fields of the OVERLAPPED), or every pending request on the handle when that pointer is NULL, whichever thread issued them. STATUS_NOT_FOUND when there is nothing to cancel.
+interface:
+  signature: "NTSTATUS NtCancelIoFileEx(HANDLE file, PIO_STATUS_BLOCK requestToCancel, PIO_STATUS_BLOCK iosb)"
+rules:
+  not_pending: "nothing pending, an already cancelled request, a completed request, or a request of another handle: STATUS_NOT_FOUND (0xC0000225) in the return value and in the IO_STATUS_BLOCK; the other handle's request is untouched."
+  one_request: "of two pending reads cancelling the first: STATUS_SUCCESS (iosb status success); the first becomes STATUS_CANCELLED, the second stays STATUS_PENDING; cancelling the first again: STATUS_NOT_FOUND."
+  all_requests: "NULL cancels the rest (STATUS_SUCCESS), a second NULL call: STATUS_NOT_FOUND."
+  other_thread: "cancels a request issued by another thread (it finishes STATUS_CANCELLED and its issuer wakes); NtCancelIoFile from another thread does not."
+errors:
+  not_found: "STATUS_NOT_FOUND (0xC0000225)"
+  bad_handle: "STATUS_INVALID_HANDLE"
+  not_a_file: "an event: STATUS_OBJECT_TYPE_MISMATCH"
+side_effects: "completes the cancelled requests"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Named I/O completion ports (object names), file handles associated through NtSetInformationFile(FileCompletionInformation), non-pipe files, remote pipes, security descriptors.

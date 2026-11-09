@@ -102,6 +102,9 @@ pub static OLEAUT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleaut32.
 pub static GDI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/gdi32.dll"));
 pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"));
 
+/// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
+/// by [`layout`]; empty without `xtask`.
+pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bcryptprimitives.dll"));
 /// Our `dwrite.dll` (ADR 0170), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
 pub static DWRITE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dwrite.dll"));
@@ -440,6 +443,10 @@ impl NtKernel for Kernel {
 
     fn trace(&mut self, values: [u64; 3]) {
         crate::kprintln!("nt: pid {} PolyTrace {:#x} {:#x} {:#x}", self.pid.0, values[0], values[1], values[2]);
+    }
+
+    fn debug_print(&mut self, text: &[u8]) {
+        crate::kprintln!("nt: pid {}: {}", self.pid.0, alloc::string::String::from_utf8_lossy(text).trim_end());
     }
 
     fn system_time(&self) -> u64 {

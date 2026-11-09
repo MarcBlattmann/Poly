@@ -310,7 +310,10 @@ fn parse_tbd_yaml(text: &str) -> Vec<TbdLibrary> {
                 }
                 continue;
             }
-            if section != "exports" {
+            // `reexports` lists what the library makes available from the
+            // libraries it re-exports (libsystem_c's `memcpy`): an app links
+            // those names against this library, so they count as its API.
+            if section != "exports" && section != "reexports" {
                 continue;
             }
             if key == "-" {
@@ -379,7 +382,8 @@ fn parse_tbd_json(text: &str) -> Result<Vec<TbdLibrary>, String> {
             .map(|a| a.iter().filter_map(|t| t.get("target").and_then(Value::as_str)).map(str::to_string).collect())
             .unwrap_or_default();
         let mut t = TbdLibrary { install_name, ..Default::default() };
-        for group in lib.get("exported_symbols").and_then(Value::as_array).into_iter().flatten() {
+        let groups = ["exported_symbols", "reexported_symbols"].into_iter().filter_map(|k| lib.get(k));
+        for group in groups.filter_map(Value::as_array).flatten() {
             let targets = match group.get("targets") {
                 Some(v) => strings(Some(v)),
                 None => lib_targets.clone(),
@@ -432,10 +436,16 @@ pub fn sdk_symbol(raw: &str) -> Option<String> {
     Some(raw.strip_prefix('_').unwrap_or(raw).to_string())
 }
 
+/// The entries of one `.tbd` file's libraries. A file of a public library
+/// also holds the private libraries it re-exports, inlined after it
+/// (AppKit's file holds UIFoundation, AudioToolbox's AudioToolboxCore):
+/// apps link their symbols through the public library, so they are
+/// credited to it, the file's first library.
 pub fn entries_from_tbd(libs: &[TbdLibrary]) -> Vec<Entry> {
     let mut out = Vec::new();
+    let umbrella = libs.first().and_then(|l| sdk_component(&l.install_name));
     for lib in libs {
-        let Some(component) = sdk_component(&lib.install_name) else { continue };
+        let Some(component) = sdk_component(&lib.install_name).or_else(|| umbrella.clone()) else { continue };
         let symbols = lib.symbols.iter().filter_map(|s| sdk_symbol(s));
         let classes = lib.objc_classes.iter().map(|c| format!("objc:{c}"));
         for symbol in symbols.chain(classes) {
@@ -657,6 +667,8 @@ exports:
                 "macos/api/Demo.framework/$s4Demo4ViewVMn",
                 "macos/api/Demo.framework/DemoFunction",
                 "macos/api/Demo.framework/DemoWeak",
+                // What it re-exports, apps link against it too.
+                "macos/api/Demo.framework/ReexportedElsewhere",
                 "macos/api/Demo.framework/_ZN4demo3fooEv",
                 "macos/api/Demo.framework/objc:DemoView",
                 "macos/api/Demo.framework/objc:DemoWindow",
@@ -688,6 +700,8 @@ exports:
             ids(entries_from_tbd(&libs)),
             [
                 "macos/api/libdemo.dylib/dataSym",
+                // The inlined private library it re-exports.
+                "macos/api/libdemo.dylib/hidden",
                 "macos/api/libdemo.dylib/objc:DemoClass",
                 "macos/api/libdemo.dylib/textSym",
                 "macos/api/libdemo.dylib/weakSym",
@@ -743,7 +757,7 @@ exports:
         std::fs::create_dir_all(&private).unwrap();
         std::fs::write(private.join("Secret.tbd"), TBD_V4.replace("Demo.framework", "Secret.framework")).unwrap();
         let v = macos_sdk(&sdk).unwrap();
-        assert_eq!(v.len(), 7, "each symbol once, despite the Current symlink");
+        assert_eq!(v.len(), 8, "each symbol once, despite the Current symlink");
         assert!(v.iter().all(|e| !e.id.contains("Secret")));
         assert!(macos_sdk(&sdk.join("nope")).is_err());
         let _ = std::fs::remove_dir_all(&sdk);

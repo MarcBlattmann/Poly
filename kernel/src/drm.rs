@@ -980,6 +980,29 @@ fn vblank_thread(_: usize) -> usize {
     }
 }
 
+/// How often the display thread looks at the virtio GPU's `events_read`.
+const DISPLAY_POLL_MS: u64 = 100;
+
+/// Tell the DRM clients when the display configuration changes (a window
+/// showing the screen was resized, ADR 0145). The console follows such a
+/// change itself while it has the display (ADR 0102); while a DRM client
+/// has it nothing reads the device's display event, so this thread does:
+/// the device probes its outputs again and every file of the card gets a
+/// hotplug event.
+fn display_thread(_: usize) -> usize {
+    loop {
+        thread::sleep(core::time::Duration::from_millis(DISPLAY_POLL_MS));
+        if !display::take_display_event_for_drm() {
+            continue;
+        }
+        let now = time::now_ns();
+        let Some(told) = with_device(|d| d.display_changed(now)) else { continue };
+        kprintln!("drm: the display configuration changed; {told} file(s) told");
+        // The vblank thread wakes the files' readers.
+        schedule(Some(0));
+    }
+}
+
 /// The bus ID `GET_UNIQUE` reports: `pci:<domain>:<bus>:<device>.<function>`.
 fn unique() -> alloc::string::String {
     display::gpu_bdf().map_or_else(|| "virtio".into(), |b| format!("pci:0000:{b}"))
@@ -1034,6 +1057,9 @@ pub fn init() {
     }
     if let Err(e) = thread::spawn_named("drm-vblank", vblank_thread, 0) {
         kprintln!("drm: no vblank thread ({e:?}); events wake readers only when they look");
+    }
+    if let Err(e) = thread::spawn_named("drm-display", display_thread, 0) {
+        kprintln!("drm: no display thread ({e:?}); clients are not told when the display changes");
     }
     kprintln!(
         "drm: /dev/dri/card0 (226:0) and renderD128 (226:128) on virtio-gpu {}: {crtcs} CRTC(s), dumb buffers, PRIME, atomic",

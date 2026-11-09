@@ -171,6 +171,25 @@ pub unsafe extern "C" fn RtlCreateUnicodeString(d: *mut UnicodeString, s: *const
     unsafe { string::create_unicode_string(d, s, &HeapAlloc) as u8 }
 }
 
+/// `RtlFormatCurrentUserKeyPath`: `\REGISTRY\USER\<sid>` of the current
+/// user, in a string the caller frees with `RtlFreeUnicodeString`. Poly has
+/// one user, `S-1-5-21-0-0-0-1000` (ADR 0066, 0073).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlFormatCurrentUserKeyPath(d: *mut UnicodeString) -> NtStatus {
+    const PATH: &str = "\\REGISTRY\\USER\\S-1-5-21-0-0-0-1000";
+    if d.is_null() {
+        return NtStatus(0xC000_000D); // STATUS_INVALID_PARAMETER
+    }
+    let mut wide: alloc::vec::Vec<u16> = PATH.encode_utf16().collect();
+    wide.push(0);
+    // SAFETY: `d` is the caller's writable UNICODE_STRING; `wide` is NUL-terminated.
+    if unsafe { string::create_unicode_string(d, wide.as_ptr(), &HeapAlloc) } {
+        SUCCESS
+    } else {
+        NtStatus(0xC000_0017) // STATUS_NO_MEMORY
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn RtlMultiByteToUnicodeN(
     out: *mut u16,
@@ -505,6 +524,7 @@ pub unsafe extern "C" fn LdrLoadDll(
     LOADER_LOCK.leave(&SysPlatform);
     match r {
         Ok((_, base, op)) => {
+            crate::report_stubbed();
             if run_callouts(&op.callouts).is_err() {
                 return NtStatus(0xC000_0142);
             }
@@ -514,7 +534,11 @@ pub unsafe extern "C" fn LdrLoadDll(
             }
             SUCCESS
         }
-        Err(e) => e,
+        Err(e) => {
+            let what = alloc::format!("LdrLoadDll({})", alloc::string::String::from_utf16_lossy(&name));
+            crate::report_load_failure(&what, e);
+            e
+        }
     }
 }
 
@@ -654,10 +678,20 @@ pub unsafe extern "C" fn LdrResolveDelayLoadedAPI(
     match r {
         Ok((addr, op)) => {
             let _ = run_callouts(&op.callouts);
+            crate::report_stubbed();
             addr as *mut u8
         }
         // A failure raises; the helper does not return a sentinel.
-        Err(_f) => {
+        Err(f) => {
+            let what = alloc::format!(
+                "delay-load {}!{}",
+                alloc::string::String::from_utf8_lossy(&f.dll),
+                match &f.name {
+                    Some(n) => alloc::string::String::from_utf8_lossy(n).into_owned(),
+                    None => alloc::format!("#{}", f.ordinal),
+                }
+            );
+            crate::report_load_failure(&what, f.status);
             // SAFETY: a fail-fast; does not return.
             unsafe { core::arch::asm!("int 0x29", in("ecx") 4u32, options(noreturn)) }
         }

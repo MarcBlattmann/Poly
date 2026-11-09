@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "op_basic",
+      "exe_sha256": "ae9b1a5438ef2e1d3e68a3b7002602e69a5cd9c8a944bf45fa1fe3797f2b28c1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgb3Blbl9zZWxmX2xpbWl0ZWQKb2sgaGFuZGxlX25hbWVzX3RoaXNfcHJvY2VzcwpvayBsaW1pdGVkX3JpZ2h0X3JlYWRzX2V4aXRfY29kZQpvayBydW5uaW5nX3Byb2Nlc3NfZXhpdF9jb2RlCm9rIGxpbWl0ZWRfcmlnaHRfY2Fubm90X3Rlcm1pbmF0ZQpvayBsaW1pdGVkX3JpZ2h0X2Nhbm5vdF90ZXJtaW5hdGVfZXJyb3IKb2sgb3Blbl9zZWxmX2FsbF9hY2Nlc3MKb2sgaW5oZXJpdF90cnVlX2hhbmRsZV9pbmZvX29rCm9rIGluaGVyaXRfdHJ1ZV9oYW5kbGVfaXNfaW5oZXJpdGFibGUKb2sgaW5oZXJpdF9mYWxzZV9oYW5kbGVfaXNfbm90X2luaGVyaXRhYmxlCm9rIG9wZW5fY2hpbGQKb2sgY2hpbGRfaGFuZGxlX25hbWVzX2NoaWxkCm9rIHdhaXRfdGltZXNfb3V0X3doaWxlX3J1bm5pbmcKb2sgb3Blbl9jaGlsZF93aXRob3V0X3N5bmNocm9uaXplCm9rIHdhaXRfd2l0aG91dF9zeW5jaHJvbml6ZV9mYWlscwpvayB3YWl0X3dpdGhvdXRfc3luY2hyb25pemVfZXJyb3IKb2sgb3Blbl9jaGlsZF9mb3JfdGVybWluYXRlCm9rIHRlcm1pbmF0ZV9jaGlsZApvayBjaGlsZF93YWl0X2FmdGVyX3Rlcm1pbmF0ZQpvayB0ZXJtaW5hdGVkX2V4aXRfY29kZQpvayBjcmVhdG9yc19oYW5kbGVfZXhpdF9jb2RlCnZhbHVlIG9wZW5fZW5kZWRfcHJvY2Vzc19ieV9pZF9vayAwCnZhbHVlIG9wZW5fZW5kZWRfcHJvY2Vzc19ieV9pZF9lcnJvciA4NwpvayBvcGVuX3BpZF8wX2ZhaWxzCm9rIG9wZW5fcGlkXzBfZXJyb3IKb2sgb3Blbl91bnVzZWRfcGlkX2ZhaWxzCm9rIG9wZW5fdW51c2VkX3BpZF9lcnJvcgpvayBvcGVuX3BpZF8zX2ZhaWxzCm9rIG9wZW5fcGlkXzNfZXJyb3IKb2sgb3Blbl9zeXN0ZW1fcHJvY2Vzc19mYWlscwpvayBvcGVuX3N5c3RlbV9wcm9jZXNzX2Vycm9yCm9rIG9wZW5fd2l0aF9ub19yaWdodHNfZmFpbHMKb2sgb3Blbl93aXRoX25vX3JpZ2h0c19lcnJvcgpzdW1tYXJ5IDMxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok open_self_limited\nok handle_names_this_process\nok limited_right_reads_exit_code\nok running_process_exit_code\nok limited_right_cannot_terminate\nok limited_right_cannot_terminate_error\nok open_self_all_access\nok inherit_true_handle_info_ok\nok inherit_true_handle_is_inheritable\nok inherit_false_handle_is_not_inheritable\nok open_child\nok child_handle_names_child\nok wait_times_out_while_running\nok open_child_without_synchronize\nok wait_without_synchronize_fails\nok wait_without_synchronize_error\nok open_child_for_terminate\nok terminate_child\nok child_wait_after_terminate\nok terminated_exit_code\nok creators_handle_exit_code\nvalue open_ended_process_by_id_ok 0\nvalue open_ended_process_by_id_error 87\nok open_pid_0_fails\nok open_pid_0_error\nok open_unused_pid_fails\nok open_unused_pid_error\nok open_pid_3_fails\nok open_pid_3_error\nok open_system_process_fails\nok open_system_process_error\nok open_with_no_rights_fails\nok open_with_no_rights_error\nsummary 31 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 101
+    }
+  ]
+}

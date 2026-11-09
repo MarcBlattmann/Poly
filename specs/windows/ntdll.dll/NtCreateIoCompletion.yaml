@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtCreateIoCompletion.yaml
+id: windows/api/ntdll.dll/NtCreateIoCompletion
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CreateIoCompletionPort function, I/O Completion Ports, Standard Access Rights (NtCreateIoCompletion itself is not documented there; the kernel32 call is, and the NT call is what it makes). Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Creates an I/O completion port object and returns a handle with the access asked for. The number of concurrent threads is a hint with no failing values. The handle works with the kernel32 calls (PostQueuedCompletionStatus, GetQueuedCompletionStatus) and the NT ones; what it may do depends on its access mask.
+interface:
+  signature: "NTSTATUS NtCreateIoCompletion(PHANDLE port, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes, ULONG concurrentThreads)"
+rules:
+  all_access: "IO_COMPLETION_ALL_ACCESS (0x1F0003) is granted as asked; the handle count is 1; kernel32 can post to and receive from the handle."
+  concurrency: "0, 1, 8, 0xFFFF and 0xFFFFFFFF all succeed."
+  separate_ports: "two ports share nothing: a packet posted to one is not seen on the other."
+  rights: "IO_COMPLETION_QUERY_STATE (1) lets NtQueryIoCompletion work but not set or remove (STATUS_ACCESS_DENIED); IO_COMPLETION_MODIFY_STATE (2) lets set and remove work, and query fails with STATUS_ACCESS_DENIED; SYNCHRONIZE only, or no access at all: set/remove fail with STATUS_ACCESS_DENIED (the handle is still created); a right the type does not have (0x8000) is accepted."
+  generic_rights: "GENERIC_READ is granted as 0x20001 (READ_CONTROL | query), GENERIC_WRITE as 0x20002 (READ_CONTROL | modify... 0x20002 = STANDARD_RIGHTS_WRITE | MODIFY_STATE), GENERIC_ALL as 0x1F0003."
+  duplicate_with_less: "a duplicate with only MODIFY_STATE can set packets; the full handle sees them in its queue depth."
+  name: "object attributes naming \\BaseNamedObjects\\ without a leaf: STATUS_OBJECT_NAME_INVALID (0xC0000033)."
+errors:
+  bad_name: "STATUS_OBJECT_NAME_INVALID"
+  no_right: "STATUS_ACCESS_DENIED on the later calls"
+side_effects: "creates a port object"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Named I/O completion ports (object names), file handles associated through NtSetInformationFile(FileCompletionInformation), non-pipe files, remote pipes, security descriptors.

@@ -25,6 +25,7 @@ mod except;
 mod file;
 mod handles;
 mod legacy;
+mod locale;
 mod mapping;
 mod memory;
 mod misc;

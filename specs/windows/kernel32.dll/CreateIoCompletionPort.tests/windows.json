@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "cicp_create",
+      "exe_sha256": "5117c047968b6b9afb90b8657cfb81c3f290869567d9350ebd995de3acadf0f4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcG9ydF9jcmVhdGVkCm9rIHBvcnRfY29uY3VycmVuY3lfMQpvayBwb3J0X2NvbmN1cnJlbmN5XzgKb2sgcG9ydF9jb25jdXJyZW5jeV82NTUzNQpvayBwb3J0c19hcmVfZGlzdGluY3RfaGFuZGxlcwpvayBwb3J0X2lzX25vdF9hX3BpcGUKdmFsdWUgcG9ydF9waXBlX2luZm9fZXJyb3IgNgpvayBhc3NvY2lhdGVfcmV0dXJuc19wb3J0Cm9rIGFzc29jaWF0ZV9zZWNvbmRfaGFuZGxlX3JldHVybnNfcG9ydApvayBhc3NvY2lhdGVfYWdhaW5fZmFpbHMKb2sgYXNzb2NpYXRlX2FnYWluX2Vycm9yCm9rIGFzc29jaWF0ZV93aXRoX290aGVyX3BvcnRfZmFpbHMKb2sgYXNzb2NpYXRlX3dpdGhfb3RoZXJfcG9ydF9lcnJvcgpvayBzeW5jaHJvbm91c19jbGllbnRfaGFuZGxlX2ZhaWxzCm9rIHN5bmNocm9ub3VzX2NsaWVudF9oYW5kbGVfZXJyb3IKb2sgc3luY2hyb25vdXNfc2VydmVyX2hhbmRsZV9mYWlscwpvayBzeW5jaHJvbm91c19zZXJ2ZXJfaGFuZGxlX2Vycm9yCm9rIHN5bmNocm9ub3VzX2ZpbGVfZmFpbHMKb2sgc3luY2hyb25vdXNfZmlsZV9lcnJvcgpvayBldmVudF9hc19maWxlX2ZhaWxzCnZhbHVlIGV2ZW50X2FzX2ZpbGVfZXJyb3IgNgpvayBldmVudF9hc19wb3J0X2ZhaWxzCm9rIGV2ZW50X2FzX3BvcnRfZXJyb3IKb2sgaW52YWxpZF9maWxlX3dpdGhfZXhpc3RpbmdfcG9ydF9mYWlscwp2YWx1ZSBpbnZhbGlkX2ZpbGVfd2l0aF9leGlzdGluZ19wb3J0X2Vycm9yIDg3Cm9rIG51bGxfZmlsZV93aXRoX2V4aXN0aW5nX3BvcnRfZmFpbHMKdmFsdWUgbnVsbF9maWxlX3dpdGhfZXhpc3RpbmdfcG9ydF9lcnJvciA2Cm9rIG51bGxfZmlsZV9udWxsX3BvcnRfZmFpbHMKdmFsdWUgbnVsbF9maWxlX251bGxfcG9ydF9lcnJvciA2Cm9rIGludmFsaWRfcG9ydF9oYW5kbGVfZmFpbHMKdmFsdWUgaW52YWxpZF9wb3J0X2hhbmRsZV9lcnJvciA2Cm9rIGNyZWF0ZV9hbmRfYXNzb2NpYXRlCm9rIG5ld19wb3J0X2dldHNfcG9zdGVkX3BhY2tldApvayBjbG9zZWRfcG9ydF9mYWlscwpvayBjbG9zZWRfcG9ydF9lcnJvcgpzdW1tYXJ5IDI5IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok port_created\nok port_concurrency_1\nok port_concurrency_8\nok port_concurrency_65535\nok ports_are_distinct_handles\nok port_is_not_a_pipe\nvalue port_pipe_info_error 6\nok associate_returns_port\nok associate_second_handle_returns_port\nok associate_again_fails\nok associate_again_error\nok associate_with_other_port_fails\nok associate_with_other_port_error\nok synchronous_client_handle_fails\nok synchronous_client_handle_error\nok synchronous_server_handle_fails\nok synchronous_server_handle_error\nok synchronous_file_fails\nok synchronous_file_error\nok event_as_file_fails\nvalue event_as_file_error 6\nok event_as_port_fails\nok event_as_port_error\nok invalid_file_with_existing_port_fails\nvalue invalid_file_with_existing_port_error 87\nok null_file_with_existing_port_fails\nvalue null_file_with_existing_port_error 6\nok null_file_null_port_fails\nvalue null_file_null_port_error 6\nok invalid_port_handle_fails\nvalue invalid_port_handle_error 6\nok create_and_associate\nok new_port_gets_posted_packet\nok closed_port_fails\nok closed_port_error\nsummary 29 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

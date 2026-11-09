@@ -309,6 +309,37 @@ pub unsafe extern "system" fn GetModuleHandleA(name: *const u8) -> *mut u8 {
     }
 }
 
+/// `LoadLibraryExA`: the name through the ANSI code page, then
+/// `LoadLibraryExW` (ADR 0155).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn LoadLibraryExA(name: *const u8, file: Handle, flags: u32) -> *mut u8 {
+    // SAFETY: the caller's string.
+    match unsafe { ansi_arg(name) } {
+        None => fail(ERROR_INVALID_PARAMETER, core::ptr::null_mut()),
+        Some(w) => {
+            let w = with_nul(&w);
+            // SAFETY: a NUL-terminated string.
+            unsafe { crate::process::LoadLibraryExW(w.as_ptr(), file, flags) }
+        }
+    }
+}
+
+/// `LoadLibraryA`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn LoadLibraryA(name: *const u8) -> *mut u8 {
+    // SAFETY: as `LoadLibraryExA`.
+    unsafe { LoadLibraryExA(name, 0, 0) }
+}
+
+/// `OutputDebugStringW` / `OutputDebugStringA`: without a debugger the
+/// string goes nowhere (Learn: "If the application has no debugger and the
+/// system debugger is not active, OutputDebugString does nothing").
+#[unsafe(no_mangle)]
+pub extern "system" fn OutputDebugStringW(_text: *const u16) {}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn OutputDebugStringA(_text: *const u8) {}
+
 // ----- drives and disk space ----------------------------------------------------------------
 
 /// `GetLogicalDrives`: a bit per drive letter whose root exists
