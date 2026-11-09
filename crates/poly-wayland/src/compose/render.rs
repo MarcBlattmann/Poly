@@ -1,6 +1,7 @@
 //! Drawing one damaged rectangle: the desktop, then every window bottom to
 //! top — its frame, then its content over it — clipped to the rectangle.
 
+use super::busy;
 use super::frame::{BORDER, CORNER_RADIUS, FrameLayout, Glyph, glyph_covers};
 use super::paint::{self, Radii, ShadowCache};
 use super::scene::{Backdrop, Content, CursorLook, Scene, Window, WindowId};
@@ -51,6 +52,12 @@ pub(super) fn draw(
                 let dest = Rect::new(x - hx, y - hy, w, h).scale(s);
                 draw_image(fb, clip, content, dest, dest, s);
             }
+            CursorLook::Busy(phase) => {
+                draw_cursor(fb, clip, x, y, s);
+                // Dark or light as the frame's title bar is.
+                let dark = scene.theme().title_active & 0xff < 0x80;
+                busy::draw(fb, clip, x, y, s, *phase, dark);
+            }
             CursorLook::Hidden => {}
         }
     }
@@ -80,7 +87,7 @@ const ARROW: [&[u8; CURSOR_SIZE.0 as usize]; CURSOR_SIZE.1 as usize] = [
 ];
 
 /// The software cursor with its hot spot at logical (`x`, `y`).
-fn draw_cursor(fb: &mut dyn Framebuffer, clip: Rect, x: i32, y: i32, s: i32) {
+pub(super) fn draw_cursor(fb: &mut dyn Framebuffer, clip: Rect, x: i32, y: i32, s: i32) {
     let area = Rect::new(x, y, CURSOR_SIZE.0, CURSOR_SIZE.1).scale(s).intersect(&clip);
     for py in area.y..area.bottom() {
         let row = fb.row_mut(py as u32);

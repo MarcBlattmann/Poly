@@ -128,6 +128,9 @@ pub enum CursorLook {
     Image { content: Content, hx: i32, hy: i32 },
     /// No cursor (`set_cursor` with no surface).
     Hidden,
+    /// The arrow with a spinner: an app is starting (ADR 0167). The number
+    /// is the spinner's picture, `0..BUSY_PHASES`.
+    Busy(u8),
 }
 
 /// The composed picture of what lies behind a window (the layers below it
@@ -372,6 +375,11 @@ pub enum Placement {
 
 /// The software cursor's side, logical (the arrow fits in it).
 pub const CURSOR_SIZE: (i32, i32) = (12, 19);
+/// The busy pointer's size, logical: the arrow and its spinner at the
+/// lower right ([`CursorLook::Busy`]).
+pub const BUSY_SIZE: (i32, i32) = (27, 28);
+/// How many pictures the spinner turns through.
+pub const BUSY_PHASES: u8 = 16;
 
 /// Windows bottom to top on one output.
 #[derive(Debug)]
@@ -458,6 +466,7 @@ impl Scene {
                 let (w, h) = content.logical_size();
                 Rect::new(x - hx, y - hy, w, h)
             }
+            CursorLook::Busy(_) => Rect::new(x, y, BUSY_SIZE.0, BUSY_SIZE.1),
             CursorLook::Hidden => Rect::default(),
         }
     }

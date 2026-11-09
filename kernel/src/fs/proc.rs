@@ -146,6 +146,12 @@ pub fn comm(pid: u32) -> Option<Vec<u8>> {
     Some(find(pid).and_then(|p| crate::linux::cred::process_comm(&p)).unwrap_or(recorded))
 }
 
+/// The command line of process `pid` as `/proc/<pid>/cmdline` shows it
+/// (arguments separated by NULs), empty if it has none or is gone.
+pub fn cmdline_of(pid: u32) -> Vec<u8> {
+    KernelProc.cmdline(pid)
+}
+
 /// The memory map of process `pid`: the caller's own, or the one recorded
 /// at exec.
 pub(crate) fn memory_of(pid: u32) -> Option<Arc<Memory>> {

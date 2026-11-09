@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "dpt_children",
+      "exe_sha256": "794622dcc1e30f05964c4d646659ff715400e272ee68427ea2f5b78522dc6b63",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgdXBkYXRlX29rCm9rIHRocmVlX2NoaWxkcmVuX3dpdGhfb25lX2xpc3QKb2sgbG9uZ19jaGlsZF9zdGFydGVkCm9rIGNoaWxkX2FsaXZlX2FmdGVyX2RlbGV0ZQpvayBjaGlsZF90ZXJtaW5hdGVkCm9rIG5ld19saXN0X2luX3RoZV9zYW1lX21lbW9yeQpvayBuZXdfbGlzdF91cGRhdGVfb2sKb2sgY2hpbGRfd2l0aF9uZXdfbGlzdF9zdGFydGVkCm9rIGNoaWxkX3dpdGhfbmV3X2xpc3RfZXhpdApzdW1tYXJ5IDkgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok update_ok\nok three_children_with_one_list\nok long_child_started\nok child_alive_after_delete\nok child_terminated\nok new_list_in_the_same_memory\nok new_list_update_ok\nok child_with_new_list_started\nok child_with_new_list_exit\nsummary 9 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 221
+    }
+  ]
+}

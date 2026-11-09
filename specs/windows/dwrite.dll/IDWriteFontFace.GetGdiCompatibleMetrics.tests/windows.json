@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "gdi_metrics",
+      "exe_sha256": "f4d4582034d2a4b4ae0aaa8c257dbf0ca113b7fc1b2c70467bb4b84b5ce7a6da",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2xvdCAwIGVtIDgwMDA6IDB4MDAwMDAwMDAgdXBlbSAxMDAwIGFzYyA4NzUgZGVzYyAyNTAgZ2FwIDAgY2FwIDc1MCB4aCA1MDAgdWxwb3MgLTEyNSB1bHRoIDAgc3Rwb3MgMjUwIHN0dGggMApzbG90IDAgZW0gMTIwMDA6IDB4MDAwMDAwMDAgdXBlbSAxMDAwIGFzYyA5MTcgZGVzYyAzMzMgZ2FwIDAgY2FwIDY2NyB4aCA1MDAgdWxwb3MgLTgzIHVsdGggODMgc3Rwb3MgMjUwIHN0dGggMApzbG90IDAgZW0gMTMwMDA6IDB4MDAwMDAwMDAgdXBlbSAxMDAwIGFzYyA5MjMgZGVzYyAzMDggZ2FwIDAgY2FwIDY5MiB4aCA0NjIgdWxwb3MgLTc3IHVsdGggNzcgc3Rwb3MgMjMxIHN0dGggNzcKc2xvdCAwIGVtIDE2MDAwOiAweDAwMDAwMDAwIHVwZW0gMTAwMCBhc2MgODc1IGRlc2MgMzEzIGdhcCAwIGNhcCA2ODggeGggNTAwIHVscG9zIC0xMjUgdWx0aCA2MyBzdHBvcyAyNTAgc3R0aCA2MwpzbG90IDAgZW0gMjA1MDA6IDB4MDAwMDAwMDAgdXBlbSAxMDAwIGFzYyA4NzggZGVzYyAyOTMgZ2FwIDAgY2FwIDY4MyB4aCA0ODggdWxwb3MgLTk4IHVsdGggNDkgc3Rwb3MgMjQ0IHN0dGggNDkKc2xvdCAwIGVtIDEwMDAwMDogMHgwMDAwMDAwMCB1cGVtIDEwMDAgYXNjIDkwMCBkZXNjIDMwMCBnYXAgMCBjYXAgNzAwIHhoIDUwMCB1bHBvcyAtMTAwIHVsdGggNTAgc3Rwb3MgMjUwIHN0dGggNDAKc2xvdCAwIGVtIDEyIHBpeGVsc1BlckRpcCAyOiAweDAwMDAwMDAwIGFzYyA5MTcgZGVzYyAyOTIKc2xvdCAwIGVtIDEwIHdpdGggYSBzY2FsZSAyIHRyYW5zZm9ybTogMHgwMDAwMDAwMCBhc2MgOTAwIGRlc2MgMzAwCnNsb3QgMCBlbSAwOiAweDgwMDcwMDU3CnNsb3QgMCBlbSAtMTI6IDB4ODAwNzAwNTcKc2xvdCAxIGVtIDgwMDA6IDB4MDAwMDAwMDAgdXBlbSAyMDQ4IGFzYyAxNzkyIGRlc2MgNTEyIGdhcCAwIGNhcCAxMjgwIHhoIDEwMjQgdWxwb3MgMCB1bHRoIDAgc3Rwb3MgMjU2IHN0dGggMApzbG90IDEgZW0gMTIwMDA6IDB4MDAwMDAwMDAgdXBlbSAyMDQ4IGFzYyAxODc3IGRlc2MgNjgzIGdhcCAwIGNhcCAxMzY1IHhoIDEwMjQgdWxwb3MgLTE3MSB1bHRoIDAgc3Rwb3MgMTcxIHN0dGggMApzbG90IDEgZW0gMTMwMDA6IDB4MDAwMDAwMDAgdXBlbSAyMDQ4IGFzYyAxODkwIGRlc2MgNjMwIGdhcCAwIGNhcCAxNDE4IHhoIDk0NSB1bHBvcyAtMTU4IHVsdGggMCBzdHBvcyAzMTUgc3R0aCAwCnNsb3QgMSBlbSAxNjAwMDogMHgwMDAwMDAwMCB1cGVtIDIwNDggYXNjIDE3OTIgZGVzYyA2NDAgZ2FwIDAgY2FwIDE0MDggeGggMTAyNCB1bHBvcyAtMTI4IHVsdGggMCBzdHBvcyAyNTYgc3R0aCAwCnNsb3QgMSBlbSAyMDUwMDogMHgwMDAwMDAwMCB1cGVtIDIwNDggYXNjIDE4OTggZGVzYyA1OTkgZ2FwIDAgY2FwIDEzOTkgeGggOTk5IHVscG9zIC0xMDAgdWx0aCAxMDAgc3Rwb3MgMzAwIHN0dGggMApzbG90IDEgZW0gMTAwMDAwOiAweDAwMDAwMDAwIHVwZW0gMjA0OCBhc2MgMTg0MyBkZXNjIDU5NCBnYXAgMCBjYXAgMTM5MyB4aCAxMDA0IHVscG9zIC0xMDIgdWx0aCA0MSBzdHBvcyAyNDYgc3R0aCA0MQpzbG90IDEgZW0gMTIgcGl4ZWxzUGVyRGlwIDI6IDB4MDAwMDAwMDAgYXNjIDE4NzcgZGVzYyA1OTcKc2xvdCAxIGVtIDEwIHdpdGggYSBzY2FsZSAyIHRyYW5zZm9ybTogMHgwMDAwMDAwMCBhc2MgMTg0MyBkZXNjIDYxNApzbG90IDEgZW0gMDogMHg4MDA3MDA1NwpzbG90IDEgZW0gLTEyOiAweDgwMDcwMDU3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "slot 0 em 8000: 0x00000000 upem 1000 asc 875 desc 250 gap 0 cap 750 xh 500 ulpos -125 ulth 0 stpos 250 stth 0\nslot 0 em 12000: 0x00000000 upem 1000 asc 917 desc 333 gap 0 cap 667 xh 500 ulpos -83 ulth 83 stpos 250 stth 0\nslot 0 em 13000: 0x00000000 upem 1000 asc 923 desc 308 gap 0 cap 692 xh 462 ulpos -77 ulth 77 stpos 231 stth 77\nslot 0 em 16000: 0x00000000 upem 1000 asc 875 desc 313 gap 0 cap 688 xh 500 ulpos -125 ulth 63 stpos 250 stth 63\nslot 0 em 20500: 0x00000000 upem 1000 asc 878 desc 293 gap 0 cap 683 xh 488 ulpos -98 ulth 49 stpos 244 stth 49\nslot 0 em 100000: 0x00000000 upem 1000 asc 900 desc 300 gap 0 cap 700 xh 500 ulpos -100 ulth 50 stpos 250 stth 40\nslot 0 em 12 pixelsPerDip 2: 0x00000000 asc 917 desc 292\nslot 0 em 10 with a scale 2 transform: 0x00000000 asc 900 desc 300\nslot 0 em 0: 0x80070057\nslot 0 em -12: 0x80070057\nslot 1 em 8000: 0x00000000 upem 2048 asc 1792 desc 512 gap 0 cap 1280 xh 1024 ulpos 0 ulth 0 stpos 256 stth 0\nslot 1 em 12000: 0x00000000 upem 2048 asc 1877 desc 683 gap 0 cap 1365 xh 1024 ulpos -171 ulth 0 stpos 171 stth 0\nslot 1 em 13000: 0x00000000 upem 2048 asc 1890 desc 630 gap 0 cap 1418 xh 945 ulpos -158 ulth 0 stpos 315 stth 0\nslot 1 em 16000: 0x00000000 upem 2048 asc 1792 desc 640 gap 0 cap 1408 xh 1024 ulpos -128 ulth 0 stpos 256 stth 0\nslot 1 em 20500: 0x00000000 upem 2048 asc 1898 desc 599 gap 0 cap 1399 xh 999 ulpos -100 ulth 100 stpos 300 stth 0\nslot 1 em 100000: 0x00000000 upem 2048 asc 1843 desc 594 gap 0 cap 1393 xh 1004 ulpos -102 ulth 41 stpos 246 stth 41\nslot 1 em 12 pixelsPerDip 2: 0x00000000 asc 1877 desc 597\nslot 1 em 10 with a scale 2 transform: 0x00000000 asc 1843 desc 614\nslot 1 em 0: 0x80070057\nslot 1 em -12: 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

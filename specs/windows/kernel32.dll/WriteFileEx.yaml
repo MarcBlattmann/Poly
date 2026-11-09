@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/WriteFileEx.yaml
+id: windows/api/kernel32.dll/WriteFileEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: WriteFileEx, FileIOCompletionRoutine callback function, SleepEx. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Starts an overlapped write whose completion is delivered as a user APC in the issuing thread's next alertable wait. The routine runs only after the whole write has been taken (by a reader or by buffer space); a cancelled write runs it with ERROR_OPERATION_ABORTED.
+interface:
+  signature: "BOOL WriteFileEx(HANDLE file, LPCVOID buffer, DWORD bytes, LPOVERLAPPED overlapped, LPOVERLAPPED_COMPLETION_ROUTINE routine)"
+rules:
+  pending_until_read: "a 100-byte write into a pipe with a 16-byte buffer: the call returns TRUE; while the reader is idle an alertable wait (60 ms) finds nothing and the routine has not run; after the reader has read all 100 bytes (in 40-byte reads) the next alertable wait runs the routine with error 0 and 100 bytes."
+  cancel: "CancelIoEx on a pending WriteFileEx: TRUE; the next alertable wait runs the routine with ERROR_OPERATION_ABORTED (995) and 0 bytes."
+  routine_runs_once: "one request, one routine call."
+errors:
+  cancelled: "ERROR_OPERATION_ABORTED (995) delivered to the routine"
+side_effects: "starts a write; the routine runs later"
+threading: "the routine runs in the thread that issued the request, only while it waits alertably"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Files other than named pipes (the packets and errors are the same mechanism; pipes were used as the I/O source), remote machines, completion ports with several competing threads under load, the concurrency limit's effect on wake-up order.

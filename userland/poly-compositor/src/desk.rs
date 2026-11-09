@@ -822,6 +822,8 @@ impl Desktop {
         self.children.retain(|(pid, name)| match os::try_wait(*pid) {
             Some(status) => {
                 println!("poly-compositor: {name} (pid {pid}) exited with status {status}");
+                // Before a window: the launch's busy pointer ends if it failed.
+                server.launch_exited(*pid, status);
                 app_exited = true;
                 false
             }

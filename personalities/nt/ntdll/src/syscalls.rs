@@ -27,6 +27,8 @@ unsafe extern "system" {
         old: *mut u32,
     ) -> NtStatus;
     pub fn NtTerminateProcess(process: isize, status: NtStatus) -> NtStatus;
+    /// Poly's own: log `length` bytes of text on the kernel log (ADR 0155).
+    pub fn PolyDebugPrint(text: *const u8, length: usize) -> NtStatus;
     pub fn NtTerminateThread(thread: isize, status: NtStatus) -> NtStatus;
     pub fn NtClose(handle: isize) -> NtStatus;
     pub fn NtCreateEvent(handle: *mut isize, access: u32, attributes: *const u8, kind: u32, initial: u8) -> NtStatus;

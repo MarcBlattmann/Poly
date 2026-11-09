@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "ipt_size",
+      "exe_sha256": "db7dc30b53ac99a70cba3b11c1cbca23e1ba3561db1754d81f23d373285acc94",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2l6ZV9xdWVyeV9mYWlscwpvayBzaXplX3F1ZXJ5X2Vycm9yCm9rIHNpemVfcXVlcnlfZ2l2ZXNfYV9zaXplCm9rIHNpemVfZ3Jvd3NfMV8yCm9rIHNpemVfZ3Jvd3NfMl8zCm9rIHNpemVfZ3Jvd3NfM181Cm9rIHNpemVfaXNfYV9tdWx0aXBsZV9vZl84Cm9rIHNpemVfZml0c190aGVfdGVzdF9idWZmZXJfZm9yXzUKb2sgZXhhY3Rfc2l6ZV9vawpvayBvbmVfYnl0ZV9zaG9ydF9mYWlscwpvayBvbmVfYnl0ZV9zaG9ydF9lcnJvcgpvayBvbmVfYnl0ZV9zaG9ydF9yZXBvcnRzX25lZWRlZF9zaXplCm9rIHplcm9fc2l6ZV9mYWlscwpvayB6ZXJvX3NpemVfZXJyb3IKb2sgemVyb19zaXplX3JlcG9ydHNfbmVlZGVkX3NpemUKb2sgYmlnZ2VyX2J1ZmZlcl9vawpvayBiaWdnZXJfYnVmZmVyX3NpemVfcmV3cml0dGVuCnZhbHVlIGNvdW50XzBfb2sgMAp2YWx1ZSBjb3VudF8wX2Vycm9yIDEyMgp2YWx1ZSBjb3VudF8wX3NpemVfd3JpdHRlbiAxCnZhbHVlIGNvdW50XzI3X29rIDAKdmFsdWUgY291bnRfMjdfZXJyb3IgMTIyCnZhbHVlIGNvdW50XzI4X29rIDAKdmFsdWUgY291bnRfMjhfZXJyb3IgMTIyCnZhbHVlIGZsYWdzXzFfb2sgMAp2YWx1ZSBmbGFnc18xX2Vycm9yIDg3CnZhbHVlIGZsYWdzX2FsbF9vayAwCnZhbHVlIGZsYWdzX2FsbF9lcnJvciA4NwpzdW1tYXJ5IDE3IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok size_query_fails\nok size_query_error\nok size_query_gives_a_size\nok size_grows_1_2\nok size_grows_2_3\nok size_grows_3_5\nok size_is_a_multiple_of_8\nok size_fits_the_test_buffer_for_5\nok exact_size_ok\nok one_byte_short_fails\nok one_byte_short_error\nok one_byte_short_reports_needed_size\nok zero_size_fails\nok zero_size_error\nok zero_size_reports_needed_size\nok bigger_buffer_ok\nok bigger_buffer_size_rewritten\nvalue count_0_ok 0\nvalue count_0_error 122\nvalue count_0_size_written 1\nvalue count_27_ok 0\nvalue count_27_error 122\nvalue count_28_ok 0\nvalue count_28_error 122\nvalue flags_1_ok 0\nvalue flags_1_error 87\nvalue flags_all_ok 0\nvalue flags_all_error 87\nsummary 17 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 39
+    }
+  ]
+}

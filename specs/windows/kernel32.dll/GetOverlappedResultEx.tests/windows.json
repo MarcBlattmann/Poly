@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "gorex_basic",
+      "exe_sha256": "96faa9072f986075fc7b315df379293c613785bc76fe517fb1a05c601b4932a9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2Vjb25kX3JlYWRfcGVuZGluZ19vcl9kb25lCm9rIGV4X3plcm9fdGltZW91dF9mYWlscwpvayBleF96ZXJvX3RpbWVvdXRfZXJyb3IKb2sgZXhfemVyb190aW1lb3V0X2J5dGVzX3VudG91Y2hlZF9vcl96ZXJvCm9rIGV4X3RpbWVvdXRfZmFpbHMKb2sgZXhfdGltZW91dF9lcnJvcgpvayBleF8xbXNfdGltZW91dF9mYWlscwpvayBleF8xbXNfdGltZW91dF9lcnJvcgpvayBleF9jb21wbGV0ZXMKb2sgZXhfY29tcGxldGVkX2FnYWluCm9rIHRoaXJkX3JlYWRfcGVuZGluZwpvayBhcGNfcXVldWVkCm9rIGFsZXJ0YWJsZV93YWl0X2ZhaWxzCm9rIGFsZXJ0YWJsZV93YWl0X2Vycm9yCm9rIGFwY19yYW4Kb2sgbm9uX2FsZXJ0YWJsZV90aW1lc19vdXQKb2sgYXBjX25vdF9ydW5feWV0Cm9rIHNsZWVwZXhfcmV0dXJuc19pb19jb21wbGV0aW9uCm9rIGFwY19yYW5fbGF0ZXIKc3VtbWFyeSAxOSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok second_read_pending_or_done\nok ex_zero_timeout_fails\nok ex_zero_timeout_error\nok ex_zero_timeout_bytes_untouched_or_zero\nok ex_timeout_fails\nok ex_timeout_error\nok ex_1ms_timeout_fails\nok ex_1ms_timeout_error\nok ex_completes\nok ex_completed_again\nok third_read_pending\nok apc_queued\nok alertable_wait_fails\nok alertable_wait_error\nok apc_ran\nok non_alertable_times_out\nok apc_not_run_yet\nok sleepex_returns_io_completion\nok apc_ran_later\nsummary 19 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 181
+    }
+  ]
+}

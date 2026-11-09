@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtSetIoCompletion.yaml
+id: windows/api/ntdll.dll/NtSetIoCompletion
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: PostQueuedCompletionStatus function, GetQueuedCompletionStatus function (NtSetIoCompletion is what PostQueuedCompletionStatus calls). Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Queues a packet (key, APC context, an NTSTATUS and an information value) on a completion port. Dequeuers see the values unchanged; kernel32's GetQueuedCompletionStatus turns a failure status into a failed completion.
+interface:
+  signature: "NTSTATUS NtSetIoCompletion(HANDLE port, PVOID keyContext, PVOID apcContext, NTSTATUS ioStatus, ULONG_PTR ioStatusInformation)"
+rules:
+  values: "key, APC context, status and information come out of NtRemoveIoCompletion exactly as put in (0x11/0x1000/0/5, a failing status 0xC0000005, and pointer-maximum values with STATUS_PENDING), in queue order."
+  kernel32_view: "a packet with a failure status (0xC0000120) is a failed completion for GetQueuedCompletionStatus: FALSE, bytes 0, the key, the APC context as the OVERLAPPED pointer, GetLastError ERROR_OPERATION_ABORTED; a success status packet gives TRUE with bytes = the information value. A packet made by PostQueuedCompletionStatus is a success packet whose information is the byte count."
+  depth: "3000 packets queue without loss, in order, mixed with kernel32 posts (a kernel32 post queued last comes out last)."
+  rights: "IO_COMPLETION_MODIFY_STATE is needed (see NtCreateIoCompletion)."
+errors:
+  not_a_port: "an event handle or the current-process pseudo-handle (-1): STATUS_OBJECT_TYPE_MISMATCH (0xC0000024)"
+  bad_handle: "a bad value, NULL or a closed handle: STATUS_INVALID_HANDLE (0xC0000008)"
+side_effects: "adds a packet"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Named I/O completion ports (object names), file handles associated through NtSetInformationFile(FileCompletionInformation), non-pipe files, remote pipes, security descriptors.

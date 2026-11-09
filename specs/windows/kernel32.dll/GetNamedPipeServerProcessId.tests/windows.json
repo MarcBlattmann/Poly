@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "gspi_self",
+      "exe_sha256": "87f96b7083e78b5405ced17141957246ab487229f07cf35723b9034dccadbe44",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaW5ib3VuZF9saXN0ZW5pbmdfc2VydmVyX29rCm9rIGluYm91bmRfbGlzdGVuaW5nX3NlcnZlcl9pc19tZQpvayB3cml0ZV9vbmx5X2NsaWVudF9vawpvayB3cml0ZV9vbmx5X2NsaWVudF9pc19tZQpvayBjb25uZWN0ZWRfc2VydmVyX29rCm9rIGNvbm5lY3RlZF9zZXJ2ZXJfaXNfbWUKdmFsdWUgYWZ0ZXJfc2VydmVyX2Nsb3NlZF9vayAxCnZhbHVlIGFmdGVyX3NlcnZlcl9jbG9zZWRfZXJyb3IgMApvayBhZnRlcl9zZXJ2ZXJfY2xvc2VkX2lzX21lCnZhbHVlIG91dGJvdW5kX3NlcnZlcl9vayAxCnZhbHVlIG91dGJvdW5kX3NlcnZlcl9lcnJvciAwCm9rIG91dGJvdW5kX3NlcnZlcl9pc19tZQpvayBkdXBsaWNhdGVfb2sKb2sgZHVwbGljYXRlX2Fuc3dlcnNfbGlrZV9vcmlnaW5hbApvayBpbnZhbGlkX2hhbmRsZV9mYWlscwpvayBpbnZhbGlkX2hhbmRsZV9lcnJvcgpvayBldmVudF9mYWlscwpvayBldmVudF9lcnJvcgpzdW1tYXJ5IDE0IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok inbound_listening_server_ok\nok inbound_listening_server_is_me\nok write_only_client_ok\nok write_only_client_is_me\nok connected_server_ok\nok connected_server_is_me\nvalue after_server_closed_ok 1\nvalue after_server_closed_error 0\nok after_server_closed_is_me\nvalue outbound_server_ok 1\nvalue outbound_server_error 0\nok outbound_server_is_me\nok duplicate_ok\nok duplicate_answers_like_original\nok invalid_handle_fails\nok invalid_handle_error\nok event_fails\nok event_error\nsummary 14 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetOverlappedResultEx.yaml
+id: windows/api/kernel32.dll/GetOverlappedResultEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: GetOverlappedResultEx, QueueUserAPC, SleepEx. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  GetOverlappedResult with a timeout and an alertable option. A timeout of 0 reports a pending request as ERROR_IO_INCOMPLETE; a timeout greater than 0 that expires reports WAIT_TIMEOUT; an alertable wait ended by a queued APC reports WAIT_IO_COMPLETION after running the APC.
+interface:
+  signature: "BOOL GetOverlappedResultEx(HANDLE file, LPOVERLAPPED overlapped, LPDWORD bytes, DWORD milliseconds, BOOL alertable)"
+rules:
+  zero_timeout: "pending request, 0 ms: FALSE, ERROR_IO_INCOMPLETE (996)."
+  timeout: "pending request, 60 ms or 1 ms: FALSE, WAIT_TIMEOUT (258)."
+  completes: "data arrives: TRUE with the byte count; a further call, even with 0 ms, TRUE again with the same count."
+  alertable: "alertable = TRUE with an APC queued to the calling thread and a pending request: the APC runs and the call returns FALSE with WAIT_IO_COMPLETION (192); the request is still pending."
+  not_alertable: "alertable = FALSE with a queued APC: the call times out (WAIT_TIMEOUT); the APC has not run; a later SleepEx(0, TRUE) returns WAIT_IO_COMPLETION and runs it."
+errors:
+  incomplete: "ERROR_IO_INCOMPLETE (996) with a zero timeout"
+  timeout: "WAIT_TIMEOUT (258)"
+  apc: "WAIT_IO_COMPLETION (192)"
+side_effects: "runs queued APCs when alertable"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Files other than named pipes (the packets and errors are the same mechanism; pipes were used as the I/O source), remote machines, completion ports with several competing threads under load, the concurrency limit's effect on wake-up order.

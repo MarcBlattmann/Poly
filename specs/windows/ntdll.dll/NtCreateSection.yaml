@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtCreateSection.yaml
+id: windows/api/ntdll.dll/NtCreateSection
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: ZwCreateSection, CreateFileMappingW function, File Mapping Security and Access Rights, Memory Protection Constants. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Creates a section (shared memory) backed by the page file or a file. With no file handle it is anonymous shared memory of the given size, committed (SEC_COMMIT) and zero filled; the handle can be mapped (MapViewOfFile, NtMapViewOfSection), duplicated into other processes and queried. kernel32's CreateFileMappingW(INVALID_HANDLE_VALUE) is the same call with a narrower access mask.
+interface:
+  signature: "NTSTATUS NtCreateSection(PHANDLE section, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes, PLARGE_INTEGER maximumSize, ULONG pageProtection, ULONG allocationAttributes, HANDLE file)"
+rules:
+  anonymous: "maximum size 65536, PAGE_READWRITE, SEC_COMMIT, no file: STATUS_SUCCESS; granted access with SECTION_ALL_ACCESS requested is 0xF001F; NtQuerySection reports the size and an allocation attribute of 0x8000000 (SEC_COMMIT)."
+  size_rounding: "5000 bytes becomes 8192."
+  allocation_attributes: "SEC_COMMIT and SEC_RESERVE are accepted; 0 (neither) is STATUS_INVALID_PARAMETER_6 (0xC00000F4)."
+  protections: "PAGE_READONLY, PAGE_WRITECOPY and PAGE_EXECUTE_READWRITE are accepted; PAGE_NOACCESS, PAGE_READWRITE|PAGE_GUARD and 0 fail with STATUS_INVALID_PAGE_PROTECTION (0xC0000045)."
+  sizes: "size 0 for an anonymous section, or no size pointer: STATUS_INVALID_PARAMETER_4 (0xC00000F2); a negative size: STATUS_SECTION_TOO_BIG (0xC0000040)."
+  kernel32: "CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, NULL): a handle with granted access 0xF0007 (SECTION_QUERY|MAP_WRITE|MAP_READ plus the standard rights; not EXECUTE or EXTEND_SIZE); size 0 fails with ERROR_INVALID_PARAMETER (87); a high part of 1 makes a 4 GiB section whose size is reported exactly."
+  section_handle: "a section handle is not a file or a pipe (GetNamedPipeInfo fails with ERROR_INVALID_HANDLE)."
+  shared_between_processes: "CreateFileMappingW(INVALID_HANDLE_VALUE) mapped here, the handle duplicated into a child with full access and as a read-only handle (SECTION_MAP_READ | SECTION_QUERY): a fresh section reads as zeros; the child maps the full-access handle with FILE_MAP_WRITE, sees the parent's bytes, writes bytes the parent sees; the read-only handle cannot be mapped with FILE_MAP_WRITE (ERROR_ACCESS_DENIED) or NtMapViewOfSection PAGE_READWRITE (STATUS_ACCESS_DENIED) but maps with FILE_MAP_READ / PAGE_READONLY (the view reports PAGE_READONLY, MEM_MAPPED, committed) and sees later writes by the parent; FILE_MAP_COPY on a read-only handle was accepted. The same rules hold for a read-only duplicate made in one process."
+errors:
+  size_zero: "STATUS_INVALID_PARAMETER_4 (0xC00000F2); kernel32 ERROR_INVALID_PARAMETER (87)"
+  bad_protection: "STATUS_INVALID_PAGE_PROTECTION (0xC0000045)"
+  no_allocation_attribute: "STATUS_INVALID_PARAMETER_6 (0xC00000F4)"
+  too_big: "STATUS_SECTION_TOO_BIG (0xC0000040)"
+side_effects: "creates a section object"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Image sections (SEC_IMAGE), large pages, section offsets in the megabytes, physical memory, sections of other users' processes, security descriptors.

@@ -134,6 +134,13 @@ pub fn programs_image_with(programs: &Programs<'_>, tree: &Tree) -> Vec<u8> {
     base(&mut w);
     bin(&mut w, programs);
     let mut made: std::collections::BTreeSet<String> = ["etc", "dev", "bin"].map(String::from).into();
+    write_tree(&mut w, &mut made, tree);
+    w.finish()
+}
+
+/// Write `tree` into `w`: the directories above its entries (those not in
+/// `made` yet, which is updated), its files, then its links.
+fn write_tree(w: &mut Writer, made: &mut std::collections::BTreeSet<String>, tree: &Tree) {
     let paths = tree.files.iter().map(|(p, _, _)| p).chain(tree.symlinks.iter().map(|(p, _)| p));
     let mut dirs = std::collections::BTreeSet::new();
     for path in paths {
@@ -155,7 +162,6 @@ pub fn programs_image_with(programs: &Programs<'_>, tree: &Tree) -> Vec<u8> {
     for (path, target) in &tree.symlinks {
         w.symlink(path.as_bytes(), target.as_bytes());
     }
-    w.finish()
 }
 
 /// `/etc/inittab` for BusyBox's init: `<id>:<runlevels>:<action>:<process>`
@@ -448,6 +454,11 @@ pub const DISK_BUSYBOX: &str = "usr/local/lib/poly/busybox";
 /// `/etc/inittab`. Unlike switch_root(8) it does not empty the initramfs:
 /// its `/dev` (device nodes the kernel made) is what the disk's `/dev`
 /// shows. If the disk cannot be mounted, a shell stays on the console.
+///
+/// An image can carry `/etc/init.d/overlay` ([`switch_root_image`]'s
+/// `extra` files): it runs with the disk's mount point as its argument
+/// before the switch, to put files of the initramfs on the disk (Poly's own
+/// programs and desktop files on Chromium's disk, ADR 0147).
 pub const SWITCH_ROOT_SCRIPT: &str = "\
 #!/bin/sh
 # Pid 1 of the initramfs (tools/xtask/src/initramfs.rs, SWITCH_ROOT_SCRIPT).
@@ -457,6 +468,9 @@ if ! /etc/init.d/rootdisk || [ ! -x /mnt/root/usr/local/lib/poly/busybox ]; then
     echo \"switch-root: no root disk with /usr/local/lib/poly/busybox: a shell instead\"
     exec /bin/sh
 fi
+if [ -x /etc/init.d/overlay ]; then
+    /etc/init.d/overlay /mnt/root || echo \"switch-root: /etc/init.d/overlay failed\"
+fi
 cd /mnt/root
 mount --move /mnt/root / || exec /bin/sh
 echo \"switch-root: /dev/vda is the root\"
@@ -465,17 +479,34 @@ exec usr/local/lib/poly/busybox chroot . /usr/local/lib/poly/busybox init
 
 /// An initramfs whose first program switches to the root disk
 /// ([`SWITCH_ROOT_INIT_ARGS`], [`SWITCH_ROOT_SCRIPT`]); the disk brings
-/// BusyBox ([`DISK_BUSYBOX`]) and its own `/etc/inittab`.
-pub fn switch_root_image(busybox: &[u8]) -> Vec<u8> {
-    busybox_image_with(
+/// BusyBox ([`DISK_BUSYBOX`]) and its own `/etc/inittab`. `extra`: more files
+/// of the image (Chromium's disk gets Poly's programs this way, ADR 0147),
+/// and `/settings`, the directory a settings disk is mounted on
+/// (`poly.mount=virtio1:/settings`).
+pub fn switch_root_image(busybox: &[u8], extra: &Tree) -> Vec<u8> {
+    busybox_image_extra(
         busybox,
         DISK_ROOT_INITTAB,
         &[("etc/init.d/rootdisk", ROOTDISK_SCRIPT), ("etc/init.d/switch-root", SWITCH_ROOT_SCRIPT)],
+        extra,
+        &["settings"],
     )
 }
 
 /// [`busybox_image`] with another `/etc/inittab` and more scripts in it.
 fn busybox_image_with(busybox: &[u8], inittab: &str, scripts: &[(&str, &str)]) -> Vec<u8> {
+    busybox_image_extra(busybox, inittab, scripts, &Tree::default(), &[])
+}
+
+/// [`busybox_image_with`] with the files of `extra` and the empty
+/// directories `dirs` too.
+fn busybox_image_extra(
+    busybox: &[u8],
+    inittab: &str,
+    scripts: &[(&str, &str)],
+    extra: &Tree,
+    dirs: &[&str],
+) -> Vec<u8> {
     let mut w = writer();
     base(&mut w);
     w.file(b"etc/inittab", 0o644, inittab.as_bytes());
@@ -487,18 +518,23 @@ fn busybox_image_with(busybox: &[u8], inittab: &str, scripts: &[(&str, &str)]) -
     w.file(b"etc/profile", 0o644, PROFILE.as_bytes());
     w.file(b"etc/fstab", 0o644, FSTAB.as_bytes());
     w.file(b"etc/shells", 0o644, b"/bin/sh\n/bin/ash\n");
-    for dir in ["bin", "sbin", "usr", "usr/bin", "usr/sbin", "mnt", "home", "var", "var/log", "run"] {
+    let mut made: std::collections::BTreeSet<String> = ["etc", "dev", "etc/init.d"].map(String::from).into();
+    for dir in ["bin", "sbin", "usr", "usr/bin", "usr/sbin", "mnt", "home", "var", "var/log", "run"].iter().chain(dirs)
+    {
         w.dir(dir.as_bytes(), 0o755);
+        made.insert((*dir).to_string());
     }
     w.symlink(b"var/run", b"../run");
     w.dir(b"root", 0o700);
     w.dir(b"tmp", 0o1777);
+    made.extend(["root", "tmp"].map(String::from));
     w.file(b"bin/busybox", 0o755, busybox);
     for (dir, applets) in BUSYBOX_APPLETS {
         for applet in *applets {
             w.symlink(format!("{dir}/{applet}").as_bytes(), b"/bin/busybox");
         }
     }
+    write_tree(&mut w, &mut made, extra);
     w.finish()
 }
 
