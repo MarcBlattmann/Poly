@@ -49,3 +49,21 @@ pub unsafe fn inl(port: u16) -> u32 {
     unsafe { asm!("in eax, dx", in("dx") port, out("eax") value, options(nomem, nostack, preserves_flags)) }
     value
 }
+
+/// Write `bytes` to `port`, one byte after the other (`rep outsb`).
+///
+/// # Safety
+/// Writing to an I/O port can have arbitrary hardware side effects.
+pub unsafe fn outsb(port: u16, bytes: &[u8]) {
+    // SAFETY: caller guarantees the port writes are valid; `rsi` and `rcx`
+    // describe the live slice, and the direction flag is clear (the ABI).
+    unsafe {
+        asm!(
+            "rep outsb",
+            in("dx") port,
+            inout("rsi") bytes.as_ptr() => _,
+            inout("rcx") bytes.len() => _,
+            options(readonly, nostack, preserves_flags)
+        )
+    }
+}

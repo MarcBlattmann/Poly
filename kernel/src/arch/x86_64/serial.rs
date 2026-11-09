@@ -9,8 +9,16 @@
 //! Register offsets and bits from the PC16550D datasheet (National
 //! Semiconductor, 1995), table II.
 
-use super::port::{inb, outb};
+use super::port::{inb, outb, outsb};
 use core::fmt;
+use core::sync::atomic::{AtomicBool, Ordering};
+
+/// The transmit FIFO is on and holds 16 bytes (16550A: IIR bits 7:6 read 11
+/// after `init` enabled it), so a burst of 16 bytes may follow one LSR read
+/// that showed THRE. Set by [`SerialPort::init`].
+static TX_FIFO_16: AtomicBool = AtomicBool::new(false);
+/// Bytes sent per LSR check when [`TX_FIFO_16`].
+const TX_BURST: usize = 16;
 
 #[derive(Debug)]
 pub struct SerialPort {
@@ -57,14 +65,35 @@ impl SerialPort {
             outb(b + 3, 0x03);
             outb(b + 2, 0xc7);
             outb(b + 4, 0x0b);
+            // IIR bits 7:6 = 11: the FIFOs are enabled and usable.
+            TX_FIFO_16.store(inb(b + IIR_FCR) >> 6 == 0b11, Ordering::Relaxed);
         }
     }
 
     /// Send `bytes` as they are (no CR added before LF): a terminal's
     /// output, already through its line discipline.
     pub fn write_raw(&mut self, bytes: &[u8]) {
-        for &b in bytes {
-            self.write_byte(b);
+        if !TX_FIFO_16.load(Ordering::Relaxed) {
+            for &b in bytes {
+                self.write_byte(b);
+            }
+            return;
+        }
+        // Once THRE says the FIFO is empty, it takes 16 bytes. One `rep outsb`
+        // for them is one exit to the hypervisor instead of 16 (and the LSR
+        // read is one instead of 16): a virtual machine, QEMU under KVM
+        // especially when nested, spends most of its time in those exits when
+        // the log is long (the traced 7-Zip scenario's 9 MB).
+        for chunk in bytes.chunks(TX_BURST) {
+            // SAFETY: polling the line status register of a UART we own.
+            unsafe {
+                while inb(self.base + 5) & 0x20 == 0 {
+                    core::hint::spin_loop();
+                }
+                // SAFETY: THR of a UART we own, an empty 16-byte FIFO, and
+                // `chunk` is a live slice of at most 16 bytes.
+                outsb(self.base, chunk);
+            }
         }
     }
 
