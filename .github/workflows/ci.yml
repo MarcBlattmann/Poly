@@ -155,7 +155,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: build-${{ matrix.part }}
-          save-if: ${{ github.ref == 'refs/heads/main' || github.head_ref == 'ci-speed-2' }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             .
             kernel
