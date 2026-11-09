@@ -75,6 +75,8 @@ pub const OUTPUTS: &[&str] = &[
     "dnsapi.dll",
     "dbghelp.dll",
     "b35test.exe",
+    // ADR 0170.
+    "dwrite.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -191,6 +193,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "crates/poly-etw",
             "crates/poly-iphlp",
             "crates/poly-netapi",
+            "personalities/nt/win32/dwrite",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
