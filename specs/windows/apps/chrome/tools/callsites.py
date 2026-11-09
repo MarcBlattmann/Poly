@@ -7,7 +7,7 @@ process only. Output: `traces/s1-chrome-elf-init.trace.json` (`poly-callsite-tra
 sequence that a run of the same kit on Poly can be compared against, keyed by the caller as module+offset.
 
     callsites.py reduce <out.json> <run1.jsonl> <run2.jsonl> [<run3.jsonl> ...] --kit <polytrace-kit.json>
-                        [--machine "<text>"] [--date YYYY-MM-DD] [--to AddVectoredExceptionHandler]
+                        [--machine "<text>"] [--date YYYY-MM-DD] [--state cold|warm] [--to AddVectoredExceptionHandler]
     callsites.py flow <out.json>          print the producers with consumers (markdown)
     callsites.py show <out.json> <first> <last>      print calls n=first..last
     callsites.py compare <out.json> <poly polytrace.jsonl> [--limit N]
@@ -35,6 +35,19 @@ APP = {"chrome_elf.dll", "chrome.exe", "chrome.dll"}
 LOCKS = {"TryAcquireSRWLockExclusive", "AcquireSRWLockExclusive", "ReleaseSRWLockExclusive",
          "VirtualAlloc", "VirtualFree"}
 VAR = "<var>"
+
+BS = chr(92)
+STATES = {
+    "cold": (
+        f"cold: before every run HKCU{BS}Software{BS}Chrome for Testing and HKCU{BS}Software{BS}Google{BS}Chrome for Testing "
+        "did not exist (the state of a machine that never ran Chrome for Testing, and of Poly's registry at start); "
+        "Chrome made them during the run"
+    ),
+    "warm": (
+        "warm: both keys existed, written by earlier runs of Chrome for Testing (the blocklist beacon's state, the "
+        f"ThirdParty status codes, Software{BS}Chrome for Testing{BS}usagestats); this is the state of a second run"
+    ),
+}
 
 # Facts about the calls that matter to the Poly bring-up (the implementer's write-up
 # `chrome-win-b4.md`, "What the real call chain says").
@@ -194,8 +207,12 @@ class Run:
 
 def merge(a, b):
     """The fields equal in `a` and `b`; `<var>` for the others."""
-    if isinstance(a, dict) and isinstance(b, dict) and a.keys() == b.keys():
-        return OrderedDict((k, merge(a[k], b[k])) for k in a)
+    if isinstance(a, dict) and isinstance(b, dict):
+        # a key one run has and another has not (`err`: only written when the call changed the last error,
+        # which depends on what the call before left) differs, but the record stays a record
+        keys = list(a) + [k for k in b if k not in a]
+        merged = OrderedDict((k, merge(a.get(k, "<absent>"), b.get(k, "<absent>"))) for k in keys)
+        return OrderedDict((k, v) for k, v in merged.items() if v != "<absent>")
     if isinstance(a, list) and isinstance(b, list) and len(a) == len(b):
         return [merge(x, y) for x, y in zip(a, b)]
     if a == b:
@@ -225,7 +242,7 @@ def sha256(p):
 
 def reduce_cmd(argv):
     out_path = argv[0]
-    runs, kit, machine, date, to = [], None, "", "", "AddVectoredExceptionHandler"
+    runs, kit, machine, date, to, state = [], None, "", "", "AddVectoredExceptionHandler", "cold"
     it = iter(argv[1:])
     for a in it:
         if a == "--kit":
@@ -236,6 +253,8 @@ def reduce_cmd(argv):
             date = next(it)
         elif a == "--to":
             to = next(it)
+        elif a == "--state":
+            state = next(it)
         else:
             runs.append(a)
     R = [Run(p, to) for p in runs]
@@ -286,6 +305,7 @@ def reduce_cmd(argv):
         logger="tools/wintrace/polytrace-sync (spec-chrome-win-3 version: caller module+offset, argument classes, out-buffer dumps)",
         kit_programs=kitj.get("programs"),
         kit_files={k: v for k, v in (kitj.get("files") or {}).items() if k in ("chrome.exe", "chrome_elf.dll", "polytrace.dll")},
+        registry_state=STATES[state],
         stdout_sha256_every_run="7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b",
     )
     by_module = Counter(c["at"].split("+")[0] for c in merged)

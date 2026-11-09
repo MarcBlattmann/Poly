@@ -95,6 +95,9 @@ but no renderer**; S2's renderer API set is S1's (same code, same DLL) plus the 
 | `traces/s2-sandbox-targets.json` | what the confined children do/are refused, S2 against S1 (`tools/sandboxdiff.py`) |
 | `traces/s1-fault-injection.csv` | per-API fault tolerance of S1, 220 APIs (gap map section 6a) |
 | `tools/sandboxdiff.py` | `reduce <S1 runs> --sandboxed <S2 runs> <out.json>`: denied / failed / gone / new / outcome per process type |
+| `traces/s1-chrome-elf-init.trace.json`, `...warm.trace.json` | the call-site trace of chrome_elf.dll's and chrome.exe's start-up in the S1 browser process, cold and warm registry (`poly-callsite-trace/1`, `spec-chrome-win-3`, below) |
+| `tools/callsites.py` | `reduce` (raw runs -> the trace), `compare` (a Poly run against it, call by call), `flow` (which call's result a later call uses), `show` |
+| `drivers/run_s1_callsites.ps1` | one S1 run of the `polytrace-sync` kit (chrome_elf.dll + chrome.exe only), browser trace in `<work>\tr\<tag>-run<n>\polytrace.jsonl` |
 | `windows.json` | the recorded scenario results: exit codes, output digests, titles, machine facts |
 
 **Window titles** have an EN DASH (U+2013) before `Google Chrome for Testing`; `windows.json` writes it as `-`.
@@ -147,3 +150,68 @@ plus one test that skips the real call.
 A sandboxed run: `POLYTRACE_RELAX=0x300000000000 POLYTRACE_INHERIT=1 chrome.exe --headless --disable-gpu --user-data-dir=<fresh> --dump-dom file:///.../s1.html`
 from the kit overlaid on a copy of the application, then `tools/chrometrace.py run`, `merge`, `canon` and `tools/sandboxdiff.py reduce`. Do not use
 `taskkill /IM`; the drivers in `drivers/` kill only the tree of the process they started.
+
+## Call-site trace of chrome_elf's start-up (`spec-chrome-win-3`)
+
+Why: on Poly S1 dies in the browser process inside chrome_elf.dll's crash-reporting set-up, reading `[NULL+0x10]` with no
+API call before the fault. `traces/s1.trace.json` cannot say what Windows does *between* two calls (it has ranks, no sequence and
+no call sites), so these traces are the sequence of **every call that `chrome_elf.dll` and `chrome.exe` make through their imports
+from process start to the first `AddVectoredExceptionHandler`** (the end of chrome_elf's crash-reporting set-up), each with its
+**caller as module+offset**, its arguments, result, last error and what it left in memory.
+
+| File | Registry state of the run | Calls |
+|---|---|---|
+| `traces/s1-chrome-elf-init.trace.json` | **cold**: `HKCU\Software\Chrome for Testing` and `HKCU\Software\Google\Chrome for Testing` do not exist (a machine that never ran Chrome for Testing; Poly's registry at start) | 705 (433 from chrome_elf.dll, 272 from chrome.exe) |
+| `traces/s1-chrome-elf-init.warm.trace.json` | **warm**: both keys exist (written by an earlier run: the blocklist beacon, the ThirdParty status codes, `usagestats`) | 853 (581 + 272) |
+
+The state matters: with the beacon key present chrome_elf goes through a 148-call detour that a cold start does not take (an extra
+`VerifyVersionInfoW`, the registry writes, `CreateMutexW`, the `ReadProcessMemory`/`WriteProcessMemory` pair on an ntdll function, 15 more
+`NtCreateKey`). Compare Poly with the **cold** file; the warm one is what a second run on the same registry does.
+
+How: `cargo xtask win trace-kit chrome_elf.dll chrome.exe --sync --out <dir>` (only the two programs are traced, as `cargo xtask
+chrome-win run --kit chrome_elf.dll,chrome.exe` does on Poly: the same logger, `tools/wintrace/polytrace-sync`, the same signature table),
+overlaid on a copy of the application; `drivers/run_s1_callsites.ps1` runs S1 (`--headless --no-sandbox --disable-gpu --dump-dom`,
+`POLYTRACE_SYNC=1`; `-Cold` first saves and deletes the two keys and puts them back afterwards) and the browser process writes
+`polytrace.jsonl`. Every run printed the 440-byte DOM with SHA-256 `7b79f8b4...813b`, as without the kit. Machines: homeserver2 and the
+owner's PC (both Windows 11 25H2, build 26200.9711); the `recorded` header of each file says which runs were where. The 7-Zip logger
+(`tools/wintrace/polytrace`) is untouched.
+
+The logger (`polytrace-sync`, extended in this change) adds to each record, when `POLYTRACE_SYNC` is set (`POLYTRACE_DUMP=0` turns it
+off): `rm`/`ro` the module and offset of the return address; `ac` the class of every pointer and handle argument; `rc` the class of a
+returned pointer or handle; and for about 100 functions `out`, what the call left in memory: strings and counted strings
+(`GetModuleFileNameW`, `GetEnvironmentVariableW`, `GetCommandLine*`, `K32GetMappedFileNameW`, ...), `UNICODE_STRING` and
+`OBJECT_ATTRIBUTES` (`RtlInitUnicodeString`, `NtOpenKeyEx`, `NtCreateKey`, `RtlFormatCurrentUserKeyPath`), registry data
+(`NtQueryValueKey`, `NtSetValueKey`, `RegQueryValueExW`: type, length, data), structures (`SYSTEM_INFO`, `OSVERSIONINFOEXW`,
+`STARTUPINFOW`, `MEMORY_BASIC_INFORMATION`, `RTL_CRITICAL_SECTION`, `VS_FIXEDFILEINFO`, `CPINFO`), out handles and pointers
+(`DuplicateHandle`, `NtOpenKeyEx`, `ConvertStringSecurityDescriptorToSecurityDescriptorW`), version resources (`GetFileVersionInfo*`,
+`VerQueryValueW`), the bytes `ReadProcessMemory`/`WriteProcessMemory` move, and the frames of `RtlCaptureStackBackTrace`. Memory is read
+through `ReadProcessMemory` on the own process, which reports a bad pointer instead of faulting. Pointers and handles are **classes**,
+never values: `null`, `-1`, `stack`, `private`, `mapped`, `handle`, `int:<n>`, `image:<module>[+0x<offset>]` (the offset only for
+chrome.exe, chrome_elf.dll, chrome.dll).
+
+`poly-callsite-trace/1`: a header (`recorded`, `window`, `how_to_compare`, `landmarks`, `markers`, `noise_sites`) and `calls`, one line
+per call:
+
+```json
+{"n":685,"fn":"ConvertStringSecurityDescriptorToSecurityDescriptorW","dll":"advapi32.dll","at":"chrome_elf.dll+0x8e315",
+ "args":[{"w":"D:(A;;GA;;;SY)(A;;GWGR;;;S-1-15-2-1)S:(ML;;;;;S-1-16-0)"},1,"stack","null"],"ret":1,"out":[{"a":2,"c":"private"}]}
+```
+
+`at` is the key (the caller as module+offset; the same on Poly because the kit's copy of a program has its code at the same RVAs).
+`"private<-685"` as an argument means: the value call 685 returned or wrote through an out parameter (so a NULL where Windows has
+`private<-685` is the divergence, and every later use of it shows). A field that differs between the runs is `"<var>"` (process ids,
+string lengths that hold a path, the machine's `SYSTEM_INFO`, the first bytes of an ntdll function); a `<var>` field is not compared.
+**Not in `calls`**: `TryAcquireSRWLockExclusive`/`AcquireSRWLockExclusive`/`ReleaseSRWLockExclusive` (about 1,450 per cold run, a dozen
+more or fewer from run to run) and the allocator's `VirtualAlloc`/`VirtualFree` (where they fall between the other calls differs from
+machine to machine), and a `GetLastError` right after a failed `VirtualAlloc`; they are summarised per call site in `noise_sites`.
+The other calls are the same functions from the same sites in the same order in every run.
+
+Compare a Poly run: `cargo xtask chrome-win run --stage 1 --release --kit chrome_elf.dll,chrome.exe` (writes
+`target/chrome-win/stage1.ptrace.jsonl`), then `python -I specs/windows/apps/chrome/tools/callsites.py compare
+specs/windows/apps/chrome/traces/s1-chrome-elf-init.trace.json target/chrome-win/stage1.ptrace.jsonl`. It drops the calls above,
+aligns call n with call n, and prints the first calls that differ (a different function or caller; a result, last error, argument class,
+link or out value) and where Poly's sequence ends. `callsites.py flow <trace>` lists the results later calls use (the places where a
+NULL on Poly would be a pointer on Windows); `show <trace> <first> <last>` prints calls.
+
+What it cannot see: calls through pointers (the functions chrome_elf gets with `GetProcAddress` are visible only by their names), the
+code between calls, direct system calls, and the registers.
