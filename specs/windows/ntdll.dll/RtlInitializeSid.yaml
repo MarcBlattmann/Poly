@@ -1,0 +1,61 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/RtlInitializeSid
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: as declared
+  for the NT native API (ntifs.h / wdm.h / winternl.h, Microsoft Learn)
+  where the function is documented there; where it is not, the arguments are
+  those of the matching Win32 function, which map one to one onto the native
+  call, and the interface entry "prototype_note" says so.
+summary: >
+  Writes the 8-byte header of a SID in the caller's buffer: revision 1, the
+  count and the six authority bytes; the sub-authority slots are not
+  touched. Counts 0 to 15 succeed; 16 and above fail with
+  STATUS_INVALID_PARAMETER (the Win32 InitializeSid reports
+  ERROR_INVALID_PARAMETER for the same case).
+interface:
+  signature: "NTSTATUS RtlInitializeSid(PSID sid, PSID_IDENTIFIER_AUTHORITY authority, UCHAR sub_authority_count)"
+  layout: "SID (winnt.h): byte 0 Revision (1), byte 1 SubAuthorityCount (0..15 valid), bytes 2..7 IdentifierAuthority (six bytes, big-endian value), then SubAuthority[count] as little-endian 32-bit values; length 8 + 4 * count (at most 68)."
+  result: "NTSTATUS values are printed as 8 hex digits: STATUS_SUCCESS 0, STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_UNKNOWN_REVISION 0xC0000058, STATUS_REVISION_MISMATCH 0xC0000059, STATUS_PRIVILEGE_NOT_HELD 0xC0000061, STATUS_INVALID_ACL 0xC0000077, STATUS_INVALID_SID 0xC0000078, STATUS_INVALID_SECURITY_DESCR 0xC0000079, STATUS_NO_TOKEN 0xC000007C, STATUS_ALLOTTED_SPACE_EXCEEDED 0xC0000099, STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5, STATUS_BAD_DESCRIPTOR_FORMAT 0xC00000E7 (ntstatus.h). A BOOLEAN result is one byte, 0 or 1."
+  prototype_note: "documented (ntifs.h); Win32 counterpart InitializeSid"
+rules:
+  counts: "counts 0, 1, 2, 5, 8, 14, 15 return STATUS_SUCCESS, write exactly 8 bytes (a 0xCC-filled buffer has 8 changed bytes) and RtlValidSid is 1 with RtlLengthSid 8, 12, 16, 28, 40, 64, 68; the header for count 15 with the NT authority is 010f000000000005"
+  authority: "the six authority bytes are copied in the order given (000000000000, 000000000001, 000000000005, 000000000010, 010203040506, ffffffffffff all appear unchanged in header bytes 2..7); the sub-authority slots keep what the buffer held (0xAA-filled slots stay aaaaaaaa)"
+  overwrite: "on a buffer already holding 01050000000000052000000020020000010000000200000003000000, initializing with the world authority and count 1 gives 0101 00000000 0001 then the old values unchanged (RtlLengthSid 12); initializing again with the NT authority and count 5 restores count 5 with the old sub-authorities (length 28)"
+errors:
+  count: "counts 16, 17, 100 and 255 return STATUS_INVALID_PARAMETER (0xC000000D) and write nothing (a 0xCC-filled buffer keeps all its bytes)"
+side_effects: "writes the 8 header bytes of the buffer on success"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

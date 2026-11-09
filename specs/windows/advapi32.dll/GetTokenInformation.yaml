@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/GetTokenInformation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Reads one class of information from a token. With a too-small buffer it
+  fails with ERROR_INSUFFICIENT_BUFFER and sets *return_length to the size
+  needed. Needs TOKEN_QUERY (TOKEN_QUERY_SOURCE for TokenSource).
+interface:
+  signature: "BOOL GetTokenInformation(HANDLE token, TOKEN_INFORMATION_CLASS class, PVOID info, DWORD length, PDWORD return_length)"
+  token_rights: "TOKEN_ASSIGN_PRIMARY 0x1, TOKEN_DUPLICATE 0x2, TOKEN_IMPERSONATE 0x4, TOKEN_QUERY 0x8, TOKEN_QUERY_SOURCE 0x10, TOKEN_ADJUST_PRIVILEGES 0x20, TOKEN_ADJUST_GROUPS 0x40, TOKEN_ADJUST_DEFAULT 0x80, TOKEN_ADJUST_SESSIONID 0x100; TOKEN_ALL_ACCESS 0xF01FF (winnt.h)"
+  oracle_token: "The test process's own token on the oracle is an elevated local administrator's in an SSH logon session: primary token, session 0, High integrity (0x3000), mandatory policy 3 (NO_WRITE_UP | NEW_PROCESS_MIN), 12 groups (Everyone 7, BUILTIN\\Administrators 15 (mandatory, enabled by default, enabled, owner), BUILTIN\\Users 7, NETWORK, Authenticated Users, This Organization, Local account, NTLM Authentication, the logon SID, \"Local account and member of Administrators group\" 7 and the integrity label), 24 privileges all enabled (SeChangeNotify, SeShutdown, SeDebug, SeBackup, SeRestore, SeImpersonate, SeCreateGlobal ... but not SeTcb, SeAssignPrimaryToken or SeCreateToken), owner BUILTIN\\Administrators, primary group \"None\" (S-1-5-21-<machine>-513), TokenElevationType 1 (default), TokenElevation 1."
+  classes: "TokenUser 1, TokenGroups 2, TokenPrivileges 3, TokenOwner 4, TokenPrimaryGroup 5, TokenDefaultDacl 6, TokenSource 7, TokenType 8, TokenImpersonationLevel 9, TokenStatistics 10, TokenRestrictedSids 11, TokenSessionId 12, TokenGroupsAndPrivileges 13, TokenSandBoxInert 15, TokenOrigin 17, TokenElevationType 18, TokenLinkedToken 19, TokenElevation 20, TokenHasRestrictions 21, TokenAccessInformation 22, TokenVirtualizationAllowed 23, TokenVirtualizationEnabled 24, TokenIntegrityLevel 25, TokenUIAccess 26, TokenMandatoryPolicy 27, TokenLogonSid 28, TokenIsAppContainer 29, TokenCapabilities 30, TokenAppContainerSid 31, TokenAppContainerNumber 32 (winnt.h TOKEN_INFORMATION_CLASS)"
+rules:
+  sizes: "zero-length query on a primary token (every class 0..45): class 0, 14, 35, 36, 38 and 45 fail with ERROR_INVALID_PARAMETER (87), as does class 9 (TokenImpersonationLevel) on a primary token; variable-size classes (1-6, 11, 13, 22, 25, 28, 30, 31, 33, 34, 37, 39) fail with ERROR_INSUFFICIENT_BUFFER (122) and a positive size; the fixed sizes are: 7 TokenSource 16, 8 TokenType 4, 10 TokenStatistics 56, 12 4, 15 4, 16 31, 17 TokenOrigin 8, 18 4, 21 TokenHasRestrictions 1, 23 4, 24 4, 26 4, 27 4, 29 4, 32 4, 40 4, 41 8, 42 4, 43 16, 44 16; classes 19 (TokenLinkedToken, needs 8) and 20 (TokenElevation, needs 4) answer a zero-length query with ERROR_BAD_LENGTH (24) instead (and, with a nonzero length, a buffer of any other size than the exact one)"
+  buffer: "for every class that has a size: a buffer one byte short fails with ERROR_INSUFFICIENT_BUFFER (122) (ERROR_BAD_LENGTH 24 for class 20); the exact size succeeds; a larger buffer (+1, +8, 4096) succeeds with *return_length equal to the size needed, except class 20, which insists on exactly 4 bytes (ERROR_BAD_LENGTH 24)"
+  derived_tokens: "a primary copy has TokenType 1 and TokenImpersonationLevel fails (87); an impersonation copy has TokenType 2 and the level it was made with (0 anonymous, 1 identification, 2 impersonation, 3 delegation, a 4-byte result); both have TokenHasRestrictions 0, TokenSandBoxInert 0, TokenIsAppContainer 0, TokenUIAccess 0, TokenVirtualizationAllowed 0, TokenVirtualizationEnabled 0 and TokenMandatoryPolicy 3"
+  access: "a handle with exactly TOKEN_QUERY answers every class 1..32 except TokenSource (7: ERROR_ACCESS_DENIED), the invalid ones (9 on a primary token, 14: 87) and 19/20 (24 for the zero-length probe); a handle with exactly TOKEN_QUERY_SOURCE answers only TokenSource; handles with only TOKEN_DUPLICATE or only TOKEN_ADJUST_DEFAULT answer nothing (ERROR_ACCESS_DENIED 5, or 87/24 for the invalid ones)"
+  layout: "TokenUser: a TOKEN_USER {SID_AND_ATTRIBUTES} of 16 bytes (pointer, attributes 0) with the SID right after it (offset 16; length 16 + SID length, 44 for a 28-byte user SID); TokenOwner and TokenPrimaryGroup: {PSID} of 8 bytes, SID at offset 8; TokenIntegrityLevel: 16-byte SID_AND_ATTRIBUTES with attributes 0x60 (SE_GROUP_INTEGRITY | SE_GROUP_INTEGRITY_ENABLED), SID at offset 16, 28 bytes in all for a 12-byte label SID; TokenGroups and TokenRestrictedSids: u32 count, 4 bytes padding, count SID_AND_ATTRIBUTES of 16 bytes from offset 8, then the SIDs packed one after another (first SID at 8 + 16 * count; total = that plus the SID lengths; 8 bytes for 0 restricting SIDs); TokenPrivileges: u32 count then count 12-byte LUID_AND_ATTRIBUTES (4 + 12 * count); TokenDefaultDacl: {PACL} of 8 bytes then the ACL at offset 8; TokenStatistics (56 bytes): TokenId (8), AuthenticationId (8), ExpirationTime (8), TokenType (4), ImpersonationLevel (4), DynamicCharged (4), DynamicAvailable (4), GroupCount (4 at offset 40), PrivilegeCount (4 at 44), ModifiedId (8); the counts equal the TokenGroups and TokenPrivileges counts"
+  ambient: "on the oracle's own token (ambient_token_oracle): type 1, session 0, elevation type 1, elevation 1, integrity 0x3000, policy 3, no restrictions, no sandbox-inert, no virtualization, no UI access, not an AppContainer; user S-1-5-21-<machine>-<account>; owner BUILTIN\\Administrators S-1-5-32-544; primary group S-1-5-21-<machine>-513; 12 groups; attributes: Everyone 7, Administrators 15, Users 7, Authenticated Users 7, NETWORK 7, This Organization 7, Local account 7, Local account and member of Administrators 7; INTERACTIVE and SYSTEM absent; privileges SeChangeNotify, SeShutdown, SeDebug, SeBackup, SeImpersonate, SeCreateGlobal attributes 3 (enabled and enabled by default), SeTcb, SeAssignPrimaryToken, SeCreateToken absent; TokenLogonSid has one group"
+errors:
+  class: "class 0 and classes the token cannot answer: ERROR_INVALID_PARAMETER (87)"
+  size: "ERROR_INSUFFICIENT_BUFFER (122) with the size needed; ERROR_BAD_LENGTH (24) for TokenElevation and TokenLinkedToken"
+  access: "ERROR_ACCESS_DENIED (5) without TOKEN_QUERY (TOKEN_QUERY_SOURCE for TokenSource)"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  TokenLinkedToken, TokenAppContainer* of a real AppContainer token, claims
+  and security attributes classes (33, 34, 37, 39). Domain accounts and
+  domain-relative well-known SIDs of a real domain, AppContainer and
+  capability SIDs beyond their string forms, auditing (SACL entries are only
+  stored, never evaluated), remote systems (the system-name arguments),
+  Kerberos or NTLM logon tokens, tokens of other users.

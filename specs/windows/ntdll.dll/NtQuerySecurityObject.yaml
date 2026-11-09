@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtQuerySecurityObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Returns a self-relative security descriptor with the parts selected by
+  SecurityInformation (owner, group, DACL, SACL, label). A too-small buffer
+  gives STATUS_BUFFER_TOO_SMALL and the needed length. Reading needs
+  READ_CONTROL (the SACL needs ACCESS_SYSTEM_SECURITY).
+interface:
+  signature: "NTSTATUS NtQuerySecurityObject(HANDLE Handle, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR SecurityDescriptor, ULONG Length, PULONG LengthNeeded)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87."
+  layout: "self-relative descriptor: byte 0 revision 1, control word at 2 (0x8000 SE_SELF_RELATIVE, 0x0004 DACL present, 0x0010 SACL present, 0x0800 SACL auto-inherited), owner offset at 4, group at 8, SACL at 12, DACL at 16; the parts follow the 20-byte header (owner first, then group, then the DACL)"
+rules:
+  named_event: "for an event created with a name (default security of the elevated administrator token): OWNER alone: length 36, owner S-1-5-32-544 at offset 20, control 0x8000; GROUP alone: length 48, group = the primary group (S-1-5-21-...-513) at 20; DACL alone: length 100, control 0x8004, DACL at 20 with revision 2, size 80, 3 ACEs: Administrators 0x1f0003, SYSTEM 0x1f0003, the logon SID 0x120001 (allow ACEs, no flags); OWNER|GROUP|DACL: length 144 with offsets 20, 36, 64; GROUP|DACL: length 128 (group 20, DACL 48)"
+  unnamed_event: "an event created without a name has no security descriptor of its own: every mask answers STATUS_SUCCESS with a 20-byte descriptor (control 0x8000, all offsets 0)"
+  job: "an unnamed job object has default security: OWNER|GROUP|DACL: length 144, control 0x8004, owner Administrators, the same 3 ACEs with masks 0x1f003f, 0x1f003f, 0x120004; LABEL: length 48, control 0x8810, a SACL (offset 20, size 28, 1 ACE of type 17 SYSTEM_MANDATORY_LABEL, mask 1 = NO_WRITE_UP, SID S-1-16-12288, the creator's integrity)"
+  masks: "on the named event: 0 -> 20 bytes, control 0x8000; PROTECTED_DACL (0x80000000) or UNPROTECTED_DACL (0x20000000) alone -> the same empty 20-byte descriptor; combined with DACL they change nothing; LABEL, ATTRIBUTE (0x20), SCOPE (0x40), PROCESS_TRUST_LABEL (0x80), ACCESS_FILTER (0x100) -> 20 bytes with control 0x8800 (no SACL); SACL (8), BACKUP (0x10000) and 0xFFFFFFFF -> STATUS_ACCESS_DENIED without ACCESS_SYSTEM_SECURITY"
+  buffer: "on the job with OWNER|GROUP|DACL: length 0 and every length below 144 (1, 19, 20, 21, 143) -> STATUS_BUFFER_TOO_SMALL with *LengthNeeded 144 and no byte written; 144, 145 and 4096 succeed with the needed length returned; each part alone needs: owner 36, group 48, DACL 100, label 48 (exact length succeeds)"
+  rights: "READ_CONTROL alone is enough for owner, group, DACL and label but the SACL is refused; JOB_OBJECT_QUERY, SYNCHRONIZE, WRITE_DAC, WRITE_OWNER or access 0 alone refuse all five (STATUS_ACCESS_DENIED)"
+  system_security: "a job created with ACCESS_SYSTEM_SECURITY in the desired access fails with STATUS_PRIVILEGE_NOT_HELD while SeSecurityPrivilege is disabled in the impersonated token and succeeds (granted 0x11f003f) when it is enabled; then the SACL query returns length 28, control 0x8810, an empty ACL (revision 2, size 8, count 0). (Ambient: the administrator token.)"
+  handles: "the process pseudo-handle (-1) works (STATUS_SUCCESS), a token handle works"
+errors:
+  handles: "NULL and a closed handle: STATUS_INVALID_HANDLE"
+  access: "STATUS_ACCESS_DENIED when the handle lacks the right; *LengthNeeded is not written then"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

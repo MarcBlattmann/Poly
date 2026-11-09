@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_sidstr_alloc",
+      "exe_sha256": "d10778644b0d2582f823bff868bb10d78ca3da261874457cd539094dd7bbb6ea",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhdHVzPTB4MDAwMDAwMDAgbGVuZ3RoPTE2IG1heGltdW09MTggbnVsX2FmdGVyX3RleHQ9MCB0ZXh0PVMtMS01LTE4CmFmdGVyIFJ0bEZyZWVVbmljb2RlU3RyaW5nOiBsZW5ndGg9MCBtYXhpbXVtPTAgYnVmZmVyX251bGw9dHJ1ZQpzdGF0dXM9MHgwMDAwMDAwMCBsZW5ndGg9MTQgbWF4aW11bT0xNiBudWxfYWZ0ZXJfdGV4dD0wIHRleHQ9Uy0xLTEtMAphZnRlciBSdGxGcmVlVW5pY29kZVN0cmluZzogbGVuZ3RoPTAgbWF4aW11bT0wIGJ1ZmZlcl9udWxsPXRydWUKc3RhdHVzPTB4MDAwMDAwMDAgbGVuZ3RoPTI0IG1heGltdW09MjYgbnVsX2FmdGVyX3RleHQ9MCB0ZXh0PVMtMS01LTMyLTU0NAphZnRlciBSdGxGcmVlVW5pY29kZVN0cmluZzogbGVuZ3RoPTAgbWF4aW11bT0wIGJ1ZmZlcl9udWxsPXRydWUKc3RhdHVzPTB4MDAwMDAwMDAgbGVuZ3RoPTU0IG1heGltdW09NTYgbnVsX2FmdGVyX3RleHQ9MCB0ZXh0PVMtMS01LTIxLTEwMDAtMjAwMC0zMDAwLTUwMAphZnRlciBSdGxGcmVlVW5pY29kZVN0cmluZzogbGVuZ3RoPTAgbWF4aW11bT0wIGJ1ZmZlcl9udWxsPXRydWUKc3RhdHVzPTB4MDAwMDAwMDAgbGVuZ3RoPTI0IG1heGltdW09MjYgbnVsX2FmdGVyX3RleHQ9MCB0ZXh0PVMtMS0xNi0xMjI4OAphZnRlciBSdGxGcmVlVW5pY29kZVN0cmluZzogbGVuZ3RoPTAgbWF4aW11bT0wIGJ1ZmZlcl9udWxsPXRydWUKc3RhdHVzPTB4MDAwMDAwMDAgbGVuZ3RoPTEwIG1heGltdW09MTIgbnVsX2FmdGVyX3RleHQ9MCB0ZXh0PVMtMS0wCmFmdGVyIFJ0bEZyZWVVbmljb2RlU3RyaW5nOiBsZW5ndGg9MCBtYXhpbXVtPTAgYnVmZmVyX251bGw9dHJ1ZQpzdGF0dXM9MHgwMDAwMDAwMCBsZW5ndGg9MzIgbWF4aW11bT0zNCBudWxfYWZ0ZXJfdGV4dD0wIHRleHQ9Uy0xLTUtNDI5NDk2NzI5NQphZnRlciBSdGxGcmVlVW5pY29kZVN0cmluZzogbGVuZ3RoPTAgbWF4aW11bT0wIGJ1ZmZlcl9udWxsPXRydWUKc3RhdHVzPTB4MDAwMDAwMDAgbGVuZ3RoPTgyIG1heGltdW09ODQgbnVsX2FmdGVyX3RleHQ9MCB0ZXh0PVMtMS01LTEtMi0zLTQtNS02LTctOC05LTEwLTExLTEyLTEzLTE0LTE1CmFmdGVyIFJ0bEZyZWVVbmljb2RlU3RyaW5nOiBsZW5ndGg9MCBtYXhpbXVtPTAgYnVmZmVyX251bGw9dHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "status=0x00000000 length=16 maximum=18 nul_after_text=0 text=S-1-5-18\nafter RtlFreeUnicodeString: length=0 maximum=0 buffer_null=true\nstatus=0x00000000 length=14 maximum=16 nul_after_text=0 text=S-1-1-0\nafter RtlFreeUnicodeString: length=0 maximum=0 buffer_null=true\nstatus=0x00000000 length=24 maximum=26 nul_after_text=0 text=S-1-5-32-544\nafter RtlFreeUnicodeString: length=0 maximum=0 buffer_null=true\nstatus=0x00000000 length=54 maximum=56 nul_after_text=0 text=S-1-5-21-1000-2000-3000-500\nafter RtlFreeUnicodeString: length=0 maximum=0 buffer_null=true\nstatus=0x00000000 length=24 maximum=26 nul_after_text=0 text=S-1-16-12288\nafter RtlFreeUnicodeString: length=0 maximum=0 buffer_null=true\nstatus=0x00000000 length=10 maximum=12 nul_after_text=0 text=S-1-0\nafter RtlFreeUnicodeString: length=0 maximum=0 buffer_null=true\nstatus=0x00000000 length=32 maximum=34 nul_after_text=0 text=S-1-5-4294967295\nafter RtlFreeUnicodeString: length=0 maximum=0 buffer_null=true\nstatus=0x00000000 length=82 maximum=84 nul_after_text=0 text=S-1-5-1-2-3-4-5-6-7-8-9-10-11-12-13-14-15\nafter RtlFreeUnicodeString: length=0 maximum=0 buffer_null=true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 89
+    },
+    {
+      "name": "rtl_sidstr_forms",
+      "exe_sha256": "6d463d2f44401416edcc2552f8690d3569337357eb8c2228980243a1373476bd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YXV0aG9yaXR5IDAwMDAwMDAwMDAwNTogc3RhdHVzPTB4MDAwMDAwMDAgdGV4dD1TLTEtNS03CmF1dGhvcml0eSAwMDAwMDAwMDAwMDU6IG5vIGFsbG9jYXRpb246IHN0YXR1cz0weDAwMDAwMDAwIGxlbmd0aD0xNAphdXRob3JpdHkgMDAwMDAwMDAwMDAwOiBzdGF0dXM9MHgwMDAwMDAwMCB0ZXh0PVMtMS0wLTcKYXV0aG9yaXR5IDAwMDAwMDAwMDAwMDogbm8gYWxsb2NhdGlvbjogc3RhdHVzPTB4MDAwMDAwMDAgbGVuZ3RoPTE0CmF1dGhvcml0eSAwMDAwZmZmZmZmZmY6IHN0YXR1cz0weDAwMDAwMDAwIHRleHQ9Uy0xLTQyOTQ5NjcyOTUtNwphdXRob3JpdHkgMDAwMGZmZmZmZmZmOiBubyBhbGxvY2F0aW9uOiBzdGF0dXM9MHgwMDAwMDAwMCBsZW5ndGg9MzIKYXV0aG9yaXR5IDAwMDAwMTAwMDAwMDogc3RhdHVzPTB4MDAwMDAwMDAgdGV4dD1TLTEtMTY3NzcyMTYtNwphdXRob3JpdHkgMDAwMDAxMDAwMDAwOiBubyBhbGxvY2F0aW9uOiBzdGF0dXM9MHgwMDAwMDAwMCBsZW5ndGg9MjgKYXV0aG9yaXR5IDAwMDEwMDAwMDAwMDogc3RhdHVzPTB4MDAwMDAwMDAgdGV4dD1TLTEtMHgxMDAwMDAwMDAtNwphdXRob3JpdHkgMDAwMTAwMDAwMDAwOiBubyBhbGxvY2F0aW9uOiBzdGF0dXM9MHgwMDAwMDAwMCBsZW5ndGg9MzQKYXV0aG9yaXR5IDAxMDIwMzA0MDUwNjogc3RhdHVzPTB4MDAwMDAwMDAgdGV4dD1TLTEtMHgxMDIwMzA0MDUwNi03CmF1dGhvcml0eSAwMTAyMDMwNDA1MDY6IG5vIGFsbG9jYXRpb246IHN0YXR1cz0weDAwMDAwMDAwIGxlbmd0aD0zOAphdXRob3JpdHkgZmZmZmZmZmZmZmZmOiBzdGF0dXM9MHgwMDAwMDAwMCB0ZXh0PVMtMS0weEZGRkZGRkZGRkZGRi03CmF1dGhvcml0eSBmZmZmZmZmZmZmZmY6IG5vIGFsbG9jYXRpb246IHN0YXR1cz0weDAwMDAwMDAwIGxlbmd0aD00MApyZXZpc2lvbiAwIGNvdW50IDI6IHN0YXR1cz0weGMwMDAwMDc4IGxlbmd0aD0zMDU4MyBtYXhpbXVtPTMwNTgzIGJ1ZmZlcl9udWxsPXRydWUKcmV2aXNpb24gMCBjb3VudCAyOiBubyBhbGxvY2F0aW9uOiBzdGF0dXM9MHhjMDAwMDA3OCBsZW5ndGg9MApyZXZpc2lvbiAyIGNvdW50IDI6IHN0YXR1cz0weGMwMDAwMDc4IGxlbmd0aD0zMDU4MyBtYXhpbXVtPTMwNTgzIGJ1ZmZlcl9udWxsPXRydWUKcmV2aXNpb24gMiBjb3VudCAyOiBubyBhbGxvY2F0aW9uOiBzdGF0dXM9MHhjMDAwMDA3OCBsZW5ndGg9MApyZXZpc2lvbiAyNTUgY291bnQgMTogc3RhdHVzPTB4YzAwMDAwNzggbGVuZ3RoPTMwNTgzIG1heGltdW09MzA1ODMgYnVmZmVyX251bGw9dHJ1ZQpyZXZpc2lvbiAyNTUgY291bnQgMTogbm8gYWxsb2NhdGlvbjogc3RhdHVzPTB4YzAwMDAwNzggbGVuZ3RoPTAKcmV2aXNpb24gMSBjb3VudCAxNjogc3RhdHVzPTB4YzAwMDAwNzggbGVuZ3RoPTMwNTgzIG1heGltdW09MzA1ODMgYnVmZmVyX251bGw9dHJ1ZQpyZXZpc2lvbiAxIGNvdW50IDE2OiBubyBhbGxvY2F0aW9uOiBzdGF0dXM9MHhjMDAwMDA3OCBsZW5ndGg9MApyZXZpc2lvbiAxIGNvdW50IDE3OiBzdGF0dXM9MHhjMDAwMDA3OCBsZW5ndGg9MzA1ODMgbWF4aW11bT0zMDU4MyBidWZmZXJfbnVsbD10cnVlCnJldmlzaW9uIDEgY291bnQgMTc6IG5vIGFsbG9jYXRpb246IHN0YXR1cz0weGMwMDAwMDc4IGxlbmd0aD0wCnJldmlzaW9uIDEgY291bnQgMjU1OiBzdGF0dXM9MHhjMDAwMDA3OCBsZW5ndGg9MzA1ODMgbWF4aW11bT0zMDU4MyBidWZmZXJfbnVsbD10cnVlCnJldmlzaW9uIDEgY291bnQgMjU1OiBubyBhbGxvY2F0aW9uOiBzdGF0dXM9MHhjMDAwMDA3OCBsZW5ndGg9MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "authority 000000000005: status=0x00000000 text=S-1-5-7\nauthority 000000000005: no allocation: status=0x00000000 length=14\nauthority 000000000000: status=0x00000000 text=S-1-0-7\nauthority 000000000000: no allocation: status=0x00000000 length=14\nauthority 0000ffffffff: status=0x00000000 text=S-1-4294967295-7\nauthority 0000ffffffff: no allocation: status=0x00000000 length=32\nauthority 000001000000: status=0x00000000 text=S-1-16777216-7\nauthority 000001000000: no allocation: status=0x00000000 length=28\nauthority 000100000000: status=0x00000000 text=S-1-0x100000000-7\nauthority 000100000000: no allocation: status=0x00000000 length=34\nauthority 010203040506: status=0x00000000 text=S-1-0x10203040506-7\nauthority 010203040506: no allocation: status=0x00000000 length=38\nauthority ffffffffffff: status=0x00000000 text=S-1-0xFFFFFFFFFFFF-7\nauthority ffffffffffff: no allocation: status=0x00000000 length=40\nrevision 0 count 2: status=0xc0000078 length=30583 maximum=30583 buffer_null=true\nrevision 0 count 2: no allocation: status=0xc0000078 length=0\nrevision 2 count 2: status=0xc0000078 length=30583 maximum=30583 buffer_null=true\nrevision 2 count 2: no allocation: status=0xc0000078 length=0\nrevision 255 count 1: status=0xc0000078 length=30583 maximum=30583 buffer_null=true\nrevision 255 count 1: no allocation: status=0xc0000078 length=0\nrevision 1 count 16: status=0xc0000078 length=30583 maximum=30583 buffer_null=true\nrevision 1 count 16: no allocation: status=0xc0000078 length=0\nrevision 1 count 17: status=0xc0000078 length=30583 maximum=30583 buffer_null=true\nrevision 1 count 17: no allocation: status=0xc0000078 length=0\nrevision 1 count 255: status=0xc0000078 length=30583 maximum=30583 buffer_null=true\nrevision 1 count 255: no allocation: status=0xc0000078 length=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

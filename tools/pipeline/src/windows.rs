@@ -1248,6 +1248,9 @@ mod tests {
         // DirectWrite tests import dwrite.dll.
         let dw = image(&[("DWRITE.dll", &["DWriteCreateFactory"])], 3);
         assert_eq!(check_image(&dw).unwrap()["dwrite.dll"], ["DWriteCreateFactory"]);
+        // The security model's tests import advapi32.
+        let security = image(&[("ADVAPI32.dll", &["OpenProcessToken"])], 3);
+        assert_eq!(check_image(&security).unwrap()["advapi32.dll"], ["OpenProcessToken"]);
         let other = image(&[("shell32.dll", &["SHGetFolderPathW"])], 3);
         assert!(check_image(&other).unwrap_err().contains("shell32.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);

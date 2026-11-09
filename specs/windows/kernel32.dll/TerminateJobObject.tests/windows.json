@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "610739d357e2",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:41:56Z",
+  "tests": [
+    {
+      "name": "job_terminate_children",
+      "exe_sha256": "bc30e802df1cc4522f774b3d6d564da2a0f3ce94c7cea59567f328d6249838cd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGVybWluYXRlIGFuIGVtcHR5IGpvYjogb2sKYWNjb3VudGluZyBvZiB0aGUgdW50b3VjaGVkIGVtcHR5IGpvYjogdG90YWw9MCBhY3RpdmU9MCB0ZXJtaW5hdGVkPTAKYXNzaWduIGMxLCBjMiBhbmQgYzM6IG9rIG9rIG9rCmJlZm9yZTogYzEgYWxpdmU9dHJ1ZSBjMiBhbGl2ZT10cnVlIG91dHNpZGVyIGFsaXZlPXRydWUKYWNjb3VudGluZyBiZWZvcmU6IHRvdGFsPTMgYWN0aXZlPTMgdGVybWluYXRlZD0wClRlcm1pbmF0ZUpvYk9iamVjdCgweDEyMzQpOiBvawpleGl0IGNvZGVzOiBjMSAweDEyMzQgYzIgMHgxMjM0IGMzICh3YXMgc3VzcGVuZGVkKSAweDEyMzQKdGhlIHByb2Nlc3Mgb3V0c2lkZSB0aGUgam9iIGlzIGFsaXZlOiB0cnVlCmFjY291bnRpbmcgYWZ0ZXI6IHRvdGFsPTMgYWN0aXZlPTAgdGVybWluYXRlZD0wCnByb2Nlc3MgbGlzdCBhZnRlcjogYXNzaWduZWQ9MCBpbl9saXN0PTAKdGVybWluYXRlIGFnYWluIChubyBtZW1iZXJzIGxlZnQpOiBvawphc3NpZ24gYSBuZXcgcHJvY2VzcyB0byB0aGUgdGVybWluYXRlZCBqb2I6IG9rCm5ldyBtZW1iZXIgYWxpdmU6IHRydWU7IGFjY291bnRpbmcgdG90YWw9NCBhY3RpdmU9MSB0ZXJtaW5hdGVkPTAKdGVybWluYXRlIHdpdGggY29kZSAwOiBvawpuZXcgbWVtYmVyIGV4aXQgY29kZSAweDA7IGFjY291bnRpbmcgdG90YWw9NCBhY3RpdmU9MCB0ZXJtaW5hdGVkPTAKdGVybWluYXRlIHdpdGggU1RJTExfQUNUSVZFICgyNTkpOiBvayB3YWl0PTB4MCBHZXRFeGl0Q29kZVByb2Nlc3M9MHgxMDMKdGVybWluYXRlIHdpdGggMHhDMDAwMDAwNTogb2sgd2FpdD0weDAgR2V0RXhpdENvZGVQcm9jZXNzPTB4YzAwMDAwMDUKdGVybWluYXRlIHdpdGggMHhGRkZGRkZGRjogb2sgd2FpdD0weDAgR2V0RXhpdENvZGVQcm9jZXNzPTB4ZmZmZmZmZmYKdGVybWluYXRlIHdpdGggMTogb2sgd2FpdD0weDAgR2V0RXhpdENvZGVQcm9jZXNzPTB4MQphY2NvdW50aW5nIGF0IHRoZSBlbmQ6IHRvdGFsPTggYWN0aXZlPTAgdGVybWluYXRlZD0wCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "terminate an empty job: ok\naccounting of the untouched empty job: total=0 active=0 terminated=0\nassign c1, c2 and c3: ok ok ok\nbefore: c1 alive=true c2 alive=true outsider alive=true\naccounting before: total=3 active=3 terminated=0\nTerminateJobObject(0x1234): ok\nexit codes: c1 0x1234 c2 0x1234 c3 (was suspended) 0x1234\nthe process outside the job is alive: true\naccounting after: total=3 active=0 terminated=0\nprocess list after: assigned=0 in_list=0\nterminate again (no members left): ok\nassign a new process to the terminated job: ok\nnew member alive: true; accounting total=4 active=1 terminated=0\nterminate with code 0: ok\nnew member exit code 0x0; accounting total=4 active=0 terminated=0\nterminate with STILL_ACTIVE (259): ok wait=0x0 GetExitCodeProcess=0x103\nterminate with 0xC0000005: ok wait=0x0 GetExitCodeProcess=0xc0000005\nterminate with 0xFFFFFFFF: ok wait=0x0 GetExitCodeProcess=0xffffffff\nterminate with 1: ok wait=0x0 GetExitCodeProcess=0x1\naccounting at the end: total=8 active=0 terminated=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1624
+    },
+    {
+      "name": "job_terminate_nested",
+      "exe_sha256": "5d61a7340193532543c736aa9d0fad9bdb3d86707419509ca7f85e4a83c71518",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cF9vdXQgaW50byBvdXRlcjogb2sKcF9ib3RoIGludG8gb3V0ZXIgdGhlbiBpbm5lcjogb2sgb2sKcF9pbiBkaXJlY3RseSBpbnRvIGlubmVyOiBvawpwX290aGVyIGludG8gYW5vdGhlciBqb2I6IG9rCmFjY291bnRpbmcgb3V0ZXIgdG90YWw9MyBhY3RpdmU9MyB0ZXJtaW5hdGVkPTAgaW5uZXIgdG90YWw9MiBhY3RpdmU9MiB0ZXJtaW5hdGVkPTAgb3RoZXIgdG90YWw9MSBhY3RpdmU9MSB0ZXJtaW5hdGVkPTAKdGVybWluYXRlIHRoZSBpbm5lciBqb2I6IG9rCmlubmVyIG1lbWJlcnM6IHBfaW4gMHgzMSBwX2JvdGggMHgzMQpvdXRlci1vbmx5IG1lbWJlciBhbGl2ZTogdHJ1ZTsgb3RoZXIgam9iJ3MgbWVtYmVyIGFsaXZlOiB0cnVlCmFjY291bnRpbmcgb3V0ZXIgdG90YWw9MyBhY3RpdmU9MSB0ZXJtaW5hdGVkPTAgaW5uZXIgdG90YWw9MiBhY3RpdmU9MCB0ZXJtaW5hdGVkPTAgb3RoZXIgdG90YWw9MSBhY3RpdmU9MSB0ZXJtaW5hdGVkPTAKc3Bhd25lciBpbnRvIG91dGVyOiBvawpncmFuZGNoaWxkIG9wZW5lZDogdHJ1ZSBpbiBvdXRlcjogMQphY2NvdW50aW5nIG91dGVyIHRvdGFsPTUgYWN0aXZlPTMgdGVybWluYXRlZD0wCnRlcm1pbmF0ZSB0aGUgb3V0ZXIgam9iOiBvawpleGl0IGNvZGVzOiBwX291dCAweDMyIHNwYXduZXIgMHgzMiBncmFuZGNoaWxkIDB4MzIKb3RoZXIgam9iJ3MgbWVtYmVyIHN0aWxsIGFsaXZlOiB0cnVlCmFjY291bnRpbmcgb3V0ZXIgdG90YWw9NSBhY3RpdmU9MCB0ZXJtaW5hdGVkPTAgaW5uZXIgdG90YWw9MiBhY3RpdmU9MCB0ZXJtaW5hdGVkPTAKdGVybWluYXRlIHRoZSBvdGhlciBqb2I6IG9rCnBfb3RoZXIgZXhpdCBjb2RlIDB4MzMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "p_out into outer: ok\np_both into outer then inner: ok ok\np_in directly into inner: ok\np_other into another job: ok\naccounting outer total=3 active=3 terminated=0 inner total=2 active=2 terminated=0 other total=1 active=1 terminated=0\nterminate the inner job: ok\ninner members: p_in 0x31 p_both 0x31\nouter-only member alive: true; other job's member alive: true\naccounting outer total=3 active=1 terminated=0 inner total=2 active=0 terminated=0 other total=1 active=1 terminated=0\nspawner into outer: ok\ngrandchild opened: true in outer: 1\naccounting outer total=5 active=3 terminated=0\nterminate the outer job: ok\nexit codes: p_out 0x32 spawner 0x32 grandchild 0x32\nother job's member still alive: true\naccounting outer total=5 active=0 terminated=0 inner total=2 active=0 terminated=0\nterminate the other job: ok\np_other exit code 0x33\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1028
+    }
+  ]
+}

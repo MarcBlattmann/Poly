@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_createacl_layout",
+      "exe_sha256": "15a6b4405ab2102be438e5155c47bfe92d416b1a0c8ca0179ef1ed3b26e8ae6d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bGVuZ3RoIDggcmV2aXNpb24gMjogc3RhdHVzPTB4MDAwMDAwMDAgaGVhZGVyPTAyMDAwODAwMDAwMDAwMDAgdmFsaWQ9MSBmaXJzdF9mcmVlPTEgYXQ9OCBxdWVyeT0weDAwMDAwMDAwIGNvdW50PTAgaW5fdXNlPTggZnJlZT0wCmxlbmd0aCA5IHJldmlzaW9uIDI6IHN0YXR1cz0weDAwMDAwMDAwIGhlYWRlcj0wMjAwMDgwMDAwMDAwMDAwIHZhbGlkPTEgZmlyc3RfZnJlZT0xIGF0PTggcXVlcnk9MHgwMDAwMDAwMCBjb3VudD0wIGluX3VzZT04IGZyZWU9MApsZW5ndGggMTIgcmV2aXNpb24gMzogc3RhdHVzPTB4MDAwMDAwMDAgaGVhZGVyPTAzMDAwYzAwMDAwMDAwMDAgdmFsaWQ9MSBmaXJzdF9mcmVlPTEgYXQ9OCBxdWVyeT0weDAwMDAwMDAwIGNvdW50PTAgaW5fdXNlPTggZnJlZT00Cmxlbmd0aCA2NCByZXZpc2lvbiA0OiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDQwMDQwMDAwMDAwMDAwMCB2YWxpZD0xIGZpcnN0X2ZyZWU9MSBhdD04IHF1ZXJ5PTB4MDAwMDAwMDAgY291bnQ9MCBpbl91c2U9OCBmcmVlPTU2Cmxlbmd0aCA2NSByZXZpc2lvbiAyOiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDIwMDQwMDAwMDAwMDAwMCB2YWxpZD0xIGZpcnN0X2ZyZWU9MSBhdD04IHF1ZXJ5PTB4MDAwMDAwMDAgY291bnQ9MCBpbl91c2U9OCBmcmVlPTU2Cmxlbmd0aCA2NyByZXZpc2lvbiAyOiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDIwMDQwMDAwMDAwMDAwMCB2YWxpZD0xIGZpcnN0X2ZyZWU9MSBhdD04IHF1ZXJ5PTB4MDAwMDAwMDAgY291bnQ9MCBpbl91c2U9OCBmcmVlPTU2Cmxlbmd0aCA2OCByZXZpc2lvbiAyOiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDIwMDQ0MDAwMDAwMDAwMCB2YWxpZD0xIGZpcnN0X2ZyZWU9MSBhdD04IHF1ZXJ5PTB4MDAwMDAwMDAgY291bnQ9MCBpbl91c2U9OCBmcmVlPTYwCmxlbmd0aCAxMDI0IHJldmlzaW9uIDQ6IHN0YXR1cz0weDAwMDAwMDAwIGhlYWRlcj0wNDAwMDAwNDAwMDAwMDAwIHZhbGlkPTEgZmlyc3RfZnJlZT0xIGF0PTggcXVlcnk9MHgwMDAwMDAwMCBjb3VudD0wIGluX3VzZT04IGZyZWU9MTAxNgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "length 8 revision 2: status=0x00000000 header=0200080000000000 valid=1 first_free=1 at=8 query=0x00000000 count=0 in_use=8 free=0\nlength 9 revision 2: status=0x00000000 header=0200080000000000 valid=1 first_free=1 at=8 query=0x00000000 count=0 in_use=8 free=0\nlength 12 revision 3: status=0x00000000 header=03000c0000000000 valid=1 first_free=1 at=8 query=0x00000000 count=0 in_use=8 free=4\nlength 64 revision 4: status=0x00000000 header=0400400000000000 valid=1 first_free=1 at=8 query=0x00000000 count=0 in_use=8 free=56\nlength 65 revision 2: status=0x00000000 header=0200400000000000 valid=1 first_free=1 at=8 query=0x00000000 count=0 in_use=8 free=56\nlength 67 revision 2: status=0x00000000 header=0200400000000000 valid=1 first_free=1 at=8 query=0x00000000 count=0 in_use=8 free=56\nlength 68 revision 2: status=0x00000000 header=0200440000000000 valid=1 first_free=1 at=8 query=0x00000000 count=0 in_use=8 free=60\nlength 1024 revision 4: status=0x00000000 header=0400000400000000 valid=1 first_free=1 at=8 query=0x00000000 count=0 in_use=8 free=1016\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    },
+    {
+      "name": "rtl_createacl_lengths",
+      "exe_sha256": "661448aa261c44aa8f84518277a1f10796838650d0e236e0abdb54e931034ff7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bGVuZ3RoIDA6IHN0YXR1cz0weGMwMDAwMDIzIGhlYWRlcj1jY2NjY2NjY2NjY2NjY2NjIGJ5dGVzX2NoYW5nZWQ9MCB2YWxpZD0wCmxlbmd0aCAxOiBzdGF0dXM9MHhjMDAwMDAyMyBoZWFkZXI9Y2NjY2NjY2NjY2NjY2NjYyBieXRlc19jaGFuZ2VkPTAgdmFsaWQ9MApsZW5ndGggNDogc3RhdHVzPTB4YzAwMDAwMjMgaGVhZGVyPWNjY2NjY2NjY2NjY2NjY2MgYnl0ZXNfY2hhbmdlZD0wIHZhbGlkPTAKbGVuZ3RoIDc6IHN0YXR1cz0weGMwMDAwMDIzIGhlYWRlcj1jY2NjY2NjY2NjY2NjY2NjIGJ5dGVzX2NoYW5nZWQ9MCB2YWxpZD0wCmxlbmd0aCA4OiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDIwMDA4MDAwMDAwMDAwMCBieXRlc19jaGFuZ2VkPTggdmFsaWQ9MQpsZW5ndGggOTogc3RhdHVzPTB4MDAwMDAwMDAgaGVhZGVyPTAyMDAwODAwMDAwMDAwMDAgYnl0ZXNfY2hhbmdlZD04IHZhbGlkPTEKbGVuZ3RoIDEwOiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDIwMDA4MDAwMDAwMDAwMCBieXRlc19jaGFuZ2VkPTggdmFsaWQ9MQpsZW5ndGggMTE6IHN0YXR1cz0weDAwMDAwMDAwIGhlYWRlcj0wMjAwMDgwMDAwMDAwMDAwIGJ5dGVzX2NoYW5nZWQ9OCB2YWxpZD0xCmxlbmd0aCAxMjogc3RhdHVzPTB4MDAwMDAwMDAgaGVhZGVyPTAyMDAwYzAwMDAwMDAwMDAgYnl0ZXNfY2hhbmdlZD04IHZhbGlkPTEKbGVuZ3RoIDE1OiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDIwMDBjMDAwMDAwMDAwMCBieXRlc19jaGFuZ2VkPTggdmFsaWQ9MQpsZW5ndGggMTY6IHN0YXR1cz0weDAwMDAwMDAwIGhlYWRlcj0wMjAwMTAwMDAwMDAwMDAwIGJ5dGVzX2NoYW5nZWQ9OCB2YWxpZD0xCmxlbmd0aCAxNzogc3RhdHVzPTB4MDAwMDAwMDAgaGVhZGVyPTAyMDAxMDAwMDAwMDAwMDAgYnl0ZXNfY2hhbmdlZD04IHZhbGlkPTEKbGVuZ3RoIDY0OiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDIwMDQwMDAwMDAwMDAwMCBieXRlc19jaGFuZ2VkPTggdmFsaWQ9MQpsZW5ndGggNjU6IHN0YXR1cz0weDAwMDAwMDAwIGhlYWRlcj0wMjAwNDAwMDAwMDAwMDAwIGJ5dGVzX2NoYW5nZWQ9OCB2YWxpZD0xCmxlbmd0aCA2Njogc3RhdHVzPTB4MDAwMDAwMDAgaGVhZGVyPTAyMDA0MDAwMDAwMDAwMDAgYnl0ZXNfY2hhbmdlZD04IHZhbGlkPTEKbGVuZ3RoIDY3OiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDIwMDQwMDAwMDAwMDAwMCBieXRlc19jaGFuZ2VkPTggdmFsaWQ9MQpsZW5ndGggMTAyMDogc3RhdHVzPTB4MDAwMDAwMDAgaGVhZGVyPTAyMDBmYzAzMDAwMDAwMDAgYnl0ZXNfY2hhbmdlZD04IHZhbGlkPTEKbGVuZ3RoIDEwMjE6IHN0YXR1cz0weDAwMDAwMDAwIGhlYWRlcj0wMjAwZmMwMzAwMDAwMDAwIGJ5dGVzX2NoYW5nZWQ9OCB2YWxpZD0xCmxlbmd0aCAxMDI0OiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDIwMDAwMDQwMDAwMDAwMCBieXRlc19jaGFuZ2VkPTggdmFsaWQ9MQpsZW5ndGggMHhmZmY4OiBzdGF0dXM9MHgwMDAwMDAwMCBoZWFkZXI9MDIwMGY4ZmYwMDAwMDAwMCBieXRlc19jaGFuZ2VkPTgKbGVuZ3RoIDB4ZmZmYzogc3RhdHVzPTB4MDAwMDAwMDAgaGVhZGVyPTAyMDBmY2ZmMDAwMDAwMDAgYnl0ZXNfY2hhbmdlZD04Cmxlbmd0aCAweGZmZmQ6IHN0YXR1cz0weGMwMDAwMDBkIGhlYWRlcj1jY2NjY2NjY2NjY2NjY2NjIGJ5dGVzX2NoYW5nZWQ9MApsZW5ndGggMHhmZmZmOiBzdGF0dXM9MHhjMDAwMDAwZCBoZWFkZXI9Y2NjY2NjY2NjY2NjY2NjYyBieXRlc19jaGFuZ2VkPTAKbGVuZ3RoIDB4MTAwMDA6IHN0YXR1cz0weGMwMDAwMDBkIGhlYWRlcj1jY2NjY2NjY2NjY2NjY2NjIGJ5dGVzX2NoYW5nZWQ9MApsZW5ndGggMHgxMDAwMTogc3RhdHVzPTB4YzAwMDAwMGQgaGVhZGVyPWNjY2NjY2NjY2NjY2NjY2MgYnl0ZXNfY2hhbmdlZD0wCmxlbmd0aCAweDEwMDA0OiBzdGF0dXM9MHhjMDAwMDAwZCBoZWFkZXI9Y2NjY2NjY2NjY2NjY2NjYyBieXRlc19jaGFuZ2VkPTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "length 0: status=0xc0000023 header=cccccccccccccccc bytes_changed=0 valid=0\nlength 1: status=0xc0000023 header=cccccccccccccccc bytes_changed=0 valid=0\nlength 4: status=0xc0000023 header=cccccccccccccccc bytes_changed=0 valid=0\nlength 7: status=0xc0000023 header=cccccccccccccccc bytes_changed=0 valid=0\nlength 8: status=0x00000000 header=0200080000000000 bytes_changed=8 valid=1\nlength 9: status=0x00000000 header=0200080000000000 bytes_changed=8 valid=1\nlength 10: status=0x00000000 header=0200080000000000 bytes_changed=8 valid=1\nlength 11: status=0x00000000 header=0200080000000000 bytes_changed=8 valid=1\nlength 12: status=0x00000000 header=02000c0000000000 bytes_changed=8 valid=1\nlength 15: status=0x00000000 header=02000c0000000000 bytes_changed=8 valid=1\nlength 16: status=0x00000000 header=0200100000000000 bytes_changed=8 valid=1\nlength 17: status=0x00000000 header=0200100000000000 bytes_changed=8 valid=1\nlength 64: status=0x00000000 header=0200400000000000 bytes_changed=8 valid=1\nlength 65: status=0x00000000 header=0200400000000000 bytes_changed=8 valid=1\nlength 66: status=0x00000000 header=0200400000000000 bytes_changed=8 valid=1\nlength 67: status=0x00000000 header=0200400000000000 bytes_changed=8 valid=1\nlength 1020: status=0x00000000 header=0200fc0300000000 bytes_changed=8 valid=1\nlength 1021: status=0x00000000 header=0200fc0300000000 bytes_changed=8 valid=1\nlength 1024: status=0x00000000 header=0200000400000000 bytes_changed=8 valid=1\nlength 0xfff8: status=0x00000000 header=0200f8ff00000000 bytes_changed=8\nlength 0xfffc: status=0x00000000 header=0200fcff00000000 bytes_changed=8\nlength 0xfffd: status=0xc000000d header=cccccccccccccccc bytes_changed=0\nlength 0xffff: status=0xc000000d header=cccccccccccccccc bytes_changed=0\nlength 0x10000: status=0xc000000d header=cccccccccccccccc bytes_changed=0\nlength 0x10001: status=0xc000000d header=cccccccccccccccc bytes_changed=0\nlength 0x10004: status=0xc000000d header=cccccccccccccccc bytes_changed=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    }
+  ]
+}

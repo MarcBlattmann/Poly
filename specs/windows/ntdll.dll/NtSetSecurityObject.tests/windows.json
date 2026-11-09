@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "2d24da3f08a2",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:57:44Z",
+  "tests": [
+    {
+      "name": "ntsso_errors",
+      "exe_sha256": "a252dd5a19e9f7fb9fd9b874ef772772656a0b7e56532c426a075d0a44bc8406",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aGFuZGxlIHdpdGggb25seSBKT0JfT0JKRUNUX1FVRVJZOiBkYWNsOjB4YzAwMDAwMjIgb3duZXI6MHhjMDAwMDAyMiBncm91cDoweGMwMDAwMDIyIApoYW5kbGUgd2l0aCBvbmx5IFdSSVRFX0RBQzogZGFjbDoweDAgb3duZXI6MHhjMDAwMDAyMiBncm91cDoweGMwMDAwMDIyIApoYW5kbGUgd2l0aCBvbmx5IFdSSVRFX09XTkVSOiBkYWNsOjB4YzAwMDAwMjIgb3duZXI6MHgwIGdyb3VwOjB4MCAKaGFuZGxlIHdpdGggb25seSBSRUFEX0NPTlRST0w6IGRhY2w6MHhjMDAwMDAyMiBvd25lcjoweGMwMDAwMDIyIGdyb3VwOjB4YzAwMDAwMjIgCm93bmVyIGluZm8sIGRlc2NyaXB0b3Igd2l0aG91dCBvd25lcjogMHhjMDAwMDA3OQpncm91cCBpbmZvLCBkZXNjcmlwdG9yIHdpdGhvdXQgZ3JvdXA6IDB4YzAwMDAwNzkKREFDTCBpbmZvLCBkZXNjcmlwdG9yIHdpdGhvdXQgREFDTDogMHgwMDAwMDAwMApTQUNMIGluZm8sIGRlc2NyaXB0b3Igd2l0aG91dCBTQUNMOiAweGMwMDAwMDIyCmxhYmVsIGluZm8sIGRlc2NyaXB0b3Igd2l0aG91dCBTQUNMOiAweDAwMDAwMDAwCmRlc2NyaXB0b3IgcmV2aXNpb24gOTogMHhjMDAwMDA1OAppbmZvcm1hdGlvbiBtYXNrIDA6IDB4MDAwMDAwMDAKaW5mb3JtYXRpb24gbWFzayAweDIwOiAweDAwMDAwMDAwCmluZm9ybWF0aW9uIG1hc2sgMHgxMDA6IDB4MDAwMDAwMDAKaW5mb3JtYXRpb24gbWFzayBEQUNMfFBST1RFQ1RFRF9EQUNMOiAweDAwMDAwMDAwCmluZm9ybWF0aW9uIG1hc2sgREFDTHxVTlBST1RFQ1RFRF9EQUNMOiAweDAwMDAwMDAwCkRBQ0wgY29udHJvbCBhZnRlciBQUk9URUNURURfREFDTDogc3RhdHVzPTB4MDAwMDAwMDAgbGVuZ3RoPTEwNDQgcmV2aXNpb249MSBjb250cm9sPTB4ODAwNCBvZmZzZXRzIG93bmVyPTAgZ3JvdXA9MCBzYWNsPTAgZGFjbD0yMAogIGRhY2w6IHJldmlzaW9uPTIgc2l6ZT0xMDI0IGNvdW50PTEKICBkYWNsWzBdOiB0eXBlPTAgZmxhZ3M9MHgwIHNpemU9MjAgbWFzaz0weDQgc2lkPVMtMS0xLTAKU0FDTCB3aXRoIGFuIGF1ZGl0IEFDRSwgcHJpdmlsZWdlIGRpc2FibGVkOiAweGMwMDAwMDIyCnNlbGYtcmVsYXRpdmUgZGVzY3JpcHRvciAobGVuZ3RoX25vbnplcm89dHJ1ZSk6IDB4MDAwMDAwMDAKTlVMTCBoYW5kbGU6IDB4YzAwMDAwMDgKdW5uYW1lZCBldmVudCBoYW5kbGU6IDB4YzAwMDAwZDcKY2xvc2VkIGhhbmRsZTogMHhjMDAwMDAwOApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "handle with only JOB_OBJECT_QUERY: dacl:0xc0000022 owner:0xc0000022 group:0xc0000022 \nhandle with only WRITE_DAC: dacl:0x0 owner:0xc0000022 group:0xc0000022 \nhandle with only WRITE_OWNER: dacl:0xc0000022 owner:0x0 group:0x0 \nhandle with only READ_CONTROL: dacl:0xc0000022 owner:0xc0000022 group:0xc0000022 \nowner info, descriptor without owner: 0xc0000079\ngroup info, descriptor without group: 0xc0000079\nDACL info, descriptor without DACL: 0x00000000\nSACL info, descriptor without SACL: 0xc0000022\nlabel info, descriptor without SACL: 0x00000000\ndescriptor revision 9: 0xc0000058\ninformation mask 0: 0x00000000\ninformation mask 0x20: 0x00000000\ninformation mask 0x100: 0x00000000\ninformation mask DACL|PROTECTED_DACL: 0x00000000\ninformation mask DACL|UNPROTECTED_DACL: 0x00000000\nDACL control after PROTECTED_DACL: status=0x00000000 length=1044 revision=1 control=0x8004 offsets owner=0 group=0 sacl=0 dacl=20\n  dacl: revision=2 size=1024 count=1\n  dacl[0]: type=0 flags=0x0 size=20 mask=0x4 sid=S-1-1-0\nSACL with an audit ACE, privilege disabled: 0xc0000022\nself-relative descriptor (length_nonzero=true): 0x00000000\nNULL handle: 0xc0000008\nunnamed event handle: 0xc00000d7\nclosed handle: 0xc0000008\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "ntsso_owner_rules",
+      "exe_sha256": "bfcf285e9729866ebc68896fe330e66ecb140292396e43d3ea7e4efc353019f4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dW5jaGFuZ2VkIHRva2VuIChTZXRUaHJlYWRUb2tlbiAxKTogdGhlIHVzZXI6IG93bmVyIDB4MCBncm91cCAweDA7IEFkbWluaXN0cmF0b3JzOiBvd25lciAweDAgZ3JvdXAgMHgwOyBVc2Vyczogb3duZXIgMHgwIGdyb3VwIDB4MDsgRXZlcnlvbmU6IG93bmVyIDB4MCBncm91cCAweDA7IFNZU1RFTTogb3duZXIgMHgwIGdyb3VwIDB4MDsgCkRJU0FCTEVfTUFYX1BSSVZJTEVHRSAoU2V0VGhyZWFkVG9rZW4gMSk6IHRoZSB1c2VyOiBvd25lciAweDAgZ3JvdXAgMHgwOyBBZG1pbmlzdHJhdG9yczogb3duZXIgMHgwIGdyb3VwIDB4MDsgVXNlcnM6IG93bmVyIDB4YzAwMDAwNWEgZ3JvdXAgMHgwOyBFdmVyeW9uZTogb3duZXIgMHhjMDAwMDA1YSBncm91cCAweDA7IFNZU1RFTTogb3duZXIgMHhjMDAwMDA1YSBncm91cCAweDA7IApBZG1pbmlzdHJhdG9ycyBkZW55LW9ubHkgKFNldFRocmVhZFRva2VuIDEpOiB0aGUgdXNlcjogb3duZXIgMHgwIGdyb3VwIDB4MDsgQWRtaW5pc3RyYXRvcnM6IG93bmVyIDB4MCBncm91cCAweDA7IFVzZXJzOiBvd25lciAweDAgZ3JvdXAgMHgwOyBFdmVyeW9uZTogb3duZXIgMHgwIGdyb3VwIDB4MDsgU1lTVEVNOiBvd25lciAweDAgZ3JvdXAgMHgwOyAKYm90aCAoU2V0VGhyZWFkVG9rZW4gMSk6IHRoZSB1c2VyOiBvd25lciAweDAgZ3JvdXAgMHgwOyBBZG1pbmlzdHJhdG9yczogb3duZXIgMHhjMDAwMDA1YSBncm91cCAweDA7IFVzZXJzOiBvd25lciAweGMwMDAwMDVhIGdyb3VwIDB4MDsgRXZlcnlvbmU6IG93bmVyIDB4YzAwMDAwNWEgZ3JvdXAgMHgwOyBTWVNURU06IG93bmVyIDB4YzAwMDAwNWEgZ3JvdXAgMHgwOyAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "unchanged token (SetThreadToken 1): the user: owner 0x0 group 0x0; Administrators: owner 0x0 group 0x0; Users: owner 0x0 group 0x0; Everyone: owner 0x0 group 0x0; SYSTEM: owner 0x0 group 0x0; \nDISABLE_MAX_PRIVILEGE (SetThreadToken 1): the user: owner 0x0 group 0x0; Administrators: owner 0x0 group 0x0; Users: owner 0xc000005a group 0x0; Everyone: owner 0xc000005a group 0x0; SYSTEM: owner 0xc000005a group 0x0; \nAdministrators deny-only (SetThreadToken 1): the user: owner 0x0 group 0x0; Administrators: owner 0x0 group 0x0; Users: owner 0x0 group 0x0; Everyone: owner 0x0 group 0x0; SYSTEM: owner 0x0 group 0x0; \nboth (SetThreadToken 1): the user: owner 0x0 group 0x0; Administrators: owner 0xc000005a group 0x0; Users: owner 0xc000005a group 0x0; Everyone: owner 0xc000005a group 0x0; SYSTEM: owner 0xc000005a group 0x0; \nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/SetThreadToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Sets (or, with a NULL token, removes) the impersonation token of a thread;
+  a NULL thread pointer means the calling thread. The token must be an
+  impersonation token with TOKEN_IMPERSONATE.
+interface:
+  signature: "BOOL SetThreadToken(PHANDLE thread, HANDLE token)"
+rules:
+  tokens: "an impersonation token: TRUE, thread token type 2 level 2; Identification: level 1; Anonymous: TRUE (thread token not openable, 1347); a primary token: FALSE, ERROR_BAD_TOKEN_TYPE (1349), no thread token, even with TOKEN_IMPERSONATE|QUERY"
+  access: "an impersonation token with only TOKEN_QUERY: FALSE, ERROR_ACCESS_DENIED (5); with only TOKEN_IMPERSONATE: TRUE; a primary token with only TOKEN_QUERY: ERROR_ACCESS_DENIED (5)"
+  handle_closed: "closing the token handle after the call leaves the thread token in place"
+  remove: "SetThreadToken(NULL, NULL) removes the thread token (TRUE); an explicit pointer to the calling thread's pseudo-handle works like NULL"
+  other_thread: "a suspended thread created by CreateThread (full-access handle): SetThreadToken(&thread, token) succeeds and the thread, once resumed, finds the token (impersonation level 2 -> its report 122, identification -> 112, no token set -> 0); the calling thread is unaffected; a thread handle with only THREAD_QUERY_INFORMATION: FALSE, ERROR_ACCESS_DENIED (5)"
+errors:
+  token_type: "ERROR_BAD_TOKEN_TYPE (1349)"
+  access: "ERROR_ACCESS_DENIED (5)"
+side_effects: "sets or removes a thread's impersonation token"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

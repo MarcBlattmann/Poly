@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_lensid_counts",
+      "exe_sha256": "74e93967f836b76f0115e3dfc8b8ed2beaea3c80dce0d7d33b4e6b60af803eb6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "OCAxMiAxNiAyMCAyNCAyOCAzMiAzNiA0MCA0NCA0OCA1MiA1NiA2MCA2NCA2OCAKbnVsbCBTLTEtMC0wOiAxMgp3b3JsZCBTLTEtMS0wOiAxMgpudCBhdXRob3JpdHkgUy0xLTU6IDgKc3lzdGVtIFMtMS01LTE4OiAxMgphZG1pbmlzdHJhdG9ycyBTLTEtNS0zMi01NDQ6IDE2CmhpZ2ggbGFiZWwgUy0xLTE2LTEyMjg4OiAxMgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "8 12 16 20 24 28 32 36 40 44 48 52 56 60 64 68 \nnull S-1-0-0: 12\nworld S-1-1-0: 12\nnt authority S-1-5: 8\nsystem S-1-5-18: 12\nadministrators S-1-5-32-544: 16\nhigh label S-1-16-12288: 12\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    }
+  ]
+}
