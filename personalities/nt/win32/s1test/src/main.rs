@@ -39,6 +39,7 @@ unsafe extern "system" {
     fn WriteFile(h: Handle, buf: *const u8, len: u32, written: *mut u32, ov: *mut u8) -> i32;
     fn GetCurrentThreadId() -> u32;
     fn GetCurrentThreadStackLimits(low: *mut usize, high: *mut usize);
+    fn RtlCaptureStackBackTrace(skip: u32, count: u32, frames: *mut *mut u8, hash: *mut u32) -> u16;
     fn GetCurrentProcessId() -> u32;
     fn GetCurrentProcess() -> isize;
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
@@ -589,6 +590,27 @@ unsafe fn system() {
 
 // ----- GDI: fonts, text metrics, device caps -----------------------------------------
 
+unsafe extern "C" {
+    static __ImageBase: u8;
+}
+
+/// RtlCaptureStackBackTrace: the frames of this thread's stack, the first in this program.
+unsafe fn backtrace() {
+    let mut frames = [core::ptr::null_mut::<u8>(); 32];
+    let mut hash = 0u32;
+    let n = RtlCaptureStackBackTrace(0, 32, frames.as_mut_ptr(), &mut hash) as usize;
+    check_got(n >= 2, n as u32);
+    let base = &raw const __ImageBase as usize;
+    let inside = frames[0] as usize;
+    check_got(inside > base && inside < base + 0x100000, 0);
+    // Skipping one drops the first frame.
+    let mut again = [core::ptr::null_mut::<u8>(); 32];
+    let m = RtlCaptureStackBackTrace(1, 32, again.as_mut_ptr(), core::ptr::null_mut()) as usize;
+    check_eq(usize::from(m + 1 == n || m == n), 1);
+    check_eq(again[0] as usize, frames[1] as usize);
+    check_got(hash != 0, hash);
+}
+
 /// GetCurrentThreadStackLimits: the stack this code runs on lies between the limits.
 unsafe fn stack_limits() {
     let (mut low, mut high) = (0usize, 0usize);
@@ -668,6 +690,7 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         gdi();
         process_memory();
         stack_limits();
+        backtrace();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));
         out(b" checks passed\n");

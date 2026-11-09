@@ -196,6 +196,10 @@ pub const USER_KEYS: &[DefaultKey] = &[
     k("Control Panel\\International", &[("LocaleName", Sz("en-US"))]),
     k("Console", &[]),
     k("Software\\Classes", &[]),
+    // A vendor key that exists on a machine where Google software has run (Google Update,
+    // Chrome): Chrome for Testing finds `Software\Google` already there (call-site trace of
+    // chrome_elf's start-up on Windows, ADR 0155).
+    k("Software\\Google", &[]),
     k("Software\\Microsoft\\Windows\\CurrentVersion\\Run", &[]),
 ];
 

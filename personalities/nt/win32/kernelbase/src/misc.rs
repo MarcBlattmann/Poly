@@ -565,19 +565,3 @@ pub unsafe extern "system" fn RemoveVectoredExceptionHandler(handle: *mut u8) ->
     // SAFETY: as above.
     unsafe { nt::RtlRemoveVectoredExceptionHandler(handle) }
 }
-
-/// `RtlCaptureStackBackTrace`: no frames are captured yet (the count is 0,
-/// the hash 0), which callers that only record where they were accept.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn RtlCaptureStackBackTrace(
-    _skip: u32,
-    _count: u32,
-    _frames: *mut *mut u8,
-    hash: *mut u32,
-) -> u16 {
-    if !hash.is_null() {
-        // SAFETY: the caller's ULONG.
-        unsafe { hash.write(0) };
-    }
-    0
-}

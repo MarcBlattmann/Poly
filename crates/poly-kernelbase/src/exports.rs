@@ -280,7 +280,6 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetProductInfo", "api-ms-win-core-sysinfo-l1-2-0"),
     ("AddVectoredExceptionHandler", "api-ms-win-core-errorhandling-l1-1-0"),
     ("RemoveVectoredExceptionHandler", "api-ms-win-core-errorhandling-l1-1-0"),
-    ("RtlCaptureStackBackTrace", "api-ms-win-core-debug-l1-1-0"),
     ("GetStringTypeW", "api-ms-win-core-string-l1-1-0"),
     ("CompareStringW", "api-ms-win-core-string-l1-1-0"),
     ("CompareStringEx", "api-ms-win-core-string-l1-1-0"),
@@ -359,6 +358,8 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
 /// table gives to `ntdll` (ADR 0071).
 pub const KERNEL32_NTDLL_FORWARDS: &[(&str, &str)] = &[
     ("RtlCaptureContext", "api-ms-win-core-rtlsupport-l1-1-0"),
+    // kernel32 forwards it to ntdll, which captures the stack (ADR 0155).
+    ("RtlCaptureStackBackTrace", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlLookupFunctionEntry", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlVirtualUnwind", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlUnwindEx", "api-ms-win-core-rtlsupport-l1-1-0"),
