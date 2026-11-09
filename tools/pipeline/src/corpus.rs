@@ -297,8 +297,11 @@ pub fn build_with(root: &Path, out: &Path, cc: &str, extra: &[PathBuf]) -> Resul
         manifest.launcher = Some(compile(root, &out, cc, &launcher)?.map_err(|e| format!("the app launcher: {e}"))?);
         manifest.apps = app_tests;
     }
-    for p in programs {
-        match compile(root, &out, cc, &p)? {
+    // The compiler runs on every core (873 programs, about a minute one
+    // after the other); the manifest keeps the order of `programs`.
+    let built = util::parallel_map(&programs, util::default_jobs(16), |p| compile(root, &out, cc, p));
+    for (p, built) in programs.into_iter().zip(built) {
+        match built? {
             Ok(built) => manifest.tests.push(built),
             // No static C library here: not an error, the corpus just
             // lacks the C library startup trace.

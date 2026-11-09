@@ -231,6 +231,9 @@ in a run.
    compiles for `x86_64-pc-windows-msvc` as `cargo xtask ci lint` checks.
    It is **not part of `cargo xtask ci`**: it needs qemu-user, takes
    minutes, and a Linux CI job for it is a separate decision.
+   Nothing runs it automatically, so the result above (more than 200,000
+   blocks matching) is a one-time measurement, not something CI enforces:
+   rerun it after any change to the interpreter.
 
 ### Clean room
 

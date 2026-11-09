@@ -617,8 +617,152 @@ mod tests {
         x.to_bits()
     }
 
+    /// Little-endian 384-bit magnitudes: wide enough to add a 106-bit product
+    /// and a shifted addend exactly, which is all the reference below needs.
+    type Wide = [u64; 6];
+
+    fn wide(x: u128) -> Wide {
+        [x as u64, (x >> 64) as u64, 0, 0, 0, 0]
+    }
+
+    fn wide_shl(x: Wide, n: u32) -> Wide {
+        assert!(n < 256, "shift {n} leaves no room");
+        let (w, b) = ((n / 64) as usize, n % 64);
+        let mut out = [0u64; 6];
+        for i in (w..6).rev() {
+            out[i] = x[i - w] << b;
+            if b != 0 && i > w {
+                out[i] |= x[i - w - 1] >> (64 - b);
+            }
+        }
+        out
+    }
+
+    fn wide_add(a: Wide, b: Wide) -> Wide {
+        let mut out = [0u64; 6];
+        let mut carry = false;
+        for i in 0..6 {
+            let (s1, c1) = a[i].overflowing_add(b[i]);
+            let (s2, c2) = s1.overflowing_add(u64::from(carry));
+            out[i] = s2;
+            carry = c1 || c2;
+        }
+        assert!(!carry);
+        out
+    }
+
+    /// `a - b`, for `a >= b`.
+    fn wide_sub(a: Wide, b: Wide) -> Wide {
+        let mut out = [0u64; 6];
+        let mut borrow = false;
+        for i in 0..6 {
+            let (s1, c1) = a[i].overflowing_sub(b[i]);
+            let (s2, c2) = s1.overflowing_sub(u64::from(borrow));
+            out[i] = s2;
+            borrow = c1 || c2;
+        }
+        assert!(!borrow);
+        out
+    }
+
+    fn wide_cmp(a: Wide, b: Wide) -> core::cmp::Ordering {
+        for i in (0..6).rev() {
+            if a[i] != b[i] {
+                return a[i].cmp(&b[i]);
+            }
+        }
+        core::cmp::Ordering::Equal
+    }
+
+    /// Index of the highest set bit plus one (0 for zero).
+    fn wide_len(x: Wide) -> u32 {
+        for i in (0..6).rev() {
+            if x[i] != 0 {
+                return i as u32 * 64 + 64 - x[i].leading_zeros();
+            }
+        }
+        0
+    }
+
+    fn wide_bit(x: Wide, i: u32) -> bool {
+        (x[(i / 64) as usize] >> (i % 64)) & 1 == 1
+    }
+
+    /// Bits `n..n+64` of `x`; the caller knows nothing above them is set.
+    fn wide_bits_from(x: Wide, n: u32) -> u64 {
+        (0..64u32).filter(|i| n + i < 384 && wide_bit(x, n + i)).fold(0u64, |acc, i| acc | (1 << i))
+    }
+
+    /// Fused `a + b * c` rounded to nearest-even, computed exactly in wide
+    /// integers, so the tests do not depend on the host's `mul_add` (which is
+    /// not reliably fused on `x86_64-pc-windows-msvc`). Operands and result
+    /// must be normal numbers of format `f`.
+    fn ref_fma(f: Fmt, a: u64, b: u64, c: u64) -> u64 {
+        let bias = (1i32 << (f.exp - 1)) - 1;
+        let frac_mask = (1u64 << f.frac) - 1;
+        // sign, significand with the hidden bit, exponent of the lowest bit
+        let dec = |x: u64| {
+            let e = ((x >> f.frac) & ((1u64 << f.exp) - 1)) as i32;
+            assert!(e != 0 && e != (1 << f.exp) - 1, "operand {x:#x} is not normal");
+            ((x >> (f.frac + f.exp)) & 1 == 1, u128::from((x & frac_mask) | (1 << f.frac)), e - bias - f.frac as i32)
+        };
+        let (sa, ma, ea) = dec(a);
+        let (sb, mb, eb) = dec(b);
+        let (sc, mc, ec) = dec(c);
+        let (sp, mp, ep) = (sb ^ sc, mb * mc, eb + ec);
+        let emin = ea.min(ep);
+        let add = wide_shl(wide(ma), (ea - emin) as u32);
+        let prod = wide_shl(wide(mp), (ep - emin) as u32);
+        let (neg, mag) = if sa == sp {
+            (sa, wide_add(add, prod))
+        } else {
+            match wide_cmp(add, prod) {
+                core::cmp::Ordering::Equal => return 0, // exact cancellation is +0
+                core::cmp::Ordering::Greater => (sa, wide_sub(add, prod)),
+                core::cmp::Ordering::Less => (sp, wide_sub(prod, add)),
+            }
+        };
+        let top = wide_len(mag) as i32 - 1; // index of the leading bit
+        let mut lsb = emin + top - f.frac as i32; // exponent of the result's lowest bit
+        let mut q;
+        if top <= f.frac as i32 {
+            q = wide_bits_from(wide_shl(mag, (f.frac as i32 - top) as u32), 0);
+        } else {
+            let drop = (top - f.frac as i32) as u32;
+            q = wide_bits_from(mag, drop);
+            let half = wide_bit(mag, drop - 1);
+            let sticky = (0..drop - 1).any(|i| wide_bit(mag, i));
+            if half && (sticky || q & 1 == 1) {
+                q += 1;
+                if q == 1 << (f.frac + 1) {
+                    q >>= 1;
+                    lsb += 1;
+                }
+            }
+        }
+        let biased = lsb + f.frac as i32 + bias;
+        assert!(biased >= 1 && biased < (1 << f.exp) - 1, "result is not normal");
+        (u64::from(neg) << (f.frac + f.exp)) | ((biased as u64) << f.frac) | (q & frac_mask)
+    }
+
+    /// True when `r` is the correctly rounded square root of `x` (both
+    /// positive normal doubles): `x` lies between the squares of the
+    /// midpoints on either side of `r`. Exact, in `u128`.
+    fn sqrt_is_nearest(x: u64, r: u64) -> bool {
+        let split = |v: u64| ((v & ((1u64 << 52) - 1)) | (1 << 52), ((v >> 52) & 0x7FF) as i32 - 1075);
+        let (mx, ex) = split(x);
+        let (mr, er) = split(r);
+        // Midpoints are (2*mr -+ 1) * 2^(er-1); compare their squares with
+        // mx * 2^ex, both scaled by 2^-(2*er-2).
+        let shift = ex - (2 * er - 2);
+        assert!((0..=64).contains(&shift), "unexpected scale {shift}");
+        let x_scaled = u128::from(mx) << shift;
+        let (lo, hi) = (u128::from(2 * mr - 1), u128::from(2 * mr + 1));
+        lo * lo <= x_scaled && x_scaled <= hi * hi
+    }
+
     #[test]
-    fn fma_matches_host_fused() {
+    fn fma_matches_exact_reference() {
         // A deterministic spread of operands including cancellation cases.
         let mut s: u64 = 0x1234_5678_9abc_def1;
         let mut next = || {
@@ -642,11 +786,8 @@ mod tests {
                 v[0] = (-p).to_bits() ^ (next() & 0xFF);
             }
             let got = fma(DOUBLE, v[0], v[1], v[2], &mut env);
-            let want = f64::from_bits(v[1]).mul_add(f64::from_bits(v[2]), f64::from_bits(v[0]));
-            if want.is_nan() {
-                continue;
-            }
-            assert_eq!(got, want.to_bits(), "fma {:x} + {:x} * {:x}", v[0], v[1], v[2]);
+            let want = ref_fma(DOUBLE, v[0], v[1], v[2]);
+            assert_eq!(got, want, "fma {:x} + {:x} * {:x}", v[0], v[1], v[2]);
         }
     }
 
@@ -654,8 +795,10 @@ mod tests {
     fn fma_subnormal_and_overflow() {
         let mut env = FpEnv::default();
         let tiny = f64::from_bits(1);
-        assert_eq!(fma(DOUBLE, d(0.0), d(tiny), d(0.5), &mut env), d(tiny.mul_add(0.5, 0.0)));
-        assert_eq!(fma(DOUBLE, d(0.0), d(tiny), d(1.5), &mut env), d(tiny.mul_add(1.5, 0.0)));
+        // Half of the smallest subnormal is a tie that rounds to even (zero);
+        // one and a half of it ties to two.
+        assert_eq!(fma(DOUBLE, d(0.0), d(tiny), d(0.5), &mut env), d(0.0));
+        assert_eq!(fma(DOUBLE, d(0.0), d(tiny), d(1.5), &mut env), 2);
         assert_eq!(fma(DOUBLE, d(1.0), d(f64::MAX), d(2.0), &mut env), d(f64::INFINITY));
         assert_eq!(fma(DOUBLE, d(-0.0), d(-0.0), d(0.0), &mut env), d(-0.0));
         assert_eq!(fma(DOUBLE, d(0.0), d(-0.0), d(0.0), &mut env), d(0.0));
@@ -663,7 +806,7 @@ mod tests {
     }
 
     #[test]
-    fn fma_single_matches_host() {
+    fn fma_single_matches_exact_reference() {
         let mut s: u64 = 0xdead_beef_1234_5678;
         let mut next = || {
             s ^= s << 13;
@@ -680,8 +823,8 @@ mod tests {
                 *x = ((r as u32) & 0x807F_FFFF) | (e << 23);
             }
             let got = fma(SINGLE, u64::from(v[0]), u64::from(v[1]), u64::from(v[2]), &mut env);
-            let want = f32::from_bits(v[1]).mul_add(f32::from_bits(v[2]), f32::from_bits(v[0]));
-            assert_eq!(got as u32, want.to_bits());
+            let want = ref_fma(SINGLE, u64::from(v[0]), u64::from(v[1]), u64::from(v[2]));
+            assert_eq!(got, want, "fma {:x} + {:x} * {:x}", v[0], v[1], v[2]);
         }
     }
 
@@ -692,14 +835,11 @@ mod tests {
         for _ in 0..100_000 {
             s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
             let x = f64::from_bits((s >> 1) & 0x7FEF_FFFF_FFFF_FFFF);
-            // Compare against the host's exact square root through the identity
-            // r*r vs x checked with fma: the neighbours must be no closer.
-            let r = f64::from_bits(sqrt(DOUBLE, x.to_bits(), &mut env));
-            let below = f64::from_bits(r.to_bits() - 1);
-            let above = f64::from_bits(r.to_bits() + 1);
-            let err = |c: f64| (c.mul_add(c, -x)).abs();
-            if x > 1e-300 || x == 0.0 {
-                assert!(err(r) <= err(below) && err(r) <= err(above), "sqrt({x})");
+            // Correct rounding, checked exactly: x lies between the squares
+            // of the midpoints either side of the result.
+            let r = sqrt(DOUBLE, x.to_bits(), &mut env);
+            if x > 1e-300 {
+                assert!(sqrt_is_nearest(x.to_bits(), r), "sqrt({x})");
             }
         }
         // Subnormal inputs: compare with the host's sqrt, which is correctly rounded.

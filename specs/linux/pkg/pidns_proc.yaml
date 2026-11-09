@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/pidns_proc              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities; umask 022; every test makes a mount namespace of its own, makes / MS_REC|MS_PRIVATE and mounts below /tmp"
+  observed_by: spec-linux-pkg
+  date: 2026-11-09
+summary: >
+  What procfs shows inside a PID namespace, and when a namespace takes
+  effect. A procfs mounted by a process belongs to that process's
+  active PID namespace (the one it is in, not the one pending for its
+  children) at mount time and always shows that namespace: the numeric
+  directories are exactly its processes, in its numbers. In the init of
+  a new namespace (made with clone(CLONE_NEWPID | CLONE_NEWNS), mounts
+  private) mount("proc", dir, "proc") works (0); the numeric entries of the
+  root are one ("1") at first and two once the init has a child ("1" and
+  "2"); "self" reads as the link "1" and "thread-self" as "1/task/1"; /1/status
+  has Pid 1, PPid 0 and NSpid with one number; the creator's number in the
+  initial namespace has no entry (ENOENT). The procfs that was mounted
+  before (the initial namespace's) keeps showing the initial namespace: its
+  "self" link is the caller's number out there (not 1) and it lists the creator.
+  /proc/sys/kernel/ns_last_pid of the new mount reads the last number handed
+  out in the namespace (2 after the first child); writing 100 into it (the
+  write returns 3) makes the next process 101, and the value then reads
+  101. The mount can be unmounted (umount2 0) and its directory removed.
+  unshare(CLONE_NEWPID) does not move the caller: it stays in its namespace,
+  getpid() is unchanged, /proc/self/ns/pid is unchanged, and
+  /proc/self/ns/pid_for_children does not exist (ENOENT, for stat too)
+  until the first child has been created, because the new namespace has no
+  init yet. A procfs mounted at that point still shows the old namespace
+  ("self" is the caller's real number and the caller is listed). A second
+  unshare(CLONE_NEWPID) while one is pending is EINVAL. The first child made
+  afterwards is pid 1 of the new namespace (getppid 0), a procfs it mounts lists
+  only itself, its /proc/self/ns/pid is another inode than the parent's, and
+  from then on the parent's pid_for_children exists and is that same inode;
+  a second child of the parent is born in the same namespace.
+returns:
+  mount_proc: "0; the root lists only the namespace's processes (decimal names), plus self, thread-self and the usual files"
+  self_link: "\"1\" for the init of the namespace; the caller's real number for a process whose namespace is the one the procfs was mounted for"
+  ns_last_pid: "reads the last allocated number in the caller's namespace; a write of N (needs CAP_SYS_ADMIN over the namespace) makes the next process N+1"
+  unshare_pending: "pid_for_children: ENOENT until the first child exists, then the new namespace's inode"
+errors:
+  creator_not_visible: "ENOENT (2): /proc/<outer number> of a process outside the namespace"
+  unshare_twice: "EINVAL (22): unshare(CLONE_NEWPID) while a namespace for children is already pending"
+  pid_for_children_missing: "ENOENT (2): /proc/self/ns/pid_for_children before the new namespace has an init"
+side_effects: >
+  A mount of proc holds the PID namespace alive for as long as the mount
+  exists.
+threading: "ns_last_pid is per namespace and serialised"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: both tests are needs=root (a new PID namespace and a mount need
+# CAP_SYS_ADMIN) and use several processes (syscalls=off). A host that
+# restricts /proc/sys writes would fail the ns_last_pid steps.
