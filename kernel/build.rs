@@ -61,6 +61,7 @@ fn embed_win32() {
         // ADR 0155.
         "bcryptprimitives.dll",
         "ole32.dll",
+        "s1test.exe",
     ] {
         match &dir {
             Some(d) => {

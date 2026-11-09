@@ -1545,7 +1545,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 37] = [
+const BOOT_GROUPS: [BootGroup; 38] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1571,6 +1571,9 @@ const BOOT_GROUPS: [BootGroup; 37] = [
     // 7-Zip's command line on the NT personality, skipped without the
     // cached 7za.exe (sevenzip.rs, ADR 0087).
     ("7zip", sevenzip::boot_test),
+    // Chrome for Testing's headless --dump-dom on the NT personality, skipped
+    // without the cached package (chromewin.rs, ADR 0155).
+    ("chrome-win", chromewin::boot_test),
     // The 7-Zip scenario under the Windows API tracer, each step's trace
     // compared with the committed Windows reference, required (ADR 0114:
     // TRACE_REQUIRED; sevenzip_trace.rs, ADR 0110).
@@ -1664,7 +1667,10 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 7] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     // About 3 minutes: Linux programs, the root disk and 7-Zip.
-    ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "7zip", "toolkits", "chromium"]),
+    (
+        "userland",
+        &["programs", "native", "dynamic", "busybox", "rootdisk", "7zip", "chrome-win", "toolkits", "chromium"],
+    ),
     // The traced 7-Zip scenario, one long boot: 3 to 4 minutes.
     ("wintrace", &["wintrace"]),
     // About 3 minutes: the compositor and the desktop.

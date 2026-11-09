@@ -209,3 +209,57 @@ failure, fix and commit is in the hand-off file.
 - The 4 MiB heap limit remains for everything else; other places that hold a
   whole file in a `Vec` (`Backend::read_file`, `NtSystem::read_all` for
   `NtCreateUserProcess`) will meet it with big executables.
+
+## Addendum: batch 4, windows without a screen (`chrome-win-b4`)
+
+What the headless browser asks of `user32`, `gdi32`, COM and the Windows
+Runtime, on top of the window manager of ADR 0131 and 0136. The decisions:
+
+1. **`ole32.dll` is new and hosts COM and the Windows Runtime.** On Windows
+   `combase.dll` has them and `ole32.dll` forwards; ours is one module,
+   `ole32.dll`, and the loader's API-set table sends `api-ms-win-core-winrt-*`
+   and `api-ms-win-core-com-*` there (`poly_ldr::apiset`). Chrome imports
+   `RoInitialize` and the `Windows*String*` functions through those contracts.
+   The logic is `crates/poly-com` (host-tested): apartment bookkeeping, GUID
+   text, `HRESULT`s, `HSTRING`s.
+2. **Apartments are per thread, in a TLS slot** (`poly_com::apartment`):
+   `CoInitializeEx`, `OleInitialize` and `RoInitialize` share one state: the
+   first call is `S_OK`, the same model again `S_FALSE`, another model
+   `RPC_E_CHANGED_MODE`; `CoUninitialize` balances.
+3. **No class is registered.** `CoCreateInstance[Ex]` and `CoGetClassObject`
+   clear their out parameters and fail with `REGDB_E_CLASSNOTREG`
+   (`CO_E_NOTINITIALIZED` on a thread with no apartment);
+   `RoGetActivationFactory` and `RoActivateInstance` fail with
+   `REGDB_E_CLASSNOTREG`. Small stand-ins succeed without effect
+   (`CoInitializeSecurity`, `CoRegisterMessageFilter`, `RegisterDragDrop`);
+   `CoCreateFreeThreadedMarshaler` returns an object that is only `IUnknown`.
+4. **`HSTRING`s are real.** A handle is a pointer to a 24-byte header
+   (`sizeof(HSTRING_HEADER)`); a string from `WindowsCreateString` is a
+   reference-counted heap block that starts with that header, a fast-pass
+   string (`WindowsCreateStringReference`) is the caller's header and
+   characters; the empty string is `NULL`.
+5. **Window properties live in `user32`, per process**
+   (`poly_win32k::props`): the table is keyed by window and by name
+   (case-insensitive) or atom; properties of destroyed windows are dropped on
+   a later `SetPropW`. Properties of another process's windows are not seen.
+6. **`RegisterWindowMessageW` is win32k's** (`Request::RegisterMessage`):
+   the same atom table as window classes, one number per name for the whole
+   session.
+7. **`SystemParametersInfoW` answers the `SPI_GET*` queries** from a table of
+   a default Windows 10 session at 96 DPI (`poly_win32k::spi`, including
+   `NONCLIENTMETRICSW` with Segoe UI 9 pt); `SPI_SET*` fail with
+   `ERROR_INVALID_PARAMETER`.
+8. **DPI awareness is remembered, not applied.** `SetProcessDpiAwarenessContext`
+   works once per process; every window, monitor and DC stays at 96 DPI.
+9. **The gate of stage 1 is the spec's.** The stages run
+   `specs/windows/apps/chrome/pages/s1.html` (copied to `C:\poly-test`), the
+   launcher prints the length and SHA-256 of Chrome's standard output
+   (`LAUNCH-DIGEST` / `LAUNCH-SHA256`), and a stage passes only when Chrome
+   exited with 0 and that digest is the one in `windows.json`. The boot test
+   group `chrome-win` runs stage 1 and is skipped without the cached
+   package; it only reports until `S1_REQUIRED` is set by the change that
+   makes stage 1 pass.
+
+Tests: `crates/poly-com`, `poly_win32k::{spi,props}` and the
+`RegisterMessage` request on the host; `s1test.exe` end to end in the kernel
+self-test (`nt::test_s1`).

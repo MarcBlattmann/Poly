@@ -286,6 +286,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "s1test"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "ucrtbase"
 version = "0.0.1"
 dependencies = [

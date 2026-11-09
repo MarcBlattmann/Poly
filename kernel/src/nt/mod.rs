@@ -110,6 +110,11 @@ pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/b
 /// strings; hosts the `winrt` and `com` API sets. Installed by [`layout`].
 pub static OLE32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ole32.dll"));
 
+mod test_s1;
+
+/// The program the headless-surface ring-3 test runs (`test_s1`).
+pub static S1TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s1test.exe"));
+
 mod test_crypto;
 
 /// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in

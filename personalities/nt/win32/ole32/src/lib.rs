@@ -580,13 +580,12 @@ pub unsafe extern "system" fn CoCreateGuid(out: *mut Guid) -> Hresult {
     if unsafe { ProcessPrng(bytes.as_mut_ptr(), 16) } == 0 {
         return E_FAIL;
     }
-    bytes[6] = bytes[6] & 0x0F | 0x40;
-    bytes[8] = bytes[8] & 0x3F | 0x80;
+    // Version 4 is the top nibble of Data3, variant 1 the top bits of Data4[0].
     let g = Guid {
         data1: u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
         data2: u16::from_le_bytes([bytes[4], bytes[5]]),
-        data3: u16::from_le_bytes([bytes[6], bytes[7]]),
-        data4: [bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]],
+        data3: u16::from_le_bytes([bytes[6], bytes[7]]) & 0x0FFF | 0x4000,
+        data4: [bytes[8] & 0x3F | 0x80, bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]],
     };
     // SAFETY: the caller's out parameter.
     unsafe { *out = g };

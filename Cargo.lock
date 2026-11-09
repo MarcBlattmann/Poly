@@ -693,6 +693,7 @@ dependencies = [
  "lzma-rs",
  "poly-binfmt",
  "poly-block",
+ "poly-com",
  "poly-cpio",
  "poly-crt",
  "poly-crypto",
