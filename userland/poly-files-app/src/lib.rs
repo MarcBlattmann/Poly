@@ -119,12 +119,28 @@ fn spawn(argv: &[String]) -> Result<(), String> {
     let first = argv.first().ok_or("nothing to run")?;
     let exists = |p: &str| poly_rt::fs::metadata(p).is_ok_and(|m| m.is_file() && m.mode() & 0o111 != 0);
     let program = resolve(first, poly_rt::env::var("PATH"), &exists);
+    // The desktop shows a busy pointer until the app has a window (ADR 0167).
+    let mut startup = poly_app::startup::Startup::begin(first);
     let mut cmd = poly_rt::process::Command::new(&program);
     cmd.arg0(first)
         .args(argv.iter().skip(1).map(String::as_str))
-        .envs(poly_rt::env::vars().filter_map(|v| core::str::from_utf8(v).ok()))
+        .envs(
+            poly_rt::env::vars()
+                .filter_map(|v| core::str::from_utf8(v).ok())
+                .filter(|v| !poly_app::startup::is_token_var(v)),
+        )
+        .envs(startup.environment().iter().map(String::as_str))
         .stdin(poly_rt::process::Stdio::Null);
-    cmd.spawn().map(|_| ()).map_err(|e| alloc::format!("{first}: {e}"))
+    match cmd.spawn() {
+        Ok(child) => {
+            startup.started(child.id());
+            Ok(())
+        }
+        Err(e) => {
+            startup.failed();
+            Err(alloc::format!("{first}: {e}"))
+        }
+    }
 }
 
 /// The program: the window until it is closed.

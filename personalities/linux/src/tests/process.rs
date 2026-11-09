@@ -110,6 +110,28 @@ fn rt_sigaction_records_and_reports_actions() {
 }
 
 #[test]
+fn rt_sigaction_sigsys_reports_default_then_what_was_installed() {
+    // Chromium's seccomp-bpf sandbox asks for SIGSYS's old action first and
+    // logs "Existing signal handler" for anything but SIG_DFL.
+    let mut k = FakeKernel::new();
+    let sigsys = signal::SIGSYS as u64;
+    k.poke(scratch(0x40), &[0xee; 32]);
+    assert_eq!(sys(&mut k, nr::RT_SIGACTION, &[sigsys, 0, scratch(0x40), 8]), Ok(0));
+    assert_eq!(get_action(&k, scratch(0x40)), SigAction::default(), "a new process: SIG_DFL, flags 0, mask 0");
+    let trap = SigAction {
+        handler: 0x40_5000,
+        flags: signal::SA_SIGINFO | signal::SA_NODEFER | signal::SA_RESTORER,
+        restorer: 0x40_6000,
+        mask: 0,
+    };
+    let act = put_action(&mut k, scratch(0), trap);
+    assert_eq!(sys(&mut k, nr::RT_SIGACTION, &[sigsys, act, scratch(0x80), 8]), Ok(0));
+    assert_eq!(get_action(&k, scratch(0x80)), SigAction::default(), "the old action of the first install");
+    assert_eq!(sys(&mut k, nr::RT_SIGACTION, &[sigsys, 0, scratch(0xc0), 8]), Ok(0));
+    assert_eq!(get_action(&k, scratch(0xc0)), trap, "flags and restorer as installed");
+}
+
+#[test]
 fn rt_sigaction_errors() {
     let mut k = FakeKernel::new();
     let act = put_action(&mut k, scratch(0), SigAction { handler: 0x40_0000, ..Default::default() });
