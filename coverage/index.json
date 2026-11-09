@@ -13,6 +13,10 @@
       "description": "macOS SDK .tbd stubs (exported symbols and Objective-C classes)",
       "revision": "macOS SDK 27.0 (26A425)"
     },
+    "ms-learn-dwrite": {
+      "description": "Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method)",
+      "revision": "Windows SDK 10.0.26100.0"
+    },
     "poly-adr-0132": {
       "description": "Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents",
       "revision": "ADR 0132"

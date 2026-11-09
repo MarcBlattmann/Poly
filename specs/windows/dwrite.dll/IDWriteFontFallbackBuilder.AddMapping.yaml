@@ -1,0 +1,66 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwrite.dll/IDWriteFontFallbackBuilder.AddMapping
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64, dwrite.dll 10.0.26100.1"
+  machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
+  observed_by: spec-win-dwrite
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: the DirectWrite reference pages of the interfaces and methods named
+  here ("Programming Guide for DirectWrite", "Font Collections", "Custom
+  Font Sets"); dwrite.h, dwrite_1.h, dwrite_2.h, dwrite_3.h for constants,
+  structure layouts and the order of the methods in the vtables; winerror.h
+  for the HRESULTs; the OpenType specification (head, hhea, hmtx, maxp,
+  cmap, glyf, loca, name, OS/2, post) for the font tables the tests write.
+  Wine's tests were not read.
+summary: >
+  Builds a font fallback object from code point range mappings. Mappings are
+  checked on adding only for counts and the scale; a family that does not
+  exist, a reversed range or a scale of 0 are accepted. A fallback can be
+  built from an empty builder, and from several; AddMappings copies another
+  fallback's mappings.
+interface:
+  signature: "HRESULT IDWriteFactory2::CreateFontFallbackBuilder(IDWriteFontFallbackBuilder**); HRESULT IDWriteFontFallbackBuilder::AddMapping(const DWRITE_UNICODE_RANGE* ranges, UINT32 rangesCount, const WCHAR** targetFamilyNames, UINT32 targetFamilyNamesCount, IDWriteFontCollection* targetCollection, const WCHAR* localeName, const WCHAR* baseFamilyName, FLOAT scale); AddMappings(IDWriteFontFallback*); CreateFontFallback(IDWriteFontFallback**)"
+  hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+rules:
+  accepted: "a valid mapping, a range whose last is below its first (0x50..0x40), a target family that does not exist, scale 0 and scale 2: S_OK"
+  refused: "0 ranges, 0 target family names, scale -1: E_INVALIDARG (0x80070057)"
+  create: "CreateFontFallback: S_OK and an object; an empty builder also gives a fallback; two calls give two objects"
+  add_mappings: "AddMappings of a fallback made by another builder: S_OK; of the system fallback: S_OK"
+  overlap: "mappings A-B to \"PolyTest Alpha\" (scale 1) and B-C to \"PolyTest Beta\" (scale 0.75) in a collection: \"A\" and \"B\" map to Alpha (scale 1.0: the first mapping that covers the character wins), \"C\" to the font of Beta with scale 0.75; \"AB\" gives two runs of length 1, \"BC\" two runs (1.0 then 0.75), \"ABC\" three runs, \"CBA\" three runs (0.75, 1.0, 1.0); a character whose target family does not have it (the test font has no \"D\"; also after \"D\" was mapped to Alpha in a second AddMapping) gives a run of length 1 and a null font; mappings added after CreateFontFallback do not change the fallback already made"
+errors:
+  E_INVALIDARG: "no ranges, no target families or a negative scale"
+side_effects: "none beyond the rules above"
+threading: "the objects are used from one thread; the shared factory and the system collection may be used from several, which is not tested"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every
+  test carries its own declarations: the COM vtable layouts (from the SDK
+  headers), the enumeration constants and a writer for small TrueType fonts.
+  The test fonts are written by the test itself (eight glyphs: .notdef,
+  space, a square, a triangle, a rounded shape, a small box, a box below the
+  baseline and a box for a code point outside the BMP) with names, weights,
+  widths, styles and metrics chosen per test, and are served to DirectWrite
+  from memory through loader objects the test implements
+  (IDWriteFontFileLoader with its stream, IDWriteFontCollectionLoader with
+  its enumerator) or, where a path is the point, from a file the test writes
+  beside itself. So the results do not depend on the oracle's font list.
+  Tests of the system collection print or check only what every Windows
+  installation provides (Arial, Segoe UI, Times New Roman and similar
+  families exist; their standard faces exist; relations between values) and
+  never the metrics or file names of those fonts. The eight font slots, the
+  loaders and the calls the loaders receive are in the test file.
+not_covered: >
+  the system collection's full font list; downloadable (remote) fonts;
+  collections with font files that are TrueType collections or CFF fonts;
+  variable fonts; colour fonts; several threads; failure injection inside
+  the loaders; behaviour of different Windows versions (the oracle is one
+  build).

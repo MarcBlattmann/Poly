@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "ls_find_system",
+      "exe_sha256": "06bbb5d996162f9b28c1ccf189bae1d718c3684a53df7fb444899c851f8ff6a1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QXJpYWw6IGZhY2UgbmFtZXMgaGF2ZSBzZXZlcmFsIGxhbmd1YWdlcyB0cnVlIGVuLXVzIGZvdW5kIDEgaW4gcmFuZ2UgdHJ1ZSBFTi1VUyBzYW1lIGluZGV4IHRydWUgeHgteXkgZm91bmQgMApTZWdvZSBVSTogZmFjZSBuYW1lcyBoYXZlIHNldmVyYWwgbGFuZ3VhZ2VzIHRydWUgZW4tdXMgZm91bmQgMSBpbiByYW5nZSB0cnVlIEVOLVVTIHNhbWUgaW5kZXggdHJ1ZSB4eC15eSBmb3VuZCAwClRpbWVzIE5ldyBSb21hbjogZmFjZSBuYW1lcyBoYXZlIHNldmVyYWwgbGFuZ3VhZ2VzIHRydWUgZW4tdXMgZm91bmQgMSBpbiByYW5nZSB0cnVlIEVOLVVTIHNhbWUgaW5kZXggdHJ1ZSB4eC15eSBmb3VuZCAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Arial: face names have several languages true en-us found 1 in range true EN-US same index true xx-yy found 0\nSegoe UI: face names have several languages true en-us found 1 in range true EN-US same index true xx-yy found 0\nTimes New Roman: face names have several languages true en-us found 1 in range true EN-US same index true xx-yy found 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}
