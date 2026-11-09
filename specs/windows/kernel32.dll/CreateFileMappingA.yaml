@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateFileMappingA.yaml
+id: windows/api/kernel32.dll/CreateFileMappingA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CreateFileMappingA function, Kernel object namespaces, MapViewOfFile function. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  The ANSI form of CreateFileMappingW: anonymous or file-backed shared memory, optionally with a name. A second creation of an existing name returns a new handle to the same section with last error ERROR_ALREADY_EXISTS (183) and the original size; the name dies with the last handle.
+interface:
+  signature: "HANDLE CreateFileMappingA(HANDLE file, LPSECURITY_ATTRIBUTES sa, DWORD protect, DWORD sizeHigh, DWORD sizeLow, LPCSTR name)"
+rules:
+  named: "the first creation leaves last error 0; the second with the same name returns a new handle value and ERROR_ALREADY_EXISTS; the size seen through the second handle is the original (8192), also when the second creation asked for more (1 MiB) or less (4096). A different protection for the existing name returns a handle and ERROR_ALREADY_EXISTS as well (observed)."
+  lifetime: "the name stays taken until every handle to the section is closed (closing the creator's handle first is fine); after that the name is free and a new creation makes a new object of the new size, last error 0."
+  namespace: "a name used by an event: ERROR_INVALID_HANDLE (6). Names are case-insensitive after the prefix (Local\\POLY-ipc-CASE and Local\\poly-IPC-case are one object). The prefix itself is not: local\\... (lower case) is no namespace and the call fails with ERROR_PATH_NOT_FOUND (3)."
+  two_processes: "a child creating the same Local\\ name finds the parent's section (ERROR_ALREADY_EXISTS), maps it, sees the parent's bytes and its own writes show up in the parent's view."
+errors:
+  name_used_by_other_type: "ERROR_INVALID_HANDLE (6)"
+  bad_prefix: "ERROR_PATH_NOT_FOUND (3)"
+  already_exists: "ERROR_ALREADY_EXISTS (183) with a valid handle"
+side_effects: "creates or opens a named section"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Image sections (SEC_IMAGE), large pages, section offsets in the megabytes, physical memory, sections of other users' processes, security descriptors.

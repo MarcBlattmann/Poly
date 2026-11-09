@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/TransactNamedPipe.yaml
+id: windows/api/kernel32.dll/TransactNamedPipe
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: TransactNamedPipe, Named Pipe Type, Read, and Wait Modes. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Writes a request message and reads the reply message in one call on a duplex message-mode pipe handle whose read mode is message. A reply longer than the output buffer returns ERROR_MORE_DATA with the first bytes, and the rest stays readable.
+interface:
+  signature: "BOOL TransactNamedPipe(HANDLE pipe, LPVOID in, DWORD inSize, LPVOID out, DWORD outSize, LPDWORD bytesRead, LPOVERLAPPED overlapped)"
+rules:
+  life: "A server instance is created with CreateNamedPipeW and starts listening. It becomes connected when a client opens the pipe with CreateFileW (whether or not ConnectNamedPipe was called) or when ConnectNamedPipe completes. When the client closes its handle the instance stays taken (closing) until the server calls DisconnectNamedPipe; a new client meanwhile gets ERROR_PIPE_BUSY. After DisconnectNamedPipe the instance is not yet listening: clients still get ERROR_PIPE_BUSY until the server calls ConnectNamedPipe again."
+  read_mode_required: "the handle must be in message read mode: a client handle freshly opened with CreateFileW is in byte read mode and the call fails with ERROR_BAD_PIPE (230); after SetNamedPipeHandleState(PIPE_READMODE_MESSAGE) it works. On a byte-type pipe it fails with ERROR_BAD_PIPE too."
+  round_trip: "a server thread reading the request and writing a reply: the call blocks until the reply arrives, returns TRUE and the byte count of the reply (6 bytes 'R:dcba' for the request 'abcd' in the test)."
+  overlapped: "on an overlapped handle with an OVERLAPPED it returns FALSE with ERROR_IO_PENDING (observed: returned FALSE) when no reply is ready; GetOverlappedResult with wait gives TRUE and the reply length."
+  more_data: "a reply of 16 bytes into a 5-byte buffer: FALSE with ERROR_MORE_DATA (234), 5 bytes returned ('01234'), and PeekNamedPipe/ReadFile then show the remaining 11 bytes as the rest of the same message."
+  zero_out_buffer: "a zero-length request with a zero-length output buffer: FALSE with ERROR_MORE_DATA and 0 bytes; the whole 16-byte reply is still readable."
+  server_gone: "after the server end closed: FALSE with ERROR_BAD_PIPE (230)."
+  non_pipe: "an event handle: ERROR_INVALID_HANDLE (6)."
+errors:
+  byte_read_mode: "ERROR_BAD_PIPE (230)"
+  more_data: "ERROR_MORE_DATA (234)"
+  not_a_pipe: "ERROR_INVALID_HANDLE (6)"
+side_effects: "writes a message to the pipe and consumes the reply"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Remote clients and other machines, security descriptors on the pipe, impersonation, several sessions.

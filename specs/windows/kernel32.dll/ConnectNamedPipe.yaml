@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/ConnectNamedPipe.yaml
+id: windows/api/kernel32.dll/ConnectNamedPipe
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: ConnectNamedPipe, Named Pipe Operations, Synchronous and Overlapped Input and Output. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Waits for a client to connect to a server instance. Synchronously it blocks and then returns TRUE; when a client is already connected it returns FALSE with ERROR_PIPE_CONNECTED at once. On an overlapped handle with an OVERLAPPED it returns FALSE with ERROR_IO_PENDING and completes when a client opens the pipe. In PIPE_NOWAIT mode it never waits and reports the state through error codes.
+interface:
+  signature: "BOOL ConnectNamedPipe(HANDLE pipe, LPOVERLAPPED overlapped)"
+rules:
+  life: "A server instance is created with CreateNamedPipeW and starts listening. It becomes connected when a client opens the pipe with CreateFileW (whether or not ConnectNamedPipe was called) or when ConnectNamedPipe completes. When the client closes its handle the instance stays taken (closing) until the server calls DisconnectNamedPipe; a new client meanwhile gets ERROR_PIPE_BUSY. After DisconnectNamedPipe the instance is not yet listening: clients still get ERROR_PIPE_BUSY until the server calls ConnectNamedPipe again."
+  synchronous: "on a synchronous server handle with no client yet, the call blocks until a client opens the pipe and then returns TRUE (observed: the client opened 100 ms later, the call returned after that)."
+  client_first: "if a client has already opened the pipe, the call returns FALSE with ERROR_PIPE_CONNECTED without waiting; the same on a connected instance called a second time. Data the client wrote before the call can be read afterwards."
+  overlapped_pending: "on a FILE_FLAG_OVERLAPPED handle with an OVERLAPPED: FALSE with ERROR_IO_PENDING; the event (or, without an event in the OVERLAPPED, the file handle) is not signalled until a client connects, then it is; GetOverlappedResult reports success with 0 bytes; before that it fails with ERROR_IO_INCOMPLETE."
+  overlapped_client_first: "with a client already connected, an overlapped ConnectNamedPipe returns FALSE with ERROR_PIPE_CONNECTED and does not signal the event."
+  nowait: "in PIPE_NOWAIT mode: no client yet gives FALSE with ERROR_PIPE_LISTENING (536); a client connected gives ERROR_PIPE_CONNECTED; the client gone but the instance not disconnected gives ERROR_NO_DATA (232); after DisconnectNamedPipe it is ERROR_PIPE_LISTENING again. (A blocking-mode instance in the closing state also gives ERROR_NO_DATA.)"
+  listening_instance_io: "on an instance nobody connected to, ReadFile and WriteFile fail at once with ERROR_PIPE_LISTENING, whatever the wait mode; PeekNamedPipe fails with ERROR_BAD_PIPE (230); GetNamedPipeInfo works."
+  closing_instance: "after the client closed (before DisconnectNamedPipe): ReadFile fails with ERROR_BROKEN_PIPE, WriteFile with ERROR_NO_DATA, ConnectNamedPipe with ERROR_NO_DATA."
+errors:
+  client_end: "called on a client handle: ERROR_INVALID_FUNCTION (1)"
+  bad_handle: "INVALID_HANDLE_VALUE or a handle that is no pipe (an event): ERROR_INVALID_HANDLE (6)"
+  pipe_connected: "ERROR_PIPE_CONNECTED (535), not a failure of the connection"
+  pipe_listening: "ERROR_PIPE_LISTENING (536)"
+  no_data: "ERROR_NO_DATA (232)"
+side_effects: "moves the instance from listening to connected when a client arrives"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Remote clients and other machines, security descriptors on the pipe, impersonation, several sessions.

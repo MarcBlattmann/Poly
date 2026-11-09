@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "cn_states",
+      "exe_sha256": "58c38e475e0064db5696f70eceb2b47af34056389949987b6736f61d12771e42",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmVyX2NyZWF0ZWQKb2sgbm93YWl0X2xpc3RlbmluZ19mYWlscwpvayBub3dhaXRfbGlzdGVuaW5nX2Vycm9yCm9rIGNsaWVudF9vcGVuZWQKb2sgbm93YWl0X2NsaWVudF90aGVyZV9mYWlscwpvayBub3dhaXRfY2xpZW50X3RoZXJlX2Vycm9yCm9rIG5vd2FpdF9jbGllbnRfZ29uZV9mYWlscwpvayBub3dhaXRfY2xpZW50X2dvbmVfZXJyb3IKb2sgZGlzY29ubmVjdF9vawpvayBub3dhaXRfYWZ0ZXJfZGlzY29ubmVjdF9mYWlscwpvayBub3dhaXRfYWZ0ZXJfZGlzY29ubmVjdF9lcnJvcgpvayBjbG9zaW5nX3JlYWRfZmFpbHMKb2sgY2xvc2luZ19yZWFkX2Vycm9yCm9rIGNsb3Npbmdfd3JpdGVfZmFpbHMKb2sgY2xvc2luZ193cml0ZV9lcnJvcgpvayBjbG9zaW5nX2Nvbm5lY3RfZmFpbHMKb2sgY2xvc2luZ19jb25uZWN0X2Vycm9yCm9rIGxpc3RlbmluZ19yZWFkX2ZhaWxzCnZhbHVlIGxpc3RlbmluZ19yZWFkX2Vycm9yIDUzNgpvayBsaXN0ZW5pbmdfd3JpdGVfZmFpbHMKdmFsdWUgbGlzdGVuaW5nX3dyaXRlX2Vycm9yIDUzNgpvayBsaXN0ZW5pbmdfcGVla19mYWlscwp2YWx1ZSBsaXN0ZW5pbmdfcGVla19lcnJvciAyMzAKdmFsdWUgbGlzdGVuaW5nX3BlZWtfYXZhaWwgMAp2YWx1ZSBsaXN0ZW5pbmdfcGVla19sZWZ0IDAKb2sgbGlzdGVuaW5nX2luZm9fb2sKb2sgbGlzdGVuaW5nX2luZm9fZmxhZ3MKb2sgbGlzdGVuaW5nX2luZm9fb3V0Cm9rIGxpc3RlbmluZ19pbmZvX2luCm9rIGxpc3RlbmluZ19pbmZvX21heApzdW1tYXJ5IDI1IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok server_created\nok nowait_listening_fails\nok nowait_listening_error\nok client_opened\nok nowait_client_there_fails\nok nowait_client_there_error\nok nowait_client_gone_fails\nok nowait_client_gone_error\nok disconnect_ok\nok nowait_after_disconnect_fails\nok nowait_after_disconnect_error\nok closing_read_fails\nok closing_read_error\nok closing_write_fails\nok closing_write_error\nok closing_connect_fails\nok closing_connect_error\nok listening_read_fails\nvalue listening_read_error 536\nok listening_write_fails\nvalue listening_write_error 536\nok listening_peek_fails\nvalue listening_peek_error 230\nvalue listening_peek_avail 0\nvalue listening_peek_left 0\nok listening_info_ok\nok listening_info_flags\nok listening_info_out\nok listening_info_in\nok listening_info_max\nsummary 25 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "cn_sync",
+      "exe_sha256": "53bee4f1b07293478df45219271f259157101f69e7f9032957c80ae98c5cfb3b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmVyX2NyZWF0ZWQKb2sgY29ubmVjdF93YWl0c190aGVuX3N1Y2NlZWRzCm9rIGNvbm5lY3Rfc3RhZ2VfYWZ0ZXJfcmV0dXJuCm9rIGNvbm5lY3RfYWdhaW5fZmFpbHMKb2sgY29ubmVjdF9hZ2Fpbl9lcnJvcgpvayBjbGllbnRfdGhyZWFkX29rCm9rIGNsaWVudF9maXJzdF9vcGVuZWQKb2sgY29ubmVjdF9hZnRlcl9jbGllbnRfZmFpbHMKb2sgY29ubmVjdF9hZnRlcl9jbGllbnRfZXJyb3IKb2sgY2xpZW50X3dyaXRlcwpvayBzZXJ2ZXJfcmVhZHNfZWFybHlfZGF0YQpvayBpbnZhbGlkX2hhbmRsZV9mYWlscwpvayBpbnZhbGlkX2hhbmRsZV9lcnJvcgpvayBldmVudF9oYW5kbGVfZmFpbHMKb2sgZXZlbnRfaGFuZGxlX2Vycm9yCm9rIGNvbm5lY3Rfb25fY2xpZW50X2VuZF9mYWlscwpvayBjb25uZWN0X29uX2NsaWVudF9lbmRfZXJyb3IKc3VtbWFyeSAxNyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok server_created\nok connect_waits_then_succeeds\nok connect_stage_after_return\nok connect_again_fails\nok connect_again_error\nok client_thread_ok\nok client_first_opened\nok connect_after_client_fails\nok connect_after_client_error\nok client_writes\nok server_reads_early_data\nok invalid_handle_fails\nok invalid_handle_error\nok event_handle_fails\nok event_handle_error\nok connect_on_client_end_fails\nok connect_on_client_end_error\nsummary 17 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 167
+    }
+  ]
+}
