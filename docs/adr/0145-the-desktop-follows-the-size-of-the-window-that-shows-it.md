@@ -129,7 +129,7 @@ Checked link by link, on a Windows host with QEMU 11.1, WHPX and `-display sdl`:
   the floating window is shifted onto it; then a burst of six sizes in a row
   ends on the last (1280x800, taken in fewer mode sets than sizes), and a
   320x240 request gets the smallest screen, 640x400, with the ridge across it.
-  The group is in the `userland` shard. The VNC client waits for QEMU's answer
+  The group is in the `desktop` shard. The VNC client waits for QEMU's answer
   to its `SetDesktopSize` before it goes away: on a loaded host (TCG) a request
   from a client that left at once was sometimes never carried out (one run in
   three failed before, none in eight after). QEMU's result code in that answer

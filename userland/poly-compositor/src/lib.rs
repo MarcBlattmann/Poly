@@ -107,7 +107,7 @@ use alloc::collections::BTreeMap;
 use poly_rt::fs;
 use poly_rt::net::{UnixListener, UnixStream};
 use poly_wayland::compose::{Framebuffer, MemoryFramebuffer, Rect};
-use poly_wayland::seat::{BTN_LEFT, InputEvent, InputSource};
+use poly_wayland::seat::InputSource;
 use poly_wayland::server::{ClientId, Config, FrameTime, OutputConfig, Server, present_flags};
 use poly_wayland::wire::Fd;
 
@@ -836,12 +836,6 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
             d.polled(&fds[desk_at..desk_end]);
             while let Some(ev) = d.input.next_event() {
-                if let InputEvent::PointerButton { button: BTN_LEFT, pressed: true, .. } = &ev
-                    && let Some(link) = &mut winlink
-                {
-                    let (x, y) = server.pointer();
-                    link.close_at(server.scene(), x.floor(), y.floor());
-                }
                 if let Some(app) = d.route(ev, &mut server) {
                     if d.open_internal(&app, &mut server) {
                         continue;
@@ -854,11 +848,7 @@ fn run(args: &[String]) -> Result<u8, String> {
                         Err(e) => eprintln!("poly-compositor: {}: {e}", app.argv[0]),
                     }
                 }
-                let closes = core::mem::take(&mut d.close_requests);
                 if let Some(link) = &mut winlink {
-                    for window in closes {
-                        link.close_window(window);
-                    }
                     link.sync_geometry(server.scene());
                 }
             }
@@ -881,7 +871,13 @@ fn run(args: &[String]) -> Result<u8, String> {
         if let Some(l) = &mut winlink
             && fds.get(win_at).is_some_and(|p| p.revents != 0)
         {
-            l.pump(server.scene_mut());
+            l.pump_server(&mut server);
+        }
+        // Input to Windows windows goes to win32k (ADR 0136).
+        if let (Some(l), Some(d)) = (&mut winlink, &mut desk) {
+            for ev in core::mem::take(&mut d.foreign) {
+                l.input(&ev);
+            }
         }
 
         // A frame when one is due: with KMS whenever no flip is pending (the

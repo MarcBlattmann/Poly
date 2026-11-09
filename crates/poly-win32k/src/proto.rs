@@ -169,6 +169,21 @@ crate::wire_struct! {
         pub time: u32,
         pub x: i32,
         pub y: i32,
+        /// MSG's lPrivate: the UTF-16 unit of a VK_PACKET key message.
+        pub private: u32,
+    }
+}
+
+crate::wire_struct! {
+    /// One SendInput event (winuser.h INPUT): `kind` INPUT_MOUSE (0) with
+    /// dx, dy, mouseData, dwFlags; INPUT_KEYBOARD (1) with wVk (`a`),
+    /// wScan (`b`), dwFlags.
+    pub struct InputEvent {
+        pub kind: u32,
+        pub a: i32,
+        pub b: i32,
+        pub data: u32,
+        pub flags: u32,
     }
 }
 
@@ -237,6 +252,46 @@ crate::wire_enum! {
         /// window). Answered by the NT personality, which keeps the
         /// surfaces ([`crate::surfaces`]).
         43 => Surface { hwnd: u32 },
+        /// RedrawWindow's region work (`RDW_*` flags; `rects` in client
+        /// coordinates, `whole` for all of the client area). Also
+        /// InvalidateRect/Rgn and ValidateRect/Rgn.
+        44 => Redraw { hwnd: u32, rects: Vec<Rect>, whole: bool, flags: u32 },
+        /// What is pending for painting: an `Update`.
+        45 => Update { hwnd: u32 },
+        /// What `user32` did (`wm::paint::PAINTED_*`); `ferase` 0 keeps the
+        /// window's fErase state, 1 sets it, 2 clears it.
+        46 => Painted { hwnd: u32, what: u32, ferase: u8 },
+        /// The windows to paint in WM_PAINT order: of the calling thread,
+        /// within `root` and its descendants (0: all). A `Windows`.
+        47 => PaintOrder { root: u32 },
+        /// The calling thread's input state: an `Input`.
+        48 => InputState {},
+        /// Set the calling thread's active / focus / capture window and the
+        /// foreground (`wm::input::SET_*` bits in `which`).
+        49 => SetInput { active: u32, focus: u32, capture: u32, which: u8 },
+        /// Thread `tid`'s input state (0: the foreground thread's).
+        50 => ThreadInput { tid: u32 },
+        /// Window `hwnd`'s thread becomes the foreground thread with it
+        /// active and focused (SetForegroundWindow of another thread's window).
+        51 => GiveForeground { hwnd: u32 },
+        /// AttachThreadInput of the calling thread to thread `tid`.
+        52 => AttachInput { tid: u32, attach: bool },
+        /// The cursor position (screen coordinates), moved first when `set`
+        /// (clamped to the screen): a `Value`, x in the low 32 bits, y above.
+        53 => Cursor { set: bool, x: i32, y: i32 },
+        /// SendInput: a `Value`, the number of events inserted.
+        54 => SendInput { events: Vec<InputEvent> },
+        /// The calling thread's key state (GetKeyboardState): a `Keys`.
+        55 => KeyboardState {},
+        /// SetKeyboardState for the calling thread.
+        56 => SetKeyboardState { keys: Vec<u8> },
+        /// GetAsyncKeyState: a `Value`.
+        57 => AsyncKeyState { vk: u32 },
+        /// WindowFromPoint (screen coordinates): a `Handle`; `below`: only top-level windows below this one in z order (0: all).
+        58 => WindowFromPoint { x: i32, y: i32, below: u32 },
+        /// TrackMouseEvent: `flags` TME_* (TME_QUERY answers a `Value`:
+        /// flags | hwnd << 32 ... see `wm::raw`), `hover` ms.
+        59 => TrackMouse { hwnd: u32, flags: u32, hover: u32 },
     }
 }
 
@@ -247,7 +302,7 @@ crate::wire_enum! {
         /// A Win32 error for the caller's last error.
         2 => Error { code: u32 },
         3 => Value { value: u64 },
-        4 => Desktop { desktop: u32, message: u32, width: i32, height: i32 },
+        4 => Desktop { desktop: u32, message: u32, width: i32, height: i32, work: Rect, interactive: bool },
         5 => Atom { atom: u16 },
         6 => Class { info: ClassInfo },
         7 => Created { created: Created },
@@ -267,6 +322,10 @@ crate::wire_enum! {
         /// Queue status; the earliest timer not yet seen due, in milliseconds.
         19 => Bits { now: u32, changed: u32, next_timer_ms: Option<u64> },
         20 => Bool { value: bool },
+        21 => Update { rects: Vec<Rect>, erase: bool, frame: bool, frame_whole: bool, internal: bool, ferase: bool, visible: bool },
+        22 => Windows { hwnds: Vec<u32> },
+        23 => Input { active: u32, focus: u32, capture: u32, foreground: u32, fg_mine: bool },
+        24 => Keys { keys: Vec<u8> },
     }
 }
 
