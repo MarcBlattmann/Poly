@@ -88,7 +88,7 @@ In the order of measured impact:
    release wakes a waiter only if one is sleeping (a counter, ordered with
    `SeqCst` against the release, so no wake-up is lost).
 5. **Measurement as a permanent feature.** The compositor prints
-   `launch-to-window` for every launch (`userland/poly-compositor/src/launch.rs`,
+   `launch-to-window` for every launch (`userland/poly-compositor/src/launch_timer.rs`,
    host-tested); `poly.debug.profile` gains the lines in the table in
    `docs/DEBUGGING.md` (system calls, disk, faults, process timeline with
    CPU times, a sampler of where each program's first thread waits, IPIs

@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtCancelIoFile.yaml
+id: windows/api/ntdll.dll/NtCancelIoFile
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CancelIo function, Synchronous and Overlapped Input and Output. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Cancels the calling thread's pending requests on a file handle; the IO_STATUS_BLOCK it takes reports the call itself. Cancelled requests finish with STATUS_CANCELLED (kernel32: ERROR_OPERATION_ABORTED). Requests of other threads are not touched.
+interface:
+  signature: "NTSTATUS NtCancelIoFile(HANDLE file, PIO_STATUS_BLOCK iosb)"
+rules:
+  nothing_pending: "STATUS_SUCCESS, the IO_STATUS_BLOCK status STATUS_SUCCESS."
+  pending_requests: "two pending reads: STATUS_SUCCESS; each request's status word (the OVERLAPPED's first field) goes from STATUS_PENDING (0x103) to STATUS_CANCELLED (0xC0000120) with 0 bytes; GetOverlappedResult then fails with ERROR_OPERATION_ABORTED; the pipe works afterwards."
+  other_threads: "called from a thread that issued nothing: STATUS_SUCCESS, the other thread's request stays STATUS_PENDING; CancelIoEx on the handle then cancels it."
+  connect_and_write: "a pending ConnectNamedPipe and a pending write (4096 bytes into a 16-byte buffer, no reader) are cancelled the same way (STATUS_CANCELLED; the write reports 0 bytes)."
+errors:
+  bad_handle: "STATUS_INVALID_HANDLE"
+  not_a_file: "an event handle: STATUS_OBJECT_TYPE_MISMATCH"
+side_effects: "completes the cancelled requests"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Named I/O completion ports (object names), file handles associated through NtSetInformationFile(FileCompletionInformation), non-pipe files, remote pipes, security descriptors.

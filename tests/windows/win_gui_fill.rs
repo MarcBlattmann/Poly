@@ -1,10 +1,16 @@
-//! A Windows GUI program for the desktop link's boot test (ADR 0131, boot
-//! group `desktop-win32`): it registers a class, creates an overlapped
-//! window "Poly Fill" at (40, 400), 400 x 300, shows it, fills its client
-//! area with one colour through GetDC / FillRect / ReleaseDC (WM_PAINT is
-//! a later slice), and keeps it up for a minute of messages before it
-//! destroys it and ends. On Poly's desktop the window shows up framed by
-//! Poly, its client area in the colour (`FILL`).
+//! A Windows GUI program for the desktop link's boot test (ADR 0131, ADR
+//! 0136, boot group `desktop-win32`): it registers a class, creates an
+//! overlapped window "Poly Fill" at (40, 400), 400 x 300, shows it, fills
+//! its client area with one colour through GetDC / FillRect / ReleaseDC,
+//! and keeps it up for a minute of messages before it destroys it and
+//! ends. A left click turns the fill green (`CLICKED`); typed characters
+//! are drawn at the top left, black on white, by its WM_PAINT handler. On
+//! Poly's desktop the window shows up framed by Poly, its client area in
+//! the colour (`FILL`), and repaints as the mouse and keyboard reach it.
+//! Below the typed characters its WM_PAINT handler draws white text in
+//! logical fonts (CreateFontW: Segoe UI, Arial bold, Times New Roman
+//! italic, Courier New) with TextOutW and DrawTextW (ADR 0142), in the left
+//! 240 pixels so that the points the boot test checks stay the fill.
 #![no_std]
 #![no_main]
 #![allow(non_camel_case_types)]
@@ -75,6 +81,9 @@ struct MSG {
 }
 
 const WM_DESTROY: u32 = 0x0002;
+const WM_PAINT: u32 = 0x000F;
+const WM_CHAR: u32 = 0x0102;
+const WM_LBUTTONDOWN: u32 = 0x0201;
 const WM_TIMER: u32 = 0x0113;
 const WS_OVERLAPPEDWINDOW: u32 = 0x00CF_0000;
 const SW_SHOW: i32 = 5;
@@ -82,6 +91,28 @@ const SW_SHOW: i32 = 5;
 /// The colour the client area is filled with: RGB(0x8A, 0x47, 0xC0), a
 /// COLORREF (0x00BBGGRR).
 const FILL: u32 = 0x00C0_478A;
+/// The fill after a left click: RGB(0x22, 0xAA, 0x44).
+const CLICKED: u32 = 0x0044_AA22;
+/// `PAINTSTRUCT` (winuser.h): 72 bytes on x64.
+#[repr(C)]
+struct PAINTSTRUCT {
+    hdc: HDC,
+    erase: BOOL,
+    paint: RECT,
+    restore: BOOL,
+    inc_update: BOOL,
+    reserved: [u8; 32],
+}
+
+/// What the window procedure keeps: the fill and the typed characters.
+struct State {
+    fill: u32,
+    typed: [u16; 64],
+    len: usize,
+}
+
+static mut STATE: State = State { fill: FILL, typed: [0; 64], len: 0 };
+
 /// How long the window stays up.
 const SHOW_MS: u32 = 60_000;
 
@@ -115,22 +146,85 @@ unsafe extern "system" {
     fn SetTimer(hwnd: HWND, id: usize, ms: u32, func: *mut c_void) -> usize;
     fn GetMessageW(msg: *mut MSG, hwnd: HWND, min: u32, max: u32) -> BOOL;
     fn DispatchMessageW(msg: *const MSG) -> LRESULT;
+    fn TranslateMessage(msg: *const MSG) -> BOOL;
     fn DestroyWindow(hwnd: HWND) -> BOOL;
     fn PostQuitMessage(code: i32);
     fn DefWindowProcW(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT;
+    fn BeginPaint(hwnd: HWND, ps: *mut PAINTSTRUCT) -> HDC;
+    fn EndPaint(hwnd: HWND, ps: *const PAINTSTRUCT) -> BOOL;
+    fn InvalidateRect(hwnd: HWND, rect: *const RECT, erase: BOOL) -> BOOL;
+    fn DrawTextW(hdc: HDC, text: *const u16, count: i32, rect: *mut RECT, format: u32) -> i32;
 }
 
 #[link(name = "gdi32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn CreateSolidBrush(color: u32) -> HBRUSH;
+    fn CreateFontW(
+        height: i32,
+        width: i32,
+        escapement: i32,
+        orientation: i32,
+        weight: i32,
+        italic: u32,
+        underline: u32,
+        strike_out: u32,
+        char_set: u32,
+        out_precision: u32,
+        clip_precision: u32,
+        quality: u32,
+        pitch_and_family: u32,
+        face: *const u16,
+    ) -> *mut c_void;
+    fn SelectObject(hdc: HDC, obj: *mut c_void) -> *mut c_void;
+    fn SetTextColor(hdc: HDC, color: u32) -> u32;
+    fn SetBkMode(hdc: HDC, mode: i32) -> i32;
     fn DeleteObject(obj: *mut c_void) -> BOOL;
+    fn TextOutW(hdc: HDC, x: i32, y: i32, text: *const u16, len: i32) -> BOOL;
 }
 
 unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
-    if msg == WM_DESTROY {
-        // SAFETY: ends this thread's message loop.
-        unsafe { PostQuitMessage(0) };
-        return 0;
+    // SAFETY: one thread runs the procedure; STATE is only touched here.
+    let st = unsafe { &mut *core::ptr::addr_of_mut!(STATE) };
+    match msg {
+        WM_DESTROY => {
+            // SAFETY: ends this thread's message loop.
+            unsafe { PostQuitMessage(0) };
+            return 0;
+        }
+        WM_LBUTTONDOWN => {
+            st.fill = CLICKED;
+            // SAFETY: our window.
+            unsafe { InvalidateRect(hwnd, core::ptr::null(), 0) };
+            return 0;
+        }
+        WM_CHAR => {
+            if st.len < st.typed.len() && w >= 0x20 {
+                st.typed[st.len] = w as u16;
+                st.len += 1;
+            }
+            // SAFETY: our window.
+            unsafe { InvalidateRect(hwnd, core::ptr::null(), 0) };
+            return 0;
+        }
+        WM_PAINT => {
+            // SAFETY: our window; the PAINTSTRUCT lives across the calls.
+            unsafe {
+                let mut ps: PAINTSTRUCT = core::mem::zeroed();
+                let dc = BeginPaint(hwnd, &mut ps);
+                let mut r = RECT::default();
+                GetClientRect(hwnd, &mut r);
+                let brush = CreateSolidBrush(st.fill);
+                FillRect(dc, &r, brush);
+                DeleteObject(brush);
+                if st.len > 0 {
+                    TextOutW(dc, 10, 10, st.typed.as_ptr(), st.len as i32);
+                }
+                draw_samples(dc);
+                EndPaint(hwnd, &ps);
+            }
+            return 0;
+        }
+        _ => {}
     }
     // SAFETY: the default handling.
     unsafe { DefWindowProcW(hwnd, msg, w, l) }
@@ -143,6 +237,54 @@ macro_rules! wz {
         const W: [u16; S.len()] = ascii_utf16::<{ S.len() }>(S);
         &W
     }};
+}
+
+/// wingdi.h: TRANSPARENT, FW_NORMAL, FW_BOLD.
+const TRANSPARENT: i32 = 1;
+const FW_NORMAL: i32 = 400;
+const FW_BOLD: i32 = 700;
+/// winuser.h: DrawText formats.
+const DT_CENTER: u32 = 0x0001;
+const DT_WORDBREAK: u32 = 0x0010;
+const DT_SINGLELINE: u32 = 0x0020;
+const DT_END_ELLIPSIS: u32 = 0x8000;
+
+/// White text in logical fonts below the typed characters: TextOutW in four
+/// faces, then DrawTextW centred and wrapped, cut with an ellipsis, and
+/// with mnemonics. Everything stays within x 10 to 240.
+///
+/// # Safety
+/// `dc` is the DC of the window being painted.
+unsafe fn draw_samples(dc: HDC) {
+    // SAFETY: the caller's DC; every font is selected out and deleted again.
+    unsafe {
+        SetTextColor(dc, 0x00FF_FFFF);
+        SetBkMode(dc, TRANSPARENT);
+        let line = |y: i32, height: i32, weight: i32, italic: u32, face: &[u16], text: &[u16]| {
+            let font = CreateFontW(height, 0, 0, 0, weight, italic, 0, 0, 1, 0, 0, 0, 0, face.as_ptr());
+            let old = SelectObject(dc, font);
+            TextOutW(dc, 10, y, text.as_ptr(), text.len() as i32 - 1);
+            SelectObject(dc, old);
+            DeleteObject(font);
+        };
+        line(40, -16, FW_NORMAL, 0, wz!("Segoe UI"), wz!("Segoe UI: Hello, Poly!"));
+        line(62, -14, FW_BOLD, 0, wz!("Arial"), wz!("Arial bold: Windows text on Poly"));
+        line(82, -16, FW_NORMAL, 1, wz!("Times New Roman"), wz!("Times New Roman italic"));
+        line(104, -13, FW_NORMAL, 0, wz!("Courier New"), wz!("fn main() { 0xC0FFEE }"));
+        let font = CreateFontW(-14, 0, 0, 0, FW_NORMAL, 0, 0, 0, 1, 0, 0, 0, 0, wz!("MS Shell Dlg").as_ptr());
+        let old = SelectObject(dc, font);
+        let mut r = RECT { left: 10, top: 134, right: 240, bottom: 190 };
+        let text = wz!("Centred, wrapped text in a 230 pixel wide box with DrawTextW.");
+        DrawTextW(dc, text.as_ptr(), -1, &mut r, DT_CENTER | DT_WORDBREAK);
+        let mut r = RECT { left: 10, top: 200, right: 150, bottom: 218 };
+        let text = wz!("A long caption that does not fit");
+        DrawTextW(dc, text.as_ptr(), -1, &mut r, DT_SINGLELINE | DT_END_ELLIPSIS);
+        let mut r = RECT { left: 10, top: 222, right: 240, bottom: 240 };
+        let text = wz!("&File  &Edit  &View (mnemonics)");
+        DrawTextW(dc, text.as_ptr(), -1, &mut r, DT_SINGLELINE);
+        SelectObject(dc, old);
+        DeleteObject(font);
+    }
 }
 
 poly_wtest::main!(test);
@@ -208,6 +350,7 @@ fn test(t: &mut Test) {
                 DestroyWindow(h);
                 continue;
             }
+            TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }

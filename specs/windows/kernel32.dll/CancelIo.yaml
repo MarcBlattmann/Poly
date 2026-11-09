@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CancelIo.yaml
+id: windows/api/kernel32.dll/CancelIo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CancelIo, CancelIoEx, Synchronous and Overlapped Input and Output. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Cancels the pending I/O requests the calling thread issued on a file handle. They complete with ERROR_OPERATION_ABORTED. Requests issued by other threads on the same handle are not affected.
+interface:
+  signature: "BOOL CancelIo(HANDLE file)"
+rules:
+  nothing_pending: "returns TRUE."
+  cancels_all_of_the_threads: "two pending reads and a pending ConnectNamedPipe, issued by the calling thread: one call cancels all of them; the events signal; GetOverlappedResult gives FALSE with ERROR_OPERATION_ABORTED (995) and 0 bytes; the pipe is usable afterwards (a later write is read normally)."
+  other_threads: "called by a thread that did not issue the request: returns TRUE but the request stays pending (its status word still says pending after 200 ms); a CancelIoEx on the handle then cancels it and its issuer sees ERROR_OPERATION_ABORTED."
+errors:
+  bad_handle: "INVALID_HANDLE_VALUE or an event handle: ERROR_INVALID_HANDLE (6)"
+side_effects: "completes the cancelled requests"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Files other than named pipes (the packets and errors are the same mechanism; pipes were used as the I/O source), remote machines, completion ports with several competing threads under load, the concurrency limit's effect on wake-up order.

@@ -54,8 +54,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use poly_abi::Personality;
-use poly_personality_linux::abi::SigAction;
-use poly_personality_linux::abi::signal::{NSIG, SIG_DFL, SIG_IGN, SIGSEGV};
+use poly_personality_linux::abi::signal::SIGSEGV;
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::kernel::{CpuTimes, LinuxKernel, Wakeup};
 use poly_personality_linux::ns::pid as pid_ns;
@@ -241,12 +240,7 @@ fn child_state(parent: &LinuxState, parent_tid: u32, child: u32, clear_handlers:
     let mut state = parent.with(|p| alloc::boxed::Box::new(p.fork(parent_tid as i32, child as i32)));
     state.started_ns = crate::time::now_ns();
     if clear_handlers {
-        for signal in 1..=NSIG {
-            let a = state.actions.get(signal);
-            if a.handler != SIG_DFL && a.handler != SIG_IGN {
-                state.actions.set(signal, SigAction::default());
-            }
-        }
+        state.reset_handlers();
     }
     // Filters are inherited (seccomp(2)): so is the dispatcher's check.
     let seccomp = AtomicBool::new(parent.seccomp.load(Ordering::SeqCst));

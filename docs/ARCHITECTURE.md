@@ -1123,6 +1123,9 @@ and Poly's first shell (Phase 6, [ADR 0107](adr/0107-desktop-fbdev-input-routing
   files and built-ins) over them.
 - `cargo xtask desktop` boots into it; boot group `desktop` drives it with
   QMP (screenshots, typing, a client launched, clicks, a drag).
+  `cargo xtask desktop --chromium` (the dev menu's default, ADR 0147) boots
+  the same desktop from Chromium's Debian disk with Poly's apps copied onto
+  it at boot and Chromium the default browser (`mimeapps.list`).
 
 ## Screen terminal
 
@@ -1753,7 +1756,13 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   `desktop::Desktop` on win32k's side, `win32::Link` and
   `win32::WindowsSurfaces` on the compositor's): its client area, drawn by
   window DCs into a DIB that `ReleaseDC` commits (`PolyUserCommitSurface`).
-  Painting through update regions is stubbed until its slice.
+  Slice B (ADR 0136): win32k reproduces session 0 or the interactive
+  desktop session (`poly.win32k.session=interactive`, or a compositor);
+  update regions and WM_PAINT (`wm::paint`, `user::paint`), activation
+  and focus (`wm::input`, `user::focus`), raw input and key state
+  (`wm::raw`, `user::input`, the German layout in `kbd`), GDI regions
+  (`poly_gdi::region`); the compositor forwards pointer and keys over a
+  Windows window to win32k as desktop-link records.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →

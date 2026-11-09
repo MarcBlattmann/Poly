@@ -361,8 +361,8 @@ cargo xtask pipeline win diff --reference <windows results.json> [--build-kernel
 `win build` cross-compiles with the pinned toolchain (`-Zbuild-std` from
 `rust-src`, `rust-lld`; the first build compiles `core`, about 30 s) and
 refuses an executable that imports from a DLL other than `ntdll`,
-`kernel32`, `user32` and `gdi32` (the GUI entries' tests are still console
-programs), by ordinal, or delay-loaded. `win diff` compares per test the 32-bit exit code, the
+`kernel32`, `user32`, `gdi32` and `dwrite` (the GUI entries' tests are still console
+programs; the DirectWrite entries' tests import `dwrite.dll`), by ordinal, or delay-loaded. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
 start or was not the same on both runs is an **error**, a test Poly cannot
 start is **unsupported**. `win show`, `win diff` and `win remote` read real
@@ -392,6 +392,11 @@ homeserver2 an elevated console, which made `SetCursorPos` fail and
 `system.session` is `interactive` (absent for the SSH session), and a
 spec entry's `windows.json` keeps it, so a reference says where it was
 recorded; the screen there is 1920x1080 at 96 DPI (session 0: 1024x768).
+Poly reproduces the session a test was recorded in: `win build` keeps
+each test's `system.session` from the `windows.json` beside its source
+in the manifest, and `win poly` boots those tests with the kernel
+argument `poly.win32k.session=interactive` (ADR 0136), so a test
+directory has to hold its `windows.json` when it is built.
 The windows of such tests appear on the oracle's real desktop, so tests
 keep to a few rules (spec-win-gui-b's sheets list them): windows in the
 top-left 1000x500 pixels, closed within seconds; the cursor parked away

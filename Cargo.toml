@@ -6,6 +6,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/poly-a64",
     "crates/poly-abi",
     "crates/poly-acpi",
     "crates/poly-audio",
@@ -36,6 +37,7 @@ members = [
     "crates/poly-ldr",
     "crates/poly-libm",
     "crates/poly-line",
+    "crates/poly-macho",
     "crates/poly-mem",
     "crates/poly-ntobj",
     "crates/poly-net",
@@ -44,6 +46,7 @@ members = [
     "crates/poly-paging",
     "crates/poly-pci",
     "crates/poly-pe",
+    "crates/poly-png",
     "crates/poly-procfs",
     "crates/poly-random",
     "crates/poly-registry",
@@ -56,6 +59,7 @@ members = [
     "crates/poly-seh",
     "crates/poly-cxxeh",
     "crates/poly-smp",
+    "crates/poly-stubs",
     "crates/poly-term",
     "crates/poly-tty",
     "crates/poly-unix",
@@ -79,6 +83,7 @@ members = [
     "personalities/native",
     "personalities/nt",
     "personalities/xnu",
+    "tools/a64diff",
     "tools/coverage",
     "tools/pipeline",
     "tools/xtask",
@@ -99,6 +104,7 @@ repository = "https://github.com/MarcBlattmann/Poly"
 rust-version = "1.97"
 
 [workspace.dependencies]
+poly-a64 = { path = "crates/poly-a64" }
 poly-abi = { path = "crates/poly-abi" }
 poly-acpi = { path = "crates/poly-acpi" }
 poly-audio = { path = "crates/poly-audio" }
@@ -127,8 +133,10 @@ poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
 poly-kernelbase = { path = "crates/poly-kernelbase" }
 poly-ldr = { path = "crates/poly-ldr" }
+poly-stubs = { path = "crates/poly-stubs" }
 poly-libm = { path = "crates/poly-libm" }
 poly-line = { path = "crates/poly-line" }
+poly-macho = { path = "crates/poly-macho" }
 poly-mem = { path = "crates/poly-mem" }
 poly-ntobj = { path = "crates/poly-ntobj" }
 poly-net = { path = "crates/poly-net" }
@@ -137,6 +145,7 @@ poly-pagecache = { path = "crates/poly-pagecache" }
 poly-paging = { path = "crates/poly-paging" }
 poly-pci = { path = "crates/poly-pci" }
 poly-pe = { path = "crates/poly-pe" }
+poly-png = { path = "crates/poly-png" }
 poly-procfs = { path = "crates/poly-procfs" }
 poly-random = { path = "crates/poly-random" }
 poly-registry = { path = "crates/poly-registry" }

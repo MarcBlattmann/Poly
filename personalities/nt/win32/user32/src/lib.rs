@@ -12,9 +12,10 @@ extern crate alloc;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use poly_win32_gui::{set_last_error, wide};
+use poly_win32_gui::{SpinLock, set_last_error, wide};
 use poly_win32_rt as _;
 use poly_win32k::frame::Rect;
+use poly_win32k::kbd;
 use poly_win32k::metrics;
 use poly_win32k::proto::{ClassRef, ClassSpec, CreateSpec, Reply, Request, WinInfo};
 use poly_win32k::user::{self as u, CMsg, CRect, Env};
@@ -48,8 +49,32 @@ unsafe extern "system" {
     fn PolyGdiDeleteDisplayDC(hdc: usize) -> i32;
     fn PolyGdiFillRect(hdc: usize, rect: *const i32, brush: usize, color: u32) -> i32;
     fn PolyGdiDrawText(hdc: usize, text: *const u16, count: i32, rect: *mut i32, format: u32) -> i32;
+    fn PolyGdiDrawTextEx(
+        hdc: usize,
+        text: *mut u16,
+        count: i32,
+        rect: *mut i32,
+        format: u32,
+        tab_chars: i32,
+        left_margin: i32,
+        right_margin: i32,
+    ) -> i32;
     fn PolyGdiAttachSurface(hdc: usize, width: u32, height: u32) -> i32;
     fn PolyGdiSurface(hwnd: usize, out: *mut u64) -> i32;
+    fn PolyGdiSetDisplayGeometry(
+        hdc: usize,
+        x: i32,
+        y: i32,
+        include: *const i32,
+        n_include: u32,
+        exclude: *const i32,
+        n_exclude: u32,
+    ) -> i32;
+    fn PolyGdiGetRegionRects(rgn: usize, out: *mut i32, cap: u32) -> i32;
+    fn PolyGdiSetRegionRects(rgn: usize, rects: *const i32, n: u32) -> i32;
+    fn PolyGdiSetSystemClip(hdc: usize, rects: *const i32, n: u32) -> i32;
+    fn CreateRectRgn(l: i32, t: i32, r: i32, b: i32) -> usize;
+    fn DeleteObject(h: usize) -> i32;
 }
 
 const STATUS_BUFFER_TOO_SMALL: u32 = 0xC000_0023;
@@ -173,6 +198,55 @@ impl Env for Sys {
         // SAFETY: a DC our gdi32 made.
         unsafe { PolyGdiDeleteDisplayDC(hdc as H) };
     }
+
+    fn paint_dc(&self, hwnd: u32, clip: Option<&[Rect]>) -> u64 {
+        // A window DC with its visible region (GetDC), clipped to the update region.
+        let dc = GetDC(hwnd as H);
+        if let Some(rects) = clip {
+            let flat: Vec<i32> = rects.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect();
+            // SAFETY: `rects.len()` quadruples.
+            unsafe { PolyGdiSetSystemClip(dc, flat.as_ptr(), rects.len() as u32) };
+        }
+        dc as u64
+    }
+
+    fn release_dc(&self, hwnd: u32, hdc: u64) {
+        commit_surface(hwnd as H);
+        // SAFETY: our gdi32 checks the handle.
+        unsafe { PolyGdiReleaseDisplayDC(hdc as H) };
+    }
+
+    fn make_region(&self, rects: &[Rect]) -> u64 {
+        region_of(rects) as u64
+    }
+
+    fn delete_object(&self, h: u64) {
+        // SAFETY: our gdi32 checks the handle.
+        unsafe { DeleteObject(h as H) };
+    }
+}
+
+/// A new GDI region holding `rects`.
+fn region_of(rects: &[Rect]) -> H {
+    // SAFETY: our gdi32.
+    let rgn = unsafe { CreateRectRgn(0, 0, 0, 0) };
+    let flat: Vec<i32> = rects.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect();
+    // SAFETY: `rects.len()` quadruples.
+    unsafe { PolyGdiSetRegionRects(rgn, flat.as_ptr(), rects.len() as u32) };
+    rgn
+}
+
+/// The rectangles of GDI region `rgn` (`None`: not a region).
+fn rects_of(rgn: H) -> Option<Vec<Rect>> {
+    // SAFETY: a size query.
+    let n = unsafe { PolyGdiGetRegionRects(rgn, core::ptr::null_mut(), 0) };
+    if n < 0 {
+        return None;
+    }
+    let mut flat = vec![0i32; n as usize * 4];
+    // SAFETY: room for `n` quadruples.
+    unsafe { PolyGdiGetRegionRects(rgn, flat.as_mut_ptr(), n as u32) };
+    Some(flat.chunks(4).map(|c| Rect::new(c[0], c[1], c[2], c[3])).collect())
 }
 
 fn info(hwnd: H) -> Option<WinInfo> {
@@ -451,7 +525,12 @@ pub extern "system" fn DestroyWindow(hwnd: H) -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn ShowWindow(hwnd: H, cmd: i32) -> i32 {
-    i32::from(u::show_window(&SYS, hwnd as u64, cmd))
+    let top_visible =
+        info(hwnd).is_some_and(|i| i.style & metrics::WS_CHILD == 0 && i.style & metrics::WS_VISIBLE != 0);
+    let was = u::show_window(&SYS, hwnd as u64, cmd);
+    // Observed on the interactive desktop: 24 for a top-level window that
+    // was visible (GetForegroundWindow.yaml `show_visible`); 1 elsewhere.
+    if was && top_visible && u::screen(&SYS).interactive { 24 } else { i32::from(was) }
 }
 
 #[unsafe(no_mangle)]
@@ -593,7 +672,8 @@ fn origin(hwnd: H) -> Option<(i32, i32)> {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ClientToScreen(hwnd: H, pt: *mut i32) -> i32 {
-    let Some((x, y)) = origin(hwnd) else { return bad_window() };
+    // NULL is not a window here (ClientToScreen.yaml).
+    let Some((x, y)) = (hwnd != 0).then(|| origin(hwnd)).flatten() else { return bad_window() };
     // SAFETY: the caller's POINT.
     unsafe {
         *pt += x;
@@ -604,7 +684,8 @@ pub unsafe extern "system" fn ClientToScreen(hwnd: H, pt: *mut i32) -> i32 {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ScreenToClient(hwnd: H, pt: *mut i32) -> i32 {
-    let Some((x, y)) = origin(hwnd) else { return bad_window() };
+    // NULL is not a window here (ScreenToClient.yaml).
+    let Some((x, y)) = (hwnd != 0).then(|| origin(hwnd)).flatten() else { return bad_window() };
     // SAFETY: the caller's POINT.
     unsafe {
         *pt -= x;
@@ -615,16 +696,32 @@ pub unsafe extern "system" fn ScreenToClient(hwnd: H, pt: *mut i32) -> i32 {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn MapWindowPoints(from: H, to: H, pts: *mut i32, n: u32) -> i32 {
-    let (Some(a), Some(b)) = (origin(from), origin(to)) else { return bad_window() };
-    let (dx, dy) = (a.0 - b.0, a.1 - b.1);
+    let map_origin = |hwnd: H| -> Option<u::MapOrigin> {
+        if hwnd == 0 {
+            return Some(u::MapOrigin::default());
+        }
+        info(hwnd).map(|i| u::MapOrigin {
+            x: if i.ex_style & metrics::WS_EX_LAYOUTRTL != 0 { i.client.right } else { i.client.left },
+            y: i.client.top,
+            rtl: i.ex_style & metrics::WS_EX_LAYOUTRTL != 0,
+        })
+    };
+    let (Some(a), Some(b)) = (map_origin(from), map_origin(to)) else { return bad_window() };
+    let mut points = Vec::with_capacity(n as usize);
     for i in 0..n as usize {
-        // SAFETY: the caller's `n` POINTs.
+        // SAFETY: the caller supplies `n` readable POINTs.
+        let point = unsafe { (*pts.add(2 * i), *pts.add(2 * i + 1)) };
+        points.push(point);
+    }
+    let result = u::map_points(a, b, &mut points);
+    for (i, point) in points.iter().enumerate() {
+        // SAFETY: the caller supplies `n` writable POINTs, matching the slice above.
         unsafe {
-            *pts.add(2 * i) += dx;
-            *pts.add(2 * i + 1) += dy;
+            *pts.add(2 * i) = point.0;
+            *pts.add(2 * i + 1) = point.1;
         }
     }
-    (dx as u16 as u32 | ((dy as u16 as u32) << 16)) as i32
+    result
 }
 
 #[unsafe(no_mangle)]
@@ -808,8 +905,13 @@ pub unsafe extern "system" fn DispatchMessageW(msg: *const CMsg) -> isize {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn TranslateMessage(msg: *const CMsg) -> i32 {
+    if msg.is_null() {
+        return 0;
+    }
     // SAFETY: the caller's MSG.
-    i32::from(u::translate_message(&SYS, unsafe { &*msg }))
+    let m = unsafe { &*msg };
+    // The dead-key state is the thread's, shared with ToUnicode.
+    i32::from(with_dead_state(|d| u::input::translate(&SYS, m, d)))
 }
 
 #[unsafe(no_mangle)]
@@ -898,83 +1000,273 @@ pub extern "system" fn KillTimer(hwnd: H, id: usize) -> i32 {
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "system" fn MapVirtualKeyW(code: u32, kind: u32) -> u32 {
-    const SCANS: &[(u32, u32)] = &[
-        (0x1B, 1),
-        (0x31, 2),
-        (0x32, 3),
-        (0x33, 4),
-        (0x34, 5),
-        (0x35, 6),
-        (0x36, 7),
-        (0x37, 8),
-        (0x38, 9),
-        (0x39, 10),
-        (0x30, 11),
-        (0x08, 14),
-        (0x09, 15),
-        (0x51, 16),
-        (0x57, 17),
-        (0x45, 18),
-        (0x52, 19),
-        (0x54, 20),
-        (0x59, 21),
-        (0x55, 22),
-        (0x49, 23),
-        (0x4F, 24),
-        (0x50, 25),
-        (0x0D, 28),
-        (0x11, 29),
-        (0x41, 30),
-        (0x53, 31),
-        (0x44, 32),
-        (0x46, 33),
-        (0x47, 34),
-        (0x48, 35),
-        (0x4A, 36),
-        (0x4B, 37),
-        (0x4C, 38),
-        (0x10, 42),
-        (0x5A, 44),
-        (0x58, 45),
-        (0x43, 46),
-        (0x56, 47),
-        (0x42, 48),
-        (0x4E, 49),
-        (0x4D, 50),
-        (0x12, 56),
-        (0x20, 57),
-        (0x70, 59),
-        (0x71, 60),
-        (0x72, 61),
-        (0x73, 62),
-        (0x74, 63),
-        (0x75, 64),
-        (0x76, 65),
-        (0x77, 66),
-        (0x78, 67),
-        (0x79, 68),
-        (0x26, 72),
-        (0x25, 75),
-        (0x27, 77),
-        (0x28, 80),
-    ];
-    match kind {
-        0 => SCANS.iter().find(|s| s.0 == code).map_or(0, |s| s.1),
-        1 | 3 => SCANS.iter().find(|s| s.1 == code).map_or(0, |s| s.0),
-        2 => {
-            u::key_char(code).map_or(0, |c| if (0x61..=0x7A).contains(&c) { u32::from(c) - 0x20 } else { u32::from(c) })
+// ----- keyboard layout (`poly_win32k::kbd`: the oracle's German layout)
+
+/// The pending dead key of each thread that has one (Windows keeps it per
+/// thread, in the thread's keyboard state, `ToUnicode.yaml`): `ToUnicode`
+/// and `ToUnicodeEx` read and update it, and `TranslateMessage` should use
+/// the same through [`with_dead_state`]. Threads without a pending dead key
+/// have no entry.
+static DEAD_KEYS: SpinLock<Vec<(u32, kbd::DeadState)>> = SpinLock::new(Vec::new());
+
+/// Run `f` with the calling thread's dead-key state (for `ToUnicode` and
+/// `TranslateMessage`: `poly_win32k::kbd::translate_key`).
+fn with_dead_state<R>(f: impl FnOnce(&mut kbd::DeadState) -> R) -> R {
+    // SAFETY: no preconditions.
+    let tid = unsafe { GetCurrentThreadId() };
+    DEAD_KEYS.with(|all| {
+        let i = all.iter().position(|e| e.0 == tid);
+        let mut state = i.map_or_else(kbd::DeadState::default, |i| all[i].1);
+        let r = f(&mut state);
+        match (i, state.pending().is_some()) {
+            (Some(i), true) => all[i].1 = state,
+            (Some(i), false) => {
+                all.swap_remove(i);
+            }
+            (None, true) => all.push((tid, state)),
+            (None, false) => {}
         }
-        _ => 0,
+        r
+    })
+}
+
+/// `MapVirtualKeyW` (`MapVirtualKeyW.yaml`).
+#[unsafe(no_mangle)]
+pub extern "system" fn MapVirtualKeyW(code: u32, map_type: u32) -> u32 {
+    kbd::try_map_virtual_key(code, map_type).unwrap_or_else(|e| {
+        set_last_error(e);
+        0
+    })
+}
+
+/// `MapVirtualKeyExW`: there is one layout, so the same as
+/// `MapVirtualKeyW` for any `layout` (`MapVirtualKeyW.yaml` `same_as_ex`).
+#[unsafe(no_mangle)]
+pub extern "system" fn MapVirtualKeyExW(code: u32, map_type: u32, _layout: usize) -> u32 {
+    MapVirtualKeyW(code, map_type)
+}
+
+/// `ToUnicode` (`ToUnicode.yaml`).
+///
+/// # Safety
+/// `key_state` is NULL or 256 readable bytes; `buffer` is NULL or
+/// `buffer_len` writable units (at least one when `buffer_len` is 0).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ToUnicode(
+    vk: u32,
+    scan: u32,
+    key_state: *const u8,
+    buffer: *mut u16,
+    buffer_len: i32,
+    flags: u32,
+) -> i32 {
+    if key_state.is_null() || buffer.is_null() {
+        return 0;
     }
+    if buffer_len <= 0 {
+        if buffer_len == 0 {
+            // SAFETY: Windows writes the NUL at unit 0 even with no room
+            // (`ToUnicode.yaml` `buffer_fill`); the caller's buffer.
+            unsafe { *buffer = 0 };
+        }
+        return 0;
+    }
+    let mut ks = [0u8; 256];
+    // SAFETY: the caller's 256-byte key-state array.
+    unsafe { core::ptr::copy_nonoverlapping(key_state, ks.as_mut_ptr(), 256) };
+    // SAFETY: the caller's buffer of `buffer_len` units.
+    let buf = unsafe { core::slice::from_raw_parts_mut(buffer, buffer_len as usize) };
+    with_dead_state(|dead| kbd::to_unicode(vk, scan, &ks, buf, flags, dead))
+}
+
+/// `ToUnicodeEx`: there is one layout, so `ToUnicode` for any `layout`.
+///
+/// # Safety
+/// As [`ToUnicode`].
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ToUnicodeEx(
+    vk: u32,
+    scan: u32,
+    key_state: *const u8,
+    buffer: *mut u16,
+    buffer_len: i32,
+    flags: u32,
+    _layout: usize,
+) -> i32 {
+    // SAFETY: the caller's promises, passed on.
+    unsafe { ToUnicode(vk, scan, key_state, buffer, buffer_len, flags) }
+}
+
+/// `GetKeyboardLayout`: every thread has the oracle's layout
+/// (`MapVirtualKeyW.yaml`: HKL `0x04072000`).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetKeyboardLayout(_thread: u32) -> usize {
+    kbd::HKL as usize
 }
 
 // ----- metrics
 
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSystemMetrics(index: i32) -> i32 {
-    metrics::system_metric(index, u::screen(&SYS))
+    match metrics::system_metric(index, &u::screen(&SYS)) {
+        Some(v) => v,
+        None => {
+            set_last_error(ERROR_INVALID_PARAMETER);
+            0
+        }
+    }
+}
+
+/// GetSystemMetrics.yaml `for_dpi`; DPI 0 is ERROR_INVALID_PARAMETER, an
+/// undefined index 0 with the error unchanged.
+#[unsafe(no_mangle)]
+pub extern "system" fn GetSystemMetricsForDpi(index: i32, dpi: u32) -> i32 {
+    if dpi == 0 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    metrics::system_metric_for_dpi(index, dpi, &u::screen(&SYS)).unwrap_or(0)
+}
+
+// ----- DPI and monitors (one monitor, DPI-unaware processes: 96)
+
+/// The system DPI (GetDpiForSystem.yaml).
+const SYSTEM_DPI: u32 = 96;
+/// The one monitor's handle: the same value for every point and thread.
+const PRIMARY_MONITOR: usize = 0x0001_0001;
+/// `MONITOR_DEFAULTTONULL` / `TOPRIMARY` / `TONEAREST` (winuser.h).
+const MONITOR_DEFAULTTONULL: u32 = 0;
+/// `MONITORINFOF_PRIMARY` (winuser.h).
+const MONITORINFOF_PRIMARY: u32 = 1;
+/// `ERROR_INVALID_FLAGS`, `ERROR_INVALID_MONITOR_HANDLE` (winerror.h).
+const ERROR_INVALID_FLAGS: u32 = 1004;
+const ERROR_INVALID_MONITOR_HANDLE: u32 = 1461;
+/// `SPI_GETWORKAREA` (winuser.h).
+const SPI_GETWORKAREA: u32 = 0x0030;
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetDpiForSystem() -> u32 {
+    SYSTEM_DPI
+}
+
+/// 96 for any window of a DPI-unaware process, the desktop and message
+/// windows included; 0 with ERROR_INVALID_PARAMETER otherwise.
+#[unsafe(no_mangle)]
+pub extern "system" fn GetDpiForWindow(hwnd: H) -> u32 {
+    if hwnd != 0 && info(hwnd).is_some() {
+        SYSTEM_DPI
+    } else {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        0
+    }
+}
+
+/// The monitor for a rectangle on the screen or not (`on`), as `flags`
+/// asks; bad flags are ERROR_INVALID_FLAGS.
+fn monitor_for(on: bool, flags: u32) -> H {
+    if flags > 2 {
+        set_last_error(ERROR_INVALID_FLAGS);
+        return 0;
+    }
+    if on || flags != MONITOR_DEFAULTTONULL { PRIMARY_MONITOR } else { 0 }
+}
+
+/// Whether rectangle `r` (screen coordinates) is on the screen: it overlaps
+/// it, or is empty or inverted with its corner inside (MonitorFromPoint.yaml).
+fn rect_on_screen(r: [i32; 4]) -> bool {
+    let d = u::screen(&SYS);
+    let [l, t, rr, b] = r;
+    if rr <= l || b <= t {
+        return (0..d.width).contains(&l) && (0..d.height).contains(&t);
+    }
+    l < d.width && rr > 0 && t < d.height && b > 0
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn MonitorFromPoint(pt: u64, flags: u32) -> H {
+    let (x, y) = (pt as u32 as i32, (pt >> 32) as u32 as i32);
+    let d = u::screen(&SYS);
+    monitor_for((0..d.width).contains(&x) && (0..d.height).contains(&y), flags)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn MonitorFromRect(rect: *const i32, flags: u32) -> H {
+    if rect.is_null() {
+        return monitor_for(false, flags);
+    }
+    // SAFETY: the caller's RECT.
+    let r = unsafe { [*rect, *rect.add(1), *rect.add(2), *rect.add(3)] };
+    monitor_for(rect_on_screen(r), flags)
+}
+
+/// By the window rectangle; the desktop, message-only and never-shown
+/// windows count as on the screen (MonitorFromWindow.yaml).
+#[unsafe(no_mangle)]
+pub extern "system" fn MonitorFromWindow(hwnd: H, flags: u32) -> H {
+    if flags > 2 {
+        set_last_error(ERROR_INVALID_FLAGS);
+        return 0;
+    }
+    if hwnd == 0 {
+        return monitor_for(false, flags);
+    }
+    let Some(i) = info(hwnd) else { return bad_window() };
+    if i.desktop || i.message_only {
+        return PRIMARY_MONITOR;
+    }
+    let w = i.window;
+    if w.right <= w.left || w.bottom <= w.top {
+        // A window of no size (never shown): on the screen when its corner is.
+        return monitor_for(rect_on_screen([w.left, w.top, w.right, w.bottom]), flags);
+    }
+    monitor_for(rect_on_screen([w.left, w.top, w.right, w.bottom]), flags)
+}
+
+/// MONITORINFO (40 bytes) or MONITORINFOEXW (104 bytes, winuser.h).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetMonitorInfoW(monitor: H, mi: *mut u8) -> i32 {
+    if monitor != PRIMARY_MONITOR {
+        set_last_error(ERROR_INVALID_MONITOR_HANDLE);
+        return 0;
+    }
+    if mi.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's structure starts with cbSize.
+    let size = unsafe { core::ptr::read_unaligned(mi as *const u32) };
+    if size != 40 && size != 104 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let d = u::screen(&SYS);
+    let mut out = Vec::with_capacity(36);
+    for v in [0, 0, d.width, d.height, d.work.left, d.work.top, d.work.right, d.work.bottom] {
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    out.extend_from_slice(&MONITORINFOF_PRIMARY.to_le_bytes());
+    if size == 104 {
+        // szDevice: "\\.\DISPLAY1" and its NUL; the rest is not written.
+        for c in "\\\\.\\DISPLAY1\0".encode_utf16() {
+            out.extend_from_slice(&c.to_le_bytes());
+        }
+    }
+    // SAFETY: `size` bytes of the caller's structure, after cbSize.
+    unsafe { core::ptr::copy_nonoverlapping(out.as_ptr(), mi.add(4), out.len()) };
+    1
+}
+
+/// Only SPI_GETWORKAREA is answered: the work area.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SystemParametersInfoW(action: u32, _param: u32, pv: *mut u8, _ini: u32) -> i32 {
+    if action != SPI_GETWORKAREA || pv.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let w = u::screen(&SYS).work;
+    // SAFETY: the caller's RECT.
+    unsafe { put_rect(pv as *mut i32, w) };
+    1
 }
 
 #[unsafe(no_mangle)]
@@ -1035,15 +1327,60 @@ pub extern "system" fn GetDC(hwnd: H) -> H {
         (i.class_dc, true)
     } else {
         // SAFETY: our gdi32.
-        return attach_surface(i.hwnd, unsafe { PolyGdiCreateDisplayDC(hwnd, 0) });
+        return dc_geometry(&i, attach_surface(i.hwnd, unsafe { PolyGdiCreateDisplayDC(hwnd, 0) }), false);
     };
     if persistent != 0 {
-        return attach_surface(i.hwnd, persistent as H);
+        return dc_geometry(&i, attach_surface(i.hwnd, persistent as H), false);
     }
     // SAFETY: our gdi32.
     let dc = unsafe { PolyGdiCreateDisplayDC(hwnd, 1) };
     call(Request::SetDc { hwnd: i.hwnd, class, dc: dc as u64 });
-    attach_surface(i.hwnd, dc)
+    dc_geometry(&i, attach_surface(i.hwnd, dc), false)
+}
+
+/// Tell our gdi32 what a DC of window `i` can draw on (`GetClipBox.yaml`):
+/// its client area (`whole`: the whole window) where it is on the screen,
+/// within its parents' client areas, less its children with
+/// WS_CLIPCHILDREN and, for a child with WS_CLIPSIBLINGS, less the
+/// siblings above it; nothing when it is hidden. Top-level windows do not
+/// clip each other (the desktop is composed).
+fn dc_geometry(i: &WinInfo, dc: H, whole: bool) -> H {
+    let area = if whole { i.window } else { i.client };
+    let screen = Rect::new(0, 0, GetSystemMetrics(0), GetSystemMetrics(1));
+    let visible_window = |h: u32| info(h as H).filter(|c| c.visible).map(|c| c.window);
+    let children = |h: u32| match call(Request::Relatives { hwnd: h }) {
+        Reply::Relatives { children, .. } => children,
+        _ => Vec::new(),
+    };
+    let meet = |a: Rect, b: Rect| {
+        let r = Rect::new(a.left.max(b.left), a.top.max(b.top), a.right.min(b.right), a.bottom.min(b.bottom));
+        if r.is_empty() { Rect::default() } else { r }
+    };
+    let mut include = if i.visible { meet(area, screen) } else { Rect::default() };
+    let mut exclude: Vec<Rect> = Vec::new();
+    if i.style & metrics::WS_CLIPCHILDREN != 0 {
+        exclude.extend(children(i.hwnd).into_iter().filter_map(visible_window));
+    }
+    // Up the parents: each limits to its client area; siblings above a
+    // WS_CLIPSIBLINGS child (children come topmost first) cut it.
+    let (mut hwnd, mut style, mut parent) = (i.hwnd, i.style, i.parent);
+    while style & metrics::WS_CHILD != 0 {
+        let Some(p) = info(parent as H) else { break };
+        include = meet(include, p.client);
+        if style & metrics::WS_CLIPSIBLINGS != 0 {
+            exclude.extend(children(p.hwnd).into_iter().take_while(|&s| s != hwnd).filter_map(visible_window));
+        }
+        (hwnd, style, parent) = (p.hwnd, p.style, p.parent);
+    }
+    let flat = |rs: &[Rect]| -> Vec<i32> { rs.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect() };
+    let (inc, exc) = (flat(&[include]), flat(&exclude));
+    if dc != 0 {
+        // SAFETY: our gdi32 reads 1 and `exclude.len()` RECTs.
+        unsafe {
+            PolyGdiSetDisplayGeometry(dc, area.left, area.top, inc.as_ptr(), 1, exc.as_ptr(), exclude.len() as u32)
+        };
+    }
+    dc
 }
 
 /// The desktop link (ADR 0131): a window DC draws into the window's
@@ -1114,29 +1451,193 @@ pub unsafe extern "system" fn DrawTextW(hdc: H, text: *const u16, count: i32, re
     unsafe { PolyGdiDrawText(hdc, text, count, rect, format) }
 }
 
+/// `DT_MODIFYSTRING` and `DT_TABSTOP` (`winuser.h`).
+const DT_MODIFYSTRING: u32 = 0x1_0000;
+const DT_TABSTOP: u32 = 0x0080;
+
+/// `DrawTextExW`; `DRAWTEXTPARAMS` is `cbSize`, `iTabLength`,
+/// `iLeftMargin`, `iRightMargin`, `uiLengthDrawn` (`winuser.h`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DrawTextExW(
+    hdc: H,
+    text: *mut u16,
+    count: i32,
+    rect: *mut i32,
+    format: u32,
+    params: *mut u32,
+) -> i32 {
+    let (mut tab, mut left, mut right) = (0, 0, 0);
+    if !params.is_null() {
+        // SAFETY: the caller's DRAWTEXTPARAMS.
+        unsafe {
+            if format & DT_TABSTOP != 0 {
+                tab = *params.add(1) as i32;
+            }
+            left = *params.add(2) as i32;
+            right = *params.add(3) as i32;
+        }
+    }
+    // SAFETY: our gdi32 reads the string and RECT as documented.
+    let n = unsafe { PolyGdiDrawTextEx(hdc, text, count, rect, format, tab, left, right) };
+    if !params.is_null() && n != 0 {
+        // SAFETY: as above; the length drawn is the whole string.
+        unsafe { *params.add(4) = if count < 0 { u32::MAX } else { count as u32 } };
+    }
+    n
+}
+
+/// A string in the ANSI code page as UTF-16 with room for an ellipsis and
+/// the NUL (Latin-1, as the rest of Poly's ANSI functions).
+unsafe fn ansi_text(p: *const u8, count: i32) -> (Vec<u16>, usize) {
+    let mut v: Vec<u16> = Vec::new();
+    if !p.is_null() {
+        let mut i = 0usize;
+        loop {
+            // SAFETY: the caller's string (count -1: NUL-terminated).
+            let c = unsafe { *p.add(i) };
+            if (count >= 0 && i >= count as usize) || (count < 0 && c == 0) {
+                break;
+            }
+            v.push(u16::from(c));
+            i += 1;
+        }
+    }
+    let n = v.len();
+    v.resize(n + 8, 0);
+    (v, n)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DrawTextExA(
+    hdc: H,
+    text: *mut u8,
+    count: i32,
+    rect: *mut i32,
+    format: u32,
+    params: *mut u32,
+) -> i32 {
+    // SAFETY: the caller's string.
+    let (mut w, n) = unsafe { ansi_text(text, count) };
+    // SAFETY: our buffer of `n` units and room for an ellipsis.
+    let r = unsafe { DrawTextExW(hdc, w.as_mut_ptr(), n as i32, rect, format, params) };
+    if format & DT_MODIFYSTRING != 0 && !text.is_null() {
+        let len = w.iter().position(|&c| c == 0).unwrap_or(n);
+        for (i, &c) in w.iter().take(len).enumerate() {
+            // SAFETY: the caller's buffer, as large as the Learn page asks.
+            unsafe { *text.add(i) = if c < 0x100 { c as u8 } else { b'?' } };
+        }
+        // SAFETY: as above.
+        unsafe { *text.add(len) = 0 };
+    }
+    r
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DrawTextA(hdc: H, text: *const u8, count: i32, rect: *mut i32, format: u32) -> i32 {
+    // SAFETY: as `DrawTextExA`.
+    unsafe { DrawTextExA(hdc, text as *mut u8, count, rect, format, core::ptr::null_mut()) }
+}
+
 // ----- more of user32: keyboard state, ANSI text, rectangles, enumeration
 
-/// `GetKeyState`: no key is down (no input yet; `TranslateMessage.yaml`).
+/// `ERROR_NOACCESS` (winerror.h).
+const ERROR_NOACCESS: u32 = 998;
+
+/// `GetKeyState` (GetKeyState.yaml): the thread's state as of the input
+/// messages it retrieved, sign-extended (0xFF80 down).
 #[unsafe(no_mangle)]
-pub extern "system" fn GetKeyState(_vk: i32) -> i16 {
-    0
+pub extern "system" fn GetKeyState(vk: i32) -> i16 {
+    if !(0..=0xFF).contains(&vk) {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    if vk == 0 || vk == 0xFF {
+        return 0;
+    }
+    let b = u::input::key_state(&SYS)[vk as usize];
+    let down: u16 = if b & 0x80 != 0 { 0xFF80 } else { 0 };
+    (down | u16::from(b & 0x01)) as i16
 }
 
-/// `GetAsyncKeyState`.
+/// `GetAsyncKeyState` (GetAsyncKeyState.yaml): the physical state.
 #[unsafe(no_mangle)]
-pub extern "system" fn GetAsyncKeyState(_vk: i32) -> i16 {
-    0
+pub extern "system" fn GetAsyncKeyState(vk: i32) -> i16 {
+    if !(1..0xFF).contains(&vk) {
+        return 0;
+    }
+    match call(Request::AsyncKeyState { vk: vk as u32 }) {
+        Reply::Value { value } => value as u16 as i16,
+        _ => 0,
+    }
 }
 
-/// `GetKeyboardState`: 256 bytes, every key up.
+/// `GetKeyboardState` (GetKeyboardState.yaml).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetKeyboardState(state: *mut u8) -> i32 {
     if state.is_null() {
+        set_last_error(ERROR_NOACCESS);
+        return 0;
+    }
+    let keys = u::input::key_state(&SYS);
+    // SAFETY: the caller's 256-byte buffer.
+    unsafe { core::ptr::copy_nonoverlapping(keys.as_ptr(), state, 256) };
+    1
+}
+
+/// `SetKeyboardState`: the calling thread's key state.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetKeyboardState(state: *const u8) -> i32 {
+    if state.is_null() {
+        set_last_error(ERROR_NOACCESS);
         return 0;
     }
     // SAFETY: the caller's 256-byte buffer.
-    unsafe { core::ptr::write_bytes(state, 0, 256) };
+    let keys = unsafe { core::slice::from_raw_parts(state, 256) }.to_vec();
+    call(Request::SetKeyboardState { keys });
     1
+}
+
+/// `SendInput` (SendInput.yaml): INPUT is 40 bytes on x64 (winuser.h).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SendInput(count: u32, inputs: *const u8, size: i32) -> u32 {
+    if count == 0 || size != 40 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    if inputs.is_null() {
+        set_last_error(ERROR_NOACCESS);
+        return 0;
+    }
+    let mut events = Vec::with_capacity(count as usize);
+    for k in 0..count as usize {
+        // SAFETY: `count` INPUT structures of 40 bytes.
+        let b = unsafe { core::slice::from_raw_parts(inputs.add(k * 40), 40) };
+        let u32_at = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
+        let u16_at = |i: usize| u16::from_le_bytes([b[i], b[i + 1]]);
+        let kind = u32_at(0);
+        let e = if kind == 1 {
+            poly_win32k::proto::InputEvent {
+                kind,
+                a: i32::from(u16_at(8)),
+                b: i32::from(u16_at(10)),
+                data: 0,
+                flags: u32_at(12),
+            }
+        } else {
+            poly_win32k::proto::InputEvent {
+                kind,
+                a: u32_at(8) as i32,
+                b: u32_at(12) as i32,
+                data: u32_at(16),
+                flags: u32_at(20),
+            }
+        };
+        events.push(e);
+    }
+    match call(Request::SendInput { events }) {
+        Reply::Value { value } => value as u32,
+        _ => 0,
+    }
 }
 
 fn message_info() -> u64 {
@@ -1253,11 +1754,13 @@ pub extern "system" fn InSendMessageEx(_reserved: usize) -> u32 {
 /// `GetWindowDC`: a DC for the whole window.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetWindowDC(hwnd: H) -> H {
-    if hwnd != 0 && info(hwnd).is_none() {
-        return bad_window();
+    if hwnd == 0 {
+        // SAFETY: our gdi32.
+        return unsafe { PolyGdiCreateDisplayDC(0, 0) };
     }
+    let Some(i) = info(hwnd) else { return bad_window() };
     // SAFETY: our gdi32.
-    unsafe { PolyGdiCreateDisplayDC(hwnd, 0) }
+    dc_geometry(&i, unsafe { PolyGdiCreateDisplayDC(hwnd, 0) }, true)
 }
 
 /// `GetWindowThreadProcessId`.
@@ -1271,45 +1774,122 @@ pub unsafe extern "system" fn GetWindowThreadProcessId(hwnd: H, pid: *mut u32) -
     i.tid
 }
 
+/// The window's own WS_DISABLED bit (IsWindowEnabled.yaml); 0 with
+/// ERROR_INVALID_WINDOW_HANDLE for NULL or a bad handle.
 #[unsafe(no_mangle)]
 pub extern "system" fn IsWindowEnabled(hwnd: H) -> i32 {
-    i32::from(info(hwnd).is_some_and(|i| i.style & metrics::WS_DISABLED == 0))
+    if hwnd == 0 {
+        return bad_window();
+    }
+    match info(hwnd) {
+        Some(i) => i32::from(i.style & metrics::WS_DISABLED == 0),
+        None => bad_window(),
+    }
 }
 
-/// `EnableWindow`: whether it was disabled before; `WM_ENABLE` when the
-/// state changes.
+/// `EnableWindow` (EnableWindow.yaml): whether it was disabled before.
 #[unsafe(no_mangle)]
 pub extern "system" fn EnableWindow(hwnd: H, enable: i32) -> i32 {
-    let Some(i) = info(hwnd) else { return bad_window() };
-    let was_disabled = i.style & metrics::WS_DISABLED != 0;
-    if was_disabled == (enable != 0) {
-        let style = if enable != 0 { i.style & !metrics::WS_DISABLED } else { i.style | metrics::WS_DISABLED };
-        call(Request::SetStyle { hwnd: i.hwnd, which: -16, value: style });
-        u::send(&SYS, hwnd as u64, 0x000A, u64::from(enable != 0), 0);
-    }
-    i32::from(was_disabled)
+    i32::from(u::focus::enable_window(&SYS, hwnd as u64, enable != 0))
 }
 
-// Focus, activation and capture come with the input slice: no window has
-// them yet.
+// ----- focus, activation, the foreground (slice B; poly_win32k::user::focus)
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetFocus() -> H {
-    0
+    u::focus::input(&SYS).focus as H
 }
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetActiveWindow() -> H {
-    0
+    u::focus::input(&SYS).active as H
 }
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetForegroundWindow() -> H {
-    0
+    u::focus::input(&SYS).foreground as H
 }
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetCapture() -> H {
-    0
+    u::focus::input(&SYS).capture as H
 }
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetFocus(hwnd: H) -> H {
+    u::focus::set_focus(&SYS, hwnd as u64) as H
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetActiveWindow(hwnd: H) -> H {
+    u::focus::set_active_window(&SYS, hwnd as u64) as H
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetForegroundWindow(hwnd: H) -> i32 {
+    i32::from(u::focus::set_foreground_window(&SYS, hwnd as u64))
+}
+
+/// Any process may take the foreground on Poly: 1.
+#[unsafe(no_mangle)]
+pub extern "system" fn AllowSetForegroundWindow(_pid: u32) -> i32 {
+    1
+}
+
+/// `AttachThreadInput(idAttach, idAttachTo, fAttach)`: the calling thread
+/// (`attach`) shares `to`'s input state.
+#[unsafe(no_mangle)]
+pub extern "system" fn AttachThreadInput(attach: u32, to: u32, on: i32) -> i32 {
+    let me = SYS.tid();
+    let other = if attach == me { to } else { attach };
+    if on != 0 {
+        // Attaching: what was active in our queue loses the activation.
+        let st = u::focus::input(&SYS);
+        if st.active != 0 && !st.fg_mine {
+            u::focus::deactivate_away(&SYS, false);
+        }
+    }
+    match call(Request::AttachInput { tid: other, attach: on != 0 }) {
+        Reply::Bool { value } => {
+            if value && on != 0 && attach == me {
+                u::focus::attached_to_foreground(&SYS, other);
+            }
+            i32::from(value)
+        }
+        _ => 0,
+    }
+}
+
+/// `GUITHREADINFO` (winuser.h): cbSize, flags, hwndActive, hwndFocus,
+/// hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret, rcCaret (72 bytes).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetGUIThreadInfo(tid: u32, gti: *mut u8) -> i32 {
+    if gti.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let s = if tid == 0 || tid != SYS.tid() { u::focus::thread_input(&SYS, tid) } else { u::focus::input(&SYS) };
+    // SAFETY: the caller's GUITHREADINFO (cbSize first).
+    unsafe {
+        core::ptr::write_unaligned(gti.add(4) as *mut u32, 0);
+        core::ptr::write_unaligned(gti.add(8) as *mut u64, u64::from(s.active));
+        core::ptr::write_unaligned(gti.add(16) as *mut u64, u64::from(s.focus));
+        core::ptr::write_unaligned(gti.add(24) as *mut u64, u64::from(s.capture));
+        core::ptr::write_unaligned(gti.add(32) as *mut u64, 0);
+        core::ptr::write_unaligned(gti.add(40) as *mut u64, 0);
+        core::ptr::write_unaligned(gti.add(48) as *mut u64, 0);
+        core::ptr::write_bytes(gti.add(56), 0, 16);
+    }
+    1
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn ReleaseCapture() -> i32 {
+    let st = u::focus::input(&SYS);
+    if st.capture != 0 {
+        call(Request::SetInput { active: 0, focus: 0, capture: 0, which: poly_win32k::wm::input::SET_CAPTURE });
+        u::send(&SYS, u64::from(st.capture), 0x0215, 0, 0); // WM_CAPTURECHANGED
+    }
     1
 }
 
@@ -1317,13 +1897,31 @@ pub extern "system" fn ReleaseCapture() -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetCursorPos(pt: *mut i32) -> i32 {
     if pt.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
+    let (x, y) = cursor(None);
     // SAFETY: the caller's POINT.
     unsafe {
-        *pt = 0;
-        *pt.add(1) = 0;
+        *pt = x;
+        *pt.add(1) = y;
     }
+    1
+}
+
+/// The cursor position, moved to `to` first.
+fn cursor(to: Option<(i32, i32)>) -> (i32, i32) {
+    let (x, y) = to.unwrap_or((0, 0));
+    match call(Request::Cursor { set: to.is_some(), x, y }) {
+        Reply::Value { value } => (value as u32 as i32, (value >> 32) as u32 as i32),
+        _ => (0, 0),
+    }
+}
+
+/// Moves the cursor (clamped to the screen).
+#[unsafe(no_mangle)]
+pub extern "system" fn SetCursorPos(x: i32, y: i32) -> i32 {
+    cursor(Some((x, y)));
     1
 }
 
@@ -1550,25 +2148,376 @@ poly_win32_gui::not_implemented_stubs! {
     CallNextHookEx(hook, code, w, l) => 0;
 }
 
-// Painting through update regions (WM_PAINT) is not part of the first
-// slice (the oracle's desktop is not visible): stubs until its spec sheets.
 poly_win32_gui::not_implemented_stubs! {
-    /// `UpdateWindow(hWnd)`: zero on failure.
-    UpdateWindow(hwnd) => 0;
-    /// `BeginPaint(hWnd, lpPaint)`: NULL on failure.
-    BeginPaint(hwnd, paint) => 0;
-    /// `EndPaint(hWnd, lpPaint)`: always nonzero.
-    EndPaint(hwnd, paint) => 1;
-    /// `InvalidateRect(hWnd, lpRect, bErase)`: zero on failure.
-    InvalidateRect(hwnd, rect, erase) => 0;
-    /// `ValidateRect(hWnd, lpRect)`: zero on failure.
-    ValidateRect(hwnd, rect) => 0;
-    /// `GetUpdateRect(hWnd, lpRect, bErase)`: zero (no update region).
-    GetUpdateRect(hwnd, rect, erase) => 0;
-    /// `LoadCursorW(hInstance, lpCursorName)`: NULL on failure.
-    LoadCursorW(instance, name) => 0;
     /// `LoadIconW(hInstance, lpIconName)`: NULL on failure.
     LoadIconW(instance, name) => 0;
+}
+
+// ----- cursors, capture, the window under a point (slice B)
+
+/// The system cursors (LoadCursorW.yaml): IDC_* id, hot spot, colour.
+const CURSORS: [(u16, u32, u32, bool); 16] = [
+    (32512, 0, 0, true),    // IDC_ARROW
+    (32513, 8, 9, false),   // IDC_IBEAM (monochrome)
+    (32514, 16, 16, true),  // IDC_WAIT
+    (32515, 16, 16, false), // IDC_CROSS (monochrome)
+    (32516, 4, 0, true),    // IDC_UPARROW
+    (32642, 8, 8, true),    // IDC_SIZENWSE
+    (32643, 8, 8, true),    // IDC_SIZENESW
+    (32644, 11, 4, true),   // IDC_SIZEWE
+    (32645, 4, 11, true),   // IDC_SIZENS
+    (32646, 11, 11, true),  // IDC_SIZEALL
+    (32648, 8, 8, true),    // IDC_NO
+    (32649, 6, 0, true),    // IDC_HAND
+    (32650, 0, 8, true),    // IDC_APPSTARTING
+    (32651, 0, 0, true),    // IDC_HELP
+    (32671, 6, 0, true),    // IDC_PIN
+    (32672, 6, 0, true),    // IDC_PERSON
+];
+/// A system cursor's handle: one value per IDC_* id.
+const CURSOR_BASE: usize = 0x0006_0000;
+/// winerror.h.
+const ERROR_RESOURCE_DATA_NOT_FOUND: u32 = 1812;
+const ERROR_RESOURCE_NAME_NOT_FOUND: u32 = 1814;
+const ERROR_INVALID_CURSOR_HANDLE: u32 = 1402;
+
+fn cursor_index(h: usize) -> Option<usize> {
+    let i = h.checked_sub(CURSOR_BASE)?;
+    (i < CURSORS.len()).then_some(i)
+}
+
+/// The cursor shape set (GetCursor / SetCursor), per thread: the
+/// process's first thread starts with the arrow, a new thread with the
+/// wait cursor (SetCursor.yaml `new_thread`).
+static CURSORS_SET: SpinLock<Vec<(u32, usize)>> = SpinLock::new(Vec::new());
+
+fn with_cursor<R>(f: impl FnOnce(&mut usize) -> R) -> R {
+    let tid = SYS.tid();
+    CURSORS_SET.with(|all| {
+        let i = match all.iter().position(|e| e.0 == tid) {
+            Some(i) => i,
+            None => {
+                // IDC_ARROW for the first thread, IDC_WAIT (index 2) after.
+                let first = all.is_empty();
+                all.push((tid, if first { CURSOR_BASE } else { CURSOR_BASE + 2 }));
+                all.len() - 1
+            }
+        };
+        f(&mut all[i].1)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn LoadCursorW(instance: H, name: *const u16) -> H {
+    if instance != 0 {
+        // Our executables carry no cursor resources.
+        set_last_error(ERROR_RESOURCE_DATA_NOT_FOUND);
+        return 0;
+    }
+    let id = if (name as usize) >> 16 == 0 {
+        Some(name as usize as u16)
+    } else {
+        // SAFETY: a NUL-terminated name.
+        let s = unsafe { wide(name, -1) };
+        if s.first() == Some(&u16::from(b'#')) {
+            core::char::decode_utf16(s[1..].iter().copied())
+                .collect::<Result<alloc::string::String, _>>()
+                .ok()
+                .and_then(|t| t.parse::<u16>().ok())
+        } else {
+            None
+        }
+    };
+    match id {
+        // IDC_SIZE, IDC_ICON: obsolete, NULL with the error unchanged.
+        Some(32640 | 32641) => 0,
+        Some(id) => match CURSORS.iter().position(|c| c.0 == id) {
+            Some(i) => CURSOR_BASE + i,
+            None => {
+                set_last_error(ERROR_RESOURCE_NAME_NOT_FOUND);
+                0
+            }
+        },
+        None => {
+            set_last_error(ERROR_RESOURCE_NAME_NOT_FOUND);
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetCursor() -> H {
+    with_cursor(|c| *c)
+}
+
+/// Sets the shape; the previous one (SetCursor.yaml).
+#[unsafe(no_mangle)]
+pub extern "system" fn SetCursor(cursor: H) -> H {
+    if cursor != 0 && cursor_index(cursor).is_none() {
+        set_last_error(ERROR_INVALID_CURSOR_HANDLE);
+        return 0;
+    }
+    with_cursor(|c| core::mem::replace(c, cursor))
+}
+
+#[link(name = "gdi32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn CreateBitmap(w: i32, h: i32, planes: u32, bpp: u32, bits: *const u8) -> usize;
+}
+
+/// `ICONINFO` (winuser.h): fIcon, xHotspot, yHotspot, hbmMask, hbmColor.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetIconInfo(icon: H, ii: *mut u8) -> i32 {
+    let Some(i) = cursor_index(icon) else {
+        set_last_error(ERROR_INVALID_CURSOR_HANDLE);
+        return 0;
+    };
+    if ii.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let (_, hx, hy, colour) = CURSORS[i];
+    // SAFETY: our gdi32 makes the bitmaps.
+    let (mask, color) = unsafe {
+        if colour {
+            (CreateBitmap(32, 32, 1, 1, core::ptr::null()), CreateBitmap(32, 32, 1, 32, core::ptr::null()))
+        } else {
+            (CreateBitmap(32, 64, 1, 1, core::ptr::null()), 0)
+        }
+    };
+    // SAFETY: the caller's ICONINFO (32 bytes on x64).
+    unsafe {
+        core::ptr::write_unaligned(ii as *mut u32, 0);
+        core::ptr::write_unaligned(ii.add(4) as *mut u32, hx);
+        core::ptr::write_unaligned(ii.add(8) as *mut u32, hy);
+        core::ptr::write_unaligned(ii.add(16) as *mut u64, mask as u64);
+        core::ptr::write_unaligned(ii.add(24) as *mut u64, color as u64);
+    }
+    1
+}
+
+/// `WM_CAPTURECHANGED` (winuser.h).
+const WM_CAPTURECHANGED: u32 = 0x0215;
+
+/// SetCapture.yaml: the previous capture window of the thread's input.
+#[unsafe(no_mangle)]
+pub extern "system" fn SetCapture(hwnd: H) -> H {
+    let st = u::focus::input(&SYS);
+    let set = |h: u32| {
+        call(Request::SetInput { active: 0, focus: 0, capture: h, which: poly_win32k::wm::input::SET_CAPTURE });
+    };
+    if hwnd == 0 {
+        if st.capture != 0 {
+            set(0);
+            u::send(&SYS, u64::from(st.capture), WM_CAPTURECHANGED, 0, 0);
+        }
+        return st.capture as H;
+    }
+    let Some(i) = info(hwnd) else { return bad_window() };
+    if i.tid != SYS.tid() {
+        return 0;
+    }
+    set(i.hwnd);
+    if st.capture != 0 {
+        u::send(&SYS, u64::from(st.capture), WM_CAPTURECHANGED, 0, u64::from(i.hwnd));
+    }
+    st.capture as H
+}
+
+/// `WindowFromPoint(POINT)` (by value: x in the low half).
+#[unsafe(no_mangle)]
+pub extern "system" fn WindowFromPoint(pt: u64) -> H {
+    let (x, y) = (pt as u32 as i32, (pt >> 32) as u32 as i32);
+    let mut below = 0;
+    loop {
+        let h = match call(Request::WindowFromPoint { x, y, below }) {
+            Reply::Handle { hwnd } => hwnd as H,
+            _ => 0,
+        };
+        // The calling thread's candidate gets WM_NCHITTEST (not a disabled
+        // top-level window, nor a framed window's caption); HTTRANSPARENT
+        // passes it to its parent, a top-level window's to the window below.
+        let Some(i) = info(h) else { return h };
+        let top = i.style & metrics::WS_CHILD == 0;
+        let caption =
+            top && i.style & 0x00C0_0000 == 0x00C0_0000 && y < i.client.top && x >= i.client.left && x < i.client.right;
+        if i.tid != SYS.tid() || (top && i.style & metrics::WS_DISABLED != 0) || caption {
+            return h;
+        }
+        let l = u::makelparam(x, y);
+        let hit = u::send(&SYS, h as u64, 0x0084, 0, l);
+        if hit as i64 as i32 != -1 {
+            return h;
+        }
+        if !top {
+            u::send(&SYS, u64::from(i.parent), 0x0084, 0, l);
+            return i.parent as H;
+        }
+        below = i.hwnd;
+    }
+}
+
+/// The direct child of `parent` at a client point, hidden and disabled
+/// ones included; `parent` itself over its own area; NULL outside.
+#[unsafe(no_mangle)]
+pub extern "system" fn ChildWindowFromPoint(parent: H, pt: u64) -> H {
+    let (x, y) = (pt as u32 as i32, (pt >> 32) as u32 as i32);
+    let Some(p) = info(parent) else { return bad_window() };
+    if x < 0 || y < 0 || x >= p.client.width() || y >= p.client.height() {
+        return 0;
+    }
+    let kids = match call(Request::Relatives { hwnd: p.hwnd }) {
+        Reply::Relatives { children, .. } => children,
+        _ => Vec::new(),
+    };
+    for c in kids {
+        if let Some(ci) = info(c as H)
+            && x >= ci.window_rel.left
+            && x < ci.window_rel.right
+            && y >= ci.window_rel.top
+            && y < ci.window_rel.bottom
+        {
+            return c as H;
+        }
+    }
+    parent
+}
+
+/// `TRACKMOUSEEVENT` (24 bytes): cbSize, dwFlags, hwndTrack, dwHoverTime.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn TrackMouseEvent(tme: *mut u8) -> i32 {
+    const TME_QUERY: u32 = 0x4000_0000;
+    const TME_CANCEL: u32 = 0x8000_0000;
+    if tme.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's TRACKMOUSEEVENT.
+    let (size, flags, hwnd, hover) = unsafe {
+        (
+            core::ptr::read_unaligned(tme as *const u32),
+            core::ptr::read_unaligned(tme.add(4) as *const u32),
+            core::ptr::read_unaligned(tme.add(8) as *const u64),
+            core::ptr::read_unaligned(tme.add(16) as *const u32),
+        )
+    };
+    if size != 24 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    if flags & TME_QUERY != 0 {
+        let v = match call(Request::TrackMouse { hwnd: 0, flags, hover: 0 }) {
+            Reply::Value { value } => value,
+            _ => 0,
+        };
+        // SAFETY: as above.
+        unsafe {
+            core::ptr::write_unaligned(tme.add(4) as *mut u32, (v & 0xFFFF) as u32);
+            core::ptr::write_unaligned(tme.add(8) as *mut u64, v >> 32);
+            core::ptr::write_unaligned(tme.add(16) as *mut u32, ((v >> 16) & 0xFFFF) as u32);
+        }
+        return 1;
+    }
+    if flags & !TME_CANCEL == 0 {
+        return 1;
+    }
+    let Some(i) = info(hwnd as H) else { return bad_window() };
+    call(Request::TrackMouse { hwnd: i.hwnd, flags, hover });
+    1
+}
+
+// ----- painting (slice B; poly_win32k::user::paint)
+
+/// An optional RECT argument (`None` for NULL).
+unsafe fn opt_rect(p: *const i32) -> Option<Rect> {
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: the caller's RECT.
+    let r = unsafe { rd(p) };
+    Some(Rect::new(r[0], r[1], r[2], r[3]))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn BeginPaint(hwnd: H, ps: *mut u::PaintStruct) -> H {
+    let mut out = u::PaintStruct::default();
+    let dc = u::begin_paint(&SYS, hwnd as u64, &mut out);
+    if !ps.is_null() {
+        // SAFETY: the caller's PAINTSTRUCT.
+        unsafe { *ps = out };
+    }
+    dc as H
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn EndPaint(hwnd: H, ps: *const u::PaintStruct) -> i32 {
+    // SAFETY: the caller's PAINTSTRUCT, if any.
+    let p = if ps.is_null() { u::PaintStruct::default() } else { unsafe { *ps } };
+    i32::from(u::end_paint(&SYS, hwnd as u64, &p))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn InvalidateRect(hwnd: H, rect: *const i32, erase: i32) -> i32 {
+    // SAFETY: the caller's RECT, if any.
+    let r = unsafe { opt_rect(rect) };
+    i32::from(u::paint::invalidate(&SYS, hwnd as u64, r.as_ref().map(core::slice::from_ref), erase != 0))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn InvalidateRgn(hwnd: H, rgn: H, erase: i32) -> i32 {
+    let rects = if rgn == 0 { None } else { Some(rects_of(rgn).unwrap_or_default()) };
+    i32::from(u::paint::invalidate(&SYS, hwnd as u64, rects.as_deref(), erase != 0))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ValidateRect(hwnd: H, rect: *const i32) -> i32 {
+    // SAFETY: the caller's RECT, if any.
+    let r = unsafe { opt_rect(rect) };
+    // An inverted rectangle removes nothing (ValidateRect.yaml).
+    let r = r.map(|r| if r.right < r.left || r.bottom < r.top { Rect::default() } else { r });
+    i32::from(u::paint::validate(&SYS, hwnd as u64, r.as_ref().map(core::slice::from_ref)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn ValidateRgn(hwnd: H, rgn: H) -> i32 {
+    let rects = if rgn == 0 { None } else { Some(rects_of(rgn).unwrap_or_default()) };
+    i32::from(u::paint::validate(&SYS, hwnd as u64, rects.as_deref()))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn UpdateWindow(hwnd: H) -> i32 {
+    i32::from(u::paint::update_window(&SYS, hwnd as u64))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RedrawWindow(hwnd: H, rect: *const i32, rgn: H, flags: u32) -> i32 {
+    // The region wins over the rectangle (RedrawWindow.yaml rw_flags).
+    let rects = if rgn != 0 {
+        Some(rects_of(rgn).unwrap_or_default())
+    } else {
+        // SAFETY: the caller's RECT, if any.
+        unsafe { opt_rect(rect) }.map(|r| alloc::vec![r])
+    };
+    i32::from(u::paint::redraw_window(&SYS, hwnd as u64, rects.as_deref(), flags))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetUpdateRect(hwnd: H, rect: *mut i32, erase: i32) -> i32 {
+    let Some((any, r)) = u::paint::get_update_rect(&SYS, hwnd as u64, erase != 0) else { return 0 };
+    if !rect.is_null() {
+        // SAFETY: the caller's RECT.
+        unsafe { put_rect(rect, r) };
+    }
+    i32::from(any)
+}
+
+/// The update region into `rgn` (client coordinates); its kind.
+#[unsafe(no_mangle)]
+pub extern "system" fn GetUpdateRgn(hwnd: H, rgn: H, erase: i32) -> i32 {
+    let Some((p, _)) = u::paint::update_area(&SYS, hwnd as u64, erase != 0) else { return 0 };
+    let flat: Vec<i32> = p.rects.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect();
+    // SAFETY: `p.rects.len()` quadruples.
+    unsafe { PolyGdiSetRegionRects(rgn, flat.as_ptr(), p.rects.len() as u32) }
 }
 
 /// The entry point (`DllMain`): nothing to set up.

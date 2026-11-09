@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtRemoveIoCompletion.yaml
+id: windows/api/ntdll.dll/NtRemoveIoCompletion
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: GetQueuedCompletionStatus function, OVERLAPPED structure. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Removes one packet from a port, waiting up to a timeout (a pointer to a 100 ns value: negative is relative, positive absolute system time, NULL infinite). For real I/O the APC context is the OVERLAPPED pointer, the key the handle's key, and the IO_STATUS_BLOCK the request's final NTSTATUS and byte count.
+interface:
+  signature: "NTSTATUS NtRemoveIoCompletion(HANDLE port, PVOID *keyContext, PVOID *apcContext, PIO_STATUS_BLOCK iosb, PLARGE_INTEGER timeout)"
+rules:
+  timeout_zero: "an empty port with a zero timeout: STATUS_TIMEOUT (0x102) at once, the outputs untouched."
+  timeout_relative: "-1,000,000 (100 ms): STATUS_TIMEOUT after about that long (at least 80 ms)."
+  timeout_absolute_past: "a small positive value (a time long past): STATUS_TIMEOUT at once."
+  timeout_none: "NULL: waits for a packet; a packet set 120 ms later by another thread is returned (key, context, status and information as set)."
+  ready_packet: "a packet already queued is returned at once whatever the timeout."
+  io_read: "a read with 4 bytes of data on an associated overlapped handle: STATUS_SUCCESS, key = the handle's key, APC context = the OVERLAPPED pointer, IO_STATUS_BLOCK status 0 and information 4; the OVERLAPPED's first two fields hold the same status and byte count."
+  io_failed: "a pending read when the peer closes: iosb status STATUS_PIPE_BROKEN (0xC000014B), information 0."
+  io_cancelled: "a cancelled read: STATUS_CANCELLED (0xC0000120)."
+  io_overflow: "a message-pipe read with a 4-byte buffer for an 8-byte message: iosb status STATUS_BUFFER_OVERFLOW (0x80000005) with information 4; kernel32's GetOverlappedResult on it fails with ERROR_MORE_DATA."
+errors:
+  timeout: "STATUS_TIMEOUT (0x102)"
+  not_a_port: "an event: STATUS_OBJECT_TYPE_MISMATCH (0xC0000024); a bad handle value: STATUS_INVALID_HANDLE (0xC0000008)"
+side_effects: "removes the packet"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Named I/O completion ports (object names), file handles associated through NtSetInformationFile(FileCompletionInformation), non-pipe files, remote pipes, security descriptors.

@@ -6,7 +6,10 @@
 //! the same thing again; arrow keys, Enter, Space and Esc change it. What
 //! cannot run on this host is shown greyed with the reason; what needs
 //! something made first says so, and Start makes it first (Chromium's
-//! disk). The settings are kept per checkout in `target/poly-start.json`
+//! disk). The Desktop has a switch, "With Chromium", on by default: the
+//! desktop boots from Chromium's disk with Poly's apps and Chromium the
+//! default browser (ADR 0147); it says what the first start downloads, and
+//! is greyed, with the reason, where the host cannot run it. The settings are kept per checkout in `target/poly-start.json`
 //! (git-ignored with the rest of `target/`; a corrupt or older file gives
 //! the defaults).
 //!
@@ -43,7 +46,6 @@ const LINUX_ONLY: &str = "needs a Linux host: run it in the poly-dev container o
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Entry {
     Desktop,
-    ChromiumRun,
     ChromiumDisk,
     Toolkits,
     Shell,
@@ -54,9 +56,8 @@ pub enum Entry {
 }
 
 /// The menu's entries, in its order.
-pub const ENTRIES: [Entry; 9] = [
+pub const ENTRIES: [Entry; 8] = [
     Entry::Desktop,
-    Entry::ChromiumRun,
     Entry::ChromiumDisk,
     Entry::Toolkits,
     Entry::Shell,
@@ -71,6 +72,7 @@ pub const ENTRIES: [Entry; 9] = [
 pub enum Opt {
     Release,
     TestApps,
+    Chromium,
     Accel,
     Scale,
     Size,
@@ -89,7 +91,6 @@ impl Entry {
     pub fn id(self) -> &'static str {
         match self {
             Entry::Desktop => "desktop",
-            Entry::ChromiumRun => "chromium-run",
             Entry::ChromiumDisk => "chromium-disk",
             Entry::Toolkits => "toolkits",
             Entry::Shell => "shell",
@@ -108,7 +109,6 @@ impl Entry {
     pub fn title(self) -> &'static str {
         match self {
             Entry::Desktop => "Desktop",
-            Entry::ChromiumRun => "Desktop with Chromium",
             Entry::ChromiumDisk => "Build Chromium's disk",
             Entry::Toolkits => "Toolkits disk (GTK, Qt, VLC)",
             Entry::Shell => "Kernel shell",
@@ -123,12 +123,11 @@ impl Entry {
     pub fn about(self) -> &'static str {
         match self {
             Entry::Desktop => {
-                "Poly's desktop in QEMU's window; the test apps are an option (cargo xtask desktop --test-apps)"
+                "Poly's desktop in QEMU's window, with Chromium as the browser (cargo xtask desktop --chromium)"
             }
-            Entry::ChromiumRun => {
-                "the desktop from Chromium's disk; type \"chromium\" in the launcher (cargo xtask chromium run)"
+            Entry::ChromiumDisk => {
+                "download the pinned Debian packages and make target/poly-chromium-disk.img now, not at the first start"
             }
-            Entry::ChromiumDisk => "download the pinned Debian packages and make target/poly-chromium-disk.img",
             Entry::Toolkits => "GTK 3/4, Qt and VLC apps on the desktop, driven by steps (cargo xtask toolkits)",
             Entry::Shell => "the kernel's own shell on the serial port, native programs in /bin (cargo xtask run)",
             Entry::Busybox => "BusyBox as init and its shell on the console (cargo xtask run --busybox)",
@@ -144,8 +143,9 @@ impl Entry {
     pub fn options(self) -> &'static [Opt] {
         use Opt::*;
         match self {
-            Entry::Desktop => &[Release, TestApps, Accel, Scale, Size, FreshState, KernelArgs, Display],
-            Entry::ChromiumRun => &[Release, Accel, FreshDisk, Display],
+            Entry::Desktop => {
+                &[Release, TestApps, Chromium, Accel, Scale, Size, FreshState, FreshDisk, KernelArgs, Display]
+            }
             Entry::ChromiumDisk => &[],
             Entry::Toolkits => &[Release, Accel, FreshDisk],
             Entry::Shell | Entry::Busybox => &[Release, Accel, KernelArgs],
@@ -159,19 +159,20 @@ impl Entry {
     /// the interactive boots only; the boot tests keep their fixed sizes.
     pub fn resources(self) -> &'static [Opt] {
         match self {
-            Entry::Desktop | Entry::ChromiumRun | Entry::Toolkits | Entry::Shell | Entry::Busybox | Entry::DiskRoot => {
+            Entry::Desktop | Entry::Toolkits | Entry::Shell | Entry::Busybox | Entry::DiskRoot => {
                 &[Opt::Memory, Opt::Cpus]
             }
             Entry::ChromiumDisk | Entry::BootTests | Entry::Ci => &[],
         }
     }
 
-    /// The memory and CPUs it boots with unless asked (what "auto" is).
-    pub fn default_resources(self) -> Option<(&'static str, u32)> {
+    /// The memory and CPUs it boots with unless asked (what "auto" is);
+    /// `chromium`: the Desktop boots from Chromium's disk, which needs more.
+    pub fn default_resources(self, chromium: bool) -> Option<(&'static str, u32)> {
         let cpus = crate::QEMU_CPUS;
         match self {
+            Entry::Desktop if chromium => Some((crate::chromium::MEMORY, crate::chromium::CPUS.unwrap_or(cpus))),
             Entry::Desktop => Some((crate::desktop::MEMORY, cpus)),
-            Entry::ChromiumRun => Some((crate::chromium::MEMORY, crate::chromium::CPUS.unwrap_or(cpus))),
             Entry::Toolkits => Some((crate::toolkits::MEMORY, cpus)),
             Entry::Shell | Entry::Busybox => Some((crate::DEFAULT_MEMORY, cpus)),
             Entry::DiskRoot => Some((crate::rootdisk::MEMORY, cpus)),
@@ -194,6 +195,7 @@ impl Opt {
         match self {
             Opt::Release => "Build",
             Opt::TestApps => "Test apps",
+            Opt::Chromium => "With Chromium",
             Opt::Accel => "Accelerator",
             Opt::Scale => "Scale",
             Opt::Size => "Screen size",
@@ -219,7 +221,12 @@ impl Opt {
             Opt::Scale => "--scale=N: Poly's display scale; auto fits the host's screen",
             Opt::Size => "--size=WxH: the guest's screen; auto fits the host's screen (Enter types one)",
             Opt::FreshState => "--fresh-state: start the desktop's settings disk again",
-            Opt::FreshDisk => "--fresh-disk: make the root disk again",
+            Opt::FreshDisk => {
+                "--fresh-disk: make the root disk again (with Chromium: its disk, and so its profile, bookmarks and logins)"
+            }
+            Opt::Chromium => {
+                "--chromium: the desktop boots from Chromium's disk, with Poly's apps; Chromium is the default browser"
+            }
             Opt::KernelArgs => "extra kernel arguments, such as poly.display.scale=2 (Enter types them)",
             Opt::Display => "POLY_QEMU_DISPLAY: QEMU's -display (auto: SDL on Windows; Enter types one)",
             Opt::Groups => "the boot test groups to run (none chosen: all of them)",
@@ -242,6 +249,8 @@ pub struct Settings {
     pub entry: Entry,
     pub release: bool,
     pub test_apps: bool,
+    /// The Desktop boots from Chromium's disk (`desktop --chromium`).
+    pub chromium: bool,
     /// `auto`, `kvm`, `whpx` or `tcg`.
     pub accel: String,
     /// `auto` or 1 to 4.
@@ -267,6 +276,7 @@ impl Default for Settings {
             entry: Entry::Desktop,
             release: true,
             test_apps: false,
+            chromium: true,
             accel: "auto".into(),
             scale: "auto".into(),
             size: "auto".into(),
@@ -321,6 +331,7 @@ impl Settings {
             "entry": self.entry.id(),
             "release": self.release,
             "test_apps": self.test_apps,
+            "chromium": self.chromium,
             "accel": self.accel,
             "scale": self.scale,
             "size": self.size,
@@ -356,6 +367,7 @@ impl Settings {
             entry: text("entry").and_then(|e| Entry::from_id(&e)).unwrap_or(d.entry),
             release: flag("release", d.release),
             test_apps: flag("test_apps", d.test_apps),
+            chromium: flag("chromium", d.chromium),
             accel: one_of("accel", &ACCELS, "auto"),
             scale: one_of("scale", &SCALES, "auto"),
             size: text("size").filter(|s| s == "auto" || valid_size(s)).unwrap_or(d.size.clone()),
@@ -374,6 +386,12 @@ impl Settings {
                 .unwrap_or(d.memory.clone()),
             cpus: text("cpus").filter(|c| c == "auto" || valid_cpus(c)).unwrap_or(d.cpus.clone()),
         }
+    }
+
+    /// Whether the Desktop boots from Chromium's disk on `host`: the switch
+    /// is on and the host can run it ([`chromium_refusal`]).
+    pub fn chromium_on(&self, host: &Host) -> bool {
+        self.chromium && chromium_refusal(host).is_none()
     }
 
     fn path() -> PathBuf {
@@ -402,6 +420,7 @@ impl Settings {
         match o {
             Opt::Release => if self.release { "release" } else { "debug" }.into(),
             Opt::TestApps => if self.test_apps { "on" } else { "off" }.into(),
+            Opt::Chromium => if self.chromium { "on" } else { "off" }.into(),
             Opt::Accel => self.accel.clone(),
             Opt::Scale => self.scale.clone(),
             Opt::Size => self.size.clone(),
@@ -434,6 +453,11 @@ pub struct Host {
     pub busybox_env: bool,
     /// Chromium's disk image is there.
     pub chromium_disk: bool,
+    /// Bytes of Chromium's packages still to download (`None`: the lock
+    /// cannot be read, so unknown).
+    pub chromium_download: Option<u64>,
+    /// `curl` runs here (it downloads the packages).
+    pub curl: bool,
     /// Its memory and cores, for the resources it can give a guest.
     pub res: HostResources,
 }
@@ -445,6 +469,8 @@ impl Host {
             windows: cfg!(windows),
             busybox_env: std::env::var("POLY_BUSYBOX").is_ok_and(|v| !v.is_empty() && v != "build"),
             chromium_disk: crate::root().join("target").join(crate::chromium::FILE_NAME).is_file(),
+            chromium_download: crate::chromium::first_start().0,
+            curl: std::process::Command::new("curl").arg("--version").output().is_ok_and(|o| o.status.success()),
             res: HostResources::probe(),
         }
     }
@@ -466,21 +492,47 @@ impl Host {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Avail {
     Ready,
-    /// It can, after `first` (which Start runs first), as `why` says.
-    First {
-        first: Entry,
-        why: String,
-    },
     /// It cannot, for this reason.
     No(String),
 }
 
+/// Why this host cannot run the desktop with Chromium, if it cannot: the
+/// guest's memory it needs ([`crate::chromium::MEMORY`], more than the
+/// plain desktop) must be one the host can give, and `curl` must be there
+/// to download its packages the first time.
+pub fn chromium_refusal(host: &Host) -> Option<String> {
+    if !host.curl && host.chromium_download != Some(0) {
+        return Some("needs curl here, to download Chromium's packages".into());
+    }
+    let memory = crate::chromium::MEMORY;
+    let mib = resources::parse_memory(memory)?;
+    host.res.memory_refusal(mib).map(|why| format!("Chromium's desktop needs {memory} of guest memory, but {why}"))
+}
+
+/// What the first start with Chromium costs, as the option's description
+/// says it (nothing to say once the disk is built).
+pub fn chromium_cost(host: &Host) -> String {
+    let disk = format!("a {} disk image", crate::chromium::DISK_SIZE);
+    match (host.chromium_disk, host.chromium_download) {
+        (true, _) => "its disk is built: a start takes the desktop plus about a minute for the window".into(),
+        (false, Some(0)) => {
+            format!("first start: makes {disk} from the packages already downloaded; later starts keep it")
+        }
+        (false, Some(bytes)) => format!(
+            "first start: downloads {} of Debian packages and makes {disk}; later starts keep it",
+            megabytes(bytes)
+        ),
+        (false, None) => format!("first start: downloads Debian packages and makes {disk}; later starts keep it"),
+    }
+}
+
+/// `bytes` as megabytes, rounded: `228 MB`.
+fn megabytes(bytes: u64) -> String {
+    format!("{} MB", (bytes + 500_000) / 1_000_000)
+}
+
 pub fn availability(e: Entry, host: &Host) -> Avail {
     match e {
-        Entry::ChromiumRun if !host.chromium_disk => Avail::First {
-            first: Entry::ChromiumDisk,
-            why: "needs Chromium's disk, not built yet: Start builds it first (a download and some minutes)".into(),
-        },
         Entry::Toolkits if !host.linux => Avail::No(format!("{LINUX_ONLY} (its disk is the host's GTK, Qt and VLC)")),
         Entry::DiskRoot if !host.linux => {
             Avail::No(format!("{LINUX_ONLY} (the root disk is the host's bash, coreutils, Python, gcc)"))
@@ -506,17 +558,17 @@ fn note(e: Entry, host: &Host) -> Option<&'static str> {
 
 /// What the desktop's launcher will offer (beyond Settings and
 /// Notifications).
-fn apps_line(e: Entry, s: &Settings) -> Option<String> {
+fn apps_line(e: Entry, s: &Settings, host: &Host) -> Option<String> {
     match e {
         Entry::Desktop => {
             let apps: Vec<String> = crate::desktop::launcher_apps(s.test_apps).into_iter().map(|(n, _)| n).collect();
+            let browser = if s.chromium_on(host) { "Chromium (the default browser), " } else { "" };
             if apps.is_empty() {
-                Some("No test apps in the image; turn on Test apps to add them".into())
+                Some(format!("The launcher: {browser}Poly's apps; no test apps (turn on Test apps to add them)"))
             } else {
-                Some(format!("The desktop image's test apps: {}", apps.join(", ")))
+                Some(format!("The launcher: {browser}Poly's apps, and the test apps: {}", apps.join(", ")))
             }
         }
-        Entry::ChromiumRun => Some("The launcher: Chromium and the disk's desktop files".into()),
         _ => None,
     }
 }
@@ -569,7 +621,9 @@ pub fn args(e: Entry, s: &Settings) -> Vec<String> {
             a.push("desktop".into());
             flag(&mut a, s.release, "--release");
             flag(&mut a, s.test_apps, "--test-apps");
+            flag(&mut a, s.chromium, "--chromium");
             flag(&mut a, s.fresh_state, "--fresh-state");
+            flag(&mut a, s.chromium && s.fresh_disk, "--fresh-disk");
             if s.scale != "auto" {
                 a.push(format!("--scale={}", s.scale));
             }
@@ -578,12 +632,6 @@ pub fn args(e: Entry, s: &Settings) -> Vec<String> {
             }
             resources(&mut a);
             kernel_args(&mut a);
-        }
-        Entry::ChromiumRun => {
-            a.extend(["chromium".into(), "run".into()]);
-            flag(&mut a, s.release, "--release");
-            flag(&mut a, s.fresh_disk, "--fresh-disk");
-            resources(&mut a);
         }
         Entry::ChromiumDisk => a.extend(["chromium".into(), "disk".into()]),
         Entry::Toolkits => {
@@ -630,10 +678,12 @@ fn env(e: Entry, s: &Settings) -> Vec<(&'static str, Option<String>)> {
 
 /// What Start runs for `s`: what is needed first, then the entry.
 pub fn plan(s: &Settings, host: &Host) -> std::result::Result<Vec<Job>, String> {
+    // The switch stays on in the settings where this host cannot do it; the
+    // run is without Chromium then (the menu says why).
+    let s = &Settings { chromium: s.chromium_on(host), ..s.clone() };
     let job = |e: Entry| Job { entry: e, args: args(e, s), env: env(e, s) };
     match availability(s.entry, host) {
         Avail::Ready => Ok(vec![job(s.entry)]),
-        Avail::First { first, .. } => Ok(vec![job(first), job(s.entry)]),
         Avail::No(why) => Err(format!("{}: {why}", s.entry.title())),
     }
 }
@@ -654,7 +704,12 @@ fn execute(job: &Job, s: &Settings, build_only: bool) -> Result {
     let rest = &job.args[1..];
     match job.entry {
         Entry::Desktop => {
-            let ready = progress::show("Building the desktop", || crate::desktop::prepare(rest))?;
+            let title = if job.args.iter().any(|a| a == "--chromium") {
+                "Building the desktop with Chromium"
+            } else {
+                "Building the desktop"
+            };
+            let ready = progress::show(title, || crate::desktop::prepare(rest))?;
             if build_only { Ok(()) } else { crate::desktop::boot(ready) }
         }
         Entry::ChromiumDisk => crate::dispatch(&job.args),
@@ -790,11 +845,8 @@ impl Menu {
     fn choose(&mut self, e: Entry) {
         match availability(e, &self.host) {
             Avail::No(why) => self.message = format!("{}: {why}", e.title()),
-            avail => {
+            Avail::Ready => {
                 self.s.entry = e;
-                if let Avail::First { why, .. } = avail {
-                    self.message = why;
-                }
                 // The focus stays on the entry (its rows above the options
                 // do not move).
                 self.focus_on(Row::Entry(e));
@@ -805,9 +857,13 @@ impl Menu {
     /// Enter or Space on an option.
     fn activate(&mut self, o: Opt, enter: bool) {
         match o {
-            Opt::Release | Opt::TestApps | Opt::FreshState | Opt::FreshDisk | Opt::Accel | Opt::Scale => {
-                self.change(o, 1)
-            }
+            Opt::Release
+            | Opt::TestApps
+            | Opt::Chromium
+            | Opt::FreshState
+            | Opt::FreshDisk
+            | Opt::Accel
+            | Opt::Scale => self.change(o, 1),
             Opt::Size | Opt::Display | Opt::KernelArgs if enter => {
                 let now = match o {
                     Opt::Size if self.s.size == "auto" => String::new(),
@@ -853,6 +909,10 @@ impl Menu {
             Opt::Cpus => s.cpus = owned(cpu_choices, &s.cpus),
             Opt::Release => s.release = !s.release,
             Opt::TestApps => s.test_apps = !s.test_apps,
+            Opt::Chromium => match chromium_refusal(&self.host) {
+                Some(why) if !s.chromium => self.message = format!("Chromium cannot run here: {why}"),
+                _ => s.chromium = !s.chromium,
+            },
             Opt::FreshState => s.fresh_state = !s.fresh_state,
             Opt::FreshDisk => s.fresh_disk = !s.fresh_disk,
             Opt::Accel => s.accel = cycle(&self.host.accels(), &s.accel),
@@ -1031,7 +1091,6 @@ impl Menu {
             };
             let (tail, tail_look) = match &avail {
                 Avail::No(why) => (why.clone(), Look::Dim),
-                Avail::First { why, .. } => (why.clone(), Look::Warn),
                 Avail::Ready => match note(e, &self.host) {
                     Some(n) => (format!("{}; {n}", e.about()), Look::Dim),
                     None => (e.about().to_string(), Look::Dim),
@@ -1051,12 +1110,22 @@ impl Menu {
                 Some((e, text)) if e == o => format!("{text}_"),
                 _ => self.s.value(*o),
             };
-            let look = if focus == Row::Opt(*o) { Look::Focus } else { Look::Plain };
+            let refused = if *o == Opt::Chromium { chromium_refusal(&self.host) } else { None };
+            let look = match (&refused, focus == Row::Opt(*o)) {
+                (_, true) => Look::Focus,
+                (Some(_), false) => Look::Dim,
+                (None, false) => Look::Plain,
+            };
             let arrows = if matches!(o, Opt::Groups | Opt::Parts | Opt::KernelArgs) { "  " } else { "< " };
-            out.push(vec![
-                (look, format!("      {:<18}{arrows}{value}", o.title())),
-                (Look::Dim, if focus == Row::Opt(*o) { format!("   {}", o.hint()) } else { String::new() }),
-            ]);
+            // What a switch that costs something says is always shown: the
+            // first start's download, or why it is greyed.
+            let tail = match (o, &refused) {
+                (Opt::Chromium, Some(why)) => format!("   greyed: {why}"),
+                (Opt::Chromium, None) => format!("   {}", chromium_cost(&self.host)),
+                _ if focus == Row::Opt(*o) => format!("   {}", o.hint()),
+                _ => String::new(),
+            };
+            out.push(vec![(look, format!("      {:<18}{arrows}{value}", o.title())), (Look::Dim, tail)]);
         }
         if !self.s.entry.resources().is_empty() {
             out.push(vec![]);
@@ -1066,7 +1135,7 @@ impl Menu {
             }
         }
         out.push(vec![]);
-        if let Some(apps) = apps_line(self.s.entry, &self.s) {
+        if let Some(apps) = apps_line(self.s.entry, &self.s, &self.host) {
             out.push(vec![(Look::Dim, format!(" {apps}"))]);
         }
         match plan(&self.s, &self.host) {
@@ -1108,7 +1177,8 @@ impl Menu {
     /// and this host, then the choices (those this host cannot give greyed,
     /// with the reason).
     fn resource_lines(&self, o: Opt, focused: bool, out: &mut Vec<Line>) {
-        let (default_memory, default_cpus) = self.s.entry.default_resources().unwrap_or(("?", 0));
+        let (default_memory, default_cpus) =
+            self.s.entry.default_resources(self.s.chromium_on(&self.host)).unwrap_or(("?", 0));
         let host = &self.host.res;
         let value = match &self.edit {
             Some((e, text)) if *e == o => format!("{text}_"),
@@ -1312,7 +1382,6 @@ fn prompt(s: Settings, host: &Host) -> Result<(Settings, Action)> {
         let mark = if *e == s.entry { '*' } else { ' ' };
         let tail = match availability(*e, host) {
             Avail::No(why) => format!("(not here: {why})"),
-            Avail::First { why, .. } => why,
             Avail::Ready => e.about().to_string(),
         };
         eprintln!(" {mark}{:>2}. {:<30} {tail}", i + 1, e.title());
@@ -1389,11 +1458,32 @@ mod tests {
     const BIG: HostResources = HostResources { memory_mib: Some(16 * 1024), cpus: 8 };
 
     fn windows() -> Host {
-        Host { linux: false, windows: true, busybox_env: false, chromium_disk: false, res: BIG }
+        Host {
+            linux: false,
+            windows: true,
+            busybox_env: false,
+            chromium_disk: false,
+            chromium_download: Some(228_000_000),
+            curl: true,
+            res: BIG,
+        }
     }
 
     fn linux() -> Host {
-        Host { linux: true, windows: false, busybox_env: false, chromium_disk: true, res: BIG }
+        Host {
+            linux: true,
+            windows: false,
+            busybox_env: false,
+            chromium_disk: true,
+            chromium_download: Some(0),
+            curl: true,
+            res: BIG,
+        }
+    }
+
+    /// The settings of the plain desktop, without Chromium (the default has it).
+    fn plain() -> Settings {
+        Settings { chromium: false, ..Settings::default() }
     }
 
     #[test]
@@ -1402,6 +1492,7 @@ mod tests {
             entry: Entry::BootTests,
             release: false,
             test_apps: true,
+            chromium: false,
             accel: "tcg".into(),
             scale: "2".into(),
             size: "2560x1600".into(),
@@ -1433,6 +1524,7 @@ mod tests {
         assert_eq!((s.accel.as_str(), s.scale.as_str(), s.size.as_str()), ("auto", "auto", "auto"));
         assert!(s.release);
         assert!(!s.test_apps);
+        assert!(s.chromium, "Chromium is on unless a file says it is not");
         assert_eq!(s.groups, ["desktop"]);
         assert_eq!(s.display, "auto");
     }
@@ -1440,6 +1532,10 @@ mod tests {
     #[test]
     fn command_lines() {
         let mut s = Settings::default();
+        // The Desktop has Chromium unless that is switched off.
+        assert!(s.chromium);
+        assert_eq!(args(Entry::Desktop, &s), ["desktop", "--release", "--chromium"]);
+        s.chromium = false;
         assert_eq!(args(Entry::Desktop, &s), ["desktop", "--release"]);
         s.scale = "2".into();
         s.size = "2560x1600".into();
@@ -1459,10 +1555,27 @@ mod tests {
                 "poly.b"
             ]
         );
+        // Fresh disk is Chromium's: without it nothing is passed.
+        s.fresh_disk = true;
+        assert!(!args(Entry::Desktop, &s).iter().any(|a| a == "--fresh-disk"));
+        s.chromium = true;
+        assert_eq!(
+            args(Entry::Desktop, &s),
+            [
+                "desktop",
+                "--release",
+                "--test-apps",
+                "--chromium",
+                "--fresh-state",
+                "--fresh-disk",
+                "--scale=2",
+                "--size=2560x1600",
+                "poly.a=1",
+                "poly.b"
+            ]
+        );
         s.test_apps = false;
         s.release = false;
-        s.fresh_disk = true;
-        assert_eq!(args(Entry::ChromiumRun, &s), ["chromium", "run", "--fresh-disk"]);
         assert_eq!(args(Entry::ChromiumDisk, &s), ["chromium", "disk"]);
         assert_eq!(args(Entry::Busybox, &s), ["run", "--busybox", "poly.a=1", "poly.b"]);
         assert_eq!(args(Entry::DiskRoot, &s), ["run", "--disk-root", "--fresh-disk", "poly.a=1", "poly.b"]);
@@ -1477,7 +1590,7 @@ mod tests {
 
     #[test]
     fn the_environment_is_set_or_left_to_xtask() {
-        let mut s = Settings::default();
+        let mut s = plain();
         let j = &plan(&s, &linux()).unwrap()[0];
         assert_eq!(j.env, [(crate::accel::ENV, None), ("POLY_QEMU_DISPLAY", None)]);
         assert_eq!(j.line(), "cargo xtask desktop --release");
@@ -1493,7 +1606,7 @@ mod tests {
     }
 
     #[test]
-    fn what_cannot_run_here_says_why_and_prerequisites_come_first() {
+    fn what_cannot_run_here_says_why() {
         let w = windows();
         for e in [Entry::Toolkits, Entry::DiskRoot, Entry::Busybox] {
             match availability(e, &w) {
@@ -1504,10 +1617,10 @@ mod tests {
         }
         let with_busybox = Host { busybox_env: true, ..windows() };
         assert_eq!(availability(Entry::Busybox, &with_busybox), Avail::Ready);
-        let s = Settings { entry: Entry::ChromiumRun, ..Settings::default() };
-        let jobs = plan(&s, &w).unwrap();
-        assert_eq!(jobs.iter().map(|j| j.entry).collect::<Vec<_>>(), [Entry::ChromiumDisk, Entry::ChromiumRun]);
-        assert_eq!(plan(&s, &linux()).unwrap().len(), 1);
+        // The desktop with Chromium downloads and builds what it needs itself.
+        let s = Settings::default();
+        assert_eq!(plan(&s, &w).unwrap().len(), 1);
+        assert_eq!(plan(&s, &w).unwrap()[0].line(), "cargo xtask desktop --release --chromium");
         let s = Settings { entry: Entry::Toolkits, ..Settings::default() };
         assert!(plan(&s, &w).unwrap_err().contains("Linux host"));
     }
@@ -1541,12 +1654,14 @@ mod tests {
         assert!(m.lines().iter().flatten().any(|(_, t)| t.contains("Poly Fill")));
         m.key(Key::Right);
         assert!(!m.s.test_apps);
-        // Chromium: chosen, with what comes first.
-        m.focus_on(Row::Entry(Entry::ChromiumRun));
+        // Building Chromium's disk alone has no options.
+        m.focus_on(Row::Entry(Entry::ChromiumDisk));
         m.key(Key::Enter);
-        assert_eq!(m.s.entry, Entry::ChromiumRun);
-        assert!(m.message.contains("Chromium's disk"));
-        assert!(m.rows().contains(&Row::Opt(Opt::FreshDisk)) && !m.rows().contains(&Row::Opt(Opt::Scale)));
+        assert_eq!(m.s.entry, Entry::ChromiumDisk);
+        assert!(!m.rows().contains(&Row::Opt(Opt::FreshDisk)) && !m.rows().contains(&Row::Opt(Opt::Scale)));
+        m.focus_on(Row::Entry(Entry::Desktop));
+        m.key(Key::Enter);
+        assert_eq!(m.s.entry, Entry::Desktop);
         // Options: cycle the accelerator through what Windows has.
         m.focus_on(Row::Opt(Opt::Accel));
         let seen: Vec<String> = (0..3)
@@ -1646,10 +1761,9 @@ mod tests {
         s.kernel_args = "poly.a=1".into();
         assert_eq!(
             args(Entry::Desktop, &s),
-            ["desktop", "--release", "--memory=4G", "--cpus=3", "poly.a=1"],
+            ["desktop", "--release", "--chromium", "--memory=4G", "--cpus=3", "poly.a=1"],
             "before the kernel arguments"
         );
-        assert_eq!(args(Entry::ChromiumRun, &s), ["chromium", "run", "--release", "--memory=4G", "--cpus=3"]);
         assert_eq!(args(Entry::Toolkits, &s), ["toolkits", "--release", "--memory=4G", "--cpus=3"]);
         assert_eq!(args(Entry::Shell, &s), ["run", "--release", "--memory=4G", "--cpus=3", "poly.a=1"]);
         assert_eq!(args(Entry::Busybox, &s), ["run", "--release", "--busybox", "--memory=4G", "--cpus=3", "poly.a=1"]);
@@ -1660,13 +1774,13 @@ mod tests {
         // The boot tests and CI keep their fixed sizes; so does building the disk.
         for e in [Entry::BootTests, Entry::Ci, Entry::ChromiumDisk] {
             assert!(!args(e, &s).iter().any(|a| a.starts_with("--memory") || a.starts_with("--cpus")), "{e:?}");
-            assert!(e.resources().is_empty() && e.default_resources().is_none(), "{e:?}");
+            assert!(e.resources().is_empty() && e.default_resources(false).is_none(), "{e:?}");
         }
         // One of them alone.
         s.cpus = "auto".into();
         assert_eq!(args(Entry::Toolkits, &s), ["toolkits", "--release", "--memory=4G"]);
         // What --print shows is what the subcommand takes.
-        let s = Settings { memory: "4G".into(), cpus: "3".into(), ..Settings::default() };
+        let s = Settings { memory: "4G".into(), cpus: "3".into(), ..plain() };
         assert_eq!(plan(&s, &linux()).unwrap()[0].line(), "cargo xtask desktop --release --memory=4G --cpus=3");
         for e in ENTRIES {
             let a = args(e, &s);
@@ -1680,15 +1794,15 @@ mod tests {
     #[test]
     fn every_entry_that_takes_resources_knows_its_defaults() {
         for e in ENTRIES {
-            assert_eq!(e.resources().is_empty(), e.default_resources().is_none(), "{e:?}");
+            assert_eq!(e.resources().is_empty(), e.default_resources(false).is_none(), "{e:?}");
         }
-        assert_eq!(Entry::Desktop.default_resources(), Some(("512M", 2)));
-        assert_eq!(Entry::ChromiumRun.default_resources(), Some(("4G", 4)));
-        assert_eq!(Entry::Toolkits.default_resources(), Some(("2G", 2)));
-        assert_eq!(Entry::Shell.default_resources(), Some(("256M", 2)));
-        assert_eq!(Entry::DiskRoot.default_resources(), Some(("1G", 2)));
+        assert_eq!(Entry::Desktop.default_resources(false), Some(("512M", 2)));
+        assert_eq!(Entry::Desktop.default_resources(true), Some(("4G", 4)), "Chromium's disk needs more");
+        assert_eq!(Entry::Toolkits.default_resources(false), Some(("2G", 2)));
+        assert_eq!(Entry::Shell.default_resources(false), Some(("256M", 2)));
+        assert_eq!(Entry::DiskRoot.default_resources(false), Some(("1G", 2)));
         for e in ENTRIES {
-            if let Some((memory, _)) = e.default_resources() {
+            if let Some((memory, _)) = e.default_resources(true) {
                 assert!(resources::parse_memory(memory).is_some(), "{e:?}: {memory}");
             }
         }
@@ -1723,7 +1837,7 @@ mod tests {
 
     #[test]
     fn what_the_host_cannot_give_is_greyed_with_the_reason() {
-        let m = Menu::new(Settings::default(), linux());
+        let m = Menu::new(plain(), linux());
         let text = texts(&m);
         assert!(text.contains("Resources for Desktop"), "{text}");
         assert!(text.contains("= 512M, the default") && text.contains("= 2, the default"), "{text}");
@@ -1750,7 +1864,7 @@ mod tests {
     #[test]
     fn the_menu_warns_where_a_value_will_not_be_taken_as_it_is() {
         // A saved size below the entry's default.
-        let s = Settings { entry: Entry::ChromiumRun, memory: "1G".into(), ..Settings::default() };
+        let s = Settings { memory: "1G".into(), ..Settings::default() };
         let text = texts(&Menu::new(s, linux()));
         assert!(text.contains("below the default 4G: it may not boot"), "{text}");
         // Saved on a bigger host: Start clamps it.
@@ -1798,6 +1912,85 @@ mod tests {
         m.key(Key::Enter);
         assert_eq!((m.edit.is_none(), m.s.memory.as_str()), (true, "auto"));
         // The line Start runs.
-        assert_eq!(plan(&m.s, &m.host).unwrap()[0].line(), "cargo xtask desktop --release --cpus=6");
+        assert_eq!(plan(&m.s, &m.host).unwrap()[0].line(), "cargo xtask desktop --release --chromium --cpus=6");
+    }
+
+    #[test]
+    fn chromium_is_on_by_default_and_says_what_the_first_start_costs() {
+        let m = Menu::new(Settings::default(), windows());
+        assert!(m.s.chromium && m.rows().contains(&Row::Opt(Opt::Chromium)));
+        let text = texts(&m);
+        assert!(text.contains("With Chromium"), "{text}");
+        // Nothing downloaded or built yet: the size is in the option's line.
+        assert!(
+            text.contains("first start: downloads 228 MB of Debian packages and makes a 1.3 GB disk image"),
+            "{text}"
+        );
+        assert!(text.contains("The launcher: Chromium (the default browser), Poly's apps"), "{text}");
+        assert_eq!(plan(&m.s, &m.host).unwrap()[0].line(), "cargo xtask desktop --release --chromium");
+        // Packages there, the disk not yet; then the disk too.
+        let host = Host { chromium_download: Some(0), ..windows() };
+        assert!(chromium_cost(&host).contains("makes a 1.3 GB disk image from the packages already downloaded"));
+        let host = Host { chromium_disk: true, ..host };
+        assert!(chromium_cost(&host).contains("its disk is built"));
+        // The lock unreadable: no size, still the way.
+        assert!(chromium_cost(&Host { chromium_download: None, ..windows() }).contains("downloads Debian packages"));
+    }
+
+    #[test]
+    fn the_switch_turns_chromium_off_and_back_on_and_is_kept() {
+        let mut m = Menu::new(Settings::default(), windows());
+        m.focus_on(Row::Opt(Opt::Chromium));
+        m.key(Key::Space);
+        assert!(!m.s.chromium);
+        assert_eq!(plan(&m.s, &m.host).unwrap()[0].line(), "cargo xtask desktop --release");
+        assert!(texts(&m).contains("The launcher: Poly's apps; no test apps"));
+        // The memory a plain desktop starts with is shown then, Chromium's with it.
+        assert!(texts(&m).contains("= 512M, the default"));
+        m.key(Key::Right);
+        assert!(m.s.chromium);
+        assert!(texts(&m).contains("= 4G, the default"));
+        // Fresh disk is Chromium's disk's: only with it it is on the line.
+        m.focus_on(Row::Opt(Opt::FreshDisk));
+        m.key(Key::Space);
+        assert_eq!(plan(&m.s, &m.host).unwrap()[0].line(), "cargo xtask desktop --release --chromium --fresh-disk");
+        // Saved and loaded again with the others.
+        assert_eq!(Settings::from_json(&m.s.to_json().to_string()), m.s);
+        let off = Settings { chromium: false, ..Settings::default() };
+        assert!(!Settings::from_json(&off.to_json().to_string()).chromium);
+    }
+
+    #[test]
+    fn a_host_that_cannot_run_chromium_greys_it_out_with_the_reason() {
+        // 4G of guest memory is more than a 4 GiB host can give.
+        let small = Host { res: HostResources { memory_mib: Some(4 * 1024), cpus: 4 }, ..windows() };
+        let why = chromium_refusal(&small).expect("refused");
+        assert!(why.contains("Chromium's desktop needs 4G of guest memory") && why.contains("4.0 GiB"), "{why}");
+        let mut m = Menu::new(Settings::default(), small.clone());
+        let text = texts(&m);
+        assert!(text.contains("greyed: Chromium's desktop needs 4G"), "{text}");
+        // Drawn dim, the settings still say on, the run is the plain desktop.
+        let row = m.lines().into_iter().find(|l| l.iter().any(|(_, t)| t.contains("With Chromium"))).unwrap();
+        assert_eq!(row[0].0, Look::Dim);
+        assert!(m.s.chromium && !m.s.chromium_on(&small));
+        assert_eq!(plan(&m.s, &small).unwrap()[0].line(), "cargo xtask desktop --release");
+        assert!(texts(&m).contains("= 512M, the default"));
+        // It cannot be switched on again once off: the reason is the message.
+        m.focus_on(Row::Opt(Opt::Chromium));
+        m.key(Key::Space);
+        assert!(!m.s.chromium);
+        m.key(Key::Space);
+        assert!(!m.s.chromium && m.message.contains("Chromium cannot run here"), "{}", m.message);
+        // No curl, and packages to download: refused for that.
+        let no_curl = Host { curl: false, ..windows() };
+        assert!(chromium_refusal(&no_curl).unwrap().contains("curl"));
+        // But nothing to download needs none.
+        assert_eq!(chromium_refusal(&Host { curl: false, chromium_download: Some(0), ..windows() }), None);
+        // Hosts that can give the memory are not refused.
+        assert_eq!(chromium_refusal(&windows()), None);
+        assert_eq!(chromium_refusal(&linux()), None);
+        // An unknown memory is not a reason.
+        let unknown = Host { res: HostResources { memory_mib: None, cpus: 4 }, ..windows() };
+        assert_eq!(chromium_refusal(&unknown), None);
     }
 }

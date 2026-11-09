@@ -273,7 +273,9 @@ Run them with:
 ```sh
 cargo xtask chromium fetch                      # any host: the pinned packages
 cargo xtask chromium disk                       # any host: target/poly-chromium-disk.img
-cargo xtask chromium run                        # any host: the desktop, Chromium in the launcher
+cargo xtask desktop --chromium                  # any host: the desktop with Poly's apps, Chromium the default
+                                                # browser (the dev menu's default; ADR 0147)
+cargo xtask chromium run                        # any host: the same disk with the disk's bash on the terminal
 cargo xtask chromium apptest --target poly      # Linux host: the visible cases on Poly
 cargo xtask boot-tests chromium                 # Linux host: headless + windowed on Poly
 ```

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "db56e24d0ac3",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T17:08:29Z",
+  "tests": [
+    {
+      "name": "bea_fields",
+      "exe_sha256": "2bffb604cb4fa076d7e5864a2ce2a5c412ffcc3dc177626e191de8ab978c0bc2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bW9kZSAweDAgaW5oZXJpdCAweDA6IGFjY2Vzcz0weDFmMDFmZiBtb2RlPTAgaW5oZXJpdD0weDAgdHJ1c3RlZTogbXVsdGlwbGVfbnVsbD10cnVlIG9wPTAgZm9ybT0xIHR5cGU9MCBuYW1lIEV2ZXJ5b25lCiAgbmFtZSBwb2ludGVyIGlzIHRoZSBhcmd1bWVudDogdHJ1ZTsgcGFkZGluZyB3b3JkcyAweGFhYWFhYWFhIDB4YWFhYWFhYWEKbW9kZSAweDEgaW5oZXJpdCAweDA6IGFjY2Vzcz0weDFmMDFmZiBtb2RlPTEgaW5oZXJpdD0weDAgdHJ1c3RlZTogbXVsdGlwbGVfbnVsbD10cnVlIG9wPTAgZm9ybT0xIHR5cGU9MCBuYW1lIEV2ZXJ5b25lCiAgbmFtZSBwb2ludGVyIGlzIHRoZSBhcmd1bWVudDogdHJ1ZTsgcGFkZGluZyB3b3JkcyAweGFhYWFhYWFhIDB4YWFhYWFhYWEKbW9kZSAweDIgaW5oZXJpdCAweDM6IGFjY2Vzcz0weDFmMDFmZiBtb2RlPTIgaW5oZXJpdD0weDMgdHJ1c3RlZTogbXVsdGlwbGVfbnVsbD10cnVlIG9wPTAgZm9ybT0xIHR5cGU9MCBuYW1lIEV2ZXJ5b25lCiAgbmFtZSBwb2ludGVyIGlzIHRoZSBhcmd1bWVudDogdHJ1ZTsgcGFkZGluZyB3b3JkcyAweGFhYWFhYWFhIDB4YWFhYWFhYWEKbW9kZSAweDMgaW5oZXJpdCAweDE6IGFjY2Vzcz0weDFmMDFmZiBtb2RlPTMgaW5oZXJpdD0weDEgdHJ1c3RlZTogbXVsdGlwbGVfbnVsbD10cnVlIG9wPTAgZm9ybT0xIHR5cGU9MCBuYW1lIEV2ZXJ5b25lCiAgbmFtZSBwb2ludGVyIGlzIHRoZSBhcmd1bWVudDogdHJ1ZTsgcGFkZGluZyB3b3JkcyAweGFhYWFhYWFhIDB4YWFhYWFhYWEKbW9kZSAweDQgaW5oZXJpdCAweDI6IGFjY2Vzcz0weDFmMDFmZiBtb2RlPTQgaW5oZXJpdD0weDIgdHJ1c3RlZTogbXVsdGlwbGVfbnVsbD10cnVlIG9wPTAgZm9ybT0xIHR5cGU9MCBuYW1lIEV2ZXJ5b25lCiAgbmFtZSBwb2ludGVyIGlzIHRoZSBhcmd1bWVudDogdHJ1ZTsgcGFkZGluZyB3b3JkcyAweGFhYWFhYWFhIDB4YWFhYWFhYWEKbW9kZSAweDUgaW5oZXJpdCAweDQ6IGFjY2Vzcz0weDFmMDFmZiBtb2RlPTUgaW5oZXJpdD0weDQgdHJ1c3RlZTogbXVsdGlwbGVfbnVsbD10cnVlIG9wPTAgZm9ybT0xIHR5cGU9MCBuYW1lIEV2ZXJ5b25lCiAgbmFtZSBwb2ludGVyIGlzIHRoZSBhcmd1bWVudDogdHJ1ZTsgcGFkZGluZyB3b3JkcyAweGFhYWFhYWFhIDB4YWFhYWFhYWEKbW9kZSAweDYgaW5oZXJpdCAweDg6IGFjY2Vzcz0weDFmMDFmZiBtb2RlPTYgaW5oZXJpdD0weDggdHJ1c3RlZTogbXVsdGlwbGVfbnVsbD10cnVlIG9wPTAgZm9ybT0xIHR5cGU9MCBuYW1lIEV2ZXJ5b25lCiAgbmFtZSBwb2ludGVyIGlzIHRoZSBhcmd1bWVudDogdHJ1ZTsgcGFkZGluZyB3b3JkcyAweGFhYWFhYWFhIDB4YWFhYWFhYWEKbW9kZSAweDcgaW5oZXJpdCAweDA6IGFjY2Vzcz0weDFmMDFmZiBtb2RlPTcgaW5oZXJpdD0weDAgdHJ1c3RlZTogbXVsdGlwbGVfbnVsbD10cnVlIG9wPTAgZm9ybT0xIHR5cGU9MCBuYW1lIEV2ZXJ5b25lCiAgbmFtZSBwb2ludGVyIGlzIHRoZSBhcmd1bWVudDogdHJ1ZTsgcGFkZGluZyB3b3JkcyAweGFhYWFhYWFhIDB4YWFhYWFhYWEKbW9kZSAweGZmZmZmZmZmIGluaGVyaXQgMHhmZmZmZmZmZjogYWNjZXNzPTB4MWYwMWZmIG1vZGU9NDI5NDk2NzI5NSBpbmhlcml0PTB4ZmZmZmZmZmYgdHJ1c3RlZTogbXVsdGlwbGVfbnVsbD10cnVlIG9wPTAgZm9ybT0xIHR5cGU9MCBuYW1lIEV2ZXJ5b25lCiAgbmFtZSBwb2ludGVyIGlzIHRoZSBhcmd1bWVudDogdHJ1ZTsgcGFkZGluZyB3b3JkcyAweGFhYWFhYWFhIDB4YWFhYWFhYWEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mode 0x0 inherit 0x0: access=0x1f01ff mode=0 inherit=0x0 trustee: multiple_null=true op=0 form=1 type=0 name Everyone\n  name pointer is the argument: true; padding words 0xaaaaaaaa 0xaaaaaaaa\nmode 0x1 inherit 0x0: access=0x1f01ff mode=1 inherit=0x0 trustee: multiple_null=true op=0 form=1 type=0 name Everyone\n  name pointer is the argument: true; padding words 0xaaaaaaaa 0xaaaaaaaa\nmode 0x2 inherit 0x3: access=0x1f01ff mode=2 inherit=0x3 trustee: multiple_null=true op=0 form=1 type=0 name Everyone\n  name pointer is the argument: true; padding words 0xaaaaaaaa 0xaaaaaaaa\nmode 0x3 inherit 0x1: access=0x1f01ff mode=3 inherit=0x1 trustee: multiple_null=true op=0 form=1 type=0 name Everyone\n  name pointer is the argument: true; padding words 0xaaaaaaaa 0xaaaaaaaa\nmode 0x4 inherit 0x2: access=0x1f01ff mode=4 inherit=0x2 trustee: multiple_null=true op=0 form=1 type=0 name Everyone\n  name pointer is the argument: true; padding words 0xaaaaaaaa 0xaaaaaaaa\nmode 0x5 inherit 0x4: access=0x1f01ff mode=5 inherit=0x4 trustee: multiple_null=true op=0 form=1 type=0 name Everyone\n  name pointer is the argument: true; padding words 0xaaaaaaaa 0xaaaaaaaa\nmode 0x6 inherit 0x8: access=0x1f01ff mode=6 inherit=0x8 trustee: multiple_null=true op=0 form=1 type=0 name Everyone\n  name pointer is the argument: true; padding words 0xaaaaaaaa 0xaaaaaaaa\nmode 0x7 inherit 0x0: access=0x1f01ff mode=7 inherit=0x0 trustee: multiple_null=true op=0 form=1 type=0 name Everyone\n  name pointer is the argument: true; padding words 0xaaaaaaaa 0xaaaaaaaa\nmode 0xffffffff inherit 0xffffffff: access=0x1f01ff mode=4294967295 inherit=0xffffffff trustee: multiple_null=true op=0 form=1 type=0 name Everyone\n  name pointer is the argument: true; padding words 0xaaaaaaaa 0xaaaaaaaa\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

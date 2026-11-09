@@ -316,6 +316,13 @@ impl Xwayland {
                                 transient_for: w.transient_for,
                             };
                             server.x_update(*id, &state);
+                            // An app's window: its launch's busy pointer ends.
+                            if w.mapped
+                                && !w.override_redirect
+                                && let Some(pid) = w.pid
+                            {
+                                server.launch_window_mapped(pid);
+                            }
                         }
                     }
                     Action::Destroyed(id) => server.x_destroy(*id),

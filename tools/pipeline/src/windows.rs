@@ -36,9 +36,12 @@ pub const CORPUS_DIR: &str = "tests/windows";
 pub const SUPPORT_CRATE: &str = "tests/windows/support";
 pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// The only DLLs a test program may import from (by name): the native
-/// API, `kernel32`, and the GUI's `user32` and `gdi32` (Phase 7's window,
-/// message and painting entries).
-pub const ALLOWED_DLLS: &[&str] = &["ntdll.dll", "kernel32.dll", "user32.dll", "gdi32.dll"];
+/// API, `kernel32`, the GUI's `user32` and `gdi32` (Phase 7's window,
+/// message and painting entries), `dwrite` (DirectWrite's entries), `advapi32`
+/// (the security model: tokens, SIDs, ACLs, security descriptors, account lookup)
+/// and `userenv` (AppContainer SIDs).
+pub const ALLOWED_DLLS: &[&str] =
+    &["ntdll.dll", "kernel32.dll", "user32.dll", "gdi32.dll", "dwrite.dll", "advapi32.dll", "userenv.dll"];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
 
@@ -189,6 +192,11 @@ pub struct Built {
     pub size: u64,
     /// DLL (lower case) to the names imported from it.
     pub imports: BTreeMap<String, Vec<String>>,
+    /// The Windows session its reference was recorded in (`interactive`,
+    /// from the `windows.json` beside the source; absent: the SSH session).
+    /// `win poly` boots Poly's win32k in the same kind of session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
 }
 
 /// `manifest.json` beside the executables.
@@ -330,12 +338,31 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
             exe_sha256: sha256::hex(&bytes),
             size: bytes.len() as u64,
             imports,
+            session: session_of(&src.path),
         });
     }
     let revision = util::git_text(repo, &["rev-parse", "HEAD"]).ok().map(|s| s.trim().to_string());
     let m = Manifest { format: BUILD_FORMAT.into(), rustc: version, revision, clang, tests };
     util::write_json(&out.join("manifest.json"), &m)?;
     Ok(m)
+}
+
+/// The session a test's reference was recorded in: `system.session` of
+/// the `windows.json` in the source's directory, if there is one.
+fn session_of(source: &Path) -> Option<String> {
+    let reference = source.parent()?.join("windows.json");
+    let bytes = std::fs::read(reference).ok()?;
+    RunFile::parse(&bytes).ok()?.system.session
+}
+
+/// The kernel arguments for a test recorded in `session` (ADR 0131):
+/// Poly's win32k reproduces the interactive desktop session (1920x1080,
+/// windows visible and painted, input) only when asked.
+pub fn session_kernel_args(session: Option<&str>) -> &'static str {
+    match session {
+        Some("interactive") => " poly.win32k.session=interactive",
+        _ => "",
+    }
 }
 
 /// The Rust tests: one generated Cargo package with a binary per test.
@@ -784,7 +811,8 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
         let image = poly::initramfs(&bytes)?;
-        let (done, log, _) = target.boot_log(&t.name, &image, work, &poly_kernel_args())?;
+        let args = format!("{}{}", poly_kernel_args(), session_kernel_args(t.session.as_deref()));
+        let (done, log, _) = target.boot_log(&t.name, &image, work, &args)?;
         let timed_out = done.exit == crate::trace::Exit::Timeout;
         let mut r = parse_poly_serial(&t.name, &log, &t.exe_sha256, timed_out)?;
         r.ms = Some(done.duration_ns / 1_000_000);
@@ -1217,6 +1245,9 @@ mod tests {
         // GUI tests (Phase 7) import user32 and gdi32, still as console programs.
         let gui_dlls = image(&[("USER32.dll", &["CreateWindowExW"]), ("gdi32.dll", &["BitBlt"])], 3);
         assert_eq!(check_image(&gui_dlls).unwrap()["user32.dll"], ["CreateWindowExW"]);
+        // DirectWrite tests import dwrite.dll.
+        let dw = image(&[("DWRITE.dll", &["DWriteCreateFactory"])], 3);
+        assert_eq!(check_image(&dw).unwrap()["dwrite.dll"], ["DWriteCreateFactory"]);
         let other = image(&[("shell32.dll", &["SHGetFolderPathW"])], 3);
         assert!(check_image(&other).unwrap_err().contains("shell32.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);
@@ -1281,6 +1312,7 @@ mod tests {
                 exe_sha256: sha256::hex(bytes),
                 size: bytes.len() as u64,
                 imports: BTreeMap::new(),
+                session: None,
             });
         }
         let m =

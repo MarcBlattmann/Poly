@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "pk_byte",
+      "exe_sha256": "4a5a787b4d0e5deeabf851df827e8fc68b92241258a172c3cf2d424af1a53379",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZW1wdHlfcGVla19vawpvayBlbXB0eV9jb3BpZWQKb2sgZW1wdHlfYXZhaWxhYmxlCm9rIGVtcHR5X2xlZnQKb2sgd3JpdGVfMTEKb2sgcGVlazVfb2sKb2sgcGVlazVfY29waWVkCm9rIHBlZWs1X2RhdGEKb2sgcGVlazVfYXZhaWxhYmxlCm9rIHBlZWs1X2xlZnRfaXNfbWludXNfY29waWVkCm9rIHBlZWsxNl9vawpvayBwZWVrMTZfY29waWVkCm9rIHBlZWsxNl9hdmFpbGFibGUKb2sgcGVlazE2X2xlZnRfaXNfbWludXNfY29waWVkCm9rIHNpemVzX29ubHlfb2sKb2sgc2l6ZXNfb25seV9hdmFpbGFibGUKb2sgc2l6ZXNfb25seV9sZWZ0Cm9rIHplcm9fYnVmZmVyX29rCm9rIHplcm9fYnVmZmVyX2NvcGllZApvayB6ZXJvX2J1ZmZlcl9hdmFpbGFibGUKb2sgYWxsX251bGxfb2sKb2sgcmVhZDYKb2sgcGVla19yZXN0X29rCm9rIHBlZWtfcmVzdF9jb3BpZWQKb2sgcGVla19yZXN0X2F2YWlsYWJsZQpvayBwZWVrX3Jlc3RfZGF0YQpvayBzZXJ2ZXJfd3JpdGVzCm9rIGNsaWVudF9wZWVrX29rCm9rIGNsaWVudF9wZWVrX2NvcGllZApvayBjbGllbnRfcGVla19hdmFpbGFibGUKb2sgcGVla19hZnRlcl9jbG9zZV93aXRoX2RhdGFfb2sKb2sgcGVla19hZnRlcl9jbG9zZV9jb3BpZWQKb2sgcGVla19hZnRlcl9jbG9zZV9hdmFpbGFibGUKb2sgZHJhaW4Kb2sgcGVla19lbXB0eV9icm9rZW5fZmFpbHMKb2sgcGVla19lbXB0eV9icm9rZW5fZXJyb3IKc3VtbWFyeSAzNiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok empty_peek_ok\nok empty_copied\nok empty_available\nok empty_left\nok write_11\nok peek5_ok\nok peek5_copied\nok peek5_data\nok peek5_available\nok peek5_left_is_minus_copied\nok peek16_ok\nok peek16_copied\nok peek16_available\nok peek16_left_is_minus_copied\nok sizes_only_ok\nok sizes_only_available\nok sizes_only_left\nok zero_buffer_ok\nok zero_buffer_copied\nok zero_buffer_available\nok all_null_ok\nok read6\nok peek_rest_ok\nok peek_rest_copied\nok peek_rest_available\nok peek_rest_data\nok server_writes\nok client_peek_ok\nok client_peek_copied\nok client_peek_available\nok peek_after_close_with_data_ok\nok peek_after_close_copied\nok peek_after_close_available\nok drain\nok peek_empty_broken_fails\nok peek_empty_broken_error\nsummary 36 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "pk_errors",
+      "exe_sha256": "028f541eb68eb0aab99b236333792e27d036116c014890974158c8aa69e026eb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgb3V0Ym91bmRfd3JpdGUKb2sgcGVla193cml0ZV9vbmx5X3NlcnZlcl9mYWlscwpvayBwZWVrX3dyaXRlX29ubHlfc2VydmVyX2Vycm9yCm9rIHBlZWtfcmVhZGFibGVfY2xpZW50X29rCm9rIHBlZWtfcmVhZGFibGVfY2xpZW50X2NvcGllZApvayBwZWVrX3JlYWRhYmxlX2NsaWVudF9hdmFpbGFibGUKb2sgcGVla193cml0ZV9vbmx5X2NsaWVudF9mYWlscwpvayBwZWVrX3dyaXRlX29ubHlfY2xpZW50X2Vycm9yCm9rIHBlZWtfaW52YWxpZF9oYW5kbGVfZmFpbHMKb2sgcGVla19pbnZhbGlkX2hhbmRsZV9lcnJvcgpvayBwZWVrX251bGxfaGFuZGxlX2ZhaWxzCm9rIHBlZWtfbnVsbF9oYW5kbGVfZXJyb3IKb2sgcGVla19ldmVudF9mYWlscwpvayBwZWVrX2V2ZW50X2Vycm9yCm9rIG9wZW5lZF9vd25fZXhlCm9rIHBlZWtfZmlsZV9mYWlscwpvayBwZWVrX2ZpbGVfZXJyb3IKb2sgcGVla19jbG9zZWRfaGFuZGxlX2ZhaWxzCm9rIHBlZWtfY2xvc2VkX2hhbmRsZV9lcnJvcgpzdW1tYXJ5IDE5IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok outbound_write\nok peek_write_only_server_fails\nok peek_write_only_server_error\nok peek_readable_client_ok\nok peek_readable_client_copied\nok peek_readable_client_available\nok peek_write_only_client_fails\nok peek_write_only_client_error\nok peek_invalid_handle_fails\nok peek_invalid_handle_error\nok peek_null_handle_fails\nok peek_null_handle_error\nok peek_event_fails\nok peek_event_error\nok opened_own_exe\nok peek_file_fails\nok peek_file_error\nok peek_closed_handle_fails\nok peek_closed_handle_error\nsummary 19 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

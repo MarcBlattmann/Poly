@@ -14,6 +14,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use poly_gdi::gdi::{Gdi, Rect};
+use poly_gdi::region::Region;
 use poly_win32_gui::{SpinLock, set_last_error, wide};
 use poly_win32_rt as _;
 
@@ -21,17 +22,110 @@ use poly_win32_rt as _;
 unsafe extern "system" {
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
     fn VirtualFree(addr: *mut u8, size: usize, kind: u32) -> i32;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        security: *const u8,
+        disposition: u32,
+        flags: u32,
+        template: usize,
+    ) -> usize;
+    fn GetFileSizeEx(file: usize, size: *mut i64) -> i32;
+    fn ReadFile(file: usize, buf: *mut u8, count: u32, read: *mut u32, overlapped: *mut u8) -> i32;
+    fn CloseHandle(h: usize) -> i32;
 }
 
 const MEM_COMMIT_RESERVE: u32 = 0x3000;
 const MEM_RELEASE: u32 = 0x8000;
 const PAGE_READWRITE: u32 = 0x04;
+// winerror.h
 const ERROR_INVALID_HANDLE: u32 = 6;
+const ERROR_INVALID_PARAMETER: u32 = 87;
 
 static GDI: SpinLock<Option<Gdi>> = SpinLock::new(None);
 
 fn gdi<R>(f: impl FnOnce(&mut Gdi) -> R) -> R {
-    GDI.with(|g| f(g.get_or_insert_with(Gdi::new)))
+    GDI.with(|g| {
+        f(g.get_or_insert_with(|| {
+            let mut g = Gdi::new();
+            g.set_font_loader(load_font);
+            g
+        }))
+    })
+}
+
+/// A file of Poly's font store (ADR 0105, 0142): `C:\Windows\Fonts` on the
+/// root disk, the Linux store (`Z:\usr\share\fonts\truetype\dejavu`, all the
+/// desktop image has) otherwise; `None` where it is in neither, and the
+/// bitmap faces draw instead.
+fn load_font(name: &str) -> Option<Vec<u8>> {
+    ["C:\\Windows\\Fonts\\", "Z:\\usr\\share\\fonts\\truetype\\dejavu\\"].iter().find_map(|dir| read_file(dir, name))
+}
+
+fn read_file(dir: &str, name: &str) -> Option<Vec<u8>> {
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const FILE_SHARE_READ_WRITE: u32 = 3;
+    const OPEN_EXISTING: u32 = 3;
+    const MAX_FONT_FILE: i64 = 64 << 20;
+    let mut path: Vec<u16> = dir.encode_utf16().collect();
+    path.extend(name.encode_utf16());
+    path.push(0);
+    // SAFETY: a NUL-terminated path; the handle is closed below.
+    let file = unsafe {
+        CreateFileW(path.as_ptr(), GENERIC_READ, FILE_SHARE_READ_WRITE, core::ptr::null(), OPEN_EXISTING, 0, 0)
+    };
+    if file == usize::MAX || file == 0 {
+        return None;
+    }
+    let mut size = 0i64;
+    // SAFETY: an open file and a local out-value.
+    let ok = unsafe { GetFileSizeEx(file, &mut size) } != 0 && size > 0 && size <= MAX_FONT_FILE;
+    let mut data = Vec::new();
+    if ok {
+        data.resize(size as usize, 0u8);
+        let mut done = 0usize;
+        while done < data.len() {
+            let mut got = 0u32;
+            let want = (data.len() - done).min(1 << 20) as u32;
+            // SAFETY: `want` bytes fit in the buffer after `done`.
+            let r = unsafe { ReadFile(file, data.as_mut_ptr().add(done), want, &mut got, core::ptr::null_mut()) };
+            if r == 0 || got == 0 {
+                break;
+            }
+            done += got as usize;
+        }
+        data.truncate(done);
+    }
+    // SAFETY: the handle opened above.
+    unsafe { CloseHandle(file) };
+    (ok && !data.is_empty()).then_some(data)
+}
+
+/// `count` bytes of a string in the ANSI code page as UTF-16 (Latin-1;
+/// `count` < 0: NUL-terminated).
+///
+/// # Safety
+/// `p` points at such a string.
+unsafe fn ansi(p: *const u8, count: i32) -> Vec<u16> {
+    let mut v = Vec::new();
+    if p.is_null() {
+        return v;
+    }
+    let mut i = 0usize;
+    loop {
+        if count >= 0 && i >= count as usize {
+            break;
+        }
+        // SAFETY: the caller's promise.
+        let c = unsafe { *p.add(i) };
+        if count < 0 && c == 0 {
+            break;
+        }
+        v.push(u16::from(c));
+        i += 1;
+    }
+    v
 }
 
 type H = usize;
@@ -199,16 +293,6 @@ pub unsafe extern "system" fn CreateDIBSection(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn CreateRectRgn(l: i32, t: i32, r: i32, b: i32) -> H {
-    gdi(|g| g.create_rect_rgn(Rect::new(l, t, r, b))) as H
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn SelectClipRgn(hdc: H, rgn: H) -> i32 {
-    gdi(|g| g.select_clip_rgn(hdc as u64, rgn as u64))
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn CreateFontIndirectW(lf: *const u8) -> H {
     if lf.is_null() {
         return 0;
@@ -216,6 +300,309 @@ pub unsafe extern "system" fn CreateFontIndirectW(lf: *const u8) -> H {
     // SAFETY: a LOGFONTW (92 bytes).
     let b = unsafe { core::slice::from_raw_parts(lf, 92) };
     gdi(|g| g.create_font(b)) as H
+}
+
+/// `CreateFontIndirectA`: a `LOGFONTA` (60 bytes; the face name is 32
+/// ANSI characters) becomes the `LOGFONTW`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateFontIndirectA(lf: *const u8) -> H {
+    if lf.is_null() {
+        return 0;
+    }
+    // SAFETY: a LOGFONTA (60 bytes).
+    let a = unsafe { core::slice::from_raw_parts(lf, 60) };
+    let mut w = [0u8; 92];
+    w[..28].copy_from_slice(&a[..28]);
+    for i in 0..32 {
+        if a[28 + i] == 0 {
+            break;
+        }
+        w[28 + 2 * i] = a[28 + i];
+    }
+    gdi(|g| g.create_font(&w)) as H
+}
+
+/// The `LOGFONTW` of `CreateFontW`'s arguments (Learn).
+#[allow(clippy::too_many_arguments)]
+fn logfont_of(
+    height: i32,
+    width: i32,
+    escapement: i32,
+    orientation: i32,
+    weight: i32,
+    italic: u32,
+    underline: u32,
+    strike_out: u32,
+    char_set: u32,
+    out_precision: u32,
+    clip_precision: u32,
+    quality: u32,
+    pitch_and_family: u32,
+) -> [u8; 92] {
+    let mut b = [0u8; 92];
+    for (i, v) in [height, width, escapement, orientation, weight].iter().enumerate() {
+        b[4 * i..4 * i + 4].copy_from_slice(&v.to_le_bytes());
+    }
+    b[20] = italic as u8;
+    b[21] = underline as u8;
+    b[22] = strike_out as u8;
+    b[23] = char_set as u8;
+    b[24] = out_precision as u8;
+    b[25] = clip_precision as u8;
+    b[26] = quality as u8;
+    b[27] = pitch_and_family as u8;
+    b
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "system" fn CreateFontW(
+    height: i32,
+    width: i32,
+    escapement: i32,
+    orientation: i32,
+    weight: i32,
+    italic: u32,
+    underline: u32,
+    strike_out: u32,
+    char_set: u32,
+    out_precision: u32,
+    clip_precision: u32,
+    quality: u32,
+    pitch_and_family: u32,
+    face: *const u16,
+) -> H {
+    let mut b = logfont_of(
+        height,
+        width,
+        escapement,
+        orientation,
+        weight,
+        italic,
+        underline,
+        strike_out,
+        char_set,
+        out_precision,
+        clip_precision,
+        quality,
+        pitch_and_family,
+    );
+    if !face.is_null() {
+        for i in 0..31 {
+            // SAFETY: a NUL-terminated name; reading stops at the NUL.
+            let c = unsafe { *face.add(i) };
+            if c == 0 {
+                break;
+            }
+            b[28 + 2 * i..30 + 2 * i].copy_from_slice(&c.to_le_bytes());
+        }
+    }
+    gdi(|g| g.create_font(&b)) as H
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "system" fn CreateFontA(
+    height: i32,
+    width: i32,
+    escapement: i32,
+    orientation: i32,
+    weight: i32,
+    italic: u32,
+    underline: u32,
+    strike_out: u32,
+    char_set: u32,
+    out_precision: u32,
+    clip_precision: u32,
+    quality: u32,
+    pitch_and_family: u32,
+    face: *const u8,
+) -> H {
+    let b = logfont_of(
+        height,
+        width,
+        escapement,
+        orientation,
+        weight,
+        italic,
+        underline,
+        strike_out,
+        char_set,
+        out_precision,
+        clip_precision,
+        quality,
+        pitch_and_family,
+    );
+    let mut a = [0u8; 60];
+    a[..28].copy_from_slice(&b[..28]);
+    if !face.is_null() {
+        for i in 0..31 {
+            // SAFETY: a NUL-terminated name; reading stops at the NUL.
+            let c = unsafe { *face.add(i) };
+            if c == 0 {
+                break;
+            }
+            a[28 + i] = c;
+        }
+    }
+    // SAFETY: our LOGFONTA.
+    unsafe { CreateFontIndirectA(a.as_ptr()) }
+}
+
+// ----- regions
+
+/// A (kind, error) result: the error, if any, becomes the last error.
+fn kind_or_error((kind, err): (i32, u32)) -> i32 {
+    if err != 0 {
+        set_last_error(err);
+    }
+    kind
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn CreateRectRgn(l: i32, t: i32, r: i32, b: i32) -> H {
+    match gdi(|g| g.create_rect_rgn(Rect::new(l, t, r, b))) {
+        Ok(h) => h as H,
+        Err(e) => {
+            set_last_error(e);
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateRectRgnIndirect(rect: *const i32) -> H {
+    if rect.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's RECT.
+    let r = unsafe { read_rect(rect) };
+    CreateRectRgn(r.left, r.top, r.right, r.bottom)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetRectRgn(rgn: H, l: i32, t: i32, r: i32, b: i32) -> i32 {
+    i32::from(gdi(|g| g.set_rect_rgn(rgn as u64, Rect::new(l, t, r, b))))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn CombineRgn(dst: H, src1: H, src2: H, mode: i32) -> i32 {
+    kind_or_error(gdi(|g| g.combine_rgn(dst as u64, src1 as u64, src2 as u64, mode)))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetRgnBox(rgn: H, rect: *mut i32) -> i32 {
+    let Some((kind, r)) = gdi(|g| g.rgn_box(rgn as u64)) else { return 0 };
+    if !rect.is_null() {
+        // SAFETY: the caller's RECT.
+        unsafe { write_rect(rect, r) };
+    }
+    kind
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn OffsetRgn(rgn: H, dx: i32, dy: i32) -> i32 {
+    gdi(|g| g.offset_rgn(rgn as u64, dx, dy))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn EqualRgn(a: H, b: H) -> i32 {
+    gdi(|g| g.equal_rgn(a as u64, b as u64))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn PtInRegion(rgn: H, x: i32, y: i32) -> i32 {
+    match gdi(|g| g.pt_in_region(rgn as u64, x, y)) {
+        Ok(inside) => i32::from(inside),
+        Err(e) => {
+            set_last_error(e);
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RectInRegion(rgn: H, rect: *const i32) -> i32 {
+    if rect.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller's RECT.
+    let r = unsafe { read_rect(rect) };
+    i32::from(gdi(|g| g.rect_in_region(rgn as u64, r)).unwrap_or(false))
+}
+
+/// `GetRegionData` (Learn): the size needed for a NULL buffer, `count`
+/// when it was large enough, else 0.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetRegionData(rgn: H, count: u32, data: *mut u8) -> u32 {
+    let Some(bytes) = gdi(|g| g.region_data(rgn as u64)) else { return 0 };
+    if data.is_null() {
+        return bytes.len() as u32;
+    }
+    if (count as usize) < bytes.len() {
+        return 0;
+    }
+    // SAFETY: the caller's buffer holds `count` bytes, at least these.
+    unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), data, bytes.len()) };
+    count
+}
+
+// ----- clipping
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SelectClipRgn(hdc: H, rgn: H) -> i32 {
+    kind_or_error(gdi(|g| g.select_clip_rgn(hdc as u64, rgn as u64)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn ExtSelectClipRgn(hdc: H, rgn: H, mode: i32) -> i32 {
+    kind_or_error(gdi(|g| g.ext_select_clip_rgn(hdc as u64, rgn as u64, mode)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetClipRgn(hdc: H, rgn: H) -> i32 {
+    kind_or_error(gdi(|g| g.clip_rgn(hdc as u64, rgn as u64)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn IntersectClipRect(hdc: H, l: i32, t: i32, r: i32, b: i32) -> i32 {
+    kind_or_error(gdi(|g| g.clip_rect(hdc as u64, Rect::new(l, t, r, b), false)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn ExcludeClipRect(hdc: H, l: i32, t: i32, r: i32, b: i32) -> i32 {
+    kind_or_error(gdi(|g| g.clip_rect(hdc as u64, Rect::new(l, t, r, b), true)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetRandomRgn(hdc: H, rgn: H, which: i32) -> i32 {
+    gdi(|g| g.random_rgn(hdc as u64, rgn as u64, which))
+}
+
+/// `SetViewportOrgEx` (`viewport`) / `SetWindowOrgEx`.
+unsafe fn set_origin(hdc: H, viewport: bool, x: i32, y: i32, old: *mut i32) -> i32 {
+    let Some((ox, oy)) = gdi(|g| g.set_origin(hdc as u64, viewport, x, y)) else { return 0 };
+    if !old.is_null() {
+        // SAFETY: the caller's POINT.
+        unsafe {
+            *old = ox;
+            *old.add(1) = oy;
+        }
+    }
+    1
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetViewportOrgEx(hdc: H, x: i32, y: i32, old: *mut i32) -> i32 {
+    // SAFETY: the caller's POINT or NULL.
+    unsafe { set_origin(hdc, true, x, y, old) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetWindowOrgEx(hdc: H, x: i32, y: i32, old: *mut i32) -> i32 {
+    // SAFETY: the caller's POINT or NULL.
+    unsafe { set_origin(hdc, false, x, y, old) }
 }
 
 // ----- attributes
@@ -269,7 +656,9 @@ pub unsafe extern "system" fn MoveToEx(hdc: H, x: i32, y: i32, old: *mut i32) ->
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetClipBox(hdc: H, rect: *mut i32) -> i32 {
     let (kind, r) = gdi(|g| g.clip_box(hdc as u64));
-    if kind != 0 && !rect.is_null() {
+    if kind == 0 {
+        set_last_error(ERROR_INVALID_HANDLE);
+    } else if !rect.is_null() {
         // SAFETY: the caller's RECT.
         unsafe { write_rect(rect, r) };
     }
@@ -341,6 +730,14 @@ pub unsafe extern "system" fn TextOutW(hdc: H, x: i32, y: i32, text: *const u16,
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "system" fn TextOutA(hdc: H, x: i32, y: i32, text: *const u8, count: i32) -> i32 {
+    // SAFETY: `count` characters at `text`.
+    let s = unsafe { ansi(text, count.max(0)) };
+    // SAFETY: our own buffer.
+    unsafe { TextOutW(hdc, x, y, s.as_ptr(), s.len() as i32) }
+}
+
+#[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub unsafe extern "system" fn ExtTextOutW(
     hdc: H,
@@ -350,19 +747,49 @@ pub unsafe extern "system" fn ExtTextOutW(
     rect: *const i32,
     text: *const u16,
     count: u32,
-    _dx: *const i32,
+    dx: *const i32,
 ) -> i32 {
-    const ETO_OPAQUE: u32 = 2;
-    if options & ETO_OPAQUE != 0 && !rect.is_null() {
-        // SAFETY: the caller's RECT.
-        let r = unsafe { read_rect(rect) };
-        gdi(|g| {
-            let bk = g.bk_color(hdc as u64);
-            g.fill_rect_color(hdc as u64, r, bk)
-        });
+    // SAFETY: `count` characters at `text`, `count` spacings at `dx`, a RECT.
+    let (s, rect, dx) = unsafe {
+        (
+            wide(text, count.min(i32::MAX as u32) as i32),
+            if rect.is_null() { None } else { Some(read_rect(rect)) },
+            if dx.is_null() { None } else { Some(core::slice::from_raw_parts(dx, count as usize).to_vec()) },
+        )
+    };
+    let ok = gdi(|g| g.ext_text_out(hdc as u64, x, y, options, rect, &s, dx.as_deref()));
+    if !ok {
+        set_last_error(ERROR_INVALID_HANDLE);
     }
+    i32::from(ok)
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "system" fn ExtTextOutA(
+    hdc: H,
+    x: i32,
+    y: i32,
+    options: u32,
+    rect: *const i32,
+    text: *const u8,
+    count: u32,
+    dx: *const i32,
+) -> i32 {
     // SAFETY: `count` characters at `text`.
-    unsafe { TextOutW(hdc, x, y, text, count as i32) }
+    let s = unsafe { ansi(text, count.min(i32::MAX as u32) as i32) };
+    // SAFETY: our own buffer; the rest is the caller's.
+    unsafe { ExtTextOutW(hdc, x, y, options, rect, s.as_ptr(), s.len() as u32, dx) }
+}
+
+unsafe fn write_size(size: *mut i32, (cx, cy): (i32, i32)) {
+    if !size.is_null() {
+        // SAFETY: the caller's SIZE.
+        unsafe {
+            *size = cx;
+            *size.add(1) = cy;
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -370,11 +797,65 @@ pub unsafe extern "system" fn GetTextExtentPoint32W(hdc: H, text: *const u16, co
     // SAFETY: `count` characters at `text`.
     let s = unsafe { wide(text, count.max(0)) };
     match gdi(|g| g.text_extent(hdc as u64, &s)) {
-        Some((cx, cy)) => {
+        Some(e) => {
             // SAFETY: the caller's SIZE.
+            unsafe { write_size(size, e) };
+            1
+        }
+        None => {
+            set_last_error(ERROR_INVALID_HANDLE);
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetTextExtentPointW(hdc: H, text: *const u16, count: i32, size: *mut i32) -> i32 {
+    // SAFETY: as `GetTextExtentPoint32W`.
+    unsafe { GetTextExtentPoint32W(hdc, text, count, size) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetTextExtentPoint32A(hdc: H, text: *const u8, count: i32, size: *mut i32) -> i32 {
+    // SAFETY: `count` characters at `text`.
+    let s = unsafe { ansi(text, count.max(0)) };
+    // SAFETY: our own buffer.
+    unsafe { GetTextExtentPoint32W(hdc, s.as_ptr(), s.len() as i32, size) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetTextExtentPointA(hdc: H, text: *const u8, count: i32, size: *mut i32) -> i32 {
+    // SAFETY: as `GetTextExtentPoint32A`.
+    unsafe { GetTextExtentPoint32A(hdc, text, count, size) }
+}
+
+/// `GetTextExtentExPointW`: `fit` gets how many characters fit in `max`
+/// (`max` < 0: no limit), `dx` the width of the text up to each character.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetTextExtentExPointW(
+    hdc: H,
+    text: *const u16,
+    count: i32,
+    max: i32,
+    fit: *mut i32,
+    dx: *mut i32,
+    size: *mut i32,
+) -> i32 {
+    // SAFETY: `count` characters at `text`.
+    let s = unsafe { wide(text, count.max(0)) };
+    match gdi(|g| g.text_extent_ex(hdc as u64, &s, if max < 0 { i32::MAX } else { max })) {
+        Some((e, n, running)) => {
+            // SAFETY: the caller's out-pointers; `dx` holds `count` values.
             unsafe {
-                *size = cx;
-                *size.add(1) = cy;
+                write_size(size, e);
+                if !fit.is_null() {
+                    *fit = n as i32;
+                }
+                if !dx.is_null() {
+                    for (i, v) in running.iter().enumerate() {
+                        *dx.add(i) = *v;
+                    }
+                }
             }
             1
         }
@@ -383,6 +864,22 @@ pub unsafe extern "system" fn GetTextExtentPoint32W(hdc: H, text: *const u16, co
             0
         }
     }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetTextExtentExPointA(
+    hdc: H,
+    text: *const u8,
+    count: i32,
+    max: i32,
+    fit: *mut i32,
+    dx: *mut i32,
+    size: *mut i32,
+) -> i32 {
+    // SAFETY: `count` characters at `text`.
+    let s = unsafe { ansi(text, count.max(0)) };
+    // SAFETY: our own buffer; the rest is the caller's.
+    unsafe { GetTextExtentExPointW(hdc, s.as_ptr(), s.len() as i32, max, fit, dx, size) }
 }
 
 #[unsafe(no_mangle)]
@@ -399,6 +896,119 @@ pub unsafe extern "system" fn GetTextMetricsW(hdc: H, tm: *mut u8) -> i32 {
             0
         }
     }
+}
+
+/// `GetTextMetricsA`: `TEXTMETRICA` is the same up to `tmWeight`...
+/// `tmOverhang`, `tmDigitizedAspect*`, then the five character fields as
+/// bytes (`wingdi.h`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetTextMetricsA(hdc: H, tm: *mut u8) -> i32 {
+    match gdi(|g| g.text_metrics(hdc as u64)) {
+        Some(m) => {
+            let w = m.to_bytes();
+            let mut a = [0u8; 56];
+            a[..44].copy_from_slice(&w[..44]);
+            let byte = |c: u16| if c > 0xFF { 0xFF } else { c as u8 };
+            a[44] = byte(m.first_char);
+            a[45] = byte(m.last_char);
+            a[46] = byte(m.default_char);
+            a[47] = byte(m.break_char);
+            a[48] = m.italic;
+            a[49] = m.underlined;
+            a[50] = m.struck_out;
+            a[51] = m.pitch_and_family;
+            a[52] = m.char_set;
+            // SAFETY: the caller's TEXTMETRICA (56 bytes).
+            unsafe { core::ptr::copy_nonoverlapping(a.as_ptr(), tm, a.len()) };
+            1
+        }
+        None => {
+            set_last_error(ERROR_INVALID_HANDLE);
+            0
+        }
+    }
+}
+
+/// `GetTextFaceW`: the name (with its NUL) copied up to `count` units; the
+/// length written, with the NUL. A NULL buffer asks for the size needed.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetTextFaceW(hdc: H, count: i32, buf: *mut u16) -> i32 {
+    let Some(mut name) = gdi(|g| g.text_face(hdc as u64)) else {
+        set_last_error(ERROR_INVALID_HANDLE);
+        return 0;
+    };
+    name.push(0);
+    if buf.is_null() {
+        return name.len() as i32;
+    }
+    let n = name.len().min(count.max(0) as usize);
+    // SAFETY: the caller's buffer of `count` units.
+    unsafe { core::ptr::copy_nonoverlapping(name.as_ptr(), buf, n) };
+    if n > 0 && n < name.len() {
+        // SAFETY: as above.
+        unsafe { *buf.add(n - 1) = 0 };
+    }
+    n as i32
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetTextFaceA(hdc: H, count: i32, buf: *mut u8) -> i32 {
+    let Some(mut name) = gdi(|g| g.text_face(hdc as u64)) else {
+        set_last_error(ERROR_INVALID_HANDLE);
+        return 0;
+    };
+    name.push(0);
+    if buf.is_null() {
+        return name.len() as i32;
+    }
+    let n = name.len().min(count.max(0) as usize);
+    for (i, &c) in name.iter().take(n).enumerate() {
+        // SAFETY: the caller's buffer of `count` bytes.
+        unsafe { *buf.add(i) = if c < 0x100 { c as u8 } else { b'?' } };
+    }
+    if n > 0 && n < name.len() {
+        // SAFETY: as above.
+        unsafe { *buf.add(n - 1) = 0 };
+    }
+    n as i32
+}
+
+/// `GetCharWidth32W`: the advance of each character of `first..=last`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCharWidth32W(hdc: H, first: u32, last: u32, buf: *mut i32) -> i32 {
+    match gdi(|g| g.char_widths(hdc as u64, first, last)) {
+        Some(w) => {
+            if !buf.is_null() {
+                for (i, v) in w.iter().enumerate() {
+                    // SAFETY: the caller's buffer of `last - first + 1` values.
+                    unsafe { *buf.add(i) = *v };
+                }
+            }
+            1
+        }
+        None => {
+            set_last_error(ERROR_INVALID_PARAMETER);
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCharWidthW(hdc: H, first: u32, last: u32, buf: *mut i32) -> i32 {
+    // SAFETY: as `GetCharWidth32W`.
+    unsafe { GetCharWidth32W(hdc, first, last, buf) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCharWidth32A(hdc: H, first: u32, last: u32, buf: *mut i32) -> i32 {
+    // SAFETY: as `GetCharWidth32W`; the bytes are Latin-1 characters.
+    unsafe { GetCharWidth32W(hdc, first, last, buf) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCharWidthA(hdc: H, first: u32, last: u32, buf: *mut i32) -> i32 {
+    // SAFETY: as `GetCharWidth32A`.
+    unsafe { GetCharWidth32A(hdc, first, last, buf) }
 }
 
 // ----- for user32
@@ -420,6 +1030,86 @@ pub extern "system" fn PolyGdiReleaseDisplayDC(hdc: H) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "system" fn PolyGdiDeleteDisplayDC(hdc: H) -> i32 {
     i32::from(gdi(|g| g.delete_dc(hdc as u64).0))
+}
+
+/// `count` RECTs at `p` (none for NULL).
+unsafe fn read_rects(p: *const i32, count: u32) -> Vec<Rect> {
+    if p.is_null() {
+        return Vec::new();
+    }
+    // SAFETY: the caller passes `count` RECTs.
+    (0..count as usize).map(|i| unsafe { read_rect(p.add(4 * i)) }).collect()
+}
+
+/// What window DC `hdc` can draw on (user32's `GetDC`/`GetWindowDC`):
+/// its device 0,0 is at (`x`, `y`) on the screen, and it reaches the
+/// union of the `n_include` RECTs at `include` less the union of the
+/// `n_exclude` RECTs at `exclude`, in screen coordinates. 1 on success.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiSetDisplayGeometry(
+    hdc: H,
+    x: i32,
+    y: i32,
+    include: *const i32,
+    n_include: u32,
+    exclude: *const i32,
+    n_exclude: u32,
+) -> i32 {
+    // SAFETY: the caller's arrays of RECTs.
+    let (inc, exc) = unsafe { (read_rects(include, n_include), read_rects(exclude, n_exclude)) };
+    i32::from(gdi(|g| g.set_display_geometry(hdc as u64, (x, y), &inc, &exc)))
+}
+
+/// Set window DC `hdc`'s system clip to the union of the `n` RECTs at
+/// `rects` (device, i.e. client or window, coordinates), as `BeginPaint`
+/// limits its DC to the update region: drawing and `GetClipBox` honour it
+/// on top of the visible region and any clip region, `GetClipRgn` does not
+/// see it. NULL `rects` removes it; the next `GetDC`/`GetWindowDC` of the
+/// DC removes it too. 1 on success.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiSetSystemClip(hdc: H, rects: *const i32, n: u32) -> i32 {
+    let clip = if rects.is_null() {
+        None
+    } else {
+        // SAFETY: the caller's array of RECTs.
+        let rs = unsafe { read_rects(rects, n) };
+        Some(solid_union(&rs))
+    };
+    i32::from(gdi(|g| g.set_system_clip(hdc as u64, clip)))
+}
+
+/// The union of rectangles, empty and inverted ones counting as nothing.
+fn solid_union(rs: &[Rect]) -> Region {
+    let solid: Vec<Rect> = rs.iter().filter(|r| !r.is_empty()).copied().collect();
+    Region::from_rects(&solid)
+}
+
+/// Region `hrgn`'s rectangles in canonical band order (`GetRegionData`'s)
+/// as (left, top, right, bottom) quadruples into `out`, at most `cap` of
+/// them: the total count (`cap` 0 asks for it), -1 when `hrgn` is not a
+/// region.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiGetRegionRects(hrgn: H, out: *mut i32, cap: u32) -> i32 {
+    let Some(rects) = gdi(|g| g.region(hrgn as u64).map(|r| r.rects().to_vec())) else { return -1 };
+    if !out.is_null() {
+        for (i, r) in rects.iter().take(cap as usize).enumerate() {
+            // SAFETY: the caller's buffer holds `cap` RECTs.
+            unsafe { write_rect(out.add(4 * i), *r) };
+        }
+    }
+    rects.len() as i32
+}
+
+/// Replace region `hrgn`'s contents by the union of the `n` RECTs at
+/// `rects` (empty or inverted ones count as nothing): the new kind
+/// (NULLREGION 1, SIMPLEREGION 2, COMPLEXREGION 3), ERROR 0 when `hrgn` is
+/// not a region.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiSetRegionRects(hrgn: H, rects: *const i32, n: u32) -> i32 {
+    // SAFETY: the caller's array of RECTs (or NULL: none).
+    let rs = unsafe { read_rects(rects, n) };
+    let rgn = solid_union(&rs);
+    gdi(|g| g.set_region(hrgn as u64, rgn))
 }
 
 /// The desktop link's surface DIBs (ADR 0131): per window, a top-down
@@ -509,7 +1199,8 @@ pub unsafe extern "system" fn PolyGdiFillRect(hdc: H, rect: *const i32, brush: H
     i32::from(ok)
 }
 
-/// `DrawTextW`.
+/// `DrawTextW` (`DT_MODIFYSTRING` writes to `text`, as the API does though
+/// the parameter is a `LPCWSTR`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn PolyGdiDrawText(
     hdc: H,
@@ -518,14 +1209,53 @@ pub unsafe extern "system" fn PolyGdiDrawText(
     rect: *mut i32,
     format: u32,
 ) -> i32 {
+    // SAFETY: as `PolyGdiDrawTextEx`.
+    unsafe { PolyGdiDrawTextEx(hdc, text as *mut u16, count, rect, format, 0, 0, 0) }
+}
+
+/// `DrawTextExW`: `tab_chars` is `iTabLength` (0: the default), the margins
+/// narrow the rectangle for drawing. The number of characters drawn is not
+/// reported. `DT_MODIFYSTRING` writes the ellipsized text back to `text`.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "system" fn PolyGdiDrawTextEx(
+    hdc: H,
+    text: *mut u16,
+    count: i32,
+    rect: *mut i32,
+    format: u32,
+    tab_chars: i32,
+    left_margin: i32,
+    right_margin: i32,
+) -> i32 {
+    const DT_CALCRECT: u32 = 0x0400;
+    const DT_MODIFYSTRING: u32 = 0x1_0000;
     if rect.is_null() {
         return 0;
     }
     // SAFETY: the caller's string (count -1: NUL-terminated) and RECT.
     let (s, mut r) = unsafe { (wide(text, count), read_rect(rect)) };
-    let n = gdi(|g| g.draw_text(hdc as u64, &s, &mut r, format));
-    // SAFETY: as above.
-    unsafe { write_rect(rect, r) };
+    let inset = Rect::new(r.left + left_margin, r.top, r.right - right_margin, r.bottom);
+    let mut inner = inset;
+    let (n, modified) = gdi(|g| g.draw_text_ex(hdc as u64, &s, &mut inner, format, tab_chars));
+    if format & DT_CALCRECT != 0 {
+        // The calculated rectangle includes the margins.
+        r.right = inner.right + right_margin;
+        r.bottom = inner.bottom;
+        // SAFETY: as above.
+        unsafe { write_rect(rect, r) };
+    }
+    if format & DT_MODIFYSTRING != 0
+        && let Some(m) = modified
+        && !text.is_null()
+    {
+        for (i, &c) in m.iter().enumerate() {
+            // SAFETY: the caller's buffer holds the string and room for its ellipsis.
+            unsafe { *text.add(i) = c };
+        }
+        // SAFETY: as above.
+        unsafe { *text.add(m.len()) = 0 };
+    }
     n
 }
 

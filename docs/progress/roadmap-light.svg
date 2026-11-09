@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 100 of 159 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 104 of 164 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">100 / 159 milestones · 63%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">104 / 164 milestones · 63%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -412,43 +412,58 @@
 </g>
 <text x="884.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">2/16</text>
 <text x="16.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 9  XNU personality and macOS foundations</text>
-<g><title>⚖️ Decide: aarch64 kernel port or x86-64 only (modern Mac apps are increasingly arm64-only)</title>
-<rect x="340.0" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ ⚖️ Decided (owner, ADR 0151): both: an arm64 → x86-64 translator first (arm64-only Mac apps on x86 PCs), and an aarch64 kernel port as groundwork</title>
+<rect x="340.0" y="323.0" width="26.0" height="16.0" fill="#2da44e" rx="3"/>
+</g>
+<g><title>✔ arm64 translator: A64 decoder and reference interpreter (integer, branches, loads and stores, flags, a SIMD/FP subset), checked against qemu-aarch64 as a black box (ADR 0152)</title>
+<rect x="368.0" y="323.0" width="26.0" height="16.0" fill="#2da44e" rx="3"/>
+</g>
+<g><title>✔ Mach-O reader: fat and thin files, load commands, symbols, dylib dependencies, chained fixups, classic rebase and bind, robust against corrupt files (ADR 0153)</title>
+<rect x="396.0" y="323.0" width="26.0" height="16.0" fill="#2da44e" rx="3"/>
+</g>
+<g><title>✔ aarch64 port groundwork: a boot stub on QEMU virt (PL011 serial, self-test) built and booted in CI (ADR 0154)</title>
+<rect x="424.0" y="323.0" width="26.0" height="16.0" fill="#2da44e" rx="3"/>
+</g>
+<g><title>aarch64 port groundwork: the kernel's x86-64 code behind crate::arch, so a second architecture plugs in (ADR 0151)</title>
+<rect x="452.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>macOS test oracle (licensed Mac); extend the framework map with Objective-C methods and Swift API</title>
-<rect x="379.7" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="480.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Mach-O loading and our own dyld (shared cache optional, chained fixups)</title>
-<rect x="419.3" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="508.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Mach core: tasks, threads, ports, port rights, messages, Mach VM</title>
-<rect x="459.0" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="536.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>BSD layer: XNU syscalls, kqueue, posix_spawn, signals with Darwin semantics</title>
-<rect x="498.7" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="564.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+</g>
+<g><title>arm64 translator: block JIT to x86-64 on the shared decoder, the arm64 system call convention in the XNU personality, 16 KiB pages, MAP_JIT and code cache invalidation; arm64-only command-line programs run on x86 PCs (ADR 0151)</title>
+<rect x="592.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>File system semantics: case-insensitive APFS behaviour, extended attributes, resource forks</title>
-<rect x="538.3" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="620.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>libSystem: libc, libpthread (incl. workqueues), libdispatch (GCD), libxpc</title>
-<rect x="578.0" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="648.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Objective-C runtime (libobjc) and Swift runtime</title>
-<rect x="617.7" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="676.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>System daemons: launchd, XPC services, preferences (cfprefsd), notifyd</title>
-<rect x="657.3" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="704.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>CoreFoundation, Foundation, Security framework, keychain</title>
-<rect x="697.0" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="732.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Networking: CFNetwork, Network.framework on our sockets</title>
-<rect x="736.7" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="760.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Milestone: macOS command-line tools run (Swift and Objective-C)</title>
-<rect x="776.3" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="788.0" y="323.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<text x="884.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">0/12</text>
+<text x="884.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">4/17</text>
 <text x="16.0" y="365.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start">10  macOS GUI apps and Liquid Glass</text>
 <g><title>Window server: Quartz / CoreGraphics windows composited by our compositor, menu bars drawn in-window (owner decision, ADR 0107)</title>
 <rect x="340.0" y="353.0" width="45.6" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>

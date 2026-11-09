@@ -36,7 +36,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 23] = [
+pub const OUTPUTS: [&str; 24] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -63,6 +63,8 @@ pub const OUTPUTS: [&str; 23] = [
     // ADR 0128.
     "gdi32.dll",
     "win32u.dll",
+    // ADR 0155.
+    "bcryptprimitives.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -72,6 +74,12 @@ const CACHE_KEEP: usize = 6;
 /// workspace for the Windows target instead (into `target/win32-clippy`,
 /// deleted afterwards).
 pub fn command(args: &[String]) -> Result {
+    // The name the modules are cached under, a hash of their inputs (CI
+    // keys its cache of `target/win32-cache` with it).
+    if args.iter().any(|a| a == "--cache-key") {
+        println!("win32-{:016x}", cache_key(&root())?);
+        return Ok(());
+    }
     if args.iter().any(|a| a == "--clippy") {
         let target = root().join("target").join("win32-clippy");
         let mut cmd = cargo_for(&target, "clippy")?;
@@ -93,48 +101,7 @@ pub fn command(args: &[String]) -> Result {
 /// verified and cached.
 pub fn ensure() -> Result<PathBuf> {
     let root = root();
-    let files = crate::ntdll::inputs_from(
-        &root,
-        &[
-            "personalities/nt/win32/rt",
-            "personalities/nt/win32/kernelbase",
-            "personalities/nt/win32/kernel32",
-            "personalities/nt/win32/k32test",
-            "personalities/nt/win32/contest",
-            "personalities/nt/win32/advapi32",
-            "personalities/nt/win32/a32test",
-            "personalities/nt/win32/crt",
-            "personalities/nt/win32/ucrtbase",
-            "personalities/nt/win32/msvcrt",
-            "personalities/nt/win32/crttest",
-            "personalities/nt/win32/crtloctest",
-            "personalities/nt/win32/user32",
-            "personalities/nt/win32/oleaut32",
-            "personalities/nt/win32/cryptrt",
-            "personalities/nt/win32/bcrypt",
-            "personalities/nt/win32/crypt32",
-            "personalities/nt/win32/cryptest",
-            "personalities/nt/win32/crtiotest",
-            "personalities/nt/win32/ws2_32",
-            "personalities/nt/win32/wstest",
-            "personalities/nt/win32/inet",
-            "personalities/nt/win32/winhttp",
-            "personalities/nt/win32/wininet",
-            "personalities/nt/win32/httptest",
-            "personalities/nt/win32/gui",
-            "personalities/nt/win32/gdi32",
-            "personalities/nt/win32/win32u",
-        ],
-        &[
-            "personalities/nt/win32/Cargo.toml",
-            "personalities/nt/win32/Cargo.lock",
-            "personalities/nt/src/services.rs",
-            // win32u's stubs come from win32k's table (ADR 0128).
-            "crates/poly-win32k/src/services.rs",
-            "rust-toolchain.toml",
-        ],
-    )?;
-    let key = crate::ntdll::hash_files(&root, RUSTFLAGS, &files)?;
+    let key = cache_key(&root)?;
     let cache = cache_dir(&root);
     let cached = cache.join(format!("win32-{key:016x}"));
     if OUTPUTS.iter().all(|f| cached.join(f).is_file()) {
@@ -164,6 +131,54 @@ pub fn ensure() -> Result<PathBuf> {
     Ok(cached)
 }
 
+/// The hash of everything the modules are built from: the name they are
+/// cached under.
+fn cache_key(root: &Path) -> Result<u64> {
+    let files = crate::ntdll::inputs_from(
+        root,
+        &[
+            "personalities/nt/win32/rt",
+            "personalities/nt/win32/kernelbase",
+            "personalities/nt/win32/kernel32",
+            "personalities/nt/win32/k32test",
+            "personalities/nt/win32/contest",
+            "personalities/nt/win32/advapi32",
+            "personalities/nt/win32/a32test",
+            "personalities/nt/win32/crt",
+            "personalities/nt/win32/ucrtbase",
+            "personalities/nt/win32/msvcrt",
+            "personalities/nt/win32/crttest",
+            "personalities/nt/win32/crtloctest",
+            "personalities/nt/win32/user32",
+            "personalities/nt/win32/oleaut32",
+            "personalities/nt/win32/cryptrt",
+            "personalities/nt/win32/bcrypt",
+            "personalities/nt/win32/crypt32",
+            "personalities/nt/win32/cryptest",
+            "personalities/nt/win32/crtiotest",
+            "personalities/nt/win32/ws2_32",
+            "personalities/nt/win32/wstest",
+            "personalities/nt/win32/inet",
+            "personalities/nt/win32/winhttp",
+            "personalities/nt/win32/wininet",
+            "personalities/nt/win32/httptest",
+            "personalities/nt/win32/gui",
+            "personalities/nt/win32/gdi32",
+            "personalities/nt/win32/win32u",
+            "personalities/nt/win32/bcryptprimitives",
+        ],
+        &[
+            "personalities/nt/win32/Cargo.toml",
+            "personalities/nt/win32/Cargo.lock",
+            "personalities/nt/src/services.rs",
+            // win32u's stubs come from win32k's table (ADR 0128).
+            "crates/poly-win32k/src/services.rs",
+            "rust-toolchain.toml",
+        ],
+    )?;
+    crate::ntdll::hash_files(root, RUSTFLAGS, &files)
+}
+
 /// `win32-cache`, beside `ntdll`'s cache.
 fn cache_dir(root: &Path) -> PathBuf {
     let ntdll = crate::ntdll::cache_dir(root);
@@ -188,7 +203,10 @@ fn prune(dir: &Path) {
 /// Build the workspace into `target_dir`; the directory with the outputs.
 fn build(target_dir: &Path) -> Result<PathBuf> {
     let mut cmd = cargo_for(target_dir, "build")?;
-    step("build kernelbase.dll, kernel32.dll, advapi32.dll, ucrtbase.dll, msvcrt.dll and the test programs", &mut cmd)?;
+    step(
+        "build kernelbase.dll, kernel32.dll, advapi32.dll, ucrtbase.dll, msvcrt.dll, bcryptprimitives.dll and the test programs",
+        &mut cmd,
+    )?;
     let out = target_dir.join("x86_64-pc-windows-msvc/release");
     for f in OUTPUTS {
         if !out.join(f).is_file() {

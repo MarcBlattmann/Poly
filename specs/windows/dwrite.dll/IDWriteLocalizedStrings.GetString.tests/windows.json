@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "ls_basic",
+      "exe_sha256": "7d3ad5401c0ac2a873c04f848cfedaa8abc154216f756bfdd727207ce658a348",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y291bnQgNQogIDA6IGxvY2FsZSAnZGUtZGUnICg1IHVuaXRzKSBzdHJpbmcgJ1BvbHlUZXN0IFN0cmluZ3MgREUgXHV7ZTR9JyAoMjEgdW5pdHMpCiAgMTogbG9jYWxlICdlbi1hdScgKDUgdW5pdHMpIHN0cmluZyAnUG9seVRlc3QgU3RyaW5ncyBBVScgKDE5IHVuaXRzKQogIDI6IGxvY2FsZSAnZW4tdXMnICg1IHVuaXRzKSBzdHJpbmcgJ1BvbHlUZXN0IFN0cmluZ3MnICgxNiB1bml0cykKICAzOiBsb2NhbGUgJ2ZyLWZyJyAoNSB1bml0cykgc3RyaW5nICdQb2x5VGVzdCBTdHJpbmdzIEZSJyAoMTkgdW5pdHMpCiAgNDogbG9jYWxlICdqYS1qcCcgKDUgdW5pdHMpIHN0cmluZyAnXHV7MzBkZH1cdXszMGVhfVx1ezMwZmN9JyAoMyB1bml0cykKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "count 5\n  0: locale 'de-de' (5 units) string 'PolyTest Strings DE \\u{e4}' (21 units)\n  1: locale 'en-au' (5 units) string 'PolyTest Strings AU' (19 units)\n  2: locale 'en-us' (5 units) string 'PolyTest Strings' (16 units)\n  3: locale 'fr-fr' (5 units) string 'PolyTest Strings FR' (19 units)\n  4: locale 'ja-jp' (5 units) string '\\u{30dd}\\u{30ea}\\u{30fc}' (3 units)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

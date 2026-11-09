@@ -1402,6 +1402,32 @@ continue and kill of a process (`linux: pid 13 killed by signal 15`);
 without it only kills by signals that dump core (`SIGSEGV`, `SIGABRT`,
 `SIGQUIT`, ...).
 
+Tracing everything is too slow for a program as large as Chromium. Three
+more arguments make a trace small enough to run to its end:
+
+- `poly.strace.calls=rt_sigaction,execve,clone3` traces only the calls with
+  these names (together with `poly.strace` or `poly.strace=<comm>`).
+  `rt_sigaction` lines show the action installed and the one that was there:
+  `rt_sigaction(0x1f, ..) act={0x555562514990, 0x44000004} old={0x0, 0x0} = 0`
+  (handler and flags of signal 31, `SIGSYS`).
+- `poly.strace.errors` traces every call but writes only those that failed
+  (not `EAGAIN` or `EINTR`), each with the time of day (`HHMMSS.mmm` UTC, the
+  form of Chromium's log time stamps).
+- `poly.exits` writes one line for every Linux process that ends, with the
+  time, its name and the start of its command line, and its status or the
+  signal that killed it (`linux: 105844.162 pid 87 (chromium)
+  [/usr/lib/chromium/chromium --type=utility ...] exit status 0`). It needs
+  no tracing.
+- `poly.exits.trail` (or `poly.exits.trail=64`) keeps the last 32 (64) calls
+  of every process in memory, writes nothing while they run, and prints them
+  under the process's `poly.exits` line when it ends (`linux:   trail pid 86:
+  112505.1 strace: pid 86 futex(...) = 0`). A long run is not slowed down, and
+  the calls that led to an exit with status 0 that nobody expected can be read.
+
+`cargo xtask chromium STEP...` takes `POLY_CHROMIUM_APPEND` (more kernel
+arguments, as `chromium run`) and `POLY_CHROMIUM_LOG` (a file for the whole
+console, for a run in a container, whose `target/` goes away with it).
+
 **Init.** BusyBox's init blocks its signals and takes them with
 `rt_sigtimedwait`; `poweroff` sends it `SIGUSR2` (`kill(0x1, 0xc, ..)`
 in a trace). If `poweroff` or `reboot` does nothing, trace pid 1. A shell

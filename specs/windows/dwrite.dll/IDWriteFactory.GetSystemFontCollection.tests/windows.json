@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "gsfc_update",
+      "exe_sha256": "a49ec43649f994f64b6f08176cf8e0b83e9b866c2236f201b831801b79d02d35",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "a2luZCAwOiBGQUxTRSAweDAwMDAwMDAwIFRSVUUgMHgwMDAwMDAwMCBGQUxTRSAweDAwMDAwMDAwCmtpbmQgMDogc2FtZSBvYmplY3QgYS9jIGZhbHNlIGNvdW50cyBlcXVhbCB0cnVlCmtpbmQgMDogRmFjdG9yeTMgdmFyaWFudCAweDAwMDAwMDAwIG51bGw9ZmFsc2UgaGFzIGZhbWlsaWVzIHRydWUKa2luZCAxOiBGQUxTRSAweDAwMDAwMDAwIFRSVUUgMHgwMDAwMDAwMCBGQUxTRSAweDAwMDAwMDAwCmtpbmQgMTogc2FtZSBvYmplY3QgYS9jIGZhbHNlIGNvdW50cyBlcXVhbCB0cnVlCmtpbmQgMTogRmFjdG9yeTMgdmFyaWFudCAweDAwMDAwMDAwIG51bGw9ZmFsc2UgaGFzIGZhbWlsaWVzIHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "kind 0: FALSE 0x00000000 TRUE 0x00000000 FALSE 0x00000000\nkind 0: same object a/c false counts equal true\nkind 0: Factory3 variant 0x00000000 null=false has families true\nkind 1: FALSE 0x00000000 TRUE 0x00000000 FALSE 0x00000000\nkind 1: same object a/c false counts equal true\nkind 1: Factory3 variant 0x00000000 null=false has families true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 154
+    }
+  ]
+}

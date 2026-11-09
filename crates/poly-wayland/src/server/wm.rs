@@ -96,6 +96,49 @@ pub(crate) struct Internal {
     pub size: (i32, i32),
 }
 
+/// Where `r`, laid out in work area `before`, goes in work area `after`: the
+/// same share of it, edge to edge.
+fn follow_area(r: Rect, before: Rect, after: Rect) -> Rect {
+    if before.width <= 0 || before.height <= 0 {
+        return r;
+    }
+    let map = |v: i32, from: i32, from_len: i32, to: i32, to_len: i32| {
+        to + ((i64::from(v - from) * i64::from(to_len)) / i64::from(from_len)) as i32
+    };
+    let (x0, x1) = (
+        map(r.x, before.x, before.width, after.x, after.width),
+        map(r.right(), before.x, before.width, after.x, after.width),
+    );
+    let (y0, y1) = (
+        map(r.y, before.y, before.height, after.y, after.height),
+        map(r.bottom(), before.y, before.height, after.y, after.height),
+    );
+    Rect::new(x0, y0, (x1 - x0).max(1), (y1 - y0).max(1))
+}
+
+/// How far to move a span `start..end` so that it lies inside `lo..hi`: left
+/// or up as far as it overflows, but never past `lo`; right or down if it
+/// starts before `lo`.
+fn shift_into(lo: i32, hi: i32, start: i32, end: i32) -> i32 {
+    let mut d = 0;
+    if end > hi {
+        d = hi - end;
+    }
+    if start + d < lo {
+        d = lo - start;
+    }
+    d
+}
+
+/// The top left of a floating place to go back to (a content position),
+/// kept where a window's frame starts on `area` and at least a corner of it
+/// shows.
+fn keep_origin(r: Rect, area: Rect) -> Rect {
+    let x_max = (area.right() - 2 * TITLE_HEIGHT).max(area.x + BORDER);
+    let y_max = (area.bottom() - 2 * TITLE_HEIGHT).max(area.y + TITLE_HEIGHT + BORDER);
+    Rect::new(r.x.clamp(area.x + BORDER, x_max), r.y.clamp(area.y + TITLE_HEIGHT + BORDER, y_max), r.width, r.height)
+}
+
 /// The bounds a frame's outer rectangle leaves for the content.
 fn inside_frame(outer: Rect) -> Rect {
     Rect::new(
@@ -299,6 +342,68 @@ impl Server {
         self.reconfigure(c, tl);
     }
 
+    /// The work area changed from `before` to `after` (the output got another
+    /// size or scale): every managed window follows.
+    ///
+    /// - Maximized and fullscreen toplevels are configured for the new area
+    ///   (a client hears the size in a configure sequence, as for any state
+    ///   change); a tiled toplevel's rectangle keeps its share of the work
+    ///   area (a right half stays a right half) and is configured the same
+    ///   way. The same for the compositor's own windows, at once.
+    /// - Floating windows keep their size and position, shifted only as far
+    ///   as it takes to keep them on the work area (as far as they fit: a
+    ///   window larger than the area keeps its top left).
+    /// - Where a snapped window goes back to when restored is kept on the
+    ///   work area too.
+    pub(super) fn relayout(&mut self, before: Rect, after: Rect) {
+        let windows: Vec<WindowId> = self.managed_windows().into_iter().map(|i| i.window).collect();
+        for w in windows {
+            if let Some(i) = self.internal.get(&w) {
+                let (maximized, tile) = (i.maximized, i.tile);
+                match (maximized, tile) {
+                    (true, _) => self.internal_place(w, true, None, Some(after)),
+                    (false, Some(t)) => {
+                        let t = follow_area(t, before, after);
+                        self.internal_place(w, false, Some(t), Some(t));
+                    }
+                    (false, None) => self.keep_on_area(w, after),
+                }
+                if let Some(r) = self.internal.get_mut(&w).and_then(|i| i.restore.as_mut()) {
+                    *r = keep_origin(*r, after);
+                }
+                continue;
+            }
+            let Some((c, tl, _)) = self.toplevel_of(w) else { continue };
+            let Some(t) = self.toplevel(c, tl) else { continue };
+            if let Some(r) = t.want_tile {
+                t.want_tile = Some(follow_area(r, before, after));
+            }
+            if let Some((x, y)) = t.restore {
+                let r = keep_origin(Rect::new(x, y, 0, 0), after);
+                t.restore = Some((r.x, r.y));
+            }
+            if t.want_maximized || t.want_fullscreen || t.want_tile.is_some() {
+                self.reconfigure(c, tl);
+            } else {
+                self.keep_on_area(w, after);
+            }
+        }
+    }
+
+    /// Shift floating window `w` just far enough to have its frame on `area`.
+    fn keep_on_area(&mut self, w: WindowId, area: Rect) {
+        let Some(win) = self.scene.window(w) else { return };
+        let outer = win.frame().map_or_else(|| win.bounds(), |f| f.outer);
+        let (x, y) = win.position();
+        let (dx, dy) = (
+            shift_into(area.x, area.right(), outer.x, outer.right()),
+            shift_into(area.y, area.bottom(), outer.y, outer.bottom()),
+        );
+        if (dx, dy) != (0, 0) {
+            self.scene.set_position(w, x + dx, y + dy);
+        }
+    }
+
     /// A configure sequence for a toplevel whose wanted state changed (if
     /// it had its initial one).
     fn reconfigure(&mut self, c: ClientId, tl: ObjectId) {
@@ -329,6 +434,43 @@ impl Server {
         self.internal.insert(win, state);
         self.activate_internal(win);
         win
+    }
+
+    /// Treat scene window `w`, which its owner keeps (a Windows app's
+    /// surface, ADR 0136), as an internal window: it takes part in focus,
+    /// and its pointer and keyboard input come as [`InternalEvent`]s. It is
+    /// activated when `activate`.
+    pub fn adopt_internal_window(&mut self, w: WindowId, app_id: &str, activate: bool) {
+        if self.scene.window(w).is_none() || self.internal.contains_key(&w) {
+            return;
+        }
+        let size = self.scene.window(w).map_or((0, 0), |win| win.content().logical_size());
+        let state = Internal { app_id: app_id.into(), maximized: false, tile: None, restore: None, size };
+        self.internal.insert(w, state);
+        if activate {
+            self.activate_internal(w);
+        }
+    }
+
+    /// Stop treating `w` as an internal window (it is not removed).
+    pub fn release_internal_window(&mut self, w: WindowId) {
+        if self.internal.remove(&w).is_none() {
+            return;
+        }
+        let was_active = self.active_internal == Some(w);
+        if was_active {
+            self.active_internal = None;
+        }
+        let input = &mut self.seat.input;
+        if input.internal_grab == Some(w) {
+            input.internal_grab = None;
+        }
+        if input.internal_hover == Some(w) {
+            input.internal_hover = None;
+        }
+        if was_active {
+            self.focus_next();
+        }
     }
 
     /// Remove an internal window.

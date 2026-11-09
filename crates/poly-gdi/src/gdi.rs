@@ -5,9 +5,15 @@
 //! the export sets (0: none).
 
 use crate::bitmap::{Bitmap, Rgb, Storage, rop3};
-use crate::font::{self, Face, TextMetric};
+use crate::font::{Face, TextMetric};
+use crate::fontmap::{self, LogFont};
+use crate::outline::{FontFiles, Outline, Typeface};
+pub use crate::region::Rect;
+use crate::region::{COMPLEXREGION, NULLREGION, RGN_AND, RGN_COPY, Region, SIMPLEREGION};
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
+use poly_font::GlyphCache;
 
 // Object types (`wingdi.h`).
 pub const OBJ_PEN: u32 = 1;
@@ -22,6 +28,10 @@ pub const OBJ_MEMDC: u32 = 10;
 pub const ERROR_INVALID_HANDLE: u32 = 6;
 pub const ERROR_INVALID_PARAMETER: u32 = 87;
 pub const CLR_INVALID: u32 = 0xFFFF_FFFF;
+
+/// `ExtTextOutW` options (`wingdi.h`).
+pub const ETO_OPAQUE: u32 = 0x0002;
+pub const ETO_CLIPPED: u32 = 0x0004;
 
 pub const TRANSPARENT: i32 = 1;
 pub const OPAQUE: i32 = 2;
@@ -39,25 +49,16 @@ pub const BS_NULL: u32 = 1;
 // Pen styles.
 pub const PS_NULL: u32 = 5;
 
-/// A rectangle (`RECT`), right and bottom exclusive.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Rect {
-    pub left: i32,
-    pub top: i32,
-    pub right: i32,
-    pub bottom: i32,
-}
+/// `GetRandomRgn`'s system region (`wingdi.h`).
+pub const SYSRGN: i32 = 4;
 
-impl Rect {
-    pub const fn new(left: i32, top: i32, right: i32, bottom: i32) -> Rect {
-        Rect { left, top, right, bottom }
-    }
-    fn intersect(&self, o: &Rect) -> Rect {
-        Rect::new(self.left.max(o.left), self.top.max(o.top), self.right.min(o.right), self.bottom.min(o.bottom))
-    }
-    fn is_empty(&self) -> bool {
-        self.right <= self.left || self.bottom <= self.top
-    }
+/// The coordinates a region may have when made (`CreateRectRgn.yaml`,
+/// observed: -2^27 to 2^27-1; others fail with ERROR_INVALID_PARAMETER).
+const RGN_MIN: i32 = -(1 << 27);
+const RGN_MAX: i32 = (1 << 27) - 1;
+
+fn rgn_coord_ok(v: i32) -> bool {
+    (RGN_MIN..=RGN_MAX).contains(&v)
 }
 
 /// What a DC draws on.
@@ -82,7 +83,19 @@ struct DcState {
     pos: (i32, i32),
     dc_brush: u32,
     dc_pen: u32,
-    clip: Option<Rect>,
+    /// The clip region, in device coordinates (`SelectClipRgn.yaml`).
+    clip: Option<Region>,
+    /// `SetViewportOrgEx` / `SetWindowOrgEx`: device = logical - window
+    /// origin + viewport origin.
+    viewport_org: (i32, i32),
+    window_org: (i32, i32),
+}
+
+impl DcState {
+    /// What to add to logical coordinates for device ones.
+    fn to_device(&self) -> (i32, i32) {
+        (self.viewport_org.0.wrapping_sub(self.window_org.0), self.viewport_org.1.wrapping_sub(self.window_org.1))
+    }
 }
 
 #[derive(Debug)]
@@ -93,6 +106,17 @@ struct Dc {
     bitmap: u32,
     /// A window surface a display DC draws into (the desktop link).
     surface: Option<u32>,
+    /// A window DC's visible region in device coordinates (the part of
+    /// the window on the screen, less clipped children and siblings), as
+    /// user32 tells it ([`Gdi::set_display_geometry`]); `None`: not told
+    /// (the screen, or the surface bitmap when there is one).
+    vis: Option<Region>,
+    /// Where device 0,0 is on the screen (`GetRandomRgn` answers in screen
+    /// coordinates).
+    vis_origin: (i32, i32),
+    /// A system clip on top of the visible region (device coordinates),
+    /// [`Gdi::set_system_clip`].
+    sys_clip: Option<Region>,
 }
 
 #[derive(Debug)]
@@ -122,14 +146,15 @@ enum Obj {
         delete_pending: bool,
     },
     Font {
+        /// The bitmap face: the font itself for stock fonts, the stand-in
+        /// where `outline` is `None`.
         face: Face,
+        outline: Option<Outline>,
         stock: bool,
         logfont: Vec<u8>,
         delete_pending: bool,
     },
-    Region {
-        rect: Rect,
-    },
+    Region(Region),
     Palette,
 }
 
@@ -166,11 +191,56 @@ pub struct Gdi {
     /// Each slot's generation (the handle's top byte).
     gens: Vec<u8>,
     pub screen: Screen,
+    /// The font files and the rendered glyphs of outline fonts.
+    text: TextState,
 }
+
+/// What outline text needs besides the font objects.
+struct TextState {
+    files: FontFiles,
+    glyphs: Option<GlyphCache>,
+}
+
+impl core::fmt::Debug for TextState {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TextState")
+            .field("glyph_bytes", &self.glyphs.as_ref().map(GlyphCache::bytes))
+            .finish_non_exhaustive()
+    }
+}
+
+/// The glyph cache's budget: enough for a few hundred glyphs at
+/// ordinary sizes.
+const GLYPH_CACHE_BYTES: usize = 1 << 20;
 
 impl Default for Gdi {
     fn default() -> Self {
         Gdi::new()
+    }
+}
+
+/// The font a DC has selected, with the file of an outline font.
+pub(crate) struct FontSel {
+    face: Face,
+    outline: Option<Outline>,
+    data: Option<Arc<Vec<u8>>>,
+    underline: bool,
+    strike: bool,
+}
+
+impl FontSel {
+    /// To measure and draw with.
+    pub(crate) fn typeface(&self) -> Typeface<'_> {
+        Typeface::new(self.face, self.outline, self.data.as_deref().map(Vec::as_slice))
+    }
+
+    /// `TEXTMETRICW` of the font, with the `LOGFONTW`'s underline and
+    /// strike-out where a bitmap face stands in.
+    pub(crate) fn metrics(&self) -> TextMetric {
+        let mut tm = self.typeface().metrics();
+        tm.underlined |= u8::from(self.underline);
+        tm.struck_out |= u8::from(self.strike);
+        tm
     }
 }
 
@@ -182,7 +252,12 @@ struct Src<'a> {
 
 impl Gdi {
     pub fn new() -> Gdi {
-        let mut g = Gdi { objs: Vec::new(), gens: Vec::new(), screen: Screen { width: 1024, height: 768 } };
+        let mut g = Gdi {
+            objs: Vec::new(),
+            gens: Vec::new(),
+            screen: Screen { width: 1024, height: 768 },
+            text: TextState { files: FontFiles::new(), glyphs: Some(GlyphCache::new(GLYPH_CACHE_BYTES)) },
+        };
         g.objs.push(None); // index 0 is never a handle
         let brush = |c: u32, style: u32| Obj::Brush {
             style,
@@ -193,7 +268,8 @@ impl Gdi {
             delete_pending: false,
         };
         let pen = |c: u32, style: u32| Obj::Pen { style, width: 1, color: c, stock: true, delete_pending: false };
-        let font = |f: Face| Obj::Font { face: f, stock: true, logfont: Vec::new(), delete_pending: false };
+        let font =
+            |f: Face| Obj::Font { face: f, outline: None, stock: true, logfont: Vec::new(), delete_pending: false };
         let stock: [Obj; STOCK_COUNT as usize] = [
             brush(0x00FF_FFFF, BS_SOLID), // WHITE_BRUSH
             brush(0x00C0_C0C0, BS_SOLID), // LTGRAY_BRUSH
@@ -304,6 +380,8 @@ impl Gdi {
             dc_brush: 0x00FF_FFFF,
             dc_pen: 0,
             clip: None,
+            viewport_org: (0, 0),
+            window_org: (0, 0),
         }
     }
 
@@ -313,7 +391,16 @@ impl Gdi {
     pub fn create_compatible_dc(&mut self, _of: u64) -> u32 {
         let state = self.default_state();
         let bitmap = self.handle_of(1 + STOCK_BITMAP as usize);
-        self.add(Obj::Dc(Dc { kind: DcKind::Memory, state, saved: Vec::new(), bitmap, surface: None }))
+        self.add(Obj::Dc(Dc {
+            kind: DcKind::Memory,
+            state,
+            saved: Vec::new(),
+            bitmap,
+            surface: None,
+            vis: None,
+            vis_origin: (0, 0),
+            sys_clip: None,
+        }))
     }
 
     /// A DC for a window's client area or the screen (`GetDC`).
@@ -325,6 +412,9 @@ impl Gdi {
             saved: Vec::new(),
             bitmap: 0,
             surface: None,
+            vis: None,
+            vis_origin: (0, 0),
+            sys_clip: None,
         }))
     }
 
@@ -449,7 +539,7 @@ impl Gdi {
                 }
                 true
             }
-            Obj::Region { .. } | Obj::Palette => {
+            Obj::Region(_) | Obj::Palette => {
                 let i = self.index_of(h).expect("valid");
                 self.objs[i] = None;
                 true
@@ -472,7 +562,7 @@ impl Gdi {
             Some(Obj::Brush { .. }) => OBJ_BRUSH,
             Some(Obj::Pen { .. }) => OBJ_PEN,
             Some(Obj::Font { .. }) => OBJ_FONT,
-            Some(Obj::Region { .. }) => OBJ_REGION,
+            Some(Obj::Region(_)) => OBJ_REGION,
             Some(Obj::Palette) => OBJ_PAL,
             None => 0,
         }
@@ -539,11 +629,8 @@ impl Gdi {
                 }
                 OBJ_BITMAP
             }
-            Some(Obj::Region { rect }) => {
-                let r = *rect;
-                self.dc_mut(dc).expect("checked").state.clip = Some(r);
-                return Ok(2);
-            }
+            // Selecting a region is SelectClipRgn (Learn: SelectObject).
+            Some(Obj::Region(_)) => return Ok(self.select_clip_rgn(dc, obj).0 as u32),
             _ => return Ok(0),
         };
         let h = obj as u32;
@@ -594,16 +681,21 @@ impl Gdi {
         self.add(Obj::Pen { style, width, color, stock: false, delete_pending: false })
     }
 
-    /// `CreateFontIndirectW`: Poly maps every face onto the stock faces by
-    /// height for now.
+    /// `CreateFontIndirectW`: the font mapper (ADR 0142, `crate::fontmap`)
+    /// picks the font from the face name, pitch and family and the height:
+    /// an outline font of Poly's font store when its file is there (see
+    /// [`Gdi::set_font_loader`]), else a bitmap face. A `LOGFONTW` that is
+    /// too short gives the system font's face.
     pub fn create_font(&mut self, logfont: &[u8]) -> u32 {
-        let height = logfont.get(0..4).map_or(0, |b| i32::from_le_bytes([b[0], b[1], b[2], b[3]])).unsigned_abs();
-        let face = if height != 0 && height <= 13 { Face::Gui } else { Face::System };
-        self.add(Obj::Font { face, stock: false, logfont: logfont.to_vec(), delete_pending: false })
-    }
-
-    pub fn create_rect_rgn(&mut self, r: Rect) -> u32 {
-        self.add(Obj::Region { rect: r })
+        let (face, outline) = match LogFont::parse(logfont) {
+            None => (Face::System, None),
+            Some(lf) => {
+                let m = fontmap::map(&lf);
+                let outline = if m.raster.is_some() { None } else { Outline::new(&mut self.text.files, &lf, &m) };
+                (fontmap::bitmap_face(&lf), outline)
+            }
+        };
+        self.add(Obj::Font { face, outline, stock: false, logfont: logfont.to_vec(), delete_pending: false })
     }
 
     /// `CreateBitmap`: monochrome for 1 bit per pixel, else 32 bits;
@@ -793,29 +885,288 @@ impl Gdi {
         }
     }
 
-    /// `GetClipBox`: (kind, rectangle); SIMPLEREGION is 2.
-    pub fn clip_box(&self, dc: u64) -> (i32, Rect) {
-        let Some(d) = self.dc(dc) else { return (0, Rect::default()) };
+    // ----- regions (`CreateRectRgn.yaml`, `CombineRgn.yaml`, `GetRgnBox.yaml`, `PtInRegion.yaml`)
+
+    /// The region behind a handle.
+    pub fn region(&self, h: u64) -> Option<&Region> {
+        match self.obj(h) {
+            Some(Obj::Region(r)) => Some(r),
+            _ => None,
+        }
+    }
+
+    fn region_mut(&mut self, h: u64) -> Option<&mut Region> {
+        match self.obj_mut(h) {
+            Some(Obj::Region(r)) => Some(r),
+            _ => None,
+        }
+    }
+
+    /// `CreateRectRgn`: the new region, or the error for coordinates
+    /// outside -2^27..2^27-1.
+    pub fn create_rect_rgn(&mut self, r: Rect) -> Result<u32, u32> {
+        if ![r.left, r.top, r.right, r.bottom].into_iter().all(rgn_coord_ok) {
+            return Err(ERROR_INVALID_PARAMETER);
+        }
+        Ok(self.create_region(Region::from_rect(r)))
+    }
+
+    /// A new region handle for `rgn`.
+    pub fn create_region(&mut self, rgn: Region) -> u32 {
+        self.add(Obj::Region(rgn))
+    }
+
+    /// `SetRectRgn`: any coordinates are kept (observed); false when `h`
+    /// is not a region.
+    pub fn set_rect_rgn(&mut self, h: u64, r: Rect) -> bool {
+        let Some(rgn) = self.region_mut(h) else { return false };
+        *rgn = Region::from_rect(r);
+        true
+    }
+
+    /// Replace a region's contents: its new kind, ERROR (0) when `h` is not
+    /// a region.
+    pub fn set_region(&mut self, h: u64, rgn: Region) -> i32 {
+        let Some(r) = self.region_mut(h) else { return 0 };
+        *r = rgn;
+        r.kind()
+    }
+
+    /// `CombineRgn`: (kind, error); the destination is untouched on error.
+    pub fn combine_rgn(&mut self, dst: u64, src1: u64, src2: u64, mode: i32) -> (i32, u32) {
+        if !(RGN_AND..=RGN_COPY).contains(&mode) {
+            return (0, ERROR_INVALID_PARAMETER);
+        }
+        if self.region(dst).is_none() {
+            return (0, ERROR_INVALID_HANDLE);
+        }
+        let Some(a) = self.region(src1) else { return (0, ERROR_INVALID_HANDLE) };
+        let out = if mode == RGN_COPY {
+            a.clone()
+        } else {
+            let Some(b) = self.region(src2) else { return (0, ERROR_INVALID_HANDLE) };
+            a.combine(b, mode).expect("mode checked")
+        };
+        let kind = out.kind();
+        *self.region_mut(dst).expect("checked") = out;
+        (kind, 0)
+    }
+
+    /// `GetRgnBox`: (kind, box); `None` when `h` is not a region.
+    pub fn rgn_box(&self, h: u64) -> Option<(i32, Rect)> {
+        self.region(h).map(|r| (r.kind(), r.bounds()))
+    }
+
+    /// `OffsetRgn`: the kind, or ERROR (0) when `h` is not a region or a
+    /// coordinate would leave -2^27..2^27-1 (the region stays as it was).
+    pub fn offset_rgn(&mut self, h: u64, dx: i32, dy: i32) -> i32 {
+        let Some(rgn) = self.region_mut(h) else { return 0 };
+        let mut moved = rgn.clone();
+        let fits = moved.offset(dx, dy)
+            && moved.rects().iter().all(|r| [r.left, r.top, r.right, r.bottom].into_iter().all(rgn_coord_ok));
+        if !fits {
+            return 0;
+        }
+        *rgn = moved;
+        rgn.kind()
+    }
+
+    /// `EqualRgn`: 1 when both are regions with the same pixels.
+    pub fn equal_rgn(&self, a: u64, b: u64) -> i32 {
+        match (self.region(a), self.region(b)) {
+            (Some(a), Some(b)) => i32::from(a == b),
+            _ => 0,
+        }
+    }
+
+    /// `GetRegionData`'s bytes: an `RGNDATAHEADER` (`wingdi.h`: dwSize 32,
+    /// iType RDH_RECTANGLES 1, nCount, nRgnSize, rcBound) and the
+    /// rectangles.
+    pub fn region_data(&self, h: u64) -> Option<Vec<u8>> {
+        const RDH_RECTANGLES: u32 = 1;
+        let rgn = self.region(h)?;
+        let mut b = Vec::with_capacity(32 + 16 * rgn.rects().len());
+        let n = rgn.rects().len() as u32;
+        for v in [32, RDH_RECTANGLES, n, 16 * n] {
+            b.extend_from_slice(&v.to_le_bytes());
+        }
+        for r in core::iter::once(rgn.bounds()).chain(rgn.rects().iter().copied()) {
+            for v in [r.left, r.top, r.right, r.bottom] {
+                b.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+        Some(b)
+    }
+
+    /// `PtInRegion`: whether the point is in it, or the error.
+    pub fn pt_in_region(&self, h: u64, x: i32, y: i32) -> Result<bool, u32> {
+        self.region(h).map(|r| r.contains_point(x, y)).ok_or(ERROR_INVALID_HANDLE)
+    }
+
+    /// `RectInRegion`: `None` when `h` is not a region (no error set).
+    pub fn rect_in_region(&self, h: u64, r: Rect) -> Option<bool> {
+        self.region(h).map(|g| g.intersects_rect(r))
+    }
+
+    // ----- clipping (`GetClipBox.yaml`, `SelectClipRgn.yaml`)
+
+    /// What a DC can draw on, in device coordinates, before its clip
+    /// region: a memory DC's bitmap; a window DC's visible region; the
+    /// surface bitmap or the screen for display DCs nobody described.
+    fn surface_region(&self, d: &Dc) -> Region {
         let bitmap = match d.kind {
             DcKind::Memory => Some(d.bitmap),
             DcKind::Display { .. } => d.surface,
         };
-        let bounds = match bitmap.and_then(|h| self.obj(u64::from(h))) {
-            Some(Obj::Bitmap { bmp, .. }) => Rect::new(0, 0, bmp.width, bmp.height),
-            _ => Rect::new(0, 0, self.screen.width, self.screen.height),
+        let base = match (&d.vis, bitmap.and_then(|h| self.obj(u64::from(h)))) {
+            (Some(v), _) if d.kind != DcKind::Memory => v.clone(),
+            (_, Some(Obj::Bitmap { bmp, .. })) => Region::from_rect(Rect::new(0, 0, bmp.width, bmp.height)),
+            _ => Region::from_rect(Rect::new(0, 0, self.screen.width, self.screen.height)),
         };
-        let r = d.state.clip.map_or(bounds, |c| c.intersect(&bounds));
-        (if r.is_empty() { 1 } else { 2 }, r)
+        match &d.sys_clip {
+            Some(s) => base.intersect(s),
+            None => base,
+        }
     }
 
-    pub fn select_clip_rgn(&mut self, dc: u64, rgn: u64) -> i32 {
-        let r = match self.obj(rgn) {
-            Some(Obj::Region { rect }) => Some(*rect),
-            _ => None,
+    /// What drawing on a DC reaches, in device coordinates: the surface
+    /// within the clip region.
+    fn drawable(&self, d: &Dc) -> Region {
+        let s = self.surface_region(d);
+        match &d.state.clip {
+            Some(c) => s.intersect(c),
+            None => s,
+        }
+    }
+
+    /// `GetClipBox`: (kind, box in logical coordinates); kind 0 for a bad
+    /// DC.
+    pub fn clip_box(&self, dc: u64) -> (i32, Rect) {
+        let Some(d) = self.dc(dc) else { return (0, Rect::default()) };
+        let r = self.drawable(d);
+        if r.is_empty() {
+            return (NULLREGION, Rect::default());
+        }
+        let (dx, dy) = d.state.to_device();
+        (r.kind(), r.bounds().offset(dx.wrapping_neg(), dy.wrapping_neg()))
+    }
+
+    /// The kind of what a DC draws on now (the clip calls' result).
+    fn drawable_kind(&self, dc: u64) -> i32 {
+        self.dc(dc).map_or(0, |d| self.drawable(d).kind())
+    }
+
+    /// `SelectClipRgn`: (kind, error). A copy of the region becomes the
+    /// clip region (device coordinates); none removes it (SIMPLEREGION); a
+    /// handle that is no region fails without an error.
+    pub fn select_clip_rgn(&mut self, dc: u64, rgn: u64) -> (i32, u32) {
+        self.ext_select_clip_rgn(dc, rgn, RGN_COPY)
+    }
+
+    /// `ExtSelectClipRgn`: (kind, error). The modes combine the region with
+    /// the clip region (none: the whole surface); RGN_COPY replaces it.
+    pub fn ext_select_clip_rgn(&mut self, dc: u64, rgn: u64, mode: i32) -> (i32, u32) {
+        let Some(d) = self.dc(dc) else { return (0, ERROR_INVALID_HANDLE) };
+        if !(RGN_AND..=RGN_COPY).contains(&mode) {
+            return (0, ERROR_INVALID_PARAMETER);
+        }
+        let new = if rgn == 0 {
+            if mode != RGN_COPY {
+                return (0, 0);
+            }
+            None
+        } else {
+            let Some(r) = self.region(rgn) else { return (0, 0) };
+            if mode == RGN_COPY {
+                Some(r.clone())
+            } else {
+                let base = d.state.clip.clone().unwrap_or_else(|| self.surface_region(d));
+                base.combine(r, mode)
+            }
         };
-        let Some(d) = self.dc_mut(dc) else { return 0 };
-        d.state.clip = r;
-        2
+        let removed = new.is_none();
+        self.dc_mut(dc).expect("checked").state.clip = new;
+        if removed { (SIMPLEREGION, 0) } else { (self.drawable_kind(dc), 0) }
+    }
+
+    /// `GetClipRgn`: 1 and the clip region copied into `rgn`, 0 without a
+    /// clip region, -1 for a bad DC or region (with the error).
+    pub fn clip_rgn(&mut self, dc: u64, rgn: u64) -> (i32, u32) {
+        let Some(d) = self.dc(dc) else { return (-1, ERROR_INVALID_PARAMETER) };
+        let Some(c) = d.state.clip.clone() else { return (0, 0) };
+        let Some(out) = self.region_mut(rgn) else { return (-1, ERROR_INVALID_HANDLE) };
+        *out = c;
+        (1, 0)
+    }
+
+    /// `IntersectClipRect` (`exclude` false) and `ExcludeClipRect`: the
+    /// clip region (none: the surface) within / less a logical rectangle;
+    /// (COMPLEXREGION, or NULLREGION when nothing is left, observed; error).
+    pub fn clip_rect(&mut self, dc: u64, r: Rect, exclude: bool) -> (i32, u32) {
+        let Some(d) = self.dc(dc) else { return (0, ERROR_INVALID_HANDLE) };
+        let (dx, dy) = d.state.to_device();
+        let r = Region::from_rect(r.normalized().offset(dx, dy));
+        let base = d.state.clip.clone().unwrap_or_else(|| self.surface_region(d));
+        let new = if exclude { base.subtract(&r) } else { base.intersect(&r) };
+        self.dc_mut(dc).expect("checked").state.clip = Some(new);
+        (if self.drawable_kind(dc) == NULLREGION { NULLREGION } else { COMPLEXREGION }, 0)
+    }
+
+    /// `GetRandomRgn`: SYSRGN copies the system region (what the DC can
+    /// draw on, in screen coordinates) into `rgn`: 1; -1 on failure.
+    pub fn random_rgn(&mut self, dc: u64, rgn: u64, which: i32) -> i32 {
+        let Some(d) = self.dc(dc) else { return -1 };
+        if which != SYSRGN {
+            return -1;
+        }
+        let sys = self.surface_region(d).offset_by(d.vis_origin.0, d.vis_origin.1);
+        let Some(out) = self.region_mut(rgn) else { return -1 };
+        *out = sys;
+        1
+    }
+
+    /// `SetViewportOrgEx` (`viewport`) / `SetWindowOrgEx`: the old origin.
+    pub fn set_origin(&mut self, dc: u64, viewport: bool, x: i32, y: i32) -> Option<(i32, i32)> {
+        let s = self.state(dc)?;
+        let o = if viewport { &mut s.viewport_org } else { &mut s.window_org };
+        Some(core::mem::replace(o, (x, y)))
+    }
+
+    /// Describe a window DC (user32's `GetDC`/`GetWindowDC`): device 0,0
+    /// is at `origin` on the screen and the DC can draw on the union of
+    /// `include` less the union of `exclude` (screen coordinates; empty or
+    /// inverted rectangles count as nothing). False for a DC that is not a
+    /// display DC.
+    pub fn set_display_geometry(&mut self, dc: u64, origin: (i32, i32), include: &[Rect], exclude: &[Rect]) -> bool {
+        let Some(d) = self.dc_mut(dc) else { return false };
+        if d.kind == DcKind::Memory {
+            return false;
+        }
+        let union = |rs: &[Rect]| {
+            let solid: Vec<Rect> = rs.iter().filter(|r| !r.is_empty()).copied().collect();
+            Region::from_rects(&solid)
+        };
+        let vis = union(include).subtract(&union(exclude));
+        d.vis = Some(vis.offset_by(origin.0.wrapping_neg(), origin.1.wrapping_neg()));
+        d.vis_origin = origin;
+        // A DC taken anew is not limited to an update region
+        // (`GetClipBox.yaml`, `begin_paint`).
+        d.sys_clip = None;
+        true
+    }
+
+    /// Set (`Some`) or remove a display DC's system clip: a region in
+    /// device coordinates (`BeginPaint`'s update region) that limits what
+    /// it draws on as the visible region does. `GetClipBox` reflects it,
+    /// `GetClipRgn` does not (`BeginPaint.yaml`). False for a DC that is
+    /// not a display DC.
+    pub fn set_system_clip(&mut self, dc: u64, clip: Option<Region>) -> bool {
+        let Some(d) = self.dc_mut(dc) else { return false };
+        if d.kind == DcKind::Memory {
+            return false;
+        }
+        d.sys_clip = clip;
+        true
     }
 
     // ----- drawing
@@ -832,10 +1183,13 @@ impl Gdi {
         }
     }
 
-    /// The bitmap a DC draws on, with the DC's state and clip.
-    fn with_target<R>(&mut self, dc: u64, f: impl FnOnce(&mut Bitmap, &DcState, Rect, &Gdi) -> R) -> Option<R> {
+    /// The bitmap a DC draws on, with the DC's state and what drawing may
+    /// reach (device coordinates: the visible part of the surface within
+    /// the clip region and the bitmap).
+    fn with_target<R>(&mut self, dc: u64, f: impl FnOnce(&mut Bitmap, &DcState, &Region, &Gdi) -> R) -> Option<R> {
         let d = self.dc(dc)?;
         let state = d.state.clone();
+        let drawable = self.drawable(d);
         let h = match d.kind {
             DcKind::Memory => d.bitmap,
             DcKind::Display { .. } => d.surface?,
@@ -844,9 +1198,8 @@ impl Gdi {
         let mut taken = self.objs[i].take();
         let r = match &mut taken {
             Some(Obj::Bitmap { bmp, stock: false, .. }) => {
-                let bounds = Rect::new(0, 0, bmp.width, bmp.height);
-                let clip = state.clip.map_or(bounds, |c| c.intersect(&bounds));
-                Some(f(bmp, &state, clip, self))
+                let clip = drawable.intersect_rect(Rect::new(0, 0, bmp.width, bmp.height));
+                Some(f(bmp, &state, &clip, self))
             }
             _ => None,
         };
@@ -860,8 +1213,10 @@ impl Gdi {
             Some(Obj::Brush { style: BS_NULL, .. }) => None,
             // A deleted solid brush stays readable and can be selected (the
             // old selection comes back), but paints nothing (observed: a
-            // PatBlt with it selected leaves the white destination).
-            Some(Obj::Brush { deleted: true, .. }) => None,
+            // PatBlt with it selected leaves the white destination); one
+            // deleted while selected stops painting at once too (observed;
+            // it goes when deselected).
+            Some(Obj::Brush { deleted: true, .. }) | Some(Obj::Brush { delete_pending: true, .. }) => None,
             Some(Obj::Brush { .. }) if brush == self.stock(DC_BRUSH) => Some(Rgb::from_colorref(state.dc_brush)),
             Some(Obj::Brush { color, .. }) => Some(Rgb::from_colorref(*color)),
             _ => None,
@@ -877,8 +1232,21 @@ impl Gdi {
         }
     }
 
+    /// Logical point (`x`, `y`) of a DC in device coordinates.
+    fn device_point(&self, dc: u64, x: i32, y: i32) -> (i32, i32) {
+        let (dx, dy) = self.dc(dc).map_or((0, 0), |d| d.state.to_device());
+        (x.wrapping_add(dx), y.wrapping_add(dy))
+    }
+
+    /// A logical rectangle of a DC in device coordinates.
+    fn device_rect(&self, dc: u64, r: Rect) -> Rect {
+        let (dx, dy) = self.dc(dc).map_or((0, 0), |d| d.state.to_device());
+        r.offset(dx, dy)
+    }
+
     /// `SetPixel`: the colour stored, `CLR_INVALID` outside.
     pub fn set_pixel(&mut self, dc: u64, x: i32, y: i32, c: u32) -> u32 {
+        let (x, y) = self.device_point(dc, x, y);
         self.with_target(dc, |b, _, clip, _| {
             if !clip.contains_point(x, y) {
                 return CLR_INVALID;
@@ -892,22 +1260,26 @@ impl Gdi {
 
     /// `GetPixel`.
     pub fn get_pixel(&mut self, dc: u64, x: i32, y: i32) -> u32 {
+        let (x, y) = self.device_point(dc, x, y);
         self.with_target(dc, |b, _, _, _| if b.contains(x, y) { b.to_rgb(b.raw(x, y)).colorref() } else { CLR_INVALID })
             .unwrap_or(CLR_INVALID)
     }
 
-    /// Fill `r` with raster operation `code` and pattern colour `pattern`.
-    fn fill(b: &mut Bitmap, clip: Rect, r: Rect, code: u8, pattern: Option<Rgb>) {
-        let r = r.intersect(&clip);
-        if r.is_empty() {
-            return;
-        }
+    /// Fill `r` with raster operation `code` and pattern colour `pattern`,
+    /// within `clip`.
+    fn fill(b: &mut Bitmap, clip: &Region, r: Rect, code: u8, pattern: Option<Rgb>) {
         let p = pattern.map_or(0, |c| b.from_rgb(c));
         let mask = b.raw_mask();
-        for y in r.top..r.bottom {
-            for x in r.left..r.right {
-                let d = b.raw(x, y);
-                b.set_raw(x, y, rop3(code, p, 0, d) & mask);
+        for piece in clip.rects() {
+            let r = r.intersect(piece);
+            if r.is_empty() {
+                continue;
+            }
+            for y in r.top..r.bottom {
+                for x in r.left..r.right {
+                    let d = b.raw(x, y);
+                    b.set_raw(x, y, rop3(code, p, 0, d) & mask);
+                }
             }
         }
     }
@@ -923,7 +1295,7 @@ impl Gdi {
         if uses_pattern && pattern.is_none() {
             return true;
         }
-        let r = normalize(x, y, w, h);
+        let r = self.device_rect(dc, normalize(x, y, w, h));
         self.with_target(dc, |b, _, clip, _| Self::fill(b, clip, r, code, pattern));
         true
     }
@@ -934,6 +1306,7 @@ impl Gdi {
         let state = d.state.clone();
         let b = if brush == 0 { state.brush } else { brush as u32 };
         let Some(c) = self.brush_color(b, &state) else { return true };
+        let r = self.device_rect(dc, normalized(r));
         self.with_target(dc, |bmp, _, clip, _| Self::fill(bmp, clip, r, 0xF0, Some(c)));
         true
     }
@@ -943,6 +1316,7 @@ impl Gdi {
         if self.dc(dc).is_none() {
             return false;
         }
+        let r = self.device_rect(dc, normalized(r));
         self.with_target(dc, |bmp, _, clip, _| Self::fill(bmp, clip, r, 0xF0, Some(Rgb::from_colorref(color))));
         true
     }
@@ -954,8 +1328,8 @@ impl Gdi {
         let state = d.state.clone();
         let fill = self.brush_color(state.brush, &state);
         let pen = self.pen_color(state.pen, &state);
-        let (l, r) = (l.min(r), l.max(r));
-        let (t, b) = (t.min(b), t.max(b));
+        let n = self.device_rect(dc, Rect::new(l, t, r, b).normalized());
+        let (l, t, r, b) = (n.left, n.top, n.right, n.bottom);
         self.with_target(dc, |bmp, _, clip, _| match pen {
             Some(pc) => {
                 if let Some(fc) = fill {
@@ -983,9 +1357,10 @@ impl Gdi {
     pub fn line_to(&mut self, dc: u64, x: i32, y: i32) -> bool {
         let Some(d) = self.dc(dc) else { return false };
         let state = d.state.clone();
-        let (x0, y0) = state.pos;
         let pen = self.pen_color(state.pen, &state);
         if let Some(c) = pen {
+            let (x0, y0) = self.device_point(dc, state.pos.0, state.pos.1);
+            let (x, y) = self.device_point(dc, x, y);
             self.with_target(dc, |b, _, clip, _| {
                 let v = b.from_rgb(c);
                 let (dx, dy) = ((x - x0).abs(), -(y - y0).abs());
@@ -1033,13 +1408,15 @@ impl Gdi {
         let uses_source = (code >> 2) & 0x33 != code & 0x33;
         if !uses_source {
             let pattern = self.brush_color(dstate.brush, &dstate);
-            let r = normalize(x, y, w, h);
+            let r = self.device_rect(dst, normalize(x, y, w, h));
             self.with_target(dst, |b, _, clip, _| Self::fill(b, clip, r, code, pattern));
             return (true, 0);
         }
         let Some(sdc) = self.dc(src) else { return (false, 0) };
         let sbk = Rgb::from_colorref(sdc.state.bk);
         let pattern = self.brush_color(dstate.brush, &dstate);
+        let (x, y) = self.device_point(dst, x, y);
+        let (sx, sy) = self.device_point(src, sx, sy);
         let (mut x, mut y, mut sx, mut sy, mut w, mut h) = (x, y, sx, sy, w, h);
         if w < 0 {
             x += w;
@@ -1106,36 +1483,131 @@ impl Gdi {
 
     // ----- text
 
-    pub(crate) fn face_of(&self, dc: u64) -> Face {
-        let Some(d) = self.dc(dc) else { return Face::System };
+    /// Where the font files of outline fonts come from (ADR 0142).
+    pub fn set_font_loader(&mut self, loader: crate::outline::Loader) {
+        self.text.files.set_loader(loader);
+    }
+
+    /// Put a font file in the store directly (hosts without a loader).
+    pub fn add_font_file(&mut self, class: crate::fontmap::Class, bold: bool, italic: bool, data: Vec<u8>) -> bool {
+        self.text.files.add(class, bold, italic, data)
+    }
+
+    /// The font a DC has selected (the system font for a bad DC).
+    pub(crate) fn font_sel(&self, dc: u64) -> FontSel {
+        let sel = |face, outline: Option<Outline>, logfont: &[u8]| {
+            let data = outline.and_then(|o| self.text.files.data(o.slot));
+            FontSel {
+                face,
+                outline: outline.filter(|_| data.is_some()),
+                data,
+                underline: logfont.get(21).is_some_and(|&b| b != 0),
+                strike: logfont.get(22).is_some_and(|&b| b != 0),
+            }
+        };
+        let Some(d) = self.dc(dc) else { return sel(Face::System, None, &[]) };
         match self.obj(u64::from(d.state.font)) {
-            Some(Obj::Font { face, .. }) => *face,
-            _ => Face::System,
+            Some(Obj::Font { face, outline, logfont, .. }) => sel(*face, *outline, logfont),
+            _ => sel(Face::System, None, &[]),
         }
     }
 
     /// `GetTextMetricsW`.
     pub fn text_metrics(&self, dc: u64) -> Option<TextMetric> {
         self.dc(dc)?;
-        Some(self.face_of(dc).metrics())
+        Some(self.font_sel(dc).metrics())
     }
 
     /// `GetTextExtentPoint32W`.
     pub fn text_extent(&self, dc: u64, text: &[u16]) -> Option<(i32, i32)> {
         self.dc(dc)?;
-        Some(font::extent(self.face_of(dc), text))
+        Some(self.font_sel(dc).typeface().extent(text))
+    }
+
+    /// `GetTextExtentExPointW`: the extent, how many characters fit in
+    /// `max_width`, and for every character the width of the text up to and
+    /// including it.
+    pub fn text_extent_ex(&self, dc: u64, text: &[u16], max_width: i32) -> Option<((i32, i32), usize, Vec<i32>)> {
+        self.dc(dc)?;
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        let mut total = 0;
+        let mut running = Vec::with_capacity(text.len());
+        for &c in text {
+            total += tf.width(c);
+            running.push(total);
+        }
+        let fit = running.iter().take_while(|&&w| w <= max_width).count();
+        Some((tf.extent(text), fit, running))
+    }
+
+    /// `GetCharWidth32W`: the advance of each character `first..=last`.
+    pub fn char_widths(&self, dc: u64, first: u32, last: u32) -> Option<Vec<i32>> {
+        self.dc(dc)?;
+        if first > last || last > 0xFFFF {
+            return None;
+        }
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        Some((first..=last).map(|c| tf.width(c as u16)).collect())
+    }
+
+    /// `GetTextFaceW`: the face name of the selected font (the name the
+    /// program asked for, also where Poly draws it with a font of its own).
+    pub fn text_face(&self, dc: u64) -> Option<Vec<u16>> {
+        let d = self.dc(dc)?;
+        let name = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+        Some(match self.obj(u64::from(d.state.font)) {
+            Some(Obj::Font { logfont, face, .. }) => match LogFont::parse(logfont) {
+                Some(lf) if !lf.face_name().is_empty() => lf.face_name().to_vec(),
+                _ => name(match face {
+                    Face::System => "System",
+                    Face::Gui => "MS Shell Dlg",
+                    Face::AnsiFixed => "Courier",
+                    Face::OemFixed => "Terminal",
+                }),
+            },
+            _ => name("System"),
+        })
     }
 
     /// `TextOutW` (`TextOutW.yaml`): false for a bad DC.
     pub fn text_out(&mut self, dc: u64, x: i32, y: i32, text: &[u16]) -> bool {
+        self.ext_text_out(dc, x, y, 0, None, text, None)
+    }
+
+    /// `ExtTextOutW`: `options` are `ETO_OPAQUE` (the rectangle is filled
+    /// with the background colour first) and `ETO_CLIPPED` (the text is
+    /// clipped to it); `advances` are `lpDx`, the distance from each
+    /// character's origin to the next. False for a bad DC.
+    #[allow(clippy::too_many_arguments)]
+    pub fn ext_text_out(
+        &mut self,
+        dc: u64,
+        x: i32,
+        y: i32,
+        options: u32,
+        rect: Option<Rect>,
+        text: &[u16],
+        advances: Option<&[i32]>,
+    ) -> bool {
         let Some(d) = self.dc(dc) else { return false };
+        let state = d.state.clone();
+        if options & ETO_OPAQUE != 0
+            && let Some(r) = rect
+        {
+            self.fill_rect_color(dc, r, state.bk);
+        }
         if text.is_empty() {
             return true;
         }
-        let state = d.state.clone();
-        let face = self.face_of(dc);
-        let tm = face.metrics();
-        let (cx, _) = font::extent(face, text);
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        let tm = tf.metrics();
+        let cx = match advances {
+            Some(a) => text.iter().enumerate().map(|(i, &c)| a.get(i).copied().unwrap_or_else(|| tf.width(c))).sum(),
+            None => tf.extent(text).0,
+        };
         let (rx, ry) = if state.align & TA_UPDATECP != 0 { state.pos } else { (x, y) };
         let x0 = match state.align & TA_CENTER {
             TA_RIGHT => rx - cx,
@@ -1147,7 +1619,8 @@ impl Gdi {
             TA_BASELINE => ry - tm.ascent,
             _ => ry,
         };
-        self.draw_text_run(dc, x0, y0, text, None);
+        let clip = if options & ETO_CLIPPED != 0 { rect } else { None };
+        self.draw_text_run(dc, x0, y0, text, clip, advances);
         if state.align & TA_UPDATECP != 0
             && let Some(s) = self.state(dc)
         {
@@ -1161,42 +1634,122 @@ impl Gdi {
     }
 
     /// Draw `text` with its cell's top left at (`x0`, `y0`), clipped to
-    /// `clip` too when given (`DrawTextW`).
-    pub fn draw_text_run(&mut self, dc: u64, x0: i32, y0: i32, text: &[u16], clip: Option<Rect>) {
-        let face = self.face_of(dc);
-        let tm = face.metrics();
+    /// `clip` too when given. A glyph of an outline font is blended into
+    /// the surface by its coverage (grey scale antialiasing); a bitmap
+    /// face's pixels are set. Underline and strike-out follow the
+    /// `LOGFONTW`.
+    pub(crate) fn draw_text_run(
+        &mut self,
+        dc: u64,
+        x0: i32,
+        y0: i32,
+        text: &[u16],
+        clip: Option<Rect>,
+        advances: Option<&[i32]>,
+    ) {
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        let tm = tf.metrics();
+        let (x0, y0) = self.device_point(dc, x0, y0);
+        let clip = clip.map(|c| self.device_rect(dc, c));
+        let cx = match advances {
+            Some(a) => text.iter().enumerate().map(|(i, &c)| a.get(i).copied().unwrap_or_else(|| tf.width(c))).sum(),
+            None => tf.extent(text).0,
+        };
+        let (under, strike) = tf.line_metrics();
+        let mut cache = self.text.glyphs.take().unwrap_or_else(|| GlyphCache::new(GLYPH_CACHE_BYTES));
         self.with_target(dc, |b, state, dclip, _| {
-            let clip = clip.map_or(dclip, |c| c.intersect(&dclip));
-            let fg = b.from_rgb(Rgb::from_colorref(state.text));
-            let (cx, _) = font::extent(face, text);
+            let clip = match clip {
+                Some(c) => dclip.intersect_rect(c),
+                None => dclip.clone(),
+            };
+            let fg_rgb = Rgb::from_colorref(state.text);
+            let fg = b.from_rgb(fg_rgb);
             if state.bk_mode != TRANSPARENT {
                 Self::fill(
                     b,
-                    clip,
+                    &clip,
                     Rect::new(x0, y0, x0 + cx, y0 + tm.height),
                     0xF0,
                     Some(Rgb::from_colorref(state.bk)),
                 );
             }
-            let mut x = x0;
-            for &c in text {
-                let (w, rows) = face.glyph(c);
-                for (r, &row) in rows.iter().enumerate().take(tm.height as usize) {
-                    if row == 0 {
-                        continue;
+            let baseline = y0 + tm.ascent;
+            if tf.is_outline() {
+                tf.draw_outline(&mut cache, text, x0, baseline, advances, |px, py, a| {
+                    if clip.contains_point(px, py) {
+                        Self::blend(b, px, py, fg_rgb, a);
                     }
-                    for col in 0..w.min(16) {
-                        if row & (0x8000 >> col) != 0 {
-                            let (px, py) = (x + col, y0 + r as i32);
-                            if clip.contains_point(px, py) {
-                                b.set_raw(px, py, fg);
+                });
+            } else {
+                let mut x = x0;
+                for (i, &c) in text.iter().enumerate() {
+                    let (w, rows) = tf.face.glyph(c);
+                    for (r, &row) in rows.iter().enumerate().take(tm.height as usize) {
+                        if row == 0 {
+                            continue;
+                        }
+                        for col in 0..w.min(16) {
+                            if row & (0x8000 >> col) != 0 {
+                                let (px, py) = (x + col, y0 + r as i32);
+                                if clip.contains_point(px, py) {
+                                    b.set_raw(px, py, fg);
+                                }
                             }
                         }
                     }
+                    x += advances.and_then(|a| a.get(i).copied()).unwrap_or(w);
                 }
-                x += w;
+            }
+            if sel.underline {
+                let r = Rect::new(x0, baseline + under.0, x0 + cx, baseline + under.0 + under.1);
+                Self::fill(b, &clip, r, 0xF0, Some(fg_rgb));
+            }
+            if sel.strike {
+                let r = Rect::new(x0, baseline + strike.0, x0 + cx, baseline + strike.0 + strike.1);
+                Self::fill(b, &clip, r, 0xF0, Some(fg_rgb));
             }
         });
+        self.text.glyphs = Some(cache);
+    }
+
+    /// `DrawText`'s mnemonic underline: `w` pixels wide at `x`, for the
+    /// cell whose top is `y` (logical coordinates).
+    pub(crate) fn draw_underline(&mut self, dc: u64, x: i32, w: i32, y: i32, clip: Option<Rect>) {
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        let ((top, thick), _) = tf.line_metrics();
+        let baseline = y + tf.metrics().ascent;
+        let (x, y) = self.device_point(dc, x, baseline + top);
+        let clip = clip.map(|c| self.device_rect(dc, c));
+        self.with_target(dc, |b, state, dclip, _| {
+            let clip = match clip {
+                Some(c) => dclip.intersect_rect(c),
+                None => dclip.clone(),
+            };
+            Self::fill(b, &clip, Rect::new(x, y, x + w, y + thick), 0xF0, Some(Rgb::from_colorref(state.text)));
+        });
+    }
+
+    /// Paint `fg` over the pixel with `alpha` (1 to 255) of coverage.
+    fn blend(b: &mut Bitmap, x: i32, y: i32, fg: Rgb, alpha: u8) {
+        if !b.contains(x, y) {
+            return;
+        }
+        let a = u32::from(alpha);
+        if b.bpp <= 8 {
+            // Too few colours to mix: ink above half coverage.
+            if a >= 128 {
+                let v = b.from_rgb(fg);
+                b.set_raw(x, y, v);
+            }
+            return;
+        }
+        let d = b.to_rgb(b.raw(x, y));
+        let mix = |f: u8, d: u8| ((u32::from(f) * a + u32::from(d) * (255 - a) + 127) / 255) as u8;
+        let out = Rgb { r: mix(fg.r, d.r), g: mix(fg.g, d.g), b: mix(fg.b, d.b) };
+        let v = b.from_rgb(out);
+        b.set_raw(x, y, v);
     }
 
     /// Point a display DC at a window surface bitmap (the desktop link):
@@ -1208,10 +1761,11 @@ impl Gdi {
     }
 }
 
-impl Rect {
-    fn contains_point(&self, x: i32, y: i32) -> bool {
-        x >= self.left && x < self.right && y >= self.top && y < self.bottom
-    }
+/// `FillRect`'s rectangle: an inverted one is filled with its sides
+/// swapped (observed: 9,5 to 8,4 fills the pixel at 8,4); an empty one
+/// stays empty.
+fn normalized(r: Rect) -> Rect {
+    Rect::new(r.left.min(r.right), r.top.min(r.bottom), r.left.max(r.right), r.top.max(r.bottom))
 }
 
 fn normalize(x: i32, y: i32, w: i32, h: i32) -> Rect {
