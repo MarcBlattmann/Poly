@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e5f25a5644ea",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:18:06Z",
+  "tests": [
+    {
+      "name": "sid_alloc_counts",
+      "exe_sha256": "c96cf12e8fd5c02e02bf9a06e25b3a72db09e5f23f78072b148a1935c9e477ee",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y291bnQgMDogb2s9MSB2YWxpZD0xIGxlbmd0aD04IHRleHQ9Uy0xLTUKY291bnQgMDogRnJlZVNpZCByZXR1cm5lZCBudWxsPXRydWUKY291bnQgMTogb2s9MSB2YWxpZD0xIGxlbmd0aD0xMiB0ZXh0PVMtMS01LTExCmNvdW50IDE6IEZyZWVTaWQgcmV0dXJuZWQgbnVsbD10cnVlCmNvdW50IDI6IG9rPTEgdmFsaWQ9MSBsZW5ndGg9MTYgdGV4dD1TLTEtNS0xMS0yMgpjb3VudCAyOiBGcmVlU2lkIHJldHVybmVkIG51bGw9dHJ1ZQpjb3VudCAzOiBvaz0xIHZhbGlkPTEgbGVuZ3RoPTIwIHRleHQ9Uy0xLTUtMTEtMjItMzMKY291bnQgMzogRnJlZVNpZCByZXR1cm5lZCBudWxsPXRydWUKY291bnQgNDogb2s9MSB2YWxpZD0xIGxlbmd0aD0yNCB0ZXh0PVMtMS01LTExLTIyLTMzLTQ0CmNvdW50IDQ6IEZyZWVTaWQgcmV0dXJuZWQgbnVsbD10cnVlCmNvdW50IDU6IG9rPTEgdmFsaWQ9MSBsZW5ndGg9MjggdGV4dD1TLTEtNS0xMS0yMi0zMy00NC01NQpjb3VudCA1OiBGcmVlU2lkIHJldHVybmVkIG51bGw9dHJ1ZQpjb3VudCA2OiBvaz0xIHZhbGlkPTEgbGVuZ3RoPTMyIHRleHQ9Uy0xLTUtMTEtMjItMzMtNDQtNTUtNjYKY291bnQgNjogRnJlZVNpZCByZXR1cm5lZCBudWxsPXRydWUKY291bnQgNzogb2s9MSB2YWxpZD0xIGxlbmd0aD0zNiB0ZXh0PVMtMS01LTExLTIyLTMzLTQ0LTU1LTY2LTc3CmNvdW50IDc6IEZyZWVTaWQgcmV0dXJuZWQgbnVsbD10cnVlCmNvdW50IDg6IG9rPTEgdmFsaWQ9MSBsZW5ndGg9NDAgdGV4dD1TLTEtNS0xMS0yMi0zMy00NC01NS02Ni03Ny04OApjb3VudCA4OiBGcmVlU2lkIHJldHVybmVkIG51bGw9dHJ1ZQpjb3VudCA5OiBvaz0wIGVycj0xMzM3IHNpZF9udWxsPXRydWUKY291bnQgMTA6IG9rPTAgZXJyPTEzMzcgc2lkX251bGw9dHJ1ZQpjb3VudCAyNTU6IG9rPTAgZXJyPTEzMzcgc2lkX251bGw9dHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "count 0: ok=1 valid=1 length=8 text=S-1-5\ncount 0: FreeSid returned null=true\ncount 1: ok=1 valid=1 length=12 text=S-1-5-11\ncount 1: FreeSid returned null=true\ncount 2: ok=1 valid=1 length=16 text=S-1-5-11-22\ncount 2: FreeSid returned null=true\ncount 3: ok=1 valid=1 length=20 text=S-1-5-11-22-33\ncount 3: FreeSid returned null=true\ncount 4: ok=1 valid=1 length=24 text=S-1-5-11-22-33-44\ncount 4: FreeSid returned null=true\ncount 5: ok=1 valid=1 length=28 text=S-1-5-11-22-33-44-55\ncount 5: FreeSid returned null=true\ncount 6: ok=1 valid=1 length=32 text=S-1-5-11-22-33-44-55-66\ncount 6: FreeSid returned null=true\ncount 7: ok=1 valid=1 length=36 text=S-1-5-11-22-33-44-55-66-77\ncount 7: FreeSid returned null=true\ncount 8: ok=1 valid=1 length=40 text=S-1-5-11-22-33-44-55-66-77-88\ncount 8: FreeSid returned null=true\ncount 9: ok=0 err=1337 sid_null=true\ncount 10: ok=0 err=1337 sid_null=true\ncount 255: ok=0 err=1337 sid_null=true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

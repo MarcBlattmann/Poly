@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e5f25a5644ea",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:18:06Z",
+  "tests": [
+    {
+      "name": "priv_value_names",
+      "exe_sha256": "a50fc3b1d1afaaf4915bba46b5892460264ee697e1db5a3ab193f7064f18dae8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "W1NlQ3JlYXRlVG9rZW5Qcml2aWxlZ2VdOiBsb3c9MiBoaWdoPTAKW1NlQXNzaWduUHJpbWFyeVRva2VuUHJpdmlsZWdlXTogbG93PTMgaGlnaD0wCltTZUxvY2tNZW1vcnlQcml2aWxlZ2VdOiBsb3c9NCBoaWdoPTAKW1NlSW5jcmVhc2VRdW90YVByaXZpbGVnZV06IGxvdz01IGhpZ2g9MApbU2VNYWNoaW5lQWNjb3VudFByaXZpbGVnZV06IGxvdz02IGhpZ2g9MApbU2VUY2JQcml2aWxlZ2VdOiBsb3c9NyBoaWdoPTAKW1NlU2VjdXJpdHlQcml2aWxlZ2VdOiBsb3c9OCBoaWdoPTAKW1NlVGFrZU93bmVyc2hpcFByaXZpbGVnZV06IGxvdz05IGhpZ2g9MApbU2VMb2FkRHJpdmVyUHJpdmlsZWdlXTogbG93PTEwIGhpZ2g9MApbU2VTeXN0ZW1Qcm9maWxlUHJpdmlsZWdlXTogbG93PTExIGhpZ2g9MApbU2VTeXN0ZW10aW1lUHJpdmlsZWdlXTogbG93PTEyIGhpZ2g9MApbU2VQcm9maWxlU2luZ2xlUHJvY2Vzc1ByaXZpbGVnZV06IGxvdz0xMyBoaWdoPTAKW1NlSW5jcmVhc2VCYXNlUHJpb3JpdHlQcml2aWxlZ2VdOiBsb3c9MTQgaGlnaD0wCltTZUNyZWF0ZVBhZ2VmaWxlUHJpdmlsZWdlXTogbG93PTE1IGhpZ2g9MApbU2VDcmVhdGVQZXJtYW5lbnRQcml2aWxlZ2VdOiBsb3c9MTYgaGlnaD0wCltTZUJhY2t1cFByaXZpbGVnZV06IGxvdz0xNyBoaWdoPTAKW1NlUmVzdG9yZVByaXZpbGVnZV06IGxvdz0xOCBoaWdoPTAKW1NlU2h1dGRvd25Qcml2aWxlZ2VdOiBsb3c9MTkgaGlnaD0wCltTZURlYnVnUHJpdmlsZWdlXTogbG93PTIwIGhpZ2g9MApbU2VBdWRpdFByaXZpbGVnZV06IGxvdz0yMSBoaWdoPTAKW1NlU3lzdGVtRW52aXJvbm1lbnRQcml2aWxlZ2VdOiBsb3c9MjIgaGlnaD0wCltTZUNoYW5nZU5vdGlmeVByaXZpbGVnZV06IGxvdz0yMyBoaWdoPTAKW1NlUmVtb3RlU2h1dGRvd25Qcml2aWxlZ2VdOiBsb3c9MjQgaGlnaD0wCltTZVVuZG9ja1ByaXZpbGVnZV06IGxvdz0yNSBoaWdoPTAKW1NlU3luY0FnZW50UHJpdmlsZWdlXTogbG93PTI2IGhpZ2g9MApbU2VFbmFibGVEZWxlZ2F0aW9uUHJpdmlsZWdlXTogbG93PTI3IGhpZ2g9MApbU2VNYW5hZ2VWb2x1bWVQcml2aWxlZ2VdOiBsb3c9MjggaGlnaD0wCltTZUltcGVyc29uYXRlUHJpdmlsZWdlXTogbG93PTI5IGhpZ2g9MApbU2VDcmVhdGVHbG9iYWxQcml2aWxlZ2VdOiBsb3c9MzAgaGlnaD0wCltTZVRydXN0ZWRDcmVkTWFuQWNjZXNzUHJpdmlsZWdlXTogbG93PTMxIGhpZ2g9MApbU2VSZWxhYmVsUHJpdmlsZWdlXTogbG93PTMyIGhpZ2g9MApbU2VJbmNyZWFzZVdvcmtpbmdTZXRQcml2aWxlZ2VdOiBsb3c9MzMgaGlnaD0wCltTZVRpbWVab25lUHJpdmlsZWdlXTogbG93PTM0IGhpZ2g9MApbU2VDcmVhdGVTeW1ib2xpY0xpbmtQcml2aWxlZ2VdOiBsb3c9MzUgaGlnaD0wCltTZURlbGVnYXRlU2Vzc2lvblVzZXJJbXBlcnNvbmF0ZVByaXZpbGVnZV06IGxvdz0zNiBoaWdoPTAKW3NlY2hhbmdlbm90aWZ5cHJpdmlsZWdlXTogbG93PTIzIGhpZ2g9MApbU0VDSEFOR0VOT1RJRllQUklWSUxFR0VdOiBsb3c9MjMgaGlnaD0wCltTZUNoYW5nZU5vdGlmeV06IEZBSUwgZXJyPTEzMTMgbHVpZD0wOjAKW1NlRm9vUHJpdmlsZWdlXTogRkFJTCBlcnI9MTMxMyBsdWlkPTA6MApbXTogRkFJTCBlcnI9MTMxMyBsdWlkPTA6MApbU2VDaGFuZ2VOb3RpZnlQcml2aWxlZ2UgXTogRkFJTCBlcnI9MTMxMyBsdWlkPTA6MApbU2VUY2JQcml2aWxlZ2VYXTogRkFJTCBlcnI9MTMxMyBsdWlkPTA6MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "[SeCreateTokenPrivilege]: low=2 high=0\n[SeAssignPrimaryTokenPrivilege]: low=3 high=0\n[SeLockMemoryPrivilege]: low=4 high=0\n[SeIncreaseQuotaPrivilege]: low=5 high=0\n[SeMachineAccountPrivilege]: low=6 high=0\n[SeTcbPrivilege]: low=7 high=0\n[SeSecurityPrivilege]: low=8 high=0\n[SeTakeOwnershipPrivilege]: low=9 high=0\n[SeLoadDriverPrivilege]: low=10 high=0\n[SeSystemProfilePrivilege]: low=11 high=0\n[SeSystemtimePrivilege]: low=12 high=0\n[SeProfileSingleProcessPrivilege]: low=13 high=0\n[SeIncreaseBasePriorityPrivilege]: low=14 high=0\n[SeCreatePagefilePrivilege]: low=15 high=0\n[SeCreatePermanentPrivilege]: low=16 high=0\n[SeBackupPrivilege]: low=17 high=0\n[SeRestorePrivilege]: low=18 high=0\n[SeShutdownPrivilege]: low=19 high=0\n[SeDebugPrivilege]: low=20 high=0\n[SeAuditPrivilege]: low=21 high=0\n[SeSystemEnvironmentPrivilege]: low=22 high=0\n[SeChangeNotifyPrivilege]: low=23 high=0\n[SeRemoteShutdownPrivilege]: low=24 high=0\n[SeUndockPrivilege]: low=25 high=0\n[SeSyncAgentPrivilege]: low=26 high=0\n[SeEnableDelegationPrivilege]: low=27 high=0\n[SeManageVolumePrivilege]: low=28 high=0\n[SeImpersonatePrivilege]: low=29 high=0\n[SeCreateGlobalPrivilege]: low=30 high=0\n[SeTrustedCredManAccessPrivilege]: low=31 high=0\n[SeRelabelPrivilege]: low=32 high=0\n[SeIncreaseWorkingSetPrivilege]: low=33 high=0\n[SeTimeZonePrivilege]: low=34 high=0\n[SeCreateSymbolicLinkPrivilege]: low=35 high=0\n[SeDelegateSessionUserImpersonatePrivilege]: low=36 high=0\n[sechangenotifyprivilege]: low=23 high=0\n[SECHANGENOTIFYPRIVILEGE]: low=23 high=0\n[SeChangeNotify]: FAIL err=1313 luid=0:0\n[SeFooPrivilege]: FAIL err=1313 luid=0:0\n[]: FAIL err=1313 luid=0:0\n[SeChangeNotifyPrivilege ]: FAIL err=1313 luid=0:0\n[SeTcbPrivilegeX]: FAIL err=1313 luid=0:0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

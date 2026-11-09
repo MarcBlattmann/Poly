@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e1df20b984fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:53:24Z",
+  "tests": [
+    {
+      "name": "atp_buffers",
+      "exe_sha256": "b27aab9928c4027ad4314e3fec180475a6e3518541a3ae45bd968a843131b2d5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHJldmlvdXMgYnVmZmVyIDA6IG9rPTAgZXJyPTEyMiByZXR1cm5lZD0xNiB3cml0dGVuPTAgYXR0cnNfbm93PTMKcHJldmlvdXMgYnVmZmVyIDE6IG9rPTAgZXJyPTEyMiByZXR1cm5lZD0xNiB3cml0dGVuPTAgYXR0cnNfbm93PTMKcHJldmlvdXMgYnVmZmVyIDE1OiBvaz0wIGVycj0xMjIgcmV0dXJuZWQ9MTYgd3JpdHRlbj0wIGF0dHJzX25vdz0zCnByZXZpb3VzIGJ1ZmZlciAxNjogb2s9MSBlcnI9MCByZXR1cm5lZD0xNiB3cml0dGVuPTE2IGF0dHJzX25vdz0xCnByZXZpb3VzIGJ1ZmZlciAxNzogb2s9MSBlcnI9MCByZXR1cm5lZD0xNiB3cml0dGVuPTE2IGF0dHJzX25vdz0xCnByZXZpb3VzIGJ1ZmZlciAxMDA6IG9rPTEgZXJyPTAgcmV0dXJuZWQ9MTYgd3JpdHRlbj0xNiBhdHRyc19ub3c9MQpubyBwcmV2aW91cyBidWZmZXIsIGxlbmd0aCBwb2ludGVyOiBvaz0xIGVycj0tMSByZXR1cm5lZD0yODYzMzExNTMwCmNvdW50IDA6IG9rPTEgZXJyPS0xCkFESlVTVF9QUklWSUxFR0VTIG9ubHksIHdpdGhvdXQgcHJldmlvdXMgc3RhdGU6IG9rPTEgZXJyPS0xCkFESlVTVF9QUklWSUxFR0VTIG9ubHksIHdpdGggcHJldmlvdXMgc3RhdGU6IG9rPTAgZXJyPTUKUVVFUlkgb25seSwgd2l0aG91dCBwcmV2aW91cyBzdGF0ZTogb2s9MCBlcnI9NQpRVUVSWSBvbmx5LCB3aXRoIHByZXZpb3VzIHN0YXRlOiBvaz0wIGVycj01CkFESlVTVF9QUklWSUxFR0VTfFFVRVJZLCB3aXRob3V0IHByZXZpb3VzIHN0YXRlOiBvaz0xIGVycj0tMQpBREpVU1RfUFJJVklMRUdFU3xRVUVSWSwgd2l0aCBwcmV2aW91cyBzdGF0ZTogb2s9MSBlcnI9LTEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "previous buffer 0: ok=0 err=122 returned=16 written=0 attrs_now=3\nprevious buffer 1: ok=0 err=122 returned=16 written=0 attrs_now=3\nprevious buffer 15: ok=0 err=122 returned=16 written=0 attrs_now=3\nprevious buffer 16: ok=1 err=0 returned=16 written=16 attrs_now=1\nprevious buffer 17: ok=1 err=0 returned=16 written=16 attrs_now=1\nprevious buffer 100: ok=1 err=0 returned=16 written=16 attrs_now=1\nno previous buffer, length pointer: ok=1 err=-1 returned=2863311530\ncount 0: ok=1 err=-1\nADJUST_PRIVILEGES only, without previous state: ok=1 err=-1\nADJUST_PRIVILEGES only, with previous state: ok=0 err=5\nQUERY only, without previous state: ok=0 err=5\nQUERY only, with previous state: ok=0 err=5\nADJUST_PRIVILEGES|QUERY, without previous state: ok=1 err=-1\nADJUST_PRIVILEGES|QUERY, with previous state: ok=1 err=-1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "atp_enable_disable",
+      "exe_sha256": "4dc2c87105f5096fb9c5fb139bb45bbd814387fe281ab128b507dd520c839105",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhcnQ6IHNodXRkb3duIGF0dHJzPTMKZGlzYWJsZTogb2s9MSBlcnI9MCByZXR1cm5lZF9sZW5ndGg9MTYgcHJldmlvdXM6IGNvdW50PTEgYXR0cnM9MHgzCiAgbm93IGF0dHJzPTEKZW5hYmxlOiBvaz0xIGVycj0wIHJldHVybmVkX2xlbmd0aD0xNiBwcmV2aW91czogY291bnQ9MSBhdHRycz0weDEKICBub3cgYXR0cnM9MwplbmFibGUgYWdhaW46IG9rPTEgZXJyPTAgcmV0dXJuZWRfbGVuZ3RoPTE2IHByZXZpb3VzIGNvdW50PTAKYXR0cmlidXRlIEVOQUJMRURfQllfREVGQVVMVCBvbmx5OiBvaz0xIGVycj0wOyBub3cgYXR0cnM9MQpyZW1vdmU6IG9rPTEgZXJyPTAgcmV0dXJuZWRfbGVuZ3RoPTE2IHByZXZpb3VzIGF0dHJzPTB4MDsgbm93IGF0dHJzPS0xCmVuYWJsZSB0aGUgcmVtb3ZlZCBvbmU6IG9rPTEgZXJyPTEzMDA7IG5vdyBhdHRycz0tMQpkaXNhYmxlIGFsbDogb2s9MSBlbmFibGVkIGFmdGVyd2FyZHM9MDsgY2hhbmdlIG5vdGlmeSBhdHRycz0xCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "start: shutdown attrs=3\ndisable: ok=1 err=0 returned_length=16 previous: count=1 attrs=0x3\n  now attrs=1\nenable: ok=1 err=0 returned_length=16 previous: count=1 attrs=0x1\n  now attrs=3\nenable again: ok=1 err=0 returned_length=16 previous count=0\nattribute ENABLED_BY_DEFAULT only: ok=1 err=0; now attrs=1\nremove: ok=1 err=0 returned_length=16 previous attrs=0x0; now attrs=-1\nenable the removed one: ok=1 err=1300; now attrs=-1\ndisable all: ok=1 enabled afterwards=0; change notify attrs=1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

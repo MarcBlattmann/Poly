@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/RtlCreateAcl
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: as declared
+  for the NT native API (ntifs.h / wdm.h / winternl.h, Microsoft Learn)
+  where the function is documented there; where it is not, the arguments are
+  those of the matching Win32 function, which map one to one onto the native
+  call, and the interface entry "prototype_note" says so.
+summary: >
+  Writes an empty ACL header into the buffer: revision (2, 3 or 4), AclSize
+  = the length rounded down to a multiple of 4, AceCount 0. Only the 8
+  header bytes are written. Lengths below 8 give STATUS_BUFFER_TOO_SMALL;
+  lengths above 0xFFFC and other revisions give STATUS_INVALID_PARAMETER.
+interface:
+  signature: "NTSTATUS RtlCreateAcl(PACL acl, ULONG acl_length, ULONG acl_revision)"
+  layout: "ACL (winnt.h): 8-byte header {Revision u8, Sbz1 u8, AclSize u16, AceCount u16, Sbz2 u16}, then the ACEs one after the other; an ACE starts {AceType u8, AceFlags u8, AceSize u16}; an access ACE is that header, a 32-bit Mask and the SID (size 8 + SID length). ACL revisions 2, 3 and 4 exist (ACL_REVISION, ACL_REVISION3, ACL_REVISION_DS/4)."
+  result: "NTSTATUS values are printed as 8 hex digits: STATUS_SUCCESS 0, STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_UNKNOWN_REVISION 0xC0000058, STATUS_REVISION_MISMATCH 0xC0000059, STATUS_PRIVILEGE_NOT_HELD 0xC0000061, STATUS_INVALID_ACL 0xC0000077, STATUS_INVALID_SID 0xC0000078, STATUS_INVALID_SECURITY_DESCR 0xC0000079, STATUS_NO_TOKEN 0xC000007C, STATUS_ALLOTTED_SPACE_EXCEEDED 0xC0000099, STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5, STATUS_BAD_DESCRIPTOR_FORMAT 0xC00000E7 (ntstatus.h). A BOOLEAN result is one byte, 0 or 1."
+  prototype_note: "documented (wdm.h); Win32 counterpart InitializeAcl"
+rules:
+  header: "length 64 revision 2 writes 0200 4000 0000 0000 (8 bytes changed, nothing else); revision 3 and 4 write 03 and 04 in byte 0; the ACL is then valid (RtlValidAcl 1), RtlFirstFreeAce says offset 8, RtlQueryInformationAcl reports count 0, bytes in use 8, bytes free = size - 8"
+  size_rounding: "the size field is the length rounded down to a multiple of 4: 8..11 give 8, 12..15 give 12, 16 and 17 give 16, 64..67 give 64, 68 gives 68, 1020 and 1021 give 1020, 1024 gives 1024; the free count for length 9 is 0, for 65 it is 56"
+  maximum: "lengths 0xFFF8 and 0xFFFC succeed (size field 0xfff8 and 0xfffc); 0xFFFD, 0xFFFF, 0x10000, 0x10001 and 0x10004 return STATUS_INVALID_PARAMETER and write nothing"
+  revisions: "revisions 2, 3 and 4 succeed; 0, 1, 5, 6, 7, 255, 0x102, 0x10002 and 0x80000002 return STATUS_INVALID_PARAMETER and write nothing (the whole 32-bit value is checked)"
+errors:
+  too_small: "lengths 0, 1, 4, 7 (below the 8-byte header): STATUS_BUFFER_TOO_SMALL (0xC0000023), nothing written"
+  parameter: "revision other than 2, 3, 4, or length above 0xFFFC: STATUS_INVALID_PARAMETER (0xC000000D)"
+side_effects: "writes the 8-byte ACL header"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

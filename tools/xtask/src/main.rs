@@ -117,6 +117,7 @@ mod aarch64;
 mod accel;
 mod asmlabels;
 mod busybox;
+mod chrometrace;
 mod chromewin;
 mod chromium;
 mod compositor;
@@ -1624,6 +1625,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // runs in two jobs (shards `sevenzip` and `sevenzip-b`).
     ("7zip", sevenzip::boot_test_a),
     ("7zip-b", sevenzip::boot_test_b),
+    // Chrome for Testing's headless --dump-dom on the NT personality, skipped
+    // without the cached package (chromewin.rs, ADR 0155).
+    ("chrome-win", chromewin::boot_test),
     // The 7-Zip scenario under the Windows API tracer, each step's trace
     // compared with the committed Windows reference, required (ADR 0114:
     // TRACE_REQUIRED; sevenzip_trace.rs, ADR 0110).
@@ -1725,7 +1729,20 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     // About 75 s: Linux programs and the root disk.
-    ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "toolkits", "chromium", "chromium-desktop"]),
+    (
+        "userland",
+        &[
+            "programs",
+            "native",
+            "dynamic",
+            "busybox",
+            "rootdisk",
+            "chrome-win",
+            "toolkits",
+            "chromium",
+            "chromium-desktop",
+        ],
+    ),
     // About 60 s each: 7-Zip's command line on the NT personality, one boot per
     // step, every second step in each.
     ("sevenzip", &["7zip"]),
@@ -2059,6 +2076,8 @@ fn lint() -> Result {
             [
                 "tools/wintrace/polytrace/src/lib.rs",
                 "tools/wintrace/polytrace/build.rs",
+                "tools/wintrace/polytrace-sync/src/lib.rs",
+                "tools/wintrace/polytrace-sync/build.rs",
                 "tools/wintrace/polytrace-agg/src/lib.rs",
                 "tools/wintrace/polytrace-agg/build.rs",
                 "tools/wintrace/proxy/common.rs",

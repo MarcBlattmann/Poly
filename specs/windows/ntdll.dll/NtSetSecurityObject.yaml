@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtSetSecurityObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Replaces the owner, group, DACL, SACL or label of an object with the parts
+  of the given descriptor that SecurityInformation selects. WRITE_DAC is
+  needed for the DACL, WRITE_OWNER for owner and group, the privilege
+  SeSecurityPrivilege for the SACL. The descriptor may be absolute or
+  self-relative. SetKernelObjectSecurity calls it.
+interface:
+  signature: "NTSTATUS NtSetSecurityObject(HANDLE Handle, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR SecurityDescriptor)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87. Also STATUS_INVALID_OWNER 0xC000005A, STATUS_INVALID_SECURITY_DESCR 0xC0000079, STATUS_UNKNOWN_REVISION 0xC0000058."
+rules:
+  dacl: "a new DACL (Everyone: JOB_OBJECT_QUERY|SET_ATTRIBUTES = 0x6) set on a named job: STATUS_SUCCESS; read back: control 0x8004, DACL at offset 20, 1 ACE (type 0, mask 0x6, S-1-1-0), the ACL keeps the AclSize it was built with (1024, so the descriptor is 1044 bytes). A later NtOpenJobObject by name: QUERY granted 0x4, SET_ATTRIBUTES 0x2, both 0x6, TERMINATE and ASSIGN_PROCESS STATUS_ACCESS_DENIED, READ_CONTROL 0x20000 and WRITE_DAC 0x40000 granted (owner rights of the Administrators owner), MAXIMUM_ALLOWED 0x60006"
+  owner_group: "with the elevated administrator token the owner can be set to the user, Administrators, Users, Everyone and SYSTEM (all STATUS_SUCCESS and each reads back), the group to Users, Everyone and SYSTEM. In impersonated copies of the token: an unchanged copy accepts all five owners; a copy with DISABLE_MAX_PRIVILEGE accepts the user and Administrators and returns STATUS_INVALID_OWNER (0xC000005A) for Users, Everyone and SYSTEM; a copy with Administrators deny-only but all privileges accepts all five; a copy with both restrictions accepts only the user (Administrators too gives STATUS_INVALID_OWNER); setting the group always succeeds"
+  label: "LABEL_SECURITY_INFORMATION with a SACL holding one mandatory-label ACE (Low, NO_WRITE_UP): STATUS_SUCCESS; reads back with control 0x8010, a SACL of size 28 with 1 ACE of type 17, mask 1, S-1-16-4096"
+  lifetime: "a named job vanishes with its last handle: opening it afterwards gives STATUS_OBJECT_NAME_NOT_FOUND"
+  rights: "a handle with only JOB_OBJECT_QUERY: DACL, owner and group all STATUS_ACCESS_DENIED; only WRITE_DAC: the DACL works, owner and group are refused; only WRITE_OWNER: owner and group work, the DACL is refused; only READ_CONTROL: all refused"
+  descriptor_parts: "OWNER or GROUP information with a descriptor that lacks the part: STATUS_INVALID_SECURITY_DESCR (0xC0000079); DACL information with a descriptor without DACL and LABEL information without SACL: STATUS_SUCCESS; SACL information with an empty descriptor or with an audit ACE on a handle without ACCESS_SYSTEM_SECURITY: STATUS_ACCESS_DENIED; information mask 0, 0x20 and 0x100: STATUS_SUCCESS; DACL|PROTECTED_DACL and DACL|UNPROTECTED_DACL: STATUS_SUCCESS (the flag alone does not change the stored control word, which stays 0x8004); a self-relative descriptor is accepted"
+  revision: "a descriptor with revision 9: STATUS_UNKNOWN_REVISION (0xC0000058)"
+errors:
+  handles: "NULL and a closed handle: STATUS_INVALID_HANDLE"
+  no_security: "an unnamed event handle (which has no security descriptor): STATUS_NO_SECURITY_ON_OBJECT (0xC00000D7)"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

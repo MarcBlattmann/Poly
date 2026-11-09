@@ -1,0 +1,70 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/imm32.dll/ImmGetCompositionStringW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-c
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About the
+  Clipboard", "Using the Clipboard", "Clipboard Formats", "Standard
+  Clipboard Formats", "High DPI Desktop Application Development on Windows",
+  "DPI_AWARENESS_CONTEXT", "Multiple Display Monitors", "Window Features"
+  (layered windows, window regions), "About Cursors", "About Icons",
+  "Desktop Window Manager" (dwmapi), "Input Method Manager" (imm32), "About
+  Messages and Message Queues"; winuser.h, wingdi.h, windef.h, winbase.h,
+  dwmapi.h, imm.h, shellscalingapi.h and winerror.h for constants and
+  layouts. The conformance tests of Wine were consulted only where the own
+  sources line of an entry says so, for ideas of what to observe; no code or
+  expected value of theirs is used (every value in these sheets was observed
+  on the machine above). imm.h (COMPOSITIONFORM, CANDIDATEFORM, GCS_*,
+  CFS_*, NI_*, CPS_*, IACE_*); Learn pages "Input Method Manager", "About
+  Input Method Manager", "IME messages" (WM_IME_SETCONTEXT, WM_IME_NOTIFY).
+summary: >
+  Reads the composition string or attributes of a context. With nothing
+  being composed every defined index gives 0; an index that is not exactly
+  one defined GCS_ value gives IMM_ERROR_GENERAL (-2).
+interface:
+  signature: "LONG ImmGetCompositionStringW(HIMC hIMC, DWORD dwIndex, LPVOID lpBuf, DWORD dwBufLen)"
+  indexes: "GCS_COMPREADSTR 1, COMPREADATTR 2, COMPREADCLAUSE 4, COMPSTR 8, COMPATTR 0x10, COMPCLAUSE 0x20, CURSORPOS 0x80, DELTASTART 0x100, RESULTREADSTR 0x200, RESULTREADCLAUSE 0x400, RESULTSTR 0x800, RESULTCLAUSE 0x1000 (imm.h)"
+  returns: "bytes copied or needed; 0 for no data here; -2 (IMM_ERROR_GENERAL) for a bad index"
+rules:
+  no_composition: "0 for each of the twelve defined indexes, with a NULL buffer (size query) and with a 64-byte buffer, for the default and an own context; the buffer is not written"
+  bad_index: "-2 for index 0, 0x2000, 0x4000, 0x8000, 0x10000, 0xFFFFFFFF and combinations of two defined indexes (COMPSTR|RESULTSTR, COMPSTR|COMPATTR, RESULTSTR|RESULTCLAUSE)"
+  buffer_length: "any length (0, 1, 2, 3, 16, 100, 0xFFFFFFFF) with or without a buffer gives the same answer; nothing is written; unchanged after ImmNotifyIME(CPS_CANCEL) and ImmSetCompositionWindow"
+  last_error: "set to 0 for a valid context (also for -2)"
+errors:
+  null_context: "0 for every index (also invalid ones), last error not touched"
+  bad_context: "a made-up or destroyed context: 0 with ERROR_INVALID_HANDLE (6)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
+  needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants); run with
+  poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because
+  painting, input and the clipboard need the visible desktop. Window
+  procedures log documented messages only: never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels and closed within seconds; the cursor is parked
+  at (1500, 600) at the start and put back at the end; the clipboard is
+  emptied at the end of every test that touches it; a test changes no system
+  setting (only the state of its own process and windows).
+not_covered: >
+  a real composition (needs an IME or injected composition). Several
+  monitors, other system DPIs (the oracle is one 1920x1080 monitor at 96
+  DPI, scale 100%), a manifest (the tests have none: awareness is set with
+  the API), other keyboard layouts than German, installed input methods (the
+  oracle has none active), touch and pen, hooks, menus and dialogs, comctl32
+  controls, themed (visual style) painting, clipboard contents put there by
+  other programs or by the cloud clipboard and clipboard history.

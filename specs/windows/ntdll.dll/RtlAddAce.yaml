@@ -1,0 +1,69 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/RtlAddAce
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: as declared
+  for the NT native API (ntifs.h / wdm.h / winternl.h, Microsoft Learn)
+  where the function is documented there; where it is not, the arguments are
+  those of the matching Win32 function, which map one to one onto the native
+  call, and the interface entry "prototype_note" says so.
+summary: >
+  Inserts the ACEs of a list (one or several, AceListLength bytes) into the
+  ACL at StartingAceIndex, moving later ACEs up. An index at or beyond the
+  count appends. The ACL revision becomes at least AceRevision (no upper
+  limit is checked); ACE types that need a higher revision are rejected. No
+  room gives STATUS_BUFFER_TOO_SMALL.
+interface:
+  signature: "NTSTATUS RtlAddAce(PACL acl, ULONG ace_revision, ULONG starting_ace_index, PVOID ace_list, ULONG ace_list_length)"
+  layout: "ACL (winnt.h): 8-byte header {Revision u8, Sbz1 u8, AclSize u16, AceCount u16, Sbz2 u16}, then the ACEs one after the other; an ACE starts {AceType u8, AceFlags u8, AceSize u16}; an access ACE is that header, a 32-bit Mask and the SID (size 8 + SID length). ACL revisions 2, 3 and 4 exist (ACL_REVISION, ACL_REVISION3, ACL_REVISION_DS/4)."
+  result: "NTSTATUS values are printed as 8 hex digits: STATUS_SUCCESS 0, STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_UNKNOWN_REVISION 0xC0000058, STATUS_REVISION_MISMATCH 0xC0000059, STATUS_PRIVILEGE_NOT_HELD 0xC0000061, STATUS_INVALID_ACL 0xC0000077, STATUS_INVALID_SID 0xC0000078, STATUS_INVALID_SECURITY_DESCR 0xC0000079, STATUS_NO_TOKEN 0xC000007C, STATUS_ALLOTTED_SPACE_EXCEEDED 0xC0000099, STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5, STATUS_BAD_DESCRIPTOR_FORMAT 0xC00000E7 (ntstatus.h). A BOOLEAN result is one byte, 0 or 1."
+  prototype_note: "documented (ntifs.h); Win32 counterpart AddAce"
+rules:
+  positions: "into an empty ACL: index 0xFFFFFFFF appends (count 1), 0 inserts in front, 1 in the middle, the index equal to the count (3), past it (100) and 0xFFFFFFFE append; every call returns STATUS_SUCCESS and the size field stays 256; with ACEs a1 (allowed, mask 1), a2 (denied, mask 2) and a3 (allowed, mask 3) added in the order a1 at MAXULONG, a2 at 0, a3 at 1, a1 at 3, a3 at 100, a2 at 0xFFFFFFFE the final order is a2, a3, a1, a1, a3, a2"
+  lists: "a list holding two ACEs (44 bytes) inserted at index 0 adds both (count 2); inserted again at index 1 the new pair goes after the first ACE (result: a1, a1, a2, a2); a list length of 0 returns STATUS_SUCCESS and changes nothing"
+  space: "ACL length 27 (size field 24): the first 20-byte ACE returns STATUS_BUFFER_TOO_SMALL (0xC0000023); length 28 takes one ACE, 47 (size 44) one, 48 two, 49 and 51 (size 48) two, 52 two (the third returns STATUS_BUFFER_TOO_SMALL); length 8 takes none; the ACL is unchanged after a failure"
+  revision_argument: "the ACL revision after the call is the larger of its own and the argument: ACL revision 2 with arguments 0, 1, 2 stays 2, 3 gives 3, 4 gives 4, 5 gives 5, 6 gives 6, 255 gives 255 (all STATUS_SUCCESS); ACL revision 3 with 0..3 stays 3, 4 gives 4, 5 gives 5; ACL revision 4 with 0..4 stays 4, 5 gives 5, 6 gives 6, 255 gives 255"
+  types: "with the argument equal to the ACL revision: types 0, 1, 2, 3 succeed in revisions 2, 3, 4; type 4 returns STATUS_INVALID_PARAMETER in revision 2 and succeeds in 3 and 4; types 5, 6, 7, 8 return STATUS_INVALID_PARAMETER in revisions 2 and 3 and succeed in 4; types 9..0x17, 0x20, 0x7f, 0xff succeed in all three"
+errors:
+  list_length: "a list length of 16 or 19 for a 20-byte ACE returns STATUS_INVALID_PARAMETER, ACL unchanged"
+  no_room: "STATUS_BUFFER_TOO_SMALL (not STATUS_ALLOTTED_SPACE_EXCEEDED, which the Add*Ace functions use)"
+  type_revision: "STATUS_INVALID_PARAMETER for ACE types above the ACL revision allows"
+side_effects: "changes the ACL; moves later ACEs"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  an AceListLength that leaves a trailing fragment after the last whole ACE
+  (a list length of 21 for a 20-byte ACE) did not return within the runner
+  timeout in a probe round and was left out of the tests; lengths 3 and 24
+  were not tried afterwards for the same reason. Domain accounts and
+  domain-relative well-known SIDs of a real domain, AppContainer and
+  capability SIDs beyond their string forms, auditing (SACL entries are only
+  stored, never evaluated), remote systems (the system-name arguments),
+  Kerberos or NTLM logon tokens, tokens of other users.

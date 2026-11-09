@@ -474,6 +474,10 @@ impl Registry {
     pub fn resolve(&self, start: KeyId, path: &[u16], open_link: bool) -> Result<Resolved> {
         self.key(start)?;
         let path = path.strip_prefix(&[SEPARATOR]).unwrap_or(path);
+        // One trailing `\` is accepted and means nothing: Chrome's `chrome_elf` calls
+        // `NtCreateKey` on `\REGISTRY\USER\<sid>\`, and every `NtCreateKey` of the browser
+        // process recorded on Windows succeeded (ADR 0155). `a\\` is still an empty component.
+        let path = if path.len() > 1 { path.strip_suffix(&[SEPARATOR]).unwrap_or(path) } else { path };
         if path.is_empty() {
             return Ok(Resolved::Found(start));
         }

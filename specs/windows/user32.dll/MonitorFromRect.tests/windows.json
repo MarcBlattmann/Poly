@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "mfr_aware",
+      "exe_sha256": "ba3399335d8baba0c6ca0b57ba02314999fe34a7a1e8b2e5db08f8b16c9d305c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQoUEVSX01PTklUT1JfQVdBUkVfVjIpIC0+IDEKMTAwLDEwMCwyMDAsMjAwOiBERUZBVUxUVE9OVUxMIHByaW1hcnkgREVGQVVMVFRPTkVBUkVTVCBwcmltYXJ5CjE5MDAsMTAwMCwyMTAwLDEyMDA6IERFRkFVTFRUT05VTEwgcHJpbWFyeSBERUZBVUxUVE9ORUFSRVNUIHByaW1hcnkKMjAwMCwwLDIxMDAsMTAwOiBERUZBVUxUVE9OVUxMIE5VTEwgREVGQVVMVFRPTkVBUkVTVCBwcmltYXJ5Cm1vbml0b3IgMCwwLDE5MjAsMTA4MCB3b3JrIDAsMjQsMTkyMCwxMDgwIGZsYWdzIDB4MQpNb25pdG9yRnJvbVJlY3Qod2luZG93IHJlY3QpID09IE1vbml0b3JGcm9tV2luZG93IHRydWUgPT0gTW9uaXRvckZyb21Qb2ludCB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2) -> 1\n100,100,200,200: DEFAULTTONULL primary DEFAULTTONEAREST primary\n1900,1000,2100,1200: DEFAULTTONULL primary DEFAULTTONEAREST primary\n2000,0,2100,100: DEFAULTTONULL NULL DEFAULTTONEAREST primary\nmonitor 0,0,1920,1080 work 0,24,1920,1080 flags 0x1\nMonitorFromRect(window rect) == MonitorFromWindow true == MonitorFromPoint true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    },
+    {
+      "name": "mfr_flags",
+      "exe_sha256": "3fae6ce1163c0b13a98ff892cccf129e40d6983c11f0a5bce2925ed7b32896cb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5zaWRlOiBmbGFnIDA6IHByaW1hcnkgZmxhZyAxOiBwcmltYXJ5IGZsYWcgMjogcHJpbWFyeQpwYXJ0bHkgbGVmdCBvZiB0aGUgc2NyZWVuOiBmbGFnIDA6IHByaW1hcnkgZmxhZyAxOiBwcmltYXJ5IGZsYWcgMjogcHJpbWFyeQpvZmYgdG8gdGhlIHJpZ2h0OiBmbGFnIDA6IE5VTEwgZmxhZyAxOiBwcmltYXJ5IGZsYWcgMjogcHJpbWFyeQpvZmYgdG8gdGhlIGxlZnQ6IGZsYWcgMDogTlVMTCBmbGFnIDE6IHByaW1hcnkgZmxhZyAyOiBwcmltYXJ5CmZhciBvZmY6IGZsYWcgMDogTlVMTCBmbGFnIDE6IHByaW1hcnkgZmxhZyAyOiBwcmltYXJ5CmVtcHR5IGluc2lkZTogZmxhZyAwOiBwcmltYXJ5IGZsYWcgMTogcHJpbWFyeSBmbGFnIDI6IHByaW1hcnkKZW1wdHkgb2ZmOiBmbGFnIDA6IE5VTEwgZmxhZyAxOiBwcmltYXJ5IGZsYWcgMjogcHJpbWFyeQppbnZlcnRlZCBpbnNpZGU6IGZsYWcgMDogcHJpbWFyeSBmbGFnIDE6IHByaW1hcnkgZmxhZyAyOiBwcmltYXJ5CmludmVydGVkIG9mZjogZmxhZyAwOiBOVUxMIGZsYWcgMTogcHJpbWFyeSBmbGFnIDI6IHByaW1hcnkKdG91Y2hpbmcgdGhlIHJpZ2h0IGVkZ2U6IGZsYWcgMDogTlVMTCBmbGFnIDE6IHByaW1hcnkgZmxhZyAyOiBwcmltYXJ5CnRoZSBsYXN0IHBpeGVsOiBmbGFnIDA6IHByaW1hcnkgZmxhZyAxOiBwcmltYXJ5IGZsYWcgMjogcHJpbWFyeQp0aGUgd2hvbGUgY29vcmRpbmF0ZSByYW5nZTogZmxhZyAwOiBwcmltYXJ5IGZsYWcgMTogcHJpbWFyeSBmbGFnIDI6IHByaW1hcnkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "inside: flag 0: primary flag 1: primary flag 2: primary\npartly left of the screen: flag 0: primary flag 1: primary flag 2: primary\noff to the right: flag 0: NULL flag 1: primary flag 2: primary\noff to the left: flag 0: NULL flag 1: primary flag 2: primary\nfar off: flag 0: NULL flag 1: primary flag 2: primary\nempty inside: flag 0: primary flag 1: primary flag 2: primary\nempty off: flag 0: NULL flag 1: primary flag 2: primary\ninverted inside: flag 0: primary flag 1: primary flag 2: primary\ninverted off: flag 0: NULL flag 1: primary flag 2: primary\ntouching the right edge: flag 0: NULL flag 1: primary flag 2: primary\nthe last pixel: flag 0: primary flag 1: primary flag 2: primary\nthe whole coordinate range: flag 0: primary flag 1: primary flag 2: primary\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    }
+  ]
+}

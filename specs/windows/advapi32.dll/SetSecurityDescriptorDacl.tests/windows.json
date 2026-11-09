@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "69970d4f91fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:01:49Z",
+  "tests": [
+    {
+      "name": "sd_dacl_null_empty_absent",
+      "exe_sha256": "09ded83507a472bdd4d11b25d6cc58703b7772f2664b5e1b107abbca6bbb9dfe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWJzZW50OiBhYnNvbHV0ZSByZXY9MSBzYnoxPTAgY29udHJvbD0weDAwMDAgWy1dIHBhZD0wMDAwMDAwMCBvd25lcj1udWxsIGdyb3VwPW51bGwgc2FjbD1udWxsIGRhY2w9bnVsbAphYnNlbnQ6IG9rPTEgcHJlc2VudD0wIHdoZXJlPXVuY2hhbmdlZCBkZWZhdWx0ZWQ9MAphYnNlbnQ6IG9rPTEgdGV4dD1POkJBIGxlbj00IHVuaXRzPTQKYWJzZW50OiBzZWxmLXJlbGF0aXZlIG9rPTEgbGVuPTUxMgphYnNlbnQ6IHNlbGYtcmVsYXRpdmUgcmV2PTEgc2J6MT0wIGNvbnRyb2w9MHg4MDAwIFtTRUxGX1JFTEFUSVZFXSBvd25lcj0yMCBncm91cD0wIHNhY2w9MCBkYWNsPTAKTlVMTDogYWJzb2x1dGUgcmV2PTEgc2J6MT0wIGNvbnRyb2w9MHgwMDA0IFtEQUNMX1BSRVNFTlRdIHBhZD0wMDAwMDAwMCBvd25lcj1udWxsIGdyb3VwPW51bGwgc2FjbD1udWxsIGRhY2w9bnVsbApOVUxMOiBvaz0xIHByZXNlbnQ9MSB3aGVyZT1udWxsIGRlZmF1bHRlZD0wCk5VTEw6IG9rPTEgdGV4dD1POkJBRDpOT19BQ0NFU1NfQ09OVFJPTCBsZW49MjQgdW5pdHM9MjMKTlVMTDogc2VsZi1yZWxhdGl2ZSBvaz0xIGxlbj01MTIKTlVMTDogc2VsZi1yZWxhdGl2ZSByZXY9MSBzYnoxPTAgY29udHJvbD0weDgwMDQgW0RBQ0xfUFJFU0VOVHxTRUxGX1JFTEFUSVZFXSBvd25lcj0yMCBncm91cD0wIHNhY2w9MCBkYWNsPTAKZW1wdHk6IGFic29sdXRlIHJldj0xIHNiejE9MCBjb250cm9sPTB4MDAwNCBbREFDTF9QUkVTRU5UXSBwYWQ9MDAwMDAwMDAgb3duZXI9bnVsbCBncm91cD1udWxsIHNhY2w9bnVsbCBkYWNsPXNldAplbXB0eTogb2s9MSBwcmVzZW50PTEgd2hlcmU9ZWxzZXdoZXJlIGRlZmF1bHRlZD0wCmVtcHR5OiBvaz0xIHRleHQ9TzpCQUQ6IGxlbj02IHVuaXRzPTYKZW1wdHk6IHNlbGYtcmVsYXRpdmUgb2s9MSBsZW49NTEyCmVtcHR5OiBzZWxmLXJlbGF0aXZlIHJldj0xIHNiejE9MCBjb250cm9sPTB4ODAwNCBbREFDTF9QUkVTRU5UfFNFTEZfUkVMQVRJVkVdIG93bmVyPTI4IGdyb3VwPTAgc2FjbD0wIGRhY2w9MjAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "absent: absolute rev=1 sbz1=0 control=0x0000 [-] pad=00000000 owner=null group=null sacl=null dacl=null\nabsent: ok=1 present=0 where=unchanged defaulted=0\nabsent: ok=1 text=O:BA len=4 units=4\nabsent: self-relative ok=1 len=512\nabsent: self-relative rev=1 sbz1=0 control=0x8000 [SELF_RELATIVE] owner=20 group=0 sacl=0 dacl=0\nNULL: absolute rev=1 sbz1=0 control=0x0004 [DACL_PRESENT] pad=00000000 owner=null group=null sacl=null dacl=null\nNULL: ok=1 present=1 where=null defaulted=0\nNULL: ok=1 text=O:BAD:NO_ACCESS_CONTROL len=24 units=23\nNULL: self-relative ok=1 len=512\nNULL: self-relative rev=1 sbz1=0 control=0x8004 [DACL_PRESENT|SELF_RELATIVE] owner=20 group=0 sacl=0 dacl=0\nempty: absolute rev=1 sbz1=0 control=0x0004 [DACL_PRESENT] pad=00000000 owner=null group=null sacl=null dacl=set\nempty: ok=1 present=1 where=elsewhere defaulted=0\nempty: ok=1 text=O:BAD: len=6 units=6\nempty: self-relative ok=1 len=512\nempty: self-relative rev=1 sbz1=0 control=0x8004 [DACL_PRESENT|SELF_RELATIVE] owner=28 group=0 sacl=0 dacl=20\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "sd_dacl_set_basic",
+      "exe_sha256": "c69fbe86f5b55d6d40faac65c52dc6f64cab4b1146c669194e732d2f1592a0d5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5pdGlhbDogYWJzb2x1dGUgcmV2PTEgc2J6MT0wIGNvbnRyb2w9MHgwMDAwIFstXSBwYWQ9MDAwMDAwMDAgb3duZXI9bnVsbCBncm91cD1udWxsIHNhY2w9bnVsbCBkYWNsPW51bGwKcHJlc2VudCwgTlVMTDogb2s9MSBlcnI9LTEKYWZ0ZXI6IGFic29sdXRlIHJldj0xIHNiejE9MCBjb250cm9sPTB4MDAwNCBbREFDTF9QUkVTRU5UXSBwYWQ9MDAwMDAwMDAgb3duZXI9bnVsbCBncm91cD1udWxsIHNhY2w9bnVsbCBkYWNsPW51bGwKZ2V0OiBvaz0xIHByZXNlbnQ9MSB3aGVyZT1udWxsIGRlZmF1bHRlZD0wCnByZXNlbnQsIEFDTCB3aXRoIG9uZSBBQ0U6IG9rPTEKYWZ0ZXI6IGFic29sdXRlIHJldj0xIHNiejE9MCBjb250cm9sPTB4MDAwNCBbREFDTF9QUkVTRU5UXSBwYWQ9MDAwMDAwMDAgb3duZXI9bnVsbCBncm91cD1udWxsIHNhY2w9bnVsbCBkYWNsPXNldApzYW1lIHBvaW50ZXIgYXMgcGFzc2VkOiB0cnVlCmdldDogb2s9MSBwcmVzZW50PTEgd2hlcmU9ZWxzZXdoZXJlIGRlZmF1bHRlZD0wCnByZXNlbnQsIHNhbWUgQUNMLCBkZWZhdWx0ZWQ6IG9rPTEKYWZ0ZXI6IGFic29sdXRlIHJldj0xIHNiejE9MCBjb250cm9sPTB4MDAwYyBbREFDTF9QUkVTRU5UfERBQ0xfREVGQVVMVEVEXSBwYWQ9MDAwMDAwMDAgb3duZXI9bnVsbCBncm91cD1udWxsIHNhY2w9bnVsbCBkYWNsPXNldApnZXQ6IG9rPTEgcHJlc2VudD0xIHdoZXJlPWVsc2V3aGVyZSBkZWZhdWx0ZWQ9MQpub3QgcHJlc2VudCwgQUNMIGdpdmVuOiBvaz0xCmFmdGVyOiBhYnNvbHV0ZSByZXY9MSBzYnoxPTAgY29udHJvbD0weDAwMDggW0RBQ0xfREVGQVVMVEVEXSBwYWQ9MDAwMDAwMDAgb3duZXI9bnVsbCBncm91cD1udWxsIHNhY2w9bnVsbCBkYWNsPXNldApnZXQ6IG9rPTEgcHJlc2VudD0wIHdoZXJlPXVuY2hhbmdlZCBkZWZhdWx0ZWQ9MApwcmVzZW50ID0gVFJVRSwgZGVmYXVsdGVkID0gMjogb2s9MQphZnRlcjogYWJzb2x1dGUgcmV2PTEgc2J6MT0wIGNvbnRyb2w9MHgwMDBjIFtEQUNMX1BSRVNFTlR8REFDTF9ERUZBVUxURURdIHBhZD0wMDAwMDAwMCBvd25lcj1udWxsIGdyb3VwPW51bGwgc2FjbD1udWxsIGRhY2w9c2V0CnByZXNlbnQgPSA1OiBvaz0xCmFmdGVyOiBhYnNvbHV0ZSByZXY9MSBzYnoxPTAgY29udHJvbD0weDAwMDQgW0RBQ0xfUFJFU0VOVF0gcGFkPTAwMDAwMDAwIG93bmVyPW51bGwgZ3JvdXA9bnVsbCBzYWNsPW51bGwgZGFjbD1zZXQKbm90IHByZXNlbnQsIE5VTEw6IG9rPTEKYWZ0ZXI6IGFic29sdXRlIHJldj0xIHNiejE9MCBjb250cm9sPTB4MDAwMCBbLV0gcGFkPTAwMDAwMDAwIG93bmVyPW51bGwgZ3JvdXA9bnVsbCBzYWNsPW51bGwgZGFjbD1zZXQKcHJlc2VudCwgZW1wdHkgQUNMOiBvaz0xCmFmdGVyOiBhYnNvbHV0ZSByZXY9MSBzYnoxPTAgY29udHJvbD0weDAwMDQgW0RBQ0xfUFJFU0VOVF0gcGFkPTAwMDAwMDAwIG93bmVyPW51bGwgZ3JvdXA9bnVsbCBzYWNsPW51bGwgZGFjbD1zZXQKZW1wdHk6IGFjbCByZXY9MiBzYnoxPTAgc2l6ZT04IGNvdW50PTAgc2J6Mj0wCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "initial: absolute rev=1 sbz1=0 control=0x0000 [-] pad=00000000 owner=null group=null sacl=null dacl=null\npresent, NULL: ok=1 err=-1\nafter: absolute rev=1 sbz1=0 control=0x0004 [DACL_PRESENT] pad=00000000 owner=null group=null sacl=null dacl=null\nget: ok=1 present=1 where=null defaulted=0\npresent, ACL with one ACE: ok=1\nafter: absolute rev=1 sbz1=0 control=0x0004 [DACL_PRESENT] pad=00000000 owner=null group=null sacl=null dacl=set\nsame pointer as passed: true\nget: ok=1 present=1 where=elsewhere defaulted=0\npresent, same ACL, defaulted: ok=1\nafter: absolute rev=1 sbz1=0 control=0x000c [DACL_PRESENT|DACL_DEFAULTED] pad=00000000 owner=null group=null sacl=null dacl=set\nget: ok=1 present=1 where=elsewhere defaulted=1\nnot present, ACL given: ok=1\nafter: absolute rev=1 sbz1=0 control=0x0008 [DACL_DEFAULTED] pad=00000000 owner=null group=null sacl=null dacl=set\nget: ok=1 present=0 where=unchanged defaulted=0\npresent = TRUE, defaulted = 2: ok=1\nafter: absolute rev=1 sbz1=0 control=0x000c [DACL_PRESENT|DACL_DEFAULTED] pad=00000000 owner=null group=null sacl=null dacl=set\npresent = 5: ok=1\nafter: absolute rev=1 sbz1=0 control=0x0004 [DACL_PRESENT] pad=00000000 owner=null group=null sacl=null dacl=set\nnot present, NULL: ok=1\nafter: absolute rev=1 sbz1=0 control=0x0000 [-] pad=00000000 owner=null group=null sacl=null dacl=set\npresent, empty ACL: ok=1\nafter: absolute rev=1 sbz1=0 control=0x0004 [DACL_PRESENT] pad=00000000 owner=null group=null sacl=null dacl=set\nempty: acl rev=2 sbz1=0 size=8 count=0 sbz2=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "sd_dacl_set_errors",
+      "exe_sha256": "26b1887c64dc64facb994e91181039c2c1a8bc4a4610d880700232136f7b801e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmV2aXNpb24gYnl0ZSAwOiBvaz0wIGVycj0xMzA1CiAgaGVhZGVyIGFmdGVyOiAwMDAwMDAwMDAwMDAwMDAwCnJldmlzaW9uIGJ5dGUgMjogb2s9MCBlcnI9MTMwNQogIGhlYWRlciBhZnRlcjogMDIwMDAwMDAwMDAwMDAwMApyZXZpc2lvbiBieXRlIDI1NTogb2s9MCBlcnI9MTMwNQogIGhlYWRlciBhZnRlcjogZmYwMDAwMDAwMDAwMDAwMAphbGwtemVybyBidWZmZXI6IG9rPTAgZXJyPTEzMDUKc2VsZi1yZWxhdGl2ZSBkZXNjcmlwdG9yOiBvaz0wIGVycj0xMzM4CkFDTCB3aXRoIHJldmlzaW9uIDc3IGFuZCBzaXplIDM6IG9rPTEKYWZ0ZXI6IGFic29sdXRlIHJldj0xIHNiejE9MCBjb250cm9sPTB4MDAwNCBbREFDTF9QUkVTRU5UXSBwYWQ9MDAwMDAwMDAgb3duZXI9bnVsbCBncm91cD1udWxsIHNhY2w9bnVsbCBkYWNsPXNldApJc1ZhbGlkU2VjdXJpdHlEZXNjcmlwdG9yOiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "revision byte 0: ok=0 err=1305\n  header after: 0000000000000000\nrevision byte 2: ok=0 err=1305\n  header after: 0200000000000000\nrevision byte 255: ok=0 err=1305\n  header after: ff00000000000000\nall-zero buffer: ok=0 err=1305\nself-relative descriptor: ok=0 err=1338\nACL with revision 77 and size 3: ok=1\nafter: absolute rev=1 sbz1=0 control=0x0004 [DACL_PRESENT] pad=00000000 owner=null group=null sacl=null dacl=set\nIsValidSecurityDescriptor: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

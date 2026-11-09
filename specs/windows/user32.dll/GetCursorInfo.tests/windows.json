@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "gci_args",
+      "exe_sha256": "49fbb4c22e202585dff1f33225be951ec5b9aabc9aea7a39c47fbae7fc6584cd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZW9mKENVUlNPUklORk8pID0gMjQKY2JTaXplIDA6IEZBTFNFIGVycm9yIDB4NTcgY2JTaXplIDAgZmxhZ3MgMHhhYWFhIGN1cnNvciB1bnRvdWNoZWQgcHQgLTk5LC05OQpjYlNpemUgODogRkFMU0UgZXJyb3IgMHg1NyBjYlNpemUgOCBmbGFncyAweGFhYWEgY3Vyc29yIHVudG91Y2hlZCBwdCAtOTksLTk5CmNiU2l6ZSAxNjogRkFMU0UgZXJyb3IgMHg1NyBjYlNpemUgMTYgZmxhZ3MgMHhhYWFhIGN1cnNvciB1bnRvdWNoZWQgcHQgLTk5LC05OQpjYlNpemUgMjA6IEZBTFNFIGVycm9yIDB4NTcgY2JTaXplIDIwIGZsYWdzIDB4YWFhYSBjdXJzb3IgdW50b3VjaGVkIHB0IC05OSwtOTkKY2JTaXplIDIzOiBGQUxTRSBlcnJvciAweDU3IGNiU2l6ZSAyMyBmbGFncyAweGFhYWEgY3Vyc29yIHVudG91Y2hlZCBwdCAtOTksLTk5CmNiU2l6ZSAyNDogVFJVRSBlcnJvciAweDEyMzQgY2JTaXplIDAgZmxhZ3MgMHgwIGN1cnNvciBOVUxMIHB0IDE1MDAsNjAwCmNiU2l6ZSAyNTogRkFMU0UgZXJyb3IgMHg1NyBjYlNpemUgMjUgZmxhZ3MgMHhhYWFhIGN1cnNvciB1bnRvdWNoZWQgcHQgLTk5LC05OQpjYlNpemUgMjg6IEZBTFNFIGVycm9yIDB4NTcgY2JTaXplIDI4IGZsYWdzIDB4YWFhYSBjdXJzb3IgdW50b3VjaGVkIHB0IC05OSwtOTkKY2JTaXplIDEwMDA6IEZBTFNFIGVycm9yIDB4NTcgY2JTaXplIDEwMDAgZmxhZ3MgMHhhYWFhIGN1cnNvciB1bnRvdWNoZWQgcHQgLTk5LC05OQpjYlNpemUgNDI5NDk2NzI5NTogRkFMU0UgZXJyb3IgMHg1NyBjYlNpemUgNDI5NDk2NzI5NSBmbGFncyAweGFhYWEgY3Vyc29yIHVudG91Y2hlZCBwdCAtOTksLTk5CnBhcmtlZCAyNDogVFJVRSBlcnJvciAweDEyMzQgY2JTaXplIDAgZmxhZ3MgMHgwIGN1cnNvciBOVUxMIHB0IDE1MDAsNjAwCiAgcHRTY3JlZW5Qb3MgaXMgR2V0Q3Vyc29yUG9zIHRydWUgKDE1MDAsNjAwKQpOVUxMIHBvaW50ZXI6IEZBTFNFIGVycm9yIDk5OAptb3ZlZCAyNDogVFJVRSBlcnJvciAweDEyMzQgY2JTaXplIDAgZmxhZ3MgMHgwIGN1cnNvciBOVUxMIHB0IDMyMSwxMjMKICBwdFNjcmVlblBvcyAzMjEsMTIzIGlzIEdldEN1cnNvclBvcyB0cnVlCmF0IHRoZSBjb3JuZXIgMjQ6IFRSVUUgZXJyb3IgMHgxMjM0IGNiU2l6ZSAwIGZsYWdzIDB4MCBjdXJzb3IgTlVMTCBwdCAwLDAKICBwdFNjcmVlblBvcyAwLDAKYmV5b25kIHRoZSBzY3JlZW4gMjQ6IFRSVUUgZXJyb3IgMHgxMjM0IGNiU2l6ZSAwIGZsYWdzIDB4MCBjdXJzb3IgTlVMTCBwdCAxOTE5LDEwNzkKICBwdFNjcmVlblBvcyAxOTE5LDEwNzkgKGNsYW1wZWQpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "sizeof(CURSORINFO) = 24\ncbSize 0: FALSE error 0x57 cbSize 0 flags 0xaaaa cursor untouched pt -99,-99\ncbSize 8: FALSE error 0x57 cbSize 8 flags 0xaaaa cursor untouched pt -99,-99\ncbSize 16: FALSE error 0x57 cbSize 16 flags 0xaaaa cursor untouched pt -99,-99\ncbSize 20: FALSE error 0x57 cbSize 20 flags 0xaaaa cursor untouched pt -99,-99\ncbSize 23: FALSE error 0x57 cbSize 23 flags 0xaaaa cursor untouched pt -99,-99\ncbSize 24: TRUE error 0x1234 cbSize 0 flags 0x0 cursor NULL pt 1500,600\ncbSize 25: FALSE error 0x57 cbSize 25 flags 0xaaaa cursor untouched pt -99,-99\ncbSize 28: FALSE error 0x57 cbSize 28 flags 0xaaaa cursor untouched pt -99,-99\ncbSize 1000: FALSE error 0x57 cbSize 1000 flags 0xaaaa cursor untouched pt -99,-99\ncbSize 4294967295: FALSE error 0x57 cbSize 4294967295 flags 0xaaaa cursor untouched pt -99,-99\nparked 24: TRUE error 0x1234 cbSize 0 flags 0x0 cursor NULL pt 1500,600\n  ptScreenPos is GetCursorPos true (1500,600)\nNULL pointer: FALSE error 998\nmoved 24: TRUE error 0x1234 cbSize 0 flags 0x0 cursor NULL pt 321,123\n  ptScreenPos 321,123 is GetCursorPos true\nat the corner 24: TRUE error 0x1234 cbSize 0 flags 0x0 cursor NULL pt 0,0\n  ptScreenPos 0,0\nbeyond the screen 24: TRUE error 0x1234 cbSize 0 flags 0x0 cursor NULL pt 1919,1079\n  ptScreenPos 1919,1079 (clamped)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 305
+    },
+    {
+      "name": "gci_state",
+      "exe_sha256": "43b6b89598d5906784e374de295ba7579cd81473652ad1645279b6f2c867002e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGlzcGxheSBjb3VudCBicm91Z2h0IHRvIDAKb3ZlciBvdXIgd2luZG93LCBoYW5kIHNldDogVFJVRSBmbGFncyAweDEgY3Vyc29yIHNldCBwdCAxNTAsMTUwCiAgaEN1cnNvciBpcyB0aGUgaGFuZCB0cnVlIGFuZCBHZXRDdXJzb3IgdHJ1ZQpTaG93Q3Vyc29yKEZBTFNFKSAtPiAtMQphZnRlciBTaG93Q3Vyc29yKEZBTFNFKTogVFJVRSBmbGFncyAweDAgY3Vyc29yIE5VTEwgcHQgMTUwLDE1MAogIGhDdXJzb3IgaXMgdGhlIGhhbmQgZmFsc2UKU2hvd0N1cnNvcihGQUxTRSkgLT4gLTIKY291bnQgLTI6IFRSVUUgZmxhZ3MgMHgwIGN1cnNvciBOVUxMIHB0IDE1MCwxNTAKU2hvd0N1cnNvcihUUlVFKSAtPiAtMQpjb3VudCAtMTogVFJVRSBmbGFncyAweDAgY3Vyc29yIE5VTEwgcHQgMTUwLDE1MApTaG93Q3Vyc29yKFRSVUUpIC0+IDAKY291bnQgMDogVFJVRSBmbGFncyAweDEgY3Vyc29yIHNldCBwdCAxNTAsMTUwClNob3dDdXJzb3IoVFJVRSkgLT4gMQpjb3VudCAxOiBUUlVFIGZsYWdzIDB4MSBjdXJzb3Igc2V0IHB0IDE1MCwxNTAKU2hvd0N1cnNvcihGQUxTRSkgLT4gMApTZXRDdXJzb3IoTlVMTCk6IFRSVUUgZmxhZ3MgMHgwIGN1cnNvciBOVUxMIHB0IDE1MCwxNTAKICBHZXRDdXJzb3IgTlVMTCB0cnVlCmhhbmQgYWdhaW46IFRSVUUgZmxhZ3MgMHgxIGN1cnNvciBzZXQgcHQgMTUwLDE1MAptb3ZlZCB0byAxODAsMTYwOiBUUlVFIGZsYWdzIDB4MSBjdXJzb3Igc2V0IHB0IDE4MCwxNjAKICBwdCBpcyBHZXRDdXJzb3JQb3MgdHJ1ZSA7IHN0aWxsIHRoZSBoYW5kIHRydWUKb3ZlciB0aGUgZGVza3RvcDogVFJVRSBmbGFncyAweDAgY3Vyc29yIE5VTEwgcHQgMTUwMCw2MDAKICB3aW5kb3cgdW5kZXIgdGhlIGN1cnNvcjogb3RoZXIKYmFjayBvdmVyIG91ciB3aW5kb3c6IFRSVUUgZmxhZ3MgMHgxIGN1cnNvciBzZXQgcHQgMTUwLDE1MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "display count brought to 0\nover our window, hand set: TRUE flags 0x1 cursor set pt 150,150\n  hCursor is the hand true and GetCursor true\nShowCursor(FALSE) -> -1\nafter ShowCursor(FALSE): TRUE flags 0x0 cursor NULL pt 150,150\n  hCursor is the hand false\nShowCursor(FALSE) -> -2\ncount -2: TRUE flags 0x0 cursor NULL pt 150,150\nShowCursor(TRUE) -> -1\ncount -1: TRUE flags 0x0 cursor NULL pt 150,150\nShowCursor(TRUE) -> 0\ncount 0: TRUE flags 0x1 cursor set pt 150,150\nShowCursor(TRUE) -> 1\ncount 1: TRUE flags 0x1 cursor set pt 150,150\nShowCursor(FALSE) -> 0\nSetCursor(NULL): TRUE flags 0x0 cursor NULL pt 150,150\n  GetCursor NULL true\nhand again: TRUE flags 0x1 cursor set pt 150,150\nmoved to 180,160: TRUE flags 0x1 cursor set pt 180,160\n  pt is GetCursorPos true ; still the hand true\nover the desktop: TRUE flags 0x0 cursor NULL pt 1500,600\n  window under the cursor: other\nback over our window: TRUE flags 0x1 cursor set pt 150,150\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 766
+    }
+  ]
+}

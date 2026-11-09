@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/AdjustTokenGroups
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Enables or disables groups of a token. Mandatory groups cannot be
+  disabled, deny-only groups cannot be enabled. Needs TOKEN_ADJUST_GROUPS.
+interface:
+  signature: "BOOL AdjustTokenGroups(HANDLE token, BOOL reset_to_default, PTOKEN_GROUPS new_state, DWORD buffer_length, PTOKEN_GROUPS previous_state, PDWORD return_length)"
+  token_rights: "TOKEN_ASSIGN_PRIMARY 0x1, TOKEN_DUPLICATE 0x2, TOKEN_IMPERSONATE 0x4, TOKEN_QUERY 0x8, TOKEN_QUERY_SOURCE 0x10, TOKEN_ADJUST_PRIVILEGES 0x20, TOKEN_ADJUST_GROUPS 0x40, TOKEN_ADJUST_DEFAULT 0x80, TOKEN_ADJUST_SESSIONID 0x100; TOKEN_ALL_ACCESS 0xF01FF (winnt.h)"
+  oracle_token: "The test process's own token on the oracle is an elevated local administrator's in an SSH logon session: primary token, session 0, High integrity (0x3000), mandatory policy 3 (NO_WRITE_UP | NEW_PROCESS_MIN), 12 groups (Everyone 7, BUILTIN\\Administrators 15 (mandatory, enabled by default, enabled, owner), BUILTIN\\Users 7, NETWORK, Authenticated Users, This Organization, Local account, NTLM Authentication, the logon SID, \"Local account and member of Administrators group\" 7 and the integrity label), 24 privileges all enabled (SeChangeNotify, SeShutdown, SeDebug, SeBackup, SeRestore, SeImpersonate, SeCreateGlobal ... but not SeTcb, SeAssignPrimaryToken or SeCreateToken), owner BUILTIN\\Administrators, primary group \"None\" (S-1-5-21-<machine>-513), TokenElevationType 1 (default), TokenElevation 1."
+rules:
+  mandatory: "every group of the oracle token is mandatory: disabling Everyone (7), Users (7), Administrators (15) or Authenticated Users (7) fails with ERROR_CANT_DISABLE_MANDATORY (1310) and changes nothing"
+  not_in_token: "a SID the token does not have (S-1-5-18): TRUE with last error ERROR_NOT_ALL_ASSIGNED (1300)"
+  reset: "ResetToDefault TRUE succeeds (new state ignored)"
+  deny_only: "a group made deny-only by CreateRestrictedToken (attributes 16): enabling it (attributes 4 or 7) fails with error 629 (ERROR_CANT_ENABLE_DENY_ONLY) and stays 16; \"disabling\" it (attributes 0) succeeds and changes nothing; ResetToDefault succeeds and leaves it 16"
+  previous: "enabling an already enabled group with a previous-state buffer: success, *return_length 8, previous state count 0"
+  access: "a handle with only TOKEN_QUERY: ERROR_ACCESS_DENIED (5)"
+errors:
+  mandatory: "ERROR_CANT_DISABLE_MANDATORY (1310)"
+  deny_only: "error 629 (ERROR_CANT_ENABLE_DENY_ONLY)"
+  access: "ERROR_ACCESS_DENIED (5)"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

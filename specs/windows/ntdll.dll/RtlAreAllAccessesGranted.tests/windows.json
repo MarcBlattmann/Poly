@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_allgranted_special",
+      "exe_sha256": "9465b99a989840b5e2e1284a2e0d145438af8da41b8b22e9a85b4ce6b3cc5160",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Yml0IDB4ODAwMDAwMDA6IGdyYW50ZWQ9dGhhdCBkZXNpcmVkPXRoYXQ6IDE7IGdyYW50ZWQ9YWxsIGRlc2lyZWQ9dGhhdDogMTsgZ3JhbnRlZD1ub25lIGRlc2lyZWQ9dGhhdDogMDsgZ3JhbnRlZD10aGF0IGRlc2lyZWQ9MHgxOiAwCmJpdCAweDQwMDAwMDAwOiBncmFudGVkPXRoYXQgZGVzaXJlZD10aGF0OiAxOyBncmFudGVkPWFsbCBkZXNpcmVkPXRoYXQ6IDE7IGdyYW50ZWQ9bm9uZSBkZXNpcmVkPXRoYXQ6IDA7IGdyYW50ZWQ9dGhhdCBkZXNpcmVkPTB4MTogMApiaXQgMHgyMDAwMDAwMDogZ3JhbnRlZD10aGF0IGRlc2lyZWQ9dGhhdDogMTsgZ3JhbnRlZD1hbGwgZGVzaXJlZD10aGF0OiAxOyBncmFudGVkPW5vbmUgZGVzaXJlZD10aGF0OiAwOyBncmFudGVkPXRoYXQgZGVzaXJlZD0weDE6IDAKYml0IDB4MTAwMDAwMDA6IGdyYW50ZWQ9dGhhdCBkZXNpcmVkPXRoYXQ6IDE7IGdyYW50ZWQ9YWxsIGRlc2lyZWQ9dGhhdDogMTsgZ3JhbnRlZD1ub25lIGRlc2lyZWQ9dGhhdDogMDsgZ3JhbnRlZD10aGF0IGRlc2lyZWQ9MHgxOiAwCmJpdCAweDAyMDAwMDAwOiBncmFudGVkPXRoYXQgZGVzaXJlZD10aGF0OiAxOyBncmFudGVkPWFsbCBkZXNpcmVkPXRoYXQ6IDE7IGdyYW50ZWQ9bm9uZSBkZXNpcmVkPXRoYXQ6IDA7IGdyYW50ZWQ9dGhhdCBkZXNpcmVkPTB4MTogMApiaXQgMHgwMTAwMDAwMDogZ3JhbnRlZD10aGF0IGRlc2lyZWQ9dGhhdDogMTsgZ3JhbnRlZD1hbGwgZGVzaXJlZD10aGF0OiAxOyBncmFudGVkPW5vbmUgZGVzaXJlZD10aGF0OiAwOyBncmFudGVkPXRoYXQgZGVzaXJlZD0weDE6IDAKYml0IDB4MGMwMDAwMDA6IGdyYW50ZWQ9dGhhdCBkZXNpcmVkPXRoYXQ6IDE7IGdyYW50ZWQ9YWxsIGRlc2lyZWQ9dGhhdDogMTsgZ3JhbnRlZD1ub25lIGRlc2lyZWQ9dGhhdDogMDsgZ3JhbnRlZD10aGF0IGRlc2lyZWQ9MHgxOiAwCmVhY2ggc2luZ2xlIGJpdCBncmFudGVkIGZvciBpdHNlbGYsIGJpdCAwIHRvIDMxOiAxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "bit 0x80000000: granted=that desired=that: 1; granted=all desired=that: 1; granted=none desired=that: 0; granted=that desired=0x1: 0\nbit 0x40000000: granted=that desired=that: 1; granted=all desired=that: 1; granted=none desired=that: 0; granted=that desired=0x1: 0\nbit 0x20000000: granted=that desired=that: 1; granted=all desired=that: 1; granted=none desired=that: 0; granted=that desired=0x1: 0\nbit 0x10000000: granted=that desired=that: 1; granted=all desired=that: 1; granted=none desired=that: 0; granted=that desired=0x1: 0\nbit 0x02000000: granted=that desired=that: 1; granted=all desired=that: 1; granted=none desired=that: 0; granted=that desired=0x1: 0\nbit 0x01000000: granted=that desired=that: 1; granted=all desired=that: 1; granted=none desired=that: 0; granted=that desired=0x1: 0\nbit 0x0c000000: granted=that desired=that: 1; granted=all desired=that: 1; granted=none desired=that: 0; granted=that desired=0x1: 0\neach single bit granted for itself, bit 0 to 31: 11111111111111111111111111111111\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    }
+  ]
+}

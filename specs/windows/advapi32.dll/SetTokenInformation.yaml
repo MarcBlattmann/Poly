@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/SetTokenInformation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Changes a settable class of a token: the integrity level (lowering only),
+  owner, primary group, default DACL, virtualization. Needs
+  TOKEN_ADJUST_DEFAULT (TOKEN_ADJUST_SESSIONID for the session id). Chrome
+  lowers the integrity level of its sandbox tokens with it.
+interface:
+  signature: "BOOL SetTokenInformation(HANDLE token, TOKEN_INFORMATION_CLASS class, LPVOID info, DWORD length)"
+  token_rights: "TOKEN_ASSIGN_PRIMARY 0x1, TOKEN_DUPLICATE 0x2, TOKEN_IMPERSONATE 0x4, TOKEN_QUERY 0x8, TOKEN_QUERY_SOURCE 0x10, TOKEN_ADJUST_PRIVILEGES 0x20, TOKEN_ADJUST_GROUPS 0x40, TOKEN_ADJUST_DEFAULT 0x80, TOKEN_ADJUST_SESSIONID 0x100; TOKEN_ALL_ACCESS 0xF01FF (winnt.h)"
+  mandatory_label: "TokenIntegrityLevel takes a TOKEN_MANDATORY_LABEL: SID_AND_ATTRIBUTES (16 bytes) and length sizeof(that) + GetLengthSid(sid); the label SID is S-1-16-<RID> (0 untrusted, 0x1000 low, 0x2000 medium, 0x2100 medium plus, 0x3000 high, 0x4000 system)"
+rules:
+  integrity_lower: "on a fresh copy of the High token: High (same) 0x3000, Medium 0x2000, Medium plus 0x2100, Low 0x1000, Untrusted 0 succeed and read back; any other RID that is not above the current one also works (S-1-16-5000 reads back 0x1388, S-1-16-1 reads back 1); the label's attributes are ignored (0, SE_GROUP_ENABLED, INTEGRITY|INTEGRITY_ENABLED all succeed); the mandatory policy stays 3; works on an impersonation copy too"
+  integrity_raise: "raising above the current level fails with ERROR_PRIVILEGE_NOT_HELD (1314), also System (0x4000) from High and, on a token lowered earlier, going back up; the same level or lower is allowed again: the chain 0x2000, 0x3000 (fails 1314), 0x1000, 0x2000 (fails), 0x1000, 0x0, 0x1000 (fails), 0x0 behaves exactly so"
+  integrity_sid: "a SID that is not a mandatory label (S-1-5-18): ERROR_INVALID_LABEL (1299)"
+  owner: "TokenOwner may be set to BUILTIN\\Administrators (owner-capable group) or the user's SID; Users, Everyone, Authenticated Users, SYSTEM (not in the token), Guests and a label SID fail with ERROR_INVALID_OWNER (1307) and the owner stays"
+  primary_group: "TokenPrimaryGroup may be set to any group the token has (Administrators, Users, Everyone, Authenticated Users) and reads back; SIDs the token does not have (S-1-5-18, S-1-5-32-546, a label) fail with ERROR_INVALID_PRIMARY_GROUP (1308)"
+  default_dacl: "TokenDefaultDacl: a two-ACE ACL reads back byte for byte (the ACL's own AclSize is kept: 1024 for a buffer initialised with 1024); the length returned is 8 + AclSize; a NULL ACL pointer is accepted and reads back as a NULL ACL (length 8); an ACL with revision 9 fails with ERROR_INVALID_ACL (1336)"
+  classes: "TokenVirtualizationEnabled (24) can be set to 1 and 0 with only TOKEN_ADJUST_DEFAULT; TokenVirtualizationAllowed, TokenSessionId, TokenUIAccess and TokenMandatoryPolicy fail with ERROR_PRIVILEGE_NOT_HELD (1314) (they need SeTcbPrivilege); read-only classes (SandBoxInert 15, Type 8, ElevationType 18, HasRestrictions 21), class 0 and class 99 fail with ERROR_INVALID_PARAMETER (87); a wrong length (0, 1, 3, 8 for a 4-byte class) fails with ERROR_BAD_LENGTH (24)"
+  access: "TOKEN_QUERY, TOKEN_DUPLICATE, TOKEN_ADJUST_SESSIONID or TOKEN_ADJUST_PRIVILEGES alone: ERROR_ACCESS_DENIED (5)"
+errors:
+  privilege: "ERROR_PRIVILEGE_NOT_HELD (1314)"
+  owner: "ERROR_INVALID_OWNER (1307)"
+  group: "ERROR_INVALID_PRIMARY_GROUP (1308)"
+  label: "ERROR_INVALID_LABEL (1299)"
+  acl: "ERROR_INVALID_ACL (1336)"
+  length: "ERROR_BAD_LENGTH (24)"
+  class: "ERROR_INVALID_PARAMETER (87)"
+  access: "ERROR_ACCESS_DENIED (5)"
+side_effects: "changes the token object"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

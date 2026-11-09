@@ -1,0 +1,74 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/AdjustWindowRectExForDpi
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-c
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About the
+  Clipboard", "Using the Clipboard", "Clipboard Formats", "Standard
+  Clipboard Formats", "High DPI Desktop Application Development on Windows",
+  "DPI_AWARENESS_CONTEXT", "Multiple Display Monitors", "Window Features"
+  (layered windows, window regions), "About Cursors", "About Icons",
+  "Desktop Window Manager" (dwmapi), "Input Method Manager" (imm32), "About
+  Messages and Message Queues"; winuser.h, wingdi.h, windef.h, winbase.h,
+  dwmapi.h, imm.h, shellscalingapi.h and winerror.h for constants and
+  layouts. The conformance tests of Wine were consulted only where the own
+  sources line of an entry says so, for ideas of what to observe; no code or
+  expected value of theirs is used (every value in these sheets was observed
+  on the machine above).
+summary: >
+  Grows a client rectangle into the window rectangle that has it, for the
+  frame, caption and menu bar measures of the given DPI. The measures are
+  those of GetSystemMetricsForDpi at that DPI; at 96 the result equals
+  AdjustWindowRectEx and CreateWindowExW with the result gives exactly the
+  client size asked for. DPI 0 fails; the rectangle is not checked for
+  order.
+interface:
+  signature: "BOOL AdjustWindowRectExForDpi(LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle, UINT dpi)"
+rules:
+  overlappedwindow_96: "client 0,0,100,100 with WS_OVERLAPPEDWINDOW: -8,-31,108,108 at 96, -9,-38,109,109 at 120, -11,-45,111,111 at 144, -12,-52,112,112 at 168, -13,-58,113,113 at 192, -16,-72,116,116 at 240, -18,-85,118,118 at 288, -23,-112,123,123 at 384; with a menu the top moves further up by the menu bar height of that DPI (-20, -25, -30, -34, -39, -49, -58, -77 at the same DPIs), nothing else changes"
+  what_adds: "client 0,0,100,100, no menu: WS_CAPTION (alone, with WS_POPUP, with WS_CHILD, with WS_THICKFRAME, as part of WS_OVERLAPPEDWINDOW) adds 8 on the left, right and bottom and 31 on top at 96 (9/38 at 120, 11/45 at 144, 12/52 at 168, 13/58 at 192, 16/72 at 240, 18/85 at 288, 23/112 at 384); WS_THICKFRAME alone adds 7 on each side at 96 (8 at 120, 10 at 144, 11 at 168, 12 at 192, 15 at 240, 17 at 288, 22 at 384); WS_BORDER alone adds 1 on each side at every DPI; WS_DLGFRAME alone adds 3 on each side at every DPI; WS_POPUP|WS_THICKFRAME equals the thick-frame-alone numbers; WS_SYSMENU and WS_MINIMIZEBOX add nothing"
+  no_frame: "WS_OVERLAPPED, WS_POPUP, WS_CHILD without caption/border bits add nothing (0,0,100,100); with a menu only the menu height is added to the top"
+  extended_styles: "with WS_POPUP: WS_EX_CLIENTEDGE adds 2 on each side at every DPI, WS_EX_STATICEDGE adds 1, WS_EX_DLGMODALFRAME adds 3, WS_EX_WINDOWEDGE adds nothing; with WS_OVERLAPPEDWINDOW: WS_EX_CLIENTEDGE adds 2 more (-10,-33,110,110 at 96, -13,-47,113,113 at 144, -15,-60,115,115 at 192), WS_EX_WINDOWEDGE|WS_EX_CLIENTEDGE the same as CLIENTEDGE alone, WS_EX_TOOLWINDOW (the small caption is not used) and WS_EX_LAYOUTRTL change nothing; WS_VSCROLL and WS_HSCROLL add nothing"
+  all_bits: "every style bit set with a menu at 144: -13,-77,113,113; AdjustWindowRectEx with the same bits at 96 gives -10,-53,110,110"
+  result_and_error: "TRUE; the last error is not promised on success (the tests print -1 for unchanged or cleared)"
+  rectangles: "any rectangle (inverted, empty, negative, 0x7FFFFFF0 wide, left INT_MIN) gets the same amounts added on each side (WS_OVERLAPPEDWINDOW at 144: left-11, top-45, right+11, bottom+11) with wrap-around arithmetic: left INT_MIN becomes 2147483637 and the call still returns TRUE"
+  matches_createwindow: "at DPI 96 for client 300x200 the rectangle sizes WS_OVERLAPPEDWINDOW (-8,-31,308,208), popup+caption (-8,-31,308,208), popup+border (-1,-1,301,201), popup+thickframe (-7,-7,307,207) and WS_OVERLAPPEDWINDOW+WS_EX_CLIENTEDGE (-10,-33,310,210) so that CreateWindowExW gives a client area of exactly 300x200; the same in an unaware and a per-monitor-v2 thread; the DPI of the window is 96"
+  low_and_high_dpi: "DPI 1 and 2 give the 96-like frame (-3,-51,103,103 with a menu), 24: -4,-18,104,104, 47: -5,-28,105,105, 48: -6,-29,106,106, 72: -7,-40,107,107, 1000: -55,-484,155,155, 4000: -145,-1856,245,245 (WS_OVERLAPPEDWINDOW with menu)"
+errors:
+  dpi_0: "FALSE, ERROR_INVALID_PARAMETER (87), the rectangle unchanged"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
+  needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants); run with
+  poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because
+  painting, input and the clipboard need the visible desktop. Window
+  procedures log documented messages only: never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels and closed within seconds; the cursor is parked
+  at (1500, 600) at the start and put back at the end; the clipboard is
+  emptied at the end of every test that touches it; a test changes no system
+  setting (only the state of its own process and windows).
+not_covered: >
+  a NULL rectangle (faults), DPI 0xFFFFFFFF (returned TRUE with an error
+  code and an odd rectangle), huge DPIs Several monitors, other system DPIs
+  (the oracle is one 1920x1080 monitor at 96 DPI, scale 100%), a manifest
+  (the tests have none: awareness is set with the API), other keyboard
+  layouts than German, installed input methods (the oracle has none active),
+  touch and pen, hooks, menus and dialogs, comctl32 controls, themed (visual
+  style) painting, clipboard contents put there by other programs or by the
+  cloud clipboard and clipboard history.

@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtTerminateJobObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Terminates every process in the job; ExitStatus becomes each process's
+  exit code. JOB_OBJECT_TERMINATE is the right needed. TerminateJobObject
+  calls it.
+interface:
+  signature: "NTSTATUS NtTerminateJobObject(HANDLE JobHandle, NTSTATUS ExitStatus)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87."
+  access: "Job access rights (winnt.h): JOB_OBJECT_ASSIGN_PROCESS 0x1, JOB_OBJECT_SET_ATTRIBUTES 0x2, JOB_OBJECT_QUERY 0x4, JOB_OBJECT_TERMINATE 0x8, JOB_OBJECT_SET_SECURITY_ATTRIBUTES 0x10, JOB_OBJECT_ALL_ACCESS 0x1f003f. The tests create the children they assign as suspended copies of the test executable that are never resumed."
+rules:
+  exit_code: "two assigned children, ExitStatus 0, 1, 0x4242, 0xC0000005, 0x103 and -1 (0xFFFFFFFF): STATUS_SUCCESS and both processes end with exactly that exit code"
+  after: "accounting afterwards: total 2, active 0, terminated 0; terminating the emptied job again: STATUS_SUCCESS; assigning a new process to the terminated job: STATUS_SUCCESS (the process is then in the job); terminating a job that never had a process: STATUS_SUCCESS"
+  rights: "a handle with only JOB_OBJECT_TERMINATE works (child exit code 9) as does JOB_OBJECT_ALL_ACCESS; QUERY|SET_ATTRIBUTES|ASSIGN_PROCESS, SYNCHRONIZE and access 0 give STATUS_ACCESS_DENIED and the child stays active (exit code 0x103)"
+errors:
+  invalid: "NULL, a closed handle and the garbage value 0x7FF4: STATUS_INVALID_HANDLE"
+  type: "the process pseudo-handle and an event: STATUS_OBJECT_TYPE_MISMATCH"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

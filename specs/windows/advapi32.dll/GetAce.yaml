@@ -1,0 +1,61 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/GetAce
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns a pointer to ACE number ace_index inside the ACL (the first ACE is
+  at byte 8, the next at 8 plus the sizes of the earlier ACEs). The pointer
+  points into the ACL's own memory.
+interface:
+  signature: "BOOL GetAce(PACL acl, DWORD ace_index, LPVOID* ace)"
+  layout: "ACL (winnt.h): an 8-byte header {Revision (byte), Sbz1 (byte, 0), AclSize (16 bits), AceCount (16 bits), Sbz2 (16 bits)} followed by the ACEs one after the other, all fields little-endian. Each ACE starts with {AceType (byte), AceFlags (byte), AceSize (16 bits)}; access-allowed (type 0), access-denied (1), system-audit (2) and mandatory-label (0x11) ACEs continue with a 32-bit mask (the policy for a label) and the SID, so their size is 8 + the SID length (20 for the 12-byte S-1-1-0 and S-1-1-0-like SIDs, 24 for S-1-5-32-544, 76 for a 15-sub-authority SID). ACL revisions 2, 3 and 4 are the valid ones. Buffers in the tests are 8-byte aligned unless noted."
+rules:
+  offsets: "in a revision 2 ACL with ACEs of 20, 20, 24 bytes, indexes 0, 1, 2 return the offsets 8, 28, 48 from the start of the ACL; the ACE bytes there are the whole ACE (type, flags, size, mask, SID)"
+  inside: "the pointer is into the ACL: writing the byte at offset 4 of ACE 1 through it changes the ACL byte at offset 32"
+  revision_4: "in a revision 4 ACL with an allowed ACE (flags 3, 24 bytes), an audit ACE (flags 0xC0, 24 bytes) and a mandatory-label ACE (type 0x11, 20 bytes) indexes 0, 1, 2 give offsets 8, 32, 56"
+  out_of_range: "an index at or above the ACE count fails: on an empty ACL every index 0 to 0xFFFFFFFF tried (0, 1, 2, 3, 4, 5, 7, 8, 9, 100, 255, 256, 0x7FFF, 0xFFFF, 0x10000, 0x7FFFFFFF, 0x80000000, 0xFFFFFFFE, 0xFFFFFFFF); on a one-ACE ACL every index from 1 up; on a three-ACE ACL every index from 3 up; the result pointer is not written in these cases"
+  damaged_revision: "a revision byte of 0, 1, 5 or 255 fails for every index"
+  damaged_count: "the count is what limits the index, the ACE sizes decide where it is: with count 5 on the three-ACE ACL indexes 0..3 succeed (3 gives offset 72, just after the real ACEs, in the unused area) and index 4 fails; with count 100 the same; with count 0 every index fails"
+  damaged_size: "AclSize 72 (exactly the ACEs) works for indexes 0, 1, 2; AclSize 40 works for 0 and 1 and fails for 2 (the ACE would end after the ACL); AclSize 8 and 0 fail for all"
+  ace_size_not_checked: "the ACE size fields are only used to move on, not validated: with the first ACE's size set to 0, indexes 0, 1, 2 all give offset 8; with 3, index 1 gives offset 11; with 21, index 1 gives 29 and index 2 fails; with 200 or 1000 index 1 fails (beyond the ACL)"
+errors:
+  index: "index at or above the count, or an ACE position outside the ACL: FALSE, ERROR_INVALID_PARAMETER (87)"
+  acl: "revision byte not 2..4: FALSE, ERROR_INVALID_PARAMETER (87)"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  What the result pointer holds after a failure in damaged ACLs is not
+  specified (the tests show it can be left alone or written). Domain
+  accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

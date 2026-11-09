@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_impself_levels",
+      "exe_sha256": "dabb51d0651b85385deb7e8d7e860fe535b58125ecc0726d04222ba25e84326f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlOiB0aHJlYWQgdG9rZW4gKC1lcnJvciBvciBsZXZlbCoxMCt0eXBlKSA9IC0xMDA4CmxldmVsIDA6IHN0YXR1cz0weDAwMDAwMDAwIHRocmVhZCB0b2tlbiBub3cgPSAtMTM0NwpsZXZlbCAxOiBzdGF0dXM9MHgwMDAwMDAwMCB0aHJlYWQgdG9rZW4gbm93ID0gMTIKbGV2ZWwgMjogc3RhdHVzPTB4MDAwMDAwMDAgdGhyZWFkIHRva2VuIG5vdyA9IDIyCmxldmVsIDM6IHN0YXR1cz0weDAwMDAwMDAwIHRocmVhZCB0b2tlbiBub3cgPSAzMgpsZXZlbCA0OiBzdGF0dXM9MHhjMDAwMDBhNSB0aHJlYWQgdG9rZW4gbm93ID0gLTEwMDgKbGV2ZWwgNTogc3RhdHVzPTB4YzAwMDAwYTUgdGhyZWFkIHRva2VuIG5vdyA9IC0xMDA4CmxldmVsIDQyOTQ5NjcyOTU6IHN0YXR1cz0weGMwMDAwMGE1IHRocmVhZCB0b2tlbiBub3cgPSAtMTAwOAphZnRlciB0aGUgbGFzdCByZXZlcnQ6IC0xMDA4CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before: thread token (-error or level*10+type) = -1008\nlevel 0: status=0x00000000 thread token now = -1347\nlevel 1: status=0x00000000 thread token now = 12\nlevel 2: status=0x00000000 thread token now = 22\nlevel 3: status=0x00000000 thread token now = 32\nlevel 4: status=0xc00000a5 thread token now = -1008\nlevel 5: status=0xc00000a5 thread token now = -1008\nlevel 4294967295: status=0xc00000a5 thread token now = -1008\nafter the last revert: -1008\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "rtl_impself_token_ambient",
+      "exe_sha256": "e9fb495d7d5bb5ffb243b193718dea975280ed356fc75d5df866608f1dcfb37b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhdHVzPTB4MDAwMDAwMDAgdGhyZWFkIHRva2VuIG9wZW5lZDogdHJ1ZQp0eXBlOiBwcm9jZXNzIDEgdGhyZWFkIDIKaW1wZXJzb25hdGlvbiBsZXZlbCBvZiB0aGUgdGhyZWFkIHRva2VuOiAyCmdyb3VwIGNvdW50IGVxdWFsOiB0cnVlCnByaXZpbGVnZSBjb3VudCBlcXVhbDogdHJ1ZQppbnRlZ3JpdHkgUklEOiBwcm9jZXNzIDEyMjg4IHRocmVhZCAxMjI4OApzZXNzaW9uIGlkOiBwcm9jZXNzIDAgdGhyZWFkIDAKU2VDaGFuZ2VOb3RpZnlQcml2aWxlZ2U6IHByb2Nlc3MgMyB0aHJlYWQgMwpTZVNodXRkb3duUHJpdmlsZWdlOiBwcm9jZXNzIDMgdGhyZWFkIDMKU2VEZWJ1Z1ByaXZpbGVnZTogcHJvY2VzcyAzIHRocmVhZCAzClNlVGNiUHJpdmlsZWdlOiBwcm9jZXNzIC0xIHRocmVhZCAtMQpzYW1lIHVzZXIgU0lEOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "status=0x00000000 thread token opened: true\ntype: process 1 thread 2\nimpersonation level of the thread token: 2\ngroup count equal: true\nprivilege count equal: true\nintegrity RID: process 12288 thread 12288\nsession id: process 0 thread 0\nSeChangeNotifyPrivilege: process 3 thread 3\nSeShutdownPrivilege: process 3 thread 3\nSeDebugPrivilege: process 3 thread 3\nSeTcbPrivilege: process -1 thread -1\nsame user SID: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

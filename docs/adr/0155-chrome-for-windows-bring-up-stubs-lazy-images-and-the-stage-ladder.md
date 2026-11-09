@@ -209,3 +209,183 @@ failure, fix and commit is in the hand-off file.
 - The 4 MiB heap limit remains for everything else; other places that hold a
   whole file in a `Vec` (`Backend::read_file`, `NtSystem::read_all` for
   `NtCreateUserProcess`) will meet it with big executables.
+
+## Addendum: batches 3 and 5, the network service and crash handling (`chrome-win-b35`)
+
+Chrome's network service and crash handler need a second set of system DLLs
+beyond the loader fallback of section 2. They are real DLLs, not stubs,
+because Chrome calls them with arguments that must produce plausible
+results. Clean room as above: Learn's pages, the public SDK headers, the
+export and import *names* of the Chrome package, and the spec agent's
+traces (`specs/windows/apps/chrome/traces`).
+
+**ETW with no listener** (`poly-etw`, `advapi32`). Chrome registers a dozen
+providers per process (`EventRegister`, `RegisterTraceGuidsW`,
+`EventSetInformation`) and writes through them (`EventWrite*`, `TraceEvent`).
+Poly has no trace sessions, so no provider is ever enabled: registrations
+succeed with a handle, `EventEnabled`/`EventProviderEnabled` say `FALSE`, a
+write returns `ERROR_SUCCESS` and logs nothing, the enable callback is never
+called. Argument checks follow Learn (null provider, null handle,
+`ERROR_INVALID_HANDLE` for an unknown handle, 128 data descriptors at most).
+`EventActivityIdControl` keeps the thread's activity id in a TLS slot.
+
+**`RegNotifyChangeKeyValue`** (`kernelbase`, forwarded by `advapi32`) is
+`NtNotifyChangeKey`. Because Learn lets the call return before the change,
+the kernel writes the status block later, so asynchronous requests use a
+static pool of 256 status blocks (free again once the kernel has written one).
+
+**The interface list** (`poly-iphlp`, `iphlpapi.dll`). The kernel knows its
+interfaces: the loopback inside the stack and, with a NIC, the virtio-net
+device with the boot setting's address, gateway, DNS server and link-local
+IPv6 address (`kernel/src/nt/afd.rs`). A new `\Device\Afd` request,
+`IF_LIST`, hands them to user space (`poly_iphlp::wire`, Poly's own
+protocol like the others on that device). `iphlpapi` fills the exact x64
+layouts of `IP_ADAPTER_ADDRESSES_LH` (448 bytes) and its lists,
+`MIB_IF_TABLE2` (rows of 1352), `IP_ADAPTER_INFO` (704) and
+`IP_INTERFACE_INFO` from it, with Windows' naming (adapter GUID in
+braces, `Ethernet`, `Loopback Pseudo-Interface 1`, `IfType` 6 and 24).
+`NotifyAddrChange` stays pending until `CancelIPChangeNotify` completes it
+as cancelled: Poly's addresses are the boot setting and never change.
+
+**`ws2_32` remainder.** (1) Chrome's `chrome.dll` binds 23 `ws2_32` functions by
+*ordinal* (`#3` is `closesocket`, `#111` `WSAGetLastError`, `#115`
+`WSAStartup`); our DLL had none, so those imports would have bound to
+stubs. `poly_winsock::exports::ORDINALS` lists the classic numbers and the
+DLL's `build.rs` pins them with `/EXPORT:name,@n` (lld keeps the first
+`/EXPORT` of a name, so the ordinal wins over rustc's own). (2)
+`WSAEventSelect`/`WSAEnumNetworkEvents`: the rules of what is recorded when
+are a host-tested state machine (`poly_winsock::events`: `FD_ACCEPT` once
+until `accept` runs, `FD_READ` once until `recv` runs, `FD_WRITE` after a
+send blocked, `FD_CONNECT` with its error, `FD_CLOSE` after the data was
+read or with the error of a reset). A helper thread of the process,
+started by the first `WSAEventSelect`, polls the selected sockets with the
+device's `POLL` request (20 ms at most, and only for what can still be
+recorded, so it does not spin) and sets the events; the socket calls tell
+it when they re-enable an event. (3) `WSADuplicateSocketW` duplicates the
+endpoint handle into the target process and fills a 628-byte
+`WSAPROTOCOL_INFOW` with Poly's provider id and the handle's value;
+`WSASocketW(FROM_PROTOCOL_INFO)` takes it up (needs cross-process
+`DuplicateHandle`). (4) `WSALookupService*`: the query is accepted and
+finds nothing (`WSA_E_NO_MORE`), as the trace shows.
+
+**Small DLLs.** `netapi32` (`NetUserGetInfo` levels 0/1/10/20,
+`NetGetJoinInformation`, `DsRoleGetPrimaryDomainInformation`,
+`NetGetAadJoinInformation`) answers as a workgroup computer with the one
+account `poly`; `secur32!GetUserNameExW` gives `COMPUTER\poly` (SAM
+compatible) and the account name (display), the formats that need a
+directory are `ERROR_NONE_MAPPED`, and the SSPI/LSA imports fail as a system
+without security packages does (`SEC_E_SECPKG_NOT_FOUND`);
+`dhcpcsvc!DhcpRequestParams` succeeds with no option data (the addresses
+are static); `dnsapi` has `DnsIsZtEnabled` (false); `dbghelp` finds no
+symbols, ends `StackWalk64` at once and `MiniDumpWriteDump` fails
+(`ERROR_NOT_SUPPORTED`, which crashpad survives). Their logic is in
+`poly-netapi` and `poly-iphlp`; `poly-win32-netrt` shares the heap
+allocator and the `\Device\Afd` requests.
+
+**`crypt32` and `winhttp`.** `CERT_STORE_PROV_COLLECTION`,
+`CertAddStoreToCollection` (the collection holds its own reference to the
+sibling; additions land in the first sibling with
+`CERT_PHYSICAL_STORE_ADD_ENABLE_FLAG`), `CertRemoveStoreFromCollection`,
+`CertControlStore` (resync/commit succeed; `NOTIFY_CHANGE` hands back an
+event that is never set), `CryptProtectMemory`/`CryptUnprotectMemory`
+(AES-256-CBC in place; the key is random per process for
+`SAME_PROCESS`, derived from the user's master key for the other two flags;
+`poly_wincrypt::dpapi::protect_memory`), and
+`WinHttpGetIEProxyConfigForCurrentUser` (no proxy at all).
+
+**To be confirmed by the spec agent against real Windows.**
+1. The results of `TraceEvent` and `GetTraceLoggerHandle` when no session
+   is enabled (Poly: `ERROR_SUCCESS`; `INVALID_HANDLE_VALUE` for a missing
+   `WNODE_HEADER`).
+2. `GetUserNameExW(NameDisplay)` for a local account without a full name
+   (Poly: the account name), and which formats Chrome asks for.
+3. `NetUserGetInfo`'s other levels, `NetGetAadJoinInformation`'s result for a
+   machine that is not joined, `DhcpRequestParams`'s result for an adapter
+   without DHCP.
+4. Whether `WSAEnumNetworkEvents` clears an event that was recorded again
+   between the helper's poll and the call (Poly resets and takes in one step).
+5. The metrics, link speed (10 Gbit/s) and description strings Windows gives
+   a virtio NIC.
+## Addendum: batch 4, windows without a screen (`chrome-win-b4`)
+
+What the headless browser asks of `user32`, `gdi32`, COM and the Windows
+Runtime, on top of the window manager of ADR 0131 and 0136. The decisions:
+
+1. **`ole32.dll` is new and hosts COM and the Windows Runtime.** On Windows
+   `combase.dll` has them and `ole32.dll` forwards; ours is one module,
+   `ole32.dll`, and the loader's API-set table sends `api-ms-win-core-winrt-*`
+   and `api-ms-win-core-com-*` there (`poly_ldr::apiset`). Chrome imports
+   `RoInitialize` and the `Windows*String*` functions through those contracts.
+   The logic is `crates/poly-com` (host-tested): apartment bookkeeping, GUID
+   text, `HRESULT`s, `HSTRING`s.
+2. **Apartments are per thread, in a TLS slot** (`poly_com::apartment`):
+   `CoInitializeEx`, `OleInitialize` and `RoInitialize` share one state: the
+   first call is `S_OK`, the same model again `S_FALSE`, another model
+   `RPC_E_CHANGED_MODE`; `CoUninitialize` balances.
+3. **No class is registered.** `CoCreateInstance[Ex]` and `CoGetClassObject`
+   clear their out parameters and fail with `REGDB_E_CLASSNOTREG`
+   (`CO_E_NOTINITIALIZED` on a thread with no apartment);
+   `RoGetActivationFactory` and `RoActivateInstance` fail with
+   `REGDB_E_CLASSNOTREG`. Small stand-ins succeed without effect
+   (`CoInitializeSecurity`, `CoRegisterMessageFilter`, `RegisterDragDrop`);
+   `CoCreateFreeThreadedMarshaler` returns an object that is only `IUnknown`.
+4. **`HSTRING`s are real.** A handle is a pointer to a 24-byte header
+   (`sizeof(HSTRING_HEADER)`); a string from `WindowsCreateString` is a
+   reference-counted heap block that starts with that header, a fast-pass
+   string (`WindowsCreateStringReference`) is the caller's header and
+   characters; the empty string is `NULL`.
+5. **Window properties live in `user32`, per process**
+   (`poly_win32k::props`): the table is keyed by window and by name
+   (case-insensitive) or atom; properties of destroyed windows are dropped on
+   a later `SetPropW`. Properties of another process's windows are not seen.
+6. **`RegisterWindowMessageW` is win32k's** (`Request::RegisterMessage`):
+   the same atom table as window classes, one number per name for the whole
+   session.
+7. **`SystemParametersInfoW` answers the `SPI_GET*` queries** from a table of
+   a default Windows 10 session at 96 DPI (`poly_win32k::spi`, including
+   `NONCLIENTMETRICSW` with Segoe UI 9 pt); `SPI_SET*` fail with
+   `ERROR_INVALID_PARAMETER`.
+8. **DPI awareness is remembered, not applied.** `SetProcessDpiAwarenessContext`
+   works once per process; every window, monitor and DC stays at 96 DPI.
+9. **The gate of stage 1 is the spec's.** The stages run
+   `specs/windows/apps/chrome/pages/s1.html` (copied to `C:\poly-test`), the
+   launcher prints the length and SHA-256 of Chrome's standard output
+   (`LAUNCH-DIGEST` / `LAUNCH-SHA256`), and a stage passes only when Chrome
+   exited with 0 and that digest is the one in `windows.json`. The boot test
+   group `chrome-win` runs stage 1 and is skipped without the cached
+   package; it only reports until `S1_REQUIRED` is set by the change that
+   makes stage 1 pass.
+
+Tests: `crates/poly-com`, `poly_win32k::{spi,props}` and the
+`RegisterMessage` request on the host; `s1test.exe` end to end in the kernel
+self-test (`nt::test_s1`).
+
+## Addendum: the Poly-side call tracer and the comparer (`chrome-win-b4`, second step)
+
+Chrome's first S1 crash (`chrome_elf.dll`, read of address 0x10, no stub hit) could not be read off
+the serial log, so Poly gets its own tools, none of which read Chrome's code:
+
+1. **`poly.nt.trace`** (kernel argument; `=all` adds the noisy services): one `nt-trace:` line per NT
+   system call with the first four arguments, the name an `OBJECT_ATTRIBUTES` or value name carries
+   and the status (`poly_personality_nt::trace`, host-tested). `cargo xtask chrome-win run --trace`.
+2. **The unhandled-exception report** adds the general registers, 64 stack quadwords, the TEB/PEB
+   fields and the thread's TLS array.
+3. **`cargo xtask chrome-win run --kit chrome_elf.dll[,chrome.exe...]`** runs a stage with the
+   Windows API tracer's kit (ADR 0090) laid over Chrome's directory: the named programs import
+   through proxies that log every call (`polytrace.dll`, now with `POLYTRACE_SYNC`: each record is
+   written when its call returns and carries the caller's return address `ra`, so a process that dies
+   leaves its trace). The launcher sends `polytrace.jsonl` to the kernel log with `PolyDebugPrint`
+   (the console wraps and scrolls long lines) and xtask collects it in
+   `target/chrome-win/stage<N>.ptrace.jsonl`.
+4. **`cargo xtask win chrome-trace [file]`** compares that trace with the committed Windows
+   reduction (`traces/s1.trace.json`): calls that fail on Poly where Windows' never did (or the
+   reverse for status codes), last errors and names Windows never saw, and functions Windows called
+   earlier that Poly never reached (`tools/xtask/src/chrometrace.rs`, host-tested).
+5. **Stage 9** is a probe (`tests/windows/chrome_probe.rs`): what Chrome's start-up asks of
+   `version.dll`, on Chrome's own files.
+
+What the tools found: `NtCreateKey` on `\REGISTRY\USER\<sid>\` (one trailing `\`) failed
+(`STATUS_OBJECT_NAME_INVALID`; every `NtCreateKey` of the browser on Windows succeeded), the first
+`FlsAlloc` returned index 0 (Windows' never did), `HKLM\...\CurrentVersion` lacked `UBR`,
+`DisplayVersion` and `ReleaseId`, `ReadProcessMemory`/`WriteProcessMemory` were stubs, and
+`PEB.ImageBaseAddress` and the PEB's version, processor, subsystem and heap fields were 0.
