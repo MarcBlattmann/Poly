@@ -174,11 +174,7 @@ const OTHER_NAMES: &[&str] = &[
 
 /// The Windows spelling of a name Poly knows ("arial" is "Arial").
 pub fn canonical_name(name: &[u16]) -> Option<&'static str> {
-    INSTALLED
-        .iter()
-        .map(|&(n, _)| n)
-        .chain(OTHER_NAMES.iter().copied())
-        .find(|n| same_name(&utf16(n), name))
+    INSTALLED.iter().map(|&(n, _)| n).chain(OTHER_NAMES.iter().copied()).find(|n| same_name(&utf16(n), name))
 }
 
 /// The faces a family has: Regular, Bold, Italic, Bold Italic.
@@ -208,17 +204,7 @@ impl FontTable {
         let Some(FaceInfo { family, full, style_name, style, fixed }) = read_face(&data) else { return false };
         let id = self.next_id;
         self.next_id += 1;
-        self.faces.push(Face {
-            id,
-            data: Arc::new(data),
-            family,
-            full,
-            style_name,
-            style,
-            fixed,
-            owner,
-            enumerable,
-        });
+        self.faces.push(Face { id, data: Arc::new(data), family, full, style_name, style, fixed, owner, enumerable });
         self.generation += 1;
         true
     }

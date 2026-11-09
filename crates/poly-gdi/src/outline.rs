@@ -659,7 +659,11 @@ impl<'a> Typeface<'a> {
                 for row in 0..bmp.height {
                     for col in 0..bmp.width {
                         let at = (row * bmp.width + col) as usize * ch;
-                        let v = if ch == 3 { [bmp.data[at], bmp.data[at + 1], bmp.data[at + 2]] } else { [bmp.data[at]; 3] };
+                        let v = if ch == 3 {
+                            [bmp.data[at], bmp.data[at + 1], bmp.data[at + 2]]
+                        } else {
+                            [bmp.data[at]; 3]
+                        };
                         if v != [0; 3] {
                             put(px + bmp.left + col as i32, py + bmp.top + row as i32, v);
                         }
@@ -750,7 +754,21 @@ pub(crate) mod tests {
             let o = Outline::new(&font, Src::Private(1), &lf("PolyTest", h, 400), plain(), None);
             let w = |c: char| o.ex.px(i64::from(font.advance(font.glyph_index(c).unwrap())), i64::from(o.upem));
             let t = o.tm;
-            [t.height, t.ascent, t.descent, t.internal_leading, t.external_leading, t.ave_char_width, t.max_char_width, w('A'), w('B'), w('W'), w('i'), w('g'), w(' ')]
+            [
+                t.height,
+                t.ascent,
+                t.descent,
+                t.internal_leading,
+                t.external_leading,
+                t.ave_char_width,
+                t.max_char_width,
+                w('A'),
+                w('B'),
+                w('W'),
+                w('i'),
+                w('g'),
+                w(' '),
+            ]
         };
         // height ascent descent intlead extlead avew maxw | A B W i g space
         assert_eq!(cell(&sans, -1), [3, 2, 1, 1, 0, 1, 2, 2, 1, 2, 1, 1, 1]);
@@ -806,10 +824,12 @@ pub(crate) mod tests {
         // above it, one pixel thick.
         assert_eq!((i.underline, i.strike), ((2, 1), (4, 1)));
         let tall = tf::build(&tf::TALL);
-        let o = Outline::new(&Font::parse(&tall).unwrap(), Src::Private(2), &lf("PolyTest Tall", -16, 400), plain(), None);
+        let o =
+            Outline::new(&Font::parse(&tall).unwrap(), Src::Private(2), &lf("PolyTest Tall", -16, 400), plain(), None);
         assert_eq!((o.underline, o.strike), ((3, 2), (5, 2)));
         let mono = tf::build(&tf::MONO);
-        let o = Outline::new(&Font::parse(&mono).unwrap(), Src::Private(3), &lf("PolyTest Mono", -16, 400), plain(), None);
+        let o =
+            Outline::new(&Font::parse(&mono).unwrap(), Src::Private(3), &lf("PolyTest Mono", -16, 400), plain(), None);
         assert_eq!(o.tm.pitch_and_family, 0x36);
     }
 

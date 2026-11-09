@@ -1340,7 +1340,12 @@ const FR_FLAGS: u32 = 0x30;
 /// handle, and `*count` the number of fonts. NULL (error 87) for NULL data,
 /// no length or no `count`; NULL (no error) for data that is no font.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn AddFontMemResourceEx(data: *const u8, len: u32, _reserved: *mut u8, count: *mut u32) -> H {
+pub unsafe extern "system" fn AddFontMemResourceEx(
+    data: *const u8,
+    len: u32,
+    _reserved: *mut u8,
+    count: *mut u32,
+) -> H {
     if data.is_null() || len == 0 || count.is_null() {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;

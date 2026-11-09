@@ -613,7 +613,9 @@ fn draw_text_aligns_ellipsizes_and_underlines_prefixes() {
     px_fill(&px, 0x00FF_FFFF);
     let long = utf16("A rather long caption");
     let mut r = Rect::new(10, 10, 80, 30);
-    let modified = g.draw_text_ex(dc, &long, &mut r, DT_SINGLELINE | DT_END_ELLIPSIS | DT_MODIFYSTRING, DrawParams::default()).modified;
+    let modified = g
+        .draw_text_ex(dc, &long, &mut r, DT_SINGLELINE | DT_END_ELLIPSIS | DT_MODIFYSTRING, DrawParams::default())
+        .modified;
     let m = modified.expect("the text did not fit");
     assert!(m.ends_with(&utf16("...")) && m.len() < long.len());
     assert!(g.text_extent(dc, &m).unwrap().0 <= 70);
@@ -621,7 +623,14 @@ fn draw_text_aligns_ellipsizes_and_underlines_prefixes() {
     // Text that fits is not modified.
     let mut r = Rect::new(10, 10, 150, 30);
     assert_eq!(
-        g.draw_text_ex(dc, &utf16("Short"), &mut r, DT_SINGLELINE | DT_END_ELLIPSIS | DT_MODIFYSTRING, DrawParams::default()).modified,
+        g.draw_text_ex(
+            dc,
+            &utf16("Short"),
+            &mut r,
+            DT_SINGLELINE | DT_END_ELLIPSIS | DT_MODIFYSTRING,
+            DrawParams::default()
+        )
+        .modified,
         None
     );
     // "&F" underlines F unless DT_HIDEPREFIX; DT_PREFIXONLY draws only the
@@ -809,9 +818,13 @@ fn bi_level_glyphs_are_exact_boxes_and_alignment_moves_the_cell() {
     // The cell of "AB" (20x16, ascent 12) at (50,40), OPAQUE.
     g.set_bk_mode(dc, OPAQUE);
     g.set_bk_color(dc, 0x0000_0080);
-    for (align, cell) in
-        [(0, (50, 40, 70, 56)), (2, (30, 40, 50, 56)), (6, (40, 40, 60, 56)), (8, (50, 24, 70, 40)), (24, (50, 28, 70, 44))]
-    {
+    for (align, cell) in [
+        (0, (50, 40, 70, 56)),
+        (2, (30, 40, 50, 56)),
+        (6, (40, 40, 60, 56)),
+        (8, (50, 24, 70, 40)),
+        (24, (50, 28, 70, 44)),
+    ] {
         px.fill(bg);
         g.set_text_align(dc, align);
         g.text_out(dc, 50, 40, &utf16("AB"));
@@ -824,7 +837,9 @@ fn bi_level_glyphs_are_exact_boxes_and_alignment_moves_the_cell() {
     g.ext_text_out(dc, 4, 2, 0, None, &utf16("AAA"), Some(&[20, 14, 30]));
     let cols: std::collections::BTreeSet<i32> = ink(&px, 100, bg).iter().map(|p| p.0).collect();
     assert_eq!(cols.iter().copied().min(), Some(6));
-    assert!(cols.contains(&13) && !cols.contains(&14) && cols.contains(&26) && cols.contains(&47) && !cols.contains(&48));
+    assert!(
+        cols.contains(&13) && !cols.contains(&14) && cols.contains(&26) && cols.contains(&47) && !cols.contains(&48)
+    );
     // ETO_GLYPH_INDEX: glyphs 5 and 6 are 'A' and 'B'.
     px.fill(bg);
     g.ext_text_out(dc, 4, 2, ETO_GLYPH_INDEX, None, &[5, 6], None);
@@ -1049,7 +1064,9 @@ fn clear_type_text_still_has_pixels_of_the_text_colour() {
             let Some(g2) = gdi_with_fonts() else { continue };
             g = g2;
         }
-        for (name, h) in [("Arial", -16), ("Segoe UI", -12), ("Tahoma", -11), ("Courier New", -14), ("Times New Roman", -16)] {
+        for (name, h) in
+            [("Arial", -16), ("Segoe UI", -12), ("Tahoma", -11), ("Courier New", -14), ("Times New Roman", -16)]
+        {
             let (dc, mut px) = dib32(&mut g, 200, 40);
             let (bg, fg) = (0x0080_8080, 0x00FF_FFFF);
             px.fill(bg);

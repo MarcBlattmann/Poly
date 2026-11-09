@@ -87,9 +87,7 @@ fn rects_of(rows: &[u8; 16]) -> Vec<(i16, i16, i16, i16)> {
 
 fn glyphs(mono: bool) -> Vec<Glyph> {
     // .notdef: a hollow box.
-    let notdef_rows = [
-        0, 0, 0x7E, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x7E, 0, 0, 0,
-    ];
+    let notdef_rows = [0, 0, 0x7E, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x7E, 0, 0, 0];
     let mut out = alloc::vec![Glyph { cp: 0, adv: 8 * UNIT as u16, rects: rects_of(&notdef_rows) }];
     for &(lo, hi) in RANGES {
         for cp in lo..=hi {
@@ -149,8 +147,7 @@ pub fn build(mono: bool) -> Vec<u8> {
         let n = 4 * g.rects.len();
         glyf.0.extend(core::iter::repeat_n(1u8, n));
         // Each rectangle clockwise: (x0,y0) (x0,y1) (x1,y1) (x1,y0).
-        let pts: Vec<(i16, i16)> =
-            g.rects.iter().flat_map(|&(a, b, c, d)| [(a, b), (a, d), (c, d), (c, b)]).collect();
+        let pts: Vec<(i16, i16)> = g.rects.iter().flat_map(|&(a, b, c, d)| [(a, b), (a, d), (c, d), (c, b)]).collect();
         let mut prev = 0i16;
         for p in &pts {
             glyf.i16(p.0 - prev);

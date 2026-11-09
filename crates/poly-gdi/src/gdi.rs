@@ -9,12 +9,12 @@ use crate::font::{Face, TextMetric};
 use crate::fontmap::{self, LogFont};
 use crate::fonttab::{self, FontTable};
 use crate::outline::{FaceStyle, FontFiles, Outline, Src as FontSrc, Typeface};
-use core::cell::{Cell, RefCell};
 pub use crate::region::Rect;
 use crate::region::{COMPLEXREGION, NULLREGION, RGN_AND, RGN_COPY, Region, SIMPLEREGION};
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cell::{Cell, RefCell};
 use poly_font::GlyphCache;
 
 // Object types (`wingdi.h`).
@@ -292,8 +292,13 @@ impl Gdi {
             delete_pending: false,
         };
         let pen = |c: u32, style: u32| Obj::Pen { style, width: 1, color: c, stock: true, delete_pending: false };
-        let font =
-            |f: Face| Obj::Font { face: f, stock: true, logfont: Vec::new(), mapped: Cell::new(None), delete_pending: false };
+        let font = |f: Face| Obj::Font {
+            face: f,
+            stock: true,
+            logfont: Vec::new(),
+            mapped: Cell::new(None),
+            delete_pending: false,
+        };
         let stock: [Obj; STOCK_COUNT as usize] = [
             brush(0x00FF_FFFF, BS_SOLID), // WHITE_BRUSH
             brush(0x00C0_C0C0, BS_SOLID), // LTGRAY_BRUSH
