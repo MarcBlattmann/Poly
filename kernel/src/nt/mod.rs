@@ -109,6 +109,18 @@ pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/b
 /// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
 pub static VERSION: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/version.dll"));
+/// The network and identity DLLs of Chrome's batch 3/5 (ADR 0155).
+pub static IPHLPAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/iphlpapi.dll"));
+pub static NETAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/netapi32.dll"));
+pub static SECUR32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/secur32.dll"));
+pub static DHCPCSVC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dhcpcsvc.dll"));
+pub static DNSAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dnsapi.dll"));
+pub static DBGHELP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dbghelp.dll"));
+
+mod test_b35;
+
+/// The program the Chrome batch 3/5 ring-3 test runs (`test_b35`). Empty without `xtask`.
+pub static B35TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/b35test.exe"));
 
 mod test_crypto;
 
@@ -496,6 +508,10 @@ impl NtKernel for Kernel {
     fn net_info(&self) -> (Vec<[u8; 4]>, String) {
         afd::net_info()
     }
+
+    fn net_interfaces(&self) -> Vec<poly_personality_nt::afd::IfInfo> {
+        afd::net_interfaces()
+    }
 }
 
 /// Route an NT process's system call (its `SyscallHook`).
@@ -516,6 +532,7 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     // What win32k has for the compositor (ADR 0131).
     link::after_call();
     if let Some(status) = k.exit {
+        sched::terminate_siblings(ProcessId(process.pid), ThreadRef(u64::from(tid)), status);
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));
     } else if let Some(status) = k.exit_thread {
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));

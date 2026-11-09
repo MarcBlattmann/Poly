@@ -88,6 +88,10 @@ name = "poly-input"
 version = "0.0.1"
 
 [[package]]
+name = "poly-iphlp"
+version = "0.0.1"
+
+[[package]]
 name = "poly-irq"
 version = "0.0.1"
 dependencies = [
@@ -215,6 +219,7 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-console",
+ "poly-iphlp",
  "poly-net",
  "poly-ntobj",
  "poly-pe",

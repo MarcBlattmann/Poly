@@ -1,0 +1,19 @@
+[package]
+name = "netapi32"
+description = "Our netapi32.dll (ADR 0155): NetUserGetInfo, NetGetJoinInformation, DsRoleGetPrimaryDomainInformation and the buffer calls, for a workgroup computer with one user"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "netapi32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-netrt = { path = "../netrt" }
+poly-netapi = { path = "../../../../crates/poly-netapi" }
+
+[lints]
+workspace = true

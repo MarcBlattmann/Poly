@@ -104,14 +104,18 @@ pub extern "system" fn socket(af: i32, ty: i32, protocol: i32) -> Socket {
     ret_socket(new_socket(af, ty, protocol))
 }
 
-/// `WSASocketW`: `lpProtocolInfo` and the group are not supported (a
-/// protocol-info request is `WSAEINVAL`); `WSA_FLAG_OVERLAPPED` is how
-/// every Poly socket works anyway.
+/// `WSASocketW`: `lpProtocolInfo` is only taken as the record `WSADuplicateSocketW` made (a socket
+/// handed over by another process, ADR 0155; any other record is `WSAEINVAL`); the group is not
+/// supported; `WSA_FLAG_OVERLAPPED` is how every Poly socket works anyway.
 #[unsafe(no_mangle)]
 pub extern "system" fn WSASocketW(af: i32, ty: i32, protocol: i32, info: *const u8, _g: u32, _flags: u32) -> Socket {
     if !info.is_null() {
-        set_error(WSAEINVAL);
-        return INVALID_SOCKET;
+        if let Err(e) = check_started() {
+            set_error(e);
+            return INVALID_SOCKET;
+        }
+        // SAFETY: the caller's WSAPROTOCOL_INFOW.
+        return ret_socket(unsafe { crate::events::from_protocol_info(info) });
     }
     socket(af, ty, protocol)
 }
@@ -137,6 +141,7 @@ pub extern "system" fn listen(s: Socket, backlog: i32) -> i32 {
 
 fn accept_into(s: Socket, peer: &mut [u8; addr::MAX_SIZE]) -> Result<(Socket, usize), u32> {
     check_started()?;
+    crate::events::after_accept(s);
     let new = afd::open_endpoint().map_err(|_| WSAEMFILE)?;
     match call(s, proto::ACCEPT, &(new as u64).to_le_bytes(), peer) {
         Ok(n) => Ok((new as Socket, n)),
@@ -167,7 +172,13 @@ pub unsafe extern "system" fn accept(s: Socket, out: *mut u8, len: *mut i32) -> 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn connect(s: Socket, name: *const u8, len: i32) -> i32 {
     // SAFETY: the caller's address.
-    ret(unsafe { sockaddr_in(name, len) }.and_then(|a| call(s, proto::CONNECT, a, &mut []).map(|_| 0)))
+    let r = unsafe { sockaddr_in(name, len) }.and_then(|a| call(s, proto::CONNECT, a, &mut []).map(|_| 0));
+    match r {
+        Ok(_) => crate::events::connected(s),
+        Err(WSAEWOULDBLOCK) => crate::events::connecting(s),
+        Err(_) => {}
+    }
+    ret(r)
 }
 
 /// `WSAConnect`: `connect`; connect data and quality of service are not
@@ -206,6 +217,7 @@ pub extern "system" fn closesocket(s: Socket) -> i32 {
             return fail(WSAENOTSOCK);
         }
     }
+    crate::events::forget(s);
     afd::close(handle(s));
     0
 }
@@ -390,7 +402,11 @@ fn do_send(s: Socket, buf: *const u8, len: usize, flags: i32, to: Option<&[u8]>)
         return Err(WSAEFAULT);
     }
     let req = send_req(0, buf, len, to)?;
-    call(s, proto::SEND, &req.encode(), &mut [])
+    let r = call(s, proto::SEND, &req.encode(), &mut []);
+    if r == Err(WSAEWOULDBLOCK) {
+        crate::events::after_send_blocked(s);
+    }
+    r
 }
 
 /// A receive: the count and the sender's address bytes (datagrams).
@@ -403,6 +419,7 @@ fn do_recv(s: Socket, buf: *mut u8, len: usize, flags: u32) -> Result<(usize, pr
     let req = proto::RecvReq { flags, buf: buf as u64, len: len as u64 };
     let mut out = [0u8; proto::RecvReply::SIZE];
     let (status, info) = afd::ioctl(handle(s), proto::RECV, &req.encode(), &mut out);
+    crate::events::after_recv(s);
     if is_error(status) {
         return Err(wsa_of_status(status));
     }
@@ -817,7 +834,7 @@ pub unsafe extern "system" fn WSAGetOverlappedResult(
 
 /// Wait for `entries` (handle, device interest): their `revents`, or the
 /// WSA error. `timeout_ms` negative waits for ever.
-fn poll_handles(entries: &[(u64, u32)], timeout_ms: i64) -> Result<Vec<u32>, u32> {
+pub(crate) fn poll_handles(entries: &[(u64, u32)], timeout_ms: i64) -> Result<Vec<u32>, u32> {
     check_started()?;
     let h = afd::control().map_err(|_| WSAENETDOWN)?;
     let req = proto::PollReq { timeout_ms, count: entries.len() as u32 }.encode(entries);

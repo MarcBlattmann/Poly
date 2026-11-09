@@ -24,6 +24,7 @@
 extern crate alloc;
 
 pub mod afd;
+pub mod events;
 pub mod names;
 pub mod sock;
 

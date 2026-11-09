@@ -13,8 +13,16 @@ dependencies = [
 name = "advapi32"
 version = "0.0.1"
 dependencies = [
+ "poly-etw",
  "poly-kernelbase",
  "poly-security",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "b35test"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -80,6 +88,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "dbghelp"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-netrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "dhcpcsvc"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-netrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "dnsapi"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-netrt",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "gdi32"
 version = "0.0.1"
 dependencies = [
@@ -92,6 +124,15 @@ dependencies = [
 name = "httptest"
 version = "0.0.1"
 dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "iphlpapi"
+version = "0.0.1"
+dependencies = [
+ "poly-iphlp",
+ "poly-win32-netrt",
  "poly-win32-rt",
 ]
 
@@ -134,6 +175,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "netapi32"
+version = "0.0.1"
+dependencies = [
+ "poly-netapi",
+ "poly-win32-netrt",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "oleaut32"
 version = "0.0.1"
 dependencies = [
@@ -165,11 +215,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-etw"
+version = "0.0.1"
+
+[[package]]
 name = "poly-gdi"
 version = "0.0.1"
 
 [[package]]
 name = "poly-http"
+version = "0.0.1"
+
+[[package]]
+name = "poly-iphlp"
 version = "0.0.1"
 
 [[package]]
@@ -184,6 +242,10 @@ dependencies = [
 
 [[package]]
 name = "poly-libm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-netapi"
 version = "0.0.1"
 
 [[package]]
@@ -248,6 +310,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-win32-netrt"
+version = "0.0.1"
+dependencies = [
+ "poly-iphlp",
+ "poly-win32-rt",
+ "poly-winsock",
+]
+
+[[package]]
 name = "poly-win32-rt"
 version = "0.0.1"
 
@@ -272,6 +343,15 @@ name = "poly-x509"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
+]
+
+[[package]]
+name = "secur32"
+version = "0.0.1"
+dependencies = [
+ "poly-netapi",
+ "poly-win32-netrt",
+ "poly-win32-rt",
 ]
 
 [[package]]

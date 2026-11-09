@@ -170,6 +170,10 @@ name = "poly-elf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-etw"
+version = "0.0.1"
+
+[[package]]
 name = "poly-ext2"
 version = "0.0.1"
 dependencies = [
@@ -232,6 +236,10 @@ name = "poly-input"
 version = "0.0.1"
 
 [[package]]
+name = "poly-iphlp"
+version = "0.0.1"
+
+[[package]]
 name = "poly-irq"
 version = "0.0.1"
 dependencies = [
@@ -271,6 +279,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-net"
+version = "0.0.1"
+
+[[package]]
+name = "poly-netapi"
 version = "0.0.1"
 
 [[package]]
@@ -336,6 +348,7 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-console",
+ "poly-iphlp",
  "poly-ldr",
  "poly-net",
  "poly-ntobj",
