@@ -551,6 +551,7 @@ mod tests {
             exe_sha256: hash.into(),
             size: 0,
             imports: Default::default(),
+            session: None,
         }
     }
 
