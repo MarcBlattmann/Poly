@@ -41,12 +41,16 @@
 //!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop; the settings
 //!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs
 //!   test                host unit tests + kernel boot tests in QEMU
+//!   aarch64 build|run|test [--release] [kernel args...]
+//!                       the aarch64 boot stub (kernel/src/arch/aarch64, ADR 0154) on QEMU's
+//!                       virt machine: build it, boot it with the serial port on the terminal,
+//!                       or run its unit tests and boots (aarch64.rs)
 //!   boot-tests [--list] [--shard <name>[,<name>...]]... [group...]
 //!                       the boot tests alone: all, the groups named (`selftest` is
 //!                       every `selftest-*`), or a CI shard's; --list lists them
 //!   ci [part...]        everything CI checks: fmt, clippy, tests, coverage; or the
 //!                       parts named (lint, host-tests, boot-tests, coverage,
-//!                       pipeline), as CI's parallel jobs run them
+//!                       pipeline, aarch64), as CI's parallel jobs run them
 //!                       QEMU runs on KVM when /dev/kvm is usable, else on TCG;
 //!                       POLY_QEMU_ACCEL=tcg|kvm|auto chooses (accel.rs)
 //!   symbolize [--release] [--elf <path>] [addr...]
@@ -66,6 +70,16 @@
 //!                       boot the toolkits' root disk (GTK, Qt, VLC; toolkits.rs, ADR 0120)
 //!                       to the desktop and the console's bash, and run the steps
 //!                       (run:LINE send:LINE expect:TEXT shot:NAME click:X,Y key:QCODE sleep:S)
+//!   a64-diff [list | run [NAME...] | fuzz [--seed N] [--blocks N] [--family NAME]]
+//!                       poly-a64 (the arm64 interpreter, ADR 0152) against qemu-aarch64: static
+//!                       arm64 test programs (tests/a64) and generated one-instruction blocks, run
+//!                       by both and compared; Linux with qemu-user, clang and lld only (elsewhere
+//!                       it says so and succeeds); not part of `ci`
+//!   macos fetch-chrome [x64|arm64]
+//!                       download the pinned Chrome for Testing for macOS into the cache (macimports.rs)
+//!   macos imports <app|zip|file|chrome-x64|chrome-arm64>... [--report <file.md>]
+//!                       what a macOS app's Mach-O files link and import, by name, against the
+//!                       SDK framework map in coverage/macos (ADR 0157; docs/macos/chrome-mac-imports.md)
 //!   chromium lock|fetch|root [--reference]|disk
 //!                       Chromium's root disk from pinned Debian packages (chromium.rs):
 //!                       write the lock, download and check the packages, unpack them
@@ -97,6 +111,7 @@
 //!   wayland [--check]   regenerate poly-wayland's protocol modules from the Wayland
 //!                       protocol XML in third_party/ (--check: fail if out of date; wayland.rs)
 
+mod aarch64;
 mod accel;
 mod asmlabels;
 mod busybox;
@@ -119,6 +134,7 @@ mod initramfs;
 mod input;
 mod ktest;
 mod libsearch;
+mod macimports;
 mod mesa;
 mod native;
 mod net;
@@ -128,6 +144,7 @@ mod prebuilt;
 mod programs;
 mod progress;
 mod resources;
+mod rfb;
 mod rootdisk;
 mod screen;
 mod sevenzip;
@@ -219,8 +236,9 @@ fn main() -> ExitCode {
 }
 
 /// The commands [`dispatch`] runs (besides `start` and `pipeline`).
-const COMMANDS: [&str; 26] = [
+const COMMANDS: &[&str] = &[
     "build",
+    "aarch64",
     "prebuild",
     "run",
     "screenshot",
@@ -245,7 +263,9 @@ const COMMANDS: [&str; 26] = [
     "root-disk-test",
     "toolkits",
     "chromium",
+    "a64-diff",
     "chrome-win",
+    "macos",
 ];
 
 /// Run `cargo xtask <args>`: the same functions for the command line and
@@ -255,6 +275,7 @@ fn dispatch(args: &[String]) -> Result {
     let rest = args.get(1..).unwrap_or_default();
     match args.first().map(String::as_str) {
         Some("build") => build_kernel(release).map(|_| ()),
+        Some("aarch64") => aarch64::command(rest),
         Some("prebuild") => prebuilt::command(rest),
         Some("run") => run(rest),
         Some("screenshot") => screenshot(rest),
@@ -279,9 +300,19 @@ fn dispatch(args: &[String]) -> Result {
         Some("root-disk-test") => root_disk_test(),
         Some("toolkits") => toolkits::command(rest),
         Some("chromium") => chromium::command(rest),
+        Some("a64-diff") => a64_diff(rest),
         Some("chrome-win") => chromewin::command(rest),
+        Some("macos") => macimports::command(rest),
         other => Err(format!("no command {other:?}")),
     }
+}
+
+/// `cargo xtask a64-diff [list | run [NAME...] | fuzz [--seed N] [--blocks N] [--family NAME]]`: the
+/// differential tester of poly-a64 against `qemu-aarch64` (tools/a64diff, ADR 0152). Needs Linux, qemu-user,
+/// clang and lld; elsewhere it says so and succeeds. Not part of `cargo xtask ci`.
+fn a64_diff(args: &[String]) -> Result {
+    let args: &[String] = if args.is_empty() { &["run".to_string()] } else { args };
+    step("a64-diff", cargo().current_dir(root()).args(["run", "--quiet", "--package", "a64diff", "--"]).args(args))
 }
 
 fn root() -> PathBuf {
@@ -1562,7 +1593,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 38] = [
+const BOOT_GROUPS: [BootGroup; 39] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1608,6 +1639,10 @@ const BOOT_GROUPS: [BootGroup; 38] = [
     // window, then the settings read back in a second boot (desktop.rs,
     // ADR 0117).
     ("desktop-shell", desktop::shell_boot_test),
+    // The window showing the screen is resized: the desktop follows (the
+    // display event, a DRM hotplug event, a new KMS mode, the shell and
+    // windows laid out again; desktop.rs, ADR 0145).
+    ("desktop-resize", desktop::resize_boot_test),
     // A Windows GUI program's window on the desktop through win32k's
     // desktop link, /dev/win32k (desktop.rs, ADR 0131).
     ("desktop-win32", desktop::win32_boot_test),
@@ -1692,7 +1727,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
     // About 60 s: the compositor and the desktop.
-    ("desktop", &["wayland", "wayland-kms", "desktop", "desktop-win32"]),
+    ("desktop", &["wayland", "wayland-kms", "desktop", "desktop-resize", "desktop-win32"]),
     // About 55 s: window management, notifications and the settings window.
     ("desktop-shell", &["desktop-shell"]),
     // About 85 s: Poly's own Files and Terminal on the desktop.
@@ -1998,6 +2033,8 @@ fn lint() -> Result {
     host?;
     kernel?;
     native?;
+    // The aarch64 boot stub: its own package (ADR 0154).
+    aarch64::lint()?;
     step(
         "fmt (ntdll)",
         cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
@@ -2114,12 +2151,13 @@ type CiPart = (&'static str, fn() -> Result);
 /// runs each as a job of its own (`cargo xtask ci <part>`), and the boot
 /// tests as one job per shard ([`CI_BOOT_SHARDS`], `boot-tests --shard`)
 /// plus the TCG run ([`tcg_boot_tests`]).
-const CI_PARTS: [CiPart; 5] = [
+const CI_PARTS: [CiPart; 6] = [
     ("lint", lint),
     ("host-tests", host_tests),
     ("boot-tests", || boot_tests().and_then(|()| tcg_boot_tests())),
     ("coverage", coverage_checks),
     ("pipeline", pipeline_checks),
+    ("aarch64", aarch64::ci),
 ];
 
 /// The GitHub Actions workflow that runs CI.
@@ -2361,7 +2399,10 @@ mod tests {
         assert_eq!(names(&["shell", "selftest-max", "smp"]), ["selftest-max", "smp", "shell"]);
         // `=name` is that group and no other with the name as a prefix.
         assert_eq!(names(&["=desktop"]), ["desktop"]);
-        assert_eq!(names(&["desktop"]), ["desktop", "desktop-shell", "desktop-win32", "desktop-apps"]);
+        assert_eq!(
+            names(&["desktop"]),
+            ["desktop", "desktop-shell", "desktop-resize", "desktop-win32", "desktop-apps"]
+        );
         assert!(select_boot_groups(&["self".into()]).is_err());
         assert!(select_boot_groups(&["nope".into()]).is_err());
     }

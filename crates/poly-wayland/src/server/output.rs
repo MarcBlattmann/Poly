@@ -20,9 +20,18 @@ impl Server {
 
     /// Change the output (a mode set, another scale): the scene follows, and
     /// every bound `wl_output` and surface hears of it.
+    ///
+    /// When that changes the work area (another size or scale), the windows
+    /// follow it ([`Server::relayout`]): maximized, fullscreen and tiled
+    /// ones are configured for the new area, floating ones kept on it, and
+    /// the pointer stays on the output.
     pub fn set_output(&mut self, output: OutputConfig) {
+        let before = self.scene.work_area();
         self.scene.set_output(output.width, output.height, output.scale);
         self.output = output;
+        let (ow, oh) = self.scene.logical_size();
+        let clamp = |v: crate::wire::Fixed, max: i32| crate::wire::Fixed(v.0.clamp(0, (max - 1).max(0) * 256));
+        self.seat.pointer = (clamp(self.seat.pointer.0, ow), clamp(self.seat.pointer.1, oh));
         let o = self.output.clone();
         for client in self.clients.values_mut() {
             for id in client.ids_where(|d| matches!(d, Data::Output)) {
@@ -33,6 +42,10 @@ impl Server {
             }
         }
         self.fractional_scale_changed();
+        let after = self.scene.work_area();
+        if after != before {
+            self.relayout(before, after);
+        }
     }
 
     pub fn output(&self) -> &OutputConfig {

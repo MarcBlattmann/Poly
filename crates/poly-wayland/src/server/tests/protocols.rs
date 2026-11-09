@@ -1122,3 +1122,27 @@ fn a_surface_s_backdrop_is_what_is_behind_its_window() {
     srv.render(&mut fb);
     assert!(srv.surface_backdrop(p.id, glass.surface).unwrap().1.is_empty());
 }
+
+#[test]
+fn a_new_output_size_reaches_every_bound_wl_output_with_a_mode_and_done() {
+    let (mut srv, shared) = server();
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let _g = globals(&mut p, &mut srv, registry);
+    let out = p.bind(&mut srv, registry, &wl_output::INTERFACE, 4);
+    p.take();
+    srv.set_output(OutputConfig {
+        width: 1313,
+        height: 877,
+        refresh_mhz: 59_950,
+        physical_mm: (347, 231),
+        ..srv.output().clone()
+    });
+    p.read(&mut srv);
+    let e = p.take();
+    let mode = e.iter().find(|e| e.object == out && e.name() == ("wl_output", "mode")).expect("a mode");
+    // flags: current and preferred; the size and the refresh in mHz.
+    assert_eq!(mode.args, [Arg::Uint(3), Arg::Int(1313), Arg::Int(877), Arg::Int(59_950)]);
+    let geometry = e.iter().find(|e| e.object == out && e.name() == ("wl_output", "geometry")).expect("a geometry");
+    assert_eq!((&geometry.args[2], &geometry.args[3]), (&Arg::Int(347), &Arg::Int(231)));
+    assert_eq!(e.last().map(Received::name), Some(("wl_output", "done")));
+}
