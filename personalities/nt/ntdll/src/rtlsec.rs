@@ -647,6 +647,16 @@ pub unsafe extern "system" fn RtlAdjustPrivilege(
     current_thread: u8,
     was_enabled: *mut u8,
 ) -> NtStatus {
+    // The sheets: LUID 100 (no SE_* privilege has it; the last is 36) succeeds
+    // on Windows and keeps a state of its own, 0 until enabled. Observed, not
+    // understood: a process-wide flag reproduces it.
+    if privilege == 100 {
+        static STATE_100: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+        let was = STATE_100.swap(enable != 0, core::sync::atomic::Ordering::Relaxed);
+        // SAFETY: the caller's variable.
+        unsafe { was_enabled.write(u8::from(was)) };
+        return SUCCESS;
+    }
     let mut token: isize = 0;
     // SAFETY: syscall stubs with local out variables.
     let st = unsafe {

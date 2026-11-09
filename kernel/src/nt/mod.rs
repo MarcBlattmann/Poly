@@ -106,6 +106,10 @@ pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"
 /// by [`layout`]; empty without `xtask`.
 pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bcryptprimitives.dll"));
 
+/// Our `userenv.dll` (ADR 0171), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
+pub static USERENV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/userenv.dll"));
+
 /// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
 pub static VERSION: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/version.dll"));

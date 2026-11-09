@@ -179,6 +179,10 @@ pub enum Service {
     /// `NtOpenThread(ThreadHandle*, DesiredAccess, ObjectAttributes*,
     /// ClientId*)`.
     OpenThread,
+    /// `NtSetInformationProcess(ProcessHandle, ProcessInformationClass,
+    /// ProcessInformation, ProcessInformationLength)`: `ProcessMitigationPolicy`
+    /// (52) only (ADR 0171).
+    SetInformationProcess,
     /// `NtQueryInformationProcess(ProcessHandle, ProcessInformationClass,
     /// ProcessInformation, Length, ReturnLength*)`.
     QueryInformationProcess,
@@ -597,6 +601,10 @@ pub const JOB_SERVICES: [(Service, u32, &str); 7] = [
     (Service::IsProcessInJob, 0x096, "NtIsProcessInJob"),
 ];
 
+/// Process mitigation policies (ADR 0171), in the processes and threads group.
+pub const PROCESS_POLICY_SERVICES: [(Service, u32, &str); 1] =
+    [(Service::SetInformationProcess, 0x097, "NtSetInformationProcess")];
+
 /// Section queries (ADR 0169), in the memory group.
 pub const SECTION_SERVICES: [(Service, u32, &str); 1] = [(Service::QuerySection, 0x049, "NtQuerySection")];
 
@@ -612,6 +620,7 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(HANDLE_SERVICES.iter())
         .chain(IPC_SERVICES.iter())
         .chain(JOB_SERVICES.iter())
+        .chain(PROCESS_POLICY_SERVICES.iter())
         .chain(SECTION_SERVICES.iter())
 }
 

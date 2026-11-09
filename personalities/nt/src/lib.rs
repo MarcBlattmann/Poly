@@ -226,6 +226,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         OpenProcess => threads::open_process(k, regs),
         OpenThread => threads::open_thread(k, regs),
         QueryInformationProcess => threads::query_information_process(k, regs),
+        SetInformationProcess => threads::set_information_process(k, regs),
         QueryInformationThread => threads::query_information_thread(k, regs),
         SuspendThread => threads::suspend_thread(k, regs),
         ResumeThread => threads::resume_thread(k, regs),

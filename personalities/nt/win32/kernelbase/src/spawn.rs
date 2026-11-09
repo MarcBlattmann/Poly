@@ -339,6 +339,10 @@ fn make_inheritable(h: Handle) {
 /// null or a block as `CreateProcessW` documents.
 unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (bool, bool), information: *mut u8) -> i32 {
     let (app, cmd, flags) = (r.app, r.cmd, r.flags);
+    // `NoChildProcessCreation` (SetProcessMitigationPolicy, ADR 0171).
+    if crate::mitigation::child_processes_blocked() {
+        return fail(367, FALSE);
+    }
     if information.is_null() || (app.is_none() && cmd.is_none()) {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }

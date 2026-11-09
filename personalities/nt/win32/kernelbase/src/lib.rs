@@ -33,6 +33,7 @@ mod locale;
 mod mapping;
 mod memory;
 mod misc;
+mod mitigation;
 mod nls;
 mod npipe;
 mod nt;

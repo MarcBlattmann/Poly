@@ -16,10 +16,12 @@
 //!   Kernel-mode callers are not checked (Learn: `ObOpenObjectByPointer`).
 
 use alloc::collections::BTreeMap;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use poly_security::access::{self, GenericMapping as SecMapping};
 use poly_security::acl;
+use poly_security::inherit::Stored;
 use poly_security::sd::{self, Parts};
 use poly_security::sdops;
 use poly_security::token::{POLY_TOKEN_LUID, SE_PRIVILEGE_ENABLED, Token};
@@ -48,6 +50,10 @@ pub struct ObjectSecurity {
     /// The descriptors of [`DefaultSd`], built once.
     file_sd: Vec<u8>,
     key_sd: Vec<u8>,
+    /// What was set on files and keys by path (`poly_security::inherit`), and
+    /// the path of each object that has one.
+    paths: BTreeMap<String, Stored>,
+    object_path: BTreeMap<ObjectId, (String, bool)>,
 }
 
 /// The descriptor a file system or the registry gives what it makes
@@ -69,7 +75,23 @@ const KEY_SDDL: &str = "O:BAG:SYD:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;BU)(A;
 
 fn sddl(s: &str) -> Vec<u8> {
     let w: Vec<u16> = s.encode_utf16().collect();
-    poly_security::sdstr::parse(&w).expect("the built-in descriptor is valid SDDL")
+    let rel = poly_security::sdstr::parse(&w).expect("the built-in descriptor is valid SDDL");
+    // The group of what the administrator makes is the primary group "None".
+    let mut parts = Parts::from_relative(&rel).expect("a descriptor we just parsed");
+    parts.group = Some(poly_security::sid::domain_relative(poly_security::sid::rid::DOMAIN_GROUP_RID_USERS).to_bytes());
+    parts.to_relative()
+}
+
+/// The key of a path in the store of descriptors set by path: `prefix`
+/// (which volume or hive), then the components of `path` (a UTF-16 string
+/// with backslashes) upper-cased, joined by backslashes.
+pub fn path_key(prefix: &str, path: &[u16]) -> String {
+    let mut out = String::from(prefix);
+    for comp in String::from_utf16_lossy(path).split('\\').filter(|c| !c.is_empty()) {
+        out.push('\\');
+        out.push_str(&comp.to_uppercase());
+    }
+    out
 }
 
 impl Default for ObjectSecurity {
@@ -88,6 +110,8 @@ impl ObjectSecurity {
             next_luid: POLY_TOKEN_LUID + 0x100,
             file_sd: sddl(FILE_SDDL),
             key_sd: sddl(KEY_SDDL),
+            paths: BTreeMap::new(),
+            object_path: BTreeMap::new(),
         }
     }
 
@@ -211,6 +235,7 @@ impl ObjectManager {
     /// if it was one.
     pub fn security_object_deleted(&mut self, d: &crate::manager::Deleted) {
         self.security.sds.remove(&d.id);
+        self.security.object_path.remove(&d.id);
         if d.kind == ObjectType::Token {
             self.security.tokens.remove(&d.cookie);
         }
@@ -264,12 +289,12 @@ impl ObjectManager {
         let mapping = mapping_of(kind);
         let map = |m: u32| mapping.map(m);
         let mut parts = sdops::default_descriptor(token, &map);
-        if matches!(kind, ObjectType::Process | ObjectType::Thread | ObjectType::Token) {
+        if matches!(kind, ObjectType::Process | ObjectType::Thread | ObjectType::Token | ObjectType::Job) {
             // Processes, threads and tokens carry their creator's integrity
             // as a mandatory label (the sheets: `S:AI(ML;;NW;;;HI)`).
             // Tokens: no write up; processes and threads: no read up either
             // (the sheets: 0x1 on the token, 0x3 on the process).
-            let policy = if kind == ObjectType::Token { 1 } else { 3 };
+            let policy = if matches!(kind, ObjectType::Token | ObjectType::Job) { 1 } else { 3 };
             parts.sacl = Some(sdops::label_sacl(token.integrity_rid(), policy));
             parts.control |= sd::SE_SACL_PRESENT | sd::SE_SACL_AUTO_INHERITED;
         }
@@ -332,9 +357,78 @@ impl ObjectManager {
     pub fn replace_security(&mut self, id: ObjectId, kind: ObjectType, mut parts: Parts) {
         let mapping = mapping_of(kind);
         let map = |m: u32| mapping.map(m);
-        parts.dacl = parts.dacl.map(|d| sdops::trimmed_acl(&map_acl(&d, &map)));
-        parts.sacl = parts.sacl.map(|a| sdops::trimmed_acl(&a));
+        parts.dacl = parts.dacl.map(|d| map_acl(&d, &map));
+        if let Some((key, container)) = self.security.object_path.get(&id).cloned() {
+            parts.dacl = parts.dacl.map(|d| sdops::trimmed_acl(&d));
+            parts.sacl = parts.sacl.map(|a| sdops::trimmed_acl(&a));
+            // A file or key: what is set is kept by path, and what the
+            // object shows is that plus what its parents pass down.
+            // Inheritance flags mean nothing on a file: they are dropped.
+            if !container && let Some(d) = parts.dacl.take() {
+                let aces: Vec<_> = poly_security::acl::aces_in(&d)
+                    .into_iter()
+                    .map(|mut a| {
+                        a.flags &= !0x0F;
+                        a.bytes[1] = a.flags;
+                        a
+                    })
+                    .collect();
+                parts.dacl = Some(sdops::acl_of(d[0], &aces));
+            }
+            let st = Stored {
+                owner: parts.owner.clone(),
+                group: parts.group.clone(),
+                dacl: (parts.control & sd::SE_DACL_PRESENT != 0)
+                    .then(|| parts.dacl.as_deref().map(poly_security::inherit::explicit_acl)),
+                protected: parts.control & sd::SE_DACL_PROTECTED != 0,
+                sacl: parts.sacl.clone(),
+            };
+            self.security.paths.insert(key.clone(), st);
+            let which = if kind == ObjectType::Key { DefaultSd::Key } else { DefaultSd::File };
+            let eff = self.path_descriptor(which, &key, container);
+            self.security.sds.insert(id, eff.to_relative());
+            return;
+        }
         self.security.sds.insert(id, parts.to_relative());
+    }
+
+    /// The descriptor of the file or key at `key` (`volume`, `dir`, `name` joined by backslashes, the
+    /// first component names the volume or hive): the default for its kind
+    /// where nothing was set on it or above, else the stored parts with
+    /// the inherited ACEs.
+    fn path_descriptor(&self, which: DefaultSd, key: &str, container: bool) -> Parts {
+        let base = match which {
+            DefaultSd::File => &self.security.file_sd,
+            DefaultSd::Key => &self.security.key_sd,
+        };
+        let default = Parts::from_relative(base).expect("the built-in descriptor parses");
+        let comps: Vec<&str> = key.split('\\').collect();
+        let mut chain: Vec<Option<&Stored>> = Vec::with_capacity(comps.len());
+        let mut any = false;
+        let mut prefix = String::new();
+        for (i, c) in comps.iter().enumerate() {
+            if i > 0 {
+                prefix.push('\\');
+            }
+            prefix.push_str(c);
+            let st = self.security.paths.get(&prefix);
+            any |= st.is_some();
+            chain.push(st);
+        }
+        if !any {
+            return default;
+        }
+        poly_security::inherit::effective(&default, &chain, container)
+    }
+
+    /// Give a file or key object (made by the file system or the registry)
+    /// the descriptor of its `path` (components joined by backslashes, the
+    /// volume or hive first, case folded by the caller): inherited from what
+    /// was set above, else the default.
+    pub fn assign_path_security(&mut self, id: ObjectId, which: DefaultSd, path: &str, container: bool) {
+        let eff = self.path_descriptor(which, path, container);
+        self.security.sds.insert(id, eff.to_relative());
+        self.security.object_path.insert(id, (path.into(), container));
     }
 }
 

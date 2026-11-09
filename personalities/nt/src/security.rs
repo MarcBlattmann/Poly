@@ -91,10 +91,10 @@ pub fn inherit_token(
     };
     let id = sys.objects.security.new_luid();
     let source = sys.objects.security.token(base).ok_or(STATUS_INVALID_PARAMETER)?;
-    let level = source.level;
     let mut copy = source.duplicate(token::TOKEN_PRIMARY, token::SECURITY_IMPERSONATION, id);
-    // A process's primary token keeps the source's (primary) level field.
-    copy.level = level;
+    // A child's primary token has level 0 in its statistics (the sheets: the
+    // first process's, the logon token, shows Impersonation).
+    copy.level = token::SECURITY_ANONYMOUS;
     if given.is_some() {
         copy.clamp_privileges_to_integrity();
     }
@@ -882,9 +882,10 @@ pub fn query_security_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
         {
             return Err(STATUS_ACCESS_DENIED);
         }
-        let stored = sys.objects.security.sd(obj).and_then(Parts::from_relative);
         // An object without a descriptor answers an empty one.
-        let parts = stored.unwrap_or(Parts { revision: sd::SECURITY_DESCRIPTOR_REVISION, ..Parts::default() });
+        let Some(parts) = sys.objects.security.sd(obj).and_then(Parts::from_relative) else {
+            return Ok(Parts { revision: sd::SECURITY_DESCRIPTOR_REVISION, ..Parts::default() }.to_relative_kernel());
+        };
         Ok(sdops::select(&parts, info).to_relative_kernel())
     })?;
     if needed != 0 {

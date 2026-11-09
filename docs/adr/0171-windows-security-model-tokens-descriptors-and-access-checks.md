@@ -169,9 +169,45 @@ resume) works because thread tokens are per thread and per process.
 - The machine domain is now `S-1-5-21-520193847-884726105-1936024571` (the
   digit counts the sheets' string lengths imply) and Poly's user is RID 1002
   (the sheets' owner SID); the logon session is `S-1-5-5-0-123456789`.
-  ADR 0066, 0073 and 0083 still show `S-1-5-21-0-0-0-1000`: read it as this.
+  ADR 0066, 0073 and 0083 were updated to it. A `USER` hive saved before loads
+  under the new name unchanged (hives hold their contents; the SID is the mount
+  name), and the layout sync removes the old `ProfileList` key.
   `poly_registry::defaults::POLY_USER_SID` and `poly_security::MACHINE_DOMAIN`
   are the one place they are written.
+
+### Accounts, trustees and security by name (the 12 follow-up entries)
+
+- `poly_security::account`: the fixed accounts of a one-user machine
+  (`LookupAccountSidW` / `LookupAccountNameW`: names, domains, `SID_NAME_USE`;
+  Poly's user `poly` and group `None` in the domain `POLY`).
+- `poly_security::explicit`: `SetEntriesInAclW` (old ACEs keep their order, new
+  allows at the end, new denies and audits in front, `SET`/`REVOKE` drop the
+  trustee's allows, the size of the old ACL is kept less what a removal freed)
+  and `GetExplicitEntriesFromAclW` (inherited ACEs are skipped, an audit ACE
+  gives two entries, a label ACE is an error); `advapi32` reads and writes the
+  `accctrl.h` structures (`acctrl.rs`).
+- `poly_security::inherit` and `ObjectSecurity::paths`: what was set on a file
+  or key is kept **by path** (`SetNamedSecurityInfoW` goes through
+  `NtSetSecurityObject`), and an object's descriptor is that plus the
+  inheritable ACEs of its parents computed down the path, so changing a parent
+  changes every child that did not protect its own DACL; a new file or key gets
+  the inherited ACEs (`0x10`) at once. Inheritance flags mean nothing on a file
+  and are dropped there. Nothing set on a path means the flat default.
+- `GetNamedSecurityInfoW` / `SetNamedSecurityInfoW` open the file (backup
+  semantics) or key (`MACHINE\SOFTWARE`, `CURRENT_USER`, `USERS`,
+  `CLASSES_ROOT`) with the rights the information needs and call
+  `Get`/`SetSecurityInfo`; a named kernel object is `ERROR_FILE_NOT_FOUND`.
+- `Get`/`SetProcessMitigationPolicy` (`kernelbase/mitigation.rs`): the state of
+  the 19 policies in the process; only the dynamic-code and win32k policies go
+  to the kernel (`NtSetInformationProcess`, class 52, a Poly service `0x097`),
+  `NoChildProcessCreation` stops `CreateProcessW`.
+- `userenv.dll` (new): `DeriveAppContainerSidFromAppContainerName` is
+  `S-1-15-2-` and the first 28 bytes of the SHA-256 of the lower-cased name in
+  UTF-16LE (the sheets' vectors fix it), names of 1 to 64 units.
+- `TokenAccessInformation` is the full 1972 bytes: the 88-byte header, three
+  `SID_AND_ATTRIBUTES_HASH`, the privileges, the SID arrays, and 360 bytes of
+  room whose purpose the sheets do not show. `RtlAdjustPrivilege(100)` keeps a
+  flag of its own, as Windows does.
 
 ### Jobs
 

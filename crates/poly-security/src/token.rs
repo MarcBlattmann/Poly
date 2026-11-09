@@ -802,16 +802,7 @@ impl Token {
             TOKEN_LINKED_TOKEN => return Err(STATUS_NO_SUCH_LOGON_SESSION),
             TOKEN_ELEVATION => u32s(&mut out, &[u32::from(self.elevated)]),
             TOKEN_HAS_RESTRICTIONS => out.push(u8::from(self.has_restrictions())),
-            TOKEN_ACCESS_INFORMATION => {
-                // The 88-byte header and the privileges it points at.
-                out.extend_from_slice(&0u64.to_le_bytes());
-                out.extend_from_slice(&0u64.to_le_bytes());
-                out.extend_from_slice(&(base + 88).to_le_bytes());
-                out.extend_from_slice(&self.authentication_id.to_le_bytes());
-                u32s(&mut out, &[self.kind, self.level, self.mandatory_policy, 0x40_2000, 0, 0]);
-                out.extend_from_slice(&[0; 24]);
-                out.extend_from_slice(&token_privileges(&self.privileges));
-            }
+            TOKEN_ACCESS_INFORMATION => self.access_information(base, &mut out),
             TOKEN_VIRTUALIZATION_ALLOWED => u32s(&mut out, &[u32::from(self.flags & F_VIRT_ALLOWED != 0)]),
             TOKEN_VIRTUALIZATION_ENABLED => u32s(&mut out, &[u32::from(self.flags & F_VIRT_ENABLED != 0)]),
             TOKEN_INTEGRITY_LEVEL => {
@@ -835,6 +826,64 @@ impl Token {
             _ => return Err(STATUS_INVALID_INFO_CLASS),
         }
         Ok(out)
+    }
+}
+
+impl Token {
+    /// `TOKEN_ACCESS_INFORMATION` (`winnt.h`, x64): the 88-byte header, then
+    /// everything it points at in the same buffer: three
+    /// `SID_AND_ATTRIBUTES_HASH` (count, array pointer, 32 hash words: 272
+    /// bytes each) for the user and groups, the restricting SIDs and the
+    /// capabilities, the `TOKEN_PRIVILEGES`, the two arrays with their SIDs,
+    /// and 360 bytes of room for the claims and the package SID that the
+    /// sheets' length (1972 for the oracle token) shows and nothing else
+    /// explains.
+    fn access_information(&self, base: u64, out: &mut Vec<u8>) {
+        const HASH: usize = 272;
+        const ROOM: usize = 360;
+        let own: Vec<(Sid, u32)> =
+            core::iter::once((self.user.clone(), self.user_attrs)).chain(self.groups.iter().cloned()).collect();
+        let privileges = token_privileges(&self.privileges);
+        let sid_hash_at = 88;
+        let restricted_hash_at = sid_hash_at + HASH;
+        let capabilities_hash_at = restricted_hash_at + HASH;
+        let privileges_at = capabilities_hash_at + HASH;
+        let own_at = privileges_at + privileges.len();
+        let restricted_at = own_at + own.iter().map(|(s, _)| 16 + s.to_bytes().len()).sum::<usize>();
+        let hash = |count: usize, array_at: usize| -> Vec<u8> {
+            let mut h = Vec::with_capacity(HASH);
+            u32s(&mut h, &[count as u32, 0]);
+            let ptr = if count == 0 { 0 } else { base + array_at as u64 };
+            h.extend_from_slice(&ptr.to_le_bytes());
+            h.resize(HASH, 0);
+            h
+        };
+        // Header.
+        out.extend_from_slice(&(base + sid_hash_at as u64).to_le_bytes());
+        out.extend_from_slice(&(base + restricted_hash_at as u64).to_le_bytes());
+        out.extend_from_slice(&(base + privileges_at as u64).to_le_bytes());
+        out.extend_from_slice(&self.authentication_id.to_le_bytes());
+        u32s(out, &[self.kind, self.level, self.mandatory_policy, 0x40_2000, 0, 0]);
+        out.extend_from_slice(&0u64.to_le_bytes()); // PackageSid
+        out.extend_from_slice(&(base + capabilities_hash_at as u64).to_le_bytes());
+        out.extend_from_slice(&0u64.to_le_bytes()); // TrustLevelSid
+        out.extend_from_slice(&0u64.to_le_bytes()); // SecurityAttributes
+        out.extend_from_slice(&hash(own.len(), own_at));
+        out.extend_from_slice(&hash(self.restricted.len(), restricted_at));
+        out.extend_from_slice(&hash(0, 0));
+        out.extend_from_slice(&privileges);
+        for list in [&own[..], &self.restricted[..]] {
+            let mut sid_at = out.len() + 16 * list.len();
+            for (s, a) in list {
+                out.extend_from_slice(&(base + sid_at as u64).to_le_bytes());
+                u32s(out, &[*a, 0]);
+                sid_at += s.to_bytes().len();
+            }
+            for (s, _) in list {
+                out.extend_from_slice(&s.to_bytes());
+            }
+        }
+        out.resize(out.len() + ROOM, 0);
     }
 }
 
@@ -1071,5 +1120,15 @@ mod tests {
         let b = [1u8, 2, 3, 4];
         assert_eq!(fit(&b, 4), (STATUS_SUCCESS, Some(&b[..])));
         assert_eq!(fit(&b, 3), (STATUS_BUFFER_TOO_SMALL, None));
+    }
+
+    #[test]
+    fn access_information_is_1972_bytes_for_the_oracle_token() {
+        let t = Token::poly_user();
+        let b = t.query(class::TOKEN_ACCESS_INFORMATION, 0x1000).unwrap();
+        assert_eq!(b.len(), 1972);
+        // The privileges pointer lands inside the buffer.
+        let p = u64::from_le_bytes(b[16..24].try_into().unwrap()) - 0x1000;
+        assert!((88..b.len() as u64).contains(&p));
     }
 }

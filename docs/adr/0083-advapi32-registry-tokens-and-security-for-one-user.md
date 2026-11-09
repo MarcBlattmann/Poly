@@ -5,7 +5,7 @@
 forwarding), [ADR 0071](0071-our-ntdll-a-real-pe-dll-built-from-rust.md)
 (our `ntdll`, its loader and API-set table),
 [ADR 0066](0066-nt-registry-hives-in-polys-own-format.md) (the registry
-services and default hives, the single user `S-1-5-21-0-0-0-1000`) and
+services and default hives, the single user `S-1-5-21-520193847-884726105-1936024571-1002`) and
 [ADR 0030](0030-nt-object-manager-and-dispatcher-in-a-crate.md) (object
 types, access masks).
 
@@ -84,10 +84,10 @@ documented case) once the thread handle checks out. The pseudo-handles of
 are the process token, `GetCurrentThreadToken()` (-5) is `STATUS_NO_TOKEN`.
 
 The token's contents are `poly_security::token::Token::poly_user()`, the
-same for every process: user `S-1-5-21-0-0-0-1000`; groups `S-1-5-21-0-0-0-513`,
+same for every process: user `S-1-5-21-520193847-884726105-1936024571-1002`; groups `S-1-5-21-520193847-884726105-1936024571-513`,
 Everyone, Administrators (`SE_GROUP_OWNER`), Users, INTERACTIVE, CONSOLE
 LOGON, Authenticated Users, This Organization, the logon SID
-`S-1-5-5-0-256000`, LOCAL and the high integrity label; **elevated**
+`S-1-5-5-0-123456789` (ADR 0171), LOCAL and the high integrity label; **elevated**
 (`TokenIsElevated` 1) with `TokenElevationTypeDefault` (no UAC split
 token: the single user owns the machine, so programs that need
 administrator rights proceed); the usual administrator privileges with
@@ -117,7 +117,7 @@ Poly never has, so that is `ERROR_NO_IMPERSONATION_TOKEN`.
 kernel and the DLLs) holds `SID` (layout, validity, equality, well-known
 SIDs), SID strings (`S-R-I-S...`, authorities of 2^32 and more in hex, the
 two-letter constants of "SID Strings" that need no domain controller, plus
-`LA`/`LG` relative to the machine domain `S-1-5-21-0-0-0`), ACLs on the
+`LA`/`LG` relative to the machine domain `S-1-5-21-520193847-884726105-1936024571`), ACLs on the
 caller's bytes (`InitializeAcl`, validation, add/insert/delete/find ACEs,
 `ACL_REVISION_INFORMATION`/`ACL_SIZE_INFORMATION`), security descriptors
 (control bits, the absolute x64 layout of 40 bytes with four pointers, the

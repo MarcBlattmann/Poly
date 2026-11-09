@@ -347,6 +347,8 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("OpenProcessToken", "api-ms-win-core-processthreads-l1-1-0"),
     ("OpenThreadToken", "api-ms-win-core-processthreads-l1-1-0"),
     ("SetThreadToken", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetProcessMitigationPolicy", "api-ms-win-core-processthreads-l1-1-3"),
+    ("SetProcessMitigationPolicy", "api-ms-win-core-processthreads-l1-1-3"),
     // ----- Chrome batch 2 (chrome-win-b2, ADR 0155). Files (fileapi.h,
     // winbase.h, minwinbase.h); the contracts are the ones the pages list.
     ("FindFirstFileExW", "api-ms-win-core-file-l1-1-0"),

@@ -25,7 +25,7 @@ fn split_sacl(sacl: &[u8]) -> (Vec<acl::Ace>, Vec<acl::Ace>) {
 }
 
 /// An ACL of `revision` holding `aces`, sized exactly.
-fn acl_of(revision: u8, aces: &[acl::Ace]) -> Vec<u8> {
+pub fn acl_of(revision: u8, aces: &[acl::Ace]) -> Vec<u8> {
     let body: Vec<u8> = aces.iter().flat_map(|a| a.bytes.iter().copied()).collect();
     let size = acl::ACL_HEADER + body.len();
     let mut v = Vec::with_capacity(size);
@@ -62,30 +62,29 @@ pub fn select(stored: &Parts, info: u32) -> Parts {
         out.control |= SE_DACL_PRESENT
             | (stored.control & (SE_DACL_PROTECTED | SE_DACL_AUTO_INHERITED | SE_DACL_AUTO_INHERIT_REQ));
     }
-    if info & SACL_SIDE != 0 {
-        // The flag is the stored one, and a descriptor without any SACL
-        // answers a label query with it (control 0x8800); a label set by
-        // `SetSecurityObject` clears it (the sheets: control 0x8010).
-        if info & LABEL_SECURITY_INFORMATION != 0
-            && (stored.control & SE_SACL_AUTO_INHERITED != 0 || stored.sacl.is_none())
-        {
-            out.control |= SE_SACL_AUTO_INHERITED;
+    // The flag is the stored one, and a descriptor without any SACL answers a
+    // label-side query (label, attribute, scope, process trust label, access
+    // filter: 0x10, 0x20, 0x40, 0x80, 0x100) with it (control 0x8800); a label
+    // set by `SetSecurityObject` clears it (the sheets: control 0x8010).
+    if info & (LABEL_SECURITY_INFORMATION | 0x20 | 0x40 | 0x80 | 0x100) != 0
+        && (stored.control & SE_SACL_AUTO_INHERITED != 0 || stored.sacl.is_none())
+    {
+        out.control |= SE_SACL_AUTO_INHERITED;
+    }
+    if info & SACL_SIDE != 0
+        && let Some(sacl) = &stored.sacl
+    {
+        let (labels, audits) = split_sacl(sacl);
+        let mut keep: Vec<acl::Ace> = Vec::new();
+        if info & SACL_SECURITY_INFORMATION != 0 {
+            keep.extend(audits);
         }
-        if let Some(sacl) = &stored.sacl {
-            let (labels, audits) = split_sacl(sacl);
-            let mut keep: Vec<acl::Ace> = Vec::new();
-            if info & SACL_SECURITY_INFORMATION != 0 {
-                keep.extend(audits);
-            }
-            if info & LABEL_SECURITY_INFORMATION != 0 {
-                keep.extend(labels);
-            }
-            {
-                let rev = sacl.first().copied().unwrap_or(acl::ACL_REVISION);
-                out.sacl = Some(acl_of(rev, &keep));
-                out.control |= SE_SACL_PRESENT | (stored.control & (SE_SACL_PROTECTED | SE_SACL_AUTO_INHERIT_REQ));
-            }
+        if info & LABEL_SECURITY_INFORMATION != 0 {
+            keep.extend(labels);
         }
+        let rev = sacl.first().copied().unwrap_or(acl::ACL_REVISION);
+        out.sacl = Some(acl_of(rev, &keep));
+        out.control |= SE_SACL_PRESENT | (stored.control & (SE_SACL_PROTECTED | SE_SACL_AUTO_INHERIT_REQ));
     }
     out
 }

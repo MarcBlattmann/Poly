@@ -175,7 +175,8 @@ impl ObjectManager {
         if name.is_empty() && attrs.root.is_some() {
             return Err(STATUS_OBJECT_NAME_INVALID);
         }
-        let granted = access::grant(kind, desired, kind.valid_access(), caller.mode, false, caller.privileges)?;
+        let granted =
+            access::grant(kind, desired, kind.valid_access(), caller.mode, false, self.effective_privileges(caller))?;
         let flags = HandleFlags { inherit: a & OBJ_INHERIT != 0, protect_from_close: false };
         let table = Self::target_table(caller, a);
 

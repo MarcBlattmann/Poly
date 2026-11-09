@@ -344,6 +344,35 @@ pub fn open_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatu
     Ok(STATUS_SUCCESS)
 }
 
+/// `NtSetInformationProcess(Process, ProcessInformationClass,
+/// ProcessInformation, ProcessInformationLength)`: `ProcessMitigationPolicy`
+/// (52), a `PROCESS_MITIGATION_POLICY_INFORMATION` (`Policy` u32, flags u32)
+/// of the calling process, which sets the policies the kernel enforces: 2
+/// dynamic code (`ProhibitDynamicCode`) and 4 system call disable
+/// (`DisallowWin32kSystemCalls`). The others are `kernelbase`'s state.
+pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [h, class, info, length] = abi::args::<K, 4>(k, regs)?;
+    const PROCESS_MITIGATION_POLICY: u64 = 52;
+    if class != PROCESS_MITIGATION_POLICY {
+        return Err(STATUS_INVALID_INFO_CLASS);
+    }
+    if length != 8 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let pid = process_of(k, Handle(h), 0x0200)?;
+    if pid != k.caller().process {
+        return Err(STATUS_ACCESS_DENIED);
+    }
+    let policy = abi::read_u32(k, info)?;
+    let flags = abi::read_u32(k, info + 4)?;
+    k.with_state(|_, proc, _| match policy {
+        2 if flags & 1 != 0 => proc.dynamic_code_blocked = true,
+        4 if flags & 1 != 0 => proc.win32k_disabled = true,
+        _ => {}
+    });
+    Ok(STATUS_SUCCESS)
+}
+
 /// `NtQueryInformationProcess(ProcessBasicInformation)`. ExitStatus is
 /// `STATUS_PENDING` for a running process and its exit status once it has
 /// ended ([`crate::system::NtSystem::process_exits`]); the PEB base (of the

@@ -11,6 +11,7 @@
 
 extern crate alloc;
 
+mod acctrl;
 mod etw;
 
 use alloc::vec::Vec;
@@ -376,7 +377,7 @@ pub unsafe extern "system" fn GetSecurityInfo(
         // SAFETY: each pointer is the caller's, written only when non-null.
         unsafe {
             for (w, p) in
-                [(info & 1 != 0, owner), (info & 2 != 0, group), (info & 4 != 0, dacl), (info & 0x18 != 0, sacl)]
+                [(info & 1 != 0, owner), (info & 2 != 0, group), (info & 4 != 0, dacl), (info & 0x1F8 != 0, sacl)]
             {
                 if w && !p.is_null() {
                     p.write(core::ptr::null_mut());
@@ -408,7 +409,7 @@ unsafe fn get_security_info(
         return e;
     }
     // A requested part has to have somewhere to go.
-    let wants = [(info & 1 != 0, owner), (info & 2 != 0, group), (info & 4 != 0, dacl), (info & 0x18 != 0, sacl)];
+    let wants = [(info & 1 != 0, owner), (info & 2 != 0, group), (info & 4 != 0, dacl), (info & 0x1F8 != 0, sacl)];
     if wants.iter().any(|&(w, p)| w && p.is_null() && descriptor.is_null()) {
         return ERROR_INVALID_PARAMETER;
     }
@@ -444,7 +445,7 @@ unsafe fn get_security_info(
         if !dacl.is_null() && info & 4 != 0 {
             dacl.write(part(16));
         }
-        if !sacl.is_null() && info & 0x18 != 0 {
+        if !sacl.is_null() && info & 0x1F8 != 0 {
             sacl.write(part(12));
         }
         // Without a descriptor pointer the block is never freed: the parts the
