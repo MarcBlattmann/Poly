@@ -1,0 +1,13 @@
+[package]
+name = "poly-a64"
+description = "A64 (64-bit Arm) instruction decoder and reference interpreter: the first step of the arm64 to x86-64 translator (ADR 0152)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

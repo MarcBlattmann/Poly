@@ -1,0 +1,11 @@
+[package]
+name = "poly-macho"
+description = "Mach-O reader: universal files, headers, load commands, symbols, export tries, classic and chained fixups"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

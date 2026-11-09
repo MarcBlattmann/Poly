@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetInformationJobObject.yaml
+id: windows/api/kernel32.dll/SetInformationJobObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: SetInformationJobObject, JOBOBJECT_ASSOCIATE_COMPLETION_PORT, JOBOBJECT_EXTENDED_LIMIT_INFORMATION, Job Objects. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Sets a job's limits (extended limit structure: flags, active-process limit, kill-on-close, breakaway) and associates a completion port that receives the job's process events, which is how a sandbox broker watches its children: new process, exit, abnormal exit, last process gone, process limit hit.
+interface:
+  signature: "BOOL SetInformationJobObject(HANDLE job, JOBOBJECTINFOCLASS class, LPVOID info, DWORD size)"
+rules:
+  limits: "an extended limit with flags ACTIVE_PROCESS|BREAKAWAY_OK and a limit of 1 is read back unchanged through QueryInformationJobObject (class 9, and the same flags through class 2)."
+  active_limit: "with a limit of 1 a second process cannot be assigned: ERROR_NOT_ENOUGH_QUOTA (1816). Flag ACTIVE_PROCESS with a limit of 0 is accepted."
+  sizes_classes: "extended limit with 100 bytes: ERROR_BAD_LENGTH (24); class 0 or 99: ERROR_INVALID_PARAMETER (87); the accounting class (1) cannot be set: ERROR_INVALID_PARAMETER; undefined flag bits (0x80000000) fail with ERROR_INVALID_PARAMETER."
+  rights: "a job handle with only JOB_OBJECT_QUERY: ERROR_ACCESS_DENIED (5); INVALID_HANDLE_VALUE: ERROR_INVALID_HANDLE (6)."
+  port_association: "class 7 (JOBOBJECT_ASSOCIATE_COMPLETION_PORT, key + port, 16 bytes) succeeds once; a second association fails with ERROR_INVALID_PARAMETER (87)."
+  port_messages: "to the port (GetQueuedCompletionStatus: bytes = message, key = the completion key, OVERLAPPED = the process id as a value): JOB_OBJECT_MSG_NEW_PROCESS (6) at assignment; JOB_OBJECT_MSG_EXIT_PROCESS (7) when a member exits normally or is terminated with an ordinary code (17 seen); JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS (8) instead of 7 when the exit status looks like a crash (0xC0000005); then JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO (4) when the last member is gone, with a NULL OVERLAPPED. Nothing else follows."
+  port_limit_message: "with an active-process limit of 1: assigning the second process fails and JOB_OBJECT_MSG_ACTIVE_PROCESS_LIMIT (3) arrives (its OVERLAPPED value was not the refused process's id in the test)."
+errors:
+  bad_length: "ERROR_BAD_LENGTH (24)"
+  bad_class_or_flags: "ERROR_INVALID_PARAMETER (87)"
+  no_right: "ERROR_ACCESS_DENIED (5)"
+  second_port: "ERROR_INVALID_PARAMETER (87)"
+side_effects: "changes the job's limits for all members"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  AppContainer (SECURITY_CAPABILITIES) and other attributes that need a profile or a token, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS effects, jobs with CPU/memory/IO rate limits, job time limits and their notifications, UI restrictions.

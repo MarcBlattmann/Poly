@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/WaitNamedPipeW.yaml
+id: windows/api/kernel32.dll/WaitNamedPipeW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: WaitNamedPipeW, CreateNamedPipeW, Named Pipe Client. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Waits until an instance of a named pipe can accept a client (is listening), up to a timeout. It returns TRUE without waiting if one is listening, fails at once if the pipe does not exist, and fails with ERROR_SEM_TIMEOUT when the timeout passes with every instance busy. It reserves nothing.
+interface:
+  signature: "BOOL WaitNamedPipeW(LPCWSTR name, DWORD timeout)"
+rules:
+  life: "A server instance is created with CreateNamedPipeW and starts listening. It becomes connected when a client opens the pipe with CreateFileW (whether or not ConnectNamedPipe was called) or when ConnectNamedPipe completes. When the client closes its handle the instance stays taken (closing) until the server calls DisconnectNamedPipe; a new client meanwhile gets ERROR_PIPE_BUSY. After DisconnectNamedPipe the instance is not yet listening: clients still get ERROR_PIPE_BUSY until the server calls ConnectNamedPipe again."
+  no_pipe: "no pipe of that name: FALSE with ERROR_FILE_NOT_FOUND (2) at once, also with NMPWAIT_WAIT_FOREVER."
+  free_instance: "a listening instance exists: TRUE at once; nothing is consumed (calling again is TRUE again)."
+  busy: "every instance taken (including closing ones): FALSE with ERROR_SEM_TIMEOUT (121) after the timeout; 1 ms and 100 ms both seen. CreateFileW in that state fails with ERROR_PIPE_BUSY (231)."
+  default_timeout: "NMPWAIT_USE_DEFAULT_WAIT (0) uses the default time-out given to CreateNamedPipeW (150 ms seen to expire the wait; 0 there means 50 ms); the wait then fails with ERROR_SEM_TIMEOUT."
+  wake_new_instance: "a thread waiting (timeout 1500 ms) returned TRUE within 1200 ms after another instance of the name was created."
+  wake_relisten: "a waiting thread returned TRUE within 1200 ms after the busy instance was disconnected and an overlapped ConnectNamedPipe was issued on it (the instance listening again)."
+  no_wake_client_close: "a client closing its handle without the server disconnecting does not free the instance: the waiter timed out with ERROR_SEM_TIMEOUT."
+  no_reservation: "after the wait returns TRUE the instance is free to open; the call does not keep it."
+errors:
+  no_such_pipe: "ERROR_FILE_NOT_FOUND (2)"
+  timeout: "ERROR_SEM_TIMEOUT (121)"
+  empty_pipe_name: "\\\\.\\pipe\\ alone: ERROR_INVALID_PARAMETER (87)"
+  not_a_pipe_path: "a plain name such as not-a-pipe-path: ERROR_BAD_PATHNAME (161)"
+side_effects: "none beyond the rules above"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "the timeout is honoured to within tens of milliseconds"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Remote clients and other machines, security descriptors on the pipe, impersonation, several sessions.

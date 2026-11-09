@@ -2,16 +2,19 @@ name: CI
 
 # What `cargo xtask ci` runs, split into jobs that run in parallel (ADR 0077):
 # lint, host tests, the boot tests in shards, the coverage checks and the
-# agent pipeline's checks in slices, each `cargo xtask ci <part>` or
+# agent pipeline's checks in slices and the aarch64 boot stub (ADR 0154),
+# each `cargo xtask ci <part>` or
 # `cargo xtask boot-tests --shard <shards>`. The last job, `ci`, passes only if
 # every other job passed: it is the required status check, so keep its name.
 #
-# Every job takes about the same time (ADR 0150): the boot tests and the
-# pipeline's polycheck are cut into shards and slices of about three
-# minutes each, on top of the two to three minutes every job needs to build
-# what it boots. `cargo xtask ci lint` checks that the matrices run every
-# shard and slice; `cargo xtask boot-tests --list` shows the groups of each
-# shard, and the job summaries show how long each group took.
+# The kernel, the native programs, xtask, the pipeline tool and the Windows
+# test programs are built once, by the two `build` jobs (ADR 0156), and the
+# boot and pipeline jobs only unpack them (`POLY_PREBUILT=1`) and boot. Every
+# job takes about the same time (ADR 0150): the boot tests and the pipeline's
+# polycheck are cut into shards and slices. `cargo xtask ci lint` checks
+# that the matrices run every shard and slice; `cargo xtask boot-tests
+# --list` shows the groups of each shard, and the job summaries show how long
+# each group took.
 #
 # QEMU runs on KVM (xtask uses /dev/kvm when it can open it, after the
 # "Let QEMU use KVM" step); one boot job runs the self-test boots on QEMU's
@@ -35,7 +38,7 @@ jobs:
   # A pull request that only changes prose (ADRs, Markdown files, the
   # generated progress charts) skips the jobs that run programs: host tests,
   # the boot tests and the pipeline. Lint and coverage always run (the
-  # coverage job checks README.md and docs/ROADMAP.md against coverage/).
+  # lint job checks README.md and docs/ROADMAP.md against coverage/).
   changes:
     name: changes (code or prose)
     runs-on: ubuntu-24.04
@@ -64,7 +67,7 @@ jobs:
           fi
 
   lint:
-    name: lint (fmt, clippy, source checks)
+    name: lint (fmt, clippy, source checks, coverage map)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -78,16 +81,27 @@ jobs:
           workspaces: |
             .
             kernel
+            kernel/src/arch/aarch64
       # The kernel embeds our ntdll.dll; xtask caches it in target/ntdll-cache
       # under a hash of its inputs. This job saves it, the others restore it.
-      - name: ntdll.dll's cache key
-        id: ntdll
-        run: echo "key=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
+      - name: ntdll.dll's and the Win32 modules' cache keys
+        id: keys
+        run: |
+          echo "ntdll=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
+          echo "win32=$(cargo xtask win32 --cache-key)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         with:
           path: target/ntdll-cache
-          key: ${{ steps.ntdll.outputs.key }}
+          key: ${{ steps.keys.outputs.ntdll }}
+      # clippy (kernel) embeds the Win32 modules too: 30 s to build them.
+      - uses: actions/cache@v4
+        with:
+          path: target/win32-cache
+          key: ${{ steps.keys.outputs.win32 }}
       - run: cargo xtask ci lint
+      # The coverage map's checks (README and ROADMAP against coverage/) are
+      # a minute: with lint, which ends sooner than the boots.
+      - run: cargo xtask ci coverage
 
   host-tests:
     name: host tests
@@ -115,9 +129,83 @@ jobs:
         run: cargo xtask fonts fetch || echo "::warning::could not fetch the fonts; poly-font's tests on them are skipped"
       - run: cargo xtask ci host-tests
 
+  # Builds, once, what the boot and pipeline jobs boot (ADR 0156): `kernel`
+  # the kernel with our ntdll.dll and Win32 modules and the native programs,
+  # `tools` xtask, the pipeline tool and the Windows test programs. Each
+  # packs its files (the list `cargo xtask prebuild` writes) into an artifact
+  # that the other jobs unpack with the `prebuilt` action.
+  build:
+    name: build (${{ matrix.part }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      # A fresh checkout gives every source file a new modification time, so
+      # cargo rebuilt the 50 unchanged crates the cache holds (40 s). Compare
+      # the files' checksums instead.
+      RUSTC_BOOTSTRAP: 1
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: true
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [kernel, tools]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (version from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build-${{ matrix.part }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            .
+            kernel
+      # The kernel embeds our ntdll.dll and Win32 modules; xtask caches them in
+      # target/ntdll-cache and target/win32-cache under a hash of their
+      # inputs.
+      - name: ntdll.dll's and the Win32 modules' cache keys
+        id: keys
+        if: matrix.part == 'kernel'
+        run: |
+          echo "ntdll=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
+          echo "win32=$(cargo xtask win32 --cache-key)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: matrix.part == 'kernel'
+        with:
+          path: target/ntdll-cache
+          key: ${{ steps.keys.outputs.ntdll }}
+      - uses: actions/cache@v4
+        if: matrix.part == 'kernel'
+        with:
+          path: target/win32-cache
+          key: ${{ steps.keys.outputs.win32 }}
+      # 7-Zip's 7za.exe for the traced scenario's kit and the 7-Zip
+      # scenario's driver (ADR 0087, 0091), kept in a cache by version.
+      - name: 7-Zip's cache
+        if: matrix.part == 'tools'
+        uses: actions/cache@v4
+        with:
+          path: target/7zip
+          key: 7zip-26.05-7zz
+      - name: Fetch 7-Zip
+        if: matrix.part == 'tools'
+        run: cargo xtask win fetch-7zip
+      - name: Build
+        run: cargo xtask prebuild ${{ matrix.part }} --list target/prebuilt-${{ matrix.part }}.list
+      - name: Pack
+        run: tar --zstd -cf prebuilt-${{ matrix.part }}.tar.zst -T target/prebuilt-${{ matrix.part }}.list
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuilt-${{ matrix.part }}
+          path: prebuilt-${{ matrix.part }}.tar.zst
+          # Already compressed.
+          compression-level: 0
+          retention-days: 1
+
   boot:
     name: boot (${{ matrix.boot }}, ${{ matrix.accel }})
-    needs: changes
+    needs: [changes, build]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -128,27 +216,41 @@ jobs:
         # (`cargo xtask boot-tests --list` shows the groups of each); `ci
         # lint` checks that every shard is in exactly one entry. The entries
         # take about the same time (their groups' boots, in seconds on KVM:
-        # core 190, userland 170, desktop 190, wintrace 190 to 240), plus
-        # the build every job does. `x11` is true where the root disk wants
-        # Xwayland and Mesa; `sevenzip` where 7-Zip is fetched.
+        # 80 to 105). `x11` is true where the root disk wants Xwayland and
+        # Mesa; `sevenzip` where 7-Zip is fetched.
         include:
-          - boot: core
-            shards: selftest,devices,faults,x11
+          - boot: x11
+            shards: x11
             accel: auto
             x11: true
-          - boot: userland
-            shards: userland
+          - boot: apps
+            shards: desktop-apps
             accel: auto
             x11: true
-            sevenzip: true
           - boot: desktop
             shards: desktop
             accel: auto
             x11: true
-          - boot: wintrace
-            shards: wintrace
+          - boot: userland
+            shards: userland,wintrace
+            accel: auto
+            x11: true
+            sevenzip: true
+          - boot: sevenzip
+            shards: sevenzip,faults
             accel: auto
             sevenzip: true
+          - boot: sevenzip-b
+            shards: sevenzip-b
+            accel: auto
+            sevenzip: true
+          - boot: shell
+            shards: desktop-shell
+            accel: auto
+            x11: true
+          - boot: devices
+            shards: devices,selftest
+            accel: auto
           # The self-test boots on TCG too, so paths only the emulator takes
           # (and its quirks) stay tested.
           - boot: selftest
@@ -156,6 +258,7 @@ jobs:
             accel: tcg
     env:
       POLY_QEMU_ACCEL: ${{ matrix.accel }}
+      POLY_PREBUILT: 1
     steps:
       - uses: actions/checkout@v4
       - name: Install QEMU and a static BusyBox (the BusyBox and root disk boots)
@@ -184,31 +287,8 @@ jobs:
           else
             echo "::warning::no /dev/kvm on this runner: QEMU runs on TCG (several times slower)"
           fi
-      - name: Install Rust (version from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: boot
-          save-if: ${{ github.ref == 'refs/heads/main' && matrix.boot == 'core' }}
-          workspaces: |
-            .
-            kernel
-      # The kernel embeds our ntdll.dll and Win32 modules; xtask caches them in
-      # target/ntdll-cache and target/win32-cache under a hash of their
-      # inputs. The first job to miss saves them, the others restore them.
-      - name: ntdll.dll's and the Win32 modules' cache keys
-        id: keys
-        run: |
-          echo "ntdll=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
-          echo "win32=$(cargo xtask win32 --cache-key)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
-        with:
-          path: target/ntdll-cache
-          key: ${{ steps.keys.outputs.ntdll }}
-      - uses: actions/cache@v4
-        with:
-          path: target/win32-cache
-          key: ${{ steps.keys.outputs.win32 }}
+      # Everything the boot tests build, the build jobs built: no Rust here.
+      - uses: ./.github/actions/prebuilt
       # 7-Zip's 7za.exe and Linux 7zz for the `7zip` and `wintrace` boot tests
       # (ADR 0087, 0091): downloaded and checked against its pinned SHA-256
       # by xtask, kept in a cache by version. If the download fails the boot
@@ -221,8 +301,8 @@ jobs:
           key: 7zip-26.05-7zz
       - name: Fetch 7-Zip (the 7zip and wintrace boot tests)
         if: matrix.sevenzip
-        run: cargo xtask win fetch-7zip || echo "::warning::could not fetch 7-Zip; the 7zip boot test is skipped"
-      - run: cargo xtask boot-tests --shard ${{ matrix.shards }}
+        run: target/debug/xtask win fetch-7zip || echo "::warning::could not fetch 7-Zip; the 7zip boot test is skipped"
+      - run: target/debug/xtask boot-tests --shard ${{ matrix.shards }}
       - name: Keep the boot logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -234,35 +314,28 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  coverage:
-    name: coverage (map, README)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust (version from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: coverage
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo xtask ci coverage
-
   pipeline:
-    name: "pipeline (${{ matrix.slice }}, selfcheck, polycheck, win polycheck)"
-    needs: changes
+    name: "pipeline (${{ matrix.slice }})"
+    needs: [changes, build]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    env:
+      POLY_PREBUILT: 1
     strategy:
       fail-fast: false
       matrix:
         # Exactly xtask's PIPELINE_SHARDS (`ci lint` checks): `polycheck`, a
-        # QEMU boot per test, runs a third of the corpus in each; the first
-        # slice also runs selfcheck and win polycheck.
-        slice: [1/3, 2/3, 3/3]
+        # QEMU boot per test, runs a quarter of the corpus in each; `extras`
+        # runs selfcheck and win polycheck.
+        slice: [extras, 1/4, 2/4, 3/4, 4/4]
     steps:
       - uses: actions/checkout@v4
+      # Rust installs while the packages and the artifacts come in (only
+      # where something is built: `extras` builds Windows test programs).
+      - name: Start installing Rust
+        if: matrix.slice == 'extras'
+        run: .github/scripts/rust-start.sh
       # clang++, lld-link and llvm-dlltool build the C++ Windows tests of
       # green Windows entries for `win polycheck` (ADR 0098, 0099).
       - name: Install QEMU, a static BusyBox and the C++ Windows test tools
@@ -280,29 +353,12 @@ jobs:
           else
             echo "::warning::no /dev/kvm on this runner: QEMU runs on TCG (several times slower)"
           fi
-      - name: Install Rust (version from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: pipeline
-          save-if: ${{ github.ref == 'refs/heads/main' && matrix.slice == '1/3' }}
-          workspaces: |
-            .
-            kernel
-      - name: ntdll.dll's and the Win32 modules' cache keys
-        id: keys
-        run: |
-          echo "ntdll=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
-          echo "win32=$(cargo xtask win32 --cache-key)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
-        with:
-          path: target/ntdll-cache
-          key: ${{ steps.keys.outputs.ntdll }}
-      - uses: actions/cache@v4
-        with:
-          path: target/win32-cache
-          key: ${{ steps.keys.outputs.win32 }}
-      - run: cargo xtask ci pipeline --shard ${{ matrix.slice }}
+      # `win polycheck` builds Windows test programs with cargo.
+      - name: Wait for Rust
+        if: matrix.slice == 'extras'
+        run: .github/scripts/rust-wait.sh
+      - uses: ./.github/actions/prebuilt
+      - run: target/debug/xtask ci pipeline --shard ${{ matrix.slice }}
       - name: Keep the polycheck report
         if: failure()
         uses: actions/upload-artifact@v4
@@ -314,13 +370,38 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  aarch64:
+    name: aarch64 stub (unit tests, QEMU virt on TCG)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # The aarch64 machine of QEMU; the stub runs on its emulator (TCG)
+      # on every runner, whatever the host CPU.
+      - name: Install QEMU (aarch64)
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-arm
+      - name: Install Rust (version from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: aarch64
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            .
+            kernel/src/arch/aarch64
+      - run: cargo xtask ci aarch64
+
   # The required status check. `always()`: it runs, and fails, when a job it
   # needs failed or was cancelled (a skipped required check would count as
   # passing). The jobs that run programs are skipped, and count as passed,
   # only when the change is prose alone (`changes`).
   ci:
     if: always()
-    needs: [changes, lint, host-tests, boot, coverage, pipeline]
+    needs: [changes, lint, host-tests, build, boot, pipeline, aarch64]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -334,4 +415,4 @@ jobs:
             to_entries | all(
               .value.result == "success"
               or (.value.result == "skipped" and $code == "false"
-                  and (.key | IN("host-tests", "boot", "pipeline"))))' > /dev/null
+                  and (.key | IN("host-tests", "build", "boot", "pipeline", "aarch64"))))' > /dev/null

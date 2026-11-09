@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "ntdup_process",
+      "exe_sha256": "c262549fd0f2a561536550d5f00d61006bb48a77fc6df3002643cd024c7049f1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVjdl9jaGlsZF9jb25uZWN0ZWQKb2sgb3BlbmVkX2NoaWxkX2Zvcl9kdXAKb2sgcHVzaF9zYW1lX2FjY2Vzc19zdGF0dXMKb2sgcHVzaF9yZWR1Y2VkX3N0YXR1cwpvayBwdXNoZWRfdmFsdWVzX2FyZV9ub256ZXJvX2FuZF9kaWZmZXIKb2sgY2hpbGRfc2F3X3Vuc2lnbmFsbGVkCm9rIGNoaWxkX21hc2tfYWxsX2ZpdmVfYml0cwpvayBjaGlsZF9leGl0Cm9rIGNoaWxkX3Jlc2V0X3NlZW5fYnlfcGFyZW50CnZhbHVlIHB1c2hfaW50b19leGl0ZWRfcHJvY2Vzc19zdGF0dXMgMHhjMDAwMDEwYQpvayBwdXNoX3dpdGhvdXRfZHVwX3JpZ2h0X3N0YXR1cwpvayBkdXBsaWNhdGVfaGFuZGxlX3dpdGhvdXRfZHVwX3JpZ2h0X2ZhaWxzCm9rIGR1cGxpY2F0ZV9oYW5kbGVfd2l0aG91dF9kdXBfcmlnaHRfZXJyb3IKdmFsdWUgcmVjdl9jaGlsZF8yX2V4aXRfYWZ0ZXJfcGlwZV9jbG9zZWQgOTIKb2sgc2VuZF9jaGlsZF9jb25uZWN0ZWQKb2sgb3BlbmVkX2NoaWxkX2FzX3NvdXJjZQpvayBjaGlsZF9zZW50X2FfaGFuZGxlX3ZhbHVlCm9rIHB1bGxfY29weV9zdGF0dXMKb2sgcHVsbGVkX2V2ZW50X3Vuc2lnbmFsbGVkCm9rIHB1bGxlZF9ldmVudF9oYXNfdHdvX2hhbmRsZXMKb2sgcHVsbF9jbG9zZV9zb3VyY2Vfc3RhdHVzCm9rIGV2ZW50X2hhc190d29faGFuZGxlc19hZ2FpbgpvayByZW1vdGVfY2xvc2Vfd2l0aG91dF90YXJnZXRfc3RhdHVzCm9rIGNoaWxkX2hhbmRsZV9pc19jbG9zZWQKb2sgY2hpbGRfaGFuZGxlX2Vycm9yX2lzX2ludmFsaWRfaGFuZGxlCm9rIHJlbW90ZV9jbG9zZV93aXRob3V0X3RhcmdldF9jbG9zZWRfdGhlX2NoaWxkc19oYW5kbGUKb2sgcmVtb3RlX2Nsb3NlX3dpdGhvdXRfdGFyZ2V0X2Vycm9yX2lzX2ludmFsaWRfaGFuZGxlCm9rIHB1bGxfY2xvc2VkX2hhbmRsZV9zdGF0dXMKb2sgZHVwbGljYXRlX2hhbmRsZV9jbG9zZWRfaGFuZGxlX2ZhaWxzCm9rIGR1cGxpY2F0ZV9oYW5kbGVfY2xvc2VkX2hhbmRsZV9lcnJvcgpvayBwdWxsZWRfZXZlbnRfd29ya3MKb2sgcHVsbGVkX2V2ZW50X3NpZ25hbGxlZF90aHJvdWdoX290aGVyX2hhbmRsZQpvayBzZW5kX2NoaWxkX2V4aXQKc3VtbWFyeSAzMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok recv_child_connected\nok opened_child_for_dup\nok push_same_access_status\nok push_reduced_status\nok pushed_values_are_nonzero_and_differ\nok child_saw_unsignalled\nok child_mask_all_five_bits\nok child_exit\nok child_reset_seen_by_parent\nvalue push_into_exited_process_status 0xc000010a\nok push_without_dup_right_status\nok duplicate_handle_without_dup_right_fails\nok duplicate_handle_without_dup_right_error\nvalue recv_child_2_exit_after_pipe_closed 92\nok send_child_connected\nok opened_child_as_source\nok child_sent_a_handle_value\nok pull_copy_status\nok pulled_event_unsignalled\nok pulled_event_has_two_handles\nok pull_close_source_status\nok event_has_two_handles_again\nok remote_close_without_target_status\nok child_handle_is_closed\nok child_handle_error_is_invalid_handle\nok remote_close_without_target_closed_the_childs_handle\nok remote_close_without_target_error_is_invalid_handle\nok pull_closed_handle_status\nok duplicate_handle_closed_handle_fails\nok duplicate_handle_closed_handle_error\nok pulled_event_works\nok pulled_event_signalled_through_other_handle\nok send_child_exit\nsummary 31 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 210
+    }
+  ]
+}
