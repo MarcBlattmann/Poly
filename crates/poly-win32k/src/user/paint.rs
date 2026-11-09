@@ -157,6 +157,71 @@ pub fn invalidate<E: Env + ?Sized>(env: &E, hwnd: u64, rects: Option<&[Rect]>, e
     true
 }
 
+/// `InvalidateRgn` (InvalidateRgn.yaml): as [`invalidate`], but a made-up
+/// handle is 0 with ERROR_INVALID_WINDOW_HANDLE (InvalidateRect's 1 is its
+/// own); NULL stays 1 like InvalidateRect's.
+pub fn invalidate_region<E: Env + ?Sized>(env: &E, hwnd: u64, rects: Option<&[Rect]>, erase: bool) -> bool {
+    if hwnd != 0 && info(env, hwnd).is_none() {
+        env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return false;
+    }
+    invalidate(env, hwnd, rects, erase)
+}
+
+/// `ERROR_INVALID_HANDLE` (winerror.h).
+const ERROR_INVALID_HANDLE: u32 = 6;
+
+/// `InvalidateRgn(hwnd, rgn, erase)` (InvalidateRgn.yaml): `rgn` NULL is all
+/// of the client area; a deleted region or another kind of object gives 1
+/// with ERROR_INVALID_HANDLE and invalidates nothing (a made-up window is
+/// judged first).
+pub fn invalidate_rgn<E: Env + ?Sized>(env: &E, hwnd: u64, rgn: u64, erase: bool) -> bool {
+    let rects = if rgn == 0 {
+        None
+    } else {
+        let Some(r) = env.region_rects(rgn) else {
+            if hwnd != 0 && info(env, hwnd).is_none() {
+                env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+                return false;
+            }
+            env.set_last_error(ERROR_INVALID_HANDLE);
+            return true;
+        };
+        Some(r)
+    };
+    invalidate_region(env, hwnd, rects.as_deref(), erase)
+}
+
+/// `GetUpdateRgn(hwnd, rgn, erase)` (GetUpdateRgn.yaml): the update region
+/// into `rgn`, its kind. A bad window is 0 with ERROR_INVALID_WINDOW_HANDLE
+/// (the region is not changed), a NULL region 0 with ERROR_INVALID_HANDLE; a
+/// deleted region or a brush in its place is SIMPLEREGION (2) with last
+/// error 0 and nothing changed (observed).
+pub fn get_update_rgn<E: Env + ?Sized>(env: &E, hwnd: u64, rgn: u64, erase: bool) -> i32 {
+    if hwnd == 0 || info(env, hwnd).is_none() {
+        env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    }
+    if rgn == 0 {
+        env.set_last_error(ERROR_INVALID_HANDLE);
+        return 0;
+    }
+    let Some((p, _)) = update_area(env, hwnd, erase) else { return 0 };
+    match env.set_region_rects(rgn, &p.rects) {
+        0 => {
+            env.set_last_error(0);
+            2
+        }
+        kind => kind,
+    }
+}
+
+/// Everything of window `hwnd` and its descendants valid: update region,
+/// erase, frame and internal paint.
+pub fn validate_all<E: Env + ?Sized>(env: &E, hwnd: u32) {
+    redraw(env, hwnd, None, RDW_VALIDATE | RDW_NOFRAME | RDW_ALLCHILDREN);
+}
+
 /// `ValidateRect` / `ValidateRgn`: children too, as InvalidateRect reaches
 /// them (observed in vr_basic: a validated parent's child has nothing
 /// invalid).
@@ -180,6 +245,12 @@ fn normalized(r: Rect) -> Rect {
 /// `UpdateWindow` (UpdateWindow.yaml): one WM_PAINT, sent, to the window
 /// and to each of its invalid descendants.
 pub fn update_window<E: Env + ?Sized>(env: &E, hwnd: u64) -> bool {
+    update_tree(env, hwnd, true)
+}
+
+/// WM_PAINT, sent, to window `hwnd` if it is invalid and, with `children`,
+/// to its invalid descendants after it.
+fn update_tree<E: Env + ?Sized>(env: &E, hwnd: u64, children: bool) -> bool {
     let Some(i) = info(env, hwnd) else {
         env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return false;
@@ -188,7 +259,7 @@ pub fn update_window<E: Env + ?Sized>(env: &E, hwnd: u64) -> bool {
         Reply::Windows { hwnds } => hwnds,
         _ => Vec::new(),
     };
-    for h in order {
+    for h in order.into_iter().filter(|&h| children || h == i.hwnd) {
         send(env, u64::from(h), WM_PAINT, 0, 0);
     }
     true
@@ -197,6 +268,10 @@ pub fn update_window<E: Env + ?Sized>(env: &E, hwnd: u64) -> bool {
 /// `RedrawWindow` (RedrawWindow.yaml): `rects` the region or rectangle given
 /// (client coordinates), `None` for all of the client area.
 pub fn redraw_window<E: Env + ?Sized>(env: &E, hwnd: u64, rects: Option<&[Rect]>, flags: u32) -> bool {
+    // NULL is the desktop window (Learn): nothing of it is ever invalid here.
+    if hwnd == 0 {
+        return true;
+    }
     let Some(i) = info(env, hwnd) else {
         env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return false;
@@ -205,10 +280,25 @@ pub fn redraw_window<E: Env + ?Sized>(env: &E, hwnd: u64, rects: Option<&[Rect]>
     if region_flags != 0 {
         redraw(env, i.hwnd, rects, region_flags);
     }
+    // The children the immediate repaint reaches (RDW_UPDATENOW "paints the
+    // parent, then its invalid children, unless RDW_NOCHILDREN").
+    let children = flags & RDW_NOCHILDREN == 0;
     if flags & RDW_UPDATENOW != 0 {
-        update_window(env, hwnd);
+        update_tree(env, hwnd, children);
     } else if flags & RDW_ERASENOW != 0 {
         erase_now(env, i.hwnd);
+        if children {
+            // Windows below it that have an erase or a frame pending get
+            // theirs now too (Learn: RDW_ERASENOW "affected windows (as
+            // specified by RDW_ALLCHILDREN and RDW_NOCHILDREN)").
+            let below = match env.call(Request::PaintOrder { root: i.hwnd }) {
+                Reply::Windows { hwnds } => hwnds,
+                _ => Vec::new(),
+            };
+            for h in below.into_iter().filter(|&h| h != i.hwnd) {
+                erase_now(env, h);
+            }
+        }
     }
     true
 }

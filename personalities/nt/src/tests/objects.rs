@@ -251,3 +251,33 @@ fn bad_object_attributes() {
     assert_eq!(f.sys.objects.process_handle_count(PID), handles);
     assert_eq!(open_event(&mut f, EVENT).0, STATUS_OBJECT_NAME_NOT_FOUND);
 }
+
+#[test]
+fn the_trace_reads_the_name_a_call_carries() {
+    use crate::trace;
+    let mut f = Fake::new();
+    let out = f.alloc(8);
+    let oa = f.attrs(r"\Registry\Machine\Software", 0);
+    let mut regs = poly_abi::SyscallRegs {
+        rax: u64::from(Service::OpenKey.number()),
+        r10: out,
+        rdx: 0x20019,
+        r8: oa,
+        rsp: 0x7000,
+        ..Default::default()
+    };
+    let c = trace::begin(&mut f, &regs);
+    assert_eq!(c.name, "NtOpenKey");
+    assert_eq!(c.object.as_deref(), Some(r"\Registry\Machine\Software"));
+    assert_eq!(c.args[1], 0x20019);
+    // A value name is a UNICODE_STRING.
+    let name = f.unicode("ProductName");
+    regs.rax = u64::from(Service::QueryValueKey.number());
+    regs.rdx = name;
+    assert_eq!(trace::begin(&mut f, &regs).object.as_deref(), Some("ProductName"));
+    // A number no service has is named by its table.
+    regs.rax = 0x1005;
+    assert_eq!(trace::begin(&mut f, &regs).name, "win32k#0x5");
+    regs.rax = 0x0FFF;
+    assert_eq!(trace::begin(&mut f, &regs).name, "nt#0xfff");
+}

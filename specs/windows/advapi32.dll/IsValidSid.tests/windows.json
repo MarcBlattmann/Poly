@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e5f25a5644ea",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:18:06Z",
+  "tests": [
+    {
+      "name": "sid_valid_basic",
+      "exe_sha256": "6cffa09b5f1d5c81d871f8b3c4338a1eaa6a7361fbc2e7903bf6a134c3a9839f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5pdGlhbGl6ZWQgY291bnQgMDogMQppbml0aWFsaXplZCBjb3VudCAxOiAxCmluaXRpYWxpemVkIGNvdW50IDg6IDEKaW5pdGlhbGl6ZWQgY291bnQgMTU6IDEKd2VsbC1rbm93biAwOiAxCndlbGwta25vd24gMTogMQp3ZWxsLWtub3duIDIyOiAxCndlbGwta25vd24gMjY6IDEKd2VsbC1rbm93biA2NjogMQphdXRob3JpdHkgMDAwMDAwMDAwMDAwOiAxCmF1dGhvcml0eSBmZmZmZmZmZmZmZmY6IDEKYXV0aG9yaXR5IDAxMDIwMzA0MDUwNjogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "initialized count 0: 1\ninitialized count 1: 1\ninitialized count 8: 1\ninitialized count 15: 1\nwell-known 0: 1\nwell-known 1: 1\nwell-known 22: 1\nwell-known 26: 1\nwell-known 66: 1\nauthority 000000000000: 1\nauthority ffffffffffff: 1\nauthority 010203040506: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "sid_valid_invalid",
+      "exe_sha256": "e2d308457b2f41332bc6fb6463f00780920b4ef7d9e990d8eff04f390ef46a67",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmV2aXNpb24gMCBjb3VudCAyOiAwIGVycj0xMzM3CnJldmlzaW9uIDEgY291bnQgMjogMSBlcnI9LTEKcmV2aXNpb24gMiBjb3VudCAyOiAwIGVycj0xMzM3CnJldmlzaW9uIDMgY291bnQgMjogMCBlcnI9MTMzNwpyZXZpc2lvbiAyNTUgY291bnQgMjogMCBlcnI9MTMzNwpyZXZpc2lvbiAxIGNvdW50IDE1OiAxIGVycj0tMQpyZXZpc2lvbiAxIGNvdW50IDE2OiAwIGVycj0xMzM3CnJldmlzaW9uIDEgY291bnQgMTc6IDAgZXJyPTEzMzcKcmV2aXNpb24gMSBjb3VudCAyNTU6IDAgZXJyPTEzMzcKcmV2aXNpb24gMCBjb3VudCAwOiAwIGVycj0xMzM3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "revision 0 count 2: 0 err=1337\nrevision 1 count 2: 1 err=-1\nrevision 2 count 2: 0 err=1337\nrevision 3 count 2: 0 err=1337\nrevision 255 count 2: 0 err=1337\nrevision 1 count 15: 1 err=-1\nrevision 1 count 16: 0 err=1337\nrevision 1 count 17: 0 err=1337\nrevision 1 count 255: 0 err=1337\nrevision 0 count 0: 0 err=1337\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

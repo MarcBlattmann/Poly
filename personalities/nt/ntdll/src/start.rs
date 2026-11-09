@@ -66,6 +66,36 @@ unsafe extern "C" fn ntdll_thread_init(routine: u64, argument: u64, exe_base: u6
     unsafe { RtlUserThreadStart(routine, argument) }
 }
 
+unsafe extern "system" {
+    /// The generated stub (`syscalls.s`).
+    fn NtQuerySystemInformation(class: u32, info: *mut u8, length: u32, returned: *mut u32) -> NtStatus;
+}
+
+/// Fill in the PEB fields programs read directly (`poly_rtl::peb`, ADR 0155): the process
+/// heap, the reported OS version, the processor count and the executable's subsystem.
+fn init_peb(peb: u64, exe_base: u64) {
+    // SAFETY: the PEB is the process's own page; the executable's headers are mapped.
+    unsafe {
+        ((peb + poly_rtl::peb::PROCESS_HEAP as u64) as *mut u64).write(heap::process_heap().0 as u64);
+        // SystemBasicInformation (class 0): NumberOfProcessors is the byte at offset 56.
+        let mut basic = [0u8; 64];
+        let mut got = 0u32;
+        let processors =
+            if NtQuerySystemInformation(0, basic.as_mut_ptr(), 64, &mut got).0 == 0 { u32::from(basic[56]) } else { 1 };
+        let nt = exe_base + u64::from(((exe_base + 0x3c) as *const u32).read_unaligned());
+        let opt = nt + 24;
+        let subsystem = (
+            ((opt + 68) as *const u16).read_unaligned(),
+            ((opt + 48) as *const u16).read_unaligned(),
+            ((opt + 50) as *const u16).read_unaligned(),
+        );
+        for f in poly_rtl::peb::fields(poly_rtl::peb::Facts { processors, subsystem }) {
+            let at = (peb + f.at as u64) as *mut u8;
+            core::ptr::copy_nonoverlapping(f.value.to_le_bytes().as_ptr(), at, f.width);
+        }
+    }
+}
+
 /// The first thread: the process heap, the loader (with the search order
 /// from the process parameters), `ntdll` and the executable registered,
 /// the executable's imports bound, TLS set up, and the
@@ -73,15 +103,18 @@ unsafe extern "C" fn ntdll_thread_init(routine: u64, argument: u64, exe_base: u6
 fn process_init(teb: u64, exe_base: u64) -> Result<(), NtStatus> {
     heap::init();
     let peb = lock::peb();
+    init_peb(peb, exe_base);
     let image = params::image_path(peb);
     let config = Config { dirs: params::dirs(peb) };
     with_slot(|slot| *slot = Some(Loader::new(config)));
     LOADER_LOCK.enter(&SysPlatform);
     let callouts = with_loader(|l, p| {
         l.init_ldr_data(p, peb)?;
+        // The executable heads the load and memory order lists, then comes ntdll, as in every
+        // Windows process (programs that walk `PEB.Ldr` take the first entry for the image).
+        let exe = l.add_mapped(p, exe_base, &image, false)?;
         let ntdll = poly_ldr::path::wide("C:\\Windows\\System32\\ntdll.dll");
         l.add_mapped(p, ntdll_base(), &ntdll, true)?;
-        let exe = l.add_mapped(p, exe_base, &image, false)?;
         l.process_init(p, exe, teb)
     });
     let result = match callouts {

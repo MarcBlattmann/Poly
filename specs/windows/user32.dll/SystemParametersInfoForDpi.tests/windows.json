@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "spifd_errors",
+      "exe_sha256": "85a08d62dc5ce6aee96054b21eb4dbc15412b72233c1a910af98bb2318211a72",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2JTaXplIDUwNCB1aVBhcmFtIDUwNCBkcGkgMTQ0OiBvayAxIGxhc3QgZXJyb3IgLTEgY2FwdGlvbiBoZWlnaHQgZmllbGQgMzMKY2JTaXplIDUwNCB1aVBhcmFtIDAgZHBpIDE0NDogb2sgMCBsYXN0IGVycm9yIDg3IGNhcHRpb24gaGVpZ2h0IGZpZWxkIDg1CmNiU2l6ZSAwIHVpUGFyYW0gNTA0IGRwaSAxNDQ6IG9rIDAgbGFzdCBlcnJvciA4NyBjYXB0aW9uIGhlaWdodCBmaWVsZCAwCmNiU2l6ZSA1MDAgdWlQYXJhbSA1MDAgZHBpIDE0NDogb2sgMCBsYXN0IGVycm9yIDg3IGNhcHRpb24gaGVpZ2h0IGZpZWxkIDg1CmNiU2l6ZSA1MDAgdWlQYXJhbSA1MDAgZHBpIDE0NDogb2sgMCBsYXN0IGVycm9yIDg3IGNhcHRpb24gaGVpZ2h0IGZpZWxkIDg1CmNiU2l6ZSA1MDQgdWlQYXJhbSA0IGRwaSAxNDQ6IG9rIDAgbGFzdCBlcnJvciA4NyBjYXB0aW9uIGhlaWdodCBmaWVsZCA4NQpjYlNpemUgNTA4IHVpUGFyYW0gNTA4IGRwaSAxNDQ6IG9rIDAgbGFzdCBlcnJvciA4NyBjYXB0aW9uIGhlaWdodCBmaWVsZCA4NQpOVUxMIHB2UGFyYW06IG9rIDAgbGFzdCBlcnJvciA4NwpkcGkgOTYgKHRoZSBzeXN0ZW0gRFBJKTogb2sgMSBsYXN0IGVycm9yIC0xCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "cbSize 504 uiParam 504 dpi 144: ok 1 last error -1 caption height field 33\ncbSize 504 uiParam 0 dpi 144: ok 0 last error 87 caption height field 85\ncbSize 0 uiParam 504 dpi 144: ok 0 last error 87 caption height field 0\ncbSize 500 uiParam 500 dpi 144: ok 0 last error 87 caption height field 85\ncbSize 500 uiParam 500 dpi 144: ok 0 last error 87 caption height field 85\ncbSize 504 uiParam 4 dpi 144: ok 0 last error 87 caption height field 85\ncbSize 508 uiParam 508 dpi 144: ok 0 last error 87 caption height field 85\nNULL pvParam: ok 0 last error 87\ndpi 96 (the system DPI): ok 1 last error -1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    },
+    {
+      "name": "spifd_other",
+      "exe_sha256": "178d1b5b93834864b641ef7045b93d9b0a9fb9ae50dcb3d3f33c7c773c91d223",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SUNPTk1FVFJJQ1MgZHBpIDk2OiBvayAxIGxhc3QgZXJyb3IgLTEgaG9yaXpvbnRhbCA3NSB2ZXJ0aWNhbCA3NSB3cmFwIDEgZm9udCBoZWlnaHQgLTEyCklDT05USVRMRUxPR0ZPTlQgZHBpIDk2OiBvayAxIGhlaWdodCAtMTIgd2VpZ2h0IDQwMApJQ09OTUVUUklDUyBkcGkgMTIwOiBvayAxIGxhc3QgZXJyb3IgLTEgaG9yaXpvbnRhbCA5NCB2ZXJ0aWNhbCA5NCB3cmFwIDEgZm9udCBoZWlnaHQgLTE1CklDT05USVRMRUxPR0ZPTlQgZHBpIDEyMDogb2sgMSBoZWlnaHQgLTE1IHdlaWdodCA0MDAKSUNPTk1FVFJJQ1MgZHBpIDE0NDogb2sgMSBsYXN0IGVycm9yIC0xIGhvcml6b250YWwgMTEzIHZlcnRpY2FsIDExMyB3cmFwIDEgZm9udCBoZWlnaHQgLTE4CklDT05USVRMRUxPR0ZPTlQgZHBpIDE0NDogb2sgMSBoZWlnaHQgLTE4IHdlaWdodCA0MDAKSUNPTk1FVFJJQ1MgZHBpIDE5Mjogb2sgMSBsYXN0IGVycm9yIC0xIGhvcml6b250YWwgMTUwIHZlcnRpY2FsIDE1MCB3cmFwIDEgZm9udCBoZWlnaHQgLTI0CklDT05USVRMRUxPR0ZPTlQgZHBpIDE5Mjogb2sgMSBoZWlnaHQgLTI0IHdlaWdodCA0MDAKSUNPTk1FVFJJQ1MgZHBpIDI4ODogb2sgMSBsYXN0IGVycm9yIC0xIGhvcml6b250YWwgMjI1IHZlcnRpY2FsIDIyNSB3cmFwIDEgZm9udCBoZWlnaHQgLTM2CklDT05USVRMRUxPR0ZPTlQgZHBpIDI4ODogb2sgMSBoZWlnaHQgLTM2IHdlaWdodCA0MDAKR0VUV09SS0FSRUEgZHBpIDk2OiBvayAwIGxhc3QgZXJyb3IgODcgZmlyc3QgdmFsdWUgMApHRVRXT1JLQVJFQSBkcGkgMTQ0OiBvayAwIGxhc3QgZXJyb3IgODcgZmlyc3QgdmFsdWUgMApHRVRXT1JLQVJFQSBkcGkgMDogb2sgMSBsYXN0IGVycm9yIDQ2NjAgZmlyc3QgdmFsdWUgMApHRVRCRUVQIGRwaSA5Njogb2sgMCBsYXN0IGVycm9yIDg3IGZpcnN0IHZhbHVlIDAKR0VUQkVFUCBkcGkgMTQ0OiBvayAwIGxhc3QgZXJyb3IgODcgZmlyc3QgdmFsdWUgMApHRVRCRUVQIGRwaSAwOiBvayAxIGxhc3QgZXJyb3IgNDY2MCBmaXJzdCB2YWx1ZSAxCkdFVE1PVVNFIGRwaSA5Njogb2sgMCBsYXN0IGVycm9yIDg3IGZpcnN0IHZhbHVlIDAKR0VUTU9VU0UgZHBpIDE0NDogb2sgMCBsYXN0IGVycm9yIDg3IGZpcnN0IHZhbHVlIDAKR0VUTU9VU0UgZHBpIDA6IG9rIDEgbGFzdCBlcnJvciA0NjYwIGZpcnN0IHZhbHVlIDYKSUNPTkhPUklaT05UQUxTUEFDSU5HIGRwaSA5Njogb2sgMCBsYXN0IGVycm9yIDg3IGZpcnN0IHZhbHVlIDAKSUNPTkhPUklaT05UQUxTUEFDSU5HIGRwaSAxNDQ6IG9rIDAgbGFzdCBlcnJvciA4NyBmaXJzdCB2YWx1ZSAwCklDT05IT1JJWk9OVEFMU1BBQ0lORyBkcGkgMDogb2sgMSBsYXN0IGVycm9yIDQ2NjAgZmlyc3QgdmFsdWUgNzUKR0VUV0hFRUxTQ1JPTExMSU5FUyBkcGkgOTY6IG9rIDAgbGFzdCBlcnJvciA4NyBmaXJzdCB2YWx1ZSAwCkdFVFdIRUVMU0NST0xMTElORVMgZHBpIDE0NDogb2sgMCBsYXN0IGVycm9yIDg3IGZpcnN0IHZhbHVlIDAKR0VUV0hFRUxTQ1JPTExMSU5FUyBkcGkgMDogb2sgMSBsYXN0IGVycm9yIDQ2NjAgZmlyc3QgdmFsdWUgMwpHRVRGT05UU01PT1RISU5HIGRwaSA5Njogb2sgMCBsYXN0IGVycm9yIDg3IGZpcnN0IHZhbHVlIDAKR0VURk9OVFNNT09USElORyBkcGkgMTQ0OiBvayAwIGxhc3QgZXJyb3IgODcgZmlyc3QgdmFsdWUgMApHRVRGT05UU01PT1RISU5HIGRwaSAwOiBvayAxIGxhc3QgZXJyb3IgNDY2MCBmaXJzdCB2YWx1ZSAxCkdFVE1FTlVTSE9XREVMQVkgZHBpIDk2OiBvayAwIGxhc3QgZXJyb3IgODcgZmlyc3QgdmFsdWUgMApHRVRNRU5VU0hPV0RFTEFZIGRwaSAxNDQ6IG9rIDAgbGFzdCBlcnJvciA4NyBmaXJzdCB2YWx1ZSAwCkdFVE1FTlVTSE9XREVMQVkgZHBpIDA6IG9rIDEgbGFzdCBlcnJvciA0NjYwIGZpcnN0IHZhbHVlIDQwMApHRVRDQVJFVFdJRFRIIGRwaSA5Njogb2sgMCBsYXN0IGVycm9yIDg3IGZpcnN0IHZhbHVlIDAKR0VUQ0FSRVRXSURUSCBkcGkgMTQ0OiBvayAwIGxhc3QgZXJyb3IgODcgZmlyc3QgdmFsdWUgMApHRVRDQVJFVFdJRFRIIGRwaSAwOiBvayAxIGxhc3QgZXJyb3IgNDY2MCBmaXJzdCB2YWx1ZSAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ICONMETRICS dpi 96: ok 1 last error -1 horizontal 75 vertical 75 wrap 1 font height -12\nICONTITLELOGFONT dpi 96: ok 1 height -12 weight 400\nICONMETRICS dpi 120: ok 1 last error -1 horizontal 94 vertical 94 wrap 1 font height -15\nICONTITLELOGFONT dpi 120: ok 1 height -15 weight 400\nICONMETRICS dpi 144: ok 1 last error -1 horizontal 113 vertical 113 wrap 1 font height -18\nICONTITLELOGFONT dpi 144: ok 1 height -18 weight 400\nICONMETRICS dpi 192: ok 1 last error -1 horizontal 150 vertical 150 wrap 1 font height -24\nICONTITLELOGFONT dpi 192: ok 1 height -24 weight 400\nICONMETRICS dpi 288: ok 1 last error -1 horizontal 225 vertical 225 wrap 1 font height -36\nICONTITLELOGFONT dpi 288: ok 1 height -36 weight 400\nGETWORKAREA dpi 96: ok 0 last error 87 first value 0\nGETWORKAREA dpi 144: ok 0 last error 87 first value 0\nGETWORKAREA dpi 0: ok 1 last error 4660 first value 0\nGETBEEP dpi 96: ok 0 last error 87 first value 0\nGETBEEP dpi 144: ok 0 last error 87 first value 0\nGETBEEP dpi 0: ok 1 last error 4660 first value 1\nGETMOUSE dpi 96: ok 0 last error 87 first value 0\nGETMOUSE dpi 144: ok 0 last error 87 first value 0\nGETMOUSE dpi 0: ok 1 last error 4660 first value 6\nICONHORIZONTALSPACING dpi 96: ok 0 last error 87 first value 0\nICONHORIZONTALSPACING dpi 144: ok 0 last error 87 first value 0\nICONHORIZONTALSPACING dpi 0: ok 1 last error 4660 first value 75\nGETWHEELSCROLLLINES dpi 96: ok 0 last error 87 first value 0\nGETWHEELSCROLLLINES dpi 144: ok 0 last error 87 first value 0\nGETWHEELSCROLLLINES dpi 0: ok 1 last error 4660 first value 3\nGETFONTSMOOTHING dpi 96: ok 0 last error 87 first value 0\nGETFONTSMOOTHING dpi 144: ok 0 last error 87 first value 0\nGETFONTSMOOTHING dpi 0: ok 1 last error 4660 first value 1\nGETMENUSHOWDELAY dpi 96: ok 0 last error 87 first value 0\nGETMENUSHOWDELAY dpi 144: ok 0 last error 87 first value 0\nGETMENUSHOWDELAY dpi 0: ok 1 last error 4660 first value 400\nGETCARETWIDTH dpi 96: ok 0 last error 87 first value 0\nGETCARETWIDTH dpi 144: ok 0 last error 87 first value 0\nGETCARETWIDTH dpi 0: ok 1 last error 4660 first value 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

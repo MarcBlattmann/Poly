@@ -65,6 +65,16 @@ pub const OUTPUTS: &[&str] = &[
     "win32u.dll",
     // ADR 0155.
     "bcryptprimitives.dll",
+    "version.dll",
+    "ole32.dll",
+    "s1test.exe",
+    "iphlpapi.dll",
+    "netapi32.dll",
+    "secur32.dll",
+    "dhcpcsvc.dll",
+    "dnsapi.dll",
+    "dbghelp.dll",
+    "b35test.exe",
     // ADR 0170.
     "dwrite.dll",
 ];
@@ -168,6 +178,21 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/gdi32",
             "personalities/nt/win32/win32u",
             "personalities/nt/win32/bcryptprimitives",
+            "personalities/nt/win32/version",
+            "personalities/nt/win32/ole32",
+            "personalities/nt/win32/s1test",
+            "personalities/nt/win32/netrt",
+            "personalities/nt/win32/iphlpapi",
+            "personalities/nt/win32/netapi32",
+            "personalities/nt/win32/secur32",
+            "personalities/nt/win32/dhcpcsvc",
+            "personalities/nt/win32/dnsapi",
+            "personalities/nt/win32/dbghelp",
+            "personalities/nt/win32/b35test",
+            // Host crates the new DLLs link (ADR 0155).
+            "crates/poly-etw",
+            "crates/poly-iphlp",
+            "crates/poly-netapi",
             "personalities/nt/win32/dwrite",
         ],
         &[
@@ -207,7 +232,7 @@ fn prune(dir: &Path) {
 fn build(target_dir: &Path) -> Result<PathBuf> {
     let mut cmd = cargo_for(target_dir, "build")?;
     step(
-        "build kernelbase.dll, kernel32.dll, advapi32.dll, ucrtbase.dll, msvcrt.dll, bcryptprimitives.dll and the test programs",
+        "build kernelbase.dll, kernel32.dll, advapi32.dll, ucrtbase.dll, msvcrt.dll, bcryptprimitives.dll, version.dll, iphlpapi.dll and the other network DLLs and the test programs",
         &mut cmd,
     )?;
     let out = target_dir.join("x86_64-pc-windows-msvc/release");
@@ -300,6 +325,7 @@ fn verify(dir: &Path) -> Result {
     verify_exe(dir, "a32test.exe", &["advapi32.dll", "kernel32.dll"])?;
     verify_crt(dir)?;
     verify_user32_oleaut32(dir)?;
+    verify_ole32(dir)?;
     verify_crypto(dir)?;
     verify_ws2_32(dir)?;
     verify_gui(dir)
@@ -389,6 +415,20 @@ fn verify_ws2_32(dir: &Path) -> Result {
         }
     }
     verify_exe(dir, "wstest.exe", &["ws2_32.dll", "kernel32.dll"])?;
+    verify_exe(
+        dir,
+        "b35test.exe",
+        &[
+            "advapi32.dll",
+            "iphlpapi.dll",
+            "netapi32.dll",
+            "secur32.dll",
+            "dhcpcsvc.dll",
+            "dbghelp.dll",
+            "crypt32.dll",
+            "kernel32.dll",
+        ],
+    )?;
     verify_http(dir)
 }
 
@@ -457,6 +497,33 @@ fn verify_exe(dir: &Path, file: &str, allowed: &[&str]) -> Result {
         }
     }
     Ok(())
+}
+
+/// `ole32.dll` exports its COM and Windows Runtime functions as code, and
+/// `s1test.exe` imports only what it should (ADR 0155, batch 4).
+fn verify_ole32(dir: &Path) -> Result {
+    use poly_pe::ExportTarget;
+    let dll = read(&dir.join("ole32.dll"))?;
+    let dll = parse(&dll)?;
+    let exports = dll.exports().map_err(|e| format!("ole32 exports: {e:?}"))?.ok_or("ole32: no exports")?;
+    for name in poly_com::OLE32_EXPORTS {
+        if !matches!(exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?, Some(ExportTarget::Rva(_))) {
+            return Err(format!("ole32.dll lacks {name}"));
+        }
+    }
+    verify_exe(
+        dir,
+        "s1test.exe",
+        &[
+            "kernel32.dll",
+            "ole32.dll",
+            "user32.dll",
+            "gdi32.dll",
+            "api-ms-win-core-winrt-l1-1-0.dll",
+            "api-ms-win-core-winrt-string-l1-1-0.dll",
+            "api-ms-win-shcore-scaling-l1-1-1.dll",
+        ],
+    )
 }
 
 /// `advapi32` forwards each of its `kernelbase` functions to its API-set

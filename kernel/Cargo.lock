@@ -88,6 +88,10 @@ name = "poly-input"
 version = "0.0.1"
 
 [[package]]
+name = "poly-iphlp"
+version = "0.0.1"
+
+[[package]]
 name = "poly-irq"
 version = "0.0.1"
 dependencies = [
@@ -151,6 +155,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-kernelbase"
+version = "0.0.1"
+dependencies = [
+ "poly-nls",
+ "poly-ntobj",
+ "poly-pe",
+ "poly-rtl",
+]
+
+[[package]]
 name = "poly-ldr"
 version = "0.0.1"
 dependencies = [
@@ -169,6 +183,13 @@ version = "0.0.1"
 [[package]]
 name = "poly-net"
 version = "0.0.1"
+
+[[package]]
+name = "poly-nls"
+version = "0.0.1"
+dependencies = [
+ "poly-rtl",
+]
 
 [[package]]
 name = "poly-ntobj"
@@ -215,6 +236,8 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-console",
+ "poly-iphlp",
+ "poly-kernelbase",
  "poly-net",
  "poly-ntobj",
  "poly-pe",
@@ -254,6 +277,13 @@ dependencies = [
 [[package]]
 name = "poly-rtc"
 version = "0.0.1"
+
+[[package]]
+name = "poly-rtl"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
 
 [[package]]
 name = "poly-sched"

@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/ConvertStringSidToSidA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  The ANSI form of ConvertStringSidToSidW; it parses the same strings and
+  returns the same SIDs.
+interface:
+  signature: "BOOL ConvertStringSidToSidA(LPCSTR string, PSID* sid)"
+rules:
+  same_as_w: "\"S-1-5-18\", \"s-1-5-18\", \"S-1-5-21-1-2-3-500\", \"BA\", \"SY\", \"WD\" and \"S-1-0x5-1\" parse to the same SIDs as in the W form (S-1-5-18, S-1-5-18, S-1-5-21-1-2-3-500, S-1-5-32-544, S-1-5-18, S-1-1-0, S-1-5-1)"
+  rejected: "\"S-1-5-\", \"S-2-5\" (no sub-authority), \"\", \"ZZ\", a leading or trailing space, a trailing \"-\", \"S-\", \"S-1-5--1\", \"XX\" and an authority of 281474976710656 fail with ERROR_INVALID_SID (1337) and leave *sid alone"
+  accepted_like_w: "\"S-1-5-4294967296\" (saturating to 4294967295) and \"S-3-5-1\" (a SID with revision byte 3, which IsValidSid rejects) are accepted as in the W form"
+errors:
+  invalid: "FALSE with last error ERROR_INVALID_SID (1337)"
+side_effects: "allocates the SID with LocalAlloc"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

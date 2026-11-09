@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "ardac_handles",
+      "exe_sha256": "587a95055fcd6c46846eb4547f20780c87136649cf9a96fb28091a2b3ca49da3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VU5BV0FSRTogdGhyZWFkIGhhbmRsZSBpcyBVTkFXQVJFIDsgdHdvIGNhbGxzIGVxdWFsIDEgOyB3aW5kb3cgZXF1YWxzIHRocmVhZCAxIDsgd2luZG93IGlzIFVOQVdBUkUKU1lTVEVNX0FXQVJFOiB0aHJlYWQgaGFuZGxlIGlzIFNZU1RFTV9BV0FSRSA7IHR3byBjYWxscyBlcXVhbCAxIDsgd2luZG93IGVxdWFscyB0aHJlYWQgMSA7IHdpbmRvdyBpcyBTWVNURU1fQVdBUkUKUEVSX01PTklUT1JfQVdBUkU6IHRocmVhZCBoYW5kbGUgaXMgUEVSX01PTklUT1JfQVdBUkUgOyB0d28gY2FsbHMgZXF1YWwgMSA7IHdpbmRvdyBlcXVhbHMgdGhyZWFkIDEgOyB3aW5kb3cgaXMgUEVSX01PTklUT1JfQVdBUkUKUEVSX01PTklUT1JfQVdBUkVfVjI6IHRocmVhZCBoYW5kbGUgaXMgUEVSX01PTklUT1JfQVdBUkVfVjIgOyB0d28gY2FsbHMgZXF1YWwgMSA7IHdpbmRvdyBlcXVhbHMgdGhyZWFkIDEgOyB3aW5kb3cgaXMgUEVSX01PTklUT1JfQVdBUkVfVjIKVU5BV0FSRV9HRElTQ0FMRUQ6IHRocmVhZCBoYW5kbGUgaXMgVU5BV0FSRV9HRElTQ0FMRUQgOyB0d28gY2FsbHMgZXF1YWwgMSA7IHdpbmRvdyBlcXVhbHMgdGhyZWFkIDEgOyB3aW5kb3cgaXMgVU5BV0FSRV9HRElTQ0FMRUQKcmF3IDB4NjAxMDogaXMgVU5BV0FSRSBlcnJvciA0NjYwCnJhdyAweDYwMTE6IGlzIFNZU1RFTV9BV0FSRSBlcnJvciA0NjYwCnJhdyAweDYwMTI6IGlzIG5vbmUgZXJyb3IgODcKcmF3IDB4NjAxMzogaXMgbm9uZSBlcnJvciA4NwpyYXcgMHgxMjogaXMgUEVSX01PTklUT1JfQVdBUkUgZXJyb3IgNDY2MApyYXcgMHgyMjogaXMgUEVSX01PTklUT1JfQVdBUkVfVjIgZXJyb3IgNDY2MApyYXcgMHg0MDAwNjAxMDogaXMgVU5BV0FSRV9HRElTQ0FMRUQgZXJyb3IgNDY2MApyYXcgMHg0MDAwNjAxMTogaXMgbm9uZSBlcnJvciA4NwpyYXcgMHhmZmZmZmZmZjgwMDA2MDEwOiBpcyBVTkFXQVJFIGVycm9yIDQ2NjAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "UNAWARE: thread handle is UNAWARE ; two calls equal 1 ; window equals thread 1 ; window is UNAWARE\nSYSTEM_AWARE: thread handle is SYSTEM_AWARE ; two calls equal 1 ; window equals thread 1 ; window is SYSTEM_AWARE\nPER_MONITOR_AWARE: thread handle is PER_MONITOR_AWARE ; two calls equal 1 ; window equals thread 1 ; window is PER_MONITOR_AWARE\nPER_MONITOR_AWARE_V2: thread handle is PER_MONITOR_AWARE_V2 ; two calls equal 1 ; window equals thread 1 ; window is PER_MONITOR_AWARE_V2\nUNAWARE_GDISCALED: thread handle is UNAWARE_GDISCALED ; two calls equal 1 ; window equals thread 1 ; window is UNAWARE_GDISCALED\nraw 0x6010: is UNAWARE error 4660\nraw 0x6011: is SYSTEM_AWARE error 4660\nraw 0x6012: is none error 87\nraw 0x6013: is none error 87\nraw 0x12: is PER_MONITOR_AWARE error 4660\nraw 0x22: is PER_MONITOR_AWARE_V2 error 4660\nraw 0x40006010: is UNAWARE_GDISCALED error 4660\nraw 0x40006011: is none error 87\nraw 0xffffffff80006010: is UNAWARE error 4660\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    }
+  ]
+}

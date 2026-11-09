@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "eds_errors",
+      "exe_sha256": "1f0e1044cbb29364047dc76f6099ff80995df47ccd1d261bfe161cb4991f9773",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmFkIGRldmljZSBESVNQTEFZOTogb2sgMCBsYXN0IGVycm9yIDB4MTIzNCBzcGVjVmVyc2lvbiAweDAgZG1TaXplIDE4OCBkbURyaXZlckV4dHJhIDAgZG1GaWVsZHMgMHgwCiAgIHBvc2l0aW9uIDExOSwwIG9yaWVudGF0aW9uIDAgZml4ZWQgb3V0cHV0IDAgYml0cyAwIDU3MDA1eDAgZmxhZ3MgMHgwIGZyZXF1ZW5jeSAwCmdhcmJhZ2UgZGV2aWNlOiBvayAwIGxhc3QgZXJyb3IgMHgxMjM0IHNwZWNWZXJzaW9uIDB4MCBkbVNpemUgMTg4IGRtRHJpdmVyRXh0cmEgMCBkbUZpZWxkcyAweDAKICAgcG9zaXRpb24gMTE5LDAgb3JpZW50YXRpb24gMCBmaXhlZCBvdXRwdXQgMCBiaXRzIDAgNTcwMDV4MCBmbGFncyAweDAgZnJlcXVlbmN5IDAKbW9kZSAxMDAwMDA6IG9rIDAgbGFzdCBlcnJvciAweDEyMzQgc3BlY1ZlcnNpb24gMHgwIGRtU2l6ZSAxODggZG1Ecml2ZXJFeHRyYSAwIGRtRmllbGRzIDB4MAogICBwb3NpdGlvbiAxMTksMCBvcmllbnRhdGlvbiAwIGZpeGVkIG91dHB1dCAwIGJpdHMgMCA1NzAwNXgwIGZsYWdzIDB4MCBmcmVxdWVuY3kgMAptb2RlIDB4RkZGRkZGRkQ6IG9rIDEgbGFzdCBlcnJvciAweDEyMzQgc3BlY1ZlcnNpb24gMHgwIGRtU2l6ZSAxODggZG1Ecml2ZXJFeHRyYSAwIGRtRmllbGRzIDB4NTgwMDAwCiAgIHBvc2l0aW9uIDAsMCBvcmllbnRhdGlvbiAwIGZpeGVkIG91dHB1dCAwIGJpdHMgMCAweDAgZmxhZ3MgMHgwIGZyZXF1ZW5jeSA2NApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "bad device DISPLAY9: ok 0 last error 0x1234 specVersion 0x0 dmSize 188 dmDriverExtra 0 dmFields 0x0\n   position 119,0 orientation 0 fixed output 0 bits 0 57005x0 flags 0x0 frequency 0\ngarbage device: ok 0 last error 0x1234 specVersion 0x0 dmSize 188 dmDriverExtra 0 dmFields 0x0\n   position 119,0 orientation 0 fixed output 0 bits 0 57005x0 flags 0x0 frequency 0\nmode 100000: ok 0 last error 0x1234 specVersion 0x0 dmSize 188 dmDriverExtra 0 dmFields 0x0\n   position 119,0 orientation 0 fixed output 0 bits 0 57005x0 flags 0x0 frequency 0\nmode 0xFFFFFFFD: ok 1 last error 0x1234 specVersion 0x0 dmSize 188 dmDriverExtra 0 dmFields 0x580000\n   position 0,0 orientation 0 fixed output 0 bits 0 0x0 flags 0x0 frequency 64\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    },
+    {
+      "name": "eds_modes",
+      "exe_sha256": "db27767d1a7514a7db53da10d9980a424b248e4a03305c7a7ac3b921e08ea5a8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGFzdCB0aGUgbGFzdCBtb2RlOiBGQUxTRSwgbGFzdCBlcnJvciAweDEyMzQKb2sgbW9yZSB0aGFuIDAgbW9kZXMKZW51bWVyYXRpb24gZW5kZWQgd2l0aCBGQUxTRTogdHJ1ZSA7IGN1cnJlbnQgbW9kZSBhbW9uZyB0aGUgbW9kZXM6IHRydWUgOyBzb3J0ZWQgYnkgc2l6ZTogdHJ1ZSA7IGFsbCAzMiBiaXRzOiB0cnVlCm1vZGUgMDogb2sgMSBsYXN0IGVycm9yIDB4MTIzNCBzcGVjVmVyc2lvbiAweDQwMSBkbVNpemUgMTg4IGRtRHJpdmVyRXh0cmEgMCBkbUZpZWxkcyAweDdjMDA4MAogICBwb3NpdGlvbiAwLDAgb3JpZW50YXRpb24gMCBmaXhlZCBvdXRwdXQgMCBiaXRzIDMyIDgwMHg2MDAgZmxhZ3MgMHgwIGZyZXF1ZW5jeSA2MAogICBkZXZpY2UgbmFtZSAnY2RkJwpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "past the last mode: FALSE, last error 0x1234\nok more than 0 modes\nenumeration ended with FALSE: true ; current mode among the modes: true ; sorted by size: true ; all 32 bits: true\nmode 0: ok 1 last error 0x1234 specVersion 0x401 dmSize 188 dmDriverExtra 0 dmFields 0x7c0080\n   position 0,0 orientation 0 fixed output 0 bits 32 800x600 flags 0x0 frequency 60\n   device name 'cdd'\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    }
+  ]
+}

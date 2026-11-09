@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/LookupPrivilegeValueW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Finds the LUID of a privilege by name (Se...Privilege constants, winnt.h).
+  The high part is 0; the low parts are fixed numbers.
+interface:
+  signature: "BOOL LookupPrivilegeValueW(LPCWSTR system_name, LPCWSTR name, PLUID luid)"
+rules:
+  luids: "the low parts are: SeCreateTokenPrivilege 2, SeAssignPrimaryTokenPrivilege 3, SeLockMemoryPrivilege 4, SeIncreaseQuotaPrivilege 5, SeMachineAccountPrivilege 6, SeTcbPrivilege 7, SeSecurityPrivilege 8, SeTakeOwnershipPrivilege 9, SeLoadDriverPrivilege 10, SeSystemProfilePrivilege 11, SeSystemtimePrivilege 12, SeProfileSingleProcessPrivilege 13, SeIncreaseBasePriorityPrivilege 14, SeCreatePagefilePrivilege 15, SeCreatePermanentPrivilege 16, SeBackupPrivilege 17, SeRestorePrivilege 18, SeShutdownPrivilege 19, SeDebugPrivilege 20, SeAuditPrivilege 21, SeSystemEnvironmentPrivilege 22, SeChangeNotifyPrivilege 23, SeRemoteShutdownPrivilege 24, SeUndockPrivilege 25, SeSyncAgentPrivilege 26, SeEnableDelegationPrivilege 27, SeManageVolumePrivilege 28, SeImpersonatePrivilege 29, SeCreateGlobalPrivilege 30, SeTrustedCredManAccessPrivilege 31, SeRelabelPrivilege 32, SeIncreaseWorkingSetPrivilege 33, SeTimeZonePrivilege 34, SeCreateSymbolicLinkPrivilege 35, SeDelegateSessionUserImpersonatePrivilege 36"
+  case: "names are case-insensitive (\"sechangenotifyprivilege\", \"SECHANGENOTIFYPRIVILEGE\" give 23)"
+  system_name: "NULL, the empty string and \".\" look up on the local computer"
+errors:
+  unknown: "\"SeChangeNotify\", \"SeFooPrivilege\", \"\", a name with a trailing space and \"SeTcbPrivilegeX\": FALSE, ERROR_NO_SUCH_PRIVILEGE (1313); the failed call sets the LUID to 0:0"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

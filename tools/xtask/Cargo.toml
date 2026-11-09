@@ -13,6 +13,7 @@ poly-ext2.workspace = true
 poly-font.workspace = true
 poly-gfx.workspace = true
 poly-kernelbase.workspace = true
+poly-com.workspace = true
 poly-ldr.workspace = true
 poly-macho.workspace = true
 poly-stubs.workspace = true

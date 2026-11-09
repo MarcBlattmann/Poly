@@ -45,7 +45,7 @@ const CHILD_STDOUT: &[u8] = b"child stdout\r\n";
 const CHILD_STDERR: &[u8] = b"child stderr\r\n";
 
 /// `s` (ASCII) appended to `buf` at `*at`.
-fn push_ascii(buf: &mut [u16], at: &mut usize, s: &[u8]) {
+pub(crate) fn push_ascii(buf: &mut [u16], at: &mut usize, s: &[u8]) {
     for &c in s {
         buf[*at] = u16::from(c);
         *at += 1;

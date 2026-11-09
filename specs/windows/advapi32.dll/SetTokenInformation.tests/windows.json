@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e1df20b984fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:53:24Z",
+  "tests": [
+    {
+      "name": "sti_classes",
+      "exe_sha256": "d302a3537679b80db5d3418d0cea680ed948160db4be96bb0752a4329cda103f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VG9rZW5WaXJ0dWFsaXphdGlvbkVuYWJsZWQgMTogb2s9MSBlcnI9LTEKVG9rZW5WaXJ0dWFsaXphdGlvbkVuYWJsZWQgMDogb2s9MSBlcnI9LTEKVG9rZW5WaXJ0dWFsaXphdGlvbkFsbG93ZWQgMDogb2s9MCBlcnI9MTMxNApUb2tlblNlc3Npb25JZCAxOiBvaz0wIGVycj0xMzE0ClRva2VuVUlBY2Nlc3MgMTogb2s9MCBlcnI9MTMxNApUb2tlbk1hbmRhdG9yeVBvbGljeSAwOiBvaz0wIGVycj0xMzE0ClRva2VuTWFuZGF0b3J5UG9saWN5IDE6IG9rPTAgZXJyPTEzMTQKVG9rZW5TYW5kQm94SW5lcnQgMTogb2s9MCBlcnI9ODcKVG9rZW5UeXBlIDI6IG9rPTAgZXJyPTg3ClRva2VuRWxldmF0aW9uVHlwZSAxOiBvaz0wIGVycj04NwpUb2tlbkhhc1Jlc3RyaWN0aW9ucyAxOiBvaz0wIGVycj04NwpjbGFzcyAwOiBvaz0wIGVycj04NwpjbGFzcyA5OTogb2s9MCBlcnI9ODcKdmlydHVhbGl6YXRpb24gZW5hYmxlZCBub3cgMCwgYWxsb3dlZCBub3cgMCwgcG9saWN5IG5vdyAzClRva2VuVmlydHVhbGl6YXRpb25FbmFibGVkIHdpdGggbGVuZ3RoIDA6IG9rPTAgZXJyPTI0ClRva2VuVmlydHVhbGl6YXRpb25FbmFibGVkIHdpdGggbGVuZ3RoIDE6IG9rPTAgZXJyPTI0ClRva2VuVmlydHVhbGl6YXRpb25FbmFibGVkIHdpdGggbGVuZ3RoIDM6IG9rPTAgZXJyPTI0ClRva2VuVmlydHVhbGl6YXRpb25FbmFibGVkIHdpdGggbGVuZ3RoIDg6IG9rPTAgZXJyPTI0ClRva2VuVmlydHVhbGl6YXRpb25FbmFibGVkIHdpdGggb25seSBRVUVSWTogb2s9MCBlcnI9NQpUb2tlblZpcnR1YWxpemF0aW9uRW5hYmxlZCB3aXRoIG9ubHkgRFVQTElDQVRFOiBvaz0wIGVycj01ClRva2VuVmlydHVhbGl6YXRpb25FbmFibGVkIHdpdGggb25seSBBREpVU1RfREVGQVVMVDogb2s9MSBlcnI9LTEKVG9rZW5WaXJ0dWFsaXphdGlvbkVuYWJsZWQgd2l0aCBvbmx5IEFESlVTVF9TRVNTSU9OSUQ6IG9rPTAgZXJyPTUKVG9rZW5WaXJ0dWFsaXphdGlvbkVuYWJsZWQgd2l0aCBvbmx5IEFESlVTVF9QUklWSUxFR0VTOiBvaz0wIGVycj01CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "TokenVirtualizationEnabled 1: ok=1 err=-1\nTokenVirtualizationEnabled 0: ok=1 err=-1\nTokenVirtualizationAllowed 0: ok=0 err=1314\nTokenSessionId 1: ok=0 err=1314\nTokenUIAccess 1: ok=0 err=1314\nTokenMandatoryPolicy 0: ok=0 err=1314\nTokenMandatoryPolicy 1: ok=0 err=1314\nTokenSandBoxInert 1: ok=0 err=87\nTokenType 2: ok=0 err=87\nTokenElevationType 1: ok=0 err=87\nTokenHasRestrictions 1: ok=0 err=87\nclass 0: ok=0 err=87\nclass 99: ok=0 err=87\nvirtualization enabled now 0, allowed now 0, policy now 3\nTokenVirtualizationEnabled with length 0: ok=0 err=24\nTokenVirtualizationEnabled with length 1: ok=0 err=24\nTokenVirtualizationEnabled with length 3: ok=0 err=24\nTokenVirtualizationEnabled with length 8: ok=0 err=24\nTokenVirtualizationEnabled with only QUERY: ok=0 err=5\nTokenVirtualizationEnabled with only DUPLICATE: ok=0 err=5\nTokenVirtualizationEnabled with only ADJUST_DEFAULT: ok=1 err=-1\nTokenVirtualizationEnabled with only ADJUST_SESSIONID: ok=0 err=5\nTokenVirtualizationEnabled with only ADJUST_PRIVILEGES: ok=0 err=5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "sti_default_dacl",
+      "exe_sha256": "c3fdd0074ccbd880d6d9eb23b8d2578cd6588403905963a17f9a8ea399a52da6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3JpZ2luYWw6IG9rPXRydWUgYWNsX3ByZXNlbnQ9dHJ1ZSBsZW5ndGhfbWF0Y2hlc19hY2w9dHJ1ZQpzZXQgdHdvLUFDRSBBQ0w6IG9rPTEgZXJyPS0xCnJlYWQgYmFjazogb2s9dHJ1ZSBsZW5ndGg9MTAzMiBhY2xfb2Zmc2V0PTggYWNsX3NpemU9MTAyNCBzYW1lIGJ5dGVzPXRydWUgYWNlX2NvdW50PTIKc2V0IE5VTEwgQUNMOiBvaz0xIGVycj0tMTsgcmVhZCBiYWNrIG9rPXRydWUgbGVuZ3RoPTggYWNsX251bGw9dHJ1ZQpzZXQgYW4gQUNMIHdpdGggcmV2aXNpb24gOTogb2s9MCBlcnI9MTMzNgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "original: ok=true acl_present=true length_matches_acl=true\nset two-ACE ACL: ok=1 err=-1\nread back: ok=true length=1032 acl_offset=8 acl_size=1024 same bytes=true ace_count=2\nset NULL ACL: ok=1 err=-1; read back ok=true length=8 acl_null=true\nset an ACL with revision 9: ok=0 err=1336\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "sti_owner_group",
+      "exe_sha256": "b4c81da9288c7b2ab8795447a7846fef5d04fc3b11a1304074e0457ea136fb87",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhcnQgb3duZXI9Uy0xLTUtMzItNTQ0IHByaW1hcnlfZ3JvdXA9Uy0xLTUtMjEtPG1hY2hpbmU+LTUxMwpvd25lciA8LSBTLTEtNS0zMi01NDQ6IG9rPTEgZXJyPS0xIG5vdyBTLTEtNS0zMi01NDQKb3duZXIgPC0gUy0xLTUtMzItNTQ1OiBvaz0wIGVycj0xMzA3IG5vdyBTLTEtNS0zMi01NDQKb3duZXIgPC0gUy0xLTEtMDogb2s9MCBlcnI9MTMwNyBub3cgUy0xLTUtMzItNTQ0Cm93bmVyIDwtIFMtMS01LTExOiBvaz0wIGVycj0xMzA3IG5vdyBTLTEtNS0zMi01NDQKb3duZXIgPC0gUy0xLTUtMTg6IG9rPTAgZXJyPTEzMDcgbm93IFMtMS01LTMyLTU0NApvd25lciA8LSBTLTEtNS0zMi01NDY6IG9rPTAgZXJyPTEzMDcgbm93IFMtMS01LTMyLTU0NApvd25lciA8LSBTLTEtMTYtNDA5Njogb2s9MCBlcnI9MTMwNyBub3cgUy0xLTUtMzItNTQ0CnByaW1hcnkgZ3JvdXAgPC0gUy0xLTUtMzItNTQ0OiBvaz0xIGVycj0tMSBub3cgUy0xLTUtMzItNTQ0CnByaW1hcnkgZ3JvdXAgPC0gUy0xLTUtMzItNTQ1OiBvaz0xIGVycj0tMSBub3cgUy0xLTUtMzItNTQ1CnByaW1hcnkgZ3JvdXAgPC0gUy0xLTEtMDogb2s9MSBlcnI9LTEgbm93IFMtMS0xLTAKcHJpbWFyeSBncm91cCA8LSBTLTEtNS0xMTogb2s9MSBlcnI9LTEgbm93IFMtMS01LTExCnByaW1hcnkgZ3JvdXAgPC0gUy0xLTUtMTg6IG9rPTAgZXJyPTEzMDggbm93IFMtMS01LTExCnByaW1hcnkgZ3JvdXAgPC0gUy0xLTUtMzItNTQ2OiBvaz0wIGVycj0xMzA4IG5vdyBTLTEtNS0xMQpwcmltYXJ5IGdyb3VwIDwtIFMtMS0xNi00MDk2OiBvaz0wIGVycj0xMzA4IG5vdyBTLTEtNS0xMQpvd25lciA8LSB1c2VyIFNJRDogb2s9MSBub3cgZXF1YWxzIHRoZSB1c2VyOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "start owner=S-1-5-32-544 primary_group=S-1-5-21-<machine>-513\nowner <- S-1-5-32-544: ok=1 err=-1 now S-1-5-32-544\nowner <- S-1-5-32-545: ok=0 err=1307 now S-1-5-32-544\nowner <- S-1-1-0: ok=0 err=1307 now S-1-5-32-544\nowner <- S-1-5-11: ok=0 err=1307 now S-1-5-32-544\nowner <- S-1-5-18: ok=0 err=1307 now S-1-5-32-544\nowner <- S-1-5-32-546: ok=0 err=1307 now S-1-5-32-544\nowner <- S-1-16-4096: ok=0 err=1307 now S-1-5-32-544\nprimary group <- S-1-5-32-544: ok=1 err=-1 now S-1-5-32-544\nprimary group <- S-1-5-32-545: ok=1 err=-1 now S-1-5-32-545\nprimary group <- S-1-1-0: ok=1 err=-1 now S-1-1-0\nprimary group <- S-1-5-11: ok=1 err=-1 now S-1-5-11\nprimary group <- S-1-5-18: ok=0 err=1308 now S-1-5-11\nprimary group <- S-1-5-32-546: ok=0 err=1308 now S-1-5-11\nprimary group <- S-1-16-4096: ok=0 err=1308 now S-1-5-11\nowner <- user SID: ok=1 now equals the user: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

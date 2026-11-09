@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/RtlDeleteAce
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: as declared
+  for the NT native API (ntifs.h / wdm.h / winternl.h, Microsoft Learn)
+  where the function is documented there; where it is not, the arguments are
+  those of the matching Win32 function, which map one to one onto the native
+  call, and the interface entry "prototype_note" says so.
+summary: >
+  Removes the ACE at the index: later ACEs move down, the bytes freed at the
+  end of the used area are zeroed, the count drops by one, the size field is
+  unchanged. An index at or past the count gives STATUS_INVALID_PARAMETER.
+interface:
+  signature: "NTSTATUS RtlDeleteAce(PACL acl, ULONG ace_index)"
+  layout: "ACL (winnt.h): 8-byte header {Revision u8, Sbz1 u8, AclSize u16, AceCount u16, Sbz2 u16}, then the ACEs one after the other; an ACE starts {AceType u8, AceFlags u8, AceSize u16}; an access ACE is that header, a 32-bit Mask and the SID (size 8 + SID length). ACL revisions 2, 3 and 4 exist (ACL_REVISION, ACL_REVISION3, ACL_REVISION_DS/4)."
+  result: "NTSTATUS values are printed as 8 hex digits: STATUS_SUCCESS 0, STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_UNKNOWN_REVISION 0xC0000058, STATUS_REVISION_MISMATCH 0xC0000059, STATUS_PRIVILEGE_NOT_HELD 0xC0000061, STATUS_INVALID_ACL 0xC0000077, STATUS_INVALID_SID 0xC0000078, STATUS_INVALID_SECURITY_DESCR 0xC0000079, STATUS_NO_TOKEN 0xC000007C, STATUS_ALLOTTED_SPACE_EXCEEDED 0xC0000099, STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5, STATUS_BAD_DESCRIPTOR_FORMAT 0xC00000E7 (ntstatus.h). A BOOLEAN result is one byte, 0 or 1."
+  prototype_note: "Learn page exists (ntifs.h); Win32 counterpart DeleteAce"
+rules:
+  compaction: "for ACEs of 20, 24, 20 bytes in an ACL of size 96 whose free area holds 0xAA bytes: deleting index 1 gives count 2 with the third ACE directly after the first and 24 zero bytes after the used area; deleting index 0 then 0 leaves count 1 and count 0 with every used byte zero; the 0xAA bytes beyond the used area and the size field 96 never change"
+  errors: "indexes 2, 3, 100 and 0xFFFFFFFF of a 2-ACE ACL, index 0 of an empty ACL, ACL revisions 0, 1 and 5, a count of 5 over two ACEs with index 3, and an ACE of size 0 with index 1 all return STATUS_INVALID_PARAMETER with the count unchanged"
+errors:
+  invalid_parameter: "STATUS_INVALID_PARAMETER (0xC000000D) for every failure listed above"
+side_effects: "changes the ACL"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

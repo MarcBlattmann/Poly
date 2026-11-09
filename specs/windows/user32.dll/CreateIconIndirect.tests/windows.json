@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "cii_color",
+      "exe_sha256": "2376adb8acb9596ef98126f7ac8e700db4940bf20350e746119b7ed5eacd8d6c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zkljb24gRkFMU0UgaG90c3BvdCAzLDQgKGNvbG91ciBiaXRtYXAgc2VsZWN0ZWQgaW4gYSBEQyk6IHdpbmRvdyBlcnJvciAweDEyMzQKICAgc2hhcGU6IGZJY29uIDAgaG90c3BvdCAzLDQgbWFzayAxNngxNiBwbGFuZXMgMSBiaXRzIDEgOyBjb2xvciAxNngxNiBwbGFuZXMgMSBiaXRzIDMyCiAgIGRyYXduIDE2eDE2OiBiYWNrZ3JvdW5kIDEyOCByZWQgMTI4IG90aGVyIDAKICAgZHJhd24gMzJ4MzI6IGJhY2tncm91bmQgNTEyIHJlZCA1MTIgb3RoZXIgMApmSWNvbiBUUlVFOiBmSWNvbiAxIGhvdHNwb3QgOCw4IG1hc2sgMTZ4MTYgcGxhbmVzIDEgYml0cyAxIDsgY29sb3IgMTZ4MTYgcGxhbmVzIDEgYml0cyAzMgpmSWNvbiBGQUxTRSBob3RzcG90IDEwMCwyMDAgb3V0c2lkZSB0aGUgYml0bWFwczogd2luZG93CiAgIHNoYXBlOiBmSWNvbiAwIGhvdHNwb3QgMTAwLDIwMCBtYXNrIDE2eDE2IHBsYW5lcyAxIGJpdHMgMSA7IGNvbG9yIDE2eDE2IHBsYW5lcyAxIGJpdHMgMzIKYWZ0ZXIgZGVsZXRpbmcgdGhlIG9yaWdpbmFsIGJpdG1hcHM6IGZJY29uIDAgaG90c3BvdCAzLDQgbWFzayAxNngxNiBwbGFuZXMgMSBiaXRzIDEgOyBjb2xvciAxNngxNiBwbGFuZXMgMSBiaXRzIDMyCiAgIGRyYXduIDE2eDE2IGFnYWluOiBiYWNrZ3JvdW5kIDEyOCByZWQgMTI4CjI0IGJwcCBjb2xvdXIgYml0bWFwOiB3aW5kb3cgZXJyb3IgMHgxMjM0CiAgIHNoYXBlOiBmSWNvbiAxIGhvdHNwb3QgOCw4IG1hc2sgMTZ4MTYgcGxhbmVzIDEgYml0cyAxIDsgY29sb3IgMTZ4MTYgcGxhbmVzIDEgYml0cyAzMgoxIGJwcCBjb2xvdXIgYml0bWFwOiB3aW5kb3cgZXJyb3IgMHgxMjM0CiAgIHNoYXBlOiBmSWNvbiAxIGhvdHNwb3QgOCw4IG1hc2sgMTZ4MTYgcGxhbmVzIDEgYml0cyAxIDsgY29sb3IgMTZ4MTYgcGxhbmVzIDEgYml0cyAzMgo4IGJwcCBjb2xvdXIgYml0bWFwOiB3aW5kb3cgZXJyb3IgMHgxMjM0CiAgIHNoYXBlOiBmSWNvbiAxIGhvdHNwb3QgOCw4IG1hc2sgMTZ4MTYgcGxhbmVzIDEgYml0cyAxIDsgY29sb3IgMTZ4MTYgcGxhbmVzIDEgYml0cyAzMgoxNiBicHAgY29sb3VyIGJpdG1hcDogd2luZG93IGVycm9yIDB4MTIzNAogICBzaGFwZTogZkljb24gMSBob3RzcG90IDgsOCBtYXNrIDE2eDE2IHBsYW5lcyAxIGJpdHMgMSA7IGNvbG9yIDE2eDE2IHBsYW5lcyAxIGJpdHMgMzIKR2V0SWNvbkluZm8gdHdpY2U6IG1hc2tzIGRpZmZlciB0cnVlIGNvbG91cnMgZGlmZmVyIHRydWUgOyBub3QgdGhlIG9yaWdpbmFscyB0cnVlCmNvbG91ciAxNngxNiB3aXRoIG1hc2sgMzJ4MzI6IG51bGwgZXJyb3IgODcKY29sb3VyIDE2eDE2IHdpdGggbWFzayAxNngzMjogbnVsbCBlcnJvciA4NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "fIcon FALSE hotspot 3,4 (colour bitmap selected in a DC): window error 0x1234\n   shape: fIcon 0 hotspot 3,4 mask 16x16 planes 1 bits 1 ; color 16x16 planes 1 bits 32\n   drawn 16x16: background 128 red 128 other 0\n   drawn 32x32: background 512 red 512 other 0\nfIcon TRUE: fIcon 1 hotspot 8,8 mask 16x16 planes 1 bits 1 ; color 16x16 planes 1 bits 32\nfIcon FALSE hotspot 100,200 outside the bitmaps: window\n   shape: fIcon 0 hotspot 100,200 mask 16x16 planes 1 bits 1 ; color 16x16 planes 1 bits 32\nafter deleting the original bitmaps: fIcon 0 hotspot 3,4 mask 16x16 planes 1 bits 1 ; color 16x16 planes 1 bits 32\n   drawn 16x16 again: background 128 red 128\n24 bpp colour bitmap: window error 0x1234\n   shape: fIcon 1 hotspot 8,8 mask 16x16 planes 1 bits 1 ; color 16x16 planes 1 bits 32\n1 bpp colour bitmap: window error 0x1234\n   shape: fIcon 1 hotspot 8,8 mask 16x16 planes 1 bits 1 ; color 16x16 planes 1 bits 32\n8 bpp colour bitmap: window error 0x1234\n   shape: fIcon 1 hotspot 8,8 mask 16x16 planes 1 bits 1 ; color 16x16 planes 1 bits 32\n16 bpp colour bitmap: window error 0x1234\n   shape: fIcon 1 hotspot 8,8 mask 16x16 planes 1 bits 1 ; color 16x16 planes 1 bits 32\nGetIconInfo twice: masks differ true colours differ true ; not the originals true\ncolour 16x16 with mask 32x32: null error 87\ncolour 16x16 with mask 16x32: null error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "cii_mono",
+      "exe_sha256": "7e7684654b70c587cec626725d13133c394a3e052fa4a9688a4e9f3a6e68d354",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zkljb24gVFJVRSwgbWFzayAxNngzMjogd2luZG93IGVycm9yIDB4MTIzNAogICBzaGFwZTogZkljb24gMSBob3RzcG90IDgsOCBtYXNrIDE2eDMyIHBsYW5lcyAxIGJpdHMgMSA7IGNvbG9yIDB4MCBwbGFuZXMgMCBiaXRzIDAgKG5vIGNvbG9yIGJpdG1hcCkKICAgRElfTk9STUFMOiBiYWNrZ3JvdW5kIDEyOCBvdGhlciAxMjgKICAgRElfTUFTSzogYmFja2dyb3VuZCAwIG90aGVyIDI1NgogICBESV9JTUFHRTogYmFja2dyb3VuZCAwIG90aGVyIDI1NgogICBhZnRlciBkZWxldGluZyB0aGUgc291cmNlIG1hc2s6IGZJY29uIDEgaG90c3BvdCA4LDggbWFzayAxNngzMiBwbGFuZXMgMSBiaXRzIDEgOyBjb2xvciAweDAgcGxhbmVzIDAgYml0cyAwIChubyBjb2xvciBiaXRtYXApCkRlc3Ryb3lJY29uOiBUUlVFIGVycm9yIDB4MTIzNApEZXN0cm95SWNvbiBhZ2FpbjogRkFMU0UgZXJyb3IgMTQwMgpHZXRJY29uSW5mbyBvbiB0aGUgZGVzdHJveWVkIGljb246IEdldEljb25JbmZvIEZBTFNFIGVycm9yIDE0MDIKZkljb24gRkFMU0UgaG90c3BvdCA1LDY6IHdpbmRvdwogICBzaGFwZTogZkljb24gMCBob3RzcG90IDUsNiBtYXNrIDE2eDMyIHBsYW5lcyAxIGJpdHMgMSA7IGNvbG9yIDB4MCBwbGFuZXMgMCBiaXRzIDAgKG5vIGNvbG9yIGJpdG1hcCkKbWFzayAxNngzMTogd2luZG93IGVycm9yIDB4MTIzNAogICBzaGFwZTogZkljb24gMSBob3RzcG90IDgsNyBtYXNrIDE2eDMxIHBsYW5lcyAxIGJpdHMgMSA7IGNvbG9yIDB4MCBwbGFuZXMgMCBiaXRzIDAgKG5vIGNvbG9yIGJpdG1hcCkKbWFzayAzMng2NDogd2luZG93IGVycm9yIDB4MTIzNAogICBzaGFwZTogZkljb24gMSBob3RzcG90IDE2LDE2IG1hc2sgMzJ4NjQgcGxhbmVzIDEgYml0cyAxIDsgY29sb3IgMHgwIHBsYW5lcyAwIGJpdHMgMCAobm8gY29sb3IgYml0bWFwKQptYXNrIDh4MTY6IHdpbmRvdyBlcnJvciAweDEyMzQKICAgc2hhcGU6IGZJY29uIDEgaG90c3BvdCA0LDQgbWFzayA4eDE2IHBsYW5lcyAxIGJpdHMgMSA7IGNvbG9yIDB4MCBwbGFuZXMgMCBiaXRzIDAgKG5vIGNvbG9yIGJpdG1hcCkKbWFzayA0OHg5Njogd2luZG93IGVycm9yIDB4MTIzNAogICBzaGFwZTogZkljb24gMSBob3RzcG90IDI0LDI0IG1hc2sgNDh4OTYgcGxhbmVzIDEgYml0cyAxIDsgY29sb3IgMHgwIHBsYW5lcyAwIGJpdHMgMCAobm8gY29sb3IgYml0bWFwKQptYXNrIDE2eDE2OiB3aW5kb3cgZXJyb3IgMHgxMjM0CiAgIHNoYXBlOiBmSWNvbiAxIGhvdHNwb3QgOCw0IG1hc2sgMTZ4MTYgcGxhbmVzIDEgYml0cyAxIDsgY29sb3IgMHgwIHBsYW5lcyAwIGJpdHMgMCAobm8gY29sb3IgYml0bWFwKQptYXNrIDF4Mjogd2luZG93IGVycm9yIDB4MTIzNAogICBzaGFwZTogZkljb24gMSBob3RzcG90IDAsMCBtYXNrIDF4MiBwbGFuZXMgMSBiaXRzIDEgOyBjb2xvciAweDAgcGxhbmVzIDAgYml0cyAwIChubyBjb2xvciBiaXRtYXApCm1hc2sgNjR4MTI4OiB3aW5kb3cgZXJyb3IgMHgxMjM0CiAgIHNoYXBlOiBmSWNvbiAxIGhvdHNwb3QgMzIsMzIgbWFzayA2NHgxMjggcGxhbmVzIDEgYml0cyAxIDsgY29sb3IgMHgwIHBsYW5lcyAwIGJpdHMgMCAobm8gY29sb3IgYml0bWFwKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "fIcon TRUE, mask 16x32: window error 0x1234\n   shape: fIcon 1 hotspot 8,8 mask 16x32 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\n   DI_NORMAL: background 128 other 128\n   DI_MASK: background 0 other 256\n   DI_IMAGE: background 0 other 256\n   after deleting the source mask: fIcon 1 hotspot 8,8 mask 16x32 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\nDestroyIcon: TRUE error 0x1234\nDestroyIcon again: FALSE error 1402\nGetIconInfo on the destroyed icon: GetIconInfo FALSE error 1402\nfIcon FALSE hotspot 5,6: window\n   shape: fIcon 0 hotspot 5,6 mask 16x32 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\nmask 16x31: window error 0x1234\n   shape: fIcon 1 hotspot 8,7 mask 16x31 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\nmask 32x64: window error 0x1234\n   shape: fIcon 1 hotspot 16,16 mask 32x64 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\nmask 8x16: window error 0x1234\n   shape: fIcon 1 hotspot 4,4 mask 8x16 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\nmask 48x96: window error 0x1234\n   shape: fIcon 1 hotspot 24,24 mask 48x96 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\nmask 16x16: window error 0x1234\n   shape: fIcon 1 hotspot 8,4 mask 16x16 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\nmask 1x2: window error 0x1234\n   shape: fIcon 1 hotspot 0,0 mask 1x2 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\nmask 64x128: window error 0x1234\n   shape: fIcon 1 hotspot 32,32 mask 64x128 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

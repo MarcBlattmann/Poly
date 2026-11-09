@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "2d24da3f08a2",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:57:44Z",
+  "tests": [
+    {
+      "name": "ntqit_args",
+      "exe_sha256": "7511c8772b0650f184456423b32641e802d3615d550b456c0c41108dfa34ddec",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTCByZXR1cm4gbGVuZ3RoLCBleGFjdCBidWZmZXI6IDB4YzAwMDAwMDUKTlVMTCBidWZmZXIsIGxlbmd0aCA0OiAweGMwMDAwMDA1IHJldHVybmVkX2xlbmd0aD0tMQpOVUxMIGJ1ZmZlciwgbGVuZ3RoIDA6IDB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTQKbGVuZ3RoIDQwOTYgZm9yIGEgNC1ieXRlIGNsYXNzOiAweDAwMDAwMDAwIHJldHVybmVkX2xlbmd0aD00IGJ5dGVzX3dyaXR0ZW49NApsZW5ndGggMTAwIGZvciBUb2tlblN0YXRpc3RpY3M6IDB4MDAwMDAwMDAgcmV0dXJuZWRfbGVuZ3RoPTU2IGJ5dGVzX2FmdGVyX3RoZV9yZXR1cm5lZF9sZW5ndGhfdW50b3VjaGVkPXRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL return length, exact buffer: 0xc0000005\nNULL buffer, length 4: 0xc0000005 returned_length=-1\nNULL buffer, length 0: 0xc0000023 returned_length=4\nlength 4096 for a 4-byte class: 0x00000000 returned_length=4 bytes_written=4\nlength 100 for TokenStatistics: 0x00000000 returned_length=56 bytes_after_the_returned_length_untouched=true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "ntqit_layout",
+      "exe_sha256": "83ecd0836f01e0c1349986bf2f6407c622488c7850597b87f37a1239752b9e69",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dXNlcjogc3RhdHVzPTB4MDAwMDAwMDAgbGVuZ3RoPTQ0IHNpZF9vZmZzZXQ9MTYgc2lkX2xlbmd0aD0yOCBzdHJ1Y3RfYXR0cnM9MCB0b3RhbF9tYXRjaGVzPXRydWUKb3duZXI6IHN0YXR1cz0weDAwMDAwMDAwIGxlbmd0aD0yNCBzaWRfb2Zmc2V0PTggc2lkX2xlbmd0aD0xNiBzdHJ1Y3RfYXR0cnM9LTEgdG90YWxfbWF0Y2hlcz10cnVlCnByaW1hcnlfZ3JvdXA6IHN0YXR1cz0weDAwMDAwMDAwIGxlbmd0aD0zNiBzaWRfb2Zmc2V0PTggc2lkX2xlbmd0aD0yOCBzdHJ1Y3RfYXR0cnM9LTEgdG90YWxfbWF0Y2hlcz10cnVlCmludGVncml0eTogc3RhdHVzPTB4MDAwMDAwMDAgbGVuZ3RoPTI4IHNpZF9vZmZzZXQ9MTYgc2lkX2xlbmd0aD0xMiBzdHJ1Y3RfYXR0cnM9OTYgdG90YWxfbWF0Y2hlcz10cnVlCmdyb3Vwczogc3RhdHVzPTB4MDAwMDAwMDAgY291bnQ9MTIgbGVuZ3RoPTM4MCBmaXJzdF9zaWRfb2Zmc2V0PTIwMCBhcnJheV9lbmQ9MjAwCmdyb3VwczogYXJyYXkgMjAwICsgc2lkcyAxODAgPSAzODAgKGxlbmd0aCAzODApCnJlc3RyaWN0ZWRfc2lkczogc3RhdHVzPTB4MDAwMDAwMDAgY291bnQ9MCBsZW5ndGg9OCBmaXJzdF9zaWRfb2Zmc2V0PS0xIGFycmF5X2VuZD04CmxvZ29uX3NpZDogc3RhdHVzPTB4MDAwMDAwMDAgY291bnQ9MSBsZW5ndGg9NDQgZmlyc3Rfc2lkX29mZnNldD0yNCBhcnJheV9lbmQ9MjQKbG9nb25fc2lkOiBhcnJheSAyNCArIHNpZHMgMjAgPSA0NCAobGVuZ3RoIDQ0KQpkZXZpY2VfZ3JvdXBzOiBzdGF0dXM9MHgwMDAwMDAwMCBjb3VudD0wIGxlbmd0aD0yNCBmaXJzdF9zaWRfb2Zmc2V0PS0xIGFycmF5X2VuZD04CnByaXZpbGVnZXM6IHN0YXR1cz0weDAwMDAwMDAwIGNvdW50PTI0IGxlbmd0aD0yOTIgPSA0ICsgMTIgKiBjb3VudDogdHJ1ZQpkZWZhdWx0X2RhY2w6IHN0YXR1cz0weDAwMDAwMDAwIGxlbmd0aD04OCBhY2xfb2Zmc2V0PTggYWNsX3NpemU9ODAgdG90YWxfbWF0Y2hlcz10cnVlCnN0YXRpc3RpY3M6IHN0YXR1cz0weDAwMDAwMDAwIGxlbmd0aD01NiB0eXBlPTEgbGV2ZWw9MiBkeW5hbWljX2NoYXJnZWRfZmllbGRfbm9uemVybz10cnVlIGR5bmFtaWNfYXZhaWxhYmxlX2ZpZWxkX25vbnplcm89dHJ1ZSBncm91cF9jb3VudD0xMiBwcml2aWxlZ2VfY291bnQ9MjQKc291cmNlOiBzdGF0dXM9MHgwMDAwMDAwMCBsZW5ndGg9MTYKb3JpZ2luOiBzdGF0dXM9MHgwMDAwMDAwMCBsZW5ndGg9OAphY2Nlc3NfaW5mb3JtYXRpb246IHN0YXR1cz0weDAwMDAwMDAwIGxlbmd0aD0xOTcyIHByaXZpbGVnZXNfcHRyX29mZnNldF9pbl9idWZmZXI9dHJ1ZSB0eXBlPTEgbGV2ZWw9MiBtYW5kYXRvcnlfcG9saWN5PTMgZmxhZ3M9MHg0MDIwMDAgYXBwX2NvbnRhaW5lcl9udW1iZXI9MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "user: status=0x00000000 length=44 sid_offset=16 sid_length=28 struct_attrs=0 total_matches=true\nowner: status=0x00000000 length=24 sid_offset=8 sid_length=16 struct_attrs=-1 total_matches=true\nprimary_group: status=0x00000000 length=36 sid_offset=8 sid_length=28 struct_attrs=-1 total_matches=true\nintegrity: status=0x00000000 length=28 sid_offset=16 sid_length=12 struct_attrs=96 total_matches=true\ngroups: status=0x00000000 count=12 length=380 first_sid_offset=200 array_end=200\ngroups: array 200 + sids 180 = 380 (length 380)\nrestricted_sids: status=0x00000000 count=0 length=8 first_sid_offset=-1 array_end=8\nlogon_sid: status=0x00000000 count=1 length=44 first_sid_offset=24 array_end=24\nlogon_sid: array 24 + sids 20 = 44 (length 44)\ndevice_groups: status=0x00000000 count=0 length=24 first_sid_offset=-1 array_end=8\nprivileges: status=0x00000000 count=24 length=292 = 4 + 12 * count: true\ndefault_dacl: status=0x00000000 length=88 acl_offset=8 acl_size=80 total_matches=true\nstatistics: status=0x00000000 length=56 type=1 level=2 dynamic_charged_field_nonzero=true dynamic_available_field_nonzero=true group_count=12 privilege_count=24\nsource: status=0x00000000 length=16\norigin: status=0x00000000 length=8\naccess_information: status=0x00000000 length=1972 privileges_ptr_offset_in_buffer=true type=1 level=2 mandatory_policy=3 flags=0x402000 app_container_number=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "ntqit_sizes",
+      "exe_sha256": "407ee00e319ad58fc21acaa736b286fe823b4403598b82429c6185c49b8af94f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xhc3MgMDogc3RhdHVzPTB4YzAwMDAwMDMgcmV0dXJuZWRfbGVuZ3RoPXVuY2hhbmdlZApjbGFzcyAxOiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9bm9uemVybwpjbGFzcyAyOiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9bm9uemVybwpjbGFzcyAzOiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9bm9uemVybwpjbGFzcyA0OiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9bm9uemVybwpjbGFzcyA1OiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9bm9uemVybwpjbGFzcyA2OiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9bm9uemVybwpjbGFzcyA3OiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9MTYKY2xhc3MgODogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTQKY2xhc3MgOTogc3RhdHVzPTB4YzAwMDAwMDMgcmV0dXJuZWRfbGVuZ3RoPXVuY2hhbmdlZApjbGFzcyAxMDogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTU2CmNsYXNzIDExOiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9bm9uemVybwpjbGFzcyAxMjogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTQKY2xhc3MgMTM6IHN0YXR1cz0weGMwMDAwMDIzIHJldHVybmVkX2xlbmd0aD1ub256ZXJvCmNsYXNzIDE0OiBzdGF0dXM9MHhjMDAwMDAwMyByZXR1cm5lZF9sZW5ndGg9dW5jaGFuZ2VkCmNsYXNzIDE1OiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9NApjbGFzcyAxNjogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTMxCmNsYXNzIDE3OiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9OApjbGFzcyAxODogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTQKY2xhc3MgMTk6IHN0YXR1cz0weGMwMDAwMDA0IHJldHVybmVkX2xlbmd0aD04CmNsYXNzIDIwOiBzdGF0dXM9MHhjMDAwMDAwNCByZXR1cm5lZF9sZW5ndGg9NApjbGFzcyAyMTogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTEKY2xhc3MgMjI6IHN0YXR1cz0weGMwMDAwMDIzIHJldHVybmVkX2xlbmd0aD1ub256ZXJvCmNsYXNzIDIzOiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9NApjbGFzcyAyNDogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTQKY2xhc3MgMjU6IHN0YXR1cz0weGMwMDAwMDIzIHJldHVybmVkX2xlbmd0aD1ub256ZXJvCmNsYXNzIDI2OiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9NApjbGFzcyAyNzogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTQKY2xhc3MgMjg6IHN0YXR1cz0weGMwMDAwMDIzIHJldHVybmVkX2xlbmd0aD1ub256ZXJvCmNsYXNzIDI5OiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9NApjbGFzcyAzMDogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPW5vbnplcm8KY2xhc3MgMzE6IHN0YXR1cz0weGMwMDAwMDIzIHJldHVybmVkX2xlbmd0aD1ub256ZXJvCmNsYXNzIDMyOiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9NApjbGFzcyAzMzogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPW5vbnplcm8KY2xhc3MgMzQ6IHN0YXR1cz0weGMwMDAwMDIzIHJldHVybmVkX2xlbmd0aD1ub256ZXJvCmNsYXNzIDM1OiBzdGF0dXM9MHhjMDAwMDAwMyByZXR1cm5lZF9sZW5ndGg9dW5jaGFuZ2VkCmNsYXNzIDM2OiBzdGF0dXM9MHhjMDAwMDAwMyByZXR1cm5lZF9sZW5ndGg9dW5jaGFuZ2VkCmNsYXNzIDM3OiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9bm9uemVybwpjbGFzcyAzODogc3RhdHVzPTB4YzAwMDAwMDMgcmV0dXJuZWRfbGVuZ3RoPXVuY2hhbmdlZApjbGFzcyAzOTogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPW5vbnplcm8KY2xhc3MgNDA6IHN0YXR1cz0weGMwMDAwMDIzIHJldHVybmVkX2xlbmd0aD00CmNsYXNzIDQxOiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9OApjbGFzcyA0Mjogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTQKY2xhc3MgNDM6IHN0YXR1cz0weGMwMDAwMDIzIHJldHVybmVkX2xlbmd0aD0xNgpjbGFzcyA0NDogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTE2CmNsYXNzIDQ1OiBzdGF0dXM9MHhjMDAwMDAwMyByZXR1cm5lZF9sZW5ndGg9dW5jaGFuZ2VkCmNsYXNzIDQ2OiBzdGF0dXM9MHhjMDAwMDAwMyByZXR1cm5lZF9sZW5ndGg9dW5jaGFuZ2VkCmNsYXNzIDQ3OiBzdGF0dXM9MHhjMDAwMDAyMyByZXR1cm5lZF9sZW5ndGg9NApjbGFzcyA0ODogc3RhdHVzPTB4YzAwMDAwMjMgcmV0dXJuZWRfbGVuZ3RoPTQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "class 0: status=0xc0000003 returned_length=unchanged\nclass 1: status=0xc0000023 returned_length=nonzero\nclass 2: status=0xc0000023 returned_length=nonzero\nclass 3: status=0xc0000023 returned_length=nonzero\nclass 4: status=0xc0000023 returned_length=nonzero\nclass 5: status=0xc0000023 returned_length=nonzero\nclass 6: status=0xc0000023 returned_length=nonzero\nclass 7: status=0xc0000023 returned_length=16\nclass 8: status=0xc0000023 returned_length=4\nclass 9: status=0xc0000003 returned_length=unchanged\nclass 10: status=0xc0000023 returned_length=56\nclass 11: status=0xc0000023 returned_length=nonzero\nclass 12: status=0xc0000023 returned_length=4\nclass 13: status=0xc0000023 returned_length=nonzero\nclass 14: status=0xc0000003 returned_length=unchanged\nclass 15: status=0xc0000023 returned_length=4\nclass 16: status=0xc0000023 returned_length=31\nclass 17: status=0xc0000023 returned_length=8\nclass 18: status=0xc0000023 returned_length=4\nclass 19: status=0xc0000004 returned_length=8\nclass 20: status=0xc0000004 returned_length=4\nclass 21: status=0xc0000023 returned_length=1\nclass 22: status=0xc0000023 returned_length=nonzero\nclass 23: status=0xc0000023 returned_length=4\nclass 24: status=0xc0000023 returned_length=4\nclass 25: status=0xc0000023 returned_length=nonzero\nclass 26: status=0xc0000023 returned_length=4\nclass 27: status=0xc0000023 returned_length=4\nclass 28: status=0xc0000023 returned_length=nonzero\nclass 29: status=0xc0000023 returned_length=4\nclass 30: status=0xc0000023 returned_length=nonzero\nclass 31: status=0xc0000023 returned_length=nonzero\nclass 32: status=0xc0000023 returned_length=4\nclass 33: status=0xc0000023 returned_length=nonzero\nclass 34: status=0xc0000023 returned_length=nonzero\nclass 35: status=0xc0000003 returned_length=unchanged\nclass 36: status=0xc0000003 returned_length=unchanged\nclass 37: status=0xc0000023 returned_length=nonzero\nclass 38: status=0xc0000003 returned_length=unchanged\nclass 39: status=0xc0000023 returned_length=nonzero\nclass 40: status=0xc0000023 returned_length=4\nclass 41: status=0xc0000023 returned_length=8\nclass 42: status=0xc0000023 returned_length=4\nclass 43: status=0xc0000023 returned_length=16\nclass 44: status=0xc0000023 returned_length=16\nclass 45: status=0xc0000003 returned_length=unchanged\nclass 46: status=0xc0000003 returned_length=unchanged\nclass 47: status=0xc0000023 returned_length=4\nclass 48: status=0xc0000023 returned_length=4\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

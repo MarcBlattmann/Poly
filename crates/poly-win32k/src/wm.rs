@@ -225,6 +225,9 @@ pub struct Wm {
     tracking: Vec<(u32, u32)>,
     /// TrackMouseEvent's hover tracking: (window, ms, since).
     hover: Option<(u32, u32, u64)>,
+    /// The last button-down that may start a double click: (message,
+    /// window, x, y, time) (`raw`).
+    last_click: Option<(u32, u32, i32, i32, u64)>,
     /// The time of the last request (ms), for input from the desktop link.
     now: u64,
 }
@@ -280,6 +283,7 @@ impl Wm {
             sync_keys: raw::blank_keys(),
             tracking: Vec::new(),
             hover: None,
+            last_click: None,
             now: 0,
         };
         // Index 0 is never a window.
@@ -1669,6 +1673,14 @@ impl Wm {
                 Reply::Handle { hwnd: h }
             }
             Request::TrackMouse { hwnd, flags, hover } => self.track_mouse(ctx, hwnd, flags, hover, fx),
+            Request::RegisterMessage { name } => {
+                // Learn: the string is at most 255 characters; the number is in 0xC000..=0xFFFF.
+                if name.is_empty() || name.len() > 255 {
+                    err(ERROR_INVALID_PARAMETER)
+                } else {
+                    Reply::Atom { atom: self.atom_for(&name) }
+                }
+            }
             Request::Cursor { set, x, y } => {
                 if set {
                     self.cursor = (x.clamp(0, self.screen.0 - 1), y.clamp(0, self.screen.1 - 1));
@@ -1800,6 +1812,22 @@ mod tests {
             }
             r => panic!("{r:?}"),
         }
+    }
+
+    #[test]
+    fn window_messages_share_one_number_per_name() {
+        let mut wm = Wm::new();
+        let reg = |wm: &mut Wm, ctx: Ctx, s: &str| {
+            wm.handle(ctx, Request::RegisterMessage { name: s.encode_utf16().collect() }, &mut Effects::default())
+        };
+        let Reply::Atom { atom: a } = reg(&mut wm, A, "Chrome_MessageWindow") else { panic!() };
+        assert!((0xC000..=0xFFFF).contains(&a));
+        // Another process, another case: the same number.
+        assert_eq!(reg(&mut wm, B, "CHROME_MESSAGEWINDOW"), Reply::Atom { atom: a });
+        let Reply::Atom { atom: b } = reg(&mut wm, A, "TaskbarCreated") else { panic!() };
+        assert_ne!(a, b);
+        assert_eq!(reg(&mut wm, A, ""), err(ERROR_INVALID_PARAMETER));
+        assert_eq!(reg(&mut wm, A, &"x".repeat(256)), err(ERROR_INVALID_PARAMETER));
     }
 
     #[test]

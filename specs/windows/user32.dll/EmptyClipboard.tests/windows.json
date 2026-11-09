@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "ec_messages",
+      "exe_sha256": "2c3585259ed2f699d504587cc31ce7468b4f1bceb6bdab5f7019196c00945654",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QiBFbXB0eSB3aGlsZSBvcGVuLCBBIGhhZCBpdDoKICBBIFdNX0RFU1RST1lDTElQQk9BUkQKQiBFbXB0eSB0d2ljZToKICBCIFdNX0RFU1RST1lDTElQQk9BUkQKICBCIFdNX0RFU1RST1lDTElQQk9BUkQKTlVMTCBFbXB0eSBvdmVyIHR3byBkZWxheWVkIGZvcm1hdHM6CiAgQSBXTV9ERVNUUk9ZQ0xJUEJPQVJECiAgZm9ybWF0czogMCBbKG5vbmUpXQpBIEVtcHR5IG92ZXIgaXRzIG93biBkZWxheWVkIGZvcm1hdDoKICBBIFdNX0RFU1RST1lDTElQQk9BUkQKb3duZXIgZGVzdHJveWVkIHdpdGggdHdvIGRlbGF5ZWQgZm9ybWF0czoKICBCIFdNX1JFTkRFUkFMTEZPUk1BVFMKICBmb3JtYXRzIGFmdGVyOiA0IFtDRl9VTklDT0RFVEVYVCBDRl9MT0NBTEUgQ0ZfVEVYVCBDRl9PRU1URVhUXQpvayBkb25lCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "B Empty while open, A had it:\n  A WM_DESTROYCLIPBOARD\nB Empty twice:\n  B WM_DESTROYCLIPBOARD\n  B WM_DESTROYCLIPBOARD\nNULL Empty over two delayed formats:\n  A WM_DESTROYCLIPBOARD\n  formats: 0 [(none)]\nA Empty over its own delayed format:\n  A WM_DESTROYCLIPBOARD\nowner destroyed with two delayed formats:\n  B WM_RENDERALLFORMATS\n  formats after: 4 [CF_UNICODETEXT CF_LOCALE CF_TEXT CF_OEMTEXT]\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    },
+    {
+      "name": "ec_threads",
+      "exe_sha256": "050ac9f6cb4fc9bc5c1644e0200b67580eb35efee75287dc35cf50ddbd060a15",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xvc2VkLCB0aHJlYWQgRW1wdHk6IDAgZXJyIDE0MTgKbWFpbiBoYXMgQSBvcGVuLCB0aHJlYWQgRW1wdHk6IDAgZXJyIDE0MTgKICBmb3JtYXRzOiAxIFtwcml2YXRlXQptYWluIGhhcyBOVUxMIG9wZW4sIHRocmVhZCBPcGVuKE5VTEwpIDEgRW1wdHkgMSBlcnIgMCBDbG9zZSAxCiAgZm9ybWF0czogMCBbKG5vbmUpXQogIG1haW4gQ2xvc2U6IDAgZXJyIDE0MTgKb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "closed, thread Empty: 0 err 1418\nmain has A open, thread Empty: 0 err 1418\n  formats: 1 [private]\nmain has NULL open, thread Open(NULL) 1 Empty 1 err 0 Close 1\n  formats: 0 [(none)]\n  main Close: 0 err 1418\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 73
+    }
+  ]
+}

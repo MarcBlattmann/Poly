@@ -1,0 +1,19 @@
+[package]
+name = "secur32"
+description = "Our secur32.dll (ADR 0155): GetUserNameExW, and the SSPI and LSA entry points as the documented failures of a system without the security packages"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "secur32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-netrt = { path = "../netrt" }
+poly-netapi = { path = "../../../../crates/poly-netapi" }
+
+[lints]
+workspace = true

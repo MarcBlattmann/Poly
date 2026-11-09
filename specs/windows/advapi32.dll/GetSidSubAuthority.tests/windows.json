@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e5f25a5644ea",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:18:06Z",
+  "tests": [
+    {
+      "name": "sid_sub_basic",
+      "exe_sha256": "50cd2a8e2496ff5bebeadc523931d1b3b03eed6d61fa7b8ca1e3cd8bb8b5c47a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2xvdCAwOiBvZmZzZXQ9OApzbG90IDE6IG9mZnNldD0xMgpzbG90IDI6IG9mZnNldD0xNgpzbG90IDM6IG9mZnNldD0yMAp0ZXh0PVMtMS01LTEwMDAtMjAwMC0zMDAwLTQwMDAKYnl0ZXM9MDEwNDAwMDAwMDAwMDAwNWU4MDMwMDAwZDAwNzAwMDBiODBiMDAwMGEwMGYwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "slot 0: offset=8\nslot 1: offset=12\nslot 2: offset=16\nslot 3: offset=20\ntext=S-1-5-1000-2000-3000-4000\nbytes=0104000000000005e8030000d0070000b80b0000a00f0000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

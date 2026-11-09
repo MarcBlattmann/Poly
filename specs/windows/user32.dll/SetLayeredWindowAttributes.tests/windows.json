@@ -1,0 +1,57 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "slwa_flags",
+      "exe_sha256": "96bc5208b12be6290bee95a18d9c8470d2cc9bbd3d035ceca68b14a7086bd809",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0IG9uIGEgbm9uLWxheWVyZWQgd2luZG93OiBGQUxTRSBlcnJvciA4NyA7IFdTX0VYX0xBWUVSRUQgc2V0IGZhbHNlCkdldCBvbiBhIG5vbi1sYXllcmVkIHdpbmRvdzogR2V0IC0+IEZBTFNFIGVycm9yIDB4NTcga2V5IDB4YWFhYWFhYWEgYWxwaGEgMTcwIGZsYWdzIDB4YWFhYWFhYWEKY3JlYXRlZCB3aXRoIFdTX0VYX0xBWUVSRUQ6IHN0eWxlIGJpdCB0cnVlCkdldCBiZWZvcmUgYW55IFNldDogR2V0IC0+IEZBTFNFIGVycm9yIDB4MTIzNCBrZXkgMHhhYWFhYWFhYSBhbHBoYSAxNzAgZmxhZ3MgMHhhYWFhYWFhYQpTZXQgYWxwaGEgMTI4OiBUUlVFIGVycm9yIDB4MTIzNCA7IGV4dGVuZGVkIHN0eWxlIHVuY2hhbmdlZCB0cnVlCmFmdGVyIGFscGhhIDEyODogR2V0IC0+IFRSVUUgZXJyb3IgMHgxMjM0IGtleSAweDAgYWxwaGEgMTI4IGZsYWdzIDB4MgpTZXQgY29sb3VyIGtleSAweDAwRkYwMCB3aXRoIGFscGhhIGFyZ3VtZW50IDcgYW5kIExXQV9DT0xPUktFWSBvbmx5OiBUUlVFCmFmdGVyIGNvbG91ciBrZXkgb25seTogR2V0IC0+IFRSVUUgZXJyb3IgMHgxMjM0IGtleSAweGZmMDAgYWxwaGEgMTI4IGZsYWdzIDB4MQpTZXQga2V5IDB4MTIzNDU2IGFuZCBhbHBoYSAyMDAgd2l0aCBib3RoIGZsYWdzOiBUUlVFCmFmdGVyIGJvdGg6IEdldCAtPiBUUlVFIGVycm9yIDB4MTIzNCBrZXkgMHgxMjM0NTYgYWxwaGEgMjAwIGZsYWdzIDB4MwpTZXQgd2l0aCBmbGFncyAwOiBUUlVFIGVycm9yIDB4MTIzNAphZnRlciBmbGFncyAwOiBHZXQgLT4gVFJVRSBlcnJvciAweDEyMzQga2V5IDB4MTIzNDU2IGFscGhhIDIwMCBmbGFncyAweDAKU2V0IGZsYWdzIDB4NDogRkFMU0UgZXJyb3IgODcKICBhZnRlcjogR2V0IC0+IFRSVUUgZXJyb3IgMHgxMjM0IGtleSAweDEyMzQ1NiBhbHBoYSAyMDAgZmxhZ3MgMHgwClNldCBmbGFncyAweDEwOiBGQUxTRSBlcnJvciA4NwogIGFmdGVyOiBHZXQgLT4gVFJVRSBlcnJvciAweDEyMzQga2V5IDB4MTIzNDU2IGFscGhhIDIwMCBmbGFncyAweDAKU2V0IGZsYWdzIDB4ZmZmZmZmZmY6IEZBTFNFIGVycm9yIDg3CiAgYWZ0ZXI6IEdldCAtPiBUUlVFIGVycm9yIDB4MTIzNCBrZXkgMHgxMjM0NTYgYWxwaGEgMjAwIGZsYWdzIDB4MApTZXQgZmxhZ3MgMHg3OiBGQUxTRSBlcnJvciA4NwogIGFmdGVyOiBHZXQgLT4gVFJVRSBlcnJvciAweDEyMzQga2V5IDB4MTIzNDU2IGFscGhhIDIwMCBmbGFncyAweDAKYWxwaGEgMjU1OiBHZXQgLT4gVFJVRSBlcnJvciAweDEyMzQga2V5IDB4MTIzNDU2IGFscGhhIDI1NSBmbGFncyAweDIKYWxwaGEgMDogR2V0IC0+IFRSVUUgZXJyb3IgMHgxMjM0IGtleSAweDEyMzQ1NiBhbHBoYSAwIGZsYWdzIDB4MgprZXkgMHgwMTAyMDMwNCAodGhlIGhpZ2ggYnl0ZSBpcyBzdG9yZWQpOiBHZXQgLT4gVFJVRSBlcnJvciAweDEyMzQga2V5IDB4MTAyMDMwNCBhbHBoYSAwIGZsYWdzIDB4MQpTZXQgTlVMTCB3aW5kb3c6IEZBTFNFIGVycm9yIDE0MDAKU2V0IG1hZGUtdXAgd2luZG93IGhhbmRsZTogRkFMU0UgZXJyb3IgMTQwMApTZXQgZGVzdHJveWVkIHdpbmRvdzogRkFMU0UgZXJyb3IgMTQwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Set on a non-layered window: FALSE error 87 ; WS_EX_LAYERED set false\nGet on a non-layered window: Get -> FALSE error 0x57 key 0xaaaaaaaa alpha 170 flags 0xaaaaaaaa\ncreated with WS_EX_LAYERED: style bit true\nGet before any Set: Get -> FALSE error 0x1234 key 0xaaaaaaaa alpha 170 flags 0xaaaaaaaa\nSet alpha 128: TRUE error 0x1234 ; extended style unchanged true\nafter alpha 128: Get -> TRUE error 0x1234 key 0x0 alpha 128 flags 0x2\nSet colour key 0x00FF00 with alpha argument 7 and LWA_COLORKEY only: TRUE\nafter colour key only: Get -> TRUE error 0x1234 key 0xff00 alpha 128 flags 0x1\nSet key 0x123456 and alpha 200 with both flags: TRUE\nafter both: Get -> TRUE error 0x1234 key 0x123456 alpha 200 flags 0x3\nSet with flags 0: TRUE error 0x1234\nafter flags 0: Get -> TRUE error 0x1234 key 0x123456 alpha 200 flags 0x0\nSet flags 0x4: FALSE error 87\n  after: Get -> TRUE error 0x1234 key 0x123456 alpha 200 flags 0x0\nSet flags 0x10: FALSE error 87\n  after: Get -> TRUE error 0x1234 key 0x123456 alpha 200 flags 0x0\nSet flags 0xffffffff: FALSE error 87\n  after: Get -> TRUE error 0x1234 key 0x123456 alpha 200 flags 0x0\nSet flags 0x7: FALSE error 87\n  after: Get -> TRUE error 0x1234 key 0x123456 alpha 200 flags 0x0\nalpha 255: Get -> TRUE error 0x1234 key 0x123456 alpha 255 flags 0x2\nalpha 0: Get -> TRUE error 0x1234 key 0x123456 alpha 0 flags 0x2\nkey 0x01020304 (the high byte is stored): Get -> TRUE error 0x1234 key 0x1020304 alpha 0 flags 0x1\nSet NULL window: FALSE error 1400\nSet made-up window handle: FALSE error 1400\nSet destroyed window: FALSE error 1400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    },
+    {
+      "name": "slwa_hit",
+      "exe_sha256": "caa51560cf347357fa9beb4b05451de061d32509900e0574e1a9ed6d330ed734",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBjcmVhdGU6IEwgV01fTkNDUkVBVEUgcG9zPTI1MCwyNTAgc2l6ZT0xMDAsNjAgc3R5bGU9MHg4MDAwMDAwMCBleD0weDgwODAwMDgKICBjcmVhdGU6IEwgV01fTkNDQUxDU0laRSAwIHJlY3Q9MjUwLDI1MCwzNTAsMzEwCiAgY3JlYXRlOiBMIFdNX0NSRUFURSBwb3M9MjUwLDI1MCBzaXplPTEwMCw2MCBzdHlsZT0weDgwMDAwMDAwIGV4PTB4ODA4MDAwOAogIGNyZWF0ZTogTCBXTV9TSVpFIHc9MCBsPTEwMCw2MAogIGNyZWF0ZTogTCBXTV9NT1ZFIHc9MCBsPTI1MCwyNTAKbmV2ZXIgc2V0LCBzaG93bjogSXNXaW5kb3dWaXNpYmxlIFRSVUUgc2NyZWVuIDB4MDAwMGZmCiAgICBtc2c6IEwgV01fU0hPV1dJTkRPVyBzaG93PTEgc3RhdHVzPTAKICAgIG1zZzogTCBXTV9XSU5ET1dQT1NDSEFOR0lORyBwb3M9MCwwIHNpemU9MCwwIGZsYWdzPTB4NTMKICAgIG1zZzogTCBXTV9XSU5ET1dQT1NDSEFOR0VEIHBvcz0yNTAsMjUwIHNpemU9MTAwLDYwIGZsYWdzPTB4MTg1NwpXaW5kb3dGcm9tUG9pbnQgb3ZlciB0aGUgbmV2ZXItc2V0IGxheWVyZWQgd2luZG93ICgyNzAsMjcwKTogTAogICAgbXNnOiBMIFdNX05DSElUVEVTVCBzY3JlZW49MjcwLDI3MAphZnRlciBTZXQgYWxwaGEgMjU1OiBzY3JlZW4gMHhmZjAwMDAKICAgIG1zZzogTCBXTV9QQUlOVAogICAgbXNnOiBMIFdNX05DUEFJTlQgcmduPTEKICAgIG1zZzogTCBXTV9FUkFTRUJLR05ECldpbmRvd0Zyb21Qb2ludCBhbHBoYSAyNTUgKDI3MCwyNzApOiBMCiAgICBtc2c6IEwgV01fTkNISVRURVNUIHNjcmVlbj0yNzAsMjcwCmFscGhhIDY0IG1lc3NhZ2VzOgpXaW5kb3dGcm9tUG9pbnQgYWxwaGEgNjQgKDI3MCwyNzApOiBMCiAgICBtc2c6IEwgV01fTkNISVRURVNUIHNjcmVlbj0yNzAsMjcwCldpbmRvd0Zyb21Qb2ludCBhbHBoYSAxICgyNzAsMjcwKTogTAogICAgbXNnOiBMIFdNX05DSElUVEVTVCBzY3JlZW49MjcwLDI3MApXaW5kb3dGcm9tUG9pbnQgYWxwaGEgMCAoMjcwLDI3MCk6IEIKICAgIG1zZzogQiBXTV9OQ0hJVFRFU1Qgc2NyZWVuPTI3MCwyNzAKV2luZG93RnJvbVBvaW50IGFscGhhIDAsIGp1c3QgbGVmdCBvZiB0aGUgd2luZG93ICgyNDksMjcwKTogQgogICAgbXNnOiBCIFdNX05DSElUVEVTVCBzY3JlZW49MjQ5LDI3MAphbHBoYSBzZXQgYmVmb3JlIHRoZSBzaG93OiBzY3JlZW4gMHhjODAwMzcKICAgIG1zZzogTSBXTV9TSE9XV0lORE9XIHNob3c9MSBzdGF0dXM9MAogICAgbXNnOiBNIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHg1MwogICAgbXNnOiBNIFdNX05DUEFJTlQgcmduPTEKICAgIG1zZzogTSBXTV9FUkFTRUJLR05ECiAgICBtc2c6IE0gV01fV0lORE9XUE9TQ0hBTkdFRCBwb3M9NDAwLDI1MCBzaXplPTYwLDQwIGZsYWdzPTB4MTg1NwogICAgbXNnOiBNIFdNX1BBSU5UCmFmdGVyIEludmFsaWRhdGVSZWN0OgogICAgbXNnOiBNIFdNX1BBSU5UCiAgICBtc2c6IE0gV01fRVJBU0VCS0dORAphZnRlciBNb3ZlV2luZG93OiByZWN0IDQyMCwyNjAsNDgwLDMwMCBzY3JlZW4gMHhjODAwMzcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  create: L WM_NCCREATE pos=250,250 size=100,60 style=0x80000000 ex=0x8080008\n  create: L WM_NCCALCSIZE 0 rect=250,250,350,310\n  create: L WM_CREATE pos=250,250 size=100,60 style=0x80000000 ex=0x8080008\n  create: L WM_SIZE w=0 l=100,60\n  create: L WM_MOVE w=0 l=250,250\nnever set, shown: IsWindowVisible TRUE screen 0x0000ff\n    msg: L WM_SHOWWINDOW show=1 status=0\n    msg: L WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x53\n    msg: L WM_WINDOWPOSCHANGED pos=250,250 size=100,60 flags=0x1857\nWindowFromPoint over the never-set layered window (270,270): L\n    msg: L WM_NCHITTEST screen=270,270\nafter Set alpha 255: screen 0xff0000\n    msg: L WM_PAINT\n    msg: L WM_NCPAINT rgn=1\n    msg: L WM_ERASEBKGND\nWindowFromPoint alpha 255 (270,270): L\n    msg: L WM_NCHITTEST screen=270,270\nalpha 64 messages:\nWindowFromPoint alpha 64 (270,270): L\n    msg: L WM_NCHITTEST screen=270,270\nWindowFromPoint alpha 1 (270,270): L\n    msg: L WM_NCHITTEST screen=270,270\nWindowFromPoint alpha 0 (270,270): B\n    msg: B WM_NCHITTEST screen=270,270\nWindowFromPoint alpha 0, just left of the window (249,270): B\n    msg: B WM_NCHITTEST screen=249,270\nalpha set before the show: screen 0xc80037\n    msg: M WM_SHOWWINDOW show=1 status=0\n    msg: M WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x53\n    msg: M WM_NCPAINT rgn=1\n    msg: M WM_ERASEBKGND\n    msg: M WM_WINDOWPOSCHANGED pos=400,250 size=60,40 flags=0x1857\n    msg: M WM_PAINT\nafter InvalidateRect:\n    msg: M WM_PAINT\n    msg: M WM_ERASEBKGND\nafter MoveWindow: rect 420,260,480,300 screen 0xc80037\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1658
+    },
+    {
+      "name": "slwa_keyhit",
+      "exe_sha256": "904324876dd00ca2cef3466c664ca8f343e8f0272db2c73d5ac54977042e043f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "a2V5IHJlZCAweDAwMDBGRjogc2NyZWVuIDB4MDAwMGZmIFdpbmRvd0Zyb21Qb2ludCBpcyB0aGUga2V5ZWQgd2luZG93IHRydWUKa2V5IGdyZWVuIDB4MDBGRjAwOiBzY3JlZW4gMHgwMDAwZmYgV2luZG93RnJvbVBvaW50IGlzIHRoZSBrZXllZCB3aW5kb3cgZmFsc2UKa2V5IGJsdWUgMHhGRjAwMDA6IHNjcmVlbiAweDAwMDBmZiBXaW5kb3dGcm9tUG9pbnQgaXMgdGhlIGtleWVkIHdpbmRvdyB0cnVlCmtleSB3aGl0ZSAweEZGRkZGRjogc2NyZWVuIDB4MDAwMGZmIFdpbmRvd0Zyb21Qb2ludCBpcyB0aGUga2V5ZWQgd2luZG93IGZhbHNlCmtleSBibGFjayAwOiBzY3JlZW4gMHgwMDAwZmYgV2luZG93RnJvbVBvaW50IGlzIHRoZSBrZXllZCB3aW5kb3cgZmFsc2UKa2V5IGdyYXkgMHg4MDgwODA6IHNjcmVlbiAweDAwMDBmZiBXaW5kb3dGcm9tUG9pbnQgaXMgdGhlIGtleWVkIHdpbmRvdyBmYWxzZQprZXkgbWFnZW50YSAweEZGMDBGRjogc2NyZWVuIDB4MDAwMGZmIFdpbmRvd0Zyb21Qb2ludCBpcyB0aGUga2V5ZWQgd2luZG93IGZhbHNlCmtleSBjeWFuIDB4RkZGRjAwOiBzY3JlZW4gMHgwMDAwZmYgV2luZG93RnJvbVBvaW50IGlzIHRoZSBrZXllZCB3aW5kb3cgdHJ1ZQprZXkgeWVsbG93IDB4MDBGRkZGOiBzY3JlZW4gMHgwMDAwZmYgV2luZG93RnJvbVBvaW50IGlzIHRoZSBrZXllZCB3aW5kb3cgdHJ1ZQprZXkgMHgxMjM0NTY6IHNjcmVlbiAweDAwMDBmZiBXaW5kb3dGcm9tUG9pbnQgaXMgdGhlIGtleWVkIHdpbmRvdyB0cnVlCmtleSAweDAwMDBGRTogc2NyZWVuIDB4MDAwMGZmIFdpbmRvd0Zyb21Qb2ludCBpcyB0aGUga2V5ZWQgd2luZG93IHRydWUKa2V5IDB4MDAwMDAxOiBzY3JlZW4gMHgwMDAwZmYgV2luZG93RnJvbVBvaW50IGlzIHRoZSBrZXllZCB3aW5kb3cgdHJ1ZQprZXkgMHgwMTAwMDE6IHNjcmVlbiAweDAwMDBmZiBXaW5kb3dGcm9tUG9pbnQgaXMgdGhlIGtleWVkIHdpbmRvdyBmYWxzZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "key red 0x0000FF: screen 0x0000ff WindowFromPoint is the keyed window true\nkey green 0x00FF00: screen 0x0000ff WindowFromPoint is the keyed window false\nkey blue 0xFF0000: screen 0x0000ff WindowFromPoint is the keyed window true\nkey white 0xFFFFFF: screen 0x0000ff WindowFromPoint is the keyed window false\nkey black 0: screen 0x0000ff WindowFromPoint is the keyed window false\nkey gray 0x808080: screen 0x0000ff WindowFromPoint is the keyed window false\nkey magenta 0xFF00FF: screen 0x0000ff WindowFromPoint is the keyed window false\nkey cyan 0xFFFF00: screen 0x0000ff WindowFromPoint is the keyed window true\nkey yellow 0x00FFFF: screen 0x0000ff WindowFromPoint is the keyed window true\nkey 0x123456: screen 0x0000ff WindowFromPoint is the keyed window true\nkey 0x0000FE: screen 0x0000ff WindowFromPoint is the keyed window true\nkey 0x000001: screen 0x0000ff WindowFromPoint is the keyed window true\nkey 0x010001: screen 0x0000ff WindowFromPoint is the keyed window false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3867
+    }
+  ]
+}

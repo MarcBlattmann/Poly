@@ -1,0 +1,69 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtAccessCheck
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Checks an impersonation token against a security descriptor. The call
+  status says whether the check ran; the answer is in *AccessStatus
+  (STATUS_SUCCESS or STATUS_ACCESS_DENIED / STATUS_PRIVILEGE_NOT_HELD) and
+  *GrantedAccess. The descriptor needs an owner and a group; DesiredAccess
+  must already have its generic bits mapped. AccessCheck calls it.
+interface:
+  signature: "NTSTATUS NtAccessCheck(PSECURITY_DESCRIPTOR SecurityDescriptor, HANDLE ClientToken, ACCESS_MASK DesiredAccess, PGENERIC_MAPPING GenericMapping, PPRIVILEGE_SET PrivilegeSet, PULONG PrivilegeSetLength, PACCESS_MASK GrantedAccess, PNTSTATUS AccessStatus)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87. Also STATUS_NO_IMPERSONATION_TOKEN 0xC000005C, STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5, STATUS_INVALID_SECURITY_DESCR 0xC0000079, STATUS_UNKNOWN_REVISION 0xC0000058, STATUS_GENERIC_NOT_MAPPED 0xC00000E6."
+  privilege_set: "a one-entry PRIVILEGE_SET is 20 bytes (count, control, one 12-byte entry)"
+rules:
+  acl_order: "ACEs are evaluated in order: with \"allow Everyone 0x3\": desired 1, 2, 3 granted as asked; desired 4 or 7 -> AccessStatus STATUS_ACCESS_DENIED, granted 0; MAXIMUM_ALLOWED -> granted 0x3. \"deny Everyone 0x1 then allow Everyone 0x3\": desired 1 denied, 2 granted, 3 denied, MAXIMUM_ALLOWED -> 0x2. \"allow 0x3 then deny 0x1\": everything asked is granted (1, 2, 3), MAXIMUM_ALLOWED -> 0x3. Two allow ACEs add up (1 and 2 -> 3). \"allow SYSTEM 0x7 only\" denies (the token does not have SYSTEM). A deny ACE for an absent SID does not block a later allow"
+  status_split: "the call returns STATUS_SUCCESS in all of these cases; a denial is AccessStatus 0xC0000022 with GrantedAccess 0; an empty DACL denies everything (desired 1 and MAXIMUM_ALLOWED -> denied); desired 0 is STATUS_ACCESS_DENIED in AccessStatus; asking for a bit no ACE grants (0x8, 0xFFFF) is denied"
+  null_dacl: "a NULL DACL and a descriptor with no DACL present both grant everything (7 and MAXIMUM_ALLOWED -> 7)"
+  maximum_allowed: "MAXIMUM_ALLOWED|1 -> granted 0x7 (the maximum, not just bit 1)"
+  descriptor_forms: "an absolute and a self-relative descriptor give the same answer"
+  owner_rights: "an owner that is the token's user or a group of the token (Administrators) gets READ_CONTROL (0x20000) and WRITE_DAC (0x40000) even with an empty DACL (MAXIMUM_ALLOWED -> 0x60000; DELETE 0x10000 is denied); an owner the token does not have (SYSTEM) gets nothing"
+  privileges: "WRITE_OWNER (0x80000) needs SeTakeOwnershipPrivilege enabled: disabled -> AccessStatus 0xC0000022; enabled -> granted 0x80000 and the returned PRIVILEGE_SET has count 1, control 0, first entry attributes 0x80000000; MAXIMUM_ALLOWED does not include the privilege-based right (denied with an empty DACL). ACCESS_SYSTEM_SECURITY (0x1000000) needs SeSecurityPrivilege: disabled -> AccessStatus STATUS_PRIVILEGE_NOT_HELD (0xC0000061); enabled -> granted 0x1000000 with the privilege set count 1. (Ambient: the elevated administrator token holds these privileges.)"
+  privilege_buffer: "when a privilege is used, *PrivilegeSetLength below 20 (0, 4, 8) returns STATUS_BUFFER_TOO_SMALL (0xC0000023), sets the length to 20 and writes nothing; 20, 32, 55 and 56 succeed and leave the length as given"
+  tokens: "a primary token: STATUS_NO_IMPERSONATION_TOKEN (0xC000005C); an Anonymous-level token: STATUS_BAD_IMPERSONATION_LEVEL (0xC00000A5); Identification, Impersonation and Delegation tokens work; the handle needs TOKEN_QUERY (QUERY alone and QUERY|IMPERSONATE work; DUPLICATE alone and IMPERSONATE alone give STATUS_ACCESS_DENIED)"
+errors:
+  descriptor: "a descriptor without owner, without group or empty: STATUS_INVALID_SECURITY_DESCR (0xC0000079); revision 9: STATUS_UNKNOWN_REVISION (0xC0000058)"
+  generic: "GENERIC_READ or GENERIC_ALL in DesiredAccess: STATUS_GENERIC_NOT_MAPPED (0xC00000E6)"
+  handles: "NULL: STATUS_INVALID_HANDLE; the process pseudo-handle and an event: STATUS_OBJECT_TYPE_MISMATCH"
+  outputs_on_failure: "when the call itself fails, AccessStatus and GrantedAccess are left untouched"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

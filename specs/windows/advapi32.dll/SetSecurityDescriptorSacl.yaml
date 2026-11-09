@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/SetSecurityDescriptorSacl
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Sets or clears the SACL (audit entries and the mandatory label) of an
+  absolute descriptor, the same way SetSecurityDescriptorDacl does for the
+  DACL, with SE_SACL_PRESENT (0x0010) and SE_SACL_DEFAULTED (0x0020).
+interface:
+  signature: "BOOL SetSecurityDescriptorSacl(PSECURITY_DESCRIPTOR pSecurityDescriptor, BOOL bSaclPresent, PACL pSacl, BOOL bSaclDefaulted)"
+  layout: "SECURITY_DESCRIPTOR, absolute form (winnt.h, x64, 40 bytes): byte 0 Revision (1), byte 1 Sbz1, bytes 2..3 Control (little-endian 16-bit), bytes 4..7 padding, then four 8-byte pointers: Owner at 8, Group at 16, Sacl at 24, Dacl at 32. Self-relative form: the same first 4 bytes, with SE_SELF_RELATIVE (0x8000) in Control, then four 32-bit offsets from the start of the descriptor: Owner at 4, Group at 8, Sacl at 12, Dacl at 16 (header 20 bytes); an offset of 0 means the part is absent (or, for the ACLs, a NULL ACL when the PRESENT bit is set)."
+  control: "SECURITY_DESCRIPTOR_CONTROL bits: 0x0001 SE_OWNER_DEFAULTED, 0x0002 SE_GROUP_DEFAULTED, 0x0004 SE_DACL_PRESENT, 0x0008 SE_DACL_DEFAULTED, 0x0010 SE_SACL_PRESENT, 0x0020 SE_SACL_DEFAULTED, 0x0040 SE_DACL_UNTRUSTED, 0x0080 SE_SERVER_SECURITY, 0x0100 SE_DACL_AUTO_INHERIT_REQ, 0x0200 SE_SACL_AUTO_INHERIT_REQ, 0x0400 SE_DACL_AUTO_INHERITED, 0x0800 SE_SACL_AUTO_INHERITED, 0x1000 SE_DACL_PROTECTED, 0x2000 SE_SACL_PROTECTED, 0x4000 SE_RM_CONTROL_VALID, 0x8000 SE_SELF_RELATIVE."
+  acl: "ACL (winnt.h): byte 0 revision, byte 1 Sbz1, bytes 2..3 AclSize, bytes 4..5 AceCount, bytes 6..7 Sbz2, then the ACEs; an ACCESS_ALLOWED/DENIED/AUDIT/MANDATORY_LABEL ACE is type, flags, 16-bit size (8 + SID length), 32-bit mask, SID."
+rules:
+  present_null: "present TRUE with a NULL ACL: control 0x0010, slot NULL; GetSecurityDescriptorSacl then returns present TRUE and a NULL pointer"
+  present_acl: "present TRUE with an ACL (one audit ACE): control 0x0010, slot non-NULL, the same pointer comes back; defaulted TRUE adds 0x0020, the value 2 acts like TRUE; present = 5 acts like TRUE"
+  not_present: "present FALSE clears 0x0010 only: slot and SE_SACL_DEFAULTED unchanged; the Get function then reports present FALSE and leaves the pointer output untouched"
+  three_states: "absent, NULL and empty SACL are different: SDDL with owner BA and SACL information is \"O:BA\", \"O:BAS:NO_ACCESS_CONTROL\" and \"O:BAS:\"; MakeSelfRelativeSD gives control 0x8000 (sacl offset 0), 0x8010 (sacl offset 0) and 0x8010 with an 8-byte ACL"
+  not_validated: "an ACL with revision 77 and size 3 is stored (TRUE); IsValidSecurityDescriptor says FALSE"
+  other_fields: "only the SACL slot, 0x0010 and 0x0020 change; with owner, group, DACL and the bits 0x3a84 (DACL present, server security, SACL auto-inherit required, SACL auto-inherited, both protected) the call gives 0x3a94, 0x3ab4 with defaulted and 0x3aa4 when marked not present; owner, group and DACL stay"
+errors:
+  revision: "a revision byte of 0, 2 or 255, and an all-zero buffer: FALSE, last error ERROR_UNKNOWN_REVISION (1305), the header is not changed"
+  self_relative: "a self-relative descriptor: FALSE, last error ERROR_INVALID_SECURITY_DESCR (1338)"
+side_effects: "writes the SACL slot, SE_SACL_PRESENT and SE_SACL_DEFAULTED"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

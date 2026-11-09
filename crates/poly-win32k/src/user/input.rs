@@ -8,8 +8,9 @@ use crate::kbd;
 use crate::wm::raw::{WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN};
 
 pub const WM_SETCURSOR: u32 = 0x0020;
-/// `HTCLIENT` (winuser.h).
+/// `HTCLIENT`, `HTERROR` (winuser.h; HTERROR is -2, 16 bits in a hit code).
 pub const HTCLIENT: u64 = 1;
+const HTERROR: u64 = 0xFFFE;
 /// `MA_ACTIVATE`, `MA_NOACTIVATE` (winuser.h).
 const MA_NOACTIVATE: u64 = 3;
 const MA_NOACTIVATEANDEAT: u64 = 4;
@@ -35,6 +36,13 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
     let (sx, sy) = (m.l as u16 as i16 as i32, (m.l >> 16) as u16 as i16 as i32);
     let screen_l = m.l;
     let st0 = focus::input(env);
+    // A disabled top-level window: the hit is HTERROR, WM_SETCURSOR is all
+    // it gets; no WM_NCHITTEST, no activation, the mouse message is dropped
+    // (EnableWindow.yaml `mouse_disabled_popup`).
+    if i.style & WS_DISABLED != 0 && i.style & WS_CHILD == 0 && st0.capture != i.hwnd && m.message != WM_MOUSEWHEEL {
+        send(env, h, WM_SETCURSOR, h, HTERROR | (u64::from(m.message) << 16));
+        return false;
+    }
     if st0.capture == i.hwnd {
         // Captured: client coordinates of the capture window, no hit test
         // and no WM_SETCURSOR (SetCapture.yaml).
@@ -106,6 +114,43 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
         m.w = hit & 0xFFFF;
     }
     true
+}
+
+/// `TrackMouseEvent` with `TME_NONCLIENT` (TrackMouseEvent.yaml
+/// `nonclient`): `TME_LEAVE` asks for `WM_NCMOUSELEAVE`. With the cursor
+/// outside the window's non-client area the message is posted at once;
+/// over it, DefWindowProc's tracking of that area (`NC_TRACK`) ends with it.
+/// `TME_CANCEL` takes the tracking away.
+pub fn track_nonclient<E: Env + ?Sized>(env: &E, hwnd: u32, flags: u32) {
+    const TME_LEAVE: u32 = 0x2;
+    const TME_CANCEL: u32 = 0x8000_0000;
+    use core::sync::atomic::Ordering::Relaxed;
+    if flags & TME_CANCEL != 0 {
+        if flags & TME_LEAVE != 0 && NC_TRACK.load(Relaxed) == hwnd {
+            NC_TRACK.store(0, Relaxed);
+        }
+        return;
+    }
+    if flags & TME_LEAVE == 0 {
+        return;
+    }
+    let (x, y) = match env.call(Request::Cursor { set: false, x: 0, y: 0 }) {
+        Reply::Value { value } => (value as u32 as i32, (value >> 32) as u32 as i32),
+        _ => (0, 0),
+    };
+    let under = match env.call(Request::WindowFromPoint { x, y, below: 0 }) {
+        Reply::Handle { hwnd } => hwnd,
+        _ => 0,
+    };
+    let in_nonclient = under == hwnd && {
+        let hit = def_window_proc(env, u64::from(hwnd), WM_NCHITTEST, 0, makelparam(x, y));
+        hit > HTCLIENT
+    };
+    if in_nonclient {
+        NC_TRACK.store(hwnd, Relaxed);
+    } else {
+        env.call(Request::Post { hwnd: u64::from(hwnd), msg: WM_NCMOUSELEAVE, w: 0, l: 0 });
+    }
 }
 
 fn top_level_of<E: Env + ?Sized>(env: &E, i: &WinInfo) -> u32 {

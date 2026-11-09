@@ -77,22 +77,13 @@ pub fn main() -> i32 {
     let shell = pty::choose_shell(poly_rt::env::var("SHELL"), &exists);
     let mut app = term::TermApp::new(None, 80, 24);
     match (&shell, sh.is_empty()) {
-        (Some(shell), false) => match pty::Pty::open(80, 24) {
-            Ok((mut p, slave)) => {
-                let program = if o.exec.is_empty() { alloc::vec![shell.clone(), "-i".into()] } else { o.exec.clone() };
-                let argv = pty::shell_command(&sh, &p.pts, o.dir.as_deref(), &program);
-                let env = pty::shell_env(&ours, shell, o.dir.as_deref());
-                match p.spawn(&argv, &env, &slave) {
-                    Ok(()) => {
-                        poly_rt::println!("poly-terminal: {} on {}", program.join(" "), p.pts);
-                        drop(slave);
-                        app.pty = Some(p);
-                    }
-                    Err(e) => message(&mut app, &alloc::format!("Could not start {shell}: {e}")),
-                }
-            }
-            Err(e) => message(&mut app, &alloc::format!("No pseudo-terminal: {e}")),
-        },
+        (Some(shell), false) => {
+            // The shell starts at the first layout, when the window's size
+            // is known (see `pty::Launch::start`).
+            let program = if o.exec.is_empty() { alloc::vec![shell.clone(), "-i".into()] } else { o.exec.clone() };
+            let launch = pty::Launch { sh, shell: shell.clone(), program, dir: o.dir.clone(), ours };
+            app.launch = Some(alloc::boxed::Box::new(move |c, r, w, h| launch.start(c, r, w, h)));
+        }
         _ => message(&mut app, "No shell found (/bin/sh). This image has none; BusyBox or a root disk brings one."),
     }
     let status = poly_app::run(&mut app, "Terminal", "poly-terminal", (760, 480), (320, 200));
@@ -104,7 +95,7 @@ pub fn main() -> i32 {
 }
 
 /// Show `text` in the window instead of a shell.
-fn message(app: &mut term::TermApp, text: &str) {
+pub(crate) fn message(app: &mut term::TermApp, text: &str) {
     poly_rt::eprintln!("poly-terminal: {text}");
     app.vt.feed(alloc::format!("\x1b[1;31mpoly-terminal:\x1b[0m {text}\r\n").as_bytes());
 }

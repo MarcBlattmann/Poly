@@ -1,0 +1,92 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/SetLayeredWindowAttributes
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-c
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About the
+  Clipboard", "Using the Clipboard", "Clipboard Formats", "Standard
+  Clipboard Formats", "High DPI Desktop Application Development on Windows",
+  "DPI_AWARENESS_CONTEXT", "Multiple Display Monitors", "Window Features"
+  (layered windows, window regions), "About Cursors", "About Icons",
+  "Desktop Window Manager" (dwmapi), "Input Method Manager" (imm32), "About
+  Messages and Message Queues"; winuser.h, wingdi.h, windef.h, winbase.h,
+  dwmapi.h, imm.h, shellscalingapi.h and winerror.h for constants and
+  layouts. The conformance tests of Wine were consulted only where the own
+  sources line of an entry says so, for ideas of what to observe; no code or
+  expected value of theirs is used (every value in these sheets was observed
+  on the machine above). Learn pages "Layered Windows" (Window Features),
+  "Using Cursors", "About Icons", "SetLayeredWindowAttributes",
+  "UpdateLayeredWindow", "BLENDFUNCTION", "SetWindowRgn", "LoadImage",
+  "CreateIconIndirect", "ICONINFO", "CURSORINFO"; the pixel values were read
+  back from the screen with GetPixel on the screen DC after DwmFlush (BitBlt
+  with and without CAPTUREBLT gives the same). The test programs have no
+  application manifest (they are console executables built without one), so
+  behaviour that depends on the manifest's declared Windows version (layered
+  child windows) is that of an application not declaring Windows 8 support.
+summary: >
+  Gives a layered window (WS_EX_LAYERED) its colour key and/or constant
+  alpha. Only the parts selected by dwFlags are stored (LWA_COLORKEY 1,
+  LWA_ALPHA 2; the others keep their value) and dwFlags becomes the flags
+  the window reports. Until the first call (or UpdateLayeredWindow) a
+  layered window shows nothing. With alpha the window is blended with what
+  is below it as (source*alpha + below*(255-alpha))/255 per channel; with a
+  colour key the pixels of exactly that colour show what is below.
+interface:
+  signature: "BOOL SetLayeredWindowAttributes(HWND hwnd, COLORREF crKey, BYTE bAlpha, DWORD dwFlags)"
+  constants: "LWA_COLORKEY 0x1, LWA_ALPHA 0x2; WS_EX_LAYERED 0x00080000 (winuser.h)"
+  colour key: "a COLORREF 0x00BBGGRR; all 32 bits given are stored and returned (0x01020304 comes back as 0x1020304)"
+rules:
+  needs_the_style: "The window must have WS_EX_LAYERED, given at creation or added later with SetWindowLong(GWL_EXSTYLE): a window without it gives FALSE with ERROR_INVALID_PARAMETER (87). Adding the style later works like having it from the start. Removing the style and adding it again forgets the attributes (Get fails again). The call does not change the extended style."
+  flags: "dwFlags 1, 2 and 3 are accepted. 0 is accepted (TRUE): nothing is stored but the reported flags become 0 and the window is then drawn opaque. Any other bit (4, 0x10, 0xFFFFFFFF, 7) gives FALSE with 87 and changes nothing."
+  stored_parts: "Only what the flags select is stored: LWA_COLORKEY alone stores the key and keeps the alpha, LWA_ALPHA alone stores the alpha and keeps the key (the crKey/bAlpha argument of the other part is ignored). The flags reported afterwards are the ones of the last accepted call."
+  alpha_on_screen: "Over an opaque blue popup (0x0000FF) a red layered window (0xFF0000) shows: alpha 255 red 0xFF0000; 254 0xFE0001; 200 0xC80037; 128 0x80007F; 64 0x4000BF; 1 0x0100FE; 0 the blue below, unchanged. The window is invisible to the screen at alpha 0 but IsWindowVisible stays TRUE."
+  colorkey_on_screen: "With LWA_COLORKEY the pixels equal to the key show what is below, all others are opaque (a green left part and a red right part with key red: green shows as 0x00FF00, red as the blue below; with key green the opposite). A key that no pixel has changes nothing. With both flags (key red, alpha 128) the keyed pixels show the blue below and the others are blended (green part 0x00807F)."
+  never_set: "A layered window never given attributes (and not UpdateLayeredWindow-ed) and then shown is IsWindowVisible TRUE, gets WM_SHOWWINDOW and WM_WINDOWPOSCHANGING/WM_WINDOWPOSCHANGED, shows nothing (the screen shows the window below) and receives no WM_PAINT, WM_NCPAINT or WM_ERASEBKGND; WindowFromPoint still finds it (WM_NCHITTEST is sent to it)."
+  painting_messages: "The first SetLayeredWindowAttributes after the show makes the window paint: WM_PAINT, WM_NCPAINT (region 1) and WM_ERASEBKGND are delivered. Later changes of alpha send no messages. When the attributes are set before ShowWindow the show sends WM_NCPAINT and WM_ERASEBKGND and WM_PAINT follows; InvalidateRect then gives WM_PAINT and WM_ERASEBKGND. MoveWindow keeps the attributes and the look."
+  hit_testing_alpha: "WindowFromPoint (which sends WM_NCHITTEST) returns the layered window for alpha 255, 64 and 1, and the window below for alpha 0 (also just outside the window)."
+  hit_testing_colorkey: "For a window whose whole client area is painted in the key colour, WindowFromPoint returns the window below only for the keys 0x00FF00, 0xFFFFFF, 0x000000, 0x808080, 0xFF00FF and 0x010001, whose red and blue parts are equal; for 0x0000FF, 0xFF0000, 0xFFFF00, 0x00FFFF, 0x123456, 0x0000FE and 0x000001 the layered window is returned even though the screen shows what is below."
+  with_update_layered_window: "SetLayeredWindowAttributes after UpdateLayeredWindow succeeds and Get then reports it; UpdateLayeredWindow after SetLayeredWindowAttributes fails with 87."
+  children: "CreateWindowExW of a WS_CHILD window with WS_EX_LAYERED returns NULL without setting a last error in a process that declares no Windows 8 support. Adding WS_EX_LAYERED to a child with SetWindowLong leaves the style bit clear, and SetLayeredWindowAttributes on it gives FALSE with 87."
+errors:
+  not_layered: "FALSE, ERROR_INVALID_PARAMETER (87)"
+  bad_flags: "FALSE, 87, nothing stored"
+  bad_window: "NULL, a made-up handle or a destroyed window: FALSE, ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "Changes how the window is composed on the screen and what WindowFromPoint returns for it; sends the painting messages described."
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering:
+  - "first Set after ShowWindow: WM_PAINT, WM_NCPAINT, WM_ERASEBKGND"
+  - "Set before ShowWindow: the show sends WM_SHOWWINDOW, WM_WINDOWPOSCHANGING, WM_NCPAINT, WM_ERASEBKGND, WM_WINDOWPOSCHANGED, then WM_PAINT is posted"
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
+  needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants); run with
+  poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because
+  painting, input and the clipboard need the visible desktop. Window
+  procedures log documented messages only: never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels and closed within seconds; the cursor is parked
+  at (1500, 600) at the start and put back at the end; the clipboard is
+  emptied at the end of every test that touches it; a test changes no system
+  setting (only the state of its own process and windows).
+not_covered: >
+  Layered child windows in a process that declares Windows 8 support (needs
+  a manifest), layered windows on several monitors, DPI-aware blending,
+  layered windows with a window region (see SetWindowRgn). Several monitors,
+  other system DPIs (the oracle is one 1920x1080 monitor at 96 DPI, scale
+  100%), a manifest (the tests have none: awareness is set with the API),
+  other keyboard layouts than German, installed input methods (the oracle
+  has none active), touch and pen, hooks, menus and dialogs, comctl32
+  controls, themed (visual style) painting, clipboard contents put there by
+  other programs or by the cloud clipboard and clipboard history.
