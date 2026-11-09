@@ -45,6 +45,31 @@ pub struct ObjectSecurity {
     thread: BTreeMap<ThreadRef, u64>,
     sds: BTreeMap<ObjectId, Vec<u8>>,
     next_luid: u64,
+    /// The descriptors of [`DefaultSd`], built once.
+    file_sd: Vec<u8>,
+    key_sd: Vec<u8>,
+}
+
+/// The descriptor a file system or the registry gives what it makes
+/// (ADR 0171; the real ones are inherited from the parent, which Poly's
+/// file systems do not store, so this is the common NTFS / registry shape):
+/// owner Administrators, group SYSTEM, SYSTEM and Administrators full,
+/// Users and RESTRICTED read (and execute for files). Files also let
+/// Authenticated Users modify (a folder under the user profile or the temp
+/// folder) and Everyone read and execute (what `KnownDlls` gives a
+/// restricted token on Windows: the system DLLs load for any token).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DefaultSd {
+    File,
+    Key,
+}
+
+const FILE_SDDL: &str = "O:BAG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;AU)(A;OICI;FRFX;;;BU)(A;OICI;FRFX;;;RC)(A;OICI;FRFX;;;WD)";
+const KEY_SDDL: &str = "O:BAG:SYD:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;BU)(A;CI;KR;;;RC)";
+
+fn sddl(s: &str) -> Vec<u8> {
+    let w: Vec<u16> = s.encode_utf16().collect();
+    poly_security::sdstr::parse(&w).expect("the built-in descriptor is valid SDDL")
 }
 
 impl Default for ObjectSecurity {
@@ -61,6 +86,8 @@ impl ObjectSecurity {
             thread: BTreeMap::new(),
             sds: BTreeMap::new(),
             next_luid: POLY_TOKEN_LUID + 0x100,
+            file_sd: sddl(FILE_SDDL),
+            key_sd: sddl(KEY_SDDL),
         }
     }
 
@@ -140,10 +167,10 @@ impl ObjectManager {
     pub fn set_process_token(&mut self, pid: ProcessId, id: u64) -> Result<()> {
         let object = self.security.token_object(id).ok_or(STATUS_INVALID_PARAMETER)?;
         self.reference(object)?;
-        if let Some(old) = self.security.process.insert(pid, id) {
-            if let Some(o) = self.security.token_object(old) {
-                let _ = self.dereference(o);
-            }
+        if let Some(old) = self.security.process.insert(pid, id)
+            && let Some(o) = self.security.token_object(old)
+        {
+            let _ = self.dereference(o);
         }
         Ok(())
     }
@@ -158,20 +185,20 @@ impl ObjectManager {
             Some(id) => self.security.thread.insert(thread, id),
             None => self.security.thread.remove(&thread),
         };
-        if let Some(old) = old {
-            if let Some(o) = self.security.token_object(old) {
-                let _ = self.dereference(o);
-            }
+        if let Some(old) = old
+            && let Some(o) = self.security.token_object(old)
+        {
+            let _ = self.dereference(o);
         }
         Ok(())
     }
 
     /// A process ended: it no longer holds its token.
     pub fn forget_process_token(&mut self, pid: ProcessId) {
-        if let Some(id) = self.security.process.remove(&pid) {
-            if let Some(o) = self.security.token_object(id) {
-                let _ = self.dereference(o);
-            }
+        if let Some(id) = self.security.process.remove(&pid)
+            && let Some(o) = self.security.token_object(id)
+        {
+            let _ = self.dereference(o);
         }
     }
 
@@ -237,6 +264,15 @@ impl ObjectManager {
         let mapping = mapping_of(kind);
         let map = |m: u32| mapping.map(m);
         let mut parts = sdops::default_descriptor(token, &map);
+        if matches!(kind, ObjectType::Process | ObjectType::Thread | ObjectType::Token) {
+            // Processes, threads and tokens carry their creator's integrity
+            // as a mandatory label (the sheets: `S:AI(ML;;NW;;;HI)`).
+            // Tokens: no write up; processes and threads: no read up either
+            // (the sheets: 0x1 on the token, 0x3 on the process).
+            let policy = if kind == ObjectType::Token { 1 } else { 3 };
+            parts.sacl = Some(sdops::label_sacl(token.integrity_rid(), policy));
+            parts.control |= sd::SE_SACL_PRESENT | sd::SE_SACL_AUTO_INHERITED;
+        }
         if let Some(e) = explicit.and_then(Parts::from_relative) {
             if let Some(o) = e.owner {
                 parts.owner = Some(o);
@@ -245,16 +281,27 @@ impl ObjectManager {
                 parts.group = Some(g);
             }
             if e.control & sd::SE_DACL_PRESENT != 0 {
-                parts.dacl = e.dacl.map(|d| map_acl(&d, &map));
+                parts.dacl = e.dacl.map(|d| sdops::trimmed_acl(&map_acl(&d, &map)));
                 parts.control |=
                     e.control & (sd::SE_DACL_PROTECTED | sd::SE_DACL_AUTO_INHERITED | sd::SE_DACL_AUTO_INHERIT_REQ);
             }
             if e.control & sd::SE_SACL_PRESENT != 0 {
-                parts.sacl = e.sacl;
+                parts.sacl = e.sacl.map(|a| sdops::trimmed_acl(&a));
                 parts.control |= sd::SE_SACL_PRESENT;
             }
         }
         self.security.sds.insert(id, parts.to_relative());
+    }
+
+    /// Give `id` (a file or key object the file system or the registry just
+    /// made) its [`DefaultSd`], so opening it is checked against the
+    /// caller's token.
+    pub fn assign_default_security(&mut self, id: ObjectId, which: DefaultSd) {
+        let bytes = match which {
+            DefaultSd::File => self.security.file_sd.clone(),
+            DefaultSd::Key => self.security.key_sd.clone(),
+        };
+        self.security.sds.insert(id, bytes);
     }
 
     /// Give a new object made by `create_object` its descriptor: an
@@ -283,7 +330,8 @@ impl ObjectManager {
     pub fn replace_security(&mut self, id: ObjectId, kind: ObjectType, mut parts: Parts) {
         let mapping = mapping_of(kind);
         let map = |m: u32| mapping.map(m);
-        parts.dacl = parts.dacl.map(|d| map_acl(&d, &map));
+        parts.dacl = parts.dacl.map(|d| sdops::trimmed_acl(&map_acl(&d, &map)));
+        parts.sacl = parts.sacl.map(|a| sdops::trimmed_acl(&a));
         self.security.sds.insert(id, parts.to_relative());
     }
 }

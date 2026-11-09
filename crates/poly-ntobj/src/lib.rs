@@ -62,7 +62,7 @@ pub use handle::{Handle, HandleFlags};
 pub use manager::{Deleted, ObjectManager};
 pub use namespace::{Intent, NoParse, ParseHook, ParseRequest, Parsed};
 pub use object::{EventType, ObjectId, ObjectType};
-pub use security::ObjectSecurity;
+pub use security::{DefaultSd, ObjectSecurity};
 pub use services::ObjectBasicInformation;
 pub use status::{NtStatus, Result};
 pub use wait::{

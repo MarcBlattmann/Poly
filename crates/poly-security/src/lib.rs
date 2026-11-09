@@ -49,14 +49,16 @@ pub use status::NtStatus;
 
 /// Poly's single user's name (the default hives' `POLY_USER_NAME`, ADR 0066).
 pub const POLY_USER_NAME: &str = "poly";
-/// The machine's account domain: `S-1-5-21-0-0-0` (three zero
-/// sub-authorities, ADR 0066); local accounts are relative to it.
-pub const MACHINE_DOMAIN: [u32; 4] = [21, 0, 0, 0];
+/// The machine's account domain: `S-1-5-21-520193847-884726105-1936024571` (three large
+/// sub-authorities like a real machine's; their digits (9, 9 and 10) are what
+/// the string lengths of the sheets imply, ADR 0171); local accounts are
+/// relative to it.
+pub const MACHINE_DOMAIN: [u32; 4] = [21, 520_193_847, 884_726_105, 1_936_024_571];
 /// Poly's single user's relative identifier (the default hives'
-/// `S-1-5-21-0-0-0-1000`).
-pub const POLY_USER_RID: u32 = 1000;
+/// `S-1-5-21-520193847-884726105-1936024571-1002`).
+pub const POLY_USER_RID: u32 = 1002;
 
-/// Poly's single user's SID, `S-1-5-21-0-0-0-1000`.
+/// Poly's single user's SID, `S-1-5-21-520193847-884726105-1936024571-1002`.
 pub fn poly_user_sid() -> Sid {
     sid::domain_relative(POLY_USER_RID)
 }

@@ -487,7 +487,7 @@ impl ObjectManager {
         let access = if options & DUPLICATE_SAME_ACCESS != 0 {
             src.access
         } else {
-            access::grant(header.kind, desired, header.allowed, caller.mode, false, caller.privileges)?
+            self.checked_access(caller, src.object, desired, false)?
         };
         let flags = if options & DUPLICATE_SAME_ATTRIBUTES != 0 {
             src.flags

@@ -260,7 +260,8 @@ pub fn adjust_privileges(privileges: &[(u32, u32)], disable_all: bool, new: &[(u
         };
         let old = now[i].1;
         if attrs & SE_PRIVILEGE_REMOVED != 0 {
-            note(&mut previous, luid, old);
+            // The previous state of a removal reads 0 (the sheets).
+            note(&mut previous, luid, 0);
             now.remove(i);
         } else if (attrs & SE_PRIVILEGE_ENABLED != 0) != (old & SE_PRIVILEGE_ENABLED != 0) {
             note(&mut previous, luid, old);
@@ -342,8 +343,9 @@ pub struct Token {
     flags: u32,
 }
 
-/// The single user's logon session LUID (to be confirmed: any unique value).
-pub const POLY_LOGON_LUID: u64 = 0x3_E800;
+/// The single user's logon session LUID: its logon SID `S-1-5-5-0-123456789`
+/// has the length the strings of the sheets show (ADR 0171).
+pub const POLY_LOGON_LUID: u64 = 123_456_789;
 /// The first token's LUID.
 pub const POLY_TOKEN_LUID: u64 = 0x3_E801;
 
@@ -431,6 +433,30 @@ impl Token {
             .unwrap_or(rid::SECURITY_MANDATORY_MEDIUM_RID)
     }
 
+    /// What a process started with this token has enabled: below High the
+    /// privileges that need a high integrity level are disabled (Medium:
+    /// seven of the administrator's 24 stay off, Low and Untrusted: all but
+    /// three; the sheets of `CreateProcessAsUserW` count 17 and 3 enabled, the
+    /// choice of which is ours, to be confirmed by the spec agent).
+    pub fn clamp_privileges_to_integrity(&mut self) {
+        const HIGH_ONLY: [u32; 7] = [8, 9, 10, 17, 18, 20, 22];
+        const LOW_KEEPS: [u32; 3] = [19, 23, 33];
+        let rid = self.integrity_rid();
+        if rid >= rid::SECURITY_MANDATORY_HIGH_RID {
+            return;
+        }
+        for (luid, attrs) in self.privileges.iter_mut() {
+            let off = if rid < rid::SECURITY_MANDATORY_MEDIUM_RID {
+                !LOW_KEEPS.contains(luid)
+            } else {
+                HIGH_ONLY.contains(luid)
+            };
+            if off {
+                *attrs &= !SE_PRIVILEGE_ENABLED;
+            }
+        }
+    }
+
     /// The part of the token the access check looks at.
     pub fn check_view(&self) -> CheckToken<'_> {
         CheckToken {
@@ -450,10 +476,11 @@ impl Token {
         Parts {
             revision: sd::SECURITY_DESCRIPTOR_REVISION,
             sbz1: 0,
-            control: sd::SE_DACL_PRESENT,
+            control: sd::SE_DACL_PRESENT | sd::SE_SACL_PRESENT | sd::SE_SACL_AUTO_INHERITED,
             owner: Some(self.owner.to_bytes()),
             group: Some(self.primary_group.to_bytes()),
-            sacl: None,
+            // The mandatory label of the creator: its integrity, no write up.
+            sacl: Some(crate::sdops::label_sacl(self.integrity_rid(), 1)),
             dacl: self.object_dacl.clone(),
         }
     }
@@ -641,9 +668,16 @@ impl Token {
                 }
             }
             (TOKEN_INTEGRITY_LEVEL, SetData::Sid(None)) => return Err(SecErr::InvalidParameter.nt()),
-            (TOKEN_VIRTUALIZATION_ALLOWED, SetData::Value(v)) => self.set_flag(F_VIRT_ALLOWED, *v != 0),
             (TOKEN_VIRTUALIZATION_ENABLED, SetData::Value(v)) => self.set_flag(F_VIRT_ENABLED, *v != 0),
-            (TOKEN_UI_ACCESS | TOKEN_SESSION_ID | TOKEN_MANDATORY_POLICY | TOKEN_SANDBOX_INERT | TOKEN_ORIGIN, _) => {
+            (
+                TOKEN_VIRTUALIZATION_ALLOWED
+                | TOKEN_UI_ACCESS
+                | TOKEN_SESSION_ID
+                | TOKEN_MANDATORY_POLICY
+                | TOKEN_SANDBOX_INERT
+                | TOKEN_ORIGIN,
+                _,
+            ) => {
                 return Err(SecErr::PrivilegeNotHeld.nt());
             }
             _ => return Err(STATUS_INVALID_INFO_CLASS),
@@ -928,7 +962,10 @@ mod tests {
         assert_eq!(b.len(), 16 + 28);
         assert_eq!(u64_at(&b, 0), base + 16);
         assert_eq!(u32_at(&b, 8), 0);
-        assert_eq!(sddl::to_string(&Sid::from_bytes(&b[16..]).unwrap()), "S-1-5-21-0-0-0-1000");
+        assert_eq!(
+            sddl::to_string(&Sid::from_bytes(&b[16..]).unwrap()),
+            "S-1-5-21-520193847-884726105-1936024571-1002"
+        );
     }
 
     #[test]
@@ -970,7 +1007,7 @@ mod tests {
         assert_eq!(res.filter(0, &[], &[], &[(sid::nt(12), 0)], 9), Err(SecErr::InvalidParameter));
         let del = t.filter(0, &[], &[17, 18, 7], &[], 9).unwrap();
         assert_eq!(del.privileges.len(), 22);
-        let u = t.filter(0, &[t.user.clone()], &[], &[], 9).unwrap();
+        let u = t.filter(0, core::slice::from_ref(&t.user), &[], &[], 9).unwrap();
         assert_eq!(u.user_attrs, 0x10);
         assert!(u.has_restrictions());
     }

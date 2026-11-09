@@ -155,13 +155,16 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         let id = crate::security::token_of(
             k,
             h,
-            poly_security::token::TOKEN_ASSIGN_PRIMARY
-                | poly_security::token::TOKEN_DUPLICATE
-                | poly_security::token::TOKEN_QUERY,
+            poly_security::token::TOKEN_ASSIGN_PRIMARY | poly_security::token::TOKEN_QUERY,
         )?;
-        let kind = k.with_state(|sys, _, _| sys.objects.security.token(id).map(|t| t.kind));
-        if kind != Some(poly_security::token::TOKEN_PRIMARY) {
-            return Err(poly_ntobj::NtStatus(0xC000_00A8));
+        // A primary token, or an impersonation token of at least Impersonation level.
+        let ok = k.with_state(|sys, _, _| {
+            sys.objects.security.token(id).is_some_and(|t| {
+                t.kind == poly_security::token::TOKEN_PRIMARY || t.level >= poly_security::token::SECURITY_IMPERSONATION
+            })
+        });
+        if !ok {
+            return Err(poly_ntobj::NtStatus(0xC000_00A5));
         }
         Some(id)
     } else {

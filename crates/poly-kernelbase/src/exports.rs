@@ -273,6 +273,11 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("MoveFileW", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("FileTimeToDosDateTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("DosDateTimeToFileTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
+    // Tokens (processthreadsapi.h, ADR 0171):
+    // `advapi32` forwards the token functions to the same contract.
+    ("OpenProcessToken", "api-ms-win-core-processthreads-l1-1-0"),
+    ("OpenThreadToken", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadToken", "api-ms-win-core-processthreads-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our
@@ -331,7 +336,10 @@ pub const KERNEL32_OWN: &[&str] = &[
 /// Every function `kernelbase.dll` must export: each one `kernel32` or
 /// `advapi32` forwards ([`crate::advapi`], ADR 0083).
 pub fn kernelbase_exports() -> impl Iterator<Item = &'static str> {
-    KERNEL32_FORWARDS.iter().chain(crate::advapi::ADVAPI32_FORWARDS).map(|&(name, _)| name)
+    let advapi = crate::advapi::ADVAPI32_FORWARDS
+        .iter()
+        .filter(|&&(name, _)| !KERNEL32_FORWARDS.iter().any(|&(k, _)| k == name));
+    KERNEL32_FORWARDS.iter().chain(advapi).map(|&(name, _)| name)
 }
 
 /// The forwarder string of `kernel32!name`, as the export directory holds

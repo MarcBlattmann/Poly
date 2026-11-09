@@ -90,6 +90,7 @@ impl SdPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn revision(self) -> u8 {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { *self.0 }
     }
     /// `Control`.
@@ -97,11 +98,13 @@ impl SdPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn control(self) -> u16 {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { (self.0.add(2) as *const u16).read_unaligned() }
     }
     /// # Safety
     /// The header is writable.
     pub unsafe fn set_control_word(self, c: u16) {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { (self.0.add(2) as *mut u16).write_unaligned(c) }
     }
     /// Whether `SE_SELF_RELATIVE` is set.
@@ -109,6 +112,7 @@ impl SdPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn is_relative(self) -> bool {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { self.control() & SE_SELF_RELATIVE != 0 }
     }
     /// The part at the absolute slot `abs` (or relative offset `rel`):
@@ -117,6 +121,7 @@ impl SdPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn part(self, abs: usize, rel: usize) -> *mut u8 {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe {
             if self.is_relative() {
                 let off = (self.0.add(rel) as *const u32).read_unaligned();
@@ -129,6 +134,7 @@ impl SdPtr {
     /// # Safety
     /// The absolute header is writable.
     pub unsafe fn set_slot(self, abs: usize, p: *mut u8) {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { (self.0.add(abs) as *mut *mut u8).write_unaligned(p) }
     }
     /// The owner SID pointer (null for none).
@@ -136,6 +142,7 @@ impl SdPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn owner(self) -> *mut u8 {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { self.part(ABS_OWNER, REL_OWNER) }
     }
     /// The group SID pointer.
@@ -143,6 +150,7 @@ impl SdPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn group(self) -> *mut u8 {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { self.part(ABS_GROUP, REL_GROUP) }
     }
     /// The SACL pointer as stored (null for none), whether present or not.
@@ -150,6 +158,7 @@ impl SdPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn sacl_slot(self) -> *mut u8 {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { self.part(ABS_SACL, REL_SACL) }
     }
     /// The DACL pointer as stored.
@@ -157,6 +166,7 @@ impl SdPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn dacl_slot(self) -> *mut u8 {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { self.part(ABS_DACL, REL_DACL) }
     }
 }
@@ -312,6 +322,7 @@ pub unsafe fn set_control(sd: SdPtr, mask: u16, bits: u16) -> SecResult<()> {
 /// # Safety
 /// The count byte is readable.
 unsafe fn sid_len(p: *const u8) -> usize {
+    // SAFETY: the caller upholds this function's contract (see its `# Safety`).
     unsafe { sid::length_required(*p.add(1)) as usize }
 }
 
@@ -361,7 +372,7 @@ pub unsafe fn is_valid(sd: SdPtr, readable: &dyn Fn(*const u8, usize) -> bool) -
         if rel {
             for at in [REL_OWNER, REL_GROUP, REL_SACL, REL_DACL] {
                 let off = (sd.0.add(at) as *const u32).read_unaligned();
-                if off % 4 != 0 {
+                if !off.is_multiple_of(4) {
                     return false;
                 }
             }
@@ -463,13 +474,28 @@ impl Parts {
     /// The self-relative form: the 20-byte header, then the SACL, DACL,
     /// owner and group in that order with no padding.
     pub fn to_relative(&self) -> Vec<u8> {
+        self.relative_in([REL_SACL, REL_DACL, REL_OWNER, REL_GROUP])
+    }
+
+    /// The self-relative form the kernel's `NtQuerySecurityObject` returns:
+    /// owner, group, SACL, DACL in that order (the sheets: owner at 20,
+    /// group at 36, DACL at 64).
+    pub fn to_relative_kernel(&self) -> Vec<u8> {
+        self.relative_in([REL_OWNER, REL_GROUP, REL_SACL, REL_DACL])
+    }
+
+    fn relative_in(&self, order: [usize; 4]) -> Vec<u8> {
         let mut v = alloc::vec![0u8; RELATIVE_HEADER];
         v[0] = self.revision;
         v[1] = self.sbz1;
         v[2..4].copy_from_slice(&(self.control | SE_SELF_RELATIVE).to_le_bytes());
-        for (at, part) in
-            [(REL_SACL, &self.sacl), (REL_DACL, &self.dacl), (REL_OWNER, &self.owner), (REL_GROUP, &self.group)]
-        {
+        for at in order {
+            let part = match at {
+                REL_SACL => &self.sacl,
+                REL_DACL => &self.dacl,
+                REL_OWNER => &self.owner,
+                _ => &self.group,
+            };
             if let Some(p) = part {
                 let off = v.len() as u32;
                 v[at..at + 4].copy_from_slice(&off.to_le_bytes());
@@ -646,7 +672,7 @@ mod tests {
             set_owner_or_group(sd, true, group.as_mut_ptr(), false).unwrap();
             assert_eq!(length(sd), 40 + 16 + 12);
             // DACL: three states.
-            assert_eq!(get_acl(sd, false).unwrap().present, false);
+            assert!(!get_acl(sd, false).unwrap().present);
             set_acl(sd, false, true, core::ptr::null_mut(), false).unwrap();
             assert_eq!(sd.control(), SE_OWNER_DEFAULTED | SE_DACL_PRESENT);
             let mut dacl = acl::build(2, &[(0, 0, 0x1F01FF, &world())]);

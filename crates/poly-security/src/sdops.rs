@@ -37,6 +37,13 @@ fn acl_of(revision: u8, aces: &[acl::Ace]) -> Vec<u8> {
     v
 }
 
+/// `acl` cut to the ACEs it holds: the size field names the bytes in use
+/// (an ACL built in a 1024-byte buffer is stored at its used size).
+pub fn trimmed_acl(acl_bytes: &[u8]) -> Vec<u8> {
+    let aces = acl::aces_in(acl_bytes);
+    acl_of(acl_bytes.first().copied().unwrap_or(acl::ACL_REVISION), &aces)
+}
+
 /// The parts of `stored` that `info` selects, as a descriptor to hand out.
 /// The SACL side: the audit ACEs only with `SACL_SECURITY_INFORMATION`,
 /// the label ACEs only with `LABEL_SECURITY_INFORMATION`; asking for either
@@ -56,7 +63,12 @@ pub fn select(stored: &Parts, info: u32) -> Parts {
             | (stored.control & (SE_DACL_PROTECTED | SE_DACL_AUTO_INHERITED | SE_DACL_AUTO_INHERIT_REQ));
     }
     if info & SACL_SIDE != 0 {
-        if info & LABEL_SECURITY_INFORMATION != 0 {
+        // The flag is the stored one, and a descriptor without any SACL
+        // answers a label query with it (control 0x8800); a label set by
+        // `SetSecurityObject` clears it (the sheets: control 0x8010).
+        if info & LABEL_SECURITY_INFORMATION != 0
+            && (stored.control & SE_SACL_AUTO_INHERITED != 0 || stored.sacl.is_none())
+        {
             out.control |= SE_SACL_AUTO_INHERITED;
         }
         if let Some(sacl) = &stored.sacl {
@@ -68,7 +80,7 @@ pub fn select(stored: &Parts, info: u32) -> Parts {
             if info & LABEL_SECURITY_INFORMATION != 0 {
                 keep.extend(labels);
             }
-            if !keep.is_empty() || info & SACL_SECURITY_INFORMATION != 0 {
+            {
                 let rev = sacl.first().copied().unwrap_or(acl::ACL_REVISION);
                 out.sacl = Some(acl_of(rev, &keep));
                 out.control |= SE_SACL_PRESENT | (stored.control & (SE_SACL_PROTECTED | SE_SACL_AUTO_INHERIT_REQ));
@@ -118,14 +130,17 @@ pub fn merge(stored: &Parts, new: &Parts, info: u32) -> SecResult<Parts> {
     if info & SACL_SECURITY_INFORMATION != 0 {
         out.sacl = if new.control & SE_SACL_PRESENT != 0 { new.sacl.clone() } else { None };
         out.control |= SE_SACL_PRESENT;
+        out.control &= !SE_SACL_AUTO_INHERITED;
     } else if info & LABEL_SECURITY_INFORMATION != 0 {
         // Replace the label ACEs; keep the audit ACEs.
         let old_audits = stored.sacl.as_deref().map(split_sacl).map(|(_, a)| a).unwrap_or_default();
         let new_labels = new.sacl.as_deref().map(split_sacl).map(|(l, _)| l).unwrap_or_default();
         let mut all = old_audits;
         all.extend(new_labels);
-        out.sacl = Some(acl_of(acl::ACL_REVISION_DS, &all));
+        out.sacl = Some(acl_of(acl::ACL_REVISION, &all));
         out.control |= SE_SACL_PRESENT;
+        out.control &= !SE_SACL_AUTO_INHERITED;
+        out.control = (out.control & !SE_SACL_PROTECTED) | (new.control & SE_SACL_PROTECTED);
     }
     Ok(out)
 }
@@ -174,7 +189,7 @@ pub fn default_descriptor(t: &Token, map: &dyn Fn(u32) -> u32) -> Parts {
 pub fn label_sacl(rid: u32, policy: u32) -> Vec<u8> {
     let ace =
         acl::ace(acl::SYSTEM_MANDATORY_LABEL_ACE_TYPE, 0, policy, &sid::mandatory(rid).to_bytes()).expect("label SID");
-    acl_of(acl::ACL_REVISION_DS, &[acl::Ace { kind: acl::SYSTEM_MANDATORY_LABEL_ACE_TYPE, flags: 0, bytes: ace }])
+    acl_of(acl::ACL_REVISION, &[acl::Ace { kind: acl::SYSTEM_MANDATORY_LABEL_ACE_TYPE, flags: 0, bytes: ace }])
 }
 
 #[cfg(test)]
@@ -196,7 +211,7 @@ mod tests {
     fn select_and_merge() {
         let stored = parts("O:BAG:SYD:(A;;GA;;;WD)S:(AU;SAFA;GA;;;WD)(ML;;NW;;;LW)");
         assert_eq!(text(&select(&stored, OWNER_SECURITY_INFORMATION), 0xff), "O:BA");
-        assert_eq!(text(&select(&stored, LABEL_SECURITY_INFORMATION), 0xff), "S:AI(ML;;NW;;;LW)");
+        assert_eq!(text(&select(&stored, LABEL_SECURITY_INFORMATION), 0xff), "S:(ML;;NW;;;LW)");
         assert_eq!(text(&select(&stored, SACL_SECURITY_INFORMATION), 0xff), "S:(AU;SAFA;GA;;;WD)");
         let none = select(&stored, 0);
         assert_eq!(none.control, 0);
@@ -238,7 +253,7 @@ mod tests {
         assert_eq!(
             text(&ev, 0xff),
             alloc::format!(
-                "O:BAG:S-1-5-21-0-0-0-513D:(A;;0x1f0003;;;BA)(A;;0x1f0003;;;SY)(A;;0x120001;;;{})",
+                "O:BAG:S-1-5-21-520193847-884726105-1936024571-513D:(A;;0x1f0003;;;BA)(A;;0x1f0003;;;SY)(A;;0x120001;;;{})",
                 sddl::to_string(&crate::token::logon_sid(crate::token::POLY_LOGON_LUID))
             )
         );

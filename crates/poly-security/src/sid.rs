@@ -195,6 +195,7 @@ pub fn equal_prefix(a: &[u8], b: &[u8]) -> bool {
 pub unsafe fn raw<'a>(p: *const u8) -> &'a [u8] {
     // SAFETY: the count byte is readable; the caller vouches for the rest.
     let n = length_required(unsafe { *p.add(1) }) as usize;
+    // SAFETY: the caller upholds this function's contract (see its `# Safety`).
     unsafe { core::slice::from_raw_parts(p, n) }
 }
 
@@ -222,7 +223,7 @@ pub fn builtin(r: u32) -> Sid {
     Sid::new(SECURITY_NT_AUTHORITY, &[rid::SECURITY_BUILTIN_DOMAIN_RID, r])
 }
 
-/// `S-1-5-21-0-0-0-<rid>`: relative to the machine's account domain.
+/// `S-1-5-21-520193847-884726105-1936024571-<rid>`: relative to the machine's account domain.
 pub fn domain_relative(r: u32) -> Sid {
     let d = crate::MACHINE_DOMAIN;
     Sid::new(SECURITY_NT_AUTHORITY, &[d[0], d[1], d[2], d[3], r])
@@ -292,7 +293,7 @@ mod tests {
     #[test]
     fn well_known() {
         assert_eq!(local_system(), Sid::new(5, &[18]));
-        assert_eq!(domain_relative(500), Sid::new(5, &[21, 0, 0, 0, 500]));
+        assert_eq!(domain_relative(500), Sid::new(5, &[21, 520_193_847, 884_726_105, 1_936_024_571, 500]));
         assert_eq!(mandatory(rid::SECURITY_MANDATORY_HIGH_RID).subs, [0x3000]);
         assert_eq!(Sid::new(5, &[1; 20]).subs.len(), 15);
     }

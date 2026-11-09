@@ -104,6 +104,7 @@ impl AclPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn revision(self) -> u8 {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { self.u8(0) }
     }
     /// `AclSize`.
@@ -111,6 +112,7 @@ impl AclPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn size(self) -> usize {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         usize::from(unsafe { self.u16(2) })
     }
     /// `AceCount`.
@@ -118,6 +120,7 @@ impl AclPtr {
     /// # Safety
     /// The header is readable.
     pub unsafe fn count(self) -> usize {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         usize::from(unsafe { self.u16(4) })
     }
     /// The ACE at byte `off` of the ACL: (type, flags, size).
@@ -125,6 +128,7 @@ impl AclPtr {
     /// # Safety
     /// The four header bytes at `off` are readable.
     pub unsafe fn ace_at(self, off: usize) -> (u8, u8, usize) {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { (self.u8(off), self.u8(off + 1), usize::from(self.u16(off + 2))) }
     }
     /// The ACE bytes at `off`, `len` long.
@@ -132,6 +136,7 @@ impl AclPtr {
     /// # Safety
     /// They are readable.
     pub unsafe fn bytes<'a>(self, off: usize, len: usize) -> &'a [u8] {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { core::slice::from_raw_parts(self.0.add(off), len) }
     }
     /// The whole ACL as `AclSize` bytes.
@@ -139,6 +144,7 @@ impl AclPtr {
     /// # Safety
     /// They are readable.
     pub unsafe fn all<'a>(self) -> &'a [u8] {
+        // SAFETY: the caller upholds this function's contract (see its `# Safety`).
         unsafe { self.bytes(0, self.size()) }
     }
 }
@@ -263,6 +269,7 @@ pub unsafe fn is_valid(acl: AclPtr) -> bool {
 ///
 /// # Safety
 /// The walked bytes are readable.
+#[allow(clippy::result_unit_err)]
 pub unsafe fn first_free(acl: AclPtr) -> Result<Option<usize>, ()> {
     // SAFETY: the header is readable.
     let (size, count) = unsafe { (acl.size(), acl.count()) };

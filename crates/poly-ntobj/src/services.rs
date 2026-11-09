@@ -98,15 +98,19 @@ impl ObjectManager {
         Ok(())
     }
 
-    /// A new handle to an existing object, after the exclusive and access
-    /// checks.
-    fn open_existing(&mut self, caller: &Caller, id: ObjectId, desired: AccessMask, attributes: u32) -> Result<Handle> {
-        self.check_exclusive(id, caller.process, attributes)?;
+    /// The access to `id` that `desired` gets `caller`: the type's rules
+    /// ([`access::grant`]) and then the object's descriptor against the
+    /// caller's effective token (ADR 0171).
+    pub(crate) fn checked_access(
+        &self,
+        caller: &Caller,
+        id: ObjectId,
+        desired: AccessMask,
+        force: bool,
+    ) -> Result<AccessMask> {
         let h = &self.obj(id).header;
-        let force = attributes & OBJ_FORCE_ACCESS_CHECK != 0;
         let privileges = self.effective_privileges(caller);
         let mut granted = access::grant(h.kind, desired, h.allowed, caller.mode, force, privileges)?;
-        // The descriptor and the caller's token (ADR 0171).
         if let Some(r) = self.dacl_grant(caller, id, desired, force) {
             let from_dacl = r?;
             granted = if h.kind.generic_mapping().map(desired) & MAXIMUM_ALLOWED != 0 {
@@ -115,6 +119,15 @@ impl ObjectManager {
                 from_dacl
             };
         }
+        Ok(granted)
+    }
+
+    /// A new handle to an existing object, after the exclusive and access
+    /// checks.
+    fn open_existing(&mut self, caller: &Caller, id: ObjectId, desired: AccessMask, attributes: u32) -> Result<Handle> {
+        self.check_exclusive(id, caller.process, attributes)?;
+        let force = attributes & OBJ_FORCE_ACCESS_CHECK != 0;
+        let granted = self.checked_access(caller, id, desired, force)?;
         let flags = HandleFlags { inherit: attributes & OBJ_INHERIT != 0, protect_from_close: false };
         self.new_handle(Self::target_table(caller, attributes), id, granted, flags, caller.process)
     }

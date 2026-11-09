@@ -150,10 +150,10 @@ fn owner_rights() -> Sid {
 fn object_label(sacl: Option<&[u8]>) -> (u32, u32) {
     let Some(b) = sacl else { return (DEFAULT_LABEL, acl::SYSTEM_MANDATORY_LABEL_NO_WRITE_UP) };
     for a in acl::aces_in(b) {
-        if a.kind == acl::SYSTEM_MANDATORY_LABEL_ACE_TYPE {
-            if let Some(s) = a.sid().and_then(Sid::from_bytes) {
-                return (s.rid().unwrap_or(0), a.mask() & 7);
-            }
+        if a.kind == acl::SYSTEM_MANDATORY_LABEL_ACE_TYPE
+            && let Some(s) = a.sid().and_then(Sid::from_bytes)
+        {
+            return (s.rid().unwrap_or(0), a.mask() & 7);
         }
     }
     (DEFAULT_LABEL, acl::SYSTEM_MANDATORY_LABEL_NO_WRITE_UP)
@@ -241,9 +241,13 @@ pub fn check(sd: &Parts, token: &CheckToken<'_>, desired: u32, mapping: &Generic
         let owner_ok = owner.as_ref().is_some_and(|o| token_has(token, o, true));
         granted = walk(&aces, want, max, owner_ok, owner_rights_ace, &|s, allow| token_has(token, s, allow));
     }
-    // The second pass for restricting SIDs.
-    if !token.restricted.is_empty() {
-        let write_bits = mapping.write | DELETE | WRITE_DAC | WRITE_OWNER;
+    // The second pass for restricting SIDs (a write-restricted token has it
+    // even with no restricting SID: nothing matches, so writes are refused;
+    // the sheets: `WRITE_RESTRICTED` with no SIDs cannot create a file).
+    if !token.restricted.is_empty() || token.write_restricted {
+        // `READ_CONTROL` and `SYNCHRONIZE` are in the generic write mask but are
+        // not writes (a write-restricted child still loads its DLLs).
+        let write_bits = (mapping.write & !(READ_CONTROL | SYNCHRONIZE)) | DELETE | WRITE_DAC | WRITE_OWNER;
         let second = if everything {
             u32::MAX
         } else {
@@ -269,7 +273,7 @@ pub fn check(sd: &Parts, token: &CheckToken<'_>, desired: u32, mapping: &Generic
         granted &= allowed;
     }
     granted &= !MAXIMUM_ALLOWED;
-    let all = if max { granted | priv_granted } else { granted | priv_granted };
+    let all = granted | priv_granted;
     if max {
         // The other requested bits all have to be among them.
         if want & !granted != 0 || granted == 0 && priv_granted == 0 {

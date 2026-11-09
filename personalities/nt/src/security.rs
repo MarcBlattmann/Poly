@@ -90,11 +90,14 @@ pub fn inherit_token(
         }
     };
     let id = sys.objects.security.new_luid();
-    let copy = sys.objects.security.token(base).ok_or(STATUS_INVALID_PARAMETER)?.duplicate(
-        token::TOKEN_PRIMARY,
-        token::SECURITY_IMPERSONATION,
-        id,
-    );
+    let source = sys.objects.security.token(base).ok_or(STATUS_INVALID_PARAMETER)?;
+    let level = source.level;
+    let mut copy = source.duplicate(token::TOKEN_PRIMARY, token::SECURITY_IMPERSONATION, id);
+    // A process's primary token keeps the source's (primary) level field.
+    copy.level = level;
+    if given.is_some() {
+        copy.clamp_privileges_to_integrity();
+    }
     let creator_token = creator.and_then(|c| sys.objects.security.process_token(c));
     install_process_token(sys, child, copy, thread, creator_token).map(|_| ())
 }
@@ -103,11 +106,15 @@ pub fn inherit_token(
 /// creator's token): the process object and its first thread.
 pub fn assign_process_security(
     sys: &mut NtSystem,
+    child: ProcessId,
     creator: Option<&Caller>,
     process: Option<poly_ntobj::ObjectId>,
     thread: Option<poly_ntobj::ObjectId>,
 ) {
-    let token = creator.and_then(|c| sys.objects.security.effective(c.process, c.thread));
+    // The first process (no creator) is its own creator.
+    let token = creator
+        .and_then(|c| sys.objects.security.effective(c.process, c.thread))
+        .or_else(|| sys.objects.security.process_token(child));
     if let Some(p) = process {
         sys.objects.assign_security(p, ObjectType::Process, token, None);
     }
@@ -173,8 +180,27 @@ fn open_exact(
 
 // ----- opening -----------------------------------------------------------------------------
 
+/// The handle attributes of `NtOpenProcessToken(Ex)` / `NtOpenThreadToken(Ex)`:
+/// `OBJ_EXCLUSIVE` is refused, every other bit but `OBJ_INHERIT` is ignored
+/// (the sheets: 0x1, 0x4, 0x800, 0x10000 and 0x80000000 all give an ordinary
+/// handle).
+fn token_open_attributes(attributes: u64) -> Result<u32> {
+    const OBJ_EXCLUSIVE: u32 = 0x20;
+    let a = attributes as u32;
+    if a & OBJ_EXCLUSIVE != 0 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    Ok(a & OBJ_INHERIT)
+}
+
 fn open_process_token(k: &mut impl NtKernel, process: u64, access: u64, attributes: u64, out: u64) -> Result<NtStatus> {
-    let pid = process_of(k, Handle(process), PROCESS_QUERY_LIMITED_INFORMATION)?;
+    let attributes = u64::from(token_open_attributes(attributes)?);
+    // `PROCESS_QUERY_LIMITED_INFORMATION`, or the full query right that
+    // implies it (the sheets: a handle opened with `PROCESS_QUERY_INFORMATION`
+    // opens the token).
+    let pid = process_of(k, Handle(process), PROCESS_QUERY_LIMITED_INFORMATION).or_else(|e| {
+        if e == STATUS_ACCESS_DENIED { process_of(k, Handle(process), PROCESS_QUERY_INFORMATION) } else { Err(e) }
+    })?;
     let caller = k.caller();
     let h = k.with_state(|sys, _, b| {
         let id = process_token(sys, pid, caller.thread)?;
@@ -210,6 +236,7 @@ pub fn open_thread_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs, ex: bool) -
     let as_self = abi::arg(k, regs, 2)? as u8 != 0;
     let (attributes, out) =
         if ex { (abi::arg(k, regs, 3)?, abi::arg(k, regs, 4)?) } else { (0, abi::arg(k, regs, 3)?) };
+    let attributes = u64::from(token_open_attributes(attributes)?);
     let caller = k.caller();
     // The thread handle needs a query right.
     let tid = {
@@ -387,7 +414,14 @@ pub fn adjust_groups_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         read_groups(k, new_state)?
     };
     let mut t = copy_of(k, id)?;
-    let (changed, all) = t.adjust_groups(reset, &new)?;
+    let (changed, all) = match t.adjust_groups(reset, &new) {
+        Ok(r) => r,
+        Err(e) => {
+            // A refusal reports no length (the sheet: `*ReturnLength` 0).
+            abi::write_opt_u32(k, ret, 0)?;
+            return Err(e);
+        }
+    };
     // The previous state is a TOKEN_GROUPS laid out at the caller's buffer.
     let mut prev = Vec::new();
     prev.extend_from_slice(&(changed.len() as u32).to_le_bytes());
@@ -407,7 +441,9 @@ pub fn adjust_groups_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         if (buffer_length as u32 as usize) < prev.len() {
             return Err(STATUS_BUFFER_TOO_SMALL);
         }
-        abi::write(k, previous, &prev)?;
+        // An empty previous state is the count alone (the length reported is 8).
+        let n = if changed.is_empty() { 4 } else { prev.len() };
+        abi::write(k, previous, &prev[..n])?;
     }
     k.with_state(|sys, _, _| {
         if let Some(tok) = sys.objects.security.token_mut(id) {
@@ -745,6 +781,11 @@ pub fn access_check<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
             set.extend_from_slice(&sacc::SE_PRIVILEGE_USED_FOR_ACCESS.to_le_bytes());
         }
         abi::write(k, priv_at, &set)?;
+    } else if priv_at != 0 {
+        // No privilege used: an empty set (count 0; the control word is
+        // cleared too unless a missing privilege failed the call).
+        let not_held = matches!(outcome.status, Err(SecErr::PrivilegeNotHeld));
+        abi::write(k, priv_at, if not_held { &[0u8; 4] } else { &[0u8; 8] })?;
     }
     abi::write_u32(k, granted_at, outcome.granted)?;
     let status = match outcome.status {
@@ -844,7 +885,7 @@ pub fn query_security_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
         let stored = sys.objects.security.sd(obj).and_then(Parts::from_relative);
         // An object without a descriptor answers an empty one.
         let parts = stored.unwrap_or(Parts { revision: sd::SECURITY_DESCRIPTOR_REVISION, ..Parts::default() });
-        Ok(sdops::select(&parts, info).to_relative())
+        Ok(sdops::select(&parts, info).to_relative_kernel())
     })?;
     if needed != 0 {
         abi::write_u32(k, needed, bytes.len() as u32)?;
@@ -872,7 +913,9 @@ pub fn set_security_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
             & (sd::OWNER_SECURITY_INFORMATION | sd::GROUP_SECURITY_INFORMATION | sd::LABEL_SECURITY_INFORMATION)
             != 0;
         let need_dac = info & sd::DACL_SECURITY_INFORMATION != 0;
-        let need_sys = info & sd::SACL_SECURITY_INFORMATION != 0 || needs_system_security(info);
+        // The scope and process-trust labels (0x40, 0x80) are written like a
+        // SACL (the sheets: refused without `ACCESS_SYSTEM_SECURITY`).
+        let need_sys = info & (sd::SACL_SECURITY_INFORMATION | 0x40 | 0x80) != 0 || needs_system_security(info);
         if (need_owner && granted & WRITE_OWNER == 0)
             || (need_dac && granted & WRITE_DAC == 0)
             || (need_sys && granted & ACCESS_SYSTEM_SECURITY == 0)
@@ -943,7 +986,7 @@ mod tests {
         assert_eq!(f.u32_at(ret), 44);
         assert_eq!(f.u64_at(buf), buf + 16);
         let sid = Sid::from_bytes(&f.bytes_at(buf + 16, 28)).unwrap();
-        assert_eq!(sddl::to_string(&sid), "S-1-5-21-0-0-0-1000");
+        assert_eq!(sddl::to_string(&sid), "S-1-5-21-520193847-884726105-1936024571-1002");
         let small = f.alloc(8);
         assert_eq!(f.call(Service::QueryInformationToken, &[h, 1, small, 8, ret]), STATUS_BUFFER_TOO_SMALL);
         assert_eq!(f.u32_at(ret), 44);
@@ -1013,5 +1056,56 @@ mod tests {
         let tcb = f.put(&[1, 0, 0, 0, TCB as u8, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0]);
         assert_eq!(f.call(Service::AdjustPrivilegesToken, &[h, 0, tcb, 0, 0, 0]), NtStatus(0x106));
         assert_eq!(f.call(Service::AdjustPrivilegesToken, &[h, 0, 0, 0, 0, 0]), STATUS_INVALID_PARAMETER);
+    }
+
+    /// The sandbox (ADR 0171): a restricted token (one restricting SID the
+    /// object's descriptor does not name) cannot open a registry key that
+    /// the unrestricted token of the same process can, and the same token
+    /// restricted by a SID the key does name (Users) can.
+    #[test]
+    fn a_restricted_token_cannot_open_what_the_process_can() {
+        const KEY_READ: u64 = 0x2_0019;
+        const SOFTWARE: &str = r"\Registry\Machine\SOFTWARE";
+        const CURRENT_THREAD: u64 = (-2i64) as u64;
+        let mut f = Fake::new();
+        let open_key = |f: &mut Fake| {
+            let out = f.alloc(8);
+            let oa = f.attrs_in(0, SOFTWARE, 0x40);
+            let st = f.call(Service::OpenKey, &[out, KEY_READ, oa]);
+            if st == STATUS_SUCCESS {
+                let h = f.u64_at(out);
+                assert_eq!(f.call(Service::Close, &[h]), STATUS_SUCCESS);
+            }
+            st
+        };
+        // The process token reads it.
+        assert_eq!(open_key(&mut f), STATUS_SUCCESS);
+        let source = open(&mut f, 0x2);
+        // Impersonation tokens restricted by `sid`, made current on the thread.
+        let impersonate = |f: &mut Fake, sid: &[u8]| {
+            let ptr = f.put(sid);
+            let mut g = [0u8; 24];
+            g[0..4].copy_from_slice(&1u32.to_le_bytes());
+            g[8..16].copy_from_slice(&ptr.to_le_bytes());
+            g[16..20].copy_from_slice(&0u32.to_le_bytes());
+            let groups_at = f.put(&g);
+            let filtered = f.alloc(8);
+            assert_eq!(f.call(Service::FilterToken, &[source, 0, 0, 0, groups_at, filtered]), STATUS_SUCCESS);
+            let imp = f.alloc(8);
+            let oa = 0;
+            assert_eq!(f.call(Service::DuplicateToken, &[f.u64_at(filtered), 0xf01ff, oa, 0, 2, imp]), STATUS_SUCCESS);
+            let h = f.put_u64(f.u64_at(imp));
+            assert_eq!(f.call(Service::SetInformationThread, &[CURRENT_THREAD, 5, h, 8]), STATUS_SUCCESS);
+        };
+        // S-1-0-0 (the null SID): not in the key's descriptor.
+        impersonate(&mut f, &[1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(open_key(&mut f), STATUS_ACCESS_DENIED);
+        // Revert: allowed again.
+        let none = f.put_u64(0);
+        assert_eq!(f.call(Service::SetInformationThread, &[CURRENT_THREAD, 5, none, 8]), STATUS_SUCCESS);
+        assert_eq!(open_key(&mut f), STATUS_SUCCESS);
+        // S-1-5-32-545 (Users): named by the key.
+        impersonate(&mut f, &[1, 2, 0, 0, 0, 0, 0, 5, 32, 0, 0, 0, 0x21, 2, 0, 0]);
+        assert_eq!(open_key(&mut f), STATUS_SUCCESS);
     }
 }

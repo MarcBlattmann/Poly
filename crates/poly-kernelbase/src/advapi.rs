@@ -106,6 +106,7 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
     ("RevertToSelf", SECURITY_BASE),
     ("ImpersonateLoggedOnUser", SECURITY_BASE),
     ("SetThreadToken", PROCESS_THREADS),
+    ("CreateProcessAsUserW", PROCESS_THREADS),
     ("GetKernelObjectSecurity", SECURITY_BASE),
     ("SetKernelObjectSecurity", SECURITY_BASE),
     ("SetAclInformation", SECURITY_BASE),

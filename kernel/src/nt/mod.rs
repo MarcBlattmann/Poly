@@ -652,6 +652,7 @@ fn start_params(
             )?;
             poly_personality_nt::security::assign_process_security(
                 &mut s.sys,
+                pid,
                 handles.map(|h| &h.caller),
                 proc.object,
                 proc.threads.first().map(|t| t.object),

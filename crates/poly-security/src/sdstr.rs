@@ -221,7 +221,7 @@ fn parse_ace(f: &[&[u16]], sacl: bool) -> SecResult<(Vec<u8>, bool, usize)> {
     // Flags.
     let mut flags = 0u8;
     let fl: Vec<u16> = f[1].iter().copied().filter(|&c| !is_space(c)).collect();
-    if fl.len() % 2 != 0 {
+    if !fl.len().is_multiple_of(2) {
         return Err(SecErr::InvalidFlags);
     }
     for p in fl.chunks(2) {
@@ -608,17 +608,17 @@ fn ace_text(a: &acl::Ace, sacl: bool, info: u32) -> SecResult<Option<(String, us
 pub fn format(sd: &Parts, info: u32) -> SecResult<(String, usize)> {
     let mut out = String::new();
     let mut extra = 0usize;
-    if info & sd::OWNER_SECURITY_INFORMATION != 0 {
-        if let Some(o) = &sd.owner {
-            out.push_str("O:");
-            out.push_str(&sid_text(o)?);
-        }
+    if info & sd::OWNER_SECURITY_INFORMATION != 0
+        && let Some(o) = &sd.owner
+    {
+        out.push_str("O:");
+        out.push_str(&sid_text(o)?);
     }
-    if info & sd::GROUP_SECURITY_INFORMATION != 0 {
-        if let Some(g) = &sd.group {
-            out.push_str("G:");
-            out.push_str(&sid_text(g)?);
-        }
+    if info & sd::GROUP_SECURITY_INFORMATION != 0
+        && let Some(g) = &sd.group
+    {
+        out.push_str("G:");
+        out.push_str(&sid_text(g)?);
     }
     let flag_text = |control: u16, p: u16, ar: u16, ai: u16| {
         let mut s = String::new();
@@ -786,6 +786,7 @@ mod tests {
         let m = |s: &str| {
             let rel = parse(&w(&alloc::format!("D:(A;;{s};;;WD)"))).unwrap();
             let p = Parts::from_relative(&rel).unwrap();
+            // SAFETY: the bytes are a whole ACL the parser built.
             let a = unsafe { acl::aces(acl::AclPtr(p.dacl.unwrap().as_ptr() as *mut u8)) };
             a[0].mask()
         };
