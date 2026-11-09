@@ -30,7 +30,14 @@
 //!    place);
 //! 5. Q closes the client, and the launcher comes back on the empty
 //!    desktop; the launcher then starts the interactive native protocol
-//!    test client and checks its two-colour shared buffer.
+//!    test client and checks its two-colour shared buffer;
+//! 6. startup feedback (ADR 0167): a slow-starting app ("Slow Window",
+//!    `wl-demo --delay`) makes the pointer on the empty desktop the busy
+//!    arrow with a turning spinner (two screenshots, and the compositor
+//!    logs `busy pointer on`) until its window is mapped (`busy pointer
+//!    off`, the spinner gone); a second one ("Slow Activated") ends it by
+//!    activating its window with the `XDG_ACTIVATION_TOKEN` the launcher
+//!    gave it.
 //!
 //! Boot group `desktop-shell` (ADR 0117) boots the same desktop with a
 //! virtio-sound card (the mixer) and an ext2 disk mounted on `/mnt` for
@@ -48,6 +55,12 @@
 //! must turn it green and typed characters must be drawn into it, both
 //! through its WM_PAINT handler ([`win32_boot_test`], ADR 0136). Skipped
 //! where the Windows test programs cannot be built.
+//!
+//! Boot group `desktop-resize` (ADR 0145) resizes the screen while the
+//! desktop runs (a VNC client's `SetDesktopSize`, which QEMU hands to the
+//! virtio GPU as a resized window would be) and checks that the desktop
+//! follows: the ridge, a maximized and a floating window
+//! ([`resize_boot_test`]).
 //!
 //! Screenshots go to `$POLY_DESKTOP_SHOTS` (default `target/desktop/`) as
 //! PNGs, one per step.
@@ -72,6 +85,13 @@ const DEMO_FILE: &str = "[Desktop Entry]\nType=Application\nName=Poly Demo\n\
     Comment=A Wayland window drawn by a small native client\nExec=/bin/wl-demo\nKeywords=demo;wayland;test;\n";
 const DESKTOP_FILE: &str = "[Desktop Entry]\nType=Application\nName=Demo Window\n\
     Comment=The demo client, from a desktop file\nExec=/bin/wl-demo\nKeywords=demo;sample;\n";
+/// Apps that start slowly, for the busy pointer (ADR 0167): one is known
+/// by its process, the other activates its window with its launch's token.
+const SLOW_FILE: &str = "[Desktop Entry]\nType=Application\nName=Slow Window\n\
+    Comment=The demo client, ready after four seconds\nExec=/bin/wl-demo --delay 4000\nKeywords=slow;busy;\n";
+const SLOW_ACTIVATED_FILE: &str = "[Desktop Entry]\nType=Application\nName=Slow Activated\n\
+    Comment=The demo client, ready after three seconds, activating with its token\n\
+    Exec=/bin/wl-demo --delay 3000 --activate\nKeywords=slow;busy;activation;\n";
 /// The interactive launcher entry for the protocol test client.
 const WL_CLIENT_FILE: &str = "[Desktop Entry]\nType=Application\nName=Wayland Test Client\n\
     Comment=An interactive native Wayland protocol test window\nExec=/bin/wl-client --interactive\nKeywords=wayland;test;client;\n";
@@ -146,6 +166,8 @@ fn application_files(test_apps: bool) -> Vec<(String, u16, Vec<u8>)> {
     [
         ("usr/share/applications/poly-demo.desktop", DEMO_FILE),
         ("usr/share/applications/demo-window.desktop", DESKTOP_FILE),
+        ("usr/share/applications/slow-window.desktop", SLOW_FILE),
+        ("usr/share/applications/slow-activated.desktop", SLOW_ACTIVATED_FILE),
         ("usr/share/applications/wayland-test-client.desktop", WL_CLIENT_FILE),
         ("usr/share/applications/notify-test.desktop", NOTIFY_FILE),
     ]
@@ -164,6 +186,8 @@ pub fn launcher_apps(test_apps: bool) -> Vec<(String, String)> {
         (DEMO_FILE, "/bin/wl-demo"),
         (WL_CLIENT_FILE, "/bin/wl-client --interactive"),
         (DESKTOP_FILE, "/bin/wl-demo"),
+        (SLOW_FILE, "/bin/wl-demo --delay 4000"),
+        (SLOW_ACTIVATED_FILE, "/bin/wl-demo --delay 3000 --activate"),
         (NOTIFY_FILE, "/bin/notify-send"),
     ]
     .into_iter()
@@ -249,12 +273,19 @@ fn build_image(
 fn image_files(test_apps: bool) -> Result<initramfs::Tree> {
     let mut tree = initramfs::Tree::default();
     tree.files.extend(application_files(test_apps));
-    let font = crate::fonts::cache_dir().join("DejaVuSans.ttf");
-    match std::fs::read(&font) {
-        Ok(data) => tree.files.push(("usr/share/fonts/truetype/dejavu/DejaVuSans.ttf".into(), 0o644, data)),
-        Err(_) => {
-            crate::progress::note("no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font")
+    // The font store (ADR 0105): the shell uses DejaVu Sans, Windows
+    // programs' logical fonts map onto all twelve files (ADR 0142; their
+    // gdi32 looks in `C:\Windows\Fonts` and then here).
+    let fonts = crate::fonts::cache_dir();
+    let mut found = 0;
+    for (name, _, _) in crate::fonts::FILES {
+        if let Ok(data) = std::fs::read(fonts.join(name)) {
+            tree.files.push((format!("{}/{name}", crate::fonts::STORE_DIR), 0o644, data));
+            found += 1;
         }
+    }
+    if found == 0 {
+        crate::progress::note("no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font")
     }
     // Alpine Shell's wallpapers and fonts (ADR 0127).
     for (path, data) in crate::wallpapers::tree()? {
@@ -507,7 +538,12 @@ fn button(down: bool) -> String {
 /// A tablet position for logical pixel (`x`, `y`) of the screen: the
 /// compositor scales 0..0x7fff onto 0..size-1.
 fn abs(x: i32, y: i32) -> Vec<String> {
-    let (w, h) = (SIZE.0 as i64 - 1, SIZE.1 as i64 - 1);
+    abs_in(SIZE, x, y)
+}
+
+/// [`abs`] on a screen of another size.
+fn abs_in(size: (u32, u32), x: i32, y: i32) -> Vec<String> {
+    let (w, h) = (i64::from(size.0) - 1, i64::from(size.1) - 1);
     let ax = (i64::from(x) * 0x7fff + w - 1) / w;
     let ay = (i64::from(y) * 0x7fff + h - 1) / h;
     vec![
@@ -679,6 +715,8 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let img = d.shot("empty-again")?;
     expect("the launcher is back on the empty desktop", img.pixel(900, 40) == RIDGE)?;
 
+    startup_feedback(&mut d)?;
+
     // The built-in entry is a distinct launcher path from "Demo Window";
     // it must also draw, move, and close.
     d.wait(LAUNCHER_SHOWN, 30)?;
@@ -747,6 +785,92 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     d.wait("wl-client: closed", 30)?;
     wait_nth(&d.lines, "Wayland Test Client (pid", 2, 30)?;
     d.qmp.quit();
+    Ok(())
+}
+
+/// Where the busy pointer is held in [`startup_feedback`]: the desktop,
+/// clear of the window that appears in the middle.
+const BUSY_AT: (i32, i32) = (900, 600);
+
+/// How many pixels of the busy pointer's spinner area (to the arrow's
+/// lower right, ADR 0167) differ between two screenshots.
+fn spinner_diff(a: &screen::Image, b: &screen::Image) -> usize {
+    let mut n = 0;
+    for y in BUSY_AT.1 + 8..BUSY_AT.1 + 28 {
+        for x in BUSY_AT.0 + 10..BUSY_AT.0 + 27 {
+            n += usize::from(a.pixel(x as u32, y as u32) != b.pixel(x as u32, y as u32));
+        }
+    }
+    n
+}
+
+/// Step 6: startup feedback (ADR 0167). A slow app is started from the
+/// launcher; until its window is mapped the pointer over the empty desktop
+/// is the arrow with a turning spinner, and the compositor says so.
+fn startup_feedback(d: &mut Driver) -> std::result::Result<(), String> {
+    let off = count(&d.lines, "busy pointer off");
+    let shown_before = count(&d.lines, "window \"Poly Demo\" shown at");
+    let launcher_before = count(&d.lines, LAUNCHER_SHOWN);
+    d.wait(LAUNCHER_SHOWN, 30)?;
+    d.type_text(&["s", "l", "o", "w", "spc", "w", "i", "n", "d", "o", "w"])?;
+    d.wait("launcher query \"slow window\"", 30)?;
+    d.type_text(&["ret"])?;
+    d.wait("poly-compositor: launched Slow Window", 30)?;
+    wait_nth(&d.lines, "busy pointer on: launching Slow Window", 1, 30)?;
+    // The pointer on the empty desktop, away from where the window will be.
+    d.send(&abs(BUSY_AT.0, BUSY_AT.1))?;
+    let busy_a = d.shot("busy-pointer")?;
+    thread::sleep(Duration::from_millis(250));
+    let busy_b = d.shot("busy-pointer-later")?;
+    expect("the app has no window yet (the pointer is still busy)", count(&d.lines, "busy pointer off") == off)?;
+    // The arrow is there (its white inside) ...
+    let tip = (BUSY_AT.0 as u32 + 2, BUSY_AT.1 as u32 + 4);
+    expect("the busy pointer is the arrow", busy_a.pixel(tip.0, tip.1) == [0xff, 0xff, 0xff])?;
+    // ... and its spinner turns (the pictures differ at its lower right).
+    let turned = spinner_diff(&busy_a, &busy_b);
+    expect(&format!("the spinner turns ({turned} pixels differ)"), turned >= 4)?;
+    // The window maps: the busy pointer ends, by the process (not a token).
+    let line = d.wait("launch Slow Window:", 90)?;
+    expect(&format!("the launch ended by its window ({line})"), line.contains("window mapped by pid"))?;
+    wait_nth(&d.lines, "busy pointer off", off + 1, 30)?;
+    let line = wait_nth_line(&d.lines, "window \"Poly Demo\" shown at", shown_before + 1, 90)?;
+    let (x, y, w, _h) = window_place(&line).ok_or_else(|| format!("unreadable window line {line:?}"))?;
+    expect("the window is clear of the busy pointer", x + w + 40 < BUSY_AT.0 || y + 300 < BUSY_AT.1)?;
+    thread::sleep(Duration::from_millis(800));
+    let normal = d.shot("normal-pointer")?;
+    expect("the arrow stays", normal.pixel(tip.0, tip.1) == [0xff, 0xff, 0xff])?;
+    let gone = spinner_diff(&busy_a, &normal);
+    expect(&format!("the spinner is gone ({gone} pixels differ)"), gone >= 4)?;
+    let calm = spinner_diff(&normal, &d.shot("normal-pointer-later")?);
+    expect(&format!("nothing turns any more ({calm} pixels differ)"), calm == 0)?;
+    let closed = count(&d.lines, "wl-demo: closed");
+    d.send(&abs(x + w / 2, y + 30))?;
+    d.type_text(&["q"])?;
+    wait_nth(&d.lines, "wl-demo: closed", closed + 1, 30)?;
+    wait_nth(&d.lines, "Slow Window (pid", 1, 30)?;
+    wait_nth(&d.lines, LAUNCHER_SHOWN, launcher_before + 1, 30)?;
+
+    // The token path: the app activates its window with the token it was
+    // launched with, which ends the wait.
+    let off = count(&d.lines, "busy pointer off");
+    let shown_before = count(&d.lines, "window \"Poly Demo\" shown at");
+    d.type_text(&["s", "l", "o", "w", "spc", "a", "c", "t", "i", "v", "a", "t", "e", "d"])?;
+    d.wait("launcher query \"slow activated\"", 30)?;
+    d.type_text(&["ret"])?;
+    wait_nth(&d.lines, "busy pointer on: launching Slow Activated", 1, 30)?;
+    d.wait("wl-demo: activating with token poly-activation-", 90)?;
+    let line = d.wait("launch Slow Activated:", 90)?;
+    expect(&format!("the launch ended by its token ({line})"), line.contains("activated by its token"))?;
+    expect("the busy pointer ended", count(&d.lines, "busy pointer off") == off + 1)?;
+    let line = wait_nth_line(&d.lines, "window \"Poly Demo\" shown at", shown_before + 1, 90)?;
+    let (x, y, w, _h) = window_place(&line).ok_or_else(|| format!("unreadable window line {line:?}"))?;
+    thread::sleep(Duration::from_millis(800));
+    let closed = count(&d.lines, "wl-demo: closed");
+    d.send(&abs(x + w / 2, y + 30))?;
+    d.type_text(&["q"])?;
+    wait_nth(&d.lines, "wl-demo: closed", closed + 1, 30)?;
+    wait_nth(&d.lines, "Slow Activated (pid", 1, 30)?;
+    thread::sleep(Duration::from_millis(1000));
     Ok(())
 }
 
@@ -1168,6 +1292,202 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
 }
 
+/// Boot group `desktop-resize` (ADR 0145): the window showing the screen is
+/// resized while the desktop runs, and the desktop follows. A VNC client
+/// (QEMU's VNC server hands `SetDesktopSize` to the display device as the
+/// size to take, as a window resize does) asks for other sizes; the virtio
+/// GPU raises its display event, the kernel tells the compositor (a DRM
+/// hotplug event), the compositor sets the new mode, and the shell, the
+/// wallpaper and the windows lay out again:
+///
+/// 1. a maximized demo window fills the work area of a smaller screen
+///    (1100x700), then of a larger one (1500x900), the ridge across the
+///    whole width each time;
+/// 2. restored, a floating window on a screen smaller than its place is
+///    shifted onto the screen (700x500);
+/// 3. a burst of sizes in a row ends on the last, and a sliver of a window
+///    (320x240) gets the smallest screen (640x400).
+///
+/// A real window resize cannot be automated on this host's CI; the chain
+/// from the device's event onward is what runs (a real SDL window resize
+/// was tried by hand, see the ADR).
+pub fn resize_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    if cfg!(not(unix)) {
+        eprintln!("==> skipped: the desktop-resize boot test needs a Unix host (QMP, a VNC socket)");
+        return Ok(());
+    }
+    let image = image(true)?;
+    eprintln!("==> boot test: the desktop follows the display's size (maximized and floating windows, the ridge)");
+    let pid = std::process::id();
+    let socket = std::env::temp_dir().join(format!("poly-resize-qmp-{pid}.sock"));
+    let vnc = std::env::temp_dir().join(format!("poly-resize-vnc-{pid}.sock"));
+    let _ = std::fs::remove_file(&socket);
+    let _ = std::fs::remove_file(&vnc);
+    let mut qemu_args = vec![
+        "-initrd".to_string(),
+        image.display().to_string(),
+        "-qmp".to_string(),
+        format!("unix:{},server=on,wait=off", socket.display()),
+        "-vnc".to_string(),
+        format!("unix:{}", vnc.display()),
+    ];
+    qemu_args.extend(devices());
+    let lines: Lines = Arc::default();
+    let result: Arc<Mutex<Option<std::result::Result<(), String>>>> = Arc::default();
+    let (seen, outcome, (path, vnc_path)) = (Arc::clone(&lines), Arc::clone(&result), (socket.clone(), vnc.clone()));
+    let mut started = false;
+    let on_line = move |line: &str| {
+        seen.lock().unwrap_or_else(|e| e.into_inner()).push(line.to_string());
+        if !started && line.contains(READY) {
+            started = true;
+            let (lines, outcome, path, vnc_path) =
+                (Arc::clone(&seen), Arc::clone(&outcome), path.clone(), vnc_path.clone());
+            thread::spawn(move || {
+                let r = drive_resize(&path, &vnc_path, lines);
+                *outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+            });
+        }
+    };
+    let b: Result<Boot> = super::with_boot_timeout(Duration::from_secs(420), || {
+        boot_with(kernel, syms, MEMORY, &append(""), super::Devices::None, &qemu_args, None, on_line)
+    });
+    let _ = std::fs::remove_file(&socket);
+    let _ = std::fs::remove_file(&vnc);
+    let b = b?;
+    match result.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        Some(Ok(())) => Ok(()),
+        Some(Err(e)) => Err(e),
+        None if !b.output.contains(READY) => {
+            Err(format!("the desktop never came up (QEMU status {:?}, timed out: {})", b.status, b.timed_out))
+        }
+        None => Err("the desktop-resize boot test did not finish".into()),
+    }
+}
+
+/// Ask the display for a screen of `w` x `h` (the request only).
+#[cfg(unix)]
+fn ask_size(vnc: &Path, w: u32, h: u32) -> std::result::Result<(), String> {
+    crate::rfb::request_size_at(vnc, w as u16, h as u16).map(|_| ())
+}
+
+#[cfg(not(unix))]
+fn ask_size(_: &Path, _: u32, _: u32) -> std::result::Result<(), String> {
+    Err("a VNC socket needs a Unix host".into())
+}
+
+/// Ask for a screen of `w` x `h` and wait until the compositor has it.
+#[cfg(unix)]
+fn resize_to(d: &Driver, vnc: &Path, w: u32, h: u32) -> std::result::Result<(), String> {
+    let seen = count(&d.lines, "poly-compositor: screen resized to");
+    ask_size(vnc, w, h)?;
+    let line = wait_nth_line(&d.lines, "poly-compositor: screen resized to", seen + 1, 60)?;
+    expect(
+        &format!("the screen resized to {w}x{h} (the compositor says {line:?})"),
+        line.contains(&format!("screen resized to {w}x{h} ")),
+    )
+}
+
+#[cfg(not(unix))]
+fn resize_to(_: &Driver, _: &Path, _: u32, _: u32) -> std::result::Result<(), String> {
+    Err("a VNC socket needs a Unix host".into())
+}
+
+/// The steps of `desktop-resize`.
+fn drive_resize(socket: &Path, vnc: &Path, lines: Lines) -> std::result::Result<(), String> {
+    let shots = shots_dir();
+    std::fs::create_dir_all(&shots).map_err(|e| format!("{}: {e}", shots.display()))?;
+    let qmp = screen::Qmp::connect(socket, Duration::from_secs(20))?;
+    let mut d = Driver { qmp, lines, shots, step: 300 };
+    thread::sleep(Duration::from_millis(500));
+    let img = d.shot("start")?;
+    expect("the screen starts at 1280x800", (img.width, img.height) == SIZE)?;
+
+    // The demo window, maximized with the frame's middle button.
+    d.type_text(&["d", "e", "m", "o"])?;
+    d.wait("launcher query \"demo\"", 30)?;
+    d.type_text(&["ret"])?;
+    let (x, y, w, h) = shown(&d, "Poly Demo", 90)?;
+    thread::sleep(Duration::from_millis(1000));
+    click(&mut d, x + w - 4 - 8 - 22, y - 12)?;
+    d.wait(MAXIMIZED, 30)?;
+
+    // A smaller screen: the maximized window is configured for its work
+    // area (the ridge's 24 rows and the frame less), and the ridge spans it.
+    let (sw, sh) = (1100u32, 700u32);
+    resize_to(&d, vnc, sw, sh)?;
+    d.wait(&format!("wl-demo: size {}x{}", sw - 2, sh - 50), 30)?;
+    let filled = |img: &screen::Image| {
+        (img.width, img.height) == (sw, sh) && img.pixel(40, 60) == DEMO_A && img.pixel(sw - 40, sh - 40) == DEMO_A
+    };
+    let img = d.shot_until("smaller", 30, filled)?;
+    expect(&format!("the screen is {sw}x{sh}"), (img.width, img.height) == (sw, sh))?;
+    expect("the maximized window fills the smaller work area", filled(&img))?;
+    expect("the ridge spans the new width", img.pixel(sw - 10, 6) == RIDGE && img.pixel(10, 6) == RIDGE)?;
+
+    // A larger one.
+    let (lw, lh) = (1500u32, 900u32);
+    resize_to(&d, vnc, lw, lh)?;
+    d.wait(&format!("wl-demo: size {}x{}", lw - 2, lh - 50), 30)?;
+    let filled = |img: &screen::Image| {
+        (img.width, img.height) == (lw, lh) && img.pixel(40, 60) == DEMO_A && img.pixel(lw - 40, lh - 40) == DEMO_A
+    };
+    let img = d.shot_until("larger", 30, filled)?;
+    expect("the maximized window fills the larger work area", filled(&img))?;
+    expect("the ridge spans the new width again", img.pixel(lw - 10, 6) == RIDGE)?;
+
+    // The pointer is routed by the new size: a double click on the title
+    // restores the window (its title bar is at the top of the work area).
+    let before = count(&d.lines, "wl-demo: size 360x240");
+    d.send(&abs_in((lw, lh), 400, 24 + 12))?;
+    for down in [true, false, true, false] {
+        d.send(&[button(down)])?;
+    }
+    wait_nth(&d.lines, "wl-demo: size 360x240", before + 1, 30)?;
+
+    // A screen smaller than the place the window goes back to: it is
+    // shifted onto the screen, at its own size.
+    let (tw, th) = (700u32, 500u32);
+    resize_to(&d, vnc, tw, th)?;
+    let (nx, ny) = (tw as i32 - (w + 1), th as i32 - (h + 1));
+    let on_screen = |img: &screen::Image| {
+        (img.width, img.height) == (tw, th) && img.pixel((nx + 20) as u32, (ny + 20) as u32) == DEMO_A
+    };
+    let img = d.shot_until("shifted", 30, on_screen)?;
+    expect(
+        &format!("the floating window ({w}x{h}) was shifted onto the {tw}x{th} screen, to {nx},{ny}"),
+        on_screen(&img),
+    )?;
+
+    // A window dragged over many sizes: the requests come far faster than the
+    // compositor follows (it takes the size that is there once things have
+    // settled), and it ends on the last one, still drawing.
+    let before = count(&d.lines, "poly-compositor: screen resized to");
+    let burst = [(900u32, 600u32), (960, 640), (1024, 680), (1100, 720), (1180, 760), (1280, 800)];
+    for &(w, h) in &burst {
+        ask_size(vnc, w, h)?;
+    }
+    wait_nth(&d.lines, "poly-compositor: screen resized to 1280x800 ", 1, 60)?;
+    let followed = count(&d.lines, "poly-compositor: screen resized to") - before;
+    expect(
+        &format!("a burst of {} sizes took {followed} mode sets", burst.len()),
+        (1..=burst.len()).contains(&followed),
+    )?;
+    let img = d.shot_until("burst", 30, |img: &screen::Image| {
+        (img.width, img.height) == SIZE && img.pixel(SIZE.0 - 10, 6) == RIDGE
+    })?;
+    expect("the screen is 1280x800 after the burst", (img.width, img.height) == SIZE)?;
+
+    // A sliver of a window: the screen keeps to the smallest size.
+    ask_size(vnc, 320, 240)?;
+    wait_nth(&d.lines, "poly-compositor: screen resized to 640x400 ", 1, 60)?;
+    let img = d.shot_until("smallest", 30, |img: &screen::Image| {
+        (img.width, img.height) == (640, 400) && img.pixel(630, 6) == RIDGE
+    })?;
+    expect("the screen stops at 640x400 with the ridge across it", (img.width, img.height) == (640, 400))?;
+    d.qmp.quit();
+    Ok(())
+}
+
 /// The Windows GUI program of `desktop-win32` (`tests/windows/<name>.rs`).
 const WIN32_TEST: &str = "win_gui_fill";
 /// Where `pipeline win build` puts it.
@@ -1204,6 +1524,11 @@ fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
         &format!("the window is at its client rectangle {WIN32_CLIENT:?} (got {:?})", (x, y, w, h)),
         (x, y, w, h) == WIN32_CLIENT,
     )?;
+    // The busy pointer of its launch ended by the window of its process
+    // (win32k's link tells the compositor the process, ADR 0167), not by
+    // the timeout.
+    let line = d.wait("launch Poly Fill:", 60)?;
+    expect(&format!("the Windows app's launch ended by its window ({line})"), line.contains("window mapped by pid"))?;
     // The fill comes with the first commit; give the frame time.
     thread::sleep(Duration::from_millis(3000));
     let img = d.shot("win32-window")?;
@@ -1212,6 +1537,25 @@ fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
         expect(&format!("the client area is filled at +{dx},+{dy} (got {:?})", at(dx, dy)), at(dx, dy) == WIN32_FILL)?;
     }
     expect("nothing filled outside the client area", at(w + 6, h / 2) != WIN32_FILL && at(w / 2, h + 6) != WIN32_FILL)?;
+    // The program draws white text in logical fonts (CreateFontW, ADR 0142)
+    // below its typed characters. With the DejaVu fonts in the image these
+    // are outlines in grey scale: white pixels and pixels between the fill
+    // and white; without, the bitmap faces' white pixels only.
+    let (mut white, mut mixed) = (0, 0);
+    for py in 40..130 {
+        for px in 10..240 {
+            let p = at(px, py);
+            if p == [255, 255, 255] {
+                white += 1;
+            } else if p != WIN32_FILL && (0..3).all(|c| p[c] >= WIN32_FILL[c]) {
+                mixed += 1;
+            }
+        }
+    }
+    expect(&format!("the client area shows text ({white} white pixels)"), white > 100)?;
+    if crate::fonts::cached().is_some() {
+        expect(&format!("the text is antialiased ({mixed} pixels between the fill and white)"), mixed > 100)?;
+    }
     // Poly's frame: the title bar above the client area is drawn (not the
     // wallpaper of before, not the fill).
     let title = ((x + w / 2) as u32, (y - 12) as u32);
@@ -1614,7 +1958,17 @@ mod tests {
                 std::str::from_utf8(bytes).unwrap().lines().find_map(|line| line.strip_prefix("Name=")).unwrap()
             })
             .collect();
-        assert_eq!(names, ["Poly Demo", "Demo Window", "Wayland Test Client", "Send Test Notification"]);
+        assert_eq!(
+            names,
+            [
+                "Poly Demo",
+                "Demo Window",
+                "Slow Window",
+                "Slow Activated",
+                "Wayland Test Client",
+                "Send Test Notification"
+            ]
+        );
         let wl_client = files.iter().find(|(path, ..)| path.ends_with("wayland-test-client.desktop")).unwrap();
         assert!(String::from_utf8_lossy(&wl_client.2).contains("Exec=/bin/wl-client --interactive"));
 

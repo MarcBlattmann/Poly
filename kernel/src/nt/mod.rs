@@ -106,6 +106,9 @@ pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"
 /// by [`layout`]; empty without `xtask`.
 pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bcryptprimitives.dll"));
 
+/// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
+pub static VERSION: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/version.dll"));
 /// Our `ole32.dll` (ADR 0155, batch 4): COM apartments, the Windows Runtime's
 /// strings; hosts the `winrt` and `com` API sets. Installed by [`layout`].
 pub static OLE32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ole32.dll"));
@@ -121,10 +124,13 @@ pub static SECUR32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/secur32.dl
 pub static DHCPCSVC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dhcpcsvc.dll"));
 pub static DNSAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dnsapi.dll"));
 pub static DBGHELP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dbghelp.dll"));
+
+mod test_b35;
+
+/// The program the Chrome batch 3/5 ring-3 test runs (`test_b35`). Empty without `xtask`.
+pub static B35TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/b35test.exe"));
 /// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
-pub static VERSION: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/version.dll"));
-
 mod test_crypto;
 
 /// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in
@@ -554,6 +560,7 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     // What win32k has for the compositor (ADR 0131).
     link::after_call();
     if let Some(status) = k.exit {
+        sched::terminate_siblings(ProcessId(process.pid), ThreadRef(u64::from(tid)), status);
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));
     } else if let Some(status) = k.exit_thread {
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));

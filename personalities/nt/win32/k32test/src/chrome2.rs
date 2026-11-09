@@ -5,7 +5,7 @@
 //! functions Learn lists for `kernelbase` only, which are looked up with
 //! `GetProcAddress` the way Chrome does.
 
-use super::{Handle, INVALID_HANDLE_VALUE, ascii_eq, check, check_error, np, push_ascii, wslice};
+use super::{Handle, INVALID_HANDLE_VALUE, ascii_eq, np, out, out_num, push_ascii, wslice};
 use core::sync::atomic::{AtomicU32, Ordering};
 
 #[link(name = "kernel32", kind = "raw-dylib")]
@@ -91,6 +91,25 @@ const MEM_COMMIT_RESERVE: u32 = 0x3000;
 const MEM_RELEASE: u32 = 0x8000;
 const PAGE_READWRITE: u32 = 4;
 const INFINITE: u32 = u32::MAX;
+
+/// `super::check`, naming the line of a failed check first.
+#[track_caller]
+fn check(ok: bool) {
+    if !ok {
+        out(b"k32test: chrome2.rs line ");
+        out_num(core::panic::Location::caller().line());
+        out(b"
+");
+    }
+    super::check(ok);
+}
+
+/// `check` that the last error is `want`.
+#[track_caller]
+fn check_error(want: u32) {
+    // SAFETY: a plain kernel32 call.
+    check(unsafe { GetLastError() } == want);
+}
 
 /// `[a, b]` joined as `a` + `b`, NUL-terminated.
 fn join(a: &[u16], b: &[u8]) -> [u16; 300] {

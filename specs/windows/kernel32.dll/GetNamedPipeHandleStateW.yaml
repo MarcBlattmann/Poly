@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetNamedPipeHandleStateW.yaml
+id: windows/api/kernel32.dll/GetNamedPipeHandleStateW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: GetNamedPipeHandleStateW, SetNamedPipeHandleState. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Reports a handle's read mode and wait mode and the number of instances of the pipe, and optionally the name of the connected client (server handle only). Asking for the collection count and timeout values fails on a local pipe.
+interface:
+  signature: "BOOL GetNamedPipeHandleStateW(HANDLE pipe, LPDWORD state, LPDWORD curInstances, LPDWORD maxCollectionCount, LPDWORD collectDataTimeout, LPWSTR userName, DWORD userNameSize)"
+rules:
+  life: "A server instance is created with CreateNamedPipeW and starts listening. It becomes connected when a client opens the pipe with CreateFileW (whether or not ConnectNamedPipe was called) or when ConnectNamedPipe completes. When the client closes its handle the instance stays taken (closing) until the server calls DisconnectNamedPipe; a new client meanwhile gets ERROR_PIPE_BUSY. After DisconnectNamedPipe the instance is not yet listening: clients still get ERROR_PIPE_BUSY until the server calls ConnectNamedPipe again."
+  state_bits: "PIPE_NOWAIT (1) and PIPE_READMODE_MESSAGE (2); 0 is byte read mode with wait. A server handle shows the mode it was created with; a client handle from CreateFileW starts at 0 even on a message-type pipe. Each handle (server, client, another client) has its own state; duplicates of one handle share it (the duplicate sees a mode set through the original)."
+  bits_independent: "wait mode and read mode are two bits: setting PIPE_NOWAIT alone makes the state 1 and clears the read mode; setting PIPE_READMODE_MESSAGE alone makes the state 2 and clears NOWAIT; both together give 3."
+  instances: "the instance count is the number of instances of the name that exist (1, then 3 after two more were created, 2 after one closed), the same from every handle. A client sees the count too."
+  collection_values: "asking for the max collection count or the collect data timeout (non-NULL) fails with ERROR_INVALID_PARAMETER (87) on a local pipe, from both ends; the out-parameters are not written."
+  user_name: "the user-name query (server handle) fails with ERROR_CANNOT_IMPERSONATE (1368) before the server has read from the client; after the client wrote and the server read it succeeds with a non-empty name. On a client handle it fails with ERROR_INVALID_FUNCTION (1); a listening instance with no client also fails with 1368."
+  all_null: "all pointers NULL is a success on a pipe handle."
+  after_peer_closed: "still answers after the peer closed."
+errors:
+  collection_values: "ERROR_INVALID_PARAMETER (87)"
+  impersonation: "ERROR_CANNOT_IMPERSONATE (1368) for the user name before data was read"
+  client_user_name: "ERROR_INVALID_FUNCTION (1)"
+  bad_handle: "event handle or closed handle: ERROR_INVALID_HANDLE (6)"
+side_effects: "none"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Remote clients and other machines, security descriptors on the pipe, impersonation, several sessions.

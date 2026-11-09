@@ -97,6 +97,25 @@ impl<'a> Thread<'a> {
         })
     }
 
+    /// `(name) [command line] ` for a log line about this process, or
+    /// nothing: its `comm` and the first 120 bytes of its command line
+    /// (Chromium's processes tell their kind by `--type=`).
+    fn comm_for_log(&self) -> alloc::string::String {
+        let Some(comm) = crate::fs::proc::comm(self.process.pid) else { return alloc::string::String::new() };
+        let mut cmdline = crate::fs::proc::cmdline_of(self.process.pid);
+        cmdline.truncate(120);
+        for b in &mut cmdline {
+            if *b == 0 {
+                *b = b' ';
+            }
+        }
+        alloc::format!(
+            "({}) [{}] ",
+            alloc::string::String::from_utf8_lossy(&comm),
+            alloc::string::String::from_utf8_lossy(&cmdline).trim_end()
+        )
+    }
+
     /// A system call `number` starts.
     pub fn enter_syscall(&mut self, number: u64) {
         self.rax = Some(number);
@@ -737,7 +756,9 @@ impl LinuxKernel for Thread<'_> {
             // SIGHUP, SIGPIPE) are only logged with `poly.strace`; the
             // signals whose default is a core dump always are.
             if core_dump || super::strace::verbose() {
-                kprintln!("linux: pid {} killed by signal {signal}", self.process.pid);
+                let who = self.comm_for_log();
+                kprintln!("linux: {} pid {} {who}killed by signal {signal}", super::strace::stamp(), self.process.pid);
+                super::strace::write_trail(self.process.pid, &who);
             }
         }
         self.process.group_exit(status);
@@ -858,6 +879,11 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn exit_group(&mut self, status: u8) {
+        if super::strace::exits_logged() {
+            let who = self.comm_for_log();
+            kprintln!("linux: {} pid {} {who}exit status {status}", super::strace::stamp(), self.process.pid);
+            super::strace::write_trail(self.process.pid, &who);
+        }
         let status = self.process.group_exit(ExitStatus::Exited(status));
         self.exit = Some(status);
     }

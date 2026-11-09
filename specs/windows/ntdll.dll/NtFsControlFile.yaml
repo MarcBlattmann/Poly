@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtFsControlFile.yaml
+id: windows/api/ntdll.dll/NtFsControlFile
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: ConnectNamedPipe, DisconnectNamedPipe, PeekNamedPipe, TransactNamedPipe (the control codes are FSCTL_PIPE_LISTEN 0x110008, FSCTL_PIPE_DISCONNECT 0x110004, FSCTL_PIPE_PEEK 0x11400C, FSCTL_PIPE_TRANSCEIVE 0x11C017: CTL_CODE(FILE_DEVICE_NAMED_PIPE ...) from winioctl.h/ntifs.h). Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  The pipe control codes behind the kernel32 server calls. On an asynchronous handle the call returns STATUS_PENDING and the request finishes later (event or APC), on a synchronous one it blocks. Only the pipe control codes are specified here; other device control is out of scope.
+interface:
+  signature: "NTSTATUS NtFsControlFile(HANDLE file, HANDLE event, PIO_APC_ROUTINE apc, PVOID apcContext, PIO_STATUS_BLOCK iosb, ULONG code, PVOID in, ULONG inLength, PVOID out, ULONG outLength)"
+rules:
+  listen: "FSCTL_PIPE_LISTEN on a listening instance: STATUS_PENDING; the event is not signalled until a client opens the pipe, then it is and the IO_STATUS_BLOCK status is STATUS_SUCCESS. On a connected instance: STATUS_PIPE_CONNECTED (0xC00000B2)."
+  peek: "FSCTL_PIPE_PEEK with a connected client that wrote 'hello': a header of four 32-bit fields (pipe state 3 = connected, bytes available 5, number of messages, message length) followed by the data; the IO_STATUS_BLOCK information is 21 (header + data). See the visible tests for the statuses of the other states."
+  disconnect: "FSCTL_PIPE_DISCONNECT on a connected instance: STATUS_SUCCESS; the instance is then disconnected; a listen makes it listen again."
+  transceive: "FSCTL_PIPE_TRANSCEIVE on a message-mode client handle (set with SetNamedPipeHandleState) writes the input and reads the reply: STATUS_SUCCESS with the reply length in information; a short output buffer: STATUS_BUFFER_OVERFLOW with the first bytes, the rest readable; on a handle in byte read mode or on a byte-type pipe: STATUS_INVALID_PIPE_STATE (0xC00000AD)."
+  asynchronous_handles: "on an overlapped handle every call returns STATUS_PENDING even when the request completes at once; wait for the event and read the IO_STATUS_BLOCK."
+  not_a_pipe: "an event handle: STATUS_OBJECT_TYPE_MISMATCH; a bad handle value: STATUS_INVALID_HANDLE."
+errors:
+  already_connected: "STATUS_PIPE_CONNECTED (0xC00000B2)"
+  byte_mode: "STATUS_INVALID_PIPE_STATE (0xC00000AD)"
+side_effects: "changes pipe instance state (listen, disconnect) or moves data (transceive)"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Named I/O completion ports (object names), file handles associated through NtSetInformationFile(FileCompletionInformation), non-pipe files, remote pipes, security descriptors. FSCTL_PIPE_WAIT, FSCTL_PIPE_IMPERSONATE, FSCTL_PIPE_ASSIGN_EVENT and the remaining codes.

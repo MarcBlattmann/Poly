@@ -12,6 +12,8 @@
 //! - [`input`]: keys to characters on the desktop's layout, key repeat.
 //! - [`ui`]: the Alpine Shell look (ADR 0127) for app windows, in the
 //!   settings window's layout language, and a line editor and context menus.
+//! - [`startup`]: telling the desktop that this app is starting another, so
+//!   the pointer is busy until its window shows (ADR 0167).
 //! - [`run`]: the event loop on `poly-rt` (the socket, the buffer, `poll`
 //!   with the app's own handles, the clipboard's pipes, the theme following
 //!   the settings file).
@@ -25,6 +27,7 @@ extern crate std;
 pub mod input;
 pub mod proto;
 pub mod run;
+pub mod startup;
 pub mod ui;
 
 pub use input::{KeyInput, Mods};

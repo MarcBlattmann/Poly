@@ -143,6 +143,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("win32u.dll", super::WIN32U),
         // ADR 0155.
         ("bcryptprimitives.dll", super::BCRYPTPRIMITIVES),
+        ("version.dll", super::VERSION),
         ("ole32.dll", super::OLE32),
         ("iphlpapi.dll", super::IPHLPAPI),
         ("netapi32.dll", super::NETAPI32),
@@ -150,7 +151,6 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("dhcpcsvc.dll", super::DHCPCSVC),
         ("dnsapi.dll", super::DNSAPI),
         ("dbghelp.dll", super::DBGHELP),
-        ("version.dll", super::VERSION),
     ] {
         if bytes.is_empty() {
             continue;

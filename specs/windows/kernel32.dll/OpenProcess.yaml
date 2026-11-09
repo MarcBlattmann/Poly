@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/OpenProcess.yaml
+id: windows/api/kernel32.dll/OpenProcess
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: OpenProcess, Process Security and Access Rights, GetExitCodeProcess, DuplicateHandle. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Opens a handle to a process by id with the requested rights, if the caller may have them. The handle names the process (GetProcessId), reads its exit code, can be waited on with SYNCHRONIZE, and the rights bound what the handle can do. A process id nobody uses gives ERROR_INVALID_PARAMETER; protected processes give ERROR_ACCESS_DENIED.
+interface:
+  signature: "HANDLE OpenProcess(DWORD desiredAccess, BOOL inheritHandle, DWORD processId)"
+rules:
+  self: "PROCESS_QUERY_LIMITED_INFORMATION and PROCESS_ALL_ACCESS to the calling process both succeed; GetProcessId on the handle returns the id; GetExitCodeProcess gives STILL_ACTIVE (259) while it runs."
+  rights_enforced: "TerminateProcess on a handle without PROCESS_TERMINATE: ERROR_ACCESS_DENIED (5); WaitForSingleObject on a handle without SYNCHRONIZE: WAIT_FAILED with ERROR_ACCESS_DENIED; with SYNCHRONIZE a wait on a running child times out; DuplicateHandle into a process opened without PROCESS_DUP_HANDLE: ERROR_ACCESS_DENIED, with it a handle is created in the other process."
+  inherit_flag: "bInheritHandle = TRUE gives a handle with HANDLE_FLAG_INHERIT; FALSE a handle without."
+  child: "a child opened by id: waits, the exit code (7 for a child that returned 7, 17 or 33 after TerminateProcess(…, 17|33)) is seen through every handle; the exit code stays readable after the child ended, as long as a handle exists."
+  after_exit: "when no handle to the ended process remains, its id can no longer be opened (ERROR_INVALID_PARAMETER)."
+  rights_zero: "desiredAccess 0: FALSE/NULL with ERROR_ACCESS_DENIED (5)."
+errors:
+  id_0_or_unused: "ERROR_INVALID_PARAMETER (87) for ids 0, 3 and 0x7FFFFFF0"
+  system_process: "id 4 (System) with query/read/quota rights: ERROR_ACCESS_DENIED (5)"
+  rights_zero: "ERROR_ACCESS_DENIED (5)"
+side_effects: "creates a handle"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  AppContainer (SECURITY_CAPABILITIES) and other attributes that need a profile or a token, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS effects, jobs with CPU/memory/IO rate limits, job time limits and their notifications, UI restrictions. Opening processes of other users or protected processes other than System.

@@ -39,6 +39,7 @@ unsafe extern "system" {
         id: *mut u32,
     ) -> Handle;
     fn WaitForSingleObject(h: Handle, ms: u32) -> u32;
+    fn GetCurrentProcessId() -> u32;
     fn GetExitCodeThread(h: Handle, code: *mut u32) -> i32;
     fn CloseHandle(h: Handle) -> i32;
 }
@@ -105,6 +106,13 @@ unsafe extern "system" {
     fn WSACloseEvent(h: Handle) -> i32;
     fn WSAWaitForMultipleEvents(n: u32, events: *const Handle, all: i32, ms: u32, alertable: i32) -> u32;
     fn WSAAddressToStringA(sa: *const u8, len: u32, info: *const u8, out: *mut u8, outlen: *mut u32) -> i32;
+    fn WSAEventSelect(s: Socket, event: Handle, mask: i32) -> i32;
+    fn WSAEnumNetworkEvents(s: Socket, event: Handle, out: *mut u8) -> i32;
+    fn WSADuplicateSocketW(s: Socket, pid: u32, info: *mut u8) -> i32;
+    fn WSASocketW(af: i32, ty: i32, protocol: i32, info: *const u8, group: u32, flags: u32) -> Socket;
+    fn WSALookupServiceBeginW(query: *const u8, flags: u32, lookup: *mut Handle) -> i32;
+    fn WSALookupServiceNextW(lookup: Handle, flags: u32, len: *mut u32, results: *mut u8) -> i32;
+    fn WSALookupServiceEnd(lookup: Handle) -> i32;
 }
 
 #[repr(C)]
@@ -157,6 +165,8 @@ const WSAECONNREFUSED: u32 = 10061;
 const WSAVERNOTSUPPORTED: u32 = 10092;
 const WSANOTINITIALISED: u32 = 10093;
 const WSA_IO_PENDING: u32 = 997;
+const WSA_INVALID_HANDLE: u32 = 6;
+const WSA_E_NO_MORE: u32 = 10110;
 const STD_OUTPUT_HANDLE: u32 = -11i32 as u32;
 
 /// A NUL-terminated ASCII literal.
@@ -681,6 +691,124 @@ unsafe fn overlapped() {
     }
 }
 
+const FD_READ: i32 = 0x01;
+const FD_WRITE: i32 = 0x02;
+const FD_ACCEPT: i32 = 0x08;
+const FD_CONNECT: i32 = 0x10;
+const FD_CLOSE: i32 = 0x20;
+
+/// `WSAEnumNetworkEvents`: the events and the error code of `bit`.
+unsafe fn net_events(s: Socket, ev: Handle) -> (i32, [i32; 10]) {
+    let mut b = [0u8; 44];
+    // SAFETY: a local WSANETWORKEVENTS.
+    check(unsafe { WSAEnumNetworkEvents(s, ev, b.as_mut_ptr()) } == 0);
+    let mut errs = [0i32; 10];
+    for (i, e) in errs.iter_mut().enumerate() {
+        *e = i32::from_le_bytes([b[4 + 4 * i], b[5 + 4 * i], b[6 + 4 * i], b[7 + 4 * i]]);
+    }
+    (i32::from_le_bytes([b[0], b[1], b[2], b[3]]), errs)
+}
+
+/// Wait for the event object to be set (2 s at most).
+unsafe fn signalled(ev: Handle) -> bool {
+    // SAFETY: a kernel32 call on our event.
+    unsafe { WaitForSingleObject(ev, 2000) == 0 }
+}
+
+/// `WSAEventSelect` and `WSAEnumNetworkEvents` (ADR 0155): the events a loopback connection
+/// produces, the error cases, `WSADuplicateSocketW` into this process and the lookup calls.
+unsafe fn event_select() {
+    // SAFETY: ws2_32/kernel32 calls with valid buffers.
+    unsafe {
+        let (l, port) = listener();
+        let ev_l = WSACreateEvent();
+        let ev_c = WSACreateEvent();
+        let ev_a = WSACreateEvent();
+        check(ev_l != 0 && ev_c != 0 && ev_a != 0);
+        // Argument checks.
+        check_fail(WSAEventSelect(l, 0, FD_ACCEPT), WSAEINVAL);
+        check_fail(WSAEventSelect(l, ev_l, 0x4000), WSAEINVAL);
+        check_fail(WSAEventSelect(INVALID_SOCKET - 7, ev_l, FD_READ), WSAENOTSOCK);
+        // A listener records FD_ACCEPT.
+        check(WSAEventSelect(l, ev_l, FD_ACCEPT) == 0);
+        let c = socket(AF_INET, SOCK_STREAM, 0);
+        check(c != INVALID_SOCKET);
+        check(WSAEventSelect(c, ev_c, FD_CONNECT | FD_READ | FD_WRITE | FD_CLOSE) == 0);
+        let to = sin(LOOPBACK, port);
+        let r = connect(c, to.as_ptr(), 16);
+        check(r == 0 || last() == WSAEWOULDBLOCK);
+        check(signalled(ev_l));
+        let (e, _) = net_events(l, ev_l);
+        check_got(e == FD_ACCEPT, e as u32);
+        let a = accept(l, core::ptr::null_mut(), core::ptr::null_mut());
+        check(a != INVALID_SOCKET);
+        // The client: connected (error 0), and writable.
+        check(signalled(ev_c));
+        let (e, errs) = net_events(c, ev_c);
+        check_got(e & FD_CONNECT != 0 && errs[4] == 0, e as u32);
+        check_got(e & FD_WRITE != 0 || signalled(ev_c), e as u32);
+        // The server side: data produces FD_READ, closing the peer FD_CLOSE after the data.
+        check(WSAEventSelect(a, ev_a, FD_READ | FD_CLOSE) == 0);
+        check(send(c, b"ping".as_ptr(), 4, 0) == 4);
+        check(signalled(ev_a));
+        let (e, _) = net_events(a, ev_a);
+        check_got(e & FD_READ != 0, e as u32);
+        let mut buf = [0u8; 16];
+        check(recv(a, buf.as_mut_ptr(), 16, 0) == 4);
+        check(closesocket(c) == 0);
+        check(signalled(ev_a));
+        let (mut e, mut errs) = net_events(a, ev_a);
+        if e & FD_CLOSE == 0 {
+            check(signalled(ev_a));
+            (e, errs) = net_events(a, ev_a);
+        }
+        check_got(e & FD_CLOSE != 0 && errs[5] == 0, e as u32);
+        // A socket nobody selected: nothing recorded, no error.
+        let u = socket(AF_INET, SOCK_DGRAM, 0);
+        let (e, _) = net_events(u, 0);
+        check(e == 0);
+        // Ending the association.
+        check(WSAEventSelect(a, 0, 0) == 0);
+        for s in [a, u, l] {
+            check(closesocket(s) == 0);
+        }
+        for e in [ev_l, ev_c, ev_a] {
+            check(WSACloseEvent(e) != 0);
+        }
+
+        // WSADuplicateSocketW into this process, then WSASocketW from the record.
+        let (l2, port2) = listener();
+        let c2 = socket(AF_INET, SOCK_STREAM, 0);
+        let to2 = sin(LOOPBACK, port2);
+        check(connect(c2, to2.as_ptr(), 16) == 0);
+        let a2 = accept(l2, core::ptr::null_mut(), core::ptr::null_mut());
+        check(a2 != INVALID_SOCKET);
+        let mut info = [0u8; 628];
+        check(WSADuplicateSocketW(a2, GetCurrentProcessId(), info.as_mut_ptr()) == 0);
+        let s2 = WSASocketW(-1, -1, -1, info.as_ptr(), 0, 0);
+        check(s2 != INVALID_SOCKET);
+        check(send(c2, b"dup".as_ptr(), 3, 0) == 3);
+        check(recv(s2, buf.as_mut_ptr(), 16, 0) == 3 && &buf[..3] == b"dup");
+        // A record that is not ours is refused.
+        let junk = [0u8; 628];
+        check(WSASocketW(-1, -1, -1, junk.as_ptr(), 0, 0) == INVALID_SOCKET && last() == WSAEINVAL);
+        check_fail(WSADuplicateSocketW(c2 + 4000, GetCurrentProcessId(), info.as_mut_ptr()), WSAENOTSOCK);
+        for s in [s2, c2, l2] {
+            check(closesocket(s) == 0);
+        }
+
+        // WSALookupService*: accepted, and it finds nothing.
+        let query = [0u8; 120];
+        let mut h: Handle = 0;
+        check_fail(WSALookupServiceBeginW(query.as_ptr(), 0, &mut h), WSAEINVAL);
+        check(WSALookupServiceBeginW(query.as_ptr(), 0xFF0, &mut h) == 0 && h != 0);
+        let mut len = 0u32;
+        check_fail(WSALookupServiceNextW(h, 0xFF0, &mut len, core::ptr::null_mut()), WSA_E_NO_MORE);
+        check(WSALookupServiceEnd(h) == 0);
+        check_fail(WSALookupServiceEnd(0x1234), WSA_INVALID_HANDLE);
+    }
+}
+
 unsafe fn cleanup() {
     // SAFETY: plain ws2_32 calls.
     unsafe {
@@ -698,7 +826,7 @@ pub extern "system" fn wstest_main(_peb: *mut u8) -> u32 {
     out(b"wstest: start\n");
     // SAFETY: every call is a ws2_32/kernel32 export with valid arguments.
     unsafe {
-        let sections: [Section; 10] = [
+        let sections: [Section; 11] = [
             (b"start-up", startup),
             (b"address text", text),
             (b"names", names),
@@ -708,6 +836,7 @@ pub extern "system" fn wstest_main(_peb: *mut u8) -> u32 {
             (b"UDP", udp),
             (b"errors", errors),
             (b"overlapped I/O", overlapped),
+            (b"event select", event_select),
             (b"clean-up", cleanup),
         ];
         for (name, run) in sections {

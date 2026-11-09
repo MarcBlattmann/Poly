@@ -469,6 +469,11 @@ impl Process {
         self.threads.lock().live.iter().find(|(id, _)| *id == tid).map(|(_, f)| Arc::clone(f))
     }
 
+    /// The ids of the live threads.
+    pub fn live_thread_ids(&self) -> alloc::vec::Vec<u32> {
+        self.threads.lock().live.iter().map(|(id, _)| *id).collect()
+    }
+
     /// Live threads.
     pub fn thread_count(&self) -> usize {
         self.threads.lock().live.len()

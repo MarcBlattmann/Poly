@@ -60,6 +60,8 @@ fn embed_win32() {
         "win32u.dll",
         // ADR 0155.
         "bcryptprimitives.dll",
+        // ADR 0155: file version information.
+        "version.dll",
         "ole32.dll",
         "s1test.exe",
         "iphlpapi.dll",
@@ -68,8 +70,8 @@ fn embed_win32() {
         "dhcpcsvc.dll",
         "dnsapi.dll",
         "dbghelp.dll",
+        "b35test.exe",
         // ADR 0155: file version information.
-        "version.dll",
     ] {
         match &dir {
             Some(d) => {

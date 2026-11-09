@@ -1249,15 +1249,20 @@ pub fn command(args: &[String]) -> Result {
     let syms = Arc::new(Symbols::from_file(&kernel)?);
     let image = disk_image(fresh)?;
     let initrd = write_initramfs()?;
-    let mut m = crate::toolkits::Machine::boot_with_init(
+    // POLY_CHROMIUM_APPEND: more kernel arguments (`poly.strace=chromium`, ...).
+    // The boot has QEMU user networking, as `run` and the boot test.
+    let more = std::env::var("POLY_CHROMIUM_APPEND").unwrap_or_default();
+    let init = format!("{INIT_ARGS} poly.net=qemu {more}");
+    let mut m = crate::toolkits::Machine::boot_with_init_args(
         &kernel,
         &syms,
         &image,
         &initrd,
         "chromium-probe",
         MEMORY,
-        INIT_ARGS,
+        init.trim_end(),
         CPUS,
+        &crate::net::nic_args(None, false),
     )?;
     m.set_timeouts(Duration::from_secs(3600), Duration::from_secs(4 * 3600));
     m.desktop_up()?;
@@ -1268,8 +1273,13 @@ pub fn command(args: &[String]) -> Result {
             break;
         }
     }
+    // POLY_CHROMIUM_LOG: also keep the console's output there (the target
+    // directory of a container run goes away with the container).
     let log = root().join("target/poly-chromium-probe.log");
     let _ = std::fs::write(&log, m.text());
+    if let Ok(copy) = std::env::var("POLY_CHROMIUM_LOG") {
+        let _ = std::fs::write(copy, m.text());
+    }
     eprintln!("==> the console's output is in {}", log.display());
     let off = m.poweroff();
     result.and(off)

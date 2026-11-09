@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetNamedPipeClientProcessId.yaml
+id: windows/api/kernel32.dll/GetNamedPipeClientProcessId
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: GetNamedPipeClientProcessId. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Returns the process id of the process that opened the client end of a pipe, from either end of a connected pair. It keeps answering after the client end was closed. On a server instance nobody has connected to it fails with ERROR_FILE_NOT_FOUND.
+interface:
+  signature: "BOOL GetNamedPipeClientProcessId(HANDLE pipe, PULONG clientProcessId)"
+rules:
+  life: "A server instance is created with CreateNamedPipeW and starts listening. It becomes connected when a client opens the pipe with CreateFileW (whether or not ConnectNamedPipe was called) or when ConnectNamedPipe completes. When the client closes its handle the instance stays taken (closing) until the server calls DisconnectNamedPipe; a new client meanwhile gets ERROR_PIPE_BUSY. After DisconnectNamedPipe the instance is not yet listening: clients still get ERROR_PIPE_BUSY until the server calls ConnectNamedPipe again."
+  in_process: "client and server in one process: both ends report this process's id."
+  cross_process: "with the client in a child process the server end reports the child's id (the one CreateProcessW returned), not the server's; the child, asking from its client end, gets the same id as its own."
+  no_client: "on a server instance with no client: FALSE with ERROR_NOT_FOUND (1168) and the out-parameter untouched."
+  after_client_closed: "still returns the client's id after the client closed (before DisconnectNamedPipe)."
+  session: "GetNamedPipeClientSessionId on the server end and GetNamedPipeServerSessionId on the client end of one connection return the same session id."
+errors:
+  no_client: "ERROR_NOT_FOUND (1168) on a listening instance"
+  bad_handle: "a closed handle: ERROR_INVALID_HANDLE (6); a regular file handle: ERROR_INVALID_FUNCTION (1)"
+  closed_client_instance: "a second client cannot open the pipe until the server disconnects: ERROR_PIPE_BUSY (231)"
+side_effects: "none"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Remote clients and other machines, security descriptors on the pipe, impersonation, several sessions.

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "cfr_keys",
+      "exe_sha256": "c49fe56200d1e9612e50ded7f8aa88770333b8ec181d97d59a32c0dd4d2a4df8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "a2V5IFswLCAwLCAwLCAwXSBzaXplIDA6IHJlZmVyZW5jZSAweDAwMDAwMDAwIG51bGwgZmFsc2U7IEFuYWx5emUgMHg4MDA3MDA1NyBzdXBwb3J0ZWQgMCBmYWNlcyAwCmtleSBbMCwgMCwgMCwgMF0gc2l6ZSAxOiByZWZlcmVuY2UgMHgwMDAwMDAwMCBudWxsIGZhbHNlOyBBbmFseXplIDB4ODAwNzAwNTcgc3VwcG9ydGVkIDAgZmFjZXMgMAprZXkgWzAsIDAsIDAsIDBdIHNpemUgMzogcmVmZXJlbmNlIDB4MDAwMDAwMDAgbnVsbCBmYWxzZTsgQW5hbHl6ZSAweDgwMDcwMDU3IHN1cHBvcnRlZCAwIGZhY2VzIDAKa2V5IFswLCAwLCAwLCAwXSBzaXplIDQ6IHJlZmVyZW5jZSAweDAwMDAwMDAwIG51bGwgZmFsc2U7IEFuYWx5emUgMHgwMDAwMDAwMCBzdXBwb3J0ZWQgMSBmYWNlcyAxCmtleSBbNywgMCwgMCwgMF0gc2l6ZSA0OiByZWZlcmVuY2UgMHgwMDAwMDAwMCBudWxsIGZhbHNlOyBBbmFseXplIDB4ODAwNzAwMDIgc3VwcG9ydGVkIDAgZmFjZXMgMAprZXkgWzk5LCAwLCAwLCAwXSBzaXplIDQ6IHJlZmVyZW5jZSAweDAwMDAwMDAwIG51bGwgZmFsc2U7IEFuYWx5emUgMHg4MDA3MDAwMiBzdXBwb3J0ZWQgMCBmYWNlcyAwCm51bGwga2V5LCBzaXplIDA6IDB4ODAwNzAwNTcgbnVsbCB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "key [0, 0, 0, 0] size 0: reference 0x00000000 null false; Analyze 0x80070057 supported 0 faces 0\nkey [0, 0, 0, 0] size 1: reference 0x00000000 null false; Analyze 0x80070057 supported 0 faces 0\nkey [0, 0, 0, 0] size 3: reference 0x00000000 null false; Analyze 0x80070057 supported 0 faces 0\nkey [0, 0, 0, 0] size 4: reference 0x00000000 null false; Analyze 0x00000000 supported 1 faces 1\nkey [7, 0, 0, 0] size 4: reference 0x00000000 null false; Analyze 0x80070002 supported 0 faces 0\nkey [99, 0, 0, 0] size 4: reference 0x00000000 null false; Analyze 0x80070002 supported 0 faces 0\nnull key, size 0: 0x80070057 null true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

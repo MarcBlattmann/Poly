@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "nticp_query",
+      "exe_sha256": "942fecb9197ddab25b8828953bb85cc7c7cf84dcd01ccf99aa7cabe269b9d7e3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZW1wdHlfc3RhdHVzCm9rIGVtcHR5X2RlcHRoCm9rIGVtcHR5X3JldHVybmVkX2xlbmd0aApvayBkZXB0aF90aHJlZQpvayBkZXB0aF90d28KdmFsdWUgbG9uZ19idWZmZXJfc3RhdHVzIDB4YzAwMDAwMDQKdmFsdWUgbG9uZ19idWZmZXJfZGVwdGggMTQzMTY1NTc2NQp2YWx1ZSBsb25nX2J1ZmZlcl9yZXR1cm5lZF9sZW5ndGggNDgwNTkKb2sgc2hvcnRfYnVmZmVyX3N0YXR1cwpvayBzaG9ydF9idWZmZXJfdW50b3VjaGVkCm9rIHplcm9fYnVmZmVyX3N0YXR1cwpvayBudWxsX3JldHVybl9sZW5ndGhfc3RhdHVzCm9rIGNsYXNzXzFfc3RhdHVzCm9rIGNsYXNzXzk5X3N0YXR1cwpvayBldmVudF9zdGF0dXMKb2sgYmFkX2hhbmRsZV9zdGF0dXMKc3VtbWFyeSAxMyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok empty_status\nok empty_depth\nok empty_returned_length\nok depth_three\nok depth_two\nvalue long_buffer_status 0xc0000004\nvalue long_buffer_depth 1431655765\nvalue long_buffer_returned_length 48059\nok short_buffer_status\nok short_buffer_untouched\nok zero_buffer_status\nok null_return_length_status\nok class_1_status\nok class_99_status\nok event_status\nok bad_handle_status\nsummary 13 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}
