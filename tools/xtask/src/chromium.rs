@@ -1074,11 +1074,13 @@ pub const DESKTOP_ID: &str = "poly-chromium.desktop";
 /// which starts it as `poly`, sandbox on. `%U` is the pages and links it is
 /// asked to open (Desktop Entry Specification, "Exec"). `start_page`: a
 /// test page to open instead of the new tab page (the boot tests').
+/// `Icon=chromium` is Debian's name for its logo, which the package ships as
+/// hicolor PNGs (16 to 256 pixels): the launcher draws it (ADR 0146).
 fn desktop_file(start_page: Option<&str>) -> String {
     let url = start_page.map_or_else(|| "%U".to_string(), |page| format!("file:///{PAGES_DIR}/{page}"));
     format!(
         "[Desktop Entry]\nType=Application\nName=Chromium\nGenericName=Web Browser\n\
-         Comment=Web browser (Debian's Chromium)\nKeywords=browser;chrome;web;internet;\n\
+         Comment=Web browser (Debian's Chromium)\nKeywords=browser;chrome;web;internet;\nIcon=chromium\n\
          Exec=/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS} {url}\nMimeType={};\n",
         BROWSER_MIME_TYPES.join(";")
     )
@@ -2415,6 +2417,8 @@ mod tests {
         assert!(entry.contains(" %U\n"), "the launcher's entry opens what it is given");
         assert!(!entry.contains("input.html"));
         assert!(desktop_file(Some("input.html")).contains(" file:///usr/share/poly/chromium/input.html\n"));
+        // The launcher's icon is Debian's, a hicolor PNG name.
+        assert!(entry.contains("\nIcon=chromium\n"));
         assert!(LAUNCH_SCRIPT.contains("setpriv --reuid=1000"));
         // The socket's name for `poly` is made again at every launch: the
         // disk (and so `/run/user/1000`) outlives a boot.

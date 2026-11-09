@@ -1756,7 +1756,13 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   `desktop::Desktop` on win32k's side, `win32::Link` and
   `win32::WindowsSurfaces` on the compositor's): its client area, drawn by
   window DCs into a DIB that `ReleaseDC` commits (`PolyUserCommitSurface`).
-  Painting through update regions is stubbed until its slice.
+  Slice B (ADR 0136): win32k reproduces session 0 or the interactive
+  desktop session (`poly.win32k.session=interactive`, or a compositor);
+  update regions and WM_PAINT (`wm::paint`, `user::paint`), activation
+  and focus (`wm::input`, `user::focus`), raw input and key state
+  (`wm::raw`, `user::input`, the German layout in `kbd`), GDI regions
+  (`poly_gdi::region`); the compositor forwards pointer and keys over a
+  Windows window to win32k as desktop-link records.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →

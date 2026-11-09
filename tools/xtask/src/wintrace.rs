@@ -232,6 +232,420 @@ pub const SIGNATURES: &[(&str, &str)] = &[
     ("CharUpperW", "p=w"),
 ];
 
+/// Signatures for the Chrome kit (`trace-kit --agg`), `ret=args` as in
+/// [`SIGNATURES`], from Microsoft Learn's prototypes. Looked up after
+/// [`SIGNATURES`] and only for the counting kit, so the 7-Zip kit (whose
+/// bytes are in the committed reference) does not change. A count of
+/// arguments may exceed the real one but never fall short (the thunk copies
+/// the stack arguments the signature names); a function not listed is
+/// logged with four unknown arguments and the thunk copies sixteen stack
+/// slots.
+pub const CHROME_SIGNATURES: &[(&str, &str)] = &[
+    // kernel32: files, pipes, IOCP, mappings
+    ("CreateFileA", "h=aiipiih"),
+    ("CreateFileMappingW", "h=hpiiiw"),
+    ("CreateFileMappingA", "h=hpiiia"),
+    ("CreateEventA", "h=piia"),
+    ("CreateMutexW", "h=piw"),
+    ("CreateMutexA", "h=pia"),
+    ("CreateSemaphoreA", "h=piia"),
+    ("CreateNamedPipeW", "h=wiiiiiip"),
+    ("ConnectNamedPipe", "i=hp"),
+    ("DisconnectNamedPipe", "i=h"),
+    ("WaitNamedPipeW", "i=wi"),
+    ("PeekNamedPipe", "i=hpippp"),
+    ("SetNamedPipeHandleState", "i=hppp"),
+    ("TransactNamedPipe", "i=hpipipp"),
+    ("GetNamedPipeClientProcessId", "i=hp"),
+    ("GetNamedPipeServerProcessId", "i=hp"),
+    ("CreateIoCompletionPort", "h=hhqi"),
+    ("GetQueuedCompletionStatus", "i=hpppi"),
+    ("PostQueuedCompletionStatus", "i=hiqp"),
+    ("GetOverlappedResult", "i=hppi"),
+    ("CancelIo", "i=h"),
+    ("CancelIoEx", "i=hp"),
+    ("SetFileCompletionNotificationModes", "i=hc"),
+    ("ReadDirectoryChangesW", "i=hpiiippp"),
+    ("SetFileInformationByHandle", "i=hipi"),
+    ("GetFileInformationByHandleEx", "i=hipi"),
+    ("GetFileTime", "i=hppp"),
+    ("GetFileType", "i=h"),
+    ("FlushFileBuffers", "i=h"),
+    ("LockFile", "i=hiiii"),
+    ("LockFileEx", "i=hiiiip"),
+    ("UnlockFile", "i=hiiii"),
+    ("UnlockFileEx", "i=hiiip"),
+    ("MapViewOfFileEx", "p=hiiiqp"),
+    ("FlushViewOfFile", "i=pq"),
+    ("FindFirstFileExW", "h=wipipi"),
+    ("FindFirstFileExA", "h=aipipi"),
+    ("FindNextFileA", "i=hp"),
+    ("FindFirstVolumeW", "h=pi"),
+    ("FindNextVolumeW", "i=hpi"),
+    ("FindVolumeClose", "i=h"),
+    ("GetFileAttributesExW", "i=wip"),
+    ("GetFileAttributesA", "i=a"),
+    ("DeleteFileA", "i=a"),
+    ("CopyFileW", "i=wwi"),
+    ("MoveFileExW", "i=wwi"),
+    ("ReplaceFileW", "i=wwwippp"),
+    ("GetFinalPathNameByHandleW", "i=hpii"),
+    ("GetLongPathNameW", "i=wpi"),
+    ("GetShortPathNameW", "i=wpi"),
+    ("GetFullPathNameA", "i=aipp"),
+    ("GetTempFileNameA", "i=aaip"),
+    ("GetTempPathA", "i=ip"),
+    ("GetSystemDirectoryW", "i=pi"),
+    ("GetSystemDirectoryA", "i=pi"),
+    ("GetWindowsDirectoryW", "i=pi"),
+    ("GetWindowsDirectoryA", "i=pi"),
+    ("QueryDosDeviceW", "i=wpi"),
+    ("GetVolumePathNameW", "i=wpi"),
+    ("GetVolumeNameForVolumeMountPointW", "i=wpi"),
+    ("GetVolumePathNamesForVolumeNameW", "i=wpip"),
+    ("GetVolumeInformationW", "i=wpippppi"),
+    ("GetDriveTypeW", "i=w"),
+    ("GetDiskFreeSpaceA", "i=apppp"),
+    ("SetDllDirectoryW", "i=w"),
+    ("GetPrivateProfileStringW", "i=wwwpiw"),
+    ("ExpandEnvironmentStringsW", "i=wpi"),
+    ("GetEnvironmentVariableA", "i=api"),
+    ("SetEnvironmentVariableW", "i=ww"),
+    ("SetEnvironmentVariableA", "i=aa"),
+    ("GetModuleFileNameA", "i=hpi"),
+    ("GetModuleHandleExW", "i=ipp"),
+    ("GetModuleHandleExA", "i=ipp"),
+    ("LoadLibraryA", "h=a"),
+    ("LoadLibraryExA", "h=ahi"),
+    // kernel32: processes, threads, jobs, handles
+    ("CreateProcessW", "i=wwppiipwpp"),
+    ("CreateRemoteThread", "h=hpqppip"),
+    ("OpenProcess", "h=iii"),
+    ("OpenThread", "h=iii"),
+    ("DuplicateHandle", "i=hhhpiii"),
+    ("GetHandleInformation", "i=hp"),
+    ("SetHandleInformation", "i=hii"),
+    ("AssignProcessToJobObject", "i=hh"),
+    ("CreateJobObjectW", "h=pw"),
+    ("SetInformationJobObject", "i=hipi"),
+    ("QueryInformationJobObject", "i=hipip"),
+    ("TerminateJobObject", "i=hi"),
+    ("InitializeProcThreadAttributeList", "i=piip"),
+    ("UpdateProcThreadAttribute", "i=piqpqpp"),
+    ("DeleteProcThreadAttributeList", "v=p"),
+    ("GetExitCodeProcess", "i=hp"),
+    ("GetProcessId", "i=h"),
+    ("GetThreadId", "i=h"),
+    ("GetCurrentThread", "h="),
+    ("GetPriorityClass", "i=h"),
+    ("SetPriorityClass", "i=hi"),
+    ("SetProcessMitigationPolicy", "i=ipq"),
+    ("GetProcessMitigationPolicy", "i=hipq"),
+    ("SetProcessInformation", "i=hipi"),
+    ("GetProcessInformation", "i=hipi"),
+    ("SetThreadInformation", "i=hipi"),
+    ("SetErrorMode", "i=i"),
+    ("SetUnhandledExceptionFilter", "p=p"),
+    ("AddVectoredExceptionHandler", "p=ip"),
+    ("RemoveVectoredExceptionHandler", "i=p"),
+    ("SetProcessShutdownParameters", "i=ii"),
+    ("GetThreadContext", "i=hp"),
+    ("Wow64GetThreadContext", "i=hp"),
+    ("GetThreadTimes", "i=hpppp"),
+    ("GetThreadPriority", "i=h"),
+    ("GetThreadGroupAffinity", "i=hp"),
+    ("GetThreadPriorityBoost", "i=hp"),
+    ("SetThreadPriorityBoost", "i=hi"),
+    ("SetThreadExecutionState", "i=i"),
+    ("GetCurrentThreadStackLimits", "v=pp"),
+    ("QueryThreadCycleTime", "i=hp"),
+    ("QueryProcessCycleTime", "i=hp"),
+    ("ReadProcessMemory", "i=hppqp"),
+    ("WriteProcessMemory", "i=hppqp"),
+    ("VirtualProtect", "i=pqip"),
+    ("VirtualQuery", "q=ppq"),
+    ("VirtualAllocEx", "p=hpqii"),
+    ("VirtualFreeEx", "i=hpqi"),
+    ("VirtualProtectEx", "i=hpqip"),
+    ("VirtualQueryEx", "q=hppq"),
+    ("VirtualLock", "i=pq"),
+    ("VirtualUnlock", "i=pq"),
+    ("DiscardVirtualMemory", "i=pq"),
+    ("PrefetchVirtualMemory", "i=hqpi"),
+    ("HeapCreate", "h=iqq"),
+    ("HeapDestroy", "i=h"),
+    ("HeapReAlloc", "p=hipq"),
+    ("HeapSize", "q=hip"),
+    ("HeapValidate", "i=hip"),
+    ("HeapSetInformation", "i=hipq"),
+    ("HeapLock", "i=h"),
+    ("HeapUnlock", "i=h"),
+    ("HeapWalk", "i=hp"),
+    ("HeapCompact", "q=hi"),
+    ("GetProcessHeaps", "i=ip"),
+    ("GlobalAlloc", "h=iq"),
+    ("GlobalFree", "h=h"),
+    ("GlobalLock", "p=h"),
+    ("GlobalUnlock", "i=h"),
+    ("GlobalSize", "q=h"),
+    ("LocalAlloc", "h=iq"),
+    // kernel32: synchronisation, TLS/FLS
+    ("InitializeCriticalSectionEx", "i=pii"),
+    ("TryEnterCriticalSection", "i=p"),
+    ("AcquireSRWLockExclusive", "v=p"),
+    ("AcquireSRWLockShared", "v=p"),
+    ("ReleaseSRWLockExclusive", "v=p"),
+    ("ReleaseSRWLockShared", "v=p"),
+    ("InitializeSRWLock", "v=p"),
+    ("TryAcquireSRWLockExclusive", "c=p"),
+    ("InitializeConditionVariable", "v=p"),
+    ("WakeConditionVariable", "v=p"),
+    ("WakeAllConditionVariable", "v=p"),
+    ("SleepConditionVariableSRW", "i=ppii"),
+    ("InitOnceBeginInitialize", "i=pipp"),
+    ("InitOnceComplete", "i=pip"),
+    ("InitOnceExecuteOnce", "i=pppp"),
+    ("SleepEx", "i=ii"),
+    ("WaitForSingleObjectEx", "i=hii"),
+    ("ReleaseMutex", "i=h"),
+    ("CreateWaitableTimerExW", "h=pwii"),
+    ("SetWaitableTimer", "i=hpippi"),
+    ("RegisterWaitForSingleObject", "i=phppii"),
+    ("UnregisterWait", "i=h"),
+    ("UnregisterWaitEx", "i=hh"),
+    ("SwitchToThread", "i="),
+    ("FlsAlloc", "i=p"),
+    ("FlsFree", "i=i"),
+    ("FlsGetValue", "p=i"),
+    ("FlsSetValue", "i=ip"),
+    ("TlsAlloc", "i="),
+    ("TlsFree", "i=i"),
+    ("TlsGetValue", "p=i"),
+    ("TlsSetValue", "i=ip"),
+    // kernel32: system information, locale, misc
+    ("GetLocaleInfoEx", "i=wipi"),
+    ("GetLocaleInfoW", "i=iipi"),
+    ("LCMapStringEx", "i=wipipippp"),
+    ("LCMapStringW", "i=iipipi"),
+    ("CompareStringOrdinal", "i=pipii"),
+    ("GetUserDefaultLocaleName", "i=pi"),
+    ("GetSystemTimePreciseAsFileTime", "v=p"),
+    ("GetLocalTime", "v=p"),
+    ("GetSystemTime", "v=p"),
+    ("GetTimeZoneInformation", "i=p"),
+    ("GetDynamicTimeZoneInformation", "i=p"),
+    ("GetNativeSystemInfo", "v=p"),
+    ("IsWow64Process", "i=hp"),
+    ("GetLogicalProcessorInformationEx", "i=ipp"),
+    ("GetLogicalProcessorInformation", "i=pp"),
+    ("GetSystemPowerStatus", "i=p"),
+    ("GetComputerNameW", "i=pp"),
+    ("GetComputerNameExW", "i=ipp"),
+    ("OutputDebugStringW", "v=w"),
+    ("OutputDebugStringA", "v=a"),
+    ("IsDebuggerPresent", "i="),
+    ("CheckRemoteDebuggerPresent", "i=hp"),
+    ("DebugBreak", "v="),
+    ("lstrlenW", "i=w"),
+    ("lstrcmpW", "i=ww"),
+    ("lstrcmpiA", "i=aa"),
+    ("CreateToolhelp32Snapshot", "h=ii"),
+    ("Process32FirstW", "i=hp"),
+    ("Process32NextW", "i=hp"),
+    ("Module32FirstW", "i=hp"),
+    ("Module32NextW", "i=hp"),
+    ("QueryFullProcessImageNameW", "i=hipp"),
+    ("QueryFullProcessImageNameA", "i=hipp"),
+    ("K32GetModuleFileNameExW", "i=hhpi"),
+    ("K32GetMappedFileNameW", "i=hppi"),
+    ("K32EnumProcessModules", "i=hpip"),
+    ("K32GetModuleInformation", "i=hhpi"),
+    ("K32GetProcessMemoryInfo", "i=hpi"),
+    ("K32QueryWorkingSetEx", "i=hpi"),
+    ("K32GetPerformanceInfo", "i=pi"),
+    ("FormatMessageA", "i=ipiipip"),
+    ("FindResourceW", "h=hww"),
+    ("LoadResource", "h=hh"),
+    ("LockResource", "p=h"),
+    ("SizeofResource", "i=hh"),
+    ("EnumResourceNamesW", "i=hwpp"),
+    ("GetCommandLineA", "p="),
+    ("GetConsoleOutputCP", "i="),
+    ("AllocConsole", "i="),
+    ("AttachConsole", "i=i"),
+    ("FreeConsole", "i="),
+    ("SetConsoleTextAttribute", "i=hs"),
+    ("SetStdHandle", "i=ih"),
+    ("ProcessIdToSessionId", "i=ip"),
+    ("WTSGetActiveConsoleSessionId", "i="),
+    ("RtlCaptureStackBackTrace", "s=iipp"),
+    ("RtlAddFunctionTable", "c=piq"),
+    ("RtlDeleteFunctionTable", "c=p"),
+    ("RtlLookupFunctionEntry", "p=qpp"),
+    ("RtlPcToFileHeader", "p=pp"),
+    ("RtlVirtualUnwind", "p=iqqppppp"),
+    ("WerRegisterRuntimeExceptionModule", "i=wp"),
+    ("EncodePointer", "p=p"),
+    // ntdll
+    ("NtClose", "i=h"),
+    ("NtCreateKey", "i=pipipip"),
+    ("NtDeleteKey", "i=h"),
+    ("NtOpenKeyEx", "i=pipi"),
+    ("NtQueryInformationProcess", "i=hipip"),
+    ("NtQueryObject", "i=hipip"),
+    ("NtQuerySystemInformation", "i=ipip"),
+    ("NtQueryValueKey", "i=hpipip"),
+    ("NtSetValueKey", "i=hpiipi"),
+    ("NtWriteFile", "i=hhppppipp"),
+    ("RtlFormatCurrentUserKeyPath", "i=p"),
+    ("RtlFreeUnicodeString", "v=p"),
+    ("RtlGetLastNtStatus", "i="),
+    ("RtlInitUnicodeString", "v=pw"),
+    ("RtlNtStatusToDosError", "i=i"),
+    // advapi32: registry
+    ("RegOpenKeyExA", "i=haiip"),
+    ("RegCreateKeyExW", "i=hwiwiippp"),
+    ("RegQueryValueExA", "i=happpp"),
+    ("RegGetValueW", "i=hwwippp"),
+    ("RegSetValueExW", "i=hwiipi"),
+    ("RegDeleteValueW", "i=hw"),
+    ("RegDeleteKeyExW", "i=hwii"),
+    ("RegEnumKeyExW", "i=hipppppp"),
+    ("RegEnumValueW", "i=hipppppp"),
+    ("RegQueryInfoKeyW", "i=hppppppppppp"),
+    ("RegNotifyChangeKeyValue", "i=hiihi"),
+    ("RegDisablePredefinedCache", "i="),
+    // advapi32: tokens, security descriptors, ACLs, SIDs
+    ("OpenThreadToken", "i=hiip"),
+    ("GetTokenInformation", "i=hipip"),
+    ("SetTokenInformation", "i=hipi"),
+    ("DuplicateTokenEx", "i=hipiip"),
+    ("CreateRestrictedToken", "i=hiipipipp"),
+    ("CreateProcessAsUserW", "i=hwwppiipwpp"),
+    ("CreateProcessWithTokenW", "i=hiwwipwpp"),
+    ("CheckTokenMembership", "i=hpp"),
+    ("SetThreadToken", "i=ph"),
+    ("ImpersonateNamedPipeClient", "i=h"),
+    ("ImpersonateAnonymousToken", "i=h"),
+    ("RevertToSelf", "i="),
+    ("LogonUserW", "i=wwwiip"),
+    ("LookupAccountNameW", "i=wwppppp"),
+    ("AllocateAndInitializeSid", "i=pciiiiiiiip"),
+    ("FreeSid", "p=p"),
+    ("EqualSid", "i=pp"),
+    ("GetLengthSid", "i=p"),
+    ("IsValidSid", "i=p"),
+    ("GetSidSubAuthority", "p=pi"),
+    ("GetSidSubAuthorityCount", "p=p"),
+    ("ConvertSidToStringSidW", "i=pp"),
+    ("ConvertSidToStringSidA", "i=pp"),
+    ("ConvertStringSidToSidW", "i=wp"),
+    ("ConvertStringSecurityDescriptorToSecurityDescriptorW", "i=wipp"),
+    ("InitializeAcl", "i=pii"),
+    ("AddMandatoryAce", "i=piiip"),
+    ("SetEntriesInAclW", "i=ippp"),
+    ("BuildExplicitAccessWithNameW", "v=pwiii"),
+    ("BuildTrusteeWithSidW", "v=pp"),
+    ("GetNamedSecurityInfoW", "i=wiippppp"),
+    ("SetNamedSecurityInfoW", "i=wiipppp"),
+    ("GetSecurityInfo", "i=hiippppp"),
+    ("SetSecurityInfo", "i=hiipppp"),
+    ("SetSecurityDescriptorDacl", "i=pipi"),
+    ("InitializeSecurityDescriptor", "i=pi"),
+    ("GetSecurityDescriptorDacl", "i=pppp"),
+    ("MapGenericMask", "v=pp"),
+    ("GetUserNameW", "i=pp"),
+    ("EventRegister", "i=pppp"),
+    ("EventWrite", "i=qpip"),
+    ("EventUnregister", "i=q"),
+    ("CryptAcquireContextW", "i=pwwii"),
+    ("CryptGenRandom", "i=qip"),
+    ("CryptReleaseContext", "i=qi"),
+    ("OpenSCManagerW", "h=wwi"),
+    ("OpenServiceW", "h=hwi"),
+    ("QueryServiceStatus", "i=hp"),
+    ("CloseServiceHandle", "i=h"),
+    // user32
+    ("CreateWindowExW", "h=iwwiiiiihhhp"),
+    ("RegisterClassExW", "s=p"),
+    ("RegisterClassW", "s=p"),
+    ("UnregisterClassW", "i=wh"),
+    ("DefWindowProcW", "q=hiqq"),
+    ("GetMessageW", "i=phii"),
+    ("PeekMessageW", "i=phiii"),
+    ("TranslateMessage", "i=p"),
+    ("DispatchMessageW", "q=p"),
+    ("PostMessageW", "i=hiqq"),
+    ("SendMessageW", "q=hiqq"),
+    ("SendMessageTimeoutW", "q=hiqqiip"),
+    ("PostThreadMessageW", "i=iiqq"),
+    ("RegisterWindowMessageW", "i=w"),
+    ("RegisterClipboardFormatW", "i=w"),
+    ("SetWindowPos", "i=hhiiiii"),
+    ("ShowWindow", "i=hi"),
+    ("DestroyWindow", "i=h"),
+    ("SetWindowLongPtrW", "q=hiq"),
+    ("GetWindowLongPtrW", "q=hi"),
+    ("SetWindowLongW", "i=hii"),
+    ("GetWindowLongW", "i=hi"),
+    ("GetWindowRect", "i=hp"),
+    ("GetClientRect", "i=hp"),
+    ("SetTimer", "q=hqip"),
+    ("KillTimer", "i=hq"),
+    ("MsgWaitForMultipleObjectsEx", "i=ipiii"),
+    ("GetSystemMetrics", "i=i"),
+    ("SystemParametersInfoW", "i=iipi"),
+    ("GetDC", "h=h"),
+    ("ReleaseDC", "i=hh"),
+    ("LoadCursorW", "h=hw"),
+    ("LoadIconW", "h=hw"),
+    ("GetClassNameW", "i=hpi"),
+    ("FindWindowW", "h=ww"),
+    ("FindWindowExW", "h=hhww"),
+    ("GetWindowThreadProcessId", "i=hp"),
+    ("GetForegroundWindow", "h="),
+    ("SetForegroundWindow", "i=h"),
+    ("GetKeyboardLayout", "h=i"),
+    ("GetKeyState", "s=i"),
+    ("GetAsyncKeyState", "s=i"),
+    ("SetCapture", "h=h"),
+    ("ReleaseCapture", "i="),
+    ("GetCursorPos", "i=p"),
+    ("SetCursor", "h=h"),
+    ("ClientToScreen", "i=hp"),
+    ("ScreenToClient", "i=hp"),
+    ("MonitorFromWindow", "h=hi"),
+    ("GetMonitorInfoW", "i=hp"),
+    ("GetWindowTextW", "i=hpi"),
+    ("SetWindowTextW", "i=hw"),
+    ("MessageBoxW", "i=hwwi"),
+    ("CallNextHookEx", "q=hiqq"),
+    ("SetWindowsHookExW", "h=iphi"),
+    ("UnhookWindowsHookEx", "i=h"),
+    // ws2_32
+    ("WSAStartup", "i=sp"),
+    ("WSASocketW", "q=iiipii"),
+    ("socket", "q=iii"),
+    ("bind", "i=qpi"),
+    ("connect", "i=qpi"),
+    ("listen", "i=qi"),
+    ("accept", "q=qpp"),
+    ("closesocket", "i=q"),
+    ("send", "i=qpii"),
+    ("recv", "i=qpii"),
+    ("WSAIoctl", "i=qipipippp"),
+    ("WSARecv", "i=qpipppp"),
+    ("WSASend", "i=qpipipp"),
+    ("getaddrinfo", "i=aapp"),
+    ("GetAddrInfoW", "i=wwpp"),
+    ("freeaddrinfo", "v=p"),
+    ("getsockopt", "i=qiipp"),
+    ("setsockopt", "i=qiipi"),
+    ("ioctlsocket", "i=qip"),
+    ("WSAGetLastError", "i="),
+    ("WSASetLastError", "v=i"),
+];
+
 /// Functions that do not return: their record is written when they begin
 /// and the buffer goes to the file.
 pub const NORETURN: &[&str] = &[
@@ -339,13 +753,17 @@ pub fn ordinal_name(dll: &str, ordinal: u16) -> Option<&'static str> {
     poly_kernelbase::exports::OLEAUT32_EXPORTS.iter().find(|&&(_, o)| o == ordinal).map(|&(n, _)| n)
 }
 
-/// A function's signature, if [`SIGNATURES`] has it.
-pub fn signature(dll: &str, sym: &Sym) -> Option<&'static str> {
+/// A function's signature, if [`SIGNATURES`] has it; `chrome` also consults [`CHROME_SIGNATURES`].
+pub fn signature_ex(dll: &str, sym: &Sym, chrome: bool) -> Option<&'static str> {
     let name = match sym {
         Sym::Name(n) => n.as_str(),
         Sym::Ordinal(o) => ordinal_name(dll, *o)?,
     };
-    SIGNATURES.iter().find(|&&(n, _)| n == name).map(|&(_, s)| s)
+    SIGNATURES
+        .iter()
+        .find(|&&(n, _)| n == name)
+        .or_else(|| if chrome { CHROME_SIGNATURES.iter().find(|&&(n, _)| n == name) } else { None })
+        .map(|&(_, s)| s)
 }
 
 fn flags_of(sym: &Sym) -> u32 {
@@ -403,6 +821,11 @@ fn plain_name(name: &str) -> bool {
 /// The proxies for a program's imports (in the order the DLLs first
 /// appear); `data` adds names to treat as variables.
 pub fn plan(imports: &[Import], data: &[String]) -> Result<Vec<Proxy>> {
+    plan_ex(imports, data, false)
+}
+
+/// [`plan`]; `chrome` adds [`CHROME_SIGNATURES`].
+pub fn plan_ex(imports: &[Import], data: &[String], chrome: bool) -> Result<Vec<Proxy>> {
     let mut out: Vec<Proxy> = Vec::new();
     for imp in imports {
         let real = imp.dll.to_ascii_lowercase();
@@ -436,7 +859,7 @@ pub fn plan(imports: &[Import], data: &[String]) -> Result<Vec<Proxy>> {
             }
             sym => {
                 if !p.funcs.iter().any(|f| &f.sym == sym) {
-                    let sig = signature(&real, sym).unwrap_or("").to_string();
+                    let sig = signature_ex(&real, sym, chrome).unwrap_or("").to_string();
                     p.funcs.push(ProxyFunc { sym: sym.clone(), sig, flags: flags_of(sym) });
                 }
             }
@@ -538,8 +961,10 @@ fn package_toml(name: &str, lib: &str, build: &str, lib_name: &str) -> String {
     )
 }
 
-/// Write the generated workspace (the logger and every proxy) into `dir`.
-pub fn generate(dir: &Path, repo: &Path, proxies: &[Proxy]) -> Result<()> {
+/// Write the generated workspace (the logger and every proxy) into `dir`;
+/// `agg` takes the counting logger `tools/wintrace/polytrace-agg` (the
+/// Chrome kit) instead of `polytrace`.
+pub fn generate_with(dir: &Path, repo: &Path, proxies: &[Proxy], agg: bool) -> Result<()> {
     let write = |path: PathBuf, text: String| -> Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -548,6 +973,7 @@ pub fn generate(dir: &Path, repo: &Path, proxies: &[Proxy]) -> Result<()> {
     };
     let _ = std::fs::remove_dir_all(dir);
     let tracer = repo.join("tools/wintrace");
+    let logger = if agg { "polytrace-agg" } else { "polytrace" };
     let mut members = vec!["\"polytrace\"".to_string()];
     members.extend(proxies.iter().map(|p| format!("{:?}", p.crate_name)));
     write(
@@ -562,8 +988,8 @@ pub fn generate(dir: &Path, repo: &Path, proxies: &[Proxy]) -> Result<()> {
         dir.join("polytrace/Cargo.toml"),
         package_toml(
             "polytrace",
-            &tracer.join("polytrace/src/lib.rs").to_string_lossy(),
-            &tracer.join("polytrace/build.rs").to_string_lossy(),
+            &tracer.join(logger).join("src/lib.rs").to_string_lossy(),
+            &tracer.join(logger).join("build.rs").to_string_lossy(),
             "polytrace",
         ),
     )?;
@@ -790,6 +1216,11 @@ fn output_of(cmd: &mut Command) -> Result<String> {
 /// Build the logger and the proxies of `proxies` (`-Zbuild-std`, as ADR
 /// 0075's test programs); returns the directory with the DLLs.
 fn build(proxies: &[Proxy]) -> Result<PathBuf> {
+    build_with(proxies, false)
+}
+
+/// [`build`]; `agg` builds the counting logger.
+fn build_with(proxies: &[Proxy], agg: bool) -> Result<PathBuf> {
     let repo = crate::root();
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
     let sysroot = PathBuf::from(output_of(Command::new(&rustc).current_dir(&repo).args(["--print", "sysroot"]))?);
@@ -798,8 +1229,8 @@ fn build(proxies: &[Proxy]) -> Result<PathBuf> {
         return Err(format!("{} not found: the rust-src component is needed", vendor.display()));
     }
     let gen_dir = work_dir().join("build");
-    generate(&gen_dir, &repo, proxies)?;
-    let target_dir = work_dir().join("cargo");
+    generate_with(&gen_dir, &repo, proxies, agg)?;
+    let target_dir = work_dir().join(if agg { "cargo-agg" } else { "cargo" });
     let flags = [
         "-Clinker=rust-lld".to_string(),
         "-Clinker-flavor=lld-link".into(),
@@ -895,6 +1326,106 @@ pub fn build_kit(exe: &Path, out: &Path, data: &[String]) -> Result<Kit> {
     let text = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())? + "\n";
     std::fs::write(out.join(KIT_FILE), text).map_err(|e| format!("{KIT_FILE}: {e}"))?;
     Ok(Kit { dir: out.to_path_buf(), exe: name, proxies })
+}
+
+/// The Chrome kit (`trace-kit --agg`): the programs `exes` (the files of
+/// one application, in one directory) get the import names of every
+/// system DLL they import changed to a proxy's, and one set of proxies
+/// serves them all. A DLL that is one of `exes` (the application's own),
+/// is named in `skip`, or is not a `.dll` (`.drv`, `.cpl`) keeps its
+/// name and is not traced. With `agg` the logger counts instead of
+/// writing every call (`tools/wintrace/polytrace-agg`).
+pub fn build_kit_multi(exes: &[PathBuf], out: &Path, data: &[String], agg: bool, skip: &[String]) -> Result<Kit> {
+    let own: Vec<String> =
+        exes.iter().filter_map(|e| e.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase())).collect();
+    let traced = |low: &str| {
+        low.ends_with(".dll") && !own.iter().any(|o| o == low) && !skip.iter().any(|s| s.eq_ignore_ascii_case(low))
+    };
+    let mut imports: Vec<Import> = Vec::new();
+    let mut untraced: Vec<String> = Vec::new();
+    let mut programs: Vec<(String, Vec<u8>)> = Vec::new();
+    for exe in exes {
+        let bytes = std::fs::read(exe).map_err(|e| format!("{}: {e}", exe.display()))?;
+        let name = exe.file_name().ok_or("no file name")?.to_string_lossy().into_owned();
+        for imp in crate::winimports::imports_of(&bytes)? {
+            let low = imp.dll.to_ascii_lowercase();
+            if traced(&low) {
+                imports.push(imp);
+            } else {
+                untraced.push(low);
+            }
+        }
+        programs.push((name, bytes));
+    }
+    untraced.sort();
+    untraced.dedup();
+    let proxies = plan_ex(&imports, data, agg)?;
+    let mut renamed = Vec::new();
+    for (name, bytes) in &programs {
+        let r = rename_imports(bytes, |dll| {
+            let low = dll.to_ascii_lowercase();
+            proxies.iter().find(|p| p.real == low).map(|p| p.file.clone())
+        })
+        .map_err(|e| format!("{name}: {e}"))?;
+        renamed.push((name.clone(), r));
+    }
+    let built = build_with(&proxies, agg)?;
+    let _ = std::fs::remove_dir_all(out);
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    for (name, bytes) in &renamed {
+        std::fs::write(out.join(name), bytes).map_err(|e| format!("{}: {e}", out.display()))?;
+    }
+    let copy = |from: &str, to: &str| -> Result<()> {
+        std::fs::copy(built.join(from), out.join(to)).map(|_| ()).map_err(|e| format!("{from}: {e}"))
+    };
+    copy("polytrace.dll", "polytrace.dll")?;
+    for p in &proxies {
+        copy(&format!("{}.dll", p.crate_name), &p.file)?;
+    }
+    let mut files = serde_json::Map::new();
+    for f in renamed
+        .iter()
+        .map(|(n, _)| n.clone())
+        .chain(["polytrace.dll".to_string()])
+        .chain(proxies.iter().map(|p| p.file.clone()))
+    {
+        files.insert(f.clone(), Value::String(sha256_hex(&out.join(&f))));
+    }
+    let originals: Vec<Value> = exes
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "name": e.file_name().map(|n| n.to_string_lossy().into_owned()),
+                "sha256": sha256_hex(e),
+            })
+        })
+        .collect();
+    let manifest = serde_json::json!({
+        "format": "polytrace-kit/2",
+        "mode": if agg { "agg" } else { "full" },
+        "programs": originals,
+        "files": files,
+        "untraced_dlls": untraced,
+        "proxies": proxies.iter().map(|p| serde_json::json!({
+            "dll": p.real,
+            "file": p.file,
+            "functions": p.funcs.iter().map(|f| serde_json::json!({
+                "name": f.sym.to_string(),
+                "signature": f.sig,
+                "flags": f.flags,
+            })).collect::<Vec<_>>(),
+            "forwarded": p.data,
+        })).collect::<Vec<_>>(),
+        "run": "overlay this directory on a copy of the application; every process writes polytrace-<pid>.jsonl (POLYTRACE_OUT names another file, %p is the process id)",
+    });
+    let text = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())? + "\n";
+    std::fs::write(out.join(KIT_FILE), text).map_err(|e| format!("{KIT_FILE}: {e}"))?;
+    // The counting logger loads these in a confined child process, before its
+    // sandbox narrows the DLL search path (`polytrace-agg`, `agg::preload`).
+    let preload: String = proxies.iter().map(|p| format!("{}\n", p.file)).collect();
+    std::fs::write(out.join("polytrace-preload.txt"), preload).map_err(|e| format!("polytrace-preload.txt: {e}"))?;
+    let exe = renamed.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(", ");
+    Ok(Kit { dir: out.to_path_buf(), exe, proxies })
 }
 
 // ----- comparing traces -------------------------------------------------------------------
@@ -1278,7 +1809,7 @@ pub fn report(d: &TraceDiff, name_a: &str, name_b: &str, limit: usize) -> String
 
 // ----- the command ------------------------------------------------------------------------
 
-const USAGE: &str = "usage: cargo xtask win trace-kit <exe | 7zip> [--out <dir>] [--data <name>]...\n       \
+const USAGE: &str = "usage: cargo xtask win trace-kit <exe | 7zip> [<more exe>...] [--out <dir>] [--data <name>]... [--agg] [--skip <dll>]...\n       \
                      cargo xtask win trace-diff <a.jsonl> <b.jsonl> [--map-a <from>=<to>] [--map-b <from>=<to>] [--limit <n>] [--check]";
 
 fn mapping(s: &str) -> Result<(String, String)> {
@@ -1288,16 +1819,39 @@ fn mapping(s: &str) -> Result<(String, String)> {
 /// `cargo xtask win trace-kit ...`.
 pub fn trace_kit_command(args: &[String]) -> Result {
     let mut exe = None;
+    let mut extra: Vec<PathBuf> = Vec::new();
     let mut out = None;
     let mut data = Vec::new();
+    let mut skip = Vec::new();
+    let mut agg = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--out" => out = Some(PathBuf::from(it.next().ok_or(USAGE)?)),
             "--data" => data.push(it.next().ok_or(USAGE)?.clone()),
+            "--skip" => skip.push(it.next().ok_or(USAGE)?.clone()),
+            "--agg" => agg = true,
             s if exe.is_none() && !s.starts_with("--") => exe = Some(s.to_string()),
+            s if !s.starts_with("--") => extra.push(PathBuf::from(s)),
             _ => return Err(USAGE.into()),
         }
+    }
+    if agg || !extra.is_empty() || !skip.is_empty() {
+        let first = PathBuf::from(exe.ok_or(USAGE)?);
+        let exes: Vec<PathBuf> = std::iter::once(first).chain(extra).collect();
+        let out = out.unwrap_or_else(|| work_dir().join("kit"));
+        let kit = build_kit_multi(&exes, &out, &data, agg, &skip)?;
+        for p in &kit.proxies {
+            eprintln!(
+                "    {} for {}: {} functions, {} forwarded variables",
+                p.file,
+                p.real,
+                p.funcs.len(),
+                p.data.len()
+            );
+        }
+        eprintln!("==> trace kit for {} in {}", kit.exe, kit.dir.display());
+        return Ok(());
     }
     let exe = match exe.as_deref() {
         Some("7zip") => {

@@ -44,9 +44,10 @@
 //! the launcher, it creates an overlapped window and fills its client area
 //! with one colour through GetDC / FillRect / ReleaseDC; through win32k's
 //! desktop link (`/dev/win32k`) the window must show up on the desktop at
-//! its client rectangle, framed by Poly, in that colour
-//! ([`win32_boot_test`]). Skipped where the Windows test programs cannot be
-//! built.
+//! its client rectangle, framed by Poly, in that colour; a click into it
+//! must turn it green and typed characters must be drawn into it, both
+//! through its WM_PAINT handler ([`win32_boot_test`], ADR 0136). Skipped
+//! where the Windows test programs cannot be built.
 //!
 //! Screenshots go to `$POLY_DESKTOP_SHOTS` (default `target/desktop/`) as
 //! PNGs, one per step.
@@ -701,6 +702,17 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     expect("the launcher hangs from the ridge", img.pixel(900, 40) == RIDGE && img.pixel(581, 64) == RIDGE)?;
     expect("not outside the launcher", img.pixel(200, 40) != RIDGE && img.pixel(640, 90) != RIDGE)?;
 
+    // Poly's own apps have their own icons (ADR 0146): the Files row's icon
+    // box (x 296..324, y 114..142) shows the artwork's blue tile, not the
+    // launcher's glyph. At its bottom, clear of the white folder.
+    d.type_text(&["f", "i", "l", "e", "s"])?;
+    d.wait("launcher query \"files\"", 30)?;
+    thread::sleep(Duration::from_millis(800));
+    let img = d.shot("own-icon")?;
+    let tile = img.pixel(310, 140);
+    expect("Files shows its own icon (a blue tile)", tile[2] >= 0xc0 && tile[2] > tile[0] + 0x40)?;
+    d.type_text(&["backspace"; 5])?;
+
     // 2. Type, list, launch.
     d.type_text(&["d", "e", "m", "o"])?;
     d.wait("launcher query \"demo\"", 30)?;
@@ -1263,6 +1275,8 @@ const WIN32_DESKTOP_FILE: &str = "[Desktop Entry]\nType=Application\nName=Poly F
     Comment=A Windows GUI program that fills its window\nExec=/win/win_gui_fill.exe\nKeywords=fill;windows;\n";
 /// The colour it fills its client area with (`FILL`, RGB).
 const WIN32_FILL: [u8; 3] = [0x8a, 0x47, 0xc0];
+/// Its fill after a left click (`CLICKED`, RGB).
+const WIN32_CLICKED: [u8; 3] = [0x22, 0xaa, 0x44];
 /// Its client rectangle: the window at (40, 400), 400 x 300, less
 /// Windows' non-client frame of an overlapped window (8, 31, 8, 8).
 const WIN32_CLIENT: (i32, i32, i32, i32) = (48, 431, 384, 261);
@@ -1304,6 +1318,33 @@ fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
         img.pixel(title.0, title.1) != before.pixel(title.0, title.1) && img.pixel(title.0, title.1) != WIN32_FILL,
     )?;
 
+    // Input through the desktop link (ADR 0136): a click reaches the
+    // window (WM_LBUTTONDOWN), which repaints green through WM_PAINT.
+    let (cx, cy) = (x + w / 2, y + h / 2);
+    d.send(&abs(cx, cy))?;
+    d.send(&[button(true)])?;
+    d.send(&[button(false)])?;
+    thread::sleep(Duration::from_millis(3000));
+    let img = d.shot("win32-clicked")?;
+    // Away from the pointer drawn at (cx, cy).
+    let center = img.pixel((cx + 60) as u32, (cy + 40) as u32);
+    expect(&format!("the click turned the window green (got {center:?})"), center == WIN32_CLICKED)?;
+    // Typed keys reach it as WM_KEYDOWN / WM_CHAR: it draws them, black on
+    // white, at its client area's top left.
+    d.type_text(&["p", "o", "l", "y"])?;
+    thread::sleep(Duration::from_millis(3000));
+    let img = d.shot("win32-typed")?;
+    let mut black = 0;
+    for py in (y + 10)..(y + 26) {
+        for px in (x + 10)..(x + 60) {
+            if img.pixel(px as u32, py as u32) == [0, 0, 0] {
+                black += 1;
+            }
+        }
+    }
+    expect(&format!("the typed characters are drawn ({black} black pixels)"), black > 20)?;
+    expect("the rest stays green", img.pixel((cx + 60) as u32, (cy + 40) as u32) == WIN32_CLICKED)?;
+
     // Drag Poly's frame. The compositor must send Configure back over
     // /dev/win32k, not leave GetWindowRect at the program's old position.
     d.send(&abs(x + 120, y - 16))?;
@@ -1315,10 +1356,11 @@ fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     thread::sleep(Duration::from_millis(1200));
     let img = d.shot("win32-moved")?;
     let moved = ((x + 100 + w / 2) as u32, (y + 60 + h / 2) as u32);
-    expect("the Windows client area moves with Poly's frame", img.pixel(moved.0, moved.1) == WIN32_FILL)?;
+    // (green: the click above repainted it)
+    expect("the Windows client area moves with Poly's frame", img.pixel(moved.0, moved.1) == WIN32_CLICKED)?;
     // The old top-left corner: the moved window (100 right, 60 down) no
     // longer covers it.
-    expect("the old client position is cleared", img.pixel((x + 10) as u32, (y + 10) as u32) != WIN32_FILL)?;
+    expect("the old client position is cleared", img.pixel((x + 10) as u32, (y + 10) as u32) != WIN32_CLICKED)?;
 
     // The frame's close button sends WM_CLOSE to the Windows app through
     // the desktop link; its message loop destroys the window and exits.
@@ -1331,6 +1373,16 @@ fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     Ok(())
 }
 
+/// The prebuild's part: build the Windows GUI test program of
+/// `desktop-win32`; the files it made.
+pub fn prebuild_windows_app() -> Result<Vec<PathBuf>> {
+    let built = crate::sevenzip::pipeline(&["win", "build", "--tests", WIN32_TEST, "--out", WIN32_BIN])?;
+    if !built.success() {
+        return Err(format!("building {WIN32_TEST}.exe failed ({built})"));
+    }
+    Ok(crate::prebuilt::dir_files(&root().join(WIN32_BIN)))
+}
+
 /// Boot group `desktop-win32`: a Windows GUI program's window on Poly's
 /// desktop through win32k's desktop link (ADR 0131).
 pub fn win32_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
@@ -1338,7 +1390,15 @@ pub fn win32_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         eprintln!("==> skipped: the desktop-win32 boot test needs a Unix host (QMP)");
         return Ok(());
     }
-    match crate::sevenzip::pipeline(&["win", "build", "--tests", WIN32_TEST, "--out", WIN32_BIN]) {
+    let built = if crate::prebuilt::skip(
+        "the desktop's Windows test program",
+        &[root().join(WIN32_BIN).join(format!("{WIN32_TEST}.exe"))],
+    )? {
+        Ok(std::process::ExitStatus::default())
+    } else {
+        crate::sevenzip::pipeline(&["win", "build", "--tests", WIN32_TEST, "--out", WIN32_BIN])
+    };
+    match built {
         Ok(s) if s.success() => {}
         Ok(s) => {
             eprintln!("==> skipped: the desktop-win32 boot test: building {WIN32_TEST}.exe failed ({s})");

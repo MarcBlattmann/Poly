@@ -880,6 +880,12 @@ fn oracle_guard(what: &str) -> Result {
 pub fn stage() -> Result {
     let exe = crate::sevenzip::cached().ok_or("7za.exe is not in the cache; run `cargo xtask win fetch-7zip`")?;
     let data = root().join(DATA).join(TEST);
+    if crate::prebuilt::skip(
+        "the traced 7-Zip scenario's kit and driver",
+        &[root().join(BIN).join(format!("{TEST}.exe")), data.join(wintrace::KIT_FILE)],
+    )? {
+        return Ok(());
+    }
     let kit = wintrace::build_kit(&exe, &data, &[])?;
     eprintln!("==> trace kit for {} staged in {} ({} proxies)", kit.exe, data.display(), kit.proxies.len());
     let built = crate::sevenzip::pipeline(&["win", "build", "--tests", TEST, "--out", BIN])?;
@@ -887,6 +893,13 @@ pub fn stage() -> Result {
         return Err(format!("building {TEST}.exe failed ({built})"));
     }
     Ok(())
+}
+
+/// The files [`stage`] made (the prebuild packs them).
+pub fn staged_files() -> Vec<PathBuf> {
+    let mut files = crate::prebuilt::dir_files(&root().join(BIN));
+    files.extend(crate::prebuilt::dir_files(&root().join(DATA).join(TEST)));
+    files
 }
 
 /// Run the driver on Poly (`pipeline win scenario poly`); the result file.
@@ -899,7 +912,21 @@ fn run_poly(kernel: Option<&str>, dir: &Path) -> Result<PathBuf> {
     if let Some(k) = kernel {
         args.extend(["--kernel", k]);
     }
-    let status = crate::sevenzip::pipeline(&args)?;
+    // The observation file (8 MB: the traces of 46 000 calls) comes out of
+    // the guest as hex on the serial port, a port I/O exit per byte. On a
+    // hypervisor inside a virtual machine (GitHub's runners) that is 50 KB/s,
+    // three minutes for the run; QEMU's emulator does the same in 15 s,
+    // and the 7-Zip steps themselves take seconds on either. So the run is
+    // on TCG unless `POLY_QEMU_ACCEL` names an accelerator.
+    let mut cmd = crate::prebuilt::pipeline_tool();
+    cmd.args(&args);
+    if std::env::var(crate::accel::ENV).is_ok_and(|v| !v.trim().is_empty() && v.trim() != "auto") {
+        // Explicitly chosen: as asked.
+    } else {
+        eprintln!("==> the traced scenario runs on TCG: its 8 MB of serial output is slow through a hypervisor");
+        cmd.env(crate::accel::ENV, "tcg");
+    }
+    let status = cmd.status().map_err(|e| format!("pipeline: {e}"))?;
     if !status.success() {
         return Err(format!("running {TEST} on Poly failed ({status})"));
     }

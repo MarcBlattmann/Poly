@@ -1,0 +1,85 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/sandbox_flow              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests start as root and become uid/gid 65534 with no capabilities; umask 022; unprivileged user namespaces allowed; directories below /tmp are prepared by the root part of each test"
+  observed_by: spec-linux-pkg
+  date: 2026-11-09
+summary: >
+  The start-up sequences of two real sandboxes, as one unprivileged user
+  takes them step by step; the steps combine the other pkg entries.
+  Bubblewrap/Flatpak-style. One clone(CLONE_NEWUSER | CLONE_NEWNS |
+  CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWIPC | CLONE_NEWUTS) makes the
+  sandbox's first process: pid 1, parent 0, ids unmapped (65534). It writes
+  setgroups "deny", gid_map and uid_map "0 65534 1" itself and is uid 0 and gid 0.
+  Its mounts are made private (MS_REC | MS_PRIVATE); a tmpfs is mounted on a
+  directory prepared by the outer test and a new root is built in it: an
+  empty "oldroot", "data" and "work" (mkdir works, the tmpfs belongs to the
+  sandbox's root); a directory of the outer tree is bind mounted onto "data"
+  (MS_BIND | MS_REC) and remounted read-only (MS_BIND | MS_REMOUNT |
+  MS_RDONLY), after which a file in it reads but creating one is EROFS.
+  chdir to the new root, then pivot_root(newroot, newroot/oldroot) works (0),
+  chdir("/") works, umount2("/oldroot", MNT_DETACH) works (0: the old root,
+  locked until the pivot, is not any more) and rmdir of the empty "oldroot"
+  works. Only the new tree remains: the bound file reads its content, the old
+  tree's "/tmp" is ENOENT, getcwd gives "/", a file made in "work" is owned by
+  uid 0. The sandbox sets its host name (sethostname, visible in uname); its
+  network namespace has a down loopback only (connecting a UDP socket to
+  10.0.0.1 is ENETUNREACH); its IPC namespace is new (the first message queue
+  has id 0); getpid() is 1 and getppid() 0. Then it drops every capability from
+  the bounding set (prctl PR_CAPBSET_DROP up to the first invalid number) and
+  capset()s the three sets to empty; capget before showed all low 32 bits set
+  in effective and permitted, after it zero. A mount of a tmpfs is then EPERM
+  (no capability); unshare(CLONE_NEWNS) also EPERM. It sets no_new_privs and
+  installs a seccomp filter that answers mount with EXDEV: mount is now EXDEV
+  (the filter runs before the permission check), other calls work; a fork child
+  is pid 2 and inherits the filter, no_new_privs and seccomp mode 2.
+  Chrome-style namespace sandbox. One clone(CLONE_NEWUSER | CLONE_NEWPID |
+  CLONE_NEWNET), no mount namespace: pid 1, parent 0, ids unmapped until the
+  process writes its own maps, then uid 0 with all capabilities in the new user
+  namespace. chroot("/proc/self/fdinfo") works (CAP_SYS_CHROOT in the user
+  namespace) and chdir("/"): from then on "/etc", "/proc" and "/tmp" are ENOENT,
+  open("/etc/passwd") is ENOENT, the root lists the descriptor "0", and
+  ".." of "/" is "/" (same device and inode). The network namespace has a
+  down loopback: TCP connect to 127.0.0.1 is ENETUNREACH while an AF_UNIX
+  socketpair works. After the bounding set is dropped and capset to empty a
+  second chroot("..") is EPERM although the uid is still 0. With
+  no_new_privs set, a SIGSYS handler (SA_SIGINFO) installed and a filter
+  that answers openat with SECCOMP_RET_TRAP and data 0x42, openat("/x") does
+  not run; the handler sees si_signo 31, si_code 1 (SYS_SECCOMP), si_errno
+  0x42, si_syscall 257 and si_arch 0xc000003e (AUDIT_ARCH_X86_64), and by
+  storing -13 (EACCES) in the saved RAX of the ucontext (offset 144 from
+  its start) makes the call return -13 (trap and emulate); the handler ran
+  once; other calls (getpid) are unaffected. A fork child under a filter
+  that answers ptrace with SECCOMP_RET_KILL_PROCESS is killed by SIGSYS (the
+  low 7 bits of the wait status are 31) when it calls ptrace.
+returns:
+  bwrap_sequence: "every step above returns 0 in the given order; pivot_root and the detaching umount2 both work in a user namespace on a mount made there"
+  chrome_sequence: "chroot to /proc/self/fdinfo returns 0 for ns-root; the process then sees only its own descriptors as files"
+  trap_emulation: "the trapped call returns the value the handler stored in RAX"
+errors:
+  no_caps_mount: "EPERM (1): mount after capset to empty"
+  filtered_mount: "EXDEV (18): mount under a filter answering ERRNO|EXDEV (the filter runs before the permission check)"
+  chroot_no_caps: "EPERM (1): chroot after the capability sets are empty"
+  unreachable: "ENETUNREACH (101): connect to 10.0.0.1 or to 127.0.0.1 with lo down"
+  rofs: "EROFS (30): creating a file on the read-only bind mount"
+side_effects: >
+  After pivot_root and the detaching umount the outer tree is unreachable
+  for the sandbox's processes.
+threading: "none"
+ordering:
+  - "maps written before any mount (ids must be mapped for file creation)"
+  - "pivot_root before the old root is detached"
+  - "capabilities dropped before no_new_privs and the filter in the tests; any order of those two works"
+timing:
+  typical: "milliseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: CLONE_* from linux/sched.h; PR_CAPBSET_DROP 24, PR_SET_NO_NEW_PRIVS 38,
+# PR_GET_SECCOMP 21; capget/capset version 0x20080522 (linux/capability.h);
+# SECCOMP_RET_* and seccomp_data from linux/seccomp.h; AUDIT_ARCH_X86_64
+# 0xc000003e from linux/audit.h. Both tests are needs=root (they start as
+# root and become uid 65534) and use several processes (syscalls=off).
