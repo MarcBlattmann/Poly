@@ -1932,7 +1932,17 @@ mod tests {
                 std::str::from_utf8(bytes).unwrap().lines().find_map(|line| line.strip_prefix("Name=")).unwrap()
             })
             .collect();
-        assert_eq!(names, ["Poly Demo", "Demo Window", "Wayland Test Client", "Send Test Notification"]);
+        assert_eq!(
+            names,
+            [
+                "Poly Demo",
+                "Demo Window",
+                "Slow Window",
+                "Slow Activated",
+                "Wayland Test Client",
+                "Send Test Notification"
+            ]
+        );
         let wl_client = files.iter().find(|(path, ..)| path.ends_with("wayland-test-client.desktop")).unwrap();
         assert!(String::from_utf8_lossy(&wl_client.2).contains("Exec=/bin/wl-client --interactive"));
 
