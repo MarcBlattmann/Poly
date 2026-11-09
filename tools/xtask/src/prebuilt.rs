@@ -179,12 +179,22 @@ pub fn dir_files(dir: &Path) -> Vec<PathBuf> {
 /// The tools part: xtask, the pipeline tool, and the Windows programs the
 /// boot groups would build.
 fn tools_files() -> Result<Vec<PathBuf>> {
+    // The native programs build beside the pipeline tool, the Windows
+    // programs and the rest (each its own cargo target directory).
+    std::thread::scope(|s| {
+        let native = s.spawn(crate::native::build);
+        let rest = tools_files_after_native();
+        native.join().unwrap_or_else(|_| Err("building the native programs panicked".into()))?;
+        rest
+    })
+}
+
+fn tools_files_after_native() -> Result<Vec<PathBuf>> {
     let mut pipeline = crate::cargo();
     pipeline.current_dir(root()).args(["build", "--package", "poly-pipeline"]);
     crate::step("build the pipeline tool", &mut pipeline)?;
     let xtask = std::env::current_exe().map_err(|e| format!("the xtask binary: {e}"))?;
     let mut files = vec![xtask, root().join("target/debug/pipeline")];
-    crate::native::build()?;
     files.extend(native_files());
     // The Linux hello worlds and test programs of the boot groups.
     files.extend(crate::programs::prebuild()?);
