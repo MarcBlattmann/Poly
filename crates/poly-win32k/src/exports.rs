@@ -162,6 +162,7 @@ pub const USER32_EXPORTS: &[&str] = &[
     "WindowFromPoint",
     "ChildWindowFromPoint",
     "TrackMouseEvent",
+    "WindowFromDC",
 ];
 
 /// `user32.dll` functions that are stubs for now (painting through update

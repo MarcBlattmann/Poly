@@ -225,6 +225,9 @@ pub struct Wm {
     tracking: Vec<(u32, u32)>,
     /// TrackMouseEvent's hover tracking: (window, ms, since).
     hover: Option<(u32, u32, u64)>,
+    /// The last button-down that may start a double click: (message,
+    /// window, x, y, time) (`raw`).
+    last_click: Option<(u32, u32, i32, i32, u64)>,
     /// The time of the last request (ms), for input from the desktop link.
     now: u64,
 }
@@ -280,6 +283,7 @@ impl Wm {
             sync_keys: raw::blank_keys(),
             tracking: Vec::new(),
             hover: None,
+            last_click: None,
             now: 0,
         };
         // Index 0 is never a window.

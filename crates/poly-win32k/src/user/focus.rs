@@ -344,6 +344,55 @@ fn is_within<E: Env + ?Sized>(env: &E, h: u32, root: u32) -> bool {
     false
 }
 
+/// A window `root` goes (hidden by DestroyWindow): a window below it that
+/// holds the capture is sent WM_CANCELMODE and loses the capture with
+/// WM_CAPTURECHANGED (lParam NULL). The capture of `root` itself ends
+/// without a message (SetCapture.yaml `destroy`).
+pub fn release_capture_below<E: Env + ?Sized>(env: &E, root: u32) {
+    let st = input(env);
+    if st.capture == 0 || st.capture == root || !is_within(env, st.capture, root) {
+        return;
+    }
+    send(env, u64::from(st.capture), WM_CANCELMODE, 0, 0);
+    env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE });
+    send(env, u64::from(st.capture), 0x0215, 0, 0); // WM_CAPTURECHANGED
+}
+
+/// `WM_CAPTURECHANGED` (winuser.h).
+const WM_CAPTURECHANGED: u32 = 0x0215;
+
+/// `SetCapture` (SetCapture.yaml): the previous capture window of the
+/// thread's input. A window of another thread is refused (NULL, no error,
+/// nothing changes); a hidden, disabled or child window can have the
+/// capture; the previous capture window gets WM_CAPTURECHANGED (lParam the
+/// new window) before the call returns; SetCapture(NULL) releases it
+/// (lParam NULL).
+pub fn set_capture<E: Env + ?Sized>(env: &E, hwnd: u64) -> u64 {
+    let st = input(env);
+    let set = |h: u32| {
+        env.call(Request::SetInput { active: 0, focus: 0, capture: h, which: SET_CAPTURE });
+    };
+    if hwnd == 0 {
+        if st.capture != 0 {
+            set(0);
+            send(env, u64::from(st.capture), WM_CAPTURECHANGED, 0, 0);
+        }
+        return u64::from(st.capture);
+    }
+    let Some(i) = info(env, hwnd) else {
+        env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    };
+    if i.tid != env.tid() {
+        return 0;
+    }
+    set(i.hwnd);
+    if st.capture != 0 {
+        send(env, u64::from(st.capture), WM_CAPTURECHANGED, 0, u64::from(i.hwnd));
+    }
+    u64::from(st.capture)
+}
+
 /// `SetFocus` (SetFocus.yaml).
 pub fn set_focus<E: Env + ?Sized>(env: &E, hwnd: u64) -> u64 {
     let st = input(env);

@@ -251,6 +251,54 @@ fn region_handles_create_combine_and_fail_as_observed() {
     assert_eq!(g.equal_rgn(a, d), 0);
 }
 
+/// CreateRectRgn.yaml `normalised`, `empty`, `negative`, `interface.GetRegionData`.
+#[test]
+fn rectangular_regions_are_normalised_and_empty_ones_are_empty() {
+    let mut g = Gdi::new();
+    for (l, t, r, b) in [(110, 20, 10, 70), (10, 70, 110, 20), (110, 70, 10, 20), (10, 20, 110, 70)] {
+        let h = u64::from(g.create_rect_rgn(Rect::new(l, t, r, b)).unwrap());
+        assert_eq!(g.rgn_box(h), Some((2, Rect::new(10, 20, 110, 70))), "{l},{t},{r},{b}");
+        assert_eq!(rgn_rects(&g, h), [Rect::new(10, 20, 110, 70)]);
+        // One rectangle: 32 bytes of header and 16 of rectangle.
+        assert_eq!(g.region_data(h).unwrap().len(), 48);
+    }
+    for (l, t, r, b) in [(10, 20, 10, 70), (10, 20, 60, 20), (0, 0, 0, 0), (60, 70, 10, 70)] {
+        let h = u64::from(g.create_rect_rgn(Rect::new(l, t, r, b)).unwrap());
+        assert_eq!(g.object_type(h), OBJ_REGION);
+        assert_eq!(g.rgn_box(h), Some((1, Rect::default())), "{l},{t},{r},{b}");
+        assert!(rgn_rects(&g, h).is_empty());
+        let data = g.region_data(h).unwrap();
+        assert_eq!(data.len(), 32, "an empty region is the header only");
+        assert_eq!(&data[8..16], &[0, 0, 0, 0, 0, 0, 0, 0], "no rectangles, no bytes of them");
+        assert_eq!(&data[16..32], &[0u8; 16], "bound 0,0,0,0");
+    }
+    // Negative coordinates are kept.
+    let h = u64::from(g.create_rect_rgn(Rect::new(-30, -20, -10, -5)).unwrap());
+    assert_eq!(g.rgn_box(h), Some((2, Rect::new(-30, -20, -10, -5))));
+    // The limits on every side: -2^27 and 2^27 - 1 work, one past fails.
+    for bad in [1 << 27, -(1 << 27) - 1, 1 << 28, i32::MAX, i32::MIN] {
+        for corner in 0..4 {
+            let mut c = [0, 0, 10, 10];
+            c[corner] = bad;
+            assert_eq!(g.create_rect_rgn(Rect::new(c[0], c[1], c[2], c[3])), Err(ERROR_INVALID_PARAMETER), "{c:?}");
+        }
+    }
+    let sq = u64::from(g.create_rect_rgn(Rect::new(0, 0, 1_000_000, 1_000_000)).unwrap());
+    assert_eq!(g.rgn_box(sq), Some((2, Rect::new(0, 0, 1_000_000, 1_000_000))));
+    // SetRectRgn: swapped corners are put in order, anything else kept.
+    assert!(g.set_rect_rgn(sq, Rect::new(50, 40, 10, 20)));
+    assert_eq!(g.rgn_box(sq), Some((2, Rect::new(10, 20, 50, 40))));
+    assert!(g.set_rect_rgn(sq, Rect::new(1 << 27, 0, 1 << 28, 10)));
+    assert_eq!(g.rgn_box(sq), Some((2, Rect::new(1 << 27, 0, 1 << 28, 10))));
+    // 1000 regions made and deleted in turn all work.
+    for i in 0..1000 {
+        let h = u64::from(g.create_rect_rgn(Rect::new(i, i, i + 5, i + 5)).unwrap());
+        assert!(g.delete_object(h));
+        assert!(!g.delete_object(h));
+        assert_eq!(g.object_type(h), 0);
+    }
+}
+
 #[test]
 fn clip_regions_limit_drawing_in_device_coordinates() {
     let mut g = Gdi::new();
@@ -385,4 +433,126 @@ fn window_dcs_clip_to_their_visible_region() {
     assert_eq!(g.clip_box(dc), (2, Rect::new(0, 0, 200, 100)));
     let mem = u64::from(g.create_compatible_dc(0));
     assert!(!g.set_display_geometry(mem, (0, 0), &[], &[]));
+}
+
+// ----- held-out hunt: DeleteObject.yaml and CreateRectRgn.yaml rules the
+// visible tests do not show.
+
+#[test]
+fn delete_object_follows_the_sheet_for_every_kind_of_object() {
+    let mut g = Gdi::new();
+    // success: brush, pen, bitmap, font, region: 1; the second delete 0.
+    let brush = u64::from(g.create_solid_brush(0x123456));
+    let pen = u64::from(g.create_pen(0, 1, 0x654321));
+    let bmp = u64::from(g.create_bitmap(4, 4, 32, None));
+    let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 0, 5, 5)).unwrap());
+    for h in [brush, pen, bmp, rgn] {
+        assert!(g.delete_object(h), "{h:#x}");
+    }
+    // A deleted solid brush still has type OBJ_BRUSH; the others are gone.
+    assert_eq!(g.object_type(brush), OBJ_BRUSH);
+    for (h, t) in [(pen, 0), (bmp, 0), (rgn, 0)] {
+        assert_eq!(g.object_type(h), t, "{h:#x}");
+    }
+    for h in [brush, pen, bmp, rgn] {
+        assert!(!g.delete_object(h), "second delete {h:#x}");
+    }
+    // NULL and made-up handles: false.
+    for h in [0, 0x1234, 0x0bad_0bad, u64::MAX] {
+        assert!(!g.delete_object(h), "{h:#x}");
+    }
+    // stock objects: 1, and they stay usable.
+    for i in [WHITE_BRUSH, BLACK_BRUSH, NULL_BRUSH, DC_BRUSH] {
+        let s = u64::from(g.stock(i));
+        assert!(g.delete_object(s));
+        assert_eq!(g.object_type(s), OBJ_BRUSH);
+        assert!(g.delete_object(s), "still deletable-as-no-op");
+    }
+    let (dc, mut px) = dib32(&mut g, 2, 1);
+    px.fill(0);
+    g.select_object(dc, u64::from(g.stock(WHITE_BRUSH))).unwrap();
+    g.pat_blt(dc, 0, 0, 1, 1, 0x00F0_0021);
+    assert_eq!(px[0], 0x00FF_FFFF);
+}
+
+#[test]
+fn a_pen_or_bitmap_deleted_while_selected_goes_when_deselected_or_with_its_dc() {
+    let mut g = Gdi::new();
+    let (dc, _px) = dib32(&mut g, 2, 2);
+    let pen = u64::from(g.create_pen(0, 1, 0xFF));
+    let old = g.select_object(dc, pen).unwrap();
+    assert!(g.delete_object(pen));
+    assert_eq!(g.object_type(pen), OBJ_PEN, "still there while selected");
+    assert!(!g.delete_object(pen), "a second delete fails");
+    g.select_object(dc, u64::from(old)).unwrap();
+    assert_eq!(g.object_type(pen), 0, "gone once deselected");
+    // selected_bitmap: 1, stays OBJ_BITMAP until the DC is deleted; then a
+    // DeleteObject fails.
+    let bmp = u64::from(g.current_object(dc, OBJ_BITMAP));
+    assert!(g.delete_object(bmp));
+    assert_eq!(g.object_type(bmp), OBJ_BITMAP);
+    assert!(!g.delete_object(bmp));
+    assert!(g.delete_dc(dc).0);
+    assert_eq!(g.object_type(bmp), 0);
+    assert!(!g.delete_object(bmp));
+    // dc: DeleteObject of a memory DC is 1; the DC still reads OBJ_DC.
+    let m = u64::from(g.create_compatible_dc(0));
+    assert!(g.delete_object(m));
+    assert_eq!(g.object_type(m), OBJ_DC);
+    assert!(!g.delete_object(m));
+}
+
+#[test]
+fn a_display_dc_knows_its_window() {
+    // WindowFromDC (BeginPaint.yaml `erase_sent`) asks which window a DC is for.
+    let mut g = Gdi::new();
+    let dc = u64::from(g.create_display_dc(0x30042, false));
+    assert_eq!(g.display_hwnd(dc), Some(0x30042));
+    let screen = u64::from(g.create_display_dc(0, false));
+    assert_eq!(g.display_hwnd(screen), Some(0));
+    let mem = u64::from(g.create_compatible_dc(0));
+    assert_eq!(g.display_hwnd(mem), None);
+    assert!(g.release_display_dc(dc));
+    assert_eq!(g.display_hwnd(dc), None, "a released DC names no window");
+    assert_eq!(g.display_hwnd(0x77), None);
+}
+
+#[test]
+fn a_deleted_region_is_not_a_source_and_a_region_may_be_deleted_while_clipping() {
+    // CreateRectRgn.yaml `delete`; SelectClipRgn.yaml (the clip is a copy).
+    let mut g = Gdi::new();
+    let a = u64::from(g.create_rect_rgn(Rect::new(0, 0, 10, 10)).unwrap());
+    let dst = u64::from(g.create_rect_rgn(Rect::new(1, 1, 2, 2)).unwrap());
+    let (dc, _px) = dib32(&mut g, 20, 20);
+    assert_eq!(g.select_clip_rgn(dc, a).0, 2);
+    assert!(g.delete_object(a));
+    assert_eq!(g.clip_box(dc), (2, Rect::new(0, 0, 10, 10)), "the DC keeps its copy");
+    assert_eq!(g.combine_rgn(dst, a, 0, 5), (0, 6), "ERROR_INVALID_HANDLE");
+    assert_eq!(g.rgn_box(a), None);
+    // 1000 regions made and deleted in turn.
+    for i in 0..1000 {
+        let r = u64::from(g.create_rect_rgn(Rect::new(0, 0, i + 1, 3)).unwrap());
+        assert!(g.delete_object(r));
+    }
+    // Every limit of the range, on each side.
+    let lim = 1 << 27;
+    for r in [
+        Rect::new(-lim, -lim, lim - 1, lim - 1),
+        Rect::new(0, -lim, 1, lim - 1),
+        Rect::new(lim - 2, lim - 2, lim - 1, lim - 1),
+    ] {
+        assert!(g.create_rect_rgn(r).is_ok(), "{r:?}");
+    }
+    for r in [
+        Rect::new(lim, 0, 1, 1),
+        Rect::new(0, lim, 1, 1),
+        Rect::new(0, 0, lim, 1),
+        Rect::new(0, 0, 1, lim),
+        Rect::new(-lim - 1, 0, 1, 1),
+        Rect::new(0, -lim - 1, 1, 1),
+        Rect::new(0, 0, i32::MAX, 1),
+        Rect::new(0, 0, 1, i32::MIN),
+    ] {
+        assert_eq!(g.create_rect_rgn(r), Err(87), "{r:?}");
+    }
 }

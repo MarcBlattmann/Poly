@@ -567,6 +567,20 @@ pub extern "system" fn PolyGdiReleaseDisplayDC(hdc: H) -> i32 {
     i32::from(gdi(|g| g.release_display_dc(hdc as u64)))
 }
 
+/// The window a display DC was made for (`WindowFromDC`): `None` for a
+/// memory DC or a handle that is no DC; 0 for the screen's.
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiDisplayWindow(hdc: H, out: *mut u64) -> i32 {
+    match gdi(|g| g.display_hwnd(hdc as u64)) {
+        Some(w) => {
+            // SAFETY: the caller passes room for one u64.
+            unsafe { *out = w };
+            1
+        }
+        None => 0,
+    }
+}
+
 /// A window's own or class DC goes with the window.
 #[unsafe(no_mangle)]
 pub extern "system" fn PolyGdiDeleteDisplayDC(hdc: H) -> i32 {
