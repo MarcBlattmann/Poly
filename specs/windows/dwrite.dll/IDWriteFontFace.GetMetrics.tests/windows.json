@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "gm_face",
+      "exe_sha256": "86a6455e199e61f376d6f99f5fd560473314d91e25e24ebfcd30032491ff2cd8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmFzZTogdXBlbSAxMDAwIGFzYyA5MDAgZGVzYyAzMDAgZ2FwIDAgY2FwIDcwMCB4aCA1MDAgdWxwb3MgLTEwMCB1bHRoIDUwIHN0cG9zIDI1MCBzdHRoIDQwCnVzZSB0eXBvIG1ldHJpY3M6IHVwZW0gMTAwMCBhc2MgNzUwIGRlc2MgMjUwIGdhcCAxMDAgY2FwIDcwMCB4aCA1MDAgdWxwb3MgLTEwMCB1bHRoIDUwIHN0cG9zIDI1MCBzdHRoIDQwCmhoZWEgODAwLy0yMDAvKzMwMDogdXBlbSAxMDAwIGFzYyA5MDAgZGVzYyAzMDAgZ2FwIDEwMCBjYXAgNzAwIHhoIDUwMCB1bHBvcyAtMTAwIHVsdGggNTAgc3Rwb3MgMjUwIHN0dGggNDAKd2luIDcwMC8yMDAsIGhoZWEgMTAwMC8tMzAwLzUwOiB1cGVtIDEwMDAgYXNjIDcwMCBkZXNjIDIwMCBnYXAgNDUwIGNhcCA3MDAgeGggNTAwIHVscG9zIC0xMDAgdWx0aCA1MCBzdHBvcyAyNTAgc3R0aCA0MAp0eXBvIDYwMC8tMTUwLzIwMCB1c2VkOiB1cGVtIDEwMDAgYXNjIDYwMCBkZXNjIDE1MCBnYXAgMjAwIGNhcCA3MDAgeGggNTAwIHVscG9zIC0xMDAgdWx0aCA1MCBzdHBvcyAyNTAgc3R0aCA0MAp1cGVtIDIwNDg6IHVwZW0gMjA0OCBhc2MgMTg1MCBkZXNjIDYwMCBnYXAgMCBjYXAgMTQwMCB4aCAxMDAwIHVscG9zIC0xMDAgdWx0aCA1MCBzdHBvcyAyNTAgc3R0aCA0MAp1cGVtIDIwMDAsIG5vIHhoZWlnaHQgYW5kIGNhcCBoZWlnaHQ6IHVwZW0gMjAwMCBhc2MgOTAwIGRlc2MgMzAwIGdhcCAwIGNhcCAxNDAwIHhoIDEwMDAgdWxwb3MgLTEwMCB1bHRoIDUwIHN0cG9zIDI1MCBzdHRoIDQwCnVwZW0gMTAwMCwgbm8geGhlaWdodCBhbmQgY2FwIGhlaWdodDogdXBlbSAxMDAwIGFzYyA5MDAgZGVzYyAzMDAgZ2FwIDAgY2FwIDcwMCB4aCA1MDAgdWxwb3MgLTEwMCB1bHRoIDUwIHN0cG9zIDI1MCBzdHRoIDQwCnVuZGVybGluZSBhYm92ZSBiYXNlbGluZTogdXBlbSAxMDAwIGFzYyA5MDAgZGVzYyAzMDAgZ2FwIDAgY2FwIDcwMCB4aCA1MDAgdWxwb3MgODAgdWx0aCAyMCBzdHBvcyAyNTAgc3R0aCA0MApzdHJpa2VvdXQgMC8wOiB1cGVtIDEwMDAgYXNjIDkwMCBkZXNjIDMwMCBnYXAgMCBjYXAgNzAwIHhoIDUwMCB1bHBvcyAtMTAwIHVsdGggNTAgc3Rwb3MgMCBzdHRoIDUwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "base: upem 1000 asc 900 desc 300 gap 0 cap 700 xh 500 ulpos -100 ulth 50 stpos 250 stth 40\nuse typo metrics: upem 1000 asc 750 desc 250 gap 100 cap 700 xh 500 ulpos -100 ulth 50 stpos 250 stth 40\nhhea 800/-200/+300: upem 1000 asc 900 desc 300 gap 100 cap 700 xh 500 ulpos -100 ulth 50 stpos 250 stth 40\nwin 700/200, hhea 1000/-300/50: upem 1000 asc 700 desc 200 gap 450 cap 700 xh 500 ulpos -100 ulth 50 stpos 250 stth 40\ntypo 600/-150/200 used: upem 1000 asc 600 desc 150 gap 200 cap 700 xh 500 ulpos -100 ulth 50 stpos 250 stth 40\nupem 2048: upem 2048 asc 1850 desc 600 gap 0 cap 1400 xh 1000 ulpos -100 ulth 50 stpos 250 stth 40\nupem 2000, no xheight and cap height: upem 2000 asc 900 desc 300 gap 0 cap 1400 xh 1000 ulpos -100 ulth 50 stpos 250 stth 40\nupem 1000, no xheight and cap height: upem 1000 asc 900 desc 300 gap 0 cap 700 xh 500 ulpos -100 ulth 50 stpos 250 stth 40\nunderline above baseline: upem 1000 asc 900 desc 300 gap 0 cap 700 xh 500 ulpos 80 ulth 20 stpos 250 stth 40\nstrikeout 0/0: upem 1000 asc 900 desc 300 gap 0 cap 700 xh 500 ulpos -100 ulth 50 stpos 0 stth 50\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

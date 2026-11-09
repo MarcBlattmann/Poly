@@ -1,0 +1,81 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwrite.dll/IDWriteFontFamily.GetFirstMatchingFont
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64, dwrite.dll 10.0.26100.1"
+  machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
+  observed_by: spec-win-dwrite
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: the DirectWrite reference pages of the interfaces and methods named
+  here ("Programming Guide for DirectWrite", "Font Collections", "Custom
+  Font Sets"); dwrite.h, dwrite_1.h, dwrite_2.h, dwrite_3.h for constants,
+  structure layouts and the order of the methods in the vtables; winerror.h
+  for the HRESULTs; the OpenType specification (head, hhea, hmtx, maxp,
+  cmap, glyf, loca, name, OS/2, post) for the font tables the tests write.
+  Wine's tests were not read.
+summary: >
+  Picks the font of a family that best matches a weight, stretch and style.
+  As observed: the requested stretch decides first (a face of the nearest
+  stretch is taken before weight is looked at), then style, then weight,
+  with heavier faces preferred for requests above about 550 and lighter ones
+  below. A simulated face can be returned (an oblique for an oblique or
+  italic request when the family has no oblique face, a bold when the
+  stretch has no heavy one). Values outside the enumerations do not fail:
+  they are clamped. The custom collection of the tests (poly_env) holds
+  eight test fonts served from memory: family "PolyTest Alpha" (name IDs 1
+  and 2 only: Regular 400, Bold 700 with the bold flag, Italic 400 with the
+  italic flag, Bold Italic 700) and family "PolyTest Beta" whose faces name
+  their family through name ID 16 and subfamily through ID 17 (Light 300,
+  Regular 400, Black 900, and Condensed 400 with usWidthClass 3).
+interface:
+  signature: "HRESULT IDWriteFontFamily::GetFirstMatchingFont(DWRITE_FONT_WEIGHT weight, DWRITE_FONT_STRETCH stretch, DWRITE_FONT_STYLE style, IDWriteFont** matchingFont)"
+  DWRITE_FONT_WEIGHT: "THIN 100 .. REGULAR 400 .. BOLD 700 .. BLACK 900, any value 0..999 or larger is accepted"
+  DWRITE_FONT_STRETCH: "UNDEFINED 0, ULTRA_CONDENSED 1 .. NORMAL 5 .. ULTRA_EXPANDED 9"
+  DWRITE_FONT_STYLE: "NORMAL 0, OBLIQUE 1, ITALIC 2"
+  hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+rules:
+  alpha_weights: "family with Regular 400 and Bold 700 faces, normal style: requested weights up to 501 (0, 1, 100, 300, 399, 400, 401, 450, 499, 500, 501 were tried; 502..549 were not) give Regular; 550 and above (550, 599, 600, 649, 650, 651, 700, 800, 900, 950, 999, 1000, 1001, 5000) give Bold. The same split for italic requests (Italic below 550, Bold Italic from 550) and oblique requests"
+  alpha_style: "italic request: the real Italic (style 2, simulations 0) and Bold Italic faces; oblique request (style 1): the simulated Oblique (style 1, simulations 2) and Bold Oblique (700, style 1, simulations 2) faces, even though real italic faces exist; invalid styles 3, 4, 100 behave like italic (style 2)"
+  beta_weights: "family with weights 300, 400 and 900 (Black) at stretch 5: weight <= 350 (also 100, 250, 300, 350) gives Light 300; 399, 400, 450, 500, 501, 550 give Regular 400; 600, 650, 700, 800, 899, 900, 950 give Black 900 (lighter requests step toward lighter faces below 400, heavier faces above 550; 600 chooses the heavier face though 400 is closer)"
+  beta_stretch: "stretch decides before weight: stretch 3 with weights 100..550 gives Condensed 400; weights 600 and above at stretch 3 give the simulated Condensed Bold (700, stretch 3, simulations 1); stretch requests 0 (undefined), 1, 2, 3, 4 give Condensed (stretch 3); 5..10 give the normal stretch; a request for weight 300 at stretch 3 gives Condensed 400 (not Light); weight 300 at stretch 7 and weight 900 at stretch 9 give the normal-stretch Light and Black"
+  oblique_of_stretch: "condensed bold with oblique style: Condensed Bold Oblique (700, stretch 3, style 1, simulations 3); normal stretch oblique: Oblique 400 (simulations 2); Black with italic request: Black Oblique (900, style 1, simulations 2), since Beta has no italic face"
+  out_of_range: "weight 0 and weight above 999 do not fail; stretch above 9 and style above 2 do not fail (S_OK, a font); S_OK for every request"
+  system: "Arial, Segoe UI, Times New Roman and Courier New: (400,5,normal) Regular, (700,5,normal) Bold, (400,5,italic) Italic (style 2, simulations 0), (700,5,italic) Bold Italic, (400,5,oblique) a simulated oblique (style 1, simulations 2); other weights give some font of the family; stretch 3 or 7 gives the normal stretch"
+errors:
+  none: "no request fails; out-of-range values are clamped"
+side_effects: "none beyond the rules above"
+threading: "the objects are used from one thread; the shared factory and the system collection may be used from several, which is not tested"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every
+  test carries its own declarations: the COM vtable layouts (from the SDK
+  headers), the enumeration constants and a writer for small TrueType fonts.
+  The test fonts are written by the test itself (eight glyphs: .notdef,
+  space, a square, a triangle, a rounded shape, a small box, a box below the
+  baseline and a box for a code point outside the BMP) with names, weights,
+  widths, styles and metrics chosen per test, and are served to DirectWrite
+  from memory through loader objects the test implements
+  (IDWriteFontFileLoader with its stream, IDWriteFontCollectionLoader with
+  its enumerator) or, where a path is the point, from a file the test writes
+  beside itself. So the results do not depend on the oracle's font list.
+  Tests of the system collection print or check only what every Windows
+  installation provides (Arial, Segoe UI, Times New Roman and similar
+  families exist; their standard faces exist; relations between values) and
+  never the metrics or file names of those fonts. The eight font slots, the
+  loaders and the calls the loaders receive are in the test file.
+not_covered: >
+  families with several stretches around the requested one beyond Beta's
+  two; the tie breaking between equally distant weights is only shown by
+  450/500 and 550. the system collection's full font list; downloadable
+  (remote) fonts; collections with font files that are TrueType collections
+  or CFF fonts; variable fonts; colour fonts; several threads; failure
+  injection inside the loaders; behaviour of different Windows versions (the
+  oracle is one build).

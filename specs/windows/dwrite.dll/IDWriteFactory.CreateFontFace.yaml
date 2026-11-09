@@ -1,0 +1,71 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwrite.dll/IDWriteFactory.CreateFontFace
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64, dwrite.dll 10.0.26100.1"
+  machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
+  observed_by: spec-win-dwrite
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: the DirectWrite reference pages of the interfaces and methods named
+  here ("Programming Guide for DirectWrite", "Font Collections", "Custom
+  Font Sets"); dwrite.h, dwrite_1.h, dwrite_2.h, dwrite_3.h for constants,
+  structure layouts and the order of the methods in the vtables; winerror.h
+  for the HRESULTs; the OpenType specification (head, hhea, hmtx, maxp,
+  cmap, glyf, loca, name, OS/2, post) for the font tables the tests write.
+  Wine's tests were not read.
+summary: >
+  Creates a font face from font files. The face type argument is checked
+  loosely (a TrueType font file is accepted as TRUETYPE and as CFF), the
+  number of files must be 1 for a TrueType font, the face index must exist
+  and only the bold (1) and oblique (2) simulation flags are valid. The same
+  file, index and simulations give the same face object while a reference is
+  held.
+interface:
+  signature: "HRESULT IDWriteFactory::CreateFontFace(DWRITE_FONT_FACE_TYPE fontFaceType, UINT32 numberOfFiles, IDWriteFontFile* const* fontFiles, UINT32 faceIndex, DWRITE_FONT_SIMULATIONS fontFaceSimulationFlags, IDWriteFontFace** fontFace)"
+  DWRITE_FONT_FACE_TYPE: "CFF 0, TRUETYPE 1, OPENTYPE_COLLECTION 2, TYPE1 3, VECTOR 4, BITMAP 5, UNKNOWN 6, RAW_CFF 7 (dwrite.h)"
+  DWRITE_FONT_SIMULATIONS: "NONE 0, BOLD 1, OBLIQUE 2 (dwrite.h)"
+  hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+rules:
+  face_type: "for a TrueType font file: TRUETYPE (1) and CFF (0) give S_OK; OPENTYPE_COLLECTION (2) and RAW_CFF (7): DWRITE_E_FILEFORMAT (0x88985000); TYPE1 (3), VECTOR (4), BITMAP (5), values above 7: E_INVALIDARG (0x80070057). UNKNOWN (6) is accepted (the type the face then reports is not specified)"
+  face_index: "the index must exist in the file: index 1, 5 or 0xFFFFFFFF for a one-face font: E_INVALIDARG"
+  file_count: "numberOfFiles 0 or 2 for a TrueType font: E_INVALIDARG; 1 is right"
+  simulations: "0, 1 (bold), 2 (oblique) and 3 give S_OK and the face reports that value; 4, 7, 8, 0x100 and 0xFF: E_INVALIDARG; the output pointer is set to null on failure"
+  identity: "creating the face twice from the same file reference, index and simulations while the first is held returns the same pointer; other simulations give another object"
+errors:
+  bad_args: "E_INVALIDARG for unsupported face types, wrong file counts, indices and simulation flags"
+  not_a_font: "DWRITE_E_FILEFORMAT for a file that is not a font of the requested type"
+side_effects: "none beyond the rules above"
+threading: "the objects are used from one thread; the shared factory and the system collection may be used from several, which is not tested"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every
+  test carries its own declarations: the COM vtable layouts (from the SDK
+  headers), the enumeration constants and a writer for small TrueType fonts.
+  The test fonts are written by the test itself (eight glyphs: .notdef,
+  space, a square, a triangle, a rounded shape, a small box, a box below the
+  baseline and a box for a code point outside the BMP) with names, weights,
+  widths, styles and metrics chosen per test, and are served to DirectWrite
+  from memory through loader objects the test implements
+  (IDWriteFontFileLoader with its stream, IDWriteFontCollectionLoader with
+  its enumerator) or, where a path is the point, from a file the test writes
+  beside itself. So the results do not depend on the oracle's font list.
+  Tests of the system collection print or check only what every Windows
+  installation provides (Arial, Segoe UI, Times New Roman and similar
+  families exist; their standard faces exist; relations between values) and
+  never the metrics or file names of those fonts. The eight font slots, the
+  loaders and the calls the loaders receive are in the test file.
+not_covered: >
+  TrueType collections (face index above 0), CFF/OpenType fonts, fonts split
+  over several files. the system collection's full font list; downloadable
+  (remote) fonts; collections with font files that are TrueType collections
+  or CFF fonts; variable fonts; colour fonts; several threads; failure
+  injection inside the loaders; behaviour of different Windows versions (the
+  oracle is one build).
