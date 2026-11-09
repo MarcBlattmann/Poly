@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtMapViewOfSection.yaml
+id: windows/api/ntdll.dll/NtMapViewOfSection
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: ZwMapViewOfSection, MapViewOfFile function, VirtualQuery function, Memory Protection Constants. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  Maps a section (or part of it) into a process. The view is committed, aligned to 64 KiB, sized in pages, shared with every other view of the section, and described by VirtualQuery as MEM_MAPPED. Protection cannot exceed what the section and the handle's rights allow; copy-on-write views keep their writes private. Another process can be the target if the caller has PROCESS_VM_OPERATION.
+interface:
+  signature: "NTSTATUS NtMapViewOfSection(HANDLE section, HANDLE process, PVOID *baseAddress, ULONG_PTR zeroBits, SIZE_T commitSize, PLARGE_INTEGER sectionOffset, PSIZE_T viewSize, SECTION_INHERIT inherit, ULONG allocationType, ULONG win32Protect)"
+rules:
+  whole_section: "view size 0 maps the whole section: the size returned is the section size (131072), the base is 64 KiB aligned; VirtualQuery: MEM_COMMIT, PAGE_READWRITE, MEM_MAPPED, region size 131072."
+  shared_views: "two views of one section have different addresses and share bytes, in both directions; the section handle can be closed and the views still share; unmapping one leaves the other."
+  partial_view: "offset 65536, size 5000: a view of 8192 bytes whose first byte is the section's byte 65536. kernel32 MapViewOfFile with offset 65536 and 100 bytes: region of 4096."
+  offset_rules: "an offset that is no multiple of 64 KiB: STATUS_MAPPED_ALIGNMENT (0xC0000220) (kernel32 ERROR_MAPPED_ALIGNMENT 1132); a view larger than the section: STATUS_INVALID_VIEW_SIZE (0xC000001F) (kernel32 ERROR_ACCESS_DENIED 5 for MapViewOfFile with a too big byte count); an offset at or past the end of the section: STATUS_INVALID_VIEW_SIZE; a negative offset: STATUS_INVALID_VIEW_SIZE."
+  protection_vs_section: "a read-only section maps PAGE_READONLY; PAGE_READWRITE on it fails with STATUS_SECTION_PROTECTION (0xC000004E) and leaves the base NULL; a read-write section maps read-only, no-access (VirtualQuery then reports PAGE_NOACCESS) and write-copy views; PAGE_EXECUTE_READ on it fails with STATUS_SECTION_PROTECTION; protection 0 and an undefined bit (0x1000) fail with STATUS_INVALID_PAGE_PROTECTION."
+  copy_on_write: "a PAGE_WRITECOPY view reads the shared bytes until it writes; its writes stay private (the shared view does not see them) and the page no longer follows later shared writes; VirtualQuery then reports PAGE_READWRITE for the copied page."
+  handle_rights: "a section handle with SECTION_MAP_READ only: PAGE_READWRITE views fail with STATUS_ACCESS_DENIED, PAGE_READONLY views work; with only SYNCHRONIZE even a read-only view fails with STATUS_ACCESS_DENIED."
+  other_process: "mapping into a child needs PROCESS_VM_OPERATION on the process handle (without: STATUS_ACCESS_DENIED, base NULL); the view appears in the child at a 64 KiB aligned base with the size asked, MEM_COMMIT, MEM_MAPPED, PAGE_READWRITE and the section's current bytes; the child's writes into it are visible to the parent's views."
+  kernel32: "MapViewOfFile on an event handle fails with ERROR_INVALID_HANDLE, NtMapViewOfSection with STATUS_OBJECT_TYPE_MISMATCH (0xC0000024)."
+errors:
+  alignment: "STATUS_MAPPED_ALIGNMENT (0xC0000220)"
+  view_size: "STATUS_INVALID_VIEW_SIZE (0xC000001F)"
+  section_protection: "STATUS_SECTION_PROTECTION (0xC000004E)"
+  bad_protection: "STATUS_INVALID_PAGE_PROTECTION (0xC0000045)"
+  no_right: "STATUS_ACCESS_DENIED (0xC0000022)"
+  not_a_section: "STATUS_OBJECT_TYPE_MISMATCH (0xC0000024)"
+side_effects: "reserves and commits address space in the target process"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Image sections (SEC_IMAGE), large pages, section offsets in the megabytes, physical memory, sections of other users' processes, security descriptors.

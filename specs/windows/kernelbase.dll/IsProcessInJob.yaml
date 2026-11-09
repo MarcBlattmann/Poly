@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/IsProcessInJob.yaml
+id: windows/api/kernelbase.dll/IsProcessInJob
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  The same observations as the kernel32.dll entry of the same name.
+summary: >
+  kernelbase.dll exports IsProcessInJob as the implementation behind kernel32.dll's export of the same name (since Windows 7 kernel32 reaches it through API-set contracts, ADR 0079). The behaviour is exactly the one described in specs/windows/kernel32.dll/IsProcessInJob.yaml and tested by the tests in specs/windows/kernel32.dll/IsProcessInJob.tests/; this entry has no tests of its own.
+same_as: "windows/api/kernel32.dll/IsProcessInJob"
+interface:
+  signature: "see the kernel32.dll sheet"
+rules:
+  same_behaviour: "every rule and error of the kernel32.dll sheet holds for this export"
+errors:
+  same_errors: "see the kernel32.dll sheet"
+side_effects: "see the kernel32.dll sheet"
+threading: "see the kernel32.dll sheet"
+ordering: []
+timing:
+  typical: "see the kernel32.dll sheet"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  Everything the kernel32.dll sheet lists as not covered.
