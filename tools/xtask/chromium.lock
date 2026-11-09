@@ -8,6 +8,7 @@ base-files 13.8+deb13u7 debian 88296 fcd42bb5cb63f7bfc4326a92541247872206d60a192
 bash 5.2.37-2+b10 debian 1500792 2fd7b04f1b7caa29c4e683f5216e6af354a41e3cdcf6e75394d7cda680f9ab82 disk pool/main/b/bash/bash_5.2.37-2+b10_amd64.deb
 bsdextrautils 2.41.5-0+deb13u1 debian-security 94796 bf9888552d2f5dac61a3d434252af30a7619bfad1152d2a3c73bcf4b3be74526 reference pool/updates/main/u/util-linux/bsdextrautils_2.41.5-0+deb13u1_amd64.deb
 busybox-static 1:1.37.0-6+b9 debian 955316 598a3fd92bdafc34cd81196b2952ad36e910e47a4ecf162f8ce5e8e262598e53 boot pool/main/b/busybox/busybox-static_1.37.0-6+b9_amd64.deb
+ca-certificates 20250419+deb13u1 debian-security 160720 c10585ac22c7f617a73d394eea29ba71d0356f350ae973b19043d1b017f80f54 disk pool/updates/main/c/ca-certificates/ca-certificates_20250419+deb13u1_all.deb
 chromium 156.0.8078.73-1~deb13u1 debian-security 91755788 27f8d260f9ca2ff8853882f6814df0b8eb552ea507b1b580b3a55150d8ec7070 disk pool/updates/main/c/chromium/chromium_156.0.8078.73-1~deb13u1_amd64.deb
 chromium-common 156.0.8078.73-1~deb13u1 debian-security 31703468 13fc3dbea698aeea8e6dc165f2afa275522cfde29b8e46c87aa82bc0e53759bf disk pool/updates/main/c/chromium/chromium-common_156.0.8078.73-1~deb13u1_amd64.deb
 chromium-sandbox 156.0.8078.73-1~deb13u1 debian-security 161548 155ec1fd1afb88a75eefdd6c9d09fa57f1ceb4c6a6870e99ed091812fad8c3d6 disk pool/updates/main/c/chromium/chromium-sandbox_156.0.8078.73-1~deb13u1_amd64.deb
@@ -346,6 +347,7 @@ man-db 2.13.1-1 debian 1469060 d5a407221a0d59845484b5343a37ec6374102e949353e4b15
 mesa-libgallium 25.0.7-2+deb13u1 debian 9630224 3e610f29321cdcc61337c86e6b4031ff60f0c9915fe19e6a862ac06480620ff4 disk pool/main/m/mesa/mesa-libgallium_25.0.7-2+deb13u1_amd64.deb
 mount 2.41.5-0+deb13u1 debian-security 163208 eb70a615114ac40123768beb20e302554d5cb7edb33290be7e418ebe1075c878 disk pool/updates/main/u/util-linux/mount_2.41.5-0+deb13u1_amd64.deb
 ocl-icd-libopencl1 2.3.3-1 debian 42896 99dfd409ae92505ee56742feea4e82a1e052818c5b0036ee618a371b5e28c9d1 reference pool/main/o/ocl-icd/ocl-icd-libopencl1_2.3.3-1_amd64.deb
+openssl 3.5.7-1~deb13u3 debian-security 1508068 43a9cbcf2a8a0e1f0a1c3f5a33ee1f56b269690e7a2129f2b2d0582e789589d7 disk pool/updates/main/o/openssl/openssl_3.5.7-1~deb13u3_amd64.deb
 openssl-provider-legacy 3.5.7-1~deb13u3 debian-security 316452 c12e0266c4780749a4702b8959ac979689f4182e18eed85a8a5eb90ed0e16eab disk pool/updates/main/o/openssl/openssl-provider-legacy_3.5.7-1~deb13u3_amd64.deb
 procps 2:4.0.4-9 debian 882088 4db90bb6776772fc52585d6b1fbfc52ec2a85480e1b4363b743fbb2ffa2a5375 disk pool/main/p/procps/procps_4.0.4-9_amd64.deb
 readline-common 8.2-6 debian 69360 f77e8aa0bf0de618f11cb0b21658a4ed60f177d63b3cf26d7fc3706b6d0eaaa9 disk pool/main/r/readline/readline-common_8.2-6_all.deb
