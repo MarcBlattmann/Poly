@@ -170,6 +170,10 @@ name = "poly-elf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-etw"
+version = "0.0.1"
+
+[[package]]
 name = "poly-ext2"
 version = "0.0.1"
 dependencies = [
@@ -229,6 +233,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-input"
+version = "0.0.1"
+
+[[package]]
+name = "poly-iphlp"
 version = "0.0.1"
 
 [[package]]

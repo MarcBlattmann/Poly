@@ -17,6 +17,7 @@ members = [
     "crates/poly-crt",
     "crates/poly-crypto",
     "crates/poly-elf",
+    "crates/poly-etw",
     "crates/poly-ext2",
     "crates/poly-fbdev",
     "crates/poly-files",
@@ -31,6 +32,7 @@ members = [
     "crates/poly-heap",
     "crates/poly-http",
     "crates/poly-input",
+    "crates/poly-iphlp",
     "crates/poly-irq",
     "crates/poly-kernelbase",
     "crates/poly-ldr",
@@ -111,6 +113,7 @@ poly-console = { path = "crates/poly-console" }
 poly-crt = { path = "crates/poly-crt" }
 poly-crypto = { path = "crates/poly-crypto" }
 poly-elf = { path = "crates/poly-elf" }
+poly-etw = { path = "crates/poly-etw" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-fbdev = { path = "crates/poly-fbdev" }
 poly-files = { path = "crates/poly-files" }
@@ -125,6 +128,7 @@ poly-hda = { path = "crates/poly-hda" }
 poly-heap = { path = "crates/poly-heap" }
 poly-http = { path = "crates/poly-http" }
 poly-input = { path = "crates/poly-input" }
+poly-iphlp = { path = "crates/poly-iphlp" }
 poly-irq = { path = "crates/poly-irq" }
 poly-kernelbase = { path = "crates/poly-kernelbase" }
 poly-ldr = { path = "crates/poly-ldr" }
