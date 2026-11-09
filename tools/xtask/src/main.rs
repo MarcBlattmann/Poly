@@ -35,11 +35,13 @@
 //!                       (default: the self-test's verdict), save the screen to <file>
 //!                       (default target/poly-screen.png; .ppm for PPM) and quit;
 //!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
-//!   desktop [--release] [--test-apps] [--fresh-state] [--memory=SIZE] [--cpus=N] [kernel args...]
+//!   desktop [--release] [--test-apps] [--chromium [--fresh-disk]] [--fresh-state] [--memory=SIZE] [--cpus=N] [kernel args...]
 //!                       boot straight into Poly's desktop: the Wayland compositor and shell on a
 //!                       virtio GPU through DRM/KMS, a virtio keyboard and tablet (desktop.rs,
 //!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop; the settings
-//!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs
+//!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs;
+//!                       --chromium: from Chromium's root disk, with Poly's apps and Chromium the
+//!                       default browser (downloads its packages the first time, ADR 0147)
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   aarch64 build|run|test [--release] [kernel args...]
 //!                       the aarch64 boot stub (kernel/src/arch/aarch64, ADR 0154) on QEMU's
@@ -1663,6 +1665,10 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // its sandbox; skipped until its packages are fetched (chromium.rs,
     // docs/chromium-linux-gaps.md).
     ("chromium", chromium::boot_test),
+    // The desktop from Chromium's disk, `cargo xtask desktop --chromium`: Poly's
+    // apps on it, the settings disk, Chromium the default browser; skipped
+    // until the packages are fetched (chromium.rs, ADR 0147).
+    ("chromium-desktop", chromium::desktop_boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1723,7 +1729,20 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     // About 75 s: Linux programs and the root disk.
-    ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "chrome-win", "toolkits", "chromium"]),
+    (
+        "userland",
+        &[
+            "programs",
+            "native",
+            "dynamic",
+            "busybox",
+            "rootdisk",
+            "chrome-win",
+            "toolkits",
+            "chromium",
+            "chromium-desktop",
+        ],
+    ),
     // About 60 s each: 7-Zip's command line on the NT personality, one boot per
     // step, every second step in each.
     ("sevenzip", &["7zip"]),
@@ -1845,8 +1864,8 @@ fn boot_tests_command(args: &[String]) -> Result {
     while let Some(a) = it.next() {
         match a.as_str() {
             "--list" => {
-                for &(name, _) in BOOT_GROUPS {
-                    let shard = CI_BOOT_SHARDS.iter().find(|(_, g)| g.contains(&name)).map_or("-", |(s, _)| s);
+                for (name, _) in BOOT_GROUPS {
+                    let shard = CI_BOOT_SHARDS.iter().find(|(_, g)| g.contains(name)).map_or("-", |(s, _)| s);
                     println!("{name:<18} CI shard {shard}");
                 }
                 return Ok(());
@@ -2057,9 +2076,12 @@ fn lint() -> Result {
             [
                 "tools/wintrace/polytrace/src/lib.rs",
                 "tools/wintrace/polytrace/build.rs",
+                "tools/wintrace/polytrace-sync/src/lib.rs",
+                "tools/wintrace/polytrace-sync/build.rs",
                 "tools/wintrace/polytrace-agg/src/lib.rs",
                 "tools/wintrace/polytrace-agg/build.rs",
                 "tools/wintrace/proxy/common.rs",
+                "tools/wintrace/proxy/common_agg.rs",
             ]
             .map(|f| root().join(f)),
         ),
@@ -2375,8 +2397,8 @@ mod tests {
     /// shards are named once each.
     #[test]
     fn every_boot_group_is_in_one_ci_shard() {
-        for &(name, _) in BOOT_GROUPS {
-            let n = CI_BOOT_SHARDS.iter().filter(|(_, g)| g.contains(&name)).count();
+        for (name, _) in BOOT_GROUPS {
+            let n = CI_BOOT_SHARDS.iter().filter(|(_, g)| g.contains(name)).count();
             assert_eq!(n, 1, "boot test group {name} is in {n} CI shards");
         }
         for (shard, groups) in CI_BOOT_SHARDS {

@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/userenv.dll/DeriveAppContainerSidFromAppContainerName
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-chrome-win-2
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Computes the AppContainer SID that belongs to a name. It is a pure
+  function of the name (no profile is needed and nothing is created); the
+  SID is allocated and freed with FreeSid.
+interface:
+  signature: "HRESULT DeriveAppContainerSidFromAppContainerName(PCWSTR name, PSID* sid)"
+  sid_shape: "S-1-15-2-<7 hashed values>: authority 15, 8 sub-authorities (the first is 2), length 40 bytes"
+rules:
+  deterministic: "the same name gives the same SID on every run: \"poly.test\" -> S-1-15-2-9258283-302506695-126040754-1514063749-3755156841-3572502495-4003830046; \"poly.test2\" -> S-1-15-2-1309143411-1410300694-1040882798-2338710970-3543814561-3069234672-1215068326; \"a\" -> S-1-15-2-3937069567-81109666-199193729-4036909440-616594969-3159470276-4124008600; \"12345\" -> S-1-15-2-1965114644-3503613747-160562639-230092228-254582882-2069096717-6180836; \"chrome.sandbox.network\" -> S-1-15-2-2001013261-4071251912-1637534527-3730563531-3433661677-626025740-3553243051; the 64-character name \"a\" x 64 -> S-1-15-2-1653947209-3111149892-1969750866-2974796091-2672792389-4140478305-3621635385"
+  case_insensitive: "\"poly.test\", \"POLY.TEST\" and \"Poly.Test\" give the same SID"
+  characters: "spaces, a backslash and a non-ASCII letter are accepted (names \"poly test\", \"poly\\\\test\", \"poly.t\\u00e9st\" give SIDs ending ...3494890535, ...3506866110, ...121125494)"
+  shape: "valid SID (IsValidSid), revision 1, authority bytes 00 00 00 00 00 0F, 8 sub-authorities, sub-authority 0 = 2, length 40; EqualSid of two derivations of the same name is TRUE, of different names FALSE; EqualPrefixSid with S-1-15-2-1 is FALSE (the first sub-authorities differ); ConvertSidToStringSid and back is the identity"
+  lookup: "LookupAccountSidW of a derived SID of a profile that was never created fails with ERROR_NONE_MAPPED (1332)"
+errors:
+  empty_name: "name \"\": HRESULT 0x80070057 (E_INVALIDARG), *sid NULL"
+  too_long: "a name of 65 characters (and 70): 0x80070057; 64 characters is accepted"
+side_effects: "allocates the SID (free with FreeSid)"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  CreateAppContainerProfile / DeleteAppContainerProfile (they write the
+  registry and profile folders), a NULL name (faults),
+  CreateAppContainerToken and AppContainerRegisterSid (undocumented
+  kernelbase exports Chrome resolves by name). Domain accounts and
+  domain-relative well-known SIDs of a real domain, AppContainer and
+  capability SIDs beyond their string forms, auditing (SACL entries are only
+  stored, never evaluated), remote systems (the system-name arguments),
+  Kerberos or NTLM logon tokens, tokens of other users.

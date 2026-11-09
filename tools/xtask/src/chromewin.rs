@@ -690,7 +690,7 @@ pub fn build_kit(names: &[String]) -> Result<PathBuf> {
         return Err(format!("{}: not in the package", missing.display()));
     }
     let out = crate::root().join("target/chrome-kit");
-    crate::wintrace::build_kit_multi(&exes, &out, &[], false, &[])?;
+    crate::wintrace::build_kit_multi(&exes, &out, &[], false, true, &[])?;
     Ok(out)
 }
 

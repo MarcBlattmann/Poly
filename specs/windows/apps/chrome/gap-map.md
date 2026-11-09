@@ -1,6 +1,6 @@
 # spec-chrome-win: the map from Poly to Chrome for Windows (sandbox on)
 
-Status: **PARTIAL, first full version** (spec agent `spec-chrome-win`). S1, S2 (broker side), S3, S4 and S5 are recorded
+Status: **PARTIAL, second version** (spec agents `spec-chrome-win` and `spec-chrome-win-2`; the sandboxed renderers are traced since the second one, section 4a; per-API fault tolerance of S1 is section 6a). S1, S2 (broker side), S3, S4 and S5 are recorded
 twice on real Windows and reduced to stable facts; the open points are listed at the end (sandboxed renderers cannot be
 traced; S5 only as "default GPU flags, headless"; no fault injection per API).
 Branch `spec-chrome-win` (from `fa782a20`), pushed to origin. Nothing of Chrome is committed (only observations).
@@ -44,9 +44,11 @@ The README of `specs/windows/apps/chrome/` is the long form. Short:
 * **Not seen**: calls through pointers (names are known, counts are not), instructions Chrome executes itself
   (`syscall`, CPUID), the work Windows' own DLLs do under a call. The tracer logs arguments at the call (output buffers
   are not read), so what a call returned in memory (a token, a path) is not recorded.
-* **The sandbox and the tracer**: the traced kit's sandboxed renderers die at start (all other children run). So the S2
-  trace has no renderer; the renderers' call set is S1's, and the **broker side of the sandbox is complete** (section 4).
-  The scenario results of S2 are from the untraced program.
+* **The sandbox and the tracer**: the first version's confined renderers died at start (event 3033 of the Code Integrity log: the
+  creation-time "Microsoft-signed only" mitigation refuses the unsigned proxy DLLs). `spec-chrome-win-2` fixed that (section 4a): the
+  traced browser clears that mitigation bit for its children (`POLYTRACE_RELAX`) and hands each confined child its trace as an
+  inherited section (`POLYTRACE_INHERIT`). The S2 trace of this directory (`traces/s2-sandboxed.trace.json`) therefore has every
+  process type; the older `traces/s2.trace.json` (no renderer) is kept as it was recorded. The scenario results of S2 are unchanged.
 
 ## 3. The stages, observed
 
@@ -104,7 +106,9 @@ renderer; five were created in the S2 runs: the renderers never became usable) i
    stack-sampling profiler, which also makes 418 `SuspendThread` and 418 `GetThreadContext` calls in the browser), `SetProcessMitigationPolicy` (self, policy 2) and
    `GetProcessMitigationPolicy`. The unconfined children (crashpad handler, processor-metrics utility) use plain
    `CreateProcessW` with `EXTENDED_STARTUPINFO_PRESENT` (0x80000) and inherit handles = TRUE.
-5. The target side (lowering the token, closing handles) happens inside the child and could not be traced for renderers.
+5. The target side (lowering the token, closing handles) happens inside the child. It is traced since `spec-chrome-win-2`: section 4a
+   (the children call `SetTokenInformation`, `RevertToSelf`, `SetProcessMitigationPolicy`, `SetDefaultDllDirectories`; what Windows
+   then refuses). The old note follows.
    The confined network service's last traced calls before it died in an early experiment were `NtQueryObject(h,
    ObjectTypeInformation)` followed by `DuplicateHandle(self, h, self, &new, 2, FALSE, 0)`; the children also call
    `GetProcessMitigationPolicy` and `SetProcessShutdownParameters`.
@@ -112,9 +116,106 @@ renderer; five were created in the S2 runs: the renderers never became usable) i
 The semantics of every one of these calls are the job of **spec-win-sec** (tokens, ACLs, SDs, jobs; its sheets
 `spec-win-sec-sd.md`, `-acl.md`, `-rtl.md` cover the SD/ACL calls above) and of the process attribute list / handle hand-over
 of **spec-win-ipc**; this map only says *which calls, in which numbers, with which arguments*, so that their batches can be
-ordered. Not covered by either as far as their hand-offs show: `CreateRestrictedToken`, `DuplicateTokenEx`,
-`SetTokenInformation(TokenIntegrityLevel)`, the job information classes, `CreateWindowStationW`/`CreateDesktopW`,
-`SetProcessMitigationPolicy`, `DeriveAppContainerSidFromAppContainerName`.
+ordered. `spec-win-sec` has since specified `CreateRestrictedToken`, `DuplicateTokenEx`, `SetTokenInformation`, the job calls and the
+SD/ACL/SID families (149 entries, branch `spec-win-sec`); `spec-chrome-win-2` added the AclAPI trustee layer (`BuildExplicitAccessWithNameW`,
+`BuildTrusteeWithSidW/NameW`, `SetEntriesInAclW`, `GetExplicitEntriesFromAclW`), `Get/SetNamedSecurityInfoW`, `LookupAccountSidW/NameW`,
+`Get/SetProcessMitigationPolicy` and `DeriveAppContainerSidFromAppContainerName` (12 entries, section 10a). Still unspecified:
+`CreateWindowStationW`/`CreateDesktopW`, `CreateAppContainerToken` and `AppContainerRegisterSid` (undocumented exports of `kernelbase`
+that Chrome resolves by name: only their use is observable), `BuildSecurityDescriptorW`.
+
+## 4a. The sandboxed targets seen from inside (S2 with every child traced)
+
+Added by `spec-chrome-win-2`. The first map could not trace a sandboxed renderer. It can now: the S2 stage below has the browser, **all
+renderers (normal, extension, top-chrome WebUI), the GPU process, the network service, the storage service and the crashpad handlers
+traced**, three runs each, on homeserver2 (Windows 11 Home 25H2, 26200.9711), sandbox on (no `--no-sandbox`): exit 0 and the same 440-byte
+DOM in about 3 s. The files: `traces/s2-sandboxed.trace.json` (`poly-chrometrace/1`, all process types, stable over three runs),
+`traces/s2-sandbox-targets.json` (the comparison with S1, below), `tools/sandboxdiff.py`.
+
+### Why the first tracer's renderers died, and the fix
+
+* **Observed cause** (not a guess): the renderers exited with `0xC0000428` (`STATUS_INVALID_IMAGE_HASH`) about 2 ms after they were
+  created. The `Microsoft-Windows-CodeIntegrity/Operational` log has one event 3033 per death: "Code Integrity determined that a process
+  (`...\chrome.exe`) attempted to load `...\pt_kernel32.dll` that did not meet the Microsoft signing level requirements"
+  (`RequestedPolicy` 8 = Microsoft, `ValidatedPolicy` 1 = unsigned). So the tracer's unsigned proxy DLLs are refused in a child that
+  was **created** with the "Microsoft-signed binaries only" mitigation; neither `--disable-features=RendererCodeIntegrity` nor
+  `WinSboxForceMsSigned`, nor the machine policy `RendererCodeIntegrityEnabled=0` changed this in Chrome for Testing 157.
+* **The creation-time mitigation words** (`UpdateProcThreadAttribute`, attribute `0x20007`, two 64-bit words, logged by the tracer; the
+  fields are the 2-bit `PROCESS_CREATION_MITIGATION_POLICY_*` fields of `winbase.h`, value 1 = always on):
+
+| Child (`--type=`, sandbox) | word 0 | word 1 | Fields set |
+|---|---|---|---|
+| `gpu-process` | `0x0111000100011000` | `0x0100000000010000` | heap terminate-on-corruption (bit 12), bottom-up ASLR (16), extension points disabled (32), non-system fonts blocked (48), no remote images (52), no low-label images (56); word 1: restrict indirect branch prediction (16), FSCTL system calls disabled (56) |
+| `utility` storage service (`service`) | `0x0111000110011000` | `0x0100000000010000` | as GPU plus **win32k system calls disabled (bit 28)** |
+| `renderer` (all three kinds) | `0x0111100110011000` | `0x0100000020011000` | as storage plus **block non-Microsoft binaries (bit 44)**; word 1 also module-tampering protection (bit 12) and the CET shadow-stack field set to 2 (bits 28..29) |
+
+  The unconfined children (crashpad handler, processor-metrics utility, the network service with `--service-sandbox-type=none`) get no
+  `0x20007` attribute at all. All sandboxed children also get attribute `0x2000E` (child process policy, 4 bytes `01000000` =
+  `PROCESS_CREATION_CHILD_PROCESS_RESTRICTED`), `0x2001A` (attribute number 26, 4 bytes `01000000`), `0x20002` (the handle list: 3 to 5 handles) and, for
+  most of them, `0x2000D` (`PROC_THREAD_ATTRIBUTE_JOB_LIST`: one 8-byte job handle). Only the **renderers** have the Microsoft-signed bit at creation; the GPU
+  and storage service get the same mitigation later, from inside (below), after their DLLs are loaded.
+* **The fix, in the tracer, opt-in:** `POLYTRACE_RELAX=0x300000000000` makes the (traced) browser clear that 2-bit field in word 0
+  before it calls the real `UpdateProcThreadAttribute`; nothing else of the sandbox is changed. A sandboxed renderer then loads the proxies.
+  This is an interposition: the renderers of the S2 trace run **without** the Microsoft-signed-only mitigation (the other mitigations,
+  restricted token, job, desktop, win32k lockdown are as Chrome made them). What the mitigation does to unsigned DLLs is therefore
+  recorded here (event 3033) rather than traced. Poly can ignore it: its own DLLs are never "unsigned" in that sense.
+* **Where the confined child writes its trace**: its start-up token cannot create a file anywhere, not even in a folder labelled
+  Untrusted that allows `Everyone`, `Users`, `RESTRICTED`, `ANONYMOUS`, `ALL APPLICATION PACKAGES` and the null SID (`CreateFileW`
+  failed with `ERROR_ACCESS_DENIED` (5) in the renderers and the storage service, reported through `OutputDebugStringA`). So with
+  `POLYTRACE_INHERIT=1` the traced browser creates, for every child it makes with `CreateProcessAsUserW` and a handle list, a file-backed
+  section (the trace file `polytrace-c<n>.jsonl`), appends its inheritable handle to the child's handle list and passes the value in
+  the child's environment (`POLYTRACE_HANDLE`); the child maps the section in `DllMain`, before the sandbox has closed anything.
+
+### What the targets do after the sandbox is applied (S2 compared with S1)
+
+S1 = `--no-sandbox` (two runs), S2 = sandbox on (three runs), the same page, the same kit, per process type; the "sampled" calls are the
+first four calls of each function and each call with a new name (paths, key names, DLL names). `traces/s2-sandbox-targets.json` has all of it.
+
+* **Calls the target lowers itself with (new in every confined type, absent in S1)**: `advapi32!SetTokenInformation`, `RevertToSelf`,
+  `RegDisablePredefinedCache`, `kernel32!SetProcessMitigationPolicy`, `SetDefaultDllDirectories`, `SetHandleInformation` (storage,
+  renderers), `GetUserDefaultLCID/LangID/LocaleName` (the locale is read before the registry is closed), `GetProcessHandleCount`,
+  `GetCurrentProcessorNumber`, `ntdll!NtQueryInformationProcess`; in the renderers also `EnumSystemLocalesEx`, `GetGeoInfoW`,
+  `GetUserGeoID`, `GetTimeZoneInformation`, `GetDynamicTimeZoneInformation`, `GetSystemTimeAsFileTime`, `GetProcessHeaps`,
+  `HeapDestroy`, `SetThreadAffinityMask`.
+* **Calls Windows refused** (sampled records with a failing result and `ERROR_ACCESS_DENIED`/NTSTATUS `0xC0000022`, all of which
+  **succeed in S1**):
+
+| Process type | Call | Object | Result |
+|---|---|---|---|
+| renderers (all three kinds), storage service | `advapi32!RegOpenKeyExW` | `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion` | 5 `ACCESS_DENIED` |
+| renderers, storage service | `ntdll!NtCreateKey` | (a key the target tries to create) | `0xC0000022` |
+| renderers, storage, GPU, network service | `kernel32!DuplicateHandle` | (at least one of the sampled calls) | 5 `ACCESS_DENIED` |
+| renderers (normal, WebUI) | `kernel32!LoadLibraryExW` | `DWriteCore.dll` (system directory) | 5 `ACCESS_DENIED`; `GetProcAddress("DWriteCoreCreateFactory")` then gives 127 |
+| renderers, storage | `advapi32!RegQueryValueExW` | (12 to 16 calls per renderer) | never succeeds sandboxed, succeeds in S1 |
+
+  Everything else the targets do that failed also fails in S1 (so Chrome's own probes, not the sandbox): `GetTokenInformation` size
+  probes (122), `FlsGetValue` (87), `GetEnvironmentVariableW("PROGRAMFILES")` (203), `NtQueryValueKey` (`0xC0000034`),
+  `SetThreadPriority` (400/401, background-mode mismatches), `GetModuleHandleA("verifier.dll")` and
+  `GetModuleHandleW("msdia*.dll")` (126), `DiscardVirtualMemory` (158).
+* **Calls the confined renderer never makes (present in S1)**: `user32!GetSysColor`, `SystemParametersInfoW`, `GetCaretBlinkTime`,
+  `PeekMessageW`, `PostThreadMessageW` (win32k is disabled: Chrome does not call them), `RoActivateInstance`,
+  `WindowsCreateString`, `WindowsDeleteString` (WinRT), `RegNotifyChangeKeyValue`, `RegisterWaitForSingleObject`. The GPU process makes
+  every S1 call; the network service (unconfined) loses only `DeleteFileW`; the storage service loses `PeekMessageW` and
+  `PostThreadMessageW`.
+* **What Poly's checks must therefore reproduce** (first list): a confined target that was started with the restricted token, job and
+  mitigations of section 4 can **read** (and load) the files and keys it got through inherited handles and its own image directory, can
+  **not** open `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion`, cannot create registry keys, gets `ACCESS_DENIED` from (some of) its
+  `DuplicateHandle` calls, cannot load `DWriteCore.dll` from the system directory (Chrome carries on: the DOM is identical), and
+  stays connected to the browser through the handles it inherited. The exact token (restricting SIDs, groups, integrity) is
+  spec-win-sec's `CreateRestrictedToken` family; this list is the *observable consequence* an `AccessCheck`/object-open implementation must
+  show for S2 to behave as on Windows.
+
+### Mitigation state of the running children (Windows' own report, untraced S2, `Get-ProcessMitigation`)
+
+| | browser | crashpad | GPU | storage | renderers (6) | network (`none`) |
+|---|---|---|---|---|---|---|
+| Microsoft-signed only | off | off | **on** | **on** | **on** | off |
+| child process creation disallowed | off | off | on | on | on | off |
+| win32k system calls disabled | off | off | off | **on** | **on** | off |
+| extension points / non-system fonts / strict handle checks / FSCTL calls disabled | off | off | on | on | on | off |
+| no remote images, no low-label images | off | off | on | on | on | off |
+| dynamic code blocked | on (browser only) | off | off | on (storage) | off | off |
+
+All have DEP (with ATL thunk emulation), bottom-up and high-entropy ASLR on and force-relocate off.
 
 ## 5. Names resolved with `GetProcAddress` (called through pointers, counts unknown)
 
@@ -191,10 +292,36 @@ Three kinds of evidence, in this order of weight:
    devices (`setupapi`, `cfgmgr32`, `hid`), performance counters (`pdh`), ETW (`EventRegister`, `TraceEvent`, `RegisterTraceGuidsW`, ...: Chrome registers providers and writes events,
    nothing it reads back was seen), power/session notifications (`Register*Notification`, `WTS*`),
    `Shell_NotifyIconW`, drag and drop, IME, `DwmSetWindowAttribute`. Expect a stub that returns failure to work for these;
-   **this was not verified per API** (no fault injection in the tracer yet).
+   **verified per API for S1 since `spec-chrome-win-2`: section 6a** (the other stages were not injected).
 
 Everything else is **assumed to be required to succeed** (not tested): process creation, pipes, IOCP, sections, handles, `VirtualAlloc`/`VirtualProtect`
 (V8 and PartitionAlloc), SRW locks, TLS/FLS, file and registry basics, the code page and locale functions, the clock.
+
+### 6a. Per-API fault injection, S1 (what may stay a stub)
+
+Method: for each of the 220 APIs that the S1 table marks MISSING (section 8), one S1 run (`--headless --no-sandbox --disable-gpu --dump-dom`, kit with the counting logger) in which the API **is not called** and instead returns a failure from its first call, in every process of the run (`POLYTRACE_FAULT=<fn>:<ret>:<err>`; ret 0 and last error 50 `ERROR_NOT_SUPPORTED` for BOOL/pointer/DWORD results, `0xFFFFFFFFFFFFFFFF` for the two invalid-handle returners (`CreateToolhelp32Snapshot` and friends), `0x80004001` `E_NOTIMPL` for the HRESULT ones; a `void` API just does nothing). Machine: homeserver2, one run each, a bound of 30 s. Verdict: **TOLERATED** = exit 0 and the 440-byte DOM (SHA-256 prefix `7b79f8b4`) and no process ended abnormally; **TOLERATED-CHILD-CRASH** = the same output but a child process (renderer, GPU, utility) ended with the exit status in the CSV and was restarted or its work was not needed; **FATAL** = no DOM; **HANG** = still running after 30 s; **DIFFERENT** = exit 0 but other output; **NOT-CALLED** = the injection never fired (the API is not called in that run, or is a thunk the logger cannot skip: `TAIL`/`NORETURN` functions, `UpdateProcThreadAttribute`, `CreateProcessAsUserW`). Table: `traces/s1-fault-injection.csv` (api, class, injected result and error, verdict, exit, seconds, stdout bytes and digest, number of injection records, abnormal exit statuses).
+
+| Verdict | APIs | Meaning for an implementer |
+|---|---:|---|
+| TOLERATED | 162 | may fail with the injected result (a stub that returns failure/`ERROR_NOT_SUPPORTED` is enough for S1) |
+| TOLERATED-CHILD-CRASH | 9 | the browser survives, but a child dies: do not stub |
+| FATAL | 23 | must work (Chrome ends, `0x80000003` = its own breakpoint/CHECK, `0xC0000005` = a null result used) |
+| HANG | 8 | must work (Chrome waits for it forever) |
+| DIFFERENT | 4 | exit 0 but the DOM is not the expected one: must work |
+| NOT-CALLED | 14 | not decided by this run |
+
+**Must work (FATAL, HANG, DIFFERENT, TOLERATED-CHILD-CRASH):**
+
+* HANG: `AssignProcessToJobObject`, `CreateIoCompletionPort`, `CreateJobObjectW`, `CreateNamedPipeW`, `DisconnectNamedPipe`, `GetQueuedCompletionStatus`, `PostQueuedCompletionStatus`, `SetInformationJobObject`
+* FATAL: `CoInitializeEx`, `ConnectNamedPipe`, `DWriteCreateFactory`, `GetAdaptersAddresses`, `GetCurrentThreadStackLimits`, `GetFileAttributesExW`, `GetFileVersionInfoSizeW`, `GetFileVersionInfoW`, `GetIfTable2`, `GetModuleHandleExA`, `GetThreadPreferredUILanguages`, `GetWindowThreadProcessId`, `InitCommonControlsEx`, `InitializeProcThreadAttributeList`, `LoadLibraryExA`, `NetUserGetInfo`, `QueryProcessCycleTime`, `RoInitialize`, `RtlFormatCurrentUserKeyPath`, `SHGetKnownFolderPath`, `SHGetPropertyStoreForWindow`, `VerQueryValueW`, `WindowsCreateString`
+* DIFFERENT: `RegisterWaitForSingleObject`, `SetNamedPipeHandleState`, `TransactNamedPipe`, `UnregisterWaitEx`
+* TOLERATED-CHILD-CRASH: `CoTaskMemAlloc`, `CreateStdAccessibleObject`, `GetFileInformationByHandleEx`, `GetGeoInfoW`, `GetModuleHandleExW`, `GetProcessInformation`, `IsWindowVisible`, `K32GetMappedFileNameW`, `OutputDebugStringW`
+
+**Not decided (NOT-CALLED):** `CallNtPowerInformation`, `ConvertStringSecurityDescriptorToSecurityDescriptorW`, `GetProfileType`, `GetTraceEnableFlags`, `GetTraceEnableLevel`, `GetTraceLoggerHandle`, `ImmGetIMEFileNameW`, `LresultFromObject`, `TraceEvent`, `UiaDisconnectProvider`, `UiaHostProviderFromHwnd`, `UiaReturnRawElementProvider`, `UnregisterTraceGuids`, `UpdateProcThreadAttribute`.
+
+**Tolerated (a failing stub is enough in S1):** `AddVectoredExceptionHandler`, `BuildExplicitAccessWithNameW`, `BuildSecurityDescriptorW`, `BuildTrusteeWithSidW`, `CancelIPChangeNotify`, `CancelIoEx`, `CertAddStoreToCollection`, `CertControlStore`, `CoCreateFreeThreadedMarshaler`, `CoCreateInstance`, `CoTaskMemFree`, `CoUninitialize`, `CreateBitmap`, `CreateFontIndirectW`, `CreateIconIndirect`, `CreateSemaphoreA`, `CreateToolhelp32Snapshot`, `CryptProtectMemory`, `CryptUnprotectMemory`, `DeleteProcThreadAttributeList`, `DestroyIcon`, `DhcpCApiInitialize`, `DhcpRequestParams`, `DiscardVirtualMemory`, `DwmSetWindowAttribute`, `EnumDisplayDevicesW`, `EnumThreadWindows`, `EventRegister`, `EventSetInformation`, `FindFirstFileExW`, `FindWindowExW`, `FreeMibTable`, `GetAncestor`, `GetCaretBlinkTime`, `GetClassNameW`, `GetComputerNameExW`, `GetComputerNameW`, `GetDesktopWindow`, `GetDeviceCaps`, `GetDoubleClickTime`, `GetDpiForMonitor`, `GetDynamicTimeZoneInformation`, `GetFinalPathNameByHandleW`, `GetKeyboardLayout`, `GetKeyboardLayoutList`, `GetKeyboardLayoutNameW`, `GetLastInputInfo`, `GetLocaleInfoEx`, `GetLogicalProcessorInformation`, `GetLogicalProcessorInformationEx`, `GetLongPathNameW`, `GetNamedSecurityInfoW`, `GetObjectW`, `GetPointerDevices`, `GetPriorityClass`, `GetProcessMitigationPolicy`, `GetProductInfo`, `GetSecurityInfo`, `GetStockObject`, `GetStringTypeW`, `GetSysColor`, `GetSystemDirectoryW`, `GetSystemMenu`, `GetSystemPowerStatus`, `GetTextMetricsW`, `GetThreadContext`, `GetThreadId`, `GetThreadPriority`, `GetThreadPriorityBoost`, `GetTimeZoneInformation`, `GetUserDefaultLangID`, `GetUserGeoID`, `GetUserNameExW`, `GetWindow`, `GetWindowDisplayAffinity`, `GetWindowLongW`, `GetWindowTextLengthW`, `HeapSetInformation`, `K32GetModuleInformation`, `K32GetProcessMemoryInfo`, `LoadIconW`, `LoadImageW`, `LockFileEx`, `LookupAccountNameW`, `MFStartup`, `Module32FirstW`, `Module32NextW`, `MonitorFromRect`, `MsgWaitForMultipleObjectsEx`, `NotifyAddrChange`, `NotifyWinEvent`, `OleInitialize`, `OleUninitialize`, `OpenProcess`, `PathMatchSpecW`, `PrefetchVirtualMemory`, `ProcessPrng`, `PropVariantClear`, `QueryThreadCycleTime`, `QueryUnbiasedInterruptTimePrecise`, `ReadDirectoryChangesW`, `ReadProcessMemory`, `RegNotifyChangeKeyValue`, `RegisterClassW`, `RegisterDeviceNotificationW`, `RegisterDragDrop`, `RegisterGPNotification`, `RegisterPointerDeviceNotifications`, `RegisterPowerSettingNotification`, `RegisterSuspendResumeNotification`, `RegisterTraceGuidsW`, `RegisterWindowMessageW`, `RemovePropW`, `ReplaceFileW`, `RevokeDragDrop`, `RoActivateInstance`, `RoGetActivationFactory`, `RoUninitialize`, `RtlCaptureStackBackTrace`, `SHGetFolderPathW`, `SetEntriesInAclW`, `SetErrorMode`, `SetFileInformationByHandle`, `SetNamedSecurityInfoW`, `SetParent`, `SetPriorityClass`, `SetProcessInformation`, `SetProcessShutdownParameters`, `SetPropW`, `SetSecurityInfo`, `SetThreadInformation`, `SetThreadPriority`, `SetThreadPriorityBoost`, `SetWindowLongW`, `Shell_NotifyIconW`, `SwitchToThread`, `SystemParametersInfoW`, `SystemTimeToTzSpecificLocalTime`, `TzSpecificLocalTimeToSystemTime`, `UnlockFileEx`, `UnregisterDeviceNotification`, `UnregisterPowerSettingNotification`, `VerSetConditionMask`, `VerifyVersionInfoW`, `WSAEnumNetworkEvents`, `WSAEventSelect`, `WSALookupServiceBeginW`, `WSALookupServiceEnd`, `WSALookupServiceNextW`, `WTSFreeMemory`, `WTSQuerySessionInformationW`, `WTSRegisterSessionNotification`, `WTSUnRegisterSessionNotification`, `WerRegisterRuntimeExceptionModule`, `WinHttpGetIEProxyConfigForCurrentUser`, `WindowsCreateStringReference`, `WindowsDeleteString`, `WriteProcessMemory`, `lstrcmpiA`, `timeBeginPeriod`, `timeEndPeriod`, `timeGetTime`.
+
+Caveats: one API at a time (two tolerated APIs together may not be); one run each, so a race that needs a second failure is not seen; the S2/S3 stages call more (window, GPU, sandbox) and were not injected; "tolerated" says nothing about the *quality* of the page, only that the DOM digest and the exit code were unchanged. Several FATAL entries are APIs whose failure Chrome turns into its own `CHECK` (for example `GetModuleHandleExA`, `GetCurrentThreadStackLimits`, `CoInitializeEx`, `RoInitialize`, `InitCommonControlsEx`): they need a working implementation, not just a name.
 
 ## 7. Window messages (S3, browser UI thread; counts of the two runs)
 
@@ -1064,17 +1191,36 @@ The gate of every batch is a check that exists or is part of the batch; the S-nu
 `userenv.dll` `DeriveAppContainerSidFromAppContainerName`; `dnsapi.dll` `DnsIsZtEnabled`; `mdmregistration.dll`
 `IsDeviceRegisteredWithManagement`. (Not entries: `shlwapi` `#219` and `#437` are ordinals of names the map already has.)
 
+## 10a. Per-API specs added by `spec-chrome-win-2`
+
+Twelve entries that the sandbox broker or S1 call and `spec-win-sec` left out (sheets `specs/windows/<dll>/<Symbol>.yaml`, tests
+`<Symbol>.tests/`, split about 70 % visible / 30 % held out; Windows reference `windows.json` beside the visible tests):
+advapi32 `BuildExplicitAccessWithNameW`, `BuildTrusteeWithSidW`, `BuildTrusteeWithNameW`, `SetEntriesInAclW`, `GetExplicitEntriesFromAclW`,
+`GetNamedSecurityInfoW`, `SetNamedSecurityInfoW`, `LookupAccountSidW`, `LookupAccountNameW`; kernel32 `GetProcessMitigationPolicy`,
+`SetProcessMitigationPolicy`; userenv `DeriveAppContainerSidFromAppContainerName`. `GetSecurityInfo` was already done by `spec-win-sec`.
+Test programs import `advapi32.dll` and `userenv.dll` (`tools/pipeline/src/windows.rs` allows both). Highlights an implementer needs: the
+ACE order and merge rules of `SetEntriesInAclW`, the inheritance propagation rules of `SetNamedSecurityInfoW` (control bits 0x1404 /
+0x404, ACE flag 0x10), the fixed names and sizes of `LookupAccount*`, the exact lengths each mitigation policy accepts and the policies that
+cannot be set (DEP 50, CFG and shadow stack 5, strict handle checks need both flags), and the hash-based, case-insensitive,
+64-character-limited AppContainer SID.
+
 ## 11. Cross-references and open problems
 
 * spec-win-sec: tokens, ACLs, SDs, jobs. spec-win-ipc: pipes, IOCP, attribute lists, `DuplicateHandle`, sections.
   spec-win-dwrite: DirectWrite. spec-win-gui-a/b: the window manager's calls and message rules. This map orders their
   entries, it does not duplicate them.
-* **Open**: (1) sandboxed renderers under the tracer (a proxy DLL in a restricted child); a tracer mode that writes to the
-  parent over an inherited handle, or Chrome's own `--disable-features=...` for the renderer sandbox, would give the renderer
-  side. (2) per-API fault injection (which failures Chrome tolerates) needs a thunk change that every proxy would have to be
-  rebuilt for (and the 7-Zip kit re-recorded if it is shared). (3) S3 on the owner's PC (its desktop is shared); S3 and S4
-  were recorded on homeserver2 only. (4) S5 as a visible window with the default GPU flags. (5) `poly-chrometrace/1` has
-  no Poly-side comparer yet: `tools/chrometrace.py` reads both sides' runs; `cargo xtask win chrome-trace` is the follow-up.
+* **Open** (state after `spec-chrome-win-2`): (1) *closed*: sandboxed renderers are traced (section 4a). What is still not seen from
+  inside a target: the work done under a call by Windows, calls through pointers, and anything after the target has closed its
+  trace handle; the Microsoft-signed-only mitigation of the renderers is switched off for the trace (event 3033 documents what it
+  refuses). (2) *closed for S1*: per-API fault tolerance (section 6a, `POLYTRACE_FAULT`); S2 to S5 and combinations of failures are
+  not injected, and `TAIL`/`NORETURN` thunks and `UpdateProcThreadAttribute`/`CreateProcessAsUserW` cannot be skipped. (3) S3 on the
+  owner's PC (its desktop is shared); S3 and S4 were recorded on homeserver2 only. (4) S5 as a visible window with the default GPU
+  flags. (5) `poly-chrometrace/1` has no Poly-side comparer yet: `tools/chrometrace.py` reads both sides' runs; `tools/sandboxdiff.py`
+  compares sandboxed and unsandboxed runs; `cargo xtask win chrome-trace` is the follow-up. (6) The sandbox's *own* object accesses
+  (named pipes, sections, window station and desktop ACLs) are in the browser's calls (section 4); the broker's decision of which
+  token level a given process type gets is observed only through the creation-time mitigation words (section 4a), not through the
+  token (`GetTokenInformation` of a live target needs a Windows tool; not done). (7) `SetProcessMitigationPolicy` of the *targets*
+  (section 4a lists that they call it) is not decoded: the policy structures are not logged.
 * Nothing of Chrome, Windows or any other third-party binary was read, decompiled or disassembled; import and export
   *names* and the traces' observations only.
 
@@ -1096,3 +1242,14 @@ The gate of every batch is a check that exists or is part of the batch; the S-nu
   `C:/Users/Marc.Blattmann/poly-dev/handoff/spec-chrome-win-s3-window-1.png`.
 * Never run: anything of Chrome on Poly (it does not start yet), `polyd` boot tests (no kernel change), the implementer-side
   comparison of `poly-chrometrace/1` (no comparer yet).
+
+### Round 2 (`spec-chrome-win-2`)
+
+* Branch `spec-chrome-win-2` (from `origin/main`), pushed; nothing merged, no PR opened.
+* New: `tools/wintrace/proxy/common_agg.rs`, the `ctl` module of `tools/wintrace/polytrace-agg` (fault injection, mitigation probe/relax,
+  inherited trace sections, `OutputDebugString` diagnostics), `tools/sandboxdiff.py`, `traces/s2-sandboxed.trace.json`,
+  `traces/s2-sandbox-targets.json`, `traces/s1-fault-injection.csv`, sections 4a, 6a and 10a above, 12 spec sheets with tests under
+  `specs/windows/{advapi32.dll,kernel32.dll,userenv.dll}/` (27 tests: 14 visible, 13 held out), `tools/pipeline/src/windows.rs` allows
+  `advapi32.dll` and `userenv.dll` imports (the line also changes in `spec-win-sec`: merge by taking the union).
+* Machine: homeserver2 for everything (Windows 11 Home 25H2, 26200.9711, elevated administrator over SSH); the owner's PC only to build the kits.
+  The homeserver2 sshd reset connections for about an hour while the 220-run fault batch was running (it is the batch's load).

@@ -176,6 +176,30 @@ fn application_files(test_apps: bool) -> Vec<(String, u16, Vec<u8>)> {
     .collect()
 }
 
+/// Everything `--test-apps` puts on the disk of the desktop from Chromium's
+/// disk (`chromium.rs`, ADR 0147), as paths below its root: removed again at
+/// the next boot without `--test-apps`, because that disk is kept.
+pub const TEST_ONLY_PATHS: [&str; 10] = [
+    "usr/bin/wl-demo",
+    "usr/bin/wl-client",
+    "usr/share/applications/poly-demo.desktop",
+    "usr/share/applications/demo-window.desktop",
+    "usr/share/applications/slow-window.desktop",
+    "usr/share/applications/slow-activated.desktop",
+    "usr/share/applications/wayland-test-client.desktop",
+    "usr/share/applications/notify-test.desktop",
+    "usr/share/applications/poly-fill.desktop",
+    "win/win_gui_fill.exe",
+];
+
+/// The test apps' files besides their programs, with `--test-apps`: the
+/// desktop files and the Windows test program where it can be built.
+pub fn test_app_files(test_apps: bool) -> Vec<(String, u16, Vec<u8>)> {
+    let mut files = application_files(test_apps);
+    files.extend(windows_app_files(test_apps));
+    files
+}
+
 /// What the desktop's launcher offers beyond its real apps, for `cargo
 /// xtask start`'s menu: nothing, unless the test apps are on.
 pub fn launcher_apps(test_apps: bool) -> Vec<(String, String)> {
@@ -323,7 +347,7 @@ fn image_files(test_apps: bool) -> Result<initramfs::Tree> {
 /// `/mnt/poly/shell.conf`).
 pub const STATE_FILE: &str = "poly-desktop-state.img";
 
-/// `cargo xtask desktop [--release] [--fresh-state] [--size=WxH]
+/// `cargo xtask desktop [--release] [--chromium] [--fresh-state] [--fresh-disk] [--size=WxH]
 /// [--scale=N] [--memory=SIZE] [--cpus=N] [--qmp-port=PORT] [kernel args...]`: boot into the desktop in a QEMU window
 /// (no window without a desktop: then a VNC display on port 5900). The
 /// settings live on a small disk, `target/poly-desktop-state.img`, so they
@@ -342,6 +366,16 @@ pub const STATE_FILE: &str = "poly-desktop-state.img";
 /// default [`MEMORY`] and `QEMU_CPUS` (ADR 0141); the desktop boot tests keep
 /// their own sizes.
 ///
+/// `--chromium` boots the same desktop from Chromium's root disk instead of
+/// the small initramfs (ADR 0147): Poly's apps, wallpapers, fonts and
+/// settings as usual, and Chromium in the launcher as the default browser.
+/// Its packages are downloaded the first time (about 230 MB) and its disk
+/// image (1.3 GB) made, then kept: it holds Chromium's profile, so
+/// `--fresh-disk` starts it again. The default memory and CPUs are
+/// Chromium's ([`crate::chromium::MEMORY`]); the window takes about a
+/// minute to open. `--fresh-state`, `--test-apps`, `--scale`, `--size`,
+/// `--memory`, `--cpus` and the kernel arguments apply as without it.
+///
 /// `--build-only` builds everything and stops before the boot.
 pub fn command(args: &[String]) -> Result {
     let ready = prepare(args)?;
@@ -356,7 +390,11 @@ pub fn command(args: &[String]) -> Result {
 #[derive(Debug)]
 pub struct Prepared {
     kernel: PathBuf,
+    /// The initramfs: the desktop's own, or with `--chromium` the one that
+    /// switches to Chromium's disk.
     image: PathBuf,
+    /// Chromium's disk (`--chromium`).
+    chromium_disk: Option<PathBuf>,
     state: PathBuf,
     size: (u32, u32),
     scale: u32,
@@ -377,6 +415,11 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
     let fresh = args.iter().any(|a| a == "--fresh-state");
     let qmp_port = parse_qmp_port(args)?;
     let test_apps = args.iter().any(|a| a == "--test-apps");
+    let chromium = args.iter().any(|a| a == "--chromium");
+    let fresh_disk = args.iter().any(|a| a == "--fresh-disk");
+    if fresh_disk && !chromium {
+        return Err("--fresh-disk is for --chromium's disk (the desktop's own image is made afresh every time)".into());
+    }
     let value = |name: &str| args.iter().find_map(|a| a.strip_prefix(name)).map(str::to_string);
     let asked = match value("--scale=") {
         Some(v) => {
@@ -398,6 +441,12 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
     };
     let extra: Vec<String> = args.iter().filter(|a| !a.starts_with("--")).cloned().collect();
     let state = root().join("target").join(STATE_FILE);
+    // What the compositor is asked on Chromium's disk, where its first
+    // program is not its own (`poly-desktop` reads them from a file).
+    let mut compositor_args = vec!["--settings".to_string(), CHROMIUM_SETTINGS.to_string()];
+    if asked.is_some() || scale != 1 {
+        compositor_args.extend(["--scale".to_string(), scale.to_string()]);
+    }
     let (kernel, image, disk) = thread::scope(|s| {
         let kernel = s.spawn(|| super::build_kernel(release));
         let disk = s.spawn(|| -> Result {
@@ -413,37 +462,84 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
             }
             Ok(())
         });
-        let image = image(test_apps);
+        let image = if chromium {
+            let files = crate::chromium::PolyFiles { test_apps, compositor_args, test_page: None };
+            crate::chromium::desktop_parts(&files, fresh_disk).map(|p| (p.initrd, Some(p.disk)))
+        } else {
+            image(test_apps).map(|i| (i, None))
+        };
         let kernel = kernel.join().unwrap_or_else(|_| Err("building the kernel panicked".into()));
         (kernel, image, disk.join().unwrap_or_else(|_| Err("making the settings disk panicked".into())))
     });
-    let (kernel, image) = (kernel?, image?);
+    let (kernel, (image, chromium_disk)) = (kernel?, image?);
     disk?;
-    Ok(Prepared { kernel, image, state, size, scale, asked: asked.is_some(), host, qmp_port, extra, resources })
+    Ok(Prepared {
+        kernel,
+        image,
+        chromium_disk,
+        state,
+        size,
+        scale,
+        asked: asked.is_some(),
+        host,
+        qmp_port,
+        extra,
+        resources,
+    })
 }
 
 /// Boot what [`prepare`] made, in QEMU's window.
 pub fn boot(p: Prepared) -> Result {
-    let Prepared { kernel, image, state, size, scale, asked, host, qmp_port, extra, resources } = p;
+    let Prepared { kernel, image, chromium_disk, state, size, scale, asked, host, qmp_port, extra, resources } = p;
     // The compositor's `--scale` wins over the saved settings' scale (which
     // a run at another scale may have saved): asked for, or the host's when
     // that is not 1. At scale 1 the settings choose, as before.
     let force =
         if asked || scale != 1 { format!("poly.init.arg=--scale poly.init.arg={scale}") } else { String::new() };
-    let kernel_args = format!("{SETTINGS_ARGS} poly.display.scale={scale} {force} {}", extra.join(" "));
+    // From Chromium's disk the first program is the initramfs's shell, which
+    // switches to the disk (`poly-desktop` there starts the compositor, with
+    // the arguments `prepare` wrote for it); the settings disk is the second
+    // virtio-blk disk, bound into the root disk (ADR 0147).
+    let (memory, cpus, append) = match &chromium_disk {
+        Some(_) => (
+            crate::chromium::MEMORY,
+            crate::chromium::CPUS.unwrap_or(crate::QEMU_CPUS),
+            format!(
+                "{} console=ttyS0 poly.terminal=off poly.net=qemu poly.mount=virtio1:/settings poly.display.scale={scale} {}",
+                crate::chromium::INIT_ARGS,
+                extra.join(" ")
+            )
+            .trim_end()
+            .to_string(),
+        ),
+        None => (
+            MEMORY,
+            crate::QEMU_CPUS,
+            append(format!("{SETTINGS_ARGS} poly.display.scale={scale} {force} {}", extra.join(" ")).trim_end()),
+        ),
+    };
     let mut cmd = crate::qemu_with(
         &kernel,
-        &resources.memory(MEMORY),
-        resources.cpus_or(crate::QEMU_CPUS),
-        &append(kernel_args.trim_end()),
+        &resources.memory(memory),
+        resources.cpus_or(cpus),
+        &append,
         super::Devices::None,
         "mon:stdio",
     );
-    eprintln!("{}", resources.describe(MEMORY, crate::QEMU_CPUS));
+    eprintln!("{}", resources.describe(memory, cpus));
     if let Some(port) = qmp_port {
         cmd.arg("-qmp").arg(format!("tcp:127.0.0.1:{port},server,nowait"));
     }
+    if let Some(disk) = &chromium_disk {
+        cmd.args(super::rootdisk::drive_args(disk));
+    }
     cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
+    if chromium_disk.is_some() {
+        cmd.args(crate::net::nic_args(None, false));
+        eprintln!(
+            "==> Chromium's window takes about a minute to open (more without a hypervisor); the launcher lists it as Chromium"
+        );
+    }
     eprintln!("==> screen {}x{} at scale {scale} (--size=WxH, --scale=N)", size.0, size.1);
     // A QMP socket to drive the desktop from outside (scripted checks on a
     // host without Unix sockets): `POLY_QEMU_QMP=tcp:127.0.0.1:4444`.
@@ -1125,7 +1221,7 @@ fn shell_devices(state: &Path, sound: bool) -> Vec<String> {
 }
 
 /// The settings disk as the first virtio-blk device.
-fn state_drive(state: &Path) -> Vec<String> {
+pub(crate) fn state_drive(state: &Path) -> Vec<String> {
     vec![
         "-drive".to_string(),
         format!("if=none,id=state,format=raw,file={}", state.display()),
@@ -1136,6 +1232,10 @@ fn state_drive(state: &Path) -> Vec<String> {
 
 /// The kernel's arguments for the settings disk: mounted on `/mnt`, the
 /// compositor's settings file on it.
+/// Where the settings file is on Chromium's disk: the settings disk, bound
+/// into it at `/settings` (`chromium::overlay_script`).
+const CHROMIUM_SETTINGS: &str = "/settings/poly/shell.conf";
+
 const SETTINGS_ARGS: &str = "poly.mount=virtio0:/mnt poly.init.arg=--settings poly.init.arg=/mnt/poly/shell.conf";
 
 /// The kernel command line of the shell's boots.
@@ -1943,6 +2043,30 @@ mod tests {
         for test in TEST_PROGRAMS {
             assert!(!programs(false).contains(&test), "{test} is in a normal image");
         }
+    }
+
+    /// The desktop from Chromium's disk keeps its disk between boots: every
+    /// file `--test-apps` puts on it is one the next boot removes (ADR 0147).
+    #[test]
+    fn everything_test_apps_add_to_a_kept_disk_is_removed_again() {
+        let mut added: Vec<String> = TEST_PROGRAMS.iter().map(|p| format!("usr/bin/{p}")).collect();
+        added.extend(application_files(true).into_iter().map(|(path, _, _)| path));
+        added.push("usr/share/applications/poly-fill.desktop".to_string());
+        added.push(format!("win/{WIN32_TEST}.exe"));
+        for path in &added {
+            assert!(TEST_ONLY_PATHS.contains(&path.as_str()), "{path} stays on a kept disk");
+        }
+        assert_eq!(TEST_ONLY_PATHS.len(), added.len());
+        // And none of them is a path the plain desktop's apps use.
+        for p in PROGRAMS {
+            assert!(!TEST_ONLY_PATHS.contains(&format!("usr/bin/{p}").as_str()), "{p}");
+        }
+    }
+
+    #[test]
+    fn fresh_disk_is_chromiums() {
+        let e = prepare(&["--fresh-disk".to_string()]).unwrap_err();
+        assert!(e.contains("--chromium"), "{e}");
     }
 
     #[test]

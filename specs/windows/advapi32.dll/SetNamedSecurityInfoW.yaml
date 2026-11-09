@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/SetNamedSecurityInfoW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-chrome-win-2
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Sets the owner, group, DACL and/or SACL of an object found by name, and,
+  for files and keys, propagates inheritable ACEs to the children and
+  recomputes the inherited ACEs of the object itself.
+interface:
+  signature: "DWORD SetNamedSecurityInfoW(LPWSTR object_name, SE_OBJECT_TYPE object_type, SECURITY_INFORMATION info, PSID owner, PSID group, PACL dacl, PACL sacl)"
+  security_information: "OWNER 1, GROUP 2, DACL 4, SACL 8, PROTECTED_DACL 0x80000000, UNPROTECTED_DACL 0x20000000 (winnt.h)"
+  ace_flags: "OBJECT_INHERIT_ACE 1, CONTAINER_INHERIT_ACE 2, NO_PROPAGATE_INHERIT_ACE 4, INHERIT_ONLY_ACE 8, INHERITED_ACE 0x10 (winnt.h); SE_DACL_PROTECTED 0x1000, SE_DACL_AUTO_INHERITED 0x400 (control bits)"
+rules:
+  set_and_get: "a DACL set with DACL|PROTECTED_DACL on a directory is returned unchanged with control 0x1404 (SE_DACL_PRESENT, SE_DACL_AUTO_INHERITED, SE_DACL_PROTECTED)"
+  inheritance_to_new_children: "a file made afterwards in that directory gets the ACEs with flags 0x10 (INHERITED_ACE; the inherit flags 3 are dropped) and control 0x404; a subdirectory gets them with flags 0x13 (inherited + object + container inherit, because the flags 3 were on the parent ACEs); a file in that subdirectory gets flags 0x10"
+  propagation: "setting a new DACL (protected) on the parent rewrites the inherited ACEs of existing children and grandchildren: after replacing Everyone by BUILTIN\\Users in the parent, the file and the file in the subdirectory show S-1-5-32-545 with flags 0x10 (ACL size 76 for the 24-byte SID) and no Everyone ACE"
+  protected_child: "a child with a protected explicit DACL (control 0x1404, two ACEs flags 0) is not touched when the parent is set again"
+  unprotect: "DACL|UNPROTECTED_DACL_SECURITY_INFORMATION with the explicit ACEs on a protected child: the explicit ACEs (flags 0) stay first and the parent's inheritable ACEs are added after them with flags 0x10 (5 ACEs, control 0x404); the same happens when the DACL is set with no protection flag on an unprotected object"
+  null_dacl: "DACL requested with a NULL DACL (with PROTECTED): result 0 and a later GetNamedSecurityInfoW returns a NULL DACL pointer (everyone full access)"
+  owner: "owner Everyone (S-1-1-0) assigned by an elevated administrator: result 0 (SeRestorePrivilege is used) -- ambient"
+  unknown_bits: "information 0x100 alone and DACL|0x100 are accepted: result 0"
+errors:
+  missing_file: "ERROR_FILE_NOT_FOUND (2)"
+  empty_name: "ERROR_INVALID_NAME (123)"
+  object_type: "type 0 and type 99: ERROR_INVALID_PARAMETER (87)"
+  information_0: "information 0 with all pointers NULL: ERROR_ACCESS_DENIED (5)"
+  null_owner_group: "OWNER (or GROUP) requested with a NULL owner (group): ERROR_INVALID_PARAMETER (87)"
+  invalid_acl: "a DACL with ACL revision 9: ERROR_INVALID_ACL (1336)"
+side_effects: "changes the security of the named object and the inherited ACEs of its children"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  registry keys, services, SACL changes (privilege), remote names, very deep
+  trees, restoring inheritance on objects whose parent has no inheritable
+  ACEs. Domain accounts and domain-relative well-known SIDs of a real
+  domain, AppContainer and capability SIDs beyond their string forms,
+  auditing (SACL entries are only stored, never evaluated), remote systems
+  (the system-name arguments), Kerberos or NTLM logon tokens, tokens of
+  other users.

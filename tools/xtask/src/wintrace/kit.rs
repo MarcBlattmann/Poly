@@ -26,11 +26,11 @@ fn output_of(cmd: &mut Command) -> Result<String> {
 /// Build the logger and the proxies of `proxies` (`-Zbuild-std`, as ADR
 /// 0075's test programs); returns the directory with the DLLs.
 pub(super) fn build(proxies: &[Proxy]) -> Result<PathBuf> {
-    build_with(proxies, false)
+    build_with(proxies, false, false)
 }
 
 /// [`build`]; `agg` builds the counting logger.
-fn build_with(proxies: &[Proxy], agg: bool) -> Result<PathBuf> {
+fn build_with(proxies: &[Proxy], agg: bool, sync: bool) -> Result<PathBuf> {
     let repo = crate::root();
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
     let sysroot = PathBuf::from(output_of(Command::new(&rustc).current_dir(&repo).args(["--print", "sysroot"]))?);
@@ -39,8 +39,14 @@ fn build_with(proxies: &[Proxy], agg: bool) -> Result<PathBuf> {
         return Err(format!("{} not found: the rust-src component is needed", vendor.display()));
     }
     let gen_dir = work_dir().join("build");
-    generate_with(&gen_dir, &repo, proxies, agg)?;
-    let target_dir = work_dir().join(if agg { "cargo-agg" } else { "cargo" });
+    generate_with(&gen_dir, &repo, proxies, agg, sync)?;
+    let target_dir = work_dir().join(if agg {
+        "cargo-agg"
+    } else if sync {
+        "cargo-sync"
+    } else {
+        "cargo"
+    });
     let flags = [
         "-Clinker=rust-lld".to_string(),
         "-Clinker-flavor=lld-link".into(),
@@ -144,8 +150,16 @@ pub fn build_kit(exe: &Path, out: &Path, data: &[String]) -> Result<Kit> {
 /// serves them all. A DLL that is one of `exes` (the application's own),
 /// is named in `skip`, or is not a `.dll` (`.drv`, `.cpl`) keeps its
 /// name and is not traced. With `agg` the logger counts instead of
-/// writing every call (`tools/wintrace/polytrace-agg`).
-pub fn build_kit_multi(exes: &[PathBuf], out: &Path, data: &[String], agg: bool, skip: &[String]) -> Result<Kit> {
+/// writing every call (`tools/wintrace/polytrace-agg`); with `sync` the
+/// logger is `polytrace-sync` (ADR 0155).
+pub fn build_kit_multi(
+    exes: &[PathBuf],
+    out: &Path,
+    data: &[String],
+    agg: bool,
+    sync: bool,
+    skip: &[String],
+) -> Result<Kit> {
     let own: Vec<String> =
         exes.iter().filter_map(|e| e.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase())).collect();
     let traced = |low: &str| {
@@ -179,7 +193,7 @@ pub fn build_kit_multi(exes: &[PathBuf], out: &Path, data: &[String], agg: bool,
         .map_err(|e| format!("{name}: {e}"))?;
         renamed.push((name.clone(), r));
     }
-    let built = build_with(&proxies, agg)?;
+    let built = build_with(&proxies, agg, sync)?;
     let _ = std::fs::remove_dir_all(out);
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     for (name, bytes) in &renamed {
