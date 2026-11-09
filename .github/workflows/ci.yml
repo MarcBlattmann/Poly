@@ -198,15 +198,15 @@ jobs:
         # (`cargo xtask boot-tests --list` shows the groups of each); `ci
         # lint` checks that every shard is in exactly one entry. The entries
         # take about the same time (their groups' boots, in seconds on KVM:
-        # core 125, userland 140, sevenzip 130, desktop-shell 140, x11 90,
-        # wintrace 215). `x11` is true where the root disk wants Xwayland and
-        # Mesa; `sevenzip` where 7-Zip is fetched.
+        # devices 85, sevenzip 87, x11 97, apps 115, userland 115, desktop
+        # 115). `x11` is true where the root disk wants Xwayland and Mesa;
+        # `sevenzip` where 7-Zip is fetched.
         include:
-          - boot: core
-            shards: selftest,devices,faults
+          - boot: devices
+            shards: devices,faults
             accel: auto
           - boot: userland
-            shards: userland,desktop
+            shards: userland,selftest
             accel: auto
             x11: true
           - boot: sevenzip
@@ -214,17 +214,18 @@ jobs:
             accel: auto
             sevenzip: true
           - boot: desktop
-            shards: desktop-shell
+            shards: desktop,desktop-shell
             accel: auto
             x11: true
+          - boot: apps
+            shards: desktop-apps,wintrace
+            accel: auto
+            x11: true
+            sevenzip: true
           - boot: x11
             shards: x11
             accel: auto
             x11: true
-          - boot: wintrace
-            shards: wintrace
-            accel: auto
-            sevenzip: true
           # The self-test boots on TCG too, so paths only the emulator takes
           # (and its quirks) stay tested.
           - boot: selftest
@@ -283,19 +284,6 @@ jobs:
         if: matrix.sevenzip
         run: target/debug/xtask win fetch-7zip || echo "::warning::could not fetch 7-Zip; the 7zip boot test is skipped"
       - run: target/debug/xtask boot-tests --shard ${{ matrix.shards }}
-      - name: DIAG serial rate of the traced scenario (temporary)
-        if: matrix.boot == 'wintrace'
-        run: |
-          d=$(ls -d target/pipeline/runs/*scenario-poly | tail -1)
-          rm -f /tmp/ser.log
-          start=$(date +%s)
-          qemu-system-x86_64 -accel tcg -machine q35 -m 256M -smp 2 -display none -serial file:/tmp/ser.log -no-reboot             -device isa-debug-exit,iobase=0xf4,iosize=0x04 -kernel kernel/target/x86_64-unknown-none/debug/poly-kernel             -initrd "$d/sevenzip_trace.initramfs.cpio"             -append "poly.qemu_exit poly.init=/sevenzip_trace/sevenzip_trace.exe poly.test.stdout=/sevenzip_trace/poly-test.out" &
-          q=$!
-          while kill -0 $q 2>/dev/null; do
-            sleep 5
-            echo "$(( $(date +%s)-start ))s $(stat -c %s /tmp/ser.log 2>/dev/null) $(grep -c '^POLY-OUT' /tmp/ser.log 2>/dev/null)"
-          done
-          echo "total $(( $(date +%s)-start ))s"
       - name: Keep the boot logs
         if: failure()
         uses: actions/upload-artifact@v4

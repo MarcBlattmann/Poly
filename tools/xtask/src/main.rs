@@ -1674,19 +1674,21 @@ const BOOT_GROUPS: [BootGroup; 37] = [
 /// workflow can combine them into jobs of equal length as the times change
 /// without moving groups (the times of a CI run on KVM are in the comments).
 /// `cargo xtask ci lint` checks that the workflow runs exactly these.
-const CI_BOOT_SHARDS: [(&str, &[&str]); 9] = [
+const CI_BOOT_SHARDS: [(&str, &[&str]); 10] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     // About 75 s: Linux programs and the root disk.
     ("userland", &["programs", "native", "dynamic", "busybox", "rootdisk", "toolkits", "chromium"]),
     // About 130 s: 7-Zip's command line on the NT personality, one boot per step.
     ("sevenzip", &["7zip"]),
-    // The traced 7-Zip scenario, one long boot: 3 to 4 minutes.
+    // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
     // About 60 s: the compositor and the desktop.
     ("desktop", &["wayland", "wayland-kms", "desktop", "desktop-win32"]),
-    // About 140 s: window management, notifications, settings, Files and Terminal.
-    ("desktop-shell", &["desktop-shell", "desktop-apps"]),
+    // About 55 s: window management, notifications and the settings window.
+    ("desktop-shell", &["desktop-shell"]),
+    // About 85 s: Poly's own Files and Terminal on the desktop.
+    ("desktop-apps", &["desktop-apps"]),
     // X11 apps through Xwayland and Mesa: about 85 s.
     ("x11", &["xwayland", "mesa"]),
     // About 50 s.

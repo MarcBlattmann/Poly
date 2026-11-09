@@ -912,7 +912,21 @@ fn run_poly(kernel: Option<&str>, dir: &Path) -> Result<PathBuf> {
     if let Some(k) = kernel {
         args.extend(["--kernel", k]);
     }
-    let status = crate::sevenzip::pipeline(&args)?;
+    // The observation file (8 MB: the traces of 46 000 calls) comes out of
+    // the guest as hex on the serial port, a port I/O exit per byte. On a
+    // hypervisor inside a virtual machine (GitHub's runners) that is 50 KB/s,
+    // three minutes for the run; QEMU's emulator does the same in 15 s,
+    // and the 7-Zip steps themselves take seconds on either. So the run is
+    // on TCG unless `POLY_QEMU_ACCEL` names an accelerator.
+    let mut cmd = crate::prebuilt::pipeline_tool();
+    cmd.args(&args);
+    if std::env::var(crate::accel::ENV).is_ok_and(|v| !v.trim().is_empty() && v.trim() != "auto") {
+        // Explicitly chosen: as asked.
+    } else {
+        eprintln!("==> the traced scenario runs on TCG: its 8 MB of serial output is slow through a hypervisor");
+        cmd.env(crate::accel::ENV, "tcg");
+    }
+    let status = cmd.status().map_err(|e| format!("pipeline: {e}"))?;
     if !status.success() {
         return Err(format!("running {TEST} on Poly failed ({status})"));
     }
