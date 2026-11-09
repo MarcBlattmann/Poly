@@ -305,8 +305,28 @@ impl LinuxFs for Thread<'_> {
         new: Result<&[u8], Errno>,
         flags: u32,
     ) -> Result<(), Errno> {
-        let flags = RenameFlags::from_linux(flags).map_err(vfs_errno)?;
-        self.process().files.renameat(olddirfd, old, newdirfd, new.map_err(errno_vfs), flags).map_err(vfs_errno)
+        // RENAME_WHITEOUT (renameat2(2)): move, and leave a character
+        // device 0:0 under the old name. Poly has it on tmpfs (the layer
+        // overlayfs uses); an overlay does not (`EINVAL`).
+        let whiteout = flags & RenameFlags::LINUX_WHITEOUT != 0;
+        if whiteout {
+            if flags & RenameFlags::LINUX_EXCHANGE != 0 {
+                return Err(Errno::EINVAL);
+            }
+            let node = self.process().files.lookupat(olddirfd, old, false).map_err(vfs_errno)?;
+            if node.mount().fs_name() != "tmpfs" {
+                return Err(Errno::EINVAL);
+            }
+        }
+        let flags = RenameFlags::from_linux(flags & !RenameFlags::LINUX_WHITEOUT).map_err(vfs_errno)?;
+        let files = &self.process().files;
+        files.renameat(olddirfd, old, newdirfd, new.map_err(errno_vfs), flags).map_err(vfs_errno)?;
+        if whiteout {
+            files
+                .mknodat(olddirfd, old, poly_vfs::FileType::CharDevice, 0, poly_vfs::DeviceId::new(0, 0), true)
+                .map_err(vfs_errno)?;
+        }
+        Ok(())
     }
 
     fn symlinkat(&mut self, target: &[u8], dirfd: i32, path: &[u8]) -> Result<(), Errno> {

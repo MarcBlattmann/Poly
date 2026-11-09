@@ -23,6 +23,7 @@ mod keyboard;
 mod ktest;
 mod linux;
 mod log;
+mod loopdev;
 mod mm;
 mod mouse;
 mod native;

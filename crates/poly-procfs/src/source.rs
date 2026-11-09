@@ -206,6 +206,12 @@ pub struct MountEntry {
     pub no_suid: bool,
     pub no_dev: bool,
     pub no_exec: bool,
+    /// The mount's extra attributes (`MOUNT_ATTR_*`): the access time mode.
+    pub attrs: u32,
+    /// The file system's own options (`size=1024k`), without `rw`/`ro`.
+    pub sb_options: Vec<u8>,
+    /// The file system as a whole is read-only.
+    pub sb_read_only: bool,
 }
 
 /// CPU time of the system in nanoseconds, by what it was spent on

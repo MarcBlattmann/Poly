@@ -64,7 +64,7 @@ fn require_mount(k: &mut dyn LinuxKernel) -> Result<bool, Errno> {
 /// bind mounts and mount the following types of filesystems: /proc ...,
 /// /sys ..., devpts, tmpfs, ramfs, mqueue, bpf, overlayfs" of which Poly
 /// has the first five).
-const USERNS_MOUNTABLE: &[&[u8]] = &[b"proc", b"sysfs", b"devpts", b"tmpfs", b"ramfs"];
+const USERNS_MOUNTABLE: &[&[u8]] = &[b"proc", b"sysfs", b"devpts", b"tmpfs", b"ramfs", b"overlay"];
 
 // ---- mount -------------------------------------------------------------
 
@@ -135,6 +135,10 @@ pub fn mount_request(
         let source = nonempty_path(k, source)?;
         let target = nonempty_path(k, target)?;
         return Ok(MountRequest::Move { source, target });
+    }
+    // A NULL type is `EINVAL`; an empty or unknown one `ENODEV`.
+    if fstype.0 == 0 {
+        return Err(Errno::EINVAL);
     }
     let source = string_arg(k, source)?;
     let target = nonempty_path(k, target)?;

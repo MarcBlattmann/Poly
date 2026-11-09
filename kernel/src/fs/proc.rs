@@ -493,6 +493,12 @@ impl ProcSource for KernelProc {
             .iter()
             .filter_map(|m| {
                 let at = vfs().mount_path(&ctx, m.id).ok()?;
+                let mount = vfs().mount_by_id(m.id);
+                let sb_read_only = mount.as_ref().is_some_and(|mm| {
+                    mm.sb_read_only()
+                        || mm.fs().info().read_only
+                        || super::disk::mount_of(m.id).is_some_and(|d| d.read_only)
+                });
                 Some(MountEntry {
                     id: m.id,
                     parent: m.parent.map_or(m.id, |(p, _)| p),
@@ -506,6 +512,9 @@ impl ProcSource for KernelProc {
                     no_suid: m.flags.no_suid,
                     no_dev: m.flags.no_dev,
                     no_exec: m.flags.no_exec,
+                    attrs: mount.as_ref().map_or(0, |mm| mm.attrs()),
+                    sb_options: mount.as_ref().map_or_else(Vec::new, |mm| mm.sb_options()),
+                    sb_read_only,
                 })
             })
             .collect()

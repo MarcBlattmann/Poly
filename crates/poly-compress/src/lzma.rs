@@ -97,8 +97,8 @@ impl<'a> Rc<'a> {
 struct LenCoder {
     choice: u16,
     choice2: u16,
-    low: [[u16; 8]; POS_STATES_MAX],
-    mid: [[u16; 8]; POS_STATES_MAX],
+    low: Vec<u16>,
+    mid: Vec<u16>,
     high: [u16; 256],
 }
 
@@ -107,8 +107,8 @@ impl LenCoder {
         LenCoder {
             choice: PROB_INIT,
             choice2: PROB_INIT,
-            low: [[PROB_INIT; 8]; POS_STATES_MAX],
-            mid: [[PROB_INIT; 8]; POS_STATES_MAX],
+            low: vec![PROB_INIT; 8 * POS_STATES_MAX],
+            mid: vec![PROB_INIT; 8 * POS_STATES_MAX],
             high: [PROB_INIT; 256],
         }
     }
@@ -116,10 +116,10 @@ impl LenCoder {
     /// The length minus [`MATCH_MIN_LEN`].
     fn decode(&mut self, rc: &mut Rc<'_>, pos_state: usize) -> Result<usize, Error> {
         if rc.bit(&mut self.choice)? == 0 {
-            return Ok(rc.tree(&mut self.low[pos_state], 3)? as usize);
+            return Ok(rc.tree(&mut self.low[pos_state * 8..pos_state * 8 + 8], 3)? as usize);
         }
         if rc.bit(&mut self.choice2)? == 0 {
-            return Ok(8 + rc.tree(&mut self.mid[pos_state], 3)? as usize);
+            return Ok(8 + rc.tree(&mut self.mid[pos_state * 8..pos_state * 8 + 8], 3)? as usize);
         }
         Ok(16 + rc.tree(&mut self.high, 8)? as usize)
     }
@@ -132,13 +132,13 @@ pub struct State {
     lp: u32,
     pb: u32,
     literal: Vec<u16>,
-    is_match: [[u16; POS_STATES_MAX]; NUM_STATES],
+    is_match: Vec<u16>,
     is_rep: [u16; NUM_STATES],
     is_rep_g0: [u16; NUM_STATES],
     is_rep_g1: [u16; NUM_STATES],
     is_rep_g2: [u16; NUM_STATES],
-    is_rep0_long: [[u16; POS_STATES_MAX]; NUM_STATES],
-    pos_slot: [[u16; 64]; 4],
+    is_rep0_long: Vec<u16>,
+    pos_slot: Vec<u16>,
     spec_pos: [u16; SPEC_POS_LEN],
     align: [u16; 16],
     len: LenCoder,
@@ -158,13 +158,13 @@ impl State {
             lp,
             pb,
             literal: vec![PROB_INIT; 0x300usize << (lc + lp)],
-            is_match: [[PROB_INIT; POS_STATES_MAX]; NUM_STATES],
+            is_match: vec![PROB_INIT; NUM_STATES * POS_STATES_MAX],
             is_rep: [PROB_INIT; NUM_STATES],
             is_rep_g0: [PROB_INIT; NUM_STATES],
             is_rep_g1: [PROB_INIT; NUM_STATES],
             is_rep_g2: [PROB_INIT; NUM_STATES],
-            is_rep0_long: [[PROB_INIT; POS_STATES_MAX]; NUM_STATES],
-            pos_slot: [[PROB_INIT; 64]; 4],
+            is_rep0_long: vec![PROB_INIT; NUM_STATES * POS_STATES_MAX],
+            pos_slot: vec![PROB_INIT; 4 * 64],
             spec_pos: [PROB_INIT; SPEC_POS_LEN],
             align: [PROB_INIT; 16],
             len: LenCoder::new(),
@@ -185,7 +185,7 @@ impl State {
 
     fn distance(&mut self, rc: &mut Rc<'_>, len: usize) -> Result<u32, Error> {
         let len_state = len.min(3);
-        let slot = rc.tree(&mut self.pos_slot[len_state], 6)?;
+        let slot = rc.tree(&mut self.pos_slot[len_state * 64..len_state * 64 + 64], 6)?;
         if slot < 4 {
             return Ok(slot);
         }
@@ -234,7 +234,7 @@ impl State {
             let pos = out.len() - dict_start;
             let pos_state = pos & pb_mask;
             let st = self.state;
-            if rc.bit(&mut self.is_match[st][pos_state])? == 0 {
+            if rc.bit(&mut self.is_match[st * POS_STATES_MAX + pos_state])? == 0 {
                 let prev = if out.len() > dict_start { out[out.len() - 1] } else { 0 };
                 let lit_state = ((pos & lp_mask) << self.lc) + (usize::from(prev) >> (8 - self.lc));
                 let base = 0x300 * lit_state;
@@ -294,7 +294,7 @@ impl State {
                     return Err(Error::Corrupt);
                 }
                 if rc.bit(&mut self.is_rep_g0[st])? == 0 {
-                    if rc.bit(&mut self.is_rep0_long[st][pos_state])? == 0 {
+                    if rc.bit(&mut self.is_rep0_long[st * POS_STATES_MAX + pos_state])? == 0 {
                         // A one-byte repeat.
                         self.state = if st < 7 { 9 } else { 11 };
                         let dist = self.reps[0] + 1;

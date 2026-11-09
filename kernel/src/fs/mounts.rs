@@ -91,7 +91,8 @@ pub fn new_virtual(fs: FsType, root: RootOptions) -> Result<Arc<dyn FileSystem>,
             tmpfs.setattr(tmpfs.root(), &set)?;
             super::memfs::cached(tmpfs)
         }
-        FsType::Ext2 => return Err(Errno::ENOTBLK),
+        FsType::Ext2 | FsType::Squashfs => return Err(Errno::ENOTBLK),
+        FsType::Overlay => return Err(Errno::EINVAL),
     })
 }
 

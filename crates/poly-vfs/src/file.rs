@@ -617,7 +617,7 @@ impl OpenFile {
             Backend::Device(dev) if !dev.seekable() => return Err(Errno::ESPIPE),
             Backend::Object(o) if o.seek_stays_at_zero() => return Ok(0),
             Backend::Object(o) => o.seek_size().ok_or(Errno::ESPIPE)?,
-            Backend::Device(_) => 0,
+            Backend::Device(dev) => dev.size().unwrap_or(0),
             Backend::Inode => self.node.attr()?.size,
         };
         let mut off = self.offset.lock();
@@ -725,7 +725,8 @@ impl OpenFile {
         match &self.backend {
             Backend::Path => Err(Errno::EBADF),
             Backend::Inode => self.fs().sync(),
-            Backend::Device(_) | Backend::Object(_) => Err(Errno::EINVAL),
+            Backend::Device(dev) => dev.sync(),
+            Backend::Object(_) => Err(Errno::EINVAL),
         }
     }
 

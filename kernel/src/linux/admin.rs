@@ -92,6 +92,122 @@ impl core::fmt::Write for Log {
 }
 
 impl Thread<'_> {
+    /// mount(2) of a squashfs image from a loop device (ADR 0168): the
+    /// device's file system (the same one when it is mounted already), never
+    /// twice on one directory (`EBUSY`).
+    fn mount_squashfs(&mut self, source: &[u8], target: &[u8], rdev: DeviceId, flags: MountFlags) -> Result<(), Errno> {
+        if !crate::loopdev::is_loop(rdev) {
+            return Err(Errno::ENXIO);
+        }
+        let files = &self.process().files;
+        let fs = crate::loopdev::mount_squashfs(rdev).map_err(vfs_errno)?;
+        if let Ok(id) = files.mount_at(target, true)
+            && let Some(m) = crate::fs::vfs().mount_by_id(id)
+            && alloc::sync::Arc::ptr_eq(m.fs(), &fs)
+        {
+            return Err(Errno::EBUSY);
+        }
+        let id = files.mount_fs(target, fs, flags).map_err(vfs_errno)?;
+        mounts::record_source(id, source);
+        Ok(())
+    }
+
+    /// mount(2) of an overlay (ADR 0168): the layers named in `data`, looked
+    /// up as the options come (a missing directory is `ENOENT` even when a
+    /// later option is wrong), then checked against each other.
+    fn mount_overlay(
+        &mut self,
+        source: &[u8],
+        target: &[u8],
+        flags: admin::MountFlags,
+        data: &[u8],
+    ) -> Result<(), Errno> {
+        use poly_overlayfs::{Config, Layer, Overlay, Redirect, is_inside};
+        let files = &self.process().files;
+        let tnode = files.lookupat(AT_FDCWD, target, true).map_err(vfs_errno)?;
+        if tnode.attr().map_err(vfs_errno)?.kind != FileType::Directory {
+            return Err(Errno::ENOTDIR);
+        }
+        let layer_of = |path: &[u8]| -> Result<Layer, Errno> {
+            let node = files.lookupat(AT_FDCWD, path, true).map_err(vfs_errno)?;
+            if node.attr().map_err(vfs_errno)?.kind != FileType::Directory {
+                return Err(Errno::EINVAL);
+            }
+            Ok(Layer { fs: node.mount().fs().clone(), root: node.ino() })
+        };
+        let mut lowers: Vec<Layer> = Vec::new();
+        let (mut upper, mut work) = (None, None);
+        let (mut userxattr, mut redirect) = (false, Redirect::Off);
+        for (name, value) in admin::options(data) {
+            match (name, value) {
+                (b"lowerdir", Some(v)) => {
+                    for part in v.split(|&b| b == b':') {
+                        lowers.push(layer_of(part)?);
+                    }
+                }
+                (b"upperdir", Some(v)) => upper = Some(layer_of(v)?),
+                (b"workdir", Some(v)) => work = Some(layer_of(v)?),
+                (b"userxattr", None) => userxattr = true,
+                (b"redirect_dir", Some(v)) => redirect = Redirect::from_value(v).map_err(vfs_errno)?,
+                (b"index" | b"metacopy" | b"nfs_export", Some(b"on" | b"off")) => {}
+                (b"xino", Some(b"on" | b"off" | b"auto")) => {}
+                (b"volatile" | b"default_permissions", None) => {}
+                _ => return Err(Errno::EINVAL),
+            }
+        }
+        if lowers.is_empty() {
+            return Err(Errno::EINVAL);
+        }
+        match (&upper, &work) {
+            (None, _) => {
+                // Without an upper layer the mount is read-only and needs two layers.
+                if lowers.len() < 2 {
+                    return Err(Errno::EINVAL);
+                }
+                work = None;
+            }
+            (Some(u), None) => {
+                let _ = u;
+                return Err(Errno::EINVAL);
+            }
+            (Some(u), Some(w)) => {
+                if !alloc::sync::Arc::ptr_eq(&u.fs, &w.fs)
+                    || (u.root == w.root)
+                    || is_inside(&*w.fs, w.root, u.root)
+                    || is_inside(&*u.fs, u.root, w.root)
+                {
+                    return Err(Errno::EINVAL);
+                }
+            }
+        }
+        let same = |a: &Layer, b: &Layer| alloc::sync::Arc::ptr_eq(&a.fs, &b.fs) && a.root == b.root;
+        for (i, l) in lowers.iter().enumerate() {
+            if let Some(u) = &upper
+                && (same(l, u) || (alloc::sync::Arc::ptr_eq(&l.fs, &u.fs) && is_inside(&*l.fs, l.root, u.root)))
+            {
+                return Err(Errno::ELOOP);
+            }
+            if lowers[..i].iter().any(|o| same(o, l)) {
+                return Err(Errno::ELOOP);
+            }
+        }
+        let _ = work;
+        let read_only = upper.is_none();
+        let overlay =
+            Overlay::<crate::sync::RawMutex>::new(Config { upper, lowers, userxattr, redirect }).map_err(vfs_errno)?;
+        // Not behind the page cache: writes reach the upper layer at once,
+        // where the layers can be looked at directly.
+        let fs: alloc::sync::Arc<dyn poly_vfs::FileSystem> = alloc::sync::Arc::new(overlay);
+        let mut mflags = vfs_flags(flags);
+        mflags.read_only |= read_only;
+        let id = files.mount_fs(target, fs, mflags).map_err(vfs_errno)?;
+        mounts::record_source(id, if source.is_empty() { b"overlay" } else { source });
+        if let Some(m) = crate::fs::vfs().mount_by_id(id) {
+            m.set_sb_info(if source.is_empty() { b"overlay" } else { source }, data);
+        }
+        Ok(())
+    }
+
     fn mount_new(
         &mut self,
         source: &[u8],
@@ -101,6 +217,9 @@ impl Thread<'_> {
         data: &[u8],
     ) -> Result<(), Errno> {
         let fs = FsType::from_name(fstype)?;
+        if fs == FsType::Overlay {
+            return self.mount_overlay(source, target, flags, data);
+        }
         let root = admin::mount_options(fs, data)?;
         let files = &self.process().files;
         let flags = vfs_flags(flags);
@@ -115,6 +234,9 @@ impl Thread<'_> {
             }
             if node.mount().flags().no_dev {
                 return Err(Errno::EACCES);
+            }
+            if fs == FsType::Squashfs {
+                return self.mount_squashfs(source, target, attr.rdev, flags);
             }
             let disk = mounts::disk_of(attr.rdev).ok_or(Errno::ENXIO)?;
             let mounted = disk::mount_flags(&disk, flags, |fs, flags| {

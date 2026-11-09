@@ -340,6 +340,26 @@ fn mount_options(m: &MountEntry) -> String {
             s.push_str(name);
         }
     }
+    // The access time mode (`MOUNT_ATTR_NOATIME` 0x10, `STRICTATIME` 0x20,
+    // `NODIRATIME` 0x80): relatime unless the mount says otherwise.
+    match m.attrs & 0x70 {
+        0 => s.push_str(",relatime"),
+        0x10 => s.push_str(",noatime"),
+        _ => {}
+    }
+    if m.attrs & 0x80 != 0 {
+        s.push_str(",nodiratime");
+    }
+    s
+}
+
+/// The file system's options after `rw` or `ro` (`mountinfo`'s last field).
+fn super_options(m: &MountEntry) -> String {
+    let mut s = String::from(if m.sb_read_only { "ro" } else { "rw" });
+    if !m.sb_options.is_empty() {
+        s.push(',');
+        s.push_str(&String::from_utf8_lossy(&m.sb_options));
+    }
     s
 }
 
@@ -351,7 +371,12 @@ pub fn mounts(entries: &[MountEntry]) -> Vec<u8> {
         mount_field(&mut o, &m.source);
         o.0.push(b' ');
         mount_field(&mut o, &m.mount_point);
-        let _ = writeln!(o, " {} {} 0 0", m.fstype, mount_options(m));
+        let mut opts = mount_options(m);
+        if !m.sb_options.is_empty() {
+            opts.push(',');
+            opts.push_str(&String::from_utf8_lossy(&m.sb_options));
+        }
+        let _ = writeln!(o, " {} {opts} 0 0", m.fstype);
     }
     o.0
 }
@@ -368,7 +393,7 @@ pub fn mountinfo(entries: &[MountEntry]) -> Vec<u8> {
         mount_field(&mut o, &m.mount_point);
         let _ = write!(o, " {} - {} ", mount_options(m), m.fstype);
         mount_field(&mut o, &m.source);
-        let _ = writeln!(o, " {}", if m.read_only { "ro" } else { "rw" });
+        let _ = writeln!(o, " {}", super_options(m));
     }
     o.0
 }

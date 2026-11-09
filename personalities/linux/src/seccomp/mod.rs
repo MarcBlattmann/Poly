@@ -350,20 +350,35 @@ pub fn sigsys(ip: u64, nr: i32, data: u16) -> SigInfo {
     info
 }
 
-/// Read a `struct sock_fprog` (`unsigned short len;` then, 8-aligned, the
-/// `struct sock_filter *`) and the program it points to, and check it.
-/// `EFAULT`; `EINVAL` for a length of 0 or above `BPF_MAXINSNS`, or a
-/// program the checker refuses.
-pub fn read_program(k: &mut dyn LinuxKernel, fprog: UserPtr) -> Result<Program, Errno> {
+/// A `struct sock_fprog` (`unsigned short len;` then, 8-aligned, the
+/// `struct sock_filter *`) read from the caller, its length and pointer
+/// checked.
+#[derive(Clone, Copy, Debug)]
+pub struct Fprog {
+    len: usize,
+    ptr: UserPtr,
+}
+
+/// Read the `struct sock_fprog` at `fprog`: `EFAULT` if it cannot be read,
+/// `EINVAL` for a length of 0 or above `BPF_MAXINSNS` or a NULL filter
+/// pointer (linux/api/pkg/seccomp_prctl: that comes before the privilege
+/// check, which comes before the instructions are read or checked).
+pub fn read_fprog(k: &mut dyn LinuxKernel, fprog: UserPtr) -> Result<Fprog, Errno> {
     let mut header = [0u8; 16];
     k.copy_from_user(fprog, &mut header)?;
     let len = usize::from(u16::from_le_bytes([header[0], header[1]]));
     let ptr = UserPtr(u64::from_le_bytes(header[8..16].try_into().expect("8 bytes")));
-    if len == 0 || len > poly_bpf::MAXINSNS {
+    if len == 0 || len > poly_bpf::MAXINSNS || ptr.0 == 0 {
         return Err(Errno::EINVAL);
     }
-    let mut bytes = alloc::vec![0u8; len * Insn::SIZE];
-    k.copy_from_user(ptr, &mut bytes)?;
+    Ok(Fprog { len, ptr })
+}
+
+/// Read the program `fprog` points to and check it (`EFAULT` if it cannot
+/// be read, `EINVAL` if the checker refuses it).
+pub fn read_program(k: &mut dyn LinuxKernel, fprog: Fprog) -> Result<Program, Errno> {
+    let mut bytes = alloc::vec![0u8; fprog.len * Insn::SIZE];
+    k.copy_from_user(fprog.ptr, &mut bytes)?;
     let insns: Vec<Insn> = Insn::parse(&bytes);
     Program::new(&insns, RULES).map_err(|_| Errno::EINVAL)
 }

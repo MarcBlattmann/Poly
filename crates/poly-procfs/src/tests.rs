@@ -228,6 +228,7 @@ impl ProcSource for Fake {
                 fstype: "ext2".into(),
                 read_only: true,
                 no_exec: true,
+                sb_read_only: true,
                 ..Default::default()
             },
         ]
@@ -766,11 +767,14 @@ fn fdinfo_shows_position_flags_mount_and_inode() {
 #[test]
 fn mounts_and_mountinfo() {
     let e = env();
-    assert_eq!(e.text("/proc/self/mounts"), "rootfs / tmpfs rw 0 0\nvirtio2 /my\\040disk ext2 ro,noexec 0 0\n");
+    assert_eq!(
+        e.text("/proc/self/mounts"),
+        "rootfs / tmpfs rw,relatime 0 0\nvirtio2 /my\\040disk ext2 ro,noexec,relatime 0 0\n"
+    );
     assert_eq!(e.text("/proc/mounts"), e.text("/proc/42/mounts"));
     assert_eq!(
         e.text("/proc/42/mountinfo"),
-        "1 1 0:1 / / rw - tmpfs rootfs rw\n3 1 0:3 / /my\\040disk ro,noexec - ext2 virtio2 ro\n"
+        "1 1 0:1 / / rw,relatime - tmpfs rootfs rw\n3 1 0:3 / /my\\040disk ro,noexec,relatime - ext2 virtio2 ro\n"
     );
 }
 

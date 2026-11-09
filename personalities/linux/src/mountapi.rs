@@ -355,6 +355,8 @@ fn known_key(fs: FsType, key: &[u8]) -> bool {
         FsType::Devpts => matches!(key, b"uid" | b"gid" | b"max" | b"mode" | b"ptmxmode" | b"newinstance"),
         FsType::Sysfs => false,
         FsType::Ext2 => true,
+        FsType::Squashfs => false,
+        FsType::Overlay => true,
     }
 }
 

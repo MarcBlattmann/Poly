@@ -272,6 +272,13 @@ name = "poly-line"
 version = "0.0.1"
 
 [[package]]
+name = "poly-loop"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
 name = "poly-mem"
 version = "0.0.1"
 
@@ -297,6 +304,13 @@ dependencies = [
 [[package]]
 name = "poly-ntobj"
 version = "0.0.1"
+
+[[package]]
+name = "poly-overlayfs"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
 
 [[package]]
 name = "poly-pagecache"

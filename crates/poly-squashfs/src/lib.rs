@@ -67,8 +67,9 @@ impl MountError {
     }
 }
 
-/// The least a device must hold for a mount: whole 4096-byte blocks.
-pub const MIN_DEVICE: u64 = 4096;
+/// The least a device must hold for a mount: the superblock's first
+/// 1024-byte block (a smaller device, 512 bytes or none, is an I/O error).
+pub const MIN_DEVICE: u64 = 1024;
 /// The `f_type` of squashfs (`linux/magic.h`).
 pub const SQUASHFS_MAGIC: u64 = 0x7371_7368;
 /// Most bytes of decompressed data blocks kept.

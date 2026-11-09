@@ -52,8 +52,8 @@ pub fn new_tmpfs_sized(clock: Arc<dyn Clock>, size: Option<Amount>, inodes: Opti
 }
 
 /// `tmpfs` behind the page cache: what gets mounted.
-pub fn cached(tmpfs: Arc<Tmpfs>) -> Arc<CachedDiskFs> {
-    let fs = cache::cache().register(tmpfs);
+pub fn cached(inner: Arc<dyn FileSystem>) -> Arc<CachedDiskFs> {
+    let fs = cache::cache().register(inner);
     let mut all = MEMORY_FS.lock();
     all.retain(|w| w.strong_count() > 0);
     all.push(Arc::downgrade(&fs));

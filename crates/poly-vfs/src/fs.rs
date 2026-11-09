@@ -119,6 +119,15 @@ pub trait FileSystem: Send + Sync {
         false
     }
 
+    /// Called when a regular file is opened for writing (or truncating),
+    /// before the open file exists: a union file system copies the file to
+    /// its writable layer here, so the copy exists even if nothing is
+    /// written. An error fails the `open`. The default does nothing.
+    fn prepare_write(&self, ino: Ino) -> Result<()> {
+        let _ = ino;
+        Ok(())
+    }
+
     /// Reads from a regular file at `offset`; 0 at or after the end.
     fn read(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> Result<usize>;
 

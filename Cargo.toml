@@ -37,8 +37,10 @@ members = [
     "crates/poly-ldr",
     "crates/poly-libm",
     "crates/poly-line",
+    "crates/poly-loop",
     "crates/poly-mem",
     "crates/poly-ntobj",
+    "crates/poly-overlayfs",
     "crates/poly-net",
     "crates/poly-nls",
     "crates/poly-pagecache",
@@ -133,8 +135,10 @@ poly-kernelbase = { path = "crates/poly-kernelbase" }
 poly-ldr = { path = "crates/poly-ldr" }
 poly-libm = { path = "crates/poly-libm" }
 poly-line = { path = "crates/poly-line" }
+poly-loop = { path = "crates/poly-loop" }
 poly-mem = { path = "crates/poly-mem" }
 poly-ntobj = { path = "crates/poly-ntobj" }
+poly-overlayfs = { path = "crates/poly-overlayfs" }
 poly-net = { path = "crates/poly-net" }
 poly-nls = { path = "crates/poly-nls" }
 poly-pagecache = { path = "crates/poly-pagecache" }

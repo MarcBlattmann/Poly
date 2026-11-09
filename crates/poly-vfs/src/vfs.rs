@@ -27,6 +27,9 @@ type Named = Option<(Location, Vec<u8>)>;
 pub struct Vfs {
     pub(crate) mounts: SpinMutex<MountTable>,
     devices: SpinMutex<BTreeMap<DeviceId, Arc<dyn CharDevice>>>,
+    /// Block devices, a number space of their own (a block device node
+    /// opens like a character device, seekable, backed by one of these).
+    block_devices: SpinMutex<BTreeMap<DeviceId, Arc<dyn CharDevice>>>,
     /// The inodes of file objects (pipes, event files, epoll sets), on a
     /// mount no path reaches (`object.rs`).
     anon: (Arc<AnonFs>, Arc<Mount>),
@@ -76,6 +79,7 @@ impl Vfs {
         Vfs {
             mounts: SpinMutex::new(table),
             devices: SpinMutex::new(BTreeMap::new()),
+            block_devices: SpinMutex::new(BTreeMap::new()),
             anon: (anon_fs, anon_mount),
             fifos: crate::fifo::Fifos::default(),
             names_changed: core::sync::atomic::AtomicU64::new(0),
@@ -187,6 +191,26 @@ impl Vfs {
 
     pub fn char_device(&self, id: DeviceId) -> Option<Arc<dyn CharDevice>> {
         self.devices.lock().get(&id).cloned()
+    }
+
+    /// Makes `dev` the block device with number `id` (`EBUSY` if one is
+    /// registered already). Opening a block device node with that number
+    /// reads and writes through `dev` at the open file's offset.
+    pub fn register_block_device(&self, id: DeviceId, dev: Arc<dyn CharDevice>) -> Result<()> {
+        let mut devices = self.block_devices.lock();
+        if devices.contains_key(&id) {
+            return Err(Errno::EBUSY);
+        }
+        devices.insert(id, dev);
+        Ok(())
+    }
+
+    pub fn unregister_block_device(&self, id: DeviceId) -> Option<Arc<dyn CharDevice>> {
+        self.block_devices.lock().remove(&id)
+    }
+
+    pub fn block_device(&self, id: DeviceId) -> Option<Arc<dyn CharDevice>> {
+        self.block_devices.lock().get(&id).cloned()
     }
 
     // ----- walking -----
@@ -454,12 +478,28 @@ impl Vfs {
                 let end = self.fifos.open(fs, loc.ino, read, write, flags.contains(OpenFlags::NONBLOCK))?;
                 Backend::Object(Arc::new(end))
             }
-            // Block devices are reached through the block layer, and a
-            // socket's name cannot be opened (`open(2)`: ENXIO).
-            FileType::BlockDevice | FileType::Socket | FileType::Symlink => {
+            // A block device with a driver registered here (loop devices)
+            // opens like a seekable character device; the disks are
+            // reached through the block layer (not by open).
+            FileType::BlockDevice => {
+                if loc.mount.flags().no_dev {
+                    return Err(Errno::EACCES);
+                }
+                let dev = self.block_device(attr.rdev).ok_or(Errno::ENXIO)?;
+                Backend::Device(dev.open(flags)?.unwrap_or(dev))
+            }
+            // A socket's name cannot be opened (`open(2)`: ENXIO).
+            FileType::Socket | FileType::Symlink => {
                 return Err(Errno::ENXIO);
             }
         };
+        if attr.kind == FileType::Regular
+            && !created
+            && !flags.contains(OpenFlags::PATH)
+            && (write || flags.contains(OpenFlags::TRUNC))
+        {
+            loc.mount.fs().prepare_write(loc.ino)?;
+        }
         let node = loc.pin()?;
         if flags.contains(OpenFlags::TRUNC) && attr.kind == FileType::Regular && !created {
             node.clear_setid(cred)?;
@@ -662,7 +702,9 @@ impl Vfs {
         let dir_attr = self.may_change(cred, &p.dir)?;
         // A device node needs CAP_MKNOD, checked after the lookup and the
         // directory's permission (mknod's spec sheet).
-        if matches!(kind, FileType::CharDevice | FileType::BlockDevice) && !cred.has(cap::MKNOD) {
+        // The character device 0:0 is an overlay whiteout: anybody may make one.
+        let whiteout = kind == FileType::CharDevice && rdev == DeviceId::new(0, 0);
+        if matches!(kind, FileType::CharDevice | FileType::BlockDevice) && !whiteout && !cred.has(cap::MKNOD) {
             return Err(Errno::EPERM);
         }
         let (uid, gid, perm) = Self::new_owner(cred, &dir_attr, mode & !ctx.umask, false);

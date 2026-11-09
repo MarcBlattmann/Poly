@@ -73,6 +73,18 @@ pub trait CharDevice: Send + Sync {
         Ok(None)
     }
 
+    /// The size in bytes of a block device, which `lseek(SEEK_END)` adds
+    /// to; `None` (the default) for devices without one.
+    fn size(&self) -> Option<u64> {
+        None
+    }
+
+    /// `fsync(2)` on an open file of the device: `EINVAL` (the default)
+    /// for a device that has nothing to write back.
+    fn sync(&self) -> Result<()> {
+        Err(Errno::EINVAL)
+    }
+
     /// For a pseudo-terminal master: the number of its slave
     /// (`/dev/pts/<n>`), which `TIOCGPTPEER` opens. `None` for every
     /// other device.

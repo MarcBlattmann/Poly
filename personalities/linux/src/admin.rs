@@ -117,6 +117,11 @@ pub enum FsType {
     Tmpfs,
     /// ext2, ext3 or ext4 on a block device (one driver, `poly-ext2`).
     Ext2,
+    /// squashfs on a block device, in practice a loop device (`poly-squashfs`).
+    Squashfs,
+    /// overlayfs: directories of other file systems shown as one tree
+    /// (`poly-overlayfs`); the source is only a label.
+    Overlay,
 }
 
 impl FsType {
@@ -128,6 +133,8 @@ impl FsType {
             b"devpts" => FsType::Devpts,
             b"tmpfs" | b"ramfs" => FsType::Tmpfs,
             b"ext2" | b"ext3" | b"ext4" => FsType::Ext2,
+            b"squashfs" => FsType::Squashfs,
+            b"overlay" => FsType::Overlay,
             _ => return Err(Errno::ENODEV),
         })
     }
@@ -135,7 +142,7 @@ impl FsType {
     /// Whether `source` names a block device to mount (else it is only a
     /// name shown in `/proc/mounts`).
     pub const fn needs_device(self) -> bool {
-        matches!(self, FsType::Ext2)
+        matches!(self, FsType::Ext2 | FsType::Squashfs)
     }
 }
 
@@ -231,7 +238,7 @@ pub fn mount_options(fs: FsType, data: &[u8]) -> Result<RootOptions, Errno> {
                 number(value, 8)?;
             }
             (FsType::Devpts, b"newinstance") if value.is_none() => {}
-            (FsType::Ext2, _) => {}
+            (FsType::Ext2 | FsType::Squashfs | FsType::Overlay, _) => {}
             _ => return Err(Errno::EINVAL),
         }
     }

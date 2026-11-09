@@ -82,7 +82,7 @@ pub fn check_filter_flags(flags: u32) -> Result<(), Errno> {
 /// `SPEC_ALLOW` changes nothing (no speculation mitigations to leave off).
 fn set_filter(k: &mut dyn LinuxKernel, flags: u32, fprog: UserPtr) -> SysResult {
     check_filter_flags(flags)?;
-    let program = seccomp::read_program(k, fprog)?;
+    let fprog = seccomp::read_fprog(k, fprog)?;
     // seccomp(2): "either the calling thread must have the CAP_SYS_ADMIN
     // capability in its user namespace, or the thread must already have
     // the no_new_privs bit set" (EACCES).
@@ -90,6 +90,7 @@ fn set_filter(k: &mut dyn LinuxKernel, flags: u32, fprog: UserPtr) -> SysResult 
     if !creds.no_new_privs && !creds.capable(cap::SYS_ADMIN) {
         return Err(Errno::EACCES);
     }
+    let program = seccomp::read_program(k, fprog)?;
     let listener = flags & SECCOMP_FILTER_FLAG_NEW_LISTENER != 0;
     if listener && seccomp::has_listener(k) {
         return Err(Errno::EBUSY);

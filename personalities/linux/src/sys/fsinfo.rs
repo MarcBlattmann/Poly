@@ -19,8 +19,16 @@ pub const CALLS: &[(u64, Handler)] = &[(nr::SYSFS, sysfs), (nr::USTAT, ustat)];
 
 /// The file system types, in the order `/proc/filesystems` lists them,
 /// with whether each has no device (`nodev`).
-pub const FILE_SYSTEM_TYPES: &[(&str, bool)] =
-    &[("sysfs", true), ("tmpfs", true), ("proc", true), ("ext2", false), ("ext3", false), ("ext4", false)];
+pub const FILE_SYSTEM_TYPES: &[(&str, bool)] = &[
+    ("sysfs", true),
+    ("tmpfs", true),
+    ("proc", true),
+    ("ext2", false),
+    ("ext3", false),
+    ("ext4", false),
+    ("squashfs", false),
+    ("overlay", false),
+];
 
 /// sysfs(option, ...): option 1, the index of the type named by the
 /// string; option 2, the name of type `index` (a 32-bit value) written
