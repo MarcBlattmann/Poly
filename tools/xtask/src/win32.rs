@@ -36,7 +36,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 30] = [
+pub const OUTPUTS: [&str; 31] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -71,6 +71,7 @@ pub const OUTPUTS: [&str; 30] = [
     "dhcpcsvc.dll",
     "dnsapi.dll",
     "dbghelp.dll",
+    "b35test.exe",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -140,6 +141,7 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/dhcpcsvc",
             "personalities/nt/win32/dnsapi",
             "personalities/nt/win32/dbghelp",
+            "personalities/nt/win32/b35test",
             // Host crates the new DLLs link (ADR 0155).
             "crates/poly-etw",
             "crates/poly-iphlp",
@@ -391,6 +393,20 @@ fn verify_ws2_32(dir: &Path) -> Result {
         }
     }
     verify_exe(dir, "wstest.exe", &["ws2_32.dll", "kernel32.dll"])?;
+    verify_exe(
+        dir,
+        "b35test.exe",
+        &[
+            "advapi32.dll",
+            "iphlpapi.dll",
+            "netapi32.dll",
+            "secur32.dll",
+            "dhcpcsvc.dll",
+            "dbghelp.dll",
+            "crypt32.dll",
+            "kernel32.dll",
+        ],
+    )?;
     verify_http(dir)
 }
 

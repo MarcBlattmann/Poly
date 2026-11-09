@@ -66,6 +66,7 @@ fn embed_win32() {
         "dhcpcsvc.dll",
         "dnsapi.dll",
         "dbghelp.dll",
+        "b35test.exe",
     ] {
         match &dir {
             Some(d) => {

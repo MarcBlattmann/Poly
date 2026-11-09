@@ -7,6 +7,7 @@ pub const WINHTTP_EXPORTS: &[&str] = &[
     "WinHttpCheckPlatform",
     "WinHttpCloseHandle",
     "WinHttpConnect",
+    "WinHttpGetIEProxyConfigForCurrentUser",
     "WinHttpOpen",
     "WinHttpOpenRequest",
     "WinHttpQueryDataAvailable",

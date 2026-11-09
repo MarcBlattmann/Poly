@@ -114,6 +114,11 @@ pub static DHCPCSVC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dhcpcsvc.
 pub static DNSAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dnsapi.dll"));
 pub static DBGHELP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dbghelp.dll"));
 
+mod test_b35;
+
+/// The program the Chrome batch 3/5 ring-3 test runs (`test_b35`). Empty without `xtask`.
+pub static B35TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/b35test.exe"));
+
 mod test_crypto;
 
 /// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in
@@ -506,6 +511,7 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     // What win32k has for the compositor (ADR 0131).
     link::after_call();
     if let Some(status) = k.exit {
+        sched::terminate_siblings(ProcessId(process.pid), ThreadRef(u64::from(tid)), status);
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));
     } else if let Some(status) = k.exit_thread {
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));

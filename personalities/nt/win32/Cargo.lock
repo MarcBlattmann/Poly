@@ -20,6 +20,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "b35test"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "bcrypt"
 version = "0.0.1"
 dependencies = [

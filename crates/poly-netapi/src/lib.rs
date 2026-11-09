@@ -303,7 +303,7 @@ mod tests {
         assert_eq!(u32_at(&b, 40), 0x201);
         assert_eq!(wide_at(&b, (u64_at(&b, 24) - 0x9000) as usize), "");
         let b = user_info(Some("\\\\POLY"), "poly", 0, "poly", 0).unwrap();
-        assert_eq!(b.len() >= 8, true);
+        assert!(b.len() >= 8);
         let b = user_info(None, "poly", 20, "poly", 0x100).unwrap();
         assert_eq!(u32_at(&b, 28), 1000);
         assert_eq!(u32_at(&b, 24), 0x201);
