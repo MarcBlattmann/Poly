@@ -95,6 +95,7 @@
 mod accel;
 mod asmlabels;
 mod busybox;
+mod chromewin;
 mod chromium;
 mod compositor;
 mod compositor_kms;
@@ -212,7 +213,7 @@ fn main() -> ExitCode {
 }
 
 /// The commands [`dispatch`] runs (besides `start` and `pipeline`).
-const COMMANDS: [&str; 24] = [
+const COMMANDS: [&str; 25] = [
     "build",
     "run",
     "screenshot",
@@ -237,6 +238,7 @@ const COMMANDS: [&str; 24] = [
     "root-disk-test",
     "toolkits",
     "chromium",
+    "chrome-win",
 ];
 
 /// Run `cargo xtask <args>`: the same functions for the command line and
@@ -269,6 +271,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("root-disk-test") => root_disk_test(),
         Some("toolkits") => toolkits::command(rest),
         Some("chromium") => chromium::command(rest),
+        Some("chrome-win") => chromewin::command(rest),
         other => Err(format!("no command {other:?}")),
     }
 }
