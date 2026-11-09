@@ -1,0 +1,66 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/apps/chrome/chrome.yaml. An app scenario entry: the program, not an API symbol, so it has
+# no coverage-map entry (the APIs it calls are in gap-map.md and in the traces). The Linux counterpart is
+# specs/linux/apps/chromium.yaml.
+id: windows/api/apps/chrome
+oracle:
+  os: "Windows 11 25H2, build 26200.9711 (owner PC: Enterprise, AMD Ryzen AI Max+ PRO 395, 32 logical processors, 96 GB; homeserver2: Home, Intel Core i5-9500T, 6 logical processors, 7.8 GB, 1920x1080)"
+  machine: "the owner's PC (ADR 0075) for the headless stages, homeserver2 (ADR 0097) in its interactive session for the windows"
+  observed_by: spec-chrome-win
+  date: 2026-11-09
+summary: >
+  Chrome for Testing 157.0.8103.38 (Stable, win64, zip SHA-256
+  ae0deef27d449e1d7529df7705d609bab102de48464da13567ed3dd2ee1a0586) is one program run in many roles: the browser
+  process starts a crashpad handler, a GPU process, the network service, the storage service, a processor-metrics
+  utility and one renderer per page, per extension and for its own WebUI (15 to 20 processes, 150 to 250 threads in
+  a headless run). With the sandbox on, the browser (the broker) makes a restricted token, a job object, an
+  alternate window station and desktop for each confined child and starts it with CreateProcessAsUserW
+  (suspended, extended startup information, an attribute list with a handle list and mitigation policies).
+  Headless it loads a local file page, runs its script, lays out a box and prints the serialised DOM; windowed it
+  creates a Chrome_WidgetWin_1 top-level window, draws the page, takes mouse and keyboard input and ends with exit
+  code 0 when the window gets WM_CLOSE.
+environment: >
+  A fresh directory per run for --user-data-dir; the page in pages/ given as a file:/// URL; standard output
+  and error redirected to files (headless stages). The window stages run in an interactive session at 96 DPI,
+  the window placed at 40,40 (900x500), input by SendInput (mouse move, one left click, the keys p o l y, Ctrl+L and
+  a typed URL), a screenshot with CopyFromScreen, WM_CLOSE by PostMessage (drivers/s3_driver.ps1). The first run
+  of a profile takes about a second longer than later ones.
+comparison: >
+  Exit code and standard output byte for byte (headless stages); window title text, the presence of drawn text
+  (not the pixels: fonts differ) and the exit code (window stages). The API traces (traces/*.trace.json,
+  format poly-chrometrace/1, README.md) are compared per process type: every recorded function called at least
+  once, a function that never failed on Windows not failing on Poly, every process type present.
+stages:
+  s1:
+    command: "chrome.exe --headless --no-sandbox --disable-gpu --user-data-dir=<fresh> --dump-dom file:///<dir>/pages/s1.html"
+    stdout: "440 bytes, SHA-256 7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b: the doctype line, the page as parsed with the script's changes (<p id=\"p\">script-ran 42</p>, <div id=\"b\" style=\"width:200px;height:50px\">box 200</div>), \"\\n\\n\" before </body>, </html> and a CRLF; lines end in CRLF"
+    exit_code: 0
+    stderr: "two external_registry_loader_win.cc lines (a missing registry value) and nothing else"
+    time: "3 to 5 s"
+    processes: "browser, 2 crashpad handlers (one with --monitor-self), 7 renderers (4 page, 2 extension, 1 top-chrome WebUI), GPU process, network service, storage service"
+  s2:
+    command: "the same without --no-sandbox"
+    stdout: "the same 440 bytes"
+    exit_code: 0
+    time: "2 to 4 s"
+    note: "traced runs stall: the sandboxed renderers die under the tracer (README.md); the untraced runs are the scenario's results"
+  s3:
+    command: "chrome.exe --disable-gpu --no-first-run --user-data-dir=<fresh> --window-position=40,40 --window-size=900,500 file:///<dir>/pages/s3.html"
+    results:
+      - "within 2 s a visible top-level window of class Chrome_WidgetWin_1 whose title is \"poly-s3 clicks=0 keys= moved=0 – Google Chrome for Testing\""
+      - "after a mouse move, a left click in the page and the keys p o l y the title is \"poly-s3 clicks=1 keys=poly moved=1 – Google Chrome for Testing\""
+      - "the window shows the page's text (a heading, a serif paragraph, monospace code, German umlauts) on the page's background; a screenshot has well over 150 dark pixels in the text area"
+      - "WM_CLOSE to the window ends the browser, exit code 0, within 3 s"
+    messages: "the sequence of traces/s3.trace.json (browser, messages): WM_GETMINMAXINFO, WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE, WM_SIZE, WM_MOVE, WM_WINDOWPOSCHANGING/CHANGED, ..., WM_NCHITTEST, WM_SETCURSOR, WM_MOUSEMOVE, WM_LBUTTONDOWN/UP, WM_KEYDOWN/CHAR/KEYUP, WM_PAINT, WM_CLOSE, WM_DESTROY, WM_NCDESTROY, with their counts per run"
+  s4:
+    command: "S3 with http://example.com/, then (Ctrl+L, typed URL, Enter) https://www.iana.org/; headless: --dump-dom pages/s4.html"
+    results:
+      - "title \"Example Domain – Google Chrome for Testing\", then \"Internet Assigned Numbers Authority – Google Chrome for Testing\"; exit code 0 on WM_CLOSE"
+      - "headless: <p id=\"r\">http=1 https=1</p> in the DOM (831 bytes, SHA-256 568f0bdf95669b4059e1d571bef70b61eb2e4756f8545b2cf1e344d2c02330be), exit 0, 5 to 6 s"
+  s5:
+    command: "chrome.exe --headless --no-sandbox --dump-dom file:///<dir>/pages/s1.html (GPU flags at their defaults)"
+    results:
+      - "the same 440 bytes and exit code as S1; the GPU process makes 23 more distinct API calls (traces/s5.trace.json); with a window (S3) it creates a D3D11 device, a DXGI factory and a DirectComposition device"
+errors:
+  missing_optional_module: "LoadLibraryExW of optimization_guide_internal.dll fails (not in the zip); tolerated"
+  delay_load: "a missing delay-loaded DLL or export among the called ones (README: ablation) stops the browser with 0xC06D007E or a breakpoint exception"
