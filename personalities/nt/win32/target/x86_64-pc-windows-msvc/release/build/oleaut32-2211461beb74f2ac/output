@@ -1,0 +1,11 @@
+cargo:rerun-if-changed=../../../../crates/poly-kernelbase/src/exports.rs
+cargo:rustc-link-arg=/EXPORT:SysAllocString,@2
+cargo:rustc-link-arg=/EXPORT:SysReAllocString,@3
+cargo:rustc-link-arg=/EXPORT:SysAllocStringLen,@4
+cargo:rustc-link-arg=/EXPORT:SysReAllocStringLen,@5
+cargo:rustc-link-arg=/EXPORT:SysFreeString,@6
+cargo:rustc-link-arg=/EXPORT:SysStringLen,@7
+cargo:rustc-link-arg=/EXPORT:VariantInit,@8
+cargo:rustc-link-arg=/EXPORT:VariantClear,@9
+cargo:rustc-link-arg=/EXPORT:VariantCopy,@10
+cargo:rustc-link-arg=/ENTRY:oleaut32_main

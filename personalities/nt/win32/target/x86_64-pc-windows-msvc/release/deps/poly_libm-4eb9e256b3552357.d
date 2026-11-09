@@ -1,0 +1,15 @@
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\personalities\nt\win32\target\x86_64-pc-windows-msvc\release\deps\poly_libm-4eb9e256b3552357.d: C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\lib.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\atan.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\consts.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\dd.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\exp.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\fault.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\log.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\pow.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\rem.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\roots.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\trig.rs
+
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\personalities\nt\win32\target\x86_64-pc-windows-msvc\release\deps\libpoly_libm-4eb9e256b3552357.rmeta: C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\lib.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\atan.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\consts.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\dd.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\exp.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\fault.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\log.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\pow.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\rem.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\roots.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\trig.rs
+
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\lib.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\atan.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\consts.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\dd.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\exp.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\fault.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\log.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\pow.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\rem.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\roots.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-libm\src\trig.rs:

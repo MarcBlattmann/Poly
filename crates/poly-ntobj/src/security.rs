@@ -319,7 +319,9 @@ impl ObjectManager {
             kind,
             ObjectType::Event | ObjectType::Mutant | ObjectType::Semaphore | ObjectType::Timer | ObjectType::Section
         );
-        if explicit.is_none() && !(named && default_kind) {
+        // A job object has its descriptor named or not (the sheets).
+        let always = kind == ObjectType::Job;
+        if explicit.is_none() && !always && !(named && default_kind) {
             return;
         }
         let creator = self.security.effective(caller.process, caller.thread);

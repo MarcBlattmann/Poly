@@ -376,6 +376,58 @@ pub enum Service {
     /// `NtSetInformationThread(ThreadHandle, ThreadInformationClass,
     /// ThreadInformation, Length)`: `ThreadImpersonationToken` (5) only.
     SetInformationThread,
+
+    // ----- named pipes and completion ports (ADR 0169)
+    /// `NtFsControlFile(FileHandle, Event, ApcRoutine, ApcContext,
+    /// IoStatusBlock*, FsControlCode, InputBuffer, InputBufferLength,
+    /// OutputBuffer, OutputBufferLength)`.
+    FsControlFile,
+    /// `NtCreateNamedPipeFile(FileHandle*, DesiredAccess, ObjectAttributes*,
+    /// IoStatusBlock*, ShareAccess, CreateDisposition, CreateOptions,
+    /// NamedPipeType, ReadMode, CompletionMode, MaximumInstances,
+    /// InboundQuota, OutboundQuota, DefaultTimeout*)`.
+    CreateNamedPipeFile,
+    /// `NtCancelSynchronousIoFile(ThreadHandle, IoRequestToCancel*,
+    /// IoStatusBlock*)`.
+    CancelSynchronousIoFile,
+    /// `NtCreateIoCompletion(IoCompletionHandle*, DesiredAccess,
+    /// ObjectAttributes*, NumberOfConcurrentThreads)`.
+    CreateIoCompletion,
+    /// `NtSetIoCompletion(IoCompletionHandle, KeyContext, ApcContext,
+    /// IoStatus, IoStatusInformation)`.
+    SetIoCompletion,
+    /// `NtRemoveIoCompletion(IoCompletionHandle, KeyContext*, ApcContext*,
+    /// IoStatusBlock*, Timeout*)`.
+    RemoveIoCompletion,
+    /// `NtRemoveIoCompletionEx(IoCompletionHandle, IoCompletionInformation*,
+    /// Count, NumEntriesRemoved*, Timeout*, Alertable)`.
+    RemoveIoCompletionEx,
+    /// `NtQueryIoCompletion(IoCompletionHandle, IoCompletionInformationClass,
+    /// IoCompletionInformation, Length, ReturnLength*)`.
+    QueryIoCompletion,
+
+    // ----- job objects (ADR 0169)
+    /// `NtCreateJobObject(JobHandle*, DesiredAccess, ObjectAttributes*)`.
+    CreateJobObject,
+    /// `NtOpenJobObject(JobHandle*, DesiredAccess, ObjectAttributes*)`.
+    OpenJobObject,
+    /// `NtAssignProcessToJobObject(JobHandle, ProcessHandle)`.
+    AssignProcessToJobObject,
+    /// `NtTerminateJobObject(JobHandle, ExitStatus)`.
+    TerminateJobObject,
+    /// `NtQueryInformationJobObject(JobHandle, JobInformationClass,
+    /// JobInformation, JobInformationLength, ReturnLength*)`.
+    QueryInformationJobObject,
+    /// `NtSetInformationJobObject(JobHandle, JobInformationClass,
+    /// JobInformation, JobInformationLength)`.
+    SetInformationJobObject,
+    /// `NtIsProcessInJob(ProcessHandle, JobHandle)`.
+    IsProcessInJob,
+
+    // ----- sections (ADR 0169)
+    /// `NtQuerySection(SectionHandle, SectionInformationClass,
+    /// SectionInformation, SectionInformationLength, ReturnLength*)`.
+    QuerySection,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -522,6 +574,32 @@ pub const SECURITY_SERVICES: [(Service, u32, &str); 16] = [
     (Service::SetInformationThread, 0x18F, "NtSetInformationThread"),
 ];
 
+/// Named pipes and I/O completion ports (ADR 0169), in the file I/O group.
+pub const IPC_SERVICES: [(Service, u32, &str); 8] = [
+    (Service::FsControlFile, 0x0D1, "NtFsControlFile"),
+    (Service::CreateNamedPipeFile, 0x0D2, "NtCreateNamedPipeFile"),
+    (Service::CancelSynchronousIoFile, 0x0D3, "NtCancelSynchronousIoFile"),
+    (Service::CreateIoCompletion, 0x0D4, "NtCreateIoCompletion"),
+    (Service::SetIoCompletion, 0x0D5, "NtSetIoCompletion"),
+    (Service::RemoveIoCompletion, 0x0D6, "NtRemoveIoCompletion"),
+    (Service::RemoveIoCompletionEx, 0x0D7, "NtRemoveIoCompletionEx"),
+    (Service::QueryIoCompletion, 0x0D8, "NtQueryIoCompletion"),
+];
+
+/// Job objects (ADR 0169), in the processes and threads group.
+pub const JOB_SERVICES: [(Service, u32, &str); 7] = [
+    (Service::CreateJobObject, 0x090, "NtCreateJobObject"),
+    (Service::OpenJobObject, 0x091, "NtOpenJobObject"),
+    (Service::AssignProcessToJobObject, 0x092, "NtAssignProcessToJobObject"),
+    (Service::TerminateJobObject, 0x093, "NtTerminateJobObject"),
+    (Service::QueryInformationJobObject, 0x094, "NtQueryInformationJobObject"),
+    (Service::SetInformationJobObject, 0x095, "NtSetInformationJobObject"),
+    (Service::IsProcessInJob, 0x096, "NtIsProcessInJob"),
+];
+
+/// Section queries (ADR 0169), in the memory group.
+pub const SECTION_SERVICES: [(Service, u32, &str); 1] = [(Service::QuerySection, 0x049, "NtQuerySection")];
+
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
     SERVICES
@@ -532,6 +610,9 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(DEVICE_SERVICES.iter())
         .chain(SECURITY_SERVICES.iter())
         .chain(HANDLE_SERVICES.iter())
+        .chain(IPC_SERVICES.iter())
+        .chain(JOB_SERVICES.iter())
+        .chain(SECTION_SERVICES.iter())
 }
 
 impl Service {
@@ -588,6 +669,7 @@ mod tests {
         assert!((0xA0..0xB0).contains(&Service::Continue.number()));
         assert!(SYSINFO_SERVICES.iter().all(|s| (0x140..0x180).contains(&s.1)));
         assert!(DEVICE_SERVICES.iter().all(|s| (0xC0..0x100).contains(&s.1)));
+        assert!(IPC_SERVICES.iter().all(|s| (0xC0..0x100).contains(&s.1)));
         assert!(SECURITY_SERVICES.iter().all(|s| (0x180..0x1C0).contains(&s.1)));
         assert!(HANDLE_SERVICES.iter().all(|s| s.1 < 0x40));
     }

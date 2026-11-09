@@ -10,6 +10,7 @@ use crate::abi;
 use crate::consts::*;
 use crate::kernel::{NtKernel, ThreadCreate};
 use crate::objects::{Result, return_handle};
+use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::access::{
     PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION, THREAD_SET_CONTEXT,
@@ -45,6 +46,34 @@ pub(crate) fn process_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Resu
         let id = sys.objects.object_by_handle(&caller, h, access, Some(ObjectType::Process))?;
         Ok(ProcessId(sys.objects.cookie(id).expect("live process object") as u32))
     })
+}
+
+/// [`process_of`] with any one of `rights` (a handle opened with
+/// `PROCESS_QUERY_LIMITED_INFORMATION` or with `PROCESS_QUERY_INFORMATION`
+/// answers a basic query, Learn: "GetExitCodeProcess", "GetProcessId").
+pub(crate) fn process_of_any<K: NtKernel>(k: &mut K, h: Handle, rights: &[u32]) -> Result<ProcessId> {
+    let mut denied = STATUS_ACCESS_DENIED;
+    for &r in rights {
+        match process_of(k, h, r) {
+            Ok(p) => return Ok(p),
+            Err(e) if e == STATUS_ACCESS_DENIED => denied = e,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(denied)
+}
+
+/// [`thread_of`] with any one of `rights`.
+pub(crate) fn thread_of_any<K: NtKernel>(k: &mut K, h: Handle, rights: &[u32]) -> Result<ThreadRef> {
+    let mut denied = STATUS_ACCESS_DENIED;
+    for &r in rights {
+        match thread_of(k, h, r) {
+            Ok(t) => return Ok(t),
+            Err(e) if e == STATUS_ACCESS_DENIED => denied = e,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(denied)
 }
 
 /// `NtCreateThreadEx(ThreadHandle*, DesiredAccess, ObjectAttributes*,
@@ -170,6 +199,13 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
     } else {
         None
     };
+    let attributes = abi::arg(k, regs, 10)?;
+    let extra = read_create_attributes(k, attributes)?;
+    let caller = k.caller();
+    let (jobs, join) = k.with_state(|sys, _, _| -> Result<(Vec<u64>, bool)> {
+        let jobs = crate::job::resolve_jobs(sys, &caller, &extra.jobs)?;
+        Ok((jobs, sys.jobs.check_create(caller.process, extra.breakaway)?))
+    })?;
     let req = crate::kernel::ProcessCreate {
         image,
         params,
@@ -178,11 +214,62 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         inherit_handles: process_flags & PROCESS_CREATE_FLAGS_INHERIT_HANDLES != 0,
         suspended: thread_flags & THREAD_CREATE_FLAGS_CREATE_SUSPENDED != 0,
         token: given_token,
+        inherit_only: extra.handle_list,
+        jobs,
+        join_creator_jobs: join,
+        dynamic_code_blocked: extra.mitigation & PROHIBIT_DYNAMIC_CODE != 0,
     };
     let created = k.create_process(req)?;
     return_handle(k, process_out, created.process)?;
     return_handle(k, thread_out, created.thread)?;
     Ok(STATUS_SUCCESS)
+}
+
+/// Poly's own attributes of `NtCreateUserProcess` (ADR 0169): what
+/// `CreateProcessW` does with a `PROC_THREAD_ATTRIBUTE_LIST` and
+/// `CREATE_BREAKAWAY_FROM_JOB`. The attribute list is `{ count: u64,
+/// { kind: u64, value: u64, size: u64 } * count }`; `kind` 1 is the handle
+/// list (`value` points at `size` bytes of handles), 2 the mitigation policy
+/// (`value` is the 64-bit mask), 3 the job list (as the handle list), 4 the
+/// breakaway request.
+#[derive(Default)]
+struct CreateAttributes {
+    handle_list: Option<Vec<Handle>>,
+    mitigation: u64,
+    jobs: Vec<u64>,
+    breakaway: bool,
+}
+
+/// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON` (`winbase.h`).
+const PROHIBIT_DYNAMIC_CODE: u64 = 1 << 36;
+
+fn read_create_attributes<K: NtKernel>(k: &mut K, at: u64) -> Result<CreateAttributes> {
+    let mut out = CreateAttributes::default();
+    if at == 0 {
+        return Ok(out);
+    }
+    let count = abi::read_u64(k, at)?;
+    if count > 16 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    for i in 0..count {
+        let base = at + 8 + 24 * i;
+        let (kind, value, size) = (abi::read_u64(k, base)?, abi::read_u64(k, base + 8)?, abi::read_u64(k, base + 16)?);
+        let list = |k: &mut K| -> Result<Vec<u64>> {
+            if size > 8 * 1024 {
+                return Err(STATUS_INVALID_PARAMETER);
+            }
+            (0..size / 8).map(|j| abi::read_u64(k, value + 8 * j)).collect()
+        };
+        match kind {
+            1 => out.handle_list = Some(list(k)?.into_iter().map(Handle).collect()),
+            2 => out.mitigation = value,
+            3 => out.jobs = list(k)?,
+            4 => out.breakaway = value != 0,
+            _ => {}
+        }
+    }
+    Ok(out)
 }
 
 /// `NtTerminateThread(ThreadHandle, ExitStatus)`. A null handle ends every
@@ -207,32 +294,51 @@ pub fn terminate_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<Nt
 /// ClientId*)`. We open by client id (the `UniqueProcess` field); opening by
 /// name is not supported (no `\Device` process names).
 pub fn open_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
-    let [out, access, _attrs, client_ptr] = abi::args::<K, 4>(k, regs)?;
+    let [out, access, attrs, client_ptr] = abi::args::<K, 4>(k, regs)?;
     if client_ptr == 0 {
         return Err(STATUS_INVALID_PARAMETER);
     }
+    let attrs = abi::read_attributes(k, attrs)?;
     let pid = ProcessId(abi::read_u64(k, client_ptr)? as u32);
+    // No access at all is refused (Learn: "OpenProcess"); id 4 is Windows'
+    // System process, which Poly does not have and nobody may open.
+    if access as u32 == 0 {
+        return Err(STATUS_ACCESS_DENIED);
+    }
     let caller = k.caller();
     let h = k.with_state(|sys, _, _| {
-        let id = sys.objects.process_object(pid).ok_or(STATUS_INVALID_CID)?;
-        sys.objects.open_by_pointer(&caller, id, access as u32, 0)
+        let id = sys.objects.process_object(pid).ok_or(if pid.0 == SYSTEM_PROCESS_ID {
+            STATUS_ACCESS_DENIED
+        } else {
+            STATUS_INVALID_CID
+        })?;
+        sys.objects.open_by_pointer(&caller, id, access as u32, attrs.attributes & poly_ntobj::OBJ_INHERIT)
     })?;
     return_handle(k, out, h)?;
     Ok(STATUS_SUCCESS)
 }
 
+/// The process id Windows gives its System process; Poly has none, and
+/// where no process has that id the open is refused rather than not found
+/// (the spec sheet of `OpenProcess`).
+const SYSTEM_PROCESS_ID: u32 = 4;
+
 /// `NtOpenThread(ThreadHandle*, DesiredAccess, ObjectAttributes*,
 /// ClientId*)`: open by the `UniqueThread` client-id field.
 pub fn open_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
-    let [out, access, _attrs, client_ptr] = abi::args::<K, 4>(k, regs)?;
+    let [out, access, attrs, client_ptr] = abi::args::<K, 4>(k, regs)?;
     if client_ptr == 0 {
         return Err(STATUS_INVALID_PARAMETER);
+    }
+    let attrs = abi::read_attributes(k, attrs)?;
+    if access as u32 == 0 {
+        return Err(STATUS_ACCESS_DENIED);
     }
     let tid = ThreadRef(abi::read_u64(k, client_ptr + 8)?);
     let caller = k.caller();
     let h = k.with_state(|sys, _, _| {
         let id = sys.objects.thread_object(tid).ok_or(STATUS_INVALID_CID)?;
-        sys.objects.open_by_pointer(&caller, id, access as u32, 0)
+        sys.objects.open_by_pointer(&caller, id, access as u32, attrs.attributes & poly_ntobj::OBJ_INHERIT)
     })?;
     return_handle(k, out, h)?;
     Ok(STATUS_SUCCESS)
@@ -250,7 +356,7 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
     if class as u32 != PROCESS_BASIC_INFORMATION {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
-    let pid = process_of(k, Handle(h), PROCESS_QUERY_INFORMATION)?;
+    let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
     let (exit, peb) = k.with_state(|sys, proc, _| {
         if proc.pid == pid {
             (proc.exit_status.unwrap_or(STATUS_PENDING), proc.peb)
@@ -273,7 +379,7 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
     if class as u32 != THREAD_BASIC_INFORMATION {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
-    let tid = thread_of(k, Handle(h), THREAD_QUERY_INFORMATION)?;
+    let tid = thread_of_any(k, Handle(h), &[THREAD_QUERY_LIMITED_INFORMATION, THREAD_QUERY_INFORMATION])?;
     let (exit, teb, pid) = k.with_state(|_sys, proc, _| {
         let teb = proc.thread(tid).map(|t| t.teb).unwrap_or(0);
         let exit = proc.thread_exit_status(tid).unwrap_or(STATUS_PENDING);

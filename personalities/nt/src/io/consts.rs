@@ -233,3 +233,61 @@ pub const FSCTL_SET_REPARSE_POINT: u32 = 0x0009_00A4;
 pub const REPARSE_HEADER_SIZE: usize = 8;
 /// `SYMLINK_FLAG_RELATIVE` (`ntifs.h`).
 pub const SYMLINK_FLAG_RELATIVE: u32 = 1;
+
+// ----- named pipes and completion ports (ADR 0169)
+
+pub const STATUS_ILLEGAL_FUNCTION: NtStatus = NtStatus(0xC000_00AF);
+pub const STATUS_INSTANCE_NOT_AVAILABLE: NtStatus = NtStatus(0xC000_00AB);
+pub const STATUS_PIPE_NOT_AVAILABLE: NtStatus = NtStatus(0xC000_00AC);
+pub const STATUS_INVALID_PIPE_STATE: NtStatus = NtStatus(0xC000_00AD);
+pub const STATUS_PIPE_BUSY: NtStatus = NtStatus(0xC000_00AE);
+pub const STATUS_PIPE_DISCONNECTED: NtStatus = NtStatus(0xC000_00B0);
+pub const STATUS_PIPE_CLOSING: NtStatus = NtStatus(0xC000_00B1);
+pub const STATUS_PIPE_CONNECTED: NtStatus = NtStatus(0xC000_00B2);
+pub const STATUS_PIPE_LISTENING: NtStatus = NtStatus(0xC000_00B3);
+pub const STATUS_IO_TIMEOUT: NtStatus = NtStatus(0xC000_00B5);
+pub const STATUS_PIPE_EMPTY: NtStatus = NtStatus(0xC000_00D9);
+
+/// `FILE_PIPE_*` of `ntifs.h`: `NamedPipeType` / `ReadMode`.
+pub const FILE_PIPE_BYTE_STREAM_TYPE: u32 = 0;
+pub const FILE_PIPE_MESSAGE_TYPE: u32 = 1;
+/// `FILE_PIPE_REJECT_REMOTE_CLIENTS` (`ntifs.h`), bit 1 of the pipe type.
+pub const FILE_PIPE_REJECT_REMOTE_CLIENTS: u32 = 2;
+/// `CompletionMode`.
+pub const FILE_PIPE_QUEUE_OPERATION: u32 = 0;
+pub const FILE_PIPE_COMPLETE_OPERATION: u32 = 1;
+/// `NamedPipeConfiguration`.
+pub const FILE_PIPE_INBOUND: u32 = 0;
+pub const FILE_PIPE_OUTBOUND: u32 = 1;
+pub const FILE_PIPE_FULL_DUPLEX: u32 = 2;
+/// `NamedPipeState` (`ntifs.h`).
+pub const FILE_PIPE_DISCONNECTED_STATE: u32 = 1;
+pub const FILE_PIPE_LISTENING_STATE: u32 = 2;
+pub const FILE_PIPE_CONNECTED_STATE: u32 = 3;
+pub const FILE_PIPE_CLOSING_STATE: u32 = 4;
+
+/// `FILE_INFORMATION_CLASS` values (`wdm.h`/`ntifs.h`).
+pub const FILE_PIPE_INFORMATION: u32 = 23;
+pub const FILE_PIPE_LOCAL_INFORMATION: u32 = 24;
+pub const FILE_PIPE_REMOTE_INFORMATION: u32 = 25;
+pub const FILE_COMPLETION_INFORMATION: u32 = 30;
+pub const FILE_IO_COMPLETION_NOTIFICATION_INFORMATION: u32 = 41;
+/// `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS`, `FILE_SKIP_SET_EVENT_ON_HANDLE`
+/// (`winbase.h`).
+pub const FILE_SKIP_COMPLETION_PORT_ON_SUCCESS: u32 = 1;
+pub const FILE_SKIP_SET_EVENT_ON_HANDLE: u32 = 2;
+
+/// Pipe control codes (`winioctl.h`/`ntifs.h`:
+/// `CTL_CODE(FILE_DEVICE_NAMED_PIPE, n, ...)`, `FILE_DEVICE_NAMED_PIPE`
+/// being 0x11).
+pub const FSCTL_PIPE_DISCONNECT: u32 = 0x0011_0004;
+pub const FSCTL_PIPE_LISTEN: u32 = 0x0011_0008;
+pub const FSCTL_PIPE_PEEK: u32 = 0x0011_400C;
+pub const FSCTL_PIPE_TRANSCEIVE: u32 = 0x0011_C017;
+pub const FSCTL_PIPE_WAIT: u32 = 0x0011_0018;
+/// Poly's own: the process and session ids of the two ends and whether
+/// the server has read from the client (`GetNamedPipeClientProcessId`,
+/// `GetNamedPipeHandleStateW`); function numbers above `winioctl.h`'s.
+pub const FSCTL_POLY_PIPE_PROCESSES: u32 = 0x0011_0100;
+/// `IO_COMPLETION_INFORMATION_CLASS` has `IoCompletionBasicInformation` (0).
+pub const IO_COMPLETION_BASIC_INFORMATION: u32 = 0;

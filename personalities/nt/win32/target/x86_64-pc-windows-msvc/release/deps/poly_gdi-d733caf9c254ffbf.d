@@ -1,0 +1,14 @@
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\personalities\nt\win32\target\x86_64-pc-windows-msvc\release\deps\poly_gdi-d733caf9c254ffbf.d: C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\lib.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\bitfont.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\bitmap.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\font.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\fontmap.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\gdi.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\outline.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\region.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\sysfont.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\text.rs
+
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\personalities\nt\win32\target\x86_64-pc-windows-msvc\release\deps\libpoly_gdi-d733caf9c254ffbf.rmeta: C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\lib.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\bitfont.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\bitmap.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\font.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\fontmap.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\gdi.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\outline.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\region.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\sysfont.rs C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\text.rs
+
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\lib.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\bitfont.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\bitmap.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\font.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\fontmap.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\gdi.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\outline.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\region.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\sysfont.rs:
+C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\crates\poly-gdi\src\text.rs:

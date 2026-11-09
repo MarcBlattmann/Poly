@@ -19,18 +19,22 @@
 extern crate alloc;
 use poly_win32_rt as _;
 
+mod attrlist;
 mod base;
 mod console;
 mod except;
 mod file;
 mod fileex;
 mod handles;
+mod iocp;
+mod job;
 mod legacy;
 mod locale;
 mod mapping;
 mod memory;
 mod misc;
 mod nls;
+mod npipe;
 mod nt;
 mod pipe;
 mod privilege;

@@ -1,0 +1,1 @@
+cargo:rustc-link-arg=/ENTRY:bcrypt_main

@@ -1,0 +1,3 @@
+cargo:rustc-link-arg=/ENTRY:crtloctest_main
+cargo:rustc-link-arg=/SUBSYSTEM:CONSOLE
+cargo:rustc-link-arg=/MANIFEST:NO

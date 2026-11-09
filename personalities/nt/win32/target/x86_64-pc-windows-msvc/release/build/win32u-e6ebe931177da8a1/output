@@ -1,0 +1,5 @@
+cargo:rerun-if-changed=C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\personalities\nt\win32\win32u\../../../../crates/poly-win32k/src/services.rs
+cargo:rustc-link-arg=/EXPORT:PolyUserCall
+cargo:rustc-link-arg=/EXPORT:PolyUserCommitSurface
+cargo:rustc-env=WIN32U_SYSCALLS=C:\Users\Marc.Blattmann\.t3\worktrees\Poly\t3-70849504\personalities\nt\win32\target\x86_64-pc-windows-msvc\release\build\win32u-e6ebe931177da8a1\out\win32k.s
+cargo:rustc-link-arg=/ENTRY:win32u_main

@@ -1,0 +1,3 @@
+cargo:rustc-link-arg=/ENTRY:b35test_main
+cargo:rustc-link-arg=/SUBSYSTEM:CONSOLE
+cargo:rustc-link-arg=/MANIFEST:NO
