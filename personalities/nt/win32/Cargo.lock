@@ -184,12 +184,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ole32"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "oleaut32"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
  "poly-win32-rt",
 ]
+
+[[package]]
+name = "poly-com"
+version = "0.0.1"
 
 [[package]]
 name = "poly-console"
@@ -343,6 +355,13 @@ name = "poly-x509"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
+]
+
+[[package]]
+name = "s1test"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
 ]
 
 [[package]]

@@ -21,6 +21,8 @@ use poly_win32k::proto::{ClassRef, ClassSpec, CreateSpec, Reply, Request, WinInf
 use poly_win32k::user::{self as u, CMsg, CRect, Env};
 use poly_win32k::wire;
 
+mod headless;
+
 #[link(name = "ntdll", kind = "raw-dylib")]
 unsafe extern "system" {
     fn RtlUpcaseUnicodeChar(c: u16) -> u16;
@@ -1131,8 +1133,6 @@ const MONITORINFOF_PRIMARY: u32 = 1;
 /// `ERROR_INVALID_FLAGS`, `ERROR_INVALID_MONITOR_HANDLE` (winerror.h).
 const ERROR_INVALID_FLAGS: u32 = 1004;
 const ERROR_INVALID_MONITOR_HANDLE: u32 = 1461;
-/// `SPI_GETWORKAREA` (winuser.h).
-const SPI_GETWORKAREA: u32 = 0x0030;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiForSystem() -> u32 {
@@ -1246,17 +1246,12 @@ pub unsafe extern "system" fn GetMonitorInfoW(monitor: H, mi: *mut u8) -> i32 {
     1
 }
 
-/// Only SPI_GETWORKAREA is answered: the work area.
+/// The `SPI_GET*` queries (`headless::system_parameters_info`, ADR 0155
+/// batch 4); the `SPI_SET*` actions fail with `ERROR_INVALID_PARAMETER`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn SystemParametersInfoW(action: u32, _param: u32, pv: *mut u8, _ini: u32) -> i32 {
-    if action != SPI_GETWORKAREA || pv.is_null() {
-        set_last_error(ERROR_INVALID_PARAMETER);
-        return 0;
-    }
-    let w = u::screen(&SYS).work;
-    // SAFETY: the caller's RECT.
-    unsafe { put_rect(pv as *mut i32, w) };
-    1
+pub unsafe extern "system" fn SystemParametersInfoW(action: u32, param: u32, pv: *mut u8, _ini: u32) -> i32 {
+    // SAFETY: the caller's promises for this action, passed on.
+    unsafe { headless::system_parameters_info(action, param, pv) }
 }
 
 #[unsafe(no_mangle)]
@@ -1282,20 +1277,34 @@ pub unsafe extern "system" fn AdjustWindowRect(rect: *mut i32, style: u32, menu:
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSysColor(index: i32) -> u32 {
     match index {
-        0 => 0x00C8_C8C8,    // COLOR_SCROLLBAR
-        1 => 0,              // COLOR_BACKGROUND
-        2 => 0x00D1_B499,    // COLOR_ACTIVECAPTION
-        3 => 0x00DB_CDBF,    // COLOR_INACTIVECAPTION
-        4 => 0x00F0_F0F0,    // COLOR_MENU
-        5 => 0x00FF_FFFF,    // COLOR_WINDOW
-        6 => 0x0064_6464,    // COLOR_WINDOWFRAME
-        7 | 8 | 9 | 18 => 0, // menu, window, caption, button text
-        13 => 0x00D7_7800,   // COLOR_HIGHLIGHT
-        14 => 0x00FF_FFFF,   // COLOR_HIGHLIGHTTEXT
-        15 => 0x00F0_F0F0,   // COLOR_BTNFACE
-        16 => 0x00A0_A0A0,   // COLOR_BTNSHADOW
-        17 => 0x006D_6D6D,   // COLOR_GRAYTEXT
-        20 => 0x00FF_FFFF,   // COLOR_BTNHIGHLIGHT
+        0 => 0x00C8_C8C8,                   // COLOR_SCROLLBAR
+        1 => 0,                             // COLOR_BACKGROUND
+        2 => 0x00D1_B499,                   // COLOR_ACTIVECAPTION
+        3 => 0x00DB_CDBF,                   // COLOR_INACTIVECAPTION
+        4 => 0x00F0_F0F0,                   // COLOR_MENU
+        5 => 0x00FF_FFFF,                   // COLOR_WINDOW
+        6 => 0x0064_6464,                   // COLOR_WINDOWFRAME
+        7 | 8 | 9 | 18 => 0,                // menu, window, caption, button text
+        10 => 0x00B4_B4B4,                  // COLOR_ACTIVEBORDER
+        11 => 0x00FC_F7F4,                  // COLOR_INACTIVEBORDER
+        12 => 0x00AB_ABAB,                  // COLOR_APPWORKSPACE
+        19 => 0x0054_4E43,                  // COLOR_INACTIVECAPTIONTEXT
+        21 => 0x0069_6969,                  // COLOR_3DDKSHADOW
+        22 => 0x00E3_E3E3,                  // COLOR_3DLIGHT
+        23 => 0,                            // COLOR_INFOTEXT
+        24 => 0x00E1_FFFF,                  // COLOR_INFOBK
+        26 => 0x00CC_6600,                  // COLOR_HOTLIGHT
+        27 => 0x00EA_D1B9,                  // COLOR_GRADIENTACTIVECAPTION
+        28 => 0x00F2_E4D7,                  // COLOR_GRADIENTINACTIVECAPTION
+        29 => 0x00D7_7800,                  // COLOR_MENUHILIGHT
+        30 => 0x00F0_F0F0,                  // COLOR_MENUBAR
+        13 => 0x00D7_7800,                  // COLOR_HIGHLIGHT
+        14 => 0x00FF_FFFF,                  // COLOR_HIGHLIGHTTEXT
+        15 => 0x00F0_F0F0,                  // COLOR_BTNFACE
+        16 => 0x00A0_A0A0,                  // COLOR_BTNSHADOW
+        17 => 0x006D_6D6D,                  // COLOR_GRAYTEXT
+        20 => 0x00FF_FFFF,                  // COLOR_BTNHIGHLIGHT
+        i32::MIN..=-1 | 31..=i32::MAX => 0, // not a colour index
         _ => 0x00F0_F0F0,
     }
 }
@@ -2049,11 +2058,6 @@ poly_win32_gui::not_implemented_stubs! {
     UnhookWindowsHookEx(hook) => 0;
     /// `CallNextHookEx(hhk, nCode, wParam, lParam)`: zero.
     CallNextHookEx(hook, code, w, l) => 0;
-}
-
-poly_win32_gui::not_implemented_stubs! {
-    /// `LoadIconW(hInstance, lpIconName)`: NULL on failure.
-    LoadIconW(instance, name) => 0;
 }
 
 // ----- cursors, capture, the window under a point (slice B)

@@ -22,6 +22,7 @@ members = [
     "crates/poly-ext2",
     "crates/poly-fbdev",
     "crates/poly-files",
+    "crates/poly-com",
     "crates/poly-cpio",
     "crates/poly-dbus",
     "crates/poly-drm",
@@ -138,6 +139,7 @@ poly-iphlp = { path = "crates/poly-iphlp" }
 poly-irq = { path = "crates/poly-irq" }
 poly-kernelbase = { path = "crates/poly-kernelbase" }
 poly-ldr = { path = "crates/poly-ldr" }
+poly-com = { path = "crates/poly-com" }
 poly-stubs = { path = "crates/poly-stubs" }
 poly-libm = { path = "crates/poly-libm" }
 poly-line = { path = "crates/poly-line" }

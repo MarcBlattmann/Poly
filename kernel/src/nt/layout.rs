@@ -144,6 +144,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         // ADR 0155.
         ("bcryptprimitives.dll", super::BCRYPTPRIMITIVES),
         ("version.dll", super::VERSION),
+        ("ole32.dll", super::OLE32),
         ("iphlpapi.dll", super::IPHLPAPI),
         ("netapi32.dll", super::NETAPI32),
         ("secur32.dll", super::SECUR32),

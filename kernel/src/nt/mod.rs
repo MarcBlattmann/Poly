@@ -109,6 +109,14 @@ pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/b
 /// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
 pub static VERSION: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/version.dll"));
+/// Our `ole32.dll` (ADR 0155, batch 4): COM apartments, the Windows Runtime's
+/// strings; hosts the `winrt` and `com` API sets. Installed by [`layout`].
+pub static OLE32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ole32.dll"));
+
+mod test_s1;
+
+/// The program the headless-surface ring-3 test runs (`test_s1`).
+pub static S1TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s1test.exe"));
 /// The network and identity DLLs of Chrome's batch 3/5 (ADR 0155).
 pub static IPHLPAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/iphlpapi.dll"));
 pub static NETAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/netapi32.dll"));
@@ -121,7 +129,8 @@ mod test_b35;
 
 /// The program the Chrome batch 3/5 ring-3 test runs (`test_b35`). Empty without `xtask`.
 pub static B35TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/b35test.exe"));
-
+/// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
 mod test_crypto;
 
 /// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in
