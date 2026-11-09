@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "dgm_base",
+      "exe_sha256": "4c4f3850ab0b0556cfb19f010c365d913d721dc1c6cedef167fd5d1ac6c3a889",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dXBlbSAxMDAwIEdldERlc2lnbkdseXBoTWV0cmljcyAweDAwMDAwMDAwCiAgZzAgbHNiIDUwIGFkdiA1MDAgcnNiIDUwCiAgZzEgbHNiIDAgYWR2IDMwMCByc2IgMzAwCiAgZzIgbHNiIDEwMCBhZHYgMTAwMCByc2IgMTAwCiAgZzMgbHNiIDAgYWR2IDEwMDAgcnNiIDAKICBnNCBsc2IgMCBhZHYgMTAwMCByc2IgMAogIGc1IGxzYiAyMDAgYWR2IDcwMCByc2IgMTAwCiAgZzYgbHNiIDUwIGFkdiA2MDAgcnNiIDUwCiAgZzcgbHNiIDEwMCBhZHYgMTAwMCByc2IgMTAwCnVwZW0gMjA0OCBHZXREZXNpZ25HbHlwaE1ldHJpY3MgMHgwMDAwMDAwMAogIGcwIGxzYiAxMDIgYWR2IDEwMjQgcnNiIDEwMwogIGcxIGxzYiAwIGFkdiA2MTQgcnNiIDYxNAogIGcyIGxzYiAyMDQgYWR2IDIwNDggcnNiIDIwNQogIGczIGxzYiAwIGFkdiAyMDQ4IHJzYiAwCiAgZzQgbHNiIDAgYWR2IDIwNDggcnNiIDAKICBnNSBsc2IgNDA5IGFkdiAxNDMzIHJzYiAyMDUKICBnNiBsc2IgMTAyIGFkdiAxMjI4IHJzYiAxMDIKICBnNyBsc2IgMjA0IGFkdiAyMDQ4IHJzYiAyMDUKZ2x5cGggODogMHgwMDAwMDAwMCBhZHYgNTAwIGxzYiA1MApnbHlwaCA5OTogMHgwMDAwMDAwMCBhZHYgNTAwIGxzYiA1MApnbHlwaCA2NTUzNTogMHgwMDAwMDAwMCBhZHYgNTAwIGxzYiA1MApjb3VudCAwOiAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "upem 1000 GetDesignGlyphMetrics 0x00000000\n  g0 lsb 50 adv 500 rsb 50\n  g1 lsb 0 adv 300 rsb 300\n  g2 lsb 100 adv 1000 rsb 100\n  g3 lsb 0 adv 1000 rsb 0\n  g4 lsb 0 adv 1000 rsb 0\n  g5 lsb 200 adv 700 rsb 100\n  g6 lsb 50 adv 600 rsb 50\n  g7 lsb 100 adv 1000 rsb 100\nupem 2048 GetDesignGlyphMetrics 0x00000000\n  g0 lsb 102 adv 1024 rsb 103\n  g1 lsb 0 adv 614 rsb 614\n  g2 lsb 204 adv 2048 rsb 205\n  g3 lsb 0 adv 2048 rsb 0\n  g4 lsb 0 adv 2048 rsb 0\n  g5 lsb 409 adv 1433 rsb 205\n  g6 lsb 102 adv 1228 rsb 102\n  g7 lsb 204 adv 2048 rsb 205\nglyph 8: 0x00000000 adv 500 lsb 50\nglyph 99: 0x00000000 adv 500 lsb 50\nglyph 65535: 0x00000000 adv 500 lsb 50\ncount 0: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "dgm_vertical",
+      "exe_sha256": "e6850bf29d355cf2a2a54ee6df7ad461e66158bbf17e53cc772cedb292f457d3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmFzZSAodHlwbyA3NTAvLTI1MCwgd2luIDkwMC8zMDAsIGhoZWEgODAwLy0yMDApCiAgZzAgdHNiIDUwIGFkdmggMTAwMCBic2IgMjUwIHZvIDc1MAogIGcxIHRzYiA3NTAgYWR2aCAxMDAwIGJzYiAyNTAgdm8gNzUwCiAgZzIgdHNiIC01MCBhZHZoIDEwMDAgYnNiIDI1MCB2byA3NTAKICBnMyB0c2IgLTUwIGFkdmggMTAwMCBic2IgMjUwIHZvIDc1MAogIGc0IHRzYiAtNTAgYWR2aCAxMDAwIGJzYiAyNTAgdm8gNzUwCiAgZzUgdHNiIDI1MCBhZHZoIDEwMDAgYnNiIDI1MCB2byA3NTAKICBnNiB0c2IgNDUwIGFkdmggMTAwMCBic2IgNTAgdm8gNzUwCiAgZzcgdHNiIDUwIGFkdmggMTAwMCBic2IgMzUwIHZvIDc1MAogIHNpZGV3YXlzIDB4MDAwMDAwMDA6IGFsbCBlcXVhbCB0byB0aGUgaG9yaXpvbnRhbCBjYXNlIHRydWUKdHlwbyA3MDAvLTEwMCwgd2luIDk1MC8yNTAsIGhoZWEgNjUwLy0xNTAKICBnMCB0c2IgMCBhZHZoIDgwMCBic2IgMTAwIHZvIDcwMAogIGcxIHRzYiA3MDAgYWR2aCA4MDAgYnNiIDEwMCB2byA3MDAKICBnMiB0c2IgLTEwMCBhZHZoIDgwMCBic2IgMTAwIHZvIDcwMAogIGczIHRzYiAtMTAwIGFkdmggODAwIGJzYiAxMDAgdm8gNzAwCiAgZzQgdHNiIC0xMDAgYWR2aCA4MDAgYnNiIDEwMCB2byA3MDAKICBnNSB0c2IgMjAwIGFkdmggODAwIGJzYiAxMDAgdm8gNzAwCiAgZzYgdHNiIDQwMCBhZHZoIDgwMCBic2IgLTEwMCB2byA3MDAKICBnNyB0c2IgMCBhZHZoIDgwMCBic2IgMjAwIHZvIDcwMAogIHNpZGV3YXlzIDB4MDAwMDAwMDA6IGFsbCBlcXVhbCB0byB0aGUgaG9yaXpvbnRhbCBjYXNlIHRydWUKdXBlbSAyMDQ4LCB0eXBvIDc1MC8tMjUwCiAgZzAgdHNiIC02ODMgYWR2aCAxMDAwIGJzYiAyNTAgdm8gNzUwCiAgZzEgdHNiIDc1MCBhZHZoIDEwMDAgYnNiIDI1MCB2byA3NTAKICBnMiB0c2IgLTg4OCBhZHZoIDEwMDAgYnNiIDI1MCB2byA3NTAKICBnMyB0c2IgLTg4OCBhZHZoIDEwMDAgYnNiIDI1MCB2byA3NTAKICBnNCB0c2IgLTg4OCBhZHZoIDEwMDAgYnNiIDI1MCB2byA3NTAKICBnNSB0c2IgLTI3NCBhZHZoIDEwMDAgYnNiIDI1MCB2byA3NTAKICBnNiB0c2IgMTM2IGFkdmggMTAwMCBic2IgLTE1OSB2byA3NTAKICBnNyB0c2IgLTY4MyBhZHZoIDEwMDAgYnNiIDQ1NCB2byA3NTAKICBzaWRld2F5cyAweDAwMDAwMDAwOiBhbGwgZXF1YWwgdG8gdGhlIGhvcml6b250YWwgY2FzZSB0cnVlCnR5cG8gODAwLy0zMDAgd2l0aCBVU0VfVFlQT19NRVRSSUNTCiAgZzAgdHNiIDEwMCBhZHZoIDExMDAgYnNiIDMwMCB2byA4MDAKICBnMSB0c2IgODAwIGFkdmggMTEwMCBic2IgMzAwIHZvIDgwMAogIGcyIHRzYiAwIGFkdmggMTEwMCBic2IgMzAwIHZvIDgwMAogIGczIHRzYiAwIGFkdmggMTEwMCBic2IgMzAwIHZvIDgwMAogIGc0IHRzYiAwIGFkdmggMTEwMCBic2IgMzAwIHZvIDgwMAogIGc1IHRzYiAzMDAgYWR2aCAxMTAwIGJzYiAzMDAgdm8gODAwCiAgZzYgdHNiIDUwMCBhZHZoIDExMDAgYnNiIDEwMCB2byA4MDAKICBnNyB0c2IgMTAwIGFkdmggMTEwMCBic2IgNDAwIHZvIDgwMAogIHNpZGV3YXlzIDB4MDAwMDAwMDA6IGFsbCBlcXVhbCB0byB0aGUgaG9yaXpvbnRhbCBjYXNlIHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "base (typo 750/-250, win 900/300, hhea 800/-200)\n  g0 tsb 50 advh 1000 bsb 250 vo 750\n  g1 tsb 750 advh 1000 bsb 250 vo 750\n  g2 tsb -50 advh 1000 bsb 250 vo 750\n  g3 tsb -50 advh 1000 bsb 250 vo 750\n  g4 tsb -50 advh 1000 bsb 250 vo 750\n  g5 tsb 250 advh 1000 bsb 250 vo 750\n  g6 tsb 450 advh 1000 bsb 50 vo 750\n  g7 tsb 50 advh 1000 bsb 350 vo 750\n  sideways 0x00000000: all equal to the horizontal case true\ntypo 700/-100, win 950/250, hhea 650/-150\n  g0 tsb 0 advh 800 bsb 100 vo 700\n  g1 tsb 700 advh 800 bsb 100 vo 700\n  g2 tsb -100 advh 800 bsb 100 vo 700\n  g3 tsb -100 advh 800 bsb 100 vo 700\n  g4 tsb -100 advh 800 bsb 100 vo 700\n  g5 tsb 200 advh 800 bsb 100 vo 700\n  g6 tsb 400 advh 800 bsb -100 vo 700\n  g7 tsb 0 advh 800 bsb 200 vo 700\n  sideways 0x00000000: all equal to the horizontal case true\nupem 2048, typo 750/-250\n  g0 tsb -683 advh 1000 bsb 250 vo 750\n  g1 tsb 750 advh 1000 bsb 250 vo 750\n  g2 tsb -888 advh 1000 bsb 250 vo 750\n  g3 tsb -888 advh 1000 bsb 250 vo 750\n  g4 tsb -888 advh 1000 bsb 250 vo 750\n  g5 tsb -274 advh 1000 bsb 250 vo 750\n  g6 tsb 136 advh 1000 bsb -159 vo 750\n  g7 tsb -683 advh 1000 bsb 454 vo 750\n  sideways 0x00000000: all equal to the horizontal case true\ntypo 800/-300 with USE_TYPO_METRICS\n  g0 tsb 100 advh 1100 bsb 300 vo 800\n  g1 tsb 800 advh 1100 bsb 300 vo 800\n  g2 tsb 0 advh 1100 bsb 300 vo 800\n  g3 tsb 0 advh 1100 bsb 300 vo 800\n  g4 tsb 0 advh 1100 bsb 300 vo 800\n  g5 tsb 300 advh 1100 bsb 300 vo 800\n  g6 tsb 500 advh 1100 bsb 100 vo 800\n  g7 tsb 100 advh 1100 bsb 400 vo 800\n  sideways 0x00000000: all equal to the horizontal case true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

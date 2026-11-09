@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "coll_custom",
+      "exe_sha256": "56fe3909f2000a5cf52260f41a48d95c7762b71700a36699d8fac1c47c025a76",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2xvdHMgMCwxOiAweDAwMDAwMDAwIGZhbWlsaWVzIDEgWzQgZm9udHNdIAplbXB0eSBrZXk6IDB4MDAwMDAwMDAgZmFtaWxpZXMgMCAKc2xvdHMgMCwwLDEsMSAoZHVwbGljYXRlcyk6IDB4MDAwMDAwMDAgZmFtaWxpZXMgMSBbOCBmb250c10gCmtleSBvZiBuaW5lIGJ5dGVzICh0aGUgbG9hZGVyIHJlZnVzZXMgbW9yZSB0aGFuIGVpZ2h0KTogMHg4MDA3MDA1NyBudWxsCnNsb3QgNDAgKHRoZSBsb2FkZXIgZmFpbHMgdG8gbWFrZSBhIHN0cmVhbSk6IDB4MDAwMDAwMDAgZmFtaWxpZXMgMSBbNCBmb250c10gCnNsb3QgNiBpcyBub3QgYSBmb250OiAweDAwMDAwMDAwIGZhbWlsaWVzIDEgWzQgZm9udHNdIApvbmx5IGEgZmlsZSB0aGF0IGlzIG5vdCBhIGZvbnQ6IDB4MDAwMDAwMDAgZmFtaWxpZXMgMCAKYSBmb250IHdpdGggbm8gbmFtZXM6IDB4MDAwMDAwMDAgZmFtaWxpZXMgMSBbNCBmb250c10gCnNsb3RzIDUsNDogMHgwMDAwMDAwMCBmYW1pbGllcyAxIFs4IGZvbnRzXSAKdHdvIGNvbGxlY3Rpb25zIG9mIHRoZSBzYW1lIGtleTogc2FtZSBvYmplY3QgZmFsc2UKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "slots 0,1: 0x00000000 families 1 [4 fonts] \nempty key: 0x00000000 families 0 \nslots 0,0,1,1 (duplicates): 0x00000000 families 1 [8 fonts] \nkey of nine bytes (the loader refuses more than eight): 0x80070057 null\nslot 40 (the loader fails to make a stream): 0x00000000 families 1 [4 fonts] \nslot 6 is not a font: 0x00000000 families 1 [4 fonts] \nonly a file that is not a font: 0x00000000 families 0 \na font with no names: 0x00000000 families 1 [4 fonts] \nslots 5,4: 0x00000000 families 1 [8 fonts] \ntwo collections of the same key: same object false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

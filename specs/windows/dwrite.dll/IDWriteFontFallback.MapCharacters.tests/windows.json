@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "mc_custom",
+      "exe_sha256": "9eead939725ccfca371179db91939366de4e579f17d2e7581c512d6f22b796bf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlRm9udEZhbGxiYWNrQnVpbGRlciAweDAwMDAwMDAwCkFkZE1hcHBpbmcgQS1DIGFuZCBldXJvIHRvIEFscGhhOiAweDAwMDAwMDAwCkFkZE1hcHBpbmcgZS1hY3V0ZSB0byBCZXRhIHdpdGggc2NhbGUgMC41OiAweDAwMDAwMDAwCkNyZWF0ZUZvbnRGYWxsYmFjayAweDAwMDAwMDAwIG51bGwgZmFsc2UKQUJDOiBbMHgwMDAwMDAwMCBsZW4gMyBzY2FsZSAxMDAwIHc0MDAgczUgc3QwIHNpbTAgZW4tdXM9UmVndWxhcl0gCkFCQ0Q6IFsweDAwMDAwMDAwIGxlbiAzIHNjYWxlIDEwMDAgdzQwMCBzNSBzdDAgc2ltMCBlbi11cz1SZWd1bGFyXSBbMHgwMDAwMDAwMCBsZW4gMSBubyBmb250XSAKQSBlLWFjdXRlIGV1cm86IFsweDAwMDAwMDAwIGxlbiAxIHNjYWxlIDEwMDAgdzQwMCBzNSBzdDAgc2ltMCBlbi11cz1SZWd1bGFyXSBbMHgwMDAwMDAwMCBsZW4gMSBzY2FsZSA1MDAgdzQwMCBzNSBzdDAgc2ltMCBlbi11cz1SZWd1bGFyXSBbMHgwMDAwMDAwMCBsZW4gMSBzY2FsZSAxMDAwIHc0MDAgczUgc3QwIHNpbTAgZW4tdXM9UmVndWxhcl0gCkQgYWxvbmU6IFsweDAwMDAwMDAwIGxlbiAxIG5vIGZvbnRdIApldXJvIHRoZW4gQTogWzB4MDAwMDAwMDAgbGVuIDEgc2NhbGUgMTAwMCB3NDAwIHM1IHN0MCBzaW0wIGVuLXVzPVJlZ3VsYXJdIFsweDAwMDAwMDAwIGxlbiAxIHNjYWxlIDEwMDAgdzQwMCBzNSBzdDAgc2ltMCBlbi11cz1SZWd1bGFyXSAKQUJDRCB3aXRoIGJhc2UgZmFtaWx5IFBvbHlUZXN0IEJldGEgaW4gdGhlIGN1c3RvbSBjb2xsZWN0aW9uOiBbMHgwMDAwMDAwMCBsZW4gMyBzY2FsZSAxMDAwIHc0MDAgczUgc3QwIHNpbTAgZW4tdXM9UmVndWxhcl0gWzB4MDAwMDAwMDAgbGVuIDEgbm8gZm9udF0gCkFCQ0Qgd2l0aCBiYXNlIGZhbWlseSBQb2x5VGVzdCBBbHBoYSBpbiB0aGUgY3VzdG9tIGNvbGxlY3Rpb246IFsweDAwMDAwMDAwIGxlbiAzIHNjYWxlIDEwMDAgdzQwMCBzNSBzdDAgc2ltMCBlbi11cz1SZWd1bGFyXSBbMHgwMDAwMDAwMCBsZW4gMSBubyBmb250XSAKZW1wdHkgYnVpbGRlcjogMHgwMDAwMDAwMCAweDAwMDAwMDAwIGZhbGxiYWNrIG51bGwgZmFsc2UKQWRkTWFwcGluZ3Mgb2YgYW5vdGhlciBmYWxsYmFjazogMHgwMDAwMDAwMApBQiB0aHJvdWdoIHRoZSBjb3BpZWQgbWFwcGluZ3M6IFsweDAwMDAwMDAwIGxlbiAyIHNjYWxlIDEwMDAgdzQwMCBzNSBzdDAgc2ltMCBlbi11cz1SZWd1bGFyXSAKQWRkTWFwcGluZyB3aXRoIGEgcmFuZ2Ugd2hvc2UgbGFzdCBpcyBiZWxvdyBpdHMgZmlyc3Q6IDB4MDAwMDAwMDAKQWRkTWFwcGluZyB3aXRoIDAgcmFuZ2VzOiAweDgwMDcwMDU3CkFkZE1hcHBpbmcgd2l0aCAwIHRhcmdldCBmYW1pbGllczogMHg4MDA3MDA1NwpBZGRNYXBwaW5nIHdpdGggc2NhbGUgMDogMHgwMDAwMDAwMApBZGRNYXBwaW5nIHdpdGggc2NhbGUgLTE6IDB4ODAwNzAwNTcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateFontFallbackBuilder 0x00000000\nAddMapping A-C and euro to Alpha: 0x00000000\nAddMapping e-acute to Beta with scale 0.5: 0x00000000\nCreateFontFallback 0x00000000 null false\nABC: [0x00000000 len 3 scale 1000 w400 s5 st0 sim0 en-us=Regular] \nABCD: [0x00000000 len 3 scale 1000 w400 s5 st0 sim0 en-us=Regular] [0x00000000 len 1 no font] \nA e-acute euro: [0x00000000 len 1 scale 1000 w400 s5 st0 sim0 en-us=Regular] [0x00000000 len 1 scale 500 w400 s5 st0 sim0 en-us=Regular] [0x00000000 len 1 scale 1000 w400 s5 st0 sim0 en-us=Regular] \nD alone: [0x00000000 len 1 no font] \neuro then A: [0x00000000 len 1 scale 1000 w400 s5 st0 sim0 en-us=Regular] [0x00000000 len 1 scale 1000 w400 s5 st0 sim0 en-us=Regular] \nABCD with base family PolyTest Beta in the custom collection: [0x00000000 len 3 scale 1000 w400 s5 st0 sim0 en-us=Regular] [0x00000000 len 1 no font] \nABCD with base family PolyTest Alpha in the custom collection: [0x00000000 len 3 scale 1000 w400 s5 st0 sim0 en-us=Regular] [0x00000000 len 1 no font] \nempty builder: 0x00000000 0x00000000 fallback null false\nAddMappings of another fallback: 0x00000000\nAB through the copied mappings: [0x00000000 len 2 scale 1000 w400 s5 st0 sim0 en-us=Regular] \nAddMapping with a range whose last is below its first: 0x00000000\nAddMapping with 0 ranges: 0x80070057\nAddMapping with 0 target families: 0x80070057\nAddMapping with scale 0: 0x00000000\nAddMapping with scale -1: 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    }
+  ]
+}

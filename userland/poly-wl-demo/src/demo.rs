@@ -11,6 +11,11 @@
 //! keyboard enter, keys, modifiers, pointer enter, motion (the first only),
 //! buttons and the wheel. A left click swaps the window's colour
 //! ([`DEMO_A`] and [`DEMO_B`]) and commits again, which shows on the screen.
+//!
+//! Two options make it a slow-starting app for the busy pointer's boot test
+//! (ADR 0167): `--delay <ms>` waits before it connects, and `--activate`
+//! activates its window with the `XDG_ACTIVATION_TOKEN` it was launched
+//! with (`xdg_activation_v1`) before the first buffer, as toolkits do.
 
 use crate::wire::{Arg, Conn, DISPLAY, Event, bind_args};
 use alloc::string::String;
@@ -107,6 +112,7 @@ struct Ids {
     wm_base: u32,
     decoration_manager: u32,
     seat: u32,
+    activation: u32,
     surface: u32,
     xdg_surface: u32,
     toplevel: u32,
@@ -123,6 +129,7 @@ struct Names {
     wm_base: u32,
     decoration: u32,
     seat: u32,
+    activation: u32,
 }
 
 struct Demo {
@@ -138,6 +145,7 @@ struct Demo {
     synced: bool,
     motion_reported: bool,
     colour_b: bool,
+    activate: bool,
 }
 
 impl Demo {
@@ -203,6 +211,7 @@ impl Demo {
                 "xdg_wm_base" => self.names.wm_base = name,
                 "zxdg_decoration_manager_v1" => self.names.decoration = name,
                 "wl_seat" => self.names.seat = name,
+                "xdg_activation_v1" => self.names.activation = name,
                 _ => {}
             }
         } else if e.object == id.sync && e.opcode == 0 {
@@ -320,6 +329,7 @@ impl Demo {
             return Ok(1);
         }
         let (nc, ns, nw, nd, nseat) = (n.compositor, n.shm, n.wm_base, n.decoration, n.seat);
+        let na = n.activation;
         self.id.compositor = self.bind(nc, "wl_compositor", 4);
         self.id.shm = self.bind(ns, "wl_shm", 1);
         self.id.wm_base = self.bind(nw, "xdg_wm_base", 1);
@@ -328,6 +338,9 @@ impl Demo {
         }
         if nseat != 0 {
             self.id.seat = self.bind(nseat, "wl_seat", 5);
+        }
+        if self.activate && na != 0 {
+            self.id.activation = self.bind(na, "xdg_activation_v1", 1);
         }
         self.make_buffer()?;
         let c = &mut self.c;
@@ -344,6 +357,14 @@ impl Demo {
             c.request(self.id.decoration_manager, 1, &[Arg::U(decoration), Arg::U(self.id.toplevel)]);
             c.request(decoration, 1, &[Arg::U(MODE_SERVER_SIDE)]); // set_mode
         }
+        // A token from the launcher: activate the window with it before
+        // anything is drawn (xdg_activation_v1.activate is request 2).
+        if self.id.activation != 0
+            && let Some(token) = poly_rt::env::var("XDG_ACTIVATION_TOKEN")
+        {
+            c.request(self.id.activation, 2, &[Arg::S(token), Arg::U(self.id.surface)]);
+            println!("wl-demo: activating with token {token}");
+        }
         c.request(self.id.surface, 6, &[]); // commit without a buffer: configure comes
         self.flush();
         while !self.closed {
@@ -358,8 +379,27 @@ impl Demo {
     }
 }
 
+/// What the command line asks for: `--delay <ms>` and `--activate`.
+fn options<'a>(args: impl Iterator<Item = &'a str>) -> (u64, bool) {
+    let (mut delay, mut activate) = (0, false);
+    let mut args = args;
+    while let Some(a) = args.next() {
+        match a {
+            "--delay" => delay = args.next().and_then(|v| v.parse().ok()).unwrap_or(0),
+            "--activate" => activate = true,
+            _ => {}
+        }
+    }
+    (delay.min(60_000), activate)
+}
+
 /// The program.
 pub fn main() -> i32 {
+    let (delay, activate) = options(poly_rt::env::args_str().skip(1));
+    if delay > 0 {
+        println!("wl-demo: starting slowly, {delay} ms");
+        let _ = poly_rt::time::sleep(core::time::Duration::from_millis(delay));
+    }
     let c = match Conn::connect() {
         Ok(c) => c,
         Err(e) => {
@@ -380,6 +420,7 @@ pub fn main() -> i32 {
         synced: false,
         motion_reported: false,
         colour_b: false,
+        activate,
     };
     match d.run() {
         Ok(status) => status,
@@ -414,6 +455,14 @@ mod tests {
         assert_eq!(p[(312 * w) as usize], BAND);
         assert_eq!(p[(311 * w) as usize], DEMO_A);
         assert_eq!(p[(w * h - 1) as usize], DEMO_A);
+    }
+
+    #[test]
+    fn reads_its_options() {
+        assert_eq!(options(["--delay", "2500", "--activate"].into_iter()), (2500, true));
+        assert_eq!(options([].into_iter()), (0, false));
+        assert_eq!(options(["--delay", "x"].into_iter()), (0, false));
+        assert_eq!(options(["--delay", "999999999"].into_iter()).0, 60_000);
     }
 
     #[test]
