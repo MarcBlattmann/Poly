@@ -57,6 +57,7 @@ members = [
     "crates/poly-seh",
     "crates/poly-cxxeh",
     "crates/poly-smp",
+    "crates/poly-stubs",
     "crates/poly-term",
     "crates/poly-tty",
     "crates/poly-unix",
@@ -128,6 +129,7 @@ poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
 poly-kernelbase = { path = "crates/poly-kernelbase" }
 poly-ldr = { path = "crates/poly-ldr" }
+poly-stubs = { path = "crates/poly-stubs" }
 poly-libm = { path = "crates/poly-libm" }
 poly-line = { path = "crates/poly-line" }
 poly-mem = { path = "crates/poly-mem" }

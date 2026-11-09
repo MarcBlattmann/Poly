@@ -68,6 +68,24 @@ fn entries(zip: &[u8]) -> Result<Vec<Entry>, String> {
 /// The data of member `name`.
 pub fn extract(zip: &[u8], name: &str) -> Result<Vec<u8>, String> {
     let e = entries(zip)?.into_iter().find(|e| e.name == name).ok_or_else(|| format!("{name}: not in the archive"))?;
+    extract_entry(zip, &e)
+}
+
+/// Every file member (not directories) with its data, handed to `each` one
+/// at a time so a large archive is never all in memory at once.
+pub fn for_each(zip: &[u8], mut each: impl FnMut(&str, Vec<u8>) -> Result<(), String>) -> Result<(), String> {
+    for e in entries(zip)? {
+        if e.name.ends_with('/') {
+            continue;
+        }
+        let data = extract_entry(zip, &e)?;
+        each(&e.name, data)?;
+    }
+    Ok(())
+}
+
+fn extract_entry(zip: &[u8], e: &Entry) -> Result<Vec<u8>, String> {
+    let name = e.name.as_str();
     let h = e.local_header;
     if u32_at(zip, h) != Some(0x0403_4b50) {
         return Err(format!("{name}: a bad local file header"));
