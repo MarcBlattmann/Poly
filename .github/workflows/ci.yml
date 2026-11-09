@@ -128,6 +128,12 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      # A fresh checkout gives every source file a new modification time, so
+      # cargo rebuilt the 50 unchanged crates the cache holds (40 s). Compare
+      # the files' checksums instead.
+      RUSTC_BOOTSTRAP: 1
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: true
     strategy:
       fail-fast: false
       matrix:
