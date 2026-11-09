@@ -466,7 +466,7 @@ pub fn resume(pid: ProcessId, memory: &Arc<Memory>, thread: ThreadRef) -> Result
     if prev > 0 && now == 0 {
         // A new process's first thread, created suspended (ADR 0089).
         if let (Some((entry, teb)), Some((process, child_memory))) = (deferred, &child) {
-            return super::start_first_thread(process, child_memory, &super::Start { entry, teb }).map(|()| prev);
+            return super::start_first_thread(process, child_memory, &super::Start { entry, teb, tid: thread.0 as u32 }).map(|()| prev);
         }
         let process = find(owner_of(pid, thread));
         if let Some((entry, teb)) = deferred {

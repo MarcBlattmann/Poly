@@ -598,6 +598,11 @@ pub struct Start {
     pub entry: crate::arch::user::Entry,
     /// The GS base the thread runs with (its TEB).
     pub teb: u64,
+    /// The thread id it runs as; 0: the process's own id (the first thread
+    /// of a process the kernel started itself). A process made by
+    /// `NtCreateUserProcess` has a first thread with an id of its own, as
+    /// on Windows, where process and thread ids come from one table.
+    pub tid: u32,
 }
 
 /// How an NT process was started: its executable's DOS path and its
@@ -765,6 +770,7 @@ fn start_params(
                         args: [ps.start_routine, ps.argument, ps.image_base],
                     },
                     teb: ps.teb,
+                    tid: if tid == process.pid { 0 } else { tid },
                 },
                 opened,
             )),
@@ -817,9 +823,10 @@ fn create_process(
         join_creator_jobs: req.join_creator_jobs,
         dynamic_code_blocked: req.dynamic_code_blocked,
     };
-    let (start, handles) = start_params(&process, &memory, &req.image, pid, &req.params, &sources, Some(&want))?;
+    let tid = crate::process::alloc_pid();
+    let (start, handles) = start_params(&process, &memory, &req.image, tid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");
-    let first = ThreadRef(u64::from(pid));
+    let first = ThreadRef(u64::from(tid));
     let created = poly_personality_nt::ProcessCreated {
         process: ph,
         thread: th,
@@ -851,7 +858,12 @@ fn create_process(
 /// Start a new NT process's first thread in ring 3 at `start`; if it
 /// cannot start, the process ends.
 pub(super) fn start_first_thread(process: &Arc<Process>, memory: &Arc<Memory>, start: &Start) -> Result<(), NtStatus> {
-    match user::spawn_nt(Arc::clone(process), Arc::clone(memory), start.entry, start.teb, user::DEFAULT_HOOK) {
+    let spawned = if start.tid == 0 {
+        user::spawn_nt(Arc::clone(process), Arc::clone(memory), start.entry, start.teb, user::DEFAULT_HOOK)
+    } else {
+        user::spawn_nt_as(Arc::clone(process), Arc::clone(memory), start.entry, start.teb, user::DEFAULT_HOOK, start.tid)
+    };
+    match spawned {
         Ok(kthread) => {
             // The creator waits on the process object, not the thread.
             let _ = thread::detach(kthread);
@@ -936,7 +948,7 @@ pub fn resolve_fault(pid: u32, tid: u32, memory: &Arc<Memory>, addr: u64) -> boo
         let mut b = MemBackend { memory, sections: &mut s.sections };
         let tref = ThreadRef(u64::from(tid));
         match exec::access_fault(proc, &mut b, tref, addr) {
-            vm::AccessFault::StackGrown { .. } => true,
+            vm::AccessFault::StackGrown { .. } | vm::AccessFault::Retry => true,
             // Remembered for the exception it raises (ADR 0068).
             vm::AccessFault::Exception(status) => {
                 s.ctl.entry(tref).or_default().page_fault = Some((addr, status));

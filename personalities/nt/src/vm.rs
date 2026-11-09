@@ -106,6 +106,21 @@ pub struct ViewInfo {
     pub reserve: bool,
 }
 
+impl ViewInfo {
+    /// What the page tables map for a page of protection `p`. A
+    /// `PAGE_WRITECOPY` page of a data view maps read-only: its first write
+    /// faults into the personality, which turns the page into a private
+    /// `PAGE_READWRITE` one (Learn: "Memory Protection Constants": the page
+    /// "changes to PAGE_READWRITE" once written) and lets the kernel copy it.
+    pub fn hw(&self, p: Protection) -> HwProt {
+        if !self.shared && !self.image && p.base() == PAGE_WRITECOPY && !p.is_guard() {
+            HwProt::R
+        } else {
+            p.hw(self.shared)
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AllocKind {
     Private,
@@ -201,6 +216,9 @@ pub enum AccessFault {
     /// The stack's committed part now starts at `limit` (the TEB's
     /// `StackLimit`).
     StackGrown { limit: u64 },
+    /// A copy-on-write page was written: it is writable now, run the
+    /// instruction again.
+    Retry,
     /// An exception: `STATUS_GUARD_PAGE_VIOLATION` (the guard status is
     /// off now), `STATUS_STACK_OVERFLOW` or `STATUS_ACCESS_VIOLATION`.
     Exception(NtStatus),
@@ -484,7 +502,7 @@ impl VirtualMemory {
                 }
                 let offset = v.offset + (start - base);
                 b.commit_section(v.backing, offset, end - start);
-                b.protect(start, end - start, prot.hw(v.shared));
+                b.protect(start, end - start, v.hw(prot));
                 self.allocation_mut(base).expect("live").pages.fill(first..last, PageState::Committed(prot));
                 self.section_committed(v.section, base, offset, end - start);
             }
@@ -615,8 +633,8 @@ impl VirtualMemory {
         if a.pages.contains(first..last, &PageState::Reserved) {
             return Err(STATUS_NOT_COMMITTED);
         }
-        let shared = a.shared();
-        b.protect(start, end - start, prot.hw(shared));
+        let hw = a.view().map_or_else(|| prot.hw(false), |v| v.hw(prot));
+        b.protect(start, end - start, hw);
         self.allocation_mut(start).expect("checked").pages.fill(first..last, PageState::Committed(prot));
         Ok((start, end - start, old))
     }
@@ -674,6 +692,17 @@ impl VirtualMemory {
         let PageState::Committed(p) = a.pages.get(i) else {
             return AccessFault::Exception(STATUS_ACCESS_VIOLATION);
         };
+        // The first write to a copy-on-write page of a data view: the page
+        // is private and `PAGE_READWRITE` from now on.
+        if !p.is_guard()
+            && p.base() == PAGE_WRITECOPY
+            && a.view().is_some_and(|v| !v.shared && !v.image)
+            && let Ok(rw) = Protection::new(PAGE_READWRITE, false)
+        {
+            a.pages.fill(i..i + 1, PageState::Committed(rw));
+            b.protect(page, PAGE_SIZE, HwProt::RW);
+            return AccessFault::Retry;
+        }
         if !p.is_guard() {
             return AccessFault::Exception(STATUS_ACCESS_VIOLATION);
         }
@@ -768,8 +797,8 @@ pub fn map_view_pages(b: &mut dyn Backend, a: &Allocation, source: &ViewSource) 
     };
     for (range, state) in a.pages.runs_in(0..a.pages.len()) {
         let prot = match state {
-            PageState::Committed(p) => p.hw(v.shared),
-            PageState::Reserved => fallback.hw(v.shared),
+            PageState::Committed(p) => v.hw(p),
+            PageState::Reserved => v.hw(fallback),
         };
         pending = match pending {
             Some((first, n, p)) if p == prot => Some((first, n + range.len(), p)),
