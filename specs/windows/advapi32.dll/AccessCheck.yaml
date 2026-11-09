@@ -1,0 +1,74 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/AccessCheck
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Decides whether the impersonation token may have DesiredAccess to an
+  object with the given descriptor. A completed decision returns TRUE, with
+  *AccessStatus TRUE and *GrantedAccess = the desired bits, or *AccessStatus
+  FALSE, *GrantedAccess 0 and last error ERROR_ACCESS_DENIED (5). A request
+  is all-or-nothing, except MAXIMUM_ALLOWED, which returns everything the
+  DACL (and implicit owner rights, mandatory label, restricting SIDs)
+  allows. The descriptor needs an owner and a group; DesiredAccess must not
+  contain generic bits.
+interface:
+  signature: "BOOL AccessCheck(PSECURITY_DESCRIPTOR pSecurityDescriptor, HANDLE ClientToken, DWORD DesiredAccess, PGENERIC_MAPPING GenericMapping, PPRIVILEGE_SET PrivilegeSet, LPDWORD PrivilegeSetLength, LPDWORD GrantedAccess, LPBOOL AccessStatus)"
+  privilege_set: "PRIVILEGE_SET: PrivilegeCount (u32), Control (u32), then LUID_AND_ATTRIBUTES (LUID low u32, high i32, attributes u32; 12 bytes) per entry; used privileges carry SE_PRIVILEGE_USED_FOR_ACCESS (0x80000000)"
+  ambient: "Tests that depend on the oracle token say so: the SSH session runs as a local administrator with the elevated token (High integrity, Administrators group enabled, privileges present); the AccessCheck tests use an impersonation copy of it with every privilege disabled unless a test enables one on purpose."
+rules:
+  ordering: "the DACL is walked in order for the token's enabled groups and user: with \"allow Everyone 0x7, deny Administrators 0x2\" bit 0x2 is granted (the allow comes first); with \"deny Administrators 0x2, allow Everyone 0x7\" bit 0x2 and 0x3 are denied, 0x1, 0x4 and 0x5 granted, MAXIMUM_ALLOWED gives 0x5; a request is granted only if every bit is granted (allow Everyone 0x3: 0x1, 0x2, 0x3 granted, 0x4, 0x5, 0x7 denied with GrantedAccess 0; MAXIMUM_ALLOWED 0x3)"
+  skipped_aces: "a deny ACE for a SID the token does not have (S-1-5-99-1) is ignored; an allow ACE for such a SID grants nothing; an inherit-only allow ACE grants nothing; an allow ACE with container-inherit and object-inherit flags counts; an allow ACE with mask 0 and an audit ACE grant nothing (all denied, MAXIMUM_ALLOWED denied with GrantedAccess 0); desired access 0 is denied (TRUE, status FALSE, GrantedAccess 0, last error 5)"
+  maximum_allowed: "MAXIMUM_ALLOWED alone returns the union of what is granted (0x3 for allow 0x3; 0x7 for a DACL granting 0x7); MAXIMUM_ALLOWED combined with a bit that is not granted (0x2000008 with 0x8 ungranted) is denied; combined with a granted bit (0x2000001) gives the same union as alone"
+  absent_null_empty: "a descriptor without SE_DACL_PRESENT (absent) and one with a NULL DACL grant everything: 0x1, READ_CONTROL, WRITE_DAC, WRITE_OWNER (even with privileges disabled), 0x1f0007 are granted and MAXIMUM_ALLOWED returns GenericMapping.All (0xf0007) without ACCESS_SYSTEM_SECURITY; an empty DACL grants nothing, not MAXIMUM_ALLOWED either (denied, GrantedAccess 0)"
+  owner_implicit: "a token whose user SID, or any enabled group SID (Administrators, Users, Everyone were all tried), equals the descriptor owner implicitly gets READ_CONTROL and WRITE_DAC with an empty DACL (0x20000, 0x40000 and 0x60000 granted, MAXIMUM_ALLOWED 0x60000, WRITE_OWNER 0x80000, DELETE 0x10000, 0x1 denied); an owner the token does not have (S-1-5-99-1) gets nothing; the implicit rights do not depend on SE_GROUP_OWNER and survive a deny ACE for Everyone on READ_CONTROL|WRITE_DAC; they are added to what the DACL grants (Everyone allow 0x1: MAXIMUM_ALLOWED 0x60001)"
+  owner_rights: "an ACE for OWNER RIGHTS (S-1-3-4), even with mask 0, replaces the implicit rights: with \"allow OW 0x1\" owner = the user is granted 0x1 only (READ_CONTROL and WRITE_DAC denied, MAXIMUM_ALLOWED 0x1); \"allow OW READ_CONTROL\" gives READ_CONTROL only; mask 0 gives nothing; \"deny OW WRITE_DAC, allow Everyone all\": WRITE_DAC denied, MAXIMUM_ALLOWED 0x1b0007; also with owner = Administrators"
+  generic_bits: "any generic bit in DesiredAccess (0x80000000, 0x40000000, 0x20000000, 0x10000000, combinations with other bits, 0xFFFFFFFF) makes the call FALSE with ERROR_GENERIC_NOT_MAPPED (1360), outputs untouched (GrantedAccess 0xAAAAAAAA, status unchanged); generic bits stored in an ACE mask are not expanded: an allow ACE with GENERIC_ALL grants nothing for 0x1, READ_CONTROL (denied) and MAXIMUM_ALLOWED returns 0x10000000 itself; GENERIC_READ in an ACE likewise (0x80000000)"
+  special_bits: "bits no ACE grants (0x8, 0x10, 0x10000, 0x100000, 0x800000, 0x4000000, 0x8000000) are denied; ACCESS_SYSTEM_SECURITY (0x1000000) is denied with last error ERROR_PRIVILEGE_NOT_HELD (1314) when SeSecurityPrivilege is disabled"
+  token: "an identification-level or impersonation-level impersonation token works; the checks use the token's enabled groups; a deny-only group (CreateRestrictedToken, attributes 0x10) still matches deny ACEs but never allow ACEs or owner rights: with Administrators deny-only, \"allow Administrators 0x1, Users 0x2\" grants 0x2 only, \"deny Administrators 0x2, allow Everyone 0x7\" still denies 0x2 (MAXIMUM_ALLOWED 0x5), owner = Administrators with an empty DACL gives nothing; with the user SID deny-only an owner = the user gets nothing and \"deny user 0x2\" still applies; with Administrators and Users deny-only only the Everyone ACE (0x4) grants; IsTokenRestricted is FALSE for a token with only deny-only groups"
+  restricted_tokens: "with restricting SIDs both lists must grant. DACL Users 0x1, Everyone 0x2, Administrators 0x4: unrestricted 0x7; restricting {Everyone} 0x2; {Everyone, Users} 0x3; {Administrators} 0x4; {S-1-5-12} and {S-1-5-99-1} nothing (MAXIMUM_ALLOWED denied, GrantedAccess 0). DACL \"S-1-5-12 0x7, Everyone 0x1\" with restricting {S-1-5-12}: only 0x1 (MAXIMUM_ALLOWED 0x1). Owner rights count in the restricting pass too: owner = the user with an empty DACL gives READ_CONTROL and WRITE_DAC unrestricted and with restricting {user} (MAXIMUM_ALLOWED 0x60000) but nothing with restricting {Everyone}. WRITE_RESTRICTED with restricting {S-1-5-99-1} and DACL \"Users 0x3\": 0x1 granted, 0x2 and 0x3 denied (MAXIMUM_ALLOWED 0x1)"
+  privileges: "a request for WRITE_OWNER is granted when SeTakeOwnershipPrivilege is enabled in the token (LUID 9) and ACCESS_SYSTEM_SECURITY when SeSecurityPrivilege (LUID 8) is enabled; the used privileges are returned: PrivilegeCount 1, Control 0, the LUID, attributes 0x80000000; WRITE_OWNER|ACCESS_SYSTEM_SECURITY with both enabled returns two entries, LUID 9 first and 8 second; with both disabled WRITE_OWNER is denied (last error 5) and ACCESS_SYSTEM_SECURITY is denied with last error 1314; MAXIMUM_ALLOWED with privileges enabled does not add them (0x7, count 0); a DACL that already grants WRITE_OWNER still lists the privilege (count 1); a DACL denying WRITE_OWNER to Everyone does not stop the privilege (granted 0x80000); WRITE_OWNER|0x8 with 0x8 ungranted is denied but count is 1"
+  privilege_set_length: "the PrivilegeSetLength variable must be at least 20 (the size of a PRIVILEGE_SET with one entry) even when no privilege is used: lengths 0, 1, 4, 8, 12, 16 and 19 give FALSE with ERROR_INSUFFICIENT_BUFFER (122) and *length = 20; 20, 21, 32 and 256 succeed and leave it unchanged; with a privilege used lengths 0, 4, 8 and 19 fail the same way and 20 to 40 succeed; a NULL privilege set with length 0 fails with 122 and *length = 20 (no exception)"
+  integrity: "mandatory labels (SACL ML ACE) are applied for tokens below the object: with a DACL granting everything to Everyone and the plain mapping (read 1, write 2, execute 4): a High or Medium token gets all (MAXIMUM_ALLOWED 0x1f0007) when there is no label; a Low or Untrusted token with no label loses write, DELETE, WRITE_DAC and WRITE_OWNER (r, x, READ_CONTROL granted, MAXIMUM_ALLOWED 0x120005) - an absent label acts like Medium with no-write-up; a label NW at High on a Medium token (or NW at System on a High token) gives the same 0x120005, a label at or below the token's level changes nothing; NR at High on a Medium token also denies read and READ_CONTROL and, as always below the label, write (MAXIMUM_ALLOWED 0x100004); NX at High denies execute (0x20001); policy 0 at High still denies write (0x120005); NW|NR|NX at High denies everything (0, status FALSE); NW|NR|NX at Medium denies everything to a Low token; NW at Untrusted denies nothing to an Untrusted token; owner = the user does not help; with the file mapping (read 0x120089, write 0x120116, execute 0x1200a0) a Low token without label keeps FILE_GENERIC_READ, FILE_GENERIC_EXECUTE, FILE_READ_DATA, SYNCHRONIZE and READ_CONTROL, loses FILE_GENERIC_WRITE, FILE_WRITE_DATA, FILE_APPEND_DATA, FILE_WRITE_ATTRIBUTES, DELETE, WRITE_DAC, WRITE_OWNER, and MAXIMUM_ALLOWED is 0x1200a9 instead of 0x1f01ff; a Medium token is unaffected by no label or a Medium label"
+errors:
+  primary_token: "a primary token (also the process token itself): FALSE, ERROR_NO_IMPERSONATION_TOKEN (1309)"
+  levels: "anonymous-level token: FALSE, ERROR_BAD_IMPERSONATION_LEVEL (1346); identification and impersonation levels work"
+  handles: "a token handle without TOKEN_QUERY (TOKEN_IMPERSONATE only): ERROR_ACCESS_DENIED (5); NULL, -1, 0x1234 and an event handle: ERROR_INVALID_HANDLE (6)"
+  descriptor: "a descriptor without owner, without group or with neither (absolute or self-relative, also the empty self-relative one): ERROR_INVALID_SECURITY_DESCR (1338); revision byte 2: ERROR_UNKNOWN_REVISION (1305); a valid self-relative descriptor from SDDL works"
+  generic: "generic bits in DesiredAccess: ERROR_GENERIC_NOT_MAPPED (1360)"
+  denied: "TRUE with AccessStatus FALSE, GrantedAccess 0, last error ERROR_ACCESS_DENIED (5)"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtPrivilegeCheck
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Checks whether an impersonation token holds the listed privileges enabled:
+  all of them with control PRIVILEGE_SET_ALL_NECESSARY (1), at least one
+  with control 0. It marks each privilege it found enabled with
+  SE_PRIVILEGE_USED_FOR_ACCESS (0x80000000). PrivilegeCheck calls it.
+  (Signature worked out from PrivilegeCheck.)
+interface:
+  signature: "NTSTATUS NtPrivilegeCheck(HANDLE ClientToken, PPRIVILEGE_SET RequiredPrivileges, PBOOLEAN Result)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87. Also STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5."
+  privilege_set: "PRIVILEGE_SET (winnt.h): PrivilegeCount, Control (4 bytes each), then 12-byte entries"
+rules:
+  results: "with SeChangeNotify enabled, SeShutdown held but disabled, SeTcb not held: enabled, all -> 1; disabled, all -> 0; not held, all -> 0; enabled + disabled, all -> 0; enabled + disabled, any -> 1; disabled + not held, any -> 0; not held + enabled, any -> 1; three entries with one not held, all -> 0. Every call returns STATUS_SUCCESS"
+  used_for_access: "only the entries found enabled get attributes 0x80000000 (also when the overall result is 0: \"enabled + disabled, all\" marks the enabled one); the count and control fields are left as given"
+  empty_set: "no entries: all-necessary -> 1, any -> 0"
+  control_bits: "control 2 and 3 with an enabled privilege give result 1; control 0x80000000 with a disabled one gives 0"
+  tokens: "a primary token works (result 1); impersonation tokens of level Identification, Impersonation and Delegation work; level Anonymous returns STATUS_BAD_IMPERSONATION_LEVEL (0xC00000A5) and leaves the result 0x77 (untouched); the handle needs TOKEN_QUERY: handles with only TOKEN_DUPLICATE, TOKEN_IMPERSONATE or TOKEN_QUERY_SOURCE return STATUS_ACCESS_DENIED, only TOKEN_QUERY works; a token handle opened with NtOpenThreadToken works"
+errors:
+  handles: "NULL (also while the thread impersonates) : STATUS_INVALID_HANDLE; the process and thread pseudo-handles: STATUS_OBJECT_TYPE_MISMATCH"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

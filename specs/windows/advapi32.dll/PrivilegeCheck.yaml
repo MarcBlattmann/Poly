@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/PrivilegeCheck
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Tells whether the token has the given privileges enabled; with
+  PRIVILEGE_SET_ALL_NECESSARY (control 1) all of them, with 0 any one. Needs
+  TOKEN_QUERY. Entries that are held and enabled get
+  SE_PRIVILEGE_USED_FOR_ACCESS.
+interface:
+  signature: "BOOL PrivilegeCheck(HANDLE token, PPRIVILEGE_SET privileges, LPBOOL result)"
+  token_rights: "TOKEN_ASSIGN_PRIMARY 0x1, TOKEN_DUPLICATE 0x2, TOKEN_IMPERSONATE 0x4, TOKEN_QUERY 0x8, TOKEN_QUERY_SOURCE 0x10, TOKEN_ADJUST_PRIVILEGES 0x20, TOKEN_ADJUST_GROUPS 0x40, TOKEN_ADJUST_DEFAULT 0x80, TOKEN_ADJUST_SESSIONID 0x100; TOKEN_ALL_ACCESS 0xF01FF (winnt.h)"
+  privilege_set: "PRIVILEGE_SET {u32 PrivilegeCount, u32 Control, LUID_AND_ATTRIBUTES[]}"
+rules:
+  all_necessary: "one enabled privilege: TRUE and its attributes become 0x80000000; one held but disabled, or not held: FALSE, attributes stay 0; enabled + disabled: FALSE (the enabled entry is still marked 0x80000000)"
+  any: "enabled + disabled: TRUE (enabled entry marked); disabled + not held: FALSE; not held + enabled: TRUE (second entry marked)"
+  empty: "a set of 0 entries: TRUE with ALL_NECESSARY, FALSE with 0 (any)"
+  token_types: "works with a primary token as well as impersonation tokens (the call returns TRUE and the result is set); an impersonation token of level Identification works; Anonymous fails with ERROR_BAD_IMPERSONATION_LEVEL (1346)"
+  access: "a token handle with only TOKEN_DUPLICATE or only TOKEN_IMPERSONATE: ERROR_ACCESS_DENIED (5); with TOKEN_QUERY it works"
+  null_token: "a NULL token handle fails with ERROR_INVALID_HANDLE (6), also while the thread impersonates"
+errors:
+  level: "ERROR_BAD_IMPERSONATION_LEVEL (1346)"
+  access: "ERROR_ACCESS_DENIED (5)"
+  null: "ERROR_INVALID_HANDLE (6)"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_adddeniedex_errors",
+      "exe_sha256": "4359a5e9a732e92108205a3ec9817b97ccce564991b541c6e32a8020caa5dc2c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QUNMIHJldmlzaW9uIDIsIHJldmlzaW9uIGFyZ3VtZW50OiAwOjB4MC9yZXYyIDE6MHgwL3JldjIgMjoweDAvcmV2MiAzOjB4MC9yZXYzIDQ6MHgwL3JldjQgNToweGMwMDAwMDU5L3JldjIgMjU1OjB4YzAwMDAwNTkvcmV2MiAKQUNMIHJldmlzaW9uIDMsIHJldmlzaW9uIGFyZ3VtZW50OiAwOjB4MC9yZXYzIDE6MHgwL3JldjMgMjoweDAvcmV2MyAzOjB4MC9yZXYzIDQ6MHgwL3JldjQgNToweGMwMDAwMDU5L3JldjMgMjU1OjB4YzAwMDAwNTkvcmV2MyAKQUNMIHJldmlzaW9uIDQsIHJldmlzaW9uIGFyZ3VtZW50OiAwOjB4MC9yZXY0IDE6MHgwL3JldjQgMjoweDAvcmV2NCAzOjB4MC9yZXY0IDQ6MHgwL3JldjQgNToweGMwMDAwMDU5L3JldjQgMjU1OjB4YzAwMDAwNTkvcmV2NCAKU0lEIGNvdW50IDE3OiBzdGF0dXM9MHhjMDAwMDA3OApBQ0wgbGVuZ3RoIDI3OiBzdGF0dXM9MHhjMDAwMDA5OQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ACL revision 2, revision argument: 0:0x0/rev2 1:0x0/rev2 2:0x0/rev2 3:0x0/rev3 4:0x0/rev4 5:0xc0000059/rev2 255:0xc0000059/rev2 \nACL revision 3, revision argument: 0:0x0/rev3 1:0x0/rev3 2:0x0/rev3 3:0x0/rev3 4:0x0/rev4 5:0xc0000059/rev3 255:0xc0000059/rev3 \nACL revision 4, revision argument: 0:0x0/rev4 1:0x0/rev4 2:0x0/rev4 3:0x0/rev4 4:0x0/rev4 5:0xc0000059/rev4 255:0xc0000059/rev4 \nSID count 17: status=0xc0000078\nACL length 27: status=0xc0000099\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    }
+  ]
+}

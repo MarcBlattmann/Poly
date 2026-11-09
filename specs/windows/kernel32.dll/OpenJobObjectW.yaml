@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/kernel32.dll/OpenJobObjectW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Opens a named job object. The returned handle has exactly the requested
+  rights (generic rights are mapped, MAXIMUM_ALLOWED gives all). What the
+  handle can do follows its rights: QUERY to query, SET_ATTRIBUTES to set
+  limits, ASSIGN_PROCESS to assign, TERMINATE to terminate. All handles
+  refer to the same job.
+interface:
+  signature: "HANDLE OpenJobObjectW(DWORD desired_access, BOOL inherit_handle, LPCWSTR name)"
+  rights: "Job object rights: ASSIGN_PROCESS 0x1, SET_ATTRIBUTES 0x2, QUERY 0x4, TERMINATE 0x8, SET_SECURITY_ATTRIBUTES 0x10; JOB_OBJECT_ALL_ACCESS is 0x1F003F (standard rights required + SYNCHRONIZE + 0x3F) (winnt.h)."
+rules:
+  mask: "the granted access equals the request for ASSIGN_PROCESS 0x1, SET_ATTRIBUTES 0x2, QUERY 0x4, TERMINATE 0x8, SET_SECURITY_ATTRIBUTES 0x10, 0x1F, ALL_ACCESS 0x1F003F, SYNCHRONIZE, READ_CONTROL, DELETE, WRITE_DAC, WRITE_OWNER and the undefined specific bit 0x20; MAXIMUM_ALLOWED gives 0x1F003F, GENERIC_ALL 0x1F003F, GENERIC_READ 0x20004, GENERIC_WRITE 0x2000B, GENERIC_EXECUTE 0x120000; ACCESS_SYSTEM_SECURITY (the oracle account holds the privilege) is granted as 0x1000000"
+  inherit: "the inherit flag TRUE gives an inheritable handle (inheritable=1), FALSE not"
+  spelling: "the name \"Local\\\\<name>\" opens the job created as \"<name>\"; an upper-case spelling of a name created in mixed case does not open it (NULL)"
+  shared: "a limit set with a SET_ATTRIBUTES handle (active process limit 4) is seen by the creator and by a QUERY handle; a QUERY|SET_ATTRIBUTES handle sets and the creator sees limit 6"
+  rights_enforced: "through a QUERY handle: set fails (5), assign fails (5), terminate fails (5, member stays alive); through ASSIGN_PROCESS: set, query, terminate fail (5) and assign works (accounting total=1 active=1); through TERMINATE: set, query, assign fail (5) and terminate works (member exit code 0xd); through SET_ATTRIBUTES: set works, query fails (5); WaitForSingleObject(handle, 0) on a QUERY-only handle returns WAIT_FAILED (0xffffffff) with error 5 (no SYNCHRONIZE); on the creator's handle, after TerminateJobObject had emptied the job, it returns 0 (signalled)"
+errors:
+  no_rights: "desired access 0 fails: NULL, error 5"
+  undefined_bit: "the undefined specific bit 0x8000 fails: NULL, error 5 (0x20 is accepted)"
+  missing: "a name that does not exist: NULL, error 2 (ERROR_FILE_NOT_FOUND)"
+  empty_name: "an empty name: NULL, error 6"
+  missing_directory: "a name in a directory that does not exist: NULL, error 3"
+  other_kind: "the name of a mutex: NULL, error 6"
+  after_close: "after the creator closed its only handle the name is gone: error 2"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/CopySid
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Copies GetLengthSid(source) bytes of the source SID into the destination,
+  if the destination length argument is at least that large. The source is
+  not validated.
+interface:
+  signature: "BOOL CopySid(DWORD destination_length, PSID destination, PSID source)"
+  layout: "SID (winnt.h): byte 0 Revision (1), byte 1 SubAuthorityCount (0..15 valid), bytes 2..7 IdentifierAuthority (six bytes, big-endian value), then SubAuthority[count] as little-endian 32-bit values; length 8 + 4 * count (at most 68). SECURITY_MAX_SID_SIZE is 68."
+rules:
+  copy: "the copy equals the source (EqualSid TRUE, IsValidSid TRUE) for S-1-5-18 (12 bytes), S-1-5-32-544 (16), S-1-5-21-1-2-3-4 (28), a 15-sub-authority SID (68) and S-1-1-0 (12); bytes past the SID's length are not touched"
+  size: "for a 16-byte source: sizes 0, 1, 7, 8 and 15 fail and write nothing; 16, 17 and 4096 succeed and write exactly 16 bytes"
+  no_validation: "sources with revision 0, revision 2 (count 2: 16 bytes copied), and count 16 (72 bytes) and 20 (88 bytes) are copied byte for byte without error"
+errors:
+  too_small: "destination length smaller than the source's length: FALSE, last error ERROR_INSUFFICIENT_BUFFER (122)"
+side_effects: "writes the SID into the destination on success"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

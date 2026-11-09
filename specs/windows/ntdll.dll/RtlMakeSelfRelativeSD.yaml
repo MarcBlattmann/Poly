@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/RtlMakeSelfRelativeSD
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: as declared
+  for the NT native API (ntifs.h / wdm.h / winternl.h, Microsoft Learn)
+  where the function is documented there; where it is not, the arguments are
+  those of the matching Win32 function, which map one to one onto the native
+  call, and the interface entry "prototype_note" says so.
+summary: >
+  Builds the self-relative form of a descriptor in the buffer: a 20-byte
+  header (control gets SE_SELF_RELATIVE, sbz1 and the other control bits are
+  copied) then SACL, DACL, owner and group, each at the offset stored in the
+  header (0 when absent). A short buffer gives STATUS_BUFFER_TOO_SMALL and
+  the required size in BufferLength.
+interface:
+  signature: "NTSTATUS RtlMakeSelfRelativeSD(PSECURITY_DESCRIPTOR absolute, PSECURITY_DESCRIPTOR self_relative, PULONG buffer_length)"
+  layout: "SECURITY_DESCRIPTOR (winnt.h, x64): absolute form is 40 bytes {Revision u8, Sbz1 u8, Control u16, pad 4, Owner ptr at 8, Group ptr at 16, Sacl ptr at 24, Dacl ptr at 32}; self-relative form is a 20-byte header {Revision, Sbz1, Control (SE_SELF_RELATIVE 0x8000 set), OffsetOwner u32 at 4, OffsetGroup at 8, OffsetSacl at 12, OffsetDacl at 16} followed by the parts at those offsets. Control bits: 0x1 owner defaulted, 0x2 group defaulted, 0x4 DACL present, 0x8 DACL defaulted, 0x10 SACL present, 0x20 SACL defaulted, 0x1000 DACL protected, 0x2000 SACL protected, 0x4000 RM control valid, 0x8000 self-relative."
+  result: "NTSTATUS values are printed as 8 hex digits: STATUS_SUCCESS 0, STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_UNKNOWN_REVISION 0xC0000058, STATUS_REVISION_MISMATCH 0xC0000059, STATUS_PRIVILEGE_NOT_HELD 0xC0000061, STATUS_INVALID_ACL 0xC0000077, STATUS_INVALID_SID 0xC0000078, STATUS_INVALID_SECURITY_DESCR 0xC0000079, STATUS_NO_TOKEN 0xC000007C, STATUS_ALLOTTED_SPACE_EXCEEDED 0xC0000099, STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5, STATUS_BAD_DESCRIPTOR_FORMAT 0xC00000E7 (ntstatus.h). A BOOLEAN result is one byte, 0 or 1."
+  prototype_note: "no Learn page relied on; arguments of MakeSelfRelativeSD"
+rules:
+  sizes: "for owner, group, DACL (size 64) and SACL (size 28) the requirement is 144: lengths 0, 1, 19, 20, 39, 40, 143 return STATUS_BUFFER_TOO_SMALL (0xC0000023), set BufferLength to 144 and write nothing; 144 returns STATUS_SUCCESS; 145, 152 and 512 also succeed, write 144 bytes and leave BufferLength as given"
+  layout: "everything: header 01 00 14 80, owner 112, group 128, SACL 20, DACL 48 (SACL then DACL then owner then group), length 144; owner and group only: owner 20, group 36, control 0x8000; DACL only: DACL 20, length 84, control 0x8004; SACL only: SACL 20, length 48, control 0x8010; owner only: 36 bytes; group only: group at 20; NULL DACL: control 0x8004, offsets 0, length 20; nothing: 20 bytes, control 0x8000"
+  control: "sbz1 0x77 and control bits 0x1000, 0x0800, 0x4000, 0x0008 are carried over (header 01 77 1c d8 with the present bits); a DACL (or SACL) pointer without its present bit is not copied (DACL offset 0, other parts move up: 48 64 20 0 and 84 100 0 20); a cleared owner pointer gives owner offset 0"
+  input: "descriptor revision 2 or 0 is accepted and copied into the header (02 / 00); an input that is already self-relative is copied unchanged (STATUS_SUCCESS, 144 bytes; with a 20-byte buffer STATUS_BUFFER_TOO_SMALL and 144)"
+errors:
+  too_small: "STATUS_BUFFER_TOO_SMALL with the required length in BufferLength"
+side_effects: "writes the self-relative descriptor"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "69970d4f91fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:01:49Z",
+  "tests": [
+    {
+      "name": "sd_ctrlset_errors",
+      "exe_sha256": "e5703f7c869cdc7d4dd476d5d07b64728aa0cef129ea4b7b7ebe4690d9872a63",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmV2aXNpb24gYnl0ZSAwOiBvaz0xIGVycj0tMSBjb250cm9sPTB4MTAwMApyZXZpc2lvbiBieXRlIDI6IG9rPTEgZXJyPS0xIGNvbnRyb2w9MHgxMDAwCnJldmlzaW9uIGJ5dGUgMjU1OiBvaz0xIGVycj0tMSBjb250cm9sPTB4MTAwMAphbGwtemVybyBidWZmZXI6IG9rPTEgZXJyPS0xCnNlbGYtcmVsYXRpdmUgZGVzY3JpcHRvcjogb2s9MSBlcnI9LTEKICBjb250cm9sIGFmdGVyOiBvaz0xIGNvbnRyb2w9MHg5MDA0IFtEQUNMX1BSRVNFTlR8REFDTF9QUk9URUNURUR8U0VMRl9SRUxBVElWRV0gcmV2aXNpb249MHgxIGVycj0tMQpzZWxmLXJlbGF0aXZlLCBjbGVhciBwcm90ZWN0ZWQ6IG9rPTEKICBjb250cm9sIGFmdGVyOiBvaz0xIGNvbnRyb2w9MHg4MDA0IFtEQUNMX1BSRVNFTlR8U0VMRl9SRUxBVElWRV0gcmV2aXNpb249MHgxIGVycj0tMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "revision byte 0: ok=1 err=-1 control=0x1000\nrevision byte 2: ok=1 err=-1 control=0x1000\nrevision byte 255: ok=1 err=-1 control=0x1000\nall-zero buffer: ok=1 err=-1\nself-relative descriptor: ok=1 err=-1\n  control after: ok=1 control=0x9004 [DACL_PRESENT|DACL_PROTECTED|SELF_RELATIVE] revision=0x1 err=-1\nself-relative, clear protected: ok=1\n  control after: ok=1 control=0x8004 [DACL_PRESENT|SELF_RELATIVE] revision=0x1 err=-1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "sd_ctrlset_mask_and_set",
+      "exe_sha256": "2e1af5ea96e04c8e1a16f61d3fd07e43ffb32f7052e521dcaa1e1cff69f44290",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFzayAwLCBzZXQgcHJvdGVjdGVkOiBvaz0wIGVycj04NyBjb250cm9sPTB4MDAwMCBbLV0KbWFzayBwcm90ZWN0ZWQsIHNldCBwcm90ZWN0ZWQ6IG9rPTEgZXJyPS0xIGNvbnRyb2w9MHgxMDAwIFtEQUNMX1BST1RFQ1RFRF0KbWFzayBwcm90ZWN0ZWQsIHNldCAwIChjbGVhcnMpOiBvaz0xIGVycj0tMSBjb250cm9sPTB4MDAwMCBbLV0KbWFzayBwcm90ZWN0ZWR8aW5oZXJpdGVkLCBzZXQgcHJvdGVjdGVkOiBvaz0xIGVycj0tMSBjb250cm9sPTB4MTAwMCBbREFDTF9QUk9URUNURURdCm1hc2sgcHJvdGVjdGVkfGluaGVyaXRlZCwgc2V0IGluaGVyaXRlZDogb2s9MSBlcnI9LTEgY29udHJvbD0weDA0MDAgW0RBQ0xfQVVUT19JTkhFUklURURdCm1hc2sgcHJvdGVjdGVkfGluaGVyaXRlZCwgc2V0IGJvdGg6IG9rPTEgZXJyPS0xIGNvbnRyb2w9MHgxNDAwIFtEQUNMX0FVVE9fSU5IRVJJVEVEfERBQ0xfUFJPVEVDVEVEXQptYXNrIGluaGVyaXRlZCwgc2V0IHByb3RlY3RlZCAob3V0c2lkZSBtYXNrKTogb2s9MCBlcnI9ODcgY29udHJvbD0weDE0MDAgW0RBQ0xfQVVUT19JTkhFUklURUR8REFDTF9QUk9URUNURURdCm1hc2sgYWxsIHZhbGlkLCBzZXQgMDogb2s9MSBlcnI9LTEgY29udHJvbD0weDAwMDAgWy1dCm1hc2sgYWxsIHZhbGlkLCBzZXQgYWxsOiBvaz0wIGVycj04NyBjb250cm9sPTB4MDAwMCBbLV0KbWFzayBwcm90ZWN0ZWQsIHNldCBhbGwgKG9ubHkgcHJvdGVjdGVkIGNsZWFyZWQuLik6IG9rPTAgZXJyPTg3IGNvbnRyb2w9MHgwMDAwIFstXQptYXNrIHByb3RlY3RlZHxEQUNMX1BSRVNFTlQ6IG9rPTAgZXJyPTg3IGNvbnRyb2w9MHgwMDAwCmFmdGVyIG93bmVyIGRlZmF1bHRlZCArIGRhY2wgKyBwcm90ZWN0ZWQ6IGNvbnRyb2w9MHgxMDA1IFtPV05FUl9ERUZBVUxURUR8REFDTF9QUkVTRU5UfERBQ0xfUFJPVEVDVEVEXQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mask 0, set protected: ok=0 err=87 control=0x0000 [-]\nmask protected, set protected: ok=1 err=-1 control=0x1000 [DACL_PROTECTED]\nmask protected, set 0 (clears): ok=1 err=-1 control=0x0000 [-]\nmask protected|inherited, set protected: ok=1 err=-1 control=0x1000 [DACL_PROTECTED]\nmask protected|inherited, set inherited: ok=1 err=-1 control=0x0400 [DACL_AUTO_INHERITED]\nmask protected|inherited, set both: ok=1 err=-1 control=0x1400 [DACL_AUTO_INHERITED|DACL_PROTECTED]\nmask inherited, set protected (outside mask): ok=0 err=87 control=0x1400 [DACL_AUTO_INHERITED|DACL_PROTECTED]\nmask all valid, set 0: ok=1 err=-1 control=0x0000 [-]\nmask all valid, set all: ok=0 err=87 control=0x0000 [-]\nmask protected, set all (only protected cleared..): ok=0 err=87 control=0x0000 [-]\nmask protected|DACL_PRESENT: ok=0 err=87 control=0x0000\nafter owner defaulted + dacl + protected: control=0x1005 [OWNER_DEFAULTED|DACL_PRESENT|DACL_PROTECTED]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}
