@@ -23,6 +23,7 @@ mod base;
 mod console;
 mod except;
 mod file;
+mod fileex;
 mod handles;
 mod legacy;
 mod locale;

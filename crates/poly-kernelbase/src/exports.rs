@@ -298,6 +298,20 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("MoveFileW", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("FileTimeToDosDateTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("DosDateTimeToFileTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
+    // ----- Chrome batch 2 (chrome-win-b2, ADR 0155). Files (fileapi.h,
+    // winbase.h, minwinbase.h); the contracts are the ones the pages list.
+    ("FindFirstFileExW", "api-ms-win-core-file-l1-1-0"),
+    ("GetFileAttributesExW", "api-ms-win-core-file-l1-1-0"),
+    ("GetFileInformationByHandleEx", "api-ms-win-core-file-l2-1-1"),
+    ("SetFileInformationByHandle", "api-ms-win-core-file-l2-1-1"),
+    ("LockFileEx", "api-ms-win-core-file-l1-1-0"),
+    ("UnlockFileEx", "api-ms-win-core-file-l1-1-0"),
+    ("ReplaceFileW", "api-ms-win-core-file-l1-2-0"),
+    ("GetFinalPathNameByHandleW", "api-ms-win-core-file-l2-1-0"),
+    ("GetLongPathNameW", "api-ms-win-core-file-l1-1-0"),
+    ("GetSystemDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("GetWindowsDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("GetSystemWindowsDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our
