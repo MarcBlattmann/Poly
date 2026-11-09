@@ -60,7 +60,7 @@ tests that skip (Chromium, toolkits, virgl) skip as before.
 - Job names changed: `boot (<job>, <accel>)` with the jobs `core`,
   `userland`, `desktop`, `wintrace` and `selftest` (TCG), and
   `pipeline (<i>/3, ...)`. The required check is `ci`, unchanged.
-- More, shorter jobs: 14 instead of 10 per run, about the same minutes of
+- More, shorter jobs: 13 instead of 10 per run, about the same minutes of
   runner time in total (the build is paid once per job).
 - When a group gets slow, move it to another shard in `CI_BOOT_SHARDS` and
   the workflow's `shards:` lines; `ci lint` tells if one is lost.
