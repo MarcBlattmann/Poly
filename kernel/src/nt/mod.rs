@@ -232,8 +232,19 @@ static INTERACTIVE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicB
 /// The kernel argument naming the Windows session win32k reproduces.
 pub const SESSION_ARG: &str = "poly.win32k.session";
 
+/// `poly.nt.trace` (`poly.nt.trace=all` for the noisy services too): one
+/// serial line per system call (`poly_personality_nt::trace`). 0 off, 1 on, 2 all.
+static TRACE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
 /// Read the NT personality's kernel arguments (before the first program).
 pub fn configure(boot: &crate::boot_info::BootInfo) {
+    if boot.arg(poly_personality_nt::trace::FLAG) == Some("all") {
+        TRACE.store(2, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("nt: tracing every system call (poly.nt.trace=all)");
+    } else if boot.has_flag(poly_personality_nt::trace::FLAG) {
+        TRACE.store(1, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("nt: tracing system calls (poly.nt.trace)");
+    }
     if boot.arg(SESSION_ARG) == Some("interactive") {
         INTERACTIVE.store(true, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: win32k reproduces the interactive desktop session (1920x1080)");
@@ -525,7 +536,15 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     };
     let tid = user::current_tid().unwrap_or(process.pid);
     let mut k = Kernel::new(ProcessId(process.pid), ThreadRef(u64::from(tid)), memory);
+    let trace = TRACE.load(core::sync::atomic::Ordering::Relaxed);
+    let traced = (trace != 0).then(|| poly_personality_nt::trace::begin(&mut k, regs));
     let outcome = poly_personality_nt::dispatch_with(&mut k, regs);
+    if let Some(call) = traced {
+        let status = regs.rax as u32;
+        if poly_personality_nt::trace::wanted(&call, status, trace == 2) {
+            crate::kprintln!("{}", poly_personality_nt::trace::render(process.pid, tid, &call, status));
+        }
+    }
     // Any wait a signalling call satisfied: wake those threads.
     sched::drain_wakes();
     // File I/O requests it queued or completed (ADR 0067).

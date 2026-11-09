@@ -39,6 +39,12 @@ unsafe extern "system" {
     fn WriteFile(h: Handle, buf: *const u8, len: u32, written: *mut u32, ov: *mut u8) -> i32;
     fn GetCurrentThreadId() -> u32;
     fn GetCurrentProcessId() -> u32;
+    fn GetCurrentProcess() -> isize;
+    fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
+    fn VirtualProtect(addr: *mut u8, size: usize, protect: u32, old: *mut u32) -> i32;
+    fn VirtualFree(addr: *mut u8, size: usize, kind: u32) -> i32;
+    fn ReadProcessMemory(process: isize, base: *const u8, buf: *mut u8, size: usize, read: *mut usize) -> i32;
+    fn WriteProcessMemory(process: isize, base: *mut u8, buf: *const u8, size: usize, written: *mut usize) -> i32;
 }
 
 #[link(name = "ole32", kind = "raw-dylib")]
@@ -582,6 +588,39 @@ unsafe fn system() {
 
 // ----- GDI: fonts, text metrics, device caps -----------------------------------------
 
+/// ReadProcessMemory / WriteProcessMemory on the calling process (Chrome's chrome_elf reads and
+/// patches ntdll's stubs this way).
+unsafe fn process_memory() {
+    let me = GetCurrentProcess();
+    let page = VirtualAlloc(core::ptr::null_mut(), 4096, 0x3000, 0x04); // MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE
+    check_got(!page.is_null(), GetLastError());
+    page.write_bytes(0x11, 4096);
+    let mut buf = [0u8; 32];
+    let mut n = 0usize;
+    check_eq(ReadProcessMemory(me, page, buf.as_mut_ptr(), 32, &mut n) as usize, 1);
+    check_got(n == 32 && buf == [0x11; 32], n as u32);
+    // A read-only page is written by making it writable for the copy.
+    let mut old = 0u32;
+    check_eq(VirtualProtect(page, 4096, 0x02, &mut old) as usize, 1); // PAGE_READONLY
+    let patch = [0xE9u8, 1, 2, 3, 4];
+    check_eq(WriteProcessMemory(me, page.add(8), patch.as_ptr(), 5, &mut n) as usize, 1);
+    check_eq(n, 5);
+    check_got(*page.add(8) == 0xE9 && *page.add(12) == 4 && *page.add(13) == 0x11, 0);
+    let mut now = 0u32;
+    check_eq(VirtualProtect(page, 4096, 0x02, &mut now) as usize, 1);
+    check_eq(now as usize, 0x02); // put back
+    // The page after the allocation is reserved but not committed: a read across it fails
+    // halfway with ERROR_PARTIAL_COPY (299) and says how far it got.
+    let mut big = [0u8; 64];
+    SetLastError(0);
+    let r = ReadProcessMemory(me, page.add(4096 - 16), big.as_mut_ptr(), 64, &mut n);
+    check_got(r != 0 || (GetLastError() == 299 && n == 16), GetLastError());
+    // Another process is not reachable yet.
+    SetLastError(0);
+    check_fail(ReadProcessMemory(0x7777_0000, page, buf.as_mut_ptr(), 8, &mut n) as usize, 6); // ERROR_INVALID_HANDLE
+    VirtualFree(page, 0, 0x8000);
+}
+
 unsafe fn gdi() {
     // DEFAULT_GUI_FONT -> LOGFONTW (92 bytes) -> a new font -> metrics.
     let stock = GetStockObject(17);
@@ -617,6 +656,7 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         windows();
         system();
         gdi();
+        process_memory();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));
         out(b" checks passed\n");

@@ -389,4 +389,31 @@ mod tests {
         let mut broken = |_: u64, _: &mut [u8]| -> Result<usize, u32> { Err(ERROR_ACCESS_DENIED) };
         assert_eq!(read_version_resource(&mut broken), Err(ERROR_ACCESS_DENIED));
     }
+
+    /// The version information of the files of the Chrome package, when it is
+    /// cached (`cargo xtask chrome-win fetch`): the root block (`"\\"`),
+    /// the translation table and the string table all resolve.
+    #[test]
+    fn chromes_own_files_answer_the_queries_chrome_makes() {
+        // `POLY_CHROME_DIR`: the unpacked package (the cache of `cargo xtask chrome-win fetch`).
+        let Ok(dir) = std::env::var("POLY_CHROME_DIR") else { return };
+        let dir = std::path::PathBuf::from(dir);
+        {
+            for name in ["chrome.exe", "chrome_elf.dll"] {
+                let Ok(file) = std::fs::read(dir.join(name)) else { continue };
+                let mut read = |at: u64, buf: &mut [u8]| -> Result<usize, u32> {
+                    let at = at as usize;
+                    let n = buf.len().min(file.len().saturating_sub(at));
+                    buf[..n].copy_from_slice(&file[at..at + n]);
+                    Ok(n)
+                };
+                let block = read_version_resource(&mut read).unwrap_or_else(|e| panic!("{name}: error {e}"));
+                let w = |s: &str| -> Vec<u16> { s.encode_utf16().collect() };
+                let (at, n) = query_value(&block, &w("\\")).unwrap_or_else(|e| panic!("{name}: root query error {e}"));
+                assert_eq!(n, 52, "{name}");
+                assert_eq!(&block[at..at + 4], &0xFEEF04BDu32.to_le_bytes(), "{name}: VS_FIXEDFILEINFO signature");
+                assert!(query_value(&block, &w("\\VarFileInfo\\Translation")).is_ok(), "{name}");
+            }
+        }
+    }
 }

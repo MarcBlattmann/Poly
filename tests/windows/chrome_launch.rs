@@ -93,6 +93,7 @@ unsafe extern "system" {
     fn ReadFile(file: HANDLE, buffer: *mut u8, to_read: u32, read: *mut u32, overlapped: *mut c_void) -> BOOL;
     fn WriteFile(file: HANDLE, buffer: *const u8, to_write: u32, written: *mut u32, overlapped: *mut c_void) -> BOOL;
     fn CloseHandle(handle: HANDLE) -> BOOL;
+    fn SetEnvironmentVariableW(name: *const u16, value: *const u16) -> BOOL;
     fn CreateProcessW(
         application: *const u16,
         command_line: *mut u16,
@@ -166,6 +167,63 @@ fn open(path: &[u16; PATH_UNITS], write: bool, inherit: bool) -> Option<HANDLE> 
         )
     };
     (h != INVALID_HANDLE_VALUE).then_some(h)
+}
+
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    /// Poly's `PolyDebugPrint(text, length)`: up to 512 bytes on the kernel log (ADR 0155).
+    fn PolyDebugPrint(text: *const u8, length: usize) -> i32;
+}
+
+/// One kernel-log line of at most 480 bytes: `ptrace: ` (a record begins) or `ptrace+ ` (the
+/// previous line goes on) and the text.
+fn log_line(first: bool, text: &[u8]) {
+    let mut out = [0u8; 496];
+    let head: &[u8] = if first { b"ptrace: " } else { b"ptrace+ " };
+    out[..8].copy_from_slice(head);
+    let n = text.len().min(480);
+    out[8..8 + n].copy_from_slice(&text[..n]);
+    // SAFETY: a readable buffer of 8 + n bytes.
+    unsafe { PolyDebugPrint(out.as_ptr(), 8 + n) };
+}
+
+/// Send the lines of the file at `path` to the kernel log (not the console, which wraps and
+/// scrolls them): the Poly-side call trace of the kit, read back by `cargo xtask win chrome-trace`.
+fn log_file(path: &[u16; PATH_UNITS]) {
+    let Some(h) = open(path, false, false) else {
+        log_line(true, b"{\"missing\":true}");
+        return;
+    };
+    let buf = CHUNK.0.get();
+    let (mut line, mut n, mut first) = ([0u8; 480], 0usize, true);
+    loop {
+        let mut got = 0u32;
+        // SAFETY: the single thread owns CHUNK; the file handle is open.
+        let ok = unsafe { ReadFile(h, (*buf).as_mut_ptr(), 8192, &mut got, core::ptr::null_mut()) };
+        if ok == 0 || got == 0 {
+            break;
+        }
+        // SAFETY: the first `got` bytes were just read.
+        let chunk = unsafe { core::slice::from_raw_parts(buf.cast::<u8>(), got as usize) };
+        for &b in chunk {
+            if b == b'\n' {
+                log_line(first, &line[..n]);
+                (n, first) = (0, true);
+            } else if b != b'\r' {
+                if n == line.len() {
+                    log_line(first, &line[..n]);
+                    (n, first) = (0, false);
+                }
+                line[n] = b;
+                n += 1;
+            }
+        }
+    }
+    if n > 0 {
+        log_line(first, &line[..n]);
+    }
+    // SAFETY: opened above.
+    unsafe { CloseHandle(h) };
 }
 
 /// SHA-256 (FIPS 180-4 6.2), for `LAUNCH-SHA256`: the digest of what the
@@ -339,12 +397,12 @@ fn say_num(prefix: &str, v: u64, hex: bool) {
 }
 
 /// The lines of `stage.cmd`: (start, end) of each in `SPEC`.
-fn lines(spec: &[u8]) -> [(usize, usize); 4] {
-    let mut out = [(0, 0); 4];
+fn lines(spec: &[u8]) -> [(usize, usize); 6] {
+    let mut out = [(0, 0); 6];
     let (mut start, mut k) = (0, 0);
     for (i, &c) in spec.iter().enumerate() {
         if c == b'\n' {
-            if k < 4 {
+            if k < 6 {
                 let mut end = i;
                 if end > start && spec[end - 1] == b'\r' {
                     end -= 1;
@@ -355,7 +413,7 @@ fn lines(spec: &[u8]) -> [(usize, usize); 4] {
             start = i + 1;
         }
     }
-    if start < spec.len() && k < 4 {
+    if start < spec.len() && k < 6 {
         out[k] = (start, spec.len());
     }
     out
@@ -440,6 +498,20 @@ fn launch(t: &mut Test) {
     let l = lines(spec);
     let line = |k: usize| &spec[l[k].0..l[k].1];
     let (app, cmdline, cwd) = (line(0), line(1), line(2));
+    // Line 5 (optional): `NAME=VALUE`, set in the launcher's environment (which the program
+    // inherits) before it starts. Line 6 (optional): a file name in the program's directory to
+    // print after the run, between `LAUNCH-BEGIN trace` and `LAUNCH-END trace` (the Poly-side
+    // call trace of the kit, `cargo xtask chrome-win trace`).
+    let (env_line, trace_name) = (line(4), line(5));
+    if let Some(eq) = env_line.iter().position(|&c| c == b'=') {
+        let (mut name_w, mut value_w) = ([0u16; 128], [0u16; 512]);
+        if eq < 127 && env_line.len() - eq - 1 < 511 {
+            widen(&env_line[..eq], &mut name_w);
+            widen(&env_line[eq + 1..], &mut value_w);
+            // SAFETY: NUL-terminated strings.
+            unsafe { SetEnvironmentVariableW(name_w.as_ptr(), value_w.as_ptr()) };
+        }
+    }
     let seconds = {
         let mut n = 0u32;
         for &c in line(3) {
@@ -525,6 +597,20 @@ fn launch(t: &mut Test) {
     unsafe {
         CloseHandle(pi.thread);
         CloseHandle(pi.process);
+    }
+    if !trace_name.is_empty() {
+        let mut name = [0u8; 64];
+        let n = trace_name.len().min(63);
+        name[..n].copy_from_slice(&trace_name[..n]);
+        let mut p = [0u16; PATH_UNITS];
+        if cwd.len() + 1 + n < PATH_UNITS {
+            widen(cwd, &mut p);
+            p[cwd.len()] = u16::from(b'\\');
+            for (i, &b) in name[..n].iter().enumerate() {
+                p[cwd.len() + 1 + i] = u16::from(b);
+            }
+            log_file(&p);
+        }
     }
     show("stdout", &stdout_p);
     show("stderr", &stderr_p);
