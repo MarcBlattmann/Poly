@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/DisconnectNamedPipe.yaml
+id: windows/api/kernel32.dll/DisconnectNamedPipe
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
+  observed_by: spec-win-ipc
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: DisconnectNamedPipe, ConnectNamedPipe, Named Pipe Operations. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+summary: >
+  The server ends its side of a connection. The client's handle stays valid but is cut off (reads and writes fail with ERROR_PIPE_NOT_CONNECTED); unread data in the pipe is discarded; the instance must be made to listen again with ConnectNamedPipe before it serves another client.
+interface:
+  signature: "BOOL DisconnectNamedPipe(HANDLE pipe)"
+rules:
+  life: "A server instance is created with CreateNamedPipeW and starts listening. It becomes connected when a client opens the pipe with CreateFileW (whether or not ConnectNamedPipe was called) or when ConnectNamedPipe completes. When the client closes its handle the instance stays taken (closing) until the server calls DisconnectNamedPipe; a new client meanwhile gets ERROR_PIPE_BUSY. After DisconnectNamedPipe the instance is not yet listening: clients still get ERROR_PIPE_BUSY until the server calls ConnectNamedPipe again."
+  client_after: "after the server disconnected, the client's ReadFile and WriteFile fail with ERROR_PIPE_NOT_CONNECTED (233); a read that was pending on the client fails with the same code."
+  server_after: "on the server handle, ReadFile and WriteFile fail with ERROR_PIPE_NOT_CONNECTED; a second DisconnectNamedPipe fails with ERROR_PIPE_NOT_CONNECTED."
+  reuse: "the instance accepts a new client only after ConnectNamedPipe: a client opening it before that gets ERROR_PIPE_BUSY. With an overlapped ConnectNamedPipe pending, a new client connects, the event signals, and the new client's bytes are the only ones the server reads: what the old client had written and not been read is gone."
+  unread_server_data: "data the server had written and the client had not read is discarded; the client does not see it later."
+  never_connected: "on an instance with no client, DisconnectNamedPipe succeeds (TRUE) and the instance is then not listening: a client opening it gets ERROR_PIPE_BUSY until ConnectNamedPipe."
+  after_client_closed: "once the client has closed its handle, the server's DisconnectNamedPipe succeeds."
+  pending_server_read: "a read pending on the server when the client closes fails with ERROR_BROKEN_PIPE (not a disconnect: the server did not call DisconnectNamedPipe)."
+errors:
+  client_end: "called on a client handle: ERROR_INVALID_FUNCTION (1)"
+  bad_handle: "INVALID_HANDLE_VALUE or an event handle: ERROR_INVALID_HANDLE (6)"
+  already_disconnected: "ERROR_PIPE_NOT_CONNECTED (233)"
+side_effects: "discards unread data in both directions and detaches the client"
+threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except where the call waits"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+not_covered: >
+  Remote clients and other machines, security descriptors on the pipe, impersonation, several sessions.

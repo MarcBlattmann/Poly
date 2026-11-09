@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "rfx_basic",
+      "exe_sha256": "3f04f19bec7866d6af7a6cefdfa337421f910ab62daf14f27e3d1193d5d039e1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVhZGV4X3N0YXJ0ZWQKb2sgcm91dGluZV9ub3RfY2FsbGVkX3lldApvayByb3V0aW5lX25vdF9jYWxsZWRfYnlfcGxhaW5fc2xlZXAKb2sgYWxlcnRhYmxlX3NsZWVwX3JldHVybnNfaW9fY29tcGxldGlvbgpvayByb3V0aW5lX2NhbGxlZF9vbmNlCm9rIHJvdXRpbmVfZXJyb3IKb2sgcm91dGluZV9ieXRlcwpvayByb3V0aW5lX292ZXJsYXBwZWQKb2sgcmVhZGV4X2RhdGEKb2sgcmVhZGV4X3dhaXRpbmdfc3RhcnRlZApvayBub3RoaW5nX3RvX3J1bl90aW1lc19vdXQKb2sgc2Vjb25kX2FsZXJ0YWJsZV9zbGVlcApvayBzZWNvbmRfcm91dGluZV9ieXRlcwpvayByb3V0aW5lX2NhbGxlZF90d2ljZQpvayB3cml0ZWV4X29uX3BsYWluX2NsaWVudF9oYW5kbGUKb2sgd3JpdGVleF9zdGFydGVkCm9rIHdyaXRlZXhfYWxlcnRhYmxlX3NsZWVwCm9rIHdyaXRlZXhfcm91dGluZV9jYWxsZWQKb2sgd3JpdGVleF9yb3V0aW5lX2J5dGVzCm9rIHdyaXRlZXhfcm91dGluZV9lcnJvcgpvayB3cml0ZWV4X2RhdGFfYXJyaXZlZApvayB0d29fcmVxdWVzdHNfb25lX3NsZWVwCm9rIHR3b19yb3V0aW5lc19ydW5faW5fY29tcGxldGlvbl9vcmRlcgpvayBmYWlsZWRfcmVxdWVzdF9hbGVydGFibGVfc2xlZXAKb2sgZmFpbGVkX3JlcXVlc3Rfcm91dGluZV9lcnJvcgpvayBmYWlsZWRfcmVxdWVzdF9yb3V0aW5lX2J5dGVzCm9rIHBvcnRfaGFuZGxlX3JlYWRleF9mYWlscwpvayBwb3J0X2hhbmRsZV9yZWFkZXhfZXJyb3IKb2sgcG9ydF9oYW5kbGVfd3JpdGVleF9mYWlscwpvayBwb3J0X2hhbmRsZV93cml0ZWV4X2Vycm9yCnZhbHVlIHN5bmNfaGFuZGxlX3JlYWRleF9vayAxCnZhbHVlIHN5bmNfaGFuZGxlX3JlYWRleF9lcnJvciAwCnN1bW1hcnkgMzAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok readex_started\nok routine_not_called_yet\nok routine_not_called_by_plain_sleep\nok alertable_sleep_returns_io_completion\nok routine_called_once\nok routine_error\nok routine_bytes\nok routine_overlapped\nok readex_data\nok readex_waiting_started\nok nothing_to_run_times_out\nok second_alertable_sleep\nok second_routine_bytes\nok routine_called_twice\nok writeex_on_plain_client_handle\nok writeex_started\nok writeex_alertable_sleep\nok writeex_routine_called\nok writeex_routine_bytes\nok writeex_routine_error\nok writeex_data_arrived\nok two_requests_one_sleep\nok two_routines_run_in_completion_order\nok failed_request_alertable_sleep\nok failed_request_routine_error\nok failed_request_routine_bytes\nok port_handle_readex_fails\nok port_handle_readex_error\nok port_handle_writeex_fails\nok port_handle_writeex_error\nvalue sync_handle_readex_ok 1\nvalue sync_handle_readex_error 0\nsummary 30 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 217
+    }
+  ]
+}
