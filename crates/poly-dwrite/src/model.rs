@@ -162,34 +162,31 @@ pub fn simulate(entries: &[FaceEntry], base: &FontDesc, sims: u32) -> FontDesc {
     f
 }
 
-fn weight_word(w: u32) -> &'static str {
-    match w {
-        0..=150 => "Thin",
-        151..=250 => "Extra Light",
-        251..=325 => "Light",
-        326..=374 => "Semi-Light",
-        375..=449 => "",
-        450..=549 => "Medium",
-        550..=649 => "Semi-Bold",
-        650..=749 => "Bold",
-        750..=849 => "Extra Bold",
-        850..=924 => "Black",
-        _ => "Extra Black",
-    }
-}
-
-fn stretch_word(s: u32) -> &'static str {
-    match s {
-        1 => "Ultra-Condensed",
-        2 => "Extra-Condensed",
-        3 => "Condensed",
-        4 => "Semi-Condensed",
-        6 => "Semi-Expanded",
-        7 => "Expanded",
-        8 => "Extra-Expanded",
-        9 => "Ultra-Expanded",
-        _ => "",
-    }
+/// Words of a face name that say how heavy it is.
+fn is_weight_word(w: &str) -> bool {
+    const WORDS: [&str; 20] = [
+        "thin",
+        "extralight",
+        "ultralight",
+        "light",
+        "semilight",
+        "demilight",
+        "regular",
+        "normal",
+        "book",
+        "roman",
+        "medium",
+        "semibold",
+        "demibold",
+        "extra",
+        "ultra",
+        "semi",
+        "demi",
+        "-",
+        "bold",
+        "plain",
+    ];
+    WORDS.iter().any(|x| w.eq_ignore_ascii_case(x))
 }
 
 fn join(parts: &[&str]) -> String {
@@ -203,25 +200,28 @@ fn join(parts: &[&str]) -> String {
     s
 }
 
-/// The en-us name DirectWrite gives a simulated face of `base`.
+/// The en-us name DirectWrite gives a simulated face of `base`: the
+/// bold simulation drops the name's weight words and ends it in "Bold"
+/// ("Regular" and "Light" give "Bold", "Italic" "Italic Bold", "Condensed"
+/// "Condensed Bold"); the oblique simulation appends "Oblique" ("Regular"
+/// gives "Oblique").
 fn sim_name(entries: &[FaceEntry], base: &FontDesc, sims: u32) -> String {
     let _ = entries;
     let base_name = base.face_names.primary().map(crate::names::to_string).unwrap_or_default();
-    let ob = if sims & SIM_OBLIQUE != 0 { "Oblique" } else { "" };
-    if sims & SIM_BOLD == 0 {
-        // Only oblique.
-        return if base_name == "Regular" || base_name.is_empty() {
-            String::from("Oblique")
-        } else {
-            join(&[&base_name, ob])
-        };
-    }
-    let style = match base.style {
-        STYLE_ITALIC => "Italic",
-        STYLE_OBLIQUE => "Oblique",
-        _ => "",
+    let mut name = if sims & SIM_BOLD != 0 {
+        let kept: Vec<&str> = base_name.split(' ').filter(|w| !w.is_empty() && !is_weight_word(w)).collect();
+        let mut parts = kept;
+        parts.push("Bold");
+        join(&parts)
+    } else if base_name == "Regular" || base_name.is_empty() {
+        String::new()
+    } else {
+        base_name
     };
-    join(&[stretch_word(base.stretch), style, weight_word(700), ob])
+    if sims & SIM_OBLIQUE != 0 {
+        name = join(&[&name, "Oblique"]);
+    }
+    name
 }
 
 // ----- matching
@@ -556,6 +556,48 @@ mod tests {
                 "w300 s5 st1 sim2 Light Oblique",
                 "w900 s5 st1 sim2 Black Oblique",
                 "w400 s3 st1 sim2 Condensed Oblique"
+            ]
+        );
+    }
+
+    #[test]
+    fn lone_fonts_get_simulated_neighbours() {
+        let names = |e: Vec<FaceEntry>| -> Vec<String> { build_families(&e)[0].fonts.iter().map(describe).collect() };
+        // A lone regular font: Oblique, Bold and Bold Oblique are simulated.
+        assert_eq!(
+            names(alloc::vec![entry(0, "F", "Regular", 400, 5, 0)]),
+            [
+                "w400 s5 st0 sim0 Regular",
+                "w400 s5 st1 sim2 Oblique",
+                "w700 s5 st0 sim1 Bold",
+                "w700 s5 st1 sim3 Bold Oblique"
+            ]
+        );
+        // A lone italic font named Regular: only a bold simulation.
+        assert_eq!(
+            names(alloc::vec![entry(0, "F", "Regular", 400, 5, 2)]),
+            ["w400 s5 st2 sim0 Regular", "w700 s5 st2 sim1 Bold"]
+        );
+        // A lone oblique font.
+        assert_eq!(
+            names(alloc::vec![entry(0, "F", "Oblique", 400, 5, 1)]),
+            ["w400 s5 st1 sim0 Oblique", "w700 s5 st1 sim1 Oblique Bold"]
+        );
+        // Regular, Bold and Italic: an oblique pair and a bold italic.
+        let e = alloc::vec![
+            entry(0, "F", "Regular", 400, 5, 0),
+            entry(1, "F", "Bold", 700, 5, 0),
+            entry(2, "F", "Italic", 400, 5, 2),
+        ];
+        assert_eq!(
+            names(e),
+            [
+                "w400 s5 st0 sim0 Regular",
+                "w400 s5 st2 sim0 Italic",
+                "w700 s5 st0 sim0 Bold",
+                "w400 s5 st1 sim2 Oblique",
+                "w700 s5 st1 sim2 Bold Oblique",
+                "w700 s5 st2 sim1 Italic Bold"
             ]
         );
     }
