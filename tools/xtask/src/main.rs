@@ -117,6 +117,7 @@ mod aarch64;
 mod accel;
 mod asmlabels;
 mod busybox;
+mod chrometrace;
 mod chromewin;
 mod chromium;
 mod compositor;

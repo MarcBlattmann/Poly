@@ -70,6 +70,7 @@ pub mod sync;
 pub mod sysinfo;
 pub mod system;
 pub mod threads;
+pub mod trace;
 pub mod vm;
 pub mod win32k;
 

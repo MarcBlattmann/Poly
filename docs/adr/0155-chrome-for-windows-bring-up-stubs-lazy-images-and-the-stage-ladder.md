@@ -359,3 +359,33 @@ Runtime, on top of the window manager of ADR 0131 and 0136. The decisions:
 Tests: `crates/poly-com`, `poly_win32k::{spi,props}` and the
 `RegisterMessage` request on the host; `s1test.exe` end to end in the kernel
 self-test (`nt::test_s1`).
+
+## Addendum: the Poly-side call tracer and the comparer (`chrome-win-b4`, second step)
+
+Chrome's first S1 crash (`chrome_elf.dll`, read of address 0x10, no stub hit) could not be read off
+the serial log, so Poly gets its own tools, none of which read Chrome's code:
+
+1. **`poly.nt.trace`** (kernel argument; `=all` adds the noisy services): one `nt-trace:` line per NT
+   system call with the first four arguments, the name an `OBJECT_ATTRIBUTES` or value name carries
+   and the status (`poly_personality_nt::trace`, host-tested). `cargo xtask chrome-win run --trace`.
+2. **The unhandled-exception report** adds the general registers, 64 stack quadwords, the TEB/PEB
+   fields and the thread's TLS array.
+3. **`cargo xtask chrome-win run --kit chrome_elf.dll[,chrome.exe...]`** runs a stage with the
+   Windows API tracer's kit (ADR 0090) laid over Chrome's directory: the named programs import
+   through proxies that log every call (`polytrace.dll`, now with `POLYTRACE_SYNC`: each record is
+   written when its call returns and carries the caller's return address `ra`, so a process that dies
+   leaves its trace). The launcher sends `polytrace.jsonl` to the kernel log with `PolyDebugPrint`
+   (the console wraps and scrolls long lines) and xtask collects it in
+   `target/chrome-win/stage<N>.ptrace.jsonl`.
+4. **`cargo xtask win chrome-trace [file]`** compares that trace with the committed Windows
+   reduction (`traces/s1.trace.json`): calls that fail on Poly where Windows' never did (or the
+   reverse for status codes), last errors and names Windows never saw, and functions Windows called
+   earlier that Poly never reached (`tools/xtask/src/chrometrace.rs`, host-tested).
+5. **Stage 9** is a probe (`tests/windows/chrome_probe.rs`): what Chrome's start-up asks of
+   `version.dll`, on Chrome's own files.
+
+What the tools found: `NtCreateKey` on `\REGISTRY\USER\<sid>\` (one trailing `\`) failed
+(`STATUS_OBJECT_NAME_INVALID`; every `NtCreateKey` of the browser on Windows succeeded), the first
+`FlsAlloc` returned index 0 (Windows' never did), `HKLM\...\CurrentVersion` lacked `UBR`,
+`DisplayVersion` and `ReleaseId`, `ReadProcessMemory`/`WriteProcessMemory` were stubs, and
+`PEB.ImageBaseAddress` and the PEB's version, processor, subsystem and heap fields were 0.
