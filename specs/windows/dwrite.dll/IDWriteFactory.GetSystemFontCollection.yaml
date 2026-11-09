@@ -1,0 +1,70 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwrite.dll/IDWriteFactory.GetSystemFontCollection
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64, dwrite.dll 10.0.26100.1"
+  machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
+  observed_by: spec-win-dwrite
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: the DirectWrite reference pages of the interfaces and methods named
+  here ("Programming Guide for DirectWrite", "Font Collections", "Custom
+  Font Sets"); dwrite.h, dwrite_1.h, dwrite_2.h, dwrite_3.h for constants,
+  structure layouts and the order of the methods in the vtables; winerror.h
+  for the HRESULTs; the OpenType specification (head, hhea, hmtx, maxp,
+  cmap, glyf, loca, name, OS/2, post) for the font tables the tests write.
+  Wine's tests were not read.
+summary: >
+  Returns the collection of the fonts installed on the system. It exists for
+  shared and isolated factories, can be called repeatedly and with
+  checkForUpdates TRUE or FALSE. The tests treat the collection by
+  properties every Windows installation has (Arial, Segoe UI, Times New
+  Roman, Courier New, Consolas, Verdana, Tahoma, Segoe UI Emoji, Segoe UI
+  Symbol, Calibri are families on the oracle; Windows always has Arial and
+  Segoe UI); the list of families is the installation's.
+interface:
+  signature: "HRESULT IDWriteFactory::GetSystemFontCollection(IDWriteFontCollection** fontCollection, BOOL checkForUpdates = FALSE); also IDWriteFactory3::GetSystemFontCollection(BOOL includeDownloadableFonts, IDWriteFontCollection1** fontCollection, BOOL checkForUpdates = FALSE)"
+  slot_names: "IDWriteFactory3 has the overload as a separate vtable slot after the IDWriteFactory ones (dwrite_3.h); Chrome and Skia call the IDWriteFactory form"
+  hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+rules:
+  basic: "S_OK and a non-null collection with at least a few dozen families on a Windows installation (the oracle, a stock Windows 11 Core system, has fewer than 100)"
+  families: "FindFamilyName finds Arial, Segoe UI, Times New Roman, Courier New, Consolas, Verdana, Tahoma, Segoe UI Emoji and Segoe UI Symbol on the oracle"
+  check_for_updates: "checkForUpdates TRUE or FALSE both give S_OK and a collection with the same number of families"
+  objects: "each call returns a new collection object (the pointers of two calls differ), for both factory types; the family count is the same"
+  factory3: "IDWriteFactory3::GetSystemFontCollection(FALSE, &collection, FALSE) gives S_OK and a collection with the same families"
+errors:
+  none: "no error case observed (the call needs a valid output pointer)"
+side_effects: "none beyond the rules above"
+threading: "the objects are used from one thread; the shared factory and the system collection may be used from several, which is not tested"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every
+  test carries its own declarations: the COM vtable layouts (from the SDK
+  headers), the enumeration constants and a writer for small TrueType fonts.
+  The test fonts are written by the test itself (eight glyphs: .notdef,
+  space, a square, a triangle, a rounded shape, a small box, a box below the
+  baseline and a box for a code point outside the BMP) with names, weights,
+  widths, styles and metrics chosen per test, and are served to DirectWrite
+  from memory through loader objects the test implements
+  (IDWriteFontFileLoader with its stream, IDWriteFontCollectionLoader with
+  its enumerator) or, where a path is the point, from a file the test writes
+  beside itself. So the results do not depend on the oracle's font list.
+  Tests of the system collection print or check only what every Windows
+  installation provides (Arial, Segoe UI, Times New Roman and similar
+  families exist; their standard faces exist; relations between values) and
+  never the metrics or file names of those fonts. The eight font slots, the
+  loaders and the calls the loaders receive are in the test file.
+not_covered: >
+  includeDownloadableFonts TRUE; fonts installed while the process runs;
+  per-user fonts. the system collection's full font list; downloadable
+  (remote) fonts; collections with font files that are TrueType collections
+  or CFF fonts; variable fonts; colour fonts; several threads; failure
+  injection inside the loaders; behaviour of different Windows versions (the
+  oracle is one build).

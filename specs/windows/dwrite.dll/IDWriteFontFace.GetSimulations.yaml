@@ -1,0 +1,71 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwrite.dll/IDWriteFontFace.GetSimulations
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64, dwrite.dll 10.0.26100.1"
+  machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
+  observed_by: spec-win-dwrite
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: the DirectWrite reference pages of the interfaces and methods named
+  here ("Programming Guide for DirectWrite", "Font Collections", "Custom
+  Font Sets"); dwrite.h, dwrite_1.h, dwrite_2.h, dwrite_3.h for constants,
+  structure layouts and the order of the methods in the vtables; winerror.h
+  for the HRESULTs; the OpenType specification (head, hhea, hmtx, maxp,
+  cmap, glyf, loca, name, OS/2, post) for the font tables the tests write.
+  Wine's tests were not read.
+summary: >
+  Simple properties of a font face: the file format type (1, TrueType, for a
+  TrueType font file), the index of the face in its file (0), the
+  simulations it was created with, whether the font is a symbol font (its
+  cmap is a (3,0) one), and the number of glyphs (maxp.numGlyphs). The test
+  fonts of these tests are written by the test (see building_tests): eight
+  glyphs, glyph 0 .notdef (a box 50..450 by 0..700, advance 500), 1 space
+  (U+0020, advance 300, no outline), 2 a square 100..900 by 0..800 (U+0041,
+  advance 1000), 3 a triangle 0..1000 by 0..800 (U+0042), 4 a rounded shape
+  0..1000 by 0..800 (U+0043), 5 a box 200..600 by 0..500 (U+00E9, advance
+  700), 6 a box 50..550 by -200..300 (U+20AC, advance 600), 7 a box 100..900
+  by 100..700 (U+1F600, advance 1000, only in a format 12 subtable).
+interface:
+  signature: "DWRITE_FONT_FACE_TYPE IDWriteFontFace::GetType(); UINT32 GetIndex(); DWRITE_FONT_SIMULATIONS GetSimulations(); BOOL IsSymbolFont(); UINT16 GetGlyphCount() (IDWriteFontFace)"
+  hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+rules:
+  props: "a face of the test font made with simulations 0, 1, 2, 3: type 1, index 0, simulations as made, IsSymbolFont 0, glyph count 8"
+  invalid_simulations: "CreateFontFace with simulations 4, 8 or 0xFF fails (E_INVALIDARG)"
+  symbol: "a font whose cmap subtable is platform 3, encoding 0 (and has no format 12 table): IsSymbolFont 1; glyph count 8; GetGlyphIndices maps code points U+0020, U+0041, U+0043 to glyphs 1, 2, 4 and so do U+F020, U+F041 and U+F043 (the 0xF000 offset is applied); U+00E9 gives glyph 5; for the same font as an ordinary (3,1) cmap U+F0xx map to glyph 0 and IsSymbolFont is 0"
+  system: "faces of Arial (regular; with the oblique simulation: simulations 2; Bold Italic: simulations 0), Segoe UI: type 1, index 0, more than 100 glyphs, IsSymbolFont 0; Symbol: IsSymbolFont 1"
+errors:
+  E_INVALIDARG: "simulation values other than 0..3 when creating the face"
+side_effects: "none beyond the rules above"
+threading: "the objects are used from one thread; the shared factory and the system collection may be used from several, which is not tested"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every
+  test carries its own declarations: the COM vtable layouts (from the SDK
+  headers), the enumeration constants and a writer for small TrueType fonts.
+  The test fonts are written by the test itself (eight glyphs: .notdef,
+  space, a square, a triangle, a rounded shape, a small box, a box below the
+  baseline and a box for a code point outside the BMP) with names, weights,
+  widths, styles and metrics chosen per test, and are served to DirectWrite
+  from memory through loader objects the test implements
+  (IDWriteFontFileLoader with its stream, IDWriteFontCollectionLoader with
+  its enumerator) or, where a path is the point, from a file the test writes
+  beside itself. So the results do not depend on the oracle's font list.
+  Tests of the system collection print or check only what every Windows
+  installation provides (Arial, Segoe UI, Times New Roman and similar
+  families exist; their standard faces exist; relations between values) and
+  never the metrics or file names of those fonts. The eight font slots, the
+  loaders and the calls the loaders receive are in the test file.
+not_covered: >
+  the system collection's full font list; downloadable (remote) fonts;
+  collections with font files that are TrueType collections or CFF fonts;
+  variable fonts; colour fonts; several threads; failure injection inside
+  the loaders; behaviour of different Windows versions (the oracle is one
+  build).

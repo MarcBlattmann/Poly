@@ -58,6 +58,7 @@ unsafe extern "C" fn ntdll_thread_init(routine: u64, argument: u64, exe_base: u6
         let _ = run_callouts(&callouts);
         LOADER_LOCK.leave(&SysPlatform);
     } else if let Err(status) = process_init(teb, exe_base) {
+        crate::report_load_failure("process start", status);
         // SAFETY: the process cannot start: end it with the status.
         unsafe { syscalls::NtTerminateProcess(syscalls::CURRENT_PROCESS, status) };
     }
@@ -97,6 +98,7 @@ fn process_init(teb: u64, exe_base: u64) -> Result<(), NtStatus> {
         Err(status) => Err(status),
     };
     LOADER_LOCK.leave(&SysPlatform);
+    crate::report_stubbed();
     result
 }
 

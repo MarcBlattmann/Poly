@@ -2,7 +2,8 @@ name: CI
 
 # What `cargo xtask ci` runs, split into jobs that run in parallel (ADR 0077):
 # lint, host tests, the boot tests in shards, the coverage checks and the
-# agent pipeline's checks in slices, each `cargo xtask ci <part>` or
+# agent pipeline's checks in slices and the aarch64 boot stub (ADR 0154),
+# each `cargo xtask ci <part>` or
 # `cargo xtask boot-tests --shard <shards>`. The last job, `ci`, passes only if
 # every other job passed: it is the required status check, so keep its name.
 #
@@ -80,6 +81,7 @@ jobs:
           workspaces: |
             .
             kernel
+            kernel/src/arch/aarch64
       # The kernel embeds our ntdll.dll; xtask caches it in target/ntdll-cache
       # under a hash of its inputs. This job saves it, the others restore it.
       - name: ntdll.dll's and the Win32 modules' cache keys
@@ -368,13 +370,38 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  aarch64:
+    name: aarch64 stub (unit tests, QEMU virt on TCG)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # The aarch64 machine of QEMU; the stub runs on its emulator (TCG)
+      # on every runner, whatever the host CPU.
+      - name: Install QEMU (aarch64)
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-arm
+      - name: Install Rust (version from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: aarch64
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            .
+            kernel/src/arch/aarch64
+      - run: cargo xtask ci aarch64
+
   # The required status check. `always()`: it runs, and fails, when a job it
   # needs failed or was cancelled (a skipped required check would count as
   # passing). The jobs that run programs are skipped, and count as passed,
   # only when the change is prose alone (`changes`).
   ci:
     if: always()
-    needs: [changes, lint, host-tests, build, boot, pipeline]
+    needs: [changes, lint, host-tests, build, boot, pipeline, aarch64]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -388,4 +415,4 @@ jobs:
             to_entries | all(
               .value.result == "success"
               or (.value.result == "skipped" and $code == "false"
-                  and (.key | IN("host-tests", "build", "boot", "pipeline"))))' > /dev/null
+                  and (.key | IN("host-tests", "build", "boot", "pipeline", "aarch64"))))' > /dev/null

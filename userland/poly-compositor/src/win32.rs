@@ -66,6 +66,9 @@ struct Surface {
     window: WindowId,
     buffer: Option<(BufferId, u32, u32, u32, PixelFormat)>,
     geometry: (i32, i32, u32, u32),
+    /// The process of the app (0: not told), to end its startup feedback
+    /// when its first window is shown (ADR 0167).
+    pid: u32,
 }
 
 /// Windows surfaces in the scene.
@@ -88,6 +91,11 @@ impl WindowsSurfaces {
     pub fn buffer_of(&self, surface: SurfaceId) -> Option<(BufferId, u32, u32, u32)> {
         let (b, w, h, stride, _) = self.surfaces.get(&surface)?.buffer?;
         Some((b, w, h, stride))
+    }
+
+    /// The process whose window the scene window is, if win32k said.
+    pub fn process_of(&self, window: WindowId) -> Option<u32> {
+        self.surfaces.values().find(|s| s.window == window).map(|s| s.pid).filter(|&p| p != 0)
     }
 
     /// The surface a scene window shows, if it is a Windows one.
@@ -150,7 +158,7 @@ impl WindowsSurfaces {
                 if let Some(owner) = self.window(owner) {
                     scene.set_parent(window, Some(owner));
                 }
-                self.surfaces.insert(surface, Surface { window, buffer: None, geometry: (0, 0, 0, 0) });
+                self.surfaces.insert(surface, Surface { window, buffer: None, geometry: (0, 0, 0, 0), pid: 0 });
             }
             ToCompositor::Geometry { surface, x, y, width, height } => {
                 if let Some(w) = self.window(surface) {
@@ -158,6 +166,11 @@ impl WindowsSurfaces {
                 }
                 if let Some(s) = self.surfaces.get_mut(&surface) {
                     s.geometry = (x, y, width, height);
+                }
+            }
+            ToCompositor::Process { surface, pid } => {
+                if let Some(s) = self.surfaces.get_mut(&surface) {
+                    s.pid = pid;
                 }
             }
             ToCompositor::Title { surface, ref text } => {
@@ -382,6 +395,10 @@ impl Link {
         for &(w, visible) in &after {
             if visible && !server.is_internal(w) {
                 server.adopt_internal_window(w, "windows", true);
+                // Its app has a window: the busy pointer of its launch ends.
+                if let Some(pid) = self.surfaces.process_of(w) {
+                    server.launch_window_mapped(pid);
+                }
             }
         }
         for w in before {
@@ -602,6 +619,24 @@ mod tests {
         let actions = pump(&mut d, &mut ws, &mut scene, &mem);
         assert!(scene.window(w).is_none());
         assert!(actions.contains(&Action::Send(FromCompositor::Released { buffer: b2 })));
+    }
+
+    #[test]
+    fn a_surface_knows_its_process_for_the_startup_feedback() {
+        let mut scene = Scene::new(800, 600, 1);
+        let mut ws = WindowsSurfaces::new();
+        let mut d = Desktop::new();
+        let mem = Memory(BTreeMap::new());
+        let hello =
+            FromCompositor::Hello { version: VERSION, width: 800, height: 600, scale: 1, frame: FrameMetrics::POLY };
+        d.receive(&encode_all(&[hello]));
+        let s = d.create(SurfaceKind::TopLevel, 0, true);
+        let t = d.create(SurfaceKind::TopLevel, 0, true);
+        d.set_process(s, 4321);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert_eq!(ws.process_of(ws.window(s).unwrap()), Some(4321));
+        // Not told: none.
+        assert_eq!(ws.process_of(ws.window(t).unwrap()), None);
     }
 
     #[test]

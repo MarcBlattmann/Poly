@@ -271,7 +271,7 @@
 {"symbol":"DrawTextA","src":["wine-spec"],"seeds":["wine:user32/tests/text.c:test_DrawTextCalcRect","wine:user32/tests/menu.c:menu_ownerdraw_wnd_proc"]},
 {"symbol":"DrawTextExA","src":["wine-spec"],"seeds":["wine:user32/tests/text.c:test_DrawTextCalcRect"]},
 {"symbol":"DrawTextExW","src":["wine-spec"],"seeds":["wine:user32/tests/text.c:test_DrawTextCalcRect"]},
-{"symbol":"DrawTextW","status":"claimed","claimed_by":"impl-win-gui-a","src":["wine-spec"],"seeds":["wine:user32/tests/text.c:test_DrawTextCalcRect"]},
+{"symbol":"DrawTextW","status":"claimed","claimed_by":"impl-win-text","src":["wine-spec"],"seeds":["wine:user32/tests/text.c:test_DrawTextCalcRect"]},
 {"symbol":"DwmWindowNotificationsEnabled","src":["wine-spec"]},
 {"symbol":"EditWndProc","src":["wine-spec"]},
 {"symbol":"EmptyClipboard","src":["wine-spec"],"seeds":["wine:user32/tests/clipboard.c:test_GetUpdatedClipboardFormats","wine:user32/tests/edit.c:test_espassword","wine:user32/tests/edit.c:test_paste","wine:user32/tests/clipboard.c:test_string_data","wine:user32/tests/clipboard.c:test_data_handles","wine:user32/tests/clipboard.c:test_handles","wine:user32/tests/clipboard.c:test_synthesized","wine:user32/tests/clipboard.c:test_ClipboardOwner"]},

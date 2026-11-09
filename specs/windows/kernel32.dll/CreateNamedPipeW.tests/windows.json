@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "cnp_direction",
+      "exe_sha256": "92ea70e7e9d89cde4200f44a71ba1a1a74e105eb6791d9f929cb4ebc0124dbca",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaW5ib3VuZF9jcmVhdGVkCm9rIGluYm91bmRfY2xpZW50X3JlYWRfcmVmdXNlZApvayBpbmJvdW5kX2NsaWVudF9yZWFkX2Vycm9yCm9rIGluYm91bmRfY2xpZW50X3dyaXRlX29rCm9rIGluYm91bmRfY2xpZW50X3dyaXRlCm9rIGluYm91bmRfc2VydmVyX3dyaXRlX3JlZnVzZWQKb2sgaW5ib3VuZF9zZXJ2ZXJfd3JpdGVfZXJyb3IKb2sgaW5ib3VuZF9zZXJ2ZXJfcmVhZApvayBpbmJvdW5kX2NsaWVudF9yZWFkX29uX3dyaXRlX2hhbmRsZV9yZWZ1c2VkCm9rIGluYm91bmRfY2xpZW50X3JlYWRfb25fd3JpdGVfaGFuZGxlX2Vycm9yCm9rIG91dGJvdW5kX2NyZWF0ZWQKb2sgb3V0Ym91bmRfY2xpZW50X3dyaXRlX3JlZnVzZWQKb2sgb3V0Ym91bmRfY2xpZW50X3dyaXRlX2Vycm9yCm9rIG91dGJvdW5kX2NsaWVudF9yZWFkX29rCm9rIG91dGJvdW5kX3NlcnZlcl93cml0ZQpvayBvdXRib3VuZF9zZXJ2ZXJfcmVhZF9yZWZ1c2VkCm9rIG91dGJvdW5kX3NlcnZlcl9yZWFkX2Vycm9yCm9rIG91dGJvdW5kX2NsaWVudF9yZWFkCm9rIGR1cGxleF9jbGllbnRfcmVhZF9vbmx5X29rCm9rIGR1cGxleF9yZWFkX29ubHlfY2xpZW50X3dyaXRlX3JlZnVzZWQKb2sgZHVwbGV4X3JlYWRfb25seV9jbGllbnRfd3JpdGVfZXJyb3IKb2sgY2xvc2VkX2NsaWVudF9pbnN0YW5jZV9idXN5Cm9rIGNsb3NlZF9jbGllbnRfaW5zdGFuY2VfYnVzeV9lcnJvcgpvayBkdXBsZXhfY2xpZW50X3JlYWRfd3JpdGVfb2sKb2sgZHVwbGV4X3NlcnZlcl90b19jbGllbnRfd3JpdGUKb2sgZHVwbGV4X2NsaWVudF9yZWFkCm9rIGR1cGxleF9jbGllbnRfd3JpdGUKb2sgZHVwbGV4X3NlcnZlcl9yZWFkCm9rIGF0dHJpYnV0ZXNfb25seV9jbGllbnRfb2sKb2sgYXR0cmlidXRlc19vbmx5X2luZm9fb2sKb2sgYXR0cmlidXRlc19vbmx5X2luZm9fZmxhZ3MKb2sgb3Blbl9taXNzaW5nX3BpcGVfcmVmdXNlZApvayBvcGVuX21pc3NpbmdfcGlwZV9lcnJvcgpzdW1tYXJ5IDMzIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok inbound_created\nok inbound_client_read_refused\nok inbound_client_read_error\nok inbound_client_write_ok\nok inbound_client_write\nok inbound_server_write_refused\nok inbound_server_write_error\nok inbound_server_read\nok inbound_client_read_on_write_handle_refused\nok inbound_client_read_on_write_handle_error\nok outbound_created\nok outbound_client_write_refused\nok outbound_client_write_error\nok outbound_client_read_ok\nok outbound_server_write\nok outbound_server_read_refused\nok outbound_server_read_error\nok outbound_client_read\nok duplex_client_read_only_ok\nok duplex_read_only_client_write_refused\nok duplex_read_only_client_write_error\nok closed_client_instance_busy\nok closed_client_instance_busy_error\nok duplex_client_read_write_ok\nok duplex_server_to_client_write\nok duplex_client_read\nok duplex_client_write\nok duplex_server_read\nok attributes_only_client_ok\nok attributes_only_info_ok\nok attributes_only_info_flags\nok open_missing_pipe_refused\nok open_missing_pipe_error\nsummary 33 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "cnp_modes",
+      "exe_sha256": "7e9d20f5e36188f03d124461d8d1c2400bbe38bf23390ccae62c3b5e63e1eff5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgbWVzc2FnZV9zZXJ2ZXJfaW5mb19vawpvayBtZXNzYWdlX3NlcnZlcl9mbGFncwpvayBtZXNzYWdlX2NsaWVudF9pbmZvX29rCm9rIG1lc3NhZ2VfY2xpZW50X2ZsYWdzCm9rIG1lc3NhZ2Vfc2VydmVyX3N0YXRlX29rCm9rIG1lc3NhZ2Vfc2VydmVyX3N0YXRlCm9rIG1lc3NhZ2VfY2xpZW50X3N0YXRlX29rCm9rIG1lc3NhZ2VfY2xpZW50X3N0YXRlX3N0YXJ0c19ieXRlCm9rIG1lc3NhZ2VfdHlwZV9ieXRlX3JlYWRfaW5mb19vawpvayBtZXNzYWdlX3R5cGVfYnl0ZV9yZWFkX2ZsYWdzCm9rIG1lc3NhZ2VfdHlwZV9ieXRlX3JlYWRfc3RhdGUKb2sgbm93YWl0X2NyZWF0ZWQKb2sgbm93YWl0X3N0YXRlX29rCm9rIG5vd2FpdF9zdGF0ZQpvayBub3dhaXRfaW5zdGFuY2VzCm9rIHJlamVjdF9yZW1vdGVfY3JlYXRlZApvayByZWplY3RfcmVtb3RlX2luZm9fZmxhZ3MKb2sgcmVqZWN0X3JlbW90ZV9zdGF0ZQpvayByZWplY3RfcmVtb3RlX2xvY2FsX2NsaWVudF9vawp2YWx1ZSBvdGhlcl90eXBlX2NyZWF0ZWQgMQp2YWx1ZSBvdGhlcl90eXBlX2Vycm9yIDE4Mwp2YWx1ZSBvdGhlcl9yZWFkX21vZGVfY3JlYXRlZCAxCnZhbHVlIG90aGVyX3JlYWRfbW9kZV9lcnJvciAxODMKdmFsdWUgb3RoZXJfZGlyZWN0aW9uX2luX2NyZWF0ZWQgMAp2YWx1ZSBvdGhlcl9kaXJlY3Rpb25faW5fZXJyb3IgNQp2YWx1ZSBvdGhlcl9kaXJlY3Rpb25fb3V0X2NyZWF0ZWQgMAp2YWx1ZSBvdGhlcl9kaXJlY3Rpb25fb3V0X2Vycm9yIDUKdmFsdWUgb3RoZXJfd2FpdF9tb2RlX2NyZWF0ZWQgMQp2YWx1ZSBvdGhlcl93YWl0X21vZGVfZXJyb3IgMTgzCnZhbHVlIG90aGVyX21heF9sYXJnZXJfY3JlYXRlZCAxCnZhbHVlIG90aGVyX21heF9sYXJnZXJfZXJyb3IgMTgzCnZhbHVlIG90aGVyX21heF9zbWFsbGVyX2NyZWF0ZWQgMQp2YWx1ZSBvdGhlcl9tYXhfc21hbGxlcl9lcnJvciAxODMKdmFsdWUgb3RoZXJfb3ZlcmxhcHBlZF9jcmVhdGVkIDEKdmFsdWUgb3RoZXJfb3ZlcmxhcHBlZF9lcnJvciAxODMKdmFsdWUgb3RoZXJfd3JpdGVfdGhyb3VnaF9jcmVhdGVkIDEKdmFsdWUgb3RoZXJfd3JpdGVfdGhyb3VnaF9lcnJvciAxODMKdmFsdWUgc2FtZV9jcmVhdGVkIDEKdmFsdWUgc2FtZV9lcnJvciAxODMKb2sgemVyb19zaXplc19vdXQKb2sgemVyb19zaXplc19pbgpvayB6ZXJvX2J1ZmZlcl93cml0ZV9wZW5kaW5nCm9rIHplcm9fYnVmZmVyX3dyaXRlX2J5dGVzX2JlZm9yZV9yZWFkCm9rIHplcm9fYnVmZmVyX3dyaXRlX3Vuc2lnbmFsbGVkCm9rIHplcm9fYnVmZmVyX3JlYWRlcl9nZXRzX2RhdGEKb2sgemVyb19idWZmZXJfd3JpdGVfY29tcGxldGVzX2FmdGVyX3JlYWQKb2sgemVyb19idWZmZXJfd3JpdGVfcmVzdWx0Cm9rIG9kZF9zaXplc19jcmVhdGVkCm9rIG9kZF9zaXplc19vdXQKb2sgb2RkX3NpemVzX2luCnN1bW1hcnkgMzAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok message_server_info_ok\nok message_server_flags\nok message_client_info_ok\nok message_client_flags\nok message_server_state_ok\nok message_server_state\nok message_client_state_ok\nok message_client_state_starts_byte\nok message_type_byte_read_info_ok\nok message_type_byte_read_flags\nok message_type_byte_read_state\nok nowait_created\nok nowait_state_ok\nok nowait_state\nok nowait_instances\nok reject_remote_created\nok reject_remote_info_flags\nok reject_remote_state\nok reject_remote_local_client_ok\nvalue other_type_created 1\nvalue other_type_error 183\nvalue other_read_mode_created 1\nvalue other_read_mode_error 183\nvalue other_direction_in_created 0\nvalue other_direction_in_error 5\nvalue other_direction_out_created 0\nvalue other_direction_out_error 5\nvalue other_wait_mode_created 1\nvalue other_wait_mode_error 183\nvalue other_max_larger_created 1\nvalue other_max_larger_error 183\nvalue other_max_smaller_created 1\nvalue other_max_smaller_error 183\nvalue other_overlapped_created 1\nvalue other_overlapped_error 183\nvalue other_write_through_created 1\nvalue other_write_through_error 183\nvalue same_created 1\nvalue same_error 183\nok zero_sizes_out\nok zero_sizes_in\nok zero_buffer_write_pending\nok zero_buffer_write_bytes_before_read\nok zero_buffer_write_unsignalled\nok zero_buffer_reader_gets_data\nok zero_buffer_write_completes_after_read\nok zero_buffer_write_result\nok odd_sizes_created\nok odd_sizes_out\nok odd_sizes_in\nsummary 30 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 102
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "ntsec_protect",
+      "exe_sha256": "4f834e25a3d0d19adfed3f0164594873dac60cd193626f04c8bcd13b46d6bcb8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgcmVhZG9ubHlfc2VjdGlvbl9zdGF0dXMgMHgwCm9rIG1hcF9yZWFkb25seV9vbl9yZWFkb25seV9zZWN0aW9uCm9rIHJlYWRvbmx5X3ZpZXdfcHJvdGVjdApvayBtYXBfcmVhZHdyaXRlX29uX3JlYWRvbmx5X3NlY3Rpb24Kb2sgbWFwX3JlYWR3cml0ZV9vbl9yZWFkb25seV9zZWN0aW9uX25vX2Jhc2UKdmFsdWUgbWFwX3dyaXRlY29weV9vbl9yZWFkb25seV9zZWN0aW9uIDB4MApvayByZWFkb25seV92aWV3X29uX3JlYWR3cml0ZV9zZWN0aW9uCm9rIHJlYWRvbmx5X3ZpZXdfb25fcmVhZHdyaXRlX3NlY3Rpb25fcHJvdGVjdAp2YWx1ZSBleGVjdXRlX3JlYWRfdmlld19vbl9yZWFkd3JpdGVfc2VjdGlvbiAweGMwMDAwMDRlCnZhbHVlIG5vYWNjZXNzX3ZpZXdfb25fcmVhZHdyaXRlX3NlY3Rpb24gMHgwCm9rIG5vYWNjZXNzX3ZpZXdfcHJvdGVjdAp2YWx1ZSBwcm90ZWN0X3plcm9fdmlldyAweGMwMDAwMDQ1CnZhbHVlIHByb3RlY3RfaW52YWxpZF9iaXRfdmlldyAweGMwMDAwMDQ1Cm9rIHdyaXRlY29weV92aWV3X3N0YXR1cwpvayB3cml0ZWNvcHlfdmlld19wcm90ZWN0Cm9rIHdyaXRlY29weV92aWV3X3NlZXNfc2hhcmVkX2JlZm9yZV93cml0ZQpvayB3cml0ZWNvcHlfd3JpdGVfaXNfcHJpdmF0ZQpvayB3cml0ZWNvcHlfdmlld19oYXNfaXRzX293bl9ieXRlCm9rIHdyaXRlY29weV9wYWdlX25vX2xvbmdlcl9mb2xsb3dzX3NoYXJlZApvayB3cml0ZWNvcHlfdmlld19wcm90ZWN0X2FmdGVyX3dyaXRlCm9rIHdlYWtfaGFuZGxlX3JlYWR3cml0ZV92aWV3Cm9rIHdlYWtfaGFuZGxlX3JlYWR3cml0ZV92aWV3X25vX2Jhc2UKb2sgd2Vha19oYW5kbGVfcmVhZG9ubHlfdmlldwp2YWx1ZSB3ZWFrX2hhbmRsZV93cml0ZWNvcHlfdmlldyAweDAKb2sgbm9fbWFwX3JpZ2h0X3JlYWRvbmx5X3ZpZXcKb2sgbm9fbWFwX3JpZ2h0X3JlYWRvbmx5X3ZpZXdfbm9fYmFzZQpzdW1tYXJ5IDE5IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value readonly_section_status 0x0\nok map_readonly_on_readonly_section\nok readonly_view_protect\nok map_readwrite_on_readonly_section\nok map_readwrite_on_readonly_section_no_base\nvalue map_writecopy_on_readonly_section 0x0\nok readonly_view_on_readwrite_section\nok readonly_view_on_readwrite_section_protect\nvalue execute_read_view_on_readwrite_section 0xc000004e\nvalue noaccess_view_on_readwrite_section 0x0\nok noaccess_view_protect\nvalue protect_zero_view 0xc0000045\nvalue protect_invalid_bit_view 0xc0000045\nok writecopy_view_status\nok writecopy_view_protect\nok writecopy_view_sees_shared_before_write\nok writecopy_write_is_private\nok writecopy_view_has_its_own_byte\nok writecopy_page_no_longer_follows_shared\nok writecopy_view_protect_after_write\nok weak_handle_readwrite_view\nok weak_handle_readwrite_view_no_base\nok weak_handle_readonly_view\nvalue weak_handle_writecopy_view 0x0\nok no_map_right_readonly_view\nok no_map_right_readonly_view_no_base\nsummary 19 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

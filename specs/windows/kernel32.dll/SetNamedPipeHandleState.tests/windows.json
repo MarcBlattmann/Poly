@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "791f723a83b8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:00:13Z",
+  "tests": [
+    {
+      "name": "snphs_mode",
+      "exe_sha256": "770500cc60c4634892c4f796c0de93ac3efa8c359c531eca76797033a2859bf9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc3RhcnRfc3RhdGVfb2sKb2sgc3RhcnRfc3RhdGVfYnl0ZQpvayBzZXJ2ZXJfd3JpdGVzX21lc3NhZ2UKb2sgYnl0ZV9tb2RlX3BhcnRpYWxfcmVhZF9vawpvayBieXRlX21vZGVfcmVzdApvayBzZXRfbWVzc2FnZV9tb2RlX29rCm9rIHN0YXRlX21lc3NhZ2UKb2sgc2VydmVyX3N0YXRlX3VuY2hhbmdlZApvayBtZXNzYWdlX21vZGVfcGFydGlhbF9yZWFkX21vcmVfZGF0YQpvayBtZXNzYWdlX21vZGVfcGFydGlhbF9yZWFkX2Vycm9yCm9rIG1lc3NhZ2VfbW9kZV9wYXJ0aWFsX3JlYWRfYnl0ZXMKb2sgc2V0X2JhY2tfdG9fYnl0ZV9vawpvayBieXRlX21vZGVfcmVhZHNfcmVtYWluZGVyCm9rIGJ5dGVfcGlwZV9tZXNzYWdlX3JlYWRfcmVmdXNlZApvayBieXRlX3BpcGVfbWVzc2FnZV9yZWFkX2Vycm9yCm9rIGJ5dGVfcGlwZV9tZXNzYWdlX3JlYWRfcmVmdXNlZF9zZXJ2ZXIKb2sgYnl0ZV9waXBlX21lc3NhZ2VfcmVhZF9lcnJvcl9zZXJ2ZXIKb2sgbm90aGluZ190b19zZXRfb2sKb2sgdW5rbm93bl9tb2RlX2JpdHNfcmVmdXNlZApvayB1bmtub3duX21vZGVfYml0c19lcnJvcgpvayB0eXBlX2JpdF9yZWZ1c2VkCm9rIHR5cGVfYml0X2Vycm9yCnZhbHVlIGNsaWVudF9jb2xsZWN0aW9uX3NldF9vayAwCnZhbHVlIGNsaWVudF9jb2xsZWN0aW9uX3NldF9lcnJvciA4Nwp2YWx1ZSBzZXJ2ZXJfY29sbGVjdGlvbl9zZXRfb2sgMAp2YWx1ZSBzZXJ2ZXJfY29sbGVjdGlvbl9zZXRfZXJyb3IgODcKb2sgaW52YWxpZF9oYW5kbGVfZmFpbHMKb2sgaW52YWxpZF9oYW5kbGVfZXJyb3IKc3VtbWFyeSAyNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok start_state_ok\nok start_state_byte\nok server_writes_message\nok byte_mode_partial_read_ok\nok byte_mode_rest\nok set_message_mode_ok\nok state_message\nok server_state_unchanged\nok message_mode_partial_read_more_data\nok message_mode_partial_read_error\nok message_mode_partial_read_bytes\nok set_back_to_byte_ok\nok byte_mode_reads_remainder\nok byte_pipe_message_read_refused\nok byte_pipe_message_read_error\nok byte_pipe_message_read_refused_server\nok byte_pipe_message_read_error_server\nok nothing_to_set_ok\nok unknown_mode_bits_refused\nok unknown_mode_bits_error\nok type_bit_refused\nok type_bit_error\nvalue client_collection_set_ok 0\nvalue client_collection_set_error 87\nvalue server_collection_set_ok 0\nvalue server_collection_set_error 87\nok invalid_handle_fails\nok invalid_handle_error\nsummary 24 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 231
+    }
+  ]
+}

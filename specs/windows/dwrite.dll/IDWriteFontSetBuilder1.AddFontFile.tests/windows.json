@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "fs_build",
+      "exe_sha256": "f6a70d7fca2c2641438281b4677087ef216a2d8b264b87e3f58f10fc29cfa319",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlRm9udFNldEJ1aWxkZXIgMHgwMDAwMDAwMCBudWxsIGZhbHNlClFJIElEV3JpdGVGb250U2V0QnVpbGRlcjEgMHgwMDAwMDAwMApDcmVhdGVGb250U2V0IG9mIGFuIGVtcHR5IGJ1aWxkZXI6IDB4MDAwMDAwMDAgZm9udHMgMApBZGRGb250RmlsZSByZWd1bGFyICgwKTogcmVmZXJlbmNlIDB4MDAwMDAwMDAgYWRkIDB4MDAwMDAwMDAKQWRkRm9udEZpbGUgYm9sZCAoMSk6IHJlZmVyZW5jZSAweDAwMDAwMDAwIGFkZCAweDAwMDAwMDAwCkFkZEZvbnRGaWxlIGl0YWxpYyAoMik6IHJlZmVyZW5jZSAweDAwMDAwMDAwIGFkZCAweDAwMDAwMDAwCkFkZEZvbnRGaWxlIG5vdCBhIGZvbnQgKDYpOiByZWZlcmVuY2UgMHgwMDAwMDAwMCBhZGQgMHg4ODk4NTAwMApBZGRGb250RmlsZSBtaXNzaW5nICg0MCk6IHJlZmVyZW5jZSAweDAwMDAwMDAwIGFkZCAweDgwMDcwMDAyCkNyZWF0ZUZvbnRTZXQgMHgwMDAwMDAwMCBmb250cyAzCkNyZWF0ZUZvbnRDb2xsZWN0aW9uRnJvbUZvbnRTZXQgMHgwMDAwMDAwMCBmYW1pbGllcyAxCmZhbWlseSBQb2x5VGVzdCBBbHBoYTogZm9udHMgNgogICAwOiB3NDAwIHM1IHN0MCBzaW0wIGVuLXVzPVJlZ3VsYXIKICAgMTogdzQwMCBzNSBzdDIgc2ltMCBlbi11cz1JdGFsaWMKICAgMjogdzcwMCBzNSBzdDAgc2ltMCBlbi11cz1Cb2xkCiAgIDM6IHc0MDAgczUgc3QxIHNpbTIgZW4tdXM9T2JsaXF1ZQogICA0OiB3NzAwIHM1IHN0MSBzaW0yIGVuLXVzPUJvbGQgT2JsaXF1ZQogICA1OiB3NzAwIHM1IHN0MiBzaW0xIGVuLXVzPUl0YWxpYyBCb2xkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateFontSetBuilder 0x00000000 null false\nQI IDWriteFontSetBuilder1 0x00000000\nCreateFontSet of an empty builder: 0x00000000 fonts 0\nAddFontFile regular (0): reference 0x00000000 add 0x00000000\nAddFontFile bold (1): reference 0x00000000 add 0x00000000\nAddFontFile italic (2): reference 0x00000000 add 0x00000000\nAddFontFile not a font (6): reference 0x00000000 add 0x88985000\nAddFontFile missing (40): reference 0x00000000 add 0x80070002\nCreateFontSet 0x00000000 fonts 3\nCreateFontCollectionFromFontSet 0x00000000 families 1\nfamily PolyTest Alpha: fonts 6\n   0: w400 s5 st0 sim0 en-us=Regular\n   1: w400 s5 st2 sim0 en-us=Italic\n   2: w700 s5 st0 sim0 en-us=Bold\n   3: w400 s5 st1 sim2 en-us=Oblique\n   4: w700 s5 st1 sim2 en-us=Bold Oblique\n   5: w700 s5 st2 sim1 en-us=Italic Bold\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    },
+    {
+      "name": "fs_system",
+      "exe_sha256": "82c34e081d903bb0d8e28d7f5989bb3419875f082f3df3ee6ad02fd1d8af5a94",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0U3lzdGVtRm9udFNldCAweDAwMDAwMDAwIGZvbnQgY291bnQgPj0gNTAgdHJ1ZQp0aGUgZmlyc3QgNDAgZm9udCBmYWNlIHJlZmVyZW5jZXMgYWxsIG1ha2UgZmFjZXMgdHJ1ZSBhbmQgYXJlIGxvY2FsIChsb2NhbGl0eSAyKSB0cnVlCkdldEZvbnRGYWNlUmVmZXJlbmNlKGNvdW50KTogMHg4MDA3MDA1NyBvdXRfbnVsbCB0cnVlCnN5c3RlbSBjb2xsZWN0aW9uIFFJIElEV3JpdGVGb250Q29sbGVjdGlvbjEgMHgwMDAwMDAwMApHZXRGb250U2V0IDB4MDAwMDAwMDAgYXQgbGVhc3QgNTAgZm9udHMgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetSystemFontSet 0x00000000 font count >= 50 true\nthe first 40 font face references all make faces true and are local (locality 2) true\nGetFontFaceReference(count): 0x80070057 out_null true\nsystem collection QI IDWriteFontCollection1 0x00000000\nGetFontSet 0x00000000 at least 50 fonts true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

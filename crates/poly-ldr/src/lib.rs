@@ -52,6 +52,21 @@ pub use poly_ntobj::NtStatus;
 
 /// `DLL_PROCESS_DETACH`, `DLL_PROCESS_ATTACH`, `DLL_THREAD_ATTACH`,
 /// `DLL_THREAD_DETACH` (`winnt.h`).
+/// The generated DLL an import binds to when the function (or the DLL) is
+/// missing and this DLL is on the search path (ADR 0155, `poly-stubs`).
+pub const STUB_DLL: &str = "polystub.dll";
+
+/// The export of [`STUB_DLL`] that stands for `symbol` (a name, or
+/// `#<ordinal>`) of `dll` as an importing module names it: the DLL name
+/// in lower case without `.dll`, `$`, the symbol.
+pub fn stub_key(dll: &[u8], symbol: &str) -> alloc::string::String {
+    let mut name: alloc::string::String = dll.iter().map(|&b| char::from(b.to_ascii_lowercase())).collect();
+    if let Some(short) = name.strip_suffix(".dll") {
+        name = short.into();
+    }
+    alloc::format!("{name}${symbol}")
+}
+
 pub mod reason {
     pub const PROCESS_DETACH: u32 = 0;
     pub const PROCESS_ATTACH: u32 = 1;
