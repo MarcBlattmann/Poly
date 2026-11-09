@@ -386,3 +386,280 @@ fn window_dcs_clip_to_their_visible_region() {
     let mem = u64::from(g.create_compatible_dc(0));
     assert!(!g.set_display_geometry(mem, (0, 0), &[], &[]));
 }
+
+/// A 92-byte `LOGFONTW` (`wingdi.h`) with a height, weight and face name.
+fn logfont(name: &str, height: i32) -> Vec<u8> {
+    let mut b = vec![0u8; 92];
+    b[0..4].copy_from_slice(&height.to_le_bytes());
+    b[16..20].copy_from_slice(&400i32.to_le_bytes());
+    for (i, c) in name.encode_utf16().enumerate() {
+        b[28 + 2 * i..30 + 2 * i].copy_from_slice(&c.to_le_bytes());
+    }
+    b
+}
+
+#[test]
+fn created_fonts_are_mapped_by_name_and_height() {
+    use crate::font::Face;
+    let mut g = Gdi::new();
+    let dc = u64::from(g.create_compatible_dc(0));
+    let mut height_of = |name: &str, h: i32| {
+        let f = u64::from(g.create_font(&logfont(name, h)));
+        g.select_object(dc, f).unwrap();
+        g.text_metrics(dc).unwrap().height
+    };
+    assert_eq!(height_of("Segoe UI", -12), Face::Gui.metrics().height);
+    assert_eq!(height_of("Courier New", -16), Face::AnsiFixed.metrics().height);
+    assert_eq!(height_of("Terminal", -16), Face::OemFixed.metrics().height);
+    assert_eq!(height_of("Arial", -24), Face::System.metrics().height);
+    // A short LOGFONT is the system font's face.
+    let f = u64::from(g.create_font(&[0; 10]));
+    g.select_object(dc, f).unwrap();
+    assert_eq!(g.text_metrics(dc).unwrap(), Face::System.metrics());
+}
+
+#[test]
+fn small_fonts_draw_inside_their_extent_with_descenders() {
+    let mut g = Gdi::new();
+    let (dc, mut px) = dib32(&mut g, 80, 24);
+    px.fill(0x00FF_FFFF);
+    let f = u64::from(g.create_font(&logfont("Tahoma", -11)));
+    g.select_object(dc, f).unwrap();
+    g.set_bk_mode(dc, TRANSPARENT);
+    let s: Vec<u16> = "Hag gypsy".encode_utf16().collect();
+    let (cx, cy) = g.text_extent(dc, &s).unwrap();
+    assert_eq!(cy, 13);
+    g.text_out(dc, 2, 3, &s);
+    let ink: Vec<(i32, i32)> = (0..24)
+        .flat_map(|y| (0..80).map(move |x| (x, y)))
+        .filter(|&(x, y)| px[(y * 80 + x) as usize] != 0x00FF_FFFF)
+        .collect();
+    assert!(ink.len() > 60);
+    // Inside the cell (2, 3, 2 + cx, 3 + 13); the descenders of g, y and p
+    // reach its last rows (descent 2).
+    assert!(ink.iter().all(|&(x, y)| x >= 2 && x < 2 + cx && (3..16).contains(&y)), "{ink:?}");
+    assert_eq!(ink.iter().map(|p| p.1).max(), Some(3 + 12));
+    assert_eq!(ink.iter().map(|p| p.1).min(), Some(3 + 1));
+}
+
+// ----- outline text (ADR 0142): needs the DejaVu fonts (`POLY_FONT_DIR`).
+
+/// A GDI whose font store reads DejaVu from `POLY_FONT_DIR`; `None` (and a
+/// note) where the fonts are not fetched.
+fn gdi_with_fonts() -> Option<Gdi> {
+    if crate::outline::tests::dejavu("DejaVuSans.ttf").is_none() {
+        std::eprintln!("skipped: no DejaVu fonts (POLY_FONT_DIR)");
+        return None;
+    }
+    let mut g = Gdi::new();
+    g.set_font_loader(crate::outline::tests::dejavu);
+    Some(g)
+}
+
+fn white_canvas(g: &mut Gdi, w: i32, h: i32) -> (u64, Vec<u32>) {
+    let (dc, mut px) = dib32(g, w, h);
+    px.fill(0x00FF_FFFF);
+    (dc, px)
+}
+
+fn ink_of(px: &[u32], w: i32) -> Vec<(i32, i32, u32)> {
+    px.iter().enumerate().filter(|(_, v)| **v != 0x00FF_FFFF).map(|(i, &v)| (i as i32 % w, i as i32 / w, v)).collect()
+}
+
+fn utf16(s: &str) -> Vec<u16> {
+    s.encode_utf16().collect()
+}
+
+fn px_fill(px: &[u32], v: u32) {
+    // SAFETY: the DIB's memory is the test's own `Vec`, which the GDI only
+    // borrows by address.
+    unsafe { core::slice::from_raw_parts_mut(px.as_ptr() as *mut u32, px.len()) }.fill(v);
+}
+
+#[test]
+fn logical_fonts_draw_antialiased_glyphs_on_their_baseline() {
+    let Some(mut g) = gdi_with_fonts() else { return };
+    let (dc, px) = white_canvas(&mut g, 90, 30);
+    let f = u64::from(g.create_font(&logfont("Segoe UI", -16)));
+    g.select_object(dc, f).unwrap();
+    g.set_bk_mode(dc, TRANSPARENT);
+    let tm = g.text_metrics(dc).unwrap();
+    assert_eq!((tm.ascent, tm.descent), (15, 4));
+    let s = utf16("Hxg");
+    let (cx, cy) = g.text_extent(dc, &s).unwrap();
+    assert_eq!(cy, tm.height);
+    assert!(g.text_out(dc, 4, 4, &s));
+    let ink = ink_of(&px, 90);
+    assert!(ink.len() > 40);
+    // Grey scale: black, white and the greys between.
+    assert!(ink.iter().any(|&(_, _, v)| v == 0), "a fully covered pixel");
+    let grey = |v: u32| v != 0 && (v & 0xFF) == (v >> 8 & 0xFF) && (v & 0xFF) == (v >> 16 & 0xFF);
+    assert!(ink.iter().any(|&(_, _, v)| grey(v)), "grey pixels");
+    // The glyphs sit inside the cell; capitals end on the baseline (row
+    // 4 + ascent - 1), the descender of g reaches below it.
+    assert!(ink.iter().all(|&(x, y, _)| x >= 3 && x < 4 + cx + 2 && y >= 4 && y < 4 + cy), "{ink:?}");
+    let h_width = g.text_extent(dc, &utf16("H")).unwrap().0;
+    let h_ink: Vec<_> = ink.iter().filter(|&&(x, _, _)| x < 4 + h_width).collect();
+    assert_eq!(h_ink.iter().map(|p| p.1).max(), Some(4 + tm.ascent - 1));
+    assert!(ink.iter().map(|p| p.1).max().unwrap() > 4 + tm.ascent);
+}
+
+#[test]
+fn text_colour_background_and_alignment_follow_the_dc() {
+    let Some(mut g) = gdi_with_fonts() else { return };
+    let (dc, px) = white_canvas(&mut g, 120, 40);
+    let f = u64::from(g.create_font(&logfont("Arial", -14)));
+    g.select_object(dc, f).unwrap();
+    g.set_text_color(dc, rgb(200, 0, 0));
+    g.set_bk_color(dc, rgb(0, 0, 220));
+    let s = utf16("Mm");
+    let (cx, cy) = g.text_extent(dc, &s).unwrap();
+    // OPAQUE: the cell is the background colour, the glyphs red on it.
+    g.text_out(dc, 10, 5, &s);
+    let ink = ink_of(&px, 120);
+    let cell = |x: i32, y: i32| (10..10 + cx).contains(&x) && (5..5 + cy).contains(&y);
+    assert!(ink.iter().all(|&(x, y, _)| cell(x, y)), "only the cell changes");
+    assert_eq!(px[(5 * 120 + 10) as usize], 220, "background (0x00RRGGBB)");
+    assert!(ink.iter().any(|&(_, _, v)| v == 200 << 16), "full coverage is the text colour");
+    // TA_RIGHT | TA_BOTTOM puts the cell's bottom right corner at the point.
+    px_fill(&px, 0x00FF_FFFF);
+    g.set_text_align(dc, TA_RIGHT | 8);
+    g.text_out(dc, 100, 30, &s);
+    let ink = ink_of(&px, 120);
+    assert!(ink.iter().all(|&(x, y, _)| x >= 100 - cx && x < 100 && y >= 30 - cy && y < 30));
+}
+
+#[test]
+fn ext_text_out_fills_clips_and_spaces() {
+    let Some(mut g) = gdi_with_fonts() else { return };
+    let (dc, px) = white_canvas(&mut g, 100, 30);
+    let f = u64::from(g.create_font(&logfont("Courier New", -14)));
+    g.select_object(dc, f).unwrap();
+    g.set_bk_color(dc, rgb(255, 255, 0));
+    let s = utf16("abcdef");
+    // ETO_OPAQUE | ETO_CLIPPED: the rectangle yellow, the text only inside.
+    let r = Rect::new(10, 5, 40, 20);
+    assert!(g.ext_text_out(dc, 5, 5, ETO_OPAQUE | ETO_CLIPPED, Some(r), &s, None));
+    let ink = ink_of(&px, 100);
+    assert!(ink.iter().all(|&(x, y, _)| r.contains_point(x, y)), "nothing outside the rectangle");
+    assert_eq!(px[(19 * 100 + 39) as usize], 0x00FF_FF00, "the rectangle is filled");
+    // lpDx spaces the characters.
+    g.set_bk_mode(dc, TRANSPARENT);
+    let w = g.text_extent(dc, &utf16("i")).unwrap().0;
+    let xs = |g: &mut Gdi, dx: Option<&[i32]>| {
+        px_fill(&px, 0x00FF_FFFF);
+        g.ext_text_out(dc, 0, 5, 0, None, &utf16("ii"), dx);
+        ink_of(&px, 100).iter().map(|p| p.0).collect::<Vec<_>>()
+    };
+    let tight = xs(&mut g, None);
+    let spread = xs(&mut g, Some(&[w + 20, w]));
+    assert_eq!(spread.iter().max().unwrap() - tight.iter().max().unwrap(), 20);
+    // An empty string with ETO_OPAQUE still fills the rectangle.
+    px_fill(&px, 0x00FF_FFFF);
+    g.set_bk_mode(dc, OPAQUE);
+    assert!(g.ext_text_out(dc, 0, 0, ETO_OPAQUE, Some(Rect::new(1, 1, 4, 3)), &[], None));
+    assert_eq!(ink_of(&px, 100).len(), 6);
+    assert!(!g.ext_text_out(0xdead, 0, 0, 0, None, &s, None));
+}
+
+#[test]
+fn underline_and_strike_out_come_from_the_logfont() {
+    let Some(mut g) = gdi_with_fonts() else { return };
+    let (dc, px) = white_canvas(&mut g, 60, 30);
+    g.set_bk_mode(dc, TRANSPARENT);
+    let plain = u64::from(g.create_font(&logfont("Tahoma", -16)));
+    let mut lf = logfont("Tahoma", -16);
+    lf[21] = 1;
+    let under = u64::from(g.create_font(&lf));
+    let s = utf16("lll");
+    g.select_object(dc, plain).unwrap();
+    let tm = g.text_metrics(dc).unwrap();
+    g.text_out(dc, 2, 2, &s);
+    let rows_plain: std::collections::BTreeSet<i32> = ink_of(&px, 60).iter().map(|p| p.1).collect();
+    px_fill(&px, 0x00FF_FFFF);
+    g.select_object(dc, under).unwrap();
+    assert_eq!(g.text_metrics(dc).unwrap().underlined, 1);
+    g.text_out(dc, 2, 2, &s);
+    let rows_under: std::collections::BTreeSet<i32> = ink_of(&px, 60).iter().map(|p| p.1).collect();
+    // The new rows are below the baseline, inside the cell.
+    let extra: Vec<_> = rows_under.difference(&rows_plain).collect();
+    assert!(!extra.is_empty() && extra.iter().all(|&&y| y >= 2 + tm.ascent && y < 2 + tm.height), "{extra:?}");
+}
+
+#[test]
+fn draw_text_aligns_ellipsizes_and_underlines_prefixes() {
+    use crate::text::*;
+    let Some(mut g) = gdi_with_fonts() else { return };
+    let (dc, px) = white_canvas(&mut g, 160, 60);
+    let f = u64::from(g.create_font(&logfont("Segoe UI", -15)));
+    g.select_object(dc, f).unwrap();
+    g.set_bk_mode(dc, TRANSPARENT);
+    let mut r = Rect::new(10, 10, 150, 40);
+    // DT_CENTER | DT_VCENTER | DT_SINGLELINE: centred in both directions.
+    let s = utf16("Centre");
+    let (cx, cy) = g.text_extent(dc, &s).unwrap();
+    g.draw_text(dc, &s, &mut r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    let ink = ink_of(&px, 160);
+    let x0 = 10 + (140 - cx) / 2;
+    let y0 = 10 + (30 - cy) / 2;
+    assert!(ink.iter().all(|&(x, y, _)| x >= x0 - 1 && x <= x0 + cx && y >= y0 && y < y0 + cy), "{ink:?}");
+    // DT_END_ELLIPSIS in a narrow rectangle: the ink stays inside, the
+    // modified string ends in dots.
+    px_fill(&px, 0x00FF_FFFF);
+    let long = utf16("A rather long caption");
+    let mut r = Rect::new(10, 10, 80, 30);
+    let (_, modified) = g.draw_text_ex(dc, &long, &mut r, DT_SINGLELINE | DT_END_ELLIPSIS | DT_MODIFYSTRING, 0);
+    let m = modified.expect("the text did not fit");
+    assert!(m.ends_with(&utf16("...")) && m.len() < long.len());
+    assert!(g.text_extent(dc, &m).unwrap().0 <= 70);
+    assert!(ink_of(&px, 160).iter().all(|&(x, _, _)| (10..80).contains(&x)));
+    // Text that fits is not modified.
+    let mut r = Rect::new(10, 10, 150, 30);
+    assert_eq!(
+        g.draw_text_ex(dc, &utf16("Short"), &mut r, DT_SINGLELINE | DT_END_ELLIPSIS | DT_MODIFYSTRING, 0).1,
+        None
+    );
+    // "&F" underlines F unless DT_HIDEPREFIX; DT_PREFIXONLY draws only the
+    // underline.
+    let count = |g: &mut Gdi, fmt: u32| {
+        px_fill(&px, 0x00FF_FFFF);
+        let mut r = Rect::new(10, 10, 150, 40);
+        g.draw_text(dc, &utf16("&File"), &mut r, DT_SINGLELINE | fmt);
+        ink_of(&px, 160)
+    };
+    let shown = count(&mut g, 0);
+    let hidden = count(&mut g, DT_HIDEPREFIX);
+    let only = count(&mut g, DT_PREFIXONLY);
+    assert!(shown.len() > hidden.len());
+    assert!(hidden.iter().map(|p| p.1).max() < shown.iter().map(|p| p.1).max(), "the underline is the lowest row");
+    assert!(!only.is_empty() && only.len() < hidden.len());
+    let f_width = g.text_extent(dc, &utf16("F")).unwrap().0;
+    assert!(only.iter().all(|&(x, _, _)| (10..10 + f_width).contains(&x)));
+}
+
+#[test]
+fn text_faces_widths_and_fallback() {
+    let Some(mut g) = gdi_with_fonts() else { return };
+    let dc = u64::from(g.create_compatible_dc(0));
+    let f = u64::from(g.create_font(&logfont("Segoe UI", -12)));
+    g.select_object(dc, f).unwrap();
+    assert_eq!(g.text_face(dc).unwrap(), utf16("Segoe UI"));
+    let (_, fit, running) = g.text_extent_ex(dc, &utf16("Hello"), 25).unwrap();
+    assert_eq!(running.len(), 5);
+    assert!(fit < 5 && running[fit - 1] <= 25 && running[fit] > 25);
+    let w = g.char_widths(dc, 'a' as u32, 'c' as u32).unwrap();
+    assert_eq!(w.len(), 3);
+    assert_eq!(w[0], g.text_extent(dc, &utf16("a")).unwrap().0);
+    assert!(g.char_widths(dc, 5, 4).is_none());
+    // A GDI with no font files draws the bitmap stand-ins.
+    let mut plain = Gdi::new();
+    let dc2 = u64::from(plain.create_compatible_dc(0));
+    let f2 = u64::from(plain.create_font(&logfont("Segoe UI", -12)));
+    plain.select_object(dc2, f2).unwrap();
+    assert_eq!(plain.text_metrics(dc2).unwrap().height, 13);
+    assert_eq!(plain.text_face(dc2).unwrap(), utf16("Segoe UI"));
+    // Stock fonts keep the sheets' bitmap faces whatever the store has.
+    let stock = u64::from(g.stock(13));
+    g.select_object(dc, stock).unwrap();
+    assert_eq!(g.text_metrics(dc).unwrap().height, 16);
+}
