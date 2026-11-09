@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "c7e925aa9346",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T17:41:45Z",
+  "tests": [
+    {
+      "name": "afr_errors",
+      "exe_sha256": "65a457ba9967920bec9f338a639c87d4f0c1e5b907686ac824228b642e5ab106",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsaWQgZmlsZSwgRlJfUFJJVkFURTogcmV0dXJuZWQgMSBlcnJvciAwCnZhbGlkIGZpbGUsIEZSX1BSSVZBVEV8RlJfTk9UX0VOVU06IHJldHVybmVkIDEgZXJyb3IgMAp2YWxpZCBmaWxlLCBmbGFncyAwOiByZXR1cm5lZCAxIGVycm9yIDAKdmFsaWQgZmlsZSwgRlJfTk9UX0VOVU0gb25seTogcmV0dXJuZWQgMSBlcnJvciAwCnZhbGlkIGZpbGUsIGZsYWdzIDE6IHJldHVybmVkIDAgZXJyb3IgODcKdmFsaWQgZmlsZSwgZmxhZ3MgMHhGRkZGOiByZXR1cm5lZCAwIGVycm9yIDg3CmVtcHR5IGZpbGU6IHJldHVybmVkIDAgZXJyb3IgMApvayBhbiBlbXB0eSBmaWxlIGFkZHMgbm90aGluZwpqdW5rIGZpbGU6IHJldHVybmVkIDAgZXJyb3IgMApvayBhIGp1bmsgZmlsZSBhZGRzIG5vdGhpbmcKZm9udCBjdXQgaW4gaGFsZjogcmV0dXJuZWQgMCBlcnJvciAwCmZpbGUgbm90IHRoZXJlOiByZXR1cm5lZCAwIGVycm9yIDIKb2sgYSBtaXNzaW5nIGZpbGUgYWRkcyBub3RoaW5nCnN1bW1hcnkgMyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "valid file, FR_PRIVATE: returned 1 error 0\nvalid file, FR_PRIVATE|FR_NOT_ENUM: returned 1 error 0\nvalid file, flags 0: returned 1 error 0\nvalid file, FR_NOT_ENUM only: returned 1 error 0\nvalid file, flags 1: returned 0 error 87\nvalid file, flags 0xFFFF: returned 0 error 87\nempty file: returned 0 error 0\nok an empty file adds nothing\njunk file: returned 0 error 0\nok a junk file adds nothing\nfont cut in half: returned 0 error 0\nfile not there: returned 0 error 2\nok a missing file adds nothing\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 63
+    }
+  ]
+}

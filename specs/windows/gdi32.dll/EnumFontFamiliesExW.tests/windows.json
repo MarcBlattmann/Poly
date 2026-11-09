@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "c7e925aa9346",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T17:41:45Z",
+  "tests": [
+    {
+      "name": "enum_notenum",
+      "exe_sha256": "e0b9bfdc84d729c8e2813a75482bcbbc16116ded8e0f08286f848028e2956835",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlIGFkZGluZzogU2FucyBsaXN0ZWQgMCwgVGFsbCBsaXN0ZWQgMApvayBuZWl0aGVyIGZhbWlseSBpcyBsaXN0ZWQgYmVmb3JlIGFkZGluZwpTYW5zIGFkZGVkIGZyb20gbWVtb3J5OiBTYW5zIGxpc3RlZCAwIHRpbWVzLCB1c2FibGUgdHJ1ZQpvayBhIG1lbW9yeSBmb250IGlzIHVzYWJsZSBieSBuYW1lClRhbGwgYWRkZWQgZnJvbSBhIGZpbGUgd2l0aCBGUl9QUklWQVRFfEZSX05PVF9FTlVNIChyZXR1cm5lZCAxKTogVGFsbCBsaXN0ZWQgMCB0aW1lcywgdXNhYmxlIHRydWUKb2sgYW4gRlJfTk9UX0VOVU0gZm9udCBpcyB1c2FibGUKb2sgYW4gRlJfTk9UX0VOVU0gZm9udCBpcyBub3QgbGlzdGVkCnJlbW92ZSB0aGUgTk9UX0VOVU0gZm9udDogMTsgdXNhYmxlIGFmdGVyd2FyZHMgZmFsc2UKVGFsbCBhZGRlZCB3aXRoIEZSX1BSSVZBVEUgb25seSAocmV0dXJuZWQgMSk6IFRhbGwgbGlzdGVkIDEgdGltZXMKb2sgYW4gRlJfUFJJVkFURSBmaWxlIGZvbnQgaXMgbGlzdGVkCmFmdGVyIHJlbW92aW5nIGV2ZXJ5dGhpbmc6IFNhbnMgbGlzdGVkIDAsIFRhbGwgbGlzdGVkIDAKb2sgbm90aGluZyBpcyBsaXN0ZWQgYWZ0ZXIgcmVtb3ZpbmcKc3VtbWFyeSA2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before adding: Sans listed 0, Tall listed 0\nok neither family is listed before adding\nSans added from memory: Sans listed 0 times, usable true\nok a memory font is usable by name\nTall added from a file with FR_PRIVATE|FR_NOT_ENUM (returned 1): Tall listed 0 times, usable true\nok an FR_NOT_ENUM font is usable\nok an FR_NOT_ENUM font is not listed\nremove the NOT_ENUM font: 1; usable afterwards false\nTall added with FR_PRIVATE only (returned 1): Tall listed 1 times\nok an FR_PRIVATE file font is listed\nafter removing everything: Sans listed 0, Tall listed 0\nok nothing is listed after removing\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    },
+    {
+      "name": "enum_system",
+      "exe_sha256": "f05bd3033e05a7ab203670e19c0054a053eeef000c064df7fe940ea54bf9308b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QXJpYWw6IGF0IGxlYXN0IG9uZSBmYWNlIGxpc3RlZCB0cnVlLCBvbmx5IHRoaXMgZmFtaWx5IHRydWUsIGFsbCBUcnVlVHlwZSB0cnVlLCBoYXMgYm9sZCB0cnVlLCBoYXMgaXRhbGljIHRydWUsIGhhcyBmaXhlZCBwaXRjaCBmYWNlcyBmYWxzZTsgcmV0dXJuZWQgbm9uemVybyB0cnVlCm9rIHRoZSBmYW1pbHkgaXMgbGlzdGVkIHdpdGggb25seSBpdHMgb3duIFRydWVUeXBlIGZhY2VzCm9rIHRoZSBmYW1pbHkgaGFzIGEgYm9sZCBhbmQgYW4gaXRhbGljIGZhY2UKVGltZXMgTmV3IFJvbWFuOiBhdCBsZWFzdCBvbmUgZmFjZSBsaXN0ZWQgdHJ1ZSwgb25seSB0aGlzIGZhbWlseSB0cnVlLCBhbGwgVHJ1ZVR5cGUgdHJ1ZSwgaGFzIGJvbGQgdHJ1ZSwgaGFzIGl0YWxpYyB0cnVlLCBoYXMgZml4ZWQgcGl0Y2ggZmFjZXMgZmFsc2U7IHJldHVybmVkIG5vbnplcm8gdHJ1ZQpvayB0aGUgZmFtaWx5IGlzIGxpc3RlZCB3aXRoIG9ubHkgaXRzIG93biBUcnVlVHlwZSBmYWNlcwpvayB0aGUgZmFtaWx5IGhhcyBhIGJvbGQgYW5kIGFuIGl0YWxpYyBmYWNlCkNvdXJpZXIgTmV3OiBhdCBsZWFzdCBvbmUgZmFjZSBsaXN0ZWQgdHJ1ZSwgb25seSB0aGlzIGZhbWlseSB0cnVlLCBhbGwgVHJ1ZVR5cGUgdHJ1ZSwgaGFzIGJvbGQgdHJ1ZSwgaGFzIGl0YWxpYyB0cnVlLCBoYXMgZml4ZWQgcGl0Y2ggZmFjZXMgdHJ1ZTsgcmV0dXJuZWQgbm9uemVybyB0cnVlCm9rIHRoZSBmYW1pbHkgaXMgbGlzdGVkIHdpdGggb25seSBpdHMgb3duIFRydWVUeXBlIGZhY2VzCm9rIHRoZSBmYW1pbHkgaGFzIGEgYm9sZCBhbmQgYW4gaXRhbGljIGZhY2UKQ291cmllciBOZXc6IGF0IGxlYXN0IG9uZSBmYWNlIGxpc3RlZCB0cnVlLCBvbmx5IHRoaXMgZmFtaWx5IHRydWUsIGFsbCBUcnVlVHlwZSB0cnVlLCBoYXMgYm9sZCB0cnVlLCBoYXMgaXRhbGljIHRydWUsIGhhcyBmaXhlZCBwaXRjaCBmYWNlcyB0cnVlOyByZXR1cm5lZCBub256ZXJvIHRydWUKb2sgQ291cmllciBOZXcgZmFjZXMgYXJlIGZpeGVkIHBpdGNoCkFyaWFsOiBhdCBsZWFzdCBvbmUgZmFjZSBsaXN0ZWQgdHJ1ZSwgb25seSB0aGlzIGZhbWlseSB0cnVlLCBhbGwgVHJ1ZVR5cGUgdHJ1ZSwgaGFzIGJvbGQgdHJ1ZSwgaGFzIGl0YWxpYyB0cnVlLCBoYXMgZml4ZWQgcGl0Y2ggZmFjZXMgZmFsc2U7IHJldHVybmVkIG5vbnplcm8gdHJ1ZQpvayBBcmlhbCBmYWNlcyBhcmUgbm90IGZpeGVkIHBpdGNoCk5vU3VjaEZhbWlseUFueXdoZXJlOiBhdCBsZWFzdCBvbmUgZmFjZSBsaXN0ZWQgZmFsc2UsIG9ubHkgdGhpcyBmYW1pbHkgdHJ1ZSwgYWxsIFRydWVUeXBlIHRydWUsIGhhcyBib2xkIGZhbHNlLCBoYXMgaXRhbGljIGZhbHNlLCBoYXMgZml4ZWQgcGl0Y2ggZmFjZXMgZmFsc2U7IHJldHVybmVkIG5vbnplcm8gdHJ1ZQpvayBhbiB1bmtub3duIGZhbWlseSBsaXN0cyBub3RoaW5nCmFsbCBmYW1pbGllczogbW9yZSB0aGFuIDEwIGxpc3RlZDogdHJ1ZQpvayBtYW55IGZhbWlsaWVzIGFyZSBsaXN0ZWQKc3VtbWFyeSAxMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Arial: at least one face listed true, only this family true, all TrueType true, has bold true, has italic true, has fixed pitch faces false; returned nonzero true\nok the family is listed with only its own TrueType faces\nok the family has a bold and an italic face\nTimes New Roman: at least one face listed true, only this family true, all TrueType true, has bold true, has italic true, has fixed pitch faces false; returned nonzero true\nok the family is listed with only its own TrueType faces\nok the family has a bold and an italic face\nCourier New: at least one face listed true, only this family true, all TrueType true, has bold true, has italic true, has fixed pitch faces true; returned nonzero true\nok the family is listed with only its own TrueType faces\nok the family has a bold and an italic face\nCourier New: at least one face listed true, only this family true, all TrueType true, has bold true, has italic true, has fixed pitch faces true; returned nonzero true\nok Courier New faces are fixed pitch\nArial: at least one face listed true, only this family true, all TrueType true, has bold true, has italic true, has fixed pitch faces false; returned nonzero true\nok Arial faces are not fixed pitch\nNoSuchFamilyAnywhere: at least one face listed false, only this family true, all TrueType true, has bold false, has italic false, has fixed pitch faces false; returned nonzero true\nok an unknown family lists nothing\nall families: more than 10 listed: true\nok many families are listed\nsummary 10 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "c7e925aa9346",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T17:41:45Z",
+  "tests": [
+    {
+      "name": "rfr_errors",
+      "exe_sha256": "02999068e1060cd7bf50b6d0c6b5937813f58aee652311330bad8f40dc42cdb3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBmaWxlIHRoYXQgZXhpc3RzIGJ1dCB3YXMgbmV2ZXIgYWRkZWQ6IHJldHVybmVkIDAgZXJyb3IgMApvayByZW1vdmluZyB3aGF0IHdhcyBub3QgYWRkZWQgZmFpbHMKc2FtZSwgZmxhZ3MgMDogcmV0dXJuZWQgMCBlcnJvciAwCm9rIHJlbW92aW5nIHdoYXQgd2FzIG5vdCBhZGRlZCB3aXRoIGZsYWdzIDAgZmFpbHMKYSBmaWxlIHRoYXQgZG9lcyBub3QgZXhpc3Q6IHJldHVybmVkIDAgZXJyb3IgMgpvayBhIG1pc3NpbmcgZmlsZSBmYWlscwphbiBlbXB0eSBwYXRoOiByZXR1cm5lZCAwIGVycm9yIDg3Cm9rIGFuIGVtcHR5IHBhdGggZmFpbHMKZmxhZ3MgMTogcmV0dXJuZWQgMCBlcnJvciA4NwpvayBmbGFncyAxIGZhaWwKZmxhZ3MgMHhGRkZGOiByZXR1cm5lZCAwIGVycm9yIDg3Cm9rIGZsYWdzIDB4RkZGRiBmYWlsCmEgbmFtZSB3aXRoIGEgd2lsZGNhcmQ6IHJldHVybmVkIDAgZXJyb3IgMgpzdW1tYXJ5IDYgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a file that exists but was never added: returned 0 error 0\nok removing what was not added fails\nsame, flags 0: returned 0 error 0\nok removing what was not added with flags 0 fails\na file that does not exist: returned 0 error 2\nok a missing file fails\nan empty path: returned 0 error 87\nok an empty path fails\nflags 1: returned 0 error 87\nok flags 1 fail\nflags 0xFFFF: returned 0 error 87\nok flags 0xFFFF fail\na name with a wildcard: returned 0 error 2\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

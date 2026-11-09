@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "c7e925aa9346",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T17:41:45Z",
+  "tests": [
+    {
+      "name": "sta_basic",
+      "exe_sha256": "74c286ec7f6391a53849fa9732c6be0c87beada2b29037f2288bc5e8ff1bfd19",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBuZXcgREM6IEdldFRleHRBbGlnbiAwCm9rIGEgbmV3IERDIGhhcyBhbGlnbm1lbnQgMApTZXRUZXh0QWxpZ24oVEFfUklHSFR8VEFfQk9UVE9NKSByZXR1cm5lZCAwOyBub3cgMTAKb2sgU2V0VGV4dEFsaWduIHJldHVybnMgdGhlIHByZXZpb3VzIHZhbHVlCm9rIEdldFRleHRBbGlnbiByZWFkcyBpdCBiYWNrClNldFRleHRBbGlnbihUQV9DRU5URVJ8VEFfQkFTRUxJTkV8VEFfVVBEQVRFQ1ApIHJldHVybmVkIDEwOyBub3cgMzEKb2sgdGhlIHByZXZpb3VzIHZhbHVlIGNvbWVzIGJhY2sKdmFsdWUgMHgzOiByZXR1cm5lZCAwOyBHZXRUZXh0QWxpZ24gMHgzCnZhbHVlIDB4NDogcmV0dXJuZWQgMDsgR2V0VGV4dEFsaWduIDB4NAp2YWx1ZSAweDU6IHJldHVybmVkIDA7IEdldFRleHRBbGlnbiAweDUKdmFsdWUgMHg3OiByZXR1cm5lZCAwOyBHZXRUZXh0QWxpZ24gMHg3CnZhbHVlIDB4MTA6IHJldHVybmVkIDA7IEdldFRleHRBbGlnbiAweDEwCnZhbHVlIDB4MjA6IHJldHVybmVkIDA7IEdldFRleHRBbGlnbiAweDIwCnZhbHVlIDB4MTAwOiByZXR1cm5lZCAwOyBHZXRUZXh0QWxpZ24gMHgxMDAKdmFsdWUgMHhmZmZmZmZmZjogcmV0dXJuZWQgMDsgR2V0VGV4dEFsaWduIDB4ZmZmZmZmZmYKYW5vdGhlciBEQyBpcyBub3QgYWZmZWN0ZWQ6IDAKb2sgYW5vdGhlciBEQyBrZWVwcyBpdHMgb3duIGFsaWdubWVudApTYXZlREMgLyBSZXN0b3JlREM6IGR1cmluZyAweDYsIGFmdGVyIDB4YQpvayBSZXN0b3JlREMgYnJpbmdzIHRoZSBhbGlnbm1lbnQgYmFjawpzdW1tYXJ5IDYgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a new DC: GetTextAlign 0\nok a new DC has alignment 0\nSetTextAlign(TA_RIGHT|TA_BOTTOM) returned 0; now 10\nok SetTextAlign returns the previous value\nok GetTextAlign reads it back\nSetTextAlign(TA_CENTER|TA_BASELINE|TA_UPDATECP) returned 10; now 31\nok the previous value comes back\nvalue 0x3: returned 0; GetTextAlign 0x3\nvalue 0x4: returned 0; GetTextAlign 0x4\nvalue 0x5: returned 0; GetTextAlign 0x5\nvalue 0x7: returned 0; GetTextAlign 0x7\nvalue 0x10: returned 0; GetTextAlign 0x10\nvalue 0x20: returned 0; GetTextAlign 0x20\nvalue 0x100: returned 0; GetTextAlign 0x100\nvalue 0xffffffff: returned 0; GetTextAlign 0xffffffff\nanother DC is not affected: 0\nok another DC keeps its own alignment\nSaveDC / RestoreDC: during 0x6, after 0xa\nok RestoreDC brings the alignment back\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/DrawTextExW.yaml
+id: windows/api/user32.dll/DrawTextExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; text is drawn into memory DCs with 32-bit DIB sections, so no desktop is needed), two runs each with identical output, and two complete recordings with identical output"
+  observed_by: spec-win-text
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions named here (CreateFontIndirectW, LOGFONTW, TEXTMETRICW, GetTextExtentPoint32W, ExtTextOutW, DrawText, DrawTextEx, DRAWTEXTPARAMS, AddFontMemResourceEx, AddFontResourceEx, EnumFontFamiliesEx, SetTextAlign); wingdi.h and winuser.h for constants and layouts. Wine's conformance tests were not read for the values here.
+summary: >
+  DrawTextW with margins, a tab length and a count of the characters drawn.
+interface:
+  signature: "int DrawTextExW(HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp)"
+rules:
+  null_params: "A NULL parameter block behaves like DrawTextW."
+  margins: "iLeftMargin and iRightMargin shrink the rectangle the text is laid out in and aligned within: \"AB\" with a left margin of 10 starts at 20 instead of 10; DT_RIGHT with left margin 10 ends at 130 (the rectangle's right edge), with right margin 10 at 120; both margins 10 with DT_CENTER centre it in the narrowed rectangle; with DT_CALCRECT the margins are added to the measured width (left 10: 30 wide instead of 20; 5 and 7: 32); negative margins shift the text outside the rectangle's left edge (clipped); margins larger than the rectangle draw nothing. DT_WORDBREAK wraps at the narrowed width."
+  tablength: "With DT_TABSTOP, iTabLength is the tab stop in average character widths (PolyTest Sans -16, average width 8: iTabLength 4 puts the 'B' after \"A\\t\" at 32, 2 at 16); iTabLength 0 and no DT_TABSTOP use the default of 8."
+  length_drawn: "uiLengthDrawn is the number of characters processed: the whole text (2 for \"AB\", 5 for \"AB AB\") when it fits, 8 of \"AB\\nAB\\nAB\" when only two lines fit (the lines that were laid out), 10 of \"AAAA BBBB AAAA\" when one wrapped line fits; with DT_CALCRECT it is the number of characters measured; an empty string 0. DT_NOCLIP draws all lines (8)."
+  cbsize: "cbSize must be 20 (sizeof(DRAWTEXTPARAMS))."
+errors:
+  cbsize: "A cbSize of 0, 16, 19, 21, 24 or 28: 0, ERROR_INVALID_PARAMETER (87); nothing is drawn and uiLengthDrawn is not written."
+side_effects: "none beyond the rules above"
+threading: "a DC, a font and a font resource belong to the process; fonts added from memory or with FR_PRIVATE are visible to the adding process only"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing gdi32.dll, user32.dll and kernel32.dll by name, each file carrying its own declarations (Learn prototypes, wingdi.h / winuser.h constants) and its own TrueType writer. No test depends on the pixels or the metrics of a Microsoft font (the owner's decision of 2026-11-09: Poly cannot ship those fonts): text is drawn with fonts the test makes itself and adds with AddFontMemResourceEx or AddFontResourceExW(FR_PRIVATE), so Windows and Poly use the same font file, and tests on installed families print only relations that hold for every font. The tests make their own TrueType fonts (the same 14-glyph table in every file, units per em 1024, every coordinate a multiple of 64 units so that every glyph edge lies on a pixel boundary at lfHeight -16): 'PolyTest Sans' (OS/2 winAscent 768, winDescent 256, hhea ascender 768, descender -256, line gap 128), 'PolyTest Tall' (winAscent 896, winDescent 320, no line gap), 'PolyTest Mono' (Sans metrics, every advance 640, post isFixedPitch, panose proportion 9) and the Bold and Italic faces of the Sans family (the 'A' is 13 and 14 pixels wide instead of 12 at -16). Advances at 16 pixels per em: space 6, '&' 9, '-' 6, '.' 4, 'A' 12, 'B' 8, 'M' 12, 'W' 16, backslash 6, 'g' 10, 'i' 4, U+00E9 11, U+20AC 14, .notdef 10. A font reaches GDI through AddFontMemResourceEx or AddFontResourceExW(FR_PRIVATE); GDI refused a font whose name table had only the name IDs 1, 2, 4 and 6, so the tests' fonts carry IDs 0 to 6. Tests on installed families (Arial, Times New Roman, Courier New, Segoe UI, Tahoma, Verdana, Consolas and the stock fonts) print and check only relations that hold for every font, never their pixels or metrics. Drawing goes into a 32-bit top-down DIB section in a memory DC, bi-level (lfQuality NONANTIALIASED) where pixels are compared, white text on a dark blue background over a grey surface. Observations are numbers, pixel boxes, counts and rows of pixels as text, never handles, addresses or times.
+not_covered: >
+  The tab length together with DT_CALCRECT (not allowed by the flag layout), margins with DT_VCENTER.

@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/gdi32.dll/GetTextExtentPoint32W.yaml
+id: windows/api/gdi32.dll/GetTextExtentPoint32W
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; text is drawn into memory DCs with 32-bit DIB sections, so no desktop is needed), two runs each with identical output, and two complete recordings with identical output"
+  observed_by: spec-win-text
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions named here (CreateFontIndirectW, LOGFONTW, TEXTMETRICW, GetTextExtentPoint32W, ExtTextOutW, DrawText, DrawTextEx, DRAWTEXTPARAMS, AddFontMemResourceEx, AddFontResourceEx, EnumFontFamiliesEx, SetTextAlign); wingdi.h and winuser.h for constants and layouts. Wine's conformance tests were not read for the values here.
+summary: >
+  The width and height of a string in the font of a DC. Also covers GetTextExtentPointW, which behaves the same (gte_private compares them).
+interface:
+  signature: "BOOL GetTextExtentPoint32W(HDC hdc, LPCWSTR lpString, int c, LPSIZE psizl)"
+rules:
+  advances: "The width is the sum of the advances of the characters, each the file's advance scaled to the em and rounded to whole pixels, with no kerning; the height is tmHeight. PolyTest Sans at -16: space 6, '&' 9, '-' 6, '.' 4, 'A' 12, 'B' 8, 'M' 12, 'W' 16, backslash 6, 'g' 10, 'i' 4, U+00E9 11, U+20AC 14; \"AB gi\" is 40x16. gte_private prints the advances of every glyph at 14 sizes from -8 to -40, which shows the rounding, and for PolyTest Mono and Tall."
+  empty: "An empty string is 0x0."
+  count: "Only the first c characters count: counts 0 to 5 of \"AB gi\" give 0x0, 12x16, 20x16, 26x16, 36x16, 40x16. Count 0 with a NULL string succeeds with 0x0."
+  line_breaks: "Tab, line feed and carriage return have zero width."
+  long: "9000 characters of 'A' measure 108000x16: there is no limit at 8192."
+  independent: "The measurement does not depend on the text colour, background mode or alignment of the DC."
+  relations: "For installed TrueType families at sizes -9 to -32: the width of a string is the sum of the widths of its characters, its height is tmHeight, a longer prefix is never narrower, GetTextExtentExPointW's last running extent is the total, GetCharWidth32W equals the one-character extent, and the width at twice the size is twice the width within one pixel per character (gte_system)."
+errors:
+  bad_dc: "A NULL DC: FALSE, ERROR_INVALID_PARAMETER (87); the size is left alone."
+  negative_count: "A count of -1 or -5: FALSE, error 87; the size is left alone."
+side_effects: "none beyond the rules above"
+threading: "a DC, a font and a font resource belong to the process; fonts added from memory or with FR_PRIVATE are visible to the adding process only"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing gdi32.dll, user32.dll and kernel32.dll by name, each file carrying its own declarations (Learn prototypes, wingdi.h / winuser.h constants) and its own TrueType writer. No test depends on the pixels or the metrics of a Microsoft font (the owner's decision of 2026-11-09: Poly cannot ship those fonts): text is drawn with fonts the test makes itself and adds with AddFontMemResourceEx or AddFontResourceExW(FR_PRIVATE), so Windows and Poly use the same font file, and tests on installed families print only relations that hold for every font. The tests make their own TrueType fonts (the same 14-glyph table in every file, units per em 1024, every coordinate a multiple of 64 units so that every glyph edge lies on a pixel boundary at lfHeight -16): 'PolyTest Sans' (OS/2 winAscent 768, winDescent 256, hhea ascender 768, descender -256, line gap 128), 'PolyTest Tall' (winAscent 896, winDescent 320, no line gap), 'PolyTest Mono' (Sans metrics, every advance 640, post isFixedPitch, panose proportion 9) and the Bold and Italic faces of the Sans family (the 'A' is 13 and 14 pixels wide instead of 12 at -16). Advances at 16 pixels per em: space 6, '&' 9, '-' 6, '.' 4, 'A' 12, 'B' 8, 'M' 12, 'W' 16, backslash 6, 'g' 10, 'i' 4, U+00E9 11, U+20AC 14, .notdef 10. A font reaches GDI through AddFontMemResourceEx or AddFontResourceExW(FR_PRIVATE); GDI refused a font whose name table had only the name IDs 1, 2, 4 and 6, so the tests' fonts carry IDs 0 to 6. Tests on installed families (Arial, Times New Roman, Courier New, Segoe UI, Tahoma, Verdana, Consolas and the stock fonts) print and check only relations that hold for every font, never their pixels or metrics. Drawing goes into a 32-bit top-down DIB section in a memory DC, bi-level (lfQuality NONANTIALIASED) where pixels are compared, white text on a dark blue background over a grey surface. Observations are numbers, pixel boxes, counts and rows of pixels as text, never handles, addresses or times.
+not_covered: >
+  Characters the font lacks (GDI measures those with a substitute font that depends on the installed fonts), control characters other than tab, LF and CR, surrogate pairs, mapping modes other than MM_TEXT, SetTextCharacterExtra / SetTextJustification.

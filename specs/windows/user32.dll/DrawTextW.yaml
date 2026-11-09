@@ -1,55 +1,43 @@
 # Spec sheet. Describes behaviour only: no code, no internals.
-# Path: specs/<os>/<component>/<symbol>.yaml
+# Path: specs/windows/user32.dll/DrawTextW.yaml
 id: windows/api/user32.dll/DrawTextW
 oracle:
   os: "Windows 11 Home 25H2 (build 26200.9711), x64"
-  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
-  observed_by: spec-win-gui-a
-  date: 2026-11-02
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; text is drawn into memory DCs with 32-bit DIB sections, so no desktop is needed), two runs each with identical output, and two complete recordings with identical output"
+  observed_by: spec-win-text
+  date: 2026-11-09
 sources: >
-  Observations of our own test programs on the machine above. Microsoft
-  Learn reference pages of the functions and messages named here, "About
-  Messages and Message Queues", "Window Features", "About Painting and
-  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
-  for constants and layouts. Wine's tests were not read.
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions named here (CreateFontIndirectW, LOGFONTW, TEXTMETRICW, GetTextExtentPoint32W, ExtTextOutW, DrawText, DrawTextEx, DRAWTEXTPARAMS, AddFontMemResourceEx, AddFontResourceEx, EnumFontFamiliesEx, SetTextAlign); wingdi.h and winuser.h for constants and layouts. Wine's conformance tests were not read for the values here.
 summary: >
-  Draws or measures formatted text in a rectangle with the DC's font and
-  colours. Returns the height of the text (for DT_VCENTER/DT_BOTTOM single
-  lines the offset from the rectangle's top to the text's bottom).
+  Draws or measures formatted text in a rectangle with the DC's font and colours. Returns the height of the text (for DT_VCENTER/DT_BOTTOM single lines the offset from the rectangle's top to the text's bottom).
 interface:
-  signature: "int DrawTextW(HDC hdc, LPCWSTR text, int count, RECT* rect, UINT format)"
+  signature: "int DrawTextW(HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc, UINT format)"
 rules:
-  calcrect: "DT_CALCRECT draws nothing and sets right/bottom: \"Hello\" with the system font -> 34x16, returns 16; count 3 -> 22 wide; a \"\\n\" makes two lines (32) unless DT_SINGLELINE (one line, the newline measured as a character); DT_WORDBREAK at width 60 wraps \"the quick brown fox jumps\" into 4 lines (64, width 58), a word longer than the width stays on one line; a tab without DT_EXPANDTABS is one character wide, with it 8 average character widths; \"\" returns 16 with DT_SINGLELINE and 1 (height 0) without"
-  prefix: "\"&File\" measures as \"File\" (24 wide), with DT_NOPREFIX as \"&File\" (33); \"A&&B\" as \"A&B\"; no underline is drawn (keyboard cues hidden)"
-  alignment: "in a 100x40 rect at (10,10), \"Text\" (28x16): DT_LEFT|DT_TOP cell at 10,10; DT_CENTER at 46; DT_RIGHT ends at 110; DT_VCENTER|DT_SINGLELINE top 22 (returns 28); DT_BOTTOM|DT_SINGLELINE top 34 (returns 40)"
+  calcrect: "DT_CALCRECT draws nothing and sets right/bottom (left and top stay). With the stock system font: \"Hello\" is 34x16, returns 16; count 3 gives 22 wide; a \"\\n\" makes two lines (32) unless DT_SINGLELINE (one line, the newline measured as a character); DT_WORDBREAK at width 60 wraps \"the quick brown fox jumps\" into 4 lines (64, width 58), a word longer than the width stays on one line; a tab without DT_EXPANDTABS is one character wide, with it 8 average character widths; \"\" returns 16 with DT_SINGLELINE and 1 (height 0) without. With PolyTest Sans at -16 (dt_pf_calc): \"AB\" 20x16, returns 16; \"AB\\nAB\" 20x32 (a \\r\\n or a lone \\r also breaks the line); a trailing \\n adds an empty line (\"AB\\n\" 20x32, \"\\n\" 0x32, \"\\n\\n\" 0x48); DT_SINGLELINE measures a line break as zero width (\"AB\\nAB\" 40x16); trailing and leading blanks count (\"AB   \" 38 wide); \"&A\" is 12 wide, with DT_NOPREFIX 21; DT_EXPANDTABS: \"A\\tB\" is 72 wide (tabs to multiples of 8 average widths: 64); DT_EXTERNALLEADING adds the external leading (2) to every line (\"AB\" returns 18); word break: \"AAAA BBBB AAAA\" in 60 is 54x48, in 200 is 140x16, a word wider than the rectangle sets the width (48); width 0 returns 1 and leaves the rectangle alone; count 0 returns 1."
+  alignment: "in a 100x40 rect at (10,10), \"Text\" with the system font (28x16): DT_LEFT|DT_TOP cell at 10,10; DT_CENTER at 46; DT_RIGHT ends at 110; DT_VCENTER|DT_SINGLELINE top 22 (returns 28); DT_BOTTOM|DT_SINGLELINE top 34 (returns 40). PolyTest Sans, \"AB\" (20x16) in the rectangle 10,10,110,50: cells 10,10 / 50,10 / 90,10 for left / centre / right; DT_VCENTER and DT_BOTTOM only act with DT_SINGLELINE (then 10,22 and 10,34); every line of multi-line text is aligned on its own; the ink of 'A' is 2 pixels right of the cell's left edge (dt_pf_draw)."
   opaque: "in OPAQUE mode the whole text cell gets the background colour"
-  clip: "clipped to the rectangle unless DT_NOCLIP"
-  rect: "without DT_CALCRECT the rectangle is not changed"
+  clip: "clipped to the rectangle unless DT_NOCLIP (\"AB\" in 10x5: only the part inside is drawn; with DT_NOCLIP the whole 20x16 cell). A rectangle with the same left and right draws nothing without DT_NOCLIP."
+  rect: "without DT_CALCRECT the rectangle is not changed; the return value is the text height (32 for two lines); for DT_VCENTER|DT_SINGLELINE 28 and for DT_BOTTOM|DT_SINGLELINE 40 in a 40 high rectangle; an empty string returns 1 (28 with DT_SINGLELINE|DT_VCENTER, the offset of the empty line)."
+  wordbreak: "DT_WORDBREAK breaks at blanks; \"AB AB AB\" in 30 wide is three lines; DT_CENTER and DT_RIGHT then align each line; without DT_WORDBREAK the line is clipped at the rectangle; DT_SINGLELINE text wider than the rectangle is centred or right-aligned about the rectangle (the left part is clipped)."
+  prefix: "'&' marks the next character: it is removed from the text and that character is underlined; '&&' is one '&'; a trailing '&' is dropped; \"&&&A\" is '&' and an underlined 'A'. The underline is one pixel row (more for large sizes: 2 rows at -24) directly below the baseline (baseline + 1) as wide as the advance of the marked character, drawn by default; DT_NOPREFIX measures and draws the '&' as a character; DT_HIDEPREFIX removes the '&' without the underline; DT_PREFIXONLY draws only the underline (nothing for \"A&&B\"). The measured width ignores the '&' (\"A&B\" is 20 wide). dt_pf_prefix has the rows for PolyTest Sans at -12, -16 and -24, Tall and Mono."
+  ellipsis: "DT_END_ELLIPSIS cuts a too-wide line and ends it with \"...\", keeping as many leading characters as fit together with the dots (\"AABBAABBAB\" in 60 becomes \"AABB...\" (52 wide), in 50 \"AAB...\", in 40 \"AA...\", in 30 and below \"A...\" even where that is wider than the rectangle); a line that fits stays as it is; the rectangle is not changed. DT_PATH_ELLIPSIS replaces the middle of a path and keeps the part after the last backslash (\"AAAA\\BBBB\\AAAA\\BBB.AB\" in 100 becomes \"AA...\\BBB.AB\", in 60 and below \"...\\BBB.AB\"; text without a backslash is left alone). DT_WORD_ELLIPSIS cuts a word that is too wide (\"AAAAAAAA BBBB AAAAAAAA\" in 80 becomes \"AAAAA...\"). With DT_WORDBREAK the ellipsis comes on the last line that fits the height (60x32: \"AAAA BBBB AAAA...\"). DT_CALCRECT with an ellipsis flag measures the cut text (44 wide for the 50 case, whose result is 'AAB...') and with DT_MODIFYSTRING also writes it back."
+  modifystring: "DT_MODIFYSTRING writes the shortened text (NUL-terminated) back to the caller's buffer when an ellipsis flag changed it; without it the buffer stays as it was and only the drawing shows the cut text. The buffer must have room for the original length plus four."
+  misc: "DT_EDITCONTROL does not draw a last line that is only partly inside the rectangle's height; DT_INTERNAL, DT_RTLREADING (also with DT_RIGHT and DT_CENTER), DT_NOFULLWIDTHCHARBREAK do not change the layout of Latin text; DT_TABSTOP with a count in bits 8 to 15 collides with DT_NOCLIP, DT_EXTERNALLEADING and DT_CALCRECT and must not be combined with them (DrawTextExW is the way to set the tab length)."
+  relations: "For any font (stock fonts and installed families): a single line's DT_CALCRECT width is the GetTextExtentPoint32W width (within one pixel), its height the text height; two lines are twice that; DT_WORDBREAK lines are never wider than the rectangle (unless a word is) and the height grows as the rectangle narrows; the ellipsis result fits the width and ends in dots; DT_NOPREFIX measures the '&'; drawing stays inside the rectangle (dt_sys_relations)."
 errors:
-  none: "no error cases observed"
+  bad_dc: "A NULL DC: 0 (last error not set)."
+  count: "A count below -1: 0. Count 0: 1. Count -1 stops at the first NUL."
+  odd_input: "A text of 1000 'A' characters measures 12000 wide; unknown flag bits (0x400000) are ignored; a rectangle of -100000..100000 with DT_CENTER|DT_VCENTER|DT_SINGLELINE returns 100008."
 side_effects: "none beyond the rules above"
-threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+threading: "a DC, a font and a font resource belong to the process; fonts added from memory or with FR_PRIVATE are visible to the adding process only"
 ordering: []
-timing:                                       # envelopes, never exact values
+timing:
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 1  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 6
+  held_out: 3
 building_tests: >
-  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
-  (allowed since this slice); each carries its own declarations (Learn
-  prototypes, header constants) and a message log helper; window procedures
-  log only documented messages (see "documented" in the tests), never
-  painting messages, activation or IME traffic, handles, times or cascading
-  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
-  start there.
+  Rust tests (ADR 0075), one file per test, importing gdi32.dll, user32.dll and kernel32.dll by name, each file carrying its own declarations (Learn prototypes, wingdi.h / winuser.h constants) and its own TrueType writer. No test depends on the pixels or the metrics of a Microsoft font (the owner's decision of 2026-11-09: Poly cannot ship those fonts): text is drawn with fonts the test makes itself and adds with AddFontMemResourceEx or AddFontResourceExW(FR_PRIVATE), so Windows and Poly use the same font file, and tests on installed families print only relations that hold for every font. The tests make their own TrueType fonts (the same 14-glyph table in every file, units per em 1024, every coordinate a multiple of 64 units so that every glyph edge lies on a pixel boundary at lfHeight -16): 'PolyTest Sans' (OS/2 winAscent 768, winDescent 256, hhea ascender 768, descender -256, line gap 128), 'PolyTest Tall' (winAscent 896, winDescent 320, no line gap), 'PolyTest Mono' (Sans metrics, every advance 640, post isFixedPitch, panose proportion 9) and the Bold and Italic faces of the Sans family (the 'A' is 13 and 14 pixels wide instead of 12 at -16). Advances at 16 pixels per em: space 6, '&' 9, '-' 6, '.' 4, 'A' 12, 'B' 8, 'M' 12, 'W' 16, backslash 6, 'g' 10, 'i' 4, U+00E9 11, U+20AC 14, .notdef 10. A font reaches GDI through AddFontMemResourceEx or AddFontResourceExW(FR_PRIVATE); GDI refused a font whose name table had only the name IDs 1, 2, 4 and 6, so the tests' fonts carry IDs 0 to 6. Tests on installed families (Arial, Times New Roman, Courier New, Segoe UI, Tahoma, Verdana, Consolas and the stock fonts) print and check only relations that hold for every font, never their pixels or metrics. Drawing goes into a 32-bit top-down DIB section in a memory DC, bi-level (lfQuality NONANTIALIASED) where pixels are compared, white text on a dark blue background over a grey surface. Observations are numbers, pixel boxes, counts and rows of pixels as text, never handles, addresses or times.
 not_covered: >
-  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
-  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
-  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
-  IsWindowVisible of shown windows, window DC clipping - in the oracle's
-  session no window is visible (IsWindowVisible is 0 for every shown window,
-  InvalidateRect leaves no update region and no WM_PAINT comes); they need
-  the interactive desktop and are a later entry. Real input (SendInput),
-  focus and activation, menus and the menu loop, hooks, DPI awareness.
+  Right-to-left and bidirectional text, DT_INTERNAL's effect on the layout of non-Latin text, DT_NOFULLWIDTHCHARBREAK with East Asian text, DT_TABSTOP combined with the flags it excludes.
