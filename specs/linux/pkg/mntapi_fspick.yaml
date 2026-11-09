@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/api/pkg/mntapi_fspick              # package-format component: no coverage-map entry
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (the unprivileged cases as uid/gid 65534 without capabilities); umask 022; unprivileged user namespaces allowed; every test makes a mount namespace of its own, makes / MS_REC|MS_PRIVATE and mounts a tmpfs on a private directory below /tmp"
+  observed_by: spec-linux-pkg
+  date: 2026-11-06
+summary: >
+  fspick(dfd, path, flags) (syscall 433) opens a filesystem context for an
+  existing mount so that its superblock options can be changed with
+  fsconfig: set parameters, then FSCONFIG_CMD_RECONFIGURE. The path must
+  name the top directory of a mount (a bind mount of a subdirectory counts;
+  a directory inside a mount, a regular file, or a directory descriptor that
+  is not a mount top is EINVAL). Flags (32 bits): FSPICK_CLOEXEC 1
+  (FD_CLOEXEC on the descriptor; it is the lowest free one and its link
+  reads "anon_inode:[fscontext]"), FSPICK_SYMLINK_NOFOLLOW 2 (a final
+  symbolic link is not followed: it is not a mount top, EINVAL; by default
+  it is followed), FSPICK_NO_AUTOMOUNT 4, FSPICK_EMPTY_PATH 8 (an empty path
+  means dfd itself, which must be a mount's top directory; a descriptor from
+  open with O_DIRECTORY, O_RDONLY or O_PATH works); other bits are EINVAL,
+  also FSPICK_EMPTY_PATH with a non-empty name. An empty path without
+  FSPICK_EMPTY_PATH is ENOENT. An absolute path ignores dfd; a relative one
+  needs a valid dfd or AT_FDCWD. The context starts in the reconfigure state
+  (see fsconfig): it has no messages, fsmount and CMD_CREATE on it are
+  EBUSY, parameters are applied by CMD_RECONFIGURE to the whole superblock,
+  so every mount of it (the original and its bind mounts) sees the change:
+  for tmpfs size and nr_blocks change statfs f_blocks, ro and rw make
+  creating files EROFS or possible again (and ST_RDONLY appears or
+  vanishes), and the mode of the root directory is not changed. A
+  reconfigure that cannot be applied (nr_inodes below the inodes in use) is
+  EINVAL with the message "e tmpfs: Too few inodes for current use" and the
+  context is dead afterwards (EBUSY), the filesystem unchanged. The caller
+  needs CAP_SYS_ADMIN (EPERM before anything else is looked at, also for a
+  missing path); a user who is root in a user namespace they own may pick
+  and reconfigure mounts of filesystems created in that namespace, while
+  fspick of a foreign mount (the root mount) succeeds and its
+  CMD_RECONFIGURE is EPERM.
+returns:
+  success: "descriptor >= 3, a filesystem context; its link reads anon_inode:[fscontext]"
+  reconfigure_effect: "size=2m after size=1m: f_blocks 256 -> 512; nr_blocks=100: 100; ro: EROFS and ST_RDONLY; rw: writable again"
+errors:
+  not_mount_top: "EINVAL (22): directory inside a mount, regular file, symbolic link with FSPICK_SYMLINK_NOFOLLOW, an empty-path descriptor that is not a mount top or is a regular file"
+  missing: "ENOENT (2): missing name; empty name without FSPICK_EMPTY_PATH"
+  bad_flags: "EINVAL (22): flags other than the four bits (0x10, 0x100, ~0)"
+  bad_pointer: "EFAULT (14): NULL or invalid path"
+  bad_dfd: "EBADF (9): invalid dfd for a relative path or an empty path (also -1); ignored for an absolute path"
+  permission: "EPERM (1): no CAP_SYS_ADMIN, also for a missing path"
+side_effects: >
+  Allocates a context descriptor; RECONFIGURE changes the live filesystem.
+threading: "descriptors are per process (shared file table); no other thread-specific behaviour"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: FSPICK_* from linux/mount.h. The user-namespace test needs unprivileged user namespaces.
