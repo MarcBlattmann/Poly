@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "8a396a60cdf0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T18:09:27Z",
+  "tests": [
+    {
+      "name": "cfw_args",
+      "exe_sha256": "ddc61c3823824df6eaf2be58d2f40132df117e21b049e40185b4d88e967d2404",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgYSBmb250IGNvbWVzIGJhY2sKYWxsIGFyZ3VtZW50cyBzZXQ6IEdldE9iamVjdFcgOTI6IGg9LTEzIHc9NyBlc2M9MCBvcmllbnQ9MCB3ZWlnaHQ9NjAwIGl0YWxpYz0xIHVuZGVybGluZT0xIHN0cmlrZT0xIGNoYXJzZXQ9MCBvdXRwcmVjPTQgY2xpcHByZWM9MiBxdWFsaXR5PTMgcGl0Y2hmYW09MHgyMiBmYWNlPSdQb2x5VGVzdCBTYW5zJwpmbGFncyA1LzI1Ni8yLCBvZGQgdmFsdWVzOiBHZXRPYmplY3RXIDkyOiBoPTAgdz0wIGVzYz00NTAgb3JpZW50PTkwMCB3ZWlnaHQ9MCBpdGFsaWM9NSB1bmRlcmxpbmU9MCBzdHJpa2U9MiBjaGFyc2V0PTI1NSBvdXRwcmVjPTI1NSBjbGlwcHJlYz0yNTUgcXVhbGl0eT0yNTUgcGl0Y2hmYW09MHhmZiBmYWNlPSdQb2x5VGVzdCBTYW5zJwpvayBhIE5VTEwgZmFjZSBuYW1lIHN0aWxsIGdpdmVzIGEgZm9udApOVUxMIGZhY2UgbmFtZTogR2V0T2JqZWN0VyA5MjogaD0tMTYgdz0wIGVzYz0wIG9yaWVudD0wIHdlaWdodD00MDAgaXRhbGljPTAgdW5kZXJsaW5lPTAgc3RyaWtlPTAgY2hhcnNldD0xIG91dHByZWM9MCBjbGlwcHJlYz0wIHF1YWxpdHk9MCBwaXRjaGZhbT0weDAwIGZhY2U9JycKNTItY2hhcmFjdGVyIGZhY2UgbmFtZTogR2V0T2JqZWN0VyA5MjogaD0tMTYgdz0wIGVzYz0wIG9yaWVudD0wIHdlaWdodD00MDAgaXRhbGljPTAgdW5kZXJsaW5lPTAgc3RyaWtlPTAgY2hhcnNldD0xIG91dHByZWM9MCBjbGlwcHJlYz0wIHF1YWxpdHk9MCBwaXRjaGZhbT0weDAwIGZhY2U9J2FiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6MDEyMzQ1JwpDcmVhdGVGb250VyBhbmQgQ3JlYXRlRm9udEluZGlyZWN0VyBhZ3JlZSBvbiBtZXRyaWNzIGFuZCB3aWR0aHM6IHRydWUKb2sgc2FtZSBtZXRyaWNzIGFzIENyZWF0ZUZvbnRJbmRpcmVjdFcKc3VtbWFyeSAzIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok a font comes back\nall arguments set: GetObjectW 92: h=-13 w=7 esc=0 orient=0 weight=600 italic=1 underline=1 strike=1 charset=0 outprec=4 clipprec=2 quality=3 pitchfam=0x22 face='PolyTest Sans'\nflags 5/256/2, odd values: GetObjectW 92: h=0 w=0 esc=450 orient=900 weight=0 italic=5 underline=0 strike=2 charset=255 outprec=255 clipprec=255 quality=255 pitchfam=0xff face='PolyTest Sans'\nok a NULL face name still gives a font\nNULL face name: GetObjectW 92: h=-16 w=0 esc=0 orient=0 weight=400 italic=0 underline=0 strike=0 charset=1 outprec=0 clipprec=0 quality=0 pitchfam=0x00 face=''\n52-character face name: GetObjectW 92: h=-16 w=0 esc=0 orient=0 weight=400 italic=0 underline=0 strike=0 charset=1 outprec=0 clipprec=0 quality=0 pitchfam=0x00 face='abcdefghijklmnopqrstuvwxyz012345'\nCreateFontW and CreateFontIndirectW agree on metrics and widths: true\nok same metrics as CreateFontIndirectW\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}
