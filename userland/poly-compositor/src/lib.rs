@@ -87,6 +87,7 @@ mod evdev;
 mod fbdev;
 pub mod io;
 mod kms;
+mod launch;
 mod mixer;
 pub mod os;
 mod session;
@@ -782,7 +783,9 @@ fn run(args: &[String]) -> Result<u8, String> {
                     }
                     match os::spawn(&app.argv, &env) {
                         Ok(pid) => {
-                            println!("poly-compositor: launched {} (pid {pid})", app.name);
+                            let at = d.now_ms();
+                            println!("poly-compositor: launched {} (pid {pid}) at {at} ms", app.name);
+                            d.launches.started(pid, &app.name, at);
                             d.children.push((pid, app.name.clone()));
                         }
                         Err(e) => eprintln!("poly-compositor: {}: {e}", app.argv[0]),

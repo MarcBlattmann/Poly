@@ -19,7 +19,7 @@
 //! program waits for:
 //!
 //! ```text
-//! strace: pid 37 tid 52 epoll_wait(0x5, 0x7f.., 0x20, 0xffffffff, ..) = 1 [2134 ms]
+//! strace: pid 37 tid 52 epoll_wait(0x5, 0x7f.., 0x20, 0xffffffff, ..) = 1 [2134 ms, until 61234 ms]
 //! ```
 
 use crate::process::Process;
@@ -145,7 +145,7 @@ pub fn exit(trace: Trace, ret: Option<u64>) {
     }
     if slow != 0 {
         line.pop();
-        let _ = writeln!(line, " [{} ms]", took / 1_000_000);
+        let _ = writeln!(line, " [{} ms, until {} ms]", took / 1_000_000, crate::time::now_ns() / 1_000_000);
     }
     log::write_console(&line);
 }

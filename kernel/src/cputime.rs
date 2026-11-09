@@ -297,6 +297,14 @@ pub fn reaped(slot: usize, process: &Process) {
     t.slots[slot] = FREE;
 }
 
+/// The process and thread ids of the user thread in thread slot `slot`
+/// (`None` for a kernel thread).
+pub fn ids(slot: usize) -> Option<(u32, u32)> {
+    let t = TABLE.lock();
+    let s = t.slots.get(slot)?;
+    (s.pid != 0).then_some((s.pid, s.tid))
+}
+
 /// Thread `tid` of process `pid`, if it is live.
 pub fn thread(pid: u32, tid: u32) -> Option<CpuTimes> {
     let now = time::now_ns();

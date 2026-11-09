@@ -226,14 +226,38 @@ impl<F> Index<F> {
         self.clock
     }
 
-    /// The page, marked as just used.
+    /// The page, marked as just used. A page used a moment ago (within the
+    /// last 1/16 of the uses the cache has seen, [`Index::touch_age`]) keeps
+    /// its place: most lookups of a hot page (a program's code faulting in
+    /// from several processes) then neither move it in the LRU order nor
+    /// take more than a lookup in the index (ADR 0148).
     fn get(&mut self, key: &Key) -> Option<Arc<Page<F>>> {
+        let age = self.touch_age();
+        let clock = self.clock;
+        let slot = self.pages.get_mut(key)?;
+        if clock - slot.stamp <= age {
+            return Some(Arc::clone(&slot.page));
+        }
         let stamp = self.stamp();
         let slot = self.pages.get_mut(key)?;
         self.lru.remove(&slot.stamp);
         slot.stamp = stamp;
         self.lru.insert(stamp, *key);
         Some(Arc::clone(&slot.page))
+    }
+
+    /// How many uses ago a page may have been used and still count as just
+    /// used: 1/16 of the pages cached.
+    fn touch_age(&self) -> u64 {
+        (self.pages.len() / 16) as u64
+    }
+
+    /// The cached pages of inode `ino` of `fs` with indexes from `first` on
+    /// (`count` at most), without marking them used: fault-around takes the
+    /// neighbours of a page that was used.
+    fn run(&self, fs: FsId, ino: Ino, first: u64, count: u64) -> Vec<Arc<Page<F>>> {
+        let end = first.saturating_add(count.saturating_sub(1));
+        self.pages.range(Key::new(fs, ino, first)..=Key::new(fs, ino, end)).map(|(_, s)| Arc::clone(&s.page)).collect()
     }
 
     fn insert(&mut self, page: Arc<Page<F>>) {
@@ -713,6 +737,14 @@ impl<F: PageFrame, L: RawLock + Default> PageCache<F, L> {
             Some(e) => Err(e),
             None => Ok(written),
         }
+    }
+
+    /// The cached pages of inode `ino` of `fs` among the `count` from page
+    /// `first` on, in order, with their indexes; nothing is read, and the
+    /// pages are not marked used (one lookup of the index for all of them).
+    pub fn cached_run(&self, fs: FsId, ino: Ino, first: u64, count: u64) -> Vec<(u64, PageRef<F, L>)> {
+        let pages = self.core.index.lock().run(fs, ino, first, count);
+        pages.into_iter().map(|p| (p.key.index, PageRef { page: p, core: Arc::clone(&self.core) })).collect()
     }
 
     /// The page for `key` if it is cached (no read from the file system).

@@ -1170,6 +1170,11 @@ fn run(args: &[String]) -> Result {
     );
     cmd.args(rootdisk::drive_args(&image)).arg("-initrd").arg(&initrd).args(crate::desktop::devices());
     cmd.args(crate::net::nic_args(None, false));
+    // POLY_CHROMIUM_QEMU: more QEMU arguments (`-mem-prealloc`, ...), split at
+    // white space, for trying machine settings.
+    if let Ok(extra) = std::env::var("POLY_CHROMIUM_QEMU") {
+        cmd.args(extra.split_whitespace());
+    }
     // POLY_CHROMIUM_QMP: a QMP server for driving the boot by hand or by a
     // script (`tcp:127.0.0.1:4444`, any host).
     if let Ok(qmp) = std::env::var("POLY_CHROMIUM_QMP") {

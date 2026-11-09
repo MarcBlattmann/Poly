@@ -82,6 +82,12 @@ impl<F: PageFrame, L: RawLock + Default> CachedFs<F, L> {
         self.cache().cached(&self.key(ino, index))
     }
 
+    /// The cached pages of `ino` among the `count` from page `index` on, with
+    /// their indexes; nothing is read (see [`PageCache::cached_run`]).
+    pub fn cached_run(&self, ino: Ino, index: u64, count: u64) -> Vec<(u64, PageRef<F, L>)> {
+        self.cache().cached_run(self.st.id, ino, index, count)
+    }
+
     /// Write back this file system's dirty pages (all, or those of one
     /// inode) to the inner file system, without syncing it. Returns how
     /// many pages were written.
