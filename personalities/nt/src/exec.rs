@@ -64,6 +64,9 @@ pub const TEB_SELF: u64 = 0x30;
 pub const TEB_CLIENT_ID: u64 = 0x40;
 pub const TEB_PEB: u64 = 0x60;
 pub const PEB_BEING_DEBUGGED: u64 = 0x02;
+/// `PEB.ImageBaseAddress` (`winternl.h`): where the executable is mapped. Programs read it
+/// straight from the PEB (Chrome's `chrome_elf.dll` does; with 0 it faulted at address 0x10).
+pub const PEB_IMAGE_BASE_ADDRESS: u64 = 0x10;
 
 /// The `ntdll` exports the kernel enters (ADR 0071).
 pub const NTDLL_THREAD_START: &[u8] = b"LdrInitializeThunk";
@@ -292,6 +295,7 @@ pub fn start_process_from(
     let anywhere_top = MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN;
     let (peb, _) = proc.vm.allocate(b, 0, PAGE_SIZE, 0, anywhere_top, rw)?;
     let (teb, _) = proc.vm.allocate(b, 0, TEB_SIZE, 0, anywhere_top, rw)?;
+    b.write(peb + PEB_IMAGE_BASE_ADDRESS, &image_base.to_le_bytes())?;
 
     let stack = make_stack(proc, b, reserve, commit)?;
     let client = crate::kernel::ClientId { process: proc.pid, thread };
@@ -320,6 +324,22 @@ pub fn start_process_from(
         stack_base: stack.top,
         stack_limit: stack.limit,
     })
+}
+
+/// Map `KUSER_SHARED_DATA` (`poly_kernelbase::kuser`, ADR 0155) read-only at 0x7FFE0000 in `proc`,
+/// filled from `facts`. Programs read the OS version, processor features and clock there directly;
+/// a process without the page faults on the first such read.
+pub fn map_user_shared_data(
+    proc: &mut NtProcess,
+    b: &mut dyn Backend,
+    facts: &poly_kernelbase::kuser::Facts,
+) -> Result<(), NtStatus> {
+    use poly_kernelbase::kuser;
+    let (base, size) = (kuser::ADDRESS, kuser::SIZE as u64);
+    proc.vm.allocate(b, base, size, 0, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)?;
+    b.write(base, &kuser::page(facts))?;
+    proc.vm.protect(b, base, size, PAGE_READONLY)?;
+    Ok(())
 }
 
 /// [`start_process`] for a process another one creates

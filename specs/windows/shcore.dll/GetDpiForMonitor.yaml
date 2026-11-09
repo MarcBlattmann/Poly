@@ -1,0 +1,74 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/shcore.dll/GetDpiForMonitor
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-c
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About the
+  Clipboard", "Using the Clipboard", "Clipboard Formats", "Standard
+  Clipboard Formats", "High DPI Desktop Application Development on Windows",
+  "DPI_AWARENESS_CONTEXT", "Multiple Display Monitors", "Window Features"
+  (layered windows, window regions), "About Cursors", "About Icons",
+  "Desktop Window Manager" (dwmapi), "Input Method Manager" (imm32), "About
+  Messages and Message Queues"; winuser.h, wingdi.h, windef.h, winbase.h,
+  dwmapi.h, imm.h, shellscalingapi.h and winerror.h for constants and
+  layouts. The conformance tests of Wine were consulted only where the own
+  sources line of an entry says so, for ideas of what to observe; no code or
+  expected value of theirs is used (every value in these sheets was observed
+  on the machine above).
+summary: >
+  Returns the DPI of a monitor. On the oracle (one 96 DPI monitor)
+  MDT_EFFECTIVE_DPI and MDT_ANGULAR_DPI give 96 and 96 with S_OK in every
+  awareness mode (unaware, system, per-monitor v1/v2, GDI-scaled);
+  MDT_RAW_DPI fails with HRESULT 0x80070032 (ERROR_NOT_SUPPORTED) and sets
+  both outputs to 0. HRESULTs are the Win32 errors in HRESULT form and the
+  last error is set to the same Win32 code on failure.
+interface:
+  signature: "HRESULT GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT *dpiX, UINT *dpiY)"
+  types: "MDT_EFFECTIVE_DPI 0, MDT_ANGULAR_DPI 1, MDT_RAW_DPI 2 (shellscalingapi.h)"
+  hresults: "E_HANDLE-like 0x80070006 (ERROR_INVALID_HANDLE), 0x800700A0 (ERROR_BAD_ARGUMENTS), 0x800701E7 (ERROR_INVALID_ADDRESS), 0x80070032 (ERROR_NOT_SUPPORTED)"
+rules:
+  effective_angular: "type 0 and 1 for the primary monitor: S_OK, x 96, y 96; the last error stays as it was"
+  raw: "type 2: 0x80070032 with *dpiX = *dpiY = 0 (set to 0, not left alone); last error 0x32"
+  bad_type: "types 3, 100, -1, INT_MIN, INT_MAX: 0x800700A0, last error 0xA0, outputs untouched; the type is checked before the monitor, so this is the result also for an invalid monitor"
+  same_in_all_modes: "results are identical in a system-aware and a per-monitor-v2 process; the window's monitor (MonitorFromWindow) is the primary monitor with 96x96, GetDpiForWindow 96, GetDpiForSystem 96"
+  legacy: "GetProcessDpiAwareness(NULL or the current process) gives S_OK and 0 in a manifest-less process; a made-up process handle gives 0x80070057 and -1 in the output; IsProcessDPIAware 0"
+errors:
+  bad_monitor: "NULL, 0x1234, -1 with a valid type: 0x80070006, outputs untouched, last error 6"
+  null_output: "a NULL dpiX or dpiY (or both): 0x800701E7 (ERROR_INVALID_ADDRESS) and the other output is not written; also for type 2"
+  bad_type: "0x800700A0 (ERROR_BAD_ARGUMENTS)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
+  needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants); run with
+  poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because
+  painting, input and the clipboard need the visible desktop. Window
+  procedures log documented messages only: never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels and closed within seconds; the cursor is parked
+  at (1500, 600) at the start and put back at the end; the clipboard is
+  emptied at the end of every test that touches it; a test changes no system
+  setting (only the state of its own process and windows).
+not_covered: >
+  several monitors with different DPIs, monitors with a scale other than 100
+  percent, a changed DPI Several monitors, other system DPIs (the oracle is
+  one 1920x1080 monitor at 96 DPI, scale 100%), a manifest (the tests have
+  none: awareness is set with the API), other keyboard layouts than German,
+  installed input methods (the oracle has none active), touch and pen,
+  hooks, menus and dialogs, comctl32 controls, themed (visual style)
+  painting, clipboard contents put there by other programs or by the cloud
+  clipboard and clipboard history.

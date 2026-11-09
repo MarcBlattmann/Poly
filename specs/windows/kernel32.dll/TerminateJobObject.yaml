@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/kernel32.dll/TerminateJobObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Terminates every process in the job (including a suspended one and
+  processes of nested jobs below) with the given exit code; the job object
+  stays valid and usable. Needs JOB_OBJECT_TERMINATE.
+interface:
+  signature: "BOOL TerminateJobObject(HANDLE job, UINT exit_code)"
+  rights: "Job object rights: ASSIGN_PROCESS 0x1, SET_ATTRIBUTES 0x2, QUERY 0x4, TERMINATE 0x8, SET_SECURITY_ATTRIBUTES 0x10; JOB_OBJECT_ALL_ACCESS is 0x1F003F (standard rights required + SYNCHRONIZE + 0x3F) (winnt.h)."
+rules:
+  exit_code: "every member gets the code (0x1234, 0, 259, 0xC0000005, 0xFFFFFFFF, 1 all read back through GetExitCodeProcess; a code of 259 (STILL_ACTIVE) reads back 0x103 while WaitForSingleObject on the process returns signalled)"
+  scope: "a process outside the job stays alive; accounting afterwards active=0 and total unchanged; the process list is empty (assigned=0)"
+  empty: "terminating an empty job, or twice, succeeds"
+  reuse: "after a terminate a new process can be assigned (ok) and runs (alive); a later terminate ends it (exit code 0)"
+  nested: "terminating an inner job ends the members of the inner job (including one that is also in the outer job) with its code (0x31) and leaves a process that is only in the outer job and one in another job alive; terminating the outer job ends its members, the spawner and its grandchild (0x32), the other job's member stays alive until its own job is terminated (0x33)"
+  rights: "a handle that could not be opened (desired access 0 is refused, so the NULL handle fails with 6), QUERY, ASSIGN_PROCESS, SET_ATTRIBUTES, SET_SECURITY_ATTRIBUTES, SYNCHRONIZE or their mix: error 5 and the member stays alive; a TERMINATE-only handle works (exit code 0x16); it works again on the empty job; the named job is still found afterwards; a duplicate with only TERMINATE works (exit code 0x18)"
+errors:
+  bad_handles: "an event, an invalid value, a process handle, INVALID_HANDLE_VALUE: error 6"
+  rights: "missing JOB_OBJECT_TERMINATE: error 5"
+side_effects: "ends the processes"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -177,6 +177,10 @@ pub(crate) fn control<K: NtKernel>(
             let b = afd::NetInfo::new(&dns, &host).encode();
             done(STATUS_SUCCESS, b.len() as u64, b.to_vec())
         }
+        afd::IF_LIST => {
+            let b = poly_iphlp::wire::encode(&k.net_interfaces());
+            done(STATUS_SUCCESS, b.len() as u64, b)
+        }
         afd::INFO => {
             let s = snap(k, file.1)?;
             let i = afd::Info {

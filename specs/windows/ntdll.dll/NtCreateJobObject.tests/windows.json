@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "2d24da3f08a2",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:57:44Z",
+  "tests": [
+    {
+      "name": "ntcjo_basic",
+      "exe_sha256": "68ec24a7a9ce7f2e17842295e2161c6b2041c2b6d2a40dfb81270ebfd959834f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWNjZXNzIDA6IHN0YXR1cz0weDAwMDAwMDAwIGdyYW50ZWQ9MHgwIHR5cGU9Sm9iIGhhbmRsZV9mbGFncz0wCmFjY2VzcyBKT0JfT0JKRUNUX1FVRVJZOiBzdGF0dXM9MHgwMDAwMDAwMCBncmFudGVkPTB4NCB0eXBlPUpvYiBoYW5kbGVfZmxhZ3M9MAphY2Nlc3MgSk9CX09CSkVDVF9BU1NJR05fUFJPQ0VTUzogc3RhdHVzPTB4MDAwMDAwMDAgZ3JhbnRlZD0weDEgdHlwZT1Kb2IgaGFuZGxlX2ZsYWdzPTAKYWNjZXNzIEpPQl9PQkpFQ1RfQUxMX0FDQ0VTUzogc3RhdHVzPTB4MDAwMDAwMDAgZ3JhbnRlZD0weDFmMDAzZiB0eXBlPUpvYiBoYW5kbGVfZmxhZ3M9MAphY2Nlc3MgTUFYSU1VTV9BTExPV0VEOiBzdGF0dXM9MHgwMDAwMDAwMCBncmFudGVkPTB4MWYwMDNmIHR5cGU9Sm9iIGhhbmRsZV9mbGFncz0wCmFjY2VzcyBHRU5FUklDX0FMTDogc3RhdHVzPTB4MDAwMDAwMDAgZ3JhbnRlZD0weDFmMDAzZiB0eXBlPUpvYiBoYW5kbGVfZmxhZ3M9MAphY2Nlc3MgR0VORVJJQ19SRUFEOiBzdGF0dXM9MHgwMDAwMDAwMCBncmFudGVkPTB4MjAwMDQgdHlwZT1Kb2IgaGFuZGxlX2ZsYWdzPTAKYWNjZXNzIEdFTkVSSUNfV1JJVEU6IHN0YXR1cz0weDAwMDAwMDAwIGdyYW50ZWQ9MHgyMDAwYiB0eXBlPUpvYiBoYW5kbGVfZmxhZ3M9MAphY2Nlc3MgR0VORVJJQ19FWEVDVVRFOiBzdGF0dXM9MHgwMDAwMDAwMCBncmFudGVkPTB4MTIwMDAwIHR5cGU9Sm9iIGhhbmRsZV9mbGFncz0wCmFjY2VzcyBTWU5DSFJPTklaRTogc3RhdHVzPTB4MDAwMDAwMDAgZ3JhbnRlZD0weDEwMDAwMCB0eXBlPUpvYiBoYW5kbGVfZmxhZ3M9MAphY2Nlc3MgREVMRVRFOiBzdGF0dXM9MHgwMDAwMDAwMCBncmFudGVkPTB4MTAwMDAgdHlwZT1Kb2IgaGFuZGxlX2ZsYWdzPTAKYWNjZXNzIEFDQ0VTU19TWVNURU1fU0VDVVJJVFk6IHN0YXR1cz0weDAwMDAwMDAwIGdyYW50ZWQ9MHgxMDAwMDAwIHR5cGU9Sm9iIGhhbmRsZV9mbGFncz0wCmFjY2VzcyB1bmRlZmluZWQgMHgyMDogc3RhdHVzPTB4MDAwMDAwMDAgZ3JhbnRlZD0weDIwIHR5cGU9Sm9iIGhhbmRsZV9mbGFncz0wCmFjY2VzcyB1bmRlZmluZWQgMHg4MDAwOiBzdGF0dXM9MHgwMDAwMDAwMCBncmFudGVkPTB4MCB0eXBlPUpvYiBoYW5kbGVfZmxhZ3M9MAphdHRyaWJ1dGVzIDA6IHN0YXR1cz0weDAwMDAwMDAwIGhhbmRsZV9mbGFncz0wCmF0dHJpYnV0ZXMgT0JKX0lOSEVSSVQ6IHN0YXR1cz0weDAwMDAwMDAwIGhhbmRsZV9mbGFncz0xCmF0dHJpYnV0ZXMgT0JKX0NBU0VfSU5TRU5TSVRJVkU6IHN0YXR1cz0weDAwMDAwMDAwIGhhbmRsZV9mbGFncz0wCmF0dHJpYnV0ZXMgT0JKX0tFUk5FTF9IQU5ETEU6IHN0YXR1cz0weDAwMDAwMDAwIGhhbmRsZV9mbGFncz0wCmF0dHJpYnV0ZXMgT0JKX1BFUk1BTkVOVDogc3RhdHVzPTB4YzAwMDAwNjEKYXR0cmlidXRlcyBPQkpfRVhDTFVTSVZFOiBzdGF0dXM9MHgwMDAwMDAwMCBoYW5kbGVfZmxhZ3M9MAphdHRyaWJ1dGVzIE9CSl9PUEVOSUY6IHN0YXR1cz0weDAwMDAwMDAwIGhhbmRsZV9mbGFncz0wCmF0dHJpYnV0ZXMgT0JKX0ZPUkNFX0FDQ0VTU19DSEVDSzogc3RhdHVzPTB4MDAwMDAwMDAgaGFuZGxlX2ZsYWdzPTAKYXR0cmlidXRlcyAweDgwMDAwMDAwOiBzdGF0dXM9MHhjMDAwMDAwZAphdHRyaWJ1dGVzIGxlbmd0aCAwOiBzdGF0dXM9MHhjMDAwMDAwZAphdHRyaWJ1dGVzIGxlbmd0aCA4OiBzdGF0dXM9MHhjMDAwMDAwZAphdHRyaWJ1dGVzIGxlbmd0aCA0MDogc3RhdHVzPTB4YzAwMDAwMGQKYXR0cmlidXRlcyBsZW5ndGggNDc6IHN0YXR1cz0weGMwMDAwMDBkCmF0dHJpYnV0ZXMgbGVuZ3RoIDQ4OiBzdGF0dXM9MHgwMDAwMDAwMAphdHRyaWJ1dGVzIGxlbmd0aCA0OTogc3RhdHVzPTB4YzAwMDAwMGQKYXR0cmlidXRlcyBsZW5ndGggNTY6IHN0YXR1cz0weGMwMDAwMDBkCnR3byB1bm5hbWVkIGpvYnM6IGhhbmRsZXMgZGlmZmVyPXRydWUgZnJlc2ggYWNjb3VudGluZyB0b3RhbF9wcm9jZXNzZXM9MCBhY3RpdmU9MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "access 0: status=0x00000000 granted=0x0 type=Job handle_flags=0\naccess JOB_OBJECT_QUERY: status=0x00000000 granted=0x4 type=Job handle_flags=0\naccess JOB_OBJECT_ASSIGN_PROCESS: status=0x00000000 granted=0x1 type=Job handle_flags=0\naccess JOB_OBJECT_ALL_ACCESS: status=0x00000000 granted=0x1f003f type=Job handle_flags=0\naccess MAXIMUM_ALLOWED: status=0x00000000 granted=0x1f003f type=Job handle_flags=0\naccess GENERIC_ALL: status=0x00000000 granted=0x1f003f type=Job handle_flags=0\naccess GENERIC_READ: status=0x00000000 granted=0x20004 type=Job handle_flags=0\naccess GENERIC_WRITE: status=0x00000000 granted=0x2000b type=Job handle_flags=0\naccess GENERIC_EXECUTE: status=0x00000000 granted=0x120000 type=Job handle_flags=0\naccess SYNCHRONIZE: status=0x00000000 granted=0x100000 type=Job handle_flags=0\naccess DELETE: status=0x00000000 granted=0x10000 type=Job handle_flags=0\naccess ACCESS_SYSTEM_SECURITY: status=0x00000000 granted=0x1000000 type=Job handle_flags=0\naccess undefined 0x20: status=0x00000000 granted=0x20 type=Job handle_flags=0\naccess undefined 0x8000: status=0x00000000 granted=0x0 type=Job handle_flags=0\nattributes 0: status=0x00000000 handle_flags=0\nattributes OBJ_INHERIT: status=0x00000000 handle_flags=1\nattributes OBJ_CASE_INSENSITIVE: status=0x00000000 handle_flags=0\nattributes OBJ_KERNEL_HANDLE: status=0x00000000 handle_flags=0\nattributes OBJ_PERMANENT: status=0xc0000061\nattributes OBJ_EXCLUSIVE: status=0x00000000 handle_flags=0\nattributes OBJ_OPENIF: status=0x00000000 handle_flags=0\nattributes OBJ_FORCE_ACCESS_CHECK: status=0x00000000 handle_flags=0\nattributes 0x80000000: status=0xc000000d\nattributes length 0: status=0xc000000d\nattributes length 8: status=0xc000000d\nattributes length 40: status=0xc000000d\nattributes length 47: status=0xc000000d\nattributes length 48: status=0x00000000\nattributes length 49: status=0xc000000d\nattributes length 56: status=0xc000000d\ntwo unnamed jobs: handles differ=true fresh accounting total_processes=0 active=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

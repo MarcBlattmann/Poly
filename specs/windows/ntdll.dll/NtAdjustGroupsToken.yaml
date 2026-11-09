@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtAdjustGroupsToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Enables or disables groups of a token (not mandatory ones) or resets them
+  to their defaults. Every group in the oracle's elevated token is
+  mandatory, so disabling any of them fails; enabling an already enabled
+  group works. AdjustTokenGroups calls it.
+interface:
+  signature: "NTSTATUS NtAdjustGroupsToken(HANDLE TokenHandle, BOOLEAN ResetToDefault, PTOKEN_GROUPS NewState, ULONG BufferLength, PTOKEN_GROUPS PreviousState, PULONG ReturnLength)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87. Also STATUS_CANT_DISABLE_MANDATORY 0xC000005D, STATUS_CANT_ENABLE_DENY_ONLY 0xC00002B3."
+rules:
+  mandatory: "disabling (attributes 0) Everyone, Users, Administrators or Authenticated Users returns STATUS_CANT_DISABLE_MANDATORY (0xC000005D) and the attributes stay (7, 7, 15, 7); attributes SE_GROUP_USE_FOR_DENY_ONLY (0x10) give the same status"
+  enable: "attributes SE_GROUP_ENABLED (4) or 7 for the same groups: STATUS_SUCCESS, attributes unchanged"
+  absent_group: "a group the token lacks (SYSTEM): STATUS_NOT_ALL_ASSIGNED (0x106) for attributes 0, 4, 7 and 0x10"
+  reset: "ResetToDefault TRUE (NewState ignored): STATUS_SUCCESS; on a token whose Administrators group is deny-only (attributes 16) the group stays deny-only"
+  deny_only: "in a token where NtFilterToken made Administrators deny-only: attributes 4 and 7 return STATUS_CANT_ENABLE_DENY_ONLY (0xC00002B3); attributes 0 succeed; the attributes stay 16"
+  previous_buffer: "for a request on one group the previous-state buffer needs 8 bytes: buffers 0 and 4 return STATUS_BUFFER_TOO_SMALL with *ReturnLength 8 and nothing written; 8 and more write 4 bytes (a count of 0) and return the request's status (STATUS_SUCCESS for enabling Everyone, STATUS_NOT_ALL_ASSIGNED for SYSTEM); a failing disable (STATUS_CANT_DISABLE_MANDATORY) writes nothing and leaves *ReturnLength 0 for every buffer size; reset with a 256-byte previous buffer: STATUS_SUCCESS, *ReturnLength 8, previous count 0"
+  rights: "only TOKEN_ADJUST_GROUPS works; TOKEN_QUERY, TOKEN_ADJUST_PRIVILEGES and TOKEN_ADJUST_DEFAULT alone give STATUS_ACCESS_DENIED"
+errors:
+  null_state: "a NULL NewState with ResetToDefault FALSE: STATUS_INVALID_PARAMETER (0xC000000D); a group count of 0: STATUS_SUCCESS"
+  handles: "NULL: STATUS_INVALID_HANDLE; the process pseudo-handle: STATUS_OBJECT_TYPE_MISMATCH"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/RtlValidSecurityDescriptor
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: as declared
+  for the NT native API (ntifs.h / wdm.h / winternl.h, Microsoft Learn)
+  where the function is documented there; where it is not, the arguments are
+  those of the matching Win32 function, which map one to one onto the native
+  call, and the interface entry "prototype_note" says so.
+summary: >
+  TRUE (1) when the revision is 1 and the owner, group, DACL and SACL that
+  the descriptor refers to (pointers in the absolute form, offsets in the
+  self-relative form) are valid SIDs and ACLs. A missing part is fine, and
+  so is a missing owner.
+interface:
+  signature: "BOOLEAN RtlValidSecurityDescriptor(PSECURITY_DESCRIPTOR sd)"
+  layout: "SECURITY_DESCRIPTOR (winnt.h, x64): absolute form is 40 bytes {Revision u8, Sbz1 u8, Control u16, pad 4, Owner ptr at 8, Group ptr at 16, Sacl ptr at 24, Dacl ptr at 32}; self-relative form is a 20-byte header {Revision, Sbz1, Control (SE_SELF_RELATIVE 0x8000 set), OffsetOwner u32 at 4, OffsetGroup at 8, OffsetSacl at 12, OffsetDacl at 16} followed by the parts at those offsets. Control bits: 0x1 owner defaulted, 0x2 group defaulted, 0x4 DACL present, 0x8 DACL defaulted, 0x10 SACL present, 0x20 SACL defaulted, 0x1000 DACL protected, 0x2000 SACL protected, 0x4000 RM control valid, 0x8000 self-relative."
+  result: "NTSTATUS values are printed as 8 hex digits: STATUS_SUCCESS 0, STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_UNKNOWN_REVISION 0xC0000058, STATUS_REVISION_MISMATCH 0xC0000059, STATUS_PRIVILEGE_NOT_HELD 0xC0000061, STATUS_INVALID_ACL 0xC0000077, STATUS_INVALID_SID 0xC0000078, STATUS_INVALID_SECURITY_DESCR 0xC0000079, STATUS_NO_TOKEN 0xC000007C, STATUS_ALLOTTED_SPACE_EXCEEDED 0xC0000099, STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5, STATUS_BAD_DESCRIPTOR_FORMAT 0xC00000E7 (ntstatus.h). A BOOLEAN result is one byte, 0 or 1."
+  prototype_note: "documented (wdm.h); Win32 counterpart IsValidSecurityDescriptor"
+rules:
+  built: "all 1: empty, owner only, group only, owner and group, DACL only, SACL only, NULL DACL, NULL SACL, all four parts, NULL DACL and NULL SACL with owner and group, owner defaulted"
+  absolute_damage: "revision 0, 2 and 255 are 0; sbz1 0x55 is 1; a cleared owner pointer is 1 (an owner is not required); a NULL DACL or SACL (present bit, NULL pointer) is 1; a DACL or SACL pointer without its present bit is 1; control 0 with all pointers set is 1; an owner SID with revision 0, a group SID with revision 2, an owner SID with count 16, a DACL with revision 0 or 1, a DACL with count 9 over one ACE, a SACL with revision 0 are 0"
+  self_relative: "a descriptor from RtlMakeSelfRelativeSD is 1 (control 0x8014); offsets 0 for any part are 1; an owner or group offset of 4, 0x14 or 0x1e0 (not a SID there) is 0; a SACL offset of 4 or 0x1e0 is 0 and 0x14 (the SACL itself) is 1; a DACL offset of 4 or 0x1e0 is 0 and 0x14 is 1; revision 2 is 0; a DACL offset with DACL_PRESENT clear is 1; DACL_PRESENT with offset 0 is 1; 20 zero bytes plus SE_SELF_RELATIVE are 1"
+errors:
+  invalid: "returns 0; no other indication"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

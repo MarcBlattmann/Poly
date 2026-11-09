@@ -1,0 +1,19 @@
+[package]
+name = "s1test"
+description = "The program the kernel's ring-3 test of Chrome's headless user32, gdi32 and ole32 calls runs (ADR 0155, batch 4)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "s1test"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

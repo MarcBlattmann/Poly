@@ -1,0 +1,72 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/EnumDisplayMonitors
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-c
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About the
+  Clipboard", "Using the Clipboard", "Clipboard Formats", "Standard
+  Clipboard Formats", "High DPI Desktop Application Development on Windows",
+  "DPI_AWARENESS_CONTEXT", "Multiple Display Monitors", "Window Features"
+  (layered windows, window regions), "About Cursors", "About Icons",
+  "Desktop Window Manager" (dwmapi), "Input Method Manager" (imm32), "About
+  Messages and Message Queues"; winuser.h, wingdi.h, windef.h, winbase.h,
+  dwmapi.h, imm.h, shellscalingapi.h and winerror.h for constants and
+  layouts. The conformance tests of Wine were consulted only where the own
+  sources line of an entry says so, for ideas of what to observe; no code or
+  expected value of theirs is used (every value in these sheets was observed
+  on the machine above).
+summary: >
+  Calls the callback once per monitor that intersects the clip rectangle (or
+  the DC's visible region), on the oracle at most once for the primary
+  monitor 0,0,1920,1080. The callback gets the monitor handle, the DC (NULL
+  when the hdc argument is NULL), the intersection rectangle and dwData.
+  TRUE when the enumeration completed, FALSE when the callback stopped it or
+  the DC was not usable.
+interface:
+  signature: "BOOL EnumDisplayMonitors(HDC hdc, LPCRECT lprcClip, MONITORENUMPROC lpfnEnum, LPARAM dwData)"
+rules:
+  null_dc: "hdc NULL and no clip: one call with the primary monitor, DC NULL, rectangle 0,0,1920,1080, the data value; returns TRUE, last error unchanged"
+  clip: "rectangle is the intersection with the monitor: inside 100,100,300,300 unchanged; partly off -100,-100,300,300 -> 0,0,300,300; spanning -5000..5000 -> 0,0,1920,1080; last pixel 1919,1079,2000,2000 -> 1919,1079,1920,1080; -10,-10,1,1 -> 0,0,1,1; no call (and TRUE) when it misses the monitor: off screen, empty, inverted, touching the right edge (1920,0,2000,100)"
+  screen_dc: "with the screen DC: the callback gets a non-NULL DC whose clip box (GetClipBox) is the rectangle (simple region, kind 2) and LOGPIXELSX 96; with a clip both are cut; a clip off the screen gives no call and TRUE"
+  window_dc: "with a window DC (window at 300,200 size 200x150): rectangle 0,0,200,150 in the DC's coordinates and the same clip box; clip 10,10,50,50 -> 10,10,50,50; a clip beyond the window (250,10,350,50) gives no call and TRUE"
+  stop: "a callback that returns FALSE stops the enumeration and the function returns FALSE (last error unchanged); returning FALSE at a call that never happens (the second) changes nothing; with a clip that finds no monitor FALSE-returning callbacks are never called and the function returns TRUE"
+  monitor_in_callback: "the monitor handle is the primary monitor's (MonitorFromPoint), GetMonitorInfoW on it works inside the callback (monitor 0,0,1920,1080)"
+  bad_dc: "a memory DC (also one with a 200x200 bitmap, with or without clip), a made-up handle and a deleted DC: FALSE without any callback; the last error is left as it was"
+errors:
+  bad_dc: "FALSE, no callback, last error unchanged"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
+  needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants); run with
+  poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because
+  painting, input and the clipboard need the visible desktop. Window
+  procedures log documented messages only: never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels and closed within seconds; the cursor is parked
+  at (1500, 600) at the start and put back at the end; the clipboard is
+  emptied at the end of every test that touches it; a test changes no system
+  setting (only the state of its own process and windows).
+not_covered: >
+  several monitors (order of the calls), a DC for a printer, a callback that
+  changes the monitor set Several monitors, other system DPIs (the oracle is
+  one 1920x1080 monitor at 96 DPI, scale 100%), a manifest (the tests have
+  none: awareness is set with the API), other keyboard layouts than German,
+  installed input methods (the oracle has none active), touch and pen,
+  hooks, menus and dialogs, comctl32 controls, themed (visual style)
+  painting, clipboard contents put there by other programs or by the cloud
+  clipboard and clipboard history.

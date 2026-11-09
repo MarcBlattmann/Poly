@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "69970d4f91fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T11:01:49Z",
+  "tests": [
+    {
+      "name": "sd_getdacl_absolute",
+      "exe_sha256": "43d1c1f34acd2e6e77a52898fb3b7f67ebcd934cabbd6523b5716572fbd94370",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWJzZW50OiBvaz0xIHByZXNlbnQ9MCB3aGVyZT11bmNoYW5nZWQgZGVmYXVsdGVkPTAKTlVMTDogb2s9MSBwcmVzZW50PTEgd2hlcmU9bnVsbCBkZWZhdWx0ZWQ9MAplbXB0eTogb2s9MSBwcmVzZW50PTEgd2hlcmU9ZWxzZXdoZXJlIGRlZmF1bHRlZD0wCiAgc2FtZSBwb2ludGVyIGFzIHBhc3NlZDogdHJ1ZQp0d28gQUNFczogb2s9MSBwcmVzZW50PTEgd2hlcmU9ZWxzZXdoZXJlIGRlZmF1bHRlZD0wCiAgYWNsOiBhY2wgcmV2PTIgc2J6MT0wIHNpemU9NTIgY291bnQ9MiBzYnoyPTAKICBhY2w6IGFjZSAwIG9mZj04IHR5cGU9MHgwIGZsYWdzPTB4MCBzaXplPTIwIG1hc2s9MHg4MDAwMDAwMCBzaWQ9Uy0xLTEtMAogIGFjbDogYWNlIDEgb2ZmPTI4IHR5cGU9MHgxIGZsYWdzPTB4MCBzaXplPTI0IG1hc2s9MHg0MDAwMDAwMCBzaWQ9Uy0xLTUtMzItNTQ0CmRlZmF1bHRlZDogb2s9MSBwcmVzZW50PTEgd2hlcmU9ZWxzZXdoZXJlIGRlZmF1bHRlZD0xCnByZXNlbnQgY2xlYXJlZCBhZ2Fpbjogb2s9MSBwcmVzZW50PTAgd2hlcmU9dW5jaGFuZ2VkIGRlZmF1bHRlZD0wCkRBQ0xfUFJFU0VOVCBieSBoYW5kLCBOVUxMIHNsb3Q6IG9rPTEgcHJlc2VudD0xIHdoZXJlPW51bGwgZGVmYXVsdGVkPTAKc2xvdCBzZXQsIERBQ0xfUFJFU0VOVCBjbGVhcmVkIGJ5IGhhbmQ6IG9rPTEgcHJlc2VudD0wIHdoZXJlPXVuY2hhbmdlZCBkZWZhdWx0ZWQ9MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "absent: ok=1 present=0 where=unchanged defaulted=0\nNULL: ok=1 present=1 where=null defaulted=0\nempty: ok=1 present=1 where=elsewhere defaulted=0\n  same pointer as passed: true\ntwo ACEs: ok=1 present=1 where=elsewhere defaulted=0\n  acl: acl rev=2 sbz1=0 size=52 count=2 sbz2=0\n  acl: ace 0 off=8 type=0x0 flags=0x0 size=20 mask=0x80000000 sid=S-1-1-0\n  acl: ace 1 off=28 type=0x1 flags=0x0 size=24 mask=0x40000000 sid=S-1-5-32-544\ndefaulted: ok=1 present=1 where=elsewhere defaulted=1\npresent cleared again: ok=1 present=0 where=unchanged defaulted=0\nDACL_PRESENT by hand, NULL slot: ok=1 present=1 where=null defaulted=0\nslot set, DACL_PRESENT cleared by hand: ok=1 present=0 where=unchanged defaulted=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "sd_getdacl_errors",
+      "exe_sha256": "1232697dd51c7a138e7cebed47daa162eff4e39927a1693255cc48c708c803c0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmV2aXNpb24gYnl0ZTogb2s9MCBlcnI9MTMwNSBwcmVzZW50PTEwMiB3aGVyZT11bmNoYW5nZWQgZGVmYXVsdGVkPTExOQogIChyZXZpc2lvbiBieXRlIHdhcyAwKQpyZXZpc2lvbiBieXRlOiBvaz0wIGVycj0xMzA1IHByZXNlbnQ9MTAyIHdoZXJlPXVuY2hhbmdlZCBkZWZhdWx0ZWQ9MTE5CiAgKHJldmlzaW9uIGJ5dGUgd2FzIDIpCnJldmlzaW9uIGJ5dGU6IG9rPTAgZXJyPTEzMDUgcHJlc2VudD0xMDIgd2hlcmU9dW5jaGFuZ2VkIGRlZmF1bHRlZD0xMTkKICAocmV2aXNpb24gYnl0ZSB3YXMgMykKcmV2aXNpb24gYnl0ZTogb2s9MCBlcnI9MTMwNSBwcmVzZW50PTEwMiB3aGVyZT11bmNoYW5nZWQgZGVmYXVsdGVkPTExOQogIChyZXZpc2lvbiBieXRlIHdhcyAyNTUpCmFsbC16ZXJvIGJ1ZmZlcjogb2s9MCBlcnI9MTMwNSBwcmVzZW50PTEwMiB3aGVyZT11bmNoYW5nZWQgZGVmYXVsdGVkPTExOQppbnZhbGlkIEFDTCBzZXQ6IG9rPTEgcHJlc2VudD0xIHNhbWUgcG9pbnRlcj10cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "revision byte: ok=0 err=1305 present=102 where=unchanged defaulted=119\n  (revision byte was 0)\nrevision byte: ok=0 err=1305 present=102 where=unchanged defaulted=119\n  (revision byte was 2)\nrevision byte: ok=0 err=1305 present=102 where=unchanged defaulted=119\n  (revision byte was 3)\nrevision byte: ok=0 err=1305 present=102 where=unchanged defaulted=119\n  (revision byte was 255)\nall-zero buffer: ok=0 err=1305 present=102 where=unchanged defaulted=119\ninvalid ACL set: ok=1 present=1 same pointer=true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

@@ -189,12 +189,51 @@ pub(super) fn finish(mut k: Kernel) -> Option<u64> {
 fn end_after_unhandled(mut k: Kernel) -> ! {
     let unhandled = k.seh.unhandled.take().expect("checked by finish");
     let frames = backtrace(&k, &unhandled.1);
+    let regs = unhandled.1.gpr;
+    // 64 quadwords of the user stack at the fault, for reading the call chain off the return
+    // addresses in them (Chrome's bring-up, ADR 0155).
+    // The thread's TLS pointer array (`TEB.ThreadLocalStoragePointer`, gs:[0x58]) and its first
+    // slots: the implicit TLS of the modules loaded.
+    let teb = with(|s| s.processes.get(&k.pid)?.thread(k.tid).map(|t| t.teb)).unwrap_or(0);
+    let tls: Vec<u64> = {
+        let read = |at: u64| {
+            let mut b = [0u8; 8];
+            user::copy_from_user(&mut b, at).ok().map(|()| u64::from_le_bytes(b))
+        };
+        let array = read(teb + 0x58).unwrap_or(0);
+        // And the PEB: its address, ImageBaseAddress (+0x10), Ldr (+0x18), ProcessParameters (+0x20).
+        let peb = read(teb + 0x60).unwrap_or(0);
+        let mut v = alloc::vec![
+            teb,
+            array,
+            peb,
+            read(peb + 0x10).unwrap_or(0),
+            read(peb + 0x18).unwrap_or(0),
+            read(peb + 0x20).unwrap_or(0)
+        ];
+        // The first 0x1d0 bytes of the PEB, after the fields above.
+        v.extend((0..58u64).map(|i| read(peb + 8 * i).unwrap_or(u64::MAX)));
+        if array != 0 {
+            v.extend((0..6u64).map(|i| read(array + 8 * i).unwrap_or(u64::MAX)));
+        }
+        v
+    };
+    let mut structures: Vec<alloc::string::String> =
+        poly_personality_nt::diag::describe(&|at, buf| user::copy_from_user(buf, at).is_ok(), teb);
+    let mut stack = alloc::vec![0u8; 1024];
+    let words: Vec<u64> = if user::copy_from_user(&mut stack, regs[4]).is_ok() {
+        stack.chunks_exact(8).map(|c| u64::from_le_bytes(c.try_into().expect("8 bytes"))).collect()
+    } else {
+        Vec::new()
+    };
     let (pid, tid) = (k.pid, k.tid);
     // Nothing on the heap is left behind: the thread does not come back.
     let record = unhandled.0;
     drop(unhandled);
     drop(k);
-    end_unhandled(pid, tid, &record, frames)
+    structures.push(alloc::format!("teb, tls array, peb, image base, ldr, params, first tls slots {tls:x?}"));
+    drop(tls);
+    end_unhandled(pid, tid, &record, frames, regs, words, structures)
 }
 
 /// The running thread's user memory, for walking its stack.
@@ -216,8 +255,16 @@ fn backtrace(k: &Kernel, ctx: &Context) -> Vec<u64> {
     .unwrap_or((0, 0));
     let mut headers = alloc::vec![0u8; 0x1000];
     let mut modules = Vec::new();
-    if image_base != 0 && user::copy_from_user(&mut headers, image_base).is_ok() {
-        modules.extend(nt_exception::image_module(image_base, &headers));
+    // Every module on the loader's list, so a stack walk passes through DLLs too (the
+    // executable alone left Chrome's crash with a call chain of guesses, ADR 0155).
+    let mut bases = poly_personality_nt::diag::module_bases(&|at, buf| user::copy_from_user(buf, at).is_ok(), stack);
+    if image_base != 0 && !bases.contains(&image_base) {
+        bases.push(image_base);
+    }
+    for base in bases {
+        if user::copy_from_user(&mut headers, base).is_ok() {
+            modules.extend(nt_exception::image_module(base, &headers));
+        }
     }
     let read = |at: u64| {
         let mut b = [0u8; 8];
@@ -232,7 +279,15 @@ fn backtrace(k: &Kernel, ctx: &Context) -> Vec<u64> {
 /// End the calling thread's process for an unhandled exception: its exit
 /// status (and the thread object's) is the exception code, and the
 /// thread's exit code (what `thread::join` sees) all 32 bits of it.
-fn end_unhandled(pid: ProcessId, tid: ThreadRef, record: &ExceptionRecord, frames: Vec<u64>) -> ! {
+fn end_unhandled(
+    pid: ProcessId,
+    tid: ThreadRef,
+    record: &ExceptionRecord,
+    frames: Vec<u64>,
+    regs: [u64; 16],
+    stack: Vec<u64>,
+    structures: Vec<alloc::string::String>,
+) -> ! {
     crate::kprintln!(
         "nt: pid {} unhandled exception {:#010x} at {:#x}, params {:x?}; frames {:x?}",
         pid.0,
@@ -241,6 +296,15 @@ fn end_unhandled(pid: ProcessId, tid: ThreadRef, record: &ExceptionRecord, frame
         record.parameters(),
         frames
     );
+    // The general registers at the fault (rax rcx rdx rbx rsp rbp rsi rdi r8..r15), for working
+    // out which value was null (Chrome's bring-up, ADR 0155).
+    crate::kprintln!("nt: pid {} registers {:x?}", pid.0, regs);
+    crate::kprintln!("nt: pid {} stack {:x?}", pid.0, stack);
+    for line in &structures {
+        crate::kprintln!("nt: pid {} {line}", pid.0);
+    }
+    drop(structures);
+    drop(stack);
     *LAST_UNHANDLED.lock() = Some(Unhandled { pid: pid.0, code: record.code, address: record.address, frames });
     let code = NtStatus(record.code);
     with(|s| s.ctl.entry(tid).or_default().exit_status = Some(code));

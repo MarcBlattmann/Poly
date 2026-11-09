@@ -21,6 +21,8 @@ use poly_win32k::proto::{ClassRef, ClassSpec, CreateSpec, Reply, Request, WinInf
 use poly_win32k::user::{self as u, CMsg, CRect, Env};
 use poly_win32k::wire;
 
+mod headless;
+
 #[link(name = "ntdll", kind = "raw-dylib")]
 unsafe extern "system" {
     fn RtlUpcaseUnicodeChar(c: u16) -> u16;
@@ -47,6 +49,7 @@ unsafe extern "system" {
     fn PolyGdiCreateDisplayDC(hwnd: usize, persistent: i32) -> usize;
     fn PolyGdiReleaseDisplayDC(hdc: usize) -> i32;
     fn PolyGdiDeleteDisplayDC(hdc: usize) -> i32;
+    fn PolyGdiDisplayWindow(hdc: usize, out: *mut u64) -> i32;
     fn PolyGdiFillRect(hdc: usize, rect: *const i32, brush: usize, color: u32) -> i32;
     fn PolyGdiDrawText(hdc: usize, text: *const u16, count: i32, rect: *mut i32, format: u32) -> i32;
     fn PolyGdiDrawTextEx(
@@ -218,6 +221,20 @@ impl Env for Sys {
 
     fn make_region(&self, rects: &[Rect]) -> u64 {
         region_of(rects) as u64
+    }
+
+    fn set_cursor(&self, cursor: u64) {
+        with_cursor(|c| *c = cursor as usize);
+    }
+
+    fn region_rects(&self, rgn: u64) -> Option<Vec<Rect>> {
+        rects_of(rgn as H)
+    }
+
+    fn set_region_rects(&self, rgn: u64, rects: &[Rect]) -> i32 {
+        let flat: Vec<i32> = rects.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect();
+        // SAFETY: `rects.len()` quadruples.
+        unsafe { PolyGdiSetRegionRects(rgn as H, flat.as_ptr(), rects.len() as u32) }
     }
 
     fn delete_object(&self, h: u64) {
@@ -670,28 +687,38 @@ fn origin(hwnd: H) -> Option<(i32, i32)> {
     info(hwnd).map(|i| (i.client.left, i.client.top))
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn ClientToScreen(hwnd: H, pt: *mut i32) -> i32 {
-    // NULL is not a window here (ClientToScreen.yaml).
-    let Some((x, y)) = (hwnd != 0).then(|| origin(hwnd)).flatten() else { return bad_window() };
-    // SAFETY: the caller's POINT.
+/// ClientToScreen / ScreenToClient of the caller's POINT (`WS_EX_LAYOUTRTL`
+/// windows count x from the client area's right edge).
+unsafe fn convert(hwnd: H, pt: *mut i32, to_screen: bool) -> i32 {
+    // SAFETY: the caller's POINT, if any.
+    let p = if pt.is_null() { None } else { Some(unsafe { (*pt, *pt.add(1)) }) };
+    // A bad window is reported before a bad pointer.
+    let Some(i) = (hwnd != 0).then(|| info(hwnd)).flatten() else { return bad_window() };
+    let Some(p) = p else {
+        set_last_error(ERROR_NOACCESS);
+        return 0;
+    };
+    let Some((x, y)) = u::convert_point(&SYS, u64::from(i.hwnd), p, to_screen) else { return 0 };
+    // SAFETY: the caller's POINT, checked above.
     unsafe {
-        *pt += x;
-        *pt.add(1) += y;
+        *pt = x;
+        *pt.add(1) = y;
     }
     1
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "system" fn ClientToScreen(hwnd: H, pt: *mut i32) -> i32 {
+    // NULL is not a window here (ClientToScreen.yaml).
+    // SAFETY: the caller's POINT.
+    unsafe { convert(hwnd, pt, true) }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "system" fn ScreenToClient(hwnd: H, pt: *mut i32) -> i32 {
     // NULL is not a window here (ScreenToClient.yaml).
-    let Some((x, y)) = (hwnd != 0).then(|| origin(hwnd)).flatten() else { return bad_window() };
     // SAFETY: the caller's POINT.
-    unsafe {
-        *pt -= x;
-        *pt.add(1) -= y;
-    }
-    1
+    unsafe { convert(hwnd, pt, false) }
 }
 
 #[unsafe(no_mangle)]
@@ -1141,8 +1168,6 @@ const MONITORINFOF_PRIMARY: u32 = 1;
 /// `ERROR_INVALID_FLAGS`, `ERROR_INVALID_MONITOR_HANDLE` (winerror.h).
 const ERROR_INVALID_FLAGS: u32 = 1004;
 const ERROR_INVALID_MONITOR_HANDLE: u32 = 1461;
-/// `SPI_GETWORKAREA` (winuser.h).
-const SPI_GETWORKAREA: u32 = 0x0030;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiForSystem() -> u32 {
@@ -1256,17 +1281,12 @@ pub unsafe extern "system" fn GetMonitorInfoW(monitor: H, mi: *mut u8) -> i32 {
     1
 }
 
-/// Only SPI_GETWORKAREA is answered: the work area.
+/// The `SPI_GET*` queries (`headless::system_parameters_info`, ADR 0155
+/// batch 4); the `SPI_SET*` actions fail with `ERROR_INVALID_PARAMETER`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn SystemParametersInfoW(action: u32, _param: u32, pv: *mut u8, _ini: u32) -> i32 {
-    if action != SPI_GETWORKAREA || pv.is_null() {
-        set_last_error(ERROR_INVALID_PARAMETER);
-        return 0;
-    }
-    let w = u::screen(&SYS).work;
-    // SAFETY: the caller's RECT.
-    unsafe { put_rect(pv as *mut i32, w) };
-    1
+pub unsafe extern "system" fn SystemParametersInfoW(action: u32, param: u32, pv: *mut u8, _ini: u32) -> i32 {
+    // SAFETY: the caller's promises for this action, passed on.
+    unsafe { headless::system_parameters_info(action, param, pv) }
 }
 
 #[unsafe(no_mangle)]
@@ -1292,20 +1312,34 @@ pub unsafe extern "system" fn AdjustWindowRect(rect: *mut i32, style: u32, menu:
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSysColor(index: i32) -> u32 {
     match index {
-        0 => 0x00C8_C8C8,    // COLOR_SCROLLBAR
-        1 => 0,              // COLOR_BACKGROUND
-        2 => 0x00D1_B499,    // COLOR_ACTIVECAPTION
-        3 => 0x00DB_CDBF,    // COLOR_INACTIVECAPTION
-        4 => 0x00F0_F0F0,    // COLOR_MENU
-        5 => 0x00FF_FFFF,    // COLOR_WINDOW
-        6 => 0x0064_6464,    // COLOR_WINDOWFRAME
-        7 | 8 | 9 | 18 => 0, // menu, window, caption, button text
-        13 => 0x00D7_7800,   // COLOR_HIGHLIGHT
-        14 => 0x00FF_FFFF,   // COLOR_HIGHLIGHTTEXT
-        15 => 0x00F0_F0F0,   // COLOR_BTNFACE
-        16 => 0x00A0_A0A0,   // COLOR_BTNSHADOW
-        17 => 0x006D_6D6D,   // COLOR_GRAYTEXT
-        20 => 0x00FF_FFFF,   // COLOR_BTNHIGHLIGHT
+        0 => 0x00C8_C8C8,                   // COLOR_SCROLLBAR
+        1 => 0,                             // COLOR_BACKGROUND
+        2 => 0x00D1_B499,                   // COLOR_ACTIVECAPTION
+        3 => 0x00DB_CDBF,                   // COLOR_INACTIVECAPTION
+        4 => 0x00F0_F0F0,                   // COLOR_MENU
+        5 => 0x00FF_FFFF,                   // COLOR_WINDOW
+        6 => 0x0064_6464,                   // COLOR_WINDOWFRAME
+        7 | 8 | 9 | 18 => 0,                // menu, window, caption, button text
+        10 => 0x00B4_B4B4,                  // COLOR_ACTIVEBORDER
+        11 => 0x00FC_F7F4,                  // COLOR_INACTIVEBORDER
+        12 => 0x00AB_ABAB,                  // COLOR_APPWORKSPACE
+        19 => 0x0054_4E43,                  // COLOR_INACTIVECAPTIONTEXT
+        21 => 0x0069_6969,                  // COLOR_3DDKSHADOW
+        22 => 0x00E3_E3E3,                  // COLOR_3DLIGHT
+        23 => 0,                            // COLOR_INFOTEXT
+        24 => 0x00E1_FFFF,                  // COLOR_INFOBK
+        26 => 0x00CC_6600,                  // COLOR_HOTLIGHT
+        27 => 0x00EA_D1B9,                  // COLOR_GRADIENTACTIVECAPTION
+        28 => 0x00F2_E4D7,                  // COLOR_GRADIENTINACTIVECAPTION
+        29 => 0x00D7_7800,                  // COLOR_MENUHILIGHT
+        30 => 0x00F0_F0F0,                  // COLOR_MENUBAR
+        13 => 0x00D7_7800,                  // COLOR_HIGHLIGHT
+        14 => 0x00FF_FFFF,                  // COLOR_HIGHLIGHTTEXT
+        15 => 0x00F0_F0F0,                  // COLOR_BTNFACE
+        16 => 0x00A0_A0A0,                  // COLOR_BTNSHADOW
+        17 => 0x006D_6D6D,                  // COLOR_GRAYTEXT
+        20 => 0x00FF_FFFF,                  // COLOR_BTNHIGHLIGHT
+        i32::MIN..=-1 | 31..=i32::MAX => 0, // not a colour index
         _ => 0x00F0_F0F0,
     }
 }
@@ -1407,6 +1441,19 @@ fn commit_surface(hwnd: H) {
     }
     // SAFETY: win32u's stub; the kernel reads `height` rows of the DIB.
     unsafe { PolyUserCommitSurface(hwnd as u64, s[0], s[1], s[2], s[1] * 4) };
+}
+
+/// `WindowFromDC` (BeginPaint.yaml `erase_sent`): the window a DC from
+/// GetDC, GetWindowDC or BeginPaint belongs to; the desktop window for the
+/// screen's DC; NULL for a memory DC, a released DC or a made-up handle.
+#[unsafe(no_mangle)]
+pub extern "system" fn WindowFromDC(hdc: H) -> H {
+    let mut w = 0u64;
+    // SAFETY: our gdi32 writes one u64.
+    if unsafe { PolyGdiDisplayWindow(hdc, &mut w) } == 0 {
+        return 0;
+    }
+    if w == 0 { GetDesktopWindow() } else { w as H }
 }
 
 #[unsafe(no_mangle)]
@@ -1897,7 +1944,8 @@ pub extern "system" fn ReleaseCapture() -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetCursorPos(pt: *mut i32) -> i32 {
     if pt.is_null() {
-        set_last_error(ERROR_INVALID_PARAMETER);
+        // GetCursorPos.yaml `null`.
+        set_last_error(ERROR_NOACCESS);
         return 0;
     }
     let (x, y) = cursor(None);
@@ -2148,11 +2196,6 @@ poly_win32_gui::not_implemented_stubs! {
     CallNextHookEx(hook, code, w, l) => 0;
 }
 
-poly_win32_gui::not_implemented_stubs! {
-    /// `LoadIconW(hInstance, lpIconName)`: NULL on failure.
-    LoadIconW(instance, name) => 0;
-}
-
 // ----- cursors, capture, the window under a point (slice B)
 
 /// The system cursors (LoadCursorW.yaml): IDC_* id, hot spot, colour.
@@ -2296,32 +2339,10 @@ pub unsafe extern "system" fn GetIconInfo(icon: H, ii: *mut u8) -> i32 {
     1
 }
 
-/// `WM_CAPTURECHANGED` (winuser.h).
-const WM_CAPTURECHANGED: u32 = 0x0215;
-
 /// SetCapture.yaml: the previous capture window of the thread's input.
 #[unsafe(no_mangle)]
 pub extern "system" fn SetCapture(hwnd: H) -> H {
-    let st = u::focus::input(&SYS);
-    let set = |h: u32| {
-        call(Request::SetInput { active: 0, focus: 0, capture: h, which: poly_win32k::wm::input::SET_CAPTURE });
-    };
-    if hwnd == 0 {
-        if st.capture != 0 {
-            set(0);
-            u::send(&SYS, u64::from(st.capture), WM_CAPTURECHANGED, 0, 0);
-        }
-        return st.capture as H;
-    }
-    let Some(i) = info(hwnd) else { return bad_window() };
-    if i.tid != SYS.tid() {
-        return 0;
-    }
-    set(i.hwnd);
-    if st.capture != 0 {
-        u::send(&SYS, u64::from(st.capture), WM_CAPTURECHANGED, 0, u64::from(i.hwnd));
-    }
-    st.capture as H
+    u::focus::set_capture(&SYS, hwnd as u64) as H
 }
 
 /// `WindowFromPoint(POINT)` (by value: x in the low half).
@@ -2422,6 +2443,11 @@ pub unsafe extern "system" fn TrackMouseEvent(tme: *mut u8) -> i32 {
         return 1;
     }
     let Some(i) = info(hwnd as H) else { return bad_window() };
+    const TME_NONCLIENT: u32 = 0x10;
+    if flags & TME_NONCLIENT != 0 {
+        u::input::track_nonclient(&SYS, i.hwnd, flags);
+        return 1;
+    }
     call(Request::TrackMouse { hwnd: i.hwnd, flags, hover });
     1
 }
@@ -2465,8 +2491,7 @@ pub unsafe extern "system" fn InvalidateRect(hwnd: H, rect: *const i32, erase: i
 
 #[unsafe(no_mangle)]
 pub extern "system" fn InvalidateRgn(hwnd: H, rgn: H, erase: i32) -> i32 {
-    let rects = if rgn == 0 { None } else { Some(rects_of(rgn).unwrap_or_default()) };
-    i32::from(u::paint::invalidate(&SYS, hwnd as u64, rects.as_deref(), erase != 0))
+    i32::from(u::paint::invalidate_rgn(&SYS, hwnd as u64, rgn as u64, erase != 0))
 }
 
 #[unsafe(no_mangle)]
@@ -2514,10 +2539,7 @@ pub unsafe extern "system" fn GetUpdateRect(hwnd: H, rect: *mut i32, erase: i32)
 /// The update region into `rgn` (client coordinates); its kind.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetUpdateRgn(hwnd: H, rgn: H, erase: i32) -> i32 {
-    let Some((p, _)) = u::paint::update_area(&SYS, hwnd as u64, erase != 0) else { return 0 };
-    let flat: Vec<i32> = p.rects.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect();
-    // SAFETY: `p.rects.len()` quadruples.
-    unsafe { PolyGdiSetRegionRects(rgn, flat.as_ptr(), p.rects.len() as u32) }
+    u::paint::get_update_rgn(&SYS, hwnd as u64, rgn as u64, erase != 0)
 }
 
 /// The entry point (`DllMain`): nothing to set up.

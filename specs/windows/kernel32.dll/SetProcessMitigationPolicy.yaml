@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/kernel32.dll/SetProcessMitigationPolicy
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-chrome-win-2
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Sets one mitigation policy of the calling process. Most policies can only
+  be turned on; Chrome's sandbox targets call it to harden themselves after
+  start-up. Each case below ran in a child process of its own.
+interface:
+  signature: "BOOL SetProcessMitigationPolicy(PROCESS_MITIGATION_POLICY policy, PVOID buffer, SIZE_T length)"
+  policies: "PROCESS_MITIGATION_POLICY values (winnt.h): ProcessDEPPolicy 0, ProcessASLRPolicy 1, ProcessDynamicCodePolicy 2, ProcessStrictHandleCheckPolicy 3, ProcessSystemCallDisablePolicy 4, ProcessMitigationOptionsMask 5, ProcessExtensionPointDisablePolicy 6, ProcessControlFlowGuardPolicy 7, ProcessSignaturePolicy 8, ProcessFontDisablePolicy 9, ProcessImageLoadPolicy 10, ProcessSystemCallFilterPolicy 11, ProcessPayloadRestrictionPolicy 12, ProcessChildProcessPolicy 13, ProcessSideChannelIsolationPolicy 14, ProcessUserShadowStackPolicy 15, ProcessRedirectionTrustPolicy 16, ProcessUserPointerAuthPolicy 17, ProcessSEHOPPolicy 18"
+  structures: "every structure is a 4-byte flags word (DEP: 4 bytes of flags and a BOOLEAN Permanent), bit 0 first (winnt.h): StrictHandleCheck {RaiseExceptionOnInvalidHandleReference 1, HandleExceptionsPermanentlyEnabled 2}; DynamicCode {ProhibitDynamicCode 1, AllowThreadOptOut 2, AllowRemoteDowngrade 4}; ExtensionPointDisable {1}; ImageLoad {NoRemoteImages 1, NoLowMandatoryLabelImages 2, PreferSystem32Images 4}; FontDisable {DisableNonSystemFonts 1}; SystemCallDisable {DisallowWin32kSystemCalls 1}; ChildProcess {NoChildProcessCreation 1}; Signature {MicrosoftSignedOnly 1, StoreSignedOnly 2, MitigationOptIn 4}"
+rules:
+  strict_handle: "flags 1 and flags 2 alone fail with ERROR_INVALID_PARAMETER (87); flags 3 (raise + permanent) succeeds and reads back 3; after it, setting flags 0 fails with ERROR_ACCESS_DENIED (5) and the policy stays 3"
+  dynamic_code: "ProhibitDynamicCode succeeds and reads back 1; a VirtualAlloc of executable memory afterwards fails (the error low nibble is 7; ERROR_DYNAMIC_CODE_BLOCKED in winerror.h is 1655 = 0x677)"
+  succeeds_and_reads_back: "ExtensionPointDisable 1, ImageLoad 7, FontDisable 1, SystemCallDisable 1 (a process that loaded no win32k), ChildProcess 1, SideChannelIsolation 1 and RedirectionTrust 1 succeed and read back what was set"
+  signature: "Signature flags 1 (MicrosoftSignedOnly) succeeds and reads back 5 (MicrosoftSignedOnly | MitigationOptIn)"
+  aslr: "ASLR flags 1 (EnableBottomUpRandomization) succeeds and reads back 5 (bits 0 and 2)"
+  rejected: "DEP (8 bytes, flags 1) fails with ERROR_NOT_SUPPORTED (50) (DEP cannot be changed on x64); ControlFlowGuard flags 1 and UserShadowStack flags 1 fail with ERROR_ACCESS_DENIED (5); PayloadRestriction flags 1 fails with 87"
+  child_process: "after ChildProcess NoChildProcessCreation=1 a CreateProcessW fails with ERROR_CHILD_PROCESS_BLOCKED (367)"
+  invalid_arguments: "class 100, length 0 and length 3 and 8 for a 4-byte policy: ERROR_INVALID_PARAMETER (87); a NULL buffer with length 4 makes the process fault (access violation 0xC0000005)"
+errors:
+  invalid_parameter: "87"
+  access_denied: "5: cannot weaken a permanent policy, CFG and shadow stack from inside"
+  not_supported: "50: DEP on x64"
+side_effects: "the policy of the calling process changes, mostly for good"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  the full flag matrices, policies set at process creation (attribute
+  0x20007), the effect of Signature MicrosoftSignedOnly on later LoadLibrary
+  (the test has no unsigned DLL). Domain accounts and domain-relative
+  well-known SIDs of a real domain, AppContainer and capability SIDs beyond
+  their string forms, auditing (SACL entries are only stored, never
+  evaluated), remote systems (the system-name arguments), Kerberos or NTLM
+  logon tokens, tokens of other users.

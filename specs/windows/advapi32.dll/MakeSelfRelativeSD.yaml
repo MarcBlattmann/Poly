@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/MakeSelfRelativeSD
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Copies an absolute descriptor into a contiguous self-relative one: a
+  20-byte header with the four offsets and, in this order, SACL, DACL,
+  owner, group, with no padding between them. With a missing or too small
+  buffer it fails with ERROR_INSUFFICIENT_BUFFER and reports the size needed
+  in *lpdwBufferLength.
+interface:
+  signature: "BOOL MakeSelfRelativeSD(PSECURITY_DESCRIPTOR pAbsoluteSecurityDescriptor, PSECURITY_DESCRIPTOR pSelfRelativeSecurityDescriptor, LPDWORD lpdwBufferLength)"
+  layout: "SECURITY_DESCRIPTOR, absolute form (winnt.h, x64, 40 bytes): byte 0 Revision (1), byte 1 Sbz1, bytes 2..3 Control (little-endian 16-bit), bytes 4..7 padding, then four 8-byte pointers: Owner at 8, Group at 16, Sacl at 24, Dacl at 32. Self-relative form: the same first 4 bytes, with SE_SELF_RELATIVE (0x8000) in Control, then four 32-bit offsets from the start of the descriptor: Owner at 4, Group at 8, Sacl at 12, Dacl at 16 (header 20 bytes); an offset of 0 means the part is absent (or, for the ACLs, a NULL ACL when the PRESENT bit is set)."
+rules:
+  size_protocol: "NULL buffer, or a length below the need (0, 1, 20, need - 1): FALSE with ERROR_INSUFFICIENT_BUFFER (122), *length = the size needed (104 for owner BA, group SY, a 28-byte DACL and a 28-byte SACL; 20 for the empty descriptor), nothing written; a length of exactly the need or more: TRUE, exactly that many bytes written (104), *length unchanged (105, 204, 400, 512 stay as given). GetSecurityDescriptorLength of the absolute descriptor is 124, i.e. 20 more than the need"
+  layout: "revision byte 1, Sbz1 0, control = the source control | 0x8000, then the offsets of owner, group, SACL, DACL; the parts follow the 20-byte header in the order SACL, DACL, owner, group, each at the previous end: with all four (SIDs BA and SY, ACLs of 28 bytes) sacl 20, dacl 48, owner 76, group 92, total 104; owner BA and group SY alone: owner 20, group 36 (48 bytes); dacl only: dacl 20; sacl only: sacl 20; absent parts have offset 0"
+  exact_bytes: "owner BA alone gives 01 00 00 80 14 00 00 00 + 12 zero bytes + the 16 SID bytes; the empty descriptor gives 01 00 00 80 followed by 16 zero bytes; no padding bytes are inserted (an 8-byte owner S-1-5 at 20 and a 68-byte group at 28 give 92 bytes)"
+  null_dacl: "a NULL DACL (present, NULL slot) with owner SYSTEM defaulted: control 0x8005 (owner defaulted, DACL present, self-relative), owner 20, dacl 0, 32 bytes; an empty DACL (8-byte ACL) with group BU: control 0x8004, dacl 20 (ACL of 8 bytes), group 28, 44 bytes"
+  not_validated: "revision bytes 0, 2 and 255, an all-zero buffer, an owner SID with count 16 (92 bytes) and an ACL with revision 77 and size 8 (28 bytes) are all copied with TRUE"
+  result_valid: "the result passes IsValidSecurityDescriptor and its SDDL text is the source's"
+errors:
+  self_relative_input: "a source that is already self-relative: FALSE, last error ERROR_BAD_DESCRIPTOR_FORMAT (1361); the same for a size query (the length output is 0 afterwards)"
+  buffer: "ERROR_INSUFFICIENT_BUFFER (122) as above"
+side_effects: "writes the self-relative copy"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

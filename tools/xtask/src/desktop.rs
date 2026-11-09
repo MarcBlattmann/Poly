@@ -1913,6 +1913,30 @@ pub fn apps_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
 }
 
+/// The lines of text in a rectangle of a screenshot: for each run of rows
+/// that hold ink (a pixel that differs from `ground` by more than 24 in some
+/// channel; rows less than 2 apart are one line), its first and last row and
+/// the first and last column of ink. A Terminal's page has one run per line.
+fn text_lines(img: &screen::Image, area: (u32, u32, u32, u32), ground: [u8; 3]) -> Vec<(u32, u32, u32, u32)> {
+    let (x0, y0, x1, y1) = area;
+    let (x1, y1) = (x1.min(img.width), y1.min(img.height));
+    let ink = |x: u32, y: u32| img.pixel(x, y).iter().zip(ground).any(|(a, b)| a.abs_diff(b) > 24);
+    let mut lines: Vec<(u32, u32, u32, u32)> = Vec::new();
+    for y in y0..y1 {
+        let cols: Vec<u32> = (x0..x1).filter(|&x| ink(x, y)).collect();
+        let (Some(&first), Some(&last)) = (cols.first(), cols.last()) else { continue };
+        match lines.last_mut() {
+            Some(l) if y <= l.1 + 2 => {
+                l.1 = y;
+                l.2 = l.2.min(first);
+                l.3 = l.3.max(last);
+            }
+            _ => lines.push((y, y, first, last)),
+        }
+    }
+    lines
+}
+
 /// The steps of `desktop-apps`.
 fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let shots = shots_dir();
@@ -1930,9 +1954,35 @@ fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let (tx, ty, tw, th) = shown(&d, "Terminal", 90)?;
     let shell = d.wait("poly-terminal: ", 30)?;
     expect("the terminal started a shell on a pseudo-terminal", shell.contains(" on /dev/pts/"))?;
+    // The shell starts at the window's size, not at a placeholder that the
+    // first layout then changes: a resized shell redraws its prompt, and
+    // the prompt shows twice.
+    expect(
+        &format!("the shell started on a pty of the window's size, not 80x24 ({shell:?})"),
+        shell.ends_with(')') && !shell.ends_with("(80x24)"),
+    )?;
     // The prompt.
     thread::sleep(Duration::from_secs(4));
+    expect(
+        "the shell was not resized while it printed its prompt (the prompt would show twice)",
+        count(&d.lines, "poly-terminal-pty: resized") == 0,
+    )?;
     let img = d.shot("terminal")?;
+    // The prompt shows once: a shell that redraws it (a resize after it
+    // started) leaves a second short line `~ #` under the first. The lines
+    // of the page are the banner (long) and the prompt (short, with the
+    // cursor); a short line is narrower than 120 pixels and starts at the page's
+    // left edge (the mouse pointer on the screenshot is not a line).
+    let lines = text_lines(
+        &img,
+        (tx as u32 + 4, ty as u32 + 48, (tx + tw) as u32 - 4, (ty + th) as u32 - 4),
+        [0x21, 0x21, 0x20],
+    );
+    let prompts = lines.iter().filter(|l| l.3 - l.2 < 120 && l.2 < tx as u32 + 40).count();
+    expect(
+        &format!("the Terminal shows one prompt, not a redrawn second one ({prompts} short lines in {lines:?})"),
+        prompts == 1,
+    )?;
     // The header on the ground, the screen on the page (dark theme).
     let page = img.pixel((tx + tw / 2) as u32, (ty + th - 6) as u32);
     expect("the terminal's page is Alpine's surface 1", page == [0x21, 0x21, 0x20])?;
@@ -2002,6 +2052,10 @@ fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     wait_nth(&d.lines, "poly-compositor: launched Terminal", terminals + 1, 30)?;
     wait_nth(&d.lines, " on /dev/pts/", terminal_starts + 1, 30)?;
     thread::sleep(Duration::from_secs(4));
+    expect(
+        "the second terminal's shell was not resized after it started either",
+        count(&d.lines, "poly-terminal-pty: resized") == 0,
+    )?;
     type_str(&mut d, "echo shortcut; ls -l /tmp; printf '\\033]0;'; ls -1 /tmp | tr -d '\\n'; printf '\\007'\n")?;
     let title = d.wait("poly-terminal: title x", 60)?;
     expect("the shortcut terminal ran ls and received its output", title.ends_with("title x"))?;
@@ -2106,6 +2160,28 @@ mod tests {
     fn the_kernel_command_line_has_no_test_flag() {
         // The compositor is the same program either way: the image decides.
         assert_eq!(append(""), "poly.init=/bin/poly-compositor poly.init.arg=--desktop poly.terminal=off");
+    }
+
+    #[test]
+    fn finds_the_lines_of_text_in_a_screenshot() {
+        let (w, h) = (40u32, 30u32);
+        let mut rgb = vec![0x21u8; (w * h * 3) as usize];
+        let mut ink = |x0: u32, x1: u32, y0: u32, y1: u32| {
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    let i = ((y * w + x) * 3) as usize;
+                    rgb[i..i + 3].copy_from_slice(&[0xe0, 0xe0, 0xe0]);
+                }
+            }
+        };
+        // A wide line with a gap of one row in its glyphs, then a short one.
+        ink(2, 30, 4, 6);
+        ink(2, 20, 8, 10);
+        ink(2, 8, 20, 25);
+        let img = screen::Image { width: w, height: h, rgb };
+        assert_eq!(text_lines(&img, (0, 0, w, h), [0x21; 3]), [(4, 10, 2, 30), (20, 25, 2, 8)]);
+        // Only the area asked for.
+        assert_eq!(text_lines(&img, (0, 12, w, h), [0x21; 3]), [(20, 25, 2, 8)]);
     }
 
     #[test]

@@ -27,6 +27,16 @@ pub const WM_RBUTTONUP: u32 = 0x0205;
 pub const WM_MBUTTONDOWN: u32 = 0x0207;
 pub const WM_MBUTTONUP: u32 = 0x0208;
 pub const WM_MOUSEWHEEL: u32 = 0x020A;
+/// The double-click messages (winuser.h): a button-down plus 2.
+pub const WM_LBUTTONDBLCLK: u32 = 0x0203;
+pub const WM_RBUTTONDBLCLK: u32 = 0x0206;
+pub const WM_MBUTTONDBLCLK: u32 = 0x0209;
+/// `CS_DBLCLKS` (winuser.h): the class wants double-click messages.
+const CS_DBLCLKS: u32 = 0x0008;
+/// `GetDoubleClickTime`, and `SM_CXDOUBLECLK` x `SM_CYDOUBLECLK`: the
+/// rectangle centred on the first click that a second one must fall in.
+const DOUBLE_CLICK_MS: u64 = 500;
+const DOUBLE_CLICK_SIZE: (i32, i32) = (4, 4);
 /// `QS_KEY`, `QS_MOUSEMOVE`, `QS_MOUSEBUTTON` (winuser.h).
 pub const QS_KEY: u32 = 0x0001;
 pub const QS_MOUSEMOVE: u32 = 0x0002;
@@ -321,15 +331,20 @@ impl Wm {
                 value: u64::from(fl & 0xFFFF) | (u64::from(ms & 0xFFFF) << 16) | (u64::from(win) << 32),
             };
         }
-        if flags & TME_HOVER != 0 && flags & TME_CANCEL == 0 {
-            self.hover = Some((hwnd, if hover == u32::MAX { 400 } else { hover }, ctx.now));
-        }
-        if flags & TME_CANCEL != 0 && flags & TME_HOVER != 0 {
-            self.hover = None;
-        }
         if flags & TME_CANCEL != 0 {
-            self.tracking.retain(|t| t.0 != hwnd);
+            // TME_CANCEL removes the kinds of tracking named with it
+            // (TrackMouseEvent.yaml `cancel`; Learn: "the caller should also
+            // specify the type of tracking that it wants to cancel").
+            if flags & TME_HOVER != 0 && self.hover.is_some_and(|h| h.0 == hwnd) {
+                self.hover = None;
+            }
+            if flags & TME_LEAVE != 0 {
+                self.tracking.retain(|t| t.0 != hwnd);
+            }
             return Reply::Ok {};
+        }
+        if flags & TME_HOVER != 0 {
+            self.hover = Some((hwnd, if hover == u32::MAX { 400 } else { hover }, ctx.now));
         }
         if flags & TME_LEAVE != 0 {
             let (x, y) = self.cursor;
@@ -442,14 +457,24 @@ impl Wm {
         let (x, y) = self.cursor;
         let target = self.mouse_target(x, y);
         if target == 0 {
+            // The cursor is over no window: every tracked window was left
+            // (TrackMouseEvent.yaml `leave`), the hover is over.
+            if msg == WM_MOUSEMOVE {
+                self.end_tracking(ctx, 0, (x, y), fx);
+            }
             return;
         }
         let Some(thread) = self.thread_of(target) else { return };
         if thread.0 == 0 || thread == super::input::KEEPER {
+            // The desktop, or a window of no process of ours.
+            if msg == WM_MOUSEMOVE {
+                self.end_tracking(ctx, 0, (x, y), fx);
+            }
             return;
         }
         let keys = self.mouse_keys();
         let key = self.input_key(thread);
+        let msg = self.double_click(ctx, target, msg, (x, y));
         let l = u64::from(x as u16) | (u64::from(y as u16) << 16);
         let q = self.queue(key);
         // A move or wheel turn not yet retrieved is replaced or summed.
@@ -475,19 +500,67 @@ impl Wm {
         fx.wake.push(key);
         // Tracked windows the cursor left get WM_MOUSELEAVE after the move's
         // messages (TrackMouseEvent.yaml `leave`).
-        if msg == WM_MOUSEMOVE && !self.tracking.is_empty() {
-            let left: Vec<u32> = self.tracking.iter().filter(|t| t.0 != target).map(|t| t.0).collect();
-            self.tracking.retain(|t| t.0 == target);
+        if msg == WM_MOUSEMOVE {
+            self.end_tracking(ctx, target, (x, y), fx);
+        }
+    }
+
+    /// A move of the cursor to `at`, over window `target` (0: none): the
+    /// windows whose client area it left get WM_MOUSELEAVE after the move's
+    /// messages (leaving for the window's own frame counts: the tracking is
+    /// of the client area; TrackMouseEvent.yaml `leave`, `nonclient`), and a
+    /// hover that was not over the new place ends.
+    fn end_tracking(&mut self, ctx: Ctx, target: u32, at: (i32, i32), fx: &mut Effects) {
+        let outside = |wm: &Wm, h: u32| h != target || !wm.in_client(h, at);
+        if !self.tracking.is_empty() {
+            let left: Vec<u32> = self.tracking.iter().filter(|t| outside(self, t.0)).map(|t| t.0).collect();
+            self.tracking.retain(|t| !left.contains(&t.0));
             for h in left {
                 self.queue_leave(ctx, h, fx);
             }
         }
-        if msg == WM_MOUSEMOVE
-            && let Some((hw, _, _)) = self.hover
-            && hw != target
+        if let Some((hw, _, _)) = self.hover
+            && outside(self, hw)
         {
             self.hover = None;
         }
+    }
+
+    /// Whether screen point `at` is in window `h`'s client area.
+    fn in_client(&self, h: u32, at: (i32, i32)) -> bool {
+        let Some(w) = self.get(u64::from(h)) else { return false };
+        let (ox, oy) = self.client_origin(h);
+        let c = w.client_rel;
+        at.0 >= ox && at.1 >= oy && at.0 < ox + c.width() && at.1 < oy + c.height()
+    }
+
+    /// A button-down that is the second of a double click on a window whose
+    /// class has `CS_DBLCLKS` becomes its double-click message
+    /// (WindowFromPoint.yaml `double_click`): the same button on the same
+    /// window within `GetDoubleClickTime` and the double-click rectangle
+    /// around the first click (1 pixel to the right is one, 3 pixels or 2
+    /// down is not); the click after a double click starts afresh. Any other
+    /// message is returned as it is.
+    fn double_click(&mut self, ctx: Ctx, target: u32, msg: u32, at: (i32, i32)) -> u32 {
+        if !matches!(msg, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN) {
+            return msg;
+        }
+        let wants = self.get(u64::from(target)).is_some_and(|w| {
+            self.classes.get(w.class).and_then(|c| c.as_ref()).is_some_and(|c| c.style & CS_DBLCLKS != 0)
+        });
+        if wants
+            && let Some((m, h, x, y, t)) = self.last_click
+            && m == msg
+            && h == target
+            && ctx.now.saturating_sub(t) <= DOUBLE_CLICK_MS
+            && (x - DOUBLE_CLICK_SIZE.0 / 2..x + DOUBLE_CLICK_SIZE.0 / 2).contains(&at.0)
+            && (y - DOUBLE_CLICK_SIZE.1 / 2..y + DOUBLE_CLICK_SIZE.1 / 2).contains(&at.1)
+        {
+            self.last_click = None;
+            return msg + 2;
+        }
+        self.last_click = Some((msg, target, at.0, at.1, ctx.now));
+        msg
     }
 
     /// Marks the move just queued for thread `key` as the one a capture
@@ -597,6 +670,12 @@ impl Wm {
             let mut cur = t;
             while let Some(cw) = self.get(u64::from(cur)) {
                 let (ox, oy) = self.client_origin(cur);
+                // Children are clipped to the client area: a point over the
+                // frame belongs to the window, not to a child reaching over it.
+                let c = cw.client_rel;
+                if x < ox || y < oy || x >= ox + c.width() || y >= oy + c.height() {
+                    break;
+                }
                 let next =
                     cw.children.iter().copied().find(|&c| {
                         self.get(u64::from(c)).is_some_and(|k| k.style & WS_VISIBLE != 0 && inside(k, ox, oy))
@@ -645,11 +724,11 @@ impl Wm {
             Some((vk as usize & 0xFF, side_of(vk, scan, ext), down))
         } else if is_mouse(m.msg) {
             match m.msg {
-                WM_LBUTTONDOWN => Some((VK_LBUTTON, None, true)),
+                WM_LBUTTONDOWN | WM_LBUTTONDBLCLK => Some((VK_LBUTTON, None, true)),
                 WM_LBUTTONUP => Some((VK_LBUTTON, None, false)),
-                WM_RBUTTONDOWN => Some((VK_RBUTTON, None, true)),
+                WM_RBUTTONDOWN | WM_RBUTTONDBLCLK => Some((VK_RBUTTON, None, true)),
                 WM_RBUTTONUP => Some((VK_RBUTTON, None, false)),
-                WM_MBUTTONDOWN => Some((VK_MBUTTON, None, true)),
+                WM_MBUTTONDOWN | WM_MBUTTONDBLCLK => Some((VK_MBUTTON, None, true)),
                 WM_MBUTTONUP => Some((VK_MBUTTON, None, false)),
                 _ => None,
             }

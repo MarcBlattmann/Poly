@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e5f25a5644ea",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:18:06Z",
+  "tests": [
+    {
+      "name": "sid_stra_invalid",
+      "exe_sha256": "9e51c0fcb303fbeecbb6ac0c0e95b4f1afe26918d0ef4ab02d8cb039d1c5c957",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmV2aXNpb24gMCBjb3VudCAyOiBvaz0wIGVycj0xMzM3IG91dF9rZXB0PXRydWUKcmV2aXNpb24gMiBjb3VudCAyOiBvaz0wIGVycj0xMzM3IG91dF9rZXB0PXRydWUKcmV2aXNpb24gMSBjb3VudCAxNjogb2s9MCBlcnI9MTMzNyBvdXRfa2VwdD10cnVlCnJldmlzaW9uIDEgY291bnQgMjAwOiBvaz0wIGVycj0xMzM3IG91dF9rZXB0PXRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "revision 0 count 2: ok=0 err=1337 out_kept=true\nrevision 2 count 2: ok=0 err=1337 out_kept=true\nrevision 1 count 16: ok=0 err=1337 out_kept=true\nrevision 1 count 200: ok=0 err=1337 out_kept=true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

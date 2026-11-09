@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/GetSidSubAuthorityCount
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns a pointer to the count byte inside the SID: offset 1 of the
+  structure. The count byte is the only thing that decides the SID's length,
+  so writing it changes what GetLengthSid and ConvertSidToStringSidW see.
+interface:
+  signature: "PUCHAR GetSidSubAuthorityCount(PSID sid)"
+  layout: "SID (winnt.h): byte 0 Revision (1), byte 1 SubAuthorityCount (0..15 valid), bytes 2..7 IdentifierAuthority (six bytes, big-endian value), then SubAuthority[count] as little-endian 32-bit values; length 8 + 4 * count (at most 68). SECURITY_MAX_SID_SIZE is 68."
+rules:
+  pointer: "the result points at offset 1 of the SID"
+  values: "S-1-5 (WinNtAuthoritySid) reports 0, S-1-5-18 reports 1, S-1-5-32-545 reports 2; SIDs built with InitializeSid for counts 0, 1, 8, 15 report the same"
+  write: "setting the byte of S-1-5-32-545 to 1 gives length 12, IsValidSid TRUE and the text \"S-1-5-32\"; setting it to 3 gives length 20 and IsValidSid TRUE (the third slot is whatever the buffer held)"
+errors:
+  none: "no error is reported; the function does not validate the SID"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

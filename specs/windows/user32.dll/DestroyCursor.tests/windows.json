@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "dc_basic",
+      "exe_sha256": "0982ab39e7f91b39dfe91088d28c6901ec0cd14a6fb6e96577b1b6793db966eb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RGVzdHJveUN1cnNvcihDcmVhdGVDdXJzb3IpOiBUUlVFIGVycm9yIDB4MTIzNAphZ2FpbjogRkFMU0UgZXJyb3IgMTQwMgpHZXRJY29uSW5mbyhkZXN0cm95ZWQpOiBHZXRJY29uSW5mbyBGQUxTRSBlcnJvciAxNDAyCkRlc3Ryb3lDdXJzb3IoY3Vyc29yIGxvYWRlZCBmcm9tIGEgZmlsZSk6IFRSVUUgZXJyb3IgMHgxMjM0CmNvcHkgb2YgYSBjcmVhdGVkIGN1cnNvcjogd2luZG93CiAgIGNvcHk6IGZJY29uIDAgaG90c3BvdCAyLDIgbWFzayAxNngzMiBwbGFuZXMgMSBiaXRzIDEgOyBjb2xvciAweDAgcGxhbmVzIDAgYml0cyAwIChubyBjb2xvciBiaXRtYXApCkRlc3Ryb3lDdXJzb3IoQ3JlYXRlSWNvbkluZGlyZWN0IGN1cnNvcik6IFRSVUUgZXJyb3IgMHgxMjM0CkRlc3Ryb3lDdXJzb3IoY29weSk6IFRSVUUgZXJyb3IgMHgxMjM0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DestroyCursor(CreateCursor): TRUE error 0x1234\nagain: FALSE error 1402\nGetIconInfo(destroyed): GetIconInfo FALSE error 1402\nDestroyCursor(cursor loaded from a file): TRUE error 0x1234\ncopy of a created cursor: window\n   copy: fIcon 0 hotspot 2,2 mask 16x32 planes 1 bits 1 ; color 0x0 planes 0 bits 0 (no color bitmap)\nDestroyCursor(CreateIconIndirect cursor): TRUE error 0x1234\nDestroyCursor(copy): TRUE error 0x1234\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

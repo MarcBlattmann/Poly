@@ -854,3 +854,11 @@ fn delay_load_imports_go_to_stubs_too() {
     assert_eq!(read_u64(&mut w.p, slot).unwrap(), addr, "the slot holds the stub");
     assert_eq!(w.l.take_stubbed(), ["test.exe: late.dll!Mul"]);
 }
+
+#[test]
+fn peb_ldr_data_says_how_big_it_is_and_that_it_is_initialised() {
+    let mut w = world(&exe(vec![]).write());
+    let ldr = read_u64(&mut w.p, PEB + PEB_LDR).unwrap();
+    assert_eq!(read_u32(&mut w.p, ldr).unwrap(), 0x58, "Length is sizeof(PEB_LDR_DATA)");
+    assert_eq!(w.p.memory(ldr + 4, 1).unwrap(), &[1], "Initialized");
+}

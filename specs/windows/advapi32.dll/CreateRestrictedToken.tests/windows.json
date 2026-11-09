@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e1df20b984fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:53:24Z",
+  "tests": [
+    {
+      "name": "crt_disable_sids",
+      "exe_sha256": "d198162e8f3d31df0fbf65b7dcea01b9221dd5b9f57a03c80c952da5b32278a3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGlzYWJsZSBhZG1pbmlzdHJhdG9yczogb2s9MSBlcnI9LTEKICBhZG1pbnMgYXR0cnM9MTYgdXNlcnMgYXR0cnM9NyBldmVyeW9uZSBhdHRycz03IGF1dGhlbnRpY2F0ZWQgdXNlcnMgYXR0cnM9NwogIHJlc3RyaWN0ZWQ9MCBoYXNyZXN0cmljdGlvbnM9MSBpbnRlZ3JpdHk9MHgzMDAwCmRpc2FibGUgYWRtaW5pc3RyYXRvcnMgYW5kIHVzZXJzOiBvaz0xIGVycj0tMQogIGFkbWlucyBhdHRycz0xNiB1c2VycyBhdHRycz0xNiBldmVyeW9uZSBhdHRycz03IGF1dGhlbnRpY2F0ZWQgdXNlcnMgYXR0cnM9NwogIHJlc3RyaWN0ZWQ9MCBoYXNyZXN0cmljdGlvbnM9MSBpbnRlZ3JpdHk9MHgzMDAwCmRpc2FibGUgZXZlcnlvbmU6IG9rPTEgZXJyPS0xCiAgYWRtaW5zIGF0dHJzPTE1IHVzZXJzIGF0dHJzPTcgZXZlcnlvbmUgYXR0cnM9MTYgYXV0aGVudGljYXRlZCB1c2VycyBhdHRycz03CiAgcmVzdHJpY3RlZD0wIGhhc3Jlc3RyaWN0aW9ucz0xIGludGVncml0eT0weDMwMDAKZGlzYWJsZSBzeXN0ZW0gKG5vdCBpbiB0aGUgdG9rZW4pOiBvaz0xIGVycj0tMQogIGFkbWlucyBhdHRycz0xNSB1c2VycyBhdHRycz03IGV2ZXJ5b25lIGF0dHJzPTcgYXV0aGVudGljYXRlZCB1c2VycyBhdHRycz03CiAgcmVzdHJpY3RlZD0wIGhhc3Jlc3RyaWN0aW9ucz0wIGludGVncml0eT0weDMwMDAKZGlzYWJsZSB0aGUgdXNlciBTSUQ6IG9rPTEgdXNlciBhdHRycyBiZWZvcmU9MHgwIGFmdGVyPTB4MTAgc2FtZSB1c2VyIHNpZD0xCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "disable administrators: ok=1 err=-1\n  admins attrs=16 users attrs=7 everyone attrs=7 authenticated users attrs=7\n  restricted=0 hasrestrictions=1 integrity=0x3000\ndisable administrators and users: ok=1 err=-1\n  admins attrs=16 users attrs=16 everyone attrs=7 authenticated users attrs=7\n  restricted=0 hasrestrictions=1 integrity=0x3000\ndisable everyone: ok=1 err=-1\n  admins attrs=15 users attrs=7 everyone attrs=16 authenticated users attrs=7\n  restricted=0 hasrestrictions=1 integrity=0x3000\ndisable system (not in the token): ok=1 err=-1\n  admins attrs=15 users attrs=7 everyone attrs=7 authenticated users attrs=7\n  restricted=0 hasrestrictions=0 integrity=0x3000\ndisable the user SID: ok=1 user attrs before=0x0 after=0x10 same user sid=1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "crt_privileges",
+      "exe_sha256": "ef22ef97f1b6807a39023a40472457b3057a6a8ceed54bdbe9588c08f435029d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3JpZ2luYWwgaGFzIG1vcmUgdGhhbiB0aHJlZSBwcml2aWxlZ2VzCmZsYWdzIDA6IG9rPTEgc2FtZSBwcml2aWxlZ2UgY291bnQgYXMgdGhlIG9yaWdpbmFsOiB0cnVlCmZsYWdzIDA6IHR5cGU9MSByZXN0cmljdGVkPTAgaGFzcmVzdHJpY3Rpb25zPTAKRElTQUJMRV9NQVhfUFJJVklMRUdFOiBvaz0xCiAgYWZ0ZXI6IGNvdW50PTEKICBhZnRlclswXTogU2VDaGFuZ2VOb3RpZnlQcml2aWxlZ2UgYXR0cnM9MHgzCmRlbGV0ZSBiYWNrdXAgYW5kIHJlc3RvcmU6IG9rPTEgZXJyPS0xCiAgYmFja3VwIGF0dHJzPS0xIHJlc3RvcmUgYXR0cnM9LTEgc2h1dGRvd24gYXR0cnM9MyBjb3VudCAyNCAtPiAyMgpkZWxldGUgYSBwcml2aWxlZ2UgdGhlIHRva2VuIGxhY2tzICh0d2ljZSk6IG9rPTEgZXJyPS0xCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "original has more than three privileges\nflags 0: ok=1 same privilege count as the original: true\nflags 0: type=1 restricted=0 hasrestrictions=0\nDISABLE_MAX_PRIVILEGE: ok=1\n  after: count=1\n  after[0]: SeChangeNotifyPrivilege attrs=0x3\ndelete backup and restore: ok=1 err=-1\n  backup attrs=-1 restore attrs=-1 shutdown attrs=3 count 24 -> 22\ndelete a privilege the token lacks (twice): ok=1 err=-1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "crt_restrict_sids",
+      "exe_sha256": "0ab851c336bc88f2d547015b97f596e7c573455da8419845aac3df79a645a38b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVzdHJpY3QgZXZlcnlvbmU6IG9rPTEgZXJyPS0xCiAgcmVzdHJpY3RlZD0xIGhhc3Jlc3RyaWN0aW9ucz0xIHR5cGU9MQogIHJlc3RyaWN0ZWQgc2lkczogY291bnQ9MQogIHJlc3RyaWN0ZWQgc2lkc1swXTogUy0xLTEtMCBhdHRycz0weDcKICBhZG1pbnMgYXR0cnM9MTUgZXZlcnlvbmUgYXR0cnM9NwpyZXN0cmljdCBldmVyeW9uZSBhbmQgcmVzdHJpY3RlZDogb2s9MSBlcnI9LTEKICByZXN0cmljdGVkPTEgaGFzcmVzdHJpY3Rpb25zPTEgdHlwZT0xCiAgcmVzdHJpY3RlZCBzaWRzOiBjb3VudD0yCiAgcmVzdHJpY3RlZCBzaWRzWzBdOiBTLTEtMS0wIGF0dHJzPTB4NwogIHJlc3RyaWN0ZWQgc2lkc1sxXTogUy0xLTUtMTIgYXR0cnM9MHg3CiAgYWRtaW5zIGF0dHJzPTE1IGV2ZXJ5b25lIGF0dHJzPTcKcmVzdHJpY3QgdXNlcnM6IG9rPTEgZXJyPS0xCiAgcmVzdHJpY3RlZD0xIGhhc3Jlc3RyaWN0aW9ucz0xIHR5cGU9MQogIHJlc3RyaWN0ZWQgc2lkczogY291bnQ9MQogIHJlc3RyaWN0ZWQgc2lkc1swXTogUy0xLTUtMzItNTQ1IGF0dHJzPTB4NwogIGFkbWlucyBhdHRycz0xNSBldmVyeW9uZSBhdHRycz03CnJlc3RyaWN0IHVua25vd24gUy0xLTUtOTktMTogb2s9MSBlcnI9LTEKICByZXN0cmljdGVkPTEgaGFzcmVzdHJpY3Rpb25zPTEgdHlwZT0xCiAgcmVzdHJpY3RlZCBzaWRzOiBjb3VudD0xCiAgcmVzdHJpY3RlZCBzaWRzWzBdOiBTLTEtNS05OS0xIGF0dHJzPTB4NwogIGFkbWlucyBhdHRycz0xNSBldmVyeW9uZSBhdHRycz03CmF0dHJzIGdpdmVuIDB4MTc6IGNvdW50PTAKb2s9MCBlcnI9ODcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "restrict everyone: ok=1 err=-1\n  restricted=1 hasrestrictions=1 type=1\n  restricted sids: count=1\n  restricted sids[0]: S-1-1-0 attrs=0x7\n  admins attrs=15 everyone attrs=7\nrestrict everyone and restricted: ok=1 err=-1\n  restricted=1 hasrestrictions=1 type=1\n  restricted sids: count=2\n  restricted sids[0]: S-1-1-0 attrs=0x7\n  restricted sids[1]: S-1-5-12 attrs=0x7\n  admins attrs=15 everyone attrs=7\nrestrict users: ok=1 err=-1\n  restricted=1 hasrestrictions=1 type=1\n  restricted sids: count=1\n  restricted sids[0]: S-1-5-32-545 attrs=0x7\n  admins attrs=15 everyone attrs=7\nrestrict unknown S-1-5-99-1: ok=1 err=-1\n  restricted=1 hasrestrictions=1 type=1\n  restricted sids: count=1\n  restricted sids[0]: S-1-5-99-1 attrs=0x7\n  admins attrs=15 everyone attrs=7\nattrs given 0x17: count=0\nok=0 err=87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

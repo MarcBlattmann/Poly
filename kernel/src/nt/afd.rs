@@ -317,6 +317,38 @@ pub(super) fn net_info() -> (Vec<[u8; 4]>, String) {
     (dns, if host.is_empty() { String::from("poly") } else { host })
 }
 
+/// The interfaces `iphlpapi` lists (ADR 0155): the loopback inside the
+/// stack and, when there is a NIC, the virtio-net device with the boot
+/// setting's addresses.
+pub(super) fn net_interfaces() -> Vec<poly_personality_nt::afd::IfInfo> {
+    use poly_net::NetDevice as _;
+    use poly_personality_nt::afd::IfInfo;
+    let mut v = alloc::vec![IfInfo::loopback()];
+    let Some(info) = net::info() else { return v };
+    if info.bdf.is_none() {
+        return v;
+    }
+    let nic = net::with_interface(|i| {
+        let ipv4 = info.ipv4;
+        let ipv6 = i.stack.ipv6_link_local().map(|a| (a.octets(), 64u8));
+        IfInfo {
+            index: 2,
+            kind: poly_personality_nt::afd::IfKind::Ethernet,
+            mac: i.dev.mac().0,
+            mtu: i.dev.mtu() as u32,
+            up: i.dev.link_up() && !i.dev.failed(),
+            // virtio-net has no fixed speed; QEMU's NIC reports 10 Gbit/s to Windows guests.
+            speed: 10_000_000_000,
+            ipv4: ipv4.map(|s| (s.addr.addr.octets(), s.addr.prefix_len)),
+            gateway: ipv4.and_then(|s| s.gateway).map(|g| g.octets()),
+            dns: ipv4.and_then(|s| s.dns).map(|d| alloc::vec![d.octets()]).unwrap_or_default(),
+            ipv6,
+        }
+    });
+    v.extend(nic);
+    v
+}
+
 // ----- overlapped requests
 
 static PENDING: Mutex<Vec<PendIo>> = Mutex::new(Vec::new());

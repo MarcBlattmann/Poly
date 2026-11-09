@@ -60,7 +60,7 @@ pub use tables::*;
 
 // ----- the command ------------------------------------------------------------------------
 
-const USAGE: &str = "usage: cargo xtask win trace-kit <exe | 7zip> [<more exe>...] [--out <dir>] [--data <name>]... [--agg] [--skip <dll>]...\n       \
+const USAGE: &str = "usage: cargo xtask win trace-kit <exe | 7zip> [<more exe>...] [--out <dir>] [--data <name>]... [--agg | --sync] [--skip <dll>]...\n       \
                      cargo xtask win trace-diff <a.jsonl> <b.jsonl> [--map-a <from>=<to>] [--map-b <from>=<to>] [--limit <n>] [--check]";
 
 fn mapping(s: &str) -> Result<(String, String)> {
@@ -75,6 +75,7 @@ pub fn trace_kit_command(args: &[String]) -> Result {
     let mut data = Vec::new();
     let mut skip = Vec::new();
     let mut agg = false;
+    let mut sync = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -82,16 +83,17 @@ pub fn trace_kit_command(args: &[String]) -> Result {
             "--data" => data.push(it.next().ok_or(USAGE)?.clone()),
             "--skip" => skip.push(it.next().ok_or(USAGE)?.clone()),
             "--agg" => agg = true,
+            "--sync" => sync = true,
             s if exe.is_none() && !s.starts_with("--") => exe = Some(s.to_string()),
             s if !s.starts_with("--") => extra.push(PathBuf::from(s)),
             _ => return Err(USAGE.into()),
         }
     }
-    if agg || !extra.is_empty() || !skip.is_empty() {
+    if agg || sync || !extra.is_empty() || !skip.is_empty() {
         let first = PathBuf::from(exe.ok_or(USAGE)?);
         let exes: Vec<PathBuf> = std::iter::once(first).chain(extra).collect();
         let out = out.unwrap_or_else(|| work_dir().join("kit"));
-        let kit = build_kit_multi(&exes, &out, &data, agg, &skip)?;
+        let kit = build_kit_multi(&exes, &out, &data, agg, sync, &skip)?;
         for p in &kit.proxies {
             eprintln!(
                 "    {} for {}: {} functions, {} forwarded variables",

@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtOpenProcessToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Opens the primary token of a process and stores a new handle. The granted
+  access is the requested mask with generic rights mapped, 0 is refused,
+  MAXIMUM_ALLOWED gives every token right. The process handle must allow
+  PROCESS_QUERY_LIMITED_INFORMATION (or more). OpenProcessToken calls it
+  with the same arguments.
+interface:
+  signature: "NTSTATUS NtOpenProcessToken(HANDLE ProcessHandle, ACCESS_MASK DesiredAccess, PHANDLE TokenHandle)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87."
+  result: "the handle is of object type \"Token\" (NtQueryObject type name), is not inheritable (handle flags 0) and a failing call leaves *TokenHandle as it was"
+rules:
+  single_rights: "on the current process (pseudo-handle -1): TOKEN_ASSIGN_PRIMARY 0x1, TOKEN_DUPLICATE 0x2, TOKEN_IMPERSONATE 0x4, TOKEN_QUERY 0x8, TOKEN_QUERY_SOURCE 0x10, TOKEN_ADJUST_PRIVILEGES 0x20, TOKEN_ADJUST_GROUPS 0x40, TOKEN_ADJUST_DEFAULT 0x80, TOKEN_ADJUST_SESSIONID 0x100 and the standard rights DELETE 0x10000, READ_CONTROL 0x20000, WRITE_DAC 0x40000, WRITE_OWNER 0x80000 each return STATUS_SUCCESS and are granted exactly as asked"
+  composite_masks: "TOKEN_READ (0x20008) is granted 0x20008, TOKEN_WRITE (0x200e0) 0x200e0, TOKEN_EXECUTE (0x20000) 0x20000, TOKEN_ALL_ACCESS (0xf01ff) 0xf01ff, MAXIMUM_ALLOWED (0x2000000) 0xf01ff"
+  generic: "GENERIC_READ (0x80000000) is granted 0x2001a, GENERIC_WRITE (0x40000000) 0x201e0, GENERIC_EXECUTE (0x20000000) 0x20005, GENERIC_ALL (0x10000000) 0xf01ff"
+  system_security: "ACCESS_SYSTEM_SECURITY (0x1000000) is granted 0x1000000 with the oracle's elevated administrator token (ambient: the privilege behind it is available)"
+  refused_masks: "access 0, SYNCHRONIZE (0x100000) and undefined specific bits 0x200 and 0x8000 return STATUS_ACCESS_DENIED (RtlNtStatusToDosError 5) and leave *TokenHandle unchanged"
+  process_handles: "the pseudo-handle -1, a real handle of this process (all access) and a suspended child process handle with PROCESS_ALL_ACCESS, PROCESS_QUERY_LIMITED_INFORMATION (0x1000) or PROCESS_QUERY_INFORMATION (0x400) succeed (TOKEN_QUERY granted 0x8); a child handle with only SYNCHRONIZE, PROCESS_TERMINATE, PROCESS_DUP_HANDLE or access 0 gives STATUS_ACCESS_DENIED"
+  child_token: "the token of a suspended child created by CreateProcess is a different token object (token id differs) of the same user, in the same logon session, type TokenPrimary (1), session 0, integrity 0x3000 (High)"
+errors:
+  null_handle: "a NULL process handle: STATUS_INVALID_HANDLE (0xC0000008, DOS error 6); a garbage value (0x7FF4) and a closed handle likewise"
+  wrong_type: "the thread pseudo-handle -2 and an event handle: STATUS_OBJECT_TYPE_MISMATCH (0xC0000024, DOS error 6)"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

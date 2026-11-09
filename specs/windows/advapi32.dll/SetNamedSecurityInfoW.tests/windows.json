@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "db56e24d0ac3",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T17:08:29Z",
+  "tests": [
+    {
+      "name": "sns_errors",
+      "exe_sha256": "55259342549b5183cb1acd617c3bb99424c55f5c73316d62aaf0f3fdb523a748",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWlzc2luZyBmaWxlOiByZXN1bHQgMgplbXB0eSBuYW1lOiByZXN1bHQgMTIzCm9iamVjdCB0eXBlIDA6IHJlc3VsdCA4NwpvYmplY3QgdHlwZSA5OTogcmVzdWx0IDg3CmluZm8gMDogcmVzdWx0IDUKREFDTCByZXF1ZXN0ZWQsIERBQ0wgbnVsbCAoZXZlcnlvbmUgZnVsbCBhY2Nlc3MpOiByZXN1bHQgMAphZnRlciB0aGUgbnVsbCBEQUNMOiBkYWNsIHBvaW50ZXIgbnVsbD10cnVlCm93bmVyIHJlcXVlc3RlZCwgb3duZXIgbnVsbDogcmVzdWx0IDg3Cmdyb3VwIHJlcXVlc3RlZCwgZ3JvdXAgbnVsbDogcmVzdWx0IDg3Cm93bmVyIEV2ZXJ5b25lIChhbWJpZW50OiBhZG1pbmlzdHJhdG9yIHdpdGggU2VSZXN0b3JlL1NlVGFrZU93bmVyc2hpcCk6IHJlc3VsdCAwCmludmFsaWQgQUNMIChyZXZpc2lvbiA5KTogcmVzdWx0IDEzMzYKdW5rbm93biBpbmZvcm1hdGlvbiBiaXQgMHgxMDAgb25seTogcmVzdWx0IDAKREFDTCB3aXRoIGFuIHVua25vd24gYml0IDB4MTAwOiByZXN1bHQgMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "missing file: result 2\nempty name: result 123\nobject type 0: result 87\nobject type 99: result 87\ninfo 0: result 5\nDACL requested, DACL null (everyone full access): result 0\nafter the null DACL: dacl pointer null=true\nowner requested, owner null: result 87\ngroup requested, group null: result 87\nowner Everyone (ambient: administrator with SeRestore/SeTakeOwnership): result 0\ninvalid ACL (revision 9): result 1336\nunknown information bit 0x100 only: result 0\nDACL with an unknown bit 0x100: result 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "e1df20b984fb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T09:53:24Z",
+  "tests": [
+    {
+      "name": "pc_basic",
+      "exe_sha256": "ac72af37630976d69f6646b51c29594d5c705569f23a0ecc18061466fc18ee02",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW5hYmxlZCwgYWxsOiBvaz0xIHJlc3VsdD0xIGVycj0tMSBhdHRycyBhZnRlcjogMHg4MDAwMDAwMCAweDAKZGlzYWJsZWQsIGFsbDogb2s9MSByZXN1bHQ9MCBlcnI9LTEgYXR0cnMgYWZ0ZXI6IDB4MCAweDAKbm90IGhlbGQsIGFsbDogb2s9MSByZXN1bHQ9MCBlcnI9LTEgYXR0cnMgYWZ0ZXI6IDB4MCAweDAKZW5hYmxlZCArIGRpc2FibGVkLCBhbGw6IG9rPTEgcmVzdWx0PTAgZXJyPS0xIGF0dHJzIGFmdGVyOiAweDgwMDAwMDAwIDB4MAplbmFibGVkICsgZGlzYWJsZWQsIGFueTogb2s9MSByZXN1bHQ9MSBlcnI9LTEgYXR0cnMgYWZ0ZXI6IDB4ODAwMDAwMDAgMHgwCmRpc2FibGVkICsgbm90IGhlbGQsIGFueTogb2s9MSByZXN1bHQ9MCBlcnI9LTEgYXR0cnMgYWZ0ZXI6IDB4MCAweDAKbm90IGhlbGQgKyBlbmFibGVkLCBhbnk6IG9rPTEgcmVzdWx0PTEgZXJyPS0xIGF0dHJzIGFmdGVyOiAweDAgMHg4MDAwMDAwMApubyBlbnRyaWVzLCBhbGw6IG9rPTEgcmVzdWx0PTEgZXJyPS0xIGF0dHJzIGFmdGVyOiAweDAgMHgwCm5vIGVudHJpZXMsIGFueTogb2s9MSByZXN1bHQ9MCBlcnI9LTEgYXR0cnMgYWZ0ZXI6IDB4MCAweDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "enabled, all: ok=1 result=1 err=-1 attrs after: 0x80000000 0x0\ndisabled, all: ok=1 result=0 err=-1 attrs after: 0x0 0x0\nnot held, all: ok=1 result=0 err=-1 attrs after: 0x0 0x0\nenabled + disabled, all: ok=1 result=0 err=-1 attrs after: 0x80000000 0x0\nenabled + disabled, any: ok=1 result=1 err=-1 attrs after: 0x80000000 0x0\ndisabled + not held, any: ok=1 result=0 err=-1 attrs after: 0x0 0x0\nnot held + enabled, any: ok=1 result=1 err=-1 attrs after: 0x0 0x80000000\nno entries, all: ok=1 result=1 err=-1 attrs after: 0x0 0x0\nno entries, any: ok=1 result=0 err=-1 attrs after: 0x0 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}
