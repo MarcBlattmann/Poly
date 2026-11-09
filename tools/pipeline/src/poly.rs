@@ -529,6 +529,24 @@ mod tests {
     use super::*;
     use crate::trace::{NormOptions, normalize};
 
+    #[test]
+    fn initramfs_with_makes_the_directories_once() {
+        let files = vec![
+            ("nt/c/Windows/Fonts/a.ttf".to_string(), b"a".to_vec()),
+            ("nt/c/Windows/Fonts/b.ttf".to_string(), b"b".to_vec()),
+        ];
+        let entries = cpio::read(&initramfs_with(b"exe", &files).unwrap()).unwrap();
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names.iter().filter(|n| **n == "nt/c/Windows").count(), 1);
+        for n in
+            ["nt", "nt/c", "nt/c/Windows/Fonts", "nt/c/Windows/Fonts/a.ttf", "nt/c/Windows/Fonts/b.ttf", "test-binary"]
+        {
+            assert!(names.contains(&n), "{n}");
+        }
+        assert_eq!(entries.iter().find(|e| e.name == "nt/c/Windows/Fonts/b.ttf").unwrap().data, b"b");
+        assert_eq!(cpio::read(&initramfs(b"exe").unwrap()).unwrap().len(), 3);
+    }
+
     const LOG: &str = "boot: cmdline \"poly.qemu_exit poly.init=/test-binary poly.test.capture\"\n\
         POLY-INIT: exec /test-binary\r\n\
         POLY-SYSCALL: pid=7 nr=12 args=0x0 ret=0x400000 t=10\n\
