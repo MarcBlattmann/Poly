@@ -494,8 +494,11 @@ pub unsafe extern "C" fn pt_enter(f: &Func, regs: *const u64, stack: *const u64,
             w.hex(ra);
             if DUMP.load(Ordering::Relaxed) {
                 // ... and the module it lies in with the offset (`"rm"`, `"ro"`): the key a run
-                // on Windows and a run on Poly are compared by.
+                // on Windows and a run on Poly are compared by; and the class of each pointer
+                // and handle argument (`"ac"`).
                 dump::put_caller(&mut w, ra);
+                let (_, kinds, n) = signature(f.sig);
+                dump::put_arg_classes(&mut w, &kinds[..n], regs, stack);
             }
         }
         // The first arguments, kept for `pt_leave`'s dump (arguments 1-4 are in `regs`, the
@@ -540,6 +543,15 @@ pub unsafe extern "C" fn pt_leave(f: &Func, cookie: u64, ret: u64, scratch: *mut
         let mut w = W { p: scratch, len, cap: RAW_AT, full: false };
         w.bytes(b",\"ret\":");
         w.value(rk, ret, false);
+        if DUMP.load(Ordering::Relaxed) && (rk == b'p' || rk == b'h') {
+            // The class of a returned pointer or handle (`"rc"`), see `dump.rs`.
+            w.bytes(b",\"rc\":");
+            if rk == b'p' {
+                dump::pclass(&mut w, ret);
+            } else {
+                dump::hclass(&mut w, ret);
+            }
+        }
         if err != before {
             w.bytes(b",\"err\":");
             w.dec(err as u64);
