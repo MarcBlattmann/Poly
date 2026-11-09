@@ -1,0 +1,14 @@
+[package]
+name = "poly-compress"
+description = "Decompressors for the block formats of squashfs: zlib (via poly-png's inflate), LZ4 blocks, LZO1X, xz (LZMA2) and zstd, written from the formats' public descriptions; no_std with alloc, bounded output"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-png.workspace = true
+
+[lints]
+workspace = true

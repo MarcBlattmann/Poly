@@ -120,6 +120,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-compress"
+version = "0.0.1"
+dependencies = [
+ "poly-png",
+]
+
+[[package]]
 name = "poly-console"
 version = "0.0.1"
 
@@ -440,6 +447,14 @@ name = "poly-smp"
 version = "0.0.1"
 dependencies = [
  "poly-sched",
+]
+
+[[package]]
+name = "poly-squashfs"
+version = "0.0.1"
+dependencies = [
+ "poly-compress",
+ "poly-vfs",
 ]
 
 [[package]]
