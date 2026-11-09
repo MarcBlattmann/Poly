@@ -51,6 +51,16 @@ unsafe extern "system" {
     fn PolyGdiDeleteDisplayDC(hdc: usize) -> i32;
     fn PolyGdiFillRect(hdc: usize, rect: *const i32, brush: usize, color: u32) -> i32;
     fn PolyGdiDrawText(hdc: usize, text: *const u16, count: i32, rect: *mut i32, format: u32) -> i32;
+    fn PolyGdiDrawTextEx(
+        hdc: usize,
+        text: *mut u16,
+        count: i32,
+        rect: *mut i32,
+        format: u32,
+        tab_chars: i32,
+        left_margin: i32,
+        right_margin: i32,
+    ) -> i32;
     fn PolyGdiAttachSurface(hdc: usize, width: u32, height: u32) -> i32;
     fn PolyGdiSurface(hwnd: usize, out: *mut u64) -> i32;
     fn PolyGdiSetDisplayGeometry(
@@ -1448,6 +1458,93 @@ pub unsafe extern "system" fn FillRect(hdc: H, rect: *const i32, brush: H) -> i3
 pub unsafe extern "system" fn DrawTextW(hdc: H, text: *const u16, count: i32, rect: *mut i32, format: u32) -> i32 {
     // SAFETY: our gdi32 reads the string and RECT as documented.
     unsafe { PolyGdiDrawText(hdc, text, count, rect, format) }
+}
+
+/// `DT_MODIFYSTRING` and `DT_TABSTOP` (`winuser.h`).
+const DT_MODIFYSTRING: u32 = 0x1_0000;
+const DT_TABSTOP: u32 = 0x0080;
+
+/// `DrawTextExW`; `DRAWTEXTPARAMS` is `cbSize`, `iTabLength`,
+/// `iLeftMargin`, `iRightMargin`, `uiLengthDrawn` (`winuser.h`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DrawTextExW(
+    hdc: H,
+    text: *mut u16,
+    count: i32,
+    rect: *mut i32,
+    format: u32,
+    params: *mut u32,
+) -> i32 {
+    let (mut tab, mut left, mut right) = (0, 0, 0);
+    if !params.is_null() {
+        // SAFETY: the caller's DRAWTEXTPARAMS.
+        unsafe {
+            if format & DT_TABSTOP != 0 {
+                tab = *params.add(1) as i32;
+            }
+            left = *params.add(2) as i32;
+            right = *params.add(3) as i32;
+        }
+    }
+    // SAFETY: our gdi32 reads the string and RECT as documented.
+    let n = unsafe { PolyGdiDrawTextEx(hdc, text, count, rect, format, tab, left, right) };
+    if !params.is_null() && n != 0 {
+        // SAFETY: as above; the length drawn is the whole string.
+        unsafe { *params.add(4) = if count < 0 { u32::MAX } else { count as u32 } };
+    }
+    n
+}
+
+/// A string in the ANSI code page as UTF-16 with room for an ellipsis and
+/// the NUL (Latin-1, as the rest of Poly's ANSI functions).
+unsafe fn ansi_text(p: *const u8, count: i32) -> (Vec<u16>, usize) {
+    let mut v: Vec<u16> = Vec::new();
+    if !p.is_null() {
+        let mut i = 0usize;
+        loop {
+            // SAFETY: the caller's string (count -1: NUL-terminated).
+            let c = unsafe { *p.add(i) };
+            if (count >= 0 && i >= count as usize) || (count < 0 && c == 0) {
+                break;
+            }
+            v.push(u16::from(c));
+            i += 1;
+        }
+    }
+    let n = v.len();
+    v.resize(n + 8, 0);
+    (v, n)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DrawTextExA(
+    hdc: H,
+    text: *mut u8,
+    count: i32,
+    rect: *mut i32,
+    format: u32,
+    params: *mut u32,
+) -> i32 {
+    // SAFETY: the caller's string.
+    let (mut w, n) = unsafe { ansi_text(text, count) };
+    // SAFETY: our buffer of `n` units and room for an ellipsis.
+    let r = unsafe { DrawTextExW(hdc, w.as_mut_ptr(), n as i32, rect, format, params) };
+    if format & DT_MODIFYSTRING != 0 && !text.is_null() {
+        let len = w.iter().position(|&c| c == 0).unwrap_or(n);
+        for (i, &c) in w.iter().take(len).enumerate() {
+            // SAFETY: the caller's buffer, as large as the Learn page asks.
+            unsafe { *text.add(i) = if c < 0x100 { c as u8 } else { b'?' } };
+        }
+        // SAFETY: as above.
+        unsafe { *text.add(len) = 0 };
+    }
+    r
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DrawTextA(hdc: H, text: *const u8, count: i32, rect: *mut i32, format: u32) -> i32 {
+    // SAFETY: as `DrawTextExA`.
+    unsafe { DrawTextExA(hdc, text as *mut u8, count, rect, format, core::ptr::null_mut()) }
 }
 
 // ----- more of user32: keyboard state, ANSI text, rectangles, enumeration
