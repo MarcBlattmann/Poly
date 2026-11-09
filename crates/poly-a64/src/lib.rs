@@ -73,6 +73,11 @@ mod exec_simd;
 pub mod fp;
 pub mod inst;
 
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod vectors;
+
 pub use cpu::{Access, Cpu, MemFault, Memory, Outcome, SliceMemory};
 pub use decode::{decode, decode_bit_masks};
 pub use exec_int::{add_with_carry, extend_value, shift_value};
