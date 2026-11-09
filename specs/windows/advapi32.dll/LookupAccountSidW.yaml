@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/LookupAccountSidW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-chrome-win-2
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Maps a SID to the account name, the domain name and the SID_NAME_USE, for
+  the local machine (system name NULL). Well-known SIDs resolve to fixed
+  names.
+interface:
+  signature: "BOOL LookupAccountSidW(LPCWSTR system_name, PSID sid, LPWSTR name, LPDWORD cch_name, LPWSTR referenced_domain, LPDWORD cch_domain, PSID_NAME_USE use)"
+  sid_name_use: "SidTypeUser 1, SidTypeGroup 2, SidTypeDomain 3, SidTypeAlias 4, SidTypeWellKnownGroup 5, SidTypeDeletedAccount 6, SidTypeInvalid 7, SidTypeUnknown 8, SidTypeComputer 9, SidTypeLabel 10, SidTypeLogonSession 11 (winnt.h)"
+rules:
+  names: "S-1-0-0 \"NULL SID\", S-1-1-0 \"Everyone\", S-1-2-0 \"LOCAL\", S-1-3-0 \"CREATOR OWNER\" (all with an empty domain, use 5); S-1-5-1 \"DIALUP\", -2 \"NETWORK\", -4 \"INTERACTIVE\", -6 \"SERVICE\", -7 \"ANONYMOUS LOGON\", -9 \"ENTERPRISE DOMAIN CONTROLLERS\", -11 \"Authenticated Users\", -12 \"RESTRICTED\", -13 \"TERMINAL SERVER USER\", -14 \"REMOTE INTERACTIVE LOGON\", -15 \"This Organization\", -18 \"SYSTEM\", -19 \"LOCAL SERVICE\", -20 \"NETWORK SERVICE\" (domain \"NT AUTHORITY\", use 5); S-1-5-32-544 \"Administrators\", -545 \"Users\", -546 \"Guests\" (domain \"BUILTIN\", use 4 alias); S-1-5-80-0 \"ALL SERVICES\" (domain \"NT SERVICE\", use 5); S-1-15-2-1 \"ALL APPLICATION PACKAGES\", S-1-15-2-2 \"ALL RESTRICTED APP PACKAGES\", S-1-15-3-1 \"Your Internet connection\" (domain \"APPLICATION PACKAGE AUTHORITY\", use 5); S-1-16-0/4096/8192/12288/16384 \"Untrusted/Low/Medium/High/System Mandatory Level\" (domain \"Mandatory Label\", use 10); S-1-5-5-0-12345 \"LogonSessionId_0_12345\" (domain \"NT AUTHORITY\", use 11)"
+  sizes_on_success: "on success *cch_name and *cch_domain are the lengths without the terminating NUL (\"SYSTEM\" 6, \"NT AUTHORITY\" 12, Everyone's empty domain 0)"
+  sizes_on_failure: "when a buffer is too small the call fails with ERROR_INSUFFICIENT_BUFFER (122) and both sizes are set to the length including the NUL (7 and 13 for SYSTEM) even if only one was too small; nothing is written to either buffer; the use value is untouched; sizes of 0 with real or NULL buffers behave the same; for Everyone with domain size 0 the required domain size is 1 (the NUL of an empty string)"
+  exact_fit: "a name buffer of 7 and a domain buffer of 13 units (length + NUL) succeed"
+  unmapped: "S-1-5-32-547 (Power Users), -551, -555, S-1-5-21-1-2-3-500, S-1-5-99-1 and S-1-12-1-... : ERROR_NONE_MAPPED (1332); an unknown authority 77: 1332; an unregistered AppContainer SID (derived from a name): 1332"
+errors:
+  insufficient_buffer: "ERROR_INSUFFICIENT_BUFFER (122) with the required sizes"
+  none_mapped: "ERROR_NONE_MAPPED (1332) for a valid SID that has no account"
+  invalid_sid: "a SID with 16 sub-authorities (invalid) or revision 2: ERROR_INVALID_PARAMETER (87)"
+side_effects: "none"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  domain accounts, the machine's own accounts (their names are machine
+  specific), remote system names, NULL buffers with non-zero sizes (the call
+  faults). Domain accounts and domain-relative well-known SIDs of a real
+  domain, AppContainer and capability SIDs beyond their string forms,
+  auditing (SACL entries are only stored, never evaluated), remote systems
+  (the system-name arguments), Kerberos or NTLM logon tokens, tokens of
+  other users.

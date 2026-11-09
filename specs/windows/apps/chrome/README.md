@@ -91,6 +91,10 @@ but no renderer**; S2's renderer API set is S1's (same code, same DLL) plus the 
 | `drivers/remote_run.ps1` | runs one S3/S4 round on homeserver2 (after `scp` of the kit and the zip; see below) |
 | `tools/chrometrace.py`, `covmap.py`, `gapmap.py`, `gapmap_md.py` | reduce, merge, join with `coverage/windows`, write the tables |
 | `traces/s<N>.trace.json` | the committed reduced traces (`poly-chrometrace/1`, below) |
+| `traces/s2-sandboxed.trace.json` | S2 with **every** process type traced, sandbox on (`spec-chrome-win-2`, gap map section 4a) |
+| `traces/s2-sandbox-targets.json` | what the confined children do/are refused, S2 against S1 (`tools/sandboxdiff.py`) |
+| `traces/s1-fault-injection.csv` | per-API fault tolerance of S1, 220 APIs (gap map section 6a) |
+| `tools/sandboxdiff.py` | `reduce <S1 runs> --sandboxed <S2 runs> <out.json>`: denied / failed / gone / new / outcome per process type |
 | `windows.json` | the recorded scenario results: exit codes, output digests, titles, machine facts |
 
 **Window titles** have an EN DASH (U+2013) before `Google Chrome for Testing`; `windows.json` writes it as `-`.
@@ -125,3 +129,21 @@ A comparison on Poly (once Chrome runs there) is: every `calls` entry is called 
 exists on Poly, every `objects` entry that names an object Poly must provide (not `<profile>` files Chrome
 creates) is opened. `tools/chrometrace.py` reads both sides' raw runs; porting the comparison into `cargo xtask
 win chrome-trace diff` is the follow-up.
+
+## Opt-in tracer modes (counting logger, `spec-chrome-win-2`)
+
+Environment variables read by `polytrace.dll` of the `--agg` kit at start (`tools/wintrace/polytrace-agg`, module `ctl`); none is set by default and
+the 7-Zip kit (`tools/wintrace/polytrace`, `proxy/common.rs`) is unchanged. The counting kit's proxies use `proxy/common_agg.rs`, the same thunk
+plus one test that skips the real call.
+
+| Variable | Effect |
+|---|---|
+| `POLYTRACE_FAULT=<fn>:<ret>:<err>[:<after>[:<count>]];...` | the named API is not called after its first `<after>` calls: it returns `<ret>` and sets the last error `<err>`; a record `{"inject":1,...}` is written for the first 8 hits per process |
+| `POLYTRACE_FAULT_IN=<text>` | rules apply only in a process whose command line contains `<text>` (`browser`: no `--type=`) |
+| `POLYTRACE_RELAX=<mask0>[,<mask1>]` | bits cleared from the creation-time mitigation words (`UpdateProcThreadAttribute` attribute `0x20007`) the program passes; `0x300000000000` clears "Microsoft-signed binaries only" so that a sandboxed renderer accepts the unsigned proxies. The words (`{"mitigation":1,...}`) and the first bytes of every other attribute (`{"attr":1,...}`) are logged either way |
+| `POLYTRACE_INHERIT=1` | every child made with `CreateProcessAsUserW` and a handle list gets its trace file as an inherited file-backed section (`polytrace-c<n>.jsonl`, handle value in `POLYTRACE_HANDLE`); needed where a confined child cannot create a file |
+| `OutputDebugStringA` | a child that cannot make its trace file says why (`polytrace[<pid>]: step=<n> error=<code>`; 1 create, 2 mapping, 3 view, 4 inherited section, 5/6 the browser's section) |
+
+A sandboxed run: `POLYTRACE_RELAX=0x300000000000 POLYTRACE_INHERIT=1 chrome.exe --headless --disable-gpu --user-data-dir=<fresh> --dump-dom file:///.../s1.html`
+from the kit overlaid on a copy of the application, then `tools/chrometrace.py run`, `merge`, `canon` and `tools/sandboxdiff.py reduce`. Do not use
+`taskkill /IM`; the drivers in `drivers/` kill only the tree of the process they started.

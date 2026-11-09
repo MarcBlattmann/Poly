@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/LookupAccountNameW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-chrome-win-2
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Maps an account name (with or without a domain or authority prefix) to its
+  SID, the referenced domain and the SID_NAME_USE, for the local machine
+  (system name NULL).
+interface:
+  signature: "BOOL LookupAccountNameW(LPCWSTR system_name, LPCWSTR account_name, PSID sid, LPDWORD cb_sid, LPWSTR referenced_domain, LPDWORD cch_domain, PSID_NAME_USE use)"
+  sid_name_use: "see LookupAccountSidW"
+rules:
+  names_case: "names are matched without regard to case (\"Everyone\", \"everyone\", \"EVERYONE\" -> S-1-1-0; \"nt authority\\system\" -> S-1-5-18)"
+  prefixes: "a name resolves with or without its authority: \"SYSTEM\" and \"NT AUTHORITY\\SYSTEM\" -> S-1-5-18 (domain \"NT AUTHORITY\"); \"Administrators\" and \"BUILTIN\\Administrators\" -> S-1-5-32-544 (domain \"BUILTIN\", use 4); \"Users\" and \"BUILTIN\\Users\" -> S-1-5-32-545; \"ALL APPLICATION PACKAGES\" -> S-1-15-2-1 with domain \"APPLICATION PACKAGE AUTHORITY\" (the name with that domain prefix is not accepted: 1332); \"Low Mandatory Level\" and \"Mandatory Label\\Low Mandatory Level\" -> S-1-16-4096 (use 10); the other mandatory-label names likewise"
+  authorities: "\"NT AUTHORITY\" alone fails with 1332, \"BUILTIN\" alone gives S-1-5-32 (use 3 domain); the empty name \"\" and \"\\\\\" resolve to S-1-5-32 (BUILTIN, use 3); \"NT AUTHORITY\\\" fails with 1332"
+  well_known_names: "Everyone S-1-1-0; INTERACTIVE S-1-5-4; NETWORK S-1-5-2; BATCH S-1-5-3; SERVICE S-1-5-6; ANONYMOUS LOGON S-1-5-7; Authenticated Users S-1-5-11; RESTRICTED S-1-5-12; LOCAL SERVICE S-1-5-19; NETWORK SERVICE S-1-5-20; CREATOR OWNER S-1-3-0; OWNER RIGHTS S-1-3-4 (empty domain for the S-1-1 and S-1-3 groups); \"ALL RESTRICTED APPLICATION PACKAGES\" is not a name (1332: the account is \"ALL RESTRICTED APP PACKAGES\")"
+  sizes: "on failure for a too small buffer: ERROR_INSUFFICIENT_BUFFER (122); *cb_sid is set to the required SID size (12 for S-1-5-18) and *cch_domain to the required domain length including the NUL (13 for \"NT AUTHORITY\") even if only one buffer was too small; a domain size of 0 for Everyone needs 1; on success *cb_sid is not changed when the caller's buffer was larger than the SID (a 128-byte buffer stays 128) while an exactly 12-byte buffer gives 12; *cch_domain is the length without the NUL on success"
+  unknown: "an unknown name, an unknown domain prefix and sizes of 0 for an unknown name: ERROR_NONE_MAPPED (1332), SID buffer untouched, *cb_sid = 0 when passed 0"
+errors:
+  insufficient_buffer: "122 with the required sizes"
+  none_mapped: "1332 for an unknown name"
+side_effects: "none"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  local and domain user names (machine specific), remote systems, UPN names.
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.
