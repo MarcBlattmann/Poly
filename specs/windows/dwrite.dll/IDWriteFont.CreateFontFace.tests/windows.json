@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "fcf606b508cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:58:13Z",
+  "tests": [
+    {
+      "name": "cff_system",
+      "exe_sha256": "4283e0df7d0991fc32813b471c27a98bb814968b95c7302e3e3e57a0365d4b62",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QXJpYWw6IGZhY2UgdHlwZSAxIGluZGV4IDAgZ2x5cGhzID4gMTAwIHRydWUgc3ltYm9sIGZvbnQgMCAoZm9udCkgMCAoZmFjZSk7IEdldEZvbnRGYW1pbHkgMHgwMDAwMDAwMCAnQXJpYWwnClNlZ29lIFVJOiBmYWNlIHR5cGUgMSBpbmRleCAwIGdseXBocyA+IDEwMCB0cnVlIHN5bWJvbCBmb250IDAgKGZvbnQpIDAgKGZhY2UpOyBHZXRGb250RmFtaWx5IDB4MDAwMDAwMDAgJ1NlZ29lIFVJJwpTeW1ib2w6IGZhY2UgdHlwZSAxIGluZGV4IDAgZ2x5cGhzID4gMTAwIHRydWUgc3ltYm9sIGZvbnQgMSAoZm9udCkgMSAoZmFjZSk7IEdldEZvbnRGYW1pbHkgMHgwMDAwMDAwMCAnU3ltYm9sJwpXaW5nZGluZ3M6IGZhY2UgdHlwZSAxIGluZGV4IDAgZ2x5cGhzID4gMTAwIHRydWUgc3ltYm9sIGZvbnQgMSAoZm9udCkgMSAoZmFjZSk7IEdldEZvbnRGYW1pbHkgMHgwMDAwMDAwMCAnV2luZ2RpbmdzJwpTZWdvZSBVSSBTeW1ib2w6IGZhY2UgdHlwZSAxIGluZGV4IDAgZ2x5cGhzID4gMTAwIHRydWUgc3ltYm9sIGZvbnQgMCAoZm9udCkgMCAoZmFjZSk7IEdldEZvbnRGYW1pbHkgMHgwMDAwMDAwMCAnU2Vnb2UgVUkgU3ltYm9sJwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Arial: face type 1 index 0 glyphs > 100 true symbol font 0 (font) 0 (face); GetFontFamily 0x00000000 'Arial'\nSegoe UI: face type 1 index 0 glyphs > 100 true symbol font 0 (font) 0 (face); GetFontFamily 0x00000000 'Segoe UI'\nSymbol: face type 1 index 0 glyphs > 100 true symbol font 1 (font) 1 (face); GetFontFamily 0x00000000 'Symbol'\nWingdings: face type 1 index 0 glyphs > 100 true symbol font 1 (font) 1 (face); GetFontFamily 0x00000000 'Wingdings'\nSegoe UI Symbol: face type 1 index 0 glyphs > 100 true symbol font 0 (font) 0 (face); GetFontFamily 0x00000000 'Segoe UI Symbol'\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}
