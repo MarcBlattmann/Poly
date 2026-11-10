@@ -89,7 +89,10 @@ fn init_peb(peb: u64, exe_base: u64) {
             ((opt + 48) as *const u16).read_unaligned(),
             ((opt + 50) as *const u16).read_unaligned(),
         );
-        for f in poly_rtl::peb::fields(poly_rtl::peb::Facts { processors, subsystem }) {
+        // PEB.LoaderLock points at the lock `LdrLockLoaderLock` takes and the loader holds around
+        // every DllMain and TLS callback; it is set here, before any of them runs.
+        let loader_lock = (&raw const LOADER_LOCK) as u64;
+        for f in poly_rtl::peb::fields(poly_rtl::peb::Facts { processors, subsystem, loader_lock }) {
             let at = (peb + f.at as u64) as *mut u8;
             core::ptr::copy_nonoverlapping(f.value.to_le_bytes().as_ptr(), at, f.width);
         }

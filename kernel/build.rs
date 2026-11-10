@@ -62,6 +62,7 @@ fn embed_win32() {
         "bcryptprimitives.dll",
         // ADR 0155: file version information.
         "version.dll",
+        "winmm.dll",
         "ole32.dll",
         "s1test.exe",
         "iphlpapi.dll",

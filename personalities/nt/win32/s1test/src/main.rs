@@ -42,11 +42,27 @@ unsafe extern "system" {
     fn RtlCaptureStackBackTrace(skip: u32, count: u32, frames: *mut *mut u8, hash: *mut u32) -> u16;
     fn GetCurrentProcessId() -> u32;
     fn GetCurrentProcess() -> isize;
+    fn GetTickCount64() -> u64;
+    fn GetModuleHandleW(name: *const u16) -> *mut u8;
+    fn GetModuleHandleExW(flags: u32, address: *const u8, out: *mut *mut u8) -> i32;
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
     fn VirtualProtect(addr: *mut u8, size: usize, protect: u32, old: *mut u32) -> i32;
     fn VirtualFree(addr: *mut u8, size: usize, kind: u32) -> i32;
     fn ReadProcessMemory(process: isize, base: *const u8, buf: *mut u8, size: usize, read: *mut usize) -> i32;
     fn WriteProcessMemory(process: isize, base: *mut u8, buf: *const u8, size: usize, written: *mut usize) -> i32;
+}
+
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn LdrLockLoaderLock(flags: u32, disposition: *mut u32, cookie: *mut usize) -> u32;
+    fn LdrUnlockLoaderLock(flags: u32, cookie: usize) -> u32;
+}
+
+#[link(name = "winmm", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn timeGetTime() -> u32;
+    fn timeBeginPeriod(period: u32) -> u32;
+    fn timeEndPeriod(period: u32) -> u32;
 }
 
 #[link(name = "ole32", kind = "raw-dylib")]
@@ -611,6 +627,67 @@ unsafe fn backtrace() {
     check_got(hash != 0, hash);
 }
 
+/// `NtCurrentTeb()`: `gs:[0x30]`.
+unsafe fn teb() -> *const u8 {
+    let teb: *const u8;
+    core::arch::asm!("mov {}, gs:[0x30]", out(reg) teb, options(nostack, readonly, preserves_flags));
+    teb
+}
+
+/// The loader lock through the PEB (spec-chrome-elf-null items 1, 2, 4, 5): `PEB+0x110` points
+/// to an `RTL_CRITICAL_SECTION` inside ntdll that is free here (-1, 0, 0) and is the one
+/// `LdrLockLoaderLock` takes (-2, 1, this thread's id, TEB+0x48) and `LdrUnlockLoaderLock` frees.
+/// This is what Chrome's crash reporter reads without calling anything.
+unsafe fn loader_lock() {
+    let teb = teb();
+    let peb = *(teb.add(0x60) as *const *const u8);
+    check_got(!peb.is_null(), 0);
+    let lock = *(peb.add(0x110) as *const *const u8);
+    check_got(!lock.is_null(), 0);
+    // Inside ntdll's image.
+    let mut owner = core::ptr::null_mut();
+    check_eq(GetModuleHandleExW(0x4, lock, &mut owner) as usize, 1); // FROM_ADDRESS
+    let ntdll = w::<16>("ntdll.dll");
+    check_eq(owner as usize, GetModuleHandleW(ntdll.as_ptr()) as usize);
+    let tid = *(teb.add(0x48) as *const u64);
+    check_eq(tid as usize, GetCurrentThreadId() as usize);
+    let fields = || {
+        (
+            *(lock.add(0x08) as *const i32),
+            *(lock.add(0x0C) as *const i32),
+            *(lock.add(0x10) as *const u64),
+            *(lock.add(0x18) as *const u64),
+        )
+    };
+    // Free: LockCount -1, RecursionCount 0, OwningThread 0, no semaphore.
+    check_got(fields() == (-1, 0, 0, 0), 0);
+    let (mut disposition, mut cookie) = (0u32, 0usize);
+    check_eq(LdrLockLoaderLock(0, &mut disposition, &mut cookie) as usize, 0);
+    check_eq(disposition as usize, 1); // LDR_LOCK_LOADER_LOCK_DISPOSITION_LOCK_ACQUIRED
+    check_got(cookie != 0, 0);
+    // Held: LockCount -2, RecursionCount 1, OwningThread = this thread.
+    check_got(fields() == (-2, 1, tid, 0), 0);
+    check_eq(LdrUnlockLoaderLock(0, cookie) as usize, 0);
+    check_got(fields() == (-1, 0, 0, 0), 0);
+    // The field does not move for the life of the process.
+    check_eq(*(peb.add(0x110) as *const usize), lock as usize);
+}
+
+/// winmm's timer functions (Learn: `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`): the
+/// time is milliseconds since the system started (non-zero after boot, not going back; the
+/// same clock as `GetTickCount`), and a 1 ms period request is granted and ended.
+unsafe fn winmm() {
+    let a = timeGetTime();
+    check_got(a != 0, a);
+    let ticks = GetTickCount64();
+    let b = timeGetTime();
+    // The same clock as GetTickCount64, read between the two (wrapping as a DWORD).
+    check_got(b.wrapping_sub(a) < 10_000 && (ticks as u32).wrapping_sub(a) < 10_000, b);
+    check_eq(timeBeginPeriod(1) as usize, 0); // TIMERR_NOERROR
+    check_eq(timeEndPeriod(1) as usize, 0);
+    check_eq(timeBeginPeriod(0) as usize, 97); // TIMERR_NOCANDO: out of range
+}
+
 /// GetCurrentThreadStackLimits: the stack this code runs on lies between the limits.
 unsafe fn stack_limits() {
     let (mut low, mut high) = (0usize, 0usize);
@@ -691,6 +768,8 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         process_memory();
         stack_limits();
         backtrace();
+        loader_lock();
+        winmm();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));
         out(b" checks passed\n");
