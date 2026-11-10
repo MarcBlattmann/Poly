@@ -92,8 +92,7 @@ pub fn inherit_token(
     let id = sys.objects.security.new_luid();
     let source = sys.objects.security.token(base).ok_or(STATUS_INVALID_PARAMETER)?;
     let mut copy = source.duplicate(token::TOKEN_PRIMARY, token::SECURITY_IMPERSONATION, id);
-    // A child's primary token has level 0 in its statistics (the sheets: the
-    // first process's, the logon token, shows Impersonation).
+    // A process's primary token has level 0 in its statistics (the sheets).
     copy.level = token::SECURITY_ANONYMOUS;
     if given.is_some() {
         copy.clamp_privileges_to_integrity();
@@ -282,27 +281,26 @@ const STATUS_BAD_IMPERSONATION_LEVEL: NtStatus = NtStatus(0xC000_00A5);
 pub fn query_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, info_class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
     let info_class = info_class as u32;
-    let need = if info_class == class::TOKEN_SOURCE { token::TOKEN_QUERY_SOURCE } else { token::TOKEN_QUERY };
-    let id = token_of(k, h, need)?;
     let length = length as u32 as usize;
-    // TokenElevation and TokenLinkedToken insist on their exact size.
-    let exact = match info_class {
-        class::TOKEN_ELEVATION => Some(4),
-        class::TOKEN_LINKED_TOKEN => Some(8),
-        _ => None,
-    };
-    if let Some(n) = exact {
+    // The class and, for the classes that insist on their exact size
+    // (TokenElevation, TokenLinkedToken), the length are judged before the
+    // handle: a handle without TOKEN_QUERY still hears "no such class" and
+    // "wrong length" (the sheets: 87 and 24 from GetTokenInformation where
+    // the valid classes say 5).
+    if !token::is_query_class(info_class) {
+        return Err(STATUS_INVALID_INFO_CLASS);
+    }
+    if let Some(n) = token::exact_query_length(info_class) {
         if ret == 0 {
             return Err(STATUS_ACCESS_VIOLATION);
         }
-        abi::write_u32(k, ret, n as u32)?;
-        if length != n {
+        abi::write_u32(k, ret, n)?;
+        if length != n as usize {
             return Err(token::STATUS_INFO_LENGTH_MISMATCH);
         }
-        if info_class == class::TOKEN_LINKED_TOKEN {
-            return Err(token::STATUS_NO_SUCH_LOGON_SESSION);
-        }
     }
+    let need = if info_class == class::TOKEN_SOURCE { token::TOKEN_QUERY_SOURCE } else { token::TOKEN_QUERY };
+    let id = token_of(k, h, need)?;
     let t = copy_of(k, id)?;
     let bytes = t.query(info_class, buf)?;
     if ret == 0 {
@@ -472,12 +470,16 @@ pub fn set_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
         class::TOKEN_MANDATORY_POLICY,
         class::TOKEN_ORIGIN,
     ];
-    let access =
-        if info_class == class::TOKEN_SESSION_ID { token::TOKEN_ADJUST_SESSIONID } else { token::TOKEN_ADJUST_DEFAULT };
-    let id = token_of(k, h, access)?;
+    // As in the query: the class and the length are judged before the handle.
     if !settable.contains(&info_class) {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
+    if !token::set_length_ok(info_class, length) {
+        return Err(token::STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let access =
+        if info_class == class::TOKEN_SESSION_ID { token::TOKEN_ADJUST_SESSIONID } else { token::TOKEN_ADJUST_DEFAULT };
+    let id = token_of(k, h, access)?;
     let data = match info_class {
         class::TOKEN_OWNER | class::TOKEN_PRIMARY_GROUP => {
             if length < 8 {
@@ -723,7 +725,10 @@ pub fn privilege_check<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
     let mut entries: Vec<(u32, u32)> = (0..n)
         .map(|i| {
             let c = &b[8 + 12 * i..];
-            (u32::from_le_bytes([c[0], c[1], c[2], c[3]]), u32::from_le_bytes([c[8], c[9], c[10], c[11]]))
+            let (low, high) = (u32::from_le_bytes([c[0], c[1], c[2], c[3]]), [c[4], c[5], c[6], c[7]]);
+            // Every privilege's LUID has a zero high part: one with another is
+            // none a token holds (LUID 0 names no privilege).
+            (if high == [0; 4] { low } else { 0 }, u32::from_le_bytes([c[8], c[9], c[10], c[11]]))
         })
         .collect();
     let ok = t.privilege_check(&mut entries, control & 1 != 0);

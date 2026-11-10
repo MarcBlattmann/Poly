@@ -141,6 +141,15 @@ pub fn ansi_block_len(bytes: &[u8]) -> Option<usize> {
     bytes.windows(2).position(|w| w == [0, 0]).map(|i| i + 2)
 }
 
+/// Whether every string of an ANSI environment block has the `name=value`
+/// form. A UTF-16 block read as bytes does not (its "strings" are single
+/// characters): a wide block passed without `CREATE_UNICODE_ENVIRONMENT` is
+/// refused this way (the `CreateProcessAsUserW` sheet:
+/// `ERROR_INVALID_PARAMETER`).
+pub fn ansi_block_is_well_formed(block: &[u8]) -> bool {
+    block.split(|&b| b == 0).filter(|s| !s.is_empty()).all(|s| s.contains(&b'='))
+}
+
 /// A block as the child gets it: both final NULs present.
 pub fn normalized_block(block: &[u16]) -> Vec<u16> {
     let mut v = block.to_vec();
@@ -397,6 +406,19 @@ pub fn handle_flag_bits(inherit: bool, protect_from_close: bool) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ansi_environment_blocks() {
+        assert!(ansi_block_is_well_formed(b"A=1\0PATH=C:\\x\0\0"));
+        assert!(ansi_block_is_well_formed(b"=C:=C:\\\0A=\0\0"));
+        assert!(ansi_block_is_well_formed(b"\0\0"));
+        assert!(ansi_block_is_well_formed(b"\0"));
+        assert!(!ansi_block_is_well_formed(b"A=1\0B\0\0"));
+        // A UTF-16 block seen as bytes.
+        let wide: Vec<u8> = "POLYVAR=9\0\0".encode_utf16().flat_map(u16::to_le_bytes).collect();
+        let len = ansi_block_len(&wide).unwrap();
+        assert!(!ansi_block_is_well_formed(&wide[..len]));
+    }
 
     #[test]
     fn stack_limits_are_the_reservation_and_the_top() {

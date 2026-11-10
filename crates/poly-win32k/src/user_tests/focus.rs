@@ -101,8 +101,10 @@ fn minimizing_a_visible_window_on_the_interactive_desktop() {
                 "A WM_WINDOWPOSCHANGED pos=-32000,-32000 size=160,28 flags=0x8130",
                 "A WM_NCACTIVATE w=0x0",
                 "A WM_ACTIVATE w=0x200000",
-                "A WM_ACTIVATEAPP w=0x0",
+                // From the top of the z order down: the minimized A is at
+                // the bottom (gaw_leave_a).
                 "B WM_ACTIVATEAPP w=0x0",
+                "A WM_ACTIVATEAPP w=0x0",
             ]
         );
         assert_eq!(input_state(e).0, 0);
@@ -143,7 +145,9 @@ fn the_focus_follows_hiding_and_destroying_windows() {
             &[
                 "A WM_SHOWWINDOW w=0x0 l=0x0",
                 "A WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x83",
-                "A WM_WINDOWPOSCHANGED pos=50,50 size=300,200 flags=0x20001883",
+                // GetFocus.yaml `hide_parent`: 0x...887, A is alone in its
+                // z-order group and on top.
+                "A WM_WINDOWPOSCHANGED pos=50,50 size=300,200 flags=0x20001887",
             ]
         );
         assert_eq!(

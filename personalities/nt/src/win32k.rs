@@ -31,7 +31,7 @@ use poly_win32k::frame::Rect;
 use poly_win32k::link::{FromCompositor, Request as DesktopRequest};
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::services::Win32kService;
-use poly_win32k::surfaces::{MAX_SIDE, Surfaces};
+use poly_win32k::surfaces::{BAND_BYTES, MAX_SIDE, Surfaces};
 use poly_win32k::wire;
 use poly_win32k::wm::{Ctx, Effects, Key, Wm};
 
@@ -149,7 +149,7 @@ impl Win32k {
     }
 
     /// The device's `READ_BUFFER`: rows of a buffer.
-    pub fn link_rows(&self, buffer: u32, row: u32, rows: u32) -> Option<&[u8]> {
+    pub fn link_rows(&self, buffer: u32, row: u32, rows: u32) -> Option<alloc::vec::Vec<u8>> {
         self.surfaces.rows(buffer, row, rows)
     }
 
@@ -282,14 +282,30 @@ fn commit<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStat
     if size != Some((width, height)) || width > MAX_SIDE || height > MAX_SIDE || stride < u64::from(width) * 4 {
         return Err(STATUS_INVALID_PARAMETER);
     }
+    // In pieces of whole rows: a maximized window's surface is larger than
+    // one kernel allocation may be (`poly_win32k::surfaces::BAND_BYTES`).
     let row = width as usize * 4;
-    let mut bytes = vec![0u8; row * height as usize];
-    for (y, chunk) in bytes.chunks_mut(row).enumerate() {
-        abi::read(k, pixels + y as u64 * stride, chunk)?;
+    let piece = (BAND_BYTES / row.max(1)).max(1) as u32;
+    let mut bytes = vec![0u8; row * piece.min(height) as usize];
+    let mut y = 0u32;
+    while y < height {
+        let n = piece.min(height - y) as usize;
+        let part = &mut bytes[..n * row];
+        for (i, chunk) in part.chunks_mut(row).enumerate() {
+            abi::read(k, pixels + (u64::from(y) + i as u64) * stride, chunk)?;
+        }
+        let ok = k.with_state(|sys, _, _| {
+            let w = &mut sys.win32k;
+            w.surfaces.write_rows(&w.desktop, hwnd, width, height, y, part)
+        });
+        if !ok {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        y += n as u32;
     }
     let ok = k.with_state(|sys, _, _| {
         let w = &mut sys.win32k;
-        w.surfaces.commit(&mut w.desktop, hwnd, width, height, &bytes)
+        w.surfaces.committed(&mut w.desktop, hwnd)
     });
     Ok(if ok { STATUS_SUCCESS } else { STATUS_INVALID_PARAMETER })
 }

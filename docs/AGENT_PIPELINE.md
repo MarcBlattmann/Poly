@@ -18,7 +18,8 @@ including the interface the kernel implements for test runs, are in
 1. **Trace.** Run programs on the real OS (a Linux VM, or this machine,
    which is real Linux) and record every syscall: `pipeline trace`.
 2. **Claim.** Pick the next entry in roadmap order and claim it:
-   `cargo xtask coverage claim <id> --agent <your-agent-id>`.
+   `cargo xtask coverage claim <id>... --agent <your-agent-id>` (many ids in
+   one call, or `--from-file FILE`; `release` and `set-status` take them the same way).
 3. **Spec agent** (may observe the real OS): writes the spec sheet
    (`pipeline spec new` makes the skeleton) and test programs outside the
    repository; `pipeline tests split` keeps ~30% held out, outside the
@@ -360,7 +361,10 @@ cargo xtask pipeline win diff --reference <windows results.json> [--build-kernel
 
 A test that imports `dwrite.dll` is booted with the DejaVu fonts in
 `C:\Windows\Fonts` (ADR 0170): `win poly` puts the files of `$POLY_FONT_DIR` or
-`target/fonts/dejavu-*` (`cargo xtask fonts fetch`) in its initramfs.
+`target/fonts/dejavu-*` (`cargo xtask fonts fetch`) in its initramfs. A test
+that creates fonts through gdi32 (it imports `CreateFontW` or one of its
+relatives) gets them too when they are there, so a font asked for by name is
+an outline font of the height asked, as on any Windows.
 
 `win build` cross-compiles with the pinned toolchain (`-Zbuild-std` from
 `rust-src`, `rust-lld`; the first build compiles `core`, about 30 s) and

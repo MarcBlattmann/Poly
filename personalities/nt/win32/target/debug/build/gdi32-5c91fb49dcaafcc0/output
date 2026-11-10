@@ -1,0 +1,1 @@
+cargo:rustc-link-arg=/ENTRY:gdi32_main

@@ -34,6 +34,11 @@ use alloc::vec::Vec;
 /// The largest surface side with a buffer (16 MiB of kernel memory).
 pub const MAX_SIDE: u32 = 2048;
 
+/// A buffer is kept in bands of whole rows of at most this many bytes: one
+/// kernel allocation holds 4 MiB at most (`kernel/src/heap.rs`), which a
+/// maximized window's client area on a 1920x1080 screen exceeds.
+pub const BAND_BYTES: usize = 1024 * 1024;
+
 /// The pixel a buffer starts with (white, `COLOR_WINDOW`'s default).
 const BLANK: u8 = 0xFF;
 
@@ -41,7 +46,66 @@ const BLANK: u8 = 0xFF;
 struct Buffer {
     width: u32,
     height: u32,
-    bytes: Vec<u8>,
+    /// The rows, `rows_per_band` to a band (the last one shorter).
+    bands: Vec<Vec<u8>>,
+    rows_per_band: u32,
+}
+
+impl Buffer {
+    fn new(width: u32, height: u32) -> Buffer {
+        let stride = width as usize * 4;
+        let rows_per_band = (BAND_BYTES / stride.max(1)).max(1) as u32;
+        let mut bands = Vec::new();
+        let mut row = 0;
+        while row < height {
+            let n = rows_per_band.min(height - row);
+            bands.push(vec![BLANK; n as usize * stride]);
+            row += n;
+        }
+        Buffer { width, height, bands, rows_per_band }
+    }
+
+    /// Copy whole rows from `row` on out of `pixels`; false when they do
+    /// not fit.
+    fn write(&mut self, row: u32, pixels: &[u8]) -> bool {
+        let stride = self.width as usize * 4;
+        if stride == 0 || !pixels.len().is_multiple_of(stride) {
+            return false;
+        }
+        let rows = (pixels.len() / stride) as u32;
+        if row > self.height || rows > self.height - row {
+            return false;
+        }
+        for (i, src) in pixels.chunks(stride).enumerate() {
+            let y = row + i as u32;
+            let band = &mut self.bands[(y / self.rows_per_band) as usize];
+            let at = (y % self.rows_per_band) as usize * stride;
+            band[at..at + stride].copy_from_slice(src);
+        }
+        true
+    }
+
+    /// The pixel (`B, G, R, x`) at (`x`, `y`), inside the buffer.
+    fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+        let band = self.bands.get((y / self.rows_per_band) as usize)?;
+        let at = ((y % self.rows_per_band) as usize * self.width as usize + x as usize) * 4;
+        band.get(at..at + 4).map(|p| [p[0], p[1], p[2], p[3]])
+    }
+
+    /// Rows `first .. last`, row after row.
+    fn read(&self, first: u32, last: u32) -> Vec<u8> {
+        let stride = self.width as usize * 4;
+        let mut out = Vec::with_capacity((last - first) as usize * stride);
+        for y in first..last {
+            let band = &self.bands[(y / self.rows_per_band) as usize];
+            let at = (y % self.rows_per_band) as usize * stride;
+            out.extend_from_slice(&band[at..at + stride]);
+        }
+        out
+    }
 }
 
 /// The largest content `UpdateLayeredWindow` may leave here (bytes).
@@ -142,8 +206,7 @@ impl Surfaces {
                     && ch <= MAX_SIDE
                     && let Some(b) = desktop.attach_buffer(s, cw, ch, cw * 4, PixelFormat::Xrgb8888)
                 {
-                    let bytes = vec![BLANK; cw as usize * ch as usize * 4];
-                    self.buffers.insert(b, Buffer { width: cw, height: ch, bytes });
+                    self.buffers.insert(b, Buffer::new(cw, ch));
                     desktop.damage(s, 0, 0, cw, ch);
                 }
             }
@@ -268,8 +331,7 @@ impl Surfaces {
         if x < 0 || y < 0 || x as u32 >= buf.width || y as u32 >= buf.height {
             return None;
         }
-        let at = (y as usize * buf.width as usize + x as usize) * 4;
-        let p = buf.bytes.get(at..at + 3)?;
+        let p = buf.pixel(x as u32, y as u32)?;
         Some(u32::from(p[2]) | u32::from(p[1]) << 8 | u32::from(p[0]) << 16)
     }
 
@@ -284,25 +346,49 @@ impl Surfaces {
     /// `height`, 4 bytes each, row after row. False when the size is not
     /// the buffer's (the window was resized since; the app asks again).
     pub fn commit(&mut self, desktop: &mut Desktop, hwnd: u32, width: u32, height: u32, pixels: &[u8]) -> bool {
+        pixels.len() == width as usize * height as usize * 4
+            && self.write_rows(desktop, hwnd, width, height, 0, pixels)
+            && self.committed(desktop, hwnd)
+    }
+
+    /// Part of a commit: whole rows from `row` on of window `hwnd`'s
+    /// `width` x `height` surface (a large surface comes in several pieces,
+    /// [`BAND_BYTES`]); [`Surfaces::committed`] ends it. False when the size
+    /// is not the buffer's or the rows do not fit.
+    pub fn write_rows(
+        &mut self,
+        desktop: &Desktop,
+        hwnd: u32,
+        width: u32,
+        height: u32,
+        row: u32,
+        pixels: &[u8],
+    ) -> bool {
         let Some(s) = self.surface(hwnd) else { return false };
         let Some(info) = desktop.surface(s).and_then(|x| x.buffer) else { return false };
         let Some(b) = self.buffers.get_mut(&info.id) else { return false };
-        if (b.width, b.height) != (width, height) || pixels.len() != b.bytes.len() {
-            return false;
-        }
-        b.bytes.copy_from_slice(pixels);
-        desktop.damage(s, 0, 0, width, height);
+        (b.width, b.height) == (width, height) && b.write(row, pixels)
+    }
+
+    /// The rows [`Surfaces::write_rows`] wrote are the window's picture now:
+    /// the whole surface is damaged.
+    pub fn committed(&mut self, desktop: &mut Desktop, hwnd: u32) -> bool {
+        let Some(s) = self.surface(hwnd) else { return false };
+        let Some(info) = desktop.surface(s).and_then(|x| x.buffer) else { return false };
+        let Some(b) = self.buffers.get(&info.id) else { return false };
+        desktop.damage(s, 0, 0, b.width, b.height);
         true
     }
 
     /// Rows `row .. row + rows` of buffer `id` (fewer past its end), for
-    /// the device's `READ_BUFFER`.
-    pub fn rows(&self, id: BufferId, row: u32, rows: u32) -> Option<&[u8]> {
+    /// the device's `READ_BUFFER`; never more than [`BAND_BYTES`] of them.
+    pub fn rows(&self, id: BufferId, row: u32, rows: u32) -> Option<Vec<u8>> {
         let b = self.buffers.get(&id)?;
-        let stride = b.width as usize * 4;
-        let first = (row.min(b.height)) as usize;
-        let last = (row.saturating_add(rows).min(b.height)) as usize;
-        Some(&b.bytes[first * stride..last * stride])
+        let stride = (b.width as usize * 4).max(1);
+        let most = (BAND_BYTES / stride).max(1) as u32;
+        let first = row.min(b.height);
+        let last = row.saturating_add(rows.min(most)).min(b.height);
+        Some(b.read(first, last))
     }
 }
 
@@ -617,5 +703,34 @@ mod tests {
         d.receive(&encode_all(&[FromCompositor::Released { buffer }]));
         s.sync(&wm, &mut d);
         assert!(s.rows(buffer, 0, 1).is_none());
+    }
+
+    #[test]
+    fn a_large_buffer_is_kept_in_bands_of_rows() {
+        // A maximized window's client area on a 1920x1080 screen: more than
+        // one kernel allocation holds, so no band may be larger than BAND_BYTES.
+        let (w, h) = (1920u32, 1033u32);
+        let stride = (w * 4) as usize;
+        let mut b = Buffer::new(w, h);
+        assert!(b.bands.len() > 1 && b.bands.iter().all(|x| x.len() <= BAND_BYTES && x.len() % stride == 0));
+        assert_eq!(b.bands.iter().map(Vec::len).sum::<usize>(), stride * h as usize);
+        // Rows written in pieces that straddle the bands, each row filled with its number.
+        let mut y = 0u32;
+        while y < h {
+            let n = 200.min(h - y);
+            let part: Vec<u8> = (y..y + n).flat_map(|r| core::iter::repeat_n((r % 251) as u8, stride)).collect();
+            assert!(b.write(y, &part));
+            y += n;
+        }
+        for r in [0, 1, b.rows_per_band - 1, b.rows_per_band, h - 1] {
+            let row = b.read(r, r + 1);
+            assert_eq!(row.len(), stride);
+            assert!(row.iter().all(|&v| v == (r % 251) as u8), "row {r}");
+        }
+        assert_eq!(b.read(b.rows_per_band - 2, b.rows_per_band + 2).len(), 4 * stride);
+        // Rows past the end, or a piece that is not whole rows, are refused.
+        assert!(!b.write(h, &vec![0u8; stride]));
+        assert!(!b.write(0, &vec![0u8; stride + 1]));
+        assert!(b.write(h, &[]));
     }
 }

@@ -79,7 +79,7 @@
 {"symbol":"CreatePenIndirect","src":["wine-spec"],"seeds":["wine:gdi32/tests/pen.c:test_logpen"]},
 {"symbol":"CreatePolyPolygonRgn","src":["wine-spec"],"seeds":["wine:gdi32/tests/clipping.c:test_CreatePolyPolygonRgn"]},
 {"symbol":"CreatePolygonRgn","src":["wine-spec"]},
-{"symbol":"CreateRectRgn","status":"claimed","claimed_by":"impl-win-gui-a","src":["wine-spec"],"seeds":["wine:gdi32/tests/gdiobj.c:test_region","wine:gdi32/tests/gdiobj.c:test_handles_on_win64","wine:gdi32/tests/clipping.c:test_GetClipRgn","wine:gdi32/tests/clipping.c:test_window_dc_clipping","wine:gdi32/tests/clipping.c:test_GetRandomRgn","wine:gdi32/tests/bitmap.c:test_clipping","wine:gdi32/tests/dc.c:test_savedc_2","wine:gdi32/tests/clipping.c:test_memory_dc_clipping"]},
+{"symbol":"CreateRectRgn","status":"green","tests_visible":3,"tests_held_out":2,"src":["wine-spec"],"seeds":["wine:gdi32/tests/gdiobj.c:test_region","wine:gdi32/tests/gdiobj.c:test_handles_on_win64","wine:gdi32/tests/clipping.c:test_GetClipRgn","wine:gdi32/tests/clipping.c:test_window_dc_clipping","wine:gdi32/tests/clipping.c:test_GetRandomRgn","wine:gdi32/tests/bitmap.c:test_clipping","wine:gdi32/tests/dc.c:test_savedc_2","wine:gdi32/tests/clipping.c:test_memory_dc_clipping"]},
 {"symbol":"CreateRectRgnIndirect","src":["wine-spec"]},
 {"symbol":"CreateRoundRectRgn","src":["wine-spec"]},
 {"symbol":"CreateScalableFontResourceA","src":["wine-spec"],"seeds":["wine:gdi32/tests/font.c:test_CreateScalableFontResource"]},

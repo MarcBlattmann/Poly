@@ -4,43 +4,13 @@
 //! fire, no display-config adapter) the answers are the plainest ones a
 //! browser accepts.
 
-use super::{H, SYS, info, set_last_error};
+use super::{H, SYS};
 use poly_win32k::kbd;
 use poly_win32k::user::Env;
 
-const ERROR_INVALID_PARAMETER: u32 = 87;
-const ERROR_INVALID_WINDOW_HANDLE: u32 = 1400;
 const ERROR_NOT_SUPPORTED: u32 = 50;
 
-/// `WINDOWPLACEMENT` (44 bytes): flags, showCmd, min and max positions
-/// (-1, -1), the normal rectangle.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetWindowPlacement(hwnd: H, wp: *mut u8) -> i32 {
-    let Some(i) = info(hwnd) else {
-        set_last_error(ERROR_INVALID_WINDOW_HANDLE);
-        return 0;
-    };
-    if wp.is_null() {
-        set_last_error(ERROR_INVALID_PARAMETER);
-        return 0;
-    }
-    let show = if i.minimized {
-        2
-    } else if i.maximized {
-        3
-    } else {
-        1
-    };
-    let vals: [i32; 10] = [44, 0, show, -1, -1, -1, -1, i.window.left, i.window.top, i.window.right];
-    // SAFETY: the caller's WINDOWPLACEMENT (44 bytes).
-    unsafe {
-        for (k, v) in vals.iter().enumerate() {
-            core::ptr::write_unaligned(wp.add(4 * k) as *mut i32, *v);
-        }
-        core::ptr::write_unaligned(wp.add(40) as *mut i32, i.window.bottom);
-    }
-    1
-}
+// `GetWindowPlacement` is slice B's now (`lib.rs`, MonitorFromWindow.yaml `state_rects`).
 
 #[unsafe(no_mangle)]
 pub extern "system" fn IsWindowArranged(_hwnd: H) -> i32 {

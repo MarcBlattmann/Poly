@@ -275,31 +275,14 @@ pub fn has_caption(style: u32) -> bool {
     style & WS_CAPTION == WS_CAPTION
 }
 
-/// The width of the frame on each side for `style`/`ex_style`.
-fn side(style: u32, ex: u32) -> i32 {
-    side_dpi(style, ex, 96)
-}
-
 /// The frame width on each side at `dpi` (`AdjustWindowRectExForDpi.yaml`):
 /// a caption or thick frame with a border is the frame plus the padded
 /// border, a thick frame alone one less.
 fn side_dpi(style: u32, ex: u32, dpi: u32) -> i32 {
-    let fp = frame_for_dpi(dpi).saturating_add(padded_for_dpi(dpi));
     let caption = has_caption(style);
     let thick = style & WS_THICKFRAME != 0;
-    let border = style & WS_BORDER != 0;
     let dlg = style & WS_DLGFRAME != 0 || ex & WS_EX_DLGMODALFRAME != 0;
-    let outer = if caption || (thick && border) {
-        fp
-    } else if thick {
-        fp - 1
-    } else if dlg {
-        3
-    } else if border {
-        1
-    } else {
-        0
-    };
+    let outer = frame_side_dpi(style, ex, dpi);
     let client = if ex & WS_EX_CLIENTEDGE != 0 { 2 } else { 0 };
     let mut stat = if ex & WS_EX_STATICEDGE != 0 { 1 } else { 0 };
     // Observed: a dialog frame with both edges adds 4 in all, not 6.
@@ -381,13 +364,95 @@ pub fn track_limited(style: u32) -> bool {
     style & WS_POPUP == 0 || style & WS_THICKFRAME != 0
 }
 
+/// The width of a window's frame proper on each side (caption frame,
+/// sizing frame, dialog frame or border line), without the client and
+/// static edges of the extended style.
+fn frame_side(style: u32, ex: u32) -> i32 {
+    frame_side_dpi(style, ex, 96)
+}
+
+/// [`frame_side`] at `dpi` (`AdjustWindowRectExForDpi.yaml`): a caption or
+/// a thick frame with a border is the frame plus the padded border (8 at
+/// 96 DPI), a thick frame alone one less.
+fn frame_side_dpi(style: u32, ex: u32, dpi: u32) -> i32 {
+    let fp = frame_for_dpi(dpi).saturating_add(padded_for_dpi(dpi));
+    let caption = has_caption(style);
+    let thick = style & WS_THICKFRAME != 0;
+    let border = style & WS_BORDER != 0;
+    let dlg = style & WS_DLGFRAME != 0 || ex & WS_EX_DLGMODALFRAME != 0;
+    if caption || (thick && border) {
+        fp
+    } else if thick {
+        fp - 1
+    } else if dlg {
+        3
+    } else if border {
+        1
+    } else {
+        0
+    }
+}
+
 /// The `MINMAXINFO` win32k fills before `WM_GETMINMAXINFO`:
-/// (max size, max position, min track, max track). The maximized size is
-/// the work area plus the frame on each side; the position is relative to
-/// the work area (its origin is added when maximizing).
+/// (max size, max position, min track, max track), as GetSystemMetrics.yaml
+/// `window_metrics` and ShowWindow.yaml `show_maximized_from_hidden` list
+/// them. The maximized size is the screen plus the frame on each side, at
+/// minus the frame (the frame proper: a client edge does not count). The
+/// smallest tracking size is SM_CXMINTRACK x SM_CYMINTRACK for a window
+/// with a border line or a dialog frame in its style (a caption is both),
+/// twice the frame for a tool window, and twice the frame but at least 2
+/// for the others (a plain popup: 2,2; one with a sizing frame: 14,14).
 pub fn minmax(style: u32, ex: u32, d: &Display) -> [(i32, i32); 4] {
-    let s = side(style, ex);
-    [(d.work.width() + 2 * s, d.work.height() + 2 * s), (-s, -s), MIN_TRACK, (d.width + 20, d.height + 20)]
+    let s = frame_side(style, ex);
+    let min = if ex & WS_EX_TOOLWINDOW != 0 {
+        (2 * s, 2 * s)
+    } else if style & (WS_BORDER | WS_DLGFRAME) != 0 {
+        MIN_TRACK
+    } else {
+        ((2 * s).max(2), (2 * s).max(2))
+    };
+    [(d.width + 2 * s, d.height + 2 * s), (-s, -s), min, (d.width + 20, d.height + 20)]
+}
+
+/// `WS_MAXIMIZEBOX` (winuser.h).
+pub const WS_MAXIMIZEBOX: u32 = 0x0001_0000;
+/// `WS_EX_APPWINDOW` (winuser.h).
+pub const WS_EX_APPWINDOW: u32 = 0x0004_0000;
+
+/// The rectangle of a maximized top-level window (screen coordinates), from
+/// the maximized size and position its procedure answered to
+/// `WM_GETMINMAXINFO`. A window with a maximize box is fitted to the work
+/// area (its frame overhangs it: -8,16,1928,1088 over the work area
+/// 0,24,1920,1080); any other takes the position and size as they are and
+/// covers the taskbar (GetSystemMetrics.yaml `window_metrics`).
+pub fn maximized_rect(style: u32, ex: u32, d: &Display, max_size: (i32, i32), max_pos: (i32, i32)) -> Rect {
+    if style & WS_MAXIMIZEBOX != 0 {
+        let s = frame_side(style, ex);
+        let (x, y) = (d.work.left + max_pos.0, d.work.top + max_pos.1);
+        let w = max_size.0.min(d.work.width() + 2 * s);
+        let h = max_size.1.min(d.work.height() + 2 * s);
+        Rect::new(x, y, x + w, y + h)
+    } else {
+        Rect::new(max_pos.0, max_pos.1, max_pos.0 + max_size.0, max_pos.1 + max_size.1)
+    }
+}
+
+/// Where a minimized top-level window is put (its top-left corner). A
+/// window with a taskbar button on the interactive desktop is parked at
+/// -32000,-32000: one that is not owned, not a tool window and not
+/// `WS_EX_NOACTIVATE`, or any with `WS_EX_APPWINDOW`. The others, and every
+/// window of session 0 (no shell hides minimized windows there), sit in the
+/// bottom-left slot of the screen (GetActiveWindow.yaml `minimized_position`,
+/// ShowWindow.yaml `minimize`).
+pub fn minimized_origin(ex: u32, owned: bool, d: &Display) -> (i32, i32) {
+    if d.interactive && has_taskbar_button(ex, owned) { (-32000, -32000) } else { (0, d.height - MINIMIZED.1) }
+}
+
+/// Whether a top-level window has a taskbar button on the interactive
+/// desktop: one that is not owned, not a tool window and not
+/// `WS_EX_NOACTIVATE`, or any with `WS_EX_APPWINDOW`.
+pub fn has_taskbar_button(ex: u32, owned: bool) -> bool {
+    ex & WS_EX_APPWINDOW != 0 || (!owned && ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) == 0)
 }
 
 #[cfg(test)]
