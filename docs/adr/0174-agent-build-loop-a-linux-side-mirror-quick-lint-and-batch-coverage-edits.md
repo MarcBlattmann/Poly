@@ -87,7 +87,9 @@ the container) keeps the copy and the checkout equal:
 (`poly-snap-tpl-<time>`): the tree from the object store, then
 `cargo xtask ci lint`, `cargo test --workspace --no-run` and
 `cargo xtask prebuild kernel` and `tools`. A worktree's first mirror-mode
-run copies that volume. The copy keeps the template's modification times
+run copies that volume (directories first, then the files eight at a time:
+30 s, against 190 s for one `cp -a`), unless Docker's disk has less than
+60 GB free. The copy keeps the template's modification times
 and the sync then rewrites exactly the files the worktree has differently,
 so cargo's ordinary freshness check is right by construction: no
 `RUSTC_WRAPPER`, no unstable cargo flag. The next template starts as a
@@ -138,16 +140,26 @@ the old wrapper on the Windows worktree, "after" the mirror.
 
 | command | before | after |
 |---|---|---|
-| `polyd true` | 10.2 s | 6.0 s (4.7 s without the mirror) |
+| `polyd true` | 10.2 s | 6.0 s (2.3 to 4.7 s without the mirror) |
 | `cargo xtask boot-tests --list` | 23.5 s | 5.6 s |
-| `cargo xtask ci lint`, nothing built | 1170 s | 181 s |
-| `cargo xtask ci lint`, built | 1196 s | 38 s |
+| a new worktree's first call (copies the 11 GB template) | none | 30 to 34 s, once |
+| a new worktree's first `cargo xtask ci lint` | 1170 s | 72 s (no crate compiled) |
+| `cargo xtask ci lint`, nothing built, no template | 1170 s | 181 s |
+| `cargo xtask ci lint`, built | 1196 s | 32 to 38 s |
+| `cargo xtask ci lint` after an edit to `poly-abi` (42 crates checked again) | not measured | 63 to 70 s |
 | `cargo xtask ci lint --quick` (two crates changed) | none | 11 s |
-| `cargo xtask ci coverage` | 243 s | 19 s |
+| `cargo xtask ci coverage` | 243 s | 14 to 19 s |
 | `cargo xtask coverage show <id>` | 65 s | 10 s |
 | claim 150 entries | 150 calls | one call, 13 s |
+| `cargo xtask boot-tests selftest-2g` (one boot group, kernel built) | not measured (median of all boot test calls: 204 s) | 23 s |
 | `cargo fmt --all --check` | 65 s | 13 s |
 | cargo's check that xtask is built | 10 s | 0.3 s |
+| `polyd-template` from nothing | none | 775 s |
+
+Two kernel self-tests that measure time (`apic_timer_period_is_one_tick`
+and the Winsock loopback program) failed in two of six boots while the
+Docker VM's load was 12 to 40, and passed in every boot at load 9, on the
+same kernel binary: the host, not the mirror.
 
 ## Considered and dropped
 
