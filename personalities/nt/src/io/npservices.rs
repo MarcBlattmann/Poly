@@ -46,7 +46,6 @@ pub fn create_named_pipe_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Res
     if pipe_type > FILE_PIPE_MESSAGE_TYPE | FILE_PIPE_REJECT_REMOTE_CLIENTS
         || read_mode > FILE_PIPE_MESSAGE_TYPE
         || completion > FILE_PIPE_COMPLETE_OPERATION
-        || (pipe_type & FILE_PIPE_MESSAGE_TYPE == 0 && read_mode == FILE_PIPE_MESSAGE_TYPE)
         || max_instances == 0
     {
         return Err(STATUS_INVALID_PARAMETER);

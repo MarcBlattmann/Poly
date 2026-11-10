@@ -359,6 +359,11 @@ impl IoState {
                 return Err(STATUS_INSTANCE_NOT_AVAILABLE);
             }
         } else {
+            // The first instance of a byte pipe cannot read in message mode;
+            // a further instance of an existing name is not checked for it.
+            if c.pipe_type & FILE_PIPE_MESSAGE_TYPE == 0 && c.read_mode == FILE_PIPE_MESSAGE_TYPE {
+                return Err(STATUS_INVALID_PARAMETER);
+            }
             let config = match c.share & 3 {
                 2 => FILE_PIPE_INBOUND,
                 1 => FILE_PIPE_OUTBOUND,
@@ -577,6 +582,11 @@ impl IoState {
         let Some(end) = self.np_end(file) else { return Err((STATUS_INVALID_HANDLE, irp)) };
         let Some(inst) = self.np.instances.get(&end.instance) else { return Err((STATUS_PIPE_CLOSING, irp)) };
         if !inst.message || !end.message_read {
+            return Err((STATUS_INVALID_PIPE_STATE, irp));
+        }
+        // A client whose server end is closed cannot transact at all (the
+        // write alone would be STATUS_PIPE_CLOSING).
+        if !end.server && inst.client_file == Some(file) && inst.server_file.is_none() {
             return Err((STATUS_INVALID_PIPE_STATE, irp));
         }
         if let Some(s) = end_error(inst, &end, file, true, false) {
