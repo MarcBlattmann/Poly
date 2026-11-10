@@ -43,6 +43,9 @@ unsafe extern "system" {
     fn GetCurrentProcessId() -> u32;
     fn GetCurrentProcess() -> isize;
     fn GetTickCount64() -> u64;
+    fn LoadLibraryExW(name: *const u16, file: *mut u8, flags: u32) -> *mut u8;
+    fn GetProcAddress(module: *mut u8, name: *const u8) -> *mut u8;
+    fn FreeLibrary(module: *mut u8) -> i32;
     fn CreateEventW(security: *mut u8, manual_reset: i32, initial_state: i32, name: *const u16) -> isize;
     fn WaitForSingleObject(handle: isize, milliseconds: u32) -> u32;
     fn CloseHandle(handle: isize) -> i32;
@@ -800,6 +803,12 @@ unsafe fn shell32() {
     let n = GetModuleFileNameW(core::ptr::null_mut(), own.as_mut_ptr(), 260) as usize;
     check_got(n > 0 && (0..=n).all(|i| *(*argv).add(i) == own[i]), n as u32);
     check_eq(LocalFree(argv.cast()) as usize, 0);
+    // The contract Chrome loads first for it (LOAD_LIBRARY_SEARCH_SYSTEM32, 0x800) has the function.
+    let contract = w::<48>("api-ms-win-downlevel-shell32-l1-1-0.dll");
+    let module = LoadLibraryExW(contract.as_ptr(), core::ptr::null_mut(), 0x800);
+    check_got(!module.is_null(), 0);
+    check_got(!GetProcAddress(module, c"CommandLineToArgvW".as_ptr().cast()).is_null(), 0);
+    check_eq(FreeLibrary(module) as usize, 1);
     // CSIDL_LOCAL_APPDATA (0x1C), SHGFP_TYPE_CURRENT (0): %LOCALAPPDATA%, no trailing backslash.
     let mut path = [0u16; 260];
     check_eq(SHGetFolderPathW(core::ptr::null_mut(), 0x1C, core::ptr::null_mut(), 0, path.as_mut_ptr()) as usize, 0);
