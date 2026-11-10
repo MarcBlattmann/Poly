@@ -1540,7 +1540,9 @@ pub unsafe extern "system" fn DrawTextExW(
     format: u32,
     params: *mut u32,
 ) -> i32 {
-    let (mut tab, mut left, mut right) = (0, 0, 0);
+    // Without a parameter block the call is `DrawTextW`: the tab length of
+    // `DT_TABSTOP` is in the format (a negative `tab` tells gdi32 so).
+    let (mut tab, mut left, mut right) = (-1, 0, 0);
     let mut drawn: *mut u32 = core::ptr::null_mut();
     if !params.is_null() {
         // SAFETY: the caller's DRAWTEXTPARAMS: `cbSize` first.
@@ -1549,9 +1551,7 @@ pub unsafe extern "system" fn DrawTextExW(
                 set_last_error(ERROR_INVALID_PARAMETER);
                 return 0;
             }
-            if format & DT_TABSTOP != 0 {
-                tab = *params.add(1) as i32;
-            }
+            tab = if format & DT_TABSTOP != 0 { (*params.add(1) as i32).max(0) } else { 0 };
             left = *params.add(2) as i32;
             right = *params.add(3) as i32;
             drawn = params.add(4);
