@@ -1303,7 +1303,7 @@
 {"symbol":"SetProcessDEPPolicy","src":["wine-spec"]},
 {"symbol":"SetProcessDefaultCpuSets","src":["wine-spec"]},
 {"symbol":"SetProcessInformation","src":["wine-spec"]},
-{"symbol":"SetProcessMitigationPolicy","status":"claimed","claimed_by":"impl-win-sec","src":["wine-spec"]},
+{"symbol":"SetProcessMitigationPolicy","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"SetProcessPreferredUILanguages","src":["wine-spec"]},
 {"symbol":"SetProcessPriorityBoost","src":["wine-spec"],"seeds":["wine:kernel32/tests/thread.c:test_thread_priority"]},
 {"symbol":"SetProcessShutdownParameters","src":["wine-spec"]},
