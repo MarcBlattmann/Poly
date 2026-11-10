@@ -226,6 +226,11 @@ pub struct Wm {
     keeper: u32,
     /// AttachThreadInput: a thread to the queue whose input it shares.
     attached: BTreeMap<Key, Key>,
+    /// The processes that had the foreground at some time, and the threads
+    /// whose next activation takes it although another process has it
+    /// (`input`).
+    fg_seen: alloc::collections::BTreeSet<u32>,
+    fg_grant: alloc::collections::BTreeSet<Key>,
     /// The cursor position (screen coordinates).
     cursor: (i32, i32),
     /// The physical key state, keys pressed since GetAsyncKeyState last
@@ -289,6 +294,8 @@ impl Wm {
             foreground: 0,
             keeper: 0,
             attached: BTreeMap::new(),
+            fg_seen: alloc::collections::BTreeSet::new(),
+            fg_grant: alloc::collections::BTreeSet::new(),
             cursor: (0, 0),
             async_keys: raw::blank_keys(),
             async_new: alloc::vec![false; 256],
@@ -696,7 +703,10 @@ impl Wm {
             c.windows += 1;
             (c.wndproc, c.unicode, c.wnd_extra.max(0) as usize, c.name.clone())
         };
-        let minmax = parent == self.desktop && (has_caption(s.style) || s.style & WS_THICKFRAME != 0);
+        // WM_GETMINMAXINFO at creation only for a window that is not
+        // WS_POPUP or has a sizing frame (ShowWindow.yaml
+        // `show_minimized_from_hidden`).
+        let minmax = parent == self.desktop && crate::metrics::track_limited(s.style);
         // An overlapped window has a caption: WS_CAPTION is added and the
         // frame counts it from WM_NCCALCSIZE on (AdjustWindowRectEx.yaml's
         // round trip), though CREATESTRUCT shows the style as given.
@@ -1682,6 +1692,7 @@ impl Wm {
                 Reply::Ok {}
             }
             Request::InputState {} => self.input_reply(ctx.key()),
+            Request::MayTakeForeground {} => Reply::Bool { value: self.may_take_foreground(ctx.key()) },
             Request::ActivationHistory {} => {
                 let k = self.input_key(ctx.key());
                 Reply::Windows { hwnds: self.queues.get(&k).map(|q| q.activated.clone()).unwrap_or_default() }

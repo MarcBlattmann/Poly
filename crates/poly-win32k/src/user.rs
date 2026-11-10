@@ -488,8 +488,27 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
         }
     } else if style & WS_VISIBLE != 0 {
         show(env, &i, ShowKind::Create);
+        discharge_size_move(env, hwnd);
     }
     hwnd
+}
+
+/// The WM_SIZE and WM_MOVE held back at creation, if they still are
+/// (ShowWindow.yaml `hide_size_move`).
+fn discharge_size_move<E: Env + ?Sized>(env: &E, hwnd: u32) {
+    let Some(now) = info(env, u64::from(hwnd)) else { return };
+    if !now.size_move_pending {
+        return;
+    }
+    env.call(Request::SetState {
+        hwnd,
+        visible: None,
+        minimized: None,
+        maximized: None,
+        normal: None,
+        size_move_pending: Some(false),
+    });
+    send_size_move(env, &now);
 }
 
 /// `WM_SIZE` then `WM_MOVE` from the window's current rectangles.
@@ -610,6 +629,9 @@ struct Opts {
     /// A child changes its state: `WM_CHILDACTIVATE` where a top-level
     /// window would be activated.
     child_activate: bool,
+    /// The rectangle the window gets if its procedure leaves
+    /// `WM_WINDOWPOSCHANGING`'s as it is (maximizing).
+    fit: Option<Rect>,
 }
 
 /// `SWP_NOCOPYBITS` (winuser.h).
@@ -696,20 +718,8 @@ pub fn show_window<E: Env + ?Sized>(env: &E, hwnd: u64, cmd: i32) -> bool {
             }
         }
     }
-    if shown_message
-        && i.size_move_pending
-        && let Some(now) = info(env, hwnd)
-        && now.size_move_pending
-    {
-        env.call(Request::SetState {
-            hwnd: i.hwnd,
-            visible: None,
-            minimized: None,
-            maximized: None,
-            normal: None,
-            size_move_pending: Some(false),
-        });
-        send_size_move(env, &now);
+    if shown_message && i.size_move_pending {
+        discharge_size_move(env, i.hwnd);
     }
     was
 }
@@ -889,10 +899,8 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
     let (flags, after, activate) = if interactive {
         if activating {
             (base, HWND_TOP, !was_active)
-        } else if was_active || st.active == 0 {
-            (base | SWP_NOACTIVATE, HWND_BOTTOM, false)
         } else {
-            (base | SWP_NOACTIVATE, u64::from(st.active), false)
+            (base | SWP_NOACTIVATE, HWND_BOTTOM, false)
         }
     } else if was_active && !hidden && !activating {
         (base, HWND_BOTTOM, false)
@@ -900,8 +908,17 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
         (base, HWND_TOP, !was_active)
     };
     swp(env, i.hwnd, after, x, y, w, h, flags, Opts { extra, activate, ..Opts::default() });
-    if interactive && was_active && cmd == SW_MINIMIZE {
-        focus::hand_on(env, i, successor, true);
+    if interactive && cmd == SW_MINIMIZE {
+        if was_active {
+            focus::hand_on(env, i, successor, true);
+        } else {
+            // "Minimizes the specified window and activates the next
+            // top-level window" (Learn) also when the minimized window was
+            // not the active one: the window that was active before the
+            // active one takes the activation if it can (SetCapture.yaml
+            // `hide`: observed, "not understood beyond the observation").
+            focus::activate_previous(env, i.hwnd);
+        }
     }
 }
 
@@ -928,14 +945,13 @@ fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     // WM_GETMINMAXINFO first: the maximized size and position are the
     // procedure's answer.
     let mmi = ask_minmax(env, i);
-    let r = if child {
-        Rect::new(
-            mmi.max_position.x,
-            mmi.max_position.y,
-            mmi.max_position.x + mmi.max_size.x,
-            mmi.max_position.y + mmi.max_size.y,
-        )
-    } else {
+    let r = Rect::new(
+        mmi.max_position.x,
+        mmi.max_position.y,
+        mmi.max_position.x + mmi.max_size.x,
+        mmi.max_position.y + mmi.max_size.y,
+    );
+    let fit = (!child).then(|| {
         metrics::maximized_rect(
             i.style,
             i.ex_style,
@@ -943,7 +959,7 @@ fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
             (mmi.max_size.x, mmi.max_size.y),
             (mmi.max_position.x, mmi.max_position.y),
         )
-    };
+    });
     let extra = shown_bit(env, i);
     env.call(Request::SetState {
         hwnd: i.hwnd,
@@ -964,7 +980,7 @@ fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     let opts = if child {
         Opts { child_activate: true, keep_z: true, ..Opts::default() }
     } else {
-        Opts { extra, activate: focus::input(env).active != i.hwnd, ..Opts::default() }
+        Opts { extra, activate: focus::input(env).active != i.hwnd, fit, ..Opts::default() }
     };
     swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), flags, opts);
     after_restore_activation(env, i, opts.activate);
@@ -990,17 +1006,24 @@ fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
     let child = i.style & WS_CHILD != 0;
     let hidden = i.style & WS_VISIBLE == 0;
     let to_max = i.minimized && i.restore_max;
-    let r = if to_max {
+    let (r, fit) = if to_max {
         let mmi = ask_minmax(env, i);
-        metrics::maximized_rect(
+        let raw = Rect::new(
+            mmi.max_position.x,
+            mmi.max_position.y,
+            mmi.max_position.x + mmi.max_size.x,
+            mmi.max_position.y + mmi.max_size.y,
+        );
+        let fit = metrics::maximized_rect(
             i.style,
             i.ex_style,
             &display,
             (mmi.max_size.x, mmi.max_size.y),
             (mmi.max_position.x, mmi.max_position.y),
-        )
+        );
+        (raw, (!child).then_some(fit))
     } else {
-        normal_rect(env, i)
+        (normal_rect(env, i), None)
     };
     let mut extra = shown_bit(env, i);
     // Observed in session 0: showing a window that was hidden while
@@ -1030,7 +1053,7 @@ fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
     let opts = if child {
         Opts { child_activate: true, keep_z: true, ..Opts::default() }
     } else {
-        Opts { extra, activate: !no_activate && focus::input(env).active != i.hwnd, ..Opts::default() }
+        Opts { extra, activate: !no_activate && focus::input(env).active != i.hwnd, fit, ..Opts::default() }
     };
     swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), flags, opts);
     after_restore_activation(env, i, opts.activate);
@@ -1100,6 +1123,14 @@ fn swp<E: Env + ?Sized>(
     if flags & SWP_NOSENDCHANGING == 0 {
         send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
+    // A maximized window is fitted to the work area after the message,
+    // which showed the size and position of WM_GETMINMAXINFO (observed:
+    // WM_WINDOWPOSCHANGING -8,-8 1936x1096, WM_WINDOWPOSCHANGED -8,16 1936x1072).
+    if let Some(r) = opts.fit
+        && (wp.x, wp.y, wp.cx, wp.cy) == (x, y, cx.max(0), cy.max(0))
+    {
+        (wp.x, wp.y, wp.cx, wp.cy) = (r.left, r.top, r.width(), r.height());
+    }
     let interactive = screen(env).interactive;
     let top = !i.desktop && i.style & WS_CHILD == 0;
     let f = wp.flags;
@@ -1127,9 +1158,9 @@ fn swp<E: Env + ?Sized>(
     let (nx, ny) = if f & SWP_NOMOVE != 0 { (cur.left, cur.top) } else { (wp.x, wp.y) };
     let (mut ncx, mut ncy) =
         if f & SWP_NOSIZE != 0 { (cur.width(), cur.height()) } else { (wp.cx.max(0), wp.cy.max(0)) };
-    if f & SWP_NOSIZE == 0 && top && (has_caption(i.style) || i.style & WS_THICKFRAME != 0) {
+    if f & SWP_NOSIZE == 0 && top && metrics::track_limited(i.style) {
         let mmi = ask_minmax(env, &i);
-        if f & SWP_STATECHANGED == 0 && metrics::track_limited(i.style) {
+        if f & SWP_STATECHANGED == 0 {
             ncx = ncx.max(mmi.min_track.x).min(mmi.max_track.x.max(mmi.min_track.x));
             ncy = ncy.max(mmi.min_track.y).min(mmi.max_track.y.max(mmi.min_track.y));
         }
@@ -1156,9 +1187,11 @@ fn swp<E: Env + ?Sized>(
         eff &= !SWP_SHOWWINDOW;
     }
     // The interactive desktop marks every hide (and destroy) of a
-    // top-level window that takes part in activation.
+    // top-level window that has a taskbar button: not an owned one, a tool
+    // window or a WS_EX_NOACTIVATE one (gaw_owner, GetForegroundWindow.yaml
+    // `handover_same_thread`).
     let mut extra = opts.extra;
-    if hide && interactive && top && i.ex_style & WS_EX_NOACTIVATE == 0 {
+    if hide && interactive && top && metrics::has_taskbar_button(i.ex_style, i.owner != 0) {
         extra |= 0x2000_0000;
     }
     let parent_visible =
@@ -1214,7 +1247,7 @@ fn swp<E: Env + ?Sized>(
     } else if opts.activate && top {
         if !interactive {
             focus::activate_local(env, hwnd, true);
-        } else if !focus::in_background(env, i.pid) {
+        } else {
             if i.owner != 0 {
                 let mut o = WindowPos {
                     hwnd: u64::from(i.owner),
@@ -1223,7 +1256,13 @@ fn swp<E: Env + ?Sized>(
                 };
                 send(env, u64::from(i.owner), WM_WINDOWPOSCHANGING, 0, ptr(&mut o));
             }
-            focus::activate(env, hwnd, true, true);
+            // The window takes the foreground from another thread only if
+            // its thread may; a WS_EX_NOACTIVATE window never takes it from
+            // another thread of its process (gfw_xthread). Without it the
+            // window is the active one of its thread all the same.
+            let stay_back = !focus::may_take_foreground(env)
+                || (i.ex_style & WS_EX_NOACTIVATE != 0 && focus::in_background(env, i.pid));
+            focus::activate_as(env, hwnd, true, true, stay_back);
         }
     }
     env.call(Request::SetRects { hwnd, window_rel: Some(new_win), client_rel: Some(new_client) });

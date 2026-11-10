@@ -543,7 +543,7 @@ pub fn moved_paint<E: Env + ?Sized>(env: &E, now: &WinInfo, old: Rect, nocopy: b
         return;
     }
     if nocopy {
-        redraw(env, now.hwnd, None, RDW_INVALIDATE | RDW_ERASE);
+        redraw(env, now.hwnd, None, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME);
         erase_now(env, now.hwnd);
         return;
     }
@@ -566,7 +566,9 @@ pub fn moved_paint<E: Env + ?Sized>(env: &E, now: &WinInfo, old: Rect, nocopy: b
     let old_seen = to_client(intersect(old_client, scr), old_client);
     let newly = crate::rgn::Rgn::rect(new_seen).subtract(&crate::rgn::Rgn::rect(old_seen));
     if !newly.rects().is_empty() {
-        redraw(env, now.hwnd, Some(newly.rects()), RDW_INVALIDATE | RDW_ERASE);
+        // The frame is painted too, inside the move (gurn_screen: WM_NCPAINT,
+        // WM_ERASEBKGND, then WM_PAINT).
+        redraw(env, now.hwnd, Some(newly.rects()), RDW_INVALIDATE | RDW_ERASE | RDW_FRAME);
         erase_now(env, now.hwnd);
     }
 }

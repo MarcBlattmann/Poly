@@ -191,19 +191,31 @@ fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool) {
 /// (else it does when no other thread of ours has it). Returns the window
 /// that was active (0 when none or when the thread was in the background).
 pub fn activate<E: Env + ?Sized>(env: &E, y: u32, in_show: bool, foreground: bool) -> u32 {
+    activate_as(env, y, in_show, foreground, false)
+}
+
+/// Whether the calling process takes the foreground when it shows or
+/// creates a window.
+pub fn may_take_foreground<E: Env + ?Sized>(env: &E) -> bool {
+    matches!(env.call(Request::MayTakeForeground {}), Reply::Bool { value: true })
+}
+
+/// [`activate`]; with `stay_back` the window becomes the thread's active
+/// window without taking the foreground from another process.
+pub fn activate_as<E: Env + ?Sized>(env: &E, y: u32, in_show: bool, foreground: bool, stay_back: bool) -> u32 {
     let Some(yi) = info(env, u64::from(y)) else { return 0 };
     let st = input(env);
     let x = st.active;
     let fg_thread_other = st.foreground != 0
         && !st.fg_mine
         && info(env, u64::from(st.foreground)).is_some_and(|f| f.pid == yi.pid && f.pid != 0);
-    let background = !foreground && fg_thread_other;
+    let background = (!foreground && fg_thread_other) || (stay_back && !st.fg_mine && st.foreground != 0);
     if x == y && (st.fg_mine || background) {
         return x;
     }
     let xi = if x != 0 && x != y { info(env, u64::from(x)) } else { None };
     if let Some(xi) = &xi {
-        send(env, u64::from(x), WM_NCACTIVATE, 0, u64::from(y));
+        send(env, u64::from(x), WM_NCACTIVATE, min_bits(xi), u64::from(y));
         send(env, u64::from(x), WM_ACTIVATE, WA_INACTIVE | min_bits(xi), u64::from(y));
     }
     // A background input queue may update its active/focus window without
@@ -273,15 +285,16 @@ fn deactivate<E: Env + ?Sized>(env: &E, focus_done: bool, names_next: bool) {
     if st.active != 0
         && let Some(xi) = info(env, u64::from(st.active))
     {
-        send(env, u64::from(st.active), WM_NCACTIVATE, min_bits(&xi), 0);
+        // No minimized bit in WM_NCACTIVATE when no window is named
+        // (gaw_leave_a: wParam 0, WM_ACTIVATE's HIWORD 32).
+        send(env, u64::from(st.active), WM_NCACTIVATE, 0, 0);
         send(env, u64::from(st.active), WM_ACTIVATE, WA_INACTIVE | min_bits(&xi), 0);
     }
     if st.active != 0 {
-        // The window that was active first, then the others from the top
-        // of the z order down (GetForegroundWindow.yaml `nobody_takes_over`).
-        let tops = thread_tops(env);
-        for t in tops.iter().copied().filter(|&t| t == st.active).chain(tops.iter().copied().filter(|&t| t != st.active))
-        {
+        // Every top-level window of the thread, from the top of the z order
+        // down, hidden ones too (a window just hidden is on top, a
+        // minimized one at the bottom: gaw_leave_a, gaw_zhide).
+        for t in thread_tops(env) {
             send(env, u64::from(t), WM_ACTIVATEAPP, 0, 0);
         }
     }
@@ -343,11 +356,34 @@ pub fn successor<E: Env + ?Sized>(env: &E, i: &WinInfo, minimizing: bool) -> Opt
     }
     let tops = thread_tops(env);
     if minimizing {
-        let at = tops.iter().position(|&t| t == i.hwnd)?;
-        tops[at + 1..].iter().copied().find(|&t| can_take(env, t, i.hwnd))
+        // From the top of the minimized window's band down: a window above
+        // it in its own band takes it too (gaw_leave_a: B shown with
+        // SW_SHOWNA), a topmost window above a plain one does not
+        // (`minimize_foreground`: "only C above A: nobody").
+        let topmost = i.ex_style & WS_EX_TOPMOST != 0;
+        tops.into_iter()
+            .filter(|&t| topmost || info(env, u64::from(t)).is_some_and(|w| w.ex_style & WS_EX_TOPMOST == 0))
+            .find(|&t| can_take(env, t, i.hwnd))
     } else {
         previous?;
         tops.into_iter().find(|&t| can_take(env, t, i.hwnd))
+    }
+}
+
+/// SW_MINIMIZE of window `minimized`, which is not the active one: the
+/// window that was the thread's active window before the present one is
+/// activated, if it can be.
+pub fn activate_previous<E: Env + ?Sized>(env: &E, minimized: u32) {
+    let st = input(env);
+    if st.active == 0 || st.active == minimized {
+        return;
+    }
+    let previous = history(env).into_iter().find(|&h| h != st.active);
+    if let Some(p) = previous
+        && p != minimized
+        && can_take(env, p, st.active)
+    {
+        activate(env, p, false, true);
     }
 }
 
@@ -447,8 +483,14 @@ pub fn after_hide<E: Env + ?Sized>(env: &E, i: &WinInfo, hands_on: bool) {
         return;
     }
     if screen(env).interactive {
+        let st = input(env);
         let next = successor(env, i, false);
         hand_on(env, i, next, false);
+        // A process whose foreground window was destroyed may take the
+        // foreground again with its next window.
+        if destroying && st.fg_mine && st.foreground == i.hwnd {
+            env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_FG_GRANT });
+        }
     } else if destroying {
         let next = thread_tops(env).into_iter().find(|&t| can_take(env, t, i.hwnd));
         match next {
@@ -579,6 +621,13 @@ pub fn set_focus<E: Env + ?Sized>(env: &E, hwnd: u64) -> u64 {
     if top != st.active || (!st.fg_mine && st.active == 0) {
         activate(env, top, false, false);
         activated = true;
+    } else if i.hwnd != top {
+        // The focus goes to a child of the active window: no activation
+        // message, but the window is at the top of the z order afterwards
+        // (observed in gf_show_popup / gf_activation: a hidden window made
+        // after it is below it then; without the SetFocus, gaw_zhide, it is
+        // above).
+        env.call(Request::ZOrder { hwnd: top, after: HWND_TOP, apply: true });
     }
     let st = input(env);
     let old = st.focus;

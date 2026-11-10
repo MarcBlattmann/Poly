@@ -29,6 +29,9 @@ pub const SET_FOREGROUND: u8 = 8;
 /// As [`SET_CAPTURE`], for a capture that ends with its window: no mouse
 /// move is synthesized for it.
 pub const SET_CAPTURE_QUIET: u8 = 16;
+/// The calling process's foreground window was destroyed: its next
+/// activation may take the foreground back.
+pub const SET_FG_GRANT: u8 = 32;
 
 /// The keeper's key: a thread of no process of ours.
 pub(super) const KEEPER: Key = (0xFFFF_FFF0, 0xFFFF_FFF0);
@@ -68,6 +71,10 @@ impl Wm {
             q.input.active = active;
             Self::note_active(q, active);
         }
+        if which & SET_FG_GRANT != 0 {
+            self.fg_grant.insert(key);
+        }
+        let q = self.queue(k);
         if which & SET_FOCUS != 0 {
             q.input.focus = focus;
         }
@@ -134,6 +141,17 @@ impl Wm {
         if k == 0 {
             return;
         }
+        // Every window of ours lies below the other process's window now:
+        // raising one is a move in the z order (GetFocus.yaml `show`:
+        // 0x10001843 for a window shown again after the activation left).
+        let ours: Vec<u32> = self.get(u64::from(d)).map(|w| w.children.clone()).unwrap_or_default();
+        for h in ours {
+            if h != k
+                && let Some(w) = self.get_mut(u64::from(h))
+            {
+                w.below_others = true;
+            }
+        }
         if let Some(dw) = self.get_mut(u64::from(d))
             && let Some(i) = dw.children.iter().position(|&c| c == k)
             && i != 0
@@ -153,8 +171,11 @@ impl Wm {
         {
             q.input.active = 0;
             q.input.focus = 0;
+            q.activated.clear();
         }
         self.foreground = fg;
+        self.fg_seen.insert(k.0);
+        self.fg_grant.remove(&k);
     }
 
     /// `SetForegroundWindow` of another thread's window: that thread's
@@ -169,9 +190,31 @@ impl Wm {
         Self::note_active(q, h);
     }
 
-    /// `h` is the queue's active window now: the head of its history.
+    /// Whether thread `key` takes the foreground when it shows or creates
+    /// a window (Learn: SetForegroundWindow's conditions, as far as the
+    /// sheets' tests show them: gaw_zhide, gaw_leave_a, gfw_xthread): its
+    /// process has the foreground window, or never had one yet (it was
+    /// started by the foreground process), or the thread destroyed its
+    /// window while that was the foreground window and has not had the
+    /// foreground since. A thread that lost the foreground otherwise (its
+    /// window was hidden or minimized), and a new thread of a process that
+    /// lost it, are activated without it: SetForegroundWindow gets it back.
+    pub(super) fn may_take_foreground(&self, key: Key) -> bool {
+        let fg = self.foreground();
+        fg == 0
+            || self.thread_of(fg).is_some_and(|t| t.0 == key.0)
+            || !self.fg_seen.contains(&key.0)
+            || self.fg_grant.contains(&key)
+    }
+
+    /// `h` is the queue's active window now: the head of its history. A
+    /// queue that has no active window any more starts a new history: the
+    /// next window to be active took the activation from another thread or
+    /// process and has no predecessor (GetForegroundWindow.yaml
+    /// `handover_same_thread`).
     fn note_active(q: &mut Queue, h: u32) {
         if h == 0 {
+            q.activated.clear();
             return;
         }
         q.activated.retain(|&x| x != h);

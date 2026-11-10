@@ -298,6 +298,9 @@ crate::wire_enum! {
         /// The windows that were the calling queue's active window, the
         /// latest first (destroyed ones too): a `Windows`.
         60 => ActivationHistory {},
+        /// Whether the calling process takes the foreground when it shows
+        /// or creates a window (`wm::input`): a `Bool`.
+        61 => MayTakeForeground {},
         /// `RegisterWindowMessageW`: the message number (0xC000..=0xFFFF) of a
         /// name, the same for every caller of the session and the same
         /// number as a class of that name has as its atom; an `Atom`.
