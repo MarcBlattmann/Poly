@@ -406,7 +406,13 @@ What stage 1 needed next, each with a host test and a ring-3 check in `s1test`:
    down from -1 (`poly_rtl::critsec`); the values with waiters are Poly's own continuation.
 2. **`winmm.dll`**: `timeGetTime` (milliseconds since the system started, wrapping as a `DWORD`),
    `timeBeginPeriod` and `timeEndPeriod` (`poly_kernelbase::winmm`). Chrome takes this clock on
-   Poly where it takes `QueryPerformanceCounter` on the Windows machines of the trace.
+   Poly where it takes `QueryPerformanceCounter` on the Windows machines of the trace. The
+   reason is the CPU QEMU shows, not Poly: its default model (`qemu64`) has no invariant TSC
+   (CPUID.80000007H:EDX bit 8; Intel SDM vol. 3B, "Invariant TSC"; Learn, "Acquiring
+   high-resolution time stamps"), and Chrome tests that bit with CPUID itself.
+   `QueryPerformanceFrequency` is 10 MHz on both. With `POLY_QEMU_CPU=host,+invtsc` under KVM
+   (`tools/xtask/src/accel.rs`) the guest has the bit, Chrome calls `QueryPerformanceCounter`
+   and never `timeGetTime`, and the 705 calls of the cold trace are the same on Poly.
 3. **`shell32.dll`**: `CommandLineToArgvW` and `SHGetFolderPathW` (`poly_kernelbase::shell`).
    Without the DLL Chrome's crash handler got no arguments, and its delay-load of `SHELL32.dll`
    ended it with a breakpoint.
