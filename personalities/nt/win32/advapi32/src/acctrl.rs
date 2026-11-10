@@ -391,6 +391,7 @@ const ACCESS_SYSTEM_SECURITY: u32 = 0x100_0000;
 const ERROR_ACCESS_DENIED: u32 = 5;
 const ERROR_INVALID_NAME: u32 = 123;
 const ERROR_FILE_NOT_FOUND: u32 = 2;
+const ERROR_PATH_NOT_FOUND: u32 = 3;
 
 /// The calling process's user SID as a string (`CURRENT_USER` is the key
 /// `\REGISTRY\USER\<it>`).
@@ -489,6 +490,10 @@ pub unsafe extern "system" fn GetNamedSecurityInfoW(
                 CloseHandle(h);
                 return rc;
             }
+            // With no information asked for the object is opened without
+            // any access; a path that is not there then answers "access
+            // denied" (the sheet: 5 instead of 3 for a missing directory).
+            Err(ERROR_PATH_NOT_FOUND) if info == 0 => ERROR_ACCESS_DENIED,
             Err(e) => e,
         };
         // A failure nulls the outputs that were asked for and the descriptor.

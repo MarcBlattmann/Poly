@@ -279,7 +279,7 @@ fn parse_ace_types() {
     assert_eq!(dace("D;;GA;;;WD").kind, 1);
     assert_eq!(sace("AU;SA;GA;;;WD").kind, 2);
     assert_eq!(p("S:(AL;SA;GA;;;WD)"), Err(87));
-    assert_eq!(p("D:(AL;;GA;;;WD)"), Err(87));
+    assert_eq!(p("D:(AL;;GA;;;WD)"), Err(1336));
     for (r, m) in [("NW", 1), ("NR", 2), ("NX", 4), ("NWNRNX", 7), ("NWNW", 1), ("", 0), ("0x1", 1)] {
         let a = sace(&alloc::format!("ML;;{r};;;LW"));
         assert_eq!((a.kind, a.mask()), (0x11, m), "{r}");
@@ -478,7 +478,289 @@ fn parse_errors() {
     }
 }
 
+/// The size of the descriptor or the error, for a table of cases.
+fn outcome(s: &str) -> Result<usize, u32> {
+    p(s).map(|b| b.len())
+}
+
+fn check(cases: &[(&str, Result<usize, u32>)]) {
+    for (s, want) in cases {
+        assert_eq!(outcome(s), *want, "{s:?}");
+    }
+}
+
+const G1: &str = "6da8a4ff-0e52-11d0-a286-00aa003049e2";
+const G2: &str = "e45795b2-9455-11d1-aebd-0000f80367c1";
+
+#[test]
+fn parse_alarm_types() {
+    for (ty, plain, one, both, dacl) in [
+        ("AU", Ok(52), Err(1336), Err(1336), 1336),
+        ("AL", Err(87), Err(1336), Err(1336), 1336),
+        ("OU", Ok(56), Ok(68), Ok(84), 1804),
+        ("OL", Err(87), Err(87), Err(87), 1804),
+        ("al", Err(87), Err(1336), Err(1336), 1336),
+        ("Ol", Err(87), Err(87), Err(87), 1804),
+    ] {
+        assert_eq!(outcome(&alloc::format!("S:({ty};FA;GR;;;BA)")), plain, "{ty}");
+        assert_eq!(outcome(&alloc::format!("S:({ty};;GR;;;BA)")), plain, "{ty}");
+        assert_eq!(outcome(&alloc::format!("S:({ty};SAFA;CR;{G1};;SY)")), one, "{ty}");
+        assert_eq!(outcome(&alloc::format!("S:({ty};FA;CR;;{G2};SY)")), one, "{ty}");
+        assert_eq!(outcome(&alloc::format!("S:({ty};SA;CR;{G1};{G2};SY)")), both, "{ty}");
+        assert_eq!(outcome(&alloc::format!("D:({ty};;GR;;;BA)")), Err(dacl), "{ty}");
+        assert_eq!(outcome(&alloc::format!("D:({ty};SA;CR;{G1};;BA)")), Err(dacl), "{ty}");
+    }
+    // A wrong field is reported before the refusal, the earlier field first.
+    for (ty, guid) in [("AL", 1336), ("OL", 1705)] {
+        check(&[
+            (&alloc::format!("S:({ty};QQ;GR;;;BA)"), Err(1004)),
+            (&alloc::format!("S:({ty};SA;QQ;;;BA)"), Err(1336)),
+            (&alloc::format!("S:({ty};SA;GR;;;QQ)"), Err(1337)),
+            (&alloc::format!("S:({ty};SA;CR;12345;;BA)"), Err(guid)),
+            (&alloc::format!("S:({ty};SA;CR;12345;;QQ)"), Err(guid)),
+            (&alloc::format!("S:({ty};QQ;QQ;;;BA)"), Err(1004)),
+            (&alloc::format!("S:({ty};SA;GR;;BA)"), Err(87)),
+            (&alloc::format!("S:(AU;SA;GR;;;BA)({ty};SA;GR;;;BA)"), Err(87)),
+            (&alloc::format!("O:BAS:({ty};SA;GR;;;BA)D:(A;;GR;;;BA)"), Err(87)),
+        ]);
+    }
+    // OU without GUIDs: the plain audit type in a revision 4 list with four spare bytes.
+    let b = ok("S:(OU;FA;GR;;;BA)");
+    assert_eq!(hex(&b[20..]), "040024000100000002801800000000800102000000000005200000002002000000000000");
+    let b = ok(&alloc::format!("S:(OU;SA;CR;{G1};{G2};SY)"));
+    assert_eq!(
+        hex(&b[20..]),
+        "0400400001000000074038000001000003000000ffa4a86d520ed011a28600aa003049e2\
+         b29557e45594d111aebd0000f80367c1010100000000000512000000"
+    );
+}
+
+#[test]
+fn parse_section_types() {
+    let cond = "(@User.A == 1)";
+    check(&[
+        ("S:(A;;GA;;;WD)", Err(1804)),
+        ("S:(D;QQ;GA;;;WD)", Err(1804)),
+        ("S:(OA;;CR;12345;;WD)", Err(1804)),
+        (&alloc::format!("S:(OD;;CR;{G1};;WD)"), Err(1804)),
+        ("D:(AU;;GR;;;BA)", Err(1336)),
+        ("D:(ML;;NW;;;LW)", Err(1804)),
+        (&alloc::format!("S:(XA;;FR;;;BU;{cond})"), Err(1804)),
+        (&alloc::format!("S:(XD;;FR;;;BU;{cond})"), Err(1804)),
+        (&alloc::format!("D:(XU;SA;FR;;;BU;{cond})"), Err(1804)),
+        (&alloc::format!("D:(XU;;FR;;;BU;{cond})"), Err(1804)),
+        ("S:(XA;;FR;;;BU)", Err(1804)),
+        ("D:(XU;SA;FR;;;BU)", Err(1804)),
+        ("D:(RA;;;;;WD;(\"A\",TI,0,1))", Err(1804)),
+        ("D:(SP;;;;;S-1-17-1)", Err(1804)),
+        ("S:(XA;;FR;;;BU;(Member_of))", Err(1804)),
+        ("D:(XU;SA;FR;;;BU;(Member_of))", Err(1804)),
+    ]);
+}
+
+#[test]
+fn parse_conditional() {
+    // The sheet's example: header, mask, S-1-5-32-545, then the condition.
+    let a = dace("XA;;FR;;;BU;(@User.Title == \"PM\")");
+    assert_eq!(
+        hex(&a.bytes),
+        "09003800890012000102000000000005200000002102000061727478f90a0000005400690074006c00650010040000\
+         0050004d0080000000"
+    );
+    check(&[
+        ("D:(XA;;FR;;;BU;(Member_of {SID(SY)}))", Ok(80)),
+        ("D:(XA;;FR;;;BU;(Member_of {SID(SY),SID(BA)}))", Ok(100)),
+        ("D:(XA;;FR;;;BU;( Member_of  { SID(SY) , SID(BA) } ))", Ok(100)),
+        ("D:(XA;;FR;;;BU;(member_of {sid(sy)}))", Ok(80)),
+        ("D:(XA;;FR;;;BU;(Member_of SID(SY)))", Ok(76)),
+        ("D:(XA;;FR;;;BU;(@User.Tags Not_Contains {1,2}))", Ok(100)),
+        ("D:(XA;;FR;;;BU;(Not_Exists @Resource.Title))", Ok(72)),
+        ("D:(XA;;FR;;;BU;((@User.A == 1) && (@User.B == 2 || @User.C == 3)))", Ok(116)),
+        ("D:(XA;CIOI;FR;;;BU;(Member_of {SID(SY)}))(A;;GA;;;SY)", Ok(100)),
+        ("D:(XD;;FR;;;BU;(@User.Level == 1))", Ok(84)),
+        ("S:(XU;FA;FR;;;BU;(@User.Level == 1))", Ok(84)),
+        ("D:(XA;;FR;;;BU;(1 == 1))", Ok(76)),
+        // Refused conditions.
+        ("D:(XA;;FR;;;BU;(Member_of))", Err(1336)),
+        ("D:(XA;;FR;;;BU;())", Err(1336)),
+        ("D:(XA;;FR;;;BU;( ))", Err(1336)),
+        ("D:(XA;;FR;;;BU;(Member_of {}))", Err(1336)),
+        ("D:(XA;;FR;;;BU;(Member_of {SID(ZZ)}))", Err(1336)),
+        ("D:(XA;;FR;;;BU;(Member_of {SY}))", Err(1336)),
+        ("D:(XA;;FR;;;BU;(Member_of {SID(SY)))", Err(1336)),
+        ("D:(XA;;FR;;;BU;(Member_of {SID(SY)})", Err(1336)),
+        ("D:(XA;;FR;;;BU;Member_of {SID(SY)})", Err(1336)),
+        ("D:(XA;;FR;;;BU;(Nonsense {SID(SY)}))", Err(1336)),
+        ("D:(XA;;FR;;;BU;(@User.Title ==))", Err(1336)),
+        ("D:(XA;;FR;;;BU;(@User.Title = 1))", Err(1336)),
+        ("D:(XA;;FR;;;BU;(@Nowhere.A == 1))", Err(1336)),
+        ("D:(XA;;FR;;;BU;(@User.A == 1) extra)", Err(1336)),
+        ("D:(XA;;FR;;;BU;(@User.A == 1);)", Err(1336)),
+        ("D:(XA;;FR;;;BU;(@User.A == 1);x)", Err(1336)),
+        ("D:(XA;;FR;;;BU;(\"a\" == \"a\"))", Err(1336)),
+        ("D:(XA;;FR;;;BU;(Exists @User.Title))", Err(1336)),
+        // No condition, or one where none belongs.
+        ("D:(XA;;FR;;;BU)", Err(1336)),
+        ("D:(XD;;FR;;;BU)", Err(1336)),
+        ("S:(XU;SA;FR;;;BU)", Err(1336)),
+        ("D:(XA;;FR;;;BU;)", Err(1336)),
+        ("D:(ZA;;FR;;;BU)", Err(1336)),
+        ("D:(A;;FR;;;BU;(Member_of {SID(SY)}))", Err(87)),
+        ("D:(D;;FR;;;BU;(@User.A == 1))", Err(87)),
+        ("S:(AU;SA;FR;;;BU;(@User.A == 1))", Err(87)),
+        ("S:(ML;;NW;;;LW;(@User.A == 1))", Err(87)),
+        ("D:(OA;;CR;;;BU;(@User.A == 1))", Err(87)),
+    ]);
+    // ZA: the callback type, four zero bytes more, a revision 4 list.
+    let b = ok("D:(ZA;;FR;;;BU;(@User.A == 1))");
+    assert_eq!(
+        hex(&b[20..]),
+        "04003c000100000009003400890012000102000000000005200000002102000061727478f902000000410004010000\
+         00000000000302800000000000"
+    );
+}
+
+#[test]
+fn parse_resource_attributes_and_policies() {
+    let b = ok("S:(RA;;;;;WD;(\"N\",TI,0,-5))");
+    assert_eq!(
+        hex(&b[20..]),
+        "02003c0001000000120034000000000001010000000000010000000014000000010000000000000001000000180000\
+         004e000000fbffffffffffffff"
+    );
+    check(&[
+        ("S:(RA;;;;;WD;(\"Dept\",TS,0,\"Lab\"))", Ok(88)),
+        ("S:(RA;;;;;WD;(\"Dept\",TS,0,\"Lab\",\"Shop\",\"X\"))", Ok(108)),
+        ("S:(RA;;;;;WD;(\"N\",TI,0,1,2,3))", Ok(104)),
+        ("S:(RA;;;;;WD;(\"Who\",TD,0,SY,S-1-1-0))", Ok(112)),
+        ("S:(RA;;;;;WD;(\"Bin\",TX,0,01,0203))", Ok(92)),
+        ("S:(RA;CI;;;;WD;(\"N\",TI,0,5))", Ok(80)),
+        ("S:(RA;;;;;WD; (\"N\" , TI , 0 , 5 ))", Ok(80)),
+        ("S:(RA;;;;;WD;(\"A\",TI,0,1))(RA;;;;;WD;(\"B\",TS,0,\"z\"))", Ok(128)),
+        ("S:(ML;;NW;;;LW)(RA;;;;;WD;(\"A\",TI,0,1))(AU;SA;FR;;;WD)", Ok(120)),
+        ("S:(RA;;;;;WD;(\"N\",TX,0,0a0))", Ok(80)),
+        ("S:(RA;;;;;WD;(\"\",TS,0,\"v\"))", Err(1336)),
+        ("S:(RA;;;;;WD;(\"N\",TI,0xFFFFFFFF,5))", Err(1336)),
+        ("S:(RA;;;;;BA;(\"N\",TI,0,5))", Err(1336)),
+        ("S:(RA;;;;;WD)", Err(1336)),
+        ("S:(RA;;;;;WD;)", Err(1336)),
+        ("S:(RA;;;;;WD;())", Err(1336)),
+        ("S:(RA;;;;;WD;(\"N\",TI,0))", Err(1336)),
+        ("S:(RA;;;;;WD;(\"N\",TZ,0,5))", Err(1336)),
+        ("S:(RA;;;;;WD;(N,TI,0,5))", Err(1336)),
+        ("S:(RA;;;;;WD;(\"N\",TB,0,2))", Err(1336)),
+        ("S:(RA;;;;;WD;(\"N\",TD,0,ZZ))", Err(1337)),
+        ("S:(RA;;GA;;;WD;(\"N\",TI,0,5))", Err(1336)),
+        ("S:(RA;SA;;;;WD;(\"N\",TI,0,5))", Err(1004)),
+        ("S:(RA;;;;;WD;(\"N\",TI,0,5)", Err(1336)),
+        // Scoped policies.
+        ("S:(SP;;;;;S-1-17-22)", Ok(48)),
+        ("S:(SP;;;;;S-1-17-1-2)", Ok(52)),
+        ("S:(SP;CI;;;;S-1-17-22)", Ok(48)),
+        ("S:(SP;;;;;WD)", Err(87)),
+        ("S:(SP;;;;;S-1-5-18)", Err(87)),
+        ("S:(SP;;GA;;;S-1-17-22)", Err(87)),
+        ("S:(SP;;0x1;;;S-1-17-22)", Err(87)),
+        ("S:(SP;;;;;S-1-17-22;(\"N\",TI,0,5))", Err(1336)),
+        ("S:(SP;SA;;;;S-1-17-22)", Err(1004)),
+    ]);
+    assert_eq!(sace("SP;CI;;;;S-1-17-22").flags, 2);
+    assert_eq!(sace("RA;OICIIO;;;;WD;(\"N\",TI,0,5)").flags, 0xb);
+}
+
+#[test]
+fn parse_part_boundaries_and_white_space() {
+    check(&[
+        ("O:S-1-5-19G:S-1-5-20", Ok(44)),
+        ("O:S-1-5-19D:(A;;FR;;;WD)", Ok(60)),
+        ("O:S-1-5-19S:(ML;;NW;;;LW)", Ok(60)),
+        ("G:S-1-5-32-545D:P", Ok(44)),
+        ("G:S-1-5-32-545S:", Ok(44)),
+        ("O:S-1-5-19D:", Ok(40)),
+        ("O:S-1-5-0x13D:(A;;FR;;;WD)", Ok(60)),
+        ("O:S-1-5-0xAD:(A;;FR;;;WD)", Ok(60)),
+        ("O:S-1-5-19 D:(A;;FR;;;WD)", Err(1337)),
+        ("O:S-1-5-19D", Err(1337)),
+        ("O:S-1-5-19G", Err(1337)),
+        ("O:S-1-5-19S", Err(1337)),
+        ("O:S-1-5-19DG:SY", Err(1337)),
+        ("O:S-1-5-19O:SY", Err(87)),
+        ("D:(A;;FR;;;S-1-5-19)(A;;FW;;;S-1-5-20)S:(ML;;NW;;;S-1-16-4096)", Ok(96)),
+        ("D:(A;;FR;;;S-1-5-19)O:S-1-5-20G:S-1-5-19", Ok(72)),
+        ("O:LSG:NSD:S:", Ok(60)),
+        ("G:BUO:BAS:D:", Ok(68)),
+        ("O:SYG:BAD:PAI(A;;FR;;;WD)S:AI", Ok(84)),
+        ("O:BA G:SY", Ok(48)),
+    ]);
+    let b = ok("O:S-1-5-0xAD:(A;;FR;;;WD)");
+    let at = offsets(&b).0;
+    assert_eq!(sddl::to_string(&Sid::from_bytes(&b[at..]).unwrap()), "S-1-5-10");
+    // Spaces are free between and after parts; other white space is not a space.
+    for (space, after_sid, after_ace, between_aces) in [
+        (" ", Ok(32), Ok(48), Ok(72)),
+        ("  ", Ok(32), Ok(48), Ok(72)),
+        ("\t", Err(87), Ok(48), Err(1804)),
+        ("\n", Err(87), Ok(48), Err(1804)),
+        ("\r", Err(87), Ok(48), Err(1804)),
+        ("\r\n", Err(87), Ok(48), Err(1804)),
+    ] {
+        let blank = space.trim_matches(' ').is_empty();
+        let other = |n: usize| if blank { Ok(n) } else { Err(87) };
+        check(&[
+            (&alloc::format!("G:SY{space}"), after_sid),
+            (&alloc::format!("D:(A;;FR;;;WD){space}"), after_ace),
+            (&alloc::format!("S:(ML;;NW;;;LW){space}"), after_ace),
+            (&alloc::format!("O:SYD:(A;;FR;;;WD)(A;;FW;;;BA){space}"), after_ace.map(|n| n + 36)),
+            (&alloc::format!("D:(A;;FR;;;WD){space}(A;;FW;;;BA)"), between_aces),
+            (&alloc::format!("D:{space}"), other(28)),
+            (&alloc::format!("D:P{space}"), other(28)),
+            (&alloc::format!("D:NO_ACCESS_CONTROL{space}"), other(20)),
+            (&alloc::format!("G:SY{space}D:(A;;FR;;;WD){space}S:(ML;;NW;;;LW)"), other(88)),
+            (&alloc::format!("{space}D:(A;;FR;;;WD)"), other(48)),
+        ]);
+    }
+}
+
 // ----- ConvertSecurityDescriptorToStringSecurityDescriptorW -------------------------------
+
+#[test]
+fn format_conditional_text() {
+    for (a, b) in [
+        ("D:(XA;;FR;;;BU;(@User.Title == \"PM\"))", "D:(XA;;FR;;;BU;(@USER.Title == \"PM\"))"),
+        ("D:(XA;;FR;;;BU;(@User.A == 1 && @User.B == 2))", "D:(XA;;FR;;;BU;((@USER.A == 1) && (@USER.B == 2)))"),
+        ("D:(XA;;FR;;;BU;(a || b && c))", "D:(XA;;FR;;;BU;((a) || ((b) && (c))))"),
+        ("D:(XA;;FR;;;BU;(!(x)))", "D:(XA;;FR;;;BU;(!(x)))"),
+        (
+            "D:(XA;;FR;;;BU;(member_of_any{sid(S-1-5-32-544),SID(sy)}))",
+            "D:(XA;;FR;;;BU;(Member_of_any {SID(BA), SID(SY)}))",
+        ),
+        ("D:(XA;CIOI;FR;;;BU;(@device.n >= 0x10))", "D:(XA;OICI;FR;;;BU;(@DEVICE.n >= 0x10))"),
+        ("D:(XD;;FR;;;BU;(n > -3 || m < 010))", "D:(XD;;FR;;;BU;((n > -3) || (m < 010)))"),
+        ("D:(XA;;FR;;;BU;(@Resource.b == #0102FF))", "D:(XA;;FR;;;BU;(@RESOURCE.b == #0102ff))"),
+        ("S:(XU;SA;FR;;;BU;(Not_Exists @resource.t))", "S:(XU;SA;FR;;;BU;(Not_Exists @RESOURCE.t))"),
+    ] {
+        assert_eq!(round(a), b, "{a}");
+        assert_eq!(round(b), b, "{b} again");
+    }
+    // The length: the text and one more per ACE.
+    let one = "D:(XA;;FR;;;BU;(Member_of {SID(BA)}))";
+    assert_eq!((one.len(), length(one)), (37, 38));
+    let two = "D:(XA;;FR;;;BU;(Member_of {SID(BA)}))(XD;;FR;;;BU;(x == 1))";
+    assert_eq!(length(two), two.len() + 2);
+    // Resource attributes and scoped policies follow their own information bits.
+    let sd = ok("S:(RA;;;;;WD;(\"Dept\",TS,0,\"Lab\",\"Shop\"))(SP;;;;;S-1-17-22)(RA;;;;;WD;(\"N\",TI,0x1,0x10))");
+    assert_eq!(text(&sd, 0x1f).as_deref(), Ok("S:"));
+    assert_eq!(
+        text(&sd, 0x20).as_deref(),
+        Ok("S:(RA;;;;;WD;(\"Dept\",TS,0x0,\"Lab\",\"Shop\"))(RA;;;;;WD;(\"N\",TI,0x1,16))")
+    );
+    assert_eq!(text(&sd, 0x40).as_deref(), Ok("S:(SP;;;;;S-1-17-22)"));
+    let sd = ok("S:(RA;;;;;WD;(\"s\",TD,0,S-1-5-32-544,S-1-5-21-1-2-3-4))(RA;;;;;WD;(\"x\",TX,0,0102ff))");
+    assert_eq!(
+        text(&sd, 0x20).as_deref(),
+        Ok("S:(RA;;;;;WD;(\"s\",TD,0x0,BA,S-1-5-21-1-2-3-4))(RA;;;;;WD;(\"x\",TX,0x0,0102ff))")
+    );
+}
 
 const FULL: &str = "O:BAG:SYD:(A;;FA;;;WD)S:(AU;SAFA;FA;;;WD)(ML;;NW;;;LW)";
 

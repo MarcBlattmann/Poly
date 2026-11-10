@@ -387,26 +387,15 @@ pub unsafe extern "system" fn RtlAddMandatoryAce(
     kind: u8,
     mask: u32,
 ) -> NtStatus {
-    // A value in the first 64 KiB is no address (nothing is ever mapped
-    // there): not a SID, as when the arguments are given in the order of
-    // `AddMandatoryAce` and the policy or the type lands here (the sheet).
-    if (label as usize) < 0x1_0000 {
-        return SecErr::InvalidSid.nt();
-    }
-    // SAFETY: the caller's SID.
-    let s = unsafe { sid_arg(label) };
-    if sid::valid_length(s).is_none() {
-        return SecErr::InvalidSid.nt();
-    }
-    if kind != acl::SYSTEM_MANDATORY_LABEL_ACE_TYPE
-        || sid::authority_of(&s[2..8]) != sid::SECURITY_MANDATORY_LABEL_AUTHORITY
-        || mask > 7
-        || flags & !0x1F != 0
-    {
-        return SecErr::InvalidParameter.nt();
-    }
+    // The SID argument is never trusted (the sheet: NULL, small integers,
+    // uncommitted pages, a kernel address and all ones are
+    // STATUS_INVALID_SID without a fault): its header, then its whole
+    // length, have to be readable memory.
+    let header_ok = (label as usize).checked_add(sid::SID_HEADER).is_some() && readable(label, sid::SID_HEADER);
+    // SAFETY: the header was probed.
+    let s = header_ok.then(|| unsafe { sid_arg(label) }).filter(|s| readable(s.as_ptr(), s.len()));
     // SAFETY: the caller's ACL.
-    status(unsafe { acl::add(AclPtr(p), revision, kind, flags as u8, mask, s) })
+    status(unsafe { acl::add_mandatory(AclPtr(p), revision, flags, s, kind, mask) })
 }
 
 // ----- security descriptors -----------------------------------------------------------------

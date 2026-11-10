@@ -534,6 +534,45 @@ pub unsafe fn add(acl: AclPtr, revision: u32, kind: u8, flags: u8, mask: u32, si
     Ok(())
 }
 
+/// `RtlAddMandatoryAce(Acl, AceRevision, AceFlags, Sid, AceType, Mask)`.
+/// With several things wrong the status is that of the first check that
+/// fails, in the order the spec sheet observed: the ACE type (the low byte
+/// has to be 0x11: [`SecErr::InvalidParameter`]), the SID (`None` for a
+/// pointer that cannot be read, or bytes that are no valid SID:
+/// [`SecErr::InvalidSid`]), its authority (not the label authority:
+/// `InvalidParameter`), the revisions (the argument or the ACL's own byte
+/// above 4: [`SecErr::RevisionMismatch`]), the mask and the flags (bits
+/// outside 7 and 0x1F: `InvalidParameter`), the ACL (not valid:
+/// [`SecErr::InvalidAcl`]) and the room ([`SecErr::AllottedSpace`]).
+///
+/// # Safety
+/// The ACL's bytes are readable and writable.
+pub unsafe fn add_mandatory(
+    acl: AclPtr,
+    revision: u32,
+    flags: u32,
+    sid: Option<&[u8]>,
+    kind: u8,
+    mask: u32,
+) -> SecResult<()> {
+    if kind != SYSTEM_MANDATORY_LABEL_ACE_TYPE {
+        return Err(SecErr::InvalidParameter);
+    }
+    let sid = sid.filter(|s| sid::valid_length(s).is_some()).ok_or(SecErr::InvalidSid)?;
+    if sid::authority_of(&sid[2..8]) != sid::SECURITY_MANDATORY_LABEL_AUTHORITY {
+        return Err(SecErr::InvalidParameter);
+    }
+    // SAFETY: the header is readable.
+    if revision > u32::from(MAX_ACL_REVISION) || unsafe { acl.revision() } > MAX_ACL_REVISION {
+        return Err(SecErr::RevisionMismatch);
+    }
+    if mask > 7 || flags & !u32::from(VALID_INHERIT_FLAGS) != 0 {
+        return Err(SecErr::InvalidParameter);
+    }
+    // SAFETY: as documented.
+    unsafe { add(acl, revision, kind, flags as u8, mask, sid) }
+}
+
 /// A whole ACL with exactly room for `aces` (type, flags, mask, SID).
 pub fn build(revision: u8, aces: &[(u8, u8, u32, &Sid)]) -> Vec<u8> {
     let mut body = Vec::new();
@@ -660,6 +699,98 @@ mod tests {
             assert_eq!(information(p(&mut b), 3, 12, true), Err(SecErr::InvalidParameter));
             assert_eq!(information(p(&mut b), 2, 11, true), Err(SecErr::BufferTooSmall));
         }
+    }
+
+    #[test]
+    fn mandatory_ace_check_order() {
+        use crate::sid::{Sid, mandatory};
+        use SecErr::*;
+        let label = mandatory(0x1000).to_bytes();
+        let system = local_system().to_bytes();
+        let mut bad_sid = label.clone();
+        bad_sid[0] = 2;
+        // One fault each: (ACL length, ACL revision byte, revision, flags, SID, type, mask).
+        // The SID is 0 the label, 1 unreadable, 2 SYSTEM, 3 a SID of revision 2.
+        struct Call(usize, u8, u32, u32, u8, u8, u32);
+        let run = |c: &Call| {
+            let mut b = acl(c.0);
+            b[0] = c.1;
+            // SAFETY: the buffer holds the ACL and more.
+            let sid = [Some(&label[..]), None, Some(&system[..]), Some(&bad_sid[..])][usize::from(c.4)];
+            // SAFETY: the buffer holds the ACL and more.
+            let r = unsafe { add_mandatory(p(&mut b), c.2, c.3, sid, c.5, c.6) };
+            (r, u16::from_le_bytes([b[4], b[5]]))
+        };
+        let good = || Call(64, 4, 4, 0, 0, 0x11, 1);
+        assert_eq!(run(&good()), (Ok(()), 1));
+        // T type, S invalid SID, A authority, M mask, F flags, R revision argument, N no room,
+        // L the list's revision above 4, K the list not valid.
+        let fault = |name: char, c: &mut Call| match name {
+            'T' => c.5 = 0x10,
+            'S' => c.4 = 1,
+            // An unreadable SID has no authority to be wrong.
+            'A' if c.4 == 1 => {}
+            'A' => c.4 = 2,
+            'M' => c.6 = 8,
+            'F' => c.3 = 0x40,
+            'R' => c.2 = 5,
+            'N' => c.0 = 8,
+            'L' => c.1 = 9,
+            _ => c.1 = 1,
+        };
+        let alone = [
+            ('T', InvalidParameter),
+            ('S', InvalidSid),
+            ('A', InvalidParameter),
+            ('M', InvalidParameter),
+            ('F', InvalidParameter),
+            ('R', RevisionMismatch),
+            ('N', AllottedSpace),
+            ('L', RevisionMismatch),
+            ('K', InvalidAcl),
+        ];
+        for (name, e) in alone {
+            let mut c = good();
+            fault(name, &mut c);
+            assert_eq!(run(&c), (Err(e), 0), "{name} alone");
+        }
+        // Two faults: the sheet's table.
+        for (first, others) in [
+            ('T', "SAMFRNLK"),
+            ('S', "AMFRNLK"),
+            ('A', "MFRNLK"),
+            ('M', "FRNLK"),
+            ('F', "RNLK"),
+            ('R', "NLK"),
+            ('N', "LK"),
+        ] {
+            for second in others.chars() {
+                let mut c = good();
+                fault(first, &mut c);
+                fault(second, &mut c);
+                let want = match (first, second) {
+                    ('T', _) | ('A', _) => InvalidParameter,
+                    ('S', _) => InvalidSid,
+                    ('M' | 'F', 'R' | 'L') | ('R', _) | ('N', 'L') => RevisionMismatch,
+                    ('M', _) | ('F', _) => InvalidParameter,
+                    _ => InvalidAcl,
+                };
+                assert_eq!(run(&c), (Err(want), 0), "{first} with {second}");
+            }
+        }
+        // Not valid SIDs: a revision other than 1, more than 15 sub-authorities.
+        assert_eq!(run(&Call(64, 4, 4, 0, 3, 0x11, 1)).0, Err(InvalidSid));
+        let mut sixteen = Sid::new(16, &[1; 15]).to_bytes();
+        sixteen[1] = 16;
+        let mut b = acl(128);
+        // SAFETY: the buffer holds the ACL and more.
+        assert_eq!(unsafe { add_mandatory(p(&mut b), 4, 0, Some(&sixteen), 0x11, 1) }, Err(InvalidSid));
+        // Fifteen are accepted: an ACE of 76 bytes.
+        let fifteen = Sid::new(16, &[1; 15]).to_bytes();
+        let mut b = acl(128);
+        // SAFETY: the buffer holds the ACL and more.
+        unsafe { add_mandatory(p(&mut b), 4, 0, Some(&fifteen), 0x11, 1).unwrap() };
+        assert_eq!(&b[8..12], &[0x11, 0, 76, 0]);
     }
 
     #[test]

@@ -420,7 +420,7 @@
 {"symbol":"RtlAddAuditAccessObjectAce","src":["wine-spec"]},
 {"symbol":"RtlAddFunctionTable","arch":["!i386"],"src":["wine-spec"],"seeds":["wine:ntdll/tests/unwind.c:test_virtual_unwind_x86","wine:ntdll/tests/unwind.c:test_dynamic_unwind"]},
 {"symbol":"RtlAddGrowableFunctionTable","arch":["!i386"],"src":["wine-spec"],"seeds":["wine:ntdll/tests/unwind.c:test_dynamic_unwind"]},
-{"symbol":"RtlAddMandatoryAce","status":"claimed","claimed_by":"impl-win-sec","src":["wine-spec"]},
+{"symbol":"RtlAddMandatoryAce","status":"green","tests_visible":5,"tests_held_out":2,"src":["wine-spec"]},
 {"symbol":"RtlAddProcessTrustLabelAce","src":["wine-spec"]},
 {"symbol":"RtlAddRefActivationContext","src":["wine-spec"]},
 {"symbol":"RtlAddVectoredContinueHandler","src":["wine-spec"],"seeds":["wine:ntdll/tests/exception.c:test_vectored_continue_handler"]},

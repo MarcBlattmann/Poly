@@ -116,15 +116,29 @@ pub fn is_query_class(class: u32) -> bool {
     matches!(class, 1..=13 | 15..=34 | 37 | 39..=44 | 47 | 48)
 }
 
-/// The classes whose buffer has to be exactly their size
-/// (`TokenLinkedToken`, `TokenElevation`): any other length is
-/// `STATUS_INFO_LENGTH_MISMATCH`, decided before the handle is looked at.
-pub fn exact_query_length(class: u32) -> Option<u32> {
-    match class {
-        class::TOKEN_LINKED_TOKEN => Some(8),
-        class::TOKEN_ELEVATION => Some(4),
+/// The classes whose buffer has to be exactly their size: any other length
+/// is `STATUS_INFO_LENGTH_MISMATCH` with the size in `*ReturnLength`. The
+/// two are judged at different points (the spec sheets' `check_order`):
+/// `TokenElevation` before the handle's rights (`before_rights` true),
+/// `TokenLinkedToken` after them.
+pub fn exact_query_length(class: u32, before_rights: bool) -> Option<u32> {
+    match (class, before_rights) {
+        (class::TOKEN_ELEVATION, true) => Some(4),
+        (class::TOKEN_LINKED_TOKEN, false) => Some(8),
         _ => None,
     }
+}
+
+/// The handle right a query of `class` needs.
+pub fn query_right(class: u32) -> u32 {
+    if class == class::TOKEN_SOURCE { TOKEN_QUERY_SOURCE } else { TOKEN_QUERY }
+}
+
+/// The handle rights `NtSetInformationToken` needs for `class`:
+/// `TOKEN_ADJUST_DEFAULT`, and `TOKEN_ADJUST_SESSIONID` as well for the
+/// session id (the sheet: either alone is `STATUS_ACCESS_DENIED`).
+pub fn set_rights(class: u32) -> u32 {
+    if class == class::TOKEN_SESSION_ID { TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID } else { TOKEN_ADJUST_DEFAULT }
 }
 
 /// Whether `length` is one `NtSetInformationToken` takes for a settable
@@ -746,15 +760,23 @@ impl Token {
                 == other.flags & (F_HAS_RESTRICTIONS | F_WRITE_RESTRICTED)
     }
 
-    /// `PrivilegeCheck`: marks the entries found enabled with
-    /// `SE_PRIVILEGE_USED_FOR_ACCESS`; the result is all of them (`all`) or
-    /// any one. An empty set is true for "all", false for "any".
+    /// `PrivilegeCheck` on a set of (LUID low part, attributes): the result
+    /// is all of them enabled (`all`) or any one; an empty set is true for
+    /// "all", false for "any". As the spec sheet observed: a privilege is
+    /// named by the low six bits of the LUID's low part alone (the high
+    /// part and multiples of 64 do not matter), and bit 31 of every
+    /// entry's attributes (`SE_PRIVILEGE_USED_FOR_ACCESS`) is rewritten,
+    /// set where the privilege is held and enabled and cleared elsewhere,
+    /// the other bits kept.
     pub fn privilege_check(&self, set: &mut [(u32, u32)], all: bool) -> bool {
         let mut found = 0;
         for (luid, attrs) in set.iter_mut() {
-            if self.privileges.iter().any(|&(l, a)| l == *luid && a & SE_PRIVILEGE_ENABLED != 0) {
+            let number = *luid & 63;
+            if self.privileges.iter().any(|&(l, a)| l == number && a & SE_PRIVILEGE_ENABLED != 0) {
                 *attrs |= access::SE_PRIVILEGE_USED_FOR_ACCESS;
                 found += 1;
+            } else {
+                *attrs &= !access::SE_PRIVILEGE_USED_FOR_ACCESS;
             }
         }
         if all { found == set.len() } else { found > 0 }
@@ -1023,9 +1045,10 @@ mod tests {
         for class in [0, 14, 35, 36, 38, 45, 46, 49, 99] {
             assert!(!is_query_class(class), "class {class}");
         }
-        assert_eq!(exact_query_length(19), Some(8));
-        assert_eq!(exact_query_length(20), Some(4));
-        assert_eq!(exact_query_length(8), None);
+        assert_eq!(exact_query_length(19, false), Some(8));
+        assert_eq!(exact_query_length(20, true), Some(4));
+        assert_eq!((exact_query_length(19, true), exact_query_length(20, false)), (None, None));
+        assert_eq!(exact_query_length(8, true), None);
         // The fixed sizes of the sheet.
         for (class, size) in [
             (7, 16),
@@ -1054,6 +1077,41 @@ mod tests {
         ] {
             assert_eq!(t.query(class, 0).map(|b| b.len()), Ok(size), "class {class}");
         }
+    }
+
+    #[test]
+    fn query_and_set_rights() {
+        assert_eq!((query_right(7), query_right(8)), (TOKEN_QUERY_SOURCE, TOKEN_QUERY));
+        assert_eq!(set_rights(class::TOKEN_SESSION_ID), TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID);
+        assert_eq!(set_rights(class::TOKEN_ORIGIN), TOKEN_ADJUST_DEFAULT);
+    }
+
+    #[test]
+    fn privilege_check_rewrites_bit_31_only() {
+        const USED: u32 = access::SE_PRIVILEGE_USED_FOR_ACCESS;
+        let mut t = Token::poly_user();
+        // 23 enabled, 19 held and disabled, 7 not held.
+        for p in t.privileges.iter_mut().filter(|p| p.0 == 19) {
+            p.1 = 0;
+        }
+        for attrs in [0u32, 1, 2, 3, 4, USED, USED | 2, 0x7fff_ffff, 0xffff_ffff] {
+            for all in [true, false] {
+                let mut set = [(23, attrs), (19, attrs), (7, attrs)];
+                assert_eq!(t.privilege_check(&mut set, all), !all, "attributes {attrs:#x}");
+                assert_eq!(set.map(|e| e.1), [attrs | USED, attrs & !USED, attrs & !USED], "attributes {attrs:#x}");
+            }
+        }
+        // The low six bits of the low part name the privilege.
+        for extra in [0u32, 64, 128, 0x10000, 0x8000_0000] {
+            for (luid, enabled) in [(23u32, true), (19, false), (7, false)] {
+                let mut set = [(luid + extra, 0)];
+                assert_eq!(t.privilege_check(&mut set, true), enabled, "{luid} + {extra:#x}");
+                assert_eq!(set[0].1, if enabled { USED } else { 0 });
+            }
+        }
+        // An empty set: true for "all", false for "any".
+        assert!(t.privilege_check(&mut [], true));
+        assert!(!t.privilege_check(&mut [], false));
     }
 
     #[test]
