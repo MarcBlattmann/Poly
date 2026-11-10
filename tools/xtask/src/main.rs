@@ -54,7 +54,8 @@
 //!                       parts named (lint, host-tests, boot-tests, coverage,
 //!                       pipeline, aarch64), as CI's parallel jobs run them
 //!                       QEMU runs on KVM when /dev/kvm is usable, else on TCG;
-//!                       POLY_QEMU_ACCEL=tcg|kvm|auto chooses (accel.rs)
+//!                       POLY_QEMU_ACCEL=tcg|kvm|auto chooses (accel.rs);
+//!                       POLY_QEMU_CPU=<model> names QEMU's CPU model
 //!   symbolize [--release] [--elf <path>] [addr...]
 //!                       print the kernel function at each address; with no
 //!                       addresses, add symbols to the backtrace in a log on stdin
@@ -510,6 +511,7 @@ fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial:
 fn qemu_with(kernel: &Path, memory: &str, cpus: u32, append: &str, devices: Devices<'_>, serial: &str) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
     cmd.args(accel::get().qemu_args())
+        .args(accel::cpu_args(std::env::var(accel::CPU_ENV).ok().as_deref()))
         .args(["-machine", "q35", "-m", memory, "-serial", serial, "-no-reboot"])
         .args(["-smp", &cpus.to_string()])
         .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
