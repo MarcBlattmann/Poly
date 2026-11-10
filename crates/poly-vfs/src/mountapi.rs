@@ -19,7 +19,7 @@
 
 use crate::cred::{Cred, cap};
 use crate::file::{Backend, OpenFile, OpenFlags};
-use crate::mount::{Mount, MountFlags, MountId, PROPAGATION_SHARED, base_of};
+use crate::mount::{Mount, MountFlags, MountId, base_of};
 use crate::node::{FsContext, Location, NodeRef};
 use crate::{Errno, FileSystem, FileType, Result, Vfs};
 use alloc::sync::Arc;
@@ -59,6 +59,9 @@ impl Vfs {
         }
         let loc = node.loc();
         let src = loc.mount.clone();
+        if src.is_unbindable() {
+            return Err(Errno::EINVAL);
+        }
         let (m, direct) = {
             let mut table = self.mounts.lock();
             let m = table.new_mount(src.sb.clone(), loc.ino, None, src.flags());
@@ -150,7 +153,11 @@ impl Vfs {
             table.mounts.extend(below);
             return Ok(());
         }
-        if m.parent().is_none() {
+        let Some((old_parent, _)) = m.parent() else { return Err(Errno::EINVAL) };
+        // mount(2) MS_MOVE: a mount whose parent is shared cannot be moved
+        // (it would have to be moved in every peer), nor can an unbindable
+        // one go below a shared mount.
+        if old_parent.peer_group() != 0 || (dst.mount.peer_group() != 0 && m.is_unbindable()) {
             return Err(Errno::EINVAL);
         }
         // Not below itself: `dst`'s mount and the mounts it is on.
@@ -204,8 +211,12 @@ impl Vfs {
             return Err(Errno::EINVAL);
         }
         let new_parent = new.mount.parent().map(|(p, _)| p);
-        let shared = |m: &Arc<Mount>| m.propagation() == PROPAGATION_SHARED;
-        if shared(&new.mount) || shared(&root.mount) || new_parent.as_ref().is_some_and(shared) {
+        let shared = |m: &Arc<Mount>| m.peer_group() != 0;
+        if shared(&new.mount)
+            || shared(&root.mount)
+            || shared(&old_put.mount)
+            || new_parent.as_ref().is_some_and(shared)
+        {
             return Err(Errno::EINVAL);
         }
         let old_mount = root.mount.clone();

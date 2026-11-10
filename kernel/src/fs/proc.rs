@@ -121,7 +121,10 @@ fn find(pid: u32) -> Option<Arc<Process>> {
 
 /// The kernel's facts for procfs.
 #[derive(Debug, Default)]
-pub struct KernelProc;
+pub struct KernelProc {
+    /// The pid namespace this procfs shows (the initial one: `None`).
+    view: ns::pid::PidNsRef,
+}
 
 /// The root context paths are shown from: the reading process's root
 /// directory (chroot(2): a chrooted shell reads `/proc/self/exe` as
@@ -149,7 +152,7 @@ pub fn comm(pid: u32) -> Option<Vec<u8>> {
 /// The command line of process `pid` as `/proc/<pid>/cmdline` shows it
 /// (arguments separated by NULs), empty if it has none or is gone.
 pub fn cmdline_of(pid: u32) -> Vec<u8> {
-    KernelProc.cmdline(pid)
+    KernelProc::default().cmdline(pid)
 }
 
 /// The memory map of process `pid`: the caller's own, or the one recorded
@@ -245,14 +248,55 @@ fn signal_sets(p: &Process) -> (SignalSets, u64) {
 
 impl ProcSource for KernelProc {
     fn current_pid(&self) -> Option<u32> {
-        user::current_process().map(|p| p.pid)
+        let pid = user::current_process()?.pid;
+        if self.view.is_none() {
+            return Some(pid);
+        }
+        ns::pid::local(&self.view, pid as i32).map(|l| l as u32)
+    }
+
+    fn current_tid(&self) -> Option<u32> {
+        let tid = user::current_tid()?;
+        if self.view.is_none() {
+            return Some(tid);
+        }
+        ns::pid::local(&self.view, tid as i32).map(|l| l as u32)
+    }
+
+    fn ns_last_pid(&self) -> u32 {
+        match &self.view {
+            Some(ns) => ns::pid::last(ns) as u32,
+            // The initial namespace: the highest id in use stands in.
+            None => process::all().iter().map(|p| p.pid).max().unwrap_or(0),
+        }
+    }
+
+    fn write_ns_last_pid(&self, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        use poly_vfs::Errno;
+        // pid_namespaces(7): CAP_SYS_ADMIN over the namespace.
+        let writer = crate::linux::cred::current_creds().ok_or(Errno::EPERM)?;
+        if !writer.capable(poly_personality_linux::cred::cap::SYS_ADMIN) {
+            return Err(Errno::EPERM);
+        }
+        let text = core::str::from_utf8(data).map_err(|_| Errno::EINVAL)?;
+        let last: i32 = text.trim_end_matches('\n').trim().parse().map_err(|_| Errno::EINVAL)?;
+        let ns = self.view.as_ref().ok_or(Errno::EPERM)?;
+        ns::pid::set_last(ns, last).map_err(|_| Errno::EINVAL)?;
+        Ok(data.len())
     }
 
     fn pids(&self) -> Vec<u32> {
-        process::all().iter().map(|p| p.pid).collect()
+        if self.view.is_none() {
+            return process::all().iter().map(|p| p.pid).collect();
+        }
+        let mut v: Vec<u32> =
+            process::all().iter().filter_map(|p| ns::pid::local(&self.view, p.pid as i32)).map(|l| l as u32).collect();
+        v.sort_unstable();
+        v
     }
 
     fn process(&self, pid: u32) -> Option<ProcessInfo> {
+        let pid = self.global(pid)?;
         let p = find(pid)?;
         let (pgrp, session) = crate::linux::task::group_and_session(pid);
         let current = user::current_process().is_some_and(|c| c.pid == pid);
@@ -278,15 +322,20 @@ impl ProcSource for KernelProc {
             rec.unwrap_or_else(|| (b"?".to_vec(), 0, 0, (0, 0), (0, 0), Vec::new()));
         // The name prctl(PR_SET_NAME) may have changed (ADR 0045).
         let comm = crate::linux::cred::process_comm(&p).unwrap_or(comm);
+        let (ns_pids, ns_pgids, ns_sids) =
+            (self.chain(&p, pid), self.chain(&p, pgrp as u32), self.chain(&p, session as u32));
         Some(ProcessInfo {
-            pid,
-            ppid: crate::linux::task::parent_of(&p),
-            pgrp: pgrp as u32,
-            session: session as u32,
+            ns_pids,
+            ns_pgids,
+            ns_sids,
+            pid: self.local(pid),
+            ppid: self.local(crate::linux::task::parent_of(&p)),
+            pgrp: self.local(pgrp as u32),
+            session: self.local(session as u32),
             comm,
             state,
-            uids: [cred.uid, cred.euid, cred.suid, cred.fsuid],
-            gids: [cred.gid, cred.egid, cred.sgid, cred.fsgid],
+            uids: [cred.uid, cred.euid, cred.suid, cred.fsuid].map(|u| self.view_uid(u)),
+            gids: [cred.gid, cred.egid, cred.sgid, cred.fsgid].map(|g| self.view_gid(g)),
             umask: p.files.current_umask(),
             threads: p.thread_count() as u32,
             fd_slots: slots,
@@ -307,6 +356,7 @@ impl ProcSource for KernelProc {
     }
 
     fn owner(&self, pid: u32) -> Option<Owner> {
+        let pid = self.global(pid)?;
         let p = find(pid)?;
         // proc(5): owned by the process's effective user and group ids.
         let cred = crate::linux::cred::process_creds(&p);
@@ -314,14 +364,19 @@ impl ProcSource for KernelProc {
     }
 
     fn threads(&self, pid: u32) -> Vec<u32> {
+        let Some(pid) = self.global(pid) else { return Vec::new() };
         let Some(p) = find(pid) else { return Vec::new() };
         match p.linux.as_ref() {
             Some(l) => l.with(|s| s.thread_ids().map(|t| t as u32).collect()),
             None => alloc::vec![pid],
         }
+        .into_iter()
+        .map(|t| self.local(t))
+        .collect()
     }
 
     fn thread_comm(&self, pid: u32, tid: u32) -> Option<Vec<u8>> {
+        let pid = self.global(pid)?;
         let p = find(pid)?;
         let comm = p.linux.as_ref()?.with(|s| s.has_thread(tid as i32).then(|| s.thread(tid as i32).comm))?;
         let len = comm.iter().position(|&b| b == 0).unwrap_or(comm.len());
@@ -329,6 +384,7 @@ impl ProcSource for KernelProc {
     }
 
     fn maps(&self, pid: u32) -> Vec<MapEntry> {
+        let Some(pid) = self.global(pid) else { return Vec::new() };
         let Some(memory) = memory_of(pid) else { return Vec::new() };
         let ctx = root();
         // A file mapped as several regions (a library's segments, the parts
@@ -381,6 +437,7 @@ impl ProcSource for KernelProc {
     /// node would open as a named FIFO, not as the pipe, so its link keeps
     /// its text (`pipe:[<ino>]`, which names nothing).
     fn magic_target(&self, pid: u32, link: MagicLink) -> Option<poly_vfs::MagicTarget> {
+        let pid = self.global(pid)?;
         use poly_vfs::MagicTarget;
         let p = find(pid)?;
         match link {
@@ -398,6 +455,7 @@ impl ProcSource for KernelProc {
     /// No file is named but the program: its regions get the program's
     /// path (from the record), other files a placeholder.
     fn size_maps(&self, pid: u32) -> Vec<MapEntry> {
+        let Some(pid) = self.global(pid) else { return Vec::new() };
         let Some(memory) = memory_of(pid) else { return Vec::new() };
         let exe = with_record(pid, |r| (r.exe_file.upgrade(), r.exe.clone()));
         let (exe_file, exe_path) = exe.unwrap_or((None, Vec::new()));
@@ -435,14 +493,17 @@ impl ProcSource for KernelProc {
     }
 
     fn cmdline(&self, pid: u32) -> Vec<u8> {
+        let Some(pid) = self.global(pid) else { return Vec::new() };
         self.strings(pid, |r| r.arg)
     }
 
     fn environ(&self, pid: u32) -> Vec<u8> {
+        let Some(pid) = self.global(pid) else { return Vec::new() };
         self.strings(pid, |r| r.env)
     }
 
     fn exe(&self, pid: u32) -> Option<Vec<u8>> {
+        let pid = self.global(pid)?;
         let (file, path) = with_record(pid, |r| (r.exe_file.upgrade(), r.exe.clone()))?;
         match (file, root()) {
             (Some(f), Some(ctx)) => vfs().file_path(&ctx, &f).ok().or(Some(path)),
@@ -451,22 +512,26 @@ impl ProcSource for KernelProc {
     }
 
     fn cwd(&self, pid: u32) -> Option<Vec<u8>> {
+        let pid = self.global(pid)?;
         let p = find(pid)?;
         let cwd = p.files.context().cwd().clone();
         vfs().path_of(&root()?, &cwd).ok()
     }
 
     fn root(&self, pid: u32) -> Option<Vec<u8>> {
+        let pid = self.global(pid)?;
         let p = find(pid)?;
         let dir = p.files.context().root().clone();
         vfs().path_of(&root()?, &dir).ok()
     }
 
     fn fds(&self, pid: u32) -> Vec<u32> {
+        let Some(pid) = self.global(pid) else { return Vec::new() };
         find(pid).map_or_else(Vec::new, |p| p.files.fd_list().iter().map(|(fd, _, _)| *fd as u32).collect())
     }
 
     fn fd(&self, pid: u32, fd: u32) -> Option<FdInfo> {
+        let pid = self.global(pid)?;
         let p = find(pid)?;
         let (_, file, cloexec) = p.files.fd_list().into_iter().find(|(n, _, _)| *n as u32 == fd)?;
         let target =
@@ -490,6 +555,7 @@ impl ProcSource for KernelProc {
     }
 
     fn mounts(&self, pid: u32) -> Vec<MountEntry> {
+        let Some(pid) = self.global(pid) else { return Vec::new() };
         // The mounts of the process's mount namespace, as paths from its
         // root (ADR 0054).
         let Some(ctx) = find(pid).map(|p| p.files.context()).or_else(root) else { return Vec::new() };
@@ -499,11 +565,17 @@ impl ProcSource for KernelProc {
             .iter()
             .filter_map(|m| {
                 let at = vfs().mount_path(&ctx, m.id).ok()?;
+                let mount = vfs().mount_by_id(m.id);
+                let sb_made_read_only = mount.as_ref().is_some_and(|mm| mm.sb_made_read_only());
+                let sb_read_only = mount
+                    .as_ref()
+                    .is_some_and(|mm| mm.sb_read_only() || super::disk::mount_of(m.id).is_some_and(|d| d.read_only));
                 Some(MountEntry {
                     id: m.id,
                     parent: m.parent.map_or(m.id, |(p, _)| p),
                     dev: (m.dev.major, m.dev.minor),
-                    root: b"/".to_vec(),
+                    // A bind mount of a subdirectory shows where in its file system it is.
+                    root: mount.as_ref().and_then(|mm| vfs().mount_root_path(mm).ok()).unwrap_or_else(|| b"/".to_vec()),
                     mount_point: at,
                     source: super::mounts::source(m.id)
                         .unwrap_or_else(|| super::disk::source_of(m.id, m.fs_name).into_bytes()),
@@ -512,6 +584,13 @@ impl ProcSource for KernelProc {
                     no_suid: m.flags.no_suid,
                     no_dev: m.flags.no_dev,
                     no_exec: m.flags.no_exec,
+                    attrs: mount.as_ref().map_or(0, |mm| mm.attrs()),
+                    sb_options: mount.as_ref().map_or_else(Vec::new, |mm| mm.sb_options()),
+                    sb_read_only,
+                    sb_made_read_only,
+                    peer_group: mount.as_ref().map_or(0, |mm| mm.peer_group()),
+                    master_group: mount.as_ref().map_or(0, |mm| mm.master_group()),
+                    unbindable: mount.as_ref().is_some_and(|mm| mm.is_unbindable()),
                 })
             })
             .collect()
@@ -611,6 +690,7 @@ impl ProcSource for KernelProc {
     }
 
     fn namespace(&self, pid: u32, kind: usize) -> Option<u32> {
+        let pid = self.global(pid)?;
         let kind = ns::Kind::from_index(kind as u32)?;
         let p = find(pid)?;
         let (namespaces, user_ns) = namespaces_of(&p)?;
@@ -619,6 +699,15 @@ impl ProcSource for KernelProc {
 
     fn namespace_exists(&self, inum: u32, kind: usize) -> bool {
         ns::Kind::from_index(kind as u32).is_some_and(|k| ns::lookup(inum, k).is_some())
+    }
+
+    fn may_follow_namespaces(&self, pid: u32) -> bool {
+        let Some(target) = self.global(pid).and_then(find) else { return true };
+        let Some(reader) = crate::linux::cred::current_creds() else { return true };
+        let target = crate::linux::cred::process_creds(&target);
+        // `CAP_SYS_PTRACE` (`linux/capability.h`).
+        const CAP_SYS_PTRACE: u32 = 19;
+        reader.fsuid == target.euid || reader.capable(CAP_SYS_PTRACE)
     }
 
     fn pin_namespace(&self, inum: u32, kind: usize, pin: bool) {
@@ -647,6 +736,7 @@ impl ProcSource for KernelProc {
     }
 
     fn id_map(&self, pid: u32, file: IdMapFile) -> Vec<u8> {
+        let Some(pid) = self.global(pid) else { return Vec::new() };
         let Some((_, target)) = find(pid).and_then(|p| namespaces_of(&p)) else { return Vec::new() };
         let reader = crate::linux::cred::current_creds().and_then(|c| c.user_ns);
         match file {
@@ -657,6 +747,7 @@ impl ProcSource for KernelProc {
     }
 
     fn oom_score_adj(&self, pid: u32) -> i32 {
+        let Some(pid) = self.global(pid) else { return 0 };
         let Some(p) = find(pid) else { return 0 };
         p.linux.as_ref().map_or(0, |l| l.with(|s| i32::from(s.oom_score_adj)))
     }
@@ -666,6 +757,7 @@ impl ProcSource for KernelProc {
     /// `CAP_SYS_RESOURCE` (proc_pid_oom_score_adj(5), with oom_adj's
     /// "processes need CAP_SYS_RESOURCE to lower the value"): `EACCES`.
     fn set_oom_score_adj(&self, pid: u32, value: i32) -> Result<(), poly_vfs::Errno> {
+        let Some(pid) = self.global(pid) else { return Err(poly_vfs::Errno::ESRCH) };
         let p = find(pid).ok_or(poly_vfs::Errno::ESRCH)?;
         let linux = p.linux.as_ref().ok_or(poly_vfs::Errno::ESRCH)?;
         let may_lower = crate::linux::cred::current_creds()
@@ -681,6 +773,7 @@ impl ProcSource for KernelProc {
     }
 
     fn write_id_map(&self, pid: u32, file: IdMapFile, offset: u64, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        let Some(pid) = self.global(pid) else { return Err(poly_vfs::Errno::ESRCH) };
         let (_, target) = find(pid).and_then(|p| namespaces_of(&p)).ok_or(poly_vfs::Errno::ESRCH)?;
         let writer = crate::linux::cred::current_creds().ok_or(poly_vfs::Errno::EPERM)?;
         let written = match file {
@@ -706,6 +799,63 @@ const PAGE: u64 = 4096;
 const STRINGS_MAX: u64 = 128 * 1024;
 
 impl KernelProc {
+    /// A kernel user id as the reading process's user namespace names it
+    /// (65534 where it maps none).
+    fn view_uid(&self, kid: u32) -> u32 {
+        self.reader_ns().map_or(kid, |ns| ns::user::up_or_overflow(&ns, ns::user::IdKind::Uid, kid))
+    }
+
+    fn view_gid(&self, kid: u32) -> u32 {
+        self.reader_ns().map_or(kid, |ns| ns::user::up_or_overflow(&ns, ns::user::IdKind::Gid, kid))
+    }
+
+    fn reader_ns(&self) -> Option<ns::user::UserNsRef> {
+        let p = user::current_process()?;
+        namespaces_of(&p).map(|(_, u)| u)
+    }
+
+    /// A procfs showing pid namespace `view`.
+    pub fn with_view(view: ns::pid::PidNsRef) -> KernelProc {
+        KernelProc { view }
+    }
+
+    /// The global pid of this view's number `pid` (`None`: it has none).
+    fn global(&self, pid: u32) -> Option<u32> {
+        if self.view.is_none() {
+            return Some(pid);
+        }
+        ns::pid::global(&self.view, pid as i32).map(|g| g as u32)
+    }
+
+    /// Global pid `pid` as this view numbers it (0: not at all).
+    fn local(&self, pid: u32) -> u32 {
+        if self.view.is_none() {
+            return pid;
+        }
+        ns::pid::local_or_zero(&self.view, pid as i32) as u32
+    }
+
+    /// `id` (a pid, group or session of process `p`) in every pid namespace
+    /// from this view down to the process's own, outermost first.
+    fn chain(&self, p: &Process, id: u32) -> Vec<u32> {
+        let Some((names, _)) = namespaces_of(p) else { return Vec::new() };
+        let mut out = Vec::new();
+        let mut cur = names.pid.clone();
+        while let Some(n) = cur {
+            // 0 where the namespace cannot see the group or session.
+            out.push(ns::pid::local(&Some(n.clone()), id as i32).map_or(0, |l| l as u32));
+            if ns::pid::same(&Some(n.clone()), &self.view) {
+                out.reverse();
+                return out;
+            }
+            cur = n.parent().clone();
+        }
+        // The view is the initial namespace: its own number comes first.
+        out.push(id);
+        out.reverse();
+        out
+    }
+
     /// The bytes of `range` (from the record) in the process's memory.
     fn strings(&self, pid: u32, range: impl FnOnce(&Record) -> (u64, u64)) -> Vec<u8> {
         let Some((start, end)) = with_record(pid, range) else { return Vec::new() };
@@ -725,7 +875,10 @@ impl KernelProc {
 /// A procfs over the kernel's processes: what `/proc` has, and what a
 /// mount(2) of `proc` gets (ADR 0051).
 pub fn new_procfs() -> Arc<dyn poly_vfs::FileSystem> {
-    Arc::new(ProcFs::new(Arc::new(KernelProc)))
+    // The pid namespace of the process that mounts it (the one it is in,
+    // not the one its children go to).
+    let view = user::current_process().and_then(|p| namespaces_of(&p)).and_then(|(names, _)| names.pid);
+    Arc::new(ProcFs::new(Arc::new(KernelProc::with_view(view))))
 }
 
 /// A file system mounted at boot: path, file system, mode of its root,

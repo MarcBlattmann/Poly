@@ -1,0 +1,14 @@
+[package]
+name = "poly-fuse"
+description = "FUSE (file systems in user space): the /dev/fuse request protocol (linux/fuse.h, protocol 7) and a poly-vfs FileSystem that asks a user-space server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-vfs.workspace = true
+
+[lints]
+workspace = true

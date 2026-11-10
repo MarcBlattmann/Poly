@@ -149,6 +149,11 @@ Activated" to the launcher.
 
 - **Pulsing launcher or taskbar entries**: the owner asked for the pointer
   only.
+- **A notification when an app starts**: the pointer is the start-up
+  feedback, nothing else. Chromium's launch script sent one ("Chromium is
+  starting", ADR 0147) from before this ADR; it is removed (2026-11-10, the
+  owner: "we already have the cursor"), and a test keeps it out. Notifications
+  that apps send themselves are not touched.
 - **Waiting for the app to finish loading** (a splash, a window that stays
   empty): the launch ends when a window is mapped, as every desktop does.
 - **Per-app timeouts**: 30 s for all, from the request.

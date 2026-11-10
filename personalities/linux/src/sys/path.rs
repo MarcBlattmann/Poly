@@ -189,12 +189,21 @@ pub fn creat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 
 // ---- stat ----------------------------------------------------------------
 
+/// The owner and group of a file as the caller's user namespace sees them
+/// (the overflow id 65534 where it maps none).
+pub fn view_ids(k: &mut dyn LinuxKernel, uid: &mut u32, gid: &mut u32) {
+    let c = crate::cred::current(k);
+    *uid = c.uid_view(*uid);
+    *gid = c.gid_view(*gid);
+}
+
 fn stat_common(k: &mut dyn LinuxKernel, dirfd: i32, p: UserPtr, buf: UserPtr, flags: u32) -> SysResult {
     if flags & !(AT_EMPTY_PATH | AT_NO_AUTOMOUNT | AT_SYMLINK_NOFOLLOW) != 0 {
         return Err(Errno::EINVAL);
     }
     let path = maybe_empty_path(k, p, flags)?;
-    let st = fs(k)?.statat(dirfd, &path, flags & AT_SYMLINK_NOFOLLOW == 0)?;
+    let mut st = fs(k)?.statat(dirfd, &path, flags & AT_SYMLINK_NOFOLLOW == 0)?;
+    view_ids(k, &mut st.stat.uid, &mut st.stat.gid);
     copy_whole_to_user(k, buf, &st.stat.to_bytes())?;
     Ok(0)
 }
@@ -264,6 +273,7 @@ pub fn statx(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     } else {
         statx::STATX_MNT_ID
     };
+    view_ids(k, &mut st.stat.uid, &mut st.stat.gid);
     k.copy_to_user(buf, &st.to_statx(statx::STATX_BASIC_STATS | id_bit))?;
     Ok(0)
 }

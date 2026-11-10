@@ -350,6 +350,11 @@ impl LinuxKernel for Thread<'_> {
         fileio::read(self, fd, buf)
     }
 
+    fn io_piece(&mut self, fd: i32) -> usize {
+        let message = self.process.files.file(fd).ok().and_then(|f| f.device().and_then(|d| d.message_size()));
+        message.unwrap_or(poly_personality_linux::sys::io::CHUNK)
+    }
+
     fn close(&mut self, fd: i32) -> Result<(), Errno> {
         self.process.files.close(fd).map_err(vfs_errno)?;
         // Sockets only descriptors in flight hold (ADR 0048).
@@ -447,6 +452,36 @@ impl LinuxKernel for Thread<'_> {
                     let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(source), at, true);
                     let addr = memory.map(req.at(placement_of(r))).map_err(memory_errno)?;
                     return Ok(addr);
+                }
+                // A loop device maps its backing file, from where the device
+                // starts in it (ADR 0168): the same pages as the file's own
+                // mappings and its cache.
+                if file.kind() == FileType::BlockDevice
+                    && let Some(m) = file
+                        .node()
+                        .attr()
+                        .ok()
+                        .and_then(|a| crate::loopdev::mapped(a.rdev).transpose())
+                        .transpose()
+                        .map_err(vfs_errno)?
+                    && m.file.kind() == FileType::Regular
+                    && m.file.device().is_none()
+                {
+                    if r.shared && r.prot.writable() && (!file.writable() || m.read_only) {
+                        return Err(Errno::EACCES);
+                    }
+                    if offset.checked_add(r.len).is_none_or(|end| end > m.size.next_multiple_of(4096)) {
+                        return Err(Errno::EINVAL);
+                    }
+                    let source = FileSource::of(&m.file);
+                    let req = poly_vm::MapRequest::file(
+                        r.len,
+                        prot,
+                        FileRef::new(Arc::new(source)),
+                        m.offset + offset,
+                        r.shared,
+                    );
+                    return map_placed(&memory, req, r);
                 }
                 if file.kind() != FileType::Regular {
                     return Err(if file.kind() == FileType::CharDevice { Errno::ENODEV } else { Errno::EACCES });
@@ -1081,9 +1116,10 @@ impl LinuxKernel for Thread<'_> {
     fn copy_mounts(
         &mut self,
         owner: &poly_personality_linux::ns::user::UserNsRef,
+        to_slave: bool,
     ) -> Result<Arc<poly_personality_linux::ns::MntNs>, Errno> {
         super::task::release_mount_namespaces();
-        super::task::copy_mounts(&self.process.files, owner)
+        super::task::copy_mounts(&self.process.files, owner, to_slave)
     }
 
     fn enter_mounts(&mut self, ns: &Option<Arc<poly_personality_linux::ns::MntNs>>) -> Result<(), Errno> {
@@ -1109,6 +1145,14 @@ impl LinuxKernel for Thread<'_> {
         let (inum, kind) = poly_procfs::namespace_file(file.node().ino()).ok_or(Errno::EINVAL)?;
         let kind = poly_personality_linux::ns::Kind::from_index(kind as u32).ok_or(Errno::EINVAL)?;
         Ok((inum, kind))
+    }
+
+    fn open_namespace(&mut self, like: i32, inum: u32, kind: poly_personality_linux::ns::Kind) -> Result<i32, Errno> {
+        let file = self.process.files.file(like).map_err(vfs_errno)?;
+        let ino = poly_procfs::namespace_file_ino(inum, kind.index() as usize);
+        let node = file.node().sibling(ino).map_err(vfs_errno)?;
+        let open = crate::fs::vfs().open_node_quiet(&node, poly_vfs::OpenFlags::RDONLY).map_err(vfs_errno)?;
+        self.process.files.install(open, true).map_err(vfs_errno)
     }
 
     fn kcmp_id(&mut self, pid: i32, what: poly_personality_linux::kernel::KcmpResource) -> Result<u64, Errno> {
@@ -1182,8 +1226,34 @@ impl LinuxKernel for Thread<'_> {
         self.process.thread_count() > 1 || user::current_memory().is_some_and(|m| Arc::strong_count(&m) > 2)
     }
 
-    fn seccomp_listener(&mut self) -> Result<i32, Errno> {
+    fn seccomp_listener(&mut self) -> Result<(i32, Arc<poly_personality_linux::seccomp::notify::Listener>), Errno> {
         self.seccomp_listener_fd()
+    }
+
+    fn seccomp_listener_of(&mut self, fd: i32) -> Option<Arc<poly_personality_linux::seccomp::notify::Listener>> {
+        let file = self.process.files.file(fd).ok()?;
+        Some(file.object_as::<fileio::SeccompNotify>()?.listener())
+    }
+
+    fn seccomp_wait(
+        &mut self,
+        listener: &Arc<poly_personality_linux::seccomp::notify::Listener>,
+        ready: &mut dyn FnMut() -> bool,
+    ) -> Wakeup {
+        let Some(queue) = fileio::seccomp_queue(listener) else {
+            return if ready() { Wakeup::Woken } else { Wakeup::Signal };
+        };
+        let mut blocker = self.blocker();
+        let _registration = queue.register(poly_vfs::PollEvents::READABLE, poly_vfs::Blocker::waker(&blocker));
+        // (The listener notifies with every event bit.)
+        loop {
+            if ready() {
+                return Wakeup::Woken;
+            }
+            if poly_vfs::Blocker::block(&mut blocker, None) == poly_vfs::Woke::Interrupted {
+                return Wakeup::Signal;
+            }
+        }
     }
 
     fn mseal(&mut self, addr: u64, len: u64) -> Result<(), Errno> {

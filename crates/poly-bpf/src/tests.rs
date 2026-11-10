@@ -75,7 +75,7 @@ fn loads_read_the_words_and_the_length() {
     assert_eq!(p.run(&data), 115);
     let p = ok(&[Insn::stmt(LD | W | LEN, 0), Insn::stmt(RET | A, 0)]);
     assert_eq!(p.run(&data), 64);
-    let p = ok(&[Insn::stmt(LDX | W | LEN, 0), Insn::stmt(RET | X, 0)]);
+    let p = ok(&[Insn::stmt(LDX | W | LEN, 0), Insn::stmt(MISC | TXA, 0), Insn::stmt(RET | A, 0)]);
     assert_eq!(p.run(&data), 64);
     let p = ok(&[Insn::stmt(LD | W | IMM, 42), Insn::stmt(RET | A, 0)]);
     assert_eq!(p.run(&data), 42);
@@ -85,8 +85,9 @@ fn loads_read_the_words_and_the_length() {
 }
 
 #[test]
-fn scratch_memory_holds_words_and_starts_zeroed() {
+fn scratch_memory_holds_words_and_must_be_stored_before_it_is_read() {
     let p = ok(&[
+        Insn::stmt(ST, 15),
         Insn::stmt(LD | W | MEM, 15),
         Insn::stmt(ST, 3),
         Insn::stmt(LD | W | IMM, 9),
@@ -98,6 +99,22 @@ fn scratch_memory_holds_words_and_starts_zeroed() {
         Insn::stmt(RET | A, 0),
     ]);
     assert_eq!(p.run(&[]), 9);
+    // A word never stored, stored in another slot, or stored on one path only.
+    assert_eq!(err(&[Insn::stmt(LD | W | MEM, 0), ret(0)]), Error::BadMemory { pc: 0 });
+    assert_eq!(err(&[Insn::stmt(LDX | W | MEM, 0), ret(0)]), Error::BadMemory { pc: 0 });
+    assert_eq!(err(&[Insn::stmt(ST, 1), Insn::stmt(LD | W | MEM, 0), ret(0)]), Error::BadMemory { pc: 1 });
+    assert_eq!(
+        err(&[Insn::jump(JMP | JEQ | K, 0, 1, 0), Insn::stmt(ST, 2), Insn::stmt(LD | W | MEM, 2), ret(0),]),
+        Error::BadMemory { pc: 2 }
+    );
+    // Stored on both paths: fine.
+    ok(&[
+        Insn::jump(JMP | JEQ | K, 0, 1, 0),
+        Insn::stmt(ST, 2),
+        Insn::stmt(ST, 2),
+        Insn::stmt(LD | W | MEM, 2),
+        ret(0),
+    ]);
     assert_eq!(err(&[Insn::stmt(ST, 16), ret(0)]), Error::BadMemory { pc: 0 });
     assert_eq!(err(&[Insn::stmt(LD | W | MEM, 16), ret(0)]), Error::BadMemory { pc: 0 });
     assert_eq!(err(&[Insn::stmt(LDX | W | MEM, 99), ret(0)]), Error::BadMemory { pc: 0 });
@@ -123,7 +140,6 @@ fn arithmetic_is_unsigned_32_bit() {
     assert_eq!(alu(SUB, 1, 2), u32::MAX);
     assert_eq!(alu(MUL, 0x1_0000, 0x1_0000), 0);
     assert_eq!(alu(DIV, 7, 2), 3);
-    assert_eq!(alu(MOD, 7, 4), 3);
     assert_eq!(alu(OR, 0xf0, 0x0f), 0xff);
     assert_eq!(alu(AND, 0xf0, 0x3c), 0x30);
     assert_eq!(alu(XOR, 0xff, 0x0f), 0xf0);
@@ -132,14 +148,13 @@ fn arithmetic_is_unsigned_32_bit() {
     let neg = ok(&[Insn::stmt(LD | W | IMM, 1), Insn::stmt(ALU | NEG, 0), Insn::stmt(RET | A, 0)]);
     assert_eq!(neg.run(&[]), u32::MAX);
     assert_eq!(alu_x(SUB, 10, 3), 7);
-    assert_eq!(alu_x(LSH, 1, 40), 0);
-    assert_eq!(alu_x(RSH, 1, 32), 0);
+    assert_eq!(alu_x(LSH, 3, 32), 3);
+    assert_eq!(alu_x(RSH, 0x300, 33), 0x180);
 }
 
 #[test]
 fn division_by_a_zero_x_returns_zero() {
     assert_eq!(alu_x(DIV, 7, 0), 0);
-    assert_eq!(alu_x(MOD, 7, 0), 0);
     // Even when the program would return something else afterwards.
     let p = ok(&[Insn::stmt(ALU | DIV | X, 0), ret(5)]);
     assert_eq!(p.run(&[]), 0);
@@ -148,7 +163,9 @@ fn division_by_a_zero_x_returns_zero() {
 #[test]
 fn constant_division_by_zero_and_wide_shifts_are_refused() {
     assert_eq!(err(&[Insn::stmt(ALU | DIV | K, 0), ret(0)]), Error::BadConstant { pc: 0 });
-    assert_eq!(err(&[Insn::stmt(ALU | MOD | K, 0), ret(0)]), Error::BadConstant { pc: 0 });
+    assert_eq!(err(&[Insn::stmt(ALU | MOD | K, 3), ret(0)]), Error::BadOpcode { pc: 0 });
+    assert_eq!(err(&[Insn::stmt(ALU | MOD | X, 0), ret(0)]), Error::BadOpcode { pc: 0 });
+    assert_eq!(err(&[Insn::stmt(RET | X, 0)]), Error::BadOpcode { pc: 0 });
     assert_eq!(err(&[Insn::stmt(ALU | LSH | K, 32), ret(0)]), Error::BadConstant { pc: 0 });
     assert_eq!(err(&[Insn::stmt(ALU | RSH | K, 99), ret(0)]), Error::BadConstant { pc: 0 });
 }
@@ -222,7 +239,8 @@ fn registers_move_and_return() {
         Insn::stmt(LD | W | IMM, 77),
         Insn::stmt(MISC | TAX, 0),
         Insn::stmt(LD | W | IMM, 1),
-        Insn::stmt(RET | X, 0),
+        Insn::stmt(MISC | TXA, 0),
+        Insn::stmt(RET | A, 0),
     ]);
     assert_eq!(p.run(&[]), 77);
     let p = ok(&[Insn::stmt(LDX | W | IMM, 78), Insn::stmt(MISC | TXA, 0), Insn::stmt(RET | A, 0)]);

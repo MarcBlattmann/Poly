@@ -40,7 +40,9 @@ mod procfs;
 mod source;
 mod staticfs;
 
-pub use procfs::{NR_OPEN, NS_KINDS, PID_MAX, PID_POS, ProcFs, copy_at, namespace_file, process_dir};
+pub use procfs::{
+    NR_OPEN, NS_KINDS, PID_MAX, PID_POS, ProcFs, copy_at, namespace_file, namespace_file_ino, process_dir,
+};
 pub use source::{
     CpuFeatures, CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, KernelName, MagicLink, MapEntry, MapName,
     MountEntry, NANOS_PER_TICK, Owner, ProcSource, ProcState, ProcessInfo, SignalSets, SystemInfo, USER_HZ,

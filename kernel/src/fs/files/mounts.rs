@@ -33,6 +33,11 @@ impl Files {
         self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.mount_at(ctx, &self.cred(), at, target, follow))
     }
 
+    /// umount2(2) with `MNT_EXPIRE`.
+    pub fn umount_expire(&self, target: &[u8]) -> Result<()> {
+        self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.umount_expire(ctx, &self.cred(), at, target))
+    }
+
     /// umount2(2) of the mount at `target` (`lazy`: `MNT_DETACH`).
     pub fn umount(&self, target: &[u8], lazy: bool) -> Result<()> {
         self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.umount(ctx, &self.cred(), at, target, lazy))
@@ -64,8 +69,8 @@ impl Files {
 
     /// unshare(2) / clone(2) `CLONE_NEWNS` (ADR 0054): the process moves to a copy of
     /// its mount namespace; returns the copy.
-    pub fn copy_mount_namespace(&self) -> Result<MountId> {
-        vfs().copy_namespace(&mut self.ctx().lock())
+    pub fn copy_mount_namespace(&self, to_slave: bool) -> Result<MountId> {
+        vfs().copy_namespace(&mut self.ctx().lock(), to_slave)
     }
 
     /// setns(2) into mount namespace `base`: root and working directory

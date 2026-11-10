@@ -91,9 +91,12 @@ types. Two readers use it:
 WHPX (more under the emulator). Nothing in the desktop times out meanwhile:
 the compositor has no ping or unresponsive-client kill, it waits for the
 client's first buffer, and the host side (`desktop::boot`, the menu) waits
-for QEMU without a limit. To tell the person what is going on, Poly's
-launch script sends a notification ("Chromium is starting") when no Chromium
-runs yet; a second launch while it runs opens a window there.
+for QEMU without a limit. What tells the person that something is going on
+is the busy pointer ([ADR 0167](0167-busy-pointer-while-an-app-starts.md)),
+as for every app; a second launch while Chromium runs opens a window there.
+(Until 2026-11-10 the launch script also sent a notification, "Chromium is
+starting", when no Chromium ran yet. The owner had it removed: the pointer
+already says it, and a toast for every start is noise.)
 
 **No X display on this disk.** The compositor of this disk is started
 without `--xwayland-lazy`, as the plain desktop's is: the disk has no

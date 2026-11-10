@@ -24,6 +24,7 @@ poly-binfmt = { path = "../crates/poly-binfmt" }
 poly-block = { path = "../crates/poly-block" }
 poly-bochs-vbe = { path = "../crates/poly-bochs-vbe" }
 poly-elf = { path = "../crates/poly-elf" }
+poly-squashfs = { path = "../crates/poly-squashfs" }
 poly-ext2 = { path = "../crates/poly-ext2" }
 poly-fbdev = { path = "../crates/poly-fbdev" }
 poly-cpio = { path = "../crates/poly-cpio" }
@@ -33,6 +34,9 @@ poly-input = { path = "../crates/poly-input" }
 poly-drm = { path = "../crates/poly-drm" }
 poly-irq = { path = "../crates/poly-irq" }
 poly-line = { path = "../crates/poly-line" }
+poly-fuse = { path = "../crates/poly-fuse" }
+poly-loop = { path = "../crates/poly-loop" }
+poly-overlayfs = { path = "../crates/poly-overlayfs" }
 poly-mem = { path = "../crates/poly-mem" }
 poly-net = { path = "../crates/poly-net" }
 poly-pagecache = { path = "../crates/poly-pagecache" }

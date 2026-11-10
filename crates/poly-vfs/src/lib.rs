@@ -90,6 +90,7 @@ mod object;
 mod path;
 pub mod pipe;
 pub mod poll;
+pub mod propagation;
 mod sync;
 pub mod timerfd;
 mod tmpfs;
@@ -103,8 +104,8 @@ pub use fdtable::{AT_FDCWD, At, DEFAULT_FD_LIMIT, Fd, FdTable};
 pub use file::{OpenFile, OpenFlags, Whence};
 pub use fs::{
     Clock, DirEntry, EXT2_SUPER_MAGIC, FALLOC_FL_KEEP_SIZE, FALLOC_FL_PUNCH_HOLE, FileSystem, FsInfo, FsStats,
-    MQUEUE_MAGIC, MagicTarget, NewNode, PROC_SUPER_MAGIC, RenameFlags, ST_NODEV, ST_NOEXEC, ST_NOSUID, ST_RDONLY,
-    ST_RELATIME, SYSFS_MAGIC, TMPFS_MAGIC, magic_for,
+    MQUEUE_MAGIC, MagicTarget, NewNode, OpenTrunc, PROC_SUPER_MAGIC, RenameFlags, ST_NODEV, ST_NOEXEC, ST_NOSUID,
+    ST_RDONLY, ST_RELATIME, SYSFS_MAGIC, TMPFS_MAGIC, magic_for,
 };
 pub use mount::{Mount, MountFlags, MountId, MountInfo};
 pub use node::{FsContext, NodeRef};
