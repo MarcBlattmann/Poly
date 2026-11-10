@@ -38,6 +38,10 @@ pub enum SecErr {
     NoneMapped,
     InvalidDatatype,
     InvalidUuid,
+    /// An access-allowed callback object ACE (type 0x0B) has no SDDL text:
+    /// `ConvertSecurityDescriptorToStringSecurityDescriptorW` fails with
+    /// last error 805 (the spec sheet).
+    CallbackObjectAce,
 }
 
 impl SecErr {
@@ -68,6 +72,7 @@ impl SecErr {
             NoneMapped => ERROR_NONE_MAPPED,
             InvalidDatatype => 1804,
             InvalidUuid => 1705,
+            CallbackObjectAce => 805,
         }
     }
 
@@ -75,9 +80,8 @@ impl SecErr {
     pub fn nt(self) -> NtStatus {
         use SecErr::*;
         NtStatus(match self {
-            InvalidParameter | InvalidFlags | InvalidDatatype | InvalidUuid | NonDomainSid | NonAccountSid => {
-                0xC000_000D
-            }
+            InvalidParameter | InvalidFlags | InvalidDatatype | InvalidUuid | NonDomainSid | NonAccountSid
+            | CallbackObjectAce => 0xC000_000D,
             BufferTooSmall => 0xC000_0023,
             InvalidSid => 0xC000_0078,
             InvalidAcl => 0xC000_0077,

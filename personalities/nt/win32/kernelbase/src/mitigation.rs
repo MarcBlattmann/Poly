@@ -84,11 +84,18 @@ pub unsafe extern "system" fn GetProcessMitigationPolicy(
     }
     // SAFETY: `length` bytes at `buffer`, the caller's.
     unsafe {
-        core::ptr::write_bytes(buffer, 0, length);
         if policy == OPTIONS_MASK {
-            let mask = 0x3333_3303u64.to_le_bytes();
-            core::ptr::copy_nonoverlapping(mask.as_ptr(), buffer, length.min(8));
+            // Two 64-bit masks of the policies the system knows (the sheet:
+            // the first word 0x33333303; a buffer of 16 bytes or more gets
+            // more than the first 8 bytes). The second mask's bits are not
+            // in the sheet: none are claimed.
+            let masks = [0x3333_3303u64, 0];
+            let whole = (length / 8).min(masks.len());
+            for (i, m) in masks.iter().take(whole).enumerate() {
+                core::ptr::copy_nonoverlapping(m.to_le_bytes().as_ptr(), buffer.add(8 * i), 8);
+            }
         } else {
+            core::ptr::write_bytes(buffer, 0, length);
             let flags = POLICY[policy as usize].load(Ordering::Relaxed).to_le_bytes();
             core::ptr::copy_nonoverlapping(flags.as_ptr(), buffer, 4);
         }
