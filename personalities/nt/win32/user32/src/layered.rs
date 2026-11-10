@@ -19,10 +19,10 @@ unsafe extern "system" {
     fn GetObjectType(h: usize) -> u32;
     fn GetObjectW(h: usize, size: i32, out: *mut u8) -> i32;
     fn GetCurrentObject(hdc: usize, kind: u32) -> usize;
-    fn DeleteObject(h: usize) -> i32;
     fn BitBlt(dst: usize, x: i32, y: i32, w: i32, h: i32, src: usize, sx: i32, sy: i32, rop: u32) -> i32;
     fn PolyGdiGetRegionRects(rgn: usize, out: *mut i32, cap: u32) -> i32;
     fn PolyGdiSetRegionRects(rgn: usize, rects: *const i32, n: u32) -> i32;
+    fn PolyGdiTakeRegion(rgn: usize) -> i32;
 }
 
 const ERROR_GEN_FAILURE: u32 = 31;
@@ -265,9 +265,14 @@ pub extern "system" fn SetWindowRgn(hwnd: H, rgn: usize, redraw: i32) -> i32 {
             return 0;
         }
         new = rects_of(rgn);
-        // The system owns the region now: the caller's handle is gone.
+        // A handle that only keeps the type of a deleted region is no region.
+        if new.is_none() {
+            return 0;
+        }
+        // The system owns the region now: the caller's handle is no
+        // object any more (not a deleted one, which keeps its type).
         // SAFETY: gdi32 checks the handle.
-        unsafe { DeleteObject(rgn) };
+        unsafe { PolyGdiTakeRegion(rgn) };
     }
     let removing = new.is_none();
     // The kernel leaves what is outside the region out of hit testing and
@@ -333,7 +338,11 @@ pub extern "system" fn GetWindowRgn(hwnd: H, rgn: usize) -> i32 {
     }
     let flat: Vec<i32> = rects.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect();
     // SAFETY: `rects.len()` RECTs.
-    unsafe { PolyGdiSetRegionRects(rgn, flat.as_ptr(), rects.len() as u32) };
+    if unsafe { PolyGdiSetRegionRects(rgn, flat.as_ptr(), rects.len() as u32) } == 0 {
+        // A deleted region still answers its type, but takes nothing.
+        set_last_error(ERROR_INVALID_HANDLE);
+        return 0;
+    }
     kind_of(&rects)
 }
 

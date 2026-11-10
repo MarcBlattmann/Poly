@@ -1500,3 +1500,25 @@ fn clear_type_text_still_has_pixels_of_the_text_colour() {
         }
     }
 }
+
+/// SetWindowRgn.yaml `ownership`: a region the system took over is no
+/// object at all (GetObjectType 0, DeleteObject FALSE), where a deleted
+/// one still answers its type (DeleteObject.yaml).
+#[test]
+fn a_region_the_system_took_is_no_object() {
+    let mut g = Gdi::new();
+    let taken = u64::from(g.create_rect_rgn(Rect::new(10, 10, 50, 40)).unwrap());
+    let deleted = u64::from(g.create_rect_rgn(Rect::new(0, 0, 5, 5)).unwrap());
+    assert_eq!(g.take_region(taken).map(|r| r.bounds()), Some(Rect::new(10, 10, 50, 40)));
+    assert_eq!(g.object_type(taken), 0);
+    assert!(g.region(taken).is_none());
+    assert!(!g.delete_object(taken));
+    assert_eq!(g.take_region(taken), None);
+    assert!(g.delete_object(deleted));
+    assert_eq!(g.object_type(deleted), OBJ_REGION);
+    assert_eq!(g.take_region(deleted), None);
+    // Not a region: left alone.
+    let brush = u64::from(g.stock(0));
+    assert_eq!(g.take_region(brush), None);
+    assert_ne!(g.object_type(brush), 0);
+}

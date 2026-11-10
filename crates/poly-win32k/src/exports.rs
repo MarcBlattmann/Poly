@@ -403,6 +403,7 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "PolyGdiSetSystemClip",
     "PolyGdiGetRegionRects",
     "PolyGdiSetRegionRects",
+    "PolyGdiTakeRegion",
     "PolyGdiDrawTextEx",
     "PolyGdiDisplayOrigin",
     "PolyGdiDisplayWindow",

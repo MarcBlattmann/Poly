@@ -1176,6 +1176,20 @@ impl Gdi {
         self.add(Obj::Region(rgn))
     }
 
+    /// The system takes a region over (`SetWindowRgn`): its pixels, and the
+    /// handle is no object at all from then on (`GetObjectType` 0 at once,
+    /// where a deleted region still answers OBJ_REGION for a while;
+    /// SetWindowRgn.yaml `ownership`). `None` when `h` is not a region.
+    pub fn take_region(&mut self, h: u64) -> Option<Region> {
+        let i = self.index_of(h)?;
+        if !matches!(self.objs[i], Some(Obj::Region(_))) {
+            return None;
+        }
+        let Some(Obj::Region(r)) = self.objs[i].take() else { return None };
+        self.release(i, 0);
+        Some(r)
+    }
+
     /// `SetRectRgn`: any coordinates are kept (observed); false when `h`
     /// is not a region.
     pub fn set_rect_rgn(&mut self, h: u64, r: Rect) -> bool {

@@ -1400,6 +1400,13 @@ pub unsafe extern "system" fn PolyGdiGetRegionRects(hrgn: H, out: *mut i32, cap:
     rects.len() as i32
 }
 
+/// The system takes region `hrgn` over (`SetWindowRgn`): the handle is no
+/// object at all afterwards. 1, or 0 when `hrgn` is not a region.
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiTakeRegion(hrgn: H) -> i32 {
+    i32::from(gdi(|g| g.take_region(hrgn as u64)).is_some())
+}
+
 /// Replace region `hrgn`'s contents by the union of the `n` RECTs at
 /// `rects` (empty or inverted ones count as nothing): the new kind
 /// (NULLREGION 1, SIMPLEREGION 2, COMPLEXREGION 3), ERROR 0 when `hrgn` is
