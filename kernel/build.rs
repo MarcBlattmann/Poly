@@ -63,6 +63,8 @@ fn embed_win32() {
         "userenv.dll",
         // ADR 0155: file version information.
         "version.dll",
+        "winmm.dll",
+        "shell32.dll",
         "ole32.dll",
         "s1test.exe",
         "iphlpapi.dll",

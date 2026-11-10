@@ -116,6 +116,12 @@ pub static USERENV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/userenv.dl
 /// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
 pub static VERSION: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/version.dll"));
+/// Our `winmm.dll` (ADR 0155): `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`; installed by
+/// [`layout`].
+pub static WINMM: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/winmm.dll"));
+/// Our `shell32.dll` (ADR 0155): `CommandLineToArgvW`, `SHGetFolderPathW`; installed by
+/// [`layout`].
+pub static SHELL32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shell32.dll"));
 /// Our `ole32.dll` (ADR 0155, batch 4): COM apartments, the Windows Runtime's
 /// strings; hosts the `winrt` and `com` API sets. Installed by [`layout`].
 pub static OLE32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ole32.dll"));

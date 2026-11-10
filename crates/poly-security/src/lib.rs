@@ -66,11 +66,29 @@ pub fn poly_user_sid() -> Sid {
     sid::domain_relative(POLY_USER_RID)
 }
 
+/// The registry path of the current user's hive, `\REGISTRY\USER\<the user's SID>`: what
+/// `RtlFormatCurrentUserKeyPath` returns (programs build `HKEY_CURRENT_USER` paths for the
+/// native registry functions from it).
+pub fn current_user_key_path() -> alloc::string::String {
+    alloc::format!("\\REGISTRY\\USER\\{}", sddl::to_string(&poly_user_sid()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     extern crate std;
     use alloc::string::ToString;
+
+    /// The path names the hive the default registry really has (it used to be a literal in
+    /// ntdll that kept the SID from before ADR 0171, so `NtCreateKey` below it failed).
+    #[test]
+    fn the_current_user_key_path_is_the_default_user_hive() {
+        assert_eq!(
+            current_user_key_path(),
+            alloc::format!("\\REGISTRY\\USER\\{}", poly_registry::defaults::POLY_USER_SID)
+        );
+        assert_eq!(current_user_key_path(), "\\REGISTRY\\USER\\S-1-5-21-520193847-884726105-1936024571-1002");
+    }
 
     #[test]
     fn the_user_matches_the_default_hives() {
