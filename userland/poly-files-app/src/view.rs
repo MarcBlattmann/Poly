@@ -3,10 +3,17 @@
 //! the path bar (a field of breadcrumbs; Ctrl+L or a click on its empty
 //! part edits it as text), the search field, the list/grid segmented
 //! control and the hidden-files switch; the 224-pixel sidebar of places
-//! (Home, Desktop, Documents, Downloads, ..., Computer, Trash) and mounted
-//! disks; the page on surface 1 with the folder's title, a New folder
-//! button, column headers that sort (Name, Size, Kind), the rows or tiles,
-//! and a status line.
+//! (Home, Desktop, Documents, Downloads, ..., Applications, Computer, Trash)
+//! and mounted disks; the page on surface 1 with the folder's title, a New
+//! folder button, column headers that sort (Name, Size, Kind), the rows or
+//! tiles, and a status line.
+//!
+//! Applications (ADR 0175) is the launcher's catalog as a folder
+//! (`poly_shell::applications`, put over the file system by
+//! [`crate::applications`]): the same rows and tiles with each app's own
+//! icon, the kind of app in the Kind column, the selected app's details in
+//! the status line; opening one asks the desktop to start it. Nothing in it
+//! can be renamed, moved or removed, so those controls are not there.
 //!
 //! What the window decides lives in `poly-files` ([`Browser`], `ops`,
 //! `trash`, `apps`), so the file picker of Phase 8 can reuse it; this
@@ -16,6 +23,7 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::cell::RefCell;
 use poly_app::ui::{DENSE, DENSE_MEDIUM, FIELD_RADIUS, HEADER, NAV_HEIGHT, SIDEBAR, SMALL, TITLE};
 use poly_app::{App, AppEvent, CursorShape, Cx, KeyInput, LineEdit, Menu, MenuItem, Ui};
 use poly_files::apps::{Handler, Open};
@@ -24,6 +32,8 @@ use poly_files::ops::{ClipOp, Clipboard, OpError};
 use poly_files::places::{Place, PlaceIcon};
 use poly_files::{Browser, Entry, FileIcon, Fs, Kind};
 use poly_input::key::Key;
+use poly_shell::appicon::{AppIcons, IconFiles};
+use poly_shell::applications::{self as apps, Action, Item};
 use poly_shell::draw::{Face, Style};
 use poly_shell::icons::{Icon, lucide};
 use poly_shell::theme::pal;
@@ -39,6 +49,11 @@ pub const TILE_GAP: i32 = 8;
 pub const GUTTER: i32 = 20;
 /// The search field's width.
 pub const SEARCH_W: i32 = 200;
+/// An app's icon in a row of the list and in a tile of the grid (a file's
+/// glyph is 16 and 40: an app's own picture has the launcher's 28-pixel
+/// box in the tile's place for it, and what a row's height leaves).
+pub const APP_ICON_ROW: i32 = 20;
+pub const APP_ICON_TILE: i32 = 40;
 
 /// The icon of a kind of file.
 pub fn file_icon(i: FileIcon) -> Icon {
@@ -72,6 +87,7 @@ pub fn place_icon(i: PlaceIcon) -> Icon {
         PlaceIcon::Pictures => lucide::FILE_IMAGE,
         PlaceIcon::Videos => lucide::FILE_VIDEO_CAMERA,
         PlaceIcon::Computer | PlaceIcon::Drive | PlaceIcon::Removable => lucide::HARD_DRIVE,
+        PlaceIcon::Applications => lucide::APP_WINDOW,
         PlaceIcon::Trash => lucide::TRASH_2,
     }
 }
@@ -151,6 +167,7 @@ pub mod act {
     pub const RESTORE: u32 = 14;
     pub const EMPTY_TRASH: u32 = 15;
     pub const COPY_PATH: u32 = 16;
+    pub const REFRESH: u32 = 17;
 }
 
 /// The window's rectangles for a `w` × `h` window, logical.
@@ -221,6 +238,10 @@ impl Layout {
 /// Starts a program (the app's own; a test records it).
 pub type Launcher = Box<dyn FnMut(&[String]) -> Result<(), String>>;
 
+/// Asks the desktop to start an installed app as its launcher does (the
+/// control pipe's `open`; a test records it).
+pub type AppOpener = Box<dyn FnMut(&Item) -> Result<(), String>>;
+
 /// The Files app.
 pub struct FilesApp {
     pub fs: Box<dyn Fs>,
@@ -231,6 +252,12 @@ pub struct FilesApp {
     pub handlers: Vec<Handler>,
     pub defaults: Option<String>,
     pub launch: Launcher,
+    /// The Applications folder as the file system last read it (empty and
+    /// unreachable unless [`FilesApp::set_applications`] gave one).
+    pub apps: crate::applications::Shared,
+    pub open_app: AppOpener,
+    /// The apps' own icons (ADR 0146), loaded as they are drawn.
+    icons: RefCell<AppIcons>,
     /// The wall clock, seconds (for the trash's dates).
     pub clock: Box<dyn Fn() -> u64>,
     size: (i32, i32),
@@ -269,6 +296,9 @@ impl FilesApp {
             handlers: Vec::new(),
             defaults: None,
             launch,
+            apps: crate::applications::Shared::default(),
+            open_app: Box::new(|_| Err("The desktop cannot be reached".into())),
+            icons: RefCell::new(AppIcons::default()),
             clock: Box::new(|| 0),
             size: (0, 0),
             layout: Layout::default(),
@@ -296,10 +326,49 @@ impl FilesApp {
         self.browser.cwd() == self.trash_files()
     }
 
+    /// Show the Applications folder (ADR 0175): `folder` is what the file
+    /// system's overlay ([`crate::applications::overlay`]) reads the
+    /// installed apps into, `open` asks the desktop to start one. The
+    /// sidebar gets its place.
+    pub fn set_applications(&mut self, folder: crate::applications::Shared, open: AppOpener) {
+        self.apps = folder;
+        self.open_app = open;
+        if !self.places.iter().any(|p| p.kind == poly_files::places::PlaceKind::Applications) {
+            self.places = poly_files::places::with_applications(core::mem::take(&mut self.places));
+        }
+    }
+
+    /// Where the apps' icons are read from (the icon theme on the disk).
+    pub fn set_icon_files(&mut self, files: Box<dyn IconFiles>) {
+        self.icons.get_mut().set_files(files);
+    }
+
+    /// Whether the Applications folder is shown.
+    pub fn in_apps(&self) -> bool {
+        self.browser.cwd() == apps::DIR
+    }
+
+    /// The app listed as entry `e`, in the Applications folder.
+    fn app_of(&self, e: &Entry) -> Option<Item> {
+        self.in_apps().then(|| self.apps.borrow().by_path(&e.path).cloned()).flatten()
+    }
+
+    /// The folder as the path bar's text.
+    fn location(&self) -> &str {
+        if self.in_apps() { apps::URI } else { self.browser.cwd() }
+    }
+
     /// Show folder `path`.
     pub fn go(&mut self, path: &str) -> bool {
         // The sidebar's Trash is `trash:///`: its `files/` folder here.
-        let path = if path == poly_files::places::TRASH_URI { self.trash_dir.clone() } else { path.into() };
+        let path = if path == poly_files::places::TRASH_URI {
+            self.trash_dir.clone()
+        } else if apps::is_location(path) {
+            // Applications, by its name, its URI or its place.
+            apps::DIR.into()
+        } else {
+            path.into()
+        };
         let path = path.as_str();
         if path == self.trash_files() || path == self.trash_dir {
             let _ = poly_files::trash::ensure(&*self.fs, &self.trash_dir);
@@ -336,6 +405,9 @@ impl FilesApp {
         if self.in_trash() {
             return "Trash".into();
         }
+        if self.in_apps() {
+            return apps::LABEL.into();
+        }
         let cwd = self.browser.cwd();
         if cwd == "/" {
             return poly_files::path::ROOT_LABEL.into();
@@ -346,11 +418,45 @@ impl FilesApp {
         poly_files::path::file_name(cwd).into()
     }
 
+    /// How many rows there are, as the title's side and the status line
+    /// say it.
+    pub fn count_text(&self) -> String {
+        match (self.browser.len(), self.in_apps()) {
+            (1, false) => "1 item".to_string(),
+            (n, false) => format!("{n} items"),
+            (1, true) => "1 app".to_string(),
+            (n, true) => format!("{n} apps"),
+        }
+    }
+
+    /// The status line: what just happened, else the selection, else the
+    /// folder. In Applications the selected app's details: what kind of
+    /// app it is and where it comes from.
+    pub fn status_line(&self) -> String {
+        let (n, sel) = (self.browser.len(), self.browser.selected_rows().len());
+        if !self.status.is_empty() {
+            self.status.clone()
+        } else if self.in_apps() {
+            match self.browser.selected_entries().as_slice() {
+                [one] => self.app_of(one).map(|i| i.details()).unwrap_or_else(|| one.name.clone()),
+                [] => format!("{} installed", self.count_text()),
+                _ => format!("{sel} of {n} selected"),
+            }
+        } else if sel > 0 {
+            let size: u64 = self.browser.selected_entries().iter().filter(|e| !e.is_dir()).map(|e| e.size).sum();
+            format!("{sel} of {n} selected, {}", size_text(size))
+        } else {
+            format!("{} in {}", self.count_text(), self.browser.cwd())
+        }
+    }
+
     /// The breadcrumbs and their rectangles in the path bar.
     fn crumbs(&self, ui: &Ui) -> Vec<(poly_files::path::Crumb, Rect)> {
         let r = self.layout.path;
         let crumbs = if self.in_trash() {
             alloc::vec![poly_files::path::Crumb { label: "Trash".into(), path: self.trash_files() }]
+        } else if self.in_apps() {
+            alloc::vec![poly_files::path::Crumb { label: apps::LABEL.into(), path: apps::DIR.into() }]
         } else {
             poly_files::path::crumbs(self.browser.cwd(), Some(&self.home))
         };
@@ -446,13 +552,17 @@ impl FilesApp {
             return self.place_rects().iter().position(|r| r.contains(x, y)).map(Target::Place);
         }
         if hit(l.new_folder) {
+            // Nothing is made in Applications: no button there.
+            if self.in_apps() {
+                return None;
+            }
             return Some(if self.in_trash() { Target::EmptyTrash } else { Target::NewFolder });
         }
         if self.browser.view() == View::List && hit(l.columns) {
             let (size_x, kind_x) = l.column_x();
             return Some(Target::Sort(if x >= kind_x && l.kind_column {
                 SortKey::Kind
-            } else if x >= size_x {
+            } else if x >= size_x && !self.in_apps() {
                 SortKey::Size
             } else {
                 SortKey::Name
@@ -501,6 +611,9 @@ impl FilesApp {
     }
 
     pub fn open_path(&mut self, path: &str) {
+        if apps::contains(path) {
+            return self.open_app_at(path);
+        }
         match poly_files::apps::open(&*self.fs, path, &self.handlers, self.defaults.as_deref()) {
             Ok(Open::Folder(p)) => {
                 self.go(&p);
@@ -519,6 +632,22 @@ impl FilesApp {
         }
     }
 
+    /// Start the app at `path` of the Applications folder: the desktop
+    /// does it, with the launcher's code (ADR 0175).
+    fn open_app_at(&mut self, path: &str) {
+        let Some(item) = self.apps.borrow().by_path(path).cloned() else {
+            self.status = format!("{}: no such app", apps::label_of(path).unwrap_or(path));
+            return;
+        };
+        match (self.open_app)(&item) {
+            Ok(()) => {
+                poly_rt::println!("poly-files: opened app {} ({})", item.app.name, item.app.id);
+                self.status = format!("Opened {}", item.app.name);
+            }
+            Err(e) => self.status = format!("{}: {e}", item.app.name),
+        }
+    }
+
     fn run(&mut self, argv: &[String]) {
         match (self.launch)(argv) {
             Ok(()) => {
@@ -530,6 +659,9 @@ impl FilesApp {
     }
 
     fn open_terminal(&mut self) {
+        if self.in_apps() {
+            return;
+        }
         let dir = match self.browser.cursor_entry().filter(|e| e.is_dir() && self.browser.selected_rows().len() == 1) {
             Some(e) => e.path.clone(),
             None => self.browser.cwd().into(),
@@ -540,7 +672,7 @@ impl FilesApp {
 
     fn set_clip(&mut self, op: ClipOp, cx: &mut Cx) {
         let paths = self.browser.selected_paths();
-        if paths.is_empty() {
+        if paths.is_empty() || self.in_apps() {
             return;
         }
         // The paths go on the desktop's clipboard as text too.
@@ -556,7 +688,7 @@ impl FilesApp {
 
     fn paste(&mut self) {
         let Some(clip) = self.clip.clone() else { return };
-        if self.in_trash() {
+        if self.in_trash() || self.in_apps() {
             return;
         }
         let dest = String::from(self.browser.cwd());
@@ -583,7 +715,7 @@ impl FilesApp {
     }
 
     pub fn new_folder(&mut self) {
-        if self.in_trash() {
+        if self.in_trash() || self.in_apps() {
             return;
         }
         let dir = String::from(self.browser.cwd());
@@ -600,7 +732,7 @@ impl FilesApp {
 
     pub fn start_rename(&mut self) {
         let Some(e) = self.browser.cursor_entry() else { return };
-        if self.in_trash() {
+        if self.in_trash() || self.in_apps() {
             return;
         }
         let name = e.name.clone();
@@ -633,7 +765,9 @@ impl FilesApp {
     /// Move the selection to the trash (in the trash: ask to delete).
     pub fn trash_selected(&mut self) {
         let paths = self.browser.selected_paths();
-        if paths.is_empty() {
+        // An app is not removed by deleting its row: uninstalling comes
+        // with the installer (ADR 0175).
+        if paths.is_empty() || self.in_apps() {
             return;
         }
         if self.in_trash() {
@@ -655,7 +789,7 @@ impl FilesApp {
 
     fn ask_delete(&mut self) {
         let n = self.browser.selected_paths().len();
-        if n == 0 {
+        if n == 0 || self.in_apps() {
             return;
         }
         let what = if n == 1 {
@@ -667,6 +801,9 @@ impl FilesApp {
     }
 
     fn delete_selected(&mut self) {
+        if self.in_apps() {
+            return;
+        }
         let in_trash = self.in_trash();
         for e in
             self.browser.selected_entries().into_iter().map(|e| (e.name.clone(), e.path.clone())).collect::<Vec<_>>()
@@ -725,9 +862,10 @@ impl FilesApp {
                 })
             }
             x if x == act::EMPTY_TRASH + 100 => self.empty_trash(),
+            act::REFRESH => self.reload(),
             act::COPY_PATH => {
                 let paths = self.browser.selected_paths();
-                if !paths.is_empty() {
+                if !paths.is_empty() && !self.in_apps() {
                     cx.copy(paths.join("\n"));
                 }
             }
@@ -746,7 +884,24 @@ impl FilesApp {
     fn context_menu(&mut self, x: i32, y: i32, on_item: bool) {
         let n = self.browser.selected_paths().len();
         let paste = self.clip.is_some() && !self.in_trash();
-        let items = if self.in_trash() {
+        let items = if self.in_apps() {
+            // What the model says can be done with an app (today: open it).
+            let actions = if on_item {
+                self.browser.cursor_entry().and_then(|e| self.app_of(e)).map(|i| i.actions()).unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let mut items: Vec<MenuItem> = actions
+                .into_iter()
+                .map(|a| match a {
+                    Action::Open => MenuItem::new(act::OPEN, a.label(), "Enter", true),
+                })
+                .collect();
+            if items.is_empty() {
+                items.push(MenuItem::new(act::REFRESH, "Refresh", "F5", true));
+            }
+            items
+        } else if self.in_trash() {
             alloc::vec![
                 MenuItem::new(act::RESTORE, "Restore", "", on_item && n > 0),
                 MenuItem::new(act::DELETE, "Delete for ever", "Delete", on_item && n > 0),
@@ -834,7 +989,11 @@ impl FilesApp {
                 };
                 match edit.key(&k) {
                     poly_app::ui::Edit::Enter => {
-                        let target = poly_files::path::normalize(&edit.text.replace('~', &self.home));
+                        let target = if apps::is_location(&edit.text) {
+                            apps::DIR.into()
+                        } else {
+                            poly_files::path::normalize(&edit.text.replace('~', &self.home))
+                        };
                         self.path_edit = None;
                         self.focus = Focus::List;
                         self.go(&target);
@@ -853,7 +1012,7 @@ impl FilesApp {
                     if self.browser.cursor().is_none() {
                         self.browser.move_cursor(Move::Home, false, 1);
                     }
-                    if matches!(k.key, Some(Key::Enter | Key::NumpadEnter)) {
+                    if matches!(k.key, Some(Key::Enter | Key::NumpadEnter)) && !k.repeat {
                         self.open_selected();
                     }
                     return;
@@ -916,6 +1075,9 @@ impl FilesApp {
             (Some(Key::PageDown), _, _) => {
                 mv(Move::PageDown(page), &mut self.browser);
             }
+            // A held Enter opens once: a repeat would start an app again
+            // and again, or run down a chain of folders.
+            (Some(Key::Enter | Key::NumpadEnter), _, _) if k.repeat => {}
             (Some(Key::Enter | Key::NumpadEnter), _, _) => self.open_selected(),
             (Some(Key::F2), _, _) => self.start_rename(),
             (Some(Key::F5), _, _) => self.reload(),
@@ -938,7 +1100,7 @@ impl FilesApp {
                 Some('n') if m.shift => self.new_folder(),
                 Some('f') => self.focus = Focus::Search,
                 Some('l') => {
-                    self.path_edit = Some(LineEdit::selecting(self.browser.cwd(), self.browser.cwd().len()));
+                    self.path_edit = Some(LineEdit::selecting(self.location(), self.location().len()));
                     self.focus = Focus::Path;
                 }
                 Some('1') => self.browser.set_view(View::List),
@@ -1038,7 +1200,7 @@ impl FilesApp {
                 }
             }
             Some(Target::Crumb(None)) => {
-                self.path_edit = Some(LineEdit::selecting(self.browser.cwd(), self.browser.cwd().len()));
+                self.path_edit = Some(LineEdit::selecting(self.location(), self.location().len()));
                 self.focus = Focus::Path;
             }
             Some(Target::Search) => self.focus = Focus::Search,
@@ -1152,7 +1314,9 @@ impl FilesApp {
                 disks = true;
                 ui.eyebrow(fb, clip, 20, r.y - 26, "Disks");
             }
-            let active = cwd == p.path || (p.kind == poly_files::places::PlaceKind::Trash && self.in_trash());
+            let active = cwd == p.path
+                || (p.kind == poly_files::places::PlaceKind::Trash && self.in_trash())
+                || (p.kind == poly_files::places::PlaceKind::Applications && self.in_apps());
             ui.nav_row(fb, clip, r, place_icon(p.icon), &p.label, active, self.hover == Some(Target::Place(i)));
         }
     }
@@ -1174,23 +1338,27 @@ impl FilesApp {
             pal().ink_primary,
         );
         let n = self.browser.len();
-        let count = if n == 1 { "1 item".to_string() } else { format!("{n} items") };
+        let in_apps = self.in_apps();
+        let count = self.count_text();
         ui.text(fb, page_clip, end + 12, l.title.y + 4, l.title.height, l.new_folder.x - 8, &count, SMALL, pal().faint);
         let (icon, hv) = if self.in_trash() {
             (lucide::TRASH_2, self.hover == Some(Target::EmptyTrash))
         } else {
             (lucide::FOLDER_PLUS, self.hover == Some(Target::NewFolder))
         };
-        ui.icon_button(fb, page_clip, l.new_folder, icon, 16, hv, !self.in_trash() || n > 0);
+        if !in_apps {
+            ui.icon_button(fb, page_clip, l.new_folder, icon, 16, hv, !self.in_trash() || n > 0);
+        }
         // Column headers.
         if self.browser.view() == View::List {
             let (size_x, kind_x) = l.column_x();
             let (key, order) = self.browser.sort();
             let col = |label: &str, k: SortKey, x: i32, right: i32| (label.to_string(), k, x, right);
-            let mut cols = alloc::vec![
-                col("Name", SortKey::Name, l.columns.x + 38, size_x - 8),
-                col("Size", SortKey::Size, size_x, size_x + 90)
-            ];
+            let mut cols = alloc::vec![col("Name", SortKey::Name, l.columns.x + 38, size_x - 8)];
+            // An app has no size to show.
+            if !in_apps {
+                cols.push(col("Size", SortKey::Size, size_x, size_x + 90));
+            }
             if l.kind_column {
                 cols.push(col("Kind", SortKey::Kind, kind_x, l.columns.right()));
             }
@@ -1216,6 +1384,8 @@ impl FilesApp {
         if self.browser.is_empty() {
             let msg = if !self.browser.filter().is_empty() {
                 "Nothing matches the search"
+            } else if in_apps {
+                "No apps are installed"
             } else if self.in_trash() {
                 "The Trash is empty"
             } else {
@@ -1246,15 +1416,7 @@ impl FilesApp {
         }
         // The status line.
         ui.fill(fb, page_clip, Rect::new(l.footer.x, l.footer.y, l.footer.width, 1), pal().ink, pal().hairline);
-        let sel = self.browser.selected_rows().len();
-        let text = if !self.status.is_empty() {
-            self.status.clone()
-        } else if sel > 0 {
-            let size: u64 = self.browser.selected_entries().iter().filter(|e| !e.is_dir()).map(|e| e.size).sum();
-            format!("{sel} of {n} selected, {}", size_text(size))
-        } else {
-            format!("{count} in {}", self.browser.cwd())
-        };
+        let text = self.status_line();
         let fit = ui.fit(&text, SMALL, l.footer.width - 2 * GUTTER);
         ui.text(
             fb,
@@ -1286,9 +1448,56 @@ impl FilesApp {
         self.clip.as_ref().is_some_and(|c| c.op == ClipOp::Cut && c.paths.contains(&e.path))
     }
 
+    /// An app's icon in the `size` box at (`x`, `y`): its own from the icon
+    /// theme (Poly's own apps' artwork), else its glyph as files have
+    /// theirs.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_app_icon(&self, ui: &Ui, fb: &mut dyn Framebuffer, clip: Rect, item: &Item, x: i32, y: i32, size: i32) {
+        let s = ui.scale;
+        let own = item.app.icon.as_deref().and_then(|name| self.icons.borrow_mut().get(name, (size * s) as u32));
+        match own {
+            Some(bitmap) => bitmap.draw(fb, clip, x * s, y * s, size * s),
+            None => {
+                // The glyph at a file glyph's weight in the box.
+                let g = size * 4 / 5;
+                ui.icon(fb, clip, item.app.glyph(), x + (size - g) / 2, y + (size - g) / 2, g, pal().quiet, 255);
+            }
+        }
+    }
+
+    /// A row of the Applications folder: the app's icon and name, its kind.
+    fn draw_app_row(&self, ui: &Ui, fb: &mut dyn Framebuffer, clip: Rect, item: &Item, r: Rect) {
+        let l = &self.layout;
+        let (_, kind_x) = l.column_x();
+        let icon_x = r.x + 12 - (APP_ICON_ROW - 16) / 2;
+        self.draw_app_icon(ui, fb, clip, item, icon_x, r.y + (r.height - APP_ICON_ROW) / 2, APP_ICON_ROW);
+        let name_x = r.x + 38;
+        let right = if l.kind_column { kind_x } else { l.columns.right() };
+        let name = ui.fit(&item.app.name, DENSE, right - name_x - 12);
+        ui.text(fb, clip, name_x, r.y, r.height, right - 8, &name, DENSE, pal().ink_primary);
+        if l.kind_column {
+            ui.text(fb, clip, kind_x, r.y, r.height, l.columns.right(), item.kind.label(), DENSE, pal().quiet);
+        }
+    }
+
+    /// A tile of the Applications folder: the app's icon over its name.
+    fn draw_app_tile(&self, ui: &Ui, fb: &mut dyn Framebuffer, clip: Rect, item: &Item, r: Rect) {
+        self.draw_app_icon(ui, fb, clip, item, r.x + (r.width - APP_ICON_TILE) / 2, r.y + 12, APP_ICON_TILE);
+        let st = Style::new(Face::Sans, 12.0);
+        let lines = ui.text.wrap_style(&item.app.name, st.scaled(ui.scale), ((r.width - 12) * ui.scale) as f32, 2);
+        for (n, line) in lines.iter().enumerate() {
+            let w = ui.measure(line, st);
+            let y = r.y + 58 + n as i32 * 16;
+            ui.text(fb, clip, r.x + (r.width - w) / 2, y, 16, r.right() - 4, line, st, pal().ink_primary);
+        }
+    }
+
     fn draw_row(&self, ui: &Ui, fb: &mut dyn Framebuffer, clip: Rect, i: usize, e: &Entry, r: Rect) {
         let l = &self.layout;
         self.row_fill(ui, fb, clip, i, r);
+        if let Some(item) = self.app_of(e) {
+            return self.draw_app_row(ui, fb, clip, &item, r);
+        }
         let faded = e.hidden || self.cut(e);
         let ink = if faded { pal().quiet } else { pal().ink_primary };
         let icon_ink = if e.is_dir() { pal().ink_primary } else { pal().quiet };
@@ -1329,6 +1538,9 @@ impl FilesApp {
 
     fn draw_tile(&self, ui: &Ui, fb: &mut dyn Framebuffer, clip: Rect, i: usize, e: &Entry, r: Rect) {
         self.row_fill(ui, fb, clip, i, r);
+        if let Some(item) = self.app_of(e) {
+            return self.draw_app_tile(ui, fb, clip, &item, r);
+        }
         let faded = e.hidden || self.cut(e);
         let ink = if e.is_dir() { pal().ink_primary } else { pal().quiet };
         ui.icon(

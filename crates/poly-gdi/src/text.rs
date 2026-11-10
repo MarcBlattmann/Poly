@@ -32,8 +32,6 @@ pub const DT_NOFULLWIDTHCHARBREAK: u32 = 0x8_0000;
 pub const DT_HIDEPREFIX: u32 = 0x10_0000;
 pub const DT_PREFIXONLY: u32 = 0x20_0000;
 
-const ELLIPSES: u32 = DT_PATH_ELLIPSIS | DT_END_ELLIPSIS | DT_WORD_ELLIPSIS;
-
 const AMP: u16 = b'&' as u16;
 const TAB: u16 = 9;
 const LF: u16 = 10;
@@ -257,6 +255,10 @@ pub struct DrawParams {
     /// The tab stop in average character widths (0: the default; only with
     /// `DT_TABSTOP`).
     pub tab_chars: i32,
+    /// `DrawTextW`, or `DrawTextExW` without a `DRAWTEXTPARAMS`: with
+    /// `DT_TABSTOP` bits 8 to 15 of the format are the tab stop, not the
+    /// flags that have those bits (Learn: `DT_TABSTOP`).
+    pub tab_in_format: bool,
     pub left_margin: i32,
     pub right_margin: i32,
 }
@@ -278,12 +280,22 @@ impl Gdi {
     /// `DrawTextW`: the height drawn (see the sheet for `DT_VCENTER` and
     /// `DT_BOTTOM`); `rect` changes only with `DT_CALCRECT`.
     pub fn draw_text(&mut self, dc: u64, text: &[u16], rect: &mut Rect, format: u32) -> i32 {
-        self.draw_text_ex(dc, text, rect, format, DrawParams::default()).height
+        self.draw_text_ex(dc, text, rect, format, DrawParams { tab_in_format: true, ..DrawParams::default() }).height
     }
 
     /// `DrawTextExW`'s work (`DrawTextW.yaml`, `DrawTextExW.yaml`).
     pub fn draw_text_ex(&mut self, dc: u64, text: &[u16], rect: &mut Rect, format: u32, p: DrawParams) -> DrawOut {
         let Some(tm) = self.text_metrics(dc) else { return DrawOut::default() };
+        // The tab stop of `DT_TABSTOP`: `iTabLength`, or the format's second
+        // byte, which then holds no flags (a tab stop of 4 is not
+        // `DT_CALCRECT`).
+        let (format, per_tab) = if format & DT_TABSTOP == 0 {
+            (format, 8)
+        } else if p.tab_in_format {
+            (format & !0xFF00, ((format >> 8) & 0xFF) as i32)
+        } else {
+            (format, p.tab_chars)
+        };
         let sel = self.font_sel(dc);
         let tf = sel.typeface();
         let h = tm.height + if format & DT_EXTERNALLEADING != 0 { tm.external_leading } else { 0 };
@@ -308,12 +320,7 @@ impl Gdi {
         if format & DT_WORDBREAK != 0 && !single && width <= 0 {
             return DrawOut { height: 1, modified: None, drawn: 0 };
         }
-        let per_tab = if format & DT_TABSTOP != 0 {
-            if p.tab_chars > 0 { p.tab_chars } else { ((format >> 8) & 0xFF) as i32 }
-        } else {
-            8
-        };
-        let per_tab = if per_tab == 0 { 8 } else { per_tab };
+        let per_tab = if per_tab <= 0 { 8 } else { per_tab };
         let tabs =
             Tabs { expand: format & (DT_EXPANDTABS | DT_TABSTOP) != 0, stop: (per_tab * tm.ave_char_width).max(1) };
         let all = lines(&tf, &t, format, width, tabs);
@@ -332,42 +339,51 @@ impl Gdi {
         let mut cut = alloc::vec![false; contents.len()];
         let drawn_of = |n: usize| -> usize { all[n - 1].next.min(t.len()) };
         let mut drawn = if processed == 0 { 0 } else { at[drawn_of(processed)] };
-        if format & ELLIPSES != 0 {
-            let end_style = format & DT_PATH_ELLIPSIS == 0;
-            if end_style && format & DT_WORDBREAK != 0 && !single {
-                // The last line laid out takes what the rectangle has no room
-                // for, and is cut to fit; earlier lines are left as they are.
-                let last = processed - 1;
-                let mut l = t[all[last].a..].to_vec();
-                if processed == all.len() {
-                    l = t[all[last].a..all[last].b].to_vec();
+        // What the ellipsis flags cut (Learn): `DT_PATH_ELLIPSIS` the middle
+        // of every line that is too wide; `DT_WORD_ELLIPSIS` the end of every
+        // such line (with `DT_WORDBREAK` those are the words wider than the
+        // rectangle); `DT_END_ELLIPSIS` only the end of the text, which is
+        // its last line laid out: a line before it that is too wide is
+        // clipped without dots.
+        let wraps = format & DT_WORDBREAK != 0 && !single;
+        let path_style = format & DT_PATH_ELLIPSIS != 0;
+        let end_of_text = !path_style && format & DT_END_ELLIPSIS != 0;
+        let last = processed - 1;
+        if path_style || format & DT_WORD_ELLIPSIS != 0 {
+            for (i, c) in contents.iter_mut().enumerate() {
+                if end_of_text && i == last {
+                    continue;
                 }
-                let fitted = fit_end(&tf, &l, width, tabs);
-                if fitted != contents[last] {
-                    contents[last] = fitted;
-                    cut[last] = true;
+                let fitted = if path_style { fit_path(&tf, c, width, tabs) } else { fit_end(&tf, c, width, tabs) };
+                if fitted != *c {
+                    *c = fitted;
+                    cut[i] = true;
+                }
+            }
+        }
+        // With `DT_WORDBREAK` the last line laid out takes what the rectangle
+        // has no room for, and is cut to fit.
+        let swallow = end_of_text && wraps && processed < all.len();
+        if end_of_text {
+            let l = if swallow { t[all[last].a..].to_vec() } else { contents[last].clone() };
+            let fitted = fit_end(&tf, &l, width, tabs);
+            if fitted != contents[last] {
+                contents[last] = fitted;
+                cut[last] = true;
+                if swallow {
                     drawn = text.len();
-                }
-            } else {
-                for (i, c) in contents.iter_mut().enumerate() {
-                    let fitted = if end_style { fit_end(&tf, c, width, tabs) } else { fit_path(&tf, c, width, tabs) };
-                    if fitted != *c {
-                        *c = fitted;
-                        cut[i] = true;
-                    }
                 }
             }
         }
         let modified = if cut.iter().any(|&c| c) {
-            // The text with each cut line replaced; what follows an
-            // ellipsised paragraph's last line is in that line.
-            let swallow = format & DT_PATH_ELLIPSIS == 0 && format & DT_WORDBREAK != 0 && !single;
+            // The text with each cut line replaced; what follows a swallowing
+            // last line is in that line.
             let mut s = Vec::new();
             for (i, l) in all[..processed].iter().enumerate() {
                 let next = at[l.next.min(t.len())];
                 if cut[i] {
                     s.extend(source_of(&contents[i], prefix));
-                    if swallow && i + 1 == processed {
+                    if swallow && i == last {
                         break;
                     }
                     s.extend_from_slice(&text[at[l.b]..next]);

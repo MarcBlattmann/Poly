@@ -192,6 +192,17 @@ pub fn install(vfs: &Vfs, ctx: &FsContext) {
     for (path, target) in LINKS {
         made += created(vfs.symlink(&ctx, &root, target, At::Cwd, path), path);
     }
+    // /dev/loop-control (ADR 0168).
+    crate::loopdev::install(vfs);
+    crate::fuse::install(vfs);
+    let _ = created(
+        vfs.mknod(&ctx, &root, At::Cwd, b"/dev/fuse", FileType::CharDevice, 0o666, crate::fuse::FUSE_DEV),
+        b"/dev/fuse",
+    );
+    let _ = created(
+        vfs.mknod(&ctx, &root, At::Cwd, b"/dev/loop-control", FileType::CharDevice, 0o660, poly_loop::CONTROL),
+        b"/dev/loop-control",
+    );
     // /dev/input/event* for the input devices found so far (ADR 0103).
     crate::input::install_nodes(vfs, &ctx);
     // /dev/fb0 over the display (ADR 0107).

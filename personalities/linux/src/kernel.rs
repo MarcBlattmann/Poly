@@ -519,6 +519,15 @@ pub trait LinuxKernel {
     /// not open for writing), `EPIPE`, `ENOSPC`, `EAGAIN`, `EINVAL`, ...
     fn write(&mut self, fd: i32, buf: &[u8]) -> Result<usize, Errno>;
 
+    /// The most bytes read(2) and write(2) move to or from `fd` in one
+    /// piece: [`CHUNK`](crate::sys::io::CHUNK) for byte streams, more for a
+    /// file whose reads and writes are whole messages that must not be cut
+    /// (`/dev/fuse`: a request, a reply).
+    fn io_piece(&mut self, fd: i32) -> usize {
+        let _ = fd;
+        crate::sys::io::CHUNK
+    }
+
     /// Read up to `buf.len()` bytes from `fd`. Returns the bytes read; 0 at
     /// end of file. Errors: `EBADF`, `EISDIR`, `EAGAIN`, `EINVAL`, ...
     fn read(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno>;
@@ -1168,7 +1177,11 @@ pub trait LinuxKernel {
     /// and working directory moved to the same places in the copy. (Poly
     /// does not lock the copied mounts as mount_namespaces(7) describes
     /// for a less privileged namespace.) `EINVAL` by default.
-    fn copy_mounts(&mut self, owner: &crate::ns::user::UserNsRef) -> Result<alloc::sync::Arc<crate::ns::MntNs>, Errno> {
+    fn copy_mounts(
+        &mut self,
+        owner: &crate::ns::user::UserNsRef,
+        _to_slave: bool,
+    ) -> Result<alloc::sync::Arc<crate::ns::MntNs>, Errno> {
         let _ = owner;
         Err(Errno::EINVAL)
     }
@@ -1186,6 +1199,15 @@ pub trait LinuxKernel {
     /// default.
     fn namespace_of_fd(&mut self, fd: i32) -> Result<(u32, crate::ns::Kind), Errno> {
         let _ = fd;
+        Err(Errno::EINVAL)
+    }
+
+    /// A new descriptor (read-only, close-on-exec) of the file of the
+    /// namespace with inode number `inum` and kind `kind`, in the procfs
+    /// the namespace descriptor `like` was opened from (ioctl_nsfs(2):
+    /// `NS_GET_USERNS`, `NS_GET_PARENT`). `EINVAL` by default.
+    fn open_namespace(&mut self, like: i32, inum: u32, kind: crate::ns::Kind) -> Result<i32, Errno> {
+        let _ = (like, inum, kind);
         Err(Errno::EINVAL)
     }
 
@@ -1317,9 +1339,33 @@ pub trait LinuxKernel {
 
     /// seccomp(2) `SECCOMP_FILTER_FLAG_NEW_LISTENER`: a new notification
     /// descriptor on the lowest free number, open `O_RDWR`, close-on-exec,
-    /// an anonymous inode named `seccomp notify`. `ENOSYS` by default.
-    fn seccomp_listener(&mut self) -> Result<i32, Errno> {
+    /// an anonymous inode named `seccomp notify`, and the listener behind
+    /// it (made with the kernel's
+    /// [`Notifier`](crate::seccomp::notify::Notifier); the kernel closes it
+    /// when the last descriptor goes). `ENOSYS` by default.
+    fn seccomp_listener(&mut self) -> Result<(i32, Arc<crate::seccomp::notify::Listener>), Errno> {
         Err(Errno::ENOSYS)
+    }
+
+    /// The listener behind `fd`, if it is a seccomp notification
+    /// descriptor ([`seccomp_listener`](Self::seccomp_listener)).
+    fn seccomp_listener_of(&mut self, fd: i32) -> Option<Arc<crate::seccomp::notify::Listener>> {
+        let _ = fd;
+        None
+    }
+
+    /// Sleep the calling thread until `ready` says so; `listener` tells its
+    /// notifier whenever that may have changed. Returns `Woken` once it
+    /// did, or `Signal` when the thread's signal notification is set
+    /// first. The default cannot sleep: it reports a signal unless `ready`
+    /// holds.
+    fn seccomp_wait(
+        &mut self,
+        listener: &Arc<crate::seccomp::notify::Listener>,
+        ready: &mut dyn FnMut() -> bool,
+    ) -> Wakeup {
+        let _ = listener;
+        if ready() { Wakeup::Woken } else { Wakeup::Signal }
     }
 
     /// mseal(2): seal the page-aligned, non-empty range `[addr, addr +

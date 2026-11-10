@@ -218,7 +218,7 @@ fn pivot_root_in_a_copied_namespace() {
     let mut env = Env::new();
     env.mkdir("/new");
     env.write("/top", b"t");
-    let name = env.vfs.copy_namespace(&mut env.ctx).unwrap();
+    let name = env.vfs.copy_namespace(&mut env.ctx, false).unwrap();
     env.new_tmpfs("/new");
     env.mkdir("/new/old");
     env.write("/new/inside", b"i");
@@ -251,7 +251,7 @@ fn pivot_root_in_a_copied_namespace() {
 fn pivot_root_dot_dot_stacks_the_old_root() {
     let mut env = Env::new();
     env.mkdir("/new");
-    env.vfs.copy_namespace(&mut env.ctx).unwrap();
+    env.vfs.copy_namespace(&mut env.ctx, false).unwrap();
     env.new_tmpfs("/new");
     env.cd("/new").unwrap();
     let new = env.found("/new");
@@ -271,9 +271,9 @@ fn copies_keep_attributes() {
     env.new_tmpfs("/a");
     let m = env.found("/a").mount().clone();
     m.set_attrs(0x80);
-    m.set_propagation(1 << 20);
+    env.vfs.set_propagation(core::slice::from_ref(&m), 1 << 20);
     assert_eq!(env.found("/a").statfs().unwrap().flags & ST_NODIRATIME_BIT, ST_NODIRATIME_BIT);
-    env.vfs.copy_namespace(&mut env.ctx).unwrap();
+    env.vfs.copy_namespace(&mut env.ctx, false).unwrap();
     let copy = env.found("/a").mount().clone();
     assert_ne!(copy.id(), m.id());
     assert_eq!((copy.attrs(), copy.propagation()), (0x80, 1 << 20));
@@ -343,4 +343,51 @@ fn nosymfollow_and_the_access_time_mode_in_statfs() {
     assert!(env.vfs.lookup(&env.ctx, &env.root, At::Cwd, b"/a/l", false).is_ok(), "the link itself");
     m.set_attrs(0);
     assert_eq!(env.read("/a/l").unwrap(), b"x");
+}
+
+fn is_mount(env: &Env, path: &str) -> bool {
+    let n = env.found(path);
+    n.loc().is_mount_root()
+}
+
+#[test]
+fn peers_and_slaves_receive_mounts_and_unmounts() {
+    use crate::propagation::{MS_PRIVATE, MS_SHARED, MS_SLAVE, MS_UNBINDABLE};
+    let env = Env::new();
+    env.mkdir("/a");
+    env.mkdir("/b");
+    env.new_tmpfs("/a");
+    let a = env.found("/a").mount().clone();
+    env.vfs.set_propagation(core::slice::from_ref(&a), MS_SHARED);
+    env.vfs.bind(&env.ctx, &env.root, At::Cwd, b"/a", At::Cwd, b"/b", MountFlags::default()).unwrap();
+    let b = env.found("/b").mount().clone();
+    assert_eq!(a.peer_group(), b.peer_group());
+    assert_ne!(a.peer_group(), 0);
+    // A mount below one appears below the other.
+    env.mkdir("/a/s");
+    env.new_tmpfs("/a/s");
+    assert!(is_mount(&env, "/b/s"));
+    // A mount below a shared mount is shared as well.
+    assert_ne!(env.found("/a/s").mount().peer_group(), 0);
+    // The umount follows.
+    env.vfs.umount(&env.ctx, &env.root, At::Cwd, b"/a/s", false).unwrap();
+    assert!(!is_mount(&env, "/b/s"));
+    // A slave receives but does not send.
+    env.vfs.set_propagation(core::slice::from_ref(&b), MS_SLAVE);
+    assert_eq!((b.peer_group(), b.master_group()), (0, a.peer_group()));
+    env.new_tmpfs("/a/s");
+    assert!(is_mount(&env, "/b/s"));
+    env.mkdir("/b/t");
+    env.new_tmpfs("/b/t");
+    assert!(!is_mount(&env, "/a/t"));
+    // Private: nothing new arrives; unbindable: no bind.
+    env.vfs.set_propagation(core::slice::from_ref(&b), MS_PRIVATE);
+    env.mkdir("/a/u");
+    env.new_tmpfs("/a/u");
+    assert!(!is_mount(&env, "/b/u"));
+    env.vfs.set_propagation(core::slice::from_ref(&a), MS_UNBINDABLE);
+    assert_eq!(
+        env.vfs.bind(&env.ctx, &env.root, At::Cwd, b"/a", At::Cwd, b"/b", MountFlags::default()),
+        Err(Errno::EINVAL)
+    );
 }

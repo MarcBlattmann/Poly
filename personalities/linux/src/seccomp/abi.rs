@@ -69,3 +69,15 @@ pub const SECCOMP_NOTIF_RESP_SIZE: u16 = 24;
 /// filter program incurs an overhead penalty of 4 instructions."
 pub const MAX_INSNS_PER_PATH: usize = 32768;
 pub const PATH_PENALTY: usize = 4;
+
+/// The requests of a notification descriptor (seccomp_unotify(2), UAPI
+/// `linux/seccomp.h`: `SECCOMP_IOWR(0, struct seccomp_notif)`,
+/// `SECCOMP_IOWR(1, struct seccomp_notif_resp)`, `SECCOMP_IOW(2, __u64)`
+/// with the magic `'!'`).
+pub const SECCOMP_IOCTL_NOTIF_RECV: u32 = 0xc050_2100;
+pub const SECCOMP_IOCTL_NOTIF_SEND: u32 = 0xc018_2101;
+pub const SECCOMP_IOCTL_NOTIF_ID_VALID: u32 = 0x4008_2102;
+/// The magic of the requests above (bits 8 to 15).
+pub const SECCOMP_IOC_MAGIC: u32 = 0x21;
+/// `seccomp_notif_resp.flags`: run the call.
+pub const SECCOMP_USER_NOTIF_FLAG_CONTINUE: u32 = 1;

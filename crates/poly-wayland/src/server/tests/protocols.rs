@@ -343,6 +343,49 @@ fn viewports_and_buffer_transforms_set_the_surface_size() {
     assert_eq!(p.code(), Some((vpr, wp_viewporter::Error::VIEWPORT_EXISTS.0)));
 }
 
+/// `wl_surface.damage` is in surface coordinates. A client drawing for a
+/// 2x output the way `wp_fractional_scale_v1` asks (a buffer of scale 1,
+/// twice the size its viewport shows it at) that damages all of its surface
+/// has all of its buffer copied, not the top-left quarter: Chromium's new
+/// page after a navigation at scale 2 (2026-11-10).
+#[test]
+fn surface_damage_goes_through_the_viewport() {
+    let (mut srv, shared) = server_with(OutputConfig { width: 1280, height: 960, scale: 2, ..OutputConfig::default() });
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let vpr = p.bind(&mut srv, registry, &wp_viewporter::INTERFACE, 1);
+    let w = mapped(&mut p, &mut srv, &g, "v", 8, 4, 0x0011_1111);
+    let vp = p.new_id(&wp_viewport::INTERFACE);
+    p.send(&mut srv, vpr, wp_viewporter::Request::GetViewport { id: vp, surface: w.surface });
+    p.send(&mut srv, vp, wp_viewport::Request::SetDestination { width: 4, height: 2 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Commit);
+    let fill = |pixel: u32| {
+        for px in w.mem.borrow_mut().chunks_exact_mut(4) {
+            px.copy_from_slice(&pixel.to_le_bytes());
+        }
+    };
+    // A new picture, all 4x2 logical pixels of the surface damaged.
+    fill(0x00ee_eeee);
+    p.send(&mut srv, w.surface, wl_surface::Request::Attach { buffer: Some(w.buffer), x: 0, y: 0 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Damage { x: 0, y: 0, width: 4, height: 2 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Commit);
+    let content = srv.scene().windows()[0].content();
+    assert_eq!(content.pixels.iter().filter(|p| **p == 0xffee_eeee).count(), 8 * 4, "all of the buffer");
+    // One logical pixel is two by two buffer pixels.
+    fill(0x00aa_aaaa);
+    p.send(&mut srv, w.surface, wl_surface::Request::Attach { buffer: Some(w.buffer), x: 0, y: 0 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Damage { x: 3, y: 1, width: 1, height: 1 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Commit);
+    let content = srv.scene().windows()[0].content();
+    let changed: Vec<usize> = (0..32).filter(|i| content.pixels[*i] == 0xffaa_aaaa).collect();
+    assert_eq!(changed, [2 * 8 + 6, 2 * 8 + 7, 3 * 8 + 6, 3 * 8 + 7]);
+    // And so on the screen: the last physical pixel of the window.
+    let (x, y) = srv.scene().windows()[0].position();
+    let fb = render(&mut srv);
+    let (px, py) = ((x * 2) as u32, (y * 2) as u32);
+    assert_eq!((fb.pixel(px, py), fb.pixel(px + 7, py + 3)), (Some(0xeeeeee), Some(0xaaaaaa)));
+}
+
 // ---------------------------------------------------------------------
 // The clipboard and drag and drop.
 

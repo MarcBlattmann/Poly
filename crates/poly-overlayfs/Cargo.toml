@@ -1,0 +1,14 @@
+[package]
+name = "poly-overlayfs"
+description = "overlayfs as a poly-vfs FileSystem over other file systems' directories: merged lookups and listings, whiteouts and opaque directories, copy-up, renames"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-vfs.workspace = true
+
+[lints]
+workspace = true

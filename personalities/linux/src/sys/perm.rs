@@ -17,28 +17,33 @@ use crate::sys::path::{fs, nonempty_path, path_arg};
 pub const UTIME_NOW: i64 = (1 << 30) - 1;
 pub const UTIME_OMIT: i64 = (1 << 30) - 2;
 
-fn ids(a: &Args, i: usize) -> (Option<u32>, Option<u32>) {
-    (optional_id(a.uint(i)), optional_id(a.uint(i + 1)))
+/// The ids chown(2) is asked for, as kernel ids: an id the caller's user
+/// namespace maps to none is `EINVAL`.
+fn ids(k: &mut dyn LinuxKernel, a: &Args, i: usize) -> Result<(Option<u32>, Option<u32>), Errno> {
+    let c = crate::cred::current(k);
+    let uid = optional_id(a.uint(i)).map(|u| c.kuid(u)).transpose()?;
+    let gid = optional_id(a.uint(i + 1)).map(|g| c.kgid(g)).transpose()?;
+    Ok((uid, gid))
 }
 
 /// chown(path, owner, group): `-1` leaves an id alone; follows a final
 /// symbolic link.
 pub fn chown(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(0))?;
-    let (uid, gid) = ids(a, 1);
+    let (uid, gid) = ids(k, a, 1)?;
     fs(k)?.fchownat(AT_FDCWD, &path, uid, gid, true).map(|()| 0)
 }
 
 /// lchown(path, owner, group): the link itself.
 pub fn lchown(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(0))?;
-    let (uid, gid) = ids(a, 1);
+    let (uid, gid) = ids(k, a, 1)?;
     fs(k)?.fchownat(AT_FDCWD, &path, uid, gid, false).map(|()| 0)
 }
 
 /// fchown(fd, owner, group).
 pub fn fchown(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let (uid, gid) = ids(a, 1);
+    let (uid, gid) = ids(k, a, 1)?;
     fs(k)?.fchown(a.fd(0), uid, gid).map(|()| 0)
 }
 
@@ -50,7 +55,7 @@ pub fn fchownat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::EINVAL);
     }
     let path = if flags & AT_EMPTY_PATH != 0 { path_arg(k, a.ptr(1))? } else { nonempty_path(k, a.ptr(1))? };
-    let (uid, gid) = ids(a, 2);
+    let (uid, gid) = ids(k, a, 2)?;
     fs(k)?.fchownat(a.fd(0), &path, uid, gid, flags & AT_SYMLINK_NOFOLLOW == 0).map(|()| 0)
 }
 

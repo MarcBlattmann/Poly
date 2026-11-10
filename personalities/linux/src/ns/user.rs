@@ -451,7 +451,8 @@ pub fn write_setgroups(target: &UserNsRef, data: &[u8], offset: u64, writer: &Cr
         return Err(Errno::EPERM);
     }
     let mut m = t.maps.lock();
-    if m.gid.is_some() {
+    // Once denied, setgroups stays denied.
+    if m.gid.is_some() || (allow && !m.setgroups) {
         return Err(Errno::EPERM);
     }
     m.setgroups = allow;

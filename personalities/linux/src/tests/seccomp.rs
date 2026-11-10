@@ -412,3 +412,151 @@ fn filters_are_inherited_by_fork_and_threads_and_kept_by_exec() {
     k.me().exec(101);
     assert_eq!(k.me().thread(101).seccomp, mine);
 }
+
+// ---- user notifications (seccomp_unotify(2), ADR 0168) ------------------
+
+use super::fake::NoNotifier;
+use crate::seccomp::notify::{Listener, Notification, Reply};
+
+fn listener() -> alloc::sync::Arc<Listener> {
+    Listener::new(alloc::sync::Arc::new(NoNotifier))
+}
+
+fn data(nr: i32) -> SeccompData {
+    SeccompData { nr, arch: AUDIT_ARCH_X86_64, instruction_pointer: 0x1234, args: [1, 2, 3, 4, 5, 6] }
+}
+
+#[test]
+fn a_notification_is_pending_then_sent_then_answered() {
+    let l = listener();
+    assert_eq!(l.receive(), None);
+    let a = l.submit(40, data(24)).unwrap();
+    let b = l.submit(41, data(39)).unwrap();
+    assert!(a != 0 && a != b);
+    // Not valid before the supervisor has read it, valid while it waits.
+    assert!(!l.valid(a));
+    assert_eq!(l.send(a, Reply::Value(1)), Err(Errno::ENOENT));
+    assert_eq!(l.answer(a), Ok(None));
+    assert_eq!(l.receive(), Some(Notification { id: a, tid: 40, data: data(24) }));
+    assert!(l.valid(a) && !l.valid(b));
+    assert_eq!(l.receive().map(|n| (n.id, n.tid)), Some((b, 41)));
+    assert_eq!(l.receive(), None);
+    // Answered: no longer valid, a second answer is ENOENT, the thread
+    // takes the answer once.
+    assert_eq!(l.send(a, Reply::Value(1234)), Ok(()));
+    assert!(!l.valid(a));
+    assert_eq!(l.send(a, Reply::Value(1)), Err(Errno::ENOENT));
+    assert_eq!(l.answer(a), Ok(Some(Reply::Value(1234))));
+    assert_eq!(l.answer(a), Err(Errno::ENOSYS));
+    // A thread that gave up: its id is unknown.
+    l.abandon(b);
+    assert!(!l.valid(b));
+    assert_eq!(l.send(b, Reply::Continue), Err(Errno::ENOENT));
+    assert_eq!(l.send(77, Reply::Continue), Err(Errno::ENOENT));
+    // A notification that could not be delivered is read again.
+    let c = l.submit(42, data(1)).unwrap();
+    assert_eq!(l.receive().map(|n| n.id), Some(c));
+    l.unreceive(c);
+    assert!(!l.valid(c));
+    assert_eq!(l.receive().map(|n| n.id), Some(c));
+}
+
+#[test]
+fn a_closed_listener_answers_nobody() {
+    let l = listener();
+    let a = l.submit(40, data(24)).unwrap();
+    l.close();
+    assert_eq!(l.answer(a), Err(Errno::ENOSYS));
+    assert_eq!(l.submit(40, data(24)), None);
+}
+
+#[test]
+fn the_answer_of_a_response_is_a_value_an_error_or_continue() {
+    assert_eq!(Reply::of(1234, 0, 0), Ok(Reply::Value(1234)));
+    assert_eq!(Reply::of(5, -1, 0), Ok(Reply::Error(-1)));
+    assert_eq!(Reply::of(5, -1, SECCOMP_USER_NOTIF_FLAG_CONTINUE), Ok(Reply::Continue));
+    assert_eq!(Reply::of(0, 1, 0), Err(Errno::EINVAL));
+    assert_eq!(Reply::of(0, 0, 2), Err(Errno::EINVAL));
+}
+
+/// A filter that sends getpid to its listener, installed; the listener.
+fn notified_kernel() -> (FakeKernel, alloc::sync::Arc<Listener>) {
+    let mut k = FakeKernel::new();
+    no_new_privs(&mut k);
+    let filter = for_call(nr::GETPID, SECCOMP_RET_USER_NOTIF);
+    assert_eq!(install(&mut k, &filter, SECCOMP_FILTER_FLAG_NEW_LISTENER), Ok(3));
+    let l = alloc::sync::Arc::clone(k.seccomp_listener.as_ref().unwrap());
+    (k, l)
+}
+
+#[test]
+fn a_notified_call_returns_what_the_supervisor_answers() {
+    let (mut k, l) = notified_kernel();
+    let real = k.pid as u64;
+    for (reply, result) in [
+        (Reply::Value(1234), Ok(1234)),
+        (Reply::Error(-1), Err(Errno::EPERM)),
+        // Continue: the call runs.
+        (Reply::Continue, Ok(real)),
+    ] {
+        let supervisor = alloc::sync::Arc::clone(&l);
+        k.on_wait = Some(alloc::boxed::Box::new(move || {
+            let n = supervisor.receive().expect("the call waits");
+            assert_eq!((n.data.nr as u64, n.data.arch), (nr::GETPID, AUDIT_ARCH_X86_64));
+            assert_eq!(n.data.instruction_pointer, SYSCALL_RIP);
+            supervisor.send(n.id, reply).unwrap();
+        }));
+        assert_eq!(sys(&mut k, nr::GETPID, &[]), result);
+    }
+    // Calls the filter allows are not notified.
+    k.on_wait = None;
+    assert!(sys(&mut k, nr::GETTID, &[]).is_ok());
+    // Nobody answers and a signal comes: the notification is withdrawn and
+    // the call starts again.
+    assert_eq!(sys(&mut k, nr::GETPID, &[]), Err(Errno::RESTART_ALWAYS));
+    assert_eq!(l.receive(), None);
+    // The descriptor is gone: ENOSYS.
+    l.close();
+    assert_eq!(sys(&mut k, nr::GETPID, &[]), Err(Errno::ENOSYS));
+}
+
+#[test]
+fn the_notification_descriptor_is_worked_by_ioctl() {
+    let (mut k, l) = notified_kernel();
+    let buf = scratch(0x2000);
+    let recv = |k: &mut FakeKernel| sys(k, nr::IOCTL, &[3, u64::from(SECCOMP_IOCTL_NOTIF_RECV), buf]);
+    // The buffer must be zero.
+    k.poke(buf, &[0xff; SECCOMP_NOTIF_SIZE as usize]);
+    assert_eq!(recv(&mut k), Err(Errno::EINVAL));
+    k.poke(buf, &[0; SECCOMP_NOTIF_SIZE as usize]);
+    // Nothing to read and a signal: the wait is interrupted (restarted
+    // only for a handler with SA_RESTART; the dispatcher makes it EINTR).
+    assert_eq!(recv(&mut k), Err(Errno::EINTR));
+    let me = k.tid;
+    let id = l.submit(me, data(24)).unwrap();
+    assert_eq!(recv(&mut k), Ok(0));
+    assert_eq!(k.peek_u64(buf), id);
+    assert_eq!(k.peek_u32(buf + 8) as i32, me);
+    assert_eq!(k.peek_u32(buf + 12), 0);
+    assert_eq!((k.peek_u32(buf + 16), k.peek_u32(buf + 20)), (24, AUDIT_ARCH_X86_64));
+    assert_eq!((k.peek_u64(buf + 24), k.peek_u64(buf + 32), k.peek_u64(buf + 72)), (0x1234, 1, 6));
+    let valid = |k: &mut FakeKernel| sys(k, nr::IOCTL, &[3, u64::from(SECCOMP_IOCTL_NOTIF_ID_VALID), buf]);
+    assert_eq!(valid(&mut k), Ok(0));
+    // The response: id, val, error, flags.
+    let resp = scratch(0x3000);
+    let mut r = [0u8; SECCOMP_NOTIF_RESP_SIZE as usize];
+    r[0..8].copy_from_slice(&id.to_le_bytes());
+    r[16..20].copy_from_slice(&(-13i32).to_le_bytes());
+    k.poke(resp, &r);
+    let send = |k: &mut FakeKernel| sys(k, nr::IOCTL, &[3, u64::from(SECCOMP_IOCTL_NOTIF_SEND), resp]);
+    assert_eq!(send(&mut k), Ok(0));
+    assert_eq!(valid(&mut k), Err(Errno::ENOENT));
+    assert_eq!(send(&mut k), Err(Errno::ENOENT));
+    assert_eq!(l.answer(id), Ok(Some(Reply::Error(-13))));
+    // Unknown flags in the response.
+    r[20..24].copy_from_slice(&8u32.to_le_bytes());
+    k.poke(resp, &r);
+    assert_eq!(send(&mut k), Err(Errno::EINVAL));
+    // Another request with the same magic is not one of the descriptor's.
+    assert_eq!(sys(&mut k, nr::IOCTL, &[3, 0x4018_2103, buf]), Err(Errno::EINVAL));
+}
