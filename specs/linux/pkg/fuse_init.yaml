@@ -43,7 +43,17 @@ summary: >
   to at most N bytes; without limits READ requests were at most 131072 bytes
   and WRITE requests at most 65536 (max_write). Until the INIT reply is
   written, operations on the mount wait (a stat blocks and sends no
-  LOOKUP) and then proceed; mount(2) itself does not wait. Replies that
+  LOOKUP) and then proceed; mount(2) itself does not wait. The mount root
+  waits like any file below it: stat of the mount point, fstat of an
+  O_PATH descriptor of it, open(O_DIRECTORY), statfs, access, chdir,
+  chmod, utimensat and getxattr of the root, and umount2 of a path below
+  the root, all block until the reply (the root's attributes are not
+  taken from rootmode=: they come from a GETATTR sent after the reply;
+  stat then shows what the server answered, here mode 040755, ino 1,
+  nlink 2). What does not wait is what needs nothing from the file
+  system: open(O_PATH) of the mount point returns a descriptor at once,
+  readlink of it is EINVAL at once, and umount2 of the mount point itself
+  works. In that time the server reads INIT and nothing else. Replies that
   make the connection unusable: a major other than 7 (8, 6), or an error
   (-ENOSYS, -EPERM, -EIO) instead of a body. Each is accepted by write(2)
   (the write succeeds) but afterwards every operation on the mount,
@@ -72,7 +82,7 @@ threading: >
   the server. Client operations that arrive before the reply wait.
 ordering:
   - "INIT is the first request of a connection, sent without any user operation"
-  - "operations on the mount are queued until the INIT reply; none sends a request before it"
+  - "operations on the mount are queued until the INIT reply, the ones on the mount root included; none sends a request before it"
 timing:
   typical: "INIT arrives within milliseconds after mount(2)"
   guarantees: "none; a test waits up to 3 s"

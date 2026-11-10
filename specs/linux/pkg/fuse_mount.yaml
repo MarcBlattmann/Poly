@@ -20,7 +20,8 @@ summary: >
   FUSE_INIT request (see fuse_init). Mount options (names exact): fd=
   (required, decimal, an open /dev/fuse file not yet bound to a mount),
   rootmode= (required, octal; its file type bits give the root's type,
-  040000 for a directory; permission bits are accepted, 40755 works),
+  040000 for a directory; permission bits are accepted, 40755 works; the
+  root's type must fit the mount point, see errors.rootmode_type),
   user_id= and group_id= (required, decimal: the owner of the mount; any
   value for a privileged mounter, only ids mapped in the mounter's user
   namespace otherwise), max_read=N (decimal), default_permissions,
@@ -71,9 +72,9 @@ returns:
   umount: "0 for an idle mount (also for a connection that already ended); the server's read then returns ENODEV"
 errors:
   no_fd: "EINVAL (22): no fd= option, fd= not a number, the fd not open, or not an open /dev/fuse file (/dev/null, a /proc file)"
-  missing_options: "EINVAL (22): no rootmode=, user_id= or group_id=; rootmode not octal; rootmode whose type bits are none or a symbolic link (777, 120000)"
-  rootmode_type: "ENOTDIR (20): rootmode with a regular-file (100000) or character-device (20000) type over a directory mount point (valid root types: regular, directory, character, block, fifo, socket)"
-  unknown_option: "EINVAL (22): an unknown option (bogus=1), max_read= not a number, blksize= on type fuse (it belongs to fuseblk)"
+  missing_options: "EINVAL (22): no rootmode=, user_id= or group_id=; rootmode empty or not octal (8, 4x); rootmode whose type bits are no file type (777 and 0: none; 170000; 30000) or a symbolic link (120000, 120777); user_id= or group_id= empty, negative or not a decimal number (root, -2)"
+  rootmode_type: "ENOTDIR (20): the root's type does not fit the mount point. The valid root types are regular (100000), directory (40000), character device (20000), block device (60000), fifo (10000) and socket (140000), with any permission bits. Over a directory mount point only a directory root mounts: each of the five others is ENOTDIR (100000, 100644, 20000, 60000, 10000, 140000). Over a regular-file mount point a directory root (40000) is ENOTDIR and a root that is not a directory mounts (100000 and 10000 give 0)"
+  unknown_option: "EINVAL (22): an unknown option (bogus=1), max_read= not a number, blksize= with any value (512, 1024, text) on type fuse and on fuse.NAME (it is an option of fuseblk only)"
   user_ids: "EINVAL (22): user_id= or group_id= not mapped in the mounter's user namespace (unprivileged case); a privileged mounter may give any ids"
   unknown_type: "ENODEV (19): a file system type that is not fuse or fuse.NAME (fuse2)"
   type_empty_subtype: "EINVAL (22): type 'fuse.' (empty subtype)"
@@ -100,7 +101,7 @@ timing:
   typical: "microseconds to a few hundred microseconds per request round trip"
   guarantees: "none"
 tests:
-  visible: 4  # count in <symbol>.tests/
+  visible: 5  # count in <symbol>.tests/
   held_out: 2  # count kept by the diff runner
 # Notes: opcodes, struct layouts and option names from the public
 # linux/fuse.h and the kernel's public fuse documentation;

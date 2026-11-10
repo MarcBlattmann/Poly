@@ -6,6 +6,10 @@
 //! little-endian 32-bit sub-authorities. A name of 1 to 64 UTF-16 units is
 //! accepted, anything else is `E_INVALIDARG`. The SID is allocated with
 //! `LocalAlloc` (`FreeSid` frees it).
+//!
+//! `RegisterGPNotification` and `UnregisterGPNotification` (Learn, `userenv.h`) are here
+//! because Chrome's policy loader delay-loads them, and a delay-load that finds no export is
+//! fatal for Chrome (ADR 0155). Poly has no Group Policy, so a registered event is never set.
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
@@ -16,6 +20,30 @@ use poly_win32_cryptrt as _;
 #[link(name = "kernelbase", kind = "raw-dylib")]
 unsafe extern "system" {
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;
+    fn SetLastError(error: u32);
+}
+
+/// `ERROR_INVALID_PARAMETER` (`winerror.h`).
+const ERROR_INVALID_PARAMETER: u32 = 87;
+
+/// `RegisterGPNotification(hEvent, bMachine)`: "enables an application to receive notification
+/// when there is a change in policy. When a policy change occurs, the specified event object is
+/// set to the signaled state" (Learn). Policy never changes on Poly, so there is nothing to
+/// remember: the registration succeeds and the event stays as it is. A null event is refused.
+#[unsafe(no_mangle)]
+pub extern "system" fn RegisterGPNotification(event: isize, _machine: i32) -> i32 {
+    if event == 0 {
+        // SAFETY: a plain call.
+        unsafe { SetLastError(ERROR_INVALID_PARAMETER) };
+        return 0;
+    }
+    1
+}
+
+/// `UnregisterGPNotification(hEvent)`: the event gets no more notifications (it never got one).
+#[unsafe(no_mangle)]
+pub extern "system" fn UnregisterGPNotification(event: isize) -> i32 {
+    RegisterGPNotification(event, 0)
 }
 
 const E_INVALIDARG: i32 = 0x8007_0057u32 as i32;

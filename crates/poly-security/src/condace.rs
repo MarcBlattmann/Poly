@@ -8,8 +8,9 @@
 //!
 //! An expression is stored in postfix order: the operands' tokens, then the
 //! operator's byte; the whole is padded with zero bytes to a multiple of
-//! four. The text written back is one canonical spelling: one space around
-//! binary operators, parentheses only where the precedence needs them.
+//! four. The text written back is the canonical spelling the spec sheets
+//! observed: keywords and prefixes in one fixed case, one space around
+//! operators, every operand of `&&` and `||` in parentheses.
 
 use crate::err::{SecErr, SecResult};
 use crate::sddl;
@@ -181,7 +182,13 @@ impl Parser<'_> {
         }
         if let Some(op) = self.keyword(&[("Exists", OP_EXISTS), ("Not_Exists", OP_NOT_EXISTS)]) {
             self.ws();
+            // Learn, "SDDL for Conditional ACEs": for resource attributes
+            // (and names without a prefix); `Exists @User.x` is refused.
+            let at = out.len();
             self.attribute(out)?;
+            if !matches!(out[at], TOKEN_RESOURCE | TOKEN_LOCAL) {
+                return Err(());
+            }
             out.push(op);
             return Ok(());
         }
@@ -329,6 +336,23 @@ impl Parser<'_> {
         Ok(b)
     }
 
+    /// The octets of a resource attribute value: hexadecimal digits (a `#`
+    /// before them is accepted), an odd number read with a leading 0.
+    fn hex_octets(&mut self) -> R<Vec<u8>> {
+        if self.peek() == Some('#') {
+            self.i += 1;
+        }
+        let mut digits: Vec<u8> = Vec::new();
+        while let Some(d) = self.peek().and_then(|c| c.to_digit(16)) {
+            digits.push(d as u8);
+            self.i += 1;
+        }
+        if digits.len() % 2 == 1 {
+            digits.insert(0, 0);
+        }
+        Ok(digits.chunks(2).map(|p| p[0] << 4 | p[1]).collect())
+    }
+
     /// An integer: the value in two's complement, the sign byte and the
     /// base byte. `0x` is hexadecimal, a leading `0` octal.
     fn integer(&mut self) -> R<(u64, u8, u8)> {
@@ -448,9 +472,9 @@ fn operand(b: &[u8], at: usize) -> Option<(String, usize)> {
                 TOKEN_LOCAL => name,
                 _ => {
                     let prefix = match token {
-                        TOKEN_USER => "@User.",
-                        TOKEN_DEVICE => "@Device.",
-                        _ => "@Resource.",
+                        TOKEN_USER => "@USER.",
+                        TOKEN_DEVICE => "@DEVICE.",
+                        _ => "@RESOURCE.",
                     };
                     let mut t = String::from(prefix);
                     for c in name.chars() {
@@ -469,13 +493,27 @@ fn operand(b: &[u8], at: usize) -> Option<(String, usize)> {
     }
 }
 
+/// The operators as the text form spells them: `Member_of_any` and its
+/// relatives with a small `a`.
+const CANONICAL_UNARY: &[(&str, u8)] = &[
+    ("Member_of", 0x89),
+    ("Device_Member_of", 0x8a),
+    ("Member_of_any", 0x8b),
+    ("Device_Member_of_any", 0x8c),
+    ("Not_Member_of", 0x90),
+    ("Not_Device_Member_of", 0x91),
+    ("Not_Member_of_any", 0x92),
+    ("Not_Device_Member_of_any", 0x93),
+    ("Exists", OP_EXISTS),
+    ("Not_Exists", OP_NOT_EXISTS),
+];
+
 /// The expression text of a conditional ACE's application data (without
-/// the outer parentheses); `None` if the data is not an expression.
+/// the outer parentheses); `None` if the data is not an expression. Every
+/// operand of `&&` and `||` is put in parentheses, `!` is `!(x)`.
 pub fn decompile(data: &[u8]) -> Option<String> {
-    // Precedence of what is on the stack: 3 a term, 2 `&&`, 1 `||`.
-    let mut stack: Vec<(String, u8)> = Vec::new();
+    let mut stack: Vec<String> = Vec::new();
     let mut at = data.strip_prefix(&SIGNATURE).map(|_| SIGNATURE.len())?;
-    let wrap = |(t, p): (String, u8), need: u8| if p < need { alloc::format!("({t})") } else { t };
     while at < data.len() {
         let token = data[at];
         let name = |table: &[(&'static str, u8)]| table.iter().find(|(_, c)| *c == token).map(|&(n, _)| n);
@@ -485,33 +523,32 @@ pub fn decompile(data: &[u8]) -> Option<String> {
                 return None;
             }
             break;
-        } else if let Some(op) = name(MEMBER_OPS).or(name(&[("Exists", OP_EXISTS), ("Not_Exists", OP_NOT_EXISTS)])) {
-            let (x, _) = stack.pop()?;
-            stack.push((alloc::format!("{op} {x}"), 3));
+        } else if let Some(op) = name(CANONICAL_UNARY) {
+            let x = stack.pop()?;
+            stack.push(alloc::format!("{op} {x}"));
             at += 1;
         } else if let Some(op) = name(SYMBOL_OPS).or(name(WORD_OPS)) {
-            let (r, _) = stack.pop()?;
-            let (l, _) = stack.pop()?;
-            stack.push((alloc::format!("{l} {op} {r}"), 3));
-            at += 1;
-        } else if token == OP_NOT {
-            let (x, _) = stack.pop()?;
-            stack.push((alloc::format!("!({x})"), 3));
-            at += 1;
-        } else if token == OP_AND || token == OP_OR {
-            let (prec, op) = if token == OP_AND { (2, "&&") } else { (1, "||") };
             let r = stack.pop()?;
             let l = stack.pop()?;
-            // The right operand of a chain binds one tighter.
-            stack.push((alloc::format!("{} {op} {}", wrap(l, prec), wrap(r, prec + 1)), prec));
+            stack.push(alloc::format!("{l} {op} {r}"));
+            at += 1;
+        } else if token == OP_NOT {
+            let x = stack.pop()?;
+            stack.push(alloc::format!("!({x})"));
+            at += 1;
+        } else if token == OP_AND || token == OP_OR {
+            let op = if token == OP_AND { "&&" } else { "||" };
+            let r = stack.pop()?;
+            let l = stack.pop()?;
+            stack.push(alloc::format!("({l}) {op} ({r})"));
             at += 1;
         } else {
             let (t, next) = operand(data, at)?;
-            stack.push((t, 3));
+            stack.push(t);
             at = next;
         }
     }
-    let (t, _) = stack.pop()?;
+    let t = stack.pop()?;
     stack.is_empty().then_some(t)
 }
 
@@ -520,34 +557,47 @@ pub fn decompile(data: &[u8]) -> Option<String> {
 /// `CLAIM_SECURITY_ATTRIBUTE_TYPE_*` ([MS-DTYP] 2.4.10.1) and their SDDL
 /// type strings.
 const CLAIM_TYPES: &[(&str, u8)] = &[("TI", 1), ("TU", 2), ("TS", 3), ("TD", 5), ("TB", 6), ("TX", 0x10)];
+const CLAIM_INT64: u8 = 1;
+const CLAIM_UINT64: u8 = 2;
+const CLAIM_STRING: u8 = 3;
+const CLAIM_SID: u8 = 5;
+const CLAIM_BOOLEAN: u8 = 6;
 
 /// The fixed part of `CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1`: the name's
 /// offset, the value type, a reserved word, the flags and the value count.
 const CLAIM_FIXED: usize = 16;
 
+/// The flag bits an attribute may carry ([MS-DTYP] 2.5.1.1, `attr-flags`):
+/// the system flags in the low six bits, custom ones in the high half.
+const CLAIM_FLAGS: u64 = 0xFFFF_003F;
+
 /// A resource attribute ACE's data for the SDDL attribute text
-/// `"name",<type>,<flags>[,<value>...]`: a
-/// `CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1` with the value offsets after the
-/// fixed part, then the name and the values, each at a multiple of four.
+/// `"name",<type>,<flags>,<value>[,<value>...]`: a
+/// `CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1`: the fixed part, one offset per
+/// value, the name (NUL-terminated UTF-16), the values, zeros to a multiple
+/// of four. Integers, booleans and SIDs start at a multiple of four after
+/// the name; strings and octets follow one another unaligned (the spec
+/// sheet's bytes). What does not parse is [`SecErr::InvalidAcl`], a SID
+/// value that is none [`SecErr::InvalidSid`].
 pub fn compile_attribute(text: &[u16]) -> SecResult<Vec<u8>> {
     let s = chars(text);
     let mut p = Parser { s: &s, i: 0 };
-    attribute_data(&mut p).map_err(|()| SecErr::InvalidAcl)
-}
-
-fn attribute_data(p: &mut Parser) -> R<Vec<u8>> {
+    let bad = |()| SecErr::InvalidAcl;
     p.ws();
-    let name = p.quoted()?;
+    let name = p.quoted().map_err(bad)?;
+    if name.is_empty() {
+        return Err(SecErr::InvalidAcl);
+    }
     p.ws();
-    p.expect(',')?;
+    p.expect(',').map_err(bad)?;
     p.ws();
-    let kind = p.keyword(CLAIM_TYPES).ok_or(())?;
+    let kind = p.keyword(CLAIM_TYPES).ok_or(SecErr::InvalidAcl)?;
     p.ws();
-    p.expect(',')?;
+    p.expect(',').map_err(bad)?;
     p.ws();
-    let (flags, sign, _) = p.integer()?;
-    if sign != SIGN_NONE || flags > u64::from(u32::MAX) {
-        return Err(());
+    let (flags, sign, _) = p.integer().map_err(bad)?;
+    if sign != SIGN_NONE || flags & !CLAIM_FLAGS != 0 {
+        return Err(SecErr::InvalidAcl);
     }
     let mut values: Vec<Vec<u8>> = Vec::new();
     loop {
@@ -555,7 +605,7 @@ fn attribute_data(p: &mut Parser) -> R<Vec<u8>> {
         if p.i == p.s.len() {
             break;
         }
-        p.expect(',')?;
+        p.expect(',').map_err(bad)?;
         p.ws();
         let counted_value = |b: &[u8]| {
             let mut v = (b.len() as u32).to_le_bytes().to_vec();
@@ -563,43 +613,46 @@ fn attribute_data(p: &mut Parser) -> R<Vec<u8>> {
             v
         };
         values.push(match kind {
-            1 => p.integer()?.0.to_le_bytes().to_vec(),
-            2 => {
-                let (v, sign, _) = p.integer()?;
-                if sign == SIGN_MINUS {
-                    return Err(());
-                }
-                v.to_le_bytes().to_vec()
-            }
-            3 => {
-                let mut b = utf16_bytes(&p.quoted()?);
+            CLAIM_INT64 => p.integer().map_err(bad)?.0.to_le_bytes().to_vec(),
+            CLAIM_UINT64 => match p.integer().map_err(bad)? {
+                (_, SIGN_MINUS, _) => return Err(SecErr::InvalidAcl),
+                (v, _, _) => v.to_le_bytes().to_vec(),
+            },
+            CLAIM_STRING => {
+                let mut b = utf16_bytes(&p.quoted().map_err(bad)?);
                 b.extend_from_slice(&[0, 0]);
                 b
             }
-            5 => {
+            CLAIM_SID => {
                 let t: String = p.s[p.i..].iter().take_while(|c| **c != ',' && **c != ' ').collect();
                 p.i += t.chars().count();
                 let wide: Vec<u16> = t.encode_utf16().collect();
-                counted_value(&sddl::parse(&wide).ok_or(())?.to_bytes())
+                counted_value(&sddl::parse(&wide).ok_or(SecErr::InvalidSid)?.to_bytes())
             }
-            6 => match p.integer()? {
+            CLAIM_BOOLEAN => match p.integer().map_err(bad)? {
                 (v @ (0 | 1), SIGN_NONE, _) => v.to_le_bytes().to_vec(),
-                _ => return Err(()),
+                _ => return Err(SecErr::InvalidAcl),
             },
-            _ => counted_value(&p.octets()?),
+            _ => counted_value(&p.hex_octets().map_err(bad)?),
         });
     }
-    let mut name_bytes = utf16_bytes(&name);
-    name_bytes.extend_from_slice(&[0, 0]);
+    // A name, a type and flags alone are not an attribute.
+    if values.is_empty() {
+        return Err(SecErr::InvalidAcl);
+    }
+    let aligned = matches!(kind, CLAIM_INT64 | CLAIM_UINT64 | CLAIM_SID | CLAIM_BOOLEAN);
     let mut out = alloc::vec![0u8; CLAIM_FIXED + 4 * values.len()];
     out[4..6].copy_from_slice(&u16::from(kind).to_le_bytes());
     out[8..12].copy_from_slice(&(flags as u32).to_le_bytes());
     out[12..16].copy_from_slice(&(values.len() as u32).to_le_bytes());
     let name_at = out.len() as u32;
     out[0..4].copy_from_slice(&name_at.to_le_bytes());
-    out.extend_from_slice(&name_bytes);
-    for (i, v) in values.iter().enumerate() {
+    out.extend_from_slice(&utf16_bytes(&name));
+    out.extend_from_slice(&[0, 0]);
+    if aligned {
         out.resize(out.len().next_multiple_of(4), 0);
+    }
+    for (i, v) in values.iter().enumerate() {
         let at = out.len() as u32;
         out[CLAIM_FIXED + 4 * i..CLAIM_FIXED + 4 * i + 4].copy_from_slice(&at.to_le_bytes());
         out.extend_from_slice(v);
@@ -608,7 +661,9 @@ fn attribute_data(p: &mut Parser) -> R<Vec<u8>> {
     Ok(out)
 }
 
-/// The SDDL attribute text of a resource attribute ACE's data.
+/// The SDDL attribute text of a resource attribute ACE's data: the flags in
+/// hexadecimal, integers in decimal, SIDs as aliases where they have one,
+/// octets as hexadecimal digits.
 pub fn decompile_attribute(b: &[u8]) -> Option<String> {
     let dword = |at: usize| Some(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?) as usize);
     let wide_at = |at: usize| -> Option<String> {
@@ -616,21 +671,21 @@ pub fn decompile_attribute(b: &[u8]) -> Option<String> {
             b.get(at..)?.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
         Some(chars(&units).into_iter().collect())
     };
-    let kind = u16::from_le_bytes([*b.get(4)?, *b.get(5)?]);
-    let type_name = CLAIM_TYPES.iter().find(|(_, k)| u16::from(*k) == kind)?.0;
+    let kind = u8::try_from(u16::from_le_bytes([*b.get(4)?, *b.get(5)?])).ok()?;
+    let type_name = CLAIM_TYPES.iter().find(|(_, k)| *k == kind)?.0;
     let mut text = alloc::format!("\"{}\",{type_name},{:#x}", wide_at(dword(0)?)?, dword(8)?);
     for i in 0..dword(12)? {
         let at = dword(CLAIM_FIXED + 4 * i)?;
         let quad = || Some(u64::from_le_bytes(b.get(at..at + 8)?.try_into().ok()?));
         let value = match kind {
-            1 => alloc::format!("{}", quad()? as i64),
-            2 | 6 => alloc::format!("{}", quad()?),
-            3 => alloc::format!("\"{}\"", wide_at(at)?),
-            5 => {
+            CLAIM_INT64 => alloc::format!("{}", quad()? as i64),
+            CLAIM_UINT64 | CLAIM_BOOLEAN => alloc::format!("{}", quad()?),
+            CLAIM_STRING => alloc::format!("\"{}\"", wide_at(at)?),
+            CLAIM_SID => {
                 let s = Sid::from_bytes(counted(b, at)?.0)?;
                 sddl::alias_of(&s).map_or_else(|| sddl::to_string(&s), String::from)
             }
-            _ => octets_text(counted(b, at)?.0),
+            _ => String::from(&octets_text(counted(b, at)?.0)[1..]),
         };
         text.push(',');
         text.push_str(&value);
@@ -650,54 +705,117 @@ mod tests {
         b.iter().map(|x| alloc::format!("{x:02x}")).collect()
     }
 
+    /// The condition's bytes as hexadecimal text.
+    fn c(s: &str) -> String {
+        hex(&compile(&w(s)).unwrap_or_else(|e| panic!("{s}: {e:?}")))
+    }
+
     #[test]
     fn member_of_bytes() {
         // The signature, a composite of one SID literal, the operator, a pad byte.
-        let b = compile(&w("Member_of {SID(BA)}")).unwrap();
-        assert_eq!(hex(&b), "6172747850150000005110000000010200000000000520000000200200008900");
-        assert_eq!(b.len(), 32);
-        assert_eq!(decompile(&b).as_deref(), Some("Member_of {SID(BA)}"));
-        let b = compile(&w("Member_of SID(S-1-5-32-544)")).unwrap();
-        assert_eq!(b.len(), 28);
-        assert_eq!(decompile(&b).as_deref(), Some("Member_of SID(BA)"));
+        assert_eq!(c("Member_of {SID(BA)}"), "6172747850150000005110000000010200000000000520000000200200008900");
+        assert_eq!(c("Member_of {SID(SY)}"), "617274785011000000510c0000000101000000000005120000008900");
+        assert_eq!(c("Member_of{SID(SY)}"), c("Member_of {SID(SY)}"));
+        assert_eq!(c("member_of {sid(sy)}"), c("Member_of {SID(SY)}"));
+        assert_eq!(
+            c(" Member_of  { SID(SY) , SID(BA) } "),
+            "617274785026000000510c00000001010000000000051200000051100000000102000000000005200000002002000089"
+        );
+        assert_eq!(c("Member_of {SID(SY),SID(BA)}"), c(" Member_of  { SID(SY) , SID(BA) } "));
+        // A single SID without braces is the SID token alone.
+        assert_eq!(c("Member_of SID(SY)"), "61727478510c000000010100000000000512000000890000");
+        assert_eq!(c("Member_of {SID(S-1-5-32-544)}"), c("Member_of {SID(BA)}"));
+        for (name, code) in [
+            ("Not_Member_of", "90"),
+            ("Member_of_Any", "8b"),
+            ("Device_Member_of", "8a"),
+            ("Device_Member_of_Any", "8c"),
+            ("Not_Device_Member_of", "91"),
+        ] {
+            let bytes = c(&alloc::format!("{name} {{SID(SY)}}"));
+            assert_eq!(&bytes[bytes.len() - 4..], alloc::format!("{code}00"), "{name}");
+        }
     }
 
     #[test]
-    fn tokens() {
-        // A user attribute, a string, `==`.
-        let b = compile(&w("@User.a==\"b\"")).unwrap();
-        assert_eq!(hex(&b), "61727478f9020000006100100200000062008000");
-        // An integer: value, sign, base.
-        let b = compile(&w("n >= -0x10")).unwrap();
-        assert_eq!(hex(&b), "61727478f8020000006e0004f0ffffffffffffff02038500");
-        let b = compile(&w("n < 017")).unwrap();
-        assert_eq!(hex(&b[11..22]), "040f000000000000000301");
-        // Postfix order of the logical operators.
-        let b = compile(&w("a && (b || !c)")).unwrap();
-        let ops: Vec<u8> = b.iter().copied().filter(|x| *x >= 0xa0 && *x <= 0xa2).collect();
-        assert_eq!(ops, [0xa2, 0xa1, 0xa0]);
+    fn the_sheets_tokens() {
+        for (s, bytes) in [
+            ("@User.Title == \"PM\"", "61727478f90a0000005400690074006c006500100400000050004d0080000000"),
+            ("@User.Title==\"PM\"", "61727478f90a0000005400690074006c006500100400000050004d0080000000"),
+            ("Title == \"PM\"", "61727478f80a0000005400690074006c006500100400000050004d0080000000"),
+            ("@Device.Level != 7", "61727478fb0a0000004c006500760065006c0004070000000000000003028100"),
+            ("@Resource.Level < 7", "61727478fa0a0000004c006500760065006c0004070000000000000003028200"),
+            ("@User.Level <= 0x10", "61727478f90a0000004c006500760065006c0004100000000000000003038300"),
+            ("@User.Level > -3", "61727478f90a0000004c006500760065006c0004fdffffffffffffff02028400"),
+            ("@User.Level >= 010", "61727478f90a0000004c006500760065006c0004080000000000000003018500"),
+            ("@User.Tags Contains \"a\"", "61727478f90800000054006100670073001002000000610086000000"),
+            (
+                "@User.Tags Any_of {\"a\",\"b\"}",
+                "61727478f9080000005400610067007300500e000000100200000061001002000000620088000000",
+            ),
+            (
+                "@User.Tags Not_Contains {1,2}",
+                "61727478f90800000054006100670073005016000000040100000000000000030204020000000000000003028e000000",
+            ),
+            ("@User.Tags Not_Any_of {1}", "61727478f9080000005400610067007300500b00000004010000000000000003028f0000"),
+            ("Not_Exists @Resource.Title", "61727478fa0a0000005400690074006c0065008d"),
+            ("!(@User.Level == 1)", "61727478f90a0000004c006500760065006c00040100000000000000030280a2"),
+            (
+                "@User.A == 1 && @User.B == 2",
+                "61727478f9020000004100040100000000000000030280f9020000004200040200000000000000030280a000",
+            ),
+            (
+                "@User.A == 1 || @User.B == 2",
+                "61727478f9020000004100040100000000000000030280f9020000004200040200000000000000030280a100",
+            ),
+            (
+                "(@User.A == 1) && (@User.B == 2 || @User.C == 3)",
+                "61727478f9020000004100040100000000000000030280f9020000004200040200000000000000030280\
+                 f9020000004300040300000000000000030280a1a000",
+            ),
+            ("@User.A == @Resource.B", "61727478f9020000004100fa0200000042008000"),
+            ("@User.Blob == #0102ff", "61727478f90800000042006c006f00620018030000000102ff800000"),
+            ("1 == 1", "61727478f802000000310004010000000000000003028000"),
+            ("@USER.Title == \"PM\"", "61727478f90a0000005400690074006c006500100400000050004d0080000000"),
+        ] {
+            assert_eq!(c(s), bytes.replace(' ', ""), "{s}");
+        }
+        // `&&` binds tighter than `||`; extra parentheses add nothing.
+        let ops = |s: &str| -> Vec<u8> {
+            compile(&w(s)).unwrap().into_iter().filter(|x| (0xa0..=0xa2).contains(x)).collect()
+        };
+        assert_eq!(ops("a && b || c"), [0xa0, 0xa1]);
+        assert_eq!(ops("a || b && c"), [0xa0, 0xa1]);
+        assert_eq!(c("a || b && c"), c("a || (b && c)"));
+        assert_eq!(c("((a)) && (b)"), c("a && b"));
     }
 
     #[test]
-    fn text_round_trips() {
+    fn canonical_text() {
         for (a, b) in [
             ("Member_of {SID(BA)}", "Member_of {SID(BA)}"),
             ("member_of{SID(ba),SID(S-1-5-18)}", "Member_of {SID(BA), SID(SY)}"),
-            ("Not_Device_Member_of_Any {SID(WD)}", "Not_Device_Member_of_Any {SID(WD)}"),
-            ("@User.Title==\"PM\"", "@User.Title == \"PM\""),
+            ("Member_of {SID(S-1-5-21-1-2-3-4)}", "Member_of {SID(S-1-5-21-1-2-3-4)}"),
+            ("Member_of_Any {SID(WD)}", "Member_of_any {SID(WD)}"),
+            ("Not_Member_of {SID(WD)}", "Not_Member_of {SID(WD)}"),
+            ("Device_Member_of {SID(WD)}", "Device_Member_of {SID(WD)}"),
+            ("@User.Title==\"PM\"", "@USER.Title == \"PM\""),
             ("  Title  !=  \"x y\" ", "Title != \"x y\""),
-            ("@Resource.n >= 5 && @Device.m < +0x1F", "@Resource.n >= 5 && @Device.m < +0x1f"),
-            ("a == 1 || b == 2 && c == 3", "a == 1 || b == 2 && c == 3"),
-            ("(a == 1 || b == 2) && c == 3", "(a == 1 || b == 2) && c == 3"),
-            ("a == 1 || (b == 2 || c == 3)", "a == 1 || (b == 2 || c == 3)"),
+            ("@Resource.n >= 5", "@RESOURCE.n >= 5"),
+            ("@device.m < 0x10", "@DEVICE.m < 0x10"),
+            ("n > -3", "n > -3"),
+            ("n <= 010", "n <= 010"),
+            ("@User.A == 1 && @User.B == 2", "(@USER.A == 1) && (@USER.B == 2)"),
+            ("a || b && c", "(a) || ((b) && (c))"),
+            ("(a || b) && c", "((a) || (b)) && (c)"),
+            ("!(x)", "!(x)"),
             ("!(a == 1)", "!(a == 1)"),
-            ("! Exists x", "!(Exists x)"),
-            ("Not_Exists @Resource.x", "Not_Exists @Resource.x"),
-            ("@User.Tags Contains {\"a\", \"b\"}", "@User.Tags Contains {\"a\", \"b\"}"),
-            ("@User.Tags Any_of @Resource.Tags", "@User.Tags Any_of @Resource.Tags"),
-            ("x Not_Any_of {1, -2, 010}", "x Not_Any_of {1, -2, 010}"),
-            ("x == #0aFF", "x == #0aff"),
-            ("@User.a%0020b == 1", "@User.a%0020b == 1"),
+            ("!(a && b)", "!((a) && (b))"),
+            ("Not_Exists @Resource.x", "Not_Exists @RESOURCE.x"),
+            ("@User.Tags Contains {\"a\", \"b\"}", "@USER.Tags Contains {\"a\", \"b\"}"),
+            ("@User.Tags Any_of @Resource.Tags", "@USER.Tags Any_of @RESOURCE.Tags"),
+            ("x Not_Contains {1,-2,010}", "x Not_Contains {1, -2, 010}"),
+            ("x == #0102FF", "x == #0102ff"),
             ("flag", "flag"),
         ] {
             let bytes = compile(&w(a)).unwrap_or_else(|e| panic!("{a}: {e:?}"));
@@ -708,22 +826,35 @@ mod tests {
     }
 
     #[test]
-    fn bad_expressions() {
+    fn refused_conditions() {
         for s in [
             "",
+            " ",
             "Member_of",
-            "Member_of {",
+            "Member_of {}",
             "Member_of {SID(ZZ)}",
+            "Member_of {SY}",
+            "Member_of {SID(SY)",
+            "Member_of {SID(SY)}}",
             "Member_of {1}",
-            "a ==",
+            "Nonsense {SID(SY)}",
+            "@User.Title ==",
+            "== 1",
+            "@User.Title = 1",
+            "@User.A == 1 &&",
+            "@User.A == 1 &&& @User.B == 2",
+            "@User.A == 1 @User.B == 2",
+            "@Nowhere.A == 1",
+            "@User.A == 1) extra",
+            "\"a\" == \"a\"",
+            "@User.a%20b == 1",
             "a == \"x",
             "a == #1",
             "(a == 1",
-            "a == 1)",
-            "a && ",
-            "@Nobody.x == 1",
             "a == 99999999999999999999",
-            "== 1",
+            "Exists @User.Title",
+            "Exists @User.Grade && Not_Exists @Device.Kind",
+            "Not_Exists @Device.Kind",
         ] {
             assert_eq!(compile(&w(s)), Err(SecErr::InvalidAcl), "{s}");
         }
@@ -732,27 +863,100 @@ mod tests {
         assert_eq!(decompile(&[b'a', b'r', b't', b'x', 0x51, 9, 0, 0, 0]), None);
     }
 
+    /// The attribute's bytes as hexadecimal text.
+    fn a(s: &str) -> String {
+        hex(&compile_attribute(&w(s)).unwrap_or_else(|e| panic!("{s}: {e:?}")))
+    }
+
     #[test]
-    fn attributes() {
-        let b = compile_attribute(&w("\"Project\",TS,0,\"Poly\"")).unwrap();
-        // Name offset 20, type 3, flags 0, one value; the name; the value.
-        assert_eq!(hex(&b[..20]), "1400000003000000000000000100000024000000");
-        assert_eq!(b.len(), 36 + 12);
-        for (a, t) in [
-            ("\"Project\",TS,0,\"Poly\"", "\"Project\",TS,0x0,\"Poly\""),
-            ("\"n\", TI, 0x10, 1, -2, 0x10", "\"n\",TI,0x10,1,-2,16"),
-            ("\"u\",TU,0", "\"u\",TU,0x0"),
+    fn attribute_bytes() {
+        for (s, bytes) in [
+            (
+                "\"Dept\",TS,0,\"Lab\"",
+                "140000000300000000000000010000001e000000440065007000740000004c006100620000000000",
+            ),
+            (
+                "\"Dept\",TS,0,\"Lab\",\"Shop\",\"X\"",
+                "1c000000030000000000000003000000260000002e00000038000000440065007000740000004c00610062000000\
+                 530068006f007000000058000000",
+            ),
+            ("\"N\",TI,0,5", "14000000010000000000000001000000180000004e0000000500000000000000"),
+            ("\"N\",TI,0,-5", "14000000010000000000000001000000180000004e000000fbffffffffffffff"),
+            (
+                "\"N\",TI,0,1,2,3",
+                "1c0000000100000000000000030000002000000028000000300000004e000000\
+                 010000000000000002000000000000000300000000000000",
+            ),
+            ("\"N\",TU,0,5", "14000000020000000000000001000000180000004e0000000500000000000000"),
+            (
+                "\"N\",TU,0,0x10,7",
+                "180000000200000000000000020000001c000000240000004e00000010000000000000000700000000000000",
+            ),
+            ("\"Yes\",TB,0,1", "140000000600000000000000010000001c00000059006500730000000100000000000000"),
+            (
+                "\"Yes\",TB,0,0,1",
+                "18000000060000000000000002000000200000002800000059006500730000000000000000000000\
+                 0100000000000000",
+            ),
+            (
+                "\"Who\",TD,0,BA",
+                "140000000500000000000000010000001c000000570068006f0000001000000001020000000000052000000020020000",
+            ),
+            (
+                "\"Who\",TD,0,SY,S-1-1-0",
+                "1800000005000000000000000200000020000000300000 00570068006f000000\
+                 0c0000000101000000000005120000000c000000010100000000000100000000",
+            ),
+            ("\"Bin\",TX,0,0a0b0c", "140000001000000000000000010000001c000000420069006e000000030000000a0b0c00"),
+            (
+                "\"Bin\",TX,0,01,0203",
+                "180000001000000000000000020000002000000025000000420069006e000000010000000102000000020300",
+            ),
+            ("\"Odd\",TS,0,\"abc\"", "140000000300000000000000010000001c0000004f006400640000006100620063000000"),
+            ("\"N\",TI,1,5", "14000000010000000100000001000000180000004e0000000500000000000000"),
+            ("\"N\",TI,0x10000,5", "14000000010000000000010001000000180000004e0000000500000000000000"),
+            (" \"N\" , TI , 0 , 5 ", "14000000010000000000000001000000180000004e0000000500000000000000"),
+            ("\"N\",ti,0,5", "14000000010000000000000001000000180000004e0000000500000000000000"),
+            // An odd number of digits is read with a leading 0.
+            ("\"N\",TX,0,0a0", "14000000100000000000000001000000180000004e0000000200000000a00000"),
+        ] {
+            assert_eq!(a(s), bytes.replace(' ', ""), "{s}");
+        }
+    }
+
+    #[test]
+    fn attribute_text_and_errors() {
+        for (s, t) in [
+            ("\"Dept\",TS,0,\"Lab\",\"Shop\"", "\"Dept\",TS,0x0,\"Lab\",\"Shop\""),
+            ("\"n\", TI, 0x10000, 1, -2, 0x10", "\"n\",TI,0x10000,1,-2,16"),
             ("\"u\",TU,0,18446744073709551615", "\"u\",TU,0x0,18446744073709551615"),
             ("\"s\",TD,0,BA,S-1-5-21-1-2-3-4", "\"s\",TD,0x0,BA,S-1-5-21-1-2-3-4"),
             ("\"b\",TB,0,1,0", "\"b\",TB,0x0,1,0"),
-            ("\"x\",TX,0,#00ff,#", "\"x\",TX,0x0,#00ff,#"),
+            ("\"x\",TX,0,00ff,#0102", "\"x\",TX,0x0,00ff,0102"),
         ] {
-            let b = compile_attribute(&w(a)).unwrap_or_else(|e| panic!("{a}: {e:?}"));
-            assert_eq!(b.len() % 4, 0, "{a}");
-            assert_eq!(decompile_attribute(&b).as_deref(), Some(t), "{a}");
+            let b = compile_attribute(&w(s)).unwrap_or_else(|e| panic!("{s}: {e:?}"));
+            assert_eq!(b.len() % 4, 0, "{s}");
+            assert_eq!(decompile_attribute(&b).as_deref(), Some(t), "{s}");
         }
-        for s in ["", "Project,TS,0", "\"p\",TQ,0", "\"p\",TB,0,2", "\"p\",TU,0,-1", "\"p\",TS,0,1", "\"p\",TD,0,ZZ"] {
+        for s in [
+            "",
+            "\"N\"",
+            "\"N\",TI",
+            "\"N\",TI,0",
+            "\"N\",TZ,0,5",
+            "N,TI,0,5",
+            "\"\",TS,0,\"v\"",
+            "\"N\",TI,0,\"x\"",
+            "\"N\",TS,0,5",
+            "\"N\",TB,0,2",
+            "\"N\",TU,0,-1",
+            "\"N\",TI,0xFFFFFFFF,5",
+            "\"N\",TI,0x40,5",
+            "\"N\",TI,0,5) (\"M\",TI,0,5",
+            "\"N\",TI,0,5 x",
+        ] {
             assert_eq!(compile_attribute(&w(s)), Err(SecErr::InvalidAcl), "{s}");
         }
+        assert_eq!(compile_attribute(&w("\"N\",TD,0,ZZ")), Err(SecErr::InvalidSid));
     }
 }

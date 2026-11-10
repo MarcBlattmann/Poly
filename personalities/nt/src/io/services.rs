@@ -461,7 +461,7 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
             Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: false }),
             // Sockets are read before this (`afd::services::read_file`).
             Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
-            Target::PipeRoot => Err(STATUS_INVALID_DEVICE_REQUEST),
+            Target::PipeRoot | Target::PipeDevice => Err(STATUS_INVALID_DEVICE_REQUEST),
             // A named pipe end (ADR 0169). `ReadFileEx` is refused on a
             // handle with a completion port (Learn: "ReadFileEx").
             Target::NamedPipe(_) => {
@@ -609,7 +609,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
             // (`2>&1`) interleaves rather than overwrites.
             Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: true }),
             Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
-            Target::PipeRoot => Err(STATUS_INVALID_DEVICE_REQUEST),
+            Target::PipeRoot | Target::PipeDevice => Err(STATUS_INVALID_DEVICE_REQUEST),
             Target::NamedPipe(_) => {
                 if n.apc_routine != 0 && rec.port.is_some() {
                     return Err(STATUS_INVALID_PARAMETER);

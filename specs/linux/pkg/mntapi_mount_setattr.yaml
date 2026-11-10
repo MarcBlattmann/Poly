@@ -38,12 +38,14 @@ summary: >
   AT_EMPTY_PATH is ENOENT. size: below 32 is EINVAL; above 32 is accepted
   when every byte after the first 32 is zero, else E2BIG; above 4096 is
   E2BIG. An invalid dfd is EBADF (ignored for absolute paths); a NULL or
-  invalid attr or path pointer is EFAULT. Needs CAP_SYS_ADMIN (EPERM first,
-  even for a NULL attr or a missing path).
+  invalid attr or path pointer is EFAULT. Needs CAP_SYS_ADMIN: without it
+  the call is EPERM whatever the attr pointer, the attributes and the path
+  are (a NULL attr, a missing path); only bad flags and a bad size are
+  reported before that (see ordering for the whole order of the checks).
 returns:
   success: "0"
   detached: "on an open_tree clone or fsmount descriptor the options are set before it is attached and stay; the original mount of a clone is unchanged"
-  idmap: "MOUNT_ATTR_IDMAP with userns_fd a descriptor that is not a user namespace: EINVAL; not open: EBADF; without userns_fd: EINVAL; userns_fd is ignored without the flag"
+  idmap: "MOUNT_ATTR_IDMAP in attr_set reads userns_fd as a descriptor number: a number that is not an open descriptor is EBADF (995); an open descriptor that is not a user namespace file is EINVAL (a regular file, a directory, a namespace file of another kind such as /proc/self/ns/uts); a value above 2147483647 is EINVAL (0x80000000, 0x100000000 + a valid number: the upper bits are not dropped); userns_fd left 0 with the flag is EINVAL (descriptor 0 is no user namespace); MOUNT_ATTR_IDMAP in attr_clr is EINVAL, with or without a userns_fd and also when it is in attr_set too. These are judged when the struct is read, before the path: the same errors come for a missing path. userns_fd is ignored without the flag (any number, 0 returned)"
 errors:
   bad_attr: "EINVAL (22): unknown bits; an atime value without clearing 0x70; two atime values; 0x40"
   bad_propagation: "EINVAL (22): two propagation types, or a value other than the four"
@@ -53,17 +55,21 @@ errors:
   busy: "EBUSY (16): MOUNT_ATTR_RDONLY on a mount (also recursive) with a file open for writing; nothing changes"
   bad_dfd: "EBADF (9): invalid dfd with a relative or empty path"
   bad_pointer: "EFAULT (14): NULL or invalid attr or path"
-  permission: "EPERM (1): no CAP_SYS_ADMIN; checked before every other argument"
+  permission: "EPERM (1): no CAP_SYS_ADMIN; checked after flags and size, before the attr pointer, the attributes and the path"
 side_effects: >
   Changes the options and propagation of mounts in the caller's mount
   namespace (or of a detached mount).
 threading: "descriptors are per process (shared file table); no other thread-specific behaviour"
-ordering: []
+ordering:
+  - "the checks run in this order and the first that fails gives the error: (1) flags: a bit outside the four is EINVAL; (2) size: above 4096 E2BIG, below 32 EINVAL; (3) privilege: without CAP_SYS_ADMIN EPERM; (4) reading the struct: a NULL or invalid attr pointer EFAULT, a non-zero byte after the first 32 E2BIG; (5) the struct's contents: unknown attribute bits, a bad atime or propagation value (EINVAL), the MOUNT_ATTR_IDMAP rules (EBADF, EINVAL); (6) the path: EBADF for an invalid dfd, EFAULT, ENOENT, and EINVAL for what is not the top of a mount; (7) applying (EBUSY)"
+  - "so a caller without CAP_SYS_ADMIN gets EINVAL for a bad flag (also with a NULL attr and a missing path) and for size 0 or 16, E2BIG for size 5000, a bad flag before a bad size, and EPERM for everything else: a valid call, a NULL or bad attr pointer, a non-zero tail, unknown attribute bits, a missing or empty path, a directory that is no mount top"
+  - "and a privileged caller with a missing path gets the struct's error, not ENOENT: EFAULT for a NULL attr, E2BIG for a non-zero tail, EINVAL for unknown bits or a bad propagation value, EBADF for MOUNT_ATTR_IDMAP with a closed userns_fd; unknown bits with an invalid dfd are EINVAL, a good struct with an invalid dfd EBADF"
+  - "a call that fails changes nothing"
 timing:
   typical: "microseconds"
   guarantees: "none"
 tests:
-  visible: 3  # count in <symbol>.tests/
+  visible: 4  # count in <symbol>.tests/
   held_out: 2  # count kept by the diff runner
 # Notes: MOUNT_ATTR_*, struct mount_attr from linux/mount.h; AT_* from linux/fcntl.h. An id-mapped mount
 # (MOUNT_ATTR_IDMAP with a real user namespace) is not tested.

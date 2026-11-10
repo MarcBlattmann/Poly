@@ -724,8 +724,23 @@ pub struct Outcome {
     pub trace: Option<PathBuf>,
 }
 
+/// The trace files in a kernel log: the browser's (number 0) and each child process's
+/// (`<file>.N`, announced by the launcher's `{"child":N}` record), in the order printed.
+pub fn ptrace_files(log: &str) -> Vec<(u32, Vec<String>)> {
+    let mut files: Vec<(u32, Vec<String>)> = vec![(0, Vec::new())];
+    for record in ptrace_records(log) {
+        let child =
+            record.strip_prefix("{\"child\":").and_then(|r| r.strip_suffix('}')).and_then(|n| n.parse::<u32>().ok());
+        match child {
+            Some(n) => files.push((n, Vec::new())),
+            None => files.last_mut().expect("never empty").1.push(record),
+        }
+    }
+    files
+}
+
 /// The records of the `ptrace:` / `ptrace+` lines of a kernel log (the launcher's
-/// `PolyDebugPrint` of the trace file): one per line, continuations joined.
+/// `PolyDebugPrint` of the trace files): one per line, continuations joined.
 pub fn ptrace_records(log: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for line in log.lines() {
@@ -852,11 +867,17 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
     let digest_note = digest_note(st, &summary);
     let passed = summary.expected && summary.code == Some(0) && digest_note.is_none();
     let trace = if o.kit.is_some() {
-        let records = ptrace_records(&text);
+        // The browser's trace, and `<file>.N` for each child process the launcher printed.
         let file = work.join(format!("stage{stage}.ptrace.jsonl"));
-        let mut body = records.join("\n");
-        body.push('\n');
-        std::fs::write(&file, body).map_err(|e| format!("{}: {e}", file.display()))?;
+        for n in 1..100 {
+            let _ = std::fs::remove_file(work.join(format!("stage{stage}.ptrace.jsonl.{n}")));
+        }
+        for (child, records) in ptrace_files(&text) {
+            let path = if child == 0 { file.clone() } else { work.join(format!("stage{stage}.ptrace.jsonl.{child}")) };
+            let mut body = records.join("\n");
+            body.push('\n');
+            std::fs::write(&path, body).map_err(|e| format!("{}: {e}", path.display()))?;
+        }
         Some(file)
     } else {
         None
@@ -922,6 +943,34 @@ pub fn command(args: &[String]) -> Result {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_kernel_log_holds_the_browsers_trace_and_one_per_child() {
+        let log = "boot\n\
+                   nt: pid 1: ptrace: {\"format\":\"polytrace/1\"}\r\n\
+                   nt: pid 1: ptrace: {\"seq\":1,\"fn\":\"A\",\"args\":[\"lo\r\n\
+                   nt: pid 1: ptrace+ ng\"]}\r\n\
+                   noise\n\
+                   nt: pid 1: ptrace: {\"child\":1}\r\n\
+                   nt: pid 1: ptrace: {\"seq\":1,\"fn\":\"B\"}\r\n\
+                   nt: pid 1: ptrace: {\"child\":12}\r\n";
+        let files = ptrace_files(log);
+        assert_eq!(files.len(), 3);
+        assert_eq!(
+            files[0],
+            (
+                0,
+                vec![
+                    "{\"format\":\"polytrace/1\"}".to_string(),
+                    "{\"seq\":1,\"fn\":\"A\",\"args\":[\"long\"]}".to_string()
+                ]
+            )
+        );
+        assert_eq!(files[1], (1, vec!["{\"seq\":1,\"fn\":\"B\"}".to_string()]));
+        assert_eq!(files[2], (12, Vec::new()));
+        // A log without a kit has one empty file.
+        assert_eq!(ptrace_files("boot\n"), vec![(0, Vec::new())]);
+    }
+
     use super::*;
     use crate::winimports::{Coverage, Sym, Target};
 

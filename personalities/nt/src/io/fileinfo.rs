@@ -93,17 +93,37 @@ impl IoState {
     }
 
     /// The path `FileNameInformation` reports: below the volume root, `\`
-    /// for the root; `\name` for a pipe.
+    /// for the root. For either end of a named pipe it is `\` and the
+    /// pipe's name as its first creator spelled it, for the pipe file
+    /// system's root `\`, and for an anonymous pipe (`CreatePipe`) the empty
+    /// name (specs/windows/ntdll.dll/NtQueryInformationFile.yaml).
     pub fn file_name(&self, cookie: u64) -> Vec<u16> {
         match self.files.get(&cookie).map(|f| &f.target) {
             Some(Target::Disk(d)) if d.path.is_empty() => wide("\\"),
             Some(Target::Disk(d)) => d.path.clone(),
-            Some(Target::Pipe(name)) => {
+            Some(Target::NamedPipe(end)) => {
                 let mut p = wide("\\");
-                p.extend_from_slice(name);
+                p.extend_from_slice(self.np_name(end.instance).unwrap_or_default());
                 p
             }
+            Some(Target::PipeRoot) => wide("\\"),
             _ => Vec::new(),
+        }
+    }
+
+    /// The parts of a file object's full name (`ObjectNameInformation`):
+    /// its device's name and the path on the device, `None` where the file
+    /// has no path there (an anonymous pipe). `None` for files that are on
+    /// no device of the object namespace (a console, a socket, an
+    /// inherited host file).
+    pub fn object_name_parts(&self, cookie: u64) -> Option<(Vec<u16>, Option<Vec<u16>>)> {
+        let pipe_device = || wide("\\Device\\NamedPipe");
+        match self.files.get(&cookie).map(|f| &f.target)? {
+            Target::Disk(d) => Some((wide(&alloc::format!("\\Device\\PolyFs{}", d.volume)), Some(d.path.clone()))),
+            Target::NamedPipe(_) | Target::PipeRoot => Some((pipe_device(), Some(self.file_name(cookie)))),
+            Target::PipeDevice => Some((pipe_device(), Some(Vec::new()))),
+            Target::Pipe(_) => Some((pipe_device(), None)),
+            Target::Console(_) | Target::Host(_) | Target::Socket(_) => None,
         }
     }
 
@@ -120,9 +140,12 @@ impl IoState {
                 ..Default::default()
             },
             // A console or an inherited file: nothing on a volume (ADR 0080).
-            Target::Console(_) | Target::Host(_) | Target::Socket(_) | Target::NamedPipe(_) | Target::PipeRoot => {
-                info::Facts { links: 1, attributes: FILE_ATTRIBUTE_NORMAL, ..Default::default() }
-            }
+            Target::Console(_)
+            | Target::Host(_)
+            | Target::Socket(_)
+            | Target::NamedPipe(_)
+            | Target::PipeRoot
+            | Target::PipeDevice => info::Facts { links: 1, attributes: FILE_ATTRIBUTE_NORMAL, ..Default::default() },
         };
         let handle = HandleFacts { access: granted, position: rec.position, mode: info::mode_bits(rec.options) };
         let fixed = |bytes: Vec<u8>| {
@@ -143,6 +166,8 @@ impl IoState {
                 let on_disk = matches!(rec.target, Target::Disk(_));
                 InfoBytes { bytes: info::streams(&facts, on_disk), fixed: STREAM_INFO_FIXED }
             }
+            // The device itself has no name in its file system.
+            FILE_NAME_INFORMATION if matches!(rec.target, Target::PipeDevice) => return Err(STATUS_INVALID_PARAMETER),
             FILE_NAME_INFORMATION => InfoBytes { bytes: info::name(&self.file_name(cookie)), fixed: NAME_INFO_FIXED },
             FILE_ALL_INFORMATION => {
                 InfoBytes { bytes: info::all(&facts, &handle, &self.file_name(cookie)), fixed: ALL_INFO_FIXED }
@@ -476,7 +501,9 @@ impl IoState {
             // an inherited file is what its node is (ADR 0080).
             let kind = match &rec.target {
                 Target::Disk(_) => FILE_DEVICE_DISK,
-                Target::Pipe(_) | Target::NamedPipe(_) | Target::PipeRoot => FILE_DEVICE_NAMED_PIPE,
+                Target::Pipe(_) | Target::NamedPipe(_) | Target::PipeRoot | Target::PipeDevice => {
+                    FILE_DEVICE_NAMED_PIPE
+                }
                 Target::Console(_) => poly_console::ioctl::FILE_DEVICE_CONSOLE,
                 // A socket (ADR 0095): GetFileType's FILE_TYPE_PIPE.
                 Target::Socket(_) => FILE_DEVICE_NAMED_PIPE,
