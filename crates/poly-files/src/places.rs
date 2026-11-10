@@ -43,6 +43,8 @@ pub enum PlaceKind {
     Pictures,
     Videos,
     Root,
+    /// Every installed app (`poly_shell::applications`, ADR 0175).
+    Applications,
     Trash,
     Mount,
 }
@@ -58,6 +60,7 @@ pub enum PlaceIcon {
     Pictures,
     Videos,
     Computer,
+    Applications,
     Trash,
     /// A fixed disk.
     Drive,
@@ -116,6 +119,22 @@ pub fn places(home: &str, user_dirs: Option<&str>, mounts: &str, exists: &dyn Fn
     out.push(Place { label: "Trash".into(), path: TRASH_URI.into(), icon: PlaceIcon::Trash, kind: PlaceKind::Trash });
     out.extend(disks(mounts));
     out
+}
+
+/// `places` with the Applications folder (ADR 0175) before Computer: for
+/// Files, not for a file picker (an app is not a file to pick).
+pub fn with_applications(mut places: Vec<Place>) -> Vec<Place> {
+    let at = places.iter().position(|p| p.kind == PlaceKind::Root).unwrap_or(places.len());
+    places.insert(
+        at,
+        Place {
+            label: poly_shell::applications::LABEL.into(),
+            path: poly_shell::applications::URI.into(),
+            icon: PlaceIcon::Applications,
+            kind: PlaceKind::Applications,
+        },
+    );
+    places
 }
 
 /// The value of `key` in a `user-dirs.dirs` text: `None` if not named,
@@ -320,5 +339,17 @@ garbage
         assert_eq!(labels, ["Home", "Desktop", "Downloads", "Computer", "Trash"]);
         assert_eq!(all[0].path, "/home/u");
         assert_eq!(all[1].path, "/home/u/Desktop");
+    }
+
+    #[test]
+    fn applications_come_before_computer() {
+        let exists = |p: &str| p == "/home/u/Desktop";
+        let all = with_applications(places("/home/u", None, MOUNTS, &exists));
+        let labels: Vec<&str> = all.iter().map(|p| p.label.as_str()).collect();
+        assert_eq!(labels, ["Home", "Desktop", "Applications", "Computer", "Trash", "USB Stick", "data"]);
+        assert_eq!(all[2].path, "applications:///");
+        assert_eq!((all[2].kind, all[2].icon), (PlaceKind::Applications, PlaceIcon::Applications));
+        // Without a Computer row it still has a place.
+        assert_eq!(with_applications(Vec::new()).len(), 1);
     }
 }

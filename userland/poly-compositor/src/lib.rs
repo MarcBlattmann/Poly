@@ -588,6 +588,35 @@ fn client_env(socket: &str, dir: &str, dump: &str, bus: Option<&str>, display: O
     env
 }
 
+/// Start `app` as the launcher does, whoever chose it (the launcher, a
+/// shortcut, Files' Applications folder): the shell's own parts open in the
+/// shell, a program is spawned with its launch's token in its environment
+/// (xdg-activation-v1; startup-notification's name too), and the pointer is
+/// busy until it has a window (ADR 0167).
+fn start_app(d: &mut desk::Desktop, server: &mut Server, env: &[String], app: &poly_shell::App) {
+    if d.open_internal(app, server) {
+        return;
+    }
+    let (launch, token) = server.begin_launch(&app.name);
+    let mut app_env = env.to_vec();
+    app_env.retain(|v| !v.starts_with("XDG_ACTIVATION_TOKEN=") && !v.starts_with("DESKTOP_STARTUP_ID="));
+    app_env.push(format!("XDG_ACTIVATION_TOKEN={token}"));
+    app_env.push(format!("DESKTOP_STARTUP_ID={token}"));
+    match os::spawn(&app.argv, &app_env) {
+        Ok(pid) => {
+            let at = d.now_ms();
+            println!("poly-compositor: launched {} (pid {pid}) at {at} ms", app.name);
+            d.launches.started(pid, &app.name, at);
+            server.launch_pid(launch, pid);
+            d.children.push((pid, app.name.clone()));
+        }
+        Err(e) => {
+            eprintln!("poly-compositor: {}: {e}", app.argv[0]);
+            server.cancel_launch(launch);
+        }
+    }
+}
+
 /// The control pipe in the runtime directory `dir`.
 fn control_path(dir: &str) -> String {
     fs::join(dir, "poly-compositor.ctl")
@@ -759,6 +788,8 @@ fn run(args: &[String]) -> Result<u8, String> {
         // What ended is reaped below (the desktop's apps in `sync`,
         // Xwayland in `reap`, the client to run at the end).
         let mut dump = false;
+        // Apps a program asked to have started (`open <id>`, ADR 0175).
+        let mut asked: Vec<String> = Vec::new();
         if fds[control_at].revents != 0 {
             for line in control.take_lines() {
                 if line.trim() == "dump" {
@@ -771,6 +802,9 @@ fn run(args: &[String]) -> Result<u8, String> {
                         }
                         launch::Control::Pid { token, pid } => server.launch_pid_by_token(&token, pid),
                         launch::Control::Cancel { token } => server.cancel_launch_token(&token),
+                        // Files' Applications folder: started below, where
+                        // the launcher's apps are.
+                        launch::Control::Open { id } => asked.push(id),
                     }
                 }
             }
@@ -860,33 +894,21 @@ fn run(args: &[String]) -> Result<u8, String> {
             d.polled(&fds[desk_at..desk_end]);
             while let Some(ev) = d.input.next_event() {
                 if let Some(app) = d.route(ev, &mut server) {
-                    if d.open_internal(&app, &mut server) {
-                        continue;
-                    }
-                    // The app finds its launch's token in its environment
-                    // (xdg-activation-v1; startup-notification's name too).
-                    let (launch, token) = server.begin_launch(&app.name);
-                    let mut app_env = env.clone();
-                    app_env
-                        .retain(|v| !v.starts_with("XDG_ACTIVATION_TOKEN=") && !v.starts_with("DESKTOP_STARTUP_ID="));
-                    app_env.push(format!("XDG_ACTIVATION_TOKEN={token}"));
-                    app_env.push(format!("DESKTOP_STARTUP_ID={token}"));
-                    match os::spawn(&app.argv, &app_env) {
-                        Ok(pid) => {
-                            let at = d.now_ms();
-                            println!("poly-compositor: launched {} (pid {pid}) at {at} ms", app.name);
-                            d.launches.started(pid, &app.name, at);
-                            server.launch_pid(launch, pid);
-                            d.children.push((pid, app.name.clone()));
-                        }
-                        Err(e) => {
-                            eprintln!("poly-compositor: {}: {e}", app.argv[0]);
-                            server.cancel_launch(launch);
-                        }
-                    }
+                    start_app(d, &mut server, &env, &app);
                 }
                 if let Some(link) = &mut winlink {
                     link.sync_geometry(server.scene());
+                }
+            }
+            // What Files' Applications folder asked for: the same apps,
+            // started the same way.
+            for id in asked.drain(..) {
+                match d.app_by_id(&id) {
+                    Some(app) => {
+                        println!("poly-compositor: asked to open {} ({id})", app.name);
+                        start_app(d, &mut server, &env, &app);
+                    }
+                    None => eprintln!("poly-compositor: asked to open {id}: no such app"),
                 }
             }
             d.sync(&mut server);

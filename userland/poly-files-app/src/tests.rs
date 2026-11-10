@@ -113,6 +113,28 @@ struct Setup {
     app: FilesApp,
     root: PathBuf,
     launched: Rc<RefCell<Vec<Vec<String>>>>,
+    /// The IDs of the apps the desktop was asked to start.
+    opened: Rc<RefCell<Vec<String>>>,
+}
+
+/// The desktop files under a test's root, as the launcher's reader sees
+/// them.
+struct RootApps(PathBuf);
+
+impl poly_shell::apps::AppFiles for RootApps {
+    fn list(&self, dir: &str) -> Vec<String> {
+        let Ok(entries) = std::fs::read_dir(self.0.join(dir.trim_start_matches('/'))) else { return Vec::new() };
+        entries.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().into_owned()).collect()
+    }
+
+    fn read(&self, path: &str) -> Option<String> {
+        std::fs::read_to_string(self.0.join(path.trim_start_matches('/'))).ok()
+    }
+}
+
+/// What the launcher offers on a test's disk.
+fn launcher_catalog(root: &std::path::Path) -> Vec<poly_shell::App> {
+    poly_shell::apps::installed(&RootApps(root.to_path_buf()), &mut |_, _| {})
 }
 
 impl Drop for Setup {
@@ -122,6 +144,15 @@ impl Drop for Setup {
 }
 
 fn setup() -> Setup {
+    setup_with(false)
+}
+
+/// Files with the Applications folder over the test's disk.
+fn setup_apps() -> Setup {
+    setup_with(true)
+}
+
+fn setup_with(applications: bool) -> Setup {
     let root = temp();
     for d in ["home/m/Documents", "home/m/Desktop", "home/m/Downloads", "tmp", "usr/share/applications"] {
         std::fs::create_dir_all(root.join(d)).unwrap();
@@ -136,11 +167,17 @@ fn setup() -> Setup {
     .unwrap();
     let launched = Rc::new(RefCell::new(Vec::new()));
     let l = Rc::clone(&launched);
-    let fs = StdFs(root.clone());
+    let fs: Box<dyn Fs> = Box::new(StdFs(root.clone()));
+    let catalog_root = root.clone();
+    let (fs, folder) = if applications {
+        crate::applications::overlay(fs, Box::new(move || launcher_catalog(&catalog_root)))
+    } else {
+        (fs, crate::applications::Shared::default())
+    };
     let exists = |p: &str| root.join(p.trim_start_matches('/')).is_dir();
     let places = poly_files::places::places("/home/m", None, "/dev/vda1 / ext2 rw 0 0\n", &exists);
     let mut app = FilesApp::new(
-        Box::new(fs),
+        fs,
         "/home/m",
         "/home/m/.local/share/Trash",
         places,
@@ -151,10 +188,26 @@ fn setup() -> Setup {
     );
     app.handlers = crate::load_handlers(&StdFs(root.clone()), &["/usr/share/applications".into()]);
     app.clock = Box::new(|| 1_793_491_200);
+    let opened = Rc::new(RefCell::new(Vec::new()));
+    if applications {
+        let o = Rc::clone(&opened);
+        app.set_applications(
+            folder,
+            Box::new(move |item| {
+                // What goes to the compositor: the launcher's app, by ID.
+                let line = poly_shell::applications::open_request(item);
+                match poly_wayland::launch::Control::parse(&line) {
+                    Some(poly_wayland::launch::Control::Open { id }) => o.borrow_mut().push(id),
+                    other => return Err(std::format!("not an open request: {other:?}")),
+                }
+                Ok(())
+            }),
+        );
+    }
     assert!(app.go("/home/m"));
     let mut cx = Cx::default();
     app.event(AppEvent::Resized { width: 900, height: 580, scale: 1 }, &mut cx);
-    Setup { app, root, launched }
+    Setup { app, root, launched, opened }
 }
 
 fn names(app: &FilesApp) -> Vec<String> {
@@ -485,4 +538,208 @@ fn the_path_bar_edits_and_draws_with_the_bitmap_font() {
     key(&mut s.app, Some(Key::Enter), None, Mods::default());
     s.app.draw(&mut fb, &ui, true);
     assert_eq!(s.app.browser.cwd(), "/tmp");
+}
+
+// ---- the Applications folder (ADR 0175) --------------------------------------
+
+const EDITOR: &str = "[Desktop Entry]\nType=Application\nName=Editor\nComment=Write text\nExec=/usr/bin/editor %F\n";
+const HELPER: &str = "[Desktop Entry]\nType=Application\nName=Helper\nExec=h\nNoDisplay=true\n";
+
+fn button(button: u32, x: i32, y: i32, clicks: u32) -> AppEvent {
+    AppEvent::Button { button, pressed: true, x, y, clicks, mods: Mods::default() }
+}
+
+#[test]
+fn applications_lists_exactly_what_the_launcher_offers() {
+    let mut s = setup_apps();
+    let apps = s.root.join("usr/share/applications");
+    std::fs::write(apps.join("helper.desktop"), HELPER).unwrap();
+    assert!(s.app.go("applications:///"));
+    assert!(s.app.in_apps());
+    assert_eq!(s.app.title(), "Applications");
+    assert_eq!(names(&s.app), ["Files", "Notifications", "Settings", "Terminal", "Viewer"]);
+    let launcher: Vec<String> = launcher_catalog(&s.root).into_iter().map(|a| a.name).collect();
+    assert_eq!(names(&s.app), launcher, "the launcher's own list, hidden entries left out by its rule");
+    assert_eq!(s.app.count_text(), "5 apps");
+    assert_eq!(s.app.status_line(), "5 apps installed");
+    // An app is installed, another removed: the next look shows it.
+    std::fs::write(apps.join("editor.desktop"), EDITOR).unwrap();
+    std::fs::remove_file(apps.join("viewer.desktop")).unwrap();
+    key(&mut s.app, Some(Key::F5), None, Mods::default());
+    assert_eq!(names(&s.app), ["Editor", "Files", "Notifications", "Settings", "Terminal"]);
+    assert_eq!(names(&s.app), launcher_catalog(&s.root).into_iter().map(|a| a.name).collect::<Vec<_>>());
+    // Without the overlay there is no such folder.
+    let mut plain = setup();
+    assert!(!plain.app.go("applications:///"));
+    assert!(!plain.app.places.iter().any(|p| p.label == "Applications"));
+}
+
+#[test]
+fn applications_is_a_place_and_a_location() {
+    let mut s = setup_apps();
+    let labels: Vec<&str> = s.app.places.iter().map(|p| p.label.as_str()).collect();
+    let at = labels.iter().position(|l| *l == "Applications").expect("a place");
+    assert_eq!(labels[at + 1], "Computer", "{labels:?}");
+    // A click on the place.
+    let mut cx = Cx::default();
+    let mut y = 0;
+    while s.app.target_at(30, y) != Some(Target::Place(at)) && y < 580 {
+        y += 1;
+    }
+    s.app.event(button(poly_app::BTN_LEFT, 30, y, 1), &mut cx);
+    assert!(s.app.in_apps());
+    // The path bar shows and takes its location; it has no parent.
+    ctrl(&mut s.app, 'l');
+    assert_eq!(s.app.path_edit.as_ref().map(|e| e.text.as_str()), Some("applications:///"));
+    key(&mut s.app, Some(Key::Escape), None, Mods::default());
+    key(&mut s.app, Some(Key::Backspace), None, Mods::default());
+    assert!(s.app.in_apps(), "up goes nowhere");
+    assert!(!s.app.browser.can_go_up());
+    // Back to where we were and forward again.
+    key(&mut s.app, Some(Key::ArrowLeft), None, Mods { alt: true, ..Mods::default() });
+    assert_eq!(s.app.browser.cwd(), "/home/m");
+    key(&mut s.app, Some(Key::ArrowRight), None, Mods { alt: true, ..Mods::default() });
+    assert!(s.app.in_apps());
+    // Its name typed in the path bar, in any case.
+    s.app.go("/tmp");
+    ctrl(&mut s.app, 'l');
+    key(&mut s.app, Some(Key::Backspace), None, Mods::default());
+    typed(&mut s.app, "applications");
+    key(&mut s.app, Some(Key::Enter), None, Mods::default());
+    assert!(s.app.in_apps());
+    assert_eq!(s.app.browser.len(), 5);
+}
+
+#[test]
+fn opening_an_app_asks_the_desktop_to_start_it() {
+    let mut s = setup_apps();
+    s.app.go("applications:///");
+    // Type-ahead to Settings (the shell's own window: no program Files
+    // could start), Enter.
+    typed(&mut s.app, "se");
+    assert_eq!(s.app.browser.cursor_entry().unwrap().name, "Settings");
+    assert_eq!(
+        s.app.status_line(),
+        "Settings: Poly app, built into Poly. Display, keyboard, wallpaper, sound, time zone"
+    );
+    key(&mut s.app, Some(Key::Enter), None, Mods::default());
+    assert_eq!(*s.opened.borrow(), ["poly:Settings"]);
+    assert_eq!(s.app.status_line(), "Opened Settings");
+    // Enter held down (the key repeats) does not start it again.
+    let held =
+        KeyInput { code: 0, key: Some(Key::Enter), ch: None, mods: Mods::default(), pressed: true, repeat: true };
+    s.app.event(AppEvent::Key(held), &mut Cx::default());
+    assert_eq!(s.opened.borrow().len(), 1);
+    // A double click on a desktop file's app.
+    let row = names(&s.app).iter().position(|n| n == "Viewer").unwrap();
+    let r = s.app.item_rect(row);
+    let mut cx = Cx::default();
+    for clicks in [1, 2] {
+        s.app.event(button(poly_app::BTN_LEFT, r.x + 50, r.y + 10, clicks), &mut cx);
+    }
+    assert_eq!(*s.opened.borrow(), ["poly:Settings", "viewer.desktop"]);
+    assert!(s.launched.borrow().is_empty(), "Files itself starts nothing: the desktop does");
+    // The details of the selected app: its kind and where it comes from.
+    key(&mut s.app, Some(Key::ArrowUp), None, Mods::default());
+    assert_eq!(s.app.status_line(), "Terminal: Poly app, built into Poly. A shell in a window");
+    s.app.browser.select_name("Viewer");
+    assert_eq!(s.app.status_line(), "Viewer: Linux app, from /usr/share/applications/viewer.desktop");
+    // An item that is gone since the listing.
+    s.app.open_path("applications:/Gone");
+    assert_eq!(s.app.status_line(), "Gone: no such app");
+    assert_eq!(s.opened.borrow().len(), 2);
+}
+
+#[test]
+fn search_works_on_applications() {
+    let mut s = setup_apps();
+    s.app.go("applications:///");
+    ctrl(&mut s.app, 'f');
+    typed(&mut s.app, "TI");
+    assert_eq!(names(&s.app), ["Notifications", "Settings"]);
+    let model: Vec<String> = s.app.apps.borrow().matching("TI").into_iter().map(|i| i.label.clone()).collect();
+    assert_eq!(names(&s.app), model, "the model's search rule");
+    // Enter in the search field opens the first match.
+    typed(&mut s.app, "n");
+    assert_eq!(names(&s.app), ["Settings"]);
+    key(&mut s.app, Some(Key::Enter), None, Mods::default());
+    assert_eq!(*s.opened.borrow(), ["poly:Settings"]);
+}
+
+#[test]
+fn nothing_in_applications_can_be_changed() {
+    let mut s = setup_apps();
+    s.app.go("applications:///");
+    let mut cx = Cx::default();
+    s.app.browser.select_name("Viewer");
+    key(&mut s.app, Some(Key::F2), None, Mods::default());
+    assert!(s.app.rename.is_none());
+    assert_eq!(s.app.focus, Focus::List);
+    key(&mut s.app, Some(Key::Delete), None, Mods::default());
+    key(&mut s.app, Some(Key::Delete), None, Mods { shift: true, ..Mods::default() });
+    assert!(s.app.confirm.is_none(), "no uninstall yet: nothing asks to delete an app");
+    ctrl(&mut s.app, 'c');
+    ctrl(&mut s.app, 'x');
+    assert!(s.app.clip.is_none());
+    for a in [act::NEW_FOLDER, act::TRASH, act::DELETE, act::RENAME, act::CUT, act::PASTE, act::OPEN_TERMINAL] {
+        s.app.act(a, &mut cx);
+    }
+    assert!(s.root.join("usr/share/applications/viewer.desktop").is_file());
+    assert_eq!(names(&s.app), ["Files", "Notifications", "Settings", "Terminal", "Viewer"]);
+    assert!(s.launched.borrow().is_empty() && s.opened.borrow().is_empty());
+    // The New folder button is not there.
+    let l = Layout::new(900, 580);
+    assert_eq!(s.app.target_at(l.new_folder.x + 5, l.new_folder.y + 5), None);
+    // An item's menu: what the model offers (Open), nothing dead.
+    let r = s.app.item_rect(4);
+    s.app.event(button(poly_app::BTN_RIGHT, r.x + 50, r.y + 10, 1), &mut cx);
+    let labels: Vec<String> = s.app.menu.take().expect("a menu").items.into_iter().map(|i| i.label).collect();
+    assert_eq!(labels, ["Open"]);
+    // The folder's menu.
+    s.app.event(button(poly_app::BTN_RIGHT, l.list.x + 10, l.list.bottom() - 5, 1), &mut cx);
+    let labels: Vec<String> = s.app.menu.take().expect("a menu").items.into_iter().map(|i| i.label).collect();
+    assert_eq!(labels, ["Refresh"]);
+    // The file system refuses too, whoever asks.
+    assert_eq!(s.app.fs.remove_file("applications:/Viewer"), Err(FsError::Unsupported));
+    assert_eq!(s.app.fs.create_dir("applications:/New"), Err(FsError::Unsupported));
+    assert_eq!(s.app.fs.rename("applications:/Viewer", "/tmp/v"), Err(FsError::Unsupported));
+    assert_eq!(s.app.fs.copy_file("/home/m/notes.txt", "applications:/notes.txt"), Err(FsError::Unsupported));
+    assert_eq!(s.app.fs.stat("applications:/Viewer").map(|m| m.kind), Ok(Kind::File));
+    assert_eq!(s.app.fs.stat("applications:").map(|m| m.kind), Ok(Kind::Dir));
+    assert_eq!(s.app.fs.stat("applications:/Gone"), Err(FsError::NotFound));
+    assert!(s.app.fs.exists("applications:/Files") && !s.app.fs.exists("applications:/Gone"));
+    assert!(s.app.fs.exists("/home/m/notes.txt"), "the disk underneath is untouched");
+}
+
+#[test]
+fn applications_draw_each_apps_own_icon_in_both_views() {
+    let mut s = setup_apps();
+    s.app.go("applications:///");
+    let ui = Ui { text: Text::new(None), scale: 1 };
+    let mut fb = MemoryFramebuffer::new(900, 580);
+    // Poly's own artwork, as the launcher draws it, at each view's size.
+    let mut icons = poly_shell::appicon::AppIcons::default();
+    let files = names(&s.app).iter().position(|n| n == "Files").unwrap();
+    for (view, size) in [('1', crate::view::APP_ICON_ROW), ('2', crate::view::APP_ICON_TILE)] {
+        ctrl(&mut s.app, view);
+        s.app.draw(&mut fb, &ui, true);
+        let art = icons.get("poly-files", size as u32).expect("Files' icon");
+        let r = s.app.item_rect(files);
+        let (x, y) = if view == '1' {
+            (r.x + 12 - (size - 16) / 2, r.y + (r.height - size) / 2)
+        } else {
+            (r.x + (r.width - size) / 2, r.y + 12)
+        };
+        let (cx, cy) = (art.width / 2, art.height / 2);
+        let want = art.pixels[(cy * art.width + cx) as usize];
+        assert_eq!(want >> 24, 255, "the artwork is opaque at its centre");
+        let (ox, oy) = (x + (size - art.width as i32) / 2, y + (size - art.height as i32) / 2);
+        assert_eq!(fb.pixel((ox + cx as i32) as u32, (oy + cy as i32) as u32), Some(want & 0xff_ffff), "view {view}");
+    }
+    // At twice the scale too, and with every row selected.
+    let ui2 = Ui { text: Text::new(None), scale: 2 };
+    let mut fb2 = MemoryFramebuffer::new(1800, 1160);
+    ctrl(&mut s.app, 'a');
+    s.app.draw(&mut fb2, &ui2, true);
+    assert_eq!(s.app.status_line(), "5 of 5 selected");
 }

@@ -158,3 +158,39 @@ impl Fs for PolyFs {
 pub fn read_text(path: &str) -> Option<String> {
     fs::read_to_string(path).ok()
 }
+
+/// The disk for what the Applications folder reads (ADR 0175): the desktop
+/// files of the installed apps and the icon theme's files, as the
+/// compositor reads them for the launcher.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Disk;
+
+impl Disk {
+    fn names(dir: &str) -> Vec<String> {
+        fs::read_dir(dir).map(|entries| entries.into_iter().map(|e| e.name).collect()).unwrap_or_default()
+    }
+}
+
+impl poly_shell::apps::AppFiles for Disk {
+    fn list(&self, dir: &str) -> Vec<String> {
+        Disk::names(dir)
+    }
+
+    fn read(&self, path: &str) -> Option<String> {
+        read_text(path)
+    }
+}
+
+impl poly_shell::appicon::IconFiles for Disk {
+    fn read(&self, path: &str) -> Option<Vec<u8>> {
+        let meta = fs::metadata(path).ok()?;
+        if !meta.is_file() || meta.len() > poly_shell::appicon::MAX_FILE as u64 {
+            return None;
+        }
+        fs::read(path).ok()
+    }
+
+    fn list(&self, dir: &str) -> Vec<String> {
+        Disk::names(dir)
+    }
+}

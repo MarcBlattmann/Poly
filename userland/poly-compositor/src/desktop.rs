@@ -11,12 +11,9 @@ use poly_input::codes::key as k;
 use poly_input::layout::Layout;
 use poly_input::xkb::mods;
 use poly_shell::Key;
-use poly_shell::apps::{App, parse_desktop_entry};
+use poly_shell::apps::App;
 use poly_shell::shortcuts::{Hit, Keymap, Matcher, Mods};
 
-/// Where desktop files are (the Desktop Entry Specification's
-/// `$XDG_DATA_DIRS/applications`, with the default data directory).
-pub const APPLICATIONS: &str = "/usr/share/applications";
 /// The shell's fallback font (ADR 0105's font store).
 pub const FONT: &str = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
 
@@ -187,23 +184,27 @@ impl Shortcuts {
     }
 }
 
-/// The apps of every readable desktop file in `dir`.
-pub fn desktop_files(dir: &str) -> Vec<App> {
-    let Ok(entries) = poly_rt::fs::read_dir(dir) else { return Vec::new() };
-    let mut apps = Vec::new();
-    for e in entries {
-        let name = e.name;
-        if !name.ends_with(".desktop") {
-            continue;
-        }
-        if let Ok(text) = poly_rt::fs::read_to_string(&poly_rt::fs::join(dir, &name)) {
-            match parse_desktop_entry(&name, &text) {
-                Ok(app) => apps.push(app),
-                Err(why) => eprintln!("poly-compositor: {name}: not offered ({why:?})"),
-            }
-        }
+/// The disk for the shell's reading of the installed apps
+/// (`poly_shell::apps::installed`).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DiskApps;
+
+impl poly_shell::apps::AppFiles for DiskApps {
+    fn list(&self, dir: &str) -> Vec<String> {
+        poly_rt::fs::read_dir(dir).map(|entries| entries.into_iter().map(|e| e.name).collect()).unwrap_or_default()
     }
-    apps
+
+    fn read(&self, path: &str) -> Option<String> {
+        poly_rt::fs::read_to_string(path).ok()
+    }
+}
+
+/// Every installed app: Poly's own and the desktop files' (the one list
+/// the launcher offers and Files' Applications folder shows, ADR 0175).
+pub fn installed_apps() -> Vec<App> {
+    poly_shell::apps::installed(&DiskApps, &mut |name, why| {
+        eprintln!("poly-compositor: {name}: not offered ({why:?})");
+    })
 }
 
 /// The keymap as a file for `wl_keyboard.keymap`: the XKB text and its
@@ -282,7 +283,8 @@ mod tests {
     /// memory objects; the desktop boot tests check both on Poly.
     #[test]
     fn keymap_files_and_desktop_files_need_the_kernel() {
-        assert!(desktop_files("/usr/share/applications").is_empty());
+        let own: Vec<String> = poly_shell::apps::builtins().into_iter().map(|a| a.id).collect();
+        assert!(installed_apps().iter().all(|a| own.contains(&a.id)), "no disk: only Poly's own apps");
         assert!(keymap_file("/run/user/0", &US).is_err());
     }
 

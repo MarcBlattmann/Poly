@@ -15,6 +15,12 @@
 //! Applications Associations specification: the user's, then the system's in
 //! `$XDG_CONFIG_DIRS`, as `xdg-open` reads them), programs and `.desktop`
 //! files launch, folders open in Terminal from the menu.
+//!
+//! The Applications folder (ADR 0175) lists every installed app: the
+//! launcher's own catalog (`poly_shell::apps::installed`, read from the same
+//! disk by the same code), shown by [`applications`]. Opening one asks the
+//! compositor to start it (`open <id>` on its control pipe), so it starts
+//! exactly as from the launcher.
 
 #![no_std]
 
@@ -22,6 +28,7 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+pub mod applications;
 pub mod native_fs;
 pub mod view;
 
@@ -143,6 +150,24 @@ fn spawn(argv: &[String]) -> Result<(), String> {
     }
 }
 
+/// Every installed app, as the launcher reads them.
+fn installed_apps() -> Vec<poly_shell::App> {
+    poly_shell::apps::installed(&native_fs::Disk, &mut |_, _| {})
+}
+
+/// Ask the desktop to start `item`'s app as its launcher does. Without a
+/// desktop to ask (no control pipe), a program is started from here, as
+/// Files starts what opens a file; the shell's own windows cannot be.
+fn open_app(item: &poly_shell::applications::Item) -> Result<(), String> {
+    if poly_app::startup::ask(&poly_shell::applications::open_request(item)) {
+        return Ok(());
+    }
+    if item.app.internal().is_some() {
+        return Err("the desktop cannot be reached".into());
+    }
+    spawn(&item.app.argv)
+}
+
 /// The program: the window until it is closed.
 pub fn main() -> i32 {
     let fs = native_fs::PolyFs;
@@ -155,7 +180,10 @@ pub fn main() -> i32 {
     let places = poly_files::places::places(&home, user_dirs.as_deref(), &mounts, &exists);
     let data_home = poly_rt::env::var("XDG_DATA_HOME");
     let trash = poly_files::trash::trash_dir(&home, data_home);
-    let mut app = view::FilesApp::new(Box::new(fs), &home, &trash, places, Box::new(spawn));
+    let (with_apps, folder) = applications::overlay(Box::new(fs), Box::new(installed_apps));
+    let mut app = view::FilesApp::new(with_apps, &home, &trash, places, Box::new(spawn));
+    app.set_applications(folder, Box::new(open_app));
+    app.set_icon_files(Box::new(native_fs::Disk));
     app.handlers = load_handlers(&fs, &application_dirs(&home, data_home));
     let data_home_dir = match data_home.filter(|d| d.starts_with('/')) {
         Some(d) => String::from(d),

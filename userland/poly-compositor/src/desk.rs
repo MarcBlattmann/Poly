@@ -124,7 +124,7 @@ impl Desktop {
         fonts: poly_shell::draw::Fonts,
     ) -> Desktop {
         let (lw, lh) = server.scene().logical_size();
-        let apps = poly_shell::apps::catalog(desktop::desktop_files(desktop::APPLICATIONS));
+        let apps = desktop::installed_apps();
         let title_font = fonts.sans;
         let mut shell = Shell::new(lw, lh, apps, poly_shell::draw::Text::with_fonts(fonts));
         desktop::load_wallpapers(&mut shell);
@@ -544,6 +544,17 @@ impl Desktop {
     /// Where the settings are kept, if they are.
     pub fn settings_file(&self) -> Option<&str> {
         self.settings_path.as_deref()
+    }
+
+    /// The installed app with this ID, for a program that asks to have it
+    /// started (Files' Applications folder, ADR 0175). An ID the shell does
+    /// not know is an app installed since the desktop started: the apps
+    /// are read again, so the launcher has it from then on too.
+    pub fn app_by_id(&mut self, id: &str) -> Option<poly_shell::App> {
+        if self.shell.app_by_id(id).is_none() {
+            self.shell.set_catalog(desktop::installed_apps());
+        }
+        self.shell.app_by_id(id).cloned()
     }
 
     /// An app the launcher started that is the shell's own.
