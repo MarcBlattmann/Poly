@@ -4,8 +4,8 @@ id: windows/api/user32.dll/GetUpdateRect
 oracle:
   os: "Windows 11 Home 25H2 (build 26200.9711), x64"
   machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
-  observed_by: spec-win-gui-b
-  date: 2026-11-02
+  observed_by: spec-win-gui-b, spec-win-gui-b2
+  date: 2026-11-02, 2026-11-09
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn reference pages of the functions and messages named here, "About
@@ -33,9 +33,14 @@ rules:
   hidden: "a hidden window has nothing invalid (InvalidateRect leaves nothing); hiding a window with an update region empties it; showing a window makes its whole client area invalid"
   hidden_parent: "a visible child of a hidden parent: InvalidateRect returns 1, nothing invalid; when the parent is shown the child is wholly invalid too"
   off_screen: "a window moved to -500,-500 (off the screen) has nothing invalid after the move, but InvalidateRect still invalidates it (0,0,100,80) and it is painted"
-  minimized: "a minimized captioned window after InvalidateRect: returns 1 with the rectangle 0,0,0,0, QS_PAINT in the queue, and it gets WM_PAINT"
+  minimized: "a minimized captioned window after InvalidateRect (whole or partial rectangle, erase TRUE or FALSE): returns 1 with left = right = 0 (the client area is empty; top and bottom are not meaningful for a partial rectangle and must not be relied on; 0,0,0,0 for the whole client), QS_PAINT in the queue, and it gets WM_PAINT. GetUpdateRect with bErase TRUE sends nothing for it (no WM_ERASEBKGND, no WM_NCPAINT, no WM_ICONERASEBKGND); pumping delivers only WM_PAINT (also when the procedure passes it to DefWindowProc), after which nothing is invalid and QS_PAINT is gone; ValidateRect(NULL) empties it. Minimizing a window that has 10,10,50,50 invalid: inside ShowWindow WM_NCPAINT (wParam 1) is sent, afterwards GetUpdateRect says 1 with 0,0,0,0, and the pump delivers one WM_PAINT. Hiding it empties the update region (0); showing it minimized again (SW_SHOWMINNOACTIVE) sends WM_NCPAINT (1) inside the call, gives 1 with 0,0,0,0 and a WM_PAINT when pumped. A child of a minimized window: InvalidateRect returns 1 but the child has nothing invalid (0, 0,0,0,0, QS_PAINT empty). Restoring (SW_RESTORE), whether the window was invalid or not: inside ShowWindow WM_NCPAINT (1) and WM_ERASEBKGND are sent to the window; right after it GetUpdateRect gives the whole client 0,0,184,81 (200x120 window with caption) and the child 0,0,60,40, QS_PAINT set; the pump delivers WM_PAINT to the window, then to the child, whose WM_NCPAINT (1) and WM_ERASEBKGND come with its paint"
+  moved_partly_off: "a move (SetWindowPos without SWP_NOCOPYBITS) leaves valid what was on the screen before and makes invalid the part of the client area that was off the screen and is on it now; GetUpdateRect and the update region report exactly that, and one WM_PAINT follows. For a 100x80 popup: from x=-30 to x=40 the region is 0,0,30,80; from x=1870 to x=1780 50,0,100,80; from y=-40 to y=60 0,0,100,40; from y=1040 0,40,100,80; from -30,-30 to 40,60 the two bands 0,0,100,30 and 0,30,30,80 (GetUpdateRect 0,0,100,80); from -30 to -10 10,0,30,80; from -30 to 10 0,0,30,80. Nothing becomes invalid when no new part comes into view: from -30 to -60, from -30,60 to -30,100, from fully on to anywhere (0, no WM_PAINT). From wholly off the screen the whole client becomes invalid (also when it lands partly off: -300 to -30 gives 0,0,100,80). SWP_NOCOPYBITS invalidates the whole client area on every move, also between two fully visible places. For a captioned window (8 px frame, client 144x61 for 160x100) the part counts in client terms: moving from x=-60 to 40 invalidates 0,0,52,61 (its client was off the screen only left of x=-52), moving from y=-20 (only the caption off) to 60 invalidates nothing"
+  off_screen_more: "a top-level window shown (SW_SHOWNOACTIVATE), hidden and shown again, or created visible, while wholly off the screen has nothing invalid and gets no paint until it is moved onto the screen (then the whole client area is invalid and one WM_NCPAINT, WM_ERASEBKGND and WM_PAINT come, the first two inside the move); InvalidateRect on it with a partial rectangle (5,6,20,30) reads back as that rectangle until it is hidden (then empty). A child of such a window: InvalidateRect(child) returns 1 and the child reports its whole client (0,0,30,20) with QS_PAINT set while the parent reports 0; the pump delivers the child a WM_PAINT. A child wholly off the screen because its parent is mostly off it gets WM_PAINT and WM_NCPAINT but no WM_ERASEBKGND when the parent becomes visible"
+  showing_a_child: "a child that is not WS_VISIBLE: InvalidateRect(child) returns 1 and nothing is invalid. ShowWindow(child, SW_SHOWNA) makes the child's whole client area invalid (0,0,30,20) and the parent's area under the child invalid too (10,10,40,30 for a child at 10,10 of size 30x20), and the parent's pending erase of that area is sent at once (WM_ERASEBKGND to the parent inside the call); the pump then delivers WM_PAINT to the parent, then WM_PAINT, WM_NCPAINT and WM_ERASEBKGND to the child"
+  last_error: "a successful call does not touch the last-error value (a value set before the call is still there after it, also for a window with nothing invalid); for a failure it is 1400"
+  other_windows: "the desktop window (GetDesktopWindow) has nothing invalid (0, 0,0,0,0, no error); a message-only window: InvalidateRect returns 1, GetUpdateRect 0; a disabled window is invalidated and painted like an enabled one; a NULL rect pointer gives the answer only (1 with an update region, 0 without)"
 errors:
-  bad_window: "NULL or a made-up handle: 0, ERROR_INVALID_WINDOW_HANDLE (1400); the rectangle is not written"
+  bad_window: "NULL, a made-up or a destroyed window's handle, with bErase FALSE or TRUE: 0, ERROR_INVALID_WINDOW_HANDLE (1400); the rectangle is not written"
 side_effects: "none beyond the rules above"
 threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
 ordering: []
@@ -43,8 +48,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 2  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 5  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
   carrying its own declarations (Learn prototypes, header constants) and a

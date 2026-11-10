@@ -270,6 +270,29 @@ pub fn resume_apc(tid: ThreadRef) -> NtStatus {
     match saved {
         Some(regs) => {
             let status = NtStatus(regs.rax as u32);
+            // A wait that returns `STATUS_USER_APC` runs every user APC that
+            // is queued before it returns (Learn: "Asynchronous Procedure
+            // Calls"): the next one starts now, with the same context saved.
+            if status == STATUS_USER_APC {
+                let next = with(|s| {
+                    let dispatcher =
+                        s.processes.values().find(|p| p.thread(tid).is_some()).map(|p| p.apc_dispatcher)?;
+                    let apc = s.ctl.get_mut(&tid)?.apcs.pop_front()?;
+                    s.ctl.get_mut(&tid)?.apc_saved = Some(regs);
+                    Some((dispatcher, apc))
+                });
+                if let Some((dispatcher, apc)) = next {
+                    let mut frame = regs;
+                    frame.rip = dispatcher;
+                    frame.r11 = apc.routine;
+                    frame.rcx = apc.arg1;
+                    frame.rdx = apc.arg2;
+                    frame.r8 = apc.arg3;
+                    frame.rsp = regs.rsp & !0xF;
+                    let _ = user::set_registers(&frame);
+                    return status;
+                }
+            }
             let _ = user::set_registers(&regs);
             status
         }
@@ -355,6 +378,36 @@ pub fn terminate_other(pid: ProcessId, thread: ThreadRef, status: NtStatus) -> R
     with(|s| s.ctl.entry(thread).or_default().suspend_count = 0);
     process::unpark(&flags);
     flags.kick();
+    Ok(())
+}
+
+/// `NtTerminateProcess` of another process (ADR 0169), or the end of a
+/// job's members: record the exit status (the first one counts) and make
+/// every thread of `target` end at its next return to user mode. A process
+/// whose first thread was never started (created suspended) ends at once.
+pub fn terminate_process_by_id(target: ProcessId, status: NtStatus) -> Result<(), NtStatus> {
+    let (threads, deferred) = with(|s| {
+        let Some(p) = s.processes.get_mut(&target) else { return (Vec::new(), None) };
+        p.exit_status.get_or_insert(status);
+        let threads: Vec<ThreadRef> = p.threads.iter().map(|t| t.thread).collect();
+        let mut deferred = None;
+        for t in &threads {
+            if let Some(c) = s.ctl.get_mut(t)
+                && let Some(d) = c.deferred_process.take()
+            {
+                c.deferred_start = None;
+                deferred = Some(d);
+            }
+        }
+        (threads, deferred)
+    });
+    if let Some((_process, memory)) = deferred {
+        super::process_exit(target.0, &memory);
+        return Ok(());
+    }
+    for t in threads {
+        terminate_other(target, t, status)?;
+    }
     Ok(())
 }
 

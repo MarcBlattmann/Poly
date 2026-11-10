@@ -57,6 +57,24 @@ pub unsafe extern "system" fn CreateFileMappingW(
     h
 }
 
+/// `CreateFileMappingA`: the name in the ANSI code page, then as
+/// `CreateFileMappingW`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateFileMappingA(
+    file: Handle,
+    security: *const u8,
+    protect: u32,
+    size_high: u32,
+    size_low: u32,
+    name: *const u8,
+) -> Handle {
+    // SAFETY: the caller's string.
+    let wide = unsafe { ansi_arg(name) }.map(|w| with_nul(&w));
+    let p = wide.as_ref().map_or(core::ptr::null(), |w| w.as_ptr());
+    // SAFETY: a NUL-terminated name or null; the rest as given.
+    unsafe { CreateFileMappingW(file, security, protect, size_high, size_low, p) }
+}
+
 /// `OpenFileMappingW`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn OpenFileMappingW(access: u32, inherit: i32, name: *const u16) -> Handle {

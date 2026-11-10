@@ -194,6 +194,9 @@ const SERIAL_RING: usize = 256;
 const WAIT_FN: &str = "w() { for i in $(seq 1 $3); do grep -q -- \"$2\" $1 && break; sleep 0.5; done; \
                        grep -- \"$2\" $1 || { echo \"TIMEOUT $2\"; tail -n 30 $1; }; }";
 
+/// Starts the desktop in the background, its output in `/tmp/comp.log`.
+const START: &str = "POLY_XWM_DEBUG=1 poly-compositor --desktop --xwayland-lazy > /tmp/comp.log 2>&1 &";
+
 /// Wait in the guest (up to `secs`) until `file` contains `text`, then
 /// print the matching lines: a shell line for [`crate::busybox::Session::run`]
 /// (after [`WAIT_FN`]).
@@ -317,7 +320,13 @@ impl Screen {
 
 /// Wait for `text` in the compositor's log; the matching lines.
 fn log_wait(s: &mut crate::busybox::Session, text: &str, secs: u32) -> crate::Result<String> {
-    let out = s.run(&wait_for("/tmp/comp.log", text, secs))?;
+    log_wait_after(s, "", text, secs)
+}
+
+/// [`log_wait`] after `first` (shell text that ends a command itself, like
+/// `program &`, or nothing) on the same line.
+fn log_wait_after(s: &mut crate::busybox::Session, first: &str, text: &str, secs: u32) -> crate::Result<String> {
+    let out = s.run(format!("{first} {}", wait_for("/tmp/comp.log", text, secs)).trim_start())?;
     if out.contains(&format!("TIMEOUT {text}")) {
         // What X has, for the log.
         let _ = s.run("DISPLAY=:0 xwininfo -root -tree | head -30; grep 'xwm:' /tmp/comp.log | tail -40");
@@ -394,8 +403,12 @@ fn session(s: &mut crate::busybox::Session, socket: &Path, shots: &Path) -> crat
     let mut d = Screen { qmp, shots: shots.to_path_buf(), step: 0 };
     s.run("export XDG_RUNTIME_DIR=/run/user/0; mkdir -p -m 700 $XDG_RUNTIME_DIR")?;
     s.run(WAIT_FN)?;
-    s.run("POLY_XWM_DEBUG=1 poly-compositor --desktop --xwayland-lazy > /tmp/comp.log 2>&1 &")?;
-    log_wait(s, "desktop ready", 120)?;
+    // Started and waited for in one line. The compositor takes the display
+    // (and opens the desktop's link to Windows apps) a few milliseconds
+    // after it starts, and the kernel says so on this console: lines that
+    // would land right behind the prompt of a line that only started it,
+    // and `run` knows the prompt by its standing last.
+    log_wait_after(s, START, "desktop ready", 120)?;
     log_wait(s, "X display :0 on /tmp/.X11-unix/X0 and 2 socket(s)", 30)?;
     let first = d.shot("desktop")?;
     expect("the screen is the desktop's size", (first.width, first.height) == SIZE)?;
@@ -570,5 +583,7 @@ mod tests {
     fn typed_lines_fit_the_serial_ring() {
         let longest = wait_for("/tmp/comp.log", "X display :0 on /tmp/.X11-unix/X0 and 2 socket(s)", 30);
         assert!(WAIT_FN.len() < SERIAL_RING && longest.len() < SERIAL_RING);
+        let start = format!("{START} {}", wait_for("/tmp/comp.log", "desktop ready", 120));
+        assert!(start.len() < SERIAL_RING);
     }
 }

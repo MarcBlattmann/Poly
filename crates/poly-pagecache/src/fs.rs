@@ -82,6 +82,12 @@ impl<F: PageFrame, L: RawLock + Default> CachedFs<F, L> {
         self.cache().cached(&self.key(ino, index))
     }
 
+    /// The cached pages of `ino` among the `count` from page `index` on, with
+    /// their indexes; nothing is read (see [`PageCache::cached_run`]).
+    pub fn cached_run(&self, ino: Ino, index: u64, count: u64) -> Vec<(u64, PageRef<F, L>)> {
+        self.cache().cached_run(self.st.id, ino, index, count)
+    }
+
     /// Write back this file system's dirty pages (all, or those of one
     /// inode) to the inner file system, without syncing it. Returns how
     /// many pages were written.
@@ -163,25 +169,36 @@ impl<F: PageFrame, L: RawLock + Default> CachedFs<F, L> {
         let mut first = None;
         for (i, frame) in frames.into_iter().enumerate() {
             let at = i * PAGE_SIZE;
-            let page = self.core.insert(self.key(ino, index + i as u64), frame);
-            page.write(0, &buf[at..(at + PAGE_SIZE).min(len)]);
+            // Filled before it can be found (see `Core::insert`).
+            let data = &buf[at..(at + PAGE_SIZE).min(len)];
+            let page = self.core.insert(self.key(ino, index + i as u64), frame, |p| p.write(0, data));
             first.get_or_insert(page);
         }
         self.core.count_filled(count);
         Ok(first.expect("at least one frame"))
     }
 
-    /// A page to overwrite part of: cached, or a fresh zeroed one when
-    /// nothing of it is on the inner file system (`fresh`), or read.
-    fn page_for_write(&self, ino: Ino, index: u64, size: u64, fresh: bool) -> Result<Arc<Page<F>>> {
-        if !fresh {
-            return self.get_or_fill(ino, index, size);
-        }
-        if let Some(p) = self.core.lookup(&self.key(ino, index)) {
-            return Ok(p);
+    /// Copy `data` into page `index` at `in_page`; the page. It is the
+    /// cached one, or a fresh zeroed one when nothing of it is on the inner
+    /// file system (`fresh`), or read. A fresh page enters the cache with
+    /// `data` in it (see `Core::insert`).
+    fn write_page(
+        &self,
+        ino: Ino,
+        index: u64,
+        size: u64,
+        fresh: bool,
+        in_page: usize,
+        data: &[u8],
+    ) -> Result<Arc<Page<F>>> {
+        let key = self.key(ino, index);
+        let cached = if fresh { self.core.lookup(&key) } else { Some(self.get_or_fill(ino, index, size)?) };
+        if let Some(page) = cached {
+            page.write(in_page, data);
+            return Ok(page);
         }
         let frame = self.core.alloc_frame()?;
-        Ok(self.core.insert(self.key(ino, index), frame))
+        Ok(self.core.insert(key, frame, |p| p.write(in_page, data)))
     }
 
     /// Zero the cached last page of a file of `size` bytes past its end:
@@ -247,12 +264,11 @@ impl<F: PageFrame, L: RawLock + Default> CachedFs<F, L> {
             // Nothing to read if the write covers the page or the page lies
             // wholly past the old end of the file.
             let fresh = n == PAGE_SIZE || index * PAGE >= old;
-            let page = match self.page_for_write(ino, index, size, fresh) {
+            let page = match self.write_page(ino, index, size, fresh, in_page, &buf[done..done + n]) {
                 Ok(p) => p,
                 Err(e) if done == 0 => return Err(e),
                 Err(_) => break,
             };
-            page.write(in_page, &buf[done..done + n]);
             self.core.mark_dirty(&page);
             done += n;
         }

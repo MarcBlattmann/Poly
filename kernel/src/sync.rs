@@ -42,7 +42,7 @@ use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use poly_heap::RawLock;
 
 /// This CPU's count of spinlocks (and the heap's raw lock) held.
@@ -178,12 +178,23 @@ unsafe impl RawLock for RawIrqSpinLock {
     }
 }
 
-/// A lock that sleeps: threads that find it held block on a wait queue and
-/// are woken one at a time as it is released. Not FIFO-fair: a running thread
-/// can take a just-released mutex before the woken waiter runs (which then
-/// waits again).
+/// How often a thread that finds a [`Mutex`] held looks again before it goes
+/// to sleep: most holders are done within a few microseconds, and sleeping
+/// (the scheduler's lock, a switch, a wake-up interrupt for the holder's
+/// CPU) costs far more than that, most of all in a virtual machine
+/// (ADR 0148).
+const MUTEX_SPINS: u32 = 64;
+
+/// A lock that sleeps: threads that find it held look again for a moment,
+/// then block on a wait queue and are woken one at a time as it is
+/// released. Not FIFO-fair: a running thread can take a just-released mutex
+/// before the woken waiter runs (which then waits again).
 pub struct Mutex<T> {
     locked: AtomicBool,
+    /// Threads in (or about to be in) [`Mutex::lock`]'s sleep: a release
+    /// wakes one only if there are any, so an uncontended mutex never
+    /// touches the scheduler's lock.
+    sleepers: AtomicU32,
     /// [`owner_tag`] of the holder, 0 when free: catches a thread locking a
     /// mutex it already holds.
     owner: AtomicU64,
@@ -211,6 +222,7 @@ impl<T> Mutex<T> {
     pub const fn new(value: T) -> Self {
         Mutex {
             locked: AtomicBool::new(false),
+            sleepers: AtomicU32::new(0),
             owner: AtomicU64::new(0),
             waiters: WaitQueue::new(),
             value: UnsafeCell::new(value),
@@ -229,14 +241,31 @@ impl<T> Mutex<T> {
         if self.owner.load(Ordering::Relaxed) == me {
             panic!("deadlock: thread {} locks a mutex it already holds", thread::current());
         }
-        if !self.try_acquire() {
-            // The check runs with the scheduler locked, and `unlock` clears
-            // `locked` before it wakes a waiter, so a release cannot slip
-            // between a failed check and going to sleep.
+        if !self.try_acquire() && !self.spin() {
+            // Counted before the check below, which runs with the scheduler
+            // locked; `release` clears `locked` and then reads the count
+            // (both sequentially consistent), so either this check sees the
+            // release or the release sees this sleeper and wakes it (after
+            // the scheduler's lock is free again, so after this thread is
+            // queued): a release cannot slip between a failed check and
+            // going to sleep.
+            self.sleepers.fetch_add(1, Ordering::SeqCst);
             self.waiters.wait_until(|| self.try_acquire());
+            self.sleepers.fetch_sub(1, Ordering::SeqCst);
         }
         self.owner.store(me, Ordering::Relaxed);
         MutexGuard { mutex: self, _not_send: PhantomData }
+    }
+
+    /// Look for the mutex to come free a moment before sleeping for it.
+    fn spin(&self) -> bool {
+        for _ in 0..MUTEX_SPINS {
+            core::hint::spin_loop();
+            if !self.locked.load(Ordering::Relaxed) && self.try_acquire() {
+                return true;
+            }
+        }
+        false
     }
 
     /// Take the mutex if it is free, without blocking.
@@ -285,8 +314,10 @@ impl<T> Mutex<T> {
     /// Release the mutex the calling thread holds and wake one waiter.
     fn release(&self) {
         self.owner.store(0, Ordering::Relaxed);
-        self.locked.store(false, Ordering::Release);
-        self.waiters.wake_one();
+        self.locked.store(false, Ordering::SeqCst);
+        if self.sleepers.load(Ordering::SeqCst) != 0 {
+            self.waiters.wake_one();
+        }
     }
 }
 
