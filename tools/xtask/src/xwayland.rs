@@ -197,6 +197,9 @@ const WAIT_FN: &str = "w() { for i in $(seq 1 $3); do grep -q -- \"$2\" $1 && br
 /// Starts the desktop in the background, its output in `/tmp/comp.log`.
 const START: &str = "POLY_XWM_DEBUG=1 poly-compositor --desktop --xwayland-lazy > /tmp/comp.log 2>&1 &";
 
+/// The compositor's line for the connection that starts Xwayland.
+const X_CLIENT: &str = "an X client connected to :0";
+
 /// Wait in the guest (up to `secs`) until `file` contains `text`, then
 /// print the matching lines: a shell line for [`crate::busybox::Session::run`]
 /// (after [`WAIT_FN`]).
@@ -412,12 +415,20 @@ fn session(s: &mut crate::busybox::Session, socket: &Path, shots: &Path) -> crat
     log_wait(s, "X display :0 on /tmp/.X11-unix/X0 and 2 socket(s)", 30)?;
     let first = d.shot("desktop")?;
     expect("the screen is the desktop's size", (first.width, first.height) == SIZE)?;
+    // Lazy: nothing but an X client's connection starts Xwayland, so
+    // without one the compositor has not seen any (the desktop's link to
+    // Windows apps, polled right behind the X sockets, once counted as one).
+    let early = s.run(&format!("grep -c '{X_CLIENT}' /tmp/comp.log; echo counted"))?;
+    expect(
+        &format!("no X client connected before the first one ran (printed {early:?})"),
+        early.lines().any(|l| l.trim() == "0"),
+    )?;
 
     // 2. xdpyinfo, the first X client: Xwayland starts for it, then it
     // reports the server, its screen and extensions.
     let out = s.run("DISPLAY=:0 xdpyinfo > /tmp/xdpyinfo.txt 2>&1; echo status=$?")?;
     expect(&format!("xdpyinfo exits 0 (printed {out:?})"), out.contains("status=0"))?;
-    log_wait(s, "an X client connected to :0", 30)?;
+    log_wait(s, X_CLIENT, 30)?;
     log_wait(s, "Xwayland ready on :0", 60)?;
     log_wait(s, "X window manager ready", 60)?;
     let info = s.run(
