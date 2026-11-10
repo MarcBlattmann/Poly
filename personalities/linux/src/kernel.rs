@@ -1330,9 +1330,33 @@ pub trait LinuxKernel {
 
     /// seccomp(2) `SECCOMP_FILTER_FLAG_NEW_LISTENER`: a new notification
     /// descriptor on the lowest free number, open `O_RDWR`, close-on-exec,
-    /// an anonymous inode named `seccomp notify`. `ENOSYS` by default.
-    fn seccomp_listener(&mut self) -> Result<i32, Errno> {
+    /// an anonymous inode named `seccomp notify`, and the listener behind
+    /// it (made with the kernel's
+    /// [`Notifier`](crate::seccomp::notify::Notifier); the kernel closes it
+    /// when the last descriptor goes). `ENOSYS` by default.
+    fn seccomp_listener(&mut self) -> Result<(i32, Arc<crate::seccomp::notify::Listener>), Errno> {
         Err(Errno::ENOSYS)
+    }
+
+    /// The listener behind `fd`, if it is a seccomp notification
+    /// descriptor ([`seccomp_listener`](Self::seccomp_listener)).
+    fn seccomp_listener_of(&mut self, fd: i32) -> Option<Arc<crate::seccomp::notify::Listener>> {
+        let _ = fd;
+        None
+    }
+
+    /// Sleep the calling thread until `ready` says so; `listener` tells its
+    /// notifier whenever that may have changed. Returns `Woken` once it
+    /// did, or `Signal` when the thread's signal notification is set
+    /// first. The default cannot sleep: it reports a signal unless `ready`
+    /// holds.
+    fn seccomp_wait(
+        &mut self,
+        listener: &Arc<crate::seccomp::notify::Listener>,
+        ready: &mut dyn FnMut() -> bool,
+    ) -> Wakeup {
+        let _ = listener;
+        if ready() { Wakeup::Woken } else { Wakeup::Signal }
     }
 
     /// mseal(2): seal the page-aligned, non-empty range `[addr, addr +

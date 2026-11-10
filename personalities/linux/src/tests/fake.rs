@@ -25,6 +25,7 @@ use crate::time::TimerWakeup;
 use poly_abi::{Outcome, SyscallRegs};
 use std::boxed::Box;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::Arc;
 use std::vec;
 use std::vec::Vec;
 
@@ -203,6 +204,12 @@ pub struct FakeKernel {
     pub net: Option<super::socket::FakeNet>,
     /// seccomp state was installed (ADR 0054), and what was logged.
     pub seccomp_on: bool,
+    /// The notification descriptor of the last filter installed with one
+    /// (descriptor 3).
+    pub seccomp_listener: Option<Arc<crate::seccomp::notify::Listener>>,
+    /// What happens while a thread sleeps in `wait_on` (the other side of
+    /// what it waits for); without it the wait ends as if by a signal.
+    pub on_wait: Option<Box<dyn FnMut()>>,
     pub seccomp_logged: Vec<(u64, u32)>,
     /// Namespaces (ADR 0054): the root is not the mount namespace's; the
     /// mount tables copied (their ids); the mount namespaces entered; what
@@ -291,6 +298,8 @@ impl FakeKernel {
             io: Default::default(),
             net: None,
             seccomp_on: false,
+            seccomp_listener: None,
+            on_wait: None,
             seccomp_logged: Vec::new(),
             chroot: false,
             mount_copies: Vec::new(),
@@ -1012,8 +1021,28 @@ impl LinuxKernel for FakeKernel {
         self.seccomp_on = true;
     }
 
-    fn seccomp_listener(&mut self) -> Result<i32, Errno> {
-        Ok(3)
+    fn seccomp_listener(&mut self) -> Result<(i32, Arc<crate::seccomp::notify::Listener>), Errno> {
+        let l = crate::seccomp::notify::Listener::new(Arc::new(NoNotifier));
+        self.seccomp_listener = Some(Arc::clone(&l));
+        Ok((3, l))
+    }
+
+    fn seccomp_wait(
+        &mut self,
+        _listener: &Arc<crate::seccomp::notify::Listener>,
+        ready: &mut dyn FnMut() -> bool,
+    ) -> Wakeup {
+        if ready() {
+            return Wakeup::Woken;
+        }
+        if let Some(other_side) = self.on_wait.as_mut() {
+            other_side();
+        }
+        if ready() { Wakeup::Woken } else { Wakeup::Signal }
+    }
+
+    fn seccomp_listener_of(&mut self, fd: i32) -> Option<Arc<crate::seccomp::notify::Listener>> {
+        self.seccomp_listener.as_ref().filter(|_| fd == 3).map(Arc::clone)
     }
 
     fn seccomp_log(&mut self, number: u64, ret: u32) {
@@ -1324,4 +1353,15 @@ pub fn put_iovecs(k: &mut FakeKernel, at: u64, iovs: &[(u64, u64)]) -> u64 {
     }
     k.poke(at, &raw);
     at
+}
+
+/// The notifier of the fake's seccomp listeners: nobody sleeps here.
+pub struct NoNotifier;
+
+impl crate::seccomp::notify::Notifier for NoNotifier {
+    fn changed(&self) {}
+
+    fn as_any(&self) -> &(dyn core::any::Any + Send + Sync) {
+        self
+    }
 }

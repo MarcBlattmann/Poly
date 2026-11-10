@@ -1188,8 +1188,34 @@ impl LinuxKernel for Thread<'_> {
         self.process.thread_count() > 1 || user::current_memory().is_some_and(|m| Arc::strong_count(&m) > 2)
     }
 
-    fn seccomp_listener(&mut self) -> Result<i32, Errno> {
+    fn seccomp_listener(&mut self) -> Result<(i32, Arc<poly_personality_linux::seccomp::notify::Listener>), Errno> {
         self.seccomp_listener_fd()
+    }
+
+    fn seccomp_listener_of(&mut self, fd: i32) -> Option<Arc<poly_personality_linux::seccomp::notify::Listener>> {
+        let file = self.process.files.file(fd).ok()?;
+        Some(file.object_as::<fileio::SeccompNotify>()?.listener())
+    }
+
+    fn seccomp_wait(
+        &mut self,
+        listener: &Arc<poly_personality_linux::seccomp::notify::Listener>,
+        ready: &mut dyn FnMut() -> bool,
+    ) -> Wakeup {
+        let Some(queue) = fileio::seccomp_queue(listener) else {
+            return if ready() { Wakeup::Woken } else { Wakeup::Signal };
+        };
+        let mut blocker = self.blocker();
+        let _registration = queue.register(poly_vfs::PollEvents::READABLE, poly_vfs::Blocker::waker(&mut blocker));
+        // (The listener notifies with every event bit.)
+        loop {
+            if ready() {
+                return Wakeup::Woken;
+            }
+            if poly_vfs::Blocker::block(&mut blocker, None) == poly_vfs::Woke::Interrupted {
+                return Wakeup::Signal;
+            }
+        }
     }
 
     fn mseal(&mut self, addr: u64, len: u64) -> Result<(), Errno> {

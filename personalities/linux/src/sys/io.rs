@@ -118,6 +118,10 @@ pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if let Some(r) = crate::sys::perf::ioctl(k, fd, request, a.ulong(2)) {
         return r;
     }
+    // A seccomp notification descriptor's requests (seccomp_unotify(2)).
+    if let Some(r) = crate::sys::seccomp::ioctl(k, fd, request, a.ptr(2)) {
+        return r;
+    }
     // A userfaultfd's UFFDIO_* requests (ioctl_userfaultfd(2)).
     if let Some(r) = crate::sys::userfaultfd::ioctl(k, fd, request, a.ptr(2)) {
         return r;

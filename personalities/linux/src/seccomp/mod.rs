@@ -20,8 +20,9 @@
 //!   the process the same way when it is the only thread; `TRAP` sends
 //!   `SIGSYS` (`SYS_SECCOMP`, `si_call_addr`, `si_syscall`, `si_arch`,
 //!   `si_errno` = the data); `ERRNO` returns `-data` (at most 4095, the
-//!   largest errno); `TRACE` without a tracer and `USER_NOTIF` (Poly's
-//!   listeners are never notified) fail the call with `ENOSYS`; `LOG` runs
+//!   largest errno); `TRACE` without a tracer fails the call with `ENOSYS`,
+//!   and so does `USER_NOTIF` from a filter without a listener; with one
+//!   the thread waits for the supervisor's answer ([`notify`]); `LOG` runs
 //!   the call and tells the kernel to log it; `ALLOW` runs it. A call not
 //!   run leaves `rax` as the action says; after `TRAP` the registers are
 //!   as at entry, so the call appears to return its own number (seccomp's
@@ -32,11 +33,12 @@
 //! [`Linux::dispatch_with`]: crate::Linux::dispatch_with
 
 pub mod abi;
+pub mod notify;
 
 use crate::abi::SigInfo;
 use crate::abi::signal::{SIGKILL, SIGSYS};
 use crate::errno::Errno;
-use crate::kernel::{LinuxKernel, UserPtr};
+use crate::kernel::{LinuxKernel, UserPtr, Wakeup};
 use crate::signal::deliver::{force_signal, with_own};
 use crate::table::nr;
 use abi::*;
@@ -54,8 +56,9 @@ pub struct Filter {
     program: Program,
     /// `SECCOMP_FILTER_FLAG_LOG`: log every action but `ALLOW`.
     log: bool,
-    /// Installed with `SECCOMP_FILTER_FLAG_NEW_LISTENER`.
-    listener: bool,
+    /// Installed with `SECCOMP_FILTER_FLAG_NEW_LISTENER`: where its
+    /// `USER_NOTIF` verdicts go.
+    listener: Option<Arc<notify::Listener>>,
     prev: Option<Arc<Filter>>,
     /// Instructions of this filter and every earlier one, each earlier one
     /// counted with [`PATH_PENALTY`] more (seccomp(2), `ENOMEM`).
@@ -189,15 +192,21 @@ pub const fn precedence(ret: u32) -> i32 {
 /// confirmed by the diff runner: seccomp(2) does not say whose data
 /// wins). With the `LOG` flag of the filter that decided.
 pub fn evaluate(filter: &Arc<Filter>, data: &SeccompData) -> (u32, bool) {
+    let (ret, by) = decide(filter, data);
+    (ret, by.is_some_and(|f| f.log))
+}
+
+/// [`evaluate`], with the filter that decided.
+fn decide<'a>(filter: &'a Arc<Filter>, data: &SeccompData) -> (u32, Option<&'a Filter>) {
     let words = data.words();
-    let mut best: Option<(u32, bool)> = None;
+    let mut best: Option<(u32, &Filter)> = None;
     for f in filter.chain() {
         let ret = f.program.run(&words);
         if best.is_none_or(|(b, _)| precedence(ret) < precedence(b)) {
-            best = Some((ret, f.log));
+            best = Some((ret, f));
         }
     }
-    best.unwrap_or((SECCOMP_RET_ALLOW, false))
+    best.map_or((SECCOMP_RET_ALLOW, None), |(ret, f)| (ret, Some(f)))
 }
 
 /// What a filter's value asks for.
@@ -293,7 +302,9 @@ pub fn check(k: &mut dyn LinuxKernel, regs: &mut SyscallRegs) -> Verdict {
         args: [regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9],
     };
     let regs_nr = data.nr;
-    let (ret, log) = evaluate(&filter, &data);
+    let (ret, by) = decide(&filter, &data);
+    let log = by.is_some_and(|f| f.log);
+    let listener = by.and_then(|f| f.listener.clone());
     let action = Action::of(ret);
     if log && action != Action::Allow || action == Action::Log {
         k.seccomp_log(regs.rax, ret);
@@ -304,10 +315,18 @@ pub fn check(k: &mut dyn LinuxKernel, regs: &mut SyscallRegs) -> Verdict {
             regs.rax = (-i64::from(e.min(MAX_ERRNO))) as u64;
             Verdict::Skip
         }
-        Action::Trace(_) | Action::UserNotif => {
+        Action::Trace(_) => {
             regs.rax = Errno::ENOSYS.to_rax();
             Verdict::Skip
         }
+        Action::UserNotif => match listener {
+            Some(l) => notified(k, &l, &data, regs),
+            // Nobody to ask.
+            None => {
+                regs.rax = Errno::ENOSYS.to_rax();
+                Verdict::Skip
+            }
+        },
         Action::Trap(data) => {
             // `rax` keeps the call's number: the registers are as at entry.
             force_signal(k, sigsys(ip, regs_nr, data));
@@ -328,6 +347,43 @@ pub fn check(k: &mut dyn LinuxKernel, regs: &mut SyscallRegs) -> Verdict {
             k.kill_process(SIGSYS, true);
             Verdict::Skip
         }
+    }
+}
+
+/// `SECCOMP_RET_USER_NOTIF` (seccomp_unotify(2)): the call waits until the
+/// supervisor that holds `listener`'s descriptor answers it: with a value
+/// or an error, which the call then returns without running, or with the
+/// word to run it. A signal ends the wait: the notification is withdrawn
+/// and the call starts again after the handler (and is notified again).
+/// `ENOSYS` when the descriptor is gone.
+fn notified(
+    k: &mut dyn LinuxKernel,
+    listener: &Arc<notify::Listener>,
+    data: &SeccompData,
+    regs: &mut SyscallRegs,
+) -> Verdict {
+    let Some(id) = listener.submit(k.tid(), *data) else {
+        regs.rax = Errno::ENOSYS.to_rax();
+        return Verdict::Skip;
+    };
+    loop {
+        let mut answer = None;
+        let woke = k.seccomp_wait(listener, &mut || {
+            answer = listener.answer(id).transpose();
+            answer.is_some()
+        });
+        match answer {
+            Some(Ok(notify::Reply::Continue)) => return Verdict::Run,
+            Some(Ok(notify::Reply::Value(v))) => regs.rax = v as u64,
+            Some(Ok(notify::Reply::Error(e))) => regs.rax = i64::from(e) as u64,
+            Some(Err(e)) => regs.rax = e.to_rax(),
+            None if woke == Wakeup::Signal => {
+                listener.abandon(id);
+                regs.rax = Errno::RESTART_ALWAYS.to_rax();
+            }
+            None => continue,
+        }
+        return Verdict::Skip;
     }
 }
 
@@ -401,12 +457,20 @@ pub struct FilterOptions {
     pub listener: bool,
 }
 
+/// What [`install`] is given beyond the program.
+#[derive(Clone, Debug, Default)]
+pub struct NewFilter {
+    pub opts: FilterOptions,
+    /// The listener of a filter installed with one.
+    pub listener: Option<Arc<notify::Listener>>,
+}
+
 /// Whether a filter of the calling thread's chain was installed with a
 /// listener (a second one is `EBUSY`).
 pub fn has_listener(k: &mut dyn LinuxKernel) -> bool {
     let tid = k.tid();
     with_own(k, |p| match &p.thread(tid).seccomp {
-        Seccomp::Filter(f) => f.chain().any(|f| f.listener),
+        Seccomp::Filter(f) => f.chain().any(|f| f.listener.is_some()),
         _ => false,
     })
 }
@@ -420,8 +484,22 @@ pub fn install(
     opts: FilterOptions,
     tsync: bool,
 ) -> Result<Installed, Errno> {
+    install_with(k, program, NewFilter { opts, listener: None }, tsync)
+}
+
+/// [`install`], with the listener of a filter that has one.
+pub fn install_with(
+    k: &mut dyn LinuxKernel,
+    program: Program,
+    new: NewFilter,
+    tsync: bool,
+) -> Result<Installed, Errno> {
     let tid = k.tid();
+    let opts = new.opts;
+    let mut listener = new.listener;
+    let mut program = Some(program);
     let done = with_own(k, |p| {
+        let Some(program) = program.take() else { return Err(Errno::EINVAL) };
         let mine = p.thread(tid).seccomp.clone();
         let nnp = p.thread(tid).creds.no_new_privs;
         let prev = match mine {
@@ -433,7 +511,7 @@ pub fn install(
         if path_len > MAX_INSNS_PER_PATH {
             return Err(Errno::ENOMEM);
         }
-        let new = Arc::new(Filter { program, log: opts.log, listener: opts.listener, prev, path_len });
+        let new = Arc::new(Filter { program, log: opts.log, listener: listener.take(), prev, path_len });
         if tsync {
             let others: Vec<i32> = p.thread_ids().filter(|&t| t != tid).collect();
             if let Some(&blocked) = others.iter().find(|&&t| !p.thread(t).seccomp.can_sync_to(&new)) {
