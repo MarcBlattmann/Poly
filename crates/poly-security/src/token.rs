@@ -109,6 +109,37 @@ pub mod class {
     pub const TOKEN_IS_APP_SILO: u32 = 48;
 }
 
+/// Whether `NtQueryInformationToken` knows `class` at all (the spec sheets:
+/// 0, 14, 35, 36, 38, 45, 46 and everything above 48 are
+/// `STATUS_INVALID_INFO_CLASS` whatever the handle is).
+pub fn is_query_class(class: u32) -> bool {
+    matches!(class, 1..=13 | 15..=34 | 37 | 39..=44 | 47 | 48)
+}
+
+/// The classes whose buffer has to be exactly their size
+/// (`TokenLinkedToken`, `TokenElevation`): any other length is
+/// `STATUS_INFO_LENGTH_MISMATCH`, decided before the handle is looked at.
+pub fn exact_query_length(class: u32) -> Option<u32> {
+    match class {
+        class::TOKEN_LINKED_TOKEN => Some(8),
+        class::TOKEN_ELEVATION => Some(4),
+        _ => None,
+    }
+}
+
+/// Whether `length` is one `NtSetInformationToken` takes for a settable
+/// `class` (the sheet): the owner, the primary group and the default DACL
+/// are a pointer (8 bytes or more), the mandatory label 16 or more, the
+/// origin exactly 8, the `DWORD` classes exactly 4.
+pub fn set_length_ok(class: u32, length: usize) -> bool {
+    match class {
+        class::TOKEN_OWNER | class::TOKEN_PRIMARY_GROUP | class::TOKEN_DEFAULT_DACL => length >= 8,
+        class::TOKEN_INTEGRITY_LEVEL => length >= 16,
+        class::TOKEN_ORIGIN => length == 8,
+        _ => length == 4,
+    }
+}
+
 /// Group attributes (`winnt.h`, `SE_GROUP_*`).
 pub const SE_GROUP_MANDATORY: u32 = 0x1;
 pub const SE_GROUP_ENABLED_BY_DEFAULT: u32 = 0x2;
@@ -318,8 +349,10 @@ pub struct Token {
     pub modified_id: u64,
     /// [`TOKEN_PRIMARY`] or [`TOKEN_IMPERSONATION`].
     pub kind: u32,
-    /// The impersonation level (an impersonation token's; a primary token
-    /// reports [`SECURITY_IMPERSONATION`] in its statistics).
+    /// The impersonation level (an impersonation token's). A process's own
+    /// primary token reports 0 in its statistics (the `OpenProcessToken`
+    /// sheet), a primary token made by `DuplicateTokenEx`
+    /// [`SECURITY_IMPERSONATION`] (the `GetTokenInformation` sheet's test).
     pub level: u32,
     pub user: Sid,
     pub user_attrs: u32,
@@ -386,7 +419,7 @@ impl Token {
             authentication_id: POLY_LOGON_LUID,
             modified_id: POLY_TOKEN_LUID,
             kind: TOKEN_PRIMARY,
-            level: SECURITY_IMPERSONATION,
+            level: SECURITY_ANONYMOUS,
             owner: admins,
             primary_group: sid::domain_relative(rid::DOMAIN_GROUP_RID_USERS),
             user,
@@ -668,7 +701,13 @@ impl Token {
                 }
             }
             (TOKEN_INTEGRITY_LEVEL, SetData::Sid(None)) => return Err(SecErr::InvalidParameter.nt()),
-            (TOKEN_VIRTUALIZATION_ENABLED, SetData::Value(v)) => self.set_flag(F_VIRT_ENABLED, *v != 0),
+            // Accepted whatever the value; it only takes effect on a token
+            // that allows virtualization (the sheet: success, reads back 0).
+            (TOKEN_VIRTUALIZATION_ENABLED, SetData::Value(v)) => {
+                if self.flags & F_VIRT_ALLOWED != 0 {
+                    self.set_flag(F_VIRT_ENABLED, *v != 0);
+                }
+            }
             (
                 TOKEN_VIRTUALIZATION_ALLOWED
                 | TOKEN_UI_ACCESS
@@ -756,7 +795,8 @@ impl Token {
             TOKEN_STATISTICS => {
                 out.extend_from_slice(&self.id.to_le_bytes());
                 out.extend_from_slice(&self.authentication_id.to_le_bytes());
-                out.extend_from_slice(&i64::MAX.to_le_bytes());
+                // ExpirationTime: none (the `OpenProcessToken` sheet: 0).
+                out.extend_from_slice(&0i64.to_le_bytes());
                 let dynamic = 0x1F4u32;
                 u32s(
                     &mut out,
@@ -955,6 +995,105 @@ mod tests {
     }
     fn u32_at(b: &[u8], at: usize) -> u32 {
         u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn statistics_of_the_process_token() {
+        let t = Token::poly_user();
+        let s = t.query(class::TOKEN_STATISTICS, 0).unwrap();
+        assert_eq!(s.len(), 56);
+        // No expiration time; a primary token, level field 0.
+        assert_eq!(u64_at(&s, 16), 0);
+        assert_eq!((u32_at(&s, 24), u32_at(&s, 28)), (TOKEN_PRIMARY, 0));
+        // A primary duplicate reports Impersonation, an impersonation one its level.
+        let d = t.duplicate(TOKEN_PRIMARY, SECURITY_IDENTIFICATION, 77);
+        assert_eq!(u32_at(&d.query(class::TOKEN_STATISTICS, 0).unwrap(), 28), SECURITY_IMPERSONATION);
+        let d = t.duplicate(TOKEN_IMPERSONATION, SECURITY_IDENTIFICATION, 78);
+        assert_eq!(u32_at(&d.query(class::TOKEN_STATISTICS, 0).unwrap(), 28), SECURITY_IDENTIFICATION);
+        assert_eq!(u64_at(&d.query(class::TOKEN_STATISTICS, 0).unwrap(), 0), 78);
+    }
+
+    #[test]
+    fn query_classes() {
+        let t = Token::poly_user();
+        for class in 0..=60 {
+            let known = t.query(class, 0x1000) != Err(STATUS_INVALID_INFO_CLASS) || class == 9;
+            assert_eq!(is_query_class(class), known, "class {class}");
+        }
+        for class in [0, 14, 35, 36, 38, 45, 46, 49, 99] {
+            assert!(!is_query_class(class), "class {class}");
+        }
+        assert_eq!(exact_query_length(19), Some(8));
+        assert_eq!(exact_query_length(20), Some(4));
+        assert_eq!(exact_query_length(8), None);
+        // The fixed sizes of the sheet.
+        for (class, size) in [
+            (7, 16),
+            (8, 4),
+            (10, 56),
+            (12, 4),
+            (15, 4),
+            (16, 31),
+            (17, 8),
+            (18, 4),
+            (20, 4),
+            (21, 1),
+            (23, 4),
+            (24, 4),
+            (26, 4),
+            (27, 4),
+            (29, 4),
+            (32, 4),
+            (40, 4),
+            (41, 8),
+            (42, 4),
+            (43, 16),
+            (44, 16),
+            (47, 4),
+            (48, 4),
+        ] {
+            assert_eq!(t.query(class, 0).map(|b| b.len()), Ok(size), "class {class}");
+        }
+    }
+
+    #[test]
+    fn set_lengths() {
+        for (class, good, bad) in [
+            (class::TOKEN_OWNER, &[8usize, 9, 16][..], &[0usize, 4, 7][..]),
+            (class::TOKEN_PRIMARY_GROUP, &[8, 9, 16], &[0, 4, 7]),
+            (class::TOKEN_DEFAULT_DACL, &[8, 9], &[0, 4, 7]),
+            (class::TOKEN_INTEGRITY_LEVEL, &[16, 27, 28, 36], &[0, 8, 15]),
+            (class::TOKEN_ORIGIN, &[8], &[4, 0, 16]),
+            (class::TOKEN_VIRTUALIZATION_ENABLED, &[4], &[0, 1, 3, 5, 8, 16]),
+            (class::TOKEN_SESSION_ID, &[4], &[0, 8]),
+        ] {
+            for &l in good {
+                assert!(set_length_ok(class, l), "class {class}, length {l}");
+            }
+            for &l in bad {
+                assert!(!set_length_ok(class, l), "class {class}, length {l}");
+            }
+        }
+    }
+
+    #[test]
+    fn virtualization_needs_to_be_allowed() {
+        let mut t = Token::poly_user();
+        let enabled = |t: &Token| t.query(class::TOKEN_VIRTUALIZATION_ENABLED, 0).unwrap();
+        for v in [0, 1, 7] {
+            assert_eq!(t.set_information(class::TOKEN_VIRTUALIZATION_ENABLED, &SetData::Value(v)), Ok(()));
+            assert_eq!(enabled(&t), [0, 0, 0, 0], "value {v}");
+        }
+        t.flags |= F_VIRT_ALLOWED;
+        t.set_information(class::TOKEN_VIRTUALIZATION_ENABLED, &SetData::Value(7)).unwrap();
+        assert_eq!(enabled(&t), [1, 0, 0, 0]);
+        // The classes that need a privilege, and the ones that cannot be set.
+        for c in [23, 12, 26, 27, 17] {
+            assert_eq!(t.set_information(c, &SetData::Value(1)), Err(SecErr::PrivilegeNotHeld.nt()), "class {c}");
+        }
+        for c in [8, 18, 21, 1, 0, 99] {
+            assert_eq!(t.set_information(c, &SetData::Value(1)), Err(STATUS_INVALID_INFO_CLASS), "class {c}");
+        }
     }
 
     #[test]

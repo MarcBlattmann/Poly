@@ -8,11 +8,12 @@
 //! 87 for a malformed structure, 1332 for an empty SID, 1337 for a SID that
 //! is not one, 1336 for rights that are not rights, 1004 for flags,
 //! 1804 for an ACE type that is unknown or in the wrong section, 1705 for a
-//! GUID). Conditional ACEs (`XA`, `XD`, `XU`) and resource attributes are
-//! not supported: they are refused.
+//! GUID). Conditional ACEs (`XA`, `XD`, `XU`), resource attributes (`RA`)
+//! and scoped policy IDs (`SP`) carry their data as [`condace`] builds it.
 
 use crate::access::GENERIC_ALL;
 use crate::acl;
+use crate::condace;
 use crate::err::{SecErr, SecResult};
 use crate::sd::{self, Parts};
 use crate::sddl;
@@ -150,14 +151,11 @@ fn sid_token(s: &[u16]) -> SecResult<(usize, Vec<u8>)> {
     }
     let upper = |c: u16| u8::try_from(c).map(|b| b.to_ascii_uppercase()).unwrap_or(0);
     if upper(s[0]) == b'S' && s.get(1) == Some(&u16::from(b'-')) {
-        let n = s
-            .iter()
-            .position(|&c| {
-                !(char::from_u32(u32::from(c)).is_some_and(|ch| {
-                    ch.is_ascii_hexdigit() || ch == '-' || ch == 'x' || ch == 'X' || ch == 's' || ch == 'S'
-                }))
-            })
-            .unwrap_or(s.len());
+        // The SID's text ends at a space or where the next part (a letter
+        // and a colon) starts: a hexadecimal number may end in `D`, so the
+        // digits alone do not say. Whatever else is in between is the
+        // SID's and makes it a bad one ("S-1-5-18x").
+        let n = (2..s.len()).find(|&i| is_space(s[i]) || s.get(i + 1) == Some(&u16::from(b':'))).unwrap_or(s.len());
         let bytes = sddl::parse_standard(&s[..n]).ok_or(SecErr::InvalidSid)?;
         return Ok((n, bytes));
     }
@@ -195,13 +193,28 @@ fn guid_bytes(s: &[u16]) -> SecResult<[u8; 16]> {
 /// An ACE string `type;flags;rights;object;inherited;sid` as the ACE's
 /// bytes (and whether it needs a revision 4 ACL).
 fn parse_ace(f: &[&[u16]], sacl: bool) -> SecResult<(Vec<u8>, bool, usize)> {
-    if f.len() != 6 {
+    if f.len() != 6 && f.len() != 7 {
         return Err(SecErr::InvalidParameter);
     }
     let text: String =
         f[0].iter().filter_map(|&c| char::from_u32(u32::from(c))).collect::<String>().trim().to_ascii_uppercase();
+    // A seventh field is the condition of a conditional ACE or the
+    // attribute of a resource attribute ACE; no other type has one.
+    let conditional = matches!(text.as_str(), "XA" | "XD" | "XU");
+    let attribute = text == "RA";
+    if f.len() == 7 && !(conditional || attribute || text == "ZA") {
+        return Err(SecErr::InvalidParameter);
+    }
     // (type, object type?, audit?)
     let (kind, object, audit) = match text.as_str() {
+        "XA" if !sacl => (acl::ACCESS_ALLOWED_CALLBACK_ACE_TYPE, false, false),
+        "XD" if !sacl => (acl::ACCESS_DENIED_CALLBACK_ACE_TYPE, false, false),
+        "XA" | "XD" => return Err(SecErr::InvalidDatatype),
+        "XU" if sacl => (acl::SYSTEM_AUDIT_CALLBACK_ACE_TYPE, false, true),
+        "XU" => return Err(SecErr::InvalidAcl),
+        "RA" if sacl => (acl::SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE, false, false),
+        "SP" if sacl => (acl::SYSTEM_SCOPED_POLICY_ID_ACE_TYPE, false, false),
+        "RA" | "SP" => return Err(SecErr::InvalidDatatype),
         "A" if !sacl => (acl::ACCESS_ALLOWED_ACE_TYPE, false, false),
         "D" if !sacl => (acl::ACCESS_DENIED_ACE_TYPE, false, false),
         "A" | "D" | "OA" | "OD" if sacl => return Err(SecErr::InvalidDatatype),
@@ -214,7 +227,7 @@ fn parse_ace(f: &[&[u16]], sacl: bool) -> SecResult<(Vec<u8>, bool, usize)> {
         "ML" if sacl => (acl::SYSTEM_MANDATORY_LABEL_ACE_TYPE, false, false),
         "ML" => return Err(SecErr::InvalidDatatype),
         "AU" | "OU" | "OL" => return Err(SecErr::InvalidAcl),
-        "ZA" | "AA" | "XA" | "XD" | "XU" | "RA" | "SP" => return Err(SecErr::InvalidAcl),
+        "ZA" | "AA" => return Err(SecErr::InvalidAcl),
         "TL" => return Err(SecErr::InvalidParameter),
         _ => return Err(SecErr::InvalidDatatype),
     };
@@ -265,6 +278,17 @@ fn parse_ace(f: &[&[u16]], sacl: bool) -> SecResult<(Vec<u8>, bool, usize)> {
     let (g1, g2) = (f[3], f[4]);
     let mut out = Vec::new();
     let has_guids = !g1.is_empty() || !g2.is_empty();
+    // The data after the SID: the seventh field between its parentheses.
+    let mut data = Vec::new();
+    if let Some(field) = f.get(6) {
+        let inner = match trim(field) {
+            [open, inner @ .., close] if *open == u16::from(b'(') && *close == u16::from(b')') => inner,
+            _ => return Err(SecErr::InvalidAcl),
+        };
+        data = if attribute { condace::compile_attribute(inner)? } else { condace::compile(inner)? };
+    } else if attribute {
+        return Err(SecErr::InvalidParameter);
+    }
     if object && has_guids {
         let mut oflags = 0u32;
         let mut guids = Vec::new();
@@ -296,19 +320,70 @@ fn parse_ace(f: &[&[u16]], sacl: bool) -> SecResult<(Vec<u8>, bool, usize)> {
         acl::SYSTEM_ALARM_OBJECT_ACE_TYPE => acl::SYSTEM_ALARM_ACE_TYPE,
         k => k,
     };
-    let size = acl::ACE_FIXED + sid_bytes.len();
+    let size = acl::ACE_FIXED + sid_bytes.len() + data.len();
     out.extend_from_slice(&[plain, flags]);
     out.extend_from_slice(&(size as u16).to_le_bytes());
     out.extend_from_slice(&mask.to_le_bytes());
     out.extend_from_slice(&sid_bytes);
+    out.extend_from_slice(&data);
     // An object type without GUIDs is written as the plain type, but the
     // list is sized for the object form: four bytes the ACE does not use.
     Ok((out, object, if object { 4 } else { 0 }))
 }
 
-/// Split an ACE's text (between the parentheses) at `;`.
+/// Split an ACE's text (between the parentheses) at `;`: six fields and,
+/// if there is more, a seventh that is all the rest (a condition may hold
+/// `;` in its strings).
 fn fields(s: &[u16]) -> Vec<&[u16]> {
-    s.split(|&c| c == u16::from(b';')).collect()
+    s.splitn(7, |&c| c == u16::from(b';')).collect()
+}
+
+/// `s` without the spaces around it.
+fn trim(mut s: &[u16]) -> &[u16] {
+    while let [first, rest @ ..] = s {
+        if is_space(*first) { s = rest } else { break }
+    }
+    while let [rest @ .., last] = s {
+        if is_space(*last) { s = rest } else { break }
+    }
+    s
+}
+
+/// The position of the `)` that closes the ACE whose text starts at
+/// `start`: the first one, except that a seventh field (after six `;`) is a
+/// parenthesized expression, whose own parentheses (outside its quoted
+/// strings) are skipped as a whole.
+fn ace_end(s: &[u16], start: usize) -> Option<usize> {
+    let is = |i: usize, c: u8| s[i] == u16::from(c);
+    let mut semicolons = 0;
+    let mut i = start;
+    while i < s.len() {
+        if is(i, b';') {
+            semicolons += 1;
+        } else if is(i, b'(') && semicolons >= 6 {
+            let (mut depth, mut quoted) = (0usize, false);
+            loop {
+                if i >= s.len() {
+                    return None;
+                }
+                if is(i, b'"') {
+                    quoted = !quoted;
+                } else if !quoted && is(i, b'(') {
+                    depth += 1;
+                } else if !quoted && is(i, b')') {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                i += 1;
+            }
+        } else if is(i, b')') {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
 }
 
 /// An ACL section's flags and entries.
@@ -386,8 +461,8 @@ fn parse_acl_section(s: &[u16], sacl: bool) -> SecResult<(Section, usize)> {
             lone = true;
             break;
         }
-        // The matching `)`: a nested `(` is not a field.
-        let Some(end) = s[start..].iter().position(|&c| c == u16::from(b')')).map(|p| start + p) else {
+        // The closing `)`: a nested `(` is not a field (but see `ace_end`).
+        let Some(end) = ace_end(s, start) else {
             // No closing parenthesis: a bad ACE (too few fields: 87, else bad ACL).
             let f = fields(&s[start..]);
             return Err(if f.len() < 6 { SecErr::InvalidParameter } else { SecErr::InvalidAcl });
@@ -553,13 +628,23 @@ fn ace_text(a: &acl::Ace, sacl: bool, info: u32) -> SecResult<Option<(String, us
         (acl::SYSTEM_AUDIT_OBJECT_ACE_TYPE, true) => ("OU", true, false),
         (acl::SYSTEM_ALARM_OBJECT_ACE_TYPE, true) => ("OL", true, false),
         (acl::SYSTEM_MANDATORY_LABEL_ACE_TYPE, true) => ("ML", false, true),
+        (acl::ACCESS_ALLOWED_CALLBACK_ACE_TYPE, false) => ("XA", false, false),
+        (acl::ACCESS_DENIED_CALLBACK_ACE_TYPE, false) => ("XD", false, false),
+        (acl::SYSTEM_AUDIT_CALLBACK_ACE_TYPE, true) => ("XU", true, false),
+        (acl::SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE, true) => ("RA", false, false),
+        (acl::SYSTEM_SCOPED_POLICY_ID_ACE_TYPE, true) => ("SP", false, false),
+        (acl::ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE, false) => return Err(SecErr::CallbackObjectAce),
         _ => return Err(SecErr::InvalidAcl),
     };
-    if label {
-        if info & sd::LABEL_SECURITY_INFORMATION == 0 {
-            return Ok(None);
-        }
-    } else if sacl && info & sd::SACL_SECURITY_INFORMATION == 0 {
+    // Which request each kind of SACL entry belongs to.
+    let wanted = match kind {
+        _ if !sacl => true,
+        acl::SYSTEM_MANDATORY_LABEL_ACE_TYPE => info & sd::LABEL_SECURITY_INFORMATION != 0,
+        acl::SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE => info & sd::ATTRIBUTE_SECURITY_INFORMATION != 0,
+        acl::SYSTEM_SCOPED_POLICY_ID_ACE_TYPE => info & sd::SCOPE_SECURITY_INFORMATION != 0,
+        _ => info & sd::SACL_SECURITY_INFORMATION != 0,
+    };
+    if !wanted {
         return Ok(None);
     }
     let sid = a.sid().ok_or(SecErr::InvalidSid)?;
@@ -596,7 +681,19 @@ fn ace_text(a: &acl::Ace, sacl: bool, info: u32) -> SecResult<Option<(String, us
     } else {
         rights_text(a.mask())
     };
-    let text = alloc::format!("({name};{};{rights};{g1};{g2};{sid_s})", flags_text(a.flags, audit));
+    // What follows the SID: a condition or a resource attribute.
+    let after = acl::ACE_FIXED + sid::valid_length(sid).unwrap_or(sid.len());
+    let data = a.bytes.get(after..).unwrap_or(&[]);
+    let seventh = match kind {
+        acl::SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE => condace::decompile_attribute(data),
+        acl::ACCESS_ALLOWED_CALLBACK_ACE_TYPE
+        | acl::ACCESS_DENIED_CALLBACK_ACE_TYPE
+        | acl::SYSTEM_AUDIT_CALLBACK_ACE_TYPE => condace::decompile(data),
+        _ => None,
+    }
+    .map(|t| alloc::format!(";({t})"))
+    .unwrap_or_default();
+    let text = alloc::format!("({name};{};{rights};{g1};{g2};{sid_s}{seventh})", flags_text(a.flags, audit));
     // The size estimate: one more per ACE, two more when the rights are in hexadecimal.
     let extra = 1 + if rights.starts_with("0x") { 10usize.saturating_sub(rights.len()) } else { 0 };
     Ok(Some((text, extra)))
@@ -633,7 +730,11 @@ pub fn format(sd: &Parts, info: u32) -> SecResult<(String, usize)> {
         }
         s
     };
-    let sacl_info = sd::SACL_SECURITY_INFORMATION | sd::LABEL_SECURITY_INFORMATION | 0x20 | 0x40 | 0x80;
+    let sacl_info = sd::SACL_SECURITY_INFORMATION
+        | sd::LABEL_SECURITY_INFORMATION
+        | sd::ATTRIBUTE_SECURITY_INFORMATION
+        | sd::SCOPE_SECURITY_INFORMATION
+        | sd::PROCESS_TRUST_LABEL_SECURITY_INFORMATION;
     for (sacl, wanted) in [(false, info & sd::DACL_SECURITY_INFORMATION != 0), (true, info & sacl_info != 0)] {
         let (present, bytes, p, ar, ai) = if sacl {
             (

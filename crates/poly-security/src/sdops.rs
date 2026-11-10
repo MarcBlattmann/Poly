@@ -66,8 +66,12 @@ pub fn select(stored: &Parts, info: u32) -> Parts {
     // label-side query (label, attribute, scope, process trust label, access
     // filter: 0x10, 0x20, 0x40, 0x80, 0x100) with it (control 0x8800); a label
     // set by `SetSecurityObject` clears it (the sheets: control 0x8010).
-    if info & (LABEL_SECURITY_INFORMATION | 0x20 | 0x40 | 0x80 | 0x100) != 0
-        && (stored.control & SE_SACL_AUTO_INHERITED != 0 || stored.sacl.is_none())
+    // A SACL query carries the stored flag too (the sheet: the SACL of a job
+    // whose SACL holds only its label is an empty ACL with control 0x8810).
+    let label_side = info & (LABEL_SECURITY_INFORMATION | 0x20 | 0x40 | 0x80 | 0x100) != 0;
+    let inherited = stored.control & SE_SACL_AUTO_INHERITED != 0;
+    if (label_side && (inherited || stored.sacl.is_none()))
+        || (info & SACL_SECURITY_INFORMATION != 0 && inherited && stored.sacl.is_some())
     {
         out.control |= SE_SACL_AUTO_INHERITED;
     }
@@ -204,6 +208,23 @@ mod tests {
 
     fn text(p: &Parts, info: u32) -> alloc::string::String {
         sdstr::format(p, info).unwrap().0
+    }
+
+    #[test]
+    fn a_sacl_query_carries_the_stored_inheritance_flag() {
+        // A job's default: the SACL holds only the label and is auto-inherited.
+        let mut stored = parts("O:BAG:SYD:(A;;GA;;;WD)S:AI(ML;;NW;;;HI)");
+        let sacl = select(&stored, SACL_SECURITY_INFORMATION);
+        assert_eq!(sacl.control, SE_SACL_PRESENT | SE_SACL_AUTO_INHERITED);
+        assert_eq!(sacl.sacl.as_deref(), Some(&[2, 0, 8, 0, 0, 0, 0, 0][..]));
+        let rel = sacl.to_relative_kernel();
+        assert_eq!((rel.len(), u16::from_le_bytes([rel[2], rel[3]])), (28, 0x8810));
+        let label = select(&stored, LABEL_SECURITY_INFORMATION).to_relative_kernel();
+        assert_eq!((label.len(), u16::from_le_bytes([label[2], label[3]])), (48, 0x8810));
+        // The flag is the stored one: without it a SACL query has none.
+        stored.control &= !SE_SACL_AUTO_INHERITED;
+        assert_eq!(select(&stored, SACL_SECURITY_INFORMATION).control, SE_SACL_PRESENT);
+        assert_eq!(select(&parts("O:BA"), SACL_SECURITY_INFORMATION).control, 0);
     }
 
     #[test]

@@ -65,6 +65,9 @@ const NT_PROCESS_POLY_TOKEN: u32 = 0x4000_0000;
 /// The longest environment block read from a caller (Poly's limit).
 const MAX_BLOCK: usize = 1 << 20;
 
+/// `ERROR_DIRECTORY` (`winerror.h`): "The directory name is invalid."
+const ERROR_DIRECTORY: u32 = 267;
+
 /// `path` names a file (not a directory) that exists.
 fn is_file(path: &[u16]) -> Result<(), u32> {
     let a = crate::file::attributes_of(path)?;
@@ -129,6 +132,9 @@ unsafe fn child_environment(env: *const u8, flags: u32) -> Result<Vec<u16>, u32>
         // SAFETY: as above.
         let bytes = unsafe { core::slice::from_raw_parts(env, n + 1) };
         let len = p::ansi_block_len(bytes).ok_or(ERROR_INVALID_PARAMETER)?;
+        if !p::ansi_block_is_well_formed(&bytes[..len]) {
+            return Err(ERROR_INVALID_PARAMETER);
+        }
         Ok(p::normalized_block(&poly_kernelbase::text::from_ansi(&bytes[..len])))
     }
 }
@@ -343,7 +349,9 @@ unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (boo
     if crate::mitigation::child_processes_blocked() {
         return fail(367, FALSE);
     }
-    if information.is_null() || (app.is_none() && cmd.is_none()) {
+    // Something has to name the program: an application name, or a command
+    // line that is not empty.
+    if information.is_null() || (app.is_none() && cmd.is_none_or(<[u16]>::is_empty)) {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
     let image = match app {
@@ -363,7 +371,12 @@ unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (boo
     };
     let cwd = match r.current_directory {
         Some(d) => match full_path(d) {
-            Ok((f, _)) => f,
+            // The child's directory has to be one that exists (Learn's
+            // lpCurrentDirectory; the sheet: `ERROR_DIRECTORY` otherwise).
+            Ok((f, _)) => match crate::file::attributes_of(&f) {
+                Ok(a) if a & FILE_ATTRIBUTE_DIRECTORY != 0 => f,
+                _ => return fail(ERROR_DIRECTORY, FALSE),
+            },
             Err(e) => return fail(e, FALSE),
         },
         None => current_dir(),
