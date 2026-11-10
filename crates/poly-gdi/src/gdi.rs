@@ -185,6 +185,7 @@ pub const BLACK_BRUSH: u32 = 4;
 pub const NULL_BRUSH: u32 = 5;
 pub const BLACK_PEN: u32 = 7;
 pub const NULL_PEN: u32 = 8;
+pub const ANSI_VAR_FONT: u32 = 12;
 pub const SYSTEM_FONT: u32 = 13;
 /// `DEFAULT_PALETTE` (wingdi.h).
 pub const DEFAULT_PALETTE: u32 = 15;
@@ -1919,8 +1920,11 @@ impl Gdi {
     }
 
     /// `GetTextExtentExPointW`: the extent, how many characters fit in
-    /// `max_width`, and for every character the width of the text up to and
-    /// including it.
+    /// `max_width` (those whose running extent is at most it), and for every
+    /// character the width of the text up to and including it. The caller
+    /// hands out the running extents of the characters that fit, or all of
+    /// them where it was not asked for the fit (Learn: without `lpnFit` the
+    /// maximum is not used).
     pub fn text_extent_ex(&self, dc: u64, text: &[u16], max_width: i32) -> Option<((i32, i32), usize, Vec<i32>)> {
         self.dc(dc)?;
         let sel = self.font_sel(dc);
@@ -1949,24 +1953,28 @@ impl Gdi {
     /// `GetTextFaceW`: the face name of the selected font. A face the
     /// program added reports its own spelling of the name (of the family, or
     /// the full name when that was asked for); a name Poly knows its Windows
-    /// spelling; a name it does not know the stand-in family's name.
+    /// spelling; a name it does not know the stand-in family's name. A stock
+    /// font has the name of its stock object (`GetTextFaceW.yaml`): two
+    /// stock fonts that draw with the same face still differ in name.
     pub fn text_face(&self, dc: u64) -> Option<Vec<u16>> {
         let d = self.dc(dc)?;
         let name = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
-        let stock_name = |f: Face| {
-            name(match f {
-                Face::System => "System",
-                Face::Gui => "MS Shell Dlg",
-                Face::AnsiFixed => "Courier",
-                Face::OemFixed => "Terminal",
-            })
+        let face_name = |f: Face| match f {
+            Face::System => "System",
+            Face::Gui => "MS Shell Dlg",
+            Face::AnsiFixed => "Courier",
+            Face::OemFixed => "Terminal",
         };
-        Some(match self.obj(u64::from(d.state.font)) {
+        let font = u64::from(d.state.font);
+        Some(match self.obj(font) {
             Some(Obj::Font { face, stock: false, logfont, .. }) => match LogFont::parse(logfont) {
                 Some(lf) => self.face_name_of(&lf),
-                None => stock_name(*face),
+                None => name(face_name(*face)),
             },
-            Some(Obj::Font { face, .. }) => stock_name(*face),
+            Some(Obj::Font { face, .. }) => {
+                let stock = self.index_of(font).map_or(u32::MAX, |i| i as u32 - 1);
+                name(if stock == ANSI_VAR_FONT { "MS Sans Serif" } else { face_name(*face) })
+            }
             _ => name("System"),
         })
     }

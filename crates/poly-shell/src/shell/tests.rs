@@ -647,3 +647,28 @@ fn icons_scale_with_the_output() {
     assert_eq!(fb.pixel((x - 26) as u32, y as u32), Some(0xff_0000), "56 pixels wide");
     assert_ne!(fb.pixel((x - 30) as u32, y as u32), Some(0xff_0000));
 }
+
+#[test]
+fn the_catalog_can_be_read_again_and_apps_are_found_by_id() {
+    let mut s = shell();
+    s.set_windows(&[(4, "Holiday".into(), "viewer".into())]);
+    assert_eq!(s.app_by_id("poly:Settings").map(|a| a.name.as_str()), Some("Settings"));
+    assert_eq!(s.app_by_id("/bin/viewer.desktop").map(|a| a.name.as_str()), Some("Pixel Viewer"));
+    assert!(s.app_by_id("new.desktop").is_none());
+    assert!(s.app_by_id(&alloc::format!("{}4", crate::apps::WINDOW)).is_none(), "a window is not an app");
+    // An app was installed: the launcher offers it, the window stays listed.
+    let mut apps = sample_apps();
+    apps.push(App {
+        name: "New App".into(),
+        comment: String::new(),
+        keywords: Vec::new(),
+        argv: alloc::vec!["/bin/new".into()],
+        id: "new.desktop".into(),
+        icon: None,
+    });
+    s.set_catalog(crate::apps::catalog(apps.into_iter().filter(|a| a.id.ends_with(".desktop")).collect()));
+    assert_eq!(s.app_by_id("new.desktop").map(|a| a.name.as_str()), Some("New App"));
+    assert!(s.apps().iter().any(|a| a.name == "New App"));
+    assert!(s.apps().iter().any(|a| a.window() == Some(4)));
+    assert_eq!(s.apps().iter().filter(|a| a.name == "Settings").count(), 1);
+}

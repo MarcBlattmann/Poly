@@ -5,7 +5,7 @@ oracle:
   os: "Windows 11 Home 25H2 (build 26200.9711), x64"
   machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; text is drawn into memory DCs with 32-bit DIB sections, so no desktop is needed), two runs each with identical output, and two complete recordings with identical output"
   observed_by: spec-win-text
-  date: 2026-11-09
+  date: 2026-11-10
 sources: >
   Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions named here (CreateFontIndirectW, LOGFONTW, TEXTMETRICW, GetTextExtentPoint32W, ExtTextOutW, DrawText, DrawTextEx, DRAWTEXTPARAMS, AddFontMemResourceEx, AddFontResourceEx, EnumFontFamiliesEx, SetTextAlign); wingdi.h and winuser.h for constants and layouts. Wine's conformance tests were not read for the values here.
 summary: >
@@ -13,14 +13,19 @@ summary: >
 interface:
   signature: "BOOL GetTextExtentExPointW(HDC hdc, LPCWSTR lpszString, int cchString, int nMaxExtent, LPINT lpnFit, LPINT alpDx, LPSIZE lpSize)"
 rules:
-  dx: "alpDx[i] is the extent of the first i+1 characters (PolyTest Sans -16, \"AB gi\": 12 20 26 36 40); the array receives only the entries of the characters that fit."
-  fit: "*lpnFit is the number of characters whose running extent is at most nMaxExtent: maxima 0..11 give 0, 12..19 give 1, 20..25 give 2, 26..35 give 3, 36..39 give 4, 40 and above 5; the size is always that of the whole string (40x16)."
-  pointers: "lpnFit and alpDx may each be NULL, or both."
-  empty: "An empty string: size 0x0, fit 0."
+  dx: "alpDx[i] is the extent of the first i+1 characters (PolyTest Sans -16, \"AB gi\": 12 20 26 36 40). With lpnFit given, only the first *lpnFit entries are written and the rest of the array keeps what it held. With lpnFit NULL the maximum plays no part and all cchString entries are written (gte_ex_optional)."
+  fit: "*lpnFit is the number of characters whose running extent is at most nMaxExtent (an extent equal to the maximum fits): maxima 0..11 give 0, 12..19 give 1, 20..25 give 2, 26..35 give 3, 36..39 give 4, 40 and above 5, 0x7FFFFFFF all; the size is always that of the whole string (40x16)."
+  pointers: "lpnFit and alpDx may each be NULL, or both; the size is written by every call that succeeds. nMaxExtent is only looked at when lpnFit is given: with lpnFit NULL a negative maximum is no error (TRUE, the size and, if asked for, every alpDx entry are written)."
+  empty: "A count of 0: TRUE, size 0x0, *lpnFit 0, alpDx untouched; also with a negative maximum (the count is looked at before the maximum). A NULL string is an empty string whatever the count and the maximum are: TRUE, size 0x0, fit 0, alpDx untouched (gte_ex_counts)."
   narrow: "A one-character string that does not fit: fit 0, the size is that of the character."
+  sizes: "Other fonts and sizes use their own advances and height: PolyTest Tall at -32 has twice the advances of -16 and \"WAM-.Bg\" runs 32 56 80 92 100 116 136 with a height of 38; PolyTest Mono at -16 runs in steps of 10; a string of 24 characters is totalled the same way (gte_ex_long)."
 errors:
-  negative_max: "A negative nMaxExtent (-1, -5): FALSE and the outputs are left alone."
-  bad_dc: "A NULL DC: FALSE."
+  negative_max: "A negative nMaxExtent (-1, -7, the smallest int) with lpnFit given: FALSE and no output is written (size, fit and array keep what they held). With lpnFit NULL it is ignored (see pointers)."
+  bad_dc: "A NULL DC: FALSE, nothing written (also with a count of 0), no error code. A handle that is not a DC (a font handle): FALSE, ERROR_INVALID_HANDLE (6)."
+  negative_count: "A negative count (-1, -6): FALSE, no output written, with or without lpnFit."
+  null_size: "A NULL lpSize: FALSE and nothing is written, whatever else is passed (also with a count of 0 and with lpnFit NULL)."
+  order: "The checks in the order they showed: the DC and lpSize; a NULL string (success, empty); a count of 0 (success, empty); a negative count; a negative maximum with lpnFit."
+  last_error: "Only the wrong kind of handle sets an error code: after SetLastError(0), GetLastError is 0 after a NULL DC, a NULL lpSize, a negative count and a negative maximum (not 87). (On Windows a call on a non-empty string with a good DC and lpSize also sets a last error the caller had left there back to 0, whether it succeeds or fails; Poly need not copy that, and the tests start every call from 0.)"
 side_effects: "none beyond the rules above"
 threading: "a DC, a font and a font resource belong to the process; fonts added from memory or with FR_PRIVATE are visible to the adding process only"
 ordering: []
@@ -28,9 +33,9 @@ timing:
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 1
-  held_out: 1
+  visible: 4
+  held_out: 2
 building_tests: >
   Rust tests (ADR 0075), one file per test, importing gdi32.dll, user32.dll and kernel32.dll by name, each file carrying its own declarations (Learn prototypes, wingdi.h / winuser.h constants) and its own TrueType writer. No test depends on the pixels or the metrics of a Microsoft font (the owner's decision of 2026-11-09: Poly cannot ship those fonts): text is drawn with fonts the test makes itself and adds with AddFontMemResourceEx or AddFontResourceExW(FR_PRIVATE), so Windows and Poly use the same font file, and tests on installed families print only relations that hold for every font. The tests make their own TrueType fonts (the same 14-glyph table in every file, units per em 1024, every coordinate a multiple of 64 units so that every glyph edge lies on a pixel boundary at lfHeight -16): 'PolyTest Sans' (OS/2 winAscent 768, winDescent 256, hhea ascender 768, descender -256, line gap 128), 'PolyTest Tall' (winAscent 896, winDescent 320, no line gap), 'PolyTest Mono' (Sans metrics, every advance 640, post isFixedPitch, panose proportion 9) and the Bold and Italic faces of the Sans family (the 'A' is 13 and 14 pixels wide instead of 12 at -16). Advances at 16 pixels per em: space 6, '&' 9, '-' 6, '.' 4, 'A' 12, 'B' 8, 'M' 12, 'W' 16, backslash 6, 'g' 10, 'i' 4, U+00E9 11, U+20AC 14, .notdef 10. A font reaches GDI through AddFontMemResourceEx or AddFontResourceExW(FR_PRIVATE); GDI refused a font whose name table had only the name IDs 1, 2, 4 and 6, so the tests' fonts carry IDs 0 to 6. Tests on installed families (Arial, Times New Roman, Courier New, Segoe UI, Tahoma, Verdana, Consolas and the stock fonts) print and check only relations that hold for every font, never their pixels or metrics. Drawing goes into a 32-bit top-down DIB section in a memory DC, bi-level (lfQuality NONANTIALIASED) where pixels are compared, white text on a dark blue background over a grey surface. Observations are numbers, pixel boxes, counts and rows of pixels as text, never handles, addresses or times.
 not_covered: >
-  Strings of more than a few characters (the running totals use the same advances as GetTextExtentPoint32W), mapping modes.
+  Mapping modes other than MM_TEXT, SetTextCharacterExtra and SetTextJustification, characters the font lacks (see GetTextExtentPoint32W).

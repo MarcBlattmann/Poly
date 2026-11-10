@@ -406,7 +406,13 @@ What stage 1 needed next, each with a host test and a ring-3 check in `s1test`:
    down from -1 (`poly_rtl::critsec`); the values with waiters are Poly's own continuation.
 2. **`winmm.dll`**: `timeGetTime` (milliseconds since the system started, wrapping as a `DWORD`),
    `timeBeginPeriod` and `timeEndPeriod` (`poly_kernelbase::winmm`). Chrome takes this clock on
-   Poly where it takes `QueryPerformanceCounter` on the Windows machines of the trace.
+   Poly where it takes `QueryPerformanceCounter` on the Windows machines of the trace. The
+   reason is the CPU QEMU shows, not Poly: its default model (`qemu64`) has no invariant TSC
+   (CPUID.80000007H:EDX bit 8; Intel SDM vol. 3B, "Invariant TSC"; Learn, "Acquiring
+   high-resolution time stamps"), and Chrome tests that bit with CPUID itself.
+   `QueryPerformanceFrequency` is 10 MHz on both. With `POLY_QEMU_CPU=host,+invtsc` under KVM
+   (`tools/xtask/src/accel.rs`) the guest has the bit, Chrome calls `QueryPerformanceCounter`
+   and never `timeGetTime`, and the 705 calls of the cold trace are the same on Poly.
 3. **`shell32.dll`**: `CommandLineToArgvW` and `SHGetFolderPathW` (`poly_kernelbase::shell`).
    Without the DLL Chrome's crash handler got no arguments, and its delay-load of `SHELL32.dll`
    ended it with a breakpoint.
@@ -418,3 +424,36 @@ quoted part mean to `CommandLineToArgvW`; `timeBeginPeriod(0)` (Poly: `TIMERR_NO
 `SHGetFolderPathW` for the folders Poly has no path for yet (Poly: `E_FAIL`); and
 `FileNameInformation` of a named-pipe handle (Poly returns an empty name; Chrome's crash handler
 builds `\\.\pipe` + that name for its next pipe instance, so it must be `\<pipe name>`).
+
+## Addendum: pipe names, the crash handler child, and delay loads (`chrome-win-s8`, step 8)
+
+1. **Pipe names** (sheets of spec-chrome-win-4): the named pipe file system remembers the name the
+   creator of a pipe's first instance spelled; `FileNameInformation` of either end is `\<that name>`
+   (the root `\`, an anonymous pipe the empty name, the device itself `STATUS_INVALID_PARAMETER`),
+   and `NtQueryObject(ObjectNameInformation)` of a file object is its device's name and its path
+   there, with the sheet's rules for buffers that are too small (`objects::file_name_answer`).
+   A disk file's device is Poly's own (`\Device\PolyFs<N>`), not `\Device\HarddiskVolume<N>`.
+2. **`BuildSecurityDescriptorW`** (`poly_security::buildsd`): its merge differs from
+   `SetEntriesInAclW`'s (a new allowed entry goes behind the leading denied entries, or last when
+   the old list is not in that order).
+3. **Child traces.** The kit's logger writes `<file>.N` for a process that finds the trace file
+   taken; the launcher prints those files after the browser's, each behind a `{"child":N}` record,
+   and `chrome-win run` writes `stage<N>.ptrace.jsonl.<child>`. `.1` is the crash handler.
+4. **What Chrome treats as fatal that a stub cannot give.** A function Chrome reaches through its
+   delay-load helper must be an export of a DLL that loads: a missing DLL (`LoadLibrary` error 126)
+   or a missing export (`GetProcAddress` error 127) ends the process with a breakpoint at
+   `chrome.dll+0x8e84bbf`, even where a *failing call* would be tolerated (the fault-injection
+   table of the gap map). Static imports are different: the loader binds those to polystub. Added
+   for that reason: `GetThreadPreferredUILanguages` (a FALSE is fatal), userenv's
+   `RegisterGPNotification` / `UnregisterGPNotification` (policy never changes on Poly: the event is
+   never set), and the API set `api-ms-win-downlevel-shell32` (hosted by shell32.dll here, by
+   shcore.dll on Windows).
+5. **Tracing `chrome.dll` itself deadlocks**: the browser's stack sampler suspends the main thread
+   while it holds the logger's lock. Keep the kit to `chrome_elf.dll,chrome.exe`; to see why
+   `chrome.dll` stops, read Chrome's own message from the stack at the breakpoint.
+
+To be confirmed by the spec agent: `GetThreadPreferredUILanguages` for `MUI_UI_FALLBACK` (Poly:
+"en-US", "en"), for no merge flag and for `MUI_THREAD_LANGUAGES`; `RegisterGPNotification` with a
+null event (Poly: FALSE, `ERROR_INVALID_PARAMETER`); `DuplicateHandle` of a read-only section handle
+asking for `SECTION_MAP_WRITE` (Windows in the handler's trace: FALSE, `ERROR_ACCESS_DENIED`; Poly
+grants it).

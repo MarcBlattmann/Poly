@@ -164,7 +164,7 @@ pub const NETWORK_OPEN_INFO_SIZE: usize = 56;
 /// `FILE_ALL_INFORMATION` up to `NameInformation.FileName`.
 pub const ALL_INFO_FIXED: usize = 100;
 /// `FILE_NAME_INFORMATION` up to `FileName`.
-pub const NAME_INFO_FIXED: usize = 4;
+pub const NAME_INFO_FIXED: usize = 8;
 /// `FILE_RENAME_INFORMATION` up to `FileName`.
 pub const RENAME_INFO_FIXED: usize = 20;
 /// `FILE_STREAM_INFORMATION` (`ntifs.h`) up to `StreamName`.
@@ -199,7 +199,6 @@ pub const STATUS_NO_MORE_FILES: NtStatus = NtStatus(0x8000_0006);
 pub const STATUS_NO_SUCH_FILE: NtStatus = NtStatus(0xC000_000F);
 pub const STATUS_INVALID_DEVICE_REQUEST: NtStatus = NtStatus(0xC000_0010);
 pub const STATUS_END_OF_FILE: NtStatus = NtStatus(0xC000_0011);
-pub const STATUS_OBJECT_PATH_INVALID: NtStatus = NtStatus(0xC000_0039);
 pub const STATUS_SHARING_VIOLATION: NtStatus = NtStatus(0xC000_0043);
 pub const STATUS_FILE_LOCK_CONFLICT: NtStatus = NtStatus(0xC000_0054);
 pub const STATUS_LOCK_NOT_GRANTED: NtStatus = NtStatus(0xC000_0055);

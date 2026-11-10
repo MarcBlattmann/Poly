@@ -272,6 +272,61 @@ pub fn catalog(desktop: Vec<App>) -> Vec<App> {
     all
 }
 
+/// Where desktop files are (the Desktop Entry Specification's
+/// `$XDG_DATA_DIRS/applications`, with the default data directory).
+pub const APPLICATIONS: &str = "/usr/share/applications";
+
+/// The disk as the catalog's reader sees it: the compositor's and Files'
+/// own (the shell does no I/O).
+pub trait AppFiles {
+    /// The names in a directory (empty if it is missing).
+    fn list(&self, dir: &str) -> Vec<String>;
+    /// A file's text, `None` if it is missing or unreadable.
+    fn read(&self, path: &str) -> Option<String>;
+}
+
+/// The apps of every readable desktop file in `dir`, in the order of the
+/// files' names (so two readers of one disk get one list); `skipped` hears
+/// of each file that is not offered and why.
+pub fn desktop_apps(files: &dyn AppFiles, dir: &str, skipped: &mut dyn FnMut(&str, Skip)) -> Vec<App> {
+    let mut names: Vec<String> = files.list(dir).into_iter().filter(|n| n.ends_with(".desktop")).collect();
+    names.sort();
+    let mut apps = Vec::new();
+    for name in names {
+        let Some(text) = files.read(&alloc::format!("{}/{name}", dir.trim_end_matches('/'))) else { continue };
+        match parse_desktop_entry(&name, &text) {
+            Ok(app) => apps.push(app),
+            Err(why) => skipped(&name, why),
+        }
+    }
+    apps
+}
+
+/// Every installed app: the one list the launcher offers and Files'
+/// Applications folder shows (ADR 0175), [`catalog`] over the desktop files
+/// in [`APPLICATIONS`].
+pub fn installed(files: &dyn AppFiles, skipped: &mut dyn FnMut(&str, Skip)) -> Vec<App> {
+    catalog(desktop_apps(files, APPLICATIONS, skipped))
+}
+
+impl App {
+    /// The glyph drawn for the app where it has no icon of its own (no
+    /// `Icon`, or none in the icon theme).
+    pub fn glyph(&self) -> crate::icons::Icon {
+        use crate::icons::lucide;
+        match self.internal() {
+            _ if self.window().is_some() => lucide::APP_WINDOW,
+            Some(SETTINGS) => lucide::SETTINGS,
+            Some(NOTIFICATIONS) => lucide::BELL,
+            _ => match self.argv.first().map(String::as_str) {
+                Some(FILES) => lucide::FOLDER,
+                Some(TERMINAL) if self.argv.len() == 1 => lucide::SQUARE_TERMINAL,
+                _ => lucide::APP_WINDOW,
+            },
+        }
+    }
+}
+
 /// Desktop-file apps for the shell's tests, standing in for what an image
 /// carries: not Poly's built-ins and not test fixtures.
 #[cfg(test)]
@@ -354,6 +409,59 @@ mod tests {
         assert_eq!(all[3].internal(), None);
         assert_eq!(all[1].argv, [FILES]);
         assert_eq!(all[4].argv, [TERMINAL]);
+    }
+
+    /// A disk of desktop files, listed in the order given.
+    pub(crate) struct Disk(pub Vec<(&'static str, &'static str)>);
+
+    impl AppFiles for Disk {
+        fn list(&self, dir: &str) -> Vec<String> {
+            let dir = alloc::format!("{dir}/");
+            self.0.iter().filter_map(|(p, _)| p.strip_prefix(dir.as_str())).map(String::from).collect()
+        }
+
+        fn read(&self, path: &str) -> Option<String> {
+            self.0.iter().find(|(p, _)| *p == path).map(|(_, t)| (*t).into())
+        }
+    }
+
+    #[test]
+    fn the_installed_apps_are_read_in_one_order_whatever_the_disk_says() {
+        const A: &str = "[Desktop Entry]\nType=Application\nName=Editor\nExec=a\n";
+        const B: &str = "[Desktop Entry]\nType=Application\nName=Editor\nExec=b\n";
+        const HIDDEN: &str = "[Desktop Entry]\nType=Application\nName=Helper\nExec=h\nNoDisplay=true\n";
+        let disk = |files: Vec<(&'static str, &'static str)>| {
+            let mut skipped = Vec::new();
+            let apps = installed(&Disk(files), &mut |n, why| skipped.push((String::from(n), why)));
+            (apps, skipped)
+        };
+        let (one, skipped) = disk(vec![
+            ("/usr/share/applications/b.desktop", B),
+            ("/usr/share/applications/a.desktop", A),
+            ("/usr/share/applications/h.desktop", HIDDEN),
+            ("/usr/share/applications/notes.txt", "x"),
+            ("/elsewhere/c.desktop", A),
+        ]);
+        let (other, _) = disk(vec![
+            ("/usr/share/applications/h.desktop", HIDDEN),
+            ("/usr/share/applications/a.desktop", A),
+            ("/usr/share/applications/b.desktop", B),
+        ]);
+        assert_eq!(one, other, "the directory's order does not matter");
+        let names: Vec<&str> = one.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["Editor", "Files", "Notifications", "Settings", "Terminal"]);
+        assert_eq!(one[0].id, "b.desktop", "of two files with one name the later file name wins");
+        assert_eq!(skipped, [(String::from("h.desktop"), Skip::Hidden)]);
+    }
+
+    #[test]
+    fn glyphs_of_apps_without_an_icon() {
+        use crate::icons::lucide;
+        let all = catalog(Vec::new());
+        let glyphs: Vec<_> = all.iter().map(App::glyph).collect();
+        assert_eq!(glyphs, [lucide::FOLDER, lucide::BELL, lucide::SETTINGS, lucide::SQUARE_TERMINAL]);
+        assert_eq!(window_entry(3, "A", "a").glyph(), lucide::APP_WINDOW);
+        assert_eq!(sample_apps()[2].glyph(), lucide::APP_WINDOW);
     }
 
     #[test]

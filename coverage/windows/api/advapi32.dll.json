@@ -32,7 +32,7 @@
 {"symbol":"BuildExplicitAccessWithNameA","src":["wine-spec"]},
 {"symbol":"BuildExplicitAccessWithNameW","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"BuildSecurityDescriptorA","src":["wine-spec"]},
-{"symbol":"BuildSecurityDescriptorW","status":"claimed","claimed_by":"spec-chrome-win-4","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_BuildSecurityDescriptorW"]},
+{"symbol":"BuildSecurityDescriptorW","status":"claimed","claimed_by":"impl-chrome-b4","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_BuildSecurityDescriptorW"]},
 {"symbol":"BuildTrusteeWithNameA","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_trustee"]},
 {"symbol":"BuildTrusteeWithNameW","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"BuildTrusteeWithObjectsAndNameA","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_trustee"]},

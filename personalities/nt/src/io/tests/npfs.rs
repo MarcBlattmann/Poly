@@ -523,3 +523,98 @@ fn ports_accept_odd_rights_and_refuse_a_name_without_a_leaf() {
     let s = t.f.call(Service::CreateIoCompletion, &[out, 0x1F0003, oa, 0]);
     assert_eq!(s, STATUS_OBJECT_NAME_INVALID);
 }
+
+/// `FileNameInformation` of pipe handles
+/// (specs/windows/ntdll.dll/NtQueryInformationFile.yaml): a backslash and
+/// the name as the first creator spelled it, for every handle of the pipe.
+#[test]
+fn a_pipe_handle_reports_the_name_its_creator_spelled() {
+    const BS: &str = "\\";
+    let mut t = setup();
+    let name = |t: &mut T, h: u64| {
+        let (s, b) = t.query(h, FILE_NAME_INFORMATION, 528);
+        (s, b.len(), u32::from_le_bytes(b[..4].try_into().unwrap()), wide_str(&b[4..]))
+    };
+    let s = t.np_server("PolySpec4_NameA", true, SYNC);
+    // Before a client connects: 36 = 4 + 32 bytes, no NUL.
+    assert_eq!(name(&mut t, s), (STATUS_SUCCESS, 36, 32, "\\PolySpec4_NameA".into()));
+    // A client that spells it differently, and the server end it is connected to.
+    let c = t.np_client("POLYSPEC4_namea", SYNC);
+    assert_eq!(name(&mut t, c), (STATUS_SUCCESS, 36, 32, "\\PolySpec4_NameA".into()));
+    assert_eq!(name(&mut t, s).3, "\\PolySpec4_NameA");
+    // A second instance created under another spelling keeps the first one's.
+    let (st, s2, info) = t.np_create("polyspec4_NAMEA", RW | SYNCHRONIZE, 3, FILE_OPEN_IF, SYNC, MSG, MSG, 2, 512);
+    assert_eq!((st, info), (STATUS_SUCCESS, FILE_OPENED));
+    assert_eq!(name(&mut t, s2).3, "\\PolySpec4_NameA");
+    // Below sizeof(FILE_NAME_INFORMATION): nothing; then filled to the last byte.
+    for len in 0..8 {
+        assert_eq!(t.query(s, FILE_NAME_INFORMATION, len).0, STATUS_INFO_LENGTH_MISMATCH, "{len}");
+    }
+    for len in [8, 9, 20, 35] {
+        let (st, b) = t.query(s, FILE_NAME_INFORMATION, len);
+        assert_eq!(
+            (st, b.len(), u32::from_le_bytes(b[..4].try_into().unwrap())),
+            (STATUS_BUFFER_OVERFLOW, len, 32),
+            "{len}"
+        );
+    }
+    assert_eq!(t.query(s, FILE_NAME_INFORMATION, 36).0, STATUS_SUCCESS);
+    // The client end still has the name when the pipe's server ends are gone.
+    t.close(s);
+    t.close(s2);
+    assert_eq!(name(&mut t, c).3, "\\PolySpec4_NameA");
+    t.close(c);
+    // A name with backslashes, and a one-letter one.
+    let s = t.np_server("PolySpec4\\sub\\leaf", true, SYNC);
+    assert_eq!(name(&mut t, s).3, "\\PolySpec4\\sub\\leaf");
+    let p = t.np_server("P", true, SYNC);
+    assert_eq!(name(&mut t, p), (STATUS_SUCCESS, 8, 4, "\\P".into()));
+    // The file system's root is "\"; the device itself has no name.
+    let (st, root, _) = t.create("\\??\\pipe\\", FILE_READ_ATTRIBUTES | SYNCHRONIZE, SHARE_ALL, FILE_OPEN, SYNC, 0);
+    assert_eq!(st, STATUS_SUCCESS);
+    assert_eq!(name(&mut t, root), (STATUS_SUCCESS, 6, 2, "\\".into()));
+    let (st, device, _) =
+        t.create("\\Device\\NamedPipe", FILE_READ_ATTRIBUTES | SYNCHRONIZE, SHARE_ALL, FILE_OPEN, SYNC, 0);
+    assert_eq!(st, STATUS_SUCCESS);
+    assert_eq!(t.query(device, FILE_NAME_INFORMATION, 528).0, STATUS_INVALID_PARAMETER);
+    // The full object name (`NtQueryObject`, ObjectNameInformation = 1).
+    let object_name = |t: &mut T, h: u64| {
+        let buf = t.f.alloc(528);
+        let ret = t.f.alloc(8);
+        let s = t.f.call(Service::QueryObject, &[h, 1, buf, 528, ret]);
+        let n = t.f.u32_at(ret) as usize;
+        let b = t.f.bytes_at(buf, 528);
+        let len = usize::from(u16::from_le_bytes([b[0], b[1]]));
+        assert_eq!(u64::from_le_bytes(b[8..16].try_into().unwrap()), buf + 16);
+        (s, n, wide_str(&b[16..16 + len]))
+    };
+    assert_eq!(
+        object_name(&mut t, s),
+        (
+            STATUS_SUCCESS,
+            16 + 72 + 2,
+            String::from(BS) + "Device" + BS + "NamedPipe" + BS + "PolySpec4" + BS + "sub" + BS + "leaf"
+        )
+    );
+    assert_eq!(
+        object_name(&mut t, p),
+        (STATUS_SUCCESS, 16 + 38 + 2, String::from(BS) + "Device" + BS + "NamedPipe" + BS + "P")
+    );
+    // An anonymous pipe (a PolyPipe stream, what CreatePipe makes): the empty
+    // file name, and only the device's name as its object name.
+    let (st, anon, _) = t.create(
+        &(String::from(BS) + "Device" + BS + "PolyPipe" + BS + "Anonymous.1.1"),
+        RW,
+        SHARE_ALL,
+        FILE_OPEN_IF,
+        0,
+        0,
+    );
+    assert_eq!(st, STATUS_SUCCESS);
+    assert_eq!(name(&mut t, anon), (STATUS_SUCCESS, 4, 0, "".into()));
+    assert_eq!(t.query(anon, FILE_NAME_INFORMATION, 7).0, STATUS_INFO_LENGTH_MISMATCH);
+    assert_eq!(
+        object_name(&mut t, anon),
+        (STATUS_OBJECT_PATH_INVALID, 0, String::from(BS) + "Device" + BS + "NamedPipe")
+    );
+}

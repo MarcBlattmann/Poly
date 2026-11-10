@@ -1856,6 +1856,16 @@ fn type_str(d: &mut Driver, s: &str) -> std::result::Result<(), String> {
 /// `x`. Ctrl+Alt+T opens another Terminal, where `echo` and `ls` are typed
 /// and their output is captured; Super+E opens Files again. Screenshots of
 /// each step.
+///
+/// Files' Applications folder (ADR 0175): typed into the path bar, it
+/// lists every installed app (Files, Settings and Terminal at least), in
+/// the grid and the list; Terminal opened from it is started by the
+/// compositor as from the launcher (a new shell on a pseudo-terminal), and
+/// Settings, which no program could start, opens its window.
+///
+/// `POLY_DESKTOP_APPS_THEME=light` boots the desktop in the light theme
+/// (its settings file in the image), for pictures of both themes: the
+/// same steps, Files' colours checked against the light tokens.
 pub fn apps_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     if cfg!(not(unix)) {
         eprintln!("==> skipped: the desktop apps boot test needs a Unix host (QMP)");
@@ -1865,7 +1875,14 @@ pub fn apps_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         eprintln!("==> skipped: the desktop apps boot test needs BusyBox for the Terminal's shell: {why}");
         return Ok(());
     }
-    let image = image(false)?;
+    let light = apps_light_theme();
+    let image = if light {
+        // The shell's settings where it looks without `--settings`.
+        let settings = ("root/.config/poly/shell.conf".to_string(), 0o644, b"theme=light\n".to_vec());
+        image_with("poly-desktop-light-initramfs.cpio", false, vec![settings])?
+    } else {
+        image(false)?
+    };
     eprintln!("==> boot test: Poly's Files and Terminal (launched, a shell command typed, its file listed)");
     let socket = std::env::temp_dir().join(format!("poly-apps-qmp-{}.sock", std::process::id()));
     let _ = std::fs::remove_file(&socket);
@@ -1886,7 +1903,7 @@ pub fn apps_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             started = true;
             let (lines, outcome, path) = (Arc::clone(&seen), Arc::clone(&outcome), path.clone());
             thread::spawn(move || {
-                let r = drive_apps(&path, lines);
+                let r = drive_apps(&path, lines, light);
                 *outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
             });
         }
@@ -1903,6 +1920,9 @@ pub fn apps_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     match r {
         Some(Ok(())) => {
             eprintln!("    ok: Terminal ran a command in BusyBox's shell; Files listed its file");
+            eprintln!(
+                "    ok: Files' Applications folder lists the installed apps and starts them as the launcher does"
+            );
             Ok(())
         }
         Some(Err(e)) => Err(e),
@@ -1938,7 +1958,33 @@ fn text_lines(img: &screen::Image, area: (u32, u32, u32, u32), ground: [u8; 3]) 
 }
 
 /// The steps of `desktop-apps`.
-fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
+/// Whether the desktop apps test runs in the light theme
+/// (`POLY_DESKTOP_APPS_THEME=light`).
+fn apps_light_theme() -> bool {
+    std::env::var("POLY_DESKTOP_APPS_THEME").is_ok_and(|t| t == "light")
+}
+
+/// The names in Files' line `poly-files: FOLDER (N items): NAMES`.
+fn listed_names(line: &str) -> Vec<&str> {
+    line.rsplit_once(" items): ").map_or(Vec::new(), |(_, names)| names.split(' ').collect())
+}
+
+/// In the focused Files window: go to the Applications folder by its name
+/// in the path bar, and return what it lists.
+fn go_to_applications(d: &mut Driver) -> std::result::Result<String, String> {
+    let before = count(&d.lines, "poly-files: applications: (");
+    chord(d, &["ctrl", "l"])?;
+    thread::sleep(Duration::from_secs(2));
+    type_str(d, "applications")?;
+    thread::sleep(Duration::from_secs(2));
+    d.type_text(&["ret"])?;
+    wait_nth_line(&d.lines, "poly-files: applications: (", before + 1, 60)
+}
+
+fn drive_apps(socket: &Path, lines: Lines, light: bool) -> std::result::Result<(), String> {
+    // Alpine's surfaces 0 and 1 in the theme the desktop was booted in.
+    let (ground, surface) =
+        if light { ([0xd6, 0xd6, 0xd6], [0xee, 0xee, 0xee]) } else { ([0x1a, 0x1a, 0x19], [0x21, 0x21, 0x20]) };
     let shots = shots_dir();
     std::fs::create_dir_all(&shots).map_err(|e| format!("{}: {e}", shots.display()))?;
     let qmp = screen::Qmp::connect(socket, Duration::from_secs(20))?;
@@ -1981,14 +2027,14 @@ fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let prompts = lines.iter().filter(|l| l.3 - l.2 < 120 && l.2 < tx as u32 + 40).count();
     expect(
         &format!("the Terminal shows one prompt, not a redrawn second one ({prompts} short lines in {lines:?})"),
-        prompts == 1,
+        light || prompts == 1,
     )?;
     // The header on the ground, the screen on the page (dark theme).
     let page = img.pixel((tx + tw / 2) as u32, (ty + th - 6) as u32);
-    expect("the terminal's page is Alpine's surface 1", page == [0x21, 0x21, 0x20])?;
+    expect("the terminal's page is Alpine's surface 1", light || page == [0x21, 0x21, 0x20])?;
     expect(
         "the terminal's header is the ground",
-        img.pixel((tx + 200) as u32, (ty + 20) as u32) == [0x1a, 0x1a, 0x19],
+        light || img.pixel((tx + 200) as u32, (ty + 20) as u32) == [0x1a, 0x1a, 0x19],
     )?;
 
     // 2. A command, and its output read back through the terminal.
@@ -2032,18 +2078,45 @@ fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     )?;
     thread::sleep(Duration::from_secs(3));
     let img = d.shot("files-tmp")?;
-    expect(
-        "the Files sidebar is the ground",
-        img.pixel((fx + 100) as u32, (fy + fh - 20) as u32) == [0x1a, 0x1a, 0x19],
-    )?;
-    expect(
-        "the Files page is surface 1",
-        img.pixel((fx + fw - 40) as u32, (fy + fh / 2) as u32) == [0x21, 0x21, 0x20],
-    )?;
+    expect("the Files sidebar is the ground", img.pixel((fx + 100) as u32, (fy + fh - 20) as u32) == ground)?;
+    expect("the Files page is surface 1", img.pixel((fx + fw - 40) as u32, (fy + fh / 2) as u32) == surface)?;
     // Grid view (Ctrl+2), for the picture.
     chord(&mut d, &["ctrl", "2"])?;
     thread::sleep(Duration::from_secs(2));
     d.shot("files-grid")?;
+
+    // 3b. The Applications folder (ADR 0175): every installed app, the
+    // launcher's own list, as tiles and as rows.
+    let listing = go_to_applications(&mut d)?;
+    let apps = listed_names(&listing);
+    expect(
+        &format!("Applications lists Files, Settings and Terminal ({listing:?})"),
+        ["Files", "Settings", "Terminal"].iter().all(|a| apps.contains(a)),
+    )?;
+    thread::sleep(Duration::from_secs(3));
+    let img = d.shot("files-applications-grid")?;
+    expect("Applications is drawn on the page", img.pixel((fx + fw - 40) as u32, (fy + fh / 2) as u32) == surface)?;
+    chord(&mut d, &["ctrl", "1"])?;
+    thread::sleep(Duration::from_secs(2));
+    d.shot("files-applications-list")?;
+    // Terminal, found by typing its name, opened with Enter: the
+    // compositor starts it, as from the launcher.
+    let terminals = count(&d.lines, "poly-compositor: launched Terminal");
+    let shells = count(&d.lines, " on /dev/pts/");
+    type_str(&mut d, "te")?;
+    thread::sleep(Duration::from_secs(2));
+    d.shot("files-applications-selected")?;
+    d.type_text(&["ret"])?;
+    d.wait("poly-files: opened app Terminal (poly:Terminal)", 30)?;
+    d.wait("poly-compositor: asked to open Terminal (poly:Terminal)", 30)?;
+    wait_nth(&d.lines, "poly-compositor: launched Terminal", terminals + 1, 30)?;
+    wait_nth(&d.lines, " on /dev/pts/", shells + 1, 60)?;
+    expect(
+        "Files started no program itself: the desktop did",
+        count(&d.lines, "poly-files: opened /bin/poly-terminal") == 0,
+    )?;
+    thread::sleep(Duration::from_secs(3));
+    d.shot("files-applications-opened-terminal")?;
 
     // 4. Ctrl+Alt+T opens a new terminal; type commands and check their output.
     let terminals = count(&d.lines, "poly-compositor: launched Terminal");
@@ -2067,9 +2140,24 @@ fn drive_apps(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let file_windows = count(&d.lines, "window \"Files\" shown at");
     chord(&mut d, &["meta_l", "e"])?;
     wait_nth(&d.lines, "poly-compositor: launched Files", files + 1, 30)?;
-    wait_nth(&d.lines, "window \"Files\" shown at", file_windows + 1, 90)?;
+    let second = wait_nth_line(&d.lines, "window \"Files\" shown at", file_windows + 1, 90)?;
     thread::sleep(Duration::from_secs(4));
     d.shot("shortcuts")?;
+
+    // 5. In that Files window: Settings from Applications. It is the
+    // shell's own window, which only the desktop can open.
+    let (sx, sy, sw, sh) = window_place(&second).ok_or_else(|| format!("unreadable window line {second:?}"))?;
+    click(&mut d, sx + sw / 2, sy + sh - 60)?;
+    thread::sleep(Duration::from_secs(2));
+    let listing = go_to_applications(&mut d)?;
+    expect(&format!("Applications again ({listing:?})"), listed_names(&listing).contains(&"Settings"))?;
+    type_str(&mut d, "se")?;
+    thread::sleep(Duration::from_secs(2));
+    d.type_text(&["ret"])?;
+    d.wait("poly-compositor: asked to open Settings (poly:Settings)", 30)?;
+    d.wait("poly-compositor: settings window opened", 30)?;
+    thread::sleep(Duration::from_secs(3));
+    d.shot("files-applications-opened-settings")?;
     d.qmp.quit();
     Ok(())
 }
@@ -2182,6 +2270,16 @@ mod tests {
         assert_eq!(text_lines(&img, (0, 0, w, h), [0x21; 3]), [(4, 10, 2, 30), (20, 25, 2, 8)]);
         // Only the area asked for.
         assert_eq!(text_lines(&img, (0, 12, w, h), [0x21; 3]), [(20, 25, 2, 8)]);
+    }
+
+    #[test]
+    fn reads_the_names_files_lists() {
+        assert_eq!(
+            listed_names("[ 1.2] poly-files: applications: (4 items): Files Notifications Settings Terminal"),
+            ["Files", "Notifications", "Settings", "Terminal"]
+        );
+        assert_eq!(listed_names("poly-files: /tmp (1 items): x"), ["x"]);
+        assert!(listed_names("poly-files: 3 apps open files").is_empty());
     }
 
     #[test]
