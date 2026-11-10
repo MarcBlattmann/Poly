@@ -1249,3 +1249,202 @@ fn clear_type_text_still_has_pixels_of_the_text_colour() {
         }
     }
 }
+
+/// The columns of row `y` that are `v`, as runs (left, right).
+fn runs(px: &[u32], w: i32, y: i32, v: u32) -> Vec<(i32, i32)> {
+    let mut out: Vec<(i32, i32)> = Vec::new();
+    for x in 0..w {
+        if px[(y * w + x) as usize] == v {
+            match out.last_mut() {
+                Some(l) if l.1 == x => l.1 = x + 1,
+                _ => out.push((x, x + 1)),
+            }
+        }
+    }
+    out
+}
+
+fn where_is(px: &[u32], w: i32, v: u32) -> Vec<(i32, i32)> {
+    px.iter().enumerate().filter(|(_, p)| **p == v).map(|(i, _)| (i as i32 % w, i as i32 / w)).collect()
+}
+
+#[test]
+fn ext_text_out_dx_glyph_indices_and_odd_input_follow_the_sheet() {
+    let mut g = Gdi::new();
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    let (w, h) = (100, 40);
+    let (dc, mut px) = dib32(&mut g, w, h);
+    let (bg, fg, bk) = (0x0080_8080, 0x00FF_FFFF, 0x0000_0080);
+    select(&mut g, dc, &lf_full("PolyTest Sans", -16, 400, false, 3));
+    g.set_text_color(dc, fg);
+    g.set_bk_color(dc, 0x0080_0000);
+    let aaa = utf16("AAA");
+    // dx: the boxes of "AAA" with 20,14,30 at x=4, in a row inside the text.
+    px.fill(bg);
+    assert!(g.ext_text_out(dc, 4, 2, 0, None, &aaa, Some(&[20, 14, 30])));
+    assert_eq!(runs(&px, w, 8, fg), [(6, 14), (26, 34), (40, 48)]);
+    // The OPAQUE cell is as wide as the sum.
+    assert_eq!(bounds(&ink(&px, w, bg)), (4, 2, 68, 18));
+    assert_eq!(bounds(&where_is(&px, w, bk)), (4, 2, 68, 18));
+    // 0,0,0: on top of each other, no cell.
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, 0, None, &aaa, Some(&[0, 0, 0]));
+    assert_eq!(runs(&px, w, 8, fg), [(6, 14)]);
+    assert!(where_is(&px, w, bk).is_empty());
+    // Negative values move back.
+    px.fill(bg);
+    g.set_bk_mode(dc, TRANSPARENT);
+    g.ext_text_out(dc, 40, 2, 0, None, &aaa, Some(&[-12, -12, 5]));
+    assert_eq!(runs(&px, w, 8, fg), [(18, 26), (30, 38), (42, 50)]);
+    g.set_bk_mode(dc, OPAQUE);
+    // TA_RIGHT: the sum ends at x; TA_CENTER: centred about it.
+    px.fill(bg);
+    g.set_text_align(dc, TA_RIGHT);
+    g.ext_text_out(dc, 90, 2, 0, None, &aaa, Some(&[20, 14, 30]));
+    assert_eq!(runs(&px, w, 8, fg)[0].0, 90 - 64 + 2);
+    assert_eq!(bounds(&where_is(&px, w, bk)), (26, 2, 90, 18));
+    px.fill(bg);
+    g.set_text_align(dc, TA_CENTER);
+    g.ext_text_out(dc, 50, 2, 0, None, &aaa, Some(&[20, 14, 30]));
+    assert_eq!(bounds(&where_is(&px, w, bk)), (18, 2, 82, 18));
+    // TA_UPDATECP: the current position moves by the sum, the arguments are ignored.
+    for (align, start, end, cell) in [
+        (TA_UPDATECP, 10, 74, (10, 74)),
+        (TA_UPDATECP | TA_RIGHT, 80, 16, (16, 80)),
+        (TA_UPDATECP | TA_CENTER, 50, 50, (18, 82)),
+    ] {
+        px.fill(bg);
+        g.set_text_align(dc, align);
+        g.move_to(dc, start, 20);
+        g.ext_text_out(dc, 1, 1, 0, None, &aaa, Some(&[20, 14, 30]));
+        assert_eq!(g.current_position(dc), Some((end, 20)), "align {align}");
+        let b = bounds(&where_is(&px, w, bk));
+        assert_eq!((b.0, b.1, b.2, b.3), (cell.0, 20, cell.1, 36), "align {align}");
+    }
+    g.set_text_align(dc, 0);
+    g.move_to(dc, 7, 9);
+    g.ext_text_out(dc, 1, 1, 0, None, &aaa, None);
+    assert_eq!(g.current_position(dc), Some((7, 9)));
+    // An empty string with TA_UPDATECP moves nothing.
+    g.set_text_align(dc, TA_UPDATECP);
+    assert!(g.ext_text_out(dc, 1, 1, 0, None, &[], None));
+    assert_eq!(g.current_position(dc), Some((7, 9)));
+    g.set_text_align(dc, 0);
+    // Glyph indices: an index beyond the font is .notdef, as a character the font lacks.
+    g.set_bk_mode(dc, TRANSPARENT);
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, ETO_GLYPH_INDEX, None, &[999], None);
+    let beyond = ink(&px, w, bg);
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, 0, None, &utf16("Z"), None);
+    assert!(!beyond.is_empty());
+    assert_eq!(beyond, ink(&px, w, bg));
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, ETO_GLYPH_INDEX, None, &[0], None);
+    assert_eq!(beyond, ink(&px, w, bg));
+    // Glyph indices with distances and an opaque rectangle.
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, ETO_GLYPH_INDEX | ETO_OPAQUE, Some(Rect::new(0, 0, 60, 30)), &[5, 5], Some(&[30, 0]));
+    assert_eq!(runs(&px, w, 8, fg), [(6, 14), (36, 44)]);
+    assert_eq!(bounds(&ink(&px, w, bg)), (0, 0, 60, 30));
+    // Option bits that do not exist are ignored.
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, 0, None, &utf16("AB"), None);
+    let plain = px.clone();
+    for bits in [0x1, 0x8, 0x8000, 0x1 | 0x8 | 0x8000] {
+        px.fill(bg);
+        assert!(g.ext_text_out(dc, 4, 2, bits, None, &utf16("AB"), None));
+        assert_eq!(px, plain, "bits {bits:#x}");
+        px.fill(bg);
+        assert!(g.ext_text_out(dc, 4, 2, bits, Some(Rect::new(0, 0, 8, 8)), &utf16("AB"), None));
+        assert_eq!(px, plain, "bits {bits:#x} with a rectangle");
+    }
+    assert!(!g.ext_text_out(dc, 4, 2, u32::MAX, Some(Rect::new(0, 0, 8, 8)), &utf16("AB"), None));
+    // 9000 characters draw across the whole surface.
+    g.set_bk_mode(dc, OPAQUE);
+    px.fill(bg);
+    let long = vec![u16::from(b'A'); 9000];
+    assert!(g.ext_text_out(dc, 0, 0, 0, None, &long, None));
+    assert_eq!(bounds(&ink(&px, w, bg)), (0, 0, 100, 16));
+    assert_eq!(runs(&px, w, 4, fg).len(), 9);
+    // Off the surface: clipped; entirely off: nothing.
+    px.fill(bg);
+    g.ext_text_out(dc, -5, -3, 0, None, &utf16("AB"), None);
+    assert_eq!(bounds(&ink(&px, w, bg)), (0, 0, 15, 13));
+    px.fill(bg);
+    g.ext_text_out(dc, 200, 200, 0, None, &utf16("AB"), None);
+    g.ext_text_out(dc, -100, 10, ETO_CLIPPED, Some(Rect::new(0, 0, 10, 10)), &utf16("AB"), None);
+    assert!(ink(&px, w, bg).is_empty());
+}
+
+#[test]
+fn stock_fonts_have_the_face_names_of_the_sheet() {
+    let mut g = Gdi::new();
+    let dc = u64::from(g.create_compatible_dc(0));
+    assert_eq!(g.text_face(dc).unwrap(), utf16("System"), "a new DC");
+    // OEM_FIXED_FONT 10, ANSI_FIXED_FONT 11, ANSI_VAR_FONT 12, SYSTEM_FONT 13, DEFAULT_GUI_FONT 17.
+    for (stock, name) in
+        [(10, "Terminal"), (11, "Courier"), (12, "MS Sans Serif"), (13, "System"), (17, "MS Shell Dlg")]
+    {
+        let f = u64::from(g.stock(stock));
+        g.select_object(dc, f).unwrap();
+        assert_eq!(g.text_face(dc).unwrap(), utf16(name), "stock font {stock}");
+    }
+    assert!(g.text_face(0).is_none());
+}
+
+#[test]
+fn draw_text_tab_stops_and_ellipsis_flags_follow_learn() {
+    use crate::text::*;
+    let mut g = Gdi::new();
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    let (w, h) = (140, 90);
+    let (dc, mut px) = dib32(&mut g, w, h);
+    let (bg, fg) = (0x0080_8080, 0x00FF_FFFF);
+    select(&mut g, dc, &lf_full("PolyTest Sans", -16, 400, false, 3));
+    g.set_text_color(dc, fg);
+    g.set_bk_mode(dc, TRANSPARENT);
+    // DrawTextW's DT_TABSTOP: bits 8 to 15 are the tab stop in average widths (8 pixels each), and
+    // not DT_NOCLIP (1), DT_EXTERNALLEADING (2), DT_CALCRECT (4), DT_NOPREFIX (8) or DT_END_ELLIPSIS (128).
+    for (stop, b_at) in [(1, 16), (2, 16), (4, 32), (8, 64), (0, 64), (128, 1024)] {
+        px.fill(bg);
+        let mut r = Rect::new(0, 0, 130, 40);
+        let n = g.draw_text(dc, &utf16("&A\tB"), &mut r, DT_EXPANDTABS | DT_TABSTOP | (stop << 8));
+        assert_eq!((n, r), (16, Rect::new(0, 0, 130, 40)), "tab stop {stop}: drawn, not measured");
+        let mut want = vec![(2, 10)];
+        if b_at < w {
+            want.push((b_at + 1, b_at + 7));
+        }
+        assert_eq!(runs(&px, w, 10, fg), want, "tab stop {stop}");
+        assert_eq!(runs(&px, w, 13, fg), [(0, 12)], "tab stop {stop}: the mnemonic underline");
+    }
+    // DrawTextExW takes the tab stop from its parameters: there the bits are the flags they name.
+    let mut r = Rect::new(0, 0, 130, 40);
+    let p = DrawParams { tab_chars: 4, ..DrawParams::default() };
+    let out = g.draw_text_ex(dc, &utf16("A\tB"), &mut r, DT_EXPANDTABS | DT_TABSTOP | DT_CALCRECT, p);
+    assert_eq!((out.height, r), (16, Rect::new(0, 0, 40, 16)));
+    let mut r = Rect::new(0, 0, 130, 40);
+    let out =
+        g.draw_text_ex(dc, &utf16("A\tB"), &mut r, DT_EXPANDTABS | DT_TABSTOP | DT_CALCRECT, DrawParams::default());
+    assert_eq!((out.height, r), (16, Rect::new(0, 0, 72, 16)), "iTabLength 0: the default of 8");
+    // Ellipsis flags on several lines, through DT_MODIFYSTRING.
+    let ell = |g: &mut Gdi, s: &str, w: i32, h: i32, fmt: u32| {
+        let mut r = Rect::new(10, 10, 10 + w, 10 + h);
+        let out = g.draw_text_ex(dc, &utf16(s), &mut r, fmt | DT_MODIFYSTRING, DrawParams::default());
+        out.modified.map_or_else(|| std::string::String::from(s), |m| std::string::String::from_utf16(&m).unwrap())
+    };
+    // DT_WORD_ELLIPSIS: every word that is too wide, on its line.
+    let words = "AAAAAAAA BBBB AAAAAAAA";
+    assert_eq!(ell(&mut g, words, 80, 60, DT_WORDBREAK | DT_WORD_ELLIPSIS), "AAAAA... BBBB AAAAA...");
+    assert_eq!(ell(&mut g, words, 80, 60, DT_SINGLELINE | DT_WORD_ELLIPSIS), "AAAAA...");
+    assert_eq!(ell(&mut g, "AAAAAAAA\nAB\nAAAAAAAA", 80, 60, DT_WORD_ELLIPSIS), "AAAAA...\nAB\nAAAAA...");
+    // DT_END_ELLIPSIS: only the end of the text; a wide line before it is clipped without dots.
+    assert_eq!(ell(&mut g, "AAAAAAAA\nAB\nAAAAAAAA", 80, 60, DT_END_ELLIPSIS), "AAAAAAAA\nAB\nAAAAA...");
+    assert_eq!(ell(&mut g, "AAAAAAAA\nAB", 80, 60, DT_END_ELLIPSIS), "AAAAAAAA\nAB");
+    assert_eq!(ell(&mut g, words, 80, 60, DT_WORDBREAK | DT_END_ELLIPSIS), "AAAAAAAA BBBB AAAAA...");
+    // Both: every wide word, and the end of the text on the last line that fits.
+    assert_eq!(ell(&mut g, words, 80, 32, DT_WORDBREAK | DT_END_ELLIPSIS | DT_WORD_ELLIPSIS), "AAAAA... BBBB AAAAA...");
+    assert_eq!(ell(&mut g, "AAAA BBBB AAAA BBBB", 60, 32, DT_WORDBREAK | DT_END_ELLIPSIS), "AAAA BBBB AAAA...");
+    // DT_PATH_ELLIPSIS keeps what follows the last backslash, on every line.
+    assert_eq!(ell(&mut g, "AAAA\\BBBB\\AAAA\\BBB.AB\nAB", 100, 60, DT_PATH_ELLIPSIS), "AA...\\BBB.AB\nAB");
+}
