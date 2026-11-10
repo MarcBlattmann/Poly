@@ -88,11 +88,15 @@ pub unsafe extern "system" fn QueryInformationJobObject(
     let mut ret = 0u32;
     // SAFETY: the caller's buffer of `length` bytes.
     let st = unsafe { nt::NtQueryInformationJobObject(job, class, info, length, &mut ret) };
+    if !st.is_success() {
+        // A failed query leaves the caller's returned length as it was.
+        return fail_status(st, FALSE);
+    }
     if !returned.is_null() {
         // SAFETY: the caller's out-pointer.
         unsafe { returned.write(ret) };
     }
-    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+    TRUE
 }
 
 /// `SetInformationJobObject`.

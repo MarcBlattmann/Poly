@@ -81,7 +81,7 @@ pub fn create_section(
         return Err(STATUS_NOT_SUPPORTED);
     }
     let protect = Protection::new(req.page_protection, false)?;
-    if protect.is_guard() {
+    if protect.is_guard() || protect.base() == PAGE_NOACCESS {
         return Err(STATUS_INVALID_PAGE_PROTECTION);
     }
     let image = a & SEC_IMAGE != 0;
@@ -94,7 +94,9 @@ pub fn create_section(
             if size > MAX_SECTION_SIZE {
                 return Err(STATUS_SECTION_TOO_BIG);
             }
-            let pages = (page_up(size).expect("bounded") / PAGE_SIZE) as usize;
+            // An anonymous section is whole pages (5000 bytes are 8192).
+            let size = page_up(size).expect("bounded");
+            let pages = (size / PAGE_SIZE) as usize;
             let reserve = a & SEC_RESERVE != 0;
             let committed = reserve.then(|| vec![false; pages]);
             (size, SectionKind::Pagefile { committed }, SectionSource::Pagefile { size, committed: !reserve })

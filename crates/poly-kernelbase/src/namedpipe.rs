@@ -67,8 +67,9 @@ pub struct ServerParams {
 
 /// `CreateNamedPipeW`'s argument checks and conversions. `nMaxInstances` is
 /// 1 to 254, or `PIPE_UNLIMITED_INSTANCES`; the open mode needs a
-/// direction; a message read mode needs a message pipe type; a default
-/// time-out of 0 is 50 ms (Learn).
+/// direction; a default time-out of 0 is 50 ms (Learn). A message read mode
+/// on a byte pipe type is left to the pipe file system, which refuses it for
+/// the first instance of a name only.
 pub fn server_params(
     open_mode: u32,
     pipe_mode: u32,
@@ -89,9 +90,6 @@ pub fn server_params(
     }
     let known_modes = PIPE_NOWAIT | PIPE_READMODE_MESSAGE | PIPE_TYPE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS;
     if pipe_mode & !known_modes != 0 {
-        return Err(ERROR_INVALID_PARAMETER);
-    }
-    if pipe_mode & PIPE_READMODE_MESSAGE != 0 && pipe_mode & PIPE_TYPE_MESSAGE == 0 {
         return Err(ERROR_INVALID_PARAMETER);
     }
     if max_instances == 0 || max_instances > PIPE_UNLIMITED_INSTANCES {
@@ -335,7 +333,9 @@ mod tests {
         assert_eq!(server_params(0, 0, 1, 0, 0, 0), Err(ERROR_INVALID_PARAMETER));
         assert_eq!(server_params(1, 0, 0, 0, 0, 0), Err(ERROR_INVALID_PARAMETER));
         assert_eq!(server_params(1, 0, 256, 0, 0, 0), Err(ERROR_INVALID_PARAMETER));
-        assert_eq!(server_params(1, PIPE_READMODE_MESSAGE, 1, 0, 0, 0), Err(ERROR_INVALID_PARAMETER));
+        // byte type with message read mode: the pipe file system decides
+        let p = server_params(3, PIPE_READMODE_MESSAGE, 1, 0, 0, 0).unwrap();
+        assert_eq!((p.pipe_type, p.read_mode), (0, 1));
         assert_eq!(server_params(1, 0x10, 1, 0, 0, 0), Err(ERROR_INVALID_PARAMETER));
     }
 

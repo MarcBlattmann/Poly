@@ -58,6 +58,8 @@ pub struct Port {
     pub queue: VecDeque<Packet>,
     /// `NumberOfConcurrentThreads`: recorded, not enforced.
     pub concurrency: u32,
+    /// Its last handle was closed: waiters get `STATUS_ABANDONED_WAIT_0`.
+    pub abandoned: bool,
 }
 
 /// A file object's association with a port: it holds a pointer reference
@@ -85,7 +87,21 @@ pub const COMPLETION_RECORD: usize = 32;
 impl IoState {
     /// A port object with cookie `cookie` was made.
     pub fn port_create(&mut self, cookie: u64, object: ObjectId, concurrency: u32) {
-        self.ports.insert(cookie, Port { object, queue: VecDeque::new(), concurrency });
+        self.ports.insert(cookie, Port { object, queue: VecDeque::new(), concurrency, abandoned: false });
+    }
+
+    /// The last handle of port `cookie` was closed: wake its waiters.
+    pub fn port_abandon(&mut self, om: &mut ObjectManager, cookie: u64) {
+        if let Some(p) = self.ports.get_mut(&cookie) {
+            p.abandoned = true;
+            if om.is_alive(p.object) {
+                let _ = om.set_signaled(p.object, true);
+            }
+        }
+    }
+
+    pub fn port_is_abandoned(&self, cookie: u64) -> bool {
+        self.ports.get(&cookie).is_some_and(|p| p.abandoned)
     }
 
     /// The port object was deleted: its queue goes.
@@ -227,6 +243,9 @@ fn remove<K: NtKernel>(
     max: usize,
 ) -> Result<core::result::Result<Vec<Packet>, NtStatus>> {
     let caller = k.caller();
+    // The port is looked up by handle once; after that the waiter keeps the
+    // object, so it still finds it when the handle is closed under it.
+    let mut found: Option<(ObjectId, u64)> = None;
     loop {
         enum Step {
             Got(Vec<Packet>),
@@ -234,7 +253,14 @@ fn remove<K: NtKernel>(
             End(NtStatus),
         }
         let step = k.with_state(|sys, _, _| -> Result<Step> {
-            let (obj, cookie) = port_of(sys, &caller, h, IO_COMPLETION_MODIFY_STATE)?;
+            let (obj, cookie) = match found {
+                Some(f) => f,
+                None => port_of(sys, &caller, h, IO_COMPLETION_MODIFY_STATE)?,
+            };
+            found = Some((obj, cookie));
+            if sys.io.port_is_abandoned(cookie) {
+                return Ok(Step::End(STATUS_ABANDONED_WAIT_0));
+            }
             let got = sys.io.port_take(&mut sys.objects, cookie, max);
             if !got.is_empty() {
                 return Ok(Step::Got(got));

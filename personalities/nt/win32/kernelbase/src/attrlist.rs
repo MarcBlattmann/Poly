@@ -69,7 +69,7 @@ pub unsafe extern "system" fn UpdateProcThreadAttribute(
     let size_ok = match attribute {
         PARENT_PROCESS => Some(size == 8),
         HANDLE_LIST | JOB_LIST => Some(size != 0 && size % 8 == 0),
-        MITIGATION_POLICY => Some(size == 4 || size == 8),
+        MITIGATION_POLICY => Some(size == 4 || size == 8 || size == 16),
         CHILD_PROCESS_POLICY => Some(size == 4),
         SECURITY_CAPABILITIES => Some(size == 24),
         _ => None,
@@ -142,6 +142,8 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
                     if value == 0 {
                         return Err(ERROR_INVALID_PARAMETER);
                     }
+                    // 16 bytes are two policy words (`PROCESS_CREATION_MITIGATION_POLICY2`);
+                    // only the first is looked at.
                     out.mitigation = if size == 4 {
                         u64::from((value as *const u32).read_unaligned())
                     } else {
@@ -157,11 +159,11 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
 
 /// Whether `v` holds only `PROCESS_CREATION_MITIGATION_POLICY_*` values
 /// Windows defines (`winbase.h`): the one-bit flags at bits 0 to 2 and
-/// two-bit fields at every fourth bit from 8 to 52.
+/// two-bit fields at every fourth bit from 8 to 60.
 pub fn mitigation_defined(v: u64) -> bool {
     let mut ok: u64 = 0b111;
     let mut shift = 8;
-    while shift <= 52 {
+    while shift <= 60 {
         ok |= 0b11 << shift;
         shift += 4;
     }

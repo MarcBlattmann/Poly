@@ -172,7 +172,7 @@ fn creating_pipes_checks_names_instances_and_directions() {
     let mut t = setup();
     let rws = RW | SYNCHRONIZE;
     // FILE_CREATE of an existing name is refused, a further instance is not.
-    let (s1, _h1, info) = t.np_create("multi", rws, 3, FILE_CREATE, SYNC, 0, 0, 2, 4096);
+    let (s1, h1, info) = t.np_create("multi", rws, 3, FILE_CREATE, SYNC, 0, 0, 2, 4096);
     assert_eq!((s1, info), (STATUS_SUCCESS, FILE_CREATED));
     assert_eq!(t.np_create("multi", rws, 3, FILE_CREATE, SYNC, 0, 0, 2, 4096).0, STATUS_ACCESS_DENIED);
     let (s2, h2, info) = t.np_create("multi", rws, 3, FILE_OPEN_IF, SYNC, 0, 0, 2, 4096);
@@ -182,6 +182,10 @@ fn creating_pipes_checks_names_instances_and_directions() {
     assert_eq!(t.np_create("multi", rws, 1, FILE_OPEN_IF, SYNC, 0, 0, 2, 4096).0, STATUS_ACCESS_DENIED);
     t.close(h2);
     assert_eq!(t.np_create("multi", rws, 3, FILE_OPEN_IF, SYNC, 0, 0, 2, 4096).0, STATUS_SUCCESS);
+    // A message read mode on a byte pipe is refused for the first instance
+    // of a name only: a further instance is created.
+    t.close(h1);
+    assert_eq!(t.np_create("multi", rws, 3, FILE_OPEN_IF, SYNC, 0, 1, 2, 4096).0, STATUS_SUCCESS);
     // Bad parameters.
     assert_eq!(t.np_create("bad", rws, 3, FILE_CREATE, SYNC, 0, 1, 2, 4096).0, STATUS_INVALID_PARAMETER);
     assert_eq!(t.np_create("bad", rws, 3, FILE_CREATE, SYNC, 0, 0, 0, 4096).0, STATUS_INVALID_PARAMETER);
@@ -352,6 +356,9 @@ fn transceive_writes_and_reads_a_reply() {
     assert!(t.event_set(ev));
     assert_eq!(t.f.u32_at(iosb), STATUS_SUCCESS.0);
     assert_eq!(t.f.u64_at(iosb + 8), 6);
+    // The server end is gone: no transaction (not the write's status).
+    t.close(s);
+    assert_eq!(t.fsctl(c, FSCTL_PIPE_TRANSCEIVE, b"abcd", 16).0, STATUS_INVALID_PIPE_STATE);
     // Not a pipe: an event.
     let e = t.event();
     assert_eq!(t.fsctl(e, FSCTL_PIPE_LISTEN, &[], 0).0, STATUS_OBJECT_TYPE_MISMATCH);
@@ -501,4 +508,18 @@ fn files_on_a_port_post_packets_when_requests_complete() {
     assert_eq!(t.f.call(Service::ReadFile, &[s, 0, 0x7000, ov, ov, buf, 16, 0, 0]), STATUS_INVALID_PARAMETER);
     t.close(s);
     assert_eq!(t.depth(p), 0);
+}
+
+#[test]
+fn ports_accept_odd_rights_and_refuse_a_name_without_a_leaf() {
+    let mut t = setup();
+    let out = t.f.alloc(8);
+    // A right the type does not have is accepted.
+    assert_eq!(t.f.call(Service::CreateIoCompletion, &[out, 0x8000 | 0x3, 0, 0]), STATUS_SUCCESS);
+    // GENERIC_READ and GENERIC_WRITE map to the query and modify rights.
+    assert_eq!(t.f.call(Service::CreateIoCompletion, &[out, 0x8000_0000, 0, 1]), STATUS_SUCCESS);
+    // A directory name with no leaf is no name.
+    let oa = t.f.attrs(r"\BaseNamedObjects\", CI);
+    let s = t.f.call(Service::CreateIoCompletion, &[out, 0x1F0003, oa, 0]);
+    assert_eq!(s, STATUS_OBJECT_NAME_INVALID);
 }
