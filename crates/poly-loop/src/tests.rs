@@ -155,3 +155,36 @@ fn autoclear_on_last_close() {
     assert!(!loops.device(9).unwrap().is_bound());
     assert_eq!(ctl.ioctl(LOOP_CTL_REMOVE, 9), Ok(0));
 }
+
+#[test]
+fn a_mapped_device_shows_the_backing_file_and_keeps_no_pages() {
+    let (w, loops) = world();
+    let ctl = loops.control();
+    assert_eq!(ctl.ioctl(LOOP_CTL_ADD, 6), Ok(6));
+    let l6 = loops.device(6).unwrap();
+    // Not bound: nothing to map.
+    assert!(l6.mapped().unwrap().is_none());
+    let img = open(&w, "/img6", OpenFlags::RDWR | OpenFlags::CREAT).unwrap();
+    assert_eq!(img.write(&[1u8; 2048]), Ok(2048));
+    w.vfs.mknod(&w.ctx, &w.root, At::Cwd, b"/l6", FileType::BlockDevice, 0o600, DeviceId::new(7, 6)).unwrap();
+    let dev = open(&w, "/l6", OpenFlags::RDWR).unwrap();
+    assert_eq!(dev.ioctl(LOOP_SET_FD, fd(&w, img.clone())), Ok(0));
+    // A write the device still holds back is in the file once it is mapped.
+    assert_eq!(dev.write_at(0, &[2u8; 4]), Ok(4));
+    let mut check = [0u8; 4];
+    assert_eq!(img.read_at(0, &mut check), Ok(4));
+    assert_eq!(check, [1; 4]);
+    let m = l6.mapped().unwrap().unwrap();
+    assert_eq!((m.offset, m.size, m.read_only), (0, 2048, false));
+    assert_eq!(m.file.read_at(0, &mut check), Ok(4));
+    assert_eq!(check, [2; 4]);
+    // From now on the device and the file agree at once, both ways: what a
+    // mapping changes in the file is what the device reads, and a write
+    // through the device is in the file without a sync.
+    assert_eq!(img.write_at(8, &[9u8; 4]), Ok(4));
+    assert_eq!(dev.read_at(8, &mut check), Ok(4));
+    assert_eq!(check, [9; 4]);
+    assert_eq!(dev.write_at(16, &[5u8; 4]), Ok(4));
+    assert_eq!(img.read_at(16, &mut check), Ok(4));
+    assert_eq!(check, [5; 4]);
+}

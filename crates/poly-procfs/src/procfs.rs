@@ -66,6 +66,8 @@ enum G {
     InotifyWatches,
     InotifyInstances,
     InotifyQueued,
+    ThreadSelfLink,
+    NsLastPid,
 }
 
 /// No parent: in the root.
@@ -102,6 +104,8 @@ const GLOBALS: &[(&[u8], usize, G)] = &[
     (b"max_user_watches", 25, G::InotifyWatches),     // 26
     (b"max_user_instances", 25, G::InotifyInstances), // 27
     (b"max_queued_events", 25, G::InotifyQueued),     // 28
+    (b"thread-self", TOP, G::ThreadSelfLink),         // 29
+    (b"ns_last_pid", 10, G::NsLastPid),               // 30
 ];
 
 /// `/proc/sys/kernel/cap_last_cap`: the highest capability number
@@ -437,7 +441,7 @@ impl ProcFs {
             Node::Root | Node::Pid(_) | Node::Task(..) => FileType::Directory,
             Node::Global(i) => match GLOBALS[i].2 {
                 G::Dir => FileType::Directory,
-                G::SelfLink | G::MountsLink => FileType::Symlink,
+                G::SelfLink | G::MountsLink | G::ThreadSelfLink => FileType::Symlink,
                 _ => FileType::Regular,
             },
             Node::Entry(_, i) => match PID_ENTRIES[i].1 {
@@ -600,7 +604,8 @@ impl ProcFs {
                 G::InotifyWatches => format::line(&decimal(u64::from(INOTIFY_MAX_USER_WATCHES))),
                 G::InotifyInstances => format::line(&decimal(u64::from(INOTIFY_MAX_USER_INSTANCES))),
                 G::InotifyQueued => format::line(&decimal(u64::from(INOTIFY_MAX_QUEUED_EVENTS))),
-                G::Dir | G::SelfLink | G::MountsLink => return Err(Errno::EINVAL),
+                G::NsLastPid => format::line(&decimal(u64::from(src.ns_last_pid()))),
+                G::Dir | G::SelfLink | G::MountsLink | G::ThreadSelfLink => return Err(Errno::EINVAL),
             },
             Node::Entry(p, i) => {
                 let info = self.process(p)?;
@@ -654,6 +659,11 @@ impl ProcFs {
     }
 
     /// `/proc/sys/kernel/hostname` and `domainname`, which a write sets.
+    /// `/proc/sys/kernel/ns_last_pid` (pid_namespaces(7)).
+    fn is_ns_last_pid(node: Node) -> bool {
+        matches!(node, Node::Global(i) if GLOBALS[i].2 == G::NsLastPid)
+    }
+
     fn kernel_name_file(node: Node) -> Option<KernelName> {
         match node {
             Node::Global(i) => match GLOBALS[i].2 {
@@ -820,8 +830,8 @@ impl FileSystem for ProcFs {
             Node::TaskStat(..) | Node::TaskStatus(..) => 0o444,
             Node::Global(i) => match GLOBALS[i].2 {
                 G::Dir => 0o555,
-                G::SelfLink | G::MountsLink => 0o777,
-                G::Hostname | G::Domainname => 0o644,
+                G::SelfLink | G::MountsLink | G::ThreadSelfLink => 0o777,
+                G::Hostname | G::Domainname | G::NsLastPid => 0o644,
                 _ => 0o444,
             },
             Node::Entry(_, i) => PID_ENTRIES[i].2,
@@ -902,6 +912,11 @@ impl FileSystem for ProcFs {
                 src.current_pid().map(|p| decimal(u64::from(p))).ok_or(Errno::ENOENT)
             }
             Node::Global(i) if GLOBALS[i].2 == G::MountsLink => Ok(b"self/mounts".to_vec()),
+            // proc(5): "/proc/thread-self ... the same as /proc/self/task/<tid>".
+            Node::Global(i) if GLOBALS[i].2 == G::ThreadSelfLink => {
+                let (pid, tid) = src.current_pid().zip(src.current_tid()).ok_or(Errno::ENOENT)?;
+                Ok(alloc::format!("{pid}/task/{tid}").into_bytes())
+            }
             Node::Entry(p, i) => {
                 self.owner(p)?;
                 match PID_ENTRIES[i].1 {
@@ -933,7 +948,10 @@ impl FileSystem for ProcFs {
 
     fn writable_file(&self, ino: Ino) -> bool {
         Node::from_ino(ino).is_some_and(|n| {
-            Self::id_map_file(n).is_some() || Self::kernel_name_file(n).is_some() || Self::process_setting(n).is_some()
+            Self::id_map_file(n).is_some()
+                || Self::kernel_name_file(n).is_some()
+                || Self::process_setting(n).is_some()
+                || Self::is_ns_last_pid(n)
         })
     }
 
@@ -975,6 +993,9 @@ impl FileSystem for ProcFs {
         if let Some(which) = Self::kernel_name_file(node) {
             return self.src.write_kernel_name(which, offset, data);
         }
+        if Self::is_ns_last_pid(node) {
+            return self.src.write_ns_last_pid(data);
+        }
         if let Some((p, e)) = Self::process_setting(node) {
             return self.write_setting(p, e, data);
         }
@@ -992,7 +1013,8 @@ impl FileSystem for ProcFs {
         // nothing; the write that follows sets the value (Chromium opens
         // `oom_score_adj` with creat(2)).
         let node = self.node(ino)?;
-        if Self::kernel_name_file(node).is_some() || Self::process_setting(node).is_some() {
+        if Self::kernel_name_file(node).is_some() || Self::process_setting(node).is_some() || Self::is_ns_last_pid(node)
+        {
             Ok(())
         } else {
             Err(Errno::EROFS)

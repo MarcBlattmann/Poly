@@ -109,6 +109,9 @@ struct State {
     /// The device's size in bytes, fixed when the status or capacity is set.
     size: u64,
     pages: BTreeMap<u64, Page>,
+    /// The device was mapped ([`Loop::mapped`]): a mapping shows the backing
+    /// file's own pages, so the device keeps none of its own from then on.
+    mapped: bool,
     opens: u32,
     mounts: u32,
     exclusive: u32,
@@ -127,6 +130,7 @@ impl Default for State {
             block_size: 512,
             size: 0,
             pages: BTreeMap::new(),
+            mapped: false,
             opens: 0,
             mounts: 0,
             exclusive: 0,
@@ -138,6 +142,18 @@ impl State {
     fn bound(&self) -> bool {
         self.backing.is_some()
     }
+}
+
+/// The part of its backing file a loop device shows ([`Loop::mapped`]).
+#[derive(Debug)]
+pub struct Mapped {
+    pub file: Arc<OpenFile>,
+    /// Where the device starts in the file.
+    pub offset: u64,
+    /// The device's size in bytes.
+    pub size: u64,
+    /// The device refuses writes.
+    pub read_only: bool,
 }
 
 /// One loop device.
@@ -292,6 +308,11 @@ impl<L: RawLock + Default + 'static> Loop<L> {
         if !s.bound() || offset >= s.size {
             return Ok(0);
         }
+        if s.mapped {
+            // What a mapping wrote is in the file, not in pages kept here.
+            Self::write_back(s)?;
+            Self::drop_cache(s);
+        }
         let n = (buf.len() as u64).min(s.size - offset) as usize;
         let mut done = 0;
         while done < n {
@@ -325,7 +346,26 @@ impl<L: RawLock + Default + 'static> Loop<L> {
             page.dirty = true;
             done += take;
         }
+        if s.mapped {
+            // A mapping must see the write: it goes to the file at once.
+            Self::write_back(s)?;
+            Self::drop_cache(s);
+        }
         Ok(n)
+    }
+
+    /// What a mapping of the device (mmap(2)) shows: the backing file from
+    /// `offset` on, `size` bytes of it. What the device held back is
+    /// written first, and from now on the device keeps no pages of its own,
+    /// so reads and writes through it and through mappings agree. `None`
+    /// when the device is not bound.
+    pub fn mapped(&self) -> Result<Option<Mapped>> {
+        let mut s = self.state.lock();
+        let Some(file) = s.backing.clone() else { return Ok(None) };
+        Self::write_back(&mut s)?;
+        Self::drop_cache(&mut s);
+        s.mapped = true;
+        Ok(Some(Mapped { file, offset: s.offset, size: s.size, read_only: s.read_only || s.file_read_only }))
     }
 
     /// Reads for a file system mounted from the device: straight from the

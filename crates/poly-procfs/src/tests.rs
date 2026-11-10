@@ -462,13 +462,15 @@ fn the_root_lists_fixed_files_then_processes_in_pid_order() {
             "stat",
             "filesystems",
             "sys",
+            "thread-self",
             "1",
             "42"
         ]
     );
     assert_eq!(list[2].1, FileType::Symlink);
     assert_eq!(list[11].1, FileType::Directory);
-    assert_eq!(list[12].1, FileType::Directory);
+    assert_eq!(list[12].1, FileType::Symlink);
+    assert_eq!(list[13].1, FileType::Directory);
 }
 
 #[test]

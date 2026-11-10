@@ -453,6 +453,36 @@ impl LinuxKernel for Thread<'_> {
                     let addr = memory.map(req.at(placement_of(r))).map_err(memory_errno)?;
                     return Ok(addr);
                 }
+                // A loop device maps its backing file, from where the device
+                // starts in it (ADR 0168): the same pages as the file's own
+                // mappings and its cache.
+                if file.kind() == FileType::BlockDevice
+                    && let Some(m) = file
+                        .node()
+                        .attr()
+                        .ok()
+                        .and_then(|a| crate::loopdev::mapped(a.rdev).transpose())
+                        .transpose()
+                        .map_err(vfs_errno)?
+                    && m.file.kind() == FileType::Regular
+                    && m.file.device().is_none()
+                {
+                    if r.shared && r.prot.writable() && (!file.writable() || m.read_only) {
+                        return Err(Errno::EACCES);
+                    }
+                    if offset.checked_add(r.len).is_none_or(|end| end > m.size.next_multiple_of(4096)) {
+                        return Err(Errno::EINVAL);
+                    }
+                    let source = FileSource::of(&m.file);
+                    let req = poly_vm::MapRequest::file(
+                        r.len,
+                        prot,
+                        FileRef::new(Arc::new(source)),
+                        m.offset + offset,
+                        r.shared,
+                    );
+                    return map_placed(&memory, req, r);
+                }
                 if file.kind() != FileType::Regular {
                     return Err(if file.kind() == FileType::CharDevice { Errno::ENODEV } else { Errno::EACCES });
                 }

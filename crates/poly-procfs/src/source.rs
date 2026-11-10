@@ -340,6 +340,26 @@ pub trait ProcSource: Send + Sync {
     /// `/proc/self` names. `None` for kernel threads.
     fn current_pid(&self) -> Option<u32>;
 
+    /// The calling thread's id, as `/proc/thread-self` names it below its
+    /// process. The process's own id by default (its main thread).
+    fn current_tid(&self) -> Option<u32> {
+        self.current_pid()
+    }
+
+    /// `/proc/sys/kernel/ns_last_pid`: the last process or thread id handed
+    /// out in the pid namespace this procfs shows. 0 by default.
+    fn ns_last_pid(&self) -> u32 {
+        0
+    }
+
+    /// A write to `ns_last_pid` by the calling thread: a decimal number N;
+    /// the next id handed out is N + 1 (pid_namespaces(7)). The bytes taken,
+    /// or the error; `EROFS` by default.
+    fn write_ns_last_pid(&self, data: &[u8]) -> Result<usize, Errno> {
+        let _ = data;
+        Err(Errno::EROFS)
+    }
+
     /// Every process, in any order.
     fn pids(&self) -> Vec<u32>;
 

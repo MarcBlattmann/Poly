@@ -81,6 +81,16 @@ fn vfs_flags(f: admin::MountFlags) -> MountFlags {
     MountFlags { read_only: f.read_only, no_exec: f.no_exec, no_suid: f.no_suid, no_dev: f.no_dev }
 }
 
+/// The access time mode a mount(2) call names goes to the mount's
+/// attributes (`MOUNT_ATTR_NOATIME` 0x10, `STRICTATIME` 0x20, `NODIRATIME`
+/// 0x80; `/proc/<pid>/mountinfo` shows them); a call that names none
+/// leaves them.
+fn apply_atime(id: poly_vfs::MountId, f: admin::MountFlags) {
+    if let (Some(atime), Some(m)) = (f.atime, crate::fs::vfs().mount_by_id(id)) {
+        m.set_attrs((m.attrs() & !0xf0) | atime);
+    }
+}
+
 /// The kernel's log as a `fmt::Write`, for what `power` reports.
 struct Log;
 
@@ -335,6 +345,7 @@ impl Thread<'_> {
             root.uid.get_or_insert(cred.uid);
             root.gid.get_or_insert(cred.gid);
         }
+        let asked = flags;
         let flags = vfs_flags(flags);
         let id = if fs.needs_device() {
             if source.is_empty() {
@@ -366,10 +377,18 @@ impl Thread<'_> {
             let id = files.mount_fs(target, made, flags).map_err(vfs_errno)?;
             if let Some(m) = crate::fs::vfs().mount_by_id(id) {
                 let source = if source.is_empty() { &b"none"[..] } else { source };
-                m.set_sb_info(source, &poly_personality_linux::mountapi::options_string(fs, &root));
+                // MS_SYNCHRONOUS is the file system's: `sync` leads its options.
+                let mut options = if asked.sync { b"sync".to_vec() } else { Vec::new() };
+                let own = poly_personality_linux::mountapi::options_string(fs, &root);
+                if !options.is_empty() && !own.is_empty() {
+                    options.push(b',');
+                }
+                options.extend_from_slice(&own);
+                m.set_sb_info(source, &options);
             }
             id
         };
+        apply_atime(id, asked);
         mounts::record_source(id, if source.is_empty() { b"none" } else { source });
         Ok(())
     }
@@ -392,6 +411,7 @@ impl LinuxAdmin for Thread<'_> {
                     admin::check_remount_options(m.fs_name(), data)?;
                 }
                 files.remount(target, vfs_flags(*flags), *bind).map_err(vfs_errno)?;
+                apply_atime(id, *flags);
                 if !*bind
                     && disk::mount_of(id).is_none()
                     && let Some(m) = crate::fs::vfs().mount_by_id(id)
@@ -414,8 +434,14 @@ impl LinuxAdmin for Thread<'_> {
                 Ok(())
             }
             MountRequest::Bind { source, target, flags, recursive: _ } => {
+                // The bind shows the source of the mount it was taken from
+                // (proc_pid_mountinfo's spec sheet), not the path bound.
+                let from = files.lookupat(AT_FDCWD, source, true).ok().map(|n| {
+                    let m = n.mount();
+                    mounts::source(m.id()).unwrap_or_else(|| disk::source_of(m.id(), m.fs_name()).into_bytes())
+                });
                 let id = files.mount_bind(source, target, vfs_flags(*flags)).map_err(vfs_errno)?;
-                mounts::record_source(id, source);
+                mounts::record_source(id, from.as_deref().unwrap_or(source));
                 Ok(())
             }
             MountRequest::Propagation { target, kind, recursive } => {

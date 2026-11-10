@@ -66,6 +66,15 @@ pub struct MountFlags {
     pub no_suid: bool,
     pub no_dev: bool,
     pub no_exec: bool,
+    /// The access time mode, when the call names one (`MS_NOATIME`,
+    /// `MS_NODIRATIME`, `MS_RELATIME`, `MS_STRICTATIME`), as
+    /// `MOUNT_ATTR_*` bits (`linux/mount.h`: `NOATIME` 0x10, `STRICTATIME`
+    /// 0x20, `NODIRATIME` 0x80; relatime is 0). `None`: the call says
+    /// nothing about access times (a remount keeps what the mount has,
+    /// mount(2)).
+    pub atime: Option<u32>,
+    /// `MS_SYNCHRONOUS`: shown as `sync` among the file system's options.
+    pub sync: bool,
 }
 
 impl MountFlags {
@@ -75,6 +84,19 @@ impl MountFlags {
             no_suid: flags & ms::NOSUID != 0,
             no_dev: flags & ms::NODEV != 0,
             no_exec: flags & ms::NOEXEC != 0,
+            atime: if flags & (ms::NOATIME | ms::NODIRATIME | ms::RELATIME | ms::STRICTATIME) != 0 {
+                let mode = if flags & ms::NOATIME != 0 {
+                    0x10
+                } else if flags & ms::STRICTATIME != 0 {
+                    0x20
+                } else {
+                    0
+                };
+                Some(mode | if flags & ms::NODIRATIME != 0 { 0x80 } else { 0 })
+            } else {
+                None
+            },
+            sync: flags & ms::SYNCHRONOUS != 0,
         }
     }
 }

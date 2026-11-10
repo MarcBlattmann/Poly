@@ -171,6 +171,7 @@ pub fn split_attrs(attrs: u64) -> (MountFlags, u32) {
         no_suid: attrs & MOUNT_ATTR_NOSUID != 0,
         no_dev: attrs & MOUNT_ATTR_NODEV != 0,
         no_exec: attrs & MOUNT_ATTR_NOEXEC != 0,
+        ..MountFlags::default()
     };
     (flags, (attrs & ATTR_EXTRA) as u32)
 }
@@ -336,6 +337,20 @@ pub struct FsContext {
 
 /// The parameters each file system type takes (the man pages' lists, as
 /// [`admin::mount_options`] accepts them).
+/// Whether an overlay parameter with a fixed set of values has one of them
+/// (the kernel's overlayfs documentation: `redirect_dir=on|off|follow|
+/// nofollow`, `index=on|off`, `metacopy=on|off`, `xino=on|off|auto`,
+/// `nfs_export=on|off`); other parameters take anything here.
+fn overlay_value_ok(key: &[u8], value: Option<&[u8]>) -> bool {
+    let allowed: &[&[u8]] = match key {
+        b"redirect_dir" => &[b"on", b"off", b"follow", b"nofollow"],
+        b"index" | b"metacopy" | b"nfs_export" => &[b"on", b"off"],
+        b"xino" => &[b"on", b"off", b"auto"],
+        _ => return true,
+    };
+    value.is_some_and(|v| allowed.contains(&v))
+}
+
 fn known_key(fs: FsType, key: &[u8]) -> bool {
     match fs {
         FsType::Tmpfs => matches!(
@@ -446,6 +461,13 @@ impl FsContext {
                     return Err(Errno::EBUSY);
                 }
                 let fstype = self.fstype.ok_or(Errno::EINVAL)?;
+                // A file system on a device needs to be told which; a
+                // failed create ends the context.
+                if fstype.needs_device() && self.source.is_none() {
+                    self.log(b"e No source specified\n");
+                    self.phase = Phase::Failed;
+                    return Err(Errno::EINVAL);
+                }
                 let data = self.data();
                 let root = admin::mount_options(fstype, &data)?;
                 let req = CreateRequest {
@@ -477,6 +499,14 @@ impl FsContext {
                         Ok(())
                     }
                     Err(e) => {
+                        // tmpfs says why it will not shrink (tmpfs(5)).
+                        if e == Errno::EINVAL && self.fstype == Some(FsType::Tmpfs) {
+                            if self.options.iter().any(|(k, _)| k.as_slice() == b"nr_inodes") {
+                                self.log(b"e tmpfs: Too few inodes for current use\n");
+                            } else if self.options.iter().any(|(k, _)| matches!(k.as_slice(), b"size" | b"nr_blocks")) {
+                                self.log(b"e tmpfs: Too small a size for current use\n");
+                            }
+                        }
                         self.phase = Phase::Failed;
                         Err(e)
                     }
@@ -490,7 +520,7 @@ impl FsContext {
     /// context usable.
     fn set(&mut self, key: &[u8], value: Value<'_>) -> Result<(), Errno> {
         match (key, value) {
-            (b"source", Value::String(s) | Value::Path(s)) => {
+            (b"source", Value::String(s)) => {
                 if self.source.is_some() {
                     self.log(b"e Multiple sources\n");
                     return Err(Errno::EINVAL);
@@ -498,8 +528,12 @@ impl FsContext {
                 self.source = Some(s.to_vec());
                 return Ok(());
             }
-            (b"source", _) => return Err(self.reject("Bad value for", key)),
-            (b"ro" | b"rw", Value::Flag) => {
+            (b"source", _) => {
+                self.log(b"e Non-string source\n");
+                return Err(Errno::EINVAL);
+            }
+            // The flag, also given with a string value.
+            (b"ro" | b"rw", Value::Flag | Value::String(_)) => {
                 self.read_only = Some(key == b"ro");
                 return Ok(());
             }
@@ -520,6 +554,9 @@ impl FsContext {
             one.extend_from_slice(v);
         }
         if one.contains(&b',') || admin::mount_options(fstype, &one).is_err() {
+            return Err(self.reject("Bad value for", key));
+        }
+        if fstype == FsType::Overlay && !overlay_value_ok(key, value.as_deref()) {
             return Err(self.reject("Bad value for", key));
         }
         self.options.retain(|(k, _)| k.as_slice() != key);

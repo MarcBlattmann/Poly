@@ -97,6 +97,19 @@ impl Source for LoopSource {
     }
 }
 
+/// What a mapping of the loop device `id` shows (`poly_loop::Loop::mapped`):
+/// its backing file, where the device starts in it and how long it is.
+/// `None` for another device or one that is not bound.
+pub fn mapped(id: DeviceId) -> Result<Option<poly_loop::Mapped>> {
+    if !is_loop(id) {
+        return Ok(None);
+    }
+    match LOOPS.get().and_then(|l| l.device_of(id)) {
+        Some(dev) => dev.mapped(),
+        None => Ok(None),
+    }
+}
+
 /// Whether `id` names a loop device.
 pub fn is_loop(id: DeviceId) -> bool {
     id.major == poly_loop::LOOP_MAJOR

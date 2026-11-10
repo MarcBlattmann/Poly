@@ -255,6 +255,36 @@ impl ProcSource for KernelProc {
         ns::pid::local(&self.view, pid as i32).map(|l| l as u32)
     }
 
+    fn current_tid(&self) -> Option<u32> {
+        let tid = user::current_tid()?;
+        if self.view.is_none() {
+            return Some(tid);
+        }
+        ns::pid::local(&self.view, tid as i32).map(|l| l as u32)
+    }
+
+    fn ns_last_pid(&self) -> u32 {
+        match &self.view {
+            Some(ns) => ns::pid::last(ns) as u32,
+            // The initial namespace: the highest id in use stands in.
+            None => process::all().iter().map(|p| p.pid).max().unwrap_or(0),
+        }
+    }
+
+    fn write_ns_last_pid(&self, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        use poly_vfs::Errno;
+        // pid_namespaces(7): CAP_SYS_ADMIN over the namespace.
+        let writer = crate::linux::cred::current_creds().ok_or(Errno::EPERM)?;
+        if !writer.capable(poly_personality_linux::cred::cap::SYS_ADMIN) {
+            return Err(Errno::EPERM);
+        }
+        let text = core::str::from_utf8(data).map_err(|_| Errno::EINVAL)?;
+        let last: i32 = text.trim_end_matches('\n').trim().parse().map_err(|_| Errno::EINVAL)?;
+        let ns = self.view.as_ref().ok_or(Errno::EPERM)?;
+        ns::pid::set_last(ns, last).map_err(|_| Errno::EINVAL)?;
+        Ok(data.len())
+    }
+
     fn pids(&self) -> Vec<u32> {
         if self.view.is_none() {
             return process::all().iter().map(|p| p.pid).collect();

@@ -34,7 +34,13 @@ fn vfs_flags(f: admin::MountFlags) -> MountFlags {
 }
 
 fn admin_flags(f: MountFlags) -> admin::MountFlags {
-    admin::MountFlags { read_only: f.read_only, no_suid: f.no_suid, no_dev: f.no_dev, no_exec: f.no_exec }
+    admin::MountFlags {
+        read_only: f.read_only,
+        no_suid: f.no_suid,
+        no_dev: f.no_dev,
+        no_exec: f.no_exec,
+        ..admin::MountFlags::default()
+    }
 }
 
 /// What a context's commands made.

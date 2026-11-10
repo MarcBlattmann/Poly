@@ -120,7 +120,8 @@ fn mount_decodes_the_operation_from_the_flags() {
                 source: b"tmpfs".to_vec(),
                 target: b"/mnt".to_vec(),
                 fstype: b"tmpfs".to_vec(),
-                flags: MountFlags { no_suid: true, no_dev: true, ..MountFlags::default() },
+                // MS_RELATIME names the access time mode: relatime (0).
+                flags: MountFlags { no_suid: true, no_dev: true, atime: Some(0), ..MountFlags::default() },
                 data: b"mode=1777,size=1m".to_vec(),
             },
             MountRequest::Remount {

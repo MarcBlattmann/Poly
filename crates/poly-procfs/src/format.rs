@@ -352,14 +352,17 @@ fn mount_options(m: &MountEntry) -> String {
         }
     }
     // The access time mode (`MOUNT_ATTR_NOATIME` 0x10, `STRICTATIME` 0x20,
-    // `NODIRATIME` 0x80): relatime unless the mount says otherwise.
-    match m.attrs & 0x70 {
-        0 => s.push_str(",relatime"),
-        0x10 => s.push_str(",noatime"),
-        _ => {}
+    // `NODIRATIME` 0x80): relatime unless the mount says otherwise. In the
+    // order of proc_pid_mountinfo's spec sheet: noatime, nodiratime,
+    // relatime.
+    if m.attrs & 0x70 == 0x10 {
+        s.push_str(",noatime");
     }
     if m.attrs & 0x80 != 0 {
         s.push_str(",nodiratime");
+    }
+    if m.attrs & 0x70 == 0 {
+        s.push_str(",relatime");
     }
     s
 }
@@ -382,7 +385,12 @@ pub fn mounts(entries: &[MountEntry]) -> Vec<u8> {
         mount_field(&mut o, &m.source);
         o.0.push(b' ');
         mount_field(&mut o, &m.mount_point);
+        // One list for the mount and its file system: read-only when
+        // either is.
         let mut opts = mount_options(m);
+        if m.sb_read_only && !m.read_only {
+            opts.replace_range(0..2, "ro");
+        }
         if !m.sb_options.is_empty() {
             opts.push(',');
             opts.push_str(&String::from_utf8_lossy(&m.sb_options));

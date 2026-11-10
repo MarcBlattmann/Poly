@@ -270,7 +270,7 @@ impl Tmpfs {
     /// An empty tmpfs that holds at most `bytes` of file data (rounded down
     /// to whole pages); writes beyond fail with `ENOSPC`.
     pub fn with_limit(clock: Arc<dyn Clock>, bytes: u64) -> Tmpfs {
-        Tmpfs::build(clock, Some(bytes / PAGE), None)
+        Tmpfs::build(clock, Some(bytes.div_ceil(PAGE)), None)
     }
 
     /// An empty tmpfs that holds at most `bytes` of file data and `inodes`
@@ -278,13 +278,13 @@ impl Tmpfs {
     /// beyond either, writes and new files fail with `ENOSPC`. `statfs`
     /// reports both as the totals.
     pub fn with_limits(clock: Arc<dyn Clock>, bytes: u64, inodes: u64) -> Tmpfs {
-        Tmpfs::build(clock, Some(bytes / PAGE), Some(inodes))
+        Tmpfs::build(clock, Some(bytes.div_ceil(PAGE)), Some(inodes))
     }
 
     /// [`with_limits`](Self::with_limits) with either limit optional
     /// (`None`: none).
     pub fn with_optional_limits(clock: Arc<dyn Clock>, bytes: Option<u64>, inodes: Option<u64>) -> Tmpfs {
-        Tmpfs::build(clock, bytes.map(|b| b / PAGE), inodes)
+        Tmpfs::build(clock, bytes.map(|b| b.div_ceil(PAGE)), inodes)
     }
 
     fn build(clock: Arc<dyn Clock>, page_limit: Option<u64>, inode_limit: Option<u64>) -> Tmpfs {
@@ -651,13 +651,22 @@ impl Tmpfs {
 }
 
 impl FileSystem for Tmpfs {
+    /// tmpfs(5): a size is whole pages, rounded up; limits below what is
+    /// in use are refused (`EINVAL`) and nothing changes.
     fn set_limits(&self, bytes: Option<u64>, inodes: Option<u64>) -> Result<()> {
-        if let Some(b) = bytes {
-            let pages = if b == 0 { u64::MAX } else { b / PAGE };
-            self.page_limit.store(pages, core::sync::atomic::Ordering::Relaxed);
+        let mut inner = self.inner.lock();
+        let pages = bytes.map(|b| if b == 0 { u64::MAX } else { b.div_ceil(PAGE) });
+        if pages.is_some_and(|p| p < inner.pages) {
+            return Err(Errno::EINVAL);
+        }
+        if inodes.is_some_and(|n| n != 0 && n < inner.nodes.len() as u64) {
+            return Err(Errno::EINVAL);
+        }
+        if let Some(p) = pages {
+            self.page_limit.store(p, core::sync::atomic::Ordering::Relaxed);
         }
         if let Some(n) = inodes {
-            self.inner.lock().inode_limit = if n == 0 { None } else { Some(n) };
+            inner.inode_limit = if n == 0 { None } else { Some(n) };
         }
         Ok(())
     }
