@@ -8,7 +8,7 @@
 //! boundary), so a stack walk ends there. The first thread's start routine
 //! is the executable's entry point and its argument the PEB.
 
-use crate::exports::LOADER_LOCK;
+use crate::exports::{LOADER_LOCK, LOADER_LOCK_DEBUG};
 use crate::sys::SysPlatform;
 use crate::{heap, lock, params, run_callouts, syscalls, with_loader, with_slot};
 use core::arch::global_asm;
@@ -72,7 +72,8 @@ unsafe extern "system" {
 }
 
 /// Fill in the PEB fields programs read directly (`poly_rtl::peb`, ADR 0155): the process
-/// heap, the reported OS version, the processor count and the executable's subsystem.
+/// heap, the reported OS version, the processor count, the executable's subsystem and the
+/// loader-lock pointer.
 fn init_peb(peb: u64, exe_base: u64) {
     // SAFETY: the PEB is the process's own page; the executable's headers are mapped.
     unsafe {
@@ -89,7 +90,11 @@ fn init_peb(peb: u64, exe_base: u64) {
             ((opt + 48) as *const u16).read_unaligned(),
             ((opt + 50) as *const u16).read_unaligned(),
         );
-        for f in poly_rtl::peb::fields(poly_rtl::peb::Facts { processors, subsystem }) {
+        // PEB.LoaderLock points at the lock `LdrLockLoaderLock` takes and the loader holds around
+        // every DllMain and TLS callback; it is set here, before any of them runs.
+        LOADER_LOCK.make_static(&LOADER_LOCK_DEBUG);
+        let loader_lock = (&raw const LOADER_LOCK) as u64;
+        for f in poly_rtl::peb::fields(poly_rtl::peb::Facts { processors, subsystem, loader_lock }) {
             let at = (peb + f.at as u64) as *mut u8;
             core::ptr::copy_nonoverlapping(f.value.to_le_bytes().as_ptr(), at, f.width);
         }

@@ -262,6 +262,19 @@ pub extern "system" fn FlsGetValue(index: u32) -> *mut u8 {
     }
 }
 
+/// `FlsGetValue2` (`api-ms-win-core-fibers-l1-1-2`, which the C runtime looks up with
+/// `GetProcAddress`): `FlsGetValue` that leaves the last error alone.
+#[unsafe(no_mangle)]
+pub extern "system" fn FlsGetValue2(index: u32) -> *mut u8 {
+    let me = teb();
+    with(|s| {
+        if !s.fls.as_ref().is_some_and(|f| f.is_allocated(index)) {
+            return 0;
+        }
+        s.fls_values.get(&me).and_then(|v| v.get(index as usize)).copied().unwrap_or(0)
+    }) as *mut u8
+}
+
 /// `FlsSetValue`.
 #[unsafe(no_mangle)]
 pub extern "system" fn FlsSetValue(index: u32, value: *mut u8) -> i32 {

@@ -1,0 +1,69 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtQueryObject.yaml
+id: windows/api/ntdll.dll/NtQueryObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-4
+  date: 2026-11-10
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: "NtQueryObject function (winternl.h)", "ZwQueryObject (ntifs.h)",
+  "OBJECT_NAME_INFORMATION structure (ntifs.h)", "UNICODE_STRING";
+  ntifs.h for the OBJECT_INFORMATION_CLASS value, ntstatus.h for the status
+  values. Wine's tests were not read. No Microsoft binary was decompiled or
+  disassembled.
+summary: >
+  Returns information about the object behind a handle. This sheet covers
+  one class, ObjectNameInformation (1), and above all pipe handles: for
+  either end of a named pipe the name is the full object path
+  "\Device\NamedPipe\<pipe name>", built as a UNICODE_STRING at the start of
+  the caller's buffer with its characters right behind it. (The file-system
+  name without the device is what NtQueryInformationFile's
+  FileNameInformation gives.)
+interface:
+  signature: "NTSTATUS NtQueryObject(HANDLE handle, OBJECT_INFORMATION_CLASS class, PVOID object_information, ULONG length, PULONG return_length)"
+  class: "ObjectNameInformation = 1 (ntifs.h OBJECT_INFORMATION_CLASS)"
+  object_name_information: "OBJECT_NAME_INFORMATION (ntifs.h) is one UNICODE_STRING: Length u16 @0 (bytes, without a terminator), MaximumLength u16 @2, Buffer pointer @8; 16 bytes on x64. The characters follow it in the same buffer"
+  return_length: "optional; a NULL pointer is accepted (STATUS_SUCCESS with a large buffer, STATUS_BUFFER_OVERFLOW with a 16-byte one)"
+rules:
+  named_pipe_name: "for a pipe created as \\\\.\\pipe\\PolySpec4_ObjA: Length 64 (the 32 characters of \"\\Device\\NamedPipe\\PolySpec4_ObjA\"), MaximumLength 66 = Length + 2, Buffer pointing 16 bytes into the caller's buffer (right behind the UNICODE_STRING), the characters there followed by a NUL character; 82 = 16 + MaximumLength bytes are written in all and *return_length is 82; status STATUS_SUCCESS"
+  same_for_every_handle: "the server end before and after a client connected, the client end (opened as \"\\\\.\\pipe\\polyspec4_OBJA\": the name still has the creator's spelling), a second instance, and a handle inherited by a child process all give the same answer; \"crashpad_4242_ABCDEFGHIJKLMNOP\" gives \"\\Device\\NamedPipe\\crashpad_4242_ABCDEFGHIJKLMNOP\" (Length 96, MaximumLength 98, return length 114)"
+  below_the_header: "a length below 16 fails with STATUS_INFO_LENGTH_MISMATCH (0xC0000004); nothing is written to the buffer, but *return_length is set to the full size (82) (lengths 0, 1, 2, 4, 8, 12, 15 tested)"
+  too_small_no_data: "lengths from 16 up to 51 (16, 17, 18, 19, 20, 24, 32, 34, 48, 50, 51 tested) give STATUS_BUFFER_OVERFLOW (0x80000005) with *return_length 82 and nothing written to the buffer"
+  too_small_device_only: "lengths 52 and 53, which hold exactly the device name \"\\Device\\NamedPipe\" (16 + 34 + 2 bytes), give STATUS_OBJECT_PATH_INVALID (0xC0000039) with *return_length 0 and a complete string for the device name alone in the buffer: Length 34, MaximumLength 36, Buffer at +16, 52 bytes written"
+  too_small_partial: "lengths from 54 up to 81 (54, 60, 78, 79, 80, 81 tested) give STATUS_BUFFER_OVERFLOW with *return_length 82 and a truncated string: Length = length - 18, MaximumLength = length - 16, Buffer at +16, and the buffer filled to its last byte with the start of the name (length 54: \"\\Device\\NamedPipe\\\"; an odd length gives an odd Length, e.g. 79 -> Length 61)"
+  exact_and_larger: "a length of exactly the return length (82) succeeds; larger lengths give the same result and write the same 82 bytes (83, 84, 88, 528 tested)"
+  anonymous_pipe: "both ends of a pipe made by CreatePipe: with a large buffer the status is STATUS_OBJECT_PATH_INVALID (0xC0000039), *return_length is 0, and the buffer holds a complete string for the device name alone, \"\\Device\\NamedPipe\" (Length 34, MaximumLength 36, Buffer at +16, 52 bytes written); with a 16-byte buffer STATUS_BUFFER_OVERFLOW and *return_length 52, nothing written"
+  disk_file: "for a file on a disk volume the name is \"\\Device\\HarddiskVolume<number>\" followed by the path on the volume (the name FileNameInformation gives); MaximumLength = Length + 2, *return_length = 16 + MaximumLength, Buffer at +16; lengths 0 and 8 give STATUS_INFO_LENGTH_MISMATCH and 16 gives STATUS_BUFFER_OVERFLOW, each with the full size in *return_length and nothing written"
+  unnamed_object: "an event created without a name: STATUS_SUCCESS, Length 0, MaximumLength 0, Buffer NULL, 16 bytes written and *return_length 16, with a buffer of 528 or of exactly 16 bytes; lengths 15 and 0 give STATUS_INFO_LENGTH_MISMATCH with *return_length 16"
+errors:
+  invalid_handle: "STATUS_INVALID_HANDLE (0xC0000008) for the handle value 0 and for a value that is no open handle; neither the buffer nor *return_length is written"
+  info_length_mismatch: "STATUS_INFO_LENGTH_MISMATCH (0xC0000004) for a length below 16"
+  buffer_overflow: "STATUS_BUFFER_OVERFLOW (0x80000005) for a length of 16 or more that cannot hold the name (see the too_small rules for what is written)"
+  object_path_invalid: "STATUS_OBJECT_PATH_INVALID (0xC0000039) for an anonymous pipe, and for a named pipe when the buffer holds the device name but not one character more (lengths 52 and 53)"
+side_effects: "none"
+threading: "no state is shared between threads. Not tested here: a name query on a synchronous file handle another thread is blocked on"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing kernel32.dll and ntdll.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants); run
+  with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Every query gets a
+  buffer filled with 0xAA and a marker in *return_length, so the lines show
+  how many bytes were written and whether the return length was. The Buffer
+  pointer is printed as an offset into the caller's buffer, never as an
+  address. Pipe names are fixed ("PolySpec4_...").
+  specs/windows/ntdll.dll/NtQueryInformationFile.tests/ntqif_name_child.rs
+  also queries a handle a child process inherited.
+not_covered: >
+  Every other information class (basic, type, types, handle flags).
+  ObjectNameInformation for named events, mutants, sections, keys,
+  directories, symbolic links, processes and threads, tokens, and for file
+  handles other than the pipes and the disk file here (consoles, mailslots,
+  network files). Synchronous file handles with a blocked operation.

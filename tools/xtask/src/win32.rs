@@ -68,6 +68,8 @@ pub const OUTPUTS: &[&str] = &[
     // ADR 0171.
     "userenv.dll",
     "version.dll",
+    "winmm.dll",
+    "shell32.dll",
     "ole32.dll",
     "s1test.exe",
     "iphlpapi.dll",
@@ -182,6 +184,8 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/bcryptprimitives",
             "personalities/nt/win32/userenv",
             "personalities/nt/win32/version",
+            "personalities/nt/win32/winmm",
+            "personalities/nt/win32/shell32",
             "personalities/nt/win32/ole32",
             "personalities/nt/win32/s1test",
             "personalities/nt/win32/netrt",
@@ -519,6 +523,9 @@ fn verify_ole32(dir: &Path) -> Result {
         "s1test.exe",
         &[
             "kernel32.dll",
+            "ntdll.dll",
+            "winmm.dll",
+            "shell32.dll",
             "ole32.dll",
             "user32.dll",
             "gdi32.dll",

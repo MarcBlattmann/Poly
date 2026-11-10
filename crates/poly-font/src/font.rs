@@ -119,6 +119,35 @@ pub struct StyleInfo {
     pub vendor: [u8; 4],
 }
 
+/// The values a GDI-style text engine scales into `TEXTMETRICW`, read from
+/// `OS/2`, `hhea` and `post` (font units; the OpenType specification names
+/// the fields). Fields a font lacks are 0.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GdiMetrics {
+    /// `OS/2.usWinAscent`, or `hhea.ascender` without an `OS/2` table.
+    pub win_ascent: u16,
+    /// `OS/2.usWinDescent`, or `-hhea.descender`.
+    pub win_descent: u16,
+    pub hhea_ascent: i16,
+    pub hhea_descent: i16,
+    pub line_gap: i16,
+    /// `hhea.advanceWidthMax`.
+    pub advance_width_max: u16,
+    /// `OS/2.xAvgCharWidth` (0 when the font has no `OS/2` table).
+    pub avg_char_width: i16,
+    /// `post.underlinePosition` (negative: below the baseline).
+    pub underline_position: i16,
+    pub underline_thickness: i16,
+    /// `OS/2.yStrikeoutPosition` and `yStrikeoutSize`.
+    pub strikeout_position: i16,
+    pub strikeout_size: i16,
+    /// `OS/2.panose.bProportion` (9: monospaced), 0 without `OS/2`.
+    pub panose_proportion: u8,
+    /// `OS/2.panose.bFamilyType`.
+    pub panose_family: u8,
+    pub has_os2: bool,
+}
+
 /// Name IDs of the `name` table used here.
 pub mod name_id {
     pub const COPYRIGHT: u16 = 0;
@@ -315,6 +344,63 @@ impl<'a> Font<'a> {
         m
     }
 
+    /// `OS/2`, `hhea` and `post` values for scaling GDI metrics.
+    pub fn gdi_metrics(&self) -> GdiMetrics {
+        let h = self.tables.hhea;
+        let mut m = GdiMetrics {
+            hhea_ascent: i16_at(h, 4).unwrap_or(0),
+            hhea_descent: i16_at(h, 6).unwrap_or(0),
+            line_gap: i16_at(h, 8).unwrap_or(0),
+            advance_width_max: u16_at(h, 10).unwrap_or(0),
+            ..GdiMetrics::default()
+        };
+        m.win_ascent = m.hhea_ascent.max(0) as u16;
+        m.win_descent = m.hhea_descent.unsigned_abs();
+        if let Some(os2) = self.tables.os2 {
+            // xAvgCharWidth at 2, panose at 32..42, yStrikeoutSize at 26,
+            // yStrikeoutPosition at 28, usWinAscent at 74, usWinDescent at 76.
+            m.has_os2 = true;
+            m.avg_char_width = i16_at(os2, 2).unwrap_or(0);
+            m.strikeout_size = i16_at(os2, 26).unwrap_or(0);
+            m.strikeout_position = i16_at(os2, 28).unwrap_or(0);
+            m.panose_family = os2.get(32).copied().unwrap_or(0);
+            m.panose_proportion = os2.get(35).copied().unwrap_or(0);
+            if let (Some(a), Some(d)) = (u16_at(os2, 74), u16_at(os2, 76))
+                && (a != 0 || d != 0)
+            {
+                m.win_ascent = a;
+                m.win_descent = d;
+            }
+        }
+        if let Some(post) = self.tables.post {
+            m.underline_position = i16_at(post, 8).unwrap_or(0);
+            m.underline_thickness = i16_at(post, 10).unwrap_or(0);
+        }
+        m
+    }
+
+    /// The lowest and the highest code point of the Basic Multilingual
+    /// Plane the font's `cmap` maps to a glyph.
+    pub fn cmap_range(&self) -> Option<(u32, u32)> {
+        self.cmap.as_ref()?.range()
+    }
+
+    /// Whether every table the directory lists lies inside the data: a font
+    /// cut short, or with a table pointing past the end, is damaged.
+    pub fn directory_complete(data: &[u8]) -> bool {
+        let Some(n) = u16_at(data, 4) else { return false };
+        if n == 0 {
+            return false;
+        }
+        (0..usize::from(n)).all(|i| {
+            let at = 12 + 16 * i;
+            match (u32_at(data, at + 8), u32_at(data, at + 12)) {
+                (Some(off), Some(len)) => (off as usize).checked_add(len as usize).is_some_and(|e| e <= data.len()),
+                _ => false,
+            }
+        })
+    }
+
     /// The glyph for a character, or `None` if the font has none.
     pub fn glyph_index(&self, c: char) -> Option<GlyphId> {
         let g = self.cmap.as_ref()?.lookup(u32::from(c))?;
@@ -494,6 +580,59 @@ impl<'a> Cmap<'a> {
             }
         }
         best.map(|b| b.1)
+    }
+
+    /// The lowest and highest BMP code points mapped to a glyph.
+    fn range(&self) -> Option<(u32, u32)> {
+        let d = self.data;
+        let (mut lo, mut hi) = (u32::MAX, 0u32);
+        let mut note = |a: u32, b: u32| {
+            if a <= b && a <= 0xFFFF {
+                lo = lo.min(a);
+                hi = hi.max(b.min(0xFFFF));
+            }
+        };
+        match self.format {
+            0 => {
+                for c in 0..256u32 {
+                    if d.get(6 + c as usize).is_some_and(|&g| g != 0) {
+                        note(c, c);
+                    }
+                }
+            }
+            4 => {
+                let seg_x2 = usize::from(u16_at(d, 6)?);
+                let ends = 14;
+                let starts = ends + seg_x2 + 2;
+                for i in 0..seg_x2 / 2 {
+                    let (Some(end), Some(start)) = (u16_at(d, ends + 2 * i), u16_at(d, starts + 2 * i)) else {
+                        break;
+                    };
+                    // The final 0xFFFF segment is the format's terminator.
+                    if start == 0xFFFF && end == 0xFFFF {
+                        continue;
+                    }
+                    note(u32::from(start), u32::from(end));
+                }
+            }
+            6 => {
+                let first = u32::from(u16_at(d, 6)?);
+                let count = u32::from(u16_at(d, 8)?);
+                if count > 0 {
+                    note(first, first + count - 1);
+                }
+            }
+            12 => {
+                let groups = u32_at(d, 12)? as usize;
+                for i in 0..groups.min(1 << 16) {
+                    let at = 16 + 12 * i;
+                    let (Some(a), Some(b)) = (u32_at(d, at), u32_at(d, at + 4)) else { break };
+                    note(a, b);
+                }
+            }
+            _ => {}
+        }
+        (hi >= lo && lo != u32::MAX).then_some((lo, hi))
     }
 
     fn lookup(&self, c: u32) -> Option<u16> {

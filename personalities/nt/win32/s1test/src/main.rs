@@ -38,13 +38,71 @@ unsafe extern "system" {
     fn GetStdHandle(which: u32) -> Handle;
     fn WriteFile(h: Handle, buf: *const u8, len: u32, written: *mut u32, ov: *mut u8) -> i32;
     fn GetCurrentThreadId() -> u32;
+    fn GetCurrentThreadStackLimits(low: *mut usize, high: *mut usize);
+    fn RtlCaptureStackBackTrace(skip: u32, count: u32, frames: *mut *mut u8, hash: *mut u32) -> u16;
     fn GetCurrentProcessId() -> u32;
     fn GetCurrentProcess() -> isize;
+    fn GetTickCount64() -> u64;
+    fn LocalFree(block: *mut u8) -> *mut u8;
+    fn GetModuleFileNameW(module: *mut u8, buf: *mut u16, size: u32) -> u32;
+    fn GetEnvironmentVariableW(name: *const u16, buf: *mut u16, size: u32) -> u32;
+    fn GetModuleHandleW(name: *const u16) -> *mut u8;
+    fn GetModuleHandleExW(flags: u32, address: *const u8, out: *mut *mut u8) -> i32;
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
     fn VirtualProtect(addr: *mut u8, size: usize, protect: u32, old: *mut u32) -> i32;
     fn VirtualFree(addr: *mut u8, size: usize, kind: u32) -> i32;
     fn ReadProcessMemory(process: isize, base: *const u8, buf: *mut u8, size: usize, read: *mut usize) -> i32;
     fn WriteProcessMemory(process: isize, base: *mut u8, buf: *const u8, size: usize, written: *mut usize) -> i32;
+}
+
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn LdrLockLoaderLock(flags: u32, disposition: *mut u32, cookie: *mut usize) -> u32;
+    fn LdrUnlockLoaderLock(flags: u32, cookie: usize) -> u32;
+    fn RtlFormatCurrentUserKeyPath(path: *mut UnicodeString) -> u32;
+    fn RtlFreeUnicodeString(s: *mut UnicodeString);
+    fn NtCreateKey(
+        key: *mut isize,
+        access: u32,
+        attributes: *const ObjectAttributes,
+        title_index: u32,
+        class: *const UnicodeString,
+        options: u32,
+        disposition: *mut u32,
+    ) -> u32;
+    fn NtClose(handle: isize) -> u32;
+}
+
+/// `UNICODE_STRING` (`winternl.h`).
+#[repr(C)]
+struct UnicodeString {
+    length: u16,
+    maximum_length: u16,
+    buffer: *mut u16,
+}
+
+/// `OBJECT_ATTRIBUTES` (`winternl.h`).
+#[repr(C)]
+struct ObjectAttributes {
+    length: u32,
+    root: isize,
+    name: *const UnicodeString,
+    attributes: u32,
+    security_descriptor: *const u8,
+    security_qos: *const u8,
+}
+
+#[link(name = "shell32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn CommandLineToArgvW(cmd_line: *const u16, num_args: *mut i32) -> *mut *mut u16;
+    fn SHGetFolderPathW(hwnd: *mut u8, folder: i32, token: *mut u8, flags: u32, path: *mut u16) -> u32;
+}
+
+#[link(name = "winmm", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn timeGetTime() -> u32;
+    fn timeBeginPeriod(period: u32) -> u32;
+    fn timeEndPeriod(period: u32) -> u32;
 }
 
 #[link(name = "ole32", kind = "raw-dylib")]
@@ -588,6 +646,188 @@ unsafe fn system() {
 
 // ----- GDI: fonts, text metrics, device caps -----------------------------------------
 
+unsafe extern "C" {
+    static __ImageBase: u8;
+}
+
+/// RtlCaptureStackBackTrace: the frames of this thread's stack, the first in this program.
+unsafe fn backtrace() {
+    let mut frames = [core::ptr::null_mut::<u8>(); 32];
+    let mut hash = 0u32;
+    let n = RtlCaptureStackBackTrace(0, 32, frames.as_mut_ptr(), &mut hash) as usize;
+    check_got(n >= 2, n as u32);
+    let base = &raw const __ImageBase as usize;
+    let inside = frames[0] as usize;
+    check_got(inside > base && inside < base + 0x100000, 0);
+    // Skipping one drops the first frame.
+    let mut again = [core::ptr::null_mut::<u8>(); 32];
+    let m = RtlCaptureStackBackTrace(1, 32, again.as_mut_ptr(), core::ptr::null_mut()) as usize;
+    check_eq(usize::from(m + 1 == n || m == n), 1);
+    check_eq(again[0] as usize, frames[1] as usize);
+    check_got(hash != 0, hash);
+}
+
+/// `NtCurrentTeb()`: `gs:[0x30]`.
+unsafe fn teb() -> *const u8 {
+    let teb: *const u8;
+    core::arch::asm!("mov {}, gs:[0x30]", out(reg) teb, options(nostack, readonly, preserves_flags));
+    teb
+}
+
+/// The loader lock through the PEB (spec-chrome-elf-null items 1, 2, 4, 5): `PEB+0x110` points
+/// to an `RTL_CRITICAL_SECTION` inside ntdll that is free here (-1, 0, 0) and is the one
+/// `LdrLockLoaderLock` takes (-2, 1, this thread's id, TEB+0x48) and `LdrUnlockLoaderLock` frees.
+/// This is what Chrome's crash reporter reads without calling anything.
+unsafe fn loader_lock() {
+    let teb = teb();
+    let peb = *(teb.add(0x60) as *const *const u8);
+    check_got(!peb.is_null(), 0);
+    let lock = *(peb.add(0x110) as *const *const u8);
+    check_got(!lock.is_null(), 0);
+    // Inside ntdll's image.
+    let mut owner = core::ptr::null_mut();
+    check_eq(GetModuleHandleExW(0x4, lock, &mut owner) as usize, 1); // FROM_ADDRESS
+    let ntdll = w::<16>("ntdll.dll");
+    check_eq(owner as usize, GetModuleHandleW(ntdll.as_ptr()) as usize);
+    let tid = *(teb.add(0x48) as *const u64);
+    check_eq(tid as usize, GetCurrentThreadId() as usize);
+    let fields = || {
+        (
+            *(lock.add(0x08) as *const i32),
+            *(lock.add(0x0C) as *const i32),
+            *(lock.add(0x10) as *const u64),
+            *(lock.add(0x18) as *const u64),
+        )
+    };
+    // Free: LockCount -1, RecursionCount 0, OwningThread 0, no semaphore.
+    check_got(fields() == (-1, 0, 0, 0), 0);
+    let (mut disposition, mut cookie) = (0u32, 0usize);
+    check_eq(LdrLockLoaderLock(0, &mut disposition, &mut cookie) as usize, 0);
+    check_eq(disposition as usize, 1); // LDR_LOCK_LOADER_LOCK_DISPOSITION_LOCK_ACQUIRED
+    check_got(cookie != 0, 0);
+    // Held: LockCount -2, RecursionCount 1, OwningThread = this thread.
+    check_got(fields() == (-2, 1, tid, 0), 0);
+    check_eq(LdrUnlockLoaderLock(0, cookie) as usize, 0);
+    check_got(fields() == (-1, 0, 0, 0), 0);
+    // A statically initialised section with a debug record (`winnt.h`:
+    // RTL_CRITICAL_SECTION_FLAG_STATIC_INIT in SpinCount; DebugInfo points back to it).
+    let debug = *(lock as *const *const u8);
+    check_got(!debug.is_null(), 0);
+    check_eq(*(debug.add(0x08) as *const usize), lock as usize);
+    check_eq(*(lock.add(0x20) as *const usize), 0x0400_0000);
+    // The field does not move for the life of the process.
+    check_eq(*(peb.add(0x110) as *const usize), lock as usize);
+}
+
+/// The current user's registry key, the way chrome_elf opens it (cold trace n=275..277):
+/// `RtlFormatCurrentUserKeyPath`, a backslash appended, `NtCreateKey` with access 3
+/// (KEY_QUERY_VALUE | KEY_SET_VALUE) and OBJ_CASE_INSENSITIVE succeeds because the hive is there.
+unsafe fn current_user_key() {
+    let mut path = UnicodeString { length: 0, maximum_length: 0, buffer: core::ptr::null_mut() };
+    check_eq(RtlFormatCurrentUserKeyPath(&mut path) as usize, 0);
+    let chars = usize::from(path.length) / 2;
+    // "\REGISTRY\USER\S-1-5-21-...": at least the prefix and a SID.
+    check_got(chars > 20 && chars < 120 && !path.buffer.is_null(), chars as u32);
+    let mut name = [0u16; 128];
+    core::ptr::copy_nonoverlapping(path.buffer, name.as_mut_ptr(), chars);
+    name[chars] = u16::from(b'\\');
+    RtlFreeUnicodeString(&mut path);
+    let name = UnicodeString {
+        length: ((chars + 1) * 2) as u16,
+        maximum_length: ((chars + 2) * 2) as u16,
+        buffer: name.as_mut_ptr(),
+    };
+    let attributes = ObjectAttributes {
+        length: core::mem::size_of::<ObjectAttributes>() as u32,
+        root: 0,
+        name: &name,
+        attributes: 0x40, // OBJ_CASE_INSENSITIVE
+        security_descriptor: core::ptr::null(),
+        security_qos: core::ptr::null(),
+    };
+    let mut key = 0isize;
+    check_eq(NtCreateKey(&mut key, 3, &attributes, 0, core::ptr::null(), 0, core::ptr::null_mut()) as usize, 0);
+    check_got(key != 0, 0);
+    check_eq(NtClose(key) as usize, 0);
+}
+
+/// Whether the NUL-terminated wide string at `p` is `want`.
+unsafe fn wide_is(p: *const u16, want: &str) -> bool {
+    let mut i = 0;
+    for c in want.encode_utf16() {
+        if *p.add(i) != c {
+            return false;
+        }
+        i += 1;
+    }
+    *p.add(i) == 0
+}
+
+/// shell32 (Learn: `CommandLineToArgvW`, `SHGetFolderPathW`): the arguments of a command line
+/// like the one Chrome starts its crash handler with, in one block freed with `LocalFree`;
+/// and the user's local application data folder (CSIDL_LOCAL_APPDATA, what Chrome asks for).
+unsafe fn shell32() {
+    let line = w::<96>(
+        "\"C:\\Program Files\\Chrome\\chrome.exe\" --type=x \"--dir=C:\\my profile\" a\\\\\\\"b\\\" /prefetch:4",
+    );
+    let mut count = 0i32;
+    let argv = CommandLineToArgvW(line.as_ptr(), &mut count);
+    check_got(!argv.is_null(), 0);
+    check_eq(count as usize, 5);
+    check_got(wide_is(*argv, "C:\\Program Files\\Chrome\\chrome.exe"), 0);
+    check_got(wide_is(*argv.add(1), "--type=x"), 1);
+    check_got(wide_is(*argv.add(2), "--dir=C:\\my profile"), 2);
+    check_got(wide_is(*argv.add(3), "a\\\"b\""), 3);
+    check_got(wide_is(*argv.add(4), "/prefetch:4"), 4);
+    // One block: the strings lie behind the pointers, and one LocalFree releases it.
+    check_got((*argv as usize) > argv as usize && (*argv as usize) < argv as usize + 256, 0);
+    check_eq(LocalFree(argv.cast()) as usize, 0);
+    // An empty command line gives the executable's path.
+    let empty = [0u16; 1];
+    let argv = CommandLineToArgvW(empty.as_ptr(), &mut count);
+    check_got(!argv.is_null() && count == 1, count as u32);
+    let mut own = [0u16; 260];
+    let n = GetModuleFileNameW(core::ptr::null_mut(), own.as_mut_ptr(), 260) as usize;
+    check_got(n > 0 && (0..=n).all(|i| *(*argv).add(i) == own[i]), n as u32);
+    check_eq(LocalFree(argv.cast()) as usize, 0);
+    // CSIDL_LOCAL_APPDATA (0x1C), SHGFP_TYPE_CURRENT (0): %LOCALAPPDATA%, no trailing backslash.
+    let mut path = [0u16; 260];
+    check_eq(SHGetFolderPathW(core::ptr::null_mut(), 0x1C, core::ptr::null_mut(), 0, path.as_mut_ptr()) as usize, 0);
+    let mut want = [0u16; 260];
+    let name = w::<16>("LOCALAPPDATA");
+    let n = GetEnvironmentVariableW(name.as_ptr(), want.as_mut_ptr(), 260) as usize;
+    check_got(n > 3 && (0..=n).all(|i| path[i] == want[i]) && path[n - 1] != u16::from(b'\\'), n as u32);
+    // A value that is no CSIDL: E_INVALIDARG.
+    check_eq(
+        SHGetFolderPathW(core::ptr::null_mut(), 0x7F, core::ptr::null_mut(), 0, path.as_mut_ptr()) as usize,
+        0x8007_0057,
+    );
+}
+
+/// winmm's timer functions (Learn: `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`): the
+/// time is milliseconds since the system started (non-zero after boot, not going back; the
+/// same clock as `GetTickCount`), and a 1 ms period request is granted and ended.
+unsafe fn winmm() {
+    let a = timeGetTime();
+    check_got(a != 0, a);
+    let ticks = GetTickCount64();
+    let b = timeGetTime();
+    // The same clock as GetTickCount64, read between the two (wrapping as a DWORD).
+    check_got(b.wrapping_sub(a) < 10_000 && (ticks as u32).wrapping_sub(a) < 10_000, b);
+    check_eq(timeBeginPeriod(1) as usize, 0); // TIMERR_NOERROR
+    check_eq(timeEndPeriod(1) as usize, 0);
+    check_eq(timeBeginPeriod(0) as usize, 97); // TIMERR_NOCANDO: out of range
+}
+
+/// GetCurrentThreadStackLimits: the stack this code runs on lies between the limits.
+unsafe fn stack_limits() {
+    let (mut low, mut high) = (0usize, 0usize);
+    GetCurrentThreadStackLimits(&mut low, &mut high);
+    let here = &low as *const usize as usize;
+    check_got(low != 0 && low < here && here < high, 0);
+    check_eq(high % 16, 0);
+}
+
 /// ReadProcessMemory / WriteProcessMemory on the calling process (Chrome's chrome_elf reads and
 /// patches ntdll's stubs this way).
 unsafe fn process_memory() {
@@ -657,6 +897,12 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         system();
         gdi();
         process_memory();
+        stack_limits();
+        backtrace();
+        loader_lock();
+        current_user_key();
+        shell32();
+        winmm();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));
         out(b" checks passed\n");
