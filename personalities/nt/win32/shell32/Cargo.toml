@@ -1,0 +1,18 @@
+[package]
+name = "shell32"
+description = "Our shell32.dll (ADR 0155): CommandLineToArgvW and SHGetFolderPathW; the rest of shell32 is polystub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "shell32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[lints]
+workspace = true

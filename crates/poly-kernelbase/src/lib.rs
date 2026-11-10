@@ -99,6 +99,7 @@ pub mod tz;
 pub mod verinfo;
 pub mod version;
 pub mod waitreg;
+pub mod shell;
 pub mod winmm;
 
 pub use poly_ntobj::NtStatus;

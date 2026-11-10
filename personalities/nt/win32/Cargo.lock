@@ -386,6 +386,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell32"
+version = "0.0.1"
+dependencies = [
+ "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "ucrtbase"
 version = "0.0.1"
 dependencies = [

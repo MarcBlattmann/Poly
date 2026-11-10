@@ -43,6 +43,9 @@ unsafe extern "system" {
     fn GetCurrentProcessId() -> u32;
     fn GetCurrentProcess() -> isize;
     fn GetTickCount64() -> u64;
+    fn LocalFree(block: *mut u8) -> *mut u8;
+    fn GetModuleFileNameW(module: *mut u8, buf: *mut u16, size: u32) -> u32;
+    fn GetEnvironmentVariableW(name: *const u16, buf: *mut u16, size: u32) -> u32;
     fn GetModuleHandleW(name: *const u16) -> *mut u8;
     fn GetModuleHandleExW(flags: u32, address: *const u8, out: *mut *mut u8) -> i32;
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
@@ -87,6 +90,12 @@ struct ObjectAttributes {
     attributes: u32,
     security_descriptor: *const u8,
     security_qos: *const u8,
+}
+
+#[link(name = "shell32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn CommandLineToArgvW(cmd_line: *const u16, num_args: *mut i32) -> *mut *mut u16;
+    fn SHGetFolderPathW(hwnd: *mut u8, folder: i32, token: *mut u8, flags: u32, path: *mut u16) -> u32;
 }
 
 #[link(name = "winmm", kind = "raw-dylib")]
@@ -742,6 +751,55 @@ unsafe fn current_user_key() {
     check_eq(NtClose(key) as usize, 0);
 }
 
+/// Whether the NUL-terminated wide string at `p` is `want`.
+unsafe fn wide_is(p: *const u16, want: &str) -> bool {
+    let mut i = 0;
+    for c in want.encode_utf16() {
+        if *p.add(i) != c {
+            return false;
+        }
+        i += 1;
+    }
+    *p.add(i) == 0
+}
+
+/// shell32 (Learn: `CommandLineToArgvW`, `SHGetFolderPathW`): the arguments of a command line
+/// like the one Chrome starts its crash handler with, in one block freed with `LocalFree`;
+/// and the user's local application data folder (CSIDL_LOCAL_APPDATA, what Chrome asks for).
+unsafe fn shell32() {
+    let line =
+        w::<96>("\"C:\\Program Files\\Chrome\\chrome.exe\" --type=x \"--dir=C:\\my profile\" a\\\\\\\"b\\\" /prefetch:4");
+    let mut count = 0i32;
+    let argv = CommandLineToArgvW(line.as_ptr(), &mut count);
+    check_got(!argv.is_null(), 0);
+    check_eq(count as usize, 5);
+    check_got(wide_is(*argv, "C:\\Program Files\\Chrome\\chrome.exe"), 0);
+    check_got(wide_is(*argv.add(1), "--type=x"), 1);
+    check_got(wide_is(*argv.add(2), "--dir=C:\\my profile"), 2);
+    check_got(wide_is(*argv.add(3), "a\\\"b\""), 3);
+    check_got(wide_is(*argv.add(4), "/prefetch:4"), 4);
+    // One block: the strings lie behind the pointers, and one LocalFree releases it.
+    check_got((*argv as usize) > argv as usize && (*argv as usize) < argv as usize + 256, 0);
+    check_eq(LocalFree(argv.cast()) as usize, 0);
+    // An empty command line gives the executable's path.
+    let empty = [0u16; 1];
+    let argv = CommandLineToArgvW(empty.as_ptr(), &mut count);
+    check_got(!argv.is_null() && count == 1, count as u32);
+    let mut own = [0u16; 260];
+    let n = GetModuleFileNameW(core::ptr::null_mut(), own.as_mut_ptr(), 260) as usize;
+    check_got(n > 0 && (0..=n).all(|i| *(*argv).add(i) == own[i]), n as u32);
+    check_eq(LocalFree(argv.cast()) as usize, 0);
+    // CSIDL_LOCAL_APPDATA (0x1C), SHGFP_TYPE_CURRENT (0): %LOCALAPPDATA%, no trailing backslash.
+    let mut path = [0u16; 260];
+    check_eq(SHGetFolderPathW(core::ptr::null_mut(), 0x1C, core::ptr::null_mut(), 0, path.as_mut_ptr()) as usize, 0);
+    let mut want = [0u16; 260];
+    let name = w::<16>("LOCALAPPDATA");
+    let n = GetEnvironmentVariableW(name.as_ptr(), want.as_mut_ptr(), 260) as usize;
+    check_got(n > 3 && (0..=n).all(|i| path[i] == want[i]) && path[n - 1] != u16::from(b'\\'), n as u32);
+    // A value that is no CSIDL: E_INVALIDARG.
+    check_eq(SHGetFolderPathW(core::ptr::null_mut(), 0x7F, core::ptr::null_mut(), 0, path.as_mut_ptr()) as usize, 0x8007_0057);
+}
+
 /// winmm's timer functions (Learn: `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`): the
 /// time is milliseconds since the system started (non-zero after boot, not going back; the
 /// same clock as `GetTickCount`), and a 1 ms period request is granted and ended.
@@ -839,6 +897,7 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         backtrace();
         loader_lock();
         current_user_key();
+        shell32();
         winmm();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));
