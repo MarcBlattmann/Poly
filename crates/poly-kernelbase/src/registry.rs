@@ -164,6 +164,28 @@ pub fn root_path(p: Predefined, user_sid: &str) -> Option<String> {
     })
 }
 
+/// The NT path of the key an `SE_REGISTRY_KEY` object name stands for in
+/// `GetNamedSecurityInfoW` (Learn, `SE_OBJECT_TYPE`: the names start with
+/// `MACHINE`, `USERS`, `CURRENT_USER` or `CLASSES_ROOT`, in either case,
+/// and go on with a subkey path). `None` for any other first component.
+pub fn named_object_path(name: &str, user_sid: &str) -> Option<String> {
+    let (first, rest) = name.split_once('\\').unwrap_or((name, ""));
+    let p = match first.to_ascii_uppercase().as_str() {
+        "CLASSES_ROOT" => Predefined::ClassesRoot,
+        "CURRENT_USER" => Predefined::CurrentUser,
+        "MACHINE" => Predefined::LocalMachine,
+        "USERS" => Predefined::Users,
+        _ => return None,
+    };
+    let mut path = root_path(p, user_sid)?;
+    let rest = rest.trim_matches('\\');
+    if !rest.is_empty() {
+        path.push('\\');
+        path.push_str(rest);
+    }
+    Some(path)
+}
+
 /// The access mask passed to `NtOpenKey`/`NtCreateKey`: the `KEY_WOW64_*`
 /// view bits are the Win32 layer's (Poly has one view) and are dropped.
 pub const fn key_access(sam: u32) -> u32 {
@@ -391,6 +413,22 @@ pub fn parse_value_partial(b: &[u8]) -> Option<(u32, Vec<u8>)> {
 mod tests {
     use super::*;
     use crate::wide;
+
+    #[test]
+    fn named_security_objects() {
+        let sid = "S-1-5-21-0-0-0-1000";
+        let p = |n: &str| named_object_path(n, sid);
+        assert_eq!(p("MACHINE\\SOFTWARE").as_deref(), Some("\\REGISTRY\\MACHINE\\SOFTWARE"));
+        assert_eq!(p("machine\\Software\\A\\").as_deref(), Some("\\REGISTRY\\MACHINE\\Software\\A"));
+        assert_eq!(p("MACHINE").as_deref(), Some("\\REGISTRY\\MACHINE"));
+        assert_eq!(p("CLASSES_ROOT").as_deref(), Some(MACHINE_CLASSES));
+        assert_eq!(p("CURRENT_USER").as_deref(), Some("\\REGISTRY\\USER\\S-1-5-21-0-0-0-1000"));
+        assert_eq!(p("CURRENT_USER\\Software").as_deref(), Some("\\REGISTRY\\USER\\S-1-5-21-0-0-0-1000\\Software"));
+        assert_eq!(p("USERS").as_deref(), Some("\\REGISTRY\\USER"));
+        for bad in ["", "NOSUCHROOT\\SOFTWARE", "HKEY_LOCAL_MACHINE\\SOFTWARE", "C:\\Windows", "\\MACHINE"] {
+            assert_eq!(p(bad), None, "{bad}");
+        }
+    }
 
     #[test]
     fn predefined_keys() {
