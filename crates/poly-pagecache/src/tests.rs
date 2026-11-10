@@ -245,16 +245,17 @@ fn reads_fill_once_with_read_ahead_and_then_hit() {
 #[test]
 fn read_ahead_stops_at_cached_pages_and_at_the_end() {
     let (_cache, probe, fs) = setup(1000);
-    let ino = inner_file(&probe, b"f", &pattern(2, 40 * PAGE_SIZE - 100));
+    let pages = 40;
+    let ino = inner_file(&probe, b"f", &pattern(2, pages * PAGE_SIZE - 100));
     let mut b = [0u8; 1];
     fs.read(ino, 5 * PAGE, &mut b).unwrap();
     assert_eq!(fs.page_counts().0, READAHEAD_PAGES);
     fs.read(ino, 0, &mut b).unwrap();
     assert_eq!(fs.page_counts().0, READAHEAD_PAGES + 5, "stops at page 5, which is cached");
-    fs.read(ino, 39 * PAGE, &mut b).unwrap();
+    fs.read(ino, (pages as u64 - 1) * PAGE, &mut b).unwrap();
     assert_eq!(fs.page_counts().0, READAHEAD_PAGES + 6, "the last page alone");
     assert_eq!(probe.reads(), 3);
-    assert_eq!(read_all(&*fs, ino), pattern(2, 40 * PAGE_SIZE - 100));
+    assert_eq!(read_all(&*fs, ino), pattern(2, pages * PAGE_SIZE - 100));
 }
 
 #[test]
@@ -437,7 +438,7 @@ fn eviction_drops_clean_unused_pages_least_recently_used_first() {
 #[test]
 fn allocation_failure_evicts_then_reports_out_of_memory() {
     let (cache, probe, fs) = setup(1000);
-    let ino = inner_file(&probe, b"f", &pattern(9, 64 * PAGE_SIZE));
+    let ino = inner_file(&probe, b"f", &pattern(9, 128 * PAGE_SIZE));
     let mut b = [0u8; 1];
     for i in 0..48 {
         fs.read(ino, i * PAGE, &mut b).unwrap();
@@ -445,10 +446,10 @@ fn allocation_failure_evicts_then_reports_out_of_memory() {
     BUDGET.with(|x| x.set(Some(0)));
     // No frame at first: clean pages make room, then the read works... once
     // the budget allows it again; with none at all it fails cleanly.
-    assert_eq!(fs.read(ino, 60 * PAGE, &mut b).unwrap_err(), Errno::ENOMEM);
+    assert_eq!(fs.read(ino, 100 * PAGE, &mut b).unwrap_err(), Errno::ENOMEM);
     assert!(cache.stats().evicted > 0, "clean pages were evicted to make room");
     BUDGET.with(|x| x.set(Some(1)));
-    assert_eq!(fs.read(ino, 61 * PAGE, &mut b).unwrap(), 1, "read-ahead shrinks to what memory allows");
+    assert_eq!(fs.read(ino, 101 * PAGE, &mut b).unwrap(), 1, "read-ahead shrinks to what memory allows");
     BUDGET.with(|x| x.set(None));
     let written = fs.create(fs.root(), b"g", &REG).unwrap();
     BUDGET.with(|x| x.set(Some(1)));
@@ -722,4 +723,88 @@ fn data_pages_are_written_pages_not_holes() {
     assert_eq!(fs.data_pages(ino, 16, 17), Some(vec![16]));
     fs.truncate(ino, 0).unwrap();
     assert_eq!(fs.data_pages(ino, 0, u64::MAX), Some(vec![]));
+}
+
+#[test]
+fn a_run_of_cached_pages_comes_from_one_lookup_and_reads_nothing() {
+    let (_cache, probe, fs) = setup(1000);
+    let ino = inner_file(&probe, b"f", &pattern(3, 40 * PAGE_SIZE));
+    let other = inner_file(&probe, b"g", &pattern(4, 4 * PAGE_SIZE));
+    let mut b = [0u8; 1];
+    // Read-ahead cached pages 5-20 of f; page 2 of g is cached too.
+    fs.read(ino, 5 * PAGE, &mut b).unwrap();
+    fs.read(other, 2 * PAGE, &mut b).unwrap();
+    let reads = probe.reads();
+    let run = fs.cached_run(ino, 0, 8);
+    assert_eq!(run.iter().map(|r| r.0).collect::<Vec<_>>(), [5, 6, 7], "only f's cached pages in 0..8");
+    let run = fs.cached_run(ino, 18, 100);
+    assert_eq!(run.iter().map(|r| r.0).collect::<Vec<_>>(), [18, 19, 20]);
+    assert!(fs.cached_run(ino, 30, 5).is_empty());
+    assert_eq!(
+        fs.cached_run(other, 0, 4).iter().map(|r| r.0).collect::<Vec<_>>(),
+        [2, 3],
+        "read ahead from page 2 to the end of g"
+    );
+    assert_eq!(probe.reads(), reads, "nothing was read");
+}
+
+#[test]
+fn a_page_used_a_moment_ago_keeps_its_place_in_the_lru_order() {
+    let (cache, probe, fs) = setup(1000);
+    let ino = inner_file(&probe, b"f", &pattern(5, 64 * PAGE_SIZE));
+    let mut b = [0u8; 1];
+    for page in 0..64 {
+        fs.read(ino, page * PAGE, &mut b).unwrap();
+    }
+    assert_eq!(fs.page_counts().0, 64);
+    // Page 63 was just used: looking it up again changes no order (and so
+    // takes nothing out of the cache or into it).
+    let before = cache.stats();
+    for _ in 0..10 {
+        assert!(fs.cached_page(ino, 63).is_some());
+    }
+    assert_eq!(cache.stats().evicted, before.evicted);
+    // Evicting from the old end still takes page 0 first.
+    cache.shrink(63);
+    assert!(fs.cached_page(ino, 0).is_none() && fs.cached_page(ino, 63).is_some());
+}
+
+#[test]
+fn a_page_found_without_the_inode_lock_has_its_contents() {
+    // Page faults look pages up without the inode's lock (ADR 0148), so
+    // they race the fills: a page must not be in the index before what it
+    // holds is (the bytes here are never zero; a new frame's are).
+    let (_cache, probe, fs) = setup(1000);
+    let data: Vec<u8> = (0..32 * PAGE_SIZE).map(|i| 1 + (i % 251) as u8).collect();
+    let read = inner_file(&probe, b"read", &data);
+    let grown = fs.create(fs.root(), b"grown", &REG).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let peeker = {
+        let (fs, stop) = (Arc::clone(&fs), Arc::clone(&stop));
+        thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                for file in [read, grown] {
+                    for (index, page) in fs.cached_run(file, 0, 4096) {
+                        let mut bytes = [0u8; PAGE_SIZE];
+                        page.read(0, &mut bytes);
+                        assert!(
+                            bytes[0] != 0 && bytes[PAGE_SIZE - 1] != 0,
+                            "page {index} was found before it was filled"
+                        );
+                    }
+                }
+            }
+        })
+    };
+    let mut b = [0u8; 1];
+    for round in 0..400 {
+        // Two misses with their read-ahead, then the pages go again.
+        fs.read(read, 0, &mut b).unwrap();
+        fs.read(read, 16 * PAGE, &mut b).unwrap();
+        fs.evict_clean();
+        // A whole new page past the end of a file.
+        fs.write(grown, round * PAGE, &data[..PAGE_SIZE]).unwrap();
+    }
+    stop.store(true, Ordering::Relaxed);
+    peeker.join().unwrap();
 }

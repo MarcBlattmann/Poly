@@ -54,6 +54,8 @@ pub struct Desktop {
     shell_button: bool,
     /// Apps started from the launcher, not reaped yet.
     pub children: Vec<(os::Pid, String)>,
+    /// Launches that have not shown a window yet (ADR 0148).
+    pub launches: crate::launch_timer::LaunchTimer,
     /// Windows seen, to log new ones and to bring the launcher back when
     /// the last one goes.
     windows: BTreeSet<u32>,
@@ -232,6 +234,7 @@ impl Desktop {
             dir: o.dir.to_string(),
             shell_button: false,
             children: Vec::new(),
+            launches: Default::default(),
             windows: BTreeSet::new(),
             window_list: Vec::new(),
             ready: false,
@@ -816,12 +819,18 @@ impl Desktop {
     /// damage to the scene, the keyboard to the launcher while it shows,
     /// the launcher back on an empty desktop, the status, new windows
     /// logged.
+    /// The monotonic clock in milliseconds (the launch timer's).
+    pub fn now_ms(&self) -> u64 {
+        now_ms()
+    }
+
     pub fn sync(&mut self, server: &mut Server) {
         self.internal_events(server);
         let mut app_exited = false;
         self.children.retain(|(pid, name)| match os::try_wait(*pid) {
             Some(status) => {
                 println!("poly-compositor: {name} (pid {pid}) exited with status {status}");
+                self.launches.ended(*pid);
                 // Before a window: the launch's busy pointer ends if it failed.
                 server.launch_exited(*pid, status);
                 app_exited = true;
@@ -834,6 +843,9 @@ impl Desktop {
             let (x, y) = w.position();
             let (cw, ch) = w.content().logical_size();
             println!("poly-compositor: window {:?} shown at {x},{y} size {cw}x{ch}", w.title());
+            if let Some((name, ms)) = self.launches.window_shown(now_ms()) {
+                println!("poly-compositor: launch-to-window {name}: {ms} ms");
+            }
         }
         if desktop::launcher_should_reopen(
             self.shell.launcher().is_visible(),
