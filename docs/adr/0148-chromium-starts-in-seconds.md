@@ -83,6 +83,11 @@ In the order of measured impact:
    and `fill` ask for the size only for a page that is missing or reaches
    past the mapping's limit. The page cache moves a page in its LRU order
    only if it was last used more than 1/16 of the cache's uses ago.
+   These lookups do not take the inode's lock either, which used to keep a
+   fault away from a page being filled, so the page cache now puts a page into
+   its index only once its contents are in it (`Core::insert`: read from
+   the file system, or the first bytes written to a new page); a fault can
+   no longer map, or copy, the zeros of a frame about to be filled.
 4. **A mutex that does not bother the scheduler** (`kernel/src/sync.rs`):
    a thread that finds it held looks 64 times before it sleeps, and a
    release wakes a waiter only if one is sleeping (a counter, ordered with

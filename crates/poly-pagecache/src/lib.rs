@@ -53,6 +53,12 @@
 //!   the inner file system's I/O: reads, writes, truncation, writeback,
 //!   discarding. So a page is filled once, and writeback never races a
 //!   write or a truncation of the same file.
+//! - Looking a cached page up ([`PageCache::cached`],
+//!   [`PageCache::cached_run`]) takes the index's lock only, not the
+//!   inode's (page faults do this, ADR 0148). So a page enters the index
+//!   with its contents: read from the inner file system, or the first
+//!   bytes written to it, never the zeros of a new frame that is about to
+//!   be filled.
 //! - Each file system has a namespace lock of type `L`, held across
 //!   operations that may delete an inode, so that its pages are gone before
 //!   any other operation can create a file with the same inode number.
@@ -408,9 +414,13 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
         F::alloc().ok_or(Errno::ENOMEM)
     }
 
-    /// A new page for `key` in `frame`, put into the index.
-    pub(crate) fn insert(&self, key: Key, frame: F) -> Arc<Page<F>> {
+    /// A new page for `key` in `frame`, put into the index once `fill` has
+    /// written what it holds: a lookup that does not take the inode's lock
+    /// ([`PageCache::cached`], [`PageCache::cached_run`]: a page fault) never
+    /// finds a page whose contents are not there yet.
+    pub(crate) fn insert(&self, key: Key, frame: F, fill: impl FnOnce(&Page<F>)) -> Arc<Page<F>> {
         let page = Arc::new(Page::new(key, frame));
+        fill(&page);
         let over = {
             let mut index = self.index.lock();
             index.insert(Arc::clone(&page));

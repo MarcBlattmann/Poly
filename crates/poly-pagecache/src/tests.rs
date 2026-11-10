@@ -768,3 +768,43 @@ fn a_page_used_a_moment_ago_keeps_its_place_in_the_lru_order() {
     cache.shrink(63);
     assert!(fs.cached_page(ino, 0).is_none() && fs.cached_page(ino, 63).is_some());
 }
+
+#[test]
+fn a_page_found_without_the_inode_lock_has_its_contents() {
+    // Page faults look pages up without the inode's lock (ADR 0148), so
+    // they race the fills: a page must not be in the index before what it
+    // holds is (the bytes here are never zero; a new frame's are).
+    let (_cache, probe, fs) = setup(1000);
+    let data: Vec<u8> = (0..32 * PAGE_SIZE).map(|i| 1 + (i % 251) as u8).collect();
+    let read = inner_file(&probe, b"read", &data);
+    let grown = fs.create(fs.root(), b"grown", &REG).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let peeker = {
+        let (fs, stop) = (Arc::clone(&fs), Arc::clone(&stop));
+        thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                for file in [read, grown] {
+                    for (index, page) in fs.cached_run(file, 0, 4096) {
+                        let mut bytes = [0u8; PAGE_SIZE];
+                        page.read(0, &mut bytes);
+                        assert!(
+                            bytes[0] != 0 && bytes[PAGE_SIZE - 1] != 0,
+                            "page {index} was found before it was filled"
+                        );
+                    }
+                }
+            }
+        })
+    };
+    let mut b = [0u8; 1];
+    for round in 0..400 {
+        // Two misses with their read-ahead, then the pages go again.
+        fs.read(read, 0, &mut b).unwrap();
+        fs.read(read, 16 * PAGE, &mut b).unwrap();
+        fs.evict_clean();
+        // A whole new page past the end of a file.
+        fs.write(grown, round * PAGE, &data[..PAGE_SIZE]).unwrap();
+    }
+    stop.store(true, Ordering::Relaxed);
+    peeker.join().unwrap();
+}
