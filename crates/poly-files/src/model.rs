@@ -349,12 +349,16 @@ impl Browser {
     /// `/`) are skipped, so an entry's path is always inside the folder.
     fn load(fs: &dyn Fs, path: &str) -> Result<Vec<Entry>, FsError> {
         let raw = fs.read_dir(path)?;
+        // A made-up folder's names are labels (`Fs::is_virtual`).
+        let labels = fs.is_virtual(path);
         Ok(raw
             .into_iter()
-            .filter(|r| crate::ops::validate_name(&r.name).is_ok())
+            .filter(|r| labels || crate::ops::validate_name(&r.name).is_ok())
             .map(|r| {
                 let child = join(path, &r.name);
-                Entry::new(path, &r.name, r.kind, fs.stat(&child).ok())
+                let mut e = Entry::new(path, &r.name, r.kind, fs.stat(&child).ok());
+                e.hidden &= !labels;
+                e
             })
             .collect())
     }
@@ -690,6 +694,83 @@ mod tests {
 
     fn selected(b: &Browser) -> Vec<&str> {
         b.selected_entries().into_iter().map(|e| e.name.as_str()).collect()
+    }
+
+    /// A folder `list:` of three names, made up or not.
+    struct Labels(bool);
+
+    impl Fs for Labels {
+        fn read_dir(&self, path: &str) -> Result<Vec<crate::fs::RawEntry>, FsError> {
+            if path != "list:" {
+                return Err(FsError::NotFound);
+            }
+            let entry = |name: &str| crate::fs::RawEntry { name: name.into(), kind: Kind::File };
+            Ok(vec![entry(".NET Tool"), entry("Input/Output"), entry("Files")])
+        }
+
+        fn stat(&self, _: &str) -> Result<Meta, FsError> {
+            Ok(Meta::default())
+        }
+
+        fn lstat(&self, _: &str) -> Result<Meta, FsError> {
+            Ok(Meta::default())
+        }
+
+        fn read_head(&self, _: &str, _: usize) -> Result<Vec<u8>, FsError> {
+            Err(FsError::Unsupported)
+        }
+
+        fn write(&self, _: &str, _: &[u8]) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
+        }
+
+        fn create_new(&self, _: &str, _: &[u8]) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
+        }
+
+        fn create_dir(&self, _: &str) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
+        }
+
+        fn rename(&self, _: &str, _: &str) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
+        }
+
+        fn remove_file(&self, _: &str) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
+        }
+
+        fn remove_dir(&self, _: &str) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
+        }
+
+        fn is_virtual(&self, path: &str) -> bool {
+            self.0 && path == "list:"
+        }
+    }
+
+    #[test]
+    fn a_made_up_folders_names_are_labels() {
+        // On a disk: the dot file is hidden, the name with a slash is not a
+        // file name.
+        let mut b = Browser::new();
+        b.open_dir(&Labels(false), "list:///").unwrap();
+        assert_eq!(b.cwd(), "list:");
+        assert_eq!(names(&b), ["Files"]);
+        // Made up: every label shows, and searching and history work as in
+        // any folder.
+        let fs = Labels(true);
+        let mut b = Browser::new();
+        b.open_dir(&fs, "list:///").unwrap();
+        assert_eq!(names(&b), [".NET Tool", "Files", "Input/Output"]);
+        assert!(b.rows().all(|e| !e.hidden));
+        assert_eq!(b.entry(2).map(|e| e.path.as_str()), Some("list:/Input/Output"));
+        assert!(!b.can_go_up(), "it has no parent folder");
+        b.set_filter("net");
+        assert_eq!(names(&b), [".NET Tool"]);
+        b.set_filter("");
+        b.reload(&fs).unwrap();
+        assert_eq!(b.len(), 3);
     }
 
     #[test]

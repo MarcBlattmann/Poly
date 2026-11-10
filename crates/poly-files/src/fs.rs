@@ -174,6 +174,15 @@ pub trait Fs {
     fn exists(&self, path: &str) -> bool {
         self.lstat(path).is_ok()
     }
+
+    /// Whether folder `path` is not on a disk but a list this file system
+    /// makes up (Files' Applications folder, ADR 0175). The names in it
+    /// are labels, not file names: none is hidden for its dot and none is
+    /// refused for what a file name cannot hold.
+    fn is_virtual(&self, path: &str) -> bool {
+        let _ = path;
+        false
+    }
 }
 
 /// Creates directory `path` and any missing parents.

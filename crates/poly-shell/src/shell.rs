@@ -224,6 +224,26 @@ impl Shell {
         &self.apps
     }
 
+    /// The installed app with this ID (a desktop file's name, `poly:<name>`
+    /// for a built-in): what Files' Applications folder asks to be started
+    /// (ADR 0175). Open windows are not apps.
+    pub fn app_by_id(&self, id: &str) -> Option<&App> {
+        self.base_apps.iter().find(|a| a.id == id)
+    }
+
+    /// The installed apps were read again: the launcher offers these (and
+    /// the open windows it listed) from now on.
+    pub fn set_catalog(&mut self, apps: Vec<App>) {
+        if apps == self.base_apps {
+            return;
+        }
+        let windows: Vec<App> = self.apps.iter().filter(|a| a.window().is_some()).cloned().collect();
+        self.base_apps = apps;
+        self.apps = self.base_apps.iter().cloned().chain(windows).collect();
+        self.launcher.requery(&self.apps);
+        self.touch();
+    }
+
     pub fn launcher(&self) -> &Launcher {
         &self.launcher
     }
@@ -1233,16 +1253,7 @@ impl Shell {
             if let Some(bitmap) = &own {
                 bitmap.draw(fb, clip, icon.x, icon.y, ib);
             }
-            let glyph = match app.internal() {
-                _ if app.window().is_some() => lucide::APP_WINDOW,
-                Some(crate::apps::SETTINGS) => lucide::SETTINGS,
-                Some(crate::apps::NOTIFICATIONS) => lucide::BELL,
-                _ => match app.argv.first().map(String::as_str) {
-                    Some(crate::apps::FILES) => lucide::FOLDER,
-                    Some(crate::apps::TERMINAL) if app.argv.len() == 1 => lucide::SQUARE_TERMINAL,
-                    _ => lucide::APP_WINDOW,
-                },
-            };
+            let glyph = app.glyph();
             let gsz = lt::GLYPH * s;
             let (gx, gy) = (icon.x + (ib - gsz) / 2, icon.y + (ib - gsz) / 2);
             if own.is_none() {
