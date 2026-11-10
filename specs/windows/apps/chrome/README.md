@@ -215,3 +215,52 @@ NULL on Poly would be a pointer on Windows); `show <trace> <first> <last>` print
 
 What it cannot see: calls through pointers (the functions chrome_elf gets with `GetProcAddress` are visible only by their names), the
 code between calls, direct system calls, and the registers.
+
+## Call-site trace of the crash handler child (`spec-chrome-win-4`)
+
+Why: on Poly S1's next blocker was in the crash handler process (`chrome.exe --type=crashpad-handler`), which the browser trace
+does not cover. These two files are the handler's own start-up on Windows, call by call, in the same format:
+
+| File | The handler was started | Calls |
+|---|---|---|
+| `traces/s1-crashpad-handler.trace.json` | without `--monitor-self` | 833 (272 from chrome_elf.dll, 561 from chrome.exe) |
+| `traces/s1-crashpad-handler.monitor-self.trace.json` | with `--monitor-self` (it then makes a pipe of its own and starts a second handler that watches it) | 905 |
+
+Which of the two a run takes is the browser's choice: in nine cold runs in a row on one machine the browser passed `--monitor-self`
+in runs 1, 3, 5, 7, 9 and not in runs 2, 4, 6, 8. Look at the handler's command line (`GetCommandLineW`, n=115) and compare with the
+matching file.
+
+The window is **the handler's main thread from process start to its `ExitProcess`** (`window.threads` is `main`: the calls of the
+thread that made the first call; the handler's other threads serve the pipe and their calls fall between the main thread's
+differently in every run). Within one variant every run makes the same calls from the same sites in the same order.
+
+What the main thread does around the pipe (the calls Poly stopped at; numbers of the file without `--monitor-self`):
+
+- n=675 `GetFileInformationByHandleEx(<the pipe server handle inherited from the browser>, FileNameInfo (2), buffer, 528)` returns 1
+  (`chrome.exe+0x470e1`): this is how the handler asks for the pipe's name. What the call answers for a pipe is in
+  `specs/windows/kernel32.dll/GetFileInformationByHandleEx.yaml` and `specs/windows/ntdll.dll/NtQueryInformationFile.yaml`.
+- n=676-678 three `RegisterWaitForSingleObject`, n=679 `CreateThread` (the thread that serves the inherited instance);
+- n=680 `CreateNamedPipeW("\\.\pipe\crashpad_<pid>_<16 letters>", PIPE_ACCESS_DUPLEX (3), 6, 2, 512, 512, 0, NULL)` returns a handle
+  with last error 183 (`ERROR_ALREADY_EXISTS`: the pipe's second instance), n=681 `CreateThread` for it;
+- n=682 `GetQueuedCompletionStatus(port, ..., INFINITE)`: the main thread waits here until the browser says it is done.
+
+How: the same kit and driver as the browser trace (`cargo xtask win trace-kit chrome_elf.dll chrome.exe --sync`,
+`drivers/run_s1_callsites.ps1 -Cold`). The logger (`tools/wintrace/polytrace-sync`) now lets every process of a run write a trace: a
+process that cannot open `POLYTRACE_OUT` because its parent holds it (the file is not shared for writing) writes `<file>.1`,
+`<file>.2`, ... (the first that does not exist; the driver empties the run's directory first). A run of S1 leaves the browser's
+`polytrace.jsonl` and twelve children: `.1` the crash handler, then (in the order they loaded the logger) the second handler when
+there is one, the GPU process, the network and storage services and the renderers. Only the logger changed: the kit's `chrome.exe`,
+`chrome_elf.dll` and proxies are byte for byte the ones of the browser trace. Recorded on the owner's PC only (Windows 11 Enterprise
+25H2, build 26200.9711), 4 and 5 runs; every run printed the same DOM (SHA-256 `7b79f8b4...813b`) and ended with exit code 0.
+
+Reduce and compare (`tools/callsites.py`):
+
+```sh
+python -I specs/windows/apps/chrome/tools/callsites.py reduce <out.json> <run>/polytrace.jsonl.1 ... --kit <kit>/polytrace-kit.json \
+    --process crashpad-handler --main-thread --to ExitProcess
+python -I specs/windows/apps/chrome/tools/callsites.py compare specs/windows/apps/chrome/traces/s1-crashpad-handler.trace.json <poly's file of the handler>
+```
+
+`compare` reads the window (last call, main thread only) from the reference. On Poly the handler's file is the `.1` beside the
+browser's trace if Poly's `CreateFileW` refuses the second writer as Windows does (`ERROR_SHARING_VIOLATION`); the launcher has to
+print it as it prints the browser's.

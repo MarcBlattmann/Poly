@@ -368,6 +368,26 @@ pub extern "system" fn GetCurrentThreadId() -> u32 {
     unsafe { ((teb() + 0x48) as *const u64).read() as u32 }
 }
 
+/// `GetCurrentThreadStackLimits`: the thread's stack reservation and top, from the TEB
+/// (`NT_TIB.StackBase` at + 0x08, `StackLimit` + 0x10, `DeallocationStack` + 0x1478).
+///
+/// # Safety
+/// Both pointers are writable `ULONG_PTR`s.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCurrentThreadStackLimits(low: *mut usize, high: *mut usize) {
+    let t = teb();
+    // SAFETY: the TEB is valid; the caller's pointers are writable.
+    unsafe {
+        let (lo, hi) = poly_kernelbase::process::stack_limits(
+            ((t + 0x1478) as *const u64).read(),
+            ((t + 0x10) as *const u64).read(),
+            ((t + 0x08) as *const u64).read(),
+        );
+        low.write(lo as usize);
+        high.write(hi as usize);
+    }
+}
+
 /// `ExitProcess`: every DLL's `DLL_PROCESS_DETACH`, then the end of the
 /// process (`RtlExitUserProcess`, ADR 0071).
 #[unsafe(no_mangle)]

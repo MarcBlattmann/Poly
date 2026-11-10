@@ -82,8 +82,11 @@ unsafe extern "system" {
 // winnt.h / fileapi.h
 const GENERIC_WRITE: u32 = 0x4000_0000;
 const FILE_SHARE_READ: u32 = 1;
+const CREATE_NEW: u32 = 1;
 const CREATE_ALWAYS: u32 = 2;
 const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+/// `ERROR_SHARING_VIOLATION` (`winerror.h`).
+const ERROR_SHARING_VIOLATION: u32 = 32;
 const INVALID_HANDLE_VALUE: Handle = -1;
 /// `TLS_OUT_OF_INDEXES` (`winbase.h`).
 const TLS_OUT_OF_INDEXES: u32 = 0xFFFF_FFFF;
@@ -618,23 +621,56 @@ macro_rules! wide {
 }
 
 /// Open the trace file (`POLYTRACE_OUT` or `polytrace.jsonl`).
+///
+/// A child process inherits the environment and the current directory, so it names the file its
+/// parent still holds open; that open fails (the file is not shared for writing). Such a process
+/// writes `<name>.1`, `<name>.2`, ... instead: the first of them that does not exist yet, so the
+/// children of one run are numbered in the order they loaded the logger (spec-chrome-win-4).
 unsafe fn open() {
-    let mut path = [0u16; 520];
-    // SAFETY: the name is NUL-terminated; `path` holds 520 units.
-    let n = unsafe { GetEnvironmentVariableW(wide!("POLYTRACE_OUT").as_ptr(), path.as_mut_ptr(), path.len() as u32) };
-    let name = if n > 0 && (n as usize) < path.len() { path.as_ptr() } else { wide!("polytrace.jsonl").as_ptr() };
-    // SAFETY: `name` is NUL-terminated.
-    let file = unsafe {
-        CreateFileW(
-            name,
-            GENERIC_WRITE,
-            FILE_SHARE_READ,
-            core::ptr::null_mut(),
-            CREATE_ALWAYS,
-            FILE_ATTRIBUTE_NORMAL,
-            0,
-        )
+    const TAIL: usize = 4; // ".99" and the NUL
+    let mut path = [0u16; 520 + TAIL];
+    // SAFETY: the name is NUL-terminated; `path` holds more than 520 units.
+    let n = unsafe { GetEnvironmentVariableW(wide!("POLYTRACE_OUT").as_ptr(), path.as_mut_ptr(), 520) } as usize;
+    let len = if n > 0 && n < 520 {
+        n
+    } else {
+        let default = wide!("polytrace.jsonl");
+        path[..default.len()].copy_from_slice(default);
+        default.len() - 1
     };
+    let create = |name: *const u16, disposition: u32| {
+        // SAFETY: `name` is NUL-terminated.
+        unsafe {
+            CreateFileW(
+                name,
+                GENERIC_WRITE,
+                FILE_SHARE_READ,
+                core::ptr::null_mut(),
+                disposition,
+                FILE_ATTRIBUTE_NORMAL,
+                0,
+            )
+        }
+    };
+    let mut file = create(path.as_ptr(), CREATE_ALWAYS);
+    // SAFETY: no arguments.
+    if file == INVALID_HANDLE_VALUE && unsafe { GetLastError() } == ERROR_SHARING_VIOLATION {
+        for i in 1..100u16 {
+            let mut at = len;
+            path[at] = b'.' as u16;
+            at += 1;
+            if i >= 10 {
+                path[at] = b'0' as u16 + i / 10;
+                at += 1;
+            }
+            path[at] = b'0' as u16 + i % 10;
+            path[at + 1] = 0;
+            file = create(path.as_ptr(), CREATE_NEW);
+            if file != INVALID_HANDLE_VALUE {
+                break;
+            }
+        }
+    }
     FILE.store(file, Ordering::Relaxed);
 }
 

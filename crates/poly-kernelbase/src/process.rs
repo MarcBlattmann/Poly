@@ -37,6 +37,13 @@ pub const CREATE_UNICODE_ENVIRONMENT: u32 = 0x400;
 /// `STILL_ACTIVE` (`minwinbase.h`): `STATUS_PENDING`.
 pub const STILL_ACTIVE: u32 = 0x103;
 
+/// `GetCurrentThreadStackLimits` (Learn: `processthreadsapi.h`): the boundaries of the thread's
+/// stack, `(low, high)`: the base of its reservation (`TEB.DeallocationStack`, else the committed
+/// limit `NT_TIB.StackLimit`) and `NT_TIB.StackBase`.
+pub fn stack_limits(deallocation_stack: u64, stack_limit: u64, stack_base: u64) -> (u64, u64) {
+    (if deallocation_stack != 0 { deallocation_stack } else { stack_limit }, stack_base)
+}
+
 /// Offsets in `RTL_USER_PROCESS_PARAMETERS` (see the module docs).
 pub const PP_IMAGE_PATH_NAME: usize = 0x60;
 pub const PP_COMMAND_LINE: usize = 0x70;
@@ -411,6 +418,13 @@ mod tests {
         let wide: Vec<u8> = "POLYVAR=9\0\0".encode_utf16().flat_map(u16::to_le_bytes).collect();
         let len = ansi_block_len(&wide).unwrap();
         assert!(!ansi_block_is_well_formed(&wide[..len]));
+    }
+
+    #[test]
+    fn stack_limits_are_the_reservation_and_the_top() {
+        assert_eq!(stack_limits(0x10_0000, 0x13_0000, 0x14_0000), (0x10_0000, 0x14_0000));
+        // Without a recorded reservation the committed limit stands in.
+        assert_eq!(stack_limits(0, 0x13_0000, 0x14_0000), (0x13_0000, 0x14_0000));
     }
     use crate::wide;
 

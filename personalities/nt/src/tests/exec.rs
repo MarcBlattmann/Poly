@@ -43,6 +43,8 @@ fn teb_peb_and_stack() {
     assert_eq!(f.u64_at(s.teb + TEB_PEB), s.peb);
     assert_eq!(f.u64_at(s.teb + TEB_STACK_BASE), s.stack_base);
     assert_eq!(f.u64_at(s.teb + TEB_STACK_LIMIT), s.stack_limit);
+    // DeallocationStack is the reservation's base (what GetCurrentThreadStackLimits reports).
+    assert_eq!(f.u64_at(s.teb + exec::TEB_DEALLOCATION_STACK), s.stack_base - 0x4_0000);
     assert_eq!(f.bytes_at(s.peb + exec::PEB_BEING_DEBUGGED, 1), [0]);
     // PEB.ImageBaseAddress is the executable's base.
     assert_eq!(f.u64_at(s.peb + exec::PEB_IMAGE_BASE_ADDRESS), s.image_base);

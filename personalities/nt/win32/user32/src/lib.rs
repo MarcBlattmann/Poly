@@ -61,6 +61,7 @@ unsafe extern "system" {
         tab_chars: i32,
         left_margin: i32,
         right_margin: i32,
+        drawn: *mut u32,
     ) -> i32;
     fn PolyGdiAttachSurface(hdc: usize, width: u32, height: u32) -> i32;
     fn PolyGdiSurface(hwnd: usize, out: *mut u64) -> i32;
@@ -1514,23 +1515,24 @@ pub unsafe extern "system" fn DrawTextExW(
     params: *mut u32,
 ) -> i32 {
     let (mut tab, mut left, mut right) = (0, 0, 0);
+    let mut drawn: *mut u32 = core::ptr::null_mut();
     if !params.is_null() {
-        // SAFETY: the caller's DRAWTEXTPARAMS.
+        // SAFETY: the caller's DRAWTEXTPARAMS: `cbSize` first.
         unsafe {
+            if *params != 20 {
+                set_last_error(ERROR_INVALID_PARAMETER);
+                return 0;
+            }
             if format & DT_TABSTOP != 0 {
                 tab = *params.add(1) as i32;
             }
             left = *params.add(2) as i32;
             right = *params.add(3) as i32;
+            drawn = params.add(4);
         }
     }
     // SAFETY: our gdi32 reads the string and RECT as documented.
-    let n = unsafe { PolyGdiDrawTextEx(hdc, text, count, rect, format, tab, left, right) };
-    if !params.is_null() && n != 0 {
-        // SAFETY: as above; the length drawn is the whole string.
-        unsafe { *params.add(4) = if count < 0 { u32::MAX } else { count as u32 } };
-    }
-    n
+    unsafe { PolyGdiDrawTextEx(hdc, text, count, rect, format, tab, left, right, drawn) }
 }
 
 /// A string in the ANSI code page as UTF-16 with room for an ellipsis and
