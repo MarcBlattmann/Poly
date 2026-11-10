@@ -25,11 +25,14 @@ spec sheet and visible tests you were handed, plus public docs and export names.
 ```sh
 cargo xtask test        # host unit tests + kernel boot tests in QEMU
 cargo xtask ci          # everything CI runs (fmt, clippy, tests, coverage checks)
+cargo xtask ci lint --quick   # fmt + clippy of only the crates changed against origin/main (ADR 0174)
 cargo xtask run         # boot the kernel interactively (Ctrl-A X quits QEMU)
-cargo xtask coverage claim <id> --agent <your-agent-id>
+cargo xtask coverage claim <id>... --agent <your-agent-id>   # also release, set-status: many ids in one call
 ```
 
-Run `cargo xtask ci` before every commit. It must pass.
+Run `cargo xtask ci` before every commit. It must pass. While you work,
+`cargo xtask ci lint --quick` is the fast check; it does not look at the
+crates that depend on what you changed, so the full lint (and CI) is the gate.
 
 ## Rules
 

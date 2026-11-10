@@ -482,14 +482,14 @@ fn session(s: &mut Session) -> super::Result {
     let out = s.run("mount")?;
     check(
         "mount lists the file systems",
-        out.contains("proc on /proc type proc (rw,nosuid,nodev,noexec)")
-            && out.contains("tmpfs on /tmp type tmpfs (rw,nosuid,nodev)")
+        out.contains("proc on /proc type proc (rw,nosuid,nodev,noexec,relatime)")
+            && out.contains("tmpfs on /tmp type tmpfs (rw,nosuid,nodev,relatime)")
             && out.contains("devpts on /dev/pts type devpts"),
         &out,
     )?;
     // mount(2) and umount2(2): a tmpfs, and the ext2 test disk (/dev/vdc).
     let out = s.run("mkdir -p /m && mount -t tmpfs -o size=1m,mode=700 scratch /m && stat -c '%a' /m && grep ' /m ' /proc/mounts && umount /m && echo unmounted")?;
-    check("mount -t tmpfs", out == "700\nscratch /m tmpfs rw 0 0\nunmounted\n", &out)?;
+    check("mount -t tmpfs", out == "700\nscratch /m tmpfs rw,relatime,size=1024k,mode=700 0 0\nunmounted\n", &out)?;
     let out = s.run("mount -t ext2 /dev/vdc /mnt && cat /mnt/hello.txt && umount /mnt && echo unmounted")?;
     // The kernel logs the disk coming up and the (un)mount in between.
     let hello = String::from_utf8_lossy(super::ext2disk::HELLO);

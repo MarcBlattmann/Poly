@@ -379,7 +379,6 @@ pub unsafe extern "system" fn LookupAccountNameW(
 #[link(name = "kernelbase", kind = "raw-dylib")]
 unsafe extern "system" {
     fn GetLastError() -> u32;
-    fn RegOpenKeyExW(hkey: Handle, sub: *const u16, options: u32, sam: u32, out: *mut Handle) -> u32;
 }
 
 const SE_FILE_OBJECT: u32 = 1;
@@ -393,16 +392,50 @@ const ERROR_ACCESS_DENIED: u32 = 5;
 const ERROR_INVALID_NAME: u32 = 123;
 const ERROR_FILE_NOT_FOUND: u32 = 2;
 
-/// The predefined key a `GetNamedSecurityInfoW` root name stands for
-/// (`MACHINE`, `USERS`, `CURRENT_USER`, `CLASSES_ROOT`).
-fn registry_root(name: &str) -> Option<Handle> {
-    Some(match name.to_ascii_uppercase().as_str() {
-        "CLASSES_ROOT" => 0x8000_0000u32 as i32 as isize,
-        "CURRENT_USER" => 0x8000_0001u32 as i32 as isize,
-        "MACHINE" => 0x8000_0002u32 as i32 as isize,
-        "USERS" => 0x8000_0003u32 as i32 as isize,
-        _ => return None,
-    })
+/// The calling process's user SID as a string (`CURRENT_USER` is the key
+/// `\REGISTRY\USER\<it>`).
+fn user_sid_string() -> String {
+    /// `NtCurrentProcessToken()` (`winnt.h`): the process token for queries.
+    const CURRENT_PROCESS_TOKEN: Handle = -4;
+    const TOKEN_USER: u32 = 1;
+    let mut buf = [0u64; 12];
+    let mut ret = 0;
+    // SAFETY: a 96-byte, 8-aligned buffer; TOKEN_USER is a pointer into it and the SID.
+    let sid = unsafe {
+        if GetTokenInformation(CURRENT_PROCESS_TOKEN, TOKEN_USER, buf.as_mut_ptr().cast(), 96, &mut ret) != 0 {
+            sid::Sid::from_bytes(core::slice::from_raw_parts(buf.as_ptr().cast::<u8>().add(16), 80))
+        } else {
+            None
+        }
+    };
+    poly_security::sddl::to_string(&sid.unwrap_or_else(poly_security::poly_user_sid))
+}
+
+/// Open the registry key an `SE_REGISTRY_KEY` name stands for: a handle to
+/// the key object itself (also for a bare root such as `CLASSES_ROOT`), so
+/// its security descriptor can be read through it.
+unsafe fn open_registry_key(name: &str, access: u32) -> Result<Handle, u32> {
+    const OBJ_CASE_INSENSITIVE: u32 = 0x40;
+    let Some(path) = poly_kernelbase::registry::named_object_path(name, &user_sid_string()) else {
+        return Err(ERROR_INVALID_PARAMETER);
+    };
+    let units: Vec<u16> = path.encode_utf16().collect();
+    // UNICODE_STRING and OBJECT_ATTRIBUTES (`winternl.h`, x64: 16 and 48 bytes).
+    let mut ustr = [0u8; 16];
+    let mut oa = [0u8; 48];
+    // SAFETY: the structures are locals of the sizes written.
+    unsafe {
+        put_u32(ustr.as_mut_ptr(), 0, (units.len() * 2) as u32 | ((units.len() * 2) as u32) << 16);
+        put_u64(ustr.as_mut_ptr(), 8, units.as_ptr() as u64);
+        put_u32(oa.as_mut_ptr(), 0, 48);
+        put_u64(oa.as_mut_ptr(), 16, ustr.as_ptr() as u64);
+        put_u32(oa.as_mut_ptr(), 24, OBJ_CASE_INSENSITIVE);
+        let mut h: Handle = 0;
+        match NtOpenKey(&mut h, access, oa.as_ptr()) {
+            0 => Ok(h),
+            st => Err(RtlNtStatusToDosError(st)),
+        }
+    }
 }
 
 /// Open the object `name` of `object_type` with `access`: a file or
@@ -420,20 +453,7 @@ unsafe fn open_named(name: *const u16, object_type: u32, access: u32) -> Result<
                 let h = CreateFileW(name, access, 7, core::ptr::null(), 3, 0x0200_0000, 0);
                 if h == -1 { Err(GetLastError()) } else { Ok(h) }
             }
-            SE_REGISTRY_KEY => {
-                let text = String::from_utf16_lossy(w);
-                let (root, rest) = match text.split_once('\\') {
-                    Some((r, s)) => (r, s),
-                    None => (text.as_str(), ""),
-                };
-                let Some(hroot) = registry_root(root) else { return Err(ERROR_INVALID_PARAMETER) };
-                let sub: Vec<u16> = rest.encode_utf16().chain([0]).collect();
-                let mut out: Handle = 0;
-                match RegOpenKeyExW(hroot, sub.as_ptr(), 0, access, &mut out) {
-                    0 => Ok(out),
-                    e => Err(e),
-                }
-            }
+            SE_REGISTRY_KEY => open_registry_key(&String::from_utf16_lossy(w), access),
             SE_KERNEL_OBJECT => {
                 if w.is_empty() {
                     Err(ERROR_INVALID_PARAMETER)
@@ -464,7 +484,8 @@ pub unsafe extern "system" fn GetNamedSecurityInfoW(
     unsafe {
         let rc = match open_named(name, object_type, access) {
             Ok(h) => {
-                let rc = GetSecurityInfo(h, object_type, info, owner, group, dacl, sacl, descriptor);
+                // The handle is of the type asked for: this function opened it.
+                let rc = security_info_of(h, object_type, info, owner, group, dacl, sacl, descriptor, false);
                 CloseHandle(h);
                 return rc;
             }

@@ -207,12 +207,17 @@ impl Files {
     /// Drop `files`, which descriptors of this table no longer hold, and
     /// let go of the record locks on them (ADR 0059).
     fn released(&self, files: Vec<Arc<OpenFile>>) {
-        Self::released_by(self.lock_owner(), files);
+        Self::released_by(self.lock_owner(), files, true);
     }
 
     /// [`released`](Self::released) for the table whose lock owner id is
-    /// `owner` (one this process no longer holds, at its end).
-    fn released_by(owner: usize, files: Vec<Arc<OpenFile>>) {
+    /// `owner` (one this process no longer holds, at its end). Each file
+    /// hears that a descriptor of it was closed (a FUSE server gets its
+    /// `FLUSH`); only with `wait` may that sleep (not at a process's end).
+    fn released_by(owner: usize, files: Vec<Arc<OpenFile>>, wait: bool) {
+        for file in &files {
+            file.descriptor_closed(wait);
+        }
         let keys = super::locks::keys_of(&files);
         drop(files);
         super::locks::closed(owner, &keys);
@@ -313,7 +318,7 @@ impl Files {
         let old = core::mem::take(&mut *table.lock());
         let files = old.iter().map(|(_, f, _)| Arc::clone(f)).collect();
         drop(old);
-        Self::released_by(owner, files);
+        Self::released_by(owner, files, false);
     }
 
     // ---- I/O on descriptors (no lock held during the transfer) ------------
@@ -390,6 +395,12 @@ impl Files {
     /// `fsync(2)`.
     pub fn fsync(&self, fd: Fd) -> Result<()> {
         self.file(fd)?.sync()
+    }
+
+    /// `fsync(2)`, or `fdatasync(2)` with `data_only`: the difference is
+    /// the file system's (most sync everything, ADR 0040).
+    pub fn fsync_with(&self, fd: Fd, data_only: bool) -> Result<()> {
+        self.file(fd)?.sync_with(data_only)
     }
 
     // ---- paths ----------------------------------------------------------

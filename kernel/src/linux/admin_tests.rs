@@ -65,7 +65,7 @@ kernel_test! {
             check!(1, mkdir(p, "/tmp/adm-m").is_ok());
             check!(2, mount(p, "scratch", "/tmp/adm-m", "tmpfs", MS_NOSUID | MS_NODEV, "mode=0710,size=1m") == Ok(0));
             check!(3, mode(p, "/tmp/adm-m") == Ok(0o40710));
-            check!(4, text(p, "/proc/mounts").contains("scratch /tmp/adm-m tmpfs rw,nosuid,nodev 0 0\n"));
+            check!(4, text(p, "/proc/mounts").contains("scratch /tmp/adm-m tmpfs rw,nosuid,nodev,relatime,size=1024k,mode=710 0 0\n"));
             let fd = create(p, "/tmp/adm-m/f", "in tmpfs").map_err(|_| 5u64)?;
             // Busy while a file is open in it.
             check!(6, umount(p, "/tmp/adm-m") == Err(Errno::EBUSY));
@@ -104,7 +104,7 @@ kernel_test! {
             check!(4, sys(p, nr::CLOSE, &[fd]) == Ok(0));
             check!(5, mount(p, "", "/tmp/adm-r", "", MS_REMOUNT | MS_RDONLY, "") == Ok(0));
             check!(6, create(p, "/tmp/adm-r/g", "y") == Err(Errno::EROFS));
-            check!(7, text(p, "/proc/mounts").contains("none /tmp/adm-r tmpfs ro 0 0\n"));
+            check!(7, text(p, "/proc/mounts").contains("none /tmp/adm-r tmpfs ro,relatime 0 0\n"));
             check!(8, mount(p, "", "/tmp/adm-r", "", MS_REMOUNT, "") == Ok(0));
             let fd = create(p, "/tmp/adm-r/g", "y").map_err(|_| 9u64)?;
             check!(10, sys(p, nr::CLOSE, &[fd]) == Ok(0));

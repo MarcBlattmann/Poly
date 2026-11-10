@@ -18,6 +18,11 @@ use poly_gdi::region::Region;
 use poly_win32_gui::{SpinLock, last_error, set_last_error, wide};
 use poly_win32_rt as _;
 
+#[link(name = "win32u", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn PolyUserCall(req: *const u8, len: u64, out: *mut u8, cap: u64, out_len: *mut u64) -> u32;
+}
+
 #[link(name = "kernel32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
@@ -34,6 +39,7 @@ unsafe extern "system" {
     fn GetFileSizeEx(file: usize, size: *mut i64) -> i32;
     fn ReadFile(file: usize, buf: *mut u8, count: u32, read: *mut u32, overlapped: *mut u8) -> i32;
     fn CloseHandle(h: usize) -> i32;
+    fn GetFullPathNameW(name: *const u16, size: u32, buf: *mut u16, file_part: *mut *mut u16) -> u32;
 }
 
 const MEM_COMMIT_RESERVE: u32 = 0x3000;
@@ -215,10 +221,16 @@ pub extern "system" fn GetCurrentObject(hdc: H, kind: u32) -> H {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetObjectW(h: H, size: i32, buf: *mut u8) -> i32 {
-    let Some(bytes) = gdi(|g| g.object_bytes(h as u64)) else { return 0 };
-    if buf.is_null() {
-        return bytes.len() as i32;
+    // A region has no description: 0 with ERROR_INVALID_HANDLE
+    // (CreateRectRgn.yaml `in_a_dc`).
+    if gdi(|g| g.is_region(h as u64)) {
+        set_last_error(ERROR_INVALID_HANDLE);
+        return 0;
     }
+    if buf.is_null() {
+        return gdi(|g| g.object_bytes(h as u64)).map_or(0, |b| b.len() as i32);
+    }
+    let Some(bytes) = gdi(|g| g.object_bytes_for(h as u64, size.max(0) as usize)) else { return 0 };
     let n = bytes.len().min(size.max(0) as usize);
     // SAFETY: the caller's buffer holds `size` bytes.
     unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, n) };
@@ -228,6 +240,55 @@ pub unsafe extern "system" fn GetObjectW(h: H, size: i32, buf: *mut u8) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "system" fn CreateSolidBrush(color: u32) -> H {
     gdi(|g| g.create_solid_brush(color)) as H
+}
+
+/// `CreateHatchBrush` (Learn): a brush of one of the six hatch styles.
+#[unsafe(no_mangle)]
+pub extern "system" fn CreateHatchBrush(hatch: i32, color: u32) -> H {
+    if !(0..=5).contains(&hatch) {
+        return 0;
+    }
+    gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_HATCHED, color, hatch as u64)) as H
+}
+
+/// `CreatePatternBrush` (Learn): a brush from a bitmap.
+#[unsafe(no_mangle)]
+pub extern "system" fn CreatePatternBrush(bitmap: H) -> H {
+    if gdi(|g| g.object_type(bitmap as u64)) != poly_gdi::gdi::OBJ_BITMAP {
+        return 0;
+    }
+    gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_PATTERN, 0, bitmap as u64)) as H
+}
+
+/// `CreateDIBPatternBrushPt` (Learn): a brush from a packed DIB.
+#[unsafe(no_mangle)]
+pub extern "system" fn CreateDIBPatternBrushPt(packed_dib: *const u8, _usage: u32) -> H {
+    if packed_dib.is_null() {
+        return 0;
+    }
+    gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_DIBPATTERNPT, 0, packed_dib as u64)) as H
+}
+
+/// `CreatePalette` (Learn): a logical palette; NULL for a NULL `LOGPALETTE`.
+#[unsafe(no_mangle)]
+pub extern "system" fn CreatePalette(log_palette: *const u8) -> H {
+    if log_palette.is_null() {
+        return 0;
+    }
+    gdi(|g| g.create_palette()) as H
+}
+
+/// `SelectPalette` (Learn): the DC's previous palette, NULL on failure.
+#[unsafe(no_mangle)]
+pub extern "system" fn SelectPalette(hdc: H, palette: H, _force_background: i32) -> H {
+    gdi(|g| g.select_palette(hdc as u64, palette as u64)) as H
+}
+
+/// `RealizePalette` (Learn): the number of entries mapped; none on a
+/// true-colour screen.
+#[unsafe(no_mangle)]
+pub extern "system" fn RealizePalette(_hdc: H) -> u32 {
+    0
 }
 
 #[unsafe(no_mangle)]
@@ -544,16 +605,30 @@ pub unsafe extern "system" fn RectInRegion(rgn: H, rect: *const i32) -> i32 {
 /// when it was large enough, else 0.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetRegionData(rgn: H, count: u32, data: *mut u8) -> u32 {
-    let Some(bytes) = gdi(|g| g.region_data(rgn as u64)) else { return 0 };
+    // CreateRectRgn.yaml `region_data_buffer`: not a region is
+    // ERROR_INVALID_HANDLE; a buffer smaller than the data is
+    // ERROR_INVALID_PARAMETER with nothing written; otherwise the bytes
+    // written (the size needed, not the buffer's).
+    let Some(bytes) = gdi(|g| g.region_data(rgn as u64)) else {
+        set_last_error(ERROR_INVALID_HANDLE);
+        return 0;
+    };
     if data.is_null() {
         return bytes.len() as u32;
     }
     if (count as usize) < bytes.len() {
+        set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
     // SAFETY: the caller's buffer holds `count` bytes, at least these.
     unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), data, bytes.len()) };
-    count
+    bytes.len() as u32
+}
+
+/// `FillRgn` (Learn): fills a region with a brush.
+#[unsafe(no_mangle)]
+pub extern "system" fn FillRgn(hdc: H, rgn: H, brush: H) -> i32 {
+    i32::from(gdi(|g| g.fill_rgn(hdc as u64, rgn as u64, brush as u64)))
 }
 
 // ----- clipping
@@ -634,7 +709,40 @@ dc_get_set! {
     SetDCBrushColor(c: u32) -> u32 = set_dc_brush_color;
     SetDCPenColor(c: u32) -> u32 = set_dc_pen_color;
     SaveDC() -> i32 = save_dc;
-    GetDeviceCaps(index: i32) -> i32 = device_caps;
+}
+
+/// `GetDeviceCaps` (GetSystemMetrics.yaml `device_caps_screen`): the
+/// screen's values for every DC, of the display win32k has now.
+#[unsafe(no_mangle)]
+pub extern "system" fn GetDeviceCaps(hdc: H, index: i32) -> i32 {
+    let size = display_size();
+    let caps = gdi(|g| {
+        if let Some((width, height)) = size {
+            g.screen = poly_gdi::gdi::Screen { width, height };
+        }
+        g.device_caps(hdc as u64, index)
+    });
+    caps.unwrap_or_else(|| {
+        set_last_error(ERROR_INVALID_HANDLE);
+        0
+    })
+}
+
+/// The screen's size in pixels, from win32k (`None`: it did not answer).
+fn display_size() -> Option<(i32, i32)> {
+    use poly_win32k::proto::{Reply, Request};
+    let req = poly_win32k::wire::encode(&Request::Desktop {});
+    let mut out = [0u8; 256];
+    let mut len = 0u64;
+    // SAFETY: the buffers are ours and sized as passed.
+    let s = unsafe { PolyUserCall(req.as_ptr(), req.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+    if s != 0 {
+        return None;
+    }
+    match poly_win32k::wire::decode(out.get(..len as usize)?)? {
+        Reply::Desktop { width, height, .. } => Some((width, height)),
+        _ => None,
+    }
 }
 
 /// `SetTextAlign`: the previous alignment; `GDI_ERROR` for a bad DC.
@@ -888,8 +996,10 @@ pub unsafe extern "system" fn GetTextExtentPointA(hdc: H, text: *const u8, count
     unsafe { GetTextExtentPoint32A(hdc, text, count, size) }
 }
 
-/// `GetTextExtentExPointW`: `fit` gets how many characters fit in `max`
-/// (`max` < 0: no limit), `dx` the width of the text up to each character.
+/// `GetTextExtentExPointW`: `fit` gets how many characters fit in `max`,
+/// `dx` the width of the text up to each of them. Without `fit` the maximum
+/// is not used (Learn) and `dx` gets the running width of every character;
+/// a negative maximum fails all the same (`GetTextExtentExPointW.yaml`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetTextExtentExPointW(
     hdc: H,
@@ -910,14 +1020,16 @@ pub unsafe extern "system" fn GetTextExtentExPointW(
     match gdi(|g| g.text_extent_ex(hdc as u64, &s, max)) {
         Some((e, n, running)) => {
             // SAFETY: the caller's out-pointers; `dx` holds `count` values,
-            // of which the characters that fit are written.
+            // of which the characters that fit are written (all of them
+            // when the caller did not ask how many fit).
             unsafe {
                 write_size(size, e);
                 if !fit.is_null() {
                     *fit = n as i32;
                 }
                 if !dx.is_null() {
-                    for (i, v) in running.iter().take(n).enumerate() {
+                    let filled = if fit.is_null() { running.len() } else { n };
+                    for (i, v) in running.iter().take(filled).enumerate() {
                         *dx.add(i) = *v;
                     }
                 }
@@ -1285,10 +1397,12 @@ pub unsafe extern "system" fn PolyGdiDrawText(
     format: u32,
 ) -> i32 {
     // SAFETY: as `PolyGdiDrawTextEx`.
-    unsafe { PolyGdiDrawTextEx(hdc, text as *mut u16, count, rect, format, 0, 0, 0, core::ptr::null_mut()) }
+    unsafe { PolyGdiDrawTextEx(hdc, text as *mut u16, count, rect, format, -1, 0, 0, core::ptr::null_mut()) }
 }
 
-/// `DrawTextExW`: `tab_chars` is `iTabLength` (0: the default), the margins
+/// `DrawTextExW`: `tab_chars` is `iTabLength` (0: the default; negative:
+/// there is no `DRAWTEXTPARAMS`, and with `DT_TABSTOP` bits 8 to 15 of
+/// `format` are the tab length, as in `DrawTextW`), the margins
 /// narrow the rectangle for laying out the text; `drawn` (if not NULL)
 /// gets `uiLengthDrawn`. `DT_MODIFYSTRING` writes the ellipsized text back
 /// to `text`. A count of 0 draws nothing and gives 1; below -1, 0.
@@ -1317,7 +1431,12 @@ pub unsafe extern "system" fn PolyGdiDrawTextEx(
     // SAFETY: the caller's string (count -1: NUL-terminated) and RECT.
     let (s, mut r) = unsafe { (wide(text, count), read_rect(rect)) };
     let before = r;
-    let params = poly_gdi::text::DrawParams { tab_chars, left_margin, right_margin };
+    let params = poly_gdi::text::DrawParams {
+        tab_chars: tab_chars.max(0),
+        tab_in_format: tab_chars < 0,
+        left_margin,
+        right_margin,
+    };
     let out = gdi(|g| g.draw_text_ex(hdc as u64, &s, &mut r, format, params));
     if out.height == 0 {
         return 0;
@@ -1404,6 +1523,29 @@ unsafe fn path_units(name: *const u16) -> Vec<u16> {
     v
 }
 
+/// The file a font resource path (NUL-terminated) names, to tell whether
+/// two paths are the same file: its full path without the NUL (the path
+/// itself where the system has none for it). An add and its remove may
+/// spell the file differently (relative and absolute, `/` and `\`, case).
+fn font_file_id(path: &[u16]) -> Vec<u16> {
+    let mut buf = alloc::vec![0u16; 520];
+    for _ in 0..2 {
+        // SAFETY: a NUL-terminated path and a buffer of `buf.len()` units.
+        let n = unsafe { GetFullPathNameW(path.as_ptr(), buf.len() as u32, buf.as_mut_ptr(), core::ptr::null_mut()) }
+            as usize;
+        if n == 0 {
+            break;
+        }
+        if n < buf.len() {
+            buf.truncate(n);
+            return buf;
+        }
+        // Too small: `n` is the size needed, with the NUL.
+        buf.resize(n + 1, 0);
+    }
+    path[..path.len() - 1].to_vec()
+}
+
 /// `AddFontResourceExW`: the number of fonts added (1), 0 with the last
 /// error of the failed open (`ERROR_FILE_NOT_FOUND`), 87 for bad flags, none
 /// for a file that is no font.
@@ -1413,6 +1555,8 @@ pub unsafe extern "system" fn AddFontResourceExW(name: *const u16, flags: u32, _
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
+    // What the caller's last error was: a call that sets none leaves it.
+    let before = last_error();
     // SAFETY: a NUL-terminated path.
     let path = unsafe { path_units(name) };
     let data = match read_path(&path) {
@@ -1422,10 +1566,9 @@ pub unsafe extern "system" fn AddFontResourceExW(name: *const u16, flags: u32, _
             return 0;
         }
     };
-    let ok = !data.is_empty() && gdi(|g| g.add_font_file(&path[..path.len() - 1], flags, data));
-    if !ok {
-        set_last_error(0);
-    }
+    let id = font_file_id(&path);
+    let ok = !data.is_empty() && gdi(|g| g.add_font_file(&id, flags, data));
+    set_last_error(before);
     i32::from(ok)
 }
 
@@ -1436,7 +1579,10 @@ pub unsafe extern "system" fn AddFontResourceW(name: *const u16) -> i32 {
 }
 
 /// `RemoveFontResourceExW`: removes one earlier add of the same file with
-/// the same flags. The file has to be there (`ERROR_FILE_NOT_FOUND`).
+/// the same flags (each add needs a remove of its own). An empty path and
+/// flags that are none of `FR_PRIVATE` and `FR_NOT_ENUM` are error 87; the
+/// file has to be there (`ERROR_FILE_NOT_FOUND`, and the font stays); a
+/// file that was not added with these flags fails without a last error.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn RemoveFontResourceExW(name: *const u16, flags: u32, _reserved: *mut u8) -> i32 {
     // SAFETY: a NUL-terminated path or NULL.
@@ -1445,14 +1591,14 @@ pub unsafe extern "system" fn RemoveFontResourceExW(name: *const u16, flags: u32
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
+    let before = last_error();
     if let Err(e) = read_path(&path) {
         set_last_error(e);
         return 0;
     }
-    let ok = gdi(|g| g.remove_font_file(&path[..path.len() - 1], flags));
-    if !ok {
-        set_last_error(0);
-    }
+    let id = font_file_id(&path);
+    let ok = gdi(|g| g.remove_font_file(&id, flags));
+    set_last_error(before);
     i32::from(ok)
 }
 

@@ -486,10 +486,16 @@ impl Server {
             }
         }
         if let Attached::Buffer(b) = attached {
-            // Surface damage in buffer pixels: the new scale (a transform or
-            // viewport damages all of it).
-            let damage: Vec<Rect> =
-                p.buffer_damage.iter().copied().chain(p.damage.iter().map(|d| d.scale(scale))).collect();
+            // Surface damage in buffer pixels: through the new viewport,
+            // scale and transform, not the scale alone (a 2× buffer of
+            // scale 1 behind a viewport is damaged in logical pixels).
+            let (bw, bh) = new_size.unwrap_or((0, 0));
+            let damage: Vec<Rect> = p
+                .buffer_damage
+                .iter()
+                .copied()
+                .chain(p.damage.iter().map(|d| view.buffer_rect(*d, bw, bh, scale)))
+                .collect();
             self.copy_buffer(c, b, id, window, scale, &damage);
             self.client(c).send(b, wl_buffer::Event::Release);
         }

@@ -112,7 +112,7 @@ fn objects_live_and_die_as_observed() {
     assert_eq!(g.object_type(b), OBJ_BRUSH);
     assert!(!g.delete_object(b));
     // Deleted and unselected: selecting it succeeds (the old brush comes
-    // back), but it paints nothing; a live brush given to FillRect paints.
+    // back), and it paints white; a live brush given to FillRect paints.
     {
         let (dc, mut px) = dib32(&mut g, 12, 1);
         px.fill(0x00FF_FFFF);
@@ -139,8 +139,8 @@ fn objects_live_and_die_as_observed() {
     g.delete_dc(dc);
     let prev = g.select_object(other, u64::from(bmp)).unwrap();
     assert_eq!(g.object_type(u64::from(prev)), OBJ_BITMAP);
-    // A selected brush deleted: it paints no more, and is gone once
-    // replaced (DeleteObject do_basic on the oracle).
+    // A selected brush the DC never drew with, deleted: it paints white,
+    // and is gone once replaced (DeleteObject.yaml `selected_brush_pen`).
     let (dc, mut px) = dib32(&mut g, 1, 1);
     px[0] = 0x00FF_FFFF;
     let red = u64::from(g.create_solid_brush(0xFF));
@@ -295,7 +295,9 @@ fn rectangular_regions_are_normalised_and_empty_ones_are_empty() {
         let h = u64::from(g.create_rect_rgn(Rect::new(i, i, i + 5, i + 5)).unwrap());
         assert!(g.delete_object(h));
         assert!(!g.delete_object(h));
-        assert_eq!(g.object_type(h), 0);
+        // type_after_delete: a deleted region keeps reporting OBJ_REGION.
+        assert_eq!(g.object_type(h), OBJ_REGION);
+        assert_eq!(g.rgn_box(h), None);
     }
 }
 
@@ -449,9 +451,9 @@ fn delete_object_follows_the_sheet_for_every_kind_of_object() {
     for h in [brush, pen, bmp, rgn] {
         assert!(g.delete_object(h), "{h:#x}");
     }
-    // A deleted solid brush still has type OBJ_BRUSH; the others are gone.
+    // type_after_delete: every deleted object keeps reporting its type.
     assert_eq!(g.object_type(brush), OBJ_BRUSH);
-    for (h, t) in [(pen, 0), (bmp, 0), (rgn, 0)] {
+    for (h, t) in [(pen, OBJ_PEN), (bmp, OBJ_BITMAP), (rgn, OBJ_REGION)] {
         assert_eq!(g.object_type(h), t, "{h:#x}");
     }
     for h in [brush, pen, bmp, rgn] {
@@ -468,6 +470,11 @@ fn delete_object_follows_the_sheet_for_every_kind_of_object() {
         assert_eq!(g.object_type(s), OBJ_BRUSH);
         assert!(g.delete_object(s), "still deletable-as-no-op");
     }
+    // DEFAULT_PALETTE (15) too: 1, type OBJ_PAL, the same handle again.
+    let pal = u64::from(g.stock(15));
+    assert!(g.delete_object(pal));
+    assert_eq!(g.object_type(pal), OBJ_PAL);
+    assert_eq!(u64::from(g.stock(15)), pal);
     let (dc, mut px) = dib32(&mut g, 2, 1);
     px.fill(0);
     g.select_object(dc, u64::from(g.stock(WHITE_BRUSH))).unwrap();
@@ -484,17 +491,28 @@ fn a_pen_or_bitmap_deleted_while_selected_goes_when_deselected_or_with_its_dc() 
     assert!(g.delete_object(pen));
     assert_eq!(g.object_type(pen), OBJ_PEN, "still there while selected");
     assert!(!g.delete_object(pen), "a second delete fails");
+    assert_eq!(g.object_bytes(pen), None, "GetObject answers nothing while it waits");
     g.select_object(dc, u64::from(old)).unwrap();
-    assert_eq!(g.object_type(pen), 0, "gone once deselected");
+    // after_deselect: a deleted pen is reported as OBJ_PEN for ever, but
+    // cannot be deleted or selected again.
+    assert_eq!(g.object_type(pen), OBJ_PEN);
+    assert!(!g.delete_object(pen));
+    assert_eq!(g.select_object(dc, pen), Ok(0));
     // selected_bitmap: 1, stays OBJ_BITMAP until the DC is deleted; then a
     // DeleteObject fails.
     let bmp = u64::from(g.current_object(dc, OBJ_BITMAP));
     assert!(g.delete_object(bmp));
     assert_eq!(g.object_type(bmp), OBJ_BITMAP);
     assert!(!g.delete_object(bmp));
+    assert_eq!(g.object_bytes_for(bmp, 128).map(|b| b.len()), Some(104), "a DIB section's DIBSECTION");
+    assert_eq!(g.object_bytes_for(bmp, 32).map(|b| b.len()), Some(32));
+    let other = u64::from(g.create_compatible_dc(0));
+    assert_eq!(g.select_object(other, bmp), Ok(0), "not into a second DC");
     assert!(g.delete_dc(dc).0);
-    assert_eq!(g.object_type(bmp), 0);
+    assert_eq!(g.object_type(bmp), OBJ_BITMAP, "the type stays after the DC is gone");
+    assert_eq!(g.object_bytes(bmp), None);
     assert!(!g.delete_object(bmp));
+    assert_eq!(g.select_object(other, bmp), Ok(0));
     // dc: DeleteObject of a memory DC is 1; the DC still reads OBJ_DC.
     let m = u64::from(g.create_compatible_dc(0));
     assert!(g.delete_object(m));
@@ -846,6 +864,239 @@ fn text_faces_widths_and_fallback() {
     let stock = u64::from(g.stock(13));
     g.select_object(dc, stock).unwrap();
     assert_eq!(g.text_metrics(dc).unwrap().height, 16);
+}
+
+/// DeleteObject.yaml `selected_brush_pen`: what a DC draws with after its
+/// selected brush or pen was deleted depends on whether it drew with it
+/// before (or saved its state with it).
+#[test]
+fn a_deleted_selected_brush_or_pen_draws_by_its_use() {
+    const PATCOPY: u32 = 0x00F0_0021;
+    const BG: u32 = 0x0010_2030;
+    // (used before the delete, SaveDC before / RestoreDC after, stock object selected between)
+    for (used, save, stock_between) in
+        [(false, false, false), (true, false, false), (false, true, false), (true, true, false), (false, true, true)]
+    {
+        let own = used || save;
+        // Brush.
+        let mut g = Gdi::new();
+        let (dc, mut px) = dib32(&mut g, 8, 8);
+        let br = u64::from(g.create_solid_brush(0x0060_4020));
+        g.select_object(dc, br).unwrap();
+        if used {
+            g.pat_blt(dc, 0, 0, 8, 2, PATCOPY);
+        }
+        let saved = if save { g.save_dc(dc) } else { 0 };
+        if stock_between {
+            g.select_object(dc, u64::from(g.stock(BLACK_BRUSH))).unwrap();
+        }
+        assert!(g.delete_object(br));
+        assert_eq!(g.object_type(br), OBJ_BRUSH);
+        assert!(!g.delete_object(br), "a second delete fails");
+        assert_eq!(g.object_bytes(br), None);
+        if save {
+            assert!(g.restore_dc(dc, saved));
+        }
+        assert_eq!(u64::from(g.current_object(dc, OBJ_BRUSH)), br);
+        px.fill(BG);
+        g.pat_blt(dc, 0, 0, 8, 4, PATCOPY);
+        let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 4, 8, 6)).unwrap());
+        assert!(g.fill_rgn(dc, rgn, br));
+        let case = (used, save, stock_between);
+        assert_eq!(px[3 * 8 + 3], if own { 0x0020_4060 } else { 0x00FF_FFFF }, "PatBlt {case:?}");
+        assert_eq!(px[5 * 8 + 3], if own { 0x0020_4060 } else { BG }, "FillRgn {case:?}");
+        // Deselected: the brush is gone.
+        g.select_object(dc, u64::from(g.stock(WHITE_BRUSH))).unwrap();
+        assert_eq!(g.object_type(br), 0);
+        assert_eq!(g.select_object(dc, br), Ok(0));
+
+        // Pen.
+        let mut g = Gdi::new();
+        let (dc, mut px) = dib32(&mut g, 8, 8);
+        let pen = u64::from(g.create_pen(0, 1, 0x0010_10E0));
+        g.select_object(dc, pen).unwrap();
+        if used {
+            g.move_to(dc, 0, 1);
+            g.line_to(dc, 8, 1);
+        }
+        let saved = if save { g.save_dc(dc) } else { 0 };
+        if stock_between {
+            g.select_object(dc, u64::from(g.stock(BLACK_PEN))).unwrap();
+        }
+        assert!(g.delete_object(pen));
+        if save {
+            assert!(g.restore_dc(dc, saved));
+        }
+        px.fill(BG);
+        g.move_to(dc, 0, 3);
+        g.line_to(dc, 8, 3);
+        assert_eq!(px[3 * 8 + 3], if own { 0x00E0_1010 } else { 0 }, "LineTo {case:?}");
+    }
+    // A brush in two DCs, neither drew with it: white in both.
+    let mut g = Gdi::new();
+    let (a, mut pa) = dib32(&mut g, 2, 2);
+    let (b, mut pb) = dib32(&mut g, 2, 2);
+    let br = u64::from(g.create_solid_brush(0x0050_9030));
+    g.select_object(a, br).unwrap();
+    g.select_object(b, br).unwrap();
+    assert!(g.delete_object(br));
+    pa.fill(BG);
+    pb.fill(BG);
+    g.pat_blt(a, 0, 0, 2, 2, PATCOPY);
+    g.pat_blt(b, 0, 0, 2, 2, PATCOPY);
+    assert_eq!((pa[0], pb[0]), (0x00FF_FFFF, 0x00FF_FFFF));
+    // Not into a third DC while it waits.
+    let c = u64::from(g.create_compatible_dc(0));
+    assert_eq!(g.select_object(c, br), Ok(0));
+    // A deleted region: FillRgn fails; a brush deleted before it was
+    // selected fills white through FillRect.
+    let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 0, 1, 1)).unwrap());
+    let live = u64::from(g.create_solid_brush(0x0000_00FF));
+    assert!(g.delete_object(rgn));
+    assert!(!g.fill_rgn(a, rgn, live));
+    assert!(g.delete_object(live));
+    pa.fill(BG);
+    assert!(g.fill_rect(a, Rect::new(0, 0, 2, 2), live));
+    assert_eq!(pa[0], 0x00FF_FFFF);
+    // A font's GetObject fills a buffer larger than LOGFONTW.
+    let font = u64::from(g.create_font(&[0u8; 92]));
+    assert_eq!(g.object_bytes_for(font, 128).map(|b| b.len().min(128)), Some(128));
+    assert_eq!(g.object_bytes(font).map(|b| b.len()), Some(92));
+}
+
+/// GetSystemMetrics.yaml `device_caps_screen`.
+#[test]
+fn device_caps_are_the_screens_for_every_dc() {
+    let mut g = Gdi::new();
+    g.screen = Screen { width: 1920, height: 1080 };
+    let screen = u64::from(g.create_display_dc(0, false));
+    let window = u64::from(g.create_display_dc(0x1234, false));
+    let (mem, _px) = dib32(&mut g, 4, 4);
+    let want = [
+        (0, 16384),
+        (2, 1),
+        (4, 508),
+        (6, 286),
+        (8, 1920),
+        (10, 1080),
+        (12, 32),
+        (14, 1),
+        (16, -1),
+        (18, -1),
+        (20, 0),
+        (22, 0),
+        (24, -1),
+        (26, 0),
+        (28, 511),
+        (30, 254),
+        (32, 255),
+        (34, 30727),
+        (36, 1),
+        (38, 32409),
+        (40, 36),
+        (42, 36),
+        (44, 51),
+        (88, 96),
+        (90, 96),
+        (104, 0),
+        (106, 20),
+        (108, 24),
+        (110, 0),
+        (114, 0),
+        (116, 60),
+        (117, 1080),
+        (118, 1920),
+        (119, 1),
+        (120, 0),
+        (121, 2),
+        (-1, 0),
+        (3, 0),
+        (1000, 0),
+    ];
+    for dc in [screen, window, mem] {
+        for (index, value) in want {
+            assert_eq!(g.device_caps(dc, index), Some(value), "index {index}");
+        }
+    }
+    assert_eq!(g.device_caps(0, 8), None);
+    assert_eq!(g.device_caps(0x1234_5678, 8), None);
+}
+
+/// BeginPaint.yaml `dc_value`: a window's consecutive common DCs have the
+/// same handle value, in the default state each time.
+#[test]
+fn a_window_gets_its_released_dc_again() {
+    let mut g = Gdi::new();
+    let a = u64::from(g.create_display_dc(0x10, false));
+    g.set_text_color(a, 0x123456);
+    assert!(g.release_display_dc(a));
+    assert_eq!(g.object_type(a), 0, "released: the handle names nothing");
+    assert_eq!(g.display_hwnd(a), None);
+    let again = u64::from(g.create_display_dc(0x10, false));
+    assert_eq!(again, a);
+    assert_eq!(g.text_color(again), 0, "the default state");
+    assert!(g.release_display_dc(again));
+    // The screen's DC in between does not disturb it.
+    let screen = u64::from(g.create_display_dc(0, false));
+    assert_ne!(screen, a);
+    assert!(g.release_display_dc(screen));
+    assert_eq!(u64::from(g.create_display_dc(0x10, false)), a);
+    assert!(g.release_display_dc(a));
+    // Another window's DC in between: no promise, and never the same DC twice at once.
+    let b = u64::from(g.create_display_dc(0x20, false));
+    let a2 = u64::from(g.create_display_dc(0x10, false));
+    assert_ne!(b, a2);
+    assert!(g.release_display_dc(b));
+    assert!(g.release_display_dc(a2));
+    // An own DC stays what it is.
+    let own = u64::from(g.create_display_dc(0x30, true));
+    assert!(g.release_display_dc(own));
+    assert_eq!(g.display_hwnd(own), Some(0x30));
+}
+
+/// DeleteObject.yaml `palette`, `bitmaps_other_kinds`, `type_after_delete`;
+/// CreateRectRgn.yaml `indirect_and_set`.
+#[test]
+fn palettes_and_styled_brushes_follow_the_delete_rules() {
+    let mut g = Gdi::new();
+    let (dc, _px) = dib32(&mut g, 2, 2);
+    let stock = g.stock(DEFAULT_PALETTE);
+    assert_eq!(g.current_object(dc, OBJ_PAL), stock);
+    // A palette that is not selected: 1, and the type stays.
+    let free = u64::from(g.create_palette());
+    assert_eq!(g.object_type(free), OBJ_PAL);
+    assert!(g.delete_object(free));
+    assert_eq!(g.object_type(free), OBJ_PAL);
+    assert!(!g.delete_object(free));
+    // Selected: the delete fails and it stays; back to the stock one, it goes.
+    let pal = u64::from(g.create_palette());
+    assert_eq!(g.select_palette(dc, pal), stock);
+    assert_eq!(u64::from(g.current_object(dc, OBJ_PAL)), pal);
+    assert!(!g.delete_object(pal));
+    assert_eq!(g.object_type(pal), OBJ_PAL);
+    assert_eq!(u64::from(g.select_palette(dc, u64::from(stock))), pal);
+    assert!(g.delete_object(pal));
+    // Not a palette, not a DC: NULL.
+    assert_eq!(g.select_palette(dc, u64::from(g.stock(WHITE_BRUSH))), 0);
+    assert_eq!(g.select_palette(0x1234, u64::from(stock)), 0);
+    // Hatch and pattern brushes are brushes; deleted, they keep their type.
+    for style in [BS_HATCHED, BS_PATTERN, BS_DIBPATTERNPT] {
+        let b = u64::from(g.create_styled_brush(style, 0x0000_FF00, 3));
+        assert_eq!(g.object_type(b), OBJ_BRUSH);
+        assert_eq!(g.object_bytes(b).map(|v| v[0]), Some(style as u8));
+        assert!(g.delete_object(b));
+        assert_eq!(g.object_type(b), OBJ_BRUSH);
+        assert!(!g.delete_object(b));
+    }
+    // SetRectRgn: 0 for what is not a region, 1 for one deleted just before.
+    let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 0, 4, 4)).unwrap());
+    assert!(g.is_region(rgn));
+    assert!(!g.set_rect_rgn(u64::from(g.stock(WHITE_BRUSH)), Rect::new(0, 0, 1, 1)));
+    assert!(!g.set_rect_rgn(0, Rect::new(0, 0, 1, 1)));
+    assert!(g.delete_object(rgn));
+    assert!(!g.is_region(rgn));
+    assert!(g.set_rect_rgn(rgn, Rect::new(0, 0, 1, 1)));
+    assert_eq!(g.rgn_box(rgn), None);
 }
 
 // ----- private fonts (`specs/windows/gdi32.dll`: the PolyTest fonts, which
@@ -1248,4 +1499,203 @@ fn clear_type_text_still_has_pixels_of_the_text_colour() {
             assert!(pure > 0, "{name} {h} (store fonts {fonts})");
         }
     }
+}
+
+/// The columns of row `y` that are `v`, as runs (left, right).
+fn runs(px: &[u32], w: i32, y: i32, v: u32) -> Vec<(i32, i32)> {
+    let mut out: Vec<(i32, i32)> = Vec::new();
+    for x in 0..w {
+        if px[(y * w + x) as usize] == v {
+            match out.last_mut() {
+                Some(l) if l.1 == x => l.1 = x + 1,
+                _ => out.push((x, x + 1)),
+            }
+        }
+    }
+    out
+}
+
+fn where_is(px: &[u32], w: i32, v: u32) -> Vec<(i32, i32)> {
+    px.iter().enumerate().filter(|(_, p)| **p == v).map(|(i, _)| (i as i32 % w, i as i32 / w)).collect()
+}
+
+#[test]
+fn ext_text_out_dx_glyph_indices_and_odd_input_follow_the_sheet() {
+    let mut g = Gdi::new();
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    let (w, h) = (100, 40);
+    let (dc, mut px) = dib32(&mut g, w, h);
+    let (bg, fg, bk) = (0x0080_8080, 0x00FF_FFFF, 0x0000_0080);
+    select(&mut g, dc, &lf_full("PolyTest Sans", -16, 400, false, 3));
+    g.set_text_color(dc, fg);
+    g.set_bk_color(dc, 0x0080_0000);
+    let aaa = utf16("AAA");
+    // dx: the boxes of "AAA" with 20,14,30 at x=4, in a row inside the text.
+    px.fill(bg);
+    assert!(g.ext_text_out(dc, 4, 2, 0, None, &aaa, Some(&[20, 14, 30])));
+    assert_eq!(runs(&px, w, 8, fg), [(6, 14), (26, 34), (40, 48)]);
+    // The OPAQUE cell is as wide as the sum.
+    assert_eq!(bounds(&ink(&px, w, bg)), (4, 2, 68, 18));
+    assert_eq!(bounds(&where_is(&px, w, bk)), (4, 2, 68, 18));
+    // 0,0,0: on top of each other, no cell.
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, 0, None, &aaa, Some(&[0, 0, 0]));
+    assert_eq!(runs(&px, w, 8, fg), [(6, 14)]);
+    assert!(where_is(&px, w, bk).is_empty());
+    // Negative values move back.
+    px.fill(bg);
+    g.set_bk_mode(dc, TRANSPARENT);
+    g.ext_text_out(dc, 40, 2, 0, None, &aaa, Some(&[-12, -12, 5]));
+    assert_eq!(runs(&px, w, 8, fg), [(18, 26), (30, 38), (42, 50)]);
+    g.set_bk_mode(dc, OPAQUE);
+    // TA_RIGHT: the sum ends at x; TA_CENTER: centred about it.
+    px.fill(bg);
+    g.set_text_align(dc, TA_RIGHT);
+    g.ext_text_out(dc, 90, 2, 0, None, &aaa, Some(&[20, 14, 30]));
+    assert_eq!(runs(&px, w, 8, fg)[0].0, 90 - 64 + 2);
+    assert_eq!(bounds(&where_is(&px, w, bk)), (26, 2, 90, 18));
+    px.fill(bg);
+    g.set_text_align(dc, TA_CENTER);
+    g.ext_text_out(dc, 50, 2, 0, None, &aaa, Some(&[20, 14, 30]));
+    assert_eq!(bounds(&where_is(&px, w, bk)), (18, 2, 82, 18));
+    // TA_UPDATECP: the current position moves by the sum, the arguments are ignored.
+    for (align, start, end, cell) in [
+        (TA_UPDATECP, 10, 74, (10, 74)),
+        (TA_UPDATECP | TA_RIGHT, 80, 16, (16, 80)),
+        (TA_UPDATECP | TA_CENTER, 50, 50, (18, 82)),
+    ] {
+        px.fill(bg);
+        g.set_text_align(dc, align);
+        g.move_to(dc, start, 20);
+        g.ext_text_out(dc, 1, 1, 0, None, &aaa, Some(&[20, 14, 30]));
+        assert_eq!(g.current_position(dc), Some((end, 20)), "align {align}");
+        let b = bounds(&where_is(&px, w, bk));
+        assert_eq!((b.0, b.1, b.2, b.3), (cell.0, 20, cell.1, 36), "align {align}");
+    }
+    g.set_text_align(dc, 0);
+    g.move_to(dc, 7, 9);
+    g.ext_text_out(dc, 1, 1, 0, None, &aaa, None);
+    assert_eq!(g.current_position(dc), Some((7, 9)));
+    // An empty string with TA_UPDATECP moves nothing.
+    g.set_text_align(dc, TA_UPDATECP);
+    assert!(g.ext_text_out(dc, 1, 1, 0, None, &[], None));
+    assert_eq!(g.current_position(dc), Some((7, 9)));
+    g.set_text_align(dc, 0);
+    // Glyph indices: an index beyond the font is .notdef, as a character the font lacks.
+    g.set_bk_mode(dc, TRANSPARENT);
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, ETO_GLYPH_INDEX, None, &[999], None);
+    let beyond = ink(&px, w, bg);
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, 0, None, &utf16("Z"), None);
+    assert!(!beyond.is_empty());
+    assert_eq!(beyond, ink(&px, w, bg));
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, ETO_GLYPH_INDEX, None, &[0], None);
+    assert_eq!(beyond, ink(&px, w, bg));
+    // Glyph indices with distances and an opaque rectangle.
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, ETO_GLYPH_INDEX | ETO_OPAQUE, Some(Rect::new(0, 0, 60, 30)), &[5, 5], Some(&[30, 0]));
+    assert_eq!(runs(&px, w, 8, fg), [(6, 14), (36, 44)]);
+    assert_eq!(bounds(&ink(&px, w, bg)), (0, 0, 60, 30));
+    // Option bits that do not exist are ignored.
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, 0, None, &utf16("AB"), None);
+    let plain = px.clone();
+    for bits in [0x1, 0x8, 0x8000, 0x1 | 0x8 | 0x8000] {
+        px.fill(bg);
+        assert!(g.ext_text_out(dc, 4, 2, bits, None, &utf16("AB"), None));
+        assert_eq!(px, plain, "bits {bits:#x}");
+        px.fill(bg);
+        assert!(g.ext_text_out(dc, 4, 2, bits, Some(Rect::new(0, 0, 8, 8)), &utf16("AB"), None));
+        assert_eq!(px, plain, "bits {bits:#x} with a rectangle");
+    }
+    assert!(!g.ext_text_out(dc, 4, 2, u32::MAX, Some(Rect::new(0, 0, 8, 8)), &utf16("AB"), None));
+    // 9000 characters draw across the whole surface.
+    g.set_bk_mode(dc, OPAQUE);
+    px.fill(bg);
+    let long = vec![u16::from(b'A'); 9000];
+    assert!(g.ext_text_out(dc, 0, 0, 0, None, &long, None));
+    assert_eq!(bounds(&ink(&px, w, bg)), (0, 0, 100, 16));
+    assert_eq!(runs(&px, w, 4, fg).len(), 9);
+    // Off the surface: clipped; entirely off: nothing.
+    px.fill(bg);
+    g.ext_text_out(dc, -5, -3, 0, None, &utf16("AB"), None);
+    assert_eq!(bounds(&ink(&px, w, bg)), (0, 0, 15, 13));
+    px.fill(bg);
+    g.ext_text_out(dc, 200, 200, 0, None, &utf16("AB"), None);
+    g.ext_text_out(dc, -100, 10, ETO_CLIPPED, Some(Rect::new(0, 0, 10, 10)), &utf16("AB"), None);
+    assert!(ink(&px, w, bg).is_empty());
+}
+
+#[test]
+fn stock_fonts_have_the_face_names_of_the_sheet() {
+    let mut g = Gdi::new();
+    let dc = u64::from(g.create_compatible_dc(0));
+    assert_eq!(g.text_face(dc).unwrap(), utf16("System"), "a new DC");
+    // OEM_FIXED_FONT 10, ANSI_FIXED_FONT 11, ANSI_VAR_FONT 12, SYSTEM_FONT 13, DEFAULT_GUI_FONT 17.
+    for (stock, name) in
+        [(10, "Terminal"), (11, "Courier"), (12, "MS Sans Serif"), (13, "System"), (17, "MS Shell Dlg")]
+    {
+        let f = u64::from(g.stock(stock));
+        g.select_object(dc, f).unwrap();
+        assert_eq!(g.text_face(dc).unwrap(), utf16(name), "stock font {stock}");
+    }
+    assert!(g.text_face(0).is_none());
+}
+
+#[test]
+fn draw_text_tab_stops_and_ellipsis_flags_follow_learn() {
+    use crate::text::*;
+    let mut g = Gdi::new();
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    let (w, h) = (140, 90);
+    let (dc, mut px) = dib32(&mut g, w, h);
+    let (bg, fg) = (0x0080_8080, 0x00FF_FFFF);
+    select(&mut g, dc, &lf_full("PolyTest Sans", -16, 400, false, 3));
+    g.set_text_color(dc, fg);
+    g.set_bk_mode(dc, TRANSPARENT);
+    // DrawTextW's DT_TABSTOP: bits 8 to 15 are the tab stop in average widths (8 pixels each), and
+    // not DT_NOCLIP (1), DT_EXTERNALLEADING (2), DT_CALCRECT (4), DT_NOPREFIX (8) or DT_END_ELLIPSIS (128).
+    for (stop, b_at) in [(1, 16), (2, 16), (4, 32), (8, 64), (0, 64), (128, 1024)] {
+        px.fill(bg);
+        let mut r = Rect::new(0, 0, 130, 40);
+        let n = g.draw_text(dc, &utf16("&A\tB"), &mut r, DT_EXPANDTABS | DT_TABSTOP | (stop << 8));
+        assert_eq!((n, r), (16, Rect::new(0, 0, 130, 40)), "tab stop {stop}: drawn, not measured");
+        let mut want = vec![(2, 10)];
+        if b_at < w {
+            want.push((b_at + 1, b_at + 7));
+        }
+        assert_eq!(runs(&px, w, 10, fg), want, "tab stop {stop}");
+        assert_eq!(runs(&px, w, 13, fg), [(0, 12)], "tab stop {stop}: the mnemonic underline");
+    }
+    // DrawTextExW takes the tab stop from its parameters: there the bits are the flags they name.
+    let mut r = Rect::new(0, 0, 130, 40);
+    let p = DrawParams { tab_chars: 4, ..DrawParams::default() };
+    let out = g.draw_text_ex(dc, &utf16("A\tB"), &mut r, DT_EXPANDTABS | DT_TABSTOP | DT_CALCRECT, p);
+    assert_eq!((out.height, r), (16, Rect::new(0, 0, 40, 16)));
+    let mut r = Rect::new(0, 0, 130, 40);
+    let out =
+        g.draw_text_ex(dc, &utf16("A\tB"), &mut r, DT_EXPANDTABS | DT_TABSTOP | DT_CALCRECT, DrawParams::default());
+    assert_eq!((out.height, r), (16, Rect::new(0, 0, 72, 16)), "iTabLength 0: the default of 8");
+    // Ellipsis flags on several lines, through DT_MODIFYSTRING.
+    let ell = |g: &mut Gdi, s: &str, w: i32, h: i32, fmt: u32| {
+        let mut r = Rect::new(10, 10, 10 + w, 10 + h);
+        let out = g.draw_text_ex(dc, &utf16(s), &mut r, fmt | DT_MODIFYSTRING, DrawParams::default());
+        out.modified.map_or_else(|| std::string::String::from(s), |m| std::string::String::from_utf16(&m).unwrap())
+    };
+    // DT_WORD_ELLIPSIS: every word that is too wide, on its line.
+    let words = "AAAAAAAA BBBB AAAAAAAA";
+    assert_eq!(ell(&mut g, words, 80, 60, DT_WORDBREAK | DT_WORD_ELLIPSIS), "AAAAA... BBBB AAAAA...");
+    assert_eq!(ell(&mut g, words, 80, 60, DT_SINGLELINE | DT_WORD_ELLIPSIS), "AAAAA...");
+    assert_eq!(ell(&mut g, "AAAAAAAA\nAB\nAAAAAAAA", 80, 60, DT_WORD_ELLIPSIS), "AAAAA...\nAB\nAAAAA...");
+    // DT_END_ELLIPSIS: only the end of the text; a wide line before it is clipped without dots.
+    assert_eq!(ell(&mut g, "AAAAAAAA\nAB\nAAAAAAAA", 80, 60, DT_END_ELLIPSIS), "AAAAAAAA\nAB\nAAAAA...");
+    assert_eq!(ell(&mut g, "AAAAAAAA\nAB", 80, 60, DT_END_ELLIPSIS), "AAAAAAAA\nAB");
+    assert_eq!(ell(&mut g, words, 80, 60, DT_WORDBREAK | DT_END_ELLIPSIS), "AAAAAAAA BBBB AAAAA...");
+    // Both: every wide word, and the end of the text on the last line that fits.
+    assert_eq!(ell(&mut g, words, 80, 32, DT_WORDBREAK | DT_END_ELLIPSIS | DT_WORD_ELLIPSIS), "AAAAA... BBBB AAAAA...");
+    assert_eq!(ell(&mut g, "AAAA BBBB AAAA BBBB", 60, 32, DT_WORDBREAK | DT_END_ELLIPSIS), "AAAA BBBB AAAA...");
+    // DT_PATH_ELLIPSIS keeps what follows the last backslash, on every line.
+    assert_eq!(ell(&mut g, "AAAA\\BBBB\\AAAA\\BBB.AB\nAB", 100, 60, DT_PATH_ELLIPSIS), "AA...\\BBB.AB\nAB");
 }

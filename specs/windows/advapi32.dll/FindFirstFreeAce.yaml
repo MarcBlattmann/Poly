@@ -34,6 +34,7 @@ rules:
   ace_size: "a first-ACE size of 0 gives offset 8 (TRUE), 3 gives 11; sizes 21, 120 and 200 fail; a third-ACE size of 200 gives TRUE with NULL"
 errors:
   damaged: "an ACE count that the list does not support (count 5 or 100), an AclSize smaller than the ACE area (0, 8, 40) or an ACE size that makes the walk leave the ACL (21, 120, 200 for the first ACE): FALSE, ERROR_INVALID_ACL (1336)"
+  out_pointer: "a failing call (1336) stores NULL in the out pointer, also when it held another value before the call; RtlFirstFreeAce does the same"
 side_effects: "none beyond the rules above"
 threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
 ordering: []

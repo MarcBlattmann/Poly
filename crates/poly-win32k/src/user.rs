@@ -362,8 +362,10 @@ pub fn send<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l: u64) -> u6
 /// `CreateWindowExW` (`CreateWindowExW.yaml`).
 pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, param: u64) -> u32 {
     let style = spec.style;
-    // WS_VISIBLE is the show at the end of the sequence.
-    spec.style &= !WS_VISIBLE;
+    // WS_VISIBLE is the show at the end of the sequence, and so are
+    // WS_MINIMIZE / WS_MAXIMIZE: the window is made at its rectangle and
+    // put into that state then.
+    spec.style &= !(WS_VISIBLE | WS_MINIMIZE | WS_MAXIMIZE);
     let instance = spec.instance;
     let menu = spec.menu;
     let c = match env.call(Request::CreateWindow { spec }) {
@@ -463,10 +465,50 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     if notify {
         send(env, u64::from(i.parent), WM_PARENTNOTIFY, u64::from(WM_CREATE) | ((menu & 0xFFFF) << 16), h);
     }
-    if style & WS_VISIBLE != 0 {
+    if style & (WS_MINIMIZE | WS_MAXIMIZE) != 0 {
+        // Created minimized or maximized: the rectangle asked for is its
+        // restored one (MonitorFromWindow.yaml `state`: a window created
+        // with WS_MINIMIZE at -3000,200 is judged by that position).
+        if style & WS_VISIBLE != 0 {
+            if style & WS_MINIMIZE != 0 {
+                minimize(env, &i, SW_SHOWMINIMIZED);
+            } else {
+                maximize(env, &i);
+            }
+        } else {
+            let min = style & WS_MINIMIZE != 0;
+            env.call(Request::SetState {
+                hwnd,
+                visible: None,
+                minimized: Some(min),
+                maximized: Some(!min),
+                normal: Some(i.window_rel),
+                size_move_pending: None,
+            });
+        }
+    } else if style & WS_VISIBLE != 0 {
         show(env, &i, ShowKind::Create);
+        discharge_size_move(env, hwnd);
     }
     hwnd
+}
+
+/// The WM_SIZE and WM_MOVE held back at creation, if they still are
+/// (ShowWindow.yaml `hide_size_move`).
+fn discharge_size_move<E: Env + ?Sized>(env: &E, hwnd: u32) {
+    let Some(now) = info(env, u64::from(hwnd)) else { return };
+    if !now.size_move_pending {
+        return;
+    }
+    env.call(Request::SetState {
+        hwnd,
+        visible: None,
+        minimized: None,
+        maximized: None,
+        normal: None,
+        size_move_pending: Some(false),
+    });
+    send_size_move(env, &now);
 }
 
 /// `WM_SIZE` then `WM_MOVE` from the window's current rectangles.
@@ -514,11 +556,19 @@ fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
             send(env, h, WM_SHOWWINDOW, 0, 0);
         }
         focus::DESTROYING.store(hwnd, core::sync::atomic::Ordering::Relaxed);
-        set_window_pos(env, h, 0, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE);
+        let flags = SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE;
+        swp(env, hwnd, 0, 0, 0, 0, 0, flags, Opts { destroying: true, ..Opts::default() });
+        focus::DESTROYING.store(0, core::sync::atomic::Ordering::Relaxed);
+    } else if i.style & WS_CHILD == 0 && focus::input(env).active == hwnd {
+        // A hidden window can be the active one (session 0): destroying it
+        // moves the activation as for a visible one.
+        focus::DESTROYING.store(hwnd, core::sync::atomic::Ordering::Relaxed);
+        focus::after_hide(env, &i, true, true);
         focus::DESTROYING.store(0, core::sync::atomic::Ordering::Relaxed);
     }
-    // A descendant of the hidden window that holds the capture loses it too.
-    focus::release_capture_below(env, hwnd);
+    // The capture of the window or of one below it ends without a message
+    // (SetCapture.yaml `destroy`; a deactivation above cancelled it already).
+    focus::drop_capture_within(env, hwnd);
     if let Reply::Relatives { owned, .. } = env.call(Request::Relatives { hwnd }) {
         for o in owned {
             destroy_tree(env, o, false);
@@ -528,13 +578,18 @@ fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
     nc_destroy(env, hwnd);
 }
 
+/// WM_DESTROY to `hwnd`, then to its children. A window that has the
+/// focus hands it to its parent before its own WM_DESTROY, and again after
+/// its children's if one of them passed it up (GetFocus.yaml `destroy_child`).
 fn send_destroy<E: Env + ?Sized>(env: &E, hwnd: u32) {
+    focus::focus_to_parent(env, hwnd);
     send(env, u64::from(hwnd), WM_DESTROY, 0, 0);
     if let Reply::Relatives { children, .. } = env.call(Request::Relatives { hwnd }) {
         for c in children {
             send_destroy(env, c);
         }
     }
+    focus::focus_to_parent(env, hwnd);
 }
 
 fn nc_destroy<E: Env + ?Sized>(env: &E, hwnd: u32) {
@@ -561,41 +616,133 @@ enum ShowKind {
     Command(i32),
 }
 
+/// What a `swp` call does besides what its flags say.
+#[derive(Clone, Copy, Debug, Default)]
+struct Opts {
+    /// Bits for the flags of `WM_WINDOWPOSCHANGED` only.
+    extra: u32,
+    /// The call activates the window, between `WM_NCCALCSIZE` and
+    /// `WM_WINDOWPOSCHANGED`.
+    activate: bool,
+    /// The z order stays as it is whatever the flags ask (a child's state
+    /// changes: ShowWindow.yaml `child_min_max`).
+    keep_z: bool,
+    /// A child changes its state: `WM_CHILDACTIVATE` where a top-level
+    /// window would be activated.
+    child_activate: bool,
+    /// The rectangle the window gets if its procedure leaves
+    /// `WM_WINDOWPOSCHANGING`'s as it is (maximizing).
+    fit: Option<Rect>,
+    /// The show of a window being created: it takes the foreground only if
+    /// its thread may (`focus::may_take_foreground`); a ShowWindow command
+    /// always does.
+    creating: bool,
+    /// `DestroyWindow` hides the window: the activation is handed on
+    /// although the call is SWP_NOACTIVATE.
+    destroying: bool,
+}
+
+/// `SWP_NOCOPYBITS` (winuser.h).
+const SWP_NOCOPYBITS: u32 = 0x0100;
+/// `HWND_BOTTOM` (winuser.h).
+const HWND_BOTTOM: u64 = 1;
+
 /// `ShowWindow` (`ShowWindow.yaml`): the previous `WS_VISIBLE` state.
+///
+/// A command for the state the window is in sends nothing (`same_state`),
+/// but `SW_SHOWNA`. The commands that minimize, maximize or restore send
+/// no `WM_SHOWWINDOW`, also when they show a hidden window. `WM_SIZE` and
+/// `WM_MOVE` held back at creation come after the first call that sends
+/// `WM_SHOWWINDOW` (`hide_size_move`).
 pub fn show_window<E: Env + ?Sized>(env: &E, hwnd: u64, cmd: i32) -> bool {
     let Some(i) = info(env, hwnd) else {
         env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return false;
     };
     let was = i.style & WS_VISIBLE != 0;
+    // Whether the call sent WM_SHOWWINDOW (the held-back WM_SIZE / WM_MOVE follow it).
+    let mut shown_message = false;
     match cmd {
         SW_HIDE => {
             if was {
                 hide(env, &i);
+                shown_message = true;
             }
         }
-        SW_SHOWMINIMIZED | SW_MINIMIZE | SW_SHOWMINNOACTIVE | SW_FORCEMINIMIZE => {
-            if screen(env).interactive {
-                minimize_interactive(env, &i, cmd);
-            } else {
+        SW_FORCEMINIMIZE => {
+            // On a visible window of the calling thread: WS_VISIBLE goes
+            // without a message, and the window is not minimized (`commands`).
+            if was && !i.minimized && i.tid == env.tid() {
+                env.call(Request::SetState {
+                    hwnd: i.hwnd,
+                    visible: Some(false),
+                    minimized: None,
+                    maximized: None,
+                    normal: None,
+                    size_move_pending: None,
+                });
+            }
+        }
+        SW_SHOWMINIMIZED | SW_MINIMIZE | SW_SHOWMINNOACTIVE => {
+            if !i.minimized || !was {
                 minimize(env, &i, cmd);
             }
         }
-        SW_SHOWMAXIMIZED => maximize(env, &i),
+        SW_SHOWMAXIMIZED => {
+            if !i.maximized || i.minimized || !was {
+                maximize(env, &i);
+            }
+        }
+        SW_SHOWNA => {
+            if was {
+                // Also on a visible window: the message, and the window is
+                // raised if it was not on top (`same_state`, `z_order`).
+                send(env, hwnd, WM_SHOWWINDOW, 1, 0);
+                let flags = if i.style & WS_CHILD != 0 {
+                    SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE
+                } else {
+                    SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE
+                };
+                swp(env, i.hwnd, HWND_TOP, 0, 0, 0, 0, flags, Opts::default());
+            } else {
+                show(env, &i, ShowKind::Command(cmd));
+            }
+            shown_message = true;
+        }
+        SW_SHOW => {
+            // SW_SHOW does not restore a minimized window.
+            if !was {
+                show(env, &i, ShowKind::Command(cmd));
+                shown_message = true;
+            }
+        }
         _ => {
-            if (i.minimized || i.maximized) && matches!(cmd, SW_SHOWNORMAL | SW_RESTORE | SW_SHOWDEFAULT) {
-                restore(env, &i, true);
-            } else if i.minimized && cmd == SW_SHOWNOACTIVATE {
-                // "Displays a window in its most recent size and position"
-                // (Learn): a minimized window is restored (observed:
-                // WM_WINDOWPOSCHANGING to the normal rectangle, 0x8120).
-                restore(env, &i, false);
+            // SW_SHOWNORMAL, SW_RESTORE, SW_SHOWDEFAULT, SW_SHOWNOACTIVATE.
+            if i.minimized || i.maximized {
+                restore(env, &i, cmd);
             } else if !was {
                 show(env, &i, ShowKind::Command(cmd));
+                shown_message = true;
             }
         }
     }
+    if shown_message && i.size_move_pending {
+        discharge_size_move(env, i.hwnd);
+    }
     was
+}
+
+/// Whether showing top-level window `i` reports the "shown" bit 0x10000000
+/// in `WM_WINDOWPOSCHANGED` on the interactive desktop: every show of a
+/// hidden window but a tool window's or a `WS_EX_NOACTIVATE` window's
+/// without `WS_EX_APPWINDOW` (GetActiveWindow.yaml `minimized_position`).
+fn shown_bit<E: Env + ?Sized>(env: &E, i: &WinInfo) -> u32 {
+    let plain = i.ex_style & WS_EX_APPWINDOW != 0 || i.ex_style & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) == 0;
+    if screen(env).interactive && i.style & WS_CHILD == 0 && i.style & WS_VISIBLE == 0 && plain {
+        0x1000_0000
+    } else {
+        0
+    }
 }
 
 fn show<E: Env + ?Sized>(env: &E, i: &WinInfo, kind: ShowKind) {
@@ -626,23 +773,28 @@ fn show<E: Env + ?Sized>(env: &E, i: &WinInfo, kind: ShowKind) {
         }
         return;
     }
-    let activatable = i.ex_style & WS_EX_NOACTIVATE == 0;
+    let interactive = screen(env).interactive;
     let mut flags = SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE;
-    let mut extra = 0;
+    let mut extra = shown_bit(env, i);
     match kind {
-        ShowKind::Create => {}
+        // Creating a visible window activates it, also a WS_EX_NOACTIVATE
+        // one (which reports no "shown" bit then).
+        ShowKind::Create => {
+            if i.ex_style & WS_EX_NOACTIVATE != 0 {
+                extra = 0;
+            }
+        }
         ShowKind::Command(SW_SHOWNA) => flags |= SWP_NOACTIVATE,
         ShowKind::Command(SW_SHOWNOACTIVATE) => {
             flags |= SWP_NOACTIVATE | SWP_NOZORDER;
-            if i.owner != 0 {
+            // Session 0 reports the bit for an owned window (sw_toplevel).
+            if !interactive && i.owner != 0 {
                 extra = 0x1000_0000;
             }
         }
-        ShowKind::Command(_) => {
-            if !activatable {
-                flags |= SWP_NOACTIVATE;
-            }
-        }
+        // WS_EX_NOACTIVATE and tool windows are activated by a show all
+        // the same (GetActiveWindow.yaml `show_activates`).
+        ShowKind::Command(_) => {}
     }
     if flags & SWP_NOZORDER == 0
         && let Reply::Relatives { owned, .. } = env.call(Request::Relatives { hwnd: i.hwnd })
@@ -657,39 +809,19 @@ fn show<E: Env + ?Sized>(env: &E, i: &WinInfo, kind: ShowKind) {
             send(env, u64::from(o), WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
         }
     }
-    let interactive = screen(env).interactive;
-    if interactive {
-        // Observed on the interactive desktop: the top bit 0x10000000 in
-        // WM_WINDOWPOSCHANGED of every show but a WS_EX_NOACTIVATE window's
-        // creation; creating a visible window activates it even then.
-        extra = if !activatable && matches!(kind, ShowKind::Create) { 0 } else { 0x1000_0000 };
-    }
-    let activate = (activatable || (interactive && matches!(kind, ShowKind::Create))) && flags & SWP_NOACTIVATE == 0;
-    swp(env, i.hwnd, HWND_TOP, 0, 0, 0, 0, flags, extra, activate);
-    if i.size_move_pending {
-        env.call(Request::SetState {
-            hwnd: i.hwnd,
-            visible: None,
-            minimized: None,
-            maximized: None,
-            normal: None,
-            size_move_pending: Some(false),
-        });
-        if let Some(i) = info(env, h) {
-            send_size_move(env, &i);
-        }
-    }
+    let activate = flags & SWP_NOACTIVATE == 0;
+    let creating = kind == ShowKind::Create;
+    swp(env, i.hwnd, HWND_TOP, 0, 0, 0, 0, flags, Opts { extra, activate, creating, ..Opts::default() });
 }
 
 fn hide<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     let h = u64::from(i.hwnd);
     send(env, h, WM_SHOWWINDOW, 0, 0);
-    // Hiding the active window (interactive): the system activates the next
-    // window inside the call (its owner, else a window of another process),
-    // so the call is not SWP_NOACTIVATE / SWP_NOZORDER (GetActiveWindow.yaml
-    // gaw_owner: 0x83 for an owned window, hide_active: 0x83 for any).
-    let hands_over = screen(env).interactive && focus::input(env).active == i.hwnd;
-    let flags = if hands_over {
+    // Hiding the thread's active window is not SWP_NOACTIVATE / SWP_NOZORDER:
+    // the call raises the window while the activation is handed on
+    // (ShowWindow.yaml `hide`, GetActiveWindow.yaml `hide_flags`).
+    let active = i.style & WS_CHILD == 0 && focus::input(env).active == i.hwnd;
+    let flags = if active {
         SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE
     } else {
         SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE
@@ -697,105 +829,17 @@ fn hide<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     set_window_pos(env, h, 0, 0, 0, 0, 0, flags);
 }
 
-fn set_state<E: Env + ?Sized>(env: &E, hwnd: u32, minimized: bool, maximized: bool, normal: Option<Rect>) {
-    env.call(Request::SetState {
-        hwnd,
-        visible: Some(true),
-        minimized: Some(minimized),
-        maximized: Some(maximized),
-        normal,
-        size_move_pending: Some(false),
-    });
-}
-
-/// A private bit of `swp`'s `extra`: the call raises the window (its
-/// WINDOWPOS has no SWP_NOZORDER) although nothing moves in the z order.
-const Z_RAISED: u32 = 0x4000_0000;
-/// Another: the call shows a window that was hidden (its WS_VISIBLE was set
-/// before the call; SWP_SHOWWINDOW stays in the reported flags).
-const WAS_HIDDEN: u32 = 0x0800_0000;
-
-fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
-    if i.minimized {
-        return;
-    }
-    let sh = screen(env).height;
-    let normal = if i.maximized { None } else { Some(i.window_rel) };
-    set_state(env, i.hwnd, true, false, normal);
-    let (w, h) = MINIMIZED;
-    // SW_MINIMIZE and SW_SHOWMINIMIZED activate the next window and raise
-    // this one (WM_WINDOWPOSCHANGED 0x8120 for a shown window); the
-    // NOACTIVE show leaves the z order alone (0x8164; ShowWindow.yaml `minimize`).
-    let raised =
-        if cmd == SW_SHOWMINNOACTIVE { 0 } else { Z_RAISED } | if i.style & WS_VISIBLE == 0 { WAS_HIDDEN } else { 0 };
-    swp(
-        env,
-        i.hwnd,
-        HWND_TOP,
-        0,
-        sh - h,
-        w,
-        h,
-        SWP_STATECHANGED | 0x100 | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
-        raised,
-        false,
-    );
-}
-
-/// Minimizing on the interactive desktop (GetFocus.yaml `minimize`,
-/// GetForegroundWindow.yaml): to -32000,-32000 (SM_ARRANGE is ARW_HIDE);
-/// SW_SHOWMINIMIZED activates the minimized window, SW_MINIMIZE of the
-/// active window takes the focus away first and gives the activation away
-/// after.
-fn minimize_interactive<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
-    if i.minimized {
-        return;
-    }
-    let normal = if i.maximized { None } else { Some(i.window_rel) };
-    let st = focus::input(env);
-    let was_active = st.active == i.hwnd;
-    let activate = cmd == SW_SHOWMINIMIZED;
-    if was_active && !activate && st.focus != 0 {
-        send(env, u64::from(st.focus), focus::WM_KILLFOCUS, 0, 0);
-        env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: crate::wm::input::SET_FOCUS });
-    }
-    // A hidden window is shown by the swp below (its WINDOWPOS keeps
-    // SWP_SHOWWINDOW and counts as a z-order change); a visible one already is.
-    env.call(Request::SetState {
-        hwnd: i.hwnd,
-        visible: i.visible.then_some(true),
-        minimized: Some(true),
-        maximized: Some(false),
-        normal,
-        size_move_pending: Some(false),
-    });
-    let (w, h) = MINIMIZED;
-    let flags =
-        SWP_STATECHANGED | 0x100 | SWP_SHOWWINDOW | SWP_FRAMECHANGED | if activate { 0 } else { SWP_NOACTIVATE };
-    // The "shown" bit only when the minimizing shows a hidden window
-    // (GetFocus.yaml `minimize`, GetActiveWindow.yaml `minimize_inactive`:
-    // 0x8130 for a visible one; gfw_show: 0x10008170 for a hidden one).
-    let extra = if i.style & WS_VISIBLE != 0 || (was_active && !activate) { 0 } else { 0x1000_0000 };
-    // A window with a minimize box goes to the bottom-left corner like
-    // session 0's (ClientToScreen.yaml cts_states: 0,1052 on 1080 rows);
-    // one without (a caption-only popup) is parked at -32000,-32000
-    // (GetForegroundWindow.yaml gfw_show).
-    let (mx, my) = if i.style & WS_MINIMIZEBOX != 0 { (0, screen(env).height - h) } else { (-32000, -32000) };
-    swp(env, i.hwnd, HWND_TOP, mx, my, w, h, flags, extra, activate);
-    if was_active && !activate {
-        focus::deactivate_away(env, true);
-    }
-}
-
-fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
-    if i.maximized {
-        return;
-    }
-    // WM_GETMINMAXINFO first: the maximized size and position are the
-    // procedure's answer (ShowWindow.yaml: maxsize 1040,784 at -8,-8 on a
-    // 1024x768 screen, the frame overhanging it).
+/// The size and position a window's procedure answers to `WM_GETMINMAXINFO`.
+fn ask_minmax<E: Env + ?Sized>(env: &E, i: &WinInfo) -> MinMaxInfo {
     let display = screen(env);
-    let [ms, mp, mt, xt] = metrics::minmax(i.style, i.ex_style, &display);
+    let [mut ms, mp, mt, xt] = metrics::minmax(i.style, i.ex_style, &display);
+    // A child is maximized over its parent's client area (observed:
+    // maxsize 286,163 at -1,-1 for a bordered child of a 284x161 client).
+    if i.style & WS_CHILD != 0
+        && let Some(p) = info(env, u64::from(i.parent))
+    {
+        ms = (p.client.width() - 2 * mp.0, p.client.height() - 2 * mp.1);
+    }
     let mut mmi = MinMaxInfo {
         reserved: CPoint::default(),
         max_size: CPoint { x: ms.0, y: ms.1 },
@@ -804,34 +848,230 @@ fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
         max_track: CPoint { x: xt.0, y: xt.1 },
     };
     send(env, u64::from(i.hwnd), WM_GETMINMAXINFO, 0, ptr(&mut mmi));
-    let size = (mmi.max_size.x, mmi.max_size.y);
-    let pos = (display.work.left + mmi.max_position.x, display.work.top + mmi.max_position.y);
-    let normal = if i.minimized { None } else { Some(i.window_rel) };
-    set_state(env, i.hwnd, false, true, normal);
-    swp(env, i.hwnd, HWND_TOP, pos.0, pos.1, size.0, size.1, SWP_STATECHANGED | SWP_FRAMECHANGED, 0, false);
+    mmi
 }
 
-/// SW_RESTORE and friends. On the interactive desktop restoring a window
-/// that was minimized or maximized activates it inside the call
-/// (`activate`; GetFocus.yaml `restore`: WM_WINDOWPOSCHANGING 0x8120, the
-/// activation with its own WM_WINDOWPOSCHANGING 0x3, WM_WINDOWPOSCHANGED
-/// 0x8120, then WM_ACTIVATE once more).
-fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo, activate: bool) {
-    let r = normal_rect(env, i);
-    set_state(env, i.hwnd, false, false, None);
-    // Out of the icon its pixels are not kept (SWP_NOCOPYBITS, as when it
-    // was minimized; observed 0x8120).
-    let nocopy = if i.minimized { 0x100 } else { 0 };
-    let flags = SWP_STATECHANGED | nocopy | SWP_FRAMECHANGED;
-    let activating = activate
-        && screen(env).interactive
-        && i.style & WS_CHILD == 0
-        && i.ex_style & WS_EX_NOACTIVATE == 0
-        && focus::input(env).active != i.hwnd;
-    swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), flags, 0, activating);
-    if activating && focus::input(env).active == i.hwnd {
+/// The three minimizing commands (ShowWindow.yaml `minimize`,
+/// `show_minimized_from_hidden`, `z_order`; GetActiveWindow.yaml
+/// `minimize_active`, `minimized_position`; GetForegroundWindow.yaml
+/// `minimize_foreground`).
+///
+/// Session 0: every one of them makes the window the thread's active one,
+/// but SW_MINIMIZE / SW_SHOWMINNOACTIVE of the visible active window, which
+/// put it at the bottom of the z order. The interactive desktop:
+/// SW_SHOWMINIMIZED activates the window; the others do not (a window that
+/// is not the active one goes below it), and SW_MINIMIZE of the active
+/// window takes its focus away first and hands the activation on after.
+fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
+    let display = screen(env);
+    let interactive = display.interactive;
+    let child = i.style & WS_CHILD != 0;
+    let hidden = i.style & WS_VISIBLE == 0;
+    let st = focus::input(env);
+    let was_active = !child && st.active == i.hwnd;
+    let (w, h) = MINIMIZED;
+    let (x, y) = if child {
+        let ph = info(env, u64::from(i.parent)).map_or(0, |p| p.client.height());
+        (0, ph - h)
+    } else {
+        metrics::minimized_origin(i.ex_style, i.owner != 0, &display)
+    };
+    if i.minimized {
+        // A hidden minimized window shown minimized again.
+        let flags = SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE;
+        swp(env, i.hwnd, HWND_TOP, 0, 0, 0, 0, flags, Opts { extra: shown_bit(env, i), ..Opts::default() });
+        return;
+    }
+    let activating = cmd == SW_SHOWMINIMIZED;
+    if interactive && was_active && st.focus != 0 {
+        send(env, u64::from(st.focus), focus::WM_KILLFOCUS, 0, 0);
+        env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: crate::wm::input::SET_FOCUS });
+    }
+    // Who takes the activation from a minimized active window is settled
+    // by the z order before it moves.
+    let successor = if interactive && was_active && cmd == SW_MINIMIZE { focus::successor(env, i, true) } else { None };
+    let extra = shown_bit(env, i);
+    env.call(Request::SetState {
+        hwnd: i.hwnd,
+        visible: None,
+        minimized: Some(true),
+        maximized: Some(false),
+        normal: if i.maximized { None } else { Some(i.window_rel) },
+        size_move_pending: None,
+    });
+    let base = SWP_STATECHANGED | SWP_NOCOPYBITS | SWP_SHOWWINDOW | SWP_FRAMECHANGED;
+    if child {
+        swp(
+            env,
+            i.hwnd,
+            HWND_TOP,
+            x,
+            y,
+            w,
+            h,
+            base | SWP_NOZORDER,
+            Opts { child_activate: true, keep_z: true, ..Opts::default() },
+        );
+        return;
+    }
+    // Where it goes in the z order, and whether the call activates it.
+    let (flags, after, activate) = if interactive {
+        if activating { (base, HWND_TOP, !was_active) } else { (base | SWP_NOACTIVATE, HWND_BOTTOM, false) }
+    } else if was_active && !hidden && !activating {
+        (base, HWND_BOTTOM, false)
+    } else {
+        (base, HWND_TOP, !was_active)
+    };
+    swp(env, i.hwnd, after, x, y, w, h, flags, Opts { extra, activate, ..Opts::default() });
+    if interactive && cmd == SW_MINIMIZE {
+        if was_active {
+            focus::hand_on(env, i, successor, true);
+        } else {
+            // "Minimizes the specified window and activates the next
+            // top-level window" (Learn) also when the minimized window was
+            // not the active one: the window that was active before the
+            // active one takes the activation if it can (SetCapture.yaml
+            // `hide`: observed, "not understood beyond the observation").
+            focus::activate_previous(env, i.hwnd);
+        }
+    }
+}
+
+fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
+    let display = screen(env);
+    let child = i.style & WS_CHILD != 0;
+    let hidden = i.style & WS_VISIBLE == 0;
+    if i.maximized && !i.minimized {
+        // A hidden maximized window shown again.
+        let flags = SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE;
+        swp(
+            env,
+            i.hwnd,
+            HWND_TOP,
+            0,
+            0,
+            0,
+            0,
+            flags,
+            Opts { extra: shown_bit(env, i), activate: !child, ..Opts::default() },
+        );
+        return;
+    }
+    // WM_GETMINMAXINFO first: the maximized size and position are the
+    // procedure's answer.
+    let mmi = ask_minmax(env, i);
+    let r = Rect::new(
+        mmi.max_position.x,
+        mmi.max_position.y,
+        mmi.max_position.x + mmi.max_size.x,
+        mmi.max_position.y + mmi.max_size.y,
+    );
+    let fit = (!child).then(|| {
+        metrics::maximized_rect(
+            i.style,
+            i.ex_style,
+            &display,
+            (mmi.max_size.x, mmi.max_size.y),
+            (mmi.max_position.x, mmi.max_position.y),
+        )
+    });
+    let extra = shown_bit(env, i);
+    env.call(Request::SetState {
+        hwnd: i.hwnd,
+        visible: None,
+        minimized: Some(false),
+        maximized: Some(true),
+        normal: if i.minimized || i.maximized { None } else { Some(i.window_rel) },
+        size_move_pending: None,
+    });
+    let mut flags = SWP_STATECHANGED | SWP_FRAMECHANGED;
+    if hidden {
+        flags |= SWP_SHOWWINDOW;
+    }
+    if i.minimized {
+        // Out of the icon its pixels are not kept.
+        flags |= SWP_NOCOPYBITS;
+    }
+    let opts = if child {
+        Opts { child_activate: true, keep_z: true, ..Opts::default() }
+    } else {
+        Opts { extra, activate: focus::input(env).active != i.hwnd, fit, ..Opts::default() }
+    };
+    swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), flags, opts);
+    after_restore_activation(env, i, opts.activate);
+}
+
+/// A minimized window that a command restored or maximized and activated
+/// gets WM_ACTIVATE once more after its WM_SIZE, naming no other window
+/// (GetActiveWindow.yaml `show_activates`, interactive).
+fn after_restore_activation<E: Env + ?Sized>(env: &E, i: &WinInfo, activated: bool) {
+    if activated && i.minimized && screen(env).interactive && focus::input(env).active == i.hwnd {
         send(env, u64::from(i.hwnd), focus::WM_ACTIVATE, focus::WA_ACTIVE, 0);
     }
+}
+
+/// SW_SHOWNORMAL, SW_RESTORE, SW_SHOWDEFAULT and SW_SHOWNOACTIVATE on a
+/// minimized or maximized window (ShowWindow.yaml `state_changes`,
+/// `restore`, `show_after_hidden_maximized`): back to the normal rectangle,
+/// or, for a window that was maximized when it was minimized, to the
+/// maximized one.
+fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
+    let display = screen(env);
+    let interactive = display.interactive;
+    let child = i.style & WS_CHILD != 0;
+    let hidden = i.style & WS_VISIBLE == 0;
+    let to_max = i.minimized && i.restore_max;
+    let (r, fit) = if to_max {
+        let mmi = ask_minmax(env, i);
+        let raw = Rect::new(
+            mmi.max_position.x,
+            mmi.max_position.y,
+            mmi.max_position.x + mmi.max_size.x,
+            mmi.max_position.y + mmi.max_size.y,
+        );
+        let fit = metrics::maximized_rect(
+            i.style,
+            i.ex_style,
+            &display,
+            (mmi.max_size.x, mmi.max_size.y),
+            (mmi.max_position.x, mmi.max_position.y),
+        );
+        (raw, (!child).then_some(fit))
+    } else {
+        (normal_rect(env, i), None)
+    };
+    let mut extra = shown_bit(env, i);
+    // Observed in session 0: showing a window that was hidden while
+    // maximized reports 0x40000000.
+    if hidden && i.maximized && !i.minimized && !interactive {
+        extra |= 0x4000_0000;
+    }
+    env.call(Request::SetState {
+        hwnd: i.hwnd,
+        visible: None,
+        minimized: Some(false),
+        maximized: Some(to_max),
+        normal: None,
+        size_move_pending: None,
+    });
+    let mut flags = SWP_STATECHANGED | SWP_FRAMECHANGED;
+    if i.minimized {
+        flags |= SWP_NOCOPYBITS;
+    }
+    if hidden {
+        flags |= SWP_SHOWWINDOW;
+    }
+    let no_activate = cmd == SW_SHOWNOACTIVATE;
+    if no_activate && interactive {
+        flags |= SWP_NOACTIVATE;
+    }
+    let opts = if child {
+        Opts { child_activate: true, keep_z: true, ..Opts::default() }
+    } else {
+        Opts { extra, activate: !no_activate && focus::input(env).active != i.hwnd, fit, ..Opts::default() }
+    };
+    swp(env, i.hwnd, HWND_TOP, r.left, r.top, r.width(), r.height(), flags, opts);
+    after_restore_activation(env, i, opts.activate);
 }
 
 fn normal_rect<E: Env + ?Sized>(env: &E, i: &WinInfo) -> Rect {
@@ -867,9 +1107,19 @@ pub fn set_window_pos<E: Env + ?Sized>(
         env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return false;
     };
-    swp(env, i.hwnd, after, x, y, cx, cy, flags, 0, false)
+    swp(env, i.hwnd, after, x, y, cx, cy, flags, Opts::default())
 }
 
+/// The work of `SetWindowPos` and of every `ShowWindow` command.
+///
+/// `WM_WINDOWPOSCHANGING` carries the caller's flags. A call without
+/// `SWP_NOZORDER` asks for the window's place in the z order (the top,
+/// unless `after` says otherwise). `WM_WINDOWPOSCHANGED` has the same flags,
+/// less `SWP_SHOWWINDOW` for a window that was visible, plus `SWP_NOZORDER`
+/// when the window was already where the call puts it, `SWP_NOMOVE` /
+/// `SWP_NOSIZE` likewise, and 0x800 / 0x1000 while the client area keeps
+/// its size / position; `WM_NCCALCSIZE`'s `WINDOWPOS` has those flags with
+/// both of the last two (ShowWindow.yaml `z_order`, `state_changes`).
 #[allow(clippy::too_many_arguments)]
 fn swp<E: Env + ?Sized>(
     env: &E,
@@ -880,8 +1130,7 @@ fn swp<E: Env + ?Sized>(
     cx: i32,
     cy: i32,
     flags: u32,
-    extra: u32,
-    activate: bool,
+    opts: Opts,
 ) -> bool {
     let h = u64::from(hwnd);
     let Some(i) = info(env, h) else { return false };
@@ -889,25 +1138,29 @@ fn swp<E: Env + ?Sized>(
     if flags & SWP_NOSENDCHANGING == 0 {
         send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
-    let z_raised = extra & Z_RAISED != 0;
-    let was_hidden = extra & WAS_HIDDEN != 0;
-    let extra = extra & !(Z_RAISED | WAS_HIDDEN);
+    // A maximized window is fitted to the work area after the message,
+    // which showed the size and position of WM_GETMINMAXINFO (observed:
+    // WM_WINDOWPOSCHANGING -8,-8 1936x1096, WM_WINDOWPOSCHANGED -8,16 1936x1072).
+    if let Some(r) = opts.fit
+        && (wp.x, wp.y, wp.cx, wp.cy) == (x, y, cx.max(0), cy.max(0))
+    {
+        (wp.x, wp.y, wp.cx, wp.cy) = (r.left, r.top, r.width(), r.height());
+    }
     let interactive = screen(env).interactive;
-    // Whether the window is raised: asked before the activation below brings
-    // it to the top, which is a z-order change all the same (GetActiveWindow.yaml
-    // `show_again`: no SWP_NOZORDER once another process's window was raised
-    // above it meanwhile).
-    let raised_by_call = flags & SWP_NOZORDER == 0
+    let top = !i.desktop && i.style & WS_CHILD == 0;
+    let f = wp.flags;
+    // Whether the window moves in the z order: asked before an activation
+    // below brings it to the top, which is a move all the same.
+    let zchanged = f & SWP_NOZORDER == 0
+        && !opts.keep_z
         && matches!(
             env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
             Reply::Bool { value: true }
         );
-    if flags & SWP_HIDEWINDOW != 0
-        && flags & SWP_NOACTIVATE == 0
-        && interactive
-        && i.owner != 0
-        && focus::input(env).active == hwnd
-    {
+    let styled_visible = i.style & WS_VISIBLE != 0;
+    let hide = f & SWP_HIDEWINDOW != 0 && styled_visible;
+    let was_active = top && focus::input(env).active == hwnd;
+    if hide && f & SWP_NOACTIVATE == 0 && interactive && i.owner != 0 && was_active {
         // The owner is the next window to activate: it is asked first.
         let mut o = WindowPos {
             hwnd: u64::from(i.owner),
@@ -916,70 +1169,20 @@ fn swp<E: Env + ?Sized>(
         };
         send(env, u64::from(i.owner), WM_WINDOWPOSCHANGING, 0, ptr(&mut o));
     }
-    if activate && interactive && !focus::in_background(env, i.pid) {
-        // The interactive session activates it (focus::activate), inside
-        // this SetWindowPos.
-        if i.owner != 0 {
-            let mut o = WindowPos {
-                hwnd: u64::from(i.owner),
-                flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
-                ..WindowPos::default()
-            };
-            send(env, u64::from(i.owner), WM_WINDOWPOSCHANGING, 0, ptr(&mut o));
-        }
-        focus::activate(env, hwnd, true, true);
-    } else if activate {
-        // Session 0 activates nothing: bringing it to the top only.
-        let mut a = WindowPos { hwnd: h, flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE, ..WindowPos::default() };
-        send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut a));
-    }
-    let f = wp.flags;
     let cur = i.window_rel;
     let (nx, ny) = if f & SWP_NOMOVE != 0 { (cur.left, cur.top) } else { (wp.x, wp.y) };
     let (mut ncx, mut ncy) =
         if f & SWP_NOSIZE != 0 { (cur.width(), cur.height()) } else { (wp.cx.max(0), wp.cy.max(0)) };
-    let top = !i.desktop && i.style & WS_CHILD == 0;
-    if f & SWP_NOSIZE == 0 && top && (has_caption(i.style) || i.style & WS_THICKFRAME != 0) {
-        let [ms, mp, mt, xt] = metrics::minmax(i.style, i.ex_style, &screen(env));
-        let mut mmi = MinMaxInfo {
-            reserved: CPoint::default(),
-            max_size: CPoint { x: ms.0, y: ms.1 },
-            max_position: CPoint { x: mp.0, y: mp.1 },
-            min_track: CPoint { x: mt.0, y: mt.1 },
-            max_track: CPoint { x: xt.0, y: xt.1 },
-        };
-        send(env, h, WM_GETMINMAXINFO, 0, ptr(&mut mmi));
-        if f & SWP_STATECHANGED == 0 && metrics::track_limited(i.style) {
+    if f & SWP_NOSIZE == 0 && top && metrics::track_limited(i.style) {
+        let mmi = ask_minmax(env, &i);
+        if f & SWP_STATECHANGED == 0 {
             ncx = ncx.max(mmi.min_track.x).min(mmi.max_track.x.max(mmi.min_track.x));
             ncy = ncy.max(mmi.min_track.y).min(mmi.max_track.y.max(mmi.min_track.y));
         }
     }
     let moved = (nx, ny) != (cur.left, cur.top);
     let sized = (ncx, ncy) != (cur.width(), cur.height());
-    let styled_visible = i.style & WS_VISIBLE != 0;
     let show = f & SWP_SHOWWINDOW != 0 && !styled_visible;
-    // A minimizing show of a hidden window enters the z order: it changed
-    // (GetForegroundWindow.yaml gfw_show: no SWP_NOZORDER in the result).
-    let zchanged = f & SWP_NOZORDER == 0
-        && (raised_by_call
-            || z_raised
-            || matches!(
-                env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
-                Reply::Bool { value: true }
-            )
-            || (interactive && !activate && f & SWP_STATECHANGED != 0 && (show || i.minimized)));
-    let hide = f & SWP_HIDEWINDOW != 0 && styled_visible;
-    // Hiding the active window with no owner to take the activation: it
-    // goes to a window of another process, raised above the hidden one
-    // (GetActiveWindow.yaml hide_active: WM_WINDOWPOSCHANGED 0x20001883, no
-    // SWP_NOZORDER).
-    let activation_goes_away = hide
-        && interactive
-        && f & SWP_NOACTIVATE == 0
-        && focus::input(env).active == hwnd
-        && !(i.owner != 0
-            && info(env, u64::from(i.owner))
-                .is_some_and(|o| o.visible && o.style & WS_DISABLED == 0 && o.tid == env.tid()));
     let frame = f & SWP_FRAMECHANGED != 0;
     if !(moved || sized || zchanged || show || hide || frame) {
         return true;
@@ -991,10 +1194,21 @@ fn swp<E: Env + ?Sized>(
     if !sized {
         eff |= SWP_NOSIZE;
     }
-    if !zchanged && !activation_goes_away {
+    if !zchanged {
         eff |= SWP_NOZORDER;
     }
-    let extra = if activation_goes_away { extra | 0x2000_0000 } else { extra };
+    // SWP_SHOWWINDOW is reported only when the call shows the window.
+    if styled_visible {
+        eff &= !SWP_SHOWWINDOW;
+    }
+    // The interactive desktop marks every hide (and destroy) of a
+    // top-level window that has a taskbar button: not an owned one, a tool
+    // window or a WS_EX_NOACTIVATE one (gaw_owner, GetForegroundWindow.yaml
+    // `handover_same_thread`).
+    let mut extra = opts.extra;
+    if hide && interactive && top && metrics::has_taskbar_button(i.ex_style, i.owner != 0) {
+        extra |= 0x2000_0000;
+    }
     let parent_visible =
         i.desktop || i.parent == 0 || info(env, u64::from(i.parent)).is_some_and(|p| p.visible || p.desktop);
     let vis_before = i.visible;
@@ -1011,15 +1225,15 @@ fn swp<E: Env + ?Sized>(
     let new_win = Rect::new(nx, ny, nx + ncx, ny + ncy);
     let old_client = i.client_rel;
     let new_client = if sized || frame {
-        // Minimizing: the WINDOWPOS of WM_NCCALCSIZE has neither
-        // SWP_SHOWWINDOW nor SWP_NOZORDER (observed 0x9920 for 0x8160).
-        let calc_flags = if f & SWP_STATECHANGED != 0 && i.minimized {
-            (eff | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE) & !(SWP_SHOWWINDOW | SWP_NOZORDER)
-        } else {
-            eff | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE
+        let mut calc = WindowPos {
+            hwnd: h,
+            insert_after: wp.insert_after,
+            x: nx,
+            y: ny,
+            cx: ncx,
+            cy: ncy,
+            flags: eff | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE,
         };
-        let mut calc =
-            WindowPos { hwnd: h, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: calc_flags };
         let mut params = NcCalcSizeParams {
             rgrc: [CRect::from(new_win), CRect::from(cur), CRect::from(old_client)],
             pos: &mut calc,
@@ -1036,21 +1250,45 @@ fn swp<E: Env + ?Sized>(
     let client_moved = (new_client.left, new_client.top) != (old_client.left, old_client.top);
     let client_sized = (new_client.width(), new_client.height()) != (old_client.width(), old_client.height());
     let mut changed = eff | extra;
-    // SWP_SHOWWINDOW is not reported for a window that is shown already
-    // (WS_VISIBLE; in session 0 nothing is truly visible, but the style
-    // counts: ShowWindow.yaml `minimize`, SW_MINIMIZE of a shown window
-    // reports 0x8120, SW_SHOWMINNOACTIVE of a hidden one 0x8164).
-    if f & SWP_SHOWWINDOW != 0 && ((styled_visible && !was_hidden) || (interactive && vis_before)) {
-        changed &= !SWP_SHOWWINDOW;
-    }
     if !client_sized {
         changed |= SWP_NOCLIENTSIZE;
     }
     if !client_moved {
         changed |= SWP_NOCLIENTMOVE;
     }
+    // The activation, inside the call.
+    if opts.child_activate {
+        send(env, h, WM_CHILDACTIVATE, 0, 0);
+    } else if opts.activate && top {
+        if !interactive {
+            focus::activate_local(env, hwnd, true);
+        } else {
+            // While another thread of the process has the foreground a
+            // window is shown without being activated (GetFocus.yaml
+            // gf_threads), but a WS_EX_NOACTIVATE one, which becomes the
+            // active window of its own thread (gfw_xthread: "active from
+            // its creation").
+            let behind = focus::in_background(env, i.pid);
+            let noactivate = i.ex_style & WS_EX_NOACTIVATE != 0;
+            if !behind || noactivate {
+                if i.owner != 0 {
+                    let mut o = WindowPos {
+                        hwnd: u64::from(i.owner),
+                        flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+                        ..WindowPos::default()
+                    };
+                    send(env, u64::from(i.owner), WM_WINDOWPOSCHANGING, 0, ptr(&mut o));
+                }
+                // A window being created takes the foreground from another
+                // process only if its thread may; without it the window is
+                // the active one of its thread all the same.
+                let stay_back = behind || (opts.creating && !focus::may_take_foreground(env));
+                focus::activate_as(env, hwnd, true, true, stay_back);
+            }
+        }
+    }
     env.call(Request::SetRects { hwnd, window_rel: Some(new_win), client_rel: Some(new_client) });
-    if zchanged {
+    if f & SWP_NOZORDER == 0 && !opts.keep_z {
         env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: true });
     }
     if show || hide {
@@ -1078,29 +1316,25 @@ fn swp<E: Env + ?Sized>(
         }
         if show && vis_after {
             paint::shown_paint(env, &now);
+        } else if vis_before && vis_after && f & SWP_STATECHANGED != 0 && now.minimized {
+            paint::minimized_paint(env, &now);
+        } else if vis_before && vis_after && f & SWP_STATECHANGED != 0 && wp.flags & SWP_NOCOPYBITS != 0 {
+            paint::restored_paint(env, &now);
         } else if vis_before && vis_after && sized {
             paint::resized_paint(env, hwnd, old_client, new_client);
+        } else if vis_before && vis_after && frame && !moved {
+            paint::frame_changed_paint(env, &now);
         }
-        // A top-level window moved or sized wholly off the screen has
-        // nothing to paint: its update region goes (GetUpdateRect.yaml
-        // `off_screen`; InvalidateRect still invalidates it afterwards).
         if interactive && vis_after && !child && (moved || sized) {
-            let d = screen(env);
-            let w = new_win;
-            if w.right <= 0 || w.bottom <= 0 || w.left >= d.width || w.top >= d.height {
-                paint::validate_all(env, hwnd);
-            }
+            paint::moved_paint(env, &now, cur, f & SWP_NOCOPYBITS != 0 && f & SWP_STATECHANGED == 0);
         }
     }
     let mut done = WindowPos { hwnd: h, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
     send(env, h, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
-    if hide && vis_before && interactive {
-        // Destroying a window ends the capture of a window below it before
-        // the deactivation messages (SetCapture.yaml `destroy`).
-        if focus::DESTROYING.load(core::sync::atomic::Ordering::Relaxed) == hwnd {
-            focus::release_capture_below(env, hwnd);
-        }
-        focus::after_hide(env, &i);
+    if hide && vis_before && top {
+        focus::after_hide(env, &i, was_active && f & SWP_NOACTIVATE == 0, opts.destroying);
+    } else if hide && vis_before && interactive {
+        focus::child_hidden(env, &i);
     }
     true
 }
@@ -1474,4 +1708,5 @@ mod tests;
 pub mod focus;
 pub mod input;
 pub mod paint;
+pub mod place;
 pub use paint::{PaintStruct, begin_paint, end_paint};

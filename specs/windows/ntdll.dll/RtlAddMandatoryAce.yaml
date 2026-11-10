@@ -28,7 +28,7 @@ interface:
   signature: "NTSTATUS RtlAddMandatoryAce(PACL acl, ULONG ace_revision, ULONG ace_flags, PSID label_sid, UCHAR ace_type, ACCESS_MASK mask)"
   layout: "ACL (winnt.h): 8-byte header {Revision u8, Sbz1 u8, AclSize u16, AceCount u16, Sbz2 u16}, then the ACEs one after the other; an ACE starts {AceType u8, AceFlags u8, AceSize u16}; an access ACE is that header, a 32-bit Mask and the SID (size 8 + SID length). ACL revisions 2, 3 and 4 exist (ACL_REVISION, ACL_REVISION3, ACL_REVISION_DS/4)."
   result: "NTSTATUS values are printed as 8 hex digits: STATUS_SUCCESS 0, STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_UNKNOWN_REVISION 0xC0000058, STATUS_REVISION_MISMATCH 0xC0000059, STATUS_PRIVILEGE_NOT_HELD 0xC0000061, STATUS_INVALID_ACL 0xC0000077, STATUS_INVALID_SID 0xC0000078, STATUS_INVALID_SECURITY_DESCR 0xC0000079, STATUS_NO_TOKEN 0xC000007C, STATUS_ALLOTTED_SPACE_EXCEEDED 0xC0000099, STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5, STATUS_BAD_DESCRIPTOR_FORMAT 0xC00000E7 (ntstatus.h). A BOOLEAN result is one byte, 0 or 1."
-  prototype_note: "no public Microsoft prototype is relied on: the arguments come from AddMandatoryAce (ACL, revision, flags, policy, SID) plus the ACE type; the order (SID fourth, ACE type fifth as a byte, policy sixth) was found by probing: the order of the Win32 function (SID last) returns STATUS_INVALID_SID for every ordering of flags, policy and type 0x11"
+  prototype_note: "no public Microsoft prototype is relied on: the arguments come from AddMandatoryAce (ACL, revision, flags, policy, SID) plus the ACE type; the order (SID fourth, ACE type fifth as a byte, policy sixth) was found by probing: a call in the order of the Win32 function (SID last) is judged like any other call: its integers stand in the SID and type positions and the checks of rule check_order apply to them"
 rules:
   layout: "revision 4, flags 0, S-1-16-8192, type 0x11, mask 1 in an empty revision-4 ACL of length 64 gives count 1 and the ACE 11001400 01000000 010100000000001000200000; AddMandatoryAce(4, 0, policy 1) gives identical ACL bytes; it appends after earlier ACEs and before later ones"
   mask: "masks 0..5 and 7 are stored in the mask field; 8, 0xf, 0x10, 0x100, 0xFFFFFFFF return STATUS_INVALID_PARAMETER"
@@ -37,9 +37,11 @@ rules:
   sid: "any RID works (0, 0x1000, 0x2000, 0x2100, 0x3000, 0x4000, 0x5000, 0x1234, 0xFFFFFFFF); a label SID with two sub-authorities or none also succeeds (ACE sizes 0x18 and 0x10); SIDs with authority 0, 1, 5, 15, 17 return STATUS_INVALID_PARAMETER; the same SID from CreateWellKnownSid(WinLowLabelSid), from RtlAllocateAndInitializeSid and in an 8-aligned buffer gives identical results"
   revision: "ACL revision 2, 3 or 4 all accept the ACE; the revision argument 0, 1, 2 keeps the ACL revision, 3 and 4 raise it, 5 returns STATUS_REVISION_MISMATCH"
   space: "ACL length 27: STATUS_ALLOTTED_SPACE_EXCEEDED; 28: success"
+  check_order: "with several things wrong the status is that of the first check that fails, in this order: (1) the low byte of the ACE type argument is not 0x11: STATUS_INVALID_PARAMETER; (2) the SID argument is not a valid SID (see bad_pointer and errors): STATUS_INVALID_SID; (3) the SID's authority is not 16: STATUS_INVALID_PARAMETER; (4) the revision argument is above 4, or the ACL's own revision byte is (9): STATUS_REVISION_MISMATCH; (5) mask bits outside 7 or flags outside 0x1F: STATUS_INVALID_PARAMETER; (6) the ACL is not valid (revision byte 1): STATUS_INVALID_ACL (0xC0000077); (7) no room: STATUS_ALLOTTED_SPACE_EXCEEDED. So a wrong type hides every other fault, an invalid SID hides everything but a wrong type, a non-label SID hides a wrong revision, mask, flags and a full ACL, and a wrong revision hides a wrong mask. Nothing is appended in any of these cases (the ACE count stays)"
+  bad_pointer: "the SID argument is never trusted: NULL, small integers (2, 8, 0x100, 0xFFFF) and addresses that cannot be read (reserved but uncommitted pages, a kernel address, all ones) return STATUS_INVALID_SID without a fault; a wrong type still comes first (STATUS_INVALID_PARAMETER), and a wrong mask, wrong flags, a revision argument of 5 or an ACL of 8 bytes do not change the answer"
 errors:
   parameter: "STATUS_INVALID_PARAMETER for mask, flags, type and non-label SIDs as above"
-  invalid_sid: "SID count 16, or any SID in the wrong argument position: STATUS_INVALID_SID"
+  invalid_sid: "a SID with more than 15 sub-authorities (count byte 16 or 255) or with a revision byte other than 1 (0, 2, 255), and a SID argument that is not readable memory (rule bad_pointer): STATUS_INVALID_SID; a label SID with 15 sub-authorities is accepted (ACE of 76 bytes)"
   revision: "revision argument 5: STATUS_REVISION_MISMATCH"
   no_room: "STATUS_ALLOTTED_SPACE_EXCEEDED"
 side_effects: "appends an ACE"
@@ -49,8 +51,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 3  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 5  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
   by name, each carrying its own declarations (Learn prototypes, header

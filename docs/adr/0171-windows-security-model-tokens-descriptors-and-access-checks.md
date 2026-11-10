@@ -50,8 +50,11 @@ Chromium was read, nothing was run on Windows.
   `NtSetSecurityObject` do (labels, protection flags, owner rules) and SDDL in
   both directions (the irregular error codes of the sheets: 87, 1332, 1337,
   1336, 1004, 1804, 1705; object ACEs; `NO_ACCESS_CONTROL`; the length the
-  API reports). Conditional ACEs (`XA`, `XD`, `XU`) and resource attributes are
-  refused.
+  API reports). Conditional ACEs (`XA`, `XD`, `XU`), resource attributes
+  (`RA`) and scoped policy IDs (`SP`) are stored and written back
+  (`condace`: the `artx` expression tokens and the
+  `CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1` of [MS-DTYP] 2.4.4.17 and 2.4.10.1);
+  the access check does not evaluate conditions.
 - **AccessCheck** (`access`): privileges first (`WRITE_OWNER` with
   `SeTakeOwnershipPrivilege`, `ACCESS_SYSTEM_SECURITY` with
   `SeSecurityPrivilege`, reported as used), the implicit owner rights
@@ -251,8 +254,11 @@ by the job code.
 - `TokenAccessInformation` (class 22) is a plausible 88-byte header plus the
   privileges; its exact size on Windows (1972 for the oracle token) is not
   reproduced.
-- Conditional ACEs in SDDL, `SetEntriesInAcl`, `GetNamedSecurityInfo` and the
-  `*ByType` access checks are not implemented.
+- Conditional ACEs are not evaluated by the access checks (they are kept as
+  data), and the `*ByType` access checks are not implemented.
+- `GetNamedSecurityInfoW` reads files, directories and registry keys
+  (`MACHINE`, `USERS`, `CURRENT_USER`, `CLASSES_ROOT` names, opened by their
+  NT paths); the other object types are refused.
 
 ## Consequences
 

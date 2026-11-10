@@ -145,6 +145,13 @@ pub const fn length_required(count: u8) -> u32 {
     SID_HEADER as u32 + 4 * count as u32
 }
 
+/// `RtlLengthRequiredSid`: the count is a whole 32-bit value there, and the
+/// result stops at `0xFFFFFFFF` from the count `0x3FFFFFF8` on (the spec
+/// sheet: `0x3FFFFFF7` still gives 8 + 4 * count = 4294967268).
+pub const fn length_required_native(count: u32) -> u32 {
+    if count >= 0x3FFF_FFF8 { u32::MAX } else { SID_HEADER as u32 + 4 * count }
+}
+
 /// `GetLengthSid` of the SID starting at `bytes` (its header only is
 /// trusted: Learn says the result for an invalid SID is undefined).
 pub fn length_of(header: &[u8]) -> u32 {
@@ -242,6 +249,48 @@ pub fn local_system() -> Sid {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_length_required() {
+        for (count, len) in [
+            (0u32, 8u32),
+            (1, 12),
+            (15, 68),
+            (16, 72),
+            (17, 76),
+            (63, 260),
+            (64, 264),
+            (100, 408),
+            (127, 516),
+            (128, 520),
+            (255, 1028),
+            (256, 1032),
+            (257, 1036),
+            (511, 2052),
+            (1000, 4008),
+            (65535, 262148),
+            (65536, 262152),
+            (131072, 524296),
+            (1 << 20, 4194312),
+            (1 << 24, 67108872),
+            (1 << 26, 268435464),
+            (1 << 27, 536870920),
+            (0xFFF_FFFF, 1073741828),
+            (1 << 28, 1073741832),
+            (1 << 29, 2147483656),
+            (0x3FFF_FFF7, 4294967268),
+            (0x3FFF_FFF8, u32::MAX),
+            (0x3FFF_FFFC, u32::MAX),
+            (0x3FFF_FFFF, u32::MAX),
+            (1 << 30, u32::MAX),
+            (u32::MAX, u32::MAX),
+        ] {
+            assert_eq!(length_required_native(count), len, "{count:#x}");
+        }
+        for count in 0..=255u8 {
+            assert_eq!(length_required_native(u32::from(count)), length_required(count));
+        }
+    }
 
     #[test]
     fn layout_and_lengths() {

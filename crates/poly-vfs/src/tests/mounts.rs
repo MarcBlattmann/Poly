@@ -362,7 +362,7 @@ fn mount_namespaces_are_copies_of_the_tree() {
     env.cd("/m/d").unwrap();
     let initial = env.vfs.namespace_of(&env.ctx);
     let mut ctx = env.ctx.clone();
-    let copy = env.vfs.copy_namespace(&mut ctx).unwrap();
+    let copy = env.vfs.copy_namespace(&mut ctx, false).unwrap();
     assert_ne!(copy, initial);
     assert_eq!(env.vfs.namespace_of(&ctx), copy);
     assert_eq!(env.vfs.namespace_mounts(initial).len(), 2);

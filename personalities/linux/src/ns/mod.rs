@@ -597,6 +597,10 @@ pub const NEW_NAMESPACES: u64 = CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC | CLON
 /// (clone(2) does not take the cgroup and time ones, [`NEW_NAMESPACES`]).
 pub const ALL_NAMESPACES: u64 = NEW_NAMESPACES | CLONE_NEWCGROUP | CLONE_NEWTIME;
 
+/// What copies the mount table: given the owner and whether shared mounts
+/// become slaves.
+pub type CopyMounts<'a> = dyn FnMut(&UserNsRef, bool) -> Result<Arc<MntNs>, Errno> + 'a;
+
 /// Make the namespaces `flags` asks for (already checked) for a process
 /// with namespaces `ns` and its thread's credentials `creds` (both
 /// changed in place): clone(2) for the child (`for_child`: a new pid
@@ -617,7 +621,7 @@ pub fn make(
     flags: u64,
     for_child: bool,
     initial_names: UtsNames,
-    copy_mounts: &mut dyn FnMut(&UserNsRef) -> Result<Arc<MntNs>, Errno>,
+    copy_mounts: &mut CopyMounts<'_>,
 ) -> Result<(), Errno> {
     let mut c = creds.clone();
     if flags & CLONE_NEWUSER != 0 {
@@ -668,7 +672,9 @@ pub fn make(
     }
     // Last: the kernel's copy cannot be taken back.
     if flags & CLONE_NEWNS != 0 {
-        n.mnt = Some(copy_mounts(&owner)?);
+        // A copy made with a new user namespace turns its shared mounts into
+        // slaves of the original's peer groups (mount_namespaces(7)).
+        n.mnt = Some(copy_mounts(&owner, flags & CLONE_NEWUSER != 0)?);
     }
     *ns = n;
     *creds = c;

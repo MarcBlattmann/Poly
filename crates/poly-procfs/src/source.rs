@@ -70,6 +70,12 @@ pub struct SignalSets {
 /// Facts about one process.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProcessInfo {
+    /// The process's number in every pid namespace from the one the reader
+    /// sees it from down to its own (`NSpid`), and its group's and
+    /// session's (`NSpgid`, `NSsid`); empty: just the one number.
+    pub ns_pids: Vec<u32>,
+    pub ns_pgids: Vec<u32>,
+    pub ns_sids: Vec<u32>,
     pub pid: u32,
     pub ppid: u32,
     pub pgrp: u32,
@@ -206,6 +212,21 @@ pub struct MountEntry {
     pub no_suid: bool,
     pub no_dev: bool,
     pub no_exec: bool,
+    /// The mount's extra attributes (`MOUNT_ATTR_*`): the access time mode.
+    pub attrs: u32,
+    /// The file system's own options (`size=1024k`), without `rw`/`ro`.
+    pub sb_options: Vec<u8>,
+    /// The file system as a whole is read-only.
+    pub sb_read_only: bool,
+    /// It was made so (mounted or remounted read-only, or its volume is),
+    /// as opposed to a file system that never takes changes (procfs):
+    /// `/proc/<pid>/mounts` then shows the mount as `ro`.
+    pub sb_made_read_only: bool,
+    /// Mount propagation: the peer group (0: none), the group it is a slave
+    /// of (0: none), and whether it is unbindable.
+    pub peer_group: u32,
+    pub master_group: u32,
+    pub unbindable: bool,
 }
 
 /// CPU time of the system in nanoseconds, by what it was spent on
@@ -323,6 +344,26 @@ pub trait ProcSource: Send + Sync {
     /// `/proc/self` names. `None` for kernel threads.
     fn current_pid(&self) -> Option<u32>;
 
+    /// The calling thread's id, as `/proc/thread-self` names it below its
+    /// process. The process's own id by default (its main thread).
+    fn current_tid(&self) -> Option<u32> {
+        self.current_pid()
+    }
+
+    /// `/proc/sys/kernel/ns_last_pid`: the last process or thread id handed
+    /// out in the pid namespace this procfs shows. 0 by default.
+    fn ns_last_pid(&self) -> u32 {
+        0
+    }
+
+    /// A write to `ns_last_pid` by the calling thread: a decimal number N;
+    /// the next id handed out is N + 1 (pid_namespaces(7)). The bytes taken,
+    /// or the error; `EROFS` by default.
+    fn write_ns_last_pid(&self, data: &[u8]) -> Result<usize, Errno> {
+        let _ = data;
+        Err(Errno::EROFS)
+    }
+
     /// Every process, in any order.
     fn pids(&self) -> Vec<u32>;
 
@@ -391,6 +432,15 @@ pub trait ProcSource: Send + Sync {
     fn thread_comm(&self, pid: u32, tid: u32) -> Option<Vec<u8>> {
         let _ = (pid, tid);
         None
+    }
+
+    /// Whether the reading process may follow the namespace links of
+    /// process `pid` (`/proc/<pid>/ns/<kind>`): its own user's, or anybody's
+    /// with `CAP_SYS_PTRACE` (namespaces(7): the links are governed by a
+    /// ptrace access mode check). Yes by default.
+    fn may_follow_namespaces(&self, pid: u32) -> bool {
+        let _ = pid;
+        true
     }
 
     /// Whether a namespace of kind `kind` with inode number `inum` exists.

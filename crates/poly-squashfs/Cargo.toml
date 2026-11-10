@@ -1,0 +1,15 @@
+[package]
+name = "poly-squashfs"
+description = "The squashfs 4 read-only file system from its public format description: gzip, lzma-less xz, lzo, lz4 and zstd compressed images, fragments, sparse files, xattrs, as a poly-vfs FileSystem over any byte source"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-compress.workspace = true
+poly-vfs.workspace = true
+
+[lints]
+workspace = true

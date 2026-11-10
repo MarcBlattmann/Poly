@@ -45,12 +45,46 @@ use poly_vfs::poll::{PollEntry, PollTarget};
 use poly_vfs::timerfd::{TimerClock, TimerFd, TimerSpec};
 use poly_vfs::{FileObject, PollEvents, Timeout};
 
-/// A seccomp user notification descriptor
-/// (`SECCOMP_FILTER_FLAG_NEW_LISTENER`). Poly's filters never notify
-/// (`SECCOMP_RET_USER_NOTIF` fails the call with `ENOSYS`), so it never
-/// has anything to read: it exists so the descriptor is there, named
-/// `anon_inode:seccomp notify` (ADR 0121).
-struct SeccompNotify;
+/// The kernel's side of a seccomp listener: the queue its sleepers (the
+/// stopped threads, the supervisor's `RECV`, poll(2)) wait on.
+struct SeccompQueue(Arc<poly_vfs::WaitQueue>);
+
+impl poly_personality_linux::seccomp::notify::Notifier for SeccompQueue {
+    fn changed(&self) {
+        self.0.notify(PollEvents::READABLE | PollEvents::WRITABLE | PollEvents::ALWAYS);
+    }
+
+    fn as_any(&self) -> &(dyn core::any::Any + Send + Sync) {
+        self
+    }
+}
+
+/// The wait queue of `listener` (one made by [`Thread::seccomp_listener_fd`]).
+pub(super) fn seccomp_queue(
+    listener: &poly_personality_linux::seccomp::notify::Listener,
+) -> Option<Arc<poly_vfs::WaitQueue>> {
+    listener.notifier().as_any().downcast_ref::<SeccompQueue>().map(|q| Arc::clone(&q.0))
+}
+
+/// A seccomp notification descriptor (seccomp_unotify(2)): an anonymous
+/// inode named `seccomp notify`, worked with ioctl(2). When the last
+/// descriptor is closed nobody can answer any more: the listener is closed.
+pub(super) struct SeccompNotify {
+    listener: Arc<poly_personality_linux::seccomp::notify::Listener>,
+    queue: Arc<poly_vfs::WaitQueue>,
+}
+
+impl SeccompNotify {
+    pub(super) fn listener(&self) -> Arc<poly_personality_linux::seccomp::notify::Listener> {
+        Arc::clone(&self.listener)
+    }
+}
+
+impl Drop for SeccompNotify {
+    fn drop(&mut self) {
+        self.listener.close();
+    }
+}
 
 impl FileObject for SeccompNotify {
     fn read(&self, _buf: &mut [u8]) -> poly_vfs::Result<usize> {
@@ -61,12 +95,22 @@ impl FileObject for SeccompNotify {
         Err(poly_vfs::Errno::EINVAL)
     }
 
+    /// Readable while a notification can be read, writable while one that
+    /// was read waits for its answer.
     fn poll(&self) -> PollEvents {
-        PollEvents::NONE
+        let (pending, sent) = self.listener.waiting();
+        let mut e = PollEvents::NONE;
+        if pending {
+            e = e | PollEvents::READABLE;
+        }
+        if sent {
+            e = e | PollEvents::WRITABLE;
+        }
+        e
     }
 
     fn wait_queue(&self) -> Option<&Arc<poly_vfs::WaitQueue>> {
-        None
+        Some(&self.queue)
     }
 
     fn anon_name(&self) -> Option<&'static str> {
@@ -80,9 +124,16 @@ impl Thread<'_> {
     }
 
     /// `LinuxKernel::seccomp_listener`: `O_RDWR`, close-on-exec.
-    pub(super) fn seccomp_listener_fd(&self) -> Result<i32, Errno> {
+    pub(super) fn seccomp_listener_fd(
+        &self,
+    ) -> Result<(i32, Arc<poly_personality_linux::seccomp::notify::Listener>), Errno> {
+        use poly_personality_linux::seccomp::notify::Listener;
+        let queue = Arc::new(poly_vfs::WaitQueue::new());
+        let listener = Listener::new(Arc::new(SeccompQueue(Arc::clone(&queue))));
+        let object = Arc::new(SeccompNotify { listener: Arc::clone(&listener), queue });
         let new = NewFd { nonblock: false, cloexec: true };
-        self.install_object(Arc::new(SeccompNotify), FileType::Regular, OpenFlags::RDWR, new)
+        let fd = self.install_object(object, FileType::Regular, OpenFlags::RDWR, new)?;
+        Ok((fd, listener))
     }
 
     fn file(&self, fd: Fd) -> Result<Arc<OpenFile>, Errno> {

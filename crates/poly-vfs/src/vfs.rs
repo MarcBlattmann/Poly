@@ -34,6 +34,9 @@ type Named = Option<(Location, Vec<u8>)>;
 pub struct Vfs {
     pub(crate) mounts: SpinMutex<MountTable>,
     devices: SpinMutex<BTreeMap<DeviceId, Arc<dyn CharDevice>>>,
+    /// Block devices, a number space of their own (a block device node
+    /// opens like a character device, seekable, backed by one of these).
+    block_devices: SpinMutex<BTreeMap<DeviceId, Arc<dyn CharDevice>>>,
     /// The inodes of file objects (pipes, event files, epoll sets), on a
     /// mount no path reaches (`object.rs`).
     anon: (Arc<AnonFs>, Arc<Mount>),
@@ -83,6 +86,7 @@ impl Vfs {
         Vfs {
             mounts: SpinMutex::new(table),
             devices: SpinMutex::new(BTreeMap::new()),
+            block_devices: SpinMutex::new(BTreeMap::new()),
             anon: (anon_fs, anon_mount),
             fifos: crate::fifo::Fifos::default(),
             names_changed: core::sync::atomic::AtomicU64::new(0),

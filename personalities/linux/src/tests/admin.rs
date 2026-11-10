@@ -120,7 +120,8 @@ fn mount_decodes_the_operation_from_the_flags() {
                 source: b"tmpfs".to_vec(),
                 target: b"/mnt".to_vec(),
                 fstype: b"tmpfs".to_vec(),
-                flags: MountFlags { no_suid: true, no_dev: true, ..MountFlags::default() },
+                // MS_RELATIME names the access time mode: relatime (0).
+                flags: MountFlags { no_suid: true, no_dev: true, atime: Some(0), ..MountFlags::default() },
                 data: b"mode=1777,size=1m".to_vec(),
             },
             MountRequest::Remount {
@@ -142,7 +143,7 @@ fn mount_decodes_the_operation_from_the_flags() {
     // Two propagation types at once; no type for a new mount; a bad pointer.
     let both = admin::ms::PRIVATE | admin::ms::SHARED;
     assert_eq!(sys(&mut k, nr::MOUNT, &[0, p[1], 0, both, 0]), Err(Errno::EINVAL));
-    assert_eq!(sys(&mut k, nr::MOUNT, &[p[0], p[1], 0, 0, 0]), Err(Errno::ENODEV));
+    assert_eq!(sys(&mut k, nr::MOUNT, &[p[0], p[1], 0, 0, 0]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::MOUNT, &[p[0], UNMAPPED, p[2], 0, 0]), Err(Errno::EFAULT));
     assert!(log.lock().unwrap().mounts.is_empty());
 }

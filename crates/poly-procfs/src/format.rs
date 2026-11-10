@@ -7,7 +7,7 @@ use crate::cpuflags::flag_names;
 use crate::source::{
     CpuInfo, FdInfo, KernelInfo, MapEntry, MapName, MountEntry, NANOS_PER_TICK, ProcessInfo, SystemInfo,
 };
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt::Write;
 
@@ -187,6 +187,14 @@ pub fn status(p: &ProcessInfo, maps: &[MapEntry]) -> Vec<u8> {
 /// `/proc/<pid>/task/<tid>/status`: the process's, with the thread's id in
 /// `Pid` and `NSpid` (`Tgid` stays the process's; `p.comm` is the thread's
 /// name: the caller puts it there).
+/// Numbers joined by tabs (`NSpid`): the chain, or just `one`.
+fn chain(list: &[u32], one: u32) -> String {
+    if list.is_empty() {
+        return one.to_string();
+    }
+    list.iter().map(u32::to_string).collect::<Vec<_>>().join("\t")
+}
+
 pub fn thread_status(p: &ProcessInfo, tid: u32, maps: &[MapEntry]) -> Vec<u8> {
     let v = vm_sizes(maps, p.exe.as_deref());
     let rss = p.resident_pages * PAGE;
@@ -200,13 +208,16 @@ pub fn thread_status(p: &ProcessInfo, tid: u32, maps: &[MapEntry]) -> Vec<u8> {
         o,
         "\nUmask:\t{:04o}\nState:\t{}\nTgid:\t{pid}\nNgid:\t0\nPid:\t{tid}\nPPid:\t{}\nTracerPid:\t0\n\
          Uid:\t{u0}\t{u1}\t{u2}\t{u3}\nGid:\t{g0}\t{g1}\t{g2}\t{g3}\nFDSize:\t{}\nGroups:\t\n\
-         NStgid:\t{pid}\nNSpid:\t{tid}\nNSpgid:\t{}\nNSsid:\t{}\n",
+         NStgid:\t{}\nNSpid:\t{}\nNSpgid:\t{}\nNSsid:\t{}\n",
         p.umask,
         p.state.status(),
         p.ppid,
         p.fd_slots,
-        p.pgrp,
-        p.session,
+        chain(&p.ns_pids, p.pid),
+        // A thread has its own number at the last level.
+        if tid == p.pid { chain(&p.ns_pids, tid) } else { tid.to_string() },
+        chain(&p.ns_pgids, p.pgrp),
+        chain(&p.ns_sids, p.session),
         pid = p.pid,
     );
     kb(&mut o, "VmPeak", v.size);
@@ -340,6 +351,29 @@ fn mount_options(m: &MountEntry) -> String {
             s.push_str(name);
         }
     }
+    // The access time mode (`MOUNT_ATTR_NOATIME` 0x10, `STRICTATIME` 0x20,
+    // `NODIRATIME` 0x80): relatime unless the mount says otherwise. In the
+    // order of proc_pid_mountinfo's spec sheet: noatime, nodiratime,
+    // relatime.
+    if m.attrs & 0x70 == 0x10 {
+        s.push_str(",noatime");
+    }
+    if m.attrs & 0x80 != 0 {
+        s.push_str(",nodiratime");
+    }
+    if m.attrs & 0x70 == 0 {
+        s.push_str(",relatime");
+    }
+    s
+}
+
+/// The file system's options after `rw` or `ro` (`mountinfo`'s last field).
+fn super_options(m: &MountEntry) -> String {
+    let mut s = String::from(if m.sb_read_only { "ro" } else { "rw" });
+    if !m.sb_options.is_empty() {
+        s.push(',');
+        s.push_str(&String::from_utf8_lossy(&m.sb_options));
+    }
     s
 }
 
@@ -351,7 +385,17 @@ pub fn mounts(entries: &[MountEntry]) -> Vec<u8> {
         mount_field(&mut o, &m.source);
         o.0.push(b' ');
         mount_field(&mut o, &m.mount_point);
-        let _ = writeln!(o, " {} {} 0 0", m.fstype, mount_options(m));
+        // One list for the mount and its file system: read-only when
+        // either is.
+        let mut opts = mount_options(m);
+        if m.sb_made_read_only && !m.read_only {
+            opts.replace_range(0..2, "ro");
+        }
+        if !m.sb_options.is_empty() {
+            opts.push(',');
+            opts.push_str(&String::from_utf8_lossy(&m.sb_options));
+        }
+        let _ = writeln!(o, " {} {opts} 0 0", m.fstype);
     }
     o.0
 }
@@ -366,9 +410,19 @@ pub fn mountinfo(entries: &[MountEntry]) -> Vec<u8> {
         mount_field(&mut o, &m.root);
         o.0.push(b' ');
         mount_field(&mut o, &m.mount_point);
-        let _ = write!(o, " {} - {} ", mount_options(m), m.fstype);
+        let _ = write!(o, " {}", mount_options(m));
+        if m.peer_group != 0 {
+            let _ = write!(o, " shared:{}", m.peer_group);
+        }
+        if m.master_group != 0 {
+            let _ = write!(o, " master:{}", m.master_group);
+        }
+        if m.unbindable {
+            o.0.extend_from_slice(b" unbindable");
+        }
+        let _ = write!(o, " - {} ", m.fstype);
         mount_field(&mut o, &m.source);
-        let _ = writeln!(o, " {}", if m.read_only { "ro" } else { "rw" });
+        let _ = writeln!(o, " {}", super_options(m));
     }
     o.0
 }

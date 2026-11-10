@@ -1240,12 +1240,38 @@ pub extern "system" fn MonitorFromWindow(hwnd: H, flags: u32) -> H {
     if i.desktop || i.message_only {
         return PRIMARY_MONITOR;
     }
-    let w = i.window;
-    if w.right <= w.left || w.bottom <= w.top {
-        // A window of no size (never shown): on the screen when its corner is.
-        return monitor_for(rect_on_screen([w.left, w.top, w.right, w.bottom]), flags);
-    }
+    // A minimized window is judged by its restored rectangle; a window of
+    // no size by its corner (`rect_on_screen`).
+    let w = u::place::monitor_rect(&SYS, &i);
     monitor_for(rect_on_screen([w.left, w.top, w.right, w.bottom]), flags)
+}
+
+/// `GetWindowPlacement` (Learn; MonitorFromWindow.yaml `state_rects`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetWindowPlacement(hwnd: H, wp: *mut u::place::WindowPlacement) -> i32 {
+    if wp.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let mut out = u::place::WindowPlacement::default();
+    if !u::place::get_window_placement(&SYS, hwnd as u64, &mut out) {
+        return 0;
+    }
+    // SAFETY: the caller's WINDOWPLACEMENT.
+    unsafe { wp.write_unaligned(out) };
+    1
+}
+
+/// `SetWindowPlacement` (Learn; MonitorFromWindow.yaml `state_rects`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetWindowPlacement(hwnd: H, wp: *const u::place::WindowPlacement) -> i32 {
+    if wp.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's WINDOWPLACEMENT.
+    let wp = unsafe { wp.read_unaligned() };
+    i32::from(u::place::set_window_placement(&SYS, hwnd as u64, &wp))
 }
 
 /// MONITORINFO (40 bytes) or MONITORINFOEXW (104 bytes, winuser.h).
@@ -1514,7 +1540,9 @@ pub unsafe extern "system" fn DrawTextExW(
     format: u32,
     params: *mut u32,
 ) -> i32 {
-    let (mut tab, mut left, mut right) = (0, 0, 0);
+    // Without a parameter block the call is `DrawTextW`: the tab length of
+    // `DT_TABSTOP` is in the format (a negative `tab` tells gdi32 so).
+    let (mut tab, mut left, mut right) = (-1, 0, 0);
     let mut drawn: *mut u32 = core::ptr::null_mut();
     if !params.is_null() {
         // SAFETY: the caller's DRAWTEXTPARAMS: `cbSize` first.
@@ -1523,9 +1551,7 @@ pub unsafe extern "system" fn DrawTextExW(
                 set_last_error(ERROR_INVALID_PARAMETER);
                 return 0;
             }
-            if format & DT_TABSTOP != 0 {
-                tab = *params.add(1) as i32;
-            }
+            tab = if format & DT_TABSTOP != 0 { (*params.add(1) as i32).max(0) } else { 0 };
             left = *params.add(2) as i32;
             right = *params.add(3) as i32;
             drawn = params.add(4);

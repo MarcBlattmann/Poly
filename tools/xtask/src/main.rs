@@ -53,6 +53,9 @@
 //!   ci [part...]        everything CI checks: fmt, clippy, tests, coverage; or the
 //!                       parts named (lint, host-tests, boot-tests, coverage,
 //!                       pipeline, aarch64), as CI's parallel jobs run them
+//!   ci lint --quick     fmt and clippy of only the crates with a file changed against
+//!                       origin/main, and the source checks: seconds, before a commit;
+//!                       the full `ci lint`, which CI runs, is the gate (quicklint.rs)
 //!                       QEMU runs on KVM when /dev/kvm is usable, else on TCG;
 //!                       POLY_QEMU_ACCEL=tcg|kvm|auto chooses (accel.rs);
 //!                       POLY_QEMU_CPU=<model> names QEMU's CPU model
@@ -87,8 +90,8 @@
 //!                       Chromium's root disk from pinned Debian packages (chromium.rs):
 //!                       write the lock, download and check the packages, unpack them
 //!                       (Linux), make target/poly-chromium-disk.img
-//!   chromium [--release] [--fresh-disk] [STEP...]
-//!                       boot Chromium's disk to the desktop, steps as for toolkits
+//!   chromium [--release] [--fresh-disk] [--scale=N] [STEP...]
+//!                       boot Chromium's disk to the desktop, steps as for toolkits (--scale=N: a HiDPI desktop)
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
@@ -148,6 +151,7 @@ mod ntdll;
 mod prebuilt;
 mod programs;
 mod progress;
+mod quicklint;
 mod resources;
 mod rfb;
 mod rootdisk;
@@ -2020,19 +2024,120 @@ fn test() -> Result {
     boot_tests()
 }
 
-/// Formatting, clippy and the source checks.
+/// `ci lint --quick`: only what changed against `origin/main` (quicklint.rs).
+static LINT_QUICK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Formatting, clippy and the source checks; with `--quick`, of the
+/// crates that have a file changed against `origin/main` (the full lint,
+/// which CI runs, is the gate: ADR 0174).
 fn lint() -> Result {
-    step("fmt (host)", cargo().current_dir(root()).args(["fmt", "--all", "--check"]))?;
-    step("fmt (kernel)", cargo().current_dir(kernel_dir()).args(["fmt", "--check"]))?;
-    // The three clippy runs that build apart (host and Windows xtask share
-    // `target/`, the kernel has its own, the native programs theirs) run
-    // side by side: a minute of a two-minute job.
-    let (host, kernel, native) = thread::scope(|s| {
+    if !LINT_QUICK.load(std::sync::atomic::Ordering::Relaxed) {
+        lint_units(&quicklint::Plan::everything())?;
+        return source_checks(None);
+    }
+    let changed = quicklint::changed(&root())?;
+    let plan = match quicklint::plan(&changed, &quicklint::members(&root())?) {
+        Ok(plan) => plan,
+        Err(why) => {
+            eprintln!("==> lint --quick: {why}: the full lint");
+            lint_units(&quicklint::Plan::everything())?;
+            return source_checks(None);
+        }
+    };
+    eprintln!(
+        "==> lint --quick: {} files changed against origin/main; checking {} (not what depends on them: CI runs the full lint)",
+        changed.len(),
+        plan.describe()
+    );
+    lint_units(&plan)?;
+    source_checks(Some(&changed))
+}
+
+/// rustfmt's checks of `plan`, one after the other.
+fn fmt_checks(plan: &quicklint::Plan) -> Result {
+    if plan.all_host {
+        step("fmt (host)", cargo().current_dir(root()).args(["fmt", "--all", "--check"]))?;
+    } else if !plan.packages.is_empty() {
+        let mut cmd = cargo();
+        cmd.current_dir(root()).args(["fmt", "--check"]);
+        for package in &plan.packages {
+            cmd.args(["--package", package]);
+        }
+        step("fmt (changed host packages)", &mut cmd)?;
+    }
+    if plan.kernel {
+        step("fmt (kernel)", cargo().current_dir(kernel_dir()).args(["fmt", "--check"]))?;
+    }
+    if plan.ntdll {
+        step(
+            "fmt (ntdll)",
+            cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
+        )?;
+    }
+    if plan.win32 {
+        step(
+            "fmt (win32)",
+            cargo()
+                .args(["fmt", "--all", "--check", "--manifest-path"])
+                .arg(root().join("personalities/nt/win32/Cargo.toml")),
+        )?;
+    }
+    if plan.wintrace {
+        // The Windows API tracer's DLL sources (no manifest of their own: the
+        // kit's generated workspace builds them, wintrace.rs).
+        step(
+            "fmt (wintrace)",
+            Command::new("rustfmt").args(["--check", "--edition", "2024"]).args(
+                [
+                    "tools/wintrace/polytrace/src/lib.rs",
+                    "tools/wintrace/polytrace/build.rs",
+                    "tools/wintrace/polytrace-sync/src/lib.rs",
+                    "tools/wintrace/polytrace-sync/build.rs",
+                    "tools/wintrace/polytrace-sync/src/dump.rs",
+                    "tools/wintrace/polytrace-agg/src/lib.rs",
+                    "tools/wintrace/polytrace-agg/build.rs",
+                    "tools/wintrace/proxy/common.rs",
+                    "tools/wintrace/proxy/common_agg.rs",
+                ]
+                .map(|f| root().join(f)),
+            ),
+        )?;
+    }
+    Ok(())
+}
+
+/// Formatting and clippy of the units of `plan`.
+fn lint_units(plan: &quicklint::Plan) -> Result {
+    // rustfmt (one process per workspace, a single thread each: 15 s for the
+    // host workspace) and the clippy runs that build apart (host and Windows
+    // xtask share `target/`, the kernel has its own, the native programs
+    // theirs) run side by side: the lint takes as long as the longest of them.
+    let (fmt, host, kernel, native) = thread::scope(|s| {
+        let fmt = s.spawn(|| fmt_checks(plan));
         let host = s.spawn(|| -> Result {
-            step(
-                "clippy (host)",
-                cargo().current_dir(root()).args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
-            )?;
+            if plan.all_host {
+                step(
+                    "clippy (host)",
+                    cargo().current_dir(root()).args([
+                        "clippy",
+                        "--workspace",
+                        "--all-targets",
+                        "--",
+                        "-D",
+                        "warnings",
+                    ]),
+                )?;
+            } else if !plan.packages.is_empty() {
+                let mut cmd = cargo();
+                cmd.current_dir(root()).arg("clippy");
+                for package in &plan.packages {
+                    cmd.args(["--package", package]);
+                }
+                step("clippy (changed host packages)", cmd.args(["--all-targets", "--", "-D", "warnings"]))?;
+            }
+            if !plan.xtask_windows {
+                return Ok(());
+            }
             // xtask itself on Windows, so building and booting work on a Windows
             // host too (hostfs.rs has the stand-ins for what needs Linux).
             step(
@@ -2050,46 +2155,31 @@ fn lint() -> Result {
                 ]),
             )
         });
-        let kernel = s.spawn(|| step("clippy (kernel)", kernel_cargo()?.args(["clippy", "--", "-D", "warnings"])));
+        let kernel = s.spawn(|| -> Result {
+            if !plan.kernel {
+                return Ok(());
+            }
+            step("clippy (kernel)", kernel_cargo()?.args(["clippy", "--", "-D", "warnings"]))
+        });
         // The native programs and poly-rt for the native target (ADR 0125).
-        let native = native::lint();
+        let native = if plan.native { native::lint() } else { Ok(()) };
         let join = |h: thread::ScopedJoinHandle<'_, Result>| h.join().unwrap_or_else(|_| Err("a lint panicked".into()));
-        (join(host), join(kernel), native)
+        (join(fmt), join(host), join(kernel), native)
     });
+    fmt?;
     host?;
     kernel?;
     native?;
     // The aarch64 boot stub: its own package (ADR 0154).
-    aarch64::lint()?;
-    step(
-        "fmt (ntdll)",
-        cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
-    )?;
-    step(
-        "fmt (win32)",
-        cargo()
-            .args(["fmt", "--all", "--check", "--manifest-path"])
-            .arg(root().join("personalities/nt/win32/Cargo.toml")),
-    )?;
-    // The Windows API tracer's DLL sources (no manifest of their own: the
-    // kit's generated workspace builds them, wintrace.rs).
-    step(
-        "fmt (wintrace)",
-        Command::new("rustfmt").args(["--check", "--edition", "2024"]).args(
-            [
-                "tools/wintrace/polytrace/src/lib.rs",
-                "tools/wintrace/polytrace/build.rs",
-                "tools/wintrace/polytrace-sync/src/lib.rs",
-                "tools/wintrace/polytrace-sync/build.rs",
-                "tools/wintrace/polytrace-sync/src/dump.rs",
-                "tools/wintrace/polytrace-agg/src/lib.rs",
-                "tools/wintrace/polytrace-agg/build.rs",
-                "tools/wintrace/proxy/common.rs",
-                "tools/wintrace/proxy/common_agg.rs",
-            ]
-            .map(|f| root().join(f)),
-        ),
-    )?;
+    if plan.aarch64 {
+        aarch64::lint()?;
+    }
+    Ok(())
+}
+
+/// The checks of the sources that are not rustfmt's or clippy's; the
+/// conflict markers in the `changed` files only, or in every tracked file.
+fn source_checks(changed: Option<&[String]>) -> Result {
     eprintln!("==> font tables");
     font::run(&root(), &["--check".into()])?;
     eprintln!("==> Wayland protocol modules");
@@ -2097,7 +2187,7 @@ fn lint() -> Result {
     eprintln!("==> global_asm! labels");
     asmlabels::check(&kernel_dir().join("src"))?;
     eprintln!("==> merge conflict markers");
-    conflicts::check(&root())?;
+    conflicts::check(&root(), changed)?;
     eprintln!("==> the CI workflow runs every part and boot test shard");
     check_workflow(&root().join(WORKFLOW))
 }
@@ -2278,12 +2368,15 @@ fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
 
 /// `ci [part...] [--shard I/N]`: every part of CI ([`CI_PARTS`]), or the
 /// ones named; with `--shard`, only slice I of N of the pipeline part
-/// ([`PIPELINE_SHARD`]), the slices the workflow runs in parallel.
+/// ([`PIPELINE_SHARD`]), the slices the workflow runs in parallel. `ci lint
+/// --quick` lints only what changed against `origin/main` ([`lint`]).
 fn ci(args: &[String]) -> Result {
     let mut parts: Vec<&String> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
-        if a == "--shard" {
+        if a == "--quick" {
+            LINT_QUICK.store(true, std::sync::atomic::Ordering::Relaxed);
+        } else if a == "--shard" {
             let text = it.next().ok_or("ci: --shard needs I/N")?;
             if text == "extras" {
                 PIPELINE_EXTRAS.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -2308,6 +2401,9 @@ fn ci(args: &[String]) -> Result {
         && !parts.iter().any(|a| a.as_str() == "pipeline")
     {
         return Err("ci: --shard slices the pipeline part: name it (`ci pipeline --shard 1/4`)".into());
+    }
+    if LINT_QUICK.load(std::sync::atomic::Ordering::Relaxed) && (parts.len() != 1 || parts[0] != "lint") {
+        return Err("ci: --quick is the lint's: `ci lint --quick`".into());
     }
     let started = Instant::now();
     let mut took = Vec::new();

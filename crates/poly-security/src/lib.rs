@@ -35,6 +35,7 @@ pub mod access;
 pub mod account;
 pub mod acl;
 pub mod buildsd;
+pub mod condace;
 pub mod err;
 pub mod error;
 pub mod explicit;
@@ -43,6 +44,8 @@ pub mod sd;
 pub mod sddl;
 pub mod sdops;
 pub mod sdstr;
+#[cfg(test)]
+mod sdstr_sheet;
 pub mod sid;
 pub mod status;
 pub mod token;
