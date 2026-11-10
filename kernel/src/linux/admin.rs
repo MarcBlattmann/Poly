@@ -238,9 +238,14 @@ impl Thread<'_> {
         if root_mode & 0o170000 != 0o040000 {
             return Err(Errno::EINVAL);
         }
+        // The owner of the mount is named by ids of the mounter's user
+        // namespace: one without a mapping there is EINVAL (the spec sheet
+        // of fuse_mount).
+        let mounter_ns = super::cred::current_creds().and_then(|c| c.user_ns);
+        let kernel_id = |kind, id| poly_personality_linux::ns::user::down(&mounter_ns, kind, id).ok_or(Errno::EINVAL);
         opts.root_mode = root_mode;
-        opts.user_id = user_id;
-        opts.group_id = group_id;
+        opts.user_id = kernel_id(poly_personality_linux::ns::user::IdKind::Uid, user_id)?;
+        opts.group_id = kernel_id(poly_personality_linux::ns::user::IdKind::Gid, group_id)?;
         let file = files.file(fd as i32).map_err(|_| Errno::EINVAL)?;
         let conn = file
             .device()
@@ -249,7 +254,8 @@ impl Thread<'_> {
             .map(|f| f.conn().clone())
             .ok_or(Errno::EINVAL)?;
         let cred = files.cred();
-        conn.bind(Caller { uid: cred.uid, gid: cred.gid, pid: self.process().pid }).map_err(vfs_errno)?;
+        let who = Caller { uid: cred.uid, gid: cred.gid, pid: self.process().pid, umask: 0 };
+        conn.bind(who).map_err(vfs_errno)?;
         let name = match (&subtype, fstype) {
             (Some(s), _) => {
                 let mut n = b"fuse.".to_vec();

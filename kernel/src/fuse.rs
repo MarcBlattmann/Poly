@@ -40,7 +40,7 @@ impl Env for KernelEnv {
         match crate::user::current_process() {
             Some(p) => {
                 let c = p.files.cred();
-                Caller { uid: c.uid, gid: c.gid, pid: p.pid }
+                Caller { uid: c.uid, gid: c.gid, pid: p.pid, umask: u32::from(p.files.current_umask()) }
             }
             None => Caller::default(),
         }
@@ -88,6 +88,10 @@ impl CharDevice for FuseFile {
 
     fn as_any(&self) -> Option<&(dyn Any + Send + Sync)> {
         Some(self)
+    }
+
+    fn message_size(&self) -> Option<usize> {
+        Some(poly_fuse::MAX_MESSAGE)
     }
 }
 

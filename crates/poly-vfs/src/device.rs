@@ -99,6 +99,14 @@ pub trait CharDevice: Send + Sync {
     fn as_any(&self) -> Option<&(dyn core::any::Any + Send + Sync)> {
         None
     }
+
+    /// For a device whose reads and writes are whole messages (`/dev/fuse`:
+    /// one request per read, one reply per write): the size of the largest
+    /// one, so the caller moves each in one piece. `None` (the default) for
+    /// byte streams, which may be cut anywhere.
+    fn message_size(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// `/dev/null` (1, 3).

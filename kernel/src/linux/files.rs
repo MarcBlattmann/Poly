@@ -414,10 +414,11 @@ impl LinuxFs for Thread<'_> {
         self.process().files.truncate(path, len).map_err(vfs_errno)
     }
 
-    /// `fdatasync` is `fsync`: file systems sync everything at once
-    /// (ADR 0040: there is no per-file sync).
-    fn fsync(&mut self, fd: i32, _data_only: bool) -> Result<(), Errno> {
-        self.process().files.fsync(fd).map_err(vfs_errno)
+    /// `fdatasync` is `fsync` for the file systems that sync everything at
+    /// once (ADR 0040: there is no per-file sync); a FUSE server is told
+    /// which one it is (ADR 0168).
+    fn fsync(&mut self, fd: i32, data_only: bool) -> Result<(), Errno> {
+        self.process().files.fsync_with(fd, data_only).map_err(vfs_errno)
     }
 
     fn sync(&mut self) {

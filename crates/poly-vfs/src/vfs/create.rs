@@ -48,11 +48,33 @@ impl Vfs {
         check_path(path)?;
         let start = Self::start(ctx, at);
         let mut walk = Walk::restricted(self, cred, ctx.root.loc().clone(), &start, resolve);
-        let ((loc, named), created) = if !flags.contains(OpenFlags::CREAT) {
-            (walk.resolve_named(start, path, follow)?, false)
+        let ((loc, named), created, made) = if !flags.contains(OpenFlags::CREAT) {
+            (walk.resolve_named(start, path, follow)?, false, None)
         } else {
             self.open_creat(&mut walk, ctx, start, path, flags, mode)?
         };
+        // A file the file system created and opened in one step is open
+        // already: whatever fails from here on gives its handle back.
+        let (fs, ino) = (loc.mount.sb.fs.clone(), loc.ino);
+        let opened = self.open_found(cred, loc, named, created, made, flags);
+        if let (Err(_), Some(h)) = (&opened, made) {
+            fs.close_handle(ino, h, flags, false);
+        }
+        opened
+    }
+
+    /// The rest of [`open_resolve`](Self::open_resolve), once the walk
+    /// found (or created) the file at `loc`. `made` is the handle of a file
+    /// created open ([`FileSystem::create_open`]).
+    fn open_found(
+        &self,
+        cred: &Cred,
+        loc: Location,
+        named: Option<(Location, Vec<u8>)>,
+        created: bool,
+        made: Option<u64>,
+        flags: OpenFlags,
+    ) -> Result<Arc<OpenFile>> {
         let origin = named.map(|(dir, name)| Origin {
             mount: Arc::downgrade(&dir.mount),
             dir: dir.ino,
@@ -153,13 +175,25 @@ impl Vfs {
             loc.mount.fs().prepare_write(loc.ino)?;
         }
         let node = loc.pin()?;
-        if flags.contains(OpenFlags::TRUNC) && attr.kind == FileType::Regular && !created {
+        let trunc = flags.contains(OpenFlags::TRUNC) && attr.kind == FileType::Regular && !created;
+        let how = node.mount().fs().open_truncates();
+        if trunc {
             node.clear_setid(cred)?;
-            if attr.size != 0 {
+            if how == crate::OpenTrunc::Always || (how == crate::OpenTrunc::IfNotEmpty && attr.size != 0) {
                 node.truncate_unchecked(0)?;
             }
         }
-        let mut file = OpenFile::new(node, attr.kind, backend, flags).with_origin(origin);
+        // What the file system keeps per open (a FUSE server's file handle).
+        let handle = match made {
+            Some(h) => Some(h),
+            None if matches!(backend, Backend::Inode) => {
+                let asked =
+                    if trunc && how == crate::OpenTrunc::InOpen { flags } else { flags.without(OpenFlags::TRUNC) };
+                node.mount().fs().open_handle(node.ino(), asked, attr.kind == FileType::Directory)?
+            }
+            None => None,
+        };
+        let mut file = OpenFile::new(node, attr.kind, backend, flags).with_origin(origin).with_handle(handle);
         if attr.kind == FileType::Regular && flags.writable() && !flags.contains(OpenFlags::PATH) {
             file = file.counting_text_writer();
         }
@@ -211,7 +245,7 @@ impl Vfs {
         path: &[u8],
         flags: OpenFlags,
         mode: u16,
-    ) -> Result<(Found, bool)> {
+    ) -> Result<(Found, bool, Option<u64>)> {
         let mut p = walk.parent(start, path)?;
         loop {
             let Last::Name(name) = &p.last else { return Err(Errno::EISDIR) };
@@ -229,7 +263,7 @@ impl Vfs {
                         if p.trailing_slash && kind != FileType::Directory {
                             return Err(Errno::ENOTDIR);
                         }
-                        return Ok(((loc, Some((p.dir, name.clone()))), false));
+                        return Ok(((loc, Some((p.dir, name.clone()))), false, None));
                     }
                     if flags.contains(OpenFlags::NOFOLLOW) {
                         return Err(Errno::ELOOP);
@@ -240,7 +274,7 @@ impl Vfs {
                             if p.trailing_slash && found.0.attr()?.kind != FileType::Directory {
                                 return Err(Errno::ENOTDIR);
                             }
-                            return Ok((found, false));
+                            return Ok((found, false, None));
                         }
                     };
                     if p.trailing_slash {
@@ -255,10 +289,15 @@ impl Vfs {
                     let dir_attr = self.may_change(walk.cred, &p.dir)?;
                     let (uid, gid, perm) = Self::new_owner(walk.cred, &dir_attr, mode & !ctx.umask, false);
                     let node = NewNode { kind: FileType::Regular, perm, uid, gid, rdev: DeviceId::default() };
-                    let ino = self.name_changed(p.dir.mount.sb.fs.create(p.dir.ino, name, &node))?;
+                    // A file system with state per open creates the file open.
+                    let fs = &p.dir.mount.sb.fs;
+                    let (ino, made) = self.name_changed(match fs.create_open(p.dir.ino, name, &node, flags)? {
+                        Some((ino, handle)) => Ok((ino, Some(handle))),
+                        None => fs.create(p.dir.ino, name, &node).map(|ino| (ino, None)),
+                    })?;
                     inotify::entry_event(&p.dir, name, inotify::mask::IN_CREATE, false, 0);
                     let loc = Location { mount: p.dir.mount.clone(), ino };
-                    return Ok(((loc, Some((p.dir, name.clone()))), true));
+                    return Ok(((loc, Some((p.dir, name.clone()))), true, made));
                 }
                 Err(e) => return Err(e),
             }
@@ -313,8 +352,10 @@ impl Vfs {
         if loc.mount.sb.has_text_writers(loc.ino) {
             return Err(Errno::ETXTBSY);
         }
-        let file = OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin);
-        Ok(Arc::new(file.denying_write()))
+        let node = loc.pin()?;
+        let handle = node.mount().fs().open_handle(node.ino(), OpenFlags::RDONLY, false)?;
+        let file = OpenFile::new(node, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin);
+        Ok(Arc::new(file.with_handle(handle).denying_write()))
     }
 
     /// `mkdir(2)`: `mode` is masked by the umask.

@@ -273,11 +273,12 @@ fn write_from(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> S
 pub(crate) fn write_from_how(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64, how: How) -> SysResult {
     // RLIMIT_FSIZE: the write may be cut short, or refused.
     let total = crate::sys::fsize::allowed_with(k, fd, how.at, total, how.append)?;
-    let mut chunk = bounce(total.min(CHUNK as u64) as usize)?;
+    let piece = k.io_piece(fd).max(CHUNK) as u64;
+    let mut chunk = bounce(total.min(piece) as usize)?;
     let mut cursor = Cursor::new(iovs, total);
     let mut done: u64 = 0;
     while done < total {
-        let want = (total - done).min(CHUNK as u64) as usize;
+        let want = (total - done).min(piece) as usize;
         let mut filled = 0;
         let mut fault = false;
         while filled < want {
@@ -328,7 +329,8 @@ fn read_into(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> Sy
 
 /// [`read_into`] for a transfer `how` (`total` not zero).
 pub(crate) fn read_into_how(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64, how: How) -> SysResult {
-    let mut buf = bounce(total.min(CHUNK as u64) as usize)?;
+    let piece = k.io_piece(fd).max(CHUNK) as u64;
+    let mut buf = bounce(total.min(piece) as usize)?;
     let mut cursor = Cursor::new(iovs, total);
     let mut done: u64 = 0;
     // Files whose reads never wait (regular files, the memory devices)

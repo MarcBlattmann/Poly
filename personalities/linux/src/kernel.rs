@@ -519,6 +519,15 @@ pub trait LinuxKernel {
     /// not open for writing), `EPIPE`, `ENOSPC`, `EAGAIN`, `EINVAL`, ...
     fn write(&mut self, fd: i32, buf: &[u8]) -> Result<usize, Errno>;
 
+    /// The most bytes read(2) and write(2) move to or from `fd` in one
+    /// piece: [`CHUNK`](crate::sys::io::CHUNK) for byte streams, more for a
+    /// file whose reads and writes are whole messages that must not be cut
+    /// (`/dev/fuse`: a request, a reply).
+    fn io_piece(&mut self, fd: i32) -> usize {
+        let _ = fd;
+        crate::sys::io::CHUNK
+    }
+
     /// Read up to `buf.len()` bytes from `fd`. Returns the bytes read; 0 at
     /// end of file. Errors: `EBADF`, `EISDIR`, `EAGAIN`, `EINVAL`, ...
     fn read(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno>;
