@@ -37,6 +37,17 @@ summary: >
   are written as the octal escapes \040, \011, \012 and \134; '#' in the source
   as \043; other characters (including '#' in a path, quotes, non-ASCII bytes)
   as they are. Superblock options are not escaped.
+  The source field has its own set, one character larger than the paths':
+  every '#' of the source string becomes \043, wherever it stands (source
+  "dev#1" -> dev\0431, "#tag" -> \043tag, "tag#" -> tag\043, "#" -> \043,
+  "a##b" -> a\043\043b, "# a<tab>b" -> \043\040a\011b), in mountinfo and
+  in /proc/self/mounts alike, while the mount point and the root field
+  keep '#' ("dir#1", "#x#", root "/sub#dir/in\040ner"). Escaping is not
+  skipped for text that already looks like an escape: a backslash is
+  always \134, so a directory named with the four characters \040 shows
+  as \134040 and a source "s\043t" as s\134043t. '%' and ':' are plain. A
+  bind mount shows the source string of the mount it was made from,
+  escaped the same way.
   Relations: the parent id of a mount is the id of the mount it was made on
   (a mount on a directory of another mount has that mount as parent; a mount
   made on top of another at the same mount point has the covered mount as
@@ -74,7 +85,7 @@ timing:
   typical: "microseconds per read"
   guarantees: none
 tests:
-  visible: 4
+  visible: 5
   held_out: 2
 # Notes: proc(5) documents the format (public). Mount ids, parent ids, peer
 # group numbers and device numbers vary and are never printed or compared as

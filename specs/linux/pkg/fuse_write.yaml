@@ -29,7 +29,15 @@ summary: >
   new name NUL, node = the old parent; renameat2 with RENAME_EXCHANGE:
   FUSE_RENAME2 (45) {u64 newdir, u32 flags 2, u32 padding} + the names;
   RENAME_NOREPLACE onto an existing name is EEXIST decided by the kernel
-  from its lookup, no request; plain rename over an existing name replaces
+  from its lookup, no request; RENAME_NOREPLACE onto a free name sends
+  FUSE_RENAME2 with flags 1 (RENAME_NOREPLACE), newdir = the new parent's
+  node and both names, and no FUSE_RENAME; renameat2 with flags 0 sends
+  FUSE_RENAME like rename. Every renameat2 with a non-zero flag goes out
+  as RENAME2 with that flag. A server that answers RENAME2 with ENOSYS
+  makes that call EINVAL, and the kernel remembers it for the connection:
+  later renameat2 calls with a flag (NOREPLACE, EXCHANGE) are EINVAL
+  without a request, while renames without flags still send FUSE_RENAME.
+  Plain rename over an existing name replaces
   it (the node of the source answers at the new name, the same st_ino).
   A name that was removed or renamed away is ENOENT afterwards (the kernel
   asks LOOKUP again and the server answers ENOENT). After a create, link
@@ -46,9 +54,19 @@ summary: >
   ones changed; chown(path, -1, g) sets only GID); truncate(path) and
   ftruncate FATTR_SIZE (8) and the new size (ftruncate adds FATTR_FH (64)
   and the fh of the open file, and the kernel may add FATTR_LOCKOWNER
-  (512)); utimensat FATTR_ATIME (16) and/or FATTR_MTIME (32) with seconds
-  (and nanoseconds), UTIME_NOW as FATTR_ATIME_NOW (128) (FATTR_MTIME_NOW
-  256 for the mtime), UTIME_OMIT leaves the field out. The reply's
+  (512)); utimensat sends one SETATTR: an explicit time sets FATTR_ATIME
+  (16) and/or FATTR_MTIME (32) with the seconds and nanoseconds given
+  (both explicit: valid 48). A time given as UTIME_NOW sets the plain bit
+  and the NOW bit together, FATTR_ATIME | FATTR_ATIME_NOW (144) for the
+  access time and FATTR_MTIME | FATTR_MTIME_NOW (32 + 256 = 288) for the
+  modification time, and the request carries the kernel's current time
+  (seconds and nanoseconds) in that time's fields; a NULL times pointer is
+  both as UTIME_NOW (valid 432); the kinds mix per time (explicit atime
+  with UTIME_NOW mtime: 304; UTIME_NOW atime with explicit mtime: 176).
+  UTIME_OMIT leaves that time's bits out and its fields 0; both omitted
+  sends no request and the call is 0. No other bit is set by utimensat
+  (no FATTR_CTIME, the ctime field is 0), also not FATTR_FH when the file
+  is named by an open descriptor (futimens). The reply's
   attributes become the file's: the next stat shows the new mode, uid, gid,
   size and mtime. The server's error is the call's error (EPERM, EROFS,
   EIO) and the file is unchanged. open(O_TRUNC) of an existing file: when
@@ -79,6 +97,7 @@ returns:
 errors:
   server_errors: "the server's negative errno is the call's errno for CREATE, MKDIR, MKNOD, SYMLINK, LINK, UNLINK, RMDIR, RENAME, SETATTR, WRITE, OPEN"
   eexist: "EEXIST (17): creating an existing name with O_EXCL, mkdir or link onto an existing name (kernel, no request); noreplace rename onto an existing name"
+  rename2_enosys: "EINVAL (22): renameat2 with a flag when the server answers (or once answered) FUSE_RENAME2 with ENOSYS"
   enoent: "ENOENT (2): rename or unlink of a name that does not exist (from the lookup)"
   enotempty: "ENOTEMPTY (39): rmdir of a directory the server says is not empty (server's answer)"
   enotdir_eisdir: "ENOTDIR (20): rmdir of a file; EISDIR (21): unlink of a directory (both decided by the kernel from the attributes)"
@@ -96,7 +115,7 @@ timing:
   typical: "microseconds to a few hundred microseconds per request round trip"
   guarantees: "none"
 tests:
-  visible: 3  # count in <symbol>.tests/
+  visible: 4  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 # Notes: same setup and helper (tests/linux/include/p_fuse.h) as fuse_mount.
 # The served tree is described at the top of that header. The tests
