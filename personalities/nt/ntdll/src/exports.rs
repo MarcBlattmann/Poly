@@ -493,9 +493,14 @@ pub unsafe extern "C" fn RtlCompareMemory(a: *const u8, b: *const u8, len: usize
 
 // ----- the loader -----------------------------------------------------------
 
-/// `LDR_LOCK_LOADER_LOCK` disposition: the loader lock critical section is
-/// kept in ntdll's own data.
+/// The loader lock: the critical section `PEB.LoaderLock` (PEB+0x110) points to, taken by
+/// `LdrLockLoaderLock` and held around every `DllMain` and TLS callback. It is kept in
+/// ntdll's own data, as programs that read it through the PEB expect
+/// (spec-chrome-elf-null).
 pub(crate) static LOADER_LOCK: CriticalSection = CriticalSection::new();
+/// Its `RTL_CRITICAL_SECTION_DEBUG` (`DebugInfo` is non-NULL for the loader lock).
+pub(crate) static LOADER_LOCK_DEBUG: poly_rtl::critsec::CriticalSectionDebug =
+    poly_rtl::critsec::CriticalSectionDebug::new();
 
 fn to_wide(s: *const UnicodeString) -> alloc::vec::Vec<u16> {
     if s.is_null() {

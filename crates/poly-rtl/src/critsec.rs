@@ -30,6 +30,10 @@ use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 /// `SpinCount`.
 pub const FLAG_BITS: u64 = 0xFF00_0000;
 
+/// `RTL_CRITICAL_SECTION_FLAG_STATIC_INIT` (`winnt.h`): the section was not made by
+/// `RtlInitializeCriticalSection` but is part of an image's data (the loader lock is one).
+pub const FLAG_STATIC_INIT: u64 = 0x0400_0000;
+
 /// `LockCount` of a free section.
 pub const FREE: i32 = -1;
 /// `LockCount` of a section its owner holds once, with no waiter.
@@ -63,6 +67,48 @@ pub struct CriticalSection {
     pub spin_count: AtomicU64,
 }
 
+/// `RTL_CRITICAL_SECTION_DEBUG` (`winnt.h`; 48 bytes on x64): what `DebugInfo` points to.
+/// Poly keeps one only for sections that programs expect to have it (the loader lock, whose
+/// `DebugInfo` is non-NULL in a Windows process, spec-chrome-elf-null item 4).
+#[repr(C)]
+#[derive(Debug)]
+pub struct CriticalSectionDebug {
+    /// `Type`: `RTL_CRITSECT_TYPE` (0).
+    pub kind: u16,
+    pub creator_back_trace_index: u16,
+    /// `CriticalSection`: back to the section.
+    pub critical_section: AtomicU64,
+    /// `ProcessLocksList` (`LIST_ENTRY`: `Flink`, `Blink`); an empty list points at itself.
+    pub process_locks_list: [AtomicU64; 2],
+    pub entry_count: u32,
+    pub contention_count: u32,
+    pub flags: u32,
+    pub creator_back_trace_index_high: u16,
+    pub identifier: u16,
+}
+
+impl Default for CriticalSectionDebug {
+    fn default() -> Self {
+        CriticalSectionDebug::new()
+    }
+}
+
+impl CriticalSectionDebug {
+    pub const fn new() -> CriticalSectionDebug {
+        CriticalSectionDebug {
+            kind: 0,
+            creator_back_trace_index: 0,
+            critical_section: AtomicU64::new(0),
+            process_locks_list: [AtomicU64::new(0), AtomicU64::new(0)],
+            entry_count: 0,
+            contention_count: 0,
+            flags: 0,
+            creator_back_trace_index_high: 0,
+            identifier: 0,
+        }
+    }
+}
+
 impl Default for CriticalSection {
     fn default() -> Self {
         CriticalSection::new()
@@ -91,6 +137,19 @@ impl CriticalSection {
         self.owning_thread.store(0, Ordering::Relaxed);
         self.lock_semaphore.store(0, Ordering::Relaxed);
         self.spin_count.store(spin_count & (FLAG_BITS | 0x00FF_FFFF), Ordering::Release);
+    }
+
+    /// Mark a section that lives in an image's data as statically initialised and give it
+    /// its debug record: `DebugInfo` points to `debug`, `debug` points back, its list is
+    /// empty, and `SpinCount` gets `RTL_CRITICAL_SECTION_FLAG_STATIC_INIT`. The lock state
+    /// is not touched. Both must stay where they are (statics).
+    pub fn make_static(&self, debug: &CriticalSectionDebug) {
+        let list = (&raw const debug.process_locks_list) as u64;
+        debug.critical_section.store(self as *const CriticalSection as u64, Ordering::Relaxed);
+        debug.process_locks_list[0].store(list, Ordering::Relaxed);
+        debug.process_locks_list[1].store(list, Ordering::Relaxed);
+        self.debug_info.store(debug as *const CriticalSectionDebug as u64, Ordering::Relaxed);
+        self.spin_count.fetch_or(FLAG_STATIC_INIT, Ordering::Release);
     }
 
     fn spins(&self) -> u64 {
@@ -294,6 +353,34 @@ mod tests {
         assert_eq!(at(&cs), (-2, 1, h.current_thread()));
         cs.leave(&h);
         assert_eq!(at(&cs), (-1, 0, 0));
+    }
+
+    /// `winnt.h`'s `RTL_CRITICAL_SECTION_DEBUG` on x64, and what a static section shows
+    /// (spec-chrome-elf-null item 4: `DebugInfo` non-NULL, `SpinCount` 0x4000000).
+    #[test]
+    fn a_static_section_has_a_debug_record_and_the_static_flag() {
+        assert_eq!(core::mem::size_of::<CriticalSectionDebug>(), 48);
+        assert_eq!(core::mem::offset_of!(CriticalSectionDebug, critical_section), 0x08);
+        assert_eq!(core::mem::offset_of!(CriticalSectionDebug, process_locks_list), 0x10);
+        assert_eq!(core::mem::offset_of!(CriticalSectionDebug, entry_count), 0x20);
+        assert_eq!(core::mem::offset_of!(CriticalSectionDebug, identifier), 0x2E);
+        let h = Host::default();
+        let cs = CriticalSection::new();
+        let debug = CriticalSectionDebug::new();
+        cs.make_static(&debug);
+        assert_eq!(cs.debug_info.load(Ordering::Relaxed), &raw const debug as u64);
+        assert_eq!(debug.critical_section.load(Ordering::Relaxed), &raw const cs as u64);
+        let list = &raw const debug.process_locks_list as u64;
+        assert_eq!(debug.process_locks_list[0].load(Ordering::Relaxed), list);
+        assert_eq!(debug.process_locks_list[1].load(Ordering::Relaxed), list);
+        assert_eq!(cs.spin_count.load(Ordering::Relaxed), 0x0400_0000);
+        // The flag is not a spin count, and the section still works and stays free.
+        assert_eq!(cs.spins(), 0);
+        assert_eq!(cs.lock_count.load(Ordering::Relaxed), FREE);
+        cs.enter(&h);
+        assert_eq!(cs.lock_count.load(Ordering::Relaxed), HELD);
+        cs.leave(&h);
+        assert!(!cs.is_locked());
     }
 
     #[test]

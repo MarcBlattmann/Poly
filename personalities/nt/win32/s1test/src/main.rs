@@ -669,6 +669,12 @@ unsafe fn loader_lock() {
     check_got(fields() == (-2, 1, tid, 0), 0);
     check_eq(LdrUnlockLoaderLock(0, cookie) as usize, 0);
     check_got(fields() == (-1, 0, 0, 0), 0);
+    // A statically initialised section with a debug record (`winnt.h`:
+    // RTL_CRITICAL_SECTION_FLAG_STATIC_INIT in SpinCount; DebugInfo points back to it).
+    let debug = *(lock as *const *const u8);
+    check_got(!debug.is_null(), 0);
+    check_eq(*(debug.add(0x08) as *const usize), lock as usize);
+    check_eq(*(lock.add(0x20) as *const usize), 0x0400_0000);
     // The field does not move for the life of the process.
     check_eq(*(peb.add(0x110) as *const usize), lock as usize);
 }
