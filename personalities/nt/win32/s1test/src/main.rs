@@ -43,6 +43,9 @@ unsafe extern "system" {
     fn GetCurrentProcessId() -> u32;
     fn GetCurrentProcess() -> isize;
     fn GetTickCount64() -> u64;
+    fn CreateEventW(security: *mut u8, manual_reset: i32, initial_state: i32, name: *const u16) -> isize;
+    fn WaitForSingleObject(handle: isize, milliseconds: u32) -> u32;
+    fn CloseHandle(handle: isize) -> i32;
     fn GetThreadPreferredUILanguages(flags: u32, count: *mut u32, buf: *mut u16, cch: *mut u32) -> i32;
     fn LocalFree(block: *mut u8) -> *mut u8;
     fn GetModuleFileNameW(module: *mut u8, buf: *mut u16, size: u32) -> u32;
@@ -97,6 +100,12 @@ struct ObjectAttributes {
 unsafe extern "system" {
     fn CommandLineToArgvW(cmd_line: *const u16, num_args: *mut i32) -> *mut *mut u16;
     fn SHGetFolderPathW(hwnd: *mut u8, folder: i32, token: *mut u8, flags: u32, path: *mut u16) -> u32;
+}
+
+#[link(name = "userenv", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn RegisterGPNotification(event: isize, machine: i32) -> i32;
+    fn UnregisterGPNotification(event: isize) -> i32;
 }
 
 #[link(name = "winmm", kind = "raw-dylib")]
@@ -829,6 +838,21 @@ unsafe fn ui_languages() {
     check_eq(GetLastError() as usize, 87);
 }
 
+/// userenv's policy notifications (Learn: `RegisterGPNotification`), which Chrome's policy
+/// loader delay-loads (the export has to exist): registering an event succeeds for the user
+/// and the machine, the event is not set (policy does not change on Poly), and it unregisters.
+unsafe fn gp_notification() {
+    let event = CreateEventW(core::ptr::null_mut(), 1, 0, core::ptr::null());
+    check_got(event != 0, 0);
+    check_eq(RegisterGPNotification(event, 0) as usize, 1);
+    check_eq(RegisterGPNotification(event, 1) as usize, 1);
+    check_eq(WaitForSingleObject(event, 0) as usize, 258); // WAIT_TIMEOUT
+    check_eq(UnregisterGPNotification(event) as usize, 1);
+    check_eq(RegisterGPNotification(0, 0) as usize, 0);
+    check_eq(GetLastError() as usize, 87);
+    check_eq(CloseHandle(event) as usize, 1);
+}
+
 /// winmm's timer functions (Learn: `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`): the
 /// time is milliseconds since the system started (non-zero after boot, not going back; the
 /// same clock as `GetTickCount`), and a 1 ms period request is granted and ended.
@@ -928,6 +952,7 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         current_user_key();
         shell32();
         ui_languages();
+        gp_notification();
         winmm();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));
