@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "8a396a60cdf0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T18:09:27Z",
+  "tests": [
+    {
+      "name": "afr_add",
+      "exe_sha256": "c17b1b800f8bb475925cffed33ac2e6fdaa26c7f7eb1e5d7d46668f54a4fe7a8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgbm90IGF2YWlsYWJsZSBiZWZvcmUgYWRkaW5nCkFkZEZvbnRSZXNvdXJjZUV4VyhGUl9QUklWQVRFKSByZXR1cm5lZCAxIGVycm9yIDAKb2sgb25lIGZvbnQgYWRkZWQKb2sgYXZhaWxhYmxlIGFmdGVyIGFkZGluZwpmaXJzdDogUmVtb3ZlRm9udFJlc291cmNlRXhXKEZSX1BSSVZBVEUpIHJldHVybmVkIDEgZXJyb3IgMApvayByZW1vdmUgc3VjY2VlZHMKb2sgZ29uZSBhZnRlciByZW1vdmluZwpzZWNvbmQ6IFJlbW92ZUZvbnRSZXNvdXJjZUV4VyhGUl9QUklWQVRFKSByZXR1cm5lZCAwIGVycm9yIDAKb2sgYSBzZWNvbmQgcmVtb3ZlIGZhaWxzCm9rIGFkZGVkIGFnYWluCmF2YWlsYWJsZSBhZnRlciB0aGUgZmlsZSB3YXMgZGVsZXRlZDogdHJ1ZQpmaWxlIGdvbmU6IFJlbW92ZUZvbnRSZXNvdXJjZUV4VyhGUl9QUklWQVRFKSByZXR1cm5lZCAwIGVycm9yIDIKYXZhaWxhYmxlIGFmdGVyIHRoZSBmYWlsZWQgcmVtb3ZlOiB0cnVlCmZpbGUgYmFjazogUmVtb3ZlRm9udFJlc291cmNlRXhXKEZSX1BSSVZBVEUpIHJldHVybmVkIDEgZXJyb3IgMApyZW1vdmUgd2l0aCB0aGUgZmlsZSBkZWxldGVkIHJldHVybmVkIDA7IHdpdGggdGhlIGZpbGUgYmFjayAxCm9rIGdvbmUgYWZ0ZXIgdGhlIGZpbmFsIHJlbW92ZQptaXNzaW5nIGZpbGU6IEFkZEZvbnRSZXNvdXJjZUV4VyByZXR1cm5lZCAwIGVycm9yIDIKb2sgYSBtaXNzaW5nIGZpbGUgYWRkcyBubyBmb250CnN1bW1hcnkgOSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok not available before adding\nAddFontResourceExW(FR_PRIVATE) returned 1 error 0\nok one font added\nok available after adding\nfirst: RemoveFontResourceExW(FR_PRIVATE) returned 1 error 0\nok remove succeeds\nok gone after removing\nsecond: RemoveFontResourceExW(FR_PRIVATE) returned 0 error 0\nok a second remove fails\nok added again\navailable after the file was deleted: true\nfile gone: RemoveFontResourceExW(FR_PRIVATE) returned 0 error 2\navailable after the failed remove: true\nfile back: RemoveFontResourceExW(FR_PRIVATE) returned 1 error 0\nremove with the file deleted returned 0; with the file back 1\nok gone after the final remove\nmissing file: AddFontResourceExW returned 0 error 2\nok a missing file adds no font\nsummary 9 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

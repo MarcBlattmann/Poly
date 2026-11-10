@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "8a396a60cdf0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T18:09:27Z",
+  "tests": [
+    {
+      "name": "enum_notenum",
+      "exe_sha256": "e0b9bfdc84d729c8e2813a75482bcbbc16116ded8e0f08286f848028e2956835",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlIGFkZGluZzogU2FucyBsaXN0ZWQgMCwgVGFsbCBsaXN0ZWQgMApvayBuZWl0aGVyIGZhbWlseSBpcyBsaXN0ZWQgYmVmb3JlIGFkZGluZwpTYW5zIGFkZGVkIGZyb20gbWVtb3J5OiBTYW5zIGxpc3RlZCAwIHRpbWVzLCB1c2FibGUgdHJ1ZQpvayBhIG1lbW9yeSBmb250IGlzIHVzYWJsZSBieSBuYW1lClRhbGwgYWRkZWQgZnJvbSBhIGZpbGUgd2l0aCBGUl9QUklWQVRFfEZSX05PVF9FTlVNIChyZXR1cm5lZCAxKTogVGFsbCBsaXN0ZWQgMCB0aW1lcywgdXNhYmxlIHRydWUKb2sgYW4gRlJfTk9UX0VOVU0gZm9udCBpcyB1c2FibGUKb2sgYW4gRlJfTk9UX0VOVU0gZm9udCBpcyBub3QgbGlzdGVkCnJlbW92ZSB0aGUgTk9UX0VOVU0gZm9udDogMTsgdXNhYmxlIGFmdGVyd2FyZHMgZmFsc2UKVGFsbCBhZGRlZCB3aXRoIEZSX1BSSVZBVEUgb25seSAocmV0dXJuZWQgMSk6IFRhbGwgbGlzdGVkIDEgdGltZXMKb2sgYW4gRlJfUFJJVkFURSBmaWxlIGZvbnQgaXMgbGlzdGVkCmFmdGVyIHJlbW92aW5nIGV2ZXJ5dGhpbmc6IFNhbnMgbGlzdGVkIDAsIFRhbGwgbGlzdGVkIDAKb2sgbm90aGluZyBpcyBsaXN0ZWQgYWZ0ZXIgcmVtb3ZpbmcKc3VtbWFyeSA2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before adding: Sans listed 0, Tall listed 0\nok neither family is listed before adding\nSans added from memory: Sans listed 0 times, usable true\nok a memory font is usable by name\nTall added from a file with FR_PRIVATE|FR_NOT_ENUM (returned 1): Tall listed 0 times, usable true\nok an FR_NOT_ENUM font is usable\nok an FR_NOT_ENUM font is not listed\nremove the NOT_ENUM font: 1; usable afterwards false\nTall added with FR_PRIVATE only (returned 1): Tall listed 1 times\nok an FR_PRIVATE file font is listed\nafter removing everything: Sans listed 0, Tall listed 0\nok nothing is listed after removing\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "enum_private",
+      "exe_sha256": "d204476a42c3b9a102fa2d3a638e18af5c036617da751be0199a271efbc58657",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UG9seVRlc3QgU2FucywgREVGQVVMVF9DSEFSU0VUOiBFbnVtRm9udEZhbWlsaWVzRXhXIHJldHVybmVkIDEsIGNhbGxiYWNrIGNhbGxlZCAzIHRpbWVzCiAgWzBdIGZhY2UgJ1BvbHlUZXN0IFNhbnMnIGZ1bGwgJ1BvbHlUZXN0IFNhbnMnIHN0eWxlICdSZWd1bGFyJyBzY3JpcHQgJ1dlc3Rlcm4nIHR5cGUgNCB3ZWlnaHQgNDAwIGl0YWxpYyAwIGNoYXJzZXQgMCBwaXRjaGZhbSAweDAyCiAgWzFdIGZhY2UgJ1BvbHlUZXN0IFNhbnMnIGZ1bGwgJ1BvbHlUZXN0IFNhbnMgQm9sZCcgc3R5bGUgJ0JvbGQnIHNjcmlwdCAnV2VzdGVybicgdHlwZSA0IHdlaWdodCA3MDAgaXRhbGljIDAgY2hhcnNldCAwIHBpdGNoZmFtIDB4MDIKICBbMl0gZmFjZSAnUG9seVRlc3QgU2FucycgZnVsbCAnUG9seVRlc3QgU2FucyBJdGFsaWMnIHN0eWxlICdJdGFsaWMnIHNjcmlwdCAnV2VzdGVybicgdHlwZSA0IHdlaWdodCA0MDAgaXRhbGljIDI1NSBjaGFyc2V0IDAgcGl0Y2hmYW0gMHgwMgpvayBQb2x5VGVzdCBTYW5zIGhhcyB0aHJlZSBmYWNlcwpQb2x5VGVzdCBUYWxsLCBERUZBVUxUX0NIQVJTRVQ6IEVudW1Gb250RmFtaWxpZXNFeFcgcmV0dXJuZWQgMSwgY2FsbGJhY2sgY2FsbGVkIDEgdGltZXMKICBbMF0gZmFjZSAnUG9seVRlc3QgVGFsbCcgZnVsbCAnUG9seVRlc3QgVGFsbCcgc3R5bGUgJ1JlZ3VsYXInIHNjcmlwdCAnV2VzdGVybicgdHlwZSA0IHdlaWdodCA0MDAgaXRhbGljIDAgY2hhcnNldCAwIHBpdGNoZmFtIDB4MDIKb2sgUG9seVRlc3QgVGFsbCBoYXMgb25lIGZhY2UKUG9seVRlc3QgTW9ubywgQU5TSV9DSEFSU0VUOiBFbnVtRm9udEZhbWlsaWVzRXhXIHJldHVybmVkIDEsIGNhbGxiYWNrIGNhbGxlZCAxIHRpbWVzCiAgWzBdIGZhY2UgJ1BvbHlUZXN0IE1vbm8nIGZ1bGwgJ1BvbHlUZXN0IE1vbm8nIHN0eWxlICdSZWd1bGFyJyBzY3JpcHQgJ1dlc3Rlcm4nIHR5cGUgNCB3ZWlnaHQgNDAwIGl0YWxpYyAwIGNoYXJzZXQgMCBwaXRjaGZhbSAweDMxClBvbHlUZXN0IE1vbm8sIFNZTUJPTF9DSEFSU0VUOiBFbnVtRm9udEZhbWlsaWVzRXhXIHJldHVybmVkIDEsIGNhbGxiYWNrIGNhbGxlZCAwIHRpbWVzCmxvd2VyIGNhc2UgbmFtZTogRW51bUZvbnRGYW1pbGllc0V4VyByZXR1cm5lZCAxLCBjYWxsYmFjayBjYWxsZWQgMSB0aW1lcwogIFswXSBmYWNlICdQb2x5VGVzdCBUYWxsJyBmdWxsICdQb2x5VGVzdCBUYWxsJyBzdHlsZSAnUmVndWxhcicgc2NyaXB0ICdXZXN0ZXJuJyB0eXBlIDQgd2VpZ2h0IDQwMCBpdGFsaWMgMCBjaGFyc2V0IDAgcGl0Y2hmYW0gMHgwMgpwcmVmaXggb2YgYSBuYW1lOiBFbnVtRm9udEZhbWlsaWVzRXhXIHJldHVybmVkIDEsIGNhbGxiYWNrIGNhbGxlZCAwIHRpbWVzCm5vIHN1Y2ggZmFtaWx5OiBFbnVtRm9udEZhbWlsaWVzRXhXIHJldHVybmVkIDEsIGNhbGxiYWNrIGNhbGxlZCAwIHRpbWVzCm9rIGFuIHVua25vd24gZmFtaWx5IGlzIG5ldmVyIGNhbGxlZCBiYWNrCnN0b3AgYWZ0ZXIgdGhlIGZpcnN0IGNhbGw6IEVudW1Gb250RmFtaWxpZXNFeFcgcmV0dXJuZWQgMCwgY2FsbGJhY2sgY2FsbGVkIDEgdGltZXMKICBbMF0gZmFjZSAnUG9seVRlc3QgU2FucycgZnVsbCAnUG9seVRlc3QgU2Fucycgc3R5bGUgJ1JlZ3VsYXInIHNjcmlwdCAnV2VzdGVybicgdHlwZSA0IHdlaWdodCA0MDAgaXRhbGljIDAgY2hhcnNldCAwIHBpdGNoZmFtIDB4MDIKb2sgcmV0dXJuaW5nIDAgc3RvcHMgdGhlIGVudW1lcmF0aW9uCmFsbCBmYW1pbGllcyAoZW1wdHkgbmFtZSk6IHJldHVybmVkIDEsIG1vcmUgdGhhbiAzIGNhbGxiYWNrczogdHJ1ZSwgUG9seVRlc3QgZmFtaWxpZXMgZm91bmQgW3RydWUsIHRydWUsIHRydWVdCm9rIHRoZSB0aHJlZSBwcml2YXRlIGZhbWlsaWVzIGFyZSBhbW9uZyB0aGUgZmFtaWxpZXMgbGlzdGVkCnN1bW1hcnkgNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "PolyTest Sans, DEFAULT_CHARSET: EnumFontFamiliesExW returned 1, callback called 3 times\n  [0] face 'PolyTest Sans' full 'PolyTest Sans' style 'Regular' script 'Western' type 4 weight 400 italic 0 charset 0 pitchfam 0x02\n  [1] face 'PolyTest Sans' full 'PolyTest Sans Bold' style 'Bold' script 'Western' type 4 weight 700 italic 0 charset 0 pitchfam 0x02\n  [2] face 'PolyTest Sans' full 'PolyTest Sans Italic' style 'Italic' script 'Western' type 4 weight 400 italic 255 charset 0 pitchfam 0x02\nok PolyTest Sans has three faces\nPolyTest Tall, DEFAULT_CHARSET: EnumFontFamiliesExW returned 1, callback called 1 times\n  [0] face 'PolyTest Tall' full 'PolyTest Tall' style 'Regular' script 'Western' type 4 weight 400 italic 0 charset 0 pitchfam 0x02\nok PolyTest Tall has one face\nPolyTest Mono, ANSI_CHARSET: EnumFontFamiliesExW returned 1, callback called 1 times\n  [0] face 'PolyTest Mono' full 'PolyTest Mono' style 'Regular' script 'Western' type 4 weight 400 italic 0 charset 0 pitchfam 0x31\nPolyTest Mono, SYMBOL_CHARSET: EnumFontFamiliesExW returned 1, callback called 0 times\nlower case name: EnumFontFamiliesExW returned 1, callback called 1 times\n  [0] face 'PolyTest Tall' full 'PolyTest Tall' style 'Regular' script 'Western' type 4 weight 400 italic 0 charset 0 pitchfam 0x02\nprefix of a name: EnumFontFamiliesExW returned 1, callback called 0 times\nno such family: EnumFontFamiliesExW returned 1, callback called 0 times\nok an unknown family is never called back\nstop after the first call: EnumFontFamiliesExW returned 0, callback called 1 times\n  [0] face 'PolyTest Sans' full 'PolyTest Sans' style 'Regular' script 'Western' type 4 weight 400 italic 0 charset 0 pitchfam 0x02\nok returning 0 stops the enumeration\nall families (empty name): returned 1, more than 3 callbacks: true, PolyTest families found [true, true, true]\nok the three private families are among the families listed\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 65
+    }
+  ]
+}

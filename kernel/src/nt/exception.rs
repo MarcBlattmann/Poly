@@ -218,7 +218,9 @@ fn end_after_unhandled(mut k: Kernel) -> ! {
         }
         v
     };
-    let mut stack = [0u8; 512];
+    let mut structures: Vec<alloc::string::String> =
+        poly_personality_nt::diag::describe(&|at, buf| user::copy_from_user(buf, at).is_ok(), teb);
+    let mut stack = alloc::vec![0u8; 1024];
     let words: Vec<u64> = if user::copy_from_user(&mut stack, regs[4]).is_ok() {
         stack.chunks_exact(8).map(|c| u64::from_le_bytes(c.try_into().expect("8 bytes"))).collect()
     } else {
@@ -229,7 +231,9 @@ fn end_after_unhandled(mut k: Kernel) -> ! {
     let record = unhandled.0;
     drop(unhandled);
     drop(k);
-    end_unhandled(pid, tid, &record, frames, regs, words, tls)
+    structures.push(alloc::format!("teb, tls array, peb, image base, ldr, params, first tls slots {tls:x?}"));
+    drop(tls);
+    end_unhandled(pid, tid, &record, frames, regs, words, structures)
 }
 
 /// The running thread's user memory, for walking its stack.
@@ -251,8 +255,16 @@ fn backtrace(k: &Kernel, ctx: &Context) -> Vec<u64> {
     .unwrap_or((0, 0));
     let mut headers = alloc::vec![0u8; 0x1000];
     let mut modules = Vec::new();
-    if image_base != 0 && user::copy_from_user(&mut headers, image_base).is_ok() {
-        modules.extend(nt_exception::image_module(image_base, &headers));
+    // Every module on the loader's list, so a stack walk passes through DLLs too (the
+    // executable alone left Chrome's crash with a call chain of guesses, ADR 0155).
+    let mut bases = poly_personality_nt::diag::module_bases(&|at, buf| user::copy_from_user(buf, at).is_ok(), stack);
+    if image_base != 0 && !bases.contains(&image_base) {
+        bases.push(image_base);
+    }
+    for base in bases {
+        if user::copy_from_user(&mut headers, base).is_ok() {
+            modules.extend(nt_exception::image_module(base, &headers));
+        }
     }
     let read = |at: u64| {
         let mut b = [0u8; 8];
@@ -274,7 +286,7 @@ fn end_unhandled(
     frames: Vec<u64>,
     regs: [u64; 16],
     stack: Vec<u64>,
-    tls: Vec<u64>,
+    structures: Vec<alloc::string::String>,
 ) -> ! {
     crate::kprintln!(
         "nt: pid {} unhandled exception {:#010x} at {:#x}, params {:x?}; frames {:x?}",
@@ -288,8 +300,10 @@ fn end_unhandled(
     // out which value was null (Chrome's bring-up, ADR 0155).
     crate::kprintln!("nt: pid {} registers {:x?}", pid.0, regs);
     crate::kprintln!("nt: pid {} stack {:x?}", pid.0, stack);
-    crate::kprintln!("nt: pid {} teb, tls array, peb, image base, ldr, params, first tls slots {:x?}", pid.0, tls);
-    drop(tls);
+    for line in &structures {
+        crate::kprintln!("nt: pid {} {line}", pid.0);
+    }
+    drop(structures);
     drop(stack);
     *LAST_UNHANDLED.lock() = Some(Unhandled { pid: pid.0, code: record.code, address: record.address, frames });
     let code = NtStatus(record.code);

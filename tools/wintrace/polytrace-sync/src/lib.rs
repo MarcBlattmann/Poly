@@ -44,6 +44,8 @@
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
 
+mod dump;
+
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicIsize, AtomicU32, AtomicU64, Ordering};
 
@@ -140,6 +142,13 @@ const SCRATCH: usize = 0x800;
 const SUFFIX: usize = 64;
 /// Longest string read from an argument, in characters.
 const MAX_STRING: usize = 200;
+/// Where [`pt_enter`] keeps the call's first [`NRAW`] argument values in the scratch area, for
+/// [`pt_leave`]'s out-buffer dump (`dump.rs`): the end of the area.
+const RAW_AT: usize = SCRATCH - 8 * NRAW - 32;
+/// Argument values kept for the dump.
+const NRAW: usize = 12;
+/// The dump record's size (a call's whole record with its `"out"` entries).
+const DUMPBUF: usize = 16 * 1024;
 
 /// A cell shared by threads under [`State::lock`] (or written once at
 /// `DLL_PROCESS_ATTACH`, before any other thread can call in).
@@ -157,6 +166,31 @@ static THREADS: AtomicU32 = AtomicU32::new(0);
 static LOCK: Shared<CriticalSection> = Shared(UnsafeCell::new(CriticalSection([0; 5])));
 static BUF: Shared<[u8; BUFFER]> = Shared(UnsafeCell::new([0; BUFFER]));
 static LEN: Shared<usize> = Shared(UnsafeCell::new(0));
+static DUMP_BUF: Shared<[u8; DUMPBUF]> = Shared(UnsafeCell::new([0; DUMPBUF]));
+
+/// Take the logger's lock (recursive).
+pub(crate) fn lock() {
+    // SAFETY: `LOCK` is initialised at DLL_PROCESS_ATTACH, before any call is traced.
+    unsafe { EnterCriticalSection(LOCK.0.get()) }
+}
+
+/// Release the logger's lock.
+pub(crate) fn unlock() {
+    // SAFETY: as in [`lock`].
+    unsafe { LeaveCriticalSection(LOCK.0.get()) }
+}
+
+/// A NUL-terminated string as a byte slice.
+unsafe fn cname<'a>(p: *const u8) -> &'a [u8] {
+    let mut n = 0;
+    // SAFETY: the generator's strings are NUL-terminated.
+    unsafe {
+        while *p.add(n) != 0 {
+            n += 1;
+        }
+        core::slice::from_raw_parts(p, n)
+    }
+}
 
 /// A bounded writer into a byte buffer; what does not fit is dropped and
 /// [`W::full`] says so.
@@ -444,19 +478,35 @@ pub unsafe extern "C" fn pt_enter(f: &Func, regs: *const u64, stack: *const u64,
             return 0;
         };
         let seq = SEQ.fetch_add(1, Ordering::Relaxed);
-        let mut w = W { p: scratch, len: 0, cap: SCRATCH - SUFFIX, full: false };
+        let mut w = W { p: scratch, len: 0, cap: RAW_AT - SUFFIX, full: false };
         begin(&mut w, f, t, seq, regs, stack, true);
         if w.full {
             // Strings too long for the record: pointers instead.
-            w = W { p: scratch, len: 0, cap: SCRATCH - SUFFIX, full: false };
+            w = W { p: scratch, len: 0, cap: RAW_AT - SUFFIX, full: false };
             begin(&mut w, f, t, seq, regs, stack, false);
         }
         if SYNC.load(Ordering::Relaxed) {
             // The caller's return address (`pt_common`'s frame: the return address is 0x888
             // bytes above the saved argument registers `regs` points at): which code made the
             // call, for reading a program's behaviour on Poly (ADR 0155).
+            let ra = *regs.cast::<u8>().add(0x888).cast::<u64>();
             w.bytes(b",\"ra\":");
-            w.hex(*regs.cast::<u8>().add(0x888).cast::<u64>());
+            w.hex(ra);
+            if DUMP.load(Ordering::Relaxed) {
+                // ... and the module it lies in with the offset (`"rm"`, `"ro"`): the key a run
+                // on Windows and a run on Poly are compared by; and the class of each pointer
+                // and handle argument (`"ac"`).
+                dump::put_caller(&mut w, ra);
+                let (_, kinds, n) = signature(f.sig);
+                dump::put_arg_classes(&mut w, &kinds[..n], regs, stack);
+            }
+        }
+        // The first arguments, kept for `pt_leave`'s dump (arguments 1-4 are in `regs`, the
+        // rest in the thunk's copy `stack`).
+        let raw = scratch.add(RAW_AT).cast::<u64>();
+        for i in 0..NRAW {
+            let v = if i < 4 { *regs.add(i) } else { *stack.add(i - 4) };
+            raw.add(i).write_unaligned(v);
         }
         let mut cookie = (w.len as u64) | ((err as u64) << 32);
         if f.flags & (NORETURN | TAIL) != 0 {
@@ -490,15 +540,50 @@ pub unsafe extern "C" fn pt_leave(f: &Func, cookie: u64, ret: u64, scratch: *mut
         };
         let before = (cookie >> 32) as u32;
         let (rk, _, _) = signature(f.sig);
-        let mut w = W { p: scratch, len, cap: SCRATCH, full: false };
+        let mut w = W { p: scratch, len, cap: RAW_AT, full: false };
         w.bytes(b",\"ret\":");
         w.value(rk, ret, false);
+        if DUMP.load(Ordering::Relaxed) && (rk == b'p' || rk == b'h') {
+            // The class of a returned pointer or handle (`"rc"`), see `dump.rs`.
+            w.bytes(b",\"rc\":");
+            if rk == b'p' {
+                dump::pclass(&mut w, ret);
+            } else {
+                dump::hclass(&mut w, ret);
+            }
+        }
         if err != before {
             w.bytes(b",\"err\":");
             w.dec(err as u64);
         }
+        let sync = SYNC.load(Ordering::Relaxed);
+        let name = cname(f.name);
+        if sync && DUMP.load(Ordering::Relaxed) && dump::has_rule(name) {
+            // What the call left in memory (`dump.rs`), appended as `"out":[...]` to the record.
+            let mut raw = [0u64; NRAW];
+            let rawp = scratch.add(RAW_AT).cast::<u64>();
+            for (i, r) in raw.iter_mut().enumerate() {
+                *r = rawp.add(i).read_unaligned();
+            }
+            lock();
+            let mut d = W { p: DUMP_BUF.0.get().cast::<u8>(), len: 0, cap: DUMPBUF - 8, full: false };
+            d.bytes(core::slice::from_raw_parts(scratch, w.len));
+            d.bytes(b",\"out\":[");
+            dump::dump(&mut dump::D::new(&mut d), name, &raw, ret);
+            d.bytes(b"]}\n");
+            let done = !d.full;
+            if done {
+                append(core::slice::from_raw_parts(d.p, d.len), true);
+            }
+            unlock();
+            if done {
+                leave_logger(tls, t);
+                SetLastError(err);
+                return;
+            }
+        }
         w.bytes(b"}\n");
-        append(core::slice::from_raw_parts(scratch, w.len), SYNC.load(Ordering::Relaxed));
+        append(core::slice::from_raw_parts(scratch, w.len), sync);
         leave_logger(tls, t);
         SetLastError(err);
     }
@@ -508,6 +593,10 @@ pub unsafe extern "C" fn pt_leave(f: &Func, cookie: u64, ret: u64, scratch: *mut
 /// dies on an unhandled exception leaves its trace up to the last call (bring-up of a program on
 /// Poly, ADR 0155). Off by default: the buffering is what makes a trace cheap.
 static SYNC: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Out-buffer dumps and the caller's module and offset (`dump.rs`): on with `POLYTRACE_SYNC`,
+/// unless `POLYTRACE_DUMP=0` (spec-chrome-win-3).
+static DUMP: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 /// UTF-16 of an ASCII string literal, NUL-terminated, at compile time.
 macro_rules! wide {
@@ -566,6 +655,9 @@ pub unsafe extern "system" fn polytrace_main(_module: usize, reason: u32, _reser
                         > 0,
                     Ordering::Relaxed,
                 );
+                let mut off = [0u16; 4];
+                let n = GetEnvironmentVariableW(wide!("POLYTRACE_DUMP").as_ptr(), off.as_mut_ptr(), off.len() as u32);
+                DUMP.store(!(n > 0 && off[0] == b'0' as u16) && SYNC.load(Ordering::Relaxed), Ordering::Relaxed);
                 if FILE.load(Ordering::Relaxed) != INVALID_HANDLE_VALUE {
                     append(b"{\"format\":\"polytrace/1\"}\n", false);
                     TLS.store(TlsAlloc(), Ordering::Release);

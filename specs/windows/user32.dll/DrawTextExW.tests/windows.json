@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "8a396a60cdf0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T18:09:27Z",
+  "tests": [
+    {
+      "name": "dtx_params",
+      "exe_sha256": "9c21203dde2dbf70bbf3c4856d8cb76440acac0e8aa01ddc199f75d1b1bd0af7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTCBwYXJhbWV0ZXJzOiByZXR1cm5lZCAxNiBlcnJvciAwOyByZWN0IGFmdGVyIDEwLDEwLDEzMCw2MDsgdWlMZW5ndGhEcmF3biAtMTsgY2VsbCAxMCwxMCwzMCwyNiAoMTc2KTsgaW5rIDEyLDEwLDI5LDIyICgxNDQpCnplcm8gbWFyZ2luczogcmV0dXJuZWQgMTYgZXJyb3IgMDsgcmVjdCBhZnRlciAxMCwxMCwxMzAsNjA7IHVpTGVuZ3RoRHJhd24gMjsgY2VsbCAxMCwxMCwzMCwyNiAoMTc2KTsgaW5rIDEyLDEwLDI5LDIyICgxNDQpCmxlZnQgbWFyZ2luIDEwOiByZXR1cm5lZCAxNiBlcnJvciAwOyByZWN0IGFmdGVyIDEwLDEwLDEzMCw2MDsgdWlMZW5ndGhEcmF3biAyOyBjZWxsIDIwLDEwLDQwLDI2ICgxNzYpOyBpbmsgMjIsMTAsMzksMjIgKDE0NCkKbGVmdCBtYXJnaW4gMTAsIERUX1JJR0hUOiByZXR1cm5lZCAxNiBlcnJvciAwOyByZWN0IGFmdGVyIDEwLDEwLDEzMCw2MDsgdWlMZW5ndGhEcmF3biAyOyBjZWxsIDExMCwxMCwxMzAsMjYgKDE3Nik7IGluayAxMTIsMTAsMTI5LDIyICgxNDQpCnJpZ2h0IG1hcmdpbiAxMCwgRFRfUklHSFQ6IHJldHVybmVkIDE2IGVycm9yIDA7IHJlY3QgYWZ0ZXIgMTAsMTAsMTMwLDYwOyB1aUxlbmd0aERyYXduIDI7IGNlbGwgMTAwLDEwLDEyMCwyNiAoMTc2KTsgaW5rIDEwMiwxMCwxMTksMjIgKDE0NCkKYm90aCBtYXJnaW5zIDEwLCBEVF9DRU5URVI6IHJldHVybmVkIDE2IGVycm9yIDA7IHJlY3QgYWZ0ZXIgMTAsMTAsMTMwLDYwOyB1aUxlbmd0aERyYXduIDI7IGNlbGwgNjAsMTAsODAsMjYgKDE3Nik7IGluayA2MiwxMCw3OSwyMiAoMTQ0KQpsZWZ0IG1hcmdpbiAxMCwgRFRfQ0FMQ1JFQ1Q6IHJldHVybmVkIDE2IGVycm9yIDA7IHJlY3QgYWZ0ZXIgMTAsMTAsNDAsMjY7IHVpTGVuZ3RoRHJhd24gMjsgY2VsbCAwLDAsMCwwICgwKTsgaW5rIDAsMCwwLDAgKDApCnJpZ2h0IG1hcmdpbiAxMCwgRFRfQ0FMQ1JFQ1Q6IHJldHVybmVkIDE2IGVycm9yIDA7IHJlY3QgYWZ0ZXIgMTAsMTAsNDAsMjY7IHVpTGVuZ3RoRHJhd24gMjsgY2VsbCAwLDAsMCwwICgwKTsgaW5rIDAsMCwwLDAgKDApCm1hcmdpbnMgNS83LCBEVF9DQUxDUkVDVDogcmV0dXJuZWQgMTYgZXJyb3IgMDsgcmVjdCBhZnRlciAxMCwxMCw0MiwyNjsgdWlMZW5ndGhEcmF3biAyOyBjZWxsIDAsMCwwLDAgKDApOyBpbmsgMCwwLDAsMCAoMCkKbWFyZ2lucyBhbmQgRFRfV09SREJSRUFLIGluIDYwIHdpZGUsIDEwLzEwOiByZXR1cm5lZCA0OCBlcnJvciAwOyByZWN0IGFmdGVyIDEwLDEwLDcwLDgwOyB1aUxlbmd0aERyYXduIDE0OyBjZWxsIDIwLDEwLDY4LDU4ICgxMTg0KTsgaW5rIDIxLDEwLDY2LDU0ICg5NjApCm5lZ2F0aXZlIG1hcmdpbnM6IHJldHVybmVkIDE2IGVycm9yIDA7IHJlY3QgYWZ0ZXIgMTAsMTAsMTMwLDYwOyB1aUxlbmd0aERyYXduIDI7IGNlbGwgMTAsMTAsMjUsMjYgKDEzMik7IGluayAxMCwxMCwyNCwyMiAoMTA4KQptYXJnaW5zIHdpZGVyIHRoYW4gdGhlIHJlY3RhbmdsZTogcmV0dXJuZWQgMTYgZXJyb3IgMDsgcmVjdCBhZnRlciAxMCwxMCwzMCw2MDsgdWlMZW5ndGhEcmF3biAyOyBjZWxsIDAsMCwwLDAgKDApOyBpbmsgMCwwLDAsMCAoMCkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL parameters: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn -1; cell 10,10,30,26 (176); ink 12,10,29,22 (144)\nzero margins: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 10,10,30,26 (176); ink 12,10,29,22 (144)\nleft margin 10: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 20,10,40,26 (176); ink 22,10,39,22 (144)\nleft margin 10, DT_RIGHT: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 110,10,130,26 (176); ink 112,10,129,22 (144)\nright margin 10, DT_RIGHT: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 100,10,120,26 (176); ink 102,10,119,22 (144)\nboth margins 10, DT_CENTER: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 60,10,80,26 (176); ink 62,10,79,22 (144)\nleft margin 10, DT_CALCRECT: returned 16 error 0; rect after 10,10,40,26; uiLengthDrawn 2; cell 0,0,0,0 (0); ink 0,0,0,0 (0)\nright margin 10, DT_CALCRECT: returned 16 error 0; rect after 10,10,40,26; uiLengthDrawn 2; cell 0,0,0,0 (0); ink 0,0,0,0 (0)\nmargins 5/7, DT_CALCRECT: returned 16 error 0; rect after 10,10,42,26; uiLengthDrawn 2; cell 0,0,0,0 (0); ink 0,0,0,0 (0)\nmargins and DT_WORDBREAK in 60 wide, 10/10: returned 48 error 0; rect after 10,10,70,80; uiLengthDrawn 14; cell 20,10,68,58 (1184); ink 21,10,66,54 (960)\nnegative margins: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 2; cell 10,10,25,26 (132); ink 10,10,24,22 (108)\nmargins wider than the rectangle: returned 16 error 0; rect after 10,10,30,60; uiLengthDrawn 2; cell 0,0,0,0 (0); ink 0,0,0,0 (0)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    },
+    {
+      "name": "dtx_tabs",
+      "exe_sha256": "a4fd4edceb6165f9b2feef67cdf77528666b295f935033c0789a06c71ac7df90",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGFiLCBpVGFiTGVuZ3RoIDQsIERUX1RBQlNUT1B8RFRfRVhQQU5EVEFCUzogcmV0dXJuZWQgMTYgZXJyb3IgMDsgcmVjdCBhZnRlciAxMCwxMCwxMzAsNjA7IHVpTGVuZ3RoRHJhd24gMzsgY2VsbCAxMCwxMCw1MCwyNiAoNDk2KTsgaW5rIDEyLDEwLDQ5LDIyICgxNDQpCnRhYiwgaVRhYkxlbmd0aCAyOiByZXR1cm5lZCAxNiBlcnJvciAwOyByZWN0IGFmdGVyIDEwLDEwLDEzMCw2MDsgdWlMZW5ndGhEcmF3biAzOyBjZWxsIDEwLDEwLDM0LDI2ICgyNDApOyBpbmsgMTIsMTAsMzMsMjIgKDE0NCkKdGFiLCBpVGFiTGVuZ3RoIDQgd2l0aG91dCBEVF9UQUJTVE9QIChpZ25vcmVkPyk6IHJldHVybmVkIDE2IGVycm9yIDA7IHJlY3QgYWZ0ZXIgMTAsMTAsMTMwLDYwOyB1aUxlbmd0aERyYXduIDM7IGNlbGwgMTAsMTAsODIsMjYgKDEwMDgpOyBpbmsgMTIsMTAsODEsMjIgKDE0NCkKdGFiLCBpVGFiTGVuZ3RoIDAgd2l0aCBEVF9UQUJTVE9QOiByZXR1cm5lZCAxNiBlcnJvciAwOyByZWN0IGFmdGVyIDEwLDEwLDEzMCw2MDsgdWlMZW5ndGhEcmF3biAzOyBjZWxsIDEwLDEwLDgyLDI2ICgxMDA4KTsgaW5rIDEyLDEwLDgxLDIyICgxNDQpCmxlbmd0aCBkcmF3biwgZXZlcnl0aGluZyBmaXRzOiByZXR1cm5lZCAxNiBlcnJvciAwOyByZWN0IGFmdGVyIDEwLDEwLDEzMCw2MDsgdWlMZW5ndGhEcmF3biA1OyBjZWxsIDEwLDEwLDU2LDI2ICg0NDgpOyBpbmsgMTIsMTAsNTUsMjIgKDI4OCkKbGVuZ3RoIGRyYXduLCAzIGxpbmVzLCByb29tIGZvciAyOiByZXR1cm5lZCA0OCBlcnJvciAwOyByZWN0IGFmdGVyIDEwLDEwLDEzMCw0MjsgdWlMZW5ndGhEcmF3biA4OyBjZWxsIDEwLDEwLDMwLDQyICgzNTIpOyBpbmsgMTIsMTAsMjksMzggKDI4OCkKbGVuZ3RoIGRyYXduLCB3cmFwcGVkLCByb29tIGZvciAxOiByZXR1cm5lZCAzMiBlcnJvciAwOyByZWN0IGFmdGVyIDEwLDEwLDUwLDI2OyB1aUxlbmd0aERyYXduIDEwOyBjZWxsIDEwLDEwLDUwLDI2ICgzMjgpOyBpbmsgMTIsMTAsNTAsMjIgKDMxMikKbGVuZ3RoIGRyYXduLCBEVF9DQUxDUkVDVDogcmV0dXJuZWQgMzIgZXJyb3IgMDsgcmVjdCBhZnRlciAxMCwxMCwzMCw0MjsgdWlMZW5ndGhEcmF3biA1OyBjZWxsIDAsMCwwLDAgKDApOyBpbmsgMCwwLDAsMCAoMCkKbGVuZ3RoIGRyYXduLCBEVF9OT0NMSVAsIDMgbGluZXMgaW4gMTogcmV0dXJuZWQgNDggZXJyb3IgMDsgcmVjdCBhZnRlciAxMCwxMCwxMzAsMjY7IHVpTGVuZ3RoRHJhd24gODsgY2VsbCAxMCwxMCwzMCw1OCAoNTI4KTsgaW5rIDEyLDEwLDI5LDU0ICg0MzIpCmxlbmd0aCBkcmF3biwgZW1wdHkgc3RyaW5nOiByZXR1cm5lZCAxIGVycm9yIDA7IHJlY3QgYWZ0ZXIgMTAsMTAsMTMwLDYwOyB1aUxlbmd0aERyYXduIDA7IGNlbGwgMCwwLDAsMCAoMCk7IGluayAwLDAsMCwwICgwKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "tab, iTabLength 4, DT_TABSTOP|DT_EXPANDTABS: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 3; cell 10,10,50,26 (496); ink 12,10,49,22 (144)\ntab, iTabLength 2: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 3; cell 10,10,34,26 (240); ink 12,10,33,22 (144)\ntab, iTabLength 4 without DT_TABSTOP (ignored?): returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 3; cell 10,10,82,26 (1008); ink 12,10,81,22 (144)\ntab, iTabLength 0 with DT_TABSTOP: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 3; cell 10,10,82,26 (1008); ink 12,10,81,22 (144)\nlength drawn, everything fits: returned 16 error 0; rect after 10,10,130,60; uiLengthDrawn 5; cell 10,10,56,26 (448); ink 12,10,55,22 (288)\nlength drawn, 3 lines, room for 2: returned 48 error 0; rect after 10,10,130,42; uiLengthDrawn 8; cell 10,10,30,42 (352); ink 12,10,29,38 (288)\nlength drawn, wrapped, room for 1: returned 32 error 0; rect after 10,10,50,26; uiLengthDrawn 10; cell 10,10,50,26 (328); ink 12,10,50,22 (312)\nlength drawn, DT_CALCRECT: returned 32 error 0; rect after 10,10,30,42; uiLengthDrawn 5; cell 0,0,0,0 (0); ink 0,0,0,0 (0)\nlength drawn, DT_NOCLIP, 3 lines in 1: returned 48 error 0; rect after 10,10,130,26; uiLengthDrawn 8; cell 10,10,30,58 (528); ink 12,10,29,54 (432)\nlength drawn, empty string: returned 1 error 0; rect after 10,10,130,60; uiLengthDrawn 0; cell 0,0,0,0 (0); ink 0,0,0,0 (0)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    }
+  ]
+}
