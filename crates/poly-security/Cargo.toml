@@ -7,8 +7,6 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-[dependencies]
-poly-ntobj = { workspace = true }
 
 [lints]
 workspace = true

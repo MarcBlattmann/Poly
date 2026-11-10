@@ -105,6 +105,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetCurrentProcessId", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetCurrentThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetCurrentThreadId", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetCurrentThreadStackLimits", "api-ms-win-core-processthreads-l1-1-0"),
     ("ExitProcess", "api-ms-win-core-processthreads-l1-1-0"),
     ("TerminateProcess", "api-ms-win-core-processthreads-l1-1-0"),
     ("CreateThread", "api-ms-win-core-processthreads-l1-1-0"),
@@ -321,7 +322,6 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetProductInfo", "api-ms-win-core-sysinfo-l1-2-0"),
     ("AddVectoredExceptionHandler", "api-ms-win-core-errorhandling-l1-1-0"),
     ("RemoveVectoredExceptionHandler", "api-ms-win-core-errorhandling-l1-1-0"),
-    ("RtlCaptureStackBackTrace", "api-ms-win-core-debug-l1-1-0"),
     ("GetStringTypeW", "api-ms-win-core-string-l1-1-0"),
     ("CompareStringW", "api-ms-win-core-string-l1-1-0"),
     ("CompareStringEx", "api-ms-win-core-string-l1-1-0"),
@@ -342,6 +342,13 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("MoveFileW", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("FileTimeToDosDateTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("DosDateTimeToFileTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
+    // Tokens (processthreadsapi.h, ADR 0171):
+    // `advapi32` forwards the token functions to the same contract.
+    ("OpenProcessToken", "api-ms-win-core-processthreads-l1-1-0"),
+    ("OpenThreadToken", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadToken", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetProcessMitigationPolicy", "api-ms-win-core-processthreads-l1-1-3"),
+    ("SetProcessMitigationPolicy", "api-ms-win-core-processthreads-l1-1-3"),
     // ----- Chrome batch 2 (chrome-win-b2, ADR 0155). Files (fileapi.h,
     // winbase.h, minwinbase.h); the contracts are the ones the pages list.
     ("FindFirstFileExW", "api-ms-win-core-file-l1-1-0"),
@@ -400,6 +407,8 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
 /// table gives to `ntdll` (ADR 0071).
 pub const KERNEL32_NTDLL_FORWARDS: &[(&str, &str)] = &[
     ("RtlCaptureContext", "api-ms-win-core-rtlsupport-l1-1-0"),
+    // kernel32 forwards it to ntdll, which captures the stack (ADR 0155).
+    ("RtlCaptureStackBackTrace", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlLookupFunctionEntry", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlVirtualUnwind", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlUnwindEx", "api-ms-win-core-rtlsupport-l1-1-0"),
@@ -453,7 +462,10 @@ pub const KERNEL32_OWN: &[&str] = &[
 /// Every function `kernelbase.dll` must export: each one `kernel32` or
 /// `advapi32` forwards ([`crate::advapi`], ADR 0083).
 pub fn kernelbase_exports() -> impl Iterator<Item = &'static str> {
-    KERNEL32_FORWARDS.iter().chain(crate::advapi::ADVAPI32_FORWARDS).map(|&(name, _)| name)
+    let advapi = crate::advapi::ADVAPI32_FORWARDS
+        .iter()
+        .filter(|&&(name, _)| !KERNEL32_FORWARDS.iter().any(|&(k, _)| k == name));
+    KERNEL32_FORWARDS.iter().chain(advapi).map(|&(name, _)| name)
 }
 
 /// The forwarder string of `kernel32!name`, as the export directory holds

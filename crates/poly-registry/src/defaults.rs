@@ -12,7 +12,7 @@
 //! | system | `\REGISTRY\MACHINE\SYSTEM` (`HKLM\SYSTEM`) | `SYSTEM` |
 //! | software | `\REGISTRY\MACHINE\SOFTWARE` (`HKLM\SOFTWARE`) | `SOFTWARE` |
 //! | default user | `\REGISTRY\USER\.DEFAULT` (`HKU\.DEFAULT`) | `DEFAULT` |
-//! | Poly's user | `\REGISTRY\USER\S-1-5-21-0-0-0-1000` (`HKCU`) | `USER` |
+//! | Poly's user | `\REGISTRY\USER\S-1-5-21-520193847-884726105-1936024571-1002` (`HKCU`) | `USER` |
 //!
 //! Volatile keys are made at every boot ([`volatile_keys`]):
 //! `HKLM\HARDWARE`, the `HKLM\SYSTEM\CurrentControlSet` symbolic link to
@@ -35,7 +35,7 @@ use poly_ntobj::name::wide;
 /// (`S-1-5-21-…`, Learn: "Well-known SIDs") with three zero sub-authorities
 /// and relative id 1000. Poly's own choice until tokens exist (the
 /// `advapi32` milestone); `HKEY_CURRENT_USER` is `\REGISTRY\USER\<this>`.
-pub const POLY_USER_SID: &str = "S-1-5-21-0-0-0-1000";
+pub const POLY_USER_SID: &str = "S-1-5-21-520193847-884726105-1936024571-1002";
 /// The user's name and the machine's (Poly's own values).
 pub const POLY_USER_NAME: &str = "poly";
 pub const POLY_COMPUTER_NAME: &str = "POLY";
@@ -196,6 +196,10 @@ pub const USER_KEYS: &[DefaultKey] = &[
     k("Control Panel\\International", &[("LocaleName", Sz("en-US"))]),
     k("Console", &[]),
     k("Software\\Classes", &[]),
+    // A vendor key that exists on a machine where Google software has run (Google Update,
+    // Chrome): Chrome for Testing finds `Software\Google` already there (call-site trace of
+    // chrome_elf's start-up on Windows, ADR 0155).
+    k("Software\\Google", &[]),
     k("Software\\Microsoft\\Windows\\CurrentVersion\\Run", &[]),
 ];
 

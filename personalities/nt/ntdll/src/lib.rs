@@ -22,6 +22,7 @@ mod exports;
 mod heap;
 mod lock;
 mod params;
+mod rtlsec;
 mod seh;
 mod start;
 mod sys;

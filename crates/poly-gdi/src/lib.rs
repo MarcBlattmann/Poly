@@ -30,13 +30,17 @@ extern crate std;
 
 mod bitfont;
 pub mod bitmap;
+pub mod builtin;
 pub mod font;
 pub mod fontmap;
+pub mod fonttab;
 pub mod gdi;
 pub mod outline;
 pub mod region;
 mod sysfont;
 pub mod text;
 
+#[cfg(test)]
+mod testfonts;
 #[cfg(test)]
 mod tests;

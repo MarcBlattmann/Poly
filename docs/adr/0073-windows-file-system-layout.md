@@ -4,7 +4,7 @@
 `\??\C:` is the VFS directory `/nt/c`, case-insensitive lookup over the
 case-sensitive VFS, NT attributes in `user.poly.ntattr`),
 [ADR 0066](0066-nt-registry-hives-in-polys-own-format.md) (the registry, its
-default hives, Poly's single user `S-1-5-21-0-0-0-1000`, where hive files
+default hives, Poly's single user `S-1-5-21-520193847-884726105-1936024571-1002`, where hive files
 live), [ADR 0065](0065-nt-threads-synchronisation-and-apcs.md) (the first
 thread gets the PEB as its argument), [ADR 0055](0055-microsoft-redistributables-run-apps-own-copies.md)
 (apps bring their own Microsoft runtimes) and
@@ -93,7 +93,7 @@ Paths are Learn's defaults:
 | `...\poly\AppData\Local\Temp` | | `TEMP`, `TMP` | the user's temporary directory (`GetTempPath` reads `TMP`, `TEMP`) |
 | `...\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\StartUp`, `SendTo`, `Templates`, `Recent` | `FOLDERID_StartMenu`, `..Programs`, `..Startup`, `..SendTo`, `..Templates`, `..Recent` | | |
 
-**The default user.** ADR 0066's `HKU\S-1-5-21-0-0-0-1000` is the user
+**The default user.** ADR 0066's `HKU\S-1-5-21-520193847-884726105-1936024571-1002` is the user
 `poly`; its profile is `C:\Users\poly` (Learn's `%SystemDrive%\Users\
 %USERNAME%`). One user until tokens exist (the `advapi32` milestone); the
 table is written per user (`User { name, sid }`), so a second user is a
@@ -159,7 +159,7 @@ the key or value without defining it.
 | `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion` | `SystemRoot` = `C:\Windows` | fixed | name only |
 | `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion` | `ProgramFilesDir`, `ProgramW6432Dir`, `ProgramFilesDir (x86)`, `CommonFilesDir`, `CommonW6432Dir`, `CommonFilesDir (x86)` | fixed | Learn: "WOW64 Implementation Details" (names) |
 | `HKLM\...\Windows NT\CurrentVersion\ProfileList` | `ProfilesDirectory`, `Default`, `Public`, `ProgramData` (`REG_EXPAND_SZ`, below `%SystemDrive%`) | fixed | name only (the profile functions return these folders) |
-| `...\ProfileList\S-1-5-21-0-0-0-1000` | `ProfileImagePath` = `C:\Users\poly` (`REG_EXPAND_SZ`) | fixed | name only |
+| `...\ProfileList\S-1-5-21-520193847-884726105-1936024571-1002` | `ProfileImagePath` = `C:\Users\poly` (`REG_EXPAND_SZ`) | fixed | name only |
 | `HKLM\SYSTEM\<current control set>\Control\Session Manager\Environment` | `TEMP`, `TMP` = `%SystemRoot%\TEMP`, `windir` = `%SystemRoot%` | if missing | Learn: "Environment Variables" |
 | `HKU\<sid>\Environment` | `TEMP`, `TMP` = `%USERPROFILE%\AppData\Local\Temp` | if missing | Learn: "Environment Variables" |
 | `HKU\<sid>\Volatile Environment` (volatile) | `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `APPDATA`, `LOCALAPPDATA`, `USERNAME` | fixed | Learn: "Recognized environment variables" |

@@ -238,3 +238,104 @@ Option 1 is what this branch does.
   fonts, and the `DrawTextW` flags `DT_END_ELLIPSIS`, `DT_PATH_ELLIPSIS`,
   `DT_MODIFYSTRING`, `DT_HIDEPREFIX`, `DT_PREFIXONLY`, `DT_EDITCONTROL`,
   `DT_INTERNAL`. Each "(choice)" above is a rule to confirm.
+
+## Update: the spec sheets of `spec-win-text` (impl-win-text-2)
+
+The "(choice)" lines above were written before any spec sheet existed for
+the text calls. `spec-win-text` has since observed them (CreateFontIndirectW,
+GetTextMetricsW, GetTextExtentPoint32W, ExtTextOutW, TextOutW, DrawTextW,
+...; `specs/windows/gdi32.dll/`, `user32.dll/`) with fonts the tests write
+for themselves, so that Windows and Poly read the same font file. What
+follows replaces the decisions it contradicts; everything else above stands.
+
+### What is new
+
+1. **Private fonts** (`poly_gdi::fonttab`). `AddFontMemResourceEx` copies the
+   image, `AddFontResourceExW` reads the file (`FR_PRIVATE`, `FR_NOT_ENUM`;
+   flags other than those two bits fail with error 87), `RemoveFont...` take
+   one add away again (the file has to exist; the flags have to match). A
+   font is a TrueType or OpenType font with outlines, whose table directory
+   lies inside the data and which has a family name; anything else adds
+   nothing (no error). The faces are found by family name (case-insensitive,
+   exact: a blank more or less is another name) or by full name; of a
+   family's faces the one that matches the bold and italic request best is
+   taken (bold first). A request is mapped when the font is selected, and
+   again whenever a font is added or removed. Only files add to
+   `EnumFontFamiliesExW`'s list (not memory fonts, not `FR_NOT_ENUM`); its
+   other entries are Poly's installed families under their Windows names
+   (Regular, Bold, Italic, Bold Italic each).
+2. **Metrics come from the font file** (`outline::Outline::new`):
+   `OS/2.usWinAscent` and `usWinDescent` (or `hhea`), scaled and rounded to
+   the nearest pixel, halves up; `hhea.lineGap` is the external leading;
+   `OS/2.xAvgCharWidth` the average width; `hhea.advanceWidthMax` the
+   maximum; the first character is the lowest code point of the `cmap` (at
+   least 32), the last the highest of the BMP, the default one below the
+   first, the break character 32; the family is FF_MODERN without
+   TMPF_FIXED_PITCH for a font marked monospaced (`post`, panose), else
+   TMPF_FIXED_PITCH (which means variable) with no family. The em is 16
+   pixels for `lfHeight` 0, `|lfHeight|` below zero and at least 2; a
+   positive `lfHeight` is the *cell*: ascent and descent are scaled together
+   to add up to it, so the em is fractional (advances use it, the internal
+   leading is the cell less the rounded em). `lfWidth` scales the horizontal
+   size so that the average width is that many pixels.
+3. **Advances** are the file's, scaled and rounded to whole pixels; tab, line
+   feed and carriage return take no room in `GetTextExtentPoint32W` (but have
+   the `.notdef` width in `GetCharWidth32W`); characters the font lacks are
+   `.notdef`.
+4. **Synthesis.** A bold request that the family has no face for makes every
+   advance, the average and the maximum width one pixel wider and the ink a
+   pixel wider; an italic one slants the ink (advances unchanged).
+   `tmWeight` is 700 then. Underline and strike-out use the font's own `post`
+   and `OS/2` values (position of the top of the line, thickness).
+5. **Pixels.** `lfQuality` NONANTIALIASED and ANTIALIASED draw all or nothing
+   (coverage of at least half a pixel, and a row or column the outline
+   touches in a row always gets a pixel: the oracle drew ANTIALIASED the same way);
+   DEFAULT, CLEARTYPE and CLEARTYPE_NATURAL give each colour channel its own
+   coverage (three subpixels per pixel, each channel the mean of three, a
+   gain of 1.4: the box glyphs of the sheet come out with the observed
+   164 pure and 168 blended pixels); DRAFT and PROOF are grey scale. Glyphs are rendered
+   through one affine map, which also carries the slant and
+   `lfEscapement`/`lfOrientation`: the text runs along the escapement and
+   turns about the reference point (a quarter turn puts the baseline one
+   pixel further away than the ascent, as observed).
+6. **No font files, still TrueType.** The test images of the diff runner (and
+   a bare root disk) have no DejaVu, but a logical font must behave as a
+   TrueType face everywhere. `poly_gdi::builtin` makes two TrueType fonts in
+   memory from Spleen 8x16's pixels (one square of outline per ink pixel;
+   units per em 1024, a pixel 64 units, ascent 12, descent 4 pixels), one
+   proportional and one fixed pitch, and the mapper uses them where the
+   store's files are missing. The bitmap faces now only stand for the stock
+   objects and the raster font names.
+7. **`GetTextFaceW`** reports the font's own spelling of its family name (its
+   full name when that was asked for), a name Poly knows in its Windows
+   spelling (`arial` is `Arial`), and for a name it does not know the family
+   it stands in with (Arial, Times New Roman or Courier New by class).
+8. **ExtTextOutW**: `ETO_GLYPH_INDEX`; an inverted rectangle is normalised
+   for filling and clipping; all options set fail.
+9. **DrawText**: a mnemonic underline is one row at baseline + 1 as wide as
+   the character, drawn by default; text wraps at blanks, a blank that fits
+   stays at the end of its line (counted for left aligned lines, not for
+   centred or right aligned ones), one that does not is dropped, a word
+   wider than the rectangle has its own line; `
+`, `
+` and `` break
+   lines; lines are laid out while their top is not below the rectangle's
+   bottom (that is the height returned and `uiLengthDrawn`); end and word
+   ellipsis keep at least one character and the dots even where that is
+   wider, path ellipsis keeps what follows the last backslash and leaves a
+   string without one (or ending in one) alone, an ellipsis with
+   `DT_WORDBREAK` cuts the last line laid out; `DT_MODIFYSTRING` keeps the
+   `&` of the text; `DT_CALCRECT` measures the cut text; `DrawTextEx`'s
+   margins, tab length (only with `DT_TABSTOP`), `cbSize` of 20 and
+   `uiLengthDrawn` are done in `poly-gdi`.
+
+### Open
+
+- `to_glyphs` is gone from the sheet; the pixels of the stock bitmap fonts
+  and of the installed families (DejaVu under Windows names) are still not
+  specified, and are not matched.
+- Rotation other than quarter turns, vertical fonts, kerning, charset-specific
+  mapping, `GetCharABCWidths` and bidirectional text are not done.
+- A font added with `FR_PRIVATE` is listed by `EnumFontFamiliesExW` with the
+  metrics of a default-size face only in the log font; the
+  `NEWTEXTMETRICEXW` argument carries just weight, italic and pitch.

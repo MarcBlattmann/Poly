@@ -491,6 +491,7 @@ pub fn command(args: &[String]) -> Result {
     let root = crate::root();
     let (mut file, mut stage, mut process, mut kit, mut all) =
         (None, "s1".to_string(), "browser".to_string(), None, false);
+    let (mut calls, mut chrome_dir) = (None, None);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -498,12 +499,27 @@ pub fn command(args: &[String]) -> Result {
             "--process" => process = it.next().ok_or(USAGE)?.clone(),
             "--kit" => kit = Some(PathBuf::from(it.next().ok_or(USAGE)?)),
             "--all" => all = true,
+            "--calls" => calls = Some(PathBuf::from(it.next().ok_or(USAGE)?)),
+            "--chrome-dir" => chrome_dir = Some(PathBuf::from(it.next().ok_or(USAGE)?)),
             s if !s.starts_with("--") && file.is_none() => file = Some(PathBuf::from(s)),
             _ => return Err(USAGE.into()),
         }
     }
     let file = file.unwrap_or_else(|| root.join("target/chrome-win/stage1.ptrace.jsonl"));
     let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+    if let Some(calls) = calls {
+        // By caller (module + offset), with the values the calls read and wrote.
+        let doc = match std::fs::read_to_string(&calls) {
+            Ok(t) => Some(serde_json::from_str::<Value>(&t).map_err(|e| format!("{}: {e}", calls.display()))?),
+            Err(e) => {
+                println!("{}: {e} (reporting Poly's suspect values only)", calls.display());
+                None
+            }
+        };
+        let modules = crate::chromecalls::modules_in(&chrome_dir.unwrap_or_else(crate::chromewin::app_dir));
+        print!("{}", crate::chromecalls::report(&text, &modules, doc.as_ref(), &process)?);
+        return Ok(());
+    }
     let poly = parse_poly(&text);
     let trace_path = root.join(format!("specs/windows/apps/chrome/traces/{stage}.trace.json"));
     let doc: Value = serde_json::from_str(

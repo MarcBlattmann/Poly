@@ -59,6 +59,9 @@ const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
 const PROCESS_BASIC_INFORMATION: u32 = 0;
 /// `ThreadBasicInformation`: `ClientId.UniqueThread` at 24.
 const THREAD_BASIC_INFORMATION: u32 = 0;
+/// Poly's `NtCreateUserProcess` flag: `CreateInfo` is a primary token
+/// handle for the new process (ADR 0171).
+const NT_PROCESS_POLY_TOKEN: u32 = 0x4000_0000;
 /// The longest environment block read from a caller (Poly's limit).
 const MAX_BLOCK: usize = 1 << 20;
 
@@ -217,6 +220,47 @@ pub unsafe extern "system" fn CreateProcessW(
             flags,
             environment,
             current_directory: wide_arg(current_directory),
+            token: None,
+            attribute_list: match attribute_list(startup_info, flags) {
+                Ok(l) => l,
+                Err(e) => return fail(e, FALSE),
+            },
+        };
+        create(&request, startup.as_ref(), attributes, information)
+    }
+}
+
+/// `CreateProcessAsUserW` (ADR 0171): `CreateProcessW` with the primary
+/// token the child gets (a NULL token is `CreateProcessW`). The token needs
+/// `TOKEN_QUERY` and `TOKEN_ASSIGN_PRIMARY`; an impersonation token of level
+/// Impersonation or Delegation is made a primary one, a lower level is
+/// `ERROR_BAD_IMPERSONATION_LEVEL`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateProcessAsUserW(
+    token: Handle,
+    application: *const u16,
+    command_line: *mut u16,
+    process_attributes: *const u8,
+    thread_attributes: *const u8,
+    inherit_handles: i32,
+    flags: u32,
+    environment: *const u8,
+    current_directory: *const u16,
+    startup_info: *const u8,
+    information: *mut u8,
+) -> i32 {
+    // SAFETY: the caller's arguments, as Learn documents them.
+    unsafe {
+        let startup = startup_from(startup_info, &wide_string);
+        let attributes = (inherits(process_attributes), inherits(thread_attributes));
+        let request = Request {
+            app: wide_arg(application),
+            cmd: wide_arg(command_line),
+            inherit_handles: inherit_handles != 0,
+            flags,
+            environment,
+            current_directory: wide_arg(current_directory),
+            token: (token != 0).then_some(token),
             attribute_list: match attribute_list(startup_info, flags) {
                 Ok(l) => l,
                 Err(e) => return fail(e, FALSE),
@@ -254,6 +298,7 @@ pub unsafe extern "system" fn CreateProcessA(
             flags,
             environment,
             current_directory: cwd.as_deref(),
+            token: None,
             attribute_list: match attribute_list(startup_info, flags) {
                 Ok(l) => l,
                 Err(e) => return fail(e, FALSE),
@@ -271,6 +316,8 @@ struct Request<'a> {
     flags: u32,
     environment: *const u8,
     current_directory: Option<&'a [u16]>,
+    /// The primary token the child gets (`CreateProcessAsUserW`, ADR 0171).
+    token: Option<Handle>,
     /// The `PROC_THREAD_ATTRIBUTE_LIST` of a `STARTUPINFOEX`, or null.
     attribute_list: *const u8,
 }
@@ -292,6 +339,10 @@ fn make_inheritable(h: Handle) {
 /// null or a block as `CreateProcessW` documents.
 unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (bool, bool), information: *mut u8) -> i32 {
     let (app, cmd, flags) = (r.app, r.cmd, r.flags);
+    // `NoChildProcessCreation` (SetProcessMitigationPolicy, ADR 0171).
+    if crate::mitigation::child_processes_blocked() {
+        return fail(367, FALSE);
+    }
     if information.is_null() || (app.is_none() && cmd.is_none()) {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
@@ -377,7 +428,10 @@ unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (boo
     }
     blob.insert(0, records);
     let attribute_blob = if records == 0 { core::ptr::null() } else { blob.as_ptr() as *const u8 };
-    let process_flags = if r.inherit_handles { p::NT_PROCESS_INHERIT_HANDLES } else { 0 };
+    let mut process_flags = if r.inherit_handles { p::NT_PROCESS_INHERIT_HANDLES } else { 0 };
+    if r.token.is_some() {
+        process_flags |= NT_PROCESS_POLY_TOKEN;
+    }
     let thread_flags = if flags & CREATE_SUSPENDED != 0 { p::NT_THREAD_CREATE_SUSPENDED } else { 0 };
     let (mut ph, mut th): (Handle, Handle) = (0, 0);
     // SAFETY: valid pointers; the kernel reads the parameters.
@@ -392,7 +446,8 @@ unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (boo
             process_flags,
             thread_flags,
             buf.as_ptr(),
-            core::ptr::null_mut(),
+            // Poly's token flag: CreateInfo is the token handle.
+            r.token.unwrap_or(0) as *mut u8,
             attribute_blob,
         )
     };

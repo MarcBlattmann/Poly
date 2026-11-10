@@ -8,6 +8,7 @@ sequence that a run of the same kit on Poly can be compared against, keyed by th
 
     callsites.py reduce <out.json> <run1.jsonl> <run2.jsonl> [<run3.jsonl> ...] --kit <polytrace-kit.json>
                         [--machine "<text>"] [--date YYYY-MM-DD] [--state cold|warm] [--to AddVectoredExceptionHandler]
+                        [--to-at <module>+0x<offset>] [--main-thread] [--process <name>]
     callsites.py flow <out.json>          print the producers with consumers (markdown)
     callsites.py show <out.json> <first> <last>      print calls n=first..last
     callsites.py compare <out.json> <poly polytrace.jsonl> [--limit N]
@@ -18,7 +19,10 @@ user's SID, the profile and application directories, the random part of the cras
 environment). Pointers and handles become a class (`null`, `-1`, `stack`, `private`, `mapped`,
 `image:<module>[+0x<offset>]`, `handle`, `int:<n>`); a class gets `<-n` when the value is what call `n` of
 the sequence returned or wrote to an out parameter, so a NULL where Windows has `private<-597` stands out.
-Anything that differs between two runs becomes `"<var>"`. The lock calls (`TryAcquireSRWLockExclusive`,
+Anything that differs between two runs becomes `"<var>"`. A child process's trace (the logger writes `polytrace.jsonl.<n>` for the n-th child of a run,
+spec-chrome-win-4) is reduced with `--process <name> --main-thread` (only the calls of the thread that made the
+first call: the other threads' calls fall between them differently in every run) and, where the window's last call
+is not the first of its name, `--to <fn> --to-at <caller>`; `compare` reads the window from the reference. The lock calls (`TryAcquireSRWLockExclusive`,
 `AcquireSRWLockExclusive`, `ReleaseSRWLockExclusive`) and the allocator's `VirtualAlloc`/`VirtualFree` are not in
 `calls`: how many chrome_elf makes varies by a dozen from run to run and where the allocator calls fall between the
 others varies from machine to machine; they are summarised per call site in `noise_sites`.
@@ -83,13 +87,16 @@ SID = re.compile(r"S-1-(?:5-21|12-1)-\d+(?:-\d+)+")
 def nstr(s):
     """A string with the machine-specific parts replaced."""
     s = SID.sub("<user-sid>", s)
-    s = re.sub(r"[A-Za-z]:[\\/]Users[\\/][^\\/\"]*[\\/]pc3", "<work>", s)
-    s = re.sub(r"\\Device\\HarddiskVolume\d+\\Users\\[^\\]*\\pc3", "\\\\Device\\\\HarddiskVolume<n>\\\\<work>", s)
+    s = re.sub(r"[A-Za-z]:[\\/]Users[\\/][^\\/\"]*[\\/]pc\d+", "<work>", s)
+    s = re.sub(r"\\Device\\HarddiskVolume\d+\\Users\\[^\\]*\\pc\d+", "\\\\Device\\\\HarddiskVolume<n>\\\\<work>", s)
     s = re.sub(r"\\Device\\HarddiskVolume\d+", r"\\Device\\HarddiskVolume<n>", s)
     s = re.sub(r"<work>[\\/]appk", "<app>", s)
     s = re.sub(r"<work>[\\/]ud[\\/][^\\/ \"]+", "<profile>", s)
     s = re.sub(r"<work>[\\/]pages", "<pages>", s)
     s = re.sub(r"crashpad_\d+_[A-Z]{16}", "crashpad_<pid>_<rand16>", s)
+    # the crash handler's command line: the handles and the address the browser passes it
+    s = re.sub(r"--initial-client-data=[0-9a-fx,]+", "--initial-client-data=<handles>", s)
+    s = re.sub(r"--user-stream-region=\d+,", "--user-stream-region=<handle>,", s)
     return s
 
 
@@ -121,6 +128,10 @@ def nout(o):
         o["kv"] = dict(o["kv"], data=nstr(o["kv"]["data"]))
     if "module" in o and o["module"] == "?":
         o["module"] = "<unnamed>"
+    # strings inside dumped structures (STARTUPINFOW's title is the program's path)
+    for k, v in list(o.items()):
+        if isinstance(v, dict):
+            o[k] = {kk: (nstr(vv) if isinstance(vv, str) else vv) for kk, vv in v.items()}
     return o
 
 
@@ -131,15 +142,21 @@ def hexval(x):
 class Run:
     """One run: its records up to the window's end, with producers resolved."""
 
-    def __init__(self, path, to):
+    def __init__(self, path, to, to_at=None, main_only=False):
         rows = []
         with open(path, encoding="utf-8") as f:
             for line in f:
                 if line.startswith('{"seq"'):
                     rows.append(json.loads(line))
-        end = next((i for i, r in enumerate(rows) if r["fn"] == to and r["t"] == 0), len(rows) - 1)
+        if main_only:
+            rows = [r for r in rows if r["t"] == 0]
+
+        def is_end(r):
+            return r["fn"] == to and r["t"] == 0 and (to_at is None or f'{r.get("rm")}+{r.get("ro")}' == to_at)
+
+        end = next((i for i, r in enumerate(rows) if is_end(r)), len(rows) - 1)
         self.path = path
-        self.reached_end = any(r["fn"] == to and r["t"] == 0 for r in rows)
+        self.reached_end = any(is_end(r) for r in rows)
         self.rows = rows[: end + 1]
         self.all_rows = len(rows)
         self.locks = [r for r in self.rows if r["fn"] in LOCKS]
@@ -247,6 +264,7 @@ def sha256(p):
 def reduce_cmd(argv):
     out_path = argv[0]
     runs, kit, machine, date, to, state = [], None, "", "", "AddVectoredExceptionHandler", "cold"
+    to_at, main_only, process = None, False, "browser"
     it = iter(argv[1:])
     for a in it:
         if a == "--kit":
@@ -259,9 +277,17 @@ def reduce_cmd(argv):
             to = next(it)
         elif a == "--state":
             state = next(it)
+        elif a == "--to-at":
+            to_at = next(it)
+        elif a == "--main-thread":
+            main_only = True
+        elif a == "--process":
+            process = next(it)
         else:
             runs.append(a)
-    R = [Run(p, to) for p in runs]
+    R = [Run(p, to, to_at, main_only) for p in runs]
+    if not all(r.reached_end for r in R):
+        sys.exit("a run ends before the window's last call")
     keys = [[(c["fn"], c.get("rm"), c.get("ro")) for c in r.calls] for r in R]
     if any(k != keys[0] for k in keys[1:]):
         for r, k in zip(R, keys):
@@ -299,14 +325,16 @@ def reduce_cmd(argv):
     doc = OrderedDict()
     doc["format"] = "poly-callsite-trace/1"
     doc["stage"] = "s1"
-    doc["process"] = "browser"
+    doc["process"] = process
+    child = process != "browser"
     doc["recorded"] = OrderedDict(
         machine=machine,
         date=date,
         runs=len(R),
         command="chrome.exe --headless --no-sandbox --disable-gpu --user-data-dir=<profile> --dump-dom file:///<pages>/s1.html",
         env="POLYTRACE_SYNC=1 (dumps on), POLYTRACE_OUT=<file>; no other variable",
-        logger="tools/wintrace/polytrace-sync (spec-chrome-win-3 version: caller module+offset, argument classes, out-buffer dumps)",
+        logger="tools/wintrace/polytrace-sync (spec-chrome-win-3 version: caller module+offset, argument classes, out-buffer dumps)"
+        + ("; spec-chrome-win-4: a child process writes <file>.<n>, this process's file is one of those" if child else ""),
         kit_programs=kitj.get("programs"),
         kit_files={k: v for k, v in (kitj.get("files") or {}).items() if k in ("chrome.exe", "chrome_elf.dll", "polytrace.dll")},
         registry_state=STATES[state],
@@ -316,7 +344,11 @@ def reduce_cmd(argv):
     doc["window"] = OrderedDict(
         [
             ("from", "process start (the first call chrome_elf.dll makes through its imports)"),
-            ("to", f"the first {to} (the end of chrome_elf's crash-reporting initialisation)"),
+            ("to", f"the first {to}" + (f" from {to_at}" if to_at else "")
+             + ("" if child else " (the end of chrome_elf's crash-reporting initialisation)")),
+            ("to_fn", to),
+            ("to_at", to_at),
+            ("threads", "main" if main_only else "all"),
             ("calls", len(merged)),
             ("calls_by_caller_module", dict(by_module)),
             ("calls_per_run", [len(r.calls) for r in R]),
@@ -426,12 +458,14 @@ def diff_fields(ref, got, path=""):
 def compare_cmd(argv):
     """Compare a Poly run of the same kit with the reference, call by call."""
     ref = load(argv[0])
-    poly = Run(argv[1], ref["window"]["to"].split()[2] if False else "AddVectoredExceptionHandler")
+    win = ref["window"]
+    to = win.get("to_fn", "AddVectoredExceptionHandler")
+    poly = Run(argv[1], to, win.get("to_at"), win.get("threads") == "main")
     limit = int(argv[argv.index("--limit") + 1]) if "--limit" in argv else 12
     calls = ref["calls"]
     got = poly.norm
     print(f"reference: {len(calls)} calls ({ref['recorded']['machine']}); poly: {len(got)} calls"
-          f"{'' if poly.reached_end else ' (the run ends before AddVectoredExceptionHandler)'}")
+          f"{'' if poly.reached_end else f' (the run ends before {to})'}")
     found = 0
     for n, g in enumerate(got):
         if n >= len(calls):

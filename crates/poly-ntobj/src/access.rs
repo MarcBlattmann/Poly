@@ -131,6 +131,8 @@ pub const THREAD_IMPERSONATE: AccessMask = 0x0100;
 pub const THREAD_DIRECT_IMPERSONATION: AccessMask = 0x0200;
 pub const THREAD_SET_LIMITED_INFORMATION: AccessMask = 0x0400;
 pub const THREAD_QUERY_LIMITED_INFORMATION: AccessMask = 0x0800;
+/// `THREAD_RESUME` (Windows Vista and later).
+pub const THREAD_RESUME: AccessMask = 0x1000;
 /// `THREAD_ALL_ACCESS` for Windows Vista and later.
 pub const THREAD_ALL_ACCESS: AccessMask = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF;
 

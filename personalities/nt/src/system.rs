@@ -69,12 +69,6 @@ pub struct NtSystem {
     /// `NtQueryInformationProcess` (`GetExitCodeProcess`, ADR 0079).
     pub process_exits: BTreeMap<ProcessId, poly_ntobj::NtStatus>,
 
-    /// The privileges of each process's primary token once a
-    /// `NtAdjustPrivilegesToken` changed them (ADR 0114); a process not
-    /// here has [`poly_security::token::Token::poly_user`]'s. Forgotten when
-    /// the process ends.
-    pub token_privileges: BTreeMap<ProcessId, Vec<(u32, u32)>>,
-
     /// win32k's machine-wide state: the desktop link's surfaces (ADR 0128).
     pub win32k: crate::win32k::Win32k,
 
@@ -116,7 +110,6 @@ impl NtSystem {
             io: crate::io::IoState::new(),
             registry,
             process_exits: BTreeMap::new(),
-            token_privileges: BTreeMap::new(),
             win32k: crate::win32k::Win32k::default(),
             jobs: crate::job::Jobs::default(),
             sections: BTreeMap::new(),
@@ -172,6 +165,7 @@ impl NtSystem {
     /// can drop a reference.
     pub fn reap(&mut self, b: &mut dyn Backend) {
         while let Some(d) = self.objects.pop_deleted() {
+            self.objects.security_object_deleted(&d);
             match d.kind {
                 ObjectType::Section => self.remove_section(d.cookie, b),
                 ObjectType::File => {

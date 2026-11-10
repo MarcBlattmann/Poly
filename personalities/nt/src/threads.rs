@@ -168,7 +168,8 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
     }
     let params = crate::params::read(params_at, &mut |addr, buf| abi::read(k, addr, buf))?;
     let name = image_nt_name(&params.image_path)?;
-    let attrs = abi::Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE };
+    let attrs =
+        abi::Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE, security: None };
     let image = crate::io::services::with_named(
         k,
         &attrs,
@@ -177,6 +178,27 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         |sys, cookie| sys.io.read_all(cookie),
     )?;
     let all = |a: u32, all: u32| if a == 0 { all } else { a };
+    // Poly's own flag: CreateInfo is a handle to the primary token to give it.
+    let given_token = if process_flags & PROCESS_CREATE_FLAGS_POLY_TOKEN != 0 {
+        let h = abi::arg(k, regs, 9)?;
+        let id = crate::security::token_of(
+            k,
+            h,
+            poly_security::token::TOKEN_ASSIGN_PRIMARY | poly_security::token::TOKEN_QUERY,
+        )?;
+        // A primary token, or an impersonation token of at least Impersonation level.
+        let ok = k.with_state(|sys, _, _| {
+            sys.objects.security.token(id).is_some_and(|t| {
+                t.kind == poly_security::token::TOKEN_PRIMARY || t.level >= poly_security::token::SECURITY_IMPERSONATION
+            })
+        });
+        if !ok {
+            return Err(poly_ntobj::NtStatus(0xC000_00A5));
+        }
+        Some(id)
+    } else {
+        None
+    };
     let attributes = abi::arg(k, regs, 10)?;
     let extra = read_create_attributes(k, attributes)?;
     let caller = k.caller();
@@ -191,6 +213,7 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         thread_access: all(thread_access, poly_ntobj::access::THREAD_ALL_ACCESS),
         inherit_handles: process_flags & PROCESS_CREATE_FLAGS_INHERIT_HANDLES != 0,
         suspended: thread_flags & THREAD_CREATE_FLAGS_CREATE_SUSPENDED != 0,
+        token: given_token,
         inherit_only: extra.handle_list,
         jobs,
         join_creator_jobs: join,
@@ -318,6 +341,35 @@ pub fn open_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatu
         sys.objects.open_by_pointer(&caller, id, access as u32, attrs.attributes & poly_ntobj::OBJ_INHERIT)
     })?;
     return_handle(k, out, h)?;
+    Ok(STATUS_SUCCESS)
+}
+
+/// `NtSetInformationProcess(Process, ProcessInformationClass,
+/// ProcessInformation, ProcessInformationLength)`: `ProcessMitigationPolicy`
+/// (52), a `PROCESS_MITIGATION_POLICY_INFORMATION` (`Policy` u32, flags u32)
+/// of the calling process, which sets the policies the kernel enforces: 2
+/// dynamic code (`ProhibitDynamicCode`) and 4 system call disable
+/// (`DisallowWin32kSystemCalls`). The others are `kernelbase`'s state.
+pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [h, class, info, length] = abi::args::<K, 4>(k, regs)?;
+    const PROCESS_MITIGATION_POLICY: u64 = 52;
+    if class != PROCESS_MITIGATION_POLICY {
+        return Err(STATUS_INVALID_INFO_CLASS);
+    }
+    if length != 8 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let pid = process_of(k, Handle(h), 0x0200)?;
+    if pid != k.caller().process {
+        return Err(STATUS_ACCESS_DENIED);
+    }
+    let policy = abi::read_u32(k, info)?;
+    let flags = abi::read_u32(k, info + 4)?;
+    k.with_state(|_, proc, _| match policy {
+        2 if flags & 1 != 0 => proc.dynamic_code_blocked = true,
+        4 if flags & 1 != 0 => proc.win32k_disabled = true,
+        _ => {}
+    });
     Ok(STATUS_SUCCESS)
 }
 

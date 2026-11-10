@@ -52,10 +52,10 @@ pub fn slot(index: u32) -> Option<Slot> {
     }
 }
 
-/// FLS indices taken before a program runs: Windows' loader holds index 0, and the browser
-/// process of Chrome recorded on Windows never got 0 from any of its six `FlsAlloc` calls
-/// (programs use 0 as "not allocated"). The first index `FlsAlloc` returns is 1.
-pub const FLS_RESERVED: u32 = 1;
+/// FLS indices taken before a program runs: Windows' loader holds indices 0 and 1. The browser
+/// process of Chrome recorded on Windows 11 (call-site trace, `s1-chrome-elf-init`) got 2 from its
+/// first `FlsAlloc` and 3 from its second, and never 0 (programs use 0 as "not allocated").
+pub const FLS_RESERVED: u32 = 2;
 
 /// A set of indices handed out lowest first.
 #[derive(Clone, Debug)]
@@ -120,10 +120,11 @@ mod tests {
     #[test]
     fn fls_starts_above_the_loaders_index() {
         let mut f = Indices::with_reserved(FLS_MAXIMUM_AVAILABLE, FLS_RESERVED);
-        assert_eq!(f.alloc(), Some(1));
+        // Windows 11 gave Chrome 2 and then 3.
         assert_eq!(f.alloc(), Some(2));
-        assert!(f.is_allocated(0));
-        let mut n = 3;
+        assert_eq!(f.alloc(), Some(3));
+        assert!(f.is_allocated(0) && f.is_allocated(1));
+        let mut n = 4;
         while f.alloc().is_some() {
             n += 1;
         }

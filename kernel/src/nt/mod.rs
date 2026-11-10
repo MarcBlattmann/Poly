@@ -113,9 +113,19 @@ pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/b
 /// [`layout`]; empty without `xtask`.
 pub static DWRITE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dwrite.dll"));
 
+/// Our `userenv.dll` (ADR 0171), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
+pub static USERENV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/userenv.dll"));
+
 /// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
 pub static VERSION: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/version.dll"));
+/// Our `winmm.dll` (ADR 0155): `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`; installed by
+/// [`layout`].
+pub static WINMM: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/winmm.dll"));
+/// Our `shell32.dll` (ADR 0155): `CommandLineToArgvW`, `SHGetFolderPathW`; installed by
+/// [`layout`].
+pub static SHELL32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shell32.dll"));
 /// Our `ole32.dll` (ADR 0155, batch 4): COM apartments, the Windows Runtime's
 /// strings; hosts the `winrt` and `com` API sets. Installed by [`layout`].
 pub static OLE32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ole32.dll"));
@@ -676,6 +686,8 @@ struct HandlesFor {
     process_access: u32,
     thread_access: u32,
     inherit_handles: bool,
+    /// The primary token it gets, else a copy of the creator's (ADR 0171).
+    token: Option<u64>,
     /// ADR 0169: only these handles (`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`),
     /// the jobs it is created in, whether it joins its creator's, and
     /// whether it may make memory executable.
@@ -729,6 +741,22 @@ fn start_params(
         let only = handles.and_then(|h| h.inherit_only.as_deref());
         let start = exec::start_process_listed(&mut s.sys, proc, &mut b, file, NTDLL, None, thread, inherit_from, only);
         let start = start.and_then(|ps| {
+            // Its token (a copy of its creator's, or the one given) and the
+            // descriptors of its objects (ADR 0171).
+            poly_personality_nt::security::inherit_token(
+                &mut s.sys,
+                pid,
+                handles.map(|h| h.caller.process),
+                handles.and_then(|h| h.token),
+                thread,
+            )?;
+            poly_personality_nt::security::assign_process_security(
+                &mut s.sys,
+                pid,
+                handles.map(|h| &h.caller),
+                proc.object,
+                proc.threads.first().map(|t| t.object),
+            );
             // Its creator's jobs and the ones it was made for (ADR 0169).
             if let Some(h) = handles {
                 s.sys.jobs.process_created(
@@ -816,6 +844,7 @@ fn create_process(
         process_access: req.process_access,
         thread_access: req.thread_access,
         inherit_handles: req.inherit_handles,
+        token: req.token,
         inherit_only: req.inherit_only,
         jobs: req.jobs,
         join_creator_jobs: req.join_creator_jobs,

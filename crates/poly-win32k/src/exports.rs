@@ -298,6 +298,9 @@ pub const IMM32_EXPORTS: &[&str] = &[
 /// `gdi32.dll` functions of the first slice (and its private `PolyGdi*`
 /// exports for `user32`).
 pub const GDI32_EXPORTS: &[&str] = &[
+    "AddFontMemResourceEx",
+    "AddFontResourceExW",
+    "AddFontResourceW",
     "BitBlt",
     "CombineRgn",
     "CreateBitmap",
@@ -316,6 +319,7 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "CreateSolidBrush",
     "DeleteDC",
     "DeleteObject",
+    "EnumFontFamiliesExW",
     "EqualRgn",
     "ExcludeClipRect",
     "ExtSelectClipRgn",
@@ -331,6 +335,7 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "GetClipBox",
     "GetClipRgn",
     "GetCurrentObject",
+    "GetCurrentPositionEx",
     "GetDeviceCaps",
     "GetObjectType",
     "GetObjectW",
@@ -359,6 +364,9 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "PtInRegion",
     "RectInRegion",
     "Rectangle",
+    "RemoveFontMemResourceEx",
+    "RemoveFontResourceExW",
+    "RemoveFontResourceW",
     "RestoreDC",
     "SaveDC",
     "SelectClipRgn",

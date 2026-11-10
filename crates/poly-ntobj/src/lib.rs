@@ -48,9 +48,10 @@ pub mod manager;
 pub mod name;
 pub mod namespace;
 mod object;
+pub mod security;
 mod services;
 mod slab;
-pub mod status;
+pub use poly_security::status;
 pub mod wait;
 
 #[cfg(test)]
@@ -61,6 +62,7 @@ pub use handle::{Handle, HandleFlags};
 pub use manager::{Deleted, ObjectManager};
 pub use namespace::{Intent, NoParse, ParseHook, ParseRequest, Parsed};
 pub use object::{EventType, ObjectId, ObjectType};
+pub use security::{DefaultSd, ObjectSecurity, path_key};
 pub use services::ObjectBasicInformation;
 pub use status::{NtStatus, Result};
 pub use wait::{
@@ -141,26 +143,29 @@ pub const DUPLICATE_SAME_ACCESS: u32 = 0x2;
 pub const DUPLICATE_SAME_ATTRIBUTES: u32 = 0x4;
 
 /// `OBJECT_ATTRIBUTES` once the personality has captured it: the root
-/// directory handle, the name (the `UNICODE_STRING`'s code units) and the
-/// `OBJ_*` flags. Security descriptors and quality of service come later.
+/// directory handle, the name (the `UNICODE_STRING`'s code units), the
+/// `OBJ_*` flags and the security descriptor. Quality of service comes
+/// later.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ObjectAttributes<'a> {
     pub root: Option<Handle>,
     pub name: Option<&'a [u16]>,
     pub attributes: u32,
+    /// The security descriptor the creator gave (self-relative bytes).
+    pub security: Option<&'a [u8]>,
 }
 
 impl<'a> ObjectAttributes<'a> {
     pub const fn named(name: &'a [u16], attributes: u32) -> ObjectAttributes<'a> {
-        ObjectAttributes { root: None, name: Some(name), attributes }
+        ObjectAttributes { root: None, name: Some(name), attributes, security: None }
     }
 
     pub const fn unnamed(attributes: u32) -> ObjectAttributes<'a> {
-        ObjectAttributes { root: None, name: None, attributes }
+        ObjectAttributes { root: None, name: None, attributes, security: None }
     }
 
     pub const fn relative(root: Handle, name: &'a [u16], attributes: u32) -> ObjectAttributes<'a> {
-        ObjectAttributes { root: Some(root), name: Some(name), attributes }
+        ObjectAttributes { root: Some(root), name: Some(name), attributes, security: None }
     }
 }
 

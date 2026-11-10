@@ -1,0 +1,73 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtQueryInformationFile.yaml
+id: windows/api/ntdll.dll/NtQueryInformationFile
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output (four runs for the tests that did not change between rounds), each run in a fresh scratch directory; the test that needs a second process starts its own image again with CreateProcessW and a --child argument"
+  observed_by: spec-chrome-win-4
+  date: 2026-11-10
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: "NtQueryInformationFile function (ntifs.h)", "FILE_NAME_INFORMATION
+  structure (ntddk.h)", "CreateNamedPipeW", "CreatePipe", "Pipe Names";
+  wdm.h / ntifs.h for the FILE_INFORMATION_CLASS value and the structure
+  layout, ntstatus.h for the status values. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns information about the file object behind a handle. This sheet
+  covers one class, FileNameInformation (9), and above all pipe handles:
+  for either end of a named pipe the name is a backslash followed by the
+  pipe's name exactly as the creator of its first instance spelled it,
+  without the device (no "\Device\NamedPipe", no "\\.\pipe"); for either end
+  of an anonymous pipe it is the empty name. Chrome's crash handler asks a
+  pipe server handle it inherited for this name, puts "\\.\pipe" before it
+  and creates the pipe's next instance by that path.
+interface:
+  signature: "NTSTATUS NtQueryInformationFile(HANDLE file, PIO_STATUS_BLOCK io_status_block, PVOID file_information, ULONG length, FILE_INFORMATION_CLASS class)"
+  class: "FileNameInformation = 9 (wdm.h FILE_INFORMATION_CLASS)"
+  file_name_information: "FILE_NAME_INFORMATION (ntddk.h): FileNameLength u32 @0, the length of the name in bytes; FileName WCHAR[] @4, UTF-16, not NUL-terminated. sizeof is 8 (one character and two bytes of padding)"
+  io_status_block: "IO_STATUS_BLOCK (wdm.h): Status @0 (pointer sized), Information @8"
+rules:
+  named_pipe_name: "for a named pipe created as \\\\.\\pipe\\PolySpec4_NameA the name is \"\\PolySpec4_NameA\": one backslash, then everything after \"\\\\.\\pipe\\\". FileNameLength 32 for these 16 characters; status STATUS_SUCCESS (0); the I/O status block gets Status 0 and Information 36 = 4 + FileNameLength; exactly 36 bytes of the caller's buffer are written (no terminating NUL, the rest of a larger buffer is not touched)"
+  same_for_every_handle: "the server end and the client end report the same name, and so do: the server end before a client connects, while one is connected and after the client closed; a second instance of the pipe and the client connected to it; a duplicate made with DuplicateHandle; a handle a child process inherited (the child sees the same name as the parent)"
+  spelling: "the name is the spelling the first instance was created with. A client that opened the pipe as \"\\\\.\\pipe\\POLYSPEC4_namea\" reports \"\\PolySpec4_NameA\", and so does the server end it is connected to; clients opened through the NT paths \"\\??\\pipe\\PolySpec4_NameD\", \"\\Device\\NamedPipe\\PolySpec4_NameD\" and \"\\??\\PIPE\\polyspec4_named\" all report \"\\PolySpec4_NameD\""
+  name_shapes: "\"crashpad_4242_ABCDEFGHIJKLMNOP\" -> \"\\crashpad_4242_ABCDEFGHIJKLMNOP\" (FileNameLength 62, Information 66); names with dots and spaces come back unchanged; a pipe name may hold backslashes: \"PolySpec4\\sub\\leaf\" -> \"\\PolySpec4\\sub\\leaf\"; \"P\" -> \"\\P\" (FileNameLength 4, Information 8); a pipe name of 205 characters -> FileNameLength 412, Information 416 (a 528-byte buffer, the size Chrome's crash handler passes, holds it)"
+  reopening_by_name: "\"\\\\.\\pipe\" + the name is a path the pipe can be created and opened by: a child that inherited the server handle of a pipe created with PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE, message mode, 2 instances built \"\\\\.\\pipe\\PolySpec4_NameC\" that way, and CreateNamedPipeW with it (PIPE_ACCESS_DUPLEX, message mode, 2 instances, 512-byte buffers) made the second instance (last error ERROR_ALREADY_EXISTS (183) after the success, as for every further instance); a third call failed with ERROR_PIPE_BUSY (231); the new instance reports the same name and GetNamedPipeHandleStateW on the inherited handle then counts 2 instances. After the child ended, its instance is gone and the parent could create a second instance again"
+  anonymous_pipe: "both ends of a pipe made by CreatePipe report the empty name: STATUS_SUCCESS, FileNameLength 0, Information 4, and only the 4 bytes of the length field are written (also with a 528-byte buffer)"
+  pipe_root: "a handle to the pipe file system's root opened as \"\\??\\pipe\\\" or \"\\Device\\NamedPipe\\\" reports \"\\\" (FileNameLength 2, Information 6); a handle to the device itself, opened as \"\\Device\\NamedPipe\" without the final backslash, fails with STATUS_INVALID_PARAMETER (0xC000000D)"
+  disk_file: "for a file on a disk volume the name is the full path on its volume, starting with a backslash and without the drive letter or device: for a file in the directory of the test's own image it equals the image's directory with the drive letter and colon removed, followed by the file's name; Information = 4 + FileNameLength"
+  minimum_length: "a length below 8 (sizeof(FILE_NAME_INFORMATION)) fails with STATUS_INFO_LENGTH_MISMATCH (0xC0000004) for every kind of file handle, also for an anonymous pipe whose answer needs 4 bytes (lengths 0, 1, 2, 3, 4, 5, 6, 7 tested); nothing is written to the buffer and the I/O status block is not written"
+  too_small: "a length of at least 8 that cannot hold the whole name gives STATUS_BUFFER_OVERFLOW (0x80000005), a warning: FileNameLength is still the full length of the name (32), the buffer is filled to its very last byte with the start of the name (length 9 writes 9 bytes: the field, two characters and the first byte of the third; length 35 writes 35 bytes), and the I/O status block gets Status 0x80000005 and Information = the length passed. Tested for 8, 9, 10, 11, 12, 20, 33, 34, 35 with a 36-byte answer, and 100 and for a disk file 8"
+  exact_and_larger: "a length of exactly 4 + FileNameLength succeeds, and every larger length gives the same result with the same number of bytes written (36, 37, 38, 40, 528 tested)"
+errors:
+  not_a_file: "STATUS_OBJECT_TYPE_MISMATCH (0xC0000024) for a handle to an event and for the process pseudo handle (-1)"
+  invalid_handle: "STATUS_INVALID_HANDLE (0xC0000008) for the handle value 0 and for a value that is no open handle"
+  info_length_mismatch: "STATUS_INFO_LENGTH_MISMATCH (0xC0000004) for a length below 8 (see rules.minimum_length)"
+  buffer_overflow: "STATUS_BUFFER_OVERFLOW (0x80000005) when the name does not fit (see rules.too_small); it is a warning status and data was written"
+  on_failure: "for the three error statuses above nothing is written: neither the buffer nor the I/O status block"
+side_effects: "none: the query changes nothing about the pipe, its instances or its connection state"
+threading: "no state is shared between threads"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing kernel32.dll and ntdll.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants); run
+  with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Every query gets a
+  buffer filled with 0xAA and an I/O status block filled with a marker, so
+  the lines show how many bytes were written and whether the status block
+  was. Pipe names are fixed ("PolySpec4_..."), so the output is the same on
+  every run; handles, process ids and addresses are never printed. The
+  child-process test starts its own image again with handle inheritance
+  and reads the child's report from an anonymous pipe.
+not_covered: >
+  Every other information class (basic, standard, position, mode, access,
+  alignment, all, pipe and pipe-local information, ...). FileNameInformation
+  for directories, files opened by file ID, files on network shares and
+  substituted drives, other devices (console, NUL, mailslots), and names
+  longer than the 800-byte test buffer. Asynchronous handles with pending
+  I/O. Pipes of other sessions or machines.
