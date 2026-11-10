@@ -112,7 +112,7 @@ fn objects_live_and_die_as_observed() {
     assert_eq!(g.object_type(b), OBJ_BRUSH);
     assert!(!g.delete_object(b));
     // Deleted and unselected: selecting it succeeds (the old brush comes
-    // back), but it paints nothing; a live brush given to FillRect paints.
+    // back), and it paints white; a live brush given to FillRect paints.
     {
         let (dc, mut px) = dib32(&mut g, 12, 1);
         px.fill(0x00FF_FFFF);
@@ -139,8 +139,8 @@ fn objects_live_and_die_as_observed() {
     g.delete_dc(dc);
     let prev = g.select_object(other, u64::from(bmp)).unwrap();
     assert_eq!(g.object_type(u64::from(prev)), OBJ_BITMAP);
-    // A selected brush deleted: it paints no more, and is gone once
-    // replaced (DeleteObject do_basic on the oracle).
+    // A selected brush the DC never drew with, deleted: it paints white,
+    // and is gone once replaced (DeleteObject.yaml `selected_brush_pen`).
     let (dc, mut px) = dib32(&mut g, 1, 1);
     px[0] = 0x00FF_FFFF;
     let red = u64::from(g.create_solid_brush(0xFF));
@@ -295,7 +295,9 @@ fn rectangular_regions_are_normalised_and_empty_ones_are_empty() {
         let h = u64::from(g.create_rect_rgn(Rect::new(i, i, i + 5, i + 5)).unwrap());
         assert!(g.delete_object(h));
         assert!(!g.delete_object(h));
-        assert_eq!(g.object_type(h), 0);
+        // type_after_delete: a deleted region keeps reporting OBJ_REGION.
+        assert_eq!(g.object_type(h), OBJ_REGION);
+        assert_eq!(g.rgn_box(h), None);
     }
 }
 
@@ -449,9 +451,9 @@ fn delete_object_follows_the_sheet_for_every_kind_of_object() {
     for h in [brush, pen, bmp, rgn] {
         assert!(g.delete_object(h), "{h:#x}");
     }
-    // A deleted solid brush still has type OBJ_BRUSH; the others are gone.
+    // type_after_delete: every deleted object keeps reporting its type.
     assert_eq!(g.object_type(brush), OBJ_BRUSH);
-    for (h, t) in [(pen, 0), (bmp, 0), (rgn, 0)] {
+    for (h, t) in [(pen, OBJ_PEN), (bmp, OBJ_BITMAP), (rgn, OBJ_REGION)] {
         assert_eq!(g.object_type(h), t, "{h:#x}");
     }
     for h in [brush, pen, bmp, rgn] {
@@ -468,6 +470,11 @@ fn delete_object_follows_the_sheet_for_every_kind_of_object() {
         assert_eq!(g.object_type(s), OBJ_BRUSH);
         assert!(g.delete_object(s), "still deletable-as-no-op");
     }
+    // DEFAULT_PALETTE (15) too: 1, type OBJ_PAL, the same handle again.
+    let pal = u64::from(g.stock(15));
+    assert!(g.delete_object(pal));
+    assert_eq!(g.object_type(pal), OBJ_PAL);
+    assert_eq!(u64::from(g.stock(15)), pal);
     let (dc, mut px) = dib32(&mut g, 2, 1);
     px.fill(0);
     g.select_object(dc, u64::from(g.stock(WHITE_BRUSH))).unwrap();
@@ -484,17 +491,28 @@ fn a_pen_or_bitmap_deleted_while_selected_goes_when_deselected_or_with_its_dc() 
     assert!(g.delete_object(pen));
     assert_eq!(g.object_type(pen), OBJ_PEN, "still there while selected");
     assert!(!g.delete_object(pen), "a second delete fails");
+    assert_eq!(g.object_bytes(pen), None, "GetObject answers nothing while it waits");
     g.select_object(dc, u64::from(old)).unwrap();
-    assert_eq!(g.object_type(pen), 0, "gone once deselected");
+    // after_deselect: a deleted pen is reported as OBJ_PEN for ever, but
+    // cannot be deleted or selected again.
+    assert_eq!(g.object_type(pen), OBJ_PEN);
+    assert!(!g.delete_object(pen));
+    assert_eq!(g.select_object(dc, pen), Ok(0));
     // selected_bitmap: 1, stays OBJ_BITMAP until the DC is deleted; then a
     // DeleteObject fails.
     let bmp = u64::from(g.current_object(dc, OBJ_BITMAP));
     assert!(g.delete_object(bmp));
     assert_eq!(g.object_type(bmp), OBJ_BITMAP);
     assert!(!g.delete_object(bmp));
+    assert_eq!(g.object_bytes_for(bmp, 128).map(|b| b.len()), Some(104), "a DIB section's DIBSECTION");
+    assert_eq!(g.object_bytes_for(bmp, 32).map(|b| b.len()), Some(32));
+    let other = u64::from(g.create_compatible_dc(0));
+    assert_eq!(g.select_object(other, bmp), Ok(0), "not into a second DC");
     assert!(g.delete_dc(dc).0);
-    assert_eq!(g.object_type(bmp), 0);
+    assert_eq!(g.object_type(bmp), OBJ_BITMAP, "the type stays after the DC is gone");
+    assert_eq!(g.object_bytes(bmp), None);
     assert!(!g.delete_object(bmp));
+    assert_eq!(g.select_object(other, bmp), Ok(0));
     // dc: DeleteObject of a memory DC is 1; the DC still reads OBJ_DC.
     let m = u64::from(g.create_compatible_dc(0));
     assert!(g.delete_object(m));
@@ -846,6 +864,239 @@ fn text_faces_widths_and_fallback() {
     let stock = u64::from(g.stock(13));
     g.select_object(dc, stock).unwrap();
     assert_eq!(g.text_metrics(dc).unwrap().height, 16);
+}
+
+/// DeleteObject.yaml `selected_brush_pen`: what a DC draws with after its
+/// selected brush or pen was deleted depends on whether it drew with it
+/// before (or saved its state with it).
+#[test]
+fn a_deleted_selected_brush_or_pen_draws_by_its_use() {
+    const PATCOPY: u32 = 0x00F0_0021;
+    const BG: u32 = 0x0010_2030;
+    // (used before the delete, SaveDC before / RestoreDC after, stock object selected between)
+    for (used, save, stock_between) in
+        [(false, false, false), (true, false, false), (false, true, false), (true, true, false), (false, true, true)]
+    {
+        let own = used || save;
+        // Brush.
+        let mut g = Gdi::new();
+        let (dc, mut px) = dib32(&mut g, 8, 8);
+        let br = u64::from(g.create_solid_brush(0x0060_4020));
+        g.select_object(dc, br).unwrap();
+        if used {
+            g.pat_blt(dc, 0, 0, 8, 2, PATCOPY);
+        }
+        let saved = if save { g.save_dc(dc) } else { 0 };
+        if stock_between {
+            g.select_object(dc, u64::from(g.stock(BLACK_BRUSH))).unwrap();
+        }
+        assert!(g.delete_object(br));
+        assert_eq!(g.object_type(br), OBJ_BRUSH);
+        assert!(!g.delete_object(br), "a second delete fails");
+        assert_eq!(g.object_bytes(br), None);
+        if save {
+            assert!(g.restore_dc(dc, saved));
+        }
+        assert_eq!(u64::from(g.current_object(dc, OBJ_BRUSH)), br);
+        px.fill(BG);
+        g.pat_blt(dc, 0, 0, 8, 4, PATCOPY);
+        let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 4, 8, 6)).unwrap());
+        assert!(g.fill_rgn(dc, rgn, br));
+        let case = (used, save, stock_between);
+        assert_eq!(px[3 * 8 + 3], if own { 0x0020_4060 } else { 0x00FF_FFFF }, "PatBlt {case:?}");
+        assert_eq!(px[5 * 8 + 3], if own { 0x0020_4060 } else { BG }, "FillRgn {case:?}");
+        // Deselected: the brush is gone.
+        g.select_object(dc, u64::from(g.stock(WHITE_BRUSH))).unwrap();
+        assert_eq!(g.object_type(br), 0);
+        assert_eq!(g.select_object(dc, br), Ok(0));
+
+        // Pen.
+        let mut g = Gdi::new();
+        let (dc, mut px) = dib32(&mut g, 8, 8);
+        let pen = u64::from(g.create_pen(0, 1, 0x0010_10E0));
+        g.select_object(dc, pen).unwrap();
+        if used {
+            g.move_to(dc, 0, 1);
+            g.line_to(dc, 8, 1);
+        }
+        let saved = if save { g.save_dc(dc) } else { 0 };
+        if stock_between {
+            g.select_object(dc, u64::from(g.stock(BLACK_PEN))).unwrap();
+        }
+        assert!(g.delete_object(pen));
+        if save {
+            assert!(g.restore_dc(dc, saved));
+        }
+        px.fill(BG);
+        g.move_to(dc, 0, 3);
+        g.line_to(dc, 8, 3);
+        assert_eq!(px[3 * 8 + 3], if own { 0x00E0_1010 } else { 0 }, "LineTo {case:?}");
+    }
+    // A brush in two DCs, neither drew with it: white in both.
+    let mut g = Gdi::new();
+    let (a, mut pa) = dib32(&mut g, 2, 2);
+    let (b, mut pb) = dib32(&mut g, 2, 2);
+    let br = u64::from(g.create_solid_brush(0x0050_9030));
+    g.select_object(a, br).unwrap();
+    g.select_object(b, br).unwrap();
+    assert!(g.delete_object(br));
+    pa.fill(BG);
+    pb.fill(BG);
+    g.pat_blt(a, 0, 0, 2, 2, PATCOPY);
+    g.pat_blt(b, 0, 0, 2, 2, PATCOPY);
+    assert_eq!((pa[0], pb[0]), (0x00FF_FFFF, 0x00FF_FFFF));
+    // Not into a third DC while it waits.
+    let c = u64::from(g.create_compatible_dc(0));
+    assert_eq!(g.select_object(c, br), Ok(0));
+    // A deleted region: FillRgn fails; a brush deleted before it was
+    // selected fills white through FillRect.
+    let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 0, 1, 1)).unwrap());
+    let live = u64::from(g.create_solid_brush(0x0000_00FF));
+    assert!(g.delete_object(rgn));
+    assert!(!g.fill_rgn(a, rgn, live));
+    assert!(g.delete_object(live));
+    pa.fill(BG);
+    assert!(g.fill_rect(a, Rect::new(0, 0, 2, 2), live));
+    assert_eq!(pa[0], 0x00FF_FFFF);
+    // A font's GetObject fills a buffer larger than LOGFONTW.
+    let font = u64::from(g.create_font(&[0u8; 92]));
+    assert_eq!(g.object_bytes_for(font, 128).map(|b| b.len().min(128)), Some(128));
+    assert_eq!(g.object_bytes(font).map(|b| b.len()), Some(92));
+}
+
+/// GetSystemMetrics.yaml `device_caps_screen`.
+#[test]
+fn device_caps_are_the_screens_for_every_dc() {
+    let mut g = Gdi::new();
+    g.screen = Screen { width: 1920, height: 1080 };
+    let screen = u64::from(g.create_display_dc(0, false));
+    let window = u64::from(g.create_display_dc(0x1234, false));
+    let (mem, _px) = dib32(&mut g, 4, 4);
+    let want = [
+        (0, 16384),
+        (2, 1),
+        (4, 508),
+        (6, 286),
+        (8, 1920),
+        (10, 1080),
+        (12, 32),
+        (14, 1),
+        (16, -1),
+        (18, -1),
+        (20, 0),
+        (22, 0),
+        (24, -1),
+        (26, 0),
+        (28, 511),
+        (30, 254),
+        (32, 255),
+        (34, 30727),
+        (36, 1),
+        (38, 32409),
+        (40, 36),
+        (42, 36),
+        (44, 51),
+        (88, 96),
+        (90, 96),
+        (104, 0),
+        (106, 20),
+        (108, 24),
+        (110, 0),
+        (114, 0),
+        (116, 60),
+        (117, 1080),
+        (118, 1920),
+        (119, 1),
+        (120, 0),
+        (121, 2),
+        (-1, 0),
+        (3, 0),
+        (1000, 0),
+    ];
+    for dc in [screen, window, mem] {
+        for (index, value) in want {
+            assert_eq!(g.device_caps(dc, index), Some(value), "index {index}");
+        }
+    }
+    assert_eq!(g.device_caps(0, 8), None);
+    assert_eq!(g.device_caps(0x1234_5678, 8), None);
+}
+
+/// BeginPaint.yaml `dc_value`: a window's consecutive common DCs have the
+/// same handle value, in the default state each time.
+#[test]
+fn a_window_gets_its_released_dc_again() {
+    let mut g = Gdi::new();
+    let a = u64::from(g.create_display_dc(0x10, false));
+    g.set_text_color(a, 0x123456);
+    assert!(g.release_display_dc(a));
+    assert_eq!(g.object_type(a), 0, "released: the handle names nothing");
+    assert_eq!(g.display_hwnd(a), None);
+    let again = u64::from(g.create_display_dc(0x10, false));
+    assert_eq!(again, a);
+    assert_eq!(g.text_color(again), 0, "the default state");
+    assert!(g.release_display_dc(again));
+    // The screen's DC in between does not disturb it.
+    let screen = u64::from(g.create_display_dc(0, false));
+    assert_ne!(screen, a);
+    assert!(g.release_display_dc(screen));
+    assert_eq!(u64::from(g.create_display_dc(0x10, false)), a);
+    assert!(g.release_display_dc(a));
+    // Another window's DC in between: no promise, and never the same DC twice at once.
+    let b = u64::from(g.create_display_dc(0x20, false));
+    let a2 = u64::from(g.create_display_dc(0x10, false));
+    assert_ne!(b, a2);
+    assert!(g.release_display_dc(b));
+    assert!(g.release_display_dc(a2));
+    // An own DC stays what it is.
+    let own = u64::from(g.create_display_dc(0x30, true));
+    assert!(g.release_display_dc(own));
+    assert_eq!(g.display_hwnd(own), Some(0x30));
+}
+
+/// DeleteObject.yaml `palette`, `bitmaps_other_kinds`, `type_after_delete`;
+/// CreateRectRgn.yaml `indirect_and_set`.
+#[test]
+fn palettes_and_styled_brushes_follow_the_delete_rules() {
+    let mut g = Gdi::new();
+    let (dc, _px) = dib32(&mut g, 2, 2);
+    let stock = g.stock(DEFAULT_PALETTE);
+    assert_eq!(g.current_object(dc, OBJ_PAL), stock);
+    // A palette that is not selected: 1, and the type stays.
+    let free = u64::from(g.create_palette());
+    assert_eq!(g.object_type(free), OBJ_PAL);
+    assert!(g.delete_object(free));
+    assert_eq!(g.object_type(free), OBJ_PAL);
+    assert!(!g.delete_object(free));
+    // Selected: the delete fails and it stays; back to the stock one, it goes.
+    let pal = u64::from(g.create_palette());
+    assert_eq!(g.select_palette(dc, pal), stock);
+    assert_eq!(u64::from(g.current_object(dc, OBJ_PAL)), pal);
+    assert!(!g.delete_object(pal));
+    assert_eq!(g.object_type(pal), OBJ_PAL);
+    assert_eq!(u64::from(g.select_palette(dc, u64::from(stock))), pal);
+    assert!(g.delete_object(pal));
+    // Not a palette, not a DC: NULL.
+    assert_eq!(g.select_palette(dc, u64::from(g.stock(WHITE_BRUSH))), 0);
+    assert_eq!(g.select_palette(0x1234, u64::from(stock)), 0);
+    // Hatch and pattern brushes are brushes; deleted, they keep their type.
+    for style in [BS_HATCHED, BS_PATTERN, BS_DIBPATTERNPT] {
+        let b = u64::from(g.create_styled_brush(style, 0x0000_FF00, 3));
+        assert_eq!(g.object_type(b), OBJ_BRUSH);
+        assert_eq!(g.object_bytes(b).map(|v| v[0]), Some(style as u8));
+        assert!(g.delete_object(b));
+        assert_eq!(g.object_type(b), OBJ_BRUSH);
+        assert!(!g.delete_object(b));
+    }
+    // SetRectRgn: 0 for what is not a region, 1 for one deleted just before.
+    let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 0, 4, 4)).unwrap());
+    assert!(g.is_region(rgn));
+    assert!(!g.set_rect_rgn(u64::from(g.stock(WHITE_BRUSH)), Rect::new(0, 0, 1, 1)));
+    assert!(!g.set_rect_rgn(0, Rect::new(0, 0, 1, 1)));
+    assert!(g.delete_object(rgn));
+    assert!(!g.is_region(rgn));
+    assert!(g.set_rect_rgn(rgn, Rect::new(0, 0, 1, 1)));
+    assert_eq!(g.rgn_box(rgn), None);
 }
 
 // ----- private fonts (`specs/windows/gdi32.dll`: the PolyTest fonts, which
