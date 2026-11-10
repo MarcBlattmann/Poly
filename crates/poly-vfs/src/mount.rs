@@ -305,6 +305,14 @@ impl Mount {
         self.sb.ro.load(Ordering::Relaxed) || self.sb.info.read_only
     }
 
+    /// Whether the file system was made read-only
+    /// ([`set_sb_read_only`](Self::set_sb_read_only)), as opposed to one
+    /// that never takes changes (procfs): `/proc/<pid>/mounts` shows only
+    /// the former as `ro`.
+    pub fn sb_made_read_only(&self) -> bool {
+        self.sb.ro.load(Ordering::Relaxed)
+    }
+
     /// Make the file system read-only as a whole, or writable again.
     pub fn set_sb_read_only(&self, ro: bool) {
         self.sb.ro.store(ro, Ordering::Relaxed);

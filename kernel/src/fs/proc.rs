@@ -566,11 +566,10 @@ impl ProcSource for KernelProc {
             .filter_map(|m| {
                 let at = vfs().mount_path(&ctx, m.id).ok()?;
                 let mount = vfs().mount_by_id(m.id);
-                let sb_made_read_only = mount.as_ref().is_some_and(|mm| mm.sb_read_only());
-                let sb_read_only = sb_made_read_only
-                    || mount.as_ref().is_some_and(|mm| {
-                        mm.fs().info().read_only || super::disk::mount_of(m.id).is_some_and(|d| d.read_only)
-                    });
+                let sb_made_read_only = mount.as_ref().is_some_and(|mm| mm.sb_made_read_only());
+                let sb_read_only = mount
+                    .as_ref()
+                    .is_some_and(|mm| mm.sb_read_only() || super::disk::mount_of(m.id).is_some_and(|d| d.read_only));
                 Some(MountEntry {
                     id: m.id,
                     parent: m.parent.map_or(m.id, |(p, _)| p),
