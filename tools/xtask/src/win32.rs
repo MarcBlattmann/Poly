@@ -65,6 +65,8 @@ pub const OUTPUTS: &[&str] = &[
     "win32u.dll",
     // ADR 0155.
     "bcryptprimitives.dll",
+    // ADR 0171.
+    "userenv.dll",
     "version.dll",
     "ole32.dll",
     "s1test.exe",
@@ -178,6 +180,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/gdi32",
             "personalities/nt/win32/win32u",
             "personalities/nt/win32/bcryptprimitives",
+            "personalities/nt/win32/userenv",
             "personalities/nt/win32/version",
             "personalities/nt/win32/ole32",
             "personalities/nt/win32/s1test",

@@ -69,14 +69,11 @@ pub struct NtSystem {
     /// `NtQueryInformationProcess` (`GetExitCodeProcess`, ADR 0079).
     pub process_exits: BTreeMap<ProcessId, poly_ntobj::NtStatus>,
 
-    /// The privileges of each process's primary token once a
-    /// `NtAdjustPrivilegesToken` changed them (ADR 0114); a process not
-    /// here has [`poly_security::token::Token::poly_user`]'s. Forgotten when
-    /// the process ends.
-    pub token_privileges: BTreeMap<ProcessId, Vec<(u32, u32)>>,
-
     /// win32k's machine-wide state: the desktop link's surfaces (ADR 0128).
     pub win32k: crate::win32k::Win32k,
+
+    /// The job objects and which process belongs to which (ADR 0169).
+    pub jobs: crate::job::Jobs,
 
     sections: BTreeMap<u64, Section>,
     next_key: u64,
@@ -113,11 +110,17 @@ impl NtSystem {
             io: crate::io::IoState::new(),
             registry,
             process_exits: BTreeMap::new(),
-            token_privileges: BTreeMap::new(),
             win32k: crate::win32k::Win32k::default(),
+            jobs: crate::job::Jobs::default(),
             sections: BTreeMap::new(),
             next_key: 1,
         }
+    }
+
+    /// Process `pid` ended with `status`: its jobs count it out and post
+    /// their messages (ADR 0169).
+    pub fn job_process_exited(&mut self, pid: ProcessId, status: poly_ntobj::NtStatus) {
+        self.jobs.process_exited(&mut self.io, &mut self.objects, pid, status);
     }
 
     /// Store a section's data; returns its key (the object's cookie).
@@ -162,6 +165,7 @@ impl NtSystem {
     /// can drop a reference.
     pub fn reap(&mut self, b: &mut dyn Backend) {
         while let Some(d) = self.objects.pop_deleted() {
+            self.objects.security_object_deleted(&d);
             match d.kind {
                 ObjectType::Section => self.remove_section(d.cookie, b),
                 ObjectType::File => {
@@ -169,10 +173,18 @@ impl NtSystem {
                     self.io.file_closed(d.cookie);
                 }
                 ObjectType::Key => self.registry.object_deleted(d.cookie, &mut self.objects),
+                ObjectType::IoCompletion => self.io.port_deleted(d.cookie),
                 ObjectType::Process => {
                     self.process_exits.remove(&ProcessId(d.cookie as u32));
+                    self.jobs.process_forgotten(ProcessId(d.cookie as u32));
                 }
+                ObjectType::Job => self.jobs.deleted(d.cookie),
                 _ => {}
+            }
+            // A closed file object's or a deleted job's reference on its
+            // completion port.
+            for port in core::mem::take(&mut self.io.released).into_iter().chain(self.jobs.take_released()) {
+                let _ = self.objects.dereference(port);
             }
         }
     }
@@ -215,6 +227,9 @@ pub struct NtProcess {
     /// The image's stack reserve and commit, the default for new threads.
     pub default_stack_reserve: u64,
     pub default_stack_commit: u64,
+    /// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON`:
+    /// memory cannot be made executable (ADR 0169).
+    pub dynamic_code_blocked: bool,
     /// Its exit status, once known: the first `NtTerminateProcess` of it
     /// sets it, else its last thread's end ([`crate::exec::thread_exit`]);
     /// a running process is pending.
@@ -244,6 +259,7 @@ impl NtProcess {
             default_stack_reserve: 0x1_0000,
             default_stack_commit: 0x1000,
             exit_status: None,
+            dynamic_code_blocked: false,
             exception_dispatcher: 0,
             win32k_disabled: false,
         }

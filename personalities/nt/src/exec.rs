@@ -268,8 +268,24 @@ pub fn start_process_from(
     thread: ThreadRef,
     inherit_from: Option<poly_ntobj::ProcessId>,
 ) -> Result<ProcessStart, NtStatus> {
+    start_process_listed(sys, proc, b, file, ntdll, file_object, thread, inherit_from, None)
+}
+
+/// [`start_process_from`] inheriting only the handles of `only` (ADR 0169).
+#[allow(clippy::too_many_arguments)] // what a new process is made of
+pub fn start_process_listed(
+    sys: &mut NtSystem,
+    proc: &mut NtProcess,
+    b: &mut dyn Backend,
+    file: &[u8],
+    ntdll: &[u8],
+    file_object: Option<ObjectId>,
+    thread: ThreadRef,
+    inherit_from: Option<poly_ntobj::ProcessId>,
+    only: Option<&[Handle]>,
+) -> Result<ProcessStart, NtStatus> {
     let om = &mut sys.objects;
-    om.create_process(proc.pid, inherit_from)?;
+    om.create_process_with(proc.pid, inherit_from, only)?;
     let pobj =
         NewObject::Opaque { kind: ObjectType::Process, cookie: proc.pid.0.into(), signaled: Some(false), parse: false };
     let pid_object = om.new_object(pobj, thread)?;
@@ -466,6 +482,7 @@ pub fn thread_exit(
     // Tell the dispatcher the thread is gone (abandon its mutants, drop its
     // waits), then signal its object so waiters on it wake.
     sys.objects.thread_terminated(thread);
+    sys.objects.forget_thread_token(thread);
     let _ = sys.objects.set_signaled(t.object, true);
     let _ = sys.objects.set_thread_object(thread, None);
     let _ = sys.objects.dereference(t.object);
@@ -484,6 +501,7 @@ pub fn thread_exit(
 /// handle in its table. Its memory itself goes with the kernel's memory
 /// map; `b` is only used to free section pages.
 pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backend) {
+    sys.job_process_exited(proc.pid, proc.exit_status.unwrap_or(STATUS_SUCCESS));
     sys.win32k.process_exited(&mut sys.objects, proc.pid.0);
     for a in proc.vm.clear() {
         if let Some(v) = a.view() {
@@ -491,12 +509,13 @@ pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backen
         }
     }
     for t in core::mem::take(&mut proc.threads) {
+        sys.objects.forget_thread_token(t.thread);
         let _ = sys.objects.set_thread_object(t.thread, None);
         let _ = sys.objects.set_signaled(t.object, true);
         let _ = sys.objects.dereference(t.object);
     }
     let _ = sys.objects.destroy_process(proc.pid);
-    sys.token_privileges.remove(&proc.pid);
+    sys.objects.forget_process_token(proc.pid);
     if let Some(p) = proc.object.take() {
         // Kept while a handle keeps the object (`GetExitCodeProcess`);
         // `NtSystem::reap` forgets it with the object.

@@ -182,7 +182,7 @@ means for Poly.
 | `SYSTEM` | `\REGISTRY\MACHINE\SYSTEM` | "Predefined Keys" (`HKEY_LOCAL_MACHINE`) |
 | `SOFTWARE` | `\REGISTRY\MACHINE\SOFTWARE` | "Predefined Keys" |
 | `DEFAULT` | `\REGISTRY\USER\.DEFAULT` | "Predefined Keys": `HKEY_CURRENT_USER` falls back to `HKEY_USERS\.Default` |
-| `USER` | `\REGISTRY\USER\S-1-5-21-0-0-0-1000` | Poly's single user: a local-account SID shape ("Well-known SIDs") with Poly's own sub-authorities; `HKEY_CURRENT_USER` maps here |
+| `USER` | `\REGISTRY\USER\S-1-5-21-520193847-884726105-1936024571-1002` | Poly's single user: a local-account SID shape ("Well-known SIDs") with Poly's own sub-authorities; `HKEY_CURRENT_USER` maps here |
 
 | Key (below the hive) | Values | Source |
 |---|---|---|
@@ -209,7 +209,7 @@ Volatile keys, made at every boot and never saved:
 |---|---|---|
 | `\REGISTRY\MACHINE\HARDWARE\DESCRIPTION\System`, `...\DEVICEMAP` | (empty until device detection fills them) | Learn: "ZwSetValueKey": the system writes the hardware description tree |
 | `HKLM\SYSTEM\CurrentControlSet` | a symbolic link (`SymbolicLinkValue`, `REG_LINK`) to `\REGISTRY\MACHINE\SYSTEM\ControlSet001` | name only (`CurrentControlSet` is how Learn names the current control set throughout) |
-| `HKU\S-1-5-21-0-0-0-1000\Volatile Environment` | `APPDATA`, `HOMEDRIVE`, `HOMEPATH`, `LOCALAPPDATA`, `LOGONSERVER`, `USERDOMAIN`, `USERNAME` = `poly`, `USERPROFILE` = `C:\Users\poly` | Learn: "Recognized environment variables" (each variable's meaning) |
+| `HKU\S-1-5-21-520193847-884726105-1936024571-1002\Volatile Environment` | `APPDATA`, `HOMEDRIVE`, `HOMEPATH`, `LOCALAPPDATA`, `LOGONSERVER`, `USERDOMAIN`, `USERNAME` = `poly`, `USERPROFILE` = `C:\Users\poly` | Learn: "Recognized environment variables" (each variable's meaning) |
 
 ## To be confirmed by the spec agent against real Windows
 

@@ -21,6 +21,7 @@ poly-rtl = { path = "../../../crates/poly-rtl" }
 poly-seh = { path = "../../../crates/poly-seh" }
 poly-pe = { path = "../../../crates/poly-pe" }
 poly-ntobj = { path = "../../../crates/poly-ntobj" }
+poly-security = { path = "../../../crates/poly-security" }
 
 [profile.release]
 panic = "abort"

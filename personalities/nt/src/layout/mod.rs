@@ -67,7 +67,7 @@ pub struct User {
     pub sid: &'static str,
 }
 
-/// Poly's single user (ADR 0066): `poly`, `S-1-5-21-0-0-0-1000`.
+/// Poly's single user (ADR 0066): `poly`, `S-1-5-21-520193847-884726105-1936024571-1002`.
 pub const POLY_USER: User =
     User { name: poly_registry::defaults::POLY_USER_NAME, sid: poly_registry::defaults::POLY_USER_SID };
 

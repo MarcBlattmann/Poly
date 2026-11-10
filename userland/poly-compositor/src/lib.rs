@@ -87,6 +87,7 @@ mod evdev;
 mod fbdev;
 pub mod io;
 mod kms;
+mod launch_timer;
 mod mixer;
 pub mod os;
 mod session;
@@ -726,14 +727,9 @@ fn run(args: &[String]) -> Result<u8, String> {
             fds.push(os::PollFd::readable(fd));
         }
         let flip_pending = screen.kms().is_some_and(|k| k.is_pending());
-        let x_at = fds.len();
-        if let Some(x) = &xw {
-            fds.extend(x.poll_fds());
-        }
-        let win_at = fds.len();
-        if let Some(l) = &winlink {
-            fds.push(os::PollFd::readable(l.fd()));
-        }
+        // Xwayland's, then the link to Windows apps: each reads only its own.
+        let x_fds = add_fds(&mut fds, xw.iter().flat_map(|x| x.poll_fds()));
+        let win_fds = add_fds(&mut fds, winlink.iter().map(|l| os::PollFd::readable(l.fd())));
         let now = os::monotonic_ns();
         let mut timeout = if server.wants_frame() && !flip_pending {
             (next_frame.saturating_sub(now) / 1_000_000) as i32
@@ -877,7 +873,9 @@ fn run(args: &[String]) -> Result<u8, String> {
                     app_env.push(format!("DESKTOP_STARTUP_ID={token}"));
                     match os::spawn(&app.argv, &app_env) {
                         Ok(pid) => {
-                            println!("poly-compositor: launched {} (pid {pid})", app.name);
+                            let at = d.now_ms();
+                            println!("poly-compositor: launched {} (pid {pid}) at {at} ms", app.name);
+                            d.launches.started(pid, &app.name, at);
                             server.launch_pid(launch, pid);
                             d.children.push((pid, app.name.clone()));
                         }
@@ -897,7 +895,7 @@ fn run(args: &[String]) -> Result<u8, String> {
         // Xwayland: a client waiting for it, its window manager, what the
         // user did to X windows.
         if let Some(x) = &mut xw {
-            if let Some((id, stream)) = x.handle(&fds[x_at..], &mut server, &env) {
+            if let Some((id, stream)) = x.handle(&fds[x_fds], &mut server, &env) {
                 conns.insert(id, Connection { stream, out: Vec::new(), out_fds: Vec::new() });
             }
             x.pump(&mut server);
@@ -908,7 +906,7 @@ fn run(args: &[String]) -> Result<u8, String> {
 
         // Windows apps' windows: what win32k reported.
         if let Some(l) = &mut winlink
-            && fds.get(win_at).is_some_and(|p| p.revents != 0)
+            && fds[win_fds].iter().any(|p| p.revents != 0)
         {
             l.pump_server(&mut server);
         }
@@ -1040,6 +1038,14 @@ fn run(args: &[String]) -> Result<u8, String> {
     }
 }
 
+/// Adds `more` to the poll set and says where it sits there, so that its
+/// reader gets these descriptors and not the ones added behind them.
+fn add_fds(fds: &mut Vec<os::PollFd>, more: impl IntoIterator<Item = os::PollFd>) -> core::ops::Range<usize> {
+    let at = fds.len();
+    fds.extend(more);
+    at..fds.len()
+}
+
 /// A rectangle of the whole output, for tests.
 #[cfg(test)]
 fn whole(w: u32, h: u32) -> poly_wayland::compose::Rect {
@@ -1138,5 +1144,20 @@ mod tests {
         let p = ppm(&mut fb);
         assert!(p.starts_with(b"P6\n800 600\n255\n"));
         assert_eq!(p.len(), 15 + 800 * 600 * 3);
+    }
+
+    /// The link to Windows apps sits behind Xwayland's listeners in the poll
+    /// set: its news is not an X client's connection (`--xwayland-lazy`).
+    #[test]
+    fn each_part_of_the_poll_set_ends_where_the_next_begins() {
+        let mut fds = vec![os::PollFd::readable(3)];
+        let x = add_fds(&mut fds, [os::PollFd::readable(10), os::PollFd::readable(11)]);
+        let none = add_fds(&mut fds, None);
+        let win = add_fds(&mut fds, [os::PollFd::readable(20)]);
+        assert_eq!((x.clone(), none.clone(), win.clone()), (1..3, 3..3, 3..4));
+        fds[win.start].revents = os::POLLIN;
+        assert!(fds[x].iter().all(|p| p.revents == 0));
+        assert!(fds[none].is_empty());
+        assert!(fds[win].iter().any(|p| p.revents != 0));
     }
 }

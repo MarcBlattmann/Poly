@@ -74,9 +74,11 @@ unsafe impl PageFrame for KernelFrame {
         let phys = FRAMES.lock().as_mut().and_then(|f| f.allocate(0))?;
         let frame = KernelFrame { phys };
         CACHE_FRAMES.fetch_add(1, Ordering::Relaxed);
+        let timer = crate::profile::start();
         // SAFETY: a frame just allocated, so nothing else uses it; the
         // direct map maps it writable.
         unsafe { frame.as_ptr().write_bytes(0, PAGE_SIZE) };
+        crate::profile::since(crate::profile::Event::ZeroCacheFrame, timer);
         Some(frame)
     }
 
@@ -255,7 +257,23 @@ impl PageSource for FileSource {
 
     fn cached_page(&self, offset: u64) -> Option<Result<CachedPage, IoError>> {
         let fs = self.cached.as_ref()?;
-        Some(fs.page(self.node.ino(), offset / PAGE_SIZE as u64).map_err(|_| IoError))
+        let (ino, index) = (self.node.ino(), offset / PAGE_SIZE as u64);
+        // A page the cache holds needs neither the inode's lock nor its
+        // attributes: most faults on a program's code find theirs here.
+        if let Some(page) = fs.cached_page(ino, index) {
+            return Some(Ok(page));
+        }
+        let timer = crate::profile::start();
+        let page = fs.page(ino, index).map_err(|_| IoError);
+        crate::profile::since(crate::profile::Event::FaultMiss, timer);
+        Some(page)
+    }
+
+    fn peek_cached_pages(&self, offset: u64, count: u64) -> Vec<(u64, CachedPage)> {
+        let Some(fs) = self.cached.as_ref() else { return Vec::new() };
+        let first = offset / PAGE_SIZE as u64;
+        let pages = fs.cached_run(self.node.ino(), first, count);
+        pages.into_iter().map(|(index, page)| (index * PAGE_SIZE as u64, page)).collect()
     }
 
     fn shareable(&self) -> bool {

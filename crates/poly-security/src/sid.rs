@@ -166,25 +166,44 @@ pub fn is_valid(bytes: &[u8]) -> bool {
     valid_length(bytes).is_some()
 }
 
-/// `EqualSid`: the same bytes.
+/// `EqualSid` on SIDs given as `GetLengthSid`-long slices (Learn and the
+/// sheet: no validity check; the revision byte, the count and all the
+/// authority and sub-authority bytes must be the same).
 pub fn equal(a: &[u8], b: &[u8]) -> bool {
-    match (valid_length(a), valid_length(b)) {
-        (Some(la), Some(lb)) => la == lb && a[..la] == b[..lb],
-        _ => false,
-    }
+    let (la, lb) = (length_of(a) as usize, length_of(b) as usize);
+    la == lb && a.len() >= la && b.len() >= lb && a[..la] == b[..lb]
 }
 
-/// `EqualPrefixSid`: the same revision, authority and sub-authorities but
-/// the last.
+/// `EqualPrefixSid`: the same revision and count, the same authority and
+/// the same sub-authorities but the last. No validity check.
 pub fn equal_prefix(a: &[u8], b: &[u8]) -> bool {
-    match (Sid::from_bytes(a), Sid::from_bytes(b)) {
-        (Some(x), Some(y)) => {
-            x.authority == y.authority
-                && x.subs.len() == y.subs.len()
-                && x.subs[..x.subs.len().saturating_sub(1)] == y.subs[..y.subs.len().saturating_sub(1)]
-        }
-        _ => false,
+    let (la, lb) = (length_of(a) as usize, length_of(b) as usize);
+    if la != lb || a.len() < la || b.len() < lb || a[..2] != b[..2] {
+        return false;
     }
+    // Revision, count and authority, then every sub-authority but the last.
+    let end = if la > SID_HEADER { la - 4 } else { la };
+    a[..end] == b[..end]
+}
+
+/// The bytes of the SID at `p`, as long as its count byte says (`8 + 4 *
+/// count`), whatever the other bytes hold.
+///
+/// # Safety
+/// `p` must point to a SID whose count byte tells the truth about the
+/// readable memory (the contract of every SID function).
+pub unsafe fn raw<'a>(p: *const u8) -> &'a [u8] {
+    // SAFETY: the count byte is readable; the caller vouches for the rest.
+    let n = length_required(unsafe { *p.add(1) }) as usize;
+    // SAFETY: the caller upholds this function's contract (see its `# Safety`).
+    unsafe { core::slice::from_raw_parts(p, n) }
+}
+
+/// The account domain of an account SID `S-1-5-21-a-b-c-...`: the first
+/// three sub-authorities after 21, if there are (authority 5).
+pub fn account_domain(s: &Sid) -> Option<Sid> {
+    (s.authority == SECURITY_NT_AUTHORITY && s.subs.len() >= 4 && s.subs[0] == rid::SECURITY_NT_NON_UNIQUE)
+        .then(|| Sid::new(SECURITY_NT_AUTHORITY, &s.subs[..4]))
 }
 
 // ----- well-known SIDs ---------------------------------------------------------------
@@ -204,7 +223,7 @@ pub fn builtin(r: u32) -> Sid {
     Sid::new(SECURITY_NT_AUTHORITY, &[rid::SECURITY_BUILTIN_DOMAIN_RID, r])
 }
 
-/// `S-1-5-21-0-0-0-<rid>`: relative to the machine's account domain.
+/// `S-1-5-21-520193847-884726105-1936024571-<rid>`: relative to the machine's account domain.
 pub fn domain_relative(r: u32) -> Sid {
     let d = crate::MACHINE_DOMAIN;
     Sid::new(SECURITY_NT_AUTHORITY, &[d[0], d[1], d[2], d[3], r])
@@ -274,7 +293,7 @@ mod tests {
     #[test]
     fn well_known() {
         assert_eq!(local_system(), Sid::new(5, &[18]));
-        assert_eq!(domain_relative(500), Sid::new(5, &[21, 0, 0, 0, 500]));
+        assert_eq!(domain_relative(500), Sid::new(5, &[21, 520_193_847, 884_726_105, 1_936_024_571, 500]));
         assert_eq!(mandatory(rid::SECURITY_MANDATORY_HIGH_RID).subs, [0x3000]);
         assert_eq!(Sid::new(5, &[1; 20]).subs.len(), 15);
     }

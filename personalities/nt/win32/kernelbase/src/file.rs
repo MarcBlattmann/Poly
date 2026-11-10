@@ -121,43 +121,32 @@ unsafe fn transfer(handle: Handle, buf: *mut u8, len: u32, done: *mut u32, ov: *
         unsafe { done.write(0) };
     }
     let mut local = IoStatusBlock::default();
-    let (iosb, offset, event): (*mut IoStatusBlock, i64, Handle) = if ov.is_null() {
-        (&mut local, 0, 0)
+    // Learn: "If the low-order bit of hEvent is set, the completion is not
+    // queued to a completion port": no completion context then; the event
+    // is the handle without that bit.
+    let (iosb, offset, event, context): (*mut IoStatusBlock, i64, Handle, *const u8) = if ov.is_null() {
+        (&mut local, 0, 0, core::ptr::null())
     } else {
         // SAFETY: the caller's OVERLAPPED; its first two fields are the
         // IO_STATUS_BLOCK the kernel completes (minwinbase.h).
         unsafe {
             (*ov).internal = nt::STATUS_PENDING.0 as u64;
-            (ov as *mut IoStatusBlock, file::overlapped_offset((*ov).offset, (*ov).offset_high), (*ov).event)
+            let e = (*ov).event;
+            (
+                ov as *mut IoStatusBlock,
+                file::overlapped_offset((*ov).offset, (*ov).offset_high),
+                e & !1,
+                if e & 1 != 0 { core::ptr::null() } else { ov as *const u8 },
+            )
         }
     };
     let offset_ptr = if ov.is_null() { core::ptr::null() } else { &offset as *const i64 };
     // SAFETY: the caller's buffer of `len` bytes; valid pointers.
     let mut st = unsafe {
         if write {
-            nt::NtWriteFile(
-                handle,
-                event,
-                core::ptr::null(),
-                core::ptr::null(),
-                iosb,
-                buf,
-                len,
-                offset_ptr,
-                core::ptr::null(),
-            )
+            nt::NtWriteFile(handle, event, core::ptr::null(), context, iosb, buf, len, offset_ptr, core::ptr::null())
         } else {
-            nt::NtReadFile(
-                handle,
-                event,
-                core::ptr::null(),
-                core::ptr::null(),
-                iosb,
-                buf,
-                len,
-                offset_ptr,
-                core::ptr::null(),
-            )
+            nt::NtReadFile(handle, event, core::ptr::null(), context, iosb, buf, len, offset_ptr, core::ptr::null())
         }
     };
     if st == nt::STATUS_PENDING {

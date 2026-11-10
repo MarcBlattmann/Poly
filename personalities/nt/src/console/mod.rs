@@ -434,6 +434,9 @@ impl IoState {
             position: 0,
             delete_on_close: false,
             scan: None,
+            port: None,
+            skip_port: false,
+            skip_event: false,
         };
         self.files.insert(cookie, rec);
         Ok((object, cookie))
@@ -487,6 +490,9 @@ impl IoState {
             position: 0,
             delete_on_close: false,
             scan: None,
+            port: None,
+            skip_port: false,
+            skip_event: false,
         };
         self.files.insert(cookie, rec);
         let h = om.open_by_pointer(caller, object, access, 0);
@@ -517,6 +523,7 @@ pub fn open_for_process(
             root,
             name: Some(poly_ntobj::name::wide(name)),
             attributes: poly_ntobj::OBJ_CASE_INSENSITIVE,
+            security: None,
         };
         let access = FILE_GENERIC_READ | FILE_GENERIC_WRITE;
         let share = FILE_SHARE_READ | FILE_SHARE_WRITE;

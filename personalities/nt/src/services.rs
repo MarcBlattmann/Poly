@@ -179,6 +179,10 @@ pub enum Service {
     /// `NtOpenThread(ThreadHandle*, DesiredAccess, ObjectAttributes*,
     /// ClientId*)`.
     OpenThread,
+    /// `NtSetInformationProcess(ProcessHandle, ProcessInformationClass,
+    /// ProcessInformation, ProcessInformationLength)`: `ProcessMitigationPolicy`
+    /// (52) only (ADR 0171).
+    SetInformationProcess,
     /// `NtQueryInformationProcess(ProcessHandle, ProcessInformationClass,
     /// ProcessInformation, Length, ReturnLength*)`.
     QueryInformationProcess,
@@ -346,6 +350,88 @@ pub enum Service {
     /// NewState*, BufferLength, PreviousState*, ReturnLength*)`: not in the
     /// WDK; `AdjustTokenPrivileges`' parameters in its order (ADR 0114).
     AdjustPrivilegesToken,
+    // ----- security (ADR 0171)
+    /// `NtDuplicateToken(ExistingToken, DesiredAccess, ObjectAttributes*,
+    /// EffectiveOnly, TokenType, NewToken*)`.
+    DuplicateToken,
+    /// `NtFilterToken(ExistingToken, Flags, SidsToDisable*,
+    /// PrivilegesToDelete*, RestrictedSids*, NewToken*)`.
+    FilterToken,
+    /// `NtAdjustGroupsToken(TokenHandle, ResetToDefault, NewState*,
+    /// BufferLength, PreviousState*, ReturnLength*)`.
+    AdjustGroupsToken,
+    /// `NtSetInformationToken(TokenHandle, TokenInformationClass,
+    /// TokenInformation, TokenInformationLength)`.
+    SetInformationToken,
+    /// `NtCompareTokens(FirstToken, SecondToken, Equal*)`.
+    CompareTokens,
+    /// `NtPrivilegeCheck(ClientToken, RequiredPrivileges*, Result*)`.
+    PrivilegeCheck,
+    /// `NtAccessCheck(SecurityDescriptor*, ClientToken, DesiredAccess,
+    /// GenericMapping*, PrivilegeSet*, PrivilegeSetLength*, GrantedAccess*,
+    /// AccessStatus*)`.
+    AccessCheck,
+    /// `NtQuerySecurityObject(Handle, SecurityInformation,
+    /// SecurityDescriptor*, Length, LengthNeeded*)`.
+    QuerySecurityObject,
+    /// `NtSetSecurityObject(Handle, SecurityInformation,
+    /// SecurityDescriptor*)`.
+    SetSecurityObject,
+    /// `NtSetInformationThread(ThreadHandle, ThreadInformationClass,
+    /// ThreadInformation, Length)`: `ThreadImpersonationToken` (5) only.
+    SetInformationThread,
+
+    // ----- named pipes and completion ports (ADR 0169)
+    /// `NtFsControlFile(FileHandle, Event, ApcRoutine, ApcContext,
+    /// IoStatusBlock*, FsControlCode, InputBuffer, InputBufferLength,
+    /// OutputBuffer, OutputBufferLength)`.
+    FsControlFile,
+    /// `NtCreateNamedPipeFile(FileHandle*, DesiredAccess, ObjectAttributes*,
+    /// IoStatusBlock*, ShareAccess, CreateDisposition, CreateOptions,
+    /// NamedPipeType, ReadMode, CompletionMode, MaximumInstances,
+    /// InboundQuota, OutboundQuota, DefaultTimeout*)`.
+    CreateNamedPipeFile,
+    /// `NtCancelSynchronousIoFile(ThreadHandle, IoRequestToCancel*,
+    /// IoStatusBlock*)`.
+    CancelSynchronousIoFile,
+    /// `NtCreateIoCompletion(IoCompletionHandle*, DesiredAccess,
+    /// ObjectAttributes*, NumberOfConcurrentThreads)`.
+    CreateIoCompletion,
+    /// `NtSetIoCompletion(IoCompletionHandle, KeyContext, ApcContext,
+    /// IoStatus, IoStatusInformation)`.
+    SetIoCompletion,
+    /// `NtRemoveIoCompletion(IoCompletionHandle, KeyContext*, ApcContext*,
+    /// IoStatusBlock*, Timeout*)`.
+    RemoveIoCompletion,
+    /// `NtRemoveIoCompletionEx(IoCompletionHandle, IoCompletionInformation*,
+    /// Count, NumEntriesRemoved*, Timeout*, Alertable)`.
+    RemoveIoCompletionEx,
+    /// `NtQueryIoCompletion(IoCompletionHandle, IoCompletionInformationClass,
+    /// IoCompletionInformation, Length, ReturnLength*)`.
+    QueryIoCompletion,
+
+    // ----- job objects (ADR 0169)
+    /// `NtCreateJobObject(JobHandle*, DesiredAccess, ObjectAttributes*)`.
+    CreateJobObject,
+    /// `NtOpenJobObject(JobHandle*, DesiredAccess, ObjectAttributes*)`.
+    OpenJobObject,
+    /// `NtAssignProcessToJobObject(JobHandle, ProcessHandle)`.
+    AssignProcessToJobObject,
+    /// `NtTerminateJobObject(JobHandle, ExitStatus)`.
+    TerminateJobObject,
+    /// `NtQueryInformationJobObject(JobHandle, JobInformationClass,
+    /// JobInformation, JobInformationLength, ReturnLength*)`.
+    QueryInformationJobObject,
+    /// `NtSetInformationJobObject(JobHandle, JobInformationClass,
+    /// JobInformation, JobInformationLength)`.
+    SetInformationJobObject,
+    /// `NtIsProcessInJob(ProcessHandle, JobHandle)`.
+    IsProcessInJob,
+
+    // ----- sections (ADR 0169)
+    /// `NtQuerySection(SectionHandle, SectionInformationClass,
+    /// SectionInformation, SectionInformationLength, ReturnLength*)`.
+    QuerySection,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -473,14 +559,54 @@ pub const HANDLE_SERVICES: [(Service, u32, &str); 1] =
     [(Service::SetInformationObject, 0x011, "NtSetInformationObject")];
 
 /// Access tokens (ADR 0083).
-pub const SECURITY_SERVICES: [(Service, u32, &str); 6] = [
+pub const SECURITY_SERVICES: [(Service, u32, &str); 16] = [
     (Service::OpenProcessToken, 0x180, "NtOpenProcessToken"),
     (Service::OpenProcessTokenEx, 0x181, "NtOpenProcessTokenEx"),
     (Service::OpenThreadToken, 0x182, "NtOpenThreadToken"),
     (Service::OpenThreadTokenEx, 0x183, "NtOpenThreadTokenEx"),
     (Service::QueryInformationToken, 0x184, "NtQueryInformationToken"),
     (Service::AdjustPrivilegesToken, 0x185, "NtAdjustPrivilegesToken"),
+    (Service::DuplicateToken, 0x186, "NtDuplicateToken"),
+    (Service::FilterToken, 0x187, "NtFilterToken"),
+    (Service::AdjustGroupsToken, 0x188, "NtAdjustGroupsToken"),
+    (Service::SetInformationToken, 0x189, "NtSetInformationToken"),
+    (Service::CompareTokens, 0x18A, "NtCompareTokens"),
+    (Service::PrivilegeCheck, 0x18B, "NtPrivilegeCheck"),
+    (Service::AccessCheck, 0x18C, "NtAccessCheck"),
+    (Service::QuerySecurityObject, 0x18D, "NtQuerySecurityObject"),
+    (Service::SetSecurityObject, 0x18E, "NtSetSecurityObject"),
+    (Service::SetInformationThread, 0x18F, "NtSetInformationThread"),
 ];
+
+/// Named pipes and I/O completion ports (ADR 0169), in the file I/O group.
+pub const IPC_SERVICES: [(Service, u32, &str); 8] = [
+    (Service::FsControlFile, 0x0D1, "NtFsControlFile"),
+    (Service::CreateNamedPipeFile, 0x0D2, "NtCreateNamedPipeFile"),
+    (Service::CancelSynchronousIoFile, 0x0D3, "NtCancelSynchronousIoFile"),
+    (Service::CreateIoCompletion, 0x0D4, "NtCreateIoCompletion"),
+    (Service::SetIoCompletion, 0x0D5, "NtSetIoCompletion"),
+    (Service::RemoveIoCompletion, 0x0D6, "NtRemoveIoCompletion"),
+    (Service::RemoveIoCompletionEx, 0x0D7, "NtRemoveIoCompletionEx"),
+    (Service::QueryIoCompletion, 0x0D8, "NtQueryIoCompletion"),
+];
+
+/// Job objects (ADR 0169), in the processes and threads group.
+pub const JOB_SERVICES: [(Service, u32, &str); 7] = [
+    (Service::CreateJobObject, 0x090, "NtCreateJobObject"),
+    (Service::OpenJobObject, 0x091, "NtOpenJobObject"),
+    (Service::AssignProcessToJobObject, 0x092, "NtAssignProcessToJobObject"),
+    (Service::TerminateJobObject, 0x093, "NtTerminateJobObject"),
+    (Service::QueryInformationJobObject, 0x094, "NtQueryInformationJobObject"),
+    (Service::SetInformationJobObject, 0x095, "NtSetInformationJobObject"),
+    (Service::IsProcessInJob, 0x096, "NtIsProcessInJob"),
+];
+
+/// Process mitigation policies (ADR 0171), in the processes and threads group.
+pub const PROCESS_POLICY_SERVICES: [(Service, u32, &str); 1] =
+    [(Service::SetInformationProcess, 0x097, "NtSetInformationProcess")];
+
+/// Section queries (ADR 0169), in the memory group.
+pub const SECTION_SERVICES: [(Service, u32, &str); 1] = [(Service::QuerySection, 0x049, "NtQuerySection")];
 
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
@@ -492,6 +618,10 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(DEVICE_SERVICES.iter())
         .chain(SECURITY_SERVICES.iter())
         .chain(HANDLE_SERVICES.iter())
+        .chain(IPC_SERVICES.iter())
+        .chain(JOB_SERVICES.iter())
+        .chain(PROCESS_POLICY_SERVICES.iter())
+        .chain(SECTION_SERVICES.iter())
 }
 
 impl Service {
@@ -548,6 +678,7 @@ mod tests {
         assert!((0xA0..0xB0).contains(&Service::Continue.number()));
         assert!(SYSINFO_SERVICES.iter().all(|s| (0x140..0x180).contains(&s.1)));
         assert!(DEVICE_SERVICES.iter().all(|s| (0xC0..0x100).contains(&s.1)));
+        assert!(IPC_SERVICES.iter().all(|s| (0xC0..0x100).contains(&s.1)));
         assert!(SECURITY_SERVICES.iter().all(|s| (0x180..0x1C0).contains(&s.1)));
         assert!(HANDLE_SERVICES.iter().all(|s| s.1 < 0x40));
     }

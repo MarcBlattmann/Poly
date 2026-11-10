@@ -82,6 +82,11 @@ pub const THREAD_CREATE_FLAGS_CREATE_SUSPENDED: u32 = 0x0001;
 /// public header defines the flags): the new process inherits the
 /// creator's inheritable handles (`CreateProcessW`'s `bInheritHandles`).
 pub const PROCESS_CREATE_FLAGS_INHERIT_HANDLES: u32 = 0x0004;
+/// Poly's own `NtCreateUserProcess` flag (ADR 0171): the `CreateInfo`
+/// argument is a handle to the primary token the new process gets
+/// (`CreateProcessAsUserW`); without it the child gets a copy of its
+/// creator's token.
+pub const PROCESS_CREATE_FLAGS_POLY_TOKEN: u32 = 0x4000_0000;
 
 /// Poly's own `OBJECT_INFORMATION_CLASS` value for a handle's flags (ADR
 /// 0089): `ObjectHandleFlagInformation`, read by `NtQueryObject` and set by

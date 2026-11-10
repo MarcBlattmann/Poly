@@ -198,6 +198,7 @@ fn apply(reg: &mut Registry, e: &Entry, now: u64) -> Result<bool, NtStatus> {
 /// documentation). Idempotent: a second call changes nothing.
 pub fn sync(reg: &mut Registry, user: &User, now: u64) -> Result<Changed, NtStatus> {
     let mut changed = Vec::new();
+    retire_old_user_sid(reg, now, &mut changed);
     for e in entries(reg, user) {
         if apply(reg, &e, now)? {
             changed.push(alloc::format!("{}\\{}", e.key, e.name));
@@ -222,4 +223,20 @@ pub fn sync(reg: &mut Registry, user: &User, now: u64) -> Result<Changed, NtStat
         }
     }
     Ok(changed)
+}
+
+/// Poly's user was `S-1-5-21-0-0-0-1000` before ADR 0171 gave the machine a
+/// real-looking domain. A saved `USER` hive loads under the new name as it is
+/// (hives are saved by their contents, the SID is only the mount name), so
+/// nothing is lost; what is left is the old `ProfileList` key of the
+/// previous SID, removed here once (the new one is made by the entries above).
+fn retire_old_user_sid(reg: &mut Registry, now: u64, changed: &mut Vec<String>) {
+    const OLD_SID: &str = "S-1-5-21-0-0-0-1000";
+    let machine = reg.machine();
+    let path = alloc::format!("{PROFILE_LIST}\\{OLD_SID}");
+    if let Some(old) = reg.find(machine, &path)
+        && reg.delete_key(old, now).is_ok()
+    {
+        changed.push(path);
+    }
 }

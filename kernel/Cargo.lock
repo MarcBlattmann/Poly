@@ -219,6 +219,9 @@ dependencies = [
 [[package]]
 name = "poly-ntobj"
 version = "0.0.1"
+dependencies = [
+ "poly-security",
+]
 
 [[package]]
 name = "poly-overlayfs"
@@ -328,9 +331,6 @@ version = "0.0.1"
 [[package]]
 name = "poly-security"
 version = "0.0.1"
-dependencies = [
- "poly-ntobj",
-]
 
 [[package]]
 name = "poly-seh"
