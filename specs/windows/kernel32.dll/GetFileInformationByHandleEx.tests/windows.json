@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "8034cd5f4b0e",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-10T08:44:05Z",
+  "tests": [
+    {
+      "name": "gfibhe_pipe_name",
+      "exe_sha256": "a1f0a5f35da6aca1b0ae39e9ae9d9d4e8a475a6ed1305e9cb039a041be2d9bab",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2VydmVyIGNyZWF0ZWQgMQpzZXJ2ZXIsIG5vYm9keSBjb25uZWN0ZWQgWzUyOF06IHJldCAxIGVycm9yIDA7IEZpbGVOYW1lTGVuZ3RoIDMyIHdyaXR0ZW4gMzYgbmFtZSAiXFBvbHlTcGVjNF9JbmZvQSIKY2xpZW50IG9wZW5lZCBhcyBwb2x5c3BlYzRfSU5GT0EgMQpzZXJ2ZXIsIGNvbm5lY3RlZCBbNTI4XTogcmV0IDEgZXJyb3IgMDsgRmlsZU5hbWVMZW5ndGggMzIgd3JpdHRlbiAzNiBuYW1lICJcUG9seVNwZWM0X0luZm9BIgpjbGllbnQgWzUyOF06IHJldCAxIGVycm9yIDA7IEZpbGVOYW1lTGVuZ3RoIDMyIHdyaXR0ZW4gMzYgbmFtZSAiXFBvbHlTcGVjNF9JbmZvQSIKc2VydmVyIFswXTogcmV0IDAgZXJyb3IgMjQ7IGJ1ZmZlciB1bnRvdWNoZWQKc2VydmVyIFszXTogcmV0IDAgZXJyb3IgMjQ7IGJ1ZmZlciB1bnRvdWNoZWQKc2VydmVyIFs0XTogcmV0IDAgZXJyb3IgMjQ7IGJ1ZmZlciB1bnRvdWNoZWQKc2VydmVyIFs3XTogcmV0IDAgZXJyb3IgMjQ7IGJ1ZmZlciB1bnRvdWNoZWQKc2VydmVyIFs4XTogcmV0IDAgZXJyb3IgMjM0OyBGaWxlTmFtZUxlbmd0aCAzMiB3cml0dGVuIDggbmFtZSAiXFAiCnNlcnZlciBbOV06IHJldCAwIGVycm9yIDIzNDsgRmlsZU5hbWVMZW5ndGggMzIgd3JpdHRlbiA5IG5hbWUgIlxQIgpzZXJ2ZXIgWzEwXTogcmV0IDAgZXJyb3IgMjM0OyBGaWxlTmFtZUxlbmd0aCAzMiB3cml0dGVuIDEwIG5hbWUgIlxQbyIKc2VydmVyIFsxMl06IHJldCAwIGVycm9yIDIzNDsgRmlsZU5hbWVMZW5ndGggMzIgd3JpdHRlbiAxMiBuYW1lICJcUG9sIgpzZXJ2ZXIgWzM0XTogcmV0IDAgZXJyb3IgMjM0OyBGaWxlTmFtZUxlbmd0aCAzMiB3cml0dGVuIDM0IG5hbWUgIlxQb2x5U3BlYzRfSW5mbyIKc2VydmVyIFszNV06IHJldCAwIGVycm9yIDIzNDsgRmlsZU5hbWVMZW5ndGggMzIgd3JpdHRlbiAzNSBuYW1lICJcUG9seVNwZWM0X0luZm8iCnNlcnZlciBbMzZdOiByZXQgMSBlcnJvciAwOyBGaWxlTmFtZUxlbmd0aCAzMiB3cml0dGVuIDM2IG5hbWUgIlxQb2x5U3BlYzRfSW5mb0EiCnNlcnZlciBbMzddOiByZXQgMSBlcnJvciAwOyBGaWxlTmFtZUxlbmd0aCAzMiB3cml0dGVuIDM2IG5hbWUgIlxQb2x5U3BlYzRfSW5mb0EiCnNlcnZlciBbMzhdOiByZXQgMSBlcnJvciAwOyBGaWxlTmFtZUxlbmd0aCAzMiB3cml0dGVuIDM2IG5hbWUgIlxQb2x5U3BlYzRfSW5mb0EiCnNlcnZlciBbNDBdOiByZXQgMSBlcnJvciAwOyBGaWxlTmFtZUxlbmd0aCAzMiB3cml0dGVuIDM2IG5hbWUgIlxQb2x5U3BlYzRfSW5mb0EiCmNsaWVudCBbNF06IHJldCAwIGVycm9yIDI0OyBidWZmZXIgdW50b3VjaGVkCmNsaWVudCBbOF06IHJldCAwIGVycm9yIDIzNDsgRmlsZU5hbWVMZW5ndGggMzIgd3JpdHRlbiA4IG5hbWUgIlxQIgpjbGllbnQgWzM2XTogcmV0IDEgZXJyb3IgMDsgRmlsZU5hbWVMZW5ndGggMzIgd3JpdHRlbiAzNiBuYW1lICJcUG9seVNwZWM0X0luZm9BIgpjbGllbnQgWzM4XTogcmV0IDEgZXJyb3IgMDsgRmlsZU5hbWVMZW5ndGggMzIgd3JpdHRlbiAzNiBuYW1lICJcUG9seVNwZWM0X0luZm9BIgpjcmFzaHBhZC1saWtlIG5hbWUgWzUyOF06IHJldCAxIGVycm9yIDA7IEZpbGVOYW1lTGVuZ3RoIDYyIHdyaXR0ZW4gNjYgbmFtZSAiXGNyYXNocGFkXzQyNDJfQUJDREVGR0hJSktMTU5PUCIKYW5vbnltb3VzIHBpcGUgY3JlYXRlZCAxCmFub255bW91cyBwaXBlLCByZWFkIGVuZCBbNTI4XTogcmV0IDEgZXJyb3IgMDsgRmlsZU5hbWVMZW5ndGggMCB3cml0dGVuIDQgbmFtZSAiIgphbm9ueW1vdXMgcGlwZSwgcmVhZCBlbmQgWzhdOiByZXQgMSBlcnJvciAwOyBGaWxlTmFtZUxlbmd0aCAwIHdyaXR0ZW4gNCBuYW1lICIiCmFub255bW91cyBwaXBlLCByZWFkIGVuZCBbNF06IHJldCAwIGVycm9yIDI0OyBidWZmZXIgdW50b3VjaGVkCmFub255bW91cyBwaXBlLCB3cml0ZSBlbmQgWzUyOF06IHJldCAxIGVycm9yIDA7IEZpbGVOYW1lTGVuZ3RoIDAgd3JpdHRlbiA0IG5hbWUgIiIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "server created 1\nserver, nobody connected [528]: ret 1 error 0; FileNameLength 32 written 36 name \"\\PolySpec4_InfoA\"\nclient opened as polyspec4_INFOA 1\nserver, connected [528]: ret 1 error 0; FileNameLength 32 written 36 name \"\\PolySpec4_InfoA\"\nclient [528]: ret 1 error 0; FileNameLength 32 written 36 name \"\\PolySpec4_InfoA\"\nserver [0]: ret 0 error 24; buffer untouched\nserver [3]: ret 0 error 24; buffer untouched\nserver [4]: ret 0 error 24; buffer untouched\nserver [7]: ret 0 error 24; buffer untouched\nserver [8]: ret 0 error 234; FileNameLength 32 written 8 name \"\\P\"\nserver [9]: ret 0 error 234; FileNameLength 32 written 9 name \"\\P\"\nserver [10]: ret 0 error 234; FileNameLength 32 written 10 name \"\\Po\"\nserver [12]: ret 0 error 234; FileNameLength 32 written 12 name \"\\Pol\"\nserver [34]: ret 0 error 234; FileNameLength 32 written 34 name \"\\PolySpec4_Info\"\nserver [35]: ret 0 error 234; FileNameLength 32 written 35 name \"\\PolySpec4_Info\"\nserver [36]: ret 1 error 0; FileNameLength 32 written 36 name \"\\PolySpec4_InfoA\"\nserver [37]: ret 1 error 0; FileNameLength 32 written 36 name \"\\PolySpec4_InfoA\"\nserver [38]: ret 1 error 0; FileNameLength 32 written 36 name \"\\PolySpec4_InfoA\"\nserver [40]: ret 1 error 0; FileNameLength 32 written 36 name \"\\PolySpec4_InfoA\"\nclient [4]: ret 0 error 24; buffer untouched\nclient [8]: ret 0 error 234; FileNameLength 32 written 8 name \"\\P\"\nclient [36]: ret 1 error 0; FileNameLength 32 written 36 name \"\\PolySpec4_InfoA\"\nclient [38]: ret 1 error 0; FileNameLength 32 written 36 name \"\\PolySpec4_InfoA\"\ncrashpad-like name [528]: ret 1 error 0; FileNameLength 62 written 66 name \"\\crashpad_4242_ABCDEFGHIJKLMNOP\"\nanonymous pipe created 1\nanonymous pipe, read end [528]: ret 1 error 0; FileNameLength 0 written 4 name \"\"\nanonymous pipe, read end [8]: ret 1 error 0; FileNameLength 0 written 4 name \"\"\nanonymous pipe, read end [4]: ret 0 error 24; buffer untouched\nanonymous pipe, write end [528]: ret 1 error 0; FileNameLength 0 written 4 name \"\"\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/BuildSecurityDescriptorW.yaml
+id: windows/api/advapi32.dll/BuildSecurityDescriptorW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test runs twice with identical output (four runs in all for the tests that did not change between rounds)"
+  observed_by: spec-chrome-win-4
+  date: 2026-11-10
+sources: >
+  Observations of our own test programs on the machine above, and the call
+  as recorded in specs/windows/apps/chrome/traces/s1-chrome-elf-init.trace.json
+  (n=689). Microsoft Learn: "BuildSecurityDescriptorW function (aclapi.h)",
+  "BuildExplicitAccessWithNameW", "EXPLICIT_ACCESS_W", "TRUSTEE_W",
+  "ACCESS_MODE", "SetEntriesInAclW", "Security Descriptor Control", "ACE
+  Strings"; winnt.h, accctrl.h, aclapi.h, sddl.h and winerror.h for
+  constants and layouts. Wine's tests were not read. No Microsoft binary was
+  decompiled or disassembled.
+summary: >
+  Builds a new self-relative security descriptor in memory it allocates:
+  owner and group from the trustees given (or from the old descriptor), a
+  DACL and a SACL made by merging the access and audit entries given into
+  the old descriptor's lists. Chrome's crash reporting calls it once, with
+  the descriptor of the crash handler's pipe (made from an SDDL string) and
+  one entry that gives the current user GENERIC_ALL; the call returns 0 and
+  hands out a 136-byte descriptor whose DACL starts with that entry.
+interface:
+  signature: "DWORD BuildSecurityDescriptorW(PTRUSTEE_W owner, PTRUSTEE_W group, ULONG access_count, PEXPLICIT_ACCESS_W access_entries, ULONG audit_count, PEXPLICIT_ACCESS_W audit_entries, PSECURITY_DESCRIPTOR old_sd, PULONG new_size, PSECURITY_DESCRIPTOR *new_sd)"
+  returns: "a Win32 error code; ERROR_SUCCESS (0) on success"
+  explicit_access_w: "EXPLICIT_ACCESS_W (accctrl.h), 48 bytes on x64: access u32 @0, mode u32 @4, inherit u32 @8, TRUSTEE_W @16..48 (see specs/windows/advapi32.dll/BuildExplicitAccessWithNameW.yaml)"
+  access_mode: "ACCESS_MODE (accctrl.h): NOT_USED_ACCESS 0, GRANT_ACCESS 1, SET_ACCESS 2, DENY_ACCESS 3, REVOKE_ACCESS 4, SET_AUDIT_SUCCESS 5, SET_AUDIT_FAILURE 6"
+  control_bits: "winnt.h: SE_DACL_PRESENT 0x0004, SE_SACL_PRESENT 0x0010, SE_DACL_AUTO_INHERITED 0x0400, SE_SACL_AUTO_INHERITED 0x0800, SE_DACL_PROTECTED 0x1000, SE_SACL_PROTECTED 0x2000, SE_SELF_RELATIVE 0x8000"
+  ace_types: "winnt.h: ACCESS_ALLOWED_ACE_TYPE 0, ACCESS_DENIED_ACE_TYPE 1, SYSTEM_AUDIT_ACE_TYPE 2, SYSTEM_MANDATORY_LABEL_ACE_TYPE 17; SUCCESSFUL_ACCESS_ACE_FLAG 0x40, FAILED_ACCESS_ACE_FLAG 0x80, INHERITED_ACE 0x10"
+rules:
+  chrome_call: "old descriptor from ConvertStringSecurityDescriptorToSecurityDescriptorW(\"D:(A;;GA;;;SY)(A;;GWGR;;;S-1-15-2-1)S:(ML;;;;;S-1-16-0)\") (100 bytes, control 0x8014, no owner, no group, DACL of 2 allow entries: SYSTEM 0x10000000, S-1-15-2-1 0xC0000000; SACL of one mandatory-label entry, type 17, mask 0, S-1-16-0); one access entry made by BuildExplicitAccessWithNameW(\"CURRENT_USER\", GENERIC_ALL, SET_ACCESS, NO_INHERITANCE); owner, group NULL, no audit entries. Result: return 0; *new_size 136; *new_sd a valid self-relative descriptor of 136 bytes, revision 1, control 0x8014, no owner, no group; DACL revision 2, 88 bytes, 3 entries in this order: allow (type 0, flags 0, mask 0x10000000) for the SID of the calling process token's user (a 36-byte entry for an account SID with five sub-authorities), then the two old entries unchanged (SYSTEM 0x10000000, S-1-15-2-1 0xC0000000); SACL unchanged (28 bytes, the label entry). Calling it again gives the same result"
+  result_memory: "*new_sd is memory the caller frees with LocalFree: LocalSize of it equals *new_size, and GetSecurityDescriptorLength of the descriptor equals *new_size too (20, 28, 32, 36, 48, 60, 64, 72, 88, 92, 100, 104, 112, 116, 120, 136, 140, 144, 148 observed)"
+  last_error: "after every successful call the thread's last error is ERROR_INSUFFICIENT_BUFFER (122) although the function returned 0 (set to 0xDEAD before each call; the Chrome trace shows the same: ret 0, err 122). The return value is the result; the last error is a leftover"
+  control: "the new descriptor's control is always 0x8014 (SE_SELF_RELATIVE | SE_DACL_PRESENT | SE_SACL_PRESENT), whatever the old one had: an old descriptor with control 0xBC14 (protected and auto-inherited DACL and SACL) gives 0x8014, and so do old descriptors with 0x8004 and 0x8000 and no old descriptor at all. A list that has no entries to hold is present with a NULL pointer (\"NULL DACL\", \"NULL SACL\"); revision is 1"
+  nothing: "all trustees NULL, both counts 0, old NULL: return 0, a 20-byte descriptor (the header), DACL present and NULL, SACL present and NULL"
+  owner_group: "a trustee given as owner or group becomes the new owner or group, 'defaulted' flags 0: by SID (TRUSTEE_IS_SID) S-1-5-32-544 as owner gives a 36-byte descriptor, S-1-5-18 as group 32 bytes, both 48; by name (TRUSTEE_IS_NAME) \"CURRENT_USER\" is the SID of the calling process token's user and \"Everyone\" is S-1-1-0. With an old descriptor, a NULL trustee keeps the old owner or group and a trustee replaces it (old O:BA G:SY: a new owner S-1-5-19 leaves the group SYSTEM and makes the descriptor 4 bytes smaller; a new group leaves the owner)"
+  access_entries_no_old: "each GRANT_ACCESS or SET_ACCESS entry becomes an access-allowed entry (type 0), each DENY_ACCESS entry an access-denied entry (type 1), with the access mask exactly as given (generic bits are not mapped: 0xC0000000 and 0x10000000 stay; a mask of 0 is stored) and the inheritance value as the entry's flags (1, 2, 3, 4, 8 observed unchanged). The DACL has revision 2 and is exactly as large as its entries (8 + the entry sizes; an entry is 8 + the SID's length). Denied entries come first, then the allowed ones in the order given: grant Everyone 0x120089 (inherit 3), deny Users 0x2 -> [deny Users 0x2, allow Everyone 0x120089 flags 3]. Entries for the same trustee are not combined: grant Everyone 0x1, grant Everyone 0x2, set Users 0x4, grant Users 0x8 -> four entries in that order"
+  dropped_entries: "an access entry whose inheritance value has bit 0x10 (INHERITED_ACE) set produces no entry: inheritance 0x10 and 0x1F each give a DACL that is present with 0 entries (8 bytes), not a NULL one. A lone REVOKE_ACCESS entry gives the same empty DACL"
+  mode_not_checked_against_list: "an audit mode in the access list makes that entry in the DACL (SET_AUDIT_SUCCESS: type 2, flags 0x40), and an access mode in the audit list makes that entry in the SACL (GRANT_ACCESS: type 0); both calls return 0"
+  audit_entries: "SET_AUDIT_SUCCESS gives a system-audit entry (type 2) with flags 0x40, SET_AUDIT_FAILURE one with flags 0x80, mask as given; without an old SACL they stand in the order given. With an old SACL the new entry comes first and the old entries follow unchanged (old [audit Everyone, label] + audit-failure Users -> [audit Users 0x80, audit Everyone, label])"
+  old_copied: "an old descriptor with nothing new is copied: same owner, group, DACL and SACL entries, same length, but control 0x8014 (see control); an old descriptor without a DACL (SDDL \"\") or with a NULL DACL gives a NULL DACL, and with one granted entry both give a DACL of that one entry"
+  merge_allow: "a GRANT_ACCESS or SET_ACCESS entry for a trustee the old DACL does not name is added as a new allowed entry. Where it goes depends on the old list: [allow, allow] -> first ([new, allow, allow], the Chrome case; also before an old entry with flags 3 and before an inherited one); [deny, allow, allow] -> after the denied entry ([deny, new, allow, allow]); [allow, deny, allow] and [allow, allow, deny] (a denied entry after an allowed one) -> last"
+  merge_deny: "a DENY_ACCESS entry is added as the first entry in every case ([allow, deny, allow], [deny, allow, allow], [allow, allow, deny], [allow, inherited allow]); an allowed entry of the same trustee stays (deny Everyone GENERIC_READ beside an old allow Everyone GENERIC_READ keeps both)"
+  merge_same_trustee: "GRANT_ACCESS for a trustee that already has an allowed entry adds a second entry and leaves the old one (old allow Everyone 0x80000000 + grant Everyone 0x2 -> both entries). SET_ACCESS removes the trustee's old allowed entry and adds the new one at the place a new allowed entry goes ([allow Everyone GR, deny Users, allow SYSTEM] + set Everyone 0x2 -> [deny Users, allow SYSTEM, allow Everyone 0x2]; [deny Users, allow Everyone GR, allow SYSTEM] + set Everyone 0x2 -> [deny Users, allow Everyone 0x2, allow SYSTEM]). GRANT_ACCESS of exactly the rights an old denied entry of the same trustee denies removes that denied entry (old deny Users 0x40000000 + grant Users 0x40000000 -> [allow Users 0x40000000, ...])"
+  revoke: "REVOKE_ACCESS removes the trustee's allowed entries (revoke Everyone: the allow Everyone entry is gone) and leaves a denied entry of that trustee in place (revoke Users with an old deny Users entry: the list is unchanged)"
+  several_entries: "revoke Users + set SYSTEM 0x1 + deny LOCAL SERVICE 0x4 on old [allow Everyone GR, deny Users GW, allow SYSTEM GA] gives [deny LOCAL SERVICE 0x4, allow Everyone GR, deny Users GW, allow SYSTEM 0x1]"
+  sacl_kept: "the old SACL is carried over with every entry, including mandatory-label entries (type 17), when no audit entries are given; an old descriptor without a SACL gives a NULL SACL"
+errors:
+  old_absolute: "ERROR_INVALID_SECURITY_DESCR (1338) when the old descriptor is in absolute form (one made by InitializeSecurityDescriptor); *new_size and *new_sd are not written; the last error is 0 afterwards"
+  unknown_name: "ERROR_NONE_MAPPED (1332) when a trustee name (in an access entry or as the owner) is no account; nothing is written to *new_size and *new_sd; the last error is 1332 too"
+  bad_mode: "ERROR_INVALID_PARAMETER (87) for an access entry whose mode is NOT_USED_ACCESS (0) or 7; nothing is written and the last error is left as it was"
+side_effects: "one LocalAlloc block per successful call; the thread's last error (see rules.last_error); the old descriptor and the entries are not changed"
+threading: "no state is shared between threads; the calling process's token decides what \"CURRENT_USER\" is"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Before
+  each call the last error is 0xDEAD, *new_size 0xAAAAAAAA and *new_sd a
+  marker, so the lines show what the call wrote. A descriptor is printed
+  through the documented accessors (control, owner, group, lists, GetAce):
+  per entry its type, flags, size, mask and SID. The SID of the process
+  token's user prints as "<token user>", other account SIDs with the machine
+  part masked; pointers are never printed.
+not_covered: >
+  Trustees in the object forms (TRUSTEE_IS_OBJECTS_AND_SID / _NAME) and
+  multiple trustees, domain accounts, names other than CURRENT_USER and
+  Everyone, object and callback entries in the old lists, inheritance from a
+  parent, old descriptors with more than three entries, counts that do not
+  match the lists, and NULL pointers where the function reads or writes
+  (they would fault). The offsets of the parts inside the new descriptor
+  were not recorded, only what the accessors return. BuildSecurityDescriptorA.

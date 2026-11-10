@@ -8,8 +8,9 @@ param(
 )
 # S1 (headless, --no-sandbox, --disable-gpu, --dump-dom) of the Chrome-for-Testing kit built from
 # chrome_elf.dll and chrome.exe only (tools/wintrace/polytrace-sync): one run, browser trace in
-# $Work\tr\$Tag-run$Run\polytrace.jsonl. It starts one process tree and waits for it; it never
-# kills anything but the process it started.
+# $Work\tr\$Tag-run$Run\polytrace.jsonl; the child processes' traces are polytrace.jsonl.1, .2, ...
+# beside it, in the order they loaded the logger (.1 is the crash handler). It starts one process
+# tree and waits for it; it never kills anything but the process it started.
 $ErrorActionPreference = 'Stop'
 if (-not $AppDir) { $AppDir = "$Work\appk" }
 $out = "$Work\tr\$Tag-run$Run"
