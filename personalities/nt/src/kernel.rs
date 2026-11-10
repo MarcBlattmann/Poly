@@ -116,6 +116,9 @@ pub struct ProcessCreate {
     /// Its first thread starts suspended, until `NtResumeThread` (ADR
     /// 0089: `CREATE_SUSPENDED`).
     pub suspended: bool,
+    /// The primary token the new process gets (`CreateProcessAsUserW`, ADR
+    /// 0171); `None`: a copy of its creator's.
+    pub token: Option<u64>,
     /// With `inherit_handles`, only these handles are inherited (the
     /// `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`, ADR 0169).
     pub inherit_only: Option<alloc::vec::Vec<poly_ntobj::Handle>>,

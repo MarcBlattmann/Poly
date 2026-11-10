@@ -482,6 +482,7 @@ pub fn thread_exit(
     // Tell the dispatcher the thread is gone (abandon its mutants, drop its
     // waits), then signal its object so waiters on it wake.
     sys.objects.thread_terminated(thread);
+    sys.objects.forget_thread_token(thread);
     let _ = sys.objects.set_signaled(t.object, true);
     let _ = sys.objects.set_thread_object(thread, None);
     let _ = sys.objects.dereference(t.object);
@@ -508,12 +509,13 @@ pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backen
         }
     }
     for t in core::mem::take(&mut proc.threads) {
+        sys.objects.forget_thread_token(t.thread);
         let _ = sys.objects.set_thread_object(t.thread, None);
         let _ = sys.objects.set_signaled(t.object, true);
         let _ = sys.objects.dereference(t.object);
     }
     let _ = sys.objects.destroy_process(proc.pid);
-    sys.token_privileges.remove(&proc.pid);
+    sys.objects.forget_process_token(proc.pid);
     if let Some(p) = proc.object.take() {
         // Kept while a handle keeps the object (`GetExitCodeProcess`);
         // `NtSystem::reap` forgets it with the object.

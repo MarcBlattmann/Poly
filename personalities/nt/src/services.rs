@@ -179,6 +179,10 @@ pub enum Service {
     /// `NtOpenThread(ThreadHandle*, DesiredAccess, ObjectAttributes*,
     /// ClientId*)`.
     OpenThread,
+    /// `NtSetInformationProcess(ProcessHandle, ProcessInformationClass,
+    /// ProcessInformation, ProcessInformationLength)`: `ProcessMitigationPolicy`
+    /// (52) only (ADR 0171).
+    SetInformationProcess,
     /// `NtQueryInformationProcess(ProcessHandle, ProcessInformationClass,
     /// ProcessInformation, Length, ReturnLength*)`.
     QueryInformationProcess,
@@ -346,6 +350,36 @@ pub enum Service {
     /// NewState*, BufferLength, PreviousState*, ReturnLength*)`: not in the
     /// WDK; `AdjustTokenPrivileges`' parameters in its order (ADR 0114).
     AdjustPrivilegesToken,
+    // ----- security (ADR 0171)
+    /// `NtDuplicateToken(ExistingToken, DesiredAccess, ObjectAttributes*,
+    /// EffectiveOnly, TokenType, NewToken*)`.
+    DuplicateToken,
+    /// `NtFilterToken(ExistingToken, Flags, SidsToDisable*,
+    /// PrivilegesToDelete*, RestrictedSids*, NewToken*)`.
+    FilterToken,
+    /// `NtAdjustGroupsToken(TokenHandle, ResetToDefault, NewState*,
+    /// BufferLength, PreviousState*, ReturnLength*)`.
+    AdjustGroupsToken,
+    /// `NtSetInformationToken(TokenHandle, TokenInformationClass,
+    /// TokenInformation, TokenInformationLength)`.
+    SetInformationToken,
+    /// `NtCompareTokens(FirstToken, SecondToken, Equal*)`.
+    CompareTokens,
+    /// `NtPrivilegeCheck(ClientToken, RequiredPrivileges*, Result*)`.
+    PrivilegeCheck,
+    /// `NtAccessCheck(SecurityDescriptor*, ClientToken, DesiredAccess,
+    /// GenericMapping*, PrivilegeSet*, PrivilegeSetLength*, GrantedAccess*,
+    /// AccessStatus*)`.
+    AccessCheck,
+    /// `NtQuerySecurityObject(Handle, SecurityInformation,
+    /// SecurityDescriptor*, Length, LengthNeeded*)`.
+    QuerySecurityObject,
+    /// `NtSetSecurityObject(Handle, SecurityInformation,
+    /// SecurityDescriptor*)`.
+    SetSecurityObject,
+    /// `NtSetInformationThread(ThreadHandle, ThreadInformationClass,
+    /// ThreadInformation, Length)`: `ThreadImpersonationToken` (5) only.
+    SetInformationThread,
 
     // ----- named pipes and completion ports (ADR 0169)
     /// `NtFsControlFile(FileHandle, Event, ApcRoutine, ApcContext,
@@ -525,13 +559,23 @@ pub const HANDLE_SERVICES: [(Service, u32, &str); 1] =
     [(Service::SetInformationObject, 0x011, "NtSetInformationObject")];
 
 /// Access tokens (ADR 0083).
-pub const SECURITY_SERVICES: [(Service, u32, &str); 6] = [
+pub const SECURITY_SERVICES: [(Service, u32, &str); 16] = [
     (Service::OpenProcessToken, 0x180, "NtOpenProcessToken"),
     (Service::OpenProcessTokenEx, 0x181, "NtOpenProcessTokenEx"),
     (Service::OpenThreadToken, 0x182, "NtOpenThreadToken"),
     (Service::OpenThreadTokenEx, 0x183, "NtOpenThreadTokenEx"),
     (Service::QueryInformationToken, 0x184, "NtQueryInformationToken"),
     (Service::AdjustPrivilegesToken, 0x185, "NtAdjustPrivilegesToken"),
+    (Service::DuplicateToken, 0x186, "NtDuplicateToken"),
+    (Service::FilterToken, 0x187, "NtFilterToken"),
+    (Service::AdjustGroupsToken, 0x188, "NtAdjustGroupsToken"),
+    (Service::SetInformationToken, 0x189, "NtSetInformationToken"),
+    (Service::CompareTokens, 0x18A, "NtCompareTokens"),
+    (Service::PrivilegeCheck, 0x18B, "NtPrivilegeCheck"),
+    (Service::AccessCheck, 0x18C, "NtAccessCheck"),
+    (Service::QuerySecurityObject, 0x18D, "NtQuerySecurityObject"),
+    (Service::SetSecurityObject, 0x18E, "NtSetSecurityObject"),
+    (Service::SetInformationThread, 0x18F, "NtSetInformationThread"),
 ];
 
 /// Named pipes and I/O completion ports (ADR 0169), in the file I/O group.
@@ -557,6 +601,10 @@ pub const JOB_SERVICES: [(Service, u32, &str); 7] = [
     (Service::IsProcessInJob, 0x096, "NtIsProcessInJob"),
 ];
 
+/// Process mitigation policies (ADR 0171), in the processes and threads group.
+pub const PROCESS_POLICY_SERVICES: [(Service, u32, &str); 1] =
+    [(Service::SetInformationProcess, 0x097, "NtSetInformationProcess")];
+
 /// Section queries (ADR 0169), in the memory group.
 pub const SECTION_SERVICES: [(Service, u32, &str); 1] = [(Service::QuerySection, 0x049, "NtQuerySection")];
 
@@ -572,6 +620,7 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(HANDLE_SERVICES.iter())
         .chain(IPC_SERVICES.iter())
         .chain(JOB_SERVICES.iter())
+        .chain(PROCESS_POLICY_SERVICES.iter())
         .chain(SECTION_SERVICES.iter())
 }
 

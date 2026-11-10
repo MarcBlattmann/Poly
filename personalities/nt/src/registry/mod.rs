@@ -255,7 +255,11 @@ impl KeyParse<'_> {
         };
         let new = NewObject::Opaque { kind: ObjectType::Key, cookie: open.to_bits(), signaled: None, parse: true };
         match om.new_object(new, thread) {
-            Ok(id) => Parsed::Object(id),
+            Ok(id) => {
+                let path = self.reg.full_path(key).unwrap_or_default();
+                om.assign_path_security(id, poly_ntobj::DefaultSd::Key, &poly_ntobj::path_key("K", &path), true);
+                Parsed::Object(id)
+            }
             Err(e) => {
                 self.reg.close(open);
                 Parsed::Fail(e)

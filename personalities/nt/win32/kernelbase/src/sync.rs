@@ -196,8 +196,14 @@ pub(crate) unsafe fn create_named(
     if !security.is_null() && unsafe { (security.add(16) as *const i32).read() } != 0 {
         attrs |= nt::OBJ_INHERIT;
     }
-    let oa = ObjectAttributes::new(string.as_ref(), attrs);
-    let oa_ptr = if string.is_some() || attrs & nt::OBJ_INHERIT != 0 {
+    let mut oa = ObjectAttributes::new(string.as_ref(), attrs);
+    // SECURITY_ATTRIBUTES.lpSecurityDescriptor at 8: the new object's
+    // descriptor (ADR 0171).
+    // SAFETY: the caller's structure when non-null.
+    if !security.is_null() {
+        oa.security_descriptor = unsafe { (security.add(8) as *const *const u8).read() };
+    }
+    let oa_ptr = if string.is_some() || attrs & nt::OBJ_INHERIT != 0 || !oa.security_descriptor.is_null() {
         &oa as *const ObjectAttributes
     } else {
         core::ptr::null()

@@ -147,6 +147,27 @@ pub fn fs_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
                 }
                 Ok(Out::Wait { key: super::names::fold(&name), timeout: specified.then_some(timeout) })
             }
+            // An anonymous pipe (`CreatePipe`, a `\Device\PolyPipe` stream)
+            // answers `FSCTL_PIPE_PEEK` (`PeekNamedPipe`) like a byte-mode
+            // named pipe: the header, then what is there.
+            Target::Pipe(ref key) if code == FSCTL_PIPE_PEEK => {
+                if out_len < super::npfs::PEEK_HEADER {
+                    return Err(STATUS_INFO_LENGTH_MISMATCH);
+                }
+                let pipe = sys.io.pipes.get(key).ok_or(STATUS_INVALID_HANDLE)?;
+                if pipe.data.is_empty() && pipe.writers == 0 && pipe.had_writer {
+                    return Err(STATUS_PIPE_BROKEN);
+                }
+                let max = out_len - super::npfs::PEEK_HEADER;
+                let available = pipe.data.len();
+                let mut data = Vec::with_capacity(super::npfs::PEEK_HEADER + max.min(available));
+                for v in [FILE_PIPE_CONNECTED_STATE, available as u32, 0, 0] {
+                    data.extend_from_slice(&v.to_le_bytes());
+                }
+                data.extend(pipe.data.iter().take(max).copied());
+                let status = if available > max { STATUS_BUFFER_OVERFLOW } else { STATUS_SUCCESS };
+                Ok(Out::Done { status, data })
+            }
             Target::NamedPipe(_) => {
                 // The access bits of the code (`CTL_CODE`): bit 14 read, 15 write.
                 let need = (if code & (1 << 14) != 0 { FILE_READ_DATA } else { 0 })
