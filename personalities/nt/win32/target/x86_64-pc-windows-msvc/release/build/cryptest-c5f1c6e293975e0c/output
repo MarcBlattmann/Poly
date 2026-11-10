@@ -1,3 +1,0 @@
-cargo:rustc-link-arg=/ENTRY:cryptest_main
-cargo:rustc-link-arg=/SUBSYSTEM:CONSOLE
-cargo:rustc-link-arg=/MANIFEST:NO
