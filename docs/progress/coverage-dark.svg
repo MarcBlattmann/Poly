@@ -1313,7 +1313,7 @@
 </g>
 <g><title>kernel32: 0 / 1,559 done (0.0%)</title>
 <rect x="244.6" y="469.0" width="57.8" height="53.7" fill="#21262d"/>
-<rect x="244.6" y="469.0" width="10.5" height="53.7" fill="#388bfd"/>
+<rect x="244.6" y="469.0" width="10.6" height="53.7" fill="#388bfd"/>
 <rect x="243.6" y="468.0" width="59.8" height="55.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="249.6" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">kernel32</text>
 <text x="249.6" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">0%</text>
@@ -1332,7 +1332,7 @@
 </g>
 <g><title>ntdll: 0 / 1,523 done (0.0%)</title>
 <rect x="244.6" y="634.6" width="57.8" height="52.4" fill="#21262d"/>
-<rect x="244.6" y="634.6" width="4.9" height="52.4" fill="#388bfd"/>
+<rect x="244.6" y="634.6" width="7.3" height="52.4" fill="#388bfd"/>
 <rect x="243.6" y="633.6" width="59.8" height="54.4" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="249.6" y="648.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">ntdll</text>
 <text x="249.6" y="662.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">0%</text>
@@ -1352,7 +1352,7 @@
 <g><title>user32: 55 / 992 done (5.5%)</title>
 <rect x="304.5" y="595.7" width="40.2" height="48.2" fill="#21262d"/>
 <rect x="304.5" y="595.7" width="2.2" height="48.2" fill="#2ea043"/>
-<rect x="306.7" y="595.7" width="0.9" height="48.2" fill="#388bfd"/>
+<rect x="306.7" y="595.7" width="2.8" height="48.2" fill="#388bfd"/>
 <rect x="303.5" y="594.7" width="42.2" height="50.2" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="309.5" y="609.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">user…</text>
 </g>
@@ -1372,7 +1372,7 @@
 <g><title>advapi32: 0 / 589 done (0.0%)</title>
 <rect x="346.6" y="548.4" width="31.5" height="35.5" fill="#21262d"/>
 <rect x="346.6" y="548.4" width="0.1" height="35.5" fill="#bb8009"/>
-<rect x="346.7" y="548.4" width="5.2" height="35.5" fill="#388bfd"/>
+<rect x="346.7" y="548.4" width="6.8" height="35.5" fill="#388bfd"/>
 <rect x="345.6" y="547.4" width="33.5" height="37.5" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>gdi32: 14 / 545 done (2.6%)</title>
@@ -1540,6 +1540,7 @@
 </g>
 <g><title>shcore: 0 / 186 done (0.0%)</title>
 <rect x="427.7" y="542.9" width="16.5" height="19.4" fill="#21262d"/>
+<rect x="427.7" y="542.9" width="0.1" height="19.4" fill="#388bfd"/>
 <rect x="426.7" y="541.9" width="18.5" height="21.4" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>mfplat: 0 / 184 done (0.0%)</title>
@@ -1611,6 +1612,7 @@
 </g>
 <g><title>imm32: 0 / 135 done (0.0%)</title>
 <rect x="446.3" y="594.9" width="15.6" height="14.3" fill="#21262d"/>
+<rect x="446.3" y="594.9" width="1.6" height="14.3" fill="#388bfd"/>
 <rect x="445.3" y="593.9" width="17.6" height="16.3" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>mprapi: 0 / 132 done (0.0%)</title>
@@ -1731,6 +1733,7 @@
 </g>
 <g><title>dwmapi: 0 / 85 done (0.0%)</title>
 <rect x="479.7" y="605.6" width="10.5" height="12.5" fill="#21262d"/>
+<rect x="479.7" y="605.6" width="0.7" height="12.5" fill="#388bfd"/>
 <rect x="478.7" y="604.6" width="12.5" height="14.5" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>appxdeploymentclient: 0 / 82 done (0.0%)</title>

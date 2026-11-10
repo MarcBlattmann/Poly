@@ -326,6 +326,9 @@ dependencies = [
 [[package]]
 name = "poly-ntobj"
 version = "0.0.1"
+dependencies = [
+ "poly-security",
+]
 
 [[package]]
 name = "poly-pagecache"
@@ -453,7 +456,6 @@ version = "0.0.1"
 name = "poly-security"
 version = "0.0.1"
 dependencies = [
- "poly-ntobj",
  "poly-registry",
 ]
 

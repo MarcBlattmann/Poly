@@ -6,3 +6,4 @@
 *.iso
 /.claude/worktrees
 /.oracle-remote
+/personalities/nt/win32/target

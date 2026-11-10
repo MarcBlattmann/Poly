@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "b6cfbc5bbf11",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:59:58Z",
+  "tests": [
+    {
+      "name": "rtl_queryacl_damaged",
+      "exe_sha256": "3c4420ea1fa9d00a109c177d0927662d7054a1938c8543fac53bb451df624f2c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW50YWN0LCBjbGFzcyAxOiBzdGF0dXM9MHgwMDAwMDAwMCByZXN1bHQ9MDIwMDAwMDBjY2NjY2NjY2NjY2NjY2NjCmludGFjdCwgY2xhc3MgMjogc3RhdHVzPTB4MDAwMDAwMDAgcmVzdWx0PTAyMDAwMDAwMzAwMDAwMDAzMDAwMDAwMApyZXZpc2lvbiAwLCBjbGFzcyAxOiBzdGF0dXM9MHhjMDAwMDAwZCByZXN1bHQ9Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjCnJldmlzaW9uIDAsIGNsYXNzIDI6IHN0YXR1cz0weGMwMDAwMDBkIHJlc3VsdD1jY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2MKcmV2aXNpb24gMSwgY2xhc3MgMTogc3RhdHVzPTB4YzAwMDAwMGQgcmVzdWx0PWNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYwpyZXZpc2lvbiAxLCBjbGFzcyAyOiBzdGF0dXM9MHhjMDAwMDAwZCByZXN1bHQ9Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjCnJldmlzaW9uIDUsIGNsYXNzIDE6IHN0YXR1cz0weGMwMDAwMDBkIHJlc3VsdD1jY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2MKcmV2aXNpb24gNSwgY2xhc3MgMjogc3RhdHVzPTB4YzAwMDAwMGQgcmVzdWx0PWNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYwpjb3VudCA1LCBjbGFzcyAxOiBzdGF0dXM9MHgwMDAwMDAwMCByZXN1bHQ9MDIwMDAwMDBjY2NjY2NjY2NjY2NjY2NjCmNvdW50IDUsIGNsYXNzIDI6IHN0YXR1cz0weDAwMDAwMDAwIHJlc3VsdD0wNTAwMDAwMDMwMDAwMDAwMzAwMDAwMDAKZmlyc3QgQUNFIHNpemUgMCwgY2xhc3MgMTogc3RhdHVzPTB4MDAwMDAwMDAgcmVzdWx0PTAyMDAwMDAwY2NjY2NjY2NjY2NjY2NjYwpmaXJzdCBBQ0Ugc2l6ZSAwLCBjbGFzcyAyOiBzdGF0dXM9MHgwMDAwMDAwMCByZXN1bHQ9MDIwMDAwMDAwODAwMDAwMDU4MDAwMDAwCnNpemUgZmllbGQgNCwgY2xhc3MgMTogc3RhdHVzPTB4MDAwMDAwMDAgcmVzdWx0PTAyMDAwMDAwY2NjY2NjY2NjY2NjY2NjYwpzaXplIGZpZWxkIDQsIGNsYXNzIDI6IHN0YXR1cz0weDAwMDAwMDAwIHJlc3VsdD0wMDAwMDAwMDA0MDAwMDAwMDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "intact, class 1: status=0x00000000 result=02000000cccccccccccccccc\nintact, class 2: status=0x00000000 result=020000003000000030000000\nrevision 0, class 1: status=0xc000000d result=cccccccccccccccccccccccc\nrevision 0, class 2: status=0xc000000d result=cccccccccccccccccccccccc\nrevision 1, class 1: status=0xc000000d result=cccccccccccccccccccccccc\nrevision 1, class 2: status=0xc000000d result=cccccccccccccccccccccccc\nrevision 5, class 1: status=0xc000000d result=cccccccccccccccccccccccc\nrevision 5, class 2: status=0xc000000d result=cccccccccccccccccccccccc\ncount 5, class 1: status=0x00000000 result=02000000cccccccccccccccc\ncount 5, class 2: status=0x00000000 result=050000003000000030000000\nfirst ACE size 0, class 1: status=0x00000000 result=02000000cccccccccccccccc\nfirst ACE size 0, class 2: status=0x00000000 result=020000000800000058000000\nsize field 4, class 1: status=0x00000000 result=02000000cccccccccccccccc\nsize field 4, class 2: status=0x00000000 result=000000000400000000000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "rtl_queryacl_revision",
+      "exe_sha256": "d744d9cd7b893bbba23c69c5c2ee66965d09e32c7370d66a919e8a0c75674d8d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmV2aXNpb24gMiwgbGVuZ3RoIDA6IHN0YXR1cz0weGMwMDAwMDIzIGJ5dGVzX2NoYW5nZWQ9MCByZXN1bHQ9Y2NjY2NjY2NjY2NjY2NjYwpyZXZpc2lvbiAyLCBsZW5ndGggMzogc3RhdHVzPTB4YzAwMDAwMjMgYnl0ZXNfY2hhbmdlZD0wIHJlc3VsdD1jY2NjY2NjY2NjY2NjY2NjCnJldmlzaW9uIDIsIGxlbmd0aCA0OiBzdGF0dXM9MHgwMDAwMDAwMCBieXRlc19jaGFuZ2VkPTQgcmVzdWx0PTAyMDAwMDAwY2NjY2NjY2MKcmV2aXNpb24gMiwgbGVuZ3RoIDg6IHN0YXR1cz0weDAwMDAwMDAwIGJ5dGVzX2NoYW5nZWQ9NCByZXN1bHQ9MDIwMDAwMDBjY2NjY2NjYwpyZXZpc2lvbiAyLCBsZW5ndGggMzI6IHN0YXR1cz0weDAwMDAwMDAwIGJ5dGVzX2NoYW5nZWQ9NCByZXN1bHQ9MDIwMDAwMDBjY2NjY2NjYwpyZXZpc2lvbiAzLCBsZW5ndGggMDogc3RhdHVzPTB4YzAwMDAwMjMgYnl0ZXNfY2hhbmdlZD0wIHJlc3VsdD1jY2NjY2NjY2NjY2NjY2NjCnJldmlzaW9uIDMsIGxlbmd0aCAzOiBzdGF0dXM9MHhjMDAwMDAyMyBieXRlc19jaGFuZ2VkPTAgcmVzdWx0PWNjY2NjY2NjY2NjY2NjY2MKcmV2aXNpb24gMywgbGVuZ3RoIDQ6IHN0YXR1cz0weDAwMDAwMDAwIGJ5dGVzX2NoYW5nZWQ9NCByZXN1bHQ9MDMwMDAwMDBjY2NjY2NjYwpyZXZpc2lvbiAzLCBsZW5ndGggODogc3RhdHVzPTB4MDAwMDAwMDAgYnl0ZXNfY2hhbmdlZD00IHJlc3VsdD0wMzAwMDAwMGNjY2NjY2NjCnJldmlzaW9uIDMsIGxlbmd0aCAzMjogc3RhdHVzPTB4MDAwMDAwMDAgYnl0ZXNfY2hhbmdlZD00IHJlc3VsdD0wMzAwMDAwMGNjY2NjY2NjCnJldmlzaW9uIDQsIGxlbmd0aCAwOiBzdGF0dXM9MHhjMDAwMDAyMyBieXRlc19jaGFuZ2VkPTAgcmVzdWx0PWNjY2NjY2NjY2NjY2NjY2MKcmV2aXNpb24gNCwgbGVuZ3RoIDM6IHN0YXR1cz0weGMwMDAwMDIzIGJ5dGVzX2NoYW5nZWQ9MCByZXN1bHQ9Y2NjY2NjY2NjY2NjY2NjYwpyZXZpc2lvbiA0LCBsZW5ndGggNDogc3RhdHVzPTB4MDAwMDAwMDAgYnl0ZXNfY2hhbmdlZD00IHJlc3VsdD0wNDAwMDAwMGNjY2NjY2NjCnJldmlzaW9uIDQsIGxlbmd0aCA4OiBzdGF0dXM9MHgwMDAwMDAwMCBieXRlc19jaGFuZ2VkPTQgcmVzdWx0PTA0MDAwMDAwY2NjY2NjY2MKcmV2aXNpb24gNCwgbGVuZ3RoIDMyOiBzdGF0dXM9MHgwMDAwMDAwMCBieXRlc19jaGFuZ2VkPTQgcmVzdWx0PTA0MDAwMDAwY2NjY2NjY2MKY2xhc3MgMDogc3RhdHVzPTB4YzAwMDAwMDMgYnl0ZXNfY2hhbmdlZD0wCmNsYXNzIDM6IHN0YXR1cz0weGMwMDAwMDAzIGJ5dGVzX2NoYW5nZWQ9MApjbGFzcyA0OiBzdGF0dXM9MHhjMDAwMDAwMyBieXRlc19jaGFuZ2VkPTAKY2xhc3MgNTogc3RhdHVzPTB4YzAwMDAwMDMgYnl0ZXNfY2hhbmdlZD0wCmNsYXNzIDIwOiBzdGF0dXM9MHhjMDAwMDAwMyBieXRlc19jaGFuZ2VkPTAKY2xhc3MgOTk6IHN0YXR1cz0weGMwMDAwMDAzIGJ5dGVzX2NoYW5nZWQ9MApjbGFzcyA0Mjk0OTY3Mjk1OiBzdGF0dXM9MHhjMDAwMDAwMyBieXRlc19jaGFuZ2VkPTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "revision 2, length 0: status=0xc0000023 bytes_changed=0 result=cccccccccccccccc\nrevision 2, length 3: status=0xc0000023 bytes_changed=0 result=cccccccccccccccc\nrevision 2, length 4: status=0x00000000 bytes_changed=4 result=02000000cccccccc\nrevision 2, length 8: status=0x00000000 bytes_changed=4 result=02000000cccccccc\nrevision 2, length 32: status=0x00000000 bytes_changed=4 result=02000000cccccccc\nrevision 3, length 0: status=0xc0000023 bytes_changed=0 result=cccccccccccccccc\nrevision 3, length 3: status=0xc0000023 bytes_changed=0 result=cccccccccccccccc\nrevision 3, length 4: status=0x00000000 bytes_changed=4 result=03000000cccccccc\nrevision 3, length 8: status=0x00000000 bytes_changed=4 result=03000000cccccccc\nrevision 3, length 32: status=0x00000000 bytes_changed=4 result=03000000cccccccc\nrevision 4, length 0: status=0xc0000023 bytes_changed=0 result=cccccccccccccccc\nrevision 4, length 3: status=0xc0000023 bytes_changed=0 result=cccccccccccccccc\nrevision 4, length 4: status=0x00000000 bytes_changed=4 result=04000000cccccccc\nrevision 4, length 8: status=0x00000000 bytes_changed=4 result=04000000cccccccc\nrevision 4, length 32: status=0x00000000 bytes_changed=4 result=04000000cccccccc\nclass 0: status=0xc0000003 bytes_changed=0\nclass 3: status=0xc0000003 bytes_changed=0\nclass 4: status=0xc0000003 bytes_changed=0\nclass 5: status=0xc0000003 bytes_changed=0\nclass 20: status=0xc0000003 bytes_changed=0\nclass 99: status=0xc0000003 bytes_changed=0\nclass 4294967295: status=0xc0000003 bytes_changed=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

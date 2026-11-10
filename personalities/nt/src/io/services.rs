@@ -129,6 +129,11 @@ impl Notify {
     ) -> Result<Irp> {
         let event = self.take_event(sys, caller)?;
         let _ = sys.objects.set_signaled(file.0, false);
+        let rec = sys.io.file(file.1);
+        let (port, skip_port, skip_event) = rec.map_or((None, false, false), |r| (r.port, r.skip_port, r.skip_event));
+        // A synchronous file object ignores an APC routine (Learn:
+        // "ReadFileEx" on a handle not opened for overlapped I/O).
+        let apc = if sync { None } else { self.apc() };
         Ok(Irp {
             id: sys.io.new_irp_id(),
             file: file.1,
@@ -137,8 +142,12 @@ impl Notify {
             thread: caller.thread,
             iosb: self.iosb,
             event,
-            apc: self.apc(),
+            apc,
             sync,
+            apc_context: self.apc_context,
+            port,
+            skip_port,
+            skip_event,
             op,
             state: IrpState::Waiting,
         })
@@ -273,10 +282,24 @@ pub fn open_in(
     desired: u32,
     params: CreateParams,
 ) -> Result<(Handle, u64, u64)> {
+    open_in_with(sys, b, caller, attrs, desired, params, None)
+}
+
+/// [`open_in`], or with `np` the creation of a named pipe's server end
+/// (`NtCreateNamedPipeFile`).
+pub fn open_in_with(
+    sys: &mut NtSystem,
+    b: &mut dyn crate::Backend,
+    caller: &Caller,
+    attrs: &Attributes,
+    desired: u32,
+    params: CreateParams,
+    np: Option<super::npfs::NpCreate>,
+) -> Result<(Handle, u64, u64)> {
     if !sys.io.is_attached() {
         return Err(STATUS_OBJECT_PATH_NOT_FOUND);
     }
-    let mut hook = CreateHook { io: &mut sys.io, params, thread: caller.thread, information: 0, made: None };
+    let mut hook = CreateHook { io: &mut sys.io, params, thread: caller.thread, np, information: 0, made: None };
     let r = sys.objects.open_object(caller, &attrs.as_object_attributes(), desired, Some(ObjectType::File), &mut hook);
     let (information, made) = (hook.information, hook.made);
     sys.reap(b);
@@ -438,6 +461,25 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
             Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: false }),
             // Sockets are read before this (`afd::services::read_file`).
             Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
+            Target::PipeRoot => Err(STATUS_INVALID_DEVICE_REQUEST),
+            // A named pipe end (ADR 0169). `ReadFileEx` is refused on a
+            // handle with a completion port (Learn: "ReadFileEx").
+            Target::NamedPipe(_) => {
+                if n.apc_routine != 0 && rec.port.is_some() {
+                    return Err(STATUS_INVALID_PARAMETER);
+                }
+                let irp = n.irp(sys, &caller, file, sync, IrpOp::Read { offset: 0, len, buf, key })?;
+                match sys.io.np_read(file.1, irp) {
+                    Ok(super::npfs::NpDone::Done(s)) => Ok(Plan::Done(s)),
+                    Ok(super::npfs::NpDone::Pending(id)) => Ok(Plan::Pending { irp: id, file: file.0, sync }),
+                    Err((s, irp)) => {
+                        if let Some(e) = irp.event {
+                            let _ = sys.objects.dereference(e);
+                        }
+                        Err(s)
+                    }
+                }
+            }
             Target::Disk(d) => {
                 if rec.kind == FileType::Directory {
                     return Err(STATUS_INVALID_DEVICE_REQUEST);
@@ -525,7 +567,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
     let whole = k.with_state(|sys, _, _| -> Result<bool> {
         let (_, cookie) = file_handle(sys, &caller, Handle(h), 0)?;
         let rec = sys.io.file(cookie).expect("checked");
-        Ok(!rec.is_sync() || matches!(rec.target, Target::Pipe(_) | Target::Console(_)))
+        Ok(!rec.is_sync() || matches!(rec.target, Target::Pipe(_) | Target::Console(_) | Target::NamedPipe(_)))
     })?;
     let captured = if whole {
         if len > MAX_CAPTURED_WRITE {
@@ -567,6 +609,24 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
             // (`2>&1`) interleaves rather than overwrites.
             Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: true }),
             Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
+            Target::PipeRoot => Err(STATUS_INVALID_DEVICE_REQUEST),
+            Target::NamedPipe(_) => {
+                if n.apc_routine != 0 && rec.port.is_some() {
+                    return Err(STATUS_INVALID_PARAMETER);
+                }
+                let data = captured.unwrap_or_default();
+                let irp = n.irp(sys, &caller, file, sync, IrpOp::Write { offset: None, data: Vec::new(), key })?;
+                match sys.io.np_write(file.1, irp, data) {
+                    Ok(super::npfs::NpDone::Done(s)) => Ok(Plan::Done(s)),
+                    Ok(super::npfs::NpDone::Pending(id)) => Ok(Plan::Pending { irp: id, file: file.0, sync }),
+                    Err((s, irp)) => {
+                        if let Some(e) = irp.event {
+                            let _ = sys.objects.dereference(e);
+                        }
+                        Err(s)
+                    }
+                }
+            }
             Target::Disk(d) => {
                 if rec.kind == FileType::Directory {
                     return Err(STATUS_INVALID_DEVICE_REQUEST);
@@ -653,7 +713,14 @@ pub fn flush_buffers_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<
 // ----- information
 
 /// Copy a variable-length answer into a buffer of `len` bytes.
-fn put_info<K: NtKernel>(k: &mut K, iosb: u64, out: u64, len: usize, bytes: &[u8], fixed: usize) -> Result<NtStatus> {
+pub(crate) fn put_info<K: NtKernel>(
+    k: &mut K,
+    iosb: u64,
+    out: u64,
+    len: usize,
+    bytes: &[u8],
+    fixed: usize,
+) -> Result<NtStatus> {
     if len < fixed {
         return Err(STATUS_INFO_LENGTH_MISMATCH);
     }
@@ -668,6 +735,9 @@ fn put_info<K: NtKernel>(k: &mut K, iosb: u64, out: u64, len: usize, bytes: &[u8
 pub fn query_information_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, iosb, out, len, class] = abi::args::<K, 5>(k, regs)?;
     let class = class as u32;
+    if super::npservices::is_query_class(class) {
+        return super::npservices::query_pipe_information(k, h, iosb, out, len as u32 as usize, class);
+    }
     let caller = k.caller();
     let need = super::IoState::query_access(class).ok_or(STATUS_INVALID_INFO_CLASS)?;
     let answer = k.with_state(|sys, _, _| {
@@ -684,6 +754,9 @@ pub fn set_information_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resul
     let [h, iosb, input, len, class] = abi::args::<K, 5>(k, regs)?;
     let class = class as u32;
     let len = len as u32 as usize;
+    if super::npservices::is_set_class(class) {
+        return super::npservices::set_special_information(k, h, iosb, input, len, class);
+    }
     let (need, size) = super::IoState::set_access(class).ok_or(STATUS_INVALID_INFO_CLASS)?;
     if len < size {
         return Err(STATUS_INFO_LENGTH_MISMATCH);
@@ -732,8 +805,12 @@ pub fn set_information_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resul
                     let (_, dir) = file_handle(sys, &caller, Handle(root), 0)?;
                     RenameTo::Relative { dir, path: name }
                 } else if name.first() == Some(&(b'\\' as u16)) {
-                    let attrs =
-                        Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE };
+                    let attrs = Attributes {
+                        root: None,
+                        name: Some(name),
+                        attributes: poly_ntobj::OBJ_CASE_INSENSITIVE,
+                        security: None,
+                    };
                     let (volume, path) =
                         sys.io.resolve_device_path(&mut sys.objects, &caller, &attrs.as_object_attributes())?;
                     RenameTo::Volume { volume, path }
@@ -906,6 +983,7 @@ pub fn cancel_io_file_ex<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
         Ok(sys.io.cancel_file_process(cookie, caller.process, (request != 0).then_some(request)))
     })?;
     if n == 0 {
+        write_iosb(k, iosb, STATUS_NOT_FOUND, 0)?;
         return Err(STATUS_NOT_FOUND);
     }
     write_iosb(k, iosb, STATUS_SUCCESS, 0)?;

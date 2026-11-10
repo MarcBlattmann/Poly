@@ -1,0 +1,68 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtQueryInformationJobObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Reads limits, accounting and the process list of a job. The buffer length
+  must match the class exactly (STATUS_INFO_LENGTH_MISMATCH otherwise, also
+  for longer buffers), except for the process id list (at least 16 bytes)
+  and a few variable classes. JOB_OBJECT_QUERY is the right needed.
+  QueryInformationJobObject calls it.
+interface:
+  signature: "NTSTATUS NtQueryInformationJobObject(HANDLE JobHandle, JOBOBJECTINFOCLASS JobObjectInformationClass, PVOID JobObjectInformation, ULONG JobObjectInformationLength, PULONG ReturnLength)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87. Also STATUS_BUFFER_OVERFLOW 0x80000005."
+  access: "Job access rights (winnt.h): JOB_OBJECT_ASSIGN_PROCESS 0x1, JOB_OBJECT_SET_ATTRIBUTES 0x2, JOB_OBJECT_QUERY 0x4, JOB_OBJECT_TERMINATE 0x8, JOB_OBJECT_SET_SECURITY_ATTRIBUTES 0x10, JOB_OBJECT_ALL_ACCESS 0x1f003f. The tests create the children they assign as suspended copies of the test executable that are never resumed."
+  accounting_layout: "JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, 48 bytes: four 8-byte times, TotalPageFaultCount at 32, TotalProcesses 36, ActiveProcesses 40, TotalTerminatedProcesses 44; the IO variant (class 8) is 96 bytes with the same first 48 bytes"
+  process_list_layout: "JOBOBJECT_BASIC_PROCESS_ID_LIST: NumberOfAssignedProcesses at 0, NumberOfProcessIdsInList at 4, pointer-sized ids from offset 8"
+rules:
+  exact_lengths: "lengths not rejected as a mismatch (scanned 0 to 300, class: length): 1: 48; 2: 64; 4: 4; 6: 4; 8: 96; 9: 144 and 152; 10: 4; 12: 48 and 56; 13: 80 and 88; 15: 8; 16: 4; 17: 8; 18: 16; 20: 40 and 64; 21: 1; 26: 8; 28: 16 and 40; 29: 8; 30: 16 and 36; 32: 16; 33: 72; 34: 104; 43: 1; 44: 16; class 3 any length from 16 to 300 (the empty job returns 8 bytes); class 5 any length from 40; class 11 only even lengths from 2 (0 bytes returned); class 14: length 0 returns STATUS_BUFFER_TOO_SMALL with 16, lengths 16 and 32 succeed; class 7 answers STATUS_INVALID_INFO_CLASS at 16; classes 19 and 39 reject every length up to 300; class 0 always STATUS_INVALID_INFO_CLASS; class 31 from 144 STATUS_NOT_IMPLEMENTED; classes 36, 37, 38 and 42 answer 0xC0000509 / 0xC0000225 and classes 40, 41, 45 STATUS_INVALID_INFO_CLASS at their length"
+  defaults: "a fresh job: accounting (48 and 96 bytes), security limit (40), UI restrictions, end-of-job time, notification limit (48), limit violation (80), cpu rate (8), net rate (16), notification limit 2 (104): all zero bytes; basic and extended limit: all zero except SchedulingClass 5 at offset 60; group information (class 11) returns 0 bytes; class 14 16 zero bytes"
+  after_set: "after setting ActiveProcessLimit 3, PriorityClass 3, SchedulingClass 4 (flags 0xa8): the basic and extended reads show flags 0xa8, active 3, priority 3, scheduling 4; after setting only ActiveProcessLimit 9 (flags 0x8): flags 0x8, active 9, priority 0, scheduling 5 (the earlier priority and scheduling values are reset); UI restrictions HANDLES|DESKTOP read back 0x41"
+  accounting: "empty job: total 0, active 0, terminated 0; with two assigned suspended children: total 2, active 2, terminated 0; after NtTerminateJobObject(0x77): both children's exit codes are 0x77, total 2, active 0, terminated 0 (they never ran)"
+  process_list: "with two children: lengths 0 to 15 -> STATUS_INFO_LENGTH_MISMATCH (nothing written); length 16 or 17 -> STATUS_BUFFER_OVERFLOW (0x80000005), returned 24, assigned 2, in list 1; length 24 and more -> STATUS_SUCCESS, returned 24, assigned 2, in list 2 and both children's ids in the list; after the terminate: returned 8, assigned 0, in list 0"
+  rights: "only JOB_OBJECT_QUERY allows the queries (classes 1, 2, 3, 4, 9 tried); SET_ATTRIBUTES, ASSIGN_PROCESS, TERMINATE, SYNCHRONIZE and access 0 give STATUS_ACCESS_DENIED"
+  null_handle: "a NULL job handle answers for the calling process's own job (STATUS_SUCCESS for class 4; ambient: the oracle's test process is itself inside a job)"
+  return_length: "a NULL ReturnLength pointer is allowed (STATUS_SUCCESS); a NULL buffer with length 4: STATUS_ACCESS_VIOLATION"
+errors:
+  invalid: "a closed handle: STATUS_INVALID_HANDLE; the process pseudo-handle and an event: STATUS_OBJECT_TYPE_MISMATCH"
+  length: "STATUS_INFO_LENGTH_MISMATCH (0xC0000004) for every wrong length"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

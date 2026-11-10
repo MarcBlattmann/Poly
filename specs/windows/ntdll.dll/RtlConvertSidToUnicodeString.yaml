@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/RtlConvertSidToUnicodeString
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: as declared
+  for the NT native API (ntifs.h / wdm.h / winternl.h, Microsoft Learn)
+  where the function is documented there; where it is not, the arguments are
+  those of the matching Win32 function, which map one to one onto the native
+  call, and the interface entry "prototype_note" says so.
+summary: >
+  Writes the text form of a SID ("S-1-5-32-544") as UTF-16 into a
+  UNICODE_STRING. With AllocateDestinationString TRUE the system allocates
+  the buffer (NUL-terminated, MaximumLength = Length + 2; release with
+  RtlFreeUnicodeString); with FALSE the caller's buffer is used and must be
+  larger than the text in bytes (otherwise STATUS_BUFFER_OVERFLOW, nothing
+  written). Invalid SIDs give STATUS_INVALID_SID.
+interface:
+  signature: "NTSTATUS RtlConvertSidToUnicodeString(PUNICODE_STRING string, PSID sid, BOOLEAN allocate_destination_string)"
+  layout: "SID (winnt.h): byte 0 Revision (1), byte 1 SubAuthorityCount (0..15 valid), bytes 2..7 IdentifierAuthority (six bytes, big-endian value), then SubAuthority[count] as little-endian 32-bit values; length 8 + 4 * count (at most 68)."
+  result: "NTSTATUS values are printed as 8 hex digits: STATUS_SUCCESS 0, STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_UNKNOWN_REVISION 0xC0000058, STATUS_REVISION_MISMATCH 0xC0000059, STATUS_PRIVILEGE_NOT_HELD 0xC0000061, STATUS_INVALID_ACL 0xC0000077, STATUS_INVALID_SID 0xC0000078, STATUS_INVALID_SECURITY_DESCR 0xC0000079, STATUS_NO_TOKEN 0xC000007C, STATUS_ALLOTTED_SPACE_EXCEEDED 0xC0000099, STATUS_BAD_IMPERSONATION_LEVEL 0xC00000A5, STATUS_BAD_DESCRIPTOR_FORMAT 0xC00000E7 (ntstatus.h). A BOOLEAN result is one byte, 0 or 1."
+  unicode_string: "UNICODE_STRING (ntdef.h): Length u16 (bytes, without NUL), MaximumLength u16, pointer at 8"
+  prototype_note: "documented (wdm.h); similar to ConvertSidToStringSidW"
+rules:
+  allocated: "STATUS_SUCCESS; text, Length/MaximumLength: S-1-5-18 16/18, S-1-1-0 14/16, S-1-5-32-544 24/26, S-1-5-21-1000-2000-3000-500 54/56, S-1-16-12288 24/26, S-1-0 (count 0, authority 0) 10/12, S-1-5-4294967295 32/34, fifteen sub-authorities 82/84; the unit after the text is 0; after RtlFreeUnicodeString Length 0, MaximumLength 0, buffer NULL"
+  caller_buffer: "for S-1-5-32-544 (24 bytes of text) MaximumLength 0, 2, 22, 23 and 24 return STATUS_BUFFER_OVERFLOW (0x80000005): no unit is written and Length/MaximumLength keep their values; 25 returns STATUS_SUCCESS with Length 24, 12 units written and no NUL; 26, 28 and 128 return STATUS_SUCCESS with Length 24 and a NUL after the text (13 units written); the buffer pointer is unchanged"
+  authority_forms: "the authority prints in decimal while it is below 2^32 (000000000005 and 000000000000 as 5 and 0, 0000ffffffff as 4294967295, 000001000000 as 16777216) and as 0x plus uppercase hex otherwise (000100000000 is S-1-0x100000000-7, 010203040506 is S-1-0x10203040506-7, ffffffffffff is S-1-0xFFFFFFFFFFFF-7); text lengths with one sub-authority 7: 14, 14, 32, 28, 34, 38, 40 bytes"
+errors:
+  invalid_sid: "revision 0, 2 or 255, and counts 16, 17 and 255 return STATUS_INVALID_SID (0xC0000078) with both settings of AllocateDestinationString; the string is not modified (Length and MaximumLength keep their values, the buffer stays NULL)"
+  too_small: "STATUS_BUFFER_OVERFLOW (a warning status, 0x80000005) when the caller buffer is not larger than the text"
+side_effects: "allocates the string buffer when AllocateDestinationString is TRUE"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

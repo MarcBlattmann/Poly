@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ntdll.dll/NtAdjustPrivilegesToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled. Prototype: the arguments
+  of the Win32 function that wraps this call map one to one (Microsoft Learn
+  documents the Zw form for some of them); where Learn has no page for the
+  Nt name the signature here is worked out from the Win32 function and the
+  observations, not from a document.
+summary: >
+  Enables, disables or removes privileges of a token, optionally returning
+  the previous state of the entries it touched. Privileges the token does
+  not hold are skipped and the call succeeds with the success code
+  STATUS_NOT_ALL_ASSIGNED (0x106). AdjustTokenPrivileges calls it.
+interface:
+  signature: "NTSTATUS NtAdjustPrivilegesToken(HANDLE TokenHandle, BOOLEAN DisableAllPrivileges, PTOKEN_PRIVILEGES NewState, ULONG BufferLength, PTOKEN_PRIVILEGES PreviousState, PULONG ReturnLength)"
+  statuses: "NTSTATUS values seen (ntstatus.h): STATUS_SUCCESS 0x00000000, STATUS_NOT_ALL_ASSIGNED 0x00000106 (a success code), STATUS_OBJECT_NAME_EXISTS 0x40000000 (success), STATUS_BUFFER_OVERFLOW 0x80000005, STATUS_INVALID_INFO_CLASS 0xC0000003, STATUS_INFO_LENGTH_MISMATCH 0xC0000004, STATUS_ACCESS_VIOLATION 0xC0000005, STATUS_INVALID_HANDLE 0xC0000008, STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_BUFFER_TOO_SMALL 0xC0000023, STATUS_OBJECT_TYPE_MISMATCH 0xC0000024, STATUS_PRIVILEGE_NOT_HELD 0xC0000061. RtlNtStatusToDosError maps 0xC0000022 to 5, 0xC0000008 and 0xC0000024 to 6 and 0xC000000D to 87."
+  previous_state: "TOKEN_PRIVILEGES: PrivilegeCount (4 bytes) then 12-byte LUID_AND_ATTRIBUTES entries; one entry is 16 bytes, two entries 28"
+rules:
+  enable_disable: "disabling SeShutdownPrivilege (attributes 3 -> 1): STATUS_SUCCESS, previous state count 1 with attributes 0x3, *ReturnLength 16; enabling: previous attributes 0x1, now 3; enabling an already enabled one: previous count 0, *ReturnLength 16"
+  attribute_bits: "attributes SE_PRIVILEGE_ENABLED_BY_DEFAULT only leaves it disabled (now 1: the bit stays, not enabled); ENABLED|ENABLED_BY_DEFAULT enables (3); SE_PRIVILEGE_USED_FOR_ACCESS only disables (1)"
+  remove: "SE_PRIVILEGE_REMOVED (4): STATUS_SUCCESS, previous attributes 0x0, the privilege is gone afterwards; enabling a removed privilege returns STATUS_NOT_ALL_ASSIGNED (0x106) and it stays absent"
+  not_held: "a privilege the token lacks (SeTcb, SeCreateToken): STATUS_NOT_ALL_ASSIGNED (0x106), nothing changed for it; held ones in the same call are still applied (disabling SeChangeNotify listed after SeTcb: applied, previous count 1; listed before SeCreateToken: still disabled, previous count 0); *ReturnLength is 16 even when the previous count is 0"
+  disable_all: "DisableAllPrivileges TRUE (NewState ignored, may be NULL): STATUS_SUCCESS, no privilege enabled afterwards; with a 4096-byte previous buffer the previous state lists the enabled ones (count 1 when one was enabled), *ReturnLength = 4 + 12 * count"
+  previous_buffer: "a previous buffer of 0, 1 or 15 bytes for one entry returns STATUS_BUFFER_TOO_SMALL (0xC0000023), *ReturnLength 16, nothing written and the privilege is not changed (attributes stay 3); 16, 17 and 100 succeed (16 bytes written). For two entries: buffers 4, 16, 27 return STATUS_BUFFER_TOO_SMALL with *ReturnLength 28 and no change; 28 and 40 succeed (previous count 2)"
+  no_previous: "no previous buffer but a ReturnLength pointer: STATUS_SUCCESS and *ReturnLength is not written; a count of 0: STATUS_SUCCESS"
+  rights: "TOKEN_ADJUST_PRIVILEGES alone works without a previous state (and fails with a previous buffer: STATUS_ACCESS_DENIED); TOKEN_QUERY alone is refused in both cases; TOKEN_ADJUST_PRIVILEGES|TOKEN_QUERY works in both"
+errors:
+  null_state: "a NULL NewState with DisableAllPrivileges FALSE: STATUS_INVALID_PARAMETER"
+  handles: "NULL: STATUS_INVALID_HANDLE; the process pseudo-handle: STATUS_OBJECT_TYPE_MISMATCH"
+side_effects: "none beyond the rules above"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

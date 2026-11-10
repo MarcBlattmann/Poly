@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "iscw_roundtrip",
+      "exe_sha256": "6c742c7232b2e84c157e8611691e3e59dfb710ce760cf9eb705c00f28e2f2af7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVmYXVsdCwgYmVmb3JlIGFueSBzZXQ6IGdldCBvaz0wIHN0eWxlPTB4YWEgcG9zPTcsOCBhcmVhPTEsMiwzLDQKb3duLCBiZWZvcmUgYW55IHNldDogZ2V0IG9rPTAgc3R5bGU9MHhhYSBwb3M9Nyw4IGFyZWE9MSwyLDMsNApkZWZhdWx0IHNldCBDRlNfREVGQVVMVDogb2s9MSBsYXN0IGVycm9yIDB4MAogIHJlYWQgYmFjazogZ2V0IG9rPTEgc3R5bGU9MHgwIHBvcz0xMCwyMCBhcmVhPTUsNiw1MCw2MApkZWZhdWx0IHNldCBDRlNfUE9JTlQ6IG9rPTEgbGFzdCBlcnJvciAweDAKICByZWFkIGJhY2s6IGdldCBvaz0xIHN0eWxlPTB4MiBwb3M9MTAsMjAgYXJlYT01LDYsNTAsNjAKZGVmYXVsdCBzZXQgQ0ZTX1JFQ1Q6IG9rPTEgbGFzdCBlcnJvciAweDAKICByZWFkIGJhY2s6IGdldCBvaz0xIHN0eWxlPTB4MSBwb3M9MTAsMjAgYXJlYT01LDYsNTAsNjAKZGVmYXVsdCBzZXQgQ0ZTX0ZPUkNFX1BPU0lUSU9OOiBvaz0xIGxhc3QgZXJyb3IgMHgwCiAgcmVhZCBiYWNrOiBnZXQgb2s9MSBzdHlsZT0weDIwIHBvcz0xMCwyMCBhcmVhPTUsNiw1MCw2MApkZWZhdWx0IHNldCAweDEyMzQ6IG9rPTEgbGFzdCBlcnJvciAweDAKICByZWFkIGJhY2s6IGdldCBvaz0xIHN0eWxlPTB4MTIzNCBwb3M9MTAsMjAgYXJlYT01LDYsNTAsNjAKZGVmYXVsdDogbmVnYXRpdmUgcG9zaXRpb24gYW5kIGludmVydGVkIHJlY3RhbmdsZTogZ2V0IG9rPTEgc3R5bGU9MHgxIHBvcz0tNSwtNiBhcmVhPTUwLDYwLDUsNgpvd24gc2V0IENGU19ERUZBVUxUOiBvaz0xIGxhc3QgZXJyb3IgMHgwCiAgcmVhZCBiYWNrOiBnZXQgb2s9MSBzdHlsZT0weDAgcG9zPTEwLDIwIGFyZWE9NSw2LDUwLDYwCm93biBzZXQgQ0ZTX1BPSU5UOiBvaz0xIGxhc3QgZXJyb3IgMHgwCiAgcmVhZCBiYWNrOiBnZXQgb2s9MSBzdHlsZT0weDIgcG9zPTEwLDIwIGFyZWE9NSw2LDUwLDYwCm93biBzZXQgQ0ZTX1JFQ1Q6IG9rPTEgbGFzdCBlcnJvciAweDAKICByZWFkIGJhY2s6IGdldCBvaz0xIHN0eWxlPTB4MSBwb3M9MTAsMjAgYXJlYT01LDYsNTAsNjAKb3duIHNldCBDRlNfRk9SQ0VfUE9TSVRJT046IG9rPTEgbGFzdCBlcnJvciAweDAKICByZWFkIGJhY2s6IGdldCBvaz0xIHN0eWxlPTB4MjAgcG9zPTEwLDIwIGFyZWE9NSw2LDUwLDYwCm93biBzZXQgMHgxMjM0OiBvaz0xIGxhc3QgZXJyb3IgMHgwCiAgcmVhZCBiYWNrOiBnZXQgb2s9MSBzdHlsZT0weDEyMzQgcG9zPTEwLDIwIGFyZWE9NSw2LDUwLDYwCm93bjogbmVnYXRpdmUgcG9zaXRpb24gYW5kIGludmVydGVkIHJlY3RhbmdsZTogZ2V0IG9rPTEgc3R5bGU9MHgxIHBvcz0tNSwtNiBhcmVhPTUwLDYwLDUsNgpkZWZhdWx0IGFmdGVyIG93biB3YXMgc2V0OiBnZXQgb2s9MSBzdHlsZT0weDEgcG9zPS01LC02IGFyZWE9NTAsNjAsNSw2CmRlZmF1bHQgdmlhIEltbUdldENvbnRleHQod2luZG93KTogZ2V0IG9rPTEgc3R5bGU9MHgyIHBvcz03Nyw4OCBhcmVhPTAsMCwwLDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "default, before any set: get ok=0 style=0xaa pos=7,8 area=1,2,3,4\nown, before any set: get ok=0 style=0xaa pos=7,8 area=1,2,3,4\ndefault set CFS_DEFAULT: ok=1 last error 0x0\n  read back: get ok=1 style=0x0 pos=10,20 area=5,6,50,60\ndefault set CFS_POINT: ok=1 last error 0x0\n  read back: get ok=1 style=0x2 pos=10,20 area=5,6,50,60\ndefault set CFS_RECT: ok=1 last error 0x0\n  read back: get ok=1 style=0x1 pos=10,20 area=5,6,50,60\ndefault set CFS_FORCE_POSITION: ok=1 last error 0x0\n  read back: get ok=1 style=0x20 pos=10,20 area=5,6,50,60\ndefault set 0x1234: ok=1 last error 0x0\n  read back: get ok=1 style=0x1234 pos=10,20 area=5,6,50,60\ndefault: negative position and inverted rectangle: get ok=1 style=0x1 pos=-5,-6 area=50,60,5,6\nown set CFS_DEFAULT: ok=1 last error 0x0\n  read back: get ok=1 style=0x0 pos=10,20 area=5,6,50,60\nown set CFS_POINT: ok=1 last error 0x0\n  read back: get ok=1 style=0x2 pos=10,20 area=5,6,50,60\nown set CFS_RECT: ok=1 last error 0x0\n  read back: get ok=1 style=0x1 pos=10,20 area=5,6,50,60\nown set CFS_FORCE_POSITION: ok=1 last error 0x0\n  read back: get ok=1 style=0x20 pos=10,20 area=5,6,50,60\nown set 0x1234: ok=1 last error 0x0\n  read back: get ok=1 style=0x1234 pos=10,20 area=5,6,50,60\nown: negative position and inverted rectangle: get ok=1 style=0x1 pos=-5,-6 area=50,60,5,6\ndefault after own was set: get ok=1 style=0x1 pos=-5,-6 area=50,60,5,6\ndefault via ImmGetContext(window): get ok=1 style=0x2 pos=77,88 area=0,0,0,0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 221
+    }
+  ]
+}

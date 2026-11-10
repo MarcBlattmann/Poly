@@ -10,6 +10,7 @@ dependencies = [
  "poly-ntobj",
  "poly-pe",
  "poly-rtl",
+ "poly-security",
  "poly-seh",
 ]
 
@@ -24,6 +25,9 @@ dependencies = [
 [[package]]
 name = "poly-ntobj"
 version = "0.0.1"
+dependencies = [
+ "poly-security",
+]
 
 [[package]]
 name = "poly-pe"
@@ -35,6 +39,10 @@ version = "0.0.1"
 dependencies = [
  "poly-ntobj",
 ]
+
+[[package]]
+name = "poly-security"
+version = "0.0.1"
 
 [[package]]
 name = "poly-seh"

@@ -2,7 +2,7 @@
 {"symbol":"#138","src":["wine-spec"]},
 {"symbol":"CreateAppContainerProfile","src":["wine-spec"]},
 {"symbol":"CreateEnvironmentBlock","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_create_env"]},
-{"symbol":"DeriveAppContainerSidFromAppContainerName","status":"claimed","claimed_by":"spec-chrome-win-2","src":["chrome-win-trace"]},
+{"symbol":"DeriveAppContainerSidFromAppContainerName","status":"claimed","claimed_by":"impl-win-sec","src":["chrome-win-trace"]},
 {"symbol":"DestroyEnvironmentBlock","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_create_env"]},
 {"symbol":"EnterCriticalPolicySection","src":["wine-spec"]},
 {"symbol":"ExpandEnvironmentStringsForUserA","src":["wine-spec"]},

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "2d24da3f08a2",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T10:57:44Z",
+  "tests": [
+    {
+      "name": "ntipj_access",
+      "exe_sha256": "5bfe91322fcea80cb51cc73275a2372848c05e147cf36a19ea29e159352c8b3a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YXNzaWduOiAweDAwMDAwMDAwCnByb2Nlc3MgUFJPQ0VTU19BTExfQUNDRVNTOiB3aXRoIHRoZSBqb2IgMHgwMDAwMDEyNCwgd2l0aCBOVUxMIGpvYiAweDAwMDAwMTI0CnByb2Nlc3MgUFJPQ0VTU19RVUVSWV9JTkZPUk1BVElPTjogd2l0aCB0aGUgam9iIDB4MDAwMDAxMjQsIHdpdGggTlVMTCBqb2IgMHgwMDAwMDEyNApwcm9jZXNzIFBST0NFU1NfUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTjogd2l0aCB0aGUgam9iIDB4MDAwMDAxMjQsIHdpdGggTlVMTCBqb2IgMHgwMDAwMDEyNApwcm9jZXNzIFNZTkNIUk9OSVpFOiB3aXRoIHRoZSBqb2IgMHhjMDAwMDAyMiwgd2l0aCBOVUxMIGpvYiAweGMwMDAwMDIyCnByb2Nlc3MgUFJPQ0VTU19URVJNSU5BVEU6IHdpdGggdGhlIGpvYiAweGMwMDAwMDIyLCB3aXRoIE5VTEwgam9iIDB4YzAwMDAwMjIKcHJvY2VzcyBQUk9DRVNTX1NFVF9RVU9UQTogd2l0aCB0aGUgam9iIDB4YzAwMDAwMjIsIHdpdGggTlVMTCBqb2IgMHhjMDAwMDAyMgpwcm9jZXNzIGFjY2VzcyAwOiB3aXRoIHRoZSBqb2IgMHhjMDAwMDAyMiwgd2l0aCBOVUxMIGpvYiAweGMwMDAwMDIyCmpvYiBKT0JfT0JKRUNUX0FMTF9BQ0NFU1M6IDB4MDAwMDAxMjQKam9iIEpPQl9PQkpFQ1RfUVVFUlk6IDB4MDAwMDAxMjQKam9iIEpPQl9PQkpFQ1RfQVNTSUdOX1BST0NFU1M6IDB4YzAwMDAwMjIKam9iIEpPQl9PQkpFQ1RfU0VUX0FUVFJJQlVURVM6IDB4YzAwMDAwMjIKam9iIEpPQl9PQkpFQ1RfVEVSTUlOQVRFOiAweGMwMDAwMDIyCmpvYiBTWU5DSFJPTklaRTogMHhjMDAwMDAyMgpqb2IgYWNjZXNzIDA6IDB4YzAwMDAwMjIKTlVMTCBwcm9jZXNzOiAweGMwMDAwMDA4CnN3YXBwZWQgKGpvYiwgcHJvY2Vzcyk6IDB4YzAwMDAwMjQKZXZlbnQgYXMgcHJvY2VzczogMHhjMDAwMDAyNApldmVudCBhcyBqb2I6IDB4YzAwMDAwMjQKdGhyZWFkIHBzZXVkby1oYW5kbGUgYXMgcHJvY2VzczogMHhjMDAwMDAyNApjbG9zZWQgcHJvY2VzcyBoYW5kbGU6IDB4YzAwMDAwMDgKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "assign: 0x00000000\nprocess PROCESS_ALL_ACCESS: with the job 0x00000124, with NULL job 0x00000124\nprocess PROCESS_QUERY_INFORMATION: with the job 0x00000124, with NULL job 0x00000124\nprocess PROCESS_QUERY_LIMITED_INFORMATION: with the job 0x00000124, with NULL job 0x00000124\nprocess SYNCHRONIZE: with the job 0xc0000022, with NULL job 0xc0000022\nprocess PROCESS_TERMINATE: with the job 0xc0000022, with NULL job 0xc0000022\nprocess PROCESS_SET_QUOTA: with the job 0xc0000022, with NULL job 0xc0000022\nprocess access 0: with the job 0xc0000022, with NULL job 0xc0000022\njob JOB_OBJECT_ALL_ACCESS: 0x00000124\njob JOB_OBJECT_QUERY: 0x00000124\njob JOB_OBJECT_ASSIGN_PROCESS: 0xc0000022\njob JOB_OBJECT_SET_ATTRIBUTES: 0xc0000022\njob JOB_OBJECT_TERMINATE: 0xc0000022\njob SYNCHRONIZE: 0xc0000022\njob access 0: 0xc0000022\nNULL process: 0xc0000008\nswapped (job, process): 0xc0000024\nevent as process: 0xc0000024\nevent as job: 0xc0000024\nthread pseudo-handle as process: 0xc0000024\nclosed process handle: 0xc0000008\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

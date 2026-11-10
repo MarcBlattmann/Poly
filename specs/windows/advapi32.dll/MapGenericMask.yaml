@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/MapGenericMask
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Replaces the generic bits in *AccessMask (GENERIC_READ 0x80000000,
+  GENERIC_WRITE 0x40000000, GENERIC_EXECUTE 0x20000000, GENERIC_ALL
+  0x10000000) with the mapping's specific rights. The result never has any
+  of the four generic bits; every other bit, including MAXIMUM_ALLOWED and
+  ACCESS_SYSTEM_SECURITY, is kept.
+interface:
+  signature: "void MapGenericMask(PDWORD AccessMask, PGENERIC_MAPPING GenericMapping)"
+  mapping: "GENERIC_MAPPING: GenericRead, GenericWrite, GenericExecute, GenericAll (u32 each)"
+rules:
+  file_mapping: "with read 0x120089, write 0x120116, execute 0x1200a0, all 0x1f01ff: 0x80000000 -> 0x120089, 0x40000000 -> 0x120116, 0x20000000 -> 0x1200a0, 0x10000000 -> 0x1f01ff, 0xc0000000 -> 0x12019f, 0xa0000000 -> 0x1200a9, 0x60000000 -> 0x1201b6, 0xf0000000 -> 0x1f01ff; 0x80000008 -> 0x120089; 0x10000008 -> 0x1f01ff; 0x83000000 -> 0x03120089"
+  other_bits: "a mask without generic bits is unchanged: 0, 0x1, 0x1f01ff, 0x1f0000, 0x02000000, 0x01000000, 0x04000000, 0x08000000 map to themselves; 0xFFFFFFFF -> 0x0FFFFFFF"
+  idempotent: "applying it twice gives the same value for all of these"
+  odd_mappings: "all fields 0: every generic bit disappears and nothing is added (0x80000010 -> 0x10); a field that holds a generic bit (read = GENERIC_WRITE|1, write 2, execute 4, all 7): GENERIC_READ -> 0x3 (the read field 1 plus the write field 2: the nested GENERIC_WRITE is expanded), GENERIC_WRITE -> 0x2, GENERIC_EXECUTE -> 0x4, GENERIC_ALL -> 0x7, never a generic bit left; all four fields GENERIC_ALL: every generic mask gives 0 (0x80000010 -> 0x10); overlapping fields are OR-ed (read 0xF, write 0xF0, execute 0xFF, all 0xF0F: 0x80000000 -> 0xf, 0x40000000 -> 0xf0, 0x20000000 -> 0xff, 0x10000000 -> 0xf0f, 0xf0000000 -> 0xfff); fields 0xFFFFFFFF give 0x0FFFFFFF; fields holding MAXIMUM_ALLOWED / ACCESS_SYSTEM_SECURITY are copied (read = 0x02000000: 0x80000000 -> 0x02000000; write = 0x01000000: 0x40000000 -> 0x01000000; 0xf0000000 -> 0x03000003)"
+errors:
+  none: "no return value and no error"
+side_effects: "writes the mask in place"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

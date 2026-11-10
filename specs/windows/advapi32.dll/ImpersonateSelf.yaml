@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/ImpersonateSelf
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token: High mandatory integrity level, the full administrator privilege set present and enabled; every test runs twice with identical output"
+  observed_by: spec-win-sec
+  date: 2026-11-09
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions named here and of "Access Tokens",
+  "Security Identifiers", "Well-known SIDs", "SID Strings", "Access Control
+  Lists", "Security Descriptors", "Mandatory Integrity Control", "Job
+  Objects", "Privilege Constants"; winnt.h, winbase.h, sddl.h, aclapi.h,
+  securitybaseapi.h, processthreadsapi.h, jobapi2.h, winerror.h and
+  ntstatus.h for constants and layouts. Wine's tests were not read. No
+  Microsoft binary was decompiled or disassembled.
+summary: >
+  Makes the calling thread impersonate a copy of its own token at the given
+  level (0 anonymous, 1 identification, 2 impersonation, 3 delegation);
+  levels above 3 fail. RevertToSelf ends it.
+interface:
+  signature: "BOOL ImpersonateSelf(SECURITY_IMPERSONATION_LEVEL level)"
+rules:
+  levels: "levels 0, 1, 2, 3 return TRUE and the thread token is an impersonation token of that level; 4, 5 and 0xFFFFFFFF return FALSE with ERROR_BAD_IMPERSONATION_LEVEL (1346) and no thread token appears; before the first call the thread has no token"
+  nested: "when the thread already has an impersonation token of a lower level, asking for a higher level returns FALSE and the level stays (Identification, then Impersonation: FALSE, level stays 1; then Delegation: FALSE, stays 1); asking for a lower level works (Impersonation, then Identification: TRUE, level 1; then Delegation: FALSE, stays 1)"
+  restricted_thread_token: "while the thread impersonates a restricted token (deny-only Administrators), ImpersonateSelf(2) returns TRUE and replaces it by a copy of the process token (Administrators attributes 15 again); RevertToSelf removes it"
+  double_revert: "RevertToSelf after RevertToSelf is fine (both TRUE)"
+errors:
+  level: "ERROR_BAD_IMPERSONATION_LEVEL (1346)"
+side_effects: "sets the calling thread's impersonation token"
+threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
+  by name, each carrying its own declarations (Learn prototypes, header
+  constants); run with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md).
+  Observations are text lines of values: sizes, flags, error codes and SIDs
+  as strings. Never printed: handles, addresses, LUIDs of logon sessions,
+  token IDs, times, the machine's own SID or account names. Where a result
+  depends on the oracle's ambient token (user, groups, privileges), the test
+  says so in its name or comment ("ambient").
+not_covered: >
+  Domain accounts and domain-relative well-known SIDs of a real domain,
+  AppContainer and capability SIDs beyond their string forms, auditing (SACL
+  entries are only stored, never evaluated), remote systems (the system-name
+  arguments), Kerberos or NTLM logon tokens, tokens of other users.

@@ -55,6 +55,7 @@ pub mod exception;
 pub mod exec;
 pub mod image;
 pub mod io;
+pub mod job;
 pub mod kernel;
 pub mod layout;
 pub mod memory;
@@ -227,6 +228,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         OpenProcess => threads::open_process(k, regs),
         OpenThread => threads::open_thread(k, regs),
         QueryInformationProcess => threads::query_information_process(k, regs),
+        SetInformationProcess => threads::set_information_process(k, regs),
         QueryInformationThread => threads::query_information_thread(k, regs),
         SuspendThread => threads::suspend_thread(k, regs),
         ResumeThread => threads::resume_thread(k, regs),
@@ -283,10 +285,37 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         QueryPerformanceCounter => sysinfo::query_performance_counter(k, regs),
         QuerySystemInformation => sysinfo::query_system_information(k, regs),
         DeviceIoControlFile => console::services::device_io_control_file(k, regs),
+        QuerySection => memory::query_section(k, regs),
+        CreateJobObject => job::create_job_object(k, regs),
+        OpenJobObject => job::open_job_object(k, regs),
+        AssignProcessToJobObject => job::assign_process_to_job_object(k, regs),
+        TerminateJobObject => job::terminate_job_object(k, regs),
+        QueryInformationJobObject => job::query_information_job_object(k, regs),
+        SetInformationJobObject => job::set_information_job_object(k, regs),
+        IsProcessInJob => job::is_process_in_job(k, regs),
+        FsControlFile => io::npservices::fs_control_file(k, regs),
+        CreateNamedPipeFile => io::npservices::create_named_pipe_file(k, regs),
+        CancelSynchronousIoFile => io::npservices::cancel_synchronous_io_file(k, regs),
+        CreateIoCompletion => io::iocp::create_io_completion(k, regs),
+        SetIoCompletion => io::iocp::set_io_completion(k, regs),
+        RemoveIoCompletion => io::iocp::remove_io_completion(k, regs),
+        RemoveIoCompletionEx => io::iocp::remove_io_completion_ex(k, regs),
+        QueryIoCompletion => io::iocp::query_io_completion(k, regs),
         OpenProcessToken => security::open_process_token_service(k, regs),
         OpenProcessTokenEx => security::open_process_token_ex(k, regs),
-        OpenThreadToken | OpenThreadTokenEx => security::open_thread_token(k, regs),
+        OpenThreadToken => security::open_thread_token(k, regs, false),
+        OpenThreadTokenEx => security::open_thread_token(k, regs, true),
         QueryInformationToken => security::query_information_token(k, regs),
         AdjustPrivilegesToken => security::adjust_privileges_token(k, regs),
+        DuplicateToken => security::duplicate_token(k, regs),
+        FilterToken => security::filter_token(k, regs),
+        AdjustGroupsToken => security::adjust_groups_token(k, regs),
+        SetInformationToken => security::set_information_token(k, regs),
+        CompareTokens => security::compare_tokens(k, regs),
+        PrivilegeCheck => security::privilege_check(k, regs),
+        AccessCheck => security::access_check(k, regs),
+        QuerySecurityObject => security::query_security_object(k, regs),
+        SetSecurityObject => security::set_security_object(k, regs),
+        SetInformationThread => security::set_information_thread(k, regs),
     }
 }

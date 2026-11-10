@@ -60,6 +60,34 @@ unsafe extern "system" {
         offset: *const i64,
         key: *const u32,
     ) -> NtStatus;
+    pub fn NtOpenProcessToken(process: isize, access: u32, token: *mut isize) -> NtStatus;
+    pub fn NtOpenThreadToken(thread: isize, access: u32, as_self: u8, token: *mut isize) -> NtStatus;
+    pub fn NtDuplicateToken(
+        token: isize,
+        access: u32,
+        attributes: *const u8,
+        effective_only: u8,
+        ty: u32,
+        new: *mut isize,
+    ) -> NtStatus;
+    pub fn NtSetInformationThread(thread: isize, class: u32, info: *const u8, length: u32) -> NtStatus;
+    pub fn NtQueryInformationToken(token: isize, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> NtStatus;
+    pub fn NtAdjustPrivilegesToken(
+        token: isize,
+        disable_all: u8,
+        new_state: *const u8,
+        length: u32,
+        previous: *mut u8,
+        ret: *mut u32,
+    ) -> NtStatus;
+    pub fn NtQueryVirtualMemory(
+        process: isize,
+        base: *const u8,
+        class: u32,
+        info: *mut u8,
+        length: usize,
+        returned: *mut usize,
+    ) -> NtStatus;
     pub fn NtQueryInformationFile(handle: isize, iosb: *mut u8, info: *mut u8, len: u32, class: u32) -> NtStatus;
 }
 

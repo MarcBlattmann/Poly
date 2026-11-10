@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "610739d357e2",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T12:41:56Z",
+  "tests": [
+    {
+      "name": "job_open_rights",
+      "exe_sha256": "c4131826a8a156a5cc3cb1b816632121dc503734871f90c17fc19f51232ab95b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRvcjogdmFsaWQ9dHJ1ZSBhY2Nlc3M9MHgxZjAwM2YKb3BlbiB3aXRoIG5vIHJpZ2h0cyAoMHgwKTogZmFpbCg1KQpvcGVuIHdpdGggQVNTSUdOX1BST0NFU1MgKDB4MSk6IGFjY2Vzcz0weDEgaW5oZXJpdGFibGU9MApvcGVuIHdpdGggU0VUX0FUVFJJQlVURVMgKDB4Mik6IGFjY2Vzcz0weDIgaW5oZXJpdGFibGU9MApvcGVuIHdpdGggUVVFUlkgKDB4NCk6IGFjY2Vzcz0weDQgaW5oZXJpdGFibGU9MApvcGVuIHdpdGggVEVSTUlOQVRFICgweDgpOiBhY2Nlc3M9MHg4IGluaGVyaXRhYmxlPTAKb3BlbiB3aXRoIFNFVF9TRUNVUklUWV9BVFRSSUJVVEVTICgweDEwKTogYWNjZXNzPTB4MTAgaW5oZXJpdGFibGU9MApvcGVuIHdpdGggMHgxZiAoYWxsIHNwZWNpZmljKSAoMHgxZik6IGFjY2Vzcz0weDFmIGluaGVyaXRhYmxlPTAKb3BlbiB3aXRoIEpPQl9PQkpFQ1RfQUxMX0FDQ0VTUyAoMHgxZjAwM2YpOiBhY2Nlc3M9MHgxZjAwM2YgaW5oZXJpdGFibGU9MApvcGVuIHdpdGggU1lOQ0hST05JWkUgKDB4MTAwMDAwKTogYWNjZXNzPTB4MTAwMDAwIGluaGVyaXRhYmxlPTAKb3BlbiB3aXRoIFJFQURfQ09OVFJPTCAoMHgyMDAwMCk6IGFjY2Vzcz0weDIwMDAwIGluaGVyaXRhYmxlPTAKb3BlbiB3aXRoIERFTEVURSAoMHgxMDAwMCk6IGFjY2Vzcz0weDEwMDAwIGluaGVyaXRhYmxlPTAKb3BlbiB3aXRoIFdSSVRFX0RBQyAoMHg0MDAwMCk6IGFjY2Vzcz0weDQwMDAwIGluaGVyaXRhYmxlPTAKb3BlbiB3aXRoIFdSSVRFX09XTkVSICgweDgwMDAwKTogYWNjZXNzPTB4ODAwMDAgaW5oZXJpdGFibGU9MApvcGVuIHdpdGggTUFYSU1VTV9BTExPV0VEICgweDIwMDAwMDApOiBhY2Nlc3M9MHgxZjAwM2YgaW5oZXJpdGFibGU9MApvcGVuIHdpdGggR0VORVJJQ19BTEwgKDB4MTAwMDAwMDApOiBhY2Nlc3M9MHgxZjAwM2YgaW5oZXJpdGFibGU9MApvcGVuIHdpdGggR0VORVJJQ19SRUFEICgweDgwMDAwMDAwKTogYWNjZXNzPTB4MjAwMDQgaW5oZXJpdGFibGU9MApvcGVuIHdpdGggR0VORVJJQ19XUklURSAoMHg0MDAwMDAwMCk6IGFjY2Vzcz0weDIwMDBiIGluaGVyaXRhYmxlPTAKb3BlbiB3aXRoIEdFTkVSSUNfRVhFQ1VURSAoMHgyMDAwMDAwMCk6IGFjY2Vzcz0weDEyMDAwMCBpbmhlcml0YWJsZT0wCm9wZW4gd2l0aCB1bmRlZmluZWQgc3BlY2lmaWMgYml0IDB4MjAgKDB4MjApOiBhY2Nlc3M9MHgyMCBpbmhlcml0YWJsZT0wCm9wZW4gd2l0aCB1bmRlZmluZWQgc3BlY2lmaWMgYml0IDB4ODAwMCAoMHg4MDAwKTogZmFpbCg1KQpvcGVuIHdpdGggQUNDRVNTX1NZU1RFTV9TRUNVUklUWSAoMHgxMDAwMDAwKTogYWNjZXNzPTB4MTAwMDAwMCBpbmhlcml0YWJsZT0wCmluaGVyaXQ9VFJVRTogdmFsaWQ9dHJ1ZSBpbmhlcml0YWJsZT0xCkxvY2FsXCBzcGVsbGluZzogdmFsaWQ9dHJ1ZQp1cHBlci1jYXNlIHNwZWxsaW5nOiB2YWxpZD1mYWxzZQpuYW1lIHRoYXQgZG9lcyBub3QgZXhpc3Q6IHZhbGlkPWZhbHNlIGVycj0yCmVtcHR5IG5hbWU6IHZhbGlkPWZhbHNlIGVycj02Cm5hbWUgaW4gYSBkaXJlY3RvcnkgdGhhdCBkb2VzIG5vdCBleGlzdDogdmFsaWQ9ZmFsc2UgZXJyPTMKbmFtZSBvZiBhIG11dGV4OiBtdXRleCB2YWxpZD10cnVlIGpvYiB2YWxpZD1mYWxzZSBlcnI9NgphZnRlciB0aGUgY3JlYXRvciBjbG9zZWQgaXRzIGhhbmRsZTogdmFsaWQ9ZmFsc2UgZXJyPTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "creator: valid=true access=0x1f003f\nopen with no rights (0x0): fail(5)\nopen with ASSIGN_PROCESS (0x1): access=0x1 inheritable=0\nopen with SET_ATTRIBUTES (0x2): access=0x2 inheritable=0\nopen with QUERY (0x4): access=0x4 inheritable=0\nopen with TERMINATE (0x8): access=0x8 inheritable=0\nopen with SET_SECURITY_ATTRIBUTES (0x10): access=0x10 inheritable=0\nopen with 0x1f (all specific) (0x1f): access=0x1f inheritable=0\nopen with JOB_OBJECT_ALL_ACCESS (0x1f003f): access=0x1f003f inheritable=0\nopen with SYNCHRONIZE (0x100000): access=0x100000 inheritable=0\nopen with READ_CONTROL (0x20000): access=0x20000 inheritable=0\nopen with DELETE (0x10000): access=0x10000 inheritable=0\nopen with WRITE_DAC (0x40000): access=0x40000 inheritable=0\nopen with WRITE_OWNER (0x80000): access=0x80000 inheritable=0\nopen with MAXIMUM_ALLOWED (0x2000000): access=0x1f003f inheritable=0\nopen with GENERIC_ALL (0x10000000): access=0x1f003f inheritable=0\nopen with GENERIC_READ (0x80000000): access=0x20004 inheritable=0\nopen with GENERIC_WRITE (0x40000000): access=0x2000b inheritable=0\nopen with GENERIC_EXECUTE (0x20000000): access=0x120000 inheritable=0\nopen with undefined specific bit 0x20 (0x20): access=0x20 inheritable=0\nopen with undefined specific bit 0x8000 (0x8000): fail(5)\nopen with ACCESS_SYSTEM_SECURITY (0x1000000): access=0x1000000 inheritable=0\ninherit=TRUE: valid=true inheritable=1\nLocal\\ spelling: valid=true\nupper-case spelling: valid=false\nname that does not exist: valid=false err=2\nempty name: valid=false err=6\nname in a directory that does not exist: valid=false err=3\nname of a mutex: mutex valid=true job valid=false err=6\nafter the creator closed its handle: valid=false err=2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "7b275519989a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T14:40:32Z",
+  "tests": [
+    {
+      "name": "scd_codepages",
+      "exe_sha256": "a4844f62dcd29a4d7f0079163df79b223424e305a07ec85889d3284674c10673",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dW5pY29kZSAnSGknLCBMRiwgZS1hY3V0ZSwgZXVybywgTEYKICBVTkk6IHNpemUgMTQgYnl0ZXMgIkhceDAwaVx4MDBceDBhXHgwMFx4ZTlceDAwXHhhYyBceDBhXHgwMFx4MDBceDAwIgogIFRFWFQ6IHNpemUgNyBieXRlcyAiSGlceDBhXHhlOVx4ODBceDBhXHgwMCIKICBPRU06IHNpemUgNyBieXRlcyAiSGlceDBhXHg4Mj9ceDBhXHgwMCIKYW5zaSB3aXRoIExGLCBlLWFjdXRlLCBldXJvLCBDUkxGCiAgVU5JOiBzaXplIDI4IGJ5dGVzICJIXHgwMGlceDAwXHgwYVx4MDB0XHgwMGhceDAwZVx4MDByXHgwMGVceDAwXHhlOVx4MDBceGFjIFx4MGRceDAwXHgwYVx4MDB4XHgwMFx4MDBceDAwIgogIFRFWFQ6IHNpemUgMTQgYnl0ZXMgIkhpXHgwYXRoZXJlXHhlOVx4ODBceDBkXHgwYXhceDAwIgogIE9FTTogc2l6ZSAxNCBieXRlcyAiSGlceDBhdGhlcmVceDgyP1x4MGRceDBheFx4MDAiCm9lbSB3aXRoIENSTEYsIGUtYWN1dGUgKDB4ODIpLCBMRgogIFVOSTogc2l6ZSAyNCBieXRlcyAiSFx4MDBpXHgwMFx4MGRceDAwXHgwYVx4MDB0XHgwMGhceDAwZVx4MDByXHgwMGVceDAwXHhlOVx4MDBceDBhXHgwMFx4MDBceDAwIgogIFRFWFQ6IHNpemUgMTIgYnl0ZXMgIkhpXHgwZFx4MGF0aGVyZVx4ZTlceDBhXHgwMCIKICBPRU06IHNpemUgMTIgYnl0ZXMgIkhpXHgwZFx4MGF0aGVyZVx4ODJceDBhXHgwMCIKb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "unicode 'Hi', LF, e-acute, euro, LF\n  UNI: size 14 bytes \"H\\x00i\\x00\\x0a\\x00\\xe9\\x00\\xac \\x0a\\x00\\x00\\x00\"\n  TEXT: size 7 bytes \"Hi\\x0a\\xe9\\x80\\x0a\\x00\"\n  OEM: size 7 bytes \"Hi\\x0a\\x82?\\x0a\\x00\"\nansi with LF, e-acute, euro, CRLF\n  UNI: size 28 bytes \"H\\x00i\\x00\\x0a\\x00t\\x00h\\x00e\\x00r\\x00e\\x00\\xe9\\x00\\xac \\x0d\\x00\\x0a\\x00x\\x00\\x00\\x00\"\n  TEXT: size 14 bytes \"Hi\\x0athere\\xe9\\x80\\x0d\\x0ax\\x00\"\n  OEM: size 14 bytes \"Hi\\x0athere\\x82?\\x0d\\x0ax\\x00\"\noem with CRLF, e-acute (0x82), LF\n  UNI: size 24 bytes \"H\\x00i\\x00\\x0d\\x00\\x0a\\x00t\\x00h\\x00e\\x00r\\x00e\\x00\\xe9\\x00\\x0a\\x00\\x00\\x00\"\n  TEXT: size 12 bytes \"Hi\\x0d\\x0athere\\xe9\\x0a\\x00\"\n  OEM: size 12 bytes \"Hi\\x0d\\x0athere\\x82\\x0a\\x00\"\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 66
+    },
+    {
+      "name": "scd_delayed",
+      "exe_sha256": "bb6ffd3cd2f41d0e8a7c2028c8321c2728f04b0b4ba0a939a51a252a1bba5047",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0KFVOSSwgTlVMTCk6IG51bGwgdHJ1ZSBlcnIgMHgxMjM0IHNlcXVlbmNlICsxCiAgZm9ybWF0czogMSBbQ0ZfVU5JQ09ERVRFWFRdCiAgVU5JIGF2YWlsYWJsZSAxIFRFWFQgYXZhaWxhYmxlIDAKYXZhaWxhYmxlIGFmdGVyIGNsb3NlOiBURVhUIDEgT0VNIDEgVU5JIDEgTE9DQUxFIDEgY291bnQgNApyZWFkZXI6IGZvcm1hdHM6IDQgW0NGX1VOSUNPREVURVhUIENGX0xPQ0FMRSBDRl9URVhUIENGX09FTVRFWFRdCiAgR2V0IFVOSTogc2l6ZSAxOCBieXRlcyAiclx4MDBlXHgwMG5ceDAwZFx4MDBlXHgwMHJceDAwZVx4MDBkXHgwMFx4MDBceDAwIgogIGxvZzogQSBXTV9SRU5ERVJGT1JNQVQgQ0ZfVU5JQ09ERVRFWFQKICBHZXQgVU5JIGFnYWluOiBzaXplIDE4IGJ5dGVzICJyXHgwMGVceDAwblx4MDBkXHgwMGVceDAwclx4MDBlXHgwMGRceDAwXHgwMFx4MDAiCiAgR2V0IFRFWFQ6IHNpemUgOSBieXRlcyAicmVuZGVyZWRceDAwIgogIHJlbmRlciBjaGFuZ2VkIHRoZSBzZXF1ZW5jZSBieSAwCmRlbGF5ZWQgVEVYVDogZm9ybWF0czogNCBbQ0ZfVEVYVCBDRl9MT0NBTEUgQ0ZfT0VNVEVYVCBDRl9VTklDT0RFVEVYVF0KICBHZXQgVU5JOiBzaXplIDE4IGJ5dGVzICJyXHgwMGVceDAwblx4MDBkXHgwMGVceDAwclx4MDBlXHgwMGRceDAwXHgwMFx4MDAiCiAgbG9nOiBBIFdNX1JFTkRFUkZPUk1BVCBDRl9URVhUCmRlbGF5ZWQgcHJpdmF0ZTogR2V0IG51bGwgZmFsc2Ugc2l6ZSA0CiAgbG9nOiBBIFdNX1JFTkRFUkZPUk1BVCBwcml2YXRlCm5vIG93bmVyOiBTZXQoVU5JLCBOVUxMKSBudWxsIHRydWUgZXJyIDB4MTIzNAogIGZvcm1hdHM6IDEgW0NGX1VOSUNPREVURVhUXQogIEdldDogbnVsbCB0cnVlIGVyciAwCm9rIGRvbmUKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Set(UNI, NULL): null true err 0x1234 sequence +1\n  formats: 1 [CF_UNICODETEXT]\n  UNI available 1 TEXT available 0\navailable after close: TEXT 1 OEM 1 UNI 1 LOCALE 1 count 4\nreader: formats: 4 [CF_UNICODETEXT CF_LOCALE CF_TEXT CF_OEMTEXT]\n  Get UNI: size 18 bytes \"r\\x00e\\x00n\\x00d\\x00e\\x00r\\x00e\\x00d\\x00\\x00\\x00\"\n  log: A WM_RENDERFORMAT CF_UNICODETEXT\n  Get UNI again: size 18 bytes \"r\\x00e\\x00n\\x00d\\x00e\\x00r\\x00e\\x00d\\x00\\x00\\x00\"\n  Get TEXT: size 9 bytes \"rendered\\x00\"\n  render changed the sequence by 0\ndelayed TEXT: formats: 4 [CF_TEXT CF_LOCALE CF_OEMTEXT CF_UNICODETEXT]\n  Get UNI: size 18 bytes \"r\\x00e\\x00n\\x00d\\x00e\\x00r\\x00e\\x00d\\x00\\x00\\x00\"\n  log: A WM_RENDERFORMAT CF_TEXT\ndelayed private: Get null false size 4\n  log: A WM_RENDERFORMAT private\nno owner: Set(UNI, NULL) null true err 0x1234\n  formats: 1 [CF_UNICODETEXT]\n  Get: null true err 0\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 77
+    },
+    {
+      "name": "scd_images",
+      "exe_sha256": "48a6928cffdba238180855876c159a87c9a2b45ba0be8dff3979a88c0a0f76d5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0IENGX0JJVE1BUDogcmV0dXJuZWQgdGhlIGJpdG1hcCB0cnVlIGVyciAwCiAgZm9ybWF0cywgb3BlbjogMSBbQ0ZfQklUTUFQXQogIGZvcm1hdHMsIGNsb3NlZDogMyBbQ0ZfQklUTUFQIENGX0RJQiBDRl9ESUJWNV0KICBESUI6IHNpemUgMTAwIGJpU2l6ZSA0MCB3IDQgaCAzIHBsYW5lcyAxIGJwcCAzMiBjb21wcmVzc2lvbiAzIHNpemVpbWFnZSA0OAogIERJQlY1OiBzaXplIDE4NCBiaVNpemUgMTI0IHcgNCBoIDMgcGxhbmVzIDEgYnBwIDMyIGNvbXByZXNzaW9uIDMgc2l6ZWltYWdlIDQ4CiAgR2V0IENGX0JJVE1BUDogdGhlIHNhbWUgYml0bWFwIHRydWUKMjQtYml0IERJQiBzZXQ6IGZvcm1hdHM6IDMgW0NGX0RJQiBDRl9CSVRNQVAgQ0ZfRElCVjVdCiAgRElCOiBzaXplIDU2IGJpU2l6ZSA0MCB3IDIgaCAyIHBsYW5lcyAxIGJwcCAyNCBjb21wcmVzc2lvbiAwIHNpemVpbWFnZSAxNgogIERJQlY1OiBzaXplIDE0MCBiaVNpemUgMTI0IHcgMiBoIDIgcGxhbmVzIDEgYnBwIDI0IGNvbXByZXNzaW9uIDAgc2l6ZWltYWdlIDE2CiAgQ0ZfQklUTUFQIGRhdGE6IG51bGwgZmFsc2UKICBiaXRtYXAgb2JqZWN0OiAzMiBieXRlcywgMngyIHBsYW5lcyAxIGJwcCAzMgpDRl9IRFJPUCBzZXQ6IGZvcm1hdHM6IDEgW0NGX0hEUk9QXQogIGRhdGE6IHNpemUgNDAgaWRlbnRpY2FsIHRydWUKb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Set CF_BITMAP: returned the bitmap true err 0\n  formats, open: 1 [CF_BITMAP]\n  formats, closed: 3 [CF_BITMAP CF_DIB CF_DIBV5]\n  DIB: size 100 biSize 40 w 4 h 3 planes 1 bpp 32 compression 3 sizeimage 48\n  DIBV5: size 184 biSize 124 w 4 h 3 planes 1 bpp 32 compression 3 sizeimage 48\n  Get CF_BITMAP: the same bitmap true\n24-bit DIB set: formats: 3 [CF_DIB CF_BITMAP CF_DIBV5]\n  DIB: size 56 biSize 40 w 2 h 2 planes 1 bpp 24 compression 0 sizeimage 16\n  DIBV5: size 140 biSize 124 w 2 h 2 planes 1 bpp 24 compression 0 sizeimage 16\n  CF_BITMAP data: null false\n  bitmap object: 32 bytes, 2x2 planes 1 bpp 32\nCF_HDROP set: formats: 1 [CF_HDROP]\n  data: size 40 identical true\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 73
+    },
+    {
+      "name": "scd_replace",
+      "exe_sha256": "808fef2e4d214cad41c4b3dab52b9f00ef18bc3bac765d8a9bacd315f8c77915",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhyZWUgc2V0czogc2VxdWVuY2UgKzMKb3JkZXI6IDMgW3ByaXZhdGUgcmVnaXN0ZXJlZCBwcml2YXRlXQpyZXBsYWNlOiBudWxsIGZhbHNlIGVyciAweDAgc2VxdWVuY2UgKzEKb3JkZXIgYWZ0ZXIgcmVwbGFjZTogMyBbcHJpdmF0ZSByZWdpc3RlcmVkIHByaXZhdGVdCiAgc2l6ZSBub3cgMTEKcmVvcGVuZWQgd2l0aG91dCBFbXB0eSwgb25lIG1vcmU6IDQgW3ByaXZhdGUgcmVnaXN0ZXJlZCBwcml2YXRlIHByaXZhdGVdCiAgb3duZXIgaXMgc3RpbGwgQSB0cnVlCk5VTEwgb3BlbmVyIGFkZHM6IG51bGwgZmFsc2UgZXJyIDB4MAogIGZvcm1hdHM6IDUgW3ByaXZhdGUgcmVnaXN0ZXJlZCBwcml2YXRlIHByaXZhdGUgcHJpdmF0ZV0KICBvd25lciBpcyBzdGlsbCBBIHRydWUKVU5JIHJlcGxhY2VkOiBzaXplIDE0IGJ5dGVzICJzXHgwMGVceDAwY1x4MDBvXHgwMG5ceDAwZFx4MDBceDAwXHgwMCIKICBURVhUIG1lYW53aGlsZTogc2l6ZSA3IGJ5dGVzICJzZWNvbmRceDAwIgogIFRFWFQgYWZ0ZXIgdGhlIGNsb3NlOiBzaXplIDcgYnl0ZXMgInNlY29uZFx4MDAiCiAgZm9ybWF0czogNCBbQ0ZfVU5JQ09ERVRFWFQgQ0ZfTE9DQUxFIENGX1RFWFQgQ0ZfT0VNVEVYVF0Kb2sgZG9uZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "three sets: sequence +3\norder: 3 [private registered private]\nreplace: null false err 0x0 sequence +1\norder after replace: 3 [private registered private]\n  size now 11\nreopened without Empty, one more: 4 [private registered private private]\n  owner is still A true\nNULL opener adds: null false err 0x0\n  formats: 5 [private registered private private private]\n  owner is still A true\nUNI replaced: size 14 bytes \"s\\x00e\\x00c\\x00o\\x00n\\x00d\\x00\\x00\\x00\"\n  TEXT meanwhile: size 7 bytes \"second\\x00\"\n  TEXT after the close: size 7 bytes \"second\\x00\"\n  formats: 4 [CF_UNICODETEXT CF_LOCALE CF_TEXT CF_OEMTEXT]\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 71
+    },
+    {
+      "name": "scd_threads",
+      "exe_sha256": "70580dba99989b65dca5b004083eacb4b84496f15d68f37afd264adb5a58c0bb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xvc2VkLCB0aHJlYWQgU2V0OiBudWxsIDEgZXJyIDE0MTgKbWFpbiBoYXMgaXQgb3BlbiwgdGhyZWFkIFNldDogbnVsbCAwIGVyciAwIHNhbWUgaGFuZGxlIDEKICBmb3JtYXRzIGluIG1haW46IDIgW3ByaXZhdGUgcHJpdmF0ZV0KICBmb3JtYXRzIGFmdGVyIGNsb3NlOiAyIFtwcml2YXRlIHByaXZhdGVdCnJlYWRlciB0aHJlYWQ6IG9wZW5lZCAxIGdvdCBkYXRhIDEgc2l6ZSAxOAogIGxvZzogQSBXTV9ERVNUUk9ZQ0xJUEJPQVJECiAgbG9nOiBBIFdNX1JFTkRFUkZPUk1BVCBDRl9VTklDT0RFVEVYVApvayBkb25lCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "closed, thread Set: null 1 err 1418\nmain has it open, thread Set: null 0 err 0 same handle 1\n  formats in main: 2 [private private]\n  formats after close: 2 [private private]\nreader thread: opened 1 got data 1 size 18\n  log: A WM_DESTROYCLIPBOARD\n  log: A WM_RENDERFORMAT CF_UNICODETEXT\nok done\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 94
+    }
+  ]
+}
