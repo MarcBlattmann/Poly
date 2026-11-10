@@ -1239,12 +1239,38 @@ pub extern "system" fn MonitorFromWindow(hwnd: H, flags: u32) -> H {
     if i.desktop || i.message_only {
         return PRIMARY_MONITOR;
     }
-    let w = i.window;
-    if w.right <= w.left || w.bottom <= w.top {
-        // A window of no size (never shown): on the screen when its corner is.
-        return monitor_for(rect_on_screen([w.left, w.top, w.right, w.bottom]), flags);
-    }
+    // A minimized window is judged by its restored rectangle; a window of
+    // no size by its corner (`rect_on_screen`).
+    let w = u::place::monitor_rect(&SYS, &i);
     monitor_for(rect_on_screen([w.left, w.top, w.right, w.bottom]), flags)
+}
+
+/// `GetWindowPlacement` (Learn; MonitorFromWindow.yaml `state_rects`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetWindowPlacement(hwnd: H, wp: *mut u::place::WindowPlacement) -> i32 {
+    if wp.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let mut out = u::place::WindowPlacement::default();
+    if !u::place::get_window_placement(&SYS, hwnd as u64, &mut out) {
+        return 0;
+    }
+    // SAFETY: the caller's WINDOWPLACEMENT.
+    unsafe { wp.write_unaligned(out) };
+    1
+}
+
+/// `SetWindowPlacement` (Learn; MonitorFromWindow.yaml `state_rects`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetWindowPlacement(hwnd: H, wp: *const u::place::WindowPlacement) -> i32 {
+    if wp.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's WINDOWPLACEMENT.
+    let wp = unsafe { wp.read_unaligned() };
+    i32::from(u::place::set_window_placement(&SYS, hwnd as u64, &wp))
 }
 
 /// MONITORINFO (40 bytes) or MONITORINFOEXW (104 bytes, winuser.h).

@@ -26,6 +26,9 @@ pub const SET_FOCUS: u8 = 2;
 pub const SET_CAPTURE: u8 = 4;
 /// Make the active window the foreground window too.
 pub const SET_FOREGROUND: u8 = 8;
+/// As [`SET_CAPTURE`], for a capture that ends with its window: no mouse
+/// move is synthesized for it.
+pub const SET_CAPTURE_QUIET: u8 = 16;
 
 /// The keeper's key: a thread of no process of ours.
 pub(super) const KEEPER: Key = (0xFFFF_FFF0, 0xFFFF_FFF0);
@@ -63,11 +66,12 @@ impl Wm {
         let q = self.queue(k);
         if which & SET_ACTIVE != 0 {
             q.input.active = active;
+            Self::note_active(q, active);
         }
         if which & SET_FOCUS != 0 {
             q.input.focus = focus;
         }
-        if which & SET_CAPTURE != 0 {
+        if which & (SET_CAPTURE | SET_CAPTURE_QUIET) != 0 {
             q.input.capture = capture;
         }
         if which & SET_FOREGROUND != 0 {
@@ -87,20 +91,26 @@ impl Wm {
     /// window of the same thread, B).
     fn next_foreground(&self, from: Option<Key>) -> u32 {
         let Some(d) = self.get(u64::from(self.desktop)) else { return 0 };
+        // A window of another thread of ours takes it, wherever it is in the
+        // z order, if its thread has no active window at that moment
+        // (GetForegroundWindow.yaml `destroy_foreground`,
+        // `other_thread_not_taken`); else the window of another process.
         d.children
             .iter()
             .copied()
             .find(|&h| {
                 self.get(u64::from(h)).is_some_and(|w| {
                     h != self.message
+                        && h != self.keeper
                         && self.visible(h)
                         && w.style & (WS_DISABLED | WS_MINIMIZE) == 0
                         && !w.minimized
                         && w.ex_style & WS_EX_NOACTIVATE == 0
                         && from.is_none_or(|k| self.input_key(w.thread) != self.input_key(k))
+                        && self.input_of(w.thread).active == 0
                 })
             })
-            .unwrap_or(0)
+            .unwrap_or(self.keeper)
     }
 
     /// Nobody of the calling queue is in the foreground any more: another
@@ -156,6 +166,17 @@ impl Wm {
         let q = self.queue(k);
         q.input.active = h;
         q.input.focus = h;
+        Self::note_active(q, h);
+    }
+
+    /// `h` is the queue's active window now: the head of its history.
+    fn note_active(q: &mut Queue, h: u32) {
+        if h == 0 {
+            return;
+        }
+        q.activated.retain(|&x| x != h);
+        q.activated.insert(0, h);
+        q.activated.truncate(32);
     }
 
     /// The input state of thread `tid` of process `pid` (`GetGUIThreadInfo`);

@@ -1007,3 +1007,35 @@ fn device_caps_are_the_screens_for_every_dc() {
     assert_eq!(g.device_caps(0, 8), None);
     assert_eq!(g.device_caps(0x1234_5678, 8), None);
 }
+
+/// BeginPaint.yaml `dc_value`: a window's consecutive common DCs have the
+/// same handle value, in the default state each time.
+#[test]
+fn a_window_gets_its_released_dc_again() {
+    let mut g = Gdi::new();
+    let a = u64::from(g.create_display_dc(0x10, false));
+    g.set_text_color(a, 0x123456);
+    assert!(g.release_display_dc(a));
+    assert_eq!(g.object_type(a), 0, "released: the handle names nothing");
+    assert_eq!(g.display_hwnd(a), None);
+    let again = u64::from(g.create_display_dc(0x10, false));
+    assert_eq!(again, a);
+    assert_eq!(g.text_color(again), 0, "the default state");
+    assert!(g.release_display_dc(again));
+    // The screen's DC in between does not disturb it.
+    let screen = u64::from(g.create_display_dc(0, false));
+    assert_ne!(screen, a);
+    assert!(g.release_display_dc(screen));
+    assert_eq!(u64::from(g.create_display_dc(0x10, false)), a);
+    assert!(g.release_display_dc(a));
+    // Another window's DC in between: no promise, and never the same DC twice at once.
+    let b = u64::from(g.create_display_dc(0x20, false));
+    let a2 = u64::from(g.create_display_dc(0x10, false));
+    assert_ne!(b, a2);
+    assert!(g.release_display_dc(b));
+    assert!(g.release_display_dc(a2));
+    // An own DC stays what it is.
+    let own = u64::from(g.create_display_dc(0x30, true));
+    assert!(g.release_display_dc(own));
+    assert_eq!(g.display_hwnd(own), Some(0x30));
+}

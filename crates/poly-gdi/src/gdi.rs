@@ -206,6 +206,11 @@ pub struct Gdi {
     gens: Vec<u8>,
     /// Freed slots, oldest first (see [`DEAD_SLOTS`]).
     free: VecDeque<usize>,
+    /// The common DC a window released last (window, slot): the window's
+    /// next DC is that one again, under the same handle value
+    /// (BeginPaint.yaml `dc_value`: consecutive paints of one window see
+    /// the same HDC). Released, the handle names nothing meanwhile.
+    parked: Option<(u64, usize)>,
     pub screen: Screen,
     /// The font files and the rendered glyphs of outline fonts.
     text: TextState,
@@ -272,6 +277,7 @@ impl Gdi {
             objs: Vec::new(),
             gens: Vec::new(),
             free: VecDeque::new(),
+            parked: None,
             screen: Screen { width: 1024, height: 768 },
             text: TextState { files: FontFiles::new(), glyphs: Some(GlyphCache::new(GLYPH_CACHE_BYTES)) },
         };
@@ -425,7 +431,7 @@ impl Gdi {
     /// A DC for a window's client area or the screen (`GetDC`).
     pub fn create_display_dc(&mut self, hwnd: u64, persistent: bool) -> u32 {
         let state = self.default_state();
-        self.add(Obj::Dc(Dc {
+        let dc = Obj::Dc(Dc {
             kind: DcKind::Display { hwnd, persistent },
             state,
             saved: Vec::new(),
@@ -434,15 +440,35 @@ impl Gdi {
             vis: None,
             vis_origin: (0, 0),
             sys_clip: None,
-        }))
+        });
+        // The window's last common DC again (in its default state), unless
+        // another window took a DC since.
+        if !persistent && hwnd != 0 {
+            match self.parked.take() {
+                Some((w, i)) if w == hwnd && self.objs[i].is_none() => {
+                    self.objs[i] = Some(dc);
+                    return self.handle_of(i);
+                }
+                Some((_, i)) => self.free.push_back(i),
+                None => {}
+            }
+        }
+        self.add(dc)
     }
 
     /// `ReleaseDC`: a common display DC goes, a persistent one stays; 1
     /// when it was a display DC.
     pub fn release_display_dc(&mut self, h: u64) -> bool {
         match self.dc(h).map(|d| d.kind) {
-            Some(DcKind::Display { persistent: false, .. }) => {
+            Some(DcKind::Display { persistent: false, hwnd }) => {
                 self.free_dc(h, false);
+                // A window's DC waits for the window's next one.
+                if hwnd != 0
+                    && let Some(i) = self.free.pop_back()
+                    && let Some((_, old)) = self.parked.replace((hwnd, i))
+                {
+                    self.free.push_back(old);
+                }
                 true
             }
             Some(DcKind::Display { persistent: true, .. }) => true,

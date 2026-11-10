@@ -78,18 +78,59 @@ fn send_frame<E: Env + ?Sized>(env: &E, i: &WinInfo, p: &Pending) {
     painted(env, i.hwnd, PAINTED_FRAME, 0);
 }
 
+fn intersect(a: Rect, b: Rect) -> Rect {
+    let r = Rect::new(a.left.max(b.left), a.top.max(b.top), a.right.min(b.right), a.bottom.min(b.bottom));
+    if r.right <= r.left || r.bottom <= r.top { Rect::default() } else { r }
+}
+
+fn is_empty(r: Rect) -> bool {
+    r.right <= r.left || r.bottom <= r.top
+}
+
+/// The part of window `i`'s client area that can be seen at all, in client
+/// coordinates: what is on the screen and inside every ancestor's client
+/// area; empty for a minimized window and below one (BeginPaint.yaml
+/// `offscreen`, `invisible`).
+pub fn seen_client<E: Env + ?Sized>(env: &E, i: &WinInfo) -> Rect {
+    let d = screen(env);
+    let mut r = intersect(i.client, Rect::new(0, 0, d.width, d.height));
+    let mut cur = i.clone();
+    for _ in 0..64 {
+        if cur.minimized {
+            return Rect::default();
+        }
+        if cur.style & WS_CHILD == 0 {
+            break;
+        }
+        match info(env, u64::from(cur.parent)) {
+            Some(p) => {
+                r = intersect(r, p.client);
+                cur = p;
+            }
+            None => break,
+        }
+    }
+    if is_empty(r) {
+        return Rect::default();
+    }
+    Rect::new(r.left - i.client.left, r.top - i.client.top, r.right - i.client.left, r.bottom - i.client.top)
+}
+
 /// Send what is pending of the frame and the erase now (GetUpdateRect with
-/// erase, RDW_ERASENOW, a window being shown): the update region stays.
+/// erase, RDW_ERASENOW, a window being shown): the update region stays. A
+/// window of which nothing can be seen (minimized, off the screen) is sent
+/// no WM_ERASEBKGND (GetUpdateRect.yaml `minimized`).
 pub fn erase_now<E: Env + ?Sized>(env: &E, hwnd: u32) {
     let Some(i) = info(env, u64::from(hwnd)) else { return };
     let Some(p) = pending(env, hwnd) else { return };
     if !p.visible {
         return;
     }
-    if p.frame {
+    let seen = seen_client(env, &i);
+    if p.frame && (!is_empty(seen) || i.minimized || i.style & WS_CHILD == 0) {
         send_frame(env, &i, &p);
     }
-    if p.erase {
+    if p.erase && !is_empty(seen) {
         let dc = env.paint_dc(hwnd, Some(&p.rects));
         let r = send(env, u64::from(hwnd), WM_ERASEBKGND, dc, 0);
         env.release_dc(hwnd, dc);
@@ -107,13 +148,29 @@ pub fn begin_paint<E: Env + ?Sized>(env: &E, hwnd: u64, ps: &mut PaintStruct) ->
     let h = i.hwnd;
     let Some(p) = pending(env, h) else { return 0 };
     if !p.visible {
-        // A hidden window: a DC with nothing to paint.
+        // A hidden window: a DC with nothing to paint, no message; fErase
+        // is the window's state (`hidden`).
         let dc = env.paint_dc(h, Some(&[]));
         ps.hdc = dc;
+        ps.erase = i32::from(p.ferase);
         return dc;
     }
     if p.frame {
         send_frame(env, &i, &p);
+    }
+    let seen = seen_client(env, &i);
+    if is_empty(seen) {
+        // Nothing of it can be seen (minimized, wholly off the screen): a
+        // pending erase is dropped, not sent, and fErase is 0 for it; the
+        // window is validated (`invisible`, `minimized`).
+        let dc = env.paint_dc(h, Some(&[]));
+        painted(env, h, PAINTED_VALIDATE, 0);
+        if i.minimized {
+            flush_frames_below(env, h);
+        }
+        ps.hdc = dc;
+        ps.erase = i32::from(!p.erase && p.ferase);
+        return dc;
     }
     let dc = env.paint_dc(h, Some(&p.rects));
     let erase = if p.erase {
@@ -125,8 +182,28 @@ pub fn begin_paint<E: Env + ?Sized>(env: &E, hwnd: u64, ps: &mut PaintStruct) ->
     painted(env, h, PAINTED_VALIDATE, if p.erase { if erase { 1 } else { 2 } } else { 0 });
     ps.hdc = dc;
     ps.erase = i32::from(erase);
-    ps.paint = CRect::from(p.bounds());
+    // rcPaint is cut to what is on the screen; the update region was not
+    // (`offscreen`).
+    let b = p.bounds();
+    ps.paint = CRect::from(if p.rects.is_empty() { b } else { intersect(b, seen) });
     dc
+}
+
+/// A minimized window was painted: a frame still pending for a window
+/// below it (from before it was minimized) is painted now, WM_NCPAINT with
+/// wParam 1 (observed in gurn_iconic: the child gets it after the parent's
+/// WM_PAINT, and no WM_PAINT of its own).
+fn flush_frames_below<E: Env + ?Sized>(env: &E, hwnd: u32) {
+    let Reply::Relatives { children, .. } = env.call(Request::Relatives { hwnd }) else { return };
+    for c in children {
+        if let Some(p) = pending(env, c)
+            && p.frame
+        {
+            send(env, u64::from(c), WM_NCPAINT, 1, 0);
+            painted(env, c, PAINTED_FRAME, 0);
+        }
+        flush_frames_below(env, c);
+    }
 }
 
 /// `EndPaint` (EndPaint.yaml): the paint DC goes.
@@ -335,6 +412,13 @@ pub fn shown_paint<E: Env + ?Sized>(env: &E, i: &WinInfo) {
         return;
     }
     let child = i.style & WS_CHILD != 0;
+    // A top-level window shown wholly off the screen has nothing invalid
+    // and gets no paint until it is moved onto it (GetUpdateRect.yaml
+    // `off_screen_more`).
+    if !child && !i.minimized && off_screen(env, i.window) {
+        validate_all(env, i.hwnd);
+        return;
+    }
     let parent = if child { info(env, u64::from(i.parent)) } else { None };
     if child && let Some(p) = &parent {
         expose_parent(env, p, &[i.window_rel]);
@@ -389,4 +473,100 @@ pub fn resized_paint<E: Env + ?Sized>(env: &E, hwnd: u32, old_client: Rect, new_
 fn mark_frame_partial<E: Env + ?Sized>(env: &E, hwnd: u32) {
     // RDW_FRAME marks the whole frame; a resize repaints a part of it.
     env.call(Request::Painted { hwnd, what: PAINTED_FRAME_PARTIAL, ferase: 0 });
+}
+
+/// Whether a rectangle (screen coordinates) has nothing on the screen.
+fn off_screen<E: Env + ?Sized>(env: &E, w: Rect) -> bool {
+    let d = screen(env);
+    w.right <= 0 || w.bottom <= 0 || w.left >= d.width || w.top >= d.height
+}
+
+/// A visible window was minimized (GetUpdateRect.yaml `minimized`): its
+/// frame is painted inside the call, all of it; win32k keeps the WM_PAINT a
+/// window that was invalid still gets.
+pub fn minimized_paint<E: Env + ?Sized>(env: &E, i: &WinInfo) {
+    if !screen(env).interactive {
+        return;
+    }
+    if let Some(p) = pending(env, i.hwnd)
+        && p.frame
+    {
+        send_frame(env, i, &p);
+    }
+}
+
+/// A window left the minimized state, or came onto the screen from wholly
+/// off it: all of it and of its children is invalid, and its frame and
+/// erase are sent inside the call (GetUpdateRect.yaml `minimized`,
+/// `off_screen_more`).
+pub fn restored_paint<E: Env + ?Sized>(env: &E, i: &WinInfo) {
+    if !screen(env).interactive || !i.visible {
+        return;
+    }
+    redraw(env, i.hwnd, None, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+    erase_now(env, i.hwnd);
+}
+
+/// SetWindowPos with SWP_FRAMECHANGED alone (BeginPaint.yaml `nc_flags`):
+/// WM_NCPAINT with a region and WM_ERASEBKGND at once, inside the call;
+/// nothing becomes invalid.
+pub fn frame_changed_paint<E: Env + ?Sized>(env: &E, i: &WinInfo) {
+    if !screen(env).interactive || !i.visible || is_empty(seen_client(env, i)) {
+        return;
+    }
+    let rgn = env.make_region(&[i.window]);
+    send(env, u64::from(i.hwnd), WM_NCPAINT, rgn, 0);
+    env.delete_object(rgn);
+    let dc = env.paint_dc(i.hwnd, None);
+    let r = send(env, u64::from(i.hwnd), WM_ERASEBKGND, dc, 0);
+    env.release_dc(i.hwnd, dc);
+    painted(env, i.hwnd, 0, if r == 0 { 1 } else { 2 });
+}
+
+/// A visible top-level window was moved (or sized) from `old` (its window
+/// rectangle before, screen coordinates), GetUpdateRect.yaml
+/// `moved_partly_off`, `off_screen`: wholly off the screen it has nothing
+/// invalid; coming from wholly off it is all invalid; else the part of the
+/// client area that was off the screen and is on it now becomes invalid
+/// (what was on the screen stays valid), or all of it with `nocopy`
+/// (SWP_NOCOPYBITS).
+pub fn moved_paint<E: Env + ?Sized>(env: &E, now: &WinInfo, old: Rect, nocopy: bool) {
+    if !screen(env).interactive || !now.visible || now.minimized {
+        return;
+    }
+    if off_screen(env, now.window) {
+        validate_all(env, now.hwnd);
+        return;
+    }
+    if off_screen(env, old) {
+        restored_paint(env, now);
+        return;
+    }
+    if nocopy {
+        redraw(env, now.hwnd, None, RDW_INVALIDATE | RDW_ERASE);
+        erase_now(env, now.hwnd);
+        return;
+    }
+    if (old.width(), old.height()) != (now.window.width(), now.window.height()) {
+        return;
+    }
+    let d = screen(env);
+    let scr = Rect::new(0, 0, d.width, d.height);
+    let (dx, dy) = (old.left - now.window.left, old.top - now.window.top);
+    let c = now.client;
+    let old_client = Rect::new(c.left + dx, c.top + dy, c.right + dx, c.bottom + dy);
+    let to_client = |r: Rect, origin: Rect| {
+        if is_empty(r) {
+            Rect::default()
+        } else {
+            Rect::new(r.left - origin.left, r.top - origin.top, r.right - origin.left, r.bottom - origin.top)
+        }
+    };
+    let new_seen = to_client(intersect(c, scr), c);
+    let old_seen = to_client(intersect(old_client, scr), old_client);
+    let newly = crate::rgn::Rgn::rect(new_seen).subtract(&crate::rgn::Rgn::rect(old_seen));
+    if !newly.rects().is_empty() {
+        redraw(env, now.hwnd, Some(newly.rects()), RDW_INVALIDATE | RDW_ERASE);
+        erase_now(env, now.hwnd);
+    }
 }

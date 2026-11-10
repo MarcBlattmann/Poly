@@ -260,14 +260,28 @@ pub fn deactivate_away<E: Env + ?Sized>(env: &E, focus_done: bool) {
 /// gives it to a window it names.
 fn deactivate<E: Env + ?Sized>(env: &E, focus_done: bool, names_next: bool) {
     let st = input(env);
+    // The thread's capture ends with its activation (SetCapture.yaml
+    // `hide_nobody_takes_over`: WM_CANCELMODE and WM_CAPTURECHANGED(NULL)
+    // before the deactivation messages).
+    if st.capture != 0 && !names_next {
+        send(env, u64::from(st.capture), WM_CANCELMODE, 0, 0);
+        if input(env).capture == st.capture {
+            env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE });
+            send(env, u64::from(st.capture), WM_CAPTURECHANGED, 0, 0);
+        }
+    }
     if st.active != 0
         && let Some(xi) = info(env, u64::from(st.active))
     {
-        send(env, u64::from(st.active), WM_NCACTIVATE, 0, 0);
+        send(env, u64::from(st.active), WM_NCACTIVATE, min_bits(&xi), 0);
         send(env, u64::from(st.active), WM_ACTIVATE, WA_INACTIVE | min_bits(&xi), 0);
     }
     if st.active != 0 {
-        for t in thread_tops(env) {
+        // The window that was active first, then the others from the top
+        // of the z order down (GetForegroundWindow.yaml `nobody_takes_over`).
+        let tops = thread_tops(env);
+        for t in tops.iter().copied().filter(|&t| t == st.active).chain(tops.iter().copied().filter(|&t| t != st.active))
+        {
             send(env, u64::from(t), WM_ACTIVATEAPP, 0, 0);
         }
     }
@@ -278,6 +292,115 @@ fn deactivate<E: Env + ?Sized>(env: &E, focus_done: bool, names_next: bool) {
     // nothing is handed over meanwhile, and no keeper is raised over the windows of the thread.
     let fg = if st.fg_mine && !names_next { SET_FOREGROUND } else { 0 };
     set(env, 0, 0, SET_ACTIVE | SET_FOCUS | fg);
+}
+
+/// The windows that were the thread's active window, the latest first
+/// (destroyed ones too).
+fn history<E: Env + ?Sized>(env: &E) -> Vec<u32> {
+    match env.call(Request::ActivationHistory {}) {
+        Reply::Windows { hwnds } => hwnds,
+        _ => Vec::new(),
+    }
+}
+
+/// Whether top-level window `h` of the calling thread can take the
+/// activation from `from`: visible, enabled, not minimized, not
+/// `WS_EX_NOACTIVATE`.
+fn can_take<E: Env + ?Sized>(env: &E, h: u32, from: u32) -> bool {
+    h != from
+        && info(env, u64::from(h)).is_some_and(|w| {
+            w.tid == env.tid()
+                && w.style & WS_CHILD == 0
+                && !w.desktop
+                && !w.message_only
+                && w.visible
+                && !w.minimized
+                && w.style & WS_DISABLED == 0
+                && w.ex_style & WS_EX_NOACTIVATE == 0
+        })
+}
+
+/// The window of the thread that takes the activation when its active
+/// window `i` is hidden or destroyed, or (`minimizing`) minimized
+/// (GetForegroundWindow.yaml `handover_same_thread`, `nobody_takes_over`,
+/// `minimize_foreground`; GetActiveWindow.yaml `next_active`).
+///
+/// The window that was active before `i`, if it can take it. If the thread
+/// had an earlier active window that cannot: the topmost window of the
+/// thread that can (a minimized `i`: the first one below it). A window that
+/// was the thread's first active one hands it to nobody when hidden or
+/// destroyed (it goes to another thread or process); minimized, to the first
+/// window below it that can take it. An owned window's owner comes first.
+pub fn successor<E: Env + ?Sized>(env: &E, i: &WinInfo, minimizing: bool) -> Option<u32> {
+    if i.owner != 0 && can_take(env, i.owner, i.hwnd) {
+        return Some(i.owner);
+    }
+    let previous = history(env).into_iter().find(|&h| h != i.hwnd);
+    if let Some(p) = previous
+        && can_take(env, p, i.hwnd)
+    {
+        return Some(p);
+    }
+    let tops = thread_tops(env);
+    if minimizing {
+        let at = tops.iter().position(|&t| t == i.hwnd)?;
+        tops[at + 1..].iter().copied().find(|&t| can_take(env, t, i.hwnd))
+    } else {
+        previous?;
+        tops.into_iter().find(|&t| can_take(env, t, i.hwnd))
+    }
+}
+
+/// The active window `i` gave way (hidden, destroyed or minimized): the
+/// activation goes to `next`, or away from the thread.
+pub fn hand_on<E: Env + ?Sized>(env: &E, i: &WinInfo, next: Option<u32>, focus_done: bool) {
+    if input(env).active != i.hwnd {
+        return;
+    }
+    match next {
+        Some(n) => {
+            activate(env, n, false, true);
+        }
+        None => deactivate_away(env, focus_done),
+    }
+}
+
+/// Session 0 (ShowWindow.yaml): make `y` the thread's active window. No
+/// window is visible there and nothing takes the foreground; a window that
+/// takes the activation from another one is asked to come to the top
+/// (WM_WINDOWPOSCHANGING, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE), and
+/// outside a SetWindowPos of its own (`in_swp`) it is moved there, with
+/// WM_WINDOWPOSCHANGED when it moved.
+pub fn activate_local<E: Env + ?Sized>(env: &E, y: u32, in_swp: bool) {
+    let st = input(env);
+    if st.active == y {
+        return;
+    }
+    let Some(yi) = info(env, u64::from(y)) else { return };
+    let h = u64::from(y);
+    if st.active != 0 {
+        let mut wp = WindowPos { hwnd: h, flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE, ..WindowPos::default() };
+        send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
+    }
+    if !in_swp {
+        let moved = matches!(
+            env.call(Request::ZOrder { hwnd: y, after: HWND_TOP, apply: true }),
+            Reply::Bool { value: true }
+        );
+        if moved && st.active != 0 && yi.style & WS_VISIBLE != 0 {
+            let mut done = WindowPos {
+                hwnd: h,
+                x: yi.window_rel.left,
+                y: yi.window_rel.top,
+                cx: yi.window_rel.width(),
+                cy: yi.window_rel.height(),
+                flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE,
+                ..WindowPos::default()
+            };
+            send(env, h, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
+        }
+    }
+    set(env, y, 0, SET_ACTIVE);
 }
 
 /// The calling thread (which owns a visible top-level window) just
@@ -312,28 +435,59 @@ pub fn attached_to_foreground<E: Env + ?Sized>(env: &E, other: u32) {
     set(env, 0, 0, SET_ACTIVE | SET_FOCUS);
 }
 
-/// After window `h` was hidden or is being destroyed (interactive): if it
-/// was the active window the activation goes to its owner, if that can
-/// take it, else away; if it had the focus (a child), the focus goes to
-/// its parent (SetFocus.yaml `hide_focused`, GetActiveWindow.yaml).
-pub fn after_hide<E: Env + ?Sized>(env: &E, i: &WinInfo) {
-    if !screen(env).interactive {
+/// After top-level window `i` was hidden or is being destroyed. If it was
+/// the active window and the call hands the activation on (`hands_on`: not
+/// SetWindowPos with SWP_NOACTIVATE), another window of the thread takes
+/// it ([`successor`]) or it leaves the thread. Session 0 keeps a hidden
+/// window active; only destroying it moves the activation, to the topmost
+/// window of the thread that can have it (ShowWindow.yaml `hide`, `destroy`).
+pub fn after_hide<E: Env + ?Sized>(env: &E, i: &WinInfo, hands_on: bool) {
+    let destroying = DESTROYING.load(core::sync::atomic::Ordering::Relaxed) == i.hwnd;
+    if !(hands_on || destroying) || input(env).active != i.hwnd {
         return;
     }
-    let st = input(env);
-    if st.active == i.hwnd {
-        let owner = (i.owner != 0).then(|| info(env, u64::from(i.owner))).flatten();
-        match owner {
-            Some(o) if o.visible && o.style & WS_DISABLED == 0 && o.tid == env.tid() => {
-                activate(env, o.hwnd, false, true);
-            }
-            _ => deactivate_away(env, false),
+    if screen(env).interactive {
+        let next = successor(env, i, false);
+        hand_on(env, i, next, false);
+    } else if destroying {
+        let next = thread_tops(env).into_iter().find(|&t| can_take(env, t, i.hwnd));
+        match next {
+            Some(n) => activate_local(env, n, false),
+            None => set(env, 0, 0, SET_ACTIVE | SET_FOCUS),
         }
-    } else if st.focus != 0 && i.style & WS_CHILD != 0 && is_within(env, st.focus, i.hwnd) {
-        let parent = i.parent;
-        send(env, u64::from(st.focus), WM_KILLFOCUS, u64::from(parent), 0);
-        set(env, 0, parent, SET_FOCUS);
-        send(env, u64::from(parent), WM_SETFOCUS, u64::from(st.focus), 0);
+    }
+}
+
+/// A child was hidden: if it has the focus itself, the focus goes to its
+/// parent (GetFocus.yaml `hide_focused_child`; the focus in a descendant of
+/// the hidden window stays where it is).
+pub fn child_hidden<E: Env + ?Sized>(env: &E, i: &WinInfo) {
+    focus_to_parent(env, i.hwnd);
+}
+
+/// The focus leaves window `h`, which has it, for its parent:
+/// WM_KILLFOCUS (other = the parent), WM_SETFOCUS (other = `h`).
+pub fn focus_to_parent<E: Env + ?Sized>(env: &E, h: u32) {
+    let st = input(env);
+    if st.focus != h || h == 0 {
+        return;
+    }
+    let Some(i) = info(env, u64::from(h)) else { return };
+    if i.style & WS_CHILD == 0 {
+        return;
+    }
+    let parent = i.parent;
+    send(env, u64::from(h), WM_KILLFOCUS, u64::from(parent), 0);
+    set(env, 0, parent, SET_FOCUS);
+    send(env, u64::from(parent), WM_SETFOCUS, u64::from(h), 0);
+}
+
+/// The capture of `root` or of a window below it ends without a message
+/// (the window is being destroyed: SetCapture.yaml `destroy`).
+pub fn drop_capture_within<E: Env + ?Sized>(env: &E, root: u32) {
+    let st = input(env);
+    if st.capture != 0 && is_within(env, st.capture, root) {
+        env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE_QUIET });
     }
 }
 
@@ -350,20 +504,6 @@ fn is_within<E: Env + ?Sized>(env: &E, h: u32, root: u32) -> bool {
         }
     }
     false
-}
-
-/// A window `root` goes (hidden by DestroyWindow): a window below it that
-/// holds the capture is sent WM_CANCELMODE and loses the capture with
-/// WM_CAPTURECHANGED (lParam NULL). The capture of `root` itself ends
-/// without a message (SetCapture.yaml `destroy`).
-pub fn release_capture_below<E: Env + ?Sized>(env: &E, root: u32) {
-    let st = input(env);
-    if st.capture == 0 || st.capture == root || !is_within(env, st.capture, root) {
-        return;
-    }
-    send(env, u64::from(st.capture), WM_CANCELMODE, 0, 0);
-    env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE });
-    send(env, u64::from(st.capture), 0x0215, 0, 0); // WM_CAPTURECHANGED
 }
 
 /// `WM_CAPTURECHANGED` (winuser.h).

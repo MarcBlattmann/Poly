@@ -146,6 +146,14 @@ struct Window {
     seq: u64,
     /// Update region, pending erase and frame (`paint`).
     paint: paint::Paint,
+    /// A top-level window that lies below the windows of other processes:
+    /// minimizing the active window puts it at the bottom of the z order,
+    /// raising it brings it back (ShowWindow.yaml `z_order`). The list
+    /// order alone cannot say that for a process's only window.
+    below_others: bool,
+    /// Minimized while it was maximized: restoring it maximizes it again
+    /// (ShowWindow.yaml `restore`).
+    restore_max: bool,
 }
 
 #[derive(Debug, Default)]
@@ -159,6 +167,10 @@ struct Queue {
     last: (u32, i32, i32),
     /// Active, focus and capture window (`input`).
     input: input::InputState,
+    /// The windows that were active in this queue, the latest first (also
+    /// ones destroyed since): who takes the activation when the active
+    /// window goes (GetForegroundWindow.yaml `handover_same_thread`).
+    activated: Vec<u32>,
     /// Input messages waiting (`raw`).
     raw: VecDeque<Msg>,
     /// The thread's own key state after SetKeyboardState (`raw`).
@@ -484,6 +496,7 @@ impl Wm {
             visible: self.visible(h),
             minimized: w.minimized,
             maximized: w.maximized,
+            restore_max: w.restore_max,
             own_dc: w.own_dc,
             class_dc: class.map_or(0, |c| c.dc),
             size_move_pending: w.size_move_pending,
@@ -908,10 +921,12 @@ impl Wm {
         let Some(w) = self.get(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
         let parent = w.parent;
         let in_topmost_band = w.ex_style & WS_EX_TOPMOST != 0;
+        let was_below = w.below_others;
         let Some(p) = self.get(u64::from(parent)) else { return Reply::Bool { value: false } };
         let old = p.children.clone();
         let mut new: Vec<u32> = old.iter().copied().filter(|&c| c != hwnd).collect();
-        match after {
+        let mut raised: Vec<u32> = Vec::new();
+        let below = match after {
             HWND_TOP | HWND_TOPMOST | HWND_NOTOPMOST => {
                 // Owned windows stay above their owner (Learn: "An owned
                 // window is always above its owner in the z-order").
@@ -929,19 +944,38 @@ impl Wm {
                     0
                 };
                 new.insert(band, hwnd);
-                for (i, o) in owned.into_iter().enumerate() {
+                for (i, &o) in owned.iter().enumerate() {
                     new.insert(band + i, o);
                 }
+                raised = owned;
+                false
             }
-            HWND_BOTTOM => new.push(hwnd),
+            HWND_BOTTOM => {
+                new.push(hwnd);
+                true
+            }
             a => match new.iter().position(|&c| u64::from(c) == a & 0xFFFF_FFFF) {
-                Some(i) => new.insert(i + 1, hwnd),
+                Some(i) => {
+                    let below = self.get(u64::from(new[i])).is_some_and(|k| k.below_others);
+                    new.insert(i + 1, hwnd);
+                    below
+                }
                 None => return Reply::Bool { value: false },
             },
-        }
-        let changed = new != old;
+        };
+        // Only top-level windows lie among other processes' windows.
+        let below = below && parent == self.desktop;
+        let changed = new != old || below != was_below;
         if apply && changed {
             self.get_mut(u64::from(parent)).expect("valid").children = new;
+            if let Some(w) = self.get_mut(u64::from(hwnd)) {
+                w.below_others = below;
+            }
+            for o in raised {
+                if let Some(w) = self.get_mut(u64::from(o)) {
+                    w.below_others = false;
+                }
+            }
         }
         Reply::Bool { value: changed }
     }
@@ -1550,7 +1584,14 @@ impl Wm {
                     _ => {}
                 }
                 let Some(w) = self.get_mut(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
+                let mut minimizing = false;
                 if let Some(m) = minimized {
+                    if m && !w.minimized {
+                        w.restore_max = w.maximized;
+                        minimizing = true;
+                    } else if !m {
+                        w.restore_max = false;
+                    }
                     w.minimized = m;
                     if m {
                         w.style |= WS_MINIMIZE;
@@ -1558,6 +1599,10 @@ impl Wm {
                         w.style &= !WS_MINIMIZE;
                     }
                 }
+                if minimizing && was_visible && visible != Some(true) {
+                    self.minimized_paint(hwnd);
+                }
+                let Some(w) = self.get_mut(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
                 if let Some(m) = maximized {
                     w.maximized = m;
                     if m {
@@ -1637,6 +1682,10 @@ impl Wm {
                 Reply::Ok {}
             }
             Request::InputState {} => self.input_reply(ctx.key()),
+            Request::ActivationHistory {} => {
+                let k = self.input_key(ctx.key());
+                Reply::Windows { hwnds: self.queues.get(&k).map(|q| q.activated.clone()).unwrap_or_default() }
+            }
             Request::SetInput { active, focus, capture, which } => {
                 let had_capture = self.input_of(ctx.key()).capture;
                 self.set_input(ctx.key(), active, focus, capture, which);
@@ -1762,6 +1811,8 @@ impl Window {
             size_move_pending: false,
             seq: 0,
             paint: paint::Paint::default(),
+            below_others: false,
+            restore_max: false,
         }
     }
 }

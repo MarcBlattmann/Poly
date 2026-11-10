@@ -149,6 +149,9 @@ crate::wire_struct! {
         pub visible: bool,
         pub minimized: bool,
         pub maximized: bool,
+        /// A minimized window that was maximized before: restoring it
+        /// maximizes it again.
+        pub restore_max: bool,
         pub own_dc: u64,
         pub class_dc: u64,
         /// A hidden overlapped window whose `WM_SIZE`/`WM_MOVE` wait for
@@ -292,6 +295,9 @@ crate::wire_enum! {
         /// TrackMouseEvent: `flags` TME_* (TME_QUERY answers a `Value`:
         /// flags | hwnd << 32 ... see `wm::raw`), `hover` ms.
         59 => TrackMouse { hwnd: u32, flags: u32, hover: u32 },
+        /// The windows that were the calling queue's active window, the
+        /// latest first (destroyed ones too): a `Windows`.
+        60 => ActivationHistory {},
         /// `RegisterWindowMessageW`: the message number (0xC000..=0xFFFF) of a
         /// name, the same for every caller of the session and the same
         /// number as a class of that name has as its atom; an `Atom`.

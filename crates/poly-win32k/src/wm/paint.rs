@@ -83,6 +83,11 @@ impl Wm {
         if !self.display.interactive || !self.visible(h) {
             return;
         }
+        // The child of a minimized window: InvalidateRect leaves nothing
+        // invalid (GetUpdateRect.yaml `minimized`).
+        if flags & RDW_INVALIDATE != 0 && self.below_minimized(h) {
+            return;
+        }
         let (cw, ch) = self.client_size(h);
         let client = Rgn::rect(Rect::new(0, 0, cw, ch));
         let whole = area.is_none();
@@ -176,6 +181,57 @@ impl Wm {
         for c in kids {
             self.clear_paint_tree(c);
         }
+    }
+
+    /// A visible window minimized (GetUpdateRect.yaml `minimized`): it has
+    /// no client area to update, but what was invalid still brings it one
+    /// WM_PAINT; its frame is to paint (WM_NCPAINT, all of it). Nothing of
+    /// its descendants stays invalid; a frame they had pending stays.
+    pub(super) fn minimized_paint(&mut self, h: u32) {
+        if !self.display.interactive {
+            return;
+        }
+        let Some(w) = self.get_mut(u64::from(h)) else { return };
+        let p = &mut w.paint;
+        p.internal = p.internal || !p.upd.is_empty();
+        p.upd = Rgn::new();
+        p.frame = true;
+        p.frame_whole = true;
+        let kids = w.children.clone();
+        for c in kids {
+            self.clear_updates_below_minimized(c);
+        }
+    }
+
+    fn clear_updates_below_minimized(&mut self, h: u32) {
+        let Some(w) = self.get_mut(u64::from(h)) else { return };
+        let p = &mut w.paint;
+        p.upd = Rgn::new();
+        p.erase = false;
+        p.internal = false;
+        if p.frame {
+            p.frame_whole = true;
+        }
+        let kids = w.children.clone();
+        for c in kids {
+            self.clear_updates_below_minimized(c);
+        }
+    }
+
+    /// Whether `h` or a window above it is minimized.
+    fn below_minimized(&self, h: u32) -> bool {
+        let mut cur = h;
+        for _ in 0..64 {
+            let Some(w) = self.get(u64::from(cur)) else { return false };
+            if cur != h && w.minimized {
+                return true;
+            }
+            if w.parent == 0 || w.parent == self.desktop || w.parent == self.message {
+                return false;
+            }
+            cur = w.parent;
+        }
+        false
     }
 
     /// A window shown: its whole client area invalid, frame and erase
