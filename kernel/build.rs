@@ -71,7 +71,8 @@ fn embed_win32() {
         "dnsapi.dll",
         "dbghelp.dll",
         "b35test.exe",
-        // ADR 0155: file version information.
+        // ADR 0170.
+        "dwrite.dll",
     ] {
         match &dir {
             Some(d) => {

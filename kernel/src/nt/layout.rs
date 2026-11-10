@@ -151,6 +151,8 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("dhcpcsvc.dll", super::DHCPCSVC),
         ("dnsapi.dll", super::DNSAPI),
         ("dbghelp.dll", super::DBGHELP),
+        // ADR 0170.
+        ("dwrite.dll", super::DWRITE),
     ] {
         if bytes.is_empty() {
             continue;

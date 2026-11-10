@@ -1281,8 +1281,8 @@
 <rect x="874.0" y="408.7" width="11.0" height="5.3" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="start">Windows</text>
-<text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">0.1%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">81 / 58,733 entries · 73,276 app-provided not counted</text>
+<text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">0.2%</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">121 / 58,733 entries · 73,276 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 16,439 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="157.5" height="218.0" fill="#21262d"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2ea043"/>
@@ -1948,9 +1948,10 @@
 <rect x="575.7" y="624.3" width="8.3" height="7.3" fill="#21262d"/>
 <rect x="574.7" y="623.3" width="10.3" height="9.3" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
-<g><title>dwrite: 0 / 44 done (0.0%)</title>
+<g><title>dwrite: 40 / 44 done (90.9%)</title>
 <rect x="523.7" y="633.6" width="8.2" height="7.2" fill="#21262d"/>
-<rect x="523.7" y="633.6" width="8.2" height="7.2" fill="#388bfd"/>
+<rect x="523.7" y="633.6" width="7.4" height="7.2" fill="#2ea043"/>
+<rect x="531.1" y="633.6" width="0.7" height="7.2" fill="#388bfd"/>
 <rect x="522.7" y="632.6" width="10.2" height="9.2" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>hid: 0 / 44 done (0.0%)</title>
