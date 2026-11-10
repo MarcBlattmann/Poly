@@ -21,6 +21,24 @@ summary: >
   directory); MS_BIND|MS_REC copies the whole tree of mounts below the source,
   except submounts that are unbindable. Remounting the top of a recursive bind
   does not touch the copies of the submounts.
+  Recursive binds in detail: the tree is copied to every depth (a mount on
+  S/a and a mount inside it on S/a/deep both appear below the new path,
+  with their files; a write through <new>/a/deep reaches the original
+  S/a/deep). Every copied mount is a mount of its own: /proc/self/mountinfo
+  lists one at <new>, at <new>/a and at <new>/a/deep, while after a plain
+  bind only <new> is listed and <new>/a is the empty directory that the
+  submount covers (no deep in it). A copy keeps the per-mount flags of its
+  original (a submount mounted nodev: statfs of its copy shows ST_NODEV),
+  and a bind remount of the copied top changes only the top. The source
+  path of a bind may itself be a submount: MS_BIND|MS_REC of S/a brings
+  S/a/deep along, a plain bind of S/a shows S/a's files and an empty deep.
+  Because the copies are mounts, umount2 with flag 0 of the copied top, and
+  of <new>/a while <new>/a/deep is mounted, is EBUSY; they unmount from the
+  bottom up (deep, then a, then the top; a second umount2 of the top is
+  EINVAL), or all at once with MNT_DETACH. Unmounting a copy leaves the
+  original mounted. An unbindable mount at any depth is left out (its
+  directory in the copy is empty and no mount is listed there) while the
+  bindable mounts above it are copied.
   Per-mount flags: mount(NULL, path, NULL, MS_REMOUNT|MS_BIND|flags, NULL) on a
   mount point changes that mount only: MS_RDONLY, MS_NOSUID, MS_NODEV,
   MS_NOEXEC (statfs f_flags ST_*), MS_NOATIME, MS_NODIRATIME, MS_RELATIME,
@@ -93,7 +111,7 @@ timing:
   typical: "microseconds"
   guarantees: none
 tests:
-  visible: 4
+  visible: 5
   held_out: 2
 # Notes: constants from linux/mount.h (MS_*, MNT_*, UMOUNT_NOFOLLOW) and
 # linux/statfs.h (ST_*). Tests that use two namespaces take turns through
