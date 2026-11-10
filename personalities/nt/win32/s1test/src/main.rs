@@ -56,6 +56,37 @@ unsafe extern "system" {
 unsafe extern "system" {
     fn LdrLockLoaderLock(flags: u32, disposition: *mut u32, cookie: *mut usize) -> u32;
     fn LdrUnlockLoaderLock(flags: u32, cookie: usize) -> u32;
+    fn RtlFormatCurrentUserKeyPath(path: *mut UnicodeString) -> u32;
+    fn RtlFreeUnicodeString(s: *mut UnicodeString);
+    fn NtCreateKey(
+        key: *mut isize,
+        access: u32,
+        attributes: *const ObjectAttributes,
+        title_index: u32,
+        class: *const UnicodeString,
+        options: u32,
+        disposition: *mut u32,
+    ) -> u32;
+    fn NtClose(handle: isize) -> u32;
+}
+
+/// `UNICODE_STRING` (`winternl.h`).
+#[repr(C)]
+struct UnicodeString {
+    length: u16,
+    maximum_length: u16,
+    buffer: *mut u16,
+}
+
+/// `OBJECT_ATTRIBUTES` (`winternl.h`).
+#[repr(C)]
+struct ObjectAttributes {
+    length: u32,
+    root: isize,
+    name: *const UnicodeString,
+    attributes: u32,
+    security_descriptor: *const u8,
+    security_qos: *const u8,
 }
 
 #[link(name = "winmm", kind = "raw-dylib")]
@@ -679,6 +710,38 @@ unsafe fn loader_lock() {
     check_eq(*(peb.add(0x110) as *const usize), lock as usize);
 }
 
+/// The current user's registry key, the way chrome_elf opens it (cold trace n=275..277):
+/// `RtlFormatCurrentUserKeyPath`, a backslash appended, `NtCreateKey` with access 3
+/// (KEY_QUERY_VALUE | KEY_SET_VALUE) and OBJ_CASE_INSENSITIVE succeeds because the hive is there.
+unsafe fn current_user_key() {
+    let mut path = UnicodeString { length: 0, maximum_length: 0, buffer: core::ptr::null_mut() };
+    check_eq(RtlFormatCurrentUserKeyPath(&mut path) as usize, 0);
+    let chars = usize::from(path.length) / 2;
+    // "\REGISTRY\USER\S-1-5-21-...": at least the prefix and a SID.
+    check_got(chars > 20 && chars < 120 && !path.buffer.is_null(), chars as u32);
+    let mut name = [0u16; 128];
+    core::ptr::copy_nonoverlapping(path.buffer, name.as_mut_ptr(), chars);
+    name[chars] = u16::from(b'\\');
+    RtlFreeUnicodeString(&mut path);
+    let name = UnicodeString {
+        length: ((chars + 1) * 2) as u16,
+        maximum_length: ((chars + 2) * 2) as u16,
+        buffer: name.as_mut_ptr(),
+    };
+    let attributes = ObjectAttributes {
+        length: core::mem::size_of::<ObjectAttributes>() as u32,
+        root: 0,
+        name: &name,
+        attributes: 0x40, // OBJ_CASE_INSENSITIVE
+        security_descriptor: core::ptr::null(),
+        security_qos: core::ptr::null(),
+    };
+    let mut key = 0isize;
+    check_eq(NtCreateKey(&mut key, 3, &attributes, 0, core::ptr::null(), 0, core::ptr::null_mut()) as usize, 0);
+    check_got(key != 0, 0);
+    check_eq(NtClose(key) as usize, 0);
+}
+
 /// winmm's timer functions (Learn: `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`): the
 /// time is milliseconds since the system started (non-zero after boot, not going back; the
 /// same clock as `GetTickCount`), and a 1 ms period request is granted and ended.
@@ -775,6 +838,7 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         stack_limits();
         backtrace();
         loader_lock();
+        current_user_key();
         winmm();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));

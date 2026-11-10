@@ -173,14 +173,13 @@ pub unsafe extern "C" fn RtlCreateUnicodeString(d: *mut UnicodeString, s: *const
 
 /// `RtlFormatCurrentUserKeyPath`: `\REGISTRY\USER\<sid>` of the current
 /// user, in a string the caller frees with `RtlFreeUnicodeString`. Poly has
-/// one user, `S-1-5-21-0-0-0-1000` (ADR 0066, 0073).
+/// one user (`poly_security::poly_user_sid`, ADR 0066, 0073, 0171).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn RtlFormatCurrentUserKeyPath(d: *mut UnicodeString) -> NtStatus {
-    const PATH: &str = "\\REGISTRY\\USER\\S-1-5-21-0-0-0-1000";
     if d.is_null() {
         return NtStatus(0xC000_000D); // STATUS_INVALID_PARAMETER
     }
-    let mut wide: alloc::vec::Vec<u16> = PATH.encode_utf16().collect();
+    let mut wide: alloc::vec::Vec<u16> = poly_security::current_user_key_path().encode_utf16().collect();
     wide.push(0);
     // SAFETY: `d` is the caller's writable UNICODE_STRING; `wide` is NUL-terminated.
     if unsafe { string::create_unicode_string(d, wide.as_ptr(), &HeapAlloc) } {
