@@ -29,8 +29,8 @@ pub const SET_FOREGROUND: u8 = 8;
 /// As [`SET_CAPTURE`], for a capture that ends with its window: no mouse
 /// move is synthesized for it.
 pub const SET_CAPTURE_QUIET: u8 = 16;
-/// The calling process's foreground window was destroyed: its next
-/// activation may take the foreground back.
+/// The calling thread destroyed its foreground window: the next window it
+/// creates may take the foreground back.
 pub const SET_FG_GRANT: u8 = 32;
 
 /// The keeper's key: a thread of no process of ours.
@@ -190,15 +190,16 @@ impl Wm {
         Self::note_active(q, h);
     }
 
-    /// Whether thread `key` takes the foreground when it shows or creates
-    /// a window (Learn: SetForegroundWindow's conditions, as far as the
+    /// Whether thread `key` takes the foreground when it creates a visible
+    /// window (Learn: SetForegroundWindow's conditions, as far as the
     /// sheets' tests show them: gaw_zhide, gaw_leave_a, gfw_xthread): its
     /// process has the foreground window, or never had one yet (it was
     /// started by the foreground process), or the thread destroyed its
     /// window while that was the foreground window and has not had the
     /// foreground since. A thread that lost the foreground otherwise (its
     /// window was hidden or minimized), and a new thread of a process that
-    /// lost it, are activated without it: SetForegroundWindow gets it back.
+    /// lost it, get a window that is active without the foreground:
+    /// SetForegroundWindow, or ShowWindow of a hidden window, gets it back.
     pub(super) fn may_take_foreground(&self, key: Key) -> bool {
         let fg = self.foreground();
         fg == 0

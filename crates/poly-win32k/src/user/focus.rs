@@ -419,10 +419,8 @@ pub fn activate_local<E: Env + ?Sized>(env: &E, y: u32, in_swp: bool) {
         send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
     if !in_swp {
-        let moved = matches!(
-            env.call(Request::ZOrder { hwnd: y, after: HWND_TOP, apply: true }),
-            Reply::Bool { value: true }
-        );
+        let moved =
+            matches!(env.call(Request::ZOrder { hwnd: y, after: HWND_TOP, apply: true }), Reply::Bool { value: true });
         if moved && st.active != 0 && yi.style & WS_VISIBLE != 0 {
             let mut done = WindowPos {
                 hwnd: h,
@@ -486,8 +484,9 @@ pub fn after_hide<E: Env + ?Sized>(env: &E, i: &WinInfo, hands_on: bool) {
         let st = input(env);
         let next = successor(env, i, false);
         hand_on(env, i, next, false);
-        // A process whose foreground window was destroyed may take the
-        // foreground again with its next window.
+        // A thread that destroyed its foreground window takes the
+        // foreground again with the next window it creates (gaw_zhide); one
+        // whose window was hidden or minimized before does not (gaw_leave_a).
         if destroying && st.fg_mine && st.foreground == i.hwnd {
             env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_FG_GRANT });
         }

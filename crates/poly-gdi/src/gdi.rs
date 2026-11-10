@@ -537,7 +537,9 @@ impl Gdi {
         self.objs.iter().flatten().any(|o| match o {
             Obj::Dc(d) => {
                 d.bitmap == h
-                    || core::iter::once(&d.state).chain(d.saved.iter()).any(|s| s.brush == h || s.pen == h || s.font == h)
+                    || core::iter::once(&d.state)
+                        .chain(d.saved.iter())
+                        .any(|s| s.brush == h || s.pen == h || s.font == h)
             }
             _ => false,
         })

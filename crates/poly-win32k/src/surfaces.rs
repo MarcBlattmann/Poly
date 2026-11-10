@@ -69,7 +69,7 @@ impl Buffer {
     /// not fit.
     fn write(&mut self, row: u32, pixels: &[u8]) -> bool {
         let stride = self.width as usize * 4;
-        if stride == 0 || pixels.len() % stride != 0 {
+        if stride == 0 || !pixels.len().is_multiple_of(stride) {
             return false;
         }
         let rows = (pixels.len() / stride) as u32;
@@ -201,7 +201,15 @@ impl Surfaces {
     /// `width` x `height` surface (a large surface comes in several pieces,
     /// [`BAND_BYTES`]); [`Surfaces::committed`] ends it. False when the size
     /// is not the buffer's or the rows do not fit.
-    pub fn write_rows(&mut self, desktop: &Desktop, hwnd: u32, width: u32, height: u32, row: u32, pixels: &[u8]) -> bool {
+    pub fn write_rows(
+        &mut self,
+        desktop: &Desktop,
+        hwnd: u32,
+        width: u32,
+        height: u32,
+        row: u32,
+        pixels: &[u8],
+    ) -> bool {
         let Some(s) = self.surface(hwnd) else { return false };
         let Some(info) = desktop.surface(s).and_then(|x| x.buffer) else { return false };
         let Some(b) = self.buffers.get_mut(&info.id) else { return false };

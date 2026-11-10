@@ -632,6 +632,10 @@ struct Opts {
     /// The rectangle the window gets if its procedure leaves
     /// `WM_WINDOWPOSCHANGING`'s as it is (maximizing).
     fit: Option<Rect>,
+    /// The show of a window being created: it takes the foreground only if
+    /// its thread may (`focus::may_take_foreground`); a ShowWindow command
+    /// always does.
+    creating: bool,
 }
 
 /// `SWP_NOCOPYBITS` (winuser.h).
@@ -730,7 +734,11 @@ pub fn show_window<E: Env + ?Sized>(env: &E, hwnd: u64, cmd: i32) -> bool {
 /// without `WS_EX_APPWINDOW` (GetActiveWindow.yaml `minimized_position`).
 fn shown_bit<E: Env + ?Sized>(env: &E, i: &WinInfo) -> u32 {
     let plain = i.ex_style & WS_EX_APPWINDOW != 0 || i.ex_style & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) == 0;
-    if screen(env).interactive && i.style & WS_CHILD == 0 && i.style & WS_VISIBLE == 0 && plain { 0x1000_0000 } else { 0 }
+    if screen(env).interactive && i.style & WS_CHILD == 0 && i.style & WS_VISIBLE == 0 && plain {
+        0x1000_0000
+    } else {
+        0
+    }
 }
 
 fn show<E: Env + ?Sized>(env: &E, i: &WinInfo, kind: ShowKind) {
@@ -798,7 +806,8 @@ fn show<E: Env + ?Sized>(env: &E, i: &WinInfo, kind: ShowKind) {
         }
     }
     let activate = flags & SWP_NOACTIVATE == 0;
-    swp(env, i.hwnd, HWND_TOP, 0, 0, 0, 0, flags, Opts { extra, activate, ..Opts::default() });
+    let creating = kind == ShowKind::Create;
+    swp(env, i.hwnd, HWND_TOP, 0, 0, 0, 0, flags, Opts { extra, activate, creating, ..Opts::default() });
 }
 
 fn hide<E: Env + ?Sized>(env: &E, i: &WinInfo) {
@@ -819,7 +828,14 @@ fn hide<E: Env + ?Sized>(env: &E, i: &WinInfo) {
 /// The size and position a window's procedure answers to `WM_GETMINMAXINFO`.
 fn ask_minmax<E: Env + ?Sized>(env: &E, i: &WinInfo) -> MinMaxInfo {
     let display = screen(env);
-    let [ms, mp, mt, xt] = metrics::minmax(i.style, i.ex_style, &display);
+    let [mut ms, mp, mt, xt] = metrics::minmax(i.style, i.ex_style, &display);
+    // A child is maximized over its parent's client area (observed:
+    // maxsize 286,163 at -1,-1 for a bordered child of a 284x161 client).
+    if i.style & WS_CHILD != 0
+        && let Some(p) = info(env, u64::from(i.parent))
+    {
+        ms = (p.client.width() - 2 * mp.0, p.client.height() - 2 * mp.1);
+    }
     let mut mmi = MinMaxInfo {
         reserved: CPoint::default(),
         max_size: CPoint { x: ms.0, y: ms.1 },
@@ -869,8 +885,7 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
     }
     // Who takes the activation from a minimized active window is settled
     // by the z order before it moves.
-    let successor =
-        if interactive && was_active && cmd == SW_MINIMIZE { focus::successor(env, i, true) } else { None };
+    let successor = if interactive && was_active && cmd == SW_MINIMIZE { focus::successor(env, i, true) } else { None };
     let extra = shown_bit(env, i);
     env.call(Request::SetState {
         hwnd: i.hwnd,
@@ -897,11 +912,7 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
     }
     // Where it goes in the z order, and whether the call activates it.
     let (flags, after, activate) = if interactive {
-        if activating {
-            (base, HWND_TOP, !was_active)
-        } else {
-            (base | SWP_NOACTIVATE, HWND_BOTTOM, false)
-        }
+        if activating { (base, HWND_TOP, !was_active) } else { (base | SWP_NOACTIVATE, HWND_BOTTOM, false) }
     } else if was_active && !hidden && !activating {
         (base, HWND_BOTTOM, false)
     } else {
@@ -1248,21 +1259,28 @@ fn swp<E: Env + ?Sized>(
         if !interactive {
             focus::activate_local(env, hwnd, true);
         } else {
-            if i.owner != 0 {
-                let mut o = WindowPos {
-                    hwnd: u64::from(i.owner),
-                    flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
-                    ..WindowPos::default()
-                };
-                send(env, u64::from(i.owner), WM_WINDOWPOSCHANGING, 0, ptr(&mut o));
+            // While another thread of the process has the foreground a
+            // window is shown without being activated (GetFocus.yaml
+            // gf_threads), but a WS_EX_NOACTIVATE one, which becomes the
+            // active window of its own thread (gfw_xthread: "active from
+            // its creation").
+            let behind = focus::in_background(env, i.pid);
+            let noactivate = i.ex_style & WS_EX_NOACTIVATE != 0;
+            if !behind || noactivate {
+                if i.owner != 0 {
+                    let mut o = WindowPos {
+                        hwnd: u64::from(i.owner),
+                        flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+                        ..WindowPos::default()
+                    };
+                    send(env, u64::from(i.owner), WM_WINDOWPOSCHANGING, 0, ptr(&mut o));
+                }
+                // A window being created takes the foreground from another
+                // process only if its thread may; without it the window is
+                // the active one of its thread all the same.
+                let stay_back = behind || (opts.creating && !focus::may_take_foreground(env));
+                focus::activate_as(env, hwnd, true, true, stay_back);
             }
-            // The window takes the foreground from another thread only if
-            // its thread may; a WS_EX_NOACTIVATE window never takes it from
-            // another thread of its process (gfw_xthread). Without it the
-            // window is the active one of its thread all the same.
-            let stay_back = !focus::may_take_foreground(env)
-                || (i.ex_style & WS_EX_NOACTIVATE != 0 && focus::in_background(env, i.pid));
-            focus::activate_as(env, hwnd, true, true, stay_back);
         }
     }
     env.call(Request::SetRects { hwnd, window_rel: Some(new_win), client_rel: Some(new_client) });
@@ -1684,7 +1702,7 @@ pub fn msg_wait<E: Env + ?Sized>(env: &E, handles: &[u64], wait_all: bool, ms: u
 mod tests;
 
 pub mod focus;
-pub mod place;
 pub mod input;
 pub mod paint;
+pub mod place;
 pub use paint::{PaintStruct, begin_paint, end_paint};
