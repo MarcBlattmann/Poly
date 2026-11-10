@@ -282,25 +282,27 @@ pub fn query_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
     let [h, info_class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
     let info_class = info_class as u32;
     let length = length as u32 as usize;
-    // The class and, for the classes that insist on their exact size
-    // (TokenElevation, TokenLinkedToken), the length are judged before the
-    // handle: a handle without TOKEN_QUERY still hears "no such class" and
-    // "wrong length" (the sheets: 87 and 24 from GetTokenInformation where
-    // the valid classes say 5).
+    // The sheets' order: the class (through any handle), TokenElevation's
+    // length (through any handle, the size reported), the handle's rights,
+    // TokenLinkedToken's length, then the class's own answer.
     if !token::is_query_class(info_class) {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
-    if let Some(n) = token::exact_query_length(info_class) {
-        if ret == 0 {
-            return Err(STATUS_ACCESS_VIOLATION);
+    for before_rights in [true, false] {
+        if !before_rights {
+            token_of(k, h, token::query_right(info_class))?;
         }
-        abi::write_u32(k, ret, n)?;
-        if length != n as usize {
-            return Err(token::STATUS_INFO_LENGTH_MISMATCH);
+        if let Some(n) = token::exact_query_length(info_class, before_rights) {
+            if ret == 0 {
+                return Err(STATUS_ACCESS_VIOLATION);
+            }
+            abi::write_u32(k, ret, n)?;
+            if length != n as usize {
+                return Err(token::STATUS_INFO_LENGTH_MISMATCH);
+            }
         }
     }
-    let need = if info_class == class::TOKEN_SOURCE { token::TOKEN_QUERY_SOURCE } else { token::TOKEN_QUERY };
-    let id = token_of(k, h, need)?;
+    let id = token_of(k, h, token::query_right(info_class))?;
     let t = copy_of(k, id)?;
     let bytes = t.query(info_class, buf)?;
     if ret == 0 {
@@ -470,16 +472,15 @@ pub fn set_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
         class::TOKEN_MANDATORY_POLICY,
         class::TOKEN_ORIGIN,
     ];
-    // As in the query: the class and the length are judged before the handle.
+    // The sheet's order: the class, the handle's rights, the length, then
+    // (in `Token::set_information`) the privilege.
     if !settable.contains(&info_class) {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
+    let id = token_of(k, h, token::set_rights(info_class))?;
     if !token::set_length_ok(info_class, length) {
         return Err(token::STATUS_INFO_LENGTH_MISMATCH);
     }
-    let access =
-        if info_class == class::TOKEN_SESSION_ID { token::TOKEN_ADJUST_SESSIONID } else { token::TOKEN_ADJUST_DEFAULT };
-    let id = token_of(k, h, access)?;
     let data = match info_class {
         class::TOKEN_OWNER | class::TOKEN_PRIMARY_GROUP => {
             if length < 8 {
@@ -725,10 +726,9 @@ pub fn privilege_check<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
     let mut entries: Vec<(u32, u32)> = (0..n)
         .map(|i| {
             let c = &b[8 + 12 * i..];
-            let (low, high) = (u32::from_le_bytes([c[0], c[1], c[2], c[3]]), [c[4], c[5], c[6], c[7]]);
-            // Every privilege's LUID has a zero high part: one with another is
-            // none a token holds (LUID 0 names no privilege).
-            (if high == [0; 4] { low } else { 0 }, u32::from_le_bytes([c[8], c[9], c[10], c[11]]))
+            // The low part names the privilege (`Token::privilege_check`); the
+            // high part does not count.
+            (u32::from_le_bytes([c[0], c[1], c[2], c[3]]), u32::from_le_bytes([c[8], c[9], c[10], c[11]]))
         })
         .collect();
     let ok = t.privilege_check(&mut entries, control & 1 != 0);

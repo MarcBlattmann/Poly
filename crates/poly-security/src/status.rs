@@ -157,6 +157,7 @@ pub const STATUS_INVALID_PARAMETER_MIX: NtStatus = NtStatus(0xC000_0030);
 pub const STATUS_OBJECT_NAME_INVALID: NtStatus = NtStatus(0xC000_0033);
 pub const STATUS_OBJECT_NAME_NOT_FOUND: NtStatus = NtStatus(0xC000_0034);
 pub const STATUS_OBJECT_NAME_COLLISION: NtStatus = NtStatus(0xC000_0035);
+pub const STATUS_OBJECT_PATH_INVALID: NtStatus = NtStatus(0xC000_0039);
 pub const STATUS_OBJECT_PATH_NOT_FOUND: NtStatus = NtStatus(0xC000_003A);
 pub const STATUS_OBJECT_PATH_SYNTAX_BAD: NtStatus = NtStatus(0xC000_003B);
 pub const STATUS_THREAD_IS_TERMINATING: NtStatus = NtStatus(0xC000_004B);

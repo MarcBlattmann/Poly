@@ -75,7 +75,7 @@ static int in_ns_after_gid_map(void) {
 static void write_three_lines(i64 pid) {
     char path[48];
     expect("parent_three_lines",
-           p_write_file(p_proc_path(path, pid, "uid_map"), "0 1000 1\n5 2000 3\n100 4000 10\n"), 31);
+           p_write_file(p_proc_path(path, pid, "uid_map"), "0 1000 1\n5 2000 3\n100 4000 10\n"), 30);
 }
 
 static int in_ns_lines(void) {

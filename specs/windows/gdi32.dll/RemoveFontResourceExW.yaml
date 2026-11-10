@@ -5,7 +5,7 @@ oracle:
   os: "Windows 11 Home 25H2 (build 26200.9711), x64"
   machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; text is drawn into memory DCs with 32-bit DIB sections, so no desktop is needed), two runs each with identical output, and two complete recordings with identical output"
   observed_by: spec-win-text
-  date: 2026-11-09
+  date: 2026-11-10
 sources: >
   Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions named here (CreateFontIndirectW, LOGFONTW, TEXTMETRICW, GetTextExtentPoint32W, ExtTextOutW, DrawText, DrawTextEx, DRAWTEXTPARAMS, AddFontMemResourceEx, AddFontResourceEx, EnumFontFamiliesEx, SetTextAlign); wingdi.h and winuser.h for constants and layouts. Wine's conformance tests were not read for the values here.
 summary: >
@@ -14,12 +14,16 @@ interface:
   signature: "BOOL RemoveFontResourceExW(LPCWSTR name, DWORD fl, PVOID pdv)"
 rules:
   remove: "TRUE for a file that was added; the family is gone for new requests. A third remove after two adds of the same file fails: each add needs its own remove, and the family stays until the last one (rfr_counts)."
-  flags: "The flags of the remove must match those of the add: a remove with flags 0 after an FR_PRIVATE add returned FALSE and the font stayed."
+  flags: "The flags of the remove must be exactly those of the add. After an FR_PRIVATE|FR_NOT_ENUM add, removes with FR_PRIVATE, with FR_NOT_ENUM and with 0 return FALSE (no error code) and the font stays; FR_PRIVATE|FR_NOT_ENUM removes it. A remove with flags 0 after an FR_PRIVATE add returned FALSE and the font stayed. Adds of one file with different flags are counted apart: after one FR_PRIVATE add and one FR_PRIVATE|FR_NOT_ENUM add each flags value removes once (a second remove with the same flags is FALSE) and the family stays until both are gone (rfr_selected). (The other way round, FR_PRIVATE|FR_NOT_ENUM after an add with FR_PRIVATE alone, Windows answered TRUE and left the font in place; that is not tested and Poly may answer FALSE.)"
   file_must_exist: "The remove looks the file up: with the file deleted it fails with ERROR_FILE_NOT_FOUND (2) and the font stays loaded; with the file back it succeeds (afr_add)."
+  in_use: "A font object does not hold on to the file. After the last remove every font object that asked for the family maps to another font at once: one that is selected into a DC while the file is removed, one made before the remove and selected afterwards, and one made afterwards (GetTextFaceW no longer names the family and the widths are no longer the font's). When the file is added again the same objects are the family again, also the one that stayed selected all the time (rfr_selected)."
+  spelling: "A file is known by the file its name leads to, not by the spelling of the name: the remove finds the add when the path differs in letter case, has forward slashes for backslashes, or goes through a directory that does not exist and back with \"..\" (dir\\nodir\\..\\file), and the same the other way round (added respelled, removed as written). Adds under different spellings are adds of one file and are counted together: two adds need two removes, under any of the spellings (rfr_spellings). Also seen but not tested: the \\\\?\\ prefix and a dot after the name lead to the same file; a path with a \".\" part (dir\\.\\file) could neither be added nor removed (the remove gave error 2), which Poly need not copy."
+  reserved: "The reserved pointer is not looked at: a remove with a pointer that is not NULL works like one with NULL (rfr_names)."
 errors:
-  never_added: "A file that exists but was never added: FALSE, last error not set."
-  missing: "A file that does not exist: FALSE, error 2."
-  empty_path: "An empty path: FALSE, error 87. Flags 1 and 0xFFFF: FALSE, error 87."
+  never_added: "A name that leads to a file or a directory which is not an added font: FALSE and no error code (after SetLastError(0), GetLastError is 0). So for a font file that was never added (also a copy of an added file under another name), for a file that is not a font, and for a directory named without a backslash at its end."
+  missing: "A name that leads to no file: FALSE, ERROR_FILE_NOT_FOUND (2). So for a file that does not exist, a file in a directory that does not exist, a file's path or a directory with a backslash after it, and for names with wildcards: '*' and '?' are neither expanded nor refused as bad names, such a name is just a file that is not there ('*.ttf', 'Name?.ttf' and '*' in the directory of an added font file, and '*.ttf' without a directory, all give 2 and the added font stays) (rfr_names)."
+  empty_path: "An empty path, or one of blanks only: FALSE, error 87. Flag bits other than FR_PRIVATE (0x10) and FR_NOT_ENUM (0x20), such as 1, 0x11, 0x70, 0xFFFF and 0x80000010: FALSE, error 87, also for a file that is added, and the font stays."
+  last_error: "A remove that succeeds sets no error code."
 side_effects: "none beyond the rules above"
 threading: "a DC, a font and a font resource belong to the process; fonts added from memory or with FR_PRIVATE are visible to the adding process only"
 ordering: []
@@ -27,9 +31,9 @@ timing:
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 1
-  held_out: 1
+  visible: 4
+  held_out: 2
 building_tests: >
   Rust tests (ADR 0075), one file per test, importing gdi32.dll, user32.dll and kernel32.dll by name, each file carrying its own declarations (Learn prototypes, wingdi.h / winuser.h constants) and its own TrueType writer. No test depends on the pixels or the metrics of a Microsoft font (the owner's decision of 2026-11-09: Poly cannot ship those fonts): text is drawn with fonts the test makes itself and adds with AddFontMemResourceEx or AddFontResourceExW(FR_PRIVATE), so Windows and Poly use the same font file, and tests on installed families print only relations that hold for every font. The tests make their own TrueType fonts (the same 14-glyph table in every file, units per em 1024, every coordinate a multiple of 64 units so that every glyph edge lies on a pixel boundary at lfHeight -16): 'PolyTest Sans' (OS/2 winAscent 768, winDescent 256, hhea ascender 768, descender -256, line gap 128), 'PolyTest Tall' (winAscent 896, winDescent 320, no line gap), 'PolyTest Mono' (Sans metrics, every advance 640, post isFixedPitch, panose proportion 9) and the Bold and Italic faces of the Sans family (the 'A' is 13 and 14 pixels wide instead of 12 at -16). Advances at 16 pixels per em: space 6, '&' 9, '-' 6, '.' 4, 'A' 12, 'B' 8, 'M' 12, 'W' 16, backslash 6, 'g' 10, 'i' 4, U+00E9 11, U+20AC 14, .notdef 10. A font reaches GDI through AddFontMemResourceEx or AddFontResourceExW(FR_PRIVATE); GDI refused a font whose name table had only the name IDs 1, 2, 4 and 6, so the tests' fonts carry IDs 0 to 6. Tests on installed families (Arial, Times New Roman, Courier New, Segoe UI, Tahoma, Verdana, Consolas and the stock fonts) print and check only relations that hold for every font, never their pixels or metrics. Drawing goes into a 32-bit top-down DIB section in a memory DC, bi-level (lfQuality NONANTIALIASED) where pixels are compared, white text on a dark blue background over a grey surface. Observations are numbers, pixel boxes, counts and rows of pixels as text, never handles, addresses or times.
 not_covered: >
-  Fonts added with flags 0 (system-wide).
+  Fonts added with flags 0 (system-wide); names longer than MAX_PATH and two names joined with '|' (both returned FALSE without an error code when tried).

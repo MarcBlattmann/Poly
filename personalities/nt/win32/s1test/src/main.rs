@@ -43,6 +43,13 @@ unsafe extern "system" {
     fn GetCurrentProcessId() -> u32;
     fn GetCurrentProcess() -> isize;
     fn GetTickCount64() -> u64;
+    fn LoadLibraryExW(name: *const u16, file: *mut u8, flags: u32) -> *mut u8;
+    fn GetProcAddress(module: *mut u8, name: *const u8) -> *mut u8;
+    fn FreeLibrary(module: *mut u8) -> i32;
+    fn CreateEventW(security: *mut u8, manual_reset: i32, initial_state: i32, name: *const u16) -> isize;
+    fn WaitForSingleObject(handle: isize, milliseconds: u32) -> u32;
+    fn CloseHandle(handle: isize) -> i32;
+    fn GetThreadPreferredUILanguages(flags: u32, count: *mut u32, buf: *mut u16, cch: *mut u32) -> i32;
     fn LocalFree(block: *mut u8) -> *mut u8;
     fn GetModuleFileNameW(module: *mut u8, buf: *mut u16, size: u32) -> u32;
     fn GetEnvironmentVariableW(name: *const u16, buf: *mut u16, size: u32) -> u32;
@@ -96,6 +103,12 @@ struct ObjectAttributes {
 unsafe extern "system" {
     fn CommandLineToArgvW(cmd_line: *const u16, num_args: *mut i32) -> *mut *mut u16;
     fn SHGetFolderPathW(hwnd: *mut u8, folder: i32, token: *mut u8, flags: u32, path: *mut u16) -> u32;
+}
+
+#[link(name = "userenv", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn RegisterGPNotification(event: isize, machine: i32) -> i32;
+    fn UnregisterGPNotification(event: isize) -> i32;
 }
 
 #[link(name = "winmm", kind = "raw-dylib")]
@@ -790,6 +803,12 @@ unsafe fn shell32() {
     let n = GetModuleFileNameW(core::ptr::null_mut(), own.as_mut_ptr(), 260) as usize;
     check_got(n > 0 && (0..=n).all(|i| *(*argv).add(i) == own[i]), n as u32);
     check_eq(LocalFree(argv.cast()) as usize, 0);
+    // The contract Chrome loads first for it (LOAD_LIBRARY_SEARCH_SYSTEM32, 0x800) has the function.
+    let contract = w::<48>("api-ms-win-downlevel-shell32-l1-1-0.dll");
+    let module = LoadLibraryExW(contract.as_ptr(), core::ptr::null_mut(), 0x800);
+    check_got(!module.is_null(), 0);
+    check_got(!GetProcAddress(module, c"CommandLineToArgvW".as_ptr().cast()).is_null(), 0);
+    check_eq(FreeLibrary(module) as usize, 1);
     // CSIDL_LOCAL_APPDATA (0x1C), SHGFP_TYPE_CURRENT (0): %LOCALAPPDATA%, no trailing backslash.
     let mut path = [0u16; 260];
     check_eq(SHGetFolderPathW(core::ptr::null_mut(), 0x1C, core::ptr::null_mut(), 0, path.as_mut_ptr()) as usize, 0);
@@ -802,6 +821,45 @@ unsafe fn shell32() {
         SHGetFolderPathW(core::ptr::null_mut(), 0x7F, core::ptr::null_mut(), 0, path.as_mut_ptr()) as usize,
         0x8007_0057,
     );
+}
+
+/// `GetThreadPreferredUILanguages` the way chrome.dll calls it when it starts (Learn; a FALSE
+/// here is fatal for Chrome): `MUI_LANGUAGE_NAME | MUI_UI_FALLBACK` (0x38), first for the size,
+/// then for the list, which is the user's language and its neutral language.
+unsafe fn ui_languages() {
+    let (mut count, mut size) = (0u32, 0u32);
+    check_eq(GetThreadPreferredUILanguages(0x38, &mut count, core::ptr::null_mut(), &mut size) as usize, 1);
+    check_eq(count as usize, 2);
+    check_eq(size as usize, 10); // "en-US\0en\0\0"
+    let mut list = [0xAAAAu16; 16];
+    let mut cch = size;
+    check_eq(GetThreadPreferredUILanguages(0x38, &mut count, list.as_mut_ptr(), &mut cch) as usize, 1);
+    check_got(wide_is(list.as_ptr(), "en-US") && wide_is(list.as_ptr().add(6), "en") && list[9] == 0, cch);
+    check_eq(list[10] as usize, 0xAAAA);
+    // A buffer that is too small: ERROR_INSUFFICIENT_BUFFER (122) and the size needed.
+    let mut small = 4u32;
+    check_eq(GetThreadPreferredUILanguages(0x38, &mut count, list.as_mut_ptr(), &mut small) as usize, 0);
+    check_eq(GetLastError() as usize, 122);
+    check_eq(small as usize, 10);
+    // Both forms at once: ERROR_INVALID_PARAMETER (87).
+    let mut cch = 16u32;
+    check_eq(GetThreadPreferredUILanguages(0xC, &mut count, list.as_mut_ptr(), &mut cch) as usize, 0);
+    check_eq(GetLastError() as usize, 87);
+}
+
+/// userenv's policy notifications (Learn: `RegisterGPNotification`), which Chrome's policy
+/// loader delay-loads (the export has to exist): registering an event succeeds for the user
+/// and the machine, the event is not set (policy does not change on Poly), and it unregisters.
+unsafe fn gp_notification() {
+    let event = CreateEventW(core::ptr::null_mut(), 1, 0, core::ptr::null());
+    check_got(event != 0, 0);
+    check_eq(RegisterGPNotification(event, 0) as usize, 1);
+    check_eq(RegisterGPNotification(event, 1) as usize, 1);
+    check_eq(WaitForSingleObject(event, 0) as usize, 258); // WAIT_TIMEOUT
+    check_eq(UnregisterGPNotification(event) as usize, 1);
+    check_eq(RegisterGPNotification(0, 0) as usize, 0);
+    check_eq(GetLastError() as usize, 87);
+    check_eq(CloseHandle(event) as usize, 1);
 }
 
 /// winmm's timer functions (Learn: `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`): the
@@ -902,6 +960,8 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         loader_lock();
         current_user_key();
         shell32();
+        ui_languages();
+        gp_notification();
         winmm();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));

@@ -31,6 +31,36 @@ summary: >
   superblock) is EPERM. A mount that the namespace's root makes itself is not
   locked: mounting a tmpfs (0), remounting it any way (0) and unmounting it (0)
   all work.
+  The locks, rule by rule (they are set once, when the mount namespace is
+  copied into the new user namespace, on every mount of the copy):
+  (1) In place: no inherited mount can be removed or moved. umount2 with
+  flag 0 or MNT_DETACH is EINVAL, for a mount directly on the old tree
+  and for a mount below another inherited mount alike; mount(MS_MOVE) of
+  one is EINVAL.
+  (2) Flags: each of read-only, nosuid, nodev and noexec that the mount
+  had is locked on: a bind remount (MS_BIND | MS_REMOUNT) that leaves one
+  out is EPERM. A flag the mount did not have may be added and removed
+  again (it is not locked by being added later).
+  (3) Access-time mode: locked on every inherited mount, whatever it was.
+  A bind remount that names another mode is EPERM (MS_RELATIME on a
+  mount that was noatime; MS_NOATIME or MS_STRICTATIME on a mount with
+  the default relatime); naming the mode it has, or none of the atime
+  flags (the mode is then kept), works.
+  (4) Copies: a bind made inside the namespace is a mount of its root, so
+  the top of the copy can be unmounted; but the flag locks travel with
+  the copy (a plain bind of a noexec mount: remounting the copy without
+  noexec is EPERM, with it 0, umount2 of the copy 0), and in a recursive
+  bind (MS_BIND | MS_REC) the copies of the mounts below stay locked onto
+  the copy: umount2 of <copy>/sub is EINVAL and its nodev cannot be
+  cleared (EPERM); umount2 of the copy's top with flag 0 is EBUSY (a
+  mount is below it), with MNT_DETACH 0 and the whole copy is gone.
+  (5) A plain MS_BIND (without MS_REC) of an inherited mount that has
+  another inherited mount below it is EINVAL (the copy would show what
+  that mount covers); with MS_REC it works; a plain bind of a mount with
+  nothing mounted below it, also of the lower mount itself, works.
+  (6) Mounting on top of an inherited mount is allowed; that mount is the
+  root's own (umount2 0) and the inherited mount below it is still
+  locked afterwards (umount2 EINVAL).
 returns:
   tmpfs_in_userns: "0; top directory owned by ns-root (uid 0, gid 0 inside)"
   locked_remount_same_flags: "0"
@@ -39,8 +69,10 @@ errors:
   needs_init_userns: "EPERM (1): mounting ext4, squashfs, devtmpfs or cgroup2 from a user namespace; tmpfs before the unshare"
   mknod_device: "EPERM (1): mknod of a character or block device node"
   hostname: "EPERM (1): sethostname in a UTS namespace owned by an outer user namespace"
-  locked_umount: "EINVAL (22): umount2 (with or without MNT_DETACH) of an inherited mount"
-  locked_flags: "EPERM (1): clearing a flag (ro, nosuid, nodev) that the inherited mount had; a non-bind remount of an inherited mount"
+  locked_umount: "EINVAL (22): umount2 (with or without MNT_DETACH) of an inherited mount, also one below another inherited mount and the copy of one inside a recursive bind; MS_MOVE of an inherited mount"
+  locked_flags: "EPERM (1): clearing a flag (ro, nosuid, nodev, noexec) that the inherited mount had, on it or on a bind copy of it; naming another access-time mode than the inherited mount has; a non-bind remount of an inherited mount"
+  locked_bind: "EINVAL (22): MS_BIND without MS_REC of an inherited mount that has an inherited mount below it"
+  copy_busy: "EBUSY (16): umount2 with flag 0 of the top of a recursive bind copy while the copies below it are mounted"
 side_effects: >
   Mounts in the new mount namespace are private to it.
 threading: "mount namespace is shared by threads of the process"
@@ -49,11 +81,12 @@ timing:
   typical: "microseconds"
   guarantees: "none"
 tests:
-  visible: 1  # count in <symbol>.tests/
+  visible: 2  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 # Notes: MS_* values are from linux/mount.h (MS_RDONLY 1, MS_NOSUID 2,
-# MS_NODEV 4, MS_NOEXEC 8, MS_REMOUNT 32, MS_BIND 4096, MS_REC 16384,
-# MS_PRIVATE 1<<18). Both tests are needs=root (they start as root and
+# MS_NODEV 4, MS_NOEXEC 8, MS_REMOUNT 32, MS_NOATIME 1024, MS_BIND 4096,
+# MS_MOVE 8192, MS_REC 16384, MS_PRIVATE 1<<18, MS_RELATIME 1<<21,
+# MS_STRICTATIME 1<<24). The tests are needs=root (they start as root and
 # become uid 65534; user namespaces may be disabled on a host) and use
 # several processes (syscalls=off). procfs is deliberately not tested here:
 # whether a container's /proc counts as fully visible depends on the host.

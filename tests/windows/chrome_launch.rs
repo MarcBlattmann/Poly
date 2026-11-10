@@ -610,6 +610,37 @@ fn launch(t: &mut Test) {
                 p[cwd.len() + 1 + i] = u16::from(b);
             }
             log_file(&p);
+            // The traces of the child processes: the logger of a process that finds the
+            // file taken writes `<file>.1`, `<file>.2`, ... (the first that does not exist).
+            // Each is announced by a `{"child":N}` record.
+            let end = cwd.len() + 1 + n;
+            for child in 1..=99u32 {
+                let digits = [b'0' + (child / 10) as u8, b'0' + (child % 10) as u8];
+                let digits = if child < 10 { &digits[1..] } else { &digits[..] };
+                if end + 1 + digits.len() >= PATH_UNITS {
+                    break;
+                }
+                p[end] = u16::from(b'.');
+                for (i, &d) in digits.iter().enumerate() {
+                    p[end + 1 + i] = u16::from(d);
+                }
+                p[end + 1 + digits.len()] = 0;
+                let Some(h) = open(&p, false, false) else { break };
+                // SAFETY: opened above.
+                unsafe { CloseHandle(h) };
+                let mut mark = *b"{\"child\":00}";
+                let m = if child < 10 {
+                    mark[9] = digits[0];
+                    mark[10] = b'}';
+                    11
+                } else {
+                    mark[9] = digits[0];
+                    mark[10] = digits[1];
+                    12
+                };
+                log_line(true, &mark[..m]);
+                log_file(&p);
+            }
         }
     }
     show("stdout", &stdout_p);

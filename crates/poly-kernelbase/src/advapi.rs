@@ -142,6 +142,7 @@ pub const ADVAPI32_OWN: &[&str] = &[
     "BuildTrusteeWithNameW",
     "BuildTrusteeWithSidW",
     "BuildExplicitAccessWithNameW",
+    "BuildSecurityDescriptorW",
     "SetEntriesInAclW",
     "GetExplicitEntriesFromAclW",
     "LookupAccountSidW",
