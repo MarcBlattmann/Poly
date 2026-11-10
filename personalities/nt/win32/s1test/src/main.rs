@@ -559,8 +559,10 @@ unsafe fn system() {
     check_eq(GetSysColorBrush(5), brush);
     check_eq(GetSysColorBrush(31), 0);
 
-    // The keyboard layout list.
-    check_eq(GetKeyboardLayoutList(0, core::ptr::null_mut()) as usize, 1);
+    // The keyboard layout list: three installed layouts, as the oracle of
+    // specs/windows/imm32.dll/ImmIsIME.yaml has (its visible test records the
+    // count); the first one is the thread's current layout.
+    check_eq(GetKeyboardLayoutList(0, core::ptr::null_mut()) as usize, 3);
     let mut hkl = 0usize;
     check_eq(GetKeyboardLayoutList(1, &mut hkl) as usize, 1);
     check_eq(hkl, GetKeyboardLayout(0));
@@ -580,7 +582,9 @@ unsafe fn system() {
     let (mut dx, mut dy) = (0u32, 0u32);
     check_hr(GetDpiForMonitor(mon, 0, &mut dx, &mut dy), S_OK);
     check_got(dx == 96 && dy == 96, dx);
-    check_hr(GetDpiForMonitor(mon, 9, &mut dx, &mut dy), 0x8007_0057);
+    // A type that does not exist: ERROR_BAD_ARGUMENTS as an HRESULT
+    // (specs/windows/shcore.dll/GetDpiForMonitor.yaml `bad_type`).
+    check_hr(GetDpiForMonitor(mon, 9, &mut dx, &mut dy), 0x8007_00A0);
     let mut aw = 9u32;
     check_hr(GetProcessDpiAwareness(0, &mut aw), S_OK);
     check_eq(aw as usize, 2); // per monitor, set above
