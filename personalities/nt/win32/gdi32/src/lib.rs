@@ -212,6 +212,12 @@ pub extern "system" fn GetCurrentObject(hdc: H, kind: u32) -> H {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetObjectW(h: H, size: i32, buf: *mut u8) -> i32 {
+    // A region has no description: 0 with ERROR_INVALID_HANDLE
+    // (CreateRectRgn.yaml `in_a_dc`).
+    if gdi(|g| g.is_region(h as u64)) {
+        set_last_error(ERROR_INVALID_HANDLE);
+        return 0;
+    }
     if buf.is_null() {
         return gdi(|g| g.object_bytes(h as u64)).map_or(0, |b| b.len() as i32);
     }
@@ -225,6 +231,55 @@ pub unsafe extern "system" fn GetObjectW(h: H, size: i32, buf: *mut u8) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "system" fn CreateSolidBrush(color: u32) -> H {
     gdi(|g| g.create_solid_brush(color)) as H
+}
+
+/// `CreateHatchBrush` (Learn): a brush of one of the six hatch styles.
+#[unsafe(no_mangle)]
+pub extern "system" fn CreateHatchBrush(hatch: i32, color: u32) -> H {
+    if !(0..=5).contains(&hatch) {
+        return 0;
+    }
+    gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_HATCHED, color, hatch as u64)) as H
+}
+
+/// `CreatePatternBrush` (Learn): a brush from a bitmap.
+#[unsafe(no_mangle)]
+pub extern "system" fn CreatePatternBrush(bitmap: H) -> H {
+    if gdi(|g| g.object_type(bitmap as u64)) != poly_gdi::gdi::OBJ_BITMAP {
+        return 0;
+    }
+    gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_PATTERN, 0, bitmap as u64)) as H
+}
+
+/// `CreateDIBPatternBrushPt` (Learn): a brush from a packed DIB.
+#[unsafe(no_mangle)]
+pub extern "system" fn CreateDIBPatternBrushPt(packed_dib: *const u8, _usage: u32) -> H {
+    if packed_dib.is_null() {
+        return 0;
+    }
+    gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_DIBPATTERNPT, 0, packed_dib as u64)) as H
+}
+
+/// `CreatePalette` (Learn): a logical palette; NULL for a NULL `LOGPALETTE`.
+#[unsafe(no_mangle)]
+pub extern "system" fn CreatePalette(log_palette: *const u8) -> H {
+    if log_palette.is_null() {
+        return 0;
+    }
+    gdi(|g| g.create_palette()) as H
+}
+
+/// `SelectPalette` (Learn): the DC's previous palette, NULL on failure.
+#[unsafe(no_mangle)]
+pub extern "system" fn SelectPalette(hdc: H, palette: H, _force_background: i32) -> H {
+    gdi(|g| g.select_palette(hdc as u64, palette as u64)) as H
+}
+
+/// `RealizePalette` (Learn): the number of entries mapped; none on a
+/// true-colour screen.
+#[unsafe(no_mangle)]
+pub extern "system" fn RealizePalette(_hdc: H) -> u32 {
+    0
 }
 
 #[unsafe(no_mangle)]

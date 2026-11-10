@@ -1039,3 +1039,48 @@ fn a_window_gets_its_released_dc_again() {
     assert!(g.release_display_dc(own));
     assert_eq!(g.display_hwnd(own), Some(0x30));
 }
+
+/// DeleteObject.yaml `palette`, `bitmaps_other_kinds`, `type_after_delete`;
+/// CreateRectRgn.yaml `indirect_and_set`.
+#[test]
+fn palettes_and_styled_brushes_follow_the_delete_rules() {
+    let mut g = Gdi::new();
+    let (dc, _px) = dib32(&mut g, 2, 2);
+    let stock = g.stock(DEFAULT_PALETTE);
+    assert_eq!(g.current_object(dc, OBJ_PAL), stock);
+    // A palette that is not selected: 1, and the type stays.
+    let free = u64::from(g.create_palette());
+    assert_eq!(g.object_type(free), OBJ_PAL);
+    assert!(g.delete_object(free));
+    assert_eq!(g.object_type(free), OBJ_PAL);
+    assert!(!g.delete_object(free));
+    // Selected: the delete fails and it stays; back to the stock one, it goes.
+    let pal = u64::from(g.create_palette());
+    assert_eq!(g.select_palette(dc, pal), stock);
+    assert_eq!(u64::from(g.current_object(dc, OBJ_PAL)), pal);
+    assert!(!g.delete_object(pal));
+    assert_eq!(g.object_type(pal), OBJ_PAL);
+    assert_eq!(u64::from(g.select_palette(dc, u64::from(stock))), pal);
+    assert!(g.delete_object(pal));
+    // Not a palette, not a DC: NULL.
+    assert_eq!(g.select_palette(dc, u64::from(g.stock(WHITE_BRUSH))), 0);
+    assert_eq!(g.select_palette(0x1234, u64::from(stock)), 0);
+    // Hatch and pattern brushes are brushes; deleted, they keep their type.
+    for style in [BS_HATCHED, BS_PATTERN, BS_DIBPATTERNPT] {
+        let b = u64::from(g.create_styled_brush(style, 0x0000_FF00, 3));
+        assert_eq!(g.object_type(b), OBJ_BRUSH);
+        assert_eq!(g.object_bytes(b).map(|v| v[0]), Some(style as u8));
+        assert!(g.delete_object(b));
+        assert_eq!(g.object_type(b), OBJ_BRUSH);
+        assert!(!g.delete_object(b));
+    }
+    // SetRectRgn: 0 for what is not a region, 1 for one deleted just before.
+    let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 0, 4, 4)).unwrap());
+    assert!(g.is_region(rgn));
+    assert!(!g.set_rect_rgn(u64::from(g.stock(WHITE_BRUSH)), Rect::new(0, 0, 1, 1)));
+    assert!(!g.set_rect_rgn(0, Rect::new(0, 0, 1, 1)));
+    assert!(g.delete_object(rgn));
+    assert!(!g.is_region(rgn));
+    assert!(g.set_rect_rgn(rgn, Rect::new(0, 0, 1, 1)));
+    assert_eq!(g.rgn_box(rgn), None);
+}

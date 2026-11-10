@@ -475,8 +475,7 @@ pub fn attached_to_foreground<E: Env + ?Sized>(env: &E, other: u32) {
 /// it ([`successor`]) or it leaves the thread. Session 0 keeps a hidden
 /// window active; only destroying it moves the activation, to the topmost
 /// window of the thread that can have it (ShowWindow.yaml `hide`, `destroy`).
-pub fn after_hide<E: Env + ?Sized>(env: &E, i: &WinInfo, hands_on: bool) {
-    let destroying = DESTROYING.load(core::sync::atomic::Ordering::Relaxed) == i.hwnd;
+pub fn after_hide<E: Env + ?Sized>(env: &E, i: &WinInfo, hands_on: bool, destroying: bool) {
     if !(hands_on || destroying) || input(env).active != i.hwnd {
         return;
     }

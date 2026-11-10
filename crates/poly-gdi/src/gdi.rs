@@ -47,6 +47,10 @@ pub const TA_BASELINE: u32 = 24;
 // Brush styles.
 pub const BS_SOLID: u32 = 0;
 pub const BS_NULL: u32 = 1;
+/// `BS_HATCHED`, `BS_PATTERN`, `BS_DIBPATTERNPT` (wingdi.h).
+pub const BS_HATCHED: u32 = 2;
+pub const BS_PATTERN: u32 = 3;
+pub const BS_DIBPATTERNPT: u32 = 6;
 // Pen styles.
 pub const PS_NULL: u32 = 5;
 
@@ -84,6 +88,8 @@ struct DcState {
     pos: (i32, i32),
     dc_brush: u32,
     dc_pen: u32,
+    /// The palette `SelectPalette` selected (the stock one at first).
+    palette: u32,
     /// The DC has drawn with the selected brush / pen since it was selected
     /// (or the state was saved with it): what a brush or pen deleted while
     /// selected still draws with (DeleteObject.yaml `selected_brush_pen`).
@@ -175,6 +181,8 @@ pub const NULL_BRUSH: u32 = 5;
 pub const BLACK_PEN: u32 = 7;
 pub const NULL_PEN: u32 = 8;
 pub const SYSTEM_FONT: u32 = 13;
+/// `DEFAULT_PALETTE` (wingdi.h).
+pub const DEFAULT_PALETTE: u32 = 15;
 pub const DC_BRUSH: u32 = 18;
 pub const DC_PEN: u32 = 19;
 /// Poly's own index for the default 1x1 monochrome bitmap.
@@ -402,6 +410,7 @@ impl Gdi {
             pos: (0, 0),
             dc_brush: 0x00FF_FFFF,
             dc_pen: 0,
+            palette: self.stock(DEFAULT_PALETTE),
             brush_used: false,
             pen_used: false,
             clip: None,
@@ -545,6 +554,39 @@ impl Gdi {
         })
     }
 
+    /// Whether a DC has palette `h` selected.
+    fn palette_held(&self, h: u32) -> bool {
+        self.objs.iter().flatten().any(|o| match o {
+            Obj::Dc(d) => core::iter::once(&d.state).chain(d.saved.iter()).any(|s| s.palette == h),
+            _ => false,
+        })
+    }
+
+    /// `CreatePalette`: a logical palette (its colours are not kept: Poly's
+    /// screens are true-colour).
+    pub fn create_palette(&mut self) -> u32 {
+        self.add(Obj::Palette)
+    }
+
+    /// `SelectPalette`: the palette selected before, 0 when `dc` or `pal`
+    /// is not what it should be.
+    pub fn select_palette(&mut self, dc: u64, pal: u64) -> u32 {
+        if !matches!(self.obj(pal), Some(Obj::Palette)) {
+            return 0;
+        }
+        match self.state(dc) {
+            Some(s) => core::mem::replace(&mut s.palette, pal as u32),
+            None => 0,
+        }
+    }
+
+    /// `CreateHatchBrush` / `CreatePatternBrush` / `CreateDIBPatternBrushPt`:
+    /// a brush of that style. It paints as a solid brush of `color` for
+    /// now (the hatch lines' colour; black for a pattern).
+    pub fn create_styled_brush(&mut self, style: u32, color: u32, hatch: u64) -> u32 {
+        self.add(Obj::Brush { style, color, hatch, stock: false, deleted: false, delete_pending: false })
+    }
+
     /// `DeleteDC`: (result, error).
     pub fn delete_dc(&mut self, h: u64) -> (bool, u32) {
         match self.obj(h) {
@@ -614,6 +656,11 @@ impl Gdi {
                 true
             }
             Obj::Palette => {
+                // A palette a DC has selected is not deleted: the call
+                // fails and it stays (DeleteObject.yaml `palette`).
+                if self.palette_held(h as u32) {
+                    return false;
+                }
                 self.release(i, OBJ_PAL);
                 true
             }
@@ -665,6 +712,12 @@ impl Gdi {
             _ => {}
         }
         Some(b)
+    }
+
+    /// Whether `h` is a region (`GetObject` has nothing to say about one:
+    /// 0 with ERROR_INVALID_HANDLE, CreateRectRgn.yaml `in_a_dc`).
+    pub fn is_region(&self, h: u64) -> bool {
+        matches!(self.obj(h), Some(Obj::Region(_)))
     }
 
     /// `GetObjectW`'s bytes for an object (`LOGBRUSH`, `BITMAP`, `LOGPEN`,
@@ -780,7 +833,7 @@ impl Gdi {
             OBJ_BRUSH => d.state.brush,
             OBJ_FONT => d.state.font,
             OBJ_BITMAP => d.bitmap,
-            OBJ_PAL => self.stock(15),
+            OBJ_PAL => d.state.palette,
             _ => 0,
         }
     }
@@ -1063,6 +1116,11 @@ impl Gdi {
     /// `SetRectRgn`: any coordinates are kept (observed); false when `h`
     /// is not a region.
     pub fn set_rect_rgn(&mut self, h: u64, r: Rect) -> bool {
+        // Observed: on a region deleted just before the call still answers
+        // 1 (CreateRectRgn.yaml `indirect_and_set`; nothing is changed).
+        if matches!(self.obj(h), Some(Obj::Dead(OBJ_REGION))) {
+            return true;
+        }
         let Some(rgn) = self.region_mut(h) else { return false };
         *rgn = Region::from_rect(r);
         true

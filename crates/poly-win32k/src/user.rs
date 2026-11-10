@@ -556,13 +556,14 @@ fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
             send(env, h, WM_SHOWWINDOW, 0, 0);
         }
         focus::DESTROYING.store(hwnd, core::sync::atomic::Ordering::Relaxed);
-        set_window_pos(env, h, 0, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE);
+        let flags = SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE;
+        swp(env, hwnd, 0, 0, 0, 0, 0, flags, Opts { destroying: true, ..Opts::default() });
         focus::DESTROYING.store(0, core::sync::atomic::Ordering::Relaxed);
     } else if i.style & WS_CHILD == 0 && focus::input(env).active == hwnd {
         // A hidden window can be the active one (session 0): destroying it
         // moves the activation as for a visible one.
         focus::DESTROYING.store(hwnd, core::sync::atomic::Ordering::Relaxed);
-        focus::after_hide(env, &i, true);
+        focus::after_hide(env, &i, true, true);
         focus::DESTROYING.store(0, core::sync::atomic::Ordering::Relaxed);
     }
     // The capture of the window or of one below it ends without a message
@@ -636,6 +637,9 @@ struct Opts {
     /// its thread may (`focus::may_take_foreground`); a ShowWindow command
     /// always does.
     creating: bool,
+    /// `DestroyWindow` hides the window: the activation is handed on
+    /// although the call is SWP_NOACTIVATE.
+    destroying: bool,
 }
 
 /// `SWP_NOCOPYBITS` (winuser.h).
@@ -1328,7 +1332,7 @@ fn swp<E: Env + ?Sized>(
     let mut done = WindowPos { hwnd: h, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
     send(env, h, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
     if hide && vis_before && top {
-        focus::after_hide(env, &i, was_active && f & SWP_NOACTIVATE == 0);
+        focus::after_hide(env, &i, was_active && f & SWP_NOACTIVATE == 0, opts.destroying);
     } else if hide && vis_before && interactive {
         focus::child_hidden(env, &i);
     }
