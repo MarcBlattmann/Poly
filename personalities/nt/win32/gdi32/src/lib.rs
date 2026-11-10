@@ -519,6 +519,19 @@ pub extern "system" fn CreateEllipticRgn(l: i32, t: i32, r: i32, b: i32) -> H {
     rgn
 }
 
+/// `CreateRoundRectRgn(x1, y1, x2, y2, w, h)` (Learn): a rectangle whose
+/// corners are rounded by an ellipse `w` wide and `h` high
+/// ([`Region::round_rect`]).
+#[unsafe(no_mangle)]
+pub extern "system" fn CreateRoundRectRgn(l: i32, t: i32, r: i32, b: i32, w: i32, h: i32) -> H {
+    let rgn = CreateRectRgn(0, 0, 1, 1);
+    if rgn == 0 {
+        return 0;
+    }
+    gdi(|g| g.set_region(rgn as u64, Region::round_rect(l, t, r, b, w, h)));
+    rgn
+}
+
 /// A square root without `std` (Newton's method on a positive double).
 fn libm_sqrt(x: f64) -> f64 {
     if x <= 0.0 {
@@ -1266,6 +1279,21 @@ pub extern "system" fn PolyGdiAttachSurface(hdc: H, width: u32, height: u32) -> 
             // White, as the compositor shows a surface before it is drawn.
             // SAFETY: `len` bytes just allocated.
             unsafe { core::ptr::write_bytes(mem, 0xFF, len) };
+            // A resized window keeps what it showed, from its top-left
+            // corner: only the area it gained is invalid and painted anew.
+            if let Some((_, _, old_bits, ow, oh)) = old {
+                let row = ow.min(width) as usize * 4;
+                for y in 0..oh.min(height) as usize {
+                    // SAFETY: both DIBs hold these rows; they do not overlap.
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            (old_bits as *const u8).add(y * ow as usize * 4),
+                            (mem as *mut u8).add(y * width as usize * 4),
+                            row,
+                        );
+                    }
+                }
+            }
             let b = gdi(|g| g.create_dib(width as i32, -(height as i32), 32, Vec::new(), mem as u64, len));
             let b = u64::from(b);
             SURFACES.with(|s| {

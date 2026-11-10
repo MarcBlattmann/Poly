@@ -236,6 +236,15 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
                 let w = &sys.win32k;
                 return Reply::Value { value: u64::from(w.surfaces.screen_pixel(&w.wm, &w.desktop, x, y)) };
             }
+            // What UpdateLayeredWindow gave a layered window (ADR 0172).
+            Request::LayeredContent { hwnd, width, height, pixels } => {
+                let w = &mut sys.win32k;
+                return if w.surfaces.set_content(&w.wm, hwnd, width, height, pixels) {
+                    Reply::Ok {}
+                } else {
+                    Reply::Error { code: 87 }
+                };
+            }
             // A system cursor over a top-level window's surface (ADR 0172).
             Request::CursorShape { hwnd, idc } => {
                 let w = &mut sys.win32k;

@@ -383,6 +383,13 @@ pub fn resized_paint<E: Env + ?Sized>(env: &E, hwnd: u32, old_client: Rect, new_
         redraw(env, hwnd, Some(&[]), RDW_INVALIDATE | RDW_FRAME | RDW_NOCHILDREN);
         mark_frame_partial(env, hwnd);
     } else {
+        // A window that only shrank has nothing to paint, but its surface
+        // has a new size: what the window showed goes to it as it was
+        // (taking and releasing a DC remakes and commits the surface).
+        if (nw, nh) != (ow, oh) && !i.desktop && i.style & crate::metrics::WS_CHILD == 0 {
+            let dc = env.paint_dc(hwnd, None);
+            env.release_dc(hwnd, dc);
+        }
         return;
     }
     erase_now(env, hwnd);

@@ -183,4 +183,34 @@ mod tests {
         ime.thread_gone(t);
         assert_eq!(ime.run(t, ImeOp::Check { himc: d }), ImeRes::Err { code: 6 });
     }
+
+    /// ImmSetCompositionWindow.yaml / ImmSetCandidateWindow.yaml: NULL, a
+    /// made-up and a destroyed context are ERROR_INVALID_HANDLE; the forms
+    /// of a context are independent, kept as given and unset until stored.
+    #[test]
+    fn forms_are_per_context_and_bad_contexts_are_invalid_handles() {
+        let mut ime = Ime::default();
+        let t = (1, 10);
+        let ImeRes::Val { value: d } = ime.run(t, ImeOp::DefaultOf { pid: 1, tid: 10 }) else { panic!() };
+        let ImeRes::Val { value: a } = ime.run(t, ImeOp::Create {}) else { panic!() };
+        for bad in [0u32, 0x1234_5678] {
+            assert_eq!(ime.run(t, ImeOp::Check { himc: bad }), ImeRes::Err { code: 6 });
+            let set = ImeOp::Form { himc: bad, kind: 0, set: true, bytes: alloc::vec![1; 28] };
+            assert_eq!(ime.run(t, set), ImeRes::Err { code: 6 });
+        }
+        let get = |ime: &mut Ime, himc, kind| ime.run(t, ImeOp::Form { himc, kind, set: false, bytes: Vec::new() });
+        for kind in 0..5 {
+            assert_eq!(get(&mut ime, d, kind), ImeRes::Unset {});
+        }
+        for kind in 0..5u8 {
+            let bytes = alloc::vec![kind + 1; 32];
+            assert_eq!(ime.run(t, ImeOp::Form { himc: a, kind, set: true, bytes }), ImeRes::Ok {});
+        }
+        for kind in 0..5u8 {
+            assert_eq!(get(&mut ime, a, kind), ImeRes::Bytes { bytes: alloc::vec![kind + 1; 32] });
+            assert_eq!(get(&mut ime, d, kind), ImeRes::Unset {});
+        }
+        assert_eq!(ime.run(t, ImeOp::Destroy { himc: a }), ImeRes::Ok {});
+        assert_eq!(get(&mut ime, a, 0), ImeRes::Err { code: 6 });
+    }
 }

@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 use poly_win32k::guic;
 use poly_win32k::metrics;
 use poly_win32k::proto::{Reply, Request};
+use poly_win32k::spi;
 use poly_win32k::user::{self as u};
 
 #[link(name = "gdi32", kind = "raw-dylib")]
@@ -196,44 +197,10 @@ pub unsafe extern "system" fn AdjustWindowRectExForDpi(
 
 // ----- system colours
 
-const SYS_COLORS: [u32; 31] = [
-    0x00C8_C8C8,
-    0x0000_0000,
-    0x00D1_B499,
-    0x00DB_CDBF,
-    0x00F0_F0F0,
-    0x00FF_FFFF,
-    0x0064_6464,
-    0,
-    0,
-    0,
-    0x00B4_B4B4,
-    0x00FC_F7F4,
-    0x00AB_ABAB,
-    0x00D7_7800,
-    0x00FF_FFFF,
-    0x00F0_F0F0,
-    0x00A0_A0A0,
-    0x006D_6D6D,
-    0,
-    0,
-    0x00FF_FFFF,
-    0x0069_6969,
-    0x00E3_E3E3,
-    0,
-    0x00E1_FFFF,
-    0,
-    0x00CC_6600,
-    0x00EA_D1B9,
-    0x00F2_E4D7,
-    0x00D7_7800,
-    0x00F0_F0F0,
-];
-
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSysColor(index: i32) -> u32 {
-    match usize::try_from(index).ok().and_then(|i| SYS_COLORS.get(i)) {
-        Some(&c) => c,
+    match guic::sys_color(index) {
+        Some(c) => c,
         None => {
             set_last_error(ERROR_INVALID_PARAMETER);
             0
@@ -245,7 +212,7 @@ static BRUSHES: SpinLock<[usize; 31]> = SpinLock::new([0; 31]);
 
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSysColorBrush(index: i32) -> usize {
-    let Some(&color) = usize::try_from(index).ok().and_then(|i| SYS_COLORS.get(i)) else { return 0 };
+    let Some(color) = guic::sys_color(index) else { return 0 };
     BRUSHES.with(|b| {
         let slot = &mut b[index as usize];
         if *slot == 0 {
@@ -457,9 +424,28 @@ pub unsafe extern "system" fn SystemParametersInfoW(action: u32, param: u32, pv:
                 }
                 1
             }
+            // The queries the sheet did not observe: what Learn documents
+            // as the defaults (`poly_win32k::spi`, ADR 0155); anything
+            // else is no action (87).
             None => {
-                set_last_error(ERROR_INVALID_PARAMETER);
-                0
+                // SAFETY: cbSize is the structure's first field.
+                let cb = if spi::has_cb_size(action) && !pv.is_null() { read32(pv, 0) } else { 0 };
+                let w = u::screen(&SYS).work;
+                match spi::query(action, param, cb, [w.left, w.top, w.right, w.bottom]) {
+                    spi::Outcome::Bytes(bytes) if !pv.is_null() => {
+                        // SAFETY: the caller's buffer for this action holds the answer.
+                        unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), pv, bytes.len()) };
+                        1
+                    }
+                    spi::Outcome::Error(code) => {
+                        set_last_error(code);
+                        0
+                    }
+                    _ => {
+                        set_last_error(ERROR_INVALID_PARAMETER);
+                        0
+                    }
+                }
             }
         },
     }

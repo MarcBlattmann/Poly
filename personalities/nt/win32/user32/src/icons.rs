@@ -92,27 +92,9 @@ fn is_system_icon(h: usize) -> bool {
     (ICON_BASE..ICON_BASE + SYSTEM_ICONS).contains(&h)
 }
 
-/// A system icon: 32x32 with a filled disc (the artwork is Poly's).
+/// A system icon (`poly_win32k::icofile::system_icon`: Poly's own artwork).
 fn system_icon(index: usize) -> Image {
-    let mut img = blank(32, 32, false, (16, 16));
-    // A disc of radius 14 whose colour depends on the icon.
-    let colors: [[u8; 3]; 7] =
-        [[200, 120, 40], [30, 30, 200], [200, 160, 30], [30, 200, 220], [200, 80, 80], [160, 60, 160], [60, 160, 60]];
-    for y in 0..32i32 {
-        for x in 0..32i32 {
-            let (dx, dy) = (x - 16, y - 16);
-            let inside = dx * dx + dy * dy <= 14 * 14;
-            let at = (y * 32 + x) as usize;
-            if inside {
-                let c = colors[index % 7];
-                img.bgra[at * 4..at * 4 + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
-            } else {
-                img.and[at] = 1;
-            }
-        }
-    }
-    img.alpha = true;
-    img
+    icofile::system_icon(index)
 }
 
 fn system_cursor(index: usize) -> (Image, bool) {

@@ -44,11 +44,35 @@ struct Buffer {
     bytes: Vec<u8>,
 }
 
+/// The largest content `UpdateLayeredWindow` may leave here (bytes).
+pub const MAX_CONTENT: usize = 1 << 20;
+
+/// What `UpdateLayeredWindow` gave a layered window: pixels (`B, G, R, A`,
+/// top-down) covering the window from its top-left corner.
+#[derive(Debug)]
+struct Content {
+    width: u32,
+    height: u32,
+    bytes: Vec<u8>,
+}
+
+impl Content {
+    fn at(&self, x: i32, y: i32) -> Option<[u8; 4]> {
+        if x < 0 || y < 0 || x as u32 >= self.width || y as u32 >= self.height {
+            return None;
+        }
+        let at = (y as usize * self.width as usize + x as usize) * 4;
+        self.bytes.get(at..at + 4).map(|p| [p[0], p[1], p[2], p[3]])
+    }
+}
+
 /// The surfaces of top-level windows and their buffers.
 #[derive(Debug, Default)]
 pub struct Surfaces {
     windows: BTreeMap<u32, SurfaceId>,
     buffers: BTreeMap<BufferId, Buffer>,
+    /// The contents of `UpdateLayeredWindow`-ed windows.
+    contents: BTreeMap<u32, Content>,
 }
 
 impl Surfaces {
@@ -72,6 +96,8 @@ impl Surfaces {
         for b in desktop.take_released() {
             self.buffers.remove(&b);
         }
+        // A content lasts while its window is layered by UpdateLayeredWindow.
+        self.contents.retain(|h, _| wm.layered(*h).is_some_and(|l| l.update));
         // Surfaces exist with a compositor, and in an interactive session
         // even without one (window DCs keep their pixels, BeginPaint.yaml
         // reads them back).
@@ -128,12 +154,35 @@ impl Surfaces {
         }
     }
 
+    /// `UpdateLayeredWindow` gave layered window `hwnd` this content:
+    /// `width` x `height` pixels (`B, G, R, A`, top-down) from its top-left
+    /// corner; `width` 0 takes it away. False for a window that is not
+    /// layered or pixels that do not fit the size.
+    pub fn set_content(&mut self, wm: &Wm, hwnd: u32, width: u32, height: u32, pixels: Vec<u8>) -> bool {
+        if wm.layered(hwnd).is_none() {
+            return false;
+        }
+        if width == 0 || height == 0 {
+            self.contents.remove(&hwnd);
+            return true;
+        }
+        let size = (width as usize).checked_mul(height as usize).and_then(|n| n.checked_mul(4));
+        if size != Some(pixels.len()) || pixels.len() > MAX_CONTENT {
+            return false;
+        }
+        self.contents.insert(hwnd, Content { width, height, bytes: pixels });
+        true
+    }
+
     /// What the screen shows at (`x`, `y`) as a `COLORREF`: the topmost
     /// visible top-level window's client pixel there, a layered window
     /// blended with what is below it as `(src * a + below * (255 - a)) / 255`
     /// per channel, its colour key showing what is below, and a layered
     /// window never given attributes showing nothing
-    /// (`SetLayeredWindowAttributes.yaml`). Black where no window is.
+    /// (`SetLayeredWindowAttributes.yaml`); a window given its content by
+    /// `UpdateLayeredWindow` composed as that call said
+    /// (`UpdateLayeredWindow.yaml`); nothing of a window outside its region
+    /// (`SetWindowRgn.yaml`). Black where no window is.
     pub fn screen_pixel(&self, wm: &Wm, desktop: &Desktop, x: i32, y: i32) -> u32 {
         self.pixel_below(wm, desktop, &wm.top_levels(), x, y)
     }
@@ -145,7 +194,12 @@ impl Surfaces {
     pub fn hit_passes(&self, wm: &Wm, desktop: &Desktop, top: u32, x: i32, y: i32) -> bool {
         let Some((key, alpha, flags, attrs, _)) = wm.layered_of(top) else { return false };
         if !attrs {
-            return false;
+            // UpdateLayeredWindow's content: a pixel without alpha is not hit
+            // (`UpdateLayeredWindow.yaml` `hit_testing`).
+            let (Some(l), Some(c), Some(i)) = (wm.layered(top), self.contents.get(&top), wm.info(top)) else {
+                return false;
+            };
+            return c.at(x - i.window.left, y - i.window.top).is_some_and(|p| l.ulw_hit_passes(p));
         }
         if flags & 2 != 0 && alpha == 0 {
             return true;
@@ -160,16 +214,33 @@ impl Surfaces {
     fn pixel_below(&self, wm: &Wm, desktop: &Desktop, order: &[u32], x: i32, y: i32) -> u32 {
         for (k, &h) in order.iter().enumerate() {
             let Some(i) = wm.info(h) else { continue };
-            if !i.visible || i.minimized || i.message_only || !i.client.contains(x, y) {
+            if !i.visible || i.minimized || i.message_only || wm.region_excludes(h, x, y) {
                 continue;
             }
-            let Some(pix) = self.client_pixel(desktop, h, x - i.client.left, y - i.client.top) else { continue };
-            let Some((key, alpha, flags, attrs, update)) = wm.layered_of(h) else { return pix };
+            let lay = wm.layered(h);
+            // UpdateLayeredWindow's content covers the window from its
+            // top-left; any other window shows its client area's surface.
+            let content = self.contents.get(&h).filter(|_| lay.is_some_and(|l| l.update));
+            let px = match content {
+                Some(c) => c.at(x - i.window.left, y - i.window.top),
+                None if i.client.contains(x, y) => self
+                    .client_pixel(desktop, h, x - i.client.left, y - i.client.top)
+                    .map(|c| [(c >> 16) as u8, (c >> 8) as u8, c as u8, 255]),
+                None => None,
+            };
+            let Some(px) = px else { continue };
+            let pix = u32::from(px[2]) | u32::from(px[1]) << 8 | u32::from(px[0]) << 16;
+            let Some(l) = lay else { return pix };
+            let (key, alpha, flags, attrs, update) = (l.key, l.alpha, l.flags, l.attrs, l.update);
             if !attrs && !update {
                 continue;
             }
             if !attrs {
-                return pix;
+                if content.is_none() {
+                    return pix;
+                }
+                let below = self.pixel_below(wm, desktop, &order[k + 1..], x, y);
+                return l.ulw_pixel(px, below);
             }
             if flags & 1 != 0 && pix == key & 0x00FF_FFFF {
                 continue;
@@ -295,6 +366,185 @@ mod tests {
             },
         );
         h
+    }
+
+    /// A 40x30 popup at (`x`, `y`) with extended style `ex`, shown, and
+    /// its surface filled with the `COLORREF` `fill`.
+    fn popup(wm: &mut Wm, d: &mut Desktop, s: &mut Surfaces, x: i32, y: i32, ex: u32, fill: u32) -> u32 {
+        let name: Vec<u16> = "Pop".encode_utf16().collect();
+        let spec = ClassSpec { name: name.clone(), wndproc: 1, unicode: true, ..ClassSpec::default() };
+        call(wm, Request::RegisterClass { spec });
+        let spec =
+            CreateSpec { class: ClassRef::Name { name }, style: 0x8000_0000, ex_style: ex, ..CreateSpec::default() };
+        let Reply::Created { created } = call(wm, Request::CreateWindow { spec }) else { panic!("not created") };
+        let h = created.hwnd;
+        let r = Some(Rect::new(x, y, x + 40, y + 30));
+        call(wm, Request::SetRects { hwnd: h, window_rel: r, client_rel: r });
+        call(wm, Request::FinishCreate { hwnd: h });
+        call(
+            wm,
+            Request::SetState {
+                hwnd: h,
+                visible: Some(true),
+                minimized: None,
+                maximized: None,
+                normal: None,
+                size_move_pending: None,
+            },
+        );
+        s.sync(wm, d);
+        let px: Vec<u8> =
+            (0..40 * 30).flat_map(|_| [(fill >> 16) as u8, (fill >> 8) as u8, fill as u8, 0xFF]).collect();
+        assert!(s.commit(d, h, 40, 30, &px));
+        h
+    }
+
+    const BLUE: u32 = 0x00FF_0000;
+    const RED: u32 = 0x0000_00FF;
+    const GREEN: u32 = 0x0000_FF00;
+
+    /// SetWindowRgn.yaml `shape_hit_test`, `window_coordinates`, `shapes`,
+    /// `removal`: only the part of a window inside its region is on the
+    /// screen and hit; the region moves with the window; an empty region
+    /// hides it; a region larger than the window does not enlarge it.
+    #[test]
+    fn a_window_region_cuts_the_screen_and_the_hit_test() {
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        let below = popup(&mut wm, &mut d, &mut s, 245, 245, 0, BLUE);
+        let top = popup(&mut wm, &mut d, &mut s, 250, 250, 0, RED);
+        let at = |wm: &mut Wm, x, y| match call(wm, Request::WindowFromPoint { x, y, below: 0 }) {
+            Reply::Handle { hwnd } => hwnd,
+            r => panic!("{r:?}"),
+        };
+        assert_eq!(at(&mut wm, 255, 255), top);
+        assert_eq!(s.screen_pixel(&wm, &d, 255, 255), RED);
+        // The region 10,10,30,20 covers the screen points 260..279, 260..269.
+        let rgn = |wm: &mut Wm, rects: Vec<u32>| call(wm, Request::WindowRgn { hwnd: top, set: true, rects });
+        assert_eq!(rgn(&mut wm, vec![10, 10, 30, 20]), Reply::Ok {});
+        for (x, y) in [(260, 260), (279, 269), (265, 265)] {
+            assert_eq!(at(&mut wm, x, y), top, "{x},{y}");
+            assert_eq!(s.screen_pixel(&wm, &d, x, y), RED, "{x},{y}");
+        }
+        for (x, y) in [(255, 265), (265, 270), (280, 265), (259, 259)] {
+            assert_eq!(at(&mut wm, x, y), below, "{x},{y}");
+            assert_eq!(s.screen_pixel(&wm, &d, x, y), BLUE, "{x},{y}");
+        }
+        assert!(wm.region_excludes(top, 255, 265) && !wm.region_excludes(top, 265, 265));
+        // The region moves with the window.
+        let r = Some(Rect::new(255, 255, 295, 285));
+        call(&mut wm, Request::SetRects { hwnd: top, window_rel: r, client_rel: r });
+        assert_eq!(at(&mut wm, 265, 265), top);
+        assert_eq!(at(&mut wm, 262, 262), below);
+        assert_eq!(at(&mut wm, 284, 274), top);
+        let r = Some(Rect::new(250, 250, 290, 280));
+        call(&mut wm, Request::SetRects { hwnd: top, window_rel: r, client_rel: r });
+        // Two rectangles; an empty region hides the whole window.
+        rgn(&mut wm, vec![0, 0, 5, 5, 20, 20, 40, 30]);
+        assert_eq!(at(&mut wm, 252, 252), top);
+        assert_eq!(at(&mut wm, 275, 275), top);
+        assert_eq!(at(&mut wm, 260, 260), below);
+        rgn(&mut wm, Vec::new());
+        for (x, y) in [(250, 250), (265, 265), (279, 269)] {
+            assert_eq!(at(&mut wm, x, y), below, "{x},{y}");
+            assert_eq!(s.screen_pixel(&wm, &d, x, y), BLUE, "{x},{y}");
+        }
+        // A region larger than the window does not enlarge it.
+        rgn(&mut wm, vec![(-50i32) as u32, (-50i32) as u32, 500, 500]);
+        assert_eq!(at(&mut wm, 289, 279), top);
+        assert_ne!(at(&mut wm, 290, 279), top);
+        assert_ne!(at(&mut wm, 249, 250), top);
+        // Removing it gives the whole window back.
+        rgn(&mut wm, vec![10, 10, 30, 20]);
+        assert_eq!(call(&mut wm, Request::WindowRgn { hwnd: top, set: false, rects: Vec::new() }), Reply::Ok {});
+        assert_eq!(at(&mut wm, 255, 255), top);
+        assert_eq!(s.screen_pixel(&wm, &d, 255, 255), RED);
+        let gone = Request::WindowRgn { hwnd: 0xBAD0, set: false, rects: Vec::new() };
+        assert!(matches!(call(&mut wm, gone), Reply::Error { code: 1400 }));
+    }
+
+    /// UpdateLayeredWindow.yaml: the content the call gave is what the
+    /// screen shows, composed by the call's flags over what is below; hits
+    /// pass where a per-pixel alpha is 0; SetLayeredWindowAttributes after
+    /// it takes over; the content goes with the layered style.
+    #[test]
+    fn update_layered_window_content_is_composed_on_the_screen() {
+        const LAYERED: u32 = 0x0008_0000;
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        let below = popup(&mut wm, &mut d, &mut s, 100, 100, 0, BLUE);
+        let top = popup(&mut wm, &mut d, &mut s, 100, 100, LAYERED, RED);
+        let lay = |wm: &mut Wm, op, key, alpha, flags| call(wm, Request::Layered { hwnd: top, op, key, alpha, flags });
+        // Never given attributes or content: nothing of it shows.
+        assert_eq!(s.screen_pixel(&wm, &d, 105, 105), BLUE);
+        assert!(!s.set_content(&wm, below, 1, 1, vec![0; 4]));
+        // 4x1 pixels: opaque green, 50% red (premultiplied), alpha 0 with colour, all zero.
+        let content = vec![0, 0xFF, 0, 0xFF, 0, 0, 0x80, 0x80, 0, 0, 0xFF, 0, 0, 0, 0, 0];
+        assert!(!s.set_content(&wm, top, 4, 2, content.clone()));
+        assert!(s.set_content(&wm, top, 4, 1, content));
+        // ULW_ALPHA with AC_SRC_ALPHA, constant alpha 255.
+        assert_eq!(lay(&mut wm, 2, 0, 0, 0), Reply::Ok {});
+        assert_eq!(lay(&mut wm, 3, 0, 255, 2 | 0x100), Reply::Ok {});
+        let shown = |s: &Surfaces, wm: &Wm, d: &Desktop, x: i32| {
+            let c = s.screen_pixel(wm, d, 100 + x, 100);
+            (c & 0xFF) << 16 | (c & 0xFF00) | (c >> 16) & 0xFF
+        };
+        assert_eq!(shown(&s, &wm, &d, 0), 0x00FF00);
+        assert_eq!(shown(&s, &wm, &d, 1), 0x80007F);
+        assert_eq!(shown(&s, &wm, &d, 2), 0xFF00FF);
+        assert_eq!(shown(&s, &wm, &d, 3), 0x0000FF);
+        // Past the content the window shows nothing.
+        assert_eq!(shown(&s, &wm, &d, 4), 0x0000FF);
+        assert_eq!(s.screen_pixel(&wm, &d, 100, 101), BLUE);
+        assert!(!s.hit_passes(&wm, &d, top, 100, 100));
+        assert!(!s.hit_passes(&wm, &d, top, 101, 100));
+        assert!(s.hit_passes(&wm, &d, top, 102, 100));
+        assert!(s.hit_passes(&wm, &d, top, 103, 100));
+        // The same content with a colour key (green) and no blend.
+        assert_eq!(lay(&mut wm, 3, GREEN, 0, 1), Reply::Ok {});
+        assert_eq!(shown(&s, &wm, &d, 0), 0x0000FF);
+        assert_eq!(shown(&s, &wm, &d, 1), 0x800000);
+        assert!(!s.hit_passes(&wm, &d, top, 103, 100));
+        // SetLayeredWindowAttributes after it: the constant alpha of that call.
+        assert!(matches!(lay(&mut wm, 0, 0, 128, 2), Reply::Ok {}));
+        assert!(matches!(lay(&mut wm, 2, 0, 0, 0), Reply::Error { code: 87 }));
+        assert_eq!(shown(&s, &wm, &d, 0), 0x00807F);
+        // Without the style the content is forgotten.
+        call(&mut wm, Request::SetStyle { hwnd: top, which: -20, value: 0 });
+        s.sync(&wm, &mut d);
+        call(&mut wm, Request::SetStyle { hwnd: top, which: -20, value: LAYERED });
+        assert_eq!(lay(&mut wm, 3, 0, 255, 2 | 0x100), Reply::Ok {});
+        assert_eq!(s.screen_pixel(&wm, &d, 105, 105), RED);
+    }
+
+    /// SetLayeredWindowAttributes.yaml `children`: a WS_CHILD window with
+    /// WS_EX_LAYERED is not created (no last error: code 0), and
+    /// SetWindowLong leaves the bit clear on a child.
+    #[test]
+    fn a_layered_child_window_is_not_created() {
+        const LAYERED: u32 = 0x0008_0000;
+        let mut wm = Wm::new();
+        let parent = window(&mut wm, true);
+        let name: Vec<u16> = "Fill".encode_utf16().collect();
+        let child = |ex| CreateSpec {
+            class: ClassRef::Name { name: name.clone() },
+            style: 0x4000_0000,
+            ex_style: ex,
+            parent: u64::from(parent),
+            cx: 10,
+            cy: 10,
+            ..CreateSpec::default()
+        };
+        assert!(matches!(call(&mut wm, Request::CreateWindow { spec: child(LAYERED) }), Reply::Error { code: 0 }));
+        let Reply::Created { created } = call(&mut wm, Request::CreateWindow { spec: child(0) }) else { panic!() };
+        call(&mut wm, Request::SetStyle { hwnd: created.hwnd, which: -20, value: LAYERED });
+        assert_eq!(wm.layered(created.hwnd), None);
+        let set = Request::Layered { hwnd: created.hwnd, op: 0, key: 0, alpha: 1, flags: 2 };
+        assert!(matches!(call(&mut wm, set), Reply::Error { code: 87 }));
     }
 
     #[test]

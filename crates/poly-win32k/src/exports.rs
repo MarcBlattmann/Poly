@@ -312,6 +312,7 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "CreateEllipticRgn",
     "CreateRectRgn",
     "CreateRectRgnIndirect",
+    "CreateRoundRectRgn",
     "CreateSolidBrush",
     "DeleteDC",
     "DeleteObject",

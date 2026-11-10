@@ -117,6 +117,7 @@ version = "0.0.1"
 dependencies = [
  "poly-win32-gui",
  "poly-win32-rt",
+ "poly-win32k",
 ]
 
 [[package]]

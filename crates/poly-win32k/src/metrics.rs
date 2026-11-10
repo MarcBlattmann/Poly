@@ -238,6 +238,14 @@ pub fn cursor_for_dpi(dpi: u32) -> i32 {
     }
 }
 
+/// The DPI `GetSystemMetricsForDpi` works with for its `dpi` argument:
+/// 0, 0x10000 and 0xFFFFFFFF are refused (ERROR_INVALID_PARAMETER), every
+/// other value above 0xFFFF counts as 0xFFFF (0x7FFFFFFF answers like
+/// 0xFFFF; `GetSystemMetricsForDpi.yaml` `bad_dpi`, `odd_dpis`).
+pub fn metric_dpi(dpi: u32) -> Option<u32> {
+    if dpi == 0 || dpi == 0x10000 || dpi == u32::MAX { None } else { Some(dpi.min(0xFFFF)) }
+}
+
 /// `GetSystemMetricsForDpi(index, dpi)`: the sizes scaled as the oracle
 /// listed them (`GetSystemMetricsForDpi.yaml`), the rest as at 96 DPI.
 pub fn system_metric_for_dpi(index: i32, dpi: u32, d: &Display) -> Option<i32> {
@@ -504,6 +512,137 @@ mod tests {
         assert_eq!(system_metric(0, &Display::SERVICE), Some(1024));
         assert_eq!(system_metric(17, &Display::SERVICE), Some(745));
         assert_eq!(system_metric(61, &Display::SERVICE), Some(1040));
+    }
+
+    /// GetSystemMetricsForDpi.yaml, every value the sheet states:
+    /// `scaling_table`, `not_scaled`, `odd_dpis`, `bad_dpi`, `bad_index`.
+    #[test]
+    fn system_metrics_for_dpi_have_every_value_of_the_sheet() {
+        let d = Display::INTERACTIVE;
+        let f = |index: i32, dpi: u32| system_metric_for_dpi(index, metric_dpi(dpi).unwrap(), &d).unwrap();
+        let dpis = [96u32, 120, 144, 168, 192, 240, 288, 384];
+        let table: [(&[i32], [i32; 8]); 16] = [
+            (&[2, 3, 9, 10, 20, 21], [17, 21, 26, 30, 34, 43, 51, 68]),
+            (&[4, 51], [23, 29, 34, 40, 45, 56, 67, 89]),
+            (&[11, 12], [32, 40, 48, 56, 64, 80, 96, 128]),
+            (&[13, 14], [32, 32, 48, 48, 64, 64, 96, 128]),
+            (&[15], [20, 25, 30, 34, 39, 49, 58, 77]),
+            (&[28, 34], [136, 166, 198, 232, 258, 324, 384, 510]),
+            (&[29, 35], [39, 47, 56, 64, 71, 88, 103, 135]),
+            (&[30], [36, 46, 54, 64, 72, 91, 109, 145]),
+            (&[31, 52, 53], [22, 28, 33, 39, 44, 55, 66, 88]),
+            (&[32, 33], [4, 4, 5, 5, 5, 6, 6, 7]),
+            (&[38, 39], [75, 94, 113, 131, 150, 188, 225, 300]),
+            (&[49, 50], [16, 20, 24, 28, 32, 40, 48, 64]),
+            (&[54, 55], [19, 24, 29, 33, 38, 48, 57, 76]),
+            (&[71, 72], [15, 19, 25, 29, 31, 41, 47, 65]),
+            (&[92], [4, 5, 6, 7, 8, 10, 12, 16]),
+            (&[36, 37], [4; 8]),
+        ];
+        for (indices, want) in table {
+            for &i in indices {
+                assert_eq!(dpis.map(|dpi| f(i, dpi)), want, "SM {i}");
+            }
+        }
+        // Unchanged at all DPIs (also the odd ones).
+        let fixed: [(i32, i32); 37] = [
+            (0, 1920),
+            (1, 1080),
+            (16, 1920),
+            (17, 1033),
+            (5, 1),
+            (6, 1),
+            (7, 3),
+            (8, 3),
+            (45, 2),
+            (46, 2),
+            (36, 4),
+            (37, 4),
+            (68, 4),
+            (69, 4),
+            (83, 1),
+            (84, 1),
+            (56, 8),
+            (47, 160),
+            (48, 28),
+            (57, 160),
+            (58, 28),
+            (59, 1940),
+            (60, 1100),
+            (61, 1936),
+            (62, 1072),
+            (63, 3),
+            (78, 1920),
+            (79, 1080),
+            (80, 1),
+            (81, 1),
+            (82, 1),
+            (85, 4),
+            (93, 516),
+            // Flags and counts that are 0.
+            (19, 0),
+            (43, 0),
+            (75, 0),
+            (86, 0),
+        ];
+        for (i, want) in fixed {
+            for dpi in [96u32, 120, 144, 168, 192, 240, 288, 384, 1, 24, 100, 1000, 0xFFFF] {
+                assert_eq!(f(i, dpi), want, "SM {i} at {dpi}");
+            }
+        }
+        // Rounding at odd DPIs.
+        let odd = |index: i32, pairs: &[(u32, i32)]| {
+            for &(dpi, want) in pairs {
+                assert_eq!(f(index, dpi), want, "SM {index} at {dpi}");
+            }
+        };
+        odd(
+            4,
+            &[
+                (1, 24),
+                (2, 24),
+                (24, 7),
+                (48, 12),
+                (72, 18),
+                (95, 23),
+                (97, 23),
+                (100, 24),
+                (119, 28),
+                (121, 29),
+                (130, 31),
+                (1000, 230),
+                (4000, 918),
+                (0xFFFF, 15019),
+                (0x7FFF_FFFF, 15019),
+            ],
+        );
+        odd(
+            11,
+            &[
+                (1, 0),
+                (2, 1),
+                (24, 8),
+                (48, 16),
+                (72, 24),
+                (95, 32),
+                (100, 33),
+                (1000, 333),
+                (4000, 1333),
+                (0xFFFF, 21845),
+            ],
+        );
+        odd(13, &[(1, 32), (24, 32), (95, 32), (100, 32), (130, 32), (1000, 128), (4000, 128), (0xFFFF, 128)]);
+        odd(92, &[(1, 0), (24, 1), (48, 2), (72, 3), (95, 4), (1000, 42), (4000, 100)]);
+        odd(32, &[(1, 3), (2, 3), (24, 3), (48, 4), (72, 4), (95, 4), (1000, 13), (4000, 45), (0xFFFF, 686)]);
+        // DPIs that are refused; indices that are none.
+        for bad in [0u32, 0x10000, 0xFFFF_FFFF] {
+            assert_eq!(metric_dpi(bad), None);
+        }
+        assert_eq!(metric_dpi(0xFFFF), Some(0xFFFF));
+        assert_eq!(metric_dpi(0x7FFF_FFFF), Some(0xFFFF));
+        for bad in [-1, -100, 100, 1000, 0xFFF, 0x1001, 0x7FFF_FFFF, i32::MIN] {
+            assert_eq!(system_metric_for_dpi(bad, 96, &d), None, "{bad}");
+        }
     }
 
     #[test]

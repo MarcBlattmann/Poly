@@ -1,9 +1,12 @@
 //! Layered windows and window regions (ADR 0172): `SetLayeredWindowAttributes`,
 //! `GetLayeredWindowAttributes`, `UpdateLayeredWindow`, `SetWindowRgn`,
 //! `GetWindowRgn` and `GetWindowRgnBox`. The attributes belong to the kernel
-//! (`poly_win32k::guic::Layered`); the regions of this process's windows are
-//! kept here as rectangle lists (the system owns the region a caller passes:
-//! its handle is deleted at once).
+//! (`poly_win32k::guic::Layered`), which also gets the content
+//! `UpdateLayeredWindow` gives a window and composes it on the screen; the
+//! regions of this process's windows are kept here as rectangle lists (the
+//! system owns the region a caller passes: its handle is deleted at once)
+//! and told to the kernel, which leaves the rest of the window out of hit
+//! testing and of what the screen shows.
 
 use super::{H, SYS, SpinLock, call, info, set_last_error};
 use alloc::vec::Vec;
@@ -105,7 +108,7 @@ pub unsafe extern "system" fn UpdateLayeredWindow(
     psize: *const i32,
     src: usize,
     ppt_src: *const i32,
-    _key: u32,
+    key: u32,
     pblend: *const u8,
     flags: u32,
 ) -> i32 {
@@ -143,6 +146,7 @@ pub unsafe extern "system" fn UpdateLayeredWindow(
         }
     }
     // The source: NULL, a screen DC, or a memory DC holding a real bitmap.
+    let mut src_bitmap = 0;
     if src != 0 {
         // SAFETY: gdi32 checks handles.
         let kind = unsafe { GetObjectType(src) };
@@ -153,6 +157,7 @@ pub unsafe extern "system" fn UpdateLayeredWindow(
                 unsafe {
                     let bmp = GetCurrentObject(src, OBJ_BITMAP);
                     let mut bm = [0u8; 32];
+                    src_bitmap = bmp;
                     bmp != 0
                         && GetObjectW(bmp, 32, bm.as_mut_ptr()) > 0
                         && !(i32::from_le_bytes([bm[4], bm[5], bm[6], bm[7]]) == 1
@@ -166,6 +171,19 @@ pub unsafe extern "system" fn UpdateLayeredWindow(
             set_last_error(ERROR_GEN_FAILURE);
             return 0;
         }
+    }
+    // Every check passed: the window shows its content from now on,
+    // composed as this call says (the constant alpha and AC_SRC_ALPHA of
+    // the blend, the colour key).
+    let (constant_alpha, src_alpha) = if pblend.is_null() {
+        (255, false)
+    } else {
+        // SAFETY: the caller's BLENDFUNCTION (4 bytes).
+        unsafe { (*pblend.add(2), *pblend.add(3) & 1 != 0) }
+    };
+    match layered(hwnd, 3, key, constant_alpha, (flags & 7) | if src_alpha { 0x100 } else { 0 }) {
+        Reply::Ok {} => {}
+        r => return fail(r),
     }
     let Some(i) = info(hwnd) else { return 0 };
     let (mut x, mut y) = (i.window.left, i.window.top);
@@ -201,6 +219,17 @@ pub unsafe extern "system" fn UpdateLayeredWindow(
             unsafe { BitBlt(dc, 0, 0, cx, cy, src, sx, sy, SRCCOPY) };
             super::ReleaseDC(hwnd, dc);
         }
+        // The kernel composes the screen from the pixels themselves, with
+        // their alpha (a screen DC as the source has no bitmap to give).
+        let pixels = if src_bitmap != 0 { super::clipboard::bitmap_pixels(src_bitmap) } else { None };
+        let content = pixels.and_then(|(bw, bh, px)| {
+            poly_win32k::guic::ulw_content(&px, bw, bh, sx, sy, cx, cy, poly_win32k::surfaces::MAX_CONTENT)
+        });
+        let (width, height, pixels) = match content {
+            Some(c) => (cx as u32, cy as u32, c),
+            None => (0, 0, Vec::new()),
+        };
+        call(Request::LayeredContent { hwnd: hwnd as u32, width, height, pixels });
     }
     1
 }
@@ -241,6 +270,11 @@ pub extern "system" fn SetWindowRgn(hwnd: H, rgn: usize, redraw: i32) -> i32 {
         unsafe { DeleteObject(rgn) };
     }
     let removing = new.is_none();
+    // The kernel leaves what is outside the region out of hit testing and
+    // of what the screen shows (SetWindowRgn.yaml `shape_hit_test`).
+    let rects: Vec<u32> =
+        new.iter().flatten().flat_map(|r| [r.left as u32, r.top as u32, r.right as u32, r.bottom as u32]).collect();
+    call(Request::WindowRgn { hwnd: i.hwnd, set: !removing, rects });
     REGIONS.with(|r| {
         r.retain(|e| e.0 != i.hwnd);
         if let Some(v) = new {

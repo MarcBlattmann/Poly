@@ -1179,11 +1179,10 @@ pub extern "system" fn GetSystemMetrics(index: i32) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSystemMetricsForDpi(index: i32, dpi: u32) -> i32 {
     // 0, 0x10000 and 0xFFFFFFFF fail; larger values count as 0xFFFF.
-    if dpi == 0 || dpi == 0x10000 || dpi == u32::MAX {
+    let Some(dpi) = metrics::metric_dpi(dpi) else {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
-    }
-    let dpi = dpi.min(0xFFFF);
+    };
     match metrics::system_metric_for_dpi(index, dpi, &u::screen(&SYS)) {
         Some(v) => v,
         None => {

@@ -77,19 +77,40 @@ clip set to it. `QueryDisplayConfig` and its two companions fail with `ERROR_NOT
 
 The attributes of `SetLayeredWindowAttributes` live in the window (`guic::Layered`); the
 rules of `UpdateLayeredWindow` (argument checks, ordering with `SetLayeredWindowAttributes`)
-are in `user32`, and its content is blitted into the window's surface. Per-pixel alpha,
-colour keys and hit testing through transparent pixels are not composed by the compositor
-yet: a layered window shows its pixels opaquely. `SetWindowRgn` keeps the region's
-rectangles in `user32` (the caller's handle is deleted, the system owning it), sends the
-frame messages with flags `0x1001837`, and `GetWindowRgn`/`GetWindowRgnBox` answer from
-them; the compositor does not clip to the shape yet.
+are in `user32`, and its content is blitted into the window's surface. `SetWindowRgn` keeps
+the region's rectangles in `user32` (the caller's handle is deleted, the system owning it),
+sends the frame messages with flags `0x1001837`, and `GetWindowRgn`/`GetWindowRgnBox` answer
+from them.
+
+What Windows itself shows of such windows is win32k's (rework after the held-out run):
+
+- `UpdateLayeredWindow` also hands win32k the source bitmap's pixels with their alpha
+  (`Request::LayeredContent`, kept per window in `Surfaces`, at most 1 MiB) and how to show
+  them (`Request::Layered` op 3: the `ULW_*` flags, the colour key, the blend's constant
+  alpha and `AC_SRC_ALPHA`). `guic::Layered::ulw_pixel` composes a pixel over what is below
+  by the sheet's rules (premultiplied per-pixel alpha, constant alpha, colour key,
+  `ULW_OPAQUE`); a pixel without alpha passes hits through. The window's surface cannot
+  hold this: it is `B, G, R, x`, and a content must outlive hiding and resizing.
+- `SetWindowRgn` also tells win32k the region (`Request::WindowRgn`, a `rgn::Rgn` in the
+  window): `WindowFromPoint` (so mouse input too) and the screen's pixels leave out what is
+  outside it.
+- Both are what `GetPixel` on the screen DC and `WindowFromPoint` answer (win32k's own
+  composition, `Surfaces::screen_pixel` and `hit_passes`). Poly's compositor still shows
+  such windows opaque and unclipped: the desktop link carries neither alpha nor a shape.
+- A resized window keeps what it showed from its top-left corner (`gdi32` copies the old
+  surface DIB into the new one, and a window that only shrank commits it), as only the area
+  it gained is invalid.
+- `gdi32` gains `CreateRoundRectRgn` (`poly_gdi::region::Region::round_rect`), which the
+  region sheets use.
 
 ### 4. Icons and cursors are `user32` objects made of pixels
 
 An icon or cursor is an AND mask and BGRA colour (or a mask of twice the height),
 a hotspot and a lifetime (`user32::icons`); `GetIconInfo` makes fresh GDI bitmaps of it
 each call. System cursors keep slice B's handles, the seven system icons are shared
-handles with Poly's own artwork. `LoadImageW` reads `.ico`, `.cur` and `.bmp` files
+handles with Poly's own artwork (`icofile::system_icon`: a plain shape per icon that covers
+exactly as many of the 32 x 32 pixels as the oracle's icon draws, which is all the sheet
+tells about their look). `LoadImageW` reads `.ico`, `.cur` and `.bmp` files
 (`poly_win32k::icofile`), picks and scales the closest image (hotspots scale with it).
 `DrawIconEx` draws pixel by pixel with `GetPixel`/`SetPixelV`.
 
@@ -120,6 +141,8 @@ Learn pages and the plainest answers the gap map shows Chrome accepts.
   the DPI tables; `Request` tags 100..106 and a few `WinInfo` fields (`dpi`, `creating`, `ime`).
 - New DLLs `shcore.dll`, `dwmapi.dll`, `imm32.dll`; `user32.dll` modules `clipboard`,
   `display`, `icons`, `layered`, `misc`, `s3`.
+- The rework adds `Request` tags 109 (`WindowRgn`) and 110 (`LayeredContent`) and op 3 of
+  `Layered`.
 - Not done here: a compositor cursor bridge for created cursors, shaped and translucent
-  windows on the screen, the clipboard bridge to a desktop clipboard, display-config
-  adapters, WinEvent delivery.
+  windows in Poly's compositor (win32k's own screen and hit test have them), the clipboard
+  bridge to a desktop clipboard, display-config adapters, WinEvent delivery.

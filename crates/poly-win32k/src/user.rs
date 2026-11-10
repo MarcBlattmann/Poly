@@ -377,7 +377,10 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     let c = match env.call(Request::CreateWindow { spec }) {
         Reply::Created { created } => created,
         Reply::Error { code } => {
-            env.set_last_error(code);
+            // Code 0: refused without a last error (a layered child window).
+            if code != 0 {
+                env.set_last_error(code);
+            }
             return 0;
         }
         _ => return 0,

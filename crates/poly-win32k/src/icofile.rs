@@ -23,6 +23,61 @@ pub struct Image {
     pub hot: (i32, i32),
 }
 
+/// How many of the 32 x 32 pixels each system icon leaves alone when it is
+/// drawn (`IDI_APPLICATION` 32512 .. `IDI_SHIELD` 32518; `LoadIconW.yaml`
+/// `system_icons`: "background 160, 168, 168, 493, 168, 160, 416 of 1024
+/// remain").
+pub const SYSTEM_ICON_BACKGROUND: [usize; 7] = [160, 168, 168, 493, 168, 160, 416];
+
+/// The colours (`B, G, R`) of the system icons.
+const SYSTEM_ICON_COLORS: [[u8; 3]; 7] =
+    [[200, 120, 40], [30, 30, 200], [200, 160, 30], [30, 200, 220], [200, 80, 80], [160, 60, 160], [60, 160, 60]];
+
+/// One of the seven system icons (`index` 0 is `IDI_APPLICATION`): 32 x 32
+/// with the hotspot in the middle. The artwork is Poly's own, a plain
+/// shape in one colour (a rounded square for the application and logo
+/// icons, a disc for the error, question and information icons, a triangle
+/// for the warning, a shield); each covers exactly as many pixels as the
+/// oracle's icon of that id draws (see [`SYSTEM_ICON_BACKGROUND`]), the
+/// ones nearest the middle of the shape.
+pub fn system_icon(index: usize) -> Image {
+    let index = index % 7;
+    // How far a pixel is from the middle of the shape (twice the
+    // coordinates, so the centre lies between the pixels).
+    let rank = |x: i64, y: i64| -> i64 {
+        let (u, v) = (2 * x - 31, 2 * y - 31);
+        let au = u.abs();
+        match index {
+            0 | 5 => u * u * u * u + v * v * v * v,
+            3 => v.max(2 * au - v),
+            6 => (6 * au).max(-6 * v).max(5 * (v + au)),
+            _ => u * u + v * v,
+        }
+    };
+    let mut order: Vec<(i64, i64, usize)> = Vec::with_capacity(1024);
+    for y in 0..32i64 {
+        for x in 0..32i64 {
+            order.push((rank(x, y), (2 * x - 31).abs(), (y * 32 + x) as usize));
+        }
+    }
+    order.sort_unstable();
+    let covered = 1024 - SYSTEM_ICON_BACKGROUND[index];
+    let mut img = Image {
+        w: 32,
+        h: 32,
+        bgra: alloc::vec![0; 32 * 32 * 4],
+        and: alloc::vec![1; 32 * 32],
+        alpha: true,
+        hot: (16, 16),
+    };
+    let c = SYSTEM_ICON_COLORS[index];
+    for &(_, _, at) in order.iter().take(covered) {
+        img.bgra[at * 4..at * 4 + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
+        img.and[at] = 0;
+    }
+    img
+}
+
 fn rd16(b: &[u8], at: usize) -> Option<u16> {
     b.get(at..at + 2).map(|s| u16::from_le_bytes([s[0], s[1]]))
 }
@@ -112,6 +167,34 @@ pub fn scale(img: &Image, w: i32, h: i32) -> Image {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// LoadIconW.yaml `system_icons`: 32 x 32, hotspot 16,16, and drawn
+    /// over a background the icons leave 160, 168, 168, 493, 168, 160 and
+    /// 416 of the 1024 pixels alone.
+    #[test]
+    fn system_icons_cover_as_many_pixels_as_the_oracles() {
+        for (i, want) in [160usize, 168, 168, 493, 168, 160, 416].into_iter().enumerate() {
+            let img = system_icon(i);
+            assert_eq!((img.w, img.h, img.hot, img.alpha), (32, 32, (16, 16), true));
+            let transparent = img.and.iter().filter(|&&a| a != 0).count();
+            assert_eq!(transparent, want, "icon {i}");
+            for (at, &a) in img.and.iter().enumerate() {
+                let p = &img.bgra[at * 4..at * 4 + 4];
+                // Opaque where the mask is clear, nothing where it is set;
+                // never the magenta a test draws over.
+                assert_eq!(p[3], if a == 0 { 255 } else { 0 }, "icon {i} pixel {at}");
+                assert_ne!((p[0], p[1], p[2]), (255, 0, 255));
+            }
+            // The middle is always drawn.
+            assert_eq!(img.and[16 * 32 + 16], 0, "icon {i}");
+        }
+        // Different artwork per id (the logo shares the application's shape, not its colour).
+        for a in 0..7 {
+            for b in a + 1..7 {
+                assert_ne!(system_icon(a), system_icon(b), "{a} {b}");
+            }
+        }
+    }
 
     fn ico(kind: u16, w: u8, hot: (u16, u16)) -> Vec<u8> {
         let n = usize::from(w);

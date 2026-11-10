@@ -312,7 +312,10 @@ crate::wire_enum! {
         /// `Ok` (once) or for the thread a `Value` with the previous one.
         101 => Dpi { set: bool, process: bool, awareness: u8 },
         /// Layered attributes: `op` 0 set (a `Value` for the first set, else `Ok`), 1 get
-        /// (a `Value`: key, alpha << 32, flags << 40), 2 mark `UpdateLayeredWindow`.
+        /// (a `Value`: key, alpha << 32, flags << 40), 2 whether `UpdateLayeredWindow`
+        /// may be used (not after a set), 3 an `UpdateLayeredWindow` succeeded: `key` is
+        /// its colour key, `alpha` the blend's constant alpha, `flags` the `ULW_*` flags
+        /// with 0x100 for `AC_SRC_ALPHA`.
         103 => Layered { hwnd: u32, op: u8, key: u32, alpha: u8, flags: u32 },
         /// An input-context operation (ADR 0172): an `Ime`.
         105 => Ime { op: crate::ime::ImeOp },
@@ -322,6 +325,13 @@ crate::wire_enum! {
         107 => CursorShape { hwnd: u32, idc: u16 },
         /// What the screen shows at a point: a `Value`, the `COLORREF`.
         108 => ScreenPixel { x: i32, y: i32 },
+        /// `SetWindowRgn`: the window's region as left, top, right, bottom
+        /// quadruples in window coordinates (`set` false: none): an `Ok`.
+        109 => WindowRgn { hwnd: u32, set: bool, rects: Vec<u32> },
+        /// The content `UpdateLayeredWindow` gave a layered window: `width` x
+        /// `height` pixels (`B, G, R, A`, top-down) from the window's top-left
+        /// (`width` 0: none): an `Ok`.
+        110 => LayeredContent { hwnd: u32, width: u32, height: u32, pixels: Vec<u8> },
     }
 }
 
@@ -399,6 +409,8 @@ mod tests {
             Request::Clip { op: crate::clip::ClipOp::Set { format: 13, handle: 5, data: Some(vec![1, 2]) } },
             Request::Dpi { set: true, process: false, awareness: 2 },
             Request::Layered { hwnd: 1, op: 0, key: 2, alpha: 3, flags: 3 },
+            Request::WindowRgn { hwnd: 1, set: true, rects: vec![1, 2, 3, 4] },
+            Request::LayeredContent { hwnd: 1, width: 1, height: 1, pixels: vec![1, 2, 3, 4] },
         ] {
             assert_eq!(decode::<Request>(&encode(&r)), Some(r));
         }

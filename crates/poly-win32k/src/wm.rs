@@ -154,6 +154,8 @@ struct Window {
     lay: guic::Layered,
     /// The input-context association (`ime::Assoc::code`).
     ime: u32,
+    /// The window region (`SetWindowRgn`), in window coordinates.
+    region: Option<crate::rgn::Rgn>,
 }
 
 #[derive(Debug, Default)]
@@ -483,6 +485,22 @@ impl Wm {
         ))
     }
 
+    /// A window's layered state, if it has `WS_EX_LAYERED`.
+    pub fn layered(&self, h: u32) -> Option<guic::Layered> {
+        let w = self.get(u64::from(h))?;
+        (w.ex_style & guic::WS_EX_LAYERED != 0).then_some(w.lay)
+    }
+
+    /// Whether window `h` has a region (`SetWindowRgn`) that leaves out
+    /// the screen point: nothing of the window is drawn or hit there
+    /// (`SetWindowRgn.yaml` `shape_hit_test`).
+    pub fn region_excludes(&self, h: u32, x: i32, y: i32) -> bool {
+        let Some(w) = self.get(u64::from(h)) else { return false };
+        let Some(rgn) = &w.region else { return false };
+        let (ox, oy) = self.parent_origin(h);
+        !rgn.contains(x - ox - w.window_rel.left, y - oy - w.window_rel.top)
+    }
+
     /// A window's text.
     pub fn text(&self, h: u32) -> Option<&[u16]> {
         self.get(u64::from(h)).map(|w| w.text.as_slice())
@@ -669,6 +687,12 @@ impl Wm {
         if !child && s.menu != 0 {
             // No menus exist yet, so no value is a menu handle.
             return err(ERROR_INVALID_MENU_HANDLE);
+        }
+        // A layered child window needs a manifest that declares Windows 8
+        // support: without one it is not created, and no last error is set
+        // (SetLayeredWindowAttributes.yaml `children`).
+        if child && s.ex_style & guic::WS_EX_LAYERED != 0 {
+            return err(0);
         }
         // A message-only window of style 0 is overlapped too (its client
         // area is inside a caption frame, ClientToScreen.yaml cts_states).
@@ -1178,11 +1202,24 @@ impl Wm {
                 }
                 Reply::Value { value: u64::from(l.key) | u64::from(l.alpha) << 32 | u64::from(l.flags) << 40 }
             }
+            // UpdateLayeredWindow is refused once attributes are set.
+            2 => {
+                if l.attrs {
+                    return err(ERROR_INVALID_PARAMETER);
+                }
+                Reply::Ok {}
+            }
+            // A successful UpdateLayeredWindow: the window shows its
+            // content from now on, composed as the call said.
             _ => {
                 if l.attrs {
                     return err(ERROR_INVALID_PARAMETER);
                 }
                 l.update = true;
+                l.ulw_flags = flags & 7;
+                l.ulw_src_alpha = flags & 0x100 != 0;
+                l.ulw_key = key;
+                l.ulw_alpha = alpha;
                 Reply::Ok {}
             }
         }
@@ -1772,7 +1809,20 @@ impl Wm {
                 Some(w) => Reply::Value { value: u64::from(core::mem::replace(&mut w.ime, code)) },
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
-            Request::CursorShape { .. } | Request::ScreenPixel { .. } => Reply::Ok {},
+            Request::CursorShape { .. } | Request::ScreenPixel { .. } | Request::LayeredContent { .. } => Reply::Ok {},
+            Request::WindowRgn { hwnd, set, rects } => match self.get_mut(u64::from(hwnd)) {
+                Some(w) => {
+                    w.region = set.then(|| {
+                        let rs: Vec<Rect> = rects
+                            .chunks_exact(4)
+                            .map(|c| Rect::new(c[0] as i32, c[1] as i32, c[2] as i32, c[3] as i32))
+                            .collect();
+                        crate::rgn::Rgn::from_rects(&rs)
+                    });
+                    Reply::Ok {}
+                }
+                None => err(ERROR_INVALID_WINDOW_HANDLE),
+            },
             Request::Dpi { set, process, awareness } => self.dpi_op(ctx, set, process, awareness),
             Request::Post { hwnd, msg, w, l } => {
                 if hwnd == 0 {
@@ -1943,6 +1993,7 @@ impl Window {
             dpi: 0,
             lay: guic::Layered::default(),
             ime: u32::MAX,
+            region: None,
         }
     }
 }

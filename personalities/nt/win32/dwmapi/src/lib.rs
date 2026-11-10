@@ -9,6 +9,7 @@
 
 use poly_win32_gui::set_last_error;
 use poly_win32_rt as _;
+use poly_win32k::guic;
 
 #[link(name = "user32", kind = "raw-dylib")]
 unsafe extern "system" {
@@ -39,13 +40,7 @@ const E_INSUFFICIENT: i32 = 0x8007_007Au32 as i32;
 const DWM_E_NOT_PRESENTING: i32 = 0x8898_0090u32 as i32;
 
 const WS_CHILD: u32 = 0x4000_0000;
-const WS_POPUP: u32 = 0x8000_0000;
 const WS_CAPTION: u32 = 0x00C0_0000;
-const WS_THICKFRAME: u32 = 0x0004_0000;
-const WS_SYSMENU: u32 = 0x0008_0000;
-const WS_MINIMIZEBOX: u32 = 0x0002_0000;
-const WS_MAXIMIZEBOX: u32 = 0x0001_0000;
-const WS_EX_TOOLWINDOW: u32 = 0x80;
 const GWL_STYLE: i32 = -16;
 const GWL_EXSTYLE: i32 = -20;
 
@@ -336,38 +331,16 @@ pub unsafe extern "system" fn DwmGetWindowAttribute(hwnd: usize, attr: u32, out:
             let mut r = [0i32; 4];
             // SAFETY: a RECT out.
             unsafe { GetWindowRect(hwnd, r.as_mut_ptr()) };
-            let s = style(hwnd);
-            let inset = if s & WS_CAPTION == WS_CAPTION {
-                7
-            } else if s & WS_POPUP != 0 && s & WS_THICKFRAME != 0 {
-                6
-            } else {
-                0
-            };
+            let inset = guic::dwm_frame_inset(style(hwnd));
             put_rect(out, [r[0] + inset, r[1], r[2] - inset, r[3] - inset])
         }
         CAPTION_BUTTON_BOUNDS => {
             let mut r = [0i32; 4];
             // SAFETY: a RECT out.
             unsafe { GetWindowRect(hwnd, r.as_mut_ptr()) };
-            let s = style(hwnd);
             // SAFETY: a user32 call on a window handle.
             let ex = unsafe { GetWindowLongW(hwnd, GWL_EXSTYLE) as u32 };
-            let w = r[2] - r[0];
-            let b: [i32; 4] = if s & WS_CAPTION == WS_CAPTION {
-                if s & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX) != 0 && ex & WS_EX_TOOLWINDOW == 0 {
-                    [w - 153, 0, w - 7, 30]
-                } else if s & WS_SYSMENU != 0 {
-                    [w - 56, 0, w - 7, 30]
-                } else {
-                    [w - 7, 0, w - 7, 30]
-                }
-            } else if s & WS_THICKFRAME != 0 {
-                [w - 6, 0, w - 6, 29]
-            } else {
-                [0, 0, 0, 0]
-            };
-            put_rect(out, b)
+            put_rect(out, guic::dwm_caption_buttons(style(hwnd), ex, r[2] - r[0]))
         }
         _ => E_INVALIDARG,
     }

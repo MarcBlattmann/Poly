@@ -279,8 +279,8 @@ pub extern "system" fn ImmDestroyContext(himc: usize) -> i32 {
     }
 }
 
-/// Whether `himc` is a context: NULL is not (and is no error to callers
-/// that allow it); a bad handle sets ERROR_INVALID_HANDLE.
+/// Whether `himc` is a context: a bad handle (NULL too, for the callers
+/// that pass it on) sets ERROR_INVALID_HANDLE.
 fn valid(himc: usize) -> bool {
     if himc > u32::MAX as usize {
         set_last_error(ERROR_INVALID_HANDLE);
@@ -351,7 +351,9 @@ pub extern "system" fn ImmNotifyIME(himc: usize, action: u32, index: u32, _value
 /// COMPOSITIONFORM (28 bytes) and CANDIDATEFORM (32 bytes).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ImmSetCompositionWindow(himc: usize, form: *const u8) -> i32 {
-    if himc == 0 || !valid(himc) || form.is_null() {
+    // NULL, a made-up or a destroyed context: ERROR_INVALID_HANDLE
+    // (ImmSetCompositionWindow.yaml `bad_context`).
+    if !valid(himc) || form.is_null() {
         return 0;
     }
     // SAFETY: a COMPOSITIONFORM.
@@ -389,7 +391,9 @@ pub unsafe extern "system" fn ImmGetCompositionWindow(himc: usize, form: *mut u8
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ImmSetCandidateWindow(himc: usize, form: *const u8) -> i32 {
-    if himc == 0 || !valid(himc) || form.is_null() {
+    // NULL, a made-up or a destroyed context: ERROR_INVALID_HANDLE
+    // (ImmSetCandidateWindow.yaml `bad_context`).
+    if !valid(himc) || form.is_null() {
         return 0;
     }
     // SAFETY: a CANDIDATEFORM (dwIndex first).
