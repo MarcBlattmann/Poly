@@ -150,6 +150,22 @@ pub fn ansi_block_is_well_formed(block: &[u8]) -> bool {
     block.split(|&b| b == 0).filter(|s| !s.is_empty()).all(|s| s.contains(&b'='))
 }
 
+/// The answer of `GetProcessMitigationPolicy(ProcessMitigationOptionsMask)`:
+/// the 64-bit masks 0x3333333333333303 and 0x0333333333333330, little
+/// endian, as the spec sheet recorded them (zeros follow for a longer
+/// buffer).
+pub const fn mitigation_options_mask() -> [u8; 16] {
+    let (a, b) = (0x3333_3333_3333_3303u64.to_le_bytes(), 0x0333_3333_3333_3330u64.to_le_bytes());
+    let mut out = [0u8; 16];
+    let mut i = 0;
+    while i < 8 {
+        out[i] = a[i];
+        out[8 + i] = b[i];
+        i += 1;
+    }
+    out
+}
+
 /// A block as the child gets it: both final NULs present.
 pub fn normalized_block(block: &[u16]) -> Vec<u16> {
     let mut v = block.to_vec();
@@ -406,6 +422,14 @@ pub fn handle_flag_bits(inherit: bool, protect_from_close: bool) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mitigation_mask_bytes() {
+        assert_eq!(
+            mitigation_options_mask(),
+            [0x03, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x30, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x03]
+        );
+    }
 
     #[test]
     fn ansi_environment_blocks() {

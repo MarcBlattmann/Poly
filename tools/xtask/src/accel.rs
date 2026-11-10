@@ -15,11 +15,32 @@
 //! CPU's feature set, under TCG everything TCG emulates. CI runs the
 //! self-test boots under TCG as well (ADR 0077), so code paths only one of
 //! them takes stay tested.
+//!
+//! `POLY_QEMU_CPU=<model>` passes `-cpu <model>` to every boot that does not
+//! name a model itself. It is for experiments: `qemu64` has no invariant TSC
+//! (CPUID.80000007H:EDX bit 8), which real machines have and programs test
+//! for with CPUID (Chrome for Windows takes `timeGetTime` instead of
+//! `QueryPerformanceCounter` without it, ADR 0155);
+//! `POLY_QEMU_CPU=host,+invtsc` under KVM shows the guest the host's.
 
 use std::sync::{Once, OnceLock};
 
 /// The environment variable that chooses the accelerator.
 pub const ENV: &str = "POLY_QEMU_ACCEL";
+
+/// The environment variable that names QEMU's CPU model.
+pub const CPU_ENV: &str = "POLY_QEMU_CPU";
+
+/// QEMU's arguments for `POLY_QEMU_CPU=<var>` (None: unset): `-cpu <model>`,
+/// or nothing (QEMU's default model) when it is unset or empty. They come
+/// before a boot's own arguments, so a boot that names a model keeps it
+/// (QEMU takes the last `-cpu`).
+pub fn cpu_args(var: Option<&str>) -> Vec<String> {
+    match var.map(str::trim) {
+        Some(model) if !model.is_empty() => vec!["-cpu".to_string(), model.to_string()],
+        _ => Vec::new(),
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Accel {
@@ -166,6 +187,15 @@ pub fn get() -> Accel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_cpu_model_is_passed_only_when_named() {
+        assert!(cpu_args(None).is_empty());
+        assert!(cpu_args(Some("")).is_empty());
+        assert!(cpu_args(Some("  ")).is_empty());
+        assert_eq!(cpu_args(Some("host,+invtsc")), ["-cpu", "host,+invtsc"]);
+        assert_eq!(cpu_args(Some(" max ")), ["-cpu", "max"]);
+    }
 
     #[test]
     fn chooses_kvm_when_usable_unless_told_otherwise() {

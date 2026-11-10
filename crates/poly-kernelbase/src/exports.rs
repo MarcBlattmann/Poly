@@ -312,6 +312,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetSystemDefaultLangID", "api-ms-win-core-localization-l1-2-0"),
     ("GetUserDefaultLocaleName", "api-ms-win-core-localization-l1-2-0"),
     ("GetSystemDefaultLocaleName", "api-ms-win-core-localization-l1-2-0"),
+    ("GetThreadPreferredUILanguages", "api-ms-win-core-localization-l1-2-0"),
     ("IsValidLocale", "api-ms-win-core-localization-l1-2-0"),
     ("GetLocaleInfoW", "api-ms-win-core-localization-l1-2-0"),
     ("LCMapStringW", "api-ms-win-core-localization-l1-2-0"),

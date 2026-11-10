@@ -325,11 +325,14 @@ pub unsafe extern "system" fn PrivilegeCheck(token: Handle, set: *mut u8, result
     let mut r = 0u8;
     // SAFETY: the caller's privilege set.
     let st = unsafe { NtPrivilegeCheck(token, set, &mut r) };
-    if !st.is_success() {
+    // The answer is stored whatever the call did: a failing call leaves
+    // FALSE there (the sheet), a successful one exactly 0 or 1.
+    let ok = st.is_success();
+    // SAFETY: the caller's variable.
+    unsafe { result.write(i32::from(ok && r != 0)) };
+    if !ok {
         return fail_status(st, FALSE);
     }
-    // SAFETY: the caller's variable.
-    unsafe { result.write(i32::from(r)) };
     TRUE
 }
 

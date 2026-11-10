@@ -79,9 +79,16 @@ summary: >
   and -ENOENT once the id was answered. ioctl(fd,
   SECCOMP_IOCTL_NOTIF_SEND=0xc0182101, &struct seccomp_notif_resp {u64 id;
   s64 val; s32 error; u32 flags}) answers: error 0 makes the call return
-  val (1234 -> 1234), a negative error (-EPERM) makes it return that
-  error, and flags SECCOMP_USER_NOTIF_FLAG_CONTINUE (1) lets the call run
-  for real (sched_yield -> 0) and ignores val and error. Calls that the
+  val (1234 -> 1234), a non-zero error makes it return the error value as
+  it is (-EPERM -> -EPERM; val 77 with error -5 -> -5, the error wins; a
+  positive error 5 is accepted and the call returns 5), and flags
+  SECCOMP_USER_NOTIF_FLAG_CONTINUE (1) lets the call run for real
+  (sched_yield -> 0). With FLAG_CONTINUE both val and error must be 0: a
+  non-zero val, a non-zero error or both make SEND fail with EINVAL. Any
+  flag bit other than bit 0 (2, 3, 0x80000000) is EINVAL too. A SEND that
+  fails with EINVAL answers nothing: the caller keeps waiting, ID_VALID
+  is still 0 and a later correct SEND for the same id works. SEND for an
+  id that no caller waits with (never handed out) is ENOENT. Calls that the
   filter does not send to USER_NOTIF (getpid) are not intercepted. RECV
   with a buffer that is not all zero is -EINVAL at once. Answering an id a
   second time right after the first answer may be ENOENT or EINPROGRESS
@@ -99,6 +106,7 @@ errors:
   clone3_rule: "ENOSYS (38) from the filter"
   notif_recv_dirty: "EINVAL (22): buffer not all zero"
   notif_unknown_id: "ENOENT (2): ID_VALID or SEND for an id that is not waiting (answered, or caller gone)"
+  notif_send_invalid: "EINVAL (22): SEND with FLAG_CONTINUE and a non-zero val or error; SEND with a flag bit other than 1; the notification stays pending"
 side_effects: >
   Filters are never removed. TSYNC changes other threads of the caller's
   process. A notification blocks the intercepted caller until the

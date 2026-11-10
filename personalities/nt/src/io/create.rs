@@ -181,8 +181,11 @@ impl CreateHook<'_> {
             if self.np.is_some() {
                 return Err(STATUS_OBJECT_NAME_INVALID);
             }
+            // `\Device\NamedPipe\` is the file system's root; without the
+            // final backslash it is the device itself.
+            let target = if r.remaining.is_empty() { Target::PipeDevice } else { Target::PipeRoot };
             let object = new_file_object(om, cookie, self.thread)?;
-            self.io.files.insert(cookie, self.record(object, Target::PipeRoot, FileType::Directory));
+            self.io.files.insert(cookie, self.record(object, target, FileType::Directory));
             self.information = FILE_OPENED;
             self.made = Some(cookie);
             return Ok(object);
@@ -193,7 +196,7 @@ impl CreateHook<'_> {
         let key = names::fold(remaining);
         let (instance, server, information) = match self.np {
             Some(c) => {
-                let (id, info) = self.io.np_server_create(&key, &c, pid)?;
+                let (id, info) = self.io.np_server_create(&key, remaining, &c, pid)?;
                 (id, true, info)
             }
             None => (self.io.np_client_connect(&key, self.params.access, pid)?, false, FILE_OPENED),

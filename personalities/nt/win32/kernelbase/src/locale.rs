@@ -61,6 +61,43 @@ pub unsafe extern "system" fn GetSystemDefaultLocaleName(buf: *mut u16, cch: i32
     unsafe { GetUserDefaultLocaleName(buf, cch) }
 }
 
+/// `GetThreadPreferredUILanguages`: the list `poly_kernelbase::uilang` builds (Poly has one
+/// UI language), as a double-NUL-terminated list; with no buffer and a size of 0 only the
+/// count and the size needed.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetThreadPreferredUILanguages(
+    flags: u32,
+    count: *mut u32,
+    buf: *mut u16,
+    cch: *mut u32,
+) -> i32 {
+    use poly_kernelbase::uilang;
+    if count.is_null() || cch.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, 0);
+    }
+    let list = match uilang::thread_preferred(flags) {
+        Ok(l) => l,
+        Err(e) => return fail(e, 0),
+    };
+    // SAFETY: the caller's size variable.
+    let a = uilang::answer(&list, !buf.is_null(), unsafe { cch.read_unaligned() });
+    // SAFETY: the caller's out variables; the buffer holds `*cch >= a.size` characters when
+    // there is text to copy.
+    unsafe {
+        if a.error != Some(ERROR_INVALID_PARAMETER) {
+            count.write_unaligned(a.count);
+            cch.write_unaligned(a.size);
+        }
+        if let Some(text) = &a.text {
+            core::ptr::copy_nonoverlapping(text.as_ptr(), buf, text.len());
+        }
+    }
+    match a.error {
+        Some(e) => fail(e, 0),
+        None => 1,
+    }
+}
+
 /// `IsValidLocale`.
 #[unsafe(no_mangle)]
 pub extern "system" fn IsValidLocale(lcid: u32, flags: u32) -> i32 {

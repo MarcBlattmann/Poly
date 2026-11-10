@@ -526,6 +526,7 @@ fn verify_ole32(dir: &Path) -> Result {
             "ntdll.dll",
             "winmm.dll",
             "shell32.dll",
+            "userenv.dll",
             "ole32.dll",
             "user32.dll",
             "gdi32.dll",

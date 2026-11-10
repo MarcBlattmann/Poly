@@ -45,6 +45,46 @@ summary: >
   clearing everything, or clearing only NOROOT (2), is EPERM; adding more
   bits (0x2f) is allowed and reads 0x2f; fork children inherit the bits;
   without CAP_SETPCAP SET is EPERM and GET still works.
+  The secure bits in full (linux/securebits.h of the oracle's kernel): six
+  bits, each with a lock bit one position higher: NOROOT 0x1 (lock 0x2),
+  NO_SETUID_FIXUP 0x4 (0x8), KEEP_CAPS 0x10 (0x20), NO_CAP_AMBIENT_RAISE
+  0x40 (0x80), EXEC_RESTRICT_FILE 0x100 (0x200), EXEC_DENY_INTERACTIVE
+  0x400 (0x800). PR_SET_SECUREBITS replaces the whole value with arg2;
+  each of the twelve bits can be set by itself or with others (0x554
+  reads 0x554), a lock bit also without its base bit. A value with any
+  bit above 0x800 (0x1000, 0x10000, 0x1004, bit 32) is EPERM, not EINVAL,
+  and changes nothing. arg3..arg5 are ignored. The lock rule: while a
+  lock bit is set, a SET must contain that lock bit and must leave its
+  base bit as it is, set or clear, or it is EPERM; the other bits may
+  change in the same call (with 0xc set: 0, 0x8 and 0x4 are EPERM, 0x1c
+  then 0xc work; with only the lock 0x800 set: 0xc00 and 0x100 are EPERM,
+  0x800 and 0x900 work).
+  Privilege: with CAP_SETPCAP every allowed change works. Without it a
+  SET that changes one of the first four pairs (0x1 .. 0x80) is EPERM,
+  and a SET of exactly the current value is EPERM too; but the two EXEC
+  pairs (0x100 .. 0x800) may be set, cleared and locked by any caller as
+  long as no other bit changes in that call (uid 65534 holding 0x41:
+  0x41, 0, 0x40, 0x45 and 0x540 are EPERM; 0x141 works, then 0x41, then
+  0xc41; after that 0x41 is EPERM because of the lock).
+  What the bits do to other calls. KEEP_CAPS is the flag of
+  PR_SET_KEEPCAPS (8) / PR_GET_KEEPCAPS (7): setting the bit makes
+  PR_GET_KEEPCAPS read 1, PR_SET_KEEPCAPS 0 or 1 clears or sets the bit
+  in PR_GET_SECUREBITS; PR_SET_KEEPCAPS takes only 0 or 1 (2 is EINVAL),
+  needs no capability (uid 65534 may set it), and is EPERM for both
+  values while KEEP_CAPS_LOCKED (0x20) is set. NO_CAP_AMBIENT_RAISE makes
+  PR_CAP_AMBIENT_RAISE EPERM for every capability, also one that is in
+  the permitted and inheritable sets and one that is already raised; the
+  capabilities already in the ambient set stay and LOWER still works;
+  after the bit is cleared RAISE works again; set together with its
+  lock it cannot be cleared again, and fork children inherit both. setresuid from uid 0 to
+  another uid (all three ids): normally the permitted and the effective
+  capability sets become empty (a capset that asks for a capability is
+  then EPERM); with NO_SETUID_FIXUP both sets stay as they were; with
+  KEEP_CAPS (set as a secure bit or through PR_SET_KEEPCAPS) the
+  permitted set stays, the effective set becomes empty, a capset may make
+  permitted capabilities effective again, and the KEEP_CAPS bit is still
+  set afterwards. NOROOT, the EXEC bits and what execve does with
+  KEEP_CAPS were not observed.
   Ambient capabilities: PR_CAP_AMBIENT (47) with operation in arg2:
   PR_CAP_AMBIENT_IS_SET 1 (cap in arg3 -> 1 or 0), RAISE 2, LOWER 3,
   CLEAR_ALL 4. The set starts empty. RAISE needs the capability in both the
@@ -82,7 +122,8 @@ errors:
   no_permission: "EACCES (13): mode 2, valid struct, caller without no_new_privs and without CAP_SYS_ADMIN (uid 65534 after setresuid)"
   order: "mode (EINVAL) > struct copy (EFAULT) > length 0 and NULL filter pointer (EINVAL) > privilege (EACCES) > instruction check (EINVAL)"
   capbset: "EINVAL (22): capability above the last, 63; EPERM (1): DROP without CAP_SETPCAP"
-  securebits: "EPERM (1): SET without CAP_SETPCAP; clearing a locked bit"
+  securebits: "EPERM (1), never EINVAL: SET with a bit above 0x800; SET that drops a lock bit or changes a locked base bit; without CAP_SETPCAP a SET that changes a bit of 0x1 .. 0x80 or that changes nothing. PR_SET_KEEPCAPS: EINVAL (22) for a value other than 0 or 1, EPERM while KEEP_CAPS is locked"
+  securebits_ambient: "EPERM (1): PR_CAP_AMBIENT_RAISE while NO_CAP_AMBIENT_RAISE (0x40) is set"
   ambient: "EPERM (1): RAISE without the capability in permitted and inheritable; EINVAL (22): invalid capability, unknown operation, non-zero arguments that must be 0"
 side_effects: >
   Installing adds a filter that cannot be removed, for the calling thread
@@ -95,8 +136,8 @@ timing:
   typical: "microseconds per call"
   guarantees: "none"
 tests:
-  visible: 3  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 # Notes: option numbers from linux/prctl.h (PR_GET_SECCOMP 21, PR_SET_SECCOMP
 # 22, PR_CAPBSET_READ 23, PR_CAPBSET_DROP 24, PR_GET_SECUREBITS 27,
 # PR_SET_SECUREBITS 28, PR_SET_NO_NEW_PRIVS 38, PR_GET_NO_NEW_PRIVS 39,
@@ -104,6 +145,7 @@ tests:
 # from linux/capability.h (CAP_NET_BIND_SERVICE 10, CAP_NET_RAW 13);
 # capget/capset version 3 header 0x20080522. The tests need root
 # (poly-diff: needs=root) except the first (filter), which passes for any
-# user. The secure-bits observations: an unknown extra bit (0x100) was
-# accepted by this kernel; not tested. Strict mode could not be observed:
-# the container's filter makes it EINVAL.
+# user. The secure-bits observations: bits 0x100 .. 0x800 are the
+# SECBIT_EXEC_* pairs of newer kernels (present in the oracle's 6.18; an
+# older kernel refuses them with EPERM like any unknown bit). Strict mode
+# could not be observed: the container's filter makes it EINVAL.
