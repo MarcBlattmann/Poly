@@ -34,6 +34,7 @@
 use super::consts::*;
 use super::info::{self, Stored};
 use super::names::{self, split_path};
+use super::npfs::NpEnd;
 use super::share::ShareRequest;
 use super::walk::{self, Resolved};
 use super::{Device, DiskFile, FileRecord, IoState, NodeKey, Target, VfsRoot, status_of};
@@ -67,6 +68,8 @@ pub struct CreateHook<'a> {
     pub io: &'a mut IoState,
     pub params: CreateParams,
     pub thread: ThreadRef,
+    /// Set by `NtCreateNamedPipeFile`: this create makes a server end.
+    pub np: Option<super::npfs::NpCreate>,
     /// `IO_STATUS_BLOCK.Information` once the file object is made.
     pub information: u64,
     /// The new file object's cookie.
@@ -91,12 +94,19 @@ enum Start {
 
 impl CreateHook<'_> {
     fn run(&mut self, om: &mut ObjectManager, r: &ParseRequest<'_>) -> Result<ObjectId, NtStatus> {
+        // `NtCreateNamedPipeFile` only works below the pipe device.
+        if self.np.is_some()
+            && !(r.kind == ObjectType::Device && matches!(self.io.device(r.cookie), Some(Device::NamedPipe)))
+        {
+            return Err(STATUS_INVALID_DEVICE_REQUEST);
+        }
         let start = match r.kind {
             ObjectType::Device => match self.io.device(r.cookie) {
                 Some(Device::Volume(v)) => Start::Volume(v),
                 Some(Device::Pipe) => Start::Pipe,
                 Some(Device::Console) => return self.open_console(om, r, None),
                 Some(Device::Afd) => return self.open_endpoint(om, r.remaining),
+                Some(Device::NamedPipe) => return self.open_named_pipe(om, r),
                 None => return Err(STATUS_OBJECT_PATH_NOT_FOUND),
             },
             ObjectType::File => {
@@ -159,6 +169,64 @@ impl CreateHook<'_> {
         Ok(object)
     }
 
+    /// `\Device\NamedPipe\<name>`: a server end made by
+    /// `NtCreateNamedPipeFile`, or a client's open of a pipe a server made
+    /// (ADR 0169, [`super::npfs`]); the device itself opens as the pipe
+    /// directory, which `FSCTL_PIPE_WAIT` is sent to.
+    fn open_named_pipe(&mut self, om: &mut ObjectManager, r: &ParseRequest<'_>) -> Result<ObjectId, NtStatus> {
+        let remaining = r.remaining.strip_prefix(&[u16::from(b'\\')]).unwrap_or(r.remaining);
+        let pid = r.caller.as_ref().map_or(0, |c| c.process.0);
+        let cookie = self.io.cookie();
+        if remaining.is_empty() {
+            if self.np.is_some() {
+                return Err(STATUS_OBJECT_NAME_INVALID);
+            }
+            let object = new_file_object(om, cookie, self.thread)?;
+            self.io.files.insert(cookie, self.record(object, Target::PipeRoot, FileType::Directory));
+            self.information = FILE_OPENED;
+            self.made = Some(cookie);
+            return Ok(object);
+        }
+        if remaining.split(|&c| c == u16::from(b'\\')).any(<[u16]>::is_empty) {
+            return Err(STATUS_OBJECT_NAME_INVALID);
+        }
+        let key = names::fold(remaining);
+        let (instance, server, information) = match self.np {
+            Some(c) => {
+                let (id, info) = self.io.np_server_create(&key, &c, pid)?;
+                (id, true, info)
+            }
+            None => (self.io.np_client_connect(&key, self.params.access, pid)?, false, FILE_OPENED),
+        };
+        let object = match new_file_object(om, cookie, self.thread) {
+            Ok(o) => o,
+            Err(e) => {
+                if server {
+                    self.io.np_server_abort(instance);
+                }
+                return Err(e);
+            }
+        };
+        let end = match self.np {
+            Some(c) => NpEnd {
+                instance,
+                server: true,
+                message_read: c.read_mode == FILE_PIPE_MESSAGE_TYPE,
+                nowait: c.completion_mode == FILE_PIPE_COMPLETE_OPERATION,
+            },
+            None => NpEnd { instance, server: false, message_read: false, nowait: false },
+        };
+        self.io.files.insert(cookie, self.record(object, Target::NamedPipe(end), FileType::Fifo));
+        if server {
+            self.io.np_server_attached(instance, cookie);
+        } else {
+            self.io.np_client_attached(instance, cookie);
+        }
+        self.information = information;
+        self.made = Some(cookie);
+        Ok(object)
+    }
+
     fn open_pipe(&mut self, om: &mut ObjectManager, remaining: &[u16]) -> Result<ObjectId, NtStatus> {
         let p = &self.params;
         if p.options & FILE_DIRECTORY_FILE != 0 {
@@ -202,6 +270,9 @@ impl CreateHook<'_> {
             position: 0,
             delete_on_close: p.options & FILE_DELETE_ON_CLOSE != 0,
             scan: None,
+            port: None,
+            skip_port: false,
+            skip_event: false,
         }
     }
 

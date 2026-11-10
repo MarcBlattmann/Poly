@@ -69,7 +69,8 @@ pub fn object_name(name: &[u16]) -> Option<Vec<u16>> {
     let mut rest = name;
     for prefix in ["Global\\", "Local\\"] {
         let p: Vec<u16> = crate::wide(prefix);
-        if rest.len() >= p.len() && crate::text::eq_ignore_case(&rest[..p.len()], &p) {
+        // Learn: "Kernel object namespaces": the prefixes are case-sensitive.
+        if rest.len() >= p.len() && rest[..p.len()] == p[..] {
             rest = &rest[p.len()..];
             break;
         }
@@ -301,7 +302,8 @@ mod tests {
         let s = |n: &str| object_name(&crate::wide(n)).map(|v| std::string::String::from_utf16_lossy(&v));
         assert_eq!(s("Ev"), Some("\\BaseNamedObjects\\Ev".into()));
         assert_eq!(s("Global\\Ev"), Some("\\BaseNamedObjects\\Ev".into()));
-        assert_eq!(s("local\\Ev"), Some("\\BaseNamedObjects\\Ev".into()));
+        assert_eq!(s("Local\\Ev"), Some("\\BaseNamedObjects\\Ev".into()));
+        assert_eq!(s("local\\Ev"), Some("\\BaseNamedObjects\\local\\Ev".into()));
         assert_eq!(s(""), None);
     }
 

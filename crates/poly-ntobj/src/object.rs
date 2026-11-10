@@ -51,10 +51,14 @@ pub enum ObjectType {
     Device,
     /// An access token (ADR 0083).
     Token,
+    /// An I/O completion port (ADR 0169).
+    IoCompletion,
+    /// A job object (ADR 0169).
+    Job,
 }
 
 impl ObjectType {
-    pub const ALL: [ObjectType; 13] = [
+    pub const ALL: [ObjectType; 15] = [
         ObjectType::Directory,
         ObjectType::SymbolicLink,
         ObjectType::Event,
@@ -68,6 +72,8 @@ impl ObjectType {
         ObjectType::Key,
         ObjectType::Device,
         ObjectType::Token,
+        ObjectType::IoCompletion,
+        ObjectType::Job,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -85,6 +91,8 @@ impl ObjectType {
             ObjectType::Key => "Key",
             ObjectType::Device => "Device",
             ObjectType::Token => "Token",
+            ObjectType::IoCompletion => "IoCompletion",
+            ObjectType::Job => "Job",
         }
     }
 
@@ -99,13 +107,22 @@ impl ObjectType {
                 | ObjectType::Key
                 | ObjectType::Device
                 | ObjectType::Token
+                | ObjectType::IoCompletion
+                | ObjectType::Job
         )
     }
 
     /// Every right a handle to this type can hold (the type's
     /// `*_ALL_ACCESS`).
     pub const fn valid_access(self) -> AccessMask {
-        self.generic_mapping().all
+        match self {
+            // A handle to a section can be asked to wait (the standard
+            // `SYNCHRONIZE` right is valid for every object).
+            ObjectType::Section => self.generic_mapping().all | SYNCHRONIZE,
+            // The specific rights a port does not have are accepted too (the spec sheet).
+            ObjectType::IoCompletion => self.generic_mapping().all | 0xFFFF,
+            _ => self.generic_mapping().all,
+        }
     }
 
     /// The type's generic mapping.
@@ -150,6 +167,18 @@ impl ObjectType {
             ObjectType::Process => (R, W, X | SYNCHRONIZE, PROCESS_ALL_ACCESS),
             ObjectType::Thread => (R, W, X | SYNCHRONIZE, THREAD_ALL_ACCESS),
             ObjectType::Token => (TOKEN_READ, TOKEN_WRITE, TOKEN_EXECUTE, TOKEN_ALL_ACCESS),
+            ObjectType::IoCompletion => (
+                R | IO_COMPLETION_QUERY_STATE,
+                W | IO_COMPLETION_MODIFY_STATE,
+                X | SYNCHRONIZE,
+                IO_COMPLETION_ALL_ACCESS,
+            ),
+            ObjectType::Job => (
+                R | JOB_OBJECT_QUERY,
+                W | JOB_OBJECT_ASSIGN_PROCESS | JOB_OBJECT_SET_ATTRIBUTES | JOB_OBJECT_TERMINATE,
+                X | SYNCHRONIZE,
+                JOB_OBJECT_ALL_ACCESS,
+            ),
         };
         GenericMapping { read, write, execute, all }
     }

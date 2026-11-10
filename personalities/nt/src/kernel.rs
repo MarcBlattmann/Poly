@@ -116,6 +116,16 @@ pub struct ProcessCreate {
     /// Its first thread starts suspended, until `NtResumeThread` (ADR
     /// 0089: `CREATE_SUSPENDED`).
     pub suspended: bool,
+    /// With `inherit_handles`, only these handles are inherited (the
+    /// `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`, ADR 0169).
+    pub inherit_only: Option<alloc::vec::Vec<poly_ntobj::Handle>>,
+    /// The jobs (cookies) it is created in (`PROC_THREAD_ATTRIBUTE_JOB_LIST`),
+    /// and whether it joins its creator's too.
+    pub jobs: alloc::vec::Vec<u64>,
+    pub join_creator_jobs: bool,
+    /// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON`:
+    /// it cannot make memory executable.
+    pub dynamic_code_blocked: bool,
 }
 
 /// What [`NtKernel::create_process`] produced: handles in the caller's
@@ -175,6 +185,24 @@ pub trait NtKernel {
     /// End another thread of this process (`NtTerminateThread` of a thread
     /// that is not the caller). `None` means it is already gone.
     fn terminate_thread(&mut self, thread: ThreadRef, status: NtStatus) -> Result<(), NtStatus>;
+
+    /// Run `f` on another NT process's state and address space (ADR 0169:
+    /// `NtMapViewOfSection` and `NtUnmapViewOfSection` with a process
+    /// handle that is not the caller's). `None` when that process is gone.
+    fn with_process<R>(
+        &mut self,
+        _pid: poly_ntobj::ProcessId,
+        _f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn Backend) -> R,
+    ) -> Option<R> {
+        None
+    }
+
+    /// `NtTerminateProcess` of another process (ADR 0169): every thread of
+    /// `pid` ends with `status`, which becomes the process's exit status
+    /// unless it already has one.
+    fn terminate_other_process(&mut self, _pid: poly_ntobj::ProcessId, _status: NtStatus) -> Result<(), NtStatus> {
+        Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED)
+    }
 
     /// Suspend a thread (`NtSuspendThread`): raise its suspend count and, if
     /// it was zero, stop it before it next runs user code. Returns the

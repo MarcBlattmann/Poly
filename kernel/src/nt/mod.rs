@@ -370,6 +370,19 @@ impl NtKernel for Kernel {
         })
     }
 
+    fn with_process<R>(
+        &mut self,
+        pid: ProcessId,
+        f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn Backend) -> R,
+    ) -> Option<R> {
+        let memory = io::memory_of(pid.0)?;
+        with(|s| {
+            let proc = s.processes.get_mut(&pid)?;
+            let mut b = MemBackend { memory: &memory, sections: &mut s.sections };
+            Some(f(&mut s.sys, proc, &mut b))
+        })
+    }
+
     fn terminate_process(&mut self, status: NtStatus) {
         note_exit_status(self.pid.0, status, true);
         self.exit = Some(status);
@@ -396,6 +409,10 @@ impl NtKernel for Kernel {
 
     fn terminate_thread(&mut self, thread: ThreadRef, status: NtStatus) -> Result<(), NtStatus> {
         sched::terminate_other(self.pid, thread, status)
+    }
+
+    fn terminate_other_process(&mut self, pid: ProcessId, status: NtStatus) -> Result<(), NtStatus> {
+        sched::terminate_process_by_id(pid, status)
     }
 
     fn suspend_thread(&mut self, thread: ThreadRef) -> Result<u32, NtStatus> {
@@ -655,6 +672,13 @@ struct HandlesFor {
     process_access: u32,
     thread_access: u32,
     inherit_handles: bool,
+    /// ADR 0169: only these handles (`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`),
+    /// the jobs it is created in, whether it joins its creator's, and
+    /// whether it may make memory executable.
+    inherit_only: Option<Vec<poly_ntobj::Handle>>,
+    jobs: Vec<u64>,
+    join_creator_jobs: bool,
+    dynamic_code_blocked: bool,
 }
 
 /// Handles to a new process and its first thread.
@@ -690,6 +714,7 @@ fn start_params(
         s.processes.insert(pid, NtProcess::new(pid));
         s.created.insert(pid, registry::filetime_now());
         let proc = s.processes.get_mut(&pid).expect("just inserted");
+        proc.dynamic_code_blocked = handles.is_some_and(|h| h.dynamic_code_blocked);
         let mut b = MemBackend { memory, sections: &mut s.sections };
         // Its creator's inheritable handles, before any other (ADR 0089).
         let inherit_from = handles.filter(|h| h.inherit_handles).map(|h| h.caller.process);
@@ -697,8 +722,20 @@ fn start_params(
             given: params.given_std_handles(),
             console: handles.and_then(|h| s.sys.io.console_of_process(h.caller.process)),
         };
-        let start = exec::start_process_from(&mut s.sys, proc, &mut b, file, NTDLL, None, thread, inherit_from);
+        let only = handles.and_then(|h| h.inherit_only.as_deref());
+        let start = exec::start_process_listed(&mut s.sys, proc, &mut b, file, NTDLL, None, thread, inherit_from, only);
         let start = start.and_then(|ps| {
+            // Its creator's jobs and the ones it was made for (ADR 0169).
+            if let Some(h) = handles {
+                s.sys.jobs.process_created(
+                    &mut s.sys.io,
+                    &mut s.sys.objects,
+                    h.caller.process,
+                    pid,
+                    h.join_creator_jobs,
+                    &h.jobs,
+                )?;
+            }
             // KUSER_SHARED_DATA at 0x7FFE0000 (ADR 0155).
             exec::map_user_shared_data(proc, &mut b, &user_shared_facts())?;
             // The process parameters: image path, command line,
@@ -775,6 +812,10 @@ fn create_process(
         process_access: req.process_access,
         thread_access: req.thread_access,
         inherit_handles: req.inherit_handles,
+        inherit_only: req.inherit_only,
+        jobs: req.jobs,
+        join_creator_jobs: req.join_creator_jobs,
+        dynamic_code_blocked: req.dynamic_code_blocked,
     };
     let (start, handles) = start_params(&process, &memory, &req.image, pid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");
@@ -877,6 +918,8 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
 
     // Its file objects closed with its handles: deliver the cancellations.
     io::drain();
+    // Jobs it kept alive (kill on close) end their other members (ADR 0169).
+    io::kill_pending();
     // Its console handles too: a console it was the last on closes.
     console::drive();
     io::unregister(pid);
