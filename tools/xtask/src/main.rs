@@ -139,6 +139,7 @@ mod hostfs;
 mod hostscreen;
 mod initramfs;
 mod input;
+mod installer;
 mod ktest;
 mod libsearch;
 mod macimports;
@@ -1674,6 +1675,10 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // apps on it, the settings disk, Chromium the default browser; skipped
     // until the packages are fetched (chromium.rs, ADR 0147).
     ("chromium-desktop", chromium::desktop_boot_test),
+    // A Debian package opened from Files and by xdg-open, installed by Poly's
+    // installer with the disk's own apt and dpkg, found in the launcher and
+    // started; skipped until the packages are fetched (installer.rs, ADR 0173).
+    ("linux-installer", installer::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1746,6 +1751,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
             "toolkits",
             "chromium",
             "chromium-desktop",
+            "linux-installer",
         ],
     ),
     // About 60 s each: 7-Zip's command line on the NT personality, one boot per

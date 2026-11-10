@@ -788,8 +788,11 @@ fn run(args: &[String]) -> Result<u8, String> {
         // What ended is reaped below (the desktop's apps in `sync`,
         // Xwayland in `reap`, the client to run at the end).
         let mut dump = false;
-        // Apps a program asked to have started (`open <id>`, ADR 0175).
+        // Apps a program asked to have started (`open <id>`, ADR 0175), and
+        // package files to open the installer for (`install <path>`, ADR 0173).
         let mut asked: Vec<String> = Vec::new();
+        let mut to_install: Vec<String> = Vec::new();
+        let mut rescan = false;
         if fds[control_at].revents != 0 {
             for line in control.take_lines() {
                 if line.trim() == "dump" {
@@ -805,6 +808,8 @@ fn run(args: &[String]) -> Result<u8, String> {
                         // Files' Applications folder: started below, where
                         // the launcher's apps are.
                         launch::Control::Open { id } => asked.push(id),
+                        launch::Control::Install { path } => to_install.push(path),
+                        launch::Control::Rescan => rescan = true,
                     }
                 }
             }
@@ -910,6 +915,16 @@ fn run(args: &[String]) -> Result<u8, String> {
                     }
                     None => eprintln!("poly-compositor: asked to open {id}: no such app"),
                 }
+            }
+            // The installer added an app: the launcher's list is read again.
+            if rescan {
+                println!("poly-compositor: {} app(s) in the launcher (read again)", d.rescan_apps());
+            }
+            // A package file someone asked to have opened: the desktop's
+            // own installer shows it (ADR 0173).
+            for path in to_install.drain(..) {
+                println!("poly-compositor: asked to open the installer for {path}");
+                start_app(d, &mut server, &env, &poly_shell::apps::installer_entry(&path));
             }
             d.sync(&mut server);
         }

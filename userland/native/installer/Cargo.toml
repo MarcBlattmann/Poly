@@ -1,0 +1,20 @@
+[package]
+name = "poly-installer-native"
+description = "/bin/poly-installer: Poly's installer (userland/poly-installer-app) as a native Poly program (ADR 0173)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "poly-installer"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-installer-app = { path = "../../poly-installer-app" }
+poly-rt = { path = "../../../crates/poly-rt" }
+
+[lints]
+workspace = true

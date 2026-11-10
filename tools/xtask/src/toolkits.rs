@@ -618,6 +618,20 @@ impl Machine {
         self.send_events(&[button_event(false)])
     }
 
+    /// A double click at (`x`, `y`): two presses well within the 400 ms
+    /// Poly's apps count as one (`poly-app`), which [`Machine::click`]
+    /// twice is too slow for.
+    pub(crate) fn double_click(&mut self, x: i32, y: i32) -> Result {
+        self.send_events(&abs_events(x, y))?;
+        std::thread::sleep(Duration::from_millis(300));
+        for down in [true, false, true, false] {
+            self.qmp.execute("input-send-event", &format!(r#"{{"events": [{}]}}"#, button_event(down)))?;
+            std::thread::sleep(Duration::from_millis(40));
+        }
+        std::thread::sleep(Duration::from_millis(150));
+        Ok(())
+    }
+
     pub(crate) fn key(&mut self, qcode: &str) -> Result {
         self.send_events(&[key_event(qcode, true)])?;
         self.send_events(&[key_event(qcode, false)])

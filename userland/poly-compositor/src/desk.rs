@@ -557,6 +557,15 @@ impl Desktop {
         self.shell.app_by_id(id).cloned()
     }
 
+    /// Read the installed apps again (the installer added one, ADR 0173):
+    /// the launcher offers them from now on. Returns how many there are.
+    pub fn rescan_apps(&mut self) -> usize {
+        let apps = desktop::installed_apps();
+        let count = apps.len();
+        self.shell.set_catalog(apps);
+        count
+    }
+
     /// An app the launcher started that is the shell's own.
     pub fn open_internal(&mut self, app: &poly_shell::App, server: &mut Server) -> bool {
         match app.internal() {

@@ -39,8 +39,8 @@ use std::sync::Arc;
 
 /// The native programs `userland/native/` builds, as `/bin/<name>`: the
 /// test programs, the compositor and desktop, `notify-send`, the
-/// desktop's Wayland test clients, and Poly's Files and Terminal.
-pub const PROGRAMS: [&str; 8] = [
+/// desktop's Wayland test clients, and Poly's Files, Terminal and installer.
+pub const PROGRAMS: [&str; 9] = [
     "native-hello",
     "native-child",
     "poly-compositor",
@@ -49,6 +49,7 @@ pub const PROGRAMS: [&str; 8] = [
     "wl-client",
     "poly-files",
     "poly-terminal",
+    "poly-installer",
 ];
 
 /// What `/bin/native-hello` prints last when every check passed.

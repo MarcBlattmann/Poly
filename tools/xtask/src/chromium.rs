@@ -129,6 +129,30 @@ pub const DISK_SEEDS: &[&str] = &[
     "grep",
     "sed",
     "util-linux",
+    // The package tools (ADR 0132, 0173): this disk is the Debian base root
+    // `.deb` packages install into, with the distribution's own `dpkg` and
+    // `apt`, the archive's signing keys, and the rest of Debian's Essential
+    // set, which every package's maintainer scripts may use without
+    // declaring it (Debian Policy 3.8).
+    "apt",
+    "dpkg",
+    "debian-archive-keyring",
+    "base-passwd",
+    "bsdutils",
+    "debianutils",
+    "diffutils",
+    "gzip",
+    "hostname",
+    "init-system-helpers",
+    "libc-bin",
+    "ncurses-base",
+    "ncurses-bin",
+    "perl-base",
+    "sysvinit-utils",
+    "tar",
+    // `xdg-mime query filetype` (xdg-utils) asks file(1) what a file is:
+    // how `xdg-open` of a downloaded package finds the installer.
+    "file",
 ];
 
 /// What the initramfs takes from the lock: a statically linked BusyBox for
@@ -140,6 +164,14 @@ pub const BOOT_SEEDS: &[&str] = &["busybox-static"];
 /// screen, Xwayland, tools to click, type and take pictures of X windows,
 /// and strace to trace Chromium inside the jail.
 pub const REFERENCE_SEEDS: &[&str] = &["weston", "xvfb", "xwayland", "xdotool", "x11-apps", "xauth", "strace"];
+
+/// The package the installer's boot test installs (`installer.rs`, ADR
+/// 0173), set `install`: galculator, a small GTK 3 calculator from Debian's
+/// archive that is not on the disk and needs one library that is not there
+/// either (`libquadmath0`), which `apt` then has to fetch. Only the package
+/// itself is locked and cached: the test puts it into the Downloads folder,
+/// as a download would.
+pub const INSTALL_SEEDS: &[&str] = &["galculator"];
 
 /// The lock, relative to the repository.
 pub const LOCK: &str = "tools/xtask/chromium.lock";
@@ -206,14 +238,24 @@ pub const INPUT_AFTER: [u8; 3] = [0xb0, 0x3a, 0x2a];
 pub const WINDOW_ARGS: &str = "--ozone-platform=wayland --disable-gpu --no-first-run --no-default-browser-check \
      --disable-background-networking --disable-component-update --disable-sync --password-store=basic";
 
-/// `/usr/local/bin/poly-chromium`: Chromium as user `poly`, which it needs
-/// to run its sandbox, on the desktop's Wayland display. The compositor's
-/// runtime directory stays private (ADR 0120); the user gets a second name
-/// of its socket (a hard link: unix(7) finds a socket by its inode) in its
-/// own. `setpriv(1)` (util-linux) changes the user. It says nothing while
-/// Chromium starts: the busy pointer does (ADR 0167), no notification.
+/// `/usr/local/bin/poly-chromium`: Chromium as user `poly`
+/// ([`USER_SCRIPT`]), which it needs to run its sandbox. It says nothing
+/// while Chromium starts: the busy pointer does (ADR 0167), no notification.
 pub const LAUNCH_SCRIPT: &str = "#!/bin/bash
 # Chromium as user poly on the desktop (tools/xtask/src/chromium.rs).
+exec /usr/local/bin/poly-as-user /usr/bin/chromium \"$@\"
+";
+
+/// `/usr/local/bin/poly-as-user PROGRAM [ARGUMENT...]`: a program as user
+/// `poly` on the desktop's Wayland display. The compositor's runtime
+/// directory stays private (ADR 0120); the user gets a second name of its
+/// socket (a hard link: unix(7) finds a socket by its inode) in its own.
+/// The compositor's control pipe gets a second name there the same way, so
+/// what the program starts can ask the desktop for something: the installer,
+/// for a downloaded package Chromium "opens" (`xdg-open`, ADR 0173).
+/// `setpriv(1)` (util-linux) changes the user.
+pub const USER_SCRIPT: &str = "#!/bin/bash
+# A program as user poly on the desktop (tools/xtask/src/chromium.rs).
 . /etc/poly-desktop.env
 U=/run/user/1000
 mkdir -p \"$U\" /home/poly
@@ -225,11 +267,19 @@ if [ -S \"$S\" ]; then
     rm -f \"$U/$WAYLAND_DISPLAY\"
     ln \"$S\" \"$U/$WAYLAND_DISPLAY\" && chown poly:poly \"$U/$WAYLAND_DISPLAY\"
 fi
+# The desktop's control pipe, for what Chromium opens (a downloaded package):
+# where the compositor says it is, else where it makes it.
+C=\"${POLY_COMPOSITOR_CONTROL:-$XDG_RUNTIME_DIR/poly-compositor.ctl}\"
+if [ -p \"$C\" ]; then
+    rm -f \"$U/poly-compositor.ctl\"
+    ln \"$C\" \"$U/poly-compositor.ctl\" && chown poly:poly \"$U/poly-compositor.ctl\" \\
+        && export POLY_COMPOSITOR_CONTROL=\"$U/poly-compositor.ctl\"
+fi
 cd /home/poly
 exec setpriv --reuid=1000 --regid=1000 --init-groups env HOME=/home/poly XDG_RUNTIME_DIR=\"$U\" \\
     XDG_CONFIG_HOME=/home/poly/.config XDG_CACHE_HOME=/home/poly/.cache \\
     XDG_DATA_HOME=/home/poly/.local/share XDG_STATE_HOME=/home/poly/.local/state \\
-    /usr/bin/chromium \"$@\"
+    \"$@\"
 ";
 
 /// `/etc/inittab` of Chromium's disk, read by BusyBox's init (from the disk,
@@ -256,8 +306,9 @@ pub struct Locked {
     pub archive: String,
     pub size: u64,
     pub sha256: String,
-    /// On Poly's disk (`disk`), in the initramfs (`boot`) or for the
-    /// reference only (`reference`).
+    /// On Poly's disk (`disk`), in the initramfs (`boot`), what the
+    /// installer's boot test installs (`install`) or for the reference only
+    /// (`reference`).
     pub set: String,
     pub filename: String,
 }
@@ -272,7 +323,7 @@ impl Locked {
     }
 
     /// The cached file's name (the pool file's own).
-    fn file_name(&self) -> &str {
+    pub(crate) fn file_name(&self) -> &str {
         self.filename.rsplit('/').next().unwrap_or(&self.filename)
     }
 
@@ -297,7 +348,7 @@ pub fn parse_lock(text: &str) -> Result<Vec<Locked>> {
         let size = f[3].parse().map_err(|_| bad())?;
         if f[4].len() != 64
             || !f[4].bytes().all(|b| b.is_ascii_hexdigit())
-            || !matches!(f[5], "disk" | "boot" | "reference")
+            || !matches!(f[5], "disk" | "boot" | "install" | "reference")
         {
             return Err(bad());
         }
@@ -514,7 +565,16 @@ fn write_lock() -> Result {
     let disk = closure(DISK_SEEDS, &packages)?;
     let boot = closure(BOOT_SEEDS, &packages)?;
     let all: Vec<&str> = DISK_SEEDS.iter().chain(BOOT_SEEDS).chain(REFERENCE_SEEDS).copied().collect();
-    let everything = closure(&all, &packages)?;
+    let mut everything = closure(&all, &packages)?;
+    for seed in INSTALL_SEEDS {
+        if !packages.contains_key(*seed) {
+            return Err(format!("package {seed}: not in the snapshots"));
+        }
+        if disk.contains(*seed) {
+            return Err(format!("package {seed} is on the disk: nothing for the installer's test to install"));
+        }
+        everything.insert(seed.to_string());
+    }
     let mut text = String::from(
         "# Debian packages of Chromium's root disk, its initramfs's BusyBox and the reference\n\
          # Chromium is observed in (tools/xtask/src/chromium.rs). Written by\n\
@@ -530,6 +590,8 @@ fn write_lock() -> Result {
             "disk"
         } else if boot.contains(name) {
             "boot"
+        } else if INSTALL_SEEDS.contains(&name.as_str()) {
+            "install"
         } else {
             "reference"
         };
@@ -555,13 +617,13 @@ fn write_lock() -> Result {
 // ---- fetching ------------------------------------------------------------
 
 /// Where the downloaded packages are kept.
-fn debs_dir() -> PathBuf {
+pub(crate) fn debs_dir() -> PathBuf {
     work_dir().join("debs")
 }
 
 /// The locked packages of `sets` that are not in the cache (or not as
 /// locked).
-fn missing<'a>(locked: &'a [Locked], sets: &[&str]) -> Vec<&'a Locked> {
+pub(crate) fn missing<'a>(locked: &'a [Locked], sets: &[&str]) -> Vec<&'a Locked> {
     let dir = debs_dir();
     locked
         .iter()
@@ -571,7 +633,7 @@ fn missing<'a>(locked: &'a [Locked], sets: &[&str]) -> Vec<&'a Locked> {
 }
 
 /// The sets every host needs (the reference is the spec agent's).
-const BUILD_SETS: [&str; 2] = ["disk", "boot"];
+pub(crate) const BUILD_SETS: [&str; 3] = ["disk", "boot", "install"];
 
 /// `cargo xtask chromium fetch [--reference]`: download what is missing
 /// of the disk's and the initramfs's packages (and the reference's), check
@@ -580,7 +642,7 @@ pub fn fetch(reference: bool) -> Result {
     let locked = lock()?;
     let dir = debs_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let sets: &[&str] = if reference { &["disk", "boot", "reference"] } else { &BUILD_SETS };
+    let sets: &[&str] = if reference { &["disk", "boot", "install", "reference"] } else { &BUILD_SETS };
     let todo = missing(&locked, sets);
     let wanted = locked.iter().filter(|p| sets.contains(&p.set.as_str())).count();
     crate::progress::note(&format!("{} of {wanted} locked packages to download", todo.len()));
@@ -774,10 +836,12 @@ fn unpack_dir() -> PathBuf {
     work_dir().join("disk")
 }
 
-/// The index's first line: which lock it is from.
+/// The index's first line: which lock it is from, and which version of what
+/// is unpacked (the number: raise it when [`unpack_disk`] writes something else
+/// for the same lock, the dpkg database for one).
 fn index_stamp() -> Result<String> {
     let text = std::fs::read(root().join(LOCK)).map_err(|e| format!("{LOCK}: {e}"))?;
-    Ok(format!("poly-chromium-index/1 {}", crate::sha256::hex(&text)))
+    Ok(format!("poly-chromium-index/3 {}", crate::sha256::hex(&text)))
 }
 
 fn write_index(path: &Path, stamp: &str, entries: &[Unpacked]) -> Result {
@@ -838,12 +902,26 @@ fn unpack_disk() -> Result<Vec<Unpacked>> {
     let mut entries = Vec::new();
     // Path of each regular file so far -> its blob (for hard links).
     let mut files: BTreeMap<String, usize> = BTreeMap::new();
+    let mut blob_count = 0usize;
+    let mut add_blob = |data: &[u8]| -> Result<usize> {
+        let blob = blob_count;
+        blob_count += 1;
+        let at = blobs.join(blob.to_string());
+        std::fs::File::create(&at).and_then(|mut f| f.write_all(data)).map_err(|e| format!("{}: {e}", at.display()))?;
+        Ok(blob)
+    };
+    let mut db = DpkgDb::default();
     let wanted: Vec<&Locked> = locked.iter().filter(|p| p.on_disk()).collect();
     eprintln!("==> unpacking {} packages (pure Rust) into {}", wanted.len(), dir.display());
     for p in wanted {
         let file = debs_dir().join(p.file_name());
         let deb = std::fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+        let control = poly_pkg::deb::read_control_files(&deb).map_err(|e| format!("{}: {e:?}", p.file_name()))?;
+        let wanted_sums = DpkgDb::conffiles_of(&control);
+        let mut sums: BTreeMap<String, String> = BTreeMap::new();
+        let mut paths = Vec::new();
         for e in deb_entries(&deb).map_err(|e| format!("{}: {e}", p.file_name()))? {
+            paths.push(e.path.clone());
             let path = merged_usr(&e.path);
             if USR_LINKS.iter().any(|(l, _)| *l == path) {
                 continue;
@@ -852,11 +930,11 @@ fn unpack_disk() -> Result<Vec<Unpacked>> {
                 TarKind::Dir => entries.push(Unpacked::Dir { path, mode: e.mode }),
                 TarKind::Symlink(target) => entries.push(Unpacked::Symlink { path, target }),
                 TarKind::File(data) => {
-                    let blob = files.len();
-                    let at = blobs.join(blob.to_string());
-                    std::fs::File::create(&at)
-                        .and_then(|mut f| f.write_all(&data))
-                        .map_err(|e| format!("{}: {e}", at.display()))?;
+                    let absolute = format!("/{}", e.path);
+                    if wanted_sums.contains(&absolute) {
+                        sums.insert(absolute, md5_hex(&data));
+                    }
+                    let blob = add_blob(&data)?;
                     files.insert(path.clone(), blob);
                     entries.push(Unpacked::File { path, mode: e.mode, mtime: e.mtime, blob });
                 }
@@ -868,6 +946,15 @@ fn unpack_disk() -> Result<Vec<Unpacked>> {
                 }
             }
         }
+        db.add(&control, &paths, &sums).map_err(|e| format!("{}: {e}", p.file_name()))?;
+    }
+    // dpkg's database for what was unpacked (ADR 0173).
+    for dir in DpkgDb::DIRS {
+        entries.push(Unpacked::Dir { path: dir.to_string(), mode: 0o755 });
+    }
+    for (path, mode, data) in db.files() {
+        let blob = add_blob(&data)?;
+        entries.push(Unpacked::File { path, mode, mtime: DPKG_DB_TIME, blob });
     }
     write_index(&index, &stamp, &entries)?;
     Ok(entries)
@@ -891,6 +978,112 @@ fn package_file(package: &str, path: &str) -> Result<Vec<u8>> {
             _ => None,
         })
         .ok_or_else(|| format!("{package}: no file {path}"))
+}
+
+// ---- dpkg's database --------------------------------------------------------
+
+/// The time the files of dpkg's database carry on the disk (2026-01-01 UTC:
+/// the image is the same whenever it is made).
+const DPKG_DB_TIME: i64 = 1_767_225_600;
+
+fn md5_hex(data: &[u8]) -> String {
+    let mut h = poly_crypto::md5::Md5::new();
+    h.update(data);
+    h.finish().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// dpkg's database (`/var/lib/dpkg`) for the packages the disk is made of
+/// (`poly_pkg::dpkgdb`, ADR 0173): the disk is Debian's packages unpacked
+/// here, without `dpkg`, and the database says exactly that: every package
+/// is `unpacked`, none configured, with its maintainer scripts, file list
+/// and trigger interests where `dpkg` keeps them. Debian's own `dpkg
+/// --configure -a` then configures them on Poly (the installer runs it
+/// before its first installation), and `apt` installs more next to them.
+/// What the desktop and Chromium need before that is done by [`configure`].
+#[derive(Default)]
+struct DpkgDb {
+    status: String,
+    /// `info/` files: name, mode, contents.
+    info: Vec<(String, u16, Vec<u8>)>,
+    interests: Vec<(String, Vec<poly_pkg::dpkgdb::Interest>)>,
+}
+
+impl DpkgDb {
+    /// The directories of the database and of apt's state that no package
+    /// ships.
+    const DIRS: [&'static str; 9] = [
+        "var/lib/dpkg",
+        "var/lib/dpkg/info",
+        "var/lib/dpkg/triggers",
+        "var/lib/dpkg/updates",
+        "var/lib/dpkg/alternatives",
+        "var/lib/dpkg/parts",
+        "var/lib/apt/lists/partial",
+        "var/cache/apt/archives/partial",
+        "var/log/apt",
+    ];
+
+    fn text<'a>(control: &'a [(String, Vec<u8>)], name: &str) -> Option<&'a str> {
+        control.iter().find(|(n, _)| n == name).and_then(|(_, d)| std::str::from_utf8(d).ok())
+    }
+
+    /// The configuration files the package's control files name.
+    fn conffiles_of(control: &[(String, Vec<u8>)]) -> BTreeSet<String> {
+        Self::text(control, "conffiles").map(poly_pkg::dpkgdb::conffile_paths).unwrap_or_default().into_iter().collect()
+    }
+
+    /// Add a package: its control files, the paths of its `data.tar` and
+    /// the MD5 sums of its configuration files.
+    fn add(&mut self, control: &[(String, Vec<u8>)], paths: &[String], sums: &BTreeMap<String, String>) -> Result {
+        let text = Self::text(control, "control").ok_or("no control file")?;
+        let paragraph = poly_pkg::control::first(text).ok_or("an empty control file")?;
+        let stem = poly_pkg::dpkgdb::info_stem(&paragraph).ok_or("no Package field")?;
+        let conffiles: Vec<(String, String)> = Self::text(control, "conffiles")
+            .map(poly_pkg::dpkgdb::conffile_paths)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|path| sums.get(&path).map(|sum| (path.clone(), sum.clone())))
+            .collect();
+        let state = poly_pkg::dpkgdb::State::Unpacked;
+        let status = poly_pkg::dpkgdb::status_paragraph(text, state, &conffiles).ok_or("no Package field")?;
+        self.status.push_str(&status);
+        self.status.push('\n');
+        let list = poly_pkg::dpkgdb::list_text(paths.iter().map(String::as_str));
+        self.info.push((format!("{stem}.list"), 0o644, list.into_bytes()));
+        for (name, data) in control {
+            if name == "control" || name.contains('/') {
+                continue;
+            }
+            // The maintainer scripts are programs (deb(5), Debian Policy 6.1).
+            let script = matches!(name.as_str(), "preinst" | "postinst" | "prerm" | "postrm" | "config");
+            self.info.push((format!("{stem}.{name}"), if script { 0o755 } else { 0o644 }, data.clone()));
+        }
+        if let Some(triggers) = Self::text(control, "triggers") {
+            let interests = poly_pkg::dpkgdb::interests(triggers);
+            if !interests.is_empty() {
+                self.interests.push((stem, interests));
+            }
+        }
+        Ok(())
+    }
+
+    /// The database's files: path on the disk, mode, contents.
+    fn files(self) -> Vec<(String, u16, Vec<u8>)> {
+        let mut out = vec![
+            ("var/lib/dpkg/status".to_string(), 0o644, self.status.into_bytes()),
+            ("var/lib/dpkg/available".to_string(), 0o644, Vec::new()),
+            ("var/lib/dpkg/diversions".to_string(), 0o644, Vec::new()),
+            ("var/lib/dpkg/statoverride".to_string(), 0o644, Vec::new()),
+            ("var/lib/dpkg/info/format".to_string(), 0o644, poly_pkg::dpkgdb::INFO_FORMAT.as_bytes().to_vec()),
+        ];
+        for (name, mode, data) in self.info {
+            out.push((format!("var/lib/dpkg/info/{name}"), mode, data));
+        }
+        for (name, text) in poly_pkg::dpkgdb::triggers_files(&self.interests) {
+            out.push((format!("var/lib/dpkg/triggers/{name}"), 0o644, text.into_bytes()));
+        }
+        out
+    }
 }
 
 // ---- the reference (Linux only) --------------------------------------------
@@ -967,6 +1160,19 @@ pub const PASSWD: &str = "root:x:0:0:root:/root:/bin/bash\n\
                           nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin\n\
                           poly:x:1000:1000:Poly:/home/poly:/bin/bash\n";
 pub const GROUP: &str = "root:x:0:\nnogroup:x:65534:\npoly:x:1000:\n";
+
+/// `master` (a passwd(5) or group(5) file) with the entries of `ours` whose
+/// names it does not have, at the end.
+pub fn with_user(master: &str, ours: &str) -> String {
+    let name = |line: &str| line.split(':').next().unwrap_or("").to_string();
+    let have: BTreeSet<String> = master.lines().map(name).collect();
+    let mut text: String = master.lines().filter(|l| !l.trim().is_empty()).map(|l| format!("{l}\n")).collect();
+    for line in ours.lines().filter(|l| !have.contains(&name(l))) {
+        text.push_str(line);
+        text.push('\n');
+    }
+    text
+}
 
 /// What maintainer scripts would have done that Chromium needs, the users
 /// and the test pages; the same on the disk and in the reference.
@@ -1084,7 +1290,8 @@ fn desktop_file(start_page: Option<&str>) -> String {
     )
 }
 
-/// `/etc/xdg/mimeapps.list`: Chromium is the default browser. The MIME
+/// `/etc/xdg/mimeapps.list`: Chromium is the default browser and Poly's
+/// installer opens package files. The MIME
 /// Applications Associations specification reads `$XDG_CONFIG_DIRS/mimeapps.list`
 /// (the system's choices) after the user's own (`$XDG_CONFIG_HOME`), so a
 /// user changes the default by writing theirs. Poly's Files reads it for
@@ -1096,8 +1303,42 @@ pub fn mimeapps_list() -> String {
     for mime in BROWSER_MIME_TYPES {
         text.push_str(&format!("{mime}={DESKTOP_ID}\n"));
     }
+    // Package files open in Poly's installer (ADR 0173).
+    for mime in poly_shell::apps::PACKAGE_MIME_TYPES {
+        text.push_str(&format!("{mime}={}\n", poly_shell::apps::INSTALLER_ID));
+    }
     text
 }
+
+/// `/etc/apt/sources.list.d/debian.sources` (sources.list(5), the deb822
+/// style): the two snapshots the disk's packages are from ([`ARCHIVES`]), so
+/// what `apt` resolves a new package's dependencies to fits what is on the
+/// disk, signed by Debian's archive keys (`debian-archive-keyring`). A
+/// snapshot's `Release` file is older than its `Valid-Until`, which is
+/// right for a snapshot and switched off for these two sources only.
+pub fn apt_sources() -> String {
+    let mut text =
+        String::from("# The Debian snapshots this disk is made from (tools/xtask/src/chromium.rs, ADR 0173).\n");
+    for (a, suite) in ARCHIVES.iter().zip(["trixie", "trixie-security"]) {
+        text.push_str(&format!(
+            "Types: deb\nURIs: {}\nSuites: {suite}\nComponents: main\nCheck-Valid-Until: no\n\
+             Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp\n\n",
+            a.base
+        ));
+    }
+    text
+}
+
+/// `/etc/apt/apt.conf.d/90poly` (apt.conf(5)): no translated package
+/// descriptions (an index of several megabytes nobody reads here), a
+/// download that fails is tried again (the snapshot archive answers 504 now
+/// and then), and `dpkg` without a pseudo terminal of its own: its output
+/// goes where the installer reads it.
+pub const APT_CONF: &str = "// Poly's installer (tools/xtask/src/chromium.rs, ADR 0173).
+Acquire::Languages \"none\";
+Acquire::Retries \"3\";
+Dpkg::Use-Pty \"0\";
+";
 
 /// `/usr/local/sbin/poly-desktop`: the compositor on the screen, started by
 /// init (as the toolkits' script, ADR 0120) with the arguments in
@@ -1171,38 +1412,43 @@ pub fn poly_files(opts: &PolyFiles) -> Result<crate::initramfs::Tree> {
     }
     file("usr/local/sbin/poly-desktop", 0o755, DESKTOP_SCRIPT.as_bytes().to_vec());
     file("usr/local/bin/poly-chromium", 0o755, LAUNCH_SCRIPT.as_bytes().to_vec());
+    file("usr/local/bin/poly-as-user", 0o755, USER_SCRIPT.as_bytes().to_vec());
     file("etc/poly-desktop.env", 0o644, desktop_env().into_bytes());
     file("etc/poly-desktop.args", 0o644, format!("{}\n", opts.compositor_args.join(" ")).into_bytes());
     file("etc/xdg/mimeapps.list", 0o644, mimeapps_list().into_bytes());
+    file("etc/apt/sources.list.d/debian.sources", 0o644, apt_sources().into_bytes());
+    file("etc/apt/apt.conf.d/90poly", 0o644, APT_CONF.as_bytes().to_vec());
     file(&format!("usr/share/applications/{DESKTOP_ID}"), 0o644, desktop_file(opts.test_page).into_bytes());
-    // Debian's `gawk` makes `awk` an alternative in a maintainer script;
-    // xdg-mime (xdg-open) runs awk.
-    for (path, target) in OVERLAY_LINKS {
-        tree.symlinks.push((path.to_string(), target.to_string()));
-    }
+    file(
+        &format!("usr/share/applications/{}", poly_shell::apps::INSTALLER_ID),
+        0o644,
+        poly_shell::apps::installer_desktop_file().into_bytes(),
+    );
     Ok(tree)
 }
 
-/// The links among Poly's files (path, target): `cp -a` cannot replace a
-/// link that is there already, so the overlay script removes them first.
+/// Links the disk needs before its packages are configured (path, target):
+/// Debian's `gawk` makes `awk` an alternative in its maintainer script, and
+/// xdg-mime (xdg-open) runs awk. A new disk has them and the overlay script
+/// makes one that is missing; once `dpkg --configure -a` ran (ADR 0173) the
+/// link is update-alternatives', which is left alone.
 const OVERLAY_LINKS: [(&str, &str); 1] = [("usr/bin/awk", "gawk")];
 
 /// Where the initramfs keeps Poly's files for the disk ([`poly_files`]).
 pub const OVERLAY_DIR: &str = "poly-overlay";
 
 /// `/etc/init.d/overlay` of the initramfs, run by its `switch-root` with the
-/// disk mounted on `$1`: what the last boot's test apps left (and the links
-/// of [`OVERLAY_LINKS`]) is removed, the
+/// disk mounted on `$1`: what the last boot's test apps left is removed, the
 /// files of [`OVERLAY_DIR`] are copied onto the disk (`cp -a`: modes, links
-/// and times kept), and the settings disk, if there is one on `/settings`
+/// and times kept), a link of [`OVERLAY_LINKS`] that is missing is made, and
+/// the settings disk, if there is one on `/settings`
 /// (`poly.mount=virtio1:/settings`), is bound into the disk, where the
 /// compositor reads and writes its settings.
 pub fn overlay_script() -> String {
-    let stale: Vec<String> = crate::desktop::TEST_ONLY_PATHS
+    let stale: Vec<String> = crate::desktop::TEST_ONLY_PATHS.iter().map(|p| format!("\"$D/{p}\"")).collect();
+    let links: String = OVERLAY_LINKS
         .iter()
-        .copied()
-        .chain(OVERLAY_LINKS.iter().map(|(path, _)| *path))
-        .map(|p| format!("\"$D/{p}\""))
+        .map(|(path, target)| format!("[ -e \"$D/{path}\" ] || [ -L \"$D/{path}\" ] || ln -s {target} \"$D/{path}\"\n"))
         .collect();
     format!(
         "#!/bin/sh
@@ -1215,7 +1461,7 @@ if cp -a /{OVERLAY_DIR}/. \"$D/\"; then
 else
     echo \"overlay: copying Poly's files failed\"
 fi
-if grep -q ' /settings ' /proc/mounts; then
+{links}if grep -q ' /settings ' /proc/mounts; then
     mkdir -p \"$D/settings\" && mount -o bind /settings \"$D/settings\" || echo \"overlay: /settings is not bound\"
 fi
 ",
@@ -1252,11 +1498,34 @@ pub fn collect(files: &PolyFiles) -> std::result::Result<Contents, String> {
     contents.have.insert("chromium");
     configure(tree);
     add_trust_store(tree, &certs)?;
+    // Debian's users and groups (`base-passwd`'s master files, which its
+    // maintainer script installs on a new system) with Poly's user: other
+    // packages' scripts give files to them (`base-files`: group `mail`).
+    let master = |name: &str| -> Result<String> {
+        let data = package_file("base-passwd", &format!("usr/share/base-passwd/{name}.master"))?;
+        String::from_utf8(data).map_err(|_| format!("base-passwd's {name}.master is not text"))
+    };
+    tree.file("etc/passwd", 0o644, with_user(&master("passwd")?, PASSWD).as_bytes());
+    tree.file("etc/group", 0o644, with_user(&master("group")?, GROUP).as_bytes());
+    // `/var/run` and `/var/lock` are links into `/run`, as `base-files`'
+    // maintainer script makes them on a new system; it cannot once the
+    // directories have something in them (init writes `/var/run/utmp`).
+    tree.symlink("var/run", "/run");
+    tree.symlink("var/lock", "/run/lock");
+    tree.dir("run/lock", 0o1777);
+    // No service is started by a package's maintainer script (invoke-rc.d(8),
+    // "policy-rc.d": status 101 forbids the action): init here is BusyBox's
+    // with Poly's own table, not Debian's init system.
+    tree.file(
+        "usr/sbin/policy-rc.d",
+        0o755,
+        b"#!/bin/sh\n# Poly's base root starts no services from packages (ADR 0173).\nexit 101\n",
+    );
     let poly = poly_files(files)?;
     for (path, mode, data) in &poly.files {
         tree.file(path, *mode, data);
     }
-    for (path, target) in &poly.symlinks {
+    for (path, target) in poly.symlinks.iter().map(|(p, t)| (p.as_str(), t.as_str())).chain(OVERLAY_LINKS) {
         tree.symlink(path, target);
     }
     for (path, data) in crate::fonts::shell_tree() {
@@ -2435,10 +2704,15 @@ mod tests {
         assert!(desktop_file(Some("input.html")).contains(" file:///usr/share/poly/chromium/input.html\n"));
         // The launcher's icon is Debian's, a hicolor PNG name.
         assert!(entry.contains("\nIcon=chromium\n"));
-        assert!(LAUNCH_SCRIPT.contains("setpriv --reuid=1000"));
+        assert!(LAUNCH_SCRIPT.contains("exec /usr/local/bin/poly-as-user /usr/bin/chromium \"$@\"\n"));
+        assert!(USER_SCRIPT.contains("setpriv --reuid=1000") && USER_SCRIPT.ends_with("    \"$@\"\n"));
         // The socket's name for `poly` is made again at every launch: the
         // disk (and so `/run/user/1000`) outlives a boot.
-        assert!(LAUNCH_SCRIPT.contains("rm -f \"$U/$WAYLAND_DISPLAY\"\n    ln \"$S\""));
+        assert!(USER_SCRIPT.contains("rm -f \"$U/$WAYLAND_DISPLAY\"\n    ln \"$S\""));
+        // So is the control pipe's, which what Chromium opens asks the
+        // desktop through (ADR 0173).
+        assert!(USER_SCRIPT.contains("ln \"$C\" \"$U/poly-compositor.ctl\""));
+        assert!(USER_SCRIPT.contains("export POLY_COMPOSITOR_CONTROL=\"$U/poly-compositor.ctl\""));
         // No notification when it starts: the busy pointer says so (ADR 0167).
         assert!(!LAUNCH_SCRIPT.contains("notify-send") && !entry.contains("notify-send"));
     }
@@ -2489,6 +2763,12 @@ mod tests {
             assert!(script.contains(&format!("\"$D/{path}\"")), "{path}");
         }
         assert!(script.contains("mount -o bind /settings \"$D/settings\""));
+        // awk is linked where no link is, and update-alternatives' is kept.
+        assert!(
+            script
+                .contains("[ -e \"$D/usr/bin/awk\" ] || [ -L \"$D/usr/bin/awk\" ] || ln -s gawk \"$D/usr/bin/awk\"\n")
+        );
+        assert!(!script.contains("rm -f \"$D/usr/bin/awk\""));
         // Every path the test apps add is one the script removes.
         let added: Vec<String> = ["wl-demo", "wl-client"].iter().map(|p| format!("usr/bin/{p}")).collect();
         assert!(added.iter().all(|p| crate::desktop::TEST_ONLY_PATHS.contains(&p.as_str())));

@@ -24,6 +24,7 @@ jpeg-decoder.workspace = true
 lzma-rs.workspace = true
 poly-http.workspace = true
 poly-pe.workspace = true
+poly-pkg.workspace = true
 poly-binfmt.workspace = true
 poly-personality-native.workspace = true
 poly-win32k.workspace = true

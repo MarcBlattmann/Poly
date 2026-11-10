@@ -56,6 +56,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-compress"
+version = "0.0.1"
+dependencies = [
+ "poly-png",
+]
+
+[[package]]
 name = "poly-dbus"
 version = "0.0.1"
 
@@ -111,6 +118,26 @@ name = "poly-input"
 version = "0.0.1"
 
 [[package]]
+name = "poly-installer-app"
+version = "0.0.1"
+dependencies = [
+ "poly-app",
+ "poly-input",
+ "poly-pkg",
+ "poly-rt",
+ "poly-shell",
+ "poly-wayland",
+]
+
+[[package]]
+name = "poly-installer-native"
+version = "0.0.1"
+dependencies = [
+ "poly-installer-app",
+ "poly-rt",
+]
+
+[[package]]
 name = "poly-notify"
 version = "0.0.1"
 dependencies = [
@@ -132,6 +159,14 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-binfmt",
+]
+
+[[package]]
+name = "poly-pkg"
+version = "0.0.1"
+dependencies = [
+ "poly-compress",
+ "poly-png",
 ]
 
 [[package]]
