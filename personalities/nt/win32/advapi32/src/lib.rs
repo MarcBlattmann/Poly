@@ -335,6 +335,7 @@ unsafe extern "system" {
     fn NtQuerySecurityObject(handle: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> u32;
     fn NtSetSecurityObject(handle: Handle, info: u32, sd: *const u8) -> u32;
     fn RtlNtStatusToDosError(status: u32) -> u32;
+    fn NtOpenKey(out: *mut Handle, access: u32, attributes: *const u8) -> u32;
 }
 
 /// `SE_OBJECT_TYPE` (`accctrl.h`): the kinds `GetSecurityInfo` and
@@ -370,7 +371,25 @@ pub unsafe extern "system" fn GetSecurityInfo(
     descriptor: *mut *mut u8,
 ) -> u32 {
     // SAFETY: the caller's arguments, passed on.
-    let rc = unsafe { get_security_info(handle, object_type, info, owner, group, dacl, sacl, descriptor) };
+    unsafe { security_info_of(handle, object_type, info, owner, group, dacl, sacl, descriptor, true) }
+}
+
+/// `GetSecurityInfo`; `check_type` off for a handle this library opened as
+/// the object type says (a registry key by name).
+#[allow(clippy::too_many_arguments)]
+unsafe fn security_info_of(
+    handle: Handle,
+    object_type: u32,
+    info: u32,
+    owner: *mut *mut u8,
+    group: *mut *mut u8,
+    dacl: *mut *mut u8,
+    sacl: *mut *mut u8,
+    descriptor: *mut *mut u8,
+    check_type: bool,
+) -> u32 {
+    // SAFETY: the caller's arguments, passed on.
+    let rc = unsafe { get_security_info(handle, object_type, info, owner, group, dacl, sacl, descriptor, check_type) };
     if rc != 0 && handle != 0 {
         // A failed call nulls the outputs of the parts it was asked for and
         // the descriptor (the sheets).
@@ -401,11 +420,12 @@ unsafe fn get_security_info(
     dacl: *mut *mut u8,
     sacl: *mut *mut u8,
     descriptor: *mut *mut u8,
+    check_type: bool,
 ) -> u32 {
     if handle == 0 {
         return 6;
     }
-    if let Err(e) = object_type_ok(object_type) {
+    if check_type && let Err(e) = object_type_ok(object_type) {
         return e;
     }
     // A requested part has to have somewhere to go.

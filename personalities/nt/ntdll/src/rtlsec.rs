@@ -79,7 +79,7 @@ fn heap_alloc(n: usize) -> *mut u8 {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn RtlLengthRequiredSid(count: u32) -> u32 {
-    8u32.saturating_add(count.saturating_mul(4))
+    sid::length_required_native(count)
 }
 
 #[unsafe(no_mangle)]
@@ -211,11 +211,18 @@ pub unsafe extern "system" fn RtlConvertSidToUnicodeString(
             s.maximum_length = (bytes + 2) as u16;
             s.buffer = buf;
         } else {
-            if usize::from(s.maximum_length) < bytes + 2 || s.buffer.is_null() {
+            // The caller's buffer has to be larger than the text; the NUL
+            // is written only where it has room too.
+            let Some(terminated) = sddl::caller_buffer_takes(s.maximum_length, text.len()) else {
+                return STATUS_BUFFER_OVERFLOW;
+            };
+            if s.buffer.is_null() {
                 return STATUS_BUFFER_OVERFLOW;
             }
             core::ptr::copy_nonoverlapping(text.as_ptr(), s.buffer, text.len());
-            s.buffer.add(text.len()).write(0);
+            if terminated {
+                s.buffer.add(text.len()).write(0);
+            }
             s.length = bytes as u16;
         }
     }
@@ -380,6 +387,12 @@ pub unsafe extern "system" fn RtlAddMandatoryAce(
     kind: u8,
     mask: u32,
 ) -> NtStatus {
+    // A value in the first 64 KiB is no address (nothing is ever mapped
+    // there): not a SID, as when the arguments are given in the order of
+    // `AddMandatoryAce` and the policy or the type lands here (the sheet).
+    if (label as usize) < 0x1_0000 {
+        return SecErr::InvalidSid.nt();
+    }
     // SAFETY: the caller's SID.
     let s = unsafe { sid_arg(label) };
     if sid::valid_length(s).is_none() {

@@ -380,7 +380,13 @@ pub unsafe extern "system" fn FindFirstFreeAce(p: *mut u8, out: *mut *mut u8) ->
             unsafe { out.write(at.map_or(core::ptr::null_mut(), |o| p.add(o))) };
             TRUE
         }
-        Err(()) => fail(SecErr::InvalidAcl.win32(), FALSE),
+        Err(()) => {
+            // The walk left the ACL: no free position, as `RtlFirstFreeAce`
+            // (which this function wraps) reports it.
+            // SAFETY: the caller's out pointer.
+            unsafe { out.write(core::ptr::null_mut()) };
+            fail(SecErr::InvalidAcl.win32(), FALSE)
+        }
     }
 }
 

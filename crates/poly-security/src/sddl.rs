@@ -134,6 +134,17 @@ pub fn to_wide(bytes: &[u8]) -> Option<Vec<u16>> {
     Sid::from_bytes(bytes).map(|s| to_string(&s).encode_utf16().collect())
 }
 
+/// `RtlConvertSidToUnicodeString` into the caller's buffer of `maximum`
+/// bytes (`MaximumLength`), for a text of `units` UTF-16 units: `None` when
+/// the buffer is not larger than the text in bytes
+/// (`STATUS_BUFFER_OVERFLOW`, nothing written), else whether the
+/// terminating NUL has room too (one spare byte is enough for the text,
+/// two for the NUL).
+pub fn caller_buffer_takes(maximum: u16, units: usize) -> Option<bool> {
+    let bytes = units * 2;
+    (usize::from(maximum) > bytes).then_some(usize::from(maximum) >= bytes + 2)
+}
+
 /// A number: decimal digits, or `0x` or `0X` and hexadecimal digits;
 /// saturating at `u64::MAX`. `None` for an empty or malformed one.
 fn number(digits: &[u16]) -> Option<u64> {
@@ -227,6 +238,50 @@ mod tests {
         assert_eq!(parse(&w("s-1-5-18")), Some(local_system()));
         assert_eq!(to_string(&Sid::new(16, &[7])), "S-1-16-7");
         assert_eq!(to_string(&Sid::new(0x0100_0000, &[7])), "S-1-16777216-7");
+    }
+
+    #[test]
+    fn native_text_lengths() {
+        // The sheet's texts and their lengths in bytes.
+        for (sid, bytes) in [
+            (local_system(), 16),
+            (world(), 14),
+            (builtin(544), 24),
+            (Sid::new(5, &[21, 1000, 2000, 3000, 500]), 54),
+            (mandatory(0x3000), 24),
+            (Sid::new(0, &[]), 10),
+            (nt(u32::MAX), 32),
+            (Sid::new(5, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]), 82),
+            (Sid::new(5, &[7]), 14),
+            (Sid::new(0, &[7]), 14),
+            (Sid::new(0xFFFF_FFFF, &[7]), 32),
+            (Sid::new(0x0100_0000, &[7]), 28),
+            (Sid::new(0x1_0000_0000, &[7]), 34),
+            (Sid::new(0x0102_0304_0506, &[7]), 38),
+            (Sid::new(0xFFFF_FFFF_FFFF, &[7]), 40),
+        ] {
+            assert_eq!(to_wide(&sid.to_bytes()).unwrap().len() * 2, bytes, "{}", to_string(&sid));
+        }
+        assert_eq!(to_string(&Sid::new(0, &[])), "S-1-0");
+        assert_eq!(to_string(&Sid::new(0xFFFF_FFFF_FFFF, &[7])), "S-1-0xFFFFFFFFFFFF-7");
+        // Invalid SIDs have no text.
+        for (rev, count) in [(0u8, 1u8), (2, 1), (255, 1), (1, 16), (1, 17), (1, 255)] {
+            let mut b = alloc::vec![0u8; 8 + 4 * 255];
+            (b[0], b[1], b[7]) = (rev, count, 5);
+            assert_eq!(to_wide(&b), None, "revision {rev}, count {count}");
+        }
+    }
+
+    #[test]
+    fn caller_buffers() {
+        // S-1-5-32-544 is 12 units, 24 bytes.
+        for max in [0, 2, 22, 23, 24] {
+            assert_eq!(caller_buffer_takes(max, 12), None, "{max}");
+        }
+        assert_eq!(caller_buffer_takes(25, 12), Some(false));
+        for max in [26, 28, 128] {
+            assert_eq!(caller_buffer_takes(max, 12), Some(true), "{max}");
+        }
     }
 
     #[test]
