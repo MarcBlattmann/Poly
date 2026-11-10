@@ -43,6 +43,7 @@ unsafe extern "system" {
     fn GetCurrentProcessId() -> u32;
     fn GetCurrentProcess() -> isize;
     fn GetTickCount64() -> u64;
+    fn GetThreadPreferredUILanguages(flags: u32, count: *mut u32, buf: *mut u16, cch: *mut u32) -> i32;
     fn LocalFree(block: *mut u8) -> *mut u8;
     fn GetModuleFileNameW(module: *mut u8, buf: *mut u16, size: u32) -> u32;
     fn GetEnvironmentVariableW(name: *const u16, buf: *mut u16, size: u32) -> u32;
@@ -804,6 +805,30 @@ unsafe fn shell32() {
     );
 }
 
+/// `GetThreadPreferredUILanguages` the way chrome.dll calls it when it starts (Learn; a FALSE
+/// here is fatal for Chrome): `MUI_LANGUAGE_NAME | MUI_UI_FALLBACK` (0x38), first for the size,
+/// then for the list, which is the user's language and its neutral language.
+unsafe fn ui_languages() {
+    let (mut count, mut size) = (0u32, 0u32);
+    check_eq(GetThreadPreferredUILanguages(0x38, &mut count, core::ptr::null_mut(), &mut size) as usize, 1);
+    check_eq(count as usize, 2);
+    check_eq(size as usize, 10); // "en-US\0en\0\0"
+    let mut list = [0xAAAAu16; 16];
+    let mut cch = size;
+    check_eq(GetThreadPreferredUILanguages(0x38, &mut count, list.as_mut_ptr(), &mut cch) as usize, 1);
+    check_got(wide_is(list.as_ptr(), "en-US") && wide_is(list.as_ptr().add(6), "en") && list[9] == 0, cch);
+    check_eq(list[10] as usize, 0xAAAA);
+    // A buffer that is too small: ERROR_INSUFFICIENT_BUFFER (122) and the size needed.
+    let mut small = 4u32;
+    check_eq(GetThreadPreferredUILanguages(0x38, &mut count, list.as_mut_ptr(), &mut small) as usize, 0);
+    check_eq(GetLastError() as usize, 122);
+    check_eq(small as usize, 10);
+    // Both forms at once: ERROR_INVALID_PARAMETER (87).
+    let mut cch = 16u32;
+    check_eq(GetThreadPreferredUILanguages(0xC, &mut count, list.as_mut_ptr(), &mut cch) as usize, 0);
+    check_eq(GetLastError() as usize, 87);
+}
+
 /// winmm's timer functions (Learn: `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`): the
 /// time is milliseconds since the system started (non-zero after boot, not going back; the
 /// same clock as `GetTickCount`), and a 1 ms period request is granted and ended.
@@ -902,6 +927,7 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         loader_lock();
         current_user_key();
         shell32();
+        ui_languages();
         winmm();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));
