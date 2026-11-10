@@ -47,8 +47,10 @@
 //!   a chroot, so Chromium may make user namespaces and takes its
 //!   user-namespace sandbox; the same BusyBox, copied onto the disk
 //!   (`initramfs::DISK_BUSYBOX`), is init there with [`INITTAB`].
-//! - `cargo xtask chromium [--fresh-disk] [STEP...]`: a boot driven like
-//!   `cargo xtask toolkits` (steps; QMP, so Unix hosts).
+//! - `cargo xtask chromium [--fresh-disk] [--scale=N] [STEP...]`: a boot
+//!   driven like `cargo xtask toolkits` (steps; QMP, so Unix hosts);
+//!   `--scale=N` gives the compositor that scale (a HiDPI desktop on the
+//!   same screen, where Chromium draws through a `wp_viewport`).
 //! - `cargo xtask chromium apptest [--target linux|poly|both] [--tests-dir
 //!   DIR]...`: the scenario tests (`specs/linux/apps/chromium.tests/*.app`,
 //!   the pipeline's app test format with programs of Chromium's disk) on
@@ -208,16 +210,12 @@ pub const WINDOW_ARGS: &str = "--ozone-platform=wayland --disable-gpu --no-first
 /// to run its sandbox, on the desktop's Wayland display. The compositor's
 /// runtime directory stays private (ADR 0120); the user gets a second name
 /// of its socket (a hard link: unix(7) finds a socket by its inode) in its
-/// own. `setpriv(1)` (util-linux) changes the user.
+/// own. `setpriv(1)` (util-linux) changes the user. It says nothing while
+/// Chromium starts: the busy pointer does (ADR 0167), no notification.
 pub const LAUNCH_SCRIPT: &str = "#!/bin/bash
 # Chromium as user poly on the desktop (tools/xtask/src/chromium.rs).
 . /etc/poly-desktop.env
 U=/run/user/1000
-# The desktop shows nothing for about a minute while Chromium starts (more
-# without a hypervisor): say so, unless it runs already and only opens a window.
-if [ -x /bin/notify-send ] && ! /usr/local/lib/poly/busybox pidof chromium >/dev/null 2>&1; then
-    /bin/notify-send -a Chromium \"Chromium is starting\" \"Its window opens in about a minute.\" >/dev/null 2>&1 &
-fi
 mkdir -p \"$U\" /home/poly
 chown poly:poly \"$U\" /home/poly && chmod 700 \"$U\"
 S=\"$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY\"
@@ -1425,7 +1423,8 @@ pub fn first_start() -> (Option<u64>, bool) {
 }
 /// `cargo xtask chromium <lock|fetch [--reference]|disk|run|root
 /// --reference>` or `cargo xtask chromium [--release] [--fresh-disk]
-/// [STEP...]` (a boot driven by steps as `cargo xtask toolkits`).
+/// [--scale=N] [STEP...]` (a boot driven by steps as `cargo xtask toolkits`;
+/// `--scale=N`: the compositor's scale).
 pub fn command(args: &[String]) -> Result {
     match args.first().map(String::as_str) {
         Some("lock") => return write_lock(),
@@ -1462,7 +1461,9 @@ pub fn command(args: &[String]) -> Result {
     let kernel = crate::build_kernel(release)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
     let image = disk_image(fresh)?;
-    let initrd = write_initramfs(&PolyFiles::default())?;
+    let scale = args.iter().find_map(|a| a.strip_prefix("--scale="));
+    let compositor_args = scale.map(|s| vec!["--scale".to_string(), s.to_string()]).unwrap_or_default();
+    let initrd = write_initramfs(&PolyFiles { compositor_args, ..PolyFiles::default() })?;
     // POLY_CHROMIUM_APPEND: more kernel arguments (`poly.strace=chromium`, ...).
     // The boot has QEMU user networking, as `run` and the boot test.
     let more = std::env::var("POLY_CHROMIUM_APPEND").unwrap_or_default();
@@ -2438,6 +2439,8 @@ mod tests {
         // The socket's name for `poly` is made again at every launch: the
         // disk (and so `/run/user/1000`) outlives a boot.
         assert!(LAUNCH_SCRIPT.contains("rm -f \"$U/$WAYLAND_DISPLAY\"\n    ln \"$S\""));
+        // No notification when it starts: the busy pointer says so (ADR 0167).
+        assert!(!LAUNCH_SCRIPT.contains("notify-send") && !entry.contains("notify-send"));
     }
 
     /// Poly's Files picks the app for a web page by the same lists `xdg-open`

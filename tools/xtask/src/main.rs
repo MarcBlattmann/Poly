@@ -89,8 +89,8 @@
 //!                       Chromium's root disk from pinned Debian packages (chromium.rs):
 //!                       write the lock, download and check the packages, unpack them
 //!                       (Linux), make target/poly-chromium-disk.img
-//!   chromium [--release] [--fresh-disk] [STEP...]
-//!                       boot Chromium's disk to the desktop, steps as for toolkits
+//!   chromium [--release] [--fresh-disk] [--scale=N] [STEP...]
+//!                       boot Chromium's disk to the desktop, steps as for toolkits (--scale=N: a HiDPI desktop)
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under

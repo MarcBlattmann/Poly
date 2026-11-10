@@ -340,6 +340,48 @@ fn viewports_crop_and_scale() {
     assert_eq!(picture(&fb, &key), ["gw......", "........", "........", "........"]);
 }
 
+/// Surface rectangles (`wl_surface.damage`) lead to the buffer pixels
+/// behind them through the viewport, the buffer scale and the transform.
+#[test]
+fn surface_rectangles_map_to_buffer_pixels() {
+    let plain = View::default();
+    // The buffer scale alone.
+    assert_eq!(plain.buffer_rect(Rect::new(1, 2, 3, 4), 40, 20, 2), Rect::new(2, 4, 6, 8));
+    assert_eq!(plain.buffer_rect(Rect::new(1, 2, 3, 4), 40, 20, 1), Rect::new(1, 2, 3, 4));
+    // Larger than the surface (how clients say "everything"), partly or
+    // wholly outside it, empty.
+    assert_eq!(plain.buffer_rect(Rect::new(0, 0, i32::MAX, i32::MAX), 40, 20, 2), Rect::new(0, 0, 40, 20));
+    assert_eq!(plain.buffer_rect(Rect::new(-5, -5, 10, 10), 40, 20, 2), Rect::new(0, 0, 10, 10));
+    assert!(plain.buffer_rect(Rect::new(30, 0, 5, 5), 40, 20, 2).is_empty());
+    assert!(plain.buffer_rect(Rect::new(3, 3, 0, 5), 40, 20, 2).is_empty());
+    // A 2x output the fractional-scale way: a 2000x1200 buffer of scale 1
+    // shown 1000x600. The whole surface is the whole buffer, not its
+    // top-left quarter.
+    let hidpi = View { destination: Some((1000, 600)), ..View::default() };
+    assert_eq!(hidpi.buffer_rect(Rect::new(0, 0, 1000, 600), 2000, 1200, 1), Rect::new(0, 0, 2000, 1200));
+    assert_eq!(hidpi.buffer_rect(Rect::new(10, 20, 30, 40), 2000, 1200, 1), Rect::new(20, 40, 60, 80));
+    // Scaled by 1.5: rounded outwards.
+    let frac = View { destination: Some((4, 2)), ..View::default() };
+    assert_eq!(frac.buffer_rect(Rect::new(1, 0, 1, 1), 6, 3, 1), Rect::new(1, 0, 2, 2));
+    // A source: the middle two columns of the top row of a 4x2 buffer.
+    let crop = View { source: Some((256, 0, 512, 256)), destination: Some((4, 2)), ..View::default() };
+    assert_eq!(crop.buffer_rect(Rect::new(0, 0, 4, 2), 4, 2, 1), Rect::new(1, 0, 2, 1));
+    assert_eq!(crop.buffer_rect(Rect::new(2, 0, 2, 2), 4, 2, 1), Rect::new(2, 0, 1, 1));
+    // Every transform: a surface pixel is the buffer pixel `buffer_point`
+    // names, and the whole surface the whole 3x2 buffer.
+    for transform in 0..8 {
+        let view = View { transform, ..View::default() };
+        let (tw, th) = if transform & 1 != 0 { (2, 3) } else { (3, 2) };
+        for v in 0..th {
+            for u in 0..tw {
+                let (bx, by) = buffer_point(transform, u, v, tw, th);
+                assert_eq!(view.buffer_rect(Rect::new(u, v, 1, 1), 3, 2, 1), Rect::new(bx, by, 1, 1), "{transform}");
+            }
+        }
+        assert_eq!(view.buffer_rect(Rect::new(0, 0, tw, th), 3, 2, 1), Rect::new(0, 0, 3, 2), "{transform}");
+    }
+}
+
 /// A window part of another (a subsurface, a popup) moves and is raised
 /// with it, and can be stacked below it.
 #[test]
