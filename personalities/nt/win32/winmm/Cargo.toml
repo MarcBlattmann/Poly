@@ -1,0 +1,18 @@
+[package]
+name = "winmm"
+description = "Our winmm.dll (ADR 0155): the timer functions timeGetTime, timeBeginPeriod, timeEndPeriod; the rest of winmm is polystub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "winmm"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[lints]
+workspace = true

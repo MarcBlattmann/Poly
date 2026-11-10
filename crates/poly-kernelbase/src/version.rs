@@ -252,11 +252,16 @@ pub const VER_OR: u8 = 7;
 pub const PLATFORM_WIN32_NT: u32 = 2;
 pub const NT_WORKSTATION: u8 = 1;
 
+/// Bit 63 of every condition mask `VerSetConditionMask` returns: the call-site trace of Chrome on
+/// Windows 11 shows `0x8000000000000018` for `VerSetConditionMask(0, VER_MAJORVERSION,
+/// VER_GREATER_EQUAL)` (the three bits of the condition at bit 3, and this one).
+pub const CONDITION_MASK_FLAG: u64 = 1 << 63;
+
 /// `VerSetConditionMask`: three bits per version field, at the position of
 /// the field's type bit (bit 0 for the minor version ... bit 7 for the
-/// product type).
+/// product type), and [`CONDITION_MASK_FLAG`].
 pub fn set_condition(mask: u64, type_mask: u32, condition: u8) -> u64 {
-    let mut m = mask;
+    let mut m = mask | CONDITION_MASK_FLAG;
     for bit in 0..8 {
         if type_mask & (1 << bit) != 0 {
             m = (m & !(7u64 << (3 * bit))) | (u64::from(condition & 7) << (3 * bit));
@@ -398,9 +403,10 @@ mod verify_tests {
     #[test]
     fn the_mask_holds_three_bits_per_field() {
         let m = set_condition(0, VER_MAJORVERSION, VER_GREATER_EQUAL);
-        assert_eq!(m, 3 << 3);
+        // 0x8000000000000018 on Windows 11 (the call-site trace of chrome_elf's start-up).
+        assert_eq!(m, 0x8000_0000_0000_0018);
         let m = set_condition(m, VER_MINORVERSION | VER_SERVICEPACKMAJOR, VER_EQUAL);
-        assert_eq!(m, (3 << 3) | 1 | (1 << 15));
+        assert_eq!(m, CONDITION_MASK_FLAG | (3 << 3) | 1 | (1 << 15));
         // A later call replaces the condition.
         assert_eq!((set_condition(m, VER_MAJORVERSION, VER_LESS) >> 3) & 7, u64::from(VER_LESS));
     }
