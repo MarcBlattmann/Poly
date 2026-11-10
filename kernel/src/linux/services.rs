@@ -1244,7 +1244,7 @@ impl LinuxKernel for Thread<'_> {
             return if ready() { Wakeup::Woken } else { Wakeup::Signal };
         };
         let mut blocker = self.blocker();
-        let _registration = queue.register(poly_vfs::PollEvents::READABLE, poly_vfs::Blocker::waker(&mut blocker));
+        let _registration = queue.register(poly_vfs::PollEvents::READABLE, poly_vfs::Blocker::waker(&blocker));
         // (The listener notifies with every event bit.)
         loop {
             if ready() {
