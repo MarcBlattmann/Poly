@@ -93,8 +93,7 @@ pub struct Installer {
 }
 
 /// Why the base root cannot install packages at all.
-pub const NO_TOOLS: &str =
-    "This Poly disk was made before it could install apps. Start Poly with a fresh disk to get the package tools.";
+pub const NO_TOOLS: &str = "This Poly disk was made before it could install apps. Start Poly with a fresh disk (Fresh disk in the start menu, or --fresh-disk) to get the package tools.";
 
 impl Installer {
     /// The installer for the file at `path`, from what was read of it:
