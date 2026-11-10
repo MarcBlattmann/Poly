@@ -4,6 +4,23 @@ use crate::{IoBuf, IoError, IoQueue, Op, SubmitError, Ticket};
 
 const NIL: u32 = u32::MAX;
 
+/// The bytes of buffer cache a disk of `disk_bytes` gets when `free_ram`
+/// bytes of memory are free: 1/32 of the disk and 1/16 of the free memory,
+/// between `least` and `most`, in whole pages. A cache of 64 KiB (128 blocks
+/// of 512 bytes) holds less than one read-ahead of the page cache, so a file
+/// system's metadata is read from the disk again and again (ADR 0148).
+pub fn cache_size(disk_bytes: u64, free_ram: u64, least: usize, most: usize) -> usize {
+    let wanted = (disk_bytes / 32).min(free_ram / 16).min(most as u64) as usize;
+    wanted.max(least) / 4096 * 4096
+}
+
+/// [`BufferCache::read_blocks`] keeps the blocks of an uncached run in the
+/// cache when the run is at most this many blocks (a file system's
+/// metadata is read a block or two at a time); longer runs are file data,
+/// which has a cache of its own above (the page cache): they go straight to
+/// the caller's buffer and leave the cache to the metadata.
+pub const KEEP_RUN_BLOCKS: usize = 64;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Io {
     None,
@@ -125,6 +142,9 @@ pub struct BufferCache<'a> {
     lru_head: u32,
     lru_tail: u32,
     stats: CacheStats,
+    /// Memory to gather neighbouring dirty blocks in, so they go out as one
+    /// request ([`BufferCache::set_staging`]); empty: one request per block.
+    staging: &'a mut [u8],
 }
 
 impl core::fmt::Debug for BufferCache<'_> {
@@ -158,6 +178,7 @@ impl<'a> BufferCache<'a> {
             lru_head: NIL,
             lru_tail: NIL,
             stats: CacheStats::default(),
+            staging: &mut [],
         };
         cache.slots.fill(CacheSlot::EMPTY);
         for i in 0..n as u32 {
@@ -168,6 +189,20 @@ impl<'a> BufferCache<'a> {
 
     pub const fn block_size(&self) -> usize {
         self.block_size
+    }
+
+    /// Give the cache memory to write runs of neighbouring dirty blocks from
+    /// in one request each (instead of one request per block): a whole
+    /// number of blocks, at least two. The device reads it by DMA, so it
+    /// must be memory the device can reach.
+    pub fn set_staging(&mut self, staging: &'a mut [u8]) {
+        let n = staging.len() / self.block_size * self.block_size;
+        self.staging = &mut staging[..n];
+    }
+
+    /// Blocks the staging memory holds.
+    fn staged_blocks(&self) -> usize {
+        self.staging.len() / self.block_size
     }
 
     /// Number of buffers.
@@ -208,6 +243,81 @@ impl<'a> BufferCache<'a> {
         self.install(i, block);
         self.slots[i as usize].pins = 1;
         Ok(Buf { slot: i, block })
+    }
+
+    /// Read the whole blocks from `first` into `buf`: cached ones are copied,
+    /// each run of uncached ones is read from the device in one request
+    /// straight into `buf`. A run of at most [`KEEP_RUN_BLOCKS`] stays in the
+    /// cache too (metadata); a longer one does not (file data, cached above),
+    /// so a big read does not push everything else out. Memory the device
+    /// cannot reach ([`IoError::BadBuffer`]) is read through the cache
+    /// instead.
+    pub fn read_blocks<Q: IoQueue + ?Sized>(
+        &mut self,
+        q: &mut Q,
+        first: u64,
+        buf: &mut [u8],
+    ) -> Result<(), CacheError> {
+        self.check_device(q)?;
+        let bs = self.block_size;
+        if buf.is_empty() || !buf.len().is_multiple_of(bs) {
+            return Err(IoError::BadRequest.into());
+        }
+        let count = (buf.len() / bs) as u64;
+        if first.checked_add(count).is_none_or(|end| end > q.info().blocks) {
+            return Err(IoError::OutOfRange.into());
+        }
+        let mut i = 0u64;
+        while i < count {
+            let block = first + i;
+            if let Some(slot) = self.lookup(block) {
+                self.stats.hits += 1;
+                let from = slot as usize * bs;
+                buf[i as usize * bs..(i as usize + 1) * bs].copy_from_slice(&self.data[from..from + bs]);
+                if self.slots[slot as usize].pins == 0 {
+                    // Used just now.
+                    self.lru_unlink(slot);
+                    self.lru_push_back(slot);
+                }
+                i += 1;
+                continue;
+            }
+            let mut end = i + 1;
+            while end < count && self.lookup(first + end).is_none() {
+                end += 1;
+            }
+            let run = &mut buf[i as usize * bs..end as usize * bs];
+            match q.read(block, run) {
+                Ok(()) => {
+                    self.stats.misses += end - i;
+                    if ((end - i) as usize) <= KEEP_RUN_BLOCKS {
+                        for (k, chunk) in run.chunks(bs).enumerate() {
+                            self.keep(q, block + k as u64, chunk)?;
+                        }
+                    }
+                }
+                Err(IoError::BadBuffer) => {
+                    for (k, chunk) in run.chunks_mut(bs).enumerate() {
+                        let b = self.get(q, block + k as u64)?;
+                        chunk.copy_from_slice(self.data(&b));
+                        self.release(b);
+                    }
+                }
+                Err(e) => return Err(e.into()),
+            }
+            i = end;
+        }
+        Ok(())
+    }
+
+    /// Cache `data` (just read from the device) as `block`, unpinned.
+    fn keep<Q: IoQueue + ?Sized>(&mut self, q: &mut Q, block: u64, data: &[u8]) -> Result<(), CacheError> {
+        let i = self.victim(q)?;
+        let at = i as usize * self.block_size;
+        self.data[at..at + self.block_size].copy_from_slice(data);
+        self.install(i, block);
+        self.lru_push_back(i);
+        Ok(())
     }
 
     /// The block, pinned, filled with zeros and dirty, without reading it:
@@ -283,6 +393,13 @@ impl<'a> BufferCache<'a> {
         for i in 0..self.slots.len() as u32 {
             let s = self.slots[i as usize];
             if !(s.valid && s.dirty) {
+                continue;
+            }
+            if self.staged_blocks() >= 2 {
+                // A run of neighbours at a time; they are clean afterwards.
+                if let Err(e) = self.write_back_run(q, i) {
+                    error.get_or_insert(e);
+                }
                 continue;
             }
             let buf = self.io_buf(i);
@@ -473,7 +590,7 @@ impl<'a> BufferCache<'a> {
         }
         let s = self.slots[i as usize];
         if s.valid && s.dirty {
-            self.write_slot(q, i)?;
+            self.write_back_run(q, i)?;
         }
         self.lru_unlink(i);
         self.evict(i);
@@ -499,6 +616,46 @@ impl<'a> BufferCache<'a> {
         self.slots[i as usize].dirty = false;
         self.stats.write_backs += 1;
         Ok(())
+    }
+
+    /// Write the dirty block in slot `i` and, with staging memory, the dirty
+    /// blocks next to it (the cache holds) in the same request: a run of
+    /// consecutive blocks going out at once. They are clean afterwards.
+    fn write_back_run<Q: IoQueue + ?Sized>(&mut self, q: &mut Q, i: u32) -> Result<(), IoError> {
+        let cap = self.staged_blocks();
+        if cap < 2 {
+            return self.write_slot(q, i);
+        }
+        let blocks = q.info().blocks;
+        let at = self.slots[i as usize].block;
+        // Upwards first (writes mostly go forward), then down with what is left.
+        let mut hi = at;
+        while ((hi - at + 1) as usize) < cap && hi + 1 < blocks && self.is_dirty(hi + 1) {
+            hi += 1;
+        }
+        let mut lo = at;
+        while ((hi - lo + 1) as usize) < cap && lo > 0 && self.is_dirty(lo - 1) {
+            lo -= 1;
+        }
+        let bs = self.block_size;
+        for b in lo..=hi {
+            let slot = self.lookup(b).expect("a block of the run is cached") as usize;
+            let from = slot * bs;
+            let to = (b - lo) as usize * bs;
+            self.staging[to..to + bs].copy_from_slice(&self.data[from..from + bs]);
+        }
+        let len = (hi - lo + 1) as usize * bs;
+        q.write(lo, &self.staging[..len])?;
+        for b in lo..=hi {
+            let slot = self.lookup(b).expect("a block of the run is cached");
+            self.slots[slot as usize].dirty = false;
+        }
+        self.stats.write_backs += hi - lo + 1;
+        Ok(())
+    }
+
+    fn is_dirty(&self, block: u64) -> bool {
+        self.lookup(block).is_some_and(|i| self.slots[i as usize].dirty)
     }
 
     fn has_io(&self) -> bool {

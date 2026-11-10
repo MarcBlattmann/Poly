@@ -63,6 +63,9 @@ pub const TEB_SELF: u64 = 0x30;
 /// `TEB.ClientId` (`winternl.h`): two `HANDLE`s, the process and thread id.
 pub const TEB_CLIENT_ID: u64 = 0x40;
 pub const TEB_PEB: u64 = 0x60;
+/// `TEB.DeallocationStack` (`ntpebteb.h`): the base of the stack's reservation, the low limit
+/// `GetCurrentThreadStackLimits` reports.
+pub const TEB_DEALLOCATION_STACK: u64 = 0x1478;
 pub const PEB_BEING_DEBUGGED: u64 = 0x02;
 /// `PEB.ImageBaseAddress` (`winternl.h`): where the executable is mapped. Programs read it
 /// straight from the PEB (Chrome's `chrome_elf.dll` does; with 0 it faulted at address 0x10).
@@ -182,7 +185,8 @@ fn write_teb(
     tib[TEB_CLIENT_ID as usize..][..8].copy_from_slice(&u64::from(client.process.0).to_le_bytes());
     tib[TEB_CLIENT_ID as usize + 8..][..8].copy_from_slice(&client.thread.0.to_le_bytes());
     tib[TEB_PEB as usize..][..8].copy_from_slice(&peb.to_le_bytes());
-    b.write(teb, &tib)
+    b.write(teb, &tib)?;
+    b.write(teb + TEB_DEALLOCATION_STACK, &stack.alloc.to_le_bytes())
 }
 
 /// Map `image` as an image section view in `proc` (at its preferred base,
@@ -268,8 +272,24 @@ pub fn start_process_from(
     thread: ThreadRef,
     inherit_from: Option<poly_ntobj::ProcessId>,
 ) -> Result<ProcessStart, NtStatus> {
+    start_process_listed(sys, proc, b, file, ntdll, file_object, thread, inherit_from, None)
+}
+
+/// [`start_process_from`] inheriting only the handles of `only` (ADR 0169).
+#[allow(clippy::too_many_arguments)] // what a new process is made of
+pub fn start_process_listed(
+    sys: &mut NtSystem,
+    proc: &mut NtProcess,
+    b: &mut dyn Backend,
+    file: &[u8],
+    ntdll: &[u8],
+    file_object: Option<ObjectId>,
+    thread: ThreadRef,
+    inherit_from: Option<poly_ntobj::ProcessId>,
+    only: Option<&[Handle]>,
+) -> Result<ProcessStart, NtStatus> {
     let om = &mut sys.objects;
-    om.create_process(proc.pid, inherit_from)?;
+    om.create_process_with(proc.pid, inherit_from, only)?;
     let pobj =
         NewObject::Opaque { kind: ObjectType::Process, cookie: proc.pid.0.into(), signaled: Some(false), parse: false };
     let pid_object = om.new_object(pobj, thread)?;
@@ -466,6 +486,7 @@ pub fn thread_exit(
     // Tell the dispatcher the thread is gone (abandon its mutants, drop its
     // waits), then signal its object so waiters on it wake.
     sys.objects.thread_terminated(thread);
+    sys.objects.forget_thread_token(thread);
     let _ = sys.objects.set_signaled(t.object, true);
     let _ = sys.objects.set_thread_object(thread, None);
     let _ = sys.objects.dereference(t.object);
@@ -484,6 +505,7 @@ pub fn thread_exit(
 /// handle in its table. Its memory itself goes with the kernel's memory
 /// map; `b` is only used to free section pages.
 pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backend) {
+    sys.job_process_exited(proc.pid, proc.exit_status.unwrap_or(STATUS_SUCCESS));
     sys.win32k.process_exited(&mut sys.objects, proc.pid.0);
     for a in proc.vm.clear() {
         if let Some(v) = a.view() {
@@ -491,12 +513,13 @@ pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backen
         }
     }
     for t in core::mem::take(&mut proc.threads) {
+        sys.objects.forget_thread_token(t.thread);
         let _ = sys.objects.set_thread_object(t.thread, None);
         let _ = sys.objects.set_signaled(t.object, true);
         let _ = sys.objects.dereference(t.object);
     }
     let _ = sys.objects.destroy_process(proc.pid);
-    sys.token_privileges.remove(&proc.pid);
+    sys.objects.forget_process_token(proc.pid);
     if let Some(p) = proc.object.take() {
         // Kept while a handle keeps the object (`GetExitCodeProcess`);
         // `NtSystem::reap` forgets it with the object.

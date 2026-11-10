@@ -17,6 +17,48 @@
 /// `(function, contract)`: `kernel32!function` forwards to
 /// `contract.function`.
 pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
+    // Named pipes, completion ports and overlapped I/O (ADR 0169).
+    ("CreateJobObjectW", "api-ms-win-core-job-l1-1-0"),
+    ("OpenJobObjectW", "api-ms-win-core-job-l1-1-0"),
+    ("AssignProcessToJobObject", "api-ms-win-core-job-l1-1-0"),
+    ("IsProcessInJob", "api-ms-win-core-job-l1-1-0"),
+    ("QueryInformationJobObject", "api-ms-win-core-job-l1-1-0"),
+    ("SetInformationJobObject", "api-ms-win-core-job-l1-1-0"),
+    ("TerminateJobObject", "api-ms-win-core-job-l1-1-0"),
+    ("InitializeProcThreadAttributeList", "api-ms-win-core-processthreads-l1-1-0"),
+    ("UpdateProcThreadAttribute", "api-ms-win-core-processthreads-l1-1-0"),
+    ("DeleteProcThreadAttributeList", "api-ms-win-core-processthreads-l1-1-0"),
+    ("CreateFileMappingA", "api-ms-win-core-memory-l1-1-0"),
+    ("CreateNamedPipeW", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("ConnectNamedPipe", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("DisconnectNamedPipe", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("PeekNamedPipe", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeInfo", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeHandleStateW", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("SetNamedPipeHandleState", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("TransactNamedPipe", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("CallNamedPipeW", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("WaitNamedPipeW", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeClientProcessId", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeServerProcessId", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeClientSessionId", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("GetNamedPipeServerSessionId", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("CancelIo", "api-ms-win-core-io-l1-1-0"),
+    ("CancelIoEx", "api-ms-win-core-io-l1-1-0"),
+    ("CancelSynchronousIo", "api-ms-win-core-io-l1-1-0"),
+    ("CreateIoCompletionPort", "api-ms-win-core-io-l1-1-0"),
+    ("GetOverlappedResult", "api-ms-win-core-io-l1-1-0"),
+    ("GetOverlappedResultEx", "api-ms-win-core-io-l1-1-0"),
+    ("GetQueuedCompletionStatus", "api-ms-win-core-io-l1-1-0"),
+    ("GetQueuedCompletionStatusEx", "api-ms-win-core-io-l1-1-0"),
+    ("PostQueuedCompletionStatus", "api-ms-win-core-io-l1-1-0"),
+    ("ReadFileEx", "api-ms-win-core-file-l1-1-0"),
+    ("WriteFileEx", "api-ms-win-core-file-l1-1-0"),
+    ("SetFileCompletionNotificationModes", "api-ms-win-core-file-l1-1-0"),
+    ("OpenProcess", "api-ms-win-core-processthreads-l1-1-0"),
+    ("OpenThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadId", "api-ms-win-core-processthreads-l1-1-0"),
+    ("QueueUserAPC", "api-ms-win-core-processthreads-l1-1-0"),
     // Files (fileapi.h).
     ("CreateFileW", "api-ms-win-core-file-l1-1-0"),
     ("CreateFileA", "api-ms-win-core-file-l1-1-0"),
@@ -63,6 +105,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetCurrentProcessId", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetCurrentThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetCurrentThreadId", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetCurrentThreadStackLimits", "api-ms-win-core-processthreads-l1-1-0"),
     ("ExitProcess", "api-ms-win-core-processthreads-l1-1-0"),
     ("TerminateProcess", "api-ms-win-core-processthreads-l1-1-0"),
     ("CreateThread", "api-ms-win-core-processthreads-l1-1-0"),
@@ -279,7 +322,6 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetProductInfo", "api-ms-win-core-sysinfo-l1-2-0"),
     ("AddVectoredExceptionHandler", "api-ms-win-core-errorhandling-l1-1-0"),
     ("RemoveVectoredExceptionHandler", "api-ms-win-core-errorhandling-l1-1-0"),
-    ("RtlCaptureStackBackTrace", "api-ms-win-core-debug-l1-1-0"),
     ("GetStringTypeW", "api-ms-win-core-string-l1-1-0"),
     ("CompareStringW", "api-ms-win-core-string-l1-1-0"),
     ("CompareStringEx", "api-ms-win-core-string-l1-1-0"),
@@ -300,6 +342,13 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("MoveFileW", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("FileTimeToDosDateTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("DosDateTimeToFileTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
+    // Tokens (processthreadsapi.h, ADR 0171):
+    // `advapi32` forwards the token functions to the same contract.
+    ("OpenProcessToken", "api-ms-win-core-processthreads-l1-1-0"),
+    ("OpenThreadToken", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadToken", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetProcessMitigationPolicy", "api-ms-win-core-processthreads-l1-1-3"),
+    ("SetProcessMitigationPolicy", "api-ms-win-core-processthreads-l1-1-3"),
     // ----- Chrome batch 2 (chrome-win-b2, ADR 0155). Files (fileapi.h,
     // winbase.h, minwinbase.h); the contracts are the ones the pages list.
     ("FindFirstFileExW", "api-ms-win-core-file-l1-1-0"),
@@ -358,6 +407,8 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
 /// table gives to `ntdll` (ADR 0071).
 pub const KERNEL32_NTDLL_FORWARDS: &[(&str, &str)] = &[
     ("RtlCaptureContext", "api-ms-win-core-rtlsupport-l1-1-0"),
+    // kernel32 forwards it to ntdll, which captures the stack (ADR 0155).
+    ("RtlCaptureStackBackTrace", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlLookupFunctionEntry", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlVirtualUnwind", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlUnwindEx", "api-ms-win-core-rtlsupport-l1-1-0"),
@@ -411,7 +462,10 @@ pub const KERNEL32_OWN: &[&str] = &[
 /// Every function `kernelbase.dll` must export: each one `kernel32` or
 /// `advapi32` forwards ([`crate::advapi`], ADR 0083).
 pub fn kernelbase_exports() -> impl Iterator<Item = &'static str> {
-    KERNEL32_FORWARDS.iter().chain(crate::advapi::ADVAPI32_FORWARDS).map(|&(name, _)| name)
+    let advapi = crate::advapi::ADVAPI32_FORWARDS
+        .iter()
+        .filter(|&&(name, _)| !KERNEL32_FORWARDS.iter().any(|&(k, _)| k == name));
+    KERNEL32_FORWARDS.iter().chain(advapi).map(|&(name, _)| name)
 }
 
 /// The forwarder string of `kernel32!name`, as the export directory holds

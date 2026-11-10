@@ -404,7 +404,9 @@ fn idle_main(_: usize) -> usize {
             if switched {
                 cpu::enable_interrupts();
             } else {
+                let timer = crate::profile::start();
                 cpu::enable_interrupts_and_halt();
+                crate::profile::since(crate::profile::Event::Halt, timer);
             }
         }
     }

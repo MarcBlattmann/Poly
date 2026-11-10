@@ -596,10 +596,15 @@ fn created_fonts_are_mapped_by_name_and_height() {
         g.select_object(dc, f).unwrap();
         g.text_metrics(dc).unwrap().height
     };
-    assert_eq!(height_of("Segoe UI", -12), Face::Gui.metrics().height);
-    assert_eq!(height_of("Courier New", -16), Face::AnsiFixed.metrics().height);
+    // Names Poly knows get a scalable font (the built-in one where the font
+    // store has no files): the em is the height asked for, the cell the
+    // font's ascent plus descent.
+    assert_eq!(height_of("Segoe UI", -12), 12);
+    assert_eq!(height_of("Courier New", -16), 16);
+    assert_eq!(height_of("Arial", -24), 24);
+    // Raster font names are their bitmap faces at every size.
     assert_eq!(height_of("Terminal", -16), Face::OemFixed.metrics().height);
-    assert_eq!(height_of("Arial", -24), Face::System.metrics().height);
+    assert_eq!(height_of("System", -40), Face::System.metrics().height);
     // A short LOGFONT is the system font's face.
     let f = u64::from(g.create_font(&[0; 10]));
     g.select_object(dc, f).unwrap();
@@ -616,18 +621,18 @@ fn small_fonts_draw_inside_their_extent_with_descenders() {
     g.set_bk_mode(dc, TRANSPARENT);
     let s: Vec<u16> = "Hag gypsy".encode_utf16().collect();
     let (cx, cy) = g.text_extent(dc, &s).unwrap();
-    assert_eq!(cy, 13);
+    assert_eq!(cy, 11);
     g.text_out(dc, 2, 3, &s);
     let ink: Vec<(i32, i32)> = (0..24)
         .flat_map(|y| (0..80).map(move |x| (x, y)))
         .filter(|&(x, y)| px[(y * 80 + x) as usize] != 0x00FF_FFFF)
         .collect();
     assert!(ink.len() > 60);
-    // Inside the cell (2, 3, 2 + cx, 3 + 13); the descenders of g, y and p
-    // reach its last rows (descent 2).
-    assert!(ink.iter().all(|&(x, y)| x >= 2 && x < 2 + cx && (3..16).contains(&y)), "{ink:?}");
-    assert_eq!(ink.iter().map(|p| p.1).max(), Some(3 + 12));
-    assert_eq!(ink.iter().map(|p| p.1).min(), Some(3 + 1));
+    // Inside the cell (2, 3, 2 + cx, 3 + 11); the descenders of g, y and p
+    // reach its last rows (descent 3).
+    assert!(ink.iter().all(|&(x, y)| x >= 1 && x < 3 + cx && (3..14).contains(&y)), "{ink:?}");
+    assert!(ink.iter().map(|p| p.1).max() >= Some(3 + 9));
+    assert!(ink.iter().map(|p| p.1).min() <= Some(3 + 3));
 }
 
 // ----- outline text (ADR 0142): needs the DejaVu fonts (`POLY_FONT_DIR`).
@@ -668,7 +673,7 @@ fn px_fill(px: &[u32], v: u32) {
 fn logical_fonts_draw_antialiased_glyphs_on_their_baseline() {
     let Some(mut g) = gdi_with_fonts() else { return };
     let (dc, px) = white_canvas(&mut g, 90, 30);
-    let f = u64::from(g.create_font(&logfont("Segoe UI", -16)));
+    let f = u64::from(g.create_font(&lf_full("Segoe UI", -16, 400, false, 2)));
     g.select_object(dc, f).unwrap();
     g.set_bk_mode(dc, TRANSPARENT);
     let tm = g.text_metrics(dc).unwrap();
@@ -696,7 +701,7 @@ fn logical_fonts_draw_antialiased_glyphs_on_their_baseline() {
 fn text_colour_background_and_alignment_follow_the_dc() {
     let Some(mut g) = gdi_with_fonts() else { return };
     let (dc, px) = white_canvas(&mut g, 120, 40);
-    let f = u64::from(g.create_font(&logfont("Arial", -14)));
+    let f = u64::from(g.create_font(&lf_full("Arial", -14, 400, false, 2)));
     g.select_object(dc, f).unwrap();
     g.set_text_color(dc, rgb(200, 0, 0));
     g.set_bk_color(dc, rgb(0, 0, 220));
@@ -766,7 +771,7 @@ fn underline_and_strike_out_come_from_the_logfont() {
     let rows_plain: std::collections::BTreeSet<i32> = ink_of(&px, 60).iter().map(|p| p.1).collect();
     px_fill(&px, 0x00FF_FFFF);
     g.select_object(dc, under).unwrap();
-    assert_eq!(g.text_metrics(dc).unwrap().underlined, 1);
+    assert_eq!(g.text_metrics(dc).unwrap().underlined, 255);
     g.text_out(dc, 2, 2, &s);
     let rows_under: std::collections::BTreeSet<i32> = ink_of(&px, 60).iter().map(|p| p.1).collect();
     // The new rows are below the baseline, inside the cell.
@@ -796,7 +801,9 @@ fn draw_text_aligns_ellipsizes_and_underlines_prefixes() {
     px_fill(&px, 0x00FF_FFFF);
     let long = utf16("A rather long caption");
     let mut r = Rect::new(10, 10, 80, 30);
-    let (_, modified) = g.draw_text_ex(dc, &long, &mut r, DT_SINGLELINE | DT_END_ELLIPSIS | DT_MODIFYSTRING, 0);
+    let modified = g
+        .draw_text_ex(dc, &long, &mut r, DT_SINGLELINE | DT_END_ELLIPSIS | DT_MODIFYSTRING, DrawParams::default())
+        .modified;
     let m = modified.expect("the text did not fit");
     assert!(m.ends_with(&utf16("...")) && m.len() < long.len());
     assert!(g.text_extent(dc, &m).unwrap().0 <= 70);
@@ -804,7 +811,14 @@ fn draw_text_aligns_ellipsizes_and_underlines_prefixes() {
     // Text that fits is not modified.
     let mut r = Rect::new(10, 10, 150, 30);
     assert_eq!(
-        g.draw_text_ex(dc, &utf16("Short"), &mut r, DT_SINGLELINE | DT_END_ELLIPSIS | DT_MODIFYSTRING, 0).1,
+        g.draw_text_ex(
+            dc,
+            &utf16("Short"),
+            &mut r,
+            DT_SINGLELINE | DT_END_ELLIPSIS | DT_MODIFYSTRING,
+            DrawParams::default()
+        )
+        .modified,
         None
     );
     // "&F" underlines F unless DT_HIDEPREFIX; DT_PREFIXONLY draws only the
@@ -844,7 +858,7 @@ fn text_faces_widths_and_fallback() {
     let dc2 = u64::from(plain.create_compatible_dc(0));
     let f2 = u64::from(plain.create_font(&logfont("Segoe UI", -12)));
     plain.select_object(dc2, f2).unwrap();
-    assert_eq!(plain.text_metrics(dc2).unwrap().height, 13);
+    assert_eq!(plain.text_metrics(dc2).unwrap().height, 12);
     assert_eq!(plain.text_face(dc2).unwrap(), utf16("Segoe UI"));
     // Stock fonts keep the sheets' bitmap faces whatever the store has.
     let stock = u64::from(g.stock(13));
@@ -1083,4 +1097,406 @@ fn palettes_and_styled_brushes_follow_the_delete_rules() {
     assert!(!g.is_region(rgn));
     assert!(g.set_rect_rgn(rgn, Rect::new(0, 0, 1, 1)));
     assert_eq!(g.rgn_box(rgn), None);
+}
+
+// ----- private fonts (`specs/windows/gdi32.dll`: the PolyTest fonts, which
+// every test of the text sheets writes for itself).
+
+use crate::testfonts as tfont;
+
+/// A LOGFONTW for a face name with a height, weight, italic and quality.
+fn lf_full(name: &str, height: i32, weight: i32, italic: bool, quality: u8) -> Vec<u8> {
+    let mut b = logfont(name, height);
+    b[16..20].copy_from_slice(&weight.to_le_bytes());
+    b[20] = u8::from(italic);
+    b[26] = quality;
+    b
+}
+
+fn select(g: &mut Gdi, dc: u64, lf: &[u8]) -> u64 {
+    let f = u64::from(g.create_font(lf));
+    g.select_object(dc, f).unwrap();
+    f
+}
+
+#[test]
+fn memory_fonts_are_found_by_name_and_go_away() {
+    let mut g = Gdi::new();
+    let dc = u64::from(g.create_compatible_dc(0));
+    let font = tfont::build(&tfont::MONO);
+    // Before: a substitute (the stand-in family of the pitch asked for).
+    select(&mut g, dc, &lf_full("PolyTest Mono", -16, 400, false, 3));
+    assert_ne!(g.text_face(dc).unwrap(), utf16("PolyTest Mono"));
+    let h = g.add_font_mem(&font).unwrap();
+    // The existing font maps again (generation changed); lower case finds it.
+    assert_eq!(g.text_face(dc).unwrap(), utf16("PolyTest Mono"));
+    select(&mut g, dc, &lf_full("polytest mono", -16, 400, false, 3));
+    assert_eq!(g.text_face(dc).unwrap(), utf16("PolyTest Mono"));
+    let tm = g.text_metrics(dc).unwrap();
+    assert_eq!((tm.height, tm.ascent, tm.ave_char_width, tm.pitch_and_family), (16, 12, 10, 0x36));
+    assert_eq!(g.text_extent(dc, &utf16("AB gi")).unwrap(), (50, 16));
+    // Added twice: usable until both are removed; the data was copied.
+    let h2 = g.add_font_mem(&font).unwrap();
+    assert_ne!(h, h2);
+    assert!(g.remove_font_mem(u64::from(h)));
+    assert_eq!(g.text_face(dc).unwrap(), utf16("PolyTest Mono"));
+    assert!(!g.remove_font_mem(u64::from(h)));
+    assert!(g.remove_font_mem(u64::from(h2)));
+    assert_ne!(g.text_face(dc).unwrap(), utf16("PolyTest Mono"));
+    assert!(!g.remove_font_mem(0x1234));
+    assert!(g.add_font_mem(&font[..font.len() / 2]).is_none());
+    assert!(g.add_font_mem(&[0u8; 600]).is_none());
+    assert!(g.add_font_mem(&[]).is_none());
+}
+
+#[test]
+fn a_family_picks_its_face_and_synthesises_the_rest() {
+    let mut g = Gdi::new();
+    let dc = u64::from(g.create_compatible_dc(0));
+    for d in [&tfont::SANS, &tfont::SANS_BOLD, &tfont::SANS_ITALIC, &tfont::TALL] {
+        g.add_font_file(&utf16(d.family)[..], 0x10, tfont::build(d));
+    }
+    let a = |g: &mut Gdi, dc: u64, name: &str, weight: i32, italic: bool| {
+        select(g, dc, &lf_full(name, -16, weight, italic, 3));
+        (g.text_extent(dc, &utf16("A")).unwrap().0, g.text_metrics(dc).unwrap())
+    };
+    // Weights 0..550 the Regular face, 600.. the Bold one.
+    for w in [0, 100, 400, 550] {
+        assert_eq!(a(&mut g, dc, "PolyTest Sans", w, false).0, 12);
+    }
+    for w in [600, 700, 900] {
+        let (adv, tm) = a(&mut g, dc, "PolyTest Sans", w, false);
+        assert_eq!((adv, tm.weight), (13, 700));
+    }
+    // Italic: the Italic face; italic and bold: the Bold face, slanted.
+    let (adv, tm) = a(&mut g, dc, "PolyTest Sans", 400, true);
+    assert_eq!((adv, tm.italic), (14, 255));
+    assert_eq!(a(&mut g, dc, "PolyTest Sans", 700, true).0, 13);
+    // A full name finds the face and is reported as asked.
+    let (adv, tm) = a(&mut g, dc, "PolyTest Sans Bold", 400, false);
+    assert_eq!((adv, tm.weight), (13, 700));
+    assert_eq!(g.text_face(dc).unwrap(), utf16("PolyTest Sans Bold"));
+    // Names that are not the family: no match.
+    for n in ["PolyTest Sans ", " PolyTest Sans", "PolyTest  Sans", "PolyTest", "PolyTest Sans Extra"] {
+        select(&mut g, dc, &lf_full(n, -16, 400, false, 3));
+        assert_ne!(g.text_face(dc).unwrap(), utf16("PolyTest Sans"), "{n:?}");
+    }
+    // Tall has only a Regular face: bold and italic are synthesised, the
+    // advance one pixel wider, the slant leaves it alone.
+    assert_eq!(a(&mut g, dc, "PolyTest Tall", 700, false).0, 13);
+    let (adv, tm) = a(&mut g, dc, "PolyTest Tall", 400, true);
+    assert_eq!((adv, tm.italic), (12, 255));
+    // Enumeration lists the faces of a family and nothing for a prefix.
+    let faces = g.enum_fonts(&utf16("polytest sans"), 1);
+    let names: Vec<_> = faces.iter().map(|f| f.full.clone()).collect();
+    assert_eq!(names, [utf16("PolyTest Sans"), utf16("PolyTest Sans Bold"), utf16("PolyTest Sans Italic")]);
+    assert_eq!(
+        faces.iter().map(|f| (f.weight, f.italic, f.pitch_and_family())).collect::<Vec<_>>(),
+        [(400, false, 2), (700, false, 2), (400, true, 2)]
+    );
+    assert!(g.enum_fonts(&utf16("PolyTest"), 1).is_empty());
+    assert!(g.enum_fonts(&utf16("PolyTest Sans"), 2).is_empty());
+    assert!(g.enum_fonts(&[], 1).len() > 10);
+}
+
+/// The ink pixels of a canvas, as (x, y).
+fn ink(px: &[u32], w: i32, bg: u32) -> Vec<(i32, i32)> {
+    px.iter().enumerate().filter(|(_, v)| **v != bg).map(|(i, _)| (i as i32 % w, i as i32 / w)).collect()
+}
+
+fn bounds(p: &[(i32, i32)]) -> (i32, i32, i32, i32) {
+    (
+        p.iter().map(|q| q.0).min().unwrap(),
+        p.iter().map(|q| q.1).min().unwrap(),
+        p.iter().map(|q| q.0).max().unwrap() + 1,
+        p.iter().map(|q| q.1).max().unwrap() + 1,
+    )
+}
+
+#[test]
+fn bi_level_glyphs_are_exact_boxes_and_alignment_moves_the_cell() {
+    let mut g = Gdi::new();
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    let (dc, mut px) = dib32(&mut g, 100, 70);
+    let bg = 0x0080_8080;
+    px.fill(bg);
+    select(&mut g, dc, &lf_full("PolyTest Sans", -16, 400, false, 3));
+    g.set_text_color(dc, 0x00FF_FFFF);
+    g.set_bk_mode(dc, TRANSPARENT);
+    // TextOutW: 'A' is an 8x12 box 2 pixels right of the origin.
+    assert!(g.text_out(dc, 50, 40, &utf16("A")));
+    assert_eq!(bounds(&ink(&px, 100, bg)), (52, 40, 60, 52));
+    assert_eq!(ink(&px, 100, bg).len(), 96);
+    assert!(px.iter().all(|&v| v == bg || v == 0x00FF_FFFF), "bi-level: only the two colours");
+    // 'B' 6x8, 'i' 2x12, 'g' 8x10 reaching 4 below the baseline.
+    for (s, want) in [("B", (51, 44, 57, 52)), ("i", (51, 40, 53, 52)), ("g", (51, 46, 59, 56))] {
+        px.fill(bg);
+        g.text_out(dc, 50, 40, &utf16(s));
+        let b = bounds(&ink(&px, 100, bg));
+        assert_eq!((b.0, b.2), (want.0, want.2), "{s}");
+        assert_eq!(b.3 - b.1, want.3 - want.1, "{s}");
+    }
+    // The cell of "AB" (20x16, ascent 12) at (50,40), OPAQUE.
+    g.set_bk_mode(dc, OPAQUE);
+    g.set_bk_color(dc, 0x0000_0080);
+    for (align, cell) in [
+        (0, (50, 40, 70, 56)),
+        (2, (30, 40, 50, 56)),
+        (6, (40, 40, 60, 56)),
+        (8, (50, 24, 70, 40)),
+        (24, (50, 28, 70, 44)),
+    ] {
+        px.fill(bg);
+        g.set_text_align(dc, align);
+        g.text_out(dc, 50, 40, &utf16("AB"));
+        assert_eq!(bounds(&ink(&px, 100, bg)), cell, "align {align}");
+    }
+    // lpDx: "AAA" with 20,14,30 at x=4: boxes at 6-14, 26-34, 40-48.
+    g.set_text_align(dc, 0);
+    g.set_bk_mode(dc, TRANSPARENT);
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, 0, None, &utf16("AAA"), Some(&[20, 14, 30]));
+    let cols: std::collections::BTreeSet<i32> = ink(&px, 100, bg).iter().map(|p| p.0).collect();
+    assert_eq!(cols.iter().copied().min(), Some(6));
+    assert!(
+        cols.contains(&13) && !cols.contains(&14) && cols.contains(&26) && cols.contains(&47) && !cols.contains(&48)
+    );
+    // ETO_GLYPH_INDEX: glyphs 5 and 6 are 'A' and 'B'.
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, ETO_GLYPH_INDEX, None, &[5, 6], None);
+    let with_glyphs = ink(&px, 100, bg);
+    px.fill(bg);
+    g.ext_text_out(dc, 4, 2, 0, None, &utf16("AB"), None);
+    assert_eq!(with_glyphs, ink(&px, 100, bg));
+    assert!(!g.ext_text_out(dc, 4, 2, u32::MAX, None, &utf16("A"), None));
+}
+
+#[test]
+fn underline_strike_and_bold_synthesis_follow_the_font_file() {
+    let mut g = Gdi::new();
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    let (dc, mut px) = dib32(&mut g, 60, 40);
+    let bg = 0x0080_8080;
+    g.set_bk_mode(dc, TRANSPARENT);
+    g.set_text_color(dc, 0x00FF_FFFF);
+    let draw = |g: &mut Gdi, px: &mut Vec<u32>, lf: &[u8]| {
+        px.fill(bg);
+        select(g, dc, lf);
+        g.text_out(dc, 4, 4, &utf16("AB g"));
+        ink(px, 60, bg)
+    };
+    let plain = draw(&mut g, &mut px, &lf_full("PolyTest Sans", -16, 400, false, 3));
+    assert_eq!(bounds(&plain), (6, 4, 39, 20));
+    assert_eq!(plain.len(), 224);
+    let mut lf = lf_full("PolyTest Sans", -16, 400, false, 3);
+    lf[21] = 1;
+    let under = draw(&mut g, &mut px, &lf);
+    // The line is 2 below the baseline (row 18), 1 thick, over the whole advance.
+    assert_eq!(bounds(&under), (4, 4, 40, 20));
+    assert_eq!(under.len(), 252);
+    assert!((4..40).all(|x| under.contains(&(x, 18))));
+    let mut lf = lf_full("PolyTest Sans", -16, 400, false, 3);
+    lf[22] = 1;
+    let strike = draw(&mut g, &mut px, &lf);
+    assert!((4..40).all(|x| strike.contains(&(x, 12))), "4 above the baseline");
+    // Bold without a bold face: wider by a pixel each; the ink of 'A' too.
+    let bold = draw(&mut g, &mut px, &lf_full("PolyTest Sans", -16, 700, false, 3));
+    assert_eq!(bounds(&bold).0, 6);
+    assert_eq!(g.text_extent(dc, &utf16("AB gi")).unwrap(), (45, 16));
+    // Italic without an italic face: the ink reaches further right, the top stays.
+    let slanted = draw(&mut g, &mut px, &lf_full("PolyTest Sans", -16, 400, true, 3));
+    assert!(bounds(&slanted).2 > bounds(&plain).2 && bounds(&slanted).1 == bounds(&plain).1);
+}
+
+fn calc(g: &mut Gdi, dc: u64, s: &str, width: i32, fmt: u32) -> (i32, i32, i32) {
+    let mut r = Rect::new(10, 10, 10 + width, 90);
+    let n = g.draw_text(dc, &utf16(s), &mut r, fmt | crate::text::DT_CALCRECT);
+    (n, r.right - r.left, r.bottom - r.top)
+}
+
+#[test]
+fn draw_text_wraps_and_ellipsizes_like_the_sheet() {
+    use crate::text::*;
+    let mut g = Gdi::new();
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    let dc = u64::from(g.create_compatible_dc(0));
+    select(&mut g, dc, &lf_full("PolyTest Sans", -16, 400, false, 3));
+    // dt_pf_layout: sizes of wrapped text, trailing blanks that fit count.
+    assert_eq!(calc(&mut g, dc, "AB", 100, DT_SINGLELINE), (16, 20, 16));
+    assert_eq!(calc(&mut g, dc, "AB\nAB", 100, 0), (32, 20, 32));
+    assert_eq!(calc(&mut g, dc, "AB\r\nAB", 100, 0), (32, 20, 32));
+    assert_eq!(calc(&mut g, dc, "AB\rAB", 100, 0), (32, 20, 32));
+    assert_eq!(calc(&mut g, dc, "AB\nAB", 100, DT_SINGLELINE), (16, 40, 16));
+    assert_eq!(calc(&mut g, dc, "AB\n", 100, 0), (32, 20, 32));
+    assert_eq!(calc(&mut g, dc, "\n\n", 100, 0), (48, 0, 48));
+    assert_eq!(calc(&mut g, dc, "AB   ", 100, 0), (16, 38, 16));
+    assert_eq!(calc(&mut g, dc, "&A", 100, 0), (16, 12, 16));
+    assert_eq!(calc(&mut g, dc, "&A", 100, DT_NOPREFIX), (16, 21, 16));
+    assert_eq!(calc(&mut g, dc, "A\tB", 100, DT_EXPANDTABS), (16, 72, 16));
+    assert_eq!(calc(&mut g, dc, "AAAA BBBB AAAA", 60, DT_WORDBREAK), (48, 54, 48));
+    assert_eq!(calc(&mut g, dc, "AB AB AB AB", 60, DT_WORDBREAK), (32, 52, 32));
+    assert_eq!(calc(&mut g, dc, "AAAA BBBB AAAA", 50, DT_WORDBREAK), (48, 48, 48));
+    assert_eq!(calc(&mut g, dc, "AB AB AB AB", 50, DT_WORDBREAK), (32, 46, 32));
+    assert_eq!(calc(&mut g, dc, "AB AB AB AB", 40, DT_WORDBREAK), (64, 26, 64));
+    assert_eq!(calc(&mut g, dc, "AB AB AB AB", 24, DT_WORDBREAK), (64, 20, 64));
+    assert_eq!(calc(&mut g, dc, "AAAAAAAAAA", 40, DT_WORDBREAK), (16, 120, 16));
+    assert_eq!(calc(&mut g, dc, "      ", 20, DT_WORDBREAK), (32, 18, 32));
+    assert_eq!(calc(&mut g, dc, "AB     AB", 30, DT_WORDBREAK), (48, 26, 48));
+    assert_eq!(calc(&mut g, dc, "AAAA BBBB\nAAAA BBBB", 60, DT_WORDBREAK), (64, 54, 64));
+    // The ellipsis rules of dt_pf_ellipsis, through DT_MODIFYSTRING.
+    let ell = |g: &mut Gdi, s: &str, w: i32, fmt: u32| {
+        let mut r = Rect::new(10, 10, 10 + w, 60);
+        let out = g.draw_text_ex(dc, &utf16(s), &mut r, fmt | DT_MODIFYSTRING, DrawParams::default());
+        out.modified.map_or_else(|| std::string::String::from(s), |m| std::string::String::from_utf16(&m).unwrap())
+    };
+    let sl = DT_SINGLELINE;
+    assert_eq!(ell(&mut g, "AABBAABBAB", 100, sl | DT_END_ELLIPSIS), "AABBAABBAB");
+    assert_eq!(ell(&mut g, "AABBAABBAB", 60, sl | DT_END_ELLIPSIS), "AABB...");
+    assert_eq!(ell(&mut g, "AABBAABBAB", 50, sl | DT_END_ELLIPSIS), "AAB...");
+    assert_eq!(ell(&mut g, "AABBAABBAB", 40, sl | DT_END_ELLIPSIS), "AA...");
+    assert_eq!(ell(&mut g, "AABBAABBAB", 30, sl | DT_END_ELLIPSIS), "A...");
+    assert_eq!(ell(&mut g, "AABBAABBAB", 0, sl | DT_END_ELLIPSIS), "A...");
+    assert_eq!(ell(&mut g, "AB AB AB AB", 40, sl | DT_END_ELLIPSIS), "AB ...");
+    assert_eq!(ell(&mut g, "gi.gi.gi", 30, sl | DT_END_ELLIPSIS), "gi....");
+    assert_eq!(ell(&mut g, "AAAAAAAA BBBB AAAAAAAA", 80, sl | DT_WORD_ELLIPSIS), "AAAAA...");
+    assert_eq!(ell(&mut g, "AAAA\\BBBB\\AAAA\\BBB.AB", 100, sl | DT_PATH_ELLIPSIS), "AA...\\BBB.AB");
+    assert_eq!(ell(&mut g, "AAAA\\BBBB\\AAAA\\BBB.AB", 80, sl | DT_PATH_ELLIPSIS), "A...\\BBB.AB");
+    assert_eq!(ell(&mut g, "AAAA\\BBBB\\AAAA\\BBB.AB", 20, sl | DT_PATH_ELLIPSIS), "...\\BBB.AB");
+    assert_eq!(ell(&mut g, "AABBAABBAB", 50, sl | DT_PATH_ELLIPSIS), "AABBAABBAB");
+    assert_eq!(ell(&mut g, "AABBAABB\\", 50, sl | DT_PATH_ELLIPSIS), "AABBAABB\\");
+    // With a prefix, the buffer keeps the '&'.
+    assert_eq!(ell(&mut g, "&AABBAABBAB", 50, sl | DT_END_ELLIPSIS), "&AAB...");
+    assert_eq!(ell(&mut g, "&AABBAABBAB", 50, sl | DT_END_ELLIPSIS | DT_NOPREFIX), "&AA...");
+    // END_ELLIPSIS|WORDBREAK cuts the last line laid out.
+    let wb = DT_WORDBREAK | DT_END_ELLIPSIS;
+    assert_eq!(ell(&mut g, "AAAA BBBB AAAA BBBB", 60, wb), "AAAA BBBB AAAA BBBB");
+    assert_eq!(ell(&mut g, "AAAA BBBB AAAA BBBB", 30, wb), "AAAA BBBB AAAA BB...");
+    let mut r = Rect::new(10, 10, 70, 42);
+    let out = g.draw_text_ex(dc, &utf16("AAAA BBBB AAAA BBBB"), &mut r, wb | DT_MODIFYSTRING, DrawParams::default());
+    assert_eq!(out.height, 48);
+    assert_eq!(std::string::String::from_utf16(&out.modified.unwrap()).unwrap(), "AAAA BBBB AAAA...");
+    // uiLengthDrawn: lines that start inside the rectangle are laid out.
+    let mut r = Rect::new(10, 10, 130, 42);
+    let out = g.draw_text_ex(dc, &utf16("AB\nAB\nAB"), &mut r, 0, DrawParams::default());
+    assert_eq!((out.height, out.drawn), (48, 8));
+    let mut r = Rect::new(10, 10, 50, 26);
+    let out = g.draw_text_ex(dc, &utf16("AAAA BBBB AAAA"), &mut r, DT_WORDBREAK, DrawParams::default());
+    assert_eq!((out.height, out.drawn), (32, 10));
+}
+
+#[test]
+fn draw_text_cells_alignment_and_mnemonic_underline() {
+    use crate::text::*;
+    let mut g = Gdi::new();
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    let (dc, mut px) = dib32(&mut g, 140, 90);
+    let bg = 0x0080_8080;
+    px.fill(bg);
+    select(&mut g, dc, &lf_full("PolyTest Sans", -16, 400, false, 3));
+    g.set_text_color(dc, 0x00FF_FFFF);
+    g.set_bk_color(dc, 0x0000_0080);
+    // Wrapped lines: the cells of left aligned lines include the blank that
+    // fit, the centred and right aligned do not.
+    let mut r = Rect::new(10, 10, 40, 60);
+    g.draw_text(dc, &utf16("AB AB AB"), &mut r, DT_WORDBREAK);
+    assert_eq!(bounds(&ink(&px, 140, bg)), (10, 10, 36, 58));
+    px.fill(bg);
+    g.draw_text(dc, &utf16("AB AB AB"), &mut r, DT_WORDBREAK | DT_CENTER);
+    assert_eq!(bounds(&ink(&px, 140, bg)), (15, 10, 35, 58));
+    px.fill(bg);
+    g.draw_text(dc, &utf16("AB AB AB"), &mut r, DT_WORDBREAK | DT_RIGHT);
+    assert_eq!(bounds(&ink(&px, 140, bg)), (20, 10, 40, 58));
+    // The mnemonic underline: one row at baseline + 1, as wide as the character.
+    px.fill(bg);
+    g.set_bk_mode(dc, TRANSPARENT);
+    let mut r = Rect::new(4, 4, 80, 40);
+    g.draw_text(dc, &utf16("A&B"), &mut r, 0);
+    let pts = ink(&px, 140, bg);
+    // 'B' starts at 4 + 12; its underline is on row 4 + 12 + 1 = 17, 8 wide.
+    assert!((16..24).all(|x| pts.contains(&(x, 17))));
+    assert!(!pts.contains(&(15, 17)) && !pts.contains(&(24, 17)));
+    // DT_HIDEPREFIX: no underline; DT_PREFIXONLY: only the underline.
+    px.fill(bg);
+    g.draw_text(dc, &utf16("A&B"), &mut r, DT_HIDEPREFIX);
+    assert!(!ink(&px, 140, bg).contains(&(16, 17)));
+    px.fill(bg);
+    g.draw_text(dc, &utf16("A&B"), &mut r, DT_PREFIXONLY);
+    assert_eq!(bounds(&ink(&px, 140, bg)), (16, 17, 24, 18));
+}
+
+#[test]
+fn rotated_text_turns_about_the_reference_point() {
+    let mut g = Gdi::new();
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    let (dc, mut px) = dib32(&mut g, 80, 80);
+    let bg = 0x0080_8080;
+    g.set_bk_mode(dc, TRANSPARENT);
+    g.set_text_color(dc, 0x00FF_FFFF);
+    // `CreateFontIndirectW.yaml`: "AB" at (30,30), TA_LEFT|TA_TOP.
+    for (esc, want) in [
+        (0i32, (32, 30, 49, 42)),
+        (900, (31, 11, 43, 28)),
+        (1800, (11, 18, 28, 30)),
+        (2700, (17, 32, 29, 49)),
+        (-900, (17, 32, 29, 49)),
+        (3600, (32, 30, 49, 42)),
+    ] {
+        px.fill(bg);
+        let mut lf = lf_full("PolyTest Sans", -16, 400, false, 3);
+        lf[8..12].copy_from_slice(&esc.to_le_bytes());
+        select(&mut g, dc, &lf);
+        g.text_out(dc, 30, 30, &utf16("AB"));
+        assert_eq!(bounds(&ink(&px, 80, bg)), want, "escapement {esc}");
+        // The unrotated width stays.
+        assert_eq!(g.text_extent(dc, &utf16("AB")).unwrap(), (20, 16));
+    }
+}
+
+#[test]
+fn clear_type_text_filters_three_subpixels_per_pixel() {
+    let mut g = Gdi::new();
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    let (dc, mut px) = dib32(&mut g, 60, 30);
+    let (bg, fg) = (0x0080_8080, 0x00FF_FFFF);
+    g.set_bk_mode(dc, TRANSPARENT);
+    g.set_text_color(dc, fg);
+    let count = |g: &mut Gdi, px: &mut Vec<u32>, q: u8| {
+        px.fill(bg);
+        select(g, dc, &lf_full("PolyTest Sans", -16, 400, false, q));
+        g.text_out(dc, 2, 2, &utf16("AB gi"));
+        let pure = px.iter().filter(|&&v| v == fg).count();
+        let other = px.iter().filter(|&&v| v != fg && v != bg).count();
+        (pure, other)
+    };
+    // The box glyphs of `to_pfglyphs`: grey scale keeps the edges exact;
+    // ClearType (and the default) spreads each edge over a pixel on both sides.
+    assert_eq!(count(&mut g, &mut px, 4), (248, 0));
+    assert_eq!(count(&mut g, &mut px, 5), (164, 168));
+    assert_eq!(count(&mut g, &mut px, 0), (164, 168));
+}
+
+#[test]
+fn clear_type_text_still_has_pixels_of_the_text_colour() {
+    // to_ink: at ordinary sizes some pixel is the text colour exactly, with
+    // the fonts of the store and with the built-in font.
+    for fonts in [false, true] {
+        let mut g = Gdi::new();
+        if fonts {
+            let Some(g2) = gdi_with_fonts() else { continue };
+            g = g2;
+        }
+        for (name, h) in
+            [("Arial", -16), ("Segoe UI", -12), ("Tahoma", -11), ("Courier New", -14), ("Times New Roman", -16)]
+        {
+            let (dc, mut px) = dib32(&mut g, 200, 40);
+            let (bg, fg) = (0x0080_8080, 0x00FF_FFFF);
+            px.fill(bg);
+            g.set_bk_mode(dc, TRANSPARENT);
+            g.set_text_color(dc, fg);
+            select(&mut g, dc, &lf_full(name, h, 400, false, 5));
+            g.text_out(dc, 2, 2, &utf16("The quick brown fox jumps"));
+            let pure = px.iter().filter(|&&v| v == fg).count();
+            assert!(pure > 0, "{name} {h} (store fonts {fonts})");
+        }
+    }
 }

@@ -16,7 +16,7 @@ pub struct NtStatus(pub u32);
 
 /// What every fallible call in this crate returns: success values travel in
 /// `Ok` (some calls also report an informational status, see
-/// [`crate::Created`]), failures as the `NTSTATUS` the service returns.
+/// `Created` in `poly-ntobj`), failures as the `NTSTATUS` the service returns.
 pub type Result<T> = core::result::Result<T, NtStatus>;
 
 impl NtStatus {

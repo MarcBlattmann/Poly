@@ -1,0 +1,18 @@
+[package]
+name = "userenv"
+description = "Our userenv.dll (ADR 0171): DeriveAppContainerSidFromAppContainerName, the AppContainer SID Chrome's sandbox derives from a name"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "userenv"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-cryptrt = { path = "../cryptrt" }
+poly-crypto = { path = "../../../../crates/poly-crypto" }
+
+[lints]
+workspace = true

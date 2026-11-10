@@ -207,3 +207,14 @@ missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
 undocumented_unsafe_blocks = "warn"
+
+# The coverage tool reads the whole map (870 000 entries) on every call: 21 s
+# for `coverage check` unoptimised, a few seconds optimised (ADR 0174).
+[profile.dev.package.poly-coverage]
+opt-level = 3
+
+[profile.dev.package.serde_json]
+opt-level = 3
+
+[profile.dev.package.serde]
+opt-level = 3

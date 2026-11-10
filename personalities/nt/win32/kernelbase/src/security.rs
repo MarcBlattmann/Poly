@@ -1,32 +1,82 @@
-//! Tokens, SIDs, security descriptors and ACLs (ADR 0083), which
-//! `advapi32` forwards here through `api-ms-win-core-processthreads-l1-1-0`
-//! and `api-ms-win-security-base-l1-1-0`.
+//! Access tokens, impersonation and the security of kernel objects
+//! (ADR 0083, 0171), which `advapi32` forwards here through
+//! `api-ms-win-core-processthreads-l1-1-0` and
+//! `api-ms-win-security-base-l1-1-0`.
 //!
-//! Poly has one user and enforces nothing beyond handle access (ADR 0066):
-//! these functions build, check and read the structures programs pass
-//! around, laid out as `winnt.h` declares them; the logic is
-//! `poly_security`'s (host-tested). Tokens come from the kernel's
-//! `NtOpenProcessToken` / `NtQueryInformationToken`.
+//! The functions are thin: the kernel's token services
+//! (`NtOpenProcessToken`, `NtDuplicateToken`, `NtFilterToken`, ...) decide
+//! and this layer builds their arguments from the Win32 ones and turns the
+//! `NTSTATUS` into a last error. The SIDs, ACLs and security descriptors
+//! are `secdata.rs`.
 
-use crate::base::{FALSE, TRUE, fail, fail_status, process_heap, set_last_error};
-use crate::nt::{self, Handle};
+use crate::base::{FALSE, TRUE, fail, fail_status, set_last_error};
+use crate::nt::Handle;
+use crate::secdata::sid_arg;
+use alloc::vec::Vec;
 use poly_kernelbase::error::*;
 use poly_ntobj::NtStatus;
-use poly_security::sd::{self, Parts};
-use poly_security::sid::{self, Sid};
-use poly_security::{acl, error as serr, token};
+use poly_security::sid::Sid;
+use poly_security::token::{self, class};
+use poly_security::{access, error as serr};
 
 #[link(name = "ntdll", kind = "raw-dylib")]
 unsafe extern "system" {
     fn NtOpenProcessToken(process: Handle, access: u32, token: *mut Handle) -> NtStatus;
     fn NtOpenThreadToken(thread: Handle, access: u32, as_self: u8, token: *mut Handle) -> NtStatus;
     fn NtQueryInformationToken(token: Handle, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> NtStatus;
+    fn NtSetInformationToken(token: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
+    fn NtDuplicateToken(
+        token: Handle,
+        access: u32,
+        attributes: *const u8,
+        effective_only: u8,
+        ty: u32,
+        new: *mut Handle,
+    ) -> NtStatus;
+    fn NtFilterToken(
+        token: Handle,
+        flags: u32,
+        disable: *const u8,
+        delete: *const u8,
+        restrict: *const u8,
+        new: *mut Handle,
+    ) -> NtStatus;
+    fn NtAdjustGroupsToken(
+        token: Handle,
+        reset: u8,
+        new_state: *const u8,
+        length: u32,
+        previous: *mut u8,
+        ret: *mut u32,
+    ) -> NtStatus;
+    fn NtPrivilegeCheck(token: Handle, set: *mut u8, result: *mut u8) -> NtStatus;
+    fn NtAccessCheck(
+        sd: *const u8,
+        token: Handle,
+        desired: u32,
+        mapping: *const access::GenericMapping,
+        privileges: *mut u8,
+        privileges_length: *mut u32,
+        granted: *mut u32,
+        status: *mut u32,
+    ) -> NtStatus;
+    fn NtSetInformationThread(thread: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
+    fn NtQuerySecurityObject(handle: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> NtStatus;
+    fn NtSetSecurityObject(handle: Handle, info: u32, sd: *const u8) -> NtStatus;
+    fn NtClose(handle: Handle) -> NtStatus;
+    fn RtlImpersonateSelf(level: u32) -> NtStatus;
 }
 
-/// `ERROR_NO_IMPERSONATION_TOKEN` (`winerror.h`).
-const ERROR_NO_IMPERSONATION_TOKEN: u32 = 1309;
+/// `ERROR_NOT_ALL_ASSIGNED` (`winerror.h`).
+const ERROR_NOT_ALL_ASSIGNED: u32 = 1300;
+const CURRENT_THREAD: Handle = -2;
 
-// ----- tokens ------------------------------------------------------------------------------
+/// Success with `NTSTATUS`: `TRUE`, or the failure's last error.
+fn done(st: NtStatus) -> i32 {
+    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+}
+
+// ----- opening -----------------------------------------------------------------------------
 
 /// `OpenProcessToken`.
 #[unsafe(no_mangle)]
@@ -45,8 +95,8 @@ pub unsafe extern "system" fn OpenProcessToken(process: Handle, access: u32, out
     TRUE
 }
 
-/// `OpenThreadToken`: Poly's threads never impersonate, so this is
-/// `ERROR_NO_TOKEN` for any valid thread handle (Learn's documented case).
+/// `OpenThreadToken`: the impersonation token of a thread; none is
+/// `ERROR_NO_TOKEN`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn OpenThreadToken(thread: Handle, access: u32, as_self: i32, out: *mut Handle) -> i32 {
     if out.is_null() {
@@ -74,16 +124,16 @@ pub unsafe extern "system" fn GetTokenInformation(
     length: u32,
     ret: *mut u32,
 ) -> i32 {
-    if info.is_null() && length != 0 {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
     // SAFETY: `info` holds `length` bytes; `ret` is the caller's variable.
-    let st = unsafe { NtQueryInformationToken(token, class, info, length, ret) };
-    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+    done(unsafe { NtQueryInformationToken(token, class, info, length, ret) })
 }
 
 /// A token's information as bytes (laid out for the returned buffer).
-fn query_token(h: Handle, class: u32) -> Option<alloc::vec::Vec<u8>> {
+fn query_token(h: Handle, class: u32) -> Option<Vec<u8>> {
+    query_token_status(h, class).ok()
+}
+
+fn query_token_status(h: Handle, class: u32) -> Result<Vec<u8>, NtStatus> {
     let mut buf = alloc::vec![0u8; 512];
     loop {
         let mut need = 0;
@@ -91,26 +141,202 @@ fn query_token(h: Handle, class: u32) -> Option<alloc::vec::Vec<u8>> {
         let st = unsafe { NtQueryInformationToken(h, class, buf.as_mut_ptr(), buf.len() as u32, &mut need) };
         if st.is_success() {
             buf.truncate(need as usize);
-            return Some(buf);
+            return Ok(buf);
         }
-        if need as usize <= buf.len() {
-            return None;
+        if st.0 == 0xC000_0023 && need as usize > buf.len() {
+            buf.resize(need as usize, 0);
+            continue;
         }
-        buf.resize(need as usize, 0);
+        return Err(st);
     }
 }
 
 /// The process token's user (`GetCurrentProcessToken()`, `TokenUser`).
 pub fn token_user() -> Option<Sid> {
-    let b = query_token(token::CURRENT_PROCESS_TOKEN as Handle, token::class::TOKEN_USER)?;
+    let b = query_token(token::CURRENT_PROCESS_TOKEN as Handle, class::TOKEN_USER)?;
     Sid::from_bytes(b.get(16..)?)
 }
 
-/// `CheckTokenMembership`: with a null token, the calling thread's
-/// effective token (the process token: threads do not impersonate). Learn:
-/// a token passed in must be an impersonation token; Poly's are primary
-/// tokens, so that is `ERROR_NO_IMPERSONATION_TOKEN`. A SID is a member when
-/// it is the user or an enabled group that is not deny-only.
+/// `SetTokenInformation`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetTokenInformation(token: Handle, class: u32, info: *const u8, length: u32) -> i32 {
+    // SAFETY: the caller's buffer.
+    done(unsafe { NtSetInformationToken(token, class, info, length) })
+}
+
+/// `IsTokenRestricted`: whether the token has restricting SIDs.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn IsTokenRestricted(token: Handle) -> i32 {
+    match query_token_status(token, class::TOKEN_RESTRICTED_SIDS) {
+        Ok(b) => i32::from(b.get(0..4).is_some_and(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]) != 0)),
+        Err(st) => fail_status(st, FALSE),
+    }
+}
+
+// ----- adjusting ---------------------------------------------------------------------------
+
+/// `AdjustTokenGroups`: success with the last error
+/// `ERROR_NOT_ALL_ASSIGNED` when the token lacks a group named.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn AdjustTokenGroups(
+    token: Handle,
+    reset: i32,
+    new_state: *const u8,
+    length: u32,
+    previous: *mut u8,
+    ret: *mut u32,
+) -> i32 {
+    // SAFETY: the caller's structures, checked by the kernel.
+    let st = unsafe { NtAdjustGroupsToken(token, u8::from(reset != 0), new_state, length, previous, ret) };
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    set_last_error(if st == token::STATUS_NOT_ALL_ASSIGNED { ERROR_NOT_ALL_ASSIGNED } else { ERROR_SUCCESS });
+    TRUE
+}
+
+// ----- duplicating and restricting ---------------------------------------------------------
+
+/// `SECURITY_ATTRIBUTES` (`minwinbase.h`, x64).
+#[repr(C)]
+pub struct SecurityAttributes {
+    pub length: u32,
+    pub descriptor: *const u8,
+    pub inherit: i32,
+}
+
+/// The `OBJECT_ATTRIBUTES` and `SECURITY_QUALITY_OF_SERVICE` for a call
+/// that takes security attributes and (if `level`) an impersonation level.
+struct Attrs {
+    oa: [u64; 6],
+    qos: [u32; 3],
+}
+
+impl Attrs {
+    fn new(sa: *const SecurityAttributes, level: Option<u32>) -> alloc::boxed::Box<Attrs> {
+        let mut a = alloc::boxed::Box::new(Attrs { oa: [0; 6], qos: [12, level.unwrap_or(0), 0] });
+        a.oa[0] = 48;
+        if !sa.is_null() {
+            // SAFETY: the caller's SECURITY_ATTRIBUTES.
+            let sa = unsafe { &*sa };
+            a.oa[4] = sa.descriptor as u64;
+            if sa.inherit != 0 {
+                a.oa[3] = u64::from(crate::nt::OBJ_INHERIT);
+            }
+        }
+        if level.is_some() {
+            a.oa[5] = a.qos.as_ptr() as u64;
+        }
+        a
+    }
+}
+
+/// `DuplicateTokenEx`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DuplicateTokenEx(
+    token: Handle,
+    access: u32,
+    sa: *const SecurityAttributes,
+    level: u32,
+    ty: u32,
+    out: *mut Handle,
+) -> i32 {
+    let a = Attrs::new(sa, Some(level));
+    let mut h = 0;
+    // SAFETY: the attribute block and `h` are locals.
+    let st = unsafe { NtDuplicateToken(token, access, a.oa.as_ptr().cast(), 0, ty, &mut h) };
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    // SAFETY: the caller's variable.
+    unsafe { out.write(h) };
+    TRUE
+}
+
+/// `DuplicateToken`: an impersonation token with access
+/// `TOKEN_IMPERSONATE | TOKEN_QUERY`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DuplicateToken(token: Handle, level: u32, out: *mut Handle) -> i32 {
+    // SAFETY: as `DuplicateTokenEx`.
+    unsafe { DuplicateTokenEx(token, token::TOKEN_IMPERSONATE | token::TOKEN_QUERY, core::ptr::null(), level, 2, out) }
+}
+
+/// `CreateRestrictedToken`: the lists become a `TOKEN_GROUPS` (the
+/// `SID_AND_ATTRIBUTES` arrays are laid out as one) and a `TOKEN_PRIVILEGES`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateRestrictedToken(
+    token: Handle,
+    flags: u32,
+    disable_count: u32,
+    disable: *const u8,
+    delete_count: u32,
+    delete: *const u8,
+    restrict_count: u32,
+    restrict: *const u8,
+    out: *mut Handle,
+) -> i32 {
+    let groups = |count: u32, p: *const u8| -> Option<Vec<u8>> {
+        if count == 0 || p.is_null() {
+            return None;
+        }
+        let mut v = Vec::with_capacity(8 + 16 * count as usize);
+        v.extend_from_slice(&count.to_le_bytes());
+        v.extend_from_slice(&[0; 4]);
+        // SAFETY: the caller's array of `count` SID_AND_ATTRIBUTES.
+        v.extend_from_slice(unsafe { core::slice::from_raw_parts(p, 16 * count as usize) });
+        Some(v)
+    };
+    let d = groups(disable_count, disable);
+    let r = groups(restrict_count, restrict);
+    let privileges = if delete_count == 0 || delete.is_null() {
+        None
+    } else {
+        let mut v = Vec::with_capacity(4 + 12 * delete_count as usize);
+        v.extend_from_slice(&delete_count.to_le_bytes());
+        // SAFETY: the caller's array of `delete_count` LUID_AND_ATTRIBUTES.
+        v.extend_from_slice(unsafe { core::slice::from_raw_parts(delete, 12 * delete_count as usize) });
+        Some(v)
+    };
+    let mut h = 0;
+    // SAFETY: the buffers are locals.
+    let st = unsafe {
+        NtFilterToken(
+            token,
+            flags,
+            d.as_ref().map_or(core::ptr::null(), |v| v.as_ptr()),
+            privileges.as_ref().map_or(core::ptr::null(), |v| v.as_ptr()),
+            r.as_ref().map_or(core::ptr::null(), |v| v.as_ptr()),
+            &mut h,
+        )
+    };
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    // SAFETY: the caller's variable.
+    unsafe { out.write(h) };
+    TRUE
+}
+
+// ----- checking ----------------------------------------------------------------------------
+
+/// `PrivilegeCheck`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PrivilegeCheck(token: Handle, set: *mut u8, result: *mut i32) -> i32 {
+    let mut r = 0u8;
+    // SAFETY: the caller's privilege set.
+    let st = unsafe { NtPrivilegeCheck(token, set, &mut r) };
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    // SAFETY: the caller's variable.
+    unsafe { result.write(i32::from(r)) };
+    TRUE
+}
+
+/// `CheckTokenMembership`: whether `sid` is the user or an enabled group of
+/// the token (also a restricting SID, if it has any). A token has to be an
+/// impersonation token; none means the calling thread's, or a copy of the
+/// process's. A restricted thread token cannot be opened by its own thread.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CheckTokenMembership(
     token_handle: Handle,
@@ -120,665 +346,224 @@ pub unsafe extern "system" fn CheckTokenMembership(
     if is_member.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    if token_handle != 0 {
-        return fail(ERROR_NO_IMPERSONATION_TOKEN, FALSE);
-    }
+    // SAFETY: the caller's variable.
+    unsafe { is_member.write(0) };
     // SAFETY: the caller's SID.
     let Some(want) = Sid::from_bytes(unsafe { sid_arg(sid_ptr) }) else {
         return fail(serr::ERROR_INVALID_SID, FALSE);
     };
-    let h = token::CURRENT_THREAD_EFFECTIVE_TOKEN as Handle;
-    let Some(groups) = query_token(h, token::class::TOKEN_GROUPS) else { return fail(ERROR_INVALID_HANDLE, FALSE) };
-    let base = groups.as_ptr() as u64;
-    let count = u32::from_le_bytes(groups[0..4].try_into().unwrap_or_default()) as usize;
-    let mut member = token_user().is_some_and(|u| u == want);
-    for i in 0..count {
-        let at = 8 + 16 * i;
-        let (Some(p), Some(a)) = (groups.get(at..at + 8), groups.get(at + 8..at + 12)) else { break };
-        let off = (u64::from_le_bytes(p.try_into().unwrap_or_default()).wrapping_sub(base)) as usize;
-        let attrs = u32::from_le_bytes(a.try_into().unwrap_or_default());
-        let enabled = attrs & token::SE_GROUP_ENABLED != 0 && attrs & token::SE_GROUP_USE_FOR_DENY_ONLY == 0;
-        if enabled && groups.get(off..).and_then(Sid::from_bytes).is_some_and(|s| s == want) {
-            member = true;
+    let (h, owned) = if token_handle != 0 {
+        let mut ty = [0u8; 4];
+        let mut ret = 0;
+        // SAFETY: local buffer.
+        let st = unsafe { NtQueryInformationToken(token_handle, class::TOKEN_TYPE, ty.as_mut_ptr(), 4, &mut ret) };
+        if !st.is_success() {
+            return fail_status(st, FALSE);
         }
-    }
-    // SAFETY: checked non-null.
-    unsafe { is_member.write(i32::from(member)) };
-    TRUE
-}
-
-// ----- SIDs --------------------------------------------------------------------------------
-
-/// The SID at `p` as bytes: its full length when its header is valid, else
-/// only the header (so validity checks fail without reading further).
-///
-/// # Safety
-/// `p` is null or points at a SID header and, if valid, the whole SID.
-unsafe fn sid_arg<'a>(p: *const u8) -> &'a [u8] {
-    if p.is_null() {
-        return &[];
-    }
-    // SAFETY: the caller's contract.
-    unsafe {
-        let header = core::slice::from_raw_parts(p, 2);
-        let len = if header[0] == sid::SID_REVISION && usize::from(header[1]) <= sid::SID_MAX_SUB_AUTHORITIES {
-            sid::length_required(header[1]) as usize
+        if u32::from_le_bytes(ty) != token::TOKEN_IMPERSONATION {
+            return fail(1309, FALSE);
+        }
+        (token_handle, false)
+    } else {
+        let mut h = 0;
+        // SAFETY: local variable.
+        let st = unsafe { NtOpenThreadToken(CURRENT_THREAD, token::TOKEN_QUERY, 0, &mut h) };
+        if st.is_success() {
+            (h, true)
+        } else if st.0 == 0xC000_007C {
+            // No thread token: an identification copy of the process token.
+            let mut p = 0;
+            // SAFETY: local variables; the attribute block is local.
+            let st = unsafe { NtOpenProcessToken(-1, token::TOKEN_DUPLICATE | token::TOKEN_QUERY, &mut p) };
+            if !st.is_success() {
+                return fail_status(st, FALSE);
+            }
+            let a = Attrs::new(core::ptr::null(), Some(token::SECURITY_IDENTIFICATION));
+            // SAFETY: as above.
+            let st = unsafe { NtDuplicateToken(p, token::TOKEN_QUERY, a.oa.as_ptr().cast(), 0, 2, &mut h) };
+            // SAFETY: our handle.
+            unsafe { NtClose(p) };
+            if !st.is_success() {
+                return fail_status(st, FALSE);
+            }
+            (h, true)
         } else {
-            2
-        };
-        core::slice::from_raw_parts(p, len)
+            return fail_status(st, FALSE);
+        }
+    };
+    let member = member_of(h, &want);
+    if owned {
+        // SAFETY: our handle.
+        unsafe { NtClose(h) };
     }
-}
-
-/// `AllocateAndInitializeSid`: 1 to 8 sub-authorities (Learn), in the
-/// process heap (`FreeSid` frees it).
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn AllocateAndInitializeSid(
-    authority: *const [u8; 6],
-    count: u8,
-    s0: u32,
-    s1: u32,
-    s2: u32,
-    s3: u32,
-    s4: u32,
-    s5: u32,
-    s6: u32,
-    s7: u32,
-    out: *mut *mut u8,
-) -> i32 {
-    if authority.is_null() || out.is_null() || !(1..=8).contains(&count) {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    let subs = [s0, s1, s2, s3, s4, s5, s6, s7];
-    // SAFETY: checked non-null; six bytes.
-    let auth = sid::authority_of(unsafe { &*authority });
-    let bytes = Sid::new(auth, &subs[..usize::from(count)]).to_bytes();
-    // SAFETY: the process heap.
-    let p = unsafe { nt::RtlAllocateHeap(process_heap(), 0, bytes.len()) };
-    if p.is_null() {
-        return fail(ERROR_NOT_ENOUGH_MEMORY, FALSE);
-    }
-    // SAFETY: `p` holds `bytes.len()` bytes; `out` is checked non-null.
-    unsafe {
-        core::ptr::copy_nonoverlapping(bytes.as_ptr(), p, bytes.len());
-        out.write(p);
-    }
-    TRUE
-}
-
-/// `FreeSid`: NULL on success, the SID back on failure.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn FreeSid(p: *mut u8) -> *mut u8 {
-    if p.is_null() {
-        return p;
-    }
-    // SAFETY: a block of the process heap (AllocateAndInitializeSid).
-    if unsafe { nt::RtlFreeHeap(process_heap(), 0, p) } != 0 { core::ptr::null_mut() } else { p }
-}
-
-/// `EqualSid`. Learn: when they differ, `GetLastError` has more; Poly
-/// clears it (`ERROR_SUCCESS`, to be confirmed by the spec agent).
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn EqualSid(a: *const u8, b: *const u8) -> i32 {
-    // SAFETY: the caller's SIDs.
-    let (a, b) = unsafe { (sid_arg(a), sid_arg(b)) };
-    if sid::equal(a, b) {
-        TRUE
-    } else {
-        set_last_error(ERROR_SUCCESS);
-        FALSE
-    }
-}
-
-/// `EqualPrefixSid`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn EqualPrefixSid(a: *const u8, b: *const u8) -> i32 {
-    // SAFETY: the caller's SIDs.
-    let (a, b) = unsafe { (sid_arg(a), sid_arg(b)) };
-    if sid::equal_prefix(a, b) {
-        TRUE
-    } else {
-        set_last_error(ERROR_SUCCESS);
-        FALSE
-    }
-}
-
-/// `GetLengthSid` (undefined for an invalid SID, Learn: its header decides).
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetLengthSid(p: *const u8) -> u32 {
-    // SAFETY: the caller's SID header.
-    sid::length_of(unsafe { core::slice::from_raw_parts(p, 2) })
-}
-
-/// `IsValidSid`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn IsValidSid(p: *const u8) -> i32 {
-    // SAFETY: the caller's SID or null.
-    i32::from(sid::is_valid(unsafe { sid_arg(p) }))
-}
-
-/// `CopySid`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn CopySid(length: u32, dest: *mut u8, src: *const u8) -> i32 {
-    // SAFETY: the caller's SID or null.
-    let s = unsafe { sid_arg(src) };
-    let Some(len) = sid::valid_length(s) else { return fail(serr::ERROR_INVALID_SID, FALSE) };
-    if (length as usize) < len {
-        return fail(ERROR_INSUFFICIENT_BUFFER, FALSE);
-    }
-    // SAFETY: `dest` holds `length` >= `len` bytes.
-    unsafe { core::ptr::copy(s.as_ptr(), dest, len) };
-    TRUE
-}
-
-/// `InitializeSid`: the header only (Learn: the sub-authorities are set
-/// with `GetSidSubAuthority`).
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn InitializeSid(p: *mut u8, authority: *const [u8; 6], count: u8) -> i32 {
-    if p.is_null() || authority.is_null() || usize::from(count) > sid::SID_MAX_SUB_AUTHORITIES {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    // SAFETY: `p` holds at least the 8-byte header; `authority` six bytes.
-    unsafe {
-        p.write(sid::SID_REVISION);
-        p.add(1).write(count);
-        core::ptr::copy_nonoverlapping(authority.cast::<u8>(), p.add(2), 6);
-    }
-    TRUE
-}
-
-/// `GetSidLengthRequired`.
-#[unsafe(no_mangle)]
-pub extern "system" fn GetSidLengthRequired(count: u8) -> u32 {
-    sid::length_required(count)
-}
-
-/// `GetSidIdentifierAuthority`.
-#[unsafe(no_mangle)]
-pub extern "system" fn GetSidIdentifierAuthority(p: *mut u8) -> *mut u8 {
-    set_last_error(ERROR_SUCCESS);
-    p.wrapping_add(2)
-}
-
-/// `GetSidSubAuthority` (no check: Learn says the result for a bad index is
-/// undefined).
-#[unsafe(no_mangle)]
-pub extern "system" fn GetSidSubAuthority(p: *mut u8, index: u32) -> *mut u32 {
-    set_last_error(ERROR_SUCCESS);
-    p.wrapping_add(sid::SID_HEADER + 4 * index as usize).cast()
-}
-
-/// `GetSidSubAuthorityCount`.
-#[unsafe(no_mangle)]
-pub extern "system" fn GetSidSubAuthorityCount(p: *mut u8) -> *mut u8 {
-    set_last_error(ERROR_SUCCESS);
-    p.wrapping_add(1)
-}
-
-// ----- ACLs ---------------------------------------------------------------------------------
-
-/// The ACL at `p` as its `AclSize` bytes (only the header if the size is
-/// below it).
-///
-/// # Safety
-/// `p` points at an ACL of `AclSize` bytes.
-unsafe fn acl_arg<'a>(p: *mut u8) -> &'a mut [u8] {
-    // SAFETY: the caller's contract.
-    unsafe {
-        let size = usize::from(u16::from_le_bytes([*p.add(2), *p.add(3)])).max(acl::ACL_HEADER);
-        core::slice::from_raw_parts_mut(p, size)
-    }
-}
-
-fn bool_result(r: Result<(), u32>) -> i32 {
-    match r {
-        Ok(()) => TRUE,
-        Err(e) => fail(e, FALSE),
-    }
-}
-
-/// `InitializeAcl`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn InitializeAcl(p: *mut u8, length: u32, revision: u32) -> i32 {
-    if p.is_null() {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    if (length as usize) < acl::ACL_HEADER {
-        return fail(ERROR_INSUFFICIENT_BUFFER, FALSE);
-    }
-    // SAFETY: the caller's buffer of `length` bytes.
-    let buf = unsafe { core::slice::from_raw_parts_mut(p, length.min(0xFFFF) as usize) };
-    bool_result(acl::initialize(buf, length, revision))
-}
-
-/// `IsValidAcl`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn IsValidAcl(p: *mut u8) -> i32 {
-    // SAFETY: the caller's ACL.
-    i32::from(!p.is_null() && acl::is_valid(unsafe { acl_arg(p) }))
-}
-
-/// `GetAclInformation`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetAclInformation(p: *mut u8, info: *mut u8, length: u32, class: u32) -> i32 {
-    // SAFETY: the caller's ACL.
-    match acl::information(unsafe { acl_arg(p) }, class) {
-        Ok(b) if (length as usize) < b.len() => fail(ERROR_INSUFFICIENT_BUFFER, FALSE),
-        Ok(b) => {
-            // SAFETY: `info` holds `length` >= `b.len()` bytes.
-            unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), info, b.len()) };
+    match member {
+        Some(m) => {
+            // SAFETY: the caller's variable.
+            unsafe { is_member.write(i32::from(m)) };
             TRUE
         }
-        Err(e) => fail(e, FALSE),
+        None => fail(ERROR_INVALID_HANDLE, FALSE),
     }
 }
 
-/// The `Add*Ace*` functions.
-///
-/// # Safety
-/// `p` is an ACL, `s` a SID.
-unsafe fn add_ace(p: *mut u8, revision: u32, kind: u8, flags: u32, mask: u32, s: *const u8) -> i32 {
-    // SAFETY: the caller's ACL and SID.
-    bool_result(unsafe { acl::add(acl_arg(p), revision, kind, flags, mask, sid_arg(s)) })
-}
-
-/// `AddAccessAllowedAce`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn AddAccessAllowedAce(p: *mut u8, revision: u32, mask: u32, s: *const u8) -> i32 {
-    // SAFETY: the caller's ACL and SID.
-    unsafe { add_ace(p, revision, acl::ACCESS_ALLOWED_ACE_TYPE, 0, mask, s) }
-}
-
-/// `AddAccessAllowedAceEx`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn AddAccessAllowedAceEx(
-    p: *mut u8,
-    revision: u32,
-    flags: u32,
-    mask: u32,
-    s: *const u8,
-) -> i32 {
-    // SAFETY: the caller's ACL and SID.
-    unsafe { add_ace(p, revision, acl::ACCESS_ALLOWED_ACE_TYPE, flags, mask, s) }
-}
-
-/// `AddAccessDeniedAce`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn AddAccessDeniedAce(p: *mut u8, revision: u32, mask: u32, s: *const u8) -> i32 {
-    // SAFETY: the caller's ACL and SID.
-    unsafe { add_ace(p, revision, acl::ACCESS_DENIED_ACE_TYPE, 0, mask, s) }
-}
-
-/// `AddAccessDeniedAceEx`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn AddAccessDeniedAceEx(
-    p: *mut u8,
-    revision: u32,
-    flags: u32,
-    mask: u32,
-    s: *const u8,
-) -> i32 {
-    // SAFETY: the caller's ACL and SID.
-    unsafe { add_ace(p, revision, acl::ACCESS_DENIED_ACE_TYPE, flags, mask, s) }
-}
-
-/// `AddAce`: insert `length` bytes of ACEs before ACE `start`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn AddAce(p: *mut u8, revision: u32, start: u32, list: *const u8, length: u32) -> i32 {
-    if list.is_null() {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    // SAFETY: the caller's ACL and `length` bytes of ACEs.
-    bool_result(unsafe { acl::insert(acl_arg(p), revision, start, core::slice::from_raw_parts(list, length as usize)) })
-}
-
-/// `GetAce`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetAce(p: *mut u8, index: u32, out: *mut *mut u8) -> i32 {
-    // SAFETY: the caller's ACL.
-    match acl::ace_offset(unsafe { acl_arg(p) }, index) {
-        Ok(at) => {
-            // SAFETY: the caller's variable; `at` is inside the ACL.
-            unsafe { out.write(p.add(at)) };
-            TRUE
+/// Whether `want` is the user or an enabled group of token `h`, and a
+/// restricting SID too if the token has some.
+fn member_of(h: Handle, want: &Sid) -> Option<bool> {
+    let groups_of = |class: u32| -> Option<Vec<(Sid, u32)>> {
+        let b = query_token(h, class)?;
+        let base = b.as_ptr() as u64;
+        let count = u32::from_le_bytes(b.get(0..4)?.try_into().ok()?) as usize;
+        let mut out = Vec::new();
+        for i in 0..count {
+            let at = 8 + 16 * i;
+            let off = u64::from_le_bytes(b.get(at..at + 8)?.try_into().ok()?).wrapping_sub(base) as usize;
+            let attrs = u32::from_le_bytes(b.get(at + 8..at + 12)?.try_into().ok()?);
+            out.push((Sid::from_bytes(b.get(off..)?)?, attrs));
         }
-        Err(e) => fail(e, FALSE),
-    }
+        Some(out)
+    };
+    let user = {
+        let b = query_token(h, class::TOKEN_USER)?;
+        (Sid::from_bytes(b.get(16..)?)?, u32::from_le_bytes(b.get(8..12)?.try_into().ok()?))
+    };
+    let enabled = |attrs: u32| attrs & token::SE_GROUP_ENABLED != 0 && attrs & token::SE_GROUP_USE_FOR_DENY_ONLY == 0;
+    let groups = groups_of(class::TOKEN_GROUPS)?;
+    let normal = (user.0 == *want && user.1 & token::SE_GROUP_USE_FOR_DENY_ONLY == 0)
+        || groups.iter().any(|(g, a)| g == want && enabled(*a));
+    let restricted = groups_of(class::TOKEN_RESTRICTED_SIDS)?;
+    Some(normal && (restricted.is_empty() || restricted.iter().any(|(g, a)| g == want && enabled(*a))))
 }
 
-/// `DeleteAce`.
+/// `AccessCheck`: decides whether the impersonation token may have
+/// `desired` access to an object with the descriptor. A completed decision
+/// is `TRUE`; a denial sets `*status` to FALSE, `*granted` to 0 and the last
+/// error `ERROR_ACCESS_DENIED` (`ERROR_PRIVILEGE_NOT_HELD` for
+/// `ACCESS_SYSTEM_SECURITY`). The privilege set has to have room for one
+/// entry (20 bytes) even when none is used.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DeleteAce(p: *mut u8, index: u32) -> i32 {
-    // SAFETY: the caller's ACL.
-    bool_result(acl::delete(unsafe { acl_arg(p) }, index))
-}
-
-/// `FindFirstFreeAce`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn FindFirstFreeAce(p: *mut u8, out: *mut *mut u8) -> i32 {
-    // SAFETY: the caller's ACL.
-    match acl::first_free(unsafe { acl_arg(p) }) {
-        Ok(at) => {
-            // SAFETY: the caller's variable; `at` is at most the ACL's size.
-            unsafe { out.write(p.add(at)) };
-            TRUE
-        }
-        Err(e) => fail(e, FALSE),
-    }
-}
-
-// ----- security descriptors ------------------------------------------------------------
-
-fn read_u16(p: *const u8, at: usize) -> u16 {
-    // SAFETY: the callers pass descriptors of at least 20 bytes.
-    unsafe { core::ptr::read_unaligned(p.add(at).cast::<u16>()) }
-}
-
-fn read_u32(p: *const u8, at: usize) -> u32 {
-    // SAFETY: as above.
-    unsafe { core::ptr::read_unaligned(p.add(at).cast::<u32>()) }
-}
-
-fn read_ptr(p: *const u8, at: usize) -> *mut u8 {
-    // SAFETY: the callers pass absolute descriptors of 40 bytes.
-    unsafe { core::ptr::read_unaligned(p.add(at).cast::<*mut u8>()) }
-}
-
-fn write_ptr(p: *mut u8, at: usize, v: *const u8) {
-    // SAFETY: as above, writable.
-    unsafe { core::ptr::write_unaligned(p.add(at).cast::<*const u8>(), v) }
-}
-
-fn control(p: *const u8) -> u16 {
-    read_u16(p, 2)
-}
-
-fn set_control_bits(p: *mut u8, c: u16) {
-    // SAFETY: the descriptor's control word.
-    unsafe { core::ptr::write_unaligned(p.add(2).cast::<u16>(), c) }
-}
-
-/// The four part pointers of a descriptor in either form (null: absent).
-fn part_pointers(p: *const u8) -> [*mut u8; 4] {
-    let c = control(p);
-    if c & sd::SE_SELF_RELATIVE != 0 {
-        [sd::REL_OWNER, sd::REL_GROUP, sd::REL_SACL, sd::REL_DACL].map(|at| match read_u32(p, at) {
-            0 => core::ptr::null_mut(),
-            off => p.wrapping_add(off as usize).cast_mut(),
-        })
-    } else {
-        [sd::ABS_OWNER, sd::ABS_GROUP, sd::ABS_SACL, sd::ABS_DACL].map(|at| read_ptr(p, at))
-    }
-}
-
-/// The parts of a descriptor as slices.
-///
-/// # Safety
-/// `p` is a descriptor whose parts are readable.
-unsafe fn parts<'a>(p: *const u8) -> Parts<'a> {
-    let [o, g, s, d] = part_pointers(p);
-    let c = control(p);
-    // SAFETY: the caller's contract.
-    unsafe {
-        let acl_of = |a: *mut u8, present: bool| if a.is_null() || !present { None } else { Some(&*acl_arg(a)) };
-        Parts {
-            control: c,
-            owner: (!o.is_null()).then(|| sid_arg(o)),
-            group: (!g.is_null()).then(|| sid_arg(g)),
-            sacl: acl_of(s, c & sd::SE_SACL_PRESENT != 0),
-            dacl: acl_of(d, c & sd::SE_DACL_PRESENT != 0),
-        }
-    }
-}
-
-/// The revision and self-relative checks every `Set*` function makes.
-fn check_absolute(p: *const u8) -> Result<(), u32> {
-    if p.is_null() {
-        return Err(ERROR_INVALID_PARAMETER);
-    }
-    // SAFETY: the caller's descriptor header.
-    sd::check_absolute(unsafe { *p }, control(p))
-}
-
-/// `InitializeSecurityDescriptor`: an empty absolute descriptor.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn InitializeSecurityDescriptor(p: *mut u8, revision: u32) -> i32 {
-    if revision != u32::from(sd::SECURITY_DESCRIPTOR_REVISION) {
-        return fail(serr::ERROR_UNKNOWN_REVISION, FALSE);
-    }
-    // SAFETY: the caller's SECURITY_DESCRIPTOR (40 bytes).
-    unsafe {
-        core::ptr::write_bytes(p, 0, sd::SECURITY_DESCRIPTOR_MIN_LENGTH);
-        p.write(sd::SECURITY_DESCRIPTOR_REVISION);
-    }
-    TRUE
-}
-
-/// `IsValidSecurityDescriptor`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn IsValidSecurityDescriptor(p: *const u8) -> i32 {
-    // SAFETY: the caller's descriptor.
-    if p.is_null() || unsafe { *p } != sd::SECURITY_DESCRIPTOR_REVISION {
-        return fail(serr::ERROR_INVALID_SECURITY_DESCR, FALSE);
-    }
-    // SAFETY: as above.
-    bool_result(unsafe { parts(p) }.check())
-}
-
-/// `GetSecurityDescriptorLength`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetSecurityDescriptorLength(p: *const u8) -> u32 {
-    // SAFETY: the caller's descriptor.
-    let parts = unsafe { parts(p) };
-    if parts.control & sd::SE_SELF_RELATIVE != 0 {
-        let end = |s: Option<&[u8]>| s.map_or(0, |s| s.as_ptr() as usize - p as usize + s.len());
-        [sd::RELATIVE_HEADER, end(parts.owner), end(parts.group), end(parts.sacl), end(parts.dacl)]
-            .into_iter()
-            .max()
-            .unwrap_or(sd::RELATIVE_HEADER) as u32
-    } else {
-        parts.absolute_length() as u32
-    }
-}
-
-/// `GetSecurityDescriptorControl`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetSecurityDescriptorControl(p: *const u8, out: *mut u16, revision: *mut u32) -> i32 {
-    if p.is_null() || out.is_null() || revision.is_null() {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    // SAFETY: checked non-null; the caller's variables.
-    unsafe {
-        out.write(control(p));
-        revision.write(u32::from(*p));
-    }
-    TRUE
-}
-
-/// `SetSecurityDescriptorControl`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn SetSecurityDescriptorControl(p: *mut u8, mask: u16, bits: u16) -> i32 {
-    if p.is_null() {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    // SAFETY: the caller's descriptor header.
-    if unsafe { *p } != sd::SECURITY_DESCRIPTOR_REVISION {
-        return fail(serr::ERROR_UNKNOWN_REVISION, FALSE);
-    }
-    match sd::set_control(control(p), mask, bits) {
-        Ok(c) => {
-            set_control_bits(p, c);
-            TRUE
-        }
-        Err(e) => fail(e, FALSE),
-    }
-}
-
-fn set_acl(
-    p: *mut u8,
-    field: usize,
-    present_bit: u16,
-    defaulted_bit: u16,
-    present: i32,
-    a: *mut u8,
-    defaulted: i32,
+pub unsafe extern "system" fn AccessCheck(
+    sd: *const u8,
+    token: Handle,
+    desired: u32,
+    mapping: *const access::GenericMapping,
+    privileges: *mut u8,
+    privileges_length: *mut u32,
+    granted: *mut u32,
+    status: *mut i32,
 ) -> i32 {
-    if let Err(e) = check_absolute(p) {
-        return fail(e, FALSE);
-    }
-    let c = sd::set_acl_control(control(p), present_bit, defaulted_bit, present != 0, defaulted != 0);
-    set_control_bits(p, c);
-    write_ptr(p, field, if present != 0 { a } else { core::ptr::null() });
-    TRUE
-}
-
-/// `SetSecurityDescriptorDacl` (the DACL is referenced, not copied: Learn).
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn SetSecurityDescriptorDacl(p: *mut u8, present: i32, a: *mut u8, defaulted: i32) -> i32 {
-    set_acl(p, sd::ABS_DACL, sd::SE_DACL_PRESENT, sd::SE_DACL_DEFAULTED, present, a, defaulted)
-}
-
-/// `SetSecurityDescriptorSacl`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn SetSecurityDescriptorSacl(p: *mut u8, present: i32, a: *mut u8, defaulted: i32) -> i32 {
-    set_acl(p, sd::ABS_SACL, sd::SE_SACL_PRESENT, sd::SE_SACL_DEFAULTED, present, a, defaulted)
-}
-
-/// `GetSecurityDescriptorDacl`/`Sacl`: the pointer and the defaulted flag
-/// are only written when the ACL is present (Learn).
-///
-/// # Safety
-/// The caller's descriptor and variables.
-unsafe fn get_acl(
-    p: *const u8,
-    index: usize,
-    present_bit: u16,
-    defaulted_bit: u16,
-    present: *mut i32,
-    out: *mut *mut u8,
-    defaulted: *mut i32,
-) -> i32 {
-    if p.is_null() || present.is_null() {
+    if privileges_length.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    // SAFETY: the caller's descriptor header.
-    if unsafe { *p } != sd::SECURITY_DESCRIPTOR_REVISION {
-        return fail(serr::ERROR_UNKNOWN_REVISION, FALSE);
-    }
-    let c = control(p);
-    let is_present = c & present_bit != 0;
-    // SAFETY: the caller's variables (the optional ones checked).
+    // SAFETY: the caller's variable.
     unsafe {
-        present.write(i32::from(is_present));
-        if is_present {
-            if !out.is_null() {
-                out.write(part_pointers(p)[index]);
-            }
-            if !defaulted.is_null() {
-                defaulted.write(i32::from(c & defaulted_bit != 0));
-            }
-        }
-    }
-    TRUE
-}
-
-/// `GetSecurityDescriptorDacl`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetSecurityDescriptorDacl(
-    p: *const u8,
-    present: *mut i32,
-    out: *mut *mut u8,
-    defaulted: *mut i32,
-) -> i32 {
-    // SAFETY: the caller's descriptor and variables.
-    unsafe { get_acl(p, 3, sd::SE_DACL_PRESENT, sd::SE_DACL_DEFAULTED, present, out, defaulted) }
-}
-
-/// `GetSecurityDescriptorSacl`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetSecurityDescriptorSacl(
-    p: *const u8,
-    present: *mut i32,
-    out: *mut *mut u8,
-    defaulted: *mut i32,
-) -> i32 {
-    // SAFETY: the caller's descriptor and variables.
-    unsafe { get_acl(p, 2, sd::SE_SACL_PRESENT, sd::SE_SACL_DEFAULTED, present, out, defaulted) }
-}
-
-fn set_sid(p: *mut u8, field: usize, defaulted_bit: u16, s: *mut u8, defaulted: i32) -> i32 {
-    if let Err(e) = check_absolute(p) {
-        return fail(e, FALSE);
-    }
-    let c = if defaulted != 0 { control(p) | defaulted_bit } else { control(p) & !defaulted_bit };
-    set_control_bits(p, c);
-    write_ptr(p, field, s);
-    TRUE
-}
-
-/// `SetSecurityDescriptorOwner`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn SetSecurityDescriptorOwner(p: *mut u8, s: *mut u8, defaulted: i32) -> i32 {
-    set_sid(p, sd::ABS_OWNER, sd::SE_OWNER_DEFAULTED, s, defaulted)
-}
-
-/// `SetSecurityDescriptorGroup`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn SetSecurityDescriptorGroup(p: *mut u8, s: *mut u8, defaulted: i32) -> i32 {
-    set_sid(p, sd::ABS_GROUP, sd::SE_GROUP_DEFAULTED, s, defaulted)
-}
-
-/// # Safety
-/// The caller's descriptor and variables.
-unsafe fn get_sid(p: *const u8, index: usize, defaulted_bit: u16, out: *mut *mut u8, defaulted: *mut i32) -> i32 {
-    if p.is_null() || out.is_null() || defaulted.is_null() {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    // SAFETY: the caller's descriptor header.
-    if unsafe { *p } != sd::SECURITY_DESCRIPTOR_REVISION {
-        return fail(serr::ERROR_UNKNOWN_REVISION, FALSE);
-    }
-    // SAFETY: checked non-null.
-    unsafe {
-        out.write(part_pointers(p)[index]);
-        defaulted.write(i32::from(control(p) & defaulted_bit != 0));
-    }
-    TRUE
-}
-
-/// `GetSecurityDescriptorOwner`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetSecurityDescriptorOwner(p: *const u8, out: *mut *mut u8, defaulted: *mut i32) -> i32 {
-    // SAFETY: the caller's descriptor and variables.
-    unsafe { get_sid(p, 0, sd::SE_OWNER_DEFAULTED, out, defaulted) }
-}
-
-/// `GetSecurityDescriptorGroup`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetSecurityDescriptorGroup(p: *const u8, out: *mut *mut u8, defaulted: *mut i32) -> i32 {
-    // SAFETY: the caller's descriptor and variables.
-    unsafe { get_sid(p, 1, sd::SE_GROUP_DEFAULTED, out, defaulted) }
-}
-
-/// `MakeSelfRelativeSD`: a short buffer gets nothing and
-/// `ERROR_INSUFFICIENT_BUFFER`, with the size needed in `*length` (Learn).
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn MakeSelfRelativeSD(abs: *const u8, rel: *mut u8, length: *mut u32) -> i32 {
-    if abs.is_null() || length.is_null() {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    if control(abs) & sd::SE_SELF_RELATIVE != 0 {
-        return fail(serr::ERROR_BAD_DESCRIPTOR_FORMAT, FALSE);
-    }
-    // SAFETY: the caller's absolute descriptor.
-    let bytes = unsafe { parts(abs) }.to_relative();
-    // SAFETY: the caller's variable and buffer of `*length` bytes.
-    unsafe {
-        if (length.read() as usize) < bytes.len() || rel.is_null() {
-            length.write(bytes.len() as u32);
+        if privileges_length.read() < 20 || privileges.is_null() {
+            privileges_length.write(20);
             return fail(ERROR_INSUFFICIENT_BUFFER, FALSE);
         }
-        core::ptr::copy_nonoverlapping(bytes.as_ptr(), rel, bytes.len());
+    }
+    let mut st_out = 0xFFFF_FFFFu32;
+    let mut g = 0u32;
+    // SAFETY: the caller's pointers and locals.
+    let st = unsafe { NtAccessCheck(sd, token, desired, mapping, privileges, privileges_length, &mut g, &mut st_out) };
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    // SAFETY: the caller's variables.
+    unsafe {
+        granted.write(g);
+        status.write(i32::from(st_out == 0));
+    }
+    if st_out != 0 {
+        set_last_error(if st_out == 0xC000_0061 { 1314 } else { ERROR_ACCESS_DENIED });
     }
     TRUE
+}
+
+// ----- impersonation -----------------------------------------------------------------------
+
+/// `ImpersonateSelf`.
+#[unsafe(no_mangle)]
+pub extern "system" fn ImpersonateSelf(level: u32) -> i32 {
+    // SAFETY: no arguments to misuse.
+    done(unsafe { RtlImpersonateSelf(level) })
+}
+
+/// `RevertToSelf`: always `TRUE`.
+#[unsafe(no_mangle)]
+pub extern "system" fn RevertToSelf() -> i32 {
+    let none = 0u64.to_le_bytes();
+    // SAFETY: a local buffer.
+    let _ = unsafe { NtSetInformationThread(CURRENT_THREAD, 5, none.as_ptr(), 8) };
+    TRUE
+}
+
+/// `SetThreadToken`: the impersonation token of the thread `*thread` (the
+/// calling thread for NULL); NULL as the token removes it.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetThreadToken(thread: *const Handle, token: Handle) -> i32 {
+    // SAFETY: the caller's thread handle variable.
+    let t = if thread.is_null() { CURRENT_THREAD } else { unsafe { thread.read() } };
+    let b = (token as u64).to_le_bytes();
+    // SAFETY: a local buffer.
+    done(unsafe { NtSetInformationThread(t, 5, b.as_ptr(), 8) })
+}
+
+/// `ImpersonateLoggedOnUser`: a primary token is duplicated to an
+/// impersonation token of level Impersonation first.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ImpersonateLoggedOnUser(token: Handle) -> i32 {
+    if token == 0 {
+        return fail(ERROR_INVALID_HANDLE, FALSE);
+    }
+    let mut ty = [0u8; 4];
+    let mut ret = 0;
+    // SAFETY: local buffer.
+    let st = unsafe { NtQueryInformationToken(token, class::TOKEN_TYPE, ty.as_mut_ptr(), 4, &mut ret) };
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    let (h, owned) = if u32::from_le_bytes(ty) == token::TOKEN_PRIMARY {
+        let a = Attrs::new(core::ptr::null(), Some(token::SECURITY_IMPERSONATION));
+        let mut d = 0;
+        // SAFETY: locals.
+        let st = unsafe {
+            NtDuplicateToken(token, token::TOKEN_IMPERSONATE | token::TOKEN_QUERY, a.oa.as_ptr().cast(), 0, 2, &mut d)
+        };
+        if !st.is_success() {
+            return fail_status(st, FALSE);
+        }
+        (d, true)
+    } else {
+        (token, false)
+    };
+    let b = (h as u64).to_le_bytes();
+    // SAFETY: a local buffer.
+    let st = unsafe { NtSetInformationThread(CURRENT_THREAD, 5, b.as_ptr(), 8) };
+    if owned {
+        // SAFETY: our handle.
+        unsafe { NtClose(h) };
+    }
+    done(st)
+}
+
+// ----- the security of kernel objects ------------------------------------------------------
+
+/// `GetKernelObjectSecurity`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetKernelObjectSecurity(
+    handle: Handle,
+    information: u32,
+    sd: *mut u8,
+    length: u32,
+    needed: *mut u32,
+) -> i32 {
+    // SAFETY: the caller's buffer of `length` bytes and variable.
+    done(unsafe { NtQuerySecurityObject(handle, information, sd, length, needed) })
+}
+
+/// `SetKernelObjectSecurity`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetKernelObjectSecurity(handle: Handle, information: u32, sd: *const u8) -> i32 {
+    // SAFETY: the caller's descriptor.
+    done(unsafe { NtSetSecurityObject(handle, information, sd) })
 }

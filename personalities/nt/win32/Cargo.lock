@@ -300,6 +300,9 @@ dependencies = [
 [[package]]
 name = "poly-ntobj"
 version = "0.0.1"
+dependencies = [
+ "poly-security",
+]
 
 [[package]]
 name = "poly-pe"
@@ -315,9 +318,6 @@ dependencies = [
 [[package]]
 name = "poly-security"
 version = "0.0.1"
-dependencies = [
- "poly-ntobj",
-]
 
 [[package]]
 name = "poly-seh"
@@ -404,6 +404,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell32"
+version = "0.0.1"
+dependencies = [
+ "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "ucrtbase"
 version = "0.0.1"
 dependencies = [
@@ -421,6 +429,14 @@ dependencies = [
  "poly-win32-gui",
  "poly-win32-rt",
  "poly-win32k",
+]
+
+[[package]]
+name = "userenv"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+ "poly-win32-cryptrt",
 ]
 
 [[package]]
@@ -453,6 +469,14 @@ version = "0.0.1"
 dependencies = [
  "poly-http",
  "poly-win32-inet",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "winmm"
+version = "0.0.1"
+dependencies = [
+ "poly-kernelbase",
  "poly-win32-rt",
 ]
 

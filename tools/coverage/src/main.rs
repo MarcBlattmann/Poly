@@ -5,10 +5,12 @@
 //! coverage import linux <syscall_64.tbl> --revision <rev>
 //! coverage import xnu <syscalls.master> <syscall_sw.c> --revision <rev>
 //! coverage import macos-sdk <MacOSX.sdk> --revision <sdk version>   (run on a Mac)
-//! coverage claim <id> --agent <agent-id>
-//! coverage release <id>
-//! coverage set-status <id> <missing|stub|green|blocked-by-design|app-provided>
+//! coverage claim <id>... [--from-file FILE] --agent <agent-id>
+//! coverage release <id>... [--from-file FILE]
+//! coverage set-status <id>... [--from-file FILE] <missing|stub|green|blocked-by-design|app-provided>
 //!                     [--tests-visible N] [--tests-held-out N]
+//!                                (many entries in one call: all of them change, or none.
+//!                                FILE has one id per line, `#` lines are comments, `-` is standard input)
 //! coverage set-status --component <os>/<layer>/<component> [--component ...] <status>
 //!                                                    (every entry of those components)
 //! coverage check
@@ -119,35 +121,56 @@ fn import(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// The entry ids of a `--from-file` file: one per line, without the
+/// space around it; empty lines and lines that start with `#` are skipped.
+fn ids_in(text: &str) -> Vec<String> {
+    text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(String::from).collect()
+}
+
+/// The entry ids a command names: `given` on the command line, then those
+/// of every `--from-file FILE` (`-`: standard input).
+fn ids(args: &[String], given: &[&str]) -> Result<Vec<String>, String> {
+    let mut ids: Vec<String> = given.iter().map(|s| s.to_string()).collect();
+    for file in opts(args, "--from-file") {
+        let text = if file == "-" {
+            std::io::read_to_string(std::io::stdin()).map_err(|e| format!("standard input: {e}"))?
+        } else {
+            read(file)?
+        };
+        ids.extend(ids_in(&text));
+    }
+    Ok(ids)
+}
+
+/// "3 entries", "1 entry".
+fn entries(n: usize) -> String {
+    format!("{n} {}", if n == 1 { "entry" } else { "entries" })
+}
+
 fn claim(args: &[String]) -> Result<(), String> {
-    let pos = positional(args);
-    let [id] = pos.as_slice() else { return Err("usage: coverage claim <id> --agent <agent-id>".into()) };
+    const USAGE: &str = "usage: coverage claim <id>... [--from-file FILE] --agent <agent-id>";
+    let ids = ids(args, &positional(args))?;
+    if ids.is_empty() {
+        return Err(USAGE.into());
+    }
     let agent = opt(args, "--agent").ok_or("--agent is required")?;
     let mut c = load()?;
-    let e = c.find_mut(id).ok_or_else(|| format!("no entry {id}"))?;
-    if e.status != Status::Missing && e.status != Status::Stub {
-        return Err(format!(
-            "{id} is {}{}",
-            e.status.name(),
-            e.claimed_by.as_ref().map_or(String::new(), |a| format!(" by {a}"))
-        ));
-    }
-    e.status = Status::Claimed;
-    e.claimed_by = Some(agent.to_string());
-    save(&c)
+    let n = c.claim(&ids.iter().map(String::as_str).collect::<Vec<_>>(), agent)?;
+    save(&c)?;
+    println!("claimed {} for {agent}", entries(n));
+    Ok(())
 }
 
 fn release(args: &[String]) -> Result<(), String> {
-    let pos = positional(args);
-    let [id] = pos.as_slice() else { return Err("usage: coverage release <id>".into()) };
-    let mut c = load()?;
-    let e = c.find_mut(id).ok_or_else(|| format!("no entry {id}"))?;
-    if e.status != Status::Claimed {
-        return Err(format!("{id} is not claimed"));
+    let ids = ids(args, &positional(args))?;
+    if ids.is_empty() {
+        return Err("usage: coverage release <id>... [--from-file FILE]".into());
     }
-    e.status = Status::Missing;
-    e.claimed_by = None;
-    save(&c)
+    let mut c = load()?;
+    let n = c.release(&ids.iter().map(String::as_str).collect::<Vec<_>>())?;
+    save(&c)?;
+    println!("released {}", entries(n));
+    Ok(())
 }
 
 /// Every value following a `--name` in `args` (the option may repeat).
@@ -161,7 +184,7 @@ fn parse_status(s: &str) -> Result<Status, String> {
 }
 
 fn set_status(args: &[String]) -> Result<(), String> {
-    const USAGE: &str = "usage: coverage set-status <id> <status> [--tests-visible N] [--tests-held-out N] | coverage set-status --component <os>/<layer>/<component> ... <status>";
+    const USAGE: &str = "usage: coverage set-status <id>... [--from-file FILE] <status> [--tests-visible N] [--tests-held-out N] | coverage set-status --component <os>/<layer>/<component> ... <status>";
     let pos = positional(args);
     let components = opts(args, "--component");
     if !components.is_empty() {
@@ -174,26 +197,22 @@ fn set_status(args: &[String]) -> Result<(), String> {
         }
         return save(&c);
     }
-    let [id, status] = pos.as_slice() else { return Err(USAGE.into()) };
-    let status = parse_status(status)?;
-    if status == Status::Claimed {
-        return Err("use `coverage claim` to claim".into());
+    // The status is the last word: `set-status <id>... <status>`.
+    let Some((status, given)) = pos.split_last() else { return Err(USAGE.into()) };
+    let ids = ids(args, given)?;
+    if ids.is_empty() {
+        return Err(USAGE.into());
     }
+    let status = parse_status(status)?;
     let count = |name: &str| -> Result<Option<u32>, String> {
         opt(args, name).map(|n| n.parse::<u32>().map_err(|_| format!("{name} {n}: a number"))).transpose()
     };
     let (visible, held_out) = (count("--tests-visible")?, count("--tests-held-out")?);
     let mut c = load()?;
-    let e = c.find_mut(id).ok_or_else(|| format!("no entry {id}"))?;
-    e.status = status;
-    e.claimed_by = None;
-    if let Some(n) = visible {
-        e.tests_visible = n;
-    }
-    if let Some(n) = held_out {
-        e.tests_held_out = n;
-    }
-    save(&c)
+    let n = c.set_status(&ids.iter().map(String::as_str).collect::<Vec<_>>(), status, visible, held_out)?;
+    save(&c)?;
+    println!("{} set to {}", entries(n), status.name());
+    Ok(())
 }
 
 fn check() -> Result<(), String> {
@@ -370,5 +389,25 @@ fn main() -> ExitCode {
             eprintln!("coverage: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `--from-file`: one id per line (an id may have spaces in it), comments and empty lines skipped.
+    #[test]
+    fn reads_the_ids_of_a_file() {
+        let text = "# this batch\nlinux/syscall/x86_64/read\r\n\n  macos/objc/Foundation/-[NSObject init]  \n#x\nwindows/api/a.dll/#12\n";
+        assert_eq!(
+            ids_in(text),
+            ["linux/syscall/x86_64/read", "macos/objc/Foundation/-[NSObject init]", "windows/api/a.dll/#12"]
+        );
+    }
+
+    #[test]
+    fn counts_entries_in_words() {
+        assert_eq!((entries(1), entries(2), entries(0)), ("1 entry".into(), "2 entries".into(), "0 entries".into()));
     }
 }

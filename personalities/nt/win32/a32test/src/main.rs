@@ -277,10 +277,13 @@ fn out_num(mut v: u32) {
 static STEP: AtomicU32 = AtomicU32::new(0);
 
 /// Check `ok` as the next step, reporting `got` on failure.
+#[track_caller]
 fn check_got(ok: bool, got: u32) {
     let step = STEP.fetch_add(1, Ordering::Relaxed) + 1;
     if !ok {
-        out(b"a32test: step ");
+        out(b"a32test: line ");
+        out_num(core::panic::Location::caller().line());
+        out(b": step ");
         out_num(step);
         out(b" failed (got ");
         out_num(got);
@@ -291,6 +294,7 @@ fn check_got(ok: bool, got: u32) {
 }
 
 /// Check `ok`, reporting the last error on failure.
+#[track_caller]
 fn check(ok: bool) {
     // SAFETY: a plain kernel32 call.
     let e = unsafe { GetLastError() };
@@ -298,11 +302,13 @@ fn check(ok: bool) {
 }
 
 /// Check a returned (registry) error code.
+#[track_caller]
 fn check_code(got: u32, want: u32) {
     check_got(got == want, got);
 }
 
 /// Check that a call failed with `want` as the last error.
+#[track_caller]
 fn check_fail(r: i32, want: u32) {
     // SAFETY: a plain kernel32 call.
     let e = unsafe { GetLastError() };
@@ -807,7 +813,7 @@ unsafe fn token() {
         check(IsValidSid(user) != 0 && user == p.add(16));
         let mut s: *mut u16 = core::ptr::null_mut();
         check(ConvertSidToStringSidW(user, &mut s) != 0);
-        check(wide_eq(s, b"S-1-5-21-0-0-0-1000"));
+        check(wide_eq(s, b"S-1-5-21-520193847-884726105-1936024571-1002"));
         check(LocalFree(s.cast()).is_null());
         // Elevated, high integrity, the default elevation type.
         let mut v = 0u32;
@@ -885,20 +891,21 @@ unsafe fn adjust() {
         };
         let mut t: Handle = 0;
         check(OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &mut t) != 0);
-        // SeRestorePrivilege (18): held, disabled.
-        check_got(enabled(t, 18) == Some(0), enabled(t, 18).unwrap_or(99));
-        let on = tp(18, 2);
-        SetLastError(5);
-        check(AdjustTokenPrivileges(t, 0, on.as_ptr().cast(), 0, core::ptr::null_mut(), core::ptr::null_mut()) != 0);
-        check_code(GetLastError(), 0);
-        check_got(enabled(t, 18) == Some(2), enabled(t, 18).unwrap_or(99));
-        // Disable it again, asking for the previous state: just it, enabled.
+        // SeRestorePrivilege (18): held, enabled (and enabled by default).
+        check_got(enabled(t, 18) == Some(3), enabled(t, 18).unwrap_or(99));
+        // Disable it, asking for the previous state: just it, as it was.
         let off = tp(18, 0);
         let mut prev = [0u32; 8];
         let mut len = 0u32;
         check(AdjustTokenPrivileges(t, 0, off.as_ptr().cast(), 32, prev.as_mut_ptr().cast(), &mut len) != 0);
-        check_got(len == 16 && prev[0] == 1 && prev[1] == 18 && prev[3] == 2, len);
-        check_got(enabled(t, 18) == Some(0), enabled(t, 18).unwrap_or(99));
+        check_got(len == 16 && prev[0] == 1 && prev[1] == 18 && prev[3] == 3, len);
+        check_got(enabled(t, 18) == Some(1), enabled(t, 18).unwrap_or(99));
+        // Enable it again: no previous state asked for.
+        let on = tp(18, 2);
+        SetLastError(5);
+        check(AdjustTokenPrivileges(t, 0, on.as_ptr().cast(), 0, core::ptr::null_mut(), core::ptr::null_mut()) != 0);
+        check_code(GetLastError(), 0);
+        check_got(enabled(t, 18) == Some(3), enabled(t, 18).unwrap_or(99));
         // SeLockMemoryPrivilege (4) is not held: success, not all assigned.
         let lock = tp(4, 2);
         check(AdjustTokenPrivileges(t, 0, lock.as_ptr().cast(), 0, core::ptr::null_mut(), core::ptr::null_mut()) != 0);
@@ -918,7 +925,7 @@ unsafe fn sids() {
         let mut everyone: *mut u8 = core::ptr::null_mut();
         check_fail(
             AllocateAndInitializeSid(&SECURITY_WORLD_SID_AUTHORITY, 9, 0, 0, 0, 0, 0, 0, 0, 0, &mut everyone),
-            ERROR_INVALID_PARAMETER,
+            ERROR_INVALID_SID,
         );
         check(AllocateAndInitializeSid(&SECURITY_WORLD_SID_AUTHORITY, 1, 0, 0, 0, 0, 0, 0, 0, 0, &mut everyone) != 0);
         check_got(GetLengthSid(everyone) == 12, GetLengthSid(everyone));

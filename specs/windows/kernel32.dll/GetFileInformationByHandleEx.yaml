@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetFileInformationByHandleEx.yaml
+id: windows/api/kernel32.dll/GetFileInformationByHandleEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output (four runs in all), each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-4
+  date: 2026-11-10
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn: "GetFileInformationByHandleEx function (winbase.h)",
+  "FILE_INFO_BY_HANDLE_CLASS enumeration (minwinbase.h)", "FILE_NAME_INFO
+  structure (winbase.h)", "CreateNamedPipeW", "CreatePipe"; winerror.h for
+  the error codes. Wine's tests were not read. No Microsoft binary was
+  decompiled or disassembled.
+summary: >
+  Returns information about the file behind a handle. This sheet covers one
+  class, FileNameInfo (2), and above all pipe handles. The answer is the
+  one NtQueryInformationFile gives for FileNameInformation (see
+  specs/windows/ntdll.dll/NtQueryInformationFile.yaml): for a named pipe a
+  backslash and the pipe's name as its creator spelled it, without the
+  device; for an anonymous pipe the empty name. What differs is how
+  failures are reported: a BOOL and a last error.
+interface:
+  signature: "BOOL GetFileInformationByHandleEx(HANDLE file, FILE_INFO_BY_HANDLE_CLASS class, LPVOID file_information, DWORD buffer_size)"
+  class: "FileNameInfo = 2 (minwinbase.h FILE_INFO_BY_HANDLE_CLASS)"
+  file_name_info: "FILE_NAME_INFO (winbase.h): FileNameLength u32 @0, the length of the name in bytes; FileName WCHAR[] @4, UTF-16, not NUL-terminated. sizeof is 8"
+rules:
+  named_pipe_name: "for a pipe created as \\\\.\\pipe\\PolySpec4_InfoA the call returns TRUE with FileNameLength 32 and the name \"\\PolySpec4_InfoA\"; exactly 36 = 4 + FileNameLength bytes of the buffer are written (no terminating NUL)"
+  same_for_every_handle: "the server end before and after a client connected, the client end (opened as \"\\\\.\\pipe\\polyspec4_INFOA\": the name still has the creator's spelling), a second instance, a duplicate handle and a handle a child process inherited all report the same name; \"crashpad_4242_ABCDEFGHIJKLMNOP\" gives \"\\crashpad_4242_ABCDEFGHIJKLMNOP\" (FileNameLength 62, 66 bytes written)"
+  anonymous_pipe: "both ends of a pipe made by CreatePipe: TRUE, FileNameLength 0, only the 4 bytes of the length field written (buffer sizes 528 and 8)"
+  disk_file: "for a file on a disk volume: TRUE and the full path on its volume, starting with a backslash and without the drive letter (the image's directory without the drive letter and colon, followed by the file's name, for a file beside the test's image)"
+  minimum_size: "a buffer size below 8 (sizeof(FILE_NAME_INFO)) fails with ERROR_BAD_LENGTH (24) and writes nothing, for every kind of file handle, also for an anonymous pipe whose answer needs 4 bytes (sizes 0, 1, 2, 3, 4, 5, 6, 7 tested)"
+  too_small: "a buffer size of at least 8 that cannot hold the whole name fails with ERROR_MORE_DATA (234), and the buffer has been written: FileNameLength is the full length of the name (32) and the buffer is filled to its last byte with the start of the name (size 9 writes 9 bytes; sizes 8, 9, 10, 12, 34, 35 tested with a 36-byte answer, 11, 36 and 37 with a 38-byte one, 8 with a disk file)"
+  exact_and_larger: "a buffer size of exactly 4 + FileNameLength succeeds, and larger sizes give the same result with the same number of bytes written (36, 37, 38, 40, 528 tested)"
+errors:
+  invalid_handle: "ERROR_INVALID_HANDLE (6), FALSE, nothing written: for a handle to an event (not a file), for the handle value 0, for INVALID_HANDLE_VALUE and for a value that is no open handle"
+  bad_length: "ERROR_BAD_LENGTH (24) for a buffer size below 8"
+  more_data: "ERROR_MORE_DATA (234) when the name does not fit; the truncated data is in the buffer"
+side_effects: "the calling thread's last error on failure; nothing about the pipe changes"
+threading: "no state is shared between threads; the last error is per thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing kernel32.dll and ntdll.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants); run
+  with poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Every query gets a
+  buffer filled with 0xAA, so the lines show how many bytes were written;
+  the last error is set to 0 before the call and printed only after a
+  failure. Pipe names are fixed ("PolySpec4_...").
+  specs/windows/ntdll.dll/NtQueryInformationFile.tests/ntqif_name_child.rs
+  also queries a handle a child process inherited.
+not_covered: >
+  Every other class (FileBasicInfo, FileStandardInfo, FileStreamInfo,
+  FileIdBothDirectoryInfo, FileAttributeTagInfo, FileIdInfo, ...), class
+  values outside the enumeration, directories, files on network shares,
+  consoles and other devices.

@@ -41,6 +41,9 @@ what. Claim the entry you want so nobody else (human or agent) duplicates it:
 cargo xtask coverage claim <entry-id> --agent <your-github-name>
 ```
 
+(`claim`, `release` and `set-status` take many entry ids in one call, also
+from `--from-file FILE` with one id per line; all of them change or none.)
+
 and include the claim in your pull request. Release it if you stop. The ordered
 plan is [docs/ROADMAP.md](docs/ROADMAP.md): work on the next unticked
 milestone, not one further down.

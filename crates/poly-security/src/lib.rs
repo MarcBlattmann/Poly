@@ -31,28 +31,46 @@
 
 extern crate alloc;
 
+pub mod access;
+pub mod account;
 pub mod acl;
+pub mod err;
 pub mod error;
+pub mod explicit;
+pub mod inherit;
 pub mod sd;
 pub mod sddl;
+pub mod sdops;
+pub mod sdstr;
 pub mod sid;
+pub mod status;
 pub mod token;
+pub mod wellknown;
 
-pub use poly_ntobj::NtStatus;
 pub use sid::Sid;
+pub use status::NtStatus;
 
 /// Poly's single user's name (the default hives' `POLY_USER_NAME`, ADR 0066).
 pub const POLY_USER_NAME: &str = "poly";
-/// The machine's account domain: `S-1-5-21-0-0-0` (three zero
-/// sub-authorities, ADR 0066); local accounts are relative to it.
-pub const MACHINE_DOMAIN: [u32; 4] = [21, 0, 0, 0];
+/// The machine's account domain: `S-1-5-21-520193847-884726105-1936024571` (three large
+/// sub-authorities like a real machine's; their digits (9, 9 and 10) are what
+/// the string lengths of the sheets imply, ADR 0171); local accounts are
+/// relative to it.
+pub const MACHINE_DOMAIN: [u32; 4] = [21, 520_193_847, 884_726_105, 1_936_024_571];
 /// Poly's single user's relative identifier (the default hives'
-/// `S-1-5-21-0-0-0-1000`).
-pub const POLY_USER_RID: u32 = 1000;
+/// `S-1-5-21-520193847-884726105-1936024571-1002`).
+pub const POLY_USER_RID: u32 = 1002;
 
-/// Poly's single user's SID, `S-1-5-21-0-0-0-1000`.
+/// Poly's single user's SID, `S-1-5-21-520193847-884726105-1936024571-1002`.
 pub fn poly_user_sid() -> Sid {
     sid::domain_relative(POLY_USER_RID)
+}
+
+/// The registry path of the current user's hive, `\REGISTRY\USER\<the user's SID>`: what
+/// `RtlFormatCurrentUserKeyPath` returns (programs build `HKEY_CURRENT_USER` paths for the
+/// native registry functions from it).
+pub fn current_user_key_path() -> alloc::string::String {
+    alloc::format!("\\REGISTRY\\USER\\{}", sddl::to_string(&poly_user_sid()))
 }
 
 #[cfg(test)]
@@ -60,6 +78,17 @@ mod tests {
     use super::*;
     extern crate std;
     use alloc::string::ToString;
+
+    /// The path names the hive the default registry really has (it used to be a literal in
+    /// ntdll that kept the SID from before ADR 0171, so `NtCreateKey` below it failed).
+    #[test]
+    fn the_current_user_key_path_is_the_default_user_hive() {
+        assert_eq!(
+            current_user_key_path(),
+            alloc::format!("\\REGISTRY\\USER\\{}", poly_registry::defaults::POLY_USER_SID)
+        );
+        assert_eq!(current_user_key_path(), "\\REGISTRY\\USER\\S-1-5-21-520193847-884726105-1936024571-1002");
+    }
 
     #[test]
     fn the_user_matches_the_default_hives() {

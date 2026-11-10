@@ -6,20 +6,32 @@
 use std::path::Path;
 use std::process::Command;
 
-pub fn check(root: &Path) -> Result<(), String> {
-    let out = Command::new("git")
-        .current_dir(root)
-        .args(["ls-files", "-z"])
-        .output()
-        .map_err(|e| format!("git ls-files: {e}"))?;
-    if !out.status.success() {
-        return Err("git ls-files failed".into());
-    }
+/// Check every tracked file, or only the files `only` names (`ci lint
+/// --quick`: the files changed against `origin/main`; one that is gone is
+/// skipped).
+pub fn check(root: &Path, only: Option<&[String]>) -> Result<(), String> {
+    let names: Vec<String> = match only {
+        Some(files) => files.to_vec(),
+        None => {
+            let out = Command::new("git")
+                .current_dir(root)
+                .args(["ls-files", "-z"])
+                .output()
+                .map_err(|e| format!("git ls-files: {e}"))?;
+            if !out.status.success() {
+                return Err("git ls-files failed".into());
+            }
+            out.stdout
+                .split(|b| *b == 0)
+                .filter(|n| !n.is_empty())
+                .map(|n| String::from_utf8_lossy(n).into_owned())
+                .collect()
+        }
+    };
     let mut found = Vec::new();
-    for name in out.stdout.split(|b| *b == 0).filter(|n| !n.is_empty()) {
-        let name = String::from_utf8_lossy(name);
+    for name in &names {
         // Binary files and generated images may hold anything.
-        let Ok(text) = std::fs::read_to_string(root.join(&*name)) else { continue };
+        let Ok(text) = std::fs::read_to_string(root.join(name)) else { continue };
         for (line, at) in markers(&text) {
             found.push(format!("  {name}:{at}: {line}"));
         }

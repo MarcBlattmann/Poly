@@ -155,8 +155,10 @@ impl HandleTable {
 
     /// The inheritable entries at the same indices (Learn: "Handle
     /// Inheritance": an inherited handle has the same value and access).
-    fn inheritable(&self) -> HandleTable {
-        let entries: Vec<_> = self.entries.iter().map(|e| e.filter(|e| e.flags.inherit)).collect();
+    fn inheritable(&self, only: Option<&[Handle]>) -> HandleTable {
+        let listed = |i: usize| only.is_none_or(|l| l.iter().any(|h| h.index() == Some(i as u32)));
+        let entries: Vec<_> =
+            self.entries.iter().enumerate().map(|(i, e)| e.filter(|e| e.flags.inherit && listed(i))).collect();
         // Inserted one by one, in order: collecting into a `BTreeSet`
         // sorts first, with a 4 KiB scratch buffer on the stack, too much
         // for a kernel thread deep in `NtCreateUserProcess` (ADR 0089).
@@ -194,11 +196,23 @@ impl ObjectManager {
     /// access (Learn: "Handle Inheritance"). Inheriting a handle to an
     /// `OBJ_EXCLUSIVE` object is allowed; to be confirmed by the spec agent.
     pub fn create_process(&mut self, process: ProcessId, inherit_from: Option<ProcessId>) -> Result<()> {
+        self.create_process_with(process, inherit_from, None)
+    }
+
+    /// [`Self::create_process`] inheriting only the handles of `only` (the
+    /// `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` of `CreateProcessW`, ADR 0169):
+    /// those of them that are inheritable, at the same values.
+    pub fn create_process_with(
+        &mut self,
+        process: ProcessId,
+        inherit_from: Option<ProcessId>,
+        only: Option<&[Handle]>,
+    ) -> Result<()> {
         if self.processes.contains_key(&process) {
             return Err(STATUS_INVALID_PARAMETER);
         }
         let table = match inherit_from {
-            Some(parent) => self.processes.get(&parent).ok_or(STATUS_INVALID_PARAMETER)?.table.inheritable(),
+            Some(parent) => self.processes.get(&parent).ok_or(STATUS_INVALID_PARAMETER)?.table.inheritable(only),
             None => HandleTable::new(),
         };
         let objects: Vec<ObjectId> = table.iter().map(|(_, e)| e.object).collect();
@@ -487,7 +501,12 @@ impl ObjectManager {
         let access = if options & DUPLICATE_SAME_ACCESS != 0 {
             src.access
         } else {
-            access::grant(header.kind, desired, header.allowed, caller.mode, false, caller.privileges)?
+            // A copy with no access holds nothing to check (the sheets).
+            if desired == 0 {
+                access::grant(header.kind, desired, header.allowed, caller.mode, false, caller.privileges)?
+            } else {
+                self.checked_access(caller, src.object, desired, false)?
+            }
         };
         let flags = if options & DUPLICATE_SAME_ATTRIBUTES != 0 {
             src.flags

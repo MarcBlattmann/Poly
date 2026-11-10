@@ -1,55 +1,51 @@
-# Poly
+<h1 align="center">Poly</h1>
 
-An operating system on its own Rust kernel that runs **Linux, Windows and
-macOS apps side by side**, each looking exactly like it does on its native OS.
+<p align="center">
+  One operating system that runs <b>Linux, Windows and macOS apps side by side</b>.
+</p>
 
-Three native *personalities* (Linux, NT and XNU) share one kernel core. A
-process's personality is chosen from its binary format (ELF, PE or Mach-O).
-There is no Wine and no Linux underneath. The user-mode Windows DLLs and macOS
-frameworks are reimplemented **clean-room** by AI agents that work from specs
-verified against the real OS.
+<p align="center">
+  <img alt="Poly's desktop with the app launcher open" src="docs/img/desktop.png" width="720">
+</p>
 
-> **Status: early, but real programs run.** The kernel boots in QEMU on
-> several cores and has its own desktop. Linux programs run on it, from `cat`
-> and `grep` to GTK and Qt apps, VLC and Chromium, which is the desktop's
-> default browser. The Windows personality is far enough along to run 7-Zip's
-> command line with the same results and API calls as on real Windows; Chrome
-> for Windows is the current goal and does not run yet. For macOS only the
-> groundwork exists; no macOS app runs. See the [roadmap](docs/ROADMAP.md).
+> [!NOTE]
+> **Poly is early.** It runs in a virtual machine (QEMU), not yet on real
+> hardware. Linux apps run today, including Chromium as the browser. Windows
+> is in progress: 7-Zip's command line works, and Chrome for Windows is the
+> current goal. For macOS only the groundwork exists.
 
-## What works today
+## What is Poly?
 
-| | State |
-|---|---|
-| **Kernel** | Boots in QEMU (KVM, WHPX or the emulator) on up to 16 cores. Own memory management, scheduler, TCP/IP stack, ext2/ext4, virtio disk, network, GPU, input and sound drivers. |
-| **Linux** | The Linux personality implements 353 of the 370 system calls tracked in the [coverage map](#progress). BusyBox, bash, coreutils, Python and a C compiler run, as do GTK 3/4 and Qt 6 apps and VLC with sound. Linux programs match traces recorded on real Linux. |
-| **Desktop** | Native Poly user space (compositor, shell, launcher, notifications, settings, Files and Terminal), in the look of [Alpine Shell](docs/adr/0127-the-alpine-shell-look.md): light and dark themes, app icons, editable shortcuts, a busy pointer while an app starts, and it follows the size of the window that shows it. Wayland and X11 (XWayland) apps get windows with Poly's neutral frame (apps that draw their own, like Chromium, keep theirs). |
-| **Chromium** | The Debian build of Chromium runs on the desktop as the default browser, with its user-namespace sandbox, and opens web pages over the network ([ADR 0147](docs/adr/0147-the-desktop-from-chromiums-disk-with-chromium-as-the-default-browser.md)). |
-| **Windows** | The NT personality has the object manager, memory, processes, registry, files, exceptions and its own `ntdll`, `kernel32`, C runtime, `advapi32`, Winsock and cryptography. 7-Zip's command line passes its recorded scenario, and its trace matches the one recorded on real Windows step by step ([report](docs/windows/7zip-trace.md)). Windows, messages, GDI drawing and text, DirectWrite, input and focus work for test programs on the desktop. The security model and IPC (pipes, completion ports, jobs) that Chrome needs are being built. |
-| **Chrome for Windows** | In progress, not running. Specs for it are recorded on real Windows ([gap map](specs/windows/apps/chrome/gap-map.md)); on Poly it still stops early in the browser process, in the setup of Chrome's crash reporting. |
-| **macOS** | Groundwork only: a Mach-O reader, an arm64 decoder with a reference interpreter, an aarch64 boot stub, and an import map of what Chrome for macOS needs ([docs/macos](docs/macos/README.md)). |
+Poly is its own operating system, with its own kernel written in Rust. It is
+not Linux with a compatibility layer on top. The kernel speaks the language
+of each system directly, so a Linux app, a Windows app and a macOS app each
+run as if they were at home, on one desktop.
 
-## How it fits together
+The Windows and macOS system libraries are written from scratch. They come
+only from watching how the real systems behave, never from their code, so
+Poly stays legal to share.
+
+## How does it work?
 
 ```mermaid
 flowchart TB
-    DESK["<b>One desktop</b><br/><small>Poly compositor + shell · every app keeps its native look</small>"]
+    DESK["<b>One desktop</b><br/><small>every app keeps its own look</small>"]
 
-    subgraph LX["Linux"]
+    subgraph LX["Linux · runs today"]
         direction TB
-        L1["Linux apps<br/><small>ELF</small>"] --> L2["glibc · Mesa · GTK · Qt<br/><small>run unchanged</small>"] --> L3["Linux personality"]
+        L1["Linux apps"] --> L2["Linux's own libraries<br/><small>used as they are</small>"] --> L3["Linux layer"]
     end
-    subgraph WX["Windows"]
+    subgraph WX["Windows · in progress"]
         direction TB
-        W1["Windows apps<br/><small>PE</small>"] --> W2["ntdll · kernel32 · user32 · DirectX<br/><small>clean-room rewrite</small>"] --> W3["NT personality"]
+        W1["Windows apps"] --> W2["Windows libraries<br/><small>rewritten from scratch</small>"] --> W3["Windows layer"]
     end
-    subgraph MX["macOS"]
+    subgraph MX["macOS · groundwork"]
         direction TB
-        M1["macOS apps<br/><small>Mach-O</small>"] --> M2["libSystem · AppKit · Metal · SwiftUI<br/><small>clean-room rewrite</small>"] --> M3["XNU personality"]
+        M1["macOS apps"] --> M2["macOS libraries<br/><small>rewritten from scratch</small>"] --> M3["macOS layer"]
     end
 
-    CORE["<b>Poly kernel · shared core</b> <small>(Rust)</small><br/><small>memory · scheduler · files · network · drivers</small>"]
-    HW["Hardware<br/><small>QEMU + virtio first, then one real laptop</small>"]
+    CORE["<b>Poly kernel</b> <small>(Rust)</small><br/><small>memory · files · network · drivers</small>"]
+    HW["Your computer<br/><small>a virtual machine today, a real laptop later</small>"]
 
     DESK --- LX & WX & MX
     LX & WX & MX --> CORE
@@ -68,13 +64,24 @@ flowchart TB
     style MX fill:#f6f0ff,stroke:#8250df,color:#3e1f79
 ```
 
-Every app talks to the system libraries it was built for. Linux's libraries
-are open source and run as they are; the Windows and macOS ones are rewritten
-from scratch. Below them, each OS world gets its own *personality* in the
-kernel, and all three share one core. More detail in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Every app talks to the libraries it was built for. Linux's are open source,
+so they run unchanged; the Windows and macOS ones are rewritten. Below them
+the kernel has one layer per system (a *personality*), and all three share
+the same core. More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Progress
+## How do I try it?
+
+Install [Rust](https://rustup.rs) and [QEMU](https://www.qemu.org/download/), then run:
+
+```sh
+cargo xtask start
+```
+
+A menu opens. Press Enter to boot Poly's desktop with Chromium; the first
+start downloads about 230 MB once. More commands are in
+[docs/RUNNING.md](docs/RUNNING.md).
+
+## How far along is it?
 
 <!-- coverage:begin -->
 <!-- Generated by `cargo xtask coverage readme` from docs/ROADMAP.md and coverage/. Do not edit. -->
@@ -82,7 +89,7 @@ kernel, and all three share one core. More detail in
 <p>
   <a href="docs/ROADMAP.md"><img alt="roadmap: 104 of 164 milestones" src="docs/progress/badge-roadmap.svg"></a>
   <img alt="Linux API coverage: 88.5%" src="docs/progress/badge-linux.svg">
-  <img alt="Windows API coverage: 0.2%" src="docs/progress/badge-windows.svg">
+  <img alt="Windows API coverage: 0.6%" src="docs/progress/badge-windows.svg">
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
 
@@ -108,7 +115,7 @@ kernel, and all three share one core. More detail in
 | OS | API coverage | App-weighted | Traces passing |
 |---|---:|---:|---:|
 | Linux | 88.5% | n/a | 0 / 0 |
-| Windows | 0.2% | n/a | 0 / 0 |
+| Windows | 0.6% | n/a | 0 / 0 |
 | macOS | 0.0% | n/a | 0 / 0 |
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | N/A by design | App-provided |
@@ -116,7 +123,7 @@ kernel, and all three share one core. More detail in
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 0 | 0 | 35 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 3 | 1,808 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,198 | 121 | 4 | 3,094 | 53,703 | 0 | 73,276 |
+| Windows | user-mode DLL exports | 130,198 | 332 | 4 | 2,890 | 53,696 | 0 | 73,276 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 0 | 517 | 0 | 0 |
 | macOS | framework API | 741,217 | 0 | 0 | 0 | 741,217 | 0 | 0 |
 
@@ -137,95 +144,22 @@ Seeded from (names only):
 
 <!-- coverage:end -->
 
-## Quick start
+## How is it built?
 
-Needs Rust (the pinned version installs automatically through
-`rust-toolchain.toml`) and `qemu-system-x86_64`; `--busybox` takes a
-statically linked BusyBox from the host (`busybox-static` on Debian and
-Ubuntu) or builds the pinned release.
+Most of the code is written by AI agents in two separate roles. One watches
+the real system and writes down what it does, with tests. The other writes
+Poly's code from those notes alone. Every test then runs on the real system
+and on Poly, and the results must match.
 
-```sh
-cargo xtask start   # a menu of everything that boots: the desktop (with Chromium, on by default), the shells, boot tests, CI
-                    # (it remembers your choice: next time Enter runs it again; --last skips the menu)
-cargo xtask desktop --chromium # Poly's desktop with Chromium, the default browser (the menu's default; the first
-                    # start downloads about 230 MB of Debian packages and makes a 1.3 GB disk image, kept after that)
-cargo xtask desktop # the desktop without Chromium, from a small initramfs (no test apps in the image or the launcher)
-cargo xtask desktop --test-apps # add the test apps: Poly Demo, Wayland Test Client, Demo Window, Poly Fill, Send Test Notification
-cargo xtask run     # boot the kernel in QEMU (Ctrl-A X to quit)
-cargo xtask run --busybox   # boot into BusyBox's init and shell (`poweroff` quits; add console=tty1 for the screen)
-cargo xtask test    # host unit tests + boot tests in QEMU
-cargo xtask boot-tests --list   # the boot test groups; `boot-tests <group>` runs some
-cargo xtask ci      # everything CI checks (`ci lint`, `ci host-tests`, ...: one part)
-```
+The rules behind this are in [CLEAN_ROOM.md](CLEAN_ROOM.md). To help, start
+with [CONTRIBUTING.md](CONTRIBUTING.md).
 
-On GitHub, CI runs the same parts as parallel jobs: lint, host tests, the boot
-tests in 11 shards (`cargo xtask boot-tests --list` shows the groups of each),
-the coverage checks and the pipeline checks. It takes about 4 minutes; the one
-required check is `ci`, which passes when every other job did.
+## What is the plan?
 
-QEMU runs on the host's hypervisor when it can (much faster): KVM on Linux,
-the Windows Hypervisor Platform (WHPX) on Windows (turn on the Windows
-feature "Windows Hypervisor Platform"), and on its emulator (TCG)
-otherwise; `POLY_QEMU_ACCEL=tcg` forces the emulator. `cargo xtask desktop`
-sizes the screen for the host's display (a 200% display gets 2560x1600
-drawn at scale 2, so it is sharp); `--size=WxH` and `--scale=N` override it.
-`--memory=SIZE` and `--cpus=N` (on `desktop`, `run`, `chromium run`,
-`toolkits`, and in the menu's Resources block) give the guest more RAM or
-CPUs than its default, up to what the host has (the kernel starts at most 16
-CPUs; it has no RAM limit).
+Twelve phases, from the kernel to a real laptop: [docs/ROADMAP.md](docs/ROADMAP.md).
 
-On Windows, `cargo xtask run` builds and boots the kernel natively (QEMU
-for Windows on the `PATH`). The parts that need a Linux host report so: the
-diff runner against real Linux, root disks assembled from Linux packages,
-and the boot tests that take screenshots or type through QEMU's Unix
-sockets. Run those in WSL or a Linux container; `cargo xtask start` shows
-them greyed out with the reason. In Git Bash, `winpty cargo xtask start`
-gives the full menu (mintty is not a Windows console; without winpty it
-asks with a numbered prompt instead).
-
-## Repository layout
-
-| Path | What |
-|---|---|
-| `kernel/` | The kernel (its own Cargo workspace): boot, CPU setup, memory, scheduler, drivers, file systems, network, process and syscall routing |
-| `crates/` | `no_std` libraries shared with the kernel, unit-tested on the host |
-| `personalities/` | Linux, NT (with the Windows DLLs under `nt/win32/`) and XNU system call layers, and the native Poly one |
-| `userland/` | The desktop's native programs: compositor, Files, Terminal, notifications and a Wayland demo client |
-| `tools/xtask/` | Build, run and test driver |
-| `tools/pipeline/` | The agent pipeline: call tracer, diff runner, spec and hand-off tools ([docs](docs/AGENT_PIPELINE.md)) |
-| `coverage/` | The coverage map: one file per library or call table |
-| `tools/coverage/` | Maintains the coverage map and the progress section above |
-| `specs/` | Behaviour specs and visible tests, written from the real OS |
-| `tests/` | Test programs run on the real OS and on Poly (Linux and Windows) |
-| `docs/` | [Architecture](docs/ARCHITECTURE.md), [decision records](docs/adr/), [project brief](docs/PROJECT_BRIEF.md), [agent pipeline](docs/AGENT_PIPELINE.md), [Windows](docs/windows/) and [macOS](docs/macos/README.md) notes |
-
-## How work gets done
-
-1. A call tracer records which APIs the target apps use; that ranks the work queue.
-2. A **spec agent** observes the real OS in a VM and writes a spec plus tests
-   (~70% visible, ~30% held out).
-3. An **implementer agent**, in a separate context, sees only the spec and the
-   visible tests and writes the code.
-4. A diff runner runs the tests on the real OS and on Poly. Green merges; red
-   goes back to the implementer, and after about 5 rounds to a human.
-
-The rules that keep this legally clean are in **[CLEAN_ROOM.md](CLEAN_ROOM.md)**.
-
-## Contributing
-
-Contributions are welcome, from people and from their AI agents, under the
-same clean-room rules the project's own agents follow. Each contributor takes
-one role per component, **spec writer** (observes the real OS, writes specs and
-tests) or **implementer** (works only from specs and visible tests), never both.
-What you have read before matters too: for example, someone who has studied
-Wine or ReactOS source cannot implement Windows parts. Start with
-**[CONTRIBUTING.md](CONTRIBUTING.md)**.
-
-## Roadmap
-
-The full ordered plan, from the kernel core to running on a real laptop, is in
-**[docs/ROADMAP.md](docs/ROADMAP.md)**: 12 phases, one checkbox per milestone.
-The chart under [Progress](#progress) is generated from it.
+<details>
+<summary>The phases and how far each one is</summary>
 
 <!-- roadmap:begin -->
 <!-- Generated by `cargo xtask coverage readme` from docs/ROADMAP.md. Do not edit. -->
@@ -247,16 +181,8 @@ The chart under [Progress](#progress) is generated from it.
 
 <!-- roadmap:end -->
 
-## Known limits
-
-- 100% API coverage does not mean every app works. Undocumented quirks only
-  show up in trace replays.
-- Kernel-mode anti-cheat, DRM and driver-installing apps may never work.
-- Apple services (iCloud, App Store, iMessage, Apple Pay) can be blocked server-side.
-- Microsoft and Apple add APIs every year, so the coverage map is a treadmill.
-- GPU output cannot match pixel for pixel. Visual tests use a noise floor
-  measured on the real OS.
+</details>
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE). See [ADR 0005](docs/adr/0005-license.md).
+[Apache License 2.0](LICENSE)

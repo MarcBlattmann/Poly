@@ -61,6 +61,8 @@ pub struct LogFont {
     pub underline: bool,
     pub strike_out: bool,
     pub char_set: u8,
+    /// `lfQuality`: 3 is `NONANTIALIASED_QUALITY`.
+    pub quality: u8,
     pub pitch_and_family: u8,
     face: [u16; 32],
 }
@@ -90,6 +92,7 @@ impl LogFont {
             underline: b[21] != 0,
             strike_out: b[22] != 0,
             char_set: b[23],
+            quality: b[26],
             pitch_and_family: b[27],
             face,
         })
@@ -244,6 +247,16 @@ pub fn map(lf: &LogFont) -> Mapping {
         }
     });
     Mapping { class, family: class.family(), bold: lf.weight >= 600, italic: lf.italic, raster }
+}
+
+/// Whether the mapper knows the face name of `lf` (a raster name or one of
+/// the outline names of its table), rather than going by the pitch and
+/// family alone.
+pub fn is_known(lf: &LogFont) -> bool {
+    let mut buf = [0u8; 32];
+    let n = normalise(lf.face_name(), &mut buf);
+    let name = &buf[..n];
+    n > 0 && (RASTER.iter().any(|(r, _, _)| r.as_bytes() == name) || NAMES.iter().any(|(p, _)| matches(p, name)))
 }
 
 /// The tallest `lfHeight` (in pixels, either sign) the 13-pixel

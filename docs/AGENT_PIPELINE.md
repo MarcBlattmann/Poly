@@ -18,7 +18,8 @@ including the interface the kernel implements for test runs, are in
 1. **Trace.** Run programs on the real OS (a Linux VM, or this machine,
    which is real Linux) and record every syscall: `pipeline trace`.
 2. **Claim.** Pick the next entry in roadmap order and claim it:
-   `cargo xtask coverage claim <id> --agent <your-agent-id>`.
+   `cargo xtask coverage claim <id>... --agent <your-agent-id>` (many ids in
+   one call, or `--from-file FILE`; `release` and `set-status` take them the same way).
 3. **Spec agent** (may observe the real OS): writes the spec sheet
    (`pipeline spec new` makes the skeleton) and test programs outside the
    repository; `pipeline tests split` keeps ~30% held out, outside the
