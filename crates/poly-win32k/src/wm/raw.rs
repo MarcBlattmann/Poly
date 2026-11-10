@@ -658,9 +658,15 @@ impl Wm {
                 None => tops.clear(),
             }
         }
+        // Inside the window rectangle and, when the window has a region
+        // (SetWindowRgn.yaml `shape_hit_test`), inside that too.
         let inside = |w: &Window, ox: i32, oy: i32| {
             let r = w.window_rel;
-            x >= r.left + ox && x < r.right + ox && y >= r.top + oy && y < r.bottom + oy
+            x >= r.left + ox
+                && x < r.right + ox
+                && y >= r.top + oy
+                && y < r.bottom + oy
+                && w.region.as_ref().is_none_or(|g| g.contains(x - ox - r.left, y - oy - r.top))
         };
         for t in tops {
             let Some(w) = self.get(u64::from(t)) else { continue };

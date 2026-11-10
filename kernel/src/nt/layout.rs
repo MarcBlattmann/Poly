@@ -156,6 +156,10 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("dbghelp.dll", super::DBGHELP),
         // ADR 0170.
         ("dwrite.dll", super::DWRITE),
+        // ADR 0172.
+        ("shcore.dll", super::SHCORE),
+        ("dwmapi.dll", super::DWMAPI),
+        ("imm32.dll", super::IMM32),
     ] {
         if bytes.is_empty() {
             continue;

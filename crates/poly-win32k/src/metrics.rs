@@ -129,7 +129,13 @@ pub fn system_metric(index: i32, d: &Display) -> Option<i32> {
         60 => h + 20,                          // SM_CYMAXTRACK
         61 => ww + 16,                         // SM_CXMAXIMIZED
         62 => wh + 16,                         // SM_CYMAXIMIZED
-        63 => 1,                               // SM_NETWORK (bit 0)
+        63 => {
+            if d.interactive {
+                3
+            } else {
+                1
+            }
+        } // SM_NETWORK (bits)
         64..=66 => 0,                          // reserved
         67 => 0,                               // SM_CLEANBOOT
         68 | 69 => 4,                          // SM_CXDRAG, SM_CYDRAG
@@ -152,6 +158,8 @@ pub fn system_metric(index: i32, d: &Display) -> Option<i32> {
         90 => 0,                               // reserved
         91 => 0,                               // SM_MOUSEHORIZONTALWHEELPRESENT
         92 => 4,                               // SM_CXPADDEDBORDER
+        85 => 4,                               // undefined in winuser.h (same on the oracle)
+        93 => 516,                             // undefined in winuser.h (same on the oracle)
         94 => 0,                               // SM_DIGITIZER
         95 => 0,                               // SM_MAXIMUMTOUCHES
         96 => 0,                               // reserved
@@ -166,50 +174,6 @@ pub fn system_metric(index: i32, d: &Display) -> Option<i32> {
     })
 }
 
-/// `GetSystemMetricsForDpi(index, dpi)`: the sizes scaled as the oracle
-/// listed (GetSystemMetrics.yaml `for_dpi`), the rest as at 96 DPI.
-pub fn system_metric_for_dpi(index: i32, dpi: u32, d: &Display) -> Option<i32> {
-    let base = system_metric(index, d)?;
-    let scaled = |v: i32| -> i32 { ((i64::from(v) * i64::from(dpi) + 48) / 96) as i32 };
-    // Values the oracle listed at 96/120/144/192 that plain rounding does
-    // not give.
-    let table = |v: [i32; 4]| -> i32 {
-        match dpi {
-            96 => v[0],
-            120 => v[1],
-            144 => v[2],
-            192 => v[3],
-            _ => scaled(v[0]),
-        }
-    };
-    Some(match index {
-        2 | 3 | 9 | 10 | 20 | 21 => table([17, 21, 26, 34]),
-        4 | 51 => match dpi {
-            1 => 24,
-            // The caption bar is the scaled 22 plus the border (96/120/144/
-            // 192, 48 and 1000 all fit).
-            _ if !matches!(dpi, 96 | 120 | 144 | 192) => scaled(22) + 1,
-            _ => table([23, 29, 34, 45]),
-        },
-        11 | 12 => table([32, 40, 48, 64]),
-        13 | 14 => table([32, 32, 48, 64]),
-        // The menu bar is the scaled 19 plus the border, like the caption.
-        15 if !matches!(dpi, 96 | 120 | 144 | 192) => scaled(19) + 1,
-        15 => table([20, 25, 30, 39]),
-        28 | 34 => table([136, 166, 198, 258]),
-        29 | 35 => table([39, 47, 56, 71]),
-        30 => table([36, 46, 54, 72]),
-        31 | 52 | 53 => table([22, 28, 33, 44]),
-        32 | 33 => table([4, 4, 5, 5]),
-        38 | 39 => table([75, 94, 113, 150]),
-        49 | 50 => table([16, 20, 24, 32]),
-        54 | 55 => table([19, 24, 29, 38]),
-        71 | 72 => table([15, 19, 25, 31]),
-        92 => table([4, 5, 6, 8]),
-        _ => base,
-    })
-}
-
 /// What a frame adds on each side.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Insets {
@@ -219,35 +183,129 @@ pub struct Insets {
     pub bottom: i32,
 }
 
+/// The DPIs the sheet (`GetSystemMetricsForDpi.yaml` `scaling_table`)
+/// lists values for.
+const DPIS: [u32; 8] = [96, 120, 144, 168, 192, 240, 288, 384];
+
+/// `round(v * dpi / 96)`, halves up.
+fn scale(v: i64, dpi: u32) -> i32 {
+    ((v * i64::from(dpi) + 48) / 96).clamp(i64::MIN / 2, i64::from(i32::MAX)) as i32
+}
+
+/// A metric that grows with the DPI: the sheet's value at one of the
+/// listed DPIs, else `v96` scaled.
+fn listed(dpi: u32, row: [i32; 8], v96: i64) -> i32 {
+    match DPIS.iter().position(|&d| d == dpi) {
+        Some(k) => row[k],
+        None => scale(v96, dpi),
+    }
+}
+
+/// The caption height (`SM_CYCAPTION`) at `dpi`: a 22-pixel button
+/// height scaled, plus the 1-pixel border; the tiny DPIs 1 and 2 give 24.
+pub fn caption_for_dpi(dpi: u32) -> i32 {
+    if dpi <= 2 { 24 } else { scale(22, dpi).saturating_add(1) }
+}
+
+/// `SM_CXFRAME` at `dpi`: 3 and the scaled border (round(dpi / 96)).
+pub fn frame_for_dpi(dpi: u32) -> i32 {
+    3 + scale(1, dpi)
+}
+
+/// `SM_CXPADDEDBORDER` at `dpi` (capped at 100).
+pub fn padded_for_dpi(dpi: u32) -> i32 {
+    scale(4, dpi).min(100)
+}
+
+/// `SM_CYMENU` at `dpi`: the scaled 19 plus the 1-pixel border.
+pub fn menu_for_dpi(dpi: u32) -> i32 {
+    match dpi {
+        0..=2 => 24,
+        24 => 7,
+        47 => 11,
+        _ => scale(19, dpi).saturating_add(1),
+    }
+}
+
+/// The cursor size at `dpi` (`SM_CXCURSOR`): 32, 48, 64, 96 or 128.
+pub fn cursor_for_dpi(dpi: u32) -> i32 {
+    match dpi {
+        0..=143 => 32,
+        144..=191 => 48,
+        192..=287 => 64,
+        288..=383 => 96,
+        _ => 128,
+    }
+}
+
+/// The DPI `GetSystemMetricsForDpi` works with for its `dpi` argument:
+/// 0, 0x10000 and 0xFFFFFFFF are refused (ERROR_INVALID_PARAMETER), every
+/// other value above 0xFFFF counts as 0xFFFF (0x7FFFFFFF answers like
+/// 0xFFFF; `GetSystemMetricsForDpi.yaml` `bad_dpi`, `odd_dpis`).
+pub fn metric_dpi(dpi: u32) -> Option<u32> {
+    if dpi == 0 || dpi == 0x10000 || dpi == u32::MAX { None } else { Some(dpi.min(0xFFFF)) }
+}
+
+/// `GetSystemMetricsForDpi(index, dpi)`: the sizes scaled as the oracle
+/// listed them (`GetSystemMetricsForDpi.yaml`), the rest as at 96 DPI.
+pub fn system_metric_for_dpi(index: i32, dpi: u32, d: &Display) -> Option<i32> {
+    let base = system_metric(index, d)?;
+    Some(match index {
+        2 | 3 | 9 | 10 | 20 | 21 => scale(17, dpi),
+        4 | 51 => caption_for_dpi(dpi),
+        11 | 12 => scale(32, dpi),
+        13 | 14 => cursor_for_dpi(dpi),
+        15 => menu_for_dpi(dpi),
+        28 | 34 => listed(dpi, [136, 166, 198, 232, 258, 324, 384, 510], 136),
+        29 | 35 => listed(dpi, [39, 47, 56, 64, 71, 88, 103, 135], 39),
+        30 => listed(dpi, [36, 46, 54, 64, 72, 91, 109, 145], 36),
+        31 | 52 | 53 => scale(22, dpi),
+        32 | 33 => frame_for_dpi(dpi),
+        38 | 39 => scale(75, dpi),
+        49 | 50 => scale(16, dpi),
+        54 | 55 => scale(19, dpi),
+        71 | 72 => listed(dpi, [15, 19, 25, 29, 31, 41, 47, 65], 15),
+        92 => padded_for_dpi(dpi),
+        _ => base,
+    })
+}
+
 /// Whether a style has a caption (both `WS_BORDER` and `WS_DLGFRAME`).
 pub fn has_caption(style: u32) -> bool {
     style & WS_CAPTION == WS_CAPTION
 }
 
-/// The width of the frame on each side for `style`/`ex_style`.
-fn side(style: u32, ex: u32) -> i32 {
+/// The frame width on each side at `dpi` (`AdjustWindowRectExForDpi.yaml`):
+/// a caption or thick frame with a border is the frame plus the padded
+/// border, a thick frame alone one less.
+fn side_dpi(style: u32, ex: u32, dpi: u32) -> i32 {
     let caption = has_caption(style);
     let thick = style & WS_THICKFRAME != 0;
     let dlg = style & WS_DLGFRAME != 0 || ex & WS_EX_DLGMODALFRAME != 0;
-    let outer = frame_side(style, ex);
+    let outer = frame_side_dpi(style, ex, dpi);
     let client = if ex & WS_EX_CLIENTEDGE != 0 { 2 } else { 0 };
     let mut stat = if ex & WS_EX_STATICEDGE != 0 { 1 } else { 0 };
     // Observed: a dialog frame with both edges adds 4 in all, not 6.
-    if stat != 0 && dlg && !caption && !thick && client != 0 {
-        stat = -1;
+    if stat != 0 && client != 0 {
+        stat = if dlg && !caption && !thick { -1 } else { 0 };
     }
     outer + client + stat
 }
 
 /// `AdjustWindowRectEx`'s insets: the frame, the caption, a menu bar.
 pub fn frame_insets(style: u32, menu: bool, ex: u32) -> Insets {
-    let s = side(style, ex);
+    frame_insets_dpi(style, menu, ex, 96)
+}
+
+/// [`frame_insets`] at `dpi` (`AdjustWindowRectExForDpi`).
+pub fn frame_insets_dpi(style: u32, menu: bool, ex: u32, dpi: u32) -> Insets {
+    let s = side_dpi(style, ex, dpi);
     let mut top = s;
     if has_caption(style) {
-        top += CAPTION;
+        top += caption_for_dpi(dpi);
     }
     if menu {
-        top += MENU;
+        top += menu_for_dpi(dpi);
     }
     Insets { left: s, top, right: s, bottom: s }
 }
@@ -263,6 +321,18 @@ pub fn client_insets(style: u32, ex: u32, menu: bool) -> Insets {
         i.bottom += SCROLLBAR;
     }
     i
+}
+
+/// `AdjustWindowRectExForDpi`: the amounts added with wrap-around
+/// arithmetic, as observed for rectangles at the edge of the range.
+pub fn adjust_window_rect_dpi(r: Rect, style: u32, menu: bool, ex: u32, dpi: u32) -> Rect {
+    let i = frame_insets_dpi(style, menu, ex, dpi);
+    Rect::new(
+        r.left.wrapping_sub(i.left),
+        r.top.wrapping_sub(i.top),
+        r.right.wrapping_add(i.right),
+        r.bottom.wrapping_add(i.bottom),
+    )
 }
 
 /// `AdjustWindowRectEx`.
@@ -298,14 +368,22 @@ pub fn track_limited(style: u32) -> bool {
 /// sizing frame, dialog frame or border line), without the client and
 /// static edges of the extended style.
 fn frame_side(style: u32, ex: u32) -> i32 {
+    frame_side_dpi(style, ex, 96)
+}
+
+/// [`frame_side`] at `dpi` (`AdjustWindowRectExForDpi.yaml`): a caption or
+/// a thick frame with a border is the frame plus the padded border (8 at
+/// 96 DPI), a thick frame alone one less.
+fn frame_side_dpi(style: u32, ex: u32, dpi: u32) -> i32 {
+    let fp = frame_for_dpi(dpi).saturating_add(padded_for_dpi(dpi));
     let caption = has_caption(style);
     let thick = style & WS_THICKFRAME != 0;
     let border = style & WS_BORDER != 0;
     let dlg = style & WS_DLGFRAME != 0 || ex & WS_EX_DLGMODALFRAME != 0;
     if caption || (thick && border) {
-        8
+        fp
     } else if thick {
-        7
+        fp - 1
     } else if dlg {
         3
     } else if border {
@@ -484,18 +562,152 @@ mod tests {
         ] {
             assert_eq!(m(index), Some(0), "SM {index}");
         }
-        assert_eq!([56, 82, 0x2002, 63].map(|x| m(x).unwrap()), [8, 1, 1, 1]);
+        // SM_NETWORK is 3 in GetSystemMetricsForDpi.yaml's later recording (1 in GetSystemMetrics.yaml's).
+        assert_eq!([56, 82, 0x2002, 63].map(|x| m(x).unwrap()), [8, 1, 1, 3]);
         // `errors.undefined`: none for the reserved holes, undefined beyond.
         for index in [24, 25, 26, 27, 64, 65, 66, 90, 96, 0x2005] {
             assert_eq!(m(index), Some(0), "SM {index}");
         }
-        for index in [-1, -100, 97, 0x1001, i32::MAX, 85, 93] {
+        for index in [-1, -100, 97, 0x1001, i32::MAX] {
             assert_eq!(m(index), None, "SM {index}");
         }
+        // Two indices winuser.h does not define answer on the later oracle (GetSystemMetricsForDpi.yaml).
+        assert_eq!([85, 93].map(|x| m(x).unwrap()), [4, 516]);
         // The service session (slice A's sheets).
         assert_eq!(system_metric(0, &Display::SERVICE), Some(1024));
         assert_eq!(system_metric(17, &Display::SERVICE), Some(745));
         assert_eq!(system_metric(61, &Display::SERVICE), Some(1040));
+    }
+
+    /// GetSystemMetricsForDpi.yaml, every value the sheet states:
+    /// `scaling_table`, `not_scaled`, `odd_dpis`, `bad_dpi`, `bad_index`.
+    #[test]
+    fn system_metrics_for_dpi_have_every_value_of_the_sheet() {
+        let d = Display::INTERACTIVE;
+        let f = |index: i32, dpi: u32| system_metric_for_dpi(index, metric_dpi(dpi).unwrap(), &d).unwrap();
+        let dpis = [96u32, 120, 144, 168, 192, 240, 288, 384];
+        let table: [(&[i32], [i32; 8]); 16] = [
+            (&[2, 3, 9, 10, 20, 21], [17, 21, 26, 30, 34, 43, 51, 68]),
+            (&[4, 51], [23, 29, 34, 40, 45, 56, 67, 89]),
+            (&[11, 12], [32, 40, 48, 56, 64, 80, 96, 128]),
+            (&[13, 14], [32, 32, 48, 48, 64, 64, 96, 128]),
+            (&[15], [20, 25, 30, 34, 39, 49, 58, 77]),
+            (&[28, 34], [136, 166, 198, 232, 258, 324, 384, 510]),
+            (&[29, 35], [39, 47, 56, 64, 71, 88, 103, 135]),
+            (&[30], [36, 46, 54, 64, 72, 91, 109, 145]),
+            (&[31, 52, 53], [22, 28, 33, 39, 44, 55, 66, 88]),
+            (&[32, 33], [4, 4, 5, 5, 5, 6, 6, 7]),
+            (&[38, 39], [75, 94, 113, 131, 150, 188, 225, 300]),
+            (&[49, 50], [16, 20, 24, 28, 32, 40, 48, 64]),
+            (&[54, 55], [19, 24, 29, 33, 38, 48, 57, 76]),
+            (&[71, 72], [15, 19, 25, 29, 31, 41, 47, 65]),
+            (&[92], [4, 5, 6, 7, 8, 10, 12, 16]),
+            (&[36, 37], [4; 8]),
+        ];
+        for (indices, want) in table {
+            for &i in indices {
+                assert_eq!(dpis.map(|dpi| f(i, dpi)), want, "SM {i}");
+            }
+        }
+        // Unchanged at all DPIs (also the odd ones).
+        let fixed: [(i32, i32); 37] = [
+            (0, 1920),
+            (1, 1080),
+            (16, 1920),
+            (17, 1033),
+            (5, 1),
+            (6, 1),
+            (7, 3),
+            (8, 3),
+            (45, 2),
+            (46, 2),
+            (36, 4),
+            (37, 4),
+            (68, 4),
+            (69, 4),
+            (83, 1),
+            (84, 1),
+            (56, 8),
+            (47, 160),
+            (48, 28),
+            (57, 160),
+            (58, 28),
+            (59, 1940),
+            (60, 1100),
+            (61, 1936),
+            (62, 1072),
+            (63, 3),
+            (78, 1920),
+            (79, 1080),
+            (80, 1),
+            (81, 1),
+            (82, 1),
+            (85, 4),
+            (93, 516),
+            // Flags and counts that are 0.
+            (19, 0),
+            (43, 0),
+            (75, 0),
+            (86, 0),
+        ];
+        for (i, want) in fixed {
+            for dpi in [96u32, 120, 144, 168, 192, 240, 288, 384, 1, 24, 100, 1000, 0xFFFF] {
+                assert_eq!(f(i, dpi), want, "SM {i} at {dpi}");
+            }
+        }
+        // Rounding at odd DPIs.
+        let odd = |index: i32, pairs: &[(u32, i32)]| {
+            for &(dpi, want) in pairs {
+                assert_eq!(f(index, dpi), want, "SM {index} at {dpi}");
+            }
+        };
+        odd(
+            4,
+            &[
+                (1, 24),
+                (2, 24),
+                (24, 7),
+                (48, 12),
+                (72, 18),
+                (95, 23),
+                (97, 23),
+                (100, 24),
+                (119, 28),
+                (121, 29),
+                (130, 31),
+                (1000, 230),
+                (4000, 918),
+                (0xFFFF, 15019),
+                (0x7FFF_FFFF, 15019),
+            ],
+        );
+        odd(
+            11,
+            &[
+                (1, 0),
+                (2, 1),
+                (24, 8),
+                (48, 16),
+                (72, 24),
+                (95, 32),
+                (100, 33),
+                (1000, 333),
+                (4000, 1333),
+                (0xFFFF, 21845),
+            ],
+        );
+        odd(13, &[(1, 32), (24, 32), (95, 32), (100, 32), (130, 32), (1000, 128), (4000, 128), (0xFFFF, 128)]);
+        odd(92, &[(1, 0), (24, 1), (48, 2), (72, 3), (95, 4), (1000, 42), (4000, 100)]);
+        odd(32, &[(1, 3), (2, 3), (24, 3), (48, 4), (72, 4), (95, 4), (1000, 13), (4000, 45), (0xFFFF, 686)]);
+        // DPIs that are refused; indices that are none.
+        for bad in [0u32, 0x10000, 0xFFFF_FFFF] {
+            assert_eq!(metric_dpi(bad), None);
+        }
+        assert_eq!(metric_dpi(0xFFFF), Some(0xFFFF));
+        assert_eq!(metric_dpi(0x7FFF_FFFF), Some(0xFFFF));
+        for bad in [-1, -100, 100, 1000, 0xFFF, 0x1001, 0x7FFF_FFFF, i32::MIN] {
+            assert_eq!(system_metric_for_dpi(bad, 96, &d), None, "{bad}");
+        }
     }
 
     #[test]

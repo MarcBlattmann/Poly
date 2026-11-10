@@ -45,9 +45,14 @@
 
 extern crate alloc;
 
+pub mod clip;
 pub mod desktop;
+pub mod dib;
 pub mod exports;
 pub mod frame;
+pub mod guic;
+pub mod icofile;
+pub mod ime;
 pub mod kbd;
 pub mod link;
 pub mod metrics;

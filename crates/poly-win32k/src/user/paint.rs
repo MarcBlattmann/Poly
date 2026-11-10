@@ -122,6 +122,10 @@ pub fn seen_client<E: Env + ?Sized>(env: &E, i: &WinInfo) -> Rect {
 /// no WM_ERASEBKGND (GetUpdateRect.yaml `minimized`).
 pub fn erase_now<E: Env + ?Sized>(env: &E, hwnd: u32) {
     let Some(i) = info(env, u64::from(hwnd)) else { return };
+    // A layered window nobody gave attributes shows, and paints, nothing.
+    if !i.lay_ready {
+        return;
+    }
     let Some(p) = pending(env, hwnd) else { return };
     if !p.visible {
         return;
@@ -463,8 +467,25 @@ pub fn resized_paint<E: Env + ?Sized>(env: &E, hwnd: u32, old_client: Rect, new_
         redraw(env, hwnd, Some(&[]), RDW_INVALIDATE | RDW_FRAME | RDW_NOCHILDREN);
         mark_frame_partial(env, hwnd);
     } else {
+        // A window that only shrank has nothing to paint, but its surface
+        // has a new size: what the window showed goes to it as it was
+        // (taking and releasing a DC remakes and commits the surface).
+        if (nw, nh) != (ow, oh) && !i.desktop && i.style & crate::metrics::WS_CHILD == 0 {
+            let dc = env.paint_dc(hwnd, None);
+            env.release_dc(hwnd, dc);
+        }
         return;
     }
+    erase_now(env, hwnd);
+}
+
+/// A frame change that redraws everything (`SetWindowRgn(NULL)`,
+/// `SetWindowRgn.yaml`): the client invalid and erased at once, the frame
+/// repainted as a region.
+pub fn frame_redraw<E: Env + ?Sized>(env: &E, hwnd: u32) {
+    redraw(env, hwnd, None, RDW_INVALIDATE | RDW_ERASE | RDW_NOCHILDREN);
+    redraw(env, hwnd, Some(&[]), RDW_INVALIDATE | RDW_FRAME | RDW_NOCHILDREN);
+    mark_frame_partial(env, hwnd);
     erase_now(env, hwnd);
 }
 

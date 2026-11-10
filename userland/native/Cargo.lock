@@ -138,6 +138,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-nls"
+version = "0.0.1"
+dependencies = [
+ "poly-rtl",
+]
+
+[[package]]
 name = "poly-notify"
 version = "0.0.1"
 dependencies = [
@@ -151,6 +158,13 @@ version = "0.0.1"
 dependencies = [
  "poly-notify",
  "poly-rt",
+]
+
+[[package]]
+name = "poly-ntobj"
+version = "0.0.1"
+dependencies = [
+ "poly-security",
 ]
 
 [[package]]
@@ -180,6 +194,17 @@ dependencies = [
  "poly-heap",
  "poly-personality-native",
 ]
+
+[[package]]
+name = "poly-rtl"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
+
+[[package]]
+name = "poly-security"
+version = "0.0.1"
 
 [[package]]
 name = "poly-shell"
@@ -228,6 +253,9 @@ dependencies = [
 [[package]]
 name = "poly-win32k"
 version = "0.0.1"
+dependencies = [
+ "poly-nls",
+]
 
 [[package]]
 name = "poly-wl-demo"
