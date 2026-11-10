@@ -9,12 +9,25 @@ There is no Wine and no Linux underneath. The user-mode Windows DLLs and macOS
 frameworks are reimplemented **clean-room** by AI agents that work from specs
 verified against the real OS.
 
-> **Status: early.** The kernel boots in QEMU on several cores and runs real
-> Linux command-line programs: `cat`, `cp`, `grep`, `sed`, `sort`, `wc` and
-> others match their recorded traces from real Linux. The Windows personality
-> is being built (object manager, memory, processes, registry, files and
-> exceptions so far); no Windows or macOS app runs yet. See the
-> [roadmap](docs/ROADMAP.md).
+> **Status: early, but real programs run.** The kernel boots in QEMU on
+> several cores and has its own desktop. Linux programs run on it, from `cat`
+> and `grep` to GTK and Qt apps, VLC and Chromium, which is the desktop's
+> default browser. The Windows personality is far enough along to run 7-Zip's
+> command line with the same results and API calls as on real Windows; Chrome
+> for Windows is the current goal and does not run yet. For macOS only the
+> groundwork exists; no macOS app runs. See the [roadmap](docs/ROADMAP.md).
+
+## What works today
+
+| | State |
+|---|---|
+| **Kernel** | Boots in QEMU (KVM, WHPX or the emulator) on up to 16 cores. Own memory management, scheduler, TCP/IP stack, ext2/ext4, virtio disk, network, GPU, input and sound drivers. |
+| **Linux** | The Linux personality implements 353 of the 370 system calls tracked in the [coverage map](#progress). BusyBox, bash, coreutils, Python and a C compiler run, as do GTK 3/4 and Qt 6 apps and VLC with sound. Linux programs match traces recorded on real Linux. |
+| **Desktop** | Native Poly user space (compositor, shell, launcher, notifications, settings, Files and Terminal), in the look of [Alpine Shell](docs/adr/0127-the-alpine-shell-look.md): light and dark themes, app icons, editable shortcuts, a busy pointer while an app starts, and it follows the size of the window that shows it. Wayland and X11 (XWayland) apps get windows with Poly's neutral frame (apps that draw their own, like Chromium, keep theirs). |
+| **Chromium** | The Debian build of Chromium runs on the desktop as the default browser, with its user-namespace sandbox, and opens web pages over the network ([ADR 0147](docs/adr/0147-the-desktop-from-chromiums-disk-with-chromium-as-the-default-browser.md)). |
+| **Windows** | The NT personality has the object manager, memory, processes, registry, files, exceptions and its own `ntdll`, `kernel32`, C runtime, `advapi32`, Winsock and cryptography. 7-Zip's command line passes its recorded scenario, and its trace matches the one recorded on real Windows step by step ([report](docs/windows/7zip-trace.md)). Windows, messages, GDI drawing and text, DirectWrite, input and focus work for test programs on the desktop. The security model and IPC (pipes, completion ports, jobs) that Chrome needs are being built. |
+| **Chrome for Windows** | In progress, not running. Specs for it are recorded on real Windows ([gap map](specs/windows/apps/chrome/gap-map.md)); on Poly it still stops early in the browser process, in the setup of Chrome's crash reporting. |
+| **macOS** | Groundwork only: a Mach-O reader, an arm64 decoder with a reference interpreter, an aarch64 boot stub, and an import map of what Chrome for macOS needs ([docs/macos](docs/macos/README.md)). |
 
 ## How it fits together
 
@@ -145,6 +158,11 @@ cargo xtask boot-tests --list   # the boot test groups; `boot-tests <group>` run
 cargo xtask ci      # everything CI checks (`ci lint`, `ci host-tests`, ...: one part)
 ```
 
+On GitHub, CI runs the same parts as parallel jobs: lint, host tests, the boot
+tests in 11 shards (`cargo xtask boot-tests --list` shows the groups of each),
+the coverage checks and the pipeline checks. It takes about 4 minutes; the one
+required check is `ci`, which passes when every other job did.
+
 QEMU runs on the host's hypervisor when it can (much faster): KVM on Linux,
 the Windows Hypervisor Platform (WHPX) on Windows (turn on the Windows
 feature "Windows Hypervisor Platform"), and on its emulator (TCG)
@@ -169,14 +187,17 @@ asks with a numbered prompt instead).
 
 | Path | What |
 |---|---|
-| `kernel/` | The kernel: boot, CPU setup, memory map, process and syscall routing |
+| `kernel/` | The kernel (its own Cargo workspace): boot, CPU setup, memory, scheduler, drivers, file systems, network, process and syscall routing |
 | `crates/` | `no_std` libraries shared with the kernel, unit-tested on the host |
-| `personalities/` | Linux, NT and XNU system call layers |
+| `personalities/` | Linux, NT (with the Windows DLLs under `nt/win32/`) and XNU system call layers, and the native Poly one |
+| `userland/` | The desktop's native programs: compositor, Files, Terminal, notifications and a Wayland demo client |
 | `tools/xtask/` | Build, run and test driver |
+| `tools/pipeline/` | The agent pipeline: call tracer, diff runner, spec and hand-off tools ([docs](docs/AGENT_PIPELINE.md)) |
 | `coverage/` | The coverage map: one file per library or call table |
 | `tools/coverage/` | Maintains the coverage map and the progress section above |
 | `specs/` | Behaviour specs and visible tests, written from the real OS |
-| `docs/` | [Architecture](docs/ARCHITECTURE.md), [decision records](docs/adr/), [project brief](docs/PROJECT_BRIEF.md) |
+| `tests/` | Test programs run on the real OS and on Poly (Linux and Windows) |
+| `docs/` | [Architecture](docs/ARCHITECTURE.md), [decision records](docs/adr/), [project brief](docs/PROJECT_BRIEF.md), [agent pipeline](docs/AGENT_PIPELINE.md), [Windows](docs/windows/) and [macOS](docs/macos/README.md) notes |
 
 ## How work gets done
 
