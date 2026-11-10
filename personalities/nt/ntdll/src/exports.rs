@@ -173,14 +173,13 @@ pub unsafe extern "C" fn RtlCreateUnicodeString(d: *mut UnicodeString, s: *const
 
 /// `RtlFormatCurrentUserKeyPath`: `\REGISTRY\USER\<sid>` of the current
 /// user, in a string the caller frees with `RtlFreeUnicodeString`. Poly has
-/// one user, `S-1-5-21-0-0-0-1000` (ADR 0066, 0073).
+/// one user (`poly_security::poly_user_sid`, ADR 0066, 0073, 0171).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn RtlFormatCurrentUserKeyPath(d: *mut UnicodeString) -> NtStatus {
-    const PATH: &str = "\\REGISTRY\\USER\\S-1-5-21-0-0-0-1000";
     if d.is_null() {
         return NtStatus(0xC000_000D); // STATUS_INVALID_PARAMETER
     }
-    let mut wide: alloc::vec::Vec<u16> = PATH.encode_utf16().collect();
+    let mut wide: alloc::vec::Vec<u16> = poly_security::current_user_key_path().encode_utf16().collect();
     wide.push(0);
     // SAFETY: `d` is the caller's writable UNICODE_STRING; `wide` is NUL-terminated.
     if unsafe { string::create_unicode_string(d, wide.as_ptr(), &HeapAlloc) } {
@@ -493,9 +492,14 @@ pub unsafe extern "C" fn RtlCompareMemory(a: *const u8, b: *const u8, len: usize
 
 // ----- the loader -----------------------------------------------------------
 
-/// `LDR_LOCK_LOADER_LOCK` disposition: the loader lock critical section is
-/// kept in ntdll's own data.
+/// The loader lock: the critical section `PEB.LoaderLock` (PEB+0x110) points to, taken by
+/// `LdrLockLoaderLock` and held around every `DllMain` and TLS callback. It is kept in
+/// ntdll's own data, as programs that read it through the PEB expect
+/// (spec-chrome-elf-null).
 pub(crate) static LOADER_LOCK: CriticalSection = CriticalSection::new();
+/// Its `RTL_CRITICAL_SECTION_DEBUG` (`DebugInfo` is non-NULL for the loader lock).
+pub(crate) static LOADER_LOCK_DEBUG: poly_rtl::critsec::CriticalSectionDebug =
+    poly_rtl::critsec::CriticalSectionDebug::new();
 
 fn to_wide(s: *const UnicodeString) -> alloc::vec::Vec<u16> {
     if s.is_null() {
@@ -519,13 +523,19 @@ pub unsafe extern "C" fn LdrLoadDll(
         // SAFETY: a NUL-terminated path when non-null.
         Some(unsafe { collect_wide(search_path) })
     };
+    // The loader lock is held while the DllMain and TLS callbacks run (PEB.LoaderLock readers
+    // see this thread as the owner); it is recursive, so a DllMain may load more DLLs.
     LOADER_LOCK.enter(&SysPlatform);
     let r = with_loader(|l, p| l.load(p, &name, sp.as_deref()));
+    let callouts_ok = match &r {
+        Ok((_, _, op)) => run_callouts(&op.callouts).is_ok(),
+        Err(_) => true,
+    };
     LOADER_LOCK.leave(&SysPlatform);
     match r {
-        Ok((_, base, op)) => {
+        Ok((_, base, _)) => {
             crate::report_stubbed();
-            if run_callouts(&op.callouts).is_err() {
+            if !callouts_ok {
                 return NtStatus(0xC000_0142);
             }
             if !handle.is_null() {
@@ -546,15 +556,16 @@ pub unsafe extern "C" fn LdrLoadDll(
 pub unsafe extern "C" fn LdrUnloadDll(handle: *mut u8) -> NtStatus {
     LOADER_LOCK.enter(&SysPlatform);
     let unload = with_loader(|l, _| l.unload(handle as u64));
-    LOADER_LOCK.leave(&SysPlatform);
-    match unload {
+    let status = match unload {
         Ok(u) => {
             let _ = run_callouts(&u.callouts);
             with_loader(|l, p| l.finish_unload(p, u));
             SUCCESS
         }
         Err(e) => e,
-    }
+    };
+    LOADER_LOCK.leave(&SysPlatform);
+    status
 }
 
 #[unsafe(no_mangle)]
@@ -589,8 +600,8 @@ pub unsafe extern "C" fn LdrGetProcedureAddress(
     let n = if by_name { Some(unsafe { (*name).bytes().to_vec() }) } else { None };
     LOADER_LOCK.enter(&SysPlatform);
     let r = with_loader(|l, p| l.get_procedure(p, handle as u64, n.as_deref(), ordinal as u16));
-    LOADER_LOCK.leave(&SysPlatform);
-    match r {
+    // A forwarder can load a DLL: its callouts run under the loader lock too.
+    let status = match r {
         Ok((a, op)) => {
             let _ = run_callouts(&op.callouts);
             if !address.is_null() {
@@ -600,7 +611,9 @@ pub unsafe extern "C" fn LdrGetProcedureAddress(
             SUCCESS
         }
         Err(e) => e,
-    }
+    };
+    LOADER_LOCK.leave(&SysPlatform);
+    status
 }
 
 #[unsafe(no_mangle)]
@@ -649,17 +662,21 @@ pub unsafe extern "C" fn LdrUnlockLoaderLock(_flags: u32, _cookie: usize) -> NtS
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn LdrShutdownProcess() -> NtStatus {
+    LOADER_LOCK.enter(&SysPlatform);
     let callouts = with_loader(|l, _| l.process_detach());
     let _ = run_callouts(&callouts);
+    LOADER_LOCK.leave(&SysPlatform);
     SUCCESS
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn LdrShutdownThread() -> NtStatus {
     let teb = crate::lock::teb();
+    LOADER_LOCK.enter(&SysPlatform);
     let callouts = with_loader(|l, _| l.thread_detach());
     let _ = run_callouts(&callouts);
     with_loader(|l, p| l.thread_exit(p, teb));
+    LOADER_LOCK.leave(&SysPlatform);
     SUCCESS
 }
 
@@ -674,10 +691,12 @@ pub unsafe extern "C" fn LdrResolveDelayLoadedAPI(
 ) -> *mut u8 {
     LOADER_LOCK.enter(&SysPlatform);
     let r = with_loader(|l, p| l.resolve_delay(p, parent as u64, descriptor as u64, thunk as u64));
+    if let Ok((_, op)) = &r {
+        let _ = run_callouts(&op.callouts);
+    }
     LOADER_LOCK.leave(&SysPlatform);
     match r {
-        Ok((addr, op)) => {
-            let _ = run_callouts(&op.callouts);
+        Ok((addr, _)) => {
             crate::report_stubbed();
             addr as *mut u8
         }

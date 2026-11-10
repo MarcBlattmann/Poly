@@ -458,6 +458,45 @@ pub unsafe extern "C" fn RtlRaiseException(record: *mut u8) {
     unsafe { core::arch::asm!("int 0x29", in("ecx") 2u32, options(noreturn)) }
 }
 
+/// `RtlCaptureStackBackTrace(FramesToSkip, FramesToCapture, BackTrace, BackTraceHash)` (Learn):
+/// the return addresses of the calling thread's stack, from the caller of this function on, found
+/// with the unwind data of the loaded modules; returns how many were captured, and sets the hash
+/// (the sum of the addresses). Chrome's `chrome.exe` captures its own call chain this way at
+/// start-up (ADR 0155).
+///
+/// # Safety
+/// `frames` has room for `count` pointers; `hash` is null or a writable `ULONG`.
+#[unsafe(no_mangle)]
+#[inline(never)]
+pub unsafe extern "system" fn RtlCaptureStackBackTrace(
+    skip: u32,
+    count: u32,
+    frames: *mut *mut u8,
+    hash: *mut u32,
+) -> u16 {
+    let mut buf = ContextBuf([0; CONTEXT_SIZE]);
+    // SAFETY: an aligned CONTEXT buffer.
+    unsafe { RtlCaptureContext(buf.0.as_mut_ptr()) };
+    let ctx = Context::from_bytes(&buf.0).unwrap_or_default();
+    let skip = skip as usize;
+    let count = (count as usize).min(0xFFFF);
+    // The first frame is this function itself; the caller's follows.
+    let walked = poly_seh::dispatch::walk(&Proc, &ctx, 1 + skip + count);
+    let mut sum = 0u32;
+    let mut n = 0usize;
+    for f in walked.iter().skip(1 + skip).take(count) {
+        // SAFETY: `frames` has room for `count` pointers.
+        unsafe { frames.add(n).write(f.pc as *mut u8) };
+        sum = sum.wrapping_add(f.pc as u32);
+        n += 1;
+    }
+    if !hash.is_null() {
+        // SAFETY: the caller's ULONG.
+        unsafe { hash.write(sum) };
+    }
+    n as u16
+}
+
 // ----- __C_specific_handler (ADR 0087; `poly_seh::scope`) -----------------------------
 
 /// The program's filters, termination handlers and the unwind to an
