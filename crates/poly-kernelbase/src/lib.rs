@@ -97,6 +97,7 @@ pub mod text;
 pub mod time;
 pub mod tls;
 pub mod tz;
+pub mod uilang;
 pub mod verinfo;
 pub mod version;
 pub mod waitreg;

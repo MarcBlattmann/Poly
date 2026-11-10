@@ -15,7 +15,7 @@ use crate::kernel::NtKernel;
 use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::status::*;
-use poly_ntobj::{EventType, Handle, NtStatus, ProcessId};
+use poly_ntobj::{EventType, Handle, NtStatus, ObjectType, ProcessId};
 
 pub type Result<T> = core::result::Result<T, NtStatus>;
 
@@ -143,6 +143,81 @@ fn return_info<K: NtKernel>(k: &mut K, buf: u64, length: u64, ret: u64, info: &[
     Ok(STATUS_SUCCESS)
 }
 
+/// What `NtQueryObject(ObjectNameInformation)` answers for a file object.
+#[derive(Debug, PartialEq, Eq)]
+pub struct NameAnswer {
+    pub status: NtStatus,
+    /// What `*ReturnLength` gets.
+    pub return_length: u32,
+    /// What is written at the start of the caller's buffer.
+    pub bytes: Vec<u8>,
+}
+
+/// The answer of `NtQueryObject(ObjectNameInformation)` for a file on
+/// `device` (its object name, e.g. `\Device\NamedPipe`) with the path
+/// `path` there, for a caller's buffer of `length` bytes at `buf`
+/// (specs/windows/ntdll.dll/NtQueryObject.yaml, observed with pipes):
+///
+/// * the whole name fits: a `UNICODE_STRING` (its buffer right behind it),
+///   the characters and a NUL; the return length is that size;
+/// * below the `UNICODE_STRING`'s size: `STATUS_INFO_LENGTH_MISMATCH`,
+///   nothing written, the full size returned;
+/// * too small for the device's name: `STATUS_BUFFER_OVERFLOW`, nothing
+///   written, the full size returned;
+/// * the device's name fits but not one character more:
+///   `STATUS_OBJECT_PATH_INVALID`, a complete string for the device's name
+///   alone, return length 0;
+/// * more than that: `STATUS_BUFFER_OVERFLOW` with the buffer filled to
+///   its last byte with the start of the name.
+///
+/// A file with no path on its device (`path` `None`: an anonymous pipe)
+/// has only the device's name to give, and that is
+/// `STATUS_OBJECT_PATH_INVALID` once it fits.
+pub fn file_name_answer(device: &[u16], path: Option<&[u16]>, length: usize, buf: u64) -> NameAnswer {
+    let header = UNICODE_STRING_SIZE;
+    let string = |chars: usize, text: &[u8]| {
+        let s = UnicodeString { length: chars as u16, maximum_length: chars as u16 + 2, buffer: buf + header as u64 };
+        let mut out = s.to_bytes().to_vec();
+        out.extend_from_slice(text);
+        out
+    };
+    let device_bytes = abi::utf16_bytes(device);
+    let device_size = header + device_bytes.len() + 2;
+    let mut device_only = device_bytes.clone();
+    device_only.extend_from_slice(&[0, 0]);
+    let mut full = device_bytes.clone();
+    full.extend_from_slice(&abi::utf16_bytes(path.unwrap_or_default()));
+    let full_chars = full.len();
+    full.extend_from_slice(&[0, 0]);
+    let full_size = if path.is_some() { header + full.len() } else { device_size };
+    let nothing = |status| NameAnswer { status, return_length: full_size as u32, bytes: Vec::new() };
+    if length < header {
+        return nothing(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    if length < device_size {
+        return nothing(STATUS_BUFFER_OVERFLOW);
+    }
+    if path.is_some() && length >= full_size {
+        return NameAnswer {
+            status: STATUS_SUCCESS,
+            return_length: full_size as u32,
+            bytes: string(full_chars, &full),
+        };
+    }
+    if path.is_none() || length < device_size + 2 {
+        return NameAnswer {
+            status: STATUS_OBJECT_PATH_INVALID,
+            return_length: 0,
+            bytes: string(device_bytes.len(), &device_only),
+        };
+    }
+    NameAnswer {
+        status: STATUS_BUFFER_OVERFLOW,
+        return_length: full_size as u32,
+        bytes: string(length - header - 2, &full[..length - header]),
+    }
+}
+
 /// A `UNICODE_STRING` followed by `pad` bytes and then its characters and
 /// a NUL, all at `buf`: what `ObjectNameInformation` and
 /// `ObjectTypeInformation` return.
@@ -176,6 +251,19 @@ pub fn query_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
     let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
     let (h, class) = (Handle(h), class as u32);
     let caller = k.caller();
+    if class == OBJECT_NAME_INFORMATION {
+        // A file object's name is its device's name and its path there.
+        let parts = k.with_state(|sys, _, _| {
+            let id = sys.objects.object_by_handle(&caller, h, 0, Some(ObjectType::File)).ok()?;
+            sys.io.object_name_parts(sys.objects.cookie(id)?)
+        });
+        if let Some((device, path)) = parts {
+            let a = file_name_answer(&device, path.as_deref(), length as usize, buf);
+            abi::write_opt_u32(k, ret, a.return_length)?;
+            abi::write(k, buf, &a.bytes)?;
+            return Ok(a.status);
+        }
+    }
     let info: Vec<u8> = k.with_state(|sys, _, _| -> Result<Vec<u8>> {
         let om = &sys.objects;
         Ok(match class {
@@ -382,4 +470,71 @@ pub fn set_event<K: NtKernel>(k: &mut K, regs: &SyscallRegs, set: bool) -> Resul
     })?;
     abi::write_opt_u32(k, prev, was as u32)?;
     Ok(STATUS_SUCCESS)
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::*;
+
+    fn w(s: &str) -> Vec<u16> {
+        s.encode_utf16().collect()
+    }
+
+    /// `(status, return length, Length, MaximumLength, bytes written, name)`.
+    fn ask(path: Option<&str>, length: usize) -> (u32, u32, u16, u16, usize, alloc::string::String) {
+        let a = file_name_answer(&w("\\Device\\NamedPipe"), path.map(w).as_deref(), length, 0x1000);
+        if a.bytes.is_empty() {
+            return (a.status.0, a.return_length, 0, 0, 0, alloc::string::String::new());
+        }
+        let s = UnicodeString::from_bytes(a.bytes[..16].try_into().unwrap());
+        assert_eq!(s.buffer, 0x1010);
+        let chars: Vec<u16> = a.bytes[16..16 + usize::from(s.length) / 2 * 2]
+            .chunks(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        (
+            a.status.0,
+            a.return_length,
+            s.length,
+            s.maximum_length,
+            a.bytes.len(),
+            alloc::string::String::from_utf16_lossy(&chars),
+        )
+    }
+
+    /// The lines of specs/windows/ntdll.dll/NtQueryObject.tests/windows.json for
+    /// the pipe `PolySpec4_ObjA`.
+    #[test]
+    fn a_named_pipe_by_buffer_size() {
+        let p = Some("\\PolySpec4_ObjA");
+        let full = "\\Device\\NamedPipe\\PolySpec4_ObjA";
+        for n in [82, 83, 84, 88, 528] {
+            assert_eq!(ask(p, n), (0, 82, 64, 66, 82, full.into()), "{n}");
+        }
+        for n in [0, 1, 2, 4, 8, 12, 15] {
+            assert_eq!(ask(p, n), (0xC000_0004, 82, 0, 0, 0, "".into()), "{n}");
+        }
+        for n in [16, 17, 18, 19, 20, 24, 32, 34, 48, 50, 51] {
+            assert_eq!(ask(p, n), (0x8000_0005, 82, 0, 0, 0, "".into()), "{n}");
+        }
+        for n in [52, 53] {
+            assert_eq!(ask(p, n), (0xC000_0039, 0, 34, 36, 52, "\\Device\\NamedPipe".into()), "{n}");
+        }
+        assert_eq!(ask(p, 54), (0x8000_0005, 82, 36, 38, 54, "\\Device\\NamedPipe\\".into()));
+        assert_eq!(ask(p, 60), (0x8000_0005, 82, 42, 44, 60, "\\Device\\NamedPipe\\Pol".into()));
+        assert_eq!(ask(p, 79), (0x8000_0005, 82, 61, 63, 79, "\\Device\\NamedPipe\\PolySpec4_Ob".into()));
+        assert_eq!(ask(p, 81), (0x8000_0005, 82, 63, 65, 81, "\\Device\\NamedPipe\\PolySpec4_Obj".into()));
+        // The NUL after the name is written when it fits.
+        let a = file_name_answer(&w("\\Device\\NamedPipe"), Some(&w("\\P")), 528, 0);
+        assert_eq!(a.bytes.len(), 16 + 38 + 2);
+        assert_eq!(&a.bytes[a.bytes.len() - 2..], [0, 0]);
+    }
+
+    #[test]
+    fn an_anonymous_pipe_has_only_the_devices_name() {
+        assert_eq!(ask(None, 528), (0xC000_0039, 0, 34, 36, 52, "\\Device\\NamedPipe".into()));
+        assert_eq!(ask(None, 52), (0xC000_0039, 0, 34, 36, 52, "\\Device\\NamedPipe".into()));
+        assert_eq!(ask(None, 16), (0x8000_0005, 52, 0, 0, 0, "".into()));
+        assert_eq!(ask(None, 8), (0xC000_0004, 52, 0, 0, 0, "".into()));
+    }
 }

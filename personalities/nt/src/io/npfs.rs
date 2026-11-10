@@ -195,6 +195,10 @@ impl Chan {
 /// A pipe name.
 #[derive(Debug)]
 pub struct NamedPipe {
+    /// The name as the creator of the first instance spelled it (what
+    /// `FileNameInformation` and `ObjectNameInformation` report for every
+    /// handle of the pipe; the map's key is the folded name).
+    pub name: Vec<u16>,
     pub share: u32,
     pub config: u32,
     pub max_instances: u32,
@@ -210,6 +214,9 @@ pub struct NamedPipe {
 pub struct Instance {
     pub id: u64,
     pub pipe: Vec<u16>,
+    /// The pipe's name as its first creator spelled it (kept here too: a
+    /// client end outlives the pipe's last server end).
+    pub name: Vec<u16>,
     pub state: PipeState,
     /// The instance's pipe type: messages, or a byte stream.
     pub message: bool,
@@ -331,6 +338,12 @@ impl IoState {
         })
     }
 
+    /// The name of the pipe `instance` belongs to, as its first creator
+    /// spelled it (without the device or a leading backslash).
+    pub fn np_name(&self, instance: u64) -> Option<&[u16]> {
+        self.np.instances.get(&instance).map(|i| i.name.as_slice())
+    }
+
     // ----- opening
 
     /// Make a new instance for a server open (the checks of
@@ -341,6 +354,7 @@ impl IoState {
     pub fn np_server_create(
         &mut self,
         key: &[u16],
+        name: &[u16],
         c: &NpCreate,
         server_pid: u32,
     ) -> core::result::Result<(u64, u64), NtStatus> {
@@ -372,6 +386,7 @@ impl IoState {
             self.np.pipes.insert(
                 key.to_vec(),
                 NamedPipe {
+                    name: name.to_vec(),
                     share: c.share,
                     config,
                     max_instances: c.max_instances,
@@ -382,9 +397,9 @@ impl IoState {
                 },
             );
         }
-        let (inbound, outbound) = {
+        let (inbound, outbound, name) = {
             let p = &self.np.pipes[key];
-            (p.inbound, p.outbound)
+            (p.inbound, p.outbound, p.name.clone())
         };
         self.np.next += 1;
         let id = self.np.next;
@@ -393,6 +408,7 @@ impl IoState {
             Instance {
                 id,
                 pipe: key.to_vec(),
+                name,
                 state: PipeState::Listening,
                 message: c.pipe_type & FILE_PIPE_MESSAGE_TYPE != 0,
                 reject_remote: c.pipe_type & FILE_PIPE_REJECT_REMOTE_CLIENTS != 0,
