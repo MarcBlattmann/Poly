@@ -24,6 +24,15 @@ cargo xtask boot-tests --list   # the boot test groups; `boot-tests <group>` run
 cargo xtask ci      # everything CI checks (`ci lint`, `ci host-tests`, ...: one part)
 ```
 
+**Installing a Linux app** (ADR 0173): on the desktop with Chromium, download a `.deb`
+from Debian 13's archive (for example from packages.debian.org) and click it in
+Chromium's downloads, or double-click it in Files: Poly's installer shows what it
+is, and Install has Debian's own `apt` and `dpkg` install it with what it needs (the
+first time on a disk it configures the disk's own packages first, about half a
+minute). The app is then in the launcher and in Files' Applications. A disk made
+before this needs **Fresh disk** once (`--fresh-disk`). `cargo xtask boot-tests
+linux-installer` runs the whole thing with galculator.
+
 On GitHub, CI runs the same parts as parallel jobs: lint, host tests, the boot
 tests in 11 shards (`cargo xtask boot-tests --list` shows the groups of each),
 the coverage checks and the pipeline checks. It takes about 4 minutes; the one

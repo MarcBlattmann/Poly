@@ -304,12 +304,24 @@ pub enum Control {
     /// desktop file's name, `poly:<name>` for one of Poly's own), exactly
     /// as the launcher starts it (ADR 0175: Files' Applications folder).
     Open { id: String },
+    /// `install <path>`: open the installer for the package file at this
+    /// absolute path (ADR 0173). Whoever opens a package asks so (Files, a
+    /// browser's "open" of a download, which may run as another user); the
+    /// desktop starts its own installer, which shows the package and
+    /// installs nothing before its **Install** is clicked.
+    Install { path: String },
+    /// `rescan`: the installed apps changed (the installer added one): read
+    /// them again, so the launcher offers them (ADR 0173).
+    Rescan,
 }
 
 impl Control {
     /// Read a control line; `None` for any other (`dump`, noise).
     pub fn parse(line: &str) -> Option<Control> {
         let line = line.trim();
+        if line == "rescan" {
+            return Some(Control::Rescan);
+        }
         let (word, rest) = line.split_once(' ')?;
         let rest = rest.trim();
         match word {
@@ -326,6 +338,7 @@ impl Control {
             }
             "cancel" => valid_token(rest).then(|| Control::Cancel { token: rest.into() }),
             "open" => valid_app_id(rest).then(|| Control::Open { id: rest.into() }),
+            "install" => valid_path(rest).then(|| Control::Install { path: rest.into() }),
             _ => None,
         }
     }
@@ -337,6 +350,8 @@ impl Control {
             Control::Pid { token, pid } => format!("pid {token} {pid}\n"),
             Control::Cancel { token } => format!("cancel {token}\n"),
             Control::Open { id } => format!("open {id}\n"),
+            Control::Install { path } => format!("install {path}\n"),
+            Control::Rescan => String::from("rescan\n"),
         }
     }
 }
@@ -351,6 +366,13 @@ fn valid_token(t: &str) -> bool {
 /// characters, and nothing around it that reading the line would trim.
 fn valid_app_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 255 && id.trim() == id && !id.chars().any(char::is_control)
+}
+
+/// A file's path as a request carries it: absolute, one line, at most
+/// `PATH_MAX` bytes, and nothing around it that reading the line would
+/// trim.
+fn valid_path(path: &str) -> bool {
+    path.starts_with('/') && path.len() < 4096 && path.trim() == path && !path.chars().any(char::is_control)
 }
 
 #[cfg(test)]
@@ -594,6 +616,8 @@ mod tests {
             Control::Cancel { token: "poly-launch-9-1".into() },
             Control::Open { id: "poly:Settings".into() },
             Control::Open { id: "org.example.Text Editor.desktop".into() },
+            Control::Install { path: "/home/poly/Downloads/my app_1.0 (2).deb".into() },
+            Control::Rescan,
         ];
         for c in lines {
             assert_eq!(Control::parse(&c.line()), Some(c));
@@ -605,5 +629,11 @@ mod tests {
         assert_eq!(Control::parse("frobnicate x y"), None);
         assert_eq!(Control::parse("open "), None);
         assert_eq!(Control::parse("open a\u{7}b"), None);
+        // Only an absolute path on one line is a file to install.
+        assert_eq!(Control::parse("install Downloads/app.deb"), None);
+        assert_eq!(Control::parse("install "), None);
+        assert_eq!(Control::parse("install /tmp/a\u{1b}[2J.deb"), None);
+        assert_eq!(Control::parse("rescan now"), None);
+        assert_eq!(Control::parse(" rescan \n"), Some(Control::Rescan));
     }
 }

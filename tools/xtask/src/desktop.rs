@@ -135,7 +135,7 @@ pub fn devices_sized((w, h): (u32, u32)) -> Vec<String> {
 /// The programs in the desktop's image (`/bin/<name>`), all native
 /// programs built on every host (ADR 0125, ADR 0133), Poly's own Files
 /// and Terminal among them (ADR 0134).
-pub const PROGRAMS: [&str; 4] = ["poly-compositor", "notify-send", "poly-files", "poly-terminal"];
+pub const PROGRAMS: [&str; 5] = ["poly-compositor", "notify-send", "poly-files", "poly-terminal", "poly-installer"];
 
 /// The programs of the test apps, in the image only with `--test-apps`.
 pub const TEST_PROGRAMS: [&str; 2] = ["wl-demo", "wl-client"];
@@ -2178,7 +2178,10 @@ mod tests {
     fn test_apps_are_absent_from_a_normal_image() {
         // Not hidden, absent: no test program, no test desktop file, so the
         // shell has nothing to list.
-        assert_eq!(programs(false), ["poly-compositor", "notify-send", "poly-files", "poly-terminal"]);
+        assert_eq!(
+            programs(false),
+            ["poly-compositor", "notify-send", "poly-files", "poly-terminal", "poly-installer"]
+        );
         assert!(application_files(false).is_empty());
         assert!(windows_app_files(false).is_empty());
         assert!(launcher_apps(false).is_empty());

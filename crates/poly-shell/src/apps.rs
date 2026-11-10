@@ -228,6 +228,53 @@ pub fn builtins() -> Vec<App> {
 pub const FILES: &str = "/bin/poly-files";
 pub const TERMINAL: &str = "/bin/poly-terminal";
 
+/// Poly's installer (ADR 0132, 0173): the program that opens a package
+/// file. It is not an app of the launcher (it does nothing without a
+/// file); its desktop file ([`installer_desktop_file`]) makes it the app
+/// that opens packages.
+pub const INSTALLER: &str = "/bin/poly-installer";
+
+/// The argument that makes the installer open its window; without it the
+/// program asks the desktop to (so the window is always the desktop's).
+pub const INSTALLER_WINDOW: &str = "--window";
+
+/// The installer's desktop file ID.
+pub const INSTALLER_ID: &str = "poly-installer.desktop";
+
+/// The MIME types of the package files the installer opens (the shared
+/// MIME database's names): Debian packages, which it installs, and the
+/// formats it knows by sight and says so about (RPM, Flatpak references,
+/// snaps; ADR 0132).
+pub const PACKAGE_MIME_TYPES: [&str; 4] = [
+    "application/vnd.debian.binary-package",
+    "application/x-rpm",
+    "application/vnd.flatpak.ref",
+    "application/vnd.snap",
+];
+
+/// The installer's desktop file: it opens the package types and is not
+/// shown among the apps (`NoDisplay`; Desktop Entry Specification).
+pub fn installer_desktop_file() -> String {
+    alloc::format!(
+        "[Desktop Entry]\nType=Application\nName=Installer\nComment=Install an app from a package file\n\
+         Exec={INSTALLER} %f\nNoDisplay=true\nMimeType={};\n",
+        PACKAGE_MIME_TYPES.join(";")
+    )
+}
+
+/// The installer's window for the package file at `path`, as an app the
+/// desktop starts (whoever opened the file asked for it, ADR 0173).
+pub fn installer_entry(path: &str) -> App {
+    App {
+        name: "Installer".into(),
+        comment: "Install an app from a package file".into(),
+        keywords: Vec::new(),
+        argv: alloc::vec![INSTALLER.into(), INSTALLER_WINDOW.into(), path.into()],
+        id: INSTALLER_ID.into(),
+        icon: None,
+    }
+}
+
 /// The `argv` of the built-ins the shell itself opens (ADR 0117).
 pub const SETTINGS: &str = "poly-shell:settings";
 pub const NOTIFICATIONS: &str = "poly-shell:notifications";

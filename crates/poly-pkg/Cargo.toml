@@ -1,0 +1,15 @@
+[package]
+name = "poly-pkg"
+description = "Linux packages for Poly's installer (ADR 0132, 0173): which format a file is, by its content; reading a .deb (ar(5), tar(5), deb(5), deb-control(5)) for what the installer shows; the dpkg database a Debian base root needs so the distribution's own dpkg and apt work in it; what apt is run with and its progress lines; the installer's model. no_std + alloc, tested on the host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-compress.workspace = true
+poly-png.workspace = true
+
+[lints]
+workspace = true

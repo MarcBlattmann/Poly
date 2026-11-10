@@ -276,6 +276,18 @@ name = "poly-input"
 version = "0.0.1"
 
 [[package]]
+name = "poly-installer-app"
+version = "0.0.1"
+dependencies = [
+ "poly-app",
+ "poly-input",
+ "poly-pkg",
+ "poly-rt",
+ "poly-shell",
+ "poly-wayland",
+]
+
+[[package]]
 name = "poly-iphlp"
 version = "0.0.1"
 
@@ -440,6 +452,14 @@ dependencies = [
  "poly-personality-nt",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "poly-pkg"
+version = "0.0.1"
+dependencies = [
+ "poly-compress",
+ "poly-png",
 ]
 
 [[package]]
@@ -790,6 +810,7 @@ dependencies = [
  "poly-macho",
  "poly-pe",
  "poly-personality-native",
+ "poly-pkg",
  "poly-shell",
  "poly-stubs",
  "poly-term",

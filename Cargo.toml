@@ -55,6 +55,7 @@ members = [
     "crates/poly-paging",
     "crates/poly-pci",
     "crates/poly-pe",
+    "crates/poly-pkg",
     "crates/poly-png",
     "crates/poly-procfs",
     "crates/poly-random",
@@ -100,6 +101,7 @@ members = [
     "userland/poly-app",
     "userland/poly-compositor",
     "userland/poly-files-app",
+    "userland/poly-installer-app",
     "userland/poly-notify",
     "userland/poly-terminal",
     "userland/poly-wl-demo",
@@ -164,6 +166,7 @@ poly-pagecache = { path = "crates/poly-pagecache" }
 poly-paging = { path = "crates/poly-paging" }
 poly-pci = { path = "crates/poly-pci" }
 poly-pe = { path = "crates/poly-pe" }
+poly-pkg = { path = "crates/poly-pkg" }
 poly-png = { path = "crates/poly-png" }
 poly-procfs = { path = "crates/poly-procfs" }
 poly-random = { path = "crates/poly-random" }
@@ -175,6 +178,7 @@ poly-sched = { path = "crates/poly-sched" }
 poly-shell = { path = "crates/poly-shell" }
 poly-app = { path = "userland/poly-app" }
 poly-files-app = { path = "userland/poly-files-app" }
+poly-installer-app = { path = "userland/poly-installer-app" }
 poly-terminal = { path = "userland/poly-terminal" }
 poly-security = { path = "crates/poly-security" }
 poly-seh = { path = "crates/poly-seh" }

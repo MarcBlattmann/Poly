@@ -167,7 +167,8 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] One installer for every Linux package format, as on macOS or Windows: opening a downloaded package shows what it is and installs it with one click; it appears in the launcher, updates through its own channel and uninstalls from the launcher or Settings (ADR 0132)
 - [ ] AppImages install and run, without FUSE (Poly mounts their squashfs) (ADR 0132)
 - [x] ⚖️ Decided (owner, ADR 0132): `.deb` installs go into Debian stable or Ubuntu LTS bases (chosen from the package's dependencies), `.rpm` into a Fedora base
-- [ ] `.deb` packages install with their dependencies and maintainer scripts (the distribution's own `apt` and `dpkg` in a shared base root) (ADR 0132)
+- [x] `.deb` packages install with their dependencies and maintainer scripts (the distribution's own `apt` and `dpkg` in a shared base root) (ADR 0132; ADR 0173: the Debian base, which is the desktop's root disk; a downloaded package opened from Chromium or Files, Poly's installer, the app in the launcher)
+- [ ] An Ubuntu LTS base for `.deb` packages built for Ubuntu, chosen from the package's dependencies (ADR 0132)
 - [ ] `.rpm` packages install with their dependencies (`dnf` and `rpm` in a shared base root) (ADR 0132)
 - [ ] Flatpak: Flathub apps install and run sandboxed (`flatpak` and `bubblewrap` unchanged; the desktop portals answered by Poly's shell) (ADR 0132)
 - [x] ⚖️ Decided (owner, ADR 0132): no Snap support; apps shipped as snaps are installed from Flathub or their `.deb`/`.rpm` instead
