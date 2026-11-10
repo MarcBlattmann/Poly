@@ -20,6 +20,17 @@ pub const ERROR_FILE_EXISTS: u32 = 80;
 pub const ERROR_NEGATIVE_SEEK: u32 = 131;
 /// `ERROR_BAD_ARGUMENTS` (`winerror.h`).
 pub const ERROR_BAD_ARGUMENTS: u32 = 160;
+/// `ERROR_IO_INCOMPLETE` (`winerror.h`).
+pub const ERROR_IO_INCOMPLETE: u32 = 996;
+/// `ERROR_CANNOT_IMPERSONATE` (`winerror.h`).
+pub const ERROR_CANNOT_IMPERSONATE: u32 = 1368;
+/// `ERROR_ABANDONED_WAIT_0` (`winerror.h`).
+pub const ERROR_ABANDONED_WAIT_0: u32 = 735;
+/// `ERROR_OBJECT_NAME_EXISTS` (`winerror.h`).
+pub const ERROR_OBJECT_NAME_EXISTS: u32 = 698;
+/// `WAIT_TIMEOUT`, `WAIT_IO_COMPLETION` (`winbase.h`) as errors.
+pub const ERROR_WAIT_TIMEOUT: u32 = 258;
+pub const ERROR_WAIT_IO_COMPLETION: u32 = 192;
 /// `ERROR_OLD_WIN_VERSION` (`winerror.h`).
 pub const ERROR_OLD_WIN_VERSION: u32 = 1150;
 /// `ERROR_INVALID_FLAGS` (`winerror.h`).

@@ -4,8 +4,8 @@ id: windows/api/user32.dll/ShowWindow
 oracle:
   os: "Windows 11 Home 25H2 (build 26200.9711), x64"
   machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
-  observed_by: spec-win-gui-a
-  date: 2026-11-02
+  observed_by: spec-win-gui-a, spec-win-gui-b2
+  date: 2026-11-02, 2026-11-09
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn reference pages of the functions and messages named here, "About
@@ -22,18 +22,29 @@ summary: >
 interface:
   signature: "BOOL ShowWindow(HWND hwnd, int cmd)"
 rules:
-  return: "the previous WS_VISIBLE state: 0 or nonzero (1 observed)"
-  child_show: "SW_SHOW of a hidden child: WM_SHOWWINDOW(1,0) only while its parent is hidden; with the parent shown: WM_SHOWWINDOW(1,0), WM_WINDOWPOSCHANGING(0x57), WM_WINDOWPOSCHANGED(0x1857); SW_SHOWNA, SW_SHOWNORMAL the same"
-  child_hide: "WM_SHOWWINDOW(0,0), WM_WINDOWPOSCHANGING(0x97), WM_WINDOWPOSCHANGED(0x1897)"
-  same_state: "SW_SHOW / SW_SHOWNOACTIVATE of a visible window and SW_HIDE of a hidden one send nothing"
+  return: "the previous WS_VISIBLE state: 1 when it was set (also for a visible minimized or maximized window), 0 when it was clear (a hidden window, also one hidden while minimized or maximized, which keeps WS_MINIMIZE / WS_MAXIMIZE); a show command that minimizes or maximizes a hidden window returns 0"
+  commands: "SW_SHOWDEFAULT (10) acts as SW_SHOWNORMAL (the test processes have no STARTUPINFO show command); SW_FORCEMINIMIZE (11) on a visible window of the calling thread clears WS_VISIBLE without a single message (the window is not minimized), on a hidden or a minimized window it does nothing; the other commands are in the rules below"
+  child_show: "SW_SHOW of a hidden child: WM_SHOWWINDOW(1,0) only while its parent is hidden; with the parent shown: WM_SHOWWINDOW(1,0), WM_WINDOWPOSCHANGING(0x57), WM_WINDOWPOSCHANGED(0x1857); SW_SHOWNA, SW_SHOWNORMAL the same (a child is never activated: SWP_NOACTIVATE|SWP_NOZORDER are always in its flags, and SW_SHOWNA of a visible child sends WM_SHOWWINDOW(1) and WM_WINDOWPOSCHANGING(0x57))"
+  child_hide: "WM_SHOWWINDOW(0,0), WM_WINDOWPOSCHANGING(0x97), WM_WINDOWPOSCHANGED(0x1897), no WM_SIZE or WM_MOVE"
+  child_min_max: "SW_SHOWMINNOACTIVE / SW_SHOWMAXIMIZED of a hidden child with a caption or a border of a visible parent: no WM_SHOWWINDOW; WM_WINDOWPOSCHANGING(0x8164 / 0x8060), WM_NCCALCSIZE(TRUE, flags 0x9964 / 0x9864), WM_CHILDACTIVATE, WM_WINDOWPOSCHANGED(0x8164 / 0x8064), WM_MOVE, WM_SIZE(SIZE_MINIMIZED / SIZE_MAXIMIZED); SW_RESTORE of the minimized one: 0x8120, NCCALCSIZE 0x9924, WM_CHILDACTIVATE, CHANGED 0x8124, WM_MOVE, WM_SIZE(SIZE_RESTORED)"
+  same_state: "a command for the state the window is already in sends nothing and returns 1: SW_SHOWNORMAL / SW_SHOW / SW_SHOWNOACTIVATE / SW_RESTORE / SW_SHOWDEFAULT of a visible restored window (also an inactive one: it is not activated), SW_SHOWMAXIMIZED of a maximized one, SW_MINIMIZE / SW_SHOWMINIMIZED / SW_SHOWMINNOACTIVE / SW_SHOW of a minimized one (SW_SHOW does not restore a minimized window), SW_HIDE of a hidden one. SW_SHOWNA is the exception: on any visible window it sends WM_SHOWWINDOW(1,0) and WM_WINDOWPOSCHANGING(0x53), and WM_WINDOWPOSCHANGED only when the call raises a window that was not on top (flags 0x1813, see z_order)"
+  show_hidden: "a hidden top-level window (restored, not minimized or maximized): SW_SHOWNORMAL, SW_SHOW, SW_RESTORE, SW_SHOWDEFAULT: WM_SHOWWINDOW(1,0), WM_WINDOWPOSCHANGING(pos 0,0 size 0,0, flags 0x43 = SWP_SHOWWINDOW|SWP_NOMOVE|SWP_NOSIZE), WM_WINDOWPOSCHANGED(the window rect, 0x1847), and the window becomes the thread's active window; SW_SHOWNOACTIVATE: 0x57 / 0x1857, not activated; SW_SHOWNA: 0x53 / 0x1857, not activated. GetActiveWindow works in this session although no window is visible"
+  show_minimized_from_hidden: "SW_SHOWMINIMIZED, SW_MINIMIZE, SW_SHOWMINNOACTIVE of a hidden window return 0 and send NO WM_SHOWWINDOW: [WM_GETMINMAXINFO], WM_WINDOWPOSCHANGING(pos 0,740 size 160x28, 0x8160), [WM_GETMINMAXINFO], WM_NCCALCSIZE(TRUE, new rect = the minimized rect, same pos/size, flags 0x9964), WM_WINDOWPOSCHANGED(0x8164), WM_MOVE(0,740), WM_SIZE(SIZE_MINIMIZED, 0,0); all three leave the window the active one (also SW_SHOWMINNOACTIVE). The minimized rectangle is 0,740,160,768 (the bottom-left slot of the 1024x768 screen; client 0x0). WM_GETMINMAXINFO is sent (at creation, before WM_NCCREATE, and in the brackets here) only to windows that are not WS_POPUP or have WS_THICKFRAME; a plain popup (also with a border, a dialog frame or a caption) gets none"
+  show_maximized_from_hidden: "SW_SHOWMAXIMIZED of a hidden window: no WM_SHOWWINDOW; WM_GETMINMAXINFO, WM_WINDOWPOSCHANGING(the maximized rect, 0x8060), [WM_GETMINMAXINFO again, only for the windows of the minimize case], WM_NCCALCSIZE(TRUE, flags 0x9864), WM_WINDOWPOSCHANGED(0x8064), WM_MOVE(client origin), WM_SIZE(SIZE_MAXIMIZED, client size); the window is active. WS_OVERLAPPEDWINDOW (1024x768 screen): WM_GETMINMAXINFO maxsize 1040x784, maxpos -8,-8, mintrack 136,39, maxtrack 1044,788; rect -8,-8,1032,776, client 1024x745, WM_MOVE(0,23). A WS_POPUP: one WM_GETMINMAXINFO only (before the WINDOWPOSCHANGING): maxsize 1024x768, maxpos 0,0, mintrack 2,2, maxtrack 1044,788; rect 0,0,1024,768, WM_SIZE(SIZE_MAXIMIZED, 1024,768)"
+  state_changes: "visible windows: the flags of WM_WINDOWPOSCHANGING / WM_NCCALCSIZE(TRUE) / WM_WINDOWPOSCHANGED (0x8000 = the minimized/maximized state changes): to minimized from restored or maximized (SW_MINIMIZE, SW_SHOWMINIMIZED, SW_SHOWMINNOACTIVE): 0x8160 / 0x9920 / 0x8120, then WM_MOVE, WM_SIZE(SIZE_MINIMIZED); to maximized from restored: 0x8020 / 0x9824 / 0x8024, WM_MOVE, WM_SIZE(SIZE_MAXIMIZED); from maximized to restored (SW_SHOWNORMAL, SW_SHOWNOACTIVATE, SW_RESTORE): 0x8020 / 0x9824 / 0x8024 with the old rectangle, WM_MOVE, WM_SIZE(SIZE_RESTORED); from minimized to restored: 0x8120 (the old rectangle) / 0x9920 or 0x9924 / 0x8120 or 0x8124 (the 4 = SWP_NOZORDER only when the window did not move in the z order, see z_order), WM_MOVE, WM_SIZE(SIZE_RESTORED); from minimized to maximized: the same flags with WM_SIZE(SIZE_MAXIMIZED). WM_NCCALCSIZE's WINDOWPOS flags are always the WM_WINDOWPOSCHANGED flags | 0x1800 (0x9964 = 0x8164 | 0x1800, 0x9920 = 0x8120 | 0x1800). On a minimized window SW_SHOWNORMAL, SW_RESTORE and SW_SHOWNOACTIVATE restore it, SW_SHOW and SW_SHOWNA do not"
+  minimize: "SW_SHOWMINNOACTIVE / SW_MINIMIZE of a visible window: WM_WINDOWPOSCHANGING(0,740 160x28, 0x8160), WM_GETMINMAXINFO, WM_NCCALCSIZE(TRUE, 0x9920), WM_WINDOWPOSCHANGED(0x8120: SWP_SHOWWINDOW is dropped because the window is visible), WM_MOVE(0,740), WM_SIZE(SIZE_MINIMIZED, 0,0); IsIconic 1; rect 0,740,160,768; client 0x0. A visible window that is not the active one is activated and raised by it (an extra WM_WINDOWPOSCHANGING(0x13) to the window before its WM_WINDOWPOSCHANGED, which has the same flags 0x8120)"
+  maximize: "SW_SHOWMAXIMIZED of a restored window: WM_GETMINMAXINFO, WM_WINDOWPOSCHANGING(-8,-8 1040x784, 0x8020), WM_GETMINMAXINFO, WM_NCCALCSIZE(0x9824), WM_WINDOWPOSCHANGED(0x8024), WM_MOVE(0,23), WM_SIZE(SIZE_MAXIMIZED, 1024,745); IsZoomed 1; of an inactive window it also activates and raises it (extra WM_WINDOWPOSCHANGING(0x13) before WM_WINDOWPOSCHANGED, whose flags lose the 4: 0x8020, NCCALCSIZE 0x9820)"
+  restore: "back to the old rectangle with WM_SIZE(SIZE_RESTORED, 284,161) and WM_MOVE(58,71) for the 300x200 window at 50,40. A window that was maximized before it was minimized returns to maximized when it is restored (SW_RESTORE / SW_SHOWNORMAL / SW_SHOWNOACTIVATE of the minimized window: WM_SIZE(SIZE_MAXIMIZED))"
+  ws_visible_after: "minimize/maximize/restore commands set WS_VISIBLE (the window was hidden before); a minimized or maximized window that is hidden keeps WS_MINIMIZE / WS_MAXIMIZE"
+  z_order: "A WM_WINDOWPOSCHANGING without SWP_NOZORDER asks to move the window to the top of the z order. WM_WINDOWPOSCHANGED then has the same flags (minus SWP_SHOWWINDOW for a window that was visible) plus SWP_NOZORDER (4) when the window was already where the call put it, and no 4 when it moved. SW_MINIMIZE / SW_SHOWMINNOACTIVE of the visible active window moves it to the bottom of the z order; a window shown into the minimized state from hidden stays on top. So the same restore gives CHANGED 0x8120 after a visible window was minimized (it moves back up) and 0x8124 after a hidden window was shown minimized (it never moved); SW_HIDE of the active window (0x83, see hide) gives 0x1883 for a window that was minimized from visible (it is raised while being hidden) and 0x1887 in every other state; SW_SHOWNA of a visible window that lies below another one raises it: WM_SHOWWINDOW(1,0), WM_WINDOWPOSCHANGING(0x53), WM_WINDOWPOSCHANGED(0x1813 = the show flag dropped from 0x53 plus 0x1800)"
+  hide: "SW_HIDE of a visible window: WM_SHOWWINDOW(0,0), WM_WINDOWPOSCHANGING(pos 0,0 size 0,0, 0x97 = SWP_HIDEWINDOW|NOACTIVATE|NOZORDER|NOMOVE|NOSIZE; 0x83 for the thread's active window: it carries neither NOACTIVATE nor NOZORDER), WM_WINDOWPOSCHANGED(the window's rect, 0x1897 for 0x97; 0x1887 or 0x1883 for 0x83, see z_order). The hidden active window stays the thread's active window in this session (no other window takes the activation). A hidden window keeps its minimized or maximized state and rectangle"
+  hide_size_move: "no WM_SIZE/WM_MOVE follows a hide, with one exception: a top-level window without WS_POPUP (the overlapped, caption, border or frame styles, also style 0; not a popup, not a child) gets its WM_SIZE and WM_MOVE held back at creation (CreateWindowExW sends WM_GETMINMAXINFO, WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE only) and they are delivered once after the first ShowWindow call that sends WM_SHOWWINDOW (a show, a hide, or SW_SHOWNA of a visible window): WM_SIZE(the state SIZE_RESTORED / SIZE_MINIMIZED / SIZE_MAXIMIZED, client size) first, then WM_MOVE(client origin), after WM_WINDOWPOSCHANGED (after WM_WINDOWPOSCHANGING for SW_SHOWNA). A show into the minimized or maximized state from hidden (no WM_SHOWWINDOW, its own WM_MOVE, WM_SIZE) does not discharge them: the window delivers them at its next hide or SW_SHOWNA, whatever restore/maximize/minimize happened in between. Example: a WS_OVERLAPPEDWINDOW at 50,40 300x200 first shown with SW_SHOWMINNOACTIVE, later restored and so on, then hidden: WM_SHOWWINDOW(0), WM_WINDOWPOSCHANGING(0x83), WM_WINDOWPOSCHANGED(0x1887), WM_SIZE(SIZE_RESTORED, 284,161), WM_MOVE(58,71). A window first shown restored (SW_SHOWNORMAL, SW_SHOWNOACTIVATE) has them at that show (WM_SIZE, WM_MOVE after WM_WINDOWPOSCHANGED) and nothing at the hide. WS_POPUP windows (also with a caption or a frame) get WM_SIZE and WM_MOVE at creation and never again"
+  show_after_hidden_maximized: "SW_SHOWNORMAL of a window that was maximized and then hidden: no WM_SHOWWINDOW; WM_WINDOWPOSCHANGING(old rect, 0x8060), WM_NCCALCSIZE(0x9864), WM_WINDOWPOSCHANGED(0x40008064: the flag 0x40000000 is set), WM_MOVE, WM_SIZE(SIZE_RESTORED)"
+  destroy: "DestroyWindow of a visible top-level window sends no WM_SHOWWINDOW: WM_WINDOWPOSCHANGING(0x97), WM_WINDOWPOSCHANGED(0x1897 whatever the state of the window (also minimized or maximized) and whether it is active or not), then, when it was the active window and another window X of the thread can be activated, X gets WM_WINDOWPOSCHANGING(0x13) (and WM_WINDOWPOSCHANGED 0x1813 when X moved in the z order), then WM_DESTROY and WM_NCDESTROY to the window; with no such window nothing is active afterwards. A visible child being destroyed gets WM_SHOWWINDOW(0) with 0x97 / 0x1897 first"
   popup_show_noactivate: "SW_SHOWNA of a WS_EX_NOACTIVATE popup: WM_SHOWWINDOW(1,0), WM_WINDOWPOSCHANGING(0x53), WM_WINDOWPOSCHANGED(0x1857); before that its hidden owned popup gets a WM_WINDOWPOSCHANGING(0x13); an owned popup shown with SW_SHOWNOACTIVATE: WM_WINDOWPOSCHANGED flags 0x10001857"
   owner_hide: "hiding the owner does not hide its owned windows (their WS_VISIBLE stays)"
   ws_visible: "a child shown while its parent is hidden has WS_VISIBLE but IsWindowVisible 0"
-  minimize: "SW_SHOWMINNOACTIVE / SW_MINIMIZE of a 300x200 WS_OVERLAPPEDWINDOW at 50,40: WM_WINDOWPOSCHANGING(0,740 160x28, flags 0x8160 / 0x8160), WM_GETMINMAXINFO, WM_NCCALCSIZE(TRUE), WM_WINDOWPOSCHANGED(0x8164 / 0x8120), WM_MOVE(0,740), WM_SIZE(SIZE_MINIMIZED, 0,0); IsIconic 1; rect 0,740,160,768 (bottom-left icon slot: no shell hides minimized windows here); client 0x0"
-  maximize: "SW_SHOWMAXIMIZED: WM_GETMINMAXINFO, WM_WINDOWPOSCHANGING(-8,-8 1040x784, 0x8020), WM_GETMINMAXINFO, WM_NCCALCSIZE, WM_WINDOWPOSCHANGED(0x8024), WM_MOVE(0,23), WM_SIZE(SIZE_MAXIMIZED, 1024,745); IsZoomed 1"
-  restore: "back to the old rectangle with WM_SIZE(SIZE_RESTORED, 284,161) and WM_MOVE(58,71)"
-  ws_visible_after: "minimize/maximize/restore commands set WS_VISIBLE (the window was hidden before)"
-  hide_after_restore: "SW_HIDE of a restored top-level window: WM_SHOWWINDOW(0,0), WM_WINDOWPOSCHANGING(0x83), WM_WINDOWPOSCHANGED(0x1887), then WM_SIZE and WM_MOVE"
+  interactive_desktop: "the tests of the focus and activation sheets (GetActiveWindow, GetFocus, GetForegroundWindow, SetForegroundWindow) were recorded in the interactive session, where ShowWindow differs: the screen is 1920x1080; the minimized rect is -32000,-32000 160x28 (0,1052,160,1080 for a WS_EX_TOOLWINDOW or WS_EX_NOACTIVATE window without WS_EX_APPWINDOW and for an owned window); a window shown from hidden gets the extra bit 0x10000000 in WM_WINDOWPOSCHANGED (top-level windows only), a hide or destroy 0x20000000 (also of inactive windows); the activation of the hidden or destroyed active window passes to the next window below it in the z order that can be activated, of any process (see GetActiveWindow)"
 errors:
   bad_handle: "0, ERROR_INVALID_WINDOW_HANDLE (1400)"
 side_effects: "none beyond the rules above"
@@ -43,21 +54,24 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 2  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 6  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
   (allowed since this slice); each carries its own declarations (Learn
   prototypes, header constants) and a message log helper; window procedures
   log only documented messages (see "documented" in the tests), never
   painting messages, activation or IME traffic, handles, times or cascading
-  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
-  start there. WINDOWPOS flags as observed: the caller's SWP_* bits plus
-  0x800 (client area keeps its size) and 0x1000 (client area does not move)
-  in WM_WINDOWPOSCHANGED and WM_NCCALCSIZE where true; 0x8000 when the
-  minimized/maximized state changes; a WM_WINDOWPOSCHANGING for a show/hide
-  carries pos 0,0 size 0,0 with SWP_NOMOVE|SWP_NOSIZE. Activation messages
-  are not recorded (WS_EX_NOACTIVATE windows, SW_*NA commands).
+  default positions. The tests of this sheet ran over SSH in session 0
+  (screen 1024x768, no window visible), where the activation is still
+  tracked per thread (GetActiveWindow) but no other process takes it over.
+  WINDOWPOSCHANGING / WM_NCCALCSIZE / WINDOWPOSCHANGED flags as observed:
+  see the rules (state_changes, z_order); a WM_WINDOWPOSCHANGING for a
+  show/hide carries pos 0,0 size 0,0 with SWP_NOMOVE|SWP_NOSIZE.
+  Activation messages are not recorded in session 0 (which window is
+  active is printed). The interactive-desktop behaviour of ShowWindow is
+  in the tests of GetActiveWindow, GetFocus and GetForegroundWindow, which
+  run with poly-oracle.ps1 -Interactive.
 not_covered: >
   Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
   WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
@@ -65,5 +79,7 @@ not_covered: >
   IsWindowVisible of shown windows, window DC clipping - in the oracle's
   session no window is visible (IsWindowVisible is 0 for every shown window,
   InvalidateRect leaves no update region and no WM_PAINT comes); they need
-  the interactive desktop and are a later entry. Real input (SendInput),
-  focus and activation, menus and the menu loop, hooks, DPI awareness.
+  the interactive desktop (see the sheets of those entries). Menus and the
+  menu loop, hooks, DPI awareness, several monitors, SW_SHOWDEFAULT with
+  a STARTUPINFO show command, SW_FORCEMINIMIZE of a window of another
+  thread.

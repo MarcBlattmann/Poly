@@ -25,6 +25,33 @@ use alloc::vec::Vec;
 use poly_kernelbase::error::*;
 use poly_kernelbase::process::{self as p, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, STARTUPINFO_SIZE};
 
+/// `EXTENDED_STARTUPINFO_PRESENT`, `CREATE_BREAKAWAY_FROM_JOB` (`winbase.h`).
+const EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
+const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+/// `sizeof(STARTUPINFOEXW)`: the `STARTUPINFO` and `lpAttributeList` (8 bytes).
+const STARTUPINFOEX_SIZE: usize = STARTUPINFO_SIZE + 8;
+/// `HANDLE_FLAG_INHERIT` (`winbase.h`).
+const HANDLE_FLAG_INHERIT: u32 = 1;
+
+/// The attribute list of a `STARTUPINFOEX` (null if none), or
+/// `ERROR_INVALID_PARAMETER` when the flag is given with a structure of the
+/// plain size (Learn: "STARTUPINFOEXW").
+///
+/// # Safety
+/// `si` is null or a `STARTUPINFO` as large as its `cb` says.
+unsafe fn attribute_list(si: *const u8, flags: u32) -> Result<*const u8, u32> {
+    if flags & EXTENDED_STARTUPINFO_PRESENT == 0 || si.is_null() {
+        return Ok(core::ptr::null());
+    }
+    // SAFETY: `cb` is the first field.
+    let cb = unsafe { (si as *const u32).read_unaligned() } as usize;
+    if cb < STARTUPINFOEX_SIZE {
+        return Err(ERROR_INVALID_PARAMETER);
+    }
+    // SAFETY: `cb` covers `lpAttributeList`.
+    Ok(unsafe { (si.add(STARTUPINFO_SIZE) as *const *const u8).read_unaligned() })
+}
+
 /// `FILE_ATTRIBUTE_DIRECTORY` (`winnt.h`).
 const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
 /// `ProcessBasicInformation`: `ExitStatus` at 0, `UniqueProcessId` at 32
@@ -190,6 +217,10 @@ pub unsafe extern "system" fn CreateProcessW(
             flags,
             environment,
             current_directory: wide_arg(current_directory),
+            attribute_list: match attribute_list(startup_info, flags) {
+                Ok(l) => l,
+                Err(e) => return fail(e, FALSE),
+            },
         };
         create(&request, startup.as_ref(), attributes, information)
     }
@@ -223,6 +254,10 @@ pub unsafe extern "system" fn CreateProcessA(
             flags,
             environment,
             current_directory: cwd.as_deref(),
+            attribute_list: match attribute_list(startup_info, flags) {
+                Ok(l) => l,
+                Err(e) => return fail(e, FALSE),
+            },
         };
         create(&request, startup.as_ref(), attributes, information)
     }
@@ -236,6 +271,8 @@ struct Request<'a> {
     flags: u32,
     environment: *const u8,
     current_directory: Option<&'a [u16]>,
+    /// The `PROC_THREAD_ATTRIBUTE_LIST` of a `STARTUPINFOEX`, or null.
+    attribute_list: *const u8,
 }
 
 /// Make the handle `h` inheritable (`SECURITY_ATTRIBUTES.bInheritHandle`
@@ -292,6 +329,54 @@ unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (boo
         Ok(b) => buf.copy_from_slice(&b),
         Err(e) => return fail(e, FALSE),
     }
+    // The attribute list and CREATE_BREAKAWAY_FROM_JOB as Poly's attributes
+    // of NtCreateUserProcess (ADR 0169): kind, value, size per record.
+    // SAFETY: the caller's list.
+    let parsed = match unsafe { crate::attrlist::parse(r.attribute_list) } {
+        Ok(a) => a,
+        Err(e) => return fail(e, FALSE),
+    };
+    if let Some(list) = &parsed.handle_list {
+        // Learn: the handles must be inheritable, and bInheritHandles TRUE.
+        let mut seen: Vec<usize> = Vec::new();
+        let valid = r.inherit_handles
+            && list.iter().all(|&h| {
+                let mut f = 0u32;
+                // SAFETY: a handle value and an out-pointer.
+                let ok = unsafe { crate::handles::GetHandleInformation(h as Handle, &mut f) } != 0;
+                let fresh = !seen.contains(&h);
+                seen.push(h);
+                ok && f & HANDLE_FLAG_INHERIT != 0 && fresh
+            });
+        if !valid {
+            return fail(ERROR_INVALID_PARAMETER, FALSE);
+        }
+    }
+    if !crate::attrlist::mitigation_defined(parsed.mitigation) {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    let handle_words: Vec<u64> = parsed.handle_list.iter().flatten().map(|&h| h as u64).collect();
+    let job_words: Vec<u64> = parsed.jobs.iter().map(|&h| h as u64).collect();
+    let mut blob: Vec<u64> = Vec::new();
+    let mut records = 0u64;
+    let mut record = |kind: u64, value: u64, size: u64| {
+        blob.extend_from_slice(&[kind, value, size]);
+        records += 1;
+    };
+    if parsed.handle_list.is_some() {
+        record(1, handle_words.as_ptr() as u64, handle_words.len() as u64 * 8);
+    }
+    if parsed.mitigation != 0 {
+        record(2, parsed.mitigation, 8);
+    }
+    if !job_words.is_empty() {
+        record(3, job_words.as_ptr() as u64, job_words.len() as u64 * 8);
+    }
+    if flags & CREATE_BREAKAWAY_FROM_JOB != 0 {
+        record(4, 1, 0);
+    }
+    blob.insert(0, records);
+    let attribute_blob = if records == 0 { core::ptr::null() } else { blob.as_ptr() as *const u8 };
     let process_flags = if r.inherit_handles { p::NT_PROCESS_INHERIT_HANDLES } else { 0 };
     let thread_flags = if flags & CREATE_SUSPENDED != 0 { p::NT_THREAD_CREATE_SUSPENDED } else { 0 };
     let (mut ph, mut th): (Handle, Handle) = (0, 0);
@@ -308,7 +393,7 @@ unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (boo
             thread_flags,
             buf.as_ptr(),
             core::ptr::null_mut(),
-            core::ptr::null(),
+            attribute_blob,
         )
     };
     if !st.is_success() {

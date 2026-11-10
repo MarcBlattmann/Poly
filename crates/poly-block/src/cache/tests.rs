@@ -515,3 +515,198 @@ fn a_cache_that_sleeps_through_a_wait_hook() {
     assert_eq!(other, pattern(50));
     assert_eq!(q.stats().finished, q.stats().requests);
 }
+
+#[test]
+fn read_blocks_reads_each_uncached_run_in_one_request() {
+    let mut t = Tables::new(8, 2, 8);
+    let mut disk = SimDisk::new(400, BS as u32, false, 5);
+    for b in 0..400u64 {
+        disk.durable[b as usize * BS..(b as usize + 1) * BS].copy_from_slice(&pattern(b));
+    }
+    let mut q = RequestQueue::new(disk, t.storage()).unwrap();
+    let mut s = Store::new(KEEP_RUN_BLOCKS * 2);
+    let mut c = s.cache();
+    // Block 105 is cached (and dirty: the device must not overwrite it).
+    let x = c.get_zeroed(&mut q, 105).unwrap();
+    c.data_mut(&x).copy_from_slice(&pattern(1000));
+    c.release(x);
+    let mut buf = vec![0u8; 10 * BS];
+    c.read_blocks(&mut q, 100, &mut buf).unwrap();
+    for k in 0..10u64 {
+        let want = if k == 5 { pattern(1000) } else { pattern(100 + k) };
+        assert_eq!(&buf[k as usize * BS..(k as usize + 1) * BS], &want[..], "block {}", 100 + k);
+    }
+    // One request for the run before the cached block, one for the run after.
+    assert_eq!(requests(&q.device().log, Op::Read), [(100, 5), (106, 4)]);
+    assert_eq!(c.stats().hits, 1);
+    // A short run was kept: reading it again asks the device for nothing.
+    let n = q.device().log.len();
+    c.read_blocks(&mut q, 100, &mut buf).unwrap();
+    assert_eq!(requests(&q.device().log[n..], Op::Read), []);
+    assert!(c.is_cached(103) && c.is_cached(109));
+}
+
+#[test]
+fn a_long_read_leaves_the_cache_alone() {
+    let mut t = Tables::new(8, 2, 8);
+    let mut disk = SimDisk::new(400, BS as u32, false, 6);
+    for b in 0..400u64 {
+        disk.durable[b as usize * BS..(b as usize + 1) * BS].copy_from_slice(&pattern(b));
+    }
+    let mut q = RequestQueue::new(disk, t.storage()).unwrap();
+    let mut s = Store::new(KEEP_RUN_BLOCKS * 2);
+    let mut c = s.cache();
+    for b in 0..4 {
+        c.get(&mut q, b).map(|x| c.release(x)).unwrap();
+    }
+    let mut buf = vec![0u8; (KEEP_RUN_BLOCKS + 1) * BS];
+    c.read_blocks(&mut q, 200, &mut buf).unwrap();
+    for k in 0..=KEEP_RUN_BLOCKS as u64 {
+        assert_eq!(&buf[k as usize * BS..(k as usize + 1) * BS], &pattern(200 + k)[..]);
+    }
+    assert_eq!(requests(&q.device().log, Op::Read).last(), Some(&(200, KEEP_RUN_BLOCKS as u32 + 1)));
+    // The long run is not cached; what was cached before still is.
+    assert!(!c.is_cached(200) && (0..4).all(|b| c.is_cached(b)));
+    // Errors.
+    assert_eq!(c.read_blocks(&mut q, 399, &mut buf), Err(CacheError::Io(IoError::OutOfRange)));
+    assert_eq!(c.read_blocks(&mut q, 0, &mut buf[..BS - 1]), Err(CacheError::Io(IoError::BadRequest)));
+}
+
+#[test]
+fn staged_sync_writes_runs_of_neighbours_in_single_requests() {
+    let mut t = Tables::new(8, 2, 8);
+    let mut q = RequestQueue::new(SimDisk::new(64, BS as u32, true, 7), t.storage()).unwrap();
+    let mut s = Store::new(32);
+    let mut stage = vec![0u8; 8 * BS];
+    let mut c = s.cache();
+    c.set_staging(&mut stage);
+    // 10-24 in a scrambled order (so slots are not in block order), 40-41, 50.
+    let blocks: Vec<u64> = (10..25).rev().chain([40, 41, 50]).collect();
+    for &b in &blocks {
+        let x = c.get_zeroed(&mut q, b).unwrap();
+        c.data_mut(&x).copy_from_slice(&pattern(b));
+        c.release(x);
+    }
+    c.sync(&mut q).unwrap();
+    assert_eq!(c.dirty_count(), 0);
+    let d = q.device();
+    for &b in &blocks {
+        assert_eq!(&d.durable[b as usize * BS..(b as usize + 1) * BS], &pattern(b)[..], "block {b}");
+    }
+    let writes = requests(&d.log, Op::Write);
+    // No run is longer than the staging memory (8 blocks), nothing is
+    // written twice, and 18 blocks go out in a handful of requests.
+    assert!(writes.iter().all(|w| w.1 <= 8), "{writes:?}");
+    assert_eq!(writes.iter().map(|w| w.1).sum::<u32>(), 18);
+    assert!(writes.len() <= 6, "{writes:?}");
+    assert_eq!(requests(&d.log, Op::Flush).len(), 1);
+}
+
+#[test]
+fn a_dirty_victim_goes_out_with_its_neighbours() {
+    let mut t = Tables::new(8, 2, 8);
+    let mut q = RequestQueue::new(SimDisk::new(64, BS as u32, false, 8), t.storage()).unwrap();
+    let mut s = Store::new(6);
+    let mut stage = vec![0u8; 4 * BS];
+    let mut c = s.cache();
+    c.set_staging(&mut stage);
+    for b in 0..6 {
+        let x = c.get_zeroed(&mut q, b).unwrap();
+        c.data_mut(&x).copy_from_slice(&pattern(b));
+        c.release(x);
+    }
+    // Block 0 is the victim: blocks 0-3 (what the staging memory holds) go out together.
+    c.get(&mut q, 30).map(|x| c.release(x)).unwrap();
+    assert_eq!(requests(&q.device().log, Op::Write), [(0, 4)]);
+    assert_eq!(c.dirty_count(), 2);
+    let d = q.device();
+    for b in 0..4u64 {
+        assert_eq!(&d.durable[b as usize * BS..(b as usize + 1) * BS], &pattern(b)[..]);
+    }
+}
+
+#[test]
+fn a_cache_is_a_32nd_of_the_disk_within_the_memory_and_the_limits() {
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * KIB;
+    let size = |disk, ram| cache_size(disk, ram, 64 * KIB as usize, 16 * MIB as usize) as u64;
+    // A test disk and a RAM disk get the least.
+    assert_eq!(size(MIB, 4096 * MIB), 64 * KIB);
+    assert_eq!(size(256 * KIB, 4096 * MIB), 64 * KIB);
+    // In between: a 32nd of the disk.
+    assert_eq!(size(256 * MIB, 4096 * MIB), 8 * MIB);
+    // The most, however big the disk.
+    assert_eq!(size(1228 * MIB, 4096 * MIB), 16 * MIB);
+    assert_eq!(size(u64::MAX, u64::MAX), 16 * MIB);
+    // Short of memory: a 16th of what is free, but never below the least.
+    assert_eq!(size(1228 * MIB, 64 * MIB), 4 * MIB);
+    assert_eq!(size(1228 * MIB, MIB), 64 * KIB);
+    assert_eq!(size(0, 0), 64 * KIB);
+    // Whole pages.
+    assert_eq!(cache_size(100_000_000, u64::MAX, 4096, usize::MAX) % 4096, 0);
+}
+
+#[test]
+fn randomized_reads_and_staged_writes_against_a_model() {
+    const BLOCKS: u64 = 300;
+    for seed in 1..=15u64 {
+        let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9) | 1);
+        let mut disk = SimDisk::new(BLOCKS, BS as u32, true, seed);
+        disk.max_pending = 1 + rng.below(4) as usize;
+        disk.info.max_blocks = 1 + rng.below(40) as u32;
+        let mut latest: Vec<Vec<u8>> = (0..BLOCKS).map(pattern).collect();
+        for (b, data) in latest.iter().enumerate() {
+            disk.durable[b * BS..(b + 1) * BS].copy_from_slice(data);
+        }
+        let mut t = Tables::new(8, 3, 8);
+        let mut q = RequestQueue::new(disk, t.storage()).unwrap();
+        let mut store = Store::new(6 + rng.below(100) as usize);
+        let mut stage = vec![0u8; (rng.below(10) as usize) * BS];
+        let mut c = store.cache();
+        c.set_staging(&mut stage);
+        for step in 0..600u64 {
+            match rng.below(100) {
+                0..45 => {
+                    let n = 1 + rng.below(90);
+                    let first = rng.below(BLOCKS - n + 1);
+                    let mut buf = vec![0xeeu8; n as usize * BS];
+                    c.read_blocks(&mut q, first, &mut buf).unwrap();
+                    for k in 0..n {
+                        let got = &buf[k as usize * BS..(k as usize + 1) * BS];
+                        assert_eq!(
+                            got,
+                            &latest[(first + k) as usize][..],
+                            "seed {seed} step {step} block {}",
+                            first + k
+                        );
+                    }
+                }
+                45..85 => {
+                    let b = rng.below(BLOCKS);
+                    let x = if rng.one_in(2) { c.get(&mut q, b) } else { c.get_zeroed(&mut q, b) }.unwrap();
+                    let data = pattern(seed << 32 | step);
+                    c.data_mut(&x).copy_from_slice(&data);
+                    latest[b as usize] = data;
+                    c.release(x);
+                }
+                85..95 => {
+                    let b = rng.below(BLOCKS);
+                    let x = c.get(&mut q, b).unwrap();
+                    assert_eq!(c.data(&x), &latest[b as usize][..], "seed {seed} step {step} get {b}");
+                    c.release(x);
+                }
+                _ => {
+                    c.sync(&mut q).unwrap();
+                    assert_eq!(c.dirty_count(), 0);
+                    for (b, want) in latest.iter().enumerate() {
+                        assert_eq!(
+                            &q.device().durable[b * BS..(b + 1) * BS],
+                            &want[..],
+                            "seed {seed} step {step} durable {b}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

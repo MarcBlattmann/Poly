@@ -491,6 +491,12 @@ fn termination(status: ExitStatus) -> Termination {
 pub fn process_exit(process: &Process, status: ExitStatus) {
     let Some(me) = user::current_process() else { return };
     let pid = process.pid;
+    if crate::profile::enabled() {
+        let cpu = crate::cputime::process(process);
+        let status =
+            alloc::format!("{status:?}, {} ms user, {} ms system", cpu.user_ns / 1_000_000, cpu.system_ns / 1_000_000);
+        crate::profile::process("exit", pid, status.as_bytes());
+    }
     // Listed first, so a parent that reaps at once finds it to let go of.
     ZOMBIES.lock().insert(pid, me);
     // Terminals: hangups and orphaned process groups (ADR 0046).
@@ -628,6 +634,10 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     }
     vfork_release(old_tid);
     vfork_release(pid);
+    if crate::profile::enabled() {
+        let line: Vec<u8> = argv_refs.iter().flat_map(|a| a.iter().copied().chain(*b" ")).collect();
+        crate::profile::process("exec", pid, &line);
+    }
     Ok(())
 }
 

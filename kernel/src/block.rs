@@ -69,8 +69,20 @@ use poly_block::{
     SubmitError, Ticket,
 };
 
-/// Bytes of buffer cache per disk.
+/// Bytes of buffer cache of a small disk, and the least any disk has.
 pub const CACHE_BYTES: usize = 64 * 1024;
+/// The most buffer cache a disk gets (ADR 0148).
+pub const CACHE_BYTES_MAX: usize = 16 * 1024 * 1024;
+/// Memory neighbouring dirty blocks are gathered in, to be written as one
+/// request (ADR 0148).
+const STAGING_BYTES: usize = 128 * 1024;
+
+/// The buffer cache a disk of `disk_bytes` gets when `free_ram` bytes of
+/// memory are free ([`poly_block::cache_size`], ADR 0148).
+pub fn cache_bytes_for(disk_bytes: u64, free_ram: u64) -> usize {
+    poly_block::cache_size(disk_bytes, free_ram, CACHE_BYTES, CACHE_BYTES_MAX)
+}
+
 /// Size of the RAM disk `ram0`.
 pub const RAM_DISK_BYTES: usize = 256 * 1024;
 /// Block size of the RAM disk: one sector, like the test disk.
@@ -155,16 +167,59 @@ pub struct Tables {
     segments: Vec<IoBuf>,
     parts: Vec<Part>,
     slots: Vec<CacheSlot>,
-    /// The cache's buffers: one heap allocation, so direct-mapped and
-    /// physically contiguous, which DMA into it needs (see `dma.rs`).
-    data: Vec<u8>,
+    /// Where neighbouring dirty blocks are gathered into one request.
+    staging: Vec<u8>,
+    /// The cache's buffers: one run of memory, direct-mapped and physically
+    /// contiguous, which DMA into it needs (see `dma.rs`).
+    data: CacheData,
+}
+
+/// The memory of a buffer cache.
+#[derive(Debug)]
+enum CacheData {
+    /// A heap allocation (at most 4 MiB, the largest the heap makes).
+    Heap(Vec<u8>),
+    /// Frames from `frames::allocate_contiguous`, kept for good.
+    Frames(&'static mut [u8]),
+}
+
+impl CacheData {
+    /// `bytes` of memory a device can reach, if there is that much.
+    fn new(bytes: usize) -> Option<CacheData> {
+        const HEAP_MAX: usize = 2 * 1024 * 1024;
+        if bytes <= HEAP_MAX {
+            return Some(CacheData::Heap(vec![0; bytes]));
+        }
+        let frames = (bytes as u64).div_ceil(4096);
+        let phys = crate::frames::allocate_contiguous(frames)?;
+        let virt = crate::arch::phys_range_to_virt(phys, frames * 4096)?;
+        // SAFETY: the frames were just allocated and nothing else uses them;
+        // the direct map covers them linearly, so they are `bytes` writable
+        // bytes at `virt`. They are never freed, so the slice is `'static`.
+        Some(CacheData::Frames(unsafe { core::slice::from_raw_parts_mut(virt as *mut u8, bytes) }))
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        match self {
+            CacheData::Heap(v) => v,
+            CacheData::Frames(f) => f,
+        }
+    }
 }
 
 impl Tables {
     /// For a device with blocks of `block_size` bytes and a cache of
     /// `cache_bytes` (at least one buffer).
     pub fn new(block_size: usize, cache_bytes: usize) -> Tables {
-        let buffers = (cache_bytes / block_size).max(1);
+        // Memory for the buffers; a smaller cache if the memory is not there.
+        let mut buffers = (cache_bytes / block_size).max(1);
+        let data = loop {
+            match CacheData::new(buffers * block_size) {
+                Some(d) => break d,
+                None if buffers > 1 => buffers = (buffers / 2).max(1),
+                None => panic!("no memory for a disk's cache"),
+            }
+        };
         let segments = DEVICE_REQUESTS * SEGMENTS_PER_REQUEST;
         Tables {
             requests: vec![RequestSlot::EMPTY; QUEUE_REQUESTS],
@@ -172,7 +227,8 @@ impl Tables {
             segments: vec![IoBuf::EMPTY; segments],
             parts: vec![Part::EMPTY; segments],
             slots: vec![CacheSlot::EMPTY; buffers],
-            data: vec![0; buffers * block_size],
+            staging: vec![0; if buffers >= 1024 { STAGING_BYTES / block_size * block_size } else { 0 }],
+            data,
         }
     }
 }
@@ -239,7 +295,9 @@ impl Disk {
     /// [`CACHE_BYTES`], polled. Everything lives as long as the kernel. Not
     /// listed: [`register`] does that.
     pub fn new(name: &'static str, what: String, dev: Device<'static>) -> Result<&'static Disk, Error> {
-        Disk::with_cache(name, what, dev, CACHE_BYTES)
+        let free = crate::frames::FRAMES.lock().as_ref().map_or(0, |f| f.free_frames() * 4096);
+        let bytes = dev.info().bytes();
+        Disk::with_cache(name, what, dev, cache_bytes_for(bytes, free))
     }
 
     fn with_cache(
@@ -250,10 +308,12 @@ impl Disk {
     ) -> Result<&'static Disk, Error> {
         let info = dev.info();
         let tables = Box::leak(Box::new(Tables::new(info.block_size as usize, cache_bytes)));
-        let Tables { requests, device, segments, parts, slots, data } = tables;
+        let Tables { requests, device, segments, parts, slots, staging, data } = tables;
+        let data = data.as_mut_slice();
         let storage = QueueStorage { requests, device, segments, parts };
         let queue = RequestQueue::new(dev, storage).map_err(Error::Queue)?;
-        let cache = BufferCache::new(slots, data, info.block_size as usize).ok_or(Error::BlockSize)?;
+        let mut cache = BufferCache::new(slots, data, info.block_size as usize).ok_or(Error::BlockSize)?;
+        cache.set_staging(staging);
         Ok(Box::leak(Box::new(Disk {
             name,
             what,
@@ -296,7 +356,7 @@ impl Disk {
     /// A handle for queueing requests and waiting for them, past the
     /// cache.
     pub fn io(&self) -> Io<'_> {
-        Io { disk: self, pending: 0 }
+        Io { disk: self, pending: 0, timing: Vec::new() }
     }
 
     pub fn read_block(&self, block: u64, buf: &mut [u8]) -> Result<(), CacheError> {
@@ -331,6 +391,12 @@ impl Disk {
 
     pub fn stats(&self) -> Stats {
         self.lock().stats()
+    }
+
+    /// The queue's counters alone (a spinlock, no waiting): for the profile
+    /// at power-off, when the cache may be locked.
+    pub fn queue_stats(&self) -> QueueStats {
+        *self.queue.lock().stats()
     }
 
     pub fn waiting(&self) -> Waiting {
@@ -430,6 +496,8 @@ pub struct Io<'d> {
     disk: &'d Disk,
     /// Tickets handed out and not yet waited for.
     pending: usize,
+    /// With the profile on: when each request was queued (ADR 0148).
+    timing: Vec<(Ticket, Op, usize, u64)>,
 }
 
 impl IoQueue for Io<'_> {
@@ -444,6 +512,9 @@ impl IoQueue for Io<'_> {
             match unsafe { self.disk.queue.lock().enqueue(op, lba, buf) } {
                 Ok(t) => {
                     self.pending += 1;
+                    if let Some(now) = crate::profile::start() {
+                        self.timing.push((t, op, buf.len, now));
+                    }
                     return Ok(t);
                 }
                 // Every request slot belongs to other users, and frees up as
@@ -461,7 +532,18 @@ impl IoQueue for Io<'_> {
 
     fn wait(&mut self, t: Ticket) -> Result<(), IoError> {
         self.pending = self.pending.saturating_sub(1);
-        self.disk.wait(t)
+        let result = self.disk.wait(t);
+        if let Some(i) = self.timing.iter().position(|e| e.0 == t) {
+            let (_, op, len, at) = self.timing.swap_remove(i);
+            let event = match op {
+                Op::Read => crate::profile::Event::DiskRead,
+                Op::Write => crate::profile::Event::DiskWrite,
+                Op::Flush => crate::profile::Event::DiskFlush,
+            };
+            crate::profile::bytes(event, len);
+            crate::profile::since(event, Some(at));
+        }
+        result
     }
 }
 
@@ -515,13 +597,7 @@ impl Cached<'_> {
         if first.checked_add(count).is_none_or(|end| end > self.info().blocks) {
             return Err(IoError::OutOfRange.into());
         }
-        if count > 1 {
-            self.cache.prefetch(&mut self.disk.io(), first, count);
-        }
-        for (block, chunk) in (first..).zip(buf.chunks_mut(bs)) {
-            self.read_block(block, chunk)?;
-        }
-        Ok(())
+        self.cache.read_blocks(&mut self.disk.io(), first, buf)
     }
 
     /// Replace block `block` with `data` (exactly one block long) in the
@@ -790,7 +866,10 @@ kernel_test! {
         }
         for d in disks() {
             let s = d.stats();
-            if s.buffers != CACHE_BYTES / d.info().block_size as usize || find(d.name()).is_none() {
+            // The cache was sized when the disk came up (memory was freer
+            // then): at least the least, at most the most.
+            let (least, most) = (CACHE_BYTES / d.info().block_size as usize, CACHE_BYTES_MAX / d.info().block_size as usize);
+            if !(least..=most).contains(&s.buffers) || find(d.name()).is_none() {
                 return Err("a disk's cache does not have the configured size");
             }
         }
@@ -821,15 +900,15 @@ kernel_test! {
             if s2.cache.hits != s1.cache.hits + 1 || s2.cache.misses != s1.cache.misses {
                 return Err("reading a cached block did not count a hit");
             }
-            // 20 blocks: read ahead together, merged into fewer requests.
+            // 20 blocks: one request for the whole run.
             let mut long = vec![0u8; 20 * bs];
             ok(name, "multi-block read", d.read(3, &mut long))?;
             if long != pattern(3, 20, bs) {
                 return Err("a multi-block read returned the wrong data");
             }
             let s3 = d.stats();
-            if s3.cache.read_ahead != s2.cache.read_ahead + 20 || s3.queue.merged == s2.queue.merged {
-                return Err("a multi-block read was not read ahead in merged requests");
+            if s3.cache.misses != s2.cache.misses + 20 || s3.queue.requests != s2.queue.requests + 1 {
+                return Err("a multi-block read of uncached blocks was not one request");
             }
             // Refused before anything reaches the device.
             let out_of_range = Err(CacheError::Io(IoError::OutOfRange));

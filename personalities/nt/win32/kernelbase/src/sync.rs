@@ -182,7 +182,7 @@ pub unsafe extern "system" fn WaitForMultipleObjects(count: u32, handles: *const
 /// that exists opens it and sets `ERROR_ALREADY_EXISTS`; otherwise the last
 /// error is cleared. A missing name is `ERROR_INVALID_PARAMETER`-free: a
 /// null or empty name makes an unnamed object.
-unsafe fn create_named(
+pub(crate) unsafe fn create_named(
     name: *const u16,
     security: *const u8,
     create: impl FnOnce(*mut Handle, *const ObjectAttributes) -> NtStatus,

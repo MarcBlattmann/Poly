@@ -123,6 +123,14 @@ pub trait PageSource: Send + Sync {
         None
     }
 
+    /// The page-cache pages among the `count` from `offset` (a multiple of
+    /// the page size) on that the cache holds now, with their offsets;
+    /// nothing is read and nothing blocks (fault-around maps the neighbours
+    /// of a faulting page that are there already).
+    fn peek_cached_pages(&self, _offset: u64, _count: u64) -> Vec<(u64, CachedPage)> {
+        Vec::new()
+    }
+
     /// A number that names the object behind the source whichever
     /// `PageSource` value maps it (a file: its device and inode), for
     /// shared futex keys; `None` (the default): the value itself names it.
@@ -242,6 +250,15 @@ impl FileRef {
     /// the end of the file, where the cache's page is zero anyway). `Err`
     /// for a page past the end of the file (`SIGBUS`) or a failed read.
     fn cached_page(&self, offset: u64) -> Option<Result<CachedPage, FaultError>> {
+        // A page the cache holds needs no look at the file's size (a page
+        // past its end is never cached): asking costs a file system
+        // attribute read, which takes the volume's lock, and every fault
+        // on a program's code would wait for whoever holds it (ADR 0148).
+        if offset.saturating_add(PAGE_SIZE) <= self.limit
+            && let Some((_, page)) = self.source.peek_cached_pages(offset, 1).pop()
+        {
+            return Some(Ok(page));
+        }
         let len = self.source.len();
         if offset >= len {
             return Some(Err(FaultError::Bus));
@@ -250,6 +267,19 @@ impl FileRef {
             return None;
         }
         Some(self.source.cached_page(offset)?.map_err(|_| FaultError::Bus))
+    }
+
+    /// [`PageSource::peek_cached_pages`] for the pages that lie wholly below
+    /// the limit and inside the file.
+    fn peek_cached(&self, offset: u64, count: u64) -> Vec<(u64, CachedPage)> {
+        // Cached pages lie inside the file; only those that reach past the
+        // limit need its size.
+        let mut pages = self.source.peek_cached_pages(offset, count);
+        if pages.iter().any(|(at, _)| at.saturating_add(PAGE_SIZE) > self.limit) {
+            let len = self.source.len();
+            pages.retain(|(at, _)| *at < len && self.limit >= (*at + PAGE_SIZE).min(len));
+        }
+        pages
     }
 
     /// The shared frame for the page at `offset`, for a source that has
@@ -265,6 +295,13 @@ impl FileRef {
     /// beyond the end of the file is `SIGBUS`, as mmap(2) documents; the
     /// part of the last page past the end, or past the limit, stays zero.
     fn fill(&self, offset: u64, page: &mut [u8; PAGE_SIZE as usize]) -> Result<(), FaultError> {
+        // From the page cache if it holds the page (see `cached_page`).
+        if offset.saturating_add(PAGE_SIZE) <= self.limit
+            && let Some((_, cached)) = self.source.peek_cached_pages(offset, 1).pop()
+        {
+            cached.read(0, page);
+            return Ok(());
+        }
         let len = self.source.len();
         if offset >= len {
             return Err(FaultError::Bus);
@@ -686,8 +723,16 @@ impl Memory {
     /// fault handlers through [`user::page_fault`](super::page_fault), and
     /// by [`read`](Self::read) and [`write`](Self::write).
     pub fn fault(&self, addr: u64, access: Access) -> Result<(), FaultError> {
+        let waited = crate::profile::start();
+        let before = waited.map(|_| crate::profile::enter(crate::profile::IN_FAULT_LOCK));
         let mut inner = self.inner.lock();
-        self.resolve(&mut inner, addr, access, false)
+        crate::profile::since(crate::profile::Event::FaultLock, waited);
+        waited.map(|_| crate::profile::enter(crate::profile::IN_FAULT));
+        let result = self.resolve(&mut inner, addr, access, false);
+        if let Some(before) = before {
+            crate::profile::leave(before);
+        }
+        result
     }
 
     fn resolve(&self, inner: &mut Inner, addr: u64, access: Access, forced: bool) -> Result<(), FaultError> {
@@ -707,6 +752,21 @@ impl Memory {
         let state = if present { PageState::Present { refs } } else { PageState::Absent };
         let shared = inner.map.find(addr).is_some_and(|v| v.is_shared());
         let action = if forced { inner.map.fault_forced(addr, state) } else { inner.map.fault(addr, access, state) };
+        let (timer, event) = (crate::profile::start(), fault_event(&action));
+        let result = self.resolve_action(inner, action, access, shared);
+        if let Some(event) = event {
+            crate::profile::since(event, timer);
+        }
+        result
+    }
+
+    fn resolve_action(
+        &self,
+        inner: &mut Inner,
+        action: FaultAction<FileRef>,
+        access: Access,
+        shared: bool,
+    ) -> Result<(), FaultError> {
         match action {
             FaultAction::ZeroFill { page, prot } => {
                 let frame = UserFrame::zeroed().ok_or(FaultError::OutOfMemory)?;
@@ -716,15 +776,32 @@ impl Memory {
                 if !private_copy && let Some(frame) = file.shared_frame(offset) {
                     return self.map_shared(inner, page, frame?, prot);
                 }
-                if !private_copy && let Some(cached) = file.cached_page(offset) {
-                    return self.map_cached(inner, page, cached?, prot, shared, access);
+                let fill = crate::profile::start();
+                fill.map(|_| crate::profile::enter(crate::profile::IN_FAULT_CACHE));
+                let cached = if private_copy { None } else { file.cached_page(offset) };
+                fill.map(|_| crate::profile::enter(crate::profile::IN_FAULT));
+                crate::profile::since(crate::profile::Event::FaultFill, fill);
+                if let Some(cached) = cached {
+                    let timer = crate::profile::start();
+                    let mapped = self.map_cached(inner, page, cached?, prot, shared, access);
+                    crate::profile::since(crate::profile::Event::FaultMap, timer);
+                    if mapped.is_ok() {
+                        let timer = crate::profile::start();
+                        self.fault_around(inner, page, &file, offset, prot, shared);
+                        crate::profile::since(crate::profile::Event::FaultAround, timer);
+                    }
+                    return mapped;
                 }
                 // A frame of its own: a copy of the file's page. `prot`
                 // lacks write for a read of a private region; a later write
                 // only needs its permissions updated (the frame has one
                 // user).
                 let mut frame = UserFrame::zeroed().ok_or(FaultError::OutOfMemory)?;
-                file.fill(offset, frame.bytes_mut())?;
+                let copy = crate::profile::start();
+                copy.map(|_| crate::profile::enter(crate::profile::IN_FAULT_COPY));
+                let filled = file.fill(offset, frame.bytes_mut());
+                copy.map(|_| crate::profile::enter(crate::profile::IN_FAULT));
+                filled?;
                 self.space.map_owned(page, frame, page_prot(prot)).map_err(map_error)
             }
             FaultAction::SetPermissions { page, prot } if inner.shared.contains_key(&page) => {
@@ -755,6 +832,43 @@ impl Memory {
             }
             FaultAction::Segv(code) => Err(FaultError::Segv(code)),
             FaultAction::UserFault { page, uffd } => Err(FaultError::UserFault { uffd, page }),
+        }
+    }
+
+    /// Fault-around (ADR 0148): a page of a file mapping was just mapped, so
+    /// map the pages around it too (within the aligned window of
+    /// [`FAULT_AROUND_PAGES`] pages, the region and the file) that the page
+    /// cache holds already and that nothing maps yet, read-only: the next
+    /// touches of a program's code and data then do not fault. No file is
+    /// read for it, so it costs a few lookups and the page table entries.
+    fn fault_around(&self, inner: &mut Inner, page: u64, file: &FileRef, offset: u64, prot: Prot, shared: bool) {
+        let Some((start, end, plain)) = inner.map.find(page).map(|v| (v.start, v.end, v.uffd == 0)) else { return };
+        if !plain {
+            return;
+        }
+        let window = FAULT_AROUND_PAGES * PAGE_SIZE;
+        let from = (page & !(window - 1)).max(start);
+        let to = ((page & !(window - 1)) + window).min(end);
+        // The file offset of `from` (the window starts at or below `page`,
+        // inside the region, so `page - from` does not exceed `offset`).
+        let first = offset - (page - from);
+        let pages = file.peek_cached(first, (to - from) / PAGE_SIZE);
+        if pages.is_empty() {
+            return;
+        }
+        let mapped: alloc::collections::BTreeSet<u64> =
+            self.space.mapped_pages(from, to).into_iter().map(|(at, _)| at).collect();
+        for (at_offset, cached) in pages {
+            let at = from + (at_offset - first);
+            if at != page
+                && !mapped.contains(&at)
+                && !inner.cached.contains_key(&at)
+                && !inner.parked.contains_key(&at)
+                && !inner.shared.contains_key(&at)
+            {
+                // Best effort: a page that cannot be mapped faults on its own.
+                let _ = self.map_cached(inner, at, cached, prot, shared, Access::Read);
+            }
         }
     }
 
@@ -850,6 +964,23 @@ impl Memory {
             drop(inside);
         }
     }
+}
+
+/// Pages a fault on a file mapping maps around the faulting one when the page
+/// cache holds them (an aligned window of 64 KiB).
+const FAULT_AROUND_PAGES: u64 = 16;
+
+/// What the profile calls a page fault resolved by `action` (ADR 0148).
+fn fault_event<F>(action: &FaultAction<F>) -> Option<crate::profile::Event> {
+    use crate::profile::Event;
+    Some(match action {
+        FaultAction::ZeroFill { .. } => Event::FaultZero,
+        FaultAction::ReadFile { private_copy: true, .. } => Event::FaultFileCopy,
+        FaultAction::ReadFile { .. } => Event::FaultCached,
+        FaultAction::CopyOnWrite { .. } => Event::FaultCow,
+        FaultAction::SetPermissions { .. } => Event::FaultPerm,
+        FaultAction::Segv(_) | FaultAction::UserFault { .. } => return None,
+    })
 }
 
 impl Drop for Memory {
