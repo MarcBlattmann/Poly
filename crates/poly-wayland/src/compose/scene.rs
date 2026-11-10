@@ -40,6 +40,60 @@ impl View {
     pub fn is_identity(&self) -> bool {
         *self == View::default()
     }
+
+    /// The buffer pixels that show rectangle `r` of the surface (surface
+    /// coordinates, as `wl_surface.damage` gives them), for a buffer of
+    /// `width` × `height` pixels at buffer scale `scale`: the viewport's
+    /// scaling and cropping undone, then the buffer scale, then the
+    /// transform (wayland.xml and viewporter.xml: a buffer is transformed,
+    /// scaled, cropped to the source and scaled to the destination, in that
+    /// order). Rounded outwards and clipped to the buffer, so a rectangle
+    /// larger than the surface gives all of the buffer that is shown.
+    ///
+    /// With a viewport the buffer scale alone is not the answer: a client
+    /// drawing for a 2× output with `wp_fractional_scale_v1` attaches a
+    /// buffer of scale 1 twice the destination's size, and surface
+    /// rectangle 0,0 1000×600 is then all 2000×1200 buffer pixels.
+    pub fn buffer_rect(&self, r: Rect, width: i32, height: i32, scale: i32) -> Rect {
+        let s = i64::from(scale.max(1));
+        let (tw, th) = if self.transform & 1 != 0 { (height, width) } else { (width, height) };
+        if tw <= 0 || th <= 0 || r.width <= 0 || r.height <= 0 {
+            return Rect::default();
+        }
+        let (tw, th) = (i64::from(tw), i64::from(th));
+        // The source in 1/256 logical pixels, and the surface's size.
+        let (sx, sy, sw, sh) = match self.source {
+            Some((x, y, w, h)) => (i64::from(x), i64::from(y), i64::from(w), i64::from(h)),
+            None => (0, 0, tw * 256 / s, th * 256 / s),
+        };
+        let (dw, dh) = match self.destination {
+            Some((w, h)) => (i64::from(w), i64::from(h)),
+            None => (sw >> 8, sh >> 8),
+        };
+        if sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0 {
+            return Rect::default();
+        }
+        // One axis: surface edges `a..b` of a surface `d` long showing
+        // `len` 1/256 pixels from `from`, as pixel edges of `t` pixels.
+        let axis = |a: i64, b: i64, d: i64, from: i64, len: i64, t: i64| {
+            let (a, b) = (a.clamp(0, d), b.clamp(0, d));
+            let den = d * 256;
+            let low = ((from * d + a * len) * s).div_euclid(den);
+            let high = ((from * d + b * len) * s + den - 1).div_euclid(den);
+            (low.clamp(0, t), high.clamp(0, t))
+        };
+        let (x, y) = (i64::from(r.x), i64::from(r.y));
+        let (u0, u1) = axis(x, x + i64::from(r.width), dw, sx, sw, tw);
+        let (v0, v1) = axis(y, y + i64::from(r.height), dh, sy, sh, th);
+        if u0 >= u1 || v0 >= v1 {
+            return Rect::default();
+        }
+        // The transform undone: the two corner pixels, wherever they land.
+        let (tw, th) = (tw as i32, th as i32);
+        let (ax, ay) = buffer_point(self.transform, u0 as i32, v0 as i32, tw, th);
+        let (bx, by) = buffer_point(self.transform, u1 as i32 - 1, v1 as i32 - 1, tw, th);
+        Rect::from_edges(ax.min(bx), ay.min(by), ax.max(bx) + 1, ay.max(by) + 1)
+    }
 }
 
 /// Where surface pixel (`u`, `v`) of a `w` × `h` surface (both in buffer
