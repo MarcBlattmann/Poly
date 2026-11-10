@@ -388,7 +388,7 @@ pub fn mounts(entries: &[MountEntry]) -> Vec<u8> {
         // One list for the mount and its file system: read-only when
         // either is.
         let mut opts = mount_options(m);
-        if m.sb_read_only && !m.read_only {
+        if m.sb_made_read_only && !m.read_only {
             opts.replace_range(0..2, "ro");
         }
         if !m.sb_options.is_empty() {

@@ -232,6 +232,7 @@ impl ProcSource for Fake {
                 read_only: true,
                 no_exec: true,
                 sb_read_only: true,
+                sb_made_read_only: true,
                 ..Default::default()
             },
         ]

@@ -218,6 +218,10 @@ pub struct MountEntry {
     pub sb_options: Vec<u8>,
     /// The file system as a whole is read-only.
     pub sb_read_only: bool,
+    /// It was made so (mounted or remounted read-only, or its volume is),
+    /// as opposed to a file system that never takes changes (procfs):
+    /// `/proc/<pid>/mounts` then shows the mount as `ro`.
+    pub sb_made_read_only: bool,
     /// Mount propagation: the peer group (0: none), the group it is a slave
     /// of (0: none), and whether it is unbindable.
     pub peer_group: u32,

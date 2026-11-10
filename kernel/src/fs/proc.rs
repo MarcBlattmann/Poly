@@ -566,11 +566,11 @@ impl ProcSource for KernelProc {
             .filter_map(|m| {
                 let at = vfs().mount_path(&ctx, m.id).ok()?;
                 let mount = vfs().mount_by_id(m.id);
-                let sb_read_only = mount.as_ref().is_some_and(|mm| {
-                    mm.sb_read_only()
-                        || mm.fs().info().read_only
-                        || super::disk::mount_of(m.id).is_some_and(|d| d.read_only)
-                });
+                let sb_made_read_only = mount.as_ref().is_some_and(|mm| mm.sb_read_only());
+                let sb_read_only = sb_made_read_only
+                    || mount.as_ref().is_some_and(|mm| {
+                        mm.fs().info().read_only || super::disk::mount_of(m.id).is_some_and(|d| d.read_only)
+                    });
                 Some(MountEntry {
                     id: m.id,
                     parent: m.parent.map_or(m.id, |(p, _)| p),
@@ -588,6 +588,7 @@ impl ProcSource for KernelProc {
                     attrs: mount.as_ref().map_or(0, |mm| mm.attrs()),
                     sb_options: mount.as_ref().map_or_else(Vec::new, |mm| mm.sb_options()),
                     sb_read_only,
+                    sb_made_read_only,
                     peer_group: mount.as_ref().map_or(0, |mm| mm.peer_group()),
                     master_group: mount.as_ref().map_or(0, |mm| mm.master_group()),
                     unbindable: mount.as_ref().is_some_and(|mm| mm.is_unbindable()),
