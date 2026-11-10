@@ -127,6 +127,68 @@ exports move rectangle lists between `user32` and region objects.
   DefWindowProc tracks the non-client area it saw a `WM_NCMOUSEMOVE` in:
   the move into the client area is followed by `WM_NCMOUSELEAVE`.
 
+### 7. Rules of the sharpened sheets (2026-11-10)
+
+The sheets of twelve entries were sharpened after their held-out tests
+failed (BeginPaint, GetUpdateRect, ShowWindow, GetActiveWindow, GetFocus,
+GetForegroundWindow, EnableWindow, SetCapture, GetSystemMetrics,
+MonitorFromWindow, CreateRectRgn, DeleteObject). What that settled:
+
+- **One rule for the flags of a position change** (`user::swp`).
+  `WM_WINDOWPOSCHANGING` carries what was asked. A call without
+  `SWP_NOZORDER` asks for a place in the z order (the top, unless said
+  otherwise). `WM_WINDOWPOSCHANGED` has the same flags, less
+  `SWP_SHOWWINDOW` for a window that was visible, plus `SWP_NOZORDER` when
+  the window was already where the call puts it; `WM_NCCALCSIZE`'s flags are
+  those with 0x1800. The special cases of the first version are gone.
+- **The z order knows other processes.** A top-level window can lie below
+  the windows of other processes (`wm::Window::below_others`): minimizing
+  the active window puts it at the bottom, the keeper taking the foreground
+  puts every window of ours below it, raising a window brings it back, and
+  each of these is a move. `SetFocus` on a child of the active window
+  leaves that window on top.
+- **ShowWindow is one function for both sessions** (`user::show_window`,
+  `minimize`, `maximize`, `restore`). Commands that minimize, maximize or
+  restore send no `WM_SHOWWINDOW`; the `WM_SIZE` / `WM_MOVE` held back at
+  creation follow the first call that sends one. A maximized window is
+  fitted to the work area after `WM_WINDOWPOSCHANGING`, only if it has a
+  maximize box. A minimized window is parked at -32000,-32000 if it has a
+  taskbar button (`metrics::has_taskbar_button`), else in the bottom-left
+  slot. A window minimized while maximized is restored to maximized.
+- **Session 0 has an active window per thread** and nothing else: a window
+  that takes the activation from another is asked to come to the top
+  (`WM_WINDOWPOSCHANGING` 0x13), the first one is not; a hidden window stays
+  active (`focus::activate_local`).
+- **Who takes the activation** when the active window is hidden, destroyed
+  or minimized (`focus::successor`): its owner; else the window that was
+  active before it (`Request::ActivationHistory`, a history that starts
+  anew when the thread loses the activation); else, only if there was such
+  a window, the topmost one that can; a minimized window hands it to the
+  topmost window from its own z-order band down. Otherwise the activation
+  leaves the thread: its capture is cancelled, `WM_ACTIVATEAPP` goes to its
+  windows in z order, and the foreground goes to a window of another thread
+  of the process that has no active window, else to the other process.
+- **The foreground at creation.** A window being created takes the
+  foreground from another process only if its thread may
+  (`wm::input::may_take_foreground`): the process has it, never had it, or
+  the thread destroyed its foreground window. Otherwise it is the active
+  window of its thread without the foreground. `ShowWindow` of a hidden
+  window and `SetForegroundWindow` take it.
+- **Painting what cannot be seen.** `rcPaint` is cut to the part of the
+  client area on the screen; a window of which nothing can be seen
+  (minimized, off the screen) gets no `WM_ERASEBKGND`. Moving a window
+  makes invalid what was off the screen and is on it now. A window's
+  consecutive paints see the same `HDC` value (`poly_gdi`: the DC a window
+  released last is parked for it).
+- **Window surfaces are kept in bands of rows** (`surfaces::BAND_BYTES`):
+  a maximized window's client area on a 1920x1080 screen is more than one
+  kernel allocation may be.
+- **GDI objects.** A deleted object's handle keeps answering
+  `GetObjectType` until its slot comes round (`gdi::DEAD_SLOTS`); a brush or
+  pen deleted while selected draws in its own colour only if the DC drew
+  with it before or saved its state with it, else as the default white
+  brush / black pen.
+
 ## Consequences
 
 - The interactive session is a kernel argument; the two oracle sessions'

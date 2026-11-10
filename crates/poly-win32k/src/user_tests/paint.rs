@@ -77,14 +77,15 @@ fn begin_paint_reports_what_is_pending_and_validates() {
         paint::begin_paint(e, f, &mut paint::PaintStruct::default());
         assert_eq!(take_log(), ["F WM_NCPAINT w=0x1", "F WM_ERASEBKGND"]);
         // A hidden window: a DC, rcPaint empty, no message; fErase is the
-        // window's state (BeginPaint.yaml `hidden`): 1 for a window that was
-        // never erased, 0 after an erase that succeeded.
+        // window's state (BeginPaint.yaml `hidden`): 0 for a window that was
+        // never erased (EndPaint.yaml ep_outside), 1 after an erase that
+        // returned 0.
         let hid = create(e, 'H', WS_EX_NOACTIVATE, "Bp", WS_POPUP, 400, 0, 100, 80, 0, 0);
         take_log();
         let mut psh = paint::PaintStruct::default();
         let dc = paint::begin_paint(e, hid, &mut psh);
         assert_ne!(dc, 0);
-        assert_eq!((psh.erase, psh.paint), (1, CRect::default()));
+        assert_eq!((psh.erase, psh.paint), (0, CRect::default()));
         assert_eq!(take_log(), Vec::<String>::new());
         // A made-up handle: NULL, ERROR_INVALID_WINDOW_HANDLE, the PAINTSTRUCT zeroed.
         for bad in [0, 0x1234_5678] {

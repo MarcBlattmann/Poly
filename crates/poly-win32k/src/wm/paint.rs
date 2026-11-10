@@ -50,13 +50,14 @@ pub(super) struct Paint {
     /// RDW_INTERNALPAINT: a `WM_PAINT` with nothing invalid.
     pub internal: bool,
     /// What BeginPaint reports as fErase when no erase is pending: the last
-    /// erase's outcome (1 when the procedure returned 0), 1 at first.
+    /// erase's outcome (1 when the procedure returned 0); 0 for a window
+    /// that was never erased (EndPaint.yaml ep_outside: a hidden window).
     pub ferase: bool,
 }
 
 impl Default for Paint {
     fn default() -> Self {
-        Paint { upd: Rgn::new(), erase: false, frame: false, frame_whole: false, internal: false, ferase: true }
+        Paint { upd: Rgn::new(), erase: false, frame: false, frame_whole: false, internal: false, ferase: false }
     }
 }
 
