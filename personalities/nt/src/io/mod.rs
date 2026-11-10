@@ -199,6 +199,9 @@ pub enum Target {
     /// The root of the named pipe device (`\??\pipe\`), opened for
     /// `FSCTL_PIPE_WAIT`.
     PipeRoot,
+    /// The named pipe device itself (`\Device\NamedPipe` without a final
+    /// backslash): the same uses as the root, but it has no file name.
+    PipeDevice,
 }
 
 /// The kernel's data for one file object.
@@ -603,7 +606,7 @@ impl IoState {
         }
         match rec.target {
             Target::NamedPipe(end) => self.np_closed(cookie, end),
-            Target::PipeRoot => {}
+            Target::PipeRoot | Target::PipeDevice => {}
             Target::Console(t) => self.console_file_closed(cookie, t),
             Target::Host(_) => {}
             Target::Socket(e) => crate::afd::services::endpoint_closed(e),

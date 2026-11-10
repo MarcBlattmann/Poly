@@ -127,7 +127,7 @@ pub fn fs_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
         let sync = rec.is_sync();
         let has_port = rec.port.is_some();
         match rec.target {
-            Target::PipeRoot if code == FSCTL_PIPE_WAIT => {
+            Target::PipeRoot | Target::PipeDevice if code == FSCTL_PIPE_WAIT => {
                 // FILE_PIPE_WAIT_FOR_BUFFER (`ntifs.h`): Timeout, NameLength,
                 // TimeoutSpecified, Name.
                 if data.len() < 16 {
