@@ -33,6 +33,7 @@ use alloc::vec::Vec;
 const INHERITED_ACE: u32 = 0x10;
 
 /// What the call was given, the old descriptor already read.
+#[derive(Debug)]
 pub struct Request<'a> {
     pub owner: Option<&'a Trustee>,
     pub group: Option<&'a Trustee>,
