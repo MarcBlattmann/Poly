@@ -100,6 +100,18 @@ impl Startup {
     }
 }
 
+/// Write `line` (whole, with its newline) to the compositor's control pipe:
+/// a request of the desktop, like `open <id>` for an app of its catalog
+/// (ADR 0175). `false` if there is no pipe or the line did not go out (the
+/// pipe is full: nothing was asked).
+pub fn ask(line: &str) -> bool {
+    let Some(pipe) = poly_rt::env::var("POLY_COMPOSITOR_CONTROL").filter(|p| p.starts_with('/')) else {
+        return false;
+    };
+    poly_rt::fs::File::open_with(pipe, poly_rt::abi::open::WRITE | poly_rt::abi::open::NONBLOCK, 0)
+        .is_ok_and(|f| f.write_all(line.as_bytes()).is_ok())
+}
+
 /// Whether `var` (`NAME=value`) is one of [`TOKEN_VARS`]: an app that was
 /// itself launched must not pass its own token on.
 pub fn is_token_var(var: &str) -> bool {

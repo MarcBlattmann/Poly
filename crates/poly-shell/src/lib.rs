@@ -22,7 +22,8 @@
 //!   (`poly-font`) and shapes; [`icons`]: Lucide's icons; [`appicon`]: the
 //!   icons of installed apps (`Icon=` found in the icon theme, decoded with
 //!   `poly-png`, scaled and cached, ADR 0146); [`theme`]: the measurements
-//!   and tokens.
+//!   and tokens; [`applications`]: the Applications folder Files shows, the
+//!   launcher's catalog as a folder (ADR 0175).
 //!
 //! `no_std` with `alloc` and host-tested: the compositor
 //! (`userland/poly-compositor`) owns the I/O (reading desktop files and
@@ -35,6 +36,7 @@ extern crate alloc;
 extern crate std;
 
 pub mod appicon;
+pub mod applications;
 pub mod apps;
 pub mod chrome;
 pub mod clock;

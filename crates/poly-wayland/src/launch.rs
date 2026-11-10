@@ -300,6 +300,10 @@ pub enum Control {
     Pid { token: String, pid: u32 },
     /// `cancel <token>`: starting it failed.
     Cancel { token: String },
+    /// `open <id>`: start the app the desktop's catalog has under this ID (a
+    /// desktop file's name, `poly:<name>` for one of Poly's own), exactly
+    /// as the launcher starts it (ADR 0175: Files' Applications folder).
+    Open { id: String },
 }
 
 impl Control {
@@ -321,6 +325,7 @@ impl Control {
                 valid_token(token).then(|| Control::Pid { token: token.into(), pid })
             }
             "cancel" => valid_token(rest).then(|| Control::Cancel { token: rest.into() }),
+            "open" => valid_app_id(rest).then(|| Control::Open { id: rest.into() }),
             _ => None,
         }
     }
@@ -331,6 +336,7 @@ impl Control {
             Control::Launch { token, name } => format!("launch {token} {name}\n"),
             Control::Pid { token, pid } => format!("pid {token} {pid}\n"),
             Control::Cancel { token } => format!("cancel {token}\n"),
+            Control::Open { id } => format!("open {id}\n"),
         }
     }
 }
@@ -339,6 +345,12 @@ impl Control {
 /// variables and on one line).
 fn valid_token(t: &str) -> bool {
     !t.is_empty() && t.len() <= 96 && t.bytes().all(|b| b.is_ascii_graphic())
+}
+
+/// An app's ID is a file name or `poly:<name>`: one line, no control
+/// characters, and nothing around it that reading the line would trim.
+fn valid_app_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 255 && id.trim() == id && !id.chars().any(char::is_control)
 }
 
 #[cfg(test)]
@@ -580,6 +592,8 @@ mod tests {
             Control::Launch { token: "poly-launch-9-1".into(), name: "Text Editor".into() },
             Control::Pid { token: "poly-launch-9-1".into(), pid: 31 },
             Control::Cancel { token: "poly-launch-9-1".into() },
+            Control::Open { id: "poly:Settings".into() },
+            Control::Open { id: "org.example.Text Editor.desktop".into() },
         ];
         for c in lines {
             assert_eq!(Control::parse(&c.line()), Some(c));
@@ -589,5 +603,7 @@ mod tests {
         assert_eq!(Control::parse("pid tok notanumber"), None);
         assert_eq!(Control::parse("launch  bad\u{1}tok name"), None);
         assert_eq!(Control::parse("frobnicate x y"), None);
+        assert_eq!(Control::parse("open "), None);
+        assert_eq!(Control::parse("open a\u{7}b"), None);
     }
 }
