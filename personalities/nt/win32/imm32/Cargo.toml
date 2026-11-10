@@ -1,0 +1,19 @@
+[package]
+name = "imm32"
+description = "Our imm32.dll (ADR 0172): input contexts without any IME"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "imm32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-gui = { path = "../gui" }
+poly-win32k = { path = "../../../../crates/poly-win32k" }
+
+[lints]
+workspace = true

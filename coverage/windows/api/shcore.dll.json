@@ -16,7 +16,7 @@
 {"symbol":"GUIDFromStringW","src":["wine-spec"]},
 {"symbol":"GetCurrentProcessExplicitAppUserModelID","src":["wine-spec"],"seeds":["wine:shcore/tests/shcore.c:test_AppUserModelID"]},
 {"symbol":"GetCurrentWindow","src":["wine-spec"]},
-{"symbol":"GetDpiForMonitor","status":"claimed","claimed_by":"spec-win-gui-c","src":["wine-spec"]},
+{"symbol":"GetDpiForMonitor","status":"green","tests_visible":3,"tests_held_out":2,"src":["wine-spec"]},
 {"symbol":"GetDpiForShellUIComponent","src":["wine-spec"]},
 {"symbol":"GetFeatureEnabledState","src":["wine-spec"]},
 {"symbol":"GetOverrideScaleFactorForWindow","src":["wine-spec"]},

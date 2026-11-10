@@ -159,6 +159,15 @@ crate::wire_struct! {
         pub size_move_pending: bool,
         pub desktop: bool,
         pub message_only: bool,
+        /// DPI awareness the window was created under (`guic::AWARE_*`).
+        pub dpi: u8,
+        /// Between `CreateWindow` and `FinishCreate`.
+        pub creating: bool,
+        /// The input-context association (`ime::Assoc::code`).
+        pub ime: u32,
+        /// Not a layered window, or one that has had its attributes (or
+        /// `UpdateLayeredWindow`) set: it paints.
+        pub lay_ready: bool,
     }
 }
 
@@ -305,6 +314,33 @@ crate::wire_enum! {
         /// name, the same for every caller of the session and the same
         /// number as a class of that name has as its atom; an `Atom`.
         70 => RegisterMessage { name: Vec<u16> },
+        /// A clipboard operation (ADR 0172): a `Clip`.
+        100 => Clip { op: crate::clip::ClipOp },
+        /// DPI awareness (`awareness` is `guic::AWARE_*`): without `set` a
+        /// `Value` with the calling thread's; with `set` for the process an
+        /// `Ok` (once) or for the thread a `Value` with the previous one.
+        101 => Dpi { set: bool, process: bool, awareness: u8 },
+        /// Layered attributes: `op` 0 set (a `Value` for the first set, else `Ok`), 1 get
+        /// (a `Value`: key, alpha << 32, flags << 40), 2 whether `UpdateLayeredWindow`
+        /// may be used (not after a set), 3 an `UpdateLayeredWindow` succeeded: `key` is
+        /// its colour key, `alpha` the blend's constant alpha, `flags` the `ULW_*` flags
+        /// with 0x100 for `AC_SRC_ALPHA`.
+        103 => Layered { hwnd: u32, op: u8, key: u32, alpha: u8, flags: u32 },
+        /// An input-context operation (ADR 0172): an `Ime`.
+        105 => Ime { op: crate::ime::ImeOp },
+        /// Set a window's input-context association (`ime::Assoc::code`): a `Value` with the previous code.
+        106 => ImeAssoc { hwnd: u32, code: u32 },
+        /// The system cursor (`IDC_*`) to show over a top-level window's surface.
+        107 => CursorShape { hwnd: u32, idc: u16 },
+        /// What the screen shows at a point: a `Value`, the `COLORREF`.
+        108 => ScreenPixel { x: i32, y: i32 },
+        /// `SetWindowRgn`: the window's region as left, top, right, bottom
+        /// quadruples in window coordinates (`set` false: none): an `Ok`.
+        109 => WindowRgn { hwnd: u32, set: bool, rects: Vec<u32> },
+        /// The content `UpdateLayeredWindow` gave a layered window: `width` x
+        /// `height` pixels (`B, G, R, A`, top-down) from the window's top-left
+        /// (`width` 0: none): an `Ok`.
+        110 => LayeredContent { hwnd: u32, width: u32, height: u32, pixels: Vec<u8> },
     }
 }
 
@@ -339,6 +375,8 @@ crate::wire_enum! {
         22 => Windows { hwnds: Vec<u32> },
         23 => Input { active: u32, focus: u32, capture: u32, foreground: u32, fg_mine: bool },
         24 => Keys { keys: Vec<u8> },
+        100 => Clip { res: crate::clip::ClipRes },
+        105 => Ime { res: crate::ime::ImeRes },
     }
 }
 
@@ -375,6 +413,18 @@ mod tests {
         assert_eq!(decode::<Request>(&encode(&r)), Some(r));
         let p = Reply::Window { info: WinInfo { hwnd: 0x10010, window: Rect::new(1, 2, 3, 4), ..WinInfo::default() } };
         assert_eq!(decode::<Reply>(&encode(&p)), Some(p));
+        for r in [
+            Request::Ime { op: crate::ime::ImeOp::Create {} },
+            Request::Clip { op: crate::clip::ClipOp::Set { format: 13, handle: 5, data: Some(vec![1, 2]) } },
+            Request::Dpi { set: true, process: false, awareness: 2 },
+            Request::Layered { hwnd: 1, op: 0, key: 2, alpha: 3, flags: 3 },
+            Request::WindowRgn { hwnd: 1, set: true, rects: vec![1, 2, 3, 4] },
+            Request::LayeredContent { hwnd: 1, width: 1, height: 1, pixels: vec![1, 2, 3, 4] },
+        ] {
+            assert_eq!(decode::<Request>(&encode(&r)), Some(r));
+        }
+        let r = Reply::Ime { res: crate::ime::ImeRes::Val { value: 7 } };
+        assert_eq!(decode::<Reply>(&encode(&r)), Some(r));
         let e = Reply::Empty { next_timer_ms: Some(5) };
         assert_eq!(decode::<Reply>(&encode(&e)), Some(e));
     }

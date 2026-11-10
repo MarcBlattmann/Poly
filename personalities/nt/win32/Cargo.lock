@@ -112,6 +112,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dwmapi"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-gui",
+ "poly-win32-rt",
+ "poly-win32k",
+]
+
+[[package]]
 name = "dwrite"
 version = "0.0.1"
 dependencies = [
@@ -136,6 +145,15 @@ name = "httptest"
 version = "0.0.1"
 dependencies = [
  "poly-win32-rt",
+]
+
+[[package]]
+name = "imm32"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-gui",
+ "poly-win32-rt",
+ "poly-win32k",
 ]
 
 [[package]]
@@ -367,6 +385,9 @@ version = "0.0.1"
 [[package]]
 name = "poly-win32k"
 version = "0.0.1"
+dependencies = [
+ "poly-nls",
+]
 
 [[package]]
 name = "poly-wincrypt"
@@ -400,6 +421,14 @@ version = "0.0.1"
 dependencies = [
  "poly-netapi",
  "poly-win32-netrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "shcore"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-gui",
  "poly-win32-rt",
 ]
 

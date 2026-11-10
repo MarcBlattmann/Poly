@@ -1,0 +1,19 @@
+[package]
+name = "dwmapi"
+description = "Our dwmapi.dll (ADR 0172): the desktop window manager calls of a browser window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "dwmapi"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-gui = { path = "../gui" }
+poly-win32k = { path = "../../../../crates/poly-win32k" }
+
+[lints]
+workspace = true

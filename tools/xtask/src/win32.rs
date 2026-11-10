@@ -81,6 +81,10 @@ pub const OUTPUTS: &[&str] = &[
     "b35test.exe",
     // ADR 0170.
     "dwrite.dll",
+    // ADR 0172.
+    "shcore.dll",
+    "dwmapi.dll",
+    "imm32.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -201,6 +205,9 @@ fn cache_key(root: &Path) -> Result<u64> {
             "crates/poly-iphlp",
             "crates/poly-netapi",
             "personalities/nt/win32/dwrite",
+            "personalities/nt/win32/shcore",
+            "personalities/nt/win32/dwmapi",
+            "personalities/nt/win32/imm32",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -343,13 +350,18 @@ fn verify(dir: &Path) -> Result {
 /// win32k service table, each export the system-call stub of its number.
 fn verify_gui(dir: &Path) -> Result {
     use poly_pe::ExportTarget;
-    use poly_win32k::exports::{GDI32_EXPORTS, GDI32_STUBS, USER32_EXPORTS, USER32_STUBS};
+    use poly_win32k::exports::{
+        DWMAPI_EXPORTS, GDI32_EXPORTS, GDI32_STUBS, IMM32_EXPORTS, SHCORE_EXPORTS, USER32_EXPORTS, USER32_STUBS,
+    };
     use poly_win32k::services::{WIN32K_SERVICES, stub_bytes};
     for (file, names) in [
         ("user32.dll", USER32_STUBS),
         ("user32.dll", USER32_EXPORTS),
         ("gdi32.dll", GDI32_STUBS),
         ("gdi32.dll", GDI32_EXPORTS),
+        ("shcore.dll", SHCORE_EXPORTS),
+        ("dwmapi.dll", DWMAPI_EXPORTS),
+        ("imm32.dll", IMM32_EXPORTS),
     ] {
         let bytes = read(&dir.join(file))?;
         let dll = parse(&bytes)?;

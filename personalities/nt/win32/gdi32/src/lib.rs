@@ -550,6 +550,69 @@ pub unsafe extern "system" fn CreateRectRgnIndirect(rect: *const i32) -> H {
     CreateRectRgn(r.left, r.top, r.right, r.bottom)
 }
 
+/// `CreateEllipticRgn`: the ellipse inscribed in the rectangle, one pixel
+/// narrower and shorter than the bounds given (GDI's regions of ellipses are
+/// 59x39 for 0,0,60,40; `GetWindowRgnBox.yaml`).
+#[unsafe(no_mangle)]
+pub extern "system" fn CreateEllipticRgn(l: i32, t: i32, r: i32, b: i32) -> H {
+    let (w, h) = (i64::from(r) - i64::from(l) - 1, i64::from(b) - i64::from(t) - 1);
+    let rgn = CreateRectRgn(0, 0, 1, 1);
+    if rgn == 0 {
+        return 0;
+    }
+    let mut rects = Vec::new();
+    if w > 0 && h > 0 {
+        // Integer arithmetic on twice the coordinates keeps the rounding exact.
+        let (a2, b2) = (w, h); // semi-axes times two
+        for y in 0..h {
+            let dy = 2 * y + 1 - h; // twice the distance of the row's centre from the middle
+            // x extent: |2x+1-w| <= a2 * sqrt(1 - (dy/b2)^2)
+            let num = (b2 * b2 - dy * dy).max(0);
+            // half-width squared, times b2^2: a2^2 * num / b2^2
+            let hw2 = (a2 * a2 * num) as f64 / (b2 * b2) as f64;
+            let hw = libm_sqrt(hw2);
+            let left = ((w as f64 - hw) / 2.0 + 0.5) as i64;
+            let right = ((w as f64 + hw) / 2.0 + 0.5) as i64;
+            if right > left {
+                rects.push(Rect::new(
+                    l.wrapping_add(left as i32),
+                    t.wrapping_add(y as i32),
+                    l.wrapping_add(right as i32),
+                    t.wrapping_add(y as i32 + 1),
+                ));
+            }
+        }
+    }
+    let region = Region::from_rects(&rects);
+    gdi(|g| g.set_region(rgn as u64, region));
+    rgn
+}
+
+/// `CreateRoundRectRgn(x1, y1, x2, y2, w, h)` (Learn): a rectangle whose
+/// corners are rounded by an ellipse `w` wide and `h` high
+/// ([`Region::round_rect`]).
+#[unsafe(no_mangle)]
+pub extern "system" fn CreateRoundRectRgn(l: i32, t: i32, r: i32, b: i32, w: i32, h: i32) -> H {
+    let rgn = CreateRectRgn(0, 0, 1, 1);
+    if rgn == 0 {
+        return 0;
+    }
+    gdi(|g| g.set_region(rgn as u64, Region::round_rect(l, t, r, b, w, h)));
+    rgn
+}
+
+/// A square root without `std` (Newton's method on a positive double).
+fn libm_sqrt(x: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let mut g = if x > 1.0 { x / 2.0 } else { 1.0 };
+    for _ in 0..40 {
+        g = 0.5 * (g + x / g);
+    }
+    g
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn SetRectRgn(rgn: H, l: i32, t: i32, r: i32, b: i32) -> i32 {
     i32::from(gdi(|g| g.set_rect_rgn(rgn as u64, Rect::new(l, t, r, b))))
@@ -832,9 +895,32 @@ pub extern "system" fn SetPixelV(hdc: H, x: i32, y: i32, c: u32) -> i32 {
     i32::from(SetPixel(hdc, x, y, c) != poly_gdi::gdi::CLR_INVALID)
 }
 
+/// What the screen shows at a point (win32k composes the surfaces,
+/// ADR 0172), for the screen DC.
+fn screen_pixel(x: i32, y: i32) -> u32 {
+    use poly_win32k::proto::{Reply, Request};
+    let bytes = poly_win32k::wire::encode(&Request::ScreenPixel { x, y });
+    let mut out = [0u8; 64];
+    let mut len = 0u64;
+    // SAFETY: the buffers are ours and sized as passed.
+    let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+    if s != 0 {
+        return 0xFFFF_FFFF;
+    }
+    match poly_win32k::wire::decode::<Reply>(&out[..len as usize]) {
+        Some(Reply::Value { value }) => value as u32,
+        _ => 0xFFFF_FFFF,
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetPixel(hdc: H, x: i32, y: i32) -> u32 {
-    gdi(|g| g.get_pixel(hdc as u64, x, y))
+    let r = gdi(|g| g.get_pixel(hdc as u64, x, y));
+    // The screen DC draws nowhere itself: it reads what the windows show.
+    if r == 0xFFFF_FFFF && gdi(|g| g.display_hwnd(hdc as u64)) == Some(0) {
+        return screen_pixel(x, y);
+    }
+    r
 }
 
 #[unsafe(no_mangle)]
@@ -1271,6 +1357,38 @@ fn solid_union(rs: &[Rect]) -> Region {
     Region::from_rects(&solid)
 }
 
+/// A bitmap's pixels (`B, G, R, A` rows, top-down) into `out` (`cap`
+/// bytes) and its size: width in the low 32 bits, height above; 0 for a
+/// handle that is no bitmap. `out` may be NULL to ask the size.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiBitmapPixels(hbm: H, out: *mut u8, cap: usize) -> u64 {
+    let Some((w, h, px)) = gdi(|g| g.bitmap_bgra(hbm as u64)) else { return 0 };
+    if !out.is_null() && px.len() <= cap {
+        // SAFETY: the caller's buffer of `cap` bytes.
+        unsafe { core::ptr::copy_nonoverlapping(px.as_ptr(), out, px.len()) };
+    }
+    u64::from(w as u32) | u64::from(h as u32) << 32
+}
+
+/// A display DC's origin on the screen into `out` (x, y): 1; 0 for a
+/// memory DC or a handle that is no DC (`EnumDisplayMonitors`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiDisplayOrigin(hdc: H, out: *mut i32) -> i32 {
+    match gdi(|g| g.display_origin(hdc as u64)) {
+        Some((x, y)) => {
+            if !out.is_null() {
+                // SAFETY: two i32 of the caller.
+                unsafe {
+                    *out = x;
+                    *out.add(1) = y;
+                }
+            }
+            1
+        }
+        None => 0,
+    }
+}
+
 /// Region `hrgn`'s rectangles in canonical band order (`GetRegionData`'s)
 /// as (left, top, right, bottom) quadruples into `out`, at most `cap` of
 /// them: the total count (`cap` 0 asks for it), -1 when `hrgn` is not a
@@ -1285,6 +1403,13 @@ pub unsafe extern "system" fn PolyGdiGetRegionRects(hrgn: H, out: *mut i32, cap:
         }
     }
     rects.len() as i32
+}
+
+/// The system takes region `hrgn` over (`SetWindowRgn`): the handle is no
+/// object at all afterwards. 1, or 0 when `hrgn` is not a region.
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiTakeRegion(hrgn: H) -> i32 {
+    i32::from(gdi(|g| g.take_region(hrgn as u64)).is_some())
 }
 
 /// Replace region `hrgn`'s contents by the union of the `n` RECTs at
@@ -1329,6 +1454,21 @@ pub extern "system" fn PolyGdiAttachSurface(hdc: H, width: u32, height: u32) -> 
             // White, as the compositor shows a surface before it is drawn.
             // SAFETY: `len` bytes just allocated.
             unsafe { core::ptr::write_bytes(mem, 0xFF, len) };
+            // A resized window keeps what it showed, from its top-left
+            // corner: only the area it gained is invalid and painted anew.
+            if let Some((_, _, old_bits, ow, oh)) = old {
+                let row = ow.min(width) as usize * 4;
+                for y in 0..oh.min(height) as usize {
+                    // SAFETY: both DIBs hold these rows; they do not overlap.
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            (old_bits as *const u8).add(y * ow as usize * 4),
+                            (mem as *mut u8).add(y * width as usize * 4),
+                            row,
+                        );
+                    }
+                }
+            }
             let b = gdi(|g| g.create_dib(width as i32, -(height as i32), 32, Vec::new(), mem as u64, len));
             let b = u64::from(b);
             SURFACES.with(|s| {

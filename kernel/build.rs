@@ -76,6 +76,10 @@ fn embed_win32() {
         "b35test.exe",
         // ADR 0170.
         "dwrite.dll",
+        // ADR 0172.
+        "shcore.dll",
+        "dwmapi.dll",
+        "imm32.dll",
     ] {
         match &dir {
             Some(d) => {
