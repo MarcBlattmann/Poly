@@ -213,5 +213,6 @@ The `toolkits` group's GDK error on the owner's PC ("Truncating shared memory
 file failed") did not show here: galculator runs with Debian 13's GTK
 3.24.49 from the pinned packages, while the toolkits disk is made of the
 *host's* GTK packages, which differ between that PC's build container and
-CI's runner. That failure is therefore not on this path and was not looked
-into further.
+CI's runner. During this work the `toolkits` group failed with that error
+in one run and passed in the next, on the same PC, so it does not happen
+every time. It is not on this path and was not looked into further.
