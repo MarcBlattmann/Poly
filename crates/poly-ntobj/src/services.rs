@@ -98,13 +98,36 @@ impl ObjectManager {
         Ok(())
     }
 
+    /// The access to `id` that `desired` gets `caller`: the type's rules
+    /// ([`access::grant`]) and then the object's descriptor against the
+    /// caller's effective token (ADR 0171).
+    pub(crate) fn checked_access(
+        &self,
+        caller: &Caller,
+        id: ObjectId,
+        desired: AccessMask,
+        force: bool,
+    ) -> Result<AccessMask> {
+        let h = &self.obj(id).header;
+        let privileges = self.effective_privileges(caller);
+        let mut granted = access::grant(h.kind, desired, h.allowed, caller.mode, force, privileges)?;
+        if let Some(r) = self.dacl_grant(caller, id, desired, force) {
+            let from_dacl = r?;
+            granted = if h.kind.generic_mapping().map(desired) & MAXIMUM_ALLOWED != 0 {
+                granted & from_dacl
+            } else {
+                from_dacl
+            };
+        }
+        Ok(granted)
+    }
+
     /// A new handle to an existing object, after the exclusive and access
     /// checks.
     fn open_existing(&mut self, caller: &Caller, id: ObjectId, desired: AccessMask, attributes: u32) -> Result<Handle> {
         self.check_exclusive(id, caller.process, attributes)?;
-        let h = &self.obj(id).header;
         let force = attributes & OBJ_FORCE_ACCESS_CHECK != 0;
-        let granted = access::grant(h.kind, desired, h.allowed, caller.mode, force, caller.privileges)?;
+        let granted = self.checked_access(caller, id, desired, force)?;
         let flags = HandleFlags { inherit: attributes & OBJ_INHERIT != 0, protect_from_close: false };
         self.new_handle(Self::target_table(caller, attributes), id, granted, flags, caller.process)
     }
@@ -152,7 +175,8 @@ impl ObjectManager {
         if name.is_empty() && attrs.root.is_some() {
             return Err(STATUS_OBJECT_NAME_INVALID);
         }
-        let granted = access::grant(kind, desired, kind.valid_access(), caller.mode, false, caller.privileges)?;
+        let granted =
+            access::grant(kind, desired, kind.valid_access(), caller.mode, false, self.effective_privileges(caller))?;
         let flags = HandleFlags { inherit: a & OBJ_INHERIT != 0, protect_from_close: false };
         let table = Self::target_table(caller, a);
 
@@ -161,6 +185,7 @@ impl ObjectManager {
         if name.is_empty() {
             let id = self.insert(object);
             self.add_pointer(id);
+            self.assign_new_security(caller, id, kind, attrs.security, false);
             let handle = self.new_handle(table, id, granted, flags, caller.process);
             self.release_pointer(id);
             return handle.map(|handle| Created { handle, object: id, status: STATUS_SUCCESS });
@@ -218,6 +243,7 @@ impl ObjectManager {
                 self.link(parent, &name, id);
                 self.release_pointer(parent);
                 self.add_pointer(id);
+                self.assign_new_security(caller, id, kind, attrs.security, true);
                 let handle = self.new_handle(table, id, granted, flags, caller.process);
                 self.release_pointer(id);
                 handle.map(|handle| Created { handle, object: id, status: STATUS_SUCCESS })

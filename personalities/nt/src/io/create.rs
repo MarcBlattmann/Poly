@@ -307,6 +307,9 @@ impl CreateHook<'_> {
         let key = NodeKey::of(&node)?;
         let cookie = self.io.cookie();
         let object = new_file_object(om, cookie, self.thread)?;
+        // Files and directories carry the file system's descriptor (ADR 0171).
+        let sd_key = poly_ntobj::path_key(&alloc::format!("F{volume}"), &found.path);
+        om.assign_path_security(object, poly_ntobj::DefaultSd::File, &sd_key, kind == FileType::Directory);
         let share = ShareRequest::new(p.access, p.share);
         let state = self.io.nodes.entry(key).or_default();
         state.share.add(&share);

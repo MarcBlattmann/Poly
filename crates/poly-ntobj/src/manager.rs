@@ -59,6 +59,8 @@ pub struct ObjectManager {
     /// Pointer references to drop once the current operation is done, so
     /// nothing is deleted while a loop still looks at it.
     pub(crate) deferred: Vec<ObjectId>,
+    /// Access tokens and security descriptors (ADR 0171).
+    pub security: crate::security::ObjectSecurity,
 }
 
 /// The directories every namespace starts with.
@@ -113,6 +115,7 @@ impl ObjectManager {
             wakes: VecDeque::new(),
             deleted: VecDeque::new(),
             deferred: Vec::new(),
+            security: crate::security::ObjectSecurity::new(),
         };
         for path in WELL_KNOWN_DIRECTORIES {
             om.insert_permanent(path, Object::new(ObjectType::Directory, Body::Directory(Directory::default())));
