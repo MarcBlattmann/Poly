@@ -153,7 +153,7 @@ impl CharDevice for LinkFile {
         let r = ReadBuffer::from_bytes(&raw);
         // Copied out of the NT state first: no user memory is touched
         // while its lock is held.
-        let rows = with_existing(|s| s.sys.win32k.link_rows(r.buffer, r.row, r.rows).map(<[u8]>::to_vec))
+        let rows = with_existing(|s| s.sys.win32k.link_rows(r.buffer, r.row, r.rows))
             .flatten()
             .ok_or(Errno::EINVAL)?;
         if rows.len() > MAX_COPY {
