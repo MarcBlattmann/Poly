@@ -15,7 +15,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use poly_gdi::gdi::{Gdi, Rect};
 use poly_gdi::region::Region;
-use poly_win32_gui::{SpinLock, set_last_error, wide};
+use poly_win32_gui::{SpinLock, last_error, set_last_error, wide};
 use poly_win32_rt as _;
 
 #[link(name = "kernel32", kind = "raw-dylib")]
@@ -64,19 +64,27 @@ fn load_font(name: &str) -> Option<Vec<u8>> {
 }
 
 fn read_file(dir: &str, name: &str) -> Option<Vec<u8>> {
+    let mut path: Vec<u16> = dir.encode_utf16().collect();
+    path.extend(name.encode_utf16());
+    path.push(0);
+    read_path(&path).ok().filter(|d| !d.is_empty())
+}
+
+/// The bytes of the file `path` (NUL-terminated) names, or the last error
+/// of the failed open (`ERROR_FILE_NOT_FOUND` if the system gave none).
+/// A file that is empty or too big for a font gives an empty vector.
+fn read_path(path: &[u16]) -> Result<Vec<u8>, u32> {
     const GENERIC_READ: u32 = 0x8000_0000;
     const FILE_SHARE_READ_WRITE: u32 = 3;
     const OPEN_EXISTING: u32 = 3;
     const MAX_FONT_FILE: i64 = 64 << 20;
-    let mut path: Vec<u16> = dir.encode_utf16().collect();
-    path.extend(name.encode_utf16());
-    path.push(0);
     // SAFETY: a NUL-terminated path; the handle is closed below.
     let file = unsafe {
         CreateFileW(path.as_ptr(), GENERIC_READ, FILE_SHARE_READ_WRITE, core::ptr::null(), OPEN_EXISTING, 0, 0)
     };
     if file == usize::MAX || file == 0 {
-        return None;
+        let e = last_error();
+        return Err(if e == 0 { 2 } else { e });
     }
     let mut size = 0i64;
     // SAFETY: an open file and a local out-value.
@@ -99,7 +107,7 @@ fn read_file(dir: &str, name: &str) -> Option<Vec<u8>> {
     }
     // SAFETY: the handle opened above.
     unsafe { CloseHandle(file) };
-    (ok && !data.is_empty()).then_some(data)
+    if ok && !data.is_empty() { Ok(data) } else { Ok(Vec::new()) }
 }
 
 /// `count` bytes of a string in the ANSI code page as UTF-16 (Latin-1;
@@ -388,7 +396,7 @@ pub unsafe extern "system" fn CreateFontW(
         pitch_and_family,
     );
     if !face.is_null() {
-        for i in 0..31 {
+        for i in 0..32 {
             // SAFETY: a NUL-terminated name; reading stops at the NUL.
             let c = unsafe { *face.add(i) };
             if c == 0 {
@@ -623,12 +631,51 @@ dc_get_set! {
     GetBkColor() -> u32 = bk_color;
     SetBkMode(m: i32) -> i32 = set_bk_mode;
     GetBkMode() -> i32 = bk_mode;
-    SetTextAlign(a: u32) -> u32 = set_text_align;
-    GetTextAlign() -> u32 = text_align;
     SetDCBrushColor(c: u32) -> u32 = set_dc_brush_color;
     SetDCPenColor(c: u32) -> u32 = set_dc_pen_color;
     SaveDC() -> i32 = save_dc;
     GetDeviceCaps(index: i32) -> i32 = device_caps;
+}
+
+/// `SetTextAlign`: the previous alignment; `GDI_ERROR` for a bad DC.
+#[unsafe(no_mangle)]
+pub extern "system" fn SetTextAlign(hdc: H, a: u32) -> u32 {
+    let old = gdi(|g| g.set_text_align(hdc as u64, a));
+    if old == u32::MAX && !gdi(|g| g.is_dc(hdc as u64)) {
+        set_last_error(ERROR_INVALID_HANDLE);
+    }
+    old
+}
+
+/// `GetTextAlign`: the alignment; `GDI_ERROR` for a bad DC.
+#[unsafe(no_mangle)]
+pub extern "system" fn GetTextAlign(hdc: H) -> u32 {
+    let a = gdi(|g| g.text_align(hdc as u64));
+    if a == u32::MAX && !gdi(|g| g.is_dc(hdc as u64)) {
+        set_last_error(ERROR_INVALID_HANDLE);
+    }
+    a
+}
+
+/// `GetCurrentPositionEx`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCurrentPositionEx(hdc: H, pt: *mut i32) -> i32 {
+    match gdi(|g| g.current_position(hdc as u64)) {
+        Some((x, y)) => {
+            if !pt.is_null() {
+                // SAFETY: the caller's POINT.
+                unsafe {
+                    *pt = x;
+                    *pt.add(1) = y;
+                }
+            }
+            1
+        }
+        None => {
+            set_last_error(ERROR_INVALID_HANDLE);
+            0
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -720,8 +767,12 @@ pub extern "system" fn GdiFlush() -> i32 {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn TextOutW(hdc: H, x: i32, y: i32, text: *const u16, count: i32) -> i32 {
+    // A negative count fails; a NULL string does not draw.
+    if count < 0 || (text.is_null() && count > 0) {
+        return 0;
+    }
     // SAFETY: `count` characters at `text`.
-    let s = unsafe { wide(text, count.max(0)) };
+    let s = unsafe { wide(text, count) };
     let ok = gdi(|g| g.text_out(hdc as u64, x, y, &s));
     if !ok {
         set_last_error(ERROR_INVALID_HANDLE);
@@ -749,6 +800,10 @@ pub unsafe extern "system" fn ExtTextOutW(
     count: u32,
     dx: *const i32,
 ) -> i32 {
+    // Options with every bit set fail, and so does a NULL string to draw.
+    if options == u32::MAX || (text.is_null() && count > 0) {
+        return 0;
+    }
     // SAFETY: `count` characters at `text`, `count` spacings at `dx`, a RECT.
     let (s, rect, dx) = unsafe {
         (
@@ -794,8 +849,12 @@ unsafe fn write_size(size: *mut i32, (cx, cy): (i32, i32)) {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetTextExtentPoint32W(hdc: H, text: *const u16, count: i32, size: *mut i32) -> i32 {
+    if count < 0 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
     // SAFETY: `count` characters at `text`.
-    let s = unsafe { wide(text, count.max(0)) };
+    let s = unsafe { wide(text, count) };
     match gdi(|g| g.text_extent(hdc as u64, &s)) {
         Some(e) => {
             // SAFETY: the caller's SIZE.
@@ -803,7 +862,7 @@ pub unsafe extern "system" fn GetTextExtentPoint32W(hdc: H, text: *const u16, co
             1
         }
         None => {
-            set_last_error(ERROR_INVALID_HANDLE);
+            set_last_error(ERROR_INVALID_PARAMETER);
             0
         }
     }
@@ -841,18 +900,24 @@ pub unsafe extern "system" fn GetTextExtentExPointW(
     dx: *mut i32,
     size: *mut i32,
 ) -> i32 {
+    // A negative maximum or count fails and leaves the outputs alone.
+    if max < 0 || count < 0 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
     // SAFETY: `count` characters at `text`.
-    let s = unsafe { wide(text, count.max(0)) };
-    match gdi(|g| g.text_extent_ex(hdc as u64, &s, if max < 0 { i32::MAX } else { max })) {
+    let s = unsafe { wide(text, count) };
+    match gdi(|g| g.text_extent_ex(hdc as u64, &s, max)) {
         Some((e, n, running)) => {
-            // SAFETY: the caller's out-pointers; `dx` holds `count` values.
+            // SAFETY: the caller's out-pointers; `dx` holds `count` values,
+            // of which the characters that fit are written.
             unsafe {
                 write_size(size, e);
                 if !fit.is_null() {
                     *fit = n as i32;
                 }
                 if !dx.is_null() {
-                    for (i, v) in running.iter().enumerate() {
+                    for (i, v) in running.iter().take(n).enumerate() {
                         *dx.add(i) = *v;
                     }
                 }
@@ -860,7 +925,7 @@ pub unsafe extern "system" fn GetTextExtentExPointW(
             1
         }
         None => {
-            set_last_error(ERROR_INVALID_HANDLE);
+            set_last_error(ERROR_INVALID_PARAMETER);
             0
         }
     }
@@ -891,10 +956,7 @@ pub unsafe extern "system" fn GetTextMetricsW(hdc: H, tm: *mut u8) -> i32 {
             unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), tm, b.len()) };
             1
         }
-        None => {
-            set_last_error(ERROR_INVALID_HANDLE);
-            0
-        }
+        None => 0,
     }
 }
 
@@ -922,10 +984,7 @@ pub unsafe extern "system" fn GetTextMetricsA(hdc: H, tm: *mut u8) -> i32 {
             unsafe { core::ptr::copy_nonoverlapping(a.as_ptr(), tm, a.len()) };
             1
         }
-        None => {
-            set_last_error(ERROR_INVALID_HANDLE);
-            0
-        }
+        None => 0,
     }
 }
 
@@ -933,13 +992,14 @@ pub unsafe extern "system" fn GetTextMetricsA(hdc: H, tm: *mut u8) -> i32 {
 /// length written, with the NUL. A NULL buffer asks for the size needed.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetTextFaceW(hdc: H, count: i32, buf: *mut u16) -> i32 {
-    let Some(mut name) = gdi(|g| g.text_face(hdc as u64)) else {
-        set_last_error(ERROR_INVALID_HANDLE);
-        return 0;
-    };
+    let Some(mut name) = gdi(|g| g.text_face(hdc as u64)) else { return 0 };
     name.push(0);
     if buf.is_null() {
         return name.len() as i32;
+    }
+    if count <= 0 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
     }
     let n = name.len().min(count.max(0) as usize);
     // SAFETY: the caller's buffer of `count` units.
@@ -953,13 +1013,14 @@ pub unsafe extern "system" fn GetTextFaceW(hdc: H, count: i32, buf: *mut u16) ->
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetTextFaceA(hdc: H, count: i32, buf: *mut u8) -> i32 {
-    let Some(mut name) = gdi(|g| g.text_face(hdc as u64)) else {
-        set_last_error(ERROR_INVALID_HANDLE);
-        return 0;
-    };
+    let Some(mut name) = gdi(|g| g.text_face(hdc as u64)) else { return 0 };
     name.push(0);
     if buf.is_null() {
         return name.len() as i32;
+    }
+    if count <= 0 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
     }
     let n = name.len().min(count.max(0) as usize);
     for (i, &c) in name.iter().take(n).enumerate() {
@@ -1224,12 +1285,13 @@ pub unsafe extern "system" fn PolyGdiDrawText(
     format: u32,
 ) -> i32 {
     // SAFETY: as `PolyGdiDrawTextEx`.
-    unsafe { PolyGdiDrawTextEx(hdc, text as *mut u16, count, rect, format, 0, 0, 0) }
+    unsafe { PolyGdiDrawTextEx(hdc, text as *mut u16, count, rect, format, 0, 0, 0, core::ptr::null_mut()) }
 }
 
 /// `DrawTextExW`: `tab_chars` is `iTabLength` (0: the default), the margins
-/// narrow the rectangle for drawing. The number of characters drawn is not
-/// reported. `DT_MODIFYSTRING` writes the ellipsized text back to `text`.
+/// narrow the rectangle for laying out the text; `drawn` (if not NULL)
+/// gets `uiLengthDrawn`. `DT_MODIFYSTRING` writes the ellipsized text back
+/// to `text`. A count of 0 draws nothing and gives 1; below -1, 0.
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub unsafe extern "system" fn PolyGdiDrawTextEx(
@@ -1241,26 +1303,31 @@ pub unsafe extern "system" fn PolyGdiDrawTextEx(
     tab_chars: i32,
     left_margin: i32,
     right_margin: i32,
+    drawn: *mut u32,
 ) -> i32 {
-    const DT_CALCRECT: u32 = 0x0400;
     const DT_MODIFYSTRING: u32 = 0x1_0000;
-    if rect.is_null() {
+    if rect.is_null() || count < -1 {
         return 0;
+    }
+    // A count of 0 is the empty string; with text there it draws nothing.
+    // SAFETY: the caller's string is readable at least for its first unit.
+    if count == 0 && !text.is_null() && unsafe { *text } != 0 {
+        return 1;
     }
     // SAFETY: the caller's string (count -1: NUL-terminated) and RECT.
     let (s, mut r) = unsafe { (wide(text, count), read_rect(rect)) };
-    let inset = Rect::new(r.left + left_margin, r.top, r.right - right_margin, r.bottom);
-    let mut inner = inset;
-    let (n, modified) = gdi(|g| g.draw_text_ex(hdc as u64, &s, &mut inner, format, tab_chars));
-    if format & DT_CALCRECT != 0 {
-        // The calculated rectangle includes the margins.
-        r.right = inner.right + right_margin;
-        r.bottom = inner.bottom;
+    let before = r;
+    let params = poly_gdi::text::DrawParams { tab_chars, left_margin, right_margin };
+    let out = gdi(|g| g.draw_text_ex(hdc as u64, &s, &mut r, format, params));
+    if out.height == 0 {
+        return 0;
+    }
+    if r != before {
         // SAFETY: as above.
         unsafe { write_rect(rect, r) };
     }
     if format & DT_MODIFYSTRING != 0
-        && let Some(m) = modified
+        && let Some(m) = out.modified
         && !text.is_null()
     {
         for (i, &c) in m.iter().enumerate() {
@@ -1270,7 +1337,195 @@ pub unsafe extern "system" fn PolyGdiDrawTextEx(
         // SAFETY: as above.
         unsafe { *text.add(m.len()) = 0 };
     }
-    n
+    if !drawn.is_null() {
+        // SAFETY: the caller's DRAWTEXTPARAMS field.
+        unsafe { *drawn = out.drawn as u32 };
+    }
+    out.height
+}
+
+// ----- fonts added by the program, and enumeration
+
+/// `AddFontResourceExW`'s and `AddFontMemResourceEx`'s flag bits: `FR_PRIVATE`
+/// and `FR_NOT_ENUM` (`wingdi.h`).
+const FR_FLAGS: u32 = 0x30;
+
+/// `AddFontMemResourceEx`: the fonts in `data` for this process only; the
+/// handle, and `*count` the number of fonts. NULL (error 87) for NULL data,
+/// no length or no `count`; NULL (no error) for data that is no font.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn AddFontMemResourceEx(
+    data: *const u8,
+    len: u32,
+    _reserved: *mut u8,
+    count: *mut u32,
+) -> H {
+    if data.is_null() || len == 0 || count.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's font image of `len` bytes.
+    let bytes = unsafe { core::slice::from_raw_parts(data, len as usize) };
+    match gdi(|g| g.add_font_mem(bytes)) {
+        Some(h) => {
+            // SAFETY: the caller's out-value.
+            unsafe { *count = 1 };
+            h as H
+        }
+        None => {
+            set_last_error(0);
+            0
+        }
+    }
+}
+
+/// `RemoveFontMemResourceEx`.
+#[unsafe(no_mangle)]
+pub extern "system" fn RemoveFontMemResourceEx(h: H) -> i32 {
+    if h == 0 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let ok = gdi(|g| g.remove_font_mem(h as u64));
+    if !ok {
+        set_last_error(0);
+    }
+    i32::from(ok)
+}
+
+/// The NUL-terminated path at `name` as units with the NUL.
+///
+/// # Safety
+/// `name` is NULL or a NUL-terminated string.
+unsafe fn path_units(name: *const u16) -> Vec<u16> {
+    // SAFETY: the caller's promise.
+    let mut v = unsafe { wide(name, -1) };
+    v.push(0);
+    v
+}
+
+/// `AddFontResourceExW`: the number of fonts added (1), 0 with the last
+/// error of the failed open (`ERROR_FILE_NOT_FOUND`), 87 for bad flags, none
+/// for a file that is no font.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn AddFontResourceExW(name: *const u16, flags: u32, _reserved: *mut u8) -> i32 {
+    if name.is_null() || flags & !FR_FLAGS != 0 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: a NUL-terminated path.
+    let path = unsafe { path_units(name) };
+    let data = match read_path(&path) {
+        Ok(d) => d,
+        Err(e) => {
+            set_last_error(e);
+            return 0;
+        }
+    };
+    let ok = !data.is_empty() && gdi(|g| g.add_font_file(&path[..path.len() - 1], flags, data));
+    if !ok {
+        set_last_error(0);
+    }
+    i32::from(ok)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn AddFontResourceW(name: *const u16) -> i32 {
+    // SAFETY: as `AddFontResourceExW`.
+    unsafe { AddFontResourceExW(name, 0, core::ptr::null_mut()) }
+}
+
+/// `RemoveFontResourceExW`: removes one earlier add of the same file with
+/// the same flags. The file has to be there (`ERROR_FILE_NOT_FOUND`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RemoveFontResourceExW(name: *const u16, flags: u32, _reserved: *mut u8) -> i32 {
+    // SAFETY: a NUL-terminated path or NULL.
+    let path = unsafe { path_units(name) };
+    if path.len() <= 1 || flags & !FR_FLAGS != 0 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    if let Err(e) = read_path(&path) {
+        set_last_error(e);
+        return 0;
+    }
+    let ok = gdi(|g| g.remove_font_file(&path[..path.len() - 1], flags));
+    if !ok {
+        set_last_error(0);
+    }
+    i32::from(ok)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RemoveFontResourceW(name: *const u16) -> i32 {
+    // SAFETY: as `RemoveFontResourceExW`.
+    unsafe { RemoveFontResourceExW(name, 0, core::ptr::null_mut()) }
+}
+
+/// `FONTENUMPROCW` (`wingdi.h`).
+type FontEnumProc = unsafe extern "system" fn(*const u8, *const u8, u32, isize) -> i32;
+
+/// `ENUMLOGFONTEXW` (`wingdi.h`): a `LOGFONTW`, the full name (64 units),
+/// the style and the script (32 units each).
+const ENUMLOGFONTEXW_SIZE: usize = 92 + 128 + 64 + 64;
+/// `NEWTEXTMETRICEXW`: `TEXTMETRICW` (60 bytes), `ntmFlags`, `ntmSizeEM`,
+/// `ntmCellHeight`, `ntmAvgWidth`, and a `FONTSIGNATURE` (24 bytes).
+const NEWTEXTMETRICEXW_SIZE: usize = 60 + 16 + 24;
+const TRUETYPE_FONTTYPE: u32 = 4;
+
+fn put_name(buf: &mut [u8], at: usize, max: usize, name: &[u16]) {
+    for (i, &u) in name.iter().take(max - 1).enumerate() {
+        buf[at + 2 * i..at + 2 * i + 2].copy_from_slice(&u.to_le_bytes());
+    }
+}
+
+/// `EnumFontFamiliesExW`: calls `proc` for each face of the family `lf`
+/// names (every family if the name is empty) in the character set it
+/// names; returns what the last call returned (1 if there was none), or 0
+/// when a call ended the enumeration.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn EnumFontFamiliesExW(
+    _hdc: H,
+    lf: *const u8,
+    proc: Option<FontEnumProc>,
+    lparam: isize,
+    _flags: u32,
+) -> i32 {
+    let Some(proc) = proc else {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    };
+    let (name, charset) = if lf.is_null() {
+        (Vec::new(), 1u8)
+    } else {
+        // SAFETY: a LOGFONTW (92 bytes).
+        let b = unsafe { core::slice::from_raw_parts(lf, 92) };
+        let units: Vec<u16> = (0..32).map(|i| u16::from_le_bytes([b[28 + 2 * i], b[29 + 2 * i]])).collect();
+        let n = units.iter().position(|&c| c == 0).unwrap_or(32);
+        (units[..n].to_vec(), b[23])
+    };
+    let faces = gdi(|g| g.enum_fonts(&name, charset));
+    let mut ret = 1;
+    for f in faces {
+        let mut elf = [0u8; ENUMLOGFONTEXW_SIZE];
+        elf[16..20].copy_from_slice(&f.weight.to_le_bytes());
+        elf[20] = if f.italic { 255 } else { 0 };
+        elf[27] = f.pitch_and_family();
+        put_name(&mut elf, 28, 32, &f.family);
+        put_name(&mut elf, 92, 64, &f.full);
+        put_name(&mut elf, 92 + 128, 32, &f.style_name);
+        put_name(&mut elf, 92 + 128 + 64, 32, &"Western".encode_utf16().collect::<Vec<u16>>());
+        let mut ntm = [0u8; NEWTEXTMETRICEXW_SIZE];
+        ntm[28..32].copy_from_slice(&f.weight.to_le_bytes());
+        ntm[52] = elf[20];
+        ntm[55] = f.pitch_and_family() | 4 | 2;
+        // SAFETY: the caller's callback gets structures of the documented sizes.
+        ret = unsafe { proc(elf.as_ptr(), ntm.as_ptr(), TRUETYPE_FONTTYPE, lparam) };
+        if ret == 0 {
+            break;
+        }
+    }
+    ret
 }
 
 /// The entry point (`DllMain`): nothing to set up.
