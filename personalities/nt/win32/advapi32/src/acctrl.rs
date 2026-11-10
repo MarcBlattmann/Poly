@@ -11,6 +11,8 @@ use poly_security::explicit::{self, Entry, Trustee};
 const TRUSTEE_IS_SID: u32 = 0;
 const TRUSTEE_IS_NAME: u32 = 1;
 const ERROR_NONE_MAPPED: u32 = 1332;
+/// `ERROR_INVALID_SECURITY_DESCR` (`winerror.h`).
+const ERROR_INVALID_SECURITY_DESCR: u32 = 1338;
 
 unsafe fn put_u32(p: *mut u8, at: usize, v: u32) {
     // SAFETY: the caller's structure.
@@ -78,21 +80,116 @@ pub unsafe extern "system" fn BuildExplicitAccessWithNameW(
     }
 }
 
-/// The entry at `p` (`EXPLICIT_ACCESS_W`, 48 bytes).
-unsafe fn read_entry(p: *const u8) -> Entry {
-    // SAFETY: the caller's array.
+/// The trustee at `t` (`TRUSTEE_W`, 32 bytes: the form at 12, the name or
+/// SID pointer at 24).
+unsafe fn read_trustee(t: *const u8) -> Trustee {
+    // SAFETY: the caller's structure.
     unsafe {
-        let form = get_u32(p, 28);
-        let ptr = get_u64(p, 40) as *const u8;
-        let trustee = match form {
+        let ptr = get_u64(t, 24) as *const u8;
+        match get_u32(t, 12) {
             TRUSTEE_IS_SID if !ptr.is_null() => Trustee::Sid(sid_bytes(ptr).to_vec()),
             TRUSTEE_IS_NAME => match wide(ptr as *const u16) {
                 Some(w) => Trustee::Name(String::from_utf16_lossy(w)),
                 None => Trustee::Bad,
             },
             _ => Trustee::Bad,
+        }
+    }
+}
+
+/// The entry at `p` (`EXPLICIT_ACCESS_W`, 48 bytes).
+unsafe fn read_entry(p: *const u8) -> Entry {
+    // SAFETY: the caller's array.
+    unsafe {
+        Entry { access: get_u32(p, 0), mode: get_u32(p, 4), inherit: get_u32(p, 8), trustee: read_trustee(p.add(16)) }
+    }
+}
+
+/// The SID of a trustee for `BuildSecurityDescriptorW`: a SID, the name
+/// `CURRENT_USER` (the process token's user) or an account name.
+fn trustee_sid(t: &Trustee) -> Result<sid::Sid, u32> {
+    match t {
+        Trustee::Sid(b) => sid::Sid::from_bytes(b).ok_or(ERROR_INVALID_PARAMETER),
+        Trustee::Name(n) if n.eq_ignore_ascii_case("CURRENT_USER") => {
+            let mut buf = [0u8; 128];
+            let mut len = 0u32;
+            // SAFETY: `buf` holds 128 bytes; the process token's pseudo-handle.
+            let ok = unsafe {
+                GetTokenInformation(
+                    token::CURRENT_PROCESS_TOKEN as Handle,
+                    token::class::TOKEN_USER,
+                    buf.as_mut_ptr(),
+                    buf.len() as u32,
+                    &mut len,
+                )
+            };
+            // TOKEN_USER: the SID_AND_ATTRIBUTES (16 bytes), then the SID.
+            if ok == 0 { Err(ERROR_NONE_MAPPED) } else { sid::Sid::from_bytes(&buf[16..]).ok_or(ERROR_NONE_MAPPED) }
+        }
+        Trustee::Name(n) => account::lookup_name(n).map(|(s, _, _)| s).ok_or(ERROR_NONE_MAPPED),
+        Trustee::Bad => Err(ERROR_INVALID_PARAMETER),
+    }
+}
+
+/// `BuildSecurityDescriptorW`: a new self-relative descriptor in one
+/// `LocalAlloc` block (`poly_security::buildsd` has the rules). The last
+/// error after a success is `ERROR_INSUFFICIENT_BUFFER`, as observed on
+/// Windows (the return value is the result).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn BuildSecurityDescriptorW(
+    owner: *const u8,
+    group: *const u8,
+    access_count: u32,
+    access: *const u8,
+    audit_count: u32,
+    audit: *const u8,
+    old_sd: *const u8,
+    new_size: *mut u32,
+    new_sd: *mut *mut u8,
+) -> u32 {
+    // SAFETY: the caller's trustees, arrays, descriptor and out pointers.
+    unsafe {
+        let old = if old_sd.is_null() {
+            None
+        } else {
+            let p = SdPtr(old_sd as *mut u8);
+            if p.control() & sd::SE_SELF_RELATIVE == 0 {
+                SetLastError(0);
+                return ERROR_INVALID_SECURITY_DESCR;
+            }
+            Some(sd::Parts::read(p))
         };
-        Entry { access: get_u32(p, 0), mode: get_u32(p, 4), inherit: get_u32(p, 8), trustee }
+        let trustee = |t: *const u8| (!t.is_null()).then(|| read_trustee(t));
+        let (owner, group) = (trustee(owner), trustee(group));
+        let entries = |count: u32, p: *const u8| -> Vec<Entry> {
+            if p.is_null() { Vec::new() } else { (0..count as usize).map(|i| read_entry(p.add(48 * i))).collect() }
+        };
+        let (access, audit) = (entries(access_count, access), entries(audit_count, audit));
+        let request = poly_security::buildsd::Request {
+            owner: owner.as_ref(),
+            group: group.as_ref(),
+            access: &access,
+            audit: &audit,
+            old: old.as_ref(),
+        };
+        let bytes = match poly_security::buildsd::build(&request, &trustee_sid) {
+            Ok(parts) => parts.to_relative(),
+            Err(e) => {
+                if e == ERROR_NONE_MAPPED {
+                    SetLastError(e);
+                }
+                return e;
+            }
+        };
+        let Some(block) = local_copy(&bytes) else { return ERROR_NOT_ENOUGH_MEMORY };
+        if !new_size.is_null() {
+            new_size.write_unaligned(bytes.len() as u32);
+        }
+        if !new_sd.is_null() {
+            new_sd.write_unaligned(block);
+        }
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        0
     }
 }
 
