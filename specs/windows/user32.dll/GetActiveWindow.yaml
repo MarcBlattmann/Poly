@@ -66,7 +66,14 @@ building_tests: >
   right on with AllowSetForegroundWindow(ASFW_ANY), or it is the first
   program the runner starts). "other" below is a window of another process
   (on the oracle a console window); "ours" a window of the test without a
-  tag. Two windows of other processes matter on the oracle"s desktop and the tests of 2026-11-10 tell them apart: K, the runner"s keeper (WS_EX_TOPMOST, the foreground window when a test starts), and the top visible window that is not topmost, a console window of another process, printed as "other" (it is what a minimize hands the foreground to, see GetActiveWindow next_active). A z order line lists the test"s top-level windows and K from the top down.
+  tag.
+  Two windows of other processes matter on the oracle's desktop and the
+  tests of 2026-11-10 tell them apart: K, the runner's keeper
+  (WS_EX_TOPMOST, the foreground window when a test starts), and the top
+  visible window that is not topmost, a console window of another process,
+  printed as "other" (it is what a minimize hands the foreground to, see
+  GetActiveWindow next_active). A z order line lists the test's top-level
+  windows and K from the top down.
 not_covered: >
   DPI awareness other than unaware (the tests have no manifest), several
   monitors, other keyboard layouts than German, IME, touch and pen, hooks,
