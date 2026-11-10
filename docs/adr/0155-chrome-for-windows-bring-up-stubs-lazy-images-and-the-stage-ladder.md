@@ -417,4 +417,4 @@ To be confirmed by the spec agent against real Windows: what two quotation marks
 quoted part mean to `CommandLineToArgvW`; `timeBeginPeriod(0)` (Poly: `TIMERR_NOCANDO`);
 `SHGetFolderPathW` for the folders Poly has no path for yet (Poly: `E_FAIL`); and
 `FileNameInformation` of a named-pipe handle (Poly returns an empty name; Chrome's crash handler
-builds `\.\pipe` + that name for its next pipe instance, so it must be `\<pipe name>`).
+builds `\\.\pipe` + that name for its next pipe instance, so it must be `\<pipe name>`).
