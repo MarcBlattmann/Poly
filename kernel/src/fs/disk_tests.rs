@@ -247,8 +247,11 @@ kernel_test! {
             memory.write(0x200_0000 + 2 * PAGE_SIZE as u64, b"shared!").map_err(|_| "writing the shared mapping")?;
             let mut back = [0u8; 7];
             f.pread(fd, &mut back, 2 * PAGE_SIZE as u64).map_err(e)?;
-            // The private mapping's page was copied; the shared one is the cache's.
-            if &back != b"shared!" || memory.cached_pages() != 1 {
+            // The shared mapping's page is the cache's (fault-around may have
+            // mapped other pages of the file too, read-only).
+            let shared = memory.space().translate(0x200_0000 + 2 * PAGE_SIZE as u64).ok_or("not mapped")?;
+            let in_cache = m.cached.cached_page(ino, 2).ok_or("the shared page is not cached")?;
+            if &back != b"shared!" || shared.phys != in_cache.frame().phys() {
                 return Err("a write through a shared mapping is not in the file");
             }
             f.pread(fd, &mut back, PAGE_SIZE as u64).map_err(e)?;

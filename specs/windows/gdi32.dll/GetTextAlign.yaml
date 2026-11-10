@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/gdi32.dll/GetTextAlign.yaml
+id: windows/api/gdi32.dll/GetTextAlign
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; text is drawn into memory DCs with 32-bit DIB sections, so no desktop is needed), two runs each with identical output, and two complete recordings with identical output"
+  observed_by: spec-win-text
+  date: 2026-11-09
+sources: >
+  The same observations as the SetTextAlign entry. Microsoft Learn reference pages of the functions named here (CreateFontIndirectW, LOGFONTW, TEXTMETRICW, GetTextExtentPoint32W, ExtTextOutW, DrawText, DrawTextEx, DRAWTEXTPARAMS, AddFontMemResourceEx, AddFontResourceEx, EnumFontFamiliesEx, SetTextAlign); wingdi.h and winuser.h for constants and layouts. Wine's conformance tests were not read for the values here.
+summary: >
+  GetTextAlign reads the value SetTextAlign stored; it is specified on the SetTextAlign sheet and tested by its tests.
+same_as: "windows/api/gdi32.dll/SetTextAlign"
+interface:
+  signature: "see the SetTextAlign sheet"
+rules:
+  same_behaviour: "every rule and error of the SetTextAlign sheet holds for this export; its tests exercise it too"
+errors:
+  same_errors: "see the SetTextAlign sheet"
+side_effects: "see the sheet it points to"
+threading: "see the sheet it points to"
+ordering: []
+timing:
+  typical: "see the sheet it points to"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  Everything the SetTextAlign sheet lists as not covered; this entry has no tests of its own (the tests of SetTextAlign call it as well).

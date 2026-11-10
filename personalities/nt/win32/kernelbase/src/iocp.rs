@@ -22,6 +22,7 @@ const IO_COMPLETION_ALL_ACCESS: u32 = 0x001F_0003;
 const WAIT_TIMEOUT: u32 = 258;
 const WAIT_IO_COMPLETION: u32 = 192;
 const STATUS_NOT_FOUND: NtStatus = NtStatus(0xC000_0225);
+const STATUS_ABANDONED_WAIT_0: NtStatus = NtStatus(0x80);
 
 fn set_info(h: Handle, class: u32, data: &[u8]) -> Result<(), NtStatus> {
     let mut iosb = IoStatusBlock::default();
@@ -94,6 +95,12 @@ pub unsafe extern "system" fn GetQueuedCompletionStatus(
     let st = unsafe { nt::NtRemoveIoCompletion(port, &mut k, &mut ctx, &mut iosb, tp) };
     // SAFETY: the caller's out-pointers.
     unsafe {
+        if st == STATUS_ABANDONED_WAIT_0 {
+            if !overlapped.is_null() {
+                overlapped.write(core::ptr::null_mut());
+            }
+            return fail(ERROR_ABANDONED_WAIT_0, FALSE);
+        }
         if st != nt::STATUS_TIMEOUT && !st.is_success() && st != nt::STATUS_USER_APC {
             if !overlapped.is_null() {
                 overlapped.write(core::ptr::null_mut());
@@ -149,12 +156,14 @@ pub unsafe extern "system" fn GetQueuedCompletionStatusEx(
     let mut n = 0u32;
     // SAFETY: valid pointers; `raw` holds `count` records.
     let st = unsafe { nt::NtRemoveIoCompletionEx(port, raw.as_mut_ptr(), count, &mut n, tp, alertable as u8) };
-    if st == nt::STATUS_TIMEOUT || st == nt::STATUS_USER_APC || !st.is_success() {
+    if st == nt::STATUS_TIMEOUT || st == nt::STATUS_USER_APC || st == STATUS_ABANDONED_WAIT_0 || !st.is_success() {
         if !removed.is_null() {
             // SAFETY: the caller's out-pointer.
             unsafe { removed.write(0) };
         }
-        return if st == nt::STATUS_TIMEOUT {
+        return if st == STATUS_ABANDONED_WAIT_0 {
+            fail(ERROR_ABANDONED_WAIT_0, FALSE)
+        } else if st == nt::STATUS_TIMEOUT {
             fail(WAIT_TIMEOUT, FALSE)
         } else if st == nt::STATUS_USER_APC {
             fail(WAIT_IO_COMPLETION, FALSE)
@@ -257,9 +266,12 @@ unsafe fn overlapped_result(
             continue;
         }
         if alertable {
-            // Learn: an alertable call runs queued APCs also when the request is done.
+            // An alertable call runs queued APCs also when the request is
+            // done (the spec sheet), and then reports the wait as ended by them.
             // SAFETY: no arguments.
-            unsafe { nt::NtTestAlert() };
+            if unsafe { nt::NtTestAlert() } == nt::STATUS_USER_APC {
+                return fail(WAIT_IO_COMPLETION, FALSE);
+            }
         }
         // SAFETY: the OVERLAPPED is complete.
         let high = unsafe { (*ov).internal_high };

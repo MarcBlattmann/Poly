@@ -45,7 +45,20 @@ pub fn close<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let h = Handle(abi::arg(k, regs, 0)?);
     let caller = k.caller();
     k.with_state(|sys, _, b| {
+        // A completion port whose last handle goes wakes its waiters with
+        // `STATUS_ABANDONED_WAIT_0` (ADR 0169; Learn: "GetQueuedCompletionStatus").
+        let port = sys
+            .objects
+            .object_by_handle(&caller, h, 0, Some(poly_ntobj::ObjectType::IoCompletion))
+            .ok()
+            .and_then(|o| sys.objects.cookie(o).map(|c| (o, c)));
         let r = sys.objects.nt_close(&caller, h);
+        if let Some((o, cookie)) = port
+            && r.is_ok()
+            && sys.objects.handle_count(o) == Some(0)
+        {
+            sys.io.port_abandon(&mut sys.objects, cookie);
+        }
         sys.reap(b);
         r
     })?;
@@ -90,6 +103,12 @@ pub fn duplicate_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<Nt
             let from =
                 process_of(sys, &caller, Handle(src_process), PROCESS_DUP_HANDLE)?.ok_or(STATUS_INVALID_HANDLE)?;
             let to = process_of(sys, &caller, Handle(dst_process), PROCESS_DUP_HANDLE)?;
+            // A process that has ended cannot be given a handle (nor have one taken).
+            if sys.process_exits.contains_key(&from) || to.is_some_and(|t| sys.process_exits.contains_key(&t)) {
+                return Err(STATUS_PROCESS_IS_TERMINATING);
+            }
+            // Without a `TargetHandle` pointer nothing is made: only the source closes.
+            let to = if out == 0 { None } else { to };
             sys.objects.nt_duplicate_object(
                 &caller,
                 from,

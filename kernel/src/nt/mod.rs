@@ -105,6 +105,9 @@ pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
 pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bcryptprimitives.dll"));
+/// Our `dwrite.dll` (ADR 0170), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
+pub static DWRITE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dwrite.dll"));
 
 /// Our `userenv.dll` (ADR 0171), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
@@ -734,8 +737,6 @@ fn start_params(
         let only = handles.and_then(|h| h.inherit_only.as_deref());
         let start = exec::start_process_listed(&mut s.sys, proc, &mut b, file, NTDLL, None, thread, inherit_from, only);
         let start = start.and_then(|ps| {
-            // KUSER_SHARED_DATA at 0x7FFE0000 (ADR 0155).
-            exec::map_user_shared_data(proc, &mut b, &user_shared_facts())?;
             // Its token (a copy of its creator's, or the one given) and the
             // descriptors of its objects (ADR 0171).
             poly_personality_nt::security::inherit_token(
@@ -763,6 +764,8 @@ fn start_params(
                     &h.jobs,
                 )?;
             }
+            // KUSER_SHARED_DATA at 0x7FFE0000 (ADR 0155).
+            exec::map_user_shared_data(proc, &mut b, &user_shared_facts())?;
             // The process parameters: image path, command line,
             // environment and current directory (ADR 0073, 0079).
             let base = poly_personality_nt::params::write(proc, &mut b, ps.peb, params)?;

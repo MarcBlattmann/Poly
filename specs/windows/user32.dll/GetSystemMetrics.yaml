@@ -4,8 +4,8 @@ id: windows/api/user32.dll/GetSystemMetrics
 oracle:
   os: "Windows 11 Home 25H2 (build 26200.9711), x64"
   machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
-  observed_by: spec-win-gui-b
-  date: 2026-11-02
+  observed_by: spec-win-gui-b, spec-win-gui-b2
+  date: "2026-11-02; 2026-11-09 (spec-win-gui-b2: GetDeviceCaps of the screen, window metrics, DPI sweep)"
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn reference pages of the functions and messages named here, "About
@@ -29,6 +29,28 @@ rules:
   work_area_sizes: "the work area is 0,24,1920,1080; SM_CXFULLSCREEN 1920, SM_CYFULLSCREEN 1033 (work height minus SM_CYCAPTION); SM_CXMAXIMIZED 1936, SM_CYMAXIMIZED 1072 (work area plus 16 each way); SM_CXMAXTRACK 1940, SM_CYMAXTRACK 1100 (virtual screen plus 20); SM_CXMINTRACK 136, SM_CYMINTRACK 39"
   sizes_96: "SM_CXVSCROLL/SM_CYHSCROLL/SM_CYVSCROLL/SM_CXHSCROLL/SM_CYVTHUMB/SM_CXHTHUMB 17, SM_CYCAPTION 23, SM_CXBORDER/SM_CYBORDER 1, SM_CXDLGFRAME/SM_CYDLGFRAME 3, SM_CXICON/SM_CYICON 32, SM_CXCURSOR/SM_CYCURSOR 32, SM_CYMENU 20, SM_CYKANJIWINDOW 0, SM_CXMIN 136, SM_CYMIN 39, SM_CXSIZE 36, SM_CYSIZE 22, SM_CXFRAME/SM_CYFRAME (= SM_CXSIZEFRAME, index 32) 4, SM_CXDOUBLECLK/SM_CYDOUBLECLK 4, SM_CXICONSPACING/SM_CYICONSPACING 75, SM_CXEDGE/SM_CYEDGE 2, SM_CXMINSPACING 160, SM_CYMINSPACING 28, SM_CXSMICON/SM_CYSMICON 16, SM_CYSMCAPTION 23, SM_CXSMSIZE/SM_CYSMSIZE 22, SM_CXMENUSIZE/SM_CYMENUSIZE 19, SM_CXMINIMIZED 160, SM_CYMINIMIZED 28, SM_CXDRAG/SM_CYDRAG 4, SM_CXMENUCHECK/SM_CYMENUCHECK 15, SM_CXFOCUSBORDER/SM_CYFOCUSBORDER 1, SM_CXPADDEDBORDER 4; GetDoubleClickTime 500"
   for_dpi: "GetSystemMetricsForDpi at 96/120/144/192: scroll bars and thumbs 17/21/26/34, SM_CYCAPTION and SM_CYSMCAPTION 23/29/34/45, icons 32/40/48/64, cursors 32/32/48/64, SM_CYMENU 20/25/30/39, SM_CXMIN 136/166/198/258, SM_CYMIN 39/47/56/71, SM_CXSIZE 36/46/54/72, SM_CYSIZE and small caption buttons 22/28/33/44, SM_CXFRAME 4/4/5/5, icon spacing 75/94/113/150, small icons 16/20/24/32, menu bar buttons 19/24/29/38, menu check 15/19/25/31, SM_CXPADDEDBORDER 4/5/6/8; unchanged at every DPI: borders 1, dialog frames 3, edges 2, double-click and drag rectangles 4, focus borders 1, minimized sizes 160x28, min spacing 160x28, SM_CYKANJIWINDOW 0, the screen, the virtual screen and SM_CXMAXIMIZED; at the system DPI (96) it equals GetSystemMetrics; SM_CYCAPTION at DPI 1 is 24, at 48 is 12, at 1000 is 230"
+  device_caps_screen: "SM_CXSCREEN/SM_CYSCREEN are the screen DC's GetDeviceCaps HORZRES (8)/VERTRES (10), 1920 and 1080; DESKTOPHORZRES (118) 1920 and DESKTOPVERTRES (117) 1080. GetDeviceCaps gives the SAME answer for every index on the screen DC (GetDC(NULL)), the DC of a window (a 200x120 window: its clip box is 0,0,200,120, the caps are still the screen's), a memory DC made with CreateCompatibleDC(screen DC) and a memory DC holding a 32-bit DIB section. All the values: DRIVERVERSION(0) 16384, TECHNOLOGY(2) 1 (DT_RASDISPLAY), HORZSIZE(4) 508, VERTSIZE(6) 286 (mm), HORZRES 1920, VERTRES 1080, BITSPIXEL(12) 32, PLANES(14) 1, NUMBRUSHES(16) -1, NUMPENS(18) -1, NUMMARKERS(20) 0, NUMFONTS(22) 0, NUMCOLORS(24) -1, PDEVICESIZE(26) 0, CURVECAPS(28) 511, LINECAPS(30) 254, POLYGONALCAPS(32) 255, TEXTCAPS(34) 30727, CLIPCAPS(36) 1, RASTERCAPS(38) 32409, ASPECTX(40) 36, ASPECTY(42) 36, ASPECTXY(44) 51, LOGPIXELSX(88) 96, LOGPIXELSY(90) 96, SIZEPALETTE(104) 0, NUMRESERVED(106) 20, COLORRES(108) 24, PHYSICALWIDTH(110) 0, PHYSICALHEIGHT(111) 0, PHYSICALOFFSETX(112) 0, PHYSICALOFFSETY(113) 0, SCALINGFACTORX(114) 0, SCALINGFACTORY(115) 0, VREFRESH(116) 60, BLTALIGNMENT(119) 1, SHADEBLENDCAPS(120) 0, COLORMGMTCAPS(121) 2. A NULL DC: 0 with ERROR_INVALID_HANDLE (6); an index that is not defined (-1, 3, 1000): 0, error unchanged."
+  window_metrics: "How the metrics show in a window (window 300x200 at 60,70, 96 DPI, work area 0,24,1920,1080). WM_GETMINMAXINFO values (maxsize / maxpos / mintrack / maxtrack) and the maximized rectangle: WS_OVERLAPPEDWINDOW: 1936x1096 at -8,-8 / 136,39 / 1940,1100, maximized window rect -8,16,1928,1088 (client 1920x1033: it stops at the taskbar, top = work top - 8) - so the message's max size is the SCREEN size plus the frame (1080+16) while SM_CYMAXIMIZED is the work-area height plus 16 (1072); WS_CAPTION|WS_THICKFRAME (no maximize box), WS_CAPTION alone, and a tool window with caption, sysmenu and thick frame: the same message values (mintrack 136,39; the tool window 16,16) and the maximized rect is -8,-8,1928,1088 (client 1920x1057): it covers the taskbar; WS_POPUP: maxsize 1920x1080 at 0,0, mintrack 2,2, maximized rect 0,0,1920,1080; WS_POPUP|WS_BORDER: 1922x1082 at -1,-1, mintrack 136,39, rect -1,-1,1921,1081; WS_POPUP|WS_THICKFRAME: 1934x1094 at -7,-7, mintrack 14,14, rect -7,-7,1927,1087 (client 1920x1080). maxtrack is 1940,1100 for every style (SM_CXMAXTRACK/SM_CYMAXTRACK). The overlapped styles get one WM_GETMINMAXINFO at creation, a plain WS_POPUP none; ShowWindow(SW_SHOWMAXIMIZED) sends two for a window with a frame (one for a plain popup), SW_RESTORE and the minimize one more each. A minimized window of any style has the rectangle 0,1052,160,1080 (SM_CXMINIMIZED x SM_CYMINIMIZED at the bottom left of the screen) and an empty client rectangle 0,0,0,0. SM_CXFRAME + SM_CXPADDEDBORDER = 8 is the frame width of the overlapped window."
+  dpi_formulas: "GetSystemMetricsForDpi at DPI d >= 24 (round = half up): scroll bars and thumbs (SM_CXVSCROLL, SM_CYHSCROLL, SM_CYVTHUMB, SM_CXHTHUMB; SM_CYVSCROLL and SM_CXHSCROLL equal them at 96/120/144/192) round(17*d/96), never below 8; SM_CYCAPTION and SM_CYSMCAPTION round(22*d/96)+1; SM_CYSIZE, SM_CXSMSIZE, SM_CYSMSIZE round(22*d/96); SM_CXICON round(32*d/96) (SM_CYICON the same at 96/120/144/192); SM_CXICONSPACING = SM_CYICONSPACING round(75*d/96); SM_CXPADDEDBORDER round(4*d/96); SM_CYMENU round(19*d/96)+1 and SM_CXMENUSIZE/SM_CYMENUSIZE round(19*d/96) for d >= 48; SM_CYMIN = SM_CYMINTRACK = SM_CYCAPTION + 2 * (SM_CXFRAME + SM_CXPADDEDBORDER) at the same d; SM_CXCURSOR (SM_CYCURSOR the same at 96/120/144/192) is 32 below 144 DPI, 48 for 144 to 191, 64 for 192 to 287, 96 for 288 to 383, 128 from 384; SM_CXMIN = SM_CXMINTRACK, SM_CXSIZE, SM_CXFRAME (= SM_CYFRAME), SM_CXSMICON and SM_CXMENUCHECK (= SM_CYMENUCHECK) follow the table below. Never scaled: borders 1, dialog frames 3, edges 2, double-click and drag rectangles 4, focus borders 1, minimized 160x28, minimized spacing 160x28, SM_CYKANJIWINDOW 0, the screen and virtual screen, SM_CXMAXIMIZED 1936, SM_CXMAXTRACK 1940. DPI 1 does not follow the formulas (caption-related values keep a minimum; see the table)."
+  dpi_table: |
+    Observed GetSystemMetricsForDpi values, one metric per line (SM_ prefix left off), at the DPIs of the first line:
+    dpi:            1 24 48 72 96 100 110 120 125 144 168 192 216 240 288 384 480 1000
+    CXVSCROLL: 8 8 9 13 17 18 19 21 22 26 30 34 38 43 51 68 85 177
+    CYCAPTION: 24 7 12 18 23 24 26 29 30 34 40 45 51 56 67 89 111 230
+    CXICON: 0 8 16 24 32 33 37 40 42 48 56 64 72 80 96 128 160 333
+    CXCURSOR: 32 32 32 32 32 32 32 32 32 48 48 64 64 64 96 128 128 128
+    CYMENU: 24 7 11 15 20 21 23 25 26 30 34 39 44 49 58 77 96 199
+    CXMIN: 93 50 72 106 136 140 154 166 174 198 232 258 292 324 384 510 632 1306
+    CYMIN: 30 15 24 32 39 40 44 47 48 56 64 71 79 88 103 135 167 340
+    CXSIZE: 38 10 18 28 36 38 41 46 48 54 64 72 82 91 109 145 181 377
+    CYSIZE: 23 6 11 17 22 23 25 28 29 33 39 44 50 55 66 88 110 229
+    CXFRAME: 3 3 4 4 4 4 4 4 4 5 5 5 5 6 6 7 8 13
+    CXICONSPACING: 1 19 38 56 75 78 86 94 98 113 131 150 169 188 225 300 375 781
+    CXSMICON: 0 4 8 12 16 16 18 20 21 24 28 32 36 40 48 64 80 166
+    CXMENUSIZE: 8 8 10 14 19 20 22 24 25 29 33 38 43 48 57 76 95 198
+    CYMENUSIZE: 23 6 10 14 19 20 22 24 25 29 33 38 43 48 57 76 95 198
+    CXMENUCHECK: 21 3 7 11 15 17 19 19 21 25 29 31 37 41 47 65 81 165
+    CXPADDEDBORDER: 0 1 2 3 4 4 5 5 5 6 7 8 9 10 12 16 20 42
   flags: "SM_MOUSEPRESENT 0, SM_CMOUSEBUTTONS 0 and SM_MOUSEWHEELPRESENT 0 (the oracle has no mouse attached; SendInput still moves the cursor), SM_DEBUG 0, SM_SWAPBUTTON 0, SM_MENUDROPALIGNMENT 0, SM_PENWINDOWS 0, SM_DBCSENABLED 0, SM_SECURE 0, SM_ARRANGE 8 (ARW_HIDE, winuser.h: minimized windows are hidden), SM_CLEANBOOT 0, SM_SHOWSOUNDS 0, SM_SLOWMACHINE 0, SM_MIDEASTENABLED 0, SM_IMMENABLED 1, SM_TABLETPC 0, SM_MEDIACENTER 0, SM_STARTER 0, SM_SERVERR2 0, SM_MOUSEHORIZONTALWHEELPRESENT 0, SM_DIGITIZER 0, SM_MAXIMUMTOUCHES 0, SM_REMOTESESSION 0, SM_SHUTTINGDOWN 0, SM_REMOTECONTROL 0, SM_CARETBLINKINGENABLED 1, SM_CONVERTIBLESLATEMODE 0, SM_SYSTEMDOCKED 0, SM_NETWORK bit 0 set"
 errors:
   undefined: "an index winuser.h does not define returns 0. The last error: ERROR_INVALID_PARAMETER (87) for negative indices, 97, 0x1001 and 0x7FFFFFFF; unchanged (0) for 24..27, 64..66, 90, 96 and 0x2005"
@@ -40,8 +62,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 2  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
   carrying its own declarations (Learn prototypes, header constants) and a

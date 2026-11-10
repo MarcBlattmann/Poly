@@ -250,8 +250,18 @@ pub fn query_section<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtSta
         let obj = sys.objects.object_by_handle(&caller, Handle(h), access, Some(ObjectType::Section))?;
         let key = sys.objects.cookie(obj).ok_or(STATUS_INVALID_HANDLE)?;
         let s = sys.section(key).ok_or(STATUS_INVALID_HANDLE)?;
-        if class as u32 != 0 {
+        let class = class as u32;
+        if class > 4 {
             return Err(STATUS_INVALID_INFO_CLASS);
+        }
+        if class != 0 {
+            // `SectionImageInformation` (64 bytes), `SectionRelocationInformation`
+            // and `SectionOriginalBaseInformation` (8): data sections are no images.
+            let need = if class == 1 { 64 } else { 8 };
+            if (len as u32 as usize) < need {
+                return Err(STATUS_INFO_LENGTH_MISMATCH);
+            }
+            return Err(STATUS_SECTION_NOT_IMAGE);
         }
         // SEC_FILE for a section of a file, SEC_IMAGE for an image, else
         // what the section was made with (`SEC_COMMIT`, `SEC_RESERVE`).

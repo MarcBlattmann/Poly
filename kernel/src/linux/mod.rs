@@ -203,7 +203,12 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         testrun::enter(process.pid, tid, number, &args);
     }
     k.enter_syscall(number);
+    let started = crate::profile::enabled().then(|| (crate::time::now_ns(), crate::profile::enter(number as u32 + 1)));
     let outcome = Linux::dispatch_with(&mut k, regs);
+    if let Some((t, before)) = started {
+        crate::profile::leave(before);
+        crate::profile::syscall(number, crate::time::now_ns().saturating_sub(t));
+    }
     k.set_result(regs.rax);
     let exit = k.take_exit();
     if process.traced {

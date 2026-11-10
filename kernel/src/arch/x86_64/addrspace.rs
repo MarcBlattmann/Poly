@@ -250,10 +250,14 @@ pub struct UserFrame {
 impl UserFrame {
     /// A zeroed frame, or `None` if memory ran out.
     pub fn zeroed() -> Option<UserFrame> {
+        let timer = crate::profile::start();
         let phys = FRAMES.lock().as_mut().and_then(|f| f.allocate(0))?;
+        crate::profile::since(crate::profile::Event::AllocFrame, timer);
         USER_FRAMES.fetch_add(1, Ordering::Relaxed);
         let mut frame = UserFrame { phys };
+        let timer = crate::profile::start();
         frame.bytes_mut().fill(0);
+        crate::profile::since(crate::profile::Event::ZeroFrame, timer);
         Some(frame)
     }
 

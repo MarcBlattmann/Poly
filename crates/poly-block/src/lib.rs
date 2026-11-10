@@ -43,7 +43,7 @@ mod ramdisk;
 pub mod sync;
 mod watchdog;
 
-pub use cache::{Buf, BufferCache, CacheError, CacheSlot, CacheStats};
+pub use cache::{Buf, BufferCache, CacheError, CacheSlot, CacheStats, KEEP_RUN_BLOCKS, cache_size};
 pub use queue::{DeviceSlot, Part, QueueStats, QueueStorage, RequestQueue, RequestSlot, SetupError, Ticket};
 pub use ramdisk::{RAMDISK_COMPLETIONS, RamDisk};
 pub use watchdog::{Abort, Clock, Watchdog};

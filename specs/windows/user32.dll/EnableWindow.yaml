@@ -4,8 +4,8 @@ id: windows/api/user32.dll/EnableWindow
 oracle:
   os: "Windows 11 Home 25H2 (build 26200.9711), x64"
   machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
-  observed_by: spec-win-gui-b
-  date: 2026-11-02
+  observed_by: spec-win-gui-b, spec-win-gui-b2
+  date: 2026-11-02, 2026-11-09 (mouse rules after the held-out feedback)
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn reference pages of the functions and messages named here, "About
@@ -35,6 +35,11 @@ rules:
   mouse_disabled_child: "a click on a disabled child C: WindowFromPoint returns the parent A, and A gets WM_NCHITTEST (three times), WM_SETCURSOR(hit HTCLIENT, WM_LBUTTONDOWN), WM_LBUTTONDOWN at its own client coordinates, WM_NCHITTEST, WM_SETCURSOR(WM_LBUTTONUP), WM_LBUTTONUP; C gets nothing"
   mouse_disabled_popup: "a click on a disabled top-level popup D lying over A: WindowFromPoint returns D; D gets WM_SETCURSOR(window D, hit HTERROR -2, WM_LBUTTONDOWN) and WM_SETCURSOR(-2, WM_LBUTTONUP) only (no WM_NCHITTEST, no button messages); A gets nothing; no activation change"
   mouse_enabled_child: "after enabling C, a click on it: C WM_NCHITTEST x3, C then A WM_MOUSEACTIVATE(top A, HTCLIENT, WM_LBUTTONDOWN), C then A WM_SETCURSOR(window C), C WM_LBUTTONDOWN, WM_NCHITTEST, C and A WM_SETCURSOR(WM_LBUTTONUP), C WM_LBUTTONUP"
+  click_sequence: "a button press (left or right) on a window of the active top-level window A, routed as: WM_NCHITTEST twice to the window under the cursor (the test's own WindowFromPoint call before the click adds one more, which is why three are listed above); for a CHILD window, WM_PARENTNOTIFY(wParam = the button message such as WM_LBUTTONDOWN) to each ancestor, nearest first (C, then A for a grandchild G of C); WM_MOUSEACTIVATE(wParam = A, HTCLIENT, the button message) to the clicked child and then to each of its ancestors up to A (DefWindowProc passes it to the parent), ALSO WHEN A IS ALREADY THE ACTIVE WINDOW and also for the right button; WM_SETCURSOR(window = the clicked window, HTCLIENT, the button message) to the clicked window and then to each ancestor; the button message with client coordinates to the clicked window only; for the release WM_NCHITTEST, the WM_SETCURSOR chain, the button-up message. A press on the active top-level window itself (its own client area, or the disabled child E that falls through to it) gets no WM_MOUSEACTIVATE and no WM_PARENTNOTIFY: WM_NCHITTEST x2, WM_SETCURSOR(window A, HTCLIENT), the button message"
+  click_disabled_child_active: "a click on a disabled child E of the active A is handled as a click on A's own client area at that point (see above: A gets the hit tests, WM_SETCURSOR, the button message in A's client coordinates; no WM_MOUSEACTIVATE, no WM_PARENTNOTIFY); a click on a disabled grandchild F of an enabled child C is handled as a click on C (C's client coordinates; PARENTNOTIFY to A, MOUSEACTIVATE to C then A, SETCURSOR to C then A, as for any click on C). WindowFromPoint returns the enabled ancestor in both cases"
+  move_over_children: "a mouse move onto an enabled grandchild G of C: G WM_NCHITTEST, WM_SETCURSOR(window G, HTCLIENT, WM_MOUSEMOVE) to G, C and A in that order, WM_MOUSEMOVE to G; onto a disabled child E of A: A gets WM_NCHITTEST, WM_SETCURSOR(window A), WM_MOUSEMOVE in A's client coordinates; onto a disabled grandchild F of C: the same to C (and A for WM_SETCURSOR)"
+  click_inactive_toplevel: "a press on any enabled part of an INACTIVE enabled top-level window A (its own client area, a disabled child E of it, an enabled child C) while B is active activates A: WM_NCHITTEST x2, (for a child PARENTNOTIFY, then) WM_MOUSEACTIVATE (clicked window, then ancestors; wParam = A), then B WM_NCACTIVATE(0, lParam = A) and WM_ACTIVATE(WA_INACTIVE, other = A); A WM_WINDOWPOSCHANGING (pos/size 0, flags 0x3) and WM_WINDOWPOSCHANGED (own position and size, flags 0x1803), WM_NCACTIVATE(1), WM_ACTIVATE with WA_CLICKACTIVE (2) and other = B; B WM_KILLFOCUS(other = A), A WM_SETFOCUS(other = B); then the WM_SETCURSOR chain and the button message; A is then active, focus and foreground; after the button-up a synthesized WM_NCHITTEST, WM_SETCURSOR and WM_MOUSEMOVE (keys 0) reach the window under the cursor. A WS_EX_NOACTIVATE popup N is activated by a click the same way (the style does not stop mouse activation)"
+  click_disabled_toplevel_inactive: "a press on an inactive disabled top-level popup D: WindowFromPoint returns D; D gets only WM_SETCURSOR(window D, HTERROR -2, WM_LBUTTONDOWN) and WM_SETCURSOR(-2, WM_LBUTTONUP): no hit-test message, no button messages, no WM_MOUSEACTIVATE, no activation (B stays active). The children of a disabled window are not hit: over an enabled child H of the disabled popup D WindowFromPoint returns D, and the click is treated as a click on D itself (HTERROR, nothing else)"
 errors:
   null: "NULL: 0, ERROR_INVALID_WINDOW_HANDLE (1400)"
   bad_handle: "a made-up handle: 0, ERROR_INVALID_WINDOW_HANDLE (1400)"
@@ -46,8 +51,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 2  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
   carrying its own declarations (Learn prototypes, header constants) and a

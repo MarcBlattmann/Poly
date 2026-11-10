@@ -358,6 +358,10 @@ cargo xtask pipeline win show <results.json>        # the observations in a resu
 cargo xtask pipeline win diff --reference <windows results.json> [--build-kernel] [--target <file.json>]
 ```
 
+A test that imports `dwrite.dll` is booted with the DejaVu fonts in
+`C:\Windows\Fonts` (ADR 0170): `win poly` puts the files of `$POLY_FONT_DIR` or
+`target/fonts/dejavu-*` (`cargo xtask fonts fetch`) in its initramfs.
+
 `win build` cross-compiles with the pinned toolchain (`-Zbuild-std` from
 `rust-src`, `rust-lld`; the first build compiles `core`, about 30 s) and
 refuses an executable that imports from a DLL other than `ntdll`,
