@@ -1095,6 +1095,12 @@ impl LinuxKernel for FakeKernel {
         }
     }
 
+    fn open_namespace(&mut self, _like: i32, inum: u32, kind: crate::ns::Kind) -> Result<i32, Errno> {
+        let fd = (100..).find(|fd| !self.ns_fds.contains_key(fd)).expect("a free descriptor");
+        self.ns_fds.insert(fd, (inum, kind));
+        Ok(fd)
+    }
+
     fn with_futexes(&mut self, f: &mut dyn FnMut(&mut FutexTable, &mut dyn LinuxKernel)) {
         assert!(!self.futexes_locked, "with_futexes called inside with_futexes");
         let mut table = core::mem::take(&mut self.futexes);

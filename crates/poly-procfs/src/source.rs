@@ -410,6 +410,15 @@ pub trait ProcSource: Send + Sync {
         None
     }
 
+    /// Whether the reading process may follow the namespace links of
+    /// process `pid` (`/proc/<pid>/ns/<kind>`): its own user's, or anybody's
+    /// with `CAP_SYS_PTRACE` (namespaces(7): the links are governed by a
+    /// ptrace access mode check). Yes by default.
+    fn may_follow_namespaces(&self, pid: u32) -> bool {
+        let _ = pid;
+        true
+    }
+
     /// Whether a namespace of kind `kind` with inode number `inum` exists.
     fn namespace_exists(&self, inum: u32, kind: usize) -> bool {
         let _ = (inum, kind);

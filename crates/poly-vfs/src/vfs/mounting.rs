@@ -58,8 +58,11 @@ impl Vfs {
         }
         let sb = src.mount.sb.clone();
         let (peer, master) = self.bind_inherit(&src.mount)?;
+        // What is shown is held while the mount lives (see `Mount::pins_root`).
+        let pinned = src.ino != sb.fs.root() && sb.fs.open(src.ino).is_ok();
         let mut table = self.mounts.lock();
         let m = table.add(sb, src.ino, Some((dst.mount.clone(), dst.ino)), flags);
+        m.pins_root.store(pinned, core::sync::atomic::Ordering::Relaxed);
         m.set_attrs(src.mount.attrs());
         m.set_groups(peer, master);
         self.propagate_mount(&mut table, &dst.mount, dst.ino, &m);

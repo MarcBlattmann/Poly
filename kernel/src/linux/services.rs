@@ -1117,6 +1117,14 @@ impl LinuxKernel for Thread<'_> {
         Ok((inum, kind))
     }
 
+    fn open_namespace(&mut self, like: i32, inum: u32, kind: poly_personality_linux::ns::Kind) -> Result<i32, Errno> {
+        let file = self.process.files.file(like).map_err(vfs_errno)?;
+        let ino = poly_procfs::namespace_file_ino(inum, kind.index() as usize);
+        let node = file.node().sibling(ino).map_err(vfs_errno)?;
+        let open = crate::fs::vfs().open_node_quiet(&node, poly_vfs::OpenFlags::RDONLY).map_err(vfs_errno)?;
+        self.process.files.install(open, true).map_err(vfs_errno)
+    }
+
     fn kcmp_id(&mut self, pid: i32, what: poly_personality_linux::kernel::KcmpResource) -> Result<u64, Errno> {
         super::procaccess::kcmp_id(pid, what)
     }

@@ -671,6 +671,15 @@ impl ProcSource for KernelProc {
         ns::Kind::from_index(kind as u32).is_some_and(|k| ns::lookup(inum, k).is_some())
     }
 
+    fn may_follow_namespaces(&self, pid: u32) -> bool {
+        let Some(target) = self.global(pid).and_then(find) else { return true };
+        let Some(reader) = crate::linux::cred::current_creds() else { return true };
+        let target = crate::linux::cred::process_creds(&target);
+        // `CAP_SYS_PTRACE` (`linux/capability.h`).
+        const CAP_SYS_PTRACE: u32 = 19;
+        reader.fsuid == target.euid || reader.capable(CAP_SYS_PTRACE)
+    }
+
     fn pin_namespace(&self, inum: u32, kind: usize, pin: bool) {
         if let Some(k) = ns::Kind::from_index(kind as u32) {
             ns::pin(inum, k, pin);

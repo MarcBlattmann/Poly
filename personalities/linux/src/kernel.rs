@@ -1202,6 +1202,15 @@ pub trait LinuxKernel {
         Err(Errno::EINVAL)
     }
 
+    /// A new descriptor (read-only, close-on-exec) of the file of the
+    /// namespace with inode number `inum` and kind `kind`, in the procfs
+    /// the namespace descriptor `like` was opened from (ioctl_nsfs(2):
+    /// `NS_GET_USERNS`, `NS_GET_PARENT`). `EINVAL` by default.
+    fn open_namespace(&mut self, like: i32, inum: u32, kind: crate::ns::Kind) -> Result<i32, Errno> {
+        let _ = (like, inum, kind);
+        Err(Errno::EINVAL)
+    }
+
     // ---- other processes' resources (ADR 0121) -------------------------
 
     /// kcmp(2): an identity of resource `what` of process `pid` (a global

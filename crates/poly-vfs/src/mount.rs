@@ -110,6 +110,19 @@ pub struct Mount {
     /// `MNT_EXPIRE`: the namespace generation the first call saw plus one
     /// (0: not marked).
     pub(crate) expire: AtomicU64,
+    /// The mount holds a pin on its root inode ([`FileSystem::open`]): a
+    /// bind mount of something that is not its file system's root keeps
+    /// that inode, whatever happens to its names (a namespace file of
+    /// procfs keeps its namespace alive, as `ip netns add` relies on).
+    pub(crate) pins_root: AtomicBool,
+}
+
+impl Drop for Mount {
+    fn drop(&mut self) {
+        if self.pins_root.load(Ordering::Relaxed) {
+            self.sb.fs.release(self.root);
+        }
+    }
 }
 
 /// How a mount refers to the mount it is on.
@@ -659,6 +672,7 @@ impl MountTable {
             propagation_mark: AtomicBool::new(false),
             writers: AtomicU32::new(0),
             expire: AtomicU64::new(0),
+            pins_root: AtomicBool::new(false),
         });
         self.next_id += 1;
         m

@@ -129,6 +129,15 @@ pub trait FileSystem: Send + Sync {
         false
     }
 
+    /// The error of opening `ino` for writing, for a file that can never be
+    /// written and says so with an error of its own (a namespace file of
+    /// procfs: `EPERM`); it comes before the read-only file system's
+    /// `EROFS`. `None` (the default): the usual checks.
+    fn write_open_error(&self, ino: Ino) -> Option<Errno> {
+        let _ = ino;
+        None
+    }
+
     /// Called when a regular file is opened for writing (or truncating),
     /// before the open file exists: a union file system copies the file to
     /// its writable layer here, so the copy exists even if nothing is

@@ -202,6 +202,13 @@ fn parse_ns_name(name: &[u8]) -> Option<(usize, u32)> {
 /// files `/proc/<pid>/ns/<kind>` links to: its inode number and kind (an
 /// index into [`NS_KINDS`], never `pid_for_children` or
 /// `time_for_children`).
+/// The inode of the hidden file of the namespace with inode number `inum`
+/// and kind `kind` (an index into [`NS_KINDS`]), in any procfs: what
+/// [`namespace_file`] reads back.
+pub fn namespace_file_ino(inum: u32, kind: usize) -> Ino {
+    Node::NsFile(inum, kind).ino()
+}
+
 pub fn namespace_file(ino: Ino) -> Option<(u32, usize)> {
     match Node::from_ino(ino)? {
         Node::NsFile(inum, kind) => Some((inum, kind)),
@@ -908,10 +915,20 @@ impl FileSystem for ProcFs {
             Node::Fd(p, fd) => src.fd(p, fd).map(|f| f.target).ok_or(Errno::ENOENT),
             Node::Ns(p, k) => {
                 let inum = src.namespace(p, k).ok_or(Errno::ENOENT)?;
+                // Another user's namespaces are not for the reader to follow.
+                if !src.may_follow_namespaces(p) {
+                    return Err(Errno::EACCES);
+                }
                 Ok(alloc::format!("{}:[{inum}]", ns_type(k)).into_bytes())
             }
             _ => Err(Errno::EINVAL),
         }
+    }
+
+    /// A namespace file cannot be opened for writing: `EPERM`
+    /// (ioctl_nsfs's spec sheet).
+    fn write_open_error(&self, ino: Ino) -> Option<Errno> {
+        matches!(Node::from_ino(ino), Some(Node::NsFile(..))).then_some(Errno::EPERM)
     }
 
     fn writable_file(&self, ino: Ino) -> bool {

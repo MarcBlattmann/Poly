@@ -106,6 +106,11 @@ impl Vfs {
         }
         if !created {
             if (write || flags.contains(OpenFlags::TRUNC))
+                && let Some(e) = loc.mount.sb.fs.write_open_error(loc.ino)
+            {
+                return Err(e);
+            }
+            if (write || flags.contains(OpenFlags::TRUNC))
                 && is_fs_object(attr.kind)
                 && loc.mount.read_only_for(loc.ino)
             {
