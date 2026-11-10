@@ -270,7 +270,7 @@
 {"symbol":"DrawStateW","src":["wine-spec"]},
 {"symbol":"DrawTextA","src":["wine-spec"],"seeds":["wine:user32/tests/text.c:test_DrawTextCalcRect","wine:user32/tests/menu.c:menu_ownerdraw_wnd_proc"]},
 {"symbol":"DrawTextExA","src":["wine-spec"],"seeds":["wine:user32/tests/text.c:test_DrawTextCalcRect"]},
-{"symbol":"DrawTextExW","status":"claimed","claimed_by":"impl-win-text","src":["wine-spec"],"seeds":["wine:user32/tests/text.c:test_DrawTextCalcRect"]},
+{"symbol":"DrawTextExW","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:user32/tests/text.c:test_DrawTextCalcRect"]},
 {"symbol":"DrawTextW","status":"claimed","claimed_by":"impl-win-text","src":["wine-spec"],"seeds":["wine:user32/tests/text.c:test_DrawTextCalcRect"]},
 {"symbol":"DwmWindowNotificationsEnabled","src":["wine-spec"]},
 {"symbol":"EditWndProc","src":["wine-spec"]},
