@@ -355,10 +355,24 @@ pub fn is_cursor(h: usize) -> bool {
 
 // ----- GetIconInfo, GetCursorInfo, ShowCursor
 
+/// The rows of the mask bitmap `GetIconInfo` reports: the icon's height,
+/// or for a monochrome one the rows of the mask it was made from (AND
+/// above XOR: twice the height, one more for an odd mask, the single row
+/// of a 1x1 mask).
+fn mask_rows(o: &Obj) -> i32 {
+    if !o.mono {
+        o.img.h
+    } else if o.mask_rows > 0 {
+        o.mask_rows
+    } else {
+        2 * o.img.h
+    }
+}
+
 fn mask_bits(o: &Obj) -> Vec<u8> {
     // 1 bit per pixel rows padded to words; 1 = white.
     let (w, h) = (o.img.w as usize, o.img.h as usize);
-    let rows = if o.mono { (o.mask_rows as usize).max(2 * h) } else { h };
+    let rows = mask_rows(o) as usize;
     let stride = w.div_ceil(16) * 2;
     let mut out = alloc::vec![0u8; stride * rows];
     for y in 0..rows {
@@ -380,7 +394,7 @@ fn mask_bits(o: &Obj) -> Vec<u8> {
 pub unsafe extern "system" fn GetIconInfo(icon: usize, ii: *mut u8) -> i32 {
     let made = with_obj(icon, |o| {
         let (w, h) = (o.img.w, o.img.h);
-        let mask_rows = if o.mono { o.mask_rows.max(2 * h) } else { h };
+        let mask_rows = mask_rows(o);
         let bits = mask_bits(o);
         // SAFETY: gdi32 copies the bits.
         let (m, c) = unsafe {
