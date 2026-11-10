@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "8a396a60cdf0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-09T18:09:27Z",
+  "tests": [
+    {
+      "name": "afm_basic",
+      "exe_sha256": "c100d889f910daba342a87153667d7dd792a4a12ab948888bdc75b153a2e7280",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlIGFkZGluZzogYSBkaWZmZXJlbnQgZmFjZSB0aGFuICdQb2x5VGVzdCBNb25vJyAoYSBzdWJzdGl0dXRlKQpvayB0aGUgZmFtaWx5IGlzIHVua25vd24gYmVmb3JlIHRoZSBmb250IGlzIGFkZGVkCkFkZEZvbnRNZW1SZXNvdXJjZUV4OiBoYW5kbGUgbm9uLU5VTEwgZm9udHMgYWRkZWQgMQpvayBhIGhhbmRsZSBjb21lcyBiYWNrCm9rIG9uZSBmb250IHdhcyBhZGRlZAphZnRlciBhZGRpbmc6IGZhY2UgJ1BvbHlUZXN0IE1vbm8nICgxNCk7IGhlaWdodCAxNiBhc2NlbnQgMTIgJ0EnIDEwICdBQiBnaScgNTB4MTYKb2sgdGhlIGZhbWlseSBpcyBzZWxlY3RhYmxlIGJ5IG5hbWUgYWZ0ZXIgYWRkaW5nCmxvd2VyIGNhc2UgcmVxdWVzdDogZmFjZSAnUG9seVRlc3QgTW9ubycgKDE0KTsgaGVpZ2h0IDE2IGFzY2VudCAxMiAnQScgMTAgJ0FCIGdpJyA1MHgxNgpvayBhIGxvd2VyIGNhc2UgcmVxdWVzdCBmaW5kcyB0aGUgZm9udCBhbmQgcmVwb3J0cyBpdHMgb3duIHNwZWxsaW5nClJlbW92ZUZvbnRNZW1SZXNvdXJjZUV4IHJldHVybmVkIDEKb2sgcmVtb3ZlIHN1Y2NlZWRzCmFmdGVyIHJlbW92aW5nOiBhIGRpZmZlcmVudCBmYWNlIHRoYW4gJ1BvbHlUZXN0IE1vbm8nIChhIHN1YnN0aXR1dGUpCm9rIHRoZSBmYW1pbHkgaXMgdW5rbm93biBhZ2FpbiBhZnRlciByZW1vdmluZwpzdW1tYXJ5IDcgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before adding: a different face than 'PolyTest Mono' (a substitute)\nok the family is unknown before the font is added\nAddFontMemResourceEx: handle non-NULL fonts added 1\nok a handle comes back\nok one font was added\nafter adding: face 'PolyTest Mono' (14); height 16 ascent 12 'A' 10 'AB gi' 50x16\nok the family is selectable by name after adding\nlower case request: face 'PolyTest Mono' (14); height 16 ascent 12 'A' 10 'AB gi' 50x16\nok a lower case request finds the font and reports its own spelling\nRemoveFontMemResourceEx returned 1\nok remove succeeds\nafter removing: a different face than 'PolyTest Mono' (a substitute)\nok the family is unknown again after removing\nsummary 7 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 69
+    },
+    {
+      "name": "afm_copy",
+      "exe_sha256": "bee516adb0af472f275e023bea3187a6b94dc483abf5ae0845738bf3187dc7f0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgYWRkZWQKYWZ0ZXIgb3ZlcndyaXRpbmcgdGhlIGNhbGxlcidzIGJ1ZmZlcjogYXZhaWxhYmxlIHRydWUKb2sgdGhlIGZvbnQgd29ya3MgYWx0aG91Z2ggdGhlIGJ1ZmZlciB3YXMgb3ZlcndyaXR0ZW4Kc2Vjb25kIGFkZDogY291bnQgMSwgaGFuZGxlcyBkaWZmZXIgdHJ1ZQpvayBzZWNvbmQgYWRkIHN1Y2NlZWRzCmFmdGVyIHJlbW92aW5nIHRoZSBmaXJzdCBoYW5kbGU6IGF2YWlsYWJsZSB0cnVlCnJlbW92ZSBmaXJzdCByZXR1cm5lZCAxCm9rIHRoZSBmYW1pbHkgaXMgc3RpbGwgYXZhaWxhYmxlIGFmdGVyIHJlbW92aW5nIG9uZSBvZiB0d28gYWRkcwpyZW1vdmUgc2Vjb25kIHJldHVybmVkIDEKYWZ0ZXIgcmVtb3ZpbmcgdGhlIHNlY29uZCBoYW5kbGU6IGF2YWlsYWJsZSBmYWxzZQpvayB0aGUgZmFtaWx5IGlzIGdvbmUgYWZ0ZXIgcmVtb3ZpbmcgYm90aApzdW1tYXJ5IDUgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok added\nafter overwriting the caller's buffer: available true\nok the font works although the buffer was overwritten\nsecond add: count 1, handles differ true\nok second add succeeds\nafter removing the first handle: available true\nremove first returned 1\nok the family is still available after removing one of two adds\nremove second returned 1\nafter removing the second handle: available false\nok the family is gone after removing both\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    }
+  ]
+}

@@ -110,9 +110,11 @@ fn process_init(teb: u64, exe_base: u64) -> Result<(), NtStatus> {
     LOADER_LOCK.enter(&SysPlatform);
     let callouts = with_loader(|l, p| {
         l.init_ldr_data(p, peb)?;
+        // The executable heads the load and memory order lists, then comes ntdll, as in every
+        // Windows process (programs that walk `PEB.Ldr` take the first entry for the image).
+        let exe = l.add_mapped(p, exe_base, &image, false)?;
         let ntdll = poly_ldr::path::wide("C:\\Windows\\System32\\ntdll.dll");
         l.add_mapped(p, ntdll_base(), &ntdll, true)?;
-        let exe = l.add_mapped(p, exe_base, &image, false)?;
         l.process_init(p, exe, teb)
     });
     let result = match callouts {

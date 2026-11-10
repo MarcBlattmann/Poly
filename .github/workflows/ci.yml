@@ -358,6 +358,17 @@ jobs:
         if: matrix.slice == 'extras'
         run: .github/scripts/rust-wait.sh
       - uses: ./.github/actions/prebuilt
+      # `win polycheck` runs the DirectWrite entries' tests, which need the
+      # system fonts (ADR 0170): the same pinned DejaVu fonts as host tests.
+      - name: The fonts' cache
+        if: matrix.slice == 'extras'
+        uses: actions/cache@v4
+        with:
+          path: target/fonts
+          key: fonts-dejavu-2.37
+      - name: Fetch the fonts (DirectWrite's tests on Poly)
+        if: matrix.slice == 'extras'
+        run: target/debug/xtask fonts fetch
       - run: target/debug/xtask ci pipeline --shard ${{ matrix.slice }}
       - name: Keep the polycheck report
         if: failure()

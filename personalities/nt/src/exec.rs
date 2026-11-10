@@ -326,6 +326,22 @@ pub fn start_process_from(
     })
 }
 
+/// Map `KUSER_SHARED_DATA` (`poly_kernelbase::kuser`, ADR 0155) read-only at 0x7FFE0000 in `proc`,
+/// filled from `facts`. Programs read the OS version, processor features and clock there directly;
+/// a process without the page faults on the first such read.
+pub fn map_user_shared_data(
+    proc: &mut NtProcess,
+    b: &mut dyn Backend,
+    facts: &poly_kernelbase::kuser::Facts,
+) -> Result<(), NtStatus> {
+    use poly_kernelbase::kuser;
+    let (base, size) = (kuser::ADDRESS, kuser::SIZE as u64);
+    proc.vm.allocate(b, base, size, 0, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)?;
+    b.write(base, &kuser::page(facts))?;
+    proc.vm.protect(b, base, size, PAGE_READONLY)?;
+    Ok(())
+}
+
 /// [`start_process`] for a process another one creates
 /// (`NtCreateUserProcess`, ADR 0079), with its process parameters
 /// ([`crate::params::write`]) and, with `inherit_from`, its creator's

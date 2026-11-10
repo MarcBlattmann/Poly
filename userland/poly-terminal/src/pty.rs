@@ -89,6 +89,39 @@ pub fn winsize(cols: u16, rows: u16, width_px: u16, height_px: u16) -> [u8; 8] {
     b
 }
 
+/// What to run, and how, once the window's size is known (see
+/// [`Launch::start`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Launch {
+    /// The `sh` that opens the terminal for the program.
+    pub sh: String,
+    /// The user's shell (for `SHELL`).
+    pub shell: String,
+    /// The program and its arguments.
+    pub program: Vec<String>,
+    pub dir: Option<String>,
+    /// The terminal's own environment.
+    pub ours: Vec<(String, String)>,
+}
+
+impl Launch {
+    /// Open a pseudo-terminal of the given size and start the program on it.
+    ///
+    /// The size must be the window's real one: a shell that already printed
+    /// its prompt when the terminal is resized (`SIGWINCH`) redraws it, and
+    /// the prompt shows twice. This is why the terminal starts the shell
+    /// only at its first layout, not when the process starts.
+    pub fn start(&self, cols: u16, rows: u16, width_px: u16, height_px: u16) -> Result<Pty, String> {
+        let (mut p, slave) =
+            Pty::open(cols, rows, width_px, height_px).map_err(|e| format!("No pseudo-terminal: {e}"))?;
+        let argv = shell_command(&self.sh, &p.pts, self.dir.as_deref(), &self.program);
+        let env = shell_env(&self.ours, &self.shell, self.dir.as_deref());
+        p.spawn(&argv, &env, &slave).map_err(|e| format!("Could not start {}: {e}", self.shell))?;
+        poly_rt::println!("poly-terminal: {} on {} ({cols}x{rows})", self.program.join(" "), p.pts);
+        Ok(p)
+    }
+}
+
 /// A pseudo-terminal's master and the child on its slave.
 #[derive(Debug)]
 pub struct Pty {
@@ -98,8 +131,9 @@ pub struct Pty {
 }
 
 impl Pty {
-    /// Open a pseudo-terminal of `cols` × `rows`.
-    pub fn open(cols: u16, rows: u16) -> Result<(Pty, File), String> {
+    /// Open a pseudo-terminal of `cols` × `rows` (`width_px` × `height_px`
+    /// pixels, 0 when not known).
+    pub fn open(cols: u16, rows: u16, width_px: u16, height_px: u16) -> Result<(Pty, File), String> {
         let master = File::open_with("/dev/ptmx", open::READ | open::WRITE | open::NONBLOCK, 0)
             .map_err(|e| format!("/dev/ptmx: {e}"))?;
         let unlock = 0u32;
@@ -115,7 +149,7 @@ impl Pty {
         let pts = format!("/dev/pts/{n}");
         let slave = File::open_with(&pts, open::READ | open::WRITE, 0).map_err(|e| format!("{pts}: {e}"))?;
         let pty = Pty { master, child: None, pts };
-        pty.resize(cols, rows, 0, 0);
+        pty.resize(cols, rows, width_px, height_px);
         Ok((pty, slave))
     }
 

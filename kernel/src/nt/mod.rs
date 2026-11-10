@@ -105,6 +105,9 @@ pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
 pub static BCRYPTPRIMITIVES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bcryptprimitives.dll"));
+/// Our `dwrite.dll` (ADR 0170), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
+pub static DWRITE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dwrite.dll"));
 
 /// Our `version.dll` (ADR 0155), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
@@ -696,6 +699,8 @@ fn start_params(
         };
         let start = exec::start_process_from(&mut s.sys, proc, &mut b, file, NTDLL, None, thread, inherit_from);
         let start = start.and_then(|ps| {
+            // KUSER_SHARED_DATA at 0x7FFE0000 (ADR 0155).
+            exec::map_user_shared_data(proc, &mut b, &user_shared_facts())?;
             // The process parameters: image path, command line,
             // environment and current directory (ADR 0073, 0079).
             let base = poly_personality_nt::params::write(proc, &mut b, ps.peb, params)?;
@@ -935,5 +940,37 @@ pub fn spawn_pe_with(
             process_exit(pid, &memory);
             Err(SpawnError::Thread(e))
         }
+    }
+}
+
+/// What `KUSER_SHARED_DATA` is filled from when a process starts (ADR 0155).
+fn user_shared_facts() -> poly_personality_nt::kuser::Facts {
+    use core::arch::x86_64::__cpuid_count;
+    // SAFETY: CPUID exists on every x86-64 processor; leaves beyond the maximum are not read.
+    let cpu = unsafe {
+        let max = __cpuid_count(0, 0).eax;
+        let ext_max = __cpuid_count(0x8000_0000, 0).eax;
+        let l1 = __cpuid_count(1, 0);
+        let l7 = if max >= 7 { __cpuid_count(7, 0) } else { core::mem::zeroed() };
+        let e1 = if ext_max >= 0x8000_0001 { __cpuid_count(0x8000_0001, 0) } else { core::mem::zeroed() };
+        // The kernel's own XCR0 (what it enabled), when the processor has XSAVE enabled.
+        let xcr0 = if l1.ecx >> 27 & 1 != 0 { core::arch::x86_64::_xgetbv(0) } else { 0 };
+        poly_personality_nt::CpuId {
+            leaf1_ecx: l1.ecx,
+            leaf1_edx: l1.edx,
+            leaf7_ebx: l7.ebx,
+            leaf7_ecx: l7.ecx,
+            ext1_ecx: e1.ecx,
+            ext1_edx: e1.edx,
+            xcr0,
+        }
+    };
+    let pages = crate::frames::FRAMES.lock().as_ref().map_or(0, |f| f.total_frames());
+    poly_personality_nt::kuser::Facts {
+        system_time: registry::filetime_now(),
+        uptime: crate::time::now_ns() / 100,
+        processors: crate::thread::online_cpus().len() as u32,
+        physical_pages: pages,
+        cpu,
     }
 }
