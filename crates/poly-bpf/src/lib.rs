@@ -21,13 +21,15 @@
 //!   instruction of the program, so every run ends after at most as many
 //!   steps as there are instructions;
 //! - the last instruction a return, so no run falls off the end;
-//! - no division or remainder by a constant 0 and no shift by a constant
-//!   of 32 or more (Poly's reading: the result is not defined).
+//! - no division by a constant 0 and no shift by a constant of 32 or more;
+//! - no remainder (`BPF_MOD`, in either form) and no `RET X`, which seccomp
+//!   does not accept (linux/api/pkg/seccomp_bpf_isa);
+//! - no read of a scratch word that is not stored on every path that
+//!   reaches the read.
 //!
-//! At run time a division or remainder by `X` = 0 ends the program with
-//! the value 0, the classic BPF rule, and a shift by `X` of 32 or more
-//! gives 0. Scratch memory starts zeroed, so reading a word no
-//! instruction stored is defined (0) rather than refused.
+//! At run time a division by `X` = 0 ends the program with the value 0
+//! (seccomp then kills the thread), and a shift by `X` uses its low five
+//! bits (a count of 32 shifts by 0, 33 by 1).
 //!
 //! The input is a slice of 32-bit words in the host's byte order, as
 //! seccomp loads `struct seccomp_data`: a load at byte offset `k` reads
@@ -193,7 +195,6 @@ enum AluOp {
     And,
     Lsh,
     Rsh,
-    Mod,
     Xor,
 }
 
@@ -222,7 +223,7 @@ enum Op {
     /// Skip this many instructions.
     Ja(u32),
     Jump(Cond, Src, u8, u8),
-    Ret(Src),
+    Ret(u32),
     RetA,
     Tax,
     Txa,
@@ -251,6 +252,7 @@ impl Program {
         if !matches!(ops[len - 1], Op::Ret(_) | Op::RetA) {
             return Err(Error::NoReturn);
         }
+        check_memory(&ops)?;
         Ok(Program { ops: ops.into_boxed_slice() })
     }
 
@@ -292,14 +294,13 @@ impl Program {
                         AluOp::Add => a.wrapping_add(v),
                         AluOp::Sub => a.wrapping_sub(v),
                         AluOp::Mul => a.wrapping_mul(v),
-                        AluOp::Div | AluOp::Mod if v == 0 => return 0,
+                        AluOp::Div if v == 0 => return 0,
                         AluOp::Div => a / v,
-                        AluOp::Mod => a % v,
                         AluOp::Or => a | v,
                         AluOp::And => a & v,
                         AluOp::Xor => a ^ v,
-                        AluOp::Lsh => a.checked_shl(v).unwrap_or(0),
-                        AluOp::Rsh => a.checked_shr(v).unwrap_or(0),
+                        AluOp::Lsh => a << (v & 31),
+                        AluOp::Rsh => a >> (v & 31),
                     };
                 }
                 Op::Neg => a = a.wrapping_neg(),
@@ -317,8 +318,7 @@ impl Program {
                     };
                     pc += usize::from(if taken { jt } else { jf });
                 }
-                Op::Ret(Src::K(k)) => return k,
-                Op::Ret(Src::X) => return x,
+                Op::Ret(k) => return k,
                 Op::RetA => return a,
                 Op::Tax => x = a,
                 Op::Txa => a = x,
@@ -327,6 +327,33 @@ impl Program {
         // Unreachable for a checked program; 0 is classic BPF's "drop".
         0
     }
+}
+
+/// Refuses a read of scratch memory that is not stored on every path to
+/// it. Every jump goes forward, so one pass in order knows, for each
+/// instruction, which words every path reaching it has stored (`masks`,
+/// the intersection of what the jumps to it carried).
+fn check_memory(ops: &[Op]) -> Result<(), Error> {
+    let mut masks = alloc::vec![u32::MAX; ops.len() + 1];
+    let mut valid = 0u32;
+    for (pc, op) in ops.iter().enumerate() {
+        valid &= masks[pc];
+        match *op {
+            Op::LoadAMem(i) | Op::LoadXMem(i) if valid & (1 << i) == 0 => return Err(Error::BadMemory { pc }),
+            Op::StoreA(i) | Op::StoreX(i) => valid |= 1 << i,
+            Op::Ja(k) => {
+                masks[pc + 1 + k as usize] &= valid;
+                valid = u32::MAX;
+            }
+            Op::Jump(_, _, jt, jf) => {
+                masks[pc + 1 + usize::from(jt)] &= valid;
+                masks[pc + 1 + usize::from(jf)] &= valid;
+                valid = u32::MAX;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// Check and decode the instruction at `pc` of a program of `len`.
@@ -377,13 +404,12 @@ fn decode(pc: usize, insn: &Insn, len: usize, rules: Rules) -> Result<Op, Error>
                 AND => AluOp::And,
                 LSH => AluOp::Lsh,
                 RSH => AluOp::Rsh,
-                MOD => AluOp::Mod,
                 XOR => AluOp::Xor,
                 NEG if c & X == 0 => return Ok(Op::Neg),
                 _ => return Err(bad),
             };
             match (op, src) {
-                (AluOp::Div | AluOp::Mod, Src::K(0)) => return Err(Error::BadConstant { pc }),
+                (AluOp::Div, Src::K(0)) => return Err(Error::BadConstant { pc }),
                 (AluOp::Lsh | AluOp::Rsh, Src::K(k)) if k >= 32 => return Err(Error::BadConstant { pc }),
                 _ => {}
             }
@@ -413,8 +439,7 @@ fn decode(pc: usize, insn: &Insn, len: usize, rules: Rules) -> Result<Op, Error>
             Op::Jump(cond, src, insn.jt, insn.jf)
         }
         RET => match c & !0x07 {
-            K => Op::Ret(Src::K(k)),
-            X => Op::Ret(Src::X),
+            K => Op::Ret(k),
             A => Op::RetA,
             _ => return Err(bad),
         },

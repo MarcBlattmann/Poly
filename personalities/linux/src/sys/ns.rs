@@ -80,7 +80,7 @@ pub fn unshare(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Ok(0);
     }
     let names = if make & CLONE_NEWUTS != 0 { initial_names(k) } else { UtsNames::default() };
-    ns::make(&mut namespaces, &mut creds, make, false, names, &mut |owner| k.copy_mounts(owner))?;
+    ns::make(&mut namespaces, &mut creds, make, false, names, &mut |owner, slave| k.copy_mounts(owner, slave))?;
     with_own(k, |p| {
         p.ns = namespaces;
         p.thread_mut(tid).creds = creds;

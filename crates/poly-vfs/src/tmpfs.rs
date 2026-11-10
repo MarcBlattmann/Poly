@@ -54,8 +54,9 @@ const LAST_COOKIE: u64 = DIR_END - 1;
 pub struct Tmpfs {
     inner: SpinMutex<Inner>,
     clock: Arc<dyn Clock>,
-    /// Data pages the file system may hold, if limited (`ENOSPC` beyond).
-    page_limit: Option<u64>,
+    /// Data pages the file system may hold (`ENOSPC` beyond); `u64::MAX`:
+    /// no limit. A remount can change it ([`FileSystem::set_limits`]).
+    page_limit: core::sync::atomic::AtomicU64,
     /// This instance's number, part of its file handles
     /// ([`crate::fileattr`]): a handle made by another tmpfs does not
     /// decode here.
@@ -269,7 +270,7 @@ impl Tmpfs {
     /// An empty tmpfs that holds at most `bytes` of file data (rounded down
     /// to whole pages); writes beyond fail with `ENOSPC`.
     pub fn with_limit(clock: Arc<dyn Clock>, bytes: u64) -> Tmpfs {
-        Tmpfs::build(clock, Some(bytes / PAGE), None)
+        Tmpfs::build(clock, Some(bytes.div_ceil(PAGE)), None)
     }
 
     /// An empty tmpfs that holds at most `bytes` of file data and `inodes`
@@ -277,13 +278,13 @@ impl Tmpfs {
     /// beyond either, writes and new files fail with `ENOSPC`. `statfs`
     /// reports both as the totals.
     pub fn with_limits(clock: Arc<dyn Clock>, bytes: u64, inodes: u64) -> Tmpfs {
-        Tmpfs::build(clock, Some(bytes / PAGE), Some(inodes))
+        Tmpfs::build(clock, Some(bytes.div_ceil(PAGE)), Some(inodes))
     }
 
     /// [`with_limits`](Self::with_limits) with either limit optional
     /// (`None`: none).
     pub fn with_optional_limits(clock: Arc<dyn Clock>, bytes: Option<u64>, inodes: Option<u64>) -> Tmpfs {
-        Tmpfs::build(clock, bytes.map(|b| b / PAGE), inodes)
+        Tmpfs::build(clock, bytes.map(|b| b.div_ceil(PAGE)), inodes)
     }
 
     fn build(clock: Arc<dyn Clock>, page_limit: Option<u64>, inode_limit: Option<u64>) -> Tmpfs {
@@ -310,7 +311,7 @@ impl Tmpfs {
         Tmpfs {
             inner: SpinMutex::new(Inner { nodes, next_ino: ROOT + 1, pages: 0, inode_limit }),
             clock,
-            page_limit,
+            page_limit: core::sync::atomic::AtomicU64::new(page_limit.unwrap_or(u64::MAX)),
             instance,
             kind: ("tmpfs", crate::TMPFS_MAGIC),
         }
@@ -624,10 +625,8 @@ impl Tmpfs {
     }
 
     fn check_space(&self, inner: &Inner, new_pages: u64) -> Result<()> {
-        match self.page_limit {
-            Some(limit) if inner.pages + new_pages > limit => Err(Errno::ENOSPC),
-            _ => Ok(()),
-        }
+        let limit = self.page_limit.load(core::sync::atomic::Ordering::Relaxed);
+        if limit != u64::MAX && inner.pages + new_pages > limit { Err(Errno::ENOSPC) } else { Ok(()) }
     }
 
     /// Writes `buf` at `offset`; `touch` sets the modification and change
@@ -652,6 +651,26 @@ impl Tmpfs {
 }
 
 impl FileSystem for Tmpfs {
+    /// tmpfs(5): a size is whole pages, rounded up; limits below what is
+    /// in use are refused (`EINVAL`) and nothing changes.
+    fn set_limits(&self, bytes: Option<u64>, inodes: Option<u64>) -> Result<()> {
+        let mut inner = self.inner.lock();
+        let pages = bytes.map(|b| if b == 0 { u64::MAX } else { b.div_ceil(PAGE) });
+        if pages.is_some_and(|p| p < inner.pages) {
+            return Err(Errno::EINVAL);
+        }
+        if inodes.is_some_and(|n| n != 0 && n < inner.nodes.len() as u64) {
+            return Err(Errno::EINVAL);
+        }
+        if let Some(p) = pages {
+            self.page_limit.store(p, core::sync::atomic::Ordering::Relaxed);
+        }
+        if let Some(n) = inodes {
+            inner.inode_limit = if n == 0 { None } else { Some(n) };
+        }
+        Ok(())
+    }
+
     fn info(&self) -> FsInfo {
         FsInfo { name: self.kind.0, read_only: false, cache_lookups: false }
     }
@@ -670,7 +689,8 @@ impl FileSystem for Tmpfs {
     /// the count of free ones is the room left in the inode numbers.
     fn statfs(&self) -> Result<crate::FsStats> {
         let inner = self.inner.lock();
-        let total = self.page_limit.unwrap_or(inner.pages).max(inner.pages);
+        let limit = self.page_limit.load(core::sync::atomic::Ordering::Relaxed);
+        let total = if limit == u64::MAX { inner.pages } else { limit }.max(inner.pages);
         let free = total - inner.pages;
         let used = inner.nodes.len() as u64;
         // Without a limit, as many inodes as an inode count can hold.

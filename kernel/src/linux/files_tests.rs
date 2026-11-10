@@ -336,9 +336,9 @@ kernel_test! {
             check!(10, text(p, "/proc/version").starts_with("Linux version 6.1.0-poly "));
             check!(11, text(p, "/proc/stat").contains("\nbtime "));
             let mounts = text(p, "/proc/mounts");
-            check!(12, mounts.contains(" /proc proc rw,nosuid,nodev,noexec 0 0\n"));
+            check!(12, mounts.contains(" /proc proc rw,nosuid,nodev,noexec,relatime 0 0\n"));
             check!(13, mounts.contains(" /sys sysfs ") && mounts.contains(" /dev/shm tmpfs "));
-            check!(14, text(p, "/proc/self/mountinfo").contains(" / / rw - tmpfs "));
+            check!(14, text(p, "/proc/self/mountinfo").contains(" / / rw,relatime - tmpfs "));
             check!(15, text(p, "/proc/filesystems").contains("nodev\tproc\n"));
             check!(16, text(p, "/proc/sys/kernel/ostype") == "Linux\n");
             check!(17, text(p, "/proc/sys/kernel/random/uuid").len() == 37);

@@ -50,6 +50,16 @@ pub trait FileSystem: Send + Sync {
 
     fn getattr(&self, ino: Ino) -> Result<Attr>;
 
+    /// The attributes of `ino` for a path walk that goes through it: its
+    /// type, and the owner and mode as far as the kernel checks search
+    /// permission itself. The default is [`getattr`](Self::getattr); a file
+    /// system that asks somebody else for attributes (FUSE) answers from
+    /// what it knows, and with full permission where the checks are not the
+    /// kernel's.
+    fn walk_attr(&self, ino: Ino) -> Result<Attr> {
+        self.getattr(ino)
+    }
+
     /// Changes attributes; returns the new ones. A size change is a
     /// truncate (regular files only: `EISDIR` / `EINVAL` otherwise).
     fn setattr(&self, ino: Ino, set: &SetAttr) -> Result<Attr>;
@@ -119,6 +129,31 @@ pub trait FileSystem: Send + Sync {
         false
     }
 
+    /// The error of opening `ino` for writing, for a file that can never be
+    /// written and says so with an error of its own (a namespace file of
+    /// procfs: `EPERM`); it comes before the read-only file system's
+    /// `EROFS`. `None` (the default): the usual checks.
+    fn write_open_error(&self, ino: Ino) -> Option<Errno> {
+        let _ = ino;
+        None
+    }
+
+    /// Called when a regular file is opened for writing (or truncating),
+    /// before the open file exists: a union file system copies the file to
+    /// its writable layer here, so the copy exists even if nothing is
+    /// written. An error fails the `open`. The default does nothing.
+    fn prepare_write(&self, ino: Ino) -> Result<()> {
+        let _ = ino;
+        Ok(())
+    }
+
+    /// A remount changes the size limits (tmpfs(5) `size`, `nr_inodes`;
+    /// 0: no limit). `EOPNOTSUPP` for a file system without such limits.
+    fn set_limits(&self, bytes: Option<u64>, inodes: Option<u64>) -> Result<()> {
+        let _ = (bytes, inodes);
+        Err(Errno::EOPNOTSUPP)
+    }
+
     /// Reads from a regular file at `offset`; 0 at or after the end.
     fn read(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> Result<usize>;
 
@@ -174,6 +209,98 @@ pub trait FileSystem: Send + Sync {
 
     /// Drops a pin taken by [`FileSystem::open`].
     fn release(&self, _ino: Ino) {}
+
+    // ---- state per open file (ADR 0168) -----------------------------------
+    //
+    // A file system that keeps something for every `open` (FUSE: the
+    // server's file handle) hands out a handle here; the VFS passes it back
+    // with the calls made through that open file and gives it up when the
+    // last reference to the open file is gone. The defaults keep nothing
+    // and do the work by inode.
+
+    /// Opens regular file or directory (`dir`) `ino` with `flags`; `Some`
+    /// is the handle of this open. `O_TRUNC` is among the flags only when
+    /// [`open_truncates`](Self::open_truncates) is [`OpenTrunc::InOpen`].
+    /// An error fails the `open`.
+    fn open_handle(&self, ino: Ino, flags: crate::OpenFlags, dir: bool) -> Result<Option<u64>> {
+        let _ = (ino, flags, dir);
+        Ok(None)
+    }
+
+    /// Creates regular file `name` in `dir` and opens it in one step:
+    /// the new inode and the handle of the open. `None` (the default): the
+    /// VFS calls [`create`](Self::create) and then
+    /// [`open_handle`](Self::open_handle).
+    fn create_open(
+        &self,
+        dir: Ino,
+        name: &[u8],
+        node: &NewNode,
+        flags: crate::OpenFlags,
+    ) -> Result<Option<(Ino, u64)>> {
+        let _ = (dir, name, node, flags);
+        Ok(None)
+    }
+
+    /// How `O_TRUNC` of an existing file is done.
+    fn open_truncates(&self) -> OpenTrunc {
+        OpenTrunc::IfNotEmpty
+    }
+
+    /// The last reference to the open file of `handle` is gone. Must not
+    /// sleep.
+    fn close_handle(&self, ino: Ino, handle: u64, flags: crate::OpenFlags, dir: bool) {
+        let _ = (ino, handle, flags, dir);
+    }
+
+    /// A descriptor of the open file was closed (close(2), every time).
+    /// With `wait` the call may sleep until the file system has seen it.
+    fn flush_handle(&self, ino: Ino, handle: u64, wait: bool) -> Result<()> {
+        let _ = (ino, handle, wait);
+        Ok(())
+    }
+
+    /// [`read`](Self::read) through an open file.
+    fn read_handle(&self, ino: Ino, handle: u64, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        let _ = handle;
+        self.read(ino, offset, buf)
+    }
+
+    /// [`write`](Self::write) through an open file.
+    fn write_handle(&self, ino: Ino, handle: u64, offset: u64, buf: &[u8]) -> Result<usize> {
+        let _ = handle;
+        self.write(ino, offset, buf)
+    }
+
+    /// [`append`](Self::append) through an open file.
+    fn append_handle(&self, ino: Ino, handle: u64, buf: &[u8]) -> Result<(u64, usize)> {
+        let _ = handle;
+        self.append(ino, buf)
+    }
+
+    /// [`truncate`](Self::truncate) through an open file (ftruncate(2)).
+    fn truncate_handle(&self, ino: Ino, handle: u64, size: u64) -> Result<()> {
+        let _ = handle;
+        self.truncate(ino, size)
+    }
+
+    /// [`readdir`](Self::readdir) through an open directory.
+    fn readdir_handle(
+        &self,
+        dir: Ino,
+        handle: u64,
+        pos: u64,
+        emit: &mut dyn FnMut(&DirEntry<'_>) -> bool,
+    ) -> Result<()> {
+        let _ = handle;
+        self.readdir(dir, pos, emit)
+    }
+
+    /// fsync(2) (`data_only`: fdatasync(2)) of an open file or directory.
+    fn sync_handle(&self, ino: Ino, handle: u64, data_only: bool, dir: bool) -> Result<()> {
+        let _ = (ino, handle, data_only, dir);
+        self.sync()
+    }
 
     /// Whether `ino` has no file type: `stat` reports its mode without
     /// `S_IFMT` bits (Linux's anonymous inodes). The default is no.
@@ -336,6 +463,19 @@ pub const fn st_flags_of_attrs(attrs: u32) -> u64 {
         f |= ST_NOSYMFOLLOW;
     }
     f
+}
+
+/// How a file system wants `open(O_TRUNC)` of an existing regular file
+/// done ([`FileSystem::open_truncates`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpenTrunc {
+    /// The VFS truncates before the open, unless the file is empty.
+    IfNotEmpty,
+    /// The VFS truncates before the open, also an empty file (the file
+    /// system's own size may differ from the one the VFS saw).
+    Always,
+    /// The open truncates: [`FileSystem::open_handle`] gets `O_TRUNC`.
+    InOpen,
 }
 
 /// Where a magic link leads ([`FileSystem::magic_target`]).

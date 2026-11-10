@@ -23,6 +23,26 @@ impl Vfs {
         self.devices.lock().get(&id).cloned()
     }
 
+    /// Makes `dev` the block device with number `id` (`EBUSY` if one is
+    /// registered already). Opening a block device node with that number
+    /// reads and writes through `dev` at the open file's offset.
+    pub fn register_block_device(&self, id: DeviceId, dev: Arc<dyn CharDevice>) -> Result<()> {
+        let mut devices = self.block_devices.lock();
+        if devices.contains_key(&id) {
+            return Err(Errno::EBUSY);
+        }
+        devices.insert(id, dev);
+        Ok(())
+    }
+
+    pub fn unregister_block_device(&self, id: DeviceId) -> Option<Arc<dyn CharDevice>> {
+        self.block_devices.lock().remove(&id)
+    }
+
+    pub fn block_device(&self, id: DeviceId) -> Option<Arc<dyn CharDevice>> {
+        self.block_devices.lock().get(&id).cloned()
+    }
+
     // ----- walking -----
 
     /// The location `loc` shows: if file systems are mounted on it, the
