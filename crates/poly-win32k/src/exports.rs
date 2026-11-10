@@ -244,6 +244,7 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "ExtSelectClipRgn",
     "ExtTextOutA",
     "ExtTextOutW",
+    "FillRgn",
     "GdiFlush",
     "GetBkColor",
     "GetBkMode",

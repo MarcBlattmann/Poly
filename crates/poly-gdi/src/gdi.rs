@@ -10,6 +10,7 @@ use crate::fontmap::{self, LogFont};
 use crate::outline::{FontFiles, Outline, Typeface};
 pub use crate::region::Rect;
 use crate::region::{COMPLEXREGION, NULLREGION, RGN_AND, RGN_COPY, Region, SIMPLEREGION};
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -83,6 +84,11 @@ struct DcState {
     pos: (i32, i32),
     dc_brush: u32,
     dc_pen: u32,
+    /// The DC has drawn with the selected brush / pen since it was selected
+    /// (or the state was saved with it): what a brush or pen deleted while
+    /// selected still draws with (DeleteObject.yaml `selected_brush_pen`).
+    brush_used: bool,
+    pen_used: bool,
     /// The clip region, in device coordinates (`SelectClipRgn.yaml`).
     clip: Option<Region>,
     /// `SetViewportOrgEx` / `SetWindowOrgEx`: device = logical - window
@@ -124,6 +130,10 @@ enum Obj {
     Dc(Dc),
     /// A deleted DC: still answers `OBJ_DC` (`CreateCompatibleDC.yaml`).
     DeadDc,
+    /// A deleted object whose handle still answers `GetObjectType` with its
+    /// old type and nothing else (DeleteObject.yaml `type_after_delete`,
+    /// `after_deselect`): pens, fonts, bitmaps, regions, palettes.
+    Dead(u32),
     Bitmap {
         bmp: Bitmap,
         selected_in: u32,
@@ -176,6 +186,10 @@ const STOCK_COUNT: u32 = 21;
 /// (observed: a PatBlt after selecting a deleted brush's handle paints
 /// nothing, even when a new brush took its place).
 const MAX_GENERATION: u8 = 0x7F;
+/// How many freed slots wait before the oldest is used again: a deleted
+/// object's handle keeps answering `GetObjectType` (DeleteObject.yaml: the
+/// old type "forever") until its slot comes round.
+const DEAD_SLOTS: usize = 256;
 
 /// What `GetDeviceCaps` of the screen reports.
 #[derive(Clone, Copy, Debug)]
@@ -190,6 +204,8 @@ pub struct Gdi {
     objs: Vec<Option<Obj>>,
     /// Each slot's generation (the handle's top byte).
     gens: Vec<u8>,
+    /// Freed slots, oldest first (see [`DEAD_SLOTS`]).
+    free: VecDeque<usize>,
     pub screen: Screen,
     /// The font files and the rendered glyphs of outline fonts.
     text: TextState,
@@ -255,6 +271,7 @@ impl Gdi {
         let mut g = Gdi {
             objs: Vec::new(),
             gens: Vec::new(),
+            free: VecDeque::new(),
             screen: Screen { width: 1024, height: 768 },
             text: TextState { files: FontFiles::new(), glyphs: Some(GlyphCache::new(GLYPH_CACHE_BYTES)) },
         };
@@ -315,9 +332,9 @@ impl Gdi {
     }
 
     fn add(&mut self, o: Obj) -> u32 {
-        let i = match self.objs.iter().skip(1 + STOCK_COUNT as usize).position(Option::is_none) {
-            Some(p) => {
-                let i = p + 1 + STOCK_COUNT as usize;
+        let reuse = if self.free.len() > DEAD_SLOTS { self.free.pop_front() } else { None };
+        let i = match reuse {
+            Some(i) => {
                 if self.gens.len() <= i {
                     self.gens.resize(i + 1, 1);
                 }
@@ -379,6 +396,8 @@ impl Gdi {
             pos: (0, 0),
             dc_brush: 0x00FF_FFFF,
             dc_pen: 0,
+            brush_used: false,
+            pen_used: false,
             clip: None,
             viewport_org: (0, 0),
             window_org: (0, 0),
@@ -439,12 +458,22 @@ impl Gdi {
         }
     }
 
+    /// Slot `i`'s object is gone: its handle answers `GetObjectType` with
+    /// `ty` (0: nothing) until the slot is used again.
+    fn release(&mut self, i: usize, ty: u32) {
+        self.objs[i] = if ty == 0 { None } else { Some(Obj::Dead(ty)) };
+        self.free.push_back(i);
+    }
+
     fn free_dc(&mut self, h: u64, zombie: bool) {
         let Some(i) = self.index_of(h) else { return };
         let Some(Obj::Dc(d)) = self.objs[i].take() else { return };
-        // Objects selected into it whose deletion waited go now.
-        for o in [d.state.brush, d.state.pen, d.state.font] {
-            self.finish_pending(u64::from(o));
+        // Objects selected into it (or into a saved state of it) whose
+        // deletion waited go now.
+        for st in core::iter::once(&d.state).chain(d.saved.iter()) {
+            for o in [st.brush, st.pen, st.font] {
+                self.finish_pending(u64::from(o));
+            }
         }
         if let Some(Obj::Bitmap { selected_in, .. }) = self.obj_mut(u64::from(d.bitmap)) {
             *selected_in = 0;
@@ -452,30 +481,38 @@ impl Gdi {
         self.finish_pending(u64::from(d.bitmap));
         if zombie {
             self.objs[i] = Some(Obj::DeadDc);
+        } else {
+            self.free.push_back(i);
         }
     }
 
     /// An object whose deletion waited because it was selected: gone once
-    /// no DC holds it.
+    /// no DC holds it. A brush leaves nothing (type 0); a pen, a font and a
+    /// bitmap keep answering their type (DeleteObject.yaml `after_deselect`,
+    /// `selected_bitmap`).
     fn finish_pending(&mut self, h: u64) {
         let held = self.held(h);
         let Some(i) = self.index_of(h) else { return };
-        let pending = match &self.objs[i] {
-            Some(Obj::Brush { delete_pending, .. })
-            | Some(Obj::Pen { delete_pending, .. })
-            | Some(Obj::Font { delete_pending, .. }) => *delete_pending,
-            Some(Obj::Bitmap { delete_pending, selected_in, .. }) => *delete_pending && *selected_in == 0,
-            _ => false,
+        let (pending, ty) = match &self.objs[i] {
+            Some(Obj::Brush { delete_pending, .. }) => (*delete_pending, 0),
+            Some(Obj::Pen { delete_pending, .. }) => (*delete_pending, OBJ_PEN),
+            Some(Obj::Font { delete_pending, .. }) => (*delete_pending, OBJ_FONT),
+            Some(Obj::Bitmap { delete_pending, selected_in, .. }) => (*delete_pending && *selected_in == 0, OBJ_BITMAP),
+            _ => (false, 0),
         };
         if pending && !held {
-            self.objs[i] = None;
+            self.release(i, ty);
         }
     }
 
+    /// Whether a DC has `h` selected, now or in a state `SaveDC` kept.
     fn held(&self, h: u64) -> bool {
         let h = h as u32;
         self.objs.iter().flatten().any(|o| match o {
-            Obj::Dc(d) => d.state.brush == h || d.state.pen == h || d.state.font == h || d.bitmap == h,
+            Obj::Dc(d) => {
+                d.bitmap == h
+                    || core::iter::once(&d.state).chain(d.saved.iter()).any(|s| s.brush == h || s.pen == h || s.font == h)
+            }
             _ => false,
         })
     }
@@ -491,18 +528,23 @@ impl Gdi {
         }
     }
 
-    /// `DeleteObject`.
+    /// `DeleteObject` (DeleteObject.yaml). A stock object stays; an object
+    /// a DC has selected waits (`delete_pending`) and goes when it is
+    /// deselected; a second delete of either fails.
     pub fn delete_object(&mut self, h: u64) -> bool {
         let held = self.held(h);
-        let Some(o) = self.obj_mut(h) else { return false };
+        let Some(i) = self.index_of(h) else { return false };
+        let stock_slot = i <= STOCK_COUNT as usize;
+        let Some(o) = self.objs[i].as_mut() else { return false };
         match o {
             Obj::Dc(_) => {
                 self.free_dc(h, true);
                 true
             }
-            Obj::DeadDc => false,
+            Obj::DeadDc | Obj::Dead(_) => false,
             Obj::Brush { stock: true, .. } | Obj::Pen { stock: true, .. } | Obj::Font { stock: true, .. } => true,
             Obj::Bitmap { stock: true, .. } => true,
+            Obj::Palette if stock_slot => true,
             Obj::Brush { deleted, delete_pending, .. } => {
                 if *deleted || *delete_pending {
                     return false;
@@ -510,7 +552,8 @@ impl Gdi {
                 if held {
                     *delete_pending = true;
                 } else {
-                    // Observed: a deleted solid brush stays readable.
+                    // Observed: a brush deleted while no DC has it stays
+                    // readable and can still be selected (it paints white).
                     *deleted = true;
                 }
                 true
@@ -522,8 +565,8 @@ impl Gdi {
                 if held {
                     *delete_pending = true;
                 } else {
-                    let i = self.index_of(h).expect("valid");
-                    self.objs[i] = None;
+                    let ty = if matches!(o, Obj::Pen { .. }) { OBJ_PEN } else { OBJ_FONT };
+                    self.release(i, ty);
                 }
                 true
             }
@@ -534,14 +577,16 @@ impl Gdi {
                 if *selected_in != 0 {
                     *delete_pending = true;
                 } else {
-                    let i = self.index_of(h).expect("valid");
-                    self.objs[i] = None;
+                    self.release(i, OBJ_BITMAP);
                 }
                 true
             }
-            Obj::Region(_) | Obj::Palette => {
-                let i = self.index_of(h).expect("valid");
-                self.objs[i] = None;
+            Obj::Region(_) => {
+                self.release(i, OBJ_REGION);
+                true
+            }
+            Obj::Palette => {
+                self.release(i, OBJ_PAL);
                 true
             }
         }
@@ -558,6 +603,7 @@ impl Gdi {
                 }
             }
             Some(Obj::DeadDc) => OBJ_DC,
+            Some(Obj::Dead(ty)) => *ty,
             Some(Obj::Bitmap { .. }) => OBJ_BITMAP,
             Some(Obj::Brush { .. }) => OBJ_BRUSH,
             Some(Obj::Pen { .. }) => OBJ_PEN,
@@ -568,10 +614,38 @@ impl Gdi {
         }
     }
 
+    /// `GetObjectW` into a buffer of `size` bytes: as [`Gdi::object_bytes`],
+    /// but a DIB section answers its `DIBSECTION` (wingdi.h, 104 bytes) when
+    /// the buffer holds one (Learn: GetObject; DeleteObject.yaml
+    /// `selected_bitmap`), and a font fills a larger buffer than `LOGFONTW`
+    /// (observed: 128 bytes for a buffer of 128; the rest of
+    /// `ENUMLOGFONTEXW`, 348 bytes, zero here).
+    pub fn object_bytes_for(&self, h: u64, size: usize) -> Option<Vec<u8>> {
+        let mut b = self.object_bytes(h)?;
+        match self.obj(h)? {
+            Obj::Bitmap { bmp, .. } if bmp.dib && size >= 104 => {
+                let height = bmp.height.unsigned_abs();
+                b.resize(104, 0);
+                b[32..36].copy_from_slice(&40u32.to_le_bytes());
+                b[36..40].copy_from_slice(&bmp.width.to_le_bytes());
+                b[40..44].copy_from_slice(&height.to_le_bytes());
+                b[44..46].copy_from_slice(&1u16.to_le_bytes());
+                b[46..48].copy_from_slice(&bmp.bpp.to_le_bytes());
+                b[52..56].copy_from_slice(&((bmp.stride as u32) * height).to_le_bytes());
+            }
+            Obj::Font { .. } => b.resize(348, 0),
+            _ => {}
+        }
+        Some(b)
+    }
+
     /// `GetObjectW`'s bytes for an object (`LOGBRUSH`, `BITMAP`, `LOGPEN`,
     /// `LOGFONTW`).
     pub fn object_bytes(&self, h: u64) -> Option<Vec<u8>> {
         Some(match self.obj(h)? {
+            // A brush or pen deleted while selected answers nothing
+            // (DeleteObject.yaml `selected_brush_pen`: GetObject 0).
+            Obj::Brush { delete_pending: true, .. } | Obj::Pen { delete_pending: true, .. } => return None,
             Obj::Brush { style, color, hatch, .. } => {
                 let mut b = vec![0u8; 16];
                 b[0..4].copy_from_slice(&style.to_le_bytes());
@@ -620,6 +694,12 @@ impl Gdi {
             return Err(ERROR_INVALID_HANDLE);
         }
         let kind = match self.obj(obj) {
+            // An object whose deletion waits for its DC cannot be selected
+            // anywhere (DeleteObject.yaml `selected_brush_pen`: NULL).
+            Some(Obj::Brush { delete_pending: true, .. })
+            | Some(Obj::Pen { delete_pending: true, .. })
+            | Some(Obj::Font { delete_pending: true, .. })
+            | Some(Obj::Bitmap { delete_pending: true, .. }) => return Ok(0),
             Some(Obj::Brush { .. }) => OBJ_BRUSH,
             Some(Obj::Pen { .. }) => OBJ_PEN,
             Some(Obj::Font { .. }) => OBJ_FONT,
@@ -636,8 +716,14 @@ impl Gdi {
         let h = obj as u32;
         let d = self.dc_mut(dc).expect("checked");
         let old = match kind {
-            OBJ_BRUSH => core::mem::replace(&mut d.state.brush, h),
-            OBJ_PEN => core::mem::replace(&mut d.state.pen, h),
+            OBJ_BRUSH => {
+                d.state.brush_used = false;
+                core::mem::replace(&mut d.state.brush, h)
+            }
+            OBJ_PEN => {
+                d.state.pen_used = false;
+                core::mem::replace(&mut d.state.pen, h)
+            }
             OBJ_FONT => core::mem::replace(&mut d.state.font, h),
             _ => {
                 if d.kind != DcKind::Memory {
@@ -844,7 +930,17 @@ impl Gdi {
 
     /// `SaveDC`: the new level (0 on failure).
     pub fn save_dc(&mut self, dc: u64) -> i32 {
+        // Saving the state takes the brush and the pen as the DC's own: one
+        // that is deleted afterwards still draws in its colour, also when
+        // the DC never drew with it (DeleteObject.yaml `selected_brush_pen`).
+        let Some(d) = self.dc(dc) else { return 0 };
+        let (brush, pen) = (d.state.brush, d.state.pen);
+        let brush_alive =
+            matches!(self.obj(u64::from(brush)), Some(Obj::Brush { deleted: false, delete_pending: false, .. }));
+        let pen_alive = matches!(self.obj(u64::from(pen)), Some(Obj::Pen { delete_pending: false, .. }));
         let Some(d) = self.dc_mut(dc) else { return 0 };
+        d.state.brush_used |= brush_alive;
+        d.state.pen_used |= pen_alive;
         d.saved.push(d.state.clone());
         d.saved.len() as i32
     }
@@ -857,32 +953,52 @@ impl Gdi {
         if target < 0 || target >= n {
             return false;
         }
-        d.saved.truncate(target as usize + 1);
-        d.state = d.saved.pop().expect("present");
+        let dropped: Vec<DcState> = d.saved.drain(target as usize + 1..).collect();
+        let old = core::mem::replace(&mut d.state, d.saved.pop().expect("present"));
+        // What only the dropped states had selected and waits to be deleted
+        // goes now.
+        for st in dropped.iter().chain(core::iter::once(&old)) {
+            for o in [st.brush, st.pen, st.font] {
+                self.finish_pending(u64::from(o));
+            }
+        }
         true
     }
 
-    /// `GetDeviceCaps`.
-    pub fn device_caps(&self, dc: u64, index: i32) -> i32 {
-        if self.dc(dc).is_none() {
-            return 0;
-        }
-        match index {
-            2 => 1,                             // TECHNOLOGY: DT_RASDISPLAY
-            4 => self.screen.width * 254 / 960, // HORZSIZE (mm)
-            6 => self.screen.height * 254 / 960,
-            8 | 118 => self.screen.width, // HORZRES, DESKTOPHORZRES
-            10 | 117 => self.screen.height,
-            12 => 32,      // BITSPIXEL
-            14 => 1,       // PLANES
-            24 => -1,      // NUMCOLORS
-            40 | 42 => 36, // ASPECTX, ASPECTY
-            44 => 51,      // ASPECTXY
-            88 | 90 => 96, // LOGPIXELSX, LOGPIXELSY
-            108 => 24,     // COLORRES
-            116 => 60,     // VREFRESH
+    /// `GetDeviceCaps` (GetSystemMetrics.yaml `device_caps_screen`): the
+    /// screen's capabilities, the same for every DC (the screen's, a
+    /// window's, a memory DC); an index that is not defined answers 0;
+    /// `None`: not a DC (ERROR_INVALID_HANDLE).
+    pub fn device_caps(&self, dc: u64, index: i32) -> Option<i32> {
+        self.dc(dc)?;
+        // Millimetres at 96 pixels per inch, rounded.
+        let mm = |px: i32| (px * 254 + 480) / 960;
+        Some(match index {
+            0 => 0x4000,                    // DRIVERVERSION
+            2 => 1,                         // TECHNOLOGY: DT_RASDISPLAY
+            4 => mm(self.screen.width),     // HORZSIZE
+            6 => mm(self.screen.height),    // VERTSIZE
+            8 | 118 => self.screen.width,   // HORZRES, DESKTOPHORZRES
+            10 | 117 => self.screen.height, // VERTRES, DESKTOPVERTRES
+            12 => 32,                       // BITSPIXEL
+            14 => 1,                        // PLANES
+            16 | 18 | 24 => -1,             // NUMBRUSHES, NUMPENS, NUMCOLORS
+            28 => 511,                      // CURVECAPS
+            30 => 254,                      // LINECAPS
+            32 => 255,                      // POLYGONALCAPS
+            34 => 30727,                    // TEXTCAPS
+            36 => 1,                        // CLIPCAPS: CP_RECTANGLE
+            38 => 32409,                    // RASTERCAPS
+            40 | 42 => 36,                  // ASPECTX, ASPECTY
+            44 => 51,                       // ASPECTXY
+            88 | 90 => 96,                  // LOGPIXELSX, LOGPIXELSY
+            106 => 20,                      // NUMRESERVED
+            108 => 24,                      // COLORRES
+            116 => 60,                      // VREFRESH
+            119 => 1,                       // BLTALIGNMENT
+            121 => 2,                       // COLORMGMTCAPS: CM_GAMMA_RAMP
             _ => 0,
-        }
+        })
     }
 
     // ----- regions (`CreateRectRgn.yaml`, `CombineRgn.yaml`, `GetRgnBox.yaml`, `PtInRegion.yaml`)
@@ -1207,28 +1323,65 @@ impl Gdi {
         r
     }
 
-    /// The colour a brush paints in (`None`: a null brush).
+    /// The colour the DC's selected brush paints in (`None`: a null brush).
+    /// A brush deleted while selected keeps its colour if the DC drew with
+    /// it before (or saved its state with it); one the DC never used, and
+    /// one that was deleted before it was selected, paints as the default
+    /// white brush (DeleteObject.yaml `selected_brush_pen`,
+    /// `deleted_not_selected_brush`).
     fn brush_color(&self, brush: u32, state: &DcState) -> Option<Rgb> {
+        const WHITE: u32 = 0x00FF_FFFF;
         match self.obj(u64::from(brush)) {
             Some(Obj::Brush { style: BS_NULL, .. }) => None,
-            // A deleted solid brush stays readable and can be selected (the
-            // old selection comes back), but paints nothing (observed: a
-            // PatBlt with it selected leaves the white destination); one
-            // deleted while selected stops painting at once too (observed;
-            // it goes when deselected).
-            Some(Obj::Brush { deleted: true, .. }) | Some(Obj::Brush { delete_pending: true, .. }) => None,
+            Some(Obj::Brush { deleted: true, .. }) => Some(Rgb::from_colorref(WHITE)),
+            Some(Obj::Brush { delete_pending: true, color, .. }) => {
+                Some(Rgb::from_colorref(if brush == state.brush && state.brush_used { *color } else { WHITE }))
+            }
             Some(Obj::Brush { .. }) if brush == self.stock(DC_BRUSH) => Some(Rgb::from_colorref(state.dc_brush)),
             Some(Obj::Brush { color, .. }) => Some(Rgb::from_colorref(*color)),
             _ => None,
         }
     }
 
+    /// The colour a brush named by its handle paints in (`FillRect`,
+    /// `FillRgn`): as [`Gdi::brush_color`], but a brush deleted while
+    /// selected that the DC has not drawn with paints nothing
+    /// (DeleteObject.yaml `selected_brush_pen`).
+    fn handle_brush_color(&self, brush: u32, state: &DcState) -> Option<Rgb> {
+        match self.obj(u64::from(brush)) {
+            Some(Obj::Brush { delete_pending: true, .. }) if !(brush == state.brush && state.brush_used) => None,
+            _ => self.brush_color(brush, state),
+        }
+    }
+
+    /// The colour the DC's selected pen draws in (`None`: a null pen). A pen
+    /// deleted while selected: its own colour if the DC drew with it before,
+    /// else the default black pen's.
     fn pen_color(&self, pen: u32, state: &DcState) -> Option<Rgb> {
         match self.obj(u64::from(pen)) {
             Some(Obj::Pen { style: PS_NULL, .. }) => None,
+            Some(Obj::Pen { delete_pending: true, color, .. }) => {
+                Some(Rgb::from_colorref(if state.pen_used { *color } else { 0 }))
+            }
             Some(Obj::Pen { .. }) if pen == self.stock(DC_PEN) => Some(Rgb::from_colorref(state.dc_pen)),
             Some(Obj::Pen { color, .. }) => Some(Rgb::from_colorref(*color)),
             _ => None,
+        }
+    }
+
+    /// The DC draws with its selected brush (`brush`) and / or pen now: a
+    /// live one counts as used from here on.
+    fn mark_used(&mut self, dc: u64, brush: bool, pen: bool) {
+        let Some(d) = self.dc(dc) else { return };
+        let b = brush
+            && matches!(
+                self.obj(u64::from(d.state.brush)),
+                Some(Obj::Brush { deleted: false, delete_pending: false, .. })
+            );
+        let p = pen && matches!(self.obj(u64::from(d.state.pen)), Some(Obj::Pen { delete_pending: false, .. }));
+        if let Some(s) = self.state(dc) {
+            s.brush_used |= b;
+            s.pen_used |= p;
         }
     }
 
@@ -1295,6 +1448,9 @@ impl Gdi {
         if uses_pattern && pattern.is_none() {
             return true;
         }
+        if uses_pattern {
+            self.mark_used(dc, true, false);
+        }
         let r = self.device_rect(dc, normalize(x, y, w, h));
         self.with_target(dc, |b, _, clip, _| Self::fill(b, clip, r, code, pattern));
         true
@@ -1305,9 +1461,34 @@ impl Gdi {
         let Some(d) = self.dc(dc) else { return false };
         let state = d.state.clone();
         let b = if brush == 0 { state.brush } else { brush as u32 };
-        let Some(c) = self.brush_color(b, &state) else { return true };
+        let Some(c) = self.handle_brush_color(b, &state) else { return true };
+        if b == state.brush {
+            self.mark_used(dc, true, false);
+        }
         let r = self.device_rect(dc, normalized(r));
         self.with_target(dc, |bmp, _, clip, _| Self::fill(bmp, clip, r, 0xF0, Some(c)));
+        true
+    }
+
+    /// `FillRgn` (Learn): region `rgn` (logical coordinates) filled with
+    /// `brush`; false when one of them is not what it should be.
+    pub fn fill_rgn(&mut self, dc: u64, rgn: u64, brush: u64) -> bool {
+        let Some(d) = self.dc(dc) else { return false };
+        let state = d.state.clone();
+        let Some(rects) = self.region(rgn).map(|r| r.rects().to_vec()) else { return false };
+        if !matches!(self.obj(brush), Some(Obj::Brush { .. })) {
+            return false;
+        }
+        let Some(c) = self.handle_brush_color(brush as u32, &state) else { return true };
+        if brush as u32 == state.brush {
+            self.mark_used(dc, true, false);
+        }
+        let rects: Vec<Rect> = rects.into_iter().map(|r| self.device_rect(dc, r)).collect();
+        self.with_target(dc, |bmp, _, clip, _| {
+            for r in rects {
+                Self::fill(bmp, clip, r, 0xF0, Some(c));
+            }
+        });
         true
     }
 
@@ -1328,6 +1509,7 @@ impl Gdi {
         let state = d.state.clone();
         let fill = self.brush_color(state.brush, &state);
         let pen = self.pen_color(state.pen, &state);
+        self.mark_used(dc, true, true);
         let n = self.device_rect(dc, Rect::new(l, t, r, b).normalized());
         let (l, t, r, b) = (n.left, n.top, n.right, n.bottom);
         self.with_target(dc, |bmp, _, clip, _| match pen {
@@ -1358,6 +1540,7 @@ impl Gdi {
         let Some(d) = self.dc(dc) else { return false };
         let state = d.state.clone();
         let pen = self.pen_color(state.pen, &state);
+        self.mark_used(dc, false, true);
         if let Some(c) = pen {
             let (x0, y0) = self.device_point(dc, state.pos.0, state.pos.1);
             let (x, y) = self.device_point(dc, x, y);

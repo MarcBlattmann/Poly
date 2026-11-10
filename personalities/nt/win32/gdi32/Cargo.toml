@@ -14,6 +14,7 @@ crate-type = ["cdylib"]
 poly-win32-rt = { path = "../rt" }
 poly-win32-gui = { path = "../gui" }
 poly-gdi = { path = "../../../../crates/poly-gdi" }
+poly-win32k = { path = "../../../../crates/poly-win32k" }
 
 [lints]
 workspace = true
