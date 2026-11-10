@@ -389,3 +389,32 @@ What the tools found: `NtCreateKey` on `\REGISTRY\USER\<sid>\` (one trailing `\`
 `FlsAlloc` returned index 0 (Windows' never did), `HKLM\...\CurrentVersion` lacked `UBR`,
 `DisplayVersion` and `ReleaseId`, `ReadProcessMemory`/`WriteProcessMemory` were stubs, and
 `PEB.ImageBaseAddress` and the PEB's version, processor, subsystem and heap fields were 0.
+
+## Addendum: the loader lock in the PEB, `winmm` and `shell32` (`wip/chrome-win-b4`, step 6)
+
+What stage 1 needed next, each with a host test and a ring-3 check in `s1test`:
+
+1. **`PEB+0x110` points to the loader lock** (spec-chrome-elf-null): Chrome's crash reporter reads
+   `PEB -> LoaderLock -> OwningThread` without calling anything, so a null field faulted at
+   `chrome_elf+0x8e9b4`. `ntdll` stores the address of its loader-lock critical section there
+   before any initialiser runs (`poly_rtl::peb::LOADER_LOCK`); the same section is taken by
+   `LdrLockLoaderLock` and held around every `DllMain` and TLS callback, including those of
+   `LdrLoadDll`, `LdrUnloadDll`, forwarder and delay loads and thread and process exit. It shows
+   what a Windows process shows: free `LockCount` -1, `RecursionCount` 0, `OwningThread` 0; held
+   once -2, 1, the owner's thread id; `SpinCount` 0x4000000 (`RTL_CRITICAL_SECTION_FLAG_STATIC_INIT`)
+   and a `DebugInfo` record that points back. `LockCount` of every critical section now counts
+   down from -1 (`poly_rtl::critsec`); the values with waiters are Poly's own continuation.
+2. **`winmm.dll`**: `timeGetTime` (milliseconds since the system started, wrapping as a `DWORD`),
+   `timeBeginPeriod` and `timeEndPeriod` (`poly_kernelbase::winmm`). Chrome takes this clock on
+   Poly where it takes `QueryPerformanceCounter` on the Windows machines of the trace.
+3. **`shell32.dll`**: `CommandLineToArgvW` and `SHGetFolderPathW` (`poly_kernelbase::shell`).
+   Without the DLL Chrome's crash handler got no arguments, and its delay-load of `SHELL32.dll`
+   ended it with a breakpoint.
+4. **`RtlFormatCurrentUserKeyPath`** takes the user's SID from `poly_security` (the literal still
+   named the SID from before ADR 0171, so `NtCreateKey` below it failed).
+
+To be confirmed by the spec agent against real Windows: what two quotation marks in a row inside a
+quoted part mean to `CommandLineToArgvW`; `timeBeginPeriod(0)` (Poly: `TIMERR_NOCANDO`);
+`SHGetFolderPathW` for the folders Poly has no path for yet (Poly: `E_FAIL`); and
+`FileNameInformation` of a named-pipe handle (Poly returns an empty name; Chrome's crash handler
+builds `\.\pipe` + that name for its next pipe instance, so it must be `\<pipe name>`).

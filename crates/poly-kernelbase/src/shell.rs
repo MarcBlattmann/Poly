@@ -195,7 +195,10 @@ mod tests {
 
     #[test]
     fn the_program_name_is_taken_as_it_stands() {
-        assert_eq!(split("\"C:\\Program Files\\Chrome\\chrome.exe\" --x"), ["C:\\Program Files\\Chrome\\chrome.exe", "--x"]);
+        assert_eq!(
+            split("\"C:\\Program Files\\Chrome\\chrome.exe\" --x"),
+            ["C:\\Program Files\\Chrome\\chrome.exe", "--x"]
+        );
         // Backslashes before the closing mark are plain characters in the name.
         assert_eq!(split("\"C:\\dir\\\" b"), ["C:\\dir\\", "b"]);
         assert_eq!(split("C:\\a\\b.exe c"), ["C:\\a\\b.exe", "c"]);
@@ -204,7 +207,10 @@ mod tests {
     #[test]
     fn quotation_marks_keep_white_space_in_an_argument() {
         assert_eq!(split("x \"a b\" c"), ["x", "a b", "c"]);
-        assert_eq!(split("x \"--user-data-dir=C:\\my profile\" /prefetch:4"), ["x", "--user-data-dir=C:\\my profile", "/prefetch:4"]);
+        assert_eq!(
+            split("x \"--user-data-dir=C:\\my profile\" /prefetch:4"),
+            ["x", "--user-data-dir=C:\\my profile", "/prefetch:4"]
+        );
         assert_eq!(split("x d\"e f\"g h"), ["x", "de fg", "h"]);
         assert_eq!(split("x \"\" y"), ["x", "", "y"]);
     }

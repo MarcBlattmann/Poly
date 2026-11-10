@@ -767,8 +767,9 @@ unsafe fn wide_is(p: *const u16, want: &str) -> bool {
 /// like the one Chrome starts its crash handler with, in one block freed with `LocalFree`;
 /// and the user's local application data folder (CSIDL_LOCAL_APPDATA, what Chrome asks for).
 unsafe fn shell32() {
-    let line =
-        w::<96>("\"C:\\Program Files\\Chrome\\chrome.exe\" --type=x \"--dir=C:\\my profile\" a\\\\\\\"b\\\" /prefetch:4");
+    let line = w::<96>(
+        "\"C:\\Program Files\\Chrome\\chrome.exe\" --type=x \"--dir=C:\\my profile\" a\\\\\\\"b\\\" /prefetch:4",
+    );
     let mut count = 0i32;
     let argv = CommandLineToArgvW(line.as_ptr(), &mut count);
     check_got(!argv.is_null(), 0);
@@ -797,7 +798,10 @@ unsafe fn shell32() {
     let n = GetEnvironmentVariableW(name.as_ptr(), want.as_mut_ptr(), 260) as usize;
     check_got(n > 3 && (0..=n).all(|i| path[i] == want[i]) && path[n - 1] != u16::from(b'\\'), n as u32);
     // A value that is no CSIDL: E_INVALIDARG.
-    check_eq(SHGetFolderPathW(core::ptr::null_mut(), 0x7F, core::ptr::null_mut(), 0, path.as_mut_ptr()) as usize, 0x8007_0057);
+    check_eq(
+        SHGetFolderPathW(core::ptr::null_mut(), 0x7F, core::ptr::null_mut(), 0, path.as_mut_ptr()) as usize,
+        0x8007_0057,
+    );
 }
 
 /// winmm's timer functions (Learn: `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`): the
