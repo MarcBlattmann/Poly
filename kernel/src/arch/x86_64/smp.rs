@@ -415,7 +415,9 @@ extern "sysv64" fn ap_entry(index: u64) -> ! {
 /// thread must move).
 pub fn send_reschedule(index: usize) {
     if let Some(area) = percpu::cpu(index).filter(|_| online_cpus().contains(index)) {
+        let timer = crate::profile::start();
         apic::send_ipi(area.apic_id(), RESCHEDULE_VECTOR);
+        crate::profile::since(crate::profile::Event::Ipi, timer);
     }
 }
 

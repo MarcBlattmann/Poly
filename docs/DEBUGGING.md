@@ -1641,6 +1641,49 @@ stuck in `poly_kernel::sync::RawMutex` waits for a volume or inode lock
 (the holder is in the block layer, or deadlocked: the order is namespace,
 inode, ext2 volume, disk cache).
 
+## Where the time goes: launch timer and profile (ADR 0148)
+
+**How long does an app take to start?** The compositor times every launch
+from the launcher, from the Enter key to the app's first window, and says so
+on the console:
+
+```text
+poly-compositor: launched Chromium (pid 32) at 8631 ms
+poly-compositor: window "Untitled - Chromium" shown at 115,45 size 1050x780
+poly-compositor: launch-to-window Chromium: 10214 ms
+```
+
+The times are the compositor's monotonic clock; always on, two lines per
+launch.
+
+**Where did it go?** `poly.debug.profile` (see `kernel/src/profile.rs`)
+samples the kernel on every timer tick (`pc` and `caller` lines, look them up
+with `addr2line -f -C -e <kernel> <address>`) and, at power-off, prints:
+
+| Line | Tells |
+|---|---|
+| `profile: N ticks: K kernel, U user` | ticks of all CPUs; most "kernel" ticks of a mostly idle system are the idle loop (`enable_interrupts_and_halt`) |
+| `profile: proc <ms> ms exec/exit pid N ...` | what ran when: every exec with its arguments, every exit with its status and CPU time (user, system) |
+| `profile: main thread of pid N, S samples: running x%, waiting for a CPU y%, ...` | every 4 ms the first thread of each process is looked at: running, runnable but without a CPU, or blocked in the kernel, in a page fault (waiting for the memory's lock, in the page cache, copying a file's page, other) or in a system call (the longest few named): where the program's own thread waits |
+| `profile: syscall <name> (<nr>) N calls T us` | Linux system calls by total wall time (a call that blocks counts its sleep) |
+| `profile: event <name> N times T us B bytes` | `disk-read`, `disk-write`, `disk-flush` (queueing to result), page faults by kind (`fault-zero`, `fault-file-copy`, `fault-cached`, `fault-cow`, `fault-perm`, and inside the cached ones `fault-fill`, `fault-miss`, `fault-map`, `fault-around`), `fault-lock` (waiting for the memory's lock), `zero-frame`, `alloc-frame`, `zero-cache-frame`, reschedule IPIs sent (`ipi-send`) and halts of idle CPUs (`idle-halt`) |
+| `profile: disk <name> N requests, M to the device, ...` | the request queue: user requests, device requests, merges and splits |
+| `profile: page cache N pages, H hits, M misses, ...` | the page cache |
+
+Times are wall times of the thread, summed over threads (they can add up to
+more than the run). `poly.strace.slow=<ms>` adds the calls that took that
+long and longer, with the time they ended (`[1159 ms, until 14613 ms]`).
+`poly.debug.membench` times clearing 64 MiB of memory the kernel has not
+touched yet and then touched memory, which tells what a virtual machine
+charges for its RAM's first use (about 50 microseconds per page under WHPX
+on the owner's PC, against a few tenths of a microsecond once touched).
+
+**Driving a native WHPX run** (`cargo xtask chromium run --release` on
+Windows) from a script: `POLY_CHROMIUM_QMP=tcp:127.0.0.1:4477` opens a QMP
+server for key events, `POLY_CHROMIUM_APPEND="poly.debug.profile"` adds kernel
+arguments, `POLY_CHROMIUM_QEMU="..."` adds QEMU arguments. The guest's
+shell reads QEMU's standard input (`poweroff` prints the profile).
+
 ## Attaching a debugger
 
 ```sh

@@ -87,6 +87,7 @@ mod evdev;
 mod fbdev;
 pub mod io;
 mod kms;
+mod launch_timer;
 mod mixer;
 pub mod os;
 mod session;
@@ -877,7 +878,9 @@ fn run(args: &[String]) -> Result<u8, String> {
                     app_env.push(format!("DESKTOP_STARTUP_ID={token}"));
                     match os::spawn(&app.argv, &app_env) {
                         Ok(pid) => {
-                            println!("poly-compositor: launched {} (pid {pid})", app.name);
+                            let at = d.now_ms();
+                            println!("poly-compositor: launched {} (pid {pid}) at {at} ms", app.name);
+                            d.launches.started(pid, &app.name, at);
                             server.launch_pid(launch, pid);
                             d.children.push((pid, app.name.clone()));
                         }
