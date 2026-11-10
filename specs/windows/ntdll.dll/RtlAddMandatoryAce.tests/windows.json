@@ -11,6 +11,19 @@
   "started": "2026-11-09T10:59:58Z",
   "tests": [
     {
+      "name": "rtl_addmandatory_badptr",
+      "exe_sha256": "373eda4d0580266cde01f180b98813de848922ca3bccfa6d5a23806300e7d2f2",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "U0lEIGFyZ3VtZW50IHJlc2VydmVkIHBhZ2VzIChyZXNlcnZlZD10cnVlKTogYWxvbmU9MHhjMDAwMDA3OC9uMCB0eXBlIDB4MTA9MHhjMDAwMDAwZC9uMCBtYXNrIDB4MTA9MHhjMDAwMDA3OC9uMCAKU0lEIGFyZ3VtZW50IGEga2VybmVsIGFkZHJlc3MgKHJlc2VydmVkPXRydWUpOiBhbG9uZT0weGMwMDAwMDc4L24wIHR5cGUgMHgxMD0weGMwMDAwMDBkL24wIG1hc2sgMHgxMD0weGMwMDAwMDc4L24wIApTSUQgYXJndW1lbnQgYWxsIG9uZXMgKHJlc2VydmVkPXRydWUpOiBhbG9uZT0weGMwMDAwMDc4L24wIHR5cGUgMHgxMD0weGMwMDAwMDBkL24wIG1hc2sgMHgxMD0weGMwMDAwMDc4L24wIApTSUQgYXJndW1lbnQgMHgwOiBhbG9uZT0weGMwMDAwMDc4L24wIHR5cGUgMHgxMD0weGMwMDAwMDBkL24wIHR5cGUgMD0weGMwMDAwMDBkL24wIG1hc2sgMHgxMD0weGMwMDAwMDc4L24wIGZsYWdzIDB4NDA9MHhjMDAwMDA3OC9uMCByZXZpc2lvbiA1PTB4YzAwMDAwNzgvbjAgQUNMIG9mIDggYnl0ZXM9MHhjMDAwMDA3OC9uMCAKU0lEIGFyZ3VtZW50IDB4MjogYWxvbmU9MHhjMDAwMDA3OC9uMCB0eXBlIDB4MTA9MHhjMDAwMDAwZC9uMCB0eXBlIDA9MHhjMDAwMDAwZC9uMCBtYXNrIDB4MTA9MHhjMDAwMDA3OC9uMCBmbGFncyAweDQwPTB4YzAwMDAwNzgvbjAgcmV2aXNpb24gNT0weGMwMDAwMDc4L24wIEFDTCBvZiA4IGJ5dGVzPTB4YzAwMDAwNzgvbjAgClNJRCBhcmd1bWVudCAweDg6IGFsb25lPTB4YzAwMDAwNzgvbjAgdHlwZSAweDEwPTB4YzAwMDAwMGQvbjAgdHlwZSAwPTB4YzAwMDAwMGQvbjAgbWFzayAweDEwPTB4YzAwMDAwNzgvbjAgZmxhZ3MgMHg0MD0weGMwMDAwMDc4L24wIHJldmlzaW9uIDU9MHhjMDAwMDA3OC9uMCBBQ0wgb2YgOCBieXRlcz0weGMwMDAwMDc4L24wIApTSUQgYXJndW1lbnQgMHgxMDA6IGFsb25lPTB4YzAwMDAwNzgvbjAgdHlwZSAweDEwPTB4YzAwMDAwMGQvbjAgdHlwZSAwPTB4YzAwMDAwMGQvbjAgbWFzayAweDEwPTB4YzAwMDAwNzgvbjAgZmxhZ3MgMHg0MD0weGMwMDAwMDc4L24wIHJldmlzaW9uIDU9MHhjMDAwMDA3OC9uMCBBQ0wgb2YgOCBieXRlcz0weGMwMDAwMDc4L24wIApTSUQgYXJndW1lbnQgMHhmZmZmOiBhbG9uZT0weGMwMDAwMDc4L24wIHR5cGUgMHgxMD0weGMwMDAwMDBkL24wIHR5cGUgMD0weGMwMDAwMDBkL24wIG1hc2sgMHgxMD0weGMwMDAwMDc4L24wIGZsYWdzIDB4NDA9MHhjMDAwMDA3OC9uMCByZXZpc2lvbiA1PTB4YzAwMDAwNzgvbjAgQUNMIG9mIDggYnl0ZXM9MHhjMDAwMDA3OC9uMCAKbGFiZWwgU0lEIHdpdGggcmV2aXNpb24gMDogYWxvbmU9MHhjMDAwMDA3OC9uMC9zaXplMCB0eXBlIDI9MHhjMDAwMDAwZC9uMC9zaXplMCBtYXNrIDg9MHhjMDAwMDA3OC9uMC9zaXplMCAKbGFiZWwgU0lEIHdpdGggcmV2aXNpb24gMjogYWxvbmU9MHhjMDAwMDA3OC9uMC9zaXplMCB0eXBlIDI9MHhjMDAwMDAwZC9uMC9zaXplMCBtYXNrIDg9MHhjMDAwMDA3OC9uMC9zaXplMCAKbGFiZWwgU0lEIHdpdGggcmV2aXNpb24gMjU1OiBhbG9uZT0weGMwMDAwMDc4L24wL3NpemUwIHR5cGUgMj0weGMwMDAwMDBkL24wL3NpemUwIG1hc2sgOD0weGMwMDAwMDc4L24wL3NpemUwIApsYWJlbCBTSUQgd2l0aCBjb3VudCAxNTogYWxvbmU9MHgwMDAwMDAwMC9uMS9zaXplNzYgdHlwZSAyPTB4YzAwMDAwMGQvbjAvc2l6ZTAgbWFzayA4PTB4YzAwMDAwMGQvbjAvc2l6ZTAgCmxhYmVsIFNJRCB3aXRoIGNvdW50IDI1NTogYWxvbmU9MHhjMDAwMDA3OC9uMC9zaXplMCB0eXBlIDI9MHhjMDAwMDAwZC9uMC9zaXplMCBtYXNrIDg9MHhjMDAwMDA3OC9uMC9zaXplMCAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SID argument reserved pages (reserved=true): alone=0xc0000078/n0 type 0x10=0xc000000d/n0 mask 0x10=0xc0000078/n0 \nSID argument a kernel address (reserved=true): alone=0xc0000078/n0 type 0x10=0xc000000d/n0 mask 0x10=0xc0000078/n0 \nSID argument all ones (reserved=true): alone=0xc0000078/n0 type 0x10=0xc000000d/n0 mask 0x10=0xc0000078/n0 \nSID argument 0x0: alone=0xc0000078/n0 type 0x10=0xc000000d/n0 type 0=0xc000000d/n0 mask 0x10=0xc0000078/n0 flags 0x40=0xc0000078/n0 revision 5=0xc0000078/n0 ACL of 8 bytes=0xc0000078/n0 \nSID argument 0x2: alone=0xc0000078/n0 type 0x10=0xc000000d/n0 type 0=0xc000000d/n0 mask 0x10=0xc0000078/n0 flags 0x40=0xc0000078/n0 revision 5=0xc0000078/n0 ACL of 8 bytes=0xc0000078/n0 \nSID argument 0x8: alone=0xc0000078/n0 type 0x10=0xc000000d/n0 type 0=0xc000000d/n0 mask 0x10=0xc0000078/n0 flags 0x40=0xc0000078/n0 revision 5=0xc0000078/n0 ACL of 8 bytes=0xc0000078/n0 \nSID argument 0x100: alone=0xc0000078/n0 type 0x10=0xc000000d/n0 type 0=0xc000000d/n0 mask 0x10=0xc0000078/n0 flags 0x40=0xc0000078/n0 revision 5=0xc0000078/n0 ACL of 8 bytes=0xc0000078/n0 \nSID argument 0xffff: alone=0xc0000078/n0 type 0x10=0xc000000d/n0 type 0=0xc000000d/n0 mask 0x10=0xc0000078/n0 flags 0x40=0xc0000078/n0 revision 5=0xc0000078/n0 ACL of 8 bytes=0xc0000078/n0 \nlabel SID with revision 0: alone=0xc0000078/n0/size0 type 2=0xc000000d/n0/size0 mask 8=0xc0000078/n0/size0 \nlabel SID with revision 2: alone=0xc0000078/n0/size0 type 2=0xc000000d/n0/size0 mask 8=0xc0000078/n0/size0 \nlabel SID with revision 255: alone=0xc0000078/n0/size0 type 2=0xc000000d/n0/size0 mask 8=0xc0000078/n0/size0 \nlabel SID with count 15: alone=0x00000000/n1/size76 type 2=0xc000000d/n0/size0 mask 8=0xc000000d/n0/size0 \nlabel SID with count 255: alone=0xc0000078/n0/size0 type 2=0xc000000d/n0/size0 mask 8=0xc0000078/n0/size0 \nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
       "name": "rtl_addmandatory_errors",
       "exe_sha256": "b5c3449aede31470991b7ea22b0a8e06ec9f1aea4744aea0ad8cd23781d0b879",
       "status": "ran",
@@ -37,6 +50,19 @@
       "error": null,
       "stable": true,
       "ms": 40
+    },
+    {
+      "name": "rtl_addmandatory_precedence",
+      "exe_sha256": "e5d6605ebb6c26222e32a387e79cc86746d84baac3c2aa4d7712161b76ea5ee8",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "bm90aGluZyB3cm9uZzogc3RhdHVzPTB4MDAwMDAwMDAgY291bnQ9MQpUIGFsb25lOiBzdGF0dXM9MHhjMDAwMDAwZCBjb3VudD0wClMgYWxvbmU6IHN0YXR1cz0weGMwMDAwMDc4IGNvdW50PTAKQSBhbG9uZTogc3RhdHVzPTB4YzAwMDAwMGQgY291bnQ9MApNIGFsb25lOiBzdGF0dXM9MHhjMDAwMDAwZCBjb3VudD0wCkYgYWxvbmU6IHN0YXR1cz0weGMwMDAwMDBkIGNvdW50PTAKUiBhbG9uZTogc3RhdHVzPTB4YzAwMDAwNTkgY291bnQ9MApOIGFsb25lOiBzdGF0dXM9MHhjMDAwMDA5OSBjb3VudD0wCkwgYWxvbmU6IHN0YXR1cz0weGMwMDAwMDU5IGNvdW50PTAKSyBhbG9uZTogc3RhdHVzPTB4YzAwMDAwNzcgY291bnQ9MApUIHRvZ2V0aGVyIHdpdGg6IFM9MHhjMDAwMDAwZCBBPTB4YzAwMDAwMGQgTT0weGMwMDAwMDBkIEY9MHhjMDAwMDAwZCBSPTB4YzAwMDAwMGQgTj0weGMwMDAwMDBkIEw9MHhjMDAwMDAwZCBLPTB4YzAwMDAwMGQgClMgdG9nZXRoZXIgd2l0aDogQT0weGMwMDAwMDc4IE09MHhjMDAwMDA3OCBGPTB4YzAwMDAwNzggUj0weGMwMDAwMDc4IE49MHhjMDAwMDA3OCBMPTB4YzAwMDAwNzggSz0weGMwMDAwMDc4IApBIHRvZ2V0aGVyIHdpdGg6IE09MHhjMDAwMDAwZCBGPTB4YzAwMDAwMGQgUj0weGMwMDAwMDBkIE49MHhjMDAwMDAwZCBMPTB4YzAwMDAwMGQgSz0weGMwMDAwMDBkIApNIHRvZ2V0aGVyIHdpdGg6IEY9MHhjMDAwMDAwZCBSPTB4YzAwMDAwNTkgTj0weGMwMDAwMDBkIEw9MHhjMDAwMDA1OSBLPTB4YzAwMDAwMGQgCkYgdG9nZXRoZXIgd2l0aDogUj0weGMwMDAwMDU5IE49MHhjMDAwMDAwZCBMPTB4YzAwMDAwNTkgSz0weGMwMDAwMDBkIApSIHRvZ2V0aGVyIHdpdGg6IE49MHhjMDAwMDA1OSBMPTB4YzAwMDAwNTkgSz0weGMwMDAwMDU5IApOIHRvZ2V0aGVyIHdpdGg6IEw9MHhjMDAwMDA1OSBLPTB4YzAwMDAwNzcgCkwgdG9nZXRoZXIgd2l0aDogSz0weGMwMDAwMDc3IApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "nothing wrong: status=0x00000000 count=1\nT alone: status=0xc000000d count=0\nS alone: status=0xc0000078 count=0\nA alone: status=0xc000000d count=0\nM alone: status=0xc000000d count=0\nF alone: status=0xc000000d count=0\nR alone: status=0xc0000059 count=0\nN alone: status=0xc0000099 count=0\nL alone: status=0xc0000059 count=0\nK alone: status=0xc0000077 count=0\nT together with: S=0xc000000d A=0xc000000d M=0xc000000d F=0xc000000d R=0xc000000d N=0xc000000d L=0xc000000d K=0xc000000d \nS together with: A=0xc0000078 M=0xc0000078 F=0xc0000078 R=0xc0000078 N=0xc0000078 L=0xc0000078 K=0xc0000078 \nA together with: M=0xc000000d F=0xc000000d R=0xc000000d N=0xc000000d L=0xc000000d K=0xc000000d \nM together with: F=0xc000000d R=0xc0000059 N=0xc000000d L=0xc0000059 K=0xc000000d \nF together with: R=0xc0000059 N=0xc000000d L=0xc0000059 K=0xc000000d \nR together with: N=0xc0000059 L=0xc0000059 K=0xc0000059 \nN together with: L=0xc0000059 K=0xc0000077 \nL together with: K=0xc0000077 \nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
     },
     {
       "name": "rtl_addmandatory_sids",

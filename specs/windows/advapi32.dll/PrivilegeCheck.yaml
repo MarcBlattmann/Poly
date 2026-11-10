@@ -31,10 +31,15 @@ rules:
   token_types: "works with a primary token as well as impersonation tokens (the call returns TRUE and the result is set); an impersonation token of level Identification works; Anonymous fails with ERROR_BAD_IMPERSONATION_LEVEL (1346)"
   access: "a token handle with only TOKEN_DUPLICATE or only TOKEN_IMPERSONATE: ERROR_ACCESS_DENIED (5); with TOKEN_QUERY it works"
   null_token: "a NULL token handle fails with ERROR_INVALID_HANDLE (6), also while the thread impersonates"
+  result_on_failure: "every failing call stores FALSE (0) in *result before it returns, whatever was there (0x12345678, -1, 1): ERROR_ACCESS_DENIED (a handle without TOKEN_QUERY), ERROR_BAD_IMPERSONATION_LEVEL (an anonymous-level token), ERROR_INVALID_HANDLE (see errors); the privilege set is left as it was. A successful call stores exactly 0 or 1"
+  attributes: "a successful call rewrites bit 31 (SE_PRIVILEGE_USED_FOR_ACCESS, 0x80000000) of every entry's Attributes and keeps the other 31 bits: the bit is set in an entry whose privilege is held and enabled and cleared in every other entry (1 becomes 0x80000001 or stays 1; 0x80000002 stays or becomes 2; 0xFFFFFFFF stays or becomes 0x7FFFFFFF), with \"all necessary\" and with \"any\" alike and whatever the result is; the attribute bits coming in have no influence on the result; PrivilegeCount and Control are not changed"
+  control: "only bit 0 of Control counts: every even value behaves as 0 (any) and every odd value as 1 (all necessary)"
+  luid: "a privilege is identified by the low 6 bits of the LUID's LowPart alone: HighPart is ignored (7, -1), and a multiple of 64 added to the number names the same privilege (+64, +128, +0x10000, +0x80000000 give the answer of the plain number, for an enabled, a disabled and a not-held privilege alike)"
 errors:
   level: "ERROR_BAD_IMPERSONATION_LEVEL (1346)"
   access: "ERROR_ACCESS_DENIED (5)"
   null: "ERROR_INVALID_HANDLE (6)"
+  handle: "ERROR_INVALID_HANDLE (6) also for a closed handle, a handle value that is not open, the process pseudo-handle and a handle of another object type (an event)"
 side_effects: "none beyond the rules above"
 threading: "no state is shared between threads unless noted; the calling thread's token and last error are per thread"
 ordering: []
@@ -42,8 +47,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 1  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
   by name, each carrying its own declarations (Learn prototypes, header

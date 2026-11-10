@@ -23,10 +23,12 @@ interface:
   signature: "BOOL GetProcessMitigationPolicy(HANDLE process, PROCESS_MITIGATION_POLICY policy, PVOID buffer, SIZE_T length)"
   policies: "PROCESS_MITIGATION_POLICY values (winnt.h): ProcessDEPPolicy 0, ProcessASLRPolicy 1, ProcessDynamicCodePolicy 2, ProcessStrictHandleCheckPolicy 3, ProcessSystemCallDisablePolicy 4, ProcessMitigationOptionsMask 5, ProcessExtensionPointDisablePolicy 6, ProcessControlFlowGuardPolicy 7, ProcessSignaturePolicy 8, ProcessFontDisablePolicy 9, ProcessImageLoadPolicy 10, ProcessSystemCallFilterPolicy 11, ProcessPayloadRestrictionPolicy 12, ProcessChildProcessPolicy 13, ProcessSideChannelIsolationPolicy 14, ProcessUserShadowStackPolicy 15, ProcessRedirectionTrustPolicy 16, ProcessUserPointerAuthPolicy 17, ProcessSEHOPPolicy 18"
 rules:
-  sizes: "each policy accepts exactly one length: 4 bytes for ASLR (1), DynamicCode (2), StrictHandleCheck (3), SystemCallDisable (4), ExtensionPointDisable (6), ControlFlowGuard (7), Signature (8), FontDisable (9), ImageLoad (10), SystemCallFilter (11), PayloadRestriction (12), ChildProcess (13), SideChannelIsolation (14), UserShadowStack (15), RedirectionTrust (16), SEHOP (18); 8 bytes for DEP (0); ProcessMitigationOptionsMask (5) accepts 8, 9, 12, 16, 24, 32, 64 and 128 (two 64-bit masks of the policies the system supports; at 64 bytes more than the first 8 bytes are written, the first word was 0x33333303); any other length fails with 87"
+  sizes: "each policy accepts exactly one length: 4 bytes for ASLR (1), DynamicCode (2), StrictHandleCheck (3), SystemCallDisable (4), ExtensionPointDisable (6), ControlFlowGuard (7), Signature (8), FontDisable (9), ImageLoad (10), SystemCallFilter (11), PayloadRestriction (12), ChildProcess (13), SideChannelIsolation (14), UserShadowStack (15), RedirectionTrust (16), SEHOP (18); 8 bytes for DEP (0); ProcessMitigationOptionsMask (5) accepts every length from 8 up (rule options_mask); for the other policies any other length fails with 87"
   class_17: "ProcessUserPointerAuthPolicy (17) is not supported on this system: length 4 fails with ERROR_NOT_SUPPORTED (50), other lengths 87; classes 19, 20, 100 and 0xFFFFFFFF fail with 87 for every length"
   handles: "the pseudo-handle of the current process, and real handles with PROCESS_QUERY_INFORMATION (0x400) or PROCESS_QUERY_LIMITED_INFORMATION (0x1000) work; SYNCHRONIZE only and PROCESS_TERMINATE only fail with ERROR_ACCESS_DENIED (5); a NULL handle, -2 and a handle value that is not open fail with ERROR_INVALID_HANDLE (6)"
   null_buffer: "a NULL buffer with length 0 fails with ERROR_INVALID_PARAMETER (87)"
+  options_mask: "the answer of ProcessMitigationOptionsMask (5) is a row of 64-bit masks, little-endian: 0x3333333333333303, then 0x0333333333333330, then zeros (bytes 03 33 33 33 33 33 33 33, 30 33 33 33 33 33 33 03, 00 ...). Exactly the given length is written, cut off inside a mask when the length is not a multiple of 8 (length 9: the first mask and the byte 0x30; length 12: and 33 33 33); from byte 16 on everything up to the length is zero (lengths 24, 32, 64, 128); bytes past the length keep their old content. Every length from 8 up is accepted (8 to 40 without a gap, 48, 64, 128, 129); 0 to 7 fail with 87. A real process handle gives the same bytes as the pseudo-handle"
+  buffer_use: "every other policy writes exactly its own length (8 bytes for DEP, 4 for the others) and leaves the bytes after it as they were; a failing call (a wrong length 87, class 17's 50, an unknown class, class 5 with a length below 8) leaves the whole buffer as it was"
 errors:
   invalid_parameter: "87: unknown class or a length the class does not accept, NULL buffer"
   not_supported: "50: class 17 with length 4"
@@ -39,8 +41,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 1  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing advapi32.dll, kernel32.dll and ntdll.dll
   by name, each carrying its own declarations (Learn prototypes, header
