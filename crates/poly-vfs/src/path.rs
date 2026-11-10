@@ -290,7 +290,7 @@ impl<'a> Walk<'a> {
             // directory we may search. That comes before anything about
             // the name itself, its length included: `file/<256 bytes>` is
             // ENOTDIR (the order of path errors, step 3).
-            let attr = cur.attr()?;
+            let attr = cur.mount.sb.fs.walk_attr(cur.ino)?;
             if attr.kind != FileType::Directory {
                 return Err(Errno::ENOTDIR);
             }
@@ -313,7 +313,9 @@ impl<'a> Walk<'a> {
                 b".." => cur = self.dotdot(cur)?,
                 name => {
                     let child = self.child(&cur, name)?;
-                    if child.attr()?.kind == FileType::Symlink {
+                    // Only the type matters here (it may be a mount's root,
+                    // which the walk goes through without asking for more).
+                    if child.mount.sb.fs.walk_attr(child.ino)?.kind == FileType::Symlink {
                         let target = match self.link_target(&child)? {
                             LinkTarget::Path(t) => t,
                             LinkTarget::Jump((loc, _)) => {

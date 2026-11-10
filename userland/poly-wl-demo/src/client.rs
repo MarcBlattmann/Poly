@@ -10,8 +10,13 @@
 //! Started by `poly-compositor --exec` (which sets `POLY_COMPOSITOR_DUMP`),
 //! it then asks the compositor for a picture of the output (a `dump` line
 //! on the named pipe `$POLY_COMPOSITOR_CONTROL`) and finds its own pixels
-//! in it. A second connection checks that a request to an unknown object
-//! is a protocol error.
+//! in it. Then, with a picture to check and not `--interactive`, it shows
+//! the buffer at half its size through a `wp_viewport` (what a client
+//! drawing for a 2x output with a buffer of scale 1 does), draws a new
+//! picture and damages all of the surface in surface coordinates
+//! (`wl_surface.damage`): every pixel of the window must be new (this
+//! program only; the C one does not do it). A second connection checks that
+//! a request to an unknown object is a protocol error.
 //!
 //! Output, one line per check: `ok <check>` or `not ok <check> (...)`,
 //! then `summary <passed> passed, <failed> failed` and, if all passed,
@@ -89,6 +94,8 @@ struct State {
     buffer: u32,
     frame: u32,
     names: [u32; 5],
+    /// `wp_viewporter`'s name (0: not offered).
+    viewporter_name: u32,
     formats: u32,
     synced: bool,
     configured: bool,
@@ -140,6 +147,8 @@ impl Test {
             let iface = e.string(1);
             if let Some(i) = GLOBALS.iter().position(|g| *g == iface) {
                 s.names[i] = e.arg(0);
+            } else if iface == "wp_viewporter" {
+                s.viewporter_name = e.arg(0);
             }
         } else if e.object == s.sync && e.opcode == 0 {
             s.synced = true;
@@ -207,10 +216,60 @@ impl Test {
     /// count our window's pixels in it: each half of the buffer at the
     /// output's scale.
     fn check_composed(&mut self) {
-        let Some(path) = poly_rt::env::var("POLY_COMPOSITOR_DUMP") else {
+        if poly_rt::env::var("POLY_COMPOSITOR_DUMP").is_none() {
             println!("wl-client: not started by poly-compositor --exec: no picture to check");
             return;
-        };
+        }
+        let Some((w, h, left, right)) = self.picture() else { return };
+        let (mw, mh) = self.s.mode;
+        self.check((w as i32, h as i32) == (mw, mh), "the picture is the output's size", &format!("{w}x{h}"));
+        let scale = self.s.output_scale.max(1) as u64;
+        let want = u64::from(WIDTH / 2) * u64::from(HEIGHT) * scale * scale;
+        let got = format!("{left} and {right} pixels, want {want} each");
+        self.check(left == want && right == want, "the window's pixels are on the output", &got);
+    }
+
+    /// `wl_surface.damage` through a viewport: the buffer shown at half its
+    /// size (a 2x buffer of scale 1, the `wp_fractional_scale_v1` way), a new
+    /// picture (all [`RIGHT`]) and all of the *surface* damaged, in surface
+    /// coordinates. Every pixel of the window must be new: a compositor that
+    /// takes the rectangle for buffer pixels copies the buffer's top-left
+    /// quarter only (Chromium's page after a navigation at scale 2,
+    /// 2026-11-10). Only where there is a picture to check.
+    fn check_viewport_damage(&mut self, shared: &mut Shared) {
+        if poly_rt::env::var("POLY_COMPOSITOR_DUMP").is_none() {
+            return;
+        }
+        if self.s.viewporter_name == 0 {
+            return self.check(false, "wp_viewporter is offered", "no such global");
+        }
+        let c = &mut self.c;
+        let s = &mut self.s;
+        let viewporter = c.new_id();
+        c.request(s.registry, 0, &bind_args(s.viewporter_name, "wp_viewporter", 1, viewporter));
+        let viewport = c.new_id();
+        c.request(viewporter, 1, &[Arg::U(viewport), Arg::U(s.surface)]); // get_viewport
+        c.request(viewport, 2, &[Arg::U(WIDTH / 2), Arg::U(HEIGHT / 2)]); // set_destination
+        shared.pixels().fill(RIGHT);
+        c.request(s.surface, 1, &[Arg::U(s.buffer), Arg::U(0), Arg::U(0)]); // attach
+        c.request(s.surface, 2, &[Arg::U(0), Arg::U(0), Arg::U(WIDTH / 2), Arg::U(HEIGHT / 2)]); // damage
+        s.frame = c.new_id();
+        s.frame_done = false;
+        c.request(s.surface, 3, &[Arg::U(s.frame)]); // frame
+        c.request(s.surface, 6, &[]); // commit
+        let ok = self.wait_for(|s| s.frame_done);
+        self.check(ok, "the frame callback is done after the commit through a viewport", "no callback");
+        let Some((_, _, left, right)) = self.picture() else { return };
+        let scale = self.s.output_scale.max(1) as u64;
+        let want = u64::from(WIDTH / 2) * u64::from(HEIGHT / 2) * scale * scale;
+        let got = format!("{left} old and {right} new pixels, want 0 and {want}");
+        self.check(left == 0 && right == want, "surface damage through a viewport renews every pixel", &got);
+    }
+
+    /// A picture of the output from the compositor that started us: its
+    /// size and its [`LEFT`] and [`RIGHT`] pixels (a failed check if none).
+    fn picture(&mut self) -> Option<(u32, u32, u64, u64)> {
+        let path = poly_rt::env::var("POLY_COMPOSITOR_DUMP")?;
         let _ = poly_rt::fs::remove_file(path);
         if let Some(ctl) = poly_rt::env::var("POLY_COMPOSITOR_CONTROL") {
             let pipe = poly_rt::fs::OpenOptions::new().write(true).nonblocking(true).open(ctl);
@@ -223,17 +282,12 @@ impl Test {
             let _ = poly_rt::time::sleep(Duration::from_millis(20));
             waited += 20;
         }
-        let Some((w, h, left, right)) = poly_rt::fs::read(path).ok().as_deref().and_then(count_ppm) else {
+        let counts = poly_rt::fs::read(path).ok().as_deref().and_then(count_ppm);
+        if counts.is_none() {
             let got = if poly_rt::fs::exists(path) { "not a PPM" } else { "no file" };
             self.check(false, "the compositor wrote a picture of the output", got);
-            return;
-        };
-        let (mw, mh) = self.s.mode;
-        self.check((w as i32, h as i32) == (mw, mh), "the picture is the output's size", &format!("{w}x{h}"));
-        let scale = self.s.output_scale.max(1) as u64;
-        let want = u64::from(WIDTH / 2) * u64::from(HEIGHT) * scale * scale;
-        let got = format!("{left} and {right} pixels, want {want} each");
-        self.check(left == want && right == want, "the window's pixels are on the output", &got);
+        }
+        counts
     }
 
     /// A request to an object that does not exist is `wl_display.error`
@@ -331,6 +385,11 @@ impl Test {
         self.check(preferred >= 1, "a preferred buffer scale", &format!("scale {preferred}"));
         println!("wl-client: window {WIDTH}x{HEIGHT} mapped, title \"wl-client\"");
         self.check_composed();
+        // Not with `--interactive`: that window stays as it is, for the
+        // person (and the desktop boot test) to look at.
+        if !interactive {
+            self.check_viewport_damage(&mut shared);
+        }
         self.check_unknown_object();
         if interactive {
             self.shared = Some(shared);

@@ -329,6 +329,31 @@ follows replaces the decisions it contradicts; everything else above stands.
    margins, tab length (only with `DT_TABSTOP`), `cbSize` of 20 and
    `uiLengthDrawn` are done in `poly-gdi`.
 
+### Update: second pass over five entries (impl-win-text-3)
+
+`ExtTextOutW`, `GetTextExtentExPointW`, `GetTextFaceW`,
+`RemoveFontResourceExW` and `DrawTextW` passed their visible tests but not
+the held-out ones. Their sheets and Learn pages were read again; what
+changed:
+
+- `GetTextExtentExPointW` without `lpnFit` does not use the maximum (Learn):
+  `alpDx` gets the running extent of every character. A negative maximum
+  still fails, as the sheet says without exception.
+- `GetTextFaceW` names a stock font by its stock object, not by the bitmap
+  face that draws it: `ANSI_VAR_FONT` is "MS Sans Serif", `DEFAULT_GUI_FONT`
+  "MS Shell Dlg", though both draw with the same face.
+- `AddFontResourceExW` / `RemoveFontResourceExW` know a font file by its full
+  path (`GetFullPathNameW`), so a remove may spell the file differently from
+  its add; a call that sets no last error leaves the caller's value alone.
+- `DrawTextW` with `DT_TABSTOP` takes the tab stop from bits 8 to 15 of the
+  format and reads no flags from those bits (Learn: a tab stop of 4 is not
+  `DT_CALCRECT`); `DrawTextExW` with a `DRAWTEXTPARAMS` takes it from
+  `iTabLength` and keeps the flags.
+- Ellipses on text of several lines follow Learn: `DT_WORD_ELLIPSIS` cuts
+  every line that is too wide (with `DT_WORDBREAK`, every word wider than the
+  rectangle), `DT_END_ELLIPSIS` only the end of the text (its last line laid
+  out), `DT_PATH_ELLIPSIS` every line.
+
 ### Open
 
 - `to_glyphs` is gone from the sheet; the pixels of the stock bitmap fonts

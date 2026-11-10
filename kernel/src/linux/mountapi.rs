@@ -16,7 +16,7 @@ use crate::fs::{self, mounts};
 use crate::sync::Mutex;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use poly_personality_linux::admin;
+use poly_personality_linux::admin::{self, FsType};
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::mountapi::{
     AttrChange, Command, CreateRequest, FsContext, MountDesc, MountLink, PathAt, SuperblockOps, join_attrs,
@@ -34,7 +34,13 @@ fn vfs_flags(f: admin::MountFlags) -> MountFlags {
 }
 
 fn admin_flags(f: MountFlags) -> admin::MountFlags {
-    admin::MountFlags { read_only: f.read_only, no_suid: f.no_suid, no_dev: f.no_dev, no_exec: f.no_exec }
+    admin::MountFlags {
+        read_only: f.read_only,
+        no_suid: f.no_suid,
+        no_dev: f.no_dev,
+        no_exec: f.no_exec,
+        ..admin::MountFlags::default()
+    }
 }
 
 /// What a context's commands made.
@@ -48,6 +54,8 @@ struct Made {
     read_only: bool,
     /// fspick's mount.
     picked: Option<Arc<Mount>>,
+    /// The mount fsmount made from the context, which a reconfigure changes.
+    mounted: Option<Arc<Mount>>,
 }
 
 /// The file behind an fsopen(2) / fspick(2) descriptor.
@@ -85,10 +93,20 @@ impl FileObject for ContextFile {
 /// [`SuperblockOps`] on a context's [`Made`].
 struct Ops<'a> {
     made: &'a mut Made,
+    files: &'a crate::fs::Files,
 }
 
 impl SuperblockOps for Ops<'_> {
     fn create(&mut self, req: &CreateRequest) -> Result<(), Errno> {
+        if req.fstype == FsType::Overlay {
+            // The layers named by the parameters, looked up now.
+            let (fs, read_only) = super::admin::build_overlay(self.files, &req.data)?;
+            self.made.fs = Some(fs);
+            self.made.source = if req.source == b"none" { b"overlay".to_vec() } else { req.source.clone() };
+            self.made.options = req.data.clone();
+            self.made.read_only = req.read_only || read_only;
+            return Ok(());
+        }
         let fs = mounts::new_virtual(req.fstype, req.root).map_err(vfs_errno)?;
         self.made.fs = Some(fs);
         self.made.source = req.source.clone();
@@ -97,8 +115,20 @@ impl SuperblockOps for Ops<'_> {
         Ok(())
     }
 
-    fn reconfigure(&mut self, read_only: Option<bool>) -> Result<(), Errno> {
-        let m = self.made.picked.as_ref().ok_or(Errno::EINVAL)?;
+    fn reconfigure(&mut self, read_only: Option<bool>, data: &[u8]) -> Result<(), Errno> {
+        let m = self.made.picked.as_ref().or(self.made.mounted.as_ref()).ok_or(Errno::EINVAL)?;
+        if m.fs_name() == "tmpfs" && !data.is_empty() {
+            let root = poly_personality_linux::admin::mount_options(admin::FsType::Tmpfs, data)?;
+            let bytes = match root.size {
+                Some(poly_personality_linux::admin::Amount::Count(b)) => Some(b),
+                _ => None,
+            };
+            let inodes = match root.inodes {
+                Some(poly_personality_linux::admin::Amount::Count(n)) => Some(n),
+                _ => None,
+            };
+            m.fs().set_limits(bytes, inodes).map_err(vfs_errno)?;
+        }
         if let Some(ro) = read_only {
             // The rule of mount(2)'s MS_REMOUNT | MS_RDONLY (writers
             // through any mount, unlinked files still open).
@@ -177,8 +207,8 @@ impl Thread<'_> {
             let (flags, extra) = split_attrs(change.apply(attrs_of(m)));
             m.change_flags(vfs_flags(flags));
             m.set_attrs(extra);
-            m.set_propagation(change.propagation_of(u64::from(m.propagation())) as u32);
         }
+        fs::vfs().set_propagation(&mounts, change.propagation);
         Ok(())
     }
 
@@ -200,19 +230,20 @@ impl Thread<'_> {
         let obj = self.context_file(fd)?;
         let mut state = obj.state.lock();
         let mut made = obj.made.lock();
-        state.config(cmd, &mut Ops { made: &mut made })
+        state.config(cmd, &mut Ops { made: &mut made, files: &self.process().files })
     }
 
     pub(super) fn mnt_fsmount(&mut self, fd: i32, attrs: u64, cloexec: bool) -> Result<i32, Errno> {
         let vfs = fs::vfs();
         let obj = self.context_file(fd)?;
         obj.state.lock().begin_mount()?;
-        let made = obj.made.lock();
+        let mut made = obj.made.lock();
         let fs = made.fs.clone().ok_or(Errno::EINVAL)?;
         let (flags, extra) = split_attrs(attrs);
         let m = vfs.new_detached(fs, vfs_flags(flags));
         m.set_attrs(extra);
         m.set_sb_info(&made.source, &made.options);
+        made.mounted = Some(m.clone());
         if made.read_only {
             m.set_sb_read_only(true);
         }

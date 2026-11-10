@@ -41,6 +41,7 @@ pub mod mqueue;
 pub mod mseal;
 pub mod msg;
 pub mod ns;
+pub mod nsfs;
 pub mod numa;
 pub mod path;
 pub mod perf;

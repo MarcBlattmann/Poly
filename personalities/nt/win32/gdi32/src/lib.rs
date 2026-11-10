@@ -39,6 +39,7 @@ unsafe extern "system" {
     fn GetFileSizeEx(file: usize, size: *mut i64) -> i32;
     fn ReadFile(file: usize, buf: *mut u8, count: u32, read: *mut u32, overlapped: *mut u8) -> i32;
     fn CloseHandle(h: usize) -> i32;
+    fn GetFullPathNameW(name: *const u16, size: u32, buf: *mut u16, file_part: *mut *mut u16) -> u32;
 }
 
 const MEM_COMMIT_RESERVE: u32 = 0x3000;
@@ -1081,8 +1082,10 @@ pub unsafe extern "system" fn GetTextExtentPointA(hdc: H, text: *const u8, count
     unsafe { GetTextExtentPoint32A(hdc, text, count, size) }
 }
 
-/// `GetTextExtentExPointW`: `fit` gets how many characters fit in `max`
-/// (`max` < 0: no limit), `dx` the width of the text up to each character.
+/// `GetTextExtentExPointW`: `fit` gets how many characters fit in `max`,
+/// `dx` the width of the text up to each of them. Without `fit` the maximum
+/// is not used (Learn) and `dx` gets the running width of every character;
+/// a negative maximum fails all the same (`GetTextExtentExPointW.yaml`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetTextExtentExPointW(
     hdc: H,
@@ -1103,14 +1106,16 @@ pub unsafe extern "system" fn GetTextExtentExPointW(
     match gdi(|g| g.text_extent_ex(hdc as u64, &s, max)) {
         Some((e, n, running)) => {
             // SAFETY: the caller's out-pointers; `dx` holds `count` values,
-            // of which the characters that fit are written.
+            // of which the characters that fit are written (all of them
+            // when the caller did not ask how many fit).
             unsafe {
                 write_size(size, e);
                 if !fit.is_null() {
                     *fit = n as i32;
                 }
                 if !dx.is_null() {
-                    for (i, v) in running.iter().take(n).enumerate() {
+                    let filled = if fit.is_null() { running.len() } else { n };
+                    for (i, v) in running.iter().take(filled).enumerate() {
                         *dx.add(i) = *v;
                     }
                 }
@@ -1532,10 +1537,12 @@ pub unsafe extern "system" fn PolyGdiDrawText(
     format: u32,
 ) -> i32 {
     // SAFETY: as `PolyGdiDrawTextEx`.
-    unsafe { PolyGdiDrawTextEx(hdc, text as *mut u16, count, rect, format, 0, 0, 0, core::ptr::null_mut()) }
+    unsafe { PolyGdiDrawTextEx(hdc, text as *mut u16, count, rect, format, -1, 0, 0, core::ptr::null_mut()) }
 }
 
-/// `DrawTextExW`: `tab_chars` is `iTabLength` (0: the default), the margins
+/// `DrawTextExW`: `tab_chars` is `iTabLength` (0: the default; negative:
+/// there is no `DRAWTEXTPARAMS`, and with `DT_TABSTOP` bits 8 to 15 of
+/// `format` are the tab length, as in `DrawTextW`), the margins
 /// narrow the rectangle for laying out the text; `drawn` (if not NULL)
 /// gets `uiLengthDrawn`. `DT_MODIFYSTRING` writes the ellipsized text back
 /// to `text`. A count of 0 draws nothing and gives 1; below -1, 0.
@@ -1564,7 +1571,12 @@ pub unsafe extern "system" fn PolyGdiDrawTextEx(
     // SAFETY: the caller's string (count -1: NUL-terminated) and RECT.
     let (s, mut r) = unsafe { (wide(text, count), read_rect(rect)) };
     let before = r;
-    let params = poly_gdi::text::DrawParams { tab_chars, left_margin, right_margin };
+    let params = poly_gdi::text::DrawParams {
+        tab_chars: tab_chars.max(0),
+        tab_in_format: tab_chars < 0,
+        left_margin,
+        right_margin,
+    };
     let out = gdi(|g| g.draw_text_ex(hdc as u64, &s, &mut r, format, params));
     if out.height == 0 {
         return 0;
@@ -1651,6 +1663,29 @@ unsafe fn path_units(name: *const u16) -> Vec<u16> {
     v
 }
 
+/// The file a font resource path (NUL-terminated) names, to tell whether
+/// two paths are the same file: its full path without the NUL (the path
+/// itself where the system has none for it). An add and its remove may
+/// spell the file differently (relative and absolute, `/` and `\`, case).
+fn font_file_id(path: &[u16]) -> Vec<u16> {
+    let mut buf = alloc::vec![0u16; 520];
+    for _ in 0..2 {
+        // SAFETY: a NUL-terminated path and a buffer of `buf.len()` units.
+        let n = unsafe { GetFullPathNameW(path.as_ptr(), buf.len() as u32, buf.as_mut_ptr(), core::ptr::null_mut()) }
+            as usize;
+        if n == 0 {
+            break;
+        }
+        if n < buf.len() {
+            buf.truncate(n);
+            return buf;
+        }
+        // Too small: `n` is the size needed, with the NUL.
+        buf.resize(n + 1, 0);
+    }
+    path[..path.len() - 1].to_vec()
+}
+
 /// `AddFontResourceExW`: the number of fonts added (1), 0 with the last
 /// error of the failed open (`ERROR_FILE_NOT_FOUND`), 87 for bad flags, none
 /// for a file that is no font.
@@ -1660,6 +1695,8 @@ pub unsafe extern "system" fn AddFontResourceExW(name: *const u16, flags: u32, _
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
+    // What the caller's last error was: a call that sets none leaves it.
+    let before = last_error();
     // SAFETY: a NUL-terminated path.
     let path = unsafe { path_units(name) };
     let data = match read_path(&path) {
@@ -1669,10 +1706,9 @@ pub unsafe extern "system" fn AddFontResourceExW(name: *const u16, flags: u32, _
             return 0;
         }
     };
-    let ok = !data.is_empty() && gdi(|g| g.add_font_file(&path[..path.len() - 1], flags, data));
-    if !ok {
-        set_last_error(0);
-    }
+    let id = font_file_id(&path);
+    let ok = !data.is_empty() && gdi(|g| g.add_font_file(&id, flags, data));
+    set_last_error(before);
     i32::from(ok)
 }
 
@@ -1683,7 +1719,10 @@ pub unsafe extern "system" fn AddFontResourceW(name: *const u16) -> i32 {
 }
 
 /// `RemoveFontResourceExW`: removes one earlier add of the same file with
-/// the same flags. The file has to be there (`ERROR_FILE_NOT_FOUND`).
+/// the same flags (each add needs a remove of its own). An empty path and
+/// flags that are none of `FR_PRIVATE` and `FR_NOT_ENUM` are error 87; the
+/// file has to be there (`ERROR_FILE_NOT_FOUND`, and the font stays); a
+/// file that was not added with these flags fails without a last error.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn RemoveFontResourceExW(name: *const u16, flags: u32, _reserved: *mut u8) -> i32 {
     // SAFETY: a NUL-terminated path or NULL.
@@ -1692,14 +1731,14 @@ pub unsafe extern "system" fn RemoveFontResourceExW(name: *const u16, flags: u32
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
+    let before = last_error();
     if let Err(e) = read_path(&path) {
         set_last_error(e);
         return 0;
     }
-    let ok = gdi(|g| g.remove_font_file(&path[..path.len() - 1], flags));
-    if !ok {
-        set_last_error(0);
-    }
+    let id = font_file_id(&path);
+    let ok = gdi(|g| g.remove_font_file(&id, flags));
+    set_last_error(before);
     i32::from(ok)
 }
 

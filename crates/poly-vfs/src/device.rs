@@ -73,6 +73,18 @@ pub trait CharDevice: Send + Sync {
         Ok(None)
     }
 
+    /// The size in bytes of a block device, which `lseek(SEEK_END)` adds
+    /// to; `None` (the default) for devices without one.
+    fn size(&self) -> Option<u64> {
+        None
+    }
+
+    /// `fsync(2)` on an open file of the device: `EINVAL` (the default)
+    /// for a device that has nothing to write back.
+    fn sync(&self) -> Result<()> {
+        Err(Errno::EINVAL)
+    }
+
     /// For a pseudo-terminal master: the number of its slave
     /// (`/dev/pts/<n>`), which `TIOCGPTPEER` opens. `None` for every
     /// other device.
@@ -85,6 +97,14 @@ pub trait CharDevice: Send + Sync {
     /// of (mapping a DRM device file, or a sound card's ring buffer).
     /// `None` (the default) for devices nobody looks into.
     fn as_any(&self) -> Option<&(dyn core::any::Any + Send + Sync)> {
+        None
+    }
+
+    /// For a device whose reads and writes are whole messages (`/dev/fuse`:
+    /// one request per read, one reply per write): the size of the largest
+    /// one, so the caller moves each in one piece. `None` (the default) for
+    /// byte streams, which may be cut anywhere.
+    fn message_size(&self) -> Option<usize> {
         None
     }
 }

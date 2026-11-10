@@ -184,6 +184,9 @@ pub struct OpenFile {
     /// Causes no inotify or fanotify events (a descriptor fanotify hands
     /// to its reader).
     quiet: bool,
+    /// What the file system keeps for this open
+    /// ([`FileSystem::open_handle`](crate::FileSystem::open_handle)).
+    handle: Option<u64>,
 }
 
 impl OpenFile {
@@ -227,6 +230,43 @@ impl OpenFile {
             counts_open,
             counts_text_writer: false,
             quiet: false,
+            handle: None,
+        }
+    }
+
+    /// The open file of `handle`, which the file system gave for it.
+    pub(crate) fn with_handle(mut self, handle: Option<u64>) -> OpenFile {
+        self.handle = handle;
+        self
+    }
+
+    fn fs_read(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        match self.handle {
+            Some(h) => self.fs().read_handle(self.node.ino(), h, offset, buf),
+            None => self.fs().read(self.node.ino(), offset, buf),
+        }
+    }
+
+    fn fs_write(&self, offset: u64, buf: &[u8]) -> Result<usize> {
+        match self.handle {
+            Some(h) => self.fs().write_handle(self.node.ino(), h, offset, buf),
+            None => self.fs().write(self.node.ino(), offset, buf),
+        }
+    }
+
+    fn fs_append(&self, buf: &[u8]) -> Result<(u64, usize)> {
+        match self.handle {
+            Some(h) => self.fs().append_handle(self.node.ino(), h, buf),
+            None => self.fs().append(self.node.ino(), buf),
+        }
+    }
+
+    /// A descriptor of this open file was closed (close(2), dup2(2) onto
+    /// it, the end of the process): the file system hears of every one.
+    /// With `wait` the call may sleep until it has.
+    pub fn descriptor_closed(&self, wait: bool) {
+        if let (Some(h), Backend::Inode, FileType::Regular) = (self.handle, &self.backend, self.kind) {
+            let _ = self.fs().flush_handle(self.node.ino(), h, wait);
         }
     }
 
@@ -396,7 +436,7 @@ impl OpenFile {
             Backend::Inode => {
                 let n = {
                     let mut off = self.offset.lock();
-                    let n = self.fs().read(self.node.ino(), *off, buf)?;
+                    let n = self.fs_read(*off, buf)?;
                     *off += n as u64;
                     n
                 };
@@ -435,11 +475,11 @@ impl OpenFile {
                         m.check_write(at, buf.len() as u64, size)?;
                     }
                     if self.flags().contains(OpenFlags::APPEND) {
-                        let (at, n) = self.fs().append(self.node.ino(), buf)?;
+                        let (at, n) = self.fs_append(buf)?;
                         *off = at + n as u64;
                         n
                     } else {
-                        let n = self.fs().write(self.node.ino(), *off, buf)?;
+                        let n = self.fs_write(*off, buf)?;
                         *off += n as u64;
                         n
                     }
@@ -474,7 +514,7 @@ impl OpenFile {
         match &self.backend {
             Backend::Inode if self.kind == FileType::Directory => Err(Errno::EISDIR),
             Backend::Inode => {
-                let n = self.fs().read(self.node.ino(), offset, buf)?;
+                let n = self.fs_read(offset, buf)?;
                 self.accessed(n);
                 Ok(n)
             }
@@ -505,12 +545,12 @@ impl OpenFile {
         match &self.backend {
             Backend::Inode if buf.is_empty() => Ok(0),
             Backend::Inode if self.flags().contains(OpenFlags::APPEND) => {
-                let n = self.fs().append(self.node.ino(), buf).map(|(_, n)| n)?;
+                let n = self.fs_append(buf).map(|(_, n)| n)?;
                 self.modified(n);
                 Ok(n)
             }
             Backend::Inode => {
-                let n = self.fs().write(self.node.ino(), offset, buf)?;
+                let n = self.fs_write(offset, buf)?;
                 self.modified(n);
                 Ok(n)
             }
@@ -548,16 +588,16 @@ impl OpenFile {
         }
         let append = append.unwrap_or_else(|| self.flags().contains(OpenFlags::APPEND));
         match at {
-            Some(_) if append => self.fs().append(self.node.ino(), buf).map(|(_, n)| n),
-            Some(offset) => self.fs().write(self.node.ino(), offset, buf),
+            Some(_) if append => self.fs_append(buf).map(|(_, n)| n),
+            Some(offset) => self.fs_write(offset, buf),
             None => {
                 let mut off = self.offset.lock();
                 if append {
-                    let (end, n) = self.fs().append(self.node.ino(), buf)?;
+                    let (end, n) = self.fs_append(buf)?;
                     *off = end + n as u64;
                     Ok(n)
                 } else {
-                    let n = self.fs().write(self.node.ino(), *off, buf)?;
+                    let n = self.fs_write(*off, buf)?;
                     *off += n as u64;
                     Ok(n)
                 }
@@ -617,7 +657,7 @@ impl OpenFile {
             Backend::Device(dev) if !dev.seekable() => return Err(Errno::ESPIPE),
             Backend::Object(o) if o.seek_stays_at_zero() => return Ok(0),
             Backend::Object(o) => o.seek_size().ok_or(Errno::ESPIPE)?,
-            Backend::Device(_) => 0,
+            Backend::Device(dev) => dev.size().unwrap_or(0),
             Backend::Inode => self.node.attr()?.size,
         };
         let mut off = self.offset.lock();
@@ -659,7 +699,7 @@ impl OpenFile {
         let mut accepted = 0;
         let mut refused = false;
         let mut next = *off;
-        let r = self.fs().readdir(self.node.ino(), *off, &mut |e| {
+        let mut each = |e: &DirEntry<'_>| {
             if emit(e) {
                 accepted += 1;
                 next = e.next;
@@ -668,7 +708,11 @@ impl OpenFile {
                 refused = true;
                 false
             }
-        });
+        };
+        let r = match self.handle {
+            Some(h) => self.fs().readdir_handle(self.node.ino(), h, *off, &mut each),
+            None => self.fs().readdir(self.node.ino(), *off, &mut each),
+        };
         if r.is_ok() && accepted == 0 && !refused {
             // The end: the file system may park the position there.
             next = self.fs().readdir_end().unwrap_or(next);
@@ -692,7 +736,11 @@ impl OpenFile {
         if let Some(m) = &self.memfd {
             m.check_truncate(self.size()?, size)?;
         }
-        self.node.truncate_unchecked(size)?;
+        match self.handle {
+            Some(_) if size > MAX_FILE_SIZE => return Err(Errno::EFBIG),
+            Some(h) => self.fs().truncate_handle(self.node.ino(), h, size)?,
+            None => self.node.truncate_unchecked(size)?,
+        }
         crate::inotify::file_event(self, crate::inotify::mask::IN_MODIFY);
         Ok(())
     }
@@ -722,10 +770,19 @@ impl OpenFile {
 
     /// `fsync(2)`.
     pub fn sync(&self) -> Result<()> {
+        self.sync_with(false)
+    }
+
+    /// `fsync(2)`, or `fdatasync(2)` with `data_only`.
+    pub fn sync_with(&self, data_only: bool) -> Result<()> {
         match &self.backend {
             Backend::Path => Err(Errno::EBADF),
-            Backend::Inode => self.fs().sync(),
-            Backend::Device(_) | Backend::Object(_) => Err(Errno::EINVAL),
+            Backend::Inode => match self.handle {
+                Some(h) => self.fs().sync_handle(self.node.ino(), h, data_only, self.kind == FileType::Directory),
+                None => self.fs().sync(),
+            },
+            Backend::Device(dev) => dev.sync(),
+            Backend::Object(_) => Err(Errno::EINVAL),
         }
     }
 
@@ -853,6 +910,9 @@ impl OpenFile {
 /// inode: `IN_DELETE_SELF`, see `NodeRef`'s drop.)
 impl Drop for OpenFile {
     fn drop(&mut self) {
+        if let Some(h) = self.handle.take() {
+            self.fs().close_handle(self.node.ino(), h, self.flags(), self.kind == FileType::Directory);
+        }
         if self.denies_write {
             self.node.loc().mount.sb.allow_write(self.node.ino());
         }

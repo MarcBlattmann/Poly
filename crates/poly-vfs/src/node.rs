@@ -76,6 +76,13 @@ impl NodeRef {
         self.loc.attr()
     }
 
+    /// Inode `ino` of the same mount, pinned (`ENOENT` if it is gone):
+    /// for a file system whose inodes name objects the kernel knows, which
+    /// have no path of their own (procfs's namespace files).
+    pub fn sibling(&self, ino: Ino) -> Result<NodeRef> {
+        Location { mount: self.loc.mount.clone(), ino }.pin()
+    }
+
     pub fn stat(&self) -> Result<Stat> {
         let mut st = Stat::new(self.loc.mount.dev(), &self.attr()?);
         if self.loc.mount.sb.fs.typeless(self.loc.ino) {

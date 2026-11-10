@@ -219,7 +219,9 @@ impl Opt {
             }
             Opt::Accel => "POLY_QEMU_ACCEL: the host's hypervisor if usable (auto), or QEMU's emulator (tcg)",
             Opt::Scale => "--scale=N: Poly's display scale; auto fits the host's screen",
-            Opt::Size => "--size=WxH: the guest's screen; auto fits the host's screen (Enter types one)",
+            Opt::Size => {
+                "--size=WxH: the guest's screen, such as 1920x1080 (1080p); auto fits the host's screen (Enter types one)"
+            }
             Opt::FreshState => "--fresh-state: start the desktop's settings disk again",
             Opt::FreshDisk => {
                 "--fresh-disk: make the root disk again (with Chromium: its disk, and so its profile, bookmarks and logins)"
@@ -294,7 +296,20 @@ impl Default for Settings {
 
 const ACCELS: [&str; 4] = ["auto", "kvm", "whpx", "tcg"];
 const SCALES: [&str; 5] = ["auto", "1", "2", "3", "4"];
-const SIZES: [&str; 6] = ["auto", "1280x800", "1600x1000", "1920x1200", "2560x1600", "3840x2400"];
+/// The screen sizes Left and Right step through: 16:9 (720p, 1080p, 1440p,
+/// 4K) and 16:10 ones.
+const SIZES: [&str; 10] = [
+    "auto",
+    "1280x720",
+    "1280x800",
+    "1600x1000",
+    "1920x1080",
+    "1920x1200",
+    "2560x1440",
+    "2560x1600",
+    "3840x2160",
+    "3840x2400",
+];
 const DISPLAYS: [&str; 5] = ["auto", "sdl", "gtk", "vnc=:0", "none"];
 
 /// `WxH` with each side 320 to 8192 (what `desktop --size=` takes).
@@ -1702,7 +1717,11 @@ mod tests {
         assert_eq!(m.s.size, "1920x1200");
         // Left and Right step through the presets.
         m.key(Key::Right);
-        assert_eq!(m.s.size, "2560x1600");
+        assert_eq!(m.s.size, "2560x1440");
+        // 1080p is one of them.
+        m.key(Key::Left);
+        m.key(Key::Left);
+        assert_eq!(m.s.size, "1920x1080");
     }
 
     #[test]

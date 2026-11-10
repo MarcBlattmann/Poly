@@ -38,6 +38,13 @@ name = "poly-bpf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-compress"
+version = "0.0.1"
+dependencies = [
+ "poly-png",
+]
+
+[[package]]
 name = "poly-console"
 version = "0.0.1"
 
@@ -67,6 +74,13 @@ dependencies = [
 [[package]]
 name = "poly-fbdev"
 version = "0.0.1"
+
+[[package]]
+name = "poly-fuse"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
 
 [[package]]
 name = "poly-gfx"
@@ -114,6 +128,7 @@ dependencies = [
  "poly-elf",
  "poly-ext2",
  "poly-fbdev",
+ "poly-fuse",
  "poly-gfx",
  "poly-hda",
  "poly-heap",
@@ -121,9 +136,11 @@ dependencies = [
  "poly-irq",
  "poly-ldr",
  "poly-line",
+ "poly-loop",
  "poly-mem",
  "poly-net",
  "poly-ntobj",
+ "poly-overlayfs",
  "poly-pagecache",
  "poly-paging",
  "poly-pci",
@@ -139,6 +156,7 @@ dependencies = [
  "poly-sched",
  "poly-seh",
  "poly-smp",
+ "poly-squashfs",
  "poly-term",
  "poly-tty",
  "poly-unix",
@@ -177,6 +195,13 @@ name = "poly-line"
 version = "0.0.1"
 
 [[package]]
+name = "poly-loop"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
 name = "poly-mem"
 version = "0.0.1"
 
@@ -196,6 +221,13 @@ name = "poly-ntobj"
 version = "0.0.1"
 dependencies = [
  "poly-security",
+]
+
+[[package]]
+name = "poly-overlayfs"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
 ]
 
 [[package]]
@@ -260,6 +292,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-png"
+version = "0.0.1"
+
+[[package]]
 name = "poly-procfs"
 version = "0.0.1"
 dependencies = [
@@ -305,6 +341,14 @@ name = "poly-smp"
 version = "0.0.1"
 dependencies = [
  "poly-sched",
+]
+
+[[package]]
+name = "poly-squashfs"
+version = "0.0.1"
+dependencies = [
+ "poly-compress",
+ "poly-vfs",
 ]
 
 [[package]]

@@ -38,6 +38,8 @@ struct Table {
     to_global: BTreeMap<i32, i32>,
     /// The number the next thread or process tries first.
     next: i32,
+    /// The last number handed out (`/proc/sys/kernel/ns_last_pid`).
+    last: i32,
     /// The global pid of the namespace's init, once there is one.
     init: Option<i32>,
     /// Its init ended.
@@ -167,12 +169,30 @@ pub fn attach(ns: &PidNsRef, global: i32, process: bool) -> Result<(), Errno> {
         t.to_local.insert(global, local);
         t.to_global.insert(local, global);
         t.next = if local >= PID_MAX { 2 } else { local + 1 };
+        t.last = local;
         if process && local == INIT_PID && t.init.is_none() {
             t.init = Some(global);
         }
         drop(t);
         done.push(n);
     }
+    Ok(())
+}
+
+/// `/proc/sys/kernel/ns_last_pid` of `ns`: the last number handed out.
+pub fn last(ns: &Arc<PidNs>) -> i32 {
+    ns.table.lock().last
+}
+
+/// A write of `last` to `ns_last_pid`: the next thread or process gets
+/// `last + 1` (if it is free). `EINVAL` outside `0..PID_MAX`.
+pub fn set_last(ns: &Arc<PidNs>, last: i32) -> Result<(), Errno> {
+    if !(0..PID_MAX).contains(&last) {
+        return Err(Errno::EINVAL);
+    }
+    let mut t = ns.table.lock();
+    t.last = last;
+    t.next = last + 1;
     Ok(())
 }
 

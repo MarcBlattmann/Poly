@@ -66,6 +66,15 @@ pub struct MountFlags {
     pub no_suid: bool,
     pub no_dev: bool,
     pub no_exec: bool,
+    /// The access time mode, when the call names one (`MS_NOATIME`,
+    /// `MS_NODIRATIME`, `MS_RELATIME`, `MS_STRICTATIME`), as
+    /// `MOUNT_ATTR_*` bits (`linux/mount.h`: `NOATIME` 0x10, `STRICTATIME`
+    /// 0x20, `NODIRATIME` 0x80; relatime is 0). `None`: the call says
+    /// nothing about access times (a remount keeps what the mount has,
+    /// mount(2)).
+    pub atime: Option<u32>,
+    /// `MS_SYNCHRONOUS`: shown as `sync` among the file system's options.
+    pub sync: bool,
 }
 
 impl MountFlags {
@@ -75,6 +84,19 @@ impl MountFlags {
             no_suid: flags & ms::NOSUID != 0,
             no_dev: flags & ms::NODEV != 0,
             no_exec: flags & ms::NOEXEC != 0,
+            atime: if flags & (ms::NOATIME | ms::NODIRATIME | ms::RELATIME | ms::STRICTATIME) != 0 {
+                let mode = if flags & ms::NOATIME != 0 {
+                    0x10
+                } else if flags & ms::STRICTATIME != 0 {
+                    0x20
+                } else {
+                    0
+                };
+                Some(mode | if flags & ms::NODIRATIME != 0 { 0x80 } else { 0 })
+            } else {
+                None
+            },
+            sync: flags & ms::SYNCHRONOUS != 0,
         }
     }
 }
@@ -117,6 +139,14 @@ pub enum FsType {
     Tmpfs,
     /// ext2, ext3 or ext4 on a block device (one driver, `poly-ext2`).
     Ext2,
+    /// squashfs on a block device, in practice a loop device (`poly-squashfs`).
+    Squashfs,
+    /// overlayfs: directories of other file systems shown as one tree
+    /// (`poly-overlayfs`); the source is only a label.
+    Overlay,
+    /// FUSE: a file system served by a user-space process over `/dev/fuse`
+    /// (`fuse`, `fuse.NAME`).
+    Fuse,
 }
 
 impl FsType {
@@ -128,6 +158,10 @@ impl FsType {
             b"devpts" => FsType::Devpts,
             b"tmpfs" | b"ramfs" => FsType::Tmpfs,
             b"ext2" | b"ext3" | b"ext4" => FsType::Ext2,
+            b"squashfs" => FsType::Squashfs,
+            b"overlay" => FsType::Overlay,
+            n if n.starts_with(b"fuse.") => FsType::Fuse,
+            b"fuse" => FsType::Fuse,
             _ => return Err(Errno::ENODEV),
         })
     }
@@ -135,7 +169,7 @@ impl FsType {
     /// Whether `source` names a block device to mount (else it is only a
     /// name shown in `/proc/mounts`).
     pub const fn needs_device(self) -> bool {
-        matches!(self, FsType::Ext2)
+        matches!(self, FsType::Ext2 | FsType::Squashfs)
     }
 }
 
@@ -231,7 +265,7 @@ pub fn mount_options(fs: FsType, data: &[u8]) -> Result<RootOptions, Errno> {
                 number(value, 8)?;
             }
             (FsType::Devpts, b"newinstance") if value.is_none() => {}
-            (FsType::Ext2, _) => {}
+            (FsType::Ext2 | FsType::Squashfs | FsType::Overlay | FsType::Fuse, _) => {}
             _ => return Err(Errno::EINVAL),
         }
     }
@@ -293,6 +327,13 @@ pub trait LinuxAdmin {
     /// umount2(2) of the mount at `target`: `detach` is `MNT_DETACH`,
     /// `follow` false for `UMOUNT_NOFOLLOW`.
     fn umount(&mut self, target: &[u8], detach: bool, follow: bool) -> Result<(), Errno>;
+
+    /// umount2(2) with `MNT_EXPIRE`: `EAGAIN` the first time on an idle
+    /// mount, then the unmount.
+    fn umount_expire(&mut self, target: &[u8]) -> Result<(), Errno> {
+        let _ = target;
+        Err(Errno::EINVAL)
+    }
 
     /// mknodat(2): a regular file, FIFO, socket or device node (`mode`
     /// has the type bits, checked; `dev` is the device number as
