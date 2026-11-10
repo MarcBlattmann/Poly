@@ -73,15 +73,24 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
     if is_button_down(m.message) {
         let top = top_level_of(env, &i);
         let st = focus::input(env);
-        if top != st.active {
-            if i.style & WS_CHILD != 0 {
-                // WM_PARENTNOTIFY(button) to the parent first.
-                let p = info(env, u64::from(i.parent));
-                let pl = p.map_or(0, |p| makelparam(sx - p.client.left, sy - p.client.top));
-                send(env, u64::from(i.parent), 0x0210, u64::from(m.message), pl);
+        let child = i.style & WS_CHILD != 0;
+        // A press on a child, also of the active window, or on a top-level
+        // window that is not the active one (EnableWindow.yaml
+        // `click_sequence`): the active top-level window itself gets neither
+        // message.
+        if child || top != st.active {
+            // WM_PARENTNOTIFY(button) to each ancestor, the nearest first.
+            let mut cur = i.clone();
+            while cur.style & WS_CHILD != 0 && cur.ex_style & WS_EX_NOPARENTNOTIFY == 0 {
+                let Some(p) = info(env, u64::from(cur.parent)) else { break };
+                let pl = makelparam(sx - p.client.left, sy - p.client.top);
+                send(env, u64::from(p.hwnd), 0x0210, u64::from(m.message), pl);
+                cur = p;
             }
+            // To the window pressed; DefWindowProc passes it up to the
+            // top-level window.
             let r = send(env, h, WM_MOUSEACTIVATE, u64::from(top), (hit & 0xFFFF) | (u64::from(m.message) << 16));
-            if r != MA_NOACTIVATE && r != MA_NOACTIVATEANDEAT {
+            if top != st.active && r != MA_NOACTIVATE && r != MA_NOACTIVATEANDEAT {
                 focus::CLICK.store(true, core::sync::atomic::Ordering::Relaxed);
                 focus::activate(env, top, false, true);
                 focus::CLICK.store(false, core::sync::atomic::Ordering::Relaxed);

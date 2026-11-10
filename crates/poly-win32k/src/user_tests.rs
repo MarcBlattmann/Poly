@@ -298,6 +298,19 @@ fn children_and_visible_popups_get_their_messages() {
                 "D WM_SHOWWINDOW w=0x1 l=0x0",
             ]
         );
+        // CreateWindowExW.yaml cw_seq_popup_visible: a window created visible
+        // is the thread's active one (a WS_EX_NOACTIVATE one too); the first
+        // one is not asked to come to the top, one that takes the activation
+        // from it is (0x13; ShowWindow.yaml sw_cmds_hidden: a lone window is not).
+        create(e, 'N', WS_EX_NOACTIVATE, "C", WS_POPUP | WS_VISIBLE, 10, 10, 120, 90, 0, 0);
+        assert_eq!(
+            take_log()[5..],
+            [
+                "N WM_SHOWWINDOW w=0x1 l=0x0",
+                "N WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x43",
+                "N WM_WINDOWPOSCHANGED pos=10,10 size=120,90 flags=0x1847",
+            ]
+        );
         create(e, 'B', 0, "C", WS_POPUP | WS_VISIBLE, 200, 10, 120, 90, 0, 0);
         assert_eq!(
             take_log()[5..],
@@ -350,19 +363,63 @@ fn set_window_pos_on_a_hidden_child() {
 }
 
 #[test]
-fn minimize_nccalcsize_drops_show_and_nozorder_flags() {
+fn minimize_flags_follow_whether_the_window_was_visible() {
+    // ShowWindow.yaml `show_minimized_from_hidden`, `state_changes`, `z_order`:
+    // WM_WINDOWPOSCHANGED keeps SWP_SHOWWINDOW for a hidden window and has
+    // SWP_NOZORDER when the window did not move in the z order;
+    // WM_NCCALCSIZE's flags are those | 0x1800.
     with_env(|e| {
         register(e, "Min");
         let style = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | 0x0003_0000;
+        let positions = |log: Vec<String>| -> Vec<String> {
+            log.into_iter().filter(|l| l.contains("WINDOWPOS") || l.contains("NCCALCSIZE")).collect()
+        };
+        // Hidden: shown on top, where it was.
         let h = create(e, 'M', 0, "Min", style, 50, 40, 300, 200, 0, 0);
         take_log();
-
+        assert!(!show_window(e, h, SW_MINIMIZE));
+        assert_eq!(
+            positions(take_log()),
+            [
+                "M WM_WINDOWPOSCHANGING pos=0,740 size=160,28 flags=0x8160",
+                "M WM_NCCALCSIZE 1 new=0,740,160,768 pos=0,740,160,28 flags=0x9964",
+                "M WM_WINDOWPOSCHANGED pos=0,740 size=160,28 flags=0x8164",
+            ]
+        );
+        assert_eq!(input_state(e).0 as u64, h, "the thread's active window");
+        // The same command again: nothing.
+        assert!(show_window(e, h, SW_MINIMIZE));
+        assert_eq!(take_log(), Vec::<String>::new());
+        // Restored: it never moved in the z order (0x8124).
+        show_window(e, h, SW_RESTORE);
+        assert_eq!(
+            positions(take_log()),
+            [
+                "M WM_WINDOWPOSCHANGING pos=50,40 size=300,200 flags=0x8120",
+                "M WM_NCCALCSIZE 1 new=50,40,350,240 pos=50,40,300,200 flags=0x9924",
+                "M WM_WINDOWPOSCHANGED pos=50,40 size=300,200 flags=0x8124",
+            ]
+        );
+        // Visible and active: SW_MINIMIZE puts it at the bottom of the z order
+        // (no SWP_SHOWWINDOW, no SWP_NOZORDER), and restoring brings it back up.
         show_window(e, h, SW_MINIMIZE);
-
+        assert_eq!(
+            positions(take_log()),
+            [
+                "M WM_WINDOWPOSCHANGING pos=0,740 size=160,28 flags=0x8160",
+                "M WM_NCCALCSIZE 1 new=0,740,160,768 pos=0,740,160,28 flags=0x9920",
+                "M WM_WINDOWPOSCHANGED pos=0,740 size=160,28 flags=0x8120",
+            ]
+        );
+        assert_eq!(input_state(e).0 as u64, h, "still the active window in session 0");
+        show_window(e, h, SW_RESTORE);
         assert!(
-            take_log()
-                .iter()
-                .any(|entry| { entry == "M WM_NCCALCSIZE 1 new=0,740,160,768 pos=0,740,160,28 flags=0x9920" })
+            positions(take_log()).contains(&"M WM_WINDOWPOSCHANGED pos=50,40 size=300,200 flags=0x8120".to_string())
+        );
+        // SW_SHOWMINIMIZED of the active window leaves it on top (0x8124).
+        show_window(e, h, SW_SHOWMINIMIZED);
+        assert!(
+            positions(take_log()).contains(&"M WM_WINDOWPOSCHANGED pos=0,740 size=160,28 flags=0x8124".to_string())
         );
     });
 }
@@ -545,17 +602,29 @@ fn a_new_capture_drops_the_synthesized_move_of_a_release() {
 }
 
 #[test]
-fn a_minimized_window_with_a_minimize_box_sits_at_the_bottom_left_on_the_interactive_screen() {
+fn a_minimized_window_is_parked_or_sits_at_the_bottom_left_on_the_interactive_screen() {
     with_env(|e| {
         e.wm.borrow_mut().set_display(crate::metrics::Display::INTERACTIVE);
         register(e, "Min");
         let style = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | crate::metrics::WS_MINIMIZEBOX;
-        let h = create(e, 'M', 0, "Min", style, 300, 100, 300, 200, 0, 0);
+        // GetActiveWindow.yaml `minimized_position`: a window without a taskbar
+        // button (WS_EX_NOACTIVATE, a tool window, an owned one) sits in the
+        // bottom-left slot, 0,1052 on 1080 rows; one with a button is parked at
+        // -32000,-32000, whatever its style.
+        let h = create(e, 'M', WS_EX_NOACTIVATE, "Min", style, 300, 100, 300, 200, 0, 0);
         let p = create(e, 'N', 0, "Min", WS_POPUP | WS_CAPTION, 500, 100, 150, 100, 0, 0);
-        show_window(e, h, SW_SHOWMINNOACTIVE);
-        show_window(e, p, SW_SHOWMINNOACTIVE);
-        // ClientToScreen.yaml cts_states: 0,1052 on 1080 rows; GetForegroundWindow.yaml
-        // gfw_show: a caption-only popup is parked at -32000,-32000.
+        let o = create(e, 'O', 0, "Min", style, 500, 300, 150, 100, p, 0);
+        let app =
+            create(e, 'Q', WS_EX_NOACTIVATE | crate::metrics::WS_EX_APPWINDOW, "Min", style, 0, 0, 150, 100, 0, 0);
+        for w in [h, p, o, app] {
+            show_window(e, w, SW_SHOWMINNOACTIVE);
+        }
+        let at = |w: u64| {
+            let Reply::Window { info } = e.call(Request::Window { hwnd: w }) else { panic!() };
+            (info.window.left, info.window.top)
+        };
+        assert_eq!(at(o), (0, 1052));
+        assert_eq!(at(app), (-32000, -32000));
         let Reply::Window { info } = e.call(Request::Window { hwnd: h }) else { panic!() };
         assert_eq!((info.window.left, info.window.top), (0, 1052));
         let Reply::Window { info } = e.call(Request::Window { hwnd: p }) else { panic!() };
@@ -846,20 +915,38 @@ fn destroying_a_parent_cancels_the_capture_of_its_child_but_not_its_own() {
         assert!(at("P WM_WINDOWPOSCHANGED") < at("C WM_CANCELMODE"), "{log:?}");
         assert!(at("C WM_CAPTURECHANGED") < at("P WM_DESTROY"), "{log:?}");
         assert_eq!(input_state(e).2, 0);
-        // A window destroyed while it captures: no WM_CAPTURECHANGED.
-        let w = create(e, 'W', WS_EX_NOACTIVATE, "Cap2", WS_POPUP | WS_VISIBLE, 0, 0, 100, 100, 0, 0);
+        // An inactive window destroyed while it captures: the capture ends
+        // without a message.
+        let w = create(e, 'W', WS_EX_NOACTIVATE, "Cap2", WS_POPUP, 0, 0, 100, 100, 0, 0);
+        show_window(e, w, SW_SHOWNA);
+        assert_ne!(input_state(e).0 as u64, w);
         capture(w);
         take_log();
         assert!(destroy_window(e, w));
         assert!(!take_log().iter().any(|l| l.contains("CAPTURECHANGED") || l.contains("CANCELMODE")));
         assert_eq!(input_state(e).2, 0);
-        // A hidden parent's child loses it when the parent is destroyed too.
+        // The active window destroyed while it captures, nobody to take the
+        // activation: the deactivation cancels the capture first.
+        let v = create(e, 'V', 0, "Cap2", WS_POPUP | WS_VISIBLE, 0, 0, 100, 100, 0, 0);
+        assert_eq!(input_state(e).0 as u64, v);
+        capture(v);
+        take_log();
+        assert!(destroy_window(e, v));
+        let log = take_log();
+        let at = |s: &str| log.iter().position(|l| l.starts_with(s)).unwrap_or_else(|| panic!("{s} in {log:?}"));
+        assert!(at("V WM_WINDOWPOSCHANGED") < at("V WM_CANCELMODE"), "{log:?}");
+        assert!(at("V WM_CANCELMODE") < at("V WM_CAPTURECHANGED"), "{log:?}");
+        assert!(at("V WM_CAPTURECHANGED") < at("V WM_NCACTIVATE"), "{log:?}");
+        assert_eq!(input_state(e).2, 0);
+        // An inactive (here hidden) parent of the capturing child destroyed:
+        // the child gets no message, the capture is gone.
         let h = create(e, 'H', WS_EX_NOACTIVATE, "Cap2", WS_POPUP, 0, 0, 100, 100, 0, 0);
         let k = create(e, 'K', 0, "Cap2", WS_CHILD | WS_VISIBLE, 0, 0, 10, 10, h, 1);
         capture(k);
         take_log();
         assert!(destroy_window(e, h));
-        assert!(take_log().contains(&"K WM_CAPTURECHANGED lparam=0".to_string()));
+        assert!(!take_log().iter().any(|l| l.contains("CAPTURECHANGED") || l.contains("CANCELMODE")));
+        assert_eq!(input_state(e).2, 0);
     });
 }
 

@@ -76,7 +76,10 @@ fn begin_paint_reports_what_is_pending_and_validates() {
         take_log();
         paint::begin_paint(e, f, &mut paint::PaintStruct::default());
         assert_eq!(take_log(), ["F WM_NCPAINT w=0x1", "F WM_ERASEBKGND"]);
-        // A hidden window: a DC, rcPaint empty, fErase 0.
+        // A hidden window: a DC, rcPaint empty, no message; fErase is the
+        // window's state (BeginPaint.yaml `hidden`): 0 for a window that was
+        // never erased (EndPaint.yaml ep_outside), 1 after an erase that
+        // returned 0.
         let hid = create(e, 'H', WS_EX_NOACTIVATE, "Bp", WS_POPUP, 400, 0, 100, 80, 0, 0);
         take_log();
         let mut psh = paint::PaintStruct::default();

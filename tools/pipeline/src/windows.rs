@@ -845,16 +845,30 @@ fn system_fonts() -> Vec<(String, Vec<u8>)> {
     out
 }
 
+/// Whether a test creates fonts from a `LOGFONT` through gdi32
+/// (`CreateFontW` and its relatives): its test machine gets the system
+/// fonts then.
+fn creates_gdi_fonts(t: &Built) -> bool {
+    t.imports
+        .iter()
+        .any(|(dll, names)| dll.eq_ignore_ascii_case("gdi32.dll") && names.iter().any(|n| n.starts_with("CreateFont")))
+}
+
 /// Boot each built test on Poly; `work` keeps the initramfs images and
 /// serial logs. Tests run `jobs` at a time.
 pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &Path, jobs: usize) -> Result<RunFile> {
     let started = util::now_utc();
     // A DirectWrite test finds the system fonts in `C:\Windows\Fonts` (ADR
     // 0170): the DejaVu fonts. Without them the system collection is empty
-    // and most of those tests fail in confusing ways, so refuse to run.
-    let fonts = if manifest.tests.iter().any(|t| t.imports.contains_key("dwrite.dll")) {
+    // and most of those tests fail in confusing ways, so refuse to run. A
+    // test that creates fonts through gdi32 gets them too when they are
+    // there: a font asked for by name is an outline font of the height
+    // asked on any Windows, not Poly's 16-pixel stand-in for a machine
+    // without font files (DeleteObject.yaml `selected_font`).
+    let dwrite = |t: &Built| t.imports.contains_key("dwrite.dll");
+    let fonts = if manifest.tests.iter().any(|t| dwrite(t) || creates_gdi_fonts(t)) {
         let f = system_fonts();
-        if f.is_empty() {
+        if f.is_empty() && manifest.tests.iter().any(dwrite) {
             return Err("tests that import dwrite.dll need the system fonts in C:\\Windows\\Fonts, but no DejaVu fonts were found: \
                 run `cargo xtask fonts fetch` (target/fonts/dejavu-*) or set POLY_FONT_DIR to a directory with them"
                 .into());
@@ -865,7 +879,7 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
     };
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
-        let fonts = if t.imports.contains_key("dwrite.dll") { fonts.clone() } else { Vec::new() };
+        let fonts = if dwrite(t) || creates_gdi_fonts(t) { fonts.clone() } else { Vec::new() };
         let image = poly::initramfs_with(&bytes, &fonts)?;
         let args = format!("{}{}", poly_kernel_args(), session_kernel_args(t.session.as_deref()));
         let (done, log, _) = target.boot_log(&t.name, &image, work, &args)?;
