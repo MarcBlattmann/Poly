@@ -22,9 +22,13 @@ pub const PEB_LDR: u64 = 0x18;
 pub const LDR_IN_LOAD_ORDER: u64 = 0x10;
 pub const LDR_IN_MEMORY_ORDER: u64 = 0x20;
 pub const LDR_IN_INIT_ORDER: u64 = 0x30;
-/// Bytes Poly allocates for `PEB_LDR_DATA` (the documented 0x30 and the
-/// initialisation-order head).
-pub const LDR_DATA_SIZE: usize = 0x40;
+/// `sizeof(PEB_LDR_DATA)` on x64 (`Length`, `Initialized`, `SsHandle`, the three list heads,
+/// `EntryInProgress`, `ShutdownInProgress`, `ShutdownThreadId`): programs that walk the lists
+/// check `Length` and `Initialized`.
+pub const LDR_DATA_SIZE: usize = 0x58;
+/// `PEB_LDR_DATA.Length` and `.Initialized` (a `BOOLEAN`).
+pub const LDR_LENGTH: u64 = 0x00;
+pub const LDR_INITIALIZED: u64 = 0x04;
 
 /// Fields of `LDR_DATA_TABLE_ENTRY`.
 pub const ENTRY_IN_LOAD_ORDER: u64 = 0x00;
@@ -43,6 +47,9 @@ pub const ENTRY_SIZE: usize = 0x100;
 /// Make `PEB_LDR_DATA` with three empty lists and point `PEB.Ldr` at it.
 pub fn create(p: &mut dyn Process, peb: u64) -> Result<u64, NtStatus> {
     let ldr = p.alloc(LDR_DATA_SIZE)?;
+    write_bytes(p, ldr, &[0u8; LDR_DATA_SIZE])?;
+    write_u32(p, ldr + LDR_LENGTH, LDR_DATA_SIZE as u32)?;
+    write_bytes(p, ldr + LDR_INITIALIZED, &[1])?;
     for head in [LDR_IN_LOAD_ORDER, LDR_IN_MEMORY_ORDER, LDR_IN_INIT_ORDER] {
         write_u64(p, ldr + head, ldr + head)?;
         write_u64(p, ldr + head + 8, ldr + head)?;

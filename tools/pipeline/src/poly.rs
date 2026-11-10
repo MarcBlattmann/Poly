@@ -295,11 +295,35 @@ pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
 /// on the reference machine (hier(7)) and in the app tests' tree, so a
 /// test that gave up root can still make files there.
 pub fn initramfs(binary: &[u8]) -> Result<Vec<u8>> {
-    cpio::write(&[
+    initramfs_with(binary, &[])
+}
+
+/// [`initramfs`] plus more files: `(path in the root, data)`, their
+/// directories made on the way. A Windows test's `C:` is `/nt/c` without a disk
+/// (ADR 0073), so `nt/c/Windows/Fonts/x.ttf` is `C:\Windows\Fonts\x.ttf`.
+pub fn initramfs_with(binary: &[u8], files: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
+    let mut entries = vec![
         cpio::Entry::dir("dev"),
         cpio::Entry::dir_mode("tmp", 0o1777),
         cpio::Entry::file(INIT_PATH.trim_start_matches('/'), 0o755, binary.to_vec()),
-    ])
+    ];
+    let mut made: Vec<String> = Vec::new();
+    for (path, data) in files {
+        let mut prefix = String::new();
+        let parts: Vec<&str> = path.split('/').collect();
+        for part in &parts[..parts.len() - 1] {
+            if !prefix.is_empty() {
+                prefix.push('/');
+            }
+            prefix.push_str(part);
+            if !made.contains(&prefix) {
+                entries.push(cpio::Entry::dir(&prefix));
+                made.push(prefix.clone());
+            }
+        }
+        entries.push(cpio::Entry::file(path, 0o644, data.clone()));
+    }
+    cpio::write(&entries)
 }
 
 /// The default kernel ELF (`cargo xtask build`).
@@ -504,6 +528,24 @@ impl Target {
 mod tests {
     use super::*;
     use crate::trace::{NormOptions, normalize};
+
+    #[test]
+    fn initramfs_with_makes_the_directories_once() {
+        let files = vec![
+            ("nt/c/Windows/Fonts/a.ttf".to_string(), b"a".to_vec()),
+            ("nt/c/Windows/Fonts/b.ttf".to_string(), b"b".to_vec()),
+        ];
+        let entries = cpio::read(&initramfs_with(b"exe", &files).unwrap()).unwrap();
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names.iter().filter(|n| **n == "nt/c/Windows").count(), 1);
+        for n in
+            ["nt", "nt/c", "nt/c/Windows/Fonts", "nt/c/Windows/Fonts/a.ttf", "nt/c/Windows/Fonts/b.ttf", "test-binary"]
+        {
+            assert!(names.contains(&n), "{n}");
+        }
+        assert_eq!(entries.iter().find(|e| e.name == "nt/c/Windows/Fonts/b.ttf").unwrap().data, b"b");
+        assert_eq!(cpio::read(&initramfs(b"exe").unwrap()).unwrap().len(), 3);
+    }
 
     const LOG: &str = "boot: cmdline \"poly.qemu_exit poly.init=/test-binary poly.test.capture\"\n\
         POLY-INIT: exec /test-binary\r\n\
