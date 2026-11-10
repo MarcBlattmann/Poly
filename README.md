@@ -156,6 +156,7 @@ cargo xtask run --busybox   # boot into BusyBox's init and shell (`poweroff` qui
 cargo xtask test    # host unit tests + boot tests in QEMU
 cargo xtask boot-tests --list   # the boot test groups; `boot-tests <group>` runs some
 cargo xtask ci      # everything CI checks (`ci lint`, `ci host-tests`, ...: one part)
+cargo xtask ci lint --quick   # lint only the crates changed against origin/main (seconds; CI runs the full lint)
 ```
 
 On GitHub, CI runs the same parts as parallel jobs: lint, host tests, the boot

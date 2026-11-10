@@ -367,8 +367,97 @@ impl Coverage {
         stats
     }
 
+    #[cfg(test)]
     pub fn find_mut(&mut self, id: &str) -> Option<&mut Entry> {
         self.entries.iter_mut().find(|e| e.id == id)
+    }
+
+    /// Where the entries named `ids` are, in the order given and each once
+    /// (an id given twice counts once). Every id that names no entry is
+    /// reported, not only the first.
+    fn positions(&self, ids: &[&str]) -> Result<Vec<usize>, String> {
+        let index: BTreeMap<&str, usize> = self.entries.iter().enumerate().map(|(i, e)| (e.id.as_str(), i)).collect();
+        let mut seen = BTreeSet::new();
+        let (mut found, mut problems) = (Vec::new(), Vec::new());
+        for id in ids {
+            match index.get(id) {
+                Some(&i) if seen.insert(i) => found.push(i),
+                Some(_) => {}
+                None => problems.push(format!("no entry {id}")),
+            }
+        }
+        problems_or(found, problems)
+    }
+
+    /// Claim every entry of `ids` for `agent`, or none of them: an entry
+    /// that is not missing or a stub (claimed by someone, green, ...) fails
+    /// the whole call, with every such entry named.
+    pub fn claim(&mut self, ids: &[&str], agent: &str) -> Result<usize, String> {
+        let at = self.positions(ids)?;
+        let problems: Vec<String> = at
+            .iter()
+            .map(|&i| &self.entries[i])
+            .filter(|e| e.status != Status::Missing && e.status != Status::Stub)
+            .map(|e| {
+                format!(
+                    "{} is {}{}",
+                    e.id,
+                    e.status.name(),
+                    e.claimed_by.as_ref().map_or(String::new(), |a| format!(" by {a}"))
+                )
+            })
+            .collect();
+        let at = problems_or(at, problems)?;
+        for &i in &at {
+            self.entries[i].status = Status::Claimed;
+            self.entries[i].claimed_by = Some(agent.to_string());
+        }
+        Ok(at.len())
+    }
+
+    /// Release every claimed entry of `ids`, or none of them if one is not
+    /// claimed.
+    pub fn release(&mut self, ids: &[&str]) -> Result<usize, String> {
+        let at = self.positions(ids)?;
+        let problems: Vec<String> = at
+            .iter()
+            .map(|&i| &self.entries[i])
+            .filter(|e| e.status != Status::Claimed)
+            .map(|e| format!("{} is not claimed", e.id))
+            .collect();
+        let at = problems_or(at, problems)?;
+        for &i in &at {
+            self.entries[i].status = Status::Missing;
+            self.entries[i].claimed_by = None;
+        }
+        Ok(at.len())
+    }
+
+    /// Set the status of every entry of `ids` (and, when given, its test
+    /// counts), or of none of them if an id names no entry. A claim ends.
+    pub fn set_status(
+        &mut self,
+        ids: &[&str],
+        status: Status,
+        tests_visible: Option<u32>,
+        tests_held_out: Option<u32>,
+    ) -> Result<usize, String> {
+        if status == Status::Claimed {
+            return Err("use `coverage claim` to claim".into());
+        }
+        let at = self.positions(ids)?;
+        for &i in &at {
+            let e = &mut self.entries[i];
+            e.status = status;
+            e.claimed_by = None;
+            if let Some(n) = tests_visible {
+                e.tests_visible = n;
+            }
+            if let Some(n) = tests_held_out {
+                e.tests_held_out = n;
+            }
+        }
+        Ok(at.len())
     }
 
     /// Components whose entries are all app-provided.
@@ -572,9 +661,73 @@ fn component_files(dir: &Path) -> Result<Vec<(Os, Layer, String, PathBuf)>, Stri
     Ok(out)
 }
 
+/// `found`, or the problems in one message (the first ten, and how many more).
+fn problems_or<T>(found: T, problems: Vec<String>) -> Result<T, String> {
+    if problems.is_empty() {
+        return Ok(found);
+    }
+    let more = problems.len().saturating_sub(10);
+    let mut text = problems[..problems.len() - more].join("; ");
+    if more > 0 {
+        text.push_str(&format!("; and {more} more"));
+    }
+    Err(text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const CREATE_FILE: &str = "windows/api/kernel32.dll/CreateFileW";
+    const READ: &str = "linux/syscall/x86_64/read";
+
+    /// Many entries in one call: claimed, set and released together.
+    #[test]
+    fn claims_sets_and_releases_many_entries_at_once() {
+        let mut c = sample();
+        assert_eq!(c.claim(&[CREATE_FILE, READ, READ], "agent-1"), Ok(2));
+        for id in [CREATE_FILE, READ] {
+            let e = c.find_mut(id).unwrap();
+            assert_eq!((e.status, e.claimed_by.as_deref()), (Status::Claimed, Some("agent-1")));
+        }
+        assert_eq!(c.release(&[READ]), Ok(1));
+        assert_eq!(c.find_mut(READ).unwrap().status, Status::Missing);
+        assert_eq!(c.set_status(&[CREATE_FILE, READ], Status::Green, Some(3), None), Ok(2));
+        for id in [CREATE_FILE, READ] {
+            let e = c.find_mut(id).unwrap();
+            assert_eq!((e.status, e.claimed_by.as_deref(), e.tests_visible), (Status::Green, None, 3));
+        }
+        assert!(c.check().is_empty());
+    }
+
+    /// One bad id, or one entry that cannot be claimed or released, and
+    /// nothing changes; every problem is named.
+    #[test]
+    fn a_batch_changes_all_entries_or_none() {
+        let mut c = sample();
+        let before = c.clone();
+        let err = c.set_status(&[CREATE_FILE, "linux/syscall/x86_64/nope", "x/y"], Status::Green, None, None);
+        assert_eq!(err, Err("no entry linux/syscall/x86_64/nope; no entry x/y".into()));
+        assert_eq!(c, before);
+        assert_eq!(c.claim(&[READ, "nope"], "a"), Err("no entry nope".into()));
+        assert_eq!(c, before);
+
+        c.claim(&[READ], "agent-1").unwrap();
+        let claimed = c.clone();
+        assert_eq!(c.claim(&[CREATE_FILE, READ], "agent-2"), Err(format!("{READ} is claimed by agent-1")));
+        assert_eq!(c, claimed);
+        assert_eq!(c.release(&[READ, CREATE_FILE]), Err(format!("{CREATE_FILE} is not claimed")));
+        assert_eq!(c, claimed);
+        assert!(c.set_status(&[READ], Status::Claimed, None, None).is_err());
+    }
+
+    #[test]
+    fn many_problems_are_cut_short() {
+        let ids: Vec<String> = (0..13).map(|i| format!("nope/{i:02}")).collect();
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let err = sample().release(&ids).unwrap_err();
+        assert!(err.starts_with("no entry nope/00; ") && err.ends_with("no entry nope/09; and 3 more"), "{err}");
+    }
 
     fn sample() -> Coverage {
         let mut c = Coverage::default();
