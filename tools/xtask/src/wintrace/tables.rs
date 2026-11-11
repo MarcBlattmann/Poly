@@ -620,6 +620,26 @@ pub const CHROME_SIGNATURES: &[(&str, &str)] = &[
     ("GetProductInfo", "i=iiiip"),
     ("GetUserDefaultLangID", "s="),
     ("BuildSecurityDescriptorW", "i=ppipipppp"),
+    // The S1 DLL batch (spec-chrome-win-5): shlwapi.h, shlobj_core.h, commctrl.h, dwmapi.h,
+    // powerbase.h, wtsapi32.h, lmaccess.h, netioapi.h, oleacc.h, uiautomationcoreapi.h, realtimeapiset.h.
+    ("PathMatchSpecW", "i=ww"),
+    ("SHGetKnownFolderPath", "i=pihp"),
+    ("SHGetPropertyStoreForWindow", "i=hpp"),
+    ("InitCommonControlsEx", "i=p"),
+    ("DwmSetWindowAttribute", "i=hipi"),
+    ("CallNtPowerInformation", "i=ipipi"),
+    ("WTSRegisterSessionNotification", "i=hi"),
+    ("WTSUnRegisterSessionNotification", "i=h"),
+    ("WTSQuerySessionInformationW", "i=hiipp"),
+    ("WTSFreeMemory", "v=p"),
+    ("NetUserGetInfo", "i=wwip"),
+    ("GetIfTable2", "i=p"),
+    ("CreateStdAccessibleObject", "i=hipp"),
+    ("LresultFromObject", "q=pqp"),
+    ("UiaReturnRawElementProvider", "q=hqqp"),
+    ("UiaHostProviderFromHwnd", "i=hp"),
+    ("UiaDisconnectProvider", "i=p"),
+    ("QueryUnbiasedInterruptTimePrecise", "v=p"),
 ];
 
 /// Functions that do not return: their record is written when they begin

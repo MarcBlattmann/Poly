@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32.dll/InitCommonControlsEx.yaml
+id: windows/api/comctl32.dll/InitCommonControlsEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above, and Chrome's call in a fresh call-site trace of stage 1. Microsoft Learn: "InitCommonControlsEx function (commctrl.h)", "INITCOMMONCONTROLSEX structure", "Common Control Versions". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Makes sure the window classes of the common controls named in a bit mask are registered for the process. Chrome's browser process calls it once at start-up with ICC_WIN95_CLASSES and stops (its own CHECK, FATAL in the fault-injection run) when it returns FALSE. For Chrome the answer that matters is TRUE.
+interface:
+  signature: "BOOL InitCommonControlsEx(const INITCOMMONCONTROLSEX *picce)"
+  structure: "INITCOMMONCONTROLSEX (commctrl.h), 8 bytes: DWORD dwSize (must be 8), DWORD dwICC (ICC_ bits)"
+  icc_bits: "ICC_LISTVIEW_CLASSES 0x1, ICC_TREEVIEW_CLASSES 0x2, ICC_BAR_CLASSES 0x4, ICC_TAB_CLASSES 0x8, ICC_UPDOWN_CLASS 0x10, ICC_PROGRESS_CLASS 0x20, ICC_HOTKEY_CLASS 0x40, ICC_ANIMATE_CLASS 0x80, ICC_WIN95_CLASSES 0xFF, ICC_DATE_CLASSES 0x100, ICC_USEREX_CLASSES 0x200, ICC_COOL_CLASSES 0x400, ICC_INTERNET_CLASSES 0x800, ICC_PAGESCROLLER_CLASS 0x1000, ICC_NATIVEFNTCTL_CLASS 0x2000, ICC_STANDARD_CLASSES 0x4000, ICC_LINK_CLASS 0x8000"
+  returns: "TRUE (1) or FALSE (0)"
+chrome:
+  call: "browser process, stage 1, once (chrome.dll+0x57fc24): InitCommonControlsEx({dwSize 8, dwICC 0xFF (ICC_WIN95_CLASSES)}) = TRUE"
+  version: "Chrome's manifest asks for version 6 of the common controls, so its comctl32.dll is the side-by-side version 6; the test programs have no manifest and get version 5.82 from the system directory. The call Chrome makes returns TRUE in both"
+  on_failure: "FATAL in the fault-injection run (gap-map section 6a): a FALSE here is one of Chrome's own checks"
+rules:
+  chrome_call: "{8, ICC_WIN95_CLASSES}: TRUE; the same call again: TRUE (it may be made any number of times)"
+  size: "dwSize must be exactly 8: with 0, 4, 7, 9, 12, 16 or 0xFFFFFFFF the call returns FALSE, the last error is not changed, and a correct call afterwards still returns TRUE"
+  bits_version_5: "in version 5.82 (what a program without a manifest gets): each of the bits 0x1 to 0x2000 alone returns TRUE, so do mixes of them (0x7FF, 0x3FFF) and dwICC 0 (nothing asked for). ICC_STANDARD_CLASSES (0x4000) and ICC_LINK_CLASS (0x8000) alone, every mask that contains one of them (0xFFFF, 0xFFFFFFFF) and a mask of only undefined bits (0xFFFF0000) return FALSE, without changing the last error"
+  last_error: "a successful call leaves leftovers in the last error (1410, ERROR_CLASS_ALREADY_EXISTS, after a call that registers classes a second time); the return value is the result"
+errors:
+  wrong_size: "FALSE; last error unchanged"
+  unknown_bits: "FALSE; last error unchanged (version 5.82; see not_covered for version 6)"
+side_effects: "registers window classes for the process"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes and booleans; no line holds a handle, a pointer, a drive letter, a user name or a time. The tests import comctl32.dll by name and so load the system directory's version 5.82.
+not_covered: >
+  Version 6 of the common controls (what Chrome gets through its manifest): there ICC_STANDARD_CLASSES and ICC_LINK_CLASS are documented as valid, and the test programs cannot load it without a manifest. Which classes each bit registers and whether a control of each class can then be created, a NULL pointer, and InitCommonControls.

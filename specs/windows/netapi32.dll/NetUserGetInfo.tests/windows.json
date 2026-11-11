@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "9b678454dfdd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:31:32Z",
+  "tests": [
+    {
+      "name": "nugi_chrome",
+      "exe_sha256": "8a03bf15521861c8683f439773a63410c763517f6034f375f44fbeff0004383d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bGV2ZWwgMSwgb3duIHVzZXIgbmFtZTogc3RhdHVzIDA7IG91dCBwb2ludGVyIGEgYnVmZmVyCnVzcmkxX25hbWUgaXMgdGhlIG5hbWUgYXNrZWQgZm9yOiAxOyB1c3JpMV9wYXNzd29yZCBpcyBOVUxMOiAxOyB1c3JpMV9wcml2IGlzIDEgKHVzZXIpIG9yIDIgKGFkbWluaXN0cmF0b3IpOiAxOyB1c3JpMV9ob21lX2RpciBhbmQgdXNyaTFfY29tbWVudCBhbmQgdXNyaTFfc2NyaXB0X3BhdGggYXJlIHN0cmluZ3MgKG5vdCBOVUxMKTogMQp1c3JpMV9mbGFnczogVUZfTk9STUFMX0FDQ09VTlQgc2V0IDE7IFVGX1NDUklQVCBzZXQgMTsgVUZfQUNDT1VOVERJU0FCTEUgc2V0IDAKTmV0QXBpQnVmZmVyRnJlZSA9IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "level 1, own user name: status 0; out pointer a buffer\nusri1_name is the name asked for: 1; usri1_password is NULL: 1; usri1_priv is 1 (user) or 2 (administrator): 1; usri1_home_dir and usri1_comment and usri1_script_path are strings (not NULL): 1\nusri1_flags: UF_NORMAL_ACCOUNT set 1; UF_SCRIPT set 1; UF_ACCOUNTDISABLE set 0\nNetApiBufferFree = 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "nugi_names",
+      "exe_sha256": "2c6a40016cf876528020f5f2632158cf616682f97b8e92e42bd3198aa0a88fec",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bGV2ZWwgMSwgb3duIHVzZXIgbmFtZSBpbiBjYXBpdGFsczogc3RhdHVzIDA7IG91dCBwb2ludGVyIGEgYnVmZmVyCmxldmVsIDEsIGEgbmFtZSBubyBhY2NvdW50IGhhczogc3RhdHVzIDIyMjE7IG91dCBwb2ludGVyIE5VTEwKbGV2ZWwgMSwgc2VydmVyIG5hbWUgIiI6IHN0YXR1cyAwOyBvdXQgcG9pbnRlciBhIGJ1ZmZlcgpsZXZlbCAxLCB1c2VyIG5hbWUgIiI6IHN0YXR1cyAyMjIxOyBvdXQgcG9pbnRlciBOVUxMCmxldmVsIDEsIHVzZXIgbmFtZSBOVUxMOiBzdGF0dXMgMjIwMjsgb3V0IHBvaW50ZXIgTlVMTApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "level 1, own user name in capitals: status 0; out pointer a buffer\nlevel 1, a name no account has: status 2221; out pointer NULL\nlevel 1, server name \"\": status 0; out pointer a buffer\nlevel 1, user name \"\": status 2221; out pointer NULL\nlevel 1, user name NULL: status 2202; out pointer NULL\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}
