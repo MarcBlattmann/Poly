@@ -231,6 +231,10 @@ impl Env for Sys {
         region_of(rects) as u64
     }
 
+    fn window_created(&self, hwnd: u32) {
+        ime_hook(hwnd as H);
+    }
+
     fn set_cursor(&self, cursor: u64) {
         with_cursor(|c| *c = cursor as usize);
     }
@@ -540,11 +544,7 @@ pub unsafe extern "system" fn CreateWindowExW(
         menu: menu as u64,
         instance: instance as u64,
     };
-    let h = u::create_window(&SYS, spec, name as u64, param as u64) as H;
-    if h != 0 && ex_style & 0x0400_0000 == 0 {
-        ime_hook(h);
-    }
-    h
+    u::create_window(&SYS, spec, name as u64, param as u64) as H
 }
 
 #[link(name = "kernel32", kind = "raw-dylib")]
@@ -553,24 +553,50 @@ unsafe extern "system" {
     fn GetProcAddress(module: usize, name: *const u8) -> usize;
 }
 
-/// A process that has `imm32.dll` loaded gets each thread's hidden "IME"
-/// window with the thread's first window (ImmGetDefaultIMEWnd.yaml).
+/// The class of a thread's default IME window.
+static IME_CLASS: [u16; 4] = [b'I' as u16, b'M' as u16, b'E' as u16, 0];
+
+/// Each thread gets its hidden default IME window with its first window
+/// (ImmGetDefaultIMEWnd.yaml: class "IME", WS_POPUP | WS_DISABLED |
+/// WS_CLIPSIBLINGS, owned by the thread's first window; GetFocus.yaml
+/// `ime_window`: it is made before that window is shown and lies below it).
+/// The interactive session has one for every thread, as Windows does;
+/// session 0 only for a process that has `imm32.dll` loaded.
 fn ime_hook(hwnd: H) {
-    static HOOK: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(1);
-    let mut f = HOOK.load(core::sync::atomic::Ordering::Relaxed);
-    if f == 1 {
-        let name: [u16; 10] = [105, 109, 109, 51, 50, 46, 100, 108, 108, 0];
-        // SAFETY: kernel32 queries with NUL-terminated names.
-        f = unsafe {
-            let m = GetModuleHandleW(name.as_ptr());
-            if m == 0 { 0 } else { GetProcAddress(m, c"PolyImmWindowCreated".as_ptr().cast()) }
-        };
-        HOOK.store(f, core::sync::atomic::Ordering::Relaxed);
+    if !matches!(call(Request::DefaultIme { tid: 0 }), Reply::Handle { hwnd: 0 }) {
+        return;
     }
-    if f != 0 {
-        // SAFETY: imm32's export of this shape.
-        let call: extern "system" fn(usize) = unsafe { core::mem::transmute(f) };
-        call(hwnd);
+    if !u::screen(&SYS).interactive {
+        let name: [u16; 10] = [105, 109, 109, 51, 50, 46, 100, 108, 108, 0];
+        // SAFETY: a kernel32 query with a NUL-terminated name.
+        if unsafe { GetModuleHandleW(name.as_ptr()) } == 0 {
+            return;
+        }
+    }
+    // WNDCLASSEXW (80 bytes): cbSize, style, wndproc, extra, extra, instance,
+    // icon, cursor, brush, menu name, class name, small icon.
+    let mut wc = [0u8; 80];
+    wc[0..4].copy_from_slice(&80u32.to_le_bytes());
+    wc[8..16].copy_from_slice(&(DefWindowProcW as *const () as usize as u64).to_le_bytes());
+    wc[64..72].copy_from_slice(&(IME_CLASS.as_ptr() as u64).to_le_bytes());
+    // SAFETY: a valid class description (the class may exist already);
+    // a hidden popup owned by the thread's first window.
+    unsafe {
+        RegisterClassExW(wc.as_ptr());
+        CreateWindowExW(
+            0,
+            IME_CLASS.as_ptr(),
+            IME_CLASS.as_ptr(),
+            metrics::WS_POPUP | metrics::WS_DISABLED | metrics::WS_CLIPSIBLINGS,
+            0,
+            0,
+            0,
+            0,
+            hwnd,
+            0,
+            0,
+            0,
+        );
     }
 }
 
