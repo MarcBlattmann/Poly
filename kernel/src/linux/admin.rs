@@ -215,45 +215,19 @@ impl Thread<'_> {
         flags: admin::MountFlags,
         data: &[u8],
     ) -> Result<(), Errno> {
-        use poly_fuse::{Caller, FuseFs, Options};
+        use poly_fuse::{Caller, FuseFs};
         let files = &self.process().files;
         let tnode = files.lookupat(AT_FDCWD, target, true).map_err(vfs_errno)?;
-        if tnode.attr().map_err(vfs_errno)?.kind != FileType::Directory {
-            return Err(Errno::ENOTDIR);
-        }
-        let num = |v: Option<&[u8]>, radix: u32| -> Result<u32, Errno> {
-            let t = core::str::from_utf8(v.ok_or(Errno::EINVAL)?).map_err(|_| Errno::EINVAL)?;
-            u32::from_str_radix(t, radix).map_err(|_| Errno::EINVAL)
-        };
-        let (mut fd, mut root_mode, mut user_id, mut group_id) = (None, None, None, None);
-        let mut opts = Options::default();
-        let mut subtype: Option<Vec<u8>> = None;
-        for (name, value) in admin::options(data) {
-            match name {
-                b"fd" => fd = Some(num(value, 10)?),
-                b"rootmode" => root_mode = Some(num(value, 8)?),
-                b"user_id" => user_id = Some(num(value, 10)?),
-                b"group_id" => group_id = Some(num(value, 10)?),
-                b"max_read" => opts.max_read = num(value, 10)?,
-                b"default_permissions" => opts.default_permissions = true,
-                b"allow_other" => opts.allow_other = true,
-                b"subtype" => subtype = Some(value.ok_or(Errno::EINVAL)?.to_vec()),
-                b"blksize" | b"max_pages" => {}
-                _ => return Err(Errno::EINVAL),
-            }
-        }
-        let (Some(fd), Some(root_mode), Some(user_id), Some(group_id)) = (fd, root_mode, user_id, group_id) else {
-            return Err(Errno::EINVAL);
-        };
-        if root_mode & 0o170000 != 0o040000 {
-            return Err(Errno::EINVAL);
-        }
+        let target_is_dir = tnode.attr().map_err(vfs_errno)?.kind == FileType::Directory;
+        // The option string, then the descriptor and the owner, then the
+        // root's type against the mount point (the spec sheet of fuse_mount).
+        let parsed = poly_fuse::parse_options(data).map_err(vfs_errno)?;
+        let (fd, subtype, mut opts) = (parsed.fd, parsed.subtype, parsed.opts);
+        let (user_id, group_id) = (opts.user_id, opts.group_id);
         // The owner of the mount is named by ids of the mounter's user
-        // namespace: one without a mapping there is EINVAL (the spec sheet
-        // of fuse_mount).
+        // namespace: one without a mapping there is EINVAL.
         let mounter_ns = super::cred::current_creds().and_then(|c| c.user_ns);
         let kernel_id = |kind, id| poly_personality_linux::ns::user::down(&mounter_ns, kind, id).ok_or(Errno::EINVAL);
-        opts.root_mode = root_mode;
         opts.user_id = kernel_id(poly_personality_linux::ns::user::IdKind::Uid, user_id)?;
         opts.group_id = kernel_id(poly_personality_linux::ns::user::IdKind::Gid, group_id)?;
         let file = files.file(fd as i32).map_err(|_| Errno::EINVAL)?;
@@ -263,6 +237,11 @@ impl Thread<'_> {
             .and_then(|a| a.downcast_ref::<crate::fuse::FuseFile>())
             .map(|f| f.conn().clone())
             .ok_or(Errno::EINVAL)?;
+        // Only a directory mounts over a directory, and only something
+        // else over a file.
+        if (opts.root_kind() == FileType::Directory) != target_is_dir {
+            return Err(Errno::ENOTDIR);
+        }
         let cred = files.cred();
         let who = Caller { uid: cred.uid, gid: cred.gid, pid: self.process().pid, umask: 0 };
         conn.bind(who).map_err(vfs_errno)?;

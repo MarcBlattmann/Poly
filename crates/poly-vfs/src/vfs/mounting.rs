@@ -3,8 +3,10 @@
 use super::*;
 
 impl Vfs {
-    /// `mount(2)`: puts `fs` on the directory `path` names (`CAP_SYS_ADMIN`,
-    /// else `EPERM`; a directory, `ENOTDIR`).
+    /// `mount(2)`: puts `fs` on what `path` names (`CAP_SYS_ADMIN`, else
+    /// `EPERM`): a directory for a file system whose root is one, and
+    /// something else for a root that is not a directory (a FUSE file
+    /// system can have one); a mismatch is `ENOTDIR`.
     pub fn mount(
         &self,
         ctx: &FsContext,
@@ -18,11 +20,9 @@ impl Vfs {
             return Err(Errno::EPERM);
         }
         let target = self.resolve(ctx, cred, at, path, true)?;
-        if target.attr()?.kind != FileType::Directory {
-            return Err(Errno::ENOTDIR);
-        }
         let root = fs.root();
-        if fs.getattr(root)?.kind != FileType::Directory {
+        let onto_dir = target.attr()?.kind == FileType::Directory;
+        if (fs.getattr(root)?.kind == FileType::Directory) != onto_dir {
             return Err(Errno::ENOTDIR);
         }
         let info = fs.info();
