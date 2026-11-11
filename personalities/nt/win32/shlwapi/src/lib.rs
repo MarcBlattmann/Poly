@@ -8,6 +8,9 @@
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
+// rustc exports every `#[no_mangle]` function by name; `build.rs` exports three again with their
+// ordinals, which lld-link keeps (the first specification), noting that the name came twice.
+#![allow(linker_messages)]
 
 extern crate alloc;
 

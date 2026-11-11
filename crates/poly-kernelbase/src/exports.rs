@@ -437,6 +437,21 @@ pub const OLEAUT32_EXPORTS: &[(&str, u16)] = &[
     ("VariantInit", 8),
     ("VariantClear", 9),
     ("VariantCopy", 10),
+    // ADR 0155, step 9: what chrome.dll delay-loads by ordinal (the pairs are the export table's).
+    ("SafeArrayDestroy", 16),
+    ("SafeArrayGetDim", 17),
+    ("SafeArrayGetUBound", 19),
+    ("SafeArrayGetLBound", 20),
+    ("SafeArrayAccessData", 23),
+    ("SafeArrayUnaccessData", 24),
+    ("SafeArrayGetElement", 25),
+    ("SafeArrayPutElement", 26),
+    ("SafeArrayGetVartype", 77),
+    ("SysStringByteLen", 149),
+    ("SysAllocStringByteLen", 150),
+    ("LoadRegTypeLib", 162),
+    ("VarBstrCmp", 314),
+    ("SafeArrayCreateVector", 411),
 ];
 
 /// The exports of our `user32.dll` (ADR 0087): two string functions until

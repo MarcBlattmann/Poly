@@ -1171,6 +1171,47 @@ unsafe fn step9() {
     check_hr(SHGetPropertyStoreForWindow(hwnd, &CLSID_NOWHERE, (&raw mut store).cast()) as i32, E_NOINTERFACE);
     check_got(store.is_null(), 0);
 
+    // oleaut32 by ordinal, as chrome.dll's delay loads bind it: a vector of four VT_I4 (3).
+    let create: unsafe extern "system" fn(u16, i32, u32) -> *mut u8 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 411));
+    let upper: unsafe extern "system" fn(*mut u8, u32, *mut i32) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 19));
+    let access: unsafe extern "system" fn(*mut u8, *mut *mut i32) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 23));
+    let unaccess: unsafe extern "system" fn(*mut u8) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 24));
+    let get: unsafe extern "system" fn(*mut u8, *const i32, *mut i32) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 25));
+    let vartype: unsafe extern "system" fn(*mut u8, *mut u16) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 77));
+    let destroy: unsafe extern "system" fn(*mut u8) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 16));
+    let byte_len: unsafe extern "system" fn(*mut u16) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 149));
+    for ordinal in [17, 20, 26, 150, 162, 314] {
+        delay_load_ordinal("OLEAUT32.dll", ordinal);
+    }
+    let array = create(3, 10, 4);
+    check_got(!array.is_null(), 0);
+    let mut high = 0i32;
+    check_hr(upper(array, 1, &mut high) as i32, S_OK);
+    check_eq(high as usize, 13);
+    check_hr(upper(array, 2, &mut high) as i32, 0x8002_000B); // DISP_E_BADINDEX
+    let mut data: *mut i32 = core::ptr::null_mut();
+    check_hr(access(array, &mut data) as i32, S_OK);
+    check_got(!data.is_null() && *data == 0, 0);
+    *data.add(2) = 77;
+    check_hr(destroy(array) as i32, 0x8002_000D); // DISP_E_ARRAYISLOCKED
+    check_hr(unaccess(array) as i32, S_OK);
+    let (index, mut element) = (12i32, 0i32);
+    check_hr(get(array, &index, &mut element) as i32, S_OK);
+    check_eq(element as usize, 77);
+    let mut vt = 0u16;
+    check_hr(vartype(array, &mut vt) as i32, S_OK);
+    check_eq(usize::from(vt), 3);
+    check_hr(destroy(array) as i32, S_OK);
+    check_eq(byte_len(core::ptr::null_mut()) as usize, 0);
+
     // userenv: the profile is a local one.
     let mut profile = 0xFFu32;
     check_eq(GetProfileType(&mut profile) as usize, 1);

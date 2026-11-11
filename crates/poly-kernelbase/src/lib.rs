@@ -90,6 +90,7 @@ pub mod process;
 pub mod procinfo;
 pub mod propstore;
 pub mod registry;
+pub mod safearray;
 pub mod session;
 pub mod shell;
 pub mod shlwapi;
