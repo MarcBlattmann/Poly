@@ -7,7 +7,7 @@
 //! Order of the checks, as the spec sheets give it: the privilege first
 //! where the call needs one (`fsopen`, `fsmount`, `fspick`, `move_mount`,
 //! `pivot_root`, `open_tree` with `OPEN_TREE_CLONE`; `mount_setattr`
-//! after its size and structure), then flags and structures (`EINVAL`,
+//! after its flags and size, before its structure), then flags and structures (`EINVAL`,
 //! `E2BIG`, `EFAULT`), then the paths, then the kernel's checks on the
 //! mounts.
 
@@ -138,17 +138,7 @@ fn set_attributes(
     if buf[MOUNT_ATTR_SIZE_VER0..].iter().any(|&b| b != 0) {
         return Err(Errno::E2BIG);
     }
-    let change = AttrChange::from_bytes(&buf[..MOUNT_ATTR_SIZE_VER0]);
-    // An id-mapped mount names a user namespace by descriptor (`userns_fd`
-    // at 24): one that is not open is `EBADF`. Poly has no id-mapped
-    // mounts, so an open one is refused like mount_setattr(2) does.
-    let idmap = (change.set | change.clr) & MOUNT_ATTR_IDMAP;
-    AttrChange { set: change.set & !idmap, clr: change.clr & !idmap, ..change }.check()?;
-    if idmap != 0 {
-        let userns_fd = u32::from_le_bytes(buf[24..28].try_into().expect("4 bytes")) as i32;
-        k.fs().ok_or(Errno::ENOSYS)?.status_flags(userns_fd)?;
-        return Err(Errno::EINVAL);
-    }
+    let change = checked_change(k, &buf[..MOUNT_ATTR_SIZE_VER0])?;
     if !clone {
         require_mount(k)?;
     }
@@ -177,27 +167,60 @@ pub fn move_mount(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     admin(k)?.move_mount(&from, &to).map(|()| 0)
 }
 
-/// mount_setattr(dfd, path, flags, attr, size)
-pub fn mount_setattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let size = a.ulong(4);
-    if size < MOUNT_ATTR_SIZE_VER0 as u64 {
+/// `struct mount_attr`'s contents, judged before any path is looked at
+/// (the spec sheet of mount_setattr, `ordering` step 5): unknown bits, the
+/// access time and propagation values (`EINVAL`), then the rules of
+/// `MOUNT_ATTR_IDMAP`. In `attr_clr` it is `EINVAL` whatever `userns_fd`
+/// is; in `attr_set` `userns_fd` (the `u64` at 24) is read as a descriptor
+/// number: above `INT_MAX` `EINVAL` (the upper bits are not dropped), not
+/// open `EBADF`, not a user namespace file `EINVAL`. Poly has no id-mapped
+/// mounts, so a real user namespace is `EINVAL` as well. Without the flag
+/// `userns_fd` is not looked at.
+fn checked_change(k: &mut dyn LinuxKernel, attr: &[u8]) -> Result<AttrChange, Errno> {
+    let change = AttrChange::from_bytes(attr);
+    if (change.set | change.clr) & !crate::mountapi::ATTR_KNOWN != 0 || change.clr & MOUNT_ATTR_IDMAP != 0 {
         return Err(Errno::EINVAL);
     }
+    let idmap = change.set & MOUNT_ATTR_IDMAP != 0;
+    let change = AttrChange { set: change.set & !MOUNT_ATTR_IDMAP, ..change };
+    change.check()?;
+    if idmap {
+        let userns_fd = u64::from_le_bytes(attr[24..32].try_into().expect("8 bytes"));
+        let fd = i32::try_from(userns_fd).map_err(|_| Errno::EINVAL)?;
+        return match k.namespace_of_fd(fd) {
+            Err(Errno::EBADF) => Err(Errno::EBADF),
+            _ => Err(Errno::EINVAL),
+        };
+    }
+    Ok(change)
+}
+
+/// mount_setattr(dfd, path, flags, attr, size)
+///
+/// The checks in the order the spec sheet gives (`ordering`): the flags
+/// (`EINVAL`), the size (`E2BIG` above a page, `EINVAL` below the first
+/// version), the privilege (`EPERM`), reading the structure (`EFAULT`,
+/// `E2BIG` for a tail that is not zero), its contents
+/// ([`checked_change`]), and only then the path.
+pub fn mount_setattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let flags = a.uint(2);
+    if flags & !(AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_RECURSIVE) != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let size = a.ulong(4);
     if size > PAGE as u64 {
         return Err(Errno::E2BIG);
     }
+    if size < MOUNT_ATTR_SIZE_VER0 as u64 {
+        return Err(Errno::EINVAL);
+    }
+    require_mount(k)?;
     let mut buf = vec![0u8; size as usize];
     k.copy_from_user(a.ptr(3), &mut buf)?;
     if buf[MOUNT_ATTR_SIZE_VER0..].iter().any(|&b| b != 0) {
         return Err(Errno::E2BIG);
     }
-    let flags = a.uint(2);
-    if flags & !(AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_RECURSIVE) != 0 {
-        return Err(Errno::EINVAL);
-    }
-    let change = AttrChange::from_bytes(&buf[..MOUNT_ATTR_SIZE_VER0]);
-    change.check()?;
-    require_mount(k)?;
+    let change = checked_change(k, &buf[..MOUNT_ATTR_SIZE_VER0])?;
     let at = path_at(k, a.fd(0), a.ptr(1), flags & AT_EMPTY_PATH != 0, flags & AT_SYMLINK_NOFOLLOW == 0)?;
     admin(k)?.mount_setattr(&at, flags & AT_RECURSIVE != 0, &change).map(|()| 0)
 }
