@@ -615,3 +615,349 @@ fn gfw_minimize_as_on_windows() {
 fn sw_activation_as_on_windows() {
     replay("ShowWindow", "sw_activation", false);
 }
+
+// ----- the earlier tests of the sheets (their own procedure and helpers)
+
+/// The earlier tests' `proc_f`: the focus and position messages as their
+/// `log_b` / `log_msg` print them.
+extern "system" fn earlier_proc(h: u64, msg: u32, w: u64, l: u64) -> u64 {
+    if msg == WM_NCCREATE {
+        let t = NEXT.with(|n| n.get());
+        env().call(Request::SetLong { hwnd: h, index: -21, size: 8, value: t as u64 });
+    }
+    let t = tag(h);
+    let lo = |v: u64| v as u16 as i16;
+    let hi = |v: u64| (v >> 16) as u16 as i16;
+    match msg {
+        focus::WM_ACTIVATE => {
+            log(format!("{t} WM_ACTIVATE state={} minimized={} other={}", w & 0xFFFF, w >> 16, name(l, false)))
+        }
+        focus::WM_ACTIVATEAPP => log(format!("{t} WM_ACTIVATEAPP active={w}")),
+        focus::WM_NCACTIVATE => {
+            let other = if l == 0 { "0" } else { "handle" };
+            log(format!("{t} WM_NCACTIVATE active={w} l={other}"))
+        }
+        focus::WM_SETFOCUS => log(format!("{t} WM_SETFOCUS other={}", name(w, false))),
+        focus::WM_KILLFOCUS => log(format!("{t} WM_KILLFOCUS other={}", name(w, false))),
+        focus::WM_ENABLE => log(format!("{t} WM_ENABLE enabled={w}")),
+        focus::WM_CANCELMODE => log(format!("{t} WM_CANCELMODE")),
+        WM_SHOWWINDOW => log(format!("{t} WM_SHOWWINDOW show={w} status={l}")),
+        0x0215 => log(format!("{t} WM_CAPTURECHANGED new={}", name(l, false))),
+        WM_GETMINMAXINFO => {
+            // SAFETY: a MINMAXINFO.
+            let m = unsafe { &*(l as *const MinMaxInfo) };
+            log(format!(
+                "{t} WM_GETMINMAXINFO maxsize={},{} maxpos={},{} mintrack={},{} maxtrack={},{}",
+                m.max_size.x,
+                m.max_size.y,
+                m.max_position.x,
+                m.max_position.y,
+                m.min_track.x,
+                m.min_track.y,
+                m.max_track.x,
+                m.max_track.y
+            ));
+        }
+        WM_NCCALCSIZE if w != 0 => {
+            // SAFETY: NCCALCSIZE_PARAMS and its WINDOWPOS.
+            let (r, wp) = unsafe {
+                let p = &*(l as *const NcCalcSizeParams);
+                (p.rgrc[0], &*p.pos)
+            };
+            log(format!(
+                "{t} WM_NCCALCSIZE 1 new={},{},{},{} pos={},{},{},{} flags={:#x}",
+                r.left, r.top, r.right, r.bottom, wp.x, wp.y, wp.cx, wp.cy, wp.flags
+            ));
+        }
+        WM_NCCALCSIZE => {
+            // SAFETY: a RECT.
+            let r = unsafe { &*(l as *const CRect) };
+            log(format!("{t} WM_NCCALCSIZE 0 rect={},{},{},{}", r.left, r.top, r.right, r.bottom));
+        }
+        WM_WINDOWPOSCHANGING | WM_WINDOWPOSCHANGED => {
+            // SAFETY: a WINDOWPOS.
+            let wp = unsafe { &*(l as *const WindowPos) };
+            let n = if msg == WM_WINDOWPOSCHANGING { "WM_WINDOWPOSCHANGING" } else { "WM_WINDOWPOSCHANGED" };
+            log(format!("{t} {n} pos={},{} size={},{} flags={:#x}", wp.x, wp.y, wp.cx, wp.cy, wp.flags));
+        }
+        WM_SIZE => log(format!("{t} WM_SIZE w={w} l={},{}", lo(l), hi(l))),
+        WM_MOVE => log(format!("{t} WM_MOVE w={w} l={},{}", lo(l), hi(l))),
+        WM_DESTROY => log(format!("{t} WM_DESTROY w={w:#x} l={l:#x}")),
+        WM_NCDESTROY => log(format!("{t} WM_NCDESTROY w={w:#x} l={l:#x}")),
+        WM_CHILDACTIVATE => log(format!("{t} WM_CHILDACTIVATE w={w:#x} l={l:#x}")),
+        _ => {}
+    }
+    def_window_proc(env(), h, msg, w, l)
+}
+
+/// An earlier test on the interactive desktop: its class, its lines.
+struct Earlier<'a> {
+    e: &'a TestEnv,
+    class: &'static str,
+    out: Vec<String>,
+}
+
+impl<'a> Earlier<'a> {
+    fn start(e: &'a TestEnv, class: &'static str) -> Self {
+        interactive(e);
+        e.ime.set(true);
+        let spec = ClassSpec {
+            name: class.encode_utf16().collect(),
+            wndproc: earlier_proc as *const () as u64,
+            unicode: true,
+            ..ClassSpec::default()
+        };
+        assert!(matches!(e.call(Request::RegisterClass { spec }), Reply::Atom { .. }));
+        KEEPER_WINDOW.with(|c| c.set(0));
+        Earlier { e, class, out: vec!["ok registered".to_string()] }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn make(&self, tag: char, ex: u32, style: u32, x: i32, y: i32, cx: i32, cy: i32, parent: u64, menu: u64) -> u64 {
+        create(self.e, tag, ex, self.class, style, x, y, cx, cy, parent, menu)
+    }
+
+    /// `begin`: the window in the foreground by SetForegroundWindow, the log emptied.
+    fn begin(&self, h: u64) -> bool {
+        if u64::from(focus::input(self.e).foreground) != h {
+            focus::set_foreground_window(self.e, h);
+        }
+        take_log();
+        u64::from(focus::input(self.e).foreground) == h
+    }
+
+    /// `acquire`: a second try after hiding and showing the window.
+    fn acquire(&self, h: u64) -> bool {
+        if self.begin(h) {
+            return true;
+        }
+        show_window(self.e, h, SW_HIDE);
+        show_window(self.e, h, SW_SHOW);
+        self.begin(h)
+    }
+
+    fn flush(&mut self) {
+        for l in take_log() {
+            self.out.push(format!("  {l}"));
+        }
+    }
+
+    fn focus_state(&mut self, label: &str) {
+        let st = focus::input(self.e);
+        self.out.push(format!(
+            "{label}: active={} focus={} fg={}",
+            name(u64::from(st.active), false),
+            name(u64::from(st.focus), false),
+            name(u64::from(st.foreground), false)
+        ));
+    }
+
+    /// `report`: the log, the label, the state.
+    fn report(&mut self, label: &str) {
+        self.flush();
+        self.out.push(label.to_string());
+        self.focus_state("  state");
+    }
+
+    /// Compare with Windows; the summary line is the recorded one.
+    fn check(mut self, entry: &str, test: &str) {
+        let want = recorded(entry, test);
+        self.out.push(want.lines().last().unwrap_or_default().to_string());
+        same_as_windows(test, &self.out, &want);
+    }
+}
+
+const OVERLAPPED_WINDOW: u32 = 0x00CF_0000;
+
+/// GetFocus.yaml gf_show_popup / gf_show_overlapped: a hidden window N shown
+/// with each command while A is active with the focus on its child.
+fn gf_show(kind: u8, class: &'static str, test: &str) {
+    with_env(|e| {
+        let mut t = Earlier::start(e, class);
+        for cmd in [1, 5, 4, 8, 2, 7, 3] {
+            let a = t.make('A', 0, OVERLAPPED_WINDOW | WS_VISIBLE, 30, 30, 360, 260, 0, 0);
+            let (style, kname) = if kind == 0 { (OVERLAPPED_WINDOW, "overlapped") } else { (WS_POPUP, "popup") };
+            let n = t.make('N', 0, style, 420, 30, 300, 220, 0, 0);
+            let ok = t.acquire(a);
+            let ca = t.make('a', 0, WS_CHILD | WS_VISIBLE, 10, 10, 100, 60, a, 1);
+            t.make('n', 0, WS_CHILD | WS_VISIBLE, 10, 10, 100, 60, n, 1);
+            focus::set_focus(e, ca);
+            take_log();
+            t.out.push(format!("=== {kname} N / {} (A foreground: {})", SW_NAMES[cmd as usize], i32::from(ok)));
+            let r = show_window(e, n, cmd);
+            t.out.push(format!("  returned {}", i32::from(r)));
+            t.report("  after");
+            destroy_window(e, n);
+            destroy_window(e, a);
+            take_log();
+        }
+        t.check("GetFocus", test);
+    });
+}
+
+#[test]
+fn gf_show_popup_as_on_windows() {
+    gf_show(1, "GfShowPOPUP", "gf_show_popup");
+}
+
+#[test]
+fn gf_show_overlapped_as_on_windows() {
+    gf_show(0, "GfShowOVERLAPPED", "gf_show_overlapped");
+}
+
+/// gaw_zhide's z list: A and B from the top down.
+fn zlist_ab(e: &TestEnv) -> String {
+    let mut s = String::new();
+    let mut h = match e.call(Request::GetWindow { hwnd: u64::from(desktop(e)), cmd: 5 }) {
+        Reply::Handle { hwnd } => hwnd,
+        _ => 0,
+    };
+    while h != 0 {
+        let i = info_of(u64::from(h)).expect("a window of the list");
+        let t = userdata(u64::from(h));
+        if i.pid == 7 && (t == 0x41 || t == 0x42) {
+            s.push_str(&name(u64::from(h), false));
+            if !i.visible {
+                s.push('~');
+            }
+            if i.ex_style & WS_EX_TOPMOST != 0 {
+                s.push('^');
+            }
+            s.push(' ');
+        }
+        h = match e.call(Request::GetWindow { hwnd: u64::from(h), cmd: 2 }) {
+            Reply::Handle { hwnd } => hwnd,
+            _ => 0,
+        };
+    }
+    s
+}
+
+/// GetActiveWindow.yaml gaw_zhide: hiding or destroying the active window
+/// with B in different places of the z order.
+#[test]
+fn gaw_zhide_as_on_windows() {
+    with_env(|e| {
+        let mut t = Earlier::start(e, "GawZHide");
+        let top = WS_EX_TOPMOST;
+        let plan: [(u32, u8, u32, bool); 10] = [
+            (0, 0, 0, false),
+            (top, 0, 0, false),
+            (0, 1, 0, false),
+            (0, 2, 0, false),
+            (0, 3, 0, false),
+            (0, 3, top, false),
+            (top, 3, top, false),
+            (top, 2, top, false),
+            (0, 0, 0, true),
+            (0, 3, 0, true),
+        ];
+        for (aex, bmode, bex, destroy) in plan {
+            let a = t.make('A', aex, OVERLAPPED_WINDOW | WS_VISIBLE, 40, 40, 320, 220, 0, 0);
+            let b = t.make('B', bex, OVERLAPPED_WINDOW, 420, 40, 320, 220, 0, 0);
+            let ok = t.acquire(a);
+            match bmode {
+                0 => {}
+                1 => {
+                    show_window(e, b, SW_SHOWMINNOACTIVE);
+                }
+                2 => {
+                    show_window(e, b, SW_SHOWNORMAL);
+                    focus::set_foreground_window(e, a);
+                }
+                _ => {
+                    show_window(e, b, SW_SHOWNA);
+                }
+            }
+            take_log();
+            let an = if aex & top != 0 { "topmost A" } else { "A" };
+            let bn = ["no B shown", "B minimized", "B below A", "B above A (SW_SHOWNA)"][bmode as usize];
+            t.out.push(format!(
+                "=== {an} / {bn}{} / {} (foreground {})",
+                if bex & top != 0 { " topmost" } else { "" },
+                if destroy { "DestroyWindow(A)" } else { "SW_HIDE A" },
+                i32::from(ok)
+            ));
+            t.out.push(format!("  z before: {}", zlist_ab(e)));
+            if destroy {
+                destroy_window(e, a);
+            } else {
+                show_window(e, a, SW_HIDE);
+            }
+            t.flush();
+            t.out.push(format!("  z after: {}", zlist_ab(e)));
+            t.focus_state("  state");
+            if !destroy {
+                destroy_window(e, a);
+            }
+            destroy_window(e, b);
+            take_log();
+        }
+        t.check("GetActiveWindow", "gaw_zhide");
+    });
+}
+
+/// GetActiveWindow.yaml gaw_leave_a / gaw_leave_b: the active A hidden,
+/// minimized, destroyed or shown minimized with B in different states.
+fn gaw_leave(class: &'static str, test: &str, plan: [(u8, i32); 8]) {
+    with_env(|e| {
+        let mut t = Earlier::start(e, class);
+        for (bmode, cmd) in plan {
+            let a = t.make('A', 0, OVERLAPPED_WINDOW | WS_VISIBLE, 40, 40, 320, 220, 0, 0);
+            let b = t.make('B', 0, OVERLAPPED_WINDOW, 420, 40, 320, 220, 0, 0);
+            let mut ok = t.acquire(a);
+            match bmode {
+                0 => {}
+                1 => {
+                    show_window(e, b, SW_SHOWNA);
+                }
+                2 => {
+                    show_window(e, b, SW_SHOWMINNOACTIVE);
+                }
+                _ => {
+                    show_window(e, b, SW_SHOWNORMAL);
+                    ok = t.acquire(a);
+                }
+            }
+            take_log();
+            let bname =
+                ["B not shown", "B shown (SW_SHOWNA)", "B minimized (SW_SHOWMINNOACTIVE)", "B was active before A"]
+                    [bmode as usize];
+            let what = if cmd < 0 { "DestroyWindow" } else { SW_NAMES[cmd as usize] };
+            t.out.push(format!("=== {bname} / {what} of A (A foreground: {})", i32::from(ok)));
+            t.focus_state("  before");
+            let r = if cmd < 0 { destroy_window(e, a) } else { show_window(e, a, cmd) };
+            t.out.push(format!("  returned {}", i32::from(r)));
+            t.report("  after");
+            if cmd >= 0 {
+                for (label, h) in [("A", a), ("B", b)] {
+                    let i = info_of(h).expect("the window");
+                    t.out.push(format!(
+                        "  {label}: style_visible={} iconic={} zoomed={} rect {},{},{},{}",
+                        i32::from(i.style & WS_VISIBLE != 0),
+                        i32::from(i.minimized),
+                        i32::from(i.maximized && !i.minimized),
+                        i.window.left,
+                        i.window.top,
+                        i.window.right,
+                        i.window.bottom
+                    ));
+                }
+                destroy_window(e, a);
+            }
+            destroy_window(e, b);
+            take_log();
+        }
+        t.check("GetActiveWindow", test);
+    });
+}
+
+#[test]
+fn gaw_leave_a_as_on_windows() {
+    gaw_leave("GawLeaveA", "gaw_leave_a", [(0, 0), (0, 6), (0, -1), (0, 2), (1, 0), (1, 6), (1, -1), (1, 2)]);
+}
+
+#[test]
+fn gaw_leave_b_as_on_windows() {
+    gaw_leave("GawLeaveB", "gaw_leave_b", [(3, 0), (3, 6), (3, 2), (3, -1), (2, 0), (2, 6), (2, 2), (2, -1)]);
+}
