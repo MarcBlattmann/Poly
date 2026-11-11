@@ -259,6 +259,30 @@ pub(super) fn report_delivered(pid: ProcessId, tid: ThreadRef, record: &Exceptio
     for line in diag::exception_report(&at, record.parameters(), &ctx.gpr, &stack, &modules) {
         crate::kprintln!("{line}");
     }
+    drop(stack);
+    if record.code == diag::STATUS_STACK_OVERFLOW {
+        // What fills the stack: every value up to the stack's base (`NT_TIB.StackBase`,
+        // TEB + 8) that points into a module, counted. Read a page at a time.
+        let mut b = [0u8; 8];
+        let base = if read(teb + TEB_STACK_BASE, &mut b) { u64::from_le_bytes(b) } else { 0 };
+        let mut counts: alloc::collections::BTreeMap<u64, u32> = alloc::collections::BTreeMap::new();
+        let mut page = alloc::vec![0u8; 4096];
+        let mut at_address = rsp & !7;
+        while at_address < base && base - rsp <= 64 << 20 {
+            let n = (4096 - (at_address & 4095)).min(base - at_address) as usize;
+            if read(at_address, &mut page[..n]) {
+                for chunk in page[..n].chunks_exact(8) {
+                    let value = u64::from_le_bytes(chunk.try_into().expect("8 bytes"));
+                    if modules.iter().any(|m| value >= m.base && value - m.base < m.size) {
+                        *counts.entry(value).or_insert(0) += 1;
+                    }
+                }
+            }
+            at_address += n as u64;
+        }
+        let counts: Vec<(u64, u32)> = counts.into_iter().collect();
+        crate::kprintln!("{}", diag::frequent_addresses(&at, &counts, &modules));
+    }
 }
 
 /// The running thread's user memory, for walking its stack.

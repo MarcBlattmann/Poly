@@ -1212,6 +1212,33 @@ unsafe fn step9() {
     check_hr(destroy(array) as i32, S_OK);
     check_eq(byte_len(core::ptr::null_mut()) as usize, 0);
 
+    // The system's version, read the way Learn's "Getting the System Version" says and Chrome
+    // does when it starts: the version resource of kernelbase.dll and of kernel32.dll.
+    let info_size: unsafe extern "system" fn(*const u16, *mut u32) -> u32 =
+        core::mem::transmute(delay_load("VERSION.dll", c"GetFileVersionInfoSizeW"));
+    let info: unsafe extern "system" fn(*const u16, u32, u32, *mut u8) -> i32 =
+        core::mem::transmute(delay_load("VERSION.dll", c"GetFileVersionInfoW"));
+    let query: unsafe extern "system" fn(*const u8, *const u16, *mut *const u8, *mut u32) -> i32 =
+        core::mem::transmute(delay_load("VERSION.dll", c"VerQueryValueW"));
+    for file in [w::<16>("kernelbase.dll"), w::<16>("kernel32.dll")] {
+        let mut handle = 1u32;
+        let size = info_size(file.as_ptr(), &mut handle);
+        check_got(size > 52 && size < 2048, GetLastError());
+        let mut block = [0u8; 2048];
+        check_eq(info(file.as_ptr(), 0, size, block.as_mut_ptr()) as usize, 1);
+        let root = w::<2>("\\");
+        let (mut fixed, mut len) = (core::ptr::null(), 0u32);
+        check_eq(query(block.as_ptr(), root.as_ptr(), &mut fixed, &mut len) as usize, 1);
+        check_eq(len as usize, 52);
+        // VS_FIXEDFILEINFO: the signature, then dwProductVersionMS at 16: 10.0.
+        check_eq(fixed.cast::<u32>().read_unaligned() as usize, 0xFEEF_04BD);
+        check_eq(fixed.add(16).cast::<u32>().read_unaligned() as usize, 0x000A_0000);
+        let name = w::<48>("\\StringFileInfo\\040904B0\\ProductVersion");
+        let (mut text, mut chars) = (core::ptr::null(), 0u32);
+        check_eq(query(block.as_ptr(), name.as_ptr(), &mut text, &mut chars) as usize, 1);
+        check_got(chars == 16 && wide_is(text.cast(), "10.0.19045.2006"), chars);
+    }
+
     // userenv: the profile is a local one.
     let mut profile = 0xFFu32;
     check_eq(GetProfileType(&mut profile) as usize, 1);

@@ -276,6 +276,27 @@ fn stack_text(bytes: &[u8]) -> Vec<(usize, String)> {
     found
 }
 
+/// `STATUS_STACK_OVERFLOW` (`ntstatus.h`).
+pub const STATUS_STACK_OVERFLOW: u32 = 0xC000_00FD;
+/// How many of the most frequent code addresses a stack overflow's report names.
+pub const FREQUENT_ADDRESSES: usize = 16;
+
+/// For a stack overflow: the code addresses that are on the whole stack most often, as one line.
+/// `counts` is every stack value that points into a module with the number of times it was
+/// found (the kernel counts them over the whole stack, megabytes of it); a recursion shows as
+/// the few return addresses of its cycle, each thousands of times. The line lists up to
+/// [`FREQUENT_ADDRESSES`] of them, the most frequent first (ties by address).
+pub fn frequent_addresses(at: &Raised, counts: &[(u64, u32)], modules: &[ModuleSpan]) -> String {
+    let mut sorted: Vec<(u64, u32)> = counts.to_vec();
+    sorted.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let top: Vec<String> = sorted
+        .iter()
+        .take(FREQUENT_ADDRESSES)
+        .map(|&(address, n)| format!("{n} x {}", locate(modules, address).unwrap_or_else(|| format!("{address:#x}"))))
+        .collect();
+    format!("nt-exc: pid {} tid {} most frequent code addresses on the whole stack: {}", at.pid, at.tid, top.join(", "))
+}
+
 /// The lines `poly.nt.exceptions` logs for one exception: the code and where it was raised as
 /// `module+offset`, its parameters, the general registers (in `CONTEXT` order), the stack as
 /// quadwords (four to a line, runs of zero lines folded), the stack values that point into a
@@ -459,6 +480,19 @@ mod tests {
         let none = exception_report(&Raised { address: 0x10, ..at }, &[], &regs, &[], &mods);
         assert_eq!(none.len(), 2);
         assert!(none[0].contains(" at ? (0x10) params []"));
+    }
+
+    #[test]
+    fn a_stack_overflow_names_its_most_frequent_return_addresses() {
+        let mods = [ModuleSpan { base: 0x1000, size: 0x1000, name: "a.dll".into() }];
+        let at = Raised { pid: 2, tid: 3, code: STATUS_STACK_OVERFLOW, address: 0x1010 };
+        let line = frequent_addresses(&at, &[(0x1100, 7), (0x1200, 9000), (0x1300, 9000), (0x9999, 1)], &mods);
+        assert_eq!(
+            line,
+            "nt-exc: pid 2 tid 3 most frequent code addresses on the whole stack: 9000 x a.dll+0x200, 9000 x a.dll+0x300, 7 x a.dll+0x100, 1 x 0x9999"
+        );
+        let many: Vec<(u64, u32)> = (0..40).map(|i| (0x1000 + i, 40 - i as u32)).collect();
+        assert_eq!(frequent_addresses(&at, &many, &mods).matches(" x ").count(), FREQUENT_ADDRESSES);
     }
 
     #[test]
