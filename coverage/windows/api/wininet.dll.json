@@ -73,7 +73,7 @@
 {"symbol":"GetUrlCacheConfigInfoW","src":["wine-spec"]},
 {"symbol":"GetUrlCacheEntryInfoA","src":["wine-spec"],"seeds":["wine:wininet/tests/urlcache.c:test_IsUrlCacheEntryExpiredA","wine:wininet/tests/urlcache.c:test_urlcacheW","wine:wininet/tests/urlcache.c:test_urlcacheA","wine:wininet/tests/urlcache.c:cache_entry_exists"]},
 {"symbol":"GetUrlCacheEntryInfoExA","src":["wine-spec"],"seeds":["wine:wininet/tests/urlcache.c:test_GetUrlCacheEntryInfoExA"]},
-{"symbol":"GetUrlCacheEntryInfoExW","src":["wine-spec"],"seeds":["wine:wininet/tests/urlcache.c:test_GetUrlCacheEntryInfoExA"]},
+{"symbol":"GetUrlCacheEntryInfoExW","status":"stub","src":["wine-spec"],"seeds":["wine:wininet/tests/urlcache.c:test_GetUrlCacheEntryInfoExA"]},
 {"symbol":"GetUrlCacheEntryInfoW","src":["wine-spec"],"seeds":["wine:wininet/tests/urlcache.c:test_urlcacheW"]},
 {"symbol":"GetUrlCacheGroupAttributeA","src":["wine-spec"]},
 {"symbol":"GetUrlCacheGroupAttributeW","src":["wine-spec"]},
