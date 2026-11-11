@@ -613,6 +613,21 @@ pub unsafe extern "C" fn LdrGetProcedureAddress(
         Err(e) => e,
     };
     LOADER_LOCK.leave(&SysPlatform);
+    if status != SUCCESS {
+        // Which export a program asked for and did not get (ADR 0155, step 9): a program that
+        // treats the miss as fatal says only that it stopped (Chrome's delay loads).
+        let module =
+            with_loader(|l, _| l.find(handle as u64)).map(|m| alloc::string::String::from_utf16_lossy(&m.name));
+        let what = match &n {
+            Some(name) => alloc::string::String::from_utf8_lossy(name).into_owned(),
+            None => alloc::format!("#{ordinal}"),
+        };
+        crate::debug_print(&alloc::format!(
+            "ldr: LdrGetProcedureAddress({}!{what}) failed ({:#x})",
+            module.as_deref().unwrap_or("?"),
+            status.0
+        ));
+    }
     status
 }
 

@@ -511,6 +511,14 @@ version = "0.0.1"
 dependencies = [
  "poly-crypto",
  "poly-win32-cryptrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "uxtheme"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
 ]
 
 [[package]]

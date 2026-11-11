@@ -82,3 +82,5 @@ pub extern "system" fn kernelbase_main(_module: *mut u8, reason: u32, _reserved:
     }
     base::TRUE
 }
+
+mod delayed;

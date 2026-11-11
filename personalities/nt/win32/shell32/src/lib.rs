@@ -9,6 +9,9 @@
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
+// rustc exports every `#[no_mangle]` function by name; `build.rs` exports three again with their
+// ordinals, which lld-link keeps (the first specification), noting that the name came twice.
+#![allow(linker_messages)]
 
 extern crate alloc;
 
@@ -421,6 +424,17 @@ pub unsafe extern "system" fn SHGetPropertyStoreForWindow(hwnd: usize, iid: *con
     }
 }
 
+/// `ILFree(pidl)` (ordinal 155): "Frees an ITEMIDLIST structure allocated by the Shell" (Learn);
+/// the Shell's allocator is the COM task allocator, which is the process heap here. NULL is
+/// ignored.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ILFree(pidl: *mut u8) {
+    if !pidl.is_null() {
+        // SAFETY: a block of the task allocator.
+        unsafe { HeapFree(GetProcessHeap(), 0, pidl) };
+    }
+}
+
 /// `Shell_NotifyIconW(dwMessage, lpData)`: "Returns TRUE if successful, or FALSE otherwise"
 /// (Learn). Poly's panel has no notification area for Windows programs yet, so no icon can be
 /// added, changed or removed.
@@ -434,3 +448,5 @@ pub extern "system" fn Shell_NotifyIconW(_message: u32, _data: *const u8) -> i32
 pub extern "system" fn shell32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod delayed;

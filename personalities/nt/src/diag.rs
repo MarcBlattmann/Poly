@@ -240,8 +240,9 @@ const REPORT_ITEMS: usize = 48;
 const TEXT_MAX: usize = 96;
 
 /// Printable text of at least 5 characters in the stack: ASCII (bytes) and UTF-16, with the
-/// offset from the stack pointer where each starts. Programs leave the reason they stopped as
-/// text on the stack (Chrome's failed delay load: the DLL's name).
+/// offset from the stack pointer where each starts; a run of 3 or 4 decimal digits counts too.
+/// Programs leave the reason they stopped as text on the stack (Chrome's failed delay load: the
+/// DLL's name and the error number, "126", "127" or "182").
 fn stack_text(bytes: &[u8]) -> Vec<(usize, String)> {
     let printable = |b: u8| (0x20..0x7F).contains(&b);
     let mut found = Vec::new();
@@ -265,7 +266,7 @@ fn stack_text(bytes: &[u8]) -> Vec<(usize, String)> {
             text.push(char::from(bytes[j]));
             j += 1;
         }
-        if text.len() >= 5 {
+        if text.len() >= 5 || (text.len() >= 3 && text.bytes().all(|b| b.is_ascii_digit())) {
             found.push((i, format!("{text:?}")));
             i = j;
         } else {
@@ -427,7 +428,7 @@ mod tests {
         regs[0] = 0x7e;
         regs[4] = 0x50_f000;
         // The stack: a return address, eight zero quadwords, "SHLWAPI.dll" as bytes, then L"126 x".
-        let mut stack = alloc::vec![0x7ff8_0000_1234u64, 0, 0, 1];
+        let mut stack = alloc::vec![0x7ff8_0000_1234u64, 0, u64::from_le_bytes(*b"126\0\0\0\0\0"), 1];
         stack.extend([0u64; 8]);
         stack.push(u64::from_le_bytes(*b"SHLWAPI."));
         stack.push(u64::from_le_bytes(*b"dll\0\0\0\0\0"));
@@ -442,7 +443,7 @@ mod tests {
         assert!(lines[1].contains(" rsp=50f000 "));
         assert_eq!(
             lines[2],
-            "nt-exc: pid 7 tid 9 stack +0x0000: 00007ff800001234 0000000000000000 0000000000000000 0000000000000001"
+            "nt-exc: pid 7 tid 9 stack +0x0000: 00007ff800001234 0000000000000000 0000000000363231 0000000000000001"
         );
         assert_eq!(lines[3], "nt-exc: pid 7 tid 9 stack ... 2 lines of zeros");
         assert!(lines[4].starts_with("nt-exc: pid 7 tid 9 stack +0x0060: "), "{}", lines[4]);
@@ -450,7 +451,10 @@ mod tests {
             lines.contains(&String::from("nt-exc: pid 7 tid 9 code addresses on the stack: +0x0 chrome.dll+0x1234"))
         );
         let text = lines.last().unwrap();
-        assert_eq!(text, "nt-exc: pid 7 tid 9 text on the stack: +0x60 \"SHLWAPI.dll\", +0x70 L\"126 x\"");
+        assert_eq!(
+            text,
+            "nt-exc: pid 7 tid 9 text on the stack: +0x10 \"126\", +0x60 \"SHLWAPI.dll\", +0x70 L\"126 x\""
+        );
         // An address in no module, no stack: two lines.
         let none = exception_report(&Raised { address: 0x10, ..at }, &[], &regs, &[], &mods);
         assert_eq!(none.len(), 2);

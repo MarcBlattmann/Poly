@@ -93,6 +93,7 @@ pub const OUTPUTS: &[&str] = &[
     "uiautomationcore.dll",
     "mfplat.dll",
     "powrprof.dll",
+    "uxtheme.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -223,6 +224,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/uiautomationcore",
             "personalities/nt/win32/mfplat",
             "personalities/nt/win32/powrprof",
+            "personalities/nt/win32/uxtheme",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",

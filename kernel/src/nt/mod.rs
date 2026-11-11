@@ -115,6 +115,8 @@ pub static OLEACC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleacc.dll"
 pub static UIAUTOMATIONCORE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uiautomationcore.dll"));
 pub static MFPLAT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mfplat.dll"));
 pub static POWRPROF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/powrprof.dll"));
+/// Our `uxtheme.dll` (ADR 0155, step 9): no visual style is active.
+pub static UXTHEME: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uxtheme.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.

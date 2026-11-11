@@ -168,6 +168,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("uiautomationcore.dll", super::UIAUTOMATIONCORE),
         ("mfplat.dll", super::MFPLAT),
         ("powrprof.dll", super::POWRPROF),
+        ("uxtheme.dll", super::UXTHEME),
     ] {
         if bytes.is_empty() {
             continue;

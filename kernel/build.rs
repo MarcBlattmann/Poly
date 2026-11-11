@@ -88,6 +88,7 @@ fn embed_win32() {
         "uiautomationcore.dll",
         "mfplat.dll",
         "powrprof.dll",
+        "uxtheme.dll",
     ] {
         match &dir {
             Some(d) => {
