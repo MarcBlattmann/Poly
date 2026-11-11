@@ -620,6 +620,35 @@ impl FsContext {
     }
 }
 
+/// The options a file system shows after a reconfiguration changed its
+/// limits: `shown` (what it showed, [`options_string`]'s form) with the
+/// `size` and `nr_inodes` of `new` in place of its own, added if it had
+/// none; the root's mode and owner stay as they are (a reconfigure does
+/// not change them).
+pub fn reconfigured_options(shown: &[u8], fs: FsType, new: &RootOptions) -> Vec<u8> {
+    let limits = RootOptions { size: new.size, inodes: new.inodes, ..RootOptions::default() };
+    let changed = options_string(fs, &limits);
+    let key = |o: &[u8]| o.split(|&b| b == b'=').next().unwrap_or(o).to_vec();
+    let new_parts: Vec<&[u8]> = changed.split(|&b| b == b',').filter(|o| !o.is_empty()).collect();
+    let mut out: Vec<Vec<u8>> = Vec::new();
+    let mut used = alloc::vec![false; new_parts.len()];
+    for old in shown.split(|&b| b == b',').filter(|o| !o.is_empty()) {
+        match new_parts.iter().position(|n| key(n) == key(old)) {
+            Some(i) => {
+                used[i] = true;
+                out.push(new_parts[i].to_vec());
+            }
+            None => out.push(old.to_vec()),
+        }
+    }
+    // What was not shown before goes where a new mount shows it: the
+    // limits first.
+    let mut front: Vec<Vec<u8>> =
+        new_parts.iter().zip(&used).filter(|(_, used)| !**used).map(|(n, _)| n.to_vec()).collect();
+    front.extend(out);
+    front.join(&b","[..])
+}
+
 /// The options a file system shows (`/proc/self/mountinfo`'s super
 /// options without `rw`/`ro`, `statmount(2)`'s `mnt_opts`) after a mount
 /// with `root`: for tmpfs the size limit in KiB (whole pages), the inode
@@ -1098,5 +1127,26 @@ mod tests {
         let mut t = FsContext::new(b"tmpfs").unwrap();
         assert_eq!(t.config(&set(b"size", Value::String(b"1m")), &mut ops), Ok(()));
         assert!(ops.0.is_empty());
+    }
+
+    #[test]
+    fn a_reconfigure_shows_the_new_limits() {
+        use crate::admin::Amount;
+        let r = |size: Option<u64>, inodes: Option<u64>| RootOptions {
+            size: size.map(Amount::Count),
+            inodes: inodes.map(Amount::Count),
+            mode: Some(0o700),
+            ..RootOptions::default()
+        };
+        let show = |old: &[u8], new: &RootOptions| {
+            alloc::string::String::from_utf8(reconfigured_options(old, FsType::Tmpfs, new)).unwrap()
+        };
+        assert_eq!(show(b"size=1024k", &r(Some(2 << 20), None)), "size=2048k");
+        assert_eq!(show(b"size=1024k,nr_inodes=100,mode=700", &r(Some(4096), None)), "size=4k,nr_inodes=100,mode=700");
+        assert_eq!(show(b"size=1024k,mode=700", &r(None, Some(50))), "nr_inodes=50,size=1024k,mode=700");
+        assert_eq!(show(b"mode=755,uid=5", &r(Some(1 << 20), Some(7))), "size=1024k,nr_inodes=7,mode=755,uid=5");
+        assert_eq!(show(b"", &r(Some(1 << 20), None)), "size=1024k");
+        // Nothing about the limits: as it was (the mode is not a reconfigure's).
+        assert_eq!(show(b"size=1024k,mode=755", &r(None, None)), "size=1024k,mode=755");
     }
 }

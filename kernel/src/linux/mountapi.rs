@@ -157,6 +157,9 @@ impl SuperblockOps for Ops<'_> {
                 _ => None,
             };
             m.fs().set_limits(bytes, inodes).map_err(vfs_errno)?;
+            // The mount list shows the new limits.
+            let shown = poly_personality_linux::mountapi::reconfigured_options(&m.sb_options(), FsType::Tmpfs, &root);
+            m.set_sb_info(&m.sb_source(), &shown);
         }
         if let Some(ro) = read_only {
             // The rule of mount(2)'s MS_REMOUNT | MS_RDONLY (writers

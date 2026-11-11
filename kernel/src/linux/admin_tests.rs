@@ -335,3 +335,50 @@ kernel_test! {
         })
     }
 }
+
+/// `FSCONFIG_SET_FLAG`, `FSCONFIG_SET_STRING`, `FSCONFIG_CMD_RECONFIGURE`
+/// (`linux/mount.h`).
+const FSCONFIG_SET_FLAG: u64 = 0;
+const FSCONFIG_SET_STRING: u64 = 1;
+const FSCONFIG_CMD_RECONFIGURE: u64 = 7;
+
+kernel_test! {
+    /// The spec sheets of mntapi_fsconfig and mntapi_fspick: an overlay's
+    /// lowerdir is looked up when it is set, and a file system made
+    /// outside the caller's user namespace can be picked but not
+    /// reconfigured.
+    fn fsconfig_looks_layers_up_and_fspick_respects_the_superblocks_owner() -> TestResult {
+        let (process, memory) = setup()?;
+        run(&process, &memory, |p| -> Check {
+            let config = |p: &Process, fd: u64, cmd: u64, key: &str, value: &str| {
+                let key = if key.is_empty() { 0 } else { cstr(11, key) };
+                let value = if value.is_empty() { 0 } else { cstr(12, value) };
+                sys(p, nr::FSCONFIG, &[fd, cmd, key, value, 0])
+            };
+            let ctx = sys(p, nr::FSOPEN, &[cstr(3, "overlay"), 0]).map_err(|_| 1u64)?;
+            check!(2, config(p, ctx, FSCONFIG_SET_STRING, "lowerdir", "/nonexistent-dir") == Err(Errno::ENOENT));
+            // No message for it; the context goes on.
+            check!(3, sys(p, nr::READ, &[ctx, BUF, 256]) == Err(Errno::ENODATA));
+            check!(4, config(p, ctx, FSCONFIG_SET_STRING, "redirect_dir", "bogus") == Err(Errno::EINVAL));
+            check!(5, config(p, ctx, FSCONFIG_SET_STRING, "lowerdir", "/tmp:/") == Ok(0));
+            check!(6, sys(p, nr::CLOSE, &[ctx]) == Ok(0));
+
+            check!(7, mkdir(p, "/tmp/adm-pick").is_ok());
+            check!(8, sys(p, nr::UNSHARE, &[CLONE_NEWUSER | CLONE_NEWNS]) == Ok(0));
+            // Its own tmpfs: picked and reconfigured.
+            check!(9, mount(p, "u", "/tmp/adm-pick", "tmpfs", 0, "size=1m") == Ok(0));
+            let own = sys(p, nr::FSPICK, &[AT_FDCWD, cstr(2, "/tmp/adm-pick"), 0]).map_err(|_| 10u64)?;
+            check!(11, config(p, own, FSCONFIG_SET_STRING, "size", "2m") == Ok(0));
+            check!(12, config(p, own, FSCONFIG_CMD_RECONFIGURE, "", "") == Ok(0));
+            check!(13, text(p, "/proc/self/mounts").contains("u /tmp/adm-pick tmpfs rw,relatime,size=2048k 0 0\n"));
+            // The root file system was made outside.
+            let other = sys(p, nr::FSPICK, &[AT_FDCWD, cstr(2, "/"), 0]).map_err(|_| 14u64)?;
+            check!(15, config(p, other, FSCONFIG_SET_FLAG, "ro", "") == Ok(0));
+            check!(16, config(p, other, FSCONFIG_CMD_RECONFIGURE, "", "") == Err(Errno::EPERM));
+            let fd = create(p, "/tmp/adm-pick/still-writable", "w").map_err(|_| 17u64)?;
+            check!(18, sys(p, nr::CLOSE, &[fd]) == Ok(0));
+            check!(19, mkdir(p, "/tmp/adm-pick-2").is_ok());
+            Ok(())
+        })
+    }
+}
