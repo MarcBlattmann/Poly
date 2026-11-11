@@ -82,6 +82,21 @@ fn find(list: &[Top], h: u32) -> Option<&Top> {
     list.iter().find(|t| t.hwnd == h)
 }
 
+/// Whether `t` is owned by `owner`, directly or through its owners.
+fn owned_by(list: &[Top], t: &Top, owner: u32) -> bool {
+    let mut cur = t.owner;
+    for _ in 0..16 {
+        if cur == 0 {
+            return false;
+        }
+        if cur == owner {
+            return true;
+        }
+        cur = find(list, cur).map_or(0, |o| o.owner);
+    }
+    false
+}
+
 /// The handles of a list, in its order.
 pub fn handles(list: &[Top]) -> Vec<u32> {
     list.iter().map(|t| t.hwnd).collect()
@@ -119,7 +134,8 @@ fn top_slot(list: &[Top], order: &[u32], topmost: bool, barrier: Option<u32>) ->
 /// from the old one.
 pub fn raise(list: &[Top], hwnd: u32, barrier: Option<u32>) -> Vec<u32> {
     let Some(w) = find(list, hwnd) else { return handles(list) };
-    let owned: Vec<u32> = list.iter().filter(|t| t.owner == hwnd && t.hwnd != hwnd).map(|t| t.hwnd).collect();
+    // What it owns, and what those own (an owned popup's helper: gaw_owner).
+    let owned: Vec<u32> = list.iter().filter(|t| t.hwnd != hwnd && owned_by(list, t, hwnd)).map(|t| t.hwnd).collect();
     let mut order: Vec<u32> = list.iter().map(|t| t.hwnd).filter(|h| *h != hwnd && !owned.contains(h)).collect();
     let at = top_slot(list, &order, w.is(TOPMOST), barrier);
     order.insert(at, hwnd);
@@ -352,6 +368,10 @@ mod tests {
         owned.owner = A;
         let list = [plain(B), owned, helper(A, 0), plain(A)];
         assert_eq!(raise(&list, A, None), vec![D, I, A, B]);
+        // The helper of an active owned popup comes along with its owner's
+        // owner: no move (gaw_owner: the popup is hidden, its owner takes over).
+        let list = [helper(D, 0), owned, plain(A), plain(B)];
+        assert_eq!(raise(&list, A, None), handles(&list));
     }
 
     #[test]

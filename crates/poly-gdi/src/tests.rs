@@ -1033,6 +1033,23 @@ fn a_brush_or_pen_deleted_around_save_dc_draws_by_its_use() {
     g.select_object(dc, u64::from(g.stock(WHITE_BRUSH))).unwrap();
     assert_eq!(g.object_type(br), 0);
     assert_eq!(g.select_object(dc, br), Ok(0));
+    // A brush a state was only saved with (never drawn with) waits: after
+    // RestoreDC it draws in its own colour, and it is gone when the DC
+    // selects another one (do_brush_uses: type 0).
+    let saved_with = u64::from(g.create_solid_brush(rgb(0x10, 0xA0, 0xF0)));
+    g.select_object(dc, saved_with).unwrap();
+    let lvl = g.save_dc(dc);
+    let other = u64::from(g.create_solid_brush(rgb(1, 1, 1)));
+    g.select_object(dc, other).unwrap();
+    assert!(g.delete_object(saved_with));
+    assert!(g.restore_dc(dc, lvl));
+    assert_eq!(u64::from(g.current_object(dc, OBJ_BRUSH)), saved_with);
+    g.pat_blt(dc, 0, 0, 8, 4, 0x00F0_0021);
+    assert_eq!(px[3 * 8 + 3], 0x0010_A0F0);
+    assert!(g.delete_object(other));
+    let next = u64::from(g.create_solid_brush(rgb(0x77, 0x66, 0x55)));
+    g.select_object(dc, next).unwrap();
+    assert_eq!((g.object_type(saved_with), g.object_type(next)), (0, OBJ_BRUSH));
     // A deleted region: FillRgn fails; a brush deleted before it was
     // selected fills white through FillRect.
     let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 0, 1, 1)).unwrap());

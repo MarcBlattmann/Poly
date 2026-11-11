@@ -325,10 +325,10 @@ impl Wm {
         if (any_thread || w.thread == key) && self.needs_paint(h) {
             out.push(h);
         }
-        let mut kids: Vec<(u64, u32)> =
-            w.children.iter().filter_map(|&c| self.get(u64::from(c)).map(|cw| (cw.seq, c))).collect();
-        kids.sort_by_key(|&(seq, _)| core::cmp::Reverse(seq));
-        for (_, c) in kids {
+        // Children in their z order, from the top down: the first created
+        // is the top one (BeginPaint.yaml `clip_children`; bpn_visible: X,
+        // Y, Z after their parent).
+        for &c in &w.children {
             self.paint_walk(key, any_thread, c, out);
         }
     }

@@ -98,6 +98,10 @@ struct DcState {
     /// selected still draws with (DeleteObject.yaml `selected_brush_pen`).
     brush_used: bool,
     pen_used: bool,
+    /// The DC has drawn with the selected brush / pen itself (a save does
+    /// not count): a brush or pen deleted then stays whole (`second_dc`).
+    brush_drawn: bool,
+    pen_drawn: bool,
     /// The clip region, in device coordinates (`SelectClipRgn.yaml`).
     clip: Option<Region>,
     /// `SetViewportOrgEx` / `SetWindowOrgEx`: device = logical - window
@@ -490,6 +494,8 @@ impl Gdi {
             palette: self.stock(DEFAULT_PALETTE),
             brush_used: false,
             pen_used: false,
+            brush_drawn: false,
+            pen_drawn: false,
             clip: None,
             viewport_org: (0, 0),
             window_org: (0, 0),
@@ -631,14 +637,14 @@ impl Gdi {
         }
     }
 
-    /// Whether a DC has drawn with brush or pen `h` since it selected it
-    /// (or saved its state with it), in its state now or a saved one.
-    fn held_used(&self, h: u64) -> bool {
+    /// Whether a DC has drawn with brush or pen `h` since it selected it,
+    /// in its state now or a saved one.
+    fn held_drawn(&self, h: u64) -> bool {
         let h = h as u32;
         self.objs.iter().flatten().any(|o| match o {
             Obj::Dc(d) => core::iter::once(&d.state)
                 .chain(d.saved.iter())
-                .any(|s| (s.brush == h && s.brush_used) || (s.pen == h && s.pen_used)),
+                .any(|s| (s.brush == h && s.brush_drawn) || (s.pen == h && s.pen_drawn)),
             _ => false,
         })
     }
@@ -761,14 +767,17 @@ impl Gdi {
     /// `DeleteObject` (DeleteObject.yaml). A stock object stays; an object
     /// a DC has selected waits (`delete_pending`) and goes when it is
     /// deselected; a second delete of either fails. A brush or pen that a
-    /// DC which has it selected has drawn with (or saved its state with)
-    /// stays whole: the call returns 1 and changes nothing (`second_dc`:
-    /// GetObject still works, another DC accepts it and draws in its
-    /// colour, a second delete returns 1 again, and when every DC has let
-    /// go the handle still is the object).
+    /// DC which has it selected has drawn with stays whole: the call
+    /// returns 1 and changes nothing (`second_dc`: GetObject still works,
+    /// another DC accepts it and draws in its colour, a second delete
+    /// returns 1 again, and when every DC has let go the handle still is
+    /// the object). One that a state was only saved with waits like an
+    /// unused one, but draws in its own colour in the states that were
+    /// saved with it (`savedc_states`, do_brush_uses: gone when the last
+    /// state lets go).
     pub fn delete_object(&mut self, h: u64) -> bool {
         let held = self.held(h);
-        let used = held && self.held_used(h);
+        let used = held && self.held_drawn(h);
         if matches!(
             self.obj(h),
             Some(Obj::Brush { stock: false, deleted: false, delete_pending: false, dead: false, .. })
@@ -991,10 +1000,12 @@ impl Gdi {
         let old = match kind {
             OBJ_BRUSH => {
                 d.state.brush_used = false;
+                d.state.brush_drawn = false;
                 core::mem::replace(&mut d.state.brush, h)
             }
             OBJ_PEN => {
                 d.state.pen_used = false;
+                d.state.pen_drawn = false;
                 core::mem::replace(&mut d.state.pen, h)
             }
             OBJ_FONT => core::mem::replace(&mut d.state.font, h),
@@ -1700,8 +1711,11 @@ impl Gdi {
     /// NULL, though the DCs keep naming it and paint white).
     fn mark_used(&mut self, dc: u64, brush: bool, pen: bool) {
         let Some(d) = self.dc(dc) else { return };
-        let current = u64::from(d.state.brush);
-        if brush && let Some(Obj::Brush { delete_pending: true, dead, .. }) = self.obj_mut(current) {
+        let (current, own) = (u64::from(d.state.brush), d.state.brush_used);
+        if brush
+            && !own
+            && let Some(Obj::Brush { delete_pending: true, dead, .. }) = self.obj_mut(current)
+        {
             *dead = true;
         }
         let Some(d) = self.dc(dc) else { return };
@@ -1714,6 +1728,8 @@ impl Gdi {
         if let Some(s) = self.state(dc) {
             s.brush_used |= b;
             s.pen_used |= p;
+            s.brush_drawn |= b;
+            s.pen_drawn |= p;
         }
     }
 
