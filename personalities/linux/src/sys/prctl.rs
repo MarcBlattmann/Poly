@@ -20,6 +20,7 @@ pub const PR_GET_NAME: u32 = 16;
 pub const PR_CAPBSET_READ: u32 = 23;
 pub const PR_CAPBSET_DROP: u32 = 24;
 pub const PR_GET_SECUREBITS: u32 = 27;
+pub const PR_SET_SECUREBITS: u32 = 28;
 pub const PR_SET_NO_NEW_PRIVS: u32 = 38;
 pub const PR_GET_NO_NEW_PRIVS: u32 = 39;
 pub const PR_CAP_AMBIENT: u32 = 47;
@@ -88,7 +89,10 @@ fn cap_arg(v: u64) -> Result<u32, Errno> {
 ///   with `arg2`-`arg5` 0.
 /// - `PR_CAP_AMBIENT` with `IS_SET`, `RAISE`, `LOWER` (`arg4`, `arg5` 0)
 ///   and `CLEAR_ALL` (`arg3`-`arg5` 0).
-/// - `PR_GET_SECUREBITS`: only `SECBIT_KEEP_CAPS` can be set in Poly.
+/// - `PR_GET_SECUREBITS` / `PR_SET_SECUREBITS` (`arg3`-`arg5` ignored):
+///   the secure bits ([`cred::Creds::set_securebits`]); a refused change
+///   is `EPERM`, never `EINVAL`. `PR_SET_KEEPCAPS` is `EPERM` while
+///   `SECBIT_KEEP_CAPS` is locked.
 /// - `PR_SET_SECCOMP` / `PR_GET_SECCOMP`: [`super::seccomp`] (ADR 0054).
 /// - `PR_SET_NAME` / `PR_GET_NAME`: the thread's name, 16 bytes with the
 ///   NUL ("silently truncated" if longer); `EFAULT`.
@@ -126,10 +130,10 @@ pub fn prctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         PR_GET_KEEPCAPS => Ok(u64::from(cred::current(k).keep_caps)),
         PR_SET_KEEPCAPS => {
             let keep = bool_arg(arg2)?;
-            cred::change(k, |c| c.keep_caps = keep);
-            Ok(0)
+            cred::change(k, |c| c.set_keep_caps(keep)).map(|()| 0)
         }
-        PR_GET_SECUREBITS => Ok(if cred::current(k).keep_caps { SECBIT_KEEP_CAPS } else { 0 }),
+        PR_GET_SECUREBITS => Ok(u64::from(cred::current(k).securebits())),
+        PR_SET_SECUREBITS => cred::change(k, |c| c.set_securebits(arg2)).map(|()| 0),
         PR_CAPBSET_READ => {
             let c = cap_arg(arg2)?;
             Ok(u64::from(cred::current(k).caps.bounding.contains(c)))
