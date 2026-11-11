@@ -172,3 +172,166 @@ kernel_test! {
         })
     }
 }
+
+/// More of `linux/mount.h` and `linux/sched.h` for the tests below.
+const MS_REC: u64 = 16384;
+const MS_MOVE: u64 = 8192;
+const MS_PRIVATE: u64 = 1 << 18;
+const MS_NOATIME: u64 = 1024;
+const MNT_DETACH: u64 = 2;
+const CLONE_NEWNS: u64 = 0x0002_0000;
+const CLONE_NEWUSER: u64 = 0x1000_0000;
+
+fn umount2(p: &Process, target: &str, flags: u64) -> Result<u64, Errno> {
+    sys(p, nr::UMOUNT2, &[cstr(2, target), flags])
+}
+
+kernel_test! {
+    /// ADR 0177: `MS_BIND | MS_REC` copies the mounts below the source as
+    /// mounts of their own; a plain bind does not.
+    fn a_recursive_bind_copies_the_mounts_below() -> TestResult {
+        let (process, memory) = setup()?;
+        run(&process, &memory, |p| -> Check {
+            check!(1, sys(p, nr::UNSHARE, &[CLONE_NEWNS]) == Ok(0));
+            check!(2, mount(p, "", "/", "", MS_REC | MS_PRIVATE, "") == Ok(0));
+            for d in ["/tmp/adm-s", "/tmp/adm-c", "/tmp/adm-p"] {
+                check!(3, mkdir(p, d).is_ok());
+            }
+            check!(4, mount(p, "src", "/tmp/adm-s", "tmpfs", 0, "") == Ok(0));
+            check!(5, mkdir(p, "/tmp/adm-s/a").is_ok());
+            check!(6, mount(p, "sub", "/tmp/adm-s/a", "tmpfs", MS_NODEV, "") == Ok(0));
+            let fd = create(p, "/tmp/adm-s/a/fa", "in-a").map_err(|_| 7u64)?;
+            check!(8, sys(p, nr::CLOSE, &[fd]) == Ok(0));
+            // Recursive: the submount is there, listed, with its flags and source.
+            check!(9, mount(p, "/tmp/adm-s", "/tmp/adm-c", "", MS_BIND | MS_REC, "") == Ok(0));
+            check!(10, read_file(p, "/tmp/adm-c/a/fa") == Ok(b"in-a".to_vec()));
+            let mounts = text(p, "/proc/self/mounts");
+            check!(11, mounts.contains("src /tmp/adm-c tmpfs rw,relatime 0 0\n"));
+            check!(12, mounts.contains("sub /tmp/adm-c/a tmpfs rw,nodev,relatime 0 0\n"));
+            // Plain: the directory the submount covers.
+            check!(13, mount(p, "/tmp/adm-s", "/tmp/adm-p", "", MS_BIND, "") == Ok(0));
+            check!(14, read_file(p, "/tmp/adm-p/a/fa") == Err(Errno::ENOENT));
+            check!(15, !text(p, "/proc/self/mounts").contains(" /tmp/adm-p/a "));
+            check!(16, umount(p, "/tmp/adm-p") == Ok(0));
+            // The copies unmount from the bottom up, or all at once.
+            check!(17, umount(p, "/tmp/adm-c") == Err(Errno::EBUSY));
+            check!(18, umount(p, "/tmp/adm-c/a") == Ok(0));
+            check!(19, umount(p, "/tmp/adm-c") == Ok(0));
+            check!(20, mount(p, "/tmp/adm-s", "/tmp/adm-c", "", MS_BIND | MS_REC, "") == Ok(0));
+            check!(21, umount2(p, "/tmp/adm-c", MNT_DETACH) == Ok(0));
+            check!(22, read_file(p, "/tmp/adm-c/a/fa") == Err(Errno::ENOENT));
+            check!(23, read_file(p, "/tmp/adm-s/a/fa") == Ok(b"in-a".to_vec()));
+            Ok(())
+        })
+    }
+}
+
+kernel_test! {
+    /// ADR 0177: the mounts a user namespace inherits are locked, the file
+    /// systems made outside it are not its to change, and
+    /// pivot_root(".", ".") hides the old root beneath the new one.
+    fn inherited_mounts_are_locked_in_a_user_namespace() -> TestResult {
+        let (process, memory) = setup()?;
+        run(&process, &memory, |p| -> Check {
+            check!(1, sys(p, nr::UNSHARE, &[CLONE_NEWNS]) == Ok(0));
+            check!(2, mount(p, "", "/", "", MS_REC | MS_PRIVATE, "") == Ok(0));
+            for d in ["/tmp/adm-x", "/tmp/adm-y", "/tmp/adm-c1", "/tmp/adm-c2"] {
+                check!(3, mkdir(p, d).is_ok());
+            }
+            check!(4, mount(p, "x", "/tmp/adm-x", "tmpfs", MS_NOEXEC | MS_NOATIME, "") == Ok(0));
+            check!(5, mount(p, "y", "/tmp/adm-y", "tmpfs", 0, "") == Ok(0));
+            check!(6, mkdir(p, "/tmp/adm-y/in").is_ok());
+            check!(7, mount(p, "in", "/tmp/adm-y/in", "tmpfs", MS_NODEV, "") == Ok(0));
+            check!(8, sys(p, nr::UNSHARE, &[CLONE_NEWUSER | CLONE_NEWNS]) == Ok(0));
+            // In place.
+            check!(9, umount(p, "/tmp/adm-x") == Err(Errno::EINVAL));
+            check!(10, umount2(p, "/tmp/adm-y/in", MNT_DETACH) == Err(Errno::EINVAL));
+            check!(11, umount2(p, "/tmp/adm-y", MNT_DETACH) == Err(Errno::EINVAL));
+            check!(12, mount(p, "/tmp/adm-x", "/tmp/adm-c1", "", MS_MOVE, "") == Err(Errno::EINVAL));
+            // Flags and the access time mode.
+            let bind_remount = MS_REMOUNT | MS_BIND;
+            check!(13, mount(p, "", "/tmp/adm-x", "", bind_remount | MS_NOEXEC, "") == Ok(0));
+            check!(14, mount(p, "", "/tmp/adm-x", "", bind_remount | MS_NOATIME, "") == Err(Errno::EPERM));
+            check!(15, mount(p, "", "/tmp/adm-x", "", bind_remount | MS_NOEXEC | MS_NOSUID, "") == Ok(0));
+            check!(16, mount(p, "", "/tmp/adm-x", "", bind_remount | MS_NOEXEC, "") == Ok(0));
+            check!(17, mount(p, "", "/tmp/adm-y/in", "", bind_remount, "") == Err(Errno::EPERM));
+            check!(18, mount(p, "", "/tmp/adm-y", "", bind_remount | MS_NOATIME, "") == Err(Errno::EPERM));
+            check!(19, mount(p, "", "/tmp/adm-y", "", bind_remount, "") == Ok(0));
+            // The file system itself is the outer namespace's.
+            check!(20, mount(p, "", "/tmp/adm-y", "", MS_REMOUNT | MS_RDONLY, "") == Err(Errno::EPERM));
+            // Copies.
+            check!(21, mount(p, "/tmp/adm-y", "/tmp/adm-c1", "", MS_BIND, "") == Err(Errno::EINVAL));
+            check!(22, mount(p, "/tmp/adm-y", "/tmp/adm-c1", "", MS_BIND | MS_REC, "") == Ok(0));
+            check!(23, umount(p, "/tmp/adm-c1/in") == Err(Errno::EINVAL));
+            check!(24, mount(p, "", "/tmp/adm-c1/in", "", bind_remount, "") == Err(Errno::EPERM));
+            check!(25, umount(p, "/tmp/adm-c1") == Err(Errno::EBUSY));
+            check!(26, umount2(p, "/tmp/adm-c1", MNT_DETACH) == Ok(0));
+            check!(27, mount(p, "/tmp/adm-x", "/tmp/adm-c2", "", MS_BIND, "") == Ok(0));
+            check!(28, mount(p, "", "/tmp/adm-c2", "", bind_remount, "") == Err(Errno::EPERM));
+            check!(29, umount(p, "/tmp/adm-c2") == Ok(0));
+            // A mount of its own: on top of a locked one, changed and removed freely.
+            check!(30, mount(p, "own", "/tmp/adm-x", "tmpfs", 0, "") == Ok(0));
+            check!(31, mount(p, "", "/tmp/adm-x", "", MS_REMOUNT | MS_RDONLY, "") == Ok(0));
+            check!(32, mount(p, "", "/tmp/adm-x", "", MS_REMOUNT, "") == Ok(0));
+            check!(33, umount(p, "/tmp/adm-x") == Ok(0));
+            check!(34, umount(p, "/tmp/adm-x") == Err(Errno::EINVAL));
+            // The sandbox's last step: a new root, the old one beneath it,
+            // then gone with everything it had.
+            check!(35, mount(p, "root", "/tmp/adm-c1", "tmpfs", 0, "") == Ok(0));
+            let fd = create(p, "/tmp/adm-c1/g", "y").map_err(|_| 36u64)?;
+            check!(37, sys(p, nr::CLOSE, &[fd]) == Ok(0));
+            check!(38, sys(p, nr::CHDIR, &[cstr(2, "/tmp/adm-c1")]) == Ok(0));
+            check!(39, sys(p, nr::PIVOT_ROOT, &[cstr(1, "."), cstr(2, ".")]) == Ok(0));
+            check!(40, read_file(p, "/g") == Ok(b"y".to_vec()));
+            check!(41, read_file(p, "g") == Ok(b"y".to_vec()));
+            check!(42, mode(p, "/tmp") == Err(Errno::ENOENT));
+            check!(43, sys(p, nr::PIVOT_ROOT, &[cstr(1, "."), cstr(2, ".")]) == Err(Errno::EBUSY));
+            check!(44, umount2(p, ".", MNT_DETACH) == Ok(0));
+            check!(45, read_file(p, "/g") == Ok(b"y".to_vec()));
+            check!(46, mode(p, "/tmp") == Err(Errno::ENOENT));
+            Ok(())
+        })
+    }
+}
+
+kernel_test! {
+    /// ADR 0177, decision 9: a shared writable mapping of a file of an
+    /// overlay copies the file up and maps the upper copy, so what is
+    /// written through it is in the upper layer and the merged view at
+    /// once, and the lower layer keeps its own.
+    fn a_shared_mapping_of_an_overlay_file_writes_the_upper_layer() -> TestResult {
+        let (process, memory) = setup()?;
+        run(&process, &memory, |p| -> Check {
+            check!(1, sys(p, nr::UNSHARE, &[CLONE_NEWNS]) == Ok(0));
+            check!(2, mkdir(p, "/tmp/adm-ov").is_ok());
+            check!(3, mount(p, "ov", "/tmp/adm-ov", "tmpfs", 0, "") == Ok(0));
+            for d in ["/tmp/adm-ov/l", "/tmp/adm-ov/u", "/tmp/adm-ov/w", "/tmp/adm-ov/m"] {
+                check!(4, mkdir(p, d).is_ok());
+            }
+            let fd = create(p, "/tmp/adm-ov/l/mm", "0123456789").map_err(|_| 5u64)?;
+            check!(6, sys(p, nr::CLOSE, &[fd]) == Ok(0));
+            let layers = "lowerdir=/tmp/adm-ov/l,upperdir=/tmp/adm-ov/u,workdir=/tmp/adm-ov/w";
+            check!(7, mount(p, "overlay", "/tmp/adm-ov/m", "overlay", 0, layers) == Ok(0));
+            // O_RDWR: the file is copied up at open.
+            let fd = sys(p, nr::OPENAT, &[AT_FDCWD, cstr(6, "/tmp/adm-ov/m/mm"), 2, 0]).map_err(|_| 8u64)?;
+            check!(9, read_file(p, "/tmp/adm-ov/u/mm") == Ok(b"0123456789".to_vec()));
+            // PROT_READ | PROT_WRITE, MAP_SHARED.
+            let at = sys(p, nr::MMAP, &[0, 4096, 3, 1, fd, 0]).map_err(|_| 10u64)?;
+            check!(11, super::files_tests::peek(at, 4) == b"0123");
+            check!(12, crate::user::copy_to_user(at + 2, b"XY").is_ok());
+            // The upper layer and the merged view see it before any sync.
+            check!(13, read_file(p, "/tmp/adm-ov/u/mm") == Ok(b"01XY456789".to_vec()));
+            check!(14, read_file(p, "/tmp/adm-ov/m/mm") == Ok(b"01XY456789".to_vec()));
+            // MS_SYNC.
+            check!(15, sys(p, nr::MSYNC, &[at, 4096, 4]) == Ok(0));
+            check!(16, sys(p, nr::MUNMAP, &[at, 4096]) == Ok(0));
+            check!(17, sys(p, nr::CLOSE, &[fd]) == Ok(0));
+            check!(18, read_file(p, "/tmp/adm-ov/u/mm") == Ok(b"01XY456789".to_vec()));
+            check!(19, read_file(p, "/tmp/adm-ov/m/mm") == Ok(b"01XY456789".to_vec()));
+            check!(20, read_file(p, "/tmp/adm-ov/l/mm") == Ok(b"0123456789".to_vec()));
+            check!(21, umount(p, "/tmp/adm-ov/m") == Ok(0));
+            check!(22, umount(p, "/tmp/adm-ov") == Ok(0));
+            Ok(())
+        })
+    }
+}
