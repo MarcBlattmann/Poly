@@ -219,6 +219,12 @@ impl Thread<'_> {
         fs::vfs().move_mount(&self.process().files.cred(), &src, &dst).map_err(vfs_errno)
     }
 
+    pub(super) fn mnt_set_group(&mut self, from: &PathAt, to: &PathAt) -> Result<(), Errno> {
+        let src = self.resolve_at(from)?;
+        let dst = self.resolve_at(to)?;
+        fs::vfs().share_group(&self.process().files.cred(), &src, &dst).map_err(vfs_errno)
+    }
+
     pub(super) fn mnt_setattr(&mut self, at: &PathAt, recursive: bool, change: &AttrChange) -> Result<(), Errno> {
         let node = self.resolve_at(at)?;
         if change.is_empty() {

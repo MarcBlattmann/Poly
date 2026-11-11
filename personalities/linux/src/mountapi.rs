@@ -35,6 +35,9 @@ pub mod uapi {
     pub const MOVE_MOUNT_T_SYMLINKS: u32 = 0x10;
     pub const MOVE_MOUNT_T_AUTOMOUNTS: u32 = 0x20;
     pub const MOVE_MOUNT_T_EMPTY_PATH: u32 = 0x40;
+    /// The target mount joins the source mount's propagation group; no
+    /// mount moves.
+    pub const MOVE_MOUNT_SET_GROUP: u32 = 0x100;
 
     pub const FSOPEN_CLOEXEC: u32 = 0x01;
     pub const FSPICK_CLOEXEC: u32 = 0x01;

@@ -58,6 +58,10 @@ impl LinuxAdmin for Recorder {
         self.note(format!("move_mount {from:?} {to:?}"));
         Ok(())
     }
+    fn mount_set_group(&mut self, from: &PathAt, to: &PathAt) -> Result<(), Errno> {
+        self.note(format!("mount_set_group {from:?} {to:?}"));
+        Ok(())
+    }
     fn mount_setattr(&mut self, at: &PathAt, recursive: bool, change: &AttrChange) -> Result<(), Errno> {
         self.note(format!("mount_setattr {at:?} {recursive} {change:?}"));
         Ok(())
@@ -232,7 +236,15 @@ fn open_tree_and_move_mount_arguments() {
     assert_eq!(sys(&mut k, nr::MOVE_MOUNT, &[3, empty, AT_FDCWD_U, p, 0]), Err(Errno::ENOENT));
     let f = u64::from(MOVE_MOUNT_F_EMPTY_PATH);
     assert_eq!(sys(&mut k, nr::MOVE_MOUNT, &[3, empty, AT_FDCWD_U, p, f]), Ok(0));
-    let log = taken(&log);
+    // MOVE_MOUNT_SET_GROUP goes to its own service; 0x08, 0x80 and 0x1000
+    // are no flags.
+    for bad in [0x08u64, 0x80, 0x1000, u64::from(u32::MAX)] {
+        assert_eq!(sys(&mut k, nr::MOVE_MOUNT, &[AT_FDCWD_U, p, AT_FDCWD_U, p, bad]), Err(Errno::EINVAL));
+    }
+    let group = u64::from(MOVE_MOUNT_SET_GROUP);
+    assert_eq!(sys(&mut k, nr::MOVE_MOUNT, &[AT_FDCWD_U, p, AT_FDCWD_U, p, group]), Ok(0));
+    let mut log = taken(&log);
+    assert!(log.pop().unwrap().starts_with("mount_set_group PathAt { dirfd: -100"));
     assert_eq!(log.len(), 3);
     assert!(
         log[0].contains("path: [47, 116") && log[0].contains("follow: false") && log[0].ends_with("Some(true) true")

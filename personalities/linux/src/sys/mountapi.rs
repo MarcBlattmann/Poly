@@ -148,8 +148,10 @@ fn set_attributes(
 
 /// move_mount(from_dfd, from_path, to_dfd, to_path, flags)
 ///
-/// `MOVE_MOUNT_SET_GROUP` and `MOVE_MOUNT_BENEATH` (peer groups, mounting
-/// beneath the top of a stack) are not supported: `EINVAL`.
+/// With `MOVE_MOUNT_SET_GROUP` nothing moves: the target mount joins the
+/// source mount's propagation group (the spec sheet of mntapi_move_mount:
+/// accepted for two bind mounts). `MOVE_MOUNT_BENEATH` (mounting beneath
+/// the top of a stack) is not supported: `EINVAL`.
 pub fn move_mount(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     require_mount(k)?;
     let flags = a.uint(4);
@@ -158,12 +160,16 @@ pub fn move_mount(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         | MOVE_MOUNT_F_EMPTY_PATH
         | MOVE_MOUNT_T_SYMLINKS
         | MOVE_MOUNT_T_AUTOMOUNTS
-        | MOVE_MOUNT_T_EMPTY_PATH;
+        | MOVE_MOUNT_T_EMPTY_PATH
+        | MOVE_MOUNT_SET_GROUP;
     if flags & !known != 0 {
         return Err(Errno::EINVAL);
     }
     let from = path_at(k, a.fd(0), a.ptr(1), flags & MOVE_MOUNT_F_EMPTY_PATH != 0, flags & MOVE_MOUNT_F_SYMLINKS != 0)?;
     let to = path_at(k, a.fd(2), a.ptr(3), flags & MOVE_MOUNT_T_EMPTY_PATH != 0, flags & MOVE_MOUNT_T_SYMLINKS != 0)?;
+    if flags & MOVE_MOUNT_SET_GROUP != 0 {
+        return admin(k)?.mount_set_group(&from, &to).map(|()| 0);
+    }
     admin(k)?.move_mount(&from, &to).map(|()| 0)
 }
 

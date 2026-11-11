@@ -256,6 +256,24 @@ impl Vfs {
         Ok(())
     }
 
+    /// `move_mount(2)` with `MOVE_MOUNT_SET_GROUP`: the mount `dst` is the
+    /// root of joins the propagation group of the mount `src` is the root
+    /// of (its peers, or the group it is a slave of; a private source
+    /// makes it private). Both must be roots of mounts of the same file
+    /// system, as two bind mounts are (`EINVAL`); nothing moves.
+    pub fn share_group(&self, cred: &Cred, src: &NodeRef, dst: &NodeRef) -> Result<()> {
+        if !cred.has(cap::SYS_ADMIN) {
+            return Err(Errno::EPERM);
+        }
+        let (src, dst) = (src.loc(), dst.loc());
+        if !src.is_mount_root() || !dst.is_mount_root() || !src.mount.same_sb(&dst.mount) {
+            return Err(Errno::EINVAL);
+        }
+        let _table = self.mounts.lock();
+        dst.mount.set_groups(src.mount.peer_group(), src.mount.master_group());
+        Ok(())
+    }
+
     /// `pivot_root(2)`: the mount `new_root` names becomes the first mount
     /// of the caller's namespace and the old first mount is mounted on
     /// `put_old`; `ctx`'s root and working directory, where they were the

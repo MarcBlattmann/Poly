@@ -534,6 +534,10 @@ impl LinuxAdmin for Thread<'_> {
         self.mnt_move_mount(from, to)
     }
 
+    fn mount_set_group(&mut self, from: &PathAt, to: &PathAt) -> Result<(), Errno> {
+        self.mnt_set_group(from, to)
+    }
+
     fn mount_setattr(&mut self, at: &PathAt, recursive: bool, change: &AttrChange) -> Result<(), Errno> {
         self.mnt_setattr(at, recursive, change)
     }

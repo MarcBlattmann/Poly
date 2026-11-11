@@ -287,6 +287,37 @@ fn old_root_id(env: &Env) -> MountId {
     env.vfs.namespace_tree(&env.ctx).iter().find(|m| m.is_beneath()).map(|m| m.id()).expect("an old root")
 }
 
+/// `MOVE_MOUNT_SET_GROUP`: two mounts of one file system share a group.
+#[test]
+fn share_group_makes_the_target_a_peer_of_the_source() {
+    let env = Env::new();
+    for d in ["/a", "/b", "/other", "/a/in"] {
+        env.mkdir(d);
+    }
+    env.new_tmpfs("/a");
+    env.bind("/a", "/b", false).unwrap();
+    env.new_tmpfs("/other");
+    let share = |src: &str, dst: &str| env.vfs.share_group(&env.root, &env.found(src), &env.found(dst));
+    // Private mounts: accepted, nothing to share.
+    assert_eq!(share("/a", "/b"), Ok(()));
+    assert_eq!(env.found("/b").mount().peer_group(), 0);
+    let a = env.found("/a").mount().clone();
+    env.vfs.set_propagation(core::slice::from_ref(&a), crate::propagation::MS_SHARED);
+    assert_eq!(share("/a", "/b"), Ok(()));
+    assert_eq!(env.found("/b").mount().peer_group(), a.peer_group());
+    // A mount made below one now appears below the other.
+    env.mkdir("/a/s");
+    env.new_tmpfs("/a/s");
+    assert!(is_mount(&env, "/b/s"));
+    // Not a mount's root, another file system, no privilege.
+    env.mkdir("/a/plain");
+    assert_eq!(share("/a", "/a/plain"), Err(Errno::EINVAL));
+    assert_eq!(share("/a/plain", "/b"), Err(Errno::EINVAL));
+    assert_eq!(share("/a", "/other"), Err(Errno::EINVAL));
+    let user = Cred::user(1, 1);
+    assert_eq!(env.vfs.share_group(&user, &env.found("/a"), &env.found("/b")), Err(Errno::EPERM));
+}
+
 /// The spec sheet of mntapi_move_mount: kinds, namespaces, loops.
 #[test]
 fn move_mount_refuses_mismatched_kinds_other_namespaces_and_loops() {
