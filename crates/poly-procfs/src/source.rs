@@ -333,6 +333,52 @@ pub struct KernelInfo {
     pub domainname: Vec<u8>,
 }
 
+/// A file of `/proc/<pid>/net` (proc_pid_net(5)): what the network
+/// namespace of the process holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NetFile {
+    /// `dev`: the devices and their counters.
+    Dev,
+    /// `route`: the IPv4 routes of the main table.
+    Route,
+}
+
+/// A file whose contents belong to the IPC namespace of the process that
+/// reads or writes it (ipc_namespaces(7)): the listings of
+/// `/proc/sysvipc` and the System V and POSIX message queue settings
+/// under `/proc/sys/kernel` and `/proc/sys/fs/mqueue`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IpcFile {
+    /// `/proc/sysvipc/msg`, `shm` and `sem`.
+    SysvMsg,
+    SysvShm,
+    SysvSem,
+    /// `/proc/sys/kernel/msgmni`, `msgmax`, `msgmnb`.
+    Msgmni,
+    Msgmax,
+    Msgmnb,
+    /// `/proc/sys/kernel/shmmax`, `shmall`, `shmmni`.
+    Shmmax,
+    Shmall,
+    Shmmni,
+    /// `/proc/sys/kernel/sem`: four numbers.
+    Sem,
+    /// `/proc/sys/fs/mqueue/queues_max`, `msg_max`, `msgsize_max`,
+    /// `msg_default`, `msgsize_default`.
+    MqQueuesMax,
+    MqMsgMax,
+    MqMsgsizeMax,
+    MqMsgDefault,
+    MqMsgsizeDefault,
+}
+
+impl IpcFile {
+    /// The settings can be written; the listings cannot.
+    pub const fn writable(self) -> bool {
+        !matches!(self, IpcFile::SysvMsg | IpcFile::SysvShm | IpcFile::SysvSem)
+    }
+}
+
 /// The facts procfs shows, provided by the kernel. Every method is called
 /// without procfs or VFS locks held, from the thread that reads `/proc`,
 /// so the kernel may take its own locks (not the reader's file-system
@@ -454,6 +500,28 @@ pub trait ProcSource: Send + Sync {
     /// (setns(2) through an open descriptor). Nothing by default.
     fn pin_namespace(&self, inum: u32, kind: usize, pin: bool) {
         let _ = (inum, kind, pin);
+    }
+
+    /// The text of `/proc/<pid>/net/<file>`: the network namespace of
+    /// process `pid` as it is now. `None` (the default) if there is no
+    /// such process.
+    fn net_file(&self, pid: u32, file: NetFile) -> Option<Vec<u8>> {
+        let _ = (pid, file);
+        None
+    }
+
+    /// The text of `file` in the IPC namespace of the calling thread's
+    /// process. Empty by default.
+    fn ipc_file(&self, file: IpcFile) -> Vec<u8> {
+        let _ = file;
+        Vec::new()
+    }
+
+    /// A write of `data` to the setting `file` of the calling thread's
+    /// IPC namespace: the bytes taken, or the error. `EROFS` by default.
+    fn write_ipc_file(&self, file: IpcFile, data: &[u8]) -> Result<usize, Errno> {
+        let _ = (file, data);
+        Err(Errno::EROFS)
     }
 
     /// A write of `data` at `offset` to `/proc/sys/kernel/hostname` or

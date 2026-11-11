@@ -701,6 +701,19 @@ impl ProcSource for KernelProc {
         ns::Kind::from_index(kind as u32).is_some_and(|k| ns::lookup(inum, k).is_some())
     }
 
+    fn net_file(&self, pid: u32, file: poly_procfs::NetFile) -> Option<Vec<u8>> {
+        use poly_personality_linux::net::dev;
+        // The devices of the process's network namespace (ADR 0178); a
+        // process without Linux state is in the initial one.
+        let p = find(self.global(pid)?)?;
+        let net = namespaces_of(&p).and_then(|(n, _)| n.net);
+        let ifs = crate::linux::net::interfaces_of(&net);
+        Some(match file {
+            poly_procfs::NetFile::Dev => dev::proc_net_dev(&ifs),
+            poly_procfs::NetFile::Route => dev::proc_net_route(&ifs),
+        })
+    }
+
     fn may_follow_namespaces(&self, pid: u32) -> bool {
         let Some(target) = self.global(pid).and_then(find) else { return true };
         let Some(reader) = crate::linux::cred::current_creds() else { return true };

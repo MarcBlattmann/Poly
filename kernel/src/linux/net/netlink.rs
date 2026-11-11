@@ -1,22 +1,25 @@
 //! `AF_NETLINK` sockets (ADR 0048): [`NetlinkFile`] is the open file of
 //! a `NETLINK_ROUTE` socket. The protocol (parsing requests, building the
-//! link, address and route dumps) is the personality's
-//! (`poly_personality_linux::net::netlink`); this file gives it the
-//! interface's facts ([`interfaces`]), port ids (netlink(7): the first
-//! socket of a process gets its pid, later ones unique numbers) and a wait
-//! queue that is notified when replies are queued.
+//! link, address and route dumps, deciding what a change does) is the
+//! personality's (`poly_personality_linux::net::netlink`); this file gives
+//! it the devices of the socket's network namespace ([`interfaces_of`],
+//! [`set_link_up`]; ADR 0178), port ids (netlink(7): the first socket of a
+//! process gets its pid, later ones unique numbers) and a wait queue that
+//! is notified when replies are queued.
 
 use super::{NO_CREDS, bool_opt, generic_get, generic_set};
 use crate::net;
 use crate::sync::SpinLock;
 use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
-use core::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use core::net::IpAddr;
 use core::sync::atomic::{AtomicU32, Ordering};
 use poly_net::NetDevice;
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::net::netlink::{IfAddr, Interfaces, Link, LinkStats, NetlinkSocket};
+use poly_personality_linux::net::dev::LO_INDEX;
+use poly_personality_linux::net::netlink::{IfAddr, Interfaces, Link, LinkEnv, LinkStats, NetlinkSocket};
 use poly_personality_linux::net::{OptName, OptValue, SockAddr, SockOpt, SockType};
+use poly_personality_linux::ns::{self, NetNs};
 use poly_unix::{DEFAULT_BUFFER, SocketOptions};
 use poly_vfs::{FileObject, PollEvents, WaitQueue};
 
@@ -25,8 +28,8 @@ static PORTS: SpinLock<BTreeSet<u32>> = SpinLock::new(BTreeSet::new());
 /// The next port id handed out when a process's pid is taken.
 static NEXT_PORT: AtomicU32 = AtomicU32::new(0xffff_f000);
 
-/// Interface index of the loopback device and of `eth0`.
-pub const LO_INDEX: u32 = 1;
+/// Interface index of `eth0` (the loopback device is 1 in every network
+/// namespace).
 pub const ETH_INDEX: u32 = 2;
 
 #[derive(Debug)]
@@ -43,30 +46,45 @@ struct Options {
 pub struct NetlinkFile {
     ty: SockType,
     owner: u32,
+    /// The network namespace it was made in (`None`: the initial one).
+    ns: Option<Arc<NetNs>>,
     proto: SpinLock<NetlinkSocket>,
     options: SpinLock<Options>,
     queue: Arc<WaitQueue>,
 }
 
-/// The interface's facts, as `NETLINK_ROUTE` reports them: `lo` always
-/// (the stack's internal loopback), `eth0` when there is a network device.
+/// The initial network namespace's devices, as `NETLINK_ROUTE` reports
+/// them: `lo` (the stack's internal loopback), `eth0` when there is a
+/// network device.
 pub fn interfaces() -> Interfaces {
-    let mut ifs = Interfaces::default();
+    interfaces_of(&None)
+}
+
+/// The devices of network namespace `ns` (`None`: the initial one): its
+/// `lo` as the namespace keeps it (`poly_personality_linux::net::dev`),
+/// with the loopback counters of its stack, and in the initial namespace
+/// `eth0` when there is a network device.
+pub fn interfaces_of(ns: &Option<Arc<NetNs>>) -> Interfaces {
+    let stack = super::existing_stack(ns);
+    let looped = match (ns, &stack) {
+        // A namespace nothing was sent in yet.
+        (Some(_), None) => None,
+        _ => net::with_interface_in(stack.as_deref(), |iface| iface.stack.stats()),
+    };
+    let lo_stats = looped.map_or_else(LinkStats::default, |s| LinkStats {
+        rx_packets: s.loop_packets,
+        tx_packets: s.loop_packets,
+        rx_bytes: s.loop_bytes,
+        tx_bytes: s.loop_bytes,
+        ..LinkStats::default()
+    });
+    let mut ifs = ns::with_net_devices(ns, |d| d.interfaces(lo_stats));
+    if ns.is_some() {
+        return ifs;
+    }
     let has_device = net::info().is_some_and(|i| i.bdf.is_some());
     let _ = net::with_interface(|iface| {
         let stats = iface.stack.stats();
-        ifs.links.push(Link {
-            index: LO_INDEX,
-            name: b"lo".to_vec(),
-            loopback: true,
-            mac: [0; 6],
-            mtu: 65536,
-            up: true,
-            carrier: true,
-            stats: LinkStats { rx_packets: stats.loop_packets, tx_packets: stats.loop_packets, ..LinkStats::default() },
-        });
-        ifs.addrs.push(IfAddr { index: LO_INDEX, addr: IpAddr::V4(Ipv4Addr::LOCALHOST), prefix_len: 8 });
-        ifs.addrs.push(IfAddr { index: LO_INDEX, addr: IpAddr::V6(Ipv6Addr::LOCALHOST), prefix_len: 128 });
         if has_device {
             ifs.links.push(Link {
                 index: ETH_INDEX,
@@ -104,12 +122,64 @@ pub fn interfaces() -> Interfaces {
     ifs
 }
 
+/// Bring link `index` of network namespace `ns` up or down. The loopback
+/// device of any namespace: the namespace's devices record it and its
+/// stack routes to 127.0.0.0/8 and ::1 or stops. `eth0` is always up and
+/// cannot be taken down (`EOPNOTSUPP`). `ENODEV` for any other index.
+pub fn set_link_up(ns: &Option<Arc<NetNs>>, index: u32, up: bool) -> Result<(), Errno> {
+    match index {
+        LO_INDEX => {
+            ns::with_net_devices(ns, |d| d.set_lo_up(up));
+            let stack = super::stack_of(ns);
+            net::call_and_wake_in(stack.as_deref(), |s| s.set_loopback(up));
+            Ok(())
+        }
+        ETH_INDEX if ns.is_none() && net::info().is_some_and(|i| i.bdf.is_some()) => {
+            if up {
+                Ok(())
+            } else {
+                Err(Errno::EOPNOTSUPP)
+            }
+        }
+        _ => Err(Errno::ENODEV),
+    }
+}
+
+/// What a socket's requests act on: the devices of its network namespace,
+/// for a sender who may change them or not.
+struct Env<'a> {
+    ns: &'a Option<Arc<NetNs>>,
+    admin: bool,
+}
+
+impl LinkEnv for Env<'_> {
+    fn interfaces(&mut self) -> Interfaces {
+        interfaces_of(self.ns)
+    }
+
+    fn admin(&self) -> bool {
+        self.admin
+    }
+
+    fn set_up(&mut self, index: u32, up: bool) -> Result<(), Errno> {
+        set_link_up(self.ns, index, up)
+    }
+
+    fn add_loopback_address(&mut self, index: u32) -> Result<(), Errno> {
+        if index != LO_INDEX {
+            return Err(Errno::EOPNOTSUPP);
+        }
+        ns::with_net_devices(self.ns, |d| d.add_lo_addr())
+    }
+}
+
 impl NetlinkFile {
-    /// A new socket of process `owner`.
-    pub fn new(ty: SockType, owner: u32) -> Arc<NetlinkFile> {
+    /// A new socket of process `owner`, made in network namespace `ns`.
+    pub fn new(ty: SockType, owner: u32, ns: Option<Arc<NetNs>>) -> Arc<NetlinkFile> {
         Arc::new(NetlinkFile {
             ty,
             owner,
+            ns,
             proto: SpinLock::new(NetlinkSocket::new()),
             options: SpinLock::new(Options {
                 generic: SocketOptions { rcv_lowat: 1, ..SocketOptions::default() },
@@ -124,6 +194,11 @@ impl NetlinkFile {
 
     pub fn queue(&self) -> &Arc<WaitQueue> {
         &self.queue
+    }
+
+    /// The network namespace it was made in.
+    pub fn netns(&self) -> &Option<Arc<NetNs>> {
+        &self.ns
     }
 
     /// `(SO_RCVTIMEO, SO_SNDTIMEO)` in nanoseconds; 0: none.
@@ -179,15 +254,21 @@ impl NetlinkFile {
         SockAddr::Netlink { pid: nl.port, groups: nl.groups }
     }
 
-    /// A datagram to the kernel: answer it and wake readers.
+    /// A datagram to the kernel from the running thread: answer it (a
+    /// change needs the thread's `CAP_NET_ADMIN`) and wake readers.
     pub fn request(&self, data: &[u8]) {
-        // The facts first: the interface sits behind a sleeping mutex.
-        let ifs = interfaces();
-        {
+        let port = {
             let mut nl = self.proto.lock();
             self.autobind(&mut nl);
-            nl.request(data, &ifs);
-        }
+            nl.port
+        };
+        // Answered on a copy, with the socket unlocked: the devices sit
+        // behind a sleeping mutex.
+        let mut env = Env { ns: &self.ns, admin: super::net_admin(&self.ns) };
+        let mut answering = NetlinkSocket::new();
+        answering.port = port;
+        answering.request(data, &mut env);
+        self.proto.lock().take_replies(&mut answering);
         self.queue.notify(PollEvents::READABLE);
     }
 
