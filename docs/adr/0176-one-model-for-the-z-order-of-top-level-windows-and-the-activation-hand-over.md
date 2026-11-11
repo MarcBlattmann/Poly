@@ -44,7 +44,8 @@ disabled, minimized, no-activate, tool window, helper) and changes nothing
 itself. `wm` builds the snapshot, asks, and applies the order it gets back.
 Everything in it is tested on the host:
 
-- `raise`: to the top of the window's band, the windows it owns above it;
+- `raise`: to the top of the window's band, the windows it owns (and what
+  those own) above it;
 - `sink`: to the bottom of the band (a minimize, `HWND_BOTTOM`), a helper
   the window owns directly above it;
 - `new_slot`: where a new window goes;
@@ -109,10 +110,14 @@ with the thread's active window as the one that might give way.
 
 ### 4. The right to take the foreground
 
-win32k keeps the processes that lost the right (`fg_lost`). It is lost
-when a thread hands the foreground to another process's window: by a
-minimize (rule 4) or by its own `SetForegroundWindow`. It comes back when a
-window of the process takes the foreground (`SetForegroundWindow` on an own
+The right is a thread's (an input queue's). A process that never had the
+foreground may take it (the foreground process started it); after that a
+thread has the right once it has had the foreground (`fg_seen`,
+`fg_right`), so a new thread of such a process has not (gfw_xthread: its
+window becomes active in its thread only). The right is lost when the
+thread hands the foreground to another process's window: by a minimize
+(rule 4) or by its own `SetForegroundWindow`. It comes back when a window
+of the thread takes the foreground (`SetForegroundWindow` on an own
 window, a click). A hide or a destroy that lets the foreground fall back
 does not lose it. Without the right an activation (a visible creation, a
 show, `SetActiveWindow`, `SetFocus`) makes the window active in its thread
@@ -142,12 +147,13 @@ window there.
 
 The scripted visible tests of the four sheets (gaw_successor,
 gaw_never_active, gaw_min_inactive, gf_zorder, gf_background, gfw_right,
-gfw_minimize, sw_activation) and sw_minmax_styles run against a `Wm` in
-memory in `user_tests/replay.rs`: the scripts are read from the test
-programs in `specs/windows/`, the runner follows theirs, and the output is
-compared line by line with the entries' `windows.json`. A change to the
-model shows in seconds what it does to 1900 lines Windows printed, without
-a boot.
+gfw_minimize, sw_activation), sw_minmax_styles and eight of the earlier
+tests (gaw_activate_a to _c, gaw_leave_a and _b, gaw_zhide, gf_show_popup,
+gf_show_overlapped) run against a `Wm` in memory in
+`user_tests/replay.rs`: the scripts are read from the test programs in
+`specs/windows/`, the runner follows theirs, and the output is compared
+line by line with the entries' `windows.json`. A change to the model shows
+in seconds what it does to 2800 lines Windows printed, without a boot.
 
 ## Consequences
 
