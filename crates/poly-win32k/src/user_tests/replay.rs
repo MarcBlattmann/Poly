@@ -628,6 +628,11 @@ extern "system" fn earlier_proc(h: u64, msg: u32, w: u64, l: u64) -> u64 {
     let t = tag(h);
     let lo = |v: u64| v as u16 as i16;
     let hi = |v: u64| (v >> 16) as u16 as i16;
+    // gaw_owner logs the focus and position messages only.
+    let sizes = matches!(msg, WM_GETMINMAXINFO | WM_NCCALCSIZE | WM_SIZE | WM_MOVE | WM_DESTROY | WM_NCDESTROY);
+    if sizes && FOCUS_ONLY.with(|f| f.get()) {
+        return def_window_proc(env(), h, msg, w, l);
+    }
     match msg {
         focus::WM_ACTIVATE => {
             log(format!("{t} WM_ACTIVATE state={} minimized={} other={}", w & 0xFFFF, w >> 16, name(l, false)))
@@ -688,6 +693,11 @@ extern "system" fn earlier_proc(h: u64, msg: u32, w: u64, l: u64) -> u64 {
         _ => {}
     }
     def_window_proc(env(), h, msg, w, l)
+}
+
+thread_local! {
+    /// The running earlier test logs no size, move or destroy messages.
+    static FOCUS_ONLY: Cell<bool> = const { Cell::new(false) };
 }
 
 /// An earlier test on the interactive desktop: its class, its lines.
@@ -1023,4 +1033,51 @@ fn gaw_activate_c_as_on_windows() {
     let n = WS_EX_NOACTIVATE;
     let plan = [(0, 2, 4), (0, 2, 8), (0, 2, 9), (n, 0, 1), (n, 0, 5), (n, 0, 8), (n, 0, 2), (n, 1, 1)];
     gaw_activate("GawActivateC", "gaw_activate_c", plan);
+}
+
+/// GetActiveWindow.yaml gaw_owner (`owned_shown`, `owned_destroyed`,
+/// `owner_disabled`): popups owned by the active window shown, destroyed
+/// and hidden.
+#[test]
+fn gaw_owner_as_on_windows() {
+    with_env(|e| {
+        FOCUS_ONLY.with(|f| f.set(true));
+        let mut t = Earlier::start(e, "GawOwner");
+        let top = WS_EX_TOPMOST;
+        let a = t.make('A', top, WS_POPUP | WS_VISIBLE, 50, 50, 300, 200, 0, 0);
+        let ok = t.begin(a);
+        t.out.push(format!("{} foreground", if ok { "ok" } else { "not ok" }));
+        let gaw = |t: &mut Earlier<'_>, label: &str| {
+            t.flush();
+            let active = u64::from(focus::input(e).active);
+            t.out.push(format!("{label}: GetActiveWindow={}", name(active, false)));
+            t.focus_state("  state");
+        };
+        gaw(&mut t, "start");
+        let o1 = t.make('O', top, WS_POPUP, 400, 50, 200, 120, a, 0);
+        show_window(e, o1, SW_SHOW);
+        gaw(&mut t, "ShowWindow(O1 owned by A, SW_SHOW)");
+        destroy_window(e, o1);
+        gaw(&mut t, "DestroyWindow(O1)");
+        let o2 = t.make('P', top, WS_POPUP, 400, 50, 200, 120, a, 0);
+        show_window(e, o2, SW_SHOW);
+        gaw(&mut t, "ShowWindow(O2 owned by A, SW_SHOW)");
+        show_window(e, o2, SW_HIDE);
+        gaw(&mut t, "ShowWindow(O2, SW_HIDE)");
+        destroy_window(e, o2);
+        gaw(&mut t, "DestroyWindow(O2, hidden)");
+        focus::enable_window(e, a, false);
+        gaw(&mut t, "EnableWindow(A, FALSE)");
+        let o3 = t.make('Q', top, WS_POPUP, 400, 50, 200, 120, a, 0);
+        show_window(e, o3, SW_SHOW);
+        gaw(&mut t, "ShowWindow(O3 owned by disabled A, SW_SHOW)");
+        destroy_window(e, o3);
+        gaw(&mut t, "DestroyWindow(O3) while A is disabled");
+        focus::enable_window(e, a, true);
+        gaw(&mut t, "EnableWindow(A, TRUE)");
+        destroy_window(e, a);
+        take_log();
+        FOCUS_ONLY.with(|f| f.set(false));
+        t.check("GetActiveWindow", "gaw_owner");
+    });
 }

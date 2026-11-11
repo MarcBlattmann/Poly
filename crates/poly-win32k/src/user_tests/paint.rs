@@ -283,3 +283,21 @@ fn invalidate_rgn_reaches_children_hidden_windows_and_other_threads() {
         assert_eq!(pending_rects(e, o), [Rect::new(0, 0, 40, 40)]);
     });
 }
+
+#[test]
+fn children_are_painted_in_their_z_order_after_their_parent() {
+    // BeginPaint.yaml `clip_children` (bpn_visible): the first created child
+    // is the top one; the invalid children are painted after their parent
+    // from the top down: X, Y, Z.
+    with_env(|e| {
+        interactive(e);
+        register(e, "Pz");
+        let p = create(e, 'P', 0, "Pz", WS_POPUP | WS_VISIBLE, 100, 100, 200, 140, 0, 0);
+        let x = create(e, 'X', 0, "Pz", WS_CHILD | WS_VISIBLE, 10, 10, 60, 40, p, 1);
+        let y = create(e, 'Y', 0, "Pz", WS_CHILD | WS_VISIBLE, 50, 30, 60, 40, p, 2);
+        let z = create(e, 'Z', 0, "Pz", WS_CHILD | WS_VISIBLE, 130, 80, 50, 40, p, 3);
+        paint::redraw_window(e, p, None, RDW_INVALIDATE | RDW_ALLCHILDREN);
+        let Reply::Windows { hwnds } = e.call(Request::PaintOrder { root: p as u32 }) else { panic!() };
+        assert_eq!(hwnds, [p as u32, x as u32, y as u32, z as u32]);
+    });
+}
