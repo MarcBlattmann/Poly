@@ -172,3 +172,28 @@ fn leaving_the_client_area_ends_the_client_tracking_also_for_the_frame_and_the_d
         assert_eq!(e.call(Request::TrackMouse { hwnd: 0, flags: 0x4000_0000, hover: 0 }), Reply::Value { value: 0 });
     });
 }
+
+#[test]
+fn the_children_of_a_disabled_window_are_not_hit() {
+    // EnableWindow.yaml `click_disabled_toplevel_inactive`: over an enabled
+    // child H of the disabled popup D WindowFromPoint returns D;
+    // `mouse_disabled_child`: a disabled child falls through to its parent.
+    with_env(|e| {
+        interactive(e);
+        register(e, "Dis");
+        let at = |x: i32, y: i32| match e.call(Request::WindowFromPoint { x, y, below: 0 }) {
+            Reply::Handle { hwnd } => u64::from(hwnd),
+            _ => 0,
+        };
+        let d = create(e, 'D', 0, "Dis", WS_POPUP | WS_VISIBLE, 100, 100, 200, 150, 0, 0);
+        let h = create(e, 'H', 0, "Dis", WS_CHILD | WS_VISIBLE, 20, 20, 80, 50, d, 1);
+        let g = create(e, 'G', 0, "Dis", WS_CHILD | WS_VISIBLE, 5, 5, 20, 20, h, 2);
+        assert_eq!((at(130, 130), at(105, 105)), (g, d));
+        assert_eq!(at(180, 150), h);
+        crate::user::focus::enable_window(e, d, false);
+        assert_eq!((at(130, 130), at(180, 150), at(105, 105)), (d, d, d));
+        crate::user::focus::enable_window(e, d, true);
+        crate::user::focus::enable_window(e, h, false);
+        assert_eq!((at(130, 130), at(180, 150)), (d, d), "a disabled child and what is in it fall through");
+    });
+}

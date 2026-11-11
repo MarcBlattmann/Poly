@@ -215,7 +215,7 @@ impl Wm {
         // a system key.
         let fg = self.foreground();
         let Some(thread) = self.thread_of(fg) else { return };
-        if thread.0 == 0 || thread == super::input::KEEPER {
+        if thread.0 == 0 || super::input::foreign(thread) {
             return;
         }
         let st = self.input_of(thread);
@@ -465,7 +465,7 @@ impl Wm {
             return;
         }
         let Some(thread) = self.thread_of(target) else { return };
-        if thread.0 == 0 || thread == super::input::KEEPER {
+        if thread.0 == 0 || super::input::foreign(thread) {
             // The desktop, or a window of no process of ours.
             if msg == WM_MOUSEMOVE {
                 self.end_tracking(ctx, 0, (x, y), fx);
@@ -672,6 +672,12 @@ impl Wm {
             let Some(w) = self.get(u64::from(t)) else { continue };
             if w.style & WS_VISIBLE == 0 || !inside(w, 0, 0) {
                 continue;
+            }
+            // The children of a disabled window are not hit: the point is
+            // the window's own (EnableWindow.yaml
+            // `click_disabled_toplevel_inactive`).
+            if skip_disabled && w.style & WS_DISABLED != 0 {
+                return t;
             }
             let mut cur = t;
             while let Some(cw) = self.get(u64::from(cur)) {

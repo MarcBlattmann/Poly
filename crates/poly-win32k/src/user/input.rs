@@ -91,9 +91,9 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
             // top-level window.
             let r = send(env, h, WM_MOUSEACTIVATE, u64::from(top), (hit & 0xFFFF) | (u64::from(m.message) << 16));
             if top != st.active && r != MA_NOACTIVATE && r != MA_NOACTIVATEANDEAT {
-                focus::CLICK.store(true, core::sync::atomic::Ordering::Relaxed);
-                focus::activate(env, top, false, true);
-                focus::CLICK.store(false, core::sync::atomic::Ordering::Relaxed);
+                // A click takes the foreground whatever the thread's right to it.
+                let how = focus::How { foreground: true, click: true, ..focus::How::default() };
+                focus::activate_with(env, top, how);
                 // The window raised under the cursor gets a move after the
                 // button messages queued behind this one
                 // (WindowFromPoint.yaml wfp_activate: WM_NCHITTEST,
