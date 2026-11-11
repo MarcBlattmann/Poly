@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/K32GetMappedFileNameW.yaml
+id: windows/api/kernel32.dll/K32GetMappedFileNameW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above, and Chrome's calls in the raw stage-1 traces (browser: 145 calls, K32GetMappedFileNameW(current process, <a module's base address>, buffer, 261)). Microsoft Learn: "GetMappedFileNameW function (psapi.h)" (K32GetMappedFileNameW is kernel32's name for it), "Obtaining a File Name From a File Handle". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Gives the name of the file that is mapped at an address of a process: the native device path (\Device\<volume>\dir\file), not a drive-letter path. Chrome asks it for the base address of every module it finds in its own process, with a 261-character buffer; a child process dies when the call fails.
+interface:
+  signature: "DWORD K32GetMappedFileNameW(HANDLE hProcess, LPVOID lpv, LPWSTR lpFilename, DWORD nSize)"
+  returns: "the number of characters written without the NUL; 0 and a last error on failure"
+  access: "PROCESS_QUERY_LIMITED_INFORMATION (0x1000) or PROCESS_QUERY_INFORMATION (0x0400); PROCESS_VM_READ is not needed"
+chrome:
+  calls: "browser process, stage 1, 145 times: K32GetMappedFileNameW(GetCurrentProcess(), <base address of a loaded module>, buffer, 261) returns the length of the module's device path (51, 52, 53, 74 characters in the traces: system DLLs and Chrome's own)"
+  on_failure: "TOLERATED-CHILD-CRASH in the fault-injection run (gap-map section 6a)"
+rules:
+  name_form: "the name is \\Device\\<volume device>\\ followed by the file's path on that volume: for the executable, its own path without the drive letter and colon; for ntdll.dll and kernel32.dll, the system directory's path without its drive, a backslash and the DLL's name, on the same volume device as the executable"
+  same_as_object_name: "for a view of a data file the name is exactly the object name of the file's handle (NtQueryObject, ObjectNameInformation): the two calls use one spelling of the volume device"
+  any_address_of_the_view: "every address inside an image or a view gives the same name (the base, an address inside the first page, the second page of a view)"
+  return_and_nul: "on success the return value is the name's length in characters, a NUL follows the name in the buffer and nothing is written after the NUL. A successful call sets the last error to 0 (it was a nonzero marker before)"
+  small_buffer: "a buffer of n characters that cannot hold the name and its NUL (n at most the name's length): the first n - 1 characters and a NUL are written, the return value is n, and the last error is ERROR_INSUFFICIENT_BUFFER (122). With n = 0 nothing is written and the return value is 0, error 122. A buffer of the name's length + 1 is enough"
+  not_a_file: "an address that no file is mapped at: 0, buffer untouched. Private memory (VirtualAlloc), the stack, an address that was unmapped or freed, and NULL: last error 59 (ERROR_UNEXP_NET_ERR, as observed). A view of a section that has no file (page-file backed): ERROR_FILE_INVALID (1006). An address above the user address space: ERROR_INVALID_PARAMETER (87)"
+  process_handle: "the pseudo handle of the current process, or a real handle with PROCESS_QUERY_LIMITED_INFORMATION or PROCESS_QUERY_INFORMATION: works. A handle with only PROCESS_VM_READ or SYNCHRONIZE: 0, ERROR_ACCESS_DENIED (5). NULL or a handle of another kind (an event): 0, ERROR_INVALID_HANDLE (6)"
+errors:
+  no_file_at_address: "59; 1006 for a view of a section without a file; 87 for an address outside the user address space"
+  buffer_too_small: "ERROR_INSUFFICIENT_BUFFER (122), with a truncated name written"
+  no_query_right: "ERROR_ACCESS_DENIED (5)"
+  not_a_process_handle: "ERROR_INVALID_HANDLE (6)"
+side_effects: "none (the last error is 0 after a success)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, sizes and booleans; no line holds a handle, a pointer, a name of the machine or of its user, a hardware value or a time. Names are never printed: each line compares the name with what it has to be (the executable's own path, the system directory, the file handle's object name). The data file is a scratch file beside the test's image, deleted on close.
+not_covered: >
+  Other processes than the caller's, images loaded from network paths or from a substituted drive, long paths, the spelling of the volume device itself (the tests only compare it between calls: Poly's own device names are its own), psapi.dll's GetMappedFileNameW and the A version.

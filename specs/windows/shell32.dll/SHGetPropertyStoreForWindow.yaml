@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/SHGetPropertyStoreForWindow.yaml
+id: windows/api/shell32.dll/SHGetPropertyStoreForWindow
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above (run in the SSH session and in the desktop session, with identical output), and Chrome's calls in a fresh call-site trace of stage 1. Microsoft Learn: "SHGetPropertyStoreForWindow function (shellapi.h)", "IPropertyStore interface (propsys.h)", "Application User Model IDs (AppUserModelIDs)", "System.AppUserModel.*" property pages, "PROPVARIANT structure"; propkey.h, propsys.h, wtypes.h for constants and layouts. Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Hands out an IPropertyStore for a window: a small set of named values kept with the window, which the taskbar reads (the application user model id and the relaunch properties). Chrome asks for the store of its browser window twice in stage 1 and stops (FATAL in the fault-injection run) when the call fails. The store keeps what is set, any second store of the same window sees it, and the values go away with the window.
+interface:
+  signature: "HRESULT SHGetPropertyStoreForWindow(HWND hwnd, REFIID riid, void **ppv)"
+  returns: "S_OK (0) and *ppv = the interface asked for (one reference, the caller releases it); a failure HRESULT otherwise"
+  ipropertystore: "IPropertyStore (propsys.h), vtable after IUnknown's three methods: GetCount(DWORD *cProps), GetAt(DWORD iProp, PROPERTYKEY *pkey), GetValue(REFPROPERTYKEY key, PROPVARIANT *pv), SetValue(REFPROPERTYKEY key, REFPROPVARIANT propvar), Commit(). IID {886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99}"
+  keys: "the System.AppUserModel keys share the format id {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}: RelaunchCommand 2, RelaunchIconResource 3, RelaunchDisplayNameResource 4, ID 5, PreventPinning 9 (propkey.h)"
+  propvariant: "PROPVARIANT, 24 bytes on x64: vt u16 @0, the value @8. VT_EMPTY 0, VT_I4 3, VT_BOOL 11 (VARIANT_TRUE is 0xFFFF), VT_LPWSTR 31 (a pointer to a string the store allocates with CoTaskMemAlloc on GetValue)"
+chrome:
+  calls: "browser process, stage 1, twice (chrome.dll+0x28d324e and +0x26d8844): SHGetPropertyStoreForWindow(<its top-level window>, IID_IPropertyStore, &store) = S_OK both times. What Chrome does with the store was not traced (calls through the interface are not imports); the tests use it the way an application sets its taskbar identity"
+  on_failure: "FATAL in the fault-injection run (gap-map section 6a): Chrome ends without a DOM when the call returns a failure"
+rules:
+  success: "for a window of the calling thread: S_OK and an object, with or without COM initialised on the thread (before CoInitializeEx the call and the store's methods work the same)"
+  fresh_store: "a new window's store has no values: GetValue of any key returns S_OK with VT_EMPTY, and GetCount fails with E_FAIL (0x80004005, count 0) until a value has been set; from then on GetCount returns S_OK and the number of values"
+  set_get: "SetValue(key, VT_LPWSTR string) returns S_OK and GetValue(key) then returns S_OK, VT_LPWSTR and an equal string in memory of its own (the caller frees it with CoTaskMemFree or PropVariantClear). Seen for AppUserModel.ID, RelaunchCommand, RelaunchDisplayNameResource and RelaunchIconResource; after the four, GetCount is 4"
+  any_key: "the store takes keys that have nothing to do with windows (System.Title) and other value types: a VT_BOOL comes back as VT_BOOL with the same value; a VT_I4 7 set into AppUserModel.ID comes back as VT_LPWSTR \"7\" (that key is a string)"
+  remove: "SetValue(key, VT_EMPTY) returns S_OK and removes the value: GetValue gives VT_EMPTY again and GetCount is one lower"
+  getat: "GetAt(i) for i below the count returns S_OK and a key that is in the store; an index out of range returns E_INVALIDARG (0x80070057)"
+  commit: "Commit returns S_OK and changes nothing that can be read back: values are visible before it and after it"
+  per_window: "the values belong to the window, not to the store object. A second SHGetPropertyStoreForWindow for the same window returns another object (the pointers differ) that reads the values set through the first, and a value set through the second is read through the first at once. Another window's store is empty"
+  riid: "IID_IPropertyStore and IID_IUnknown succeed. IID_IPropertyStoreCapabilities, IID_INamedPropertyStore, IID_IDispatch and an id no interface has: E_NOINTERFACE (0x80004002) and *ppv NULL. The store's own QueryInterface answers the same"
+  window_gone: "after DestroyWindow a store that is still held answers GetValue with S_OK and VT_EMPTY (the values are gone), SetValue with 0x80070578 (HRESULT of ERROR_INVALID_WINDOW_HANDLE) and Commit with S_OK; its last Release returns 0"
+  hwnd_not_checked: "the call itself does not look at the window: for a destroyed window and for a value that never was a window (0x7FFF0000) it still returns S_OK and an object. Only NULL is refused: E_INVALIDARG (0x80070057), and *ppv is left as it was"
+errors:
+  null_hwnd: "0x80070057 (E_INVALIDARG); *ppv untouched"
+  interface_not_supported: "0x80004002 (E_NOINTERFACE); *ppv NULL"
+  setvalue_window_gone: "0x80070578"
+  getcount_empty: "0x80004005 (E_FAIL)"
+side_effects: "none until a value is set; values set are kept with the window until it is destroyed"
+threading: "tested on the thread that owns the window, in a single-threaded apartment and without COM"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes and booleans; no line holds a handle, a pointer, a drive letter, a user name or a time. The tests make hidden top-level windows of the predefined class "Static" (never shown), call the store through its vtable, and import shell32.dll, ole32.dll and user32.dll.
+not_covered: >
+  Windows of other threads and other processes, what the taskbar does with the values (grouping, pinning, jump lists), the store from other apartments or after CoUninitialize, IPropertyStore on a visible window while the shell is running, and the other property keys.
