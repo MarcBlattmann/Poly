@@ -224,7 +224,8 @@ impl Vfs {
 
     /// Mount `m`, on directory `ino` of `pm`, goes: the copies of it that
     /// propagation made below the mounts following `pm` go too (not if
-    /// something is mounted on them).
+    /// something is mounted on them, unless `m` itself goes with what is
+    /// mounted on it: a detached tree takes its copies along whole).
     pub(crate) fn propagate_umount(
         &self,
         table: &mut MountTable,
@@ -237,11 +238,12 @@ impl Vfs {
             return;
         }
         let mut doomed = Vec::new();
+        let whole = table.has_children(m.id);
         for r in table.receivers(pm) {
             if let Some(c) = table.covering(r.id, ino)
                 && Arc::ptr_eq(&c.sb, &m.sb)
                 && c.root == m.root
-                && !table.has_children(c.id)
+                && (whole || !table.has_children(c.id))
             {
                 doomed.push(c.id);
             }

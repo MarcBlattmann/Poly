@@ -582,6 +582,12 @@ fn a_recursive_bind_onto_a_shared_mount_reaches_its_peers_whole() {
     env.bind("/s", "/t/x", true).unwrap();
     assert_eq!(env.read("/peer/x/top").unwrap(), b"T");
     assert_eq!(env.read("/peer/x/a/deep/fd").unwrap(), b"in-deep");
+    // Detached, the tree goes from the peer as well, whole.
+    let before = env.vfs.mounts().len();
+    env.unmount("/t/x", true).unwrap();
+    assert_eq!(env.vfs.mounts().len(), before - 6);
+    assert_eq!(env.stat("/peer/x/top"), Err(Errno::ENOENT));
+    assert_eq!(env.read("/s/a/deep/fd").unwrap(), b"in-deep");
 }
 
 /// The spec sheet of userns_mount, "The locks, rule by rule".
