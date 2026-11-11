@@ -347,7 +347,7 @@
 {"symbol":"PathMatchSpecA","src":["wine-spec"],"seeds":["wine:shlwapi/tests/path.c:test_PathMatchSpec"]},
 {"symbol":"PathMatchSpecExA","src":["wine-spec"]},
 {"symbol":"PathMatchSpecExW","src":["wine-spec"]},
-{"symbol":"PathMatchSpecW","src":["wine-spec"]},
+{"symbol":"PathMatchSpecW","status":"claimed","claimed_by":"spec-chrome-win-5","src":["wine-spec"]},
 {"symbol":"PathParseIconLocationA","src":["wine-spec"]},
 {"symbol":"PathParseIconLocationW","src":["wine-spec"]},
 {"symbol":"PathQuoteSpacesA","src":["wine-spec"]},

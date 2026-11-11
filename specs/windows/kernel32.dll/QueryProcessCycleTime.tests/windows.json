@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "9b678454dfdd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:31:32Z",
+  "tests": [
+    {
+      "name": "qpct_handles",
+      "exe_sha256": "10687edd33cecfa654299721608696417550846c1a3ceded903d42885d7cc758",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTDogUXVlcnlQcm9jZXNzQ3ljbGVUaW1lIDAgdmFsdWUgbm90IHdyaXR0ZW4gbGFzdCBlcnJvciA2CmEgY2xvc2VkIGhhbmRsZTogUXVlcnlQcm9jZXNzQ3ljbGVUaW1lIDAgdmFsdWUgbm90IHdyaXR0ZW4gbGFzdCBlcnJvciA2CmFuIGV2ZW50IGhhbmRsZTogUXVlcnlQcm9jZXNzQ3ljbGVUaW1lIDAgdmFsdWUgbm90IHdyaXR0ZW4gbGFzdCBlcnJvciA2CnRoZSBjdXJyZW50LXRocmVhZCBwc2V1ZG8gaGFuZGxlOiBRdWVyeVByb2Nlc3NDeWNsZVRpbWUgMCB2YWx1ZSBub3Qgd3JpdHRlbiBsYXN0IGVycm9yIDYKYSByZWFsIGhhbmRsZSBvZiB0aGlzIHRocmVhZDogUXVlcnlQcm9jZXNzQ3ljbGVUaW1lIDAgdmFsdWUgbm90IHdyaXR0ZW4gbGFzdCBlcnJvciA2CnRoZSBjdXJyZW50LXByb2Nlc3MgcHNldWRvIGhhbmRsZSBhZnRlcndhcmRzOiBRdWVyeVByb2Nlc3NDeWNsZVRpbWUgMSB2YWx1ZSBhYm92ZSAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL: QueryProcessCycleTime 0 value not written last error 6\na closed handle: QueryProcessCycleTime 0 value not written last error 6\nan event handle: QueryProcessCycleTime 0 value not written last error 6\nthe current-thread pseudo handle: QueryProcessCycleTime 0 value not written last error 6\na real handle of this thread: QueryProcessCycleTime 0 value not written last error 6\nthe current-process pseudo handle afterwards: QueryProcessCycleTime 1 value above 0 last error unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "qpct_self",
+      "exe_sha256": "2be4c56a5d97a6050376788b09aab2dc264304d32fefaf8b2382168e524b62ac",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHNldWRvIGhhbmRsZTogUXVlcnlQcm9jZXNzQ3ljbGVUaW1lIDEgdmFsdWUgYWJvdmUgMCBsYXN0IGVycm9yIHVuY2hhbmdlZAp0d28gY2FsbHMgaW4gYSByb3c6IHRoZSBzZWNvbmQgaXMgbm90IGxvd2VyIDE7IGFmdGVyIHdvcmsgKDEpIHRoZSB2YWx1ZSBpcyBoaWdoZXIgMQp0aGUgZ3Jvd3RoIG92ZXIgdGhlIHdvcmsgaXMgYmV0d2VlbiAxMF42IGFuZCAxMF4xMjogMQpvd24gcHJvY2VzcywgaGFuZGxlIHdpdGggUFJPQ0VTU19RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OIChvcGVuZWQgMSk6IFF1ZXJ5UHJvY2Vzc0N5Y2xlVGltZSAxIHZhbHVlIGFib3ZlIDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKb3duIHByb2Nlc3MsIGhhbmRsZSB3aXRoIFBST0NFU1NfUVVFUllfSU5GT1JNQVRJT04gKG9wZW5lZCAxKTogUXVlcnlQcm9jZXNzQ3ljbGVUaW1lIDEgdmFsdWUgYWJvdmUgMCBsYXN0IGVycm9yIHVuY2hhbmdlZApvd24gcHJvY2VzcywgaGFuZGxlIHdpdGggUFJPQ0VTU19BTExfQUNDRVNTIChvcGVuZWQgMSk6IFF1ZXJ5UHJvY2Vzc0N5Y2xlVGltZSAxIHZhbHVlIGFib3ZlIDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKb3duIHByb2Nlc3MsIGhhbmRsZSB3aXRoIFBST0NFU1NfU0VUX0lORk9STUFUSU9OIChvcGVuZWQgMSk6IFF1ZXJ5UHJvY2Vzc0N5Y2xlVGltZSAwIHZhbHVlIG5vdCB3cml0dGVuIGxhc3QgZXJyb3IgNQpvd24gcHJvY2VzcywgaGFuZGxlIHdpdGggUFJPQ0VTU19WTV9SRUFEIChvcGVuZWQgMSk6IFF1ZXJ5UHJvY2Vzc0N5Y2xlVGltZSAwIHZhbHVlIG5vdCB3cml0dGVuIGxhc3QgZXJyb3IgNQpvd24gcHJvY2VzcywgaGFuZGxlIHdpdGggUFJPQ0VTU19URVJNSU5BVEUgKG9wZW5lZCAxKTogUXVlcnlQcm9jZXNzQ3ljbGVUaW1lIDAgdmFsdWUgbm90IHdyaXR0ZW4gbGFzdCBlcnJvciA1Cm93biBwcm9jZXNzLCBoYW5kbGUgd2l0aCBQUk9DRVNTX0RVUF9IQU5ETEUgKG9wZW5lZCAxKTogUXVlcnlQcm9jZXNzQ3ljbGVUaW1lIDAgdmFsdWUgbm90IHdyaXR0ZW4gbGFzdCBlcnJvciA1Cm93biBwcm9jZXNzLCBoYW5kbGUgd2l0aCBTWU5DSFJPTklaRSAob3BlbmVkIDEpOiBRdWVyeVByb2Nlc3NDeWNsZVRpbWUgMCB2YWx1ZSBub3Qgd3JpdHRlbiBsYXN0IGVycm9yIDUKYSByZWFsIGhhbmRsZSdzIHZhbHVlIGxpZXMgYmV0d2VlbiB0d28gcHNldWRvLWhhbmRsZSB2YWx1ZXM6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "pseudo handle: QueryProcessCycleTime 1 value above 0 last error unchanged\ntwo calls in a row: the second is not lower 1; after work (1) the value is higher 1\nthe growth over the work is between 10^6 and 10^12: 1\nown process, handle with PROCESS_QUERY_LIMITED_INFORMATION (opened 1): QueryProcessCycleTime 1 value above 0 last error unchanged\nown process, handle with PROCESS_QUERY_INFORMATION (opened 1): QueryProcessCycleTime 1 value above 0 last error unchanged\nown process, handle with PROCESS_ALL_ACCESS (opened 1): QueryProcessCycleTime 1 value above 0 last error unchanged\nown process, handle with PROCESS_SET_INFORMATION (opened 1): QueryProcessCycleTime 0 value not written last error 5\nown process, handle with PROCESS_VM_READ (opened 1): QueryProcessCycleTime 0 value not written last error 5\nown process, handle with PROCESS_TERMINATE (opened 1): QueryProcessCycleTime 0 value not written last error 5\nown process, handle with PROCESS_DUP_HANDLE (opened 1): QueryProcessCycleTime 0 value not written last error 5\nown process, handle with SYNCHRONIZE (opened 1): QueryProcessCycleTime 0 value not written last error 5\na real handle's value lies between two pseudo-handle values: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 87
+    }
+  ]
+}

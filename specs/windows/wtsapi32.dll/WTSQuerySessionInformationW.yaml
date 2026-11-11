@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/wtsapi32.dll/WTSQuerySessionInformationW.yaml
+id: windows/api/wtsapi32.dll/WTSQuerySessionInformationW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above (also run in the SSH session: the lines that differ are named in the rules), and Chrome's calls in a fresh call-site trace of stage 1. Microsoft Learn: "WTSQuerySessionInformationW function (wtsapi32.h)", "WTS_INFO_CLASS enumeration", "WTSINFOEXW structure", "WTSINFOEX_LEVEL1_W structure", "WTS_CONNECTSTATE_CLASS", "WTSFreeMemory". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Reads one kind of information about a logon session into memory the caller frees with WTSFreeMemory. Chrome asks about its own session twice: WTSSessionInfoEx (is the session locked?) and WTSClientProtocolType (console or remote desktop?). A failure is tolerated; the answers for a normal desktop session are: active, unlocked, console.
+interface:
+  signature: "BOOL WTSQuerySessionInformationW(HANDLE hServer, DWORD SessionId, WTS_INFO_CLASS WTSInfoClass, LPWSTR *ppBuffer, DWORD *pBytesReturned); void WTSFreeMemory(PVOID pMemory)"
+  returns: "nonzero, *ppBuffer = the data and *pBytesReturned = its size on success; 0 and a last error on failure, *ppBuffer untouched"
+  constants: "WTS_CURRENT_SERVER_HANDLE is NULL; WTS_CURRENT_SESSION is 0xFFFFFFFF; WTS_INFO_CLASS (wtsapi32.h): WTSInitialProgram 0, WTSSessionId 4, WTSUserName 5, WTSWinStationName 6, WTSDomainName 7, WTSConnectState 8, WTSClientName 10, WTSClientProtocolType 16, WTSSessionInfo 24, WTSSessionInfoEx 25, WTSIsRemoteSession 29"
+  wtsinfoex: "WTSINFOEXW: DWORD Level @0 (1), then at offset 8 WTSINFOEX_LEVEL1_W: ULONG SessionId @8, WTS_CONNECTSTATE_CLASS SessionState @12, LONG SessionFlags @16 (WTS_SESSIONSTATE_LOCK 0, WTS_SESSIONSTATE_UNLOCK 1, WTS_SESSIONSTATE_UNKNOWN 0xFFFFFFFF), WCHAR WinStationName[33] @20, then the user and domain names, times and counters: 232 bytes in all"
+chrome:
+  calls: "browser process, stage 1: WTSQuerySessionInformationW(NULL, WTS_CURRENT_SESSION, WTSSessionInfoEx (25), &buf, &bytes) = TRUE with 232 bytes: Level 1, SessionId 1, SessionState 0 (WTSActive), SessionFlags 1 (unlocked), WinStationName \"Console\"; then WTSFreeMemory(buf). Later, on another thread: (NULL, WTS_CURRENT_SESSION, WTSClientProtocolType (16), &buf, &bytes) = TRUE with 2 bytes, value 0 (the console); then WTSFreeMemory(buf)"
+  on_failure: "TOLERATED in the fault-injection run (gap-map section 6a), but wtsapi32.dll and the four names have to exist: Chrome delay-loads them"
+rules:
+  session_info_ex: "WTSSessionInfoEx of the current session: TRUE, 232 bytes, Level 1, SessionId = the session of the calling process (ProcessIdToSessionId), WinStationName a non-empty name of at most 32 characters. In the desktop session: SessionState 0 (WTSActive) and SessionFlags 1 (WTS_SESSIONSTATE_UNLOCK). In the SSH session (session 0, no desktop): SessionState 4 (WTSDisconnected) and SessionFlags -1 (unknown)"
+  client_protocol_type: "WTSClientProtocolType: TRUE, 2 bytes, value 0 (console) in both kinds of session"
+  by_session_id: "passing the session's own number instead of WTS_CURRENT_SESSION gives the same answers"
+  other_classes: "WTSSessionId: 4 bytes, the calling process's session. WTSConnectState: 4 bytes, 0 in the desktop session (4 in the SSH session). WTSIsRemoteSession: 1 byte, 0. WTSSessionInfo: 216 bytes, State as WTSConnectState and SessionId at offset 4. String classes (WTSUserName, WTSWinStationName, WTSDomainName, WTSClientName, WTSInitialProgram): a NUL-terminated string, and the byte count is 2 x (characters + 1); WTSUserName is the name GetUserNameW gives"
+  unknown_class: "a class that does not exist (100, 65535): FALSE, ERROR_INVALID_PARAMETER (87), *ppBuffer untouched"
+  unknown_session: "a session that does not exist (0x7FFF) with WTSSessionInfoEx: FALSE, last error 1733 (as observed), *ppBuffer untouched. With WTSClientProtocolType the same session still returns TRUE and 2 bytes"
+  free: "WTSFreeMemory takes what the call handed out; WTSFreeMemory(NULL) does nothing and does not change the last error"
+  last_error_on_success: "a successful call leaves 0 or a leftover (1008 was seen) in the last error; only the return value says whether it worked"
+errors:
+  unknown_class: "ERROR_INVALID_PARAMETER (87)"
+  unknown_session: "1733"
+side_effects: "allocates the result; the caller frees it with WTSFreeMemory"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, sizes and booleans; no line holds a handle, a pointer, a name of the machine or of its user, a hardware value or a time. The tests import wtsapi32.dll. They are recorded in the desktop session, which is where Chrome runs; the two lines that say SessionState/ConnectState and SessionFlags are the only ones that differ in the SSH session.
+not_covered: >
+  A server handle other than NULL (a made-up one faults), other sessions and a locked session (the test does not lock the desktop), remote desktop sessions, WTSEnumerateSessions and the classes not listed.

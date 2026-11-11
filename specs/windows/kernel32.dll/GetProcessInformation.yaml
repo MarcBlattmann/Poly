@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetProcessInformation.yaml
+id: windows/api/kernel32.dll/GetProcessInformation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above, and Chrome's calls in the raw stage-1 traces (browser: 17 calls, GPU process: 1). Microsoft Learn: "GetProcessInformation function (processthreadsapi.h)", "SetProcessInformation function", "PROCESS_INFORMATION_CLASS enumeration", "PROCESS_POWER_THROTTLING_STATE structure", "MEMORY_PRIORITY_INFORMATION", "PROCESS_PROTECTION_LEVEL_INFORMATION", "PROCESS_LEAP_SECOND_INFO", "PROCESS_MACHINE_INFORMATION", "APP_MEMORY_INFORMATION". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Reads one kind of information about a process into a structure of a fixed size. Chrome asks for one kind only: ProcessPowerThrottling (4), with the 12-byte PROCESS_POWER_THROTTLING_STATE, on its own process and on its children; a child process dies when the call fails. The caller has to put the structure's version (1) into the buffer first; a fresh process then answers "nothing is controlled" (both masks 0).
+interface:
+  signature: "BOOL GetProcessInformation(HANDLE hProcess, PROCESS_INFORMATION_CLASS ProcessInformationClass, LPVOID ProcessInformation, DWORD ProcessInformationSize)"
+  returns: "nonzero on success; 0 and a last error on failure. A successful call does not change the last error"
+  classes: "PROCESS_INFORMATION_CLASS (processthreadsapi.h): ProcessMemoryPriority 0, ProcessMemoryExhaustionInfo 1, ProcessAppMemoryInfo 2, ProcessInPrivateInfo 3, ProcessPowerThrottling 4, ProcessReservedValue1 5, ProcessTelemetryCoverageInfo 6, ProcessProtectionLevelInfo 7, ProcessLeapSecondInfo 8, ProcessMachineTypeInfo 9, ProcessOverrideSubsequentPrefetchParameter 10, ProcessMaxOverridePrefetchParameter 11"
+  power_throttling_state: "PROCESS_POWER_THROTTLING_STATE, 12 bytes: ULONG Version (PROCESS_POWER_THROTTLING_CURRENT_VERSION = 1), ULONG ControlMask, ULONG StateMask; bits PROCESS_POWER_THROTTLING_EXECUTION_SPEED 0x1, PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION 0x4"
+  access: "PROCESS_QUERY_LIMITED_INFORMATION (0x1000) or PROCESS_QUERY_INFORMATION (0x0400) for ProcessPowerThrottling"
+chrome:
+  calls: "GetProcessInformation(<process>, ProcessPowerThrottling (4), &state, 12) = TRUE: in the browser on the pseudo handle and on child process handles (17 calls), in the GPU process once"
+  on_failure: "TOLERATED-CHILD-CRASH in the fault-injection run (gap-map section 6a): the browser survives a failure, a child process ends"
+rules:
+  version_first: "for ProcessPowerThrottling the buffer's first field has to be 1 before the call: then TRUE and the buffer holds Version 1, ControlMask, StateMask. With 0, 2 or an unset value there: FALSE, ERROR_INVALID_PARAMETER (87), and the other two fields are not written. A NULL buffer makes the call fault (access violation): the function reads the field before anything else"
+  fresh_process: "a process nobody has throttled: Version 1, ControlMask 0, StateMask 0 (the system decides)"
+  after_set: "the masks are what the last accepted SetProcessInformation(ProcessPowerThrottling) put there: {1, 0x1, 0x1} (execution speed throttled) reads back ControlMask 0x1 StateMask 0x1; {1, 0x1, 0} (throttling off) ControlMask 0x1 StateMask 0; {1, 0x4, 0x4} ControlMask 0x4 StateMask 0x4; {1, 0, 0} (back to the system) 0 and 0. A refused set changes nothing"
+  set_refused: "SetProcessInformation(ProcessPowerThrottling) returns FALSE with ERROR_INVALID_PARAMETER (87) for Version 0 or 2, for a ControlMask bit that is not defined (0x8), and for a StateMask bit that is not in the ControlMask ({1, 0, 0x1})"
+  size: "the size has to be exactly 12: 0, 4, 8, 11, 13, 16 and 24 give FALSE with ERROR_BAD_LENGTH (24), nothing written"
+  other_process: "a child process through the handle CreateProcessW returned, or through a handle with PROCESS_QUERY_LIMITED_INFORMATION or PROCESS_QUERY_INFORMATION: TRUE, the same answer as for the own process. A handle with only PROCESS_SET_INFORMATION or SYNCHRONIZE: FALSE, ERROR_ACCESS_DENIED (5). A thread handle or NULL: FALSE, ERROR_INVALID_HANDLE (6)"
+  other_classes: "on the own process, by class and the one size that is accepted: ProcessMemoryPriority 4 bytes (MemoryPriority 5, MEMORY_PRIORITY_NORMAL); ProcessAppMemoryInfo 32 bytes; ProcessInPrivateInfo 1 byte; ProcessProtectionLevelInfo 4 bytes (0xFFFFFFFE, PROTECTION_LEVEL_NONE); ProcessLeapSecondInfo 8 bytes (Flags 0, Reserved 0); ProcessMachineTypeInfo 8 bytes (ProcessMachine 0x8664, Res0 0, MachineAttributes 0x3: user and kernel enabled); ProcessMaxOverridePrefetchParameter 4 bytes. Any other size for these: ERROR_BAD_LENGTH (24)"
+  classes_not_readable: "ProcessMemoryExhaustionInfo (1), ProcessReservedValue1 (5), ProcessTelemetryCoverageInfo (6), ProcessOverrideSubsequentPrefetchParameter (10), and the values 12, 13, 100 and 0xFFFFFFFF: FALSE, ERROR_INVALID_PARAMETER (87), whatever the size"
+errors:
+  bad_version_or_class: "ERROR_INVALID_PARAMETER (87)"
+  bad_size: "ERROR_BAD_LENGTH (24)"
+  no_query_right: "ERROR_ACCESS_DENIED (5)"
+  not_a_process_handle: "ERROR_INVALID_HANDLE (6)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, sizes and booleans; no line holds a handle, a pointer, a name of the machine or of its user, a hardware value or a time. The tests set and reset the own process's power throttling with SetProcessInformation; the second process is the test's own image started with --child.
+not_covered: >
+  What throttling does to scheduling and timers, the contents of ProcessAppMemoryInfo, classes added after this build, processes of other users, and SetProcessInformation beyond ProcessPowerThrottling.

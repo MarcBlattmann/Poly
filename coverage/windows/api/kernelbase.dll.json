@@ -989,7 +989,7 @@
 {"symbol":"QueryThreadCycleTime","src":["wine-spec"]},
 {"symbol":"QueryThreadpoolStackInformation","src":["wine-spec"]},
 {"symbol":"QueryUnbiasedInterruptTime","forward":"ntdll.RtlQueryUnbiasedInterruptTime","src":["wine-spec"],"seeds":["wine:kernel32/tests/time.c:test_QueryUnbiasedInterruptTime"]},
-{"symbol":"QueryUnbiasedInterruptTimePrecise","src":["wine-spec"]},
+{"symbol":"QueryUnbiasedInterruptTimePrecise","status":"claimed","claimed_by":"spec-chrome-win-5","src":["wine-spec"]},
 {"symbol":"QueryVirtualMemoryInformation","src":["wine-spec"]},
 {"symbol":"QueryWorkingSet","src":["wine-spec"]},
 {"symbol":"QueryWorkingSetEx","src":["wine-spec"],"seeds":["wine:psapi/tests/psapi_main.c:test_QueryWorkingSetEx","wine:psapi/tests/psapi_main.c:check_QueryWorkingSetEx"]},

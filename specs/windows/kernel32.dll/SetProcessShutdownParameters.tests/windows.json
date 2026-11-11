@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "9b678454dfdd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:31:32Z",
+  "tests": [
+    {
+      "name": "spsp_chrome",
+      "exe_sha256": "d476d481b108a2405658baa128621d048df6b47157328de1ec4258b603c163f1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YXQgc3RhcnQ6IEdldFByb2Nlc3NTaHV0ZG93blBhcmFtZXRlcnMgMSBsZXZlbCAweDI4MCBmbGFncyAweDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKU2V0UHJvY2Vzc1NodXRkb3duUGFyYW1ldGVycygweDEwMCwgMHgxKSA9IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQ7IHRoZW4gR2V0IDEgbGV2ZWwgMHgxMDAgZmxhZ3MgMHgxClNldFByb2Nlc3NTaHV0ZG93blBhcmFtZXRlcnMoMHgyN2YsIDB4MSkgPSAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkOyB0aGVuIEdldCAxIGxldmVsIDB4MjdmIGZsYWdzIDB4MQpTZXRQcm9jZXNzU2h1dGRvd25QYXJhbWV0ZXJzKDB4MTAwLCAweDEpID0gMSBsYXN0IGVycm9yIHVuY2hhbmdlZDsgdGhlbiBHZXQgMSBsZXZlbCAweDEwMCBmbGFncyAweDEKY2hpbGQgZXhpdCBjb2RlIDAKY2hpbGQ6IGF0IHN0YXJ0OiBHZXRQcm9jZXNzU2h1dGRvd25QYXJhbWV0ZXJzIDEgbGV2ZWwgMHgyODAgZmxhZ3MgMHgwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCmNoaWxkOiBTZXRQcm9jZXNzU2h1dGRvd25QYXJhbWV0ZXJzKDB4MjdmLCAweDEpID0gMSBsYXN0IGVycm9yIHVuY2hhbmdlZDsgdGhlbiBHZXQgMSBsZXZlbCAweDI3ZiBmbGFncyAweDEKYWZ0ZXIgdGhlIGNoaWxkOiBHZXRQcm9jZXNzU2h1dGRvd25QYXJhbWV0ZXJzIDEgbGV2ZWwgMHgxMDAgZmxhZ3MgMHgxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkClNldFByb2Nlc3NTaHV0ZG93blBhcmFtZXRlcnMoMHgyODAsIDB4MCkgPSAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkOyB0aGVuIEdldCAxIGxldmVsIDB4MjgwIGZsYWdzIDB4MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "at start: GetProcessShutdownParameters 1 level 0x280 flags 0x0 last error unchanged\nSetProcessShutdownParameters(0x100, 0x1) = 1 last error unchanged; then Get 1 level 0x100 flags 0x1\nSetProcessShutdownParameters(0x27f, 0x1) = 1 last error unchanged; then Get 1 level 0x27f flags 0x1\nSetProcessShutdownParameters(0x100, 0x1) = 1 last error unchanged; then Get 1 level 0x100 flags 0x1\nchild exit code 0\nchild: at start: GetProcessShutdownParameters 1 level 0x280 flags 0x0 last error unchanged\nchild: SetProcessShutdownParameters(0x27f, 0x1) = 1 last error unchanged; then Get 1 level 0x27f flags 0x1\nafter the child: GetProcessShutdownParameters 1 level 0x100 flags 0x1 last error unchanged\nSetProcessShutdownParameters(0x280, 0x0) = 1 last error unchanged; then Get 1 level 0x280 flags 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    },
+    {
+      "name": "spsp_get",
+      "exe_sha256": "ecab4640ee13abf7f54e0b4ee7f54ed311d309296043bd7e08c0f40c49cd9509",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZnJlc2ggcHJvY2VzczogR2V0UHJvY2Vzc1NodXRkb3duUGFyYW1ldGVycyAxIGxldmVsIDB4MjgwIGZsYWdzIDB4MCBsYXN0IGVycm9yIHVuY2hhbmdlZApyZWFkIGJ5IGFub3RoZXIgdGhyZWFkOiAweDI4MApTZXRQcm9jZXNzU2h1dGRvd25QYXJhbWV0ZXJzKDB4M2ZmLCAweDEpID0gMSBsYXN0IGVycm9yIHVuY2hhbmdlZDsgdGhlbiBHZXQgMSBsZXZlbCAweDNmZiBmbGFncyAweDEKcmVhZCBieSBhbm90aGVyIHRocmVhZDogMHgxMDNmZgpzZXQgdG8gKDB4MzMzLCAxKSBieSBhbm90aGVyIHRocmVhZDogMQpyZWFkIGJ5IHRoZSBmaXJzdCB0aHJlYWQ6IEdldFByb2Nlc3NTaHV0ZG93blBhcmFtZXRlcnMgMSBsZXZlbCAweDMzMyBmbGFncyAweDEgbGFzdCBlcnJvciB1bmNoYW5nZWQKU2V0UHJvY2Vzc1NodXRkb3duUGFyYW1ldGVycygweDExMSwgMHgwKSA9IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQ7IHRoZW4gR2V0IDEgbGV2ZWwgMHgxMTEgZmxhZ3MgMHgwClNldFByb2Nlc3NTaHV0ZG93blBhcmFtZXRlcnMoMHgyMjIsIDB4MSkgPSAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkOyB0aGVuIEdldCAxIGxldmVsIDB4MjIyIGZsYWdzIDB4MQpTZXRQcm9jZXNzU2h1dGRvd25QYXJhbWV0ZXJzKDB4OTk5LCAweDApID0gMSBsYXN0IGVycm9yIHVuY2hhbmdlZDsgdGhlbiBHZXQgMSBsZXZlbCAweDk5OSBmbGFncyAweDAKYWZ0ZXIgMHgxMTEsIDB4MjIyIGFuZCBhIHJlZnVzZWQgMHg5OTk6IEdldFByb2Nlc3NTaHV0ZG93blBhcmFtZXRlcnMgMSBsZXZlbCAweDk5OSBmbGFncyAweDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKU2V0UHJvY2Vzc1NodXRkb3duUGFyYW1ldGVycygweDI4MCwgMHgwKSA9IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQ7IHRoZW4gR2V0IDEgbGV2ZWwgMHgyODAgZmxhZ3MgMHgwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "fresh process: GetProcessShutdownParameters 1 level 0x280 flags 0x0 last error unchanged\nread by another thread: 0x280\nSetProcessShutdownParameters(0x3ff, 0x1) = 1 last error unchanged; then Get 1 level 0x3ff flags 0x1\nread by another thread: 0x103ff\nset to (0x333, 1) by another thread: 1\nread by the first thread: GetProcessShutdownParameters 1 level 0x333 flags 0x1 last error unchanged\nSetProcessShutdownParameters(0x111, 0x0) = 1 last error unchanged; then Get 1 level 0x111 flags 0x0\nSetProcessShutdownParameters(0x222, 0x1) = 1 last error unchanged; then Get 1 level 0x222 flags 0x1\nSetProcessShutdownParameters(0x999, 0x0) = 1 last error unchanged; then Get 1 level 0x999 flags 0x0\nafter 0x111, 0x222 and a refused 0x999: GetProcessShutdownParameters 1 level 0x999 flags 0x0 last error unchanged\nSetProcessShutdownParameters(0x280, 0x0) = 1 last error unchanged; then Get 1 level 0x280 flags 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

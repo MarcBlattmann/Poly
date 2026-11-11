@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/wtsapi32.dll/WTSFreeMemory.yaml
+id: windows/api/wtsapi32.dll/WTSFreeMemory
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  The same observations as the WTSQuerySessionInformationW entry of this DLL: every test of that entry frees what it was given with this function.
+summary: >
+  Frees memory a WTS function handed out. It returns nothing, takes NULL, and does not change the last error. Described in specs/windows/wtsapi32.dll/WTSQuerySessionInformationW.yaml (rule free) and exercised by the tests in specs/windows/wtsapi32.dll/WTSQuerySessionInformationW.tests/; this entry has no tests of its own.
+same_as: "windows/api/wtsapi32.dll/WTSQuerySessionInformationW"
+interface:
+  signature: "void WTSFreeMemory(PVOID pMemory)"
+chrome:
+  calls: "after each of the two WTSQuerySessionInformationW calls of stage 1, with the buffer that call returned"
+rules:
+  frees: "takes the buffer WTSQuerySessionInformationW returned; the tests call it after every successful query and go on to query again"
+  null: "WTSFreeMemory(NULL) returns and leaves the last error as it was"
+errors:
+  none: "the function has no result"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  A pointer that did not come from a WTS function, and freeing twice.
