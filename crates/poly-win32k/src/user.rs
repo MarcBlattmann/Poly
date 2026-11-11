@@ -587,16 +587,12 @@ fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
         if i.style & WS_CHILD != 0 {
             send(env, h, WM_SHOWWINDOW, 0, 0);
         }
-        focus::DESTROYING.store(hwnd, core::sync::atomic::Ordering::Relaxed);
         let flags = SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE;
         swp(env, hwnd, 0, 0, 0, 0, 0, flags, Opts { destroying: true, ..Opts::default() });
-        focus::DESTROYING.store(0, core::sync::atomic::Ordering::Relaxed);
     } else if i.style & WS_CHILD == 0 && focus::input(env).active == hwnd {
         // A hidden window can be the active one (session 0): destroying it
         // moves the activation as for a visible one.
-        focus::DESTROYING.store(hwnd, core::sync::atomic::Ordering::Relaxed);
         focus::after_hide(env, &i, true, true);
-        focus::DESTROYING.store(0, core::sync::atomic::Ordering::Relaxed);
     }
     // The capture of the window or of one below it ends without a message
     // (SetCapture.yaml `destroy`; a deactivation above cancelled it already).
@@ -1003,7 +999,7 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
         // active one: the activation is handed on as if it had been
         // (GetActiveWindow.yaml `minimize_inactive`).
         let next = focus::next_active(env, i.hwnd, focus::GOES_MINIMIZED);
-        focus::hand_on(env, next, was_active);
+        focus::hand_on(env, next, was_active, 0);
     }
 }
 

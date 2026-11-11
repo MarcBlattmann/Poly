@@ -53,11 +53,25 @@ pub const WA_INACTIVE: u64 = 0;
 pub const WA_ACTIVE: u64 = 1;
 /// `WA_CLICKACTIVE` (winuser.h): an activation by a mouse click.
 pub const WA_CLICKACTIVE: u64 = 2;
-/// The next activation is a click's (`user::input`).
-pub static CLICK: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
-/// The window `DestroyWindow` is hiding right now (0: none): its owner's
-/// activation reports a z-order change (GetActiveWindow.yaml gaw_owner).
-pub static DESTROYING: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+/// How a window is activated ([`activate_with`]).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct How {
+    /// From inside ShowWindow / SetWindowPos, which sends the final
+    /// WM_WINDOWPOSCHANGED itself.
+    pub in_show: bool,
+    /// It may take the foreground from another thread of the process (else
+    /// it does when no other thread of ours has it).
+    pub foreground: bool,
+    /// The window becomes the thread's active window without taking the
+    /// foreground from the thread that has it.
+    pub stay_back: bool,
+    /// By a mouse click: WM_ACTIVATE says WA_CLICKACTIVE.
+    pub click: bool,
+    /// The window `DestroyWindow` is hiding right now (0: none): its
+    /// owner's activation reports a z-order change (GetActiveWindow.yaml
+    /// gaw_owner).
+    pub destroyed: u32,
+}
 /// winerror.h.
 pub const ERROR_ACCESS_DENIED: u32 = 5;
 pub const ERROR_INVALID_PARAMETER: u32 = 87;
@@ -145,7 +159,7 @@ pub fn tops_of<E: Env + ?Sized>(env: &E, tid: u32) -> Vec<u32> {
 
 /// Bring `y` to the top with its owned windows above it and its owner
 /// below (`changed`: also send WM_WINDOWPOSCHANGED when the z order moved).
-fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool) {
+fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool, destroyed: u32) {
     let h = u64::from(y.hwnd);
     let owned = match env.call(Request::Relatives { hwnd: y.hwnd }) {
         Reply::Relatives { owned, .. } => owned,
@@ -173,10 +187,7 @@ fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool) {
         env.call(Request::ZOrder { hwnd: y.hwnd, after: HWND_TOP, apply: false }),
         Reply::Bool { value: true }
     );
-    let force = force || {
-        let d = DESTROYING.load(core::sync::atomic::Ordering::Relaxed);
-        d != 0 && owned.contains(&d)
-    };
+    let force = force || (destroyed != 0 && owned.contains(&destroyed));
     if moved || force {
         if moved {
             env.call(Request::ZOrder { hwnd: y.hwnd, after: HWND_TOP, apply: true });
@@ -236,6 +247,12 @@ pub fn may_take_foreground<E: Env + ?Sized>(env: &E) -> bool {
 /// no active window, WM_NCACTIVATE with wParam 0, WM_ACTIVATE(1),
 /// WM_SETFOCUS).
 pub fn activate_as<E: Env + ?Sized>(env: &E, y: u32, in_show: bool, foreground: bool, stay_back: bool) -> u32 {
+    activate_with(env, y, How { in_show, foreground, stay_back, ..How::default() })
+}
+
+/// [`activate_as`] with everything that can be said about the activation.
+pub fn activate_with<E: Env + ?Sized>(env: &E, y: u32, how: How) -> u32 {
+    let How { in_show, foreground, stay_back, click, destroyed } = how;
     if !screen(env).interactive {
         // Session 0: SetActiveWindow and SetFocus ask without SWP_NOACTIVATE.
         let ask = if in_show { SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE } else { SWP_NOMOVE | SWP_NOSIZE };
@@ -265,7 +282,7 @@ pub fn activate_as<E: Env + ?Sized>(env: &E, y: u32, in_show: bool, foreground: 
     // An owned window activated by SetActiveWindow / SetFocus reports its z order as changed
     // even at the top already (SetActiveWindow.yaml saw_special `O`, SetForegroundWindow.yaml
     // sfw_owned); SetForegroundWindow, clicks and shows do not.
-    raise(env, &yi, !in_show && !behind_sibling, !foreground && yi.owner != 0);
+    raise(env, &yi, !in_show && !behind_sibling, !foreground && yi.owner != 0, destroyed);
     set(env, y, 0, SET_ACTIVE | if background { 0 } else { SET_FOREGROUND });
     if x == 0 {
         for t in thread_tops(env) {
@@ -275,7 +292,7 @@ pub fn activate_as<E: Env + ?Sized>(env: &E, y: u32, in_show: bool, foreground: 
     let yi = info(env, u64::from(y)).unwrap_or(yi);
     let other = if xi.is_some() { u64::from(x) } else { 0 };
     send(env, u64::from(y), WM_NCACTIVATE, u64::from(!background) | min_bits(&yi), other);
-    let state = if CLICK.swap(false, core::sync::atomic::Ordering::Relaxed) { WA_CLICKACTIVE } else { WA_ACTIVE };
+    let state = if click { WA_CLICKACTIVE } else { WA_ACTIVE };
     send(env, u64::from(y), WM_ACTIVATE, state | min_bits(&yi), other);
     let old_focus = st.focus;
     if yi.minimized {
@@ -404,12 +421,12 @@ pub fn next_active<E: Env + ?Sized>(env: &E, hwnd: u32, cause: u8) -> Next {
 /// goes where `next` says. A window of the thread that takes over becomes
 /// the foreground window when the thread had the foreground, and only
 /// then.
-pub fn hand_on<E: Env + ?Sized>(env: &E, next: Next, focus_done: bool) {
+pub fn hand_on<E: Env + ?Sized>(env: &E, next: Next, focus_done: bool, destroyed: u32) {
     let st = input(env);
     match next {
         Next::Stay => {}
         Next::Take(n) => {
-            activate_as(env, n, false, true, !st.fg_mine);
+            activate_with(env, n, How { foreground: true, stay_back: !st.fg_mine, destroyed, ..How::default() });
         }
         Next::Away(0) => deactivate_away(env, focus_done),
         Next::Away(to) => {
@@ -541,7 +558,8 @@ pub fn after_hide<E: Env + ?Sized>(env: &E, i: &WinInfo, hands_on: bool, destroy
         let next = next_active(env, i.hwnd, if destroying { GOES_DESTROYED } else { GOES_HIDDEN });
         // The active window gives way in any case: with nobody to take
         // over the thread is left without an active window.
-        hand_on(env, if next == Next::Stay { Next::Away(0) } else { next }, false);
+        let destroyed = if destroying { i.hwnd } else { 0 };
+        hand_on(env, if next == Next::Stay { Next::Away(0) } else { next }, false, destroyed);
     } else if destroying {
         let next = thread_tops(env).into_iter().find(|&t| can_take(env, t, i.hwnd));
         match next {
@@ -751,7 +769,7 @@ pub fn set_foreground_window<E: Env + ?Sized>(env: &E, hwnd: u64) -> bool {
     env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_FG_GRANT });
     if st.active == i.hwnd && !st.fg_mine {
         send(env, hwnd, WM_NCACTIVATE, 1 | min_bits(&i), hwnd);
-        raise(env, &i, true, false);
+        raise(env, &i, true, false, 0);
         set(env, i.hwnd, 0, SET_ACTIVE | SET_FOREGROUND);
         return true;
     }
