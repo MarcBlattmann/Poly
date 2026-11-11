@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shlwapi.dll/PathMatchSpecW.yaml
+id: windows/api/shlwapi.dll/PathMatchSpecW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above, and Chrome's calls in a fresh call-site trace of stage 1 (the browser process; chrome.dll's imports from shlwapi.dll traced with tools/wintrace/polytrace-sync: 146 calls). Microsoft Learn: "PathMatchSpecW function (shlwapi.h)", "PathMatchSpecExW function" (the flags PMSF_NORMAL, PMSF_MULTIPLE, PMSF_DONT_STRIP_SPACES name what the default does). Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Says whether a name matches a spec: one pattern, or several separated by semicolons, with `*` for any run of characters and `?` for one character, without regard to letter case. Chrome's file enumeration calls it for every directory entry with the spec "*", which matches every name; the delay-load of shlwapi.dll for this one function was what stopped stage 1 on Poly. The function has a number of rules Learn does not give (spaces, the end of the name, `*.*`); they are all below, in the order a matcher needs them.
+interface:
+  signature: "BOOL PathMatchSpecW(LPCWSTR pszFile, LPCWSTR pszSpec)"
+  returns: "TRUE (1) when the name matches the spec, FALSE (0) when it does not. The last error is not changed either way"
+  strings: "both are NUL-terminated UTF-16 strings; the name is taken as it is (a whole path is just a longer name: backslash, slash and colon are ordinary characters)"
+chrome:
+  calls: "browser process, stage 1: 146 calls from one call site (chrome.dll+0x1205df6), every one with the spec \"*\" and a file name of a LevelDB directory: \"CURRENT\", \"LOCK\", \"LOG\", \"MANIFEST-000001\" (32 times each), \"000003.log\" (16), \"metadata\" (2). All return TRUE"
+  need: "the DLL shlwapi.dll with this export (a missing DLL ends Chrome at the delay load, error 126); a failing stub was tolerated in the fault-injection run (gap-map section 6a), but then Chrome's directory listings are empty"
+rules:
+  empty_spec: "an empty spec (no characters at all) matches every name, also the empty name"
+  list: "otherwise the spec is cut at every semicolon into patterns, and the result is TRUE if any pattern matches the whole name. Every pattern is tried, in any position (first, middle, last). There is no way to write a semicolon into a pattern: the name \"a;b\" is matched by \"a*b\" and \"a?b\", not by \"a;b\" (that is the patterns \"a\" and \"b\")"
+  leading_spaces: "spaces (U+0020 only) at the start of each pattern are dropped: \" *.txt\" and \"*.txt; *.doc\" work as written without them. Spaces at the end of a pattern are part of it: \"*.txt \" does not match \"a.txt\" and \"*.txt ;*.doc\" matches only \"a.doc\". A tab, a no-break space (U+00A0) and an ideographic space (U+3000) are never dropped"
+  empty_pattern: "a pattern that is empty after its leading spaces are dropped (\";\", \";;\", \" \", the part before the semicolon of \";*.txt\") matches only the empty name. So \";\" and \" \" match \"\" and nothing else, while \"\" (rule empty_spec) matches everything"
+  literals: "a character of the pattern other than `*` and `?` matches the same character of the name, without regard to case (rule case). Dots are ordinary: \"file.\" does not match \"file\", \"file\" does not match \"file.\", \"*.\" matches only names that end in a dot. `[`, `]`, `<`, `>`, `\"`, `|`, `%` and backslash are ordinary too: there are no character sets and no escape (\"\\*\" is a backslash and then a wildcard)"
+  question_mark: "`?` matches exactly one character of the name, any character (a dot, a space, a backslash, a slash). When the name has ended, a `?` still matches if it is the last character of its pattern: \"a?\" matches \"a\" and \"ab\", \"???\" matches names of two and of three characters, \"?\" matches the empty name; \"a??\" does not match \"a\" (only the last `?` may go without a character)"
+  star: "`*` matches any run of characters, also none, also dots, backslashes and slashes. A `*` that is the last character of its pattern matches whatever is left, also nothing (\"abc*\" matches \"abc\", \"*\" matches \"\"). A `*` that is followed by more pattern needs the rest of the pattern to match starting at some character of the name that is still there: it tries every remaining position, but never the position after the last character. So \"a**\" does not match \"a\", \"**\" and \"*?\" and \"?*\" do not match the empty name, \"abc*?\" does not match \"abc\", while \"ab\" matches \"a**\" and \"a*?\""
+  star_dot_star: "a pattern that is exactly `*.*`, or the rest of a pattern that is exactly `*.*` when the matcher gets to it, matches whatever is left of the name, with or without a dot, also nothing: \"*.*\" matches \"file\" and \"\", \"f*.*\" matches \"f\" and \"file\", \"*.*.*\" matches \"file.\" and \".file\" (a dot, then anything) but not \"file\". Anything after it ends the rule: \"*.* \", \"*.*x\", \"*.**\" and \"*.*?\" are ordinary patterns"
+  missing_extension: "when the name has ended and the pattern stands at a `*` or a `?`, the wildcard also matches if all that follows it is `.?` or `.*` (an extension that is not there counts as an empty one): \"*.?\" and \"?.?\" and \"?.*\" match the empty name, \"f*.?\" and \"f?.?\" and \"f?.*\" match \"f\", \"*.?.?\" and \"*.*.?\" match \"f.\" and \".\". This holds only at the name's end: \"*.?\" does not match \"f\" (the `*` has a character to try and then fails), and \".?\" without a wildcard before it does not match the empty name. With a space or anything else in between it does not hold (\"*. ?\" does not match \"\")"
+  spaces_after_star: "spaces right after a `*` are dropped, and so are spaces right after a dot that follows the `*` directly: \"* .txt\", \"*. txt\", \"*  .txt\" and \"a*. txt\" all work as \"*.txt\" / \"a*.txt\" (and then do not match the name \"a. txt\"). A `*` followed only by spaces is a `*` followed by nothing it can ever match: \"* \" matches no name at all. Everywhere else a space in a pattern is a character: \"a .txt\", \"a. txt\", \"*a .txt\", \"*x. txt\", \"*.t xt\", \"*.. txt\", \"?. txt\" match only names with that space"
+  case: "letters match without regard to case where the two letters are a simple upper/lower pair of the old Windows upper-case table: ASCII, Latin-1 (U+00E4/U+00C4; U+00FF/U+0178), Greek (U+03C3/U+03A3; U+03BC/U+039C), Cyrillic (U+0436/U+0416), the digraph U+01C6/U+01C4, full-width U+FF41/U+FF21. These do NOT match each other: U+00DF and \"ss\" and U+1E9E; U+017F (long s) and s/S; U+0131 and U+0130 and i/I (i and I match each other); U+212A (Kelvin) and k/K; U+00B5 (micro) and U+03BC/U+039C; U+03C2 (final sigma) and U+03C3/U+03A3; U+01C5 (the title-case digraph) and U+01C6/U+01C4; Georgian U+10D0 and U+1C90; Cherokee U+13A0 and U+AB70; full-width a and ASCII a"
+  long_names: "there is no length limit at 260: names and specs of 270 characters match as shorter ones do"
+  examples_extension: "\"*.txt\" matches \"file.txt\", \".txt\", \"a.b.txt\", \"dir\\file.txt\"; not \"file\", \"file.\", \"file.txt.bak\", \"file.tx\", \"file.txtx\". \"*.???\" matches \"file.txt\", \"file.txt.bak\" and \"file.tx\" (rule question_mark). \"file.*\" matches \"file.\", \"file.txt\"; not \"file\""
+errors:
+  none: "the function does not fail: it answers TRUE or FALSE and leaves the last error alone"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "microseconds per call for ordinary specs"
+  guarantees: none
+  exponential: "a pattern with several `*` that cannot match makes Windows try every way to split the name: \"*x*x*x*x*x*x*x*x*y\" against a name of 40 x did not finish in 10 seconds on the oracle (12 x and three stars: at once). An implementation need not be that slow; the tests keep such patterns short"
+tests:
+  visible: 5
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test; they import shlwapi.dll. Each line is one call: "<name>" ~ "<spec>" -> <result>; characters outside printable ASCII are written <xxxx> (UTF-16 code unit, hexadecimal); a string longer than 60 units is shown by its first 12 and its length. The last error is set to a marker before every call and would be shown if a call changed it (none did). The rules of this sheet were written as a small model and checked against every line Windows produced: 1,913 lines, none differs (the model is the spec agent's own and is not in the repository; the rules below are it, in words).
+not_covered: >
+  NULL pointers, characters outside the Basic Multilingual Plane (surrogate pairs), the full case table (only the pairs listed were tried), PathMatchSpecExW and PathMatchSpecA, kernelbase.dll's export of the same name.

@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtSuspendProcess.yaml
+id: windows/api/ntdll.dll/NtSuspendProcess
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above. The function is not on Microsoft Learn; its name is in ntdll.dll's export table and its one-argument form is how Chrome's crash handler calls it (the handler gets it with GetProcAddress(ntdll, "NtSuspendProcess"): chrome-win-b4 hand-off, step 8). Learn: "SuspendThread", "ResumeThread", "Process Security and Access Rights", "Thread Security and Access Rights"; winnt.h and ntstatus.h for constants. Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Suspends every thread of a process once: each thread's suspend count goes up by one, as if SuspendThread had been called on each. NtResumeProcess takes one off every thread's count again. Chrome's crash handler brackets the reading of a crashing client with the pair (suspend, write the dump, resume); on Windows this path does not run in stage 1 because nothing crashes, on Poly a NULL from GetProcAddress made the handler jump to address 0.
+interface:
+  signature: "NTSTATUS NtSuspendProcess(HANDLE ProcessHandle); NTSTATUS NtResumeProcess(HANDLE ProcessHandle)"
+  returns: "an NTSTATUS; STATUS_SUCCESS (0) when the process was suspended (resumed)"
+  access: "the handle needs PROCESS_SUSPEND_RESUME (0x0800); nothing else is needed and nothing else is enough"
+chrome:
+  call_site: "chrome.exe (the crash handler, --type=crashpad-handler), when a client process reports a crash: NtSuspendProcess(client process handle), later NtResumeProcess(the same handle). The handle is the one the handler holds for its client; on Windows it has PROCESS_ALL_ACCESS"
+  stage_1: "not called on Windows in stage 1 (no process crashes). On Poly every Chrome crash reaches it: until the export exists the handler dies at address 0 and the browser waits 60 s for it"
+rules:
+  suspend_counts: "NtSuspendProcess returns 0 and afterwards every thread of the process has a suspend count one higher (a child with two threads: SuspendThread on each returned 1 where it returned 0 before; a thread that waits in Sleep is counted like one that runs). The process stands still: a child that signalled an event every 10 ms signalled no more"
+  nesting: "the calls nest: after two NtSuspendProcess every thread's count is 2; one NtResumeProcess brings it to 1 and the process still stands; the second brings it to 0 and the process runs again"
+  resume_at_zero: "NtResumeProcess on a process none of whose threads is suspended returns 0 and changes nothing; counts do not go below 0 (two extra resumes, then one suspend: every count is 1, and one resume lets the process run)"
+  mixed_with_suspendthread: "the process calls and SuspendThread/ResumeThread work on the same per-thread count. A thread suspended by SuspendThread before (count 1) has count 2 while the process is suspended and 1 after NtResumeProcess: it stays suspended until its own ResumeThread (which returns 1). SuspendThread on a thread of a suspended process returns 1 and leaves that thread at count 1 after NtResumeProcess while the other threads run again"
+  resume_takes_any_count: "NtResumeProcess does not know who suspended: on a process created with CREATE_SUSPENDED (first thread at count 1) NtSuspendProcess makes the count 2, one NtResumeProcess 1 (the process has not started), and a second NtResumeProcess 0: the process starts running, exactly as ResumeThread on its first thread would start it"
+  maximum_count: "a thread's suspend count stops at 127 (MAXIMUM_SUSPEND_COUNT): the 128th SuspendThread returns -1 with last error ERROR_SIGNAL_REFUSED (156). NtSuspendProcess on a process with such a thread still returns 0: that thread stays at 127, the other threads go up by one. The NtResumeProcess that follows takes one off every thread, so the thread that was at 127 is at 126 afterwards (one lower than before the pair) and the others are back where they were"
+  state_while_suspended: "a suspended process is still a running process to its handle: GetExitCodeProcess gives STILL_ACTIVE (259) and WaitForSingleObject(process, 0) WAIT_TIMEOUT (258). TerminateProcess ends a suspended process at once (the wait returns 0, the exit code is the one given)"
+  exited_process: "on the handle of a process that has exited both calls return STATUS_PROCESS_IS_TERMINATING (0xC000010A); the access check comes first (a handle without PROCESS_SUSPEND_RESUME gives STATUS_ACCESS_DENIED for an exited process too)"
+  access_right: "PROCESS_SUSPEND_RESUME (0x0800) alone is enough for both calls. Without it both return STATUS_ACCESS_DENIED (0xC0000022) and the process is untouched: seen for PROCESS_ALL_ACCESS without that bit (0x1FF7FF), PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION, PROCESS_SET_INFORMATION, PROCESS_TERMINATE, PROCESS_VM_OPERATION | PROCESS_VM_READ, PROCESS_DUP_HANDLE and SYNCHRONIZE"
+  last_error: "the calls do not touch the thread's last error (they are native calls: the status is the result)"
+errors:
+  null_handle: "STATUS_INVALID_HANDLE (0xC0000008)"
+  closed_handle: "STATUS_INVALID_HANDLE (0xC0000008)"
+  not_a_process: "STATUS_OBJECT_TYPE_MISMATCH (0xC0000024): a thread handle, an event handle, the current-thread pseudo handle (-2)"
+  no_suspend_resume_right: "STATUS_ACCESS_DENIED (0xC0000022)"
+  exited_process: "STATUS_PROCESS_IS_TERMINATING (0xC000010A)"
+side_effects: "changes the suspend count of every thread of the target process"
+threading: "the caller is not stopped (unless it suspends its own process); the calls may come from any thread of any process that holds a handle with the right"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle; a suspended child stopped signalling within the 300 ms the tests look for"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids or times. A test that needs a second process starts its own image again with CreateProcessW and the arguments --child <mode>; the child reports through an inherited anonymous pipe or through events and is ended by the test (it also ends by itself after about 9 s). Every wait is bounded. The child of these tests has two threads (the second only sleeps) and signals an auto-reset event every 10 ms; 'runs 1' means a signal arrived within 2 s (300 ms where the test expects none), 'runs 0' that none arrived within 300 ms. A thread's suspend count is what SuspendThread returns, put back with ResumeThread at once.
+not_covered: >
+  The current-process pseudo handle (-1) and a process suspending itself through a real handle (it would stop the test; the crash handler suspends another process). Threads created in a suspended process, a process under a debugger, protected processes, processes of other users or sessions, the frozen state of job objects and of packaged apps, and what a suspended process's pending I/O and timers do.

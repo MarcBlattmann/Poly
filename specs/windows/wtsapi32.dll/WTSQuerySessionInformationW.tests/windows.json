@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "10c1f7a59fb8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:32:48Z",
+  "tests": [
+    {
+      "name": "wtsq_chrome",
+      "exe_sha256": "4348a7a63e0b929274773d9c8d8f5d9b6c5c10eac7c3344e872a29229b386407",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V1RTU2Vzc2lvbkluZm9FeDogcmV0dXJuZWQgMTsgYnl0ZXMgMjMyOyBMZXZlbCAxOyBTZXNzaW9uSWQgaXMgdGhpcyBwcm9jZXNzJ3Mgc2Vzc2lvbjogMTsgU2Vzc2lvblN0YXRlIDA7IFNlc3Npb25GbGFncyAxOyBXaW5TdGF0aW9uTmFtZSBoYXMgdGV4dDogMSAoYXQgbW9zdCAzMiBjaGFyYWN0ZXJzOiAxKQpXVFNDbGllbnRQcm90b2NvbFR5cGU6IHJldHVybmVkIDE7IGJ5dGVzIDI7IHZhbHVlIDAKV1RTU2Vzc2lvbkluZm9FeCBieSB0aGUgc2Vzc2lvbidzIG93biBpZDogcmV0dXJuZWQgMSBieXRlcyAyMzI7IExldmVsIDE7IFNlc3Npb25JZCBtYXRjaGVzIDEKV1RTQ2xpZW50UHJvdG9jb2xUeXBlIGJ5IHRoZSBzZXNzaW9uJ3Mgb3duIGlkOiByZXR1cm5lZCAxIGJ5dGVzIDI7IHZhbHVlIDAKYXNrZWQgdHdpY2U6IHRoZSBzYW1lIHNlc3Npb24sIHN0YXRlIGFuZCBmbGFncyAxCldUU0ZyZWVNZW1vcnkoTlVMTCk6IHJldHVybmVkOyBsYXN0IGVycm9yIHVuY2hhbmdlZApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WTSSessionInfoEx: returned 1; bytes 232; Level 1; SessionId is this process's session: 1; SessionState 0; SessionFlags 1; WinStationName has text: 1 (at most 32 characters: 1)\nWTSClientProtocolType: returned 1; bytes 2; value 0\nWTSSessionInfoEx by the session's own id: returned 1 bytes 232; Level 1; SessionId matches 1\nWTSClientProtocolType by the session's own id: returned 1 bytes 2; value 0\nasked twice: the same session, state and flags 1\nWTSFreeMemory(NULL): returned; last error unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 105
+    },
+    {
+      "name": "wtsq_errors",
+      "exe_sha256": "3c5f59d1c5e7e8a2e4c47ee163925510aa0e6ee3a96eacaaf8146d3ab4dd475d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xhc3MgMTAwOiByZXR1cm5lZCAwIGxhc3QgZXJyb3IgODc7IG91dCBwb2ludGVyIHVudG91Y2hlZApjbGFzcyA2NTUzNTogcmV0dXJuZWQgMCBsYXN0IGVycm9yIDg3OyBvdXQgcG9pbnRlciB1bnRvdWNoZWQKc2Vzc2lvbiAweDdmZmYsIFdUU1Nlc3Npb25JbmZvRXg6IHJldHVybmVkIDAgbGFzdCBlcnJvciAxNzMzOyBvdXQgcG9pbnRlciB1bnRvdWNoZWQKc2Vzc2lvbiAweDdmZmYsIFdUU0NsaWVudFByb3RvY29sVHlwZTogcmV0dXJuZWQgMSBieXRlcyAyCldUU1Nlc3Npb25JZCBhZnRlcndhcmRzOiByZXR1cm5lZCAxIGJ5dGVzIDQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "class 100: returned 0 last error 87; out pointer untouched\nclass 65535: returned 0 last error 87; out pointer untouched\nsession 0x7fff, WTSSessionInfoEx: returned 0 last error 1733; out pointer untouched\nsession 0x7fff, WTSClientProtocolType: returned 1 bytes 2\nWTSSessionId afterwards: returned 1 bytes 4\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

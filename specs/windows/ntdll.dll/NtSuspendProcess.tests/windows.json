@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "9b678454dfdd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:31:32Z",
+  "tests": [
+    {
+      "name": "ntsp_access",
+      "exe_sha256": "64dfb241aedc26db35f962848cb2f03a4becc07fb5f44b950129b3056709da84",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hpbGQgc3RhcnRlZDsgaXQgcnVucyAxCmhhbmRsZSB3aXRoIFBST0NFU1NfU1VTUEVORF9SRVNVTUU6IG9wZW5lZCAxIE50U3VzcGVuZFByb2Nlc3MgMHgwIChzdXNwZW5kIGNvdW50IHRoZW4gMSkgTnRSZXN1bWVQcm9jZXNzIDB4MCAoc3VzcGVuZCBjb3VudCB0aGVuIDApCmhhbmRsZSB3aXRoIFBST0NFU1NfQUxMX0FDQ0VTUyB3aXRob3V0IFBST0NFU1NfU1VTUEVORF9SRVNVTUU6IG9wZW5lZCAxIE50U3VzcGVuZFByb2Nlc3MgMHhjMDAwMDAyMiAoc3VzcGVuZCBjb3VudCB0aGVuIDApIE50UmVzdW1lUHJvY2VzcyAweGMwMDAwMDIyIChzdXNwZW5kIGNvdW50IHRoZW4gMCkKaGFuZGxlIHdpdGggUFJPQ0VTU19RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OOiBvcGVuZWQgMSBOdFN1c3BlbmRQcm9jZXNzIDB4YzAwMDAwMjIgKHN1c3BlbmQgY291bnQgdGhlbiAwKSBOdFJlc3VtZVByb2Nlc3MgMHhjMDAwMDAyMiAoc3VzcGVuZCBjb3VudCB0aGVuIDApCmhhbmRsZSB3aXRoIFBST0NFU1NfUVVFUllfSU5GT1JNQVRJT046IG9wZW5lZCAxIE50U3VzcGVuZFByb2Nlc3MgMHhjMDAwMDAyMiAoc3VzcGVuZCBjb3VudCB0aGVuIDApIE50UmVzdW1lUHJvY2VzcyAweGMwMDAwMDIyIChzdXNwZW5kIGNvdW50IHRoZW4gMCkKaGFuZGxlIHdpdGggUFJPQ0VTU19TRVRfSU5GT1JNQVRJT046IG9wZW5lZCAxIE50U3VzcGVuZFByb2Nlc3MgMHhjMDAwMDAyMiAoc3VzcGVuZCBjb3VudCB0aGVuIDApIE50UmVzdW1lUHJvY2VzcyAweGMwMDAwMDIyIChzdXNwZW5kIGNvdW50IHRoZW4gMCkKaGFuZGxlIHdpdGggUFJPQ0VTU19URVJNSU5BVEU6IG9wZW5lZCAxIE50U3VzcGVuZFByb2Nlc3MgMHhjMDAwMDAyMiAoc3VzcGVuZCBjb3VudCB0aGVuIDApIE50UmVzdW1lUHJvY2VzcyAweGMwMDAwMDIyIChzdXNwZW5kIGNvdW50IHRoZW4gMCkKaGFuZGxlIHdpdGggUFJPQ0VTU19WTV9PUEVSQVRJT04gfCBQUk9DRVNTX1ZNX1JFQUQ6IG9wZW5lZCAxIE50U3VzcGVuZFByb2Nlc3MgMHhjMDAwMDAyMiAoc3VzcGVuZCBjb3VudCB0aGVuIDApIE50UmVzdW1lUHJvY2VzcyAweGMwMDAwMDIyIChzdXNwZW5kIGNvdW50IHRoZW4gMCkKaGFuZGxlIHdpdGggUFJPQ0VTU19EVVBfSEFORExFOiBvcGVuZWQgMSBOdFN1c3BlbmRQcm9jZXNzIDB4YzAwMDAwMjIgKHN1c3BlbmQgY291bnQgdGhlbiAwKSBOdFJlc3VtZVByb2Nlc3MgMHhjMDAwMDAyMiAoc3VzcGVuZCBjb3VudCB0aGVuIDApCmhhbmRsZSB3aXRoIFNZTkNIUk9OSVpFOiBvcGVuZWQgMSBOdFN1c3BlbmRQcm9jZXNzIDB4YzAwMDAwMjIgKHN1c3BlbmQgY291bnQgdGhlbiAwKSBOdFJlc3VtZVByb2Nlc3MgMHhjMDAwMDAyMiAoc3VzcGVuZCBjb3VudCB0aGVuIDApCmhhbmRsZSB3aXRoIFBST0NFU1NfU1VTUEVORF9SRVNVTUUgfCBTWU5DSFJPTklaRTogb3BlbmVkIDEgTnRTdXNwZW5kUHJvY2VzcyAweDAgKHN1c3BlbmQgY291bnQgdGhlbiAxKSBOdFJlc3VtZVByb2Nlc3MgMHgwIChzdXNwZW5kIGNvdW50IHRoZW4gMCkKdGhlIGNoaWxkIHN0aWxsIHJ1bnMgMQpOdFN1c3BlbmRQcm9jZXNzKE5VTEwpID0gMHhjMDAwMDAwOApOdFJlc3VtZVByb2Nlc3MoTlVMTCkgPSAweGMwMDAwMDA4Ck50U3VzcGVuZFByb2Nlc3MoYSBjbG9zZWQgaGFuZGxlKSA9IDB4YzAwMDAwMDgKTnRSZXN1bWVQcm9jZXNzKGEgY2xvc2VkIGhhbmRsZSkgPSAweGMwMDAwMDA4Ck50U3VzcGVuZFByb2Nlc3ModGhlIGNoaWxkJ3MgdGhyZWFkIGhhbmRsZSkgPSAweGMwMDAwMDI0Ck50UmVzdW1lUHJvY2Vzcyh0aGUgY2hpbGQncyB0aHJlYWQgaGFuZGxlKSA9IDB4YzAwMDAwMjQKTnRTdXNwZW5kUHJvY2VzcyhhbiBldmVudCBoYW5kbGUpID0gMHhjMDAwMDAyNApOdFJlc3VtZVByb2Nlc3MoYW4gZXZlbnQgaGFuZGxlKSA9IDB4YzAwMDAwMjQKTnRTdXNwZW5kUHJvY2Vzcyh0aGUgY3VycmVudC10aHJlYWQgcHNldWRvIGhhbmRsZSkgPSAweGMwMDAwMDI0Ck50UmVzdW1lUHJvY2Vzcyh0aGUgY3VycmVudC10aHJlYWQgcHNldWRvIGhhbmRsZSkgPSAweGMwMDAwMDI0CnRoaXMgdGhyZWFkJ3MgbGFzdCBlcnJvciBpcyB1bnRvdWNoZWQgYnkgdGhlIGNhbGxzOiB0cnVlCnRoZSBjaGlsZCdzIHN1c3BlbmQgY291bnQgYXQgdGhlIGVuZCAwOyBpdCBydW5zIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "child started; it runs 1\nhandle with PROCESS_SUSPEND_RESUME: opened 1 NtSuspendProcess 0x0 (suspend count then 1) NtResumeProcess 0x0 (suspend count then 0)\nhandle with PROCESS_ALL_ACCESS without PROCESS_SUSPEND_RESUME: opened 1 NtSuspendProcess 0xc0000022 (suspend count then 0) NtResumeProcess 0xc0000022 (suspend count then 0)\nhandle with PROCESS_QUERY_LIMITED_INFORMATION: opened 1 NtSuspendProcess 0xc0000022 (suspend count then 0) NtResumeProcess 0xc0000022 (suspend count then 0)\nhandle with PROCESS_QUERY_INFORMATION: opened 1 NtSuspendProcess 0xc0000022 (suspend count then 0) NtResumeProcess 0xc0000022 (suspend count then 0)\nhandle with PROCESS_SET_INFORMATION: opened 1 NtSuspendProcess 0xc0000022 (suspend count then 0) NtResumeProcess 0xc0000022 (suspend count then 0)\nhandle with PROCESS_TERMINATE: opened 1 NtSuspendProcess 0xc0000022 (suspend count then 0) NtResumeProcess 0xc0000022 (suspend count then 0)\nhandle with PROCESS_VM_OPERATION | PROCESS_VM_READ: opened 1 NtSuspendProcess 0xc0000022 (suspend count then 0) NtResumeProcess 0xc0000022 (suspend count then 0)\nhandle with PROCESS_DUP_HANDLE: opened 1 NtSuspendProcess 0xc0000022 (suspend count then 0) NtResumeProcess 0xc0000022 (suspend count then 0)\nhandle with SYNCHRONIZE: opened 1 NtSuspendProcess 0xc0000022 (suspend count then 0) NtResumeProcess 0xc0000022 (suspend count then 0)\nhandle with PROCESS_SUSPEND_RESUME | SYNCHRONIZE: opened 1 NtSuspendProcess 0x0 (suspend count then 1) NtResumeProcess 0x0 (suspend count then 0)\nthe child still runs 1\nNtSuspendProcess(NULL) = 0xc0000008\nNtResumeProcess(NULL) = 0xc0000008\nNtSuspendProcess(a closed handle) = 0xc0000008\nNtResumeProcess(a closed handle) = 0xc0000008\nNtSuspendProcess(the child's thread handle) = 0xc0000024\nNtResumeProcess(the child's thread handle) = 0xc0000024\nNtSuspendProcess(an event handle) = 0xc0000024\nNtResumeProcess(an event handle) = 0xc0000024\nNtSuspendProcess(the current-thread pseudo handle) = 0xc0000024\nNtResumeProcess(the current-thread pseudo handle) = 0xc0000024\nthis thread's last error is untouched by the calls: true\nthe child's suspend count at the end 0; it runs 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 320
+    },
+    {
+      "name": "ntsp_created",
+      "exe_sha256": "cc76da3132732431cf1560224288f8a72e92dd0f06fd0bcaaa59b0ac5c794c5a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlZCBzdXNwZW5kZWQ6IHN1c3BlbmQgY291bnQgbWFpbiAxOyBydW5zIDAKTnRTdXNwZW5kUHJvY2VzcyhjaGlsZCkgPSAweDAKc3VzcGVuZGVkOiBzdXNwZW5kIGNvdW50IG1haW4gMjsgcnVucyAwCk50UmVzdW1lUHJvY2VzcyhjaGlsZCkgPSAweDAKcmVzdW1lZDogc3VzcGVuZCBjb3VudCBtYWluIDE7IHJ1bnMgMApOdFJlc3VtZVByb2Nlc3MoY2hpbGQpID0gMHgwCnJlc3VtZWQgYWdhaW46IHJ1bnMgMTsgc2Vjb25kIHRocmVhZCBvcGVuZWQgMQpydW5uaW5nOiBzdXNwZW5kIGNvdW50IG1haW4gMCBzZWNvbmQgMDsgcnVucyAxClN1c3BlbmRUaHJlYWQgMTI3IHRpbWVzLCB0aGUgbGFzdCByZXR1cm5lZCAxMjY7IG9uY2UgbW9yZSByZXR1cm5lZCAtMSBsYXN0IGVycm9yIDE1NgpOdFN1c3BlbmRQcm9jZXNzKGNoaWxkIHdob3NlIG1haW4gdGhyZWFkIGlzIGF0IHRoZSBtYXhpbXVtKSA9IDB4MAphZnRlciBpdDogUmVzdW1lVGhyZWFkKG1haW4pIHJldHVybmVkIDEyNzsgU3VzcGVuZFRocmVhZChzZWNvbmQpIHJldHVybmVkIDEKTnRSZXN1bWVQcm9jZXNzKGNoaWxkKSA9IDB4MAphZnRlciBpdDogUmVzdW1lVGhyZWFkKG1haW4pIHJldHVybmVkIDEyNTsgU3VzcGVuZFRocmVhZChzZWNvbmQpIHJldHVybmVkIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "created suspended: suspend count main 1; runs 0\nNtSuspendProcess(child) = 0x0\nsuspended: suspend count main 2; runs 0\nNtResumeProcess(child) = 0x0\nresumed: suspend count main 1; runs 0\nNtResumeProcess(child) = 0x0\nresumed again: runs 1; second thread opened 1\nrunning: suspend count main 0 second 0; runs 1\nSuspendThread 127 times, the last returned 126; once more returned -1 last error 156\nNtSuspendProcess(child whose main thread is at the maximum) = 0x0\nafter it: ResumeThread(main) returned 127; SuspendThread(second) returned 1\nNtResumeProcess(child) = 0x0\nafter it: ResumeThread(main) returned 125; SuspendThread(second) returned 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1233
+    },
+    {
+      "name": "ntsp_ended",
+      "exe_sha256": "052b6807266681b63018c5bfb816ece320f2820dff69d1dde5662fa81ecdcd9f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hpbGQgc3RhcnRlZDsgaXQgcnVucyAxCk50U3VzcGVuZFByb2Nlc3MoY2hpbGQpID0gMHgwCk50U3VzcGVuZFByb2Nlc3MoY2hpbGQpID0gMHgwCnN1c3BlbmRlZCB0d2ljZTogc3VzcGVuZCBjb3VudCBtYWluIDI7IHJ1bnMgMApUZXJtaW5hdGVQcm9jZXNzKHN1c3BlbmRlZCBjaGlsZCwgNykgMTsgd2FpdCAwOyBHZXRFeGl0Q29kZVByb2Nlc3MgMSBjb2RlIDcKTnRTdXNwZW5kUHJvY2VzcyhleGl0ZWQgY2hpbGQpID0gMHhjMDAwMDEwYQpOdFJlc3VtZVByb2Nlc3MoZXhpdGVkIGNoaWxkKSA9IDB4YzAwMDAxMGEKU3VzcGVuZFRocmVhZChtYWluIHRocmVhZCBvZiB0aGUgZXhpdGVkIGNoaWxkKSByZXR1cm5lZCAtMSBsYXN0IGVycm9yIDUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "child started; it runs 1\nNtSuspendProcess(child) = 0x0\nNtSuspendProcess(child) = 0x0\nsuspended twice: suspend count main 2; runs 0\nTerminateProcess(suspended child, 7) 1; wait 0; GetExitCodeProcess 1 code 7\nNtSuspendProcess(exited child) = 0xc000010a\nNtResumeProcess(exited child) = 0xc000010a\nSuspendThread(main thread of the exited child) returned -1 last error 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 586
+    }
+  ]
+}

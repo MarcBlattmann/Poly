@@ -435,7 +435,7 @@
 {"symbol":"Shell_NotifyIcon","src":["wine-spec"]},
 {"symbol":"Shell_NotifyIconA","src":["wine-spec"],"seeds":["wine:shell32/tests/systray.c:test_cbsize"]},
 {"symbol":"Shell_NotifyIconGetRect","src":["wine-spec"]},
-{"symbol":"Shell_NotifyIconW","status":"stub","src":["wine-spec"],"seeds":["wine:shell32/tests/systray.c:test_cbsize"]},
+{"symbol":"Shell_NotifyIconW","src":["wine-spec"],"seeds":["wine:shell32/tests/systray.c:test_cbsize"]},
 {"symbol":"ShortSizeFormatW","src":["wine-spec"]},
 {"symbol":"SignalFileOpen","src":["wine-spec"]},
 {"symbol":"StrChrA","forward":"shlwapi.StrChrA","src":["wine-spec"]},

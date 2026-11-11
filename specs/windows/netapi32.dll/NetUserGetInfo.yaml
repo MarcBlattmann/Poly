@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/netapi32.dll/NetUserGetInfo.yaml
+id: windows/api/netapi32.dll/NetUserGetInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above, and Chrome's call in the raw stage-1 traces (on the oracle, a workgroup computer: status 0) and in a fresh call-site trace on the owner's PC (a domain member: status 2221). Microsoft Learn: "NetUserGetInfo function (lmaccess.h)", "USER_INFO_1 structure" and the other USER_INFO_ levels, "NetApiBufferFree", "Network Management Error Codes"; lmaccess.h, lmerr.h. Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Reads one user account of a computer's account database into memory the caller frees with NetApiBufferFree; the result is a status code where 0 is success. Chrome asks the local computer about the user it runs as, level 1. It copes with "no such user" (what a domain account gets); what it does not cope with is a success without a buffer, which is what the fault injection returned.
+interface:
+  signature: "NET_API_STATUS NetUserGetInfo(LPCWSTR servername, LPCWSTR username, DWORD level, LPBYTE *bufptr); NET_API_STATUS NetApiBufferFree(LPVOID Buffer)"
+  returns: "NERR_Success (0) and *bufptr = a USER_INFO_<level> structure; an error code and *bufptr = NULL"
+  user_info_1: "USER_INFO_1 (lmaccess.h), x64 offsets: usri1_name (LPWSTR) @0, usri1_password @8, usri1_password_age (DWORD) @16, usri1_priv @20 (USER_PRIV_GUEST 0, USER_PRIV_USER 1, USER_PRIV_ADMIN 2), usri1_home_dir @24, usri1_comment @32, usri1_flags @40 (UF_SCRIPT 0x1, UF_ACCOUNTDISABLE 0x2, UF_NORMAL_ACCOUNT 0x200), usri1_script_path @48"
+chrome:
+  call: "browser process, stage 1, once (chrome.dll+0x26337a6): NetUserGetInfo(NULL, <the user name from the process's own account>, 1, &buf). On the oracle (a local account): 0. On the owner's PC (a domain account, which the local database does not hold): 2221 (NERR_UserNotFound), and Chrome goes on to the same DOM"
+  fatal_verdict: "FATAL in the fault-injection run (gap-map section 6a), but that run returned 0 with no buffer: for this function 0 is success, so Chrome used a NULL result. A failing answer that is a real error code (2221) is what Windows itself gives a domain user and is tolerated"
+rules:
+  own_user_level_1: "NULL server, the name GetUserNameW gives, level 1: status 0 and a USER_INFO_1 whose usri1_name is that name, usri1_password is NULL (the password is never returned), usri1_priv is 1 or 2, and usri1_home_dir, usri1_comment and usri1_script_path are strings (not NULL, possibly empty). usri1_flags has UF_NORMAL_ACCOUNT and UF_SCRIPT set and UF_ACCOUNTDISABLE clear. NetApiBufferFree of the buffer returns 0"
+  name_case: "the user name is matched without regard to case (the name in capitals: status 0)"
+  server: "an empty server name (\"\") is the local computer, like NULL"
+  no_such_user: "a name no account has, and an empty user name: NERR_UserNotFound (2221), *bufptr NULL. A NULL user name: 2202 (NERR_BadUsername), *bufptr NULL"
+  levels: "levels 0, 1, 2, 3, 4, 10, 11, 20, 23 and 24 return 0 for the own user; every structure but level 24's starts with the pointer to the name. Any other level (5, 12, 21, 22, 25, 1003, 0xFFFFFFFF): ERROR_INVALID_LEVEL (124), *bufptr NULL"
+  which_error_first: "for a name no account has, the answer is 2221 even with a level that does not exist: the user is looked up before the level is judged"
+errors:
+  user_not_found: "NERR_UserNotFound (2221)"
+  null_user_name: "NERR_BadUsername (2202)"
+  bad_level: "ERROR_INVALID_LEVEL (124)"
+side_effects: "allocates the result; the caller frees it with NetApiBufferFree"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, sizes and booleans; no line holds a handle, a pointer, a name of the machine or of its user, a hardware value or a time. The tests import netapi32.dll and advapi32.dll (GetUserNameW). They ask about the account they run as; no account name appears in a line.
+not_covered: >
+  Other computers as the server (a name, "\\localhost"), domain accounts and domain controllers, the fields of the levels other than 1, accounts the caller may not read, and the built-in accounts (on the oracle Guest answers level 1 with usri1_priv 0 and UF_ACCOUNTDISABLE set; no test relies on it).

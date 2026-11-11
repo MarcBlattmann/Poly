@@ -36,6 +36,180 @@ pub const CLR_INVALID: u32 = 0xFFFF_FFFF;
 pub const ETO_OPAQUE: u32 = 0x0002;
 pub const ETO_CLIPPED: u32 = 0x0004;
 pub const ETO_GLYPH_INDEX: u32 = 0x0010;
+pub const ETO_RTLREADING: u32 = 0x0080;
+pub const ETO_NUMERICSLOCAL: u32 = 0x0400;
+pub const ETO_NUMERICSLATIN: u32 = 0x0800;
+pub const ETO_IGNORELANGUAGE: u32 = 0x1000;
+pub const ETO_PDY: u32 = 0x2000;
+pub const ETO_REVERSE_INDEX_MAP: u32 = 0x1_0000;
+/// Every option `wingdi.h` defines (`ExtTextOutW.yaml`, option_bits).
+pub const ETO_DEFINED: u32 = ETO_OPAQUE
+    | ETO_CLIPPED
+    | ETO_GLYPH_INDEX
+    | ETO_RTLREADING
+    | ETO_NUMERICSLOCAL
+    | ETO_NUMERICSLATIN
+    | ETO_IGNORELANGUAGE
+    | ETO_PDY
+    | ETO_REVERSE_INDEX_MAP;
+
+/// Why `ExtTextOutW` drew nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextOutError {
+    /// Not a DC: the only failure with an error code
+    /// (`ERROR_INVALID_HANDLE`).
+    BadDc,
+    /// Options the call cannot have; no error code.
+    Refused,
+}
+
+/// Where the reference point of a text lies in its cell, from the bits of
+/// `SetTextAlign`'s value (`ExtTextOutW.yaml`, alignment): of the
+/// horizontal bits (mask 6) 2 alone and 4 alone are the right edge and 6
+/// the centre; of the vertical ones (mask 24) 8 alone is the bottom and 16
+/// or 24 the baseline. The other bits do not move the text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextAlign {
+    pub horizontal: HAlign,
+    pub vertical: VAlign,
+    /// `TA_UPDATECP`: the current position is the reference point.
+    pub update_cp: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HAlign {
+    Left,
+    Right,
+    Center,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VAlign {
+    Top,
+    Bottom,
+    Baseline,
+}
+
+impl TextAlign {
+    pub fn from_bits(align: u32) -> TextAlign {
+        TextAlign {
+            horizontal: match align & TA_CENTER {
+                0 => HAlign::Left,
+                TA_CENTER => HAlign::Center,
+                _ => HAlign::Right,
+            },
+            vertical: match align & TA_BASELINE {
+                0 => VAlign::Top,
+                TA_BOTTOM => VAlign::Bottom,
+                _ => VAlign::Baseline,
+            },
+            update_cp: align & TA_UPDATECP != 0,
+        }
+    }
+
+    /// The first origin of a text `width` long (the sum of `lpDx`, which
+    /// may be zero or negative) for the reference `x`: a centred text with
+    /// an odd width has its extra pixel on the left.
+    pub fn first_origin(self, x: i32, width: i32) -> i32 {
+        match self.horizontal {
+            HAlign::Left => x,
+            HAlign::Right => x.wrapping_sub(width),
+            HAlign::Center => (2 * i64::from(x) - i64::from(width)).div_euclid(2) as i32,
+        }
+    }
+
+    /// Where `TA_UPDATECP` leaves the current position's x: the other end
+    /// of the text; a centred text does not move it.
+    pub fn end_x(self, x: i32, width: i32) -> i32 {
+        match self.horizontal {
+            HAlign::Left => x.wrapping_add(width),
+            HAlign::Right => x.wrapping_sub(width),
+            HAlign::Center => x,
+        }
+    }
+}
+
+/// The columns of the background of text drawn with `lpDx` in OPAQUE mode
+/// (`ExtTextOutW.yaml`, dx_cell): from the first origin to the first origin
+/// plus the sum where the sum is positive, widened to hold the ink of
+/// every glyph (`ink`: the leftmost ink column and the column after the
+/// rightmost one).
+pub fn dx_cell_columns(first_origin: i32, sum: i32, ink: Option<(i32, i32)>) -> (i32, i32) {
+    let (mut left, mut right) = (first_origin, first_origin.saturating_add(sum.max(0)));
+    if let Some((l, r)) = ink {
+        left = left.min(l);
+        right = right.max(r);
+    }
+    (left, right)
+}
+
+/// What `GetTextExtentExPointW` got as its DC.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DcArg {
+    Null,
+    /// A handle that is not a DC.
+    NotDc,
+    Dc,
+}
+
+/// What `GetTextExtentExPointW` does before it measures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExtentExCheck {
+    /// FALSE and no output written, with the error code if there is one.
+    Fail(Option<u32>),
+    /// TRUE: the size is 0x0, the fit 0, `alpDx` is not touched.
+    Empty,
+    Measure,
+}
+
+/// `GetTextExtentExPointW`'s checks in their order
+/// (`GetTextExtentExPointW.yaml`, order): the DC (only a handle that is
+/// not a DC sets an error code) and `lpSize`; a NULL string is an empty
+/// string whatever the count and the maximum are; a count of 0; a negative
+/// count; a negative maximum, which only counts when `lpnFit` is given.
+pub fn extent_ex_check(
+    dc: DcArg,
+    null_size: bool,
+    null_text: bool,
+    count: i32,
+    max: i32,
+    wants_fit: bool,
+) -> ExtentExCheck {
+    match dc {
+        DcArg::Null => return ExtentExCheck::Fail(None),
+        DcArg::NotDc => return ExtentExCheck::Fail(Some(ERROR_INVALID_HANDLE)),
+        DcArg::Dc => {}
+    }
+    if null_size {
+        ExtentExCheck::Fail(None)
+    } else if null_text || count == 0 {
+        ExtentExCheck::Empty
+    } else if count < 0 || (wants_fit && max < 0) {
+        ExtentExCheck::Fail(None)
+    } else {
+        ExtentExCheck::Measure
+    }
+}
+
+/// The fit and how many `alpDx` entries `GetTextExtentExPointW` writes
+/// for the running extents of a string: with `lpnFit` the characters
+/// whose running extent is at most the maximum, and only those entries;
+/// without it the maximum plays no part and every entry is written.
+pub fn extent_ex_fit(running: &[i32], max: i32, wants_fit: bool) -> (usize, usize) {
+    let fit = running.iter().take_while(|&&w| w <= max).count();
+    (fit, if wants_fit { fit } else { running.len() })
+}
+
+/// Whether `ExtTextOutW` takes `options` (`ExtTextOutW.yaml`, option_bits
+/// and pdy): `ETO_PDY` needs an `lpDx` array; a bit `wingdi.h` does not
+/// define is ignored, unless `ETO_GLYPH_INDEX` or `ETO_IGNORELANGUAGE` is
+/// set too.
+pub fn eto_options_ok(options: u32, has_dx: bool) -> bool {
+    if options & ETO_PDY != 0 && !has_dx {
+        return false;
+    }
+    options & !ETO_DEFINED == 0 || options & (ETO_GLYPH_INDEX | ETO_IGNORELANGUAGE) == 0
+}
 
 pub const TRANSPARENT: i32 = 1;
 pub const OPAQUE: i32 = 2;
@@ -2043,11 +2217,7 @@ impl Gdi {
         self.ext_text_out(dc, x, y, 0, None, text, None)
     }
 
-    /// `ExtTextOutW`: `options` are `ETO_OPAQUE` (the rectangle is filled
-    /// with the background colour first), `ETO_CLIPPED` (the text is
-    /// clipped to it) and `ETO_GLYPH_INDEX` (`text` holds glyph indices);
-    /// `advances` are `lpDx`, the distance from each character's origin to
-    /// the next. False for a bad DC or options `ETO_*` cannot all have.
+    /// `ExtTextOutW`, as a yes or no: see [`Gdi::try_ext_text_out`].
     #[allow(clippy::too_many_arguments)]
     pub fn ext_text_out(
         &mut self,
@@ -2059,9 +2229,30 @@ impl Gdi {
         text: &[u16],
         advances: Option<&[i32]>,
     ) -> bool {
-        let Some(d) = self.dc(dc) else { return false };
-        if options == u32::MAX {
-            return false;
+        self.try_ext_text_out(dc, x, y, options, rect, text, advances).is_ok()
+    }
+
+    /// `ExtTextOutW` (`ExtTextOutW.yaml`): `options` are `ETO_OPAQUE` (the
+    /// rectangle is filled with the background colour first),
+    /// `ETO_CLIPPED` (the text is clipped to it), `ETO_GLYPH_INDEX` (`text`
+    /// holds glyph indices) and `ETO_PDY` (`advances` holds two values for
+    /// every character); `advances` are `lpDx`, the distance from each
+    /// character's origin to the next, which may be zero or negative. Their
+    /// sum is the text's width for the alignment and the current position.
+    #[allow(clippy::too_many_arguments)]
+    pub fn try_ext_text_out(
+        &mut self,
+        dc: u64,
+        x: i32,
+        y: i32,
+        options: u32,
+        rect: Option<Rect>,
+        text: &[u16],
+        advances: Option<&[i32]>,
+    ) -> Result<(), TextOutError> {
+        let Some(d) = self.dc(dc) else { return Err(TextOutError::BadDc) };
+        if !eto_options_ok(options, advances.is_some()) {
+            return Err(TextOutError::Refused);
         }
         let state = d.state.clone();
         let rect = rect.map(normalized);
@@ -2071,28 +2262,33 @@ impl Gdi {
             self.fill_rect_color(dc, r, state.bk);
         }
         if text.is_empty() {
-            return true;
+            return Ok(());
         }
         let glyph_index = options & ETO_GLYPH_INDEX != 0;
         let sel = self.font_sel(dc);
         let tf = sel.typeface();
         let tm = tf.metrics();
-        let advance = |i: usize, c: u16| match advances.and_then(|a| a.get(i)) {
-            Some(&dx) => dx,
-            None if glyph_index => tf.glyph_width(c),
-            None => tf.advance(c),
+        // `ETO_PDY`: pairs, along the line and across it.
+        let pdy = options & ETO_PDY != 0;
+        let step = if pdy { 2 } else { 1 };
+        let own = |c: u16| if glyph_index { tf.glyph_width(c) } else { tf.advance(c) };
+        let along: Option<Vec<i32>> = advances.map(|a| {
+            text.iter().enumerate().map(|(i, &c)| a.get(i * step).copied().unwrap_or_else(|| own(c))).collect()
+        });
+        let across: Option<Vec<i32>> =
+            advances.filter(|_| pdy).map(|a| (0..text.len()).map(|i| a.get(i * 2 + 1).copied().unwrap_or(0)).collect());
+        let cx: i32 = match &along {
+            Some(a) => a.iter().fold(0i32, |s, &v| s.wrapping_add(v)),
+            None => text.iter().fold(0i32, |s, &c| s.wrapping_add(own(c))),
         };
-        let cx: i32 = text.iter().enumerate().map(|(i, &c)| advance(i, c)).sum();
-        let (rx, ry) = if state.align & TA_UPDATECP != 0 { state.pos } else { (x, y) };
-        let x0 = match state.align & TA_CENTER {
-            TA_RIGHT => rx - cx,
-            TA_CENTER => rx - cx / 2,
-            _ => rx,
-        };
-        let top = match state.align & TA_BASELINE {
-            TA_BOTTOM => ry - tm.height,
-            TA_BASELINE => ry - tm.ascent,
-            _ => ry,
+        let rise: i32 = across.as_ref().map_or(0, |a| a.iter().fold(0i32, |s, &v| s.wrapping_add(v)));
+        let align = TextAlign::from_bits(state.align);
+        let (rx, ry) = if align.update_cp { state.pos } else { (x, y) };
+        let x0 = align.first_origin(rx, cx);
+        let top = match align.vertical {
+            VAlign::Top => ry,
+            VAlign::Bottom => ry - tm.height,
+            VAlign::Baseline => ry - tm.ascent,
         };
         // The baseline origin: with an escapement the text's own axes turn
         // about the reference point.
@@ -2114,20 +2310,21 @@ impl Gdi {
             (rx + round_pixel(dx), ry + round_pixel(dy))
         };
         let clip = if options & ETO_CLIPPED != 0 { rect } else { None };
-        let end = self.draw_run(dc, ox, oy, text, glyph_index, clip, advances, cx, true);
-        if state.align & TA_UPDATECP != 0
+        let run = Run { text, glyph_index, advances: along.as_deref(), rises: across.as_deref(), cx, fill: true };
+        let end = self.draw_run(dc, ox, oy, &run, clip);
+        if align.update_cp
             && let Some(s) = self.state(dc)
         {
-            s.pos.0 = match state.align & TA_CENTER {
-                TA_RIGHT => rx - cx,
-                TA_CENTER => rx,
-                _ => rx + cx,
-            };
+            s.pos.0 = align.end_x(rx, cx);
+            // `ETO_PDY`: against the sum of the second values.
+            if align.horizontal != HAlign::Center {
+                s.pos.1 = ry.wrapping_sub(rise);
+            }
             if esc != 0 {
                 s.pos = end;
             }
         }
-        true
+        Ok(())
     }
 
     /// Draw `text` (as in [`Gdi::draw_run`]) with its cell's top left at
@@ -2150,7 +2347,8 @@ impl Gdi {
             Some(a) => text.iter().enumerate().map(|(i, &c)| a.get(i).copied().unwrap_or_else(|| tf.advance(c))).sum(),
             None => tf.extent(text).0,
         };
-        self.draw_run(dc, x0, y0 + ascent, text, false, clip, advances, cx, fill);
+        let run = Run { text, glyph_index: false, advances, rises: None, cx, fill };
+        self.draw_run(dc, x0, y0 + ascent, &run, clip);
     }
 
     /// Fill the background cell of a line of text `w` wide whose top left is
@@ -2172,26 +2370,13 @@ impl Gdi {
         });
     }
 
-    /// Draw `text` (glyph indices if `glyph_index`) with its first pen
-    /// position at (`ox`, `oy`) on the baseline, in logical coordinates,
-    /// clipped to `clip` too when given; `cx` is its length along the
-    /// baseline. A glyph of an outline font is blended into the surface by
-    /// its coverage (grey scale antialiasing) or, for a bi-level font, set;
-    /// a bitmap face's pixels are set. Underline and strike-out follow the
+    /// Draw `run` with its first pen position at (`ox`, `oy`) on the
+    /// baseline, in logical coordinates, clipped to `clip` too when given.
+    /// A glyph of an outline font is blended into the surface by its
+    /// coverage (grey scale antialiasing) or, for a bi-level font, set; a
+    /// bitmap face's pixels are set. Underline and strike-out follow the
     /// `LOGFONTW`. Returns where the pen ends (logical).
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn draw_run(
-        &mut self,
-        dc: u64,
-        ox: i32,
-        oy: i32,
-        text: &[u16],
-        glyph_index: bool,
-        clip: Option<Rect>,
-        advances: Option<&[i32]>,
-        cx: i32,
-        fill: bool,
-    ) -> (i32, i32) {
+    pub(crate) fn draw_run(&mut self, dc: u64, ox: i32, oy: i32, run: &Run<'_>, clip: Option<Rect>) -> (i32, i32) {
         let sel = self.font_sel(dc);
         let tf = sel.typeface();
         let tm = tf.metrics();
@@ -2200,19 +2385,42 @@ impl Gdi {
         let clip = clip.map(|c| self.device_rect(dc, c));
         let (under, strike) = tf.line_metrics();
         let esc = tf.outline().map_or(0, |o| o.escapement);
+        let hard = tf.outline().is_none_or(|o| o.bilevel);
+        let cx = run.cx;
         let mut cache = self.text.glyphs.take().unwrap_or_else(|| GlyphCache::new(GLYPH_CACHE_BYTES));
         let mut end = (dx0, dy0);
+        // Every pixel of the glyphs with its coverage; the pen's end.
+        let glyphs = |cache: &mut GlyphCache, put: &mut dyn FnMut(i32, i32, [u8; 3])| -> (i32, i32) {
+            if tf.is_outline() {
+                return tf.draw_outline(cache, run.text, run.glyph_index, dx0, dy0, run.advances, run.rises, put);
+            }
+            let (mut x, mut y0) = (dx0, dy0 - tm.ascent);
+            for (i, &c) in run.text.iter().enumerate() {
+                let (w, rows) = tf.face.glyph(c);
+                for (r, &row) in rows.iter().enumerate().take(tm.height as usize) {
+                    if row == 0 {
+                        continue;
+                    }
+                    for col in 0..w.min(16) {
+                        if row & (0x8000 >> col) != 0 {
+                            put(x + col, y0 + r as i32, [255; 3]);
+                        }
+                    }
+                }
+                x += run.advances.and_then(|a| a.get(i).copied()).unwrap_or(w);
+                y0 -= run.rises.and_then(|a| a.get(i).copied()).unwrap_or(0);
+            }
+            (x, y0 + tm.ascent)
+        };
         self.with_target(dc, |b, state, dclip, _| {
             let clip = match clip {
                 Some(c) => dclip.intersect_rect(c),
                 None => dclip.clone(),
             };
             let fg_rgb = Rgb::from_colorref(state.text);
-            let fg = b.from_rgb(fg_rgb);
-            if state.bk_mode != TRANSPARENT && fill {
-                let cell = if esc == 0 {
-                    Rect::new(dx0, dy0 - tm.ascent, dx0 + cx, dy0 - tm.ascent + tm.height)
-                } else {
+            if state.bk_mode != TRANSPARENT && run.fill {
+                let top = dy0 - tm.ascent;
+                let cell = if esc != 0 {
                     // The box around the turned cell.
                     let (sn, cs) = crate::outline::sin_cos(esc);
                     let mut bb = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
@@ -2225,37 +2433,34 @@ impl Gdi {
                         }
                     }
                     Rect::new(bb.0, bb.1, bb.2, bb.3)
+                } else if run.advances.is_none() {
+                    Rect::new(dx0, top, dx0 + cx, top + tm.height)
+                } else {
+                    // `lpDx`: one rectangle that also holds the ink of every
+                    // glyph, and with `ETO_PDY` every character's cell at
+                    // its own height.
+                    let mut ink: Option<(i32, i32)> = None;
+                    glyphs(&mut cache, &mut |px, _, a| {
+                        if is_ink(a, hard) {
+                            ink = Some(ink.map_or((px, px + 1), |(l, r)| (l.min(px), r.max(px + 1))));
+                        }
+                    });
+                    let (left, right) = dx_cell_columns(dx0, cx, ink);
+                    let (mut up, mut high, mut low) = (0i32, 0i32, 0i32);
+                    for r in run.rises.unwrap_or(&[]).iter().take(run.text.len().saturating_sub(1)) {
+                        up = up.wrapping_add(*r);
+                        high = high.max(up);
+                        low = low.min(up);
+                    }
+                    Rect::new(left, top - high, right, top + tm.height - low)
                 };
                 Self::fill(b, &clip, cell, 0xF0, Some(Rgb::from_colorref(state.bk)));
             }
-            if tf.is_outline() {
-                end = tf.draw_outline(&mut cache, text, glyph_index, dx0, dy0, advances, |px, py, a| {
-                    if clip.contains_point(px, py) {
-                        Self::blend(b, px, py, fg_rgb, a, tf.outline().is_some_and(|o| o.bilevel));
-                    }
-                });
-            } else {
-                let y0 = dy0 - tm.ascent;
-                let mut x = dx0;
-                for (i, &c) in text.iter().enumerate() {
-                    let (w, rows) = tf.face.glyph(c);
-                    for (r, &row) in rows.iter().enumerate().take(tm.height as usize) {
-                        if row == 0 {
-                            continue;
-                        }
-                        for col in 0..w.min(16) {
-                            if row & (0x8000 >> col) != 0 {
-                                let (px, py) = (x + col, y0 + r as i32);
-                                if clip.contains_point(px, py) {
-                                    b.set_raw(px, py, fg);
-                                }
-                            }
-                        }
-                    }
-                    x += advances.and_then(|a| a.get(i).copied()).unwrap_or(w);
+            end = glyphs(&mut cache, &mut |px, py, a| {
+                if clip.contains_point(px, py) {
+                    Self::blend(b, px, py, fg_rgb, a, hard);
                 }
-                end = (x, dy0);
-            }
+            });
             if esc == 0 {
                 if sel.underline {
                     let top = dy0 + under.0;
@@ -2321,6 +2526,29 @@ impl Gdi {
             d.surface = bitmap;
         }
     }
+}
+
+/// A run of text for [`Gdi::draw_run`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Run<'a> {
+    /// Characters, or glyph indices if `glyph_index`.
+    pub text: &'a [u16],
+    pub glyph_index: bool,
+    /// `lpDx`: the distance from each character's origin to the next.
+    pub advances: Option<&'a [i32]>,
+    /// `ETO_PDY`'s second values: how far the characters after each one
+    /// move up.
+    pub rises: Option<&'a [i32]>,
+    /// The text's length along the baseline.
+    pub cx: i32,
+    /// Fill the background cell in OPAQUE mode.
+    pub fill: bool,
+}
+
+/// Whether a pixel with this coverage gets text colour: a bi-level glyph's
+/// pixel from half coverage on, any coverage of a smoothed one.
+fn is_ink(alpha: [u8; 3], hard: bool) -> bool {
+    if hard { (u32::from(alpha[0]) + u32::from(alpha[1]) + u32::from(alpha[2])) / 3 >= 128 } else { alpha != [0; 3] }
 }
 
 /// `FillRect`'s rectangle: an inverted one is filled with its sides

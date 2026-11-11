@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/QueryProcessCycleTime.yaml
+id: windows/api/kernel32.dll/QueryProcessCycleTime
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above, and Chrome's calls in the raw stage-1 traces (browser process: 60 calls, on handles of its child processes). Microsoft Learn: "QueryProcessCycleTime function (realtimeapiset.h)", "Process Security and Access Rights". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Gives the number of processor cycles all threads of a process have used so far, as one 64-bit counter that only grows. Chrome's browser process reads it for its child processes (process metrics) and stops (FATAL in the fault-injection run) when the call fails. The handle needs one of the two query rights.
+interface:
+  signature: "BOOL QueryProcessCycleTime(HANDLE ProcessHandle, PULONG64 CycleTime)"
+  returns: "nonzero and *CycleTime set on success; 0, a last error and *CycleTime untouched on failure. A successful call does not change the last error"
+  access: "PROCESS_QUERY_LIMITED_INFORMATION (0x1000) or PROCESS_QUERY_INFORMATION (0x0400)"
+chrome:
+  calls: "browser process, stage 1: QueryProcessCycleTime(<a child process handle>, &cycles) = TRUE, 60 times (two calls per child per sample)"
+  on_failure: "FATAL in the fault-injection run (gap-map section 6a)"
+rules:
+  value: "above 0 for a process that has run at all; a second call never gives less than the first; the value grows when the process works (20 million rounds of a small loop cost between 10^6 and 10^12 cycles) and stays almost where it is while the process sleeps (a child that had worked and then slept grew less in 300 ms of sleep than its work had cost)"
+  handles: "the pseudo handle of the current process, a real handle of it and a handle of another process read the same kind of counter: a reading through a real handle of the own process lies between two readings through the pseudo handle taken around it"
+  access_right: "a handle with PROCESS_QUERY_LIMITED_INFORMATION or with PROCESS_QUERY_INFORMATION works (also the handle CreateProcessW returns and PROCESS_ALL_ACCESS). A handle with only PROCESS_SET_INFORMATION, PROCESS_VM_READ, PROCESS_TERMINATE, PROCESS_DUP_HANDLE or SYNCHRONIZE: FALSE, ERROR_ACCESS_DENIED (5)"
+  exited_process: "a process that has exited (its handle still open) still answers TRUE, with a value not lower than while it ran, and the same value on every call"
+  not_a_process: "NULL, a closed handle, a thread handle, an event handle and the current-thread pseudo handle: FALSE, ERROR_INVALID_HANDLE (6)"
+errors:
+  no_query_right: "ERROR_ACCESS_DENIED (5)"
+  not_a_process_handle: "ERROR_INVALID_HANDLE (6)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call"
+  guarantees: "none; the unit is the processor's cycle counter and differs between machines"
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes and booleans; no line holds a handle, a pointer, a drive letter, a user name or a time. The second process is the test's own image started with --child; it works for a moment, signals an event and sleeps until the test ends it.
+not_covered: >
+  A NULL pointer for the result, processes of other users and protected processes, idle and system processes, the relation to QueryThreadCycleTime and QueryIdleProcessorCycleTime, and how cycles are counted across processor groups, frequency changes and virtual machines. One oddity was seen and not explained: OpenProcess with PROCESS_ALL_ACCESS minus the two query rights (0x1FEBFF) on the own process gave a handle the call accepted.

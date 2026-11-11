@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "9b678454dfdd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:31:32Z",
+  "tests": [
+    {
+      "name": "kmf_buffers",
+      "exe_sha256": "e2123851a281db5c8df33e2304bc03bdbc78fa0ca422a801e1453c3b8327dba1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIGV4ZWN1dGFibGUncyBuYW1lIHdpdGggYSBsYXJnZSBidWZmZXI6IHJldHVybmVkIGFib3ZlIDA6IDEKYnVmZmVyIG9mIHRoZSBuYW1lJ3MgbGVuZ3RoICsgMSB1bml0czogcmV0dXJuZWQgdGhlIGZ1bGwgbGVuZ3RoOyBsYXN0IGVycm9yIDA7IHVuaXRzIHdyaXR0ZW4gdGhlIGJ1ZmZlcidzIHNpemU7IGVuZHMgd2l0aCBhIE5VTCAxCmJ1ZmZlciBvZiBleGFjdGx5IHRoZSBuYW1lJ3MgbGVuZ3RoIHVuaXRzOiByZXR1cm5lZCB0aGUgZnVsbCBsZW5ndGg7IGxhc3QgZXJyb3IgMTIyOyB1bml0cyB3cml0dGVuIHRoZSBidWZmZXIncyBzaXplOyBlbmRzIHdpdGggYSBOVUwgMQpidWZmZXIgb2YgdGhlIG5hbWUncyBsZW5ndGggLSAxIHVuaXRzOiByZXR1cm5lZCB0aGUgYnVmZmVyJ3Mgc2l6ZTsgbGFzdCBlcnJvciAxMjI7IHVuaXRzIHdyaXR0ZW4gdGhlIGJ1ZmZlcidzIHNpemU7IGVuZHMgd2l0aCBhIE5VTCAxCmJ1ZmZlciBvZiAxMCB1bml0czogcmV0dXJuZWQgdGhlIGJ1ZmZlcidzIHNpemU7IGxhc3QgZXJyb3IgMTIyOyB1bml0cyB3cml0dGVuIHRoZSBidWZmZXIncyBzaXplOyBlbmRzIHdpdGggYSBOVUwgMQpidWZmZXIgb2YgMiB1bml0czogcmV0dXJuZWQgdGhlIGJ1ZmZlcidzIHNpemU7IGxhc3QgZXJyb3IgMTIyOyB1bml0cyB3cml0dGVuIHRoZSBidWZmZXIncyBzaXplOyBlbmRzIHdpdGggYSBOVUwgMQpidWZmZXIgb2YgMSB1bml0czogcmV0dXJuZWQgdGhlIGJ1ZmZlcidzIHNpemU7IGxhc3QgZXJyb3IgMTIyOyB1bml0cyB3cml0dGVuIHRoZSBidWZmZXIncyBzaXplOyBlbmRzIHdpdGggYSBOVUwgMQpidWZmZXIgb2YgMCB1bml0czogcmV0dXJuZWQgdGhlIGJ1ZmZlcidzIHNpemU7IGxhc3QgZXJyb3IgMTIyOyB1bml0cyB3cml0dGVuIG5vbmU7IGVuZHMgd2l0aCBhIE5VTCAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the executable's name with a large buffer: returned above 0: 1\nbuffer of the name's length + 1 units: returned the full length; last error 0; units written the buffer's size; ends with a NUL 1\nbuffer of exactly the name's length units: returned the full length; last error 122; units written the buffer's size; ends with a NUL 1\nbuffer of the name's length - 1 units: returned the buffer's size; last error 122; units written the buffer's size; ends with a NUL 1\nbuffer of 10 units: returned the buffer's size; last error 122; units written the buffer's size; ends with a NUL 1\nbuffer of 2 units: returned the buffer's size; last error 122; units written the buffer's size; ends with a NUL 1\nbuffer of 1 units: returned the buffer's size; last error 122; units written the buffer's size; ends with a NUL 1\nbuffer of 0 units: returned the buffer's size; last error 122; units written none; ends with a NUL 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "kmf_other",
+      "exe_sha256": "1aa5aab4d2edfcaa4304b0555976ce81221e14dd0aa15b3db63eeee77bbc5fc8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGF0YSBmaWxlIGNyZWF0ZWQgMHgwOyBtYXBwaW5nIG1hZGUgMTsgdmlldyBtYXBwZWQgMQp2aWV3IG9mIHRoZSBkYXRhIGZpbGU6IHJldHVybmVkIGFib3ZlIDA6IDE7IGxhc3QgZXJyb3IgMDsgc3RhcnRzIHdpdGggXERldmljZVw8dm9sdW1lPlw6IDE7IGVuZHMgd2l0aCB0aGUgZmlsZSdzIG5hbWU6IDE7IGVxdWFsIHRvIHRoZSBmaWxlIGhhbmRsZSdzIG9iamVjdCBuYW1lIChOdFF1ZXJ5T2JqZWN0IDB4MCk6IDEKYW4gYWRkcmVzcyBpbiB0aGUgdmlldydzIHNlY29uZCBwYWdlOiB0aGUgc2FtZSBuYW1lIDEKVW5tYXBWaWV3T2ZGaWxlIDEKdGhlIHNhbWUgYWRkcmVzcyBhZnRlciB0aGUgdmlldyB3YXMgdW5tYXBwZWQ6IHJldHVybmVkIDAgbGFzdCBlcnJvciA1OTsgYnVmZmVyIHVudG91Y2hlZAp2aWV3IG9mIGEgc2VjdGlvbiB3aXRob3V0IGEgZmlsZTogcmV0dXJuZWQgMCBsYXN0IGVycm9yIDEwMDY7IGJ1ZmZlciB1bnRvdWNoZWQKcHJpdmF0ZSBtZW1vcnkgKFZpcnR1YWxBbGxvYyk6IHJldHVybmVkIDAgbGFzdCBlcnJvciA1OTsgYnVmZmVyIHVudG91Y2hlZAp0aGUgc3RhY2s6IHJldHVybmVkIDAgbGFzdCBlcnJvciA1OTsgYnVmZmVyIHVudG91Y2hlZAp0aGUgc2FtZSBwcml2YXRlIGFkZHJlc3MgYWZ0ZXIgaXQgd2FzIGZyZWVkOiByZXR1cm5lZCAwIGxhc3QgZXJyb3IgNTk7IGJ1ZmZlciB1bnRvdWNoZWQKTlVMTDogcmV0dXJuZWQgMCBsYXN0IGVycm9yIDU5OyBidWZmZXIgdW50b3VjaGVkCmFuIGFkZHJlc3MgYWJvdmUgdGhlIHVzZXIgYWRkcmVzcyBzcGFjZTogcmV0dXJuZWQgMCBsYXN0IGVycm9yIDg3OyBidWZmZXIgdW50b3VjaGVkCnRoZSBleGVjdXRhYmxlJ3MgYmFzZSwgb3duIHByb2Nlc3MgaGFuZGxlIHdpdGggUFJPQ0VTU19RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OIChvcGVuZWQgMSk6IHJldHVybmVkIGFib3ZlIDAgbGFzdCBlcnJvciAwOyBidWZmZXIgd3JpdHRlbgp0aGUgZXhlY3V0YWJsZSdzIGJhc2UsIG93biBwcm9jZXNzIGhhbmRsZSB3aXRoIFBST0NFU1NfUVVFUllfSU5GT1JNQVRJT04gKG9wZW5lZCAxKTogcmV0dXJuZWQgYWJvdmUgMCBsYXN0IGVycm9yIDA7IGJ1ZmZlciB3cml0dGVuCnRoZSBleGVjdXRhYmxlJ3MgYmFzZSwgb3duIHByb2Nlc3MgaGFuZGxlIHdpdGggUFJPQ0VTU19RVUVSWV9JTkZPUk1BVElPTiB8IFBST0NFU1NfVk1fUkVBRCAob3BlbmVkIDEpOiByZXR1cm5lZCBhYm92ZSAwIGxhc3QgZXJyb3IgMDsgYnVmZmVyIHdyaXR0ZW4KdGhlIGV4ZWN1dGFibGUncyBiYXNlLCBvd24gcHJvY2VzcyBoYW5kbGUgd2l0aCBQUk9DRVNTX1ZNX1JFQUQgKG9wZW5lZCAxKTogcmV0dXJuZWQgMCBsYXN0IGVycm9yIDU7IGJ1ZmZlciB1bnRvdWNoZWQKdGhlIGV4ZWN1dGFibGUncyBiYXNlLCBvd24gcHJvY2VzcyBoYW5kbGUgd2l0aCBTWU5DSFJPTklaRSAob3BlbmVkIDEpOiByZXR1cm5lZCAwIGxhc3QgZXJyb3IgNTsgYnVmZmVyIHVudG91Y2hlZAp0aGUgZXhlY3V0YWJsZSdzIGJhc2UsIE5VTEwgcHJvY2VzcyBoYW5kbGU6IHJldHVybmVkIDAgbGFzdCBlcnJvciA2OyBidWZmZXIgdW50b3VjaGVkCnRoZSBleGVjdXRhYmxlJ3MgYmFzZSwgYW4gZXZlbnQgaGFuZGxlOiByZXR1cm5lZCAwIGxhc3QgZXJyb3IgNjsgYnVmZmVyIHVudG91Y2hlZApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "data file created 0x0; mapping made 1; view mapped 1\nview of the data file: returned above 0: 1; last error 0; starts with \\Device\\<volume>\\: 1; ends with the file's name: 1; equal to the file handle's object name (NtQueryObject 0x0): 1\nan address in the view's second page: the same name 1\nUnmapViewOfFile 1\nthe same address after the view was unmapped: returned 0 last error 59; buffer untouched\nview of a section without a file: returned 0 last error 1006; buffer untouched\nprivate memory (VirtualAlloc): returned 0 last error 59; buffer untouched\nthe stack: returned 0 last error 59; buffer untouched\nthe same private address after it was freed: returned 0 last error 59; buffer untouched\nNULL: returned 0 last error 59; buffer untouched\nan address above the user address space: returned 0 last error 87; buffer untouched\nthe executable's base, own process handle with PROCESS_QUERY_LIMITED_INFORMATION (opened 1): returned above 0 last error 0; buffer written\nthe executable's base, own process handle with PROCESS_QUERY_INFORMATION (opened 1): returned above 0 last error 0; buffer written\nthe executable's base, own process handle with PROCESS_QUERY_INFORMATION | PROCESS_VM_READ (opened 1): returned above 0 last error 0; buffer written\nthe executable's base, own process handle with PROCESS_VM_READ (opened 1): returned 0 last error 5; buffer untouched\nthe executable's base, own process handle with SYNCHRONIZE (opened 1): returned 0 last error 5; buffer untouched\nthe executable's base, NULL process handle: returned 0 last error 6; buffer untouched\nthe executable's base, an event handle: returned 0 last error 6; buffer untouched\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

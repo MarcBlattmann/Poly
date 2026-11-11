@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/SHGetKnownFolderPath.yaml
+id: windows/api/shell32.dll/SHGetKnownFolderPath
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above, and Chrome's call in a fresh call-site trace of stage 1 (the browser process; chrome.dll's imports from shell32.dll traced with tools/wintrace/polytrace-sync). Microsoft Learn: "SHGetKnownFolderPath function (shlobj_core.h)", "KNOWNFOLDERID", "KNOWN_FOLDER_FLAG"; knownfolders.h for the ids. Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Gives the full path of a known folder (Downloads, the profile, the application data folders, the Windows directory, ...) as a string in memory the caller frees with CoTaskMemFree. Chrome's browser process asks once, for FOLDERID_Downloads, and stops (FATAL in the fault-injection run) when the call fails. By default the call only succeeds for a folder whose directory exists.
+interface:
+  signature: "HRESULT SHGetKnownFolderPath(REFKNOWNFOLDERID rfid, DWORD dwFlags, HANDLE hToken, PWSTR *ppszPath)"
+  returns: "S_OK (0) and *ppszPath = a NUL-terminated path in CoTaskMemAlloc memory; a failure HRESULT and *ppszPath = NULL"
+  flags: "KNOWN_FOLDER_FLAG (shlobj_core.h): KF_FLAG_DEFAULT 0, KF_FLAG_SIMPLE_IDLIST 0x100, KF_FLAG_NOT_PARENT_RELATIVE 0x200, KF_FLAG_DEFAULT_PATH 0x400, KF_FLAG_INIT 0x800, KF_FLAG_NO_ALIAS 0x1000, KF_FLAG_DONT_UNEXPAND 0x2000, KF_FLAG_DONT_VERIFY 0x4000, KF_FLAG_CREATE 0x8000, KF_FLAG_ALIAS_ONLY 0x80000000"
+chrome:
+  call: "browser process, stage 1, once (chrome.dll+0x1be3ad5): SHGetKnownFolderPath(FOLDERID_Downloads {374DE290-123F-4565-9164-39C4925E467B}, 0, NULL, &path) = S_OK, path = <profile>\\Downloads. The thread's last error after it was 1008 in one run and 2 in another: a leftover, not a result"
+  other_folders: "the other folders Chrome asks for in stage 1 go through SHGetFolderPathW (not this entry): CSIDL_LOCAL_APPDATA (0x1C), CSIDL_COMMON_APPDATA (0x23), CSIDL_DESKTOPDIRECTORY (0x10), CSIDL_PROFILE (0x28), CSIDL_PROGRAMS (0x2); all return S_OK"
+  on_failure: "FATAL in the fault-injection run (gap-map section 6a): Chrome ends without a DOM when the call returns a failure"
+rules:
+  path_form: "an absolute path with a drive letter, a colon and backslashes, no backslash at the end, no forward slash; the same string on every call, in new memory each time"
+  profile_folders: "relative to FOLDERID_Profile (which is a directory directly in FOLDERID_UserProfiles): Downloads \\Downloads, Desktop \\Desktop, Documents \\Documents, LocalAppData \\AppData\\Local, RoamingAppData \\AppData\\Roaming, LocalAppDataLow \\AppData\\LocalLow, Programs \\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs. All exist in the oracle's profile and all return S_OK"
+  system_folders: "FOLDERID_Windows is GetWindowsDirectoryW's path and FOLDERID_System GetSystemDirectoryW's (shown as <Windows>\\system32); Fonts <Windows>\\Fonts; ProgramFiles <drive>\\Program Files; ProgramFilesX86 <drive>\\Program Files (x86); ProgramData <drive>\\ProgramData; Public <UserProfiles>\\Public; UserProfiles is the directory the profiles are in"
+  missing_directory: "a known folder whose directory does not exist (FOLDERID_Playlists <Profile>\\Music\\Playlists and FOLDERID_PhotoAlbums <Profile>\\Pictures\\Slide Shows in a profile nobody made them in): with flags 0 the call fails with 0x80070002 (HRESULT of ERROR_FILE_NOT_FOUND) and *ppszPath NULL; the same with KF_FLAG_NO_ALIAS, KF_FLAG_DONT_UNEXPAND and KF_FLAG_DEFAULT_PATH alone. With KF_FLAG_DONT_VERIFY (alone or with KF_FLAG_DEFAULT_PATH) it returns S_OK and the path the folder would have. None of these calls creates the directory"
+  flags_on_existing: "on a folder that exists (Downloads, LocalAppData, Windows) these flags change nothing, S_OK and the same path: KF_FLAG_DONT_VERIFY, KF_FLAG_CREATE, KF_FLAG_DONT_UNEXPAND, KF_FLAG_NO_ALIAS, KF_FLAG_DEFAULT_PATH, KF_FLAG_DEFAULT_PATH | KF_FLAG_NOT_PARENT_RELATIVE, KF_FLAG_SIMPLE_IDLIST, and the undefined low bits 0x1 and 0xFF"
+  flags_refused: "KF_FLAG_NOT_PARENT_RELATIVE without KF_FLAG_DEFAULT_PATH, and KF_FLAG_ALIAS_ONLY: E_INVALIDARG (0x80070057), *ppszPath NULL"
+  not_a_folder: "an id that is no known folder (also the all-zero GUID): 0x80070002 whatever the flags, *ppszPath NULL"
+  virtual_folders: "a known folder without a file-system path (FOLDERID_ComputerFolder, FOLDERID_ControlPanelFolder): E_FAIL (0x80004005) whatever the flags, *ppszPath NULL"
+  token: "hToken NULL is the calling user. hToken -1 is the default user: Profile is <UserProfiles>\\Default, LocalAppData and Downloads lie in it, Windows is unchanged. The process's own token opened with TOKEN_QUERY (alone or with TOKEN_IMPERSONATE) gives the same paths as NULL; opened with TOKEN_DUPLICATE only it gives E_ACCESSDENIED (0x80070005). A value that is not a handle, and a handle that is not a token (an event): E_HANDLE (0x80070006), also for FOLDERID_Windows"
+  memory: "the caller frees the path with CoTaskMemFree; on failure there is nothing to free (*ppszPath is NULL, it was a nonzero marker before the call)"
+errors:
+  unknown_id_or_missing_directory: "0x80070002"
+  virtual_folder: "0x80004005 (E_FAIL)"
+  bad_flags: "0x80070057 (E_INVALIDARG)"
+  token_without_query: "0x80070005 (E_ACCESSDENIED)"
+  not_a_token: "0x80070006 (E_HANDLE)"
+side_effects: "none with the flags tested; KF_FLAG_CREATE and KF_FLAG_INIT can create a directory or its desktop.ini and were not used where they would"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes and booleans; no line holds a handle, a pointer, a drive letter, a user name or a time. Paths are shown relative to the profile (<Profile>), the profiles directory (<UserProfiles>), the Windows directory (<Windows>) or the drive (<drive>), and each line says whether the path is an existing directory. The tests import shell32.dll and ole32.dll (CoTaskMemFree).
+not_covered: >
+  KF_FLAG_CREATE on a folder that does not exist and KF_FLAG_INIT (they change the profile), redirected folders (OneDrive, policies), folders of other users through a real token of theirs, the other hundred or so folder ids, NULL for rfid or ppszPath, and SHGetFolderPathW / SHGetKnownFolderIDList / IKnownFolderManager.

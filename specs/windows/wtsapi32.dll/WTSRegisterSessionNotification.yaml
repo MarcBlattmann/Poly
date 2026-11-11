@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/wtsapi32.dll/WTSRegisterSessionNotification.yaml
+id: windows/api/wtsapi32.dll/WTSRegisterSessionNotification
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above (run in the SSH session and in the desktop session with identical output), and Chrome's calls in a fresh call-site trace of stage 1. Microsoft Learn: "WTSRegisterSessionNotification function (wtsapi32.h)", "WTSUnRegisterSessionNotification function", "WM_WTSSESSION_CHANGE message". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Asks for WM_WTSSESSION_CHANGE messages (lock, unlock, logon, connect ...) to be sent to a window; WTSUnRegisterSessionNotification ends it. Chrome registers one hidden window twice at start-up and unregisters it once at exit. Registrations are counted per window: each successful register needs its own unregister.
+interface:
+  signature: "BOOL WTSRegisterSessionNotification(HWND hWnd, DWORD dwFlags); BOOL WTSUnRegisterSessionNotification(HWND hWnd)"
+  returns: "nonzero on success; 0 and a last error on failure"
+  flags: "NOTIFY_FOR_THIS_SESSION 0, NOTIFY_FOR_ALL_SESSIONS 1 (wtsapi32.h)"
+chrome:
+  calls: "browser process, stage 1: WTSRegisterSessionNotification(<a window of its own>, NOTIFY_FOR_THIS_SESSION (0)) = TRUE, twice for the same window (one call site, chrome.dll+0x3f7c1ee, a thread other than the main one); at exit WTSUnRegisterSessionNotification(the window) = TRUE, once"
+  on_failure: "TOLERATED in the fault-injection run (gap-map section 6a); the names have to exist (delay-loaded)"
+rules:
+  register: "a window of the caller with flags 0 or 1: TRUE. Registering the same window again returns TRUE again, also with the other flag"
+  counted: "every successful register of a window is undone by one unregister: after two registers, two unregisters return TRUE and a third returns FALSE with ERROR_FILE_NOT_FOUND (2). After a register for all sessions and one for this session, the first unregister returns TRUE"
+  never_registered: "unregistering a window that was never registered: FALSE, ERROR_FILE_NOT_FOUND (2)"
+  bad_flags: "flags other than 0 and 1 (2, 3, 0x100, 0xFFFFFFFF): FALSE, ERROR_INVALID_PARAMETER (87); the window is not registered by such a call (an unregister afterwards fails with 2)"
+  not_a_window: "NULL, a value that is no window (0x7FFF0000) and a window that has been destroyed (also one that was still registered when it was destroyed): both functions return FALSE with ERROR_INVALID_PARAMETER (87)"
+  last_error_on_success: "a successful call leaves 0 or the earlier value in the last error; only the return value counts"
+errors:
+  bad_flags_or_not_a_window: "ERROR_INVALID_PARAMETER (87)"
+  not_registered: "ERROR_FILE_NOT_FOUND (2), from WTSUnRegisterSessionNotification"
+side_effects: "the window receives WM_WTSSESSION_CHANGE while it is registered"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, sizes and booleans; no line holds a handle, a pointer, a name of the machine or of its user, a hardware value or a time. The tests make hidden top-level windows of the predefined class "Static" and import wtsapi32.dll and user32.dll. No session event is caused.
+not_covered: >
+  The messages themselves (nothing locks, logs on or connects during a test), windows of other processes, WTSRegisterSessionNotificationEx, and how many registrations a window may hold.

@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtResumeProcess.yaml
+id: windows/api/ntdll.dll/NtResumeProcess
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  The same observations as the NtSuspendProcess entry of this DLL: every test of that entry calls both functions.
+summary: >
+  Takes one off the suspend count of every thread of a process (a count of 0 stays 0); threads that reach 0 run again. It is the counterpart of NtSuspendProcess and is described rule by rule in specs/windows/ntdll.dll/NtSuspendProcess.yaml and tested by the tests in specs/windows/ntdll.dll/NtSuspendProcess.tests/; this entry has no tests of its own.
+same_as: "windows/api/ntdll.dll/NtSuspendProcess"
+interface:
+  signature: "NTSTATUS NtResumeProcess(HANDLE ProcessHandle)"
+  access: "PROCESS_SUSPEND_RESUME (0x0800)"
+rules:
+  same_sheet: "the rules nesting, resume_at_zero, mixed_with_suspendthread, resume_takes_any_count, maximum_count, exited_process and access_right of the NtSuspendProcess sheet are this function's behaviour"
+  in_short: "returns 0 and lowers every thread's suspend count by one, not below 0; it also takes counts that SuspendThread or CREATE_SUSPENDED put there"
+errors:
+  same_errors: "the statuses of the NtSuspendProcess sheet: STATUS_INVALID_HANDLE, STATUS_OBJECT_TYPE_MISMATCH, STATUS_ACCESS_DENIED, STATUS_PROCESS_IS_TERMINATING"
+side_effects: "changes the suspend count of every thread of the target process"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  Everything the NtSuspendProcess sheet lists as not covered.

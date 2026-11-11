@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "9b678454dfdd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:31:32Z",
+  "tests": [
+    {
+      "name": "ift_calls",
+      "exe_sha256": "857026550009f3ab3f97b246f00ed50e52d97e5dd1ef5fc7f3798907746110e3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0SWZUYWJsZTIgPSAwOyByb3dzIGFib3ZlIDA6IDEKYSBzZWNvbmQgY2FsbCA9IDA7IGFub3RoZXIgYmxvY2sgb2YgbWVtb3J5OiAxOyB0aGUgc2FtZSBudW1iZXIgb2Ygcm93czogMQphIGNhbGwgYWZ0ZXIgRnJlZU1pYlRhYmxlID0gMDsgcm93cyBhcyBiZWZvcmU6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetIfTable2 = 0; rows above 0: 1\na second call = 0; another block of memory: 1; the same number of rows: 1\na call after FreeMibTable = 0; rows as before: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "ift_chrome",
+      "exe_sha256": "98c82ed299e24c65d4233e4a6b712561a8855c8f19ec82665729c17afbe2792c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0SWZUYWJsZTIgPSAwOyBhIHRhYmxlIGNhbWUgYmFjazogMTsgaXQgaGFzIGF0IGxlYXN0IG9uZSByb3c6IDEKcm93cyBvZiB0eXBlIElGX1RZUEVfU09GVFdBUkVfTE9PUEJBQ0s6IDEKdGhlIGxvb3BiYWNrIHJvdzogT3BlclN0YXR1cyAxICgxIGlzIHVwKTsgUGh5c2ljYWxBZGRyZXNzTGVuZ3RoIDA7IE10dSBhYm92ZSAwOiAxOyBJbnRlcmZhY2VJbmRleCBhYm92ZSAwOiAxOyBBbGlhcyBoYXMgdGV4dDogMTsgRGVzY3JpcHRpb24gaGFzIHRleHQ6IDE7IFRyYW5zbWl0TGlua1NwZWVkIGFib3ZlIDA6IDEKdGhlIGxvb3BiYWNrIHJvdydzIEludGVyZmFjZUx1aWQgY2FycmllcyBpdHMgdHlwZTogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetIfTable2 = 0; a table came back: 1; it has at least one row: 1\nrows of type IF_TYPE_SOFTWARE_LOOPBACK: 1\nthe loopback row: OperStatus 1 (1 is up); PhysicalAddressLength 0; Mtu above 0: 1; InterfaceIndex above 0: 1; Alias has text: 1; Description has text: 1; TransmitLinkSpeed above 0: 1\nthe loopback row's InterfaceLuid carries its type: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    }
+  ]
+}
