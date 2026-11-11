@@ -21,6 +21,8 @@
 //! - [`StaticFs`] is a read-only tree of directories, links and files whose
 //!   contents a function makes ([`StaticFsBuilder`]): the kernel builds
 //!   sysfs with it.
+//! - [`mqueuefs::MqueueFs`] is the message queue file system of
+//!   mq_overview(7): a file per POSIX message queue of an IPC namespace.
 //! - [`format`] holds the text of each file, [`cpuflags`] the names of
 //!   CPU features; both are plain functions, tested here.
 //!
@@ -44,10 +46,12 @@ extern crate alloc;
 
 pub mod cpuflags;
 pub mod format;
+pub mod mqueuefs;
 mod procfs;
 mod source;
 mod staticfs;
 
+pub use mqueuefs::{MqueueFs, MqueueSource, QueueEntry};
 pub use procfs::{
     NR_OPEN, NS_KINDS, PID_MAX, PID_POS, ProcFs, copy_at, namespace_file, namespace_file_ino, process_dir,
 };

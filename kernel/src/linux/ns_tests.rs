@@ -287,3 +287,60 @@ kernel_test! {
         })
     }
 }
+
+kernel_test! {
+    /// ADR 0178: an IPC namespace owns its POSIX message queues (shown by
+    /// a message queue file system mounted from it), its System V objects
+    /// (`/proc/sysvipc`) and its settings.
+    fn an_ipc_namespace_owns_its_queues_and_settings() -> TestResult {
+        let (process, memory) = setup()?;
+        run(&process, &memory, |p| -> Check {
+            const O_CREAT_RDWR: u64 = 0o102;
+            const MS_REC_PRIVATE: u64 = 0x4000 | 0x40000;
+            const IPC_CREAT: u64 = 0o1000;
+            check!(1, sys(p, nr::UNSHARE, &[CLONE_NEWIPC | CLONE_NEWNS]) == Ok(0));
+            check!(2, sys(p, nr::MOUNT, &[cstr(1, ""), cstr(2, "/"), 0, MS_REC_PRIVATE, 0]) == Ok(0));
+            for (slot, dir) in [(1, "/tmp/mq-a"), (2, "/tmp/mq-b")] {
+                let made = sys(p, nr::MKDIRAT, &[AT_FDCWD, cstr(slot, dir), 0o755]);
+                check!(3, matches!(made, Ok(0) | Err(Errno::EEXIST)));
+            }
+            let mount = |dir: &str| sys(p, nr::MOUNT, &[cstr(3, "mqueue"), cstr(4, dir), cstr(5, "mqueue"), 0, 0]);
+            check!(4, mount("/tmp/mq-a") == Ok(0));
+            check!(5, read_file(p, "/tmp/mq-a/pk_q") == Err(Errno::ENOENT), "a new namespace has no queues");
+            let q = sys(p, nr::MQ_OPEN, &[cstr(1, "pk_q"), O_CREAT_RDWR, 0o600, 0]);
+            check!(6, q.is_ok());
+            let status = read_file(p, "/tmp/mq-a/pk_q").map_err(|_| 7u64)?;
+            check!(8, status.starts_with(b"QSIZE:0 "));
+            // System V: the first queue of the namespace is 0 and is listed.
+            let listed = |path: &str| text(p, path).lines().count();
+            check!(9, listed("/proc/sysvipc/msg") == 1 && listed("/proc/sysvipc/shm") == 1);
+            check!(10, sys(p, nr::MSGGET, &[0x706b_0001, IPC_CREAT | 0o600]) == Ok(0));
+            check!(11, listed("/proc/sysvipc/msg") == 2);
+            // A setting of this namespace.
+            let msgmni = text(p, "/proc/sys/kernel/msgmni");
+            check!(12, write_file(p, "/proc/sys/kernel/msgmni", "77") == Ok(2));
+            check!(13, text(p, "/proc/sys/kernel/msgmni") == "77\n");
+            check!(14, write_file(p, "/proc/sys/fs/mqueue/msg_max", "11") == Ok(2));
+
+            // A further namespace: none of it is there, while the mount
+            // made before keeps showing its own namespace's queue.
+            check!(15, sys(p, nr::UNSHARE, &[CLONE_NEWIPC]) == Ok(0));
+            check!(16, sys(p, nr::MQ_OPEN, &[cstr(1, "pk_q"), 2, 0, 0]) == Err(Errno::ENOENT));
+            check!(17, sys(p, nr::MSGGET, &[0x706b_0001, 0]) == Err(Errno::ENOENT));
+            check!(18, listed("/proc/sysvipc/msg") == 1);
+            check!(19, text(p, "/proc/sys/kernel/msgmni") == msgmni);
+            check!(20, text(p, "/proc/sys/fs/mqueue/msg_max") == "10\n");
+            check!(21, mount("/tmp/mq-b") == Ok(0));
+            check!(22, read_file(p, "/tmp/mq-b/pk_q") == Err(Errno::ENOENT));
+            check!(23, read_file(p, "/tmp/mq-a/pk_q").is_ok());
+            check!(24, sys(p, nr::MQ_OPEN, &[cstr(1, "pk_q"), O_CREAT_RDWR, 0o600, 0]).is_ok(), "another queue");
+            check!(25, read_file(p, "/tmp/mq-b/pk_q").is_ok());
+            check!(26, sys(p, nr::MQ_UNLINK, &[cstr(1, "pk_q")]) == Ok(0));
+            check!(27, read_file(p, "/tmp/mq-b/pk_q") == Err(Errno::ENOENT));
+            check!(28, read_file(p, "/tmp/mq-a/pk_q").is_ok(), "the outer queue is untouched");
+            check!(29, sys(p, nr::UMOUNT2, &[cstr(1, "/tmp/mq-b"), 0]) == Ok(0));
+            check!(30, sys(p, nr::UMOUNT2, &[cstr(1, "/tmp/mq-a"), 0]) == Ok(0));
+            Ok(())
+        })
+    }
+}
