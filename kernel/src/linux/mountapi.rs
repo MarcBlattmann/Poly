@@ -43,6 +43,22 @@ fn admin_flags(f: MountFlags) -> admin::MountFlags {
     }
 }
 
+/// The file system `m` shows was just made by the calling thread: it
+/// belongs to the thread's user namespace (ADR 0177).
+pub(super) fn own_superblock(m: &Mount) {
+    let owner = super::cred::current_creds().and_then(|c| c.user_ns).map_or(0, |ns| ns.inum());
+    m.set_sb_owner(owner);
+}
+
+/// Whether the calling thread may change the file system `m` shows as a
+/// whole (a remount without `MS_BIND`, `FSCONFIG_CMD_RECONFIGURE`):
+/// `CAP_SYS_ADMIN` in the user namespace that made it. Kernel threads may.
+pub(super) fn may_change_superblock(m: &Mount) -> bool {
+    super::cred::current_creds().is_none_or(|c| {
+        poly_personality_linux::ns::capable_in_user_ns(&c, m.sb_owner(), poly_personality_linux::cred::cap::SYS_ADMIN)
+    })
+}
+
 /// What a context's commands made.
 #[derive(Default)]
 struct Made {
@@ -125,6 +141,11 @@ impl SuperblockOps for Ops<'_> {
 
     fn reconfigure(&mut self, read_only: Option<bool>, data: &[u8]) -> Result<(), Errno> {
         let m = self.made.picked.as_ref().or(self.made.mounted.as_ref()).ok_or(Errno::EINVAL)?;
+        // fspick's spec sheet: a mount of a file system made outside the
+        // caller's user namespace can be picked, but not reconfigured.
+        if !may_change_superblock(m) {
+            return Err(Errno::EPERM);
+        }
         if m.fs_name() == "tmpfs" && !data.is_empty() {
             let root = poly_personality_linux::admin::mount_options(admin::FsType::Tmpfs, data)?;
             let bytes = match root.size {
@@ -205,7 +226,15 @@ impl Thread<'_> {
         }
         let mounts = fs::vfs().mount_subtree(node.mount(), recursive);
         let attrs_of = |m: &Mount| join_attrs(admin_flags(m.flags()), m.attrs());
-        // All or nothing: no mount made read-only while it has writers.
+        // All or nothing: nothing a mount is locked against (a flag that
+        // is locked on cleared, a locked access time mode changed: EPERM),
+        // and no mount made read-only while it has writers.
+        for m in &mounts {
+            let (flags, extra) = split_attrs(change.apply(attrs_of(m)));
+            if m.flags_locked_against(vfs_flags(flags)) || m.atime_locked_against(extra) {
+                return Err(Errno::EPERM);
+            }
+        }
         for m in &mounts {
             if change.apply(attrs_of(m)) & uapi::MOUNT_ATTR_RDONLY != 0 && m.busy_for_read_only() {
                 return Err(Errno::EBUSY);
@@ -251,6 +280,7 @@ impl Thread<'_> {
         let m = vfs.new_detached(fs, vfs_flags(flags));
         m.set_attrs(extra);
         m.set_sb_info(&made.source, &made.options);
+        own_superblock(&m);
         made.mounted = Some(m.clone());
         if made.read_only {
             m.set_sb_read_only(true);

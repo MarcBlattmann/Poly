@@ -62,39 +62,100 @@ impl Vfs {
         if src.is_unbindable() {
             return Err(Errno::EINVAL);
         }
-        let (m, direct) = {
-            let mut table = self.mounts.lock();
-            let m = table.new_mount(src.sb.clone(), loc.ino, None, src.flags());
-            let direct = if recursive { Self::children_of(&table, &src) } else { Vec::new() };
-            (m, direct)
-        };
-        m.set_attrs(src.attrs());
-        if direct.is_empty() {
-            return Ok(m);
-        }
         // Only the mounts on mount points at or below `node`.
-        let below: Vec<Arc<Mount>> = direct
+        let below = self.mounts_below(loc);
+        // A copy without them would show what a mount locked in place
+        // covers (ADR 0177).
+        if !recursive && below.iter().any(|c| c.locked_in_place()) {
+            return Err(Errno::EINVAL);
+        }
+        let m = {
+            let mut table = self.mounts.lock();
+            let m = table.copy_of(&src, loc.ino);
+            if recursive {
+                let kept = Self::copy_below(&mut table, &src, below, &m, false);
+                m.set_subtree(kept);
+            }
+            m
+        };
+        self.settle_pins();
+        Ok(m)
+    }
+
+    /// The mounts directly on `loc`'s mount whose mount points are `loc`
+    /// or below it, in mount order: what a copy of the subtree from `loc`
+    /// (a bind mount, a clone) would leave out or take along.
+    pub(crate) fn mounts_below(&self, loc: &Location) -> Vec<Arc<Mount>> {
+        let direct = {
+            let table = self.mounts.lock();
+            Self::children_of(&table, &loc.mount)
+        };
+        direct
             .into_iter()
             .filter(|c| c.parent().is_some_and(|(p, ino)| self.is_at_or_below(&Location { mount: p, ino }, loc)))
-            .collect();
-        let mut kept = Vec::new();
-        {
-            let mut table = self.mounts.lock();
-            let mut queue: Vec<(Arc<Mount>, Arc<Mount>)> = below.into_iter().map(|c| (c, m.clone())).collect();
-            let mut i = 0;
-            while i < queue.len() && kept.len() < 4096 {
-                let (old, new_parent) = queue[i].clone();
-                i += 1;
-                let Some((_, ino)) = old.parent() else { continue };
-                let copy = table.new_mount(old.sb.clone(), old.root, None, old.flags());
-                copy.set_attrs(old.attrs());
-                copy.set_weak_parent(&new_parent, ino);
-                queue.extend(Self::children_of(&table, &old).into_iter().map(|c| (c, copy.clone())));
-                kept.push(copy);
-            }
+            .collect()
+    }
+
+    /// Copies of the trees of mounts `first` (mounts directly on `src`,
+    /// which `top` is the copy of) for `top`, at any depth, parents before
+    /// their children, each on the mount point of its original in the copy
+    /// of its original's parent. A copy keeps its original's flags and
+    /// locks, the lock in place too: it stays where it is in the copy.
+    ///
+    /// For a bind mount (`bind`) unbindable mounts and what is below them
+    /// are left out, the copies inherit the propagation of their originals
+    /// like any bind and hold their parents; the caller puts them in the
+    /// table. For a detached tree they are private and point back weakly;
+    /// its top keeps them ([`Mount::subtree`]).
+    ///
+    /// The originals are listed before any copy is made, so a copy that
+    /// lands inside the tree it copies is not copied again.
+    pub(crate) fn copy_below(
+        table: &mut crate::mount::MountTable,
+        src: &Arc<Mount>,
+        first: Vec<Arc<Mount>>,
+        top: &Arc<Mount>,
+        bind: bool,
+    ) -> Vec<Arc<Mount>> {
+        /// The most mounts one copy takes along.
+        const MOST: usize = 4096;
+        let mut originals: Vec<Arc<Mount>> = first.into_iter().filter(|m| !(bind && m.is_unbindable())).collect();
+        let mut i = 0;
+        while i < originals.len() && originals.len() < MOST {
+            let children = Self::children_of(table, &originals[i]);
+            originals.extend(children.into_iter().filter(|m| !(bind && m.is_unbindable())));
+            i += 1;
         }
-        m.set_subtree(kept);
-        Ok(m)
+        originals.truncate(MOST);
+        let mut copies: alloc::collections::BTreeMap<MountId, Arc<Mount>> = alloc::collections::BTreeMap::new();
+        copies.insert(src.id(), top.clone());
+        let mut made = Vec::new();
+        for old in originals {
+            let Some((p, ino)) = old.parent() else { continue };
+            let Some(parent) = copies.get(&p.id()).cloned() else { continue };
+            let copy = table.copy_of(&old, old.root_ino());
+            copy.set_locks(old.locks());
+            if bind {
+                copy.set_parent(Some((parent, ino)));
+                let peer = old.peer_group();
+                copy.set_groups(peer, if peer == 0 { old.master_group() } else { 0 });
+            } else {
+                copy.set_weak_parent(&parent, ino);
+            }
+            copies.insert(old.id(), copy.clone());
+            made.push(copy);
+        }
+        made
+    }
+
+    /// Pin the copies made of mounts that pin their root
+    /// ([`Mount::pin_like`]): after the table's lock is released, because
+    /// the file system is asked.
+    pub(crate) fn settle_pins(&self) {
+        let pending = self.mounts.lock().take_pending_pins();
+        for (original, copy) in pending {
+            copy.pin_like(&original);
+        }
     }
 
     /// The mounts directly on `m` (in the table, or kept by the detached
@@ -124,9 +185,17 @@ impl Vfs {
 
     /// `move_mount(2)`: `src` must be the root of a mount (`EINVAL`). A
     /// detached mount is attached on what `dst` shows; an attached one is
-    /// moved there with everything mounted below it. A namespace's first
-    /// mount cannot move (`EINVAL`), nor can a mount move below itself
-    /// (`ELOOP`).
+    /// moved there with everything mounted below it.
+    ///
+    /// Errors (the spec sheet of mntapi_move_mount): a directory mount
+    /// onto something that is no directory, or the mount of a file onto a
+    /// directory, `EINVAL`; a mount that is attached in another namespace
+    /// than the target is in, and a mount that was attached before and is
+    /// in no namespace now (a detached mount is attached once), `EINVAL`;
+    /// a mount onto itself or below itself, also a namespace's first
+    /// mount, which everything is below, `ELOOP`; a mount locked in place,
+    /// one whose parent is shared, and an unbindable one below a shared
+    /// mount, `EINVAL`.
     pub fn move_mount(&self, cred: &Cred, src: &NodeRef, dst: &NodeRef) -> Result<()> {
         if !cred.has(cap::SYS_ADMIN) {
             return Err(Errno::EPERM);
@@ -136,15 +205,17 @@ impl Vfs {
             return Err(Errno::EINVAL);
         }
         let dst = self.follow_mounts(dst.loc().clone());
-        if dst.attr()?.kind != FileType::Directory && src.attr()?.kind == FileType::Directory {
-            return Err(Errno::ENOTDIR);
+        if (dst.attr()?.kind == FileType::Directory) != (src.attr()?.kind == FileType::Directory) {
+            return Err(Errno::EINVAL);
         }
         let m = src.mount.clone();
         let mut table = self.mounts.lock();
         if !table.contains(&m) {
             // A detached mount: attach it, with what its tree keeps below.
             if m.parent().is_some() {
-                // Below the top of a detached tree: not supported.
+                // It was attached and left its namespace (a lazy unmount,
+                // a namespace that ended), or it is below the top of a
+                // detached tree.
                 return Err(Errno::EINVAL);
             }
             m.set_parent(Some((dst.mount.clone(), dst.ino)));
@@ -153,7 +224,18 @@ impl Vfs {
             table.mounts.extend(below);
             return Ok(());
         }
-        let Some((old_parent, _)) = m.parent() else { return Err(Errno::EINVAL) };
+        // Attached: only within its own namespace.
+        if base_of(&m) != base_of(&dst.mount) {
+            return Err(Errno::EINVAL);
+        }
+        let Some((old_parent, _)) = m.parent() else {
+            // The first mount of the namespace: the target is below it.
+            return Err(Errno::ELOOP);
+        };
+        // A mount locked in place stays on its mount point (ADR 0177).
+        if m.locked_in_place() {
+            return Err(Errno::EINVAL);
+        }
         // mount(2) MS_MOVE: a mount whose parent is shared cannot be moved
         // (it would have to be moved in every peer), nor can an unbindable
         // one go below a shared mount.
@@ -185,6 +267,13 @@ impl Vfs {
     /// mount's root, `put_old` not at or below `new_root`, a shared mount
     /// involved, or a root that is not the namespace's first mount
     /// (a chroot) `EINVAL`.
+    ///
+    /// `put_old` may be `new_root` itself (`pivot_root(".", ".")`): the
+    /// old root is then stacked beneath the new root's top directory
+    /// ([`Mount::is_beneath`]), hidden by the new tree, which is `/` at
+    /// once; an unmount of that directory removes the old root
+    /// ([`Vfs::umount`]). A second such call is `EBUSY`: `new_root` is the
+    /// root's mount already.
     pub fn pivot_root(
         &self,
         ctx: &mut FsContext,
@@ -230,7 +319,13 @@ impl Vfs {
             if !table.contains(&new_mount) || base_of(&new_mount) != old_mount.id {
                 return Err(Errno::EINVAL);
             }
+            // What was stacked beneath the old root's top (an earlier
+            // root) is on a mount point like any other from now on.
+            for m in table.mounts.iter().filter(|m| m.is_on(old_mount.id, Some(old_mount.root))) {
+                m.set_beneath(false);
+            }
             old_mount.set_parent(Some((old_put.mount.clone(), old_put.ino)));
+            old_mount.set_beneath(old_put.same(&new_top));
             new_mount.set_parent(None);
             table.reorder(new_mount.id);
             table.rebase(old_mount.id, new_mount.id);
@@ -261,7 +356,7 @@ impl Vfs {
     }
 
     /// Whether `loc` is `top` or below it, climbing `..` and out of mounts.
-    fn is_at_or_below(&self, loc: &Location, top: &Location) -> bool {
+    pub(crate) fn is_at_or_below(&self, loc: &Location, top: &Location) -> bool {
         let mut cur = loc.clone();
         for _ in 0..4096 {
             if cur.same(top) {

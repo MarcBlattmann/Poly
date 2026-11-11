@@ -175,6 +175,9 @@ impl Vfs {
         let mut group_of: BTreeMap<u32, u32> = BTreeMap::new();
         group_of.insert(pm.peer_group(), g_nm);
         let recvs = table.receivers(pm);
+        // The mounts `nm` brought below it (a recursive bind): every copy
+        // of `nm` gets copies of them.
+        let below = table.descendants(nm.id);
         // The receivers come in order of discovery: a group's followers
         // after the group.
         for r in recvs {
@@ -200,16 +203,36 @@ impl Vfs {
                 let followed = group_of.get(&r.master_group()).copied().unwrap_or(g_nm);
                 (own, followed)
             };
-            let copy = table.add(nm.sb.clone(), nm.root, Some((r.clone(), ino)), nm.flags());
-            copy.set_attrs(nm.attrs());
+            let copy = table.copy_of(nm, nm.root);
+            copy.set_parent(Some((r.clone(), ino)));
             copy.set_groups(copy_peer, copy_master);
+            table.mounts.push(copy.clone());
+            let mut copies: BTreeMap<u32, Arc<Mount>> = BTreeMap::new();
+            copies.insert(nm.id, copy);
+            for m in &below {
+                let Some((p, at)) = m.parent() else { continue };
+                let Some(parent) = copies.get(&p.id).cloned() else { continue };
+                let c = table.copy_of(m, m.root);
+                c.set_locks(m.locks());
+                c.set_parent(Some((parent, at)));
+                c.set_groups(m.peer_group(), m.master_group());
+                table.mounts.push(c.clone());
+                copies.insert(m.id, c);
+            }
         }
     }
 
     /// Mount `m`, on directory `ino` of `pm`, goes: the copies of it that
     /// propagation made below the mounts following `pm` go too (not if
     /// something is mounted on them).
-    pub(crate) fn propagate_umount(&self, table: &mut MountTable, pm: &Arc<Mount>, ino: Ino, m: &Arc<Mount>) {
+    pub(crate) fn propagate_umount(
+        &self,
+        table: &mut MountTable,
+        pm: &Arc<Mount>,
+        ino: Ino,
+        m: &Arc<Mount>,
+        removed: &mut Vec<Arc<Mount>>,
+    ) {
         if pm.peer_group() == 0 {
             return;
         }
@@ -224,7 +247,9 @@ impl Vfs {
             }
         }
         for id in doomed {
-            let _ = table.remove_tree(id);
+            if let Ok(gone) = table.remove_tree(id) {
+                removed.extend(gone);
+            }
         }
     }
 
