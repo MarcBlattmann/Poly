@@ -1282,7 +1282,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">0.7%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">412 / 58,733 entries · 73,276 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">415 / 58,733 entries · 73,276 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 16,439 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="157.5" height="218.0" fill="#21262d"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2ea043"/>
@@ -1352,7 +1352,7 @@
 <rect x="303.5" y="541.1" width="42.2" height="53.6" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="309.5" y="556.1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">icu</text>
 </g>
-<g><title>user32: 110 / 992 done (11.1%)</title>
+<g><title>user32: 111 / 992 done (11.2%)</title>
 <rect x="304.5" y="595.7" width="40.2" height="48.2" fill="#21262d"/>
 <rect x="304.5" y="595.7" width="4.5" height="48.2" fill="#2ea043"/>
 <rect x="308.9" y="595.7" width="0.6" height="48.2" fill="#388bfd"/>
@@ -1379,10 +1379,10 @@
 <rect x="351.2" y="548.4" width="2.4" height="35.5" fill="#388bfd"/>
 <rect x="345.6" y="547.4" width="33.5" height="37.5" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
-<g><title>gdi32: 27 / 545 done (5.0%)</title>
+<g><title>gdi32: 29 / 545 done (5.3%)</title>
 <rect x="346.6" y="585.9" width="31.5" height="32.7" fill="#21262d"/>
-<rect x="346.6" y="585.9" width="1.6" height="32.7" fill="#2ea043"/>
-<rect x="348.2" y="585.9" width="0.4" height="32.7" fill="#388bfd"/>
+<rect x="346.6" y="585.9" width="1.7" height="32.7" fill="#2ea043"/>
+<rect x="348.3" y="585.9" width="0.3" height="32.7" fill="#388bfd"/>
 <rect x="345.6" y="584.9" width="33.5" height="34.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>icuuc: 0 / 542 done (0.0%)</title>

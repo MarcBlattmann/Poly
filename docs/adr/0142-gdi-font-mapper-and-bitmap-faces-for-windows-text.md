@@ -354,6 +354,76 @@ changed:
   rectangle), `DT_END_ELLIPSIS` only the end of the text (its last line laid
   out), `DT_PATH_ELLIPSIS` every line.
 
+### Update: the sharpened sheets of four entries (impl-win-text-3, second round)
+
+The spec agent sharpened the sheets of `ExtTextOutW`,
+`GetTextExtentExPointW`, `RemoveFontResourceExW` and `DrawTextW` (PR #187)
+and answered the questions of the pass above. What the code does now, each
+rule in `poly-gdi` with a unit test (`src/tests/sheets_text.rs`,
+`src/text.rs`):
+
+- **`ExtTextOutW`.** The alignment is read by its bits (`TextAlign`): of the
+  horizontal bits 2 alone and 4 alone are the right edge and 6 the centre,
+  of the vertical ones 8 alone the bottom and 16 or 24 the baseline. A
+  centred text with an odd width has its extra pixel on the left. `lpDx` may
+  be zero or negative; its sum is the width for the alignment and for
+  `TA_UPDATECP`. In OPAQUE mode text with `lpDx` gets one rectangle from the
+  first origin to the first origin plus the sum (nothing for a sum of zero
+  or below), widened to hold the ink of every glyph (`dx_cell_columns`): the
+  glyphs are walked once for their ink and once to draw. `ETO_PDY` takes
+  pairs; the second value moves the characters that follow up, the current
+  position goes against their sum, and the background is the box around the
+  cells at their heights. Option bits `wingdi.h` does not define are
+  ignored, unless `ETO_GLYPH_INDEX` or `ETO_IGNORELANGUAGE` is set too;
+  `ETO_PDY` without `lpDx` fails (`eto_options_ok`). Only a handle that is
+  not a DC sets an error code (`TextOutError`).
+- **`GetTextExtentExPointW`.** The checks and their order are one function
+  (`extent_ex_check`): the DC and `lpSize`, a NULL string (empty, success),
+  a count of 0, a negative count, a negative maximum, which only counts when
+  `lpnFit` is given. Only a handle that is not a DC sets an error code.
+- **`RemoveFontResourceExW`.** A font file is known by a key made of its
+  full path (`fonttab::file_key`): letter case, forward slashes, a way
+  through a directory and back with `..`, the `\\?\` prefix and a dot after
+  the name all lead to the same file, so adds under different spellings are
+  counted together. The flags must be exactly those of the add, and adds
+  with different flags are counted apart. The name is checked before the
+  file is looked for (`remove_name_check`): blanks and unknown flags are
+  error 87, a wildcard is a file that is not there (error 2). The file or
+  directory has to exist (`GetFileAttributesW`, `remove_lookup_check`; a
+  file's path with a backslash after it is error 2 too); one that is not an
+  added font fails without an error code. The visible test `rfr_names`
+  names its directory one character short of its labels: its line "the
+  directory, without the backslash" passes the directory with its
+  backslash, which Windows answers without an error code, so a directory
+  fails without one in both spellings.
+- **`DrawTextW`.** The format is settled first (`text::Format`): with
+  `DT_TABSTOP` bits 8 to 15 are the tab length and nothing else, tabs expand
+  only with `DT_EXPANDTABS`, `DT_CENTER` beats `DT_RIGHT`, `DT_VCENTER` with
+  `DT_BOTTOM` is the top, `DT_NOPREFIX` and `DT_HIDEPREFIX` beat
+  `DT_PREFIXONLY`. A carriage return and a line feed in either order are
+  one line break, pairs taken from the left. Lines are laid out while their
+  top is not below the rectangle's bottom (`DT_EDITCONTROL`: while they fit
+  whole; the first line always), and the return value counts them.
+  `DT_END_ELLIPSIS` and `DT_PATH_ELLIPSIS` act on the last line only: the
+  one with the end of the text (not the empty line after a break at the very
+  end), or the last line laid out, which then takes all the text that is
+  left. `DT_WORD_ELLIPSIS` cuts every line that is too wide and takes over
+  nothing. `DT_MODIFYSTRING` writes the text up to the end of the first line
+  that was shortened. `DT_EDITCONTROL` with `DT_WORDBREAK` breaks a word
+  wider than the rectangle between characters. A tab that is not expanded
+  and a line break inside a line have no width and draw nothing, in every
+  font. A NULL string gives 0, and a count of 0 on a text that does not
+  start with a NUL gives 1 before the DC is looked at (`count_check`).
+
+Decided without a statement in a sheet (questions for the spec agent in the
+hand-back): `DT_EXTERNALLEADING` adds nothing when `DT_INTERNAL` is set too
+(the one observation, every flag but `DT_TABSTOP` and `DT_MODIFYSTRING`,
+returns the plain height; Learn has `DT_INTERNAL` measure with the system
+font, whose external leading is none); `DT_END_ELLIPSIS` together with
+`DT_WORD_ELLIPSIS` lets the last line laid out take the rest, as
+`DT_END_ELLIPSIS` alone does; with `ETO_PDY` and `TA_RIGHT` the current
+position's y moves as with `TA_LEFT`.
+
 ### Open
 
 - `to_glyphs` is gone from the sheet; the pixels of the stock bitmap fonts

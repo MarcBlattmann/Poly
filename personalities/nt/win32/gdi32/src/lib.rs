@@ -40,6 +40,7 @@ unsafe extern "system" {
     fn ReadFile(file: usize, buf: *mut u8, count: u32, read: *mut u32, overlapped: *mut u8) -> i32;
     fn CloseHandle(h: usize) -> i32;
     fn GetFullPathNameW(name: *const u16, size: u32, buf: *mut u16, file_part: *mut *mut u16) -> u32;
+    fn GetFileAttributesW(name: *const u16) -> u32;
 }
 
 const MEM_COMMIT_RESERVE: u32 = 0x3000;
@@ -1013,6 +1014,11 @@ pub unsafe extern "system" fn TextOutA(hdc: H, x: i32, y: i32, text: *const u8, 
     unsafe { TextOutW(hdc, x, y, s.as_ptr(), s.len() as i32) }
 }
 
+/// `ExtTextOutW` (`ExtTextOutW.yaml`). Only a handle that is not a DC sets
+/// an error code; a NULL string with a count, `ETO_PDY` without `lpDx` and
+/// a stray option bit beside `ETO_GLYPH_INDEX` or `ETO_IGNORELANGUAGE` fail
+/// without one and draw nothing. With `ETO_PDY` `dx` holds two values for
+/// every character.
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub unsafe extern "system" fn ExtTextOutW(
@@ -1025,23 +1031,32 @@ pub unsafe extern "system" fn ExtTextOutW(
     count: u32,
     dx: *const i32,
 ) -> i32 {
-    // Options with every bit set fail, and so does a NULL string to draw.
-    if options == u32::MAX || (text.is_null() && count > 0) {
+    use poly_gdi::gdi::{ETO_PDY, TextOutError, eto_options_ok};
+    if !gdi(|g| g.is_dc(hdc as u64)) {
+        set_last_error(ERROR_INVALID_HANDLE);
         return 0;
     }
-    // SAFETY: `count` characters at `text`, `count` spacings at `dx`, a RECT.
+    if !eto_options_ok(options, !dx.is_null()) || (text.is_null() && count > 0) {
+        return 0;
+    }
+    let per_char = if options & ETO_PDY != 0 { 2 } else { 1 };
+    // SAFETY: `count` characters at `text`, `count` spacings (pairs with
+    // `ETO_PDY`) at `dx`, a RECT.
     let (s, rect, dx) = unsafe {
         (
             wide(text, count.min(i32::MAX as u32) as i32),
             if rect.is_null() { None } else { Some(read_rect(rect)) },
-            if dx.is_null() { None } else { Some(core::slice::from_raw_parts(dx, count as usize).to_vec()) },
+            if dx.is_null() { None } else { Some(core::slice::from_raw_parts(dx, count as usize * per_char).to_vec()) },
         )
     };
-    let ok = gdi(|g| g.ext_text_out(hdc as u64, x, y, options, rect, &s, dx.as_deref()));
-    if !ok {
-        set_last_error(ERROR_INVALID_HANDLE);
+    match gdi(|g| g.try_ext_text_out(hdc as u64, x, y, options, rect, &s, dx.as_deref())) {
+        Ok(()) => 1,
+        Err(TextOutError::BadDc) => {
+            set_last_error(ERROR_INVALID_HANDLE);
+            0
+        }
+        Err(TextOutError::Refused) => 0,
     }
-    i32::from(ok)
 }
 
 #[unsafe(no_mangle)]
@@ -1056,6 +1071,10 @@ pub unsafe extern "system" fn ExtTextOutA(
     count: u32,
     dx: *const i32,
 ) -> i32 {
+    if text.is_null() {
+        // SAFETY: no string to convert; the rest is the caller's.
+        return unsafe { ExtTextOutW(hdc, x, y, options, rect, core::ptr::null(), count, dx) };
+    }
     // SAFETY: `count` characters at `text`.
     let s = unsafe { ansi(text, count.min(i32::MAX as u32) as i32) };
     // SAFETY: our own buffer; the rest is the caller's.
@@ -1113,10 +1132,13 @@ pub unsafe extern "system" fn GetTextExtentPointA(hdc: H, text: *const u8, count
     unsafe { GetTextExtentPoint32A(hdc, text, count, size) }
 }
 
-/// `GetTextExtentExPointW`: `fit` gets how many characters fit in `max`,
-/// `dx` the width of the text up to each of them. Without `fit` the maximum
-/// is not used (Learn) and `dx` gets the running width of every character;
-/// a negative maximum fails all the same (`GetTextExtentExPointW.yaml`).
+/// `GetTextExtentExPointW` (`GetTextExtentExPointW.yaml`): `fit` gets how
+/// many characters fit in `max`, `dx` the width of the text up to each of
+/// them. `fit` and `dx` may each be NULL. The maximum only counts when
+/// `fit` is given: without it `dx` gets the running width of every
+/// character, and a negative maximum is no error. The checks and their
+/// order are `extent_ex_check`'s; only a handle that is not a DC sets an
+/// error code.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetTextExtentExPointW(
     hdc: H,
@@ -1127,15 +1149,38 @@ pub unsafe extern "system" fn GetTextExtentExPointW(
     dx: *mut i32,
     size: *mut i32,
 ) -> i32 {
-    // A negative maximum or count fails and leaves the outputs alone.
-    if max < 0 || count < 0 {
-        set_last_error(ERROR_INVALID_PARAMETER);
-        return 0;
+    use poly_gdi::gdi::{DcArg, ExtentExCheck, extent_ex_check, extent_ex_fit};
+    let dc = if hdc == 0 {
+        DcArg::Null
+    } else if gdi(|g| g.is_dc(hdc as u64)) {
+        DcArg::Dc
+    } else {
+        DcArg::NotDc
+    };
+    match extent_ex_check(dc, size.is_null(), text.is_null(), count, max, !fit.is_null()) {
+        ExtentExCheck::Fail(error) => {
+            if let Some(e) = error {
+                set_last_error(e);
+            }
+            return 0;
+        }
+        ExtentExCheck::Empty => {
+            // SAFETY: the caller's out-pointers; `size` is not NULL here.
+            unsafe {
+                write_size(size, (0, 0));
+                if !fit.is_null() {
+                    *fit = 0;
+                }
+            }
+            return 1;
+        }
+        ExtentExCheck::Measure => {}
     }
     // SAFETY: `count` characters at `text`.
     let s = unsafe { wide(text, count) };
     match gdi(|g| g.text_extent_ex(hdc as u64, &s, max)) {
-        Some((e, n, running)) => {
+        Some((e, _, running)) => {
+            let (n, written) = extent_ex_fit(&running, max, !fit.is_null());
             // SAFETY: the caller's out-pointers; `dx` holds `count` values,
             // of which the characters that fit are written (all of them
             // when the caller did not ask how many fit).
@@ -1145,8 +1190,7 @@ pub unsafe extern "system" fn GetTextExtentExPointW(
                     *fit = n as i32;
                 }
                 if !dx.is_null() {
-                    let filled = if fit.is_null() { running.len() } else { n };
-                    for (i, v) in running.iter().take(filled).enumerate() {
+                    for (i, v) in running.iter().take(written).enumerate() {
                         *dx.add(i) = *v;
                     }
                 }
@@ -1154,7 +1198,7 @@ pub unsafe extern "system" fn GetTextExtentExPointW(
             1
         }
         None => {
-            set_last_error(ERROR_INVALID_PARAMETER);
+            set_last_error(ERROR_INVALID_HANDLE);
             0
         }
     }
@@ -1170,8 +1214,12 @@ pub unsafe extern "system" fn GetTextExtentExPointA(
     dx: *mut i32,
     size: *mut i32,
 ) -> i32 {
+    if text.is_null() || count < 0 {
+        // SAFETY: nothing to convert: the checks of the wide function answer.
+        return unsafe { GetTextExtentExPointW(hdc, core::ptr::null(), count, max, fit, dx, size) };
+    }
     // SAFETY: `count` characters at `text`.
-    let s = unsafe { ansi(text, count.max(0)) };
+    let s = unsafe { ansi(text, count) };
     // SAFETY: our own buffer; the rest is the caller's.
     unsafe { GetTextExtentExPointW(hdc, s.as_ptr(), s.len() as i32, max, fit, dx, size) }
 }
@@ -1576,7 +1624,9 @@ pub unsafe extern "system" fn PolyGdiDrawText(
 /// `format` are the tab length, as in `DrawTextW`), the margins
 /// narrow the rectangle for laying out the text; `drawn` (if not NULL)
 /// gets `uiLengthDrawn`. `DT_MODIFYSTRING` writes the ellipsized text back
-/// to `text`. A count of 0 draws nothing and gives 1; below -1, 0.
+/// to `text`. The string and the count are checked before the DC
+/// (`poly_gdi::text::count_check`): a NULL string and a count below -1 give
+/// 0, a count of 0 on a text that does not start with a NUL gives 1.
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub unsafe extern "system" fn PolyGdiDrawTextEx(
@@ -1590,14 +1640,12 @@ pub unsafe extern "system" fn PolyGdiDrawTextEx(
     right_margin: i32,
     drawn: *mut u32,
 ) -> i32 {
+    use poly_gdi::text::{Early, count_check};
     const DT_MODIFYSTRING: u32 = 0x1_0000;
-    if rect.is_null() || count < -1 {
-        return 0;
-    }
-    // A count of 0 is the empty string; with text there it draws nothing.
     // SAFETY: the caller's string is readable at least for its first unit.
-    if count == 0 && !text.is_null() && unsafe { *text } != 0 {
-        return 1;
+    let starts_with_nul = text.is_null() || unsafe { *text } == 0;
+    if let Early::Return(n) = count_check(text.is_null(), rect.is_null(), starts_with_nul, count) {
+        return n;
     }
     // SAFETY: the caller's string (count -1: NUL-terminated) and RECT.
     let (s, mut r) = unsafe { (wide(text, count), read_rect(rect)) };
@@ -1694,10 +1742,11 @@ unsafe fn path_units(name: *const u16) -> Vec<u16> {
     v
 }
 
-/// The file a font resource path (NUL-terminated) names, to tell whether
-/// two paths are the same file: its full path without the NUL (the path
-/// itself where the system has none for it). An add and its remove may
-/// spell the file differently (relative and absolute, `/` and `\`, case).
+/// The file a font resource path (NUL-terminated) names: its full path
+/// without the NUL (the path itself where the system has none for it). The
+/// font table makes its key of it (`poly_gdi::fonttab::file_key`), so an
+/// add and its remove may spell the file differently (relative and
+/// absolute, `/` and `\`, case, `..`).
 fn font_file_id(path: &[u16]) -> Vec<u16> {
     let mut buf = alloc::vec![0u16; 520];
     for _ in 0..2 {
@@ -1749,21 +1798,41 @@ pub unsafe extern "system" fn AddFontResourceW(name: *const u16) -> i32 {
     unsafe { AddFontResourceExW(name, 0, core::ptr::null_mut()) }
 }
 
-/// `RemoveFontResourceExW`: removes one earlier add of the same file with
-/// the same flags (each add needs a remove of its own). An empty path and
-/// flags that are none of `FR_PRIVATE` and `FR_NOT_ENUM` are error 87; the
-/// file has to be there (`ERROR_FILE_NOT_FOUND`, and the font stays); a
-/// file that was not added with these flags fails without a last error.
+/// `RemoveFontResourceExW` (`RemoveFontResourceExW.yaml`): removes one
+/// earlier add of the same file with exactly the same flags (each add needs
+/// a remove of its own). The name and the flags are checked first
+/// (`poly_gdi::fonttab::remove_name_check`: error 87, error 2 for a name
+/// with a wildcard). Then the name has to lead to a file or a directory
+/// (`remove_lookup_check`: `ERROR_FILE_NOT_FOUND` otherwise, and the font
+/// stays); one that is not an added font fails without an error code. The
+/// reserved pointer is not looked at. A remove that succeeds sets no error
+/// code.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn RemoveFontResourceExW(name: *const u16, flags: u32, _reserved: *mut u8) -> i32 {
+    use poly_gdi::fonttab::{Leads, NameCheck, remove_lookup_check, remove_name_check};
+    /// `INVALID_FILE_ATTRIBUTES` (`fileapi.h`) and `FILE_ATTRIBUTE_DIRECTORY`
+    /// (`winnt.h`).
+    const INVALID_FILE_ATTRIBUTES: u32 = u32::MAX;
+    const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
     // SAFETY: a NUL-terminated path or NULL.
     let path = unsafe { path_units(name) };
-    if path.len() <= 1 || flags & !FR_FLAGS != 0 {
-        set_last_error(ERROR_INVALID_PARAMETER);
-        return 0;
+    match remove_name_check(&path[..path.len() - 1], flags) {
+        NameCheck::Error(e) => {
+            set_last_error(e);
+            return 0;
+        }
+        NameCheck::Refused => return 0,
+        NameCheck::Look => {}
     }
+    // What the caller's last error was: a call that sets none leaves it.
     let before = last_error();
-    if let Err(e) = read_path(&path) {
+    // SAFETY: a NUL-terminated path.
+    let leads = match unsafe { GetFileAttributesW(path.as_ptr()) } {
+        INVALID_FILE_ATTRIBUTES => Leads::Nowhere,
+        a if a & FILE_ATTRIBUTE_DIRECTORY != 0 => Leads::Directory,
+        _ => Leads::File,
+    };
+    if let NameCheck::Error(e) = remove_lookup_check(&path[..path.len() - 1], leads) {
         set_last_error(e);
         return 0;
     }
