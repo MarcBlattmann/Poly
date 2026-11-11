@@ -12,7 +12,7 @@
 {"symbol":"GetAppliedGPOListW","src":["wine-spec"]},
 {"symbol":"GetDefaultUserProfileDirectoryA","src":["wine-spec"]},
 {"symbol":"GetDefaultUserProfileDirectoryW","src":["wine-spec"]},
-{"symbol":"GetProfileType","src":["wine-spec"]},
+{"symbol":"GetProfileType","status":"claimed","claimed_by":"impl-chrome-s9","src":["wine-spec"]},
 {"symbol":"GetProfilesDirectoryA","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_get_profiles_dir"]},
 {"symbol":"GetProfilesDirectoryW","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_get_profiles_dir"]},
 {"symbol":"GetUserProfileDirectoryA","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_get_user_profile_dir"]},

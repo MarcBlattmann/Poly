@@ -457,3 +457,89 @@ To be confirmed by the spec agent: `GetThreadPreferredUILanguages` for `MUI_UI_F
 null event (Poly: FALSE, `ERROR_INVALID_PARAMETER`); `DuplicateHandle` of a read-only section handle
 asking for `SECTION_MAP_WRITE` (Windows in the handler's trace: FALSE, `ERROR_ACCESS_DENIED`; Poly
 grants it).
+
+## Addendum: the missing DLL batch, whole-process suspension, the exception log (`chrome-win-s9`, step 9)
+
+Step 8 ended at the browser's delay load of `SHLWAPI.dll`, the first of a batch the gap map names
+(`specs/windows/apps/chrome/gap-map.md`, the S1 process types and the fault-injection table of
+section 6a). This step adds the batch at once instead of one DLL per ten-minute run. Which names:
+every `(DLL, function)` the S1 trace calls (`traces/s1.trace.json`) that `cargo xtask chrome-win
+imports` reports as missing, plus the other names `chrome.dll` delay-loads from the new DLLs, so
+that a delay load of any of them binds.
+
+1. **Seven new DLLs** (`personalities/nt/win32`, logic in `poly_kernelbase::{shlwapi, session}`):
+
+   | DLL | Works | Fails cleanly (the export exists) |
+   |---|---|---|
+   | `shlwapi.dll` | `PathMatchSpecW`, `PathFindExtensionW`, `PathFindFileNameW`, `PathRemoveExtensionW`, `QISearch` (ordinal 219), `IsOS` (ordinal 437) | `AssocQueryStringW` (no association), `SHCreateMemStream` (ordinal 12: NULL) |
+   | `wtsapi32.dll` | `WTSRegisterSessionNotification`, `WTSUnRegisterSessionNotification`, `WTSQuerySessionInformationW`, `WTSFreeMemory`: one session, at the console, that never changes state | |
+   | `comctl32.dll` | `InitCommonControlsEx` accepts the structure | the control classes are not there: `CreateWindowExW` of one fails |
+   | `oleacc.dll` | | `CreateStdAccessibleObject`, `AccessibleObjectFromWindow`, `AccessibleChildren`, `WindowFromAccessibleObject`, `LresultFromObject`: `E_NOTIMPL`, out-pointers cleared |
+   | `uiautomationcore.dll` | no client listens: raising an event and disconnecting a provider succeed, `UiaClientsAreListening` is FALSE | `UiaHostProviderFromHwnd`, the two reserved-value functions: `E_NOTIMPL`; `UiaReturnRawElementProvider`: 0 |
+   | `mfplat.dll` | | `MFStartup`, `MFShutdown`: `E_NOTIMPL` |
+   | `powrprof.dll` | `CallNtPowerInformation` (`ProcessorInformation`, `SystemBatteryState`), `PowerDeterminePlatformRole[Ex]` (a desktop on mains power) | `PowerGetActiveScheme`, `PowerReadACValue`, `PowerReadDCValue`: `ERROR_FILE_NOT_FOUND` |
+
+   `powrprof.dll` hosts the API sets `api-ms-win-power-*` (`poly_ldr::apiset`); Chrome reaches
+   `CallNtPowerInformation` through `api-ms-win-power-base-l1-1-0.dll`. Ordinals are pinned in
+   `shlwapi`'s `build.rs` like `ws2_32`'s. A small DLL that links a crate using `alloc` takes the
+   process heap as its allocator with `poly_win32_rt::process_heap_allocator!()`.
+2. **In DLLs Poly had** (`poly_kernelbase::{procinfo, knownfolder, propstore}`):
+   `QueryProcessCycleTime` (the CPU time the kernel counted, as cycles at a nominal 3 GHz),
+   `GetProcessInformation` / `SetProcessInformation` (memory priority, power throttling, leap
+   seconds, protection level, machine type, application memory; kept per process, nothing acts on
+   them yet), `SetProcessShutdownParameters` / `GetProcessShutdownParameters` (kept; levels 0x100
+   to 0x3FF), `K32GetMappedFileNameW` (for the images of the calling process: the object
+   manager's name of the image's file), `shell32!SHGetKnownFolderPath` (the 122 folders of
+   Learn's KNOWNFOLDERID page, each from its default path and the environment),
+   `SHGetPropertyStoreForWindow` (an `IPropertyStore` per window handle, in the process),
+   `Shell_NotifyIconW` (FALSE: no notification area), `userenv!GetProfileType` (a local profile).
+   `NtQueryInformationProcess(ProcessTimes)` now takes a handle with
+   `PROCESS_QUERY_LIMITED_INFORMATION` too (Learn, `GetProcessTimes`).
+3. **`NtSuspendProcess` / `NtResumeProcess`** (services 0x098 and 0x099). Chrome's crash handler
+   resolves them from `ntdll` by name and calls them around the snapshot of a crashed client; with
+   the export missing it called address 0 and every crash on Poly cost the browser's 60 s wait.
+   Only the names and the access right `PROCESS_SUSPEND_RESUME` are public. Poly's reading of the
+   names: each thread of the process is suspended (resumed) once, as `NtSuspendThread`
+   (`NtResumeThread`) does one thread; a thread that was created suspended and has not started
+   keeps the count its creator will take off.
+4. **`poly.nt.exceptions[=N]`**, a kernel argument (off by default; `cargo xtask chrome-win run
+   --exceptions[=N]`): every exception handed to a process's user-mode dispatcher is logged as
+   `nt-exc:` lines: the code and where it was raised as `module+offset`, the parameters, the
+   general registers, N quadwords of the stack (256 by default, 4096 at most), the stack values
+   that point into a module and the text on the stack. Chrome's failed checks leave their reason
+   there (a failed delay load: the DLL's name and the error). The formatting is
+   `poly_personality_nt::diag::exception_report`, host-tested; the hook is
+   `NtKernel::exception_delivered`.
+5. **The coverage map**: the functions that work are `claimed` by `impl-chrome-s9`; the exports
+   that only fail are `stub`.
+
+**Doc-derived, not observed on Windows** (everything in this addendum; the spec agent
+`spec-chrome-win-5` observes the must-work functions in parallel). In particular, to be confirmed:
+
+* `PathMatchSpecW`: several patterns separated by `;`, leading spaces of each ignored (Learn says
+  it of `PathMatchSpecExW`'s `PMSF_MULTIPLE`); case-insensitive beyond ASCII.
+* `PathFindExtensionW`: a `.` before a space does not start an extension.
+* `IsOS`: TRUE for `OS_NT`, `OS_WIN2000ORGREATER`, `OS_PROFESSIONAL`, `OS_PERSONALTERMINALSERVER`;
+  FALSE for `OS_FASTUSERSWITCHING` and everything else.
+* `QISearch`: `E_INVALIDARG` for a null object, table or interface id; `E_POINTER` for a null `ppv`.
+* `WTSQuerySessionInformationW`: which classes Chrome asks; Poly answers the session id, the user
+  and "domain" (the computer's name), `Console`, `WTSActive`, protocol type 0, not remote, and
+  `ERROR_NOT_SUPPORTED` for the other classes; `ERROR_INVALID_PARAMETER` for another session id.
+* `InitCommonControlsEx`: FALSE for a `dwSize` that is not 8.
+* `CallNtPowerInformation`: the levels Chrome asks; `STATUS_NOT_SUPPORTED` for the ones Poly has
+  no answer for; the MHz of a processor (Poly: 3000).
+* `QueryProcessCycleTime`: only that it grows with the CPU time used is meaningful.
+* `GetProcessInformation` / `SetProcessInformation`: `ERROR_BAD_LENGTH` for a wrong size,
+  `ERROR_INVALID_PARAMETER` for a class Poly does not know or that cannot be set; the values of a
+  new process (memory priority 5, no throttling); another process's state reads as a new one's.
+* `SetProcessShutdownParameters`: `ERROR_INVALID_PARAMETER` for a level outside 0x100 to 0x3FF or
+  a flag other than `SHUTDOWN_NORETRY`.
+* `K32GetMappedFileNameW`: `ERROR_FILE_INVALID` for an address in no image and for another
+  process; the device name is Poly's (`\Device\PolyFs<N>`); a name longer than the buffer is cut.
+* `SHGetKnownFolderPath`: `E_INVALIDARG` for an unknown id, `E_FAIL` for a folder without a path,
+  `HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)` when the folder's variable is not set; flags other
+  than `KF_FLAG_CREATE` change nothing.
+* `SHGetPropertyStoreForWindow`: the window handle is not checked; `VT_LPWSTR` and the scalar
+  types are kept, the others are `E_INVALIDARG`; `GetAt` past the end is `E_INVALIDARG`.
+* `NtSuspendProcess` / `NtResumeProcess`: the statuses for a handle without
+  `PROCESS_SUSPEND_RESUME` (Poly: `STATUS_ACCESS_DENIED`) and for a process that has ended.
