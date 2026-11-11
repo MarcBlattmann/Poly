@@ -190,6 +190,40 @@ fn duplicate_within_and_across_processes() {
     assert_eq!(om.handle_count(ev.object), Some(5));
 }
 
+/// An object whose descriptor grants nobody anything (an empty DACL): its creator's handle can
+/// be duplicated with the same or less access, but no handle gets rights its source lacks
+/// (ADR 0155 step 9; the crash handler's trace, call 616).
+#[test]
+fn a_duplicate_gets_no_more_than_the_descriptor_allows() {
+    let (mut om, c) = setup();
+    let (token, _) = om.new_token(poly_security::token::Token::poly_user(), T1).unwrap();
+    om.set_process_token(P1, token).unwrap();
+    om.set_process_token(P2, token).unwrap();
+    // "D:": a DACL that is present and empty.
+    let sd = poly_security::sdstr::parse(&w("D:")).unwrap();
+    let attrs = ObjectAttributes { root: None, name: None, attributes: 0, security: Some(&sd) };
+    let ev = om.nt_create_event(&c, &attrs, EVENT_ALL_ACCESS, EventType::Notification, false).unwrap();
+    // The creator has what it asked for.
+    assert_eq!(om.granted_access(&c, ev.handle), Ok(EVENT_ALL_ACCESS));
+    // Less access, into another process: granted without asking the descriptor.
+    let read = om.nt_duplicate_object(&c, P1, ev.handle, Some(P2), EVENT_QUERY_STATE | SYNCHRONIZE, 0, 0);
+    let read = read.unwrap().unwrap();
+    let c2 = caller(P2, T2);
+    assert_eq!(om.granted_access(&c2, read), Ok(EVENT_QUERY_STATE | SYNCHRONIZE));
+    // The same again, and a part of it.
+    assert!(om.nt_duplicate_object(&c2, P2, read, Some(P2), EVENT_QUERY_STATE | SYNCHRONIZE, 0, 0).is_ok());
+    assert!(om.nt_duplicate_object(&c2, P2, read, Some(P2), SYNCHRONIZE, 0, 0).is_ok());
+    // More than the handle has: the descriptor is asked, and it grants nothing.
+    assert_eq!(om.nt_duplicate_object(&c2, P2, read, Some(P2), EVENT_MODIFY_STATE, 0, 0), Err(STATUS_ACCESS_DENIED));
+    assert_eq!(
+        om.nt_duplicate_object(&c2, P2, read, Some(P2), EVENT_QUERY_STATE | EVENT_MODIFY_STATE, 0, 0),
+        Err(STATUS_ACCESS_DENIED)
+    );
+    // The creator's own full handle can still be copied whole.
+    let all = om.nt_duplicate_object(&c, P1, ev.handle, Some(P1), EVENT_ALL_ACCESS, 0, 0).unwrap().unwrap();
+    assert_eq!(om.granted_access(&c, all), Ok(EVENT_ALL_ACCESS));
+}
+
 #[test]
 fn duplicate_close_source() {
     let (mut om, c) = setup();
