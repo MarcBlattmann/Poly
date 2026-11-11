@@ -527,9 +527,20 @@ fn remove_names_that_lead_to_no_file() {
     for name in ["C:\\Temp\\*.ttf", "C:\\Temp\\Name?.ttf", "C:\\Temp\\*", "*.ttf", "?", "\\\\?\\C:\\Temp\\*.ttf"] {
         assert_eq!(c(name, FR_PRIVATE), NameCheck::Error(2), "{name}");
     }
-    // A file's path or a directory with a backslash after it.
-    for name in ["C:\\Temp\\", "C:\\Temp\\Named.ttf\\", "C:/Temp/"] {
-        assert_eq!(c(name, FR_PRIVATE), NameCheck::Error(2), "{name}");
+    // What the name leads to: nothing is error 2, and so is a file's path with a backslash after
+    // it; a file or a directory that is there is looked for among the added fonts.
+    use fonttab::Leads::{Directory, File, Nowhere};
+    let l = |s: &str, leads: fonttab::Leads| fonttab::remove_lookup_check(&utf16(s), leads);
+    for name in ["C:\\Temp\\Other.ttf", "C:\\Temp\\nodir\\Named.ttf", "C:\\Temp\\N", "C:\\Temp\\Named.ttf\\"] {
+        assert_eq!(l(name, Nowhere), NameCheck::Error(2), "{name}");
+    }
+    assert_eq!(l("C:\\Temp\\Named.ttf\\", File), NameCheck::Error(2));
+    assert_eq!(l("C:/Temp/Named.ttf/", File), NameCheck::Error(2));
+    assert_eq!(l("C:\\Temp\\Named.ttf", File), NameCheck::Look);
+    // A directory, with or without a backslash at its end, is no added font: no error code.
+    for name in ["C:\\Temp", "C:\\Temp\\", "C:/Temp/", "C:\\", "C:"] {
+        assert_eq!(c(name, FR_PRIVATE), NameCheck::Look, "{name}");
+        assert_eq!(l(name, Directory), NameCheck::Look, "{name}");
     }
     // Names that are looked up: the \\?\ prefix is no wildcard.
     for name in ["C:\\Temp", "Named.ttf", "\\\\?\\C:\\Temp\\Named.ttf", " Named.ttf", "C:\\Temp\\no such\\Named.ttf"] {

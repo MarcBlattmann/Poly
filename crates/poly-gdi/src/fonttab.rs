@@ -126,9 +126,8 @@ const MAX_PATH: usize = 260;
 /// flags: flag bits other than `FR_PRIVATE` and `FR_NOT_ENUM`, an empty
 /// name and one of blanks only are error 87. A name with a wildcard is
 /// neither expanded nor refused as a bad name: it is a file that is not
-/// there (error 2), as is a name with a backslash after it. A name longer
-/// than `MAX_PATH` or two names joined with `|` fail without an error
-/// code.
+/// there (error 2). A name longer than `MAX_PATH` or two names joined with
+/// `|` fail without an error code.
 pub fn remove_name_check(name: &[u16], flags: u32) -> NameCheck {
     if flags & !(FR_PRIVATE | FR_NOT_ENUM) != 0 || name.iter().all(|&u| u == BLANK) {
         return NameCheck::Error(ERROR_INVALID_PARAMETER);
@@ -137,12 +136,34 @@ pub fn remove_name_check(name: &[u16], flags: u32) -> NameCheck {
         return NameCheck::Refused;
     }
     let rest = &name[long_prefix(name)..];
-    let wildcard = rest.iter().any(|&u| u == b'*' as u16 || u == b'?' as u16);
-    let ends_in_separator = rest.last().is_some_and(|&u| u == BACKSLASH || u == SLASH);
-    if wildcard || ends_in_separator {
+    if rest.iter().any(|&u| u == b'*' as u16 || u == b'?' as u16) {
         return NameCheck::Error(ERROR_FILE_NOT_FOUND);
     }
     NameCheck::Look
+}
+
+/// What the name of a remove leads to in the file system.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Leads {
+    Nowhere,
+    File,
+    Directory,
+}
+
+/// `RemoveFontResourceExW` after the name was looked up
+/// (`RemoveFontResourceExW.yaml`, errors, and the inputs of `rfr_names`): a
+/// name that leads to no file is error 2, and so is a file's path with a
+/// backslash after it (a name that ends in a backslash can only be a
+/// directory). A file or a directory that is there is looked for among
+/// the added fonts: a directory, with or without a backslash at its end,
+/// is none of them and fails without an error code.
+pub fn remove_lookup_check(name: &[u16], leads: Leads) -> NameCheck {
+    let ends_in_separator = name.last().is_some_and(|&u| u == BACKSLASH || u == SLASH);
+    match leads {
+        Leads::Nowhere => NameCheck::Error(ERROR_FILE_NOT_FOUND),
+        Leads::File if ends_in_separator => NameCheck::Error(ERROR_FILE_NOT_FOUND),
+        Leads::File | Leads::Directory => NameCheck::Look,
+    }
 }
 
 /// What the table reads from a font file.

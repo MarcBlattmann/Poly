@@ -1771,15 +1771,18 @@ pub unsafe extern "system" fn AddFontResourceW(name: *const u16) -> i32 {
 /// earlier add of the same file with exactly the same flags (each add needs
 /// a remove of its own). The name and the flags are checked first
 /// (`poly_gdi::fonttab::remove_name_check`: error 87, error 2 for a name
-/// that can lead to no file). Then the name has to lead to a file or a
-/// directory (`ERROR_FILE_NOT_FOUND` otherwise, and the font stays); one
-/// that is not an added font fails without an error code. The reserved
-/// pointer is not looked at. A remove that succeeds sets no error code.
+/// with a wildcard). Then the name has to lead to a file or a directory
+/// (`remove_lookup_check`: `ERROR_FILE_NOT_FOUND` otherwise, and the font
+/// stays); one that is not an added font fails without an error code. The
+/// reserved pointer is not looked at. A remove that succeeds sets no error
+/// code.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn RemoveFontResourceExW(name: *const u16, flags: u32, _reserved: *mut u8) -> i32 {
-    use poly_gdi::fonttab::{ERROR_FILE_NOT_FOUND, NameCheck, remove_name_check};
-    /// `INVALID_FILE_ATTRIBUTES` (`fileapi.h`).
+    use poly_gdi::fonttab::{Leads, NameCheck, remove_lookup_check, remove_name_check};
+    /// `INVALID_FILE_ATTRIBUTES` (`fileapi.h`) and `FILE_ATTRIBUTE_DIRECTORY`
+    /// (`winnt.h`).
     const INVALID_FILE_ATTRIBUTES: u32 = u32::MAX;
+    const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
     // SAFETY: a NUL-terminated path or NULL.
     let path = unsafe { path_units(name) };
     match remove_name_check(&path[..path.len() - 1], flags) {
@@ -1792,17 +1795,17 @@ pub unsafe extern "system" fn RemoveFontResourceExW(name: *const u16, flags: u32
     }
     // What the caller's last error was: a call that sets none leaves it.
     let before = last_error();
-    let id = font_file_id(&path);
-    // The name as given, or as its full path (a drive without a directory,
-    // `X:`, is that drive's current directory).
-    let mut full = id.clone();
-    full.push(0);
-    // SAFETY: NUL-terminated paths.
-    let there = [&path, &full].iter().any(|p| unsafe { GetFileAttributesW(p.as_ptr()) } != INVALID_FILE_ATTRIBUTES);
-    if !there {
-        set_last_error(ERROR_FILE_NOT_FOUND);
+    // SAFETY: a NUL-terminated path.
+    let leads = match unsafe { GetFileAttributesW(path.as_ptr()) } {
+        INVALID_FILE_ATTRIBUTES => Leads::Nowhere,
+        a if a & FILE_ATTRIBUTE_DIRECTORY != 0 => Leads::Directory,
+        _ => Leads::File,
+    };
+    if let NameCheck::Error(e) = remove_lookup_check(&path[..path.len() - 1], leads) {
+        set_last_error(e);
         return 0;
     }
+    let id = font_file_id(&path);
     let ok = gdi(|g| g.remove_font_file(&id, flags));
     set_last_error(before);
     i32::from(ok)

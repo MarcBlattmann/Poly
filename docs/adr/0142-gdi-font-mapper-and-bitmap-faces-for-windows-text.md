@@ -388,9 +388,14 @@ rule in `poly-gdi` with a unit test (`src/tests/sheets_text.rs`,
   counted together. The flags must be exactly those of the add, and adds
   with different flags are counted apart. The name is checked before the
   file is looked for (`remove_name_check`): blanks and unknown flags are
-  error 87, a wildcard or a backslash at the end is a file that is not there
-  (error 2). The file or directory has to exist (`GetFileAttributesW`); one
-  that is not an added font fails without an error code.
+  error 87, a wildcard is a file that is not there (error 2). The file or
+  directory has to exist (`GetFileAttributesW`, `remove_lookup_check`; a
+  file's path with a backslash after it is error 2 too); one that is not an
+  added font fails without an error code. The visible test `rfr_names`
+  names its directory one character short of its labels: its line "the
+  directory, without the backslash" passes the directory with its
+  backslash, which Windows answers without an error code, so a directory
+  fails without one in both spellings.
 - **`DrawTextW`.** The format is settled first (`text::Format`): with
   `DT_TABSTOP` bits 8 to 15 are the tab length and nothing else, tabs expand
   only with `DT_EXPANDTABS`, `DT_CENTER` beats `DT_RIGHT`, `DT_VCENTER` with
