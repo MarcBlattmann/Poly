@@ -484,6 +484,48 @@ pub fn resume(pid: ProcessId, memory: &Arc<Memory>, thread: ThreadRef) -> Result
     Ok(prev)
 }
 
+/// The threads of NT process `target`, or `STATUS_INVALID_PARAMETER` if it is gone.
+fn threads_of(target: ProcessId) -> Result<Vec<ThreadRef>, NtStatus> {
+    with(|s| s.processes.get(&target).map(|p| p.threads.iter().map(|t| t.thread).collect()))
+        .ok_or(poly_ntobj::status::STATUS_INVALID_PARAMETER)
+}
+
+/// `NtSuspendProcess` (ADR 0155 step 9): every thread of `target` is suspended once, the way
+/// [`suspend`] does one thread. A thread that was created suspended and never started just
+/// counts one more.
+pub fn suspend_process(target: ProcessId) -> Result<(), NtStatus> {
+    for t in threads_of(target)? {
+        suspend(target, t)?;
+    }
+    Ok(())
+}
+
+/// `NtResumeProcess`: every thread of `target` is resumed once. A thread that has not started
+/// yet (created suspended) keeps at least the one count its creator will take off with
+/// `NtResumeThread`, which is what starts it; a thread that is not suspended is left alone.
+pub fn resume_process(target: ProcessId) -> Result<(), NtStatus> {
+    for t in threads_of(target)? {
+        let runs_again = with(|s| {
+            let c = s.ctl.entry(t).or_default();
+            let unstarted = c.deferred_start.is_some() || c.deferred_process.is_some();
+            if c.suspend_count == 0 || (unstarted && c.suspend_count == 1) {
+                return false;
+            }
+            c.suspend_count -= 1;
+            c.suspend_count == 0
+        });
+        if runs_again
+            && let Some(process) = find(target)
+            && let Some(f) = process.thread_flags(t.0 as u32)
+        {
+            f.suspended.store(false, Ordering::SeqCst);
+            process::unpark(&f);
+            f.kick();
+        }
+    }
+    Ok(())
+}
+
 pub fn get_context(self_tid: ThreadRef, thread: ThreadRef) -> Result<NtContext, NtStatus> {
     if thread == self_tid {
         return Ok(ctx_from_regs(&user::registers()));

@@ -174,6 +174,163 @@ pub fn module_bases(r: Read<'_>, teb: u64) -> Vec<u64> {
     out
 }
 
+/// The kernel argument that logs every exception delivered to user mode (ADR 0155 step 9):
+/// `poly.nt.exceptions`, or `poly.nt.exceptions=N` to dump N quadwords of the stack.
+pub const EXCEPTIONS_FLAG: &str = "poly.nt.exceptions";
+/// Stack quadwords dumped when the argument names no number.
+pub const EXCEPTION_STACK_DEFAULT: usize = 256;
+/// The most stack quadwords one exception may dump (32 KiB of stack).
+pub const EXCEPTION_STACK_MAX: usize = 4096;
+
+/// How many stack quadwords `poly.nt.exceptions[=N]` dumps: N, at least 16 and at most
+/// [`EXCEPTION_STACK_MAX`]; the default for no value or one that is not a number.
+pub fn exception_stack_words(value: Option<&str>) -> usize {
+    value.and_then(|v| v.parse::<usize>().ok()).map_or(EXCEPTION_STACK_DEFAULT, |n| n.clamp(16, EXCEPTION_STACK_MAX))
+}
+
+/// A module of the process: where it is mapped and its base name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModuleSpan {
+    pub base: u64,
+    pub size: u64,
+    pub name: String,
+}
+
+/// Every module on `PEB.Ldr`'s load-order list (at most 256) with its size and base name.
+pub fn modules(r: Read<'_>, teb: u64) -> Vec<ModuleSpan> {
+    let mut out = Vec::new();
+    let peb = u64_at(r, teb + 0x60).unwrap_or(0);
+    let ldr = u64_at(r, peb + 0x18).unwrap_or(0);
+    if ldr == 0 {
+        return out;
+    }
+    let head = ldr + 0x10;
+    let mut at = u64_at(r, head).unwrap_or(0);
+    while at != head && at != 0 && out.len() < 256 {
+        if let Some(base) = u64_at(r, at + 0x30).filter(|&b| b != 0) {
+            let size = u64::from(u32_at(r, at + 0x40).unwrap_or(0));
+            let name = unicode(r, at + 0x58).trim_matches('"').into();
+            out.push(ModuleSpan { base, size, name });
+        }
+        at = u64_at(r, at).unwrap_or(0);
+    }
+    out
+}
+
+/// `address` as `module+0xoffset` if a module holds it.
+pub fn locate(modules: &[ModuleSpan], address: u64) -> Option<String> {
+    modules
+        .iter()
+        .find(|m| address >= m.base && address - m.base < m.size)
+        .map(|m| format!("{}+{:#x}", m.name, address - m.base))
+}
+
+/// Where and what an exception was when it was raised.
+#[derive(Clone, Copy, Debug)]
+pub struct Raised {
+    pub pid: u32,
+    pub tid: u64,
+    pub code: u32,
+    pub address: u64,
+}
+
+/// The most code addresses and pieces of text one report lists.
+const REPORT_ITEMS: usize = 48;
+/// The longest piece of text shown.
+const TEXT_MAX: usize = 96;
+
+/// Printable text of at least 5 characters in the stack: ASCII (bytes) and UTF-16, with the
+/// offset from the stack pointer where each starts. Programs leave the reason they stopped as
+/// text on the stack (Chrome's failed delay load: the DLL's name).
+fn stack_text(bytes: &[u8]) -> Vec<(usize, String)> {
+    let printable = |b: u8| (0x20..0x7F).contains(&b);
+    let mut found = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() && found.len() < REPORT_ITEMS {
+        // UTF-16: printable bytes with zeros between them.
+        let mut wide = String::new();
+        let mut j = i;
+        while j + 1 < bytes.len() && printable(bytes[j]) && bytes[j + 1] == 0 && wide.len() < TEXT_MAX {
+            wide.push(char::from(bytes[j]));
+            j += 2;
+        }
+        if wide.len() >= 5 {
+            found.push((i, format!("L{wide:?}")));
+            i = j;
+            continue;
+        }
+        let mut text = String::new();
+        let mut j = i;
+        while j < bytes.len() && printable(bytes[j]) && text.len() < TEXT_MAX {
+            text.push(char::from(bytes[j]));
+            j += 1;
+        }
+        if text.len() >= 5 {
+            found.push((i, format!("{text:?}")));
+            i = j;
+        } else {
+            i += 1;
+        }
+    }
+    found
+}
+
+/// The lines `poly.nt.exceptions` logs for one exception: the code and where it was raised as
+/// `module+offset`, its parameters, the general registers (in `CONTEXT` order), the stack as
+/// quadwords (four to a line, runs of zero lines folded), the stack values that point into a
+/// module (return addresses, most likely) and the text found on the stack.
+pub fn exception_report(
+    at: &Raised,
+    parameters: &[u64],
+    registers: &[u64; 16],
+    stack: &[u64],
+    modules: &[ModuleSpan],
+) -> Vec<String> {
+    const NAMES: [&str; 16] =
+        ["rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"];
+    let head = format!("nt-exc: pid {} tid {}", at.pid, at.tid);
+    let mut out = Vec::new();
+    out.push(format!(
+        "{head} code {:#010x} at {} ({:#x}) params {parameters:x?}",
+        at.code,
+        locate(modules, at.address).unwrap_or_else(|| String::from("?")),
+        at.address
+    ));
+    let regs: Vec<String> = NAMES.iter().zip(registers).map(|(n, v)| format!("{n}={v:x}")).collect();
+    out.push(format!("{head} regs {}", regs.join(" ")));
+    let mut zeros = 0usize;
+    for (i, line) in stack.chunks(4).enumerate() {
+        if line.iter().all(|&w| w == 0) {
+            zeros += 1;
+            continue;
+        }
+        if zeros != 0 {
+            out.push(format!("{head} stack ... {zeros} lines of zeros"));
+            zeros = 0;
+        }
+        let words: Vec<String> = line.iter().map(|w| format!("{w:016x}")).collect();
+        out.push(format!("{head} stack +{:#06x}: {}", i * 32, words.join(" ")));
+    }
+    if zeros != 0 {
+        out.push(format!("{head} stack ... {zeros} lines of zeros"));
+    }
+    let code: Vec<String> = stack
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &w)| locate(modules, w).map(|m| format!("+{:#x} {m}", i * 8)))
+        .take(REPORT_ITEMS)
+        .collect();
+    if !code.is_empty() {
+        out.push(format!("{head} code addresses on the stack: {}", code.join(", ")));
+    }
+    let bytes: Vec<u8> = stack.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let text: Vec<String> = stack_text(&bytes).into_iter().map(|(o, t)| format!("+{o:#x} {t}")).collect();
+    if !text.is_empty() {
+        out.push(format!("{head} text on the stack: {}", text.join(", ")));
+    }
+    out
+}
+
 fn r_byte(r: Read<'_>, at: u64) -> Option<u8> {
     let mut b = [0u8; 1];
     r(at, &mut b).then_some(b[0])
@@ -217,6 +374,87 @@ mod tests {
                 true
             }
         }
+    }
+
+    #[test]
+    fn the_exception_option_bounds_the_stack_dump() {
+        assert_eq!(exception_stack_words(None), EXCEPTION_STACK_DEFAULT);
+        assert_eq!(exception_stack_words(Some("1536")), 1536);
+        assert_eq!(exception_stack_words(Some("1")), 16);
+        assert_eq!(exception_stack_words(Some("1000000")), EXCEPTION_STACK_MAX);
+        assert_eq!(exception_stack_words(Some("all")), EXCEPTION_STACK_DEFAULT);
+    }
+
+    #[test]
+    fn modules_are_read_with_size_and_name_and_locate_an_address() {
+        let mut m = Mem::new();
+        let (teb, peb, ldr) = (0x1000, 0x2000, 0x3000);
+        m.q(teb + 0x60, peb);
+        m.q(peb + 0x18, ldr);
+        let (a, b) = (0x4000u64, 0x6000u64);
+        m.q(a + 0x30, 0x1_4000_0000);
+        m.put(a + 0x40, &0x45_0000u32.to_le_bytes());
+        m.string(a + 0x58, 0x5100, "chrome.exe");
+        m.q(b + 0x30, 0x7ff8_0000_0000);
+        m.put(b + 0x40, &0x1300_0000u32.to_le_bytes());
+        m.string(b + 0x58, 0x5200, "chrome.dll");
+        // The load-order list: head -> a -> b -> head.
+        m.q(ldr + 0x10, a);
+        m.q(a, b);
+        m.q(b, ldr + 0x10);
+        let mods = modules(&m.reader(), teb);
+        assert_eq!(
+            mods,
+            [
+                ModuleSpan { base: 0x1_4000_0000, size: 0x45_0000, name: "chrome.exe".into() },
+                ModuleSpan { base: 0x7ff8_0000_0000, size: 0x1300_0000, name: "chrome.dll".into() },
+            ]
+        );
+        assert_eq!(locate(&mods, 0x7ff8_08e8_4bbf).as_deref(), Some("chrome.dll+0x8e84bbf"));
+        assert_eq!(locate(&mods, 0x1_4000_0000).as_deref(), Some("chrome.exe+0x0"));
+        // One past the end of the image, and an address in no module.
+        assert_eq!(locate(&mods, 0x1_4045_0000), None);
+        assert_eq!(locate(&mods, 0x10), None);
+        // No loader data: no modules.
+        assert!(modules(&Mem::new().reader(), teb).is_empty());
+    }
+
+    #[test]
+    fn an_exception_report_names_the_module_the_stack_and_its_text() {
+        let mods = [ModuleSpan { base: 0x7ff8_0000_0000, size: 0x1300_0000, name: "chrome.dll".into() }];
+        let at = Raised { pid: 7, tid: 9, code: 0x8000_0003, address: 0x7ff8_08e8_4bbf };
+        let mut regs = [0u64; 16];
+        regs[0] = 0x7e;
+        regs[4] = 0x50_f000;
+        // The stack: a return address, eight zero quadwords, "SHLWAPI.dll" as bytes, then L"126 x".
+        let mut stack = alloc::vec![0x7ff8_0000_1234u64, 0, 0, 1];
+        stack.extend([0u64; 8]);
+        stack.push(u64::from_le_bytes(*b"SHLWAPI."));
+        stack.push(u64::from_le_bytes(*b"dll\0\0\0\0\0"));
+        let wide: Vec<u8> = "126 x".encode_utf16().flat_map(u16::to_le_bytes).chain([0; 6]).collect();
+        stack.extend(wide.chunks(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())));
+        let lines = exception_report(&at, &[1, 2], &regs, &stack, &mods);
+        assert_eq!(
+            lines[0],
+            "nt-exc: pid 7 tid 9 code 0x80000003 at chrome.dll+0x8e84bbf (0x7ff808e84bbf) params [1, 2]"
+        );
+        assert!(lines[1].starts_with("nt-exc: pid 7 tid 9 regs rax=7e rcx=0 "), "{}", lines[1]);
+        assert!(lines[1].contains(" rsp=50f000 "));
+        assert_eq!(
+            lines[2],
+            "nt-exc: pid 7 tid 9 stack +0x0000: 00007ff800001234 0000000000000000 0000000000000000 0000000000000001"
+        );
+        assert_eq!(lines[3], "nt-exc: pid 7 tid 9 stack ... 2 lines of zeros");
+        assert!(lines[4].starts_with("nt-exc: pid 7 tid 9 stack +0x0060: "), "{}", lines[4]);
+        assert!(
+            lines.contains(&String::from("nt-exc: pid 7 tid 9 code addresses on the stack: +0x0 chrome.dll+0x1234"))
+        );
+        let text = lines.last().unwrap();
+        assert_eq!(text, "nt-exc: pid 7 tid 9 text on the stack: +0x60 \"SHLWAPI.dll\", +0x70 L\"126 x\"");
+        // An address in no module, no stack: two lines.
+        let none = exception_report(&Raised { address: 0x10, ..at }, &[], &regs, &[], &mods);
+        assert_eq!(none.len(), 2);
+        assert!(none[0].contains(" at ? (0x10) params []"));
     }
 
     #[test]

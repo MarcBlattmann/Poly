@@ -40,6 +40,7 @@ mod nt;
 mod pipe;
 mod privilege;
 mod process;
+mod procinfo;
 mod registry;
 mod secdata;
 mod security;

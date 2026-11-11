@@ -236,6 +236,31 @@ fn end_after_unhandled(mut k: Kernel) -> ! {
     end_unhandled(pid, tid, &record, frames, regs, words, structures)
 }
 
+/// `poly.nt.exceptions`: log an exception that is being handed to the running thread's
+/// dispatcher: where it was raised (module and offset), the registers, and `words` quadwords of
+/// the stack with the code addresses and the text found in them. Everything is on the heap (the
+/// thread's kernel stack is 16 KiB) and freed before the thread goes back to user mode.
+pub(super) fn report_delivered(pid: ProcessId, tid: ThreadRef, record: &ExceptionRecord, ctx: &Context, words: usize) {
+    use poly_personality_nt::diag;
+    let read = |at: u64, buf: &mut [u8]| user::copy_from_user(buf, at).is_ok();
+    let teb = with(|s| s.processes.get(&pid)?.thread(tid).map(|t| t.teb)).unwrap_or(0);
+    let modules = diag::modules(&read, teb);
+    let rsp = ctx.rsp();
+    // Whole pages may be missing above the stack's top: read a quadword at a time.
+    let mut stack: Vec<u64> = Vec::with_capacity(words);
+    for i in 0..words as u64 {
+        let mut b = [0u8; 8];
+        if !read(rsp.wrapping_add(8 * i), &mut b) {
+            break;
+        }
+        stack.push(u64::from_le_bytes(b));
+    }
+    let at = diag::Raised { pid: pid.0, tid: tid.0, code: record.code, address: record.address };
+    for line in diag::exception_report(&at, record.parameters(), &ctx.gpr, &stack, &modules) {
+        crate::kprintln!("{line}");
+    }
+}
+
 /// The running thread's user memory, for walking its stack.
 struct UserMemory;
 

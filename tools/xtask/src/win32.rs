@@ -85,6 +85,14 @@ pub const OUTPUTS: &[&str] = &[
     "shcore.dll",
     "dwmapi.dll",
     "imm32.dll",
+    // ADR 0155, step 9.
+    "shlwapi.dll",
+    "wtsapi32.dll",
+    "comctl32.dll",
+    "oleacc.dll",
+    "uiautomationcore.dll",
+    "mfplat.dll",
+    "powrprof.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -208,6 +216,13 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/shcore",
             "personalities/nt/win32/dwmapi",
             "personalities/nt/win32/imm32",
+            "personalities/nt/win32/shlwapi",
+            "personalities/nt/win32/wtsapi32",
+            "personalities/nt/win32/comctl32",
+            "personalities/nt/win32/oleacc",
+            "personalities/nt/win32/uiautomationcore",
+            "personalities/nt/win32/mfplat",
+            "personalities/nt/win32/powrprof",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",

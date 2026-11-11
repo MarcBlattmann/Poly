@@ -253,6 +253,8 @@ pub struct Fake {
     pub terminated_thread: Option<(ThreadRef, NtStatus)>,
     pub traces: Vec<[u64; 3]>,
     pub suspend: BTreeMap<ThreadRef, u32>,
+    /// Processes `NtSuspendProcess` (true) and `NtResumeProcess` (false) named, in order.
+    pub process_suspends: Vec<(poly_ntobj::ProcessId, bool)>,
     pub contexts: BTreeMap<ThreadRef, NtContext>,
     pub apcs: Vec<(ThreadRef, Apc)>,
     pub next_tid: u64,
@@ -399,6 +401,16 @@ impl NtKernel for Fake {
         Ok(prev)
     }
 
+    fn suspend_process(&mut self, pid: poly_ntobj::ProcessId) -> Result<(), NtStatus> {
+        self.process_suspends.push((pid, true));
+        Ok(())
+    }
+
+    fn resume_process(&mut self, pid: poly_ntobj::ProcessId) -> Result<(), NtStatus> {
+        self.process_suspends.push((pid, false));
+        Ok(())
+    }
+
     fn get_context(&mut self, thread: ThreadRef) -> Result<NtContext, NtStatus> {
         Ok(self.contexts.get(&thread).copied().unwrap_or_default())
     }
@@ -517,6 +529,7 @@ impl Fake {
             terminated_thread: None,
             traces: Vec::new(),
             suspend: BTreeMap::new(),
+            process_suspends: Vec::new(),
             contexts: BTreeMap::new(),
             apcs: Vec::new(),
             next_tid: TID.0,

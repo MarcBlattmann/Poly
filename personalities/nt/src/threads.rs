@@ -438,6 +438,29 @@ pub fn resume_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtSta
     Ok(STATUS_SUCCESS)
 }
 
+/// `PROCESS_SUSPEND_RESUME` (`winnt.h`): "required to suspend or resume a
+/// process" (Learn, "Process Security and Access Rights").
+const PROCESS_SUSPEND_RESUME: u32 = 0x0800;
+
+/// `NtSuspendProcess(ProcessHandle)` (ADR 0155 step 9). The service is not
+/// documented; what is public is its name and the access right
+/// `PROCESS_SUSPEND_RESUME`. Poly suspends every thread of the process once.
+pub fn suspend_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [h] = abi::args::<K, 1>(k, regs)?;
+    let pid = process_of(k, Handle(h), PROCESS_SUSPEND_RESUME)?;
+    k.suspend_process(pid)?;
+    Ok(STATUS_SUCCESS)
+}
+
+/// `NtResumeProcess(ProcessHandle)`: every thread of the process is resumed
+/// once.
+pub fn resume_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [h] = abi::args::<K, 1>(k, regs)?;
+    let pid = process_of(k, Handle(h), PROCESS_SUSPEND_RESUME)?;
+    k.resume_process(pid)?;
+    Ok(STATUS_SUCCESS)
+}
+
 /// `NtGetContextThread(ThreadHandle, Context*)`: the `ContextFlags` in the
 /// buffer say which groups the caller wants; we fill those we support.
 pub fn get_context_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
@@ -472,7 +495,9 @@ pub fn set_context_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<
 /// (Poly keeps no times of ended processes), and the kernel and user CPU
 /// time the kernel counted ([`NtKernel::process_times`]), in 100 ns units.
 fn query_process_times<K: NtKernel>(k: &mut K, h: u64, buf: u64, length: u64, ret: u64) -> Result<NtStatus> {
-    let pid = process_of(k, Handle(h), PROCESS_QUERY_INFORMATION)?;
+    // Learn, `GetProcessTimes`: "The handle must have the PROCESS_QUERY_INFORMATION or
+    // PROCESS_QUERY_LIMITED_INFORMATION access right".
+    let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
     let [created, kernel, user] = k.process_times(pid).unwrap_or([0; 3]);
     let mut b = [0u8; KERNEL_USER_TIMES_SIZE];
     b[0..8].copy_from_slice(&created.to_le_bytes());

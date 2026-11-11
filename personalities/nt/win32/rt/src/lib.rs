@@ -59,3 +59,41 @@ pub fn fail_fast(code: u32) -> ! {
 fn panic(_: &core::panic::PanicInfo) -> ! {
     fail_fast(FAST_FAIL_FATAL_APP_EXIT)
 }
+
+/// Make the process heap the module's allocator: `process_heap_allocator!();` at the top of
+/// a DLL that links a crate using `alloc` (ADR 0155, step 9: the small DLLs). The blocks are
+/// `HeapAlloc`'s, 16-byte aligned; a stricter alignment is refused.
+#[macro_export]
+macro_rules! process_heap_allocator {
+    () => {
+        mod process_heap {
+            #[link(name = "kernel32", kind = "raw-dylib")]
+            unsafe extern "system" {
+                pub fn GetProcessHeap() -> *mut u8;
+                pub fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
+                pub fn HeapFree(heap: *mut u8, flags: u32, p: *mut u8) -> i32;
+            }
+
+            pub struct ProcessHeap;
+
+            // SAFETY: HeapAlloc returns 16-byte aligned blocks of the serialized process heap;
+            // stricter alignments are refused.
+            unsafe impl core::alloc::GlobalAlloc for ProcessHeap {
+                unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+                    if layout.align() > 16 {
+                        return core::ptr::null_mut();
+                    }
+                    // SAFETY: the process heap.
+                    unsafe { HeapAlloc(GetProcessHeap(), 0, layout.size().max(1)) }
+                }
+                unsafe fn dealloc(&self, ptr: *mut u8, _: core::alloc::Layout) {
+                    // SAFETY: a block from `alloc`.
+                    unsafe { HeapFree(GetProcessHeap(), 0, ptr) };
+                }
+            }
+
+            #[global_allocator]
+            static ALLOC: ProcessHeap = ProcessHeap;
+        }
+    };
+}

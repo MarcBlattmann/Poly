@@ -215,6 +215,23 @@ fn terminate_and_trace() {
     assert_eq!(f.call(Service::TerminateProcess, &[0x9998, 1]), STATUS_INVALID_HANDLE);
 }
 
+/// `NtSuspendProcess` / `NtResumeProcess` (ADR 0155 step 9): the handle names the process whose
+/// threads the kernel suspends or resumes; a handle that is none is refused before the kernel
+/// is asked.
+#[test]
+fn a_whole_process_is_suspended_and_resumed_by_handle() {
+    let mut f = Fake::new();
+    let me = f.caller().process;
+    assert_eq!(f.call(Service::SuspendProcess, &[SELF]), STATUS_SUCCESS);
+    assert_eq!(f.call(Service::ResumeProcess, &[SELF]), STATUS_SUCCESS);
+    assert_eq!(f.process_suspends, [(me, true), (me, false)]);
+    assert_eq!(f.call(Service::SuspendProcess, &[0]), STATUS_INVALID_HANDLE);
+    assert_eq!(f.call(Service::ResumeProcess, &[0x9998]), STATUS_INVALID_HANDLE);
+    assert_eq!(f.process_suspends.len(), 2);
+    assert_eq!(Service::SuspendProcess.name(), "NtSuspendProcess");
+    assert_eq!(Service::ResumeProcess.name(), "NtResumeProcess");
+}
+
 #[test]
 fn unknown_services_are_not_implemented() {
     let mut f = Fake::new();

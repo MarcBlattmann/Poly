@@ -629,14 +629,17 @@ pub const MEMORY: &str = "4G";
 /// Virtual CPUs of a stage.
 pub const CPUS: u32 = 4;
 
-/// `cargo xtask chrome-win run [--stage N] [--trace] [--release]
+/// `cargo xtask chrome-win run [--stage N] [--trace] [--exceptions[=N]] [--release]
 /// [--fresh-disk] [--timeout SECS] [--memory=SIZE] [--cpus=N]`: boot a
 /// stage headless (the kernel mounts the disk and runs the launcher as its
 /// first program), collect the serial log, print what it says. Works on
-/// every host (no QMP).
+/// every host (no QMP). `--exceptions` asks the kernel to log every exception
+/// delivered to user mode with its module, offset and N quadwords of the stack
+/// (`poly.nt.exceptions`, ADR 0155 step 9): Chrome leaves the reason it stops on its stack.
 fn run(args: &[String]) -> Result {
     let (mut stage, mut trace, mut release, mut fresh, mut timeout) = (1u32, false, false, false, 900u64);
     let mut kit_names: Vec<String> = Vec::new();
+    let mut exceptions: Option<String> = None;
     let mut rest: Vec<String> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -645,6 +648,8 @@ fn run(args: &[String]) -> Result {
                 stage = it.next().ok_or("--stage needs a number")?.parse().map_err(|e| format!("--stage: {e}"))?
             }
             "--trace" => trace = true,
+            "--exceptions" => exceptions = Some(String::new()),
+            e if e.starts_with("--exceptions=") => exceptions = Some(e["--exceptions".len()..].to_string()),
             "--kit" => {
                 kit_names = it
                     .next()
@@ -669,7 +674,7 @@ fn run(args: &[String]) -> Result {
     fetch()?;
     let kernel = crate::build_kernel(release)?;
     let kit = if kit_names.is_empty() { None } else { Some(build_kit(&kit_names)?) };
-    let outcome = boot_stage(&kernel, st, &Options { trace, fresh, timeout, rest, kit })?;
+    let outcome = boot_stage(&kernel, st, &Options { trace, exceptions, fresh, timeout, rest, kit })?;
     outcome.report(st);
     if outcome.passed {
         println!("STAGE {} PASSED", st.number);
@@ -694,10 +699,27 @@ pub fn build_kit(names: &[String]) -> Result<PathBuf> {
     Ok(out)
 }
 
+/// The kernel arguments a stage's debugging options add (each with its leading space).
+fn kernel_arguments(trace: bool, exceptions: Option<&str>) -> String {
+    let mut more = String::new();
+    if trace {
+        more.push_str(" poly.nt.trace");
+    }
+    if let Some(value) = exceptions {
+        more.push_str(" poly.nt.exceptions");
+        more.push_str(value);
+    }
+    more
+}
+
 /// How a stage is run.
 pub struct Options {
     /// Ask the kernel for the NT call trace (`poly.nt.trace`).
     pub trace: bool,
+    /// Ask the kernel to log every exception delivered to user mode
+    /// (`poly.nt.exceptions`): `Some("")` for the default stack dump, `Some("=N")` for N
+    /// quadwords.
+    pub exceptions: Option<String>,
     /// Make the disk again.
     pub fresh: bool,
     /// Seconds before QEMU is stopped.
@@ -827,7 +849,7 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
     let _ = std::fs::remove_file(&log);
     let res = crate::resources::Resources::from_args(&o.rest)?;
     eprintln!("{}", res.describe(MEMORY, CPUS));
-    let more = if o.trace { " poly.nt.trace" } else { "" };
+    let more = kernel_arguments(o.trace, o.exceptions.as_deref());
     // The kernel mounts the disk and runs the launcher (NT programs are the
     // first program's business, a Linux shell cannot exec one): no
     // initramfs. The launcher's path has no space; Chrome's does not matter.
@@ -905,8 +927,11 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
         return Ok(());
     }
     let st = &STAGES[0];
-    let outcome =
-        boot_stage(kernel, st, &Options { trace: false, fresh: false, timeout: 600, rest: Vec::new(), kit: None })?;
+    let outcome = boot_stage(
+        kernel,
+        st,
+        &Options { trace: false, exceptions: None, fresh: false, timeout: 600, rest: Vec::new(), kit: None },
+    )?;
     outcome.report(st);
     let required = S1_REQUIRED || std::env::var("POLY_CHROME_REQUIRED").is_ok_and(|v| v == "1");
     if outcome.passed {
@@ -936,13 +961,21 @@ pub fn command(args: &[String]) -> Result {
         Some("disk") => disk(args.iter().any(|a| a == "--fresh-disk")).map(|p| println!("{}", p.display())),
         Some("run") => run(&args[1..]),
         _ => Err("usage: cargo xtask chrome-win <fetch | imports [--markdown FILE] | disk [--fresh-disk] | \
-                  run [--stage N] [--trace] [--kit FILES] [--release] [--timeout SECS]>"
+                  run [--stage N] [--trace] [--exceptions[=N]] [--kit FILES] [--release] [--timeout SECS]>"
             .into()),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn debugging_options_become_kernel_arguments() {
+        assert_eq!(kernel_arguments(false, None), "");
+        assert_eq!(kernel_arguments(true, None), " poly.nt.trace");
+        assert_eq!(kernel_arguments(false, Some("")), " poly.nt.exceptions");
+        assert_eq!(kernel_arguments(true, Some("=1536")), " poly.nt.trace poly.nt.exceptions=1536");
+    }
+
     #[test]
     fn the_kernel_log_holds_the_browsers_trace_and_one_per_child() {
         let log = "boot\n\
