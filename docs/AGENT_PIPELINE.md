@@ -369,7 +369,9 @@ an outline font of the height asked, as on any Windows.
 `win build` cross-compiles with the pinned toolchain (`-Zbuild-std` from
 `rust-src`, `rust-lld`; the first build compiles `core`, about 30 s) and
 refuses an executable that imports from a DLL other than `ntdll`,
-`kernel32`, `user32`, `gdi32`, `dwmapi`, `imm32`, `shcore`, `dwrite`, `advapi32` and `userenv` (the GUI entries' tests are still console
+`kernel32`, `user32`, `gdi32`, `dwmapi`, `imm32`, `shcore`, `dwrite`, `advapi32`, `userenv`, `version` and the DLLs of Chrome's first stage
+(`shlwapi`, `shell32`, `comctl32`, `powrprof`, `wtsapi32`, `netapi32`, `iphlpapi`, `oleacc`, `uiautomationcore`, `ole32`, `oleaut32`,
+`kernelbase`; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
 programs; the DirectWrite entries' tests import `dwrite.dll`; `advapi32` and `userenv` are for the security model), by ordinal, or delay-loaded. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
 start or was not the same on both runs is an **error**, a test Poly cannot

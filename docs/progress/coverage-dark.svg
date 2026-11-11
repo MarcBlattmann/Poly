@@ -1282,7 +1282,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">0.7%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">412 / 58,733 entries · 73,276 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">415 / 58,733 entries · 73,276 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 16,439 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="157.5" height="218.0" fill="#21262d"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2ea043"/>
@@ -1314,7 +1314,7 @@
 <g><title>kernel32: 33 / 1,559 done (2.1%)</title>
 <rect x="244.6" y="469.0" width="57.8" height="53.7" fill="#21262d"/>
 <rect x="244.6" y="469.0" width="1.2" height="53.7" fill="#2ea043"/>
-<rect x="245.9" y="469.0" width="9.5" height="53.7" fill="#388bfd"/>
+<rect x="245.9" y="469.0" width="9.6" height="53.7" fill="#388bfd"/>
 <rect x="243.6" y="468.0" width="59.8" height="55.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="249.6" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">kernel32</text>
 <text x="249.6" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">2%</text>
@@ -1334,7 +1334,7 @@
 <g><title>ntdll: 72 / 1,523 done (4.7%)</title>
 <rect x="244.6" y="634.6" width="57.8" height="52.4" fill="#21262d"/>
 <rect x="244.6" y="634.6" width="2.7" height="52.4" fill="#2ea043"/>
-<rect x="247.4" y="634.6" width="4.6" height="52.4" fill="#388bfd"/>
+<rect x="247.4" y="634.6" width="4.7" height="52.4" fill="#388bfd"/>
 <rect x="243.6" y="633.6" width="59.8" height="54.4" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="249.6" y="648.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">ntdll</text>
 <text x="249.6" y="662.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">5%</text>
@@ -1352,7 +1352,7 @@
 <rect x="303.5" y="541.1" width="42.2" height="53.6" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="309.5" y="556.1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">icu</text>
 </g>
-<g><title>user32: 110 / 992 done (11.1%)</title>
+<g><title>user32: 111 / 992 done (11.2%)</title>
 <rect x="304.5" y="595.7" width="40.2" height="48.2" fill="#21262d"/>
 <rect x="304.5" y="595.7" width="4.5" height="48.2" fill="#2ea043"/>
 <rect x="308.9" y="595.7" width="0.6" height="48.2" fill="#388bfd"/>
@@ -1361,6 +1361,7 @@
 </g>
 <g><title>shlwapi: 0 / 851 done (0.0%)</title>
 <rect x="304.5" y="645.9" width="40.2" height="41.1" fill="#21262d"/>
+<rect x="304.5" y="645.9" width="0.0" height="41.1" fill="#388bfd"/>
 <rect x="303.5" y="644.9" width="42.2" height="43.1" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="309.5" y="659.9" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">shlw…</text>
 </g>
@@ -1379,10 +1380,10 @@
 <rect x="351.2" y="548.4" width="2.4" height="35.5" fill="#388bfd"/>
 <rect x="345.6" y="547.4" width="33.5" height="37.5" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
-<g><title>gdi32: 27 / 545 done (5.0%)</title>
+<g><title>gdi32: 29 / 545 done (5.3%)</title>
 <rect x="346.6" y="585.9" width="31.5" height="32.7" fill="#21262d"/>
-<rect x="346.6" y="585.9" width="1.6" height="32.7" fill="#2ea043"/>
-<rect x="348.2" y="585.9" width="0.4" height="32.7" fill="#388bfd"/>
+<rect x="346.6" y="585.9" width="1.7" height="32.7" fill="#2ea043"/>
+<rect x="348.3" y="585.9" width="0.3" height="32.7" fill="#388bfd"/>
 <rect x="345.6" y="584.9" width="33.5" height="34.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>icuuc: 0 / 542 done (0.0%)</title>
@@ -1410,6 +1411,7 @@
 </g>
 <g><title>shell32: 0 / 475 done (0.0%)</title>
 <rect x="491.8" y="469.0" width="32.2" height="27.7" fill="#21262d"/>
+<rect x="491.8" y="469.0" width="0.1" height="27.7" fill="#388bfd"/>
 <rect x="490.8" y="468.0" width="34.2" height="29.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>oleaut32: 0 / 418 done (0.0%)</title>
@@ -1566,6 +1568,7 @@
 </g>
 <g><title>comctl32: 0 / 180 done (0.0%)</title>
 <rect x="427.7" y="648.3" width="16.5" height="18.7" fill="#21262d"/>
+<rect x="427.7" y="648.3" width="0.1" height="18.7" fill="#388bfd"/>
 <rect x="426.7" y="647.3" width="18.5" height="20.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>odbc32: 0 / 174 done (0.0%)</title>
@@ -1889,6 +1892,7 @@
 </g>
 <g><title>wtsapi32: 0 / 52 done (0.0%)</title>
 <rect x="545.3" y="613.6" width="8.4" height="8.7" fill="#21262d"/>
+<rect x="545.3" y="613.6" width="0.6" height="8.7" fill="#388bfd"/>
 <rect x="544.3" y="612.6" width="10.4" height="10.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>cldapi: 0 / 51 done (0.0%)</title>
@@ -2049,6 +2053,7 @@
 </g>
 <g><title>powrprof: 0 / 34 done (0.0%)</title>
 <rect x="542.4" y="661.4" width="5.8" height="7.3" fill="#21262d"/>
+<rect x="542.4" y="661.4" width="0.2" height="7.3" fill="#388bfd"/>
 <rect x="541.4" y="660.4" width="7.8" height="9.3" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>tdh: 0 / 34 done (0.0%)</title>

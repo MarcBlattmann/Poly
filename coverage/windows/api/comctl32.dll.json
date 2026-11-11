@@ -126,7 +126,7 @@
 {"symbol":"ImageList_SetOverlayImage","src":["wine-spec"]},
 {"symbol":"ImageList_Write","src":["wine-spec"],"seeds":["wine:comctl32/tests/imagelist.c:check_iml_data"]},
 {"symbol":"InitCommonControls","src":["wine-spec"]},
-{"symbol":"InitCommonControlsEx","src":["wine-spec"],"seeds":["wine:comctl32/tests/pager.c:START_TEST","wine:comctl32/tests/treeview.c:START_TEST"]},
+{"symbol":"InitCommonControlsEx","status":"claimed","claimed_by":"spec-chrome-win-5","src":["wine-spec"],"seeds":["wine:comctl32/tests/pager.c:START_TEST","wine:comctl32/tests/treeview.c:START_TEST"]},
 {"symbol":"InitMUILanguage","src":["wine-spec"]},
 {"symbol":"InitializeFlatSB","src":["wine-spec"]},
 {"symbol":"IntlStrEqWorkerA","src":["wine-spec"]},

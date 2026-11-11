@@ -1,5 +1,5 @@
 [
-{"symbol":"CallNtPowerInformation","src":["wine-spec"]},
+{"symbol":"CallNtPowerInformation","status":"claimed","claimed_by":"spec-chrome-win-5","src":["wine-spec"]},
 {"symbol":"CanUserWritePwrScheme","src":["wine-spec"]},
 {"symbol":"DeletePwrScheme","src":["wine-spec"]},
 {"symbol":"EnumPwrSchemes","src":["wine-spec"]},

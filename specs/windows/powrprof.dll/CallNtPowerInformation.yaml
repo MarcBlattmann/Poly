@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/powrprof.dll/CallNtPowerInformation.yaml
+id: windows/api/powrprof.dll/CallNtPowerInformation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above, and Chrome's calls in the raw stage-1 traces (browser process, a worker thread, through api-ms-win-power-base-l1-1-0.dll: two calls per run in some runs, none in others). Microsoft Learn: "CallNtPowerInformation function (powerbase.h)", "POWER_INFORMATION_LEVEL enumeration", "SYSTEM_POWER_INFORMATION", "PROCESSOR_POWER_INFORMATION", "SYSTEM_BATTERY_STATE", "SYSTEM_POWER_CAPABILITIES"; ntstatus.h. Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Reads (or sets) power information by level; the result is an NTSTATUS. Chrome reads two levels with no input buffer: SystemPowerInformation (12) and ProcessorInformation (11). Both succeed on any machine; the output buffer has to be at least as large as the level's data, and a larger one is fine.
+interface:
+  signature: "NTSTATUS CallNtPowerInformation(POWER_INFORMATION_LEVEL InformationLevel, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength)"
+  returns: "STATUS_SUCCESS (0) or an NTSTATUS error; the last error is not the result"
+  levels: "POWER_INFORMATION_LEVEL (winnt.h): SystemPowerCapabilities 4, SystemBatteryState 5, ProcessorInformation 11, SystemPowerInformation 12, LastWakeTime 14, LastSleepTime 15, SystemExecutionState 16"
+  exported_by: "powrprof.dll; the API set api-ms-win-power-base-l1-1-0.dll (what Chrome imports) resolves to it"
+chrome:
+  calls: "browser process, stage 1, on a worker thread: CallNtPowerInformation(SystemPowerInformation (12), NULL, 0, out, <size>) = 0 and CallNtPowerInformation(ProcessorInformation (11), NULL, 0, out, <size>) = 0. They ran in the earlier traced runs (two calls per run) and not in this round's run: the path depends on timing"
+  on_failure: "the DLL ablation run hung without the API set (gap-map section 6); the per-API fault injection did not reach the call (NOT-CALLED)"
+rules:
+  system_power_information: "level 12 with a 16-byte output buffer: status 0 and SYSTEM_POWER_INFORMATION { ULONG MaxIdlenessAllowed; ULONG Idleness; ULONG TimeRemaining; UCHAR CoolingMode } written (16 bytes: the three padding bytes after CoolingMode are written too). Idleness and MaxIdlenessAllowed are percentages (0 to 100); CoolingMode is 0 (active), 1 (passive) or 2 (invalid: no thermal zone)"
+  processor_information: "level 11 with 24 bytes per logical processor (the count GetSystemInfo gives): status 0 and one PROCESSOR_POWER_INFORMATION { ULONG Number, MaxMhz, CurrentMhz, MhzLimit, MaxIdleState, CurrentIdleState } per processor, numbered 0, 1, 2, ... in order, with MaxMhz, CurrentMhz and MhzLimit above 0"
+  buffer_too_small: "an output buffer shorter than the level's data, by one byte or by whole records: STATUS_BUFFER_TOO_SMALL (0xC0000023) and nothing is written (no partial data)"
+  buffer_larger: "a longer output buffer is accepted: status 0, and only the level's data is written (17, 24 and 64 bytes for level 12 write 16; one byte, one record or twice as much for level 11 write the processors' records and no more)"
+  no_output: "an output length of 0 (with a buffer or with NULL): STATUS_INVALID_PARAMETER (0xC000000D)"
+  input_not_wanted: "these levels take no input: with an input buffer given (16 bytes) level 12 returns STATUS_INVALID_PARAMETER and writes nothing"
+  other_read_levels: "the same pattern for SystemBatteryState (32 bytes), SystemPowerCapabilities (76 bytes), SystemExecutionState (4 bytes), LastWakeTime and LastSleepTime (8 bytes each): status 0 with the exact size or more, STATUS_BUFFER_TOO_SMALL with one byte less, nothing written past the size. The battery state's four flags (AcOnLine, BatteryPresent, Charging, Discharging) are each 0 or 1; the execution state holds only ES_ bits"
+  unknown_level: "a level that does not exist (200, 0xFFFF, 0xFFFFFFFF): STATUS_INVALID_PARAMETER (0xC000000D), nothing written"
+errors:
+  output_too_small: "STATUS_BUFFER_TOO_SMALL (0xC0000023)"
+  no_output_or_unknown_level_or_unwanted_input: "STATUS_INVALID_PARAMETER (0xC000000D)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, sizes and booleans; no line holds a handle, a pointer, a name of the machine or of its user, a hardware value or a time. The tests import powrprof.dll. Processor frequencies, battery and thermal values are the machine's and are only checked for their range.
+not_covered: >
+  Levels that set something or need a privilege (the power policies, hibernation file, wake and execution state requests), levels 0 to 3 and 8 (policies), the actual frequencies and idle states, processor groups beyond the first, and how the values differ between machines with and without a battery or thermal zones.

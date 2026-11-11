@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "9b678454dfdd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:31:32Z",
+  "tests": [
+    {
+      "name": "pstore_chrome",
+      "exe_sha256": "3aa7e0741287c4bf58735495df31c652c2377b4df3333a53dcb1dd9ad601c66b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXgoYXBhcnRtZW50IHRocmVhZGVkKSA9IDB4MAp3aW5kb3cgY3JlYXRlZCAxClNIR2V0UHJvcGVydHlTdG9yZUZvcldpbmRvdyh3aW5kb3csIElJRF9JUHJvcGVydHlTdG9yZSkgPSAweDAgb3V0IHBvaW50ZXIgYW4gb2JqZWN0CmEgbmV3IHdpbmRvdydzIHN0b3JlOiBHZXRDb3VudCA9IDB4ODAwMDQwMDUgY291bnQgMApHZXRWYWx1ZShBcHBVc2VyTW9kZWwuSUQpID0gMHgwIHZ0IDAKU2V0VmFsdWUoQXBwVXNlck1vZGVsLklELCBWVF9MUFdTVFIgIlBvbHkuU3BlYy5XaW5kb3ciKSA9IDB4MApHZXRWYWx1ZShBcHBVc2VyTW9kZWwuSUQpID0gMHgwIHZ0IDMxICJQb2x5LlNwZWMuV2luZG93IgpTZXRWYWx1ZShBcHBVc2VyTW9kZWwuUmVsYXVuY2hDb21tYW5kLCBWVF9MUFdTVFIgIiJDOlxwb2x5XGFwcC5leGUiIC0tcHJvZmlsZT14IikgPSAweDAKU2V0VmFsdWUoQXBwVXNlck1vZGVsLlJlbGF1bmNoRGlzcGxheU5hbWVSZXNvdXJjZSwgVlRfTFBXU1RSICJQb2x5IEFwcCIpID0gMHgwClNldFZhbHVlKEFwcFVzZXJNb2RlbC5SZWxhdW5jaEljb25SZXNvdXJjZSwgVlRfTFBXU1RSICJDOlxwb2x5XGFwcC5leGUsMCIpID0gMHgwCkdldFZhbHVlKEFwcFVzZXJNb2RlbC5SZWxhdW5jaENvbW1hbmQpID0gMHgwIHZ0IDMxICIiQzpccG9seVxhcHAuZXhlIiAtLXByb2ZpbGU9eCIKR2V0VmFsdWUoQXBwVXNlck1vZGVsLlJlbGF1bmNoRGlzcGxheU5hbWVSZXNvdXJjZSkgPSAweDAgdnQgMzEgIlBvbHkgQXBwIgpHZXRWYWx1ZShBcHBVc2VyTW9kZWwuUmVsYXVuY2hJY29uUmVzb3VyY2UpID0gMHgwIHZ0IDMxICJDOlxwb2x5XGFwcC5leGUsMCIKYWZ0ZXIgZm91ciB2YWx1ZXM6IEdldENvdW50ID0gMHgwIGNvdW50IDQKQ29tbWl0ID0gMHgwCkdldFZhbHVlKEFwcFVzZXJNb2RlbC5JRCBhZnRlciBDb21taXQpID0gMHgwIHZ0IDMxICJQb2x5LlNwZWMuV2luZG93IgphIHNlY29uZCBjYWxsIGZvciB0aGUgc2FtZSB3aW5kb3cgPSAweDAgb3V0IHBvaW50ZXIgYW4gb2JqZWN0OyB0aGUgc2FtZSBvYmplY3QgYXMgdGhlIGZpcnN0IDAKR2V0VmFsdWUoQXBwVXNlck1vZGVsLklEIHRocm91Z2ggdGhlIHNlY29uZCBzdG9yZSkgPSAweDAgdnQgMzEgIlBvbHkuU3BlYy5XaW5kb3ciClNldFZhbHVlKEFwcFVzZXJNb2RlbC5JRCB0aHJvdWdoIHRoZSBzZWNvbmQgc3RvcmUsIFZUX0xQV1NUUiAiUG9seS5TcGVjLk90aGVyIikgPSAweDAKR2V0VmFsdWUoQXBwVXNlck1vZGVsLklEIHRocm91Z2ggdGhlIGZpcnN0IHN0b3JlKSA9IDB4MCB2dCAzMSAiUG9seS5TcGVjLk90aGVyIgpHZXRWYWx1ZShBcHBVc2VyTW9kZWwuSUQgb2YgYW5vdGhlciB3aW5kb3cpID0gMHgwIHZ0IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx(apartment threaded) = 0x0\nwindow created 1\nSHGetPropertyStoreForWindow(window, IID_IPropertyStore) = 0x0 out pointer an object\na new window's store: GetCount = 0x80004005 count 0\nGetValue(AppUserModel.ID) = 0x0 vt 0\nSetValue(AppUserModel.ID, VT_LPWSTR \"Poly.Spec.Window\") = 0x0\nGetValue(AppUserModel.ID) = 0x0 vt 31 \"Poly.Spec.Window\"\nSetValue(AppUserModel.RelaunchCommand, VT_LPWSTR \"\"C:\\poly\\app.exe\" --profile=x\") = 0x0\nSetValue(AppUserModel.RelaunchDisplayNameResource, VT_LPWSTR \"Poly App\") = 0x0\nSetValue(AppUserModel.RelaunchIconResource, VT_LPWSTR \"C:\\poly\\app.exe,0\") = 0x0\nGetValue(AppUserModel.RelaunchCommand) = 0x0 vt 31 \"\"C:\\poly\\app.exe\" --profile=x\"\nGetValue(AppUserModel.RelaunchDisplayNameResource) = 0x0 vt 31 \"Poly App\"\nGetValue(AppUserModel.RelaunchIconResource) = 0x0 vt 31 \"C:\\poly\\app.exe,0\"\nafter four values: GetCount = 0x0 count 4\nCommit = 0x0\nGetValue(AppUserModel.ID after Commit) = 0x0 vt 31 \"Poly.Spec.Window\"\na second call for the same window = 0x0 out pointer an object; the same object as the first 0\nGetValue(AppUserModel.ID through the second store) = 0x0 vt 31 \"Poly.Spec.Window\"\nSetValue(AppUserModel.ID through the second store, VT_LPWSTR \"Poly.Spec.Other\") = 0x0\nGetValue(AppUserModel.ID through the first store) = 0x0 vt 31 \"Poly.Spec.Other\"\nGetValue(AppUserModel.ID of another window) = 0x0 vt 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    },
+    {
+      "name": "pstore_values",
+      "exe_sha256": "0bf2d4e3de8269f4295d34da862c8cb15662b5cabc6a59b52bf85f15e3d71a85",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U0hHZXRQcm9wZXJ0eVN0b3JlRm9yV2luZG93ID0gMHgwIG91dCBwb2ludGVyIGFuIG9iamVjdApTZXRWYWx1ZShBcHBVc2VyTW9kZWwuUHJldmVudFBpbm5pbmcsIFZUX0JPT0wgdHJ1ZSkgPSAweDAKR2V0VmFsdWUoQXBwVXNlck1vZGVsLlByZXZlbnRQaW5uaW5nKSA9IDB4MCB2dCAxMSB2YWx1ZSA2NTUzNQpTZXRWYWx1ZShBcHBVc2VyTW9kZWwuSUQsIFZUX0k0IDcpID0gMHgwCkdldFZhbHVlKEFwcFVzZXJNb2RlbC5JRCkgPSAweDAgdnQgMzEgIjciClNldFZhbHVlKFN5c3RlbS5UaXRsZSwgVlRfTFBXU1RSICJhIHRpdGxlIikgPSAweDAKR2V0VmFsdWUoU3lzdGVtLlRpdGxlKSA9IDB4MCB2dCAzMSAiYSB0aXRsZSIKU2V0VmFsdWUoQXBwVXNlck1vZGVsLklELCBWVF9MUFdTVFIgIlBvbHkuU3BlYy5FcnJvcnMiKSA9IDB4MApTZXRWYWx1ZShBcHBVc2VyTW9kZWwuSUQsIFZUX0VNUFRZKSA9IDB4MApHZXRWYWx1ZShBcHBVc2VyTW9kZWwuSUQgYWZ0ZXIgVlRfRU1QVFkpID0gMHgwIHZ0IDAKR2V0Q291bnQgPSAweDAgY291bnQgMgpHZXRBdCgwKSA9IDB4MDsgdGhlIGtleSBpcyBhbiBBcHBVc2VyTW9kZWwga2V5OiAxCkdldEF0KDEwMDApID0gMHg4MDA3MDA1NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SHGetPropertyStoreForWindow = 0x0 out pointer an object\nSetValue(AppUserModel.PreventPinning, VT_BOOL true) = 0x0\nGetValue(AppUserModel.PreventPinning) = 0x0 vt 11 value 65535\nSetValue(AppUserModel.ID, VT_I4 7) = 0x0\nGetValue(AppUserModel.ID) = 0x0 vt 31 \"7\"\nSetValue(System.Title, VT_LPWSTR \"a title\") = 0x0\nGetValue(System.Title) = 0x0 vt 31 \"a title\"\nSetValue(AppUserModel.ID, VT_LPWSTR \"Poly.Spec.Errors\") = 0x0\nSetValue(AppUserModel.ID, VT_EMPTY) = 0x0\nGetValue(AppUserModel.ID after VT_EMPTY) = 0x0 vt 0\nGetCount = 0x0 count 2\nGetAt(0) = 0x0; the key is an AppUserModel key: 1\nGetAt(1000) = 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}
