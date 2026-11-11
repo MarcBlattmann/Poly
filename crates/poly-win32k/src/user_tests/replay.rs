@@ -961,3 +961,66 @@ fn gaw_leave_a_as_on_windows() {
 fn gaw_leave_b_as_on_windows() {
     gaw_leave("GawLeaveB", "gaw_leave_b", [(3, 0), (3, 6), (3, 2), (3, -1), (2, 0), (2, 6), (2, 2), (2, -1)]);
 }
+
+/// GetActiveWindow.yaml gaw_activate_a / _b / _c: a ShowWindow command on B
+/// (hidden, visible or minimized; plain or WS_EX_NOACTIVATE) while A is active.
+fn gaw_activate(class: &'static str, test: &str, plan: [(u32, u8, i32); 8]) {
+    with_env(|e| {
+        let mut t = Earlier::start(e, class);
+        for (bex, bstate, cmd) in plan {
+            let a = t.make('A', 0, WS_POPUP | WS_VISIBLE, 40, 40, 300, 200, 0, 0);
+            let b = t.make('B', bex, WS_POPUP, 400, 40, 300, 200, 0, 0);
+            match bstate {
+                0 => {}
+                1 => {
+                    show_window(e, b, SW_SHOWNA);
+                }
+                _ => {
+                    show_window(e, b, SW_SHOWMINNOACTIVE);
+                }
+            }
+            let ok = t.acquire(a);
+            take_log();
+            let exn = if bex == 0 { "plain" } else { "NOACTIVATE" };
+            let bn = ["hidden", "visible", "minimized"][bstate as usize];
+            t.out.push(format!("=== B {exn} {bn} / {} (A foreground: {})", SW_NAMES[cmd as usize], i32::from(ok)));
+            let r = show_window(e, b, cmd);
+            t.out.push(format!("  returned {}", i32::from(r)));
+            t.report("  after");
+            let i = info_of(b).expect("the window");
+            t.out.push(format!(
+                "  B: style_visible={} iconic={} zoomed={} rect {},{},{},{}",
+                i32::from(i.style & WS_VISIBLE != 0),
+                i32::from(i.minimized),
+                i32::from(i.maximized && !i.minimized),
+                i.window.left,
+                i.window.top,
+                i.window.right,
+                i.window.bottom
+            ));
+            destroy_window(e, a);
+            destroy_window(e, b);
+            take_log();
+        }
+        t.check("GetActiveWindow", test);
+    });
+}
+
+#[test]
+fn gaw_activate_a_as_on_windows() {
+    let plan = [(0, 0, 1), (0, 0, 5), (0, 0, 3), (0, 0, 2), (0, 0, 4), (0, 0, 8), (0, 0, 9), (0, 1, 1)];
+    gaw_activate("GawActivateA", "gaw_activate_a", plan);
+}
+
+#[test]
+fn gaw_activate_b_as_on_windows() {
+    let plan = [(0, 1, 5), (0, 1, 3), (0, 1, 2), (0, 1, 4), (0, 1, 8), (0, 1, 9), (0, 2, 1), (0, 2, 3)];
+    gaw_activate("GawActivateB", "gaw_activate_b", plan);
+}
+
+#[test]
+fn gaw_activate_c_as_on_windows() {
+    let n = WS_EX_NOACTIVATE;
+    let plan = [(0, 2, 4), (0, 2, 8), (0, 2, 9), (n, 0, 1), (n, 0, 5), (n, 0, 8), (n, 0, 2), (n, 1, 1)];
+    gaw_activate("GawActivateC", "gaw_activate_c", plan);
+}
