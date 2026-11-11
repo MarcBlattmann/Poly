@@ -550,7 +550,6 @@ pub unsafe extern "system" fn CreateWindowExW(
 #[link(name = "kernel32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn GetModuleHandleW(name: *const u16) -> usize;
-    fn GetProcAddress(module: usize, name: *const u8) -> usize;
 }
 
 /// The class of a thread's default IME window.
@@ -639,7 +638,10 @@ pub extern "system" fn IsWindow(hwnd: H) -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn IsWindowVisible(hwnd: H) -> i32 {
-    i32::from(info(hwnd).is_some_and(|i| i.visible))
+    // In session 0 no window is visible: 0 for every shown window too (the
+    // sheets' `not_covered` of slice A; ShowWindow.yaml sw_activation
+    // prints every window as not visible there).
+    i32::from(u::screen(&SYS).interactive && info(hwnd).is_some_and(|i| i.visible))
 }
 
 #[unsafe(no_mangle)]

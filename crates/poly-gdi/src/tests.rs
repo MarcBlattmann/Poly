@@ -866,101 +866,219 @@ fn text_faces_widths_and_fallback() {
     assert_eq!(g.text_metrics(dc).unwrap().height, 16);
 }
 
-/// DeleteObject.yaml `selected_brush_pen`: what a DC draws with after its
-/// selected brush or pen was deleted depends on whether it drew with it
-/// before (or saved its state with it).
-#[test]
-fn a_deleted_selected_brush_or_pen_draws_by_its_use() {
+/// What the second-DC tests draw with: a 12x6 DIB, the brush over all of
+/// it or the pen along row 3; the pixel at 5,3.
+fn draw_with(g: &mut Gdi, dc: u64, px: &mut [u32], pen: bool) -> u32 {
     const PATCOPY: u32 = 0x00F0_0021;
-    const BG: u32 = 0x0010_2030;
-    // (used before the delete, SaveDC before / RestoreDC after, stock object selected between)
-    for (used, save, stock_between) in
-        [(false, false, false), (true, false, false), (false, true, false), (true, true, false), (false, true, true)]
-    {
-        let own = used || save;
-        // Brush.
-        let mut g = Gdi::new();
-        let (dc, mut px) = dib32(&mut g, 8, 8);
-        let br = u64::from(g.create_solid_brush(0x0060_4020));
-        g.select_object(dc, br).unwrap();
-        if used {
-            g.pat_blt(dc, 0, 0, 8, 2, PATCOPY);
-        }
-        let saved = if save { g.save_dc(dc) } else { 0 };
-        if stock_between {
-            g.select_object(dc, u64::from(g.stock(BLACK_BRUSH))).unwrap();
-        }
-        assert!(g.delete_object(br));
-        assert_eq!(g.object_type(br), OBJ_BRUSH);
-        assert!(!g.delete_object(br), "a second delete fails");
-        assert_eq!(g.object_bytes(br), None);
-        if save {
-            assert!(g.restore_dc(dc, saved));
-        }
-        assert_eq!(u64::from(g.current_object(dc, OBJ_BRUSH)), br);
-        px.fill(BG);
-        g.pat_blt(dc, 0, 0, 8, 4, PATCOPY);
-        let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 4, 8, 6)).unwrap());
-        assert!(g.fill_rgn(dc, rgn, br));
-        let case = (used, save, stock_between);
-        assert_eq!(px[3 * 8 + 3], if own { 0x0020_4060 } else { 0x00FF_FFFF }, "PatBlt {case:?}");
-        assert_eq!(px[5 * 8 + 3], if own { 0x0020_4060 } else { BG }, "FillRgn {case:?}");
-        // Deselected: the brush is gone.
-        g.select_object(dc, u64::from(g.stock(WHITE_BRUSH))).unwrap();
-        assert_eq!(g.object_type(br), 0);
-        assert_eq!(g.select_object(dc, br), Ok(0));
-
-        // Pen.
-        let mut g = Gdi::new();
-        let (dc, mut px) = dib32(&mut g, 8, 8);
-        let pen = u64::from(g.create_pen(0, 1, 0x0010_10E0));
-        g.select_object(dc, pen).unwrap();
-        if used {
-            g.move_to(dc, 0, 1);
-            g.line_to(dc, 8, 1);
-        }
-        let saved = if save { g.save_dc(dc) } else { 0 };
-        if stock_between {
-            g.select_object(dc, u64::from(g.stock(BLACK_PEN))).unwrap();
-        }
-        assert!(g.delete_object(pen));
-        if save {
-            assert!(g.restore_dc(dc, saved));
-        }
-        px.fill(BG);
+    px.fill(0x0050_5848);
+    if pen {
         g.move_to(dc, 0, 3);
-        g.line_to(dc, 8, 3);
-        assert_eq!(px[3 * 8 + 3], if own { 0x00E0_1010 } else { 0 }, "LineTo {case:?}");
+        g.line_to(dc, 12, 3);
+    } else {
+        g.pat_blt(dc, 0, 0, 12, 6, PATCOPY);
     }
-    // A brush in two DCs, neither drew with it: white in both.
+    px[3 * 12 + 5]
+}
+
+/// DeleteObject.yaml `second_dc` (do_second_dc): a brush or pen deleted
+/// while selected into DC 1, then selected into DC 2.
+#[test]
+fn a_brush_or_pen_deleted_while_selected_and_a_second_dc() {
+    for pen in [false, true] {
+        for used in [false, true] {
+            let mut g = Gdi::new();
+            let (dc, mut px) = dib32(&mut g, 12, 6);
+            let (dc2, mut px2) = dib32(&mut g, 12, 6);
+            let (kind, own, default, stock) = if pen {
+                (OBJ_PEN, 0x0010_90D0, 0, BLACK_PEN)
+            } else {
+                (OBJ_BRUSH, 0x0070_30A0, 0x00FF_FFFF, WHITE_BRUSH)
+            };
+            let o = u64::from(if pen {
+                g.create_pen(0, 1, rgb(0x10, 0x90, 0xD0))
+            } else {
+                g.create_solid_brush(rgb(0x70, 0x30, 0xA0))
+            });
+            let case = (pen, used);
+            let prev = g.select_object(dc, o).unwrap();
+            if used {
+                assert_eq!(draw_with(&mut g, dc, &mut px, pen), own, "{case:?}");
+            }
+            assert!(g.delete_object(o), "{case:?}");
+            // Used before the delete: the object stays whole. Not used: a
+            // brush is still accepted by DC 2, a pen is refused.
+            let prev2 = g.select_object(dc2, o).unwrap();
+            let accepted = used || !pen;
+            assert_eq!(prev2, if accepted { g.stock(stock) } else { 0 }, "{case:?}");
+            assert_eq!(u64::from(g.current_object(dc2, kind)) == o, accepted, "{case:?}");
+            assert_eq!(g.object_type(o), kind, "{case:?}");
+            let want = if used { own } else { default };
+            for _ in 0..2 {
+                assert_eq!(draw_with(&mut g, dc2, &mut px2, pen), want, "{case:?}");
+                assert_eq!(draw_with(&mut g, dc, &mut px, pen), want, "{case:?}");
+            }
+            // Once a DC has painted with the unused brush its handle is dead.
+            assert_eq!(g.object_bytes(o).map(|b| b.len()), used.then_some(16), "{case:?}");
+            assert_eq!(g.delete_object(o), used, "a second delete {case:?}");
+            let ty = |g: &Gdi| g.object_type(o);
+            assert_eq!(ty(&g), if !used && !pen { 0 } else { kind }, "{case:?}");
+            g.select_object(dc, u64::from(prev)).unwrap();
+            assert_eq!(ty(&g), if !used && !pen { 0 } else { kind }, "after DC 1 let go {case:?}");
+            assert_eq!(u64::from(g.current_object(dc2, kind)) == o, accepted, "{case:?}");
+            assert_eq!(draw_with(&mut g, dc2, &mut px2, pen), want, "{case:?}");
+            // Only the object that stayed whole can be selected into DC 1 again.
+            assert_eq!(g.select_object(dc, o).unwrap() != 0, used, "{case:?}");
+            assert_eq!(draw_with(&mut g, dc, &mut px, pen), want, "{case:?}");
+            g.select_object(dc, u64::from(prev)).unwrap();
+            if prev2 != 0 {
+                g.select_object(dc2, u64::from(prev2)).unwrap();
+            }
+            // After both let go.
+            assert_eq!(ty(&g), if !used && !pen { 0 } else { kind }, "{case:?}");
+            assert_eq!(g.delete_object(o), used, "{case:?}");
+            assert_eq!(g.select_object(dc, o).unwrap() != 0, used, "{case:?}");
+        }
+    }
+}
+
+/// DeleteObject.yaml `savedc_states`, `selected_brush_pen` (do_second_dc,
+/// do_used_first, do_brush_uses): SaveDC and RestoreDC around the delete.
+#[test]
+fn a_brush_or_pen_deleted_around_save_dc_draws_by_its_use() {
+    for pen in [false, true] {
+        let (kind, own, default, stock) =
+            if pen { (OBJ_PEN, 0x0010_90D0, 0, BLACK_PEN) } else { (OBJ_BRUSH, 0x0070_30A0, 0x00FF_FFFF, WHITE_BRUSH) };
+        for order in 0..4 {
+            let mut g = Gdi::new();
+            let (dc, mut px) = dib32(&mut g, 12, 6);
+            let o = u64::from(if pen {
+                g.create_pen(0, 1, rgb(0x10, 0x90, 0xD0))
+            } else {
+                g.create_solid_brush(rgb(0x70, 0x30, 0xA0))
+            });
+            let stock = u64::from(g.stock(stock));
+            let case = (pen, order);
+            let (live, after) = match order {
+                // select, SaveDC, delete: the save counts as a use.
+                0 => {
+                    g.select_object(dc, o).unwrap();
+                    let lvl = g.save_dc(dc);
+                    assert!(g.delete_object(o));
+                    let live = draw_with(&mut g, dc, &mut px, pen);
+                    assert!(g.restore_dc(dc, lvl));
+                    (live, draw_with(&mut g, dc, &mut px, pen))
+                }
+                // SaveDC, select, delete: the saved state has the stock object.
+                1 => {
+                    let lvl = g.save_dc(dc);
+                    g.select_object(dc, o).unwrap();
+                    assert!(g.delete_object(o));
+                    let live = draw_with(&mut g, dc, &mut px, pen);
+                    assert!(g.restore_dc(dc, lvl));
+                    let after = draw_with(&mut g, dc, &mut px, pen);
+                    assert_eq!(g.object_type(o), if pen { OBJ_PEN } else { 0 }, "{case:?}");
+                    (live, after)
+                }
+                // select, SaveDC, select the stock object, delete: the
+                // saved state keeps the object alive.
+                2 => {
+                    g.select_object(dc, o).unwrap();
+                    let lvl = g.save_dc(dc);
+                    g.select_object(dc, stock).unwrap();
+                    assert!(g.delete_object(o));
+                    assert_eq!(g.object_type(o), kind, "{case:?}");
+                    let live = draw_with(&mut g, dc, &mut px, pen);
+                    assert!(g.restore_dc(dc, lvl));
+                    let after = draw_with(&mut g, dc, &mut px, pen);
+                    assert_eq!(u64::from(g.current_object(dc, kind)), o, "{case:?}");
+                    (live, after)
+                }
+                // select, delete, SaveDC: a save after the delete does not
+                // bring the object back.
+                _ => {
+                    g.select_object(dc, o).unwrap();
+                    assert!(g.delete_object(o));
+                    let lvl = g.save_dc(dc);
+                    let live = draw_with(&mut g, dc, &mut px, pen);
+                    assert!(g.restore_dc(dc, lvl));
+                    (live, draw_with(&mut g, dc, &mut px, pen))
+                }
+            };
+            let want = match order {
+                0 => (own, own),
+                2 => (default, own),
+                _ => (default, default),
+            };
+            assert_eq!((live, after), want, "{case:?}");
+        }
+    }
+    // A brush never drawn with, deleted while selected: GetObject answers
+    // nothing, a second delete fails, FillRgn with its handle paints
+    // nothing; deselected, it is gone.
+    const BG: u32 = 0x0010_2030;
     let mut g = Gdi::new();
-    let (a, mut pa) = dib32(&mut g, 2, 2);
-    let (b, mut pb) = dib32(&mut g, 2, 2);
-    let br = u64::from(g.create_solid_brush(0x0050_9030));
-    g.select_object(a, br).unwrap();
-    g.select_object(b, br).unwrap();
+    let (dc, mut px) = dib32(&mut g, 8, 8);
+    let br = u64::from(g.create_solid_brush(0x0060_4020));
+    g.select_object(dc, br).unwrap();
     assert!(g.delete_object(br));
-    pa.fill(BG);
-    pb.fill(BG);
-    g.pat_blt(a, 0, 0, 2, 2, PATCOPY);
-    g.pat_blt(b, 0, 0, 2, 2, PATCOPY);
-    assert_eq!((pa[0], pb[0]), (0x00FF_FFFF, 0x00FF_FFFF));
-    // Not into a third DC while it waits.
-    let c = u64::from(g.create_compatible_dc(0));
-    assert_eq!(g.select_object(c, br), Ok(0));
+    assert_eq!(g.object_type(br), OBJ_BRUSH);
+    assert!(!g.delete_object(br), "a second delete fails");
+    assert_eq!(g.object_bytes(br), None);
+    px.fill(BG);
+    let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 4, 8, 6)).unwrap());
+    assert!(g.fill_rgn(dc, rgn, br));
+    assert_eq!(px[5 * 8 + 3], BG);
+    g.pat_blt(dc, 0, 0, 8, 4, 0x00F0_0021);
+    assert_eq!(px[3 * 8 + 3], 0x00FF_FFFF);
+    g.select_object(dc, u64::from(g.stock(WHITE_BRUSH))).unwrap();
+    assert_eq!(g.object_type(br), 0);
+    assert_eq!(g.select_object(dc, br), Ok(0));
     // A deleted region: FillRgn fails; a brush deleted before it was
     // selected fills white through FillRect.
     let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 0, 1, 1)).unwrap());
     let live = u64::from(g.create_solid_brush(0x0000_00FF));
     assert!(g.delete_object(rgn));
-    assert!(!g.fill_rgn(a, rgn, live));
+    assert!(!g.fill_rgn(dc, rgn, live));
     assert!(g.delete_object(live));
-    pa.fill(BG);
-    assert!(g.fill_rect(a, Rect::new(0, 0, 2, 2), live));
-    assert_eq!(pa[0], 0x00FF_FFFF);
-    // A font's GetObject fills a buffer larger than LOGFONTW.
+    px.fill(BG);
+    assert!(g.fill_rect(dc, Rect::new(0, 0, 2, 2), live));
+    assert_eq!(px[0], 0x00FF_FFFF);
+}
+
+/// DeleteObject.yaml `handle_after_delete`, `font_getobject`.
+#[test]
+fn deleted_handles_answer_for_a_while_and_a_font_describes_itself() {
+    let mut g = Gdi::new();
+    // A deleted, not selected brush has its type until the next brush is deleted.
+    let a = u64::from(g.create_solid_brush(1));
+    assert!(g.delete_object(a));
+    assert_eq!(g.object_type(a), OBJ_BRUSH);
+    let b = u64::from(g.create_solid_brush(2));
+    assert_ne!(a, b, "not the same handle value");
+    assert_eq!(g.object_type(a), OBJ_BRUSH);
+    assert!(g.delete_object(b));
+    assert_eq!((g.object_type(a), g.object_type(b)), (0, OBJ_BRUSH));
+    // Or until a few dozen other brushes were created: still there after
+    // 8, gone after 64.
+    let made: Vec<u64> = (0..8).map(|k| u64::from(g.create_solid_brush(k))).collect();
+    assert_eq!(g.object_type(b), OBJ_BRUSH);
+    let more: Vec<u64> = (0..56).map(|k| u64::from(g.create_solid_brush(k))).collect();
+    assert_eq!(g.object_type(b), 0);
+    assert!(made.iter().chain(more.iter()).all(|&h| g.object_type(h) == OBJ_BRUSH));
+    // A deleted pen or region reads type 0 as soon as the next one is created.
+    let pen = u64::from(g.create_pen(0, 1, 5));
+    let rgn = u64::from(g.create_rect_rgn(Rect::new(0, 0, 1, 1)).unwrap());
+    assert!(g.delete_object(pen) && g.delete_object(rgn));
+    assert_eq!((g.object_type(pen), g.object_type(rgn)), (OBJ_PEN, OBJ_REGION));
+    g.create_pen(0, 1, 6);
+    assert_eq!((g.object_type(pen), g.object_type(rgn)), (0, OBJ_REGION));
+    g.create_rect_rgn(Rect::new(0, 0, 1, 1)).unwrap();
+    assert_eq!(g.object_type(rgn), 0);
+    // GetObject on a font copies min(size asked, 356) bytes; 92 without a buffer.
     let font = u64::from(g.create_font(&[0u8; 92]));
-    assert_eq!(g.object_bytes_for(font, 128).map(|b| b.len().min(128)), Some(128));
+    for (asked, got) in [(92, 92), (128, 128), (348, 348), (356, 356), (420, 356), (600, 356), (1, 1), (0, 0)] {
+        assert_eq!(g.object_bytes_for(font, asked).map(|b| b.len().min(asked)), Some(got), "{asked}");
+    }
     assert_eq!(g.object_bytes(font).map(|b| b.len()), Some(92));
 }
 

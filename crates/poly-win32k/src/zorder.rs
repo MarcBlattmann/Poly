@@ -177,9 +177,7 @@ pub fn helper_to_top(list: &[Top], helper: u32, barrier: Option<u32>) -> Vec<u32
 /// directly above the owner.
 pub fn helper_above_owner(list: &[Top], helper: u32, owner: u32) -> Vec<u32> {
     let order = handles(list);
-    let (Some(hi), Some(oi)) =
-        (order.iter().position(|&h| h == helper), order.iter().position(|&h| h == owner))
-    else {
+    let (Some(hi), Some(oi)) = (order.iter().position(|&h| h == helper), order.iter().position(|&h| h == owner)) else {
         return order;
     };
     let topmost = find(list, owner).is_some_and(|t| t.is(TOPMOST));
@@ -469,8 +467,7 @@ mod tests {
     fn an_earlier_active_window_that_cannot_take_it_gives_way_to_the_top_one() {
         // GetForegroundWindow.yaml handover_same_thread: E disabled, A
         // topmost and never active, B plain: A.
-        let list =
-            [win(A, VISIBLE | TOPMOST), keeper(), plain(X), plain(B), win(E, VISIBLE | DISABLED), console()];
+        let list = [win(A, VISIBLE | TOPMOST), keeper(), plain(X), plain(B), win(E, VISIBLE | DISABLED), console()];
         let s = scene(&list, &[X, E], X, X);
         assert_eq!(successor(&s, X, Cause::Hide), Next::Take(A));
         // The earlier one is gone and nobody else can: nobody.

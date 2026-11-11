@@ -883,6 +883,37 @@ pub unsafe extern "system" fn GetClipBox(hdc: H, rect: *mut i32) -> i32 {
     kind
 }
 
+/// `PtVisible` (Learn): whether the point is within the DC's clipping
+/// region; (BOOL)-1 for a DC that is not valid.
+#[unsafe(no_mangle)]
+pub extern "system" fn PtVisible(hdc: H, x: i32, y: i32) -> i32 {
+    match gdi(|g| g.pt_visible(hdc as u64, x, y)) {
+        Some(inside) => i32::from(inside),
+        None => {
+            set_last_error(ERROR_INVALID_HANDLE);
+            -1
+        }
+    }
+}
+
+/// `RectVisible` (Learn): whether any part of the rectangle is within the
+/// DC's clipping region.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RectVisible(hdc: H, rect: *const i32) -> i32 {
+    if rect.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller's RECT.
+    let r = unsafe { read_rect(rect) };
+    match gdi(|g| g.rect_visible(hdc as u64, r)) {
+        Some(any) => i32::from(any),
+        None => {
+            set_last_error(ERROR_INVALID_HANDLE);
+            0
+        }
+    }
+}
+
 // ----- drawing
 
 #[unsafe(no_mangle)]

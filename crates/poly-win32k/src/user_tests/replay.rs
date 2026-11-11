@@ -502,7 +502,8 @@ fn sw_minmax_styles_as_on_windows() {
         };
         assert!(matches!(e.call(Request::RegisterClass { spec }), Reply::Atom { .. }));
         let mut out = vec!["ok registered".to_string()];
-        let styles = [0, WS_BORDER, WS_DLGFRAME, WS_CAPTION, WS_THICKFRAME, WS_CAPTION | WS_THICKFRAME, 0x00CF_0000, WS_SYSMENU];
+        let styles =
+            [0, WS_BORDER, WS_DLGFRAME, WS_CAPTION, WS_THICKFRAME, WS_CAPTION | WS_THICKFRAME, 0x00CF_0000, WS_SYSMENU];
         let exs = [0, WS_EX_TOOLWINDOW, crate::metrics::WS_EX_DLGMODALFRAME, crate::metrics::WS_EX_STATICEDGE, 0x200];
         let rect = |r: Rect| format!("{},{},{},{}", r.left, r.top, r.right, r.bottom);
         for popup in [false, true] {

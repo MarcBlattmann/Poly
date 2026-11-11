@@ -866,8 +866,7 @@ impl Wm {
             .copied()
             .find(|&h| {
                 self.get(u64::from(h)).is_some_and(|w| {
-                    w.thread.1 == tid
-                        && self.classes[w.class].as_ref().is_some_and(|c| upcase(&c.name) == [73, 77, 69])
+                    w.thread.1 == tid && self.classes[w.class].as_ref().is_some_and(|c| upcase(&c.name) == [73, 77, 69])
                 })
             })
             .unwrap_or(0)
