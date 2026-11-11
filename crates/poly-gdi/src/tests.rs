@@ -1559,11 +1559,11 @@ fn ext_text_out_dx_glyph_indices_and_odd_input_follow_the_sheet() {
     // The OPAQUE cell is as wide as the sum.
     assert_eq!(bounds(&ink(&px, w, bg)), (4, 2, 68, 18));
     assert_eq!(bounds(&where_is(&px, w, bk)), (4, 2, 68, 18));
-    // 0,0,0: on top of each other, no cell.
+    // 0,0,0: on top of each other; the cell holds the ink and starts at the origin.
     px.fill(bg);
     g.ext_text_out(dc, 4, 2, 0, None, &aaa, Some(&[0, 0, 0]));
     assert_eq!(runs(&px, w, 8, fg), [(6, 14)]);
-    assert!(where_is(&px, w, bk).is_empty());
+    assert_eq!(bounds(&where_is(&px, w, bk)), (4, 2, 14, 18));
     // Negative values move back.
     px.fill(bg);
     g.set_bk_mode(dc, TRANSPARENT);
@@ -1706,18 +1706,22 @@ fn draw_text_tab_stops_and_ellipsis_flags_follow_learn() {
         let out = g.draw_text_ex(dc, &utf16(s), &mut r, fmt | DT_MODIFYSTRING, DrawParams::default());
         out.modified.map_or_else(|| std::string::String::from(s), |m| std::string::String::from_utf16(&m).unwrap())
     };
-    // DT_WORD_ELLIPSIS: every word that is too wide, on its line.
+    // DT_WORD_ELLIPSIS: every word that is too wide, on its line; the buffer gets the text up to the
+    // end of the first line that was shortened.
     let words = "AAAAAAAA BBBB AAAAAAAA";
-    assert_eq!(ell(&mut g, words, 80, 60, DT_WORDBREAK | DT_WORD_ELLIPSIS), "AAAAA... BBBB AAAAA...");
+    assert_eq!(ell(&mut g, words, 80, 60, DT_WORDBREAK | DT_WORD_ELLIPSIS), "AAAAA...");
     assert_eq!(ell(&mut g, words, 80, 60, DT_SINGLELINE | DT_WORD_ELLIPSIS), "AAAAA...");
-    assert_eq!(ell(&mut g, "AAAAAAAA\nAB\nAAAAAAAA", 80, 60, DT_WORD_ELLIPSIS), "AAAAA...\nAB\nAAAAA...");
+    assert_eq!(ell(&mut g, "AAAAAAAA\nAB\nAAAAAAAA", 80, 60, DT_WORD_ELLIPSIS), "AAAAA...");
+    assert_eq!(ell(&mut g, "AB\nAAAAAAAA\nAB", 80, 60, DT_WORD_ELLIPSIS), "AB\nAAAAA...");
     // DT_END_ELLIPSIS: only the end of the text; a wide line before it is clipped without dots.
     assert_eq!(ell(&mut g, "AAAAAAAA\nAB\nAAAAAAAA", 80, 60, DT_END_ELLIPSIS), "AAAAAAAA\nAB\nAAAAA...");
     assert_eq!(ell(&mut g, "AAAAAAAA\nAB", 80, 60, DT_END_ELLIPSIS), "AAAAAAAA\nAB");
     assert_eq!(ell(&mut g, words, 80, 60, DT_WORDBREAK | DT_END_ELLIPSIS), "AAAAAAAA BBBB AAAAA...");
-    // Both: every wide word, and the end of the text on the last line that fits.
-    assert_eq!(ell(&mut g, words, 80, 32, DT_WORDBREAK | DT_END_ELLIPSIS | DT_WORD_ELLIPSIS), "AAAAA... BBBB AAAAA...");
+    assert_eq!(ell(&mut g, words, 80, 32, DT_WORDBREAK | DT_END_ELLIPSIS | DT_WORD_ELLIPSIS), "AAAAA...");
     assert_eq!(ell(&mut g, "AAAA BBBB AAAA BBBB", 60, 32, DT_WORDBREAK | DT_END_ELLIPSIS), "AAAA BBBB AAAA...");
-    // DT_PATH_ELLIPSIS keeps what follows the last backslash, on every line.
-    assert_eq!(ell(&mut g, "AAAA\\BBBB\\AAAA\\BBB.AB\nAB", 100, 60, DT_PATH_ELLIPSIS), "AA...\\BBB.AB\nAB");
+    // DT_PATH_ELLIPSIS keeps what follows the last backslash, on the last line only.
+    assert_eq!(ell(&mut g, "AAAA\\BBBB\\AAAA\\BBB.AB\nAB", 100, 60, DT_PATH_ELLIPSIS), "AAAA\\BBBB\\AAAA\\BBB.AB\nAB");
+    assert_eq!(ell(&mut g, "AB\nAAAA\\BBBB\\AAAA\\BBB.AB", 100, 60, DT_PATH_ELLIPSIS), "AB\nAA...\\BBB.AB");
 }
+
+mod sheets_text;

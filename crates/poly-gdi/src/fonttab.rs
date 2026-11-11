@@ -21,7 +21,7 @@ pub const FR_NOT_ENUM: u32 = 0x20;
 pub enum Owner {
     /// `AddFontMemResourceEx`: the handle it returned.
     Memory(u32),
-    /// `AddFontResourceExW`: the path (as given) and the flags.
+    /// `AddFontResourceExW`: the file (its [`file_key`]) and the flags.
     File { path: Vec<u16>, flags: u32 },
 }
 
@@ -45,13 +45,104 @@ fn utf16(s: &str) -> Vec<u16> {
 
 /// `a` and `b` are the same name, regardless of letter case.
 pub fn same_name(a: &[u16], b: &[u16]) -> bool {
-    let fold = |u: u16| -> u16 {
-        match char::from_u32(u32::from(u)).and_then(|c| c.to_lowercase().next()) {
-            Some(l) if (l as u32) <= 0xFFFF => l as u16,
-            _ => u,
-        }
-    };
     a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| fold(x) == fold(y))
+}
+
+fn fold(u: u16) -> u16 {
+    match char::from_u32(u32::from(u)).and_then(|c| c.to_lowercase().next()) {
+        Some(l) if (l as u32) <= 0xFFFF => l as u16,
+        _ => u,
+    }
+}
+
+const SLASH: u16 = b'/' as u16;
+const BACKSLASH: u16 = b'\\' as u16;
+const DOT: u16 = b'.' as u16;
+const BLANK: u16 = b' ' as u16;
+
+/// The `\\?\` prefix of a path, if it has one.
+fn long_prefix(path: &[u16]) -> usize {
+    let p: [u16; 4] = [BACKSLASH, BACKSLASH, b'?' as u16, BACKSLASH];
+    if path.len() >= 4 && path[..4] == p { 4 } else { 0 }
+}
+
+/// What a font file is known by (`RemoveFontResourceExW.yaml`, spelling):
+/// the file its name leads to, not the spelling of the name. `full_path`
+/// is the name as a full path; the key is the same for another letter
+/// case, forward slashes, a way through a directory and back with `..`
+/// (the directory need not exist), the `\\?\` prefix and a dot after the
+/// name.
+pub fn file_key(full_path: &[u16]) -> Vec<u16> {
+    let path = &full_path[long_prefix(full_path)..];
+    let mut parts: Vec<&[u16]> = Vec::new();
+    for (i, part) in path.split(|&u| u == BACKSLASH || u == SLASH).enumerate() {
+        if i > 0 && part == [DOT, DOT] {
+            // Never above the first part (the drive, or the root).
+            if parts.len() > 1 {
+                parts.pop();
+            }
+        } else if i > 0 && part == [DOT] {
+            // The directory itself.
+        } else {
+            parts.push(part);
+        }
+    }
+    // Dots and blanks after the name are not part of it.
+    if let Some(last) = parts.last_mut() {
+        let keep = last.iter().rposition(|&u| u != DOT && u != BLANK).map_or(0, |i| i + 1);
+        if keep > 0 {
+            *last = &last[..keep];
+        }
+    }
+    let mut key = Vec::with_capacity(path.len());
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            key.push(BACKSLASH);
+        }
+        key.extend(part.iter().map(|&u| fold(u)));
+    }
+    key
+}
+
+/// What `RemoveFontResourceExW` makes of a name and flags before it looks
+/// for the file (`RemoveFontResourceExW.yaml`, errors).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NameCheck {
+    /// FALSE with this error code.
+    Error(u32),
+    /// FALSE without an error code.
+    Refused,
+    /// The name may lead to a file: look it up.
+    Look,
+}
+
+/// `ERROR_FILE_NOT_FOUND` and `ERROR_INVALID_PARAMETER` (`winerror.h`).
+pub const ERROR_FILE_NOT_FOUND: u32 = 2;
+pub const ERROR_INVALID_PARAMETER: u32 = 87;
+/// `MAX_PATH` (`minwindef.h`).
+const MAX_PATH: usize = 260;
+
+/// The checks on `RemoveFontResourceExW`'s name (without its NUL) and
+/// flags: flag bits other than `FR_PRIVATE` and `FR_NOT_ENUM`, an empty
+/// name and one of blanks only are error 87. A name with a wildcard is
+/// neither expanded nor refused as a bad name: it is a file that is not
+/// there (error 2), as is a name with a backslash after it. A name longer
+/// than `MAX_PATH` or two names joined with `|` fail without an error
+/// code.
+pub fn remove_name_check(name: &[u16], flags: u32) -> NameCheck {
+    if flags & !(FR_PRIVATE | FR_NOT_ENUM) != 0 || name.iter().all(|&u| u == BLANK) {
+        return NameCheck::Error(ERROR_INVALID_PARAMETER);
+    }
+    if name.len() > MAX_PATH || name.contains(&(b'|' as u16)) {
+        return NameCheck::Refused;
+    }
+    let rest = &name[long_prefix(name)..];
+    let wildcard = rest.iter().any(|&u| u == b'*' as u16 || u == b'?' as u16);
+    let ends_in_separator = rest.last().is_some_and(|&u| u == BACKSLASH || u == SLASH);
+    if wildcard || ends_in_separator {
+        return NameCheck::Error(ERROR_FILE_NOT_FOUND);
+    }
+    NameCheck::Look
 }
 
 /// What the table reads from a font file.
@@ -230,15 +321,20 @@ impl FontTable {
     }
 
     /// `AddFontResourceExW` with the file's bytes: whether it was a font.
+    /// `path` is the file's full path, in any spelling.
     pub fn add_file(&mut self, path: &[u16], flags: u32, data: Vec<u8>) -> bool {
         let enumerable = flags & FR_NOT_ENUM == 0;
-        self.push(data, Owner::File { path: path.to_vec(), flags }, enumerable)
+        self.push(data, Owner::File { path: file_key(path), flags }, enumerable)
     }
 
-    /// `RemoveFontResourceExW`: one add of that file with those flags.
+    /// `RemoveFontResourceExW`: one add of that file (its full path, in any
+    /// spelling) with exactly those flags. Adds of one file with different
+    /// flags are counted apart, adds under different spellings together;
+    /// the family stays until the last add is gone.
     pub fn remove_file(&mut self, path: &[u16], flags: u32) -> bool {
+        let key = file_key(path);
         let Some(i) = self.faces.iter().position(|f| match &f.owner {
-            Owner::File { path: p, flags: fl } => *fl == flags && same_name(p, path),
+            Owner::File { path: p, flags: fl } => *fl == flags && *p == key,
             Owner::Memory(_) => false,
         }) else {
             return false;
