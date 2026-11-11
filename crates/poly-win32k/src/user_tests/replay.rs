@@ -9,6 +9,7 @@
 //! where they call `user32`.
 
 use super::*;
+use alloc::vec;
 use std::path::PathBuf;
 
 thread_local! {
@@ -432,6 +433,113 @@ fn recorded(entry: &str, test: &str) -> String {
     String::from_utf8(base64(b64)).expect("text")
 }
 
+/// Compare what a replay printed with what Windows printed.
+fn same_as_windows(test: &str, out: &[String], want: &str) {
+    let want: Vec<&str> = want.lines().collect();
+    for (n, (got, want)) in out.iter().zip(want.iter()).enumerate() {
+        if got != want {
+            let from = n.saturating_sub(14);
+            panic!(
+                "{test}: line {} differs\n  Poly:    {got}\n  Windows: {want}\n--- Poly's lines before it:\n{}",
+                n + 1,
+                out[from..n].join("\n")
+            );
+        }
+    }
+    assert_eq!(out.len(), want.len(), "{test}: the number of lines");
+}
+
+thread_local! {
+    /// The WM_GETMINMAXINFO messages since the last look: how many, and the last one's values.
+    static MINMAX: Cell<[i32; 9]> = const { Cell::new([0; 9]) };
+}
+
+/// sw_minmax_styles' procedure: counts WM_GETMINMAXINFO.
+extern "system" fn minmax_proc(h: u64, msg: u32, w: u64, l: u64) -> u64 {
+    if msg == WM_GETMINMAXINFO {
+        // SAFETY: a MINMAXINFO.
+        let m = unsafe { &*(l as *const MinMaxInfo) };
+        let n = MINMAX.with(|c| c.get())[0];
+        MINMAX.with(|c| {
+            c.set([
+                n + 1,
+                m.max_size.x,
+                m.max_size.y,
+                m.max_position.x,
+                m.max_position.y,
+                m.min_track.x,
+                m.min_track.y,
+                m.max_track.x,
+                m.max_track.y,
+            ])
+        });
+    }
+    def_window_proc(env(), h, msg, w, l)
+}
+
+fn minmax_seen() -> String {
+    let g = MINMAX.with(|c| c.replace([0; 9]));
+    if g[0] == 0 {
+        "none".to_string()
+    } else {
+        format!(
+            "x{} max {}x{} at {},{} mintrack {},{} maxtrack {},{}",
+            g[0], g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8]
+        )
+    }
+}
+
+/// ShowWindow.yaml `tiled_styles`, `minmax_by_style`: sw_minmax_styles (session 0),
+/// every style and extended style of the test, as its program prints them.
+#[test]
+fn sw_minmax_styles_as_on_windows() {
+    with_env(|e| {
+        let spec = ClassSpec {
+            name: "SwMinMaxStyles".encode_utf16().collect(),
+            wndproc: minmax_proc as *const () as u64,
+            unicode: true,
+            ..ClassSpec::default()
+        };
+        assert!(matches!(e.call(Request::RegisterClass { spec }), Reply::Atom { .. }));
+        let mut out = vec!["ok registered".to_string()];
+        let styles = [0, WS_BORDER, WS_DLGFRAME, WS_CAPTION, WS_THICKFRAME, WS_CAPTION | WS_THICKFRAME, 0x00CF_0000, WS_SYSMENU];
+        let exs = [0, WS_EX_TOOLWINDOW, crate::metrics::WS_EX_DLGMODALFRAME, crate::metrics::WS_EX_STATICEDGE, 0x200];
+        let rect = |r: Rect| format!("{},{},{},{}", r.left, r.top, r.right, r.bottom);
+        for popup in [false, true] {
+            for ex in exs {
+                for st in styles {
+                    let style = st | if popup { WS_POPUP } else { 0 };
+                    MINMAX.with(|c| c.set([0; 9]));
+                    let h = create(e, 'M', ex, "SwMinMaxStyles", style, 60, 70, 300, 200, 0, 0);
+                    let at_create = minmax_seen();
+                    let made = info_of(h).expect("the window");
+                    show_window(e, h, SW_SHOWMAXIMIZED);
+                    let at_max = minmax_seen();
+                    let max = info_of(h).expect("the window");
+                    show_window(e, h, SW_SHOWMINIMIZED);
+                    let at_min = minmax_seen();
+                    let min = info_of(h).expect("the window");
+                    destroy_window(e, h);
+                    out.push(format!(
+                        "style {style:#010x} ex {ex:#x}: window style {:#010x} ex {:#x}",
+                        made.style, made.ex_style
+                    ));
+                    out.push(format!("  created: {at_create}"));
+                    out.push(format!(
+                        "  maximized: {at_max}; window {} client {}x{}",
+                        rect(max.window),
+                        max.client.width(),
+                        max.client.height()
+                    ));
+                    out.push(format!("  then minimized: {at_min}; window {}", rect(min.window)));
+                }
+            }
+        }
+        out.push("summary 1 passed, 0 failed".to_string());
+        same_as_windows("sw_minmax_styles", &out, &recorded("ShowWindow", "sw_minmax_styles"));
+    });
+}
+
 /// Run a scripted test as its program does and compare with Windows.
 fn replay(entry: &str, test: &str, interactive_session: bool) {
     let (scripts, show_ime) = scripts_of(entry, test);
@@ -463,19 +571,7 @@ fn replay(entry: &str, test: &str, interactive_session: bool) {
             run.script(s);
         }
         run.out.push("summary 1 passed, 0 failed".to_string());
-        let want = recorded(entry, test);
-        let want: Vec<&str> = want.lines().collect();
-        for (n, (got, want)) in run.out.iter().zip(want.iter()).enumerate() {
-            if got != want {
-                let from = n.saturating_sub(14);
-                panic!(
-                    "{test}: line {} differs\n  Poly:    {got}\n  Windows: {want}\n--- Poly's lines before it:\n{}",
-                    n + 1,
-                    run.out[from..n].join("\n")
-                );
-            }
-        }
-        assert_eq!(run.out.len(), want.len(), "{test}: the number of lines");
+        same_as_windows(test, &run.out, &recorded(entry, test));
     });
 }
 

@@ -763,7 +763,15 @@ impl Wm {
         {
             ex |= WS_EX_LAYOUTRTL;
         }
-        if s.style & (WS_DLGFRAME | WS_THICKFRAME) != 0 || ex & WS_EX_DLGMODALFRAME != 0 {
+        // WS_EX_WINDOWEDGE is computed, not kept (ShowWindow.yaml
+        // `tiled_styles`): a popup has it with a dialog or sizing frame
+        // unless it has a static edge.
+        let edge = if s.style & (WS_POPUP | WS_CHILD) == WS_POPUP {
+            crate::metrics::popup_window_edge(s.style, ex)
+        } else {
+            s.style & (WS_DLGFRAME | WS_THICKFRAME) != 0 || ex & WS_EX_DLGMODALFRAME != 0
+        };
+        if edge {
             ex |= WS_EX_WINDOWEDGE;
         } else {
             ex &= !WS_EX_WINDOWEDGE;
