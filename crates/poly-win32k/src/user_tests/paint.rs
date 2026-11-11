@@ -287,8 +287,9 @@ fn invalidate_rgn_reaches_children_hidden_windows_and_other_threads() {
 #[test]
 fn children_are_painted_in_their_z_order_after_their_parent() {
     // BeginPaint.yaml `clip_children` (bpn_visible): the first created child
-    // is the top one; the invalid children are painted after their parent
-    // from the top down: X, Y, Z.
+    // is the top one; updating the parent paints the invalid children after
+    // it from the top down: X, Y, Z. Read from the queue, the later-created
+    // (lower) sibling comes first (InvalidateRect.yaml `ordering`).
     with_env(|e| {
         interactive(e);
         register(e, "Pz");
@@ -299,5 +300,7 @@ fn children_are_painted_in_their_z_order_after_their_parent() {
         paint::redraw_window(e, p, None, RDW_INVALIDATE | RDW_ALLCHILDREN);
         let Reply::Windows { hwnds } = e.call(Request::PaintOrder { root: p as u32 }) else { panic!() };
         assert_eq!(hwnds, [p as u32, x as u32, y as u32, z as u32]);
+        let Reply::Windows { hwnds } = e.call(Request::PaintOrder { root: 0 }) else { panic!() };
+        assert_eq!(hwnds, [p as u32, z as u32, y as u32, x as u32]);
     });
 }
