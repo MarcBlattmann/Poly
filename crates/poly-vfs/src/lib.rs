@@ -97,7 +97,7 @@ mod tmpfs;
 mod vfs;
 pub mod xattr;
 
-pub use cred::{Access, CapSet, Cred, cap};
+pub use cred::{Access, CapSet, Cred, IdScope, cap};
 pub use device::CharDevice;
 pub use errno::Errno;
 pub use fdtable::{AT_FDCWD, At, DEFAULT_FD_LIMIT, Fd, FdTable};

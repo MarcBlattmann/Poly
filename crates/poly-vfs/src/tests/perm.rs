@@ -253,3 +253,55 @@ fn device_nodes_need_root() {
     env.vfs.mknod(ctx, &alice(), At::Cwd, b"/fifo", FileType::Fifo, 0o644, c).unwrap();
     assert_eq!(env.stat("/fifo").unwrap().rdev, DeviceId::default());
 }
+
+/// A caller whose capabilities have a scope (a user namespace's root):
+/// they reach exactly the files whose owner and group are both in it
+/// (the spec sheet of linux/api/pkg/userns_idmap, "chown and chmod by a
+/// namespace's root").
+#[test]
+fn scoped_capabilities_reach_only_files_with_owners_in_the_scope() {
+    let env = Env::new();
+    // Kernel ids 3000 and 300000..300399 are mapped, uid and gid alike.
+    let scope = IdScope { uids: alloc::vec![(3000, 1), (300_000, 400)], gids: alloc::vec![(3000, 1), (300_000, 400)] };
+    let ns_root = Cred { scope: Some(alloc::sync::Arc::new(scope)), ..Cred::user(3000, 3000).with_caps(CapSet::ALL) };
+    let chown = |path: &str, uid: Option<u32>, gid: Option<u32>| {
+        env.vfs.chown(&env.ctx, &ns_root, At::Cwd, path.as_bytes(), uid, gid, true)
+    };
+    let chmod = |path: &str, perm: u16| env.vfs.chmod(&env.ctx, &ns_root, At::Cwd, path.as_bytes(), perm, true);
+    let owner = |path: &str| env.stat(path).map(|s| (s.uid, s.gid)).unwrap();
+    env.chmod("/", 0o777);
+    env.write("/mine", b"a");
+    env.chown("/mine", 3000, 3000);
+    // To any ids (the caller translated them), also away from the caller
+    // and back; -1 leaves an id.
+    assert_eq!(chown("/mine", Some(300_004), Some(300_008)), Ok(()));
+    assert_eq!(owner("/mine"), (300_004, 300_008));
+    assert_eq!(chmod("/mine", 0o640), Ok(()), "a file of another mapped owner");
+    assert_eq!(chown("/mine", None, Some(300_019)), Ok(()));
+    assert_eq!(chown("/mine", Some(300_399), None), Ok(()));
+    assert_eq!(owner("/mine"), (300_399, 300_019));
+    assert_eq!(chown("/mine", Some(3000), Some(3000)), Ok(()));
+    // A file whose owner is outside the scope cannot be changed at all.
+    env.write("/roots", b"r");
+    env.chmod("/roots", 0o600);
+    assert_eq!(chown("/roots", Some(3000), Some(3000)), Err(Errno::EPERM));
+    assert_eq!(chmod("/roots", 0o644), Err(Errno::EPERM));
+    assert_eq!(chown("/roots", None, None), Ok(()), "changes nothing");
+    assert_eq!(owner("/roots"), (0, 0));
+    assert_eq!(env.open_as(&ns_root, "/roots", OpenFlags::RDONLY), Err(Errno::EACCES), "no DAC override either");
+    // The uid alone in the scope is not enough.
+    env.write("/half", b"h");
+    env.chown("/half", 300_004, 0);
+    env.chmod("/half", 0o600);
+    assert_eq!(chown("/half", Some(3000), None), Err(Errno::EPERM));
+    assert_eq!(chmod("/half", 0o644), Err(Errno::EPERM));
+    assert_eq!(env.open_as(&ns_root, "/half", OpenFlags::RDONLY), Err(Errno::EACCES));
+    // In reach: the DAC override works.
+    env.write("/theirs", b"t");
+    env.chown("/theirs", 300_004, 300_004);
+    env.chmod("/theirs", 0o600);
+    assert_eq!(env.open_as(&ns_root, "/theirs", OpenFlags::RDWR), Ok(()));
+    // Without a scope the capabilities reach every file.
+    let root = Cred::user(3000, 3000).with_caps(CapSet::ALL);
+    assert_eq!(env.vfs.chown(&env.ctx, &root, At::Cwd, b"/roots", Some(5), Some(5), true), Ok(()));
+}

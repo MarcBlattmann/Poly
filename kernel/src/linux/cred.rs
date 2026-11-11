@@ -18,7 +18,13 @@ use poly_vfs::{CapSet, Cred, OpenFile, SetTime, Timespec};
 
 /// The VFS's view of `ids`. Capability numbers are Linux's on both sides.
 pub fn vfs_cred(ids: &FsIds) -> Cred {
-    Cred { uid: ids.uid, gid: ids.gid, groups: ids.groups.clone(), caps: CapSet(ids.caps.0) }
+    // A user namespace's capabilities over files reach the files whose
+    // owner and group it maps.
+    let scope = ids
+        .scope
+        .as_ref()
+        .map(|s| alloc::sync::Arc::new(poly_vfs::IdScope { uids: s.uids.to_vec(), gids: s.gids.to_vec() }));
+    Cred { uid: ids.uid, gid: ids.gid, groups: ids.groups.clone(), caps: CapSet(ids.caps.0), scope }
 }
 
 /// The credentials file permission checks use for the running thread: a

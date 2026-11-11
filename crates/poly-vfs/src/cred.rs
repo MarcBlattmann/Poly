@@ -13,6 +13,7 @@
 
 use crate::{Attr, Errno, FileType, Result};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 /// Capability numbers the VFS checks (Linux UAPI `linux/capability.h`).
 /// A personality without capabilities gives its superuser
@@ -71,6 +72,28 @@ impl CapSet {
     }
 }
 
+/// The owners a caller's capabilities over files reach: kernel uid and
+/// gid ranges, each `(first, count)`. user_namespaces(7): a process with
+/// capabilities in a user namespace other than the initial one has
+/// `CAP_CHOWN`, `CAP_DAC_OVERRIDE`, `CAP_DAC_READ_SEARCH`, `CAP_FOWNER`
+/// and `CAP_FSETID` only over files whose owner uid and group are both
+/// mapped in that namespace.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct IdScope {
+    pub uids: Vec<(u32, u32)>,
+    pub gids: Vec<(u32, u32)>,
+}
+
+impl IdScope {
+    /// Whether a file owned by `uid` with group `gid` is in the scope.
+    pub fn covers(&self, uid: u32, gid: u32) -> bool {
+        let within = |ranges: &[(u32, u32)], id: u32| {
+            ranges.iter().any(|&(first, count)| id >= first && u64::from(id) < u64::from(first) + u64::from(count))
+        };
+        within(&self.uids, uid) && within(&self.gids, gid)
+    }
+}
+
 /// Who asks: the ids and capabilities a permission check uses. For Linux
 /// these are the file system ids (normally the effective ids), the
 /// supplementary groups and the effective capabilities; `access(2)` checks
@@ -83,6 +106,9 @@ pub struct Cred {
     pub groups: Arc<[u32]>,
     /// Effective capabilities.
     pub caps: CapSet,
+    /// The files the capabilities over files reach ([`Cred::has_over`]);
+    /// `None`: every file (the initial user namespace).
+    pub scope: Option<Arc<IdScope>>,
 }
 
 impl Default for Cred {
@@ -95,12 +121,12 @@ impl Default for Cred {
 impl Cred {
     /// The superuser: ids 0 and every capability.
     pub fn root() -> Cred {
-        Cred { uid: 0, gid: 0, groups: Arc::from([]), caps: CapSet::ALL }
+        Cred { uid: 0, gid: 0, groups: Arc::from([]), caps: CapSet::ALL, scope: None }
     }
 
     /// An ordinary user with no supplementary groups and no capabilities.
     pub fn user(uid: u32, gid: u32) -> Cred {
-        Cred { uid, gid, groups: Arc::from([]), caps: CapSet::EMPTY }
+        Cred { uid, gid, groups: Arc::from([]), caps: CapSet::EMPTY, scope: None }
     }
 
     pub fn with_groups(mut self, groups: &[u32]) -> Cred {
@@ -116,6 +142,20 @@ impl Cred {
     /// Whether the caller has capability `cap` ([`cap`]).
     pub fn has(&self, cap: u32) -> bool {
         self.caps.contains(cap)
+    }
+
+    /// Whether the caller has capability `cap` over a file with these
+    /// attributes: it has the capability and the file's owner and group
+    /// are in its scope ([`IdScope`]). For the capabilities that act on a
+    /// file: `CAP_CHOWN`, `CAP_DAC_OVERRIDE`, `CAP_DAC_READ_SEARCH`,
+    /// `CAP_FOWNER`, `CAP_FSETID`.
+    pub fn has_over(&self, cap: u32, attr: &Attr) -> bool {
+        self.has_over_ids(cap, attr.uid, attr.gid)
+    }
+
+    /// [`has_over`](Self::has_over) for a file owned by `uid` and `gid`.
+    pub fn has_over_ids(&self, cap: u32, uid: u32, gid: u32) -> bool {
+        self.has(cap) && self.scope.as_ref().is_none_or(|s| s.covers(uid, gid))
     }
 
     /// Whether the caller is user 0 with every capability: the kernel
@@ -145,14 +185,14 @@ impl Cred {
             return true;
         }
         let dir = attr.kind == FileType::Directory;
-        if self.has(cap::DAC_READ_SEARCH) {
+        if self.has_over(cap::DAC_READ_SEARCH, attr) {
             // Read anything; search directories.
             missing &= !Access::READ.0;
             if dir {
                 missing &= !Access::EXEC.0;
             }
         }
-        if self.has(cap::DAC_OVERRIDE) {
+        if self.has_over(cap::DAC_OVERRIDE, attr) {
             missing &= !(Access::READ.0 | Access::WRITE.0);
             // Execute needs some execute bit on anything but a directory.
             if dir || attr.perm & 0o111 != 0 {
@@ -171,7 +211,7 @@ impl Cred {
     /// (`CAP_FOWNER`): what `chmod`, `utimensat` with explicit times,
     /// `O_NOATIME` and the sticky-bit rule ask for.
     pub fn owns(&self, attr: &Attr) -> bool {
-        self.uid == attr.uid || self.has(cap::FOWNER)
+        self.uid == attr.uid || self.has_over(cap::FOWNER, attr)
     }
 }
 
