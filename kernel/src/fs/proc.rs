@@ -701,6 +701,28 @@ impl ProcSource for KernelProc {
         ns::Kind::from_index(kind as u32).is_some_and(|k| ns::lookup(inum, k).is_some())
     }
 
+    fn ipc_file(&self, file: poly_procfs::IpcFile) -> Vec<u8> {
+        poly_personality_linux::ipc::files::read(&current_ipc(), ipc_file(file))
+    }
+
+    fn write_ipc_file(&self, file: poly_procfs::IpcFile, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        poly_personality_linux::ipc::files::write(&current_ipc(), ipc_file(file), data)
+            .map_err(|e| poly_vfs::Errno::from_code(i32::from(e.get())).unwrap_or(poly_vfs::Errno::EIO))
+    }
+
+    fn net_file(&self, pid: u32, file: poly_procfs::NetFile) -> Option<Vec<u8>> {
+        use poly_personality_linux::net::dev;
+        // The devices of the process's network namespace (ADR 0178); a
+        // process without Linux state is in the initial one.
+        let p = find(self.global(pid)?)?;
+        let net = namespaces_of(&p).and_then(|(n, _)| n.net);
+        let ifs = crate::linux::net::interfaces_of(&net);
+        Some(match file {
+            poly_procfs::NetFile::Dev => dev::proc_net_dev(&ifs),
+            poly_procfs::NetFile::Route => dev::proc_net_route(&ifs),
+        })
+    }
+
     fn may_follow_namespaces(&self, pid: u32) -> bool {
         let Some(target) = self.global(pid).and_then(find) else { return true };
         let Some(reader) = crate::linux::cred::current_creds() else { return true };
@@ -782,6 +804,36 @@ impl ProcSource for KernelProc {
             IdMapFile::Setgroups => ns::user::write_setgroups(&target, data, offset, &writer),
         };
         written.map_err(|e| poly_vfs::Errno::from_code(i32::from(e.get())).unwrap_or(poly_vfs::Errno::EIO))
+    }
+}
+
+/// The IPC namespace of the running process (`None`: the initial one):
+/// whose listings and settings `/proc/sysvipc` and the IPC files of
+/// `/proc/sys` show and change (ADR 0178).
+fn current_ipc() -> Option<Arc<ns::IpcNs>> {
+    user::current_process().and_then(|p| p.linux.as_ref().and_then(|l| l.with(|s| s.ns.ipc.clone())))
+}
+
+/// procfs's name for a file of the IPC namespace as the personality's.
+fn ipc_file(file: poly_procfs::IpcFile) -> poly_personality_linux::ipc::files::IpcFile {
+    use poly_personality_linux::ipc::files::IpcFile as L;
+    use poly_procfs::IpcFile as P;
+    match file {
+        P::SysvMsg => L::SysvMsg,
+        P::SysvShm => L::SysvShm,
+        P::SysvSem => L::SysvSem,
+        P::Msgmni => L::Msgmni,
+        P::Msgmax => L::Msgmax,
+        P::Msgmnb => L::Msgmnb,
+        P::Shmmax => L::Shmmax,
+        P::Shmall => L::Shmall,
+        P::Shmmni => L::Shmmni,
+        P::Sem => L::Sem,
+        P::MqQueuesMax => L::MqQueuesMax,
+        P::MqMsgMax => L::MqMsgMax,
+        P::MqMsgsizeMax => L::MqMsgsizeMax,
+        P::MqMsgDefault => L::MqMsgDefault,
+        P::MqMsgsizeDefault => L::MqMsgsizeDefault,
     }
 }
 
@@ -887,8 +939,8 @@ type BootMount = (&'static [u8], Arc<dyn poly_vfs::FileSystem>, u16, bool);
 
 /// The memory file systems a Linux system has at boot (ADR 0122): procfs
 /// on `/proc`, sysfs on `/sys`, tmpfs on `/dev/shm`, the POSIX message
-/// queue file system on `/dev/mqueue` (mq_overview(7); a tmpfs named
-/// `mqueue`), tmpfs on `/run` and `/run/lock`. Each directory is made if
+/// queue file system on `/dev/mqueue` (mq_overview(7): the queues of the
+/// initial IPC namespace), tmpfs on `/run` and `/run/lock`. Each directory is made if
 /// missing, in this order (`/run/lock` on the new `/run`). Called once at
 /// boot by `fs::init`.
 pub fn mount_all(vfs: &Vfs, ctx: &FsContext) {
@@ -901,7 +953,7 @@ pub fn mount_all(vfs: &Vfs, ctx: &FsContext) {
         (b"/proc", new_procfs(), 0o555, true),
         (b"/sys", super::sysfs::build(), 0o555, true),
         (b"/dev/shm", tmpfs(), 0o1777, false),
-        (b"/dev/mqueue", Arc::new(poly_vfs::Tmpfs::new(clock()).named("mqueue", poly_vfs::MQUEUE_MAGIC)), 0o1777, true),
+        (b"/dev/mqueue", super::mqueuefs::new(None), 0o1777, true),
         (b"/run", tmpfs(), 0o755, false),
         (b"/run/lock", tmpfs(), 0o1777, true),
     ];

@@ -40,6 +40,12 @@
 //!   `poly.net=qemu` for exactly that (QEMU's user networking), or
 //!   `poly.net=off`. Without it the interface has no IPv4 address. IPv6
 //!   gets its link-local address when there is a device.
+//! - **Network namespaces** (ADR 0178). A network namespace other than
+//!   the initial one has a stack of its own ([`NsStack`]): no device, only
+//!   the internal loopback, which starts down. Its sockets are made in it
+//!   ([`call_in`]) and never see the initial stack or another
+//!   namespace's. The network thread polls every such stack after the
+//!   interface's and sleeps until the earliest deadline of all of them.
 //! - **Randomness** for the stack's secret (initial sequence numbers and
 //!   port choice, RFC 6528) and for a MAC address when the device has none
 //!   comes from `arch::user::random_bytes` (RDRAND, or the TSC mixed).
@@ -52,12 +58,14 @@ mod virtio;
 
 use crate::boot_info::BootInfo;
 use crate::pci::MsixVectors;
-use crate::sync::{Mutex, SetOnce};
+use crate::sync::{Mutex, MutexGuard, SetOnce, SpinLock};
 use crate::thread::{self, ThreadId, WaitQueue};
 use crate::{arch, kprintln, time};
 use alloc::boxed::Box;
+use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
 use core::net::Ipv4Addr;
-use core::sync::atomic::{AtomicBool, AtomicU64, Ordering::SeqCst};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::SeqCst};
 use poly_net::{Config, Instant, MacAddr, NetDevice, Setting, Stack, StaticIpv4, TxError};
 use poly_pci::Bdf;
 
@@ -215,6 +223,88 @@ pub struct Info {
     pub thread: Option<ThreadId>,
 }
 
+/// The protocol stack of a network namespace other than the initial one
+/// (ADR 0178): a stack without a device, so it reaches only itself, and
+/// only while its loopback interface is up.
+pub struct NsStack {
+    /// Its number among the stacks (the initial one is 0): what socket
+    /// notifications are filed under ([`notify`]).
+    id: u32,
+    iface: Mutex<Option<Interface>>,
+}
+
+impl core::fmt::Debug for NsStack {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("NsStack").field("id", &self.id).finish_non_exhaustive()
+    }
+}
+
+/// The stacks of the network namespaces, for the network thread. Weak:
+/// a stack goes with its namespace and its last socket.
+static NS_STACKS: SpinLock<Vec<Weak<NsStack>>> = SpinLock::new(Vec::new());
+static NEXT_STACK_ID: AtomicU32 = AtomicU32::new(1);
+
+impl NsStack {
+    /// The stack of a new network namespace: loopback only, and that
+    /// down. Does not block.
+    pub fn new() -> Arc<NsStack> {
+        let random = arch::user::random_bytes();
+        let secret = u64::from_le_bytes(random[..8].try_into().unwrap_or([0; 8]));
+        let cfg = Config { ipv4: None, gateway: None, ipv6: false, secret, ..Config::default() };
+        let dev = Device::None(NoDevice::default());
+        let mut stack = Stack::for_device(&dev, cfg);
+        stack.set_loopback(false);
+        let ns = Arc::new(NsStack {
+            id: NEXT_STACK_ID.fetch_add(1, SeqCst),
+            iface: Mutex::new(Some(Interface { stack, dev })),
+        });
+        let mut all = NS_STACKS.lock();
+        all.retain(|w| w.strong_count() > 0);
+        all.push(Arc::downgrade(&ns));
+        ns
+    }
+}
+
+/// The number of the stack `ns` names (`None`: the initial one, 0).
+pub fn stack_id(ns: Option<&NsStack>) -> u32 {
+    ns.map_or(0, |n| n.id)
+}
+
+/// How many namespace stacks are alive (for tests).
+pub fn namespace_stacks() -> usize {
+    NS_STACKS.lock().iter().filter(|w| w.strong_count() > 0).count()
+}
+
+fn lock_iface(ns: Option<&NsStack>) -> MutexGuard<'_, Option<Interface>> {
+    match ns {
+        None => IFACE.lock(),
+        Some(n) => n.iface.lock(),
+    }
+}
+
+/// Poll the stacks of the network namespaces (the network thread's turn
+/// for them): wake the sockets that changed; the earliest deadline of any
+/// of them in monotonic nanoseconds (`u64::MAX`: none).
+fn poll_namespaces() -> u64 {
+    let stacks: Vec<Arc<NsStack>> = {
+        let mut all = NS_STACKS.lock();
+        all.retain(|w| w.strong_count() > 0);
+        all.iter().filter_map(Weak::upgrade).collect()
+    };
+    let mut deadline = u64::MAX;
+    for s in stacks {
+        let (next, sockets) = {
+            let mut guard = s.iface.lock();
+            let Some(iface) = guard.as_mut() else { continue };
+            let (next, _) = iface.poll();
+            (next, notify::collect(&mut iface.stack))
+        };
+        notify::wake(s.id, sockets);
+        deadline = deadline.min(next.map_or(u64::MAX, instant_ns));
+    }
+    deadline
+}
+
 /// Extra polls one [`Interface::poll`] makes while loopback packets wait
 /// (a segment, its acknowledgement, the data Nagle held back for it).
 const LOOPBACK_ROUNDS: usize = 8;
@@ -290,6 +380,18 @@ pub fn call<R>(op: impl FnOnce(&mut Stack) -> R) -> R {
     call_and_generation(op).0
 }
 
+/// [`call`] on the stack of a network namespace (`None`: the initial
+/// one).
+pub fn call_in<R>(ns: Option<&NsStack>, op: impl FnOnce(&mut Stack) -> R) -> R {
+    run_call(ns, op, false).0
+}
+
+/// [`call_and_wake`] on the stack of a network namespace (`None`: the
+/// initial one).
+pub fn call_and_wake_in<R>(ns: Option<&NsStack>, op: impl FnOnce(&mut Stack) -> R) -> R {
+    run_call(ns, op, true).0
+}
+
 /// [`call`], also returning the readiness generation as of the operation:
 /// when the result says "try again later", wait for a change from it
 /// ([`wait_for_change`]). The generation is read with the interface
@@ -298,18 +400,18 @@ pub fn call<R>(op: impl FnOnce(&mut Stack) -> R) -> R {
 /// is not woken by attempts that changed nothing. This is how a blocking
 /// call (or `poll(2)` over several sockets) sleeps.
 pub fn call_and_generation<R>(op: impl FnOnce(&mut Stack) -> R) -> (R, u64) {
-    run_call(op, false)
+    run_call(None, op, false)
 }
 
 /// [`call`] for operations that change readiness for other threads
 /// waiting on the same socket (`shutdown`, `close`): always marks a change.
 pub fn call_and_wake<R>(op: impl FnOnce(&mut Stack) -> R) -> R {
-    run_call(op, true).0
+    run_call(None, op, true).0
 }
 
-fn run_call<R>(op: impl FnOnce(&mut Stack) -> R, changes: bool) -> (R, u64) {
+fn run_call<R>(ns: Option<&NsStack>, op: impl FnOnce(&mut Stack) -> R, changes: bool) -> (R, u64) {
     let (r, next, seen, moved, sockets) = {
-        let mut guard = IFACE.lock();
+        let mut guard = lock_iface(ns);
         let iface = guard.as_mut().expect("net::init has not run");
         let r = op(&mut iface.stack);
         let (next, moved) = iface.poll();
@@ -322,7 +424,7 @@ fn run_call<R>(op: impl FnOnce(&mut Stack) -> R, changes: bool) -> (R, u64) {
     if moved {
         wake_waiters();
     }
-    notify::wake(sockets);
+    notify::wake(stack_id(ns), sockets);
     let planned = PLANNED.load(SeqCst);
     if planned == 0 || next.is_some_and(|t| instant_ns(t) < planned) {
         kick();
@@ -334,6 +436,12 @@ fn run_call<R>(op: impl FnOnce(&mut Stack) -> R, changes: bool) -> (R, u64) {
 /// [`init`].
 pub fn with_interface<R>(f: impl FnOnce(&mut Interface) -> R) -> Option<R> {
     IFACE.lock().as_mut().map(f)
+}
+
+/// [`with_interface`] for the stack of a network namespace (`None`: the
+/// initial one).
+pub fn with_interface_in<R>(ns: Option<&NsStack>, f: impl FnOnce(&mut Interface) -> R) -> Option<R> {
+    lock_iface(ns).as_mut().map(f)
 }
 
 /// What [`init`] set up; `None` before.
@@ -385,7 +493,8 @@ fn network_thread(_: usize) -> usize {
         if changed {
             wake_waiters();
         }
-        notify::wake(sockets);
+        notify::wake(0, sockets);
+        let ns_deadline = poll_namespaces();
         let now_ns = time::now_ns();
         if link.is_some_and(|l| l != link_up) {
             kprintln!("net: {NAME}: link {}", if link_up { "up" } else { "down" });
@@ -400,6 +509,7 @@ fn network_thread(_: usize) -> usize {
             deadline = deadline.min(now_ns.saturating_add(POLL_INTERVAL_NS));
         }
         due = deadline;
+        let deadline = deadline.min(ns_deadline);
         PLANNED.store(deadline.max(1), SeqCst);
         if deadline <= now_ns {
             thread::yield_now();

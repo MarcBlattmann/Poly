@@ -2,7 +2,9 @@
 //! sockets that are open files, woken when the stack reports that their
 //! socket's readiness (or queued input) changed.
 //!
-//! A socket file registers its queue under its handle ([`watch`]). After
+//! A socket file registers its queue under its stack's number and its
+//! handle ([`watch`]; handles are per stack, and every network namespace
+//! has a stack: `net::NsStack`). After
 //! every poll of the stack (the network thread's, and the one each socket
 //! call makes), with the interface locked, [`collect`] asks the stack
 //! which sockets changed since the last look (`Stack::take_changed`);
@@ -24,20 +26,21 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use poly_net::{SocketHandle, Stack};
 use poly_vfs::{PollEvents, WaitQueue};
 
-static WATCHED: SpinLock<BTreeMap<SocketHandle, Weak<WaitQueue>>> = SpinLock::new(BTreeMap::new());
+static WATCHED: SpinLock<BTreeMap<(u32, SocketHandle), Weak<WaitQueue>>> = SpinLock::new(BTreeMap::new());
 /// Sockets watched; nothing is collected while 0.
 static COUNT: AtomicUsize = AtomicUsize::new(0);
 
-/// Notify `queue` whenever socket `h` may have changed, until [`unwatch`].
-pub fn watch(h: SocketHandle, queue: &Arc<WaitQueue>) {
-    if WATCHED.lock().insert(h, Arc::downgrade(queue)).is_none() {
+/// Notify `queue` whenever socket `h` of stack `stack` may have changed,
+/// until [`unwatch`].
+pub fn watch(stack: u32, h: SocketHandle, queue: &Arc<WaitQueue>) {
+    if WATCHED.lock().insert((stack, h), Arc::downgrade(queue)).is_none() {
         COUNT.fetch_add(1, Ordering::SeqCst);
     }
 }
 
-/// Stop notifying for socket `h`.
-pub fn unwatch(h: SocketHandle) {
-    let removed = WATCHED.lock().remove(&h);
+/// Stop notifying for socket `h` of stack `stack`.
+pub fn unwatch(stack: u32, h: SocketHandle) {
+    let removed = WATCHED.lock().remove(&(stack, h));
     if removed.is_some() {
         COUNT.fetch_sub(1, Ordering::SeqCst);
     }
@@ -55,15 +58,15 @@ pub(super) fn collect(stack: &mut Stack) -> Vec<SocketHandle> {
     changed
 }
 
-/// Wake the queues of `changed` (with the interface unlocked: wakers may
-/// take locks of their own).
-pub(super) fn wake(changed: Vec<SocketHandle>) {
+/// Wake the queues of the sockets `changed` of stack `stack` (with the
+/// interface unlocked: wakers may take locks of their own).
+pub(super) fn wake(stack: u32, changed: Vec<SocketHandle>) {
     if changed.is_empty() {
         return;
     }
     let queues: Vec<Arc<WaitQueue>> = {
         let w = WATCHED.lock();
-        changed.iter().filter_map(|h| w.get(h).and_then(Weak::upgrade)).collect()
+        changed.iter().filter_map(|h| w.get(&(stack, *h)).and_then(Weak::upgrade)).collect()
     };
     for q in queues {
         q.notify(PollEvents::ALL);

@@ -178,6 +178,34 @@ pub struct SemTable {
     sleepers: Vec<Sleeper>,
     /// Adjustments by global pid, set serial and semaphore; never 0.
     adjs: BTreeMap<(i32, u64, u16), i32>,
+    /// The namespace's limits.
+    pub limits: SemLimits,
+}
+
+/// The limits of one IPC namespace: the four numbers of
+/// `/proc/sys/kernel/sem` (proc_sys_kernel(5): `SEMMSL`, `SEMMNS`,
+/// `SEMOPM`, `SEMMNI`), which a write there changes for that namespace
+/// only (ipc_namespaces(7)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SemLimits {
+    /// The most semaphores in a set.
+    pub msl: i32,
+    /// The most semaphores in all sets.
+    pub mns: u64,
+    /// The most operations of one semop(2).
+    pub opm: u32,
+    /// The most sets.
+    pub mni: usize,
+}
+
+impl SemLimits {
+    pub const DEFAULT: SemLimits = SemLimits { msl: SEMMSL, mns: SEMMNS, opm: SEMOPM, mni: SEMMNI };
+}
+
+impl Default for SemLimits {
+    fn default() -> SemLimits {
+        SemLimits::DEFAULT
+    }
 }
 
 impl SemTable {
@@ -189,7 +217,13 @@ impl SemTable {
             tickets: 0,
             sleepers: Vec::new(),
             adjs: BTreeMap::new(),
+            limits: SemLimits::DEFAULT,
         }
+    }
+
+    /// Every set with its id, in id order (`/proc/sysvipc/sem`).
+    pub fn iter(&self) -> impl Iterator<Item = (i32, &SemSet)> {
+        self.sets.iter().map(|(id, s)| (*id, s))
     }
 
     pub fn len(&self) -> usize {
@@ -243,7 +277,7 @@ impl SemTable {
     /// namespace ([`SEMMNI`] sets, [`SEMMNS`] semaphores: `ENOSPC`); its
     /// values, pids and `sem_otime` are 0, its mode `flags & 0777`.
     pub fn get(&mut self, key: i32, nsems: i32, flags: u32, who: &Who, now: i64) -> Result<i32, Errno> {
-        if !(0..=SEMMSL).contains(&nsems) {
+        if !(0..=self.limits.msl).contains(&nsems) {
             return Err(Errno::EINVAL);
         }
         if key != IPC_PRIVATE {
@@ -268,7 +302,7 @@ impl SemTable {
             return Err(Errno::EINVAL);
         }
         let total = self.sets.values().map(|s| s.nsems() as u64).sum::<u64>();
-        if self.sets.len() >= SEMMNI || total + nsems as u64 > SEMMNS {
+        if self.sets.len() >= self.limits.mni || total + nsems as u64 > self.limits.mns {
             return Err(Errno::ENOSPC);
         }
         let mut id = self.last;
@@ -536,15 +570,14 @@ pub const SEMMNU: i32 = SEMMNS as i32;
 pub const SEMUME: i32 = SEMOPM as i32;
 pub const SEMUSZ: i32 = 20;
 
-/// `struct seminfo` (`linux/sem.h`, ten `int`s): the limits for
-/// `IPC_INFO`; for `SEM_INFO` (`table` given) `semusz` is the number of
-/// sets and `semaem` of semaphores in use.
-pub fn seminfo_bytes(table: Option<&SemTable>) -> [u8; 40] {
-    let (usz, aem) = match table {
-        Some(t) => (t.len() as i32, t.semaphores() as i32),
-        None => (SEMUSZ, SEMAEM),
-    };
-    let ints = [SEMMAP, SEMMNI as i32, SEMMNS as i32, SEMMNU, SEMMSL, SEMOPM as i32, SEMUME, usz, SEMVMX, aem];
+/// `struct seminfo` (`linux/sem.h`, ten `int`s): the limits of
+/// `table`'s namespace for `IPC_INFO`; for `SEM_INFO` (`in_use`)
+/// `semusz` is the number of sets and `semaem` of semaphores in use.
+pub fn seminfo_bytes(table: &SemTable, in_use: bool) -> [u8; 40] {
+    let (usz, aem) = if in_use { (table.len() as i32, table.semaphores() as i32) } else { (SEMUSZ, SEMAEM) };
+    let l = table.limits;
+    let int = |v: u64| v.min(i32::MAX as u64) as i32;
+    let ints = [SEMMAP, int(l.mni as u64), int(l.mns), SEMMNU, l.msl, int(u64::from(l.opm)), SEMUME, usz, SEMVMX, aem];
     let mut b = [0u8; 40];
     for (i, v) in ints.iter().enumerate() {
         b[i * 4..i * 4 + 4].copy_from_slice(&v.to_ne_bytes());

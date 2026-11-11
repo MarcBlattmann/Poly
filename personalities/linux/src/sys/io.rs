@@ -130,6 +130,10 @@ pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if let Some(r) = crate::sys::userfaultfd::ioctl(k, fd, request, a.ptr(2)) {
         return r;
     }
+    // The interface requests on a socket (netdevice(7), ADR 0178).
+    if let Some(r) = crate::sys::netdev::ioctl(k, fd, request, a.ptr(2)) {
+        return r;
+    }
     // SIOCOUTQ on a socket (ADR 0048): the same number as the terminal
     // request TIOCOUTQ, so it is answered before the terminal check.
     if request == crate::net::abi::SIOCOUTQ

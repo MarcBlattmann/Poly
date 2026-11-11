@@ -8,7 +8,7 @@ impl Stack {
         match dst {
             IpAddr::V4(d) => {
                 if d.is_loopback() {
-                    return Ok(Hop::Loop);
+                    return if self.loopback_up { Ok(Hop::Loop) } else { Err(Errno::ENETUNREACH) };
                 }
                 let Some(c) = self.cfg.ipv4 else { return Err(Errno::ENETUNREACH) };
                 if d == c.addr {
@@ -28,6 +28,9 @@ impl Stack {
                 }
             }
             IpAddr::V6(d) => {
+                if d.is_loopback() && !self.loopback_up {
+                    return Err(Errno::ENETUNREACH);
+                }
                 if d.is_loopback() || self.is_our_v6(d) {
                     return Ok(Hop::Loop);
                 }
@@ -59,6 +62,9 @@ impl Stack {
 
     /// Source address for packets to `dst`.
     pub(super) fn source_for(&self, dst: IpAddr) -> Result<IpAddr, Errno> {
+        if dst.is_loopback() && !self.loopback_up {
+            return Err(Errno::ENETUNREACH);
+        }
         match dst {
             IpAddr::V4(d) if d.is_loopback() => Ok(IpAddr::V4(Ipv4Addr::LOCALHOST)),
             IpAddr::V4(_) => self.cfg.ipv4.map(|c| IpAddr::V4(c.addr)).ok_or(Errno::ENETUNREACH),

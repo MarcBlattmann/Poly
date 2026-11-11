@@ -9,8 +9,8 @@ use crate::abi::Timespec;
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::ipc::sem::{
-    GETALL, GETNCNT, GETPID, GETVAL, GETZCNT, IPC_INFO, SEM_INFO, SEM_STAT, SEM_STAT_ANY, SEMOPM, SEMVMX, SETALL,
-    SETVAL, SemBuf, SemSet, SemidDs, Semop, seminfo_bytes, with_table,
+    GETALL, GETNCNT, GETPID, GETVAL, GETZCNT, IPC_INFO, SEM_INFO, SEM_STAT, SEM_STAT_ANY, SEMVMX, SETALL, SETVAL,
+    SemBuf, SemSet, SemidDs, Semop, seminfo_bytes, with_table,
 };
 use crate::ipc::shm::{IPC_RMID, IPC_SET, IPC_STAT, READ, WRITE, Who};
 use crate::kernel::{Clock, Deadline, LinuxKernel};
@@ -48,7 +48,7 @@ pub fn semget(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 ///
 /// `semid` is an `int` and `nsops` an `unsigned int` (the upper halves of
 /// the registers are ignored). `EINVAL` if `nsops` is 0, `E2BIG` above
-/// [`SEMOPM`], `EFAULT` if the array cannot be read, all before the id is
+/// the namespace's `semopm`, `EFAULT` if the array cannot be read, all before the id is
 /// looked up; the table does the rest
 /// ([`SemTable::semop`](crate::ipc::sem::SemTable::semop)). A caller that
 /// must wait sleeps until whoever makes its array possible completes it,
@@ -82,7 +82,8 @@ fn operate(k: &mut dyn LinuxKernel, a: &Args, timeout: Option<Timespec>) -> SysR
     if nsops == 0 {
         return Err(Errno::EINVAL);
     }
-    if nsops > SEMOPM {
+    let ns = with_own(k, |p| p.ns.ipc.clone());
+    if nsops > with_table(&ns, |t| t.limits.opm) {
         return Err(Errno::E2BIG);
     }
     let mut bytes = vec![0u8; nsops as usize * SemBuf::SIZE];
@@ -210,8 +211,7 @@ pub fn semctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             Ok(if cmd == IPC_STAT { 0 } else { id as u64 })
         }
         IPC_INFO | SEM_INFO => {
-            let (info, max) =
-                with_table(&ns, |t| (seminfo_bytes(if cmd == SEM_INFO { Some(t) } else { None }), t.max_index()));
+            let (info, max) = with_table(&ns, |t| (seminfo_bytes(t, cmd == SEM_INFO), t.max_index()));
             k.copy_to_user(a.ptr(3), &info)?;
             Ok(max as u64)
         }

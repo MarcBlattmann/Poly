@@ -147,6 +147,9 @@ pub enum FsType {
     /// FUSE: a file system served by a user-space process over `/dev/fuse`
     /// (`fuse`, `fuse.NAME`).
     Fuse,
+    /// The message queue file system (mq_overview(7)): the POSIX message
+    /// queues of the mounter's IPC namespace.
+    Mqueue,
 }
 
 impl FsType {
@@ -160,6 +163,7 @@ impl FsType {
             b"ext2" | b"ext3" | b"ext4" => FsType::Ext2,
             b"squashfs" => FsType::Squashfs,
             b"overlay" => FsType::Overlay,
+            b"mqueue" => FsType::Mqueue,
             n if n.starts_with(b"fuse.") => FsType::Fuse,
             b"fuse" => FsType::Fuse,
             _ => return Err(Errno::ENODEV),
@@ -265,7 +269,7 @@ pub fn mount_options(fs: FsType, data: &[u8]) -> Result<RootOptions, Errno> {
                 number(value, 8)?;
             }
             (FsType::Devpts, b"newinstance") if value.is_none() => {}
-            (FsType::Ext2 | FsType::Squashfs | FsType::Overlay | FsType::Fuse, _) => {}
+            (FsType::Ext2 | FsType::Squashfs | FsType::Overlay | FsType::Fuse | FsType::Mqueue, _) => {}
             _ => return Err(Errno::EINVAL),
         }
     }

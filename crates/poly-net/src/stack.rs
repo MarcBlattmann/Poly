@@ -175,6 +175,8 @@ pub struct Stats {
     /// Packets delivered through the internal loopback queue (to
     /// 127.0.0.0/8, ::1 and the stack's own addresses).
     pub loop_packets: u64,
+    /// The bytes of those packets (IP headers included).
+    pub loop_bytes: u64,
     pub reassembly: ReassemblyStats,
 }
 
@@ -280,6 +282,8 @@ pub struct Stack {
     /// its output runs).
     pkt_ttl: Option<u8>,
     pkt_tos: u8,
+    /// The loopback interface is up ([`Stack::set_loopback`]).
+    loopback_up: bool,
     #[cfg(test)]
     pub(crate) isn_override: Option<u32>,
 }
@@ -317,6 +321,7 @@ impl Stack {
             stats: Stats::default(),
             pkt_ttl: None,
             pkt_tos: 0,
+            loopback_up: true,
             #[cfg(test)]
             isn_override: None,
         }
@@ -344,6 +349,21 @@ impl Stack {
     pub fn set_ipv4(&mut self, addr: Option<Ipv4Cidr>, gateway: Option<Ipv4Addr>) {
         self.cfg.ipv4 = addr;
         self.cfg.gateway = gateway;
+    }
+
+    /// Bring the loopback interface up or down (a new stack's is up). While
+    /// it is down nothing is routed to 127.0.0.0/8 and ::1: connecting or
+    /// sending there is `ENETUNREACH`, as in a new network namespace of
+    /// Linux, whose `lo` starts down (network_namespaces(7)). Binding to a
+    /// loopback address still works, and packets already queued for this
+    /// host are dropped at the next [`poll`](Self::poll).
+    pub fn set_loopback(&mut self, up: bool) {
+        self.loopback_up = up;
+    }
+
+    /// Whether the loopback interface is up.
+    pub fn loopback(&self) -> bool {
+        self.loopback_up
     }
 
     /// The link-local IPv6 address, if IPv6 is on.
@@ -381,7 +401,12 @@ impl Stack {
 
         for _ in 0..LOOP_BUDGET {
             let Some(p) = self.loopq.pop_front() else { break };
+            if !self.loopback_up && Self::to_loopback(&p) {
+                self.stats.loop_dropped += 1;
+                continue;
+            }
             self.stats.loop_packets += 1;
+            self.stats.loop_bytes += p.len() as u64;
             self.process_ip(dev, &p, true);
         }
 
@@ -403,6 +428,15 @@ impl Stack {
             return Some(self.now);
         }
         self.deadline(blocked)
+    }
+
+    /// Whether the IP packet `p` is addressed to 127.0.0.0/8 or ::1.
+    fn to_loopback(p: &[u8]) -> bool {
+        match p.first().map(|b| b >> 4) {
+            Some(4) => p.get(16) == Some(&127),
+            Some(6) => p.get(24..40).is_some_and(|d| d == Ipv6Addr::LOCALHOST.octets()),
+            _ => false,
+        }
     }
 
     /// Whether packets sent to this host wait for the next

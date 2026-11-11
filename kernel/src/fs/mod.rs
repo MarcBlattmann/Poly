@@ -44,6 +44,7 @@ pub mod initrd;
 pub mod locks;
 pub mod memfs;
 pub mod mounts;
+pub mod mqueuefs;
 pub mod poll;
 pub mod proc;
 mod proc_tests;
