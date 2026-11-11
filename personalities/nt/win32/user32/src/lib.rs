@@ -565,6 +565,15 @@ fn ime_hook(hwnd: H) {
     if !matches!(call(Request::DefaultIme { tid: 0 }), Reply::Handle { hwnd: 0 }) {
         return;
     }
+    // Making it is not the caller's business: the last error stays as it
+    // was (a second thread registers the class again and would leave
+    // ERROR_CLASS_ALREADY_EXISTS; OpenClipboard.yaml oc_threads reads 0).
+    let error = poly_win32_gui::last_error();
+    make_ime_window(hwnd);
+    set_last_error(error);
+}
+
+fn make_ime_window(hwnd: H) {
     if !u::screen(&SYS).interactive {
         let name: [u16; 10] = [105, 109, 109, 51, 50, 46, 100, 108, 108, 0];
         // SAFETY: a kernel32 query with a NUL-terminated name.
