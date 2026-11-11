@@ -245,9 +245,12 @@ pub struct Wm {
     fg_return: u32,
     /// AttachThreadInput: a thread to the queue whose input it shares.
     attached: BTreeMap<Key, Key>,
-    /// The processes that lost the right to take the foreground by
-    /// activating a window (`input`).
-    fg_lost: alloc::collections::BTreeSet<u32>,
+    /// The right to take the foreground by activating a window (`input`):
+    /// the processes that had the foreground at some time (one that never
+    /// had it may take it: the foreground process started it), and the
+    /// input queues that have the right since.
+    fg_seen: alloc::collections::BTreeSet<u32>,
+    fg_right: alloc::collections::BTreeSet<Key>,
     /// The cursor position (screen coordinates).
     cursor: (i32, i32),
     /// The physical key state, keys pressed since GetAsyncKeyState last
@@ -321,7 +324,8 @@ impl Wm {
             other: 0,
             fg_return: 0,
             attached: BTreeMap::new(),
-            fg_lost: alloc::collections::BTreeSet::new(),
+            fg_seen: alloc::collections::BTreeSet::new(),
+            fg_right: alloc::collections::BTreeSet::new(),
             cursor: (0, 0),
             async_keys: raw::blank_keys(),
             async_new: alloc::vec![false; 256],
@@ -1727,6 +1731,7 @@ impl Wm {
             }
         }
         self.timers.retain(|t| t.thread != key);
+        self.fg_right.remove(&key);
         self.clip.thread_gone(pid, tid);
         self.ime.thread_gone(key);
         if let Some(q) = self.queues.remove(&key) {

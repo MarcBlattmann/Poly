@@ -88,7 +88,8 @@ impl Wm {
     pub(super) fn set_input(&mut self, key: Key, active: u32, focus: u32, capture: u32, which: u8) {
         let k = self.input_key(key);
         if which & SET_FG_GRANT != 0 {
-            self.fg_lost.remove(&key.0);
+            self.fg_seen.insert(key.0);
+            self.fg_right.insert(k);
         }
         if which & SET_ACTIVE != 0 {
             let q = self.queue(k);
@@ -148,13 +149,13 @@ impl Wm {
     }
 
     /// The window of the foreground process that a window of thread `key`
-    /// which is not topmost cannot be put above: `key`'s process has lost
-    /// the right to take the foreground and another process has it
+    /// which is not topmost cannot be put above: `key` has not the right
+    /// to take the foreground and another process has it
     /// (GetForegroundWindow.yaml `foreground_right`; Learn, SetWindowPos:
     /// "To use SetWindowPos to bring a window to the top, the process that
     /// owns the window must have SetForegroundWindow permission").
     pub(super) fn barrier(&self, key: Key) -> Option<u32> {
-        if !self.fg_lost.contains(&key.0) {
+        if foreign(key) || self.may_take_foreground(key) {
             return None;
         }
         let fg = self.foreground();
@@ -343,7 +344,7 @@ impl Wm {
     /// queue) has no active or focus window any more (GetFocus.yaml
     /// gf_threads: thread T sees NULL once A is in the foreground). A
     /// thread of ours that takes it from another process's window
-    /// remembers where it goes back to, and its process may take the
+    /// remembers where it goes back to, and has the right to take the
     /// foreground from then on (GetForegroundWindow.yaml `foreground_right`).
     fn take_foreground(&mut self, k: Key, fg: u32) {
         let old_fg = self.foreground();
@@ -361,7 +362,8 @@ impl Wm {
             if self.is_foreign(old_fg) {
                 self.fg_return = old_fg;
             }
-            self.fg_lost.remove(&k.0);
+            self.fg_seen.insert(k.0);
+            self.fg_right.insert(k);
         }
         self.foreground = fg;
     }
@@ -381,27 +383,36 @@ impl Wm {
 
     /// A thread of ours handed the foreground to window `h` of another
     /// process (its own SetForegroundWindow, or a minimize that found that
-    /// window): its process has lost the right to take the foreground by
-    /// activating a window (GetForegroundWindow.yaml `foreground_right`,
+    /// window): it has lost the right to take the foreground by activating
+    /// a window (GetForegroundWindow.yaml `foreground_right`,
     /// `minimize_foreground`).
     pub(super) fn handed_away(&mut self, from: Key, h: u32) {
         if self.is_foreign(h) && !foreign(from) {
-            self.fg_lost.insert(from.0);
+            let k = self.input_key(from);
+            self.fg_seen.insert(from.0);
+            self.fg_right.remove(&k);
         }
     }
 
     /// Whether thread `key` takes the foreground when one of its windows
     /// becomes its active window (created visible, shown with activation,
-    /// restored, SetActiveWindow): from the start of the program, and still
-    /// after its foreground window was hidden or destroyed and the
-    /// foreground fell back to another process; not after the foreground
-    /// was handed to another process's window by a minimize or by the
-    /// thread's own SetForegroundWindow, until a SetForegroundWindow on a
-    /// window of its own gives the right back (GetForegroundWindow.yaml
-    /// `foreground_right`).
+    /// restored, SetActiveWindow): a thread of the foreground process; a
+    /// thread of a process that never had the foreground (the foreground
+    /// process started it); a thread that had the foreground, still after
+    /// its foreground window was hidden or destroyed and the foreground
+    /// fell back to another process, but not after it handed the
+    /// foreground to another process's window by a minimize or by its own
+    /// SetForegroundWindow, until a SetForegroundWindow on a window of its
+    /// own gives the right back (GetForegroundWindow.yaml
+    /// `foreground_right`). A new thread of a process that had the
+    /// foreground before has not got the right (gfw_xthread: its window is
+    /// active in its thread only).
     pub(super) fn may_take_foreground(&self, key: Key) -> bool {
         let fg = self.foreground();
-        fg == 0 || self.thread_of(fg).is_some_and(|t| t.0 == key.0) || !self.fg_lost.contains(&key.0)
+        fg == 0
+            || self.thread_of(fg).is_some_and(|t| t.0 == key.0)
+            || !self.fg_seen.contains(&key.0)
+            || self.fg_right.contains(&self.input_key(key))
     }
 
     /// `h` is the queue's active window now: the head of its history. A
