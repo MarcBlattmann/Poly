@@ -606,9 +606,10 @@ impl<'a> Typeface<'a> {
     /// Draw `text` (or, with `glyph_index`, glyph indices) with its first
     /// pen position at (`x0`, `y0`) on the baseline. `put(x, y, coverage)`
     /// gets every pixel with ink, from 1 to 255. `advances` (`ExtTextOutW`'s
-    /// `lpDx`) gives each character's advance instead of the font's. The
-    /// text runs along the font's escapement. Returns the pen's position at
-    /// the end.
+    /// `lpDx`) gives each character's advance instead of the font's, and
+    /// `rises` (`ETO_PDY`) how far the characters after each one move
+    /// across the line (positive: up). The text runs along the font's
+    /// escapement. Returns the pen's position at the end.
     #[allow(clippy::too_many_arguments)]
     pub fn draw_outline(
         &self,
@@ -618,6 +619,7 @@ impl<'a> Typeface<'a> {
         x0: i32,
         y0: i32,
         advances: Option<&[i32]>,
+        rises: Option<&[i32]>,
         mut put: impl FnMut(i32, i32, [u8; 3]),
     ) -> (i32, i32) {
         let Some((o, font)) = &self.outline else { return (x0, y0) };
@@ -628,14 +630,18 @@ impl<'a> Typeface<'a> {
         // Device x = (X sx + k Y sy) cos - Y sy sin; y = -((X sx + k Y sy) sin + Y sy cos).
         let m = [sx * cs, -sx * sn, k * sy * cs - sy * sn, -(k * sy * sn + sy * cs)];
         let upright = o.escapement == 0 && !o.synth_italic && !o.bilevel && !o.synth_bold && !o.lcd && o.ex == o.ey;
-        let mut dist = 0i32;
+        let (mut dist, mut up) = (0i32, 0i32);
+        // The pen `dist` along the escapement and `up` across it, rounded
+        // to a whole pixel.
+        let pen = |dist: i32, up: i32| {
+            let (d, u) = (dist as f32, up as f32);
+            (x0 + round_f(d * cs - u * sn), y0 - round_f(d * sn + u * cs))
+        };
         for (i, &c) in text.iter().enumerate() {
             let gid = if glyph_index { Self::clamp_glyph(font, c) } else { Self::glyph(font, c) };
             let visible = glyph_index || !(c <= 0x20 || c == 0xA0);
             if visible {
-                // The pen along the escapement, rounded to a whole pixel.
-                let px = x0 + round_f(dist as f32 * cs);
-                let py = y0 - round_f(dist as f32 * sn);
+                let (px, py) = pen(dist, up);
                 let rendered;
                 let bmp = if upright {
                     cache.get(font, GlyphKey::new(o.src.key(), o.ey.em(), gid, 0, RenderMode::Gray))
@@ -670,13 +676,14 @@ impl<'a> Typeface<'a> {
                     }
                 }
             }
-            dist += match advances.and_then(|a| a.get(i)) {
+            dist = dist.wrapping_add(match advances.and_then(|a| a.get(i)) {
                 Some(&dx) => dx,
                 None if glyph_index => self.glyph_width(c),
                 None => self.advance(c),
-            };
+            });
+            up = up.wrapping_add(rises.and_then(|a| a.get(i).copied()).unwrap_or(0));
         }
-        (x0 + round_f(dist as f32 * cs), y0 - round_f(dist as f32 * sn))
+        pen(dist, up)
     }
 
     /// The underline's top row and thickness, relative to the baseline
