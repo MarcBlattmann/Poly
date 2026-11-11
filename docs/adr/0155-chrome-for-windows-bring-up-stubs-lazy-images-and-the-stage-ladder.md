@@ -510,7 +510,18 @@ that a delay load of any of them binds.
    there (a failed delay load: the DLL's name and the error). The formatting is
    `poly_personality_nt::diag::exception_report`, host-tested; the hook is
    `NtKernel::exception_delivered`.
-5. **The coverage map**: the functions that work are `claimed` by `impl-chrome-s9`; the exports
+5. **`oleaut32` by ordinal.** The first run with the batch stopped at the same breakpoint with
+   `OLEAUT32.dll` and `182` (`ERROR_INVALID_ORDINAL`) on the stack: `chrome.dll` delay-loads
+   fourteen more `oleaut32` functions by ordinal. Added (`poly_kernelbase::safearray`): safe
+   arrays (`SafeArrayCreateVector` 411, `SafeArrayDestroy` 16, `SafeArrayGetDim` 17,
+   `SafeArrayGetUBound` 19, `SafeArrayGetLBound` 20, `SafeArrayAccessData` 23,
+   `SafeArrayUnaccessData` 24, `SafeArrayGetElement` 25, `SafeArrayPutElement` 26,
+   `SafeArrayGetVartype` 77), `SysStringByteLen` 149, `SysAllocStringByteLen` 150, `VarBstrCmp`
+   314 (the order `CompareStringW` gives) and `LoadRegTypeLib` 162 (`TYPE_E_LIBNOTREGISTERED`: no
+   type library is registered). The name of each ordinal is the export table's. An array Poly
+   makes keeps its `VARTYPE` in a block in front of the descriptor (Poly's own layout); the
+   element functions take one-dimensional arrays.
+6. **The coverage map**: the functions that work are `claimed` by `impl-chrome-s9`; the exports
    that only fail are `stub`.
 
 **Doc-derived, not observed on Windows** (everything in this addendum; the spec agent
@@ -541,5 +552,11 @@ that a delay load of any of them binds.
   than `KF_FLAG_CREATE` change nothing.
 * `SHGetPropertyStoreForWindow`: the window handle is not checked; `VT_LPWSTR` and the scalar
   types are kept, the others are `E_INVALIDARG`; `GetAt` past the end is `E_INVALIDARG`.
+* Safe arrays: `SafeArrayDestroy(NULL)` (Poly: `S_OK`), which element types
+  `SafeArrayCreateVector` refuses, `SafeArrayGetVartype` of an array without a type flag (Poly:
+  `E_INVALIDARG`), `SafeArrayAccessData` and the lock count, the order of the bounds in a
+  descriptor of several dimensions (Poly follows Learn: the left-most first), and
+  `SafeArrayGetElement` / `SafeArrayPutElement` on arrays of several dimensions (Poly:
+  `E_INVALIDARG`). `VarBstrCmp`: the result for a failed comparison and for `lcid` 0.
 * `NtSuspendProcess` / `NtResumeProcess`: the statuses for a handle without
   `PROCESS_SUSPEND_RESUME` (Poly: `STATUS_ACCESS_DENIED`) and for a process that has ended.
