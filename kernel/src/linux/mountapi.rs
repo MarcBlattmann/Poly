@@ -115,6 +115,14 @@ impl SuperblockOps for Ops<'_> {
         Ok(())
     }
 
+    fn check_directory(&mut self, path: &[u8]) -> Result<(), Errno> {
+        let node = self.files.lookupat(fs::AT_FDCWD, path, true).map_err(vfs_errno)?;
+        if node.attr().map_err(vfs_errno)?.kind != poly_vfs::FileType::Directory {
+            return Err(Errno::EINVAL);
+        }
+        Ok(())
+    }
+
     fn reconfigure(&mut self, read_only: Option<bool>, data: &[u8]) -> Result<(), Errno> {
         let m = self.made.picked.as_ref().or(self.made.mounted.as_ref()).ok_or(Errno::EINVAL)?;
         if m.fs_name() == "tmpfs" && !data.is_empty() {

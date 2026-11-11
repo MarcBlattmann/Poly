@@ -318,6 +318,15 @@ pub trait SuperblockOps {
     /// Apply `read_only` (`ro`/`rw`, if given) and the parameters given
     /// (`data`, as `mount(2)` data) to the superblock.
     fn reconfigure(&mut self, read_only: Option<bool>, data: &[u8]) -> Result<(), Errno>;
+    /// A parameter names a directory (a layer of an overlay): look it up
+    /// now, as the calling thread. An overlay's directories are checked
+    /// when they are given, not at `FSCONFIG_CMD_CREATE` (the spec sheet
+    /// of mntapi_fsconfig: a `lowerdir` that does not exist is `ENOENT`
+    /// from the `FSCONFIG_SET_STRING`).
+    fn check_directory(&mut self, path: &[u8]) -> Result<(), Errno> {
+        let _ = path;
+        Ok(())
+    }
 }
 
 /// A file system context: the state behind an `fsopen(2)` / `fspick(2)`
@@ -454,7 +463,7 @@ impl FsContext {
             return Err(Errno::EBUSY);
         }
         match *cmd {
-            Command::Set { key, value } => self.set(key, value),
+            Command::Set { key, value } => self.set(key, value, ops),
             Command::Create | Command::CreateExcl if reconf => Err(Errno::EBUSY),
             Command::Create | Command::CreateExcl => {
                 if self.purpose != Purpose::Create {
@@ -518,7 +527,7 @@ impl FsContext {
     /// One parameter: the generic ones (`source`, `ro`, `rw`), then the
     /// file system's own. A rejected parameter logs why and leaves the
     /// context usable.
-    fn set(&mut self, key: &[u8], value: Value<'_>) -> Result<(), Errno> {
+    fn set(&mut self, key: &[u8], value: Value<'_>, ops: &mut dyn SuperblockOps) -> Result<(), Errno> {
         match (key, value) {
             (b"source", Value::String(s)) => {
                 if self.source.is_some() {
@@ -558,6 +567,22 @@ impl FsContext {
         }
         if fstype == FsType::Overlay && !overlay_value_ok(key, value.as_deref()) {
             return Err(self.reject("Bad value for", key));
+        }
+        // The layers of an overlay are looked up as they are given: the
+        // lookup's error is the call's, without a message, and the
+        // parameter is not taken.
+        if fstype == FsType::Overlay
+            && let Some(v) = &value
+        {
+            match key {
+                b"lowerdir" => {
+                    for dir in v.split(|&b| b == b':') {
+                        ops.check_directory(dir)?;
+                    }
+                }
+                b"upperdir" | b"workdir" => ops.check_directory(v)?,
+                _ => {}
+            }
         }
         self.options.retain(|(k, _)| k.as_slice() != key);
         self.options.push((key.to_vec(), value));
@@ -1030,5 +1055,48 @@ mod tests {
         assert_eq!(MntIdReq { size: 16, mnt_id: 1, ..MntIdReq::default() }.check(), Err(Errno::EINVAL));
         assert_eq!(MntIdReq { size: 24, spare: 1, mnt_id: 1, ..MntIdReq::default() }.check(), Err(Errno::EINVAL));
         assert_eq!(MntIdReq { size: 32, mnt_id: 0, ..MntIdReq::default() }.check(), Err(Errno::EINVAL));
+    }
+
+    /// An overlay's directories are checked when they are given.
+    #[test]
+    fn overlay_layers_are_looked_up_when_they_are_set() {
+        struct Dirs(Vec<Vec<u8>>);
+        impl SuperblockOps for Dirs {
+            fn create(&mut self, _: &CreateRequest) -> Result<(), Errno> {
+                Ok(())
+            }
+            fn reconfigure(&mut self, _: Option<bool>, _: &[u8]) -> Result<(), Errno> {
+                Ok(())
+            }
+            fn check_directory(&mut self, path: &[u8]) -> Result<(), Errno> {
+                self.0.push(path.to_vec());
+                if path.starts_with(b"/missing") { Err(Errno::ENOENT) } else { Ok(()) }
+            }
+        }
+        let mut ops = Dirs(Vec::new());
+        let mut c = FsContext::new(b"overlay").unwrap();
+        assert_eq!(c.config(&set(b"lowerdir", Value::String(b"/missing-dir")), &mut ops), Err(Errno::ENOENT));
+        // No message, and the context goes on.
+        assert!(!c.has_messages());
+        assert_eq!(c.config(&set(b"redirect_dir", Value::String(b"bogus")), &mut ops), Err(Errno::EINVAL));
+        assert_eq!(c.read_log(256).unwrap(), b"e overlay: Bad value for 'redirect_dir'\n");
+        assert_eq!(c.config(&set(b"lowerdir", Value::String(b"/a:/missing:/b")), &mut ops), Err(Errno::ENOENT));
+        assert_eq!(c.config(&set(b"upperdir", Value::String(b"/missing/up")), &mut ops), Err(Errno::ENOENT));
+        assert_eq!(c.config(&set(b"workdir", Value::String(b"/missing/work")), &mut ops), Err(Errno::ENOENT));
+        assert_eq!(c.config(&set(b"lowerdir", Value::String(b"/a:/b")), &mut ops), Ok(()));
+        assert_eq!(c.config(&set(b"upperdir", Value::String(b"/up")), &mut ops), Ok(()));
+        assert_eq!(c.config(&set(b"workdir", Value::String(b"/work")), &mut ops), Ok(()));
+        assert_eq!(c.config(&set(b"redirect_dir", Value::String(b"on")), &mut ops), Ok(()));
+        let looked: Vec<&[u8]> = ops.0.iter().map(Vec::as_slice).collect();
+        let want: [&[u8]; 9] =
+            [b"/missing-dir", b"/a", b"/missing", b"/missing/up", b"/missing/work", b"/a", b"/b", b"/up", b"/work"];
+        assert_eq!(looked, want);
+        // The parameters that were refused are not part of the data.
+        assert_eq!(c.data(), b"lowerdir=/a:/b,upperdir=/up,workdir=/work,redirect_dir=on");
+        // Other file systems' parameters are not looked up.
+        let mut ops = Dirs(Vec::new());
+        let mut t = FsContext::new(b"tmpfs").unwrap();
+        assert_eq!(t.config(&set(b"size", Value::String(b"1m")), &mut ops), Ok(()));
+        assert!(ops.0.is_empty());
     }
 }
