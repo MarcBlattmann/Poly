@@ -177,6 +177,9 @@ pub unsafe extern "system" fn SHGetKnownFolderPath(
     if id.is_null() {
         return kf::E_INVALIDARG;
     }
+    if !kf::flags_accepted(flags) {
+        return kf::E_INVALIDARG;
+    }
     // SAFETY: the caller's KNOWNFOLDERID (16 bytes, any alignment).
     let id = unsafe { id.read_unaligned() };
     let mut folder = match kf::known_folder_path(&id, variable) {

@@ -524,8 +524,74 @@ that a delay load of any of them binds.
 6. **The coverage map**: the functions that work are `claimed` by `impl-chrome-s9`; the exports
    that only fail are `stub`.
 
-**Doc-derived, not observed on Windows** (everything in this addendum; the spec agent
-`spec-chrome-win-5` observes the must-work functions in parallel). In particular, to be confirmed:
+### Step 9, continued: what the runs asked for after the batch
+
+Each stage 1 run named the next stop; the exception log (item 4) and a new loader line made
+every one of them readable without a temporary patch.
+
+7. **Every delay-loaded name binds.** A delay load of a name is fatal for Chrome in two ways: the
+   DLL does not load (error 126), or it loads and lacks the export (127, by ordinal 182). After
+   `oleaut32` (item 5) the same check fired for `user32!GetShellWindow` and then for
+   `UxTheme.dll`, one name per run. So the whole class is closed at once, from `chrome.dll`'s
+   delay-import table against our DLLs' export tables:
+   * `ntdll` logs a failed `LdrGetProcedureAddress` (`ldr: LdrGetProcedureAddress(dll!name)
+     failed`), as it logs a failed `LdrLoadDll`.
+   * `poly_win32_rt::fail_exports!` makes exports that log `stub: dll!name` (the line
+     `polystub.dll` logs) and fail the way section 2 fixes for a function the system does not
+     provide, per function: 0 with last error 120, `(DWORD)-1`, `E_NOTIMPL`,
+     `STATUS_NOT_IMPLEMENTED`, or the error value itself where the function returns one (so no
+     `HRESULT` or error-code function reports success by returning 0). 209 names in `advapi32`,
+     `dwmapi`, `gdi32`, `kernelbase`, `mfplat`, `ole32`, `shell32`, `user32`, `userenv`,
+     `winhttp` and `wininet` (`src/delayed.rs` of each). This does not change the loader rule:
+     `GetProcAddress` of a name no DLL exports still fails; these names are ones a program
+     *requires*, and they are `stub` in the coverage map.
+   * Real: `user32!GetShellWindow` (NULL: no Windows shell process), `shell32!ILFree` (ordinal
+     155), `kernel32!ProcessIdToSessionId` (the one session).
+   * **`uxtheme.dll`**: no visual style is active. `OpenThemeData` is NULL, the functions that
+     take a theme handle answer `E_HANDLE`, `IsThemeActive` and `IsAppThemed` are FALSE;
+     `DrawThemeBackgroundEx` is also ordinal 47.
+   * DLLs `chrome.dll` delay-loads that Poly still lacks (none was reached in stage 1):
+     `bthprops.cpl`, `cfgmgr32`, `comdlg32`, `credui`, `cryptui`, `d3d11`, `d3d12`, `dcomp`,
+     `dxgi`, `esent`, `hid`, `mf`, `mfreadwrite`, `mmdevapi`, `ncrypt`, `ndfapi`, `pdh`,
+     `propsys`, `setupapi`, `tbs`, `urlmon`, `wevtapi`, `winspool.drv`, `wintrust`, `winusb`.
+8. **A read-only handle of shared memory cannot be made writable.** Chrome's children ended at a
+   check after `NtQueryObject` (type `Section`), `NtQuerySection` and `NtDuplicateObject(self, h,
+   self, .., SECTION_MAP_WRITE)`: the duplicate succeeded. Two causes. `CreateFileMappingW`
+   ignored `lpFileMappingAttributes` (Learn: its descriptor is the new mapping's, its
+   `bInheritHandle` the handle's); both reach `NtCreateSection` now. And `NtDuplicateObject`
+   checked every request without `DUPLICATE_SAME_ACCESS` against the object's descriptor: now a
+   request for no more than the source handle has is granted as it is, one for more is checked
+   against the descriptor (the sheet `kernel32.dll/DuplicateHandle`), and a file handle never
+   yields more than it has (the sheet's rule `files`).
+9. **Version resources.** The browser reads the system's version from the version resources of
+   `kernelbase.dll` and `kernel32.dll` (Learn, "Getting the System Version") and ends itself when
+   neither has one. `poly_kernelbase::verinfo` builds a `VS_VERSIONINFO` and the `.res` file that
+   holds it; the two DLLs' build scripts hand it to lld-link. The version is the Windows version
+   Poly reports (10.0.19045.2006); the strings are Poly's.
+10. **`poly.nt.exceptions` for a stack overflow** counts every code address on the whole stack
+    and logs the most frequent ones: a recursion's cycle shows as a few return addresses a few
+    thousand times each, which the top of an 8 MB stack does not show.
+11. **The sheets of `spec-chrome-win-5`** arrived during the step. Made to agree with them:
+    `PathMatchSpecW` (rewritten to the sheet's rules), `SetProcessShutdownParameters` (every
+    level is accepted, a flag other than `SHUTDOWN_NORETRY` is error 641),
+    `SHGetKnownFolderPath` (`system32`, the refused flags), `GetProcessInformation` (the caller's
+    `Version` 1 for power throttling, `ProcessInPrivateInfo`), `K32GetMappedFileNameW` (the small
+    buffer), `CallNtPowerInformation` (no buffer, `SystemPowerCapabilities`), the `wtsapi32`
+    functions (registrations are kept, `WTSSessionInfoEx`, error 87 for an unknown class),
+    `NtSuspendProcess` / `NtResumeProcess` (a process that has exited), `DuplicateHandle` (NULL in
+    the caller's handle on failure). What still differs is in the hand-off file.
+
+**Where stage 1 stands.** The browser gets through its start-up, starts the crash handler, the
+GPU process and utility processes, and writes Chrome's own log lines to standard error. It then
+recurses on its main thread until the stack is full (`STATUS_STACK_OVERFLOW`; about 5,200 rounds
+of the same eight `chrome.dll` frames). Each round calls `SystemParametersInfoW`, `GetDC` and
+`CreateFontIndirectW`: Chrome asks for the system's message font, makes it, and something about
+the font it gets sends it round again. What Windows answers there for a machine without Segoe UI
+(the face name `SPI_GETNONCLIENTMETRICS` reports on Poly, which has no such font) is a question
+for the text sheets (`spec-win-text`), not for this step.
+
+**Doc-derived, not observed on Windows** (what no sheet covers yet; the functions named in item 11
+follow their sheets now). In particular, to be confirmed:
 
 * `PathMatchSpecW`: several patterns separated by `;`, leading spaces of each ignored (Learn says
   it of `PathMatchSpecExW`'s `PMSF_MULTIPLE`); case-insensitive beyond ASCII.

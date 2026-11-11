@@ -15,6 +15,8 @@ use alloc::vec::Vec;
 /// `PROCESS_INFORMATION_CLASS` (`processthreadsapi.h`).
 pub const PROCESS_MEMORY_PRIORITY: u32 = 0;
 pub const PROCESS_APP_MEMORY_INFO: u32 = 2;
+/// `ProcessInPrivateInfo`: one byte (the sheet: readable with a size of 1).
+pub const PROCESS_IN_PRIVATE_INFO: u32 = 3;
 pub const PROCESS_POWER_THROTTLING: u32 = 4;
 pub const PROCESS_PROTECTION_LEVEL_INFO: u32 = 7;
 pub const PROCESS_LEAP_SECOND_INFO: u32 = 8;
@@ -72,6 +74,7 @@ pub struct AppMemory {
 pub fn class_size(class: u32) -> Option<usize> {
     match class {
         PROCESS_MEMORY_PRIORITY | PROCESS_PROTECTION_LEVEL_INFO => Some(4),
+        PROCESS_IN_PRIVATE_INFO => Some(1),
         PROCESS_POWER_THROTTLING => Some(12),
         PROCESS_APP_MEMORY_INFO => Some(32),
         PROCESS_LEAP_SECOND_INFO | PROCESS_MACHINE_TYPE_INFO => Some(8),
@@ -105,6 +108,8 @@ pub fn get(state: &ProcessState, memory: &AppMemory, class: u32, size: usize) ->
             }
         }
         PROCESS_PROTECTION_LEVEL_INFO => out.extend(PROTECTION_LEVEL_NONE.to_le_bytes()),
+        // Not an InPrivate (browsing) process.
+        PROCESS_IN_PRIVATE_INFO => out.push(0),
         PROCESS_LEAP_SECOND_INFO => {
             out.extend(state.leap_flags.to_le_bytes());
             out.extend(0u32.to_le_bytes());
@@ -159,6 +164,13 @@ pub fn set(state: &mut ProcessState, class: u32, data: &[u8]) -> Result<(), u32>
     Ok(())
 }
 
+/// `GetProcessInformation(ProcessPowerThrottling)`: the sheet's rule `version_first`: "the
+/// buffer's first field has to be 1 before the call"; with anything else the call fails with
+/// `ERROR_INVALID_PARAMETER` and writes nothing.
+pub fn power_throttling_version_ok(version_in_buffer: u32) -> bool {
+    version_in_buffer == POWER_THROTTLING_VERSION
+}
+
 // ----- the shutdown parameters ----------------------------------------------------------------
 
 /// The level every process starts with (Learn, `SetProcessShutdownParameters`: "All processes
@@ -167,12 +179,18 @@ pub const SHUTDOWN_LEVEL_DEFAULT: u32 = 0x280;
 /// `SHUTDOWN_NORETRY` (`winbase.h`).
 pub const SHUTDOWN_NORETRY: u32 = 1;
 
-/// `SetProcessShutdownParameters(level, flags)`: Learn reserves 0x000 to 0x0FF and 0x400 to
-/// 0x4FF for the system and gives applications 0x100 to 0x3FF; the one flag is
-/// `SHUTDOWN_NORETRY`. Anything else is `ERROR_INVALID_PARAMETER`.
+/// The last error of a `SetProcessShutdownParameters` with a flag other than `SHUTDOWN_NORETRY`
+/// (the sheet: 641, as observed).
+pub const SHUTDOWN_BAD_FLAGS: u32 = 641;
+
+/// `SetProcessShutdownParameters(level, flags)`
+/// (`specs/windows/kernel32.dll/SetProcessShutdownParameters.yaml`): every level is accepted
+/// and read back unchanged, also the ranges Learn reserves for the system (rule `levels`); the
+/// flags are 0 or `SHUTDOWN_NORETRY`, any other bit fails with error 641 and leaves level and
+/// flags as they were (rule `flags`).
 pub fn shutdown_parameters(level: u32, flags: u32) -> Result<(u32, u32), u32> {
-    if !(0x100..=0x3FF).contains(&level) || flags & !SHUTDOWN_NORETRY != 0 {
-        return Err(ERROR_INVALID_PARAMETER);
+    if flags & !SHUTDOWN_NORETRY != 0 {
+        return Err(SHUTDOWN_BAD_FLAGS);
     }
     Ok((level, flags))
 }
@@ -197,11 +215,24 @@ pub fn module_at(modules: &[(u64, u64, Vec<u16>)], address: u64) -> Option<&[u16
     modules.iter().find(|(base, size, _)| address >= *base && address - *base < *size).map(|(_, _, p)| p.as_slice())
 }
 
-/// `GetMappedFileNameW`'s result for a name of `name.len()` characters and a buffer of `size`:
-/// how many characters are copied (a NUL follows them when there is room for it). Learn: "the
-/// return value specifies the length of the string copied to the buffer, in characters".
-pub fn mapped_name_copy(name: &[u16], size: u32) -> usize {
-    name.len().min(size as usize)
+/// `ERROR_INSUFFICIENT_BUFFER` (`winerror.h`).
+pub const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+
+/// `K32GetMappedFileNameW`'s result for a name and a buffer of `size` characters
+/// (`specs/windows/kernel32.dll/K32GetMappedFileNameW.yaml`, rule `small_buffer`): `(characters
+/// of the name to copy, whether a NUL follows them, the return value, the last error to set)`.
+/// A buffer of the name's length + 1 holds the name and its NUL: the return value is the
+/// length. A buffer of n characters that cannot: the first n - 1 characters and a NUL, the
+/// return value n, `ERROR_INSUFFICIENT_BUFFER`; with n = 0 nothing is written and 0 returned.
+pub fn mapped_name_copy(name: &[u16], size: u32) -> (usize, bool, u32, Option<u32>) {
+    let size = size as usize;
+    if size > name.len() {
+        (name.len(), true, name.len() as u32, None)
+    } else if size == 0 {
+        (0, false, 0, Some(ERROR_INSUFFICIENT_BUFFER))
+    } else {
+        (size - 1, true, size as u32, Some(ERROR_INSUFFICIENT_BUFFER))
+    }
 }
 
 #[cfg(test)]
@@ -234,6 +265,11 @@ mod tests {
         assert_eq!(get(&s, &m, PROCESS_POWER_THROTTLING, 4), Err(ERROR_BAD_LENGTH));
         assert_eq!(get(&s, &m, 1, 4), Err(ERROR_INVALID_PARAMETER));
         assert_eq!(get(&s, &m, 200, 4), Err(ERROR_INVALID_PARAMETER));
+        // The sheet: ProcessInPrivateInfo is one byte; the caller's Version must be 1.
+        assert_eq!(get(&s, &m, PROCESS_IN_PRIVATE_INFO, 1), Ok(vec![0]));
+        assert!(power_throttling_version_ok(1));
+        assert!(!power_throttling_version_ok(0));
+        assert!(!power_throttling_version_ok(2));
         let mut s = s;
         // Read-only classes cannot be set.
         assert_eq!(set(&mut s, PROCESS_PROTECTION_LEVEL_INFO, &[0; 4]), Err(ERROR_INVALID_PARAMETER));
@@ -274,9 +310,13 @@ mod tests {
         assert_eq!(shutdown_parameters(0x100, 1), Ok((0x100, 1)));
         assert_eq!(shutdown_parameters(SHUTDOWN_LEVEL_DEFAULT, 0), Ok((0x280, 0)));
         assert_eq!(shutdown_parameters(0x3FF, 0), Ok((0x3FF, 0)));
-        assert_eq!(shutdown_parameters(0xFF, 0), Err(ERROR_INVALID_PARAMETER));
-        assert_eq!(shutdown_parameters(0x400, 0), Err(ERROR_INVALID_PARAMETER));
-        assert_eq!(shutdown_parameters(0x280, 2), Err(ERROR_INVALID_PARAMETER));
+        // The sheet: every level is accepted, a flag other than SHUTDOWN_NORETRY is error 641.
+        for level in [0, 0xFF, 0x400, 0x500, 0x999, 0xFFFF_FFFF] {
+            assert_eq!(shutdown_parameters(level, 1), Ok((level, 1)));
+        }
+        for flags in [2, 3, 0x100, 0xFFFF_FFFF] {
+            assert_eq!(shutdown_parameters(0x280, flags), Err(641));
+        }
     }
 
     #[test]
@@ -296,8 +336,12 @@ mod tests {
         assert_eq!(module_at(&mods, 0x2fff), Some(&[1u16, 2][..]));
         assert_eq!(module_at(&mods, 0x3000), None);
         assert_eq!(module_at(&mods, 0), None);
-        assert_eq!(mapped_name_copy(&name, 260), name.len());
-        assert_eq!(mapped_name_copy(&name, 10), 10);
-        assert_eq!(mapped_name_copy(&name, 0), 0);
+        let n = name.len();
+        assert_eq!(mapped_name_copy(&name, 260), (n, true, n as u32, None));
+        assert_eq!(mapped_name_copy(&name, n as u32 + 1), (n, true, n as u32, None));
+        // The sheet: a buffer of the name's length or less is cut, with error 122.
+        assert_eq!(mapped_name_copy(&name, n as u32), (n - 1, true, n as u32, Some(122)));
+        assert_eq!(mapped_name_copy(&name, 10), (9, true, 10, Some(122)));
+        assert_eq!(mapped_name_copy(&name, 0), (0, false, 0, Some(122)));
     }
 }

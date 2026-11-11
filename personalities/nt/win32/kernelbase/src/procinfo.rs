@@ -83,6 +83,14 @@ pub unsafe extern "system" fn GetProcessInformation(process: Handle, class: u32,
             memory.available_commit = u64::from_le_bytes(status[32..40].try_into().expect("8 bytes"));
         }
     }
+    // The sheet's rule `version_first`: the caller's buffer says Version 1 before the call.
+    // SAFETY: the caller's buffer of `size` bytes (at least the field when the size is right).
+    if class == procinfo::PROCESS_POWER_THROTTLING
+        && size as usize == 12
+        && !procinfo::power_throttling_version_ok(unsafe { info.cast::<u32>().read_unaligned() })
+    {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
     match procinfo::get(&state_of(own), &memory, class, size as usize) {
         Ok(bytes) => {
             // SAFETY: the caller's buffer holds `size` bytes, which is `bytes.len()`.
@@ -154,6 +162,19 @@ pub unsafe extern "system" fn GetProcessShutdownParameters(level: *mut u32, flag
     TRUE
 }
 
+/// `ProcessIdToSessionId(dwProcessId, pSessionId)`: "Retrieves the Remote Desktop Services
+/// session associated with a specified process" (Learn). Poly has one session: every process
+/// is in the caller's (`PEB.SessionId`, PEB + 0x2C0, `winternl.h`). Doc-derived.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ProcessIdToSessionId(_process_id: u32, session: *mut u32) -> i32 {
+    if session.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the PEB is mapped; the caller's out-pointer.
+    unsafe { session.write_unaligned(((peb() + 0x2C0) as *const u32).read()) };
+    TRUE
+}
+
 /// `ERROR_FILE_INVALID` (`winerror.h`): the address is not in a mapped file.
 const ERROR_FILE_INVALID: u32 = 1006;
 /// `ObjectNameInformation` (`OBJECT_INFORMATION_CLASS`, `ntifs.h`).
@@ -218,7 +239,7 @@ fn device_name(path: &[u16]) -> Option<Vec<u16>> {
 /// any address of another process, is `ERROR_FILE_INVALID`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn K32GetMappedFileNameW(process: Handle, address: u64, name: *mut u16, size: u32) -> u32 {
-    if name.is_null() || size == 0 {
+    if name.is_null() {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
     match is_self(process) {
@@ -229,13 +250,16 @@ pub unsafe extern "system" fn K32GetMappedFileNameW(process: Handle, address: u6
     let modules = module_spans();
     let Some(path) = procinfo::module_at(&modules, address) else { return fail(ERROR_FILE_INVALID, 0) };
     let Some(device) = device_name(path) else { return fail(ERROR_FILE_INVALID, 0) };
-    let n = procinfo::mapped_name_copy(&device, size);
-    // SAFETY: the caller's buffer holds `size` characters; `n <= size`.
+    let (n, nul, ret, error) = procinfo::mapped_name_copy(&device, size);
+    // SAFETY: the caller's buffer holds `size` characters; `n` and the NUL fit in it.
     unsafe {
         core::ptr::copy_nonoverlapping(device.as_ptr(), name, n);
-        if n < size as usize {
+        if nul {
             name.add(n).write(0);
         }
     }
-    n as u32
+    if let Some(e) = error {
+        set_last_error(e);
+    }
+    ret
 }

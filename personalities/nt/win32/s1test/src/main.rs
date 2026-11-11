@@ -191,6 +191,7 @@ unsafe extern "system" {
     fn DestroyWindow(h: Hwnd) -> i32;
     fn DefWindowProcW(h: Hwnd, msg: u32, w: usize, l: isize) -> isize;
     fn IsWindow(h: Hwnd) -> i32;
+    fn GetDesktopWindow() -> Hwnd;
     fn IsWindowVisible(h: Hwnd) -> i32;
     fn GetClassNameW(h: Hwnd, buf: *mut u16, max: i32) -> i32;
     fn GetWindowThreadProcessId(h: Hwnd, pid: *mut u32) -> u32;
@@ -1040,9 +1041,15 @@ unsafe fn step9() {
     let query: unsafe extern "system" fn(usize, u32, u32, *mut *mut u8, *mut u32) -> i32 =
         core::mem::transmute(delay_load("WTSAPI32.dll", c"WTSQuerySessionInformationW"));
     let free: unsafe extern "system" fn(*mut u8) = core::mem::transmute(delay_load("WTSAPI32.dll", c"WTSFreeMemory"));
-    check_eq(register(0x1234, 0) as usize, 1);
-    check_eq(unregister(0x1234) as usize, 1);
+    // The sheet: what is no window is ERROR_INVALID_PARAMETER for both; a window is registered,
+    // unregistered, and then not registered (ERROR_FILE_NOT_FOUND).
+    check_fail(register(0x1234, 0) as usize, ERROR_INVALID_PARAMETER);
+    check_fail(unregister(0x1234) as usize, ERROR_INVALID_PARAMETER);
     check_fail(register(0, 0) as usize, ERROR_INVALID_PARAMETER);
+    let desktop = GetDesktopWindow();
+    check_eq(register(desktop, 0) as usize, 1);
+    check_eq(unregister(desktop) as usize, 1);
+    check_fail(unregister(desktop) as usize, 2);
     let (mut block, mut bytes) = (core::ptr::null_mut(), 0u32);
     // WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTSConnectState: WTSActive (0).
     check_eq(query(0, u32::MAX, 8, &mut block, &mut bytes) as usize, 1);
@@ -1102,7 +1109,10 @@ unsafe fn step9() {
     let (mut level, mut flags) = (0u32, 0u32);
     check_eq(GetProcessShutdownParameters(&mut level, &mut flags) as usize, 1);
     check_got(level == 0x100 && flags == 1, level);
-    check_fail(SetProcessShutdownParameters(0x500, 0) as usize, ERROR_INVALID_PARAMETER);
+    // The sheet: every level is accepted; a flag other than SHUTDOWN_NORETRY is error 641.
+    check_eq(SetProcessShutdownParameters(0x500, 0) as usize, 1);
+    check_fail(SetProcessShutdownParameters(0x100, 2) as usize, 641);
+    check_eq(SetProcessShutdownParameters(0x100, 1) as usize, 1);
     let mut name = [0u16; 260];
     let n =
         K32GetMappedFileNameW(GetCurrentProcess(), s1test_main as *const () as usize, name.as_mut_ptr(), 260) as usize;

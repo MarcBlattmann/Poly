@@ -408,6 +408,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("SetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),
     ("GetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),
     ("K32GetMappedFileNameW", "api-ms-win-core-psapi-l1-1-0"),
+    ("ProcessIdToSessionId", "api-ms-win-core-processthreads-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our

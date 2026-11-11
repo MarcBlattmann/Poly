@@ -12,11 +12,13 @@
 //! "InitCommonControlsEx function (commctrl.h)" and "INITCOMMONCONTROLSEX". Doc-derived, not
 //! observed on Windows.
 
-use crate::error::{ERROR_INVALID_PARAMETER, ERROR_NOT_SUPPORTED};
+use crate::error::ERROR_INVALID_PARAMETER;
 use alloc::vec::Vec;
 
 // ----- wtsapi32 -------------------------------------------------------------------------------
 
+/// The last error for a session that does not exist (the sheet: 1733, as observed).
+pub const WTS_UNKNOWN_SESSION: u32 = 1733;
 /// `WTS_CURRENT_SESSION` (`wtsapi32.h`).
 pub const WTS_CURRENT_SESSION: u32 = 0xFFFF_FFFF;
 /// `WTS_INFO_CLASS` values (`wtsapi32.h`).
@@ -30,6 +32,12 @@ pub const WTS_DOMAIN_NAME: u32 = 7;
 pub const WTS_CONNECT_STATE: u32 = 8;
 pub const WTS_CLIENT_NAME: u32 = 10;
 pub const WTS_CLIENT_PROTOCOL_TYPE: u32 = 16;
+/// `WTSSessionInfoEx`: a `WTSINFOEXW` (the class Chrome asks, the sheet's `wtsq_chrome`).
+pub const WTS_SESSION_INFO_EX: u32 = 25;
+/// `sizeof(WTSINFOEXW)` on x64 (`wtsapi32.h`: `Level`, then `WTSINFOEX_LEVEL1_W`).
+pub const WTSINFOEX_SIZE: usize = 232;
+/// `WTS_SESSIONSTATE_UNLOCK` (`wtsapi32.h`): the session is not locked.
+pub const WTS_SESSIONSTATE_UNLOCK: u32 = 1;
 pub const WTS_IS_REMOTE_SESSION: u32 = 29;
 /// `WTSActive` (`WTS_CONNECTSTATE_CLASS`): "A user is logged on to the WinStation".
 pub const WTS_ACTIVE: u32 = 0;
@@ -43,6 +51,8 @@ pub struct Session<'a> {
     pub user: &'a [u16],
     /// The computer's name: the "domain" of a local account.
     pub computer: &'a [u16],
+    /// The current time as a `FILETIME` (for `WTSINFOEX_LEVEL1_W.CurrentTime`).
+    pub now: u64,
 }
 
 fn text(s: &[u16]) -> Vec<u8> {
@@ -52,13 +62,16 @@ fn text(s: &[u16]) -> Vec<u8> {
 /// `WTSQuerySessionInformationW(server, session, class)`: the bytes the caller gets (strings
 /// with their NUL). `session` must be `WTS_CURRENT_SESSION` or this session's id
 /// (`ERROR_INVALID_PARAMETER` otherwise: Poly has no other session); a class Poly has no answer
-/// for is `ERROR_NOT_SUPPORTED`.
+/// for is `ERROR_INVALID_PARAMETER` too (the sheet: class 100 is error 87, the out pointer
+/// untouched).
 ///
 /// The session is the console's: the WinStation is `Console`, the protocol type 0 ("the console
 /// session", Learn), not remote, no client name, no initial program.
 pub fn wts_query(s: &Session<'_>, session: u32, class: u32) -> Result<Vec<u8>, u32> {
-    if session != WTS_CURRENT_SESSION && session != s.id {
-        return Err(ERROR_INVALID_PARAMETER);
+    // The sheet's rule `unknown_session`: a session that does not exist is error 1733 (as
+    // observed), except for `WTSClientProtocolType`, which answers for it all the same.
+    if session != WTS_CURRENT_SESSION && session != s.id && class != WTS_CLIENT_PROTOCOL_TYPE {
+        return Err(WTS_UNKNOWN_SESSION);
     }
     let console: Vec<u16> = "Console".encode_utf16().collect();
     Ok(match class {
@@ -70,7 +83,24 @@ pub fn wts_query(s: &Session<'_>, session: u32, class: u32) -> Result<Vec<u8>, u
         WTS_CONNECT_STATE => WTS_ACTIVE.to_le_bytes().to_vec(),
         WTS_CLIENT_PROTOCOL_TYPE => 0u16.to_le_bytes().to_vec(),
         WTS_IS_REMOTE_SESSION => alloc::vec![0u8],
-        _ => return Err(ERROR_NOT_SUPPORTED),
+        WTS_SESSION_INFO_EX => {
+            // WTSINFOEXW: Level 1 at 0; WTSINFOEX_LEVEL1_W at 8: SessionId, SessionState,
+            // SessionFlags, WinStationName[33] at 20, UserName[21] at 86, DomainName[18] at
+            // 128, the five times at 168 (CurrentTime the last, at 200), six counters at 208.
+            let mut b = alloc::vec![0u8; WTSINFOEX_SIZE];
+            b[0..4].copy_from_slice(&1u32.to_le_bytes());
+            b[8..12].copy_from_slice(&s.id.to_le_bytes());
+            b[12..16].copy_from_slice(&WTS_ACTIVE.to_le_bytes());
+            b[16..20].copy_from_slice(&WTS_SESSIONSTATE_UNLOCK.to_le_bytes());
+            for (at, text, room) in [(20usize, &console[..], 32usize), (86, s.user, 20), (128, s.computer, 17)] {
+                for (i, c) in text.iter().take(room).enumerate() {
+                    b[at + 2 * i..at + 2 * i + 2].copy_from_slice(&c.to_le_bytes());
+                }
+            }
+            b[200..208].copy_from_slice(&s.now.to_le_bytes());
+            b
+        }
+        _ => return Err(ERROR_INVALID_PARAMETER),
     })
 }
 
@@ -84,7 +114,12 @@ pub fn wts_register(hwnd: usize, flags: u32) -> Result<(), u32> {
 // ----- powrprof -------------------------------------------------------------------------------
 
 /// `POWER_INFORMATION_LEVEL` values (`winnt.h`).
+pub const SYSTEM_POWER_CAPABILITIES: u32 = 4;
+/// `sizeof(SYSTEM_POWER_CAPABILITIES)` (`winnt.h`; the sheet: 76 bytes).
+pub const SYSTEM_POWER_CAPABILITIES_SIZE: usize = 76;
 pub const SYSTEM_BATTERY_STATE: u32 = 5;
+/// `SystemExecutionState`: a `ULONG` of `ES_*` bits (the sheet's `cnpi_levels`).
+pub const SYSTEM_EXECUTION_STATE: u32 = 16;
 pub const PROCESSOR_INFORMATION: u32 = 11;
 /// `STATUS_SUCCESS`, `STATUS_BUFFER_TOO_SMALL`, `STATUS_INVALID_PARAMETER`,
 /// `STATUS_NOT_SUPPORTED` (`ntstatus.h`).
@@ -114,6 +149,10 @@ pub fn power_information(level: u32, processors: u32, output_size: usize) -> Res
     match level {
         PROCESSOR_INFORMATION => {
             let n = processors.max(1);
+            // The sheet's test: no output bytes at all is STATUS_INVALID_PARAMETER.
+            if output_size == 0 {
+                return Err(STATUS_INVALID_PARAMETER);
+            }
             if output_size < n as usize * PROCESSOR_POWER_INFORMATION_SIZE {
                 return Err(STATUS_BUFFER_TOO_SMALL);
             }
@@ -132,6 +171,25 @@ pub fn power_information(level: u32, processors: u32, output_size: usize) -> Res
             let mut out = alloc::vec![0u8; SYSTEM_BATTERY_STATE_SIZE];
             out[0] = 1;
             Ok(out)
+        }
+        SYSTEM_POWER_CAPABILITIES => {
+            if output_size < SYSTEM_POWER_CAPABILITIES_SIZE {
+                return Err(STATUS_BUFFER_TOO_SMALL);
+            }
+            // SYSTEM_POWER_CAPABILITIES (winnt.h) of a desktop: a power button
+            // (`PowerButtonPresent`, byte 0) and soft off (`SystemS5`, byte 7); no sleep states,
+            // no lid, no batteries.
+            let mut out = alloc::vec![0u8; SYSTEM_POWER_CAPABILITIES_SIZE];
+            out[0] = 1;
+            out[7] = 1;
+            Ok(out)
+        }
+        SYSTEM_EXECUTION_STATE => {
+            if output_size < 4 {
+                return Err(STATUS_BUFFER_TOO_SMALL);
+            }
+            // No thread asks the system to stay awake: no `ES_*` bit.
+            Ok(alloc::vec![0u8; 4])
         }
         _ => Err(STATUS_NOT_SUPPORTED),
     }
@@ -163,7 +221,7 @@ mod tests {
     #[test]
     fn the_console_session_answers_the_classes_a_browser_asks() {
         let (user, computer) = (w("poly"), w("POLY-PC"));
-        let s = Session { id: 1, user: &user, computer: &computer };
+        let s = Session { id: 1, user: &user, computer: &computer, now: 0x01DC_0000_0000_0000 };
         assert_eq!(wts_query(&s, WTS_CURRENT_SESSION, WTS_SESSION_ID), Ok(vec![1, 0, 0, 0]));
         assert_eq!(wts_query(&s, 1, WTS_CONNECT_STATE), Ok(vec![0, 0, 0, 0]));
         assert_eq!(wts_query(&s, 1, WTS_CLIENT_PROTOCOL_TYPE), Ok(vec![0, 0]));
@@ -175,8 +233,16 @@ mod tests {
         assert_eq!(&station[..2], &[b'C', 0]);
         assert_eq!(wts_query(&s, 1, WTS_DOMAIN_NAME).unwrap().len(), 16);
         // Another session, a class without an answer.
-        assert_eq!(wts_query(&s, 2, WTS_SESSION_ID), Err(ERROR_INVALID_PARAMETER));
-        assert_eq!(wts_query(&s, 1, 24), Err(ERROR_NOT_SUPPORTED));
+        assert_eq!(wts_query(&s, 2, WTS_SESSION_ID), Err(1733));
+        assert_eq!(wts_query(&s, 0x7FFF, WTS_CLIENT_PROTOCOL_TYPE), Ok(vec![0, 0]));
+        assert_eq!(wts_query(&s, 1, 100), Err(ERROR_INVALID_PARAMETER));
+        // WTSSessionInfoEx: 232 bytes, level 1, this session, active, unlocked, "Console".
+        let ex = wts_query(&s, WTS_CURRENT_SESSION, WTS_SESSION_INFO_EX).unwrap();
+        let d = |at: usize| u32::from_le_bytes(ex[at..at + 4].try_into().unwrap());
+        assert_eq!((ex.len(), d(0), d(8), d(12), d(16)), (232, 1, 1, 0, 1));
+        assert_eq!((ex[20], ex[22], ex[20 + 14]), (b'C', b'o', 0));
+        assert_eq!((ex[86], ex[128]), (b'p', b'P'));
+        assert_eq!(ex[207], 0x01);
     }
 
     #[test]
@@ -195,6 +261,9 @@ mod tests {
         assert_eq!((q(0), q(4), q(8), q(12), q(16), q(20)), (0, 3000, 3000, 3000, 0, 0));
         assert_eq!(q(24), 1);
         assert_eq!(power_information(PROCESSOR_INFORMATION, 2, 47), Err(STATUS_BUFFER_TOO_SMALL));
+        assert_eq!(power_information(PROCESSOR_INFORMATION, 2, 0), Err(STATUS_INVALID_PARAMETER));
+        let caps = power_information(SYSTEM_POWER_CAPABILITIES, 2, 76).unwrap();
+        assert_eq!((caps.len(), caps[0], caps[7]), (76, 1, 1));
         assert_eq!(power_information(PROCESSOR_INFORMATION, 0, 24).map(|b| b.len()), Ok(24));
     }
 
@@ -206,6 +275,7 @@ mod tests {
         assert!(b[1..].iter().all(|&x| x == 0));
         assert_eq!(power_information(SYSTEM_BATTERY_STATE, 4, 8), Err(STATUS_BUFFER_TOO_SMALL));
         assert_eq!(power_information(12, 4, 64), Err(STATUS_NOT_SUPPORTED));
+        assert_eq!(power_information(SYSTEM_EXECUTION_STATE, 4, 4), Ok(alloc::vec![0u8; 4]));
     }
 
     #[test]

@@ -54,6 +54,21 @@ pub fn path(folder: &KnownFolder, variable: impl Fn(&str) -> Option<Vec<u16>>) -
     Ok(out)
 }
 
+/// `KF_FLAG_NOT_PARENT_RELATIVE`, `KF_FLAG_DEFAULT_PATH`, `KF_FLAG_ALIAS_ONLY`
+/// (`KNOWN_FOLDER_FLAG`, `shlobj_core.h`).
+pub const KF_FLAG_NOT_PARENT_RELATIVE: u32 = 0x200;
+pub const KF_FLAG_DEFAULT_PATH: u32 = 0x400;
+pub const KF_FLAG_ALIAS_ONLY: u32 = 0x8000_0000;
+
+/// Whether `SHGetKnownFolderPath` takes these flags
+/// (`specs/windows/shell32.dll/SHGetKnownFolderPath.yaml`, rule `flags_refused`):
+/// `KF_FLAG_NOT_PARENT_RELATIVE` without `KF_FLAG_DEFAULT_PATH`, and `KF_FLAG_ALIAS_ONLY`, are
+/// `E_INVALIDARG`; the other flags change nothing on a folder that exists.
+pub fn flags_accepted(flags: u32) -> bool {
+    let lonely = flags & KF_FLAG_NOT_PARENT_RELATIVE != 0 && flags & KF_FLAG_DEFAULT_PATH == 0;
+    !lonely && flags & KF_FLAG_ALIAS_ONLY == 0
+}
+
 /// `SHGetKnownFolderPath`'s answer for an id: the path, or the `HRESULT`.
 pub fn known_folder_path(id: &[u8; 16], variable: impl Fn(&str) -> Option<Vec<u16>>) -> Result<Vec<u16>, u32> {
     path(lookup(id).ok_or(E_INVALIDARG)?, variable)
@@ -717,7 +732,7 @@ pub const KNOWN_FOLDERS: &[KnownFolder] = &[
     (
         "System",
         [0x77, 0x4E, 0xC1, 0x1A, 0xE7, 0x02, 0x5D, 0x4E, 0xB7, 0x44, 0x2E, 0xB1, 0xAE, 0x51, 0x98, 0xB7],
-        "%windir%\\System32",
+        "%windir%\\system32",
     ),
     // FOLDERID_SystemX86 {D65231B0-B2F1-4857-A4CE-A8E7C6EA7D27}
     (
@@ -837,7 +852,7 @@ mod tests {
         assert_eq!(text("3EB685DB-65F9-4CF6-A03A-E3EF65729F3D").as_deref(), Ok("C:\\Users\\poly\\AppData\\Roaming"));
         assert_eq!(text("5E6C858F-0E22-4760-9AFE-EA3317B67173").as_deref(), Ok("C:\\Users\\poly"));
         assert_eq!(text("F38BF404-1D43-42F2-9305-67DE0B28FC23").as_deref(), Ok("C:\\Windows"));
-        assert_eq!(text("1AC14E77-02E7-4E5D-B744-2EB1AE5198B7").as_deref(), Ok("C:\\Windows\\System32"));
+        assert_eq!(text("1AC14E77-02E7-4E5D-B744-2EB1AE5198B7").as_deref(), Ok("C:\\Windows\\system32"));
         assert_eq!(text("905E63B6-C1BF-494E-B29C-65B732D3D21A").as_deref(), Ok("C:\\Program Files"));
         assert_eq!(text("7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E").as_deref(), Ok("C:\\Program Files (x86)"));
         // Folders below a variable.
@@ -874,5 +889,12 @@ mod tests {
             }
         }
         assert_eq!(lookup(&guid("FDD39AD0-238F-46AF-ADB4-6C85480369C7")).map(|f| f.0), Some("Documents"));
+        // The sheet's flags.
+        for flags in [0, 0x4000, 0x8000, 0x2000, 0x1000, 0x400, 0x600, 0x100, 0x1, 0xFF] {
+            assert!(flags_accepted(flags), "{flags:#x}");
+        }
+        for flags in [0x200, 0x8000_0000, 0x8000_0400] {
+            assert!(!flags_accepted(flags), "{flags:#x}");
+        }
     }
 }

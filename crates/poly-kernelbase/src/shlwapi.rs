@@ -2,11 +2,11 @@
 //! utility" functions Chrome's browser delay-loads. Without the DLL the browser ends itself
 //! with a breakpoint (the delay load of `SHLWAPI.dll` fails).
 //!
-//! Sources, all Microsoft Learn (`shlwapi.h`): "PathMatchSpecW", "PathMatchSpecExW" (what a
-//! pattern list is: patterns separated by semicolons, leading spaces of each ignored),
-//! "PathFindExtensionW", "PathFindFileNameW", "PathRemoveExtensionW", "IsOS" (the table of
-//! `OS_*` values and which of them are always FALSE or TRUE), "QISearch" and "QITAB". None of
-//! it was observed on Windows.
+//! Sources: `PathMatchSpecW` follows its spec sheet
+//! (`specs/windows/shlwapi.dll/PathMatchSpecW.yaml`). The others are Microsoft Learn's
+//! (`shlwapi.h`): "PathFindExtensionW", "PathFindFileNameW", "PathRemoveExtensionW", "IsOS" (the
+//! table of `OS_*` values and which of them are always FALSE or TRUE), "QISearch" and "QITAB";
+//! those were not observed on Windows.
 
 use alloc::vec::Vec;
 
@@ -19,57 +19,93 @@ const STAR: u16 = b'*' as u16;
 const QUESTION: u16 = b'?' as u16;
 const SEMICOLON: u16 = b';' as u16;
 
-/// Upper case of one UTF-16 unit, for the case-insensitive comparison of file names (the simple
-/// one-to-one mappings; a unit without one is itself).
-fn upper(c: u16) -> u16 {
-    match char::from_u32(u32::from(c)) {
-        Some(ch) => {
-            let mut up = ch.to_uppercase();
-            match (up.next(), up.next()) {
-                (Some(u), None) if (u as u32) <= 0xFFFF => u as u32 as u16,
-                _ => c,
-            }
-        }
-        None => c,
+/// The character two letters are compared by: the sheet's rule `case`. Letters match "where the
+/// two letters are a simple upper/lower pair of the old Windows upper-case table". That table
+/// has the one-to-one pairs whose lower-case letter is the lower case of its upper-case letter
+/// (so the long s, the dotless i, the micro sign, the final sigma and the title-case digraphs
+/// stand alone), and none of the pairs Unicode added later (Georgian, Cherokee).
+fn fold(c: u16) -> u16 {
+    if matches!(c, 0x10D0..=0x10FF | 0x13A0..=0x13FF | 0x1C90..=0x1CBF | 0xAB70..=0xABBF) {
+        return c;
+    }
+    let Some(ch) = char::from_u32(u32::from(c)) else { return c };
+    let mut up = ch.to_uppercase();
+    let (Some(u), None) = (up.next(), up.next()) else { return c };
+    let mut back = u.to_lowercase();
+    match (back.next(), back.next()) {
+        (Some(l), None) if l == ch && (u as u32) <= 0xFFFF => u as u32 as u16,
+        _ => c,
     }
 }
 
-/// Whether `name` matches one MS-DOS wildcard pattern: `*` stands for any run of characters
-/// (also none), `?` for any one character, everything else for itself without regard to case.
+/// `pattern` without the spaces (U+0020) it starts with.
+fn skip_spaces(pattern: &[u16]) -> &[u16] {
+    let start = pattern.iter().position(|&c| c != SPACE).unwrap_or(pattern.len());
+    &pattern[start..]
+}
+
+/// Whether `rest` (what follows a wildcard) is `.?` or `.*`: an extension that may be missing.
+fn optional_extension(rest: &[u16]) -> bool {
+    rest.len() == 2 && rest[0] == DOT && (rest[1] == QUESTION || rest[1] == STAR)
+}
+
+/// Whether `name` matches one pattern, by the rules of
+/// `specs/windows/shlwapi.dll/PathMatchSpecW.yaml` (named in the comments).
 pub fn wildcard_match(name: &[u16], pattern: &[u16]) -> bool {
-    // The classic two-pointer match with one backtrack point (the last `*`).
-    let (mut n, mut p) = (0, 0);
-    let mut star: Option<(usize, usize)> = None;
-    while n < name.len() {
-        if p < pattern.len() && pattern[p] == STAR {
-            star = Some((p, n));
-            p += 1;
-        } else if p < pattern.len() && (pattern[p] == QUESTION || upper(pattern[p]) == upper(name[n])) {
-            n += 1;
-            p += 1;
-        } else if let Some((sp, sn)) = star {
-            // Let the last `*` take one more character.
-            star = Some((sp, sn + 1));
-            p = sp + 1;
-            n = sn + 1;
-        } else {
-            return false;
-        }
+    // star_dot_star: a pattern that is exactly `*.*` matches whatever is left, also nothing.
+    if pattern == [STAR, DOT, STAR] {
+        return true;
     }
-    pattern[p..].iter().all(|&c| c == STAR)
+    let Some((&first, raw_rest)) = pattern.split_first() else {
+        // empty_pattern: matches only the empty name.
+        return name.is_empty();
+    };
+    match first {
+        STAR => {
+            // star: a `*` that is the last character matches whatever is left.
+            if raw_rest.is_empty() {
+                return true;
+            }
+            // missing_extension: at the name's end, `.?` or `.*` right behind the wildcard.
+            if name.is_empty() && optional_extension(raw_rest) {
+                return true;
+            }
+            // spaces_after_star: spaces right after the `*` are dropped, and spaces right after
+            // a dot that follows the `*` directly; a `*` followed only by spaces matches nothing.
+            let after = skip_spaces(raw_rest);
+            if after.is_empty() {
+                return false;
+            }
+            let mut rest: Vec<u16> = Vec::with_capacity(after.len());
+            if after[0] == DOT {
+                rest.push(DOT);
+                rest.extend_from_slice(skip_spaces(&after[1..]));
+            } else {
+                rest.extend_from_slice(after);
+            }
+            // star: the rest must match from a character that is still there.
+            (0..name.len()).any(|i| wildcard_match(&name[i..], &rest))
+        }
+        QUESTION => match name.split_first() {
+            Some((_, tail)) => wildcard_match(tail, raw_rest),
+            // question_mark: at the name's end a `?` matches if it is the pattern's last
+            // character; missing_extension: or if `.?` / `.*` is all that follows.
+            None => raw_rest.is_empty() || optional_extension(raw_rest),
+        },
+        // literals: every other character matches itself, without regard to case.
+        c => match name.split_first() {
+            Some((&n, tail)) => fold(n) == fold(c) && wildcard_match(tail, raw_rest),
+            None => false,
+        },
+    }
 }
 
-/// `PathMatchSpecW(pszFile, pszSpec)`: whether the name matches the specification. Learn's
-/// page for the function shows one pattern (`*.c`); `PathMatchSpecExW` says how a list is
-/// written (patterns separated by semicolons, leading spaces of each ignored) and that the
-/// older function is that one with its defaults. Poly reads the specification as such a list:
-/// the name matches if it matches any pattern. An empty pattern matches nothing but an empty
-/// name.
+/// `PathMatchSpecW(pszFile, pszSpec)` (`specs/windows/shlwapi.dll/PathMatchSpecW.yaml`): an
+/// empty spec matches every name (rule `empty_spec`); otherwise the spec is cut at every
+/// semicolon, the spaces each pattern starts with are dropped (`leading_spaces`), and the name
+/// matches if it matches any pattern (`list`).
 pub fn path_match_spec(file: &[u16], spec: &[u16]) -> bool {
-    spec.split(|&c| c == SEMICOLON).any(|pattern| {
-        let start = pattern.iter().position(|&c| c != SPACE).unwrap_or(pattern.len());
-        wildcard_match(file, &pattern[start..])
-    })
+    spec.is_empty() || spec.split(|&c| c == SEMICOLON).any(|pattern| wildcard_match(file, skip_spaces(pattern)))
 }
 
 /// `PathFindExtensionW`: the index of the `.` that starts the extension, or `path.len()` (the
@@ -153,39 +189,141 @@ mod tests {
         path_match_spec(&w(file), &w(spec))
     }
 
+    /// The examples of the sheet, rule by rule.
     #[test]
-    fn wildcards_match_as_ms_dos_patterns_do() {
-        assert!(m("main.c", "*.c"));
-        assert!(m("MAIN.C", "*.c"));
-        assert!(!m("main.cpp", "*.c"));
-        assert!(m("main.cpp", "*.c*"));
-        assert!(m("a", "?"));
-        assert!(!m("ab", "?"));
-        assert!(!m("", "?"));
-        assert!(m("", "*"));
-        assert!(m("anything.at.all", "*"));
-        assert!(m("chrome.exe", "chrome.exe"));
-        assert!(m("chrome.exe", "c*e.e?e"));
-        assert!(m("abcabc", "*abc"));
-        assert!(m("xaybzc", "*a*b*c"));
-        assert!(!m("xaybz", "*a*b*c"));
-        assert!(m("C:\\dir\\file.txt", "*.txt"));
-        assert!(m("", ""));
-        assert!(!m("a", ""));
-        // Case folding beyond ASCII.
-        assert!(m("\u{e4}.txt", "\u{c4}.TXT"));
+    fn path_match_spec_follows_the_sheet() {
+        let yes = |file: &str, spec: &str| assert!(m(file, spec), "{file:?} ~ {spec:?} should match");
+        let no = |file: &str, spec: &str| assert!(!m(file, spec), "{file:?} ~ {spec:?} should not match");
+        // empty_spec, list, leading_spaces, empty_pattern.
+        yes("a", "");
+        yes("", "");
+        yes("a.c", "*.c;*.txt");
+        yes("a.txt", "*.c;*.txt");
+        no("a.h", "*.c;*.txt");
+        yes("a;b", "a*b");
+        no("a;b", "a;b");
+        yes("a.txt", " *.txt");
+        yes("a.doc", "*.txt; *.doc");
+        no("a.txt", "*.txt ");
+        yes("a.doc", "*.txt ;*.doc");
+        no("a.txt", "*.txt ;*.doc");
+        yes("", ";");
+        no("a", ";");
+        yes("", " ");
+        no("a", " ");
+        // literals.
+        no("file", "file.");
+        no("file.", "file");
+        yes("MAIN.C", "*.c");
+        // question_mark.
+        yes("a", "a?");
+        yes("ab", "a?");
+        yes("ab", "???");
+        yes("abc", "???");
+        yes("", "?");
+        no("a", "a??");
+        yes("ac", "a??");
+        // star.
+        yes("abc", "abc*");
+        yes("", "*");
+        no("a", "a**");
+        no("", "**");
+        no("", "*?");
+        no("", "?*");
+        no("abc", "abc*?");
+        yes("ab", "a**");
+        yes("ab", "a*?");
+        // star_dot_star.
+        yes("file", "*.*");
+        yes("CURRENT", "*.*");
+        yes("", "*.*");
+        yes("f", "f*.*");
+        yes("file", "f*.*");
+        yes("file.", "*.*.*");
+        yes(".file", "*.*.*");
+        no("file", "*.*.*");
+        // missing_extension.
+        for spec in ["*.?", "?.?", "?.*"] {
+            yes("", spec);
+        }
+        for spec in ["f*.?", "f?.?", "f?.*"] {
+            yes("f", spec);
+        }
+        for spec in ["*.?.?", "*.*.?"] {
+            yes("f.", spec);
+            yes(".", spec);
+        }
+        no("f", "*.?");
+        no("", ".?");
+        no("", "*. ?");
+        // spaces_after_star.
+        for spec in ["* .txt", "*. txt", "*  .txt"] {
+            yes("a.txt", spec);
+            no("a. txt", spec);
+        }
+        yes("ab.txt", "a*. txt");
+        no("a", "* ");
+        no("", "* ");
+        yes("a .txt", "a .txt");
+        no("a.txt", "a .txt");
+        no("a.txt", "?. txt");
+        yes("a. txt", "?. txt");
+        // examples_extension.
+        for name in ["file.txt", ".txt", "a.b.txt", "dir\\file.txt"] {
+            yes(name, "*.txt");
+        }
+        for name in ["file", "file.", "file.txt.bak", "file.tx", "file.txtx"] {
+            no(name, "*.txt");
+        }
+        for name in ["file.txt", "file.txt.bak", "file.tx"] {
+            yes(name, "*.???");
+        }
+        yes("file.", "file.*");
+        yes("file.txt", "file.*");
+        no("file", "file.*");
     }
 
+    /// The sheet's rule `case`: the pairs that match and the letters that stand alone.
     #[test]
-    fn a_specification_is_a_list_of_patterns() {
-        assert!(m("a.txt", "*.c;*.txt"));
-        assert!(m("a.c", "*.c;*.txt"));
-        assert!(!m("a.h", "*.c;*.txt"));
-        // Leading spaces of each pattern are ignored.
-        assert!(m("a.txt", "*.c; *.txt"));
-        assert!(m("a.c", "  *.c;*.txt"));
-        // Trailing spaces are part of the pattern.
-        assert!(!m("a.c", "*.c ;*.txt"));
+    fn letters_match_as_the_old_upper_case_table_pairs_them() {
+        let pair = |a: u16, b: u16| path_match_spec(&[a], &[b]) && path_match_spec(&[b], &[a]);
+        for (a, b) in [
+            (0x61, 0x41),
+            (0xE4, 0xC4),
+            (0xFF, 0x178),
+            (0x3C3, 0x3A3),
+            (0x3BC, 0x39C),
+            (0x436, 0x416),
+            (0x1C6, 0x1C4),
+            (0xFF41, 0xFF21),
+            (0x69, 0x49),
+        ] {
+            assert!(pair(a, b), "{a:#x} and {b:#x} should match");
+        }
+        for (a, b) in [
+            (0x17F, 0x73),
+            (0x17F, 0x53),
+            (0x131, 0x69),
+            (0x131, 0x49),
+            (0x130, 0x69),
+            (0x131, 0x130),
+            (0x212A, 0x6B),
+            (0x212A, 0x4B),
+            (0xB5, 0x3BC),
+            (0xB5, 0x39C),
+            (0x3C2, 0x3C3),
+            (0x3C2, 0x3A3),
+            (0x1C5, 0x1C6),
+            (0x1C5, 0x1C4),
+            (0x10D0, 0x1C90),
+            (0x13A0, 0xAB70),
+            (0xFF41, 0x61),
+            (0xDF, 0x1E9E),
+        ] {
+            assert!(!pair(a, b), "{a:#x} and {b:#x} should not match");
+        }
+        // A sharp s is not "ss".
+        assert!(!m("\u{df}", "ss"));
     }
 
     #[test]

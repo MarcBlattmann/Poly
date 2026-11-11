@@ -21,6 +21,19 @@ unsafe extern "system" {
     fn SetLastError(error: u32);
     fn GetEnvironmentVariableW(name: *const u16, buf: *mut u16, size: u32) -> u32;
     fn GetComputerNameW(buf: *mut u16, size: *mut u32) -> i32;
+    fn GetSystemTimeAsFileTime(time: *mut u64);
+}
+
+#[link(name = "user32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn IsWindow(hwnd: usize) -> i32;
+}
+
+/// Whether `hwnd` is a window (the sheet's rule `not_a_window`: NULL, a value that is no window
+/// and a destroyed window are `ERROR_INVALID_PARAMETER` for both functions).
+fn is_window(hwnd: usize) -> bool {
+    // SAFETY: a plain call.
+    hwnd != 0 && unsafe { IsWindow(hwnd) } != 0
 }
 
 /// `ERROR_INVALID_HANDLE`, `ERROR_INVALID_PARAMETER`, `ERROR_NOT_ENOUGH_MEMORY` (`winerror.h`).
@@ -45,21 +58,56 @@ fn session_id() -> u32 {
     }
 }
 
+/// The windows registered for session notifications (0: a free slot). Poly's session never
+/// changes state, so nothing is ever sent to them; they are kept because unregistering a window
+/// that is not registered fails (the sheet).
+static REGISTERED: [core::sync::atomic::AtomicUsize; 64] = [const { core::sync::atomic::AtomicUsize::new(0) }; 64];
+
+/// `ERROR_FILE_NOT_FOUND` (`winerror.h`): the window is not registered.
+const ERROR_FILE_NOT_FOUND: u32 = 2;
+
 /// `WTSRegisterSessionNotification(hWnd, dwFlags)`: the window is to get
-/// `WM_WTSSESSION_CHANGE`. Poly's session never changes state, so nothing is ever sent and
-/// nothing has to be remembered.
+/// `WM_WTSSESSION_CHANGE`.
 #[unsafe(no_mangle)]
 pub extern "system" fn WTSRegisterSessionNotification(hwnd: usize, flags: u32) -> i32 {
-    match session::wts_register(hwnd, flags) {
-        Ok(()) => 1,
-        Err(e) => fail(e),
+    use core::sync::atomic::Ordering;
+    if let Err(e) = session::wts_register(hwnd, flags) {
+        return fail(e);
     }
+    if !is_window(hwnd) {
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    if REGISTERED.iter().any(|slot| slot.load(Ordering::Acquire) == hwnd) {
+        return 1;
+    }
+    for slot in &REGISTERED {
+        if slot.compare_exchange(0, hwnd, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            return 1;
+        }
+    }
+    fail(ERROR_NOT_ENOUGH_MEMORY)
 }
 
-/// `WTSUnRegisterSessionNotification(hWnd)`.
+/// `WTSUnRegisterSessionNotification(hWnd)`: FALSE with `ERROR_FILE_NOT_FOUND` for a window
+/// that is not registered (`specs/windows/wtsapi32.dll/WTSRegisterSessionNotification.yaml`).
 #[unsafe(no_mangle)]
 pub extern "system" fn WTSUnRegisterSessionNotification(hwnd: usize) -> i32 {
-    if hwnd == 0 { fail(ERROR_INVALID_PARAMETER) } else { 1 }
+    use core::sync::atomic::Ordering;
+    if !is_window(hwnd) {
+        // A destroyed window's registration goes with it.
+        for slot in &REGISTERED {
+            let _ = slot.compare_exchange(hwnd, 0, Ordering::AcqRel, Ordering::Acquire);
+        }
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    {
+        for slot in &REGISTERED {
+            if slot.compare_exchange(hwnd, 0, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+                return 1;
+            }
+        }
+    }
+    fail(ERROR_FILE_NOT_FOUND)
 }
 
 /// `WTSQuerySessionInformationW(hServer, SessionId, WTSInfoClass, ppBuffer, pBytesReturned)`:
@@ -76,11 +124,6 @@ pub unsafe extern "system" fn WTSQuerySessionInformationW(
     if buffer.is_null() || returned.is_null() {
         return fail(ERROR_INVALID_PARAMETER);
     }
-    // SAFETY: the caller's out-pointers.
-    unsafe {
-        buffer.write(core::ptr::null_mut());
-        returned.write_unaligned(0);
-    }
     if server != 0 {
         return fail(ERROR_INVALID_HANDLE);
     }
@@ -94,7 +137,10 @@ pub unsafe extern "system" fn WTSQuerySessionInformationW(
     // SAFETY: the buffer holds `len` characters.
     let ok = unsafe { GetComputerNameW(computer.as_mut_ptr(), &mut len) };
     let computer = &computer[..if ok != 0 { (len as usize).min(63) } else { 0 }];
-    let s = Session { id: session_id(), user, computer };
+    let mut now = 0u64;
+    // SAFETY: a FILETIME is 8 bytes.
+    unsafe { GetSystemTimeAsFileTime(&mut now) };
+    let s = Session { id: session_id(), user, computer, now };
     let bytes = match session::wts_query(&s, session, class) {
         Ok(b) => b,
         Err(e) => return fail(e),

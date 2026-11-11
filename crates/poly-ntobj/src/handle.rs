@@ -514,6 +514,10 @@ impl ObjectManager {
             let mapped = header.kind.generic_mapping().map(desired);
             if desired == 0 || (mapped & access::MAXIMUM_ALLOWED == 0 && mapped & !src.access == 0) {
                 access::grant(header.kind, desired, header.allowed, caller.mode, false, caller.privileges)?
+            } else if header.kind == ObjectType::File && mapped & access::MAXIMUM_ALLOWED == 0 {
+                // specs/windows/kernel32.dll/DuplicateHandle.yaml, rule `files`: "a file handle
+                // never yields more than it has".
+                return Err(STATUS_ACCESS_DENIED);
             } else {
                 self.checked_access(caller, src.object, desired, false)?
             }

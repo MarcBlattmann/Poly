@@ -448,6 +448,11 @@ const PROCESS_SUSPEND_RESUME: u32 = 0x0800;
 pub fn suspend_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h] = abi::args::<K, 1>(k, regs)?;
     let pid = process_of(k, Handle(h), PROCESS_SUSPEND_RESUME)?;
+    // The sheet: a process that has exited is STATUS_PROCESS_IS_TERMINATING, after the access
+    // check.
+    if k.with_state(|sys, _, _| sys.process_exits.contains_key(&pid)) {
+        return Err(STATUS_PROCESS_IS_TERMINATING);
+    }
     k.suspend_process(pid)?;
     Ok(STATUS_SUCCESS)
 }
@@ -457,6 +462,11 @@ pub fn suspend_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
 pub fn resume_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h] = abi::args::<K, 1>(k, regs)?;
     let pid = process_of(k, Handle(h), PROCESS_SUSPEND_RESUME)?;
+    // The sheet: a process that has exited is STATUS_PROCESS_IS_TERMINATING, after the access
+    // check.
+    if k.with_state(|sys, _, _| sys.process_exits.contains_key(&pid)) {
+        return Err(STATUS_PROCESS_IS_TERMINATING);
+    }
     k.resume_process(pid)?;
     Ok(STATUS_SUCCESS)
 }
