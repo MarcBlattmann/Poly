@@ -73,7 +73,9 @@ fn hiding_the_active_window_hands_the_activation_to_another_process() {
 #[test]
 fn minimizing_a_visible_window_on_the_interactive_desktop() {
     // GetActiveWindow.yaml `minimize_inactive`: B moves to -32000,-32000 (160x28,
-    // flags 0x8170 / 0x8130), no activation; GetFocus.yaml `minimize`: the
+    // flags 0x8170 / 0x8130); the active A is topmost and the thread has no
+    // plain window, so A loses the activation to the other process's plain
+    // window (gaw_min_inactive, scenario 7). GetFocus.yaml `minimize`: the
     // active A with the focus on its child gets the same WINDOWPOS flags and
     // WM_ACTIVATE(WA_INACTIVE, minimized).
     with_env(|e| {
@@ -86,6 +88,8 @@ fn minimizing_a_visible_window_on_the_interactive_desktop() {
                 "B WM_WINDOWPOSCHANGED pos=-32000,-32000 size=160,28 flags=0x8130",
             ]
         );
+        assert_eq!(input_state(e), (0, 0, 0));
+        assert!(crate::user::focus::set_foreground_window(e, a));
         assert_eq!(input_state(e), (a as u32, a as u32, 0));
         // The active A with the focus on its child C.
         let c = create(e, 'C', 0, "Fc", WS_CHILD | WS_VISIBLE, 10, 10, 100, 50, a, 1);

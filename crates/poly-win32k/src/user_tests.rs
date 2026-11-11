@@ -21,6 +21,9 @@ struct TestEnv {
     cursor: Cell<u64>,
     /// GDI regions the tests made: handle and rectangles.
     regions: RefCell<Vec<(u64, Vec<Rect>)>>,
+    /// Give each thread its default IME window with its first window, as
+    /// `user32` does (`replay`).
+    ime: Cell<bool>,
 }
 
 thread_local! {
@@ -80,6 +83,11 @@ impl Env for TestEnv {
     fn set_cursor(&self, cursor: u64) {
         self.cursor.set(cursor);
     }
+    fn window_created(&self, hwnd: u32) {
+        if self.ime.get() {
+            replay::make_ime_window(self, hwnd);
+        }
+    }
     fn region_rects(&self, rgn: u64) -> Option<Vec<Rect>> {
         self.regions.borrow().iter().find(|r| r.0 == rgn).map(|r| r.1.clone())
     }
@@ -102,6 +110,7 @@ fn with_env(f: impl FnOnce(&TestEnv)) {
         err: Cell::new(0),
         cursor: Cell::new(0),
         regions: RefCell::new(Vec::new()),
+        ime: Cell::new(false),
     };
     ENV.with(|p| p.set(&e));
     take_log();
@@ -301,13 +310,19 @@ fn children_and_visible_popups_get_their_messages() {
         // CreateWindowExW.yaml cw_seq_popup_visible: a window created visible
         // is the thread's active one (a WS_EX_NOACTIVATE one too); the first
         // one is not asked to come to the top, one that takes the activation
-        // from it is (0x13; ShowWindow.yaml sw_cmds_hidden: a lone window is not).
+        // from it is (0x13; ShowWindow.yaml `activation_ask`, sw_activation:
+        // the activation messages of session 0, WM_NCACTIVATE with wParam 0).
         create(e, 'N', WS_EX_NOACTIVATE, "C", WS_POPUP | WS_VISIBLE, 10, 10, 120, 90, 0, 0);
         assert_eq!(
             take_log()[5..],
             [
                 "N WM_SHOWWINDOW w=0x1 l=0x0",
                 "N WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x43",
+                "N WM_ACTIVATEAPP w=0x1",
+                "P WM_ACTIVATEAPP w=0x1",
+                "N WM_NCACTIVATE w=0x0",
+                "N WM_ACTIVATE w=0x1",
+                "N WM_SETFOCUS",
                 "N WM_WINDOWPOSCHANGED pos=10,10 size=120,90 flags=0x1847",
             ]
         );
@@ -317,7 +332,13 @@ fn children_and_visible_popups_get_their_messages() {
             [
                 "B WM_SHOWWINDOW w=0x1 l=0x0",
                 "B WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x43",
+                "N WM_NCACTIVATE w=0x0",
+                "N WM_ACTIVATE w=0x0",
                 "B WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x13",
+                "B WM_NCACTIVATE w=0x0",
+                "B WM_ACTIVATE w=0x1",
+                "N WM_KILLFOCUS",
+                "B WM_SETFOCUS",
                 "B WM_WINDOWPOSCHANGED pos=200,10 size=120,90 flags=0x1847",
             ]
         );
@@ -487,7 +508,9 @@ fn nonclient_mouse_move_uses_geometric_hit_without_nchittest_callout() {
 
 #[test]
 fn background_focus_activation_does_not_send_windowposchanged() {
+    // SetActiveWindow.yaml / SetFocus.yaml `background` (the interactive session).
     with_env(|e| {
+        interactive(e);
         register(e, "FocusBackground");
         let a = create(e, 'A', 0, "FocusBackground", WS_POPUP | WS_VISIBLE, 50, 50, 100, 100, 0, 0);
         e.call(Request::SetInput {
@@ -1159,3 +1182,5 @@ mod focus_hunt;
 mod input_hunt;
 #[path = "user_tests/paint.rs"]
 mod paint_hunt;
+#[path = "user_tests/replay.rs"]
+mod replay;

@@ -164,6 +164,9 @@ struct Window {
     /// Minimized while it was maximized: restoring it maximizes it again
     /// (ShowWindow.yaml `restore`).
     restore_max: bool,
+    /// Its thread's default IME window in the interactive session: in the
+    /// z order it follows the thread's active window (`input`, ADR 0176).
+    helper: bool,
 }
 
 #[derive(Debug, Default)]
@@ -232,15 +235,22 @@ pub struct Wm {
     cascade: i32,
     /// The foreground window (`input`).
     foreground: u32,
-    /// The interactive session's window of another process (`input`).
+    /// The interactive session's windows of other processes (`input`): the
+    /// keeper, the hidden window of its process, the console window.
     keeper: u32,
+    keeper_aux: u32,
+    other: u32,
+    /// The window of another process the foreground goes back to when a
+    /// thread of ours gives it up: the one it was taken from.
+    fg_return: u32,
     /// AttachThreadInput: a thread to the queue whose input it shares.
     attached: BTreeMap<Key, Key>,
-    /// The processes that had the foreground at some time, and the threads
-    /// whose next activation takes it although another process has it
-    /// (`input`).
+    /// The right to take the foreground by activating a window (`input`):
+    /// the processes that had the foreground at some time (one that never
+    /// had it may take it: the foreground process started it), and the
+    /// input queues that have the right since.
     fg_seen: alloc::collections::BTreeSet<u32>,
-    fg_grant: alloc::collections::BTreeSet<Key>,
+    fg_right: alloc::collections::BTreeSet<Key>,
     /// The cursor position (screen coordinates).
     cursor: (i32, i32),
     /// The physical key state, keys pressed since GetAsyncKeyState last
@@ -310,9 +320,12 @@ impl Wm {
             cascade: 0,
             foreground: 0,
             keeper: 0,
+            keeper_aux: 0,
+            other: 0,
+            fg_return: 0,
             attached: BTreeMap::new(),
             fg_seen: alloc::collections::BTreeSet::new(),
-            fg_grant: alloc::collections::BTreeSet::new(),
+            fg_right: alloc::collections::BTreeSet::new(),
             cursor: (0, 0),
             async_keys: raw::blank_keys(),
             async_new: alloc::vec![false; 256],
@@ -754,7 +767,15 @@ impl Wm {
         {
             ex |= WS_EX_LAYOUTRTL;
         }
-        if s.style & (WS_DLGFRAME | WS_THICKFRAME) != 0 || ex & WS_EX_DLGMODALFRAME != 0 {
+        // WS_EX_WINDOWEDGE is computed, not kept (ShowWindow.yaml
+        // `tiled_styles`): a popup has it with a dialog or sizing frame
+        // unless it has a static edge.
+        let edge = if s.style & (WS_POPUP | WS_CHILD) == WS_POPUP {
+            crate::metrics::popup_window_edge(s.style, ex)
+        } else {
+            s.style & (WS_DLGFRAME | WS_THICKFRAME) != 0 || ex & WS_EX_DLGMODALFRAME != 0
+        };
+        if edge {
             ex |= WS_EX_WINDOWEDGE;
         } else {
             ex &= !WS_EX_WINDOWEDGE;
@@ -784,13 +805,36 @@ impl Wm {
         win.state = State::Creating;
         win.dpi =
             if child { self.get(u64::from(parent)).map_or(0, |p| p.dpi) } else { self.thread_awareness(ctx.key()) };
+        // The thread's default IME window (class "IME", owned by the
+        // thread's first window) takes part in the z order of the
+        // interactive session: it is in its owner's band and is made
+        // directly below it (GetFocus.yaml `ime_window`).
+        let helper = self.display.interactive
+            && parent == self.desktop
+            && owner != 0
+            && class_name.len() == 3
+            && upcase(&class_name) == [73, 77, 69];
+        if helper && self.get(u64::from(owner)).is_some_and(|o| o.ex_style & WS_EX_TOPMOST != 0) {
+            win.ex_style |= WS_EX_TOPMOST;
+        }
+        win.helper = helper;
+        let topmost = win.ex_style & WS_EX_TOPMOST != 0;
         self.seq += 1;
         win.seq = self.seq;
         let hwnd = self.alloc(win);
-        // Top-level windows go on top; children below their siblings
+        // Top-level windows go on top of their band (the topmost windows
+        // lead the list); children below their siblings
         // (`SetWindowPos.yaml`: GW_CHILD is the first created).
-        // A top-level window that is not topmost goes below the topmost band.
-        let at = self.band_start(parent, ex & WS_EX_TOPMOST != 0);
+        let at = if parent == self.desktop {
+            let mut flags = if topmost { crate::zorder::TOPMOST } else { 0 };
+            if helper {
+                flags |= crate::zorder::HELPER;
+            }
+            let new = crate::zorder::Top { hwnd, queue: self.input_key(ctx.key()), flags, owner };
+            crate::zorder::new_slot(&self.tops(), &new, self.barrier(ctx.key()))
+        } else {
+            0
+        };
         let p = self.get_mut(u64::from(parent)).expect("valid parent");
         if child {
             p.children.push(hwnd);
@@ -815,6 +859,21 @@ impl Wm {
                 asked_cy: s.cy,
             },
         }
+    }
+
+    /// The default IME window of thread `tid`: its top-level window of
+    /// class "IME" (ImmGetDefaultIMEWnd.yaml), 0 if it has none.
+    fn default_ime(&self, tid: u32) -> u32 {
+        let Some(d) = self.get(u64::from(self.desktop)) else { return 0 };
+        d.children
+            .iter()
+            .copied()
+            .find(|&h| {
+                self.get(u64::from(h)).is_some_and(|w| {
+                    w.thread.1 == tid && self.classes[w.class].as_ref().is_some_and(|c| upcase(&c.name) == [73, 77, 69])
+                })
+            })
+            .unwrap_or(0)
     }
 
     /// The top-level window of `h`'s chain of parents (`GA_ROOT`).
@@ -854,6 +913,7 @@ impl Wm {
     /// creation failed): its posted messages and timers go with it.
     fn free_window(&mut self, hwnd: u32) {
         let Some(idx) = self.index(u64::from(hwnd)) else { return };
+        self.rehome_helpers(hwnd);
         let w = self.slots[idx].take().expect("valid");
         self.free.push(idx);
         if let Some(p) = self.get_mut(u64::from(w.parent)) {
@@ -995,54 +1055,60 @@ impl Wm {
         })
     }
 
+    /// Where `SetWindowPos` puts a window among its siblings (`apply`:
+    /// do it), and whether that is a move. Top-level windows follow the
+    /// model of `crate::zorder` (ADR 0176): the top and the bottom are
+    /// those of the window's band, owned windows come along above a raised
+    /// owner, and a thread without the foreground right stays below the
+    /// foreground process's windows.
     fn z_order(&mut self, hwnd: u32, after: u64, apply: bool) -> Reply {
         let Some(w) = self.get(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
         let parent = w.parent;
-        let in_topmost_band = w.ex_style & WS_EX_TOPMOST != 0;
+        let thread = w.thread;
         let was_below = w.below_others;
         let Some(p) = self.get(u64::from(parent)) else { return Reply::Bool { value: false } };
         let old = p.children.clone();
-        let mut new: Vec<u32> = old.iter().copied().filter(|&c| c != hwnd).collect();
+        let top_level = parent == self.desktop;
         let mut raised: Vec<u32> = Vec::new();
-        let below = match after {
+        let (new, below) = match after {
             HWND_TOP | HWND_TOPMOST | HWND_NOTOPMOST => {
                 // Owned windows stay above their owner (Learn: "An owned
-                // window is always above its owner in the z-order").
-                let owned: Vec<u32> =
-                    new.iter().copied().filter(|&c| self.get(u64::from(c)).is_some_and(|o| o.owner == hwnd)).collect();
-                new.retain(|c| !owned.contains(c));
-                // Top of its band: a window outside the topmost band goes
-                // below the topmost windows (HWND_TOPMOST / HWND_NOTOPMOST
-                // leave the style to the caller).
-                let band = if parent == self.desktop && !in_topmost_band {
-                    new.iter()
-                        .take_while(|&&c| self.get(u64::from(c)).is_some_and(|k| k.ex_style & WS_EX_TOPMOST != 0))
-                        .count()
+                // window is always above its owner in the z-order");
+                // HWND_TOPMOST / HWND_NOTOPMOST leave the style to the caller.
+                if top_level {
+                    let list = self.tops();
+                    raised = list.iter().filter(|t| t.owner == hwnd).map(|t| t.hwnd).collect();
+                    (crate::zorder::raise(&list, hwnd, self.barrier(thread)), false)
                 } else {
-                    0
-                };
-                new.insert(band, hwnd);
-                for (i, &o) in owned.iter().enumerate() {
-                    new.insert(band + i, o);
+                    let mut new: Vec<u32> = old.iter().copied().filter(|&c| c != hwnd).collect();
+                    new.insert(0, hwnd);
+                    (new, false)
                 }
-                raised = owned;
-                false
             }
             HWND_BOTTOM => {
-                new.push(hwnd);
-                true
-            }
-            a => match new.iter().position(|&c| u64::from(c) == a & 0xFFFF_FFFF) {
-                Some(i) => {
-                    let below = self.get(u64::from(new[i])).is_some_and(|k| k.below_others);
-                    new.insert(i + 1, hwnd);
-                    below
+                if top_level {
+                    (crate::zorder::sink(&self.tops(), hwnd), true)
+                } else {
+                    let mut new: Vec<u32> = old.iter().copied().filter(|&c| c != hwnd).collect();
+                    new.push(hwnd);
+                    (new, false)
                 }
-                None => return Reply::Bool { value: false },
-            },
+            }
+            a => {
+                let mut new: Vec<u32> = old.iter().copied().filter(|&c| c != hwnd).collect();
+                match new.iter().position(|&c| u64::from(c) == a & 0xFFFF_FFFF) {
+                    Some(i) => {
+                        let below = top_level && self.get(u64::from(new[i])).is_some_and(|k| k.below_others);
+                        new.insert(i + 1, hwnd);
+                        (new, below)
+                    }
+                    None => return Reply::Bool { value: false },
+                }
+            }
         };
-        // Only top-level windows lie among other processes' windows.
-        let below = below && parent == self.desktop;
+        // A process's only window in a session without other processes'
+        // windows (session 0): the list alone cannot say that it went to
+        // the bottom (ShowWindow.yaml `z_order`).
         let changed = new != old || below != was_below;
         if apply && changed {
             self.get_mut(u64::from(parent)).expect("valid").children = new;
@@ -1520,7 +1586,7 @@ impl Wm {
         let (wndproc, unicode) = (win.wndproc, win.unicode);
         // The desktop and the message window have no thread of their own:
         // their default procedure runs in the sender.
-        if to == ctx.key() || to.0 == SYSTEM_DESKTOP_PID || to == input::KEEPER {
+        if to == ctx.key() || to.0 == SYSTEM_DESKTOP_PID || input::foreign(to) {
             return Reply::SameThread { wndproc, unicode, hwnd: hwnd as u32 };
         }
         let id = self.next_send;
@@ -1665,6 +1731,7 @@ impl Wm {
             }
         }
         self.timers.retain(|t| t.thread != key);
+        self.fg_right.remove(&key);
         self.clip.thread_gone(pid, tid);
         self.ime.thread_gone(key);
         if let Some(q) = self.queues.remove(&key) {
@@ -1944,7 +2011,13 @@ impl Wm {
             Request::ThreadInput { tid } => self.thread_input(ctx.pid, tid),
             Request::GiveForeground { hwnd } => {
                 self.give_foreground(hwnd);
+                self.handed_away(ctx.key(), hwnd);
                 Reply::Ok {}
+            }
+            Request::NextActive { hwnd, cause } => self.next_active(ctx.key(), hwnd, cause),
+            Request::DefaultIme { tid } => {
+                let tid = if tid == 0 { ctx.tid } else { tid };
+                Reply::Handle { hwnd: self.default_ime(tid) }
             }
             Request::AttachInput { tid, attach } => self.attach_input(ctx.key(), tid, attach),
             Request::SendInput { events } => Reply::Value { value: u64::from(self.send_input(ctx, &events, fx)) },
@@ -2056,6 +2129,7 @@ impl Window {
             region: None,
             below_others: false,
             restore_max: false,
+            helper: false,
         }
     }
 }

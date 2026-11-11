@@ -310,6 +310,13 @@ crate::wire_enum! {
         /// Whether the calling process takes the foreground when it shows
         /// or creates a window (`wm::input`): a `Bool`.
         61 => MayTakeForeground {},
+        /// Who takes the activation when window `hwnd` of the calling
+        /// thread is hidden (`cause` 0), destroyed (1) or minimized (2):
+        /// a `Next` (`crate::zorder::successor`, ADR 0176).
+        62 => NextActive { hwnd: u32, cause: u8 },
+        /// The default IME window of thread `tid` (0: the calling one): a
+        /// `Handle`, 0 when it has none.
+        63 => DefaultIme { tid: u32 },
         /// `RegisterWindowMessageW`: the message number (0xC000..=0xFFFF) of a
         /// name, the same for every caller of the session and the same
         /// number as a class of that name has as its atom; an `Atom`.
@@ -375,6 +382,11 @@ crate::wire_enum! {
         22 => Windows { hwnds: Vec<u32> },
         23 => Input { active: u32, focus: u32, capture: u32, foreground: u32, fg_mine: bool },
         24 => Keys { keys: Vec<u8> },
+        /// What becomes of the activation (`Request::NextActive`): `kind` 0
+        /// nothing changes, 1 window `hwnd` of the thread takes it, 2 the
+        /// thread loses it and `hwnd` gets the foreground (0: the window
+        /// of another process that had it before).
+        25 => Next { kind: u8, hwnd: u32 },
         100 => Clip { res: crate::clip::ClipRes },
         105 => Ime { res: crate::ime::ImeRes },
     }

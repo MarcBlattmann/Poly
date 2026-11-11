@@ -1,8 +1,9 @@
 //! Our `imm32.dll` (ADR 0172): input contexts without any IME. Contexts
 //! and the window association are win32k's (`poly_win32k::ime`); this DLL
 //! maps the `Imm*` calls onto them, sends the `WM_IME_SETCONTEXT` pair an
-//! association change makes in the active window, and keeps each thread's
-//! default IME window. Sheets: `specs/windows/imm32.dll/Imm*.yaml`.
+//! association change makes in the active window, and names each thread's
+//! default IME window (which `user32` makes). Sheets:
+//! `specs/windows/imm32.dll/Imm*.yaml`.
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
@@ -11,7 +12,7 @@ extern crate alloc;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use poly_win32_gui::{SpinLock, set_last_error};
+use poly_win32_gui::set_last_error;
 use poly_win32_rt as _;
 use poly_win32k::ime::{Assoc, ImeOp, ImeRes};
 use poly_win32k::proto::{Reply, Request, WinInfo};
@@ -27,24 +28,6 @@ unsafe extern "system" {
     fn SendMessageW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
     fn GetGUIThreadInfo(tid: u32, gti: *mut u8) -> i32;
     fn PrivateLayoutInstalled(hkl: usize) -> i32;
-    fn CreateWindowExW(
-        ex: u32,
-        class: *const u16,
-        name: *const u16,
-        style: u32,
-        x: i32,
-        y: i32,
-        w: i32,
-        h: i32,
-        parent: usize,
-        menu: usize,
-        instance: usize,
-        param: *mut u8,
-    ) -> usize;
-    fn RegisterClassExW(wc: *const u8) -> u16;
-    fn DefWindowProcW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
-    fn IsWindow(hwnd: usize) -> i32;
-    fn EnumThreadWindows(tid: u32, f: Option<unsafe extern "system" fn(usize, isize) -> i32>, l: isize) -> i32;
 }
 
 #[link(name = "kernel32", kind = "raw-dylib")]
@@ -432,98 +415,21 @@ fn get_form(himc: usize, kind: u8, form: *mut u8, size: usize) -> i32 {
 
 // ----- the default IME window of a thread
 
-/// (thread, its IME window).
-static IME_WINDOWS: SpinLock<Vec<(u32, usize)>> = SpinLock::new(Vec::new());
-
-const WS_POPUP: u32 = 0x8000_0000;
-const WS_DISABLED: u32 = 0x0800_0000;
-const WS_CLIPSIBLINGS: u32 = 0x0400_0000;
-
-static IME_CLASS: [u16; 4] = [b'I' as u16, b'M' as u16, b'E' as u16, 0];
-
-/// Called by `user32` when a thread creates a window: its first one gets
-/// the hidden "IME" window, owned by it.
-#[unsafe(no_mangle)]
-pub extern "system" fn PolyImmWindowCreated(first: usize) {
-    // SAFETY: no preconditions.
-    let tid = unsafe { GetCurrentThreadId() };
-    let have = IME_WINDOWS.with(|w| match w.iter().position(|e| e.0 == tid) {
-        Some(k) => {
-            // SAFETY: a user32 query. (An entry of 0 is the window being created.)
-            if w[k].1 == 0 || unsafe { IsWindow(w[k].1) } != 0 {
-                true
-            } else {
-                w.remove(k);
-                false
-            }
-        }
-        None => false,
-    });
-    if have {
-        return;
-    }
-    // Reserve the slot first: creating the window calls back here.
-    IME_WINDOWS.with(|w| w.push((tid, 0)));
-    // WNDCLASSEXW (80 bytes): cbSize, style, wndproc, extra, extra, instance, icon, cursor, brush, menu name, class name, small icon.
-    let mut wc = [0u8; 80];
-    wc[0..4].copy_from_slice(&80u32.to_le_bytes());
-    wc[8..16].copy_from_slice(&(DefWindowProcW as *const () as usize as u64).to_le_bytes());
-    wc[64..72].copy_from_slice(&(IME_CLASS.as_ptr() as u64).to_le_bytes());
-    // SAFETY: a valid class description; the class may exist already.
-    unsafe { RegisterClassExW(wc.as_ptr()) };
-    // SAFETY: creating a hidden popup owned by the thread's first window.
-    let h = unsafe {
-        CreateWindowExW(
-            0,
-            IME_CLASS.as_ptr(),
-            IME_CLASS.as_ptr(),
-            WS_POPUP | WS_DISABLED | WS_CLIPSIBLINGS,
-            0,
-            0,
-            0,
-            0,
-            first,
-            0,
-            0,
-            core::ptr::null_mut(),
-        )
-    };
-    IME_WINDOWS.with(|w| {
-        if let Some(e) = w.iter_mut().find(|e| e.0 == tid) {
-            e.1 = h;
-        }
-    });
-}
-
-unsafe extern "system" fn any_window(_hwnd: usize, l: isize) -> i32 {
-    // SAFETY: `l` is our counter.
-    unsafe { *(l as *mut u32) += 1 };
-    1
-}
-
+/// `user32` makes each thread's hidden "IME" window with the thread's
+/// first window; win32k knows which one it is.
 #[unsafe(no_mangle)]
 pub extern "system" fn ImmGetDefaultIMEWnd(hwnd: usize) -> usize {
     let tid = if hwnd == 0 {
-        // SAFETY: no preconditions.
-        unsafe { GetCurrentThreadId() }
+        0
     } else {
         match info(hwnd) {
             Some(i) if !i.desktop => i.tid,
             _ => return 0,
         }
     };
-    let found = IME_WINDOWS.with(|w| w.iter().find(|e| e.0 == tid).map(|e| e.1));
-    match found {
-        // SAFETY: a user32 query.
-        Some(h) if h != 0 && unsafe { IsWindow(h) } != 0 => h,
-        _ => {
-            // The thread's windows may have ended with its IME window.
-            let mut n = 0u32;
-            // SAFETY: counting callback on our counter.
-            unsafe { EnumThreadWindows(tid, Some(any_window), &mut n as *mut u32 as isize) };
-            let _ = n;
-            0
-        }
+    match call(Request::DefaultIme { tid }) {
+        Reply::Handle { hwnd } => hwnd as usize,
+        _ => 0,
     }
 }
 

@@ -179,7 +179,7 @@ impl Surfaces {
         // Bottom to top, so an owner has its surface before what it owns.
         for &h in tops.iter().rev() {
             let Some(i) = wm.info(h) else { continue };
-            if i.pid == 0 || i.message_only || wm.is_keeper(h) {
+            if i.pid == 0 || i.message_only || wm.is_foreign(h) {
                 continue;
             }
             let client = i.client;

@@ -73,6 +73,10 @@ process's windows it goes to the keeper, a 16x16 popup of no process of
 ours in the screen's bottom-right corner, which is the foreground window
 at the start of an interactive session.
 
+The z order of top-level windows and who takes the activation when a
+window goes are one model since [ADR 0176](0176-one-model-for-the-z-order-of-top-level-windows-and-the-activation-hand-over.md),
+which replaces what this section and section 7 say about them.
+
 ### 4. Raw input, the key state and the keyboard layout
 
 SendInput's events (and, later, the desktop link's) go through `wm::raw`:
