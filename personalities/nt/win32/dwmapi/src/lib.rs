@@ -16,6 +16,7 @@ unsafe extern "system" {
     fn IsWindow(hwnd: usize) -> i32;
     fn GetDesktopWindow() -> usize;
     fn GetWindowLongW(hwnd: usize, index: i32) -> i32;
+    fn GetLayeredWindowAttributes(hwnd: usize, key: *mut u32, alpha: *mut u8, flags: *mut u32) -> i32;
     fn GetWindowRect(hwnd: usize, rect: *mut i32) -> i32;
     fn SetPropW(hwnd: usize, key: *const u16, data: usize) -> i32;
     fn GetPropW(hwnd: usize, key: *const u16) -> usize;
@@ -40,7 +41,6 @@ const E_INSUFFICIENT: i32 = 0x8007_007Au32 as i32;
 const DWM_E_NOT_PRESENTING: i32 = 0x8898_0090u32 as i32;
 
 const WS_CHILD: u32 = 0x4000_0000;
-const WS_CAPTION: u32 = 0x00C0_0000;
 const GWL_STYLE: i32 = -16;
 const GWL_EXSTYLE: i32 = -20;
 
@@ -77,6 +77,33 @@ pub extern "system" fn DwmGetCompositionTimingInfo(_hwnd: usize, _info: *mut u8)
 fn style(hwnd: usize) -> u32 {
     // SAFETY: a user32 call on a window handle.
     unsafe { GetWindowLongW(hwnd, GWL_STYLE) as u32 }
+}
+
+fn ex_style(hwnd: usize) -> u32 {
+    // SAFETY: a user32 call on a window handle.
+    unsafe { GetWindowLongW(hwnd, GWL_EXSTYLE) as u32 }
+}
+
+/// The attribute number the "UpdateLayeredWindow has been called" mark is kept under.
+const LAYERED_UPDATED: u32 = 91;
+
+/// A layered window that has no attributes yet: neither
+/// `SetLayeredWindowAttributes` nor `UpdateLayeredWindow` has been called
+/// (`DwmGetWindowAttribute.yaml` `layered`).
+fn layered_unset(hwnd: usize) -> bool {
+    if ex_style(hwnd) & guic::WS_EX_LAYERED == 0 {
+        return false;
+    }
+    // SAFETY: no outputs asked for.
+    let set = unsafe {
+        GetLayeredWindowAttributes(hwnd, core::ptr::null_mut(), core::ptr::null_mut(), core::ptr::null_mut())
+    };
+    set == 0 && stored(hwnd, LAYERED_UPDATED).is_none()
+}
+
+/// The style and extended style the window manager judges the window by.
+fn frame_styles(hwnd: usize) -> (u32, u32) {
+    guic::dwm_style_of(style(hwnd), ex_style(hwnd), layered_unset(hwnd))
 }
 
 fn is_window(hwnd: usize) -> bool {
@@ -162,7 +189,10 @@ const NC_EFFECTIVE: u32 = 90;
 fn effective(hwnd: usize) -> bool {
     match stored(hwnd, NC_EFFECTIVE) {
         Some(v) => v != 0,
-        None => style(hwnd) & WS_CAPTION == WS_CAPTION,
+        None => {
+            let (style, ex) = frame_styles(hwnd);
+            guic::dwm_nc_rendering(style, ex)
+        }
     }
 }
 
@@ -264,7 +294,10 @@ pub unsafe extern "system" fn DwmSetWindowAttribute(hwnd: usize, attr: u32, valu
         let before = effective(hwnd);
         store(hwnd, attr, v);
         let after = match v {
-            0 => style(hwnd) & WS_CAPTION == WS_CAPTION,
+            0 => {
+                let (style, ex) = frame_styles(hwnd);
+                guic::dwm_nc_rendering(style, ex)
+            }
             1 => false,
             2 => true,
             _ => before,
@@ -331,16 +364,16 @@ pub unsafe extern "system" fn DwmGetWindowAttribute(hwnd: usize, attr: u32, out:
             let mut r = [0i32; 4];
             // SAFETY: a RECT out.
             unsafe { GetWindowRect(hwnd, r.as_mut_ptr()) };
-            let inset = guic::dwm_frame_inset(style(hwnd));
+            let (style, ex) = frame_styles(hwnd);
+            let inset = guic::dwm_frame_inset(style, ex);
             put_rect(out, [r[0] + inset, r[1], r[2] - inset, r[3] - inset])
         }
         CAPTION_BUTTON_BOUNDS => {
             let mut r = [0i32; 4];
             // SAFETY: a RECT out.
             unsafe { GetWindowRect(hwnd, r.as_mut_ptr()) };
-            // SAFETY: a user32 call on a window handle.
-            let ex = unsafe { GetWindowLongW(hwnd, GWL_EXSTYLE) as u32 };
-            put_rect(out, guic::dwm_caption_buttons(style(hwnd), ex, r[2] - r[0]))
+            let (style, ex) = frame_styles(hwnd);
+            put_rect(out, guic::dwm_caption_buttons(style, ex, r[2] - r[0]))
         }
         _ => E_INVALIDARG,
     }

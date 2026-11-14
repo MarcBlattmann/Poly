@@ -70,7 +70,13 @@ summary: >
   was wrong by one.) A number above 4294967295 is not refused for its
   size: only its low 32 bits are used, so "4294967296 0 1" is accepted
   and reads back as "0 0 1", "0 4294967301 1" reads back with outside 5,
-  and a count of 4294967296 is a count of 0 (EINVAL). The numbers are
+  and a count of 4294967296 is a count of 0 (EINVAL). This holds however
+  long the number is: only its value modulo 2^32 counts, also for numbers
+  above 64 bits (a 29 digit "99999999999999999999999999999" as inside start
+  reads back as 2684354559, a 31 digit "1000000000000000000000000000001" as
+  1073741825, 18446744073709551616 as a count is 0 and EINVAL, as a start 0,
+  and 18446744073709551615 as a start is 4294967295, EINVAL); there is no
+  error for a number that does not fit in 64 bits. The numbers are
   decimal only: a leading 0 does not make them octal ("010 0 1" maps id
   ten), "0x10" and a leading "+" are EINVAL. A write that is refused
   leaves the map unwritten: a correct write afterwards is accepted (the

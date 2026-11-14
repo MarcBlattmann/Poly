@@ -20,7 +20,7 @@ use poly_rt::fs::File;
 use poly_rt::net::UnixStream;
 use poly_rt::poll::PollEntry;
 use poly_rt::sys;
-use poly_wayland::compose::{Framebuffer, Rect};
+use poly_wayland::compose::{Framebuffer, Rect, Scale};
 use poly_wayland::wire::Fd;
 
 /// What happened, as the app hears it.
@@ -31,7 +31,7 @@ pub enum AppEvent {
     Resized {
         width: i32,
         height: i32,
-        scale: i32,
+        scale: Scale,
     },
     Key(KeyInput),
     /// The pointer moved to (`x`, `y`), logical.
@@ -495,14 +495,17 @@ pub fn run(app: &mut dyn App, title: &str, app_id: &str, size: (i32, i32), min: 
             let Some(c) = canvas.as_mut() else { continue };
             let drawn = app.draw(c, &ui, full);
             let s = ui.scale;
+            let buffer = Rect::new(0, 0, bw, bh);
             let damage: Vec<Rect> = if full {
-                alloc::vec![Rect::new(0, 0, bw, bh)]
+                alloc::vec![buffer]
             } else {
+                let (lw, lh) = client.size();
                 drawn
-                    .unwrap_or_else(|| alloc::vec![Rect::new(0, 0, bw / s, bh / s)])
+                    .unwrap_or_else(|| alloc::vec![Rect::new(0, 0, lw, lh)])
                     .into_iter()
                     .chain(dirty.drain(..))
-                    .map(|r| r.scale(s))
+                    .map(|r| s.rect_out(r).intersect(&buffer))
+                    .filter(|r| !r.is_empty())
                     .collect()
             };
             dirty.clear();

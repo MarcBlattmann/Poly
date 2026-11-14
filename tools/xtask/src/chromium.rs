@@ -841,7 +841,7 @@ fn unpack_dir() -> PathBuf {
 /// for the same lock, the dpkg database for one).
 fn index_stamp() -> Result<String> {
     let text = std::fs::read(root().join(LOCK)).map_err(|e| format!("{LOCK}: {e}"))?;
-    Ok(format!("poly-chromium-index/3 {}", crate::sha256::hex(&text)))
+    Ok(format!("poly-chromium-index/4 {}", crate::sha256::hex(&text)))
 }
 
 fn write_index(path: &Path, stamp: &str, entries: &[Unpacked]) -> Result {
@@ -1006,6 +1006,9 @@ struct DpkgDb {
     /// `info/` files: name, mode, contents.
     info: Vec<(String, u16, Vec<u8>)>,
     interests: Vec<(String, Vec<poly_pkg::dpkgdb::Interest>)>,
+    /// The names of the packages it was made of: what the installer does not
+    /// uninstall (`poly_pkg::remove::BASE_PACKAGES`, ADR 0180).
+    names: BTreeSet<String>,
 }
 
 impl DpkgDb {
@@ -1038,6 +1041,7 @@ impl DpkgDb {
         let text = Self::text(control, "control").ok_or("no control file")?;
         let paragraph = poly_pkg::control::first(text).ok_or("an empty control file")?;
         let stem = poly_pkg::dpkgdb::info_stem(&paragraph).ok_or("no Package field")?;
+        self.names.insert(paragraph.get("Package").unwrap_or_default().trim().to_string());
         let conffiles: Vec<(String, String)> = Self::text(control, "conffiles")
             .map(poly_pkg::dpkgdb::conffile_paths)
             .unwrap_or_default()
@@ -1079,6 +1083,18 @@ impl DpkgDb {
         for (name, mode, data) in self.info {
             out.push((format!("var/lib/dpkg/info/{name}"), mode, data));
         }
+        // What the base root is made of, so the installer leaves it alone.
+        let base: String = self
+            .names
+            .iter()
+            .map(|n| {
+                format!(
+                    "{n}
+"
+                )
+            })
+            .collect();
+        out.push((poly_pkg::remove::BASE_PACKAGES.trim_start_matches('/').to_string(), 0o644, base.into_bytes()));
         for (name, text) in poly_pkg::dpkgdb::triggers_files(&self.interests) {
             out.push((format!("var/lib/dpkg/triggers/{name}"), 0o644, text.into_bytes()));
         }

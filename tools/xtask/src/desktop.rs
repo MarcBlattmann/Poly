@@ -397,7 +397,8 @@ pub struct Prepared {
     chromium_disk: Option<PathBuf>,
     state: PathBuf,
     size: (u32, u32),
-    scale: u32,
+    /// The compositor's scale as it takes it (`1`, `1.25`, `1.5`, `2`).
+    scale: String,
     /// Whether `--scale` was given.
     asked: bool,
     host: Option<hostscreen::Screen>,
@@ -421,30 +422,30 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
         return Err("--fresh-disk is for --chromium's disk (the desktop's own image is made afresh every time)".into());
     }
     let value = |name: &str| args.iter().find_map(|a| a.strip_prefix(name)).map(str::to_string);
+    // The scale asked for, in percent (ADR 0179: fractions too).
     let asked = match value("--scale=") {
-        Some(v) => {
-            Some(v.parse::<u32>().ok().filter(|s| (1..=4).contains(s)).ok_or(format!("--scale={v}: expected 1 to 4"))?)
-        }
+        Some(v) => Some(parse_scale_percent(&v).ok_or(format!("--scale={v}: expected 1 to 4, such as 2, 1.5 or 150"))?),
         None => None,
     };
     let resources = crate::resources::Resources::from_args(args)?;
     let host = hostscreen::main_screen();
     // (size, scale) for the host's main screen.
     let fitted = host.map(|h| hostscreen::fit(SIZE, h, WINDOW_TITLE));
-    let scale = asked.or(fitted.map(|f| f.1)).unwrap_or(1);
+    let percent = asked.or(fitted.map(|f| f.1 * 100)).unwrap_or(100);
     let size = match value("--size=") {
         Some(v) => parse_size(&v).ok_or(format!("--size={v}: expected WxH, such as 2560x1600"))?,
         None => match fitted {
-            Some((size, s)) if asked.is_none() || asked == Some(s) => size,
-            _ => (SIZE.0 * scale, SIZE.1 * scale),
+            Some((size, s)) if asked.is_none() || asked == Some(s * 100) => size,
+            _ => (SIZE.0 * percent / 100, SIZE.1 * percent / 100),
         },
     };
+    let scale = scale_text(percent);
     let extra: Vec<String> = args.iter().filter(|a| !a.starts_with("--")).cloned().collect();
     let state = root().join("target").join(STATE_FILE);
     // What the compositor is asked on Chromium's disk, where its first
     // program is not its own (`poly-desktop` reads them from a file).
     let mut compositor_args = vec!["--settings".to_string(), CHROMIUM_SETTINGS.to_string()];
-    if asked.is_some() || scale != 1 {
+    if asked.is_some() || percent != 100 {
         compositor_args.extend(["--scale".to_string(), scale.to_string()]);
     }
     let (kernel, image, disk) = thread::scope(|s| {
@@ -495,7 +496,7 @@ pub fn boot(p: Prepared) -> Result {
     // a run at another scale may have saved): asked for, or the host's when
     // that is not 1. At scale 1 the settings choose, as before.
     let force =
-        if asked || scale != 1 { format!("poly.init.arg=--scale poly.init.arg={scale}") } else { String::new() };
+        if asked || scale != "1" { format!("poly.init.arg=--scale poly.init.arg={scale}") } else { String::new() };
     // From Chromium's disk the first program is the initramfs's shell, which
     // switches to the disk (`poly-desktop` there starts the compositor, with
     // the arguments `prepare` wrote for it); the settings disk is the second
@@ -570,6 +571,37 @@ fn parse_qmp_port(args: &[String]) -> Result<Option<u16>> {
 /// The height of QEMU's window title bar, in logical pixels (room left
 /// for it when the window is fitted to the screen).
 const WINDOW_TITLE: u32 = 32;
+
+/// A scale as `--scale=` gives it: a factor from 1 to 4 (`2`, `1.5`, `1.25`)
+/// or a percentage from 100 to 400 (`150`, `150%`), as a percentage.
+fn parse_scale_percent(v: &str) -> Option<u32> {
+    let v = v.trim();
+    let (digits, percent) = v.strip_suffix('%').map_or((v, false), |d| (d.trim(), true));
+    let p = if let Some((whole, frac)) = digits.split_once('.') {
+        if percent
+            || frac.is_empty()
+            || frac.len() > 2
+            || !whole.chars().chain(frac.chars()).all(|c| c.is_ascii_digit())
+        {
+            return None;
+        }
+        let f: u32 = frac.parse().ok()?;
+        whole.parse::<u32>().ok()? * 100 + if frac.len() == 1 { f * 10 } else { f }
+    } else {
+        let n: u32 = digits.parse().ok()?;
+        if percent || n >= 100 { n } else { n * 100 }
+    };
+    (100..=400).contains(&p).then_some(p)
+}
+
+/// A percentage as the compositor reads it: `1`, `1.5`, `1.25`.
+fn scale_text(percent: u32) -> String {
+    match (percent / 100, percent % 100) {
+        (w, 0) => format!("{w}"),
+        (w, f) if f % 10 == 0 => format!("{w}.{}", f / 10),
+        (w, f) => format!("{w}.{f:02}"),
+    }
+}
 
 /// `WxH` as a screen size (each side 320 to 8192).
 fn parse_size(v: &str) -> Option<(u32, u32)> {
@@ -1464,6 +1496,175 @@ pub fn resize_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
 }
 
+/// Boot group `desktop-scale` (ADR 0179): the display scale is switched to
+/// 150 % in the settings while a window is open, and the desktop follows:
+///
+/// 1. the settings' Displays page offers 150 % and clicking it sets it
+///    (`poly-compositor: scale 150%`), the screen staying 1280x800 physical
+///    pixels and becoming 853x533 logical ones;
+/// 2. the demo window's frame has the same border (2 pixels, one logical
+///    pixel rounded) and title bar (36 pixels, 24 logical) as it is placed
+///    anywhere, and its content starts right inside them, in one colour (no
+///    blur at the edge);
+/// 3. the shell's ridge is 36 pixels high with a sharp lower edge;
+/// 4. a click at the physical place of the frame's maximize button reaches
+///    it (the pointer, the drawing and the hit-testing use one conversion),
+///    and the maximized window fills the work area.
+pub fn scale_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    if cfg!(not(unix)) {
+        eprintln!("==> skipped: the desktop-scale boot test needs a Unix host (QMP)");
+        return Ok(());
+    }
+    let image = image(true)?;
+    eprintln!("==> boot test: the display scale switched to 150 % in the settings (shell, frames, pointer)");
+    let socket = std::env::temp_dir().join(format!("poly-scale-qmp-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&socket);
+    let mut qemu_args = vec![
+        "-initrd".to_string(),
+        image.display().to_string(),
+        "-qmp".to_string(),
+        format!("unix:{},server=on,wait=off", socket.display()),
+    ];
+    qemu_args.extend(devices());
+    let lines: Lines = Arc::default();
+    let result: Arc<Mutex<Option<std::result::Result<(), String>>>> = Arc::default();
+    let (seen, outcome, path) = (Arc::clone(&lines), Arc::clone(&result), socket.clone());
+    let mut started = false;
+    let on_line = move |line: &str| {
+        seen.lock().unwrap_or_else(|e| e.into_inner()).push(line.to_string());
+        if !started && line.contains(READY) {
+            started = true;
+            let (lines, outcome, path) = (Arc::clone(&seen), Arc::clone(&outcome), path.clone());
+            thread::spawn(move || {
+                let r = drive_scale(&path, lines);
+                *outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+            });
+        }
+    };
+    let b: Result<Boot> = super::with_boot_timeout(Duration::from_secs(420), || {
+        boot_with(kernel, syms, MEMORY, &append(""), super::Devices::None, &qemu_args, None, on_line)
+    });
+    let _ = std::fs::remove_file(&socket);
+    let b = b?;
+    match result.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        Some(Ok(())) => Ok(()),
+        Some(Err(e)) => Err(e),
+        None if !b.output.contains(READY) => {
+            Err(format!("the desktop never came up (QEMU status {:?}, timed out: {})", b.status, b.timed_out))
+        }
+        None => Err("the desktop-scale boot test did not finish".into()),
+    }
+}
+
+/// A logical length at 150 % in physical pixels (halves up, as
+/// `Scale::px` rounds).
+fn at_150(v: i32) -> i32 {
+    (3 * v + 1).div_euclid(2)
+}
+
+/// The steps of `desktop-scale`.
+fn drive_scale(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
+    let shots = shots_dir();
+    std::fs::create_dir_all(&shots).map_err(|e| format!("{}: {e}", shots.display()))?;
+    let qmp = screen::Qmp::connect(socket, Duration::from_secs(20))?;
+    let mut d = Driver { qmp, lines, shots, step: 600 };
+    let r = scale_steps(&mut d);
+    if r.is_err() {
+        // Do not leave QEMU running until the group's timeout.
+        d.qmp.quit();
+    }
+    r
+}
+
+fn scale_steps(d: &mut Driver) -> std::result::Result<(), String> {
+    thread::sleep(Duration::from_millis(500));
+    let img = d.shot("scale-100")?;
+    expect("the screen starts at 1280x800", (img.width, img.height) == SIZE)?;
+
+    // The demo window, then the settings on its Displays page.
+    d.type_text(&["d", "e", "m", "o"])?;
+    d.wait("launcher query \"demo\"", 30)?;
+    d.type_text(&["ret"])?;
+    let (x, y, w, h) = shown(d, "Poly Demo", 90)?;
+    thread::sleep(Duration::from_millis(1000));
+    chord(d, &["meta_l", "i"])?;
+    d.wait("settings window opened", 30)?;
+    let (sx, sy, _, _) = shown(d, "Settings", 30)?;
+    thread::sleep(Duration::from_millis(800));
+    click(d, sx + 562, sy + 291)?; // Home's Displays card
+    thread::sleep(Duration::from_millis(1000));
+    d.shot("scale-displays-page")?;
+    click(d, sx + 721, sy + 236)?; // 150 %
+    d.wait("poly-compositor: scale 150%", 30)?;
+    thread::sleep(Duration::from_millis(2000));
+    d.shot("scale-150-settings")?;
+
+    // The settings away; the demo window is what is left.
+    chord(d, &["alt", "f4"])?;
+    d.wait("settings window closed", 30)?;
+    thread::sleep(Duration::from_millis(1500));
+    // Its frame at 150 %: a 2 pixel border to the left of the content and a
+    // 36 pixel title bar above it, whichever colours (active or not).
+    let borders: [[u8; 3]; 2] = [[0x3b, 0x3b, 0x39], [0x2e, 0x2e, 0x2d]];
+    let titles: [[u8; 3]; 2] = [[0x1a, 0x1a, 0x19], [0x24, 0x24, 0x23]];
+    // The logical screen is 853x533: a window that reached below it was
+    // shifted up until its frame (the border below included) is on it.
+    let y = y.min(533 - 1 - h);
+    let (cx, cy) = (at_150(x) as u32, at_150(y) as u32);
+    // A row in the demo's top band (its middle has a stripe of another colour).
+    let mid = cy + 20;
+    let framed = |img: &screen::Image| {
+        let left = |i: u32| img.pixel(cx - i, mid);
+        let top = |i: u32| img.pixel(cx + 40, cy - i);
+        img.pixel(cx, mid) == DEMO_A
+            && borders.contains(&left(1))
+            && borders.contains(&left(2))
+            && !borders.contains(&left(3))
+            && titles.contains(&top(1))
+            && titles.contains(&top(36))
+            && borders.contains(&top(37))
+            && borders.contains(&top(38))
+            && !borders.contains(&top(39))
+    };
+    let img = d.shot_until("scale-150-demo", 30, framed)?;
+    let probe: Vec<_> = (1..=3).map(|i| img.pixel(cx - i, mid)).collect();
+    let above: Vec<_> = [1, 36, 37, 38, 39].iter().map(|&i| img.pixel(cx + 40, cy - i)).collect();
+    expect(
+        &format!(
+            "the demo window's frame at 150 % (content at {cx},{cy}, a 2 pixel border and a 36 pixel title bar):              content {:?}, left of it {probe:?}, above {above:?}",
+            img.pixel(cx, mid)
+        ),
+        framed(&img),
+    )?;
+    // Nothing between the border and the content (no blurred seam), nor along
+    // the content's right edge: only the content colour, then the border.
+    let right = cx + at_150(w) as u32;
+    expect(
+        "the content's right edge is sharp",
+        img.pixel(right - 1, mid) == DEMO_A && borders.contains(&img.pixel(right, mid)),
+    )?;
+    // The ridge: 36 pixels, one sharp lower edge (the wallpaper under it
+    // differs from its colour).
+    expect("the ridge is 36 pixels high", img.pixel(10, 35) == RIDGE && img.pixel(1270, 35) == RIDGE)?;
+    expect("and ends there", img.pixel(1270, 36) != RIDGE && img.pixel(1270, 37) != RIDGE)?;
+
+    // The pointer: the maximize button is hit where it is drawn (physical
+    // pixels), 42 logical pixels left of the content's right edge.
+    let (bx, by) = (at_150(x + w - 34), at_150(y - 12));
+    d.send(&abs_in(SIZE, bx, by))?;
+    d.send(&[button(true)])?;
+    d.send(&[button(false)])?;
+    // Logical 853x533: the work area less the frame and its border.
+    d.wait("wl-demo: size 851x", 30)?;
+    thread::sleep(Duration::from_millis(1500));
+    let filled = |img: &screen::Image| img.pixel(60, 120) == DEMO_A && img.pixel(1200, 760) == DEMO_A;
+    let img = d.shot_until("scale-150-maximized", 30, filled)?;
+    expect("the maximized window fills the work area at 150 %", filled(&img))?;
+    expect("the ridge stays above it", img.pixel(640, 10) == RIDGE)?;
+    d.qmp.quit();
+    Ok(())
+}
+
 /// Ask the display for a screen of `w` x `h` (the request only).
 #[cfg(unix)]
 fn ask_size(vnc: &Path, w: u32, h: u32) -> std::result::Result<(), String> {
@@ -2172,6 +2373,28 @@ mod tests {
         assert_eq!(parse_qmp_port(&["--qmp-port=4444".into()]).unwrap(), Some(4444));
         assert!(parse_qmp_port(&["--qmp-port=0".into()]).is_err());
         assert!(parse_qmp_port(&["--qmp-port=nope".into()]).is_err());
+    }
+
+    #[test]
+    fn scales_are_factors_or_percentages() {
+        for (text, percent) in [
+            ("1", 100),
+            ("2", 200),
+            ("4", 400),
+            ("1.5", 150),
+            ("1.25", 125),
+            ("1.75", 175),
+            ("150", 150),
+            ("125%", 125),
+            ("2.0", 200),
+        ] {
+            assert_eq!(parse_scale_percent(text), Some(percent), "{text}");
+        }
+        for bad in ["", "0", "5", "99", "401", "1.", "1.234", "1.5%", "x", "-1"] {
+            assert_eq!(parse_scale_percent(bad), None, "{bad:?}");
+        }
+        // What the compositor and the kernel's argument take back.
+        assert_eq!([100, 125, 150, 175, 200].map(scale_text), ["1", "1.25", "1.5", "1.75", "2"]);
     }
 
     #[test]

@@ -36,13 +36,13 @@ fn processors() -> u32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CallNtPowerInformation(
     level: u32,
-    _input: *const u8,
-    _input_len: u32,
+    input: *const u8,
+    input_len: u32,
     output: *mut u8,
     output_len: u32,
 ) -> u32 {
     let size = if output.is_null() { 0 } else { output_len as usize };
-    match session::power_information(level, processors(), size) {
+    match session::power_information(level, processors(), !input.is_null() && input_len > 0, size) {
         Ok(bytes) => {
             // SAFETY: the caller's buffer holds `output_len` bytes, at least `bytes.len()`.
             unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), output, bytes.len()) };

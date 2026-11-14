@@ -30,6 +30,27 @@ pub enum ProcState {
 }
 
 impl ProcState {
+    /// The state of a process that has `ended` (not waited for yet), is
+    /// `stopped`, or has live threads each of which `runs` (`true`: on a
+    /// CPU or waiting for one; `false`: blocked). proc_pid_stat(5): `R`
+    /// "Running", `S` "Sleeping in an interruptible wait". A process is
+    /// running while any of its threads is; it sleeps only when all of
+    /// them wait. One that is runnable but not on a CPU (it was just woken,
+    /// or is on its way back from a system call) is `R`, not `S`: a
+    /// program that polls for `S` to know its child is blocked in a call
+    /// must not see it before the child is there.
+    pub fn of(ended: bool, stopped: bool, mut runs: impl Iterator<Item = bool>) -> ProcState {
+        if ended {
+            ProcState::Zombie
+        } else if stopped {
+            ProcState::Stopped
+        } else if runs.any(|r| r) {
+            ProcState::Running
+        } else {
+            ProcState::Sleeping
+        }
+    }
+
     /// The letter of `/proc/<pid>/stat`.
     pub const fn letter(self) -> char {
         match self {

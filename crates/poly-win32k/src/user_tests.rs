@@ -1175,6 +1175,82 @@ fn a_second_quick_click_is_a_double_click_for_a_class_that_wants_it() {
     });
 }
 
+/// MonitorFromWindow.yaml `placement`, `state_rects`: the rectangles a normal
+/// position gets (workspace coordinates; tool windows use screen ones), and
+/// ptMinPosition.
+#[test]
+fn window_placements_follow_the_monitor_from_window_sheet() {
+    use crate::user::place::{WindowPlacement, get_window_placement, set_window_placement};
+    with_env(|e| {
+        interactive(e);
+        register(e, "Place");
+        let ws = |ex: u32, style: u32| {
+            create(e, 'A', ex | WS_EX_NOACTIVATE, "Place", style | WS_VISIBLE, 100, 100, 240, 140, 0, 0)
+        };
+        let set = |h: u64, show: u32, flags: u32, min: (i32, i32), n: (i32, i32, i32, i32)| {
+            let wp = WindowPlacement {
+                length: 44,
+                flags,
+                show_cmd: show,
+                min_position: CPoint { x: min.0, y: min.1 },
+                max_position: CPoint { x: -1, y: -1 },
+                normal_position: CRect { left: n.0, top: n.1, right: n.2, bottom: n.3 },
+            };
+            assert!(set_window_placement(e, h, &wp));
+        };
+        let get = |h: u64| {
+            let mut wp = WindowPlacement::default();
+            assert!(get_window_placement(e, h, &mut wp));
+            let n = wp.normal_position;
+            ((wp.min_position.x, wp.min_position.y), (n.left, n.top, n.right, n.bottom))
+        };
+        let rect = |h: u64| {
+            let Reply::Window { info } = e.call(Request::Window { hwnd: h }) else { panic!() };
+            (info.window.left, info.window.top, info.window.right, info.window.bottom)
+        };
+        let style = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME;
+        let h = ws(0, style);
+        // Wholly above: onto the screen, cut at the work area's top.
+        set(h, 1, 0, (-1, -1), (200, -700, 440, -560));
+        assert_eq!(rect(h), (200, 24, 440, 140));
+        assert_eq!(get(h).1, (200, 0, 440, 116));
+        // Wholly below, left and right; touching and partly on it stay.
+        set(h, 1, 0, (-1, -1), (200, 1500, 440, 1640));
+        assert_eq!(rect(h), (200, 940, 440, 1080));
+        set(h, 1, 0, (-1, -1), (-900, 150, -660, 290));
+        assert_eq!(rect(h), (0, 174, 240, 314));
+        set(h, 1, 0, (-1, -1), (-240, 150, 0, 290));
+        assert_eq!(rect(h), (-240, 174, 0, 314));
+        set(h, 1, 0, (-1, -1), (-120, -60, 120, 80));
+        assert_eq!(rect(h), (-120, -36, 120, 104));
+        // ptMinPosition: given while not minimized, the slot it gets when
+        // minimized, kept by later calls on the minimized window; a point
+        // with WPF_SETMINPOSITION moves the minimized window.
+        assert_eq!(get(h).0, (-1, -1));
+        set(h, 2, 0, (300, 200), (200, 150, 440, 290));
+        assert_eq!((get(h).0, rect(h)), ((0, 1028), (0, 1052, 160, 1080)));
+        set(h, 3, 0, (-1, -1), (200, 150, 440, 290));
+        assert_eq!(get(h).0, (0, 1028));
+        set(h, 7, 0, (-1, -1), (200, 150, 440, 290));
+        assert_eq!(get(h).0, (0, 1028));
+        set(h, 9, 0, (-1, -1), (200, 150, 440, 290));
+        assert_eq!(get(h).0, (0, 1028));
+        set(h, 1, 0, (-1, -1), (200, 150, 440, 290));
+        assert_eq!(get(h).0, (-1, -1));
+        set(h, 2, 0, (-1, -1), (200, 150, 440, 290));
+        set(h, 2, 1, (300, 200), (200, 150, 440, 290));
+        assert_eq!((get(h).0, rect(h)), ((300, 200), (300, 224, 460, 252)));
+        set(h, 1, 0, (-1, -1), (200, 150, 440, 290));
+        assert_eq!((get(h).0, rect(h)), ((300, 200), (200, 174, 440, 314)));
+        // A tool window: screen coordinates, nothing adjusted, slot in screen ones.
+        let t = ws(WS_EX_TOOLWINDOW, WS_POPUP | WS_CAPTION);
+        set(t, 1, 0, (-1, -1), (200, -700, 440, -560));
+        assert_eq!((rect(t), get(t).1), ((200, -700, 440, -560), (200, -700, 440, -560)));
+        set(t, 2, 0, (-1, -1), (200, 150, 440, 290));
+        assert_eq!(get(t).0, (0, 1052));
+    });
+}
+
 // The held-out hunt, one file per group (spec sheets re-read rule by rule).
 #[path = "user_tests/focus.rs"]
 mod focus_hunt;

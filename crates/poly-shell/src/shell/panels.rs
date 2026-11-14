@@ -26,7 +26,7 @@ use crate::theme::{ink, notice as nt, panel as pt, ridge as rt};
 use alloc::string::String;
 use alloc::vec::Vec;
 use poly_dbus::notifications::Urgency;
-use poly_wayland::compose::{Framebuffer, Rect};
+use poly_wayland::compose::{Framebuffer, Rect, Scale};
 
 /// The panels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -433,17 +433,17 @@ impl Shell {
         out
     }
 
-    pub(super) fn draw_notices(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, body: Rect) {
+    pub(super) fn draw_notices(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale, body: Rect) {
         let st = Style::new(Face::Sans, nt::TEXT_SIZE).scaled(s);
         let title_st = Style::new(Face::Medium, nt::TEXT_SIZE).scaled(s);
-        let fs = s as f32;
+        let fs = s.factor();
         for (i, n) in self.notice_layout(body.y).iter().enumerate() {
             let r = n.rect.scale(s);
             if i > 0 {
                 fill(
                     fb,
                     clip,
-                    Rect::new(r.x + nt::PADDING_X * s, r.y - s, r.width - 2 * nt::PADDING_X * s, s),
+                    Rect::new(r.x + nt::PADDING_X * s, r.y - s.line(1), r.width - 2 * nt::PADDING_X * s, s.line(1)),
                     fg(),
                     nt::DIVIDER_ALPHA,
                 );
@@ -486,7 +486,7 @@ impl Shell {
     // -----------------------------------------------------------------
     // Drawing the panels.
 
-    pub(super) fn draw_panel(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, p: Panel, body: Rect) {
+    pub(super) fn draw_panel(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale, p: Panel, body: Rect) {
         match p {
             Panel::Menu => self.draw_menu(fb, clip, s, body),
             Panel::Control => match self.panels.view {
@@ -507,7 +507,7 @@ impl Shell {
         )
     }
 
-    fn draw_menu(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, body: Rect) {
+    fn draw_menu(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale, body: Rect) {
         let st = Style::new(Face::Sans, pt::MENU_SIZE).scaled(s);
         for (i, (action, label, confirm, icon)) in MENU.iter().enumerate() {
             let r = self.menu_row(body, i).scale(s);
@@ -525,7 +525,7 @@ impl Shell {
         }
     }
 
-    fn draw_control(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, body: Rect) {
+    fn draw_control(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale, body: Rect) {
         let m = self.control_main(body);
         let label_st = Style::new(Face::Sans, 12.0).scaled(s);
         let value_st = Style::new(Face::Sans, 13.0).scaled(s);
@@ -606,7 +606,7 @@ impl Shell {
         );
     }
 
-    fn draw_sub_view(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, v: ControlView, body: Rect) {
+    fn draw_sub_view(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale, v: ControlView, body: Rect) {
         let sv = self.sub_view(v, body);
         let b = sv.back.scale(s);
         let csz = 16 * s;
@@ -668,7 +668,7 @@ impl Shell {
                 fb,
                 clip,
                 ((body.x + 12 + 8) * s) as f32,
-                tb * s,
+                *tb * s,
                 body.right() * s,
                 name,
                 gst,
@@ -730,10 +730,10 @@ impl Shell {
         CalendarLayout { prev, next, today, day_row, all_day, scroll }
     }
 
-    fn draw_calendar(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, body: Rect) {
+    fn draw_calendar(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale, body: Rect) {
         let c = self.calendar_layout(body);
         let (weekday, day, month) = self.calendar_date(self.panels.day);
-        let fs = s as f32;
+        let fs = s.factor();
         // The header: the date (14 px medium), the arrows.
         let hst = Style::new(Face::Medium, 14.0).scaled(s);
         let label = alloc::format!("{}, {} {}", WEEKDAYS[weekday], MONTHS[(month as usize + 11) % 12], day);
@@ -772,8 +772,8 @@ impl Shell {
         // The day: weekday (9 px capitals at 50 %), the date in a white
         // circle if it is today.
         let dr = c.day_row.scale(s);
-        border(fb, Rect::new(dr.x, dr.bottom() - s, dr.width, s));
-        border(fb, Rect::new(col_x, dr.y, s, dr.height));
+        border(fb, Rect::new(dr.x, dr.bottom() - s.line(1), dr.width, s.line(1)));
+        border(fb, Rect::new(col_x, dr.y, s.line(1), dr.height));
         let col_w = pt::CAL_COLUMN * s;
         let wst = Style::new(Face::Sans, 9.0).scaled(s).tracking(0.025);
         let wd: String = WEEKDAYS[weekday][..3].to_uppercase();
@@ -807,8 +807,8 @@ impl Shell {
         }
         // The all-day strip.
         let ad = c.all_day.scale(s);
-        border(fb, Rect::new(ad.x, ad.bottom() - s, ad.width, s));
-        border(fb, Rect::new(col_x, ad.y, s, ad.height));
+        border(fb, Rect::new(ad.x, ad.bottom() - s.line(1), ad.width, s.line(1)));
+        border(fb, Rect::new(col_x, ad.y, s.line(1), ad.height));
         let sst = Style::new(Face::Sans, 9.0).scaled(s);
         let aw = self.text.measure("all-day", sst);
         let ab = ad.y + 4 * s + (13.5 * fs / 2.0 + self.text.cap(sst) / 2.0) as i32;
@@ -816,7 +816,7 @@ impl Shell {
         // The hours, scrolled so the time now is in view.
         let sc = c.scroll.scale(s);
         let area = clip.intersect(&sc);
-        border(fb, Rect::new(col_x, sc.y, s, sc.height).intersect(&area));
+        border(fb, Rect::new(col_x, sc.y, s.line(1), sc.height).intersect(&area));
         let (secs, off) = self.time;
         let minutes = ((secs + i64::from(off) * 60).rem_euclid(86_400) / 60) as i32;
         let max_scroll = 24 * pt::CAL_HOUR - pt::CAL_SCROLL;
@@ -827,7 +827,7 @@ impl Shell {
                 continue;
             }
             let ys = y * s;
-            fill(fb, area, Rect::new(col_x + s, ys, col_w, s), fg(), pt::CAL_LINE_ALPHA);
+            fill(fb, area, Rect::new(col_x + s.line(1), ys, col_w, s.line(1)), fg(), pt::CAL_LINE_ALPHA);
             if (1..24).contains(&hour) {
                 let label = alloc::format!("{hour:02}:00");
                 let lw = self.text.measure(&label, sst);
@@ -837,7 +837,7 @@ impl Shell {
         }
         if self.panels.day == 0 {
             let y = (c.scroll.y + minutes * pt::CAL_HOUR / 60 - scroll) * s;
-            fill(fb, area, Rect::new(col_x, y, col_w, s), pt::CAL_NOW, 255);
+            fill(fb, area, Rect::new(col_x, y, col_w, s.line(1)), pt::CAL_NOW, 255);
             poly_wayland::compose::paint::circle(
                 fb,
                 area,
@@ -862,7 +862,7 @@ impl Shell {
         HistoryLayout { clear, rows }
     }
 
-    fn draw_history(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, body: Rect) {
+    fn draw_history(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale, body: Rect) {
         let h = self.history_layout(body);
         let hst = Style::new(Face::Medium, 14.0).scaled(s);
         let hb = self.text.centre(body.y * s, 40 * s, hst);
@@ -889,7 +889,7 @@ impl Shell {
         fill(
             fb,
             clip,
-            Rect::new(body.x * s, (body.y + 40) * s, body.width * s, s),
+            Rect::new(body.x * s, (body.y + 40) * s, body.width * s, s.line(1)),
             fg(),
             crate::theme::launcher::DIVIDER_ALPHA,
         );

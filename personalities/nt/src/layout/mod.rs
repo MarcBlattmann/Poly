@@ -211,6 +211,11 @@ pub const FOLDERS: &[Folder] = &[
     with_shell(drive("Users\\Public\\Pictures", Some("FOLDERID_PublicPictures")), "CommonPictures"),
     with_shell(drive("Users\\Public\\Videos", Some("FOLDERID_PublicVideos")), "CommonVideo"),
     hidden(drive("Users\\Default", None)),
+    // The default user's profile is a template for new accounts: `SHGetKnownFolderPath` with
+    // `hToken` -1 names folders in it, and the sheet saw all three directories on Windows.
+    hidden(drive("Users\\Default\\AppData", None)),
+    drive("Users\\Default\\AppData\\Local", None),
+    drive("Users\\Default\\Downloads", None),
     // The user's profile.
     with_env(profile("", Some("FOLDERID_Profile")), &["USERPROFILE"]),
     with_shell(profile("Desktop", Some("FOLDERID_Desktop")), "Desktop"),

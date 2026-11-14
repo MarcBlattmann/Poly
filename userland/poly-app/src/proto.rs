@@ -19,12 +19,16 @@
 //! `xdg_surface` and `xdg_toplevel` are made and committed without a
 //! buffer; the first `configure` is acknowledged, and only then is a buffer
 //! attached ([`Client::present`]). The window's size is in logical pixels;
-//! the buffer is `scale` times larger (`wl_surface.preferred_buffer_scale`,
-//! else the output's scale).
+//! the buffer is `scale` times larger. The scale is the exact fraction of
+//! `wp_fractional_scale_v1` when the compositor has it and `wp_viewporter`
+//! (a buffer of `round(size * scale)` pixels of buffer scale 1, shown at the
+//! logical size through a viewport; ADR 0179), else the whole number of
+//! `wl_surface.preferred_buffer_scale` or of the output.
 
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::string::String;
 use alloc::vec::Vec;
+use poly_wayland::compose::Scale;
 use poly_wayland::protocol::*;
 use poly_wayland::wire::{self, Arg, ArgKind, Fd, Fixed, Header, Interface, Message, NewObject, ObjectId};
 
@@ -59,7 +63,7 @@ pub enum Event {
     Resized {
         width: i32,
         height: i32,
-        scale: i32,
+        scale: Scale,
     },
     /// The user asked to close the window.
     Close,
@@ -239,6 +243,12 @@ pub struct Client {
     data_manager: Option<ObjectId>,
     cursor_manager: Option<ObjectId>,
     output: Option<ObjectId>,
+    /// `wp_fractional_scale_manager_v1` and `wp_viewporter`, the surface's
+    /// fractional scale object and viewport (made with the surface).
+    fractional_manager: Option<ObjectId>,
+    viewporter: Option<ObjectId>,
+    fractional: Option<ObjectId>,
+    viewport: Option<ObjectId>,
     surface: Option<ObjectId>,
     xdg_surface: Option<ObjectId>,
     toplevel: Option<ObjectId>,
@@ -258,9 +268,15 @@ pub struct Client {
     /// configure came.
     size: (i32, i32),
     pending_size: (i32, i32),
-    scale: i32,
+    scale: Scale,
     output_scale: i32,
     surface_scale: Option<i32>,
+    /// What the compositor prefers for the surface, exact
+    /// (`wp_fractional_scale_v1.preferred_scale`).
+    preferred_fraction: Option<Scale>,
+    /// What was last told to the compositor: the viewport's destination
+    /// (`None`: no viewport in use) and the buffer scale.
+    shown_as: (Option<(i32, i32)>, i32),
     configured: bool,
     /// The pointer: where, the serial of its enter (for the cursor), the
     /// last button's serial.
@@ -311,6 +327,10 @@ impl Client {
             data_manager: None,
             cursor_manager: None,
             output: None,
+            fractional_manager: None,
+            viewporter: None,
+            fractional: None,
+            viewport: None,
             surface: None,
             xdg_surface: None,
             toplevel: None,
@@ -326,9 +346,11 @@ impl Client {
             min_size,
             size: (0, 0),
             pending_size: (0, 0),
-            scale: 1,
+            scale: Scale::ONE,
             output_scale: 1,
             surface_scale: None,
+            preferred_fraction: None,
+            shown_as: (None, 1),
             configured: false,
             pointer_at: (0.0, 0.0),
             enter_serial: 0,
@@ -374,13 +396,13 @@ impl Client {
         self.size
     }
 
-    pub fn scale(&self) -> i32 {
+    pub fn scale(&self) -> Scale {
         self.scale
     }
 
-    /// The buffer's size in physical pixels.
+    /// The buffer's size in physical pixels ([`Scale::buffer_size`]).
     pub fn buffer_size(&self) -> (i32, i32) {
-        (self.size.0 * self.scale, self.size.1 * self.scale)
+        self.scale.buffer_size(self.size.0, self.size.1)
     }
 
     pub fn modifiers(&self) -> (u32, u32) {
@@ -476,6 +498,12 @@ impl Client {
                     self.output_scale = factor.clamp(1, 8);
                     self.rescale();
                 }
+            }
+            "wp_fractional_scale_v1" => {
+                let wp_fractional_scale_v1::Event::PreferredScale { scale } =
+                    wp_fractional_scale_v1::Event::from_args(m.opcode, m.args).map_err(bad)?;
+                self.preferred_fraction = Some(Scale::from_120ths(scale));
+                self.rescale();
             }
             "wl_surface" => {
                 if let wl_surface::Event::PreferredBufferScale { factor } =
@@ -596,6 +624,12 @@ impl Client {
         if self.output.is_none() {
             self.output = self.bind(&wl_output::INTERFACE, 3);
         }
+        if self.fractional_manager.is_none() {
+            self.fractional_manager = self.bind(&wp_fractional_scale_manager_v1::INTERFACE, 1);
+        }
+        if self.viewporter.is_none() {
+            self.viewporter = self.bind(&wp_viewporter::INTERFACE, 1);
+        }
         if let (Some(dm), Some(seat), None) = (self.data_manager, self.seat, self.data_device) {
             let id = self.conn.new_id(&wl_data_device::INTERFACE);
             self.conn.send(dm, wl_data_device_manager::Request::GetDataDevice { id, seat });
@@ -623,6 +657,15 @@ impl Client {
         if mw > 0 && mh > 0 {
             self.conn.send(top, xdg_toplevel::Request::SetMinSize { width: mw, height: mh });
         }
+        // The exact scale, and a viewport to show a buffer of that scale at
+        // the logical size, when the compositor has both.
+        if let (Some(manager), Some(vp)) = (self.fractional_manager, self.viewporter) {
+            let f = self.conn.new_id(&wp_fractional_scale_v1::INTERFACE);
+            self.conn.send(manager, wp_fractional_scale_manager_v1::Request::GetFractionalScale { id: f, surface });
+            let v = self.conn.new_id(&wp_viewport::INTERFACE);
+            self.conn.send(vp, wp_viewporter::Request::GetViewport { id: v, surface });
+            (self.fractional, self.viewport) = (Some(f), Some(v));
+        }
         self.conn.send(surface, wl_surface::Request::Commit);
         self.surface = Some(surface);
         self.xdg_surface = Some(xdg);
@@ -631,7 +674,12 @@ impl Client {
     }
 
     fn rescale(&mut self) {
-        let scale = self.surface_scale.unwrap_or(self.output_scale).clamp(1, 8);
+        let whole = Scale::from_int(self.surface_scale.unwrap_or(self.output_scale).clamp(1, 8) as u32);
+        // The exact fraction only with a viewport to show it through.
+        let scale = match (self.preferred_fraction, self.viewport) {
+            (Some(f), Some(_)) => f,
+            _ => whole,
+        };
         if scale != self.scale {
             self.scale = scale;
             if self.configured {
@@ -777,12 +825,35 @@ impl Client {
         self.buffer = Some(Buffer { pool, buffer, width, height });
     }
 
+    /// Tell the compositor how the buffer maps onto the window: a whole
+    /// scale as the buffer scale, a fraction as a buffer of scale 1 shown at
+    /// the logical size through the viewport. Only what changed is sent.
+    fn show_as_scaled(&mut self, surface: ObjectId) {
+        let want = match self.viewport {
+            Some(_) if !self.scale.is_integer() => (Some(self.size), 1),
+            _ => (None, self.scale.ceil() as i32),
+        };
+        if want == self.shown_as {
+            return;
+        }
+        if want.1 != self.shown_as.1 {
+            self.conn.send(surface, wl_surface::Request::SetBufferScale { scale: want.1 });
+        }
+        if want.0 != self.shown_as.0
+            && let Some(v) = self.viewport
+        {
+            let (width, height) = want.0.unwrap_or((-1, -1));
+            self.conn.send(v, wp_viewport::Request::SetDestination { width, height });
+        }
+        self.shown_as = want;
+    }
+
     /// Show the buffer, `damage` (physical pixels) redrawn, and ask for a
     /// frame callback.
     pub fn present(&mut self, damage: &[poly_wayland::compose::Rect]) {
         let (Some(surface), Some(b)) = (self.surface, self.buffer.as_ref()) else { return };
         let buffer = b.buffer;
-        self.conn.send(surface, wl_surface::Request::SetBufferScale { scale: self.scale });
+        self.show_as_scaled(surface);
         self.conn.send(surface, wl_surface::Request::Attach { buffer: Some(buffer), x: 0, y: 0 });
         for r in damage {
             self.conn

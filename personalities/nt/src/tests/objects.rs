@@ -46,6 +46,17 @@ fn query_string(f: &mut Fake, h: u64, class: u32) -> String {
     unicode_at(f, buf)
 }
 
+/// A failed `NtDuplicateObject` leaves NULL in `*TargetHandle`, not what was there before
+/// (specs/windows/kernel32.dll/DuplicateHandle.yaml, rule `on_refusal`).
+#[test]
+fn a_failed_duplicate_nulls_the_target_handle() {
+    let mut f = Fake::new();
+    let out = f.put_u64(0xDEAD_BEEF);
+    let s = f.call(Service::DuplicateObject, &[SELF, 0x9998, SELF, out, 0, 0, 0]);
+    assert_ne!(s, STATUS_SUCCESS);
+    assert_eq!(f.u64_at(out), 0);
+}
+
 #[test]
 fn named_event_lifetime_through_handles() {
     let mut f = Fake::new();

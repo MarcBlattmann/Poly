@@ -218,7 +218,7 @@ impl Opt {
                 "--test-apps: put the test apps (programs and launcher entries) in the desktop image; off: absent"
             }
             Opt::Accel => "POLY_QEMU_ACCEL: the host's hypervisor if usable (auto), or QEMU's emulator (tcg)",
-            Opt::Scale => "--scale=N: Poly's display scale; auto fits the host's screen",
+            Opt::Scale => "--scale=N: Poly's display scale (1, 1.25, 1.5, 1.75, 2 ...); auto fits the host's screen",
             Opt::Size => {
                 "--size=WxH: the guest's screen, such as 1920x1080 (1080p); auto fits the host's screen (Enter types one)"
             }
@@ -295,7 +295,7 @@ impl Default for Settings {
 }
 
 const ACCELS: [&str; 4] = ["auto", "kvm", "whpx", "tcg"];
-const SCALES: [&str; 5] = ["auto", "1", "2", "3", "4"];
+const SCALES: [&str; 8] = ["auto", "1", "1.25", "1.5", "1.75", "2", "3", "4"];
 /// The screen sizes Left and Right step through: 16:9 (720p, 1080p, 1440p,
 /// 4K) and 16:10 ones.
 const SIZES: [&str; 10] = [

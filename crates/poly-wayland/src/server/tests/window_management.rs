@@ -428,3 +428,43 @@ fn an_unchanged_work_area_configures_nothing() {
     p.read(&mut srv);
     assert!(!p.take().iter().any(|e| e.name() == ("xdg_toplevel", "configure")));
 }
+
+/// A scale change (ADR 0179): an internal window at a fractional scale has
+/// a buffer of the rounded size shown through a viewport, and fitting it to
+/// a smaller logical screen keeps its frame on the work area.
+#[test]
+fn an_internal_window_at_a_fraction_and_when_it_stops_fitting() {
+    use crate::compose::Scale;
+    let (mut srv, _shared) = server();
+    srv.scene_mut().set_reserved_top(24);
+    srv.set_output(OutputConfig {
+        width: 1280,
+        height: 800,
+        scale: Scale::from_percent(150),
+        ..OutputConfig::default()
+    });
+    let s = srv.add_internal_window("Settings", "poly.settings", 301, 201);
+    srv.set_internal_pixels(s, 452, 302, &vec![0x12_3456; 452 * 302], None);
+    let c = srv.scene().window(s).unwrap().content();
+    assert_eq!((c.scale, c.width, c.height, c.view.destination), (1, 452, 302, Some((301, 201))));
+    assert_eq!(c.logical_size(), (301, 201));
+    // The screen becomes smaller than the window: it is resized and shifted.
+    srv.set_output(OutputConfig {
+        width: 600,
+        height: 450,
+        scale: Scale::from_percent(150),
+        ..OutputConfig::default()
+    });
+    assert!(srv.resize_internal_window(s, 360, 200));
+    assert!(!srv.resize_internal_window(s, 360, 200), "nothing changed");
+    srv.set_internal_pixels(s, 540, 300, &vec![0x12_3456; 540 * 300], None);
+    let w = srv.scene().window(s).unwrap();
+    assert_eq!(w.content().logical_size(), (360, 200));
+    let (x, y) = w.position();
+    assert!(x >= BORDER && y >= 24 + TITLE_HEIGHT + BORDER, "{x},{y}");
+    // Whole scales use the buffer scale.
+    srv.set_output(OutputConfig { width: 800, height: 600, scale: Scale::from_int(2), ..OutputConfig::default() });
+    srv.set_internal_pixels(s, 720, 400, &vec![0x12_3456; 720 * 400], None);
+    let c = srv.scene().window(s).unwrap().content();
+    assert_eq!((c.scale, c.view.destination), (2, None));
+}

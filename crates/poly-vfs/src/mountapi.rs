@@ -258,15 +258,24 @@ impl Vfs {
 
     /// `move_mount(2)` with `MOVE_MOUNT_SET_GROUP`: the mount `dst` is the
     /// root of joins the propagation group of the mount `src` is the root
-    /// of (its peers, or the group it is a slave of; a private source
-    /// makes it private). Both must be roots of mounts of the same file
-    /// system, as two bind mounts are (`EINVAL`); nothing moves.
+    /// of (its peers, or the group it is a slave of). The source must be shared
+    /// or a slave and the target private, two mounts (not one) of the same file
+    /// system, both tops of mounts (`EINVAL`); nothing moves.
     pub fn share_group(&self, cred: &Cred, src: &NodeRef, dst: &NodeRef) -> Result<()> {
         if !cred.has(cap::SYS_ADMIN) {
             return Err(Errno::EPERM);
         }
         let (src, dst) = (src.loc(), dst.loc());
         if !src.is_mount_root() || !dst.is_mount_root() || !src.mount.same_sb(&dst.mount) {
+            return Err(Errno::EINVAL);
+        }
+        // The same mount twice has nothing to join; a private source has no
+        // group to give; a target that is shared or a slave has one already.
+        if Arc::ptr_eq(&src.mount, &dst.mount)
+            || (src.mount.peer_group() == 0 && src.mount.master_group() == 0)
+            || dst.mount.peer_group() != 0
+            || dst.mount.master_group() != 0
+        {
             return Err(Errno::EINVAL);
         }
         let _table = self.mounts.lock();

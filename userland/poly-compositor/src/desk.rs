@@ -19,7 +19,7 @@ use poly_shell::shortcuts::Hit;
 use poly_shell::switcher::{Entry, Mru, thumbnail};
 use poly_shell::wm::{self, Action, Placed, Zone};
 use poly_shell::{Key, Press, Shell, apps};
-use poly_wayland::compose::{MemoryFramebuffer, Placement, Rect, Theme, WindowId};
+use poly_wayland::compose::{MemoryFramebuffer, Placement, Rect, Scale, Theme, WindowId};
 use poly_wayland::seat::{BTN_LEFT, InputEvent, InputSource};
 use poly_wayland::server::{InternalEvent, OutputConfig, Server};
 use poly_wayland::wire::Fixed;
@@ -37,7 +37,7 @@ pub struct Options<'a> {
     pub dir: &'a str,
     pub fb_name: &'a str,
     pub keymap: Option<&'a str>,
-    pub scale: Option<u32>,
+    pub scale: Option<Scale>,
     pub settings: Option<String>,
 }
 
@@ -606,9 +606,10 @@ impl Desktop {
 
     fn draw_settings(&mut self, server: &mut Server) {
         let Some(w) = &self.settings_win else { return };
-        let s = server.output().scale as i32;
+        let s = server.output().scale;
         let (lw, lh) = w.size;
-        let mut fb = MemoryFramebuffer::new((lw * s) as u32, (lh * s) as u32);
+        let (bw, bh) = s.buffer_size(lw, lh);
+        let mut fb = MemoryFramebuffer::new(bw as u32, bh as u32);
         self.shell.draw_settings(&mut fb, lw, lh, s, &self.info, realtime_secs());
         server.set_internal_pixels(w.id, fb.width_px(), fb.height_px(), fb.pixels(), None);
     }
@@ -715,6 +716,15 @@ impl Desktop {
                 server.set_output(out);
                 let (lw, lh) = server.scene().logical_size();
                 self.shell.resize(lw, lh);
+                // The settings window fits the new logical screen (a 720
+                // pixel tall window does not fit 533 logical rows).
+                if let Some(sw) = &mut self.settings_win {
+                    use poly_shell::theme::settings as t;
+                    let size = (t::WIDTH.min(lw - 40), t::HEIGHT.min(lh - 80));
+                    if server.resize_internal_window(sw.id, size.0, size.1) {
+                        sw.size = size;
+                    }
+                }
                 server.scene_mut().damage_all();
                 println!("poly-compositor: scale {s}");
             }

@@ -439,8 +439,8 @@ impl Shadow {
     }
 
     /// The same at output scale `s` (lengths multiplied).
-    pub fn scaled(self, s: i32) -> Shadow {
-        let f = s as f32;
+    pub fn scaled(self, s: super::Scale) -> Shadow {
+        let f = s.factor();
         Shadow { dx: self.dx * f, dy: self.dy * f, blur: self.blur * f, spread: self.spread * f, ..self }
     }
 

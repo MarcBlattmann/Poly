@@ -940,6 +940,10 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
         env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: crate::wm::input::SET_FOCUS });
     }
     let extra = shown_bit(env, i);
+    // The place it gets is what GetWindowPlacement reports as ptMinPosition
+    // (MonitorFromWindow.yaml `placement`).
+    let (ox, oy) = place::workspace_origin(env, i);
+    env.call(Request::SetMinPos { hwnd: i.hwnd, x: x - ox, y: y - oy });
     env.call(Request::SetState {
         hwnd: i.hwnd,
         visible: None,

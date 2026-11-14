@@ -129,6 +129,9 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
 /// confirmed by the spec agent).
 pub fn query<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, addr, class, buf, length, ret] = abi::args::<K, 6>(k, regs)?;
+    if class as u32 == MEMORY_MAPPED_FILENAME_INFORMATION {
+        return mapped_filename(k, process, addr, buf, length, ret);
+    }
     if class as u32 != MEMORY_BASIC_INFORMATION_CLASS {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
@@ -145,6 +148,45 @@ pub fn query<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
         abi::write_u64(k, ret, MEMORY_BASIC_INFORMATION_SIZE as u64)?;
     }
     Ok(STATUS_SUCCESS)
+}
+
+/// `MemoryMappedFilenameInformation` (`MEMORY_INFORMATION_CLASS`, `ntddk.h`): the name of the file
+/// a view maps.
+const MEMORY_MAPPED_FILENAME_INFORMATION: u32 = 2;
+/// `STATUS_INVALID_ADDRESS`, `STATUS_FILE_INVALID` (`ntstatus.h`).
+const STATUS_INVALID_ADDRESS: NtStatus = NtStatus(0xC000_0141);
+const STATUS_FILE_INVALID: NtStatus = NtStatus(0xC000_0098);
+
+/// `NtQueryVirtualMemory(MemoryMappedFilenameInformation)`: the object name of the file (device
+/// name and path, as `NtQueryObject(ObjectNameInformation)` spells it) behind the view or image
+/// at `addr`, as a `MEMORY_SECTION_NAME` (a `UNICODE_STRING` and its characters). An address in no
+/// allocation or in private memory is `STATUS_INVALID_ADDRESS`; a view of a section with no file
+/// `STATUS_FILE_INVALID` (`specs/windows/kernel32.dll/K32GetMappedFileNameW.yaml`). The process
+/// handle needs `PROCESS_QUERY_LIMITED_INFORMATION`.
+fn mapped_filename<K: NtKernel>(
+    k: &mut K,
+    process: u64,
+    addr: u64,
+    buf: u64,
+    length: u64,
+    ret: u64,
+) -> Result<NtStatus> {
+    let caller = k.caller();
+    let (device, path) = k.with_state(|sys, proc, _| {
+        own_process(sys, proc, &caller, Handle(process), PROCESS_QUERY_LIMITED_INFORMATION)?;
+        let view = proc.vm.allocation(addr).and_then(|a| a.view()).ok_or(STATUS_INVALID_ADDRESS)?;
+        let file = match &sys.section(view.section).ok_or(STATUS_INVALID_ADDRESS)?.kind {
+            crate::system::SectionKind::File { file } => Some(*file),
+            crate::system::SectionKind::Image { file, .. } => *file,
+            crate::system::SectionKind::Pagefile { .. } => None,
+        };
+        let cookie = sys.objects.cookie(file.ok_or(STATUS_FILE_INVALID)?).ok_or(STATUS_FILE_INVALID)?;
+        sys.io.object_name_parts(cookie).ok_or(STATUS_FILE_INVALID)
+    })?;
+    let a = crate::objects::file_name_answer(&device, path.as_deref(), length as usize, buf);
+    abi::write_opt_u32(k, ret, a.return_length)?;
+    abi::write(k, buf, &a.bytes)?;
+    Ok(a.status)
 }
 
 /// `NtCreateSection`.

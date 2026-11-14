@@ -213,7 +213,7 @@
 {"symbol":"NetUserDel","src":["wine-spec"],"seeds":["wine:netapi32/tests/access.c:run_userhandling_tests"]},
 {"symbol":"NetUserEnum","src":["wine-spec"]},
 {"symbol":"NetUserGetGroups","src":["wine-spec"]},
-{"symbol":"NetUserGetInfo","status":"claimed","claimed_by":"impl-chrome-b35","src":["wine-spec"],"seeds":["wine:netapi32/tests/access.c:run_usergetinfo_tests"]},
+{"symbol":"NetUserGetInfo","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:netapi32/tests/access.c:run_usergetinfo_tests"]},
 {"symbol":"NetUserGetLocalGroups","src":["wine-spec"]},
 {"symbol":"NetUserModalsGet","src":["wine-spec"],"seeds":["wine:netapi32/tests/access.c:run_usermodalsget_tests"]},
 {"symbol":"NetUserModalsSet","src":["wine-spec"]},

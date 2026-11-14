@@ -373,8 +373,17 @@ pub fn syscall(regs: &mut SyscallRegs) -> SyscallReturn {
         u.hook
     })
     .expect("system call from a kernel thread");
-    let (process, _, _) = current().expect("system call from a kernel thread");
+    let (process, flags, tid) = current().expect("system call from a kernel thread");
     hook(process, regs);
+    // An NT thread that was suspended while it was inside a system call (a child that only sleeps
+    // and signals is almost never in ring 3 when the timer fires) stops here, before it runs user
+    // code again, unless it is on its way out.
+    if flags.suspended.load(Ordering::SeqCst)
+        && process.personality == poly_abi::Personality::Nt
+        && thread::with_current_user(|u| u.exit.is_none()).unwrap_or(true)
+    {
+        crate::nt::wait_while_suspended(process.pid, tid);
+    }
     let (rip, restore_all, exit) =
         thread::with_current_user(|u| (u.return_to.take(), u.replaced, u.exit.take())).expect("still a user thread");
     if let Some(status) = exit {

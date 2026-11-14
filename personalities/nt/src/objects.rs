@@ -121,7 +121,17 @@ pub fn duplicate_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<Nt
         })();
         sys.reap(b);
         r
-    })?;
+    });
+    // A refused or failed duplication leaves NULL in `*TargetHandle` (the sheet: "handle NULL").
+    let made = match made {
+        Ok(m) => m,
+        Err(e) => {
+            if out != 0 {
+                let _ = return_handle(k, out, Handle::NULL);
+            }
+            return Err(e);
+        }
+    };
     if let Some(h) = made
         && out != 0
     {

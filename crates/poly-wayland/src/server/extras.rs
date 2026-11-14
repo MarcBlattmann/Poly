@@ -1,9 +1,10 @@
 //! Two small protocols toolkits use when they are there:
 //!
 //! - `wp_fractional_scale_v1` (fractional-scale-v1.xml): a surface's
-//!   preferred scale in 120ths. Poly's outputs have an integer scale, so it
-//!   is that scale times 120; a client that uses it draws at the output's
-//!   resolution through `wp_viewport`, which Poly shows pixel for pixel.
+//!   preferred scale in 120ths: the output's scale exactly (150 % is 180,
+//!   ADR 0179). A client that uses it draws at the output's resolution
+//!   through `wp_viewport` (a buffer of `round(size * scale)` pixels), which
+//!   Poly shows pixel for pixel.
 //! - `xdg_activation_v1` (xdg-activation-v1.xml): a client asks for a
 //!   token, hands it to another (an app it starts, through
 //!   `XDG_ACTIVATION_TOKEN`), which activates its toplevel with it. Tokens
@@ -46,7 +47,7 @@ impl Server {
             return Err(error(_manager, code, format!("surface {surface} already has a fractional scale")));
         }
         s.fractional = Some(id);
-        let scale = self.output.scale * 120;
+        let scale = self.output.scale.as_120ths();
         let client = self.client(c);
         client.insert(id, &wp_fractional_scale_v1::INTERFACE, 1, Data::Fractional(Some(surface)));
         client.send(id, wp_fractional_scale_v1::Event::PreferredScale { scale });
@@ -71,7 +72,7 @@ impl Server {
 
     /// Every fractional scale object hears the output's scale.
     pub(super) fn fractional_scale_changed(&mut self) {
-        let scale = self.output.scale * 120;
+        let scale = self.output.scale.as_120ths();
         for client in self.clients.values_mut() {
             for id in client.ids_where(|d| matches!(d, Data::Fractional(Some(_)))) {
                 client.send(id, wp_fractional_scale_v1::Event::PreferredScale { scale });

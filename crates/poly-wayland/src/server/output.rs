@@ -38,7 +38,7 @@ impl Server {
                 send_output(client, id, &o);
             }
             for s in client.ids_where(|d| matches!(d, Data::Surface(s) if s.window.is_some())) {
-                client.send(s, wl_surface::Event::PreferredBufferScale { factor: o.scale as i32 });
+                client.send(s, wl_surface::Event::PreferredBufferScale { factor: o.scale.ceil() as i32 });
             }
         }
         self.fractional_scale_changed();
@@ -105,7 +105,7 @@ fn send_output(client: &mut super::Client, id: ObjectId, o: &OutputConfig) {
             refresh: o.refresh_mhz as i32,
         },
     );
-    client.send(id, wl_output::Event::Scale { factor: o.scale as i32 });
+    client.send(id, wl_output::Event::Scale { factor: o.scale.ceil() as i32 });
     client.send(id, wl_output::Event::Name { name: o.name.clone() });
     client.send(id, wl_output::Event::Description { description: o.description.clone() });
     client.send(id, wl_output::Event::Done);

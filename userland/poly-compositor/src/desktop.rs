@@ -202,7 +202,11 @@ impl poly_shell::apps::AppFiles for DiskApps {
 /// Every installed app: Poly's own and the desktop files' (the one list
 /// the launcher offers and Files' Applications folder shows, ADR 0175).
 pub fn installed_apps() -> Vec<App> {
-    poly_shell::apps::installed(&DiskApps, &mut |name, why| {
+    // The desktop user's own desktop files too: the AppImages the installer
+    // put there (ADR 0180).
+    let data = poly_shell::apps::data_home(poly_rt::env::var("XDG_DATA_HOME"), poly_rt::env::var("HOME"));
+    let user = poly_shell::apps::user_applications(&data);
+    poly_shell::apps::installed_for_user(&DiskApps, &user, &mut |name, why| {
         eprintln!("poly-compositor: {name}: not offered ({why:?})");
     })
 }

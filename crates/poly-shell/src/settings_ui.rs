@@ -41,6 +41,7 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use poly_input::layout::Layout;
+use poly_wayland::compose::Scale;
 use poly_wayland::compose::paint::{self, Radii, Shadow};
 use poly_wayland::compose::{Framebuffer, Rect};
 
@@ -186,7 +187,7 @@ pub enum Target {
     Back,
     Forward,
     Mode(usize),
-    Scale(u32),
+    Scale(Scale),
     Keyboard(usize),
     Wallpaper(usize),
     Volume,
@@ -634,7 +635,7 @@ impl SettingsWindow {
                     .map(|(i, &(mw, mh))| (format!("{mw}\u{d7}{mh}"), (mw, mh) == current, Target::Mode(i)))
                     .collect();
                 let scales: Vec<(String, bool, Target)> =
-                    SCALES.iter().map(|&s| (format!("{}%", s * 100), s == st.scale, Target::Scale(s))).collect();
+                    SCALES.iter().map(|&s| (format!("{}%", s.percent()), s == st.scale, Target::Scale(s))).collect();
                 b.rows(vec![
                     ("Resolution".into(), Some("The display's mode".into()), Control::Segmented(res)),
                     ("Scale".into(), Some("The size of everything on the screen".into()), Control::Segmented(scales)),
