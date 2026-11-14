@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "fstat_dir_dev",
+      "source_sha256": "1f88e671c2ea7b8311353a9793e50eb0a9c1e9806c7d611c0acb3399427bdd6a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0920d6ee98e920e7d9b1aecbb40722b6ff71c64a455720219bea798ea939ae86",
+          "exit_code": 0,
+          "stdout": "ok fstat64 of a directory\nok a directory, mode 0755\nok an empty directory has 2 links\nok and size 64 on APFS\nok fstat64 of /dev/null\nok a character device, mode 0666\nok device 3,2 (major in the top byte)\nok size 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "fstat_file",
+      "source_sha256": "e89b7ef391881c322d112e6852b02c2d828fdbac9bf166bc6d14c8edbf6958df",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "638979e0ea5941cd1bdc400c4590d584399a697a8f315b70617e5d611c6f60e3",
+          "exit_code": 0,
+          "stdout": "ok fstat64 returns 0\nok a regular file, mode 0644\nok one link\nok size 5\nok an inode number\nok owned by the caller's uid\nok and gid\nok no flags\nok st_gen is 0 for an unprivileged caller\nok modified after 2023\nvalue st_blksize 4096\nvalue st_blocks 8\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

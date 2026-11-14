@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "task_self_reply_ports",
+      "source_sha256": "e6c47de398faa00feb27c5af673d60d973b383d84a0165a58c6d467144bf65a3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d2d34255c476a1370599899d6e63b0f5088a49858764370d84ac0b87066f9738",
+          "exit_code": 0,
+          "stdout": "ok mach_reply_port gives a name\nok a new one each time\nok never the task's\nok the task's name stays\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "task_self_stable",
+      "source_sha256": "f2cac0b10907f35c2adc8f371c904873d8cb6fda7198087abba70f7c9e6f1359",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "24ad9c7f1241e2d78105b9414bdc155b103e4b0899828cb81e44e87e236411f4",
+          "exit_code": 0,
+          "stdout": "ok not MACH_PORT_NULL\nok not MACH_PORT_DEAD\nok a 32-bit name\nok the same name twice\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

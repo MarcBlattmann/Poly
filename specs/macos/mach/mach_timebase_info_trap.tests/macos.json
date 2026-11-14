@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "timebase_bad_pointer",
+      "source_sha256": "e8724025acca6c75ad7926ac841b7abc3b996779ef6eb5526a17483469bd8121",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6b3d20573261627aefe38d24ca7892f88c22dc279d03a5663342ed2b727e9b9a",
+          "exit_code": 0,
+          "stdout": "ok NULL: KERN_SUCCESS\nok address 8: KERN_SUCCESS\nok a good pointer afterwards\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "timebase_stable",
+      "source_sha256": "404214e916587db215cf4df89e64f0bd7bac91f103c633a19b6d7cf55148aebd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4d705f8b6a85879bd3783525ff084d9bbfc33223c89b3fa4fe72a0fd6e548a2f",
+          "exit_code": 0,
+          "stdout": "ok KERN_SUCCESS again\nok the same numer and denom\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

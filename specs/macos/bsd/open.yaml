@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/open.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# open.tests/macos.json.
+id: macos/syscall/bsd/open
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 5,
+  arguments in rdi, rsi, rdx, r10, r8, r9; arm64 `svc #0x80` with x16 = 5,
+  arguments in x0..x5. On failure the carry flag is set and the result
+  register holds the errno (<sys/errno.h>); on success the carry flag is
+  clear. open(path, flags, mode) returns the lowest free descriptor (3 in
+  a fresh test process, 0 after stdin was closed). With O_CREAT a missing
+  regular file is made with mode & ~umask (0666 under umask 022 is 0644,
+  under 077 0600); an existing file is opened without O_EXCL and refused
+  with it. O_TRUNC empties an existing file opened for writing. "." opens
+  with O_RDONLY, also with O_CREAT. Path components are at most 255 bytes:
+  255 works, 256 is ENAMETOOLONG (also without O_CREAT). Flag values are
+  those of <sys/fcntl.h> (O_CREAT 0x200, O_TRUNC 0x400, O_EXCL 0x800,
+  O_DIRECTORY 0x100000).
+returns:
+  success: "the lowest free descriptor"
+errors:
+  missing: "ENOENT (2): a missing file without O_CREAT, the empty path, O_CREAT in a missing directory"
+  exists: "EEXIST (17): O_CREAT|O_EXCL of an existing file"
+  not_a_directory: "ENOTDIR (20): O_DIRECTORY of a regular file; a regular file used as a directory (\"file/x\")"
+  directory_for_writing: "EISDIR (21): a directory with O_WRONLY or O_RDWR"
+  name_too_long: "ENAMETOOLONG (63): a component of 256 bytes or more"
+  bad_path: "EFAULT (14): path at address 8"
+side_effects: "O_CREAT makes the file; O_TRUNC empties it"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

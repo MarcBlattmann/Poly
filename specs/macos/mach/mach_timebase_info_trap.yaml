@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/mach_timebase_info_trap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# mach_timebase_info_trap.tests/macos.json.
+id: macos/syscall/mach/mach_timebase_info_trap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 89;
+  arm64 `svc #0x80` with x16 = -89. The result is in rax / x0; there is no
+  carry-flag convention. mach_timebase_info_trap(info) fills struct
+  mach_timebase_info {u32 numer, u32 denom} (<mach/mach_time.h>), the
+  ratio of mach_absolute_time units to nanoseconds, and returns
+  KERN_SUCCESS (0). The arm64 oracle gives 125/3 (24 MHz ticks); x86_64
+  under Rosetta is expected to give 1/1 (not observed). The ratio is the
+  same on every call. A NULL or unmapped pointer is not reported: the trap
+  returns KERN_SUCCESS and later calls work.
+returns:
+  success: "KERN_SUCCESS (0), *info filled"
+  bad_pointer: "KERN_SUCCESS (0) for NULL or address 8, nothing written"
+errors: {}
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -53,8 +53,12 @@ typedef unsigned long size_t;
 #define SYS_close 6
 #define SYS_unlink 10
 #define SYS_getpid 20
+#define SYS_getuid 24
 #define SYS_getppid 39
+#define SYS_getgid 47
+#define SYS_umask 60
 #define SYS_munmap 73
+#define SYS_mprotect 74
 #define SYS_mkdir 136
 #define SYS_rmdir 137
 #define SYS_mmap 197
@@ -84,10 +88,16 @@ typedef unsigned long size_t;
 #define ENOTDIR 20
 #define EISDIR 21
 #define EINVAL 22
+#define ENODEV 19
 #define ESPIPE 29
 #define ENAMETOOLONG 63
 #define ENOTEMPTY 66
 #define ENOSYS 78
+
+/* <sys/unistd.h> */
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
 
 /* <sys/fcntl.h> */
 #define O_RDONLY 0x0000
@@ -117,6 +127,7 @@ typedef unsigned long size_t;
 #define S_IFCHR 0020000
 #define S_IFDIR 0040000
 #define S_IFREG 0100000
+#define S_IFIFO 0010000
 
 /* <sys/dirent.h> */
 #define DT_UNKNOWN 0

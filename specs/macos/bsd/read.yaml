@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/read.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# read.tests/macos.json.
+id: macos/syscall/bsd/read
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 3,
+  arguments in rdi, rsi, rdx, r10, r8, r9; arm64 `svc #0x80` with x16 = 3,
+  arguments in x0..x5. On failure the carry flag is set and the result
+  register holds the errno (<sys/errno.h>); on success the carry flag is
+  clear. read(fd, buf, count) copies up to count bytes from the
+  descriptor's offset and returns how many; 0 at the end of the file. A
+  count of 0 returns 0 and leaves the offset. /dev/null and the test's
+  stdin read 0. A read into an unwritable buffer fails with EFAULT and
+  consumes nothing, but at the end of the file the same read returns 0
+  (nothing to copy).
+returns:
+  success: "the number of bytes read, 0 at end of file"
+  count_zero: "0, offset unchanged"
+errors:
+  not_open: "EBADF (9): fd 77"
+  not_readable: "EBADF (9): a descriptor opened O_WRONLY"
+  directory: "EISDIR (21): a directory opened O_RDONLY"
+  bad_buffer: "EFAULT (14): buffer at address 8 while data is available; the offset does not move"
+side_effects: "the descriptor's offset moves by the bytes read"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

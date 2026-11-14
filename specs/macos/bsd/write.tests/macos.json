@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "write_counts",
+      "source_sha256": "22ed9f21e5aa54689ed2a65057dd3f8892e43f530cd448596e3b1fe6c9fbca34",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "114b81c0ebb6f335bd67bcb65487e6b0e420a6b76d6f6201b1f72419a247feda",
+          "exit_code": 0,
+          "stdout": "line written by write\nok write to stdout returns the count\nok a count of 0 returns 0\nok open a new file\nok first write returns 5\nok second write returns 3\nok the file is 8 bytes\nok an O_APPEND write returns 1\nok O_APPEND wrote at the end, not at offset 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "write_devnull",
+      "source_sha256": "12d36810cfae039c21b8a9e69ba8d56a272094d816ba74eb23e3e51bfeea3133",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a5c879e7f257317a85eac8b8e18a35d41b23006a7de3ec1a803c27e947f91c0c",
+          "exit_code": 0,
+          "stdout": "ok open /dev/null\nok 3 bytes: 3\nok 100000 bytes: 100000\nok 0 bytes: 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
