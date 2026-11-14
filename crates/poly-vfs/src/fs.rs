@@ -138,6 +138,18 @@ pub trait FileSystem: Send + Sync {
         None
     }
 
+    /// The file of another file system that holds `ino`'s data, for a
+    /// file system that shows the files of others (an overlay shows its
+    /// layers'): a shared memory mapping of `ino` maps that file, so the
+    /// mapping, the layer and the union show the same bytes. With
+    /// `for_write` it is the file writes go to (the copy in the writable
+    /// layer, made now if there is none yet). `None`, the default: the
+    /// file system holds its own data.
+    fn backing_file(&self, ino: Ino, for_write: bool) -> Result<Option<(alloc::sync::Arc<dyn FileSystem>, Ino)>> {
+        let _ = (ino, for_write);
+        Ok(None)
+    }
+
     /// Called when a regular file is opened for writing (or truncating),
     /// before the open file exists: a union file system copies the file to
     /// its writable layer here, so the copy exists even if nothing is

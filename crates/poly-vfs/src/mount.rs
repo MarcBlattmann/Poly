@@ -70,6 +70,27 @@ impl MountFlags {
     }
 }
 
+/// What a mount is locked against ([`Mount::locks`]; ADR 0177). The locks
+/// are set when a mount namespace is copied for a user namespace other
+/// than the one that owns it (mount_namespaces(7), "Restrictions on mount
+/// namespaces"): the less privileged namespace must not uncover what a
+/// mount hides or drop the restrictions a mount came with.
+pub mod lock {
+    /// In place: the mount cannot be unmounted or moved off its mount
+    /// point by itself (`EINVAL`); it goes with the mount it is on.
+    pub const PLACE: u8 = 1;
+    /// The per-mount flag was set when the lock was made and cannot be
+    /// cleared again (`EPERM`).
+    pub const READ_ONLY: u8 = 2;
+    pub const NO_SUID: u8 = 4;
+    pub const NO_DEV: u8 = 8;
+    pub const NO_EXEC: u8 = 16;
+    /// The access time mode cannot be changed (`EPERM`), whatever it is.
+    pub const ATIME: u8 = 32;
+    /// The locks a copy of the mount keeps (a bind mount of it).
+    pub const FLAGS: u8 = READ_ONLY | NO_SUID | NO_DEV | NO_EXEC | ATIME;
+}
+
 /// One mounted subtree.
 pub struct Mount {
     pub(crate) id: MountId,
@@ -89,6 +110,13 @@ pub struct Mount {
     subtree: SpinMutex<Vec<Arc<Mount>>>,
     /// [`MountFlags`] as bits: a remount changes them in place.
     flags: AtomicU8,
+    /// [`lock`] bits.
+    locks: AtomicU8,
+    /// Stacked under the mount whose root it is mounted on, not over it:
+    /// `pivot_root(2)` with `put_old` = `new_root` puts the old root
+    /// there. Path lookups do not enter it (what is above hides it);
+    /// unmounting that place removes it. Moving it ends this.
+    beneath: AtomicBool,
     /// The rest of the per-mount attributes, as Linux's `MOUNT_ATTR_*`
     /// bits other than the four of [`MountFlags`] (`linux/mount.h`: the
     /// access time mode `0x70`, `NODIRATIME 0x80`, `NOSYMFOLLOW
@@ -177,6 +205,80 @@ impl Mount {
         self.set_flags(flags);
     }
 
+    /// What the mount is locked against ([`lock`]).
+    pub fn locks(&self) -> u8 {
+        self.locks.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_locks(&self, locks: u8) {
+        self.locks.store(locks, Ordering::Relaxed);
+    }
+
+    /// Whether the mount cannot be unmounted or moved by itself
+    /// ([`lock::PLACE`]).
+    pub fn locked_in_place(&self) -> bool {
+        self.locks() & lock::PLACE != 0
+    }
+
+    /// The locks a mount with the flags and attributes it has now gets
+    /// when its namespace is copied for a less privileged user namespace:
+    /// every flag it has, and its access time mode.
+    pub(crate) fn locks_of_flags(&self) -> u8 {
+        let f = self.flags();
+        [
+            (f.read_only, lock::READ_ONLY),
+            (f.no_suid, lock::NO_SUID),
+            (f.no_dev, lock::NO_DEV),
+            (f.no_exec, lock::NO_EXEC),
+        ]
+        .iter()
+        .filter(|(on, _)| *on)
+        .fold(lock::ATIME, |acc, (_, bit)| acc | bit)
+    }
+
+    /// Whether a remount of this mount to `flags` (`MS_REMOUNT | MS_BIND`,
+    /// `mount_setattr(2)`) would clear a flag that is locked on (`EPERM`).
+    pub fn flags_locked_against(&self, flags: MountFlags) -> bool {
+        let l = self.locks();
+        (l & lock::READ_ONLY != 0 && !flags.read_only)
+            || (l & lock::NO_SUID != 0 && !flags.no_suid)
+            || (l & lock::NO_DEV != 0 && !flags.no_dev)
+            || (l & lock::NO_EXEC != 0 && !flags.no_exec)
+    }
+
+    /// Whether the access time mode is locked and `attrs` (`MOUNT_ATTR_*`
+    /// bits, the mode in `0x70`) names another mode than the mount has
+    /// (`EPERM`).
+    pub fn atime_locked_against(&self, attrs: u32) -> bool {
+        self.locks() & lock::ATIME != 0 && (attrs ^ self.attrs()) & 0x70 != 0
+    }
+
+    /// After a copy of `original` was made (a bind mount, a copied
+    /// namespace, propagation): hold the root inode as the original does
+    /// (see `pins_root`). Not under the mount table's lock: the file
+    /// system is asked.
+    pub(crate) fn pin_like(&self, original: &Mount) {
+        if original.pins_root.load(Ordering::Relaxed)
+            && !self.pins_root.load(Ordering::Relaxed)
+            && self.sb.fs.open(self.root).is_ok()
+        {
+            self.pins_root.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// The user namespace that owns the file system (a number the caller
+    /// chooses; 0, the initial one, until [`set_sb_owner`](Self::set_sb_owner)):
+    /// only its root may change the file system itself (a remount without
+    /// `MS_BIND`, `FSCONFIG_CMD_RECONFIGURE`).
+    pub fn sb_owner(&self) -> u32 {
+        self.sb.owner.load(Ordering::Relaxed)
+    }
+
+    /// Record who made the file system (shared by all its mounts).
+    pub fn set_sb_owner(&self, owner: u32) {
+        self.sb.owner.store(owner, Ordering::Relaxed);
+    }
+
     /// Where this mount is mounted: the mount and inode of its mount
     /// point; `None` for the root of a tree or a detached mount.
     pub fn parent(&self) -> Option<(Arc<Mount>, Ino)> {
@@ -186,6 +288,17 @@ impl Mount {
 
     pub(crate) fn set_parent(&self, parent: Option<(Arc<Mount>, Ino)>) {
         *self.parent.lock() = parent.map(|(m, ino)| (Link::Strong(m), ino));
+        self.set_beneath(false);
+    }
+
+    /// Whether the mount is stacked under the root it is mounted on (see
+    /// the field).
+    pub fn is_beneath(&self) -> bool {
+        self.beneath.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_beneath(&self, beneath: bool) {
+        self.beneath.store(beneath, Ordering::Relaxed);
     }
 
     /// Mount this (a copy below the top of a detached tree) on `(parent,
@@ -434,6 +547,8 @@ pub(crate) struct Superblock {
     open_inodes: SpinMutex<BTreeMap<Ino, u32>>,
     /// The source and options recorded by [`Mount::set_sb_info`].
     meta: SpinMutex<(Vec<u8>, Vec<u8>)>,
+    /// [`Mount::sb_owner`].
+    owner: AtomicU32,
 }
 
 impl Superblock {
@@ -575,6 +690,8 @@ pub(crate) struct MountTable {
     next_anon_minor: u32,
     pub(crate) next_group: u32,
     supers: Vec<Weak<Superblock>>,
+    /// Copies of mounts that pin their root, not pinned yet (`copy_of`).
+    pending_pins: Vec<(Arc<Mount>, Arc<Mount>)>,
     /// Namespaces whose first mount changed (`pivot_root(2)`): the id a
     /// namespace was named by when it was made, and its first mount now.
     aliases: BTreeMap<MountId, MountId>,
@@ -588,6 +705,7 @@ impl MountTable {
             next_anon_minor: 1,
             next_group: 1,
             supers: Vec::new(),
+            pending_pins: Vec::new(),
             aliases: BTreeMap::new(),
         }
     }
@@ -642,6 +760,7 @@ impl MountTable {
             writers: AtomicU32::new(0),
             open_inodes: SpinMutex::new(BTreeMap::new()),
             meta: SpinMutex::new((Vec::new(), Vec::new())),
+            owner: AtomicU32::new(0),
         });
         self.supers.push(Arc::downgrade(&sb));
         sb
@@ -674,6 +793,8 @@ impl MountTable {
             parent: SpinMutex::new(parent.map(|(m, ino)| (Link::Strong(m), ino))),
             subtree: SpinMutex::new(Vec::new()),
             flags: AtomicU8::new(flags.to_bits()),
+            locks: AtomicU8::new(0),
+            beneath: AtomicBool::new(false),
             attrs: AtomicU32::new(0),
             peer: AtomicU32::new(0),
             master: AtomicU32::new(0),
@@ -684,6 +805,27 @@ impl MountTable {
         });
         self.next_id += 1;
         m
+    }
+
+    /// A copy of `m` showing `root` of the same file system, in no list
+    /// yet and on no mount point: with the flags, attributes and flag
+    /// locks of `m` (a copy is not locked in place by itself), private.
+    /// If `m` pins its root the copy is noted to be pinned too, once the
+    /// table's lock is released (`take_pending_pins`).
+    pub(crate) fn copy_of(&mut self, m: &Arc<Mount>, root: Ino) -> Arc<Mount> {
+        let copy = self.new_mount(m.sb.clone(), root, None, m.flags());
+        copy.set_attrs(m.attrs());
+        copy.set_locks(m.locks() & lock::FLAGS);
+        if m.pins_root.load(Ordering::Relaxed) {
+            self.pending_pins.push((m.clone(), copy.clone()));
+        }
+        copy
+    }
+
+    /// The copies made of mounts that pin their root, for
+    /// [`Vfs::settle_pins`](crate::Vfs) to pin outside the lock.
+    pub(crate) fn take_pending_pins(&mut self) -> Vec<(Arc<Mount>, Arc<Mount>)> {
+        core::mem::take(&mut self.pending_pins)
     }
 
     /// Whether `m` is in the table (attached), not detached.
@@ -728,9 +870,16 @@ impl MountTable {
         self.new_mount(sb, root, None, MountFlags::default())
     }
 
-    /// The topmost mount on mount point `(mount, ino)`.
+    /// The topmost mount on mount point `(mount, ino)` (not one stacked
+    /// beneath it, [`Mount::is_beneath`]).
     pub(crate) fn covering(&self, mount: MountId, ino: Ino) -> Option<&Arc<Mount>> {
-        self.mounts.iter().rev().find(|m| m.is_on(mount, Some(ino)))
+        self.mounts.iter().rev().find(|m| m.is_on(mount, Some(ino)) && !m.is_beneath())
+    }
+
+    /// The mount stacked beneath `(mount, ino)` ([`Mount::is_beneath`]),
+    /// the last one if there are several.
+    pub(crate) fn beneath(&self, mount: MountId, ino: Ino) -> Option<&Arc<Mount>> {
+        self.mounts.iter().rev().find(|m| m.is_on(mount, Some(ino)) && m.is_beneath())
     }
 
     /// The mounts of the tree whose first mount is `base`, in mount order
@@ -743,8 +892,12 @@ impl MountTable {
         self.mounts.iter().any(|m| m.is_on(mount, None))
     }
 
-    /// Removes `id` and, transitively, everything mounted below it.
-    pub(crate) fn remove_tree(&mut self, id: MountId) -> Result<()> {
+    /// Removes `id` and, transitively, everything mounted below it, and
+    /// returns what was removed: the caller drops it after it released the
+    /// table's lock, because a mount that goes may release an inode it
+    /// pinned (a namespace file, whose namespace may be a mount namespace
+    /// that then takes this lock to drop its mounts).
+    pub(crate) fn remove_tree(&mut self, id: MountId) -> Result<Vec<Arc<Mount>>> {
         if !self.mounts.iter().any(|m| m.id == id) {
             return Err(Errno::EINVAL);
         }
@@ -755,7 +908,8 @@ impl MountTable {
             doomed.extend(self.mounts.iter().filter(|m| m.is_on(d, None)).map(|m| m.id));
             i += 1;
         }
+        let removed = self.mounts.iter().filter(|m| doomed.contains(&m.id)).cloned().collect();
         self.mounts.retain(|m| !doomed.contains(&m.id));
-        Ok(())
+        Ok(removed)
     }
 }

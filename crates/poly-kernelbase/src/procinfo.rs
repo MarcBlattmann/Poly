@@ -21,6 +21,9 @@ pub const PROCESS_POWER_THROTTLING: u32 = 4;
 pub const PROCESS_PROTECTION_LEVEL_INFO: u32 = 7;
 pub const PROCESS_LEAP_SECOND_INFO: u32 = 8;
 pub const PROCESS_MACHINE_TYPE_INFO: u32 = 9;
+/// `ProcessMaxOverridePrefetchParameter`: four bytes, readable (the sheet), 0 for a process that
+/// has no prefetch override.
+pub const PROCESS_MAX_OVERRIDE_PREFETCH_PARAMETER: u32 = 11;
 
 /// `MEMORY_PRIORITY_NORMAL` (`processthreadsapi.h`): "the default priority for all threads and
 /// processes on the system" (Learn, `MEMORY_PRIORITY_INFORMATION`).
@@ -73,7 +76,7 @@ pub struct AppMemory {
 /// The size of the structure a class carries, or `None` for a class Poly does not know.
 pub fn class_size(class: u32) -> Option<usize> {
     match class {
-        PROCESS_MEMORY_PRIORITY | PROCESS_PROTECTION_LEVEL_INFO => Some(4),
+        PROCESS_MEMORY_PRIORITY | PROCESS_PROTECTION_LEVEL_INFO | PROCESS_MAX_OVERRIDE_PREFETCH_PARAMETER => Some(4),
         PROCESS_IN_PRIVATE_INFO => Some(1),
         PROCESS_POWER_THROTTLING => Some(12),
         PROCESS_APP_MEMORY_INFO => Some(32),
@@ -114,6 +117,7 @@ pub fn get(state: &ProcessState, memory: &AppMemory, class: u32, size: usize) ->
             out.extend(state.leap_flags.to_le_bytes());
             out.extend(0u32.to_le_bytes());
         }
+        PROCESS_MAX_OVERRIDE_PREFETCH_PARAMETER => out.extend(0u32.to_le_bytes()),
         _ => {
             // PROCESS_MACHINE_INFORMATION: ProcessMachine, Res0, MachineAttributes.
             out.extend(MACHINE_AMD64.to_le_bytes());
@@ -302,6 +306,19 @@ mod tests {
         assert_eq!(set(&mut s, PROCESS_LEAP_SECOND_INFO, &[1, 0, 0, 0, 0, 0, 0, 0]), Ok(()));
         assert_eq!(get(&s, &m, PROCESS_LEAP_SECOND_INFO, 8), Ok(vec![1, 0, 0, 0, 0, 0, 0, 0]));
         assert_eq!(set(&mut s, PROCESS_LEAP_SECOND_INFO, &[2, 0, 0, 0, 0, 0, 0, 0]), Err(ERROR_INVALID_PARAMETER));
+    }
+
+    #[test]
+    fn the_prefetch_override_class_reads_four_bytes_and_the_wrong_size_is_a_bad_length() {
+        let (s, m) = (ProcessState::NEW, AppMemory::default());
+        assert_eq!(get(&s, &m, PROCESS_MAX_OVERRIDE_PREFETCH_PARAMETER, 4), Ok(vec![0, 0, 0, 0]));
+        for size in [0, 1, 2, 8, 12, 64] {
+            assert_eq!(get(&s, &m, PROCESS_MAX_OVERRIDE_PREFETCH_PARAMETER, size), Err(ERROR_BAD_LENGTH), "{size}");
+        }
+        // The classes that cannot be read, whatever the size (the sheet).
+        for class in [1, 5, 6, 10, 12, 13, 100, 0xFFFF_FFFF] {
+            assert_eq!(get(&s, &m, class, 4), Err(ERROR_INVALID_PARAMETER), "{class}");
+        }
     }
 
     #[test]

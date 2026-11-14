@@ -15,17 +15,19 @@ use crate::tz::{TimeZone, ZONES};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use poly_wayland::compose::Scale;
 
 /// The keyboard layouts offered (`poly-input`'s names) and their labels.
 pub const KEYBOARDS: &[(&str, &str)] = &[("us", "English (US)"), ("de-ch", "German (Switzerland)"), ("de", "German")];
-/// The output scales offered.
-pub const SCALES: &[u32] = &[1, 2];
+/// The output scales offered: 100, 125, 150, 175 and 200 % (ADR 0179).
+pub const SCALES: &[Scale] = &Scale::PRESETS;
 
 /// The settings.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
-    /// The output's integer scale.
-    pub scale: u32,
+    /// The output's scale (a fraction too, ADR 0179). The file keeps the
+    /// percentage (`scale=150`); older files' `1` and `2` still read.
+    pub scale: Scale,
     /// The display mode asked for (`None`: the display's preferred one).
     pub resolution: Option<(u32, u32)>,
     pub keyboard: String,
@@ -54,7 +56,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
-            scale: 1,
+            scale: Scale::ONE,
             resolution: None,
             keyboard: "us".into(),
             wallpaper: PRESETS[0].0.into(),
@@ -75,7 +77,7 @@ impl Default for Settings {
 /// and what the compositor applies).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Change {
-    Scale(u32),
+    Scale(Scale),
     Resolution(u32, u32),
     Keyboard(String),
     Wallpaper(String),
@@ -106,7 +108,7 @@ impl Settings {
             let Some((key, value)) = line.split_once('=') else { continue };
             let (key, value) = (key.trim(), value.trim());
             let known = match key {
-                "scale" => value.parse().ok().filter(|v| SCALES.contains(v)).map(|v| s.scale = v).is_some(),
+                "scale" => Scale::parse(value).filter(|v| SCALES.contains(v)).map(|v| s.scale = v).is_some(),
                 "resolution" => {
                     let r = value.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)));
                     s.resolution = r.filter(|&(w, h): &(u32, u32)| w >= 320 && h >= 200 && w <= 8192 && h <= 8192);
@@ -168,7 +170,7 @@ impl Settings {
     /// The file's text.
     pub fn to_text(&self) -> String {
         let mut out = String::from("# Poly's shell settings (ADR 0117), written by the compositor.\n");
-        out += &format!("scale={}\n", self.scale);
+        out += &format!("scale={}\n", self.scale.to_text());
         if let Some((w, h)) = self.resolution {
             out += &format!("resolution={w}x{h}\n");
         }
@@ -240,7 +242,7 @@ mod tests {
     #[test]
     fn round_trip() {
         let s = Settings {
-            scale: 2,
+            scale: Scale::from_percent(150),
             resolution: Some((1920, 1080)),
             keyboard: "de-ch".into(),
             wallpaper: "forest".into(),
@@ -288,7 +290,10 @@ mod tests {
         assert_eq!(s.volume, 100);
         assert!(s.apply(&Change::Keyboard("de".into())));
         assert!(!s.apply(&Change::Keyboard("xx".into())));
-        assert!(!s.apply(&Change::Scale(5)));
+        assert!(!s.apply(&Change::Scale(Scale::from_int(5))));
+        assert!(!s.apply(&Change::Scale(Scale::from_percent(140))));
+        assert!(s.apply(&Change::Scale(Scale::from_percent(125))));
+        assert!(!s.apply(&Change::Scale(Scale::from_percent(125))), "no change");
         assert!(s.apply(&Change::TimeZone("Asia/Tokyo".into())));
         assert_eq!(s.zone_label(), "Tokyo");
         assert!(s.apply(&Change::Wallpaper("dusk".into())));

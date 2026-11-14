@@ -35,6 +35,9 @@ pub mod uapi {
     pub const MOVE_MOUNT_T_SYMLINKS: u32 = 0x10;
     pub const MOVE_MOUNT_T_AUTOMOUNTS: u32 = 0x20;
     pub const MOVE_MOUNT_T_EMPTY_PATH: u32 = 0x40;
+    /// The target mount joins the source mount's propagation group; no
+    /// mount moves.
+    pub const MOVE_MOUNT_SET_GROUP: u32 = 0x100;
 
     pub const FSOPEN_CLOEXEC: u32 = 0x01;
     pub const FSPICK_CLOEXEC: u32 = 0x01;
@@ -318,6 +321,15 @@ pub trait SuperblockOps {
     /// Apply `read_only` (`ro`/`rw`, if given) and the parameters given
     /// (`data`, as `mount(2)` data) to the superblock.
     fn reconfigure(&mut self, read_only: Option<bool>, data: &[u8]) -> Result<(), Errno>;
+    /// A parameter names a directory (a layer of an overlay): look it up
+    /// now, as the calling thread. An overlay's directories are checked
+    /// when they are given, not at `FSCONFIG_CMD_CREATE` (the spec sheet
+    /// of mntapi_fsconfig: a `lowerdir` that does not exist is `ENOENT`
+    /// from the `FSCONFIG_SET_STRING`).
+    fn check_directory(&mut self, path: &[u8]) -> Result<(), Errno> {
+        let _ = path;
+        Ok(())
+    }
 }
 
 /// A file system context: the state behind an `fsopen(2)` / `fspick(2)`
@@ -454,7 +466,7 @@ impl FsContext {
             return Err(Errno::EBUSY);
         }
         match *cmd {
-            Command::Set { key, value } => self.set(key, value),
+            Command::Set { key, value } => self.set(key, value, ops),
             Command::Create | Command::CreateExcl if reconf => Err(Errno::EBUSY),
             Command::Create | Command::CreateExcl => {
                 if self.purpose != Purpose::Create {
@@ -518,7 +530,7 @@ impl FsContext {
     /// One parameter: the generic ones (`source`, `ro`, `rw`), then the
     /// file system's own. A rejected parameter logs why and leaves the
     /// context usable.
-    fn set(&mut self, key: &[u8], value: Value<'_>) -> Result<(), Errno> {
+    fn set(&mut self, key: &[u8], value: Value<'_>, ops: &mut dyn SuperblockOps) -> Result<(), Errno> {
         match (key, value) {
             (b"source", Value::String(s)) => {
                 if self.source.is_some() {
@@ -559,6 +571,22 @@ impl FsContext {
         if fstype == FsType::Overlay && !overlay_value_ok(key, value.as_deref()) {
             return Err(self.reject("Bad value for", key));
         }
+        // The layers of an overlay are looked up as they are given: the
+        // lookup's error is the call's, without a message, and the
+        // parameter is not taken.
+        if fstype == FsType::Overlay
+            && let Some(v) = &value
+        {
+            match key {
+                b"lowerdir" => {
+                    for dir in v.split(|&b| b == b':') {
+                        ops.check_directory(dir)?;
+                    }
+                }
+                b"upperdir" | b"workdir" => ops.check_directory(v)?,
+                _ => {}
+            }
+        }
         self.options.retain(|(k, _)| k.as_slice() != key);
         self.options.push((key.to_vec(), value));
         Ok(())
@@ -593,6 +621,35 @@ impl FsContext {
             _ => Err(Errno::EINVAL),
         }
     }
+}
+
+/// The options a file system shows after a reconfiguration changed its
+/// limits: `shown` (what it showed, [`options_string`]'s form) with the
+/// `size` and `nr_inodes` of `new` in place of its own, added if it had
+/// none; the root's mode and owner stay as they are (a reconfigure does
+/// not change them).
+pub fn reconfigured_options(shown: &[u8], fs: FsType, new: &RootOptions) -> Vec<u8> {
+    let limits = RootOptions { size: new.size, inodes: new.inodes, ..RootOptions::default() };
+    let changed = options_string(fs, &limits);
+    let key = |o: &[u8]| o.split(|&b| b == b'=').next().unwrap_or(o).to_vec();
+    let new_parts: Vec<&[u8]> = changed.split(|&b| b == b',').filter(|o| !o.is_empty()).collect();
+    let mut out: Vec<Vec<u8>> = Vec::new();
+    let mut used = alloc::vec![false; new_parts.len()];
+    for old in shown.split(|&b| b == b',').filter(|o| !o.is_empty()) {
+        match new_parts.iter().position(|n| key(n) == key(old)) {
+            Some(i) => {
+                used[i] = true;
+                out.push(new_parts[i].to_vec());
+            }
+            None => out.push(old.to_vec()),
+        }
+    }
+    // What was not shown before goes where a new mount shows it: the
+    // limits first.
+    let mut front: Vec<Vec<u8>> =
+        new_parts.iter().zip(&used).filter(|(_, used)| !**used).map(|(n, _)| n.to_vec()).collect();
+    front.extend(out);
+    front.join(&b","[..])
 }
 
 /// The options a file system shows (`/proc/self/mountinfo`'s super
@@ -1030,5 +1087,69 @@ mod tests {
         assert_eq!(MntIdReq { size: 16, mnt_id: 1, ..MntIdReq::default() }.check(), Err(Errno::EINVAL));
         assert_eq!(MntIdReq { size: 24, spare: 1, mnt_id: 1, ..MntIdReq::default() }.check(), Err(Errno::EINVAL));
         assert_eq!(MntIdReq { size: 32, mnt_id: 0, ..MntIdReq::default() }.check(), Err(Errno::EINVAL));
+    }
+
+    /// An overlay's directories are checked when they are given.
+    #[test]
+    fn overlay_layers_are_looked_up_when_they_are_set() {
+        struct Dirs(Vec<Vec<u8>>);
+        impl SuperblockOps for Dirs {
+            fn create(&mut self, _: &CreateRequest) -> Result<(), Errno> {
+                Ok(())
+            }
+            fn reconfigure(&mut self, _: Option<bool>, _: &[u8]) -> Result<(), Errno> {
+                Ok(())
+            }
+            fn check_directory(&mut self, path: &[u8]) -> Result<(), Errno> {
+                self.0.push(path.to_vec());
+                if path.starts_with(b"/missing") { Err(Errno::ENOENT) } else { Ok(()) }
+            }
+        }
+        let mut ops = Dirs(Vec::new());
+        let mut c = FsContext::new(b"overlay").unwrap();
+        assert_eq!(c.config(&set(b"lowerdir", Value::String(b"/missing-dir")), &mut ops), Err(Errno::ENOENT));
+        // No message, and the context goes on.
+        assert!(!c.has_messages());
+        assert_eq!(c.config(&set(b"redirect_dir", Value::String(b"bogus")), &mut ops), Err(Errno::EINVAL));
+        assert_eq!(c.read_log(256).unwrap(), b"e overlay: Bad value for 'redirect_dir'\n");
+        assert_eq!(c.config(&set(b"lowerdir", Value::String(b"/a:/missing:/b")), &mut ops), Err(Errno::ENOENT));
+        assert_eq!(c.config(&set(b"upperdir", Value::String(b"/missing/up")), &mut ops), Err(Errno::ENOENT));
+        assert_eq!(c.config(&set(b"workdir", Value::String(b"/missing/work")), &mut ops), Err(Errno::ENOENT));
+        assert_eq!(c.config(&set(b"lowerdir", Value::String(b"/a:/b")), &mut ops), Ok(()));
+        assert_eq!(c.config(&set(b"upperdir", Value::String(b"/up")), &mut ops), Ok(()));
+        assert_eq!(c.config(&set(b"workdir", Value::String(b"/work")), &mut ops), Ok(()));
+        assert_eq!(c.config(&set(b"redirect_dir", Value::String(b"on")), &mut ops), Ok(()));
+        let looked: Vec<&[u8]> = ops.0.iter().map(Vec::as_slice).collect();
+        let want: [&[u8]; 9] =
+            [b"/missing-dir", b"/a", b"/missing", b"/missing/up", b"/missing/work", b"/a", b"/b", b"/up", b"/work"];
+        assert_eq!(looked, want);
+        // The parameters that were refused are not part of the data.
+        assert_eq!(c.data(), b"lowerdir=/a:/b,upperdir=/up,workdir=/work,redirect_dir=on");
+        // Other file systems' parameters are not looked up.
+        let mut ops = Dirs(Vec::new());
+        let mut t = FsContext::new(b"tmpfs").unwrap();
+        assert_eq!(t.config(&set(b"size", Value::String(b"1m")), &mut ops), Ok(()));
+        assert!(ops.0.is_empty());
+    }
+
+    #[test]
+    fn a_reconfigure_shows_the_new_limits() {
+        use crate::admin::Amount;
+        let r = |size: Option<u64>, inodes: Option<u64>| RootOptions {
+            size: size.map(Amount::Count),
+            inodes: inodes.map(Amount::Count),
+            mode: Some(0o700),
+            ..RootOptions::default()
+        };
+        let show = |old: &[u8], new: &RootOptions| {
+            alloc::string::String::from_utf8(reconfigured_options(old, FsType::Tmpfs, new)).unwrap()
+        };
+        assert_eq!(show(b"size=1024k", &r(Some(2 << 20), None)), "size=2048k");
+        assert_eq!(show(b"size=1024k,nr_inodes=100,mode=700", &r(Some(4096), None)), "size=4k,nr_inodes=100,mode=700");
+        assert_eq!(show(b"size=1024k,mode=700", &r(None, Some(50))), "nr_inodes=50,size=1024k,mode=700");
+        assert_eq!(show(b"mode=755,uid=5", &r(Some(1 << 20), Some(7))), "size=1024k,nr_inodes=7,mode=755,uid=5");
+        assert_eq!(show(b"", &r(Some(1 << 20), None)), "size=1024k");
+        // Nothing about the limits: as it was (the mode is not a reconfigure's).
+        assert_eq!(show(b"size=1024k,mode=755", &r(None, None)), "size=1024k,mode=755");
     }
 }

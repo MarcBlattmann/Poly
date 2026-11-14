@@ -64,7 +64,11 @@ impl Creds {
         new.sgid = new.egid;
         new.fsgid = new.egid;
         new.keep_caps = false;
-        new.caps = exec_caps(&self.caps, self.root_uid(), new.uid, new.euid, privileged_file);
+        // SECBIT_NOROOT: "the kernel does not grant capabilities when a
+        // set-user-ID-root program is executed, or when a process with an
+        // effective or real UID of 0 calls execve(2)" (capabilities(7)).
+        let root = if self.secure_bits & super::secbit::NOROOT != 0 { None } else { self.root_uid() };
+        new.caps = exec_caps(&self.caps, root, new.uid, new.euid, privileged_file);
         let secure = new.uid != new.euid || new.gid != new.egid;
         (new, secure)
     }

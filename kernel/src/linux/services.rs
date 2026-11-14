@@ -495,7 +495,9 @@ impl LinuxKernel for Thread<'_> {
                     Some(m) => m.map(r.shared, r.prot.writable()).map_err(vfs_errno)?,
                     None => None,
                 };
-                let source = FileSource::of(&file).holding(writable_map);
+                // A file of an overlay maps the layer's file that holds its
+                // data (ADR 0177); a writable shared mapping copies it up.
+                let source = FileSource::of(&file).holding(writable_map).backed(r.shared && r.prot.writable());
                 poly_vm::MapRequest::file(r.len, prot, FileRef::new(Arc::new(source)), offset, r.shared)
             }
         };
@@ -795,6 +797,16 @@ impl LinuxKernel for Thread<'_> {
                 kprintln!("linux: {} pid {} {who}killed by signal {signal}", super::strace::stamp(), self.process.pid);
                 super::strace::write_trail(self.process.pid, &who);
             }
+        } else if super::strace::exits_logged() {
+            // A fault that kills: `fault` logs the line about it after
+            // this; the trail shows the calls that led there.
+            let who = self.comm_for_log();
+            kprintln!(
+                "linux: {} pid {} {who}killed by signal {signal} (fault)",
+                super::strace::stamp(),
+                self.process.pid
+            );
+            super::strace::write_trail(self.process.pid, &who);
         }
         self.process.group_exit(status);
         self.exit = Some(status);

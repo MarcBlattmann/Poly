@@ -140,6 +140,88 @@ fn id_maps_parse_and_translate() {
     assert_eq!(user::write_map(&None, IdKind::Uid, b"0 0 1", 0, &root), Err(Errno::EPERM), "the initial maps");
 }
 
+/// The spec sheet of userns_idmap, "The size rule, exactly".
+#[test]
+fn a_map_range_never_reaches_the_no_id_value() {
+    let ok = |text: &str| user::parse_map(text.as_bytes()).map(|l| (l[0].first, l[0].lower, l[0].count));
+    assert_eq!(ok("4294967294 0 1"), Ok((4_294_967_294, 0, 1)));
+    assert_eq!(ok("0 4294967294 1"), Ok((0, 4_294_967_294, 1)));
+    assert_eq!(ok("5 5 4294967290"), Ok((5, 5, 4_294_967_290)));
+    assert_eq!(ok("0 0 4294967295"), Ok((0, 0, u32::MAX)));
+    assert_eq!(ok("0 2 4294967293"), Ok((0, 2, 4_294_967_293)));
+    assert!(user::parse_map(b"0 0 10\n4294967000 100 295\n").is_ok());
+    for bad in [
+        "4294967294 0 2",
+        "0 4294967294 2",
+        "5 0 4294967291",
+        "5 6 4294967290",
+        "6 5 4294967290",
+        "1 1 4294967295",
+        "0 2 4294967294",
+        "4294967295 0 1",
+        "4294967295 0 2",
+        "70000 4294967295 1",
+        "0 0 10\n4294967000 100 296\n",
+    ] {
+        assert_eq!(user::parse_map(bad.as_bytes()).err(), Some(Errno::EINVAL), "{bad:?}");
+    }
+    // Above 32 bits only the low 32 bits count.
+    assert_eq!(ok("4294967296 0 1"), Ok((0, 0, 1)));
+    assert_eq!(ok("0 4294967301 1"), Ok((0, 5, 1)));
+    assert_eq!(ok("0 0 4294967296").err(), Some(Errno::EINVAL), "a count of 0");
+    // Decimal only.
+    assert_eq!(ok("010 0 1"), Ok((10, 0, 1)));
+    for bad in ["0x10 0 1", "+1 0 1", "0 +0 1", "1 0 0x1", "-1 0 1", "a 0 1"] {
+        assert_eq!(user::parse_map(bad.as_bytes()).err(), Some(Errno::EINVAL), "{bad:?}");
+    }
+    // A refused write leaves the map unwritten.
+    let root = Creds::root();
+    let ns = Some(user::create(&root).unwrap());
+    assert_eq!(user::write_map(&ns, IdKind::Uid, b"4294967295 0 1\n", 0, &root), Err(Errno::EINVAL));
+    assert_eq!(user::write_map(&ns, IdKind::Uid, b"0 0 1\n", 0, &root), Ok(6));
+    assert_eq!(user::format_map(&ns, IdKind::Uid, &None), b"         0          0          1\n");
+    assert_eq!(user::write_map(&ns, IdKind::Uid, b"0 0 1\n", 0, &root), Err(Errno::EPERM));
+}
+
+/// "chown and chmod by a namespace's root": its capabilities over files
+/// reach the owners its namespace maps.
+#[test]
+fn file_capabilities_reach_the_mapped_owners() {
+    let root = Creds::root();
+    assert_eq!(root.fs_ids().scope, None, "the initial namespace: every file");
+    let outer = Some(user::create(&root).unwrap());
+    let mut c = root.clone();
+    c.user_ns = outer.clone();
+    // No maps yet: nothing is in reach.
+    assert!(!c.fs_ids().scope.unwrap().covers(0, 0));
+    user::write_map(&outer, IdKind::Uid, b"0 3000 1\n1 300000 400\n", 0, &root).unwrap();
+    assert!(!c.fs_ids().scope.unwrap().covers(3000, 3000), "the group map is not written yet");
+    user::write_map(&outer, IdKind::Gid, b"0 3000 1\n1 300000 400\n", 0, &root).unwrap();
+    let ids = c.fs_ids();
+    let scope = ids.scope.clone().unwrap();
+    assert!(scope.covers(3000, 3000) && scope.covers(300_004, 300_008) && scope.covers(300_399, 3000));
+    assert!(
+        !scope.covers(0, 0) && !scope.covers(3000, 0) && !scope.covers(300_400, 3000) && !scope.covers(65534, 65534)
+    );
+    for cap in [cap::CHOWN, cap::FOWNER, cap::DAC_OVERRIDE, cap::DAC_READ_SEARCH, cap::FSETID, cap::SYS_ADMIN] {
+        assert!(ids.caps.contains(cap), "{cap}");
+    }
+    assert!(!ids.caps.contains(cap::MKNOD) && !ids.caps.contains(cap::LINUX_IMMUTABLE));
+    assert_eq!(c.access_ids().scope, ids.scope);
+    // One level down: the inner namespace maps onto the outer one.
+    let inner = Some(user::create(&c).unwrap());
+    user::write_map(&inner, IdKind::Uid, b"0 0 1\n1 100 50\n", 0, &c).unwrap();
+    user::write_map(&inner, IdKind::Gid, b"0 0 1\n1 100 50\n", 0, &c).unwrap();
+    let mut i = c.clone();
+    i.user_ns = inner.clone();
+    let scope = i.fs_ids().scope.unwrap();
+    // Inner 3 is outer 102 is kernel 300101; inner 50 is the last mapped.
+    assert_eq!(user::down(&inner, IdKind::Uid, 3), Some(300_101));
+    assert!(scope.covers(3000, 3000) && scope.covers(300_101, 300_102) && scope.covers(300_148, 300_148));
+    assert!(!scope.covers(300_004, 300_008), "the outer namespace's 5:9 is not mapped here");
+    assert!(!scope.covers(300_149, 3000));
+}
+
 #[test]
 fn a_uts_namespace_has_its_own_names() {
     let mut k = FakeKernel::new();

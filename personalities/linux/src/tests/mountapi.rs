@@ -6,6 +6,7 @@ extern crate std;
 use super::fake::*;
 use crate::admin::{LinuxAdmin, MountRequest, Reboot, SystemName};
 use crate::cred::Creds;
+use crate::kernel::LinuxKernel;
 use crate::mountapi::uapi::*;
 use crate::mountapi::{AttrChange, Command, FsContext, MountDesc, MountLink, PathAt, Value, unique_id};
 use crate::{Errno, nr};
@@ -55,6 +56,10 @@ impl LinuxAdmin for Recorder {
     }
     fn move_mount(&mut self, from: &PathAt, to: &PathAt) -> Result<(), Errno> {
         self.note(format!("move_mount {from:?} {to:?}"));
+        Ok(())
+    }
+    fn mount_set_group(&mut self, from: &PathAt, to: &PathAt) -> Result<(), Errno> {
+        self.note(format!("mount_set_group {from:?} {to:?}"));
         Ok(())
     }
     fn mount_setattr(&mut self, at: &PathAt, recursive: bool, change: &AttrChange) -> Result<(), Errno> {
@@ -120,11 +125,98 @@ fn privilege_comes_first_where_needed() {
     // open_tree without a clone needs nothing.
     assert_eq!(sys(&mut k, nr::OPEN_TREE, &[AT_FDCWD_U, name, 0]), Ok(5));
     assert_eq!(sys(&mut k, nr::OPEN_TREE, &[AT_FDCWD_U, name, u64::from(OPEN_TREE_CLONE)]), Err(Errno::EPERM));
-    // mount_setattr checks the size before the privilege.
+    // mount_setattr checks the flags and the size before the privilege.
     let attr = DATA + 0x200;
     k.poke(attr, &[0u8; 32]);
     assert_eq!(sys(&mut k, nr::MOUNT_SETATTR, &[AT_FDCWD_U, name, 0, attr, 8]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::MOUNT_SETATTR, &[AT_FDCWD_U, name, 0, attr, 32]), Err(Errno::EPERM));
+    assert_eq!(taken(&log).len(), 1);
+}
+
+/// The spec sheet of mntapi_mount_setattr, `ordering`: flags, size,
+/// privilege, reading the structure, its contents, the path.
+#[test]
+fn mount_setattr_judges_in_the_sheets_order() {
+    let attr = DATA + 0x200;
+    let put = |k: &mut FakeKernel, words: [u64; 6]| {
+        let b: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        k.poke(attr, &b);
+    };
+    let call = |k: &mut FakeKernel, path: u64, flags: u64, attr: u64, size: u64| {
+        sys(k, nr::MOUNT_SETATTR, &[AT_FDCWD_U, path, flags, attr, size])
+    };
+    // Without CAP_SYS_ADMIN: EINVAL and E2BIG for flags and sizes, EPERM
+    // for everything else.
+    let (mut k, log) = kernel(Creds::user(65534, 65534));
+    let p = string(&mut k, DATA, b"/tmp/d");
+    let empty = string(&mut k, DATA + 0x100, b"");
+    put(&mut k, [MOUNT_ATTR_NODEV, 0, 0, 0, 0, 5]);
+    assert_eq!(call(&mut k, p, 0x4, attr, 32), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, p, 0x10, 0, 32), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, p, 0, attr, 16), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, p, 0, 0, 0), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, p, 0, attr, 5000), Err(Errno::E2BIG));
+    assert_eq!(call(&mut k, p, 0x4, attr, 5000), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, p, 0, attr, 32), Err(Errno::EPERM));
+    assert_eq!(call(&mut k, p, 0, 0, 32), Err(Errno::EPERM));
+    assert_eq!(call(&mut k, p, 0, UNMAPPED, 32), Err(Errno::EPERM));
+    assert_eq!(call(&mut k, p, 0, attr, 48), Err(Errno::EPERM));
+    assert_eq!(call(&mut k, empty, 0, attr, 32), Err(Errno::EPERM));
+    put(&mut k, [0x4000, 0, 0, 0, 0, 0]);
+    assert_eq!(call(&mut k, p, 0, attr, 32), Err(Errno::EPERM));
+    assert!(taken(&log).is_empty());
+
+    // With it: the structure's error before the path's.
+    let (mut k, log) = kernel(Creds::root());
+    let empty = string(&mut k, DATA + 0x100, b"");
+    assert_eq!(call(&mut k, empty, 0x4, 0, 8), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, empty, 0, 0, 8), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, empty, 0, 0, 5000), Err(Errno::E2BIG));
+    assert_eq!(call(&mut k, empty, 0, 0, 32), Err(Errno::EFAULT));
+    put(&mut k, [MOUNT_ATTR_NODEV, 0, 0, 0, 0, 5]);
+    assert_eq!(call(&mut k, empty, 0, attr, 48), Err(Errno::E2BIG));
+    put(&mut k, [0x4000, 0, 0, 0, 0, 0]);
+    assert_eq!(call(&mut k, empty, 0, attr, 32), Err(Errno::EINVAL));
+    put(&mut k, [0, 0, 0x7, 0, 0, 0]);
+    assert_eq!(call(&mut k, empty, 0, attr, 32), Err(Errno::EINVAL));
+    put(&mut k, [MOUNT_ATTR_NODEV, 0, 0, 0, 0, 0]);
+    assert_eq!(call(&mut k, empty, 0, attr, 32), Err(Errno::ENOENT));
+    assert_eq!(call(&mut k, UNMAPPED, 0, attr, 32), Err(Errno::EFAULT));
+    assert!(taken(&log).is_empty());
+}
+
+/// `MOUNT_ATTR_IDMAP` and `userns_fd` (the sheet's `returns.idmap`).
+#[test]
+fn mount_setattr_idmap_reads_userns_fd() {
+    let (mut k, log) = kernel(Creds::root());
+    let p = string(&mut k, DATA, b"/tmp/d");
+    let empty = string(&mut k, DATA + 0x100, b"");
+    let attr = DATA + 0x200;
+    let call = |k: &mut FakeKernel, path: u64, words: [u64; 4]| {
+        let b: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        k.poke(attr, &b);
+        sys(k, nr::MOUNT_SETATTR, &[AT_FDCWD_U, path, 0, attr, 32])
+    };
+    // 1 is an open file of the fake kernel, 995 is not open; 100 and 101
+    // are namespace files.
+    let user = k.open_namespace(0, 7, crate::ns::Kind::User).unwrap();
+    let uts = k.open_namespace(0, 8, crate::ns::Kind::Uts).unwrap();
+    assert_eq!(call(&mut k, p, [MOUNT_ATTR_IDMAP, 0, 0, 995]), Err(Errno::EBADF));
+    // Judged when the structure is read: the same for a missing path.
+    assert_eq!(call(&mut k, empty, [MOUNT_ATTR_IDMAP, 0, 0, 995]), Err(Errno::EBADF));
+    assert_eq!(call(&mut k, p, [MOUNT_ATTR_IDMAP, 0, 0, 1]), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, p, [MOUNT_ATTR_IDMAP, 0, 0, uts as u64]), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, p, [MOUNT_ATTR_IDMAP, 0, 0, 0x8000_0000]), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, p, [MOUNT_ATTR_IDMAP, 0, 0, 0x1_0000_0000 + uts as u64]), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, p, [0, MOUNT_ATTR_IDMAP, 0, uts as u64]), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, p, [MOUNT_ATTR_IDMAP, MOUNT_ATTR_IDMAP, 0, 995]), Err(Errno::EINVAL));
+    // Unknown bits come before the descriptor.
+    assert_eq!(call(&mut k, p, [MOUNT_ATTR_IDMAP | 0x4000, 0, 0, 995]), Err(Errno::EINVAL));
+    // Poly has no id-mapped mounts.
+    assert_eq!(call(&mut k, p, [MOUNT_ATTR_IDMAP, 0, 0, user as u64]), Err(Errno::EINVAL));
+    assert!(taken(&log).is_empty());
+    // Without the flag the field is ignored.
+    assert_eq!(call(&mut k, p, [MOUNT_ATTR_NOEXEC, 0, 0, 995]), Ok(0));
     assert_eq!(taken(&log).len(), 1);
 }
 
@@ -144,7 +236,15 @@ fn open_tree_and_move_mount_arguments() {
     assert_eq!(sys(&mut k, nr::MOVE_MOUNT, &[3, empty, AT_FDCWD_U, p, 0]), Err(Errno::ENOENT));
     let f = u64::from(MOVE_MOUNT_F_EMPTY_PATH);
     assert_eq!(sys(&mut k, nr::MOVE_MOUNT, &[3, empty, AT_FDCWD_U, p, f]), Ok(0));
-    let log = taken(&log);
+    // MOVE_MOUNT_SET_GROUP goes to its own service; 0x08, 0x80 and 0x1000
+    // are no flags.
+    for bad in [0x08u64, 0x80, 0x1000, u64::from(u32::MAX)] {
+        assert_eq!(sys(&mut k, nr::MOVE_MOUNT, &[AT_FDCWD_U, p, AT_FDCWD_U, p, bad]), Err(Errno::EINVAL));
+    }
+    let group = u64::from(MOVE_MOUNT_SET_GROUP);
+    assert_eq!(sys(&mut k, nr::MOVE_MOUNT, &[AT_FDCWD_U, p, AT_FDCWD_U, p, group]), Ok(0));
+    let mut log = taken(&log);
+    assert!(log.pop().unwrap().starts_with("mount_set_group PathAt { dirfd: -100"));
     assert_eq!(log.len(), 3);
     assert!(
         log[0].contains("path: [47, 116") && log[0].contains("follow: false") && log[0].ends_with("Some(true) true")

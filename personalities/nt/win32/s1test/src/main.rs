@@ -1119,8 +1119,8 @@ unsafe fn step9() {
     let device = w::<8>("\\Device\\");
     check_got(n > 20 && name[..8] == device[..8] && name[n] == 0, n as u32);
     check_got(name[n - 10..n].iter().zip("s1test.exe".encode_utf16()).all(|(a, b)| *a == b), n as u32);
-    // An address in no image.
-    check_fail(K32GetMappedFileNameW(GetCurrentProcess(), 0x10, name.as_mut_ptr(), 260) as usize, 1006);
+    // An address nothing is mapped at: ERROR_UNEXP_NET_ERR (59) on Windows (the K32GetMappedFileNameW sheet).
+    check_fail(K32GetMappedFileNameW(GetCurrentProcess(), 0x10, name.as_mut_ptr(), 260) as usize, 59);
 
     // shell32: FOLDERID_LocalAppData is %LOCALAPPDATA%, in a CoTaskMemAlloc block.
     let local_app_data: [u8; 16] =
@@ -1132,14 +1132,30 @@ unsafe fn step9() {
     let n = GetEnvironmentVariableW(variable.as_ptr(), want.as_mut_ptr(), 260) as usize;
     check_got(n > 3 && (0..=n).all(|i| *path.add(i) == want[i]), n as u32);
     CoTaskMemFree(path.cast());
-    // An id that is no known folder: E_INVALIDARG and a null path.
-    check_hr(SHGetKnownFolderPath(&CLSID_NOWHERE, 0, core::ptr::null_mut(), &mut path) as i32, 0x8007_0057);
+    // An id that is no known folder: HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) and a null path (the sheet).
+    check_hr(SHGetKnownFolderPath(&CLSID_NOWHERE, 0, core::ptr::null_mut(), &mut path) as i32, 0x8007_0002);
     check_got(path.is_null(), 0);
 
     // The property store of a window: what is set is read back, by a second store object too.
     let iid_store: [u8; 16] =
         [0xEB, 0x8E, 0x6D, 0x88, 0xF2, 0x8C, 0x46, 0x44, 0x8D, 0x02, 0xCD, 0xBA, 0x1D, 0xBD, 0xCF, 0x99];
-    let hwnd = 0x4_0102usize;
+    // A real window: the store of a window that is gone takes no value (the sheet).
+    let class_name = w::<11>("PolyS1Test");
+    let hwnd = CreateWindowExW(
+        0,
+        class_name.as_ptr(),
+        class_name.as_ptr(),
+        0,
+        0,
+        0,
+        0,
+        0,
+        HWND_MESSAGE,
+        0,
+        0,
+        core::ptr::null_mut(),
+    );
+    check_got(hwnd != 0, GetLastError());
     let mut store: *mut *const [usize; 8] = core::ptr::null_mut();
     check_hr(SHGetPropertyStoreForWindow(hwnd, &iid_store, (&raw mut store).cast()) as i32, S_OK);
     check_got(!store.is_null(), 0);
@@ -1180,6 +1196,7 @@ unsafe fn step9() {
     // Another interface is refused.
     check_hr(SHGetPropertyStoreForWindow(hwnd, &CLSID_NOWHERE, (&raw mut store).cast()) as i32, E_NOINTERFACE);
     check_got(store.is_null(), 0);
+    check_eq(DestroyWindow(hwnd) as usize, 1);
 
     // oleaut32 by ordinal, as chrome.dll's delay loads bind it: a vector of four VT_I4 (3).
     let create: unsafe extern "system" fn(u16, i32, u32) -> *mut u8 =
