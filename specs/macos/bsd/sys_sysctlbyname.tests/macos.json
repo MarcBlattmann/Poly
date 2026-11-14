@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "byname_basic",
+      "source_sha256": "1f7709e67b6975cc3b25553ec9a7f6045f9646cd3937344c61c4805bc24927f7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "027d5ff28372f663c08f563dea9944ce3122e0da4e815c7c9c543dff522c0273",
+          "exit_code": 0,
+          "stdout": "ok kern.ostype succeeds\nok it is \"Darwin\", 7 bytes\nok a name length counting the NUL works too\nok a NULL buffer reports length 7\nok hw.pagesize by name fills 8 bytes when there is room\nvalue hw.pagesize 16384\nok and 4 bytes when there are 4\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "byname_errors",
+      "source_sha256": "cdd8cd59f0d4dfcf705f285dc103c0383f572b806059a39c3088d8050c540826",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "070c7fe520662326a4b80a9be1a27e5dbd1a761c498ba8e3fe419895ddf570a5",
+          "exit_code": 0,
+          "stdout": "ok kern.nosuchthing: ENOENT\nok the empty name: ENOENT\nok the node kern: ENOENT\nok length 5 of kern.ostype: ENOENT\nok a 1999-byte name: ENAMETOOLONG\nok the name at address 8: EFAULT\nok setting kern.ostype: EPERM\nok a 2-byte buffer: ENOMEM\nok the length becomes 0\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
