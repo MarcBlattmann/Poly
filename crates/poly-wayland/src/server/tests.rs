@@ -340,6 +340,7 @@ fn the_registry_lists_the_globals_and_sync_answers() {
     assert_eq!(
         names,
         [
+            "org_kde_kwin_server_decoration_manager",
             "wl_compositor",
             "wl_data_device_manager",
             "wl_output",
@@ -1069,6 +1070,7 @@ fn removing_a_client_frees_its_windows_and_memory() {
     assert!(closed.contains(&fd.0), "an unused fd is closed: {closed:?}");
     assert_eq!(srv.clients().count(), 0);
 }
+mod frame_ownership;
 mod input_routing;
 mod protocols;
 mod startup;

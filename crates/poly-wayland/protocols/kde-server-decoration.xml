@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The wire format of the server decoration protocol that GTK 3 and other
+  toolkits use to learn whether the compositor decorates windows (ADR 0183).
+
+  Written for Poly: interface, request and event names, their order (the
+  opcodes), argument types and the mode numbers are ABI facts of the
+  protocol as it is in use; none of its documentation text is copied here.
+  What Poly does with the messages is in ADR 0183 and
+  crates/poly-wayland/src/server/decoration.rs.
+-->
+<protocol name="kde_server_decoration">
+  <interface name="org_kde_kwin_server_decoration_manager" version="1">
+    <description summary="Poly's description: the decoration manager">
+      Offered by a compositor that draws window frames. It announces the mode
+      it uses for windows by default and creates one decoration object per
+      surface whose client takes part.
+    </description>
+    <request name="create">
+      <description summary="a decoration object for a surface">
+        Taking part: a window whose surface has a decoration object lets the
+        compositor frame it. A window without one draws its own frame.
+      </description>
+      <arg name="id" type="new_id" interface="org_kde_kwin_server_decoration"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+    <event name="default_mode">
+      <description summary="the mode the compositor uses by default">
+        Sent once on binding. 0 none, 1 client, 2 server.
+      </description>
+      <arg name="mode" type="uint"/>
+    </event>
+  </interface>
+
+  <interface name="org_kde_kwin_server_decoration" version="1">
+    <description summary="Poly's description: one surface's decoration">
+      The decoration of one surface: the mode the client would like, and the
+      mode the compositor uses. 0 none, 1 client, 2 server.
+    </description>
+    <request name="release" type="destructor">
+      <description summary="end the decoration object"/>
+    </request>
+    <request name="request_mode">
+      <description summary="the mode the client would like"/>
+      <arg name="mode" type="uint"/>
+    </request>
+    <event name="mode">
+      <description summary="the mode the compositor uses"/>
+      <arg name="mode" type="uint"/>
+    </event>
+  </interface>
+</protocol>
