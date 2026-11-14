@@ -46,9 +46,10 @@ pub fn trail_len(flag_present: bool, value: Option<&str>) -> Option<usize> {
 }
 
 /// Whether a process with `command_line` is traced when `poly.nt.only` is `only` (empty: every
-/// process). A process whose command line is not known yet is not.
+/// process; `a|b`: a command line with either text). A process whose command line is not known
+/// yet is not.
 pub fn selects(command_line: Option<&str>, only: &str) -> bool {
-    only.is_empty() || command_line.is_some_and(|c| c.contains(only))
+    only.is_empty() || command_line.is_some_and(|c| only.split('|').any(|o| !o.is_empty() && c.contains(o)))
 }
 
 /// Whether an exception with `code` makes the trail be written: a breakpoint
@@ -75,6 +76,11 @@ impl Trail {
     /// The kept calls, oldest first; the trail starts over.
     pub fn take(&mut self) -> alloc::vec::Vec<String> {
         self.lines.drain(..).collect()
+    }
+
+    /// The kept calls, oldest first; they stay (a periodic report, `poly.nt.waits`).
+    pub fn lines(&self) -> impl Iterator<Item = &String> {
+        self.lines.iter()
     }
 }
 
@@ -276,6 +282,7 @@ mod tests {
         for i in 0..5 {
             t.push(format!("call {i}"), 3);
         }
+        assert_eq!(t.lines().cloned().collect::<alloc::vec::Vec<_>>(), ["call 2", "call 3", "call 4"]);
         assert_eq!(t.take(), ["call 2", "call 3", "call 4"]);
         assert!(t.take().is_empty());
         assert_eq!(trail_len(true, None), Some(TRAIL_DEFAULT));
@@ -294,6 +301,8 @@ mod tests {
         assert!(!selects(Some("chrome.exe --type=gpu-process"), "--type=renderer"));
         assert!(!selects(None, "--type=renderer"));
         assert!(selects(None, ""));
+        assert!(selects(Some("chrome.exe --dump-dom x"), "--type=renderer|--dump-dom"));
+        assert!(!selects(Some("chrome.exe --type=gpu-process"), "--type=renderer|--dump-dom"));
     }
 
     #[test]

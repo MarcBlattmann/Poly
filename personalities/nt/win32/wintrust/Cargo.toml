@@ -1,0 +1,17 @@
+[package]
+name = "wintrust"
+description = "Our wintrust.dll (ADR 0155, step 12): signature verification Chrome delay-loads, on a system with no trust providers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "wintrust"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

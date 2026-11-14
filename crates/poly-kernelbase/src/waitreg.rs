@@ -57,10 +57,14 @@ pub fn completion(handle: isize) -> Completion {
 
 /// What `UnregisterWaitEx` does (Learn): the wait is cancelled; if a
 /// callback is running, `NULL` and an event make the call fail with
-/// `ERROR_IO_PENDING` (the callback finishes later; the event is signaled
-/// then), `INVALID_HANDLE_VALUE` waits for it. A call from the callback
-/// itself cannot wait for it (that would never end): it returns at once as
-/// `NULL` does.
+/// `ERROR_IO_PENDING` (the callback finishes later), `INVALID_HANDLE_VALUE`
+/// waits for it. A call from the callback itself cannot wait for it (that
+/// would never end): it returns at once as `NULL` does. An event is
+/// signaled once the wait is unregistered, whether the call succeeded or
+/// failed with `ERROR_IO_PENDING` (Learn: "If the function succeeds, or if
+/// the function fails with ERROR_IO_PENDING, the caller should always wait
+/// until the event is signaled"): Chrome waits for it after a successful
+/// call (ADR 0155 step 12).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Unregister {
     /// The call's result.
@@ -79,7 +83,7 @@ pub fn unregister(completion: Completion, callback_running: bool, from_callback:
     match (completion, callback_running) {
         (Completion::Block, _) if !from_callback => Unregister { ok: true, error: 0, block: true, signal_later: false },
         (_, true) => pending,
-        _ => Unregister { ok: true, error: 0, block: false, signal_later: false },
+        _ => Unregister { ok: true, error: 0, block: false, signal_later: completion == Completion::Event },
     }
 }
 
@@ -103,13 +107,16 @@ mod tests {
         assert_eq!(completion(0), Completion::None);
         assert_eq!(completion(-1), Completion::Block);
         assert_eq!(completion(0x44), Completion::Event);
-        // Nothing running: success at once, whatever the event.
-        for c in [Completion::None, Completion::Event] {
-            assert_eq!(
-                unregister(c, false, false),
-                Unregister { ok: true, error: 0, block: false, signal_later: false }
-            );
-        }
+        // Nothing running: success at once; an event is still signaled (when the wait's
+        // thread is done).
+        assert_eq!(
+            unregister(Completion::None, false, false),
+            Unregister { ok: true, error: 0, block: false, signal_later: false }
+        );
+        assert_eq!(
+            unregister(Completion::Event, false, false),
+            Unregister { ok: true, error: 0, block: false, signal_later: true }
+        );
         // A callback running: pending, the event is signaled later.
         assert_eq!(
             unregister(Completion::None, true, false),
