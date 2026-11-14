@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoCreateInstance.yaml
+id: windows/api/ole32.dll/CoCreateInstance
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CoInitializeEx function (combaseapi.h)", "CoUninitialize", "CoGetApartmentType", "CoRegisterMessageFilter", "CoCreateInstance", "CoGetClassObject", "CLSIDFromString", "StringFromCLSID", "CoTaskMemAlloc", "CoTaskMemFree", "PropVariantClear", "COINIT enumeration"; objbase.h, combaseapi.h, wtypes.h, propidl.h, winerror.h (S_FALSE 1, RPC_E_CHANGED_MODE 0x80010106, CO_E_NOTINITIALIZED 0x800401F0, REGDB_E_CLASSNOTREG 0x80040154, CO_E_CLASSSTRING 0x800401F3, E_INVALIDARG 0x80070057) for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates an object of a class. Chrome's browser, network service and processor-metrics utility call it 44 times and meet class not registered, activation-context and procedure-not-found failures, all tolerated. A thread that did not initialise COM gets CO_E_NOTINITIALIZED (0x800401F0); a class id nothing registers gives REGDB_E_CLASSNOTREG (0x80040154) for every class context (all, in-process, local, 0) and for the all-zero id; the output pointer is set to NULL on failure; an aggregation request (outer unknown) for a class that does not exist gives 0x80040110 (CLASS_E_NOAGGREGATION). The same results hold for CoGetClassObject. NULL arguments make Windows crash and are not tested.
+interface:
+  signature: "HRESULT CoCreateInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD context, REFIID iid, LPVOID* object); HRESULT CoGetClassObject(REFCLSID clsid, DWORD context, COSERVERINFO* server, REFIID iid, LPVOID* object)"
+chrome:
+  calls: "CoCreateInstance 44 calls (browser, network service, utility) with failures INVALID_PARAMETER, PROC_NOT_FOUND, SXS_KEY_NOT_FOUND in the trace; CoGetClassObject 1 call"
+rules:
+  not_initialised: "an unknown class id on a thread that did not call CoInitializeEx: CoCreateInstance and CoGetClassObject: 0x800401F0, output NULL"
+  unknown_class: "after CoInitializeEx(NULL, 2): CLSCTX_ALL (0x17), CLSCTX_INPROC_SERVER, CLSCTX_LOCAL_SERVER, context 0 and the all-zero class id: 0x80040154, output set to NULL; CoGetClassObject: 0x80040154, output NULL"
+  outer_unknown: "an unknown class with a non-NULL outer unknown: 0x80040110"
+  after_uninitialise: "after CoUninitialize the thread is uninitialised again: 0x800401F0"
+errors:
+  class_not_registered: "REGDB_E_CLASSNOTREG 0x80040154"
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0"
+  no_aggregation: "CLASS_E_NOAGGREGATION 0x80040110"
+side_effects: "none for the failures tested"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  Successful creation (needs a registered class: the tests use none), classes of the machine, NULL pointers, remote servers, activation contexts and manifests, the errors 87 (INVALID_PARAMETER), 127 and the SXS ones of the trace.

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "tz_to_utc_b",
+      "exe_sha256": "e6a684111b9b43e4976f2f34702218ac2e1bc90fe0bbcfbdb4192eb5ed44d7b3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3VtbWVyOiBsb2NhbCAyMDIwLTA3LTE1IDA1OjAwOjAwLjAwMCBkb3cgMCAtPiBVVEMgMjAyMC0wNy0xNSAxMjowMDowMC4wMDAgZG93IDMKaW5zaWRlIHRoZSBza2lwcGVkIGhvdXI6IGxvY2FsIDIwMjAtMDMtMDggMDI6MzA6MDAuMDAwIGRvdyAwIC0+IFVUQyAyMDIwLTAzLTA4IDA5OjMwOjAwLjAwMCBkb3cgMApvbmUgc2Vjb25kIGJlZm9yZSB0aGUgcmVwZWF0ZWQgaG91cjogbG9jYWwgMjAyMC0xMS0wMSAwMDo1OTo1OS4wMDAgZG93IDAgLT4gVVRDIDIwMjAtMTEtMDEgMDc6NTk6NTkuMDAwIGRvdyAwCnRoZSBlbmQgb2YgdGhlIHJlcGVhdGVkIGhvdXI6IGxvY2FsIDIwMjAtMTEtMDEgMDE6NTk6NTkuMDAwIGRvdyAwIC0+IFVUQyAyMDIwLTExLTAxIDA4OjU5OjU5LjAwMCBkb3cgMAphIGxlYXAteWVhciBldmVuaW5nOiBsb2NhbCAyMDI0LTAyLTI4IDE5OjAwOjAwLjAwMCBkb3cgMCAtPiBVVEMgMjAyNC0wMi0yOSAwMzowMDowMC4wMDAgZG93IDQKbGFzdC1TdW5kYXkgem9uZSwgaW5zaWRlIHRoZSBza2lwcGVkIGhvdXI6IGxvY2FsIDIwMjAtMDMtMjkgMDI6MzA6MDAuMDAwIGRvdyAwIC0+IFVUQyAyMDIwLTAzLTI5IDAwOjMwOjAwLjAwMCBkb3cgMApyb3VuZCB0cmlwIFVUQyAtPiBsb2NhbCAtPiBVVEM6IDEgMSwgc2FtZSBzZWNvbmQgMQpob3VyIDI0OiBsb2NhbCAyMDIwLTAxLTAxIDI0OjAwOjAwLjAwMCBkb3cgMCAtPiBmYWlsZWQsIGxhc3QgZXJyb3IgODcsIG91dHB1dCB1bnRvdWNoZWQgMQpOVUxMIHpvbmU6IDEsIHRoZSBVVEMgdGltZSBpcyB3aXRoaW4gMjQgaG91cnMgb2YgdGhlIGxvY2FsIHRpbWU6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "summer: local 2020-07-15 05:00:00.000 dow 0 -> UTC 2020-07-15 12:00:00.000 dow 3\ninside the skipped hour: local 2020-03-08 02:30:00.000 dow 0 -> UTC 2020-03-08 09:30:00.000 dow 0\none second before the repeated hour: local 2020-11-01 00:59:59.000 dow 0 -> UTC 2020-11-01 07:59:59.000 dow 0\nthe end of the repeated hour: local 2020-11-01 01:59:59.000 dow 0 -> UTC 2020-11-01 08:59:59.000 dow 0\na leap-year evening: local 2024-02-28 19:00:00.000 dow 0 -> UTC 2024-02-29 03:00:00.000 dow 4\nlast-Sunday zone, inside the skipped hour: local 2020-03-29 02:30:00.000 dow 0 -> UTC 2020-03-29 00:30:00.000 dow 0\nround trip UTC -> local -> UTC: 1 1, same second 1\nhour 24: local 2020-01-01 24:00:00.000 dow 0 -> failed, last error 87, output untouched 1\nNULL zone: 1, the UTC time is within 24 hours of the local time: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "tz_to_utc_c",
+      "exe_sha256": "051aeffc74ad8af10ba8ac0e047bb3fd5f9cc42fbd779aa89ddf1acda964cbbc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b25lIHNlY29uZCBiZWZvcmUgdGhlIHNraXBwZWQgaG91cjogbG9jYWwgMjAyMC0wMy0wOCAwMTo1OTo1OS4wMDAgZG93IDAgLT4gVVRDIDIwMjAtMDMtMDggMDk6NTk6NTkuMDAwIGRvdyAwCnRoZSBlbmQgb2YgdGhlIHNraXBwZWQgaG91cjogbG9jYWwgMjAyMC0wMy0wOCAwMjo1OTo1OS4wMDAgZG93IDAgLT4gVVRDIDIwMjAtMDMtMDggMDk6NTk6NTkuMDAwIGRvdyAwCnRoZSBzdGFydCBvZiB0aGUgcmVwZWF0ZWQgaG91cjogbG9jYWwgMjAyMC0xMS0wMSAwMTowMDowMC4wMDAgZG93IDAgLT4gVVRDIDIwMjAtMTEtMDEgMDg6MDA6MDAuMDAwIGRvdyAwCmFmdGVyIHRoZSByZXBlYXRlZCBob3VyOiBsb2NhbCAyMDIwLTExLTAxIDAyOjAwOjAwLjAwMCBkb3cgMCAtPiBVVEMgMjAyMC0xMS0wMSAxMDowMDowMC4wMDAgZG93IDAKbWlsbGlzZWNvbmRzIDk5OSBhbmQgYSB3cm9uZyBkYXkgb2Ygd2VlayBpbiB0aGUgaW5wdXQ6IGxvY2FsIDIwMjAtMDctMTUgMDU6MDA6MDAuOTk5IGRvdyA1IC0+IFVUQyAyMDIwLTA3LTE1IDEyOjAwOjAwLjk5OSBkb3cgMwpsYXN0LVN1bmRheSB6b25lLCBpbnNpZGUgdGhlIHJlcGVhdGVkIGhvdXI6IGxvY2FsIDIwMjAtMTAtMjUgMDI6MzA6MDAuMDAwIGRvdyAwIC0+IFVUQyAyMDIwLTEwLTI1IDAwOjMwOjAwLjAwMCBkb3cgMAptb250aCAxMzogbG9jYWwgMjAyMC0xMy0wMSAwMDowMDowMC4wMDAgZG93IDAgLT4gZmFpbGVkLCBsYXN0IGVycm9yIDg3LCBvdXRwdXQgdW50b3VjaGVkIDEKMSBKYW51YXJ5IDE2MDEgbG9jYWwgKGJlZm9yZSB0aGUgZXBvY2ggaW4gVVRDKTogbG9jYWwgMTYwMS0wMS0wMSAwMDowMDowMC4wMDAgZG93IDAgLT4gVVRDIDE2MDEtMDEtMDEgMDg6MDA6MDAuMDAwIGRvdyAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "one second before the skipped hour: local 2020-03-08 01:59:59.000 dow 0 -> UTC 2020-03-08 09:59:59.000 dow 0\nthe end of the skipped hour: local 2020-03-08 02:59:59.000 dow 0 -> UTC 2020-03-08 09:59:59.000 dow 0\nthe start of the repeated hour: local 2020-11-01 01:00:00.000 dow 0 -> UTC 2020-11-01 08:00:00.000 dow 0\nafter the repeated hour: local 2020-11-01 02:00:00.000 dow 0 -> UTC 2020-11-01 10:00:00.000 dow 0\nmilliseconds 999 and a wrong day of week in the input: local 2020-07-15 05:00:00.999 dow 5 -> UTC 2020-07-15 12:00:00.999 dow 3\nlast-Sunday zone, inside the repeated hour: local 2020-10-25 02:30:00.000 dow 0 -> UTC 2020-10-25 00:30:00.000 dow 0\nmonth 13: local 2020-13-01 00:00:00.000 dow 0 -> failed, last error 87, output untouched 1\n1 January 1601 local (before the epoch in UTC): local 1601-01-01 00:00:00.000 dow 0 -> UTC 1601-01-01 08:00:00.000 dow 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 39
+    }
+  ]
+}

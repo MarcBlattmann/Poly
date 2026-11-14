@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/RegDisablePredefinedCache.yaml
+id: windows/api/advapi32.dll/RegDisablePredefinedCache
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "RegDisablePredefinedCache function (winreg.h)", "Predefined Keys"; winreg.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Tells the registry code not to cache the handles of HKEY_CURRENT_USER. It takes no arguments and returns ERROR_SUCCESS (0) without touching the last error; it can be repeated. Chrome's confined targets (GPU, network service, every renderer and storage service) call it before they give up their registry access. Afterwards the predefined keys still open (HKLM\SOFTWARE and HKCU\Software) and a missing key still gives error 2.
+interface:
+  signature: "LSTATUS RegDisablePredefinedCache(void)"
+chrome:
+  calls: "4 calls, in the confined GPU, network and utility children of stage 2 (not in stage 1)"
+rules:
+  result: "RegDisablePredefinedCache() = 0, the last error untouched; a second call = 0"
+  no_effect_on_access: "RegOpenKeyExW(HKLM, \"SOFTWARE\") = 0 before and after; HKCU\\Software = 0 after; a missing key = 2"
+errors:
+  none: "the call has no failure result in the tests"
+side_effects: "none visible"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  The cache itself (not observable), behaviour while impersonating.
