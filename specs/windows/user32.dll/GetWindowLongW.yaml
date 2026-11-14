@@ -24,7 +24,7 @@ rules:
   userdata: "GWL_USERDATA starts 0; after SetWindowLongPtrW(GWLP_USERDATA, 0x123456789) the 32-bit read gives the low half 0x23456789"
   extra_bytes: "a class with 8 bytes of extra window memory: offsets 0 and 4 read 0 at first, then what SetWindowLongW wrote (0x1111, 0x2222); offset 1 is not aligned and reads the bytes 1..4 (0x22000011); offsets 5, 6 and 8 and above fail with ERROR_INVALID_INDEX (1413), value 0"
   bad_index: "index -1, -2, -17, -22, -32 and 0x7FFFFFFF: 0 with ERROR_INVALID_INDEX (1413)"
-  pointer_indexes: "GWL_WNDPROC, GWL_HINSTANCE and GWL_HWNDPARENT with the 32-bit call: see the sheet's tests (value and last error printed per index); the 64-bit GetWindowLongPtrW gives the owner for GWLP_HWNDPARENT of a popup and the parent for a child, 0 for a top-level window without owner"
+  pointer_indexes: "GWL_WNDPROC (-4), GWL_HINSTANCE (-6) and GWL_HWNDPARENT (-8) with the 32-bit call: 0 with ERROR_INVALID_INDEX (1413); the 64-bit GetWindowLongPtrW gives for GWLP_HWNDPARENT the owner of an owned popup and the parent of a child, 0 for a top-level window without owner, for GWLP_HINSTANCE the module handle and for GWLP_WNDPROC a non-null procedure"
   chrome: "Chrome's windows: holder 0x8c000000 / 0x80, top-level created 0x06cf0000 / 0x00200100, shown 0x16cf0000, minimized 0x36cf0000 (WS_MINIMIZE added, WS_VISIBLE kept), restored 0x16cf0000; the child 0x46300000 hidden, 0x56300000 shown, id 656 and extended style 0x20; SetWindowLongW(GWL_STYLE) with WS_DISABLED sends WM_STYLECHANGING and WM_STYLECHANGED (old 0x56300000, new 0x5e300000) and returns the old style"
 errors:
   bad_window: "NULL, a made-up handle and a destroyed window: 0 with ERROR_INVALID_WINDOW_HANDLE (1400)"

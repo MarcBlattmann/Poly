@@ -23,7 +23,7 @@ rules:
   set: "SetMessageExtraInfo(v) returns the previous value and the call then returns v: 0x1234, 0x55AA, 0x80000000, 0x123456789 (all 64 bits kept), -1 (all ones); SetMessageExtraInfo(0) clears it"
   per_thread: "the value is per thread: a new thread starts with 0 and its SetMessageExtraInfo does not change the creator's value"
   messages: "for a message posted with PostMessageW the handler sees 0 (not the value set when posting or later); a message sent with SendMessageW sees the value the sender's thread set before sending (0x9999) and the value stays set afterwards"
-  input: "keys sent with SendInput and dwExtraInfo 0xABCD: WM_KEYDOWN and WM_KEYUP see 0xABCD, the WM_CHAR made from them sees 0; a click with the touch/pen signature (dwExtraInfo 0xFF515701) is seen in WM_LBUTTONDOWN and WM_LBUTTONUP (the signature test in the recording of Chrome does not hold for plain input: 0)"
+  input: "keys sent with SendInput and dwExtraInfo 0xABCD: WM_KEYDOWN and WM_KEYUP see 0xABCD, the WM_CHAR made from them sees 0; a click with the touch/pen signature (dwExtraInfo 0xFF515701) is seen in WM_LBUTTONDOWN and WM_LBUTTONUP"
 errors:
 side_effects: "none beyond the rules above"
 threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"

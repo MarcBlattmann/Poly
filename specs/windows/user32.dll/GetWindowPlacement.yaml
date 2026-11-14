@@ -24,7 +24,7 @@ rules:
   moved: "after SetWindowPos the normal rectangle follows the window rectangle"
   kinds: "a popup, a tool window: show 1, normal equals the window rectangle; a child: show 1, normal is the child's rectangle in parent coordinates (not equal to the window rectangle)"
   length: "the length field of 0, 40 and 48 is accepted (the call fills the structure of the current size)"
-  chrome: "Chrome's top-level window: built and shown: show 1, min and max unset, normal 640x400 at the window; after the move and resize 500x360; minimized: show 2, min offscreen (-32000), normal not equal to the iconic window rectangle; restored: show 1 and min stays offscreen; SetWindowPlacement of the same placement returns TRUE and changes nothing; SC_MAXIMIZE: show 3, flags 2; SC_RESTORE: show 1 flags 0 (min unset again after the maximize: the minimized-position field is reset when the window is restored from maximized)"
+  chrome: "Chrome's top-level window: built and shown: show 1, min and max unset, normal 640x400 at the window; after the move and resize 500x360; minimized: show 2, min offscreen (-32000), normal not equal to the iconic window rectangle; restored: show 1 and min stays offscreen; SetWindowPlacement of the same placement returns TRUE and changes nothing; SC_MAXIMIZE: show 3, flags 2 and ptMinPosition unset (-1,-1) again; SC_RESTORE: show 1, flags 0, min still unset"
 errors:
   bad_window: "NULL and a made-up handle: FALSE with ERROR_INVALID_WINDOW_HANDLE (1400), the structure filled with zeros"
   null_pointer: "a NULL structure pointer: FALSE with ERROR_NOACCESS (998)"
