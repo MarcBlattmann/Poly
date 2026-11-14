@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/dwrite.dll/IDWriteFactory.CreateNumberSubstitution
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64; the same answers on Windows 11 Enterprise (build 26200) of the owner's PC"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0), two runs each with identical output; the owner's PC (desktop session) for a second look with the same output"
+  observed_by: spec-chrome-win-6
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machines above. Microsoft
+  Learn: IDWriteFactory::CreateNumberSubstitution,
+  DWRITE_NUMBER_SUBSTITUTION_METHOD, IDWriteNumberSubstitution,
+  IDWriteTextAnalysisSource::GetNumberSubstitution,
+  IDWriteFontFallback::MapCharacters; dwrite.h for the vtable order, the
+  enumeration values and the interface id; winerror.h for the HRESULTs.
+  How Chrome reaches the call: Chrome's stage 1 run on Poly (poly.nt.exceptions)
+  and Chromium's and Skia's public source (BSD licence), read by the spec agent
+  for the order of the calls only.
+summary: >
+  Makes an IDWriteNumberSubstitution object (an opaque object a caller hands
+  back to DirectWrite through its text-analysis source). Every method from
+  FROM_CULTURE (0) to TRADITIONAL (4) succeeds for every locale tried; the
+  locale name is not checked except by the methods that read the culture.
+  A font manager makes one (method NONE, the user's locale, ignoreUserOverride
+  TRUE) each time it asks the system fallback for a font; when this call fails
+  it gives up on the fallback.
+interface:
+  signature: "HRESULT IDWriteFactory::CreateNumberSubstitution(DWRITE_NUMBER_SUBSTITUTION_METHOD substitutionMethod, const WCHAR* localeName, BOOL ignoreUserOverride, IDWriteNumberSubstitution** numberSubstitution)"
+  vtable: "IDWriteFactory slot 22 counting IUnknown's three methods as 0 to 2 (GetSystemFontCollection is 3, CreateTextAnalyzer 21, CreateNumberSubstitution 22, CreateGlyphRunAnalysis 23)"
+  methods: "DWRITE_NUMBER_SUBSTITUTION_METHOD (dwrite.h): FROM_CULTURE 0, CONTEXTUAL 1, NONE 2, NATIONAL 3, TRADITIONAL 4"
+  iid: "IID_IDWriteNumberSubstitution 14885CC9-BAB0-4F90-B6ED-5C366A2CD03D (dwrite.h)"
+  hresults: "S_OK 0; E_NOINTERFACE 0x80004002; E_NOTIMPL 0x80004001; E_INVALIDARG 0x80070057 (winerror.h)"
+chrome:
+  call_site: "chrome.dll's Skia font manager (DirectWrite), whenever a family name is not in the system collection (IDWriteFontCollection::FindFamilyName says exists FALSE) or no name is given: before IDWriteFontFallback::MapCharacters for one space (U+0020) it calls CreateNumberSubstitution(NONE, the user's default locale name from GetUserDefaultLocaleName, TRUE, &out) and hands the object out through its source's GetNumberSubstitution. When the call fails the font manager returns no typeface for that name."
+  stage_1: "On Windows the browser asks only for faces the system collection has, so this path is not needed in stage 1; it is needed for any face that is not installed (a generic name such as \"sans\", a message font the user picked and later removed). On Poly the method returns E_NOTIMPL (it is a stub): every lookup of a family the collection lacks fails, and in stage 1 (where the collection was empty, see IDWriteFactory.GetSystemFontCollection) that is what makes the browser's UI-font set-up recurse until the stack overflows."
+rules:
+  success: "Every method 0 to 4 with the user's locale, \"en-us\", \"de-CH\", \"ar-EG\", \"th-TH\", \"zh-CN\" and the empty string, with ignoreUserOverride TRUE or FALSE: S_OK and a non-null object"
+  object: "QueryInterface of the object for IDWriteNumberSubstitution and for IUnknown returns S_OK and the same pointer; for IDWriteFactory E_NOINTERFACE and NULL. The object holds one reference: the Release that balances the call returns 0. Two calls with the same arguments give two different objects. The isolated and the shared factory behave the same."
+  method_range: "A method above 4 (5, 6, 0xFFFFFFFF): E_INVALIDARG, the out pointer set to NULL"
+  locale_checks: "The locale name is checked only for FROM_CULTURE: a NULL locale with FROM_CULTURE is E_INVALIDARG (out NULL), with NONE it is S_OK; a sentence (\"not a locale at all\") with FROM_CULTURE is E_INVALIDARG, with NONE S_OK; well-formed names that name no locale (\"xx-YY\") and other spellings (\"EN-US\", \"en_US\") are S_OK with FROM_CULTURE too; a 94-character name with NONE is S_OK"
+  out_on_failure: "every failure sets the out pointer to NULL"
+errors:
+  invalid_method: "E_INVALIDARG (0x80070057)"
+  invalid_locale_for_culture: "E_INVALIDARG (FROM_CULTURE only)"
+side_effects: "none: the object only carries the arguments back to DirectWrite"
+threading: "the objects are used from one thread; the shared factory may be used from several, which is not tested"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing dwrite.dll, kernel32.dll, user32.dll and
+  gdi32.dll by name, each file carrying its own declarations (the vtable
+  layouts and interface ids from dwrite.h, dwrite_2.h; constants from
+  winuser.h, wingdi.h, winerror.h). The tests print HRESULTs, whether an
+  object came back and how it answers QueryInterface; never pointers.
+not_covered: >
+  What the object changes in text analysis or layout (Poly has no text
+  analyzer or layout; MapCharacters only passes the object through), a NULL
+  out pointer, locales beyond those listed, IDWriteFactory's other methods.

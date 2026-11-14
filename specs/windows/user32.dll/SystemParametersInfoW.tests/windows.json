@@ -26,6 +26,20 @@
       "ms": 57
     },
     {
+      "name": "spi_font_chrome",
+      "exe_sha256": "e53f49c45caeb0898c37f55d9ab4c40f4204aebfb662a985501644db4fec14e6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2NyZWVuIERDOiAxIExPR1BJWEVMU1kgOTYKY2FwdGlvbjogZm9udCAxIHNlbGVjdGVkIDEgR2V0T2JqZWN0VyA5MiBzYW1lIExPR0ZPTlQgMTsgR2V0VGV4dE1ldHJpY3NXIDEgaGVpZ2h0LWludGVybmFsIGxlYWRpbmcgPSAtbGZIZWlnaHQgMSAoPjAgMSk7IEdldFRleHRGYWNlVyByZXR1cm5zIGxlbmd0aCsxIDEgdGhlIHJlcXVlc3RlZCBmYWNlIDEKc21hbGwgY2FwdGlvbjogZm9udCAxIHNlbGVjdGVkIDEgR2V0T2JqZWN0VyA5MiBzYW1lIExPR0ZPTlQgMTsgR2V0VGV4dE1ldHJpY3NXIDEgaGVpZ2h0LWludGVybmFsIGxlYWRpbmcgPSAtbGZIZWlnaHQgMSAoPjAgMSk7IEdldFRleHRGYWNlVyByZXR1cm5zIGxlbmd0aCsxIDEgdGhlIHJlcXVlc3RlZCBmYWNlIDEKbWVudTogZm9udCAxIHNlbGVjdGVkIDEgR2V0T2JqZWN0VyA5MiBzYW1lIExPR0ZPTlQgMTsgR2V0VGV4dE1ldHJpY3NXIDEgaGVpZ2h0LWludGVybmFsIGxlYWRpbmcgPSAtbGZIZWlnaHQgMSAoPjAgMSk7IEdldFRleHRGYWNlVyByZXR1cm5zIGxlbmd0aCsxIDEgdGhlIHJlcXVlc3RlZCBmYWNlIDEKc3RhdHVzOiBmb250IDEgc2VsZWN0ZWQgMSBHZXRPYmplY3RXIDkyIHNhbWUgTE9HRk9OVCAxOyBHZXRUZXh0TWV0cmljc1cgMSBoZWlnaHQtaW50ZXJuYWwgbGVhZGluZyA9IC1sZkhlaWdodCAxICg+MCAxKTsgR2V0VGV4dEZhY2VXIHJldHVybnMgbGVuZ3RoKzEgMSB0aGUgcmVxdWVzdGVkIGZhY2UgMQptZXNzYWdlOiBmb250IDEgc2VsZWN0ZWQgMSBHZXRPYmplY3RXIDkyIHNhbWUgTE9HRk9OVCAxOyBHZXRUZXh0TWV0cmljc1cgMSBoZWlnaHQtaW50ZXJuYWwgbGVhZGluZyA9IC1sZkhlaWdodCAxICg+MCAxKTsgR2V0VGV4dEZhY2VXIHJldHVybnMgbGVuZ3RoKzEgMSB0aGUgcmVxdWVzdGVkIGZhY2UgMQpSZWxlYXNlREMgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "screen DC: 1 LOGPIXELSY 96\ncaption: font 1 selected 1 GetObjectW 92 same LOGFONT 1; GetTextMetricsW 1 height-internal leading = -lfHeight 1 (>0 1); GetTextFaceW returns length+1 1 the requested face 1\nsmall caption: font 1 selected 1 GetObjectW 92 same LOGFONT 1; GetTextMetricsW 1 height-internal leading = -lfHeight 1 (>0 1); GetTextFaceW returns length+1 1 the requested face 1\nmenu: font 1 selected 1 GetObjectW 92 same LOGFONT 1; GetTextMetricsW 1 height-internal leading = -lfHeight 1 (>0 1); GetTextFaceW returns length+1 1 the requested face 1\nstatus: font 1 selected 1 GetObjectW 92 same LOGFONT 1; GetTextMetricsW 1 height-internal leading = -lfHeight 1 (>0 1); GetTextFaceW returns length+1 1 the requested face 1\nmessage: font 1 selected 1 GetObjectW 92 same LOGFONT 1; GetTextMetricsW 1 height-internal leading = -lfHeight 1 (>0 1); GetTextFaceW returns length+1 1 the requested face 1\nReleaseDC 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
       "name": "spi_metrics",
       "exe_sha256": "2fbcf6c648744ec1560c385213eb39b2df7ac85ef01e238e4d5087ec59c38043",
       "status": "ran",
