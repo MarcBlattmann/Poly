@@ -22,6 +22,7 @@ use crate::user;
 use crate::user::exec::{self, ExecError, ExecParams};
 use crate::user::memory::PageSource;
 use crate::{fs, kprintln, qemu, testrun, thread};
+use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -80,8 +81,9 @@ pub enum Prepared {
     Linux { process: Arc<Process>, image: exec::Image },
     /// A PE executable: its process record and image (its headers parsed;
     /// its pages are read from the file as they are touched, ADR 0155),
-    /// started by `crate::nt`.
-    Nt { process: Arc<Process>, image: poly_personality_nt::image::ImageSection, launch: crate::nt::Launch },
+    /// started by `crate::nt`. Boxed: the section record is several times
+    /// the size of the other variants.
+    Nt { process: Arc<Process>, image: Box<poly_personality_nt::image::ImageSection>, launch: crate::nt::Launch },
     /// A native Poly program (ADR 0125): its process record and loaded
     /// image, started like a Linux ELF.
     Native { process: Arc<Process>, image: exec::Image },
@@ -109,7 +111,7 @@ impl Prepared {
                 Ok(process)
             }
             Prepared::Nt { process, image, launch } => {
-                crate::nt::spawn_pe_with(&process, image, user::DEFAULT_HOOK, &launch)
+                crate::nt::spawn_pe_with(&process, *image, user::DEFAULT_HOOK, &launch)
                     .map_err(|e| ExecPathError::Unsupported(format!("PE executable could not start: {e:?}")))?;
                 Ok(process)
             }
@@ -215,7 +217,7 @@ fn prepare_full(
             let process = Arc::new(Process::new_nt(process::alloc_pid(), format, traced));
             // Its DOS path and arguments go into its process parameters.
             let launch = crate::nt::Launch::of(path, argv);
-            return Ok(Prepared::Nt { process, image, launch });
+            return Ok(Prepared::Nt { process, image: Box::new(image), launch });
         }
         Some(Personality::Native) => {
             // A native program is a static ELF executable with Poly's ABI
