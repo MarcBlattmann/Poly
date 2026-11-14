@@ -97,11 +97,15 @@ int test_main(void) {
     expect("then_good_same_fd_is_enotconn", mnt_fd(fd, D, ",rootmode=40000" IDS), -ENOTCONN_);
     expect("then_good_other_mount_point", mnt_fd(fd, F, ",rootmode=100000" IDS), -ENOTCONN_);
     a_close(fd);
+    syscall2(SYS_umount2, D, MNT_DETACH);
+    syscall2(SYS_umount2, F, MNT_DETACH);
 
     fd = a_open("/dev/fuse", O_RDWR, 0);
     expect("enotdir_mount_file", mnt_fd(fd, F, ",rootmode=40000" IDS), -ENOTDIR);
     expect("then_good_file_same_fd", mnt_fd(fd, F, ",rootmode=100000" IDS), -ENOTCONN_);
     a_close(fd);
+    syscall2(SYS_umount2, D, MNT_DETACH);
+    syscall2(SYS_umount2, F, MNT_DETACH);
 
     fd = a_open("/dev/fuse", O_RDWR, 0);
     expect("einval_bad_user", mnt_fd(fd, D, ",rootmode=40000,user_id=x,group_id=0"), -EINVAL);
