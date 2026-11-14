@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetEnvironmentVariableA.yaml
+id: windows/api/kernel32.dll/GetEnvironmentVariableA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (each test run at least twice, identical output). Microsoft Learn: "GetEnvironmentVariableA function (processenv.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Copies the value of an environment variable of the calling process into a buffer, converted from UTF-16 to the ANSI code page. 16 of the 19 apps of the survey import it (7 in their main executable: git/MinGit, Node, PuTTY, Sumatra, VS Code, WinMerge, WinSCP); Python, Firefox and git's bash stop on it today. The function is the ANSI twin of GetEnvironmentVariableW: the same lookup, with the conversion rules below, and sizes counted in bytes.
+interface:
+  signature: "DWORD GetEnvironmentVariableA(LPCSTR lpName, LPSTR lpBuffer, DWORD nSize)"
+  returns: "success: the number of bytes copied, not counting the terminating NUL; buffer too small: the size the buffer needs, counting the NUL; not found: 0"
+  buffer: "nSize is the size of lpBuffer in bytes (not characters); lpBuffer may be NULL when nSize is 0"
+rules:
+  lookup: "lpName is converted from the ANSI code page to UTF-16 and looked up in the process's environment block without regard to letter case (the same case rule as the W function: the Unicode upper-case mapping, so a byte 0xE9 and a byte 0xC9 name the same variable in code page 1252). A trailing space or any other extra character makes it another name. A name that is empty, NULL or has an equal sign anywhere ('A=B', '=', 'PT=') is not found; a name that starts with an equal sign ('=PT:') is found when such a variable exists (set through SetEnvironmentVariable)"
+  success: "when the value, converted to the ANSI code page, is shorter than nSize bytes (length < nSize), it is copied with a NUL after it and the result is its length in bytes. The last error is NOT changed by a successful call"
+  too_small: "when length + 1 > nSize (including nSize 0 and a NULL buffer), the buffer is not written at all (not even a NUL) and the result is length + 1, the size that would fit. The last error is not changed. A value of exactly nSize - 1 bytes fits; one of nSize bytes does not"
+  empty_value: "a variable with an empty value is found: the result is 0, a NUL is written to the buffer when nSize is at least 1, and the last error is NOT changed (it is 203 only for a variable that does not exist). With nSize 0 the result is 1 (the size needed for the NUL). So a caller can tell empty from missing only through GetLastError after a call that returned 0"
+  not_found: "the result is 0, the last error is ERROR_ENVVAR_NOT_FOUND (203), the buffer is not touched"
+  conversion: "the value is converted unit by unit to the ANSI code page of the system (GetACP; 1252 on the oracle; the lookup of a name uses the same page). A character the page has gets its byte: U+20AC 0x80, U+2018/U+2019 0x91/0x92, U+201C 0x93, U+2122 0x99, U+0152 0x8C, U+2013/U+2014 0x96/0x97, U+2026 0x85, U+00A0 0xA0, U+00E9 0xE9, U+00FF 0xFF. A few characters take a best-fit byte: U+0100 becomes 'A' and U+0101 'a'. Anything else becomes '?': Cyrillic, CJK, U+017F, U+3042, and a character outside the BMP gives one '?' per UTF-16 unit (two for a surrogate pair: 'A', U+1F600, 'B' becomes \"A??B\"). Control characters (CR, LF, TAB, 0x01, 0x7F) are kept. The count is in bytes, so it can differ from the number of UTF-16 units"
+  limits: "a value of 3,000 units works (and larger ones up to 32,766 bytes, see SetEnvironmentVariableA); a name of 255 bytes works; a name of 255 or 300 bytes that is not set is simply not found; 200 variables work and the first and the last resolve"
+  inherited: "the variables the process was started with are in the block (SystemRoot, windir, TEMP, PATH ... on Windows); a test of them is not part of this sheet because it depends on how the process was started"
+errors:
+  error_envvar_not_found: "203, when no such variable exists (also for an empty, NULL or '='-containing name); the result is 0 and the buffer is untouched"
+  no_other: "no other error; the function never fails because of the buffer (it returns the size needed)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test; they import kernel32.dll. Each line is one call: the arguments, the result, the last error (a marker is set before every call: `unchanged` when the call left it alone) and, for buffers, how many bytes the call wrote (the buffer is filled with 0xAA first, so `wrote N bytes` is the position of the last byte that changed). Bytes outside printable ASCII are written <xx>, UTF-16 units <xxxx>. The ANSI code page of the oracle is 1252.
+not_covered: >
+  Environment strings of more than 32,767 units, the ANSI code pages other than 1252 (a DBCS page converts two bytes into one unit; sizes are bytes), OEM-mode (SetFileApisToOEM) conversion, a NULL name through the dedicated path of the debugger, concurrent changes from other threads.

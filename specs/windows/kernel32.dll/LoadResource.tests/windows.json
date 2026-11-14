@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "6b55edb62ca7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:54:12Z",
+  "tests": [
+    {
+      "name": "lr_basic",
+      "exe_sha256": "8b24a236f76f6b2889ad654600d880fc8d2951eee2ca220adb9ce1fbfec44fc5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGF0YWZpbGU6IGZpbGUgd3JpdHRlbiAxLCBMb2FkTGlicmFyeUV4VyhmbGFncyAweDIpIC0+IGEgbW9kdWxlCmRhdGFmaWxlOiBGaW5kUmVzb3VyY2VXIHR5cGUgIzEwIG5hbWUgIkJMT0IiIC0+IGZvdW5kLCBzaXplIDIwLCBsb2FkZWQgMSwgZGF0YSAiMDEyMzQ1Njc4OUFCQ0RFRkdISUoiCmRhdGFmaWxlOiB0d28gbG9hZHMgZ2l2ZSB0aGUgc2FtZSBoYW5kbGU6IDEKZGF0YWZpbGU6IHR3byBsb2NrcyBnaXZlIHRoZSBzYW1lIHBvaW50ZXI6IDEKZGF0YWZpbGU6IHNpemUgMjAsIGRhdGEgIjAxMjM0NTY3ODlBQkNERUZHSElKIgpkYXRhZmlsZTogc3VtIG9mIHRoZSBieXRlcyAxMjIwCmRhdGFmaWxlOiBlbXB0eSByZXNvdXJjZTogc2l6ZSAwLCBsb2FkZWQgMSwgbG9ja2VkIDEsIGVycm9yIHVuY2hhbmdlZApkYXRhZmlsZTogRnJlZVJlc291cmNlIC0+IDAsIGVycm9yIHVuY2hhbmdlZApkYXRhZmlsZTogZGF0YSBhZnRlciBGcmVlUmVzb3VyY2UgIjAxMjM0NTY3ODlBQkNERUZHSElKIgpkYXRhZmlsZTogRmluZFJlc291cmNlVyB0eXBlICMxNiBuYW1lICMxIC0+IGZvdW5kLCBzaXplIDE2LCBsb2FkZWQgMSwgZGF0YSAiQEFCQ0RFRkdISUpLTE1OTyIKZGF0YWZpbGU6IHZlcnNpb24gcmVzb3VyY2UgZm91bmQgMQppbWFnZSByZXNvdXJjZTogZmlsZSB3cml0dGVuIDEsIExvYWRMaWJyYXJ5RXhXKGZsYWdzIDB4MjApIC0+IGEgbW9kdWxlCmltYWdlIHJlc291cmNlOiBGaW5kUmVzb3VyY2VXIHR5cGUgIzEwIG5hbWUgIkJMT0IiIC0+IGZvdW5kLCBzaXplIDIwLCBsb2FkZWQgMSwgZGF0YSAiMDEyMzQ1Njc4OUFCQ0RFRkdISUoiCmltYWdlIHJlc291cmNlOiB0d28gbG9hZHMgZ2l2ZSB0aGUgc2FtZSBoYW5kbGU6IDEKaW1hZ2UgcmVzb3VyY2U6IHR3byBsb2NrcyBnaXZlIHRoZSBzYW1lIHBvaW50ZXI6IDEKaW1hZ2UgcmVzb3VyY2U6IHNpemUgMjAsIGRhdGEgIjAxMjM0NTY3ODlBQkNERUZHSElKIgppbWFnZSByZXNvdXJjZTogc3VtIG9mIHRoZSBieXRlcyAxMjIwCmltYWdlIHJlc291cmNlOiBlbXB0eSByZXNvdXJjZTogc2l6ZSAwLCBsb2FkZWQgMSwgbG9ja2VkIDEsIGVycm9yIHVuY2hhbmdlZAppbWFnZSByZXNvdXJjZTogRnJlZVJlc291cmNlIC0+IDAsIGVycm9yIHVuY2hhbmdlZAppbWFnZSByZXNvdXJjZTogZGF0YSBhZnRlciBGcmVlUmVzb3VyY2UgIjAxMjM0NTY3ODlBQkNERUZHSElKIgppbWFnZSByZXNvdXJjZTogRmluZFJlc291cmNlVyB0eXBlICMxNiBuYW1lICMxIC0+IGZvdW5kLCBzaXplIDE2LCBsb2FkZWQgMSwgZGF0YSAiQEFCQ0RFRkdISUpLTE1OTyIKaW1hZ2UgcmVzb3VyY2U6IHZlcnNpb24gcmVzb3VyY2UgZm91bmQgMQpub3JtYWw6IGZpbGUgd3JpdHRlbiAxLCBMb2FkTGlicmFyeUV4VyhmbGFncyAweDApIC0+IGEgbW9kdWxlCm5vcm1hbDogRmluZFJlc291cmNlVyB0eXBlICMxMCBuYW1lICJCTE9CIiAtPiBmb3VuZCwgc2l6ZSAyMCwgbG9hZGVkIDEsIGRhdGEgIjAxMjM0NTY3ODlBQkNERUZHSElKIgpub3JtYWw6IHR3byBsb2FkcyBnaXZlIHRoZSBzYW1lIGhhbmRsZTogMQpub3JtYWw6IHR3byBsb2NrcyBnaXZlIHRoZSBzYW1lIHBvaW50ZXI6IDEKbm9ybWFsOiBzaXplIDIwLCBkYXRhICIwMTIzNDU2Nzg5QUJDREVGR0hJSiIKbm9ybWFsOiBzdW0gb2YgdGhlIGJ5dGVzIDEyMjAKbm9ybWFsOiBlbXB0eSByZXNvdXJjZTogc2l6ZSAwLCBsb2FkZWQgMSwgbG9ja2VkIDEsIGVycm9yIHVuY2hhbmdlZApub3JtYWw6IEZyZWVSZXNvdXJjZSAtPiAwLCBlcnJvciB1bmNoYW5nZWQKbm9ybWFsOiBkYXRhIGFmdGVyIEZyZWVSZXNvdXJjZSAiMDEyMzQ1Njc4OUFCQ0RFRkdISUoiCm5vcm1hbDogRmluZFJlc291cmNlVyB0eXBlICMxNiBuYW1lICMxIC0+IGZvdW5kLCBzaXplIDE2LCBsb2FkZWQgMSwgZGF0YSAiQEFCQ0RFRkdISUpLTE1OTyIKbm9ybWFsOiB2ZXJzaW9uIHJlc291cmNlIGZvdW5kIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "datafile: file written 1, LoadLibraryExW(flags 0x2) -> a module\ndatafile: FindResourceW type #10 name \"BLOB\" -> found, size 20, loaded 1, data \"0123456789ABCDEFGHIJ\"\ndatafile: two loads give the same handle: 1\ndatafile: two locks give the same pointer: 1\ndatafile: size 20, data \"0123456789ABCDEFGHIJ\"\ndatafile: sum of the bytes 1220\ndatafile: empty resource: size 0, loaded 1, locked 1, error unchanged\ndatafile: FreeResource -> 0, error unchanged\ndatafile: data after FreeResource \"0123456789ABCDEFGHIJ\"\ndatafile: FindResourceW type #16 name #1 -> found, size 16, loaded 1, data \"@ABCDEFGHIJKLMNO\"\ndatafile: version resource found 1\nimage resource: file written 1, LoadLibraryExW(flags 0x20) -> a module\nimage resource: FindResourceW type #10 name \"BLOB\" -> found, size 20, loaded 1, data \"0123456789ABCDEFGHIJ\"\nimage resource: two loads give the same handle: 1\nimage resource: two locks give the same pointer: 1\nimage resource: size 20, data \"0123456789ABCDEFGHIJ\"\nimage resource: sum of the bytes 1220\nimage resource: empty resource: size 0, loaded 1, locked 1, error unchanged\nimage resource: FreeResource -> 0, error unchanged\nimage resource: data after FreeResource \"0123456789ABCDEFGHIJ\"\nimage resource: FindResourceW type #16 name #1 -> found, size 16, loaded 1, data \"@ABCDEFGHIJKLMNO\"\nimage resource: version resource found 1\nnormal: file written 1, LoadLibraryExW(flags 0x0) -> a module\nnormal: FindResourceW type #10 name \"BLOB\" -> found, size 20, loaded 1, data \"0123456789ABCDEFGHIJ\"\nnormal: two loads give the same handle: 1\nnormal: two locks give the same pointer: 1\nnormal: size 20, data \"0123456789ABCDEFGHIJ\"\nnormal: sum of the bytes 1220\nnormal: empty resource: size 0, loaded 1, locked 1, error unchanged\nnormal: FreeResource -> 0, error unchanged\nnormal: data after FreeResource \"0123456789ABCDEFGHIJ\"\nnormal: FindResourceW type #16 name #1 -> found, size 16, loaded 1, data \"@ABCDEFGHIJKLMNO\"\nnormal: version resource found 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 63
+    }
+  ]
+}

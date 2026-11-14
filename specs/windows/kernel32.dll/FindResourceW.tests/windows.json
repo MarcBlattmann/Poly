@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "6b55edb62ca7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:54:12Z",
+  "tests": [
+    {
+      "name": "fr_exe",
+      "exe_sha256": "79b5e61ddd28512a4e1d74c19b92f04b0246d19db0720d3b722aff6fbf31bab6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZXhlOiBGaW5kUmVzb3VyY2VXIHR5cGUgIzk5IG5hbWUgIzEgLT4gTlVMTCwgZXJyb3IgMTgxMgpleGU6IEZpbmRSZXNvdXJjZVcgdHlwZSAiTk9QRSIgbmFtZSAjMSAtPiBOVUxMLCBlcnJvciAxODEyCmV4ZTogRmluZFJlc291cmNlVyB0eXBlICMxMCBuYW1lICJCTE9CIiAtPiBOVUxMLCBlcnJvciAxODEyCmV4ZTogRmluZFJlc291cmNlVyB0eXBlICM2IG5hbWUgIzEgLT4gTlVMTCwgZXJyb3IgMTgxMgpOVUxMIG1vZHVsZTogRmluZFJlc291cmNlVyB0eXBlICM5OSBuYW1lICMxIC0+IE5VTEwsIGVycm9yIDE4MTIKYm9ndXMgbW9kdWxlOiBGaW5kUmVzb3VyY2VXIHR5cGUgIzEwIG5hbWUgIzEgLT4gTlVMTCwgZXJyb3IgMTgxMgpkYXRhZmlsZTogZmlsZSB3cml0dGVuIDEsIExvYWRMaWJyYXJ5RXhXKGZsYWdzIDB4MikgLT4gYSBtb2R1bGUKZGF0YSBmaWxlIGhhbmRsZSBoYXMgYml0IDAgc2V0OiAxCmltYWdlIHJlc291cmNlOiBmaWxlIHdyaXR0ZW4gMSwgTG9hZExpYnJhcnlFeFcoZmxhZ3MgMHgyMCkgLT4gYSBtb2R1bGUKaW1hZ2UtcmVzb3VyY2UgaGFuZGxlIGhhcyBiaXQgMSBzZXQ6IDEsIGJpdCAwIHNldDogMApub3JtYWw6IGZpbGUgd3JpdHRlbiAxLCBMb2FkTGlicmFyeUV4VyhmbGFncyAweDApIC0+IGEgbW9kdWxlCm5vcm1hbCBoYW5kbGUgaXMgNjQgS2lCIGFsaWduZWQ6IDEsIGxvdyBiaXRzIGNsZWFyOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "exe: FindResourceW type #99 name #1 -> NULL, error 1812\nexe: FindResourceW type \"NOPE\" name #1 -> NULL, error 1812\nexe: FindResourceW type #10 name \"BLOB\" -> NULL, error 1812\nexe: FindResourceW type #6 name #1 -> NULL, error 1812\nNULL module: FindResourceW type #99 name #1 -> NULL, error 1812\nbogus module: FindResourceW type #10 name #1 -> NULL, error 1812\ndatafile: file written 1, LoadLibraryExW(flags 0x2) -> a module\ndata file handle has bit 0 set: 1\nimage resource: file written 1, LoadLibraryExW(flags 0x20) -> a module\nimage-resource handle has bit 1 set: 1, bit 0 set: 0\nnormal: file written 1, LoadLibraryExW(flags 0x0) -> a module\nnormal handle is 64 KiB aligned: 1, low bits clear: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shlwapi.dll/PathRemoveFileSpecW.yaml
+id: windows/api/shlwapi.dll/PathRemoveFileSpecW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above: every function was called on the same four sets of strings (relative paths, paths with a drive letter, UNC and device paths, paths with the long prefix; 36 to 40 strings each, edge cases first) and each run was repeated with identical output. Microsoft Learn: "PathRemoveFileSpecW function (shlwapi.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled. The rules below were read from the observed tables and are not checked line by line by a model (the visible tests and their recorded results are the complete data).
+summary: >
+  Removes the last component (the "file spec") of a path in place. Git for Windows stops on it in its very first step ("Invalid executable path": it strips git.exe from its own path to find the installation); 8 of the 19 packages import it (5 in their main executable). The result keeps the root of the path and its drive-or-server prefix as a Windows 11 shlwapi does, with the quirks below.
+interface:
+  signature: "BOOL PathRemoveFileSpecW(LPWSTR pszPath)"
+  returns: "TRUE when something was removed (the string changed), FALSE when the path is a root (or empty) and stays as it is"
+  buffer: "the string is shortened in place; nothing is ever longer than before except that a removed root backslash is put back (`C:\\a` becomes `C:\\`, which is shorter again)"
+rules:
+  roots: "a \"root\" in these rules is: the empty string; a single backslash `\\`; two backslashes `\\\\`; a drive letter and a colon `C:` (with\n        or without a backslash after it); `\\\\?\\C:` (with or without a backslash); `\\\\?\\Volume{guid}` (with or without a backslash). A drive letter\n        is one ASCII letter (either case) followed by a colon at the very start. A path that already is one of these (and is not followed by anything) is returned unchanged with FALSE: '', `\\`, `\\\\`, `C:`, `C:\\`, `\\\\?\\C:`, `\\\\?\\C:\\`, `\\\\?\\Volume{guid}` and `\\\\?\\Volume{guid}\\`. Not roots: `\\\\.\\C:\\` (becomes `\\\\.\\C:`), `\\\\s` (becomes `\\\\`), `\\\\s\\sh`, `\\\\?\\` (becomes `\\\\?`)"
+  no_backslash: "a string without a backslash loses all of it, except that a leading drive letter and colon stay: `a` -> '' (TRUE), `a b` -> '', ` ` -> '', `.` -> '', `a.b` -> '', `a/b` -> '' (the forward slash is not a separator at all), `C:a` -> `C:`, `C:/a` -> `C:`, `C:/a/b` -> `C:`"
+  cut: "otherwise the text from the last backslash on is removed, and then the backslashes that end what is left are removed too (the doubled backslash of `a\\\\b` goes: -> `a`; `C:\\a\\\\b` -> `C:\\a`; `\\\\s\\\\sh` -> `\\\\s`), but never into the root. A trailing backslash is a last component that is empty: `a\\b\\` -> `a\\b`, `C:\\a\\` -> `C:\\a`. So `a\\b\\c.txt` -> `a\\b`, `a\\b\\c.txt\\` -> `a\\b\\c.txt`, `a\\\\\\b\\` -> `a\\\\\\b`"
+  root_kept: "when what is left is a root without its backslash it is given one back: `\\a` -> `\\`; `C:\\a` -> `C:\\`; `C:\\\\a` -> `C:\\`; `c:\\a` -> `c:\\`; `\\\\?\\C:\\a` -> `\\\\?\\C:\\`; `\\\\?\\Volume{guid}\\a` -> `\\\\?\\Volume{guid}\\`; `\\\\a` (UNC server only) -> `\\\\`; `\\\\\\a` -> `\\\\\\`; `\\\\\\` -> `\\\\`. A root-like but not recognized head (`1:\\a`, `::\\a`, `CC:\\a`, `C::\\a`) is just cut: -> `1:`, `::`, `CC:`, `C::`"
+  unc: "after the two leading backslashes the server and the share are ordinary components: `\\\\s\\sh\\f` -> `\\\\s\\sh`; `\\\\s\\sh` -> `\\\\s`; `\\\\s\\sh\\` -> `\\\\s\\sh`; `\\\\server\\share\\dir\\file.txt` -> `\\\\server\\share\\dir`; `\\\\server\\share` -> `\\\\server`; `\\\\server` -> `\\\\`; `\\\\ab`, `\\\\abc`, `\\\\abcdefgh` -> `\\\\` (the length of the server does not matter); `\\\\.\\pipe\\x` -> `\\\\.\\pipe`; `\\\\.\\C:\\a` -> `\\\\.\\C:`; `\\\\.` -> `\\\\`"
+  long_prefix: "the `\\\\?\\` prefix is not special except for its root forms: `\\\\?\\C:\\a\\b` -> `\\\\?\\C:\\a`; `\\\\?\\UNC\\s\\sh\\f` -> `\\\\?\\UNC\\s\\sh`; `\\\\?\\UNC\\s\\sh` -> `\\\\?\\UNC\\s`; `\\\\?\\UNC` -> `\\\\?`; `\\\\?\\a\\b` -> `\\\\?\\a`; `\\\\?\\pipe\\x` -> `\\\\?\\pipe`; `\\\\?\\` -> `\\\\?`; the NT prefix `\\??\\C:\\a\\b` -> `\\??\\C:\\a`"
+  dots: "`.` and `..` are components like any other: `a\\.` -> `a`, `C:\\a\\..\\b` -> `C:\\a\\..`, `C:\\.` -> `C:\\`, `.` -> '', `..\\a` -> `..`; trailing dots, spaces and case are untouched (`C:\\a\\b.` -> `C:\\a`, `a\\ \\b` -> `a\\ `)"
+  mixed_slash: "the last BACKSLASH decides: `a/b\\c` -> `a/b`, `a\\b/c` -> `a`, `C:/a\\b` -> `C:/a`, `C:\\a/b` -> `C:\\`"
+errors:
+  none: "no error code; the result says whether the string was changed. The last error is not changed"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per group of strings; they import shlwapi.dll (kernelbase.dll for the PathCch functions). Each line is one call: "<input>" -> <result>. A test string is a path as UTF-16; backslashes are written as they are (so `\\s` is two backslashes and an s); a string longer than 70 units is shown by its first 12 and its length. The last error is set to a marker before each call and shown only when a call changed it. Result strings are read up to their NUL; destination buffers are prefilled with 0xAAAA.
+not_covered: >
+  A NULL pointer, strings longer than MAX_PATH, quotes, the ANSI function PathRemoveFileSpecA (the same rules on bytes), strings with a drive letter that is not ASCII.
