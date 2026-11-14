@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "3b0da0f262c8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:44:14Z",
+  "tests": [
+    {
+      "name": "gsd_basic",
+      "exe_sha256": "068b99d456aaf847e0fc7a02750af430ff30d7cab890c0c53606c71445ae7c76",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhcnRzIHdpdGggYSBkcml2ZSBhbmQgYSBiYWNrc2xhc2g6IDEKZW5kcyB3aXRob3V0IGEgYmFja3NsYXNoOiAxCmVuZHMgd2l0aCBcc3lzdGVtMzIgKGFueSBjYXNlKTogMQpvbmx5IEFTQ0lJLCBubyBmb3J3YXJkIHNsYXNoOiAxCmxlbmd0aCB3aXRob3V0IE5VTCBpcyAxOSAoQzpcV2luZG93c1xzeXN0ZW0zMik6IDEKVyBmdW5jdGlvbjogc2FtZSBsZW5ndGggMSwgc2FtZSB0ZXh0IDEKR2V0U3lzdGVtRGlyZWN0b3J5QSBzaXplIDAgLT4gbGVuZ3RoKzEsIGVycm9yIHVuY2hhbmdlZCwgd3JvdGUgMCBieXRlcwpHZXRTeXN0ZW1EaXJlY3RvcnlBIHNpemUgMSAtPiBsZW5ndGgrMSwgZXJyb3IgdW5jaGFuZ2VkLCB3cm90ZSAwIGJ5dGVzCkdldFN5c3RlbURpcmVjdG9yeUEgc2l6ZSAxOCAtPiBsZW5ndGgrMSwgZXJyb3IgdW5jaGFuZ2VkLCB3cm90ZSAwIGJ5dGVzCkdldFN5c3RlbURpcmVjdG9yeUEgc2l6ZSAxOSAtPiBsZW5ndGgrMSwgZXJyb3IgdW5jaGFuZ2VkLCB3cm90ZSAwIGJ5dGVzCkdldFN5c3RlbURpcmVjdG9yeUEgc2l6ZSAyMCAtPiBsZW5ndGgsIGVycm9yIHVuY2hhbmdlZCwgd3JvdGUgMjAgYnl0ZXMKR2V0U3lzdGVtRGlyZWN0b3J5QSBzaXplIDI2MCAtPiBsZW5ndGgsIGVycm9yIHVuY2hhbmdlZCwgd3JvdGUgMjAgYnl0ZXMKR2V0U3lzdGVtRGlyZWN0b3J5VyBzaXplIDAgLT4gbGVuZ3RoKzEsIGVycm9yIHVuY2hhbmdlZCwgd3JvdGUgMCB1bml0cwpHZXRTeXN0ZW1EaXJlY3RvcnlXIHNpemUgMSAtPiBsZW5ndGgrMSwgZXJyb3IgdW5jaGFuZ2VkLCB3cm90ZSAwIHVuaXRzCkdldFN5c3RlbURpcmVjdG9yeVcgc2l6ZSAxOCAtPiBsZW5ndGgrMSwgZXJyb3IgdW5jaGFuZ2VkLCB3cm90ZSAwIHVuaXRzCkdldFN5c3RlbURpcmVjdG9yeVcgc2l6ZSAxOSAtPiBsZW5ndGgrMSwgZXJyb3IgdW5jaGFuZ2VkLCB3cm90ZSAwIHVuaXRzCkdldFN5c3RlbURpcmVjdG9yeVcgc2l6ZSAyMCAtPiBsZW5ndGgsIGVycm9yIHVuY2hhbmdlZCwgd3JvdGUgMjAgdW5pdHMKR2V0U3lzdGVtRGlyZWN0b3J5VyBzaXplIDI2MCAtPiBsZW5ndGgsIGVycm9yIHVuY2hhbmdlZCwgd3JvdGUgMjAgdW5pdHMKTlVMTCBidWZmZXIsIHNpemUgMCAtPiBsZW5ndGgrMSwgZXJyb3IgdW5jaGFuZ2VkCmFnYWluOiBzYW1lIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "starts with a drive and a backslash: 1\nends without a backslash: 1\nends with \\system32 (any case): 1\nonly ASCII, no forward slash: 1\nlength without NUL is 19 (C:\\Windows\\system32): 1\nW function: same length 1, same text 1\nGetSystemDirectoryA size 0 -> length+1, error unchanged, wrote 0 bytes\nGetSystemDirectoryA size 1 -> length+1, error unchanged, wrote 0 bytes\nGetSystemDirectoryA size 18 -> length+1, error unchanged, wrote 0 bytes\nGetSystemDirectoryA size 19 -> length+1, error unchanged, wrote 0 bytes\nGetSystemDirectoryA size 20 -> length, error unchanged, wrote 20 bytes\nGetSystemDirectoryA size 260 -> length, error unchanged, wrote 20 bytes\nGetSystemDirectoryW size 0 -> length+1, error unchanged, wrote 0 units\nGetSystemDirectoryW size 1 -> length+1, error unchanged, wrote 0 units\nGetSystemDirectoryW size 18 -> length+1, error unchanged, wrote 0 units\nGetSystemDirectoryW size 19 -> length+1, error unchanged, wrote 0 units\nGetSystemDirectoryW size 20 -> length, error unchanged, wrote 20 units\nGetSystemDirectoryW size 260 -> length, error unchanged, wrote 20 units\nNULL buffer, size 0 -> length+1, error unchanged\nagain: same 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

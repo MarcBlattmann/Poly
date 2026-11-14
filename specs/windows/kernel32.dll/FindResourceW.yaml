@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/FindResourceW.yaml
+id: windows/api/kernel32.dll/FindResourceW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. The tests write a small generated PE32+ DLL image (no code, only a .rsrc section; lib/mkpe.py of the spec agent's kit builds the 2,048 bytes, and the test source carries them as a byte array) next to themselves and load it with LoadLibraryExW three ways: as a data file (0x2), as image resources (0x20) and as a normal image (0); every lookup gives the same lines in all three ways. Microsoft Learn: "FindResourceW function (libloaderapi.h), MAKEINTRESOURCE, Resource Types, Resource Definition Statements (the "#number" form)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Finds a resource of a type and name in a module and returns a handle to it (an HRSRC). 12 of 19 packages import it (8 in their main executable): icons, dialog templates, version information, strings all start here. 14 packages import LoadResource, LockResource and SizeofResource, which work on its result. Together they stop most apps when they first need an icon or a menu.
+interface:
+  signature: "HRSRC FindResourceW(HMODULE hModule, LPCWSTR lpName, LPCWSTR lpType)"
+  returns: "a non-NULL handle that identifies the resource entry (the same value for the same resource each time), or NULL with the last error set"
+  ids: "lpName and lpType are either a pointer to a NUL-terminated string or an integer id below 0x10000 passed as if it were a pointer (MAKEINTRESOURCE)"
+rules:
+  modes: "The three load modes give identical answers. A module handle is the one LoadLibraryExW returned: with LOAD_LIBRARY_AS_DATAFILE its low bit is\n        set (the handle is not an address of a mapped image), with LOAD_LIBRARY_AS_IMAGE_RESOURCE bit 1 is set and bit 0 clear, and a normal\n        image's handle is 64 KiB aligned. The resource functions must accept all three"
+  fixture: "The resources of the test image: RT_ICON #1 (8 bytes 01..08); RT_STRING blocks #1 (strings 1 \"Hello\", 2 empty, 3 \"World \" U+20AC U+00E9,\n        15 \"last\"), #2 (string 16 \"sixteen\") in the neutral language and block #7 (string 100 \"nur deutsch\") in de-DE (0x0407) only; RT_RCDATA\n        named \"ALPHA\" (1 byte), \"BETA\" (3), \"BLOB\" (20 bytes \"0123456789ABCDEFGHIJ\"), \"ZETA\" (2), numbered 100 (\"abc\"), 101 (0 bytes), and 7 in two\n        languages, en-US (0x0409, \"english text\") and de-DE (\"deutscher text!\"); RT_GROUP_ICON \"MAINICON\" and #2 (6 bytes each); RT_VERSION #1 in\n        en-US (16 bytes \"@ABCDEFGHIJKLMNO\"); a custom type \"TEXTFILE\" with the names #1 (14 bytes, two lines) and \"README\" (\"hello\"); a custom type\n        \"TEXTFILE2\" with the name #5 (70 bytes). All names and type names are stored in upper case, as resource compilers do"
+  found: "by number and by name: RT_RCDATA \"BLOB\" (size 20), RT_RCDATA #100 (3), RT_RCDATA #101 (a resource of 0 bytes is found like any other), RT_ICON #1 (8), RT_STRING #1 (66 bytes: the block of 16 strings, each a length unit and the units), RT_STRING #7 (found without a language although it exists only in de-DE), RT_GROUP_ICON \"MAINICON\" and #2, RT_VERSION #1, type \"TEXTFILE\" with #1 and \"README\", type \"TEXTFILE2\" #5. Two lookups of the same resource return the same handle"
+  case: "string names and string types are matched without regard to letter case (the stored names are upper case): \"blob\", \"Alpha\", \"zeta\" find BLOB, ALPHA, ZETA; \"textFILE\" with \"readme\" finds TEXTFILE/README"
+  number_form: "a string that starts with `#` stands for the number after it, for names and for types: \"#10\" is RT_RCDATA, \"#100\" is the id 100 (\"#10\" + \"#100\" finds the 3-byte resource), \"#6\" + \"#2\" finds string block 2, leading zeros are fine (\"#010\" + \"#0100\"), \"#101\" finds id 101. The digits are read until the first character that is not a digit, and white space after the `#` is skipped: \"#100x\" and \"# 100\" both stand for 100. \"#abc\" stands for the id 0 (not found: ERROR_RESOURCE_NAME_NOT_FOUND). The string \"#\" alone and \"#65636\" (a number above 65535) fail with ERROR_INVALID_PARAMETER (87) and NULL"
+  not_found: "the type does not exist in the module (RT_RCDATA exists; 99, \"NOTYPE\", \"TEXTFILE2\" asked as a name, the type 0 are tried): NULL and ERROR_RESOURCE_TYPE_NOT_FOUND (1813); the type exists but the name does not (RT_RCDATA with #1, #0, #999, \"NOPE\"; RT_ICON with \"BLOB\"): NULL and ERROR_RESOURCE_NAME_NOT_FOUND (1814); a module that has no resources at all (this test's own executable, a NULL module handle that stands for it, or an address that is no module): NULL and ERROR_RESOURCE_DATA_NOT_FOUND (1812) for every type and name"
+  last_error: "set on every failure and not changed by a success"
+errors:
+  error_resource_data_not_found: "1812: the module has no resource directory (or is not a module)"
+  error_resource_type_not_found: "1813"
+  error_resource_name_not_found: "1814 (and for \"#abc\")"
+  error_invalid_parameter: "87: the strings \"#\" and \"#65636\""
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075); they import kernel32.dll (and user32.dll for LoadStringW). Each line is one call with its type and name written as #n for a number and "text" for a string, then -> found/NULL and the last error, or the size and the first bytes of the data (non-printable bytes as <xx>). The tests need a loader that can load a PE image that has no code and no imports with LOAD_LIBRARY_AS_DATAFILE, LOAD_LIBRARY_AS_IMAGE_RESOURCE and normally (a DLL without an entry point); a program of another kind (a console exe) is not needed for the lookups.
+not_covered: >
+  A NULL name or type pointer, resources in the main image of a real executable (the test programs have none), languages (see FindResourceExW), the manifest resources.
