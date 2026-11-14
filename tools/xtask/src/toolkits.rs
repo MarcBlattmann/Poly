@@ -632,9 +632,17 @@ impl Machine {
         Ok(())
     }
 
+    /// Press and release a key; `ctrl+o` style chords press the keys in
+    /// order and release them in reverse.
     pub(crate) fn key(&mut self, qcode: &str) -> Result {
-        self.send_events(&[key_event(qcode, true)])?;
-        self.send_events(&[key_event(qcode, false)])
+        let keys: Vec<&str> = qcode.split('+').collect();
+        for k in &keys {
+            self.send_events(&[key_event(k, true)])?;
+        }
+        for k in keys.iter().rev() {
+            self.send_events(&[key_event(k, false)])?;
+        }
+        Ok(())
     }
 
     pub(crate) fn type_text(&mut self, text: &str) -> Result {
