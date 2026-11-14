@@ -272,27 +272,23 @@ fn mapped_view_name(process: Handle, address: u64) -> Result<Vec<u16>, u32> {
 }
 
 /// `K32GetMappedFileNameW(hProcess, lpv, lpFilename, nSize)` (`GetMappedFileNameW` of PSAPI
-/// version 2): the device-form name of the file mapped at `lpv`. Poly answers for the images
-/// the loader mapped into this process (what Chrome asks about); an address in no image, and
-/// any address of another process, is `ERROR_FILE_INVALID`.
+/// version 2): the device-form name of the file mapped at `lpv` in this process or, with a
+/// handle that has `PROCESS_QUERY_LIMITED_INFORMATION`, in another one.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn K32GetMappedFileNameW(process: Handle, address: u64, name: *mut u16, size: u32) -> u32 {
     if name.is_null() {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
-    match is_self(process) {
-        None => return 0,
-        Some(false) => return fail(ERROR_FILE_INVALID, 0),
-        Some(true) => {}
-    }
+    let Some(own) = is_self(process) else { return 0 };
     // The sheet: an address above the user address space is ERROR_INVALID_PARAMETER.
     if address > USER_ADDRESS_LIMIT {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
-    let modules = module_spans();
-    // One of the loader's images: the file of its path. Anything else (and an image whose file
-    // cannot be opened by that path): ask the kernel what file the address is in.
-    let device = match procinfo::module_at(&modules, address).and_then(device_name) {
+    // One of this process's loader images: the file of its path. Anything else (another
+    // process's views, and an image whose file cannot be opened by that path): ask the kernel
+    // what file the address is in.
+    let from_loader = if own { procinfo::module_at(&module_spans(), address).and_then(device_name) } else { None };
+    let device = match from_loader {
         Some(d) => d,
         None => match mapped_view_name(process, address) {
             Ok(d) => d,
