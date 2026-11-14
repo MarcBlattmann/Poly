@@ -3,13 +3,27 @@
   "system": {
     "name": "windows",
     "version": "10.0.26200.0",
-    "build": "26200.9711",
+    "build": "26200.9974",
     "arch": "AMD64"
   },
-  "bundle": "8a396a60cdf0",
+  "bundle": "a4a7b33f45cd",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-09T18:09:27Z",
+  "started": "2026-11-14T15:27:41Z",
   "tests": [
+    {
+      "name": "gtf_absent",
+      "exe_sha256": "bd9b70781b0e5fac9849e53bb43a84af295301b5852c921539d8f3eb7a990b94",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWJzZW50IGZhY2U6IHJldHVybnMgbGVuZ3RoKzEgMSB0aGUgcmVxdWVzdGVkIDAgbm9uLWVtcHR5IDEgZW51bWVyYXRlZCAxIChyZXR1cm4gMSwgZXZlcnkgY2FsbGJhY2sgdGhhdCBmYWNlIDEpIHRoZSBlbXB0eSBmYWNlJ3MgMQpOVUxMIGJ1ZmZlciwgY291bnQgMDogcmV0dXJucyBsZW5ndGgrMSAxCmNvdW50IDE6IHJldHVybnMgMSAoY291bnQtMSAwKSBmaXJzdCBjb3VudC0xIHVuaXRzIG9mIHRoZSBuYW1lIDEgTlVMIGF0IGNvdW50LTEgMSBuZXh0IHVuaXQgdW50b3VjaGVkIDEKY291bnQgMjogcmV0dXJucyAyIChjb3VudC0xIDApIGZpcnN0IGNvdW50LTEgdW5pdHMgb2YgdGhlIG5hbWUgMSBOVUwgYXQgY291bnQtMSAxIG5leHQgdW5pdCB1bnRvdWNoZWQgMQpjb3VudCAzOiByZXR1cm5zIDMgKGNvdW50LTEgMCkgZmlyc3QgY291bnQtMSB1bml0cyBvZiB0aGUgbmFtZSAxIE5VTCBhdCBjb3VudC0xIDEgbmV4dCB1bml0IHVudG91Y2hlZCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "absent face: returns length+1 1 the requested 0 non-empty 1 enumerated 1 (return 1, every callback that face 1) the empty face's 1\nNULL buffer, count 0: returns length+1 1\ncount 1: returns 1 (count-1 0) first count-1 units of the name 1 NUL at count-1 1 next unit untouched 1\ncount 2: returns 2 (count-1 0) first count-1 units of the name 1 NUL at count-1 1 next unit untouched 1\ncount 3: returns 3 (count-1 0) first count-1 units of the name 1 NUL at count-1 1 next unit untouched 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
     {
       "name": "gtf_basic",
       "exe_sha256": "9d1c874242af440d89eafdac5c7b5bdab79d8459c4003bd49e6de81e2776297c",

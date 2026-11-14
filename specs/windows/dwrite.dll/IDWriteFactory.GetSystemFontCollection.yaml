@@ -6,6 +6,7 @@ oracle:
   machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
   observed_by: spec-win-dwrite
   date: 2026-11-09
+  this_round: "spec-chrome-win-6 (2026-11-14): the tests added this round ran on Windows 11 Home 25H2 build 26200.9974 on homeserver2 over SSH (session 0), two rounds of two runs each, identical, and on the owner's PC (Windows 11 Enterprise, build 26200, desktop session) with the same output. The chrome section comes from Chrome's stage-1 runs on Poly (call traces of chrome.dll's user32, gdi32 and dwrite imports, poly.nt.exceptions) and from Chromium's and Skia's public source (BSD licence), read by the spec agent for the order of the calls only"
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn: the DirectWrite reference pages of the interfaces and methods named
@@ -27,12 +28,16 @@ interface:
   signature: "HRESULT IDWriteFactory::GetSystemFontCollection(IDWriteFontCollection** fontCollection, BOOL checkForUpdates = FALSE); also IDWriteFactory3::GetSystemFontCollection(BOOL includeDownloadableFonts, IDWriteFontCollection1** fontCollection, BOOL checkForUpdates = FALSE)"
   slot_names: "IDWriteFactory3 has the overload as a separate vtable slot after the IDWriteFactory ones (dwrite_3.h); Chrome and Skia call the IDWriteFactory form"
   hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+chrome:
+  call_site: "chrome.dll's Skia font manager is made on the shared factory's system collection (GetSystemFontCollection(&c, FALSE)) and IDWriteFactory2::GetSystemFontFallback; every font of the browser's UI comes from them"
+  stage_1: "on Poly the system collection is built from the files in C:/Windows/Fonts (ADR 0170). The disk of `cargo xtask chrome-win run` had no such folder, so the collection had no family at all and every lookup failed (see SystemParametersInfoW). Windows always has fonts there; a Poly disk that runs Windows programs needs its font store (with fonts on the stage disk the recursion is gone: observed)"
 rules:
   basic: "S_OK and a non-null collection with at least a few dozen families on a Windows installation (the oracle, a stock Windows 11 Core system, has fewer than 100)"
   families: "FindFamilyName finds Arial, Segoe UI, Times New Roman, Courier New, Consolas, Verdana, Tahoma, Segoe UI Emoji and Segoe UI Symbol on the oracle"
   check_for_updates: "checkForUpdates TRUE or FALSE both give S_OK and a collection with the same number of families"
   objects: "each call returns a new collection object (the pointers of two calls differ), for both factory types; the family count is the same"
   factory3: "IDWriteFactory3::GetSystemFontCollection(FALSE, &collection, FALSE) gives S_OK and a collection with the same families"
+  never_empty: "the system collection is never empty: families > 0 from a shared and from an isolated factory; every family has at least one font and a name; GetFont(0) and CreateFontFace work for the first and the last family; the face of the message font (SPI_GETNONCLIENTMETRICS) is a family; checkForUpdates TRUE gives the same count (test gsfc_every_family)"
 errors:
   none: "no error case observed (the call needs a valid output pointer)"
 side_effects: "none beyond the rules above"
@@ -42,7 +47,7 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
   guarantees: none
 tests:
-  visible: 1  # count in <symbol>.tests/
+  visible: 2  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every

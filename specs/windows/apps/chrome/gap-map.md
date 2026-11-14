@@ -817,6 +817,19 @@ Totals over every stage: 579 APIs; claimed 239, green 27, MISSING 311, NOT LISTE
 |---|---|---|---|---|---|---|---|---|---|---|---:|---|
 | dwrite.dll | `DWriteCreateFactory` | MISSING | B | x x x x x x x | 2 | returned 0/NULL 2 x |
 
+**Stage 1 on Poly, the UI-font recursion (spec-chrome-win-6, 2026-11-14).** The browser's UI-font set-up
+(`SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)`, then per font `CreateFontIndirectW`, `GetDC(NULL)`,
+`SelectObject`, `GetObjectW`, `GetTextMetricsW`) gets Windows' answers on Poly; the face name it reads is then
+looked up through DirectWrite (`IDWriteFontCollection::FindFamilyName` on the system collection, else the system
+fallback after `IDWriteFactory::CreateNumberSubstitution`). On the stage disk the system collection was empty
+(no fonts under `C:\Windows\Fonts`) and `CreateNumberSubstitution` is a stub, so no typeface came back, and
+Chrome's fallback to its default UI font starts the same set-up again: 5,226 rounds until the stack overflowed.
+With the font store on the disk the recursion is gone. The rules are in the sheets of
+`user32.dll/SystemParametersInfoW`, `GetDC`, `gdi32.dll/CreateFontIndirectW`, `GetObjectW`, `GetTextFaceW`,
+`GetTextMetricsW`, `EnumFontFamiliesExW` and `dwrite.dll/IDWriteFactory.GetSystemFontCollection`,
+`IDWriteFontCollection.FindFamilyName`, `IDWriteFactory.CreateNumberSubstitution`,
+`IDWriteFontFallback.MapCharacters` (their `chrome` sections).
+
 ### GPU / DXGI  (3 APIs: MISSING 3)
 
 | DLL | API | Poly | By | S1 S2 S3 S4 S4W S5 S5W | Max calls | Failures seen on Windows |
