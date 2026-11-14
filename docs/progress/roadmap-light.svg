@@ -386,7 +386,7 @@
 <g><title>AppImages install and run, without FUSE (Poly mounts their squashfs) (ADR 0132)</title>
 <rect x="525.1" y="293.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<g><title>✔ An installed Linux app uninstalls from Files' Applications (a confirmation window, Debian's own apt-get remove and autoremove; Poly's own apps and the base root stay) and an AppImage installs from a double click (run or install, read without running it, in the launcher and Applications, uninstalled again), started by extracting because execve from FUSE fails (ADR 0180)</title>
+<g><title>✔ An installed Linux app uninstalls from Files' Applications (a confirmation window, Debian's own apt-get remove and autoremove; Poly's own apps and the base root stay) and an AppImage installs from a double click (run or install, read without running it, in the launcher and Applications, uninstalled again), started the runtime's normal way from its FUSE mount (extracting only where there is no FUSE) (ADR 0180)</title>
 <rect x="551.6" y="293.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ ⚖️ Decided (owner, ADR 0132): .deb installs go into Debian stable or Ubuntu LTS bases (chosen from the package's dependencies), .rpm into a Fedora base</title>

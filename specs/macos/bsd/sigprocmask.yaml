@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/sigprocmask.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# sigprocmask.tests/macos.json.
+id: macos/syscall/bsd/sigprocmask
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 48,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 48, arguments in x0..x5 (second result in x1). On
+  failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. sigprocmask(how,
+  set_ptr, old_ptr) changes and reads the signal mask, a 32-bit set where
+  signal n is bit n-1. how is SIG_BLOCK 1 (add), SIG_UNBLOCK 2 (remove) or
+  SIG_SETMASK 3 (replace). The old mask is stored through old_ptr; a NULL
+  set only reads. The mask of a new process is empty. SIGKILL and SIGSTOP
+  cannot be blocked: their bits (8 and 16) are dropped, so setting
+  everything gives 0xfffefeff and blocking only those two leaves the mask
+  empty. A blocked signal stays pending (sigpending, BSD 52, stores the
+  pending set, here the bit of SIGUSR1); several of the same signal count
+  once; unblocking delivers it before the sigprocmask call returns (the
+  handler ran once for three kills), after which nothing is pending. Not
+  tested: an unwritable old_ptr (address 8) was not an error in a probe.
+returns:
+  success: "0; *old_ptr = the mask before the change"
+errors:
+  bad_how: "EINVAL (22): how 0 or 9"
+  bad_pointer: "EFAULT (14): set pointer at address 8"
+side_effects: "the signal mask changes; unblocking can run handlers"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

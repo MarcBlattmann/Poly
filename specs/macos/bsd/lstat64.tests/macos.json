@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "lstat_regular",
+      "source_sha256": "a8063cfd34189906390fe8a4b32bde659a40682d2344b9452cc0e552beefb840",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1ea217828b0a38cfc41851c9640374d937ac21b06819708a83a8d58b45f32d3b",
+          "exit_code": 0,
+          "stdout": "ok a file: the same as stat64\nok a regular file, size 3\nok a directory\nok a device\nok a link in the middle of the path is followed\nok and it is the file inside\nok a trailing slash follows the link too: a directory\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "lstat_symlink",
+      "source_sha256": "6ca64f046abc025d7e360f39a5214c3a898b9f89d4b2b072f457d02f6c2efec3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5155382e60529622ec01adde51f8139806c49d36a5d871507197120272a64f1a",
+          "exit_code": 0,
+          "stdout": "ok lstat64 of a link returns 0\nok a symbolic link, mode 0755\nok size 4: the length of \"file\"\nok one link\nok size 20: the length of \"a/much/longer/target\"\nok a dangling link\nok it is a link of size 7\nok a loop of links\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -382,6 +382,16 @@ impl ObjectManager {
         self.wakes.pop_front()
     }
 
+    /// The status of wait `id` if it was satisfied and its wake is still queued (not yet taken
+    /// by [`Self::pop_wake`]); the wake is removed. A waiter whose time ran out, or that got an
+    /// APC, asks this before it cancels: a satisfied wait has already taken its object (an
+    /// auto-reset event reset, a semaphore count, a mutant), so reporting a timeout then would
+    /// lose the signal (ADR 0155 step 12).
+    pub fn take_wake(&mut self, id: WaitId) -> Option<NtStatus> {
+        let at = self.wakes.iter().position(|w| w.wait == id)?;
+        self.wakes.remove(at).map(|w| w.status)
+    }
+
     /// The blocked waits, for diagnostics (`poly.nt.waits`): who waits, on
     /// what, and how.
     pub fn pending_wait_list(&self) -> Vec<WaitDescription> {

@@ -18,7 +18,8 @@
 //!    by URL and SHA-256). A double click in Files asks *Run* or *Install*;
 //!    Install copies it to the user's folder, takes its desktop file and
 //!    icon out of the image, and the launcher and Applications list it; Open
-//!    starts it (a window appears); Uninstall from Applications removes it.
+//!    starts it the runtime's normal way, its image mounted through FUSE (a
+//!    window appears); Uninstall from Applications removes it.
 //!
 //! The guest reaches Debian's snapshot archive and GitHub through QEMU's user
 //! networking. The group skips itself where the packages are not fetched
@@ -288,6 +289,12 @@ fn appimage(m: &mut Machine) -> Result {
     m.shot("appimage-running")?;
     let out = m.run("echo running-\"$(ps | grep -ci '[c]pu-x')\"")?;
     expect(&format!("the app runs ({out:?})"), !out.contains("running-0"))?;
+    // Started the runtime's normal way: its image is mounted through FUSE
+    // (the squashfs at the image's offset), not extracted (ADR 0180).
+    let out = m.run(&format!(
+        "echo fuse-\"$(grep -c ' fuse.squashfuse ' /proc/mounts)-$(grep -c APPIMAGE_EXTRACT_AND_RUN /root/.local/share/applications/{APPIMAGE_ID})\""
+    ))?;
+    expect(&format!("the app runs from its FUSE mount, not extracted ({out:?})"), out.contains("fuse-1-0"))?;
     // Stop it before it is removed.
     m.run("for p in $(pidof cpu-x); do kill $p; done; sleep 2; echo stopped")?;
 

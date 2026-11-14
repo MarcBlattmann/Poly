@@ -51,6 +51,7 @@ use crate::protect::Protection;
 use crate::section::{self, MapView};
 use crate::system::{NtProcess, NtSystem, NtThread, Section, SectionKind};
 use crate::vm::{ALLOCATION_GRANULARITY, AccessFault, PAGE_SIZE, page_up};
+use alloc::vec::Vec;
 use core::result::Result;
 use poly_ntobj::status::*;
 use poly_ntobj::{Handle, NewObject, NtStatus, ObjectId, ObjectType, ThreadRef};
@@ -199,7 +200,10 @@ fn map_image(
     image: ImageSection,
     file_object: Option<ObjectId>,
     thread: ThreadRef,
+    name: Option<(Vec<u16>, Vec<u16>)>,
 ) -> Result<(u64, u64), NtStatus> {
+    let mut image = image;
+    image.name = name;
     let source = SectionSource::Image(image.image.clone());
     let backing = b.create_section(&source)?;
     if let Some(f) = file_object {
@@ -304,8 +308,10 @@ pub fn start_process_listed(
         image.info.optional.size_of_stack_reserve,
         image.info.optional.size_of_stack_commit,
     );
-    let (image_base, preferred) = map_image(sys, proc, b, image, file_object, thread)?;
-    let (ntdll_base, _) = map_image(sys, proc, b, ntdll, None, thread)?;
+    let ntdll_name = sys.io.dos_file_name(&"C:\\Windows\\System32\\ntdll.dll".encode_utf16().collect::<Vec<u16>>());
+    let image_name = proc.image_name.take();
+    let (image_base, preferred) = map_image(sys, proc, b, image, file_object, thread, image_name)?;
+    let (ntdll_base, _) = map_image(sys, proc, b, ntdll, None, thread, ntdll_name)?;
     proc.thread_start = ntdll_base + u64::from(entries.thread_start);
     proc.apc_dispatcher = ntdll_base + u64::from(entries.apc_dispatcher);
     proc.exception_dispatcher = ntdll_base + u64::from(entries.exception_dispatcher);

@@ -107,6 +107,15 @@ pub trait CharDevice: Send + Sync {
     fn message_size(&self) -> Option<usize> {
         None
     }
+
+    /// For a message device: the size of the message a read would take
+    /// now (0 when none waits), so that a reader waiting for one needs no
+    /// buffer as large as the largest; a read whose buffer is smaller than
+    /// the message fails with `EINVAL` and leaves it there. `None` (the
+    /// default): [`message_size`](Self::message_size).
+    fn next_message_size(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// `/dev/null` (1, 3).

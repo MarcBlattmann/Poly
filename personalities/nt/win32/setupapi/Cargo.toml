@@ -1,0 +1,17 @@
+[package]
+name = "setupapi"
+description = "Our setupapi.dll (ADR 0155, step 12): the device installation functions Chrome delay-loads, on a system that enumerates no devices through them"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "setupapi"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true
