@@ -1,4 +1,4 @@
-//! Window stations and desktops (ADR 0183): the names a session has, the answers of
+//! Window stations and desktops (ADR 0186): the names a session has, the answers of
 //! `GetUserObjectInformationW` and the shape of `STARTUPINFO.lpDesktop`, as host-tested logic.
 //! The objects themselves (handles, descriptors, lifetime) are the NT personality's; this
 //! module only holds what can be decided from names and numbers.

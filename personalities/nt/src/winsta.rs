@@ -1,4 +1,4 @@
-//! Window stations and desktops as objects (ADR 0183).
+//! Window stations and desktops as objects (ADR 0186).
 //!
 //! `user32` asks for them through `PolyUserCall` (`Request::Winsta`, the records of
 //! [`poly_win32k::winsta`]); this module makes the objects, hands out the handles and keeps what
@@ -289,6 +289,8 @@ fn handle_with(sys: &mut NtSystem, caller: &Caller, id: ObjectId, access: u32, i
 /// Run one operation for `caller` (a thread of `proc`). `sd` is the descriptor the call carried,
 /// already read from the caller's memory.
 pub fn run(sys: &mut NtSystem, caller: &Caller, proc: &NtProcess, op: &WinstaOp, sd: Option<Vec<u8>>) -> Reply {
+    // A process that has not used its token yet gets it now: new objects take their descriptor from it.
+    let _ = crate::security::process_token(sys, caller.process, caller.thread);
     match op {
         WinstaOp::CreateStation { name, flags, access, .. } => {
             if let Err(e) = check_station_name(name) {

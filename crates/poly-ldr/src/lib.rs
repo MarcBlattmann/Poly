@@ -88,6 +88,7 @@ pub mod status {
     pub const STATUS_INVALID_IMAGE_FORMAT: NtStatus = NtStatus(0xC000_007B);
     pub const STATUS_DLL_NOT_FOUND: NtStatus = NtStatus(0xC000_0135);
     pub const STATUS_ACCESS_DENIED: NtStatus = NtStatus(0xC000_0022);
+    pub const STATUS_BAD_IMPERSONATION_LEVEL: NtStatus = NtStatus(0xC000_00A5);
     pub const STATUS_ORDINAL_NOT_FOUND: NtStatus = NtStatus(0xC000_0138);
     pub const STATUS_ENTRYPOINT_NOT_FOUND: NtStatus = NtStatus(0xC000_0139);
     pub const STATUS_DLL_INIT_FAILED: NtStatus = NtStatus(0xC000_0142);

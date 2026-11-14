@@ -1929,7 +1929,7 @@ impl Wm {
                 Reply::Ok {}
             }
             Request::Clip { op } => self.clip_op(ctx, op, fx),
-            // Window stations and desktops are objects of the NT personality's (ADR 0183).
+            // Window stations and desktops are objects of the NT personality's (ADR 0186).
             Request::Winsta { .. } => Reply::Error { code: 87 },
             Request::Layered { hwnd, op, key, alpha, flags } => self.layered_op(hwnd, op, key, alpha, flags),
             Request::Ime { op } => Reply::Ime { res: self.ime.run(ctx.key(), op) },

@@ -149,7 +149,7 @@ const MAXIMUM_ALLOWED: u32 = 0x0200_0000;
 
 /// A predefined key's handle has the rights its descriptor gives the caller's token (a token
 /// that may only read opens `HKEY_LOCAL_MACHINE` too: the subkeys are checked when they are
-/// opened, ADR 0183).
+/// opened, ADR 0186).
 fn open_absolute(path: &str) -> Result<Handle, NtStatus> {
     let units: Vec<u16> = path.encode_utf16().collect();
     nt_open(0, &units, MAXIMUM_ALLOWED, 0)

@@ -627,10 +627,18 @@ impl Loader {
         if !path::has_path(&n) && path::is_windows_known(&n) {
             p.known_dll_access()?;
         }
-        let candidates = if path::has_path(&n) { vec![n] } else { path::candidates(&n, &self.dirs, search_path) };
+        let explicit = path::has_path(&n);
+        let candidates = if explicit { vec![n] } else { path::candidates(&n, &self.dirs, search_path) };
         for c in candidates {
-            if let Ok(bytes) = p.read_file(&path::nt_path(&c)) {
-                return Ok(Found::File(c, bytes));
+            match p.read_file(&path::nt_path(&c)) {
+                Ok(bytes) => return Ok(Found::File(c, bytes)),
+                // A file the caller named that its token may not open is refused as it is (the
+                // `LoadLibraryExW` sheet: `ERROR_ACCESS_DENIED`); in a search a candidate that
+                // cannot be opened is passed over like one that is not there.
+                Err(e) if explicit && (e == STATUS_ACCESS_DENIED || e == STATUS_BAD_IMPERSONATION_LEVEL) => {
+                    return Err(e);
+                }
+                Err(_) => {}
             }
         }
         Err(STATUS_DLL_NOT_FOUND)

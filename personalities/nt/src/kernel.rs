@@ -130,10 +130,10 @@ pub struct ProcessCreate {
     /// and whether it joins its creator's too.
     pub jobs: alloc::vec::Vec<u64>,
     pub join_creator_jobs: bool,
-    /// Its mitigation policies from the creation attributes (ADR 0183); a dynamic-code policy
+    /// Its mitigation policies from the creation attributes (ADR 0186); a dynamic-code policy
     /// in them means it cannot make memory executable.
     pub mitigation: poly_kernelbase::mitigation::State,
-    /// The window station and desktop it starts on (`lpDesktop` and what it inherits, ADR 0183).
+    /// The window station and desktop it starts on (`lpDesktop` and what it inherits, ADR 0186).
     pub desktop: crate::winsta::Start,
     /// The creator's error mode (`SetErrorMode`): the new process starts with it
     /// ([`crate::procattrs`]).

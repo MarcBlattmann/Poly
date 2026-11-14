@@ -330,7 +330,7 @@ crate::wire_enum! {
         70 => RegisterMessage { name: Vec<u16> },
         /// A clipboard operation (ADR 0172): a `Clip`.
         100 => Clip { op: crate::clip::ClipOp },
-        /// A window station or desktop operation (ADR 0183): the NT personality answers it
+        /// A window station or desktop operation (ADR 0186): the NT personality answers it
         /// itself (it makes the handles), the window manager never sees it.
         120 => Winsta { op: crate::winsta::WinstaOp },
         /// DPI awareness (`awareness` is `guic::AWARE_*`): without `set` a

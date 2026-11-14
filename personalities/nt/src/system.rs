@@ -75,7 +75,7 @@ pub struct NtSystem {
     /// The job objects and which process belongs to which (ADR 0169).
     pub jobs: crate::job::Jobs,
 
-    /// The window stations and desktops and who is on them (ADR 0183).
+    /// The window stations and desktops and who is on them (ADR 0186).
     pub winsta: crate::winsta::WinSta,
     /// What a process keeps that another can set and a child inherits: error mode, memory
     /// priority, power throttling ([`crate::procattrs`]). A process without an entry has the
@@ -241,7 +241,7 @@ pub struct NtProcess {
     /// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON`:
     /// memory cannot be made executable (ADR 0169).
     pub dynamic_code_blocked: bool,
-    /// Its mitigation policies (ADR 0183): the creation attributes and `SetProcessMitigationPolicy`.
+    /// Its mitigation policies (ADR 0186): the creation attributes and `SetProcessMitigationPolicy`.
     pub mitigation: poly_kernelbase::mitigation::State,
     /// Its exit status, once known: the first `NtTerminateProcess` of it
     /// sets it, else its last thread's end ([`crate::exec::thread_exit`]);

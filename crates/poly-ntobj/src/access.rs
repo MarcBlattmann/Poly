@@ -81,7 +81,7 @@ pub const KEY_EXECUTE: AccessMask = 0x0002_0019;
 pub const IO_COMPLETION_QUERY_STATE: AccessMask = 0x0001;
 pub const IO_COMPLETION_MODIFY_STATE: AccessMask = 0x0002;
 pub const IO_COMPLETION_ALL_ACCESS: AccessMask = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x3;
-// Window station and desktop rights (`winuser.h`, ADR 0183).
+// Window station and desktop rights (`winuser.h`, ADR 0186).
 pub const WINSTA_ENUMDESKTOPS: AccessMask = 0x0001;
 pub const WINSTA_READATTRIBUTES: AccessMask = 0x0002;
 pub const WINSTA_ACCESSCLIPBOARD: AccessMask = 0x0004;

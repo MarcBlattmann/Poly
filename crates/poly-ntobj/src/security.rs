@@ -487,3 +487,65 @@ fn map_acl(acl_bytes: &[u8], map: &dyn Fn(u32) -> u32) -> Vec<u8> {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use poly_security::sid::mandatory;
+    use poly_security::token::SE_GROUP_INTEGRITY;
+
+    /// `Token::poly_user()` at integrity `rid`, with or without `SeImpersonatePrivilege`.
+    fn token(rid: u32, impersonate: bool) -> Token {
+        let mut t = Token::poly_user();
+        for g in t.groups.iter_mut().filter(|g| g.1 & SE_GROUP_INTEGRITY != 0) {
+            g.0 = mandatory(rid);
+        }
+        t.privileges.retain(|&(l, _)| impersonate || l != 29);
+        t
+    }
+
+    /// A process (5) with token `process` and a thread (6) that impersonates `thread`.
+    fn setup(process: Token, thread: Token) -> (ObjectManager, Caller) {
+        let mut om = ObjectManager::new();
+        let (p, _) = om.new_token(process, ThreadRef(1)).unwrap();
+        let (t, _) = om.new_token(thread, ThreadRef(1)).unwrap();
+        om.set_process_token(ProcessId(5), p).unwrap();
+        om.set_thread_token(ThreadRef(6), Some(t)).unwrap();
+        (om, Caller::user(ProcessId(5), ThreadRef(6)))
+    }
+
+    #[test]
+    fn an_impersonation_token_above_the_process_token_is_only_an_identification_token() {
+        // The `LoadLibraryExW` sheet: an Untrusted process whose thread carries a Low token.
+        let (om, c) = setup(token(0, false), token(0x1000, false));
+        assert!(om.security.impersonation_downgraded(c.process, c.thread));
+        // At or below the process's level it is fine.
+        let (om, c) = setup(token(0x1000, false), token(0, false));
+        assert!(!om.security.impersonation_downgraded(c.process, c.thread));
+        let (om, c) = setup(token(0x1000, false), token(0x1000, false));
+        assert!(!om.security.impersonation_downgraded(c.process, c.thread));
+        // A process that holds the impersonate privilege may impersonate a higher level.
+        let (om, c) = setup(token(0, true), token(0x1000, false));
+        assert!(!om.security.impersonation_downgraded(c.process, c.thread));
+        // No thread token: nothing to downgrade.
+        let (mut om, c) = setup(token(0, false), token(0x1000, false));
+        om.set_thread_token(c.thread, None).unwrap();
+        assert!(!om.security.impersonation_downgraded(c.process, c.thread));
+    }
+
+    #[test]
+    fn opening_under_a_downgraded_token_gives_bad_impersonation_level() {
+        let (mut om, c) = setup(token(0, false), token(0x1000, false));
+        let id = om
+            .new_object(
+                NewObject::Opaque { kind: ObjectType::Desktop, cookie: 1, signaled: None, parse: false },
+                c.thread,
+            )
+            .unwrap();
+        om.assign_security(id, ObjectType::Desktop, om.security.process_token(c.process), None);
+        assert_eq!(om.dacl_grant(&c, id, 1, false), Some(Err(STATUS_BAD_IMPERSONATION_LEVEL)));
+        // Without the thread token the process's own decides.
+        om.set_thread_token(c.thread, None).unwrap();
+        assert!(matches!(om.dacl_grant(&c, id, 1, false), Some(Ok(_))));
+    }
+}

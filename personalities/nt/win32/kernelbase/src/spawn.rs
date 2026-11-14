@@ -460,7 +460,7 @@ unsafe fn create(
         record(1, handle_words.as_ptr() as u64, handle_words.len() as u64 * 8);
     }
     if parsed.has_mitigation {
-        // Kind 2: the value points at the two mitigation words (ADR 0183).
+        // Kind 2: the value points at the two mitigation words (ADR 0186).
         record(2, parsed.mitigation.as_ptr() as u64, 16);
     }
     if let Some(v) = parsed.child_policy {

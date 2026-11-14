@@ -28,6 +28,8 @@ struct Fake {
     tried: Vec<String>,
     /// What opening the known DLLs gives the caller's token (`None`: allowed).
     known_refused: Option<NtStatus>,
+    /// Files the caller's token may not open.
+    denied: Vec<String>,
 }
 
 fn s(v: &[u16]) -> String {
@@ -87,6 +89,9 @@ impl Process for Fake {
     fn read_file(&mut self, nt_path: &[u16]) -> Result<Vec<u8>, NtStatus> {
         let key = s(nt_path).to_lowercase();
         self.tried.push(key.clone());
+        if self.denied.contains(&key) {
+            return Err(STATUS_ACCESS_DENIED);
+        }
         self.files.get(&key).cloned().ok_or(STATUS_OBJECT_NAME_NOT_FOUND)
     }
 
@@ -424,6 +429,26 @@ fn a_known_dll_is_refused_with_the_status_of_the_token_and_others_are_not_found(
     // Allowed again: the file is looked for.
     w.p.known_refused = None;
     assert_eq!(w.l.load(&mut w.p, &wide("msctf.dll"), None).unwrap_err(), STATUS_DLL_NOT_FOUND);
+}
+
+#[test]
+fn a_file_the_token_may_not_open_is_refused_by_path_and_passed_over_in_a_search() {
+    let locked = || dll("locked.dll", 0x1_8400_0000, vec![], vec![]).write();
+    let mut w = world(&exe(vec![]).write());
+    w.l.process_init(&mut w.p, w.exe, TEB).unwrap();
+    w.p.file(r"C:\app\locked.dll", locked());
+    w.p.file(r"C:\Windows\System32\locked.dll", locked());
+    w.p.denied.push(r"\??\c:\app\locked.dll".into());
+    // By name: the first directory's file is passed over, the next one loads.
+    assert!(w.l.load(&mut w.p, &wide("locked.dll"), None).is_ok());
+    // Named by its path: refused with the token's status.
+    let mut w = world(&exe(vec![]).write());
+    w.l.process_init(&mut w.p, w.exe, TEB).unwrap();
+    w.p.file(r"C:\app\locked.dll", locked());
+    w.p.denied.push(r"\??\c:\app\locked.dll".into());
+    assert_eq!(w.l.load(&mut w.p, &wide(r"C:\app\locked.dll"), None).unwrap_err(), STATUS_ACCESS_DENIED);
+    // By name with nothing else to find: not found.
+    assert_eq!(w.l.load(&mut w.p, &wide("locked.dll"), None).unwrap_err(), STATUS_DLL_NOT_FOUND);
 }
 
 #[test]

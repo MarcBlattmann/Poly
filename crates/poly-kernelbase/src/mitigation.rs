@@ -1,4 +1,4 @@
-//! Process mitigation policies as one process has them (ADR 0171, ADR 0183): what
+//! Process mitigation policies as one process has them (ADR 0171, ADR 0186): what
 //! `GetProcessMitigationPolicy` reads, what `SetProcessMitigationPolicy` may change, and what
 //! the creation-time attributes of `UpdateProcThreadAttribute` (`PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY`,
 //! `..._CHILD_PROCESS_POLICY`) put there before the child runs a line.
