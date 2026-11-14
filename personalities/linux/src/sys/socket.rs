@@ -28,6 +28,7 @@ use crate::errno::{Errno, SysResult};
 use crate::fileio::NewFd;
 use crate::kernel::{Clock, LinuxKernel, Target, UserPtr};
 use crate::net::abi::{self, MsgHdr, SockAddr, Ucred};
+use crate::net::ipopt::{Congestion, Membership, StoredOpt};
 use crate::net::{Family, Kind, LinuxNet, OptName, OptValue, RecvMsg, RecvReq, SendMsg, Shutdown, SockOpt, SockType};
 use crate::signal::deliver::{eintr_if_acting, send as send_signal, with_own};
 use crate::sys::io::bounce;
@@ -696,7 +697,9 @@ pub fn recvfrom(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 }
 
 /// The control data recvmsg returns, at most `room` bytes: `SCM_RIGHTS`
-/// first, then `SCM_CREDENTIALS`; whether something did not fit.
+/// first, then `SCM_CREDENTIALS`, then the IP ones the socket's receive
+/// options ask for ([`crate::net::RecvAnc::cmsgs`]); whether something
+/// did not fit.
 fn build_control(got: &RecvMsg, room: usize) -> (Vec<u8>, bool) {
     let mut out = Vec::new();
     let mut truncated = got.rights_truncated;
@@ -710,6 +713,13 @@ fn build_control(got: &RecvMsg, room: usize) -> (Vec<u8>, bool) {
         } else {
             truncated = true;
         }
+    }
+    for m in got.anc.cmsgs() {
+        if out.len() + abi::cmsg_len(m.data.len()) > room {
+            truncated = true;
+            break;
+        }
+        abi::push_cmsg(&mut out, m.level, m.ty, &m.data);
     }
     out.truncate(room);
     (out, truncated)
@@ -949,6 +959,112 @@ fn decode_opt(k: &mut dyn LinuxKernel, level: i32, name: i32, val: UserPtr, len:
         (abi::SOL_IPV6, abi::IPV6_UNICAST_HOPS) => SockOpt::Ipv6UnicastHops(hops(int(k)?)?),
         (abi::SOL_NETLINK, abi::NETLINK_ADD_MEMBERSHIP) => SockOpt::NetlinkAddMembership(int(k)? as u32),
         (abi::SOL_NETLINK, abi::NETLINK_DROP_MEMBERSHIP) => SockOpt::NetlinkDropMembership(int(k)? as u32),
+        _ => return decode_ip_extra(k, level, name, val, len),
+    })
+}
+
+/// A value of one byte or an int (ip(7): the `IP_*` int options take an
+/// `unsigned char` where the argument is shorter than an int); `EINVAL`
+/// for an empty argument.
+fn read_int_or_byte(k: &mut dyn LinuxKernel, ptr: UserPtr, len: u32) -> Result<i32, Errno> {
+    if len >= 4 {
+        return read_int(k, ptr, len);
+    }
+    if len == 0 {
+        return Err(Errno::EINVAL);
+    }
+    let mut b = [0u8; 1];
+    k.copy_from_user(ptr, &mut b)?;
+    Ok(i32::from(b[0]))
+}
+
+/// The first `n` bytes of an option's argument.
+fn read_arg(k: &mut dyn LinuxKernel, ptr: UserPtr, n: usize) -> Result<Vec<u8>, Errno> {
+    let mut b = vec![0u8; n];
+    k.copy_from_user(ptr, &mut b)?;
+    Ok(b)
+}
+
+fn v4_at(b: &[u8], at: usize) -> core::net::Ipv4Addr {
+    core::net::Ipv4Addr::new(b[at], b[at + 1], b[at + 2], b[at + 3])
+}
+
+fn v6_at(b: &[u8], at: usize) -> core::net::Ipv6Addr {
+    let mut a = [0u8; 16];
+    a.copy_from_slice(&b[at..at + 16]);
+    core::net::Ipv6Addr::from(a)
+}
+
+/// The `IP_*`, `IPV6_*` and `TCP_*` options of [`crate::net::ipopt`]
+/// (`ENOPROTOOPT` for any other): ints that are stored
+/// ([`StoredOpt`]), `IPV6_TCLASS`, `IP_MULTICAST_IF` (`in_addr` or
+/// `ip_mreqn`), group memberships (`ip_mreq` / `ip_mreqn` / `ipv6_mreq`;
+/// `EINVAL` for a short argument or a group that is not multicast),
+/// `IPV6_PKTINFO` and `TCP_CONGESTION`.
+fn decode_ip_extra(k: &mut dyn LinuxKernel, level: i32, name: i32, val: UserPtr, len: u32) -> Result<SockOpt, Errno> {
+    if let Some(o) = StoredOpt::from_linux(level, name) {
+        let v = if o.byte_form() { read_int_or_byte(k, val, len)? } else { read_int(k, val, len)? };
+        return Ok(SockOpt::Stored(o, o.normalize(v)?));
+    }
+    Ok(match (level, name) {
+        (abi::SOL_IPV6, abi::IPV6_TCLASS) => match read_int(k, val, len)? {
+            -1 => SockOpt::Ipv6Tclass(0),
+            v @ 0..=255 => SockOpt::Ipv6Tclass(v as u8),
+            _ => return Err(Errno::EINVAL),
+        },
+        (abi::SOL_IP, abi::IP_MULTICAST_IF) => {
+            if len < 4 {
+                return Err(Errno::EINVAL);
+            }
+            if len as usize >= abi::IP_MREQN_SIZE {
+                let b = read_arg(k, val, abi::IP_MREQN_SIZE)?;
+                let ifindex = u32::from_le_bytes([b[8], b[9], b[10], b[11]]);
+                SockOpt::IpMulticastIf { addr: v4_at(&b, 4), ifindex }
+            } else {
+                let b = read_arg(k, val, 4)?;
+                SockOpt::IpMulticastIf { addr: v4_at(&b, 0), ifindex: 0 }
+            }
+        }
+        (abi::SOL_IP, n @ (abi::IP_ADD_MEMBERSHIP | abi::IP_DROP_MEMBERSHIP)) => {
+            let m = if len as usize >= abi::IP_MREQN_SIZE {
+                let b = read_arg(k, val, abi::IP_MREQN_SIZE)?;
+                let ifindex = u32::from_le_bytes([b[8], b[9], b[10], b[11]]);
+                Membership { group: v4_at(&b, 0).into(), ifindex, iface: v4_at(&b, 4) }
+            } else if len as usize >= abi::IP_MREQ_SIZE {
+                let b = read_arg(k, val, abi::IP_MREQ_SIZE)?;
+                Membership { group: v4_at(&b, 0).into(), ifindex: 0, iface: v4_at(&b, 4) }
+            } else {
+                return Err(Errno::EINVAL);
+            };
+            if !m.is_multicast() {
+                return Err(Errno::EINVAL);
+            }
+            if n == abi::IP_ADD_MEMBERSHIP { SockOpt::AddMembership(m) } else { SockOpt::DropMembership(m) }
+        }
+        (abi::SOL_IPV6, n @ (abi::IPV6_ADD_MEMBERSHIP | abi::IPV6_DROP_MEMBERSHIP)) => {
+            if (len as usize) < abi::IPV6_MREQ_SIZE {
+                return Err(Errno::EINVAL);
+            }
+            let b = read_arg(k, val, abi::IPV6_MREQ_SIZE)?;
+            let ifindex = u32::from_le_bytes([b[16], b[17], b[18], b[19]]);
+            let m = Membership { group: v6_at(&b, 0).into(), ifindex, iface: core::net::Ipv4Addr::UNSPECIFIED };
+            if !m.is_multicast() {
+                return Err(Errno::EINVAL);
+            }
+            if n == abi::IPV6_ADD_MEMBERSHIP { SockOpt::AddMembership(m) } else { SockOpt::DropMembership(m) }
+        }
+        (abi::SOL_IPV6, abi::IPV6_PKTINFO) => {
+            if len as usize != abi::IN6_PKTINFO_SIZE {
+                return Err(Errno::EINVAL);
+            }
+            let b = read_arg(k, val, abi::IN6_PKTINFO_SIZE)?;
+            SockOpt::Ipv6PktInfo { addr: v6_at(&b, 0), ifindex: u32::from_le_bytes([b[16], b[17], b[18], b[19]]) }
+        }
+        (abi::SOL_TCP, abi::TCP_CONGESTION) => {
+            let n = (len as usize).min(crate::net::ipopt::TCP_CA_NAME_MAX - 1);
+            let b = read_arg(k, val, n)?;
+            SockOpt::TcpCongestion(Congestion::parse(&b)?)
+        }
         _ => return Err(Errno::ENOPROTOOPT),
     })
 }
@@ -1012,7 +1128,12 @@ fn opt_name(level: i32, name: i32) -> Result<OptName, Errno> {
         (abi::SOL_IPV6, abi::IPV6_RECVERR) => OptName::Ipv6RecvErr,
         (abi::SOL_IPV6, abi::IPV6_V6ONLY) => OptName::Ipv6V6Only,
         (abi::SOL_IPV6, abi::IPV6_UNICAST_HOPS) => OptName::Ipv6UnicastHops,
-        _ => return Err(Errno::ENOPROTOOPT),
+        (abi::SOL_IPV6, abi::IPV6_TCLASS) => OptName::Ipv6Tclass,
+        (abi::SOL_IPV6, abi::IPV6_PKTINFO) => OptName::Ipv6PktInfo,
+        (abi::SOL_IP, abi::IP_MULTICAST_IF) => OptName::IpMulticastIf,
+        (abi::SOL_IP, abi::IP_MTU) => OptName::IpMtu,
+        (abi::SOL_TCP, abi::TCP_CONGESTION) => OptName::TcpCongestion,
+        (l, n) => OptName::Stored(StoredOpt::from_linux(l, n).ok_or(Errno::ENOPROTOOPT)?),
     })
 }
 
@@ -1033,6 +1154,7 @@ pub fn encode_value(v: OptValue) -> Vec<u8> {
             b
         }
         OptValue::Ucred(u) => u.to_bytes().to_vec(),
+        OptValue::Bytes(b, n) => b[..usize::from(n)].to_vec(),
     }
 }
 
