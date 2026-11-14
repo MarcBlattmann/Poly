@@ -66,12 +66,13 @@ pub use wm::{InternalEvent, WindowInfo};
 
 use crate::compose::{Framebuffer, Hit, Rect, Scale, Scene, WindowId};
 use crate::protocol::{
-    wl_buffer, wl_callback, wl_compositor, wl_data_device, wl_data_device_manager, wl_data_offer, wl_data_source,
-    wl_display, wl_keyboard, wl_output, wl_pointer, wl_region, wl_registry, wl_seat, wl_shm, wl_shm_pool,
-    wl_subcompositor, wl_subsurface, wl_surface, wl_touch, wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1,
-    wp_fractional_scale_manager_v1, wp_fractional_scale_v1, wp_presentation, wp_presentation_feedback, wp_viewport,
-    wp_viewporter, xdg_activation_token_v1, xdg_activation_v1, xdg_popup, xdg_positioner, xdg_surface, xdg_toplevel,
-    xdg_wm_base, xwayland_shell_v1, xwayland_surface_v1, zwp_linux_buffer_params_v1, zwp_linux_dmabuf_feedback_v1,
+    org_kde_kwin_server_decoration, org_kde_kwin_server_decoration_manager, wl_buffer, wl_callback, wl_compositor,
+    wl_data_device, wl_data_device_manager, wl_data_offer, wl_data_source, wl_display, wl_keyboard, wl_output,
+    wl_pointer, wl_region, wl_registry, wl_seat, wl_shm, wl_shm_pool, wl_subcompositor, wl_subsurface, wl_surface,
+    wl_touch, wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1, wp_fractional_scale_manager_v1,
+    wp_fractional_scale_v1, wp_presentation, wp_presentation_feedback, wp_viewport, wp_viewporter,
+    xdg_activation_token_v1, xdg_activation_v1, xdg_popup, xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base,
+    xwayland_shell_v1, xwayland_surface_v1, zwp_linux_buffer_params_v1, zwp_linux_dmabuf_feedback_v1,
     zwp_linux_dmabuf_v1, zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
 };
 use crate::seat::{Capabilities, InputEvent};
@@ -201,6 +202,7 @@ pub mod versions {
     pub const SEAT: u32 = 7;
     pub const XDG_WM_BASE: u32 = 6;
     pub const DECORATION_MANAGER: u32 = 2;
+    pub const KDE_DECORATION: u32 = 1;
     pub const PRESENTATION: u32 = 1;
     pub const SUBCOMPOSITOR: u32 = 1;
     pub const DATA_DEVICE_MANAGER: u32 = 3;
@@ -273,6 +275,10 @@ pub(crate) enum Data {
     DecorationManager,
     /// The toplevel it decorates.
     Decoration(ObjectId),
+    /// `org_kde_kwin_server_decoration_manager` (ADR 0183).
+    KdeDecorationManager,
+    /// An `org_kde_kwin_server_decoration`: the surface it is for.
+    KdeDecoration(ObjectId),
     Presentation,
     Feedback,
     Subcompositor,
@@ -324,6 +330,8 @@ pub(crate) struct Client {
     next_server_id: u32,
     /// Why the client was cut off, after a protocol error.
     failed: Option<String>,
+    /// It bound `org_kde_kwin_server_decoration_manager` (ADR 0183).
+    kde_decoration: bool,
 }
 
 impl Client {
@@ -490,6 +498,7 @@ impl Server {
             (&wl_seat::INTERFACE, versions::SEAT),
             (&xdg_wm_base::INTERFACE, versions::XDG_WM_BASE),
             (&zxdg_decoration_manager_v1::INTERFACE, versions::DECORATION_MANAGER),
+            (&org_kde_kwin_server_decoration_manager::INTERFACE, versions::KDE_DECORATION),
             (&wp_presentation::INTERFACE, versions::PRESENTATION),
             (&wl_subcompositor::INTERFACE, versions::SUBCOMPOSITOR),
             (&wl_data_device_manager::INTERFACE, versions::DATA_DEVICE_MANAGER),
@@ -834,6 +843,12 @@ impl Server {
                 self.decoration_manager_request(c, id, parse!(zxdg_decoration_manager_v1))
             }
             zxdg_toplevel_decoration_v1::NAME => self.decoration_request(c, id, parse!(zxdg_toplevel_decoration_v1)),
+            org_kde_kwin_server_decoration_manager::NAME => {
+                self.kde_decoration_manager_request(c, id, parse!(org_kde_kwin_server_decoration_manager))
+            }
+            org_kde_kwin_server_decoration::NAME => {
+                self.kde_decoration_request(c, id, parse!(org_kde_kwin_server_decoration))
+            }
             wp_presentation::NAME => self.presentation_request(c, id, parse!(wp_presentation)),
             wp_presentation_feedback::NAME => Ok(()),
             xwayland_shell_v1::NAME => self.xwayland_shell_request(c, parse!(xwayland_shell_v1)),

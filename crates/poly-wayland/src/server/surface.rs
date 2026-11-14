@@ -148,6 +148,9 @@ pub(crate) struct Surface {
     pub fractional: Option<ObjectId>,
     /// How an outside window manager shows it (role `external`).
     pub managed: Option<super::external::Managed>,
+    /// Its `org_kde_kwin_server_decoration` (ADR 0183) and the mode the
+    /// client asked for through it.
+    pub kde_decoration: Option<(ObjectId, Option<crate::frame_policy::KdeMode>)>,
 }
 
 impl Surface {
@@ -175,6 +178,7 @@ impl Surface {
             applied_offset: (0, 0),
             fractional: None,
             managed: None,
+            kde_decoration: None,
         }
     }
 
