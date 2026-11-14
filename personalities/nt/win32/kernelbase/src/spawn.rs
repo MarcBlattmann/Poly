@@ -148,6 +148,15 @@ fn basic_information(process: Handle) -> Result<[u8; 48], u32> {
     if st.is_success() { Ok(info) } else { Err(from_status(st)) }
 }
 
+/// The `lpSecurityDescriptor` of a `SECURITY_ATTRIBUTES` (offset 8), or null.
+///
+/// # Safety
+/// `sa` is null or the caller's `SECURITY_ATTRIBUTES`.
+pub(crate) unsafe fn descriptor_of(sa: *const u8) -> *const u8 {
+    // SAFETY: the caller's structure when non-null.
+    if sa.is_null() { core::ptr::null() } else { unsafe { (sa.add(8) as *const *const u8).read_unaligned() } }
+}
+
 /// `SECURITY_ATTRIBUTES.bInheritHandle` (offset 16 on x64,
 /// `minwinbase.h`).
 ///
@@ -218,7 +227,12 @@ pub unsafe extern "system" fn CreateProcessW(
     // SAFETY: the caller's arguments, as Learn documents them.
     unsafe {
         let startup = startup_from(startup_info, &wide_string);
-        let attributes = (inherits(process_attributes), inherits(thread_attributes));
+        let attributes = (
+            inherits(process_attributes),
+            inherits(thread_attributes),
+            descriptor_of(process_attributes),
+            descriptor_of(thread_attributes),
+        );
         let request = Request {
             app: wide_arg(application),
             cmd: wide_arg(command_line),
@@ -258,7 +272,12 @@ pub unsafe extern "system" fn CreateProcessAsUserW(
     // SAFETY: the caller's arguments, as Learn documents them.
     unsafe {
         let startup = startup_from(startup_info, &wide_string);
-        let attributes = (inherits(process_attributes), inherits(thread_attributes));
+        let attributes = (
+            inherits(process_attributes),
+            inherits(thread_attributes),
+            descriptor_of(process_attributes),
+            descriptor_of(thread_attributes),
+        );
         let request = Request {
             app: wide_arg(application),
             cmd: wide_arg(command_line),
@@ -296,7 +315,12 @@ pub unsafe extern "system" fn CreateProcessA(
     // SAFETY: the caller's arguments, as Learn documents them.
     unsafe {
         let startup = startup_from(startup_info, &ansi_string);
-        let attributes = (inherits(process_attributes), inherits(thread_attributes));
+        let attributes = (
+            inherits(process_attributes),
+            inherits(thread_attributes),
+            descriptor_of(process_attributes),
+            descriptor_of(thread_attributes),
+        );
         let request = Request {
             app: app.as_deref(),
             cmd: cmd.as_deref(),
@@ -343,7 +367,7 @@ fn make_inheritable(h: Handle) {
 /// # Safety
 /// `information` is null or a `PROCESS_INFORMATION`; `r.environment` is
 /// null or a block as `CreateProcessW` documents.
-unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (bool, bool), information: *mut u8) -> i32 {
+unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (bool, bool, *const u8, *const u8), information: *mut u8) -> i32 {
     let (app, cmd, flags) = (r.app, r.cmd, r.flags);
     // `NoChildProcessCreation` (SetProcessMitigationPolicy, ADR 0171).
     if crate::mitigation::child_processes_blocked() {
@@ -447,6 +471,16 @@ unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (boo
     }
     let thread_flags = if flags & CREATE_SUSPENDED != 0 { p::NT_THREAD_CREATE_SUSPENDED } else { 0 };
     let (mut ph, mut th): (Handle, Handle) = (0, 0);
+    // `lpProcessAttributes` / `lpThreadAttributes`: the descriptors of the new process and thread
+    // objects.
+    let mut process_oa = nt::ObjectAttributes::new(None, 0);
+    process_oa.security_descriptor = attributes.2;
+    let mut thread_oa = nt::ObjectAttributes::new(None, 0);
+    thread_oa.security_descriptor = attributes.3;
+    let process_oa_ptr: *const nt::ObjectAttributes =
+        if process_oa.security_descriptor.is_null() { core::ptr::null() } else { &process_oa };
+    let thread_oa_ptr: *const nt::ObjectAttributes =
+        if thread_oa.security_descriptor.is_null() { core::ptr::null() } else { &thread_oa };
     // SAFETY: valid pointers; the kernel reads the parameters.
     let st = unsafe {
         nt::NtCreateUserProcess(
@@ -454,8 +488,8 @@ unsafe fn create(r: &Request<'_>, startup: Option<&p::Startup>, attributes: (boo
             &mut th,
             0,
             0,
-            core::ptr::null(),
-            core::ptr::null(),
+            process_oa_ptr,
+            thread_oa_ptr,
             process_flags,
             thread_flags,
             buf.as_ptr(),

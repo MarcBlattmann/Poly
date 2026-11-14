@@ -36,10 +36,14 @@ pub unsafe extern "system" fn CreateThread(
     flags: u32,
     thread_id: *mut u32,
 ) -> Handle {
-    let _ = security;
     if start.is_null() {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
+    // `lpThreadAttributes->lpSecurityDescriptor` is the new thread object's descriptor.
+    // SAFETY: the caller's structure when non-null.
+    let mut oa = ObjectAttributes::new(None, 0);
+    oa.security_descriptor = unsafe { crate::spawn::descriptor_of(security) };
+    let oa_ptr: *const ObjectAttributes = if oa.security_descriptor.is_null() { core::ptr::null() } else { &oa };
     let suspended = flags & CREATE_SUSPENDED != 0;
     let (commit, reserve) = if flags & STACK_SIZE_PARAM_IS_A_RESERVATION != 0 { (0, stack) } else { (stack, 0) };
     let mut h: Handle = 0;
@@ -48,7 +52,7 @@ pub unsafe extern "system" fn CreateThread(
         nt::NtCreateThreadEx(
             &mut h,
             THREAD_ALL_ACCESS,
-            core::ptr::null(),
+            oa_ptr,
             nt::CURRENT_PROCESS,
             start,
             parameter,

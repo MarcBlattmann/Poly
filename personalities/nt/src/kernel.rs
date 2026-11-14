@@ -89,6 +89,10 @@ pub struct ThreadCreate {
     pub suspended: bool,
     /// The access mask the new thread handle is opened with.
     pub desired_access: u32,
+    /// The security descriptor the new thread object gets (`lpThreadAttributes`, self-relative);
+    /// the creator's handle is opened before it applies, so it keeps all access
+    /// (specs/windows/kernel32.dll/DuplicateHandle.yaml: `empty_dacl`, thread).
+    pub security: Option<alloc::vec::Vec<u8>>,
 }
 
 /// What [`NtKernel::create_thread`] produced: a handle to the new thread's
@@ -129,6 +133,11 @@ pub struct ProcessCreate {
     /// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON`:
     /// it cannot make memory executable.
     pub dynamic_code_blocked: bool,
+    /// The security descriptors of the new process object and of its first thread object
+    /// (`lpProcessAttributes`, `lpThreadAttributes`; self-relative). The creator's handles are
+    /// opened before they apply.
+    pub process_security: Option<alloc::vec::Vec<u8>>,
+    pub thread_security: Option<alloc::vec::Vec<u8>>,
 }
 
 /// What [`NtKernel::create_process`] produced: handles in the caller's

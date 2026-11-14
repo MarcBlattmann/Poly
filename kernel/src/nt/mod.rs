@@ -734,6 +734,10 @@ struct HandlesFor {
     jobs: Vec<u64>,
     join_creator_jobs: bool,
     dynamic_code_blocked: bool,
+    /// The descriptors of its process and first thread objects (`lpProcessAttributes`,
+    /// `lpThreadAttributes`), applied once the creator's handles are open.
+    process_security: Option<Vec<u8>>,
+    thread_security: Option<Vec<u8>>,
 }
 
 /// Handles to a new process and its first thread.
@@ -818,7 +822,17 @@ fn start_params(
             // Handles for its creator (NtCreateUserProcess, ADR 0079).
             let opened = match handles {
                 Some(h) => {
-                    Some(exec::child_handles(&mut s.sys, &h.caller, pid, thread, h.process_access, h.thread_access)?)
+                    let opened =
+                        exec::child_handles(&mut s.sys, &h.caller, pid, thread, h.process_access, h.thread_access)?;
+                    // The creator's handles are open: now the descriptors it asked for apply.
+                    poly_personality_nt::security::assign_explicit_process_security(
+                        &mut s.sys,
+                        pid,
+                        Some(&h.caller),
+                        proc.object.map(|o| (o, h.process_security.as_deref())),
+                        proc.threads.first().map(|t| (t.object, h.thread_security.as_deref())),
+                    );
+                    Some(opened)
                 }
                 None => None,
             };
@@ -888,6 +902,8 @@ fn create_process(
         jobs: req.jobs,
         join_creator_jobs: req.join_creator_jobs,
         dynamic_code_blocked: req.dynamic_code_blocked,
+        process_security: req.process_security,
+        thread_security: req.thread_security,
     };
     let (start, handles) = start_params(&process, &memory, &req.image, pid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");

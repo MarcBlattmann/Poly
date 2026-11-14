@@ -122,6 +122,28 @@ pub fn assign_process_security(
     }
 }
 
+/// Give the process object and the first thread object of a new process the descriptors the
+/// creator asked for (`lpProcessAttributes`, `lpThreadAttributes`), on top of the defaults. Called
+/// after the creator's handles were opened, so that a descriptor that allows nobody anything does
+/// not keep the creator from its own handles (specs/windows/kernel32.dll/DuplicateHandle.yaml).
+pub fn assign_explicit_process_security(
+    sys: &mut NtSystem,
+    child: ProcessId,
+    creator: Option<&Caller>,
+    process: Option<(poly_ntobj::ObjectId, Option<&[u8]>)>,
+    thread: Option<(poly_ntobj::ObjectId, Option<&[u8]>)>,
+) {
+    let token = creator
+        .and_then(|c| sys.objects.security.effective(c.process, c.thread))
+        .or_else(|| sys.objects.security.process_token(child));
+    if let Some((p, Some(sd))) = process {
+        sys.objects.assign_security(p, ObjectType::Process, token, Some(sd));
+    }
+    if let Some((t, Some(sd))) = thread {
+        sys.objects.assign_security(t, ObjectType::Thread, token, Some(sd));
+    }
+}
+
 /// The token a request by `caller` is checked with, as a copy.
 fn effective(sys: &mut NtSystem, caller: &Caller) -> Result<(u64, Token)> {
     let id = match sys.objects.security.effective(caller.process, caller.thread) {

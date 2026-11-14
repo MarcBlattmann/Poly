@@ -318,6 +318,11 @@ pub fn create_thread(
         let obj = s.sys.objects.thread_object(tref).expect("new thread object");
         let caller = poly_ntobj::Caller::user(pid, caller);
         let handle = s.sys.objects.open_by_pointer(&caller, obj, req.desired_access, 0)?;
+        // The descriptor the creator asked for applies after its own handle is open.
+        if let Some(sd) = req.security.as_deref() {
+            let token = s.sys.objects.security.effective(pid, caller.thread);
+            s.sys.objects.assign_security(obj, poly_ntobj::ObjectType::Thread, token, Some(sd));
+        }
         Ok::<_, NtStatus>((start, handle))
     })?;
     let entry = Entry { rip: start.entry, rsp: start.rsp, args: [start.start_routine, start.argument, 0] };
