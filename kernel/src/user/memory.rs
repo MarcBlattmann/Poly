@@ -555,13 +555,26 @@ impl Memory {
     /// Create a mapping (`mmap`): returns its address. A fixed placement
     /// replaces what was there; its pages are unmapped and freed.
     pub fn map(&self, req: MapRequest<FileRef>) -> Result<u64, MemoryError> {
+        self.map_within(req, None)
+    }
+
+    /// [`Memory::map`] for `MAP_32BIT`: without a fixed address the mapping
+    /// ends at or below `limit` (see [`poly_vm::VmMap::map_below`]).
+    pub fn map_below(&self, req: MapRequest<FileRef>, limit: u64) -> Result<u64, MemoryError> {
+        self.map_within(req, Some(limit))
+    }
+
+    fn map_within(&self, req: MapRequest<FileRef>, below: Option<u64>) -> Result<u64, MemoryError> {
         if let Backing::File { shared: true, file, .. } = &req.backing
             && !file.source.shareable()
         {
             return Err(MemoryError::Unsupported);
         }
         let mut inner = self.inner.lock();
-        let mapped = inner.map.map(req)?;
+        let mapped = match below {
+            None => inner.map.map(req)?,
+            Some(limit) => inner.map.map_below(req, limit)?,
+        };
         self.release(&mut inner, &mapped.replaced);
         Ok(mapped.addr)
     }
