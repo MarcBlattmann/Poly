@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "uoi_rules",
+      "exe_sha256": "77a99c47a2dec6e6ea6b0178fefc3a6d5299e259f6b3db2ed76f3a60f26e3a9d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhdGlvbiBVT0lfRkxBR1Mgb2sgbmVlZCAxMiBieXRlcyAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMApzdGF0aW9uIFVPSV9VU0VSX1NJRCBvayBuZWVkIDAgYnl0ZXMKc3RhdGlvbiBpbmRleCAwIGVycm9yIDg3IG5lZWQgMApzdGF0aW9uIFVPSV9OQU1FIGluIDAgYnl0ZXMgZXJyb3IgMTIyIG5lZWQgMjIKZGVza3RvcCBVT0lfRkxBR1Mgb2sgbmVlZCAxMiBieXRlcyAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMApkZXNrdG9wIFVPSV9VU0VSX1NJRCBvayBuZWVkIDAgYnl0ZXMKZGVza3RvcCBpbmRleCAwIGVycm9yIDg3IG5lZWQgMApkZXNrdG9wIFVPSV9OQU1FIGluIDAgYnl0ZXMgZXJyb3IgMTIyIG5lZWQgMjYKTlVMTCBidWZmZXIsIGxlbmd0aCAwOiByPTAgZXJyPTEyMiBuZWVkZWQ9MjIKYSBwcm9jZXNzIGhhbmRsZTogcj0wIGVycj0xCnN0YXRpb24gaGFuZGxlIHdpdGggV0lOU1RBX1JFQURBVFRSSUJVVEVTLCBVT0lfTkFNRTogcj0xIGVycj11bmNoYW5nZWQKZGVza3RvcCBoYW5kbGUgd2l0aCBERVNLVE9QX0VOVU1FUkFURSBvbmx5LCBVT0lfRkxBR1M6IHI9MSBlcnI9dW5jaGFuZ2VkClNldFVzZXJPYmplY3RJbmZvcm1hdGlvblcoVU9JX05BTUUpOiByPTAgZXJyPTg3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "station UOI_FLAGS ok need 12 bytes 00 00 00 00 00 00 00 00 00 00 00 00\nstation UOI_USER_SID ok need 0 bytes\nstation index 0 error 87 need 0\nstation UOI_NAME in 0 bytes error 122 need 22\ndesktop UOI_FLAGS ok need 12 bytes 00 00 00 00 00 00 00 00 00 00 00 00\ndesktop UOI_USER_SID ok need 0 bytes\ndesktop index 0 error 87 need 0\ndesktop UOI_NAME in 0 bytes error 122 need 26\nNULL buffer, length 0: r=0 err=122 needed=22\na process handle: r=0 err=1\nstation handle with WINSTA_READATTRIBUTES, UOI_NAME: r=1 err=unchanged\ndesktop handle with DESKTOP_ENUMERATE only, UOI_FLAGS: r=1 err=unchanged\nSetUserObjectInformationW(UOI_NAME): r=0 err=87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "uoi_rules_c",
+      "exe_sha256": "702502ce5d7fb055f427b766cdca6fc4ab22ffd6b3f920b3176491e80d2b29b2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhdGlvbiBVT0lfVFlQRSBvayBuZWVkIDI4IGJ5dGVzIDU3IDAwIDY5IDAwIDZlIDAwIDY0IDAwIDZmIDAwIDc3IDAwIDUzIDAwIDc0IDAwIDYxIDAwIDc0IDAwIDY5IDAwIDZmIDAwIDZlIDAwIDAwIDAwCnN0YXRpb24gVU9JX0lPIGVycm9yIDEgbmVlZCAwCnN0YXRpb24gVU9JX05BTUUgaW4gNCBieXRlcyBlcnJvciAxMjIgbmVlZCAyMgpzdGF0aW9uIFVPSV9UWVBFIGluIDIgYnl0ZXMgZXJyb3IgMTIyIG5lZWQgMjgKZGVza3RvcCBVT0lfVFlQRSBvayBuZWVkIDE2IGJ5dGVzIDQ0IDAwIDY1IDAwIDczIDAwIDZiIDAwIDc0IDAwIDZmIDAwIDcwIDAwIDAwIDAwCmRlc2t0b3AgVU9JX0lPIG9rIG5lZWQgNCBieXRlcyAwMCAwMCAwMCAwMApkZXNrdG9wIFVPSV9OQU1FIGluIDQgYnl0ZXMgZXJyb3IgMTIyIG5lZWQgMjYKZGVza3RvcCBVT0lfVFlQRSBpbiAyIGJ5dGVzIGVycm9yIDEyMiBuZWVkIDE2Ck5VTEwgaGFuZGxlOiByPTAgZXJyPXVuY2hhbmdlZApzdGF0aW9uIGhhbmRsZSB3aXRoIFdJTlNUQV9FTlVNREVTS1RPUFMgb25seSwgVU9JX05BTUU6IHI9MCBlcnI9NQpkZXNrdG9wIGhhbmRsZSB3aXRoIERFU0tUT1BfV1JJVEVPQkpFQ1RTIG9ubHksIFVPSV9OQU1FOiByPTEgZXJyPXVuY2hhbmdlZApVT0lfRkxBR1MgYWZ0ZXJ3YXJkcyBvayBuZWVkIDEyIGJ5dGVzIDAxIDAwIDAwIDAwIDAwIDAwIDAwIDAwIDAwIDAwIDAwIDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "station UOI_TYPE ok need 28 bytes 57 00 69 00 6e 00 64 00 6f 00 77 00 53 00 74 00 61 00 74 00 69 00 6f 00 6e 00 00 00\nstation UOI_IO error 1 need 0\nstation UOI_NAME in 4 bytes error 122 need 22\nstation UOI_TYPE in 2 bytes error 122 need 28\ndesktop UOI_TYPE ok need 16 bytes 44 00 65 00 73 00 6b 00 74 00 6f 00 70 00 00 00\ndesktop UOI_IO ok need 4 bytes 00 00 00 00\ndesktop UOI_NAME in 4 bytes error 122 need 26\ndesktop UOI_TYPE in 2 bytes error 122 need 16\nNULL handle: r=0 err=unchanged\nstation handle with WINSTA_ENUMDESKTOPS only, UOI_NAME: r=0 err=5\ndesktop handle with DESKTOP_WRITEOBJECTS only, UOI_NAME: r=1 err=unchanged\nUOI_FLAGS afterwards ok need 12 bytes 01 00 00 00 00 00 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

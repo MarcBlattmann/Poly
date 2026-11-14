@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "desktop_child",
+      "exe_sha256": "dcb6b19df997d35a9a0da8f9efb4d7c52d3ca46f7342c6b16bca667a989549ba",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWx0ZXJuYXRlIHN0YXRpb24gYW5kIGRlc2t0b3AgY3JlYXRlZDogMSAxCkNyZWF0ZVByb2Nlc3NXLXN0eWxlIHN0YXJ0LCBscERlc2t0b3AgPSBzdGF0aW9uXGRlc2t0b3A6IGNyZWF0ZWQsIGNoaWxkIGV4aXQgY29kZSAweGYKQ3JlYXRlUHJvY2Vzc1ctc3R5bGUgc3RhcnQsIGxwRGVza3RvcCA9IG1pc3Npbmcgc3RhdGlvbjogY3JlYXRlZCwgY2hpbGQgZXhpdCBjb2RlIDB4YzAwMDAxNDIKQ3JlYXRlUHJvY2Vzc1ctc3R5bGUgc3RhcnQsIGxwRGVza3RvcCA9IG1pc3NpbmcgZGVza3RvcCBpbiB0aGUgYWx0ZXJuYXRlIHN0YXRpb246IGNyZWF0ZWQsIGNoaWxkIGV4aXQgY29kZSAweGMwMDAwMTQyCkNyZWF0ZVByb2Nlc3NXLXN0eWxlIHN0YXJ0LCBscERlc2t0b3AgPSBkZXNrdG9wIG5hbWUgYWxvbmUgKG5vdCBpbiB0aGUgcHJvY2VzcydzIG93biBzdGF0aW9uKTogY3JlYXRlZCwgY2hpbGQgZXhpdCBjb2RlIDB4YzAwMDAxNDIKQ3JlYXRlUHJvY2Vzc1ctc3R5bGUgc3RhcnQsIGxwRGVza3RvcCA9IG5vIGRlc2t0b3AgZ2l2ZW46IGNyZWF0ZWQsIGNoaWxkIGV4aXQgY29kZSAweGMKQ3JlYXRlUHJvY2Vzc1ctc3R5bGUgc3RhcnQsIGxwRGVza3RvcCA9IGVtcHR5IHN0cmluZzogY3JlYXRlZCwgY2hpbGQgZXhpdCBjb2RlIDB4YwpyZXN0cmljdGVkIExvdyB0b2tlbiwgb2JqZWN0cyB3aXRoIHRoZSBjcmVhdG9yJ3MgZGVmYXVsdCBzZWN1cml0eTogc3RhdGlvbiAxIGRlc2t0b3AgMSwgY2hpbGQgZXhpdCBjb2RlIDB4YzAwMDAxNDIKcmVzdHJpY3RlZCBMb3cgdG9rZW4sIG9iamVjdHMgb3BlbiB0byBFdmVyeW9uZSAoRDooQTs7R0E7OztXRCkpOiBzdGF0aW9uIDEgZGVza3RvcCAxLCBjaGlsZCBleGl0IGNvZGUgMHhjMDAwMDE0MgpyZXN0cmljdGVkIExvdyB0b2tlbiwgRXZlcnlvbmUgYW5kIGEgTG93IGxhYmVsOiBzdGF0aW9uIDEgZGVza3RvcCAxLCBjaGlsZCBleGl0IGNvZGUgMHhmCnJlc3RyaWN0ZWQgTG93IHRva2VuLCBTWVNURU0gYW5kIEFMTCBBUFBMSUNBVElPTiBQQUNLQUdFUyBhbmQgYW4gVW50cnVzdGVkIGxhYmVsOiBzdGF0aW9uIDEgZGVza3RvcCAwLCBjaGlsZCBleGl0IGNvZGUgMHhjMDAwMDE0MgpyZXN0cmljdGVkIExvdyB0b2tlbiwgRXZlcnlvbmUgYW5kIGFuIFVudHJ1c3RlZCBsYWJlbDogc3RhdGlvbiAxIGRlc2t0b3AgMSwgY2hpbGQgZXhpdCBjb2RlIDB4ZgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "alternate station and desktop created: 1 1\nCreateProcessW-style start, lpDesktop = station\\desktop: created, child exit code 0xf\nCreateProcessW-style start, lpDesktop = missing station: created, child exit code 0xc0000142\nCreateProcessW-style start, lpDesktop = missing desktop in the alternate station: created, child exit code 0xc0000142\nCreateProcessW-style start, lpDesktop = desktop name alone (not in the process's own station): created, child exit code 0xc0000142\nCreateProcessW-style start, lpDesktop = no desktop given: created, child exit code 0xc\nCreateProcessW-style start, lpDesktop = empty string: created, child exit code 0xc\nrestricted Low token, objects with the creator's default security: station 1 desktop 1, child exit code 0xc0000142\nrestricted Low token, objects open to Everyone (D:(A;;GA;;;WD)): station 1 desktop 1, child exit code 0xc0000142\nrestricted Low token, Everyone and a Low label: station 1 desktop 1, child exit code 0xf\nrestricted Low token, SYSTEM and ALL APPLICATION PACKAGES and an Untrusted label: station 1 desktop 0, child exit code 0xc0000142\nrestricted Low token, Everyone and an Untrusted label: station 1 desktop 1, child exit code 0xf\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 164
+    },
+    {
+      "name": "desktop_create",
+      "exe_sha256": "b45d35cc2ed7a90e8d09ae834314b61f6eccf01f18184695582a33a083d3698e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlIG5hbWVkIGRlc2t0b3AsIEdFTkVSSUNfQUxMOiBvcGVuZWQ9MSBlcnI9dW5jaGFuZ2VkClVPSV9UWVBFIG9rIG5lZWQgMTYgYnl0ZXMgNDQgMDAgNjUgMDAgNzMgMDAgNmIgMDAgNzQgMDAgNmYgMDAgNzAgMDAgMDAgMDAKYSBkaWZmZXJlbnQgaGFuZGxlIHZhbHVlPTEKY3JlYXRlIGFjY2VzcyAwOiBvcGVuZWQ9MCBlcnI9OApjcmVhdGUgd2l0aCBmbGFncyAweDEwMDogb3BlbmVkPTAgZXJyPTg3CmNyZWF0ZSB3aXRoIGFuIGVtcHR5IG5hbWU6IG9wZW5lZD0wIGVycj02Ck9wZW5EZXNrdG9wVyBTV0lUQ0hERVNLVE9QOiBvcGVuZWQ9MSBlcnI9dW5jaGFuZ2VkCm9wZW4gYWZ0ZXIgdGhlIGxhc3QgaGFuZGxlIHdhcyBjbG9zZWQ6IG9wZW5lZD0wIGVycj0yCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create named desktop, GENERIC_ALL: opened=1 err=unchanged\nUOI_TYPE ok need 16 bytes 44 00 65 00 73 00 6b 00 74 00 6f 00 70 00 00 00\na different handle value=1\ncreate access 0: opened=0 err=8\ncreate with flags 0x100: opened=0 err=87\ncreate with an empty name: opened=0 err=6\nOpenDesktopW SWITCHDESKTOP: opened=1 err=unchanged\nopen after the last handle was closed: opened=0 err=2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "desktop_create_c",
+      "exe_sha256": "13a45e9d576b6f3ada7f547d2f7fb796c486a258fd90b9dcaf8b9cc2cbe9105c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VU9JX0ZMQUdTIG9rIG5lZWQgMTIgYnl0ZXMgMDAgMDAgMDAgMDAgMDAgMDAgMDAgMDAgMDAgMDAgMDAgMDAKY3JlYXRlIHRoZSBzYW1lIG5hbWUgYWdhaW4gd2l0aCBSRUFET0JKRUNUUzogb3BlbmVkPTEgZXJyPXVuY2hhbmdlZApjcmVhdGUgYWNjZXNzIERFU0tUT1BfQUxMX0FDQ0VTUzogb3BlbmVkPTEgZXJyPXVuY2hhbmdlZApjcmVhdGUgd2l0aCBmbGFncyBERl9BTExPV09USEVSQUNDT1VOVEhPT0s6IG9wZW5lZD0xIGVycj11bmNoYW5nZWQKY3JlYXRlIHdpdGggYSBOVUxMIG5hbWU6IG9wZW5lZD0wIGVycj02CiAgbmFtZSBtYXRjaGVzPTEKd2l0aCBhIHN0YXRpb24gaGFuZGxlIHRoYXQgaGFzIFJFQURBVFRSSUJVVEVTIG9ubHkgKHN3aXRjaCAxKTogY3JlYXRlIG9wZW5lZD0xIGVycj11bmNoYW5nZWQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "UOI_FLAGS ok need 12 bytes 00 00 00 00 00 00 00 00 00 00 00 00\ncreate the same name again with READOBJECTS: opened=1 err=unchanged\ncreate access DESKTOP_ALL_ACCESS: opened=1 err=unchanged\ncreate with flags DF_ALLOWOTHERACCOUNTHOOK: opened=1 err=unchanged\ncreate with a NULL name: opened=0 err=6\n  name matches=1\nwith a station handle that has READATTRIBUTES only (switch 1): create opened=1 err=unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}
