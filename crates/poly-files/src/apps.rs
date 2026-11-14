@@ -352,6 +352,9 @@ pub fn choose<'a>(handlers: &'a [Handler], mime: &str, defaults: Option<&str>) -
     handlers_for(handlers, mime, defaults).into_iter().next()
 }
 
+/// The type of an AppImage.
+const APPIMAGE: &str = "application/vnd.appimage";
+
 /// What opening a file does.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Open {
@@ -391,10 +394,15 @@ pub fn open_action(
             }
         }
     }
+    // An AppImage that is not installed yet is asked about by the app that
+    // opens its type (Poly's installer: run it or install it, ADR 0180); an
+    // installed copy, in the installer's folder, just runs.
+    let installed_image = path.contains("/poly/appimages/");
+    let ask_first = mime == APPIMAGE && !installed_image && choose(handlers, mime, defaults).is_some();
     let program = mime == mime::EXECUTABLE
-        || mime == "application/vnd.appimage"
+        || mime == APPIMAGE
         || contents.is_some_and(|c| c.starts_with(b"#!") || mime::sniff(c) == Some(mime::EXECUTABLE));
-    if exec && program {
+    if exec && program && !ask_first {
         return Open::Launch(alloc::vec![crate::path::normalize(path)]);
     }
     match choose(handlers, mime, defaults) {
@@ -549,6 +557,27 @@ mod tests {
         assert_eq!(
             open_action("/g.desktop", &file(0o644), mime::DESKTOP, Some(d), &hs, None),
             Open::With(vec!["code".into(), "/g.desktop".into()])
+        );
+    }
+
+    #[test]
+    fn an_appimage_goes_to_the_installer_unless_it_is_installed() {
+        let file = |mode| Meta { kind: Kind::File, size: 1, mode, ..Meta::default() };
+        let mut hs = handlers();
+        hs.push(entry("poly-installer.desktop", "poly-installer %f", "application/vnd.appimage;"));
+        let image = "application/vnd.appimage";
+        let with = |p: &str| Open::With(vec!["poly-installer".into(), p.into()]);
+        // Downloaded, with or without the execute bit: the installer asks.
+        assert_eq!(open_action("/d/App.AppImage", &file(0o644), image, None, &hs, None), with("/d/App.AppImage"));
+        assert_eq!(open_action("/d/App.AppImage", &file(0o755), image, None, &hs, None), with("/d/App.AppImage"));
+        // The installer's own copy runs.
+        let own = "/root/.local/share/poly/appimages/app/app.AppImage";
+        assert_eq!(open_action(own, &file(0o755), image, None, &hs, None), Open::Launch(vec![own.into()]));
+        // Without an installer the execute bit runs it, as before.
+        let plain = handlers();
+        assert_eq!(
+            open_action("/d/App.AppImage", &file(0o755), image, None, &plain, None),
+            Open::Launch(vec!["/d/App.AppImage".into()])
         );
     }
 

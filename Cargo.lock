@@ -228,6 +228,7 @@ dependencies = [
  "poly-app",
  "poly-files",
  "poly-input",
+ "poly-pkg",
  "poly-rt",
  "poly-shell",
  "poly-wayland",
@@ -460,6 +461,8 @@ version = "0.0.1"
 dependencies = [
  "poly-compress",
  "poly-png",
+ "poly-squashfs",
+ "poly-vfs",
 ]
 
 [[package]]

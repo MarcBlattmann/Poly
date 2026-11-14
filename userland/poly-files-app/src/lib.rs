@@ -150,9 +150,32 @@ fn spawn(argv: &[String]) -> Result<(), String> {
     }
 }
 
+/// The user's data directory (`$XDG_DATA_HOME`), where the AppImages the
+/// installer put there are (ADR 0180).
+fn data_home() -> String {
+    poly_shell::apps::data_home(poly_rt::env::var("XDG_DATA_HOME"), poly_rt::env::var("HOME"))
+}
+
 /// Every installed app, as the launcher reads them.
 fn installed_apps() -> Vec<poly_shell::App> {
-    poly_shell::apps::installed(&native_fs::Disk, &mut |_, _| {})
+    let user = poly_shell::apps::user_applications(&data_home());
+    poly_shell::apps::installed_for_user(&native_fs::Disk, &user, &mut |_, _| {})
+}
+
+/// The apps the installer can uninstall: those of packages that were
+/// installed after the base root was made, and its AppImages.
+fn removable_apps() -> Vec<String> {
+    poly_pkg::remove::removable(&native_fs::Disk, &data_home())
+}
+
+/// Ask the desktop to show the installer's window that uninstalls `item`'s
+/// app; it asks before anything is removed (ADR 0180).
+fn uninstall_app(item: &poly_shell::applications::Item) -> Result<(), String> {
+    if poly_app::startup::ask(&poly_shell::applications::uninstall_request(item)) {
+        Ok(())
+    } else {
+        Err("the desktop cannot be reached".into())
+    }
 }
 
 /// Ask the desktop to start `item`'s app as its launcher does. Without a
@@ -180,9 +203,10 @@ pub fn main() -> i32 {
     let places = poly_files::places::places(&home, user_dirs.as_deref(), &mounts, &exists);
     let data_home = poly_rt::env::var("XDG_DATA_HOME");
     let trash = poly_files::trash::trash_dir(&home, data_home);
-    let (with_apps, folder) = applications::overlay(Box::new(fs), Box::new(installed_apps));
+    let (with_apps, folder) = applications::overlay(Box::new(fs), Box::new(installed_apps), Box::new(removable_apps));
     let mut app = view::FilesApp::new(with_apps, &home, &trash, places, Box::new(spawn));
     app.set_applications(folder, Box::new(open_app));
+    app.uninstall_app = Box::new(uninstall_app);
     app.set_icon_files(Box::new(native_fs::Disk));
     app.handlers = load_handlers(&fs, &application_dirs(&home, data_home));
     let data_home_dir = match data_home.filter(|d| d.starts_with('/')) {
