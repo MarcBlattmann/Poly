@@ -796,3 +796,5 @@ pub unsafe extern "system" fn WindowsDeleteStringBuffer(buffer: HString) -> Hres
 pub extern "system" fn ole32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod delayed;

@@ -26,6 +26,9 @@ pub const TABLE: &[(&str, Option<&str>)] = &[
     // `CommandLineToArgvW` by contract (shcore.dll on Windows: Chrome's processes load
     // `api-ms-win-downlevel-shell32-l1-1-0.dll` for it before they fall back to shell32).
     ("api-ms-win-downlevel-shell32-", Some("shell32.dll")),
+    // `CallNtPowerInformation` and the power-setting functions by contract (powrprof.dll on
+    // Windows too; ADR 0155, step 9).
+    ("api-ms-win-power-", Some("powrprof.dll")),
     ("api-ms-win-core-", Some("kernelbase.dll")),
     ("api-ms-win-security-", Some("advapi32.dll")),
     ("api-ms-win-eventing-", Some("advapi32.dll")),
@@ -112,6 +115,9 @@ mod tests {
         assert_eq!(resolve(&w("api-ms-win-core-com-l1-1-3.dll")), ApiSet::Host("ole32.dll"));
         assert_eq!(resolve(&w("api-ms-win-shcore-scaling-l1-1-1.dll")), ApiSet::Host("user32.dll"));
         assert_eq!(resolve(&w("api-ms-win-downlevel-shell32-l1-1-0.dll")), ApiSet::Host("shell32.dll"));
+        assert_eq!(resolve(&w("api-ms-win-power-base-l1-1-0.dll")), ApiSet::Host("powrprof.dll"));
+        assert_eq!(resolve(&w("api-ms-win-power-setting-l1-1-0.dll")), ApiSet::Host("powrprof.dll"));
+        assert_eq!(resolve(&w("api-ms-win-core-realtime-l1-1-1.dll")), ApiSet::Host("kernelbase.dll"));
         assert_eq!(resolve(&w("ext-ms-win-ntuser-window-l1-1-0.dll")), ApiSet::Absent);
         assert_eq!(resolve(&w("api-ms-win-unknown-l1-1-0.dll")), ApiSet::Absent);
         assert_eq!(resolve(&w("kernel32.dll")), ApiSet::NotApiSet);

@@ -46,6 +46,21 @@ pub extern "system" fn UnregisterGPNotification(event: isize) -> i32 {
     RegisterGPNotification(event, 0)
 }
 
+/// `GetProfileType(dwFlags)`: "Retrieves the type of profile loaded for the current user"
+/// (Learn, `userenv.h`). The flags are 0 for a local profile (`PT_TEMPORARY`, `PT_ROAMING` and
+/// `PT_MANDATORY` are the other kinds); Poly's one user has a local profile on `C:`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetProfileType(flags: *mut u32) -> i32 {
+    if flags.is_null() {
+        // SAFETY: a plain call.
+        unsafe { SetLastError(ERROR_INVALID_PARAMETER) };
+        return 0;
+    }
+    // SAFETY: the caller's out-pointer.
+    unsafe { flags.write_unaligned(0) };
+    1
+}
+
 const E_INVALIDARG: i32 = 0x8007_0057u32 as i32;
 const E_OUTOFMEMORY: i32 = 0x8007_000Eu32 as i32;
 
@@ -108,3 +123,5 @@ pub unsafe extern "system" fn DeriveAppContainerSidFromAppContainerName(name: *c
 pub extern "system" fn userenv_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod delayed;

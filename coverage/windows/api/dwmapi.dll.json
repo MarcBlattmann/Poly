@@ -24,7 +24,7 @@
 {"symbol":"#163","src":["wine-spec"]},
 {"symbol":"#164","src":["wine-spec"]},
 {"symbol":"DwmAttachMilContent","src":["wine-spec"]},
-{"symbol":"DwmDefWindowProc","src":["wine-spec"]},
+{"symbol":"DwmDefWindowProc","status":"stub","src":["wine-spec"]},
 {"symbol":"DwmDetachMilContent","src":["wine-spec"]},
 {"symbol":"DwmEnableBlurBehindWindow","src":["wine-spec"]},
 {"symbol":"DwmEnableComposition","src":["wine-spec"]},

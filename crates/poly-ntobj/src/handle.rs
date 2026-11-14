@@ -438,10 +438,19 @@ impl ObjectManager {
     ///   `DUPLICATE_CLOSE_SOURCE`: the source is closed and no handle made.
     ///   Otherwise `STATUS_INVALID_PARAMETER`; to be confirmed by the spec
     ///   agent.
-    /// - `DUPLICATE_SAME_ACCESS` copies the source's access; otherwise
-    ///   `desired` goes through the same check as an open, so the new handle
-    ///   may have more access than the source (Learn: "DuplicateHandle" says
-    ///   this can happen "in some cases"; to be confirmed by the spec agent).
+    /// - `DUPLICATE_SAME_ACCESS` copies the source's access. Otherwise a
+    ///   `desired` that asks for no more than the source handle has is
+    ///   granted as it is: the object's descriptor is not asked again (a
+    ///   handle to an object whose descriptor grants nobody anything can
+    ///   still be handed on with less access, which is how Chrome passes a
+    ///   read-only handle of its shared memory to a child). A `desired`
+    ///   with rights the source lacks goes through the same check as an
+    ///   open, so the new handle may have more access than the source
+    ///   (Learn: "DuplicateHandle" says this can happen "in some cases" and
+    ///   not in others; the sheet's event without a descriptor gets it) or
+    ///   be refused with `STATUS_ACCESS_DENIED` (the crash handler's trace,
+    ///   `s1-crashpad-handler`, call 616: `SECTION_MAP_WRITE` on a
+    ///   read-only handle of such a section). ADR 0155, step 9.
     /// - `DUPLICATE_SAME_ATTRIBUTES` copies the source's flags; otherwise
     ///   `attributes` gives them (`OBJ_INHERIT`, `OBJ_PROTECT_CLOSE`).
     /// - `DUPLICATE_CLOSE_SOURCE` closes the source "regardless of any error
@@ -502,8 +511,13 @@ impl ObjectManager {
             src.access
         } else {
             // A copy with no access holds nothing to check (the sheets).
-            if desired == 0 {
+            let mapped = header.kind.generic_mapping().map(desired);
+            if desired == 0 || (mapped & access::MAXIMUM_ALLOWED == 0 && mapped & !src.access == 0) {
                 access::grant(header.kind, desired, header.allowed, caller.mode, false, caller.privileges)?
+            } else if header.kind == ObjectType::File && mapped & access::MAXIMUM_ALLOWED == 0 {
+                // specs/windows/kernel32.dll/DuplicateHandle.yaml, rule `files`: "a file handle
+                // never yields more than it has".
+                return Err(STATUS_ACCESS_DENIED);
             } else {
                 self.checked_access(caller, src.object, desired, false)?
             }

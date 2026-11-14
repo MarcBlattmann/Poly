@@ -80,6 +80,15 @@ fn embed_win32() {
         "shcore.dll",
         "dwmapi.dll",
         "imm32.dll",
+        // ADR 0155, step 9.
+        "shlwapi.dll",
+        "wtsapi32.dll",
+        "comctl32.dll",
+        "oleacc.dll",
+        "uiautomationcore.dll",
+        "mfplat.dll",
+        "powrprof.dll",
+        "uxtheme.dll",
     ] {
         match &dir {
             Some(d) => {

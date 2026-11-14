@@ -210,6 +210,142 @@ pub fn query_value(block: &[u8], sub_block: &[u16]) -> Result<(usize, u32), u32>
     Ok((current.value, current.value_len))
 }
 
+// ----- building a version resource (ADR 0155, step 9) -----------------------------------------
+
+/// The version Poly's system DLLs carry in their version resources: the Windows version Poly
+/// reports to programs (`poly_registry::defaults`: Windows 10, build 19045, update 2006). Learn,
+/// "Getting the System Version": "To obtain the full version number for the operating system,
+/// call the GetFileVersionInfo function on one of the system DLLs, such as Kernel32.dll, then
+/// call VerQueryValue to obtain the \\StringFileInfo\\<lang><codepage>\\ProductVersion
+/// subblock". Chrome's browser does that with `kernelbase.dll` and `kernel32.dll` when it
+/// starts and ends itself when neither has a version.
+pub const SYSTEM_VERSION: [u16; 4] = [10, 0, 19045, 2006];
+
+/// `VS_FFI_SIGNATURE`, `VS_FFI_STRUCVERSION`, `VS_FFI_FILEFLAGSMASK`, `VOS_NT_WINDOWS32`,
+/// `VFT_DLL` (`verrsrc.h`).
+const VS_FFI_SIGNATURE: u32 = 0xFEEF_04BD;
+const VS_FFI_STRUCVERSION: u32 = 0x0001_0000;
+const VS_FFI_FILEFLAGSMASK: u32 = 0x3F;
+const VOS_NT_WINDOWS32: u32 = 0x0004_0004;
+const VFT_DLL: u32 = 2;
+
+/// One node of a version resource (Learn, "VS_VERSIONINFO", "StringFileInfo", "String"):
+/// `wLength`, `wValueLength`, `wType` (1 for text), the key, padding to 32 bits, the value,
+/// and the children, each aligned to 32 bits.
+fn build_node(key: &str, text: bool, value_len: u16, value: &[u8], children: &[Vec<u8>]) -> Vec<u8> {
+    let mut b = alloc::vec![0u8; 6];
+    for c in key.encode_utf16().chain([0]) {
+        b.extend_from_slice(&c.to_le_bytes());
+    }
+    while !b.len().is_multiple_of(4) {
+        b.push(0);
+    }
+    b.extend_from_slice(value);
+    for c in children {
+        while !b.len().is_multiple_of(4) {
+            b.push(0);
+        }
+        b.extend_from_slice(c);
+    }
+    let len = b.len() as u16;
+    b[0..2].copy_from_slice(&len.to_le_bytes());
+    b[2..4].copy_from_slice(&value_len.to_le_bytes());
+    b[4..6].copy_from_slice(&u16::from(text).to_le_bytes());
+    b
+}
+
+/// The `VS_VERSIONINFO` of a DLL: the fixed file information with `version` as the file and
+/// the product version, and `strings` (name, value) for U.S. English in Unicode (`040904B0`),
+/// with the translation that names that block.
+pub fn build_version_info(version: [u16; 4], strings: &[(&str, &str)]) -> Vec<u8> {
+    let ms = (u32::from(version[0]) << 16) | u32::from(version[1]);
+    let ls = (u32::from(version[2]) << 16) | u32::from(version[3]);
+    let mut fixed = Vec::with_capacity(52);
+    for v in [
+        VS_FFI_SIGNATURE,
+        VS_FFI_STRUCVERSION,
+        ms,
+        ls,
+        ms,
+        ls,
+        VS_FFI_FILEFLAGSMASK,
+        0,
+        VOS_NT_WINDOWS32,
+        VFT_DLL,
+        0,
+        0,
+        0,
+    ] {
+        fixed.extend_from_slice(&v.to_le_bytes());
+    }
+    let entries: Vec<Vec<u8>> = strings
+        .iter()
+        .map(|(key, value)| {
+            let v: Vec<u8> = value.encode_utf16().chain([0]).flat_map(u16::to_le_bytes).collect();
+            build_node(key, true, (v.len() / 2) as u16, &v, &[])
+        })
+        .collect();
+    let table = build_node("040904B0", true, 0, &[], &entries);
+    let string_info = build_node("StringFileInfo", true, 0, &[], &[table]);
+    // The translation: language 0x0409, code page 1200 (0x04B0).
+    let translation = build_node("Translation", false, 4, &[0x09, 0x04, 0xB0, 0x04], &[]);
+    let var_info = build_node("VarFileInfo", true, 0, &[], &[translation]);
+    build_node("VS_VERSION_INFO", false, 52, &fixed, &[string_info, var_info])
+}
+
+/// The version resource of one of Poly's system DLLs: [`SYSTEM_VERSION`], the strings Learn's
+/// "Version Information" lists as required for a file (`CompanyName`, `FileDescription`,
+/// `FileVersion`, `InternalName`, `OriginalFilename`, `ProductName`, `ProductVersion`).
+pub fn system_dll_version_info(file: &str, description: &str) -> Vec<u8> {
+    let v = SYSTEM_VERSION;
+    let text = alloc::format!("{}.{}.{}.{}", v[0], v[1], v[2], v[3]);
+    let internal = file.strip_suffix(".dll").unwrap_or(file);
+    build_version_info(
+        v,
+        &[
+            ("CompanyName", "Poly"),
+            ("FileDescription", description),
+            ("FileVersion", &text),
+            ("InternalName", internal),
+            ("OriginalFilename", file),
+            ("ProductName", "Poly"),
+            ("ProductVersion", &text),
+        ],
+    )
+}
+
+/// A resource file (`.res`, Learn: "Resource File Formats", `RESOURCEHEADER`) that holds
+/// `version` as the resource `RT_VERSION` (16) named 1 for U.S. English: what the linker takes
+/// to put a version resource into an image. A `.res` file starts with an empty resource; each
+/// resource is its header (the data size, the header size, the type and the name as 0xFFFF and
+/// an id, the data version, the memory flags, the language, the version, the characteristics)
+/// and its data, padded to 32 bits.
+pub fn res_file(version: &[u8]) -> Vec<u8> {
+    fn header(data_size: u32, kind: u16, name: u16, flags: u16, language: u16) -> Vec<u8> {
+        let mut h = Vec::with_capacity(32);
+        h.extend_from_slice(&data_size.to_le_bytes());
+        h.extend_from_slice(&32u32.to_le_bytes());
+        for id in [kind, name] {
+            h.extend_from_slice(&0xFFFFu16.to_le_bytes());
+            h.extend_from_slice(&id.to_le_bytes());
+        }
+        h.extend_from_slice(&0u32.to_le_bytes());
+        h.extend_from_slice(&flags.to_le_bytes());
+        h.extend_from_slice(&language.to_le_bytes());
+        h.extend_from_slice(&0u32.to_le_bytes());
+        h.extend_from_slice(&0u32.to_le_bytes());
+        h
+    }
+    let mut out = header(0, 0, 0, 0, 0);
+    // MOVEABLE | PURE (0x0030), the flags of a version resource; language 0x0409.
+    out.extend(header(version.len() as u32, 16, 1, 0x0030, 0x0409));
+    out.extend_from_slice(version);
+    while !out.len().is_multiple_of(4) {
+        out.push(0);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,6 +439,51 @@ mod tests {
             assert_eq!(query_value(&block, &wide(p)), Err(ERROR_RESOURCE_TYPE_NOT_FOUND), "{p:?}");
         }
         assert_eq!(query_value(&[1, 2, 3], &wide("\\")), Err(ERROR_RESOURCE_DATA_NOT_FOUND));
+    }
+
+    /// The version resource Poly's system DLLs carry answers what Learn's "Getting the System
+    /// Version" asks of it, and its `.res` file is two resource headers and the data.
+    #[test]
+    fn a_built_system_version_is_read_back() {
+        let block = system_dll_version_info("kernel32.dll", "Poly kernel32");
+        let (at, len) = query_value(&block, &wide("\\")).unwrap();
+        assert_eq!(len, 52);
+        let q = |o: usize| u32::from_le_bytes(block[at + o..at + o + 4].try_into().unwrap());
+        assert_eq!(q(0), 0xFEEF_04BD);
+        // dwFileVersionMS/LS and dwProductVersionMS/LS: 10.0.19045.2006.
+        assert_eq!((q(8), q(12), q(16), q(20)), (0x000A_0000, 0x4A65_07D6, 0x000A_0000, 0x4A65_07D6));
+        assert_eq!((q(32), q(36)), (0x0004_0004, 2));
+        let (at, len) = query_value(&block, &wide("\\VarFileInfo\\Translation")).unwrap();
+        assert_eq!((len, &block[at..at + 4]), (4, &[0x09, 0x04, 0xB0, 0x04][..]));
+        for (name, want) in [
+            ("ProductVersion", "10.0.19045.2006"),
+            ("FileVersion", "10.0.19045.2006"),
+            ("OriginalFilename", "kernel32.dll"),
+            ("InternalName", "kernel32"),
+            ("CompanyName", "Poly"),
+        ] {
+            let path = std::format!("\\StringFileInfo\\040904B0\\{name}");
+            let (at, len) = query_value(&block, &wide(&path)).unwrap();
+            assert_eq!(len as usize, want.len() + 1, "{name}");
+            assert_eq!(utf16(&block, at, want.len()), want, "{name}");
+        }
+        // The .res file: an empty resource, then RT_VERSION / 1 / 0x409 with the block.
+        let res = res_file(&block);
+        assert_eq!(&res[..8], &[0, 0, 0, 0, 32, 0, 0, 0]);
+        assert_eq!(u32::from_le_bytes(res[32..36].try_into().unwrap()) as usize, block.len());
+        assert_eq!(&res[40..48], &[0xFF, 0xFF, 16, 0, 0xFF, 0xFF, 1, 0]);
+        assert_eq!(u16::from_le_bytes([res[54], res[55]]), 0x0409);
+        assert_eq!(&res[64..64 + block.len()], &block[..]);
+        assert_eq!(res.len() % 4, 0);
+        // And the resource is found in a file that carries it.
+        let pe = pe_with_version(&block);
+        let mut read = |at: u64, buf: &mut [u8]| -> Result<usize, u32> {
+            let at = at as usize;
+            let n = buf.len().min(pe.len().saturating_sub(at));
+            buf[..n].copy_from_slice(&pe[at..at + n]);
+            Ok(n)
+        };
+        assert_eq!(read_version_resource(&mut read), Ok(block));
     }
 
     /// A PE32+ file with only a `.rsrc` section holding `version` as the

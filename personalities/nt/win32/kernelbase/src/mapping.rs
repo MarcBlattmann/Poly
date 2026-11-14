@@ -15,7 +15,12 @@ const VIEW_SHARE: u32 = 1;
 
 /// `CreateFileMappingW`: a section of `file` (or of the paging file for
 /// `INVALID_HANDLE_VALUE`). A name that exists opens that mapping and
-/// sets `ERROR_ALREADY_EXISTS` (Learn).
+/// sets `ERROR_ALREADY_EXISTS` (Learn). `lpFileMappingAttributes`: Learn:
+/// it "determines whether a returned handle can be inherited by child
+/// processes", and its `lpSecurityDescriptor` "specifies a security
+/// descriptor for a new file mapping object" (ADR 0155, step 9: Chrome
+/// gives its shared memory a descriptor so that a read-only handle to it
+/// cannot be duplicated into a writable one).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CreateFileMappingW(
     file: Handle,
@@ -25,7 +30,6 @@ pub unsafe extern "system" fn CreateFileMappingW(
     size_low: u32,
     name: *const u16,
 ) -> Handle {
-    let _ = security;
     let size = (u64::from(size_high) << 32) | u64::from(size_low);
     let paging = file == INVALID_HANDLE_VALUE;
     let args = match mapping::create_args(protect, paging, size) {
@@ -35,7 +39,19 @@ pub unsafe extern "system" fn CreateFileMappingW(
     // SAFETY: the caller's string.
     let nt_name = unsafe { wide_arg(name) }.and_then(object_name);
     let us = nt_name.as_deref().map(UnicodeString::new);
-    let oa = ObjectAttributes::new(us.as_ref(), if us.is_some() { nt::OBJ_OPENIF } else { 0 });
+    let mut attrs = if us.is_some() { nt::OBJ_OPENIF } else { 0 };
+    // SECURITY_ATTRIBUTES (minwinbase.h): lpSecurityDescriptor at 8, bInheritHandle at 16.
+    // SAFETY: the caller's structure when non-null.
+    let (descriptor, inherit) = if security.is_null() {
+        (core::ptr::null(), false)
+    } else {
+        unsafe { ((security.add(8) as *const *const u8).read(), (security.add(16) as *const i32).read() != 0) }
+    };
+    if inherit {
+        attrs |= nt::OBJ_INHERIT;
+    }
+    let mut oa = ObjectAttributes::new(us.as_ref(), attrs);
+    oa.security_descriptor = descriptor;
     let max = size as i64;
     let mut h: Handle = 0;
     // SAFETY: valid pointers.

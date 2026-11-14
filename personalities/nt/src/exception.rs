@@ -347,7 +347,9 @@ pub fn deliver<K: NtKernel>(
         k.write_user(at, bytes).map_err(|_| Undeliverable::BadStack)?;
     }
     let entry = dispatcher_entry(ctx, &frame, dispatcher);
-    k.load_context(&entry, CONTEXT_CONTROL | CONTEXT_INTEGER).map_err(Undeliverable::NoContext)
+    k.load_context(&entry, CONTEXT_CONTROL | CONTEXT_INTEGER).map_err(Undeliverable::NoContext)?;
+    k.exception_delivered(record, ctx);
+    Ok(())
 }
 
 /// What became of a CPU exception.

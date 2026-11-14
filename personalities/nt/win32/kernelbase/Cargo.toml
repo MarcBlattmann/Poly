@@ -19,5 +19,8 @@ poly-ntobj = { path = "../../../../crates/poly-ntobj" }
 poly-security = { path = "../../../../crates/poly-security" }
 poly-pe = { path = "../../../../crates/poly-pe" }
 
+[build-dependencies]
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
 [lints]
 workspace = true

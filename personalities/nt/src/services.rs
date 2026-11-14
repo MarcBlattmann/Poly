@@ -432,6 +432,15 @@ pub enum Service {
     /// `NtQuerySection(SectionHandle, SectionInformationClass,
     /// SectionInformation, SectionInformationLength, ReturnLength*)`.
     QuerySection,
+
+    // ----- whole processes (ADR 0155, step 9)
+    /// `NtSuspendProcess(ProcessHandle)`: not documented; only the export
+    /// name is public. Poly's reading of the name: every thread of the
+    /// process is suspended once, as `NtSuspendThread` does one thread.
+    SuspendProcess,
+    /// `NtResumeProcess(ProcessHandle)`: the reverse, every thread of the
+    /// process is resumed once.
+    ResumeProcess,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -608,6 +617,11 @@ pub const PROCESS_POLICY_SERVICES: [(Service, u32, &str); 1] =
 /// Section queries (ADR 0169), in the memory group.
 pub const SECTION_SERVICES: [(Service, u32, &str); 1] = [(Service::QuerySection, 0x049, "NtQuerySection")];
 
+/// Suspending and resuming a whole process (ADR 0155, step 9), in the
+/// processes and threads group.
+pub const PROCESS_SUSPEND_SERVICES: [(Service, u32, &str); 2] =
+    [(Service::SuspendProcess, 0x098, "NtSuspendProcess"), (Service::ResumeProcess, 0x099, "NtResumeProcess")];
+
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
     SERVICES
@@ -622,6 +636,7 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(JOB_SERVICES.iter())
         .chain(PROCESS_POLICY_SERVICES.iter())
         .chain(SECTION_SERVICES.iter())
+        .chain(PROCESS_SUSPEND_SERVICES.iter())
 }
 
 impl Service {
@@ -681,5 +696,6 @@ mod tests {
         assert!(IPC_SERVICES.iter().all(|s| (0xC0..0x100).contains(&s.1)));
         assert!(SECURITY_SERVICES.iter().all(|s| (0x180..0x1C0).contains(&s.1)));
         assert!(HANDLE_SERVICES.iter().all(|s| s.1 < 0x40));
+        assert!(PROCESS_SUSPEND_SERVICES.iter().all(|s| (0x80..0xC0).contains(&s.1)));
     }
 }

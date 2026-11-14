@@ -387,3 +387,5 @@ pub unsafe extern "system" fn WinHttpGetIEProxyConfigForCurrentUser(config: *mut
     unsafe { core::ptr::write_bytes(config, 0, 32) };
     TRUE
 }
+
+mod delayed;

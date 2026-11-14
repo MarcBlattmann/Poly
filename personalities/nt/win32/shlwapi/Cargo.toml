@@ -1,0 +1,18 @@
+[package]
+name = "shlwapi"
+description = "Our shlwapi.dll (ADR 0155, step 9): the path and COM helpers Chrome's browser delay-loads"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "shlwapi"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[lints]
+workspace = true
