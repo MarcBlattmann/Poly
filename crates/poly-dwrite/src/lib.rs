@@ -20,6 +20,7 @@ extern crate std;
 pub mod face;
 pub mod model;
 pub mod names;
+pub mod numsub;
 pub mod render;
 pub mod sfnt;
 pub mod system;

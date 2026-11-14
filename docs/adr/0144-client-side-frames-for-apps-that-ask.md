@@ -1,6 +1,6 @@
 # 0144: Apps that ask to draw their own frame get no Poly frame
 
-**Status:** Accepted. Refines the frame decision of ADR 0106.
+**Status:** Accepted. Refines the frame decision of ADR 0106. Extended by [ADR 0183](0183-one-title-bar-who-draws-a-window-s-frame.md): GTK's own title bars (KDE's server decoration protocol, shadow margins) and the one decision module.
 
 ## Context
 

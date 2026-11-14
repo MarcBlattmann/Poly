@@ -266,6 +266,32 @@ pub fn map_view<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> 
     Ok(mapped.status)
 }
 
+/// `NtUnmapViewOfSectionEx(ProcessHandle, BaseAddress, Flags)`: `Flags` may hold
+/// `MEM_UNMAP_WITH_TRANSIENT_BOOST` (a scheduling hint, ignored) and `MEM_PRESERVE_PLACEHOLDER`
+/// (Learn, "UnmapViewOfFile2": the view, which replaced a placeholder, becomes that placeholder
+/// again; see [`section::unmap_view_ex`]). Other flags:
+/// `STATUS_INVALID_PARAMETER_3`. Statuses to be confirmed by the spec agent.
+pub fn unmap_view_ex<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [process, addr, flags] = abi::args::<K, 3>(k, regs)?;
+    let flags = flags as u32;
+    if flags & !(MEM_UNMAP_WITH_TRANSIENT_BOOST | MEM_PRESERVE_PLACEHOLDER) != 0 {
+        return Err(STATUS_INVALID_PARAMETER_3);
+    }
+    let preserve = flags & MEM_PRESERVE_PLACEHOLDER != 0;
+    let caller = k.caller();
+    let target = k.with_state(|sys, proc, _| target_of(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION))?;
+    match target {
+        Target::Own => k.with_state(|sys, proc, b| section::unmap_view_ex(sys, proc, b, addr, preserve))?,
+        Target::Other(pid) => k
+            .with_process(pid, |sys, proc, b| section::unmap_view_ex(sys, proc, b, addr, preserve))
+            .ok_or(STATUS_PROCESS_IS_TERMINATING)??,
+    };
+    Ok(STATUS_SUCCESS)
+}
+
+/// `MEM_UNMAP_WITH_TRANSIENT_BOOST` (`winnt.h`).
+const MEM_UNMAP_WITH_TRANSIENT_BOOST: u32 = 1;
+
 /// `NtUnmapViewOfSection`.
 pub fn unmap_view<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, addr] = abi::args::<K, 2>(k, regs)?;

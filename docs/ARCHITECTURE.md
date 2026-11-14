@@ -1077,9 +1077,12 @@ the Linux personality, with its logic in a host-tested crate:
 - **Protocol types** are generated from the XML in `third_party/wayland*/`
   by `cargo xtask wayland` into `crates/poly-wayland/src/protocol/`
   (checked in; `ci lint` checks they are current).
-- **Frames:** every toplevel gets Poly's neutral frame (title bar with the
-  title and a close button, a one-pixel border), drawn by the compositor;
-  `zxdg_decoration_manager_v1` always answers `server_side`.
+- **Frames:** a toplevel gets Poly's neutral frame (title bar with the
+  title and the window buttons, a one-pixel border), drawn by the compositor,
+  unless its client draws its own title bar: `poly_wayland::frame_policy`
+  decides from xdg-decoration, KDE's server decoration protocol and the
+  window geometry's shadow margins, and a client-drawn window has one title
+  bar, not two (ADR 0144, 0183).
 - **Timing:** frames at most every 1/60 s when something changed or a
   client waits; frame callbacks and `wp_presentation` feedback are
   answered with them. Real vsync comes with the display driver.

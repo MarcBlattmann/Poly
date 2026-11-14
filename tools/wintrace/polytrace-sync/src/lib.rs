@@ -77,6 +77,17 @@ unsafe extern "system" {
     fn InitializeCriticalSection(cs: *mut CriticalSection);
     fn EnterCriticalSection(cs: *mut CriticalSection);
     fn LeaveCriticalSection(cs: *mut CriticalSection);
+    fn GetCommandLineW() -> *const u16;
+    fn Sleep(ms: u32);
+    fn CreateThread(
+        attributes: *mut u8,
+        stack: usize,
+        start: unsafe extern "system" fn(usize) -> u32,
+        parameter: usize,
+        flags: u32,
+        id: *mut u32,
+    ) -> Handle;
+    fn AddVectoredExceptionHandler(first: u32, handler: unsafe extern "system" fn(*mut *mut u32) -> i32) -> usize;
 }
 
 // winnt.h / fileapi.h
@@ -488,7 +499,7 @@ pub unsafe extern "C" fn pt_enter(f: &Func, regs: *const u64, stack: *const u64,
             w = W { p: scratch, len: 0, cap: RAW_AT - SUFFIX, full: false };
             begin(&mut w, f, t, seq, regs, stack, false);
         }
-        if SYNC.load(Ordering::Relaxed) {
+        if SYNC.load(Ordering::Relaxed) || RING.load(Ordering::Relaxed) != 0 || FIRST.load(Ordering::Relaxed) {
             // The caller's return address (`pt_common`'s frame: the return address is 0x888
             // bytes above the saved argument registers `regs` points at): which code made the
             // call, for reading a program's behaviour on Poly (ADR 0155).
@@ -515,9 +526,9 @@ pub unsafe extern "C" fn pt_enter(f: &Func, regs: *const u64, stack: *const u64,
         if f.flags & (NORETURN | TAIL) != 0 {
             w.cap = SCRATCH;
             w.bytes(b",\"ret\":null}\n");
-            append(core::slice::from_raw_parts(scratch, w.len), f.flags & NORETURN != 0);
+            record(f, 0, core::slice::from_raw_parts(scratch, w.len), f.flags & NORETURN != 0);
             cookie = 0;
-        } else if f.flags & FLUSH != 0 {
+        } else if f.flags & FLUSH != 0 && RING.load(Ordering::Relaxed) == 0 && !FIRST.load(Ordering::Relaxed) {
             append(&[], true);
         }
         leave_logger(tls, t);
@@ -586,10 +597,186 @@ pub unsafe extern "C" fn pt_leave(f: &Func, cookie: u64, ret: u64, scratch: *mut
             }
         }
         w.bytes(b"}\n");
-        append(core::slice::from_raw_parts(scratch, w.len), sync);
+        // The result's class, on the width the signature gives it (a `void` function has none).
+        let value = match rk {
+            kind::INT => ret & 0xFFFF_FFFF,
+            kind::SHORT => ret & 0xFFFF,
+            kind::BYTE => ret & 0xFF,
+            _ => ret,
+        };
+        let class = if rk == kind::VOID {
+            0
+        } else if value == 0 {
+            1
+        } else {
+            2
+        };
+        let outcome = if err != before { class | (u64::from(err & 0xFFFF) << 2) } else { class };
+        record(f, outcome, core::slice::from_raw_parts(scratch, w.len), sync);
         leave_logger(tls, t);
         SetLastError(err);
     }
+}
+
+/// `POLYTRACE_FIRST=1`: write a record only the first time a function returns with a given
+/// outcome (its result is zero or not, and the last error it set, if any): which functions a
+/// process reaches and how they answer, in the order it first reached them, in a few hundred
+/// records however long it runs. Compared with the Windows reference's per-function rows (ADR
+/// 0155 step 11). Lock-free, like ring mode.
+static FIRST: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+const SEEN_SLOTS: usize = 1 << 14;
+#[allow(clippy::declare_interior_mutable_const)]
+const SEEN_FREE: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+static SEEN: [core::sync::atomic::AtomicUsize; SEEN_SLOTS] = [SEEN_FREE; SEEN_SLOTS];
+/// Set while a first-mode record is being written.
+static FIRST_WRITING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Whether `key` (never 0) is new; it is remembered. A full table says no.
+fn first_time(key: usize) -> bool {
+    let mut i = (key.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 40) % SEEN_SLOTS;
+    for _ in 0..SEEN_SLOTS {
+        match SEEN[i].compare_exchange(0, key, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => return true,
+            Err(v) if v == key => return false,
+            Err(_) => i = (i + 1) % SEEN_SLOTS,
+        }
+    }
+    false
+}
+
+/// Keep or write one finished record of a call to `f` that ended with `outcome` (see
+/// [`FIRST`]; 0 for a call that does not return): into the ring in ring mode, to the file the
+/// first time in first mode, else into the buffer.
+unsafe fn record(f: &Func, outcome: u64, rec: &[u8], flush: bool) {
+    if FIRST.load(Ordering::Relaxed) {
+        // A function's table entry is below 2^48; the outcome takes the bits above.
+        let key = (f as *const Func as usize) ^ ((outcome as usize) << 48);
+        if first_time(key) {
+            // One writer at a time (two writes at the same file position overlap on Poly), but
+            // never wait long: a thread suspended while it writes must not stop the others, so
+            // after a while the record is written anyway.
+            let mut spins = 0u32;
+            while FIRST_WRITING.swap(true, Ordering::Acquire) && spins < 1 << 20 {
+                core::hint::spin_loop();
+                spins += 1;
+            }
+            let mut wrote = 0u32;
+            // SAFETY: the record and the trace file.
+            unsafe {
+                WriteFile(
+                    FILE.load(Ordering::Relaxed),
+                    rec.as_ptr(),
+                    rec.len() as u32,
+                    &mut wrote,
+                    core::ptr::null_mut(),
+                )
+            };
+            FIRST_WRITING.store(false, Ordering::Release);
+        }
+        return;
+    }
+    let n = RING.load(Ordering::Relaxed);
+    if n == 0 {
+        // SAFETY: the caller's record.
+        unsafe { append(rec, flush) };
+        return;
+    }
+    let i = (RING_NEXT.fetch_add(1, Ordering::Relaxed) % u64::from(n)) as usize;
+    let len = rec.len().min(RING_SLOT - 2);
+    // SAFETY: slot `i` is inside RING_BUF (i < n <= RING_SLOTS). Two threads write the same slot
+    // only when the ring wraps around within one record's copy: a torn record, which a debugging
+    // trail can afford; no lock is taken, so a thread suspended here blocks nobody.
+    unsafe {
+        let slot = (RING_BUF.0.get() as *mut u8).add(i * RING_SLOT);
+        core::ptr::copy_nonoverlapping(rec.as_ptr(), slot.add(2), len);
+        if len < rec.len() {
+            // Cut: the line still ends.
+            *slot.add(2 + len - 1) = b'\n';
+        }
+        slot.cast::<u16>().write_unaligned(len as u16);
+    }
+}
+
+/// `POLYTRACE_RING=N`: keep only the last N records (at most [`RING_SLOTS`]) and write them when the
+/// process meets a breakpoint or a fatal exception ([`on_exception`]): the calls before a failed
+/// check, without writing the millions of records that come before it (ADR 0155, step 11). No
+/// lock is taken on this path (a stack sampler that suspends a thread inside the logger cannot
+/// block the others), and the records carry `ra` but no buffer dumps.
+static RING: AtomicU32 = AtomicU32::new(0);
+static RING_NEXT: AtomicU64 = AtomicU64::new(0);
+const RING_SLOTS: usize = 4096;
+/// Bytes per kept record (a 2-byte length, then the record; longer records are cut).
+const RING_SLOT: usize = 640;
+static RING_BUF: Shared<[u8; RING_SLOTS * RING_SLOT]> = Shared(UnsafeCell::new([0; RING_SLOTS * RING_SLOT]));
+/// Fatal exceptions written so far (breakpoints are written every time, other codes once).
+static RING_FATAL: AtomicU32 = AtomicU32::new(0);
+
+/// `EXCEPTION_BREAKPOINT` (`winnt.h`).
+const EXCEPTION_BREAKPOINT: u32 = 0x8000_0003;
+/// `EXCEPTION_CONTINUE_SEARCH` (`excpt.h`).
+const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
+
+/// The vectored handler of ring mode: `pointers` is `EXCEPTION_POINTERS`, whose first field points
+/// at the `EXCEPTION_RECORD` (whose first field is the code). Writes the ring and lets the
+/// exception go on to the program's own handlers.
+unsafe extern "system" fn on_exception(pointers: *mut *mut u32) -> i32 {
+    // SAFETY: the dispatcher passes a valid EXCEPTION_POINTERS.
+    let code = unsafe { **pointers };
+    let fatal = code >= 0xC000_0000;
+    if code != EXCEPTION_BREAKPOINT && !(fatal && RING_FATAL.fetch_add(1, Ordering::Relaxed) == 0) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    // SAFETY: no arguments.
+    let err = unsafe { GetLastError() };
+    write_ring(u64::from(code));
+    // SAFETY: no arguments.
+    unsafe { SetLastError(err) };
+    EXCEPTION_CONTINUE_SEARCH
+}
+
+/// `POLYTRACE_RING_AT=<seconds>`: a thread writes the ring once, that many seconds after the
+/// logger was loaded (header `"ring":"at"`): what a process that went quiet did last.
+unsafe extern "system" fn ring_at(seconds: usize) -> u32 {
+    // SAFETY: no arguments but the time.
+    unsafe { Sleep((seconds as u32).saturating_mul(1000)) };
+    write_ring(u64::MAX);
+    0
+}
+
+/// Write the ring to the trace file, oldest record first, between a header naming `why` (an
+/// exception code, or `u64::MAX` for [`ring_at`]) and `{"ring":"end"}`.
+fn write_ring(why: u64) {
+    let file = FILE.load(Ordering::Relaxed);
+    let n = u64::from(RING.load(Ordering::Relaxed));
+    let put = |bytes: &[u8]| {
+        let mut wrote = 0u32;
+        // SAFETY: a byte slice and the trace file.
+        unsafe { WriteFile(file, bytes.as_ptr(), bytes.len() as u32, &mut wrote, core::ptr::null_mut()) };
+    };
+    let mut head = [0u8; 96];
+    let mut w = W { p: head.as_mut_ptr(), len: 0, cap: head.len(), full: false };
+    let next = RING_NEXT.load(Ordering::Relaxed);
+    // `hex` writes a quoted string.
+    w.bytes(b"{\"ring\":");
+    if why == u64::MAX {
+        w.bytes(b"\"at\"");
+    } else {
+        w.hex(why);
+    }
+    w.bytes(b",\"calls\":");
+    w.dec(next);
+    w.bytes(b"}\n");
+    put(&head[..w.len]);
+    for k in next.saturating_sub(n)..next {
+        let i = (k % n) as usize;
+        // SAFETY: slot `i` of RING_BUF; its length was written after its record.
+        unsafe {
+            let slot = (RING_BUF.0.get() as *const u8).add(i * RING_SLOT);
+            let len = (slot.cast::<u16>().read_unaligned() as usize).min(RING_SLOT - 2);
+            put(core::slice::from_raw_parts(slot.add(2), len));
+        }
+    }
+    put(b"{\"ring\":\"end\"}\n");
 }
 
 /// `POLYTRACE_SYNC` is set: every record is written when its call returns, so a process that
@@ -618,6 +805,31 @@ macro_rules! wide {
         };
         &W
     }};
+}
+
+/// `POLYTRACE_ONLY=<text>`: trace only a process whose command line contains `text` (Chrome's
+/// `--type=renderer`); in the others the logger opens no file and every thunk calls straight
+/// through.
+unsafe fn selected() -> bool {
+    let mut want = [0u16; 128];
+    // SAFETY: the name is NUL-terminated; `want` holds 128 units.
+    let n = unsafe { GetEnvironmentVariableW(wide!("POLYTRACE_ONLY").as_ptr(), want.as_mut_ptr(), 128) } as usize;
+    if n == 0 || n >= 128 {
+        return true;
+    }
+    // SAFETY: the process's command line, NUL-terminated.
+    let line = unsafe {
+        let p = GetCommandLineW();
+        if p.is_null() {
+            return false;
+        }
+        let mut len = 0;
+        while *p.add(len) != 0 {
+            len += 1;
+        }
+        core::slice::from_raw_parts(p, len)
+    };
+    line.windows(n).any(|w| w == &want[..n])
 }
 
 /// Open the trace file (`POLYTRACE_OUT` or `polytrace.jsonl`).
@@ -684,6 +896,10 @@ pub unsafe extern "system" fn polytrace_main(_module: usize, reason: u32, _reser
             DLL_PROCESS_ATTACH => {
                 let err = GetLastError();
                 InitializeCriticalSection(LOCK.0.get());
+                if !selected() {
+                    SetLastError(err);
+                    return 1;
+                }
                 open();
                 let mut probe = [0u16; 4];
                 SYNC.store(
@@ -694,6 +910,36 @@ pub unsafe extern "system" fn polytrace_main(_module: usize, reason: u32, _reser
                 let mut off = [0u16; 4];
                 let n = GetEnvironmentVariableW(wide!("POLYTRACE_DUMP").as_ptr(), off.as_mut_ptr(), off.len() as u32);
                 DUMP.store(!(n > 0 && off[0] == b'0' as u16) && SYNC.load(Ordering::Relaxed), Ordering::Relaxed);
+                let mut first = [0u16; 4];
+                if GetEnvironmentVariableW(wide!("POLYTRACE_FIRST").as_ptr(), first.as_mut_ptr(), 4) > 0 {
+                    FIRST.store(true, Ordering::Relaxed);
+                    DUMP.store(false, Ordering::Relaxed);
+                }
+                let mut ring = [0u16; 8];
+                let n = GetEnvironmentVariableW(wide!("POLYTRACE_RING").as_ptr(), ring.as_mut_ptr(), ring.len() as u32);
+                let slots = ring[..(n as usize).min(ring.len())]
+                    .iter()
+                    .take_while(|c| (b'0' as u16..=b'9' as u16).contains(c))
+                    .fold(0u32, |v, &c| v.saturating_mul(10).saturating_add(u32::from(c - b'0' as u16)));
+                if slots > 0 && FILE.load(Ordering::Relaxed) != INVALID_HANDLE_VALUE {
+                    RING.store(slots.min(RING_SLOTS as u32), Ordering::Relaxed);
+                    DUMP.store(false, Ordering::Relaxed);
+                    AddVectoredExceptionHandler(1, on_exception);
+                    let mut at = [0u16; 8];
+                    let n = GetEnvironmentVariableW(wide!("POLYTRACE_RING_AT").as_ptr(), at.as_mut_ptr(), 8);
+                    let seconds = at[..(n as usize).min(at.len())]
+                        .iter()
+                        .take_while(|c| (b'0' as u16..=b'9' as u16).contains(c))
+                        .fold(0usize, |v, &c| v.saturating_mul(10).saturating_add(usize::from(c - b'0' as u16)));
+                    if seconds > 0 {
+                        let mut id = 0u32;
+                        // The thread starts once the loader lock is released.
+                        let h = CreateThread(core::ptr::null_mut(), 0, ring_at, seconds, 0, &mut id);
+                        if h != 0 && h != INVALID_HANDLE_VALUE {
+                            CloseHandle(h);
+                        }
+                    }
+                }
                 if FILE.load(Ordering::Relaxed) != INVALID_HANDLE_VALUE {
                     append(b"{\"format\":\"polytrace/1\"}\n", false);
                     TLS.store(TlsAlloc(), Ordering::Release);

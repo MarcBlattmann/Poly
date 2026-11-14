@@ -153,6 +153,16 @@ pub enum WaitCancel {
     Terminated,
 }
 
+/// A blocked wait as [`ObjectManager::pending_wait_list`] lists it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WaitDescription {
+    pub thread: ThreadRef,
+    /// `WaitAll` (else `WaitAny`).
+    pub all: bool,
+    pub alertable: bool,
+    pub objects: Vec<ObjectId>,
+}
+
 #[derive(Debug)]
 pub(crate) struct WaitBlock {
     thread: ThreadRef,
@@ -370,6 +380,20 @@ impl ObjectManager {
     /// The next satisfied wait, oldest first.
     pub fn pop_wake(&mut self) -> Option<Wake> {
         self.wakes.pop_front()
+    }
+
+    /// The blocked waits, for diagnostics (`poly.nt.waits`): who waits, on
+    /// what, and how.
+    pub fn pending_wait_list(&self) -> Vec<WaitDescription> {
+        self.waits
+            .iter()
+            .map(|(_, _, w)| WaitDescription {
+                thread: w.thread,
+                all: w.wait_type == WaitType::All,
+                alertable: w.alertable,
+                objects: w.objects.clone(),
+            })
+            .collect()
     }
 
     /// Whether a wait is still blocked.

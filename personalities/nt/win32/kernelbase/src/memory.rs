@@ -10,6 +10,9 @@ use poly_kernelbase::memory::{self, *};
 /// `VirtualAlloc`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn VirtualAlloc(address: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8 {
+    if let Err(e) = memory::check_alloc_type(kind) {
+        return fail(e, core::ptr::null_mut());
+    }
     let (mut base, mut sz) = (address, size);
     // SAFETY: valid in/out pointers; the kernel checks the arguments.
     let st = unsafe { nt::NtAllocateVirtualMemory(nt::CURRENT_PROCESS, &mut base, 0, &mut sz, kind, protect) };

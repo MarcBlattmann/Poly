@@ -18,6 +18,7 @@ pub mod prelude {
 
 pub mod cursor_shape_v1;
 pub mod fractional_scale_v1;
+pub mod kde_server_decoration;
 pub mod linux_dmabuf_v1;
 pub mod presentation_time;
 pub mod viewporter;
@@ -29,6 +30,7 @@ pub mod xwayland_shell;
 
 pub use cursor_shape_v1::*;
 pub use fractional_scale_v1::*;
+pub use kde_server_decoration::*;
 pub use linux_dmabuf_v1::*;
 pub use presentation_time::*;
 pub use viewporter::*;
@@ -85,6 +87,8 @@ pub static INTERFACES: &[&crate::wire::Interface] = &[
     &wp_cursor_shape_device_v1::INTERFACE,
     &xwayland_shell_v1::INTERFACE,
     &xwayland_surface_v1::INTERFACE,
+    &org_kde_kwin_server_decoration_manager::INTERFACE,
+    &org_kde_kwin_server_decoration::INTERFACE,
 ];
 
 /// The interface called `name`.

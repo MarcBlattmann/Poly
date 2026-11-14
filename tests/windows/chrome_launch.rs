@@ -498,16 +498,17 @@ fn launch(t: &mut Test) {
     let l = lines(spec);
     let line = |k: usize| &spec[l[k].0..l[k].1];
     let (app, cmdline, cwd) = (line(0), line(1), line(2));
-    // Line 5 (optional): `NAME=VALUE`, set in the launcher's environment (which the program
-    // inherits) before it starts. Line 6 (optional): a file name in the program's directory to
-    // print after the run, between `LAUNCH-BEGIN trace` and `LAUNCH-END trace` (the Poly-side
-    // call trace of the kit, `cargo xtask chrome-win trace`).
+    // Line 5 (optional): `NAME=VALUE` assignments separated by spaces, set in the launcher's
+    // environment (which the program inherits) before it starts. Line 6 (optional): a file name
+    // in the program's directory to print after the run, between `LAUNCH-BEGIN trace` and
+    // `LAUNCH-END trace` (the Poly-side call trace of the kit, `cargo xtask chrome-win trace`).
     let (env_line, trace_name) = (line(4), line(5));
-    if let Some(eq) = env_line.iter().position(|&c| c == b'=') {
+    for assignment in env_line.split(|&c| c == b' ') {
+        let Some(eq) = assignment.iter().position(|&c| c == b'=') else { continue };
         let (mut name_w, mut value_w) = ([0u16; 128], [0u16; 512]);
-        if eq < 127 && env_line.len() - eq - 1 < 511 {
-            widen(&env_line[..eq], &mut name_w);
-            widen(&env_line[eq + 1..], &mut value_w);
+        if eq < 127 && assignment.len() - eq - 1 < 511 {
+            widen(&assignment[..eq], &mut name_w);
+            widen(&assignment[eq + 1..], &mut value_w);
             // SAFETY: NUL-terminated strings.
             unsafe { SetEnvironmentVariableW(name_w.as_ptr(), value_w.as_ptr()) };
         }
