@@ -474,6 +474,22 @@ impl Process {
         self.threads.lock().live.iter().map(|(id, _)| *id).collect()
     }
 
+    /// For each live thread, whether it runs: it is on a CPU or waiting
+    /// for one, or has not started yet (its kernel thread is not known).
+    /// `false` for a thread that is blocked (or has exited). What
+    /// `/proc/<pid>/stat` shows as `R` or `S` (`poly_procfs::ProcState::of`).
+    pub fn threads_running(&self) -> Vec<bool> {
+        // The kernel threads' ids first: the scheduler has its own lock.
+        let ids: Vec<u64> = self.threads.lock().live.iter().map(|(_, f)| f.thread.load(Ordering::SeqCst)).collect();
+        let runs = |bits: u64| {
+            bits == 0 || {
+                let id = crate::thread::ThreadId::from_bits(bits - 1);
+                matches!(crate::thread::state(id), Some(crate::thread::State::Running | crate::thread::State::Runnable))
+            }
+        };
+        ids.into_iter().map(runs).collect()
+    }
+
     /// Live threads.
     pub fn thread_count(&self) -> usize {
         self.threads.lock().live.len()
@@ -641,4 +657,71 @@ pub fn register_threadless(process: &Arc<Process>) {
 pub fn all() -> Vec<Arc<Process>> {
     let weak: Vec<Weak<Process>> = TABLE.lock().values().cloned().collect();
     weak.iter().filter_map(Weak::upgrade).collect()
+}
+
+static PARKED: WaitQueue = WaitQueue::new();
+static RELEASED: AtomicBool = AtomicBool::new(false);
+
+fn parked(_: usize) -> usize {
+    PARKED.wait_until(|| RELEASED.load(Ordering::SeqCst));
+    0
+}
+
+fn finishes(_: usize) -> usize {
+    0
+}
+
+crate::kernel_test! {
+    /// `/proc/<pid>/stat` shows `S` only while every thread is blocked: a
+    /// thread that is runnable but not on a CPU (just woken, or on its way
+    /// back from a system call) runs (`threads_running`).
+    fn a_thread_runs_unless_it_is_blocked() -> TestResult {
+        use crate::thread::{self, State};
+        let elf = binfmt::Format::Elf { bits: binfmt::Bits::B64, arch: binfmt::Arch::X86_64 };
+        let p = Arc::new(Process::new(alloc_pid(), Personality::Linux, elf));
+        let (tid, flags) = p.attach_thread().ok_or("could not attach a thread")?;
+        let point = |id: thread::ThreadId| flags.thread.store(id.to_bits() + 1, Ordering::SeqCst);
+        let check = || -> crate::ktest::TestResult {
+            if p.threads_running() != [true] {
+                return Err("a thread that has not started yet does not run");
+            }
+            RELEASED.store(false, Ordering::SeqCst);
+            let waiter = thread::spawn(parked, 0).map_err(|_| "spawn failed")?;
+            point(waiter);
+            let blocked = thread::wait_until(5, || thread::state(waiter) == Some(State::Blocked));
+            let seen = p.threads_running();
+            RELEASED.store(true, Ordering::SeqCst);
+            PARKED.wake_all();
+            if thread::join(waiter) != Ok(0) {
+                return Err("the blocked thread did not finish");
+            }
+            if !blocked || seen != [false] {
+                return Err("a blocked thread runs");
+            }
+            // Runnable, not on a CPU: made on this CPU, which this thread
+            // keeps until it is looked at.
+            let runnable = {
+                let _pin = thread::pin_current();
+                let _irq = crate::arch::cpu::InterruptsOff::new();
+                let ready = thread::spawn_here(finishes, 0).map_err(|_| "spawn failed")?;
+                point(ready);
+                let r = thread::state(ready) == Some(State::Runnable) && p.threads_running() == [true];
+                (ready, r)
+            };
+            if thread::join(runnable.0) != Ok(0) {
+                return Err("the runnable thread did not finish");
+            }
+            if !runnable.1 {
+                return Err("a runnable thread does not run");
+            }
+            point(thread::current());
+            if p.threads_running() != [true] {
+                return Err("the running thread does not run");
+            }
+            Ok(())
+        };
+        let result = check();
+        p.cancel_thread(tid);
+        result
+    }
 }
