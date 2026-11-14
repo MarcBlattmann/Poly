@@ -185,6 +185,11 @@ pub unsafe extern "system" fn UpdateLayeredWindow(
         Reply::Ok {} => {}
         r => return fail(r),
     }
+    // dwmapi tells a layered window that has had its content from one that has
+    // nothing yet by this mark (DwmGetWindowAttribute.yaml `layered`).
+    let mark: [u16; 10] = [80, 111, 108, 121, 68, 119, 109, 57, 49, 0];
+    // SAFETY: a NUL-terminated name and a window of this process.
+    unsafe { super::headless::SetPropW(hwnd, mark.as_ptr(), 1) };
     let Some(i) = info(hwnd) else { return 0 };
     let (mut x, mut y) = (i.window.left, i.window.top);
     let (mut cx, mut cy) = (i.window.width(), i.window.height());
