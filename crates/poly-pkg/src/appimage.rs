@@ -39,10 +39,16 @@ pub const IMAGE_KEY: &str = "X-Poly-AppImage";
 /// FUSE (the AppImage project's `APPIMAGE_EXTRACT_AND_RUN`).
 pub const EXTRACT_AND_RUN: &str = "APPIMAGE_EXTRACT_AND_RUN";
 
+/// The device the type 2 runtime mounts an image through (fuse(4)).
+pub const FUSE_DEVICE: &str = "/dev/fuse";
+
 /// Whether an AppImage has to be started by extracting it
-/// ([`EXTRACT_AND_RUN`]) on Poly instead of by mounting its image through
-/// FUSE (ADR 0180 says which works and why).
-pub const RUNS_BY_EXTRACTING: bool = true;
+/// ([`EXTRACT_AND_RUN`]) instead of the runtime's normal way, mounting its
+/// image through FUSE: only where there is no FUSE (`fuse`: whether
+/// [`FUSE_DEVICE`] exists). ADR 0180.
+pub fn runs_by_extracting(fuse: bool) -> bool {
+    !fuse
+}
 
 /// Most bytes of an icon or a desktop file read from an image.
 const FILE_LIMIT: u64 = 4 << 20;
