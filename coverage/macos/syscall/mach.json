@@ -29,7 +29,7 @@
 {"symbol":"mach_msg_overwrite_trap","number":32,"src":["xnu-mach-traps"]},
 {"symbol":"mach_msg_trap","number":31,"src":["xnu-mach-traps"]},
 {"symbol":"mach_reply_port","number":26,"src":["xnu-mach-traps"]},
-{"symbol":"mach_timebase_info_trap","number":89,"src":["xnu-mach-traps"]},
+{"symbol":"mach_timebase_info_trap","number":89,"status":"claimed","claimed_by":"spec-macos-1","src":["xnu-mach-traps"]},
 {"symbol":"mach_vm_reclaim_update_kernel_accounting_trap","number":63,"src":["xnu-mach-traps"]},
 {"symbol":"mach_voucher_extract_attr_recipe_trap","number":72,"src":["xnu-mach-traps"]},
 {"symbol":"mach_wait_until_trap","number":90,"src":["xnu-mach-traps"]},
@@ -57,7 +57,7 @@
 {"symbol":"task_dyld_process_info_notify_get_trap","number":13,"src":["xnu-mach-traps"]},
 {"symbol":"task_for_pid","number":45,"src":["xnu-mach-traps"]},
 {"symbol":"task_name_for_pid","number":44,"src":["xnu-mach-traps"]},
-{"symbol":"task_self_trap","number":28,"src":["xnu-mach-traps"]},
+{"symbol":"task_self_trap","number":28,"status":"claimed","claimed_by":"spec-macos-1","src":["xnu-mach-traps"]},
 {"symbol":"thread_get_special_reply_port","number":50,"src":["xnu-mach-traps"]},
 {"symbol":"thread_self_trap","number":27,"src":["xnu-mach-traps"]},
 {"symbol":"thread_switch","number":61,"src":["xnu-mach-traps"]}

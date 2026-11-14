@@ -124,7 +124,7 @@ start downloads about 230 MB once. More commands are in
 | Linux | user-mode API | 35 | 33 | 0 | 2 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 3 | 1,808 | 0 | 0 |
 | Windows | user-mode DLL exports | 130,200 | 434 | 185 | 2,843 | 53,462 | 0 | 73,276 |
-| macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 0 | 517 | 0 | 0 |
+| macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 15 | 502 | 0 | 0 |
 | macOS | framework API | 741,217 | 0 | 0 | 0 | 741,217 | 0 | 0 |
 
 *API coverage* is green entries out of the entries that are ours to build: *app-provided* entries (libraries the application or its installer supplies, ADR 0055) are listed under *Entries* but left out of the percentages, and so are entries *not applicable by design* (calls the reference OS itself does not offer on x86-64, or that would replace the running kernel; Poly answers them as the reference does). *App-weighted* counts each API by how often the target apps call it; it is the number that tracks real progress and appears once the call tracer exists.
