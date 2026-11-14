@@ -833,6 +833,10 @@ pub fn access_check<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
 pub fn set_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, info_class, info, length] = abi::args::<K, 4>(k, regs)?;
     const THREAD_IMPERSONATION_TOKEN: u64 = 5;
+    // `ThreadAffinityMask` (4): the thread's affinity, `crate::threads`.
+    if info_class == crate::threads::THREAD_AFFINITY_MASK {
+        return crate::threads::set_thread_affinity(k, Handle(h), info, length);
+    }
     if info_class != THREAD_IMPERSONATION_TOKEN {
         return Err(STATUS_INVALID_INFO_CLASS);
     }

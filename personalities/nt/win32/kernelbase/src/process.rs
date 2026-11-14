@@ -503,23 +503,48 @@ pub unsafe extern "system" fn LoadLibraryExW(name: *const u16, file: Handle, fla
     };
     let s = nt::UnicodeString::new(&owned);
     let mut h = core::ptr::null_mut();
-    // Whether the module is mapped already: a load that maps it leaves the last error 0 (the
-    // `LoadLibraryExW` sheet: `winmm.dll`, not loaded yet, loaded with error 0; a loaded module
-    // leaves it as it was).
-    let mut mapped = core::ptr::null_mut();
-    // SAFETY: valid pointers.
-    let was_loaded =
-        unsafe { nt::LdrGetDllHandle(core::ptr::null(), core::ptr::null_mut(), &s, &mut mapped) }.is_success();
-    // SAFETY: valid pointers.
-    let st = unsafe { nt::LdrLoadDll(core::ptr::null(), core::ptr::null_mut(), &s, &mut h) };
-    if st.is_success() {
-        if !was_loaded {
-            set_last_error(0);
-        }
-        h
-    } else {
-        fail_status(st, core::ptr::null_mut())
+    // A name without a path is looked for in the directories the search flags name: the call's
+    // own, else the process's default (`SetDefaultDllDirectories`); none: the standard order.
+    let search = if has_path { None } else { search_path_for(flags) };
+    let search_ptr = search.as_ref().map_or(core::ptr::null(), |v| v.as_ptr());
+    let loaded_before: Vec<u64> = modules().into_iter().map(|(b, _)| b).collect();
+    // SAFETY: valid pointers; the search path is NUL-terminated.
+    let st = unsafe { nt::LdrLoadDll(search_ptr, core::ptr::null_mut(), &s, &mut h) };
+    if !st.is_success() {
+        return fail_status(st, core::ptr::null_mut());
     }
+    // A module the call newly loaded leaves the last error 0 (its initialisation runs code that
+    // sets it: the sheets of `SetDefaultDllDirectories` and `LoadLibraryExW`); one that was
+    // loaded already leaves it alone.
+    if !loaded_before.contains(&(h as u64)) {
+        set_last_error(0);
+    }
+    h
+}
+
+/// The `;`-separated, NUL-terminated search path a load with `flags` uses, or `None` for the
+/// standard search order (`poly_kernelbase::system::dll_search_dirs`).
+fn search_path_for(flags: u32) -> Option<Vec<u16>> {
+    let eff = poly_kernelbase::system::effective_search_flags(
+        flags,
+        DEFAULT_DLL_DIRECTORIES.load(core::sync::atomic::Ordering::Relaxed),
+    );
+    // The application's directory: the executable's path up to its last separator.
+    let mut exe = [0u16; 520];
+    // SAFETY: a 520-unit buffer; a NULL module is the executable.
+    let n = unsafe { GetModuleFileNameW(core::ptr::null_mut(), exe.as_mut_ptr(), 519) } as usize;
+    let end = exe[..n].iter().rposition(|&c| c == u16::from(b'\\')).unwrap_or(0);
+    let system32: Vec<u16> = "C:\\Windows\\System32".encode_utf16().collect();
+    let dirs = poly_kernelbase::system::dll_search_dirs(eff, &exe[..end], &system32)?;
+    let mut out: Vec<u16> = Vec::new();
+    for (i, d) in dirs.iter().enumerate() {
+        if i != 0 {
+            out.push(u16::from(b';'));
+        }
+        out.extend_from_slice(d);
+    }
+    out.push(0);
+    Some(out)
 }
 
 /// The process's default DLL directories (`SetDefaultDllDirectories`), 0

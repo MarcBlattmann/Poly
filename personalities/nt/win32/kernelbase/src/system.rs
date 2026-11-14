@@ -150,13 +150,73 @@ pub extern "system" fn SetProcessAffinityMask(process: Handle, mask: u64) -> i32
 /// process's), 0 with `ERROR_INVALID_PARAMETER` for a mask outside the
 /// process's.
 #[unsafe(no_mangle)]
-pub extern "system" fn SetThreadAffinityMask(_thread: Handle, mask: u64) -> u64 {
+pub extern "system" fn SetThreadAffinityMask(thread: Handle, mask: u64) -> u64 {
     let process = process_affinity();
     if !system::valid_affinity(mask, process) {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
-    process
+    // The thread's previous mask is `ThreadBasicInformation.AffinityMask`; the kernel moves the
+    // thread (`NtSetInformationThread(ThreadAffinityMask)`).
+    let mut info = [0u8; 48];
+    // SAFETY: a buffer of the class's size.
+    let st = unsafe { nt::NtQueryInformationThread(thread, 0, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
+    if !st.is_success() {
+        return fail_status(st, 0);
+    }
+    let previous = u64::from_le_bytes(info[32..40].try_into().expect("8 bytes"));
+    let bytes = mask.to_le_bytes();
+    // SAFETY: an 8-byte KAFFINITY.
+    let st = unsafe { nt::NtSetInformationThread(thread, 4, bytes.as_ptr(), 8) };
+    if !st.is_success() {
+        return fail_status(st, 0);
+    }
+    previous
 }
+
+/// `GetCurrentProcessorNumber`: the CPU the thread runs on now (`NtGetCurrentProcessorNumber`).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetCurrentProcessorNumber() -> u32 {
+    // SAFETY: a service without arguments.
+    unsafe { nt::NtGetCurrentProcessorNumber() }
+}
+
+/// `GetCurrentProcessorNumberEx(PPROCESSOR_NUMBER)`: group 0 and the CPU's number
+/// (`Group` u16, `Number` u8, `Reserved` u8; `winnt.h`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCurrentProcessorNumberEx(number: *mut u8) {
+    if number.is_null() {
+        return;
+    }
+    // SAFETY: the caller's PROCESSOR_NUMBER.
+    unsafe {
+        number.cast::<u16>().write_unaligned(0);
+        number.add(2).write(GetCurrentProcessorNumber() as u8);
+        number.add(3).write(0);
+    }
+}
+
+/// `GetProcessHandleCount(hProcess, pdwHandleCount)`: the open handles of the process
+/// (`NtQueryInformationProcess(ProcessHandleCount)`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetProcessHandleCount(process: Handle, count: *mut u32) -> i32 {
+    if count.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    let mut n = 0u32;
+    // SAFETY: a 4-byte buffer of the class's size.
+    let st = unsafe {
+        nt::NtQueryInformationProcess(process, PROCESS_HANDLE_COUNT, (&raw mut n).cast(), 4, core::ptr::null_mut())
+    };
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    // SAFETY: the caller's out-pointer.
+    unsafe { count.write_unaligned(n) };
+    TRUE
+}
+
+/// `ProcessHandleCount` (`ntddk.h`'s `PROCESSINFOCLASS`).
+const PROCESS_HANDLE_COUNT: u32 = 20;
 
 // ----- the processor ----------------------------------------------------------------
 

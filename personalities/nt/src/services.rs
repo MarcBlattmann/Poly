@@ -446,6 +446,11 @@ pub enum Service {
     /// `NtResumeProcess(ProcessHandle)`: the reverse, every thread of the
     /// process is resumed once.
     ResumeProcess,
+
+    // ----- processors (impl-chrome-s2)
+    /// `NtGetCurrentProcessorNumber()`: the number of the CPU the caller runs on, as the
+    /// return value.
+    GetCurrentProcessorNumber,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -630,6 +635,10 @@ pub const SECTION_SERVICES: [(Service, u32, &str); 2] = [
 pub const PROCESS_SUSPEND_SERVICES: [(Service, u32, &str); 2] =
     [(Service::SuspendProcess, 0x098, "NtSuspendProcess"), (Service::ResumeProcess, 0x099, "NtResumeProcess")];
 
+/// The processor the caller runs on, in the processes and threads group.
+pub const PROCESSOR_SERVICES: [(Service, u32, &str); 1] =
+    [(Service::GetCurrentProcessorNumber, 0x09A, "NtGetCurrentProcessorNumber")];
+
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
     SERVICES
@@ -645,6 +654,7 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(PROCESS_POLICY_SERVICES.iter())
         .chain(SECTION_SERVICES.iter())
         .chain(PROCESS_SUSPEND_SERVICES.iter())
+        .chain(PROCESSOR_SERVICES.iter())
 }
 
 impl Service {

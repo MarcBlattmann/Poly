@@ -71,6 +71,7 @@ extern crate alloc;
 pub mod advapi;
 pub mod cpu;
 pub mod env;
+pub mod errmode;
 pub mod error;
 pub mod exports;
 pub mod file;

@@ -85,6 +85,23 @@ pub fn class_size(class: u32) -> Option<usize> {
     }
 }
 
+/// `ProcessMemoryExhaustionInfo` (`PROCESS_MEMORY_EXHAUSTION_INFO`, 16 bytes), `ProcessTelemetryCoverageInfo`
+/// and `ProcessOverrideSubsequentPrefetchParameter` (a `DWORD`): classes `SetProcessInformation`
+/// checks the size of although Poly does not act on them (read: `ERROR_INVALID_PARAMETER`).
+pub const PROCESS_MEMORY_EXHAUSTION_INFO: u32 = 1;
+pub const PROCESS_TELEMETRY_COVERAGE_INFO: u32 = 6;
+pub const PROCESS_OVERRIDE_SUBSEQUENT_PREFETCH_PARAMETER: u32 = 10;
+
+/// The size of the structure `SetProcessInformation` expects for a class, `None` for a class
+/// nothing defines.
+pub fn set_class_size(class: u32) -> Option<usize> {
+    match class {
+        PROCESS_MEMORY_EXHAUSTION_INFO | PROCESS_TELEMETRY_COVERAGE_INFO => Some(16),
+        PROCESS_OVERRIDE_SUBSEQUENT_PREFETCH_PARAMETER => Some(4),
+        c => class_size(c),
+    }
+}
+
 fn u32_at(b: &[u8], at: usize) -> u32 {
     u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]])
 }
@@ -132,13 +149,15 @@ pub fn get(state: &ProcessState, memory: &AppMemory, class: u32, size: usize) ->
 /// throttling, leap seconds). The read-only classes and unknown ones are
 /// `ERROR_INVALID_PARAMETER`, as is a value outside the header's range.
 pub fn set(state: &mut ProcessState, class: u32, data: &[u8]) -> Result<(), u32> {
-    let want = match class {
-        PROCESS_MEMORY_PRIORITY | PROCESS_POWER_THROTTLING | PROCESS_LEAP_SECOND_INFO => class_size(class),
-        _ => None,
-    }
-    .ok_or(ERROR_INVALID_PARAMETER)?;
+    // The sheet (`SetProcessInformation`, rules `other_classes` and the size rules): a class
+    // nothing defines (5, 99) is 87; a class with a structure of its own, whatever it is, is 24
+    // for a size that is not the structure's; one that cannot be set is 87 for the right size.
+    let want = set_class_size(class).ok_or(ERROR_INVALID_PARAMETER)?;
     if data.len() != want {
         return Err(ERROR_BAD_LENGTH);
+    }
+    if !matches!(class, PROCESS_MEMORY_PRIORITY | PROCESS_POWER_THROTTLING | PROCESS_LEAP_SECOND_INFO) {
+        return Err(ERROR_INVALID_PARAMETER);
     }
     match class {
         PROCESS_MEMORY_PRIORITY => {
@@ -279,6 +298,23 @@ mod tests {
         assert_eq!(set(&mut s, PROCESS_PROTECTION_LEVEL_INFO, &[0; 4]), Err(ERROR_INVALID_PARAMETER));
         assert_eq!(set(&mut s, PROCESS_MACHINE_TYPE_INFO, &[0; 8]), Err(ERROR_INVALID_PARAMETER));
         assert_eq!(set(&mut s, PROCESS_MEMORY_PRIORITY, &[5, 0]), Err(ERROR_BAD_LENGTH));
+        assert_eq!(s, ProcessState::NEW);
+    }
+
+    #[test]
+    fn set_judges_the_class_then_the_size_then_whether_it_can_be_set() {
+        let mut s = ProcessState::NEW;
+        // The sheet (`other_classes`): 5 and 99 are 87; 6 and 10 with 12 bytes are 24.
+        for class in [5, 99, 0xFFFF_FFFF] {
+            assert_eq!(set(&mut s, class, &[0; 12]), Err(ERROR_INVALID_PARAMETER), "{class}");
+        }
+        for class in [1, 6, 10] {
+            assert_eq!(set(&mut s, class, &[0; 12]), Err(ERROR_BAD_LENGTH), "{class}");
+        }
+        // The right size of a class that cannot be set is 87.
+        for (class, size) in [(1, 16), (6, 16), (10, 4), (7, 4), (9, 8)] {
+            assert_eq!(set(&mut s, class, &vec![0; size]), Err(ERROR_INVALID_PARAMETER), "{class}");
+        }
         assert_eq!(s, ProcessState::NEW);
     }
 

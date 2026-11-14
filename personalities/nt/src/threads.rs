@@ -10,11 +10,12 @@ use crate::abi;
 use crate::consts::*;
 use crate::kernel::{NtKernel, ThreadCreate};
 use crate::objects::{Result, return_handle};
+use crate::procattrs::ProcAttrs;
 use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::access::{
-    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION, THREAD_SET_CONTEXT,
-    THREAD_SUSPEND_RESUME, THREAD_TERMINATE,
+    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_SET_INFORMATION, THREAD_GET_CONTEXT,
+    THREAD_QUERY_INFORMATION, THREAD_SET_CONTEXT, THREAD_SET_INFORMATION, THREAD_SUSPEND_RESUME, THREAD_TERMINATE,
 };
 use poly_ntobj::status::*;
 use poly_ntobj::{Handle, NtStatus, ObjectType, ProcessId, ThreadRef};
@@ -233,6 +234,7 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         join_creator_jobs: join,
         mitigation,
         desktop,
+        error_mode: extra.error_mode,
         process_security,
         thread_security,
     };
@@ -248,7 +250,8 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
 /// { kind: u64, value: u64, size: u64 } * count }`; `kind` 1 is the handle
 /// list (`value` points at `size` bytes of handles), 2 the mitigation policy
 /// (`value` points at the two 64-bit words, `size` 8 or 16), 3 the job list (as the handle list),
-/// 4 the breakaway request, 5 the child process policy (`value` is the 32-bit value).
+/// 4 the breakaway request, 5 the creator's error mode (the 32-bit `value`), 6 the child
+/// process policy (`value` is the 32-bit value).
 #[derive(Default)]
 struct CreateAttributes {
     handle_list: Option<Vec<Handle>>,
@@ -259,6 +262,8 @@ struct CreateAttributes {
     child_policy: u32,
     jobs: Vec<u64>,
     breakaway: bool,
+    /// The creator's error mode (`SetErrorMode`), which the child starts with.
+    error_mode: u32,
 }
 
 impl CreateAttributes {
@@ -297,9 +302,10 @@ fn read_create_attributes<K: NtKernel>(k: &mut K, at: u64) -> Result<CreateAttri
                     out.mitigation[1] = abi::read_u64(k, value + 8)?;
                 }
             }
-            5 => out.child_policy = value as u32,
+            6 => out.child_policy = value as u32,
             3 => out.jobs = list(k)?,
             4 => out.breakaway = value != 0,
+            5 => out.error_mode = value as u32,
             _ => {}
         }
     }
@@ -387,6 +393,21 @@ pub fn open_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatu
 pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, class, info, length] = abi::args::<K, 4>(k, regs)?;
     const PROCESS_MITIGATION_POLICY: u64 = 52;
+    // The values a process keeps for itself and a child inherits (`crate::procattrs`): any
+    // process whose handle has `PROCESS_SET_INFORMATION`.
+    if ProcAttrs::class_size(class).is_some() {
+        let size = ProcAttrs::class_size(class).unwrap_or(0);
+        if length as usize != size {
+            return Err(STATUS_INFO_LENGTH_MISMATCH);
+        }
+        let pid = process_of(k, Handle(h), PROCESS_SET_INFORMATION)?;
+        let mut data = alloc::vec![0u8; size];
+        abi::read(k, info, &mut data)?;
+        return k.with_state(|sys, _, _| {
+            let attrs = sys.proc_attrs.entry(pid).or_insert_with(|| ProcAttrs::new(0));
+            attrs.set(class, &data).map(|()| STATUS_SUCCESS)
+        });
+    }
     if class != PROCESS_MITIGATION_POLICY {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
@@ -443,6 +464,20 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
     if class == 52 {
         return query_mitigation(k, h, buf, length);
     }
+    // `ProcessHandleCount` (20, `ntddk.h`): a `ULONG`, the open handles of the process
+    // (`GetProcessHandleCount`).
+    if class == 20 {
+        let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
+        let n = k.with_state(|sys, _, _| sys.objects.process_handle_count(pid).unwrap_or(0));
+        return write_info(k, buf, length, ret, &(n as u32).to_le_bytes());
+    }
+    if ProcAttrs::class_size(class).is_some() {
+        let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
+        let bytes = k.with_state(|sys, _, _| {
+            sys.proc_attrs.get(&pid).copied().unwrap_or(ProcAttrs::new(0)).get(class).expect("a class it keeps")
+        });
+        return write_info(k, buf, length, ret, &bytes);
+    }
     if class as u32 != PROCESS_BASIC_INFORMATION {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
@@ -480,7 +515,32 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
     b[8..16].copy_from_slice(&teb.to_le_bytes());
     b[16..24].copy_from_slice(&u64::from(pid.0).to_le_bytes());
     b[24..32].copy_from_slice(&tid.0.to_le_bytes());
+    // `AffinityMask`: the CPUs the thread may run on (a thread that has ended: 0).
+    let affinity = k.thread_affinity(tid).unwrap_or(0);
+    b[32..40].copy_from_slice(&affinity.to_le_bytes());
     write_info(k, buf, length, ret, &b)
+}
+
+/// `ThreadAffinityMask` (`ntddk.h`'s `THREADINFOCLASS`): `NtSetInformationThread` takes a
+/// `KAFFINITY`.
+pub const THREAD_AFFINITY_MASK: u64 = 4;
+
+/// `NtSetInformationThread(ThreadAffinityMask)`: the thread may run only on the CPUs of the mask
+/// (those the system has; a mask with none is `STATUS_INVALID_PARAMETER`). Needs
+/// `THREAD_SET_INFORMATION`.
+pub fn set_thread_affinity<K: NtKernel>(k: &mut K, h: Handle, info: u64, length: u64) -> Result<NtStatus> {
+    let tid = thread_of(k, h, THREAD_SET_INFORMATION)?;
+    if length != 8 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let mask = abi::read_u64(k, info)?;
+    k.set_thread_affinity(tid, mask)?;
+    Ok(STATUS_SUCCESS)
+}
+
+/// `NtGetCurrentProcessorNumber()`: the number of the CPU the calling thread runs on.
+pub fn get_current_processor_number<K: NtKernel>(k: &mut K, _regs: &SyscallRegs) -> Result<NtStatus> {
+    Ok(NtStatus(k.current_processor()))
 }
 
 pub fn suspend_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {

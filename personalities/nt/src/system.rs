@@ -77,6 +77,10 @@ pub struct NtSystem {
 
     /// The window stations and desktops and who is on them (ADR 0183).
     pub winsta: crate::winsta::WinSta,
+    /// What a process keeps that another can set and a child inherits: error mode, memory
+    /// priority, power throttling ([`crate::procattrs`]). A process without an entry has the
+    /// defaults.
+    pub proc_attrs: BTreeMap<ProcessId, crate::procattrs::ProcAttrs>,
 
     sections: BTreeMap<u64, Section>,
     next_key: u64,
@@ -116,6 +120,7 @@ impl NtSystem {
             win32k: crate::win32k::Win32k::default(),
             jobs: crate::job::Jobs::default(),
             winsta: crate::winsta::WinSta::default(),
+            proc_attrs: BTreeMap::new(),
             sections: BTreeMap::new(),
             next_key: 1,
         }
@@ -180,6 +185,7 @@ impl NtSystem {
                 ObjectType::IoCompletion => self.io.port_deleted(d.cookie),
                 ObjectType::Process => {
                     self.process_exits.remove(&ProcessId(d.cookie as u32));
+                    self.proc_attrs.remove(&ProcessId(d.cookie as u32));
                     self.jobs.process_forgotten(ProcessId(d.cookie as u32));
                 }
                 ObjectType::Job => self.jobs.deleted(d.cookie),

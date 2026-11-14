@@ -618,6 +618,25 @@ impl NtKernel for Kernel {
         sched::resume(self.pid, &self.memory, thread)
     }
 
+    fn current_processor(&mut self) -> u32 {
+        crate::thread::this_cpu() as u32
+    }
+
+    fn thread_affinity(&mut self, thread: ThreadRef) -> Result<u64, NtStatus> {
+        let id = sched::kernel_thread(self.pid, self.tid, thread)?;
+        let mask = crate::thread::affinity(id).ok_or(poly_ntobj::status::STATUS_INVALID_CID)?;
+        Ok(mask.intersection(crate::thread::online_cpus()).bits())
+    }
+
+    fn set_thread_affinity(&mut self, thread: ThreadRef, mask: u64) -> Result<(), NtStatus> {
+        let id = sched::kernel_thread(self.pid, self.tid, thread)?;
+        let cpus = crate::thread::CpuSet::from_bits(mask).intersection(crate::thread::online_cpus());
+        if cpus.is_empty() {
+            return Err(poly_ntobj::status::STATUS_INVALID_PARAMETER);
+        }
+        crate::thread::set_affinity(id, cpus).map_err(|_| poly_ntobj::status::STATUS_INVALID_PARAMETER)
+    }
+
     fn suspend_process(&mut self, pid: ProcessId) -> Result<(), NtStatus> {
         sched::suspend_process(pid)
     }
@@ -916,6 +935,8 @@ struct HandlesFor {
     mitigation: poly_personality_nt::MitigationState,
     /// The station and desktop it starts on (ADR 0183).
     desktop: poly_personality_nt::winsta::Start,
+    /// Its creator's error mode (`SetErrorMode`), which it starts with.
+    error_mode: u32,
     /// The descriptors of its process and first thread objects (`lpProcessAttributes`,
     /// `lpThreadAttributes`), applied once the creator's handles are open.
     process_security: Option<Vec<u8>>,
@@ -960,6 +981,12 @@ fn start_params(
         if let Some(h) = handles {
             proc.set_mitigation(h.mitigation);
             s.sys.winsta.begin(pid, h.desktop.clone());
+        }
+        match handles.map_or(0, |h| h.error_mode) {
+            0 => {}
+            mode => {
+                s.sys.proc_attrs.insert(pid, poly_personality_nt::procattrs::ProcAttrs::new(mode));
+            }
         }
         proc.image_name = s.sys.io.dos_file_name(&params.image_path);
         let mut b = MemBackend { memory, sections: &mut s.sections };
@@ -1091,6 +1118,7 @@ fn create_process(
         join_creator_jobs: req.join_creator_jobs,
         mitigation: req.mitigation,
         desktop: req.desktop,
+        error_mode: req.error_mode,
         process_security: req.process_security,
         thread_security: req.thread_security,
     };

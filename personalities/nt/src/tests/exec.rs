@@ -234,6 +234,81 @@ fn a_whole_process_is_suspended_and_resumed_by_handle() {
     assert_eq!(Service::ResumeProcess.name(), "NtResumeProcess");
 }
 
+/// The values a process keeps for itself (`crate::procattrs`): error mode, memory priority and
+/// power throttling go through `NtSetInformationProcess` / `NtQueryInformationProcess`, a wrong
+/// size or value is refused, a new process starts with its creator's error mode, and the handle
+/// count counts handles.
+#[test]
+fn process_values_are_set_and_read_back() {
+    use crate::procattrs::*;
+    let mut f = Fake::new();
+    let word = |f: &mut Fake, v: u32| f.put(&v.to_le_bytes());
+    let out = f.alloc(16);
+    let read = |f: &mut Fake, class: u64, n: u64| {
+        let st = f.call(Service::QueryInformationProcess, &[SELF, class, out, n, 0]);
+        (st, f.bytes_at(out, n as usize))
+    };
+    // Defaults: error mode 0, memory priority 5, power throttling Version 1 with empty masks.
+    assert_eq!(read(&mut f, PROCESS_DEFAULT_HARD_ERROR_MODE, 4), (STATUS_SUCCESS, vec![0; 4]));
+    assert_eq!(read(&mut f, PROCESS_MEMORY_PRIORITY, 4), (STATUS_SUCCESS, vec![5, 0, 0, 0]));
+    assert_eq!(read(&mut f, PROCESS_POWER_THROTTLING_STATE, 12).1, vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    // Set and read back.
+    let p = word(&mut f, 0x8003);
+    assert_eq!(f.call(Service::SetInformationProcess, &[SELF, PROCESS_DEFAULT_HARD_ERROR_MODE, p, 4]), STATUS_SUCCESS);
+    assert_eq!(read(&mut f, PROCESS_DEFAULT_HARD_ERROR_MODE, 4).1, 0x8003u32.to_le_bytes());
+    let p = word(&mut f, 2);
+    assert_eq!(f.call(Service::SetInformationProcess, &[SELF, PROCESS_MEMORY_PRIORITY, p, 4]), STATUS_SUCCESS);
+    assert_eq!(read(&mut f, PROCESS_MEMORY_PRIORITY, 4).1, 2u32.to_le_bytes());
+    let p = word(&mut f, 9);
+    assert_eq!(
+        f.call(Service::SetInformationProcess, &[SELF, PROCESS_MEMORY_PRIORITY, p, 4]),
+        STATUS_INVALID_PARAMETER
+    );
+    assert_eq!(
+        f.call(Service::SetInformationProcess, &[SELF, PROCESS_MEMORY_PRIORITY, p, 8]),
+        STATUS_INFO_LENGTH_MISMATCH
+    );
+    let throttle = f.put(&[1u32, 5, 5].iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>());
+    assert_eq!(
+        f.call(Service::SetInformationProcess, &[SELF, PROCESS_POWER_THROTTLING_STATE, throttle, 12]),
+        STATUS_SUCCESS
+    );
+    assert_eq!(read(&mut f, PROCESS_POWER_THROTTLING_STATE, 12).1[4..], [5, 0, 0, 0, 5, 0, 0, 0]);
+    // A buffer that is too small for a query.
+    assert_eq!(
+        f.call(Service::QueryInformationProcess, &[SELF, PROCESS_POWER_THROTTLING_STATE, out, 4, 0]),
+        STATUS_INFO_LENGTH_MISMATCH
+    );
+    // A handle that is none.
+    let p = word(&mut f, 1);
+    assert_eq!(f.call(Service::SetInformationProcess, &[0, PROCESS_MEMORY_PRIORITY, p, 4]), STATUS_INVALID_HANDLE);
+    // The handle count: one more handle, one more.
+    let count = |f: &mut Fake| u32::from_le_bytes(read(f, 20, 4).1.try_into().unwrap());
+    let before = count(&mut f);
+    let h = f.alloc(8);
+    assert_eq!(f.call(Service::CreateEvent, &[h, 0x1f0003, 0, 0, 0]), STATUS_SUCCESS);
+    assert_eq!(count(&mut f), before + 1);
+    let h = f.u64_at(h);
+    assert_eq!(f.call(Service::Close, &[h]), STATUS_SUCCESS);
+    assert_eq!(count(&mut f), before);
+}
+
+/// `NtGetCurrentProcessorNumber` and the thread's affinity reach the kernel; the thread's
+/// `ThreadBasicInformation` carries the affinity mask.
+#[test]
+fn processor_number_and_thread_affinity() {
+    let mut f = Fake::new();
+    assert_eq!(f.call(Service::GetCurrentProcessorNumber, &[]), NtStatus(0));
+    assert_eq!(Service::GetCurrentProcessorNumber.name(), "NtGetCurrentProcessorNumber");
+    let out = f.alloc(48);
+    assert_eq!(f.call(Service::QueryInformationThread, &[(-2i64) as u64, 0, out, 48, 0]), STATUS_SUCCESS);
+    assert_eq!(f.u64_at(out + 32), 1);
+    // A mask of 8 bytes only, through a handle that can set information.
+    let p = f.put_u64(0xF);
+    assert_eq!(f.call(Service::SetInformationThread, &[(-2i64) as u64, 4, p, 8]), STATUS_SUCCESS);
+    assert_eq!(f.call(Service::SetInformationThread, &[(-2i64) as u64, 4, p, 4]), STATUS_INFO_LENGTH_MISMATCH);
+}
+
 #[test]
 fn unknown_services_are_not_implemented() {
     let mut f = Fake::new();

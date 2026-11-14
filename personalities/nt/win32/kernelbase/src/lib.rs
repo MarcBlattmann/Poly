@@ -22,6 +22,7 @@ use poly_win32_rt as _;
 mod attrlist;
 mod base;
 mod console;
+mod errmode;
 mod except;
 mod file;
 mod fileex;

@@ -464,13 +464,18 @@ unsafe fn create(
         record(2, parsed.mitigation.as_ptr() as u64, 16);
     }
     if let Some(v) = parsed.child_policy {
-        record(5, u64::from(v), 4);
+        record(6, u64::from(v), 4);
     }
     if !job_words.is_empty() {
         record(3, job_words.as_ptr() as u64, job_words.len() as u64 * 8);
     }
     if flags & CREATE_BREAKAWAY_FROM_JOB != 0 {
         record(4, 1, 0);
+    }
+    // A child starts with the error mode in force when it is created (`SetErrorMode`).
+    let error_mode = crate::errmode::process_mode();
+    if error_mode != 0 {
+        record(5, u64::from(error_mode), 0);
     }
     blob.insert(0, records);
     let attribute_blob = if records == 0 { core::ptr::null() } else { blob.as_ptr() as *const u8 };

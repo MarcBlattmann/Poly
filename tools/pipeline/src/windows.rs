@@ -894,12 +894,15 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
     } else {
         Vec::new()
     };
+    /// The processors a Windows test boots with: `GetCurrentProcessorNumber`'s recorded test pins a
+    /// thread to each of the first four.
+    const WINDOWS_TEST_CPUS: u32 = 4;
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
         let fonts = if dwrite(t) || creates_gdi_fonts(t) { fonts.clone() } else { Vec::new() };
         let image = poly::initramfs_with(&bytes, &fonts)?;
         let args = format!("{}{}", poly_kernel_args(), session_kernel_args(t.session.as_deref()));
-        let (done, log, _) = target.boot_log(&t.name, &image, work, &args)?;
+        let (done, log, _) = target.boot_log_cpus(&t.name, &image, work, &args, WINDOWS_TEST_CPUS)?;
         let timed_out = done.exit == crate::trace::Exit::Timeout;
         let mut r = parse_poly_serial(&t.name, &log, &t.exe_sha256, timed_out)?;
         r.ms = Some(done.duration_ns / 1_000_000);
