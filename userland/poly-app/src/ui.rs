@@ -8,8 +8,8 @@
 //! popovers with Alpine's shadow — plus a one-line text editor for search
 //! and rename fields.
 //!
-//! Layout is in logical pixels; everything here scales by the window's
-//! integer scale when it draws, as the settings window does.
+//! Layout is in logical pixels; everything here converts by the window's
+//! scale (a fraction too, ADR 0179) when it draws, as the settings window does.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -17,7 +17,7 @@ use poly_shell::draw::{Face, Fonts, Style, Text, fill, rounded_border, rounded_r
 use poly_shell::icons::Icon;
 use poly_shell::theme::{pal, settings as t};
 use poly_wayland::compose::paint::{Radii, Shadow};
-use poly_wayland::compose::{Framebuffer, Rect};
+use poly_wayland::compose::{Framebuffer, Rect, Scale};
 
 /// Where the desktop's fonts are (the compositor's `SHELL_FONTS`).
 pub const FONTS: &str = "/usr/share/poly/fonts";
@@ -44,7 +44,7 @@ pub const EYEBROW: Style = Style::new(Face::Semibold, t::EYEBROW_SIZE).tracking(
 /// The fonts and the scale an app draws with.
 pub struct Ui {
     pub text: Text,
-    pub scale: i32,
+    pub scale: Scale,
 }
 
 impl core::fmt::Debug for Ui {
@@ -55,7 +55,7 @@ impl core::fmt::Debug for Ui {
 
 impl Ui {
     pub fn new(fonts: Fonts) -> Ui {
-        Ui { text: Text::with_fonts(fonts), scale: 1 }
+        Ui { text: Text::with_fonts(fonts), scale: Scale::ONE }
     }
 
     /// Logical `r` in physical pixels.
@@ -65,12 +65,12 @@ impl Ui {
 
     /// The width of `s` in logical pixels.
     pub fn measure(&self, s: &str, st: Style) -> i32 {
-        (self.text.measure(s, st.scaled(self.scale)) / self.scale as f32 + 0.999) as i32
+        (self.text.measure(s, st.scaled(self.scale)) / self.scale.factor() + 0.999) as i32
     }
 
     /// `s` cut with an ellipsis to fit `max_w` logical pixels.
     pub fn fit(&self, s: &str, st: Style, max_w: i32) -> String {
-        self.text.fit_style(s, st.scaled(self.scale), (max_w * self.scale) as f32)
+        self.text.fit_style(s, st.scaled(self.scale), self.scale.px(max_w) as f32)
     }
 
     /// Fill logical `r`.
@@ -87,7 +87,7 @@ impl Ui {
     /// A one-logical-pixel border inside a rounded rectangle.
     #[allow(clippy::too_many_arguments)]
     pub fn border(&self, fb: &mut dyn Framebuffer, clip: Rect, r: Rect, radius: i32, rgb: u32, alpha: u8) {
-        rounded_border(fb, clip, self.px(r), radius * self.scale, self.scale, rgb, alpha);
+        rounded_border(fb, clip, self.px(r), radius * self.scale, self.scale.line(1), rgb, alpha);
     }
 
     /// Text with its baseline centred in the logical row `top`..`top + h`,
@@ -109,7 +109,7 @@ impl Ui {
         let st = st.scaled(s_);
         let base = self.text.centre(top * s_, h * s_, st);
         let end = self.text.draw_style(fb, clip, (x * s_) as f32, base, max_x * s_, s, st, rgb, 255);
-        (end / s_ as f32) as i32
+        (end / s_.factor()) as i32
     }
 
     /// An icon of `size` logical pixels at (`x`, `y`).
@@ -140,8 +140,9 @@ impl Ui {
         let grown = Rect::new(page.x, page.y, page.width + 2 * r as i32, page.height + 2 * r as i32);
         let clip = clip.intersect(&page);
         poly_wayland::compose::paint::fill_rounded(fb, clip, grown, Radii::all(r), pal().line, 255);
-        let inner = Rect::new(grown.x + s, grown.y + s, grown.width - s, grown.height - s);
-        poly_wayland::compose::paint::fill_rounded(fb, clip, inner, Radii::all(r - s as f32), pal().s1, 255);
+        let inner =
+            Rect::new(grown.x + s.line(1), grown.y + s.line(1), grown.width - s.line(1), grown.height - s.line(1));
+        poly_wayland::compose::paint::fill_rounded(fb, clip, inner, Radii::all(r - s.factor()), pal().s1, 255);
     }
 
     /// A square button with an icon (the header's arrows): a ghost fill

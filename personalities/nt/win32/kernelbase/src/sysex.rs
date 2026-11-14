@@ -654,13 +654,18 @@ pub unsafe extern "system" fn GetSystemPowerStatus(out: *mut u8) -> i32 {
     TRUE
 }
 
+/// What the machine spent before the kernel's clock started (firmware, boot loader): the system
+/// is "up" this long when the kernel begins to count (QueryUnbiasedInterruptTimePrecise sheet:
+/// "the system has been up for more than a second"). 100 ns units: ten seconds.
+const BEFORE_THE_KERNEL_CLOCK: u64 = 10 * 10_000_000;
+
 /// 100 ns units since the system started, not counting time asleep (Poly
 /// never sleeps).
 fn interrupt_time() -> u64 {
     let (mut c, mut f) = (0i64, 0i64);
     // SAFETY: valid pointers.
     unsafe { nt::NtQueryPerformanceCounter(&mut c, &mut f) };
-    (u128::from(c as u64) * 10_000_000 / u128::from((f as u64).max(1))) as u64
+    BEFORE_THE_KERNEL_CLOCK + (u128::from(c as u64) * 10_000_000 / u128::from((f as u64).max(1))) as u64
 }
 
 /// `QueryUnbiasedInterruptTimePrecise` (`realtimeapiset.h`): no result.
@@ -681,4 +686,24 @@ pub unsafe extern "system" fn QueryUnbiasedInterruptTime(out: *mut u64) -> i32 {
     // SAFETY: the caller's out-pointer.
     unsafe { out.write_unaligned(interrupt_time()) };
     TRUE
+}
+
+/// `QueryInterruptTime` (`realtimeapiset.h`): the interrupt time, which also counts time spent
+/// asleep; Poly never sleeps, so it is the unbiased time. No result.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn QueryInterruptTime(out: *mut u64) {
+    if !out.is_null() {
+        // SAFETY: the caller's out-pointer.
+        unsafe { out.write_unaligned(interrupt_time()) };
+    }
+}
+
+/// `QueryInterruptTimePrecise` (`realtimeapiset.h`): as `QueryInterruptTime`, read at the moment
+/// of the call. No result.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn QueryInterruptTimePrecise(out: *mut u64) {
+    if !out.is_null() {
+        // SAFETY: the caller's out-pointer.
+        unsafe { out.write_unaligned(interrupt_time()) };
+    }
 }

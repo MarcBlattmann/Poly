@@ -1063,10 +1063,76 @@ unsafe fn step9() {
     // comctl32: an INITCOMMONCONTROLSEX of 8 bytes is accepted.
     let init: unsafe extern "system" fn(*const u32) -> i32 =
         core::mem::transmute(delay_load("COMCTL32.dll", c"InitCommonControlsEx"));
-    let icc = [8u32, 0xFFFF];
+    let icc = [8u32, 0xFF]; // ICC_WIN95_CLASSES, what Chrome asks
     check_eq(init(icc.as_ptr()) as usize, 1);
-    let bad = [4u32, 0xFFFF];
+    let bad = [4u32, 0xFF];
     check_eq(init(bad.as_ptr()) as usize, 0);
+    // The sheet (version 5.82): the bits 0x1 to 0x2000 and 0 are accepted; ICC_STANDARD_CLASSES,
+    // ICC_LINK_CLASS, masks holding them and undefined bits are not.
+    for (mask, want) in
+        [(0u32, 1usize), (0x7FF, 1), (0x3FFF, 1), (0x4000, 0), (0x8000, 0), (0xFFFF, 0), (0xFFFF_0000, 0)]
+    {
+        let a = [8u32, mask];
+        check_eq(init(a.as_ptr()) as usize, want);
+    }
+    // WTSRegisterSessionNotification counts: each register needs its own unregister.
+    check_eq(register(desktop, 0) as usize, 1);
+    check_eq(register(desktop, 1) as usize, 1);
+    check_eq(unregister(desktop) as usize, 1);
+    check_eq(unregister(desktop) as usize, 1);
+    check_fail(unregister(desktop) as usize, 2);
+    // WTSSessionInfo (24): 216 bytes, State at 0, SessionId at 4.
+    check_eq(query(0, u32::MAX, 24, &mut block, &mut bytes) as usize, 1);
+    check_got(!block.is_null() && bytes == 216 && block.cast::<u32>().read_unaligned() == 0, bytes);
+    free(block);
+
+    // QueryUnbiasedInterruptTime and the interrupt time pair: one clock, 100 ns units.
+    let unbiased: unsafe extern "system" fn(*mut u64) -> i32 =
+        core::mem::transmute(delay_load("kernel32.dll", c"QueryUnbiasedInterruptTime"));
+    let interrupt: unsafe extern "system" fn(*mut u64) =
+        core::mem::transmute(delay_load("kernelbase.dll", c"QueryInterruptTimePrecise"));
+    let (mut coarse, mut fine) = (0u64, 0u64);
+    check_eq(unbiased(&mut coarse) as usize, 1);
+    interrupt(&mut fine);
+    check_got(coarse > 10_000_000 && fine >= coarse, fine as u32);
+
+    // A thread made with an empty DACL: the creator's handle keeps its access, a reduced copy
+    // cannot be given more (DuplicateHandle sheet, rule `empty_dacl`).
+    let init_acl: unsafe extern "system" fn(*mut u8, u32, u32) -> i32 =
+        core::mem::transmute(delay_load("ADVAPI32.dll", c"InitializeAcl"));
+    let init_sd: unsafe extern "system" fn(*mut u8, u32) -> i32 =
+        core::mem::transmute(delay_load("ADVAPI32.dll", c"InitializeSecurityDescriptor"));
+    let set_dacl: unsafe extern "system" fn(*mut u8, i32, *mut u8, i32) -> i32 =
+        core::mem::transmute(delay_load("ADVAPI32.dll", c"SetSecurityDescriptorDacl"));
+    let create_thread: unsafe extern "system" fn(*const u8, usize, *const u8, *mut u8, u32, *mut u32) -> isize =
+        core::mem::transmute(delay_load("kernel32.dll", c"CreateThread"));
+    let duplicate: unsafe extern "system" fn(isize, isize, isize, *mut isize, u32, i32, u32) -> i32 =
+        core::mem::transmute(delay_load("kernel32.dll", c"DuplicateHandle"));
+    let mut acl = [0u8; 8];
+    let mut sd = [0u8; 64];
+    check_eq(init_acl(acl.as_mut_ptr(), 8, 2) as usize, 1);
+    check_eq(init_sd(sd.as_mut_ptr(), 1) as usize, 1);
+    check_eq(set_dacl(sd.as_mut_ptr(), 1, acl.as_mut_ptr(), 0) as usize, 1);
+    // SECURITY_ATTRIBUTES: nLength 24, lpSecurityDescriptor at 8, bInheritHandle at 16.
+    let mut sa = [0u8; 24];
+    sa[0] = 24;
+    sa[8..16].copy_from_slice(&(sd.as_ptr() as u64).to_le_bytes());
+    // CREATE_SUSPENDED: the thread never runs.
+    let thread =
+        create_thread(sa.as_ptr(), 0, s1test_main as *const u8, core::ptr::null_mut(), 4, core::ptr::null_mut());
+    check_got(thread != 0, GetLastError());
+    let me = GetCurrentProcess();
+    let (mut small, mut more) = (0isize, 1isize);
+    // THREAD_QUERY_LIMITED_INFORMATION (0x800) from the creator's own handle: a part of it.
+    check_eq(duplicate(me, thread, me, &mut small, 0x800, 0, 0) as usize, 1);
+    // THREAD_TERMINATE (0x1) from the reduced handle: the descriptor allows nobody anything.
+    check_eq(duplicate(me, small, me, &mut more, 0x1, 0, 0) as usize, 0);
+    check_got(GetLastError() == 5 && more == 0, GetLastError());
+    // READ_CONTROL alone is the owner's right.
+    check_eq(duplicate(me, small, me, &mut more, 0x2_0000, 0, 0) as usize, 1);
+    CloseHandle(more);
+    CloseHandle(small);
+    CloseHandle(thread);
 
     // The power API set: ProcessorInformation (11) fills one 24-byte record per processor.
     let power: unsafe extern "system" fn(u32, *const u8, u32, *mut u8, u32) -> u32 =
@@ -1119,8 +1185,8 @@ unsafe fn step9() {
     let device = w::<8>("\\Device\\");
     check_got(n > 20 && name[..8] == device[..8] && name[n] == 0, n as u32);
     check_got(name[n - 10..n].iter().zip("s1test.exe".encode_utf16()).all(|(a, b)| *a == b), n as u32);
-    // An address in no image.
-    check_fail(K32GetMappedFileNameW(GetCurrentProcess(), 0x10, name.as_mut_ptr(), 260) as usize, 1006);
+    // An address nothing is mapped at: ERROR_UNEXP_NET_ERR (59) on Windows (the K32GetMappedFileNameW sheet).
+    check_fail(K32GetMappedFileNameW(GetCurrentProcess(), 0x10, name.as_mut_ptr(), 260) as usize, 59);
 
     // shell32: FOLDERID_LocalAppData is %LOCALAPPDATA%, in a CoTaskMemAlloc block.
     let local_app_data: [u8; 16] =
@@ -1132,14 +1198,30 @@ unsafe fn step9() {
     let n = GetEnvironmentVariableW(variable.as_ptr(), want.as_mut_ptr(), 260) as usize;
     check_got(n > 3 && (0..=n).all(|i| *path.add(i) == want[i]), n as u32);
     CoTaskMemFree(path.cast());
-    // An id that is no known folder: E_INVALIDARG and a null path.
-    check_hr(SHGetKnownFolderPath(&CLSID_NOWHERE, 0, core::ptr::null_mut(), &mut path) as i32, 0x8007_0057);
+    // An id that is no known folder: HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) and a null path (the sheet).
+    check_hr(SHGetKnownFolderPath(&CLSID_NOWHERE, 0, core::ptr::null_mut(), &mut path) as i32, 0x8007_0002);
     check_got(path.is_null(), 0);
 
     // The property store of a window: what is set is read back, by a second store object too.
     let iid_store: [u8; 16] =
         [0xEB, 0x8E, 0x6D, 0x88, 0xF2, 0x8C, 0x46, 0x44, 0x8D, 0x02, 0xCD, 0xBA, 0x1D, 0xBD, 0xCF, 0x99];
-    let hwnd = 0x4_0102usize;
+    // A real window: the store of a window that is gone takes no value (the sheet).
+    let class_name = w::<11>("PolyS1Test");
+    let hwnd = CreateWindowExW(
+        0,
+        class_name.as_ptr(),
+        class_name.as_ptr(),
+        0,
+        0,
+        0,
+        0,
+        0,
+        HWND_MESSAGE,
+        0,
+        0,
+        core::ptr::null_mut(),
+    );
+    check_got(hwnd != 0, GetLastError());
     let mut store: *mut *const [usize; 8] = core::ptr::null_mut();
     check_hr(SHGetPropertyStoreForWindow(hwnd, &iid_store, (&raw mut store).cast()) as i32, S_OK);
     check_got(!store.is_null(), 0);
@@ -1180,6 +1262,7 @@ unsafe fn step9() {
     // Another interface is refused.
     check_hr(SHGetPropertyStoreForWindow(hwnd, &CLSID_NOWHERE, (&raw mut store).cast()) as i32, E_NOINTERFACE);
     check_got(store.is_null(), 0);
+    check_eq(DestroyWindow(hwnd) as usize, 1);
 
     // oleaut32 by ordinal, as chrome.dll's delay loads bind it: a vector of four VT_I4 (3).
     let create: unsafe extern "system" fn(u16, i32, u32) -> *mut u8 =

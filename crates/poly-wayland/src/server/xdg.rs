@@ -464,7 +464,7 @@ impl Server {
             if let Some(x) = self.xdg(c, xid) {
                 x.initial_done = true;
             }
-            let scale = self.output.scale as i32;
+            let scale = self.output.scale.ceil() as i32;
             self.client(c).send(surface, wl_surface::Event::PreferredBufferScale { factor: scale });
             self.configure_role(c, role);
             return Ok(());

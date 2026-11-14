@@ -1,11 +1,12 @@
 //! Drawing the window.
 
 use super::*;
+use poly_wayland::compose::Scale;
 
 impl SettingsWindow {
     /// Draw the window, `w` × `h` logical at scale `s`, into `fb` (which is
     /// at least that big, physical).
-    pub fn draw(&self, fb: &mut dyn Framebuffer, w: i32, h: i32, s: i32, cx: &Context<'_>) {
+    pub fn draw(&self, fb: &mut dyn Framebuffer, w: i32, h: i32, s: Scale, cx: &Context<'_>) {
         let all = Rect::new(0, 0, w * s, h * s);
         fill(fb, all, all, pal().s0, 255);
         // The page's surface: rounded at the top left, a hairline along its
@@ -14,25 +15,28 @@ impl SettingsWindow {
         let r = (t::CARD_RADIUS * s) as f32;
         let grown = Rect::new(page.x, page.y, page.width + 2 * r as i32, page.height + 2 * r as i32);
         paint::fill_rounded(fb, page, grown, Radii::all(r), pal().line, 255);
-        let inner = Rect::new(grown.x + s, grown.y + s, grown.width - s, grown.height - s);
-        paint::fill_rounded(fb, page, inner, Radii::all(r - s as f32), pal().s1, 255);
+        let inner =
+            Rect::new(grown.x + s.line(1), grown.y + s.line(1), grown.width - s.line(1), grown.height - s.line(1));
+        paint::fill_rounded(fb, page, inner, Radii::all(r - s.factor()), pal().s1, 255);
         let (items, _) = self.layout(w, h, cx);
         let text = cx.text;
         for item in &items {
             match item {
                 Item::Text { x, y, max_x, text: s_, style, rgb } => {
-                    text.draw_style(fb, all, (x * s) as f32, y * s, max_x * s, s_, style.scaled(s), *rgb, 255);
+                    text.draw_style(fb, all, (*x * s) as f32, *y * s, *max_x * s, s_, style.scaled(s), *rgb, 255);
                 }
                 Item::Card(c) => rounded_rect(fb, all, c.scale(s), t::CARD_RADIUS * s, pal().ink, pal().ghost),
-                Item::Line(l) => fill(fb, all, Rect::new(l.x * s, l.y * s, l.width * s, s), pal().ink, pal().hairline),
+                Item::Line(l) => {
+                    fill(fb, all, Rect::new(l.x * s, l.y * s, l.width * s, s.line(1)), pal().ink, pal().hairline)
+                }
                 Item::Fill { rect, rgb, alpha, radius } => {
-                    rounded_rect(fb, all, rect.scale(s), radius * s, *rgb, *alpha)
+                    rounded_rect(fb, all, rect.scale(s), *radius * s, *rgb, *alpha)
                 }
                 Item::Field { rect, focused } => {
                     let f = rect.scale(s);
                     rounded_rect(fb, all, f, t::FIELD_RADIUS * s, pal().s2, 255);
                     let line = if *focused { pal().faint } else { pal().line };
-                    rounded_border(fb, all, f, t::FIELD_RADIUS * s, s, line, 255);
+                    rounded_border(fb, all, f, t::FIELD_RADIUS * s, s.line(1), line, 255);
                 }
                 Item::Bar { rect, value } => {
                     let r = rect.scale(s);
@@ -90,7 +94,7 @@ impl SettingsWindow {
                         fb,
                         all,
                         k,
-                        Radii::all(8.0 * s as f32),
+                        Radii::all(8.0 * s.factor()),
                         Rect::default(),
                     );
                     rounded_rect(fb, all, k, 8 * s, knob, 255);
@@ -105,11 +109,11 @@ impl SettingsWindow {
                     if *selected {
                         rounded_border(fb, all, r.grow(3 * s), 11 * s, 2 * s, pal().ink_primary, 255);
                     } else {
-                        rounded_border(fb, all, r, 8 * s, s, pal().line, 255);
+                        rounded_border(fb, all, r, 8 * s, s.line(1), pal().line, 255);
                     }
                 }
                 Item::Icon { icon, x, y, size, rgb, alpha } => {
-                    icon.draw(fb, all, (x * s) as f32, (y * s) as f32, (size * s) as f32, *rgb, *alpha);
+                    icon.draw(fb, all, (*x * s) as f32, (*y * s) as f32, (*size * s) as f32, *rgb, *alpha);
                 }
                 Item::Button { rect, label, hover } => {
                     let r = rect.scale(s);
@@ -137,7 +141,7 @@ impl SettingsWindow {
                         rounded_rect(fb, all, r, t::FIELD_RADIUS * s, pal().ink, pal().ghost);
                     }
                     let rgb = if *enabled { pal().ink_primary } else { pal().faint };
-                    let sz = size * s;
+                    let sz = *size * s;
                     icon.draw(
                         fb,
                         all,
@@ -150,7 +154,7 @@ impl SettingsWindow {
                 }
                 Item::Pill { rect, text: label } => {
                     let r = rect.scale(s);
-                    rounded_border(fb, all, r, 5 * s, s, pal().quiet, 255);
+                    rounded_border(fb, all, r, 5 * s, s.line(1), pal().quiet, 255);
                     let st = Style::new(Face::Sans, 11.0).scaled(s);
                     let lw = text.measure(label, st);
                     let b = text.centre(r.y, r.height, st);
@@ -171,8 +175,14 @@ impl SettingsWindow {
                     for (r, k) in caps {
                         let c = r.scale(s);
                         rounded_rect(fb, all, c, 5 * s, pal().ink, pal().ghost);
-                        rounded_border(fb, all, c, 5 * s, s, pal().ink, pal().hairline);
-                        fill(fb, all, Rect::new(c.x + 3 * s, c.bottom() - s, c.width - 6 * s, s), pal().line, 255);
+                        rounded_border(fb, all, c, 5 * s, s.line(1), pal().ink, pal().hairline);
+                        fill(
+                            fb,
+                            all,
+                            Rect::new(c.x + 3 * s, c.bottom() - s.line(1), c.width - 6 * s, s.line(1)),
+                            pal().line,
+                            255,
+                        );
                         let w = text.measure(k, mono);
                         let b = text.centre(c.y, c.height, mono);
                         text.draw_style(

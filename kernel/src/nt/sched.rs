@@ -338,6 +338,11 @@ pub fn create_thread(
         let obj = s.sys.objects.thread_object(tref).expect("new thread object");
         let caller = poly_ntobj::Caller::user(pid, caller);
         let handle = s.sys.objects.open_by_pointer(&caller, obj, req.desired_access, 0)?;
+        // The descriptor the creator asked for applies after its own handle is open.
+        if let Some(sd) = req.security.as_deref() {
+            let token = s.sys.objects.security.effective(pid, caller.thread);
+            s.sys.objects.assign_security(obj, poly_ntobj::ObjectType::Thread, token, Some(sd));
+        }
         Ok::<_, NtStatus>((start, handle))
     })?;
     let entry = Entry { rip: start.entry, rsp: start.rsp, args: [start.start_routine, start.argument, 0] };
@@ -456,13 +461,29 @@ fn owner_of(pid: ProcessId, thread: ThreadRef) -> ProcessId {
     })
 }
 
+/// A thread's suspend count stops here (`MAXIMUM_SUSPEND_COUNT`, `winnt.h`).
+const MAXIMUM_SUSPEND_COUNT: u32 = 127;
+
 pub fn suspend(pid: ProcessId, thread: ThreadRef) -> Result<u32, NtStatus> {
+    // A thread that has ended cannot be suspended (`SuspendThread`: ERROR_ACCESS_DENIED, which
+    // is what STATUS_THREAD_IS_TERMINATING maps to). One that was created suspended and has not
+    // started has no live flags yet but is still a thread.
+    let unstarted =
+        with(|s| s.ctl.get(&thread).is_some_and(|c| c.deferred_start.is_some() || c.deferred_process.is_some()));
+    if !unstarted && !find(owner_of(pid, thread)).is_some_and(|p| p.thread_flags(thread.0 as u32).is_some()) {
+        return Err(poly_ntobj::status::STATUS_THREAD_IS_TERMINATING);
+    }
     let prev = with(|s| {
         let c = s.ctl.entry(thread).or_default();
         let p = c.suspend_count;
-        c.suspend_count += 1;
+        if p < MAXIMUM_SUSPEND_COUNT {
+            c.suspend_count += 1;
+        }
         p
     });
+    if prev >= MAXIMUM_SUSPEND_COUNT {
+        return Err(poly_ntobj::status::STATUS_SUSPEND_COUNT_EXCEEDED);
+    }
     if prev == 0
         && let Some(process) = find(owner_of(pid, thread))
         && let Some(f) = process.thread_flags(thread.0 as u32)
@@ -512,36 +533,24 @@ fn threads_of(target: ProcessId) -> Result<Vec<ThreadRef>, NtStatus> {
 
 /// `NtSuspendProcess` (ADR 0155 step 9): every thread of `target` is suspended once, the way
 /// [`suspend`] does one thread. A thread that was created suspended and never started just
-/// counts one more.
+/// counts one more; one already at the maximum count stays there and the call still succeeds.
 pub fn suspend_process(target: ProcessId) -> Result<(), NtStatus> {
     for t in threads_of(target)? {
-        suspend(target, t)?;
+        match suspend(target, t) {
+            Ok(_) | Err(poly_ntobj::status::STATUS_SUSPEND_COUNT_EXCEEDED) => {}
+            Err(e) => return Err(e),
+        }
     }
     Ok(())
 }
 
-/// `NtResumeProcess`: every thread of `target` is resumed once. A thread that has not started
-/// yet (created suspended) keeps at least the one count its creator will take off with
-/// `NtResumeThread`, which is what starts it; a thread that is not suspended is left alone.
-pub fn resume_process(target: ProcessId) -> Result<(), NtStatus> {
+/// `NtResumeProcess`: every thread of `target` is resumed once, exactly as [`resume`] does one
+/// thread (the call does not know who suspended: a count that `CREATE_SUSPENDED` left is taken
+/// off too, and a thread that reaches 0 starts). A thread at 0 stays at 0. `memory` is the
+/// caller's: a thread created suspended and not yet started is always one of the caller's own.
+pub fn resume_process(target: ProcessId, memory: &Arc<Memory>) -> Result<(), NtStatus> {
     for t in threads_of(target)? {
-        let runs_again = with(|s| {
-            let c = s.ctl.entry(t).or_default();
-            let unstarted = c.deferred_start.is_some() || c.deferred_process.is_some();
-            if c.suspend_count == 0 || (unstarted && c.suspend_count == 1) {
-                return false;
-            }
-            c.suspend_count -= 1;
-            c.suspend_count == 0
-        });
-        if runs_again
-            && let Some(process) = find(target)
-            && let Some(f) = process.thread_flags(t.0 as u32)
-        {
-            f.suspended.store(false, Ordering::SeqCst);
-            process::unpark(&f);
-            f.kick();
-        }
+        resume(target, memory, t)?;
     }
     Ok(())
 }

@@ -713,7 +713,8 @@ fn surface_requests_are_checked() {
 
 #[test]
 fn hidpi_outputs_and_buffer_scales() {
-    let (mut srv, shared) = server_with(OutputConfig { width: 1280, height: 960, scale: 2, ..OutputConfig::default() });
+    let (mut srv, shared) =
+        server_with(OutputConfig { width: 1280, height: 960, scale: Scale::from_int(2), ..OutputConfig::default() });
     let (mut p, registry) = connect(&mut srv, &shared);
     let g = globals(&mut p, &mut srv, registry);
     p.bind(&mut srv, registry, &wl_output::INTERFACE, 4);
@@ -752,7 +753,7 @@ fn hidpi_outputs_and_buffer_scales() {
     assert_eq!((fb.pixel(px, py), fb.pixel(px + 1, py)), (Some(0x00ff00), Some(0xff0000)));
     // The output's scale changes: wl_output and the surface hear of it.
     p.take();
-    srv.set_output(OutputConfig { width: 1280, height: 960, scale: 1, ..OutputConfig::default() });
+    srv.set_output(OutputConfig { width: 1280, height: 960, scale: Scale::from_int(1), ..OutputConfig::default() });
     p.read(&mut srv);
     let names = p.names();
     assert!(names.contains(&("wl_output", "scale")) && names.contains(&("wl_surface", "preferred_buffer_scale")));

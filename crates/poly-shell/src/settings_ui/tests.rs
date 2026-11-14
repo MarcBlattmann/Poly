@@ -72,8 +72,8 @@ fn tabs_pages_and_changes() {
     let (zx, zy) = at(&win, &c, Target::Zone(1));
     assert_eq!(win.button(zx, zy, true, W, H, &c).1, Some(Change::TimeZone("Europe/Zurich".into())));
     win.page = Page::Display;
-    let (dx, dy) = at(&win, &c, Target::Scale(2));
-    assert_eq!(win.button(dx, dy, true, W, H, &c).1, Some(Change::Scale(2)));
+    let (dx, dy) = at(&win, &c, Target::Scale(Scale::from_int(2)));
+    assert_eq!(win.button(dx, dy, true, W, H, &c).1, Some(Change::Scale(Scale::from_int(2))));
     // Home's cards lead to pages.
     win.page = Page::Home;
     let (hx, hy) = at(&win, &c, Target::Nav(Page::Sound));
@@ -142,7 +142,7 @@ fn every_page_fits_and_draws() {
         }
         assert!(!items.is_empty());
         let mut fb = MemoryFramebuffer::new(W as u32, H as u32);
-        win.draw(&mut fb, W, H, 1, &c);
+        win.draw(&mut fb, W, H, Scale::from_int(1), &c);
         assert_eq!(fb.pixel(10, H as u32 - 10), Some(pal().s0), "the sidebar's ground");
         assert_eq!(fb.pixel(W as u32 - 5, H as u32 - 5), Some(pal().s1), "the page");
         assert_eq!(fb.pixel(t::SIDEBAR as u32 + 40, t::HEADER as u32), Some(pal().line), "the page's hairline");
@@ -150,14 +150,14 @@ fn every_page_fits_and_draws() {
     // The active page is highlighted in the sidebar, its tab in the header.
     win.page = Page::Display;
     let mut fb = MemoryFramebuffer::new(W as u32, H as u32);
-    win.draw(&mut fb, W, H, 1, &c);
+    win.draw(&mut fb, W, H, Scale::from_int(1), &c);
     let row = win.nav().into_iter().find(|n| n.1 == Page::Display).unwrap().0;
     assert_eq!(fb.pixel((row.right() - 6) as u32, (row.y + 4) as u32), Some(pal().s3));
     let tab = win.tabs(&text).into_iter().find(|t| t.1 == 3).unwrap().0;
     assert_eq!(fb.pixel((tab.x + 4) as u32, (tab.y + 14) as u32), Some(pal().s3));
     // At scale 2 too.
     let mut fb = MemoryFramebuffer::new(2 * W as u32, 2 * H as u32);
-    win.draw(&mut fb, W, H, 2, &c);
+    win.draw(&mut fb, W, H, Scale::from_int(2), &c);
     assert_eq!(fb.pixel(2 * W as u32 - 5, 2 * H as u32 - 5), Some(pal().s1));
 }
 
@@ -171,7 +171,7 @@ fn controls_are_drawn_in_alpines_colours() {
     let (items, _) = win.layout(W, H, &c);
     let toggle = items.iter().find_map(|i| if let Item::Toggle { rect, .. } = i { Some(*rect) } else { None }).unwrap();
     let mut fb = MemoryFramebuffer::new(W as u32, H as u32);
-    win.draw(&mut fb, W, H, 1, &c);
+    win.draw(&mut fb, W, H, Scale::from_int(1), &c);
     // On: the track in the ink, the knob in the ground colour on the right.
     assert_eq!(fb.pixel((toggle.x + 6) as u32, (toggle.y + 11) as u32), Some(pal().ink_primary));
     assert_eq!(fb.pixel((toggle.x + 27) as u32, (toggle.y + 11) as u32), Some(pal().s0));
@@ -312,4 +312,34 @@ fn offsets() {
     assert_eq!(utc_offset(60), "UTC+01:00");
     assert_eq!(utc_offset(-300), "UTC-05:00");
     assert_eq!(utc_offset(330), "UTC+05:30");
+}
+
+#[test]
+fn the_display_page_offers_every_scale_and_they_fit() {
+    let text = Text::new(None);
+    let (st, i) = (Settings::default(), info());
+    let c = cx(&st, &i, &text);
+    let mut win = SettingsWindow { page: Page::Display, ..SettingsWindow::default() };
+    let (_, targets) = win.layout(W, H, &c);
+    let mut seen = Vec::new();
+    for (r, t) in &targets {
+        if let Target::Scale(s) = t {
+            seen.push((s.percent(), r.x, r.y, r.width));
+            assert!(r.right() <= W, "the {s} button is inside the window: {r:?}");
+        }
+    }
+    assert_eq!(seen.iter().map(|s| s.0).collect::<Vec<_>>(), [100, 125, 150, 175, 200]);
+    // One row, in order, side by side.
+    assert!(seen.windows(2).all(|p| p[0].2 == p[1].2 && p[0].1 + p[0].3 <= p[1].1), "{seen:?}");
+    // 150 % chosen.
+    let (x, y) = at(&win, &c, Target::Scale(Scale::from_percent(150)));
+    assert_eq!(win.button(x, y, true, W, H, &c).1, Some(Change::Scale(Scale::from_percent(150))));
+    // Where the boot test (`desktop-scale`) clicks: Home's Displays card, then 150 %.
+    win.page = Page::Home;
+    let (hx, hy) = at(&win, &c, Target::Nav(Page::Display));
+    assert_eq!((hx, hy), (562, 291));
+    win.button(hx, hy, true, W, H, &c);
+    assert_eq!(win.page, Page::Display);
+    let (x, y) = at(&win, &c, Target::Scale(Scale::from_percent(150)));
+    assert_eq!((x, y), (721, 236));
 }

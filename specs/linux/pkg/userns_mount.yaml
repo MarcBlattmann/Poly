@@ -34,22 +34,35 @@ summary: >
   The locks, rule by rule (they are set once, when the mount namespace is
   copied into the new user namespace, on every mount of the copy):
   (1) In place: no inherited mount can be removed or moved. umount2 with
-  flag 0 or MNT_DETACH is EINVAL, for a mount directly on the old tree
-  and for a mount below another inherited mount alike; mount(MS_MOVE) of
-  one is EINVAL.
+  flag 0, MNT_FORCE or MNT_DETACH is EINVAL, for a mount directly on the
+  old tree and for a mount below another inherited mount alike, and also for
+  one that has mounts below it (the lock is judged before whether the mount
+  is busy: flag 0 on a mount with an inherited mount below it is EINVAL, not
+  EBUSY); mount(MS_MOVE) of one is EINVAL.
   (2) Flags: each of read-only, nosuid, nodev and noexec that the mount
   had is locked on: a bind remount (MS_BIND | MS_REMOUNT) that leaves one
   out is EPERM. A flag the mount did not have may be added and removed
   again (it is not locked by being added later).
   (3) Access-time mode: locked on every inherited mount, whatever it was.
-  A bind remount that names another mode is EPERM (MS_RELATIME on a
+  The mode is the whole combination of noatime, nodiratime and
+  relatime/strictatime that the mount has, so nodiratime is part of it: a
+  bind remount that names another combination is EPERM (MS_RELATIME on a
   mount that was noatime; MS_NOATIME or MS_STRICTATIME on a mount with
-  the default relatime); naming the mode it has, or none of the atime
-  flags (the mode is then kept), works.
+  the default relatime; MS_NODIRATIME added to a mount that did not have
+  it, alone or with MS_RELATIME; MS_NOATIME on a mount that is nodiratime
+  only; MS_RELATIME alone on a nodiratime mount, which would clear it, or
+  MS_NODIRATIME alone on a noatime|nodiratime mount, which would clear
+  noatime). Naming exactly the combination the mount has (MS_RELATIME |
+  MS_NODIRATIME on a nodiratime mount), or none of the atime flags (the
+  whole combination is then kept), works.
   (4) Copies: a bind made inside the namespace is a mount of its root, so
   the top of the copy can be unmounted; but the flag locks travel with
   the copy (a plain bind of a noexec mount: remounting the copy without
-  noexec is EPERM, with it 0, umount2 of the copy 0), and in a recursive
+  noexec is EPERM, with it 0, umount2 of the copy 0); the access-time lock
+  travels as well, nodiratime included (a bind copy of a noatime mount
+  refuses MS_RELATIME and MS_STRICTATIME, a copy of a nodiratime mount
+  refuses MS_NOATIME and MS_RELATIME alone, a recursive copy of a relatime
+  mount refuses MS_NOATIME and MS_NODIRATIME); and in a recursive
   bind (MS_BIND | MS_REC) the copies of the mounts below stay locked onto
   the copy: umount2 of <copy>/sub is EINVAL and its nodev cannot be
   cleared (EPERM); umount2 of the copy's top with flag 0 is EBUSY (a
@@ -81,7 +94,7 @@ timing:
   typical: "microseconds"
   guarantees: "none"
 tests:
-  visible: 2  # count in <symbol>.tests/
+  visible: 3  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 # Notes: MS_* values are from linux/mount.h (MS_RDONLY 1, MS_NOSUID 2,
 # MS_NODEV 4, MS_NOEXEC 8, MS_REMOUNT 32, MS_NOATIME 1024, MS_BIND 4096,

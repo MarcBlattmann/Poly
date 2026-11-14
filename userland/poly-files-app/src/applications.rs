@@ -22,6 +22,10 @@ use poly_shell::applications::{self as model, Folder};
 /// test's list).
 pub type Catalog = Box<dyn Fn() -> Vec<App>>;
 
+/// Reads the desktop file IDs of the apps that can be uninstalled
+/// (`poly_pkg::remove::removable` on the disk; a test's list).
+pub type Removable = Box<dyn Fn() -> Vec<String>>;
+
 /// The folder as last read, shared with the window (which draws the items'
 /// icons and names and opens them).
 pub type Shared = Rc<RefCell<Folder>>;
@@ -30,6 +34,7 @@ pub type Shared = Rc<RefCell<Folder>>;
 pub struct WithApplications {
     inner: Box<dyn Fs>,
     catalog: Catalog,
+    removable: Removable,
     folder: Shared,
 }
 
@@ -41,9 +46,9 @@ impl core::fmt::Debug for WithApplications {
 
 /// `fs` with the Applications folder of `catalog`'s apps, and the folder
 /// for the window.
-pub fn overlay(fs: Box<dyn Fs>, catalog: Catalog) -> (Box<dyn Fs>, Shared) {
+pub fn overlay(fs: Box<dyn Fs>, catalog: Catalog, removable: Removable) -> (Box<dyn Fs>, Shared) {
     let folder = Shared::default();
-    (Box::new(WithApplications { inner: fs, catalog, folder: Rc::clone(&folder) }), folder)
+    (Box::new(WithApplications { inner: fs, catalog, removable, folder: Rc::clone(&folder) }), folder)
 }
 
 impl WithApplications {
@@ -62,7 +67,9 @@ impl WithApplications {
 impl Fs for WithApplications {
     fn read_dir(&self, path: &str) -> Result<Vec<RawEntry>, FsError> {
         if path == model::DIR {
-            let folder = Folder::new((self.catalog)());
+            let mut folder = Folder::new((self.catalog)());
+            // The apps the installer owns can be uninstalled (ADR 0180).
+            folder.mark_removable(&(self.removable)());
             let entries = folder.items().iter().map(|i| RawEntry { name: i.label.clone(), kind: Kind::File }).collect();
             *self.folder.borrow_mut() = folder;
             return Ok(entries);

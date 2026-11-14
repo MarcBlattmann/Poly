@@ -7,7 +7,7 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
-use poly_wayland::compose::Rect;
+use poly_wayland::compose::{Rect, Scale};
 use poly_wayland::seat::{Capabilities, InputEvent};
 use poly_wayland::server::{ClientId, Config, Host, OutputConfig, Server, ShmMap};
 use poly_wayland::wire::{Fd, Fixed};
@@ -67,8 +67,17 @@ struct World {
 
 impl World {
     fn new(scale: u32) -> World {
+        World::at(Scale::from_int(scale))
+    }
+
+    fn at(scale: Scale) -> World {
         let files = Rc::new(RefCell::new(Files::default()));
-        let output = OutputConfig { width: 1280 * scale, height: 800 * scale, scale, ..OutputConfig::default() };
+        let output = OutputConfig {
+            width: scale.px(1280) as u32,
+            height: scale.px(800) as u32,
+            scale,
+            ..OutputConfig::default()
+        };
         let mut server = Server::new(Config { output, ..Config::default() }, Box::new(TestHost(Rc::clone(&files))));
         server.set_seat_capabilities(Capabilities(Capabilities::POINTER.0 | Capabilities::KEYBOARD.0));
         let id = server.add_client();
@@ -122,7 +131,7 @@ fn a_window_comes_up_configured_and_shows_its_buffer() {
     assert!(w.server.failure(w.id).is_none(), "{:?}", w.server.failure(w.id));
     assert!(w.client.configured());
     let ev = w.events();
-    assert!(ev.contains(&Event::Resized { width: 800, height: 520, scale: 1 }), "{ev:?}");
+    assert!(ev.contains(&Event::Resized { width: 800, height: 520, scale: Scale::ONE }), "{ev:?}");
     assert!(w.client.needs_buffer());
     w.draw(0x20_3040);
     assert!(w.server.failure(w.id).is_none(), "{:?}", w.server.failure(w.id));
@@ -134,10 +143,49 @@ fn a_window_comes_up_configured_and_shows_its_buffer() {
 }
 
 #[test]
+fn a_fractional_scale_is_a_buffer_of_scale_one_through_a_viewport() {
+    for percent in [125, 150, 175] {
+        let scale = Scale::from_percent(percent);
+        let mut w = World::at(scale);
+        assert!(w.server.failure(w.id).is_none(), "{percent} %: {:?}", w.server.failure(w.id));
+        let ev = w.events();
+        assert!(ev.contains(&Event::Resized { width: 800, height: 520, scale }), "{percent} %: {ev:?}");
+        assert_eq!(w.client.buffer_size(), (scale.px(800), scale.px(520)));
+        w.draw(0x11_2233);
+        assert!(w.server.failure(w.id).is_none(), "{percent} %: {:?}", w.server.failure(w.id));
+        let win = w.server.scene().windows().iter().find(|x| x.title() == "Files").unwrap();
+        let c = win.content();
+        assert_eq!(c.logical_size(), (800, 520), "{percent} %: the window keeps its logical size");
+        assert_eq!((c.scale, c.width as i32, c.height as i32), (1, scale.px(800), scale.px(520)));
+        assert_eq!(c.view.destination, Some((800, 520)));
+        assert_eq!(c.pixels[0] & 0xff_ffff, 0x11_2233);
+    }
+}
+
+#[test]
+fn a_client_that_hears_a_whole_scale_again_leaves_the_viewport() {
+    let mut w = World::at(Scale::from_percent(150));
+    w.events();
+    w.draw(1);
+    w.server.set_output(OutputConfig {
+        width: 2560,
+        height: 1600,
+        scale: Scale::from_int(2),
+        ..OutputConfig::default()
+    });
+    w.pump();
+    assert!(w.events().iter().any(|e| matches!(e, Event::Resized { scale, .. } if *scale == Scale::from_int(2))));
+    assert_eq!(w.client.buffer_size(), (1600, 1040));
+    w.draw(2);
+    let win = w.server.scene().windows().iter().find(|x| x.title() == "Files").unwrap();
+    assert_eq!((win.content().scale, win.content().view.destination), (2, None));
+}
+
+#[test]
 fn hidpi_buffers_are_scale_times_larger() {
     let mut w = World::new(2);
     let ev = w.events();
-    assert!(ev.iter().any(|e| matches!(e, Event::Resized { scale: 2, .. })), "{ev:?}");
+    assert!(ev.iter().any(|e| matches!(e, Event::Resized { scale, .. } if *scale == Scale::from_int(2))), "{ev:?}");
     assert_eq!(w.client.buffer_size(), (1600, 1040));
     w.draw(0x11_2233);
     let win = w.server.scene().windows().iter().find(|x| x.title() == "Files").unwrap();

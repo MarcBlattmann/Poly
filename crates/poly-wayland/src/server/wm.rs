@@ -18,7 +18,7 @@
 //!   draws their pixels ([`Server::set_internal_pixels`]).
 
 use super::{ClientId, Data, Server, Toplevel, owner_of, owner_tag};
-use crate::compose::{BORDER, Rect, TITLE_HEIGHT, WindowId};
+use crate::compose::{BORDER, Rect, TITLE_HEIGHT, View, WindowId};
 use crate::protocol::{xdg_popup, xdg_toplevel};
 use crate::wire::ObjectId;
 use alloc::string::String;
@@ -424,8 +424,8 @@ impl Server {
         let tag = owner_tag(INTERNAL, ObjectId(self.next_internal));
         self.next_internal += 1;
         let win = self.scene.add_window(tag, true);
-        let s = self.output.scale;
-        self.scene.resize_content(win, width.max(1) as u32 * s, height.max(1) as u32 * s, s);
+        let (bw, bh) = self.output.scale.buffer_size(width.max(1), height.max(1));
+        self.set_internal_buffer(win, (bw as u32, bh as u32), (width.max(1), height.max(1)));
         self.scene.set_title(win, title);
         let (x, y) = self.scene.place(0, 0, width, height, true);
         self.scene.set_position(win, x, y);
@@ -503,9 +503,42 @@ impl Server {
         self.internal.get(&w).map(|i| i.size)
     }
 
+    /// Give floating internal window `w` another logical size (its owner
+    /// draws it again at once) and keep its frame on the work area: what a
+    /// window that no longer fits does after a scale change. False for a
+    /// maximized or tiled window (it follows the work area) or one that has
+    /// that size already.
+    pub fn resize_internal_window(&mut self, w: WindowId, width: i32, height: i32) -> bool {
+        let Some(i) = self.internal.get_mut(&w) else { return false };
+        let size = (width.max(1), height.max(1));
+        if i.maximized || i.tile.is_some() || i.size == size {
+            return false;
+        }
+        i.size = size;
+        let area = self.scene.work_area();
+        self.keep_on_area(w, area);
+        true
+    }
+
     pub fn set_internal_title(&mut self, w: WindowId, title: &str) {
         if self.internal.contains_key(&w) {
             self.scene.set_title(w, title);
+        }
+    }
+
+    /// Give internal window `w` a buffer of `buffer` physical pixels for a
+    /// window of `logical` size: at a whole scale the buffer has that buffer
+    /// scale, at a fraction it has scale 1 and is shown through a viewport of
+    /// the logical size, as a client of `wp_fractional_scale_v1` does it
+    /// (ADR 0179).
+    fn set_internal_buffer(&mut self, w: WindowId, buffer: (u32, u32), logical: (i32, i32)) {
+        let s = self.output.scale;
+        if s.is_integer() {
+            self.scene.resize_content(w, buffer.0, buffer.1, s.ceil());
+            self.scene.set_view(w, View::default());
+        } else {
+            self.scene.resize_content(w, buffer.0, buffer.1, 1);
+            self.scene.set_view(w, View { destination: Some(logical), ..View::default() });
         }
     }
 
@@ -516,8 +549,11 @@ impl Server {
         if !self.internal.contains_key(&w) || pixels.len() < width as usize * height as usize {
             return;
         }
-        let s = self.output.scale;
-        self.scene.resize_content(w, width, height, s);
+        let logical = self.internal.get(&w).map_or_else(
+            || (self.output.scale.to_logical(width as i32), self.output.scale.to_logical(height as i32)),
+            |i| i.size,
+        );
+        self.set_internal_buffer(w, (width, height), logical);
         let Some(content) = self.scene.content_mut(w) else { return };
         for (dst, src) in content.pixels.iter_mut().zip(pixels) {
             *dst = src | 0xff00_0000;

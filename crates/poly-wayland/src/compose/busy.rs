@@ -13,7 +13,7 @@
 
 use super::paint::{mix, sqrt};
 use super::scene::{BUSY_PHASES, BUSY_SIZE};
-use super::{Framebuffer, Rect};
+use super::{Framebuffer, Rect, Scale};
 
 /// The ring's centre, logical pixels from the hot spot.
 pub const RING_CENTRE: (f32, f32) = (18.0, 18.5);
@@ -104,14 +104,17 @@ pub fn paint_pixel(dst: u32, dx: f32, dy: f32, phase: u8, dark: bool, aa: f32) -
 /// Draw the spinner for a pointer with its hot spot at logical (`x`, `y`)
 /// on the output of scale `s`, inside `clip` (the arrow is drawn by the
 /// caller).
-pub fn draw(fb: &mut dyn Framebuffer, clip: Rect, x: i32, y: i32, s: i32, phase: u8, dark: bool) {
-    let area = Rect::new(x, y, BUSY_SIZE.0, BUSY_SIZE.1).scale(s).intersect(&clip);
-    let (scale, aa) = (s as f32, 1.0 / s as f32);
+pub fn draw(fb: &mut dyn Framebuffer, clip: Rect, x: i32, y: i32, s: Scale, phase: u8, dark: bool) {
+    // The hot spot's physical pixel, then everything measured from it.
+    let (ox, oy) = (s.px(x), s.px(y));
+    let size = Rect::new(ox, oy, s.px(BUSY_SIZE.0) + 1, s.px(BUSY_SIZE.1) + 1);
+    let area = size.intersect(&clip);
+    let (scale, aa) = (s.factor(), 1.0 / s.factor());
     for py in area.y..area.bottom() {
         let row = fb.row_mut(py as u32);
-        let dy = (py as f32 + 0.5) / scale - y as f32;
+        let dy = (py as f32 + 0.5 - oy as f32) / scale;
         for px in area.x..area.right() {
-            let dx = (px as f32 + 0.5) / scale - x as f32;
+            let dx = (px as f32 + 0.5 - ox as f32) / scale;
             let at = &mut row[px as usize];
             *at = paint_pixel(*at, dx, dy, phase, dark, aa);
         }
@@ -217,7 +220,7 @@ mod tests {
     #[test]
     fn dump_pictures_when_asked() {
         let Some(dir) = std::env::var_os("POLY_BUSY_DUMP") else { return };
-        let s = 4;
+        let s = Scale::from_int(4);
         for (name, dark, ground) in [("dark", true, 0xff30_3030u32), ("light", false, 0xffe8_e8e8)] {
             let (w, h) = ((BUSY_SIZE.0 + 2) * s * 4, BUSY_SIZE.1 * s);
             let mut fb = crate::compose::MemoryFramebuffer::new(w as u32, h as u32);

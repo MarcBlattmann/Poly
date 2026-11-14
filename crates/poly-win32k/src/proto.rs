@@ -152,6 +152,11 @@ crate::wire_struct! {
         /// A minimized window that was maximized before: restoring it
         /// maximizes it again.
         pub restore_max: bool,
+        /// `WINDOWPLACEMENT.ptMinPosition` as `GetWindowPlacement` reports
+        /// it (workspace coordinates for a top-level window that is not a
+        /// tool window; -1,-1 until something sets it).
+        pub min_x: i32,
+        pub min_y: i32,
         pub own_dc: u64,
         pub class_dc: u64,
         /// A hidden overlapped window whose `WM_SIZE`/`WM_MOVE` wait for
@@ -317,6 +322,8 @@ crate::wire_enum! {
         /// The default IME window of thread `tid` (0: the calling one): a
         /// `Handle`, 0 when it has none.
         63 => DefaultIme { tid: u32 },
+        /// The minimized position `GetWindowPlacement` reports (`WinInfo::min_x`, `min_y`).
+        64 => SetMinPos { hwnd: u32, x: i32, y: i32 },
         /// `RegisterWindowMessageW`: the message number (0xC000..=0xFFFF) of a
         /// name, the same for every caller of the session and the same
         /// number as a class of that name has as its atom; an `Atom`.

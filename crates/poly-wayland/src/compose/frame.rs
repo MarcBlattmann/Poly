@@ -17,8 +17,8 @@
 //!   └──────────────────────────────────────────┘
 //! ```
 
-use super::Rect;
 use super::paint::Shadow;
+use super::{Rect, Scale};
 
 /// The title bar's height.
 pub const TITLE_HEIGHT: i32 = 24;
@@ -139,16 +139,60 @@ impl FrameLayout {
         let text = Rect::new(title.x + PADDING, title.y, text_right - title.x - PADDING, TITLE_HEIGHT);
         FrameLayout { outer, title, close, maximize, minimize, text, bounds: g }
     }
+}
 
-    /// The border's four strips.
-    pub fn border(&self) -> [Rect; 4] {
-        let (o, g) = (self.outer, self.bounds);
-        [
-            Rect::new(o.x, o.y, o.width, BORDER),
-            Rect::new(o.x, g.bottom(), o.width, BORDER),
-            Rect::new(o.x, o.y + BORDER, BORDER, o.height - 2 * BORDER),
-            Rect::new(g.right(), o.y + BORDER, BORDER, o.height - 2 * BORDER),
-        ]
+/// A frame in physical pixels (ADR 0179), laid out from the content's
+/// physical rectangle outwards: the border is [`Scale::line`] of
+/// [`BORDER`] on every side and the title bar `px(TITLE_HEIGHT)` high
+/// wherever the window is, so dragging a window never makes its border
+/// thicker or thinner, and the content and the frame always touch. The
+/// buttons and the text keep their logical distances from the title bar's
+/// right and left edges, each converted alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PhysFrame {
+    /// Everything, border included.
+    pub outer: Rect,
+    /// The border's width.
+    pub border: i32,
+    /// The border above and the title bar: the part with rounded corners.
+    pub top: Rect,
+    pub title: Rect,
+    /// The border strips along the sides and the bottom, below the top.
+    pub strips: [Rect; 3],
+    pub close: Rect,
+    pub maximize: Rect,
+    pub minimize: Rect,
+    pub text: Rect,
+}
+
+impl FrameLayout {
+    /// This frame at scale `s` around the visible bounds' physical
+    /// rectangle `bounds`.
+    pub fn physical(&self, bounds: Rect, s: Scale) -> PhysFrame {
+        let b = s.line(BORDER);
+        let th = s.px(TITLE_HEIGHT);
+        let outer = Rect::new(bounds.x - b, bounds.y - th - b, bounds.width + 2 * b, bounds.height + th + 2 * b);
+        let top = Rect::new(outer.x, outer.y, outer.width, b + th);
+        let title = Rect::new(bounds.x, bounds.y - th, bounds.width, th);
+        let left_edge = |r: Rect| {
+            if r.is_empty() {
+                return Rect::default();
+            }
+            // Its distances from the title bar's right edge, logical.
+            let x = title.right() - s.px(self.title.right() - r.x);
+            Rect::new(x, title.y + s.px(r.y - self.title.y), s.px(r.width), s.px(r.height))
+        };
+        let (close, maximize, minimize) = (left_edge(self.close), left_edge(self.maximize), left_edge(self.minimize));
+        let leftmost = [minimize, maximize, close].into_iter().find(|r| !r.is_empty());
+        let pad = s.px(PADDING);
+        let text_right = leftmost.map_or(title.right() - pad, |r| r.x - pad);
+        let text = Rect::new(title.x + pad, title.y, text_right - title.x - pad, th);
+        let strips = [
+            Rect::new(outer.x, outer.y, b, outer.height),
+            Rect::new(outer.x, outer.bottom() - b, outer.width, b),
+            Rect::new(outer.right() - b, outer.y, b, outer.height),
+        ];
+        PhysFrame { outer, border: b, top, title, strips, close, maximize, minimize, text }
     }
 }
 

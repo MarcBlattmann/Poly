@@ -1,9 +1,9 @@
 //! The scene: windows in z-order with what they show, and the damage —
 //! the parts of the output that must be drawn again.
 
-use super::frame::{BORDER, FrameLayout, TITLE_HEIGHT, Theme};
+use super::frame::{BORDER, FrameLayout, PhysFrame, TITLE_HEIGHT, Theme};
 use super::text::{BitmapFont, TextRenderer};
-use super::{Framebuffer, Rect};
+use super::{Framebuffer, Rect, Scale};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
@@ -160,11 +160,19 @@ impl Content {
             None => (0, 0, tw * 256 / s, th * 256 / s),
         };
         let (dw, dh) = (i64::from(dw.max(1)), i64::from(dh.max(1)));
-        // The pixel's centre in surface coordinates, then in buffer pixels.
-        let su = sx + (2 * i64::from(x) + 1) * sw / (2 * dw);
-        let sv = sy + (2 * i64::from(y) + 1) * sh / (2 * dh);
-        let u = (su * s / 256).clamp(0, tw - 1) as i32;
-        let v = (sv * s / 256).clamp(0, th - 1) as i32;
+        // A client drawing for a fractional scale (a viewport, a buffer of
+        // scale 1) has a buffer of the rounded size, and the rectangle it
+        // is shown in is rounded by its edges: they differ by one pixel at
+        // most. Map pixel to pixel then, rather than skip or repeat a column
+        // in the middle of the window (ADR 0179).
+        let (u, v) = if s == 1 && self.view.source.is_none() && (tw - dw).abs() <= 1 && (th - dh).abs() <= 1 {
+            (i64::from(x).clamp(0, tw - 1) as i32, i64::from(y).clamp(0, th - 1) as i32)
+        } else {
+            // The pixel's centre in surface coordinates, then in buffer pixels.
+            let su = sx + (2 * i64::from(x) + 1) * sw / (2 * dw);
+            let sv = sy + (2 * i64::from(y) + 1) * sh / (2 * dh);
+            ((su * s / 256).clamp(0, tw - 1) as i32, (sv * s / 256).clamp(0, th - 1) as i32)
+        };
         let (bx, by) = buffer_point(self.view.transform, u, v, tw as i32, th as i32);
         let i = by as usize * self.width as usize + bx as usize;
         self.pixels.get(i).copied().unwrap_or(0)
@@ -383,6 +391,25 @@ impl Window {
         self.decorated.then(|| FrameLayout::around(self.bounds()))
     }
 
+    /// Where the window is drawn on an output of scale `s`, in physical
+    /// pixels (ADR 0179): the visible bounds' corner is the converted
+    /// logical one and their size the converted logical size (what a client
+    /// drawing at that scale made its buffer), the surface is placed by its
+    /// distance from the bounds and the frame is laid out around them with
+    /// the same border and title bar wherever the window is. At a whole
+    /// scale this is every logical coordinate times the scale.
+    pub(crate) fn placed(&self, s: Scale) -> Placed {
+        let (surface, bounds) = (self.surface_rect(), self.bounds());
+        let b = Rect::new(s.px(bounds.x), s.px(bounds.y), s.px(bounds.width), s.px(bounds.height));
+        let sf = Rect::new(
+            b.x - s.px(bounds.x - surface.x),
+            b.y - s.px(bounds.y - surface.y),
+            s.px(surface.width),
+            s.px(surface.height),
+        );
+        Placed { surface: sf, bounds: b, frame: self.frame().map(|f| f.physical(b, s)) }
+    }
+
     /// Everything the window draws on, logical.
     pub fn extent(&self) -> Rect {
         if !self.is_visible() {
@@ -394,6 +421,16 @@ impl Window {
             None => surface,
         }
     }
+}
+
+/// A window in physical pixels ([`Window::placed`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Placed {
+    /// The content's rectangle.
+    pub surface: Rect,
+    /// The visible bounds.
+    pub bounds: Rect,
+    pub frame: Option<PhysFrame>,
 }
 
 /// What is at a point of the output.
@@ -441,7 +478,7 @@ pub struct Scene {
     /// The output in physical pixels, and its scale.
     width: u32,
     height: u32,
-    scale: u32,
+    scale: Scale,
     windows: Vec<Window>,
     /// Physical pixels to draw again.
     damage: Vec<Rect>,
@@ -463,16 +500,16 @@ pub struct Scene {
 
 impl Scene {
     /// An empty scene on an output of `width` × `height` physical pixels at
-    /// `scale` (at least 1), titles in the 8×16 Spleen font.
-    pub fn new(width: u32, height: u32, scale: u32) -> Scene {
+    /// `scale` (a whole factor or a [`Scale`]), titles in the 8×16 Spleen font.
+    pub fn new(width: u32, height: u32, scale: impl Into<Scale>) -> Scene {
         Scene::with_text(width, height, scale, Box::new(BitmapFont(&poly_gfx::SPLEEN_8X16)))
     }
 
-    pub fn with_text(width: u32, height: u32, scale: u32, text: Box<dyn TextRenderer>) -> Scene {
+    pub fn with_text(width: u32, height: u32, scale: impl Into<Scale>, text: Box<dyn TextRenderer>) -> Scene {
         let mut s = Scene {
             width,
             height,
-            scale: scale.max(1),
+            scale: scale.into(),
             windows: Vec::new(),
             damage: Vec::new(),
             theme: Theme::NEUTRAL,
@@ -583,17 +620,22 @@ impl Scene {
     }
 
     /// The output: physical width and height, and scale.
-    pub fn output(&self) -> (u32, u32, u32) {
+    pub fn output(&self) -> (u32, u32, Scale) {
         (self.width, self.height, self.scale)
     }
 
-    /// The output's size in logical pixels.
-    pub fn logical_size(&self) -> (i32, i32) {
-        ((self.width / self.scale) as i32, (self.height / self.scale) as i32)
+    /// The output's scale.
+    pub fn scale(&self) -> Scale {
+        self.scale
     }
 
-    pub fn set_output(&mut self, width: u32, height: u32, scale: u32) {
-        (self.width, self.height, self.scale) = (width, height, scale.max(1));
+    /// The output's size in logical pixels ([`Scale::output_size`]).
+    pub fn logical_size(&self) -> (i32, i32) {
+        self.scale.output_size(self.width, self.height)
+    }
+
+    pub fn set_output(&mut self, width: u32, height: u32, scale: impl Into<Scale>) {
+        (self.width, self.height, self.scale) = (width, height, scale.into());
         self.damage_all();
     }
 
@@ -625,8 +667,19 @@ impl Scene {
 
     /// Mark `r` (logical) for drawing.
     pub fn damage_logical(&mut self, r: Rect) {
-        let s = self.scale as i32;
-        self.damage_physical(r.scale(s));
+        self.damage_physical(self.physical_extent(r));
+    }
+
+    /// The physical pixels logical rectangle `r` may touch: its edges
+    /// rounded outwards, and at a fraction two pixels more on each side,
+    /// since a window's frame and content are laid out from their own
+    /// rounded corners ([`Window::placed`]).
+    pub fn physical_extent(&self, r: Rect) -> Rect {
+        let e = self.scale.rect_out(r);
+        if self.scale.is_integer() || e.is_empty() {
+            return e;
+        }
+        Rect::new(e.x - 2, e.y - 2, e.width + 4, e.height + 4)
     }
 
     /// Mark `r` (physical) for drawing.
@@ -1064,9 +1117,9 @@ impl Scene {
         let damage: Vec<Rect> = all.iter().map(|d| d.intersect(&screen)).filter(|d| !d.is_empty()).collect();
         let mut backdrops = core::mem::take(&mut self.backdrops);
         let mut shadows = core::mem::take(&mut self.shadows);
-        let s = self.scale as i32;
+        let s = self.scale;
         for (id, b) in backdrops.iter_mut() {
-            let extent = self.window(*id).map_or(Rect::default(), |w| w.extent().scale(s).intersect(&screen));
+            let extent = self.window(*id).map_or(Rect::default(), |w| s.rect(w.extent()).intersect(&screen));
             b.follow(extent);
         }
         for r in &damage {

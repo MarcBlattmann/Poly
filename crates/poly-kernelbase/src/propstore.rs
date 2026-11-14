@@ -26,6 +26,11 @@ pub const E_INVALIDARG: u32 = 0x8007_0057;
 pub const E_NOINTERFACE: u32 = 0x8000_4002;
 pub const E_POINTER: u32 = 0x8000_4003;
 pub const E_OUTOFMEMORY: u32 = 0x8007_000E;
+/// `E_FAIL` (`winerror.h`): `GetCount` of a store nothing was ever set in.
+pub const E_FAIL: u32 = 0x8000_4005;
+/// `HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE)`: `SetValue` on the store of a window that
+/// is gone.
+pub const E_INVALID_WINDOW: u32 = 0x8007_0578;
 
 /// `IID_IPropertyStore` {886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99} (`propsys.h`), in memory order.
 pub const IID_IPROPERTYSTORE: [u8; 16] =
@@ -64,6 +69,40 @@ pub fn kind(vt: u16) -> Kind {
     }
 }
 
+/// The properties whose value is a string (`propkey.h`): `System.AppUserModel.ID` {9F4C2855-9F79-
+/// 4B39-A8D0-E1D42DE1D5F3},5 and the relaunch properties ,2 to ,4 of the same format, and
+/// `System.Title` {F29F85E0-4FF9-1068-AB91-08002B27B3D9},2. A number set into one of them is read
+/// back as its text (sheet rule `any_key`: a `VT_I4` 7 set into `AppUserModel.ID` is `VT_LPWSTR`
+/// "7").
+pub fn is_text_key(key: &Key) -> bool {
+    const APP_USER_MODEL: [u8; 16] =
+        [0x55, 0x28, 0x4C, 0x9F, 0x79, 0x9F, 0x39, 0x4B, 0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3];
+    const SUMMARY_INFORMATION: [u8; 16] =
+        [0xE0, 0x85, 0x9F, 0xF2, 0xF9, 0x4F, 0x68, 0x10, 0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9];
+    let pid = u32::from_le_bytes([key[16], key[17], key[18], key[19]]);
+    (key[..16] == APP_USER_MODEL && (2..=5).contains(&pid)) || (key[..16] == SUMMARY_INFORMATION && pid == 2)
+}
+
+/// The text of an integer variant (`PROPVARIANT` bytes), when its type is an integer type:
+/// `VT_I2` 2, `VT_I4` 3, `VT_I1` 16, `VT_UI1` 17, `VT_UI2` 18, `VT_UI4` 19, `VT_I8` 20, `VT_UI8` 21,
+/// `VT_INT` 22, `VT_UINT` 23 (the value's bytes start at offset 8).
+pub fn integer_text(variant: &[u8; 24]) -> Option<Vec<u16>> {
+    let vt = u16::from_le_bytes([variant[0], variant[1]]);
+    let b = &variant[8..16];
+    let text = match vt {
+        16 => alloc::format!("{}", b[0] as i8),
+        17 => alloc::format!("{}", b[0]),
+        2 => alloc::format!("{}", i16::from_le_bytes([b[0], b[1]])),
+        18 => alloc::format!("{}", u16::from_le_bytes([b[0], b[1]])),
+        3 | 22 => alloc::format!("{}", i32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+        19 | 23 => alloc::format!("{}", u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+        20 => alloc::format!("{}", i64::from_le_bytes(b.try_into().ok()?)),
+        21 => alloc::format!("{}", u64::from_le_bytes(b.try_into().ok()?)),
+        _ => return None,
+    };
+    Some(text.encode_utf16().collect())
+}
+
 /// A value the store holds.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
@@ -77,16 +116,25 @@ pub enum Value {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Store {
     items: Vec<(Key, Value)>,
+    /// A value has been set at some time: from then on `GetCount` succeeds, before it it fails
+    /// with `E_FAIL` (sheet rule `fresh_store`).
+    touched: bool,
 }
 
 impl Store {
     pub const fn new() -> Store {
-        Store { items: Vec::new() }
+        Store { items: Vec::new(), touched: false }
     }
 
     /// `IPropertyStore::GetCount`.
     pub fn count(&self) -> u32 {
         self.items.len() as u32
+    }
+
+    /// `IPropertyStore::GetCount` as a window's store answers it: `Err` (`E_FAIL`, count 0) while
+    /// nothing was ever set.
+    pub fn count_checked(&self) -> Result<u32, u32> {
+        if self.touched { Ok(self.count()) } else { Err(E_FAIL) }
     }
 
     /// `IPropertyStore::GetAt`: the key at an index, `None` (`E_INVALIDARG`) past the end.
@@ -103,6 +151,7 @@ impl Store {
     /// `IPropertyStore::SetValue`: set, replace or (with `None`, a `VT_EMPTY`) remove.
     pub fn set(&mut self, key: &Key, value: Option<Value>) {
         let at = self.items.iter().position(|(k, _)| k == key);
+        self.touched |= value.is_some();
         match (at, value) {
             (Some(i), Some(v)) => self.items[i].1 = v,
             (Some(i), None) => {
@@ -146,6 +195,7 @@ mod tests {
     fn a_store_keeps_values_in_the_order_they_were_set() {
         let mut s = Store::new();
         assert_eq!(s.count(), 0);
+        assert_eq!(s.count_checked(), Err(E_FAIL));
         assert_eq!(s.get(&key(1)), None);
         assert_eq!(s.key_at(0), None);
         let id: Vec<u16> = "Chrome.UserData.Default".encode_utf16().collect();
@@ -172,5 +222,38 @@ mod tests {
         assert!(!s.is_empty());
         s.set(&key(2), None);
         assert!(s.is_empty());
+        // Once a value was set, GetCount succeeds, also when the store is empty again.
+        assert_eq!(s.count_checked(), Ok(0));
+    }
+
+    #[test]
+    fn a_new_store_without_a_value_cannot_count_and_removing_nothing_sets_nothing() {
+        let mut s = Store::new();
+        s.set(&key(1), None);
+        assert_eq!(s.count_checked(), Err(E_FAIL));
+        s.set(&key(1), Some(Value::Text(Vec::new())));
+        assert_eq!(s.count_checked(), Ok(1));
+    }
+
+    #[test]
+    fn numbers_set_into_text_keys_read_back_as_text() {
+        let mut id = [0u8; 20];
+        id[..16].copy_from_slice(&[
+            0x55, 0x28, 0x4C, 0x9F, 0x79, 0x9F, 0x39, 0x4B, 0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3,
+        ]);
+        id[16] = 5;
+        assert!(is_text_key(&id));
+        id[16] = 9; // PreventPinning is a boolean
+        assert!(!is_text_key(&id));
+        assert!(!is_text_key(&key(1)));
+        let mut v = [0u8; 24];
+        v[0] = 3;
+        v[8..12].copy_from_slice(&(-7i32).to_le_bytes());
+        assert_eq!(integer_text(&v), Some("-7".encode_utf16().collect()));
+        v[0] = 19;
+        v[8..12].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(integer_text(&v), Some("4294967295".encode_utf16().collect()));
+        v[0] = 11;
+        assert_eq!(integer_text(&v), None);
     }
 }

@@ -17,8 +17,8 @@ fn shell() -> Shell {
 fn render(s: &Shell) -> MemoryFramebuffer {
     let mut fb = MemoryFramebuffer::new(1280, 800);
     let all = Rect::new(0, 0, 1280, 800);
-    s.below().draw(&mut fb, all, 1);
-    s.above().draw(&mut fb, all, 1);
+    s.below().draw(&mut fb, all, Scale::from_int(1));
+    s.above().draw(&mut fb, all, Scale::from_int(1));
     fb
 }
 
@@ -411,10 +411,10 @@ fn hidpi_draws_the_same_at_twice_the_size() {
     s.press(10, 10);
     let mut big = MemoryFramebuffer::new(2560, 1600);
     let all = Rect::new(0, 0, 2560, 1600);
-    s.below().draw(&mut big, all, 2);
-    s.above().draw(&mut big, all, 2);
+    s.below().draw(&mut big, all, Scale::from_int(2));
+    s.above().draw(&mut big, all, Scale::from_int(2));
     assert_eq!(big.pixel(1280, 40), Some(BAR), "the ridge is 48 physical rows");
-    let body = s.panel_geometry(Panel::Menu).body(24).scale(2);
+    let body = s.panel_geometry(Panel::Menu).body(24).scale(Scale::from_int(2));
     assert_eq!(big.pixel((body.x + 4) as u32, (body.y + 4) as u32), Some(BAR), "the menu hangs at twice the size");
 }
 
@@ -640,8 +640,8 @@ fn icons_scale_with_the_output() {
     let mut fb = MemoryFramebuffer::new(2560, 1600);
     let all = Rect::new(0, 0, 2560, 1600);
     // The shell is 1280 x 800 logical; at scale 2 the box is 56 pixels.
-    s.above().draw(&mut fb, all, 2);
-    let row = s.row_rect(&s.launcher_layout(24), 0).scale(2);
+    s.above().draw(&mut fb, all, Scale::from_int(2));
+    let row = s.row_rect(&s.launcher_layout(24), 0).scale(Scale::from_int(2));
     let (x, y) = (row.x + 2 * 10 + 28, row.y + row.height / 2);
     assert_eq!(fb.pixel(x as u32, y as u32), Some(0xff_0000));
     assert_eq!(fb.pixel((x - 26) as u32, y as u32), Some(0xff_0000), "56 pixels wide");
