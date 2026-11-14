@@ -31,7 +31,7 @@ use poly_shell::icons::lucide;
 use poly_shell::theme::pal;
 use poly_vt::keys::{self, KeyMods, MouseAction, MouseButton, MouseEvent};
 use poly_vt::{Attrs, Cell, Color, CursorShape as VtCursor, Damage, MouseMode, Terminal};
-use poly_wayland::compose::{Framebuffer, Rect};
+use poly_wayland::compose::{Framebuffer, Rect, Scale};
 
 /// The header's height and the padding around the screen, logical.
 pub const HEADER: i32 = 40;
@@ -43,7 +43,7 @@ pub const LINE: f32 = 1.35;
 pub const SCROLLBACK: usize = 5000;
 
 /// The mono style at scale `s`.
-fn mono(s: i32) -> Style {
+fn mono(s: Scale) -> Style {
     Style::new(Face::Mono, FONT_SIZE).scaled(s)
 }
 
@@ -117,12 +117,12 @@ pub struct Grid {
 impl Grid {
     /// The grid for a `w` × `h` logical window at scale `s`, cells of
     /// `advance` physical pixels (the mono face's).
-    pub fn new(w: i32, h: i32, s: i32, advance: f32) -> Grid {
+    pub fn new(w: i32, h: i32, s: Scale, advance: f32) -> Grid {
         let cell_w = ((advance + 0.5) as i32).max(1);
-        let cell_h = ((FONT_SIZE * LINE * s as f32 + 0.5) as i32).max(1);
+        let cell_h = ((FONT_SIZE * LINE * s.factor() + 0.5) as i32).max(1);
         let (x, y) = (PAD * s, (HEADER + PAD) * s);
-        let cols = ((w * s - 2 * PAD * s) / cell_w).clamp(2, 1000) as u16;
-        let rows = (((h - HEADER) * s - 2 * PAD * s) / cell_h).clamp(2, 500) as u16;
+        let cols = ((s.px(w) - 2 * PAD * s) / cell_w).clamp(2, 1000) as u16;
+        let rows = ((s.px(h - HEADER) - 2 * PAD * s) / cell_h).clamp(2, 500) as u16;
         Grid { cell_w, cell_h, x, y, cols, rows }
     }
 
@@ -229,7 +229,7 @@ pub struct TermApp {
     /// Bytes for the shell that did not go yet.
     out: Vec<u8>,
     size: (i32, i32),
-    scale: i32,
+    scale: Scale,
     grid: Grid,
     /// The mono face's advance at the current scale, physical.
     advance: f32,
@@ -275,7 +275,7 @@ impl TermApp {
             pty,
             out: Vec::new(),
             size: (0, 0),
-            scale: 1,
+            scale: Scale::ONE,
             grid: Grid::default(),
             advance: 8.0,
             selection: None,
@@ -360,22 +360,22 @@ impl TermApp {
                 cx.damage(Rect::new(0, HEADER, self.size.0, self.size.1 - HEADER));
             }
             Damage::Rows(rows) => {
-                let s = self.scale.max(1);
+                let s = self.scale;
                 if self.dirty.len() < rows.len() {
                     self.dirty.resize(rows.len(), false);
                 }
                 for (r, _) in rows.iter().enumerate().filter(|(_, d)| **d) {
                     self.dirty[r] = true;
                     let p = self.grid.row_rect(r as u16, self.size.0 * s);
-                    cx.damage(Rect::new(0, p.y / s, self.size.0, (p.height + s - 1) / s + 1));
+                    cx.damage(s.rect_to_logical_out(p));
                 }
             }
         }
         // The cursor's old row, if it moved off it.
         if let Some(r) = self.drawn_cursor.take() {
-            let s = self.scale.max(1);
+            let s = self.scale;
             let p = self.grid.row_rect(r, self.size.0 * s);
-            cx.damage(Rect::new(0, p.y / s, self.size.0, (p.height + s - 1) / s + 1));
+            cx.damage(s.rect_to_logical_out(p));
         }
     }
 
@@ -738,7 +738,7 @@ impl TermApp {
                         fg = pal().s1;
                     }
                     (VtCursor::Block, false) => {
-                        poly_shell::draw::rounded_border(fb, clip, cr, 0, s, pal().ink_primary, 200);
+                        poly_shell::draw::rounded_border(fb, clip, cr, 0, s.line(1), pal().ink_primary, 200);
                     }
                     (VtCursor::Underline, _) => {
                         let u = Rect::new(x, row_rect.y + g.cell_h - 2 * s, w, 2 * s);
@@ -764,7 +764,7 @@ impl TermApp {
                     ui.text.draw_style(
                         fb,
                         clip,
-                        (x + s.max(1) / 2 + 1) as f32 - 0.5,
+                        (x + s.line(1) / 2 + 1) as f32 - 0.5,
                         baseline,
                         x + w,
                         text,
@@ -775,10 +775,10 @@ impl TermApp {
                 }
             }
             if cell.attrs.contains(Attrs::UNDERLINE) {
-                poly_shell::draw::fill(fb, clip, Rect::new(x, baseline + 2 * s, w, s), fg, 255);
+                poly_shell::draw::fill(fb, clip, Rect::new(x, baseline + 2 * s, w, s.line(1)), fg, 255);
             }
             if cell.attrs.contains(Attrs::STRIKE) {
-                poly_shell::draw::fill(fb, clip, Rect::new(x, baseline - g.cell_h / 4, w, s), fg, 255);
+                poly_shell::draw::fill(fb, clip, Rect::new(x, baseline - g.cell_h / 4, w, s.line(1)), fg, 255);
             }
         }
     }
@@ -837,9 +837,9 @@ impl App for TermApp {
                     self.send(&bytes);
                 }
                 if let Some((r, _)) = self.vt.cursor_on_display() {
-                    let s = self.scale.max(1);
+                    let s = self.scale;
                     let p = self.grid.row_rect(r, self.size.0 * s);
-                    cx.damage(Rect::new(0, p.y / s, self.size.0, (p.height + s - 1) / s + 1));
+                    cx.damage(s.rect_to_logical_out(p));
                 }
             }
             AppEvent::Theme => cx.redraw(),
@@ -878,7 +878,7 @@ impl App for TermApp {
         for r in rows {
             self.draw_row(ui, fb, all, r, light);
             let p = self.grid.row_rect(r, all.width);
-            drawn.push(Rect::new(0, p.y / s, self.size.0, (p.height + s - 1) / s + 1));
+            drawn.push(s.rect_to_logical_out(p));
         }
         self.drawn_cursor = self.vt.cursor_on_display().map(|(r, _)| r);
         if let Some(m) = &self.menu {
@@ -942,22 +942,22 @@ mod tests {
     use poly_wayland::compose::MemoryFramebuffer;
 
     fn ui() -> Ui {
-        Ui { text: Text::new(None), scale: 1 }
+        Ui { text: Text::new(None), scale: Scale::ONE }
     }
 
     fn app(w: i32, h: i32) -> TermApp {
         let mut t = TermApp::new(None, 80, 24);
         let mut cx = Cx::default();
-        t.event(AppEvent::Resized { width: w, height: h, scale: 1 }, &mut cx);
+        t.event(AppEvent::Resized { width: w, height: h, scale: Scale::ONE }, &mut cx);
         t
     }
 
     #[test]
     fn the_grid_fills_the_page_inside_its_padding() {
-        let g = Grid::new(800, 520, 1, 7.8);
+        let g = Grid::new(800, 520, Scale::from_int(1), 7.8);
         assert_eq!((g.cell_w, g.cell_h), (8, 18));
         assert_eq!((g.cols, g.rows), ((800 - 24) as u16 / 8, ((520 - 40 - 24) / 18) as u16));
-        let g2 = Grid::new(800, 520, 2, 15.6);
+        let g2 = Grid::new(800, 520, Scale::from_int(2), 15.6);
         assert_eq!((g2.cell_w, g2.cell_h), (16, 35));
         assert_eq!(g2.cell_at(g2.x + 16 * 3 + 1, g2.y + 35 * 2 + 1), (3, 2));
         assert_eq!(g2.cell_at(0, 0), (0, 0), "clamped");
@@ -1008,7 +1008,7 @@ mod tests {
         let mut fb = MemoryFramebuffer::new(640, 480);
         assert!(calls.borrow().is_empty(), "not at creation");
         // The size arrives, but the cell size does not yet: still waiting.
-        t.event(AppEvent::Resized { width: 640, height: 480, scale: 1 }, &mut cx);
+        t.event(AppEvent::Resized { width: 640, height: 480, scale: Scale::ONE }, &mut cx);
         assert!(calls.borrow().is_empty(), "not before the first draw measures the cells");
         t.draw(&mut fb, &ui(), true);
         let g = t.grid;
@@ -1020,7 +1020,7 @@ mod tests {
         );
         assert_ne!((g.cols, g.rows), (80, 24), "a size other than the placeholder");
         // Later layouts do not start it again.
-        t.event(AppEvent::Resized { width: 700, height: 500, scale: 1 }, &mut cx);
+        t.event(AppEvent::Resized { width: 700, height: 500, scale: Scale::ONE }, &mut cx);
         t.draw(&mut fb, &ui(), true);
         assert_eq!(calls.borrow().len(), 1);
     }

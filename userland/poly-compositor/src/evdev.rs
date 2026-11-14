@@ -20,6 +20,7 @@
 
 use crate::os::{self, RawFd};
 use crate::prelude::*;
+use poly_wayland::compose::Scale;
 use poly_wayland::seat::InputEventQueue;
 use poly_wayland::seat::{Capabilities, InputEvent, InputSource};
 use poly_wayland::wire::Fixed;
@@ -58,6 +59,16 @@ pub enum Kind {
     },
 }
 
+/// What pointer devices are mapped onto: the output's size in physical
+/// pixels and its scale (ADR 0179). Absolute devices cover the physical
+/// pixels, relative ones move in them; the seat hears logical positions
+/// ([`Scale::physical_to_logical`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Geometry {
+    pub physical: (i32, i32),
+    pub scale: Scale,
+}
+
 /// One device's frame being built.
 #[derive(Debug)]
 pub struct Translator {
@@ -77,21 +88,22 @@ impl Translator {
         Translator { kind, dx: 0, dy: 0, abs: (None, None), last_abs: (0, 0), rest: Vec::new() }
     }
 
-    /// Scale `v` from the axis range onto `0..size` logical pixels.
-    fn scale(v: i32, (min, max): (i32, i32), size: i32) -> Fixed {
+    /// Scale `v` from the axis range onto the output's `0..size` physical
+    /// pixels, then to the logical position the seat works in.
+    fn scale(v: i32, (min, max): (i32, i32), size: i32, scale: Scale) -> Fixed {
         let span = i64::from(max) - i64::from(min);
         if span <= 0 {
             return Fixed::from_int(0);
         }
         let pos = (i64::from(v) - i64::from(min)).clamp(0, span);
-        Fixed(((pos * i64::from(size - 1).max(0) * 256) / span) as i32)
+        scale.physical_to_logical(Fixed(((pos * i64::from(size - 1).max(0) * 256) / span) as i32))
     }
 
     /// One event; at `SYN_REPORT` what the frame means is appended to
-    /// `out`. `size` is the output's logical size, `time` the time in ms.
-    pub fn feed(&mut self, ty: u16, code: u16, value: i32, time: u32, size: (i32, i32), out: &mut Vec<InputEvent>) {
+    /// `out`. `geometry` is the output's, `time` the time in ms.
+    pub fn feed(&mut self, ty: u16, code: u16, value: i32, time: u32, geometry: Geometry, out: &mut Vec<InputEvent>) {
         match (ty, code) {
-            (EV_SYN, SYN_REPORT) => self.flush(time, size, out),
+            (EV_SYN, SYN_REPORT) => self.flush(time, geometry, out),
             (EV_SYN, SYN_DROPPED) => {
                 (self.dx, self.dy, self.abs) = (0, 0, (None, None));
                 self.rest.clear();
@@ -121,9 +133,15 @@ impl Translator {
         }
     }
 
-    fn flush(&mut self, time: u32, size: (i32, i32), out: &mut Vec<InputEvent>) {
+    fn flush(&mut self, time: u32, geometry: Geometry, out: &mut Vec<InputEvent>) {
+        let (size, scale) = (geometry.physical, geometry.scale);
         if self.dx != 0 || self.dy != 0 {
-            out.push(InputEvent::PointerMotion { time, dx: Fixed::from_int(self.dx), dy: Fixed::from_int(self.dy) });
+            // A relative device moves in physical pixels.
+            out.push(InputEvent::PointerMotion {
+                time,
+                dx: scale.to_logical_fixed(self.dx),
+                dy: scale.to_logical_fixed(self.dy),
+            });
             (self.dx, self.dy) = (0, 0);
         }
         if let Kind::Tablet { x, y } = self.kind
@@ -135,8 +153,8 @@ impl Translator {
             self.abs = (None, None);
             out.push(InputEvent::PointerMotionAbsolute {
                 time,
-                x: Self::scale(ax, x, size.0),
-                y: Self::scale(ay, y, size.1),
+                x: Self::scale(ax, x, size.0, scale),
+                y: Self::scale(ay, y, size.1, scale),
             });
         }
         out.append(&mut self.rest);
@@ -261,9 +279,8 @@ impl Evdev {
         Evdev { devices, queue: InputEventQueue::default() }
     }
 
-    /// Read what device `index` has (it was readable); `size` is the
-    /// output's logical size, `time` now in ms.
-    pub fn read(&mut self, index: usize, size: (i32, i32), time: u32) {
+    /// Read what device `index` has (it was readable); `time` is now in ms.
+    pub fn read(&mut self, index: usize, geometry: Geometry, time: u32) {
         let Some(dev) = self.devices.get_mut(index) else { return };
         let mut buf = [0u8; EVENT_SIZE * 64];
         let mut out = Vec::new();
@@ -276,7 +293,7 @@ impl Evdev {
                 let ty = u16::from_le_bytes([e[16], e[17]]);
                 let code = u16::from_le_bytes([e[18], e[19]]);
                 let value = i32::from_le_bytes([e[20], e[21], e[22], e[23]]);
-                dev.translator.feed(ty, code, value, time, size, &mut out);
+                dev.translator.feed(ty, code, value, time, geometry, &mut out);
             }
             if n < buf.len() {
                 break;
@@ -305,7 +322,7 @@ impl InputSource for Evdev {
 mod tests {
     use super::*;
 
-    const SIZE: (i32, i32) = (1280, 800);
+    const SIZE: Geometry = Geometry { physical: (1280, 800), scale: Scale::ONE };
 
     fn frame(t: &mut Translator, events: &[(u16, u16, i32)]) -> Vec<InputEvent> {
         let mut out = Vec::new();
@@ -362,6 +379,41 @@ mod tests {
         let out = frame(&mut t, &[(EV_ABS, ABS_X, 0x4000)]);
         let InputEvent::PointerMotionAbsolute { x, .. } = out[0] else { panic!() };
         assert_eq!(x.floor(), 639);
+    }
+
+    #[test]
+    fn pointers_are_physical_pixels_made_logical_by_the_scale() {
+        // 150 %: a 1280x800 screen is 853x533 logical pixels.
+        let at150 = Geometry { physical: (1280, 800), scale: Scale::from_percent(150) };
+        let mut t = Translator::new(Kind::Tablet { x: (0, 0x7fff), y: (0, 0x7fff) });
+        let mut out = Vec::new();
+        t.feed(EV_ABS, ABS_X, 0x7fff, 5, at150, &mut out);
+        t.feed(EV_ABS, ABS_Y, 0x7fff, 5, at150, &mut out);
+        t.feed(EV_SYN, SYN_REPORT, 0, 5, at150, &mut out);
+        // The last physical pixel, 1279 and 799, in logical pixels: inside
+        // the screen's 853x533 (what the seat clamps to is 852 and 532).
+        let [InputEvent::PointerMotionAbsolute { x, y, .. }] = out[..] else { panic!("{out:?}") };
+        assert_eq!((x.floor(), y.floor()), (852, 532));
+        assert_eq!(x, Scale::from_percent(150).to_logical_fixed(1279));
+        // The middle of the screen is the middle of the logical one.
+        let mut out = Vec::new();
+        t.feed(EV_ABS, ABS_X, 0x4000, 5, at150, &mut out);
+        t.feed(EV_SYN, SYN_REPORT, 0, 5, at150, &mut out);
+        let InputEvent::PointerMotionAbsolute { x, .. } = out[0] else { panic!() };
+        assert_eq!(x.floor(), 426);
+        // A mouse moves in physical pixels: three of them are two logical ones.
+        let mut m = Translator::new(Kind::Mouse);
+        let mut out = Vec::new();
+        m.feed(EV_REL, REL_X, 3, 5, at150, &mut out);
+        m.feed(EV_REL, REL_Y, -3, 5, at150, &mut out);
+        m.feed(EV_SYN, SYN_REPORT, 0, 5, at150, &mut out);
+        assert_eq!(out, [InputEvent::PointerMotion { time: 5, dx: Fixed::from_int(2), dy: Fixed::from_int(-2) }]);
+        // At a whole scale of 2 a pixel is half a logical one.
+        let at2 = Geometry { physical: (2560, 1600), scale: Scale::from_int(2) };
+        let mut out = Vec::new();
+        m.feed(EV_REL, REL_X, 3, 5, at2, &mut out);
+        m.feed(EV_SYN, SYN_REPORT, 0, 5, at2, &mut out);
+        assert_eq!(out, [InputEvent::PointerMotion { time: 5, dx: Fixed(384), dy: Fixed(0) }]);
     }
 
     #[test]
