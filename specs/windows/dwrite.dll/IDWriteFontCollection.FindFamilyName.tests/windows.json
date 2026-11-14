@@ -3,13 +3,27 @@
   "system": {
     "name": "windows",
     "version": "10.0.26200.0",
-    "build": "26200.9711",
+    "build": "26200.9974",
     "arch": "AMD64"
   },
-  "bundle": "fcf606b508cd",
+  "bundle": "a4a7b33f45cd",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-09T12:58:13Z",
+  "started": "2026-11-14T15:27:41Z",
   "tests": [
+    {
+      "name": "ffn_message_font",
+      "exe_sha256": "9491d9432383bbeb344db2c73fc29caa2ead1c69f1f0f97d12930d8a081cc60e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3lzdGVtIGNvbGxlY3Rpb246IGZhbWlsaWVzPjAgMQpjYXB0aW9uOiAweDAwMDAwMDAwIGV4aXN0cyAxIGluZGV4PGNvdW50IDE7IEdldEZvbnRGYW1pbHkgMHgwMDAwMDAwMCBpdHMgbmFtZSBpcyB0aGUgZmFjZSAxOyBHZXRGaXJzdE1hdGNoaW5nRm9udCAweDAwMDAwMDAwIGZvbnRzPjAgMTsgQ3JlYXRlRm9udEZhY2UgMHgwMDAwMDAwMCBmYWNlIDEKc21hbGwgY2FwdGlvbjogMHgwMDAwMDAwMCBleGlzdHMgMSBpbmRleDxjb3VudCAxOyBHZXRGb250RmFtaWx5IDB4MDAwMDAwMDAgaXRzIG5hbWUgaXMgdGhlIGZhY2UgMTsgR2V0Rmlyc3RNYXRjaGluZ0ZvbnQgMHgwMDAwMDAwMCBmb250cz4wIDE7IENyZWF0ZUZvbnRGYWNlIDB4MDAwMDAwMDAgZmFjZSAxCm1lbnU6IDB4MDAwMDAwMDAgZXhpc3RzIDEgaW5kZXg8Y291bnQgMTsgR2V0Rm9udEZhbWlseSAweDAwMDAwMDAwIGl0cyBuYW1lIGlzIHRoZSBmYWNlIDE7IEdldEZpcnN0TWF0Y2hpbmdGb250IDB4MDAwMDAwMDAgZm9udHM+MCAxOyBDcmVhdGVGb250RmFjZSAweDAwMDAwMDAwIGZhY2UgMQpzdGF0dXM6IDB4MDAwMDAwMDAgZXhpc3RzIDEgaW5kZXg8Y291bnQgMTsgR2V0Rm9udEZhbWlseSAweDAwMDAwMDAwIGl0cyBuYW1lIGlzIHRoZSBmYWNlIDE7IEdldEZpcnN0TWF0Y2hpbmdGb250IDB4MDAwMDAwMDAgZm9udHM+MCAxOyBDcmVhdGVGb250RmFjZSAweDAwMDAwMDAwIGZhY2UgMQptZXNzYWdlOiAweDAwMDAwMDAwIGV4aXN0cyAxIGluZGV4PGNvdW50IDE7IEdldEZvbnRGYW1pbHkgMHgwMDAwMDAwMCBpdHMgbmFtZSBpcyB0aGUgZmFjZSAxOyBHZXRGaXJzdE1hdGNoaW5nRm9udCAweDAwMDAwMDAwIGZvbnRzPjAgMTsgQ3JlYXRlRm9udEZhY2UgMHgwMDAwMDAwMCBmYWNlIDEKJ3NhbnMnOiAweDAwMDAwMDAwIGV4aXN0cyAwIGluZGV4IGlzIDB4RkZGRkZGRkYgMQonc2Fucy1zZXJpZic6IDB4MDAwMDAwMDAgZXhpc3RzIDAgaW5kZXggaXMgMHhGRkZGRkZGRiAxCidTYW5zJzogMHgwMDAwMDAwMCBleGlzdHMgMCBpbmRleCBpcyAweEZGRkZGRkZGIDEKJ3NlcmlmJzogMHgwMDAwMDAwMCBleGlzdHMgMCBpbmRleCBpcyAweEZGRkZGRkZGIDEKJ21vbm9zcGFjZSc6IDB4MDAwMDAwMDAgZXhpc3RzIDAgaW5kZXggaXMgMHhGRkZGRkZGRiAxCidQb2x5Tm9TdWNoIEZhY2UnOiAweDAwMDAwMDAwIGV4aXN0cyAwIGluZGV4IGlzIDB4RkZGRkZGRkYgMQonU3lzdGVtJzogMHgwMDAwMDAwMCBleGlzdHMgMCBpbmRleCBpcyAweEZGRkZGRkZGIDEKJ01TIFNoZWxsIERsZyc6IDB4MDAwMDAwMDAgZXhpc3RzIDAgaW5kZXggaXMgMHhGRkZGRkZGRiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "system collection: families>0 1\ncaption: 0x00000000 exists 1 index<count 1; GetFontFamily 0x00000000 its name is the face 1; GetFirstMatchingFont 0x00000000 fonts>0 1; CreateFontFace 0x00000000 face 1\nsmall caption: 0x00000000 exists 1 index<count 1; GetFontFamily 0x00000000 its name is the face 1; GetFirstMatchingFont 0x00000000 fonts>0 1; CreateFontFace 0x00000000 face 1\nmenu: 0x00000000 exists 1 index<count 1; GetFontFamily 0x00000000 its name is the face 1; GetFirstMatchingFont 0x00000000 fonts>0 1; CreateFontFace 0x00000000 face 1\nstatus: 0x00000000 exists 1 index<count 1; GetFontFamily 0x00000000 its name is the face 1; GetFirstMatchingFont 0x00000000 fonts>0 1; CreateFontFace 0x00000000 face 1\nmessage: 0x00000000 exists 1 index<count 1; GetFontFamily 0x00000000 its name is the face 1; GetFirstMatchingFont 0x00000000 fonts>0 1; CreateFontFace 0x00000000 face 1\n'sans': 0x00000000 exists 0 index is 0xFFFFFFFF 1\n'sans-serif': 0x00000000 exists 0 index is 0xFFFFFFFF 1\n'Sans': 0x00000000 exists 0 index is 0xFFFFFFFF 1\n'serif': 0x00000000 exists 0 index is 0xFFFFFFFF 1\n'monospace': 0x00000000 exists 0 index is 0xFFFFFFFF 1\n'PolyNoSuch Face': 0x00000000 exists 0 index is 0xFFFFFFFF 1\n'System': 0x00000000 exists 0 index is 0xFFFFFFFF 1\n'MS Shell Dlg': 0x00000000 exists 0 index is 0xFFFFFFFF 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 212
+    },
     {
       "name": "ffn_system",
       "exe_sha256": "282285f7260d4adee9de2ec940d49c5037f782305ea0ea0a7eb2ceeabf2e56a4",

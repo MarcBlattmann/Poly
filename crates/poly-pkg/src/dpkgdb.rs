@@ -220,6 +220,24 @@ pub fn installed_version(status: &str, name: &str) -> Option<String> {
     None
 }
 
+/// What dpkg's status file says about package `name`, if it is installed
+/// and configured.
+pub fn installed_info(status: &str, name: &str) -> Option<crate::deb::Info> {
+    let wanted = alloc::format!("Package: {name}");
+    for block in status.split("\n\n") {
+        let block = block.trim_start_matches('\n');
+        if block.lines().next().map(str::trim_end) != Some(wanted.as_str()) {
+            continue;
+        }
+        let p = control::first(block)?;
+        if p.get("Status")?.split_whitespace().nth(2) != Some("installed") {
+            return None;
+        }
+        return crate::deb::Info::from_paragraph(&p).ok();
+    }
+    None
+}
+
 /// How many packages of `status` are wanted but not configured yet
 /// (unpacked, or left half way by a configuration that failed or was cut
 /// off): what `dpkg --configure -a` will work through.
