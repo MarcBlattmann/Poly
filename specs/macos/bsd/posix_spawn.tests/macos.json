@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "spawn_errors",
+      "source_sha256": "ba8b4a7fa58d651aa725acdb8f1f5a222b50118da6d60ab3f21c144b1bc5e5d7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "033a577eb3297438b5316c735fed6f86146b77f487e2bdc058341e3d355a2942",
+          "exit_code": 0,
+          "stdout": "ok a missing file: ENOENT\nok a directory: EACCES\nok no execute permission: EACCES\nok a file used as a directory: ENOTDIR\nok no child was made: ECHILD\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "spawn_inherit",
+      "source_sha256": "b187fd73675a8367280ae571961116f5b129716057f123f29c48108672d82311",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "38854bfd782596ba217c4239ca0e9fc0e5c4529786e95e8038159f35a0789b0a",
+          "exit_code": 0,
+          "stdout": "ok posix_spawn\nchild args: [child]\nchild env:\nchild fd5=open fd6=closed usr1=1 usr2=0 mask=268435456\nok the child ran\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

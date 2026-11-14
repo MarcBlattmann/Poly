@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/fork.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# fork.tests/macos.json.
+id: macos/syscall/bsd/fork
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 2,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 2, arguments in x0..x5 (second result in x1). On
+  failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. fork() makes a copy
+  of the process. The parent gets the child's pid in the result register
+  and 0 in the second register; the child gets its own pid in the result
+  register and 1 in the second register (so a caller tells the two apart
+  by the second register). The child's pid differs from the parent's and
+  its parent is the caller (getppid, BSD 39). Memory is copied (the
+  child's writes do not appear in the parent); descriptors are shared (one
+  file offset, the same pipe). Signals: the child keeps the handlers (also
+  SIG_IGN) and the signal mask and has no pending signals, while the
+  parent's stay pending.
+returns:
+  parent: "the child's pid (> 0), second register 0"
+  child: "the child's own pid, second register 1"
+errors: {}
+side_effects: "a new process"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

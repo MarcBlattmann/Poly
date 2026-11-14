@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "getpid_ignores_arguments",
+      "source_sha256": "6b5534489ed1a644e4abb40a9c2ea9b22744bd6c3029f58d0b0c996b5d1a8a8c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "759584f03f4209ad6a28bfd690773a36fae719a950351256eabf345f3e1edc6e",
+          "exit_code": 0,
+          "stdout": "ok getpid with arguments succeeds\nok and gives the same pid\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "getpid_parent",
+      "source_sha256": "782072a5a0ba950af2fb376d8440bcc8e6fd79fe0770fc2a71ca755aa7c0f93a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "125fb873dd94d500eec5d6bfdebc62c3b711f221b2cc07d114a02a46f1fd7a0a",
+          "exit_code": 0,
+          "stdout": "ok getppid succeeds\nok the parent pid is positive\nok the parent pid is not the pid\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

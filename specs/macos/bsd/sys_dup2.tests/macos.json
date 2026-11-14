@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "dup2_basic",
+      "source_sha256": "a6faf81279e6036ad865a8dc61614876da172059e4525422b3ae56a67e5a960e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "795af6dfa0441b2a26c693c4a5fef58ffdb7ed11b1d5c5728e7b67e5f0d2c092",
+          "exit_code": 0,
+          "stdout": "ok dup2 returns the new descriptor\nok the offset is shared: the copy continues at 3\nok the copy is the same file (inode)\nok the new descriptor has no close-on-exec\nok a descriptor far above the used ones: 50\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dup2_same_fd",
+      "source_sha256": "afe8d248b95e5668858561ca7e9f9e81f3d71aa0a1bfb468f1feb354cb026516",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d46b5770a25c589374f6e0778f9b046819b08877a65f913604e657dc74c2873d",
+          "exit_code": 0,
+          "stdout": "ok an open descriptor: returned\nok close-on-exec is kept\nok a descriptor that is not open: EBADF\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
