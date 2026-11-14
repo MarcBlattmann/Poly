@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a4a7b33f45cd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T15:27:41Z",
+  "tests": [
+    {
+      "name": "gobj_font",
+      "exe_sha256": "e72e738595315da46cf0562c74ff1f7c685108c171bb47163ae0f2df421b506a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zm9udCBtYWRlIDEgR2V0T2JqZWN0VHlwZSA2Ck5VTEwgYnVmZmVyLCBzaXplIDA6IDkyCk5VTEwgYnVmZmVyLCBzaXplIDkyOiA5MgpzaXplIDkyOiByZXR1cm5zIDkyIGZpcnN0IDkyIGJ5dGVzIGVxdWFsIHRoZSBMT0dGT05UVywgdGhlIDE2IGJ5dGVzIGFmdGVyIHRoZSByZXR1cm5lZCBzaXplIHVudG91Y2hlZCAxCjMxLXVuaXQgZmFjZTogOTIgc2FtZSAxCjMyIHVuaXRzLCBubyBOVUw6IG1hZGUgMSByZXR1cm5zIDkyIHRoZSBmaXJzdCAzMSB1bml0cyBrZXB0IDEgdGhlIGxhc3QgdW5pdCBpcyBOVUwgMCBvdGhlciBmaWVsZHMga2VwdCAxCmRlbGV0ZWQgZm9udDogMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "font made 1 GetObjectType 6\nNULL buffer, size 0: 92\nNULL buffer, size 92: 92\nsize 92: returns 92 first 92 bytes equal the LOGFONTW, the 16 bytes after the returned size untouched 1\n31-unit face: 92 same 1\n32 units, no NUL: made 1 returns 92 the first 31 units kept 1 the last unit is NUL 0 other fields kept 1\ndeleted font: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

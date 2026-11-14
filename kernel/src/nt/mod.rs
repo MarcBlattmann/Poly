@@ -256,6 +256,14 @@ struct NtState {
     /// Each live process's creation time, a `FILETIME`
     /// (`NtQueryInformationProcess(ProcessTimes)`, ADR 0087).
     created: BTreeMap<ProcessId, u64>,
+    /// What an ended process's `ProcessTimes` stay at: its creation time and the kernel and user
+    /// CPU time it used, taken as it ended (`QueryProcessCycleTime` of an exited process "still
+    /// answers TRUE, with a value not lower than while it ran, and the same value on every call").
+    finished: BTreeMap<ProcessId, [u64; 3]>,
+    /// The most CPU time (kernel, user; 100 ns) a live process was ever reported to have used: a
+    /// reading never goes down, and an ended process keeps at least what was read while it ran
+    /// (its last thread's time is only counted once that thread is gone).
+    peak: BTreeMap<ProcessId, [u64; 2]>,
 }
 
 static STATE: Mutex<Option<NtState>> = Mutex::new(None);
@@ -345,6 +353,8 @@ fn make_state(slot: &mut Option<NtState>) {
         ctl: BTreeMap::new(),
         timers: BTreeMap::new(),
         created: BTreeMap::new(),
+        finished: BTreeMap::new(),
+        peak: BTreeMap::new(),
     };
     // The Windows folders on C: and the registry values that follow
     // them (ADR 0073), before file I/O attaches C:.
@@ -568,9 +578,17 @@ impl NtKernel for Kernel {
     }
 
     fn process_times(&self, pid: ProcessId) -> Option<[u64; 3]> {
-        let created = with(|s| s.created.get(&pid).copied())?;
+        let Some(created) = with(|s| s.created.get(&pid).copied()) else {
+            return with(|s| s.finished.get(&pid).copied());
+        };
         let cpu = crate::process::find(pid.0).map(|p| crate::cputime::process(&p)).unwrap_or_default();
-        Some([created, cpu.system_ns / 100, cpu.user_ns / 100])
+        let seen = with(|s| {
+            let peak = s.peak.entry(pid).or_insert([0, 0]);
+            peak[0] = peak[0].max(cpu.system_ns / 100);
+            peak[1] = peak[1].max(cpu.user_ns / 100);
+            *peak
+        });
+        Some([created, seen[0], seen[1]])
     }
 
     fn save_hive(&mut self, file: &str, data: &[u8]) -> Result<(), NtStatus> {
@@ -734,6 +752,10 @@ struct HandlesFor {
     jobs: Vec<u64>,
     join_creator_jobs: bool,
     dynamic_code_blocked: bool,
+    /// The descriptors of its process and first thread objects (`lpProcessAttributes`,
+    /// `lpThreadAttributes`), applied once the creator's handles are open.
+    process_security: Option<Vec<u8>>,
+    thread_security: Option<Vec<u8>>,
 }
 
 /// Handles to a new process and its first thread.
@@ -768,6 +790,8 @@ fn start_params(
     let started = with(|s| {
         s.processes.insert(pid, NtProcess::new(pid));
         s.created.insert(pid, registry::filetime_now());
+        s.finished.remove(&pid);
+        s.peak.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
         proc.dynamic_code_blocked = handles.is_some_and(|h| h.dynamic_code_blocked);
         let mut b = MemBackend { memory, sections: &mut s.sections };
@@ -818,7 +842,17 @@ fn start_params(
             // Handles for its creator (NtCreateUserProcess, ADR 0079).
             let opened = match handles {
                 Some(h) => {
-                    Some(exec::child_handles(&mut s.sys, &h.caller, pid, thread, h.process_access, h.thread_access)?)
+                    let opened =
+                        exec::child_handles(&mut s.sys, &h.caller, pid, thread, h.process_access, h.thread_access)?;
+                    // The creator's handles are open: now the descriptors it asked for apply.
+                    poly_personality_nt::security::assign_explicit_process_security(
+                        &mut s.sys,
+                        pid,
+                        Some(&h.caller),
+                        proc.object.map(|o| (o, h.process_security.as_deref())),
+                        proc.threads.first().map(|t| (t.object, h.thread_security.as_deref())),
+                    );
+                    Some(opened)
                 }
                 None => None,
             };
@@ -888,6 +922,8 @@ fn create_process(
         jobs: req.jobs,
         join_creator_jobs: req.join_creator_jobs,
         dynamic_code_blocked: req.dynamic_code_blocked,
+        process_security: req.process_security,
+        thread_security: req.thread_security,
     };
     let (start, handles) = start_params(&process, &memory, &req.image, pid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");
@@ -978,8 +1014,24 @@ pub fn thread_exit(pid: u32, tid: u32, status: ExitStatus, memory: &Arc<Memory>)
 /// The NT process `pid` has ended (its last thread is going): drop its
 /// objects, views and handles. Its memory itself goes with `user::Memory`.
 pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
+    // What it used, kept for the handles that outlive it (the last thread is still counted).
+    let used = crate::process::find(pid).map(|p| crate::cputime::process(&p)).unwrap_or_default();
     with(|s| {
-        s.created.remove(&ProcessId(pid));
+        if let Some(created) = s.created.remove(&ProcessId(pid)) {
+            let cpu = used;
+            const KEEP: usize = 4096;
+            if s.finished.len() >= KEEP
+                && let Some(oldest) = s.finished.keys().next().copied()
+            {
+                s.finished.remove(&oldest);
+            }
+            let seen = s.peak.get(&ProcessId(pid)).copied().unwrap_or([0, 0]);
+            s.finished.insert(
+                ProcessId(pid),
+                [created, (cpu.system_ns / 100).max(seen[0]), (cpu.user_ns / 100).max(seen[1])],
+            );
+        }
+        s.peak.remove(&ProcessId(pid));
         if let Some(mut proc) = s.processes.remove(&ProcessId(pid)) {
             let mut b = MemBackend { memory, sections: &mut s.sections };
             exec::process_exit(&mut s.sys, &mut proc, &mut b);

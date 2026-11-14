@@ -403,6 +403,9 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     // ADR 0155, step 9: what Chrome's browser needs to get past its start (Learn; the
     // contracts are the ones the functions' headers belong to, to be confirmed).
     ("QueryProcessCycleTime", "api-ms-win-core-realtime-l1-1-0"),
+    // `QueryUnbiasedInterruptTime` is kernel32's too (its pair, `QueryUnbiasedInterruptTimePrecise`,
+    // is `kernelbase`'s alone: the sheet).
+    ("QueryUnbiasedInterruptTime", "api-ms-win-core-realtime-l1-1-0"),
     ("GetProcessInformation", "api-ms-win-core-processthreads-l1-1-3"),
     ("SetProcessInformation", "api-ms-win-core-processthreads-l1-1-3"),
     ("SetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),

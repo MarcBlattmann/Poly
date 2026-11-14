@@ -116,6 +116,8 @@ struct Setup {
     launched: Rc<RefCell<Vec<Vec<String>>>>,
     /// The IDs of the apps the desktop was asked to start.
     opened: Rc<RefCell<Vec<String>>>,
+    /// The IDs of the apps the desktop was asked to uninstall.
+    uninstalled: Rc<RefCell<Vec<String>>>,
 }
 
 /// The desktop files under a test's root, as the launcher's reader sees
@@ -171,7 +173,11 @@ fn setup_with(applications: bool) -> Setup {
     let fs: Box<dyn Fs> = Box::new(StdFs(root.clone()));
     let catalog_root = root.clone();
     let (fs, folder) = if applications {
-        crate::applications::overlay(fs, Box::new(move || launcher_catalog(&catalog_root)))
+        crate::applications::overlay(
+            fs,
+            Box::new(move || launcher_catalog(&catalog_root)),
+            Box::new(|| std::vec!["viewer.desktop".to_string()]),
+        )
     } else {
         (fs, crate::applications::Shared::default())
     };
@@ -190,7 +196,17 @@ fn setup_with(applications: bool) -> Setup {
     app.handlers = crate::load_handlers(&StdFs(root.clone()), &["/usr/share/applications".into()]);
     app.clock = Box::new(|| 1_793_491_200);
     let opened = Rc::new(RefCell::new(Vec::new()));
+    let uninstalled = Rc::new(RefCell::new(Vec::new()));
     if applications {
+        let u = Rc::clone(&uninstalled);
+        app.uninstall_app = Box::new(move |item| {
+            let line = poly_shell::applications::uninstall_request(item);
+            match poly_wayland::launch::Control::parse(&line) {
+                Some(poly_wayland::launch::Control::Uninstall { id }) => u.borrow_mut().push(id),
+                other => return Err(std::format!("not an uninstall request: {other:?}")),
+            }
+            Ok(())
+        });
         let o = Rc::clone(&opened);
         app.set_applications(
             folder,
@@ -208,7 +224,7 @@ fn setup_with(applications: bool) -> Setup {
     assert!(app.go("/home/m"));
     let mut cx = Cx::default();
     app.event(AppEvent::Resized { width: 900, height: 580, scale: Scale::from_int(1) }, &mut cx);
-    Setup { app, root, launched, opened }
+    Setup { app, root, launched, opened, uninstalled }
 }
 
 fn names(app: &FilesApp) -> Vec<String> {
@@ -676,26 +692,29 @@ fn nothing_in_applications_can_be_changed() {
     key(&mut s.app, Some(Key::F2), None, Mods::default());
     assert!(s.app.rename.is_none());
     assert_eq!(s.app.focus, Focus::List);
-    key(&mut s.app, Some(Key::Delete), None, Mods::default());
     key(&mut s.app, Some(Key::Delete), None, Mods { shift: true, ..Mods::default() });
-    assert!(s.app.confirm.is_none(), "no uninstall yet: nothing asks to delete an app");
+    assert!(s.app.confirm.is_none(), "nothing asks to delete an app");
+    assert!(s.uninstalled.borrow().is_empty());
     ctrl(&mut s.app, 'c');
     ctrl(&mut s.app, 'x');
     assert!(s.app.clip.is_none());
-    for a in [act::NEW_FOLDER, act::TRASH, act::DELETE, act::RENAME, act::CUT, act::PASTE, act::OPEN_TERMINAL] {
+    for a in [act::NEW_FOLDER, act::DELETE, act::RENAME, act::CUT, act::PASTE, act::OPEN_TERMINAL] {
         s.app.act(a, &mut cx);
     }
     assert!(s.root.join("usr/share/applications/viewer.desktop").is_file());
     assert_eq!(names(&s.app), ["Files", "Notifications", "Settings", "Terminal", "Viewer"]);
-    assert!(s.launched.borrow().is_empty() && s.opened.borrow().is_empty());
+    assert!(s.launched.borrow().is_empty() && s.opened.borrow().is_empty() && s.uninstalled.borrow().is_empty());
     // The New folder button is not there.
     let l = Layout::new(900, 580);
     assert_eq!(s.app.target_at(l.new_folder.x + 5, l.new_folder.y + 5), None);
-    // An item's menu: what the model offers (Open), nothing dead.
-    let r = s.app.item_rect(4);
+    // An item's menu: what the model offers, nothing dead. Poly's own apps
+    // only open.
+    let r = s.app.item_rect(0);
     s.app.event(button(poly_app::BTN_RIGHT, r.x + 50, r.y + 10, 1), &mut cx);
     let labels: Vec<String> = s.app.menu.take().expect("a menu").items.into_iter().map(|i| i.label).collect();
     assert_eq!(labels, ["Open"]);
+    s.app.act(act::UNINSTALL, &mut cx);
+    assert!(s.uninstalled.borrow().is_empty(), "Poly's own apps cannot be uninstalled");
     // The folder's menu.
     s.app.event(button(poly_app::BTN_RIGHT, l.list.x + 10, l.list.bottom() - 5, 1), &mut cx);
     let labels: Vec<String> = s.app.menu.take().expect("a menu").items.into_iter().map(|i| i.label).collect();
@@ -710,6 +729,34 @@ fn nothing_in_applications_can_be_changed() {
     assert_eq!(s.app.fs.stat("applications:/Gone"), Err(FsError::NotFound));
     assert!(s.app.fs.exists("applications:/Files") && !s.app.fs.exists("applications:/Gone"));
     assert!(s.app.fs.exists("/home/m/notes.txt"), "the disk underneath is untouched");
+}
+
+#[test]
+fn an_app_the_installer_owns_can_be_uninstalled_from_its_menu() {
+    let mut s = setup_apps();
+    s.app.go("applications:///");
+    let mut cx = Cx::default();
+    let r = s.app.item_rect(4);
+    s.app.event(button(poly_app::BTN_RIGHT, r.x + 50, r.y + 10, 1), &mut cx);
+    let menu = s.app.menu.clone().expect("a menu");
+    let labels: Vec<&str> = menu.items.iter().map(|i| i.label.as_str()).collect();
+    assert_eq!(labels, ["Open", "Uninstall"]);
+    assert!(menu.items.iter().all(|i| i.enabled));
+    // The row asks the desktop to show the installer's window; nothing is
+    // removed from here.
+    s.app.act(act::UNINSTALL, &mut cx);
+    assert_eq!(*s.uninstalled.borrow(), ["viewer.desktop"]);
+    assert_eq!(s.app.status, "Asked to uninstall Viewer");
+    assert!(s.root.join("usr/share/applications/viewer.desktop").is_file());
+    assert!(s.opened.borrow().is_empty());
+    // The Delete key is the same request, for an app the installer owns.
+    s.app.menu = None;
+    key(&mut s.app, Some(Key::Delete), None, Mods::default());
+    assert_eq!(*s.uninstalled.borrow(), ["viewer.desktop", "viewer.desktop"]);
+    // Without a desktop to ask the status says so and nothing happens.
+    s.app.uninstall_app = Box::new(|_| Err("the desktop cannot be reached".into()));
+    s.app.act(act::UNINSTALL, &mut cx);
+    assert_eq!(s.app.status, "Viewer: the desktop cannot be reached");
 }
 
 #[test]
