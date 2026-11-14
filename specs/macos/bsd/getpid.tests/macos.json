@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "getpid_ignores_arguments",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "9ff44ece91dff4d36ee06451ce3590959467d01a0f7bcbb1504f982e33b7f84f",
+          "executable_sha256": "759584f03f4209ad6a28bfd690773a36fae719a950351256eabf345f3e1edc6e",
           "exit_code": 0,
           "stdout": "ok getpid with arguments succeeds\nok and gives the same pid\nsummary 2 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "0f979bfe21ffed343f2591f2790b5e0109c66bf66988a81885ac813c4f973048",
+          "executable_sha256": "125fb873dd94d500eec5d6bfdebc62c3b711f221b2cc07d114a02a46f1fd7a0a",
           "exit_code": 0,
           "stdout": "ok getppid succeeds\nok the parent pid is positive\nok the parent pid is not the pid\nsummary 3 passed, 0 failed\n",
           "stderr": "",

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "fstatat_dirfd",
+      "source_sha256": "1053513d0a65193f63592553b336d215234eba27b42a1526b65a42b2fda8369c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7cf86bc90e652b76a6ac73c57479cd5b2bbe5415db2ce0daad077fee7398bdad",
+          "exit_code": 0,
+          "stdout": "ok a relative path from a directory descriptor\nok top is not in dir: ENOENT\nok AT_FDCWD (-2): top is in the working directory\nok a regular file of size 0\nok an absolute path ignores dirfd\nok it is /dev/null\nok an absolute path with a descriptor that is not open\nok a path in the middle: dir/inner from AT_FDCWD\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "fstatat_nofollow",
+      "source_sha256": "122ac555f4ec0a597809d41bc85c51a2c48eab2836c1110b6d7573a44c00b720",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "152d4464881c332cd0945e87157aeb92d334edb304a015b5a39c3be60a5083cd",
+          "exit_code": 0,
+          "stdout": "ok flags 0 on a link\nok the file: regular, size 10\nok AT_SYMLINK_NOFOLLOW on a link\nok the link: S_IFLNK, size 4\nok NOFOLLOW from a directory descriptor\nok the link: size 7 (\"../file\")\nok and following it from the directory descriptor\nok reaches the file\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
