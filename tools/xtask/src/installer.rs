@@ -47,19 +47,19 @@ const APP: &str = "Galculator";
 /// How long the package tools may take for a step: configuring the base
 /// root takes about half a minute with a hypervisor, the downloads depend
 /// on the network.
-const STEP_WAIT: Duration = Duration::from_secs(900);
+pub(crate) const STEP_WAIT: Duration = Duration::from_secs(900);
 /// How long a window may take to show.
-const WINDOW_WAIT: Duration = Duration::from_secs(180);
+pub(crate) const WINDOW_WAIT: Duration = Duration::from_secs(180);
 
 /// The installer's window is `poly_installer_app::view::SIZE`, its buttons
 /// 32 high in the bottom right corner behind a margin of 28 (6 lower), the
 /// main one 92 wide and the other 10 to its left: where to click, from the
 /// window's place.
-fn main_button((x, y, w, h): (i32, i32, i32, i32)) -> (i32, i32) {
+pub(crate) fn main_button((x, y, w, h): (i32, i32, i32, i32)) -> (i32, i32) {
     (x + w - 28 - 46, y + h - 28 + 6 - 16)
 }
 
-fn other_button(place: (i32, i32, i32, i32)) -> (i32, i32) {
+pub(crate) fn other_button(place: (i32, i32, i32, i32)) -> (i32, i32) {
     let (x, y) = main_button(place);
     (x - 46 - 10 - 46, y)
 }
@@ -67,11 +67,11 @@ fn other_button(place: (i32, i32, i32, i32)) -> (i32, i32) {
 /// The first row of Files' list: right of the sidebar (224) and the gutter
 /// (20), below the header (40), the title (14 + 36 + 6), the column
 /// headers (30) and 2, 34 high (`poly_files_app::view::Layout`).
-fn first_row((x, y, _, _): (i32, i32, i32, i32)) -> (i32, i32) {
+pub(crate) fn first_row((x, y, _, _): (i32, i32, i32, i32)) -> (i32, i32) {
     (x + 224 + 20 + 120, y + 40 + 14 + 36 + 6 + 30 + 2 + 17)
 }
 
-fn expect(what: &str, ok: bool) -> Result {
+pub(crate) fn expect(what: &str, ok: bool) -> Result {
     if ok { Ok(()) } else { Err(format!("not true: {what}")) }
 }
 
