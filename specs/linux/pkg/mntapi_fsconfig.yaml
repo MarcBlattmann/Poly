@@ -45,9 +45,43 @@ summary: >
   string), flags ro and rw. tmpfs takes "ro" as a flag and as a string, "rw"
   as a flag; "size" as a flag is a bad value. overlay takes lowerdir (':'
   separated; each directory is checked as it is given: ENOENT), upperdir,
-  workdir, redirect_dir as strings. The caller needs CAP_SYS_ADMIN for
-  CMD_CREATE (EPERM); setting parameters on an inherited descriptor needs
-  none.
+  workdir, redirect_dir as strings (lowerdir+ is taken too). The
+  directories of an overlay are looked up when they are set (see
+  missing_directory and not_directory).
+  The order of the checks, the first that fails gives the error: (1) fs_fd
+  is an int (the upper 32 bits of the register are ignored) and a negative
+  one is EINVAL with any command; (2) a cmd of 9 or above is EOPNOTSUPP,
+  also for a descriptor that is not open; (3) the shape of the arguments is
+  EINVAL, also for a descriptor that is not open: a key missing where one
+  is needed or given where none is allowed, a missing value, a nonzero aux
+  where it must be zero, SET_BINARY of length 0 or over 1 MiB; (4) the
+  descriptor: EBADF when it is not open, EINVAL when it is some other
+  file; (5) only now are key, value and path read from memory (EFAULT), so
+  a bad pointer with a closed descriptor is EBADF; (6) for SET_FD an aux
+  of -1 is EINVAL and an aux that is not open is EBADF for every key (an
+  unknown one, a flag option and "source" too), an open aux is EINVAL for a
+  string parameter and for an unknown key; (7) the parameter itself
+  (unknown key, wrong kind of value, bad value: EINVAL). SET_PATH and
+  SET_PATH_EMPTY are EINVAL for the parameters of tmpfs and overlay (they
+  are strings and flags) before the directory descriptor or the path is
+  looked at: a closed dirfd, a path that does not exist and an empty path
+  are all EINVAL there.
+  Privilege. CMD_CREATE and CMD_CREATE_EXCL by a caller without
+  CAP_SYS_ADMIN are EPERM for every file system type tried (tmpfs, ramfs,
+  overlay, squashfs, proc, sysfs, devpts, cgroup2, mqueue, ext4, fuse) and
+  before the parameters are judged: an overlay without lowerdir or a
+  squashfs without a source is EPERM, not EINVAL. The state is looked at
+  before the privilege (a second CREATE after create, RECONFIGURE before
+  create: EBUSY) and the shape of the arguments before the state (EINVAL).
+  This EPERM changes nothing: the context still takes parameters (the
+  unprivileged caller may set more, and they count), and a CMD_CREATE by
+  root works afterwards. fsmount of a created context by such a caller is
+  EPERM and changes nothing either (root can fsmount it afterwards); fsopen
+  and fspick are EPERM for it. In the reconfigure state (after fsmount, or
+  from fspick) the same caller may set parameters, but CMD_RECONFIGURE is
+  EPERM and that refusal ends the context: every later command, root's too,
+  is EBUSY, fsmount included, and reading gives ENODATA. A CMD_CREATE by
+  root that fails on the parameters ends the context in the same way.
 returns:
   success: "0"
   read_message: "one message per read, e.g. e tmpfs: Bad value for 'size' followed by a newline"
@@ -60,19 +94,22 @@ errors:
   bad_parameter: "EINVAL (22): unknown key (also as a flag), bad value (size 'abc', mode '999', nr_inodes 'y'), flag for a value option, value for a flag, nonzero unused argument, empty key, key or string over 256 bytes, SET_BINARY of length 0 or over 1048576 or for an option that is not binary, SET_PATH / SET_PATH_EMPTY / SET_FD for a string option, key or value given for CREATE/RECONFIGURE"
   unknown_cmd: "EOPNOTSUPP (95): cmd 9 or above"
   bad_pointers: "EFAULT (14): invalid key, value or path pointer; SET_BINARY with an unreadable buffer"
-  bad_fd: "EBADF (9): fs_fd not open (also the mount descriptor of fsmount, which is not a context); SET_FD with aux not open; EINVAL for fs_fd -1 and for an fs_fd that is some other file (a regular file)"
-  missing_directory: "ENOENT (2): overlay lowerdir that does not exist (when it is set)"
-  permission: "EPERM (1): CMD_CREATE without CAP_SYS_ADMIN"
+  bad_fd: "EBADF (9): fs_fd not open (also the mount descriptor of fsmount, which is not a context); SET_FD with aux not open, for any key; EINVAL for every negative fs_fd (also with an unknown command) and for an fs_fd that is some other file (a regular file)"
+  missing_directory: "ENOENT (2): overlay lowerdir (each ':' part, also lowerdir+), upperdir or workdir that does not exist, from the SET_STRING that names it; no message is queued and the parameter is not taken"
+  not_directory: "EINVAL (22): lowerdir (any part), upperdir or workdir that exists but is no directory, message 'e overlay: PATH is not a directory' with PATH as it was given; upperdir '' (message \"Bad value for 'upperdir'\"); a lowerdir list that ends in ':'; lowerdir or upperdir given with SET_PATH (message \"Bad value for 'lowerdir'\"); at CMD_CREATE the same directory as upperdir and workdir (the context then ends)"
+  permission: "EPERM (1): CMD_CREATE and CMD_CREATE_EXCL without CAP_SYS_ADMIN, whatever the file system type (the context stays usable); fsmount of a created context, fsopen and fspick without it; CMD_RECONFIGURE without it (this one ends the context)"
 side_effects: >
   Changes the context; CMD_CREATE allocates the filesystem, CMD_RECONFIGURE
   changes a live one.
 threading: "descriptors are per process (shared file table); no other thread-specific behaviour"
-ordering: []
+ordering:
+  - "fs_fd negative (EINVAL); cmd 9 and above (EOPNOTSUPP); shape of the arguments (EINVAL); fs_fd open and a context (EBADF, EINVAL); memory read (EFAULT); SET_FD's aux (EINVAL for -1, EBADF if not open); the parameter (EINVAL); the state (EBUSY) comes before the privilege (EPERM) of CREATE, which comes before the judging of the parameters of the file system"
+  - "a CMD_CREATE refused with EPERM leaves the context in its parameter state; a CMD_RECONFIGURE refused with EPERM ends it"
 timing:
   typical: "microseconds"
   guarantees: "none"
 tests:
-  visible: 3  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 6  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 # Notes: FSCONFIG_* from linux/mount.h. Tests compare the messages listed in the summary exactly.
 # The fuse fd parameter (the descriptor of /dev/fuse) is not covered here.
