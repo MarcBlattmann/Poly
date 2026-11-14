@@ -289,6 +289,12 @@ impl Conn {
         s.bound && !s.init_done && !s.refused && !s.dead
     }
 
+    /// The length of the request the server's next read takes, 0 if none
+    /// waits.
+    pub fn next_len(&self) -> usize {
+        self.state.lock().pending.front().map_or(0, |p| p.bytes.len())
+    }
+
     /// Readable: a request waits, or the connection ended.
     pub fn readable(&self) -> bool {
         let s = self.state.lock();
@@ -530,7 +536,10 @@ struct Cache {
     attrs: BTreeMap<Ino, Cached>,
     /// `(dir, name)` to the node (0: known not to exist), until.
     entries: BTreeMap<(Ino, Vec<u8>), (u64, u64)>,
-    parents: BTreeMap<Ino, Ino>,
+    /// Each node's directory and the name it was last looked up or
+    /// made by there: `..`, and the node's name for a path
+    /// ([`FileSystem::name_of`]).
+    parents: BTreeMap<Ino, (Ino, Vec<u8>)>,
 }
 
 /// One open of a file or directory.
@@ -750,7 +759,7 @@ impl FuseFs {
         }
         let attr = Self::parse_attr(&r[40..128]);
         c.attrs.insert(node, Cached { attr, until: valid_until(now, u64_at(r, 24), u32_at(r, 36)) });
-        c.parents.insert(node, dir);
+        c.parents.insert(node, (dir, name.to_vec()));
         Ok(node)
     }
 
@@ -988,7 +997,7 @@ impl FileSystem for FuseFs {
 
     fn lookup(&self, dir: Ino, name: &[u8]) -> Result<Ino> {
         if name == b".." {
-            return Ok(self.cache.lock().parents.get(&dir).copied().unwrap_or(ROOT_ID));
+            return Ok(self.cache.lock().parents.get(&dir).map_or(ROOT_ID, |p| p.0));
         }
         if let Some(a) = self.known_attr(dir)
             && a.kind != FileType::Directory
@@ -1006,6 +1015,15 @@ impl FileSystem for FuseFs {
             0 => Err(Errno::ENOENT),
             node => Ok(node),
         }
+    }
+
+    /// A node id is the server's, not the inode number its `READDIR`
+    /// gives (`d_ino` is `fuse_dirent.ino`, which squashfuse numbers
+    /// otherwise), so a scan of the directory cannot find a node's name:
+    /// the name it was looked up by is kept instead.
+    fn name_of(&self, dir: Ino, child: Ino) -> Option<Vec<u8>> {
+        let c = self.cache.lock();
+        c.parents.get(&child).filter(|p| p.0 == dir).map(|p| p.1.clone())
     }
 
     fn getattr(&self, ino: Ino) -> Result<Attr> {
@@ -1135,10 +1153,10 @@ impl FileSystem for FuseFs {
         if r.is_ok() {
             let mut c = self.cache.lock();
             if let Some(node) = moved {
-                c.parents.insert(node, nd);
+                c.parents.insert(node, (nd, nn.to_vec()));
             }
             if let (true, Some(node)) = (flags.exchange, other) {
-                c.parents.insert(node, od);
+                c.parents.insert(node, (od, on.to_vec()));
             }
         }
         r.map(|_| ())

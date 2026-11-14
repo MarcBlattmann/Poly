@@ -42,7 +42,7 @@ struct ProtocolFile {
 /// `4460c20cfcf68b994a5ee206ed15fc19ad312f16c96075186e83b0e3f4aa48a5`),
 /// both as published with their `.sha256sum` files on
 /// gitlab.freedesktop.org.
-const PROTOCOLS: [ProtocolFile; 10] = [
+const PROTOCOLS: [ProtocolFile; 11] = [
     ProtocolFile {
         xml: "third_party/wayland/wayland.xml",
         module: "wayland",
@@ -94,6 +94,16 @@ const PROTOCOLS: [ProtocolFile; 10] = [
         module: "xwayland_shell",
         sha256: "a6589c3205d1f424cbd2708c1507daf143db2d355dcd931f6f79986c0dc205b6",
     },
+    // Poly's own file (ADR 0183): the wire format of KDE's server
+    // decoration protocol (interface, request and event names, opcodes and
+    // argument types are ABI facts), written from the public description,
+    // with none of the original's text. An empty SHA-256: nothing released
+    // to check it against.
+    ProtocolFile {
+        xml: "crates/poly-wayland/protocols/kde-server-decoration.xml",
+        module: "kde_server_decoration",
+        sha256: "",
+    },
 ];
 
 /// Where the modules go.
@@ -111,6 +121,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         let path = root.join(p.xml);
         let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         if let Some(sum) = sha256(&path)
+            && !p.sha256.is_empty()
             && sum != p.sha256
         {
             return Err(format!("{}: SHA-256 {sum}, not the released file's {}", p.xml, p.sha256));

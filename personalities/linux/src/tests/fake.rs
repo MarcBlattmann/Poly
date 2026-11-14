@@ -66,6 +66,12 @@ pub struct File {
     pub fail_after: Option<(usize, Errno)>,
     /// Fail every read with this.
     pub read_error: Option<Errno>,
+    /// A message device (`/dev/fuse`): a read takes all of `input` or,
+    /// with a smaller buffer, fails with `EINVAL`.
+    pub message: bool,
+    /// What `read_piece` answers, consumed from the front; then the length
+    /// of `input` for a message device.
+    pub pieces: Vec<usize>,
 }
 
 impl File {
@@ -79,6 +85,8 @@ impl File {
             max_write: None,
             fail_after: None,
             read_error: None,
+            message: false,
+            pieces: Vec::new(),
         }
     }
 }
@@ -536,6 +544,14 @@ impl LinuxKernel for FakeKernel {
         Ok(())
     }
 
+    fn read_piece(&mut self, fd: i32) -> usize {
+        match self.files.get_mut(&fd) {
+            Some(f) if !f.pieces.is_empty() => f.pieces.remove(0),
+            Some(f) if f.message => f.input.len(),
+            _ => self.io_piece(fd),
+        }
+    }
+
     fn write(&mut self, fd: i32, buf: &[u8]) -> Result<usize, Errno> {
         if !self.files.contains_key(&fd)
             && let Some(fs) = self.fs.as_mut()
@@ -575,6 +591,9 @@ impl LinuxKernel for FakeKernel {
         }
         if let Some(e) = f.read_error {
             return Err(e);
+        }
+        if f.message && buf.len() < f.input.len() {
+            return Err(Errno::EINVAL);
         }
         let n = buf.len().min(f.input.len());
         buf[..n].copy_from_slice(&f.input[..n]);

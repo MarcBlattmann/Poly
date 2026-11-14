@@ -93,6 +93,13 @@ impl CharDevice for FuseFile {
     fn message_size(&self) -> Option<usize> {
         Some(poly_fuse::MAX_MESSAGE)
     }
+
+    /// The waiting request: a server's read does not take a buffer of
+    /// `MAX_MESSAGE` (one megabyte, contiguous) every time it waits, which
+    /// failed with `ENOMEM` once memory was fragmented.
+    fn next_message_size(&self) -> Option<usize> {
+        Some(self.conn.next_len())
+    }
 }
 
 /// The registered device: every open is a connection of its own.

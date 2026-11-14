@@ -11,8 +11,8 @@
 //! - [`protocol`]: request and event types and tables for every interface of
 //!   `wayland.xml`, `xdg-shell`, `xdg-decoration`, `viewporter`,
 //!   `presentation-time`, `linux-dmabuf`, `fractional-scale`,
-//!   `xdg-activation`, `cursor-shape` and `xwayland-shell-v1`, generated from
-//!   the XML by
+//!   `xdg-activation`, `cursor-shape`, `xwayland-shell-v1` and KDE's server
+//!   decoration protocol, generated from the XML by
 //!   `cargo xtask wayland`.
 //! - [`server`]: clients and their objects, request dispatch, and the
 //!   protocol logic: `wl_display`/`wl_registry`/`wl_callback`,
@@ -25,7 +25,8 @@
 //!   `wl_data_device_manager` (clipboard, drag and drop), `xdg_wm_base`/
 //!   `xdg_positioner` (constraint adjustment)/`xdg_surface`/`xdg_toplevel`
 //!   (interactive move and resize)/`xdg_popup` (grabs),
-//!   `zxdg_decoration_manager_v1` (server-side unless the client draws its own), `wp_presentation`
+//!   `zxdg_decoration_manager_v1` and KDE's server decoration manager (Poly's frame unless the client
+//!   draws its own, [`frame_policy`]), `wp_presentation`
 //!   (paced by page flips when the display has them),
 //!   `wp_fractional_scale_v1` and `xdg_activation_v1`; and an API for window
 //!   managers outside xdg-shell, and `xwayland_shell_v1` with X windows as
@@ -51,6 +52,7 @@ extern crate alloc;
 extern crate std;
 
 pub mod compose;
+pub mod frame_policy;
 pub mod launch;
 pub mod protocol;
 pub mod seat;

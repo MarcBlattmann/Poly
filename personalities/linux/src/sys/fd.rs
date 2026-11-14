@@ -3,12 +3,12 @@
 //! getdents64(2) and getdents(2), ftruncate(2), fsync(2), fdatasync(2),
 //! sync(2), syncfs(2), fstatfs(2), close_range(2), flock(2).
 
-use crate::abi::MAX_RW_COUNT;
+use crate::abi::{Iovec, MAX_RW_COUNT};
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::fs::{DirEntry, encode_dirent, encode_dirent64, fcntl::*};
 use crate::kernel::{LinuxKernel, UserPtr};
-use crate::sys::io::{CHUNK, bounce};
+use crate::sys::io::{CHUNK, How, bounce};
 use crate::sys::path::fs;
 
 /// A descriptor argument: `EBADF` when negative.
@@ -29,15 +29,23 @@ fn offset_arg(a: &Args, i: usize) -> Result<u64, Errno> {
     u64::try_from(a.long(i)).map_err(|_| Errno::EINVAL)
 }
 
-/// pread64(fd, buf, count, offset): one read of up to [`CHUNK`] bytes.
+/// pread64(fd, buf, count, offset): as read(2) at `offset`, without moving
+/// the file's offset. A regular file gives everything up to its end, a
+/// chunk after another, not just the first [`CHUNK`] bytes: programs such
+/// as squashfuse take a short `pread` of a regular file before its end for
+/// an I/O error (pread(2): "the file offset is not changed"; read(2):
+/// fewer bytes than asked only at end of file or for files that are not
+/// regular).
 pub fn pread64(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let offset = offset_arg(a, 3)?;
-    let count = a.ulong(2).min(MAX_RW_COUNT).min(CHUNK as u64) as usize;
-    let mut buf = bounce(count)?;
-    let n = fs(k)?.pread(fd, &mut buf, offset)?.min(count);
-    k.copy_to_user(a.ptr(1), &buf[..n])?;
-    Ok(n as u64)
+    let count = a.ulong(2).min(MAX_RW_COUNT);
+    if count == 0 {
+        return fs(k)?.pread(fd, &mut [], offset).map(|n| n as u64);
+    }
+    let iov = [Iovec { base: a.ptr(1).0, len: count }];
+    let how = How { at: Some(offset), append: None, nowait: false };
+    crate::sys::io::read_into_how(k, fd, &iov, count, how)
 }
 
 /// pwrite64(fd, buf, count, offset): chunk by chunk until done or short;
