@@ -59,7 +59,7 @@
 {"symbol":"GetIfEntry2Ex","src":["wine-spec"]},
 {"symbol":"GetIfEntryFromStack","src":["wine-spec"]},
 {"symbol":"GetIfTable","src":["wine-spec"],"seeds":["wine:iphlpapi/tests/iphlpapi.c:testGetIfTable"]},
-{"symbol":"GetIfTable2","status":"claimed","claimed_by":"impl-chrome-b35","src":["wine-spec"],"seeds":["wine:iphlpapi/tests/iphlpapi.c:test_GetIfTable2","wine:iphlpapi/tests/iphlpapi.c:test_GetIpInterface","wine:iphlpapi/tests/iphlpapi.c:test_interface_identifier_conversion"]},
+{"symbol":"GetIfTable2","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:iphlpapi/tests/iphlpapi.c:test_GetIfTable2","wine:iphlpapi/tests/iphlpapi.c:test_GetIpInterface","wine:iphlpapi/tests/iphlpapi.c:test_interface_identifier_conversion"]},
 {"symbol":"GetIfTable2Ex","src":["wine-spec"],"seeds":["wine:iphlpapi/tests/iphlpapi.c:test_GetIfTable2Ex"]},
 {"symbol":"GetIfTableFromStack","src":["wine-spec"]},
 {"symbol":"GetIgmpList","src":["wine-spec"]},

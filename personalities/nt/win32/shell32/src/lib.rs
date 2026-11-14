@@ -36,8 +36,20 @@ unsafe extern "system" {
     fn GetModuleFileNameW(module: *mut u8, buf: *mut u16, size: u32) -> u32;
     fn GetEnvironmentVariableW(name: *const u16, buf: *mut u16, size: u32) -> u32;
     fn CreateDirectoryW(name: *const u16, security: *const u8) -> i32;
+    fn GetFileAttributesW(name: *const u16) -> u32;
+    fn GetLastError() -> u32;
     fn AcquireSRWLockExclusive(lock: *mut usize);
     fn ReleaseSRWLockExclusive(lock: *mut usize);
+}
+
+#[link(name = "user32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn IsWindow(hwnd: usize) -> i32;
+}
+
+#[link(name = "advapi32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GetTokenInformation(token: *mut u8, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> i32;
 }
 
 #[link(name = "ole32", kind = "raw-dylib")]
@@ -157,15 +169,48 @@ fn variable(name: &str) -> Option<Vec<u16>> {
     (n != 0 && n < MAX_PATH).then(|| out[..n].to_vec())
 }
 
+/// Whether directory `path` (NUL-terminated) exists.
+fn directory_exists(path: &[u16]) -> bool {
+    /// `FILE_ATTRIBUTE_DIRECTORY`, `INVALID_FILE_ATTRIBUTES` (`fileapi.h`).
+    const DIRECTORY: u32 = 0x10;
+    const INVALID: u32 = u32::MAX;
+    // SAFETY: NUL-terminated.
+    let a = unsafe { GetFileAttributesW(path.as_ptr()) };
+    a != INVALID && a & DIRECTORY != 0
+}
+
+/// Whose folders `hToken` asks for (`specs/windows/shell32.dll/SHGetKnownFolderPath.yaml`, rule
+/// `token`): NULL is the calling user, -1 the default user, and anything else has to be a token
+/// handle opened with `TOKEN_QUERY` (its user is the only one Poly has). The failures:
+/// `E_ACCESSDENIED` without that right, `E_HANDLE` for a value that is no token.
+fn whose_folders(token: *mut u8) -> Result<bool, u32> {
+    use poly_kernelbase::knownfolder as kf;
+    if token.is_null() {
+        return Ok(false);
+    }
+    if token as usize == usize::MAX {
+        return Ok(true);
+    }
+    /// `TokenType` (`TOKEN_INFORMATION_CLASS`, `winnt.h`): needs `TOKEN_QUERY`, nothing else.
+    const TOKEN_TYPE: u32 = 8;
+    let (mut info, mut ret) = ([0u8; 4], 0u32);
+    // SAFETY: a 4-byte buffer and a live out variable.
+    if unsafe { GetTokenInformation(token, TOKEN_TYPE, info.as_mut_ptr(), 4, &mut ret) } != 0 {
+        return Ok(false);
+    }
+    // SAFETY: a plain call.
+    Err(if unsafe { GetLastError() } == 5 { kf::E_ACCESSDENIED } else { kf::E_HANDLE })
+}
+
 /// `SHGetKnownFolderPath(rfid, dwFlags, hToken, ppszPath)`: the folder's path in a
-/// `CoTaskMemAlloc` block, without a trailing backslash. The token is the current user's (Poly
-/// has one user); of the flags only `KF_FLAG_CREATE` changes anything. `*ppszPath` is NULL on
-/// failure.
+/// `CoTaskMemAlloc` block, without a trailing backslash. A folder whose directory is not there
+/// is `HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)` unless `KF_FLAG_DONT_VERIFY` says not to look;
+/// `KF_FLAG_CREATE` makes it. `*ppszPath` is NULL on failure.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SHGetKnownFolderPath(
     id: *const [u8; 16],
     flags: u32,
-    _token: *mut u8,
+    token: *mut u8,
     path: *mut *mut u16,
 ) -> u32 {
     use poly_kernelbase::knownfolder as kf;
@@ -177,19 +222,29 @@ pub unsafe extern "system" fn SHGetKnownFolderPath(
     if id.is_null() {
         return kf::E_INVALIDARG;
     }
-    if !kf::flags_accepted(flags) {
-        return kf::E_INVALIDARG;
-    }
+    let default_user = match whose_folders(token) {
+        Ok(d) => d,
+        Err(e) => return e,
+    };
     // SAFETY: the caller's KNOWNFOLDERID (16 bytes, any alignment).
     let id = unsafe { id.read_unaligned() };
+    // An id that is no folder, and a virtual folder, fail whatever the flags (the sheet).
     let mut folder = match kf::known_folder_path(&id, variable) {
         Ok(p) => p,
         Err(e) => return e,
     };
+    if !kf::flags_accepted(flags) {
+        return kf::E_INVALIDARG;
+    }
+    if default_user && let Some(profile) = variable("USERPROFILE") {
+        folder = kf::for_default_user(&folder, &profile);
+    }
     folder.push(0);
     if flags & kf::KF_FLAG_CREATE != 0 {
         // SAFETY: NUL-terminated. An existing folder is fine.
         unsafe { CreateDirectoryW(folder.as_ptr(), core::ptr::null()) };
+    } else if flags & kf::KF_FLAG_DONT_VERIFY == 0 && !directory_exists(&folder) {
+        return kf::E_FILE_NOT_FOUND;
     }
     // SAFETY: a plain allocation.
     let block = unsafe { CoTaskMemAlloc(folder.len() * 2) }.cast::<u16>();
@@ -217,12 +272,20 @@ struct Stores(core::cell::UnsafeCell<Vec<(usize, Store)>>);
 unsafe impl Sync for Stores {}
 static STORES: Stores = Stores(core::cell::UnsafeCell::new(Vec::new()));
 
-/// Run `f` on the store of `hwnd` (made on first use), under the lock.
+/// Forget the stores of windows that are gone: "the values go away with the window".
+fn drop_dead_stores(stores: &mut Vec<(usize, Store)>) {
+    // SAFETY: a plain call, on any value.
+    stores.retain(|(w, _)| unsafe { IsWindow(*w) } != 0);
+}
+
+/// Run `f` on the store of `hwnd` (made on first use), under the lock. The store of a window
+/// that is gone is empty again.
 fn with_store<R>(hwnd: usize, f: impl FnOnce(&mut Store) -> R) -> R {
     // SAFETY: the SRW lock's word; the vector is only touched between acquire and release.
     unsafe {
         AcquireSRWLockExclusive(STORES_LOCK.as_ptr());
         let stores = &mut *STORES.0.get();
+        drop_dead_stores(stores);
         let at = match stores.iter().position(|(w, _)| *w == hwnd) {
             Some(i) => i,
             None => {
@@ -314,9 +377,12 @@ unsafe extern "system" fn store_get_count(this: *mut WindowStore, count: *mut u3
     if count.is_null() {
         return ps::E_POINTER;
     }
-    // SAFETY: a live object; the caller's out-pointer.
-    unsafe { count.write_unaligned(with_store((*this).hwnd, |s| s.count())) };
-    ps::S_OK
+    // SAFETY: a live object.
+    let counted = with_store(unsafe { (*this).hwnd }, |s| s.count_checked());
+    // The sheet: a store nothing was set in fails with E_FAIL and count 0.
+    // SAFETY: the caller's out-pointer.
+    unsafe { count.write_unaligned(counted.unwrap_or(0)) };
+    counted.err().unwrap_or(ps::S_OK)
 }
 
 unsafe extern "system" fn store_get_at(this: *mut WindowStore, index: u32, key: *mut [u8; 20]) -> u32 {
@@ -373,7 +439,11 @@ unsafe extern "system" fn store_set_value(this: *mut WindowStore, key: *const [u
     let (key, variant) = unsafe { (key.read_unaligned(), value.read_unaligned()) };
     let new = match ps::kind(u16::from_le_bytes([variant[0], variant[1]])) {
         Kind::Empty => None,
-        Kind::Scalar => Some(Value::Scalar(variant)),
+        // A number set into a property that is a string reads back as its text.
+        Kind::Scalar => match ps::integer_text(&variant).filter(|_| ps::is_text_key(&key)) {
+            Some(text) => Some(Value::Text(text)),
+            None => Some(Value::Scalar(variant)),
+        },
         Kind::Text => {
             let p = u64::from_le_bytes(variant[8..16].try_into().expect("8 bytes")) as *const u16;
             if p.is_null() {
@@ -390,7 +460,14 @@ unsafe extern "system" fn store_set_value(this: *mut WindowStore, key: *const [u
         Kind::Unsupported => return ps::E_INVALIDARG,
     };
     // SAFETY: a live object.
-    with_store(unsafe { (*this).hwnd }, |s| s.set(&key, new));
+    let hwnd = unsafe { (*this).hwnd };
+    // The window is gone: its store takes no value (the sheet: `HRESULT_FROM_WIN32(
+    // ERROR_INVALID_WINDOW_HANDLE)`).
+    // SAFETY: a plain call, on any value.
+    if unsafe { IsWindow(hwnd) } == 0 {
+        return ps::E_INVALID_WINDOW;
+    }
+    with_store(hwnd, |s| s.set(&key, new));
     ps::S_OK
 }
 
@@ -407,9 +484,13 @@ pub unsafe extern "system" fn SHGetPropertyStoreForWindow(hwnd: usize, iid: *con
     if out.is_null() {
         return ps::E_POINTER;
     }
+    // A NULL window leaves `*ppv` as it was (the sheet).
+    if hwnd == 0 {
+        return ps::E_INVALIDARG;
+    }
     // SAFETY: the caller's out-pointer.
     unsafe { out.write(core::ptr::null_mut()) };
-    if hwnd == 0 || iid.is_null() {
+    if iid.is_null() {
         return ps::E_INVALIDARG;
     }
     // SAFETY: the process heap; the block is one WindowStore.
