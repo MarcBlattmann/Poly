@@ -295,8 +295,6 @@ pub fn open_thread_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs, ex: bool) -
     Ok(STATUS_SUCCESS)
 }
 
-const STATUS_BAD_IMPERSONATION_LEVEL: NtStatus = NtStatus(0xC000_00A5);
-
 // ----- querying ----------------------------------------------------------------------------
 
 /// `NtQueryInformationToken`.

@@ -445,7 +445,7 @@ unsafe fn create(
             return fail(ERROR_INVALID_PARAMETER, FALSE);
         }
     }
-    if !crate::attrlist::mitigation_defined(parsed.mitigation) {
+    if !poly_kernelbase::mitigation::creation_defined(parsed.mitigation[0]) {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
     let handle_words: Vec<u64> = parsed.handle_list.iter().flatten().map(|&h| h as u64).collect();
@@ -459,8 +459,12 @@ unsafe fn create(
     if parsed.handle_list.is_some() {
         record(1, handle_words.as_ptr() as u64, handle_words.len() as u64 * 8);
     }
-    if parsed.mitigation != 0 {
-        record(2, parsed.mitigation, 8);
+    if parsed.has_mitigation {
+        // Kind 2: the value points at the two mitigation words (ADR 0183).
+        record(2, parsed.mitigation.as_ptr() as u64, 16);
+    }
+    if let Some(v) = parsed.child_policy {
+        record(5, u64::from(v), 4);
     }
     if !job_words.is_empty() {
         record(3, job_words.as_ptr() as u64, job_words.len() as u64 * 8);
@@ -528,6 +532,8 @@ unsafe fn create(
         (information.add(16) as *mut u32).write_unaligned(pid);
         (information.add(20) as *mut u32).write_unaligned(tid);
     }
+    // A process made: the last error reads 0 (the sheet of `UpdateProcThreadAttribute`).
+    set_last_error(0);
     TRUE
 }
 

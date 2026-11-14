@@ -620,6 +620,13 @@ impl Loader {
         if let Some(id) = self.find_loaded(&n) {
             return Ok(Found::Loaded(id));
         }
+        // A known DLL comes from a section the system made: what the caller's token may do with
+        // it decides, before any file is looked for (the sheet of `LoadLibraryExW`: after a
+        // process lowered its token `msctf.dll` is refused with `ERROR_ACCESS_DENIED`, while
+        // `version.dll`, which is not known, is simply not found).
+        if !path::has_path(&n) && path::is_windows_known(&n) {
+            p.known_dll_access()?;
+        }
         let candidates = if path::has_path(&n) { vec![n] } else { path::candidates(&n, &self.dirs, search_path) };
         for c in candidates {
             if let Ok(bytes) = p.read_file(&path::nt_path(&c)) {

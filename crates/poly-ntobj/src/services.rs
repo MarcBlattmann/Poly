@@ -261,6 +261,37 @@ impl ObjectManager {
         Ok(id)
     }
 
+    /// A handle to `id` in `caller`'s table with `desired` access as the caller asked for it
+    /// (generic rights mapped, `MAXIMUM_ALLOWED` meaning every right the type has, rights the
+    /// type does not have dropped), not checked against the object's descriptor: what a call
+    /// that makes an object hands its maker (`CreateWindowStationW`: "every mask is accepted
+    /// and gives a handle that has exactly those rights", ADR 0183).
+    pub fn new_handle_exact(
+        &mut self,
+        caller: &Caller,
+        id: ObjectId,
+        desired: AccessMask,
+        inherit: bool,
+    ) -> Result<Handle> {
+        if !self.is_alive(id) {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        let kind = self.obj(id).header.kind;
+        let mut want = kind.generic_mapping().map(desired);
+        if want & MAXIMUM_ALLOWED != 0 {
+            want |= kind.valid_access();
+        }
+        want &= kind.valid_access();
+        let flags = HandleFlags { inherit, protect_from_close: false };
+        self.new_handle(Self::target_table(caller, 0), id, want, flags, caller.process)
+    }
+
+    /// What `desired` access to `id` the object's rules and descriptor leave `caller` (the
+    /// check an open makes, without making the handle).
+    pub fn access_for(&self, caller: &Caller, id: ObjectId, desired: AccessMask) -> Result<AccessMask> {
+        self.checked_access(caller, id, desired, false)
+    }
+
     /// `ObOpenObjectByPointer` (Learn) for kernel code: a handle to the live
     /// object `id` in `caller`'s table (or the kernel table, for a
     /// kernel-mode caller with `OBJ_KERNEL_HANDLE`), with `desired` access

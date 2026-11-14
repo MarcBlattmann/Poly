@@ -493,6 +493,7 @@ pub fn thread_exit(
     // waits), then signal its object so waiters on it wake.
     sys.objects.thread_terminated(thread);
     sys.objects.forget_thread_token(thread);
+    sys.winsta.thread_exited(&mut sys.objects, thread);
     let _ = sys.objects.set_signaled(t.object, true);
     let _ = sys.objects.set_thread_object(thread, None);
     let _ = sys.objects.dereference(t.object);
@@ -513,6 +514,7 @@ pub fn thread_exit(
 pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backend) {
     sys.job_process_exited(proc.pid, proc.exit_status.unwrap_or(STATUS_SUCCESS));
     sys.win32k.process_exited(&mut sys.objects, proc.pid.0);
+    sys.winsta.process_exited(&mut sys.objects, proc.pid);
     for a in proc.vm.clear() {
         if let Some(v) = a.view() {
             let _ = sys.objects.dereference(v.object);
@@ -520,6 +522,7 @@ pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backen
     }
     for t in core::mem::take(&mut proc.threads) {
         sys.objects.forget_thread_token(t.thread);
+        sys.winsta.thread_exited(&mut sys.objects, t.thread);
         let _ = sys.objects.set_thread_object(t.thread, None);
         let _ = sys.objects.set_signaled(t.object, true);
         let _ = sys.objects.dereference(t.object);

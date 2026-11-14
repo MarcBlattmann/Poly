@@ -148,6 +148,19 @@ impl ObjectSecurity {
         self.thread_token(thread).or_else(|| self.process_token(process))
     }
 
+    /// Whether the impersonation token of `thread` is only an identification token for the
+    /// access checks of its requests: its integrity level is higher than the process token's and
+    /// the process token holds no `SeImpersonatePrivilege` (Learn: "Impersonation Levels" and
+    /// "Mandatory Integrity Control"; the `LoadLibraryExW` sheet: an Untrusted process whose
+    /// main thread got a Low token ends with `STATUS_BAD_IMPERSONATION_LEVEL`). Opening
+    /// anything under such a token fails with that status.
+    pub fn impersonation_downgraded(&self, process: ProcessId, thread: ThreadRef) -> bool {
+        let (Some(t), Some(p)) = (self.thread_token(thread), self.process_token(process)) else { return false };
+        let (Some(t), Some(p)) = (self.token(t), self.token(p)) else { return false };
+        const SE_IMPERSONATE_PRIVILEGE: u32 = 29;
+        t.integrity_rid() > p.integrity_rid() && !p.privileges.iter().any(|&(l, _)| l == SE_IMPERSONATE_PRIVILEGE)
+    }
+
     /// The stored descriptor of `object` (self-relative).
     pub fn sd(&self, object: ObjectId) -> Option<&[u8]> {
         self.sds.get(&object).map(Vec::as_slice)
@@ -267,6 +280,9 @@ impl ObjectManager {
         }
         let sd = self.security.sds.get(&id)?;
         let tid = self.security.effective(caller.process, caller.thread)?;
+        if self.security.impersonation_downgraded(caller.process, caller.thread) {
+            return Some(Err(STATUS_BAD_IMPERSONATION_LEVEL));
+        }
         let token = self.security.token(tid)?;
         let parts = Parts::from_relative(sd)?;
         let kind = self.obj(id).header.kind;
@@ -289,12 +305,29 @@ impl ObjectManager {
         let mapping = mapping_of(kind);
         let map = |m: u32| mapping.map(m);
         let mut parts = sdops::default_descriptor(token, &map);
-        if matches!(kind, ObjectType::Process | ObjectType::Thread | ObjectType::Token | ObjectType::Job) {
+        if matches!(
+            kind,
+            ObjectType::Process
+                | ObjectType::Thread
+                | ObjectType::Token
+                | ObjectType::Job
+                | ObjectType::WindowStation
+                | ObjectType::Desktop
+        ) {
             // Processes, threads and tokens carry their creator's integrity
             // as a mandatory label (the sheets: `S:AI(ML;;NW;;;HI)`).
             // Tokens: no write up; processes and threads: no read up either
-            // (the sheets: 0x1 on the token, 0x3 on the process).
-            let policy = if matches!(kind, ObjectType::Token | ObjectType::Job) { 1 } else { 3 };
+            // (the sheets: 0x1 on the token, 0x3 on the process). So do window stations and
+            // desktops (no write up: the `CreateDesktopW` sheet, a Low token cannot start on
+            // objects made with the creator's default security).
+            let policy = if matches!(
+                kind,
+                ObjectType::Token | ObjectType::Job | ObjectType::WindowStation | ObjectType::Desktop
+            ) {
+                1
+            } else {
+                3
+            };
             parts.sacl = Some(sdops::label_sacl(token.integrity_rid(), policy));
             parts.control |= sd::SE_SACL_PRESENT | sd::SE_SACL_AUTO_INHERITED;
         }

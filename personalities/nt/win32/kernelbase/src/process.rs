@@ -503,9 +503,23 @@ pub unsafe extern "system" fn LoadLibraryExW(name: *const u16, file: Handle, fla
     };
     let s = nt::UnicodeString::new(&owned);
     let mut h = core::ptr::null_mut();
+    // Whether the module is mapped already: a load that maps it leaves the last error 0 (the
+    // `LoadLibraryExW` sheet: `winmm.dll`, not loaded yet, loaded with error 0; a loaded module
+    // leaves it as it was).
+    let mut mapped = core::ptr::null_mut();
+    // SAFETY: valid pointers.
+    let was_loaded =
+        unsafe { nt::LdrGetDllHandle(core::ptr::null(), core::ptr::null_mut(), &s, &mut mapped) }.is_success();
     // SAFETY: valid pointers.
     let st = unsafe { nt::LdrLoadDll(core::ptr::null(), core::ptr::null_mut(), &s, &mut h) };
-    if st.is_success() { h } else { fail_status(st, core::ptr::null_mut()) }
+    if st.is_success() {
+        if !was_loaded {
+            set_last_error(0);
+        }
+        h
+    } else {
+        fail_status(st, core::ptr::null_mut())
+    }
 }
 
 /// The process's default DLL directories (`SetDefaultDllDirectories`), 0

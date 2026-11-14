@@ -913,7 +913,9 @@ struct HandlesFor {
     inherit_only: Option<Vec<poly_ntobj::Handle>>,
     jobs: Vec<u64>,
     join_creator_jobs: bool,
-    dynamic_code_blocked: bool,
+    mitigation: poly_personality_nt::MitigationState,
+    /// The station and desktop it starts on (ADR 0183).
+    desktop: poly_personality_nt::winsta::Start,
     /// The descriptors of its process and first thread objects (`lpProcessAttributes`,
     /// `lpThreadAttributes`), applied once the creator's handles are open.
     process_security: Option<Vec<u8>>,
@@ -955,7 +957,10 @@ fn start_params(
         s.finished.remove(&pid);
         s.peak.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
-        proc.dynamic_code_blocked = handles.is_some_and(|h| h.dynamic_code_blocked);
+        if let Some(h) = handles {
+            proc.set_mitigation(h.mitigation);
+            s.sys.winsta.begin(pid, h.desktop.clone());
+        }
         proc.image_name = s.sys.io.dos_file_name(&params.image_path);
         let mut b = MemBackend { memory, sections: &mut s.sections };
         // Its creator's inheritable handles, before any other (ADR 0089).
@@ -1084,7 +1089,8 @@ fn create_process(
         inherit_only: req.inherit_only,
         jobs: req.jobs,
         join_creator_jobs: req.join_creator_jobs,
-        dynamic_code_blocked: req.dynamic_code_blocked,
+        mitigation: req.mitigation,
+        desktop: req.desktop,
         process_security: req.process_security,
         thread_security: req.thread_security,
     };

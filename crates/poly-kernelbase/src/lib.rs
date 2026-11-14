@@ -81,6 +81,7 @@ pub mod locale;
 pub mod mapping;
 pub mod memory;
 pub mod message;
+pub mod mitigation;
 pub mod namedpipe;
 pub mod nls;
 pub mod oleaut;

@@ -75,6 +75,7 @@ pub mod threads;
 pub mod trace;
 pub mod vm;
 pub mod win32k;
+pub mod winsta;
 
 #[cfg(test)]
 mod tests;
@@ -84,6 +85,7 @@ pub use context::NtContext;
 pub use kernel::{
     Apc, ClientId, NtKernel, NtTimeout, ProcessCreate, ProcessCreated, ThreadCreate, ThreadCreated, UserFault,
 };
+pub use poly_kernelbase::mitigation::State as MitigationState;
 pub use poly_kernelbase::{cpu::CpuId, kuser};
 pub use protect::HwProt;
 pub use services::Service;

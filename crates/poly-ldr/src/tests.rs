@@ -26,6 +26,8 @@ struct Fake {
     next_any: u64,
     next_heap: u64,
     tried: Vec<String>,
+    /// What opening the known DLLs gives the caller's token (`None`: allowed).
+    known_refused: Option<NtStatus>,
 }
 
 fn s(v: &[u16]) -> String {
@@ -78,6 +80,10 @@ impl Fake {
 }
 
 impl Process for Fake {
+    fn known_dll_access(&mut self) -> Result<(), NtStatus> {
+        self.known_refused.map_or(Ok(()), Err)
+    }
+
     fn read_file(&mut self, nt_path: &[u16]) -> Result<Vec<u8>, NtStatus> {
         let key = s(nt_path).to_lowercase();
         self.tried.push(key.clone());
@@ -396,6 +402,28 @@ fn forwarders_follow_to_their_target() {
     assert_eq!(iat(&mut w, &e, 0, 2), NTDLL_BASE + 0x1030);
     let fb = base_of(&w, "f.dll");
     assert_eq!(w.l.get_procedure(&mut w.p, fb, Some(b"Loop"), 0).unwrap_err(), STATUS_ENTRYPOINT_NOT_FOUND);
+}
+
+#[test]
+fn a_known_dll_is_refused_with_the_status_of_the_token_and_others_are_not_found() {
+    // The sheet of `LoadLibraryExW`: after the token was lowered, a known DLL (`msctf.dll`) that is
+    // not loaded yet gives `STATUS_ACCESS_DENIED` even where the file is absent, `version.dll` is
+    // not known and is just not found, and a loaded module needs no access.
+    let mut w = world(&exe(vec![]).write());
+    w.l.process_init(&mut w.p, w.exe, TEB).unwrap();
+    w.p.known_refused = Some(STATUS_ACCESS_DENIED);
+    assert_eq!(w.l.load(&mut w.p, &wide("msctf.dll"), None).unwrap_err(), STATUS_ACCESS_DENIED);
+    assert_eq!(w.l.load(&mut w.p, &wide("MSCTF"), None).unwrap_err(), STATUS_ACCESS_DENIED);
+    assert_eq!(w.l.load(&mut w.p, &wide("version.dll"), None).unwrap_err(), STATUS_DLL_NOT_FOUND);
+    assert_eq!(w.l.load(&mut w.p, &wide("no_such_library.dll"), None).unwrap_err(), STATUS_DLL_NOT_FOUND);
+    // A path names a file: the file's own descriptor decides, not the known DLLs'.
+    assert_eq!(w.l.load(&mut w.p, &wide(r"C:\Windows\System32\msctf.dll"), None).unwrap_err(), STATUS_DLL_NOT_FOUND);
+    // An identification-level token gives its own status.
+    w.p.known_refused = Some(NtStatus(0xC000_00A5));
+    assert_eq!(w.l.load(&mut w.p, &wide("kernel32.dll"), None).unwrap_err(), NtStatus(0xC000_00A5));
+    // Allowed again: the file is looked for.
+    w.p.known_refused = None;
+    assert_eq!(w.l.load(&mut w.p, &wide("msctf.dll"), None).unwrap_err(), STATUS_DLL_NOT_FOUND);
 }
 
 #[test]

@@ -75,6 +75,9 @@ pub struct NtSystem {
     /// The job objects and which process belongs to which (ADR 0169).
     pub jobs: crate::job::Jobs,
 
+    /// The window stations and desktops and who is on them (ADR 0183).
+    pub winsta: crate::winsta::WinSta,
+
     sections: BTreeMap<u64, Section>,
     next_key: u64,
 }
@@ -112,6 +115,7 @@ impl NtSystem {
             process_exits: BTreeMap::new(),
             win32k: crate::win32k::Win32k::default(),
             jobs: crate::job::Jobs::default(),
+            winsta: crate::winsta::WinSta::default(),
             sections: BTreeMap::new(),
             next_key: 1,
         }
@@ -179,6 +183,7 @@ impl NtSystem {
                     self.jobs.process_forgotten(ProcessId(d.cookie as u32));
                 }
                 ObjectType::Job => self.jobs.deleted(d.cookie),
+                ObjectType::WindowStation | ObjectType::Desktop => self.winsta.deleted(&mut self.objects, d.id),
                 _ => {}
             }
             // A closed file object's or a deleted job's reference on its
@@ -230,6 +235,8 @@ pub struct NtProcess {
     /// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON`:
     /// memory cannot be made executable (ADR 0169).
     pub dynamic_code_blocked: bool,
+    /// Its mitigation policies (ADR 0183): the creation attributes and `SetProcessMitigationPolicy`.
+    pub mitigation: poly_kernelbase::mitigation::State,
     /// Its exit status, once known: the first `NtTerminateProcess` of it
     /// sets it, else its last thread's end ([`crate::exec::thread_exit`]);
     /// a running process is pending.
@@ -263,10 +270,19 @@ impl NtProcess {
             default_stack_commit: 0x1000,
             exit_status: None,
             dynamic_code_blocked: false,
+            mitigation: poly_kernelbase::mitigation::State::new(),
             exception_dispatcher: 0,
             win32k_disabled: false,
             image_name: None,
         }
+    }
+
+    /// Take `state` as the process's mitigation policies and update what the kernel enforces
+    /// from them: the dynamic-code and win32k policies only go on (a policy that is on stays).
+    pub fn set_mitigation(&mut self, state: poly_kernelbase::mitigation::State) {
+        self.dynamic_code_blocked |= state.dynamic_code_blocked();
+        self.win32k_disabled |= state.win32k_disabled();
+        self.mitigation = state;
     }
 
     pub fn thread(&self, thread: ThreadRef) -> Option<&NtThread> {

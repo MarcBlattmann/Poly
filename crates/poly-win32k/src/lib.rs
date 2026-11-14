@@ -65,6 +65,7 @@ pub mod services;
 pub mod spi;
 pub mod surfaces;
 pub mod user;
+pub mod winsta;
 pub mod wire;
 pub mod wm;
 pub mod zorder;

@@ -23,6 +23,9 @@ const SHARE_READ: u32 = 0x01;
 const OPEN: u32 = 1;
 /// `FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT`.
 const OPTIONS: u32 = 0x40 | 0x20;
+/// `FILE_LIST_DIRECTORY`, `FILE_DIRECTORY_FILE`.
+const FILE_LIST_DIRECTORY: u32 = 0x0001;
+const FILE_DIRECTORY_FILE: u32 = 0x01;
 /// `FileStandardInformation` (bytes 0..8: AllocationSize; 8..16: EndOfFile).
 const FILE_STANDARD_INFORMATION: u32 = 5;
 
@@ -98,6 +101,40 @@ impl Process for Sys {
         // SAFETY: a handle we opened.
         unsafe { NtClose(handle) };
         read
+    }
+
+    fn known_dll_access(&mut self) -> Result<(), NtStatus> {
+        // Opening the directory the known DLLs live in stands for opening `\KnownDlls\<name>`:
+        // the same descriptor, the same token (ADR 0183).
+        // (`UnicodeName` keeps a pointer: the units have to outlive it.)
+        let units: Vec<u16> = "\\??\\C:\\Windows\\System32".encode_utf16().collect();
+        let name = UnicodeName::new(&units);
+        let oa = ObjectAttributes::new(&name);
+        let mut handle: isize = 0;
+        let mut iosb = [0u8; 16];
+        // SAFETY: valid out-pointers and a well-formed OBJECT_ATTRIBUTES.
+        let st = unsafe {
+            NtCreateFile(
+                &mut handle,
+                FILE_LIST_DIRECTORY | 0x0010_0000,
+                oa.as_ptr(),
+                iosb.as_mut_ptr(),
+                core::ptr::null(),
+                0,
+                SHARE_READ | 0x2,
+                OPEN,
+                FILE_DIRECTORY_FILE | 0x20,
+                core::ptr::null(),
+                0,
+            )
+        };
+        if !st.is_success() {
+            // Only the refusals of the token count: a volume that has no `System32` is not one.
+            return if st.0 == 0xC000_0022 || st.0 == 0xC000_00A5 { Err(st) } else { Ok(()) };
+        }
+        // SAFETY: a handle we opened.
+        unsafe { NtClose(handle) };
+        Ok(())
     }
 
     fn allocate(&mut self, base: Option<u64>, size: u64) -> Result<u64, NtStatus> {

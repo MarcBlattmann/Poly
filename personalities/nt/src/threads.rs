@@ -215,6 +215,11 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         let jobs = crate::job::resolve_jobs(sys, &caller, &extra.jobs)?;
         Ok((jobs, sys.jobs.check_create(caller.process, extra.breakaway)?))
     })?;
+    let mitigation = extra.mitigation_state();
+    let desktop = {
+        let spec = params.startup.desktop.clone();
+        k.with_state(|sys, proc, _| sys.winsta.child_start(&mut sys.objects, proc.pid, caller.thread, spec))
+    };
     let req = crate::kernel::ProcessCreate {
         image,
         params,
@@ -226,7 +231,8 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         inherit_only: extra.handle_list,
         jobs,
         join_creator_jobs: join,
-        dynamic_code_blocked: extra.mitigation & PROHIBIT_DYNAMIC_CODE != 0,
+        mitigation,
+        desktop,
         process_security,
         thread_security,
     };
@@ -241,18 +247,28 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
 /// `CREATE_BREAKAWAY_FROM_JOB`. The attribute list is `{ count: u64,
 /// { kind: u64, value: u64, size: u64 } * count }`; `kind` 1 is the handle
 /// list (`value` points at `size` bytes of handles), 2 the mitigation policy
-/// (`value` is the 64-bit mask), 3 the job list (as the handle list), 4 the
-/// breakaway request.
+/// (`value` points at the two 64-bit words, `size` 8 or 16), 3 the job list (as the handle list),
+/// 4 the breakaway request, 5 the child process policy (`value` is the 32-bit value).
 #[derive(Default)]
 struct CreateAttributes {
     handle_list: Option<Vec<Handle>>,
-    mitigation: u64,
+    /// The two mitigation words (`PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY`; the second is 0 for a
+    /// value of 8 bytes or less).
+    mitigation: [u64; 2],
+    /// `PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY`'s value.
+    child_policy: u32,
     jobs: Vec<u64>,
     breakaway: bool,
 }
 
-/// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON` (`winbase.h`).
-const PROHIBIT_DYNAMIC_CODE: u64 = 1 << 36;
+impl CreateAttributes {
+    /// The mitigation state the child starts with.
+    fn mitigation_state(&self) -> poly_kernelbase::mitigation::State {
+        poly_kernelbase::mitigation::State::new()
+            .with_creation_words(self.mitigation[0], self.mitigation[1])
+            .with_child_policy(self.child_policy)
+    }
+}
 
 fn read_create_attributes<K: NtKernel>(k: &mut K, at: u64) -> Result<CreateAttributes> {
     let mut out = CreateAttributes::default();
@@ -274,7 +290,14 @@ fn read_create_attributes<K: NtKernel>(k: &mut K, at: u64) -> Result<CreateAttri
         };
         match kind {
             1 => out.handle_list = Some(list(k)?.into_iter().map(Handle).collect()),
-            2 => out.mitigation = value,
+            2 => {
+                // `value` points at the caller's words (ADR 0183).
+                out.mitigation[0] = abi::read_u64(k, value)?;
+                if size >= 16 {
+                    out.mitigation[1] = abi::read_u64(k, value + 8)?;
+                }
+            }
+            5 => out.child_policy = value as u32,
             3 => out.jobs = list(k)?,
             4 => out.breakaway = value != 0,
             _ => {}
@@ -376,11 +399,35 @@ pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
     }
     let policy = abi::read_u32(k, info)?;
     let flags = abi::read_u32(k, info + 4)?;
-    k.with_state(|_, proc, _| match policy {
-        2 if flags & 1 != 0 => proc.dynamic_code_blocked = true,
-        4 if flags & 1 != 0 => proc.win32k_disabled = true,
-        _ => {}
+    let done = k.with_state(|_, proc, _| {
+        let mut state = proc.mitigation;
+        state.set(policy, flags).map(|()| proc.set_mitigation(state))
     });
+    // The Win32 error travels in the status (`STATUS_UNSUCCESSFUL` carries nothing): the failures
+    // are `kernelbase`'s to name; this service answers invalid parameter, not supported or denied.
+    done.map(|()| STATUS_SUCCESS).map_err(|e| match e {
+        poly_kernelbase::mitigation::SetError::InvalidParameter => STATUS_INVALID_PARAMETER,
+        poly_kernelbase::mitigation::SetError::NotSupported => STATUS_NOT_SUPPORTED,
+        poly_kernelbase::mitigation::SetError::AccessDenied => STATUS_ACCESS_DENIED,
+    })
+}
+
+/// `NtQueryInformationProcess(ProcessMitigationPolicy)` (class 52, Poly's reading: `info` is a
+/// `PROCESS_MITIGATION_POLICY_INFORMATION` whose `Policy` the caller fills and whose `Flags` the
+/// service writes): the flags word of the policy for the process `h` names (the caller or another
+/// process the handle may query).
+fn query_mitigation<K: NtKernel>(k: &mut K, h: u64, info: u64, length: u64) -> Result<NtStatus> {
+    if length != 8 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
+    let policy = abi::read_u32(k, info)?;
+    let flags = if pid == k.caller().process {
+        k.with_state(|_, proc, _| proc.mitigation.get(policy))
+    } else {
+        k.with_process(pid, |_, proc, _| proc.mitigation.get(policy)).ok_or(STATUS_PROCESS_IS_TERMINATING)?
+    };
+    abi::write_u32(k, info + 4, flags)?;
     Ok(STATUS_SUCCESS)
 }
 
@@ -392,6 +439,9 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
     let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
     if class as u32 == PROCESS_TIMES {
         return query_process_times(k, h, buf, length, ret);
+    }
+    if class == 52 {
+        return query_mitigation(k, h, buf, length);
     }
     if class as u32 != PROCESS_BASIC_INFORMATION {
         return Err(STATUS_INVALID_INFO_CLASS);

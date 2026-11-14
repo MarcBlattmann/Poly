@@ -87,6 +87,7 @@ pub mod status {
     pub const STATUS_PROCEDURE_NOT_FOUND: NtStatus = NtStatus(0xC000_007A);
     pub const STATUS_INVALID_IMAGE_FORMAT: NtStatus = NtStatus(0xC000_007B);
     pub const STATUS_DLL_NOT_FOUND: NtStatus = NtStatus(0xC000_0135);
+    pub const STATUS_ACCESS_DENIED: NtStatus = NtStatus(0xC000_0022);
     pub const STATUS_ORDINAL_NOT_FOUND: NtStatus = NtStatus(0xC000_0138);
     pub const STATUS_ENTRYPOINT_NOT_FOUND: NtStatus = NtStatus(0xC000_0139);
     pub const STATUS_DLL_INIT_FAILED: NtStatus = NtStatus(0xC000_0142);
@@ -112,6 +113,16 @@ pub trait Process {
     /// (`STATUS_OBJECT_NAME_NOT_FOUND`, `STATUS_OBJECT_PATH_NOT_FOUND`, ...:
     /// the search goes on to the next directory).
     fn read_file(&mut self, nt_path: &[u16]) -> Result<Vec<u8>, NtStatus>;
+
+    /// Whether the caller's token may use the system's known DLLs (Windows opens the section
+    /// `\KnownDlls\<name>` for them; its descriptor is that of `System32` here): `Ok` or the
+    /// status the open gives (`STATUS_ACCESS_DENIED` for a restricted token that matches
+    /// nothing, `STATUS_BAD_IMPERSONATION_LEVEL` for an impersonation token that is only
+    /// an identification token). Checked for a name the system lists as known, whether or not
+    /// Poly has the file; every process has it by default.
+    fn known_dll_access(&mut self) -> Result<(), NtStatus> {
+        Ok(())
+    }
 
     /// Reserve and commit `size` bytes of zeroed read/write memory at
     /// exactly `base` (failing with `STATUS_CONFLICTING_ADDRESSES` if any
