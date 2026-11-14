@@ -1187,3 +1187,23 @@ fn ipc_listings_and_settings() {
     let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/sysvipc/msg", true).unwrap();
     assert_eq!(st.mode & 0o777, 0o444);
 }
+
+#[test]
+fn a_process_sleeps_only_while_every_thread_waits() {
+    use std::vec;
+    let of = |ended, stopped, runs: Vec<bool>| ProcState::of(ended, stopped, runs.into_iter());
+    // Every thread blocked: S.
+    assert_eq!(of(false, false, vec![false]), ProcState::Sleeping);
+    assert_eq!(of(false, false, vec![false, false]), ProcState::Sleeping);
+    // One thread on a CPU or waiting for one (woken, or on its way back
+    // from a system call, not yet in the next one): R, not S.
+    assert_eq!(of(false, false, vec![true]), ProcState::Running);
+    assert_eq!(of(false, false, vec![false, true]), ProcState::Running);
+    // No live thread to look at (a process the kernel's own thread works for).
+    assert_eq!(of(false, false, vec![]), ProcState::Sleeping);
+    // Stopped and ended come first, whatever the threads do.
+    assert_eq!(of(false, true, vec![true]), ProcState::Stopped);
+    assert_eq!(of(true, true, vec![true]), ProcState::Zombie);
+    assert_eq!(of(true, false, vec![false]), ProcState::Zombie);
+    assert_eq!((ProcState::Running.letter(), ProcState::Sleeping.letter()), ('R', 'S'));
+}

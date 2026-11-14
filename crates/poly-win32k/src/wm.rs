@@ -164,6 +164,8 @@ struct Window {
     /// Minimized while it was maximized: restoring it maximizes it again
     /// (ShowWindow.yaml `restore`).
     restore_max: bool,
+    /// `ptMinPosition` of its window placement (`WinInfo::min_x`).
+    min_pos: (i32, i32),
     /// Its thread's default IME window in the interactive session: in the
     /// z order it follows the thread's active window (`input`, ADR 0176).
     helper: bool,
@@ -568,6 +570,8 @@ impl Wm {
             minimized: w.minimized,
             maximized: w.maximized,
             restore_max: w.restore_max,
+            min_x: w.min_pos.0,
+            min_y: w.min_pos.1,
             own_dc: w.own_dc,
             class_dc: class.map_or(0, |c| c.dc),
             size_move_pending: w.size_move_pending,
@@ -2015,6 +2019,13 @@ impl Wm {
                 Reply::Ok {}
             }
             Request::NextActive { hwnd, cause } => self.next_active(ctx.key(), hwnd, cause),
+            Request::SetMinPos { hwnd, x, y } => match self.get_mut(u64::from(hwnd)) {
+                Some(w) => {
+                    w.min_pos = (x, y);
+                    Reply::Ok {}
+                }
+                None => err(ERROR_INVALID_WINDOW_HANDLE),
+            },
             Request::DefaultIme { tid } => {
                 let tid = if tid == 0 { ctx.tid } else { tid };
                 Reply::Handle { hwnd: self.default_ime(tid) }
@@ -2129,6 +2140,7 @@ impl Window {
             region: None,
             below_others: false,
             restore_max: false,
+            min_pos: (-1, -1),
             helper: false,
         }
     }

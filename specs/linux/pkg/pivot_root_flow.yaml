@@ -23,6 +23,10 @@ summary: >
   stacked under it at the same place and is removed by the detaching umount,
   after which nothing of the old tree is reachable by name, not even
   through ".." (".." of "/" is "/"); a second pivot_root(".", ".") is EBUSY.
+  A plain umount2(".", 0) (or umount2("/", 0)) right after pivot_root(".", ".")
+  is EBUSY while the old root still has mounts below it (the usual case: /proc,
+  /dev ...), nothing changes and the old tree stays hidden beneath; only
+  MNT_DETACH removes it.
   (2) pivot_root(new_root, new_root/old) with an existing directory: the old
   tree is reachable at /old (for example /old/tmp), umount2("/old",
   MNT_DETACH) leaves an empty directory that rmdir removes. Process state:
