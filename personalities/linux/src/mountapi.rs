@@ -350,6 +350,9 @@ pub struct FsContext {
     options: Vec<(Vec<u8>, Option<Vec<u8>>)>,
     read_only: Option<bool>,
     log: VecDeque<Vec<u8>>,
+    /// `fsmount(2)` took the superblock: a context that fails after it is
+    /// busy for `fsmount` too, one that failed at create is `EINVAL`.
+    was_mounted: bool,
 }
 
 /// The parameters each file system type takes (the man pages' lists, as
@@ -416,6 +419,7 @@ impl FsContext {
             options: Vec::new(),
             read_only: None,
             log: VecDeque::new(),
+            was_mounted: false,
         }
     }
 
@@ -651,9 +655,11 @@ impl FsContext {
     /// context.
     pub fn begin_mount(&mut self) -> Result<(), Errno> {
         match (self.purpose, self.phase) {
-            (Purpose::Reconfigure, _) | (_, Phase::Mounted | Phase::Failed) => Err(Errno::EBUSY),
+            (Purpose::Reconfigure, _) | (_, Phase::Mounted) => Err(Errno::EBUSY),
+            (Purpose::Create, Phase::Failed) if self.was_mounted => Err(Errno::EBUSY),
             (Purpose::Create, Phase::Created) => {
                 self.phase = Phase::Mounted;
+                self.was_mounted = true;
                 Ok(())
             }
             _ => Err(Errno::EINVAL),
@@ -1218,9 +1224,16 @@ mod tests {
         ops.fail = Some(Errno::EINVAL);
         assert_eq!(c.config(&Command::Create, &mut ops), Err(Errno::EINVAL));
         ops.fail = None;
-        assert_eq!(c.begin_mount(), Err(Errno::EBUSY));
+        assert_eq!(c.begin_mount(), Err(Errno::EINVAL));
         assert_eq!(c.config(&set(b"size", Value::String(b"1m")), &mut ops), Err(Errno::EBUSY));
         assert_eq!(c.read_log(64), Err(Errno::ENODATA));
+        // After fsmount, a refused reconfigure makes fsmount busy too.
+        let mut c = FsContext::new(b"tmpfs").unwrap();
+        c.config(&Command::Create, &mut ops).unwrap();
+        c.begin_mount().unwrap();
+        ops.fail = Some(Errno::EPERM);
+        assert_eq!(c.config(&Command::Reconfigure, &mut ops), Err(Errno::EPERM));
+        assert_eq!(c.begin_mount(), Err(Errno::EBUSY));
     }
 
     #[test]
