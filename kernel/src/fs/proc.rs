@@ -300,15 +300,10 @@ impl ProcSource for KernelProc {
         let p = find(pid)?;
         let (pgrp, session) = crate::linux::task::group_and_session(pid);
         let current = user::current_process().is_some_and(|c| c.pid == pid);
-        let state = if p.has_ended() {
-            ProcState::Zombie
-        } else if p.is_stopped() {
-            ProcState::Stopped
-        } else if current {
-            ProcState::Running
-        } else {
-            ProcState::Sleeping
-        };
+        // `R` while one of its threads is on a CPU or waiting for one (the
+        // caller's own process always), `S` only when every thread waits.
+        let running = core::iter::once(current).chain(p.threads_running());
+        let state = ProcState::of(p.has_ended(), p.is_stopped(), running);
         // proc(5): real, effective, saved set and file system ids, of
         // the main thread (ADR 0045: credentials are per thread).
         let cred = crate::linux::cred::process_creds(&p);
