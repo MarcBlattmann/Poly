@@ -35,7 +35,7 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use poly_ntobj::NtStatus;
-use poly_ntobj::status::STATUS_INVALID_IMAGE_FORMAT;
+use poly_ntobj::status::{STATUS_INVALID_IMAGE_FORMAT, STATUS_NO_MEMORY};
 use poly_pe::{Bits, ImageInfo, Pe, reloc_kind};
 
 /// Images up to this many bytes are laid out in memory when their section
@@ -44,6 +44,26 @@ pub const EAGER_MAX: u64 = 1 << 20;
 
 /// How much of a file is read to parse the headers of a lazy image.
 const HEADER_READ: usize = 64 * 1024;
+
+/// A vector of `n` copies of `value`, or `STATUS_NO_MEMORY` when the heap
+/// cannot make it (a plain `vec![..; n]` would panic the kernel: the heap
+/// hands out at most 4 MiB at a time, and a hostile or huge image asks for
+/// more). Everything an image makes in proportion to its size or its file
+/// goes through this, so process creation and `SEC_IMAGE` fail with an error
+/// instead.
+pub(crate) fn try_filled<T: Clone>(n: usize, value: T) -> Result<Vec<T>, NtStatus> {
+    let mut v = Vec::new();
+    v.try_reserve_exact(n).map_err(|_| STATUS_NO_MEMORY)?;
+    v.resize(n, value);
+    Ok(v)
+}
+
+/// `Vec::push` that reports a heap that cannot grow as `STATUS_NO_MEMORY`.
+fn try_push<T>(v: &mut Vec<T>, item: T) -> Result<(), NtStatus> {
+    v.try_reserve(1).map_err(|_| STATUS_NO_MEMORY)?;
+    v.push(item);
+    Ok(())
+}
 
 /// The bytes of an image at their RVAs.
 pub trait ImageBytes: Send + Sync + core::fmt::Debug {
@@ -306,7 +326,7 @@ impl Lazy {
                 }
                 let count = (block - 8) / 2;
                 // Every entry must be a kind this machine uses, inside the image.
-                let mut table = vec![0u8; count as usize * 2];
+                let mut table = try_filled(count as usize * 2, 0u8)?;
                 self.read_raw(u64::from(rva) + pos + 8, &mut table);
                 for e in table.chunks_exact(2) {
                     let entry = u16::from_le_bytes([e[0], e[1]]);
@@ -320,7 +340,7 @@ impl Lazy {
                         return Err(STATUS_INVALID_IMAGE_FORMAT);
                     }
                 }
-                blocks.push(Block { page_rva, table_rva: u64::from(rva) + pos + 8, count });
+                try_push(&mut blocks, Block { page_rva, table_rva: u64::from(rva) + pos + 8, count })?;
                 pos += u64::from(block);
             }
         }
@@ -368,11 +388,14 @@ impl ImageSection {
         let plan = Self::checked_plan(&pe, file.len() as u64)?;
         let size = page_up(u64::from(plan.size_of_image)).ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
         if size > EAGER_MAX {
-            return Self::lazy(Arc::new(FileBytes(Arc::from(file))));
+            let mut copy = Vec::new();
+            copy.try_reserve_exact(file.len()).map_err(|_| STATUS_NO_MEMORY)?;
+            copy.extend_from_slice(file);
+            return Self::lazy(Arc::new(FileBytes(copy.into())));
         }
-        let mut image = vec![0u8; size as usize];
+        let mut image = try_filled(size as usize, 0u8)?;
         plan.map_into(&mut image).map_err(bad)?;
-        let pages = Self::page_protections(&plan, size);
+        let pages = Self::page_protections(&plan, size)?;
         Ok(ImageSection { image: Arc::new(Held(image.into())), info: *pe.info(), size, pages, lazy: None, name: None })
     }
 
@@ -381,7 +404,7 @@ impl ImageSection {
     pub fn from_reader(file: Arc<dyn ImageFile>) -> Result<ImageSection, NtStatus> {
         let len = file.len();
         if len <= EAGER_MAX {
-            let mut bytes = vec![0u8; len as usize];
+            let mut bytes = try_filled(len as usize, 0u8)?;
             let n = file.read_at(0, &mut bytes);
             bytes.truncate(n);
             return Self::from_file(&bytes);
@@ -391,17 +414,17 @@ impl ImageSection {
 
     pub(crate) fn lazy(file: Arc<dyn ImageFile>) -> Result<ImageSection, NtStatus> {
         let bad = |_| STATUS_INVALID_IMAGE_FORMAT;
-        let mut head = vec![0u8; HEADER_READ.min(file.len() as usize)];
+        let mut head = try_filled(HEADER_READ.min(file.len() as usize), 0u8)?;
         let n = file.read_at(0, &mut head);
         head.truncate(n);
         let pe = Pe::parse(&head).map_err(bad)?;
         let plan = Self::checked_plan(&pe, file.len())?;
         let size = page_up(u64::from(plan.size_of_image)).ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
-        let pages = Self::page_protections(&plan, size);
-        let parts = plan
-            .regions()
-            .map(|r| Part { rva: r.rva, file_offset: r.data_offset as u64, file_len: r.data_size })
-            .collect();
+        let pages = Self::page_protections(&plan, size)?;
+        let mut parts = Vec::new();
+        for r in plan.regions() {
+            try_push(&mut parts, Part { rva: r.rva, file_offset: r.data_offset as u64, file_len: r.data_size })?;
+        }
         let reloc_dir =
             pe.info().directory(poly_pe::dir::BASERELOC).filter(|d| d.size != 0).map(|d| (d.virtual_address, d.size));
         let lazy = Arc::new(Lazy { file, parts, size, fixups: None, reloc_dir });
@@ -417,8 +440,8 @@ impl ImageSection {
         pe.load_plan_in(file_len).map_err(bad)
     }
 
-    fn page_protections(plan: &poly_pe::LoadPlan<'_>, size: u64) -> Vec<Protection> {
-        let mut rights = vec![Rights::default(); (size / PAGE_SIZE) as usize];
+    fn page_protections(plan: &poly_pe::LoadPlan<'_>, size: u64) -> Result<Vec<Protection>, NtStatus> {
+        let mut rights = try_filled((size / PAGE_SIZE) as usize, Rights::default())?;
         for region in plan.regions() {
             let start = u64::from(region.rva) / PAGE_SIZE;
             let end = page_up(u64::from(region.rva) + u64::from(region.size)).unwrap_or(size).min(size) / PAGE_SIZE;
@@ -428,7 +451,10 @@ impl ImageSection {
                 r.execute |= region.protection.execute;
             }
         }
-        rights.iter().map(|r| Protection::new(r.protection(), false).expect("a base protection")).collect()
+        let mut pages = Vec::new();
+        pages.try_reserve_exact(rights.len()).map_err(|_| STATUS_NO_MEMORY)?;
+        pages.extend(rights.iter().map(|r| Protection::new(r.protection(), false).expect("a base protection")));
+        Ok(pages)
     }
 
     pub fn image_base(&self) -> u64 {
@@ -447,7 +473,9 @@ impl ImageSection {
             return Ok(Arc::new(lazy.with_relocation(&self.info, base)?));
         }
         let held = self.image.held().ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
-        let mut copy = held.to_vec();
+        let mut copy = Vec::new();
+        copy.try_reserve_exact(held.len()).map_err(|_| STATUS_NO_MEMORY)?;
+        copy.extend_from_slice(held);
         poly_pe::relocate(&mut copy, &self.info, base).map_err(|_| STATUS_INVALID_IMAGE_FORMAT)?;
         Ok(Arc::new(Held(copy.into())))
     }

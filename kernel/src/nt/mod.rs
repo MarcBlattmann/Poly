@@ -41,6 +41,7 @@ pub mod layout;
 pub mod link;
 mod test_layout;
 
+mod test_bigimage;
 mod test_ldr;
 
 /// Our `ntdll.dll` (ADR 0071), built by `cargo xtask` from
@@ -894,7 +895,8 @@ pub fn start_with_std(
         let args: Vec<&str> = launch.args.iter().map(String::as_str).collect();
         poly_personality_nt::params::for_program(&launch.image_path, &args, layout::environment(&s.sys))
     });
-    start_params(process, memory, file, tid, &params, sources, None).map(|(start, _)| start)
+    let image = poly_personality_nt::image::ImageSection::from_file(file)?;
+    start_params(process, memory, image, tid, &params, sources, None).map(|(start, _)| start)
 }
 
 /// Who gets handles to a new process and its first thread, with which
@@ -932,7 +934,7 @@ type ChildHandles = (poly_ntobj::Handle, poly_ntobj::Handle);
 fn start_params(
     process: &Arc<Process>,
     memory: &Arc<Memory>,
-    file: &[u8],
+    image: poly_personality_nt::image::ImageSection,
     tid: u32,
     params: &poly_personality_nt::params::Parameters,
     sources: &[console::StdSource; 3],
@@ -947,8 +949,7 @@ fn start_params(
     // File I/O completions are written into this memory (ADR 0067).
     io::register(process.pid, memory);
     // A console program gets a console (ADR 0080).
-    let console_app =
-        poly_pe::Pe::parse(file).is_ok_and(|pe| pe.info().optional.subsystem == poly_pe::subsystem::WINDOWS_CUI);
+    let console_app = image.info.optional.subsystem == poly_pe::subsystem::WINDOWS_CUI;
     let started = with(|s| {
         s.processes.insert(pid, NtProcess::new(pid));
         s.created.insert(pid, registry::filetime_now());
@@ -965,7 +966,8 @@ fn start_params(
             console: handles.and_then(|h| s.sys.io.console_of_process(h.caller.process)),
         };
         let only = handles.and_then(|h| h.inherit_only.as_deref());
-        let start = exec::start_process_listed(&mut s.sys, proc, &mut b, file, NTDLL, None, thread, inherit_from, only);
+        let start =
+            exec::start_process_listed(&mut s.sys, proc, &mut b, image, NTDLL, None, thread, inherit_from, only);
         let start = start.and_then(|ps| {
             // Its token (a copy of its creator's, or the one given) and the
             // descriptors of its objects (ADR 0171).
@@ -1088,7 +1090,7 @@ fn create_process(
         process_security: req.process_security,
         thread_security: req.thread_security,
     };
-    let (start, handles) = start_params(&process, &memory, &req.image, pid, &req.params, &sources, Some(&want))?;
+    let (start, handles) = start_params(&process, &memory, req.image, pid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");
     let first = ThreadRef(u64::from(pid));
     let created = poly_personality_nt::ProcessCreated {
@@ -1256,7 +1258,7 @@ pub enum SpawnError {
 /// ADR 0073).
 pub fn spawn_pe_with(
     process: &Arc<Process>,
-    file: &[u8],
+    image: poly_personality_nt::image::ImageSection,
     hook: user::SyscallHook,
     launch: &Launch,
 ) -> Result<(), SpawnError> {
@@ -1264,7 +1266,14 @@ pub fn spawn_pe_with(
     start_waits_reporter();
     let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| SpawnError::Memory)?);
     let pid = process.pid;
-    let start = start_with(process, &memory, file, pid, launch).map_err(SpawnError::Image)?;
+    let sources = console::std_sources(process);
+    let params = with(|s| {
+        let args: Vec<&str> = launch.args.iter().map(String::as_str).collect();
+        poly_personality_nt::params::for_program(&launch.image_path, &args, layout::environment(&s.sys))
+    });
+    let start = start_params(process, &memory, image, pid, &params, &sources, None)
+        .map(|(start, _)| start)
+        .map_err(SpawnError::Image)?;
     match user::spawn_nt(Arc::clone(process), Arc::clone(&memory), start.entry, start.teb, hook) {
         Ok(tid) => {
             let _ = thread::detach(tid);
