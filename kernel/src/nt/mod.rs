@@ -1080,14 +1080,11 @@ pub fn thread_exit(pid: u32, tid: u32, status: ExitStatus, memory: &Arc<Memory>)
 /// The NT process `pid` has ended (its last thread is going): drop its
 /// objects, views and handles. Its memory itself goes with `user::Memory`.
 pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
-<<<<<<< HEAD
     // What it used, kept for the handles that outlive it (the last thread is still counted).
     let used = crate::process::find(pid).map(|p| crate::cputime::process(&p)).unwrap_or_default();
-=======
     if WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 {
         crate::kprintln!("nt-waits: p{pid} ended at {} ms", crate::time::now_ns() / 1_000_000);
     }
->>>>>>> origin/chrome-s10-int
     with(|s| {
         if let Some(created) = s.created.remove(&ProcessId(pid)) {
             let cpu = used;
