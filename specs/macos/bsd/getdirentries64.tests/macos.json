@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "gde_errors",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "2f93b64306b4657c2088b03955515ee0f2c52a12530f2c43e4cb2071e18aa75c",
+          "executable_sha256": "f7840da1877e94c588a92f945ed9d31fc12124b6795e6c3874e99be1d62545f0",
           "exit_code": 0,
           "stdout": "ok a 32-byte buffer: EINVAL\nok a file: EINVAL\nok fd 99: EBADF\nok a NULL position pointer: EFAULT\nok a buffer at address 8: EFAULT\nok a position pointer at address 8: EFAULT\nok afterwards the directory reads normally\nsummary 7 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "a2e5ce336599dafed85f6d023f0d7bdfc3fa0543f056298a779e2335ac180332",
+          "executable_sha256": "0db3592046e1131e72d1b108ee7c81212f17d582cf9b5378d97a28b132ce35ee",
           "exit_code": 0,
           "stdout": "ok 5 entries of 32 bytes: 160\nok ., .., a, bb, sub with their types\nok each 32 bytes, name length, an inode\nok 5 records\nok at the end: 0\nsummary 5 passed, 0 failed\n",
           "stderr": "",

@@ -1,0 +1,61 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "exec_errors",
+      "source_sha256": "e534eb189cc148c2f7115c10cf9c752d36cbe2475cab8b9d521d1e84e7e744a3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "dec53349c2e51ab188a8f4d5bebfb04ba46b21e8e7479f1f0285244b698c7ea9",
+          "exit_code": 0,
+          "stdout": "ok a missing file: ENOENT\nok the empty path: ENOENT\nok a directory: EACCES\nok a file without execute permission: EACCES\nok an executable text file: ENOEXEC\nok a file used as a directory: ENOTDIR\nok the path at address 8: EFAULT\nok argv at address 8: EFAULT\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exec_inherit",
+      "source_sha256": "cd0492acd892d7c7d8ccb7a71a241060323ff4da4b9dc0ed4be30c9a8e656612",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "803e30a9da4f58e813da8062e44c5c9fd0f59cbe59530f3f95299f7b2ce5d769",
+          "exit_code": 0,
+          "stdout": "child args: [child]\nchild env:\nchild fd5=open fd6=closed usr1=1 usr2=0 mask=268435456\nok the program ran\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exec_shebang",
+      "source_sha256": "4d074ff655b000bde9ab5303b980b0cf77c9da6cf0043ee9c0237ae6d224c0dc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6ab1816092ae99a52d8590b97aad688a4b9356b35ccd061758afb8c6e0e81c8e",
+          "exit_code": 0,
+          "stdout": "child args: [child] [3] [script] [extra]\nchild env:\nchild fd5=closed fd6=closed usr1=0 usr2=0 mask=0\nok the interpreter ran and exited with 3\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

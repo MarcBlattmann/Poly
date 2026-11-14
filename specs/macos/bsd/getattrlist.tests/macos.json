@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "getattrlist_basic",
+      "source_sha256": "f1add6ec1f5c3c7069cbad29920dc324a47f9345d626847397c76880534a9c38",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "76ceec614ce7a2edc62d8cd1c6e2029eb3fea66fe14f1284486aeb97fb4d67b1",
+          "exit_code": 0,
+          "stdout": "ok getattrlist returns 0\nok the total length is 32\nok the name: length 5 (\"file\" and NUL), reached by the offset\nok the object type: VREG\nok the data length: 10 (at offset 16)\nok with RETURNED_ATTRS, for a directory\nok the returned set: common attributes 0x80000009, nothing else\nok the name \"dir\" (length 4)\nok the object type: VDIR\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "getattrlist_errors",
+      "source_sha256": "0bf2fa0a40b56eae0c8531dc370f7c96fcf410dc9d51b77dc854a9f74ab3390e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d3b884dcebb68817243369f72a89b9a6e78dd4d3161d9b0cb2e5331d31ab0cfe",
+          "exit_code": 0,
+          "stdout": "ok a missing path: ENOENT\nok a file used as a directory: ENOTDIR\nok a bitmap count of 4: EINVAL\nvalue a bitmap count of 6: errno 22\nok the attrlist at address 8: EFAULT\nok the buffer at address 8: EFAULT\nok the path at address 8: EFAULT\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

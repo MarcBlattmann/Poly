@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/kevent.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# kevent.tests/macos.json.
+id: macos/syscall/bsd/kevent
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 363,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 363, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. kevent(kq,
+  changelist, nchanges, eventlist, nevents, timeout) applies changes to a
+  queue and collects events (struct kevent: ident u64, filter i16, flags
+  u16, fflags u32, data i64, udata pointer: 32 bytes); the result is the
+  number of events stored; a NULL timeout waits, a zero timeout polls.
+  EVFILT_READ (-1) on a pipe: no event while it is empty; after 3 bytes
+  one event with ident = the descriptor, flags as added (EV_ADD), data 3,
+  udata echoed; it is level triggered (reported again until the data is
+  read). EVFILT_WRITE (-2): ready at once with room (data > 0). EV_DELETE
+  removes a registration. Errors in the change list are events when there
+  is room: flags EV_ERROR (0x4000) plus the flags given, data = the errno
+  (EBADF for a descriptor that is not open, EINVAL for an unknown filter,
+  ENOENT for deleting what is not registered), ident and udata echoed;
+  with no room for events the call fails with that errno. EV_RECEIPT
+  (0x40) answers each change with an EV_ERROR event of data 0.
+  EVFILT_TIMER (-7), data in milliseconds, EV_ONESHOT: one event after the
+  time with data 1, flags as added plus EV_CLEAR (0x31 for ADD|ONESHOT),
+  gone afterwards; a wait with a timeout and nothing to report returns 0.
+  EVFILT_SIGNAL (-6) counts signals sent to the process, also ignored
+  ones: two kills of SIGUSR1 are one event with data 2, ident 30, then 0.
+  EVFILT_READ on a pipe whose writers are closed: an event with EV_EOF
+  (0x8000) and data 0 (flags 0x8021 for ADD|CLEAR). EVFILT_PROC (-5) with
+  NOTE_EXIT (0x80000000): no event while the child runs, one after it
+  exits (ident = pid, fflags NOTE_EXIT, EV_EOF set, data 0), and the child
+  can still be waited for; a pid that does not exist is an error event
+  with data ESRCH (3).
+returns:
+  success: "the number of events stored in eventlist (0 when none)"
+errors:
+  bad_kq: "EBADF (9): a queue descriptor that is not open, or not a queue"
+  bad_change: "EBADF / EINVAL / ENOENT as an EV_ERROR event, or as the call's errno without room"
+  bad_pointer: "EFAULT (14): changelist at address 8"
+  bad_timeout: "EINVAL (22): 2e9 ns, a negative time"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

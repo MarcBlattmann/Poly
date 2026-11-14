@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "byname_basic",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "027d5ff28372f663c08f563dea9944ce3122e0da4e815c7c9c543dff522c0273",
+          "executable_sha256": "c69032276ba4005af0b1a80685465a4df7825075c53d6d0ba4c0bc8f84ec3576",
           "exit_code": 0,
           "stdout": "ok kern.ostype succeeds\nok it is \"Darwin\", 7 bytes\nok a name length counting the NUL works too\nok a NULL buffer reports length 7\nok hw.pagesize by name fills 8 bytes when there is room\nvalue hw.pagesize 16384\nok and 4 bytes when there are 4\nsummary 6 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "070c7fe520662326a4b80a9be1a27e5dbd1a761c498ba8e3fe419895ddf570a5",
+          "executable_sha256": "8c0ca436d422675cf1baa3f9cd7613007523fe3fa1b66f6c572f6acc26ca4787",
           "exit_code": 0,
           "stdout": "ok kern.nosuchthing: ENOENT\nok the empty name: ENOENT\nok the node kern: ENOENT\nok length 5 of kern.ostype: ENOENT\nok a 1999-byte name: ENAMETOOLONG\nok the name at address 8: EFAULT\nok setting kern.ostype: EPERM\nok a 2-byte buffer: ENOMEM\nok the length becomes 0\nsummary 9 passed, 0 failed\n",
           "stderr": "",
