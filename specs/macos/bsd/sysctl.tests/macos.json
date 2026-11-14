@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "sysctl_hw",
+      "source_sha256": "9878e085763d64b1de28864db75da0dd8acb8ca07e9fc73a6d99470b9ce18a1b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "86e56e817414841ea5d2c44402f201cf0f0f2505b6427509cf2726f04a3bac18",
+          "exit_code": 0,
+          "stdout": "ok hw.pagesize succeeds\nok into 8 bytes it writes 4\nvalue hw.pagesize 16384\nok the same in 4 bytes\nok a power of two of at least 4096\nok a 2-byte buffer: ENOMEM\nok hw.ncpu is positive\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "sysctl_kern",
+      "source_sha256": "f1b13c81c1d0c16a5a899a80fc7eba97179e494ff942895c2031a586ddf3a7c6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d8d9e7c607528f969cffe7feab2e6f2ef98ae53fbbd6ffa8bb56e02eaf4e8c79",
+          "exit_code": 0,
+          "stdout": "ok kern.ostype succeeds\nok it is \"Darwin\"\nok length 7 with the NUL\nok a NULL buffer reports length 7\nok a 3-byte buffer: ENOMEM\nok the length becomes 0\nok nothing is copied\nok kern.osrelease is digits and dots\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

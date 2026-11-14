@@ -15,6 +15,11 @@ xtask pipeline win build` and run on the Windows oracle machine
 (`cargo xtask pipeline win remote`, ADR 0097). A Windows entry's
 `<symbol>.tests/windows.json` holds the recorded Windows results of its
 visible tests (`tests split --windows-results`, or `win remote --record`).
+macOS tests are C files of raw BSD calls and Mach traps
+(`tests/macos/include/poly_mtest.h`, ADR 0182), built and run on the macOS
+oracle Mac by `cargo xtask pipeline mac run`; a macOS entry's
+`<symbol>.tests/macos.json` holds their recorded results per architecture
+(x86_64 and arm64; `mac run --record`).
 Before writing a Windows spec, `cargo xtask coverage show <id>` lists where
 Wine's conformance tests exercise the entry (its seeds): read those for
 behaviour worth observing, never copy them (`../CLEAN_ROOM.md`).

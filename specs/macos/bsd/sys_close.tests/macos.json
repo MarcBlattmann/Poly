@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "close_invalid",
+      "source_sha256": "badecc2f2027bafdb86cc2c87affffba62e29815c1db950a09a7610eb971ffeb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6fcbfc3e6ec6915f9687631e6122e9ce76c0d348180a27ad49c994bd93abbceb",
+          "exit_code": 0,
+          "stdout": "ok fd -1: EBADF\nok fd 99: EBADF\nok fd 100000: EBADF\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "close_reuse",
+      "source_sha256": "e98dc14903d110c9872d48d118aa8e70e17c3de5d8e609a3af86182fb9744776",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "513511db1e0e796a6b6555d9d54239b376282e96d04be6b684d597c40dbfa42c",
+          "exit_code": 0,
+          "stdout": "ok two opens give 3 and 4\nok after closing 3, open gives 3\nok close stdin\nok after closing 0, open gives 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

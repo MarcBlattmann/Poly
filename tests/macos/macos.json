@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "hello",
+      "source_sha256": "ee7b29b7aa1a078218ad5dd6faa4a15e5805e3a766f930823db9924e7383d21e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e93a9d854d6015ae17b676f6d86603f3a14225fddf99b3aa185747596ee7a132",
+          "exit_code": 0,
+          "stdout": "hello from a macOS test\nok write returns the byte count\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

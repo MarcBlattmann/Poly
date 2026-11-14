@@ -386,6 +386,7 @@ mod tests {
 
     /// Two builds with the same compiler give the same bytes.
     #[test]
+    #[cfg_attr(not(target_os = "linux"), ignore = "builds Linux ELF test programs with the host compiler; needs Linux")]
     fn builds_are_reproducible() {
         let cc = compiler(None);
         if compiler_version(&cc).is_err() {

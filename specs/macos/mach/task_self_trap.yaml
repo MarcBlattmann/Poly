@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/task_self_trap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# task_self_trap.tests/macos.json.
+id: macos/syscall/mach/task_self_trap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 28;
+  arm64 `svc #0x80` with x16 = -28. The result is in rax / x0; there is no
+  carry-flag convention. task_self_trap() returns the name of the calling
+  task's own port in its IPC space: a 32-bit name, neither MACH_PORT_NULL
+  (0) nor MACH_PORT_DEAD (0xffffffff), the same on every call, different
+  from thread_self_trap (27) and host_self_trap (29). mach_reply_port (26)
+  hands out a new name each time, never the task's, and the task's name
+  stays. The name itself is not part of the behaviour (tests do not print
+  it; it was 515 on the oracle).
+returns:
+  success: "the task's own port name"
+errors: {}
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
