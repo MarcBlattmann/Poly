@@ -110,8 +110,10 @@ fn program(app: &App) -> &str {
 pub enum Action {
     /// Start the app.
     Open,
-    // The installer track adds `Uninstall` here, offered by
-    // `Item::actions` for apps that a package record owns (ADR 0175).
+    /// Remove it (ADR 0180): offered for the apps a package record or the
+    /// AppImage installer owns ([`Item::removable`]); the installer's
+    /// window asks before anything is removed.
+    Uninstall,
 }
 
 impl Action {
@@ -119,6 +121,7 @@ impl Action {
     pub fn label(self) -> &'static str {
         match self {
             Action::Open => "Open",
+            Action::Uninstall => "Uninstall",
         }
     }
 }
@@ -132,6 +135,8 @@ pub struct Item {
     /// control characters), unique in the folder. The name drawn is
     /// `app.name`.
     pub label: String,
+    /// Whether it can be uninstalled ([`Folder::mark_removable`]).
+    pub removable: bool,
 }
 
 impl Item {
@@ -155,11 +160,18 @@ impl Item {
         s
     }
 
-    /// What can be done with it. No uninstall yet: that comes with the
-    /// installer, which will offer it here.
+    /// What can be done with it: open it, and uninstall it where the
+    /// installer owns it (ADR 0180). Poly's own apps and the base system's
+    /// are not removable.
     pub fn actions(&self) -> Vec<Action> {
-        alloc::vec![Action::Open]
+        if self.removable { alloc::vec![Action::Open, Action::Uninstall] } else { alloc::vec![Action::Open] }
     }
+}
+
+/// The line that asks the desktop to show the installer's window that
+/// uninstalls `item`'s app (for the compositor's control pipe).
+pub fn uninstall_request(item: &Item) -> String {
+    Control::Uninstall { id: item.app.id.clone() }.line()
 }
 
 /// The line that asks the desktop to start `item`'s app as the launcher
@@ -202,13 +214,21 @@ impl Folder {
             if items.iter().any(|i| i.label == label) {
                 label = format!("{label} ({})", app.id.replace('/', "\u{2215}"));
             }
-            items.push(Item { kind: AppKind::of(&app), app, label });
+            items.push(Item { kind: AppKind::of(&app), app, label, removable: false });
         }
         Folder { items }
     }
 
     pub fn items(&self) -> &[Item] {
         &self.items
+    }
+
+    /// Mark the items whose desktop file ID is in `ids` as removable.
+    /// Poly's own apps never are, whatever the list says.
+    pub fn mark_removable(&mut self, ids: &[String]) {
+        for item in &mut self.items {
+            item.removable = !item.app.id.starts_with("poly:") && ids.contains(&item.app.id);
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -322,9 +342,32 @@ mod tests {
         let settings = f.by_label("Settings").unwrap();
         assert_eq!(open_request(settings), "open poly:Settings\n");
         assert_eq!(Control::parse(&open_request(settings)), Some(Control::Open { id: "poly:Settings".into() }));
-        // Open is all there is: no uninstall until the installer offers it.
+        // Poly's own apps are not uninstalled, whatever is said.
         assert_eq!(settings.actions(), [Action::Open]);
         assert_eq!(Action::Open.label(), "Open");
+    }
+
+    #[test]
+    fn apps_the_installer_owns_can_be_uninstalled() {
+        let mut f = Folder::new(vec![
+            app("Galculator", "galculator.desktop", &["galculator"]),
+            app("Chromium", "chromium.desktop", &["chromium"]),
+            app("Files", "poly:Files", &["/bin/poly-files"]),
+        ]);
+        f.mark_removable(&["galculator.desktop".into(), "poly:Files".into()]);
+        let by = |l: &str| f.by_label(l).unwrap();
+        assert_eq!(by("Galculator").actions(), [Action::Open, Action::Uninstall]);
+        assert_eq!(by("Chromium").actions(), [Action::Open]);
+        assert_eq!(by("Files").actions(), [Action::Open], "Poly's own apps stay");
+        assert_eq!(Action::Uninstall.label(), "Uninstall");
+        assert_eq!(uninstall_request(by("Galculator")), "uninstall galculator.desktop\n");
+        assert_eq!(
+            Control::parse(&uninstall_request(by("Galculator"))),
+            Some(Control::Uninstall { id: "galculator.desktop".into() })
+        );
+        // Marking again replaces the marks.
+        f.mark_removable(&[]);
+        assert_eq!(f.by_label("Galculator").unwrap().actions(), [Action::Open]);
     }
 
     #[test]
