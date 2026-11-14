@@ -370,6 +370,36 @@ pub fn send<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l: u64) -> u6
     }
 }
 
+/// The style bits that decide the size of a window's frame (and so of its
+/// client area): a caption, a sizing or dialog border, scroll bars, and
+/// whether it is a child or a popup.
+const FRAME_STYLE_BITS: u32 = WS_BORDER | WS_DLGFRAME | WS_THICKFRAME | WS_HSCROLL | WS_VSCROLL | WS_CHILD | WS_POPUP;
+
+/// Whether changing a window's style from `old` to `new` changes its frame.
+pub fn frame_style_changed(old: u32, new: u32) -> bool {
+    (old ^ new) & FRAME_STYLE_BITS != 0
+}
+
+/// `SetWindowLongPtr(GWL_STYLE)` without `SWP_FRAMECHANGED`
+/// (DwmGetWindowAttribute.yaml `ncrendering_enabled`: "the client
+/// rectangle follows too"): after a style change that alters the frame of
+/// a visible window the client rectangle is calculated again from the
+/// unchanged window rectangle, with `WM_NCCALCSIZE`; no size or move
+/// message is sent. A hidden window keeps its client rectangle until
+/// `SetWindowPos` with `SWP_FRAMECHANGED` (SetWindowLongPtrW.yaml `frame`,
+/// `swl_style`: a hidden popup given `WS_BORDER` still has its 100x80).
+pub fn style_frame_changed<E: Env + ?Sized>(env: &E, hwnd: u64) {
+    let Some(i) = info(env, hwnd) else { return };
+    if i.desktop || i.minimized || !i.visible {
+        return;
+    }
+    let mut rect = CRect::from(i.window);
+    send(env, hwnd, WM_NCCALCSIZE, 0, ptr(&mut rect));
+    let (ox, oy) = origin_of(&i);
+    let client_rel = Rect::new(rect.left - ox, rect.top - oy, rect.right - ox, rect.bottom - oy);
+    env.call(Request::SetRects { hwnd: hwnd as u32, window_rel: None, client_rel: Some(client_rel) });
+}
+
 // ----- creation
 
 /// `CreateWindowExW` (`CreateWindowExW.yaml`).

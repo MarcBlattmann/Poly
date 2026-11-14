@@ -135,14 +135,54 @@ Tried in the boot test, on CPU-X 5.4.1:
   removes it when the app ends. CPU-X's window appears (screenshot in the
   hand-over).
 
-So Poly starts AppImages by extracting: the installed desktop file's `Exec` is
-`env APPIMAGE_EXTRACT_AND_RUN=1 <image>`, and the installer's **Run** sets the
-variable. `poly_pkg::appimage::RUNS_BY_EXTRACTING` is the one switch: when
-`execve` from FUSE works, set it to `false` and the desktop files are written
-without the variable (installed ones keep it, harmlessly). The roadmap's
-"AppImages install and run, without FUSE (Poly mounts their squashfs)" stays
-unticked: Poly *reads* the squashfs (to install) but does not mount it for the
-app. A start costs the unpacking each time (seconds for a 27 MB image).
+At first Poly therefore started AppImages by extracting. **Update
+(linux-fuse-exec): the FUSE path works now, and is the one Poly uses.** The
+cause of the `EIO` was not in FUSE or `execve`: the runtime's squashfuse
+reads a compressed block of its image with one `pread64` (271375 bytes for
+CPU-X's `AppRun`), and Poly's `pread64` returned at most 64 KiB (one bounce
+buffer), while `read`, `readv` and `preadv` already went on chunk by chunk
+for regular files. squashfuse takes a short read before the end of a regular
+file for an I/O error and answers the kernel's `FUSE_READ` with an error, so
+exec's read of the program failed (`ExecError::Io`, `EIO`). Found with
+`poly.strace=7` on the squashfuse process (started by `execveat` of a
+descriptor, so its `comm` is "7"): `pread64(3, …, 0x4240f, …) = 65536`, then a
+16-byte reply. `pread64` now goes through the same transfer as `preadv`
+(read(2): a regular file gives fewer bytes than asked only at its end); a
+host test in the Linux personality and a kernel self-test
+(`pread_of_a_regular_file_is_whole_up_to_its_end`) cover it.
+
+With that, `AppRun` (CPU-X's is `sharun`) ran from the mount and executed
+`bin/cpu-x`, a hard link of itself, which stopped with "Failed to get sharun
+parrent dir!": its `readlink("/proc/self/exe")` was empty. The VFS names a
+directory by scanning its parent's listing for the directory's inode number,
+and a FUSE node id is the server's handle, not the `ino` of its `READDIR`
+entries (squashfuse numbers the two differently), so nothing below a FUSE
+mount's root had a path. `FileSystem::name_of` now lets a file system say a
+node's name without a scan; FUSE keeps the name each node was looked up (or
+made, or moved) by next to its parent, which it kept already for `..`.
+
+Then CPU-X itself started from the mount and squashfuse ended with "fuse:
+reading device: Out of memory", the app with `SIGBUS` on a page of the
+mount. Every read of `/dev/fuse` took a bounce buffer of the largest
+message (a megabyte and a page, one contiguous run of the kernel heap),
+which failed once the running app had fragmented memory. A read now takes a
+buffer for the request that waits (`CharDevice::next_message_size`,
+`LinuxKernel::read_piece`; 64 KiB while none does); a request that came
+while the read waited and does not fit makes the read try again with room
+for it.
+
+So the installed desktop file's `Exec` is the image itself and **Run** sets
+nothing: the runtime mounts the image through `/dev/fuse` and runs `AppRun`
+from the mount. Extracting (`env APPIMAGE_EXTRACT_AND_RUN=1 <image>`) stays as
+the fallback for a system without FUSE:
+`poly_pkg::appimage::runs_by_extracting(fuse)` decides, and the installer asks
+it with whether `/dev/fuse` exists. Desktop files installed before keep their
+`env` prefix and still work. The boot test checks that CPU-X runs with a
+`fuse.squashfuse` mount and a desktop file without the variable. The
+roadmap's "AppImages install and run, without FUSE (Poly mounts their
+squashfs)" stays unticked: that line asks for Poly itself to mount the
+squashfs, which is still not done; AppImages run through their own FUSE
+server instead.
 
 ## Not in this ADR
 
