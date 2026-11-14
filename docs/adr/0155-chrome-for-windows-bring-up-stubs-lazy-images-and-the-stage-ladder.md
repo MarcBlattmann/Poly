@@ -432,7 +432,7 @@ builds `\\.\pipe` + that name for its next pipe instance, so it must be `\<pipe 
    (the root `\`, an anonymous pipe the empty name, the device itself `STATUS_INVALID_PARAMETER`),
    and `NtQueryObject(ObjectNameInformation)` of a file object is its device's name and its path
    there, with the sheet's rules for buffers that are too small (`objects::file_name_answer`).
-   A disk file's device is Poly's own (`\Device\PolyFs<N>`), not `\Device\HarddiskVolume<N>`.
+   A disk file's device was Poly's own (`\Device\PolyFs<N>`) then; since ADR 0185 it is `\Device\HarddiskVolume<N>`.
 2. **`BuildSecurityDescriptorW`** (`poly_security::buildsd`): its merge differs from
    `SetEntriesInAclW`'s (a new allowed entry goes behind the leading denied entries, or last when
    the old list is not in that order).
@@ -612,7 +612,7 @@ follow their sheets now). In particular, to be confirmed:
 * `SetProcessShutdownParameters`: `ERROR_INVALID_PARAMETER` for a level outside 0x100 to 0x3FF or
   a flag other than `SHUTDOWN_NORETRY`.
 * `K32GetMappedFileNameW`: `ERROR_FILE_INVALID` for an address in no image and for another
-  process; the device name is Poly's (`\Device\PolyFs<N>`); a name longer than the buffer is cut.
+  process; the device name is `\Device\HarddiskVolume<N>` (ADR 0185; `\Device\PolyFs<N>` before); a name longer than the buffer is cut.
 * `SHGetKnownFolderPath`: `E_INVALIDARG` for an unknown id, `E_FAIL` for a folder without a path,
   `HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)` when the folder's variable is not set; flags other
   than `KF_FLAG_CREATE` change nothing.

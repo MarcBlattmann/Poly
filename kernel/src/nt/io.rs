@@ -57,7 +57,7 @@ static WORKERS: Mutex<BTreeMap<u32, Arc<Worker>>> = Mutex::new(BTreeMap::new());
 /// NT lock and never while holding it.
 static DRAINING: Mutex<()> = Mutex::new(());
 
-/// Put the VFS into the NT namespace (`\Device\PolyFs<N>`, `\??\C:`,
+/// Put the VFS into the NT namespace (`\Device\HarddiskVolume<N>`, `\??\C:`,
 /// `\??\Z:`, `\Device\PolyPipe`). Called once, when the NT state is made.
 pub(super) fn attach(sys: &mut NtSystem) {
     let vfs = crate::fs::vfs();
