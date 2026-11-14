@@ -54,6 +54,15 @@
 //!                                                run there, fetch results.json; record it as the reference,
 //!                                                compare Poly with it; prepare/finish around a host-side
 //!                                                transfer.sh where the build runs in a container
+//! mac build [--tests-dir DIR]... [--tests a,b] [--out DIR]
+//!                                                macOS test programs (tests/macos/*.c and every
+//!                                                specs/macos/*/*.tests/*.c, ADR 0182) for x86_64 and arm64 with
+//!                                                the Mac's clang: target/pipeline/macos/bin/<arch>/ + manifest.json
+//! mac run [--tests-dir DIR]... [--tests a,b] [--runs 3] [--timeout SECS] [--record] [--out FILE]
+//!                                                build, run each test on this Mac --runs times per architecture
+//!                                                (x86_64 under Rosetta 2) and require the same result every time;
+//!                                                --record writes macos.json beside the tests (macOS only)
+//! mac show <results.json> [--tests a,b]          print a macOS result file (or a macos.json)
 //! ```
 
 mod apps;
@@ -63,11 +72,18 @@ mod diff;
 mod green;
 mod handoff;
 mod identity;
+mod mac;
 // The host's shared libraries of a program, found as the dynamic linking
 // boot tests find them (one source for both tools).
 #[path = "../../xtask/src/libsearch.rs"]
 mod libsearch;
 mod poly;
+#[cfg(target_os = "linux")]
+mod ptrace;
+// The tracer is ptrace(2) and Linux namespaces; elsewhere (the macOS
+// oracle, ADR 0182) the tool builds and says so when tracing is asked for.
+#[cfg(not(target_os = "linux"))]
+#[path = "ptrace_other.rs"]
 mod ptrace;
 mod remote;
 mod runner;
@@ -858,6 +874,11 @@ fn tests_cmd(repo: &Path, a: &Args) -> Result<u8> {
         Some(path) => Some(windows::RunFile::load(Path::new(path))?),
         None => None,
     };
+    if entry.os == "macos" {
+        let files: Vec<String> =
+            util::files_under(Path::new(generated))?.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        mac::check_split_files(&files)?;
+    }
     if entry.os == "windows" {
         let files: Vec<String> =
             util::files_under(Path::new(generated))?.iter().map(|p| p.to_string_lossy().into_owned()).collect();
@@ -969,6 +990,100 @@ fn handoff_cmd(repo: &Path, a: &Args) -> Result<u8> {
     }
 }
 
+/// The macOS oracle (ADR 0182): build, run on this Mac, record, show.
+fn mac_cmd(repo: &Path, a: &Args) -> Result<u8> {
+    let usage = "usage: pipeline mac <build|run|show> (see tools/pipeline/src/main.rs)";
+    let (sub, rest) = a.positional.split_first().ok_or(usage)?;
+    let mac_dir = repo.join(mac::MAC_DIR);
+    let sources = || -> Result<Vec<mac::Source>> {
+        let dirs: Vec<PathBuf> = match a.all("tests-dir") {
+            d if d.is_empty() => mac::default_dirs(repo)?,
+            d => d.into_iter().map(PathBuf::from).collect(),
+        };
+        mac::collect(&dirs, &test_list(a))
+    };
+    let build = |out: &Path| -> Result<(Vec<mac::Source>, mac::BuildManifest)> {
+        let s = sources()?;
+        let m = mac::build(repo, out, &s)?;
+        println!(
+            "built {} macOS test programs for {} with {} ({}) into {}",
+            m.tests.len(),
+            mac::ARCHES.join(" and "),
+            m.compiler,
+            m.sdk,
+            out.display()
+        );
+        Ok((s, m))
+    };
+    match sub.as_str() {
+        "build" if rest.is_empty() => {
+            a.only(&["tests-dir", "tests", "out"])?;
+            build(&a.opt("out").map_or_else(|| mac_dir.join("bin"), PathBuf::from))?;
+            Ok(0)
+        }
+        "run" if rest.is_empty() => {
+            oracle_guard("mac run")?;
+            a.only(&["tests-dir", "tests", "runs", "timeout", "record", "out"])?;
+            let runs: u32 = a.opt("runs").map_or(Ok(mac::DEFAULT_RUNS), str::parse).map_err(|_| "--runs: a number")?;
+            let bin = mac_dir.join("bin");
+            let (sources, _) = build(&bin)?;
+            let results = mac::run(repo, &bin, runs, timeout(a, DEFAULT_TIMEOUT)?)?;
+            let out = a.opt("out").map_or_else(
+                || mac_dir.join("results").join(format!("macos-{}.json", util::now_stamp())),
+                PathBuf::from,
+            );
+            util::write_json(&out, &results)?;
+            let s = &results.system;
+            println!("macOS {} ({}), Darwin {}, {} runs each:", s.product_version, s.build, s.kernel_release, runs);
+            let mut problems = 0;
+            for t in &results.tests {
+                for (arch, r) in &t.results {
+                    println!("  {:<36} {:<7} {}", t.name, arch, mac::describe(r));
+                    if r.status != "unavailable" && !r.recordable() {
+                        problems += 1;
+                    }
+                }
+            }
+            println!("results: {}", out.display());
+            if a.has("record") {
+                let mut dirs: Vec<&Path> = sources.iter().map(|s| s.dir.as_path()).collect();
+                dirs.dedup();
+                for dir in dirs {
+                    let names: Vec<String> = sources.iter().filter(|s| s.dir == dir).map(|s| s.name.clone()).collect();
+                    let path = dir.join(mac::RECORDED_RESULTS);
+                    let old = if path.exists() { Some(mac::RunFile::load(&path)?) } else { None };
+                    let (merged, skipped) = mac::merge_recording(old.as_ref(), &results, &names);
+                    for (test, arch, why) in &skipped {
+                        println!("  not recorded: {test} {arch}: {why}");
+                    }
+                    util::write_json(&path, &merged)?;
+                    println!("recorded {} tests in {}", merged.tests.len(), path.display());
+                }
+            }
+            Ok(if problems == 0 { 0 } else { 1 })
+        }
+        "show" => {
+            oracle_guard("mac show")?;
+            a.only(&["tests"])?;
+            let [file] = rest else { return Err("usage: pipeline mac show <results.json> [--tests a,b]".into()) };
+            let f = mac::RunFile::load(Path::new(file))?;
+            let wanted = test_list(a);
+            println!("macOS {} ({}), {}, {}", f.system.product_version, f.system.build, f.compiler, f.sdk);
+            for t in f.tests.iter().filter(|t| wanted.is_empty() || wanted.contains(&t.name)) {
+                for (arch, r) in &t.results {
+                    println!("== {} {arch}: {}", t.name, mac::describe(r));
+                    print!("{}", r.stdout);
+                    if !r.stderr.is_empty() {
+                        print!("-- stderr:\n{}", r.stderr);
+                    }
+                }
+            }
+            Ok(0)
+        }
+        _ => Err(usage.into()),
+    }
+}
+
 /// `--tests a,b` as a list.
 fn test_list(a: &Args) -> Vec<String> {
     a.opt("tests").map(|t| t.split(',').filter(|s| !s.is_empty()).map(String::from).collect()).unwrap_or_default()
@@ -991,8 +1106,10 @@ fn run(args: &[String]) -> Result<u8> {
         "tests" => tests_cmd(&repo, &a),
         "handoff" => handoff_cmd(&repo, &a),
         "win" => win_cmd(&repo, &a),
+        "mac" => mac_cmd(&repo, &a),
         _ => Err(format!(
-            "unknown command {cmd}; commands: build trace diff selfcheck polycheck polyrun initramfs spec tests handoff win"
+            "unknown command {cmd}; commands: build trace diff selfcheck polycheck polyrun initramfs spec tests handoff win \
+             mac"
         )),
     }
 }
