@@ -388,6 +388,23 @@ pub fn default_volumes(vfs: &Vfs, ctx: &FsContext) -> Vec<VolumeConfig> {
 }
 
 impl IoState {
+    /// The file a DOS path (`X:\dir\file`, or `\??\X:\dir\file`) names, as the object manager spells
+    /// it: `(\Device\PolyFs<N>, the path below that volume)`. The drive letter picks the volume.
+    pub fn dos_file_name(&self, dos: &[u16]) -> Option<(Vec<u16>, Vec<u16>)> {
+        let sep = |c: u16| c == u16::from(b'\\') || c == u16::from(b'/');
+        let nt_prefix = wide("\\??\\");
+        let d = dos.strip_prefix(nt_prefix.as_slice()).unwrap_or(dos);
+        if d.len() < 3 || d[1] != u16::from(b':') || !sep(d[2]) {
+            return None;
+        }
+        let letter = char::from_u32(u32::from(d[0]))?.to_ascii_uppercase();
+        let volume = self.volumes.iter().find(|v| v.letter == Some(letter))?;
+        let mut device = wide("\\Device\\");
+        device.extend_from_slice(&volume.device);
+        let path = d[2..].iter().map(|&c| if c == u16::from(b'/') { u16::from(b'\\') } else { c }).collect();
+        Some((device, path))
+    }
+
     pub fn new() -> IoState {
         IoState {
             root: None,
