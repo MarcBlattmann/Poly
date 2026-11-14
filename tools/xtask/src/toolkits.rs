@@ -622,6 +622,18 @@ impl Machine {
         self.send_events(&[button_event(false)])
     }
 
+    /// Press at `from`, move to `to` in steps, release.
+    pub(crate) fn drag(&mut self, from: (i32, i32), to: (i32, i32)) -> Result {
+        self.send_events(&abs_events(from.0, from.1))?;
+        std::thread::sleep(Duration::from_millis(300));
+        self.send_events(&[button_event(true)])?;
+        for i in 1..=8 {
+            let (x, y) = (from.0 + (to.0 - from.0) * i / 8, from.1 + (to.1 - from.1) * i / 8);
+            self.send_events(&abs_events(x, y))?;
+        }
+        self.send_events(&[button_event(false)])
+    }
+
     /// A click of the right button at (`x`, `y`): the context menu.
     pub(crate) fn right_click(&mut self, x: i32, y: i32) -> Result {
         self.send_events(&abs_events(x, y))?;
@@ -884,6 +896,10 @@ struct App {
     key_line: &'static str,
     /// Whether it needs a font on the disk ([`fonts_ready`]).
     needs_fonts: bool,
+    /// Whether it draws its own title bar and Poly draws none (GTK 3 and
+    /// 4 do; Qt asks Poly for its frame): one title bar either way
+    /// (ADR 0183).
+    own_frame: bool,
 }
 
 /// The apps (their colours are in their sources).
@@ -897,6 +913,7 @@ const TEST_APPS: [App; 3] = [
         after: [0xb0, 0x3a, 0x2a],
         key_line: "gtk3-hello: key a",
         needs_fonts: true,
+        own_frame: true,
     },
     App {
         name: "gtk4-hello",
@@ -907,6 +924,7 @@ const TEST_APPS: [App; 3] = [
         after: [0x8a, 0x2a, 0x7a],
         key_line: "gtk4-hello: key a",
         needs_fonts: true,
+        own_frame: true,
     },
     App {
         name: "qt-hello",
@@ -917,6 +935,7 @@ const TEST_APPS: [App; 3] = [
         after: [0x1a, 0x6a, 0x7a],
         key_line: "qt-hello: key 65 a",
         needs_fonts: false,
+        own_frame: false,
     },
 ];
 
@@ -966,6 +985,14 @@ pub(crate) fn find_colour(
     (n > 0).then_some(((x0, y0, x1, y1), n))
 }
 
+/// The box `(x0, y0, x1, y1)` of the pixels of `colour` on the screen.
+fn colour_box(img: &screen::Image, colour: [u8; 3]) -> Result<(i32, i32, i32, i32)> {
+    let whole = (0, 0, SIZE.0 as i32, SIZE.1 as i32);
+    let ((x0, y0, x1, y1), _) =
+        find_colour(img, colour, 3, whole).ok_or_else(|| format!("no pixel of {colour:02x?} on the screen"))?;
+    Ok((x0 as i32, y0 as i32, x1 as i32, y1 as i32))
+}
+
 fn expect(what: &str, ok: bool) -> Result {
     if ok { Ok(()) } else { Err(what.to_string()) }
 }
@@ -993,13 +1020,17 @@ impl Machine {
             &format!("the button fills most of the window ({n} pixels of {w}x{h})"),
             n as i64 * 3 >= i64::from(w) * i64::from(h),
         )?;
-        // Poly's title bar is above the window's content: right above the
-        // button, or above the title bar a GTK app draws itself (the
-        // reported place includes its shadows; Poly's frame goes around
-        // the window geometry).
-        let title = |p: [u8; 3]| near(p, TITLE_ACTIVE, 2) || near(p, TITLE_INACTIVE, 2);
-        let framed = (y0.saturating_sub(TITLE_SEARCH)..y0).any(|py| title(img.pixel(x0 + 3, py)));
-        expect("Poly's title bar is above the window", framed && (x, y) <= (x0 as i32, y0 as i32))?;
+        // One title bar (ADR 0183): an app that draws its own gets none from
+        // Poly (the compositor says who draws the frame); the others have
+        // Poly's, right above the window's content.
+        let frame = self.seen(from, &format!("poly-compositor: window {:?} frame: ", app.title), wait)?;
+        let want = if app.own_frame { "own" } else { "poly" };
+        expect(&format!("{} draws the frame of its window ({frame:?}), not {want}", app.name), frame.trim() == want)?;
+        if !app.own_frame {
+            let title = |p: [u8; 3]| near(p, TITLE_ACTIVE, 2) || near(p, TITLE_INACTIVE, 2);
+            let framed = (y0.saturating_sub(TITLE_SEARCH)..y0).any(|py| title(img.pixel(x0 + 3, py)));
+            expect("Poly's title bar is above the window", framed && (x, y) <= (x0 as i32, y0 as i32))?;
+        }
         let (cx, cy) = (((x0 + x1) / 2) as i32, ((y0 + y1) / 2) as i32);
         self.click(cx, cy)?;
         self.s.expect(&format!("{}: clicked", app.name))?;
@@ -1013,14 +1044,65 @@ impl Machine {
         expect(&format!("the click recoloured the button ({now} of {n} pixels; {corner:02x?})"), now * 4 >= n * 3)?;
         // Clicked into, the window is shown active (also one started after
         // another closed: ADR 0123).
-        let active = (y0.saturating_sub(TITLE_SEARCH)..y0).any(|py| near(img.pixel(x0 + 3, py), TITLE_ACTIVE, 2));
-        expect("Poly's title bar shows the window active", active)?;
+        if !app.own_frame {
+            let active = (y0.saturating_sub(TITLE_SEARCH)..y0).any(|py| near(img.pixel(x0 + 3, py), TITLE_ACTIVE, 2));
+            expect("Poly's title bar shows the window active", active)?;
+        }
         self.key("a")?;
         self.s.expect(app.key_line)?;
-        self.key("q")?;
-        self.s.expect(&format!("{}: closed, status 0", app.name))?;
+        if app.own_frame {
+            // Its own title bar does what Poly's does: move, maximize,
+            // restore, resize, close (ADR 0183).
+            let after = colour_box(&img, app.after)?;
+            self.check_own_frame(app, after)?;
+            self.s.expect(&format!("{}: closed, status 0", app.name))?;
+        } else {
+            self.key("q")?;
+            self.s.expect(&format!("{}: closed, status 0", app.name))?;
+        }
         std::thread::sleep(Duration::from_millis(1500));
         Ok(())
+    }
+
+    /// An app that draws its own title bar, which sits 18 pixels above the
+    /// top of its content: dragging it moves the window, a double click
+    /// maximizes and restores, dragging the corner below the content resizes,
+    /// and its close button ends the app. `content` is the box of the
+    /// colour that fills its content, as it is now.
+    fn check_own_frame(&mut self, app: &App, content: (i32, i32, i32, i32)) -> Result<()> {
+        let name = app.name;
+        let (x0, y0, x1, _y1) = content;
+        let width = x1 - x0;
+        let close = |a: i32, b: i32, tolerance: i32| (a - b).abs() <= tolerance;
+        // Move.
+        let (cx, ty) = (x0 + width / 2, y0 - 18);
+        self.drag((cx, ty), (cx + 80, ty + 50))?;
+        std::thread::sleep(Duration::from_millis(1500));
+        let moved = colour_box(&self.shot(&format!("{name}-moved"))?, app.after)?;
+        expect(
+            &format!("{name}'s title bar moves the window by the drag ({x0},{y0} to {},{})", moved.0, moved.1),
+            // (The first step of a drag only starts it.)
+            close(moved.0, x0 + 80, 20) && close(moved.1, y0 + 50, 20),
+        )?;
+        // Maximize and restore by double clicks on the title bar.
+        self.double_click(moved.0 + width / 2, moved.1 - 18)?;
+        std::thread::sleep(Duration::from_secs(3));
+        let big = colour_box(&self.shot(&format!("{name}-maximized"))?, app.after)?;
+        expect(&format!("{name}'s double click maximizes it (content {big:?})"), big.2 - big.0 >= 1000)?;
+        self.double_click((big.0 + big.2) / 2, big.1 - 18)?;
+        std::thread::sleep(Duration::from_secs(3));
+        let back = colour_box(&self.shot(&format!("{name}-restored"))?, app.after)?;
+        expect(&format!("{name}'s second double click restores it (content {back:?})"), back.2 - back.0 <= width + 20)?;
+        // Resize from the corner below its content (its resize handle).
+        self.drag((back.2 + 3, back.3 + 3), (back.2 + 63, back.3 + 43))?;
+        std::thread::sleep(Duration::from_secs(3));
+        let grown = colour_box(&self.shot(&format!("{name}-resized"))?, app.after)?;
+        expect(
+            &format!("{name} grows by dragging its corner ({back:?} to {grown:?})"),
+            grown.2 - grown.0 >= back.2 - back.0 + 40 && grown.3 - grown.1 >= back.3 - back.1 + 25,
+        )?;
+        // Close with its button.
+        self.click(grown.2 - 17, grown.1 - 18)
     }
 
     /// VLC without its interface, as user `poly` (it will not run as
@@ -1285,6 +1367,12 @@ fn tone_windows(ws: &[crate::sound::Window]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_gtk_apps_draw_their_own_title_bar() {
+        let own: Vec<&str> = TEST_APPS.iter().filter(|a| a.own_frame).map(|a| a.name).collect();
+        assert_eq!(own, ["gtk3-hello", "gtk4-hello"], "Qt asks Poly for its frame (ADR 0183)");
+    }
 
     #[test]
     fn steps_parse() {

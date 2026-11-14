@@ -244,9 +244,10 @@ minute or two).
   plugin passes a `wl_surface`; the build's object table seems to keep a
   stale entry). Whether Poly's kernel has a part in the crash is open;
   that is why the check is reported and not counted yet.
-  GTK 3 and GTK 4 draw their own title bar inside Poly's frame (they do
+  GTK 3 and GTK 4 drew their own title bar inside Poly's frame (they do
   not use `zxdg_decoration_manager_v1`; Qt does and gets Poly's frame
-  only): the price of ADR 0106's one frame for every app.
+  only); since [ADR 0183](0183-one-title-bar-who-draws-a-window-s-frame.md)
+  they have their own title bar alone.
 - VLC's Qt interface aborts at exit after Ctrl+Q ("free(): double free
   detected in tcache 2", status 134) on either compositor; not yet known
   whether Poly has a part in it (the test only waits for it to end).
