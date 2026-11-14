@@ -78,6 +78,18 @@ pub unsafe fn ptr_at(at: u64) -> u64 {
     unsafe { (at as *const usize).read() as u64 }
 }
 
+/// `THREAD_BASIC_INFORMATION.ClientId.UniqueThread` and `PROCESS_BASIC_INFORMATION.UniqueProcessId`
+/// (`winternl.h`), at their offsets for this build's pointer width (ADR 0186).
+pub const TBI_UNIQUE_THREAD: usize = if cfg!(target_pointer_width = "32") { 12 } else { 24 };
+pub const PBI_UNIQUE_PROCESS_ID: usize = if cfg!(target_pointer_width = "32") { 16 } else { 32 };
+
+/// The pointer-sized value at `at` of an information buffer, as a `u32` (an id).
+pub fn id_in(info: &[u8], at: usize) -> u32 {
+    let mut b = [0u8; 4];
+    b.copy_from_slice(&info[at..at + 4]);
+    u32::from_le_bytes(b)
+}
+
 /// Where the loader keeps its lists (`PEB.Ldr`, `LDR_DATA_TABLE_ENTRY`) in this build's process.
 #[cfg(target_arch = "x86")]
 pub const LDR: &poly_ldr::LdrLayout = poly_ldr::Bitness::X86.layout();

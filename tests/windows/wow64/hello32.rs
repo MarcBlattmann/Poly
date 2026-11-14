@@ -98,34 +98,63 @@ fn wow64_view() -> bool {
     ok != 0 && wow64 != 0 && address < 1 << 32
 }
 
-/// What the second thread saw: its id and its argument.
+/// What the second thread saw: its id and its argument, and its last error before and after it
+/// set one.
 static THREAD_SAW: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+static THREAD_ERRORS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(u32::MAX);
 
 extern "system" fn second_thread(parameter: usize) -> u32 {
-    // SAFETY: a plain kernel32 call.
-    let me = unsafe { GetCurrentThreadId() };
-    THREAD_SAW.store(me ^ parameter as u32, core::sync::atomic::Ordering::SeqCst);
-    // Its own last error, not the first thread's.
-    // SAFETY: as above.
-    unsafe { SetLastError(7) };
+    // SAFETY: plain kernel32 calls.
+    unsafe {
+        let me = GetCurrentThreadId();
+        THREAD_SAW.store(me ^ parameter as u32, core::sync::atomic::Ordering::SeqCst);
+        // A new thread starts with no last error, and its own.
+        let before = GetLastError();
+        SetLastError(7);
+        THREAD_ERRORS.store(before << 16 | GetLastError(), core::sync::atomic::Ordering::SeqCst);
+    }
     parameter as u32 + 1
 }
 
-fn thread() -> bool {
+/// The first step of the thread check that failed, or `None`.
+fn thread_step() -> Option<&'static [u8]> {
     let mut id = 0u32;
     // SAFETY: plain kernel32 calls; the routine has the documented `ThreadProc` signature.
     unsafe {
         SetLastError(5);
         let h = CreateThread(core::ptr::null_mut(), 0, second_thread, 41, 0, &mut id);
         if h == 0 {
-            return false;
+            return Some(b"CreateThread");
         }
-        let waited = WaitForSingleObject(h, 10_000) == 0;
+        let waited = WaitForSingleObject(h, 10_000);
         let mut code = 0u32;
         let got = GetExitCodeThread(h, &mut code) != 0;
         CloseHandle(h);
         let saw = THREAD_SAW.load(core::sync::atomic::Ordering::SeqCst);
-        waited && got && code == 42 && id != 0 && id != GetCurrentThreadId() && saw == id ^ 41 && GetLastError() == 5
+        let errors = THREAD_ERRORS.load(core::sync::atomic::Ordering::SeqCst);
+        if waited != 0 {
+            Some(b"WaitForSingleObject")
+        } else if !got || code != 42 {
+            Some(b"GetExitCodeThread")
+        } else if id == 0 || id == GetCurrentThreadId() || saw != id ^ 41 {
+            Some(b"thread id")
+        } else if errors != 7 {
+            Some(b"last error of the second thread")
+        } else {
+            None
+        }
+    }
+}
+
+fn thread() -> bool {
+    match thread_step() {
+        None => true,
+        Some(step) => {
+            out(b"thread step failed: ");
+            out(step);
+            out(b"\n");
+            false
+        }
     }
 }
 

@@ -280,11 +280,34 @@ fn unicode<K: NtKernel>(k: &mut K, s: &mut Scratch, at: u64) -> Result<u64, NtSt
 /// The 64-bit copy of the 32-bit `OBJECT_ATTRIBUTES` at `at` (`ntdef.h`: `Length`,
 /// `RootDirectory`, `ObjectName`, `Attributes`, `SecurityDescriptor`,
 /// `SecurityQualityOfService`; 24 bytes, 48 in 64 bits), with its name.
-fn object_attributes<K: NtKernel>(k: &mut K, s: &mut Scratch, at: u64) -> Result<u64, NtStatus> {
+fn object_attributes<K: NtKernel>(k: &mut K, s: &mut Scratch, at: u64, file: bool) -> Result<u64, NtStatus> {
     let mut b = [0u8; 24];
     abi::read(k, at, &mut b)?;
     let field = |i: usize| u32::from_le_bytes(b[4 * i..4 * i + 4].try_into().expect("4 bytes"));
-    let name = if field(2) != 0 { unicode(k, s, u64::from(field(2)))? } else { 0 };
+    let mut name = if field(2) != 0 { unicode(k, s, u64::from(field(2)))? } else { 0 };
+    // A file named by a full path under `%windir%\System32` is the one under `SysWOW64`
+    // (Learn: "File System Redirector"): the copy gets the redirected name.
+    if file && name != 0 && field(1) == 0 {
+        // The caller's 32-bit `UNICODE_STRING`: `Length`, then `Buffer` at 4.
+        let at = u64::from(field(2));
+        let length = usize::from(u16::from_le_bytes(s.get(name, 2).try_into().expect("2 bytes")));
+        let mut chars = alloc::vec![0u8; length & !1];
+        let buffer = u64::from(read32(k, at + 4)?);
+        abi::read(k, buffer, &mut chars)?;
+        let path: Vec<u16> = chars.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        if let Some(to) = super::redirect_system32(&path) {
+            let bytes: Vec<u8> = to.iter().flat_map(|c| c.to_le_bytes()).collect();
+            let length = u16::try_from(bytes.len()).map_err(|_| poly_ntobj::status::STATUS_OBJECT_NAME_INVALID)?;
+            let buffer = s.alloc(bytes.len())?;
+            s.put(buffer, &bytes);
+            name = s.alloc(16)?;
+            let mut w = [0u8; 16];
+            w[0..2].copy_from_slice(&length.to_le_bytes());
+            w[2..4].copy_from_slice(&length.to_le_bytes());
+            w[8..16].copy_from_slice(&buffer.to_le_bytes());
+            s.put(name, &w);
+        }
+    }
     let wide = s.alloc(48)?;
     let mut w = [0u8; 48];
     w[0..4].copy_from_slice(&48u32.to_le_bytes());
@@ -296,6 +319,15 @@ fn object_attributes<K: NtKernel>(k: &mut K, s: &mut Scratch, at: u64) -> Result
     s.put(wide, &w);
     Ok(wide)
 }
+
+/// The services that name a file by its `OBJECT_ATTRIBUTES`: their names are redirected.
+const FILE_SERVICES: &[Service] = &[
+    Service::CreateFile,
+    Service::OpenFile,
+    Service::DeleteFile,
+    Service::QueryAttributesFile,
+    Service::QueryFullAttributesFile,
+];
 
 /// Read and widen the arguments of a call to `service` whose 32-bit arguments start at `at`.
 fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Result<Prepared, NtStatus> {
@@ -333,7 +365,7 @@ fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Re
                 backs.push(Back::Iosb { narrow: p, wide });
                 wide
             }
-            Arg::OA => object_attributes(k, &mut s, p)?,
+            Arg::OA => object_attributes(k, &mut s, p, FILE_SERVICES.contains(&service))?,
             Arg::US => unicode(k, &mut s, p)?,
             Arg::UO => {
                 let wide = unicode(k, &mut s, p)?;

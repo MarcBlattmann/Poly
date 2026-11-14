@@ -335,3 +335,35 @@ fn without_an_i686_ntdll_a_pe32_executable_is_refused() {
     );
     assert_eq!(r.err(), Some(poly_ntobj::status::STATUS_INVALID_IMAGE_FORMAT));
 }
+
+/// The name a file service's converted `OBJECT_ATTRIBUTES` carries (its first argument).
+fn converted_name(c: &mut Caller32, service: Service, oa: u32, rest: &[u32]) -> std::string::String {
+    let mut args = vec![oa];
+    args.extend_from_slice(rest);
+    let bytes: Vec<u8> = args.iter().flat_map(|a| a.to_le_bytes()).collect();
+    c.f.mem.write_bytes(LOW, &bytes).unwrap();
+    let mut regs = SyscallRegs { rax: u64::from(service.number()), rdx: LOW, ..Default::default() };
+    let mut seen = None;
+    dispatch32(&mut c.f, &mut regs, |k, r| {
+        seen = crate::abi::read_attributes(k, r.r10).ok().and_then(|a| a.name);
+        Outcome::Handled
+    });
+    std::string::String::from_utf16(&seen.expect("a name")).unwrap()
+}
+
+#[test]
+fn a_32_bit_process_opening_system32_gets_syswow64() {
+    let mut c = Caller32::new();
+    let oa = c.attrs("\\??\\C:\\Windows\\System32\\kernel32.dll", 0x40);
+    let info = c.put(&[0u8; 40]);
+    assert_eq!(
+        converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]),
+        "\\??\\C:\\Windows\\SysWOW64\\kernel32.dll"
+    );
+    // The exempt directories keep their names.
+    let oa = c.attrs("\\??\\C:\\Windows\\System32\\drivers\\etc\\hosts", 0x40);
+    assert_eq!(
+        converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]),
+        "\\??\\C:\\Windows\\System32\\drivers\\etc\\hosts"
+    );
+}
