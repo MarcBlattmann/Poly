@@ -24,6 +24,12 @@ pub const MEM_PHYSICAL: u32 = 0x0040_0000;
 pub const MEM_RESET_UNDO: u32 = 0x0100_0000;
 pub const MEM_IMAGE: u32 = 0x0100_0000;
 pub const MEM_LARGE_PAGES: u32 = 0x2000_0000;
+/// Placeholders (`winnt.h`; Learn, "VirtualAlloc2", "VirtualFree", "MapViewOfFile3",
+/// "UnmapViewOfFile2").
+pub const MEM_REPLACE_PLACEHOLDER: u32 = 0x0000_4000;
+pub const MEM_RESERVE_PLACEHOLDER: u32 = 0x0004_0000;
+pub const MEM_COALESCE_PLACEHOLDERS: u32 = 0x0000_0001;
+pub const MEM_PRESERVE_PLACEHOLDER: u32 = 0x0000_0002;
 
 // ----- page protections (`winnt.h`, Learn "Memory Protection Constants")
 

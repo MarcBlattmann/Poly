@@ -275,7 +275,7 @@ static FACTORY_VTBL: IDWriteFactory7Vtbl = IDWriteFactory7Vtbl {
     CreateGdiCompatibleTextLayout: stub!(),
     CreateEllipsisTrimmingSign: stub!(),
     CreateTextAnalyzer: stub!(),
-    CreateNumberSubstitution: stub!(),
+    CreateNumberSubstitution: crate::numsub::create_number_substitution,
     CreateGlyphRunAnalysis: crate::render::create_glyph_run_analysis,
     GetEudcFontCollection: get_eudc_font_collection,
     CreateCustomRenderingParams_1: crate::render::create_custom_rendering_params_1,
