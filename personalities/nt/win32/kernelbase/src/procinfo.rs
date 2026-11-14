@@ -233,6 +233,44 @@ fn device_name(path: &[u16]) -> Option<Vec<u16>> {
     Some(buf[16..16 + len].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect())
 }
 
+/// The last user-mode address (`MM_HIGHEST_USER_ADDRESS` of x64 Windows).
+const USER_ADDRESS_LIMIT: u64 = 0x7FFF_FFFE_FFFF;
+/// `ERROR_UNEXP_NET_ERR` (`winerror.h`): what an address with no file mapped at it gives
+/// (the sheet: "as observed").
+const ERROR_UNEXP_NET_ERR: u32 = 59;
+/// `MemoryMappedFilenameInformation`, `STATUS_FILE_INVALID`.
+const MEMORY_MAPPED_FILENAME_INFORMATION: u32 = 2;
+const STATUS_FILE_INVALID: u32 = 0xC000_0098;
+
+/// The object name of the file a view or image at `address` of this process maps, from the
+/// kernel (`NtQueryVirtualMemory(MemoryMappedFilenameInformation)`), or the error
+/// `K32GetMappedFileNameW` reports: 1006 for a view of a section without a file, 59 for an
+/// address nothing is mapped at (private memory, freed or unmapped memory).
+fn mapped_view_name(process: Handle, address: u64) -> Result<Vec<u16>, u32> {
+    let mut buf = alloc::vec![0u8; 16 + 2 * 1024];
+    let mut ret = 0usize;
+    // SAFETY: a buffer of the stated length.
+    let st = unsafe {
+        nt::NtQueryVirtualMemory(
+            process,
+            address as *const u8,
+            MEMORY_MAPPED_FILENAME_INFORMATION,
+            buf.as_mut_ptr(),
+            buf.len(),
+            &mut ret,
+        )
+    };
+    if st.0 == STATUS_FILE_INVALID {
+        return Err(ERROR_FILE_INVALID);
+    }
+    if !st.is_success() {
+        return Err(ERROR_UNEXP_NET_ERR);
+    }
+    // A UNICODE_STRING (Length at 0) followed by its characters at offset 16.
+    let len = usize::from(u16::from_le_bytes([buf[0], buf[1]])).min(buf.len() - 16);
+    Ok(buf[16..16 + len].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect())
+}
+
 /// `K32GetMappedFileNameW(hProcess, lpv, lpFilename, nSize)` (`GetMappedFileNameW` of PSAPI
 /// version 2): the device-form name of the file mapped at `lpv`. Poly answers for the images
 /// the loader mapped into this process (what Chrome asks about); an address in no image, and
@@ -247,9 +285,22 @@ pub unsafe extern "system" fn K32GetMappedFileNameW(process: Handle, address: u6
         Some(false) => return fail(ERROR_FILE_INVALID, 0),
         Some(true) => {}
     }
+    // The sheet: an address above the user address space is ERROR_INVALID_PARAMETER.
+    if address > USER_ADDRESS_LIMIT {
+        return fail(ERROR_INVALID_PARAMETER, 0);
+    }
     let modules = module_spans();
-    let Some(path) = procinfo::module_at(&modules, address) else { return fail(ERROR_FILE_INVALID, 0) };
-    let Some(device) = device_name(path) else { return fail(ERROR_FILE_INVALID, 0) };
+    let device = match procinfo::module_at(&modules, address) {
+        Some(path) => match device_name(path) {
+            Some(d) => d,
+            None => return fail(ERROR_FILE_INVALID, 0),
+        },
+        // Not one of the loader's images: ask the kernel what file the address is in.
+        None => match mapped_view_name(process, address) {
+            Ok(d) => d,
+            Err(e) => return fail(e, 0),
+        },
+    };
     let (n, nul, ret, error) = procinfo::mapped_name_copy(&device, size);
     // SAFETY: the caller's buffer holds `size` characters; `n` and the NUL fit in it.
     unsafe {
@@ -258,8 +309,7 @@ pub unsafe extern "system" fn K32GetMappedFileNameW(process: Handle, address: u6
             name.add(n).write(0);
         }
     }
-    if let Some(e) = error {
-        set_last_error(e);
-    }
+    // A successful call sets the last error to 0 (the sheet).
+    set_last_error(error.unwrap_or(0));
     ret
 }

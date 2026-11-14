@@ -689,13 +689,18 @@ pub unsafe extern "system" fn GetSystemPowerStatus(out: *mut u8) -> i32 {
     TRUE
 }
 
+/// What the machine spent before the kernel's clock started (firmware, boot loader): the system
+/// is "up" this long when the kernel begins to count (QueryUnbiasedInterruptTimePrecise sheet:
+/// "the system has been up for more than a second"). 100 ns units: ten seconds.
+const BEFORE_THE_KERNEL_CLOCK: u64 = 10 * 10_000_000;
+
 /// 100 ns units since the system started, not counting time asleep (Poly
 /// never sleeps).
 fn interrupt_time() -> u64 {
     let (mut c, mut f) = (0i64, 0i64);
     // SAFETY: valid pointers.
     unsafe { nt::NtQueryPerformanceCounter(&mut c, &mut f) };
-    (u128::from(c as u64) * 10_000_000 / u128::from((f as u64).max(1))) as u64
+    BEFORE_THE_KERNEL_CLOCK + (u128::from(c as u64) * 10_000_000 / u128::from((f as u64).max(1))) as u64
 }
 
 /// `QueryUnbiasedInterruptTimePrecise` (`realtimeapiset.h`): no result.
