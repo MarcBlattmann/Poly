@@ -317,6 +317,7 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "CreatePatternBrush",
     "CreatePen",
     "CreateEllipticRgn",
+    "CreateEllipticRgnIndirect",
     "CreateRectRgn",
     "CreateRectRgnIndirect",
     "CreateRoundRectRgn",
