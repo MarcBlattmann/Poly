@@ -1282,7 +1282,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">0.7%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">422 / 58,735 entries · 73,276 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">433 / 58,735 entries · 73,276 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 16,439 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="157.5" height="218.0" fill="#e6eaef"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2da44e"/>
@@ -1313,10 +1313,10 @@
 <text x="180.5" y="650.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">ntoskrnl…</text>
 <text x="180.5" y="664.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
 </g>
-<g><title>kernel32: 33 / 1,559 done (2.1%)</title>
+<g><title>kernel32: 36 / 1,559 done (2.3%)</title>
 <rect x="244.6" y="469.0" width="57.8" height="53.7" fill="#e6eaef"/>
-<rect x="244.6" y="469.0" width="1.2" height="53.7" fill="#2da44e"/>
-<rect x="245.9" y="469.0" width="9.7" height="53.7" fill="#218bff"/>
+<rect x="244.6" y="469.0" width="1.3" height="53.7" fill="#2da44e"/>
+<rect x="246.0" y="469.0" width="9.6" height="53.7" fill="#218bff"/>
 <rect x="243.6" y="468.0" width="59.8" height="55.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="249.6" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">kernel32</text>
 <text x="249.6" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">2%</text>
@@ -1333,10 +1333,10 @@
 <text x="249.6" y="593.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">win32k…</text>
 <text x="249.6" y="607.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
 </g>
-<g><title>ntdll: 72 / 1,523 done (4.7%)</title>
+<g><title>ntdll: 74 / 1,523 done (4.9%)</title>
 <rect x="244.6" y="634.6" width="57.8" height="52.4" fill="#e6eaef"/>
-<rect x="244.6" y="634.6" width="2.7" height="52.4" fill="#2da44e"/>
-<rect x="247.4" y="634.6" width="4.7" height="52.4" fill="#218bff"/>
+<rect x="244.6" y="634.6" width="2.8" height="52.4" fill="#2da44e"/>
+<rect x="247.4" y="634.6" width="4.6" height="52.4" fill="#218bff"/>
 <rect x="243.6" y="633.6" width="59.8" height="54.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="249.6" y="648.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">ntdll</text>
 <text x="249.6" y="662.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">5%</text>
@@ -1362,10 +1362,11 @@
 <rect x="303.4" y="594.7" width="42.2" height="50.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="309.4" y="609.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">user…</text>
 </g>
-<g><title>shlwapi: 0 / 851 done (0.0%)</title>
+<g><title>shlwapi: 1 / 851 done (0.1%)</title>
 <rect x="304.4" y="645.9" width="40.2" height="41.1" fill="#e6eaef"/>
-<rect x="304.4" y="645.9" width="0.1" height="41.1" fill="#d4a72c"/>
-<rect x="304.5" y="645.9" width="0.3" height="41.1" fill="#218bff"/>
+<rect x="304.4" y="645.9" width="0.0" height="41.1" fill="#2da44e"/>
+<rect x="304.5" y="645.9" width="0.1" height="41.1" fill="#d4a72c"/>
+<rect x="304.6" y="645.9" width="0.2" height="41.1" fill="#218bff"/>
 <rect x="303.4" y="644.9" width="42.2" height="43.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="309.4" y="659.9" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">shlw…</text>
 </g>
@@ -1413,10 +1414,11 @@
 <rect x="454.3" y="468.0" width="36.5" height="29.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="460.3" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">uni…</text>
 </g>
-<g><title>shell32: 0 / 475 done (0.0%)</title>
+<g><title>shell32: 2 / 475 done (0.4%)</title>
 <rect x="491.8" y="469.0" width="32.2" height="27.7" fill="#e6eaef"/>
-<rect x="491.8" y="469.0" width="1.5" height="27.7" fill="#d4a72c"/>
-<rect x="493.3" y="469.0" width="0.2" height="27.7" fill="#218bff"/>
+<rect x="491.8" y="469.0" width="0.1" height="27.7" fill="#2da44e"/>
+<rect x="491.9" y="469.0" width="1.5" height="27.7" fill="#d4a72c"/>
+<rect x="493.4" y="469.0" width="0.1" height="27.7" fill="#218bff"/>
 <rect x="490.8" y="468.0" width="34.2" height="29.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>oleaut32: 0 / 418 done (0.0%)</title>
@@ -1458,9 +1460,10 @@
 <rect x="380.2" y="664.7" width="1.2" height="22.3" fill="#d4a72c"/>
 <rect x="379.2" y="663.7" width="26.6" height="24.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>netapi32: 0 / 300 done (0.0%)</title>
+<g><title>netapi32: 1 / 300 done (0.3%)</title>
 <rect x="406.8" y="498.7" width="25.2" height="21.6" fill="#e6eaef"/>
-<rect x="406.8" y="498.7" width="0.6" height="21.6" fill="#218bff"/>
+<rect x="406.8" y="498.7" width="0.1" height="21.6" fill="#2da44e"/>
+<rect x="406.9" y="498.7" width="0.5" height="21.6" fill="#218bff"/>
 <rect x="405.8" y="497.7" width="27.2" height="23.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>winsqlite3: 0 / 296 done (0.0%)</title>
@@ -1566,9 +1569,10 @@
 <rect x="427.7" y="585.5" width="16.5" height="19.1" fill="#e6eaef"/>
 <rect x="426.7" y="584.5" width="18.5" height="21.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>iphlpapi: 0 / 181 done (0.0%)</title>
+<g><title>iphlpapi: 1 / 181 done (0.6%)</title>
 <rect x="427.7" y="606.6" width="16.5" height="18.8" fill="#e6eaef"/>
-<rect x="427.7" y="606.6" width="1.4" height="18.8" fill="#218bff"/>
+<rect x="427.7" y="606.6" width="0.1" height="18.8" fill="#2da44e"/>
+<rect x="427.8" y="606.6" width="1.3" height="18.8" fill="#218bff"/>
 <rect x="426.7" y="605.6" width="18.5" height="20.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msvcm90: 0 / 181 done (0.0%)</title>
@@ -2053,10 +2057,11 @@
 <rect x="560.0" y="643.4" width="6.7" height="6.6" fill="#e6eaef"/>
 <rect x="559.0" y="642.4" width="8.7" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>powrprof: 0 / 35 done (0.0%)</title>
+<g><title>powrprof: 1 / 35 done (2.9%)</title>
 <rect x="568.7" y="643.4" width="6.7" height="6.6" fill="#e6eaef"/>
-<rect x="568.7" y="643.4" width="0.6" height="6.6" fill="#d4a72c"/>
-<rect x="569.2" y="643.4" width="0.6" height="6.6" fill="#218bff"/>
+<rect x="568.7" y="643.4" width="0.2" height="6.6" fill="#2da44e"/>
+<rect x="568.9" y="643.4" width="0.6" height="6.6" fill="#d4a72c"/>
+<rect x="569.4" y="643.4" width="0.4" height="6.6" fill="#218bff"/>
 <rect x="567.7" y="642.4" width="8.7" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>usbd.sys: 0 / 35 done (0.0%)</title>
