@@ -18,7 +18,7 @@ use core::cell::RefCell;
 use poly_app::ui::{DENSE, DENSE_MEDIUM, FIELD_RADIUS, SMALL, TITLE};
 use poly_app::{App, AppEvent, CursorShape, Cx, Ui};
 use poly_input::key::Key;
-use poly_pkg::installer::{Action, Installer, Phase};
+use poly_pkg::installer::{Action, Installer, Phase, Removal, Step};
 use poly_shell::appicon::AppIcons;
 use poly_shell::draw::Style;
 use poly_shell::icons::lucide;
@@ -53,6 +53,14 @@ pub struct Pumped {
 }
 
 /// What the installer does to the system.
+/// What installing an AppImage made: its desktop file ID and the icon file
+/// it took out of the image (if it had one).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Placed {
+    pub id: String,
+    pub icon: Option<String>,
+}
+
 pub trait Host {
     /// Start the command `argv`.
     fn start(&mut self, argv: &[String]) -> Result<(), String>;
@@ -63,6 +71,14 @@ pub trait Host {
     /// The launcher entries package `name` brought: desktop file ID, the
     /// app's name, its icon's name.
     fn apps_of(&mut self, name: &str) -> Vec<(String, String, Option<String>)>;
+    /// Install the AppImage at `path`: copy it into the user's folder and
+    /// write the desktop file (and the icon) the launcher reads (ADR 0180).
+    fn place_image(&mut self, path: &str, image: &poly_pkg::appimage::Image) -> Result<Placed, String>;
+    /// Start the AppImage at `path` from where it is.
+    fn run_image(&mut self, path: &str) -> Result<(), String>;
+    /// Take an installed AppImage's files away (its directory and desktop
+    /// file); `slug` names it (ADR 0180).
+    fn delete_image(&mut self, slug: &str) -> Result<(), String>;
     /// Tell the desktop that the installed apps changed.
     fn apps_changed(&mut self);
     /// Ask the desktop to start the app with desktop file ID `id`.
@@ -87,6 +103,9 @@ pub struct InstallerApp {
     icons: RefCell<AppIcons>,
     /// The buttons as last drawn: where a click lands.
     buttons: Vec<(Rect, Action)>,
+    /// A step the program does itself waits for the next tick (so the
+    /// window shows it first).
+    work_pending: bool,
 }
 
 impl core::fmt::Debug for InstallerApp {
@@ -131,7 +150,14 @@ impl InstallerApp {
             app_icon: None,
             icons: RefCell::new(AppIcons::default()),
             buttons: Vec::new(),
+            work_pending: false,
         }
+    }
+
+    /// The icon of the app the window is about (an uninstall shows it
+    /// before the app is gone).
+    pub fn set_app_icon(&mut self, icon: Option<String>) {
+        self.app_icon = icon;
     }
 
     /// Where app icons are read from (the icon theme's files).
@@ -141,7 +167,8 @@ impl InstallerApp {
 
     /// The window's title.
     pub fn title(&self) -> String {
-        alloc::format!("Install {}", self.model.name())
+        let verb = if self.model.uninstalling() { "Uninstall" } else { "Install" };
+        alloc::format!("{verb} {}", self.model.name())
     }
 
     /// The buttons' rectangles, right to left from the bottom right corner,
@@ -166,13 +193,19 @@ impl InstallerApp {
 
     fn run(&mut self, argv: Option<Vec<String>>, cx: &mut Cx) {
         let Some(argv) = argv else { return };
-        // The program and what it is asked to do (its last word that is no
-        // option or file).
+        if argv.is_empty() {
+            // A step the program does itself: after the next look at the
+            // window.
+            self.work_pending = true;
+            self.next_tick = Some(cx.now_ms + TICK_MS);
+            cx.redraw();
+            return;
+        }
+        // The program and what it is asked to do (the apt-get verb).
         let verb = argv
             .iter()
             .skip(1)
-            .rev()
-            .find(|a| !a.starts_with(['-', '/']) && !a.contains('='))
+            .find(|a| matches!(a.as_str(), "update" | "install" | "remove" | "autoremove"))
             .map_or("", String::as_str);
         self.host.report(alloc::format!("running {} {verb}", argv[0]).trim_end());
         if let Err(why) = self.host.start(&argv) {
@@ -187,13 +220,27 @@ impl InstallerApp {
     /// Do what a button does.
     pub fn act(&mut self, action: Action, cx: &mut Cx) {
         match action {
-            Action::Install => {
+            Action::Install | Action::Uninstall => {
                 let first = self.model.start();
                 self.run(first, cx);
             }
             Action::Close => {
                 if !self.model.busy() {
                     cx.quit();
+                }
+            }
+            Action::Run => {
+                let path = self.model.path.clone();
+                match self.host.run_image(&path) {
+                    Ok(()) => {
+                        self.host.report(&alloc::format!("started {} from {path}", self.model.name()));
+                        cx.quit();
+                    }
+                    Err(why) => {
+                        self.model.fail(&alloc::format!("{} could not be started: {why}.", self.model.name()));
+                        self.report_end();
+                        cx.redraw();
+                    }
                 }
             }
             Action::Open => {
@@ -220,35 +267,95 @@ impl InstallerApp {
             self.model.status(line);
         }
         if let Some(ok) = p.ended {
-            let host = &mut self.host;
-            let mut icon = None;
-            let next = self.model.finished(ok, |name| {
-                let apps = host.apps_of(name);
-                icon = apps.first().and_then(|(_, _, icon)| icon.clone());
-                apps.into_iter().map(|(id, name, _)| (id, name)).collect()
-            });
-            if self.model.phase == Phase::Done {
-                self.app_icon = icon;
-                self.host.apps_changed();
-            }
-            self.report_end();
-            self.run(next, cx);
+            self.step_ended(ok, cx);
         }
         if changed {
             cx.redraw();
         }
     }
 
+    /// The running step ended: go on with the next, or finish.
+    fn step_ended(&mut self, ok: bool, cx: &mut Cx) {
+        let host = &mut self.host;
+        let mut icon = None;
+        let next = self.model.finished(ok, |name| {
+            let apps = host.apps_of(name);
+            icon = apps.first().and_then(|(_, _, icon)| icon.clone());
+            apps.into_iter().map(|(id, name, _)| (id, name)).collect()
+        });
+        if self.model.phase == Phase::Done {
+            if !self.model.uninstalling() {
+                self.app_icon = icon;
+            }
+            self.host.apps_changed();
+        }
+        self.report_end();
+        self.run(next, cx);
+    }
+
+    /// Install the AppImage: its files are copied and its desktop file
+    /// written by the program.
+    fn place(&mut self, cx: &mut Cx) {
+        let (Some(image), path) = (self.model.image.clone(), self.model.path.clone()) else { return };
+        match self.host.place_image(&path, &image) {
+            Ok(placed) => {
+                self.app_icon = placed.icon;
+                let apps = alloc::vec![(placed.id, image.name.clone())];
+                self.model.finished(true, |_| apps);
+                self.host.apps_changed();
+            }
+            Err(why) => {
+                self.model.output(&alloc::format!("E: {why}"));
+                self.model.finished(false, |_| Vec::new());
+            }
+        }
+        self.report_end();
+        cx.redraw();
+    }
+
+    /// The step the program does itself (an AppImage's files taken away).
+    fn do_work(&mut self, cx: &mut Cx) {
+        if self.model.phase == Phase::Working(Step::Place) {
+            return self.place(cx);
+        }
+        let result = match (&self.model.phase, &self.model.removal) {
+            (Phase::Working(Step::Delete), Some(Removal::Image { slug, .. })) => {
+                let slug = slug.clone();
+                self.host.delete_image(&slug)
+            }
+            _ => Err("nothing to do".into()),
+        };
+        if let Err(why) = &result {
+            self.model.output(&alloc::format!("E: {why}"));
+        }
+        self.step_ended(result.is_ok(), cx);
+        cx.redraw();
+    }
+
     /// Tell the console how an installation ended, if it has: a failure
     /// with the tools' last lines.
     fn report_end(&mut self) {
         match &self.model.phase {
+            Phase::Done if self.model.uninstalling() => {
+                let apps: Vec<String> =
+                    self.model.apps.iter().map(|(id, name)| alloc::format!("{name} ({id})")).collect();
+                self.host.report(&alloc::format!("uninstalled {}: {}", self.model.name(), apps.join(", ")));
+            }
             Phase::Done => {
-                let version = self.model.package.as_ref().map_or("", |p| p.version.as_str());
+                let version = match (&self.model.package, &self.model.image) {
+                    (Some(p), _) => p.version.as_str(),
+                    (None, Some(i)) => i.version.as_str(),
+                    _ => "",
+                };
                 let apps: Vec<String> =
                     self.model.apps.iter().map(|(id, name)| alloc::format!("{name} ({id})")).collect();
                 let apps = if apps.is_empty() { "no launcher entry".to_string() } else { apps.join(", ") };
-                self.host.report(&alloc::format!("installed {} {version}: {apps}", self.model.name()));
+                let name = if version.is_empty() {
+                    self.model.name().to_string()
+                } else {
+                    alloc::format!("{} {version}", self.model.name())
+                };
+                self.host.report(&alloc::format!("installed {name}: {apps}"));
             }
             Phase::Failed(why) => {
                 self.host.report(&alloc::format!("failed: {why}"));
@@ -332,12 +439,24 @@ impl InstallerApp {
         for (i, ((r, action), (label, _))) in self.buttons.iter().zip(&labels).enumerate() {
             let hover = self.hover == Some(*action);
             let solid = i == main && labels.len() > 1 || *action == Action::Open;
-            if solid {
+            // Removing something is the danger button, as Alpine's settings
+            // draw it (its ConfirmButton's confirm state): solid danger,
+            // white text.
+            let danger = *action == Action::Uninstall;
+            if danger {
+                ui.round(fb, clip, *r, FIELD_RADIUS, p.danger, if hover { 230 } else { 255 });
+            } else if solid {
                 ui.round(fb, clip, *r, FIELD_RADIUS, p.ink_primary, if hover { 230 } else { 255 });
             } else {
                 ui.round(fb, clip, *r, FIELD_RADIUS, p.ink, if hover { p.track } else { p.ghost });
             }
-            let ink = if solid { p.on_solid } else { p.ink_primary };
+            let ink = if danger {
+                0xff_ffff
+            } else if solid {
+                p.on_solid
+            } else {
+                p.ink_primary
+            };
             let tw = ui.measure(label, DENSE_MEDIUM);
             ui.text(fb, clip, r.x + (r.width - tw) / 2, r.y, r.height, r.right(), label, DENSE_MEDIUM, ink);
         }
@@ -411,6 +530,10 @@ impl App for InstallerApp {
         self.now_ms = cx.now_ms;
         if self.model.busy() {
             self.next_tick = Some(cx.now_ms + TICK_MS);
+            if core::mem::take(&mut self.work_pending) {
+                self.do_work(cx);
+                return;
+            }
             self.pump(cx);
             // The piece of an unknown progress moves.
             if self.model.percent.is_none() {
