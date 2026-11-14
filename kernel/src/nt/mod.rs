@@ -376,6 +376,13 @@ pub fn take_exit_status(pid: u32) -> Option<u32> {
 }
 
 fn note_exit_status(pid: u32, status: NtStatus, by_process: bool) {
+    if WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 {
+        crate::kprintln!(
+            "nt-waits: p{pid} {} status {:#x}",
+            if by_process { "ends the process" } else { "ends a thread" },
+            status.0
+        );
+    }
     if let Some(slot) = EXIT_WATCH.lock().get_mut(&pid)
         && !matches!(slot, Some((_, true)))
     {
@@ -1037,6 +1044,9 @@ pub fn thread_exit(pid: u32, tid: u32, status: ExitStatus, memory: &Arc<Memory>)
 /// The NT process `pid` has ended (its last thread is going): drop its
 /// objects, views and handles. Its memory itself goes with `user::Memory`.
 pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
+    if WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 {
+        crate::kprintln!("nt-waits: p{pid} ended at {} ms", crate::time::now_ns() / 1_000_000);
+    }
     with(|s| {
         s.created.remove(&ProcessId(pid));
         if let Some(mut proc) = s.processes.remove(&ProcessId(pid)) {

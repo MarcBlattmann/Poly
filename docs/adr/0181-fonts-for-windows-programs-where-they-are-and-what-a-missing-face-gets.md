@@ -105,6 +105,15 @@ same pointer, has one reference, and each call makes a new one. The check is
 `poly_dwrite::numsub::check`, host-tested. It keeps the arguments and nothing else:
 Poly has no text analyzer.
 
+### 4. A tool: `poly.nt.waits`
+
+To see what a hung NT program waits for, the kernel argument `poly.nt.waits[=SECONDS]`
+(`chrome-win run --waits[=SECS]`) starts a kernel thread that logs every blocked NT
+wait every N seconds (default 30): `nt-waits: t<tid> any|all [alertable] on [<type> <name>
+cookie <kernel data>]...` (a process object's cookie is its pid), and every process and
+thread end with its status (`nt-waits: p<pid> ends a thread status ...`, `ended at ... ms`).
+`poly_ntobj::ObjectManager::pending_wait_list` is the listing.
+
 ## Doc-derived, to be confirmed against Windows
 
 - The rule that makes "a sentence" an invalid `FROM_CULTURE` locale: the sheet only
