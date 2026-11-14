@@ -274,6 +274,7 @@ unsafe extern "system" {
         protect: u32,
     ) -> NtStatus;
     pub fn NtUnmapViewOfSection(process: Handle, base: *const u8) -> NtStatus;
+    pub fn NtUnmapViewOfSectionEx(process: Handle, base: *const u8, flags: u32) -> NtStatus;
     pub fn NtFlushVirtualMemory(
         process: Handle,
         base: *mut *mut u8,
