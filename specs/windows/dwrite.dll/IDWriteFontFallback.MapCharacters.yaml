@@ -6,6 +6,7 @@ oracle:
   machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
   observed_by: spec-win-dwrite
   date: 2026-11-09
+  this_round: "spec-chrome-win-6 (2026-11-14): the tests added this round ran on Windows 11 Home 25H2 build 26200.9974 on homeserver2 over SSH (session 0), two rounds of two runs each, identical, and on the owner's PC (Windows 11 Enterprise, build 26200, desktop session) with the same output. The chrome section comes from Chrome's stage-1 runs on Poly (call traces of chrome.dll's user32, gdi32 and dwrite imports, poly.nt.exceptions) and from Chromium's and Skia's public source (BSD licence), read by the spec agent for the order of the calls only"
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn: the DirectWrite reference pages of the interfaces and methods named
@@ -28,12 +29,16 @@ summary: >
 interface:
   signature: "HRESULT IDWriteFontFallback::MapCharacters(IDWriteTextAnalysisSource* analysisSource, UINT32 textPosition, UINT32 textLength, IDWriteFontCollection* baseFontCollection, const WCHAR* baseFamilyName, DWRITE_FONT_WEIGHT baseWeight, DWRITE_FONT_STYLE baseStyle, DWRITE_FONT_STRETCH baseStretch, UINT32* mappedLength, IDWriteFont** mappedFont, FLOAT* scale); IDWriteFactory2::GetSystemFontFallback(IDWriteFontFallback**)"
   hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+chrome:
+  call_site: "chrome.dll's Skia font manager, for a family name FindFamilyName does not find (or no name): MapCharacters(its own text-analysis source for one space U+0020 that gives the user's default locale and a number substitution made with CreateNumberSubstitution(NONE, that locale, TRUE), position 0, length 1, the system collection, the family name asked for, the weight, style and stretch asked for); a font back is the typeface, no font or a failure means no typeface"
+  stage_1: "not reached on Poly in stage 1: the font manager stops one call earlier, when CreateNumberSubstitution returns E_NOTIMPL; on that disk the collection was empty as well"
 rules:
   system_runs: "with the system fallback and a base family \"Arial\" (base collection null): Latin text \"Hello\": one run of 5; \"A\" + two CJK characters + \"A\": runs of 1, 2, 1; CJK, Arabic, Hebrew, Greek, Cyrillic, Devanagari, Thai text: one run of the whole text, the font covers the first character; an emoji (a surrogate pair) maps with length 2 and the font covers the code point; Latin + emoji + Latin: 1, 2, 1; a math symbol U+2211: length 1. Private use U+E000 and the unassigned U+0378: S_OK, mappedLength 1, null font"
   base_family: "with the base collection null the base family is ignored: the system fallback returned a Windows UI font (Segoe UI for Latin, Greek, Cyrillic, Arabic, Hebrew and math, Yu Gothic UI for CJK, Nirmala UI for Devanagari, Leelawadee UI for Thai, Segoe UI Emoji for emoji) even with base family \"Arial\", and a non-existent or empty base family changed nothing; with the system collection given as the base collection and base family \"Arial\", Arial is returned for the text it covers (Latin, Arabic, Hebrew, Greek, Cyrillic, math symbol and the Latin parts of mixed text) and the fallback font for the rest (CJK, Devanagari, Thai, emoji)"
   scale: "the scale returned is 1.0 for every system mapping"
   custom: "a fallback with A-C and U+20AC mapped to \"PolyTest Alpha\" (scale 1) and U+00E9 to \"PolyTest Beta\" (scale 0.5) in the custom collection: \"ABC\" one run of 3 (Alpha Regular); \"ABCD\": a run of 3 then \"D\" with length 1 and a null font (S_OK); \"A e-acute euro\": three runs of 1 with scales 1.0, 0.5, 1.0; \"D\": length 1, null font; the base family given (PolyTest Alpha or Beta) does not change those results; the font returned is the Regular face (400, normal) of the target family"
   copy: "a builder that took the mappings of a fallback (AddMappings) maps \"AB\" like the original: one run of 2"
+  absent_family_space: "with the system fallback, a source giving one space (U+0020), the user's locale and a number substitution (NONE), the system collection as the base collection and a base family that is made up, NULL, empty, 'sans' or the message font's face, weights 100, 400, 700, 900, styles NORMAL, OBLIQUE, ITALIC, stretch NORMAL: S_OK, mappedLength 1, a font, scale 1.0; the font's family is the message font's face (SPI_GETNONCLIENTMETRICS), is a family of the system collection, and HasCharacter(U+0020) is TRUE. The same without a number substitution and with an empty locale, and with a NULL base collection (test mc_absent_family)"
 errors:
   none: "a code point without a font is a successful call with a null font"
 side_effects: "none beyond the rules above"
@@ -43,7 +48,7 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
   guarantees: none
 tests:
-  visible: 1  # count in <symbol>.tests/
+  visible: 2  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every

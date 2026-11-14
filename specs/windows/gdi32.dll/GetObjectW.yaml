@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/gdi32.dll/GetObjectW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64; the same answers on Windows 11 Enterprise (build 26200) of the owner's PC"
+  machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0), two runs each with identical output; the owner's PC (desktop session) for a second look with the same output"
+  observed_by: spec-chrome-win-6
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machines above. Microsoft
+  Learn: GetObjectW, GetObjectType, LOGFONTW, ENUMLOGFONTEXDVW,
+  CreateFontIndirectW, GetStockObject; wingdi.h for constants and layouts.
+  How Chrome uses it: Chrome's stage 1 run on Poly and Chromium's public
+  source (BSD licence), read by the spec agent for the order of the calls only.
+summary: >
+  This sheet covers fonts only. GetObjectW on a font copies the LOGFONTW
+  the font was made from: the request as it was given, never the face the
+  font maps to when selected. A NULL buffer asks for the size (92). A
+  larger buffer gets more (up to 356 bytes, the size of ENUMLOGFONTEXDVW),
+  a smaller one gets that many bytes.
+interface:
+  signature: "int GetObjectW(HANDLE h, int c, LPVOID pv)"
+  sizes: "sizeof(LOGFONTW) = 92; sizeof(ENUMLOGFONTEXDVW) = 356 (wingdi.h)"
+chrome:
+  call_site: "chrome.dll, setting up its UI fonts (the five LOGFONTs of SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)): for each, CreateFontIndirectW, GetDC(NULL), SelectObject of the font into that DC, then GetObjectW(font, 92, &lf) to read the face name it then asks its own font manager (DirectWrite) for, and GetTextMetricsW for the size (tmHeight - tmInternalLeading)"
+  stage_1: "the face name Chrome uses is the one GetObjectW returns, which is the requested one: if a face is not installed GDI still says its name here, and the browser asks DirectWrite for it (see IDWriteFontCollection.FindFamilyName and IDWriteFontFallback.MapCharacters for what Windows answers then)"
+rules:
+  font_logfont: "GetObjectW(font, 92, buf) returns 92 and the LOGFONTW exactly as given to CreateFontIndirectW, every field (height, width, escapement, orientation, weight, italic, underline, strike-out, charset, precisions, quality, pitch and family) and the face name as written, also when no installed face has that name and when the font is selected into a DC that maps it to another face"
+  null_buffer: "a NULL buffer returns 92 whatever the size argument (0 or 92)"
+  larger_buffer: "a size above 92 returns the size given up to 356 (93, 100, 200, 356); 357, 420, 600 and -1 return 356; the first 92 bytes are the LOGFONTW; nothing past the returned size is written"
+  smaller_buffer: "a size below 92 (91, 60, 28, 4, 1) returns that size and copies that many bytes of the LOGFONTW; size 0 with a buffer returns 0 and writes nothing"
+  face_names: "a 31-character face name comes back as written; a face name that fills all 32 units without a NUL is kept as given (the 32nd unit is not replaced by a NUL)"
+  stock_fonts: "the stock fonts (OEM_FIXED_FONT 10, ANSI_FIXED_FONT 11, ANSI_VAR_FONT 12, SYSTEM_FONT 13, DEVICE_DEFAULT_FONT 14, SYSTEM_FIXED_FONT 16, DEFAULT_GUI_FONT 17) are OBJ_FONT (GetObjectType 6) and return 92 with a non-empty face name (the names are the machine's and are not recorded)"
+  deleted: "GetObjectW of a deleted font returns 0"
+errors:
+  deleted_or_invalid: "0"
+side_effects: "none"
+threading: "a font belongs to the process; any thread may read it"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing gdi32.dll, user32.dll, kernel32.dll and
+  dwrite.dll by name, each file carrying its own declarations (Learn
+  prototypes, wingdi.h layouts). Fonts ask for a face no machine has
+  ("PolyNoSuch Face") so that nothing depends on the installed fonts; the
+  stock fonts are checked only for type, size and a non-empty name.
+not_covered: >
+  Every other object type (bitmaps, DIB sections, brushes, pens, extended
+  pens, palettes, regions), what bytes 92 to 355 of the larger buffer hold,
+  GetObjectA.
