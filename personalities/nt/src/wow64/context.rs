@@ -44,16 +44,8 @@ const OFF_SEG_SS: usize = 0xC8;
 const OFF_EXTENDED: usize = 0xCC;
 
 /// `gpr` index of each 32-bit register field (`Rax`..`R15` numbering).
-const GPRS: [(usize, usize); 8] = [
-    (OFF_EAX, 0),
-    (OFF_ECX, 1),
-    (OFF_EDX, 2),
-    (OFF_EBX, 3),
-    (OFF_ESP, 4),
-    (OFF_EBP, 5),
-    (OFF_ESI, 6),
-    (OFF_EDI, 7),
-];
+const GPRS: [(usize, usize); 8] =
+    [(OFF_EAX, 0), (OFF_ECX, 1), (OFF_EDX, 2), (OFF_EBX, 3), (OFF_ESP, 4), (OFF_EBP, 5), (OFF_ESI, 6), (OFF_EDI, 7)];
 
 fn put(b: &mut [u8], at: usize, v: u32) {
     b[at..at + 4].copy_from_slice(&v.to_le_bytes());
@@ -194,7 +186,8 @@ mod tests {
 
     #[test]
     fn a_context_survives_the_trip_to_32_bits_and_back() {
-        let mut c = Context { context_flags: CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT, ..Context::default() };
+        let mut c =
+            Context { context_flags: CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT, ..Context::default() };
         for (i, g) in c.gpr.iter_mut().enumerate().take(8) {
             *g = 0x1000 + i as u64;
         }
@@ -235,7 +228,10 @@ mod tests {
     fn a_record_has_four_byte_addresses_and_parameters() {
         let r = ExceptionRecord::new(0xC000_0005, 0, 0x40_1000, &[1, 0x10]);
         let b = to_record32(&r);
-        assert_eq!((get(&b, 0), get(&b, 12), get(&b, 16), get(&b, 20), get(&b, 24)), (0xC000_0005, 0x40_1000, 2, 1, 0x10));
+        assert_eq!(
+            (get(&b, 0), get(&b, 12), get(&b, 16), get(&b, 20), get(&b, 24)),
+            (0xC000_0005, 0x40_1000, 2, 1, 0x10)
+        );
         assert_eq!(from_record32(&b), Some(r));
         let mut bad = b;
         put(&mut bad, 16, 16);
