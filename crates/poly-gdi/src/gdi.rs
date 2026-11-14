@@ -382,6 +382,41 @@ pub const NULL_BRUSH: u32 = 5;
 pub const BLACK_PEN: u32 = 7;
 pub const NULL_PEN: u32 = 8;
 pub const ANSI_VAR_FONT: u32 = 12;
+
+/// The face name of a stock font (`stock`: its `GetStockObject` index,
+/// `u32::MAX` for a font that is not one) of kind `face`.
+fn stock_face_name(stock: u32, face: Face) -> &'static str {
+    if stock == ANSI_VAR_FONT {
+        return "MS Sans Serif";
+    }
+    match face {
+        Face::System => "System",
+        Face::Gui => "MS Shell Dlg",
+        Face::AnsiFixed => "Courier",
+        Face::OemFixed => "Terminal",
+    }
+}
+
+/// The `LOGFONTW` `GetObjectW` reports for a stock font: size, width and
+/// weight of its metrics, the ANSI (or OEM) character set, its pitch and
+/// family, and its face name (`GetObjectW.yaml` `stock_fonts`).
+fn stock_logfont(stock: u32, face: Face) -> Vec<u8> {
+    let mut b = vec![0u8; 92];
+    let tm = face.metrics();
+    b[0..4].copy_from_slice(&tm.height.to_le_bytes());
+    b[4..8].copy_from_slice(&tm.ave_char_width.to_le_bytes());
+    b[16..20].copy_from_slice(&tm.weight.to_le_bytes());
+    b[23] = tm.char_set;
+    // OUT_STRING_PRECIS, CLIP_STROKE_PRECIS, DRAFT_QUALITY: a raster font.
+    b[24] = 1;
+    b[25] = 2;
+    b[26] = 1;
+    b[27] = tm.pitch_and_family;
+    for (i, u) in stock_face_name(stock, face).encode_utf16().take(31).enumerate() {
+        b[28 + 2 * i..30 + 2 * i].copy_from_slice(&u.to_le_bytes());
+    }
+    b
+}
 pub const SYSTEM_FONT: u32 = 13;
 /// `DEFAULT_PALETTE` (wingdi.h).
 pub const DEFAULT_PALETTE: u32 = 15;
@@ -1133,13 +1168,10 @@ impl Gdi {
                 if logfont.len() == 92 {
                     logfont.clone()
                 } else {
-                    let mut b = vec![0u8; 92];
-                    let tm = face.metrics();
-                    b[0..4].copy_from_slice(&tm.height.to_le_bytes());
-                    b[16..20].copy_from_slice(&tm.weight.to_le_bytes());
-                    b[23] = tm.char_set;
-                    b[27] = tm.pitch_and_family;
-                    b
+                    // A stock font (GetObjectW.yaml `stock_fonts`: 92 bytes
+                    // and a face name): the LOGFONTW of the raster font.
+                    let stock = self.index_of(h).map_or(u32::MAX, |i| i as u32 - 1);
+                    stock_logfont(stock, *face)
                 }
             }
             _ => return None,
@@ -2368,21 +2400,15 @@ impl Gdi {
     pub fn text_face(&self, dc: u64) -> Option<Vec<u16>> {
         let d = self.dc(dc)?;
         let name = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
-        let face_name = |f: Face| match f {
-            Face::System => "System",
-            Face::Gui => "MS Shell Dlg",
-            Face::AnsiFixed => "Courier",
-            Face::OemFixed => "Terminal",
-        };
         let font = u64::from(d.state.font);
         Some(match self.obj(font) {
             Some(Obj::Font { face, stock: false, logfont, .. }) => match LogFont::parse(logfont) {
                 Some(lf) => self.face_name_of(&lf),
-                None => name(face_name(*face)),
+                None => name(stock_face_name(u32::MAX, *face)),
             },
             Some(Obj::Font { face, .. }) => {
                 let stock = self.index_of(font).map_or(u32::MAX, |i| i as u32 - 1);
-                name(if stock == ANSI_VAR_FONT { "MS Sans Serif" } else { face_name(*face) })
+                name(stock_face_name(stock, *face))
             }
             _ => name("System"),
         })
