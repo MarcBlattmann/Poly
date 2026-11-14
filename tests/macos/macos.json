@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "hello",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "e93a9d854d6015ae17b676f6d86603f3a14225fddf99b3aa185747596ee7a132",
+          "executable_sha256": "05d412a9b9e55f368c9ff535adf2b35f6b2fed9b36ca4d0de6c93b469a14dfeb",
           "exit_code": 0,
           "stdout": "hello from a macOS test\nok write returns the byte count\nsummary 1 passed, 0 failed\n",
           "stderr": "",
