@@ -132,6 +132,22 @@ below the *barrier*, the foreground process's upper window there. That is
 why `SetForegroundWindow` on the window that already is the thread's
 active one reports a move (gfw_right, scenario 3).
 
+Added with spec-win-gui-b4 (`GetActiveWindow.yaml` `background_z_order`;
+gaw_background_a to _c): while the foreground window belongs to another
+process (the thread has not the right), "on top" for a window that is not
+topmost is not the top of the band. A new window (hidden or visible), a
+raise by `SetWindowPos(HWND_TOP)`, `SetActiveWindow` of a visible window
+and the show of a hidden one go **directly above the highest visible window
+of the thread** that is not topmost: below the hidden windows already
+above it, below the thread's IME window (which lies above its active
+window), never above the barrier. A thread with no visible window of its own
+puts the window on top of the band as before. `zorder::Barrier` carries the
+barrier window and the thread's queue; `top_slot` does the placement. The
+helper itself still goes to the top of the band, and the top of a band with
+the right is unchanged. `SetActiveWindow` returns the previously active
+window in this case (it returns NULL only when another thread of the
+process holds the foreground).
+
 ### 5. Session 0 has the same messages
 
 `ShowWindow.yaml` `activation_ask` and sw_activation show that session 0
@@ -146,9 +162,9 @@ window there.
 ### 6. The visible tests are replayed on the host
 
 The scripted visible tests of the four sheets (gaw_successor,
-gaw_never_active, gaw_min_inactive, gf_zorder, gf_background, gfw_right,
-gfw_minimize, sw_activation), sw_minmax_styles and eight of the earlier
-tests (gaw_activate_a to _c, gaw_leave_a and _b, gaw_zhide, gf_show_popup,
+gaw_never_active, gaw_min_inactive, gaw_background_a to _c, gf_zorder,
+gf_background, gfw_right, gfw_minimize, sw_activation), sw_minmax_styles
+and eight of the earlier tests (gaw_activate_a to _c, gaw_leave_a and _b, gaw_zhide, gf_show_popup,
 gf_show_overlapped) run against a `Wm` in memory in
 `user_tests/replay.rs`: the scripts are read from the test programs in
 `specs/windows/`, the runner follows theirs, and the output is compared

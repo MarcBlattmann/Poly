@@ -1085,6 +1085,11 @@ impl Gdi {
         Some(b)
     }
 
+    /// Whether `h` is a font (logical or stock).
+    pub fn is_font(&self, h: u64) -> bool {
+        matches!(self.obj(h), Some(Obj::Font { .. }))
+    }
+
     /// Whether `h` is a region (`GetObject` has nothing to say about one:
     /// 0 with ERROR_INVALID_HANDLE, CreateRectRgn.yaml `in_a_dc`).
     pub fn is_region(&self, h: u64) -> bool {
@@ -2305,6 +2310,12 @@ impl Gdi {
         }
     }
 
+    /// The metrics of the stock system font (`SYSTEM_FONT`), whose line
+    /// height `DT_INTERNAL` lays text out with.
+    pub(crate) fn system_font_metrics(&self) -> TextMetric {
+        FontSel { face: Face::System, outline: None, data: None, underline: false, strike: false }.metrics()
+    }
+
     /// `GetTextMetricsW`.
     pub fn text_metrics(&self, dc: u64) -> Option<TextMetric> {
         self.dc(dc)?;
@@ -2500,8 +2511,9 @@ impl Gdi {
             && let Some(s) = self.state(dc)
         {
             s.pos.0 = align.end_x(rx, cx);
-            // `ETO_PDY`: against the sum of the second values.
-            if align.horizontal != HAlign::Center {
+            // `ETO_PDY`: against the sum of all the second values, for every
+            // horizontal alignment (the centre too).
+            if rise != 0 || across.is_some() {
                 s.pos.1 = ry.wrapping_sub(rise);
             }
             if esc != 0 {
@@ -2629,7 +2641,11 @@ impl Gdi {
                             ink = Some(ink.map_or((px, px + 1), |(l, r)| (l.min(px), r.max(px + 1))));
                         }
                     });
-                    let (left, right) = dx_cell_columns(dx0, cx, ink);
+                    let (left, mut right) = dx_cell_columns(dx0, cx, ink);
+                    // `ETO_PDY`: the right edge is one pixel farther.
+                    if run.rises.is_some() {
+                        right += 1;
+                    }
                     let (mut up, mut high, mut low) = (0i32, 0i32, 0i32);
                     for r in run.rises.unwrap_or(&[]).iter().take(run.text.len().saturating_sub(1)) {
                         up = up.wrapping_add(*r);

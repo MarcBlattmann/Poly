@@ -575,9 +575,11 @@ const CLAIM_FLAGS: u64 = 0xFFFF_003F;
 /// `"name",<type>,<flags>,<value>[,<value>...]`: a
 /// `CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1`: the fixed part, one offset per
 /// value, the name (NUL-terminated UTF-16), the values, zeros to a multiple
-/// of four. Integers, booleans and SIDs start at a multiple of four after
-/// the name; strings and octets follow one another unaligned (the spec
-/// sheet's bytes). What does not parse is [`SecErr::InvalidAcl`], a SID
+/// of four at the very end. Every value type starts right where the name
+/// ends and the values follow one another with nothing between them, so
+/// integers, booleans and SIDs are not aligned either (`ConvertString...
+/// SecurityDescriptorToSecurityDescriptorW.yaml`, resource_attributes).
+/// What does not parse is [`SecErr::InvalidAcl`], a SID
 /// value that is none [`SecErr::InvalidSid`].
 pub fn compile_attribute(text: &[u16]) -> SecResult<Vec<u8>> {
     let s = chars(text);
@@ -640,7 +642,6 @@ pub fn compile_attribute(text: &[u16]) -> SecResult<Vec<u8>> {
     if values.is_empty() {
         return Err(SecErr::InvalidAcl);
     }
-    let aligned = matches!(kind, CLAIM_INT64 | CLAIM_UINT64 | CLAIM_SID | CLAIM_BOOLEAN);
     let mut out = alloc::vec![0u8; CLAIM_FIXED + 4 * values.len()];
     out[4..6].copy_from_slice(&u16::from(kind).to_le_bytes());
     out[8..12].copy_from_slice(&(flags as u32).to_le_bytes());
@@ -649,9 +650,6 @@ pub fn compile_attribute(text: &[u16]) -> SecResult<Vec<u8>> {
     out[0..4].copy_from_slice(&name_at.to_le_bytes());
     out.extend_from_slice(&utf16_bytes(&name));
     out.extend_from_slice(&[0, 0]);
-    if aligned {
-        out.resize(out.len().next_multiple_of(4), 0);
-    }
     for (i, v) in values.iter().enumerate() {
         let at = out.len() as u32;
         out[CLAIM_FIXED + 4 * i..CLAIM_FIXED + 4 * i + 4].copy_from_slice(&at.to_le_bytes());

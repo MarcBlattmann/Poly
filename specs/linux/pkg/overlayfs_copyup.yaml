@@ -54,24 +54,95 @@ summary: >
   whiteout; across directories it works the same. renameat2 flags:
   RENAME_NOREPLACE gives EEXIST for an existing target (also a lower one),
   RENAME_EXCHANGE of two files swaps them (ENOENT if one is missing),
-  RENAME_WHITEOUT is EINVAL. Renaming a directory that exists in a lower layer:
-  EXDEV with redirect_dir=off or follow; with redirect_dir=on it succeeds: the
-  merged view shows the directory with all its content under the new name, the
-  old name is gone, the upper layer has an empty directory under the new name
-  carrying "trusted.overlay.redirect" (value: the old name alone when the
-  directory stays in the same parent, "/path" from the overlay root when it
-  moves to another directory) and a whiteout under the old name; a second
-  rename keeps pointing at the original lower path; changes below the renamed
-  directory are copied up under the new name; a directory that is only in the
-  upper layer can always be renamed. Extended attributes named
+  RENAME_WHITEOUT is EINVAL. Renaming a directory that exists in a lower
+  layer is decided by redirect_dir, see "Directory renames" below. Extended
+  attributes named
   "trusted.overlay.*" are hidden from getxattr (ENODATA) and listxattr through
   the merged view; other attributes of the lower and upper object are visible,
   and removing a lower attribute is done on the copy.
+  Directory renames. Whether a directory that exists in a lower layer (also
+  a copied-up one, also one that exists in both layers) can be renamed is
+  decided by the redirect_dir mount option. "on" allows it; "off", "follow"
+  and "nofollow" refuse it with EXDEV and change nothing, and so do
+  RENAME_EXCHANGE of it and RENAME_NOREPLACE of it to a free name
+  (RENAME_NOREPLACE onto an existing name is EEXIST first, in every mode).
+  A value that is none of on, off, follow, nofollow (also an empty one or
+  "On") is EINVAL at mount time. Without the option the kernel's default
+  decides; on the oracle (built with the always-follow setting, module
+  parameter redirect_dir off) that is the same as follow, and "off" also
+  follows redirects that are already in the layers, so the tests name the
+  option. The mount's option string in mountinfo shows redirect_dir=on and
+  redirect_dir=nofollow and leaves off and follow out. Only "on" creates
+  redirects. Redirects already present are followed when a directory is
+  looked up under on, follow (and on the oracle off and no option); under
+  nofollow an entry that carries one cannot be looked up at all: EPERM for
+  it and for everything below it (also rename, rmdir and mkdir in it), while
+  its siblings and the listing of its parent are fine. A directory that only
+  exists in the upper layer can always be renamed or exchanged, in every
+  mode: it leaves no whiteout and gets no redirect, its other markers stay.
+  With redirect_dir=on the rename of a lower directory works like this. The
+  upper layer gets the directory under the new name with the lower
+  directory's mode, owner and times, carrying trusted.overlay.redirect, and
+  a whiteout under the old name. It is empty unless the directory was copied
+  up before: then it is moved as it is, with the upper content and the
+  whiteouts it already had. The merged view shows the new name with all the
+  content of the lower directory (of every lower layer that has one, merged),
+  the old name is gone, the lower layers are not touched, and a descriptor
+  opened on the directory before keeps working. The attribute is hidden like
+  every trusted.overlay.* one (getxattr ENODATA, not listed).
+  The value of the redirect is the old name of the lower directory alone
+  when the directory stays in the same parent ("dir", "c"), and the old
+  path from the overlay's root, with a leading "/", when it moves to another
+  directory ("/a/b/e") or to the top level ("/p/q"). It always names the
+  lower entry the content comes from, so a second rename keeps it: "dir"
+  stays "dir" while the directory stays in its parent, becomes "/dir" when it
+  leaves it, stays "/dir" after that (also when it moves into yet another
+  parent or comes back to the first one); a directory first moved to another
+  parent keeps the path of its origin ("/a/b/c" after c2 went to the top
+  level and then into /a). Renaming it back to its old name leaves the
+  redirect "dir" on it and no whiteout. A directory below a renamed one that
+  is renamed too gets its old name alone when it stays in its parent ("sub")
+  and the path it had in the lower layer ("/dir/sub2") when it leaves it.
+  An absolute value is at most 256 bytes with the leading "/" counted; a
+  longer one makes the rename EXDEV with nothing changed (the same directory
+  can still be renamed inside its parent: a relative value is a name, up to
+  255 bytes).
+  Around the rename: a target that is an empty directory (lower or upper) is
+  replaced and the redirect lands on it, a merged directory with content is
+  ENOTEMPTY, a file name is ENOTDIR, a file moved onto a directory is EISDIR,
+  a directory into itself EINVAL. RENAME_EXCHANGE of such a directory works
+  with another directory (lower or upper-only) and with a file; each
+  directory gets a redirect to the lower entry it came from. RENAME_NOREPLACE
+  to a free name works. A directory renamed onto the old name of another
+  renamed directory replaces the whiteout and shows only its own content.
+  mkdir of the old name makes an empty directory: the whiteout is replaced
+  and the new directory carries trusted.overlay.opaque "y" (nothing of the
+  lower directory shows through); rmdir of it brings the whiteout back.
+  With redirect_dir=on every directory made in a directory that also exists
+  in a lower layer (the root of the overlay included) is marked opaque the
+  same way; with the other values only a directory that replaces a whiteout
+  is. A renamed directory can be removed only when it is empty in the merged
+  view (ENOTEMPTY otherwise); afterwards only the whiteout of the old name is
+  left in the upper layer.
+  Redirects that are already in the layers (images built elsewhere, also in
+  a lower layer): a relative value is one name, a sibling of the directory
+  that holds the attribute; an absolute one starts with "/" and counts from
+  the overlay's root; both are looked up in the layers below the one that
+  holds the attribute only, and the directory is not merged with a directory
+  of the same name above that layer. A value that names nothing, or a file,
+  shows an empty directory. A value that is empty, ends in "/", has a "/"
+  inside a relative value or ".." in it makes the entry unusable (lookup
+  fails, EINVAL in the cases tried) while its siblings stay fine. A directory
+  that is redirected and then renamed gets a redirect to its own name in the
+  lower layer ("moved", "/abs"), whose attribute is followed in turn; the
+  content shown does not change.
 returns:
   copy_up: "0 for the triggering call; the upper layer then has the object (visible by looking at the upper directory directly)"
   open_for_write: "a descriptor; the upper copy exists already and still has the old content"
 errors:
-  rename_dir_exdev: "EXDEV (18): rename of a directory that exists in a lower layer, redirect_dir off or follow"
+  rename_dir_exdev: "EXDEV (18): rename, RENAME_EXCHANGE or RENAME_NOREPLACE (to a free name) of a directory that exists in a lower layer, redirect_dir off, follow or nofollow; with redirect_dir=on only when the absolute redirect value would be over 256 bytes"
+  nofollow_eperm: "EPERM (1): any lookup of an entry that carries a redirect attribute, redirect_dir=nofollow"
+  redirect_bad: "EINVAL (22): lookup of an entry whose redirect attribute is empty, ends in '/', has a '/' inside a relative value or '..' in it"
   rename_exists: "EEXIST (17): RENAME_NOREPLACE onto an existing name"
   rename_whiteout: "EINVAL (22): RENAME_WHITEOUT on an overlay"
   xattr_hidden: "ENODATA (61): getxattr of trusted.overlay.* through the merged view"
@@ -82,8 +153,14 @@ timing:
   typical: "copy-up of a small file in microseconds; of larger files proportional to size"
   guarantees: none
 tests:
-  visible: 4
-  held_out: 2
+  visible: 7
+  held_out: 3
+# Notes: redirect_dir tests (pk_overlayfs_copyup_redir_*) name the option every
+# time: the default depends on the kernel build (the oracle has
+# CONFIG_OVERLAY_FS_REDIRECT_DIR off and CONFIG_OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW
+# on). The tests look at the redirect, opaque and whiteout markers in the upper
+# directory; the other internal markers (trusted.overlay.origin, .impure) are
+# not specified.
 # Notes: the tests look into the upper directory directly (a path on the
 # tmpfs below the overlay) to see what was copied; inode and device numbers
 # are never printed. trusted.* attributes need CAP_SYS_ADMIN (root). With

@@ -1,0 +1,77 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/gdi32.dll/CreateEllipticRgn
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974) and Windows 11 Enterprise 25H2 (build 26200.9711), x64: both give byte-identical rectangles for every one of the 276464 regions measured"
+  machine: "homeserver2 (real hardware, Intel UHD 630) and the spec agent's PC; the visible and held-out tests were recorded on homeserver2 in the SSH session (session 0) by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical. Regions need no desktop: the session does not change them."
+  observed_by: spec-win-gdi-rgn
+  date: 2026-11-14
+sources: >
+  Observations of our own programs on the machines above: the rectangles
+  (GetRegionData) of every ellipse with width and height from 1 to 200,
+  1164 larger ones up to 2000x2000, 1900 placed at other origins or with
+  reversed corners, and of 233400 round rectangles (CreateRoundRectRgn,
+  see that sheet). To find the construction the regions were compared with
+  what GDI's own documented path functions make from chosen input
+  (PolyBezier into a path under a 1/16 world transform, then PathToRegion;
+  FlattenPath and GetPath to read the flattened points back), all as a
+  black box. Microsoft Learn reference pages of CreateEllipticRgn,
+  CreateEllipticRgnIndirect, CreateRoundRectRgn, GetRegionData, RGNDATA,
+  GetRgnBox, PtInRegion, CombineRgn, "Regions", "Paths" (PolyBezier,
+  FlattenPath, PathToRegion), "Coordinate Spaces and Transformations";
+  wingdi.h, windef.h and winerror.h for constants and layouts. Wine's code
+  and tests were not used (Wine's own algorithm gives other rows).
+summary: >
+  Creates an elliptic region (GetObjectType OBJ_REGION 8). Only the size of
+  the rectangle matters: the region of (l, t, r, b) is the region of
+  (0, 0, |r-l|, |b-t|) moved to (min(l,r), min(t,b)). It lies in the box
+  min(l,r) .. max(l,r)-2, min(t,b) .. max(t,b)-2 (one pixel less than the
+  rectangle on the right and at the bottom) and is made of one horizontal
+  run of pixels per row. The runs are what GDI's polygon fill gives for a
+  polygon made from four cubic Bezier quarter arcs, flattened in 1/16 pixel
+  steps; the rules below give every step so the rows can be reproduced
+  exactly. CreateEllipticRgnIndirect(&RECT) is the same with the RECT's
+  four values.
+interface:
+  signature: "HRGN CreateEllipticRgn(int left, int top, int right, int bottom); HRGN CreateEllipticRgnIndirect(const RECT *lprect)"
+  GetRegionData: "RGNDATAHEADER (wingdi.h) dwSize 32, iType RDH_RECTANGLES 1, nCount, nRgnSize 16 per rectangle, rcBound; then the rectangles, top to bottom: one rectangle for each run of consecutive rows with the same left and right (a rectangle can span several rows); rows without pixels are left out."
+rules:
+  size_only: "W = |right - left|, H = |bottom - top|, and the region of the rectangle is the region of (0,0,W,H) shifted by (min(left,right), min(top,bottom)). Reversed corners ((60,40,0,0) style) and any origin (negative, odd, up to the limits) give the shifted same region; checked on 1900 placed ellipses."
+  degenerate: "There is no special case: every size, also 0 and 1, goes through the steps below (with W or H of 0 the radius A or B is negative and the box is turned over). Results: W or H of 1 (and not the other 0) gives the empty region (GetRgnBox NULLREGION 1, box 0,0,0,0, no rectangles); 3x3 is empty too. A width or height of 0 is NOT empty: (0,0,9,0) gives one row at y = -1 with the pixels 0..7 (box 0,-1,8,0); (-7,-7,-7,20) gives one column at x = -8 for the rows -7..19 (box -8,-7,-7,19); (0,0,0,0) gives the single pixel (-1,-1). 2xH (H >= 2) gives one column 0-1 for the rows 0..H-2, Wx2 one row 0..W-2 wide (0-(W-1)). So step 7 must also look at row -1."
+  units: "All coordinates below are in sixteenths of a pixel, relative to the region's origin, with the pixel (x, y) covering 16x .. 16x+16 and 16y .. 16y+16; its centre is (16x+8, 16y+8). All values are whole numbers unless said otherwise."
+  step1_box: "The ellipse box is X0 = 4, Y0 = 4, X1 = 16*(W-1) - 4, Y1 = 16*(H-1) - 4 (a quarter pixel inside the pixel box 0 .. W-1, 0 .. H-1). Centre CX = 8*(W-1), CY = 8*(H-1); radii A = 8*(W-1) - 4 = CX - X0 and B = 8*(H-1) - 4 = CY - Y0."
+  step2_control: "With k = 4*(sqrt(2)-1)/3 = 0.5522847498307936 (computed in double precision): KA = k*A rounded UP to a whole number (ceiling) and KB = k*B rounded DOWN (floor). The two directions really round differently: the other roundings miss hundreds of the measured sizes."
+  step3_arcs: "Four cubic Bezier arcs, each given by its four points P0 P1 P2 P3, in this order: (1) from the right point (X1, CY) through (X1, CY-KB) and (CX+KA, Y0) to the top point (CX, Y0); (2) from (CX, Y0) through (CX-KA, Y0) and (X0, CY-KB) to the left point (X0, CY); (3) from (X0, CY) through (X0, CY+KB) and (CX-KA, Y1) to the bottom point (CX, Y1); (4) from (CX, Y1) through (CX+KA, Y1) and (X1, CY+KB) back to (X1, CY). The direction matters only through the rounding in step 5."
+  step4_flatten: "Each arc is cut into pieces by repeated halving: a piece with points Q0 Q1 Q2 Q3 is FLAT when, for x and for y separately, |Q0 - 2*Q1 + Q2| and |Q1 - 2*Q2 + Q3| are both at most 32/3 (that is, 3 times the largest of these four second differences is at most 32). A flat piece is kept; a piece that is not flat is split at its middle (parameter 1/2, the usual midpoint construction: M01 = (Q0+Q1)/2, M12 = (Q1+Q2)/2, M23 = (Q2+Q3)/2, M012 = (M01+M12)/2, M123 = (M12+M23)/2, M = (M012+M123)/2; first half Q0 M01 M012 M, second half M M123 M23 Q3) and both halves are treated the same way, the first half first. Do this with exact fractions (the values become halves, quarters, ... of a sixteenth): no rounding happens while splitting or testing. The flattened arc is the list of the end points of its kept pieces in order. The test is the same for every size and every piece (a piece near the top point may need more halving than one near the side point of the same arc): a 4x4 ellipse has one piece per arc (its polygon is 44,24 24,4 4,24 24,44), 5x5 two (60,32 52,12 32,4 12,12 4,32 12,52 32,60 52,52), 22x6 four, a circle of 1996 pixels 32."
+  step5_round: "Every end point is rounded to the nearest whole sixteenth, halves upward (towards +infinity) in both x and y. With this upward rounding (and the different rounding of KA and KB) the lower half is not always the mirror of the upper half, nor the left half of the right one (50x8: a point at y 19.5 becomes 20 in the upper arcs while its mirror at 92.5 becomes 93); 7x8, 12x8 and 17x17 are sizes with a lower row that differs by a pixel from its upper twin, and a W x H ellipse is often not the transpose of the H x W one."
+  step6_polygon: "The polygon is the right point (X1, CY) followed by the rounded end points of arcs 1 to 4 in order (consecutive equal points can be merged); it is closed."
+  step7_rows: "For each pixel row y (-1 .. H-1), take the horizontal line through the row centres, at 16y+8. Find the smallest and the largest x where the polygon's edges meet that line (an edge from P to Q meets it when the line lies between P.y and Q.y, both ends included; the x is P.x + (16y+8 - P.y)*(Q.x - P.x)/(Q.y - P.y) as an exact fraction; a horizontal edge on the line counts with both its ends). If the line meets no edge the row is empty. Otherwise, with these XL and XR, the pixel x of the row is in the region exactly when XL <= 16x+8 < XR (left end included, right end excluded). The pixels of a row always form one run. (For W and H of 2 and more, rows -1 and H-1 are always empty, so the region lies in rows 0 .. H-2.)"
+  result: "The region is the union of the rows' runs, moved to the rectangle's origin. GetRegionData gives one rectangle per run of consecutive rows with equal runs; GetRgnBox returns NULLREGION (1) when empty, SIMPLEREGION (2) when it is one rectangle, COMPLEXREGION (3) otherwise, and the bounding box."
+  worked_example: "22x6: A 164, B 36, KA ceil(90.57) = 91, KB floor(19.88) = 19. Arc 1 is (332,40) (332,21) (259,4) (168,4); flattened and rounded, the polygon is 332,40 319,26 284,15 232,7 168,4 104,7 52,15 17,26 4,40 17,54 52,65 104,73 168,76 232,73 284,65 319,54 (16 points, 4 per arc). Row 0 (line 8): the edges 232,7-168,4 and 104,7-168,4 do not reach 8; 284,15-232,7 meets it at 238.5 and 104,7-52,15 at 97.5; pixel centres 104 (x 6) .. 232 (x 14) lie in [97.5, 238.5): run 6..14. Rectangles (top+rows: left-right exclusive): 0+1:6-15 1+1:1-20 2+1:0-21 3+1:1-20 4+1:6-15."
+  examples: "Observed rectangles (top+rows: left-right, right exclusive, relative to the origin). 24x10: 0+1:8-15 1+1:4-19 2+1:2-21 3+1:1-22 4+1:0-23 5+1:1-22 6+1:2-21 7+1:4-19 8+1:8-15. 22x14: 0+1:8-12 1+1:5-16 2+1:3-18 3+1:2-19 4+2:1-20 6+1:0-21 7+2:1-20 9+1:2-19 10+1:3-18 11+1:5-16 12+1:8-12. 23x16: 0+1:9-13 1+1:5-17 2+1:3-19 3+1:2-20 4+3:1-21 7+1:0-22 8+3:1-21 11+1:2-20 12+1:3-19 13+1:5-17 14+1:9-13. 3x22: 3+15:0-2 (one rectangle). 50x8: 0+1:15-34 1+1:6-43 2+1:2-47 3+1:0-49 4+1:2-47 5+1:6-43 6+1:15-34 (polygon 780,56 772,46 750,36 667,20 543,8 392,4 241,8 117,20 34,36 12,46 4,56 12,66 34,76 117,93 241,104 392,108 543,104 667,93 750,76 772,66). 31x21: 0+1:13-17 1+1:8-22 2+1:6-24 3+1:4-26 4+1:3-27 5+1:2-28 6+3:1-29 9+2:0-30 11+3:1-29 14+1:2-28 15+1:3-27 16+1:4-26 17+1:6-24 18+1:8-22 19+1:13-17. 3x3: empty. 4x4: 0+1:1-2 1+1:0-3 2+1:1-2."
+  exactness: "These steps give exactly the measured rectangles for EVERY ellipse whose larger side is below 192 pixels (all 36481 sizes 1..191 x 1..191 with 3439259 rows, every placed and reversed one, and the sizes 0 and 1), and for 40369 of the 41019 measured sizes up to 2000. See large_sizes."
+  large_sizes: "The only difference left is in steps 4 and 5: Windows computes the flattened points with limited fixed-point precision, so on big arcs some points come out a sixteenth off (mostly lower or more to the left) compared with the exact rounded value; the error grows with the depth of halving and reaches 0.8 sixteenth at depth 5, and it depends on the arc in a way that was not pinned down (plain de Casteljau, forward differences and 'hybrid' differences with 0..16 fraction bits and floor or round shifts were tried; none matches every arc). With the exact steps above, of the measured sizes whose larger side is 192..299: 41 of 3624 differ (96 of 537490 rows); 300..599: 5 of 180 (10 rows); 600..999: 107 of 170 (730 of 121171 rows); 1000..2000: 497 of 564 (5862 of 683173 rows). A differing row has one end one pixel off, except rows next to the top and bottom points of the biggest sizes, where the edge is almost horizontal and an end can be up to 31 pixels off. The places are the same on both machines and on every run. GDI's own path functions (PolyBezier into a path, PathToRegion) given the same four arcs reproduce Windows' ellipse regions in every case checked (3025 sizes), so the difference lies only in how the flattened points are computed. Every visible and held-out test uses sizes below 192 pixels, where the steps are exact."
+errors:
+  range: "A coordinate outside -2^27 .. 2^27-1 (134217728, -134217729, i32::MAX, i32::MIN): NULL, ERROR_INVALID_PARAMETER (87). The limits themselves are accepted (huge sizes give regions with rounding artefacts: 0,0,134217727,10 has its box at 1290..134216436 - not tested)."
+  indirect: "CreateEllipticRgnIndirect follows the same rules with the RECT's left, top, right, bottom; it gives a region equal (EqualRgn) to CreateEllipticRgn's."
+side_effects: "none: a new region object; the last error is left alone on success"
+threading: "regions can be used from any thread"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond for sizes up to a few hundred pixels; a 100000x100000 ellipse (58583 rectangles) takes milliseconds"
+  guarantees: none
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing gdi32.dll and kernel32.dll by name, each
+  carrying its own declarations (Learn prototypes, wingdi.h and windef.h
+  layouts). Each prints, per region, the type from GetRgnBox, the number of
+  rectangles and the rectangles as top+rows:left-right relative to the
+  origin, wrapped into lines of at most about 200 characters (continuation
+  lines start with "  .."). No window, no desktop: recorded in session 0.
+not_covered: >
+  The exact fixed-point arithmetic of the flattening for big arcs (see
+  large_sizes); coordinates near the 2^27 limit; the Ellipse drawing
+  function and paths (only regions were measured); regions in a DC with a
+  transform (regions are always in device units).

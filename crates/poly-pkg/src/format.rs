@@ -65,9 +65,8 @@ impl Format {
         match self {
             Format::Deb => None,
             Format::Rpm => Some("Poly cannot install RPM packages yet. Look for a Debian package (.deb) of this app."),
-            Format::AppImage => {
-                Some("Poly cannot install AppImages yet. Look for a Debian package (.deb) of this app.")
-            }
+            // Installed since ADR 0180 (`appimage`).
+            Format::AppImage => None,
             Format::Flatpak => {
                 Some("Poly cannot install Flatpak apps yet. Look for a Debian package (.deb) of this app.")
             }
@@ -106,9 +105,10 @@ mod tests {
     }
 
     #[test]
-    fn only_debian_packages_are_installed_today() {
+    fn debian_packages_and_appimages_are_installed_today() {
         assert_eq!(Format::Deb.not_yet(), None);
-        for f in [Format::Rpm, Format::AppImage, Format::Flatpak, Format::Snap] {
+        assert_eq!(Format::AppImage.not_yet(), None);
+        for f in [Format::Rpm, Format::Flatpak, Format::Snap] {
             assert!(f.not_yet().unwrap().contains(".deb"), "{}", f.name());
         }
     }

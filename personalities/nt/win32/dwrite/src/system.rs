@@ -1,6 +1,6 @@
-//! The system font collection: the fonts of `C:\Windows\Fonts` (Poly puts
-//! the DejaVu fonts there, ADR 0105), each also under the Windows family
-//! names that stand for it (`poly_dwrite::system`, ADR 0170).
+//! The system font collection: the fonts of `C:\Windows\Fonts` and of Poly's
+//! font store (the DejaVu fonts, ADR 0105, 0181), each also under the
+//! Windows family names that stand for it (`poly_dwrite::system`, ADR 0170).
 
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -17,7 +17,13 @@ use crate::coll::CollData;
 use crate::file::{FileSource, local_key, local_loader};
 use crate::io;
 
-const FONTS_DIR: &str = "C:\\Windows\\Fonts";
+/// The font folders, in the order they are read (ADR 0181): the folder of
+/// the Windows layout, then Poly's own font store on the root file system
+/// (`Z:` is `/`). A file the first folder has is not taken from the second
+/// again, so an image that links the store into `C:\Windows\Fonts` (the root
+/// disk) and one that has only the store (the desktop image) give the same
+/// collection, and fonts a program or the user put in `C:\Windows\Fonts` win.
+const FONT_DIRS: [&str; 2] = ["C:\\Windows\\Fonts", "Z:\\usr\\share\\fonts\\truetype\\dejavu"];
 
 static SYSTEM: SpinLock<Option<Arc<CollData>>> = SpinLock::new(None);
 
@@ -34,12 +40,17 @@ pub fn system_data() -> Arc<CollData> {
 
 fn build() -> CollData {
     let mut items: Vec<(FaceEntry, Arc<FileSource>)> = Vec::new();
-    for name in io::list_dir(FONTS_DIR) {
+    let mut seen: Vec<String> = Vec::new();
+    for (dir, name) in FONT_DIRS.iter().flat_map(|d| io::list_dir(d).into_iter().map(move |n| (*d, n))) {
         let lower = name.to_ascii_lowercase();
         if !(lower.ends_with(".ttf") || lower.ends_with(".otf") || lower.ends_with(".ttc") || lower.ends_with(".otc")) {
             continue;
         }
-        let path: Vec<u16> = alloc::format!("{FONTS_DIR}\\{name}").encode_utf16().collect();
+        if seen.contains(&lower) {
+            continue;
+        }
+        seen.push(lower);
+        let path: Vec<u16> = alloc::format!("{dir}\\{name}").encode_utf16().collect();
         let src = FileSource::new(local_loader(), &local_key(&path, io::write_time(&path)));
         let Ok(bytes) = src.bytes() else { continue };
         let a = sfnt::analyze(&bytes);

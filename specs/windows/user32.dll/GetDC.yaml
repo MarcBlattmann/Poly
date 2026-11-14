@@ -6,6 +6,7 @@ oracle:
   machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
   observed_by: spec-win-gui-a
   date: 2026-11-02
+  this_round: "spec-chrome-win-6 (2026-11-14): the tests added this round ran on Windows 11 Home 25H2 build 26200.9974 on homeserver2 over SSH (session 0), two rounds of two runs each, identical, and on the owner's PC (Windows 11 Enterprise, build 26200, desktop session) with the same output. The chrome section comes from Chrome's stage-1 runs on Poly (call traces of chrome.dll's user32, gdi32 and dwrite imports, poly.nt.exceptions) and from Chromium's and Skia's public source (BSD licence), read by the spec agent for the order of the calls only"
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn reference pages of the functions and messages named here, "About
@@ -17,6 +18,9 @@ summary: >
   in its default state unless the class keeps a DC (CS_OWNDC, CS_CLASSDC).
 interface:
   signature: "HDC GetDC(HWND hwnd)"
+chrome:
+  call_site: "chrome.dll's UI-font set-up (see SystemParametersInfoW): GetDC(NULL) to read LOGPIXELSY (released at once), and GetDC(NULL) per font to select it and read its name and metrics; that DC is released when the font is made"
+  stage_1: "while the browser recursed on Poly (see SystemParametersInfoW) every round held one screen DC: 5,226 DCs from GetDC(NULL) were held at once without a failure"
 rules:
   defaults: "text 0x000000, background 0xffffff, OPAQUE, the stock system font"
   screen: "GetDC(NULL): BITSPIXEL 32, PLANES 1, LOGPIXELSX/Y 96, HORZRES 1024, VERTRES 768"
@@ -24,6 +28,7 @@ rules:
   owndc: "CS_OWNDC: the same DC every time, per window, keeping its state across ReleaseDC (which returns 1)"
   classdc: "CS_CLASSDC: windows of the class share one DC"
   other_thread: "GetDC of another thread's window works (OBJ_DC)"
+  screen_dc_rounds: "GetDC(NULL) 200 times in a row, each released, half of them with a font of the caller still selected at ReleaseDC: a DC every time; the font selected in a DC fresh from GetDC(NULL) is the stock SYSTEM_FONT (SelectObject of another font returns it), whatever was left selected in an earlier one; selecting the old font back returns the caller's font; ReleaseDC returns 1; LOGPIXELSY 96. Two GetDC(NULL) held at once are two different DCs (test gd_screen_font)"
 errors:
   bad_window: "NULL, ERROR_INVALID_WINDOW_HANDLE (1400)"
 side_effects: "none beyond the rules above"
@@ -33,7 +38,7 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 1  # count in <symbol>.tests/
+  visible: 2  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name

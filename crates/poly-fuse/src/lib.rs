@@ -124,6 +124,9 @@ struct Pending {
 #[derive(Default)]
 struct State {
     bound: bool,
+    /// A mount with this descriptor failed after the descriptor was tied
+    /// to it: no mount can use it any more.
+    failed: bool,
     /// The server closed its descriptor.
     dead: bool,
     /// The file system was unmounted.
@@ -201,6 +204,9 @@ impl Conn {
     /// by `who`. `EINVAL` if the descriptor is bound already.
     pub fn bind(&self, who: Caller) -> Result<()> {
         let mut s = self.state.lock();
+        if s.failed {
+            return Err(Errno::ENOTCONN);
+        }
         if s.bound {
             return Err(Errno::EINVAL);
         }
@@ -219,6 +225,19 @@ impl Conn {
         drop(s);
         self.queue.notify(PollEvents::READABLE);
         Ok(())
+    }
+
+    /// A mount that was made with this descriptor failed after the options
+    /// were accepted (the root's type did not fit the mount point): the
+    /// descriptor stays tied to it, ended, and a new mount with it is
+    /// `ENOTCONN`.
+    pub fn fail_mount(&self) {
+        let mut s = self.state.lock();
+        s.bound = true;
+        s.failed = true;
+        s.unmounted = true;
+        drop(s);
+        self.queue.notify(PollEvents::READABLE);
     }
 
     pub fn is_bound(&self) -> bool {

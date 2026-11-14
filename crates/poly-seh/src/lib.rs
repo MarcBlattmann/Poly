@@ -33,6 +33,8 @@
 //!   called through a trait, so the walks are tested on the host and our
 //!   `ntdll` will call real code through the same trait.
 //!
+//! - [`dynamic`]: function tables registered for code made at run time
+//!   (`RtlAddFunctionTable`, `RtlAddGrowableFunctionTable`).
 //! - [`scope`]: `__C_specific_handler`'s scope table and decisions (ADR
 //!   0087).
 //!
@@ -49,6 +51,7 @@ extern crate alloc;
 pub mod consts;
 pub mod context;
 pub mod dispatch;
+pub mod dynamic;
 pub mod info;
 pub mod pdata;
 pub mod record;

@@ -248,6 +248,131 @@ fn a_duplicate_drops_maximum_allowed() {
     );
 }
 
+/// Hand the creator its handle first, then give the object `sddl` (what the kernel does for the
+/// process, thread and token objects of `CreateProcessW`, `CreateThread`, `DuplicateTokenEx`).
+fn guard(om: &mut ObjectManager, c: &Caller, id: ObjectId, kind: ObjectType, full: AccessMask, sddl: &str) -> Handle {
+    let h = om.open_by_pointer(c, id, full, 0).unwrap_or_else(|e| panic!("{kind:?}: {e:?}"));
+    let sd = poly_security::sdstr::parse(&w(sddl)).unwrap();
+    let token = om.security.effective(c.process, c.thread);
+    om.assign_security(id, kind, token, Some(&sd));
+    h
+}
+
+fn dup_to(om: &mut ObjectManager, c: &Caller, from: Handle, access: AccessMask) -> Result<AccessMask> {
+    let h = om.nt_duplicate_object(c, P1, from, Some(P1), access, 0, 0)?.unwrap();
+    om.granted_access(c, h)
+}
+
+/// The rules of an empty DACL for every object type the sheet lists
+/// (specs/windows/kernel32.dll/DuplicateHandle.yaml, `empty_dacl`): from a reduced handle only
+/// `READ_CONTROL` and `WRITE_DAC`, alone or together, can be added; everything else, and any mix
+/// of an owner right with another bit, is refused.
+fn check_empty_dacl(om: &mut ObjectManager, c: &Caller, h: Handle, small: AccessMask, other: AccessMask) {
+    let reduced = om.nt_duplicate_object(c, P1, h, Some(P1), small, 0, 0).unwrap().unwrap();
+    assert_eq!(dup_to(om, c, reduced, small), Ok(small));
+    assert_eq!(dup_to(om, c, reduced, 0), Ok(0));
+    assert_eq!(dup_to(om, c, reduced, READ_CONTROL), Ok(READ_CONTROL));
+    assert_eq!(dup_to(om, c, reduced, WRITE_DAC), Ok(WRITE_DAC));
+    assert_eq!(dup_to(om, c, reduced, READ_CONTROL | WRITE_DAC), Ok(READ_CONTROL | WRITE_DAC));
+    for bad in [other, DELETE, small | READ_CONTROL, other | READ_CONTROL, READ_CONTROL | WRITE_DAC | other] {
+        assert_eq!(dup_to(om, c, reduced, bad), Err(STATUS_ACCESS_DENIED), "{bad:#x}");
+    }
+    // A refusal puts nothing in the table.
+    let before = om.process_handle_count(P1);
+    assert!(om.nt_duplicate_object(c, P1, reduced, Some(P1), other, 0, 0).is_err());
+    assert_eq!(om.process_handle_count(P1), before);
+    // The creator's own full handle can hand out any part of it.
+    assert!(om.nt_duplicate_object(c, P1, h, Some(P1), small, 0, 0).is_ok());
+}
+
+fn with_token(om: &mut ObjectManager) -> u64 {
+    let (token, _) = om.new_token(poly_security::token::Token::poly_user(), T1).unwrap();
+    om.set_process_token(P1, token).unwrap();
+    token
+}
+
+/// Mutexes and semaphores, like events, keep an empty DACL's refusals (the sheet lists section,
+/// event, mutex, semaphore, thread, process and token).
+#[test]
+fn an_empty_dacl_refuses_extra_access_on_every_dispatcher_type() {
+    let (mut om, c) = setup();
+    with_token(&mut om);
+    let sd = poly_security::sdstr::parse(&w("D:")).unwrap();
+    let attrs = ObjectAttributes { root: None, name: None, attributes: 0, security: Some(&sd) };
+    let ev = om.nt_create_event(&c, &attrs, EVENT_ALL_ACCESS, EventType::Notification, false).unwrap();
+    check_empty_dacl(&mut om, &c, ev.handle, SYNCHRONIZE, EVENT_MODIFY_STATE);
+    let mx = om.nt_create_mutant(&c, &attrs, MUTANT_ALL_ACCESS, false).unwrap();
+    check_empty_dacl(&mut om, &c, mx.handle, SYNCHRONIZE, MUTANT_QUERY_STATE);
+    let sm = om.nt_create_semaphore(&c, &attrs, SEMAPHORE_ALL_ACCESS, 0, 5).unwrap();
+    check_empty_dacl(&mut om, &c, sm.handle, SYNCHRONIZE, SEMAPHORE_MODIFY_STATE);
+}
+
+/// A thread and a process made with an empty DACL (`lpThreadAttributes`, `lpProcessAttributes`)
+/// refuse like the others, while the creator's own handle stays full.
+#[test]
+fn an_empty_dacl_refuses_extra_access_on_threads_and_processes() {
+    let (mut om, c) = setup();
+    with_token(&mut om);
+    let (process, thread) = with_process_objects(&mut om);
+    let t = guard(&mut om, &c, thread, ObjectType::Thread, THREAD_ALL_ACCESS, "D:");
+    assert_eq!(om.granted_access(&c, t), Ok(THREAD_ALL_ACCESS));
+    check_empty_dacl(&mut om, &c, t, THREAD_QUERY_LIMITED_INFORMATION, THREAD_TERMINATE);
+    let p = guard(&mut om, &c, process, ObjectType::Process, PROCESS_ALL_ACCESS, "D:");
+    assert_eq!(om.granted_access(&c, p), Ok(PROCESS_ALL_ACCESS));
+    check_empty_dacl(&mut om, &c, p, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE);
+}
+
+/// A NULL DACL allows everything, like no descriptor; a DACL that allows Everyone part of the
+/// access allows what it lists and nothing else (rules `null_dacl`, `partial_dacl`).
+#[test]
+fn null_and_partial_dacls_on_events() {
+    let (mut om, c) = setup();
+    with_token(&mut om);
+    let make = |om: &mut ObjectManager, sddl: &str| {
+        let sd = poly_security::sdstr::parse(&w(sddl)).unwrap();
+        let attrs = ObjectAttributes { root: None, name: None, attributes: 0, security: Some(&sd) };
+        let ev = om.nt_create_event(&c, &attrs, EVENT_ALL_ACCESS, EventType::Notification, false).unwrap();
+        om.nt_duplicate_object(&c, P1, ev.handle, Some(P1), SYNCHRONIZE, 0, 0).unwrap().unwrap()
+    };
+    let none = make(&mut om, "D:NO_ACCESS_CONTROL");
+    for a in [EVENT_ALL_ACCESS, EVENT_MODIFY_STATE, DELETE, WRITE_DAC, GENERIC_ALL] {
+        assert!(dup_to(&mut om, &c, none, a).is_ok(), "{a:#x}");
+    }
+    // Everyone: SYNCHRONIZE | EVENT_MODIFY_STATE.
+    let some = make(&mut om, "D:(A;;0x100002;;;WD)");
+    assert_eq!(dup_to(&mut om, &c, some, EVENT_MODIFY_STATE), Ok(EVENT_MODIFY_STATE));
+    assert_eq!(dup_to(&mut om, &c, some, EVENT_QUERY_STATE), Err(STATUS_ACCESS_DENIED));
+    assert_eq!(dup_to(&mut om, &c, some, EVENT_ALL_ACCESS), Err(STATUS_ACCESS_DENIED));
+    assert_eq!(dup_to(&mut om, &c, some, EVENT_MODIFY_STATE | READ_CONTROL), Ok(EVENT_MODIFY_STATE | READ_CONTROL));
+}
+
+/// Generic bits are mapped first and judged like any request (rule `generic_rights`), and
+/// `MAXIMUM_ALLOWED` and the type's undefined bits are dropped (`zero_and_unknown_bits`).
+#[test]
+fn generic_and_unknown_bits_on_a_duplicate() {
+    let (mut om, c) = setup();
+    with_token(&mut om);
+    let sd = poly_security::sdstr::parse(&w("D:")).unwrap();
+    let attrs = ObjectAttributes { root: None, name: None, attributes: 0, security: Some(&sd) };
+    let ev = om.nt_create_event(&c, &attrs, EVENT_ALL_ACCESS, EventType::Notification, false).unwrap();
+    let q = om.nt_duplicate_object(&c, P1, ev.handle, Some(P1), EVENT_QUERY_STATE, 0, 0).unwrap().unwrap();
+    for g in [GENERIC_READ, GENERIC_WRITE, GENERIC_EXECUTE, GENERIC_ALL] {
+        assert_eq!(dup_to(&mut om, &c, q, g), Err(STATUS_ACCESS_DENIED), "{g:#x}");
+    }
+    // Undefined event bits go; what is left is judged.
+    assert_eq!(dup_to(&mut om, &c, q, 0xFFFC), Ok(0));
+    assert_eq!(dup_to(&mut om, &c, q, 0xFFFD), Ok(EVENT_QUERY_STATE));
+    assert_eq!(dup_to(&mut om, &c, q, MAXIMUM_ALLOWED), Ok(0));
+    // DUPLICATE_SAME_ACCESS ignores the request, whatever it is.
+    for a in [GENERIC_ALL, MAXIMUM_ALLOWED, EVENT_ALL_ACCESS, 0] {
+        let h = om.nt_duplicate_object(&c, P1, q, Some(P1), a, 0, DUPLICATE_SAME_ACCESS).unwrap().unwrap();
+        assert_eq!(om.granted_access(&c, h), Ok(EVENT_QUERY_STATE));
+    }
+    // The creator's full handle: a request for all of it (and GENERIC_ALL) is a subset.
+    assert_eq!(dup_to(&mut om, &c, ev.handle, EVENT_ALL_ACCESS), Ok(EVENT_ALL_ACCESS));
+    assert_eq!(dup_to(&mut om, &c, ev.handle, GENERIC_ALL), Ok(EVENT_ALL_ACCESS));
+}
+
 #[test]
 fn duplicate_close_source() {
     let (mut om, c) = setup();

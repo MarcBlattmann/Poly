@@ -330,6 +330,11 @@ pub trait SuperblockOps {
         let _ = path;
         Ok(())
     }
+    /// Whether the caller may make file systems (`CAP_SYS_ADMIN` where
+    /// mounts are made): `FSCONFIG_CMD_CREATE` needs it.
+    fn privileged(&self) -> bool {
+        true
+    }
 }
 
 /// A file system context: the state behind an `fsopen(2)` / `fspick(2)`
@@ -345,6 +350,9 @@ pub struct FsContext {
     options: Vec<(Vec<u8>, Option<Vec<u8>>)>,
     read_only: Option<bool>,
     log: VecDeque<Vec<u8>>,
+    /// `fsmount(2)` took the superblock: a context that fails after it is
+    /// busy for `fsmount` too, one that failed at create is `EINVAL`.
+    was_mounted: bool,
 }
 
 /// The parameters each file system type takes (the man pages' lists, as
@@ -411,6 +419,7 @@ impl FsContext {
             options: Vec::new(),
             read_only: None,
             log: VecDeque::new(),
+            was_mounted: false,
         }
     }
 
@@ -471,6 +480,11 @@ impl FsContext {
             Command::Create | Command::CreateExcl => {
                 if self.purpose != Purpose::Create {
                     return Err(Errno::EBUSY);
+                }
+                // The state comes before the privilege, the privilege before
+                // the judging of the parameters; a refusal changes nothing.
+                if !ops.privileged() {
+                    return Err(Errno::EPERM);
                 }
                 let fstype = self.fstype.ok_or(Errno::EINVAL)?;
                 // A file system on a device needs to be told which; a
@@ -578,18 +592,46 @@ impl FsContext {
             && let Some(v) = &value
         {
             match key {
-                b"lowerdir" => {
+                b"lowerdir" | b"lowerdir+" => {
                     for dir in v.split(|&b| b == b':') {
-                        ops.check_directory(dir)?;
+                        self.check_layer(dir, ops)?;
                     }
                 }
-                b"upperdir" | b"workdir" => ops.check_directory(v)?,
+                b"upperdir" | b"workdir" => {
+                    if v.is_empty() {
+                        return Err(self.reject("Bad value for", key));
+                    }
+                    self.check_layer(v, ops)?;
+                }
                 _ => {}
             }
         }
-        self.options.retain(|(k, _)| k.as_slice() != key);
+        if key != b"lowerdir+" {
+            self.options.retain(|(k, _)| k.as_slice() != key);
+        }
         self.options.push((key.to_vec(), value));
         Ok(())
+    }
+
+    /// One directory of an overlay: an empty one is `EINVAL` (without a
+    /// message), a missing one is the lookup's error (without a message), one
+    /// that is no directory is `EINVAL` and says so.
+    fn check_layer(&mut self, dir: &[u8], ops: &mut dyn SuperblockOps) -> Result<(), Errno> {
+        if dir.is_empty() {
+            return Err(Errno::EINVAL);
+        }
+        match ops.check_directory(dir) {
+            Err(Errno::EINVAL) => {
+                let text = format!(
+                    "e overlay: {} is not a directory
+",
+                    core::str::from_utf8(dir).unwrap_or("?")
+                );
+                self.log(text.as_bytes());
+                Err(Errno::EINVAL)
+            }
+            other => other,
+        }
     }
 
     /// The parameters given so far as `mount(2)` data.
@@ -614,8 +656,10 @@ impl FsContext {
     pub fn begin_mount(&mut self) -> Result<(), Errno> {
         match (self.purpose, self.phase) {
             (Purpose::Reconfigure, _) | (_, Phase::Mounted) => Err(Errno::EBUSY),
+            (Purpose::Create, Phase::Failed) if self.was_mounted => Err(Errno::EBUSY),
             (Purpose::Create, Phase::Created) => {
                 self.phase = Phase::Mounted;
+                self.was_mounted = true;
                 Ok(())
             }
             _ => Err(Errno::EINVAL),
@@ -920,9 +964,13 @@ mod tests {
         created: Option<CreateRequest>,
         fail: Option<Errno>,
         reconfigured: Vec<Option<bool>>,
+        nobody: bool,
     }
 
     impl SuperblockOps for Fake {
+        fn privileged(&self) -> bool {
+            !self.nobody
+        }
         fn create(&mut self, req: &CreateRequest) -> Result<(), Errno> {
             if let Some(e) = self.fail {
                 return Err(e);
@@ -940,7 +988,7 @@ mod tests {
     }
 
     fn fake() -> Fake {
-        Fake { created: None, fail: None, reconfigured: Vec::new() }
+        Fake { created: None, fail: None, reconfigured: Vec::new(), nobody: false }
     }
 
     fn set<'a>(key: &'a [u8], value: Value<'a>) -> Command<'a> {
@@ -1151,5 +1199,81 @@ mod tests {
         assert_eq!(show(b"", &r(Some(1 << 20), None)), "size=1024k");
         // Nothing about the limits: as it was (the mode is not a reconfigure's).
         assert_eq!(show(b"size=1024k,mode=755", &r(None, None)), "size=1024k,mode=755");
+    }
+
+    #[test]
+    fn create_needs_the_privilege_and_a_refusal_changes_nothing() {
+        let mut ops = fake();
+        ops.nobody = true;
+        let mut c = FsContext::new(b"overlay").unwrap();
+        // Before the parameters are judged (an overlay without lowerdir).
+        assert_eq!(c.config(&Command::Create, &mut ops), Err(Errno::EPERM));
+        assert_eq!(c.config(&Command::CreateExcl, &mut ops), Err(Errno::EPERM));
+        assert_eq!(c.phase(), Phase::Open);
+        assert_eq!(c.config(&Command::Reconfigure, &mut ops), Err(Errno::EBUSY));
+        c.config(&set(b"redirect_dir", Value::String(b"on")), &mut ops).unwrap();
+        ops.nobody = false;
+        assert_eq!(c.config(&Command::Create, &mut ops), Ok(()));
+        assert_eq!(ops.created.clone().unwrap().data, b"redirect_dir=on");
+    }
+
+    #[test]
+    fn a_failed_context_is_busy_for_everything() {
+        let mut ops = fake();
+        let mut c = FsContext::new(b"tmpfs").unwrap();
+        ops.fail = Some(Errno::EINVAL);
+        assert_eq!(c.config(&Command::Create, &mut ops), Err(Errno::EINVAL));
+        ops.fail = None;
+        assert_eq!(c.begin_mount(), Err(Errno::EINVAL));
+        assert_eq!(c.config(&set(b"size", Value::String(b"1m")), &mut ops), Err(Errno::EBUSY));
+        assert_eq!(c.read_log(64), Err(Errno::ENODATA));
+        // After fsmount, a refused reconfigure makes fsmount busy too.
+        let mut c = FsContext::new(b"tmpfs").unwrap();
+        c.config(&Command::Create, &mut ops).unwrap();
+        c.begin_mount().unwrap();
+        ops.fail = Some(Errno::EPERM);
+        assert_eq!(c.config(&Command::Reconfigure, &mut ops), Err(Errno::EPERM));
+        assert_eq!(c.begin_mount(), Err(Errno::EBUSY));
+    }
+
+    #[test]
+    fn overlay_directory_messages_and_lowerdir_plus() {
+        struct Dirs;
+        impl SuperblockOps for Dirs {
+            fn create(&mut self, _: &CreateRequest) -> Result<(), Errno> {
+                Ok(())
+            }
+            fn reconfigure(&mut self, _: Option<bool>, _: &[u8]) -> Result<(), Errno> {
+                Ok(())
+            }
+            fn check_directory(&mut self, path: &[u8]) -> Result<(), Errno> {
+                match path {
+                    b"/file" => Err(Errno::EINVAL),
+                    b"/dir" | b"/dir2" => Ok(()),
+                    _ => Err(Errno::ENOENT),
+                }
+            }
+        }
+        let mut c = FsContext::new(b"overlay").unwrap();
+        let mut ops = Dirs;
+        assert_eq!(c.config(&set(b"lowerdir+", Value::String(b"/missing")), &mut ops), Err(Errno::ENOENT));
+        assert_eq!(c.config(&set(b"lowerdir", Value::String(b"/dir:/file")), &mut ops), Err(Errno::EINVAL));
+        assert_eq!(
+            c.read_log(256).unwrap(),
+            b"e overlay: /file is not a directory
+"
+        );
+        assert_eq!(c.config(&set(b"upperdir", Value::String(b"")), &mut ops), Err(Errno::EINVAL));
+        assert_eq!(
+            c.read_log(256).unwrap(),
+            b"e overlay: Bad value for 'upperdir'
+"
+        );
+        // A trailing ':' says nothing.
+        assert_eq!(c.config(&set(b"lowerdir", Value::String(b"/dir:")), &mut ops), Err(Errno::EINVAL));
+        assert_eq!(c.read_log(256), Err(Errno::ENODATA));
+        assert_eq!(c.config(&set(b"lowerdir+", Value::String(b"/dir")), &mut ops), Ok(()));
+        assert_eq!(c.config(&set(b"lowerdir+", Value::String(b"/dir2")), &mut ops), Ok(()));
+        assert_eq!(c.data(), b"lowerdir+=/dir,lowerdir+=/dir2");
     }
 }

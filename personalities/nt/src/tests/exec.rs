@@ -81,6 +81,7 @@ fn a_second_threads_stack_grows_too() {
         stack_commit: 0,
         suspended: false,
         desired_access: 0x1F_FFFF,
+        security: None,
     };
     let t = exec::create_thread(&mut f.sys, &mut f.proc, &mut f.mem, &req, tid).unwrap();
     let guard = t.stack_limit - 0x1000;
@@ -136,6 +137,7 @@ fn a_new_threads_stack_grows_through_its_guard_page_too() {
         stack_commit: 0,
         suspended: false,
         desired_access: 0x1F_FFFF,
+        security: None,
     };
     let t = ThreadRef(TID.0 + 1);
     let s = exec::create_thread(&mut f.sys, &mut f.proc, &mut f.mem, &req, t).unwrap();

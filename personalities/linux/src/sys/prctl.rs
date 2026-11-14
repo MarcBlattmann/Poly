@@ -129,7 +129,12 @@ pub fn prctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         }
         PR_GET_KEEPCAPS => Ok(u64::from(cred::current(k).keep_caps)),
         PR_SET_KEEPCAPS => {
+            // The value is judged first, then the argument after it (the
+            // spec sheet of seccomp_prctl), both before the lock.
             let keep = bool_arg(arg2)?;
+            if a.ulong(2) != 0 {
+                return Err(Errno::EINVAL);
+            }
             cred::change(k, |c| c.set_keep_caps(keep)).map(|()| 0)
         }
         PR_GET_SECUREBITS => Ok(u64::from(cred::current(k).securebits())),

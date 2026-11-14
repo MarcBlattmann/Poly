@@ -515,6 +515,10 @@ fn button_event(down: bool) -> String {
     format!(r#"{{"type": "btn", "data": {{"down": {down}, "button": "left"}}}}"#)
 }
 
+fn right_button_event(down: bool) -> String {
+    format!(r#"{{"type": "btn", "data": {{"down": {down}, "button": "right"}}}}"#)
+}
+
 /// A tablet position for logical pixel (`x`, `y`) (as `desktop.rs`).
 fn abs_events(x: i32, y: i32) -> Vec<String> {
     let (w, h) = (i64::from(SIZE.0) - 1, i64::from(SIZE.1) - 1);
@@ -618,6 +622,14 @@ impl Machine {
         self.send_events(&[button_event(false)])
     }
 
+    /// A click of the right button at (`x`, `y`): the context menu.
+    pub(crate) fn right_click(&mut self, x: i32, y: i32) -> Result {
+        self.send_events(&abs_events(x, y))?;
+        std::thread::sleep(Duration::from_millis(300));
+        self.send_events(&[right_button_event(true)])?;
+        self.send_events(&[right_button_event(false)])
+    }
+
     /// A double click at (`x`, `y`): two presses well within the 400 ms
     /// Poly's apps count as one (`poly-app`), which [`Machine::click`]
     /// twice is too slow for.
@@ -632,9 +644,17 @@ impl Machine {
         Ok(())
     }
 
+    /// Press and release a key; `ctrl+o` style chords press the keys in
+    /// order and release them in reverse.
     pub(crate) fn key(&mut self, qcode: &str) -> Result {
-        self.send_events(&[key_event(qcode, true)])?;
-        self.send_events(&[key_event(qcode, false)])
+        let keys: Vec<&str> = qcode.split('+').collect();
+        for k in &keys {
+            self.send_events(&[key_event(k, true)])?;
+        }
+        for k in keys.iter().rev() {
+            self.send_events(&[key_event(k, false)])?;
+        }
+        Ok(())
     }
 
     pub(crate) fn type_text(&mut self, text: &str) -> Result {

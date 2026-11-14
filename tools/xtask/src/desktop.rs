@@ -75,7 +75,7 @@ use std::time::{Duration, Instant};
 /// The screen the desktop boots on.
 pub const SIZE: (u32, u32) = (1280, 800);
 /// What the compositor prints when the first frame is on the screen.
-const READY: &str = "poly-compositor: desktop ready";
+pub(crate) const READY: &str = "poly-compositor: desktop ready";
 /// The demo client's colours (`poly_wl_demo::demo`) and the ridge's.
 const DEMO_A: [u8; 3] = [0x2f, 0x7d, 0x6d];
 const DEMO_B: [u8; 3] = [0xc0, 0x8a, 0x2e];
@@ -258,7 +258,7 @@ pub fn image(test_apps: bool) -> Result<PathBuf> {
 
 /// [`image`] with `extra` files (path, mode, bytes) instead of the Windows
 /// app, written to `name`.
-fn image_with(name: &str, test_apps: bool, extra: Vec<(String, u16, Vec<u8>)>) -> Result<PathBuf> {
+pub(crate) fn image_with(name: &str, test_apps: bool, extra: Vec<(String, u16, Vec<u8>)>) -> Result<PathBuf> {
     build_image(name, test_apps, move || extra)
 }
 
