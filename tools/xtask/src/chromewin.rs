@@ -441,6 +441,8 @@ pub struct Debugging {
     /// The call tracer also writes its ring this many seconds after a process started
     /// (`--ring-at`): what a process that went quiet did last.
     pub ring_at: Option<u32>,
+    /// The kernel logs where the frames are every N seconds (`--mem[=N]`: `poly.nt.mem`, ADR 0188).
+    pub mem: Option<u32>,
 }
 
 static DEBUGGING: std::sync::Mutex<Option<Debugging>> = std::sync::Mutex::new(None);
@@ -751,7 +753,7 @@ pub const CPUS: u32 = 4;
 
 /// `cargo xtask chrome-win run [--stage N] [--trace] [--exceptions[=N]] [--waits[=SECS]] [--release]
 /// [--fresh-disk] [--timeout SECS] [--chrome-arg ARG]... [--launch-seconds N] [--trace-only TEXT]
-/// [--trace-ring N] [--ring-at SECS] [--trace-first] [--trail N] [--trail-skip NAMES] [--memory=SIZE]
+/// [--trace-ring N] [--ring-at SECS] [--trace-first] [--trail N] [--trail-skip NAMES] [--mem[=SECS]] [--memory=SIZE]
 /// [--cpus=N]`: boot a
 /// stage headless (the kernel mounts the disk and runs the launcher as its
 /// first program), collect the serial log, print what it says. Works on
@@ -789,6 +791,10 @@ fn run(args: &[String]) -> Result {
             "--chrome-arg" => debugging.chrome_args.push(it.next().ok_or("--chrome-arg needs an argument")?.clone()),
             "--trace-only" => debugging.trace_only = Some(it.next().ok_or("--trace-only needs a text")?.clone()),
             "--trace-first" => debugging.trace_first = true,
+            "--mem" => debugging.mem = Some(5),
+            m if m.starts_with("--mem=") => {
+                debugging.mem = Some(m["--mem=".len()..].parse().map_err(|e| format!("--mem: {e}"))?)
+            }
             "--trail-skip" => debugging.trail_skip = Some(it.next().ok_or("--trail-skip needs names")?.clone()),
             "--ring-at" => {
                 debugging.ring_at =
@@ -891,6 +897,9 @@ pub fn debugging_kernel_arguments(d: &Debugging) -> String {
     if let Some(skip) = &d.trail_skip {
         more.push_str(" poly.nt.trail.skip=");
         more.push_str(skip);
+    }
+    if let Some(n) = d.mem {
+        more.push_str(&format!(" poly.nt.mem={n}"));
     }
     more
 }
@@ -1266,6 +1275,8 @@ mod tests {
         assert_eq!(trace_env(&ring), "POLYTRACE_RING=500 POLYTRACE_ONLY=--type=renderer");
         let kernel = Debugging { trail: Some(128), ..ring };
         assert_eq!(debugging_kernel_arguments(&kernel), " poly.nt.only=--type=renderer poly.nt.trail=128");
+        let mem = Debugging { mem: Some(3), ..Debugging::default() };
+        assert_eq!(debugging_kernel_arguments(&mem), " poly.nt.mem=3");
     }
 
     #[test]

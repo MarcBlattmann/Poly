@@ -303,6 +303,13 @@ static EXCEPTIONS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32
 static WAITS_EVERY: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 static WAITS_STARTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
+/// `poly.nt.mem[=SECONDS]` (default 5): every that many seconds a kernel thread logs where the
+/// frames are (`nt-mem:` lines: free, user pages, page cache, kernel heap, the rest: page tables
+/// and kernel stacks) and, per NT process, its resident pages: its own frames, page-cache pages and
+/// shared frames (ADR 0188). 0 is off.
+static MEM_EVERY: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+static MEM_STARTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
 /// `poly.nt.trail[=N]` (`poly_personality_nt::trace::TRAIL_FLAG`): the calls each process keeps;
 /// 0 is off.
 static TRAIL_LEN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
@@ -323,7 +330,9 @@ static ONLY_SET: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool
 
 /// Whether a diagnostic needs the processes' command lines.
 fn wants_command_lines() -> bool {
-    WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 || ONLY_SET.load(core::sync::atomic::Ordering::Relaxed)
+    WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0
+        || MEM_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0
+        || ONLY_SET.load(core::sync::atomic::Ordering::Relaxed)
 }
 
 /// The calling process's command line (`PEB.ProcessParameters` at PEB + 0x20,
@@ -371,14 +380,64 @@ fn write_trail(pid: u32, tid: u32, code: u32) {
     }
 }
 
-/// Start the wait reporter once, with the first NT program.
+/// Start the wait reporter (and the memory reporter) once, with the first NT program.
 fn start_waits_reporter() {
     use core::sync::atomic::Ordering::SeqCst;
+    if MEM_EVERY.load(SeqCst) != 0
+        && !MEM_STARTED.swap(true, SeqCst)
+        && let Ok(tid) = thread::spawn_named("nt-mem", mem_main, 0)
+    {
+        let _ = thread::detach(tid);
+    }
     if WAITS_EVERY.load(SeqCst) == 0 || WAITS_STARTED.swap(true, SeqCst) {
         return;
     }
     if let Ok(tid) = thread::spawn_named("nt-waits", waits_main, 0) {
         let _ = thread::detach(tid);
+    }
+}
+
+/// One `poly.nt.mem` report: the frame allocator's frames by user, then every NT process's pages.
+pub fn log_memory() {
+    let (free, total) = crate::frames::FRAMES.lock().as_ref().map_or((0, 0), |f| (f.free_frames(), f.total_frames()));
+    let user = user::user_frames();
+    let cache = crate::fs::cache::frames();
+    let heap = crate::heap::stats().pages_held as u64;
+    let rest = total.saturating_sub(free + user + cache + heap);
+    crate::kprintln!(
+        "nt-mem: at {} ms frames total {total} free {free} user {user} cache {cache} heap {heap} rest {rest} MiB: free {} user {} cache {} heap {} rest {}",
+        crate::time::now_ns() / 1_000_000,
+        free / 256,
+        user / 256,
+        cache / 256,
+        heap / 256,
+        rest / 256
+    );
+    let mut sum = [0u64; 3];
+    for (pid, memory) in io::memories() {
+        let (resident, cached, shared) = memory.page_counts();
+        let own = resident.saturating_sub(cached + shared);
+        sum[0] += own;
+        sum[1] += cached;
+        sum[2] += shared;
+        let line = COMMAND_LINES.lock().get(&pid).cloned().unwrap_or_default();
+        let kind = line.split(' ').find(|a| a.starts_with("--type=")).unwrap_or("");
+        crate::kprintln!("nt-mem: p{pid} own {own} cached {cached} shared {shared} pages {kind}");
+    }
+    let (images, made, found) = backend::image_share_counts();
+    crate::kprintln!(
+        "nt-mem: all NT processes own {} cached {} shared {} pages; {images} images share pages, {made} image pages made, {found} faults found a shared one",
+        sum[0],
+        sum[1],
+        sum[2]
+    );
+}
+
+fn mem_main(_: usize) -> usize {
+    let every = u64::from(MEM_EVERY.load(core::sync::atomic::Ordering::SeqCst).max(1));
+    loop {
+        thread::sleep(core::time::Duration::from_secs(every));
+        log_memory();
     }
 }
 
@@ -472,6 +531,11 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
         *ONLY.lock() = String::from(only);
         ONLY_SET.store(true, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: the trace and the trail are kept for processes whose command line has {only:?}");
+    }
+    if let Some(v) = boot.arg("poly.nt.mem") {
+        MEM_EVERY.store(v.parse().unwrap_or(5), core::sync::atomic::Ordering::Relaxed);
+    } else if boot.has_flag("poly.nt.mem") {
+        MEM_EVERY.store(5, core::sync::atomic::Ordering::Relaxed);
     }
     if let Some(v) = boot.arg("poly.nt.waits") {
         WAITS_EVERY.store(v.parse().unwrap_or(30), core::sync::atomic::Ordering::Relaxed);

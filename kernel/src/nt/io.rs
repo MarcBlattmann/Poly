@@ -79,6 +79,11 @@ pub(super) fn memory_of(pid: u32) -> Option<Arc<Memory>> {
     MEMORY.lock().get(&pid).and_then(Weak::upgrade)
 }
 
+/// Every running NT process's memory, by process id (`poly.nt.mem`).
+pub(super) fn memories() -> alloc::vec::Vec<(u32, Arc<Memory>)> {
+    MEMORY.lock().iter().filter_map(|(pid, m)| Some((*pid, m.upgrade()?))).collect()
+}
+
 /// NT process `pid` has ended.
 pub(super) fn unregister(pid: u32) {
     MEMORY.lock().remove(&pid);

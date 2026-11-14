@@ -713,6 +713,14 @@ impl Memory {
         self.space.resident_pages() + inner.parked.len() as u64 + inner.cached.len() as u64 + inner.shared.len() as u64
     }
 
+    /// Resident pages ([`Memory::resident_pages`]), and how many of them map a page-cache page and
+    /// a shared frame: the rest are the memory's own frames.
+    pub fn page_counts(&self) -> (u64, u64, u64) {
+        let inner = self.inner.lock();
+        let (cached, shared) = (inner.cached.len() as u64, inner.shared.len() as u64);
+        (self.space.resident_pages() + inner.parked.len() as u64 + cached + shared, cached, shared)
+    }
+
     /// Pages that map a page-cache page.
     pub fn cached_pages(&self) -> u64 {
         self.inner.lock().cached.len() as u64
