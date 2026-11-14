@@ -311,6 +311,8 @@ pub const DISK_FILE: &str = "poly-chrome-win-disk.img";
 /// Where Chrome is on the disk, and as the DOS path programs see.
 pub const APP_ON_DISK: &str = "poly/nt/c/Program Files/Chrome";
 pub const APP_DOS: &str = "C:\\Program Files\\Chrome";
+/// Changes when what the disk carries of Poly's fonts changes (the disk is made again).
+const FONTS_STAMP: &str = "fonts-0181-dejavu";
 /// The test directory on the disk (`C:\poly-test`): the launcher, the
 /// stages, the pages.
 pub const TEST_ON_DISK: &str = "poly/nt/c/poly-test";
@@ -478,6 +480,11 @@ pub fn tree(launcher: &[u8], probe: &[u8], polystub: &[u8], kit: Option<&Path>) 
     tree.file(&format!("{TEST_ON_DISK}/{LAUNCHER}.exe"), 0o755, launcher);
     tree.file(&format!("{TEST_ON_DISK}/{PROBE}.exe"), 0o755, probe);
     tree.file(&format!("{SYSTEM32_ON_DISK}/{}", poly_stubs::STUB_DLL), 0o755, polystub);
+    // Poly's fonts (ADR 0181): Windows programs get DirectWrite's system collection and GDI's faces from
+    // `C:\Windows\Fonts`. Without them Chrome's UI font set-up found no face and started over until its
+    // stack was full (stage 1, ADR 0155 addendum 9).
+    crate::fonts::fetch_dejavu()?;
+    crate::fonts::add_to_root(&mut tree)?;
     Ok(tree)
 }
 
@@ -543,8 +550,16 @@ pub fn disk_with(fresh: bool, kit: Option<&Path>) -> Result<PathBuf> {
             kit_bytes.extend_from_slice(&std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?);
         }
     }
-    let print =
-        fingerprint(&[VERSION.as_bytes(), &launcher, &stubs, stages.as_bytes(), &s1_page()?, &probe, &kit_bytes]);
+    let print = fingerprint(&[
+        VERSION.as_bytes(),
+        &launcher,
+        &stubs,
+        stages.as_bytes(),
+        &s1_page()?,
+        &probe,
+        &kit_bytes,
+        FONTS_STAMP.as_bytes(),
+    ]);
     if !fresh && image.exists() && std::fs::read_to_string(&stamp).is_ok_and(|s| s.trim() == print) {
         return Ok(image);
     }

@@ -133,15 +133,32 @@ const RASTER: &[(&str, Face, Class)] = &[
 ];
 
 /// TrueType and other outline names programs ask for, and the class of
-/// each. A name ending in `*` stands for every name that starts with it
-/// ("Segoe UI Semibold", "Arial Narrow").
+/// each. A name matches whole, ignoring ASCII case: "Segoe UI PolyNoSuch" is
+/// not "Segoe UI" just because it starts with it (`CreateFontIndirectW.yaml`:
+/// a prefix or an extension of a name does not match). The families Windows
+/// has under several names are listed one by one.
 const NAMES: &[(&str, Class)] = &[
     // Sans serif.
-    ("arial*", Class::Sans),
-    ("segoe ui*", Class::Sans),
+    ("arial", Class::Sans),
+    ("arial black", Class::Sans),
+    ("arial narrow", Class::Sans),
+    ("arial rounded mt bold", Class::Sans),
+    ("arial unicode ms", Class::Sans),
+    ("segoe ui", Class::Sans),
+    ("segoe ui black", Class::Sans),
+    ("segoe ui emoji", Class::Sans),
+    ("segoe ui historic", Class::Sans),
+    ("segoe ui light", Class::Sans),
+    ("segoe ui semibold", Class::Sans),
+    ("segoe ui semilight", Class::Sans),
+    ("segoe ui symbol", Class::Sans),
+    ("segoe ui variable display", Class::Sans),
+    ("segoe ui variable small", Class::Sans),
+    ("segoe ui variable text", Class::Sans),
     ("tahoma", Class::Sans),
     ("verdana", Class::Sans),
-    ("calibri*", Class::Sans),
+    ("calibri", Class::Sans),
+    ("calibri light", Class::Sans),
     ("candara", Class::Sans),
     ("corbel", Class::Sans),
     ("trebuchet ms", Class::Sans),
@@ -149,18 +166,27 @@ const NAMES: &[(&str, Class)] = &[
     ("ms shell dlg", Class::Sans),
     ("ms shell dlg 2", Class::Sans),
     ("ms ui gothic", Class::Sans),
-    ("lucida sans*", Class::Sans),
+    ("lucida sans", Class::Sans),
+    ("lucida sans unicode", Class::Sans),
     ("century gothic", Class::Sans),
-    ("franklin gothic*", Class::Sans),
-    ("helvetica*", Class::Sans),
-    ("open sans*", Class::Sans),
+    ("franklin gothic medium", Class::Sans),
+    ("helvetica", Class::Sans),
+    ("open sans", Class::Sans),
     ("roboto", Class::Sans),
     ("dejavu sans", Class::Sans),
-    ("liberation sans*", Class::Sans),
+    ("liberation sans", Class::Sans),
+    ("liberation sans narrow", Class::Sans),
     ("bitstream vera sans", Class::Sans),
     ("sans-serif", Class::Sans),
-    ("meiryo*", Class::Sans),
-    ("yu gothic*", Class::Sans),
+    ("meiryo", Class::Sans),
+    ("meiryo ui", Class::Sans),
+    ("yu gothic", Class::Sans),
+    ("yu gothic ui", Class::Sans),
+    ("yu gothic light", Class::Sans),
+    ("yu gothic medium", Class::Sans),
+    ("yu gothic ui light", Class::Sans),
+    ("yu gothic ui semibold", Class::Sans),
+    ("yu gothic ui semilight", Class::Sans),
     // Serif.
     ("times new roman", Class::Serif),
     ("times", Class::Serif),
@@ -178,16 +204,17 @@ const NAMES: &[(&str, Class)] = &[
     ("serif", Class::Serif),
     ("ms mincho", Class::Serif),
     // Fixed pitch.
-    ("courier new*", Class::Mono),
+    ("courier new", Class::Mono),
     ("consolas", Class::Mono),
     ("lucida console", Class::Mono),
-    ("cascadia*", Class::Mono),
+    ("cascadia code", Class::Mono),
+    ("cascadia mono", Class::Mono),
     ("andale mono", Class::Mono),
     ("monaco", Class::Mono),
     ("menlo", Class::Mono),
-    ("source code pro*", Class::Mono),
+    ("source code pro", Class::Mono),
     ("dejavu sans mono", Class::Mono),
-    ("liberation mono*", Class::Mono),
+    ("liberation mono", Class::Mono),
     ("bitstream vera sans mono", Class::Mono),
     ("monospace", Class::Mono),
     ("mono", Class::Mono),
@@ -195,7 +222,9 @@ const NAMES: &[(&str, Class)] = &[
 ];
 
 /// `name` lower-cased (ASCII), without a leading `@` (a vertical-writing
-/// variant of the same face), as bytes; non-ASCII names do not match.
+/// variant of the same face), as bytes; non-ASCII names do not match. A
+/// blank before or after the name, or a doubled one, makes another name
+/// (`CreateFontIndirectW.yaml`, rule `names`).
 fn normalise(name: &[u16], out: &mut [u8; 32]) -> usize {
     let name = name.strip_prefix(&[u16::from(b'@')]).unwrap_or(name);
     let mut n = 0;
@@ -204,18 +233,11 @@ fn normalise(name: &[u16], out: &mut [u8; 32]) -> usize {
         out[n] = b.to_ascii_lowercase();
         n += 1;
     }
-    // Trailing blanks do not make another face.
-    while n > 0 && out[n - 1] == b' ' {
-        n -= 1;
-    }
     n
 }
 
 fn matches(pattern: &str, name: &[u8]) -> bool {
-    match pattern.strip_suffix('*') {
-        Some(prefix) => name.starts_with(prefix.as_bytes()),
-        None => name == pattern.as_bytes(),
-    }
+    name == pattern.as_bytes()
 }
 
 /// Map a `LOGFONTW`: by the face name when it is one the table knows, else
@@ -329,7 +351,7 @@ mod tests {
         assert_eq!(fam("Segoe UI"), "DejaVu Sans");
         assert_eq!(fam("segoe ui semibold"), "DejaVu Sans");
         assert_eq!(fam("ARIAL"), "DejaVu Sans");
-        assert_eq!(fam("Arial Narrow"), "DejaVu Sans");
+        assert_eq!(fam("Arial Black"), "DejaVu Sans");
         assert_eq!(fam("Tahoma"), "DejaVu Sans");
         assert_eq!(fam("MS Shell Dlg"), "DejaVu Sans");
         assert_eq!(fam("MS Shell Dlg 2"), "DejaVu Sans");
@@ -339,7 +361,21 @@ mod tests {
         assert_eq!(fam("Consolas"), "DejaVu Sans Mono");
         assert_eq!(fam("Lucida Console"), "DejaVu Sans Mono");
         assert_eq!(fam("@Arial"), "DejaVu Sans");
-        assert_eq!(fam("Arial  "), "DejaVu Sans");
+    }
+
+    #[test]
+    fn a_name_is_matched_whole() {
+        let known = |n: &str| is_known(&lf(n, -12, 400, 0));
+        assert!(known("Segoe UI") && known("segoe ui") && known("@Segoe UI") && known("Segoe UI Semibold"));
+        // A prefix, an extension, a blank before, after or doubled: another name.
+        for n in ["Segoe UI PolyNoSuch", "Segoe", "Aria", "Arial ", " Arial", "Segoe  UI", "Courier New Baltic", ""] {
+            assert!(!known(n), "{n:?}");
+        }
+        // Such a name follows the hints like any unknown one.
+        let m = |n: &str, pf: u8| map(&lf(n, -12, 400, pf)).class;
+        assert_eq!(m("Courier New PolyNoSuch", 0), Class::Sans);
+        assert_eq!(m("Courier New PolyNoSuch", FF_MODERN), Class::Mono);
+        assert_eq!(m("Arial ", FF_ROMAN), Class::Serif);
     }
 
     #[test]

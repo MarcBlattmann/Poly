@@ -280,6 +280,26 @@ fn sync_adds_what_the_layout_needs_and_agrees_with_the_defaults() {
 }
 
 #[test]
+fn the_font_list_names_the_files_of_the_font_store() {
+    // ADR 0181: `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts` lists the twelve DejaVu
+    // files of `C:\Windows\Fonts` as "<face> (TrueType)"; a program's own value survives a sync.
+    let mut reg = registry();
+    sync(&mut reg, &POLY_USER, 1).unwrap();
+    let m = reg.machine();
+    let key = alloc::format!("{}\\Fonts", env::NT_CURRENT_VERSION);
+    for (name, file) in sync::FONT_LIST {
+        assert!(name.ends_with(" (TrueType)") && file.ends_with(".ttf"), "{name}");
+        assert_eq!(value(&reg, m, &key, name), Some((REG_SZ, file.into())), "{name}");
+    }
+    let k = reg.find(m, &key).unwrap();
+    reg.set_value(k, &wide("Arial (TrueType)"), REG_SZ, &sz("arial.ttf"), 2).unwrap();
+    reg.set_value(k, &wide("DejaVu Sans (TrueType)"), REG_SZ, &sz("other.ttf"), 2).unwrap();
+    sync(&mut reg, &POLY_USER, 3).unwrap();
+    assert_eq!(value(&reg, m, &key, "Arial (TrueType)"), Some((REG_SZ, "arial.ttf".into())));
+    assert_eq!(value(&reg, m, &key, "DejaVu Sans (TrueType)"), Some((REG_SZ, "other.ttf".into())));
+}
+
+#[test]
 fn a_second_sync_changes_nothing_and_leaves_the_hives_clean() {
     let mut reg = registry();
     sync(&mut reg, &POLY_USER, 1).unwrap();

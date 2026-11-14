@@ -293,7 +293,8 @@ pub fn fetch() -> Result<PathBuf> {
     fetch_dejavu()
 }
 
-fn fetch_dejavu() -> Result<PathBuf> {
+/// The DejaVu fonts: fetched when they are not in the cache yet.
+pub fn fetch_dejavu() -> Result<PathBuf> {
     if let Some(dir) = cached() {
         eprintln!("==> {} holds the pinned DejaVu {VERSION} fonts", dir.display());
         return Ok(dir);
