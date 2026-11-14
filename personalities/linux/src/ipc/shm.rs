@@ -215,11 +215,41 @@ pub struct ShmTable {
     segments: BTreeMap<i32, Segment>,
     /// The id handed out last (`-1` before the first).
     last: i32,
+    /// The namespace's limits.
+    pub limits: ShmLimits,
+}
+
+/// The limits of one IPC namespace: `/proc/sys/kernel/shmmax`, `shmall`
+/// and `shmmni` (proc_sys_kernel(5)), which a write there changes for
+/// that namespace only (ipc_namespaces(7)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShmLimits {
+    /// The largest segment in bytes (`SHMMAX`).
+    pub max: u64,
+    /// The most pages in all segments (`SHMALL`).
+    pub all: u64,
+    /// The most segments (`SHMMNI`).
+    pub mni: usize,
+}
+
+impl ShmLimits {
+    pub const DEFAULT: ShmLimits = ShmLimits { max: SHMMAX, all: SHMALL, mni: SHMMNI };
+}
+
+impl Default for ShmLimits {
+    fn default() -> ShmLimits {
+        ShmLimits::DEFAULT
+    }
 }
 
 impl ShmTable {
     pub const fn new() -> ShmTable {
-        ShmTable { segments: BTreeMap::new(), last: -1 }
+        ShmTable { segments: BTreeMap::new(), last: -1, limits: ShmLimits::DEFAULT }
+    }
+
+    /// Every segment with its id, in id order (`/proc/sysvipc/shm`).
+    pub fn iter(&self) -> impl Iterator<Item = (i32, &Segment)> {
+        self.segments.iter().map(|(id, s)| (*id, s))
     }
 
     /// Segments that exist, removed ones still attached included.
@@ -306,7 +336,7 @@ impl ShmTable {
                 None => {}
             }
         }
-        if !(SHMMIN..=SHMMAX).contains(&size) {
+        if !(SHMMIN..=self.limits.max).contains(&size) {
             return Err(Errno::EINVAL);
         }
         // The memory is a file of this many bytes: at most the largest
@@ -325,7 +355,7 @@ impl ShmTable {
     /// `ENOSPC` unless one more segment of `pages` fits.
     fn room_for(&self, pages: u64) -> Result<(), Errno> {
         let total = self.segments.values().fold(0u64, |t, s| t.saturating_add(s.pages()));
-        if self.segments.len() >= SHMMNI || total.saturating_add(pages) > SHMALL {
+        if self.segments.len() >= self.limits.mni || total.saturating_add(pages) > self.limits.all {
             return Err(Errno::ENOSPC);
         }
         Ok(())
@@ -369,10 +399,10 @@ impl ShmTable {
 pub const SHMSEG: u64 = SHMMNI as u64;
 
 /// `struct shminfo64` (`asm-generic/shmbuf.h`, nine `unsigned long`s):
-/// the limits `IPC_INFO` writes.
-pub fn shminfo_bytes() -> [u8; 72] {
+/// the limits of a namespace, which `IPC_INFO` writes.
+pub fn shminfo_bytes(l: &ShmLimits) -> [u8; 72] {
     let mut b = [0u8; 72];
-    for (i, v) in [SHMMAX, SHMMIN, SHMMNI as u64, SHMSEG, SHMALL].iter().enumerate() {
+    for (i, v) in [l.max, SHMMIN, l.mni as u64, l.mni as u64, l.all].iter().enumerate() {
         b[i * 8..i * 8 + 8].copy_from_slice(&v.to_ne_bytes());
     }
     b

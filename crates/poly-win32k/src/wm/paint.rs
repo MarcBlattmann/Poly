@@ -320,16 +320,24 @@ impl Wm {
         out
     }
 
-    fn paint_walk(&self, key: Key, any_thread: bool, h: u32, out: &mut Vec<u32>) {
+    /// Updating a window (UpdateWindow, RDW_UPDATENOW) paints its invalid
+    /// children after it in their z order, from the top down: the first
+    /// created is the top one (BeginPaint.yaml `clip_children`;
+    /// bpn_visible: X, Y, Z after their parent). The queue hands WM_PAINT
+    /// to the later-created (lower) sibling first (InvalidateRect.yaml
+    /// `ordering`).
+    fn paint_walk(&self, key: Key, updating: bool, h: u32, out: &mut Vec<u32>) {
         let Some(w) = self.get(u64::from(h)) else { return };
-        if (any_thread || w.thread == key) && self.needs_paint(h) {
+        if (updating || w.thread == key) && self.needs_paint(h) {
             out.push(h);
         }
         let mut kids: Vec<(u64, u32)> =
             w.children.iter().filter_map(|&c| self.get(u64::from(c)).map(|cw| (cw.seq, c))).collect();
-        kids.sort_by_key(|&(seq, _)| core::cmp::Reverse(seq));
+        if !updating {
+            kids.sort_by_key(|&(seq, _)| core::cmp::Reverse(seq));
+        }
         for (_, c) in kids {
-            self.paint_walk(key, any_thread, c, out);
+            self.paint_walk(key, updating, c, out);
         }
     }
 

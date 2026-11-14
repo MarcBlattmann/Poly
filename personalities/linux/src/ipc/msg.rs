@@ -43,6 +43,29 @@ use alloc::vec::Vec;
 pub const MSGMAX: u64 = 8192;
 pub const MSGMNB: u64 = 16384;
 pub const MSGMNI: usize = 32000;
+/// The limits of one IPC namespace: `/proc/sys/kernel/msgmax`, `msgmnb`
+/// and `msgmni` (proc_sys_kernel(5)), which a write there changes for
+/// that namespace only (ipc_namespaces(7)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MsgLimits {
+    /// The largest message (`MSGMAX`).
+    pub max: u64,
+    /// The `msg_qbytes` of a new queue (`MSGMNB`).
+    pub mnb: u64,
+    /// The most queues (`MSGMNI`).
+    pub mni: usize,
+}
+
+impl MsgLimits {
+    pub const DEFAULT: MsgLimits = MsgLimits { max: MSGMAX, mnb: MSGMNB, mni: MSGMNI };
+}
+
+impl Default for MsgLimits {
+    fn default() -> MsgLimits {
+        MsgLimits::DEFAULT
+    }
+}
+
 /// The other `struct msginfo` values `IPC_INFO` reports (`linux/msg.h`).
 pub const MSGPOOL: i32 = (MSGMNI as i32 * MSGMNB as i32) / 1024;
 pub const MSGMAP: i32 = MSGMNB as i32;
@@ -215,11 +238,25 @@ pub struct MsgTable {
     serials: u64,
     tickets: u64,
     sleepers: Vec<Sleeper>,
+    /// The namespace's limits.
+    pub limits: MsgLimits,
 }
 
 impl MsgTable {
     pub const fn new() -> MsgTable {
-        MsgTable { queues: BTreeMap::new(), last: -1, serials: 0, tickets: 0, sleepers: Vec::new() }
+        MsgTable {
+            queues: BTreeMap::new(),
+            last: -1,
+            serials: 0,
+            tickets: 0,
+            sleepers: Vec::new(),
+            limits: MsgLimits::DEFAULT,
+        }
+    }
+
+    /// Every queue with its id, in id order (`/proc/sysvipc/msg`).
+    pub fn iter(&self) -> impl Iterator<Item = (i32, &Queue)> {
+        self.queues.iter().map(|(id, q)| (*id, q))
     }
 
     pub fn len(&self) -> usize {
@@ -258,8 +295,8 @@ impl MsgTable {
     /// key that no queue has is `ENOENT` without [`IPC_CREAT`], else a new
     /// queue; a key in use is `EEXIST` with `IPC_CREAT | IPC_EXCL`, then
     /// `EACCES` if the access asked for in `flags & 0777` is not granted.
-    /// A new queue needs room ([`MSGMNI`]: `ENOSPC`); its mode is
-    /// `flags & 0777`, its byte limit [`MSGMNB`].
+    /// A new queue needs room (the namespace's `msgmni`: `ENOSPC`); its
+    /// mode is `flags & 0777`, its byte limit the namespace's `msgmnb`.
     pub fn get(&mut self, key: i32, flags: u32, who: &Who, now: i64) -> Result<i32, Errno> {
         if key != IPC_PRIVATE {
             match self.queues.iter().find(|(_, q)| q.key == key) {
@@ -276,7 +313,7 @@ impl MsgTable {
                 None => {}
             }
         }
-        if self.queues.len() >= MSGMNI {
+        if self.queues.len() >= self.limits.mni {
             return Err(Errno::ENOSPC);
         }
         let mut id = self.last;
@@ -298,7 +335,7 @@ impl MsgTable {
             stime: 0,
             rtime: 0,
             ctime: now,
-            qbytes: MSGMNB,
+            qbytes: self.limits.mnb,
             lspid: 0,
             lrpid: 0,
             messages: VecDeque::new(),
@@ -507,11 +544,12 @@ impl MsgTable {
         map: impl FnOnce(u32, u32) -> Result<(u32, u32), Errno>,
         now: i64,
     ) -> Result<Vec<i32>, Errno> {
+        let mnb = self.limits.mnb;
         let q = self.queues.get_mut(&id).ok_or(Errno::EINVAL)?;
         if !q.owned_by(who) {
             return Err(Errno::EPERM);
         }
-        if qbytes > MSGMNB && !sys_resource {
+        if qbytes > mnb && !sys_resource {
             return Err(Errno::EPERM);
         }
         let (uid, gid) = map(uid, gid)?;
@@ -644,17 +682,18 @@ impl MsqidDs {
 }
 
 /// `struct msginfo` (`linux/msg.h`), 32 bytes: what `IPC_INFO` (the
-/// limits) and `MSG_INFO` (with use counts in `msgpool`, `msgmap` and
-/// `msgtql`) write.
-pub fn msginfo_bytes(table: Option<&MsgTable>) -> [u8; 32] {
-    let (pool, map, tql) = match table {
-        Some(t) => {
-            let (n, b) = t.totals();
-            (t.len() as i32, n as i32, b as i32)
-        }
-        None => (MSGPOOL, MSGMAP, MSGTQL),
+/// limits of `table`'s namespace) and `MSG_INFO` (`in_use`: with use
+/// counts in `msgpool`, `msgmap` and `msgtql`) write.
+pub fn msginfo_bytes(table: &MsgTable, in_use: bool) -> [u8; 32] {
+    let (pool, map, tql) = if in_use {
+        let (n, b) = table.totals();
+        (table.len() as i32, n as i32, b as i32)
+    } else {
+        (MSGPOOL, MSGMAP, MSGTQL)
     };
-    let ints = [pool, map, MSGMAX as i32, MSGMNB as i32, MSGMNI as i32, MSGSSZ, tql];
+    let l = table.limits;
+    let int = |v: u64| v.min(i32::MAX as u64) as i32;
+    let ints = [pool, map, int(l.max), int(l.mnb), int(l.mni as u64), MSGSSZ, tql];
     let mut b = [0u8; 32];
     for (i, v) in ints.iter().enumerate() {
         b[i * 4..i * 4 + 4].copy_from_slice(&v.to_ne_bytes());
@@ -819,7 +858,7 @@ mod tests {
         let b = ds.to_bytes();
         assert_eq!(&b[96..104], &[9, 0, 0, 0, 8, 0, 0, 0]);
         assert_eq!(MsqidDs::set_from_bytes(&b), (1, 2, 0, 77));
-        let info = msginfo_bytes(None);
+        let info = msginfo_bytes(&MsgTable::new(), false);
         assert_eq!(&info[0..4], &512_000i32.to_ne_bytes());
         assert_eq!(&info[28..30], &[0xff, 0xff]);
     }

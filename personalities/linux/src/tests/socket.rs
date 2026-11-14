@@ -55,6 +55,8 @@ pub struct FakeNet {
     pub timed: bool,
     pub names: BTreeMap<(i32, bool), SockAddr>,
     pub outq: usize,
+    /// The network namespace its sockets are in.
+    pub netns: Option<std::sync::Arc<crate::ns::NetNs>>,
 }
 
 impl FakeNet {
@@ -178,6 +180,11 @@ impl LinuxNet for FakeNet {
         self.sock(fd)?;
         Ok(self.outq)
     }
+
+    fn netns(&mut self, fd: i32) -> Result<Option<std::sync::Arc<crate::ns::NetNs>>, Errno> {
+        self.sock(fd)?;
+        Ok(self.netns.clone())
+    }
 }
 
 fn kernel() -> FakeKernel {
@@ -210,6 +217,14 @@ fn socket_checks_domain_type_and_protocol() {
     assert_eq!(ok(10, 2, 58).map(|k| k.protocol), Ok(58));
     assert_eq!(ok(2, 1, 17), Err(Errno::EPROTONOSUPPORT));
     assert_eq!(ok(2, 5, 0), Err(Errno::ESOCKTNOSUPPORT));
+    // Raw sockets (raw(7), packet(7)).
+    assert_eq!(ok(2, 3, 255), Ok(Kind { family: Family::Inet, ty: SockType::Raw, protocol: 255 }));
+    assert_eq!(ok(10, 3, 58).map(|k| k.protocol), Ok(58));
+    assert_eq!(ok(2, 3, 0), Err(Errno::EPROTONOSUPPORT));
+    assert_eq!(ok(2, 3, 256), Err(Errno::EPROTONOSUPPORT));
+    assert_eq!(ok(17, 3, 0x300), Ok(Kind { family: Family::Packet, ty: SockType::Raw, protocol: 0x300 }));
+    assert_eq!(ok(17, 2, 0).map(|k| k.ty), Ok(SockType::Datagram));
+    assert_eq!(ok(17, 1, 0), Err(Errno::ESOCKTNOSUPPORT));
     assert_eq!(ok(1, 5, 0).map(|k| k.ty), Ok(SockType::SeqPacket));
     assert_eq!(ok(1, 1, 1).map(|k| k.protocol), Ok(0), "PF_UNIX as protocol");
     assert_eq!(ok(1, 1, 6), Err(Errno::EPROTONOSUPPORT));
@@ -676,4 +691,112 @@ fn ioctl_siocoutq_on_sockets() {
     k.files.insert(fd, File::new(super::fake::Kind::Pipe));
     assert_eq!(sys(&mut k, nr::IOCTL, &[fd as u64, u64::from(abi::SIOCOUTQ), S]), Ok(0));
     assert_eq!(k.peek_u32(S), 1234);
+}
+
+/// The netns_loopback sheet's ownership rules: raw sockets need
+/// `CAP_NET_RAW` in the user namespace that owns the caller's network
+/// namespace.
+#[test]
+fn raw_sockets_need_cap_net_raw_in_the_namespaces_owner() {
+    use crate::task::clone::{CLONE_NEWNET, CLONE_NEWUSER};
+    let raw_inet = |k: &mut FakeKernel| sys(k, nr::SOCKET, &[2, 3, 255]);
+    let raw_packet = |k: &mut FakeKernel| sys(k, nr::SOCKET, &[17, 3, 0x300]);
+    // No capabilities in the initial user namespace.
+    let mut k = kernel();
+    assert_eq!(raw_inet(&mut k), Err(Errno::EPERM));
+    assert_eq!(raw_packet(&mut k), Err(Errno::EPERM));
+    assert_eq!(sys(&mut k, nr::SOCKET, &[17, 2, 0]), Err(Errno::EPERM), "a packet socket of any type");
+    assert!(sys(&mut k, nr::SOCKET, &[2, 2, 0]).is_ok(), "datagram sockets work");
+    assert!(sys(&mut k, nr::SOCKET, &[16, 3, 0]).is_ok(), "and rtnetlink");
+    assert_eq!(sys(&mut k, nr::SOCKET, &[2, 3, 0]), Err(Errno::EPROTONOSUPPORT), "the kind is checked first");
+    // A new user namespace alone: the network namespace keeps its owner.
+    assert_eq!(sys(&mut k, nr::UNSHARE, &[CLONE_NEWUSER]), Ok(0));
+    assert!(k.creds().capable(crate::cred::cap::NET_RAW), "root in the new user namespace");
+    assert_eq!(raw_inet(&mut k), Err(Errno::EPERM));
+    assert_eq!(raw_packet(&mut k), Err(Errno::EPERM));
+    // With a network namespace of its own: owned by the new user namespace.
+    let mut k = kernel();
+    assert_eq!(sys(&mut k, nr::UNSHARE, &[CLONE_NEWUSER | CLONE_NEWNET]), Ok(0));
+    assert!(raw_inet(&mut k).is_ok());
+    assert!(raw_packet(&mut k).is_ok());
+    // The capability in the initial namespace.
+    let mut k = kernel();
+    k.creds_mut().caps = crate::cred::Caps::ROOT;
+    assert!(raw_inet(&mut k).is_ok());
+    k.creds_mut().caps = crate::cred::Caps::NONE;
+    assert_eq!(raw_inet(&mut k), Err(Errno::EPERM));
+}
+
+/// The interface requests on a socket of a new network namespace
+/// (netdevice(7), the netns_loopback sheet).
+#[test]
+fn interface_ioctls_act_on_the_sockets_network_namespace() {
+    use crate::net::dev::*;
+    use crate::task::clone::{CLONE_NEWNET, CLONE_NEWUSER};
+    let mut k = kernel();
+    assert_eq!(sys(&mut k, nr::UNSHARE, &[CLONE_NEWUSER | CLONE_NEWNET]), Ok(0));
+    let ns = k.me().ns.net.clone();
+    assert!(ns.is_some());
+    net(&mut k).netns = ns.clone();
+    let fd = net(&mut k).add(Family::Inet, SockType::Datagram) as u64;
+    let ifreq = |k: &mut FakeKernel, request: u32, name: &[u8], value: u16| {
+        let mut r = [0u8; 40];
+        r[..name.len()].copy_from_slice(name);
+        r[16..18].copy_from_slice(&value.to_le_bytes());
+        k.poke(S, &r);
+        sys(k, nr::IOCTL, &[fd, u64::from(request), S]).map(|_| k.peek(S, 40))
+    };
+    let flags = |k: &mut FakeKernel| ifreq(k, SIOCGIFFLAGS, b"lo", 0).map(|r| u16::from_le_bytes([r[16], r[17]]));
+    assert_eq!(flags(&mut k), Ok(0x8), "down");
+    assert_eq!(ifreq(&mut k, SIOCGIFADDR, b"lo", 0), Err(Errno::EADDRNOTAVAIL));
+    assert_eq!(ifreq(&mut k, SIOCGIFFLAGS, b"eth0", 0), Err(Errno::ENODEV));
+    assert_eq!(ifreq(&mut k, SIOCGIFMTU, b"lo", 0).map(|r| r[16..20].to_vec()), Ok(65536i32.to_le_bytes().to_vec()));
+    // SIOCGIFCONF: nothing while lo is down; ifc_len comes back as 0.
+    let conf = |k: &mut FakeKernel, len: i32, buf: u64| {
+        let mut c = [0u8; 16];
+        c[0..4].copy_from_slice(&len.to_le_bytes());
+        c[8..16].copy_from_slice(&buf.to_le_bytes());
+        k.poke(S + 0x100, &c);
+        sys(k, nr::IOCTL, &[fd, u64::from(SIOCGIFCONF), S + 0x100]).map(|_| k.peek_u32(S + 0x100))
+    };
+    assert_eq!(conf(&mut k, 400, S + 0x200), Ok(0));
+    assert_eq!(conf(&mut k, -1, S + 0x200), Err(Errno::EINVAL));
+    // Up, as bubblewrap does it.
+    assert!(ifreq(&mut k, SIOCSIFFLAGS, b"lo", 0x49).is_ok());
+    assert!(ns.as_ref().unwrap().with_devices(|d| d.lo_up()));
+    assert_eq!(flags(&mut k), Ok(0x49));
+    assert_eq!(ifreq(&mut k, SIOCGIFADDR, b"lo", 0).map(|r| r[20..24].to_vec()), Ok(vec![127, 0, 0, 1]));
+    assert_eq!(conf(&mut k, 400, S + 0x200), Ok(40));
+    assert_eq!(k.peek(S + 0x200, 3), [b'l', b'o', 0]);
+    assert_eq!(k.peek(S + 0x200 + 20, 4), [127, 0, 0, 1]);
+    assert_eq!(conf(&mut k, 0, 0), Ok(40), "a null buffer asks for the size");
+    assert_eq!(ifreq(&mut k, SIOCSIFFLAGS, b"eth0", 1), Err(Errno::ENODEV));
+    assert_eq!(ifreq(&mut k, SIOCSIFMTU, b"lo", 1500), Err(Errno::EOPNOTSUPP));
+    // Down again.
+    assert!(ifreq(&mut k, SIOCSIFFLAGS, b"lo", 0).is_ok());
+    assert_eq!(flags(&mut k), Ok(0x8));
+    assert_eq!(sys(&mut k, nr::IOCTL, &[fd, u64::from(SIOCGIFFLAGS), UNMAPPED]), Err(Errno::EFAULT));
+
+    // Without CAP_NET_ADMIN in the owner of the socket's namespace: the
+    // getters work, the setters are EPERM, before the device is looked up.
+    k.creds_mut().caps = crate::cred::Caps::NONE;
+    assert_eq!(flags(&mut k), Ok(0x8));
+    assert_eq!(ifreq(&mut k, SIOCSIFFLAGS, b"lo", 0x49), Err(Errno::EPERM));
+    assert_eq!(ifreq(&mut k, SIOCSIFFLAGS, b"eth0", 0x49), Err(Errno::EPERM));
+    assert!(!ns.as_ref().unwrap().with_devices(|d| d.lo_up()));
+
+    // A socket of the initial namespace held by root of a new user
+    // namespace: its devices are not that root's to change.
+    let mut k = kernel();
+    assert_eq!(sys(&mut k, nr::UNSHARE, &[CLONE_NEWUSER]), Ok(0));
+    let fd = net(&mut k).add(Family::Inet, SockType::Datagram) as u64;
+    let mut r = [0u8; 40];
+    r[..2].copy_from_slice(b"lo");
+    k.poke(S, &r);
+    assert_eq!(sys(&mut k, nr::IOCTL, &[fd, u64::from(SIOCSIFFLAGS), S]), Err(Errno::EPERM));
+    assert_eq!(sys(&mut k, nr::IOCTL, &[fd, u64::from(SIOCGIFFLAGS), S]), Ok(0));
+    let got = k.peek(S + 16, 2);
+    assert_eq!(u16::from_le_bytes([got[0], got[1]]), 0x49, "the initial lo is up");
+    // Not a socket: the request is not an interface request to answer.
+    assert_ne!(sys(&mut k, nr::IOCTL, &[1, u64::from(SIOCGIFFLAGS), S]), Ok(0));
 }

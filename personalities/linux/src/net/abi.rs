@@ -23,6 +23,8 @@ pub const AF_UNIX: u16 = 1;
 pub const AF_INET: u16 = 2;
 pub const AF_INET6: u16 = 10;
 pub const AF_NETLINK: u16 = 16;
+/// `AF_PACKET` (`linux/socket.h`).
+pub const AF_PACKET: u16 = 17;
 
 pub const SOCK_STREAM: u32 = 1;
 pub const SOCK_DGRAM: u32 = 2;

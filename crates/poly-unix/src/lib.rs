@@ -276,6 +276,9 @@ struct State {
 /// One Unix domain socket.
 pub struct UnixSocket {
     ns: Arc<Namespace>,
+    /// The network namespace it was made in ([`UnixSocket::new_in`]): its
+    /// abstract names are that namespace's.
+    scope: u32,
     kind: SocketType,
     queue: Arc<WaitQueue>,
     state: SpinMutex<State>,
@@ -302,13 +305,18 @@ type PathKey = (u32, u32, u64);
 
 #[derive(Default)]
 struct Names {
-    abstract_names: BTreeMap<Vec<u8>, Weak<UnixSocket>>,
+    /// By scope (the network namespace) and name.
+    abstract_names: BTreeMap<(u32, Vec<u8>), Weak<UnixSocket>>,
     paths: BTreeMap<PathKey, Weak<UnixSocket>>,
     next_auto: u32,
 }
 
-/// Socket names and descriptors in flight: one per system (or per network
-/// namespace, later).
+/// Socket names and descriptors in flight: one per system. Abstract names
+/// are kept per scope, a number that stands for a network namespace
+/// (unix(7): the abstract namespace belongs to the network namespace; 0 is
+/// the initial one), while sockets bound to paths are found through the
+/// file system by anyone who can reach the path, and descriptors in flight
+/// may cross between scopes.
 #[derive(Default)]
 pub struct Namespace {
     names: SpinMutex<Names>,
@@ -362,9 +370,14 @@ impl Namespace {
         Arc::new(Namespace::default())
     }
 
-    /// The socket bound to abstract name `name`, if one is.
+    /// The socket bound to abstract name `name` in scope 0, if one is.
     pub fn lookup_abstract(&self, name: &[u8]) -> Option<Arc<UnixSocket>> {
-        self.names.lock().abstract_names.get(name).and_then(Weak::upgrade)
+        self.lookup_abstract_in(0, name)
+    }
+
+    /// The socket bound to abstract name `name` in `scope`, if one is.
+    pub fn lookup_abstract_in(&self, scope: u32, name: &[u8]) -> Option<Arc<UnixSocket>> {
+        self.names.lock().abstract_names.get(&(scope, name.to_vec())).and_then(Weak::upgrade)
     }
 
     /// The socket a path names, for `connect` and `sendto`: `ENOENT` and
@@ -409,8 +422,9 @@ impl Namespace {
         let is_me = |w: &Weak<UnixSocket>| w.upgrade().is_none_or(|s| core::ptr::eq(&*s, sock));
         match name {
             Address::Abstract(a) => {
-                if n.abstract_names.get(a).is_some_and(is_me) {
-                    n.abstract_names.remove(a);
+                let key = (sock.scope, a.clone());
+                if n.abstract_names.get(&key).is_some_and(is_me) {
+                    n.abstract_names.remove(&key);
                 }
             }
             Address::Path(_) => {
@@ -427,10 +441,17 @@ impl Namespace {
 
 impl UnixSocket {
     /// A new, unconnected socket owned by a process with credentials
-    /// `creds`.
+    /// `creds`, in scope 0.
     pub fn new(ns: &Arc<Namespace>, kind: SocketType, creds: Credentials) -> Arc<UnixSocket> {
+        UnixSocket::new_in(ns, 0, kind, creds)
+    }
+
+    /// A new, unconnected socket made in `scope` (see [`Namespace`]) by a
+    /// process with credentials `creds`.
+    pub fn new_in(ns: &Arc<Namespace>, scope: u32, kind: SocketType, creds: Credentials) -> Arc<UnixSocket> {
         Arc::new(UnixSocket {
             ns: Arc::clone(ns),
+            scope,
             kind,
             queue: Arc::new(WaitQueue::new()),
             state: SpinMutex::new(State {
@@ -466,8 +487,18 @@ impl UnixSocket {
     /// socketpair(2): two connected unnamed sockets, each with the other's
     /// (the creator's) credentials as `SO_PEERCRED`.
     pub fn pair(ns: &Arc<Namespace>, kind: SocketType, creds: Credentials) -> (Arc<UnixSocket>, Arc<UnixSocket>) {
-        let a = UnixSocket::new(ns, kind, creds);
-        let b = UnixSocket::new(ns, kind, creds);
+        UnixSocket::pair_in(ns, 0, kind, creds)
+    }
+
+    /// [`pair`](Self::pair) in `scope`.
+    pub fn pair_in(
+        ns: &Arc<Namespace>,
+        scope: u32,
+        kind: SocketType,
+        creds: Credentials,
+    ) -> (Arc<UnixSocket>, Arc<UnixSocket>) {
+        let a = UnixSocket::new_in(ns, scope, kind, creds);
+        let b = UnixSocket::new_in(ns, scope, kind, creds);
         for (me, other) in [(&a, &b), (&b, &a)] {
             let mut s = me.state.lock();
             s.peer_creds = Some(creds);
@@ -483,6 +514,11 @@ impl UnixSocket {
 
     pub fn kind(&self) -> SocketType {
         self.kind
+    }
+
+    /// The scope it was made in.
+    pub fn scope(&self) -> u32 {
+        self.scope
     }
 
     /// The queue to wait on for this socket's readiness.
@@ -507,7 +543,8 @@ impl UnixSocket {
     /// if this socket has a name already; a taken name is reported first:
     /// bind's spec sheet).
     pub fn bind_abstract(self: &Arc<Self>, name: &[u8]) -> Result<()> {
-        let taken = |n: &Names| n.abstract_names.get(name).is_some_and(|w| w.strong_count() > 0);
+        let key = (self.scope, name.to_vec());
+        let taken = |n: &Names| n.abstract_names.get(&key).is_some_and(|w| w.strong_count() > 0);
         if taken(&self.ns.names.lock()) {
             return Err(Errno::EADDRINUSE);
         }
@@ -517,7 +554,7 @@ impl UnixSocket {
             if taken(&n) {
                 return Err(Errno::EADDRINUSE);
             }
-            n.abstract_names.insert(name.to_vec(), Arc::downgrade(self));
+            n.abstract_names.insert(key, Arc::downgrade(self));
         }
         self.set_name(Address::Abstract(name.to_vec()))
     }
@@ -536,13 +573,13 @@ impl UnixSocket {
                 for shift in (0..5).rev() {
                     name.push(b"0123456789abcdef"[((v >> (shift * 4)) & 0xf) as usize]);
                 }
-                if !n.abstract_names.get(&name).is_some_and(|w| w.strong_count() > 0) {
+                if !n.abstract_names.get(&(self.scope, name.clone())).is_some_and(|w| w.strong_count() > 0) {
                     found = Some(name);
                     break;
                 }
             }
             let name = found.ok_or(Errno::EADDRINUSE)?;
-            n.abstract_names.insert(name.clone(), Arc::downgrade(self));
+            n.abstract_names.insert((self.scope, name.clone()), Arc::downgrade(self));
             name
         };
         self.set_name(Address::Abstract(name))
@@ -659,8 +696,8 @@ impl UnixSocket {
             let _ = self.autobind();
         }
         let my_name = self.local_name();
-        // The server's end, handed out by accept.
-        let server = UnixSocket::new(&self.ns, self.kind, creds);
+        // The server's end, handed out by accept: in the listener's scope.
+        let server = UnixSocket::new_in(&self.ns, target.scope, self.kind, creds);
         let (listener_name, listener_creds) = {
             let mut t = target.state.lock();
             let name = t.name.clone();

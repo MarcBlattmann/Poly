@@ -323,8 +323,9 @@ pub fn shmctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             })
         }
         IPC_INFO => {
-            k.copy_to_user(buf, &shminfo_bytes())?;
-            Ok(with_table(&ns, |t| t.max_index()) as u64)
+            let (info, max) = with_table(&ns, |t| (shminfo_bytes(&t.limits), t.max_index()));
+            k.copy_to_user(buf, &info)?;
+            Ok(max as u64)
         }
         SHM_INFO => {
             let (info, max) = with_table(&ns, |t| (shm_info_bytes(t), t.max_index()));

@@ -12,6 +12,7 @@
 //! installs received descriptors.
 
 pub mod abi;
+pub mod dev;
 mod errno;
 pub mod netlink;
 
@@ -19,6 +20,8 @@ pub use abi::{SockAddr, Ucred, UnixAddr};
 
 use crate::errno::Errno;
 use crate::fileio::NewFd;
+use crate::ns::NetNs;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 /// Address families the kernel supports.
@@ -28,6 +31,8 @@ pub enum Family {
     Inet,
     Inet6,
     Netlink,
+    /// `AF_PACKET` (packet(7)): creation only, see [`LinuxNet::socket`].
+    Packet,
 }
 
 impl Family {
@@ -37,6 +42,7 @@ impl Family {
             abi::AF_INET => Some(Family::Inet),
             abi::AF_INET6 => Some(Family::Inet6),
             abi::AF_NETLINK => Some(Family::Netlink),
+            abi::AF_PACKET => Some(Family::Packet),
             _ => None,
         }
     }
@@ -47,6 +53,7 @@ impl Family {
             Family::Inet => abi::AF_INET,
             Family::Inet6 => abi::AF_INET6,
             Family::Netlink => abi::AF_NETLINK,
+            Family::Packet => abi::AF_PACKET,
         }
     }
 }
@@ -246,8 +253,40 @@ pub enum OptValue {
 /// personality then decides between `EINTR` and a restart
 /// ([`timed`](Self::timed)).
 pub trait LinuxNet {
-    /// socket(2) for a checked kind.
+    /// socket(2) for a checked kind, in the calling process's network
+    /// namespace: the socket belongs to that namespace for its whole
+    /// life (network_namespaces(7)), whatever namespace its holders are
+    /// in later. A raw socket (`SOCK_RAW` of `AF_INET` / `AF_INET6`, any
+    /// `AF_PACKET` socket; the personality checked `CAP_NET_RAW`) can be
+    /// made, bound and closed; Poly carries no packets through it yet.
     fn socket(&mut self, kind: Kind, fd: NewFd) -> Result<i32, Errno>;
+
+    /// The network namespace socket `fd` was made in (`None`: the initial
+    /// one): the interface requests of ioctl(2) on it act there
+    /// (netdevice(7)). `ENOTSOCK` (the default) for a descriptor that is
+    /// not a socket.
+    fn netns(&mut self, fd: i32) -> Result<Option<Arc<NetNs>>, Errno> {
+        let _ = fd;
+        Err(Errno::ENOTSOCK)
+    }
+
+    /// The links, addresses and default routers of network namespace
+    /// `ns`. The default knows the loopback device only.
+    fn interfaces(&mut self, ns: &Option<Arc<NetNs>>) -> netlink::Interfaces {
+        crate::ns::with_net_devices(ns, |d| d.interfaces(netlink::LinkStats::default()))
+    }
+
+    /// Bring link `index` of `ns` up or down (the caller checked
+    /// `CAP_NET_ADMIN`): `ENODEV` if there is none, `EOPNOTSUPP` for a
+    /// device that cannot change. The default knows the loopback device
+    /// only; the kernel also tells its protocol stack.
+    fn set_link_up(&mut self, ns: &Option<Arc<NetNs>>, index: u32, up: bool) -> Result<(), Errno> {
+        if index != dev::LO_INDEX {
+            return Err(Errno::ENODEV);
+        }
+        crate::ns::with_net_devices(ns, |d| d.set_lo_up(up));
+        Ok(())
+    }
 
     /// socketpair(2) (Unix sockets only).
     fn socketpair(&mut self, kind: Kind, fd: NewFd) -> Result<[i32; 2], Errno>;

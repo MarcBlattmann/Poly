@@ -249,3 +249,46 @@ fn loopback_carries_a_whole_64k_datagram() {
     assert!(buf[..65507] == data[..]);
     assert_eq!(s.frames[0], 0, "never on the device");
 }
+
+/// A stack whose loopback interface is down (a new network namespace):
+/// loopback addresses can be bound but nothing is routed to them, and an
+/// address elsewhere is unreachable without a configured interface.
+#[test]
+fn loopback_down_is_unreachable_and_up_works() {
+    let mut s = Sim::with_configs(
+        48,
+        crate::Config { ipv4: None, ipv6: false, ..crate::Config::default() },
+        crate::sim::config(IP_B, 48),
+        1500,
+    );
+    assert!(s.a.loopback());
+    s.a.set_loopback(false);
+    assert!(!s.a.loopback());
+    let srv = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    assert_eq!(s.a.bind(srv, sa(Ipv4Addr::LOCALHOST, 53)), Ok(()), "binding works while lo is down");
+    let u = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    assert_eq!(s.a.connect(u, sa(Ipv4Addr::LOCALHOST, 53)), Err(Errno::ENETUNREACH));
+    assert_eq!(s.a.connect(u, sa(Ipv4Addr::new(10, 0, 0, 1), 80)), Err(Errno::ENETUNREACH));
+    assert_eq!(s.a.send_to(u, b"x", Some(sa(Ipv4Addr::LOCALHOST, 53))), Err(Errno::ENETUNREACH));
+    let t = s.a.socket(Domain::Inet, SockType::Stream, None).unwrap();
+    assert_eq!(s.a.connect(t, sa(Ipv4Addr::LOCALHOST, 53)), Err(Errno::ENETUNREACH));
+    let t6 = s.a.socket(Domain::Inet6, SockType::Stream, None).unwrap();
+    assert_eq!(s.a.connect(t6, SocketAddr::new(core::net::Ipv6Addr::LOCALHOST.into(), 53)), Err(Errno::ENETUNREACH));
+
+    s.a.set_loopback(true);
+    assert_eq!(s.a.connect(u, sa(Ipv4Addr::LOCALHOST, 53)), Ok(()));
+    assert_eq!(s.a.send(u, b"query"), Ok(5));
+    s.run_for(Duration::from_millis(10));
+    let mut buf = [0u8; 16];
+    let info = s.a.recv_from(srv, &mut buf, RecvFlags::default()).unwrap();
+    assert_eq!(&buf[..info.len], b"query");
+    assert_eq!(s.a.stats().loop_packets, 1);
+    assert_eq!(s.a.stats().loop_bytes, 20 + 8 + 5);
+    assert_eq!(s.a.connect(u, sa(Ipv4Addr::new(10, 0, 0, 1), 80)), Err(Errno::ENETUNREACH), "still no route");
+
+    // Down again: what is queued for this host is dropped.
+    assert_eq!(s.a.send(u, b"lost"), Ok(4));
+    s.a.set_loopback(false);
+    s.run_for(Duration::from_millis(10));
+    assert_eq!(s.a.recv_from(srv, &mut buf, RecvFlags::default()).map(|i| i.len), Err(Errno::EAGAIN));
+}

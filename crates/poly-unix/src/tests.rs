@@ -221,6 +221,45 @@ fn listen_connect_accept_on_abstract_names() {
     again.bind_abstract(b"svc").unwrap();
 }
 
+/// unix(7): abstract names belong to a network namespace. The same name
+/// can be bound once per scope, a lookup finds only its own scope's
+/// socket, autobind counts per scope, and a connection through a path or
+/// a socket pair works across scopes.
+#[test]
+fn abstract_names_are_per_scope() {
+    let e = env();
+    let outer = UnixSocket::new(&e.ns, SocketType::Stream, ME);
+    outer.bind_abstract(b"svc").unwrap();
+    let inner = UnixSocket::new_in(&e.ns, 7, SocketType::Stream, ME);
+    assert_eq!((outer.scope(), inner.scope()), (0, 7));
+    inner.bind_abstract(b"svc").unwrap();
+    let again = UnixSocket::new_in(&e.ns, 7, SocketType::Stream, ME);
+    assert_eq!(again.bind_abstract(b"svc"), Err(Errno::EADDRINUSE));
+    assert!(Arc::ptr_eq(&e.ns.lookup_abstract(b"svc").unwrap(), &outer));
+    assert!(Arc::ptr_eq(&e.ns.lookup_abstract_in(7, b"svc").unwrap(), &inner));
+    assert!(e.ns.lookup_abstract_in(8, b"svc").is_none());
+    assert_eq!(e.ns.bound_names(), 2);
+    // The accepted end of a connection is in the listener's scope.
+    inner.listen(1, ME).unwrap();
+    let c = UnixSocket::new_in(&e.ns, 7, SocketType::Stream, OTHER);
+    c.connect(&inner, OTHER).unwrap();
+    assert_eq!(inner.accept().unwrap().scope(), 7);
+    // Autobind names are counted per scope.
+    let a = UnixSocket::new_in(&e.ns, 7, SocketType::Datagram, ME);
+    let b = UnixSocket::new_in(&e.ns, 8, SocketType::Datagram, ME);
+    a.autobind().unwrap();
+    b.autobind().unwrap();
+    assert!(matches!(a.local_name(), Address::Abstract(n) if n.len() == 5));
+    // Closing one scope's socket frees only its name.
+    inner.close();
+    assert!(e.ns.lookup_abstract_in(7, b"svc").is_none());
+    assert!(e.ns.lookup_abstract(b"svc").is_some());
+    // A pair made in a scope stays connected whoever holds its ends.
+    let (x, y) = UnixSocket::pair_in(&e.ns, 9, SocketType::Stream, ME);
+    send(&x, b"hi").unwrap();
+    assert_eq!(recv(&y, 10).unwrap().0, b"hi");
+}
+
 #[test]
 fn path_names_live_in_the_file_system() {
     let e = env();

@@ -1,11 +1,18 @@
 //! Sockets for the Linux personality (ADR 0048): `LinuxNet` for the
-//! running thread, over three kinds of socket files.
+//! running thread, over four kinds of socket files.
 //!
 //! | Family | Open file's object | State |
 //! |---|---|---|
-//! | `AF_INET`, `AF_INET6` | [`InetSocket`] (`net/file.rs`) | the `poly-net` stack behind `net::call` |
-//! | `AF_UNIX` | `poly_unix::UnixFile` | `poly-unix`, one [`Namespace`] for the system |
-//! | `AF_NETLINK` | [`NetlinkFile`] (`netlink.rs`) | the personality's `NETLINK_ROUTE` over the interface's facts |
+//! | `AF_INET`, `AF_INET6` | [`InetSocket`] (`net/file.rs`) | the `poly-net` stack of its network namespace behind `net::call_in` |
+//! | `AF_UNIX` | `poly_unix::UnixFile` | `poly-unix`, one [`Namespace`] for the system, abstract names per network namespace |
+//! | `AF_NETLINK` | [`NetlinkFile`] (`netlink.rs`) | the personality's `NETLINK_ROUTE` over the devices of its network namespace |
+//! | raw (`SOCK_RAW`, `AF_PACKET`) | [`RawSocket`] | none: it can be made and closed, no packet goes through it |
+//!
+//! A socket belongs to the network namespace of the process that made it
+//! (ADR 0178): an Internet socket is in that namespace's stack
+//! ([`stack_of`]), a Unix socket's abstract names are that namespace's, and
+//! the interface requests of ioctl(2) and rtnetlink on any socket act on
+//! that namespace's devices.
 //!
 //! Every socket has a wait queue its readiness changes are notified on,
 //! so blocking calls here wait with `poly_vfs::poll::wait_until_done` and
@@ -21,27 +28,30 @@
 
 mod netlink;
 
-pub use netlink::{NetlinkFile, interfaces};
+pub use netlink::{NetlinkFile, interfaces, interfaces_of};
 
 use super::Thread;
 use super::services::vfs_errno;
 use crate::fs::poll::ThreadBlocker;
 use crate::fs::{self, FileType, OpenFile, OpenFlags};
 use crate::net::file::{InetSocket, errno as net_errno};
-use crate::net::{Domain, Protocol, Shutdown as NetShutdown, SockType as NetType};
-use crate::sync::SetOnce;
+use crate::net::{Domain, NsStack, Protocol, Shutdown as NetShutdown, SockType as NetType};
+use crate::sync::{SetOnce, SpinLock};
 use crate::time;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::any::Any;
 use core::net::{SocketAddr, SocketAddrV6};
 use core::time::Duration;
 use poly_personality_linux::LinuxKernel;
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::fileio::NewFd;
+use poly_personality_linux::net::netlink::Interfaces;
 use poly_personality_linux::net::{
     Family, Kind, LinuxNet, OptName, OptValue, RecvMsg, RecvReq, SendMsg, Shutdown, SockAddr, SockOpt, SockType, Ucred,
     UnixAddr,
 };
+use poly_personality_linux::ns::{self, NetNs};
 use poly_unix::{Address, Ancillary, Credentials, Namespace, SocketType, UnixFile, UnixSocket};
 use poly_vfs::poll::{self, Timeout, WaitQueue};
 use poly_vfs::{At, FileObject, PollEvents};
@@ -72,11 +82,98 @@ pub fn in_flight() -> usize {
     namespace().in_flight()
 }
 
-/// The three kinds of socket an open file can be.
+/// The stack of network namespace `ns` (`None`, the initial one: the
+/// interface's, also `None`): made the first time a socket or a device
+/// request of the namespace needs it, with its loopback as the
+/// namespace's devices say.
+pub(crate) fn stack_of(ns: &Option<Arc<NetNs>>) -> Option<Arc<NsStack>> {
+    let n = ns.as_ref()?;
+    let mut made = false;
+    let state = n.kernel_state(|| {
+        made = true;
+        NsStack::new()
+    });
+    let stack = state.downcast::<NsStack>().ok()?;
+    if made {
+        let up = n.with_devices(|d| d.lo_up());
+        crate::net::call_in(Some(&stack), |s| s.set_loopback(up));
+    }
+    Some(stack)
+}
+
+/// The stack of network namespace `ns` if it has one already.
+pub(crate) fn existing_stack(ns: &Option<Arc<NetNs>>) -> Option<Arc<NsStack>> {
+    ns.as_ref()?.kernel_state_if_made()?.downcast::<NsStack>().ok()
+}
+
+/// The number that stands for network namespace `ns` among the scopes of
+/// abstract Unix socket names: its inode number, 0 for the initial one.
+fn scope_of(ns: &Option<Arc<NetNs>>) -> u32 {
+    ns.as_ref().map_or(0, |n| n.inum())
+}
+
+/// Whether the running thread may change the devices of network
+/// namespace `ns`: `CAP_NET_ADMIN` in the user namespace that owns it.
+pub(crate) fn net_admin(ns: &Option<Arc<NetNs>>) -> bool {
+    super::cred::current_creds()
+        .is_some_and(|c| ns::user::ns_capable(&c, &ns::net_owner(ns), poly_personality_linux::cred::cap::NET_ADMIN))
+}
+
+/// A raw socket (`SOCK_RAW` of `AF_INET` / `AF_INET6`, or `AF_PACKET`;
+/// raw(7), packet(7)): sandboxes and their tests make one to see whether
+/// they hold `CAP_NET_RAW`. It can be made, bound, given options and
+/// closed; nothing is carried through it: a send finds no route
+/// (`ENETUNREACH`) and a receive waits for packets that never come.
+pub struct RawSocket {
+    kind: Kind,
+    ns: Option<Arc<NetNs>>,
+    queue: Arc<WaitQueue>,
+    options: SpinLock<poly_unix::SocketOptions>,
+    /// `SO_RCVTIMEO` / `SO_SNDTIMEO` in nanoseconds; 0: none.
+    timeouts: SpinLock<(u64, u64)>,
+}
+
+impl RawSocket {
+    fn new(kind: Kind, ns: Option<Arc<NetNs>>) -> Arc<RawSocket> {
+        Arc::new(RawSocket {
+            kind,
+            ns,
+            queue: Arc::new(WaitQueue::new()),
+            options: SpinLock::new(poly_unix::SocketOptions { rcv_lowat: 1, ..poly_unix::SocketOptions::default() }),
+            timeouts: SpinLock::new((0, 0)),
+        })
+    }
+}
+
+impl FileObject for RawSocket {
+    fn read(&self, _buf: &mut [u8]) -> Result<usize, poly_vfs::Errno> {
+        Err(poly_vfs::Errno::EAGAIN)
+    }
+
+    fn write(&self, _buf: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        Err(net_errno(poly_net::Errno::ENETUNREACH))
+    }
+
+    fn poll(&self) -> PollEvents {
+        PollEvents::WRITABLE
+    }
+
+    fn wait_queue(&self) -> Option<&Arc<WaitQueue>> {
+        Some(&self.queue)
+    }
+
+    fn timeouts(&self) -> (Option<u64>, Option<u64>) {
+        let (r, w) = *self.timeouts.lock();
+        ((r != 0).then_some(r), (w != 0).then_some(w))
+    }
+}
+
+/// The four kinds of socket an open file can be.
 enum Sock {
     Inet(Arc<InetSocket>),
     Unix(Arc<UnixFile>),
     Netlink(Arc<NetlinkFile>),
+    Raw(Arc<RawSocket>),
 }
 
 fn sock_of(file: &OpenFile) -> Result<Sock, Errno> {
@@ -88,6 +185,9 @@ fn sock_of(file: &OpenFile) -> Result<Sock, Errno> {
     }
     if let Some(s) = file.object_as::<NetlinkFile>() {
         return Ok(Sock::Netlink(s));
+    }
+    if let Some(s) = file.object_as::<RawSocket>() {
+        return Ok(Sock::Raw(s));
     }
     Err(Errno::ENOTSOCK)
 }
@@ -143,6 +243,12 @@ fn timeout(nonblock: bool, ns: u64) -> Timeout {
 const NO_CREDS: Ucred = Ucred { pid: 0, uid: u32::MAX, gid: u32::MAX };
 
 impl Thread<'_> {
+    /// The network namespace of the calling process (`None`: the initial
+    /// one): where its new sockets go.
+    fn own_netns(&self) -> Option<Arc<NetNs>> {
+        self.linux.with(|s| s.ns.net.clone())
+    }
+
     fn sock_file(&self, fd: i32) -> Result<(Arc<OpenFile>, Sock), Errno> {
         let file = self.process.files.file(fd).map_err(verr)?;
         let sock = sock_of(&file)?;
@@ -178,15 +284,17 @@ impl Thread<'_> {
         poll::wait_until_done(queue, interest, &mut blocker, wait, attempt).map_err(verr)
     }
 
-    /// The Unix socket `addr` names, for connect and sendto.
-    fn unix_target(&self, addr: &SockAddr) -> Result<Arc<UnixSocket>, Errno> {
+    /// The Unix socket `addr` names, for connect and sendto of a socket
+    /// made in `scope`: an abstract name is looked up among that network
+    /// namespace's (unix(7)), a path by whoever can reach it.
+    fn unix_target(&self, scope: u32, addr: &SockAddr) -> Result<Arc<UnixSocket>, Errno> {
         let ns = namespace();
         match addr {
             SockAddr::Unix(UnixAddr::Path(p)) => {
                 let files = &self.process.files;
                 ns.lookup_path(fs::vfs(), &files.context(), &files.cred(), At::Cwd, p).map_err(verr)
             }
-            SockAddr::Unix(UnixAddr::Abstract(n)) => ns.lookup_abstract(n).ok_or(Errno::ECONNREFUSED),
+            SockAddr::Unix(UnixAddr::Abstract(n)) => ns.lookup_abstract_in(scope, n).ok_or(Errno::ECONNREFUSED),
             _ => Err(Errno::EINVAL),
         }
     }
@@ -392,7 +500,10 @@ fn generic_set(o: &mut poly_unix::SocketOptions, opt: SockOpt) -> bool {
 
 impl LinuxNet for Thread<'_> {
     fn socket(&mut self, kind: Kind, new: NewFd) -> Result<i32, Errno> {
+        let ns = self.own_netns();
         let object: Arc<dyn FileObject> = match kind.family {
+            Family::Packet => RawSocket::new(kind, ns),
+            Family::Inet | Family::Inet6 if kind.ty == SockType::Raw => RawSocket::new(kind, ns),
             Family::Inet | Family::Inet6 => {
                 let domain = if kind.family == Family::Inet { Domain::Inet } else { Domain::Inet6 };
                 let protocol = match kind.protocol {
@@ -400,22 +511,50 @@ impl LinuxNet for Thread<'_> {
                     17 => Protocol::Udp,
                     _ => Protocol::Icmp,
                 };
-                InetSocket::new(domain, net_type(kind.ty)?, protocol).map_err(nerr)?
+                let stack = stack_of(&ns);
+                let home = ns.map(|n| -> Arc<dyn Any + Send + Sync> { n });
+                InetSocket::new_in(stack, home, domain, net_type(kind.ty)?, protocol).map_err(nerr)?
             }
             Family::Unix => {
-                let sock = UnixSocket::new(namespace(), unix_type(kind.ty)?, self.unix_creds());
+                let sock = UnixSocket::new_in(namespace(), scope_of(&ns), unix_type(kind.ty)?, self.unix_creds());
                 Arc::new(UnixFile::new(sock))
             }
-            Family::Netlink => NetlinkFile::new(kind.ty, self.process.pid),
+            Family::Netlink => NetlinkFile::new(kind.ty, self.process.pid, ns),
         };
         self.install_socket(object, new)
+    }
+
+    fn netns(&mut self, fd: i32) -> Result<Option<Arc<NetNs>>, Errno> {
+        Ok(match self.sock_file(fd)?.1 {
+            Sock::Inet(s) => s.home().and_then(|h| Arc::clone(h).downcast::<NetNs>().ok()),
+            Sock::Unix(u) => match u.socket().scope() {
+                0 => None,
+                // A namespace nobody is in any more has no devices to ask
+                // about.
+                inum => match ns::lookup(inum, ns::Kind::Net) {
+                    Some(ns::Handle::Net(Some(n))) => Some(n),
+                    _ => return Err(Errno::ENOTSOCK),
+                },
+            },
+            Sock::Netlink(n) => n.netns().clone(),
+            Sock::Raw(r) => r.ns.clone(),
+        })
+    }
+
+    fn interfaces(&mut self, ns: &Option<Arc<NetNs>>) -> Interfaces {
+        interfaces_of(ns)
+    }
+
+    fn set_link_up(&mut self, ns: &Option<Arc<NetNs>>, index: u32, up: bool) -> Result<(), Errno> {
+        netlink::set_link_up(ns, index, up)
     }
 
     fn socketpair(&mut self, kind: Kind, new: NewFd) -> Result<[i32; 2], Errno> {
         if kind.family != Family::Unix {
             return Err(Errno::EOPNOTSUPP);
         }
-        let (a, b) = UnixSocket::pair(namespace(), unix_type(kind.ty)?, self.unix_creds());
+        let scope = scope_of(&self.own_netns());
+        let (a, b) = UnixSocket::pair_in(namespace(), scope, unix_type(kind.ty)?, self.unix_creds());
         let fa = self.install_socket(Arc::new(UnixFile::new(a)), new)?;
         match self.install_socket(Arc::new(UnixFile::new(b)), new) {
             Ok(fb) => Ok([fa, fb]),
@@ -448,6 +587,8 @@ impl LinuxNet for Thread<'_> {
                 SockAddr::Netlink { pid, groups } => n.bind(*pid, *groups),
                 _ => Err(Errno::EINVAL),
             },
+            // Nothing arrives on a raw socket whatever it is bound to.
+            Sock::Raw(_) => Ok(()),
         }
     }
 
@@ -459,7 +600,7 @@ impl LinuxNet for Thread<'_> {
                 Ok(())
             }
             Sock::Unix(u) => u.socket().listen(backlog as usize, self.unix_creds()).map_err(verr),
-            Sock::Netlink(_) => Err(Errno::EOPNOTSUPP),
+            Sock::Netlink(_) | Sock::Raw(_) => Err(Errno::EOPNOTSUPP),
         }
     }
 
@@ -487,7 +628,7 @@ impl LinuxNet for Thread<'_> {
                 let fd = self.install_socket(Arc::new(UnixFile::new(conn)), new)?;
                 Ok((fd, peer))
             }
-            Sock::Netlink(_) => Err(Errno::EOPNOTSUPP),
+            Sock::Netlink(_) | Sock::Raw(_) => Err(Errno::EOPNOTSUPP),
         }
     }
 
@@ -501,7 +642,7 @@ impl LinuxNet for Thread<'_> {
                 if *addr == SockAddr::Unspec {
                     return sock.disconnect().map_err(verr);
                 }
-                let target = self.unix_target(addr)?;
+                let target = self.unix_target(sock.scope(), addr)?;
                 let creds = self.unix_creds();
                 let wait = timeout(nonblock, sock.timeouts().1);
                 self.wait_for(sock.wait_queue(), PollEvents::WRITABLE, wait, || sock.connect(&target, creds))
@@ -514,6 +655,9 @@ impl LinuxNet for Thread<'_> {
                 }
                 _ => Err(Errno::EINVAL),
             },
+            // The default destination of a raw socket: remembered by
+            // nobody, since nothing is sent.
+            Sock::Raw(_) => Ok(()),
         }
     }
 
@@ -528,6 +672,12 @@ impl LinuxNet for Thread<'_> {
                 if peer { sock.peer_name().map(unix_addr).map_err(verr) } else { Ok(unix_addr(sock.local_name())) }
             }
             Sock::Netlink(n) => Ok(if peer { SockAddr::Netlink { pid: 0, groups: 0 } } else { n.local() }),
+            Sock::Raw(_) if peer => Err(Errno::ENOTCONN),
+            Sock::Raw(r) => match r.kind.family {
+                Family::Inet => Ok(SockAddr::Inet(core::net::SocketAddrV4::new(core::net::Ipv4Addr::UNSPECIFIED, 0))),
+                Family::Inet6 => Ok(SockAddr::Inet6(SocketAddrV6::new(core::net::Ipv6Addr::UNSPECIFIED, 0, 0, 0))),
+                _ => Err(Errno::EOPNOTSUPP),
+            },
         }
     }
 
@@ -546,7 +696,7 @@ impl LinuxNet for Thread<'_> {
                     Some(_) if sock.kind() != SocketType::Datagram => {
                         return Err(if sock.is_connected() { Errno::EISCONN } else { Errno::EOPNOTSUPP });
                     }
-                    Some(a) => Some(self.unix_target(a)?),
+                    Some(a) => Some(self.unix_target(sock.scope(), a)?),
                 };
                 let mut rights = Vec::with_capacity(msg.rights.len());
                 for &r in &msg.rights {
@@ -591,6 +741,7 @@ impl LinuxNet for Thread<'_> {
                 n.request(msg.data);
                 Ok(msg.data.len())
             }
+            Sock::Raw(_) => Err(Errno::ENETUNREACH),
         }
     }
 
@@ -636,6 +787,10 @@ impl LinuxNet for Thread<'_> {
                 let (len, full_len) = self.wait_for(n.queue(), PollEvents::READABLE, wait, || n.read(buf, req.peek))?;
                 Ok(RecvMsg { len, full_len, from: Some(SockAddr::Netlink { pid: 0, groups: 0 }), ..RecvMsg::default() })
             }
+            Sock::Raw(r) => {
+                let wait = timeout(nonblock || req.dontwait, r.timeouts.lock().0);
+                self.wait_for(&r.queue, PollEvents::READABLE, wait, || Err::<RecvMsg, _>(poly_vfs::Errno::EAGAIN))
+            }
         }
     }
 
@@ -647,8 +802,7 @@ impl LinuxNet for Thread<'_> {
                     Shutdown::Write => NetShutdown::Write,
                     Shutdown::Both => NetShutdown::Both,
                 };
-                let h = s.handle();
-                crate::net::call_and_wake(|st| st.shutdown(h, how)).map_err(nerr)
+                s.with_wake(|st, h| st.shutdown(h, how)).map_err(nerr)
             }
             Sock::Unix(u) => {
                 let how = match how {
@@ -659,6 +813,7 @@ impl LinuxNet for Thread<'_> {
                 u.socket().shutdown(how).map_err(verr)
             }
             Sock::Netlink(_) => Err(Errno::EOPNOTSUPP),
+            Sock::Raw(_) => Ok(()),
         }
     }
 
@@ -682,6 +837,19 @@ impl LinuxNet for Thread<'_> {
                 Ok(())
             }
             Sock::Netlink(n) => n.setsockopt(opt),
+            Sock::Raw(r) => {
+                match opt {
+                    SockOpt::RcvTimeout(t) => r.timeouts.lock().0 = t,
+                    SockOpt::SndTimeout(t) => r.timeouts.lock().1 = t,
+                    SockOpt::SndBuf(_) | SockOpt::RcvBuf(_) | SockOpt::PassCred(_) => {}
+                    o => {
+                        if !generic_set(&mut r.options.lock(), o) {
+                            return Err(Errno::ENOPROTOOPT);
+                        }
+                    }
+                }
+                Ok(())
+            }
         }
     }
 
@@ -710,6 +878,18 @@ impl LinuxNet for Thread<'_> {
                 })
             }
             Sock::Netlink(n) => n.getsockopt(name),
+            Sock::Raw(r) => Ok(match name {
+                OptName::Type => OptValue::Int(r.kind.ty.to_linux() as i32),
+                OptName::Domain => OptValue::Int(i32::from(r.kind.family.to_linux())),
+                OptName::Protocol => OptValue::Int(r.kind.protocol),
+                OptName::Error | OptName::AcceptConn => OptValue::Int(0),
+                OptName::PeerCred => OptValue::Ucred(NO_CREDS),
+                OptName::PassCred => bool_opt(false),
+                OptName::SndBuf | OptName::RcvBuf => OptValue::Int(poly_unix::DEFAULT_BUFFER as i32),
+                OptName::RcvTimeout => OptValue::Timeval(r.timeouts.lock().0),
+                OptName::SndTimeout => OptValue::Timeval(r.timeouts.lock().1),
+                n => generic_get(&r.options.lock(), n).ok_or(Errno::ENOPROTOOPT)?,
+            }),
         }
     }
 
@@ -722,6 +902,7 @@ impl LinuxNet for Thread<'_> {
             }
             Sock::Unix(u) => u.socket().timeouts(),
             Sock::Netlink(n) => n.timeouts(),
+            Sock::Raw(r) => *r.timeouts.lock(),
         };
         if send { w != 0 } else { r != 0 }
     }
@@ -730,7 +911,7 @@ impl LinuxNet for Thread<'_> {
         match self.sock_file(fd)?.1 {
             Sock::Inet(s) => s.with(|st, h| st.send_queued(h)).map_err(nerr),
             Sock::Unix(u) => Ok(u.socket().send_queued()),
-            Sock::Netlink(_) => Ok(0),
+            Sock::Netlink(_) | Sock::Raw(_) => Ok(0),
         }
     }
 

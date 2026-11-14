@@ -36,6 +36,8 @@ struct Fake {
     oom: Mutex<std::collections::BTreeMap<u32, i32>>,
     /// What process 42's descriptor 5 is open on, for following its link.
     fd5: Mutex<Option<Arc<poly_vfs::OpenFile>>>,
+    /// What was written to the IPC settings.
+    ipc: Mutex<Vec<(crate::IpcFile, Vec<u8>)>>,
 }
 
 /// Process 42's namespaces have inode numbers 100 + kind (pid 1's: 200 +
@@ -335,6 +337,26 @@ impl ProcSource for Fake {
         [42, 1].iter().any(|&p| fake_inum(p, kind) == Some(inum))
     }
 
+    fn net_file(&self, pid: u32, file: crate::NetFile) -> Option<Vec<u8>> {
+        self.owner(pid)?;
+        Some(alloc::format!("{file:?} of {pid}\n").into_bytes())
+    }
+
+    fn ipc_file(&self, file: crate::IpcFile) -> Vec<u8> {
+        match self.ipc.lock().unwrap().iter().rev().find(|(f, _)| *f == file) {
+            Some((_, text)) => text.clone(),
+            None => alloc::format!("{file:?}\n").into_bytes(),
+        }
+    }
+
+    fn write_ipc_file(&self, file: crate::IpcFile, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        if data.iter().any(|b| b.is_ascii_alphabetic()) {
+            return Err(poly_vfs::Errno::EINVAL);
+        }
+        self.ipc.lock().unwrap().push((file, data.to_vec()));
+        Ok(data.len())
+    }
+
     fn id_map(&self, pid: u32, file: IdMapFile) -> Vec<u8> {
         match file {
             IdMapFile::Uid => alloc::format!("{:>10} {:>10} {:>10}\n", 0, pid, 1).into_bytes(),
@@ -464,6 +486,8 @@ fn the_root_lists_fixed_files_then_processes_in_pid_order() {
             "filesystems",
             "sys",
             "thread-self",
+            "net",
+            "sysvipc",
             "1",
             "42"
         ]
@@ -471,7 +495,9 @@ fn the_root_lists_fixed_files_then_processes_in_pid_order() {
     assert_eq!(list[2].1, FileType::Symlink);
     assert_eq!(list[11].1, FileType::Directory);
     assert_eq!(list[12].1, FileType::Symlink);
-    assert_eq!(list[13].1, FileType::Directory);
+    assert_eq!(list[13].1, FileType::Symlink);
+    assert_eq!(list[14].1, FileType::Directory);
+    assert_eq!(list[15].1, FileType::Directory);
 }
 
 #[test]
@@ -539,7 +565,8 @@ fn process_directories_list_their_files() {
             "task",
             "oom_score_adj",
             "oom_score",
-            "clear_refs"
+            "clear_refs",
+            "net"
         ]
     );
     assert_eq!(names(&e.list("/proc/42/fd")), [".", "..", "0", "1", "2", "5"]);
@@ -1068,4 +1095,55 @@ fn descriptor_links_lead_to_the_open_file_whatever_the_root() {
     let st = e.vfs.stat(&ctx, &e.cred, At::Cwd, b"/42/fd/5", false).unwrap();
     assert_eq!(st.mode & 0o170000, 0o120000);
     assert!(e.vfs.stat(&ctx, &e.cred, At::Cwd, b"/42/fd/0", true).is_err());
+}
+
+/// `/proc/net` leads to the caller's `net` directory, whose files the
+/// source makes for the process named (ADR 0178).
+#[test]
+fn net_is_the_callers_network_namespace() {
+    let e = env();
+    assert_eq!(e.readlink("/proc/net").unwrap(), b"self/net");
+    assert_eq!(names(&e.list("/proc/42/net")), [".", "..", "dev", "route"]);
+    assert_eq!(e.text("/proc/net/dev"), "Dev of 42\n");
+    assert_eq!(e.text("/proc/self/net/route"), "Route of 42\n");
+    assert_eq!(e.text("/proc/1/net/dev"), "Dev of 1\n");
+    assert_eq!(e.read("/proc/42/net/arp").err(), Some(poly_vfs::Errno::ENOENT));
+    assert_eq!(e.read("/proc/7/net/dev").err(), Some(poly_vfs::Errno::ENOENT));
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/42/net/dev", true).unwrap();
+    assert_eq!((st.kind(), st.mode & 0o777), (Some(FileType::Regular), 0o444));
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/42/net", true).unwrap();
+    assert_eq!((st.kind(), st.mode & 0o777), (Some(FileType::Directory), 0o555));
+    let w = |p: &str| e.vfs.open(&e.ctx, &e.cred, At::Cwd, p.as_bytes(), OpenFlags::WRONLY, 0).err();
+    assert_eq!(w("/proc/42/net/dev"), Some(poly_vfs::Errno::EROFS));
+}
+
+/// The System V listings and the IPC settings come from the source (the
+/// reader's IPC namespace); the settings take writes.
+#[test]
+fn ipc_listings_and_settings() {
+    let e = env();
+    assert_eq!(names(&e.list("/proc/sysvipc")), [".", "..", "msg", "shm", "sem"]);
+    assert_eq!(e.text("/proc/sysvipc/msg"), "SysvMsg\n");
+    assert_eq!(e.text("/proc/sysvipc/shm"), "SysvShm\n");
+    assert_eq!(e.text("/proc/sysvipc/sem"), "SysvSem\n");
+    assert_eq!(e.text("/proc/sys/kernel/msgmni"), "Msgmni\n");
+    assert_eq!(e.text("/proc/sys/kernel/sem"), "Sem\n");
+    assert_eq!(
+        names(&e.list("/proc/sys/fs/mqueue")),
+        [".", "..", "queues_max", "msg_max", "msgsize_max", "msg_default", "msgsize_default"]
+    );
+    let write = |path: &str, data: &[u8]| {
+        let f = e.vfs.open(&e.ctx, &e.cred, At::Cwd, path.as_bytes(), OpenFlags::WRONLY | OpenFlags::TRUNC, 0)?;
+        f.write(data)
+    };
+    assert_eq!(write("/proc/sys/kernel/msgmni", b"77"), Ok(2));
+    assert_eq!(e.text("/proc/sys/kernel/msgmni"), "77");
+    assert_eq!(write("/proc/sys/fs/mqueue/msg_max", b"11\n"), Ok(3));
+    assert_eq!(e.text("/proc/sys/fs/mqueue/msg_max"), "11\n");
+    assert_eq!(write("/proc/sys/kernel/shmmni", b"abc"), Err(poly_vfs::Errno::EINVAL));
+    assert_eq!(write("/proc/sysvipc/msg", b"1").err(), Some(poly_vfs::Errno::EROFS));
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/sys/kernel/msgmni", true).unwrap();
+    assert_eq!(st.mode & 0o777, 0o644);
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/sysvipc/msg", true).unwrap();
+    assert_eq!(st.mode & 0o777, 0o444);
 }

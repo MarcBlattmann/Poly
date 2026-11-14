@@ -183,28 +183,34 @@ pub struct Insets {
     pub bottom: i32,
 }
 
-/// The DPIs the sheet (`GetSystemMetricsForDpi.yaml` `scaling_table`)
-/// lists values for.
-const DPIS: [u32; 8] = [96, 120, 144, 168, 192, 240, 288, 384];
-
 /// `round(v * dpi / 96)`, halves up.
 fn scale(v: i64, dpi: u32) -> i32 {
     ((v * i64::from(dpi) + 48) / 96).clamp(i64::MIN / 2, i64::from(i32::MAX)) as i32
 }
 
-/// A metric that grows with the DPI: the sheet's value at one of the
-/// listed DPIs, else `v96` scaled.
-fn listed(dpi: u32, row: [i32; 8], v96: i64) -> i32 {
-    match DPIS.iter().position(|&d| d == dpi) {
-        Some(k) => row[k],
-        None => scale(v96, dpi),
+/// The height of a line of the caption and menu font (9 points) at `dpi`
+/// (GetSystemMetrics.yaml `dpi_formulas`: below DPI 29 for the caption and
+/// 69 for the menu the heights "follow the height of the caption and menu
+/// font at that DPI", "its pixel height changes every 8 DPI", and DPI 1 to
+/// 3 "give values of their own"). The font is `round(dpi / 8)` pixels
+/// high (9 * dpi / 72); its line height at the small sizes is what the
+/// sheet's tables give back (a height of 0 selects the default font, 21).
+fn ui_font_line(dpi: u32) -> i32 {
+    const LINES: [i32; 11] = [21, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13];
+    let em = (i64::from(dpi) * 9 + 36) / 72;
+    match usize::try_from(em).ok().and_then(|k| LINES.get(k)) {
+        Some(&line) => line,
+        // Above the sizes that matter (the scaled button heights are
+        // larger from DPI 69 on): the font's usual proportion.
+        None => (em * 4 / 3).clamp(0, i64::from(i32::MAX)) as i32,
     }
 }
 
-/// The caption height (`SM_CYCAPTION`) at `dpi`: a 22-pixel button
-/// height scaled, plus the 1-pixel border; the tiny DPIs 1 and 2 give 24.
+/// The caption height (`SM_CYCAPTION`) at `dpi`: a 22-pixel button height
+/// scaled, plus the 1-pixel border, but at least the caption font's line
+/// and 3 (which is more below DPI 29: 6 at DPI 12, 24 at DPI 1 to 3).
 pub fn caption_for_dpi(dpi: u32) -> i32 {
-    if dpi <= 2 { 24 } else { scale(22, dpi).saturating_add(1) }
+    scale(22, dpi).saturating_add(1).max(ui_font_line(dpi) + 3)
 }
 
 /// `SM_CXFRAME` at `dpi`: 3 and the scaled border (round(dpi / 96)).
@@ -217,14 +223,10 @@ pub fn padded_for_dpi(dpi: u32) -> i32 {
     scale(4, dpi).min(100)
 }
 
-/// `SM_CYMENU` at `dpi`: the scaled 19 plus the 1-pixel border.
+/// `SM_CYMENU` at `dpi`: the scaled 19 plus the 1-pixel border, but at
+/// least the menu font's line and 3 (which is more below DPI 69).
 pub fn menu_for_dpi(dpi: u32) -> i32 {
-    match dpi {
-        0..=2 => 24,
-        24 => 7,
-        47 => 11,
-        _ => scale(19, dpi).saturating_add(1),
-    }
+    scale(19, dpi).saturating_add(1).max(ui_font_line(dpi) + 3)
 }
 
 /// The cursor size at `dpi` (`SM_CXCURSOR`): 32, 48, 64, 96 or 128.
@@ -238,6 +240,80 @@ pub fn cursor_for_dpi(dpi: u32) -> i32 {
     }
 }
 
+/// `SM_CXSIZE` at `dpi`: the caption button is 28 wide for 17 high
+/// (`SM_CYSIZE`, the caption height less its border); every value of the
+/// sheet's tables follows.
+fn caption_button_width(dpi: u32) -> i32 {
+    let high = i64::from(caption_for_dpi(dpi) - 1);
+    ((high * 56 + 17) / 34).clamp(0, i64::from(i32::MAX)) as i32
+}
+
+/// The DPIs of the sheet's tables (GetSystemMetrics.yaml `dpi_table`,
+/// `dpi_table_2`) and what was observed there for the two metrics no
+/// formula was found for: `SM_CXMIN` (= `SM_CXMINTRACK`) and
+/// `SM_CXMENUCHECK` (= `SM_CYMENUCHECK`).
+const OBSERVED: [(u32, i32, i32); 40] = [
+    (1, 93, 21),
+    (12, 45, 3),
+    (24, 50, 3),
+    (36, 58, 5),
+    (48, 72, 7),
+    (60, 94, 11),
+    (72, 106, 11),
+    (84, 120, 13),
+    (96, 136, 15),
+    (97, 136, 15),
+    (100, 140, 17),
+    (108, 154, 19),
+    (110, 154, 19),
+    (115, 158, 19),
+    (120, 166, 19),
+    (125, 174, 21),
+    (130, 178, 21),
+    (144, 198, 25),
+    (150, 206, 25),
+    (156, 216, 27),
+    (168, 232, 29),
+    (175, 236, 29),
+    (180, 246, 31),
+    (192, 258, 31),
+    (200, 270, 35),
+    (216, 292, 37),
+    (225, 300, 37),
+    (240, 324, 41),
+    (250, 332, 41),
+    (288, 384, 47),
+    (300, 402, 51),
+    (350, 464, 59),
+    (384, 510, 65),
+    (400, 532, 67),
+    (450, 594, 73),
+    (480, 632, 81),
+    (500, 662, 85),
+    (600, 788, 99),
+    (800, 1044, 133),
+    (1000, 1306, 165),
+];
+
+/// A metric of [`OBSERVED`] (`pick` chooses the column) at `dpi`: the
+/// observed value, else a straight line between the two neighbours (past
+/// the ends: through the last two; DPI 1 to 3 are like DPI 1).
+fn observed(dpi: u32, pick: fn(&(u32, i32, i32)) -> i32) -> i32 {
+    if dpi <= 3 {
+        return pick(&OBSERVED[0]);
+    }
+    let rows = &OBSERVED[1..];
+    let at = rows.iter().position(|r| r.0 >= dpi).unwrap_or(rows.len() - 1).max(1);
+    let (lo, hi) = (&rows[at - 1], &rows[at]);
+    if hi.0 == dpi {
+        return pick(hi);
+    }
+    let (x0, x1) = (i64::from(lo.0), i64::from(hi.0));
+    let (y0, y1) = (i64::from(pick(lo)), i64::from(pick(hi)));
+    let y = y0 + ((i64::from(dpi) - x0) * (y1 - y0) + (x1 - x0) / 2).div_euclid(x1 - x0);
+    y.clamp(0, i64::from(i32::MAX)) as i32
+}
+
 /// The DPI `GetSystemMetricsForDpi` works with for its `dpi` argument:
 /// 0, 0x10000 and 0xFFFFFFFF are refused (ERROR_INVALID_PARAMETER), every
 /// other value above 0xFFFF counts as 0xFFFF (0x7FFFFFFF answers like
@@ -246,25 +322,32 @@ pub fn metric_dpi(dpi: u32) -> Option<u32> {
     if dpi == 0 || dpi == 0x10000 || dpi == u32::MAX { None } else { Some(dpi.min(0xFFFF)) }
 }
 
-/// `GetSystemMetricsForDpi(index, dpi)`: the sizes scaled as the oracle
-/// listed them (`GetSystemMetricsForDpi.yaml`), the rest as at 96 DPI.
+/// `GetSystemMetricsForDpi(index, dpi)` (GetSystemMetrics.yaml
+/// `dpi_formulas`, `dpi_table`, `dpi_table_2`; GetSystemMetricsForDpi.yaml):
+/// not a linear scaling. Scroll bars never go below 8, the small icon is
+/// half the icon, the caption and menu heights have the font's line as
+/// their minimum, the button sizes follow from them, and the minimum
+/// window size is the caption and the frames; two metrics are known from
+/// the tables only. The rest is as at 96 DPI.
 pub fn system_metric_for_dpi(index: i32, dpi: u32, d: &Display) -> Option<i32> {
     let base = system_metric(index, d)?;
     Some(match index {
-        2 | 3 | 9 | 10 | 20 | 21 => scale(17, dpi),
+        2 | 3 | 9 | 10 | 20 | 21 => scale(17, dpi).max(8),
         4 | 51 => caption_for_dpi(dpi),
         11 | 12 => scale(32, dpi),
         13 | 14 => cursor_for_dpi(dpi),
         15 => menu_for_dpi(dpi),
-        28 | 34 => listed(dpi, [136, 166, 198, 232, 258, 324, 384, 510], 136),
-        29 | 35 => listed(dpi, [39, 47, 56, 64, 71, 88, 103, 135], 39),
-        30 => listed(dpi, [36, 46, 54, 64, 72, 91, 109, 145], 36),
-        31 | 52 | 53 => scale(22, dpi),
+        28 | 34 => observed(dpi, |r| r.1),
+        29 | 35 => caption_for_dpi(dpi).saturating_add(2 * (frame_for_dpi(dpi) + scale(4, dpi).min(i32::MAX / 4))),
+        30 => caption_button_width(dpi),
+        31 | 52 | 53 => caption_for_dpi(dpi) - 1,
         32 | 33 => frame_for_dpi(dpi),
         38 | 39 => scale(75, dpi),
-        49 | 50 => scale(16, dpi),
-        54 | 55 => scale(19, dpi),
-        71 | 72 => listed(dpi, [15, 19, 25, 29, 31, 41, 47, 65], 15),
+        49 | 50 => scale(32, dpi) / 2,
+        54 => scale(19, dpi).max(8),
+        55 => menu_for_dpi(dpi) - 1,
+        // Always odd.
+        71 | 72 => (observed(dpi, |r| r.2) - 1) | 1,
         92 => padded_for_dpi(dpi),
         _ => base,
     })
@@ -312,8 +395,26 @@ pub fn frame_insets_dpi(style: u32, menu: bool, ex: u32, dpi: u32) -> Insets {
 
 /// The default `WM_NCCALCSIZE`'s insets: the frame plus scroll bars (and
 /// a menu bar when the window has a menu).
+///
+/// A top-level window's frame is the one of the styles it has (ShowWindow.yaml
+/// `tiled_styles`, `minmax_by_style`: the frame a maximized window hides, a
+/// caption 23 high, and 2 more each way inside a WS_EX_CLIENTEDGE); a
+/// child's is `AdjustWindowRectEx`'s.
 pub fn client_insets(style: u32, ex: u32, menu: bool) -> Insets {
-    let mut i = frame_insets(style, menu, ex);
+    let mut i = if style & WS_CHILD == 0 {
+        let (style, ex) = had_styles(style, ex);
+        let s = hidden_frame(style, ex) + if ex & WS_EX_CLIENTEDGE != 0 { 2 } else { 0 };
+        let mut top = s;
+        if has_caption(style) {
+            top += caption_for_dpi(96);
+        }
+        if menu {
+            top += menu_for_dpi(96);
+        }
+        Insets { left: s, top, right: s, bottom: s }
+    } else {
+        frame_insets(style, menu, ex)
+    };
     if style & WS_VSCROLL != 0 {
         i.right += SCROLLBAR;
     }
@@ -364,13 +465,6 @@ pub fn track_limited(style: u32) -> bool {
     style & WS_POPUP == 0 || style & WS_THICKFRAME != 0
 }
 
-/// The width of a window's frame proper on each side (caption frame,
-/// sizing frame, dialog frame or border line), without the client and
-/// static edges of the extended style.
-fn frame_side(style: u32, ex: u32) -> i32 {
-    frame_side_dpi(style, ex, 96)
-}
-
 /// [`frame_side`] at `dpi` (`AdjustWindowRectExForDpi.yaml`): a caption or
 /// a thick frame with a border is the frame plus the padded border (8 at
 /// 96 DPI), a thick frame alone one less.
@@ -393,20 +487,63 @@ fn frame_side_dpi(style: u32, ex: u32, dpi: u32) -> i32 {
     }
 }
 
+/// The styles a window has, from the ones it was created with
+/// (ShowWindow.yaml `tiled_styles`): a top-level window without WS_POPUP
+/// (and without WS_CHILD) always has a caption and WS_EX_WINDOWEDGE.
+/// A popup's WS_EX_WINDOWEDGE is computed ([`popup_window_edge`]); a
+/// child's styles are taken as they are.
+pub fn had_styles(style: u32, ex: u32) -> (u32, u32) {
+    if style & (WS_POPUP | WS_CHILD) == 0 {
+        (style | WS_CAPTION, ex | WS_EX_WINDOWEDGE)
+    } else if style & WS_CHILD == 0 {
+        let edge = if popup_window_edge(style, ex) { WS_EX_WINDOWEDGE } else { 0 };
+        (style, (ex & !WS_EX_WINDOWEDGE) | edge)
+    } else {
+        (style, ex)
+    }
+}
+
+/// Whether a popup has WS_EX_WINDOWEDGE (ShowWindow.yaml `tiled_styles`:
+/// computed, not kept): with WS_EX_DLGMODALFRAME, or with WS_DLGFRAME or
+/// WS_THICKFRAME (a caption counts) and no WS_EX_STATICEDGE.
+pub fn popup_window_edge(style: u32, ex: u32) -> bool {
+    ex & WS_EX_DLGMODALFRAME != 0 || (style & (WS_DLGFRAME | WS_THICKFRAME) != 0 && ex & WS_EX_STATICEDGE == 0)
+}
+
+/// The frame a maximized window hides on each side (ShowWindow.yaml
+/// `minmax_by_style`), by the styles the window has: 2 with
+/// WS_EX_WINDOWEDGE, else 1 with WS_EX_STATICEDGE; 1 more with WS_BORDER,
+/// WS_DLGFRAME (a caption has both) or WS_EX_DLGMODALFRAME; and 5
+/// (SM_CXFRAME + SM_CXPADDEDBORDER - SM_CXDLGFRAME) with WS_THICKFRAME or a
+/// full caption. WS_EX_CLIENTEDGE and WS_EX_TOOLWINDOW do not change it.
+pub fn hidden_frame(style: u32, ex: u32) -> i32 {
+    let (style, ex) = had_styles(style, ex);
+    let edge = if ex & WS_EX_WINDOWEDGE != 0 {
+        2
+    } else if ex & WS_EX_STATICEDGE != 0 {
+        1
+    } else {
+        0
+    };
+    let line = i32::from(style & (WS_BORDER | WS_DLGFRAME) != 0 || ex & WS_EX_DLGMODALFRAME != 0);
+    let sizing = if style & WS_THICKFRAME != 0 || has_caption(style) { 5 } else { 0 };
+    edge + line + sizing
+}
+
 /// The `MINMAXINFO` win32k fills before `WM_GETMINMAXINFO`:
-/// (max size, max position, min track, max track), as GetSystemMetrics.yaml
-/// `window_metrics` and ShowWindow.yaml `show_maximized_from_hidden` list
-/// them. The maximized size is the screen plus the frame on each side, at
-/// minus the frame (the frame proper: a client edge does not count). The
-/// smallest tracking size is SM_CXMINTRACK x SM_CYMINTRACK for a window
-/// with a border line or a dialog frame in its style (a caption is both),
-/// twice the frame for a tool window, and twice the frame but at least 2
-/// for the others (a plain popup: 2,2; one with a sizing frame: 14,14).
+/// (max size, max position, min track, max track), by the styles the
+/// window has (ShowWindow.yaml `minmax_by_style`, `tiled_styles`;
+/// GetSystemMetrics.yaml `window_metrics`). The maximized size is the
+/// screen plus the frame a maximized window hides on each side
+/// ([`hidden_frame`]), at minus that frame. The smallest tracking size is
+/// SM_CXMINTRACK x SM_CYMINTRACK for a window with WS_BORDER or WS_DLGFRAME
+/// that is not a tool window; otherwise twice the frame, at least 2 (a
+/// plain popup: 2,2; one with a sizing frame: 14,14; a tool window with a
+/// caption: 16,16). The largest is the screen plus 20.
 pub fn minmax(style: u32, ex: u32, d: &Display) -> [(i32, i32); 4] {
-    let s = frame_side(style, ex);
-    let min = if ex & WS_EX_TOOLWINDOW != 0 {
-        (2 * s, 2 * s)
-    } else if style & (WS_BORDER | WS_DLGFRAME) != 0 {
+    let (style, ex) = had_styles(style, ex);
+    let s = hidden_frame(style, ex);
+    let min = if style & (WS_BORDER | WS_DLGFRAME) != 0 && ex & WS_EX_TOOLWINDOW == 0 {
         MIN_TRACK
     } else {
         ((2 * s).max(2), (2 * s).max(2))
@@ -426,8 +563,9 @@ pub const WS_EX_APPWINDOW: u32 = 0x0004_0000;
 /// 0,24,1920,1080); any other takes the position and size as they are and
 /// covers the taskbar (GetSystemMetrics.yaml `window_metrics`).
 pub fn maximized_rect(style: u32, ex: u32, d: &Display, max_size: (i32, i32), max_pos: (i32, i32)) -> Rect {
-    if style & WS_MAXIMIZEBOX != 0 {
-        let s = frame_side(style, ex);
+    let (style, ex) = had_styles(style, ex);
+    if style & WS_MAXIMIZEBOX != 0 && has_caption(style) {
+        let s = hidden_frame(style, ex);
         let (x, y) = (d.work.left + max_pos.0, d.work.top + max_pos.1);
         let w = max_size.0.min(d.work.width() + 2 * s);
         let h = max_size.1.min(d.work.height() + 2 * s);
@@ -708,6 +846,76 @@ mod tests {
         for bad in [-1, -100, 100, 1000, 0xFFF, 0x1001, 0x7FFF_FFFF, i32::MIN] {
             assert_eq!(system_metric_for_dpi(bad, 96, &d), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn system_metrics_for_dpi_follow_the_tables_of_the_sheet() {
+        // GetSystemMetrics.yaml dpi_table and dpi_table_2, one metric per
+        // row (the index, then the values at the DPIs of the first line).
+        let d = Display::INTERACTIVE;
+        let t1 = [1, 24, 48, 72, 96, 100, 110, 120, 125, 144, 168, 192, 216, 240, 288, 384, 480, 1000];
+        let rows1: [(i32, [i32; 18]); 16] = [
+            (2, [8, 8, 9, 13, 17, 18, 19, 21, 22, 26, 30, 34, 38, 43, 51, 68, 85, 177]),
+            (4, [24, 7, 12, 18, 23, 24, 26, 29, 30, 34, 40, 45, 51, 56, 67, 89, 111, 230]),
+            (11, [0, 8, 16, 24, 32, 33, 37, 40, 42, 48, 56, 64, 72, 80, 96, 128, 160, 333]),
+            (13, [32, 32, 32, 32, 32, 32, 32, 32, 32, 48, 48, 64, 64, 64, 96, 128, 128, 128]),
+            (15, [24, 7, 11, 15, 20, 21, 23, 25, 26, 30, 34, 39, 44, 49, 58, 77, 96, 199]),
+            (28, [93, 50, 72, 106, 136, 140, 154, 166, 174, 198, 232, 258, 292, 324, 384, 510, 632, 1306]),
+            (29, [30, 15, 24, 32, 39, 40, 44, 47, 48, 56, 64, 71, 79, 88, 103, 135, 167, 340]),
+            (30, [38, 10, 18, 28, 36, 38, 41, 46, 48, 54, 64, 72, 82, 91, 109, 145, 181, 377]),
+            (31, [23, 6, 11, 17, 22, 23, 25, 28, 29, 33, 39, 44, 50, 55, 66, 88, 110, 229]),
+            (32, [3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 7, 8, 13]),
+            (38, [1, 19, 38, 56, 75, 78, 86, 94, 98, 113, 131, 150, 169, 188, 225, 300, 375, 781]),
+            (49, [0, 4, 8, 12, 16, 16, 18, 20, 21, 24, 28, 32, 36, 40, 48, 64, 80, 166]),
+            (54, [8, 8, 10, 14, 19, 20, 22, 24, 25, 29, 33, 38, 43, 48, 57, 76, 95, 198]),
+            (55, [23, 6, 10, 14, 19, 20, 22, 24, 25, 29, 33, 38, 43, 48, 57, 76, 95, 198]),
+            (71, [21, 3, 7, 11, 15, 17, 19, 19, 21, 25, 29, 31, 37, 41, 47, 65, 81, 165]),
+            (92, [0, 1, 2, 3, 4, 4, 5, 5, 5, 6, 7, 8, 9, 10, 12, 16, 20, 42]),
+        ];
+        let t2 =
+            [12, 36, 60, 84, 97, 108, 115, 130, 150, 156, 175, 180, 200, 225, 250, 300, 350, 400, 450, 500, 600, 800];
+        let rows2: [(i32, [i32; 22]); 9] = [
+            (4, [6, 9, 15, 20, 23, 26, 27, 31, 35, 37, 41, 42, 47, 53, 58, 70, 81, 93, 104, 116, 139, 184]),
+            (15, [6, 9, 14, 18, 20, 22, 24, 27, 31, 32, 36, 37, 41, 46, 50, 60, 70, 80, 90, 100, 120, 159]),
+            (31, [5, 8, 14, 19, 22, 25, 26, 30, 34, 36, 40, 41, 46, 52, 57, 69, 80, 92, 103, 115, 138, 183]),
+            (54, [8, 8, 12, 17, 19, 21, 23, 26, 30, 31, 35, 36, 40, 45, 49, 59, 69, 79, 89, 99, 119, 158]),
+            (55, [5, 8, 13, 17, 19, 21, 23, 26, 30, 31, 35, 36, 40, 45, 49, 59, 69, 79, 89, 99, 119, 158]),
+            (29, [14, 19, 29, 36, 39, 44, 45, 49, 57, 61, 65, 68, 73, 81, 90, 108, 125, 141, 158, 174, 207, 272]),
+            (30, [8, 13, 23, 31, 36, 41, 43, 49, 56, 59, 66, 68, 76, 86, 94, 114, 132, 152, 170, 189, 227, 301]),
+            (
+                28,
+                [
+                    45, 58, 94, 120, 136, 154, 158, 178, 206, 216, 236, 246, 270, 300, 332, 402, 464, 532, 594, 662,
+                    788, 1044,
+                ],
+            ),
+            (71, [3, 5, 11, 13, 15, 19, 19, 21, 25, 27, 29, 31, 35, 37, 41, 51, 59, 67, 73, 85, 99, 133]),
+        ];
+        let f = |index, dpi| system_metric_for_dpi(index, dpi, &d).unwrap();
+        for (index, row) in rows1 {
+            for (k, &dpi) in t1.iter().enumerate() {
+                assert_eq!(f(index, dpi), row[k], "index {index} at {dpi} DPI");
+            }
+        }
+        for (index, row) in rows2 {
+            for (k, &dpi) in t2.iter().enumerate() {
+                assert_eq!(f(index, dpi), row[k], "index {index} at {dpi} DPI");
+            }
+        }
+        // The pairs that are one metric, and the thresholds of dpi_formulas.
+        for dpi in [1, 12, 28, 29, 47, 68, 69, 97, 200, 2000] {
+            assert_eq!(f(51, dpi), f(4, dpi));
+            assert_eq!((f(52, dpi), f(53, dpi)), (f(31, dpi), f(31, dpi)));
+            assert_eq!((f(34, dpi), f(35, dpi)), (f(28, dpi), f(29, dpi)));
+            assert_eq!(f(72, dpi), f(71, dpi));
+            assert_eq!(f(71, dpi) % 2, 1, "{dpi}");
+            assert_eq!(f(29, dpi), f(4, dpi) + 2 * (f(32, dpi) + f(92, dpi)));
+        }
+        assert_eq!((f(4, 28), f(4, 29)), (8, 8), "the font's line is the larger one below 29");
+        assert_eq!((f(15, 68), f(15, 69), f(15, 47)), (15, 15, 11));
+        assert_eq!((f(2, 37), f(2, 43), f(54, 37), f(54, 38)), (8, 8, 8, 8));
+        assert_eq!((f(4, 2), f(4, 3), f(28, 3)), (24, 24, 93));
+        assert_eq!((f(49, 100), f(11, 100)), (16, 33));
     }
 
     #[test]

@@ -29,7 +29,7 @@ use crate::fileio::NewFd;
 use crate::kernel::{Clock, LinuxKernel, Target, UserPtr};
 use crate::net::abi::{self, MsgHdr, SockAddr, Ucred};
 use crate::net::{Family, Kind, LinuxNet, OptName, OptValue, RecvMsg, RecvReq, SendMsg, Shutdown, SockOpt, SockType};
-use crate::signal::deliver::{eintr_if_acting, send as send_signal};
+use crate::signal::deliver::{eintr_if_acting, send as send_signal, with_own};
 use crate::sys::io::bounce;
 use crate::table::Handler;
 use crate::table::nr;
@@ -130,20 +130,47 @@ pub fn check_kind(domain: i32, ty: u32, protocol: i32) -> Result<(Kind, NewFd), 
         // Ping sockets (icmp(7)).
         (Family::Inet, SockType::Datagram) if protocol == abi::IPPROTO_ICMP => protocol,
         (Family::Inet6, SockType::Datagram) if protocol == abi::IPPROTO_ICMPV6 => protocol,
-        (Family::Inet | Family::Inet6, SockType::SeqPacket | SockType::Raw) => {
+        // raw(7): any protocol but 0 ("EPROTONOSUPPORT"); IPPROTO_RAW (255)
+        // is the send-only one.
+        (Family::Inet | Family::Inet6, SockType::Raw) if (1..=255).contains(&protocol) => protocol,
+        (Family::Inet | Family::Inet6, SockType::Raw) => return Err(Errno::EPROTONOSUPPORT),
+        (Family::Inet | Family::Inet6, SockType::SeqPacket) => {
             return Err(Errno::ESOCKTNOSUPPORT);
         }
         (Family::Inet | Family::Inet6, _) => return Err(Errno::EPROTONOSUPPORT),
         (Family::Netlink, SockType::Raw | SockType::Datagram) if protocol == abi::NETLINK_ROUTE => protocol,
         (Family::Netlink, SockType::Raw | SockType::Datagram) => return Err(Errno::EPROTONOSUPPORT),
         (Family::Netlink, _) => return Err(Errno::ESOCKTNOSUPPORT),
+        // packet(7): SOCK_RAW or SOCK_DGRAM; the protocol is an Ethernet
+        // type in network byte order, or 0 for a socket that receives
+        // nothing until bound.
+        (Family::Packet, SockType::Raw | SockType::Datagram) => protocol,
+        (Family::Packet, _) => return Err(Errno::ESOCKTNOSUPPORT),
     };
     Ok((Kind { family, ty: st, protocol }, NewFd::from_flags(flags)))
 }
 
-/// socket(domain, type, protocol)
+/// Whether a socket of `kind` is a raw one: raw(7) and packet(7), "In
+/// order to create a [raw / packet] socket, a process must have the
+/// CAP_NET_RAW capability in the user namespace that governs its network
+/// namespace."
+pub fn is_raw(kind: &Kind) -> bool {
+    kind.family == Family::Packet || (matches!(kind.family, Family::Inet | Family::Inet6) && kind.ty == SockType::Raw)
+}
+
+/// socket(domain, type, protocol): a raw socket without `CAP_NET_RAW` in
+/// the user namespace that owns the caller's network namespace is
+/// `EPERM` (the netns_loopback sheet: also after unshare(CLONE_NEWUSER)
+/// alone, which leaves the network namespace with its old owner).
 pub fn socket(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let (kind, new) = check_kind(a.int(0), a.uint(1), a.int(2))?;
+    if is_raw(&kind) {
+        let tid = k.tid();
+        let (owner, creds) = with_own(k, |p| (p.ns.net_owner(), p.thread(tid).creds.clone()));
+        if !crate::ns::user::ns_capable(&creds, &owner, crate::cred::cap::NET_RAW) {
+            return Err(Errno::EPERM);
+        }
+    }
     net(k)?.socket(kind, new).map(|fd| fd as u64)
 }
 
