@@ -6,6 +6,7 @@ oracle:
   machine: "homeserver2 (real hardware, Windows 11 \"Core\" edition with the stock font set, so only some of the common font families are installed), tests run by tools/pipeline/windows/poly-oracle.ps1 in the SSH session (no visible desktop needed), two runs each, identical"
   observed_by: spec-win-dwrite
   date: 2026-11-09
+  this_round: "spec-chrome-win-6 (2026-11-14): the tests added this round ran on Windows 11 Home 25H2 build 26200.9974 on homeserver2 over SSH (session 0), two rounds of two runs each, identical, and on the owner's PC (Windows 11 Enterprise, build 26200, desktop session) with the same output. The chrome section comes from Chrome's stage-1 runs on Poly (call traces of chrome.dll's user32, gdi32 and dwrite imports, poly.nt.exceptions) and from Chromium's and Skia's public source (BSD licence), read by the spec agent for the order of the calls only"
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn: the DirectWrite reference pages of the interfaces and methods named
@@ -29,11 +30,16 @@ summary: >
 interface:
   signature: "HRESULT IDWriteFontCollection::FindFamilyName(const WCHAR* familyName, UINT32* index, BOOL* exists)"
   hresults: "HRESULT values: S_OK 0; E_FAIL 0x80004005; E_NOINTERFACE 0x80004002; E_INVALIDARG 0x80070057; ERROR_FILE_NOT_FOUND as HRESULT 0x80070002; ERROR_INSUFFICIENT_BUFFER as HRESULT 0x8007007A; DWRITE_E_FILEFORMAT 0x88985000; DWRITE_E_NOFONT 0x88985002; DWRITE_E_FILENOTFOUND 0x88985003; DWRITE_E_FILEACCESS 0x88985004; DWRITE_E_ALREADYREGISTERED 0x88985006; DWRITE_E_CACHEFORMAT 0x88985007 (winerror.h)"
+chrome:
+  call_site: "chrome.dll's Skia font manager looks every family name up with FindFamilyName on the system collection: found, it takes GetFontFamily, the first matching font and its face; not found, it asks the system fallback (IDWriteFontFallback::MapCharacters for a space, after IDWriteFactory::CreateNumberSubstitution). Chrome asks first for the face GetObjectW reports for each SPI_GETNONCLIENTMETRICS font, and when that gives no font, for 'sans'"
+  stage_1: "On Poly the stage-1 disk of `cargo xtask chrome-win run` had no fonts under C:/Windows/Fonts, so DirectWrite's system collection had no family, and IDWriteFactory::CreateNumberSubstitution is a stub (E_NOTIMPL): every name was not found and the fallback failed, which is what made the browser recurse (see SystemParametersInfoW)"
 rules:
   exact_and_case: "\"PolyTest Alpha\", \"polytest alpha\", \"POLYTEST BETA\" and \"PolyTest Beta\" are found (exists 1, indices 0, 0, 1, 1); on the system collection \"Arial\", \"arial\", \"ARIAL\" and \"aRiAl\" give the same index; the same for \"Segoe UI\" and \"Times New Roman\""
   face_names: "names of faces of a family are not family names: \"PolyTest Alpha Bold\", \"PolyTest Beta Light\", \"PolyTest Beta Black\", \"PolyTest Beta Condensed\" are not found (a font that gives name ID 16 is grouped under that name, not under its name ID 1); on the system collection \"Arial Bold\", \"Arial-Bold\" and \"ArialMT\" are not found"
   exactness: "a trailing or leading space (\"Arial \", \" Arial\"), a doubled space, a prefix (\"Aria\", \"PolyTest\"), a leading \"@\" and the empty string are not found"
   not_found: "S_OK, exists 0 (the test passes 7) and index 0xFFFFFFFF"
+  ui_faces: "the faces of the five SPI_GETNONCLIENTMETRICS fonts are families of the system collection: S_OK, exists TRUE, index below the family count; GetFontFamily of that index has the face as its en-us (or first) name, ignoring case; GetFirstMatchingFont(the lfWeight or 400, NORMAL stretch, NORMAL or ITALIC) S_OK on a family with fonts; CreateFontFace S_OK (test ffn_message_font)"
+  generic_names: "generic and GDI names are not families: 'sans', 'sans-serif', 'Sans', 'serif', 'monospace', 'System' and 'MS Shell Dlg' give S_OK, exists FALSE and index 0xFFFFFFFF, like a made-up name (test ffn_message_font)"
 errors:
   none: "a missing name is not an error: S_OK with exists FALSE"
 side_effects: "none beyond the rules above"
@@ -43,7 +49,7 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle, except the first use of a system collection or of a file (milliseconds)"
   guarantees: none
 tests:
-  visible: 1  # count in <symbol>.tests/
+  visible: 2  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing dwrite.dll and kernel32.dll by name. Every
