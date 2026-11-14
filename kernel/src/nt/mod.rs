@@ -277,6 +277,60 @@ static TRACE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0
 /// The number of stack quadwords to dump; 0 is off.
 static EXCEPTIONS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
+/// `poly.nt.waits[=SECONDS]` (default 30): every that many seconds a kernel thread logs every blocked
+/// NT wait (`nt-waits:` lines: thread id, the objects it waits on with their type, name and kernel
+/// data), to see what a program that hangs is waiting for (ADR 0181). 0 is off.
+static WAITS_EVERY: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+static WAITS_STARTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Start the wait reporter once, with the first NT program.
+fn start_waits_reporter() {
+    use core::sync::atomic::Ordering::SeqCst;
+    if WAITS_EVERY.load(SeqCst) == 0 || WAITS_STARTED.swap(true, SeqCst) {
+        return;
+    }
+    if let Ok(tid) = thread::spawn_named("nt-waits", waits_main, 0) {
+        let _ = thread::detach(tid);
+    }
+}
+
+fn waits_main(_: usize) -> usize {
+    let every = u64::from(WAITS_EVERY.load(core::sync::atomic::Ordering::SeqCst).max(1));
+    loop {
+        thread::sleep(core::time::Duration::from_secs(every));
+        let lines: alloc::vec::Vec<alloc::string::String> = with(|s| {
+            let objects = &s.sys.objects;
+            objects
+                .pending_wait_list()
+                .iter()
+                .map(|w| {
+                    let mut line = alloc::format!(
+                        "nt-waits: t{} {}{} on",
+                        w.thread.0,
+                        if w.all { "all" } else { "any" },
+                        if w.alertable { " alertable" } else { "" }
+                    );
+                    for &o in &w.objects {
+                        let kind = objects.object_type(o);
+                        let name = objects.object_name(o).map(|n| alloc::string::String::from_utf16_lossy(&n));
+                        line.push_str(&alloc::format!(
+                            " [{:?} {} cookie {:#x}]",
+                            kind,
+                            name.as_deref().unwrap_or("-"),
+                            objects.cookie(o).unwrap_or(0)
+                        ));
+                    }
+                    line
+                })
+                .collect()
+        });
+        crate::kprintln!("nt-waits: {} blocked waits at {} ms", lines.len(), crate::time::now_ns() / 1_000_000);
+        for l in lines {
+            crate::kprintln!("{l}");
+        }
+    }
+}
+
 /// Read the NT personality's kernel arguments (before the first program).
 pub fn configure(boot: &crate::boot_info::BootInfo) {
     let exceptions = boot.arg(poly_personality_nt::diag::EXCEPTIONS_FLAG);
@@ -284,6 +338,11 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
         let words = poly_personality_nt::diag::exception_stack_words(exceptions);
         EXCEPTIONS.store(words as u32, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: logging every exception delivered to user mode, {words} stack quadwords");
+    }
+    if let Some(v) = boot.arg("poly.nt.waits") {
+        WAITS_EVERY.store(v.parse().unwrap_or(30), core::sync::atomic::Ordering::Relaxed);
+    } else if boot.has_flag("poly.nt.waits") {
+        WAITS_EVERY.store(30, core::sync::atomic::Ordering::Relaxed);
     }
     if boot.arg(poly_personality_nt::trace::FLAG) == Some("all") {
         TRACE.store(2, core::sync::atomic::Ordering::Relaxed);
@@ -1043,6 +1102,7 @@ pub fn spawn_pe_with(
     launch: &Launch,
 ) -> Result<(), SpawnError> {
     use crate::user::memory::Layout;
+    start_waits_reporter();
     let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| SpawnError::Memory)?);
     let pid = process.pid;
     let start = start_with(process, &memory, file, pid, launch).map_err(SpawnError::Image)?;
