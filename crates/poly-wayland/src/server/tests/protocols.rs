@@ -350,7 +350,8 @@ fn viewports_and_buffer_transforms_set_the_surface_size() {
 /// page after a navigation at scale 2 (2026-11-10).
 #[test]
 fn surface_damage_goes_through_the_viewport() {
-    let (mut srv, shared) = server_with(OutputConfig { width: 1280, height: 960, scale: 2, ..OutputConfig::default() });
+    let (mut srv, shared) =
+        server_with(OutputConfig { width: 1280, height: 960, scale: Scale::from_int(2), ..OutputConfig::default() });
     let (mut p, registry) = connect(&mut srv, &shared);
     let g = globals(&mut p, &mut srv, registry);
     let vpr = p.bind(&mut srv, registry, &wp_viewporter::INTERFACE, 1);
@@ -961,7 +962,8 @@ fn cursor_shapes_show_the_arrow() {
 
 #[test]
 fn fractional_scale_is_the_output_scale_in_120ths() {
-    let (mut srv, shared) = server_with(OutputConfig { width: 1280, height: 960, scale: 2, ..OutputConfig::default() });
+    let (mut srv, shared) =
+        server_with(OutputConfig { width: 1280, height: 960, scale: Scale::from_int(2), ..OutputConfig::default() });
     let (mut p, registry) = connect(&mut srv, &shared);
     let g = globals(&mut p, &mut srv, registry);
     let manager = p.bind(&mut srv, registry, &wp_fractional_scale_manager_v1::INTERFACE, 1);
@@ -970,12 +972,84 @@ fn fractional_scale_is_the_output_scale_in_120ths() {
     p.send(&mut srv, manager, wp_fractional_scale_manager_v1::Request::GetFractionalScale { id: f, surface: s });
     let e = p.take();
     assert_eq!((e[0].name(), &e[0].args[..]), (("wp_fractional_scale_v1", "preferred_scale"), &[Arg::Uint(240)][..]));
-    srv.set_output(OutputConfig { width: 1280, height: 960, scale: 1, ..OutputConfig::default() });
+    srv.set_output(OutputConfig { width: 1280, height: 960, scale: Scale::from_int(1), ..OutputConfig::default() });
     p.read(&mut srv);
     assert!(p.take().iter().any(|e| e.object == f && e.args == [Arg::Uint(120)]));
     let f2 = p.new_id(&wp_fractional_scale_v1::INTERFACE);
     p.send(&mut srv, manager, wp_fractional_scale_manager_v1::Request::GetFractionalScale { id: f2, surface: s });
     assert_eq!(p.code(), Some((manager, wp_fractional_scale_manager_v1::Error::FRACTIONAL_SCALE_EXISTS.0)));
+}
+
+/// At 150 % (ADR 0179): clients that know only whole scales hear 2 (and
+/// draw at it, the compositor shrinks), clients with fractional scale hear
+/// exactly 180/120, and a change tells both.
+#[test]
+fn a_fractional_output_says_the_next_whole_scale_and_the_exact_one() {
+    let at = |percent| OutputConfig {
+        width: 1920,
+        height: 1200,
+        scale: Scale::from_percent(percent),
+        ..OutputConfig::default()
+    };
+    let (mut srv, shared) = server_with(at(150));
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let output = p.bind(&mut srv, registry, &wl_output::INTERFACE, 3);
+    let e = p.take();
+    assert!(e.iter().any(|e| e.object == output && e.name() == ("wl_output", "scale") && e.args == [Arg::Int(2)]));
+    // The output's logical size is the physical one over 1.5: 1280 x 800.
+    assert_eq!(srv.scene().logical_size(), (1280, 800));
+    let manager = p.bind(&mut srv, registry, &wp_fractional_scale_manager_v1::INTERFACE, 1);
+    let s = surface(&mut p, &mut srv, &g);
+    let f = p.new_id(&wp_fractional_scale_v1::INTERFACE);
+    p.send(&mut srv, manager, wp_fractional_scale_manager_v1::Request::GetFractionalScale { id: f, surface: s });
+    assert_eq!(p.take()[0].args, [Arg::Uint(180)]);
+    srv.set_output(at(125));
+    p.read(&mut srv);
+    let e = p.take();
+    assert!(e.iter().any(|e| e.object == f && e.args == [Arg::Uint(150)]));
+    assert!(e.iter().any(|e| e.object == output && e.name() == ("wl_output", "scale") && e.args == [Arg::Int(2)]));
+    assert_eq!(srv.scene().logical_size(), (1536, 960));
+}
+
+/// Damage through a viewport at 150 %: a buffer of 1.5 pixels per logical
+/// pixel (rounded outwards at the edges).
+#[test]
+fn surface_damage_goes_through_a_fractional_viewport() {
+    let (mut srv, shared) = server_with(OutputConfig {
+        width: 1920,
+        height: 1200,
+        scale: Scale::from_percent(150),
+        ..OutputConfig::default()
+    });
+    let (mut p, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut p, &mut srv, registry);
+    let vpr = p.bind(&mut srv, registry, &wp_viewporter::INTERFACE, 1);
+    let w = mapped(&mut p, &mut srv, &g, "v", 12, 6, 0x0011_1111);
+    let vp = p.new_id(&wp_viewport::INTERFACE);
+    p.send(&mut srv, vpr, wp_viewporter::Request::GetViewport { id: vp, surface: w.surface });
+    p.send(&mut srv, vp, wp_viewport::Request::SetDestination { width: 8, height: 4 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Commit);
+    let fill = |pixel: u32| {
+        for px in w.mem.borrow_mut().chunks_exact_mut(4) {
+            px.copy_from_slice(&pixel.to_le_bytes());
+        }
+    };
+    fill(0x00ee_eeee);
+    p.send(&mut srv, w.surface, wl_surface::Request::Attach { buffer: Some(w.buffer), x: 0, y: 0 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Damage { x: 0, y: 0, width: 8, height: 4 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Commit);
+    let content = srv.scene().windows()[0].content();
+    assert_eq!(content.pixels.iter().filter(|p| **p == 0xffee_eeee).count(), 12 * 6, "all of the buffer");
+    // Logical pixel (7, 3), the last: buffer columns 10.5..12 and rows 4.5..6,
+    // outwards 10..12 and 4..6.
+    fill(0x00aa_aaaa);
+    p.send(&mut srv, w.surface, wl_surface::Request::Attach { buffer: Some(w.buffer), x: 0, y: 0 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Damage { x: 7, y: 3, width: 1, height: 1 });
+    p.send(&mut srv, w.surface, wl_surface::Request::Commit);
+    let content = srv.scene().windows()[0].content();
+    let changed: Vec<usize> = (0..72).filter(|i| content.pixels[*i] == 0xffaa_aaaa).collect();
+    assert_eq!(changed, [4 * 12 + 10, 4 * 12 + 11, 5 * 12 + 10, 5 * 12 + 11]);
 }
 
 #[test]

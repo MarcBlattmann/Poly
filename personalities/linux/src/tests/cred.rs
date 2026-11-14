@@ -207,6 +207,34 @@ fn prctl_speculation_controls() {
     assert_eq!(p(&mut k, &[set, 0, PR_SPEC_FORCE_DISABLE]), Ok(0));
 }
 
+/// `PR_SET_SECUREBITS` through the call: the other arguments are ignored,
+/// a refusal is `EPERM`, and `PR_SET_KEEPCAPS` obeys the lock.
+#[test]
+fn prctl_secure_bits() {
+    let mut k = root();
+    let p = |k: &mut FakeKernel, args: &[u64]| sys(k, nr::PRCTL, args);
+    let (get, set) = (u64::from(PR_GET_SECUREBITS), u64::from(PR_SET_SECUREBITS));
+    assert_eq!(p(&mut k, &[get, 9, 9, 9, 9]), Ok(0));
+    assert_eq!(p(&mut k, &[set, 0x5, 7, 8, 9]), Ok(0));
+    assert_eq!(p(&mut k, &[get]), Ok(0x5));
+    assert_eq!(p(&mut k, &[set, 0x1000]), Err(Errno::EPERM));
+    assert_eq!(p(&mut k, &[set, 1 << 32]), Err(Errno::EPERM));
+    assert_eq!(p(&mut k, &[set, 0x30]), Ok(0));
+    assert_eq!(p(&mut k, &[PR_GET_KEEPCAPS.into()]), Ok(1));
+    assert_eq!(p(&mut k, &[PR_SET_KEEPCAPS.into(), 2]), Err(Errno::EINVAL));
+    assert_eq!(p(&mut k, &[PR_SET_KEEPCAPS.into(), 0]), Err(Errno::EPERM));
+    assert_eq!(p(&mut k, &[PR_SET_KEEPCAPS.into(), 1]), Err(Errno::EPERM));
+    assert_eq!(p(&mut k, &[get]), Ok(0x30));
+    // NO_CAP_AMBIENT_RAISE: EPERM for a capability that could be raised.
+    let mut k = root();
+    let both = CapSet::only(cap::KILL);
+    crate::cred::change(&mut k, |c| c.set_caps(CapSet::ALL, CapSet::ALL, both)).unwrap();
+    assert_eq!(p(&mut k, &[set, 0x40]), Ok(0));
+    assert_eq!(p(&mut k, &[PR_CAP_AMBIENT.into(), PR_CAP_AMBIENT_RAISE, cap::KILL.into(), 0, 0]), Err(Errno::EPERM));
+    assert_eq!(p(&mut k, &[set, 0]), Ok(0));
+    assert_eq!(p(&mut k, &[PR_CAP_AMBIENT.into(), PR_CAP_AMBIENT_RAISE, cap::KILL.into(), 0, 0]), Ok(0));
+}
+
 #[test]
 fn prctl_capabilities_and_flags() {
     let mut k = root();

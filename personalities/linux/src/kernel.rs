@@ -1174,9 +1174,11 @@ pub trait LinuxKernel {
 
     /// unshare(2) `CLONE_NEWNS`: a copy of the calling process's mount
     /// table as a new mount namespace owned by `owner`, the process's root
-    /// and working directory moved to the same places in the copy. (Poly
-    /// does not lock the copied mounts as mount_namespaces(7) describes
-    /// for a less privileged namespace.) `EINVAL` by default.
+    /// and working directory moved to the same places in the copy. With
+    /// `to_slave` (the owner is not the user namespace that owns the
+    /// original) the copy's shared mounts become slaves and its mounts are
+    /// locked, as mount_namespaces(7) describes for a less privileged
+    /// namespace. `EINVAL` by default.
     fn copy_mounts(
         &mut self,
         owner: &crate::ns::user::UserNsRef,

@@ -216,3 +216,12 @@ file failed") did not show here: galculator runs with Debian 13's GTK
 CI's runner. During this work the `toolkits` group failed with that error
 in one run and passed in the next, on the same PC, so it does not happen
 every time. It is not on this path and was not looked into further.
+
+*Later (track `linux-gtk-shm`):* the cause was not the GTK packages but the
+missing fonts. That checkout had never run `cargo xtask fonts fetch`, so
+the toolkits disk held no font at all. Without one, GTK computes a window
+height of about 1.4 million pixels after a relayout, the shm pool's
+`ftruncate` gets a negative length and fails with `EINVAL` (as on Linux),
+and GDK crashes. CI fetches the fonts. The boot test now fetches them
+itself and skips the GTK apps, saying why, when it cannot
+(`fonts_ready` in `tools/xtask/src/toolkits.rs`).

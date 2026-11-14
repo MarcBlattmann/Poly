@@ -384,6 +384,13 @@ pub trait LinuxAdmin {
         Err(Errno::ENOSYS)
     }
 
+    /// move_mount(2) with `MOVE_MOUNT_SET_GROUP`: the mount whose root
+    /// `to` names gets the propagation group of the mount whose root
+    /// `from` names; nothing moves.
+    fn mount_set_group(&mut self, _from: &PathAt, _to: &PathAt) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+
     /// mount_setattr(2) of the mount whose root `at` names (and with
     /// `recursive` every mount below it); `change` is checked.
     fn mount_setattr(&mut self, _at: &PathAt, _recursive: bool, _change: &AttrChange) -> Result<(), Errno> {

@@ -114,6 +114,22 @@ pub fn source(id: MountId) -> Option<Vec<u8>> {
     SOURCES.lock().get(&id).cloned()
 }
 
+/// What `/proc/<pid>/mountinfo` shows as the source of mount `m`: what
+/// mount(2) was given for it, else what its file system was mounted from
+/// (a copy of a mount, made by a recursive bind, propagation or a copied
+/// namespace, shows its original's source), else the disk's or the file
+/// system's name.
+pub fn source_of(m: &poly_vfs::Mount) -> Vec<u8> {
+    if let Some(s) = source(m.id()) {
+        return s;
+    }
+    let sb = m.sb_source();
+    if !sb.is_empty() {
+        return sb;
+    }
+    super::disk::source_of(m.id(), m.fs_name()).into_bytes()
+}
+
 /// Mount `id` is gone.
 pub fn forget(id: MountId) {
     SOURCES.lock().remove(&id);

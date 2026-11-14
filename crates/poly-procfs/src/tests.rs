@@ -811,6 +811,46 @@ fn mounts_and_mountinfo() {
     );
 }
 
+/// The spec sheet of proc_mountinfo, "Escaping": the source field escapes
+/// `#` too, the paths do not; a backslash is always escaped.
+#[test]
+fn mount_fields_are_escaped_and_the_source_escapes_hash() {
+    let line = |mount_point: &str, root: &str, source: &str| {
+        let m = MountEntry {
+            id: 7,
+            parent: 1,
+            dev: (0, 9),
+            root: root.as_bytes().to_vec(),
+            mount_point: mount_point.as_bytes().to_vec(),
+            source: source.as_bytes().to_vec(),
+            fstype: String::from("tmpfs"),
+            ..MountEntry::default()
+        };
+        let info = String::from_utf8(format::mountinfo(core::slice::from_ref(&m))).unwrap();
+        let old = String::from_utf8(format::mounts(&[m])).unwrap();
+        (info, old)
+    };
+    for (source, shown) in [
+        ("dev#1", r"dev\0431"),
+        ("#tag", r"\043tag"),
+        ("tag#", r"tag\043"),
+        ("#", r"\043"),
+        ("a##b", r"a\043\043b"),
+        ("# a\tb", r"\043\040a\011b"),
+        (r"s\043t", r"s\134043t"),
+        ("host:/ex port", r"host:/ex\040port"),
+        ("p%20:q\n", r"p%20:q\012"),
+    ] {
+        let (info, old) = line("/m", "/", source);
+        assert_eq!(info, std::format!("7 1 0:9 / /m rw,relatime - tmpfs {shown} rw\n"), "{source:?}");
+        assert_eq!(old, std::format!("{shown} /m tmpfs rw,relatime 0 0\n"), "{source:?}");
+    }
+    let (info, old) = line(r"/t/dir#1 x/lit\040y", "/sub#dir/in ner", "plain");
+    let point = r"/t/dir#1\040x/lit\134040y";
+    assert_eq!(info, std::format!("7 1 0:9 /sub#dir/in\\040ner {point} rw,relatime - tmpfs plain rw\n"));
+    assert_eq!(old, std::format!("plain {point} tmpfs rw,relatime 0 0\n"));
+}
+
 #[test]
 fn system_files() {
     let e = env();

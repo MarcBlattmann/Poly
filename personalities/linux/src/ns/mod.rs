@@ -587,6 +587,18 @@ fn register(inum: u32, h: Handle) {
     }
 }
 
+/// Whether `creds` has `cap` in the user namespace with inode number
+/// `inum` (0 or the initial namespace's number: the initial one). For
+/// what records its owner by number, like a superblock (ADR 0177). A
+/// namespace that is gone leaves the initial one to decide.
+pub fn capable_in_user_ns(creds: &Creds, inum: u32, capability: u32) -> bool {
+    let owner = match lookup(inum, Kind::User) {
+        Some(Handle::User(ns)) if inum != 0 => ns,
+        _ => None,
+    };
+    user::ns_capable(creds, &owner, capability)
+}
+
 /// The namespace with inode number `inum` of type `kind` (the initial
 /// ones included); `None` if there is none (any more).
 pub fn lookup(inum: u32, kind: Kind) -> Option<Handle> {
@@ -746,9 +758,11 @@ pub fn make(
     }
     // Last: the kernel's copy cannot be taken back.
     if flags & CLONE_NEWNS != 0 {
-        // A copy made with a new user namespace turns its shared mounts into
-        // slaves of the original's peer groups (mount_namespaces(7)).
-        n.mnt = Some(copy_mounts(&owner, flags & CLONE_NEWUSER != 0)?);
+        // A copy made for another user namespace than the one that owns
+        // the original (a new one, or one made earlier) turns its shared
+        // mounts into slaves of the original's peer groups and locks its
+        // mounts (mount_namespaces(7), "Restrictions on mount namespaces").
+        n.mnt = Some(copy_mounts(&owner, !user::same(&owner, &ns.mnt_owner()))?);
     }
     *ns = n;
     *creds = c;

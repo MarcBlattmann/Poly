@@ -85,11 +85,32 @@ impl IdMap {
     }
 }
 
+/// The kernel ids a user namespace maps, as `(first, count)` ranges: the
+/// owners its capabilities over files reach.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct IdRanges {
+    pub uids: Vec<(u32, u32)>,
+    pub gids: Vec<(u32, u32)>,
+}
+
+impl IdRanges {
+    /// Whether kernel ids `uid` and `gid` are both mapped.
+    pub fn covers(&self, uid: u32, gid: u32) -> bool {
+        let within = |ranges: &[(u32, u32)], id: u32| {
+            ranges.iter().any(|&(first, count)| id >= first && u64::from(id) < u64::from(first) + u64::from(count))
+        };
+        within(&self.uids, uid) && within(&self.gids, gid)
+    }
+}
+
 /// The parts of a user namespace that change after it is made.
 #[derive(Debug)]
 struct Maps {
     uid: Option<IdMap>,
     gid: Option<IdMap>,
+    /// [`UserNs::file_ranges`], kept once both maps are written (a map is
+    /// written once).
+    ranges: Option<Arc<IdRanges>>,
     /// `/proc/[pid]/setgroups`: "allow" (true) or "deny".
     setgroups: bool,
 }
@@ -148,6 +169,22 @@ impl UserNs {
             IdKind::Uid => m.uid.clone(),
             IdKind::Gid => m.gid.clone(),
         }
+    }
+
+    /// The kernel ids the namespace maps (none for a map not written yet).
+    pub fn file_ranges(&self) -> Arc<IdRanges> {
+        let mut m = self.maps.lock();
+        if let Some(r) = &m.ranges {
+            return r.clone();
+        }
+        let lower = |map: &Option<IdMap>| -> Vec<(u32, u32)> {
+            map.as_ref().map(|m| m.extents.iter().map(|e| (e.lower, e.count)).collect()).unwrap_or_default()
+        };
+        let ranges = Arc::new(IdRanges { uids: lower(&m.uid), gids: lower(&m.gid) });
+        if m.uid.is_some() && m.gid.is_some() {
+            m.ranges = Some(ranges.clone());
+        }
+        ranges
     }
 
     fn down(&self, kind: IdKind, id: u32) -> Option<u32> {
@@ -266,7 +303,7 @@ pub fn create(creds: &Creds) -> Result<Arc<UserNs>, Errno> {
         level,
         owner: creds.euid,
         group: creds.egid,
-        maps: Mutex::new(Maps { uid: None, gid: None, setgroups }),
+        maps: Mutex::new(Maps { uid: None, gid: None, ranges: None, setgroups }),
     }))
 }
 
@@ -305,8 +342,16 @@ pub fn format_map(target: &UserNsRef, kind: IdKind, reader: &UserNsRef) -> Vec<u
 
 /// Parse a map write: lines of three decimal numbers. `EINVAL` for
 /// anything else, an empty map, more than [`MAX_EXTENTS`] lines, a length
-/// of 0, ranges that run past `u32`, or overlapping ranges inside or
-/// outside (user_namespaces(7), "the rules about the format of the file").
+/// of 0, ranges that reach the id 4294967295, or overlapping ranges inside
+/// or outside (user_namespaces(7), "the rules about the format of the
+/// file"; the spec sheet of userns_idmap, "The size rule, exactly").
+///
+/// A number is decimal digits only (no sign, no `0x`; a leading 0 does
+/// not make it octal). One above 4294967295 is not refused for its size:
+/// only its low 32 bits count, so `4294967296` is 0 (as a count:
+/// `EINVAL`). The id 4294967295 (`(uid_t) -1`, "no id") can never be part
+/// of a range: for the inside and the outside start alike, start + count
+/// is at most 4294967295.
 pub fn parse_map(text: &[u8]) -> Result<Vec<Extent>, Errno> {
     let text = text.strip_suffix(b"\n").unwrap_or(text);
     let mut extents = Vec::new();
@@ -317,13 +362,13 @@ pub fn parse_map(text: &[u8]) -> Result<Vec<Extent>, Errno> {
             if !f.iter().all(u8::is_ascii_digit) {
                 return Err(Errno::EINVAL);
             }
-            core::str::from_utf8(f).ok().and_then(|s| s.parse().ok()).ok_or(Errno::EINVAL)
+            Ok(f.iter().fold(0u32, |n, &d| n.wrapping_mul(10).wrapping_add(u32::from(d - b'0'))))
         };
         let (first, lower, count) = (num()?, num()?, num()?);
         if fields.next().is_some() || count == 0 {
             return Err(Errno::EINVAL);
         }
-        let past = |start: u32| u64::from(start) + u64::from(count) > 1 << 32;
+        let past = |start: u32| u64::from(start) + u64::from(count) > u64::from(NO_ID);
         if past(first) || past(lower) {
             return Err(Errno::EINVAL);
         }
