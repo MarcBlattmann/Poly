@@ -65,7 +65,7 @@
 {"symbol":"CreateFontIndirectA","src":["wine-spec"],"seeds":["wine:gdi32/tests/font.c:test_CreateFontIndirect","wine:gdi32/tests/font.c:test_logfont","wine:gdi32/tests/font.c:test_max_height","wine:gdi32/tests/font.c:test_east_asian_font_selection","wine:gdi32/tests/font.c:test_GetCharacterPlacement_kerning","wine:gdi32/tests/font.c:test_GetGlyphOutline_empty_contour","wine:gdi32/tests/font.c:test_height","wine:gdi32/tests/font.c:test_long_names"]},
 {"symbol":"CreateFontIndirectExA","src":["wine-spec"],"seeds":["wine:gdi32/tests/font.c:test_CreateFontIndirectEx"]},
 {"symbol":"CreateFontIndirectExW","src":["wine-spec"]},
-{"symbol":"CreateFontIndirectW","status":"claimed","claimed_by":"spec-chrome-win-6","tests_visible":7,"tests_held_out":3,"src":["wine-spec"],"seeds":["wine:gdi32/tests/font.c:test_font_weight","wine:gdi32/tests/font.c:test_GetTextFace","wine:gdi32/tests/metafile.c:test_emf_text_extents"]},
+{"symbol":"CreateFontIndirectW","status":"green","tests_visible":7,"tests_held_out":3,"src":["wine-spec"],"seeds":["wine:gdi32/tests/font.c:test_font_weight","wine:gdi32/tests/font.c:test_GetTextFace","wine:gdi32/tests/metafile.c:test_emf_text_extents"]},
 {"symbol":"CreateFontW","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"CreateHalftonePalette","src":["wine-spec"],"seeds":["wine:gdi32/tests/palette.c:test_halftone_palette","wine:gdi32/tests/gdiobj.c:test_GetCurrentObject"]},
 {"symbol":"CreateHatchBrush","src":["wine-spec"],"seeds":["wine:gdi32/tests/brush.c:test_hatch_brush","wine:gdi32/tests/dib.c:draw_graphics"]},

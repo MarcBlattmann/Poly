@@ -1085,6 +1085,11 @@ impl Gdi {
         Some(b)
     }
 
+    /// Whether `h` is a font (logical or stock).
+    pub fn is_font(&self, h: u64) -> bool {
+        matches!(self.obj(h), Some(Obj::Font { .. }))
+    }
+
     /// Whether `h` is a region (`GetObject` has nothing to say about one:
     /// 0 with ERROR_INVALID_HANDLE, CreateRectRgn.yaml `in_a_dc`).
     pub fn is_region(&self, h: u64) -> bool {

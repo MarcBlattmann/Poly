@@ -1385,10 +1385,10 @@
 <rect x="352.6" y="548.4" width="2.4" height="35.5" fill="#218bff"/>
 <rect x="345.6" y="547.4" width="33.5" height="37.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>gdi32: 29 / 545 done (5.3%)</title>
+<g><title>gdi32: 30 / 545 done (5.5%)</title>
 <rect x="346.6" y="585.9" width="31.5" height="32.7" fill="#e6eaef"/>
 <rect x="346.6" y="585.9" width="1.7" height="32.7" fill="#2da44e"/>
-<rect x="348.3" y="585.9" width="0.3" height="32.7" fill="#218bff"/>
+<rect x="348.4" y="585.9" width="0.3" height="32.7" fill="#218bff"/>
 <rect x="345.6" y="584.9" width="33.5" height="34.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>icuuc: 0 / 542 done (0.0%)</title>
@@ -1963,10 +1963,10 @@
 <rect x="544.6" y="624.3" width="0.6" height="7.3" fill="#218bff"/>
 <rect x="543.6" y="623.3" width="10.4" height="9.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>dwrite: 40 / 45 done (88.9%)</title>
+<g><title>dwrite: 41 / 45 done (91.1%)</title>
 <rect x="554.9" y="624.3" width="8.4" height="7.3" fill="#e6eaef"/>
-<rect x="554.9" y="624.3" width="7.4" height="7.3" fill="#2da44e"/>
-<rect x="562.4" y="624.3" width="0.9" height="7.3" fill="#218bff"/>
+<rect x="554.9" y="624.3" width="7.6" height="7.3" fill="#2da44e"/>
+<rect x="562.6" y="624.3" width="0.7" height="7.3" fill="#218bff"/>
 <rect x="553.9" y="623.3" width="10.4" height="9.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>snmpapi: 0 / 45 done (0.0%)</title>
