@@ -102,3 +102,65 @@ fn guard_pages_outside_stacks_fire_once() {
     assert_eq!((q.protect, q.region_size), (RW | PAGE_GUARD, 0x1000));
     assert_eq!(vm.query(base + 0x1000).unwrap().protect, RW);
 }
+
+const GB: u64 = 1 << 30;
+
+/// V8's sandbox on Windows (Chrome's renderer, ADR 0155 step 11): one large placeholder, split
+/// into pieces, a piece replaced by private memory, freed back, and the pieces joined again.
+#[test]
+fn placeholders_split_replace_preserve_and_coalesce() {
+    let mut vm = VirtualMemory::new();
+    let mut b = Count::default();
+    let kind = MEM_RESERVE | MEM_RESERVE_PLACEHOLDER;
+    // Only PAGE_NOACCESS, only with MEM_RESERVE.
+    assert_eq!(vm.allocate(&mut b, 0, 64 * GB, 0, kind, RW), Err(STATUS_INVALID_PAGE_PROTECTION));
+    assert_eq!(
+        vm.allocate(&mut b, 0, 64 * GB, 0, MEM_RESERVE_PLACEHOLDER, PAGE_NOACCESS),
+        Err(STATUS_INVALID_PARAMETER_5)
+    );
+    assert_eq!(vm.allocate(&mut b, 0, 64 * GB, 0, kind | MEM_COMMIT, PAGE_NOACCESS), Err(STATUS_INVALID_PARAMETER_5));
+    let (base, size) = vm.allocate(&mut b, 0, 64 * GB, 0, kind, PAGE_NOACCESS).unwrap();
+    assert_eq!(size, 64 * GB);
+    let q = vm.query(base).unwrap();
+    assert_eq!((q.state, q.type_, q.allocation_base, q.region_size), (MEM_RESERVE, MEM_PRIVATE, base, 64 * GB));
+    // Nothing is committed in a placeholder.
+    assert_eq!(vm.allocate(&mut b, base, 0x1000, 0, MEM_COMMIT, RW), Err(STATUS_CONFLICTING_ADDRESSES));
+    // Split off [base + 16 GB, base + 32 GB): three placeholders.
+    let release = MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER;
+    assert_eq!(vm.free(&mut b, base + 16 * GB, 16 * GB, release), Ok((base + 16 * GB, 16 * GB)));
+    assert_eq!(vm.query(base).unwrap().region_size, 16 * GB);
+    assert_eq!(vm.query(base + 20 * GB).unwrap().allocation_base, base + 16 * GB);
+    assert_eq!(vm.query(base + 40 * GB).unwrap().allocation_base, base + 32 * GB);
+    // A split needs 64 KiB boundaries and stays inside the placeholder.
+    assert_eq!(vm.free(&mut b, base + 0x1000, 0x1_0000, release), Err(STATUS_INVALID_PARAMETER_2));
+    assert_eq!(vm.free(&mut b, base, 0x1000, release), Err(STATUS_INVALID_PARAMETER_3));
+    assert_eq!(vm.free(&mut b, base, 17 * GB, release), Err(STATUS_CONFLICTING_ADDRESSES));
+    // Replace the middle piece with private memory: exactly its range.
+    let replace = MEM_RESERVE | MEM_REPLACE_PLACEHOLDER;
+    assert_eq!(vm.allocate(&mut b, base + 16 * GB, GB, 0, replace, RW), Err(STATUS_CONFLICTING_ADDRESSES));
+    assert_eq!(
+        vm.allocate(&mut b, base + 16 * GB, 16 * GB, 0, replace | MEM_COMMIT, RW),
+        Ok((base + 16 * GB, 16 * GB))
+    );
+    assert_eq!(b.committed, 16 * GB);
+    assert_eq!(vm.query(base + 16 * GB).unwrap().state, MEM_COMMIT);
+    // Pieces that are not all placeholders do not coalesce.
+    let join = MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS;
+    assert_eq!(vm.free(&mut b, base, 64 * GB, join), Err(STATUS_CONFLICTING_ADDRESSES));
+    // Freed back to the placeholder (part of it is not enough).
+    assert_eq!(vm.free(&mut b, base + 16 * GB, GB, release), Err(STATUS_UNABLE_TO_FREE_VM));
+    assert_eq!(vm.free(&mut b, base + 16 * GB, 16 * GB, release), Ok((base + 16 * GB, 16 * GB)));
+    assert_eq!(b.released, 16 * GB);
+    let q = vm.query(base + 16 * GB).unwrap();
+    assert_eq!((q.state, q.allocation_protect, q.region_size), (MEM_RESERVE, PAGE_NOACCESS, 16 * GB));
+    // The whole range must be named exactly.
+    assert_eq!(vm.free(&mut b, base, 48 * GB, join), Err(STATUS_CONFLICTING_ADDRESSES));
+    assert_eq!(vm.free(&mut b, base + GB, 63 * GB, join), Err(STATUS_CONFLICTING_ADDRESSES));
+    assert_eq!(vm.free(&mut b, base, 64 * GB, join), Ok((base, 64 * GB)));
+    assert_eq!(vm.query(base + 40 * GB).unwrap().allocation_base, base);
+    // An ordinary allocation is neither split nor joined; a placeholder is released as usual.
+    let (other, _) = vm.allocate(&mut b, 0, 0x2_0000, 0, MEM_RESERVE, RW).unwrap();
+    assert_eq!(vm.free(&mut b, other, 0x1_0000, release), Err(STATUS_CONFLICTING_ADDRESSES));
+    assert_eq!(vm.free(&mut b, base, 0, MEM_RELEASE), Ok((base, 64 * GB)));
+    assert_eq!(vm.query(base).unwrap().state, MEM_FREE);
+}

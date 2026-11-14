@@ -23,6 +23,14 @@
 //! - Committed pages read as zero until written; decommitting frees them
 //!   (their contents are gone); releasing frees the whole allocation and
 //!   must name its base.
+//! - A *placeholder* (Learn, "VirtualAlloc2", "VirtualFree", "MapViewOfFile3",
+//!   "UnmapViewOfFile2") is a private reservation made with `MEM_RESERVE_PLACEHOLDER`
+//!   (`PAGE_NOACCESS`, nothing can be committed in it). It can be split
+//!   (`MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER` on part of it), joined again with its neighbours
+//!   (`MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS` over their whole range), and replaced by a
+//!   private allocation (`MEM_RESERVE | MEM_REPLACE_PLACEHOLDER`) or a view
+//!   (`MEM_REPLACE_PLACEHOLDER`) of exactly its range, which `MEM_PRESERVE_PLACEHOLDER` turns
+//!   back into the placeholder. See [`Placeholder`].
 //! - `PAGE_GUARD`: the first access to a guard page faults with
 //!   `STATUS_GUARD_PAGE_VIOLATION` and turns the page's guard status off
 //!   ("Creating Guard Pages"). A thread's stack grows that way: when its
@@ -112,6 +120,19 @@ pub enum AllocKind {
     View(ViewInfo),
 }
 
+/// How an allocation stands to placeholders (see the module docs).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Placeholder {
+    /// An ordinary allocation.
+    #[default]
+    No,
+    /// A placeholder: private, every page reserved, `PAGE_NOACCESS`.
+    Is,
+    /// A private allocation or a view that replaced a placeholder of exactly its range:
+    /// `MEM_PRESERVE_PLACEHOLDER` makes it that placeholder again.
+    Replaced,
+}
+
 /// A reserved range.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Allocation {
@@ -124,6 +145,7 @@ pub struct Allocation {
     /// A thread's stack: its guard page grows it.
     pub stack: bool,
     pub pages: PageMap,
+    pub placeholder: Placeholder,
 }
 
 impl Allocation {
@@ -163,6 +185,19 @@ impl Allocation {
     /// The page at `addr`.
     pub fn page(&self, addr: u64) -> PageState {
         self.pages.get(self.index(addr))
+    }
+
+    /// A placeholder of `[base, base + size)`.
+    fn new_placeholder(base: u64, size: u64) -> Allocation {
+        Allocation {
+            base,
+            size,
+            protect: PAGE_NOACCESS,
+            kind: AllocKind::Private,
+            stack: false,
+            pages: PageMap::new((size / PAGE_SIZE) as usize, PageState::Reserved),
+            placeholder: Placeholder::Is,
+        }
     }
 }
 
@@ -218,6 +253,8 @@ pub struct NewView {
     pub protect: u32,
     pub info: ViewInfo,
     pub pages: PageMap,
+    /// `MEM_REPLACE_PLACEHOLDER`: the view replaces the placeholder at `base` of exactly its size.
+    pub replace: bool,
 }
 
 /// The address space of one NT process. See the module docs.
@@ -365,6 +402,13 @@ impl VirtualMemory {
     /// - `MEM_RESET` / `MEM_RESET_UNDO`: the range must be committed
     ///   (`STATUS_CONFLICTING_ADDRESSES` / `STATUS_NOT_COMMITTED`); the
     ///   contents are kept, which `MEM_RESET` allows.
+    /// - `MEM_RESERVE | MEM_RESERVE_PLACEHOLDER` (and `MEM_TOP_DOWN`), `PAGE_NOACCESS`: a new
+    ///   placeholder (another type: `STATUS_INVALID_PARAMETER_5`, another protection:
+    ///   `STATUS_INVALID_PAGE_PROTECTION`). `MEM_RESERVE | MEM_REPLACE_PLACEHOLDER` (and
+    ///   `MEM_COMMIT`): the placeholder whose base and size are exactly the request's becomes a
+    ///   private allocation (any other range: `STATUS_CONFLICTING_ADDRESSES`). Committing in a
+    ///   placeholder is `STATUS_CONFLICTING_ADDRESSES`. Statuses to be confirmed by the spec
+    ///   agent (Learn names the rules, not the statuses).
     #[allow(clippy::too_many_arguments)]
     pub fn allocate(
         &mut self,
@@ -382,9 +426,50 @@ impl VirtualMemory {
             | MEM_TOP_DOWN
             | MEM_WRITE_WATCH
             | MEM_PHYSICAL
-            | MEM_LARGE_PAGES;
+            | MEM_LARGE_PAGES
+            | MEM_RESERVE_PLACEHOLDER
+            | MEM_REPLACE_PLACEHOLDER;
         if alloc_type & !KNOWN != 0 {
             return Err(STATUS_INVALID_PARAMETER_5);
+        }
+        if alloc_type & MEM_RESERVE_PLACEHOLDER != 0 {
+            if alloc_type & !(MEM_RESERVE | MEM_RESERVE_PLACEHOLDER | MEM_TOP_DOWN) != 0
+                || alloc_type & MEM_RESERVE == 0
+            {
+                return Err(STATUS_INVALID_PARAMETER_5);
+            }
+            if protect != PAGE_NOACCESS {
+                return Err(STATUS_INVALID_PAGE_PROTECTION);
+            }
+            if size == 0 {
+                return Err(STATUS_INVALID_PARAMETER_4);
+            }
+            let (start, len) = self.place(base, size, alloc_type & MEM_TOP_DOWN != 0, zero_bits)?;
+            self.allocations.insert(start, Allocation::new_placeholder(start, len));
+            return Ok((start, len));
+        }
+        if alloc_type & MEM_REPLACE_PLACEHOLDER != 0 {
+            if alloc_type & !(MEM_RESERVE | MEM_REPLACE_PLACEHOLDER | MEM_COMMIT) != 0 || alloc_type & MEM_RESERVE == 0
+            {
+                return Err(STATUS_INVALID_PARAMETER_5);
+            }
+            let prot = Protection::new(protect, true)?;
+            let len = self
+                .allocations
+                .get(&base)
+                .filter(|a| a.placeholder == Placeholder::Is && page_up(size) == Some(a.size))
+                .map(|a| a.size)
+                .ok_or(STATUS_CONFLICTING_ADDRESSES)?;
+            let commit = alloc_type & MEM_COMMIT != 0;
+            if commit {
+                b.commit(base, len, prot.hw(false))?;
+            }
+            let state = if commit { PageState::Committed(prot) } else { PageState::Reserved };
+            let a = self.allocations.get_mut(&base).expect("found above");
+            a.placeholder = Placeholder::Replaced;
+            a.protect = protect;
+            a.pages = PageMap::new((len / PAGE_SIZE) as usize, state);
+            return Ok((base, len));
         }
         if alloc_type & (MEM_RESET | MEM_RESET_UNDO) != 0 {
             let only_one = alloc_type == MEM_RESET || alloc_type == MEM_RESET_UNDO;
@@ -408,8 +493,15 @@ impl VirtualMemory {
             let (start, len) = self.place(base, size, alloc_type & MEM_TOP_DOWN != 0, zero_bits)?;
             let state = if commit { PageState::Committed(prot) } else { PageState::Reserved };
             let pages = PageMap::new((len / PAGE_SIZE) as usize, state);
-            let allocation =
-                Allocation { base: start, size: len, protect, kind: AllocKind::Private, stack: false, pages };
+            let allocation = Allocation {
+                base: start,
+                size: len,
+                protect,
+                kind: AllocKind::Private,
+                stack: false,
+                pages,
+                placeholder: Placeholder::No,
+            };
             if commit {
                 b.commit(start, len, prot.hw(false))?;
             }
@@ -417,6 +509,9 @@ impl VirtualMemory {
             return Ok((start, len));
         }
         let (start, end) = self.page_range(base, size)?;
+        if self.allocation(start).is_some_and(|a| a.placeholder == Placeholder::Is) {
+            return Err(STATUS_CONFLICTING_ADDRESSES);
+        }
         self.commit_range(b, start, end, prot)
     }
 
@@ -533,9 +628,14 @@ impl VirtualMemory {
     ///   end of the allocation; otherwise the pages of the range, which
     ///   must lie in it (`STATUS_UNABLE_TO_FREE_VM`). Reserved pages in the
     ///   range are fine.
+    /// - `MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER` ([`preserve`](Self::preserve)) and
+    ///   `MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS` ([`coalesce`](Self::coalesce)): placeholders.
     pub fn free(&mut self, b: &mut dyn Backend, base: u64, size: u64, free_type: u32) -> Result<(u64, u64), NtStatus> {
-        if free_type != MEM_RELEASE && free_type != MEM_DECOMMIT {
-            return Err(STATUS_INVALID_PARAMETER_4);
+        match free_type {
+            MEM_RELEASE | MEM_DECOMMIT => {}
+            t if t == MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER => return self.preserve(b, base, size),
+            t if t == MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS => return self.coalesce(base, size),
+            _ => return Err(STATUS_INVALID_PARAMETER_4),
         }
         let start = page_down(base);
         let a = self.allocation(start).ok_or(STATUS_MEMORY_NOT_ALLOCATED)?;
@@ -567,6 +667,90 @@ impl VirtualMemory {
         let (first, last) = (a.index(start), a.index(end - 1) + 1);
         a.pages.fill(first..last, PageState::Reserved);
         Ok((start, end - start))
+    }
+
+    /// `MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER`. Learn ("VirtualFree"): on a placeholder it
+    /// splits off `[base, base + size)` as a placeholder of its own (the parts before and after
+    /// stay placeholders); on a private allocation that replaced a placeholder it frees the
+    /// allocation back to that placeholder. A view is unmapped with `UnmapViewOfFile2` instead
+    /// (`STATUS_UNABLE_TO_DELETE_SECTION`).
+    ///
+    /// Poly's readings, to be confirmed by the spec agent: a split is at the allocation
+    /// granularity (`STATUS_INVALID_PARAMETER_2` / `_3` for a base / size that is not a multiple
+    /// of 64 KiB), a size of 0 or the placeholder's whole range splits nothing and succeeds, a
+    /// range past the placeholder is `STATUS_CONFLICTING_ADDRESSES`; a replaced allocation is
+    /// freed whole (`STATUS_UNABLE_TO_FREE_VM` for part of it); any other allocation is
+    /// `STATUS_CONFLICTING_ADDRESSES`.
+    pub fn preserve(&mut self, b: &mut dyn Backend, base: u64, size: u64) -> Result<(u64, u64), NtStatus> {
+        let a = self.allocation(page_down(base)).ok_or(STATUS_MEMORY_NOT_ALLOCATED)?;
+        if a.kind != AllocKind::Private {
+            return Err(STATUS_UNABLE_TO_DELETE_SECTION);
+        }
+        let (abase, aend) = (a.base, a.end());
+        match a.placeholder {
+            Placeholder::Is => {
+                if !base.is_multiple_of(ALLOCATION_GRANULARITY) {
+                    return Err(STATUS_INVALID_PARAMETER_2);
+                }
+                if !size.is_multiple_of(ALLOCATION_GRANULARITY) {
+                    return Err(STATUS_INVALID_PARAMETER_3);
+                }
+                let end = if size == 0 { aend } else { base.checked_add(size).ok_or(STATUS_INVALID_PARAMETER_3)? };
+                if end > aend {
+                    return Err(STATUS_CONFLICTING_ADDRESSES);
+                }
+                self.allocations.remove(&abase);
+                for (lo, hi) in [(abase, base), (base, end), (end, aend)] {
+                    if hi > lo {
+                        self.allocations.insert(lo, Allocation::new_placeholder(lo, hi - lo));
+                    }
+                }
+                Ok((base, end - base))
+            }
+            Placeholder::Replaced => {
+                let end = if size == 0 {
+                    aend
+                } else {
+                    base.checked_add(size).and_then(page_up).ok_or(STATUS_INVALID_PARAMETER_3)?
+                };
+                if base != abase || end != aend {
+                    return Err(STATUS_UNABLE_TO_FREE_VM);
+                }
+                b.release(abase, aend - abase);
+                self.allocations.insert(abase, Allocation::new_placeholder(abase, aend - abase));
+                Ok((abase, aend - abase))
+            }
+            Placeholder::No => Err(STATUS_CONFLICTING_ADDRESSES),
+        }
+    }
+
+    /// `MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS`. Learn ("VirtualFree"): "lpAddress and dwSize
+    /// must exactly match the overall range of the placeholders to be merged": `[base, base +
+    /// size)` must start at a placeholder's base, end at one's end, and hold nothing but
+    /// placeholders with no gap between them; they become one. Anything else is
+    /// `STATUS_CONFLICTING_ADDRESSES`, a size of 0 `STATUS_INVALID_PARAMETER_3` (statuses to be
+    /// confirmed by the spec agent).
+    pub fn coalesce(&mut self, base: u64, size: u64) -> Result<(u64, u64), NtStatus> {
+        if size == 0 {
+            return Err(STATUS_INVALID_PARAMETER_3);
+        }
+        let end = base.checked_add(size).and_then(page_up).ok_or(STATUS_INVALID_PARAMETER_3)?;
+        let mut at = base;
+        for a in self.allocations.range(base..end).map(|(_, a)| a) {
+            if a.base != at || a.placeholder != Placeholder::Is || a.end() > end {
+                return Err(STATUS_CONFLICTING_ADDRESSES);
+            }
+            at = a.end();
+        }
+        if at != end || !self.allocations.contains_key(&base) {
+            return Err(STATUS_CONFLICTING_ADDRESSES);
+        }
+        let parts: Vec<u64> = self.allocations.range(base..end).map(|(&k, _)| k).collect();
+        for k in parts {
+            self.allocations.remove(&k);
+        }
+        self.allocations.insert(base, Allocation::new_placeholder(base, end - base));
+        Ok((base, end - base))
     }
 
     /// `NtProtectVirtualMemory` on this address space: returns the base and
@@ -713,14 +897,34 @@ impl VirtualMemory {
     /// Put a view in the address space (the caller maps its pages next,
     /// and removes it again with [`remove`](Self::remove) if that fails).
     /// Returns its base. Placement as for [`place`](Self::place).
+    ///
+    /// With `replace` (`MEM_REPLACE_PLACEHOLDER`, Learn "MapViewOfFile3") the view takes the place
+    /// of the placeholder whose base and size are exactly its own (`STATUS_CONFLICTING_ADDRESSES`
+    /// otherwise; to be confirmed by the spec agent).
     pub fn insert_view(&mut self, v: NewView) -> Result<u64, NtStatus> {
-        let (base, size) = self.place(v.base, v.size, v.top_down, v.zero_bits)?;
+        let (base, size, placeholder) = if v.replace {
+            let found = self.allocations.get(&v.base).filter(|a| a.placeholder == Placeholder::Is && a.size == v.size);
+            if found.is_none() {
+                return Err(STATUS_CONFLICTING_ADDRESSES);
+            }
+            (v.base, v.size, Placeholder::Replaced)
+        } else {
+            let (base, size) = self.place(v.base, v.size, v.top_down, v.zero_bits)?;
+            (base, size, Placeholder::No)
+        };
         if size != v.size || v.pages.len() as u64 * PAGE_SIZE != size {
             // A base that is not 64 KiB-aligned would shift the view.
             return Err(STATUS_MAPPED_ALIGNMENT);
         }
-        let a =
-            Allocation { base, size, protect: v.protect, kind: AllocKind::View(v.info), stack: false, pages: v.pages };
+        let a = Allocation {
+            base,
+            size,
+            protect: v.protect,
+            kind: AllocKind::View(v.info),
+            stack: false,
+            pages: v.pages,
+            placeholder,
+        };
         self.allocations.insert(base, a);
         Ok(base)
     }
@@ -738,9 +942,26 @@ impl VirtualMemory {
         Ok(self.allocations.remove(&base).expect("live"))
     }
 
-    /// Take the allocation at `base` out (a view whose mapping failed).
+    /// Take the allocation at `base` out (a view whose mapping failed). A view that had replaced
+    /// a placeholder leaves the placeholder behind.
     pub fn remove(&mut self, base: u64) -> Option<Allocation> {
-        self.allocations.remove(&base)
+        let a = self.allocations.remove(&base)?;
+        if a.placeholder == Placeholder::Replaced {
+            self.allocations.insert(a.base, Allocation::new_placeholder(a.base, a.size));
+        }
+        Some(a)
+    }
+
+    /// The view holding `addr` became the placeholder it replaced (`UnmapViewOfFile2` with
+    /// `MEM_PRESERVE_PLACEHOLDER`, after [`remove_view`](Self::remove_view) took it out), or any
+    /// unmapped view's range becomes a placeholder (Poly's `kernelbase` asks it right after the
+    /// unmap). `STATUS_CONFLICTING_ADDRESSES` if the range is taken again.
+    pub fn put_placeholder(&mut self, base: u64, size: u64) -> Result<(), NtStatus> {
+        if !self.is_free(base, base + size) {
+            return Err(STATUS_CONFLICTING_ADDRESSES);
+        }
+        self.allocations.insert(base, Allocation::new_placeholder(base, size));
+        Ok(())
     }
 
     /// Take every allocation out (the process ends).

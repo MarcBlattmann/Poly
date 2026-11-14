@@ -432,6 +432,11 @@ pub enum Service {
     /// `NtQuerySection(SectionHandle, SectionInformationClass,
     /// SectionInformation, SectionInformationLength, ReturnLength*)`.
     QuerySection,
+    /// `NtUnmapViewOfSectionEx(ProcessHandle, BaseAddress, Flags)` (Learn,
+    /// `ZwUnmapViewOfSectionEx`): `NtUnmapViewOfSection` with `MEM_PRESERVE_PLACEHOLDER` (the view
+    /// becomes the placeholder it replaced) and `MEM_UNMAP_WITH_TRANSIENT_BOOST` (a hint). ADR 0155,
+    /// step 11.
+    UnmapViewOfSectionEx,
 
     // ----- whole processes (ADR 0155, step 9)
     /// `NtSuspendProcess(ProcessHandle)`: not documented; only the export
@@ -615,7 +620,10 @@ pub const PROCESS_POLICY_SERVICES: [(Service, u32, &str); 1] =
     [(Service::SetInformationProcess, 0x097, "NtSetInformationProcess")];
 
 /// Section queries (ADR 0169), in the memory group.
-pub const SECTION_SERVICES: [(Service, u32, &str); 1] = [(Service::QuerySection, 0x049, "NtQuerySection")];
+pub const SECTION_SERVICES: [(Service, u32, &str); 2] = [
+    (Service::QuerySection, 0x049, "NtQuerySection"),
+    (Service::UnmapViewOfSectionEx, 0x04A, "NtUnmapViewOfSectionEx"),
+];
 
 /// Suspending and resuming a whole process (ADR 0155, step 9), in the
 /// processes and threads group.
