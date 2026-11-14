@@ -3,7 +3,7 @@
 //! other, the end.
 
 use crate::view::{Host, InstallerApp, Pumped, SIZE, wrap};
-use crate::{absolute, parse_args, take_lines};
+use crate::{Request, absolute, parse_args, take_lines};
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::rc::Rc;
@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 use poly_app::{App, AppEvent, Cx, KeyInput, Mods, Ui};
 use poly_input::key::Key;
-use poly_pkg::installer::{Action, Installer, Phase, Step};
+use poly_pkg::installer::{Action, Installer, Phase, Plan, Removal, Step};
 use poly_pkg::{ar, deb};
 use poly_shell::draw::Text;
 use poly_wayland::compose::MemoryFramebuffer;
@@ -27,6 +27,9 @@ struct Fake {
     opened: Vec<String>,
     reports: Vec<String>,
     refuse_start: bool,
+    /// The AppImages whose files the window was asked to remove.
+    deleted: Vec<String>,
+    refuse_delete: bool,
 }
 
 struct FakeHost(Rc<RefCell<Fake>>);
@@ -52,6 +55,12 @@ impl Host for FakeHost {
     fn apps_of(&mut self, name: &str) -> Vec<(String, String, Option<String>)> {
         assert_eq!(name, "galculator");
         alloc::vec![("galculator.desktop".into(), "Galculator".into(), Some("galculator".into()))]
+    }
+
+    fn delete_image(&mut self, slug: &str) -> Result<(), String> {
+        let mut f = self.0.borrow_mut();
+        f.deleted.push(slug.into());
+        if f.refuse_delete { Err("permission denied".into()) } else { Ok(()) }
     }
 
     fn apps_changed(&mut self) {
@@ -260,13 +269,24 @@ fn paths_are_made_absolute_and_output_is_cut_into_lines() {
     assert_eq!(absolute("a.deb", Some("relative")), "/a.deb");
 
     // The desktop starts the window; everyone else names only the file.
-    assert_eq!(parse_args(["/tmp/a.deb"]), Some((false, "/tmp/a.deb")));
-    assert_eq!(parse_args(["--window", "/tmp/a.deb"]), Some((true, "/tmp/a.deb")));
-    assert_eq!(parse_args(["file:///tmp/a%20b.deb"]), Some((false, "/tmp/a%20b.deb")));
+    assert_eq!(parse_args(["/tmp/a.deb"]), Some((false, Request::Install("/tmp/a.deb"))));
+    assert_eq!(parse_args(["--window", "/tmp/a.deb"]), Some((true, Request::Install("/tmp/a.deb"))));
+    assert_eq!(parse_args(["file:///tmp/a%20b.deb"]), Some((false, Request::Install("/tmp/a%20b.deb"))));
+    // An app to uninstall is named by its desktop file ID.
+    assert_eq!(
+        parse_args(["--uninstall", "galculator.desktop"]),
+        Some((false, Request::Uninstall("galculator.desktop")))
+    );
+    let entry = poly_shell::apps::uninstaller_entry("galculator.desktop");
+    assert_eq!(
+        parse_args(entry.argv.iter().skip(1).map(String::as_str)),
+        Some((true, Request::Uninstall("galculator.desktop")))
+    );
+    assert_eq!(parse_args(["--uninstall"]), None);
     assert_eq!(parse_args(["--window"]), None);
     assert_eq!(parse_args([""]), None);
     let entry = poly_shell::apps::installer_entry("/tmp/a.deb");
-    assert_eq!(parse_args(entry.argv.iter().skip(1).map(String::as_str)), Some((true, "/tmp/a.deb")));
+    assert_eq!(parse_args(entry.argv.iter().skip(1).map(String::as_str)), Some((true, Request::Install("/tmp/a.deb"))));
 
     let mut buf = b"Reading package lists...\r\nBuilding\rdone\n\nhalf a li".to_vec();
     assert_eq!(take_lines(&mut buf), ["Reading package lists...", "Building", "done"]);
@@ -274,4 +294,136 @@ fn paths_are_made_absolute_and_output_is_cut_into_lines() {
     buf.extend_from_slice(b"ne\n");
     assert_eq!(take_lines(&mut buf), ["half a line"]);
     assert!(buf.is_empty());
+}
+
+/// Whether the window asked to end.
+fn quit(cx: &Cx) -> bool {
+    format!("{cx:?}").contains("quit: true")
+}
+
+fn uninstall_app(plan: Result<Plan, String>) -> (InstallerApp, Rc<RefCell<Fake>>) {
+    let model = Installer::for_removal("galculator.desktop", plan);
+    let fake = Rc::new(RefCell::new(Fake::default()));
+    (InstallerApp::new(model, Box::new(FakeHost(Rc::clone(&fake)))), fake)
+}
+
+fn galculator_plan() -> Plan {
+    let info = poly_pkg::deb::Info::parse(std::str::from_utf8(CONTROL).unwrap()).unwrap();
+    Plan {
+        app: "Galculator".into(),
+        removal: Removal::Package,
+        package: Some(info),
+        apps: alloc::vec![("galculator.desktop".into(), "Galculator".into())],
+    }
+}
+
+#[test]
+fn a_click_on_uninstall_removes_the_package_then_what_only_it_needed() {
+    let (mut app, fake) = uninstall_app(Ok(galculator_plan()));
+    assert_eq!(app.title(), "Uninstall Galculator");
+    assert_eq!(app.model.phase, Phase::Ready);
+    app.set_app_icon(Some("galculator".into()));
+    assert!(app.handles().is_empty(), "nothing runs before the click");
+    assert!(fake.borrow().started.is_empty());
+    click(&mut app, Action::Uninstall);
+    assert_eq!(app.model.phase, Phase::Working(Step::Remove));
+    assert_eq!(&fake.borrow().started[0][fake.borrow().started[0].len() - 3..], ["remove", "--", "galculator"]);
+    // The first command ends well: the second starts.
+    fake.borrow_mut().script = alloc::vec![ended(true, &["Removing galculator (2.1.4-2) ..."])];
+    let mut cx = Cx::default();
+    app.tick(&mut cx);
+    assert_eq!(app.model.phase, Phase::Working(Step::Autoremove));
+    assert_eq!(fake.borrow().started[1].last().unwrap(), "autoremove");
+    assert_eq!(fake.borrow().changed, 0, "the desktop hears when it is all over");
+    fake.borrow_mut().script = alloc::vec![ended(true, &["Removing libquadmath0:amd64 (14.2.0-19) ..."])];
+    app.tick(&mut cx);
+    assert_eq!(app.model.phase, Phase::Done);
+    assert_eq!(fake.borrow().changed, 1, "the desktop reads its apps again: the launcher entry is gone");
+    assert_eq!(
+        fake.borrow().reports,
+        [
+            "running /usr/bin/apt-get remove",
+            "running /usr/bin/apt-get autoremove",
+            "uninstalled Galculator: Galculator (galculator.desktop)"
+        ]
+    );
+    assert_eq!(app.model.buttons(), [("Close", Action::Close)]);
+    assert!(app.handles().is_empty() && app.deadline().is_none());
+}
+
+#[test]
+fn cancel_and_escape_leave_the_app_alone() {
+    let (mut app, fake) = uninstall_app(Ok(galculator_plan()));
+    let cx = click(&mut app, Action::Close);
+    assert!(quit(&cx));
+    assert!(fake.borrow().started.is_empty() && fake.borrow().changed == 0);
+    let (mut app, fake) = uninstall_app(Ok(galculator_plan()));
+    assert!(quit(&key(&mut app, Key::Escape)));
+    assert!(fake.borrow().started.is_empty());
+    // A running removal cannot be closed.
+    let (mut app, _) = uninstall_app(Ok(galculator_plan()));
+    click(&mut app, Action::Uninstall);
+    assert!(!quit(&key(&mut app, Key::Escape)));
+}
+
+#[test]
+fn an_app_that_must_stay_says_why_and_offers_close() {
+    let (mut app, fake) = uninstall_app(Err("chromium is part of Poly's base system.".into()));
+    assert_eq!(app.model.buttons(), [("Close", Action::Close)]);
+    let mut fb = MemoryFramebuffer::new(SIZE.0 as u32, SIZE.1 as u32);
+    app.draw(&mut fb, &ui(), true);
+    assert!(quit(&click(&mut app, Action::Close)));
+    assert!(fake.borrow().started.is_empty());
+}
+
+#[test]
+fn an_appimage_is_removed_by_the_window_itself_on_the_next_look() {
+    let plan = Plan {
+        app: "Hello Pixels".into(),
+        removal: Removal::Image { slug: "hello-pixels".into(), size: 5_000_000 },
+        package: None,
+        apps: alloc::vec![("poly-appimage-hello-pixels.desktop".into(), "Hello Pixels".into())],
+    };
+    let (mut app, fake) = uninstall_app(Ok(plan));
+    click(&mut app, Action::Uninstall);
+    // No command: the window shows "Removing" first, then does it.
+    assert_eq!(app.model.phase, Phase::Working(Step::Delete));
+    assert!(fake.borrow().started.is_empty() && fake.borrow().deleted.is_empty());
+    assert!(app.deadline().is_some());
+    let mut cx = Cx::default();
+    app.tick(&mut cx);
+    assert_eq!(fake.borrow().deleted, ["hello-pixels"]);
+    assert_eq!(app.model.phase, Phase::Done);
+    assert_eq!(fake.borrow().changed, 1);
+
+    // A refusal of the disk is the window's failure.
+    let plan = Plan {
+        app: "X".into(),
+        removal: Removal::Image { slug: "x".into(), size: 1 },
+        package: None,
+        apps: Vec::new(),
+    };
+    let (mut app, fake) = uninstall_app(Ok(plan));
+    fake.borrow_mut().refuse_delete = true;
+    click(&mut app, Action::Uninstall);
+    app.tick(&mut cx);
+    assert_eq!(app.model.phase, Phase::Failed("The app's files could not be removed: permission denied.".into()));
+    assert_eq!(fake.borrow().changed, 0);
+}
+
+#[test]
+fn the_uninstall_button_is_the_danger_one_in_both_themes() {
+    for light in [false, true] {
+        poly_shell::theme::set_light(light);
+        let p = poly_shell::theme::pal();
+        let (mut app, _) = uninstall_app(Ok(galculator_plan()));
+        let mut fb = MemoryFramebuffer::new(SIZE.0 as u32, SIZE.1 as u32);
+        app.draw(&mut fb, &ui(), true);
+        let (r, _) = app.button_rects(&ui()).into_iter().find(|(_, a)| *a == Action::Uninstall).unwrap();
+        // The button's corner-free edge, inside its box: the danger colour.
+        assert_eq!(fb.pixel((r.x + 6) as u32, (r.y + r.height / 2) as u32), Some(p.danger));
+        let (cancel, _) = app.button_rects(&ui()).into_iter().find(|(_, a)| *a == Action::Close).unwrap();
+        assert_ne!(fb.pixel((cancel.x + 6) as u32, (cancel.y + cancel.height / 2) as u32), Some(p.danger));
+    }
+    poly_shell::theme::set_light(false);
 }

@@ -792,6 +792,7 @@ fn run(args: &[String]) -> Result<u8, String> {
         // package files to open the installer for (`install <path>`, ADR 0173).
         let mut asked: Vec<String> = Vec::new();
         let mut to_install: Vec<String> = Vec::new();
+        let mut to_uninstall: Vec<String> = Vec::new();
         let mut rescan = false;
         if fds[control_at].revents != 0 {
             for line in control.take_lines() {
@@ -809,6 +810,7 @@ fn run(args: &[String]) -> Result<u8, String> {
                         // the launcher's apps are.
                         launch::Control::Open { id } => asked.push(id),
                         launch::Control::Install { path } => to_install.push(path),
+                        launch::Control::Uninstall { id } => to_uninstall.push(id),
                         launch::Control::Rescan => rescan = true,
                     }
                 }
@@ -925,6 +927,12 @@ fn run(args: &[String]) -> Result<u8, String> {
             for path in to_install.drain(..) {
                 println!("poly-compositor: asked to open the installer for {path}");
                 start_app(d, &mut server, &env, &poly_shell::apps::installer_entry(&path));
+            }
+            // An app Files' Applications folder asked to uninstall: the same
+            // installer window, which says what goes and asks (ADR 0180).
+            for id in to_uninstall.drain(..) {
+                println!("poly-compositor: asked to uninstall {id}");
+                start_app(d, &mut server, &env, &poly_shell::apps::uninstaller_entry(&id));
             }
             d.sync(&mut server);
         }

@@ -181,6 +181,20 @@ impl poly_shell::apps::AppFiles for Disk {
     }
 }
 
+impl poly_pkg::remove::Disk for Disk {
+    fn list(&self, dir: &str) -> Vec<String> {
+        Disk::names(dir)
+    }
+
+    fn read(&self, path: &str) -> Option<String> {
+        read_text(path)
+    }
+
+    fn size(&self, path: &str) -> Option<u64> {
+        fs::metadata(path).ok().map(|m| m.len())
+    }
+}
+
 impl poly_shell::appicon::IconFiles for Disk {
     fn read(&self, path: &str) -> Option<Vec<u8>> {
         let meta = fs::metadata(path).ok()?;

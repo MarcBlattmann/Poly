@@ -168,6 +168,7 @@ pub mod act {
     pub const EMPTY_TRASH: u32 = 15;
     pub const COPY_PATH: u32 = 16;
     pub const REFRESH: u32 = 17;
+    pub const UNINSTALL: u32 = 18;
 }
 
 /// The window's rectangles for a `w` × `h` window, logical.
@@ -242,6 +243,10 @@ pub type Launcher = Box<dyn FnMut(&[String]) -> Result<(), String>>;
 /// control pipe's `open`; a test records it).
 pub type AppOpener = Box<dyn FnMut(&Item) -> Result<(), String>>;
 
+/// Asks the desktop to show the installer's window that uninstalls an
+/// installed app (the control pipe's `uninstall`; a test records it).
+pub type AppUninstaller = Box<dyn FnMut(&Item) -> Result<(), String>>;
+
 /// The Files app.
 pub struct FilesApp {
     pub fs: Box<dyn Fs>,
@@ -256,6 +261,7 @@ pub struct FilesApp {
     /// unreachable unless [`FilesApp::set_applications`] gave one).
     pub apps: crate::applications::Shared,
     pub open_app: AppOpener,
+    pub uninstall_app: AppUninstaller,
     /// The apps' own icons (ADR 0146), loaded as they are drawn.
     icons: RefCell<AppIcons>,
     /// The wall clock, seconds (for the trash's dates).
@@ -298,6 +304,7 @@ impl FilesApp {
             launch,
             apps: crate::applications::Shared::default(),
             open_app: Box::new(|_| Err("The desktop cannot be reached".into())),
+            uninstall_app: Box::new(|_| Err("The desktop cannot be reached".into())),
             icons: RefCell::new(AppIcons::default()),
             clock: Box::new(|| 0),
             size: (0, 0),
@@ -648,6 +655,23 @@ impl FilesApp {
         }
     }
 
+    /// Ask the desktop to show the installer's window for uninstalling the
+    /// app at the cursor of the Applications folder (ADR 0180). The window
+    /// is the confirmation; nothing is removed here.
+    fn uninstall_selected(&mut self) {
+        let Some(item) = self.browser.cursor_entry().and_then(|e| self.app_of(e)).filter(|i| i.removable) else {
+            self.status = "This app cannot be uninstalled".into();
+            return;
+        };
+        match (self.uninstall_app)(&item) {
+            Ok(()) => {
+                poly_rt::println!("poly-files: asked to uninstall {} ({})", item.app.name, item.app.id);
+                self.status = format!("Asked to uninstall {}", item.app.name);
+            }
+            Err(e) => self.status = format!("{}: {e}", item.app.name),
+        }
+    }
+
     fn run(&mut self, argv: &[String]) {
         match (self.launch)(argv) {
             Ok(()) => {
@@ -842,6 +866,7 @@ impl FilesApp {
     pub fn act(&mut self, id: u32, cx: &mut Cx) {
         match id {
             act::OPEN => self.open_selected(),
+            act::UNINSTALL => self.uninstall_selected(),
             act::OPEN_TERMINAL => self.open_terminal(),
             act::CUT => self.set_clip(ClipOp::Cut, cx),
             act::COPY => self.set_clip(ClipOp::Copy, cx),
@@ -895,6 +920,7 @@ impl FilesApp {
                 .into_iter()
                 .map(|a| match a {
                     Action::Open => MenuItem::new(act::OPEN, a.label(), "Enter", true),
+                    Action::Uninstall => MenuItem::new(act::UNINSTALL, a.label(), "", true),
                 })
                 .collect();
             if items.is_empty() {

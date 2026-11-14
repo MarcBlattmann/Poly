@@ -18,7 +18,7 @@ use core::cell::RefCell;
 use poly_app::ui::{DENSE, DENSE_MEDIUM, FIELD_RADIUS, SMALL, TITLE};
 use poly_app::{App, AppEvent, CursorShape, Cx, Ui};
 use poly_input::key::Key;
-use poly_pkg::installer::{Action, Installer, Phase};
+use poly_pkg::installer::{Action, Installer, Phase, Removal, Step};
 use poly_shell::appicon::AppIcons;
 use poly_shell::draw::Style;
 use poly_shell::icons::lucide;
@@ -63,6 +63,9 @@ pub trait Host {
     /// The launcher entries package `name` brought: desktop file ID, the
     /// app's name, its icon's name.
     fn apps_of(&mut self, name: &str) -> Vec<(String, String, Option<String>)>;
+    /// Take an installed AppImage's files away (its directory and desktop
+    /// file); `slug` names it (ADR 0180).
+    fn delete_image(&mut self, slug: &str) -> Result<(), String>;
     /// Tell the desktop that the installed apps changed.
     fn apps_changed(&mut self);
     /// Ask the desktop to start the app with desktop file ID `id`.
@@ -87,6 +90,9 @@ pub struct InstallerApp {
     icons: RefCell<AppIcons>,
     /// The buttons as last drawn: where a click lands.
     buttons: Vec<(Rect, Action)>,
+    /// A step the program does itself waits for the next tick (so the
+    /// window shows it first).
+    work_pending: bool,
 }
 
 impl core::fmt::Debug for InstallerApp {
@@ -131,7 +137,14 @@ impl InstallerApp {
             app_icon: None,
             icons: RefCell::new(AppIcons::default()),
             buttons: Vec::new(),
+            work_pending: false,
         }
+    }
+
+    /// The icon of the app the window is about (an uninstall shows it
+    /// before the app is gone).
+    pub fn set_app_icon(&mut self, icon: Option<String>) {
+        self.app_icon = icon;
     }
 
     /// Where app icons are read from (the icon theme's files).
@@ -141,7 +154,8 @@ impl InstallerApp {
 
     /// The window's title.
     pub fn title(&self) -> String {
-        alloc::format!("Install {}", self.model.name())
+        let verb = if self.model.uninstalling() { "Uninstall" } else { "Install" };
+        alloc::format!("{verb} {}", self.model.name())
     }
 
     /// The buttons' rectangles, right to left from the bottom right corner,
@@ -166,13 +180,19 @@ impl InstallerApp {
 
     fn run(&mut self, argv: Option<Vec<String>>, cx: &mut Cx) {
         let Some(argv) = argv else { return };
-        // The program and what it is asked to do (its last word that is no
-        // option or file).
+        if argv.is_empty() {
+            // A step the program does itself: after the next look at the
+            // window.
+            self.work_pending = true;
+            self.next_tick = Some(cx.now_ms + TICK_MS);
+            cx.redraw();
+            return;
+        }
+        // The program and what it is asked to do (the apt-get verb).
         let verb = argv
             .iter()
             .skip(1)
-            .rev()
-            .find(|a| !a.starts_with(['-', '/']) && !a.contains('='))
+            .find(|a| matches!(a.as_str(), "update" | "install" | "remove" | "autoremove"))
             .map_or("", String::as_str);
         self.host.report(alloc::format!("running {} {verb}", argv[0]).trim_end());
         if let Err(why) = self.host.start(&argv) {
@@ -187,7 +207,7 @@ impl InstallerApp {
     /// Do what a button does.
     pub fn act(&mut self, action: Action, cx: &mut Cx) {
         match action {
-            Action::Install => {
+            Action::Install | Action::Uninstall => {
                 let first = self.model.start();
                 self.run(first, cx);
             }
@@ -220,29 +240,57 @@ impl InstallerApp {
             self.model.status(line);
         }
         if let Some(ok) = p.ended {
-            let host = &mut self.host;
-            let mut icon = None;
-            let next = self.model.finished(ok, |name| {
-                let apps = host.apps_of(name);
-                icon = apps.first().and_then(|(_, _, icon)| icon.clone());
-                apps.into_iter().map(|(id, name, _)| (id, name)).collect()
-            });
-            if self.model.phase == Phase::Done {
-                self.app_icon = icon;
-                self.host.apps_changed();
-            }
-            self.report_end();
-            self.run(next, cx);
+            self.step_ended(ok, cx);
         }
         if changed {
             cx.redraw();
         }
     }
 
+    /// The running step ended: go on with the next, or finish.
+    fn step_ended(&mut self, ok: bool, cx: &mut Cx) {
+        let host = &mut self.host;
+        let mut icon = None;
+        let next = self.model.finished(ok, |name| {
+            let apps = host.apps_of(name);
+            icon = apps.first().and_then(|(_, _, icon)| icon.clone());
+            apps.into_iter().map(|(id, name, _)| (id, name)).collect()
+        });
+        if self.model.phase == Phase::Done {
+            if !self.model.uninstalling() {
+                self.app_icon = icon;
+            }
+            self.host.apps_changed();
+        }
+        self.report_end();
+        self.run(next, cx);
+    }
+
+    /// The step the program does itself (an AppImage's files taken away).
+    fn do_work(&mut self, cx: &mut Cx) {
+        let result = match (&self.model.phase, &self.model.removal) {
+            (Phase::Working(Step::Delete), Some(Removal::Image { slug, .. })) => {
+                let slug = slug.clone();
+                self.host.delete_image(&slug)
+            }
+            _ => Err("nothing to do".into()),
+        };
+        if let Err(why) = &result {
+            self.model.output(&alloc::format!("E: {why}"));
+        }
+        self.step_ended(result.is_ok(), cx);
+        cx.redraw();
+    }
+
     /// Tell the console how an installation ended, if it has: a failure
     /// with the tools' last lines.
     fn report_end(&mut self) {
         match &self.model.phase {
+            Phase::Done if self.model.uninstalling() => {
+                let apps: Vec<String> =
+                    self.model.apps.iter().map(|(id, name)| alloc::format!("{name} ({id})")).collect();
+                self.host.report(&alloc::format!("uninstalled {}: {}", self.model.name(), apps.join(", ")));
+            }
             Phase::Done => {
                 let version = self.model.package.as_ref().map_or("", |p| p.version.as_str());
                 let apps: Vec<String> =
@@ -332,12 +380,24 @@ impl InstallerApp {
         for (i, ((r, action), (label, _))) in self.buttons.iter().zip(&labels).enumerate() {
             let hover = self.hover == Some(*action);
             let solid = i == main && labels.len() > 1 || *action == Action::Open;
-            if solid {
+            // Removing something is the danger button, as Alpine's settings
+            // draw it (its ConfirmButton's confirm state): solid danger,
+            // white text.
+            let danger = *action == Action::Uninstall;
+            if danger {
+                ui.round(fb, clip, *r, FIELD_RADIUS, p.danger, if hover { 230 } else { 255 });
+            } else if solid {
                 ui.round(fb, clip, *r, FIELD_RADIUS, p.ink_primary, if hover { 230 } else { 255 });
             } else {
                 ui.round(fb, clip, *r, FIELD_RADIUS, p.ink, if hover { p.track } else { p.ghost });
             }
-            let ink = if solid { p.on_solid } else { p.ink_primary };
+            let ink = if danger {
+                0xff_ffff
+            } else if solid {
+                p.on_solid
+            } else {
+                p.ink_primary
+            };
             let tw = ui.measure(label, DENSE_MEDIUM);
             ui.text(fb, clip, r.x + (r.width - tw) / 2, r.y, r.height, r.right(), label, DENSE_MEDIUM, ink);
         }
@@ -411,6 +471,10 @@ impl App for InstallerApp {
         self.now_ms = cx.now_ms;
         if self.model.busy() {
             self.next_tick = Some(cx.now_ms + TICK_MS);
+            if core::mem::take(&mut self.work_pending) {
+                self.do_work(cx);
+                return;
+            }
             self.pump(cx);
             // The piece of an unknown progress moves.
             if self.model.percent.is_none() {

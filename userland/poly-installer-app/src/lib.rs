@@ -3,8 +3,10 @@
 //! Wayland client of the compositor (`poly-app`).
 //!
 //! ```text
-//! poly-installer FILE             ask the desktop to open the installer for FILE
-//! poly-installer --window FILE    the installer's window (what the desktop starts)
+//! poly-installer FILE                       ask the desktop to open the installer for FILE
+//! poly-installer --window FILE              the installer's window (what the desktop starts)
+//! poly-installer --uninstall ID             ask the desktop for the window that uninstalls an app
+//! poly-installer --window --uninstall ID    that window (ADR 0180)
 //! ```
 //!
 //! It is what opens a package file: Files starts it for a double-clicked
@@ -50,20 +52,36 @@ use poly_wayland::launch::Control;
 /// (`poly_shell::apps::installer_entry`).
 pub const WINDOW_FLAG: &str = poly_shell::apps::INSTALLER_WINDOW;
 
-/// What the program was asked: the package file, and whether to be the
-/// window (`--window`) or to ask the desktop for it. `None`: no file.
-pub fn parse_args<'a>(args: impl IntoIterator<Item = &'a str>) -> Option<(bool, &'a str)> {
+/// The argument that makes the window uninstall an app: the desktop file
+/// ID follows (`poly_shell::apps::uninstaller_entry`).
+pub const UNINSTALL_FLAG: &str = poly_shell::apps::INSTALLER_UNINSTALL;
+
+/// What the program was asked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Request<'a> {
+    /// Install the package file at this path.
+    Install(&'a str),
+    /// Uninstall the app with this desktop file ID.
+    Uninstall(&'a str),
+}
+
+/// What the program was asked, and whether to be the window (`--window`) or
+/// to ask the desktop for it. `None`: nothing to do.
+pub fn parse_args<'a>(args: impl IntoIterator<Item = &'a str>) -> Option<(bool, Request<'a>)> {
     let mut window = false;
+    let mut uninstall = false;
     let mut file = None;
     for arg in args {
         if arg == WINDOW_FLAG {
             window = true;
+        } else if arg == UNINSTALL_FLAG {
+            uninstall = true;
         } else if file.is_none() && !arg.is_empty() {
             // A `file://` URL (a desktop file's `%u`) is its path.
             file = Some(arg.strip_prefix("file://").unwrap_or(arg));
         }
     }
-    file.map(|f| (window, f))
+    file.map(|f| (window, if uninstall { Request::Uninstall(f) } else { Request::Install(f) }))
 }
 
 /// `path` as an absolute path: itself, or below the directory in `pwd`
@@ -136,9 +154,44 @@ fn model_for(path: &str) -> Installer {
     model
 }
 
-/// The disk, for the icon theme's files.
+/// The user's data directory, where AppImages are (ADR 0180).
+fn data_home() -> String {
+    poly_shell::apps::data_home(poly_rt::env::var("XDG_DATA_HOME"), poly_rt::env::var("HOME"))
+}
+
+/// The disk, for the icon theme's files and for what an uninstall reads.
 #[derive(Clone, Copy, Debug, Default)]
 struct Disk;
+
+impl poly_pkg::remove::Disk for Disk {
+    fn list(&self, dir: &str) -> Vec<String> {
+        poly_rt::fs::read_dir(dir).map(|entries| entries.into_iter().map(|e| e.name).collect()).unwrap_or_default()
+    }
+
+    fn read(&self, path: &str) -> Option<String> {
+        poly_rt::fs::read_to_string(path).ok()
+    }
+
+    fn size(&self, path: &str) -> Option<u64> {
+        poly_rt::fs::metadata(path).ok().map(|m| m.len())
+    }
+}
+
+/// The installer for uninstalling the app with desktop file ID `id`, and
+/// its icon's name, from what the disk says about it.
+fn model_for_uninstall(id: &str) -> (Installer, Option<String>) {
+    let plan = poly_pkg::remove::plan(id, &data_home(), &Disk);
+    let icon = plan.as_ref().ok().and_then(|plan| {
+        plan.apps.iter().find(|(i, _)| i == id).or(plan.apps.first()).and_then(|(i, _)| {
+            let user = alloc::format!("{}/{i}", poly_shell::apps::user_applications(&data_home()));
+            let text = poly_rt::fs::read_to_string(&user)
+                .or_else(|_| poly_rt::fs::read_to_string(&alloc::format!("{}/{i}", poly_shell::apps::APPLICATIONS)))
+                .ok()?;
+            poly_shell::apps::parse_desktop_entry(i, &text).ok()?.icon
+        })
+    });
+    (Installer::for_removal(id, plan), icon)
+}
 
 impl poly_shell::appicon::IconFiles for Disk {
     fn read(&self, path: &str) -> Option<Vec<u8>> {
@@ -297,6 +350,23 @@ impl view::Host for Native {
             .collect()
     }
 
+    fn delete_image(&mut self, slug: &str) -> Result<(), String> {
+        if !poly_pkg::appimage::is_slug(slug) {
+            return Err(alloc::format!("{slug}: not an AppImage of Poly's installer"));
+        }
+        let layout = poly_pkg::appimage::layout(&data_home(), slug);
+        // The desktop file first: the app is out of the launcher even if a
+        // file of its directory cannot be removed.
+        match poly_rt::fs::remove_file(&layout.desktop) {
+            Ok(()) | Err(poly_rt::Error::NotFound) => {}
+            Err(e) => return Err(alloc::format!("{}: {e}", layout.desktop)),
+        }
+        match poly_rt::fs::remove_dir_all(&layout.dir) {
+            Ok(()) | Err(poly_rt::Error::NotFound) => Ok(()),
+            Err(e) => Err(alloc::format!("{}: {e}", layout.dir)),
+        }
+    }
+
     fn apps_changed(&mut self) {
         poly_app::startup::ask(&Control::Rescan.line());
     }
@@ -310,12 +380,45 @@ impl view::Host for Native {
     }
 }
 
+/// The window that uninstalls the app with desktop file ID `id`: asked of
+/// the desktop unless this is the window the desktop started (ADR 0180).
+fn uninstall_main(window: bool, id: &str) -> i32 {
+    if !window && poly_app::startup::ask(&Control::Uninstall { id: id.to_string() }.line()) {
+        if let Some(token) = poly_app::startup::TOKEN_VARS.iter().find_map(|v| poly_rt::env::var(v)) {
+            poly_app::startup::ask(&Control::Cancel { token: token.into() }.line());
+        }
+        poly_rt::println!("poly-installer: {id}: handed to the desktop");
+        return 0;
+    }
+    let (mut model, icon) = model_for_uninstall(id);
+    let host = match Native::new() {
+        Ok(host) => host,
+        Err(e) => {
+            poly_rt::println!("poly-installer: {e}");
+            return 1;
+        }
+    };
+    model.status_fd = host.status_fd();
+    poly_rt::println!("poly-installer: uninstall {id}: {} ({:?})", model.name(), model.phase);
+    let mut app = view::InstallerApp::new(model, Box::new(host));
+    app.set_icon_files(Box::new(Disk));
+    app.set_app_icon(icon);
+    let title = app.title();
+    let code = poly_app::run(&mut app, &title, "poly-installer", view::SIZE, view::MIN_SIZE);
+    poly_rt::println!("poly-installer: {}: closed ({:?})", app.model.name(), app.model.phase);
+    code
+}
+
 /// The program: the window until it is closed.
 pub fn main() -> i32 {
-    let Some((window, arg)) = parse_args(poly_rt::env::args_str().skip(1)) else {
-        poly_rt::println!("usage: poly-installer [--window] FILE");
+    let Some((window, request)) = parse_args(poly_rt::env::args_str().skip(1)) else {
+        poly_rt::println!("usage: poly-installer [--window] FILE | poly-installer [--window] --uninstall ID");
         return 2;
     };
+    if let Request::Uninstall(id) = request {
+        return uninstall_main(window, id);
+    }
+    let Request::Install(arg) = request else { return 2 };
     let path = absolute(arg, poly_rt::env::var("PWD"));
     // Opening a package is the desktop's job: ask it, and end.
     if !window && poly_app::startup::ask(&Control::Install { path: path.clone() }.line()) {

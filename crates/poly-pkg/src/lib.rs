@@ -10,12 +10,16 @@
 //!   ar(5) archive of `debian-binary`, `control.tar` and `data.tar`) for
 //!   what the installer shows before anything is installed: name, version,
 //!   what it is, size, what it depends on;
+//! - [`appimage`]: an AppImage (type 2: an ELF runtime with a squashfs image)
+//!   read for its desktop file and icon, and where an installed one lives;
 //! - [`dpkgdb`]: the database `dpkg` keeps under `/var/lib/dpkg`, which the
 //!   tool that builds the base root writes for the packages it unpacked
 //!   (their maintainer scripts never ran there), and which the installer
 //!   reads to say what is installed and which apps a package brought;
 //! - [`apt`]: the commands the installer runs and the progress lines `apt`
 //!   writes for a front end;
+//! - [`remove`]: which apps can be uninstalled and what removing one takes
+//!   away (ADR 0180);
 //! - [`installer`]: the installer's model: what its window says and which
 //!   command comes next.
 //!
@@ -30,6 +34,7 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+pub mod appimage;
 pub mod apt;
 pub mod ar;
 pub mod control;
@@ -37,6 +42,7 @@ pub mod deb;
 pub mod dpkgdb;
 pub mod format;
 pub mod installer;
+pub mod remove;
 pub mod tar;
 
 /// Why a package file could not be read.
@@ -54,6 +60,10 @@ pub enum Error {
     NoControl,
     /// A member is larger than a package's control data may be.
     TooLarge,
+    /// An AppImage of type 1 (an ISO image), which no one makes any more.
+    OldAppImage,
+    /// An AppImage without a desktop file that names the app.
+    NoDesktopEntry,
 }
 
 impl Error {
@@ -66,6 +76,8 @@ impl Error {
             Error::Compression => "The package is compressed in a way Poly does not know.",
             Error::NoControl => "The package does not say what it is (no control data).",
             Error::TooLarge => "The package's description is larger than a package's may be.",
+            Error::OldAppImage => "This is an AppImage of the old type 1. Look for a newer version of the app.",
+            Error::NoDesktopEntry => "This AppImage does not say what app it is (no desktop file).",
         }
     }
 }

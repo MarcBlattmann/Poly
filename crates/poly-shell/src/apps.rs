@@ -238,6 +238,10 @@ pub const INSTALLER: &str = "/bin/poly-installer";
 /// program asks the desktop to (so the window is always the desktop's).
 pub const INSTALLER_WINDOW: &str = "--window";
 
+/// The argument that makes the installer's window uninstall the app with
+/// the desktop file ID that follows (ADR 0180).
+pub const INSTALLER_UNINSTALL: &str = "--uninstall";
+
 /// The installer's desktop file ID.
 pub const INSTALLER_ID: &str = "poly-installer.desktop";
 
@@ -270,6 +274,19 @@ pub fn installer_entry(path: &str) -> App {
         comment: "Install an app from a package file".into(),
         keywords: Vec::new(),
         argv: alloc::vec![INSTALLER.into(), INSTALLER_WINDOW.into(), path.into()],
+        id: INSTALLER_ID.into(),
+        icon: None,
+    }
+}
+
+/// The installer's window that uninstalls the app with desktop file ID
+/// `id`, as an app the desktop starts (Files asked for it, ADR 0180).
+pub fn uninstaller_entry(id: &str) -> App {
+    App {
+        name: "Installer".into(),
+        comment: "Uninstall an app".into(),
+        keywords: Vec::new(),
+        argv: alloc::vec![INSTALLER.into(), INSTALLER_WINDOW.into(), INSTALLER_UNINSTALL.into(), id.into()],
         id: INSTALLER_ID.into(),
         icon: None,
     }
@@ -347,6 +364,37 @@ pub fn desktop_apps(files: &dyn AppFiles, dir: &str, skipped: &mut dyn FnMut(&st
         }
     }
     apps
+}
+
+/// The user's data directory: `$XDG_DATA_HOME` if it is an absolute path,
+/// else `~/.local/share` of `$HOME`, else root's (the desktop's user today).
+pub fn data_home(xdg_data_home: Option<&str>, home: Option<&str>) -> String {
+    match xdg_data_home.filter(|d| d.starts_with('/')) {
+        Some(d) => d.trim_end_matches('/').into(),
+        None => alloc::format!(
+            "{}/.local/share",
+            home.filter(|h| h.starts_with('/')).unwrap_or("/root").trim_end_matches('/')
+        ),
+    }
+}
+
+/// The user's applications directory below the data directory `data_home`:
+/// the desktop files of what the installer put there for the user.
+pub fn user_applications(data_home: &str) -> String {
+    alloc::format!("{}/applications", data_home.trim_end_matches('/'))
+}
+
+/// Every installed app, with the user's own desktop files in
+/// `user_dir` (`$XDG_DATA_HOME/applications`: the apps the installer
+/// put there, ADR 0180) read after the system's: for one file ID the
+/// user's wins, as the Desktop Entry Specification says.
+pub fn installed_for_user(files: &dyn AppFiles, user_dir: &str, skipped: &mut dyn FnMut(&str, Skip)) -> Vec<App> {
+    let mut apps = desktop_apps(files, APPLICATIONS, skipped);
+    let user = desktop_apps(files, user_dir, skipped);
+    apps.retain(|a| !user.iter().any(|u| u.id == a.id));
+    apps.extend(user);
+    apps.sort_by(|a, b| a.id.cmp(&b.id));
+    catalog(apps)
 }
 
 /// Every installed app: the one list the launcher offers and Files'
@@ -470,6 +518,43 @@ mod tests {
         fn read(&self, path: &str) -> Option<String> {
             self.0.iter().find(|(p, _)| *p == path).map(|(_, t)| (*t).into())
         }
+    }
+
+    #[test]
+    fn the_users_desktop_files_join_the_systems_and_win_for_one_id() {
+        const SYS: &str = "[Desktop Entry]\nType=Application\nName=System Name\nExec=s\n";
+        const USER: &str = "[Desktop Entry]\nType=Application\nName=User Name\nExec=u\n";
+        const OWN: &str = "[Desktop Entry]\nType=Application\nName=Hello Pixels\nExec=/h/x.AppImage\n";
+        let disk = Disk(vec![
+            ("/usr/share/applications/same.desktop", SYS),
+            ("/usr/share/applications/other.desktop", SYS),
+            ("/root/.local/share/applications/same.desktop", USER),
+            ("/root/.local/share/applications/poly-appimage-hello-pixels.desktop", OWN),
+        ]);
+        let apps = installed_for_user(&disk, "/root/.local/share/applications", &mut |_, _| {});
+        let found: Vec<(&str, &str)> =
+            apps.iter().filter(|a| !a.id.starts_with("poly:")).map(|a| (a.id.as_str(), a.name.as_str())).collect();
+        assert_eq!(
+            found,
+            [
+                ("poly-appimage-hello-pixels.desktop", "Hello Pixels"),
+                ("other.desktop", "System Name"),
+                ("same.desktop", "User Name"),
+            ]
+        );
+        // Without a user directory nothing changes.
+        let none = installed_for_user(&disk, "/nowhere", &mut |_, _| {});
+        assert_eq!(none.iter().find(|a| a.id == "same.desktop").map(|a| a.name.as_str()), Some("System Name"));
+        assert_eq!(data_home(Some("/data/"), Some("/home/x")), "/data");
+        assert_eq!(data_home(Some("relative"), Some("/home/x/")), "/home/x/.local/share");
+        assert_eq!(data_home(None, None), "/root/.local/share");
+    }
+
+    #[test]
+    fn the_uninstaller_is_the_installers_window_for_an_app() {
+        let e = uninstaller_entry("galculator.desktop");
+        assert_eq!(e.argv, [INSTALLER, "--window", "--uninstall", "galculator.desktop"]);
+        assert_eq!(e.id, INSTALLER_ID);
     }
 
     #[test]

@@ -92,6 +92,37 @@ pub fn install(deb: &str, status_fd: u32) -> Vec<String> {
     argv
 }
 
+/// `apt-get remove <package>`: take the installed package away (its
+/// configuration files stay, as Debian's `remove` leaves them). `package`
+/// is a package name ([`is_package_name`]); `--` keeps a name from being
+/// read as an option.
+pub fn remove(package: &str, status_fd: u32) -> Vec<String> {
+    let mut argv = base(status_fd);
+    argv.push("remove".to_string());
+    argv.push("--".to_string());
+    argv.push(package.to_string());
+    argv
+}
+
+/// `apt-get autoremove`: take away the packages that were installed only
+/// to satisfy what is gone (apt keeps track of which it installed that
+/// way; the base root's own packages were never asked for by apt, so they
+/// are never among them).
+pub fn autoremove(status_fd: u32) -> Vec<String> {
+    let mut argv = base(status_fd);
+    argv.push("autoremove".to_string());
+    argv
+}
+
+/// Whether `name` is a Debian package name (Debian Policy 5.6.7: at least
+/// two characters, lower case letters, digits and `+ - .`, starting with a
+/// letter or digit).
+pub fn is_package_name(name: &str) -> bool {
+    name.len() >= 2
+        && name.bytes().next().is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        && name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'+' | b'-' | b'.'))
+}
+
 /// Whether a file name in [`LISTS_DIR`] is a downloaded package list.
 pub fn is_package_list(name: &str) -> bool {
     name.ends_with("_Packages") || name.contains("_Packages.")
@@ -219,6 +250,23 @@ mod tests {
             "x could not be set up"
         );
         assert_eq!(dpkg_error(&["Setting up x (1) ..."]), None);
+    }
+
+    #[test]
+    fn removing_is_apts_remove_then_autoremove() {
+        let remove = remove("galculator", 7);
+        assert_eq!(remove[0], APT_GET);
+        assert!(remove.contains(&"APT::Status-Fd=7".to_string()));
+        assert_eq!(&remove[remove.len() - 3..], ["remove", "--", "galculator"]);
+        let auto = autoremove(7);
+        assert_eq!(auto.last().map(String::as_str), Some("autoremove"));
+        assert!(auto.contains(&"-y".to_string()));
+        for good in ["galculator", "libquadmath0", "g++", "x11-utils", "0ad", "python3.13"] {
+            assert!(is_package_name(good), "{good}");
+        }
+        for bad in ["", "a", "-rf", "Galculator", "a b", "a;b", "../x", "a:amd64", "a=1"] {
+            assert!(!is_package_name(bad), "{bad}");
+        }
     }
 
     #[test]

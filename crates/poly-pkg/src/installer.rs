@@ -35,6 +35,21 @@ pub enum Step {
     Update,
     /// `apt-get install <file>`.
     Install,
+    /// `apt-get remove <package>`.
+    Remove,
+    /// `apt-get autoremove`: the packages that only the removed one needed.
+    Autoremove,
+    /// Take an installed AppImage's files away (the program does it).
+    Delete,
+}
+
+/// What the window is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Task {
+    /// Install the package file.
+    Install,
+    /// Remove an installed app (ADR 0180).
+    Uninstall,
 }
 
 /// Where the installer is.
@@ -61,13 +76,44 @@ pub enum Action {
     Close,
     /// Start the app that was installed.
     Open,
+    /// Remove the app (ADR 0180).
+    Uninstall,
+}
+
+/// What an uninstall removes (ADR 0180).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Removal {
+    /// A Debian package (`Installer::package` has what dpkg knows of it).
+    Package,
+    /// An AppImage Poly installed: its slug ([`crate::appimage::slug`]) and
+    /// the size of its file in bytes.
+    Image { slug: String, size: u64 },
+}
+
+/// What the program found out about an app to uninstall.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Plan {
+    /// The app's name.
+    pub app: String,
+    pub removal: Removal,
+    /// The package, for [`Removal::Package`].
+    pub package: Option<Info>,
+    /// The launcher entries that go with it (desktop file ID, name).
+    pub apps: Vec<(String, String)>,
 }
 
 /// The installer for one package file.
 #[derive(Clone, Debug)]
 pub struct Installer {
-    /// The package file's absolute path.
+    /// What the window is for.
+    pub task: Task,
+    /// The package file's absolute path (for an uninstall: the app's
+    /// desktop file ID).
     pub path: String,
+    /// For an uninstall: the app's name, the window's heading.
+    pub title: Option<String>,
+    /// For an uninstall: which kind of install it removes.
+    pub removal: Option<Removal>,
     /// What the package says about itself, if it could be read.
     pub package: Option<Info>,
     /// The version of this package installed already, if any.
@@ -103,7 +149,10 @@ impl Installer {
     /// file could not be read at all.
     pub fn new(path: &str, head: Result<&[u8], &str>, control: Option<&[u8]>) -> Installer {
         let mut it = Installer {
+            task: Task::Install,
             path: path.to_string(),
+            title: None,
+            removal: None,
             package: None,
             installed: None,
             phase: Phase::Ready,
@@ -147,6 +196,26 @@ impl Installer {
         it
     }
 
+    /// The window that uninstalls the app with desktop file ID `id`: what
+    /// the program found out about it (`Err`: why it cannot be removed).
+    pub fn for_removal(id: &str, plan: Result<Plan, String>) -> Installer {
+        let mut it = Installer::new(id, Err("nothing to read"), None);
+        it.task = Task::Uninstall;
+        it.phase = Phase::Ready;
+        match plan {
+            Ok(plan) => {
+                it.title = Some(plan.app);
+                it.removal = Some(plan.removal);
+                it.package = plan.package;
+                it.apps = plan.apps;
+                // The base root's state does not matter for a removal.
+                it.have_lists = true;
+            }
+            Err(why) => it.phase = Phase::Refused(why),
+        }
+        it
+    }
+
     /// What the base root has: the installed version of this package (from
     /// dpkg's status file), whether `apt-get` is there, whether its package
     /// lists are, and how many of its packages are not configured yet
@@ -162,6 +231,9 @@ impl Installer {
 
     /// The package's name as the window's heading: `Package` as written.
     pub fn name(&self) -> &str {
+        if let Some(title) = &self.title {
+            return title;
+        }
         self.package.as_ref().map_or_else(|| file_name(&self.path), |p| p.name.as_str())
     }
 
@@ -170,8 +242,19 @@ impl Installer {
         self.package.as_ref().map_or("", |p| p.summary.as_str())
     }
 
+    /// Whether the window is for removing an app.
+    pub fn uninstalling(&self) -> bool {
+        self.task == Task::Uninstall
+    }
+
     /// The facts the window lists: label and value.
     pub fn facts(&self) -> Vec<(&'static str, String)> {
+        if let Some(Removal::Image { size, .. }) = &self.removal {
+            return alloc::vec![
+                ("Size", deb::human_kib(size.div_ceil(1024))),
+                ("Kind", alloc::format!("Linux app, {}", Format::AppImage.name())),
+            ];
+        }
         let Some(p) = &self.package else { return Vec::new() };
         let mut out = alloc::vec![("Version", p.version.clone())];
         if let Some(v) = &self.installed {
@@ -185,7 +268,7 @@ impl Installer {
             out.push(("From", p.publisher().to_string()));
         }
         out.push(("Kind", alloc::format!("Linux app, {} ({})", Format::Deb.name(), p.architecture)));
-        if !p.depends.is_empty() {
+        if !p.depends.is_empty() && !self.uninstalling() {
             out.push(("Needs", needs(&p.depends)));
         }
         out
@@ -194,6 +277,9 @@ impl Installer {
     /// The sentence under the facts: what happens next, is happening, or
     /// happened.
     pub fn message(&self) -> String {
+        if self.uninstalling() {
+            return self.removal_message();
+        }
         match &self.phase {
             Phase::Refused(why) | Phase::Failed(why) => why.clone(),
             Phase::Ready => {
@@ -205,7 +291,8 @@ impl Installer {
             Phase::Working(Step::Configure) => alloc::format!("Preparing this computer (once): {}", self.activity),
             Phase::Working(Step::Update) => "Getting the list of Debian's packages\u{2026}".to_string(),
             Phase::Working(Step::Install) if self.activity.is_empty() => "Installing\u{2026}".to_string(),
-            Phase::Working(Step::Install) => self.activity.clone(),
+            // The steps of an uninstall ([`Installer::removal_message`]).
+            Phase::Working(_) => self.activity.clone(),
             Phase::Done => match self.apps.first() {
                 Some((_, name)) => alloc::format!("{name} is installed. It is in the launcher and in Applications."),
                 None => alloc::format!("{} is installed.", self.name()),
@@ -213,8 +300,37 @@ impl Installer {
         }
     }
 
+    fn removal_message(&self) -> String {
+        let app = self.name();
+        match &self.phase {
+            Phase::Refused(why) | Phase::Failed(why) => why.clone(),
+            Phase::Ready => match &self.removal {
+                Some(Removal::Image { .. }) => alloc::format!(
+                    "Uninstalling removes {app} and its files from your user folder. Your own files stay."
+                ),
+                _ => alloc::format!(
+                    "Uninstalling removes {app} and what only it needed from this computer. Your own files stay."
+                ),
+            },
+            Phase::Working(Step::Autoremove) if self.activity.is_empty() => {
+                alloc::format!("Removing what only {app} needed\u{2026}")
+            }
+            Phase::Working(Step::Autoremove) => self.activity.clone(),
+            Phase::Working(Step::Remove) if !self.activity.is_empty() => self.activity.clone(),
+            Phase::Working(_) => alloc::format!("Removing {app}\u{2026}"),
+            Phase::Done => alloc::format!("{app} is uninstalled. It is gone from the launcher and from Applications."),
+        }
+    }
+
     /// The window's buttons, the main one last (it is drawn on the right).
     pub fn buttons(&self) -> Vec<(&'static str, Action)> {
+        if self.uninstalling() {
+            return match &self.phase {
+                Phase::Ready => alloc::vec![("Cancel", Action::Close), ("Uninstall", Action::Uninstall)],
+                Phase::Working(_) => Vec::new(),
+                _ => alloc::vec![("Close", Action::Close)],
+            };
+        }
         match &self.phase {
             Phase::Refused(_) | Phase::Failed(_) => alloc::vec![("Close", Action::Close)],
             Phase::Ready => {
@@ -241,12 +357,24 @@ impl Installer {
             Step::Configure => apt::configure(),
             Step::Update => apt::update(self.status_fd),
             Step::Install => apt::install(&self.path, self.status_fd),
+            Step::Remove => apt::remove(self.package.as_ref().map_or("", |p| p.name.as_str()), self.status_fd),
+            Step::Autoremove => apt::autoremove(self.status_fd),
+            // The program does it.
+            Step::Delete => Vec::new(),
         }
     }
 
     /// The step after `done` (`None`: the first), if one is left.
     fn next_step(&self, done: Option<Step>) -> Option<Step> {
-        let all = [(Step::Configure, self.unconfigured > 0), (Step::Update, !self.have_lists), (Step::Install, true)];
+        let all: Vec<(Step, bool)> = match &self.removal {
+            None => alloc::vec![
+                (Step::Configure, self.unconfigured > 0),
+                (Step::Update, !self.have_lists),
+                (Step::Install, true)
+            ],
+            Some(Removal::Package) => alloc::vec![(Step::Remove, true), (Step::Autoremove, true)],
+            Some(Removal::Image { .. }) => alloc::vec![(Step::Delete, true)],
+        };
         let from = done.map_or(0, |d| all.iter().position(|(s, _)| *s == d).map_or(all.len(), |i| i + 1));
         all[from..].iter().find(|(_, needed)| *needed).map(|(s, _)| *s)
     }
@@ -261,7 +389,8 @@ impl Installer {
     /// **Install** was clicked: the first command to run, if the package
     /// can be installed.
     pub fn start(&mut self) -> Option<Vec<String>> {
-        if self.phase != Phase::Ready || self.package.is_none() {
+        let known = self.package.is_some() || matches!(self.removal, Some(Removal::Image { .. }));
+        if self.phase != Phase::Ready || !known {
             return None;
         }
         let first = self.next_step(None)?;
@@ -299,6 +428,12 @@ impl Installer {
                 self.percent = Some(if step == Step::Install { percent / 3 } else { percent });
                 self.activity = alloc::format!("Downloading: {}", text.trim());
             }
+            // A removal is two commands, a half of the bar each.
+            Some(Progress::Install { percent, text }) if self.uninstalling() => {
+                let half = (u32::from(percent.min(100)) / 2) as u8;
+                self.percent = Some(if step == Step::Autoremove { 50 + half } else { half });
+                self.activity = text.trim().to_string();
+            }
             Some(Progress::Install { percent, text }) => {
                 self.percent = Some(33 + (u32::from(percent) * 67 / 100) as u8);
                 self.activity = text.trim().to_string();
@@ -319,6 +454,9 @@ impl Installer {
                 Step::Configure => "This computer could not be prepared for Linux apps",
                 Step::Update => "The list of Debian's packages could not be downloaded",
                 Step::Install => "The app could not be installed",
+                Step::Remove => "The app could not be uninstalled",
+                Step::Autoremove => "What only the app needed could not be removed",
+                Step::Delete => "The app's files could not be removed",
             };
             let lines: Vec<&str> = self.log.iter().map(String::as_str).collect();
             let why = match (step, apt::dpkg_error(&lines), apt::error_line(lines.iter().copied())) {
@@ -339,6 +477,20 @@ impl Installer {
                 }
                 let next = self.next_step(Some(step))?;
                 Some(self.begin(next))
+            }
+            Step::Remove | Step::Autoremove => match self.next_step(Some(step)) {
+                Some(next) => Some(self.begin(next)),
+                None => {
+                    self.percent = Some(100);
+                    self.installed = None;
+                    self.phase = Phase::Done;
+                    None
+                }
+            },
+            Step::Delete => {
+                self.percent = Some(100);
+                self.phase = Phase::Done;
+                None
             }
             Step::Install => {
                 let name = self.package.as_ref().map(|p| p.name.clone()).unwrap_or_default();
@@ -549,6 +701,130 @@ Description: scientific calculator\n A GTK 3 calculator.\n";
             it.phase,
             Phase::Failed(
                 "This computer could not be prepared for Linux apps: base-files could not be set up (chown: invalid group: 'root:mail')."
+                    .into()
+            )
+        );
+    }
+
+    fn galculator_plan() -> Plan {
+        let info = Info::parse("Package: galculator\nVersion: 2.1.4-2\nArchitecture: amd64\nMaintainer: Debian QA Group <packages@qa.debian.org>\nInstalled-Size: 1297\nDescription: scientific calculator\n A GTK 3 calculator.\n").unwrap();
+        Plan {
+            app: "Galculator".into(),
+            removal: Removal::Package,
+            package: Some(info),
+            apps: alloc::vec![("galculator.desktop".to_string(), "Galculator".to_string())],
+        }
+    }
+
+    #[test]
+    fn an_uninstall_asks_first_then_removes_then_autoremoves() {
+        let mut it = Installer::for_removal("galculator.desktop", Ok(galculator_plan()));
+        it.status_fd = 5;
+        assert_eq!(it.phase, Phase::Ready);
+        assert!(it.uninstalling());
+        assert_eq!((it.name(), it.summary()), ("Galculator", "scientific calculator"));
+        assert_eq!(
+            it.facts(),
+            [
+                ("Version", "2.1.4-2".to_string()),
+                ("Size", "1.2 MB".to_string()),
+                ("From", "Debian QA Group".to_string()),
+                ("Kind", "Linux app, Debian package (amd64)".to_string()),
+            ]
+        );
+        assert_eq!(
+            it.message(),
+            "Uninstalling removes Galculator and what only it needed from this computer. Your own files stay."
+        );
+        assert_eq!(it.buttons(), [("Cancel", Action::Close), ("Uninstall", Action::Uninstall)]);
+        // Nothing happened yet; a click starts apt's remove.
+        let remove = it.start().unwrap();
+        assert_eq!(&remove[remove.len() - 3..], ["remove", "--", "galculator"]);
+        assert!(remove.contains(&"APT::Status-Fd=5".to_string()));
+        assert_eq!(it.phase, Phase::Working(Step::Remove));
+        assert!(it.busy() && it.buttons().is_empty());
+        assert_eq!(it.message(), "Removing Galculator\u{2026}");
+        it.status("pmstatus:galculator:50.0:Removing galculator (amd64)");
+        assert_eq!((it.percent, it.message().as_str()), (Some(25), "Removing galculator (amd64)"));
+        // Then what only it needed.
+        let auto = it.finished(true, |_| panic!("nothing is read after a removal")).unwrap();
+        assert_eq!(auto.last().map(String::as_str), Some("autoremove"));
+        assert_eq!(it.phase, Phase::Working(Step::Autoremove));
+        assert_eq!(it.message(), "Removing what only Galculator needed\u{2026}");
+        it.status("pmstatus:libquadmath0:100.0:Removing libquadmath0:amd64 (amd64)");
+        assert_eq!(it.percent, Some(100));
+        assert_eq!(it.finished(true, |_| panic!("nothing is read after a removal")), None);
+        assert_eq!(it.phase, Phase::Done);
+        assert_eq!(it.message(), "Galculator is uninstalled. It is gone from the launcher and from Applications.");
+        assert_eq!(it.buttons(), [("Close", Action::Close)]);
+        assert_eq!(it.installed, None);
+        // The launcher entries that went stay known, for the desktop's rescan.
+        assert_eq!(it.apps, [("galculator.desktop".to_string(), "Galculator".to_string())]);
+    }
+
+    #[test]
+    fn an_uninstall_that_apt_refuses_says_why() {
+        let mut it = Installer::for_removal("galculator.desktop", Ok(galculator_plan()));
+        it.start();
+        it.output("E: Could not get lock /var/lib/dpkg/lock-frontend");
+        assert_eq!(it.finished(false, |_| Vec::new()), None);
+        assert_eq!(
+            it.phase,
+            Phase::Failed("The app could not be uninstalled: Could not get lock /var/lib/dpkg/lock-frontend.".into())
+        );
+        assert_eq!(it.buttons(), [("Close", Action::Close)]);
+        // The first command failing leaves the second unstarted.
+        assert_eq!(it.start(), None);
+    }
+
+    #[test]
+    fn an_app_that_cannot_be_uninstalled_is_refused_with_the_reason() {
+        let it = Installer::for_removal("chromium.desktop", Err("chromium is part of Poly's base system.".into()));
+        assert!(it.uninstalling());
+        assert_eq!(it.phase, Phase::Refused("chromium is part of Poly's base system.".into()));
+        assert_eq!(it.message(), "chromium is part of Poly's base system.");
+        assert_eq!(it.buttons(), [("Close", Action::Close)]);
+        assert!(it.facts().is_empty());
+        let mut it = it;
+        assert_eq!(it.start(), None);
+    }
+
+    #[test]
+    fn an_appimage_is_removed_by_the_program_in_one_step() {
+        let plan = Plan {
+            app: "Hello Pixels".into(),
+            removal: Removal::Image { slug: "hello-pixels".into(), size: 5_000_000 },
+            package: None,
+            apps: alloc::vec![("poly-appimage-hello-pixels.desktop".to_string(), "Hello Pixels".to_string())],
+        };
+        let mut it = Installer::for_removal("poly-appimage-hello-pixels.desktop", Ok(plan));
+        assert_eq!(it.facts(), [("Size", "4.7 MB".to_string()), ("Kind", "Linux app, AppImage".to_string())]);
+        assert_eq!(
+            it.message(),
+            "Uninstalling removes Hello Pixels and its files from your user folder. Your own files stay."
+        );
+        // No command: the program deletes the files itself.
+        assert_eq!(it.start(), Some(Vec::new()));
+        assert_eq!(it.phase, Phase::Working(Step::Delete));
+        assert_eq!(it.message(), "Removing Hello Pixels\u{2026}");
+        assert_eq!(it.finished(true, |_| Vec::new()), None);
+        assert_eq!(it.phase, Phase::Done);
+        assert_eq!(it.percent, Some(100));
+        // A failure to delete is the program's words.
+        let plan = Plan {
+            app: "X".into(),
+            removal: Removal::Image { slug: "x".into(), size: 1 },
+            package: None,
+            apps: Vec::new(),
+        };
+        let mut it = Installer::for_removal("poly-appimage-x.desktop", Ok(plan));
+        it.start();
+        it.output("E: /home/poly/.local/share/poly/appimages/x: Permission denied");
+        it.finished(false, |_| Vec::new());
+        assert_eq!(
+            it.phase,
+            Phase::Failed(
+                "The app's files could not be removed: /home/poly/.local/share/poly/appimages/x: Permission denied."
                     .into()
             )
         );
