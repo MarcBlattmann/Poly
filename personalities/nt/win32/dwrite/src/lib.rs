@@ -24,6 +24,7 @@ mod fallback;
 mod file;
 mod fontset;
 mod io;
+mod numsub;
 mod render;
 mod strings;
 mod system;

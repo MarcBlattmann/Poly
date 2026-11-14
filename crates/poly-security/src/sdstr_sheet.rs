@@ -620,6 +620,46 @@ fn parse_conditional() {
     );
 }
 
+/// The `CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1` of the first ACE of `S:(RA;...)`
+/// and the size of that ACE.
+fn ra_attribute(ace_text: &str) -> (Vec<u8>, usize) {
+    let b = ok(&alloc::format!("S:({ace_text})"));
+    let (_, _, s, _) = offsets(&b);
+    let ace = s + 8;
+    let size = usize::from(u16::from_le_bytes([b[ace + 2], b[ace + 3]]));
+    // The header, the mask and the SID of Everyone come first.
+    (b[ace + 20..ace + size].to_vec(), size)
+}
+
+/// `resource_attributes`: every value type starts right where the name ends
+/// (sddl_parse_ra_names, sddl_parse_ra_multi); only the whole ACE is padded.
+#[test]
+fn resource_attribute_values_start_where_the_name_ends() {
+    // An even number of characters ends at 2 modulo 4: no gap.
+    for (name, at) in [("a", 24), ("ab", 26), ("abc", 28), ("abcd", 30), ("abcde", 32), ("abcdef", 34)] {
+        let (st, _) = ra_attribute(&alloc::format!("RA;;;;;WD;(\"{name}\",TI,0,-1)"));
+        assert_eq!(dword(&st, 16), at, "{name}");
+        assert_eq!(&st[at..at + 8], &(-1i64).to_le_bytes());
+    }
+    // The structure of "ab" ends at 34; the ACE is padded: 20 + 36.
+    assert_eq!(ra_attribute("RA;;;;;WD;(\"ab\",TI,0,-1)").1, 56);
+    let (st, _) = ra_attribute("RA;;;;;WD;(\"ALongerAttributeName\",TI,0,-1,0,1)");
+    assert_eq!((dword(&st, 16), dword(&st, 20), dword(&st, 24)), (0x46, 0x4e, 0x56));
+    // The other types too: unsigned and boolean values, SIDs (a length and the bytes).
+    let (st, _) = ra_attribute("RA;;;;;WD;(\"ab\",TU,0,7,8)");
+    assert_eq!((dword(&st, 16), dword(&st, 20)), (30, 38));
+    let (st, _) = ra_attribute("RA;;;;;WD;(\"ab\",TB,0,1,0)");
+    assert_eq!((dword(&st, 16), dword(&st, 20)), (30, 38));
+    let (st, _) = ra_attribute("RA;;;;;WD;(\"ab\",TD,0,SY,WD)");
+    assert_eq!((dword(&st, 16), dword(&st, 20)), (30, 30 + 4 + 12));
+    assert_eq!(dword(&st, 30), 12);
+    // Strings and octets were never aligned.
+    let (st, _) = ra_attribute("RA;;;;;WD;(\"ab\",TS,0,\"x\")");
+    assert_eq!(dword(&st, 16), 26);
+    let (st, _) = ra_attribute("RA;;;;;WD;(\"ab\",TX,0,0102)");
+    assert_eq!((dword(&st, 16), dword(&st, 26)), (26, 2));
+}
+
 #[test]
 fn parse_resource_attributes_and_policies() {
     let b = ok("S:(RA;;;;;WD;(\"N\",TI,0,-5))");

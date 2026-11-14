@@ -626,3 +626,80 @@ follow their sheets now). In particular, to be confirmed:
   `E_INVALIDARG`). `VarBstrCmp`: the result for a failed comparison and for `lcid` 0.
 * `NtSuspendProcess` / `NtResumeProcess`: the statuses for a handle without
   `PROCESS_SUSPEND_RESUME` (Poly: `STATUS_ACCESS_DENIED`) and for a process that has ended.
+
+## Addendum: the renderer's start-up, placeholders, dynamic function tables (`chrome-win-s11`, step 11)
+
+After step 10 (ADR 0181) the browser stayed up, but each of its three or four renderers ended
+about 16 s in on a breakpoint inside `ChromeMain`. Watching only the renderers made the reasons
+readable, one per run; nothing here comes from reading Chrome's code.
+
+1. **Tools: trace only some processes, keep only their last calls.** The call tracer
+   (`polytrace-sync`) and the kernel learn three things, all off by default:
+   * `POLYTRACE_ONLY=<text>` (`chrome-win run --trace-only TEXT`): the logger traces only a process
+     whose command line contains the text (`--type=renderer`); in the others it opens no file and
+     every thunk calls straight through, so the browser's stack sampler can no longer stop a
+     thread inside the logger (the step 8 reason `chrome.dll` could not be in the kit).
+   * `POLYTRACE_RING=N` (`--trace-ring N`): keep the last N records in memory, without a lock, and
+     write them when the process meets a breakpoint or an error exception (a vectored handler that
+     lets the exception go on), or N seconds after start with `POLYTRACE_RING_AT` (`--ring-at`).
+   * `POLYTRACE_FIRST=1` (`--trace-first`): write a record only the first time a function returns
+     with a given outcome (zero or not, and the last error it set): which functions a process
+     reaches and how they answer, in a few hundred records, the shape of the Windows reference's
+     per-function rows (`traces/s1.trace.json`).
+   * Kernel: `poly.nt.only=<text>` limits `poly.nt.trace` and the new `poly.nt.trail[=N]` (each
+     process keeps its last N NT calls, all services, written as `nt-trail:` lines when a
+     breakpoint or error exception is handed to it) to processes whose command line has the
+     text; `poly.nt.waits` lines now name the process (`p<pid>`) and list the command lines.
+     (`--trace-only` sets `poly.nt.only` too; `--trail N`.) The ring and selection logic is
+     `poly_personality_nt::trace` (`Trail`, `selects`, `trail_len`), host-tested.
+   * `chrome-win run --chrome-arg ARG` adds a switch to Chrome's command line and
+     `--launch-seconds N` shortens the launcher's wait, so a debugging run prints Chrome's
+     standard error before QEMU is stopped. The launcher's environment line takes several
+     `NAME=VALUE` words.
+2. **Placeholders** (Learn: "VirtualAlloc2", "VirtualFree", "MapViewOfFile3", "UnmapViewOfFile2").
+   The renderer's first stop: `VirtualFree(0x1e000000000, 64 GiB, MEM_RELEASE |
+   MEM_PRESERVE_PLACEHOLDER)` failed with error 87 (`kernelbase` accepted only `MEM_RELEASE` or
+   `MEM_DECOMMIT`), then V8's check fired; the text on the stack was `v8-sandbox`. V8 reserves its
+   sandbox as one placeholder and splits it. `kernelbase` had treated a placeholder as an ordinary
+   reservation, which cannot be split. Now the kernel's address-space model has placeholders
+   (`poly_personality_nt::vm::Placeholder`): `MEM_RESERVE | MEM_RESERVE_PLACEHOLDER` makes one
+   (`PAGE_NOACCESS` only, nothing can be committed in it); `MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER`
+   splits off part of one at 64 KiB boundaries, or frees a private allocation that replaced one
+   back to it; `MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS` joins neighbouring placeholders named by
+   exactly their whole range; `MEM_RESERVE | MEM_REPLACE_PLACEHOLDER` (private memory) and
+   `NtMapViewOfSection` with `MEM_REPLACE_PLACEHOLDER` (a data view) take exactly one placeholder's
+   range; the new service `NtUnmapViewOfSectionEx` (0x04A; Learn `ZwUnmapViewOfSectionEx`) with
+   `MEM_PRESERVE_PLACEHOLDER` leaves a placeholder where the view was. `VirtualAlloc2`,
+   `VirtualFree`, `MapViewOfFile3` and `UnmapViewOfFile2` pass the types through; `VirtualAlloc`
+   refuses the placeholder types (Learn: they are `VirtualAlloc2`'s). Host test:
+   `vm::tests::placeholders_split_replace_preserve_and_coalesce`.
+3. **Function tables of code made at run time** (Learn: "RtlAddFunctionTable",
+   "RtlDeleteFunctionTable", "RtlAddGrowableFunctionTable", "RtlGrowFunctionTable",
+   "RtlDeleteGrowableFunctionTable"). The second stop: the renderer looked up
+   `ntdll!RtlAddGrowableFunctionTable`, got NULL (Poly's `ntdll` had none of these), and called
+   it: `0xC0000005` executing address 0. `poly_seh::dynamic::Registry` holds up to 256 tables
+   (host-tested); `ntdll` exports the five functions and its function-entry lookup
+   (`RtlLookupFunctionEntry`, exception dispatch, unwinding) searches the registered tables for an
+   address in no image. `kernel32` forwards `RtlAddFunctionTable` and `RtlDeleteFunctionTable`.
+4. **`CreateSemaphoreA`, `CreateEventA`, `CreateMutexA`** (Learn: the ANSI forms). With the
+   renderers alive, the first-call trace showed `CreateSemaphoreA(NULL, 0, 0x7FFFFFFF, NULL)` =
+   NULL with error 120 in every renderer (it was a stub), where Windows' renderers always got a
+   handle. They are now the W functions with the name converted from the ANSI code page.
+
+**Where stage 1 stands.** The renderers no longer die; the browser, the crash handler, the GPU,
+network and storage processes and three renderers start, and everything then goes quiet: the
+browser logs `AddKeepAlive(Default, kHeadlessCommand)` about 12 s in and nothing else, the page's
+renderer wakes every ~100 ms and goes back to sleep, and the launcher's 300 s timeout ends the run
+without the DOM. The first-call comparison against `traces/s1.trace.json` finds no single call
+that fails on Poly and not on Windows before that point; what still differs is in the hand-off
+`chrome-win-s11.md`.
+
+**Doc-derived, to be confirmed against Windows:** the statuses of every placeholder failure
+(a split off granule boundaries, a range past the placeholder, a replacement of a range that is
+not exactly one placeholder, coalescing a range that is not whole placeholders, committing in a
+placeholder); that a split naming the whole placeholder (or size 0) succeeds and changes nothing;
+that `UnmapViewOfFile2(MEM_PRESERVE_PLACEHOLDER)` of a view that replaced no placeholder leaves one
+(Poly) rather than failing; `RtlAddGrowableFunctionTable`'s status for a full table
+(`STATUS_NO_MEMORY`) and for a NULL handle pointer (`STATUS_INVALID_PARAMETER`); that
+`RtlGrowFunctionTable` ignores a count below the current one or above the maximum; which of two
+overlapping tables wins (Poly: the first registered).

@@ -39,9 +39,113 @@ impl Memory for Proc {
     }
 }
 
+/// The function tables registered for code made at run time (`poly_seh::dynamic`), behind a
+/// spin flag of their own (the loader's lock is not needed for them).
+struct Dynamic {
+    flag: core::sync::atomic::AtomicBool,
+    registry: core::cell::UnsafeCell<poly_seh::dynamic::Registry>,
+}
+
+// SAFETY: `registry` is only reached through `with_dynamic`, which `flag` makes exclusive.
+unsafe impl Sync for Dynamic {}
+
+static DYNAMIC: Dynamic = Dynamic {
+    flag: core::sync::atomic::AtomicBool::new(false),
+    registry: core::cell::UnsafeCell::new(poly_seh::dynamic::Registry::new()),
+};
+
+fn with_dynamic<R>(f: impl FnOnce(&mut poly_seh::dynamic::Registry) -> R) -> R {
+    use core::sync::atomic::Ordering;
+    while DYNAMIC.flag.swap(true, Ordering::Acquire) {
+        core::hint::spin_loop();
+    }
+    // SAFETY: `flag` makes this the only accessor.
+    let r = f(unsafe { &mut *DYNAMIC.registry.get() });
+    DYNAMIC.flag.store(false, Ordering::Release);
+    r
+}
+
+/// The entry of a registered function table that covers `pc`.
+fn dynamic_entry(pc: u64) -> Result<Option<FunctionEntry>, UnwindError> {
+    let Some(t) = with_dynamic(|r| r.find(pc)) else { return Ok(None) };
+    let Ok(off) = u32::try_from(pc - t.base) else { return Ok(None) };
+    Ok(pdata::lookup(&Proc, t.entries, t.count as usize, off)?.map(|(i, function)| FunctionEntry {
+        image_base: t.base,
+        function,
+        address: t.entries + (i * RuntimeFunction::SIZE) as u64,
+    }))
+}
+
+/// `RtlAddFunctionTable(FunctionTable, EntryCount, BaseAddress)` (Learn): register `EntryCount`
+/// sorted `RUNTIME_FUNCTION` entries for code at `BaseAddress` (their RVAs are relative to it);
+/// the caller keeps the array. TRUE on success.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlAddFunctionTable(table: *const u8, count: u32, base: u64) -> u8 {
+    if table.is_null() || count == 0 {
+        return 0;
+    }
+    let (mut low, mut high) = (u64::MAX, 0u64);
+    for i in 0..count as usize {
+        // SAFETY: the caller's array of `count` 12-byte entries.
+        let f = unsafe { RuntimeFunction::from_bytes(&*(table.add(i * RuntimeFunction::SIZE) as *const [u8; 12])) };
+        low = low.min(base.wrapping_add(u64::from(f.begin)));
+        high = high.max(base.wrapping_add(u64::from(f.end)));
+    }
+    u8::from(with_dynamic(|r| r.add_table(table as u64, count, base, low, high)).is_ok())
+}
+
+/// `RtlDeleteFunctionTable(FunctionTable)` (Learn): TRUE if the table was registered.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlDeleteFunctionTable(table: *const u8) -> u8 {
+    u8::from(with_dynamic(|r| r.delete(table as u64, false)))
+}
+
+/// `RtlAddGrowableFunctionTable(DynamicTable*, FunctionTable, EntryCount, MaximumEntryCount,
+/// RangeBase, RangeEnd)` (Learn): register a table for the code in `[RangeBase, RangeEnd)`
+/// whose entries are relative to `RangeBase` and which `RtlGrowFunctionTable` extends; its
+/// handle goes to `*DynamicTable`. Returns an `NTSTATUS`: `STATUS_SUCCESS`, else
+/// `STATUS_INVALID_PARAMETER` or `STATUS_NO_MEMORY` (when every slot is taken; Poly's
+/// choices, to be confirmed by the spec agent).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlAddGrowableFunctionTable(
+    handle: *mut u64,
+    table: *const u8,
+    count: u32,
+    max: u32,
+    low: u64,
+    high: u64,
+) -> u32 {
+    const STATUS_INVALID_PARAMETER: u32 = 0xC000_000D;
+    const STATUS_NO_MEMORY: u32 = 0xC000_0017;
+    if handle.is_null() {
+        return STATUS_INVALID_PARAMETER;
+    }
+    match with_dynamic(|r| r.add_growable(table as u64, count, max, low, high)) {
+        Ok(h) => {
+            // SAFETY: a valid out-pointer.
+            unsafe { handle.write(h) };
+            0
+        }
+        Err(poly_seh::dynamic::AddError::Invalid) => STATUS_INVALID_PARAMETER,
+        Err(poly_seh::dynamic::AddError::Full) => STATUS_NO_MEMORY,
+    }
+}
+
+/// `RtlGrowFunctionTable(DynamicTable, NewEntryCount)` (Learn).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlGrowFunctionTable(handle: u64, count: u32) {
+    with_dynamic(|r| r.grow(handle, count));
+}
+
+/// `RtlDeleteGrowableFunctionTable(DynamicTable)` (Learn).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlDeleteGrowableFunctionTable(handle: u64) {
+    with_dynamic(|r| r.delete(handle, true));
+}
+
 impl Target for Proc {
     fn function_entry(&self, pc: u64) -> Result<Option<FunctionEntry>, UnwindError> {
-        let Some(m) = with_loader(|l, _| l.find(pc)) else { return Ok(None) };
+        let Some(m) = with_loader(|l, _| l.find(pc)) else { return dynamic_entry(pc) };
         let (rva, bytes) = m.exception;
         if bytes == 0 {
             return Ok(None);

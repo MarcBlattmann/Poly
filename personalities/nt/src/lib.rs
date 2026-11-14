@@ -288,6 +288,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         QuerySystemInformation => sysinfo::query_system_information(k, regs),
         DeviceIoControlFile => console::services::device_io_control_file(k, regs),
         QuerySection => memory::query_section(k, regs),
+        UnmapViewOfSectionEx => memory::unmap_view_ex(k, regs),
         CreateJobObject => job::create_job_object(k, regs),
         OpenJobObject => job::open_job_object(k, regs),
         AssignProcessToJobObject => job::assign_process_to_job_object(k, regs),

@@ -107,6 +107,10 @@
 //!   win 7zip-trace <stage | record <windows.json>... | diff [--kernel <elf>] [--target <poly.json>] [--markdown <file>] [--check]>
 //!                       the traced scenario: the kit staged, a Windows reference recorded,
 //!                       Poly compared with it call by call (sevenzip_trace.rs, ADR 0110)
+//!   win-app imports --dir DIR [--markdown FILE]
+//!   win-app run --dir DIR --exe REL [--mode console|desktop] [--steps ...] [--args "..."]
+//!                       any unpacked Windows program: what it imports that Poly lacks; a run on
+//!                       the console, or on the desktop with screenshots and input (winapps.rs)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 //!   fonts fetch         download the pinned DejaVu fonts of the font store into the cache (fonts.rs)
@@ -174,6 +178,7 @@ mod wallpapers;
 mod wayland;
 mod win32;
 mod winapp;
+mod winapps;
 mod winimports;
 mod wintrace;
 mod xwayland;
@@ -276,6 +281,7 @@ const COMMANDS: &[&str] = &[
     "chromium",
     "a64-diff",
     "chrome-win",
+    "win-app",
     "macos",
 ];
 
@@ -313,6 +319,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("chromium") => chromium::command(rest),
         Some("a64-diff") => a64_diff(rest),
         Some("chrome-win") => chromewin::command(rest),
+        Some("win-app") => winapps::command(rest),
         Some("macos") => macimports::command(rest),
         other => Err(format!("no command {other:?}")),
     }
