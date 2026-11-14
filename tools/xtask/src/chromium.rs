@@ -322,6 +322,8 @@ exec setpriv --reuid=1000 --regid=1000 --init-groups env HOME=/home/poly XDG_RUN
 /// `/run/user/1000/bus`: nothing to do if the one it started is still there.
 /// The desktop starts it in the background ([`DESKTOP_SCRIPT`]), so it costs
 /// the boot nothing; `poly-as-user` calls it too, which waits for the socket.
+/// The daemon (and the services it starts, `dconf-service`) get `poly`'s
+/// directories, not the root session's that the desktop's environment names.
 /// The disk outlives a boot, so a pid file of an earlier boot (its pid now
 /// another process, or none) is told from a live one by the process's name.
 pub const SESSION_BUS_SCRIPT: &str = "#!/bin/bash
@@ -337,6 +339,8 @@ PID=
 if [ -z \"$PID\" ] || [ \"$(cat \"/proc/$PID/comm\" 2>/dev/null)\" != dbus-daemon ]; then
     rm -f \"$U/bus\" \"$P\"
     setpriv --reuid=1000 --regid=1000 --init-groups env HOME=/home/poly XDG_RUNTIME_DIR=\"$U\" \\
+        XDG_CONFIG_HOME=/home/poly/.config XDG_CACHE_HOME=/home/poly/.cache \\
+        XDG_DATA_HOME=/home/poly/.local/share XDG_STATE_HOME=/home/poly/.local/state \\
         \"$BIN\" --session --address=\"unix:path=$U/bus\" --nofork --nopidfile < /dev/null > /dev/null 2>&1 &
     echo $! > \"$P\"
 fi
@@ -2904,6 +2908,8 @@ mod tests {
         assert!(USER_SCRIPT.contains("/usr/local/bin/poly-session-bus"));
         assert!(USER_SCRIPT.contains("${BUS:+DBUS_SESSION_BUS_ADDRESS=\"$BUS\"}"));
         assert!(SESSION_BUS_SCRIPT.contains("--session --address=\"unix:path=$U/bus\" --nofork"));
+        // The daemon and the services it starts use poly's directories, not root's.
+        assert!(SESSION_BUS_SCRIPT.contains("XDG_CONFIG_HOME=/home/poly/.config"));
         let env = desktop_env();
         assert!(env.contains("[ -x /usr/bin/Xwayland ] && export DISPLAY=:0\n"));
         assert!(env.contains("export DEBIAN_FRONTEND=noninteractive\n"));
