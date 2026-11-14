@@ -1126,3 +1126,250 @@ fn anonymous_regions_take_names_and_split_for_them() {
     m.set_anon_name(MIN, P, name("kept")).unwrap();
     assert_eq!(m.clone().find(MIN).and_then(|v| v.name.clone()), name("kept"));
 }
+
+// ------------------------------------------------- low hints (V8's pattern) --
+
+/// A process-like address space: the default layout, a program at the PIE
+/// base, a heap, a few libraries and the stack.
+fn process_like() -> Map {
+    let mut m = map_with(Layout::default());
+    let pie = 0x5555_5555_4000;
+    m.map(file(0x20 * P, Prot::RX, 1, 0, false, Placement::FixedNoReplace(pie))).unwrap();
+    m.map(anon(8 * P, Prot::RW, Placement::FixedNoReplace(pie + 0x20 * P))).unwrap();
+    m.init_brk(pie + 0x28 * P).unwrap();
+    m.setup_stack(34 * P, Prot::RW).unwrap();
+    for i in 0..5 {
+        m.map(file(0x10 * P, Prot::RX, 10 + i, 0, false, Placement::Hint(0))).unwrap();
+    }
+    m
+}
+
+/// V8 reserves the low 4 GiB: `mmap(hint, 0x1_0000_1000 - hint, PROT_NONE,
+/// MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE)`. The hint is honoured when
+/// the range is free, for every hint from the lowest allowed address up.
+#[test]
+fn a_low_hint_for_four_gib_is_honoured_when_free() {
+    let mut m = process_like();
+    let end = 0x1_0000_1000;
+    let mut hint = USER_MIN_ADDR;
+    while hint < USER_MIN_ADDR + 64 * P {
+        let r = m.map(anon(end - hint, Prot::NONE, Placement::Hint(hint))).unwrap();
+        assert_eq!(r.addr, hint, "hint {hint:#x}");
+        assert!(r.replaced.is_empty());
+        m.unmap(r.addr, end - hint).unwrap();
+        hint += P;
+    }
+}
+
+/// The end of the 4 GiB reservation V8 asks for (one page past 4 GiB).
+const V8_END: u64 = 0x1_0000_1000;
+
+fn reservation(m: &mut Map, hint: u64) -> Result<Mapped<u32>, Error> {
+    m.map(anon(V8_END - hint, Prot::NONE, Placement::Hint(hint)))
+}
+
+#[test]
+fn a_hint_is_not_honoured_when_the_range_is_taken() {
+    let m = process_like();
+    let top = Layout::default().mmap_base;
+    let len = V8_END - 0x1a000;
+    // A mapping anywhere inside the range: the hint is not used and the
+    // search puts the mapping high, as for no hint.
+    for taken in [USER_MIN_ADDR + 0x40 * P, 0x1a000, 0x40_0000, 0x1_0000_0000, V8_END - P] {
+        let mut m = m.clone();
+        m.map(anon(P, Prot::RW, Placement::Fixed(taken))).unwrap();
+        let r = reservation(&mut m, 0x1a000).unwrap();
+        assert_ne!(r.addr, 0x1a000, "taken {taken:#x}");
+        assert!(r.addr >= 0x1_0000_0000 && r.addr + len <= top, "taken {taken:#x}: {:#x}", r.addr);
+        assert_eq!(m.find(taken).unwrap().prot, Prot::RW, "the other mapping stays");
+    }
+    // Only a page inside the range matters: the pages just before and just
+    // after it are not in the way.
+    let mut m = m;
+    m.map(anon(P, Prot::RW, Placement::Fixed(0x19000))).unwrap();
+    m.map(anon(P, Prot::RW, Placement::Fixed(V8_END))).unwrap();
+    assert_eq!(reservation(&mut m, 0x1a000).unwrap().addr, 0x1a000);
+}
+
+#[test]
+fn a_hint_below_the_minimum_address_moves_up_to_it() {
+    // "A nearby page boundary, but always above or equal to mmap_min_addr"
+    // (mmap(2)): nothing is ever placed below the minimum.
+    let mut m = process_like();
+    for hint in [1, P, USER_MIN_ADDR - P, USER_MIN_ADDR - 1] {
+        let r = m.map(anon(P, Prot::NONE, Placement::Hint(hint))).unwrap();
+        assert_eq!(r.addr, USER_MIN_ADDR, "hint {hint:#x}");
+        m.unmap(r.addr, P).unwrap();
+    }
+    // Hint 0 is no hint at all: the search puts it high.
+    let r = m.map(anon(P, Prot::NONE, Placement::Hint(0))).unwrap();
+    assert!(r.addr > 0x7000_0000_0000);
+    m.unmap(r.addr, P).unwrap();
+    // The raised range is what must be free: a taken minimum page sends the
+    // search elsewhere, and a range that starts below and ends beyond what
+    // the space allows is not used.
+    assert_eq!(
+        m.map(anon(P, Prot::NONE, Placement::Fixed(USER_MIN_ADDR + 2 * P))).unwrap().addr,
+        USER_MIN_ADDR + 2 * P
+    );
+    let r = m.map(anon(4 * P, Prot::NONE, Placement::Hint(P))).unwrap();
+    assert_ne!(r.addr, USER_MIN_ADDR, "the raised range overlaps the page at min + 2 pages");
+    let r = m.map(anon(USER_END, Prot::NONE, Placement::Hint(P)));
+    assert_eq!(r, Err(Error::NoMemory));
+}
+
+#[test]
+fn a_hint_is_rounded_up_to_a_page() {
+    let mut m = process_like();
+    assert_eq!(m.map(anon(P, Prot::NONE, Placement::Hint(0x1a001))).unwrap().addr, 0x1b000);
+    assert_eq!(m.map(anon(P, Prot::NONE, Placement::Hint(0x1c000 - 1))).unwrap().addr, 0x1c000);
+    assert_eq!(m.map(anon(2 * P, Prot::NONE, Placement::Hint(0x30fff))).unwrap().addr, 0x31000);
+    // The rounded range is what must be free.
+    m.map(anon(P, Prot::RW, Placement::Fixed(0x42000))).unwrap();
+    let r = m.map(anon(2 * P, Prot::NONE, Placement::Hint(0x41001))).unwrap();
+    assert_ne!(r.addr, 0x42000, "0x42000..0x44000 overlaps the mapping at 0x42000");
+    assert!(r.addr >= 0x1_0000_0000);
+}
+
+#[test]
+fn a_hint_whose_range_leaves_the_address_space_is_not_honoured() {
+    let mut m = process_like();
+    let l = Layout::default();
+    // Ends past USER_END (its last page stays unmapped), or overflows.
+    let len = 0x10 * P;
+    for hint in [USER_END - len + P, USER_END - P, USER_END, u64::MAX - P, u64::MAX] {
+        let r = m.map(anon(len, Prot::NONE, Placement::Hint(hint))).unwrap();
+        assert!(r.addr + len <= l.mmap_base, "hint {hint:#x} gave {:#x}", r.addr);
+        m.unmap(r.addr, len).unwrap();
+    }
+    // The stack and its guard gap are taken space.
+    let stack = m.find(USER_END - P).unwrap().start;
+    let in_gap = stack - DEFAULT_STACK_GUARD_GAP;
+    let r = m.map(anon(P, Prot::NONE, Placement::Hint(in_gap))).unwrap();
+    assert_ne!(r.addr, in_gap);
+    // Ending exactly at USER_END is fine where nothing is in the way.
+    let mut free = map_with(Layout::default());
+    assert_eq!(free.map(anon(len, Prot::NONE, Placement::Hint(USER_END - len))).unwrap().addr, USER_END - len);
+}
+
+#[test]
+fn a_fixed_mapping_without_replace_fails_with_eexist_on_overlap() {
+    let mut m = process_like();
+    let r = reservation(&mut m, 0x1a000).unwrap();
+    assert_eq!(r.addr, 0x1a000);
+    let at = |a: u64, len: u64| anon(len, Prot::RW, Placement::FixedNoReplace(a));
+    // Every kind of overlap.
+    for (a, len) in [(0x1a000, P), (0x50_0000, P), (V8_END - P, P), (0x19000, 2 * P), (V8_END - P, 2 * P)] {
+        let err = m.map(at(a, len)).unwrap_err();
+        assert_eq!(err, Error::Exists, "{a:#x}+{len:#x}");
+        assert_eq!(err.linux_errno(), 17);
+    }
+    // Touching is not overlapping.
+    assert_eq!(m.map(at(0x19000, P)).unwrap().addr, 0x19000);
+    assert_eq!(m.map(at(V8_END, P)).unwrap().addr, V8_END);
+    // Below the minimum: EPERM (no overlap involved).
+    assert_eq!(m.map(at(USER_MIN_ADDR - P, P)), Err(Error::Permission));
+    // Nothing changed by the failures.
+    assert_eq!(m.find(0x1a000).unwrap().end, V8_END);
+    // A plain MAP_FIXED over it replaces just that page.
+    let replaced = m.map(anon(P, Prot::RW, Placement::Fixed(0x50_0000))).unwrap().replaced;
+    assert_eq!(replaced.len(), 1);
+    assert_eq!((replaced[0].start, replaced[0].end), (0x50_0000, 0x50_0000 + P));
+}
+
+#[test]
+fn a_program_at_the_low_exec_base_is_not_overwritten_by_a_hint() {
+    // A non-PIE program: 0x400000 with its heap right after.
+    let mut m = map_with(Layout::default());
+    m.map(file(0x100 * P, Prot::RX, 1, 0, false, Placement::FixedNoReplace(0x40_0000))).unwrap();
+    m.map(anon(0x10 * P, Prot::RW, Placement::FixedNoReplace(0x40_0000 + 0x100 * P))).unwrap();
+    m.init_brk(0x40_0000 + 0x110 * P).unwrap();
+    assert_eq!(m.brk(0x40_0000 + 0x120 * P).brk, 0x40_0000 + 0x120 * P);
+    // V8's 4 GiB cannot go at 0x1a000 with the program in the way.
+    assert_ne!(reservation(&mut m, 0x1a000).unwrap().addr, 0x1a000);
+    // A range that ends before the program fits, and one on it does not.
+    assert_eq!(m.map(anon(0x100 * P, Prot::NONE, Placement::Hint(0x1a000))).unwrap().addr, 0x1a000);
+    assert_ne!(m.map(anon(P, Prot::NONE, Placement::Hint(0x40_0000))).unwrap().addr, 0x40_0000);
+    // Above the heap it is honoured, and the heap stops at it.
+    let above = 0x40_0000 + 0x200 * P;
+    assert_eq!(m.map(anon(P, Prot::NONE, Placement::Hint(above))).unwrap().addr, above);
+    assert_eq!(m.brk(above).brk, above);
+    assert_eq!(m.brk(above + P).brk, above, "the heap stops at the mapping");
+}
+
+#[test]
+fn a_big_reservation_costs_one_region_and_commits_in_pieces() {
+    let mut m = process_like();
+    let before = m.region_count();
+    let r = reservation(&mut m, 0x1a000).unwrap();
+    assert_eq!(r.addr, 0x1a000);
+    // One region for 4 GiB, whatever the page count.
+    assert_eq!(m.region_count(), before + 1);
+    // Commit a middle part, then the piece next to it, then one apart.
+    m.protect(0x1000_0000, 0x40_0000, Prot::RW).unwrap();
+    assert_eq!(m.region_count(), before + 3);
+    m.protect(0x1040_0000, 0x40_0000, Prot::RW).unwrap();
+    assert_eq!(m.region_count(), before + 3, "the neighbours merge");
+    m.protect(0x8000_0000, P, Prot::RW).unwrap();
+    assert_eq!(m.region_count(), before + 5);
+    let piece = m.find(0x1000_0000).unwrap();
+    assert_eq!((piece.start, piece.end, piece.prot), (0x1000_0000, 0x1080_0000, Prot::RW));
+    assert_eq!(m.find(0x2000_0000).unwrap().prot, Prot::NONE);
+    // A fault on a committed page maps a zeroed page; the rest is PROT_NONE.
+    assert!(matches!(m.fault(0x1000_0000 + 5 * P, Access::Write, PageState::Absent), FaultAction::ZeroFill { .. }));
+    assert_eq!(m.fault(0x2000_0000, Access::Read, PageState::Absent), FaultAction::Segv(SegvCode::AccErr));
+    // Unmap it in pieces.
+    m.unmap(0x8000_0000, P).unwrap();
+    assert_eq!(m.region_count(), before + 4);
+    let removed = m.unmap(0x1a000, 0x2000_0000 - 0x1a000).unwrap();
+    assert_eq!(removed.iter().map(Vma::size).sum::<u64>(), 0x2000_0000 - 0x1a000);
+    let removed = m.unmap(0x2000_0000, V8_END - 0x2000_0000).unwrap();
+    assert_eq!(removed.len(), 2, "the reserved parts either side of the page that went");
+    assert_eq!(m.region_count(), before);
+}
+
+#[test]
+fn a_big_reservation_shrinks_and_moves_by_remap() {
+    let mut m = process_like();
+    let r = reservation(&mut m, 0x1a000).unwrap();
+    let len = V8_END - r.addr;
+    let half = page_down(len / 2);
+    // Shrinking in place gives the end back.
+    let s = m.remap(r.addr, len, half, RemapPlacement::InPlace).unwrap();
+    assert_eq!(s.addr, r.addr);
+    assert_eq!(s.removed.iter().map(Vma::size).sum::<u64>(), len - half);
+    assert_eq!(m.find(r.addr).unwrap().size(), half);
+    // Moving it (fixed) keeps it one region.
+    let to = 0x2_0000_0000;
+    let moved = m.remap(r.addr, half, half, RemapPlacement::Fixed(to)).unwrap();
+    assert_eq!(moved.addr, to);
+    assert_eq!(m.find(to).unwrap().size(), half);
+    assert!(m.find(r.addr).is_none());
+}
+
+#[test]
+fn map_32bit_places_below_2_gib() {
+    let mut m = map_with(Layout::default());
+    let low = |len: u64, hint: u64| anon(len, Prot::RW, Placement::Hint(hint));
+    // No hint: the lowest hole from 1 GiB.
+    assert_eq!(m.map_below(low(4 * P, 0), LOW_2G).unwrap().addr, LOW_SEARCH_BASE);
+    assert_eq!(m.map_below(low(P, 0), LOW_2G).unwrap().addr, LOW_SEARCH_BASE + 4 * P);
+    // A free hint below 2 GiB is honoured, one that does not fit is not.
+    assert_eq!(m.map_below(low(P, 0x20_0000), LOW_2G).unwrap().addr, 0x20_0000);
+    assert_eq!(m.map_below(low(P, LOW_2G - P), LOW_2G).unwrap().addr, LOW_2G - P);
+    let r = m.map_below(low(2 * P, LOW_2G - P), LOW_2G).unwrap();
+    assert_eq!(r.addr, LOW_SEARCH_BASE + 5 * P, "the hint would end above 2 GiB");
+    let r = m.map_below(low(P, 0x1_0000_0000), LOW_2G).unwrap();
+    assert!(r.addr + P <= LOW_2G, "a hint above 2 GiB is ignored: {:#x}", r.addr);
+    // Fixed placements ignore the limit (mmap(2): MAP_32BIT is ignored with MAP_FIXED).
+    let fixed = anon(P, Prot::RW, Placement::Fixed(0x3_0000_0000));
+    assert_eq!(m.map_below(fixed, LOW_2G).unwrap().addr, 0x3_0000_0000);
+    // Without room from 1 GiB it takes the holes below it; with none, ENOMEM.
+    let mut full = map_with(Layout::default());
+    full.map(anon(LOW_2G - LOW_SEARCH_BASE, Prot::NONE, Placement::Fixed(LOW_SEARCH_BASE))).unwrap();
+    assert_eq!(full.map_below(low(P, 0), LOW_2G).unwrap().addr, USER_MIN_ADDR);
+    full.map(anon(LOW_SEARCH_BASE - USER_MIN_ADDR - P, Prot::NONE, Placement::Fixed(USER_MIN_ADDR + P))).unwrap();
+    assert_eq!(full.map_below(low(2 * P, 0), LOW_2G), Err(Error::NoMemory));
+    // A mapping too long for the area never lands above it.
+    assert_eq!(map_with(Layout::default()).map_below(low(LOW_2G, 0), LOW_2G), Err(Error::NoMemory));
+}
