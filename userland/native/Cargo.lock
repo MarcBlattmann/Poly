@@ -88,6 +88,7 @@ dependencies = [
  "poly-app",
  "poly-files",
  "poly-input",
+ "poly-pkg",
  "poly-rt",
  "poly-shell",
  "poly-wayland",
@@ -181,6 +182,8 @@ version = "0.0.1"
 dependencies = [
  "poly-compress",
  "poly-png",
+ "poly-squashfs",
+ "poly-vfs",
 ]
 
 [[package]]
@@ -219,6 +222,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-squashfs"
+version = "0.0.1"
+dependencies = [
+ "poly-compress",
+ "poly-vfs",
+]
+
+[[package]]
 name = "poly-terminal"
 version = "0.0.1"
 dependencies = [
@@ -237,6 +248,10 @@ dependencies = [
  "poly-rt",
  "poly-terminal",
 ]
+
+[[package]]
+name = "poly-vfs"
+version = "0.0.1"
 
 [[package]]
 name = "poly-vt"

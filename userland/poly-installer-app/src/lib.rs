@@ -233,7 +233,19 @@ fn model_for_uninstall(id: &str) -> (Installer, Option<String>) {
             poly_shell::apps::parse_desktop_entry(i, &text).ok()?.icon
         })
     });
-    (Installer::for_removal(id, plan), icon)
+    let refused = plan.is_err();
+    let mut model = Installer::for_removal(id, plan);
+    if refused {
+        // The window still says which app it is about.
+        let user = alloc::format!("{}/{id}", poly_shell::apps::user_applications(&data_home()));
+        let text = poly_rt::fs::read_to_string(&user)
+            .or_else(|_| poly_rt::fs::read_to_string(&alloc::format!("{}/{id}", poly_shell::apps::APPLICATIONS)))
+            .ok();
+        model.title = text.and_then(|t| {
+            poly_pkg::appimage::desktop_keys(&t).into_iter().find(|(k, _)| *k == "Name").map(|(_, v)| v.to_string())
+        });
+    }
+    (model, icon)
 }
 
 impl poly_shell::appicon::IconFiles for Disk {

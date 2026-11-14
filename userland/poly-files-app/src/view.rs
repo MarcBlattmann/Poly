@@ -789,9 +789,15 @@ impl FilesApp {
     /// Move the selection to the trash (in the trash: ask to delete).
     pub fn trash_selected(&mut self) {
         let paths = self.browser.selected_paths();
-        // An app is not removed by deleting its row: uninstalling comes
-        // with the installer (ADR 0175).
-        if paths.is_empty() || self.in_apps() {
+        // Delete on an app is Uninstall (ADR 0175, 0180): the installer's
+        // window asks. The app's row is never removed from here.
+        if self.in_apps() {
+            if !paths.is_empty() {
+                self.uninstall_selected();
+            }
+            return;
+        }
+        if paths.is_empty() {
             return;
         }
         if self.in_trash() {

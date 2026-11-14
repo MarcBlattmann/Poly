@@ -33,6 +33,15 @@ minute). The app is then in the launcher and in Files' Applications. A disk made
 before this needs **Fresh disk** once (`--fresh-disk`). `cargo xtask boot-tests
 linux-installer` runs the whole thing with galculator.
 
+**Uninstalling and AppImages** (ADR 0180): in Files' Applications folder, an app the
+installer owns (a package installed after the disk was made, or an AppImage) has
+*Uninstall* in its right-click menu (and on the Delete key); the installer's window
+says what goes and asks, then Debian's own `apt-get remove` and `autoremove` or the
+AppImage's files are taken away, and the launcher entry is gone. Chromium and Poly's
+own apps are not uninstalled. Double-clicking a downloaded `.AppImage` asks *Run* or
+*Install* (a copy in your user folder, listed in the launcher and in Applications).
+`cargo xtask boot-tests linux-installer-2` runs both, with galculator and CPU-X.
+
 On GitHub, CI runs the same parts as parallel jobs: lint, host tests, the boot
 tests in 11 shards (`cargo xtask boot-tests --list` shows the groups of each),
 the coverage checks and the pipeline checks. It takes about 4 minutes; the one

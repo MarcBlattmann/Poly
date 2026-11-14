@@ -408,7 +408,13 @@ fn a_real_appimage_is_read() {
         f.seek(SeekFrom::Start(at)).is_ok() && f.read_exact(buf).is_ok()
     })
     .unwrap();
-    std::eprintln!("{} | {} | {} | icon {:?} bytes", image.name, image.summary, image.version, image.icon.as_ref().map(Vec::len));
+    std::eprintln!(
+        "{} | {} | {} | icon {:?} bytes",
+        image.name,
+        image.summary,
+        image.version,
+        image.icon.as_ref().map(Vec::len)
+    );
     std::eprintln!("{}", image.desktop);
     assert!(!image.name.is_empty() && image.icon.is_some());
 }

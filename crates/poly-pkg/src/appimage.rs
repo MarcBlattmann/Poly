@@ -42,7 +42,7 @@ pub const EXTRACT_AND_RUN: &str = "APPIMAGE_EXTRACT_AND_RUN";
 /// Whether an AppImage has to be started by extracting it
 /// ([`EXTRACT_AND_RUN`]) on Poly instead of by mounting its image through
 /// FUSE (ADR 0180 says which works and why).
-pub const RUNS_BY_EXTRACTING: bool = false;
+pub const RUNS_BY_EXTRACTING: bool = true;
 
 /// Most bytes of an icon or a desktop file read from an image.
 const FILE_LIMIT: u64 = 4 << 20;

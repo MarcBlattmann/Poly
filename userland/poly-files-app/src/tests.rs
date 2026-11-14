@@ -691,13 +691,13 @@ fn nothing_in_applications_can_be_changed() {
     key(&mut s.app, Some(Key::F2), None, Mods::default());
     assert!(s.app.rename.is_none());
     assert_eq!(s.app.focus, Focus::List);
-    key(&mut s.app, Some(Key::Delete), None, Mods::default());
     key(&mut s.app, Some(Key::Delete), None, Mods { shift: true, ..Mods::default() });
     assert!(s.app.confirm.is_none(), "nothing asks to delete an app");
+    assert!(s.uninstalled.borrow().is_empty());
     ctrl(&mut s.app, 'c');
     ctrl(&mut s.app, 'x');
     assert!(s.app.clip.is_none());
-    for a in [act::NEW_FOLDER, act::TRASH, act::DELETE, act::RENAME, act::CUT, act::PASTE, act::OPEN_TERMINAL] {
+    for a in [act::NEW_FOLDER, act::DELETE, act::RENAME, act::CUT, act::PASTE, act::OPEN_TERMINAL] {
         s.app.act(a, &mut cx);
     }
     assert!(s.root.join("usr/share/applications/viewer.desktop").is_file());
@@ -748,6 +748,10 @@ fn an_app_the_installer_owns_can_be_uninstalled_from_its_menu() {
     assert_eq!(s.app.status, "Asked to uninstall Viewer");
     assert!(s.root.join("usr/share/applications/viewer.desktop").is_file());
     assert!(s.opened.borrow().is_empty());
+    // The Delete key is the same request, for an app the installer owns.
+    s.app.menu = None;
+    key(&mut s.app, Some(Key::Delete), None, Mods::default());
+    assert_eq!(*s.uninstalled.borrow(), ["viewer.desktop", "viewer.desktop"]);
     // Without a desktop to ask the status says so and nothing happens.
     s.app.uninstall_app = Box::new(|_| Err("the desktop cannot be reached".into()));
     s.app.act(act::UNINSTALL, &mut cx);
