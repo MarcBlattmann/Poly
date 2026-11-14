@@ -102,46 +102,90 @@ pub fn sys_color(index: i32) -> Option<u32> {
     usize::try_from(index).ok().and_then(|i| SYS_COLORS.get(i)).copied()
 }
 
+/// How a window's frame looks to the window manager
+/// (`DwmGetWindowAttribute.yaml` `frame_kinds`, `ncrendering_enabled`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DwmFrame {
+    /// A caption, or a thick frame together with `WS_BORDER` or
+    /// `WS_DLGFRAME` (a popup too): the visible frame is 7 pixels in.
+    Caption,
+    /// A popup with a thick frame alone: 6 pixels in, no buttons.
+    Thick,
+    /// Anything else (a plain popup, whatever its borders, scroll bars and
+    /// extended edges): the window rectangle.
+    Plain,
+}
+
+/// The [`DwmFrame`] of a window of `style` and `ex_style` (a top-level window
+/// without `WS_POPUP` always has a caption).
+pub fn dwm_frame(style: u32, ex_style: u32) -> DwmFrame {
+    use crate::metrics::{WS_BORDER, WS_DLGFRAME, WS_THICKFRAME, had_styles, has_caption};
+    let (style, _) = had_styles(style, ex_style);
+    if has_caption(style) || (style & WS_THICKFRAME != 0 && style & (WS_BORDER | WS_DLGFRAME) != 0) {
+        DwmFrame::Caption
+    } else if style & WS_THICKFRAME != 0 {
+        DwmFrame::Thick
+    } else {
+        DwmFrame::Plain
+    }
+}
+
+/// `DWMWA_NCRENDERING_ENABLED` by the style alone: on for a window that has
+/// a caption or a thick frame, off for a plain popup
+/// (`DwmGetWindowAttribute.yaml` `ncrendering_enabled`).
+pub fn dwm_nc_rendering(style: u32, ex_style: u32) -> bool {
+    dwm_frame(style, ex_style) != DwmFrame::Plain
+}
+
 /// `DWMWA_EXTENDED_FRAME_BOUNDS`: how far the visible frame lies inside
 /// the window rectangle at the left, right and bottom (the top is kept):
-/// 7 for a window with a caption, 6 for a popup with only a thick frame,
-/// 0 for a plain popup (`DwmGetWindowAttribute.yaml` `frame_bounds`).
-pub fn dwm_frame_inset(style: u32) -> i32 {
-    use crate::metrics::{WS_CAPTION, WS_POPUP, WS_THICKFRAME};
-    if style & WS_CAPTION == WS_CAPTION {
-        7
-    } else if style & WS_POPUP != 0 && style & WS_THICKFRAME != 0 {
-        6
-    } else {
-        0
+/// 7 for a window with a caption or a thick frame and a border, 6 for a
+/// popup with only a thick frame, 0 for a plain popup
+/// (`DwmGetWindowAttribute.yaml` `frame_bounds`, `frame_kinds`).
+pub fn dwm_frame_inset(style: u32, ex_style: u32) -> i32 {
+    match dwm_frame(style, ex_style) {
+        DwmFrame::Caption => 7,
+        DwmFrame::Thick => 6,
+        DwmFrame::Plain => 0,
     }
 }
 
 /// `DWMWA_CAPTION_BUTTON_BOUNDS` of a window `width` wide, relative to its
-/// top-left (`DwmGetWindowAttribute.yaml` `caption_buttons`): with a
-/// caption the buttons end 7 pixels before the right edge and are 30 high:
-/// 146 wide with a minimize or maximize box and the close button, 49 with
-/// the system menu alone or for a tool window, nothing without a system
+/// top-left (`DwmGetWindowAttribute.yaml` `caption_buttons`, `frame_kinds`):
+/// with a caption the buttons end 7 pixels before the right edge and are 30
+/// high: 146 wide with a minimize or maximize box and the close button, 49
+/// with the system menu alone or for a tool window, nothing without a system
 /// menu; a popup with only a thick frame has an empty rectangle 6 pixels
 /// in, 29 high; a plain popup has none.
 pub fn dwm_caption_buttons(style: u32, ex_style: u32, width: i32) -> [i32; 4] {
-    use crate::metrics::{WS_CAPTION, WS_EX_TOOLWINDOW, WS_MINIMIZEBOX, WS_SYSMENU, WS_THICKFRAME};
+    use crate::metrics::{WS_EX_TOOLWINDOW, WS_MINIMIZEBOX, WS_SYSMENU, had_styles};
     const WS_MAXIMIZEBOX: u32 = 0x0001_0000;
-    if style & WS_CAPTION == WS_CAPTION {
-        let right = width - 7;
-        let buttons = if style & WS_SYSMENU == 0 {
-            0
-        } else if style & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX) != 0 && ex_style & WS_EX_TOOLWINDOW == 0 {
-            146
-        } else {
-            49
-        };
-        [right - buttons, 0, right, 30]
-    } else if style & WS_THICKFRAME != 0 {
-        [width - 6, 0, width - 6, 29]
-    } else {
-        [0, 0, 0, 0]
+    let frame = dwm_frame(style, ex_style);
+    let (style, _) = had_styles(style, ex_style);
+    match frame {
+        DwmFrame::Caption => {
+            let right = width - 7;
+            let buttons = if style & WS_SYSMENU == 0 {
+                0
+            } else if style & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX) != 0 && ex_style & WS_EX_TOOLWINDOW == 0 {
+                146
+            } else {
+                49
+            };
+            [right - buttons, 0, right, 30]
+        }
+        DwmFrame::Thick => [width - 6, 0, width - 6, 29],
+        DwmFrame::Plain => [0, 0, 0, 0],
     }
+}
+
+/// The style and extended style the window manager judges a window by: a
+/// layered window that has no attributes yet (neither
+/// `SetLayeredWindowAttributes` nor `UpdateLayeredWindow` has been called)
+/// has no frame of its own, whatever its style; one with attributes answers
+/// as one without `WS_EX_LAYERED` (`DwmGetWindowAttribute.yaml` `layered`).
+pub fn dwm_style_of(style: u32, ex_style: u32, layered_unset: bool) -> (u32, u32) {
+    if layered_unset { (crate::metrics::WS_POPUP, ex_style & !WS_EX_LAYERED) } else { (style, ex_style) }
 }
 
 /// `WS_EX_LAYERED` (`winuser.h`).
@@ -367,11 +411,11 @@ mod tests {
         let overlapped = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
         // Frame bounds: every window with a caption loses 7.
         for s in [overlapped, WS_CAPTION, WS_CAPTION | WS_THICKFRAME, WS_CAPTION | WS_SYSMENU, WS_POPUP | WS_CAPTION] {
-            assert_eq!(dwm_frame_inset(s), 7, "{s:#x}");
+            assert_eq!(dwm_frame_inset(s, 0), 7, "{s:#x}");
         }
-        assert_eq!(dwm_frame_inset(WS_POPUP | WS_THICKFRAME), 6);
-        assert_eq!(dwm_frame_inset(WS_POPUP), 0);
-        assert_eq!(dwm_frame_inset(WS_POPUP | WS_BORDER), 0);
+        assert_eq!(dwm_frame_inset(WS_POPUP | WS_THICKFRAME, 0), 6);
+        assert_eq!(dwm_frame_inset(WS_POPUP, 0), 0);
+        assert_eq!(dwm_frame_inset(WS_POPUP | WS_BORDER, 0), 0);
         // Caption buttons of a window 300 wide.
         assert_eq!(dwm_caption_buttons(overlapped, 0, 300), [147, 0, 293, 30]);
         assert_eq!(dwm_caption_buttons(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, 0, 300), [147, 0, 293, 30]);
@@ -383,6 +427,58 @@ mod tests {
         assert_eq!(dwm_caption_buttons(WS_POPUP, 0, 300), [0, 0, 0, 0]);
         assert_eq!(dwm_caption_buttons(WS_POPUP | WS_BORDER, 0, 300), [0, 0, 0, 0]);
         assert_eq!(dwm_caption_buttons(WS_POPUP | WS_THICKFRAME, 0, 300), [294, 0, 294, 29]);
+    }
+
+    /// DwmGetWindowAttribute.yaml `frame_kinds` (a window 260 wide),
+    /// `ncrendering_enabled`, `layered`.
+    #[test]
+    fn dwm_frame_kinds_of_the_sheet() {
+        use crate::metrics::*;
+        const MAX: u32 = 0x0001_0000;
+        const NOACTIVATE: u32 = 0x0800_0000;
+        const CLIENTEDGE: u32 = 0x200;
+        const DLGMODALFRAME: u32 = 1;
+        const STATICEDGE: u32 = 0x2_0000;
+        const VSCROLL: u32 = 0x0020_0000;
+        const TOOL: u32 = WS_EX_TOOLWINDOW;
+        // (style, extended style, inset, buttons of a window 260 wide, NCR)
+        let rows: [(u32, u32, i32, [i32; 4], bool); 21] = [
+            (WS_POPUP | WS_THICKFRAME, 0, 6, [254, 0, 254, 29], true),
+            (WS_POPUP | WS_THICKFRAME | WS_BORDER, 0, 7, [253, 0, 253, 30], true),
+            (WS_POPUP | WS_THICKFRAME | WS_DLGFRAME, 0, 7, [253, 0, 253, 30], true),
+            (WS_POPUP | WS_DLGFRAME, 0, 0, [0; 4], false),
+            (WS_POPUP | WS_BORDER | WS_DLGFRAME, 0, 7, [253, 0, 253, 30], true),
+            (WS_POPUP | WS_SYSMENU, 0, 0, [0; 4], false),
+            (WS_POPUP | WS_SYSMENU | WS_THICKFRAME, 0, 6, [254, 0, 254, 29], true),
+            (WS_POPUP | VSCROLL, 0, 0, [0; 4], false),
+            (WS_POPUP | WS_THICKFRAME | VSCROLL, 0, 6, [254, 0, 254, 29], true),
+            (WS_POPUP | WS_THICKFRAME, TOOL, 6, [254, 0, 254, 29], true),
+            (WS_POPUP | WS_THICKFRAME, NOACTIVATE, 6, [254, 0, 254, 29], true),
+            (WS_POPUP, CLIENTEDGE, 0, [0; 4], false),
+            (WS_POPUP, DLGMODALFRAME, 0, [0; 4], false),
+            (WS_POPUP, STATICEDGE, 0, [0; 4], false),
+            (WS_POPUP, TOOL, 0, [0; 4], false),
+            (WS_THICKFRAME, TOOL, 7, [253, 0, 253, 30], true),
+            (WS_CAPTION, TOOL, 7, [253, 0, 253, 30], true),
+            (WS_BORDER, 0, 7, [253, 0, 253, 30], true),
+            (WS_CAPTION | WS_SYSMENU, 0, 7, [204, 0, 253, 30], true),
+            (WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | MAX | WS_THICKFRAME, 0, 7, [107, 0, 253, 30], true),
+            (WS_CAPTION | WS_SYSMENU | WS_THICKFRAME, TOOL, 7, [204, 0, 253, 30], true),
+        ];
+        for (style, ex, inset, buttons, ncr) in rows {
+            assert_eq!(dwm_frame_inset(style, ex), inset, "{style:#x} {ex:#x}");
+            assert_eq!(dwm_caption_buttons(style, ex, 260), buttons, "{style:#x} {ex:#x}");
+            assert_eq!(dwm_nc_rendering(style, ex), ncr, "{style:#x} {ex:#x}");
+        }
+        // A layered window without attributes has no frame, for every style.
+        for (style, ex) in [(WS_POPUP | WS_THICKFRAME, 0), (WS_CAPTION | WS_SYSMENU, 0), (WS_BORDER, 0)] {
+            let (s, e) = dwm_style_of(style, ex | WS_EX_LAYERED, true);
+            assert_eq!(dwm_frame_inset(s, e), 0);
+            assert_eq!(dwm_caption_buttons(s, e, 260), [0; 4]);
+            assert!(!dwm_nc_rendering(s, e));
+            let (s, e) = dwm_style_of(style, ex | WS_EX_LAYERED, false);
+            assert_eq!((s, e), (style, ex | WS_EX_LAYERED));
+        }
     }
 
     /// GetSysColor.yaml `values`, `table`, `invalid`.
