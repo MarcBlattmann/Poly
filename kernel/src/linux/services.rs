@@ -495,7 +495,9 @@ impl LinuxKernel for Thread<'_> {
                     Some(m) => m.map(r.shared, r.prot.writable()).map_err(vfs_errno)?,
                     None => None,
                 };
-                let source = FileSource::of(&file).holding(writable_map);
+                // A file of an overlay maps the layer's file that holds its
+                // data (ADR 0177); a writable shared mapping copies it up.
+                let source = FileSource::of(&file).holding(writable_map).backed(r.shared && r.prot.writable());
                 poly_vm::MapRequest::file(r.len, prot, FileRef::new(Arc::new(source)), offset, r.shared)
             }
         };

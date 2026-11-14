@@ -344,6 +344,21 @@ fn mount_field(o: &mut Out, field: &[u8]) {
     }
 }
 
+/// The source field has one more: every `#` is `\043`, wherever it stands
+/// (a mount point or root keeps `#`); the spec sheet of proc_mountinfo,
+/// "Escaping". A backslash is always `\134`, also in text that looks like
+/// an escape already.
+fn mount_source(o: &mut Out, source: &[u8]) {
+    for &b in source {
+        match b {
+            b' ' | b'\t' | b'\n' | b'\\' | b'#' => {
+                let _ = write!(o, "\\{b:03o}");
+            }
+            _ => o.0.push(b),
+        }
+    }
+}
+
 fn mount_options(m: &MountEntry) -> String {
     let mut s = String::from(if m.read_only { "ro" } else { "rw" });
     for (on, name) in [(m.no_suid, ",nosuid"), (m.no_dev, ",nodev"), (m.no_exec, ",noexec")] {
@@ -382,7 +397,7 @@ fn super_options(m: &MountEntry) -> String {
 pub fn mounts(entries: &[MountEntry]) -> Vec<u8> {
     let mut o = Out::default();
     for m in entries {
-        mount_field(&mut o, &m.source);
+        mount_source(&mut o, &m.source);
         o.0.push(b' ');
         mount_field(&mut o, &m.mount_point);
         // One list for the mount and its file system: read-only when
@@ -421,7 +436,7 @@ pub fn mountinfo(entries: &[MountEntry]) -> Vec<u8> {
             o.0.extend_from_slice(b" unbindable");
         }
         let _ = write!(o, " - {} ", m.fstype);
-        mount_field(&mut o, &m.source);
+        mount_source(&mut o, &m.source);
         let _ = writeln!(o, " {}", super_options(m));
     }
     o.0

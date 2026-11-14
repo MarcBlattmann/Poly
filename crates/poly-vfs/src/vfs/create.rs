@@ -535,7 +535,7 @@ impl Vfs {
     /// read and write and that is neither set-user-ID nor set-group-ID
     /// with group execute.
     pub(super) fn protected_hardlinks_allow(cred: &Cred, attr: &Attr) -> bool {
-        if cred.has(cap::FOWNER) || cred.uid == attr.uid {
+        if cred.has_over(cap::FOWNER, attr) || cred.uid == attr.uid {
             return true;
         }
         let setid = attr.perm & S_ISUID != 0 || (attr.perm & S_ISGID != 0 && attr.perm & S_IXGRP != 0);
