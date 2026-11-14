@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "sysctl_hw",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "86e56e817414841ea5d2c44402f201cf0f0f2505b6427509cf2726f04a3bac18",
+          "executable_sha256": "5f8de9c1df327041f1d77540fd343ecf959f9a45d67c5fd98a11858b1b7ecec7",
           "exit_code": 0,
           "stdout": "ok hw.pagesize succeeds\nok into 8 bytes it writes 4\nvalue hw.pagesize 16384\nok the same in 4 bytes\nok a power of two of at least 4096\nok a 2-byte buffer: ENOMEM\nok hw.ncpu is positive\nsummary 6 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "d8d9e7c607528f969cffe7feab2e6f2ef98ae53fbbd6ffa8bb56e02eaf4e8c79",
+          "executable_sha256": "d3d646e37308a379d27f8d0c4ee9f4c3c9f83064df4fc97fa07ecc5bfbfc240e",
           "exit_code": 0,
           "stdout": "ok kern.ostype succeeds\nok it is \"Darwin\"\nok length 7 with the NUL\nok a NULL buffer reports length 7\nok a 3-byte buffer: ENOMEM\nok the length becomes 0\nok nothing is copied\nok kern.osrelease is digits and dots\nsummary 8 passed, 0 failed\n",
           "stderr": "",

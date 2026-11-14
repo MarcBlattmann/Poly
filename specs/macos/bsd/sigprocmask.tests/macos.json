@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "mask_operations",
+      "source_sha256": "447847b0e32a355a3329971c266dbe64f4c62f88e4817b7b6dea1b708a374568",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e57d3ab1210b6ecc1648a6e246063ef89f0a6e3b3699fcd4f20a832d41e1d6f7",
+          "exit_code": 0,
+          "stdout": "ok read the mask with a NULL set\nok it starts empty\nok block SIGUSR1\nok the old mask was empty\nok block SIGUSR2\nok the old mask had SIGUSR1\nok the mask is both\nok unblock SIGUSR1\nok the old mask had both\nok the mask is SIGUSR2\nok set the mask to SIGTERM\nok the mask is exactly SIGTERM\nok and empty again\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mask_pending",
+      "source_sha256": "d6d1812896041f099bcd86c4a9ec0c0897736752b3715e9fd6df23da0956ed65",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "63ced7683258e66f1e1c835d5e81bc56eb74bb216397c5966659a89caccacba7",
+          "exit_code": 0,
+          "stdout": "ok blocked: no handler ran\nok sigpending\nok the signal is pending\nok unblocking ran the handler, once for three signals\nok nothing is pending afterwards\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

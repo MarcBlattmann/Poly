@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "exit_code_42",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "d03be68e544fedbf67243879f8eb342dd7ab1c5b9cda2a2d83cac0b97e4da473",
+          "executable_sha256": "52e2a03acd32f11a7bfb0a71333b1f90fff2abd26175f6ad3775c3412cc33948",
           "exit_code": 42,
           "stdout": "ok output before exit is written\nsummary 1 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "03f1938e3397d4d5517c4ac3dc28746b73a495dfae34d0c955303190eda737a8",
+          "executable_sha256": "c9f108c72ec7a9abc9cddae533c35e117d1dc033f08e8647dbe43b31d6ff2455",
           "exit_code": 255,
           "stdout": "ok output before exit is written\nsummary 1 passed, 0 failed\n",
           "stderr": "",
