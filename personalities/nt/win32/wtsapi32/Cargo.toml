@@ -1,0 +1,18 @@
+[package]
+name = "wtsapi32"
+description = "Our wtsapi32.dll (ADR 0155, step 9): the one console session, for WTSQuerySessionInformationW and the session notifications"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "wtsapi32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[lints]
+workspace = true

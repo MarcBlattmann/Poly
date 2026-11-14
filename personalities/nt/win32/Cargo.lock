@@ -43,6 +43,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "comctl32"
+version = "0.0.1"
+dependencies = [
+ "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "contest"
 version = "0.0.1"
 dependencies = [
@@ -194,6 +202,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mfplat"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "msvcrt"
 version = "0.0.1"
 dependencies = [
@@ -217,6 +232,13 @@ name = "ole32"
 version = "0.0.1"
 dependencies = [
  "poly-com",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "oleacc"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -409,6 +431,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "powrprof"
+version = "0.0.1"
+dependencies = [
+ "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "s1test"
 version = "0.0.1"
 dependencies = [
@@ -441,12 +471,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "shlwapi"
+version = "0.0.1"
+dependencies = [
+ "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "ucrtbase"
 version = "0.0.1"
 dependencies = [
  "poly-crt",
  "poly-libm",
  "poly-win32-crt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "uiautomationcore"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -466,6 +511,14 @@ version = "0.0.1"
 dependencies = [
  "poly-crypto",
  "poly-win32-cryptrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "uxtheme"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
 ]
 
 [[package]]
@@ -521,5 +574,13 @@ dependencies = [
 name = "wstest"
 version = "0.0.1"
 dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "wtsapi32"
+version = "0.0.1"
+dependencies = [
+ "poly-kernelbase",
  "poly-win32-rt",
 ]

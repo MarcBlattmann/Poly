@@ -744,3 +744,5 @@ pub unsafe extern "system" fn SystemFunction036(buffer: *mut u8, length: u32) ->
 pub extern "system" fn advapi32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     TRUE
 }
+
+mod delayed;

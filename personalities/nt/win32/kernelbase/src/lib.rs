@@ -40,6 +40,7 @@ mod nt;
 mod pipe;
 mod privilege;
 mod process;
+mod procinfo;
 mod registry;
 mod secdata;
 mod security;
@@ -81,3 +82,5 @@ pub extern "system" fn kernelbase_main(_module: *mut u8, reason: u32, _reserved:
     }
     base::TRUE
 }
+
+mod delayed;

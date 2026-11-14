@@ -1,0 +1,17 @@
+[package]
+name = "uxtheme"
+description = "Our uxtheme.dll (ADR 0155, step 9): visual styles are not active, so no theme can be opened"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "uxtheme"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "uiautomationcore"
+description = "Our uiautomationcore.dll (ADR 0155, step 9): the UI Automation provider entry points with no client listening"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "uiautomationcore"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

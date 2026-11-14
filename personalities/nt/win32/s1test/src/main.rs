@@ -60,6 +60,11 @@ unsafe extern "system" {
     fn VirtualFree(addr: *mut u8, size: usize, kind: u32) -> i32;
     fn ReadProcessMemory(process: isize, base: *const u8, buf: *mut u8, size: usize, read: *mut usize) -> i32;
     fn WriteProcessMemory(process: isize, base: *mut u8, buf: *const u8, size: usize, written: *mut usize) -> i32;
+    fn QueryProcessCycleTime(process: isize, cycles: *mut u64) -> i32;
+    fn GetProcessInformation(process: isize, class: u32, info: *mut u8, size: u32) -> i32;
+    fn SetProcessShutdownParameters(level: u32, flags: u32) -> i32;
+    fn GetProcessShutdownParameters(level: *mut u32, flags: *mut u32) -> i32;
+    fn K32GetMappedFileNameW(process: isize, address: usize, name: *mut u16, size: u32) -> u32;
 }
 
 #[link(name = "ntdll", kind = "raw-dylib")]
@@ -103,12 +108,15 @@ struct ObjectAttributes {
 unsafe extern "system" {
     fn CommandLineToArgvW(cmd_line: *const u16, num_args: *mut i32) -> *mut *mut u16;
     fn SHGetFolderPathW(hwnd: *mut u8, folder: i32, token: *mut u8, flags: u32, path: *mut u16) -> u32;
+    fn SHGetKnownFolderPath(id: *const [u8; 16], flags: u32, token: *mut u8, path: *mut *mut u16) -> u32;
+    fn SHGetPropertyStoreForWindow(hwnd: usize, iid: *const [u8; 16], out: *mut *mut u8) -> u32;
 }
 
 #[link(name = "userenv", kind = "raw-dylib")]
 unsafe extern "system" {
     fn RegisterGPNotification(event: isize, machine: i32) -> i32;
     fn UnregisterGPNotification(event: isize) -> i32;
+    fn GetProfileType(flags: *mut u32) -> i32;
 }
 
 #[link(name = "winmm", kind = "raw-dylib")]
@@ -183,6 +191,7 @@ unsafe extern "system" {
     fn DestroyWindow(h: Hwnd) -> i32;
     fn DefWindowProcW(h: Hwnd, msg: u32, w: usize, l: isize) -> isize;
     fn IsWindow(h: Hwnd) -> i32;
+    fn GetDesktopWindow() -> Hwnd;
     fn IsWindowVisible(h: Hwnd) -> i32;
     fn GetClassNameW(h: Hwnd, buf: *mut u16, max: i32) -> i32;
     fn GetWindowThreadProcessId(h: Hwnd, pid: *mut u32) -> u32;
@@ -948,6 +957,304 @@ unsafe fn gdi() {
     check_eq(DeleteObject(font) as usize, 1);
 }
 
+/// A function of a DLL, found the way Chrome's delay-load helper finds it: `LoadLibraryExW`
+/// then `GetProcAddress` by name or, for a `name` of one byte, by that ordinal.
+unsafe fn delay_load(dll: &str, name: &core::ffi::CStr) -> *mut u8 {
+    let mut wide = [0u16; 64];
+    for (to, c) in wide.iter_mut().zip(dll.encode_utf16()) {
+        *to = c;
+    }
+    let module = LoadLibraryExW(wide.as_ptr(), core::ptr::null_mut(), 0);
+    check_got(!module.is_null(), GetLastError());
+    let f = GetProcAddress(module, name.as_ptr().cast());
+    check_got(!f.is_null(), GetLastError());
+    f
+}
+
+/// [`delay_load`] by ordinal.
+unsafe fn delay_load_ordinal(dll: &str, ordinal: usize) -> *mut u8 {
+    let mut wide = [0u16; 64];
+    for (to, c) in wide.iter_mut().zip(dll.encode_utf16()) {
+        *to = c;
+    }
+    let module = LoadLibraryExW(wide.as_ptr(), core::ptr::null_mut(), 0);
+    check_got(!module.is_null(), GetLastError());
+    let f = GetProcAddress(module, ordinal as *const u8);
+    check_got(!f.is_null(), GetLastError());
+    f
+}
+
+/// A COM object for `QISearch`: one interface (a vtable pointer) and a reference count.
+#[repr(C)]
+struct Counted {
+    vtbl: *const [unsafe extern "system" fn(*mut Counted) -> u32; 3],
+    refs: u32,
+}
+
+unsafe extern "system" fn counted_nop(_this: *mut Counted) -> u32 {
+    0
+}
+
+unsafe extern "system" fn counted_add_ref(this: *mut Counted) -> u32 {
+    (*this).refs += 1;
+    (*this).refs
+}
+
+static COUNTED_VTBL: [unsafe extern "system" fn(*mut Counted) -> u32; 3] = [counted_nop, counted_add_ref, counted_nop];
+
+/// The DLLs and functions Chrome's browser needs right after `ChromeMain` (ADR 0155, step 9),
+/// each reached the way Chrome reaches it. From Learn; none observed on Windows.
+unsafe fn step9() {
+    // shlwapi: PathMatchSpecW by name, IsOS by ordinal 437, QISearch by ordinal 219.
+    let match_spec: unsafe extern "system" fn(*const u16, *const u16) -> i32 =
+        core::mem::transmute(delay_load("SHLWAPI.dll", c"PathMatchSpecW"));
+    let (file, spec, other) = (w::<8>("main.c"), w::<12>("*.txt; *.c"), w::<8>("*.h"));
+    check_eq(match_spec(file.as_ptr(), spec.as_ptr()) as usize, 1);
+    check_eq(match_spec(file.as_ptr(), other.as_ptr()) as usize, 0);
+    let is_os: unsafe extern "system" fn(u32) -> i32 = core::mem::transmute(delay_load_ordinal("SHLWAPI.dll", 437));
+    check_eq(is_os(1) as usize, 1); // OS_NT
+    check_eq(is_os(29) as usize, 0); // OS_ANYSERVER
+    let qi_search: unsafe extern "system" fn(
+        *mut Counted,
+        *const [usize; 2],
+        *const [u8; 16],
+        *mut *mut Counted,
+    ) -> u32 = core::mem::transmute(delay_load_ordinal("SHLWAPI.dll", 219));
+    let mut object = Counted { vtbl: &COUNTED_VTBL, refs: 1 };
+    let iid = CLSID_NOWHERE;
+    // A QITAB: { &iid, offset 0 }, then the terminating entry.
+    let table: [[usize; 2]; 2] = [[iid.as_ptr() as usize, 0], [0, 0]];
+    let mut found: *mut Counted = core::ptr::null_mut();
+    check_hr(qi_search(&mut object, table.as_ptr(), &iid, &mut found) as i32, S_OK);
+    check_got(core::ptr::eq(found, &object) && object.refs == 2, object.refs);
+    check_hr(qi_search(&mut object, table.as_ptr(), &IID_IUNKNOWN, &mut found) as i32, S_OK);
+    check_eq(object.refs as usize, 3);
+    let unknown = [7u8; 16];
+    check_hr(qi_search(&mut object, table.as_ptr(), &unknown, &mut found) as i32, E_NOINTERFACE);
+    check_got(found.is_null() && object.refs == 3, object.refs);
+
+    // wtsapi32: the session notification and the connect state of the current session.
+    let register: unsafe extern "system" fn(usize, u32) -> i32 =
+        core::mem::transmute(delay_load("WTSAPI32.dll", c"WTSRegisterSessionNotification"));
+    let unregister: unsafe extern "system" fn(usize) -> i32 =
+        core::mem::transmute(delay_load("WTSAPI32.dll", c"WTSUnRegisterSessionNotification"));
+    let query: unsafe extern "system" fn(usize, u32, u32, *mut *mut u8, *mut u32) -> i32 =
+        core::mem::transmute(delay_load("WTSAPI32.dll", c"WTSQuerySessionInformationW"));
+    let free: unsafe extern "system" fn(*mut u8) = core::mem::transmute(delay_load("WTSAPI32.dll", c"WTSFreeMemory"));
+    // The sheet: what is no window is ERROR_INVALID_PARAMETER for both; a window is registered,
+    // unregistered, and then not registered (ERROR_FILE_NOT_FOUND).
+    check_fail(register(0x1234, 0) as usize, ERROR_INVALID_PARAMETER);
+    check_fail(unregister(0x1234) as usize, ERROR_INVALID_PARAMETER);
+    check_fail(register(0, 0) as usize, ERROR_INVALID_PARAMETER);
+    let desktop = GetDesktopWindow();
+    check_eq(register(desktop, 0) as usize, 1);
+    check_eq(unregister(desktop) as usize, 1);
+    check_fail(unregister(desktop) as usize, 2);
+    let (mut block, mut bytes) = (core::ptr::null_mut(), 0u32);
+    // WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTSConnectState: WTSActive (0).
+    check_eq(query(0, u32::MAX, 8, &mut block, &mut bytes) as usize, 1);
+    check_got(!block.is_null() && bytes == 4 && block.cast::<u32>().read_unaligned() == 0, bytes);
+    free(block);
+    // WTSUserName: a NUL-terminated string.
+    check_eq(query(0, u32::MAX, 5, &mut block, &mut bytes) as usize, 1);
+    check_got(bytes >= 2 && bytes % 2 == 0 && block.add(bytes as usize - 2).cast::<u16>().read_unaligned() == 0, bytes);
+    free(block);
+
+    // comctl32: an INITCOMMONCONTROLSEX of 8 bytes is accepted.
+    let init: unsafe extern "system" fn(*const u32) -> i32 =
+        core::mem::transmute(delay_load("COMCTL32.dll", c"InitCommonControlsEx"));
+    let icc = [8u32, 0xFFFF];
+    check_eq(init(icc.as_ptr()) as usize, 1);
+    let bad = [4u32, 0xFFFF];
+    check_eq(init(bad.as_ptr()) as usize, 0);
+
+    // The power API set: ProcessorInformation (11) fills one 24-byte record per processor.
+    let power: unsafe extern "system" fn(u32, *const u8, u32, *mut u8, u32) -> u32 =
+        core::mem::transmute(delay_load("api-ms-win-power-base-l1-1-0.dll", c"CallNtPowerInformation"));
+    let mut records = [0u8; 24 * 64];
+    check_eq(power(11, core::ptr::null(), 0, records.as_mut_ptr(), records.len() as u32) as usize, 0);
+    let mhz = u32::from_le_bytes([records[4], records[5], records[6], records[7]]);
+    check_got(mhz != 0, mhz);
+    check_eq(power(11, core::ptr::null(), 0, records.as_mut_ptr(), 8) as usize, 0xC000_0023);
+
+    // The accessibility and media DLLs load and have the names Chrome calls.
+    for (dll, name) in [
+        ("OLEACC.dll", c"CreateStdAccessibleObject"),
+        ("OLEACC.dll", c"LresultFromObject"),
+        ("UIAutomationCore.DLL", c"UiaReturnRawElementProvider"),
+        ("UIAutomationCore.DLL", c"UiaHostProviderFromHwnd"),
+        ("UIAutomationCore.DLL", c"UiaDisconnectProvider"),
+        ("MFPlat.DLL", c"MFStartup"),
+        ("ntdll.dll", c"NtSuspendProcess"),
+        ("ntdll.dll", c"NtResumeProcess"),
+    ] {
+        delay_load(dll, name);
+    }
+
+    // kernel32: the cycle time grows, GetProcessInformation reads the default memory priority,
+    // the shutdown parameters are kept, and the mapped file name of this program is a device path.
+    let (mut before, mut after) = (0u64, 0u64);
+    check_eq(QueryProcessCycleTime(GetCurrentProcess(), &mut before) as usize, 1);
+    let start = GetTickCount64();
+    while GetTickCount64() < start + 30 {
+        core::hint::spin_loop();
+    }
+    check_eq(QueryProcessCycleTime(GetCurrentProcess(), &mut after) as usize, 1);
+    check_got(after > before, (after - before) as u32);
+    let mut priority = 0u32;
+    check_eq(GetProcessInformation(GetCurrentProcess(), 0, (&raw mut priority).cast(), 4) as usize, 1);
+    check_eq(priority as usize, 5); // MEMORY_PRIORITY_NORMAL
+    check_fail(GetProcessInformation(GetCurrentProcess(), 0, (&raw mut priority).cast(), 8) as usize, 24);
+    check_eq(SetProcessShutdownParameters(0x100, 1) as usize, 1);
+    let (mut level, mut flags) = (0u32, 0u32);
+    check_eq(GetProcessShutdownParameters(&mut level, &mut flags) as usize, 1);
+    check_got(level == 0x100 && flags == 1, level);
+    // The sheet: every level is accepted; a flag other than SHUTDOWN_NORETRY is error 641.
+    check_eq(SetProcessShutdownParameters(0x500, 0) as usize, 1);
+    check_fail(SetProcessShutdownParameters(0x100, 2) as usize, 641);
+    check_eq(SetProcessShutdownParameters(0x100, 1) as usize, 1);
+    let mut name = [0u16; 260];
+    let n =
+        K32GetMappedFileNameW(GetCurrentProcess(), s1test_main as *const () as usize, name.as_mut_ptr(), 260) as usize;
+    let device = w::<8>("\\Device\\");
+    check_got(n > 20 && name[..8] == device[..8] && name[n] == 0, n as u32);
+    check_got(name[n - 10..n].iter().zip("s1test.exe".encode_utf16()).all(|(a, b)| *a == b), n as u32);
+    // An address in no image.
+    check_fail(K32GetMappedFileNameW(GetCurrentProcess(), 0x10, name.as_mut_ptr(), 260) as usize, 1006);
+
+    // shell32: FOLDERID_LocalAppData is %LOCALAPPDATA%, in a CoTaskMemAlloc block.
+    let local_app_data: [u8; 16] =
+        [0x85, 0x27, 0xB3, 0xF1, 0xBA, 0x6F, 0xCF, 0x4F, 0x9D, 0x55, 0x7B, 0x8E, 0x7F, 0x15, 0x70, 0x91];
+    let mut path: *mut u16 = core::ptr::null_mut();
+    check_hr(SHGetKnownFolderPath(&local_app_data, 0, core::ptr::null_mut(), &mut path) as i32, S_OK);
+    let mut want = [0u16; 260];
+    let variable = w::<16>("LOCALAPPDATA");
+    let n = GetEnvironmentVariableW(variable.as_ptr(), want.as_mut_ptr(), 260) as usize;
+    check_got(n > 3 && (0..=n).all(|i| *path.add(i) == want[i]), n as u32);
+    CoTaskMemFree(path.cast());
+    // An id that is no known folder: E_INVALIDARG and a null path.
+    check_hr(SHGetKnownFolderPath(&CLSID_NOWHERE, 0, core::ptr::null_mut(), &mut path) as i32, 0x8007_0057);
+    check_got(path.is_null(), 0);
+
+    // The property store of a window: what is set is read back, by a second store object too.
+    let iid_store: [u8; 16] =
+        [0xEB, 0x8E, 0x6D, 0x88, 0xF2, 0x8C, 0x46, 0x44, 0x8D, 0x02, 0xCD, 0xBA, 0x1D, 0xBD, 0xCF, 0x99];
+    let hwnd = 0x4_0102usize;
+    let mut store: *mut *const [usize; 8] = core::ptr::null_mut();
+    check_hr(SHGetPropertyStoreForWindow(hwnd, &iid_store, (&raw mut store).cast()) as i32, S_OK);
+    check_got(!store.is_null(), 0);
+    let vtbl = &**store;
+    let set_value: unsafe extern "system" fn(*mut c_void, *const [u8; 20], *const [u8; 24]) -> u32 =
+        core::mem::transmute(vtbl[6]);
+    let get_value: unsafe extern "system" fn(*mut c_void, *const [u8; 20], *mut [u8; 24]) -> u32 =
+        core::mem::transmute(vtbl[5]);
+    let get_count: unsafe extern "system" fn(*mut c_void, *mut u32) -> u32 = core::mem::transmute(vtbl[3]);
+    let commit: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(vtbl[7]);
+    let release: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(vtbl[2]);
+    // PKEY_AppUserModel_ID: {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}, 5 (propkey.h).
+    let key: [u8; 20] =
+        [0x55, 0x28, 0x4C, 0x9F, 0x79, 0x9F, 0x39, 0x4B, 0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3, 5, 0, 0, 0];
+    let id = w::<16>("Poly.S1Test");
+    let mut variant = [0u8; 24];
+    variant[0] = 31; // VT_LPWSTR
+    variant[8..16].copy_from_slice(&(id.as_ptr() as u64).to_le_bytes());
+    check_hr(set_value(store.cast(), &key, &variant) as i32, S_OK);
+    check_hr(commit(store.cast()) as i32, S_OK);
+    let mut count = 0u32;
+    check_hr(get_count(store.cast(), &mut count) as i32, S_OK);
+    check_eq(count as usize, 1);
+    check_eq(release(store.cast()) as usize, 0);
+    check_hr(SHGetPropertyStoreForWindow(hwnd, &iid_store, (&raw mut store).cast()) as i32, S_OK);
+    let mut read = [0u8; 24];
+    check_hr(get_value(store.cast(), &key, &mut read) as i32, S_OK);
+    let text = u64::from_le_bytes([read[8], read[9], read[10], read[11], read[12], read[13], read[14], read[15]]);
+    check_got(read[0] == 31 && text != 0 && wide_is(text as *const u16, "Poly.S1Test"), u32::from(read[0]));
+    check_got(text != id.as_ptr() as u64, 0);
+    CoTaskMemFree(text as *mut u8);
+    // A key the store does not have: VT_EMPTY, S_OK.
+    let mut other = key;
+    other[16] = 9;
+    check_hr(get_value(store.cast(), &other, &mut read) as i32, S_OK);
+    check_eq(usize::from(read[0]), 0);
+    check_eq(release(store.cast()) as usize, 0);
+    // Another interface is refused.
+    check_hr(SHGetPropertyStoreForWindow(hwnd, &CLSID_NOWHERE, (&raw mut store).cast()) as i32, E_NOINTERFACE);
+    check_got(store.is_null(), 0);
+
+    // oleaut32 by ordinal, as chrome.dll's delay loads bind it: a vector of four VT_I4 (3).
+    let create: unsafe extern "system" fn(u16, i32, u32) -> *mut u8 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 411));
+    let upper: unsafe extern "system" fn(*mut u8, u32, *mut i32) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 19));
+    let access: unsafe extern "system" fn(*mut u8, *mut *mut i32) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 23));
+    let unaccess: unsafe extern "system" fn(*mut u8) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 24));
+    let get: unsafe extern "system" fn(*mut u8, *const i32, *mut i32) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 25));
+    let vartype: unsafe extern "system" fn(*mut u8, *mut u16) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 77));
+    let destroy: unsafe extern "system" fn(*mut u8) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 16));
+    let byte_len: unsafe extern "system" fn(*mut u16) -> u32 =
+        core::mem::transmute(delay_load_ordinal("OLEAUT32.dll", 149));
+    for ordinal in [17, 20, 26, 150, 162, 314] {
+        delay_load_ordinal("OLEAUT32.dll", ordinal);
+    }
+    let array = create(3, 10, 4);
+    check_got(!array.is_null(), 0);
+    let mut high = 0i32;
+    check_hr(upper(array, 1, &mut high) as i32, S_OK);
+    check_eq(high as usize, 13);
+    check_hr(upper(array, 2, &mut high) as i32, 0x8002_000B); // DISP_E_BADINDEX
+    let mut data: *mut i32 = core::ptr::null_mut();
+    check_hr(access(array, &mut data) as i32, S_OK);
+    check_got(!data.is_null() && *data == 0, 0);
+    *data.add(2) = 77;
+    check_hr(destroy(array) as i32, 0x8002_000D); // DISP_E_ARRAYISLOCKED
+    check_hr(unaccess(array) as i32, S_OK);
+    let (index, mut element) = (12i32, 0i32);
+    check_hr(get(array, &index, &mut element) as i32, S_OK);
+    check_eq(element as usize, 77);
+    let mut vt = 0u16;
+    check_hr(vartype(array, &mut vt) as i32, S_OK);
+    check_eq(usize::from(vt), 3);
+    check_hr(destroy(array) as i32, S_OK);
+    check_eq(byte_len(core::ptr::null_mut()) as usize, 0);
+
+    // The system's version, read the way Learn's "Getting the System Version" says and Chrome
+    // does when it starts: the version resource of kernelbase.dll and of kernel32.dll.
+    let info_size: unsafe extern "system" fn(*const u16, *mut u32) -> u32 =
+        core::mem::transmute(delay_load("VERSION.dll", c"GetFileVersionInfoSizeW"));
+    let info: unsafe extern "system" fn(*const u16, u32, u32, *mut u8) -> i32 =
+        core::mem::transmute(delay_load("VERSION.dll", c"GetFileVersionInfoW"));
+    let query: unsafe extern "system" fn(*const u8, *const u16, *mut *const u8, *mut u32) -> i32 =
+        core::mem::transmute(delay_load("VERSION.dll", c"VerQueryValueW"));
+    for file in [w::<16>("kernelbase.dll"), w::<16>("kernel32.dll")] {
+        let mut handle = 1u32;
+        let size = info_size(file.as_ptr(), &mut handle);
+        check_got(size > 52 && size < 2048, GetLastError());
+        let mut block = [0u8; 2048];
+        check_eq(info(file.as_ptr(), 0, size, block.as_mut_ptr()) as usize, 1);
+        let root = w::<2>("\\");
+        let (mut fixed, mut len) = (core::ptr::null(), 0u32);
+        check_eq(query(block.as_ptr(), root.as_ptr(), &mut fixed, &mut len) as usize, 1);
+        check_eq(len as usize, 52);
+        // VS_FIXEDFILEINFO: the signature, then dwProductVersionMS at 16: 10.0.
+        check_eq(fixed.cast::<u32>().read_unaligned() as usize, 0xFEEF_04BD);
+        check_eq(fixed.add(16).cast::<u32>().read_unaligned() as usize, 0x000A_0000);
+        let name = w::<48>("\\StringFileInfo\\040904B0\\ProductVersion");
+        let (mut text, mut chars) = (core::ptr::null(), 0u32);
+        check_eq(query(block.as_ptr(), name.as_ptr(), &mut text, &mut chars) as usize, 1);
+        check_got(chars == 16 && wide_is(text.cast(), "10.0.19045.2006"), chars);
+    }
+
+    // userenv: the profile is a local one.
+    let mut profile = 0xFFu32;
+    check_eq(GetProfileType(&mut profile) as usize, 1);
+    check_eq(profile as usize, 0);
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
     out(b"s1test: start\n");
@@ -967,6 +1274,7 @@ pub extern "system" fn s1test_main(_peb: *mut u8) -> u32 {
         ui_languages();
         gp_notification();
         winmm();
+        step9();
         out(b"s1test: all ");
         out_num(STEP.load(Ordering::Relaxed));
         out(b" checks passed\n");

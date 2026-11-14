@@ -1,0 +1,17 @@
+[package]
+name = "oleacc"
+description = "Our oleacc.dll (ADR 0155, step 9): the Active Accessibility entry points, which report that there is no accessibility support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "oleacc"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

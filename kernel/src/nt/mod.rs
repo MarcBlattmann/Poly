@@ -105,6 +105,18 @@ pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"
 pub static SHCORE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shcore.dll"));
 pub static DWMAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dwmapi.dll"));
 pub static IMM32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/imm32.dll"));
+/// The small DLLs Chrome's browser delay-loads when it starts (ADR 0155, step 9): `shlwapi`,
+/// `wtsapi32`, `comctl32`, `oleacc`, `uiautomationcore`, `mfplat` and `powrprof` (which hosts
+/// the `api-ms-win-power` API sets). Installed by [`layout`]; empty without `xtask`.
+pub static SHLWAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shlwapi.dll"));
+pub static WTSAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wtsapi32.dll"));
+pub static COMCTL32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/comctl32.dll"));
+pub static OLEACC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleacc.dll"));
+pub static UIAUTOMATIONCORE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uiautomationcore.dll"));
+pub static MFPLAT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mfplat.dll"));
+pub static POWRPROF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/powrprof.dll"));
+/// Our `uxtheme.dll` (ADR 0155, step 9): no visual style is active.
+pub static UXTHEME: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uxtheme.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -259,8 +271,20 @@ pub const SESSION_ARG: &str = "poly.win32k.session";
 /// serial line per system call (`poly_personality_nt::trace`). 0 off, 1 on, 2 all.
 static TRACE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
 
+/// `poly.nt.exceptions` (`poly.nt.exceptions=N` for N stack quadwords): every exception handed to
+/// a process's user-mode dispatcher is logged with the module and offset it was raised at and a
+/// bounded dump of the stack (`poly_personality_nt::diag::exception_report`, ADR 0155 step 9).
+/// The number of stack quadwords to dump; 0 is off.
+static EXCEPTIONS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
 /// Read the NT personality's kernel arguments (before the first program).
 pub fn configure(boot: &crate::boot_info::BootInfo) {
+    let exceptions = boot.arg(poly_personality_nt::diag::EXCEPTIONS_FLAG);
+    if exceptions.is_some() || boot.has_flag(poly_personality_nt::diag::EXCEPTIONS_FLAG) {
+        let words = poly_personality_nt::diag::exception_stack_words(exceptions);
+        EXCEPTIONS.store(words as u32, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("nt: logging every exception delivered to user mode, {words} stack quadwords");
+    }
     if boot.arg(poly_personality_nt::trace::FLAG) == Some("all") {
         TRACE.store(2, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: tracing every system call (poly.nt.trace=all)");
@@ -437,6 +461,14 @@ impl NtKernel for Kernel {
         sched::resume(self.pid, &self.memory, thread)
     }
 
+    fn suspend_process(&mut self, pid: ProcessId) -> Result<(), NtStatus> {
+        sched::suspend_process(pid)
+    }
+
+    fn resume_process(&mut self, pid: ProcessId) -> Result<(), NtStatus> {
+        sched::resume_process(pid)
+    }
+
     fn get_context(&mut self, thread: ThreadRef) -> Result<NtContext, NtStatus> {
         sched::get_context(self.tid, thread)
     }
@@ -502,6 +534,13 @@ impl NtKernel for Kernel {
             self.seh.rax = Some(rax);
         }
         Ok(())
+    }
+
+    fn exception_delivered(&mut self, record: &poly_seh::ExceptionRecord, ctx: &poly_seh::Context) {
+        let words = EXCEPTIONS.load(core::sync::atomic::Ordering::Relaxed);
+        if words != 0 {
+            exception::report_delivered(self.pid, self.tid, record, ctx, words as usize);
+        }
     }
 
     fn unhandled_exception(&mut self, record: &poly_seh::ExceptionRecord, ctx: &poly_seh::Context) {

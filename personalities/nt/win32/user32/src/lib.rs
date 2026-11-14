@@ -668,6 +668,15 @@ pub extern "system" fn IsZoomed(hwnd: H) -> i32 {
     i32::from(info(hwnd).is_some_and(|i| i.maximized))
 }
 
+/// `GetShellWindow`: "the handle of the Shell's desktop window. If no Shell process is present,
+/// the return value is NULL" (Learn). Poly's desktop is its own shell, not a Windows shell
+/// process with a window in this session: NULL. (Chrome delay-loads the function when it starts;
+/// ADR 0155, step 9. Doc-derived.)
+#[unsafe(no_mangle)]
+pub extern "system" fn GetShellWindow() -> H {
+    0
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDesktopWindow() -> H {
     u::desktop(&SYS) as H
@@ -2593,3 +2602,5 @@ pub extern "system" fn GetUpdateRgn(hwnd: H, rgn: H, erase: i32) -> i32 {
 pub extern "system" fn user32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod delayed;

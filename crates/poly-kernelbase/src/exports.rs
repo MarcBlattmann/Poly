@@ -400,6 +400,15 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetComputerNameW", "api-ms-win-core-sysinfo-l1-1-0"),
     ("IsWow64Process2", "api-ms-win-core-wow64-l1-1-1"),
     ("GetSystemPowerStatus", "api-ms-win-core-sysinfo-l1-1-0"),
+    // ADR 0155, step 9: what Chrome's browser needs to get past its start (Learn; the
+    // contracts are the ones the functions' headers belong to, to be confirmed).
+    ("QueryProcessCycleTime", "api-ms-win-core-realtime-l1-1-0"),
+    ("GetProcessInformation", "api-ms-win-core-processthreads-l1-1-3"),
+    ("SetProcessInformation", "api-ms-win-core-processthreads-l1-1-3"),
+    ("SetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),
+    ("GetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),
+    ("K32GetMappedFileNameW", "api-ms-win-core-psapi-l1-1-0"),
+    ("ProcessIdToSessionId", "api-ms-win-core-processthreads-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our
@@ -429,6 +438,21 @@ pub const OLEAUT32_EXPORTS: &[(&str, u16)] = &[
     ("VariantInit", 8),
     ("VariantClear", 9),
     ("VariantCopy", 10),
+    // ADR 0155, step 9: what chrome.dll delay-loads by ordinal (the pairs are the export table's).
+    ("SafeArrayDestroy", 16),
+    ("SafeArrayGetDim", 17),
+    ("SafeArrayGetUBound", 19),
+    ("SafeArrayGetLBound", 20),
+    ("SafeArrayAccessData", 23),
+    ("SafeArrayUnaccessData", 24),
+    ("SafeArrayGetElement", 25),
+    ("SafeArrayPutElement", 26),
+    ("SafeArrayGetVartype", 77),
+    ("SysStringByteLen", 149),
+    ("SysAllocStringByteLen", 150),
+    ("LoadRegTypeLib", 162),
+    ("VarBstrCmp", 314),
+    ("SafeArrayCreateVector", 411),
 ];
 
 /// The exports of our `user32.dll` (ADR 0087): two string functions until

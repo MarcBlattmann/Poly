@@ -216,6 +216,20 @@ pub trait NtKernel {
     /// run again when it reaches zero. Returns the previous count.
     fn resume_thread(&mut self, thread: ThreadRef) -> Result<u32, NtStatus>;
 
+    /// Suspend every thread of process `pid` once (`NtSuspendProcess`, ADR
+    /// 0155 step 9): each thread's suspend count goes up by one, as
+    /// [`NtKernel::suspend_thread`] does for one thread. A kernel that
+    /// cannot reach another process's threads answers
+    /// `STATUS_NOT_IMPLEMENTED`.
+    fn suspend_process(&mut self, _pid: poly_ntobj::ProcessId) -> Result<(), NtStatus> {
+        Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED)
+    }
+
+    /// Resume every thread of process `pid` once (`NtResumeProcess`).
+    fn resume_process(&mut self, _pid: poly_ntobj::ProcessId) -> Result<(), NtStatus> {
+        Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED)
+    }
+
     /// Read a suspended thread's CPU context (`NtGetContextThread`). Blocks
     /// until the thread is actually stopped so the context is stable; the
     /// caller's own context is read directly.
@@ -365,6 +379,13 @@ pub trait NtKernel {
     fn load_context(&mut self, ctx: &poly_seh::Context, flags: u32) -> Result<(), NtStatus> {
         let _ = (ctx, flags);
         Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED)
+    }
+
+    /// An exception is about to be handed to the process's user-mode
+    /// dispatcher (first chance; ADR 0155 step 9): the kernel may log it
+    /// (`poly.nt.exceptions`). `record` and `ctx` are where it was raised.
+    fn exception_delivered(&mut self, record: &poly_seh::ExceptionRecord, ctx: &poly_seh::Context) {
+        let _ = (record, ctx);
     }
 
     /// An exception nobody handles (second chance, no dispatcher, a frame

@@ -160,6 +160,15 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("shcore.dll", super::SHCORE),
         ("dwmapi.dll", super::DWMAPI),
         ("imm32.dll", super::IMM32),
+        // ADR 0155, step 9.
+        ("shlwapi.dll", super::SHLWAPI),
+        ("wtsapi32.dll", super::WTSAPI32),
+        ("comctl32.dll", super::COMCTL32),
+        ("oleacc.dll", super::OLEACC),
+        ("uiautomationcore.dll", super::UIAUTOMATIONCORE),
+        ("mfplat.dll", super::MFPLAT),
+        ("powrprof.dll", super::POWRPROF),
+        ("uxtheme.dll", super::UXTHEME),
     ] {
         if bytes.is_empty() {
             continue;

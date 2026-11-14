@@ -323,3 +323,5 @@ pub extern "system" fn InternetCloseHandle(h: Handle) -> i32 {
 pub extern "system" fn wininet_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     TRUE
 }
+
+mod delayed;

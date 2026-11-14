@@ -236,6 +236,55 @@ fn end_after_unhandled(mut k: Kernel) -> ! {
     end_unhandled(pid, tid, &record, frames, regs, words, structures)
 }
 
+/// `poly.nt.exceptions`: log an exception that is being handed to the running thread's
+/// dispatcher: where it was raised (module and offset), the registers, and `words` quadwords of
+/// the stack with the code addresses and the text found in them. Everything is on the heap (the
+/// thread's kernel stack is 16 KiB) and freed before the thread goes back to user mode.
+pub(super) fn report_delivered(pid: ProcessId, tid: ThreadRef, record: &ExceptionRecord, ctx: &Context, words: usize) {
+    use poly_personality_nt::diag;
+    let read = |at: u64, buf: &mut [u8]| user::copy_from_user(buf, at).is_ok();
+    let teb = with(|s| s.processes.get(&pid)?.thread(tid).map(|t| t.teb)).unwrap_or(0);
+    let modules = diag::modules(&read, teb);
+    let rsp = ctx.rsp();
+    // Whole pages may be missing above the stack's top: read a quadword at a time.
+    let mut stack: Vec<u64> = Vec::with_capacity(words);
+    for i in 0..words as u64 {
+        let mut b = [0u8; 8];
+        if !read(rsp.wrapping_add(8 * i), &mut b) {
+            break;
+        }
+        stack.push(u64::from_le_bytes(b));
+    }
+    let at = diag::Raised { pid: pid.0, tid: tid.0, code: record.code, address: record.address };
+    for line in diag::exception_report(&at, record.parameters(), &ctx.gpr, &stack, &modules) {
+        crate::kprintln!("{line}");
+    }
+    drop(stack);
+    if record.code == diag::STATUS_STACK_OVERFLOW {
+        // What fills the stack: every value up to the stack's base (`NT_TIB.StackBase`,
+        // TEB + 8) that points into a module, counted. Read a page at a time.
+        let mut b = [0u8; 8];
+        let base = if read(teb + TEB_STACK_BASE, &mut b) { u64::from_le_bytes(b) } else { 0 };
+        let mut counts: alloc::collections::BTreeMap<u64, u32> = alloc::collections::BTreeMap::new();
+        let mut page = alloc::vec![0u8; 4096];
+        let mut at_address = rsp & !7;
+        while at_address < base && base - rsp <= 64 << 20 {
+            let n = (4096 - (at_address & 4095)).min(base - at_address) as usize;
+            if read(at_address, &mut page[..n]) {
+                for chunk in page[..n].chunks_exact(8) {
+                    let value = u64::from_le_bytes(chunk.try_into().expect("8 bytes"));
+                    if modules.iter().any(|m| value >= m.base && value - m.base < m.size) {
+                        *counts.entry(value).or_insert(0) += 1;
+                    }
+                }
+            }
+            at_address += n as u64;
+        }
+        let counts: Vec<(u64, u32)> = counts.into_iter().collect();
+        crate::kprintln!("{}", diag::frequent_addresses(&at, &counts, &modules));
+    }
+}
+
 /// The running thread's user memory, for walking its stack.
 struct UserMemory;
 

@@ -98,6 +98,11 @@ pub unsafe extern "system" fn DuplicateHandle(
     // SAFETY: valid pointers; the kernel checks the handles.
     let st = unsafe { NtDuplicateObject(source_process, source, target_process, &mut h, access, attributes, options) };
     if !st.is_success() {
+        // The sheet: a failed call leaves NULL in the caller's handle.
+        if !target.is_null() {
+            // SAFETY: the caller's out-pointer.
+            unsafe { target.write_unaligned(0) };
+        }
         return fail_status(st, FALSE);
     }
     if target.is_null() {
