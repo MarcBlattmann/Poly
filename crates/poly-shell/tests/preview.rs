@@ -12,7 +12,7 @@ use poly_shell::draw::{Fonts, Text};
 use poly_shell::settings_ui::{Page, SystemInfo};
 use poly_shell::switcher::{Entry, Thumb};
 use poly_shell::{Key, Panel, Shell, apps};
-use poly_wayland::compose::{Framebuffer, Layer, MemoryFramebuffer, Rect, WindowId};
+use poly_wayland::compose::{Framebuffer, Layer, MemoryFramebuffer, Rect, Scale, WindowId};
 use std::path::Path;
 
 fn leak(path: &Path) -> Option<Font<'static>> {
@@ -51,8 +51,8 @@ fn save(fb: &MemoryFramebuffer, name: &str) {
 
 fn draw(shell: &Shell, fb: &mut MemoryFramebuffer, s: i32) {
     let all = Rect::new(0, 0, fb.width() as i32, fb.height() as i32);
-    shell.below().draw(fb, all, s);
-    shell.above().draw(fb, all, s);
+    shell.below().draw(fb, all, Scale::from_int(s as u32));
+    shell.above().draw(fb, all, Scale::from_int(s as u32));
 }
 
 fn notify(summary: &str, body: &str) -> Notify {
@@ -192,7 +192,7 @@ fn a_framed_window_and_the_settings() {
         for page in Page::ALL {
             s.settings_window.page = page;
             let mut fb = MemoryFramebuffer::new(w as u32, h as u32);
-            s.draw_settings(&mut fb, w, h, 1, &info, 1_793_491_200);
+            s.draw_settings(&mut fb, w, h, Scale::from_int(1), &info, 1_793_491_200);
             let name = page.label().to_lowercase().replace(" & ", "-");
             save(&fb, &format!("settings-{name}{tag}.png"));
         }
@@ -215,7 +215,7 @@ fn a_framed_window_and_the_settings() {
             [(poly_shell::theme::settings::WIDTH, poly_shell::theme::settings::HEIGHT, ""), (1200, 800, "-1200")]
         {
             let mut fb = MemoryFramebuffer::new(w as u32, h as u32);
-            s.draw_settings(&mut fb, w, h, 1, &info, 1_793_491_200);
+            s.draw_settings(&mut fb, w, h, Scale::from_int(1), &info, 1_793_491_200);
             save(&fb, &format!("settings-shortcuts-editing{tag}.png"));
         }
         s.apply(&Change::ResetShortcuts);
@@ -231,7 +231,7 @@ fn a_framed_window_and_the_settings() {
     scene.resize_content(win, ww as u32, wh as u32, 1);
     s.settings_window.page = Page::Sound;
     let mut content = MemoryFramebuffer::new(ww as u32, wh as u32);
-    s.draw_settings(&mut content, ww, wh, 1, &info, 1_793_491_200);
+    s.draw_settings(&mut content, ww, wh, Scale::from_int(1), &info, 1_793_491_200);
     if let Some(c) = scene.content_mut(win) {
         c.pixels.copy_from_slice(content.pixels());
     }

@@ -13,6 +13,7 @@ use poly_files::{Fs, FsError, Kind, Meta, RawEntry};
 use poly_input::key::Key;
 use poly_shell::draw::Text;
 use poly_wayland::compose::MemoryFramebuffer;
+use poly_wayland::compose::Scale;
 use std::path::PathBuf;
 
 /// `std::fs` under a temporary root; paths are `/`-rooted inside it.
@@ -222,7 +223,7 @@ fn setup_with(applications: bool) -> Setup {
     }
     assert!(app.go("/home/m"));
     let mut cx = Cx::default();
-    app.event(AppEvent::Resized { width: 900, height: 580, scale: 1 }, &mut cx);
+    app.event(AppEvent::Resized { width: 900, height: 580, scale: Scale::from_int(1) }, &mut cx);
     Setup { app, root, launched, opened, uninstalled }
 }
 
@@ -495,7 +496,7 @@ fn clicks_select_and_double_clicks_open() {
 #[test]
 fn draws_in_both_views_and_themes() {
     let mut s = setup();
-    let ui = Ui { text: Text::new(None), scale: 1 };
+    let ui = Ui { text: Text::new(None), scale: Scale::from_int(1) };
     for light in [false, true] {
         poly_shell::theme::set_light(light);
         let mut fb = MemoryFramebuffer::new(900, 580);
@@ -529,7 +530,7 @@ fn programs_are_found_on_the_path() {
 #[test]
 fn the_path_bar_edits_and_draws_with_the_bitmap_font() {
     let mut s = setup();
-    let ui = Ui { text: Text::new(None), scale: 1 };
+    let ui = Ui { text: Text::new(None), scale: Scale::from_int(1) };
     let mut fb = MemoryFramebuffer::new(900, 580);
     s.app.draw(&mut fb, &ui, true);
     let mut cx = Cx::default();
@@ -762,7 +763,7 @@ fn an_app_the_installer_owns_can_be_uninstalled_from_its_menu() {
 fn applications_draw_each_apps_own_icon_in_both_views() {
     let mut s = setup_apps();
     s.app.go("applications:///");
-    let ui = Ui { text: Text::new(None), scale: 1 };
+    let ui = Ui { text: Text::new(None), scale: Scale::from_int(1) };
     let mut fb = MemoryFramebuffer::new(900, 580);
     // Poly's own artwork, as the launcher draws it, at each view's size.
     let mut icons = poly_shell::appicon::AppIcons::default();
@@ -784,7 +785,7 @@ fn applications_draw_each_apps_own_icon_in_both_views() {
         assert_eq!(fb.pixel((ox + cx as i32) as u32, (oy + cy as i32) as u32), Some(want & 0xff_ffff), "view {view}");
     }
     // At twice the scale too, and with every row selected.
-    let ui2 = Ui { text: Text::new(None), scale: 2 };
+    let ui2 = Ui { text: Text::new(None), scale: Scale::from_int(2) };
     let mut fb2 = MemoryFramebuffer::new(1800, 1160);
     ctrl(&mut s.app, 'a');
     s.app.draw(&mut fb2, &ui2, true);

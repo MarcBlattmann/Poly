@@ -831,6 +831,42 @@ pub fn command(args: &[String]) -> Result {
 
 // ---- the boot test -------------------------------------------------------
 
+/// The pinned fonts (`cargo xtask fonts fetch`, ADR 0105) for the disk the
+/// boot test makes, fetched now if they are not yet; the reason if they
+/// cannot be.
+///
+/// GTK needs a font. On a disk without one (only `fonts.conf`) Pango has
+/// no font for any text: every glyph is an unknown-glyph box with no font
+/// behind it, font metrics are 0, and the window's size comes out wrong
+/// after a relayout: gtk3-hello asked for a minimum height of about 1.4
+/// million pixels after its click (`xdg_toplevel.set_min_size(120,
+/// 1399396)`), its next buffer (width × height × 4 bytes) overflowed to a
+/// negative size, `ftruncate` of the pool's memfd failed with `EINVAL`
+/// (ftruncate(2): "the argument length is negative", as on Linux),
+/// GDK logged "Truncating shared memory file failed" and crashed (SIGSEGV;
+/// gtk4-hello: SIGTRAP). That was the `toolkits` failure on a PC whose
+/// checkout had never fetched the fonts, while CI, which fetches them,
+/// passed.
+fn fonts_ready() -> std::result::Result<(), String> {
+    if crate::fonts::cached().is_some() {
+        return Ok(());
+    }
+    eprintln!("==> the toolkits' disk needs the fonts for GTK: fetching them (cargo xtask fonts fetch)");
+    crate::fonts::fetch().map(|_| ())
+}
+
+/// Whether the boot test runs `app` given [`fonts_ready`]'s answer: an app
+/// that needs a font is skipped, saying why, without one.
+fn runnable(app: &App, fonts: &std::result::Result<(), String>) -> bool {
+    match fonts {
+        Err(why) if app.needs_fonts => {
+            eprintln!("==> skipped: {}: GTK needs a font on the disk, and the fonts are not there: {why}", app.name);
+            false
+        }
+        _ => true,
+    }
+}
+
 /// An app the boot test starts from the launcher.
 struct App {
     /// The program, and how its lines start.
@@ -846,6 +882,8 @@ struct App {
     after: [u8; 3],
     /// What it prints for a typed `a`.
     key_line: &'static str,
+    /// Whether it needs a font on the disk ([`fonts_ready`]).
+    needs_fonts: bool,
 }
 
 /// The apps (their colours are in their sources).
@@ -858,6 +896,7 @@ const TEST_APPS: [App; 3] = [
         before: [0x2a, 0x6f, 0xb0],
         after: [0xb0, 0x3a, 0x2a],
         key_line: "gtk3-hello: key a",
+        needs_fonts: true,
     },
     App {
         name: "gtk4-hello",
@@ -867,6 +906,7 @@ const TEST_APPS: [App; 3] = [
         before: [0x2a, 0x8a, 0x4a],
         after: [0x8a, 0x2a, 0x7a],
         key_line: "gtk4-hello: key a",
+        needs_fonts: true,
     },
     App {
         name: "qt-hello",
@@ -876,6 +916,7 @@ const TEST_APPS: [App; 3] = [
         before: [0x7a, 0x5a, 0x1a],
         after: [0x1a, 0x6a, 0x7a],
         key_line: "qt-hello: key 65 a",
+        needs_fonts: false,
     },
 ];
 
@@ -1152,11 +1193,13 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             return Ok(());
         }
     };
+    let fonts = fonts_ready();
     let (image, contents) = make(TEST_FILE_NAME)?;
     // POLY_TOOLKITS_ONLY=<name>,...: only these apps (`vlc` for VLC).
     let only = std::env::var("POLY_TOOLKITS_ONLY").ok().filter(|s| !s.is_empty());
     let wanted = |name: &str| only.as_ref().is_none_or(|o| o.split(',').any(|w| w.trim() == name));
-    let apps: Vec<&App> = TEST_APPS.iter().filter(|a| contents.have.contains(a.name) && wanted(a.name)).collect();
+    let apps: Vec<&App> =
+        TEST_APPS.iter().filter(|a| contents.have.contains(a.name) && wanted(a.name) && runnable(a, &fonts)).collect();
     let vlc = ["cvlc", "media", "poly-runas"].iter().all(|n| contents.have.contains(n)) && wanted("vlc");
     if apps.is_empty() && !vlc {
         eprintln!("==> skipped: the toolkits boot test: no GTK, Qt or VLC on this host (the poly-dev image has them)");
@@ -1253,6 +1296,17 @@ mod tests {
         assert!(Step::parse("click:1").is_err());
         assert!(Step::parse("nothing").is_err());
         assert!(Step::parse("dance:1").is_err());
+    }
+
+    /// GTK apps never run on a disk without fonts (they crash there, see
+    /// `fonts_ready`); Qt does, and with fonts every app runs.
+    #[test]
+    fn gtk_apps_need_fonts() {
+        let none: std::result::Result<(), String> = Err("offline".into());
+        let ran: Vec<&str> = TEST_APPS.iter().filter(|a| runnable(a, &none)).map(|a| a.name).collect();
+        assert_eq!(ran, ["qt-hello"]);
+        let all: Vec<&str> = TEST_APPS.iter().filter(|a| runnable(a, &Ok(()))).map(|a| a.name).collect();
+        assert_eq!(all, ["gtk3-hello", "gtk4-hello", "qt-hello"]);
     }
 
     #[test]

@@ -281,3 +281,47 @@ fn inside() {
     assert!(is_inside(&*fs, a, a));
     assert!(!is_inside(&*fs, a, b));
 }
+
+/// A mapping of a file of the overlay maps the file of the layer that
+/// holds its data; a writable shared one copies the file up first.
+#[test]
+fn the_backing_file_is_the_layers_and_a_writable_mapping_copies_up() {
+    let w = world();
+    let same = |a: &Arc<dyn FileSystem>, b: &Arc<Tmpfs>| Arc::as_ptr(a) as *const u8 == Arc::as_ptr(b) as *const u8;
+    let a = w.ov.lookup(w.ov.root(), b"a").unwrap();
+    // Reading: the lower file, nothing copied.
+    let (fs, ino) = w.ov.backing_file(a, false).unwrap().unwrap();
+    assert!(same(&fs, &w.lower1));
+    assert_eq!(ino, w.lower1.lookup(w.lower1.root(), b"a").unwrap());
+    assert_eq!(w.upper.lookup(w.upper.root(), b"a"), Err(Errno::ENOENT));
+    // Writing: the upper copy, made now, with the old content.
+    let (fs, ino) = w.ov.backing_file(a, true).unwrap().unwrap();
+    assert!(same(&fs, &w.upper));
+    assert_eq!(ino, w.upper.lookup(w.upper.root(), b"a").unwrap());
+    let mut buf = [0u8; 16];
+    let n = w.upper.read(ino, 0, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"lower one a");
+    // What is written to that file is what the overlay reads; the lower
+    // layer keeps its own.
+    w.upper.write(ino, 6, b"ONE").unwrap();
+    let n = w.ov.read(a, 0, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"lower ONE a");
+    let l = w.lower1.lookup(w.lower1.root(), b"a").unwrap();
+    let n = w.lower1.read(l, 0, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"lower one a");
+    // From now on a reading mapping shows the upper copy too.
+    let (fs, again) = w.ov.backing_file(a, false).unwrap().unwrap();
+    assert!(same(&fs, &w.upper) && again == ino);
+    // Not for directories; and no upper layer, no writable mapping.
+    let d = w.ov.lookup(w.ov.root(), b"d").unwrap();
+    assert!(w.ov.backing_file(d, false).unwrap().is_none());
+    let (l1, l1l) = layer();
+    let (_l2, l2l) = layer();
+    file(&l1, l1.root(), "f", b"f");
+    let ro: Overlay =
+        Overlay::new(Config { upper: None, lowers: vec![l1l, l2l], userxattr: false, redirect: Redirect::Off })
+            .unwrap();
+    let f = ro.lookup(ro.root(), b"f").unwrap();
+    assert!(ro.backing_file(f, false).unwrap().is_some());
+    assert_eq!(ro.backing_file(f, true).err(), Some(Errno::EROFS));
+}

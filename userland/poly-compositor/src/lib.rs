@@ -53,7 +53,7 @@
 //!   loop come with the first Phase 7 slice).
 //!
 //! ```text
-//! poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE] [--stats]
+//! poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats]
 //!                 [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]]
 //!                 [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy]
 //!                 [--exec PROGRAM [ARGS...]]
@@ -107,7 +107,7 @@ use crate::prelude::*;
 use alloc::collections::BTreeMap;
 use poly_rt::fs;
 use poly_rt::net::{UnixListener, UnixStream};
-use poly_wayland::compose::{Framebuffer, MemoryFramebuffer, Rect};
+use poly_wayland::compose::{Framebuffer, MemoryFramebuffer, Rect, Scale};
 use poly_wayland::launch;
 use poly_wayland::seat::InputSource;
 use poly_wayland::server::{ClientId, Config, FrameTime, OutputConfig, Server, present_flags};
@@ -128,7 +128,7 @@ struct Options {
     width: u32,
     height: u32,
     /// `None`: automatic (from the screen, or `POLY_DISPLAY_SCALE`).
-    scale: Option<u32>,
+    scale: Option<Scale>,
     dump: Option<String>,
     probes: Vec<(u32, u32)>,
     desktop: bool,
@@ -146,14 +146,15 @@ struct Options {
     exec: Vec<String>,
 }
 
-const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE] [--stats] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
+const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
 
-/// A scale given as `N` (1 to 8) or `auto`.
-fn parse_scale(v: &str) -> Result<Option<u32>, String> {
+/// A scale given as `auto`, a factor (`2`, `1.5`) or a percentage (`150`,
+/// `150%`; [`Scale::parse`]).
+fn parse_scale(v: &str) -> Result<Option<Scale>, String> {
     if v == "auto" {
         return Ok(None);
     }
-    v.parse().ok().filter(|s| (1..=8).contains(s)).map(Some).ok_or(format!("bad scale {v}"))
+    Scale::parse(v).map(Some).ok_or(format!("bad scale {v}"))
 }
 
 fn pair(s: &str, sep: char) -> Option<(u32, u32)> {
@@ -468,7 +469,7 @@ fn open_kms(path: &str) -> Result<kms::Kms<kms::CardFile>, String> {
 
 /// The scale: asked for, else `POLY_DISPLAY_SCALE`, else from the screen
 /// (KMS) or 1.
-fn choose_scale(asked: Option<u32>, screen: &Screen) -> u32 {
+fn choose_scale(asked: Option<Scale>, screen: &Screen) -> Scale {
     if let Some(s) = asked {
         return s;
     }
@@ -478,9 +479,9 @@ fn choose_scale(asked: Option<u32>, screen: &Screen) -> u32 {
     match screen {
         Screen::Kms(k) => {
             let o = k.output();
-            kms::auto_scale(o.size().0, o.mm.0)
+            Scale::from_int(kms::auto_scale(o.size().0, o.mm.0))
         }
-        _ => 1,
+        _ => Scale::ONE,
     }
 }
 
@@ -891,11 +892,12 @@ fn run(args: &[String]) -> Result<u8, String> {
 
         // Input, then the shell.
         if let Some(d) = &mut desk {
-            let size = server.scene().logical_size();
+            let (pw, ph, scale) = server.scene().output();
+            let geometry = evdev::Geometry { physical: (pw as i32, ph as i32), scale };
             let ms = (os::monotonic_ns() / 1_000_000) as u32;
             for (i, pfd) in fds[input_at..desk_at].iter().enumerate() {
                 if pfd.revents != 0 {
-                    d.input.read(i, size, ms);
+                    d.input.read(i, geometry, ms);
                 }
             }
             d.polled(&fds[desk_at..desk_end]);
@@ -1108,7 +1110,7 @@ mod tests {
     #[test]
     fn parses_its_arguments() {
         let o = parse_args(&args("--size 640x480 --scale 2 --probe 1,2 --probe 3,4 --exec /bin/c -x")).unwrap();
-        assert_eq!((o.width, o.height, o.scale), (640, 480, Some(2)));
+        assert_eq!((o.width, o.height, o.scale), (640, 480, Some(Scale::from_int(2))));
         assert_eq!(o.probes, [(1, 2), (3, 4)]);
         let k = parse_args(&args("--kms --drm /dev/dri/card1 --scale auto")).unwrap();
         assert_eq!((k.kms, k.drm.as_str(), k.scale), (true, "/dev/dri/card1", None));
@@ -1123,7 +1125,11 @@ mod tests {
         assert!(o.desktop);
         assert_eq!((o.fb.as_str(), o.keymap.as_deref()), ("/dev/fb1", Some("de-ch")));
         let o = parse_args(&args("--desktop --settings /tmp/s.conf --scale 2")).unwrap();
-        assert_eq!((o.settings, o.scale, o.keymap), (Some("/tmp/s.conf".into()), Some(2), None));
+        assert_eq!((o.settings, o.scale, o.keymap), (Some("/tmp/s.conf".into()), Some(Scale::from_int(2)), None));
+        let f = parse_args(&args("--scale 1.5")).unwrap();
+        assert_eq!(f.scale.map(Scale::percent), Some(150));
+        assert_eq!(parse_args(&args("--scale 175")).unwrap().scale.map(Scale::percent), Some(175));
+        assert!(parse_args(&args("--scale 1.3x")).is_err());
         assert!(parse_args(&args("--keymap xx")).is_err());
         assert!(parse_args(&args("--size 0x4")).is_err());
         assert!(parse_args(&args("--scale 9")).is_err());

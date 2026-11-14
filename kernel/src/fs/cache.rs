@@ -196,12 +196,29 @@ fn relieve_memory_pressure() {
 pub struct FileSource {
     node: NodeRef,
     cached: Option<Arc<CachedDiskFs>>,
+    /// For a file of a file system that shows another's files (an
+    /// overlay): the file that holds the data, whose pages `cached` has
+    /// ([`FileSource::backed`]).
+    backing: Option<Backing>,
     /// The open file it was made from, which knows the file's name
     /// (`/proc/<pid>/maps`).
     file: Option<Arc<poly_vfs::OpenFile>>,
     /// A writable shared mapping of a memfd counts while its source lives
     /// (`F_SEAL_WRITE` is `EBUSY` meanwhile, ADR 0111).
     _writable_map: Option<poly_vfs::memfd::WritableMap>,
+}
+
+/// The file of a cached file system that holds another file's data,
+/// pinned while a mapping shows it.
+struct Backing {
+    fs: Arc<dyn poly_vfs::FileSystem>,
+    ino: poly_vfs::Ino,
+}
+
+impl Drop for Backing {
+    fn drop(&mut self) {
+        self.fs.release(self.ino);
+    }
 }
 
 impl core::fmt::Debug for FileSource {
@@ -215,7 +232,32 @@ impl FileSource {
     pub fn new(node: NodeRef) -> FileSource {
         let fs = node.mount().fs();
         let cached = disk::cached_fs_of(fs).or_else(|| super::memfs::cached_fs_of(fs));
-        FileSource { node, cached, file: None, _writable_map: None }
+        FileSource { node, cached, backing: None, file: None, _writable_map: None }
+    }
+
+    /// The same source for a memory mapping of a file whose data another
+    /// file system's file holds ([`FileSystem::backing_file`]: a file of
+    /// an overlay is a file of one of its layers): the mapping shows that
+    /// file's cached pages, so it can be shared, and what is written
+    /// through it is seen through the layer and the overlay at once.
+    /// `for_write`: the mapping is shared and writable (an overlay copies
+    /// the file to its upper layer first). A file that is its own stays
+    /// as it is.
+    pub fn backed(mut self, for_write: bool) -> FileSource {
+        if self.cached.is_none()
+            && let Ok(Some((fs, ino))) = self.node.mount().fs().backing_file(self.node.ino(), for_write)
+            && let Some(cached) = disk::cached_fs_of(&fs).or_else(|| super::memfs::cached_fs_of(&fs))
+            && fs.open(ino).is_ok()
+        {
+            self.cached = Some(cached);
+            self.backing = Some(Backing { fs, ino });
+        }
+        self
+    }
+
+    /// The inode whose pages `cached` holds.
+    fn cached_ino(&self) -> poly_vfs::Ino {
+        self.backing.as_ref().map_or(self.node.ino(), |b| b.ino)
     }
 
     /// The file `file` is open on.
@@ -257,7 +299,7 @@ impl PageSource for FileSource {
 
     fn cached_page(&self, offset: u64) -> Option<Result<CachedPage, IoError>> {
         let fs = self.cached.as_ref()?;
-        let (ino, index) = (self.node.ino(), offset / PAGE_SIZE as u64);
+        let (ino, index) = (self.cached_ino(), offset / PAGE_SIZE as u64);
         // A page the cache holds needs neither the inode's lock nor its
         // attributes: most faults on a program's code find theirs here.
         if let Some(page) = fs.cached_page(ino, index) {
@@ -272,7 +314,7 @@ impl PageSource for FileSource {
     fn peek_cached_pages(&self, offset: u64, count: u64) -> Vec<(u64, CachedPage)> {
         let Some(fs) = self.cached.as_ref() else { return Vec::new() };
         let first = offset / PAGE_SIZE as u64;
-        let pages = fs.cached_run(self.node.ino(), first, count);
+        let pages = fs.cached_run(self.cached_ino(), first, count);
         pages.into_iter().map(|(index, page)| (index * PAGE_SIZE as u64, page)).collect()
     }
 

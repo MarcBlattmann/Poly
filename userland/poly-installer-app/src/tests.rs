@@ -16,6 +16,7 @@ use poly_pkg::installer::{Action, Installer, Phase, Plan, Removal, Step};
 use poly_pkg::{ar, deb};
 use poly_shell::draw::Text;
 use poly_wayland::compose::MemoryFramebuffer;
+use poly_wayland::compose::Scale;
 
 /// What the window did to the system, and what the system answers.
 #[derive(Default)]
@@ -116,7 +117,7 @@ fn app(unconfigured: usize, have_lists: bool) -> (InstallerApp, Rc<RefCell<Fake>
 }
 
 fn ui() -> Ui {
-    Ui { text: Text::new(None), scale: 1 }
+    Ui { text: Text::new(None), scale: Scale::from_int(1) }
 }
 
 /// Draw the window (which lays the buttons out) and click the one for

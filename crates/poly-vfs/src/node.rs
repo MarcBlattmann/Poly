@@ -155,7 +155,7 @@ impl NodeRef {
             return Err(Errno::EPERM);
         }
         let mut perm = perm & crate::PERM_MASK;
-        if !cred.has(cap::FSETID) && !cred.in_group(attr.gid) {
+        if !cred.has_over(cap::FSETID, &attr) && !cred.in_group(attr.gid) {
             perm &= !S_ISGID;
         }
         self.setattr(&SetAttr { perm: Some(perm), ..SetAttr::default() })
@@ -176,10 +176,14 @@ impl NodeRef {
         self.writable_mount()?;
         // The owner, or a caller who may change anything, setting the ids
         // the file has changes nothing.
-        let may = cred.uid == attr.uid || cred.has(cap::CHOWN);
+        // CAP_CHOWN reaches the file only if its owner and group are in
+        // the caller's scope (a user namespace's root and a file of ids it
+        // does not map: EPERM).
+        let chown = cred.has_over(cap::CHOWN, &attr);
+        let may = cred.uid == attr.uid || chown;
         let uid = uid.filter(|&u| u != attr.uid || !may);
         let gid = gid.filter(|&g| g != attr.gid || !may);
-        if !cred.has(cap::CHOWN) {
+        if !chown {
             if uid.is_some() {
                 return Err(Errno::EPERM);
             }
@@ -202,7 +206,7 @@ impl NodeRef {
                 // Clearing them is a mode change: a caller who neither
                 // owns the file nor may chown it gets EPERM for -1, -1 on
                 // another user's set-user-ID file (`non_owner_noop`).
-                if !cred.has(cap::CHOWN) && !cred.owns(&attr) {
+                if !chown && !cred.owns(&attr) {
                     return Err(Errno::EPERM);
                 }
                 set.perm = Some(perm);
@@ -263,11 +267,11 @@ impl NodeRef {
     /// set-group-ID mode bits may be cleared". Regular files only; nothing
     /// changes (not even `ctime`) when no bit is set.
     pub fn clear_setid(&self, cred: &Cred) -> Result<()> {
-        if cred.has(cap::FSETID) {
+        if cred.has(cap::FSETID) && cred.scope.is_none() {
             return Ok(());
         }
         let attr = self.attr()?;
-        if attr.kind != FileType::Regular {
+        if attr.kind != FileType::Regular || cred.has_over(cap::FSETID, &attr) {
             return Ok(());
         }
         let mut perm = attr.perm & !S_ISUID;

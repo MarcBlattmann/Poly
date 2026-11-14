@@ -466,7 +466,7 @@ impl NtKernel for Kernel {
     }
 
     fn resume_process(&mut self, pid: ProcessId) -> Result<(), NtStatus> {
-        sched::resume_process(pid)
+        sched::resume_process(pid, &self.memory)
     }
 
     fn get_context(&mut self, thread: ThreadRef) -> Result<NtContext, NtStatus> {

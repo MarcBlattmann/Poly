@@ -563,3 +563,65 @@ fn the_root_needs_no_answer_before_init_and_a_release_outlives_the_mount() {
     assert_eq!(env.ops().last(), Some(&op::RELEASE));
     assert_eq!(conn.read(&*env, &mut [0u8; 8192], true), Err(Errno::ENODEV));
 }
+
+#[test]
+fn mount_options_need_fd_rootmode_and_the_owner() {
+    let o = parse_options(b"fd=7,rootmode=40755,user_id=5,group_id=6,max_read=65536,default_permissions,allow_other")
+        .unwrap();
+    assert_eq!((o.fd, o.opts.root_mode, o.opts.user_id, o.opts.group_id), (7, 0o40755, 5, 6));
+    assert_eq!((o.opts.max_read, o.opts.default_permissions, o.opts.allow_other), (65536, true, true));
+    assert_eq!(o.opts.root_kind(), FileType::Directory);
+    assert_eq!(parse_options(b"fd=3,rootmode=040700,user_id=0,group_id=0,subtype=pk").unwrap().subtype.unwrap(), b"pk");
+    for missing in [
+        &b"rootmode=40000,user_id=0,group_id=0"[..],
+        b"fd=3,user_id=0,group_id=0",
+        b"fd=3,rootmode=40000,group_id=0",
+        b"fd=3,rootmode=40000,user_id=0",
+        b"",
+    ] {
+        assert_eq!(parse_options(missing).unwrap_err(), Errno::EINVAL, "{:?}", core::str::from_utf8(missing));
+    }
+}
+
+#[test]
+fn mount_options_refuse_bad_numbers_types_and_foreign_options() {
+    let with = |rest: &str| parse_options(std::format!("fd=3{rest}").as_bytes()).map(|o| o.opts.root_kind());
+    let ids = ",user_id=0,group_id=0";
+    // Every file type but a symbolic link is a root; permission bits do not matter.
+    for (mode, kind) in [
+        ("100000", FileType::Regular),
+        ("100644", FileType::Regular),
+        ("40000", FileType::Directory),
+        ("20000", FileType::CharDevice),
+        ("60000", FileType::BlockDevice),
+        ("10000", FileType::Fifo),
+        ("140000", FileType::Socket),
+    ] {
+        assert_eq!(with(&std::format!(",rootmode={mode}{ids}")), Ok(kind), "{mode}");
+    }
+    for mode in ["0", "777", "170000", "30000", "120000", "120777", "8", "4x", "", "-40000", "+40000", "0o40000"] {
+        assert_eq!(with(&std::format!(",rootmode={mode}{ids}")), Err(Errno::EINVAL), "{mode}");
+    }
+    for rest in [
+        ",rootmode=40000,user_id=root,group_id=0",
+        ",rootmode=40000,user_id=0,group_id=",
+        ",rootmode=40000,user_id=-2,group_id=0",
+        ",rootmode=40000,user_id=0,group_id=0,blksize=512",
+        ",rootmode=40000,user_id=0,group_id=0,blksize=big",
+        ",rootmode=40000,user_id=0,group_id=0,bogus=1",
+        ",rootmode=40000,user_id=0,group_id=0,max_read=many",
+        ",rootmode=40000,user_id=0,group_id=0,max_read=",
+        ",rootmode=40000,user_id=0,group_id=0,subtype",
+        ",rootmode=40000,user_id=4294967296,group_id=0",
+    ] {
+        assert_eq!(with(rest), Err(Errno::EINVAL), "{rest}");
+    }
+    assert_eq!(parse_options(b"fd=x,rootmode=40000,user_id=0,group_id=0").unwrap_err(), Errno::EINVAL);
+}
+
+#[test]
+fn a_root_that_is_no_directory_shows_its_type() {
+    let (_env, fs) = mounted(None, Options { root_mode: 0o100644, ..Options::default() }, one_file());
+    let a = fs.walk_attr(ROOT_ID).unwrap();
+    assert_eq!((a.kind, a.nlink), (FileType::Regular, 1));
+}

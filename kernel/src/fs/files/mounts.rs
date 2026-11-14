@@ -15,22 +15,31 @@ impl Files {
         self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.mount(ctx, &self.cred(), at, target, fs, flags))
     }
 
-    /// mount(2) with `MS_BIND`.
-    pub fn mount_bind(&self, source: &[u8], target: &[u8], flags: MountFlags) -> Result<MountId> {
+    /// mount(2) with `MS_BIND` (`recursive`: with `MS_REC`, the mounts
+    /// below the source too).
+    pub fn mount_bind(&self, source: &[u8], target: &[u8], recursive: bool) -> Result<MountId> {
         let ctx = self.context();
         let cred = self.cred();
-        vfs().bind(&ctx, &cred, poly_vfs::At::Cwd, source, poly_vfs::At::Cwd, target, flags)
+        vfs().bind(&ctx, &cred, poly_vfs::At::Cwd, source, poly_vfs::At::Cwd, target, recursive)
     }
 
     /// mount(2) with `MS_REMOUNT` (`bind`: with `MS_BIND`, this mount
-    /// only; see `Vfs::remount` for when going read-only is `EBUSY`).
-    pub fn remount(&self, target: &[u8], flags: MountFlags, bind: bool) -> Result<()> {
-        self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.remount(ctx, &self.cred(), at, target, flags, bind))
+    /// only; see `Vfs::remount` for when going read-only is `EBUSY` and
+    /// what a locked mount refuses). `atime`: the access time mode the
+    /// call names, if any.
+    pub fn remount(&self, target: &[u8], flags: MountFlags, atime: Option<u32>, bind: bool) -> Result<()> {
+        self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.remount(ctx, &self.cred(), at, target, flags, atime, bind))
     }
 
     /// The mount whose root `target` names (`EINVAL` if it is not one).
     pub fn mount_at(&self, target: &[u8], follow: bool) -> Result<MountId> {
         self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.mount_at(ctx, &self.cred(), at, target, follow))
+    }
+
+    /// The mount umount2(2) of `target` removes (`EINVAL` if `target` is
+    /// not a mount's root).
+    pub fn unmount_id(&self, target: &[u8], follow: bool) -> Result<MountId> {
+        self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.unmount_id(ctx, &self.cred(), at, target, follow))
     }
 
     /// umount2(2) with `MNT_EXPIRE`.
