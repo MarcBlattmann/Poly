@@ -638,3 +638,40 @@ fn a_root_that_is_no_directory_shows_its_type() {
     let a = fs.walk_attr(ROOT_ID).unwrap();
     assert_eq!((a.kind, a.nlink), (FileType::Regular, 1));
 }
+
+#[test]
+fn a_nodes_name_is_the_one_it_was_looked_up_or_moved_by() {
+    // The node ids are the server's and need not be the inode numbers its
+    // READDIR gives (squashfuse numbers them otherwise): a path through a
+    // directory of the mount takes the name the node was looked up by.
+    let (_env, fs) = mounted(
+        Some((0, 65536, 0)),
+        opts(),
+        Box::new(|r: &Req| match r.op {
+            op::LOOKUP if r.names(0) == [b"bin".to_vec()] => Some(Ok(entry(7, S_IFDIR | 0o755, 0, 1000))),
+            op::LOOKUP => Some(Ok(entry(9, S_IFREG | 0o755, 5, 1000))),
+            op::RENAME => Some(Ok(Vec::new())),
+            _ => Some(Err(ENOSYS)),
+        }),
+    );
+    assert_eq!(fs.name_of(ROOT_ID, 7), None, "not looked up yet");
+    assert_eq!(fs.lookup(ROOT_ID, b"bin"), Ok(7));
+    assert_eq!(fs.lookup(7, b"cpu-x"), Ok(9));
+    assert_eq!(fs.lookup(7, b".."), Ok(ROOT_ID));
+    assert_eq!(fs.name_of(ROOT_ID, 7), Some(b"bin".to_vec()));
+    assert_eq!(fs.name_of(7, 9), Some(b"cpu-x".to_vec()));
+    assert_eq!(fs.name_of(ROOT_ID, 9), None, "not in that directory");
+    assert_eq!(fs.rename(7, b"cpu-x", ROOT_ID, b"moved", RenameFlags::default()), Ok(()));
+    assert_eq!(fs.name_of(ROOT_ID, 9), Some(b"moved".to_vec()));
+    assert_eq!(fs.lookup(9, b".."), Ok(ROOT_ID));
+}
+
+#[test]
+fn the_next_read_needs_room_for_the_request_that_waits() {
+    let (env, fs) = mounted(None, opts(), one_file());
+    // INIT waits for the server's first read.
+    assert_eq!(env.conn.next_len(), IN_HEADER + 64);
+    assert!(env.pump());
+    assert_eq!(env.conn.next_len(), 0, "nothing waits");
+    drop(fs);
+}

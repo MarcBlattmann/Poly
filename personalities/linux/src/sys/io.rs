@@ -341,7 +341,7 @@ fn read_into(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> Sy
 
 /// [`read_into`] for a transfer `how` (`total` not zero).
 pub(crate) fn read_into_how(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64, how: How) -> SysResult {
-    let piece = k.io_piece(fd).max(CHUNK) as u64;
+    let piece = k.read_piece(fd).max(CHUNK) as u64;
     let mut buf = bounce(total.min(piece) as usize)?;
     let mut cursor = Cursor::new(iovs, total);
     let mut done: u64 = 0;
@@ -354,6 +354,17 @@ pub(crate) fn read_into_how(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], to
         let want = (total - done).min(buf.len() as u64) as usize;
         let n = match read_once(k, fd, &mut buf[..want], how, done) {
             Ok(n) => n.min(want),
+            // A message device whose message came while the read waited,
+            // larger than the buffer but not than the caller's: again, with
+            // room for it ([`LinuxKernel::read_piece`]).
+            Err(Errno::EINVAL) if done == 0 && (buf.len() as u64) < total => {
+                let need = (k.read_piece(fd) as u64).min(total);
+                if need <= buf.len() as u64 {
+                    return Err(Errno::EINVAL);
+                }
+                buf = bounce(need as usize)?;
+                continue;
+            }
             Err(e) if done == 0 => return Err(e),
             Err(_) => break,
         };

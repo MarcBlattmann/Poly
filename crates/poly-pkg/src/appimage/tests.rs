@@ -362,6 +362,11 @@ Icon=/home/poly/.local/share/poly/appimages/hello-pixels/icon.png\nCategories=Gr
 X-Poly-AppImage=/home/poly/.local/share/poly/appimages/hello-pixels/hello-pixels.AppImage\n"
     );
     assert_eq!(image_of_desktop(&text).as_deref(), Some(l.image.as_str()));
+    // Extracting only where there is no FUSE: with /dev/fuse the runtime
+    // mounts the image, its normal way.
+    assert!(!runs_by_extracting(true));
+    assert!(runs_by_extracting(false));
+    assert_eq!(FUSE_DEVICE, "/dev/fuse");
     // The same, for a system where the image cannot be mounted.
     assert!(desktop_file(&image, &l, true).contains(&alloc::format!("Exec=env {EXTRACT_AND_RUN}=1 /home/")));
     assert_eq!(run_environment(true), [(EXTRACT_AND_RUN, "1")]);

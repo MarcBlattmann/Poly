@@ -13,6 +13,7 @@ use crate::kernel::NtKernel;
 use crate::objects::{Result, return_handle};
 use crate::section::{self, CreateSection, MapView};
 use crate::system::{NtProcess, NtSystem};
+use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::status::*;
 use poly_ntobj::{Caller, Handle, NtStatus, ObjectType};
@@ -172,21 +173,42 @@ fn mapped_filename<K: NtKernel>(
     ret: u64,
 ) -> Result<NtStatus> {
     let caller = k.caller();
-    let (device, path) = k.with_state(|sys, proc, _| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_QUERY_LIMITED_INFORMATION)?;
-        let view = proc.vm.allocation(addr).and_then(|a| a.view()).ok_or(STATUS_INVALID_ADDRESS)?;
-        let file = match &sys.section(view.section).ok_or(STATUS_INVALID_ADDRESS)?.kind {
-            crate::system::SectionKind::File { file } => Some(*file),
-            crate::system::SectionKind::Image { file, .. } => *file,
-            crate::system::SectionKind::Pagefile { .. } => None,
-        };
-        let cookie = sys.objects.cookie(file.ok_or(STATUS_FILE_INVALID)?).ok_or(STATUS_FILE_INVALID)?;
-        sys.io.object_name_parts(cookie).ok_or(STATUS_FILE_INVALID)
+    // PROCESS_QUERY_INFORMATION covers what PROCESS_QUERY_LIMITED_INFORMATION does
+    // (`K32GetMappedFileNameW.yaml` `process_handle`).
+    let target = k.with_state(|sys, proc, _| {
+        match target_of(sys, proc, &caller, Handle(process), PROCESS_QUERY_LIMITED_INFORMATION) {
+            Err(STATUS_ACCESS_DENIED) => target_of(sys, proc, &caller, Handle(process), PROCESS_QUERY_INFORMATION),
+            other => other,
+        }
     })?;
+    let (device, path) = match target {
+        Target::Own => k.with_state(|sys, proc, _| mapped_file_of(sys, proc, addr))?,
+        // Another process's views are as readable as the caller's own
+        // (`K32GetMappedFileNameW.yaml` `process_handle`).
+        Target::Other(pid) => k
+            .with_process(pid, |sys, proc, _| mapped_file_of(sys, proc, addr))
+            .ok_or(STATUS_PROCESS_IS_TERMINATING)??,
+    };
     let a = crate::objects::file_name_answer(&device, path.as_deref(), length as usize, buf);
     abi::write_opt_u32(k, ret, a.return_length)?;
     abi::write(k, buf, &a.bytes)?;
     Ok(a.status)
+}
+
+/// The device name and the path of the file the view or image at `addr` of `proc` maps.
+fn mapped_file_of(sys: &NtSystem, proc: &NtProcess, addr: u64) -> Result<(Vec<u16>, Option<Vec<u16>>)> {
+    let view = proc.vm.allocation(addr).and_then(|a| a.view()).ok_or(STATUS_INVALID_ADDRESS)?;
+    let file = match &sys.section(view.section).ok_or(STATUS_INVALID_ADDRESS)?.kind {
+        crate::system::SectionKind::File { file } => Some(*file),
+        crate::system::SectionKind::Image { file: None, image } => {
+            // An image the kernel mapped from bytes: the name it was started from.
+            return image.name.clone().map(|(device, path)| (device, Some(path))).ok_or(STATUS_FILE_INVALID);
+        }
+        crate::system::SectionKind::Image { file, .. } => *file,
+        crate::system::SectionKind::Pagefile { .. } => None,
+    };
+    let cookie = sys.objects.cookie(file.ok_or(STATUS_FILE_INVALID)?).ok_or(STATUS_FILE_INVALID)?;
+    sys.io.object_name_parts(cookie).ok_or(STATUS_FILE_INVALID)
 }
 
 /// `NtCreateSection`.

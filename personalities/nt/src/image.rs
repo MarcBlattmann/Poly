@@ -169,6 +169,10 @@ pub struct ImageSection {
     pub pages: Vec<Protection>,
     /// The same image as [`Lazy`], when it is not held.
     lazy: Option<Arc<Lazy>>,
+    /// The file it was read from as `(device name, path below the volume)`, for an image the
+    /// kernel mapped from bytes (a new process's executable and `ntdll.dll`): there is no file
+    /// object to ask then (`NtQueryVirtualMemory(MemoryMappedFilenameInformation)`).
+    pub name: Option<(Vec<u16>, Vec<u16>)>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -392,7 +396,7 @@ impl ImageSection {
         let mut image = try_filled(size as usize, 0u8)?;
         plan.map_into(&mut image).map_err(bad)?;
         let pages = Self::page_protections(&plan, size)?;
-        Ok(ImageSection { image: Arc::new(Held(image.into())), info: *pe.info(), size, pages, lazy: None })
+        Ok(ImageSection { image: Arc::new(Held(image.into())), info: *pe.info(), size, pages, lazy: None, name: None })
     }
 
     /// Parse and lay out the image in `file`, reading only its headers when
@@ -424,7 +428,7 @@ impl ImageSection {
         let reloc_dir =
             pe.info().directory(poly_pe::dir::BASERELOC).filter(|d| d.size != 0).map(|d| (d.virtual_address, d.size));
         let lazy = Arc::new(Lazy { file, parts, size, fixups: None, reloc_dir });
-        Ok(ImageSection { image: lazy.clone(), info: *pe.info(), size, pages, lazy: Some(lazy) })
+        Ok(ImageSection { image: lazy.clone(), info: *pe.info(), size, pages, lazy: Some(lazy), name: None })
     }
 
     fn checked_plan<'a>(pe: &Pe<'a>, file_len: u64) -> Result<poly_pe::LoadPlan<'a>, NtStatus> {

@@ -241,6 +241,9 @@ pub struct NtProcess {
     /// `DisallowWin32kSystemCalls`): every table-1 call fails (ADR 0128).
     /// Set by the security milestone; off for every process until then.
     pub win32k_disabled: bool,
+    /// The file its executable was started from, as `(device name, path below the volume)`
+    /// (set by the kernel before the process starts).
+    pub image_name: Option<(Vec<u16>, Vec<u16>)>,
 }
 
 impl NtProcess {
@@ -262,6 +265,7 @@ impl NtProcess {
             dynamic_code_blocked: false,
             exception_dispatcher: 0,
             win32k_disabled: false,
+            image_name: None,
         }
     }
 

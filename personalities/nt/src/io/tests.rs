@@ -198,6 +198,7 @@ fn rename_info(replace: bool, root: u64, name: &str) -> Vec<u8> {
 
 mod create;
 mod dir;
+mod dosname;
 mod info;
 mod locks_async;
 mod namespace;

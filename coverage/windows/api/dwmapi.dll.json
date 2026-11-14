@@ -36,7 +36,7 @@
 {"symbol":"DwmGetGraphicsStreamClient","src":["wine-spec"]},
 {"symbol":"DwmGetGraphicsStreamTransformHint","src":["wine-spec"]},
 {"symbol":"DwmGetTransportAttributes","src":["wine-spec"]},
-{"symbol":"DwmGetWindowAttribute","status":"claimed","claimed_by":"spec-win-gui-c","src":["wine-spec"],"seeds":["wine:dwmapi/tests/dwmapi.c:test_DWMWA_EXTENDED_FRAME_BOUNDS"]},
+{"symbol":"DwmGetWindowAttribute","status":"green","tests_visible":5,"tests_held_out":2,"src":["wine-spec"],"seeds":["wine:dwmapi/tests/dwmapi.c:test_DWMWA_EXTENDED_FRAME_BOUNDS"]},
 {"symbol":"DwmInvalidateIconicBitmaps","src":["wine-spec"]},
 {"symbol":"DwmIsCompositionEnabled","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:dwmapi/tests/dwmapi.c:test_DwmIsCompositionEnabled","wine:dwmapi/tests/dwmapi.c:test_DWMWA_EXTENDED_FRAME_BOUNDS","wine:dwmapi/tests/dwmapi.c:test_DwmFlush","wine:dwmapi/tests/dwmapi.c:test_DwmGetCompositionTimingInfo"]},
 {"symbol":"DwmModifyPreviousDxFrameDuration","src":["wine-spec"]},
