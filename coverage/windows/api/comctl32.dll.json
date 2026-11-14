@@ -126,7 +126,7 @@
 {"symbol":"ImageList_SetOverlayImage","src":["wine-spec"]},
 {"symbol":"ImageList_Write","src":["wine-spec"],"seeds":["wine:comctl32/tests/imagelist.c:check_iml_data"]},
 {"symbol":"InitCommonControls","status":"stub","src":["wine-spec"]},
-{"symbol":"InitCommonControlsEx","status":"claimed","claimed_by":"impl-chrome-s9","src":["wine-spec"],"seeds":["wine:comctl32/tests/pager.c:START_TEST","wine:comctl32/tests/treeview.c:START_TEST"]},
+{"symbol":"InitCommonControlsEx","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:comctl32/tests/pager.c:START_TEST","wine:comctl32/tests/treeview.c:START_TEST"]},
 {"symbol":"InitMUILanguage","src":["wine-spec"]},
 {"symbol":"InitializeFlatSB","src":["wine-spec"]},
 {"symbol":"IntlStrEqWorkerA","src":["wine-spec"]},
