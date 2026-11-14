@@ -106,13 +106,14 @@ impl Stack {
             return;
         }
         let unicast = !broadcast && !multicast;
+        let ifindex = if from_loop { IFINDEX_LOOPBACK } else { IFINDEX_DEVICE };
         if h.is_fragment() {
             if let Some((full, data)) = self.frag.insert(self.now, &h, payload) {
-                self.deliver_v4(dev, &full, &data, unicast);
+                self.deliver_v4(dev, &full, &data, unicast, ifindex);
             }
             return;
         }
-        self.deliver_v4(dev, &h, payload, unicast);
+        self.deliver_v4(dev, &h, payload, unicast, ifindex);
     }
 
     pub(super) fn deliver_v4<D: NetDevice>(
@@ -121,12 +122,14 @@ impl Stack {
         h: &ipv4::Ipv4Header,
         payload: &[u8],
         unicast: bool,
+        ifindex: u32,
     ) {
         let (src, dst) = (IpAddr::V4(h.src), IpAddr::V4(h.dst));
+        let meta = RxMeta { dst: Some(dst), ifindex, tos: h.tos, ttl: h.ttl };
         match h.protocol {
             proto::TCP => self.tcp_input(dev, src, dst, payload, unicast),
             proto::UDP => {
-                if self.udp_input(dev, src, dst, payload) == Some(false) && unicast {
+                if self.udp_input(dev, src, dst, payload, meta) == Some(false) && unicast {
                     let quote = quote_v4(h, payload);
                     self.icmp4_error(dev, icmpv4::DEST_UNREACHABLE, icmpv4::unreachable::PORT, 0, h, &quote);
                 }
@@ -174,10 +177,12 @@ impl Stack {
         };
         let body = &payload[off..];
         let (src, dst) = (IpAddr::V6(h.src), IpAddr::V6(h.dst));
+        let ifindex = if from_loop { IFINDEX_LOOPBACK } else { IFINDEX_DEVICE };
+        let meta = RxMeta { dst: Some(dst), ifindex, tos: h.traffic_class, ttl: h.hop_limit };
         match next {
             proto::TCP => self.tcp_input(dev, src, dst, body, !multicast),
             proto::UDP => {
-                if self.udp_input(dev, src, dst, body) == Some(false) && !multicast {
+                if self.udp_input(dev, src, dst, body, meta) == Some(false) && !multicast {
                     let quote = quote_v6(&h, payload);
                     self.icmp6_error(dev, icmpv6::DEST_UNREACHABLE, icmpv6::unreachable::PORT, 0, &h, &quote);
                 }
