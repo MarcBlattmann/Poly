@@ -18,8 +18,8 @@ summary: >
   empty path means the descriptor itself: the mount that from_dfd refers to,
   an fsmount descriptor, an open_tree descriptor or a directory or O_PATH
   descriptor of a mount top; or the directory to_dfd; an empty path without
-  the flag is ENOENT); MOVE_MOUNT_SET_GROUP 0x100 (accepted for two bind
-  mounts); any other bit is EINVAL. An absolute path ignores its dfd (even
+  the flag is ENOENT); MOVE_MOUNT_SET_GROUP 0x100 (see "Set group" below);
+  any other bit is EINVAL. An absolute path ignores its dfd (even
   an invalid one), a relative path needs AT_FDCWD or a directory descriptor.
   The source must be the top of a mount or a detached mount: a directory
   inside a mount and a descriptor of a regular file are EINVAL. The target
@@ -36,11 +36,27 @@ summary: >
   (EINVAL), and a detached mount that is attached already is EINVAL. Needs
   CAP_SYS_ADMIN: EPERM before any path is looked at (also for a missing
   target).
+  Set group (MOVE_MOUNT_SET_GROUP 0x100). Nothing is moved: the target
+  mount joins the propagation group of the source. Both paths must name the
+  top of a mount and the two mounts must belong to the same file system (a
+  bind of a subdirectory of it and the mount itself are fine; the same mount
+  twice is EINVAL). The source must be shared or a slave and the target
+  private. With a shared source the target becomes a peer: mountinfo shows
+  shared:N with the source's N, and a mount made below one appears below the
+  other (and goes again when it is unmounted). With a slave source the
+  target becomes a slave of the same master (master:N, no shared tag). A
+  private source is EINVAL (it has no group to give) and leaves both mounts
+  as they were, not 0; a target that is shared (in the group already, or in
+  another one) or already a slave is EINVAL, a source and target of
+  different file systems is EINVAL, a path that is not the top of a mount is
+  EINVAL. Other flag bits may come with it (MOVE_MOUNT_F_SYMLINKS), unknown
+  ones are EINVAL as usual.
 returns:
   success: "0"
   empty_path_target: "with T_EMPTY_PATH and a directory descriptor: attaches there"
   plain_open_tree_fd: "moves the attached mount that the descriptor names (a plain open_tree descriptor of a mount top)"
 errors:
+  set_group: "EINVAL (22): MOVE_MOUNT_SET_GROUP with a private source, with a target that is shared already (same group or another) or a slave, with the same mount as source and target, with a source or target that is not the top of a mount, or with mounts of different file systems; nothing changes"
   loop: "ELOOP (40): source mount onto itself, below itself, or the namespace root as source"
   not_movable: "EINVAL (22): source is not a mount top (plain directory, regular file descriptor); mount attached in another mount namespace; a detached mount that is attached elsewhere already"
   kind_mismatch: "EINVAL (22): directory mount on a file; file clone on a directory"
@@ -58,7 +74,7 @@ timing:
   typical: "microseconds"
   guarantees: "none"
 tests:
-  visible: 3  # count in <symbol>.tests/
+  visible: 4  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 # Notes: MOVE_MOUNT_* from linux/mount.h. Moves below a shared parent mount, and MOVE_MOUNT_BENEATH,
 # are not covered.
