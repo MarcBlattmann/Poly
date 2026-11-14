@@ -93,6 +93,36 @@ fn local_info(handle: Handle) -> Result<Local, NtStatus> {
     Ok(Local::parse(&b).expect("36 bytes"))
 }
 
+/// `CreateNamedPipeA`: the name converted from the ANSI code page, then `CreateNamedPipeW`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateNamedPipeA(
+    name: *const u8,
+    open_mode: u32,
+    pipe_mode: u32,
+    max_instances: u32,
+    out_size: u32,
+    in_size: u32,
+    default_timeout: u32,
+    security: *const u8,
+) -> Handle {
+    // SAFETY: the caller's string.
+    let Some(wide) = (unsafe { ansi_arg(name) }) else { return fail(ERROR_PATH_NOT_FOUND, INVALID_HANDLE_VALUE) };
+    let wide = with_nul(&wide);
+    // SAFETY: a NUL-terminated string made above; the rest are the caller's.
+    unsafe {
+        CreateNamedPipeW(
+            wide.as_ptr(),
+            open_mode,
+            pipe_mode,
+            max_instances,
+            out_size,
+            in_size,
+            default_timeout,
+            security,
+        )
+    }
+}
+
 /// `CreateNamedPipeW`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CreateNamedPipeW(
@@ -107,11 +137,8 @@ pub unsafe extern "system" fn CreateNamedPipeW(
 ) -> Handle {
     // SAFETY: the caller's string.
     let Some(name) = (unsafe { wide_arg(name) }) else { return fail(ERROR_PATH_NOT_FOUND, INVALID_HANDLE_VALUE) };
-    if let Err(e) = np::pipe_name(name) {
-        // A path that is no device path is the file system's to refuse.
-        if e != ERROR_BAD_PATHNAME {
-            return fail(e, INVALID_HANDLE_VALUE);
-        }
+    if let Some(e) = np::create_name_error(name) {
+        return fail(e, INVALID_HANDLE_VALUE);
     }
     let p = match np::server_params(open_mode, pipe_mode, max_instances, out_size, in_size, default_timeout) {
         Ok(p) => p,

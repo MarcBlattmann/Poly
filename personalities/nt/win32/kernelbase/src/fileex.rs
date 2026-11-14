@@ -469,3 +469,44 @@ pub unsafe extern "system" fn GetSystemWindowsDirectoryW(buf: *mut u16, size: u3
     // SAFETY: as above.
     unsafe { GetWindowsDirectoryW(buf, size) }
 }
+
+/// The ANSI form of a directory: the "size" convention in bytes.
+///
+/// # Safety
+/// `buf` holds `size` bytes (or is null with size 0).
+unsafe fn return_ansi(dir: &[u16], buf: *mut u8, size: u32) -> u32 {
+    let bytes = poly_kernelbase::text::to_ansi(dir);
+    match poly_kernelbase::text::sized(bytes.len(), size) {
+        poly_kernelbase::text::Sized::Copy(n) => {
+            // SAFETY: the caller's buffer holds more than `bytes.len()` bytes.
+            unsafe {
+                core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, bytes.len());
+                buf.add(bytes.len()).write(0);
+            }
+            n
+        }
+        poly_kernelbase::text::Sized::Needed(n) => n,
+    }
+}
+
+/// `GetSystemDirectoryA`: the wide function's text in the ANSI code page; sizes in bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetSystemDirectoryA(buf: *mut u8, size: u32) -> u32 {
+    let mut dir = windows_dir();
+    dir.extend("\\System32".encode_utf16());
+    // SAFETY: the caller's buffer.
+    unsafe { return_ansi(&dir, buf, size) }
+}
+
+/// `GetWindowsDirectoryA`, `GetSystemWindowsDirectoryA`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetWindowsDirectoryA(buf: *mut u8, size: u32) -> u32 {
+    // SAFETY: the caller's buffer.
+    unsafe { return_ansi(&windows_dir(), buf, size) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetSystemWindowsDirectoryA(buf: *mut u8, size: u32) -> u32 {
+    // SAFETY: as above.
+    unsafe { GetWindowsDirectoryA(buf, size) }
+}

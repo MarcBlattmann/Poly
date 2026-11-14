@@ -152,6 +152,41 @@ pub fn pipe_name(win32: &[u16]) -> Result<&[u16], u32> {
     if starts(&dev) { Err(ERROR_FILE_NOT_FOUND) } else { Err(ERROR_BAD_PATHNAME) }
 }
 
+/// The error `CreateNamedPipe[AW]` gives for a name that cannot be a pipe's, or `None`
+/// (`specs/windows/kernel32.dll/CreateNamedPipeA.yaml`, `name_prefix` and `name_suffix`): an empty
+/// name is `ERROR_PATH_NOT_FOUND`; the name must be `\\.\pipe\` (or `\\?\pipe\`, `\??\pipe\`) and a
+/// suffix, the prefix in any letter case and `/` taken for `\`; no prefix, a suffix that is
+/// empty, `.`, `..` or a single space, `\\localhost\...` and other devices are
+/// `ERROR_INVALID_NAME`, `\\server\...` is `ERROR_BAD_NETPATH`, and a suffix of 255 units or more
+/// `ERROR_PATH_NOT_FOUND`.
+pub fn create_name_error(name: &[u16]) -> Option<u32> {
+    if name.is_empty() {
+        return Some(ERROR_PATH_NOT_FOUND);
+    }
+    let n: Vec<u16> = name.iter().map(|&c| if c == u16::from(b'/') { u16::from(b'\\') } else { c }).collect();
+    let fold = |c: u16| if (u16::from(b'A')..=u16::from(b'Z')).contains(&c) { c + 32 } else { c };
+    let starts = |p: &str| {
+        let p: Vec<u16> = p.encode_utf16().collect();
+        n.len() >= p.len() && n.iter().zip(&p).all(|(&a, &b)| fold(a) == fold(b))
+    };
+    for prefix in ["\\\\.\\pipe\\", "\\\\?\\pipe\\", "\\??\\pipe\\"] {
+        if starts(prefix) {
+            let suffix = &n[prefix.encode_utf16().count()..];
+            return match suffix {
+                [] => Some(ERROR_INVALID_NAME),
+                [c] if *c == u16::from(b'.') || *c == u16::from(b' ') => Some(ERROR_INVALID_NAME),
+                [a, b] if *a == u16::from(b'.') && *b == u16::from(b'.') => Some(ERROR_INVALID_NAME),
+                s if s.len() >= 255 => Some(ERROR_PATH_NOT_FOUND),
+                _ => None,
+            };
+        }
+    }
+    if starts("\\\\") && !starts("\\\\.\\") && !starts("\\\\?\\") && !starts("\\\\localhost\\") {
+        return Some(ERROR_BAD_NETPATH);
+    }
+    Some(ERROR_INVALID_NAME)
+}
+
 /// What `CreateNamedPipeW` leaves in the last error: `ERROR_ALREADY_EXISTS`
 /// for a further instance (a success), else 0.
 pub fn created_error(information: u64) -> u32 {
@@ -345,6 +380,35 @@ mod tests {
         assert_eq!(pipe_name(&w("\\\\.\\pipe\\")), Err(ERROR_INVALID_NAME));
         assert_eq!(pipe_name(&w("\\\\.\\other\\x")), Err(ERROR_FILE_NOT_FOUND));
         assert_eq!(pipe_name(&w("plain")), Err(ERROR_BAD_PATHNAME));
+    }
+
+    #[test]
+    fn create_names() {
+        let e = |s: &str| create_name_error(&w(s));
+        assert_eq!(e(""), Some(ERROR_PATH_NOT_FOUND));
+        for ok in
+            [r"\\.\pipe\x", r"\\.\PIPE\x", "//./pipe/x", r"\\?\pipe\x", r"\??\pipe\x", r"\\.\pipe\a\b", r"\\.\pipe\x. "]
+        {
+            assert_eq!(e(ok), None, "{ok}");
+        }
+        for bad in [
+            "pt_x",
+            r"\\.\pipe\",
+            r"\\localhost\pipe\x",
+            r"\\.\mailslot\x",
+            r"C:\pt_x",
+            r"\pipe\x",
+            r"\\.\pipe\.",
+            r"\\.\pipe\..",
+            r"\\.\pipe\ ",
+        ] {
+            assert_eq!(e(bad), Some(ERROR_INVALID_NAME), "{bad}");
+        }
+        assert_eq!(e(r"\\pipe\x"), Some(ERROR_BAD_NETPATH));
+        let long = |n: usize| alloc::format!(r"\\.\pipe\{}", "x".repeat(n));
+        assert_eq!(e(&long(200)), None);
+        assert_eq!(e(&long(255)), Some(ERROR_PATH_NOT_FOUND));
+        assert_eq!(e(&long(300)), Some(ERROR_PATH_NOT_FOUND));
     }
 
     #[test]

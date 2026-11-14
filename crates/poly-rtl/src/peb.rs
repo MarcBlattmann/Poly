@@ -76,7 +76,7 @@ mod tests {
         }
         let u32_at = |o: usize| u32::from_le_bytes(peb[o..o + 4].try_into().unwrap());
         assert_eq!((u32_at(OS_MAJOR_VERSION), u32_at(OS_MINOR_VERSION)), (10, 0));
-        assert_eq!(u16::from_le_bytes([peb[OS_BUILD_NUMBER], peb[OS_BUILD_NUMBER + 1]]), 19045);
+        assert_eq!(u16::from_le_bytes([peb[OS_BUILD_NUMBER], peb[OS_BUILD_NUMBER + 1]]), 26200);
         assert_eq!(u32_at(OS_PLATFORM_ID), 2);
         assert_eq!(u32_at(NUMBER_OF_PROCESSORS), 4);
         assert_eq!(

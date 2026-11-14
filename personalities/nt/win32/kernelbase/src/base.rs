@@ -142,6 +142,8 @@ pub struct State {
     pub parent_console: u32,
     /// `SetConsoleCtrlHandler`'s list.
     pub ctrl: poly_console::ctrl::CtrlHandlers,
+    /// The bases of the modules loaded as data files or image resources (`resource.rs`).
+    pub datafiles: Vec<u64>,
 }
 
 struct Shared {
@@ -161,6 +163,7 @@ static SHARED: Shared = Shared {
         console: 0,
         parent_console: 0,
         ctrl: poly_console::ctrl::CtrlHandlers::new(),
+        datafiles: Vec::new(),
     }),
 };
 

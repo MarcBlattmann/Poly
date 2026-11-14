@@ -120,7 +120,7 @@ const fn k(path: &'static str, values: &'static [(&'static str, Data)]) -> Defau
 /// information"). Programs compare build numbers to decide which APIs they
 /// may use, so this states the API level Poly aims at; `RtlGetVersion`
 /// and the PEB report the same numbers when they exist.
-pub const BUILD: &str = "19045";
+pub const BUILD: &str = "26200";
 
 pub const SYSTEM_KEYS: &[DefaultKey] = &[
     k("Select", &[("Current", Dword(1)), ("Default", Dword(1)), ("Failed", Dword(0)), ("LastKnownGood", Dword(1))]),
@@ -160,8 +160,8 @@ pub const SOFTWARE_KEYS: &[DefaultKey] = &[
             // The release the build belongs to (Windows 10 22H2, `19045.2006` and later): programs
             // that report the OS version read these (Chrome's browser process, on Windows,
             // queries `UBR`, `DisplayVersion` and `ReleaseId`, the traces of ADR 0155).
-            ("UBR", Dword(2006)),
-            ("DisplayVersion", Sz("22H2")),
+            ("UBR", Dword(9974)),
+            ("DisplayVersion", Sz("25H2")),
             ("ReleaseId", Sz("2009")),
             ("InstallationType", Sz("Client")),
             ("SystemRoot", Sz("C:\\Windows")),
