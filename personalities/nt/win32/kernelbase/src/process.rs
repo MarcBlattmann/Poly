@@ -507,9 +507,19 @@ pub unsafe extern "system" fn LoadLibraryExW(name: *const u16, file: Handle, fla
     // own, else the process's default (`SetDefaultDllDirectories`); none: the standard order.
     let search = if has_path { None } else { search_path_for(flags) };
     let search_ptr = search.as_ref().map_or(core::ptr::null(), |v| v.as_ptr());
+    let loaded_before: Vec<u64> = modules().into_iter().map(|(b, _)| b).collect();
     // SAFETY: valid pointers; the search path is NUL-terminated.
     let st = unsafe { nt::LdrLoadDll(search_ptr, core::ptr::null_mut(), &s, &mut h) };
-    if st.is_success() { h } else { fail_status(st, core::ptr::null_mut()) }
+    if !st.is_success() {
+        return fail_status(st, core::ptr::null_mut());
+    }
+    // A module the call newly loaded leaves the last error 0 (its initialisation runs code that
+    // sets it: the sheets of `SetDefaultDllDirectories` and `LoadLibraryExW`); one that was
+    // loaded already leaves it alone.
+    if !loaded_before.contains(&(h as u64)) {
+        set_last_error(0);
+    }
+    h
 }
 
 /// The `;`-separated, NUL-terminated search path a load with `flags` uses, or `None` for the

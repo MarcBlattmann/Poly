@@ -35,6 +35,7 @@ pub const APTTYPEQUALIFIER_NONE: i32 = 0;
 /// is the first STA a process makes; it is gone when that thread's last
 /// initialisation is balanced, and the next STA thread becomes it). One word
 /// per process: the owner's thread id, 0 for none.
+#[derive(Debug)]
 pub struct MainSta(core::sync::atomic::AtomicU32);
 
 impl MainSta {

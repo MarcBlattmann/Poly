@@ -105,7 +105,8 @@ pub unsafe extern "system" fn GetProcessInformation(process: Handle, class: u32,
             memory.available_commit = u64::from_le_bytes(status[32..40].try_into().expect("8 bytes"));
         }
     }
-    let state = ProcessState { leap_flags: if own { LEAP_FLAGS.load(Ordering::Relaxed) } else { 0 }, ..ProcessState::NEW };
+    let state =
+        ProcessState { leap_flags: if own { LEAP_FLAGS.load(Ordering::Relaxed) } else { 0 }, ..ProcessState::NEW };
     match procinfo::get(&state, &memory, class, size as usize) {
         Ok(bytes) => {
             // SAFETY: the caller's buffer holds `size` bytes, which is `bytes.len()`.

@@ -27,10 +27,10 @@
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
 use poly_com::apartment::{APTTYPEQUALIFIER_NONE, Apartment, MainSta, Model, coinit_is_valid};
-use poly_com::propvariant::{self, Elem, Kind};
 use poly_com::guid::{GUID_TEXT_LEN, Guid};
 use poly_com::hresult::*;
 use poly_com::hstring::{self, HString, Header};
+use poly_com::propvariant::{self, Elem, Kind};
 use poly_win32_rt as _;
 
 #[link(name = "kernel32", kind = "raw-dylib")]
@@ -869,7 +869,9 @@ unsafe fn copy_owned(src: *const u8, dst: *mut u8) -> Hresult {
         match kind {
             Kind::Plain | Kind::ByRef => S_OK,
             Kind::Bstr => copy_string_slot(Elem::Bstr, true, src.add(8), dst.add(8)),
-            Kind::TaskString => copy_string_slot(Elem::TaskString, base == propvariant::VT_LPWSTR, src.add(8), dst.add(8)),
+            Kind::TaskString => {
+                copy_string_slot(Elem::TaskString, base == propvariant::VT_LPWSTR, src.add(8), dst.add(8))
+            }
             Kind::Clsid => match task_dup(pv_ptr(src, 8).cast(), 16) {
                 Ok(p) => {
                     pv_set_ptr(dst, 8, p.cast());
