@@ -136,23 +136,58 @@ pub const NOMINAL_MHZ: u32 = 3000;
 /// `PlatformRoleDesktop` (`POWER_PLATFORM_ROLE`, `winnt.h`).
 pub const PLATFORM_ROLE_DESKTOP: u32 = 1;
 
-/// `CallNtPowerInformation(level, ..., output, output_size)`: the bytes for the output buffer,
-/// or the `NTSTATUS`.
+/// `SystemPowerInformation` (`SYSTEM_POWER_INFORMATION`, 16 bytes: the three padding bytes after
+/// `CoolingMode` are written too).
+pub const SYSTEM_POWER_INFORMATION: u32 = 12;
+pub const SYSTEM_POWER_INFORMATION_SIZE: usize = 16;
+/// `LastWakeTime` and `LastSleepTime` (`ULONGLONG` each).
+pub const LAST_WAKE_TIME: u32 = 14;
+pub const LAST_SLEEP_TIME: u32 = 15;
+/// Levels `POWER_INFORMATION_LEVEL` defines that Poly serves no answer for: `STATUS_NOT_SUPPORTED`.
+/// Anything above them does not exist (the sheet: 200, 0xFFFF, 0xFFFFFFFF are
+/// `STATUS_INVALID_PARAMETER`).
+const LAST_DEFINED_LEVEL: u32 = 40;
+
+/// `CallNtPowerInformation(level, input_given, output_size)`: the bytes for the output buffer,
+/// or the `NTSTATUS` (`specs/windows/powrprof.dll/CallNtPowerInformation.yaml`).
 ///
+/// * An output length of 0, a level that does not exist, and an input buffer for a level that
+///   takes none: `STATUS_INVALID_PARAMETER`. A buffer shorter than the level's data:
+///   `STATUS_BUFFER_TOO_SMALL`, nothing written. A longer one is fine: only the data is written.
 /// * `ProcessorInformation`: one `PROCESSOR_POWER_INFORMATION` per processor (number, maximum
-///   and current MHz, MHz limit, maximum and current idle state); Learn: the buffer must hold
-///   all of them, else `STATUS_BUFFER_TOO_SMALL`.
+///   and current MHz, MHz limit, maximum and current idle state); the buffer must hold all of
+///   them.
+/// * `SystemPowerInformation`: fully idle machine (`MaxIdlenessAllowed` 100, `Idleness` 0, no
+///   time remaining) with no thermal zone (`CoolingMode` 2, "invalid").
 /// * `SystemBatteryState`: a machine on mains power without a battery (`AcOnLine` TRUE, the
-///   rest zero).
-/// * Any other level: `STATUS_NOT_SUPPORTED`.
-pub fn power_information(level: u32, processors: u32, output_size: usize) -> Result<Vec<u8>, u32> {
+///   rest zero). `LastWakeTime` / `LastSleepTime`: 0, the machine has never slept.
+/// * A defined level Poly has no answer for: `STATUS_NOT_SUPPORTED`.
+pub fn power_information(level: u32, processors: u32, input_given: bool, output_size: usize) -> Result<Vec<u8>, u32> {
+    if output_size == 0 || level > LAST_DEFINED_LEVEL {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let fixed = |size: usize| -> Result<Vec<u8>, u32> {
+        if output_size < size { Err(STATUS_BUFFER_TOO_SMALL) } else { Ok(alloc::vec![0u8; size]) }
+    };
+    let served = matches!(
+        level,
+        PROCESSOR_INFORMATION
+            | SYSTEM_POWER_INFORMATION
+            | SYSTEM_BATTERY_STATE
+            | SYSTEM_POWER_CAPABILITIES
+            | SYSTEM_EXECUTION_STATE
+            | LAST_WAKE_TIME
+            | LAST_SLEEP_TIME
+    );
+    if !served {
+        return Err(STATUS_NOT_SUPPORTED);
+    }
+    if input_given {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
     match level {
         PROCESSOR_INFORMATION => {
             let n = processors.max(1);
-            // The sheet's test: no output bytes at all is STATUS_INVALID_PARAMETER.
-            if output_size == 0 {
-                return Err(STATUS_INVALID_PARAMETER);
-            }
             if output_size < n as usize * PROCESSOR_POWER_INFORMATION_SIZE {
                 return Err(STATUS_BUFFER_TOO_SMALL);
             }
@@ -164,34 +199,29 @@ pub fn power_information(level: u32, processors: u32, output_size: usize) -> Res
             }
             Ok(out)
         }
+        SYSTEM_POWER_INFORMATION => {
+            let mut out = fixed(SYSTEM_POWER_INFORMATION_SIZE)?;
+            out[0..4].copy_from_slice(&100u32.to_le_bytes());
+            out[12] = 2;
+            Ok(out)
+        }
         SYSTEM_BATTERY_STATE => {
-            if output_size < SYSTEM_BATTERY_STATE_SIZE {
-                return Err(STATUS_BUFFER_TOO_SMALL);
-            }
-            let mut out = alloc::vec![0u8; SYSTEM_BATTERY_STATE_SIZE];
+            let mut out = fixed(SYSTEM_BATTERY_STATE_SIZE)?;
             out[0] = 1;
             Ok(out)
         }
         SYSTEM_POWER_CAPABILITIES => {
-            if output_size < SYSTEM_POWER_CAPABILITIES_SIZE {
-                return Err(STATUS_BUFFER_TOO_SMALL);
-            }
             // SYSTEM_POWER_CAPABILITIES (winnt.h) of a desktop: a power button
             // (`PowerButtonPresent`, byte 0) and soft off (`SystemS5`, byte 7); no sleep states,
             // no lid, no batteries.
-            let mut out = alloc::vec![0u8; SYSTEM_POWER_CAPABILITIES_SIZE];
+            let mut out = fixed(SYSTEM_POWER_CAPABILITIES_SIZE)?;
             out[0] = 1;
             out[7] = 1;
             Ok(out)
         }
-        SYSTEM_EXECUTION_STATE => {
-            if output_size < 4 {
-                return Err(STATUS_BUFFER_TOO_SMALL);
-            }
-            // No thread asks the system to stay awake: no `ES_*` bit.
-            Ok(alloc::vec![0u8; 4])
-        }
-        _ => Err(STATUS_NOT_SUPPORTED),
+        // No thread asks the system to stay awake: no `ES_*` bit.
+        SYSTEM_EXECUTION_STATE => fixed(4),
+        _ => fixed(8),
     }
 }
 
@@ -255,27 +285,39 @@ mod tests {
 
     #[test]
     fn processor_information_is_one_record_per_processor() {
-        let b = power_information(PROCESSOR_INFORMATION, 2, 48).unwrap();
+        let b = power_information(PROCESSOR_INFORMATION, 2, false, 48).unwrap();
         assert_eq!(b.len(), 48);
         let q = |at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
         assert_eq!((q(0), q(4), q(8), q(12), q(16), q(20)), (0, 3000, 3000, 3000, 0, 0));
         assert_eq!(q(24), 1);
-        assert_eq!(power_information(PROCESSOR_INFORMATION, 2, 47), Err(STATUS_BUFFER_TOO_SMALL));
-        assert_eq!(power_information(PROCESSOR_INFORMATION, 2, 0), Err(STATUS_INVALID_PARAMETER));
-        let caps = power_information(SYSTEM_POWER_CAPABILITIES, 2, 76).unwrap();
+        assert_eq!(power_information(PROCESSOR_INFORMATION, 2, false, 47), Err(STATUS_BUFFER_TOO_SMALL));
+        assert_eq!(power_information(PROCESSOR_INFORMATION, 2, false, 0), Err(STATUS_INVALID_PARAMETER));
+        let caps = power_information(SYSTEM_POWER_CAPABILITIES, 2, false, 76).unwrap();
         assert_eq!((caps.len(), caps[0], caps[7]), (76, 1, 1));
-        assert_eq!(power_information(PROCESSOR_INFORMATION, 0, 24).map(|b| b.len()), Ok(24));
+        assert_eq!(power_information(PROCESSOR_INFORMATION, 0, false, 24).map(|b| b.len()), Ok(24));
     }
 
     #[test]
     fn the_machine_is_on_mains_power() {
-        let b = power_information(SYSTEM_BATTERY_STATE, 4, 32).unwrap();
+        let b = power_information(SYSTEM_BATTERY_STATE, 4, false, 32).unwrap();
         assert_eq!(b.len(), 32);
         assert_eq!(b[0], 1);
         assert!(b[1..].iter().all(|&x| x == 0));
-        assert_eq!(power_information(SYSTEM_BATTERY_STATE, 4, 8), Err(STATUS_BUFFER_TOO_SMALL));
-        assert_eq!(power_information(12, 4, 64), Err(STATUS_NOT_SUPPORTED));
-        assert_eq!(power_information(SYSTEM_EXECUTION_STATE, 4, 4), Ok(alloc::vec![0u8; 4]));
+        assert_eq!(power_information(SYSTEM_BATTERY_STATE, 4, false, 8), Err(STATUS_BUFFER_TOO_SMALL));
+        let info = power_information(SYSTEM_POWER_INFORMATION, 4, false, 64).unwrap();
+        assert_eq!((info.len(), info[0], info[12]), (16, 100, 2));
+        assert_eq!(power_information(SYSTEM_POWER_INFORMATION, 4, false, 15), Err(STATUS_BUFFER_TOO_SMALL));
+        assert_eq!(power_information(SYSTEM_POWER_INFORMATION, 4, true, 16), Err(STATUS_INVALID_PARAMETER));
+        assert_eq!(power_information(SYSTEM_POWER_INFORMATION, 4, false, 0), Err(STATUS_INVALID_PARAMETER));
+        for level in [LAST_WAKE_TIME, LAST_SLEEP_TIME] {
+            assert_eq!(power_information(level, 4, false, 64), Ok(alloc::vec![0u8; 8]));
+            assert_eq!(power_information(level, 4, false, 7), Err(STATUS_BUFFER_TOO_SMALL));
+        }
+        for level in [200, 0xFFFF, 0xFFFF_FFFF] {
+            assert_eq!(power_information(level, 4, false, 64), Err(STATUS_INVALID_PARAMETER));
+        }
+        assert_eq!(power_information(8, 4, false, 64), Err(STATUS_NOT_SUPPORTED));
+        assert_eq!(power_information(SYSTEM_EXECUTION_STATE, 4, false, 4), Ok(alloc::vec![0u8; 4]));
     }
 
     #[test]

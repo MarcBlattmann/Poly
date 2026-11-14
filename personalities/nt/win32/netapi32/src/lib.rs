@@ -55,8 +55,14 @@ pub unsafe extern "system" fn NetUserGetInfo(
     level: u32,
     buf: *mut *mut u8,
 ) -> u32 {
-    if buf.is_null() || user.is_null() {
+    if buf.is_null() {
         return api::ERROR_INVALID_PARAMETER;
+    }
+    // The sheet: a failed call leaves NULL in `*bufptr`.
+    // SAFETY: checked non-null.
+    unsafe { buf.write(core::ptr::null_mut()) };
+    if user.is_null() {
+        return api::NERR_BAD_USERNAME;
     }
     // SAFETY: the caller's strings.
     let (server, user) = unsafe { (rt::wstr(server), rt::wstr(user).unwrap_or_default()) };

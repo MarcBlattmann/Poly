@@ -430,6 +430,77 @@ pub struct Options {
     pub allow_other: bool,
 }
 
+/// What mount(2)'s option string for a `fuse` mount says.
+#[derive(Clone, Debug, Default)]
+pub struct MountOptions {
+    /// `fd=`: the descriptor of `/dev/fuse`, a number of the caller.
+    pub fd: u32,
+    /// `user_id=` and `group_id=` are ids of the mounter's user namespace
+    /// here; the caller translates them.
+    pub opts: Options,
+    /// `subtype=NAME`: the type is shown as `fuse.NAME`.
+    pub subtype: Option<Vec<u8>>,
+}
+
+/// A number of `radix` made of digits only (no sign, no prefix, not
+/// empty) that fits 32 bits.
+fn option_number(v: Option<&[u8]>, radix: u32) -> Result<u32> {
+    let v = v.filter(|v| !v.is_empty()).ok_or(Errno::EINVAL)?;
+    let mut n: u32 = 0;
+    for &b in v {
+        let d = (b as char).to_digit(radix).ok_or(Errno::EINVAL)?;
+        n = n.checked_mul(radix).and_then(|n| n.checked_add(d)).ok_or(Errno::EINVAL)?;
+    }
+    Ok(n)
+}
+
+/// The options of a `fuse` or `fuse.NAME` mount (mount.fuse(8); the spec
+/// sheet of `fuse_mount`): `fd=`, `rootmode=` (octal), `user_id=` and
+/// `group_id=` (decimal) are required; `max_read=N`, `default_permissions`,
+/// `allow_other` and `subtype=NAME` may follow. Anything else is `EINVAL`,
+/// also `blksize=` (an option of `fuseblk`), a number that is not one, and
+/// a `rootmode` whose type bits name no file type or a symbolic link.
+pub fn parse_options(data: &[u8]) -> Result<MountOptions> {
+    let (mut fd, mut root_mode, mut user_id, mut group_id) = (None, None, None, None);
+    let mut out = MountOptions::default();
+    for o in data.split(|&b| b == b',').filter(|o| !o.is_empty()) {
+        let (name, value) = match o.iter().position(|&b| b == b'=') {
+            Some(i) => (&o[..i], Some(&o[i + 1..])),
+            None => (o, None),
+        };
+        match name {
+            b"fd" => fd = Some(option_number(value, 10)?),
+            b"rootmode" => root_mode = Some(option_number(value, 8)?),
+            b"user_id" => user_id = Some(option_number(value, 10)?),
+            b"group_id" => group_id = Some(option_number(value, 10)?),
+            b"max_read" => out.opts.max_read = option_number(value, 10)?,
+            b"default_permissions" if value.is_none() => out.opts.default_permissions = true,
+            b"allow_other" if value.is_none() => out.opts.allow_other = true,
+            b"subtype" => out.subtype = Some(value.ok_or(Errno::EINVAL)?.to_vec()),
+            _ => return Err(Errno::EINVAL),
+        }
+    }
+    let (Some(fd), Some(root_mode), Some(user_id), Some(group_id)) = (fd, root_mode, user_id, group_id) else {
+        return Err(Errno::EINVAL);
+    };
+    match FileType::from_mode(root_mode) {
+        None | Some(FileType::Symlink) => return Err(Errno::EINVAL),
+        Some(_) => {}
+    }
+    out.fd = fd;
+    out.opts.root_mode = root_mode;
+    out.opts.user_id = user_id;
+    out.opts.group_id = group_id;
+    Ok(out)
+}
+
+impl Options {
+    /// The type of the root that `rootmode=` names.
+    pub fn root_kind(&self) -> FileType {
+        kind_of(self.root_mode)
+    }
+}
+
 struct Cached {
     attr: Attr,
     until: u64,
@@ -573,9 +644,9 @@ impl FuseFs {
         let t = Timespec::default();
         Attr {
             ino: ROOT_ID,
-            kind: FileType::Directory,
+            kind: self.opts.root_kind(),
             perm: (self.opts.root_mode & 0o7777) as u16,
-            nlink: 2,
+            nlink: if self.opts.root_kind() == FileType::Directory { 2 } else { 1 },
             uid: self.opts.user_id,
             gid: self.opts.group_id,
             size: 0,

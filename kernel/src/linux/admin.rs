@@ -201,6 +201,11 @@ impl Thread<'_> {
         }
         let id = files.mount_fs(target, fs, flags).map_err(vfs_errno)?;
         mounts::record_source(id, source);
+        if let Some(m) = crate::fs::vfs().mount_by_id(id)
+            && m.sb_source().is_empty()
+        {
+            m.set_sb_info(source, b"");
+        }
         Ok(())
     }
 
@@ -215,45 +220,19 @@ impl Thread<'_> {
         flags: admin::MountFlags,
         data: &[u8],
     ) -> Result<(), Errno> {
-        use poly_fuse::{Caller, FuseFs, Options};
+        use poly_fuse::{Caller, FuseFs};
         let files = &self.process().files;
         let tnode = files.lookupat(AT_FDCWD, target, true).map_err(vfs_errno)?;
-        if tnode.attr().map_err(vfs_errno)?.kind != FileType::Directory {
-            return Err(Errno::ENOTDIR);
-        }
-        let num = |v: Option<&[u8]>, radix: u32| -> Result<u32, Errno> {
-            let t = core::str::from_utf8(v.ok_or(Errno::EINVAL)?).map_err(|_| Errno::EINVAL)?;
-            u32::from_str_radix(t, radix).map_err(|_| Errno::EINVAL)
-        };
-        let (mut fd, mut root_mode, mut user_id, mut group_id) = (None, None, None, None);
-        let mut opts = Options::default();
-        let mut subtype: Option<Vec<u8>> = None;
-        for (name, value) in admin::options(data) {
-            match name {
-                b"fd" => fd = Some(num(value, 10)?),
-                b"rootmode" => root_mode = Some(num(value, 8)?),
-                b"user_id" => user_id = Some(num(value, 10)?),
-                b"group_id" => group_id = Some(num(value, 10)?),
-                b"max_read" => opts.max_read = num(value, 10)?,
-                b"default_permissions" => opts.default_permissions = true,
-                b"allow_other" => opts.allow_other = true,
-                b"subtype" => subtype = Some(value.ok_or(Errno::EINVAL)?.to_vec()),
-                b"blksize" | b"max_pages" => {}
-                _ => return Err(Errno::EINVAL),
-            }
-        }
-        let (Some(fd), Some(root_mode), Some(user_id), Some(group_id)) = (fd, root_mode, user_id, group_id) else {
-            return Err(Errno::EINVAL);
-        };
-        if root_mode & 0o170000 != 0o040000 {
-            return Err(Errno::EINVAL);
-        }
+        let target_is_dir = tnode.attr().map_err(vfs_errno)?.kind == FileType::Directory;
+        // The option string, then the descriptor and the owner, then the
+        // root's type against the mount point (the spec sheet of fuse_mount).
+        let parsed = poly_fuse::parse_options(data).map_err(vfs_errno)?;
+        let (fd, subtype, mut opts) = (parsed.fd, parsed.subtype, parsed.opts);
+        let (user_id, group_id) = (opts.user_id, opts.group_id);
         // The owner of the mount is named by ids of the mounter's user
-        // namespace: one without a mapping there is EINVAL (the spec sheet
-        // of fuse_mount).
+        // namespace: one without a mapping there is EINVAL.
         let mounter_ns = super::cred::current_creds().and_then(|c| c.user_ns);
         let kernel_id = |kind, id| poly_personality_linux::ns::user::down(&mounter_ns, kind, id).ok_or(Errno::EINVAL);
-        opts.root_mode = root_mode;
         opts.user_id = kernel_id(poly_personality_linux::ns::user::IdKind::Uid, user_id)?;
         opts.group_id = kernel_id(poly_personality_linux::ns::user::IdKind::Gid, group_id)?;
         let file = files.file(fd as i32).map_err(|_| Errno::EINVAL)?;
@@ -263,6 +242,11 @@ impl Thread<'_> {
             .and_then(|a| a.downcast_ref::<crate::fuse::FuseFile>())
             .map(|f| f.conn().clone())
             .ok_or(Errno::EINVAL)?;
+        // Only a directory mounts over a directory, and only something
+        // else over a file.
+        if (opts.root_kind() == FileType::Directory) != target_is_dir {
+            return Err(Errno::ENOTDIR);
+        }
         let cred = files.cred();
         let who = Caller { uid: cred.uid, gid: cred.gid, pid: self.process().pid, umask: 0 };
         conn.bind(who).map_err(vfs_errno)?;
@@ -292,6 +276,7 @@ impl Thread<'_> {
         mounts::record_source(id, source);
         if let Some(m) = crate::fs::vfs().mount_by_id(id) {
             m.set_sb_info(source, &sb);
+            super::mountapi::own_superblock(&m);
         }
         Ok(())
     }
@@ -318,6 +303,7 @@ impl Thread<'_> {
         mounts::record_source(id, if source.is_empty() { b"overlay" } else { source });
         if let Some(m) = crate::fs::vfs().mount_by_id(id) {
             m.set_sb_info(if source.is_empty() { b"overlay" } else { source }, data);
+            super::mountapi::own_superblock(&m);
         }
         Ok(())
     }
@@ -385,6 +371,8 @@ impl Thread<'_> {
                 }
                 options.extend_from_slice(&own);
                 m.set_sb_info(source, &options);
+                // The file system belongs to the user namespace that made it.
+                super::mountapi::own_superblock(&m);
             }
             id
         };
@@ -408,10 +396,18 @@ impl LinuxAdmin for Thread<'_> {
                 // changes nothing.
                 let id = files.mount_at(target, true).map_err(vfs_errno)?;
                 if !*bind && let Some(m) = crate::fs::vfs().mount_by_id(id) {
+                    // Changing the file system itself is for the root of
+                    // the user namespace that made it (the spec sheet of
+                    // userns_mount: a remount of an inherited mount that
+                    // is not a bind remount is EPERM).
+                    if !super::mountapi::may_change_superblock(&m) {
+                        return Err(Errno::EPERM);
+                    }
                     admin::check_remount_options(m.fs_name(), data)?;
                 }
-                files.remount(target, vfs_flags(*flags), *bind).map_err(vfs_errno)?;
-                apply_atime(id, *flags);
+                // The VFS refuses what the mount is locked against (EPERM)
+                // and keeps the access time mode a call does not name.
+                files.remount(target, vfs_flags(*flags), flags.atime, *bind).map_err(vfs_errno)?;
                 if !*bind
                     && disk::mount_of(id).is_none()
                     && let Some(m) = crate::fs::vfs().mount_by_id(id)
@@ -427,20 +423,20 @@ impl LinuxAdmin for Thread<'_> {
                     // The volume itself is read-only (the disk, or its
                     // features): the mount stays so.
                     files
-                        .remount(target, MountFlags { read_only: true, ..vfs_flags(*flags) }, *bind)
+                        .remount(target, MountFlags { read_only: true, ..vfs_flags(*flags) }, None, *bind)
                         .map_err(vfs_errno)?;
                     return Err(Errno::EROFS);
                 }
                 Ok(())
             }
-            MountRequest::Bind { source, target, flags, recursive: _ } => {
+            MountRequest::Bind { source, target, flags: _, recursive } => {
                 // The bind shows the source of the mount it was taken from
-                // (proc_pid_mountinfo's spec sheet), not the path bound.
-                let from = files.lookupat(AT_FDCWD, source, true).ok().map(|n| {
-                    let m = n.mount();
-                    mounts::source(m.id()).unwrap_or_else(|| disk::source_of(m.id(), m.fs_name()).into_bytes())
-                });
-                let id = files.mount_bind(source, target, vfs_flags(*flags)).map_err(vfs_errno)?;
+                // (proc_pid_mountinfo's spec sheet), not the path bound;
+                // the copies a recursive bind makes of the mounts below
+                // show theirs (`mounts::source_of`). The other flags of
+                // the call are ignored: a bind has its source's (mount(2)).
+                let from = files.lookupat(AT_FDCWD, source, true).ok().map(|n| mounts::source_of(n.mount()));
+                let id = files.mount_bind(source, target, *recursive).map_err(vfs_errno)?;
                 mounts::record_source(id, from.as_deref().unwrap_or(source));
                 Ok(())
             }
@@ -466,7 +462,10 @@ impl LinuxAdmin for Thread<'_> {
 
     fn umount(&mut self, target: &[u8], detach: bool, follow: bool) -> Result<(), Errno> {
         let files = &self.process().files;
-        let id = files.mount_at(target, follow).map_err(vfs_errno)?;
+        // The mount the call removes: the one whose root `target` names,
+        // or the old root stacked beneath a namespace's root
+        // (pivot_root(".", ".")).
+        let id = files.unmount_id(target, follow).map_err(vfs_errno)?;
         match disk::mount_of(id) {
             // A disk is written back and its volume marked clean; it must
             // not be busy, detached or not.
@@ -533,6 +532,10 @@ impl LinuxAdmin for Thread<'_> {
 
     fn move_mount(&mut self, from: &PathAt, to: &PathAt) -> Result<(), Errno> {
         self.mnt_move_mount(from, to)
+    }
+
+    fn mount_set_group(&mut self, from: &PathAt, to: &PathAt) -> Result<(), Errno> {
+        self.mnt_set_group(from, to)
     }
 
     fn mount_setattr(&mut self, at: &PathAt, recursive: bool, change: &AttrChange) -> Result<(), Errno> {

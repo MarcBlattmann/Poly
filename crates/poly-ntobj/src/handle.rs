@@ -510,16 +510,29 @@ impl ObjectManager {
         let access = if options & DUPLICATE_SAME_ACCESS != 0 {
             src.access
         } else {
+            // MAXIMUM_ALLOWED is dropped, never "all the descriptor allows"
+            // (specs/windows/kernel32.dll/DuplicateHandle.yaml, rule `zero_and_unknown_bits`).
+            let desired = desired & !access::MAXIMUM_ALLOWED;
+            // Type-specific bits the object type does not define are dropped without an error
+            // (0xFFE0 on a section gives no access).
+            let desired = desired & !(0xFFFF & !header.kind.generic_mapping().all);
             // A copy with no access holds nothing to check (the sheets).
             let mapped = header.kind.generic_mapping().map(desired);
-            if desired == 0 || (mapped & access::MAXIMUM_ALLOWED == 0 && mapped & !src.access == 0) {
+            if desired == 0 || mapped & !src.access == 0 {
                 access::grant(header.kind, desired, header.allowed, caller.mode, false, caller.privileges)?
-            } else if header.kind == ObjectType::File && mapped & access::MAXIMUM_ALLOWED == 0 {
+            } else if header.kind == ObjectType::File {
                 // specs/windows/kernel32.dll/DuplicateHandle.yaml, rule `files`: "a file handle
                 // never yields more than it has".
                 return Err(STATUS_ACCESS_DENIED);
             } else {
-                self.checked_access(caller, src.object, desired, false)?
+                let granted = self.checked_access(caller, src.object, desired, false)?;
+                // Rule `process_thread_token_default`: a granted THREAD_SUSPEND_RESUME shows as
+                // 0x1002 on the new handle, "the check adds THREAD_RESUME to it".
+                if header.kind == ObjectType::Thread && granted & access::THREAD_SUSPEND_RESUME != 0 {
+                    granted | access::THREAD_RESUME
+                } else {
+                    granted
+                }
             }
         };
         let flags = if options & DUPLICATE_SAME_ATTRIBUTES != 0 {
