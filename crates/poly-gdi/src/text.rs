@@ -218,6 +218,18 @@ impl Format {
     pub fn leading(self, external_leading: i32) -> i32 {
         if self.has(DT_EXTERNALLEADING) && !self.has(DT_INTERNAL) { external_leading } else { 0 }
     }
+
+    /// The height of one line (`DrawTextW.yaml`, internal): the selected
+    /// font's height and leading, or with `DT_INTERNAL` the stock system
+    /// font's height, whatever font is selected (its width stays the
+    /// selected font's).
+    pub fn line_height(self, font: &crate::font::TextMetric, system: &crate::font::TextMetric) -> i32 {
+        if self.has(DT_INTERNAL) {
+            system.height + self.leading(system.external_leading)
+        } else {
+            font.height + self.leading(font.external_leading)
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -525,7 +537,7 @@ impl Gdi {
         let f = Format::new(format, if p.tab_in_format { None } else { Some(p.tab_chars) });
         let sel = self.font_sel(dc);
         let tf = sel.typeface();
-        let h = tm.height + f.leading(tm.external_leading);
+        let h = f.line_height(&tm, &self.system_font_metrics());
         let prefix = f.prefix();
         let (t, at) = if prefix {
             prefixes(text, f.underline())
@@ -569,7 +581,12 @@ impl Gdi {
         let drawn = if shown.took_rest { text.len() } else { at[all[n - 1].next.min(t.len())].min(text.len()) };
         let contents = shown.lines;
         let widths: Vec<i32> = contents.iter().map(|l| line_width(&tf, l, tabs)).collect();
-        let total = h.saturating_mul(contents.len() as i32);
+        // A last line that took the rest of the text counts the empty line
+        // a break at the very end of the text makes, though nothing of it is
+        // shown (`DrawTextW.yaml`, ellipsis).
+        let counted =
+            contents.len() + usize::from(shown.took_rest && t.last().is_some_and(|&c| matches!(unit(c), LF | CR)));
+        let total = h.saturating_mul(counted as i32);
         let room = rect.bottom - rect.top - h;
         let vertical = f.vertical();
         // A single line that is centred or put at the bottom: the offset of

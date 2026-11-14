@@ -302,10 +302,60 @@ fn eto_pdy_takes_pairs_and_moves_the_following_characters_across_the_line() {
     // OPAQUE: one rectangle around the cells of all the characters, each at its own height.
     let (mut g, dc, px) = sans(100, 40);
     assert!(g.ext_text_out(dc, 6, 10, ETO_PDY, None, &gi, Some(&[20, 6, 7, 0])));
-    assert_eq!(box_of(&px, 100, BK), Some((6, 4, 33, 26)));
+    // (The right edge is one pixel farther than that of the same lpDx without the option.)
+    assert_eq!(box_of(&px, 100, BK), Some((6, 4, 34, 26)));
     let (mut g, dc, px) = sans(100, 40);
     assert!(g.ext_text_out(dc, 6, 10, ETO_PDY, None, &gi, Some(&[20, -5, 7, 0])));
-    assert_eq!(box_of(&px, 100, BK), Some((6, 10, 33, 31)));
+    assert_eq!(box_of(&px, 100, BK), Some((6, 10, 34, 31)));
+}
+
+#[test]
+fn eto_pdy_cell_is_one_pixel_wider_on_the_right_than_the_plain_lpdx_cell() {
+    // eto_pdy_cell, eto_pdy_move: 'g' (advance 10, ink to column 69 at x=60), 'i' (advance 4).
+    let cell_of = |text: &str, x: i32, align: u32, options: u32, dx: &[i32]| {
+        let (mut g, dc, px) = sans(160, 60);
+        g.set_text_align(dc, align);
+        assert!(g.ext_text_out(dc, x, 30, ETO_OPAQUE.min(2) | options, None, &utf16(text), Some(dx)));
+        box_of(&px, 160, BK).map(|b| (b.0, b.2))
+    };
+    assert_eq!(cell_of("g", 60, 0, 0, &[14]), Some((60, 74)));
+    assert_eq!(cell_of("g", 60, 0, ETO_PDY, &[14, 0]), Some((60, 75)));
+    for dx in [0, -9, 9] {
+        assert_eq!(cell_of("g", 60, 0, 0, &[dx]), Some((60, 69)), "{dx}");
+        assert_eq!(cell_of("g", 60, 0, ETO_PDY, &[dx, 0]), Some((60, 70)), "{dx}");
+    }
+    assert_eq!(cell_of("i", 60, 0, 0, &[1]), Some((60, 63)));
+    assert_eq!(cell_of("i", 60, 0, ETO_PDY, &[1, 0]), Some((60, 64)));
+    // The same from the first origin that TA_RIGHT and TA_CENTER give.
+    assert_eq!(cell_of("g", 100, TA_RIGHT, 0, &[14]), Some((86, 100)));
+    assert_eq!(cell_of("g", 100, TA_RIGHT, ETO_PDY, &[14, 0]), Some((86, 101)));
+    assert_eq!(cell_of("g", 80, TA_CENTER, 0, &[14]), Some((73, 87)));
+    assert_eq!(cell_of("g", 80, TA_CENTER, ETO_PDY, &[14, 0]), Some((73, 88)));
+    // gAi at (60,30): the background is 60,25 to 92,50.
+    let (mut g, dc, px) = sans(160, 80);
+    assert!(g.ext_text_out(dc, 60, 30, ETO_OPAQUE | ETO_PDY, None, &utf16("gAi"), Some(&[14, 5, 14, -9, 3, 0])));
+    assert_eq!(box_of(&px, 160, BK), Some((60, 25, 92, 50)));
+}
+
+#[test]
+fn eto_pdy_with_update_cp_moves_the_y_by_all_second_values_for_every_alignment() {
+    // eto_pdy_cp: from (80,30) with (4,3) (5,3) (6,-1).
+    let end = |align: u32, dx: &[i32]| {
+        let (mut g, dc, _px) = sans(160, 60);
+        g.set_text_align(dc, align | TA_UPDATECP);
+        g.move_to(dc, 80, 30);
+        assert!(g.ext_text_out(dc, 0, 0, ETO_PDY, None, &utf16("gAi"), Some(dx)));
+        g.current_position(dc)
+    };
+    let a = [4, 3, 5, 3, 6, -1];
+    assert_eq!(end(0, &a), Some((95, 25)));
+    assert_eq!(end(TA_RIGHT, &a), Some((65, 25)));
+    assert_eq!(end(TA_CENTER, &a), Some((80, 25)));
+    let b = [14, 8, 14, 8, 3, 8];
+    assert_eq!(end(0, &b), Some((111, 6)));
+    assert_eq!(end(TA_RIGHT, &b), Some((49, 6)));
+    assert_eq!(end(TA_CENTER, &b), Some((80, 6)));
+    assert_eq!(end(TA_CENTER | TA_BOTTOM, &b), Some((80, 6)), "the vertical alignment does not matter");
 }
 
 #[test]
@@ -782,6 +832,53 @@ fn ellipsis_lines_are_drawn_where_the_sheet_has_their_ink() {
     let words = "AAAA BBBB AAAA BBBB";
     assert_eq!(ink(words, 31, DT_WORDBREAK | e), [Some((12, 56)), Some((11, 59)), None, None]);
     assert_eq!(ink(words, 64, DT_WORDBREAK), [Some((12, 56)), Some((11, 41)), Some((12, 56)), Some((11, 41))]);
+}
+
+#[test]
+fn an_ellipsis_last_line_that_takes_the_rest_counts_the_empty_line_after_a_final_break() {
+    // dt_pf_ellipsis_mix: "AB\nAB\n" in 31 high shows two lines and returns three.
+    let rc = Rect::new(10, 10, 70, 41);
+    let ret = |s: &str, fmt: u32| {
+        let (mut g, dc, _px) = sans(240, 100);
+        draw(&mut g, dc, s, rc, fmt).0
+    };
+    assert_eq!(band_ink("AB\nAB\n", rc, DT_END_ELLIPSIS), [Some((12, 29)), Some((12, 29)), None, None]);
+    assert_eq!(ret("AB\nAB\n", DT_END_ELLIPSIS), 48);
+    // Without a final break the rest is one line.
+    assert_eq!(ret("AB\nAB\nAB", DT_END_ELLIPSIS), 32);
+    assert_eq!(ret("AB\nAB\nAB", DT_END_ELLIPSIS | DT_WORD_ELLIPSIS), 32);
+}
+
+#[test]
+fn dt_internal_lays_lines_out_at_the_height_of_the_stock_system_font() {
+    // dt_pf_internal: the selected font's height never counts; its width does.
+    let mut g = Gdi::new();
+    let (dc, _px) = dib32(&mut g, 8, 8);
+    let sys = g.text_metrics(dc).expect("a DC").height;
+    assert!(sys > 0);
+    assert!(g.add_font_mem(&tfont::build(&tfont::SANS)).is_some());
+    assert!(g.add_font_mem(&tfont::build(&tfont::TALL)).is_some());
+    for (face, h) in [
+        ("PolyTest Sans", -8),
+        ("PolyTest Sans", -16),
+        ("PolyTest Sans", -32),
+        ("PolyTest Tall", -16),
+        ("PolyTest Tall", -32),
+    ] {
+        select(&mut g, dc, &lf_full(face, h, 400, false, 3));
+        let r = Rect::new(10, 10, 210, 90);
+        let calc = |g: &mut Gdi, s: &str, fmt: u32| {
+            let mut r = r;
+            let n = g.draw_text(dc, &utf16(s), &mut r, fmt | DT_CALCRECT);
+            (n, r.right - r.left, r.bottom - r.top)
+        };
+        let (_, pw, _) = calc(&mut g, "AB", 0);
+        let (n, w, bh) = calc(&mut g, "AB", DT_INTERNAL);
+        assert_eq!((n, bh, w), (sys, sys, pw), "{face} {h}");
+        assert_eq!(calc(&mut g, "AB\nAB", DT_INTERNAL).0, 2 * sys);
+        assert_eq!(calc(&mut g, "AB", DT_INTERNAL | DT_EXTERNALLEADING).0, sys);
+        assert_eq!(calc(&mut g, "AB", DT_INTERNAL | DT_EDITCONTROL).0, sys);
+    }
 }
 
 #[test]
