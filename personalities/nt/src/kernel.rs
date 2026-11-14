@@ -76,7 +76,7 @@ pub struct Apc {
 
 /// A request to create a thread in the calling process
 /// (`NtCreateThreadEx`), once the service has decoded its arguments.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ThreadCreate {
     /// The user routine the thread runs, called as `routine(argument)`.
     pub start_routine: u64,
@@ -89,11 +89,15 @@ pub struct ThreadCreate {
     pub suspended: bool,
     /// The access mask the new thread handle is opened with.
     pub desired_access: u32,
+    /// The security descriptor the new thread object gets (`lpThreadAttributes`, self-relative);
+    /// the creator's handle is opened before it applies, so it keeps all access
+    /// (specs/windows/kernel32.dll/DuplicateHandle.yaml: `empty_dacl`, thread).
+    pub security: Option<alloc::vec::Vec<u8>>,
 }
 
 /// What [`NtKernel::create_thread`] produced: a handle to the new thread's
 /// object in the caller's table and the new thread's client id.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ThreadCreated {
     pub handle: poly_ntobj::Handle,
     pub client: ClientId,
@@ -129,6 +133,11 @@ pub struct ProcessCreate {
     /// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON`:
     /// it cannot make memory executable.
     pub dynamic_code_blocked: bool,
+    /// The security descriptors of the new process object and of its first thread object
+    /// (`lpProcessAttributes`, `lpThreadAttributes`; self-relative). The creator's handles are
+    /// opened before they apply.
+    pub process_security: Option<alloc::vec::Vec<u8>>,
+    pub thread_security: Option<alloc::vec::Vec<u8>>,
 }
 
 /// What [`NtKernel::create_process`] produced: handles in the caller's
