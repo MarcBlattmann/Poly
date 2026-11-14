@@ -1063,10 +1063,76 @@ unsafe fn step9() {
     // comctl32: an INITCOMMONCONTROLSEX of 8 bytes is accepted.
     let init: unsafe extern "system" fn(*const u32) -> i32 =
         core::mem::transmute(delay_load("COMCTL32.dll", c"InitCommonControlsEx"));
-    let icc = [8u32, 0xFFFF];
+    let icc = [8u32, 0xFF]; // ICC_WIN95_CLASSES, what Chrome asks
     check_eq(init(icc.as_ptr()) as usize, 1);
-    let bad = [4u32, 0xFFFF];
+    let bad = [4u32, 0xFF];
     check_eq(init(bad.as_ptr()) as usize, 0);
+    // The sheet (version 5.82): the bits 0x1 to 0x2000 and 0 are accepted; ICC_STANDARD_CLASSES,
+    // ICC_LINK_CLASS, masks holding them and undefined bits are not.
+    for (mask, want) in
+        [(0u32, 1usize), (0x7FF, 1), (0x3FFF, 1), (0x4000, 0), (0x8000, 0), (0xFFFF, 0), (0xFFFF_0000, 0)]
+    {
+        let a = [8u32, mask];
+        check_eq(init(a.as_ptr()) as usize, want);
+    }
+    // WTSRegisterSessionNotification counts: each register needs its own unregister.
+    check_eq(register(desktop, 0) as usize, 1);
+    check_eq(register(desktop, 1) as usize, 1);
+    check_eq(unregister(desktop) as usize, 1);
+    check_eq(unregister(desktop) as usize, 1);
+    check_fail(unregister(desktop) as usize, 2);
+    // WTSSessionInfo (24): 216 bytes, State at 0, SessionId at 4.
+    check_eq(query(0, u32::MAX, 24, &mut block, &mut bytes) as usize, 1);
+    check_got(!block.is_null() && bytes == 216 && block.cast::<u32>().read_unaligned() == 0, bytes);
+    free(block);
+
+    // QueryUnbiasedInterruptTime and the interrupt time pair: one clock, 100 ns units.
+    let unbiased: unsafe extern "system" fn(*mut u64) -> i32 =
+        core::mem::transmute(delay_load("kernel32.dll", c"QueryUnbiasedInterruptTime"));
+    let interrupt: unsafe extern "system" fn(*mut u64) =
+        core::mem::transmute(delay_load("kernelbase.dll", c"QueryInterruptTimePrecise"));
+    let (mut coarse, mut fine) = (0u64, 0u64);
+    check_eq(unbiased(&mut coarse) as usize, 1);
+    interrupt(&mut fine);
+    check_got(coarse > 10_000_000 && fine >= coarse, fine as u32);
+
+    // A thread made with an empty DACL: the creator's handle keeps its access, a reduced copy
+    // cannot be given more (DuplicateHandle sheet, rule `empty_dacl`).
+    let init_acl: unsafe extern "system" fn(*mut u8, u32, u32) -> i32 =
+        core::mem::transmute(delay_load("ADVAPI32.dll", c"InitializeAcl"));
+    let init_sd: unsafe extern "system" fn(*mut u8, u32) -> i32 =
+        core::mem::transmute(delay_load("ADVAPI32.dll", c"InitializeSecurityDescriptor"));
+    let set_dacl: unsafe extern "system" fn(*mut u8, i32, *mut u8, i32) -> i32 =
+        core::mem::transmute(delay_load("ADVAPI32.dll", c"SetSecurityDescriptorDacl"));
+    let create_thread: unsafe extern "system" fn(*const u8, usize, *const u8, *mut u8, u32, *mut u32) -> isize =
+        core::mem::transmute(delay_load("kernel32.dll", c"CreateThread"));
+    let duplicate: unsafe extern "system" fn(isize, isize, isize, *mut isize, u32, i32, u32) -> i32 =
+        core::mem::transmute(delay_load("kernel32.dll", c"DuplicateHandle"));
+    let mut acl = [0u8; 8];
+    let mut sd = [0u8; 64];
+    check_eq(init_acl(acl.as_mut_ptr(), 8, 2) as usize, 1);
+    check_eq(init_sd(sd.as_mut_ptr(), 1) as usize, 1);
+    check_eq(set_dacl(sd.as_mut_ptr(), 1, acl.as_mut_ptr(), 0) as usize, 1);
+    // SECURITY_ATTRIBUTES: nLength 24, lpSecurityDescriptor at 8, bInheritHandle at 16.
+    let mut sa = [0u8; 24];
+    sa[0] = 24;
+    sa[8..16].copy_from_slice(&(sd.as_ptr() as u64).to_le_bytes());
+    // CREATE_SUSPENDED: the thread never runs.
+    let thread =
+        create_thread(sa.as_ptr(), 0, s1test_main as *const u8, core::ptr::null_mut(), 4, core::ptr::null_mut());
+    check_got(thread != 0, GetLastError());
+    let me = GetCurrentProcess();
+    let (mut small, mut more) = (0isize, 1isize);
+    // THREAD_QUERY_LIMITED_INFORMATION (0x800) from the creator's own handle: a part of it.
+    check_eq(duplicate(me, thread, me, &mut small, 0x800, 0, 0) as usize, 1);
+    // THREAD_TERMINATE (0x1) from the reduced handle: the descriptor allows nobody anything.
+    check_eq(duplicate(me, small, me, &mut more, 0x1, 0, 0) as usize, 0);
+    check_got(GetLastError() == 5 && more == 0, GetLastError());
+    // READ_CONTROL alone is the owner's right.
+    check_eq(duplicate(me, small, me, &mut more, 0x2_0000, 0, 0) as usize, 1);
+    CloseHandle(more);
+    CloseHandle(small);
+    CloseHandle(thread);
 
     // The power API set: ProcessorInformation (11) fills one 24-byte record per processor.
     let power: unsafe extern "system" fn(u32, *const u8, u32, *mut u8, u32) -> u32 =
