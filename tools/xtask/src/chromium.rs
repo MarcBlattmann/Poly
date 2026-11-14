@@ -153,6 +153,11 @@ pub const DISK_SEEDS: &[&str] = &[
     // `xdg-mime query filetype` (xdg-utils) asks file(1) what a file is:
     // how `xdg-open` of a downloaded package finds the installer.
     "file",
+    // X11 apps (Blender, Krita, VLC's Qt interface, LibreOffice's default
+    // plugin; ADR 0184): Xwayland, which the compositor starts with the first
+    // X client, and `xkbcomp`, which it runs for its keymaps.
+    "xwayland",
+    "x11-xkb-utils",
 ];
 
 /// What the initramfs takes from the lock: a statically linked BusyBox for
@@ -178,8 +183,31 @@ pub const LOCK: &str = "tools/xtask/chromium.lock";
 
 /// The disk image `cargo xtask chromium` boots (kept between runs).
 pub const FILE_NAME: &str = "poly-chromium-disk.img";
-/// About how big that image is (the dev menu says so before the first start).
+/// About how big that image is without its free room (the dev menu says so
+/// before the first start).
 pub const DISK_SIZE: &str = "1.3 GB";
+/// The free room (MiB) a disk made for interactive use has unless
+/// `--disk-size=` says otherwise (ADR 0184): a few GB, because apps
+/// installed with `apt` or the installer (Blender is 1 GB, LibreOffice and
+/// GIMP several hundred MB) must fit. The boot tests' disks keep
+/// [`rootdisk::DEFAULT_SPARE_MB`].
+pub const INTERACTIVE_SPARE_MB: u64 = 4096;
+
+/// `--disk-size=SIZE` (`small`, `512M`, `8G`: how much free room the disk
+/// made now has, [`rootdisk::parse_spare`]) or the interactive default
+/// ([`INTERACTIVE_SPARE_MB`]), for the image written from now on. A kept disk
+/// stays as it is: only `--fresh-disk` makes it again, with the room asked
+/// for (the disk holds Chromium's profile, which is not copied over).
+pub fn apply_disk_size(args: &[String]) -> Result {
+    let mb = match args.iter().find_map(|a| a.strip_prefix("--disk-size=")) {
+        Some(v) => {
+            rootdisk::parse_spare(v).ok_or(format!("--disk-size={v}: expected small, or a size such as 512M or 8G"))?
+        }
+        None => INTERACTIVE_SPARE_MB,
+    };
+    rootdisk::set_spare_mb(mb);
+    Ok(())
+}
 /// The image the boot test makes afresh.
 pub const TEST_FILE_NAME: &str = "poly-chromium-disk-test.img";
 
@@ -275,11 +303,48 @@ if [ -p \"$C\" ]; then
     ln \"$C\" \"$U/poly-compositor.ctl\" && chown poly:poly \"$U/poly-compositor.ctl\" \\
         && export POLY_COMPOSITOR_CONTROL=\"$U/poly-compositor.ctl\"
 fi
+# The session bus of user poly (ADR 0184): started with the desktop, made
+# sure of here too. An app finds it in DBUS_SESSION_BUS_ADDRESS (else libdbus
+# tries `dbus-launch`, which needs an X display and does not find it).
+/usr/local/bin/poly-session-bus
+BUS=
+[ -S \"$U/bus\" ] && BUS=\"unix:path=$U/bus\"
 cd /home/poly
 exec setpriv --reuid=1000 --regid=1000 --init-groups env HOME=/home/poly XDG_RUNTIME_DIR=\"$U\" \\
     XDG_CONFIG_HOME=/home/poly/.config XDG_CACHE_HOME=/home/poly/.cache \\
     XDG_DATA_HOME=/home/poly/.local/share XDG_STATE_HOME=/home/poly/.local/state \\
+    ${BUS:+DBUS_SESSION_BUS_ADDRESS=\"$BUS\"} \\
     \"$@\"
+";
+
+/// `/usr/local/bin/poly-session-bus`: makes sure user `poly` has a session
+/// bus (`dbus-daemon --session` of Debian's `dbus-daemon`, dbus-daemon(1)) on
+/// `/run/user/1000/bus`: nothing to do if the one it started is still there.
+/// The desktop starts it in the background ([`DESKTOP_SCRIPT`]), so it costs
+/// the boot nothing; `poly-as-user` calls it too, which waits for the socket.
+/// The disk outlives a boot, so a pid file of an earlier boot (its pid now
+/// another process, or none) is told from a live one by the process's name.
+pub const SESSION_BUS_SCRIPT: &str = "#!/bin/bash
+# The session bus of user poly (tools/xtask/src/chromium.rs, ADR 0184).
+BIN=/usr/bin/dbus-daemon
+[ -x \"$BIN\" ] || exit 0
+U=/run/user/1000
+mkdir -p \"$U\" /home/poly
+chown poly:poly \"$U\" /home/poly && chmod 700 \"$U\"
+P=\"$U/dbus.pid\"
+PID=
+[ -r \"$P\" ] && read -r PID < \"$P\"
+if [ -z \"$PID\" ] || [ \"$(cat \"/proc/$PID/comm\" 2>/dev/null)\" != dbus-daemon ]; then
+    rm -f \"$U/bus\" \"$P\"
+    setpriv --reuid=1000 --regid=1000 --init-groups env HOME=/home/poly XDG_RUNTIME_DIR=\"$U\" \\
+        \"$BIN\" --session --address=\"unix:path=$U/bus\" --nofork --nopidfile < /dev/null > /dev/null 2>&1 &
+    echo $! > \"$P\"
+fi
+for _ in $(seq 1 300); do
+    [ -S \"$U/bus\" ] && exit 0
+    sleep 0.1
+done
+exit 1
 ";
 
 /// `/etc/inittab` of Chromium's disk, read by BusyBox's init (from the disk,
@@ -1360,10 +1425,15 @@ Dpkg::Use-Pty \"0\";
 /// init (as the toolkits' script, ADR 0120) with the arguments in
 /// `/etc/poly-desktop.args` (`cargo xtask desktop --chromium`: `--scale N`
 /// and `--settings PATH`, which a first program of the compositor's own
-/// gets on the kernel's command line instead). No `--xwayland-lazy`: the disk
-/// has no Xwayland, and with an X display offered (and `DISPLAY` set for the
-/// apps) `xdg-open` runs `xprop`, which keeps connecting to a display nothing
-/// serves. The plain desktop has none either.
+/// gets on the kernel's command line instead). With `--xwayland-lazy` where
+/// the disk has Xwayland (ADR 0184): the compositor owns display `:0` and
+/// starts the server when the first X client connects, so X11 apps (Blender,
+/// Krita, VLC's Qt interface, LibreOffice's default plugin) run and nothing
+/// is paid until one does. Not where the disk has none (a disk made before
+/// this): a display offered with no server behind it made `xdg-open`, which
+/// asks `xprop` about the desktop whenever `DISPLAY` is set, spin (ADR 0147).
+/// The session bus of user `poly` is started in the background
+/// ([`SESSION_BUS_SCRIPT`]).
 pub const DESKTOP_SCRIPT: &str = "#!/bin/bash
 # Started by init on Chromium's disk (tools/xtask/src/chromium.rs).
 . /etc/poly-desktop.env
@@ -1372,7 +1442,19 @@ mkdir -p \"$XDG_CONFIG_HOME\" \"$XDG_DATA_HOME\" \"$XDG_CACHE_HOME\" \"$XDG_STAT
 cd /root
 ARGS=
 [ -r /etc/poly-desktop.args ] && ARGS=$(cat /etc/poly-desktop.args)
+[ -x /usr/bin/Xwayland ] && ARGS=\"--xwayland-lazy $ARGS\"
+[ -x /usr/local/bin/poly-session-bus ] && /usr/local/bin/poly-session-bus > /dev/null 2>&1 &
 exec /usr/local/bin/poly-compositor --desktop $ARGS
+";
+
+/// What the session adds to the toolkits' environment (ADR 0184): the X
+/// display the compositor offers (`:0`, the first free number; where the disk
+/// has Xwayland), and no question asked by `apt` and what it runs (debconf(7):
+/// `tzdata` asked for a time zone on the console and waited for ever).
+const SESSION_ENV: &str = "# X11 apps: the display the compositor owns, where there is an X server.
+[ -x /usr/bin/Xwayland ] && export DISPLAY=:0
+# apt and dpkg ask nothing (debconf(7)).
+export DEBIAN_FRONTEND=noninteractive
 ";
 
 /// `/etc/poly-desktop.env`: the toolkits' desktop environment, and the
@@ -1380,7 +1462,7 @@ exec /usr/local/bin/poly-compositor --desktop $ARGS
 /// (it would try Debian's `chromium`, which refuses to run as root).
 fn desktop_env() -> String {
     format!(
-        "{}# Where mimeapps.list names no browser (xdg-open).\nexport BROWSER=\"/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS}\"\n",
+        "{}# Where mimeapps.list names no browser (xdg-open).\nexport BROWSER=\"/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS}\"\n{SESSION_ENV}",
         crate::toolkits::DESKTOP_ENV
     )
 }
@@ -1429,6 +1511,7 @@ pub fn poly_files(opts: &PolyFiles) -> Result<crate::initramfs::Tree> {
     file("usr/local/sbin/poly-desktop", 0o755, DESKTOP_SCRIPT.as_bytes().to_vec());
     file("usr/local/bin/poly-chromium", 0o755, LAUNCH_SCRIPT.as_bytes().to_vec());
     file("usr/local/bin/poly-as-user", 0o755, USER_SCRIPT.as_bytes().to_vec());
+    file("usr/local/bin/poly-session-bus", 0o755, SESSION_BUS_SCRIPT.as_bytes().to_vec());
     file("etc/poly-desktop.env", 0o644, desktop_env().into_bytes());
     file("etc/poly-desktop.args", 0o644, format!("{}\n", opts.compositor_args.join(" ")).into_bytes());
     file("etc/xdg/mimeapps.list", 0o644, mimeapps_list().into_bytes());
@@ -1619,6 +1702,7 @@ pub const CPUS: Option<u32> = Some(4);
 /// QEMU's window with Chromium in the launcher, the disk's bash on this
 /// terminal (Ctrl-A X quits). Any host.
 fn run(args: &[String]) -> Result {
+    apply_disk_size(args)?;
     let release = args.iter().any(|a| a == "--release");
     let kernel = crate::build_kernel(release)?;
     let image = disk_image(args.iter().any(|a| a == "--fresh-disk"))?;
@@ -1720,6 +1804,7 @@ pub fn command(args: &[String]) -> Result {
             return Ok(());
         }
         Some("disk") => {
+            apply_disk_size(&args[1..])?;
             fetch(false)?;
             let (path, _) = make(FILE_NAME, &PolyFiles::default())?;
             println!("{}", path.display());
@@ -1735,6 +1820,7 @@ pub fn command(args: &[String]) -> Result {
     if !cfg!(unix) {
         return Err("a driven boot needs a Unix host (QMP); `cargo xtask chromium run` boots on any host".into());
     }
+    apply_disk_size(args)?;
     let release = args.iter().any(|a| a == "--release");
     let fresh = args.iter().any(|a| a == "--fresh-disk");
     let steps = args
@@ -2437,6 +2523,27 @@ pub fn desktop_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     if !out.contains("settings-bound") {
         failed.push(format!("/settings is not mounted on the disk: {out:?}"));
     }
+    // 3b. What an app run as `poly` finds (ADR 0184): the X display (the
+    // compositor starts Xwayland with this first X client, xdpyinfo, and
+    // gives `poly` access) and the session bus (a message to the bus
+    // daemon is answered).
+    let out = m.run(
+        "poly-as-user env | grep -E '^(DISPLAY|DBUS_SESSION_BUS_ADDRESS)='; \
+         poly-as-user xdpyinfo 2>&1 | grep -E 'name of display|vendor string'; \
+         poly-as-user dbus-send --session --dest=org.freedesktop.DBus --print-reply \
+         /org/freedesktop/DBus org.freedesktop.DBus.GetId 2>&1 | tail -n 1; echo x11-\"checked\"",
+    )?;
+    for want in [
+        "DISPLAY=:0",
+        "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus",
+        "name of display:    :0",
+        "vendor string:    The X.Org Foundation",
+        "   string \"",
+    ] {
+        if !out.contains(want) || !out.contains("x11-checked") {
+            failed.push(format!("an app run as poly lacks {want:?}: {out:?}"));
+        }
+    }
     // 4. Terminal from the launcher: its window, a shell in it.
     if failed.is_empty() {
         if !launcher_shown(&m.text()) {
@@ -2790,6 +2897,15 @@ mod tests {
         assert!(added.iter().all(|p| crate::desktop::TEST_ONLY_PATHS.contains(&p.as_str())));
         assert!(DESKTOP_SCRIPT.contains("/etc/poly-desktop.args"));
         assert!(DESKTOP_SCRIPT.contains("poly-compositor --desktop $ARGS"));
-        assert!(!DESKTOP_SCRIPT.contains("xwayland"), "no Xwayland on this disk");
+        // Xwayland starts with the first X client, where the disk has it
+        // (ADR 0184), and the session bus of `poly` with the desktop.
+        assert!(DESKTOP_SCRIPT.contains("[ -x /usr/bin/Xwayland ] && ARGS=\"--xwayland-lazy $ARGS\""));
+        assert!(DESKTOP_SCRIPT.contains("/usr/local/bin/poly-session-bus > /dev/null 2>&1 &"));
+        assert!(USER_SCRIPT.contains("/usr/local/bin/poly-session-bus"));
+        assert!(USER_SCRIPT.contains("${BUS:+DBUS_SESSION_BUS_ADDRESS=\"$BUS\"}"));
+        assert!(SESSION_BUS_SCRIPT.contains("--session --address=\"unix:path=$U/bus\" --nofork"));
+        let env = desktop_env();
+        assert!(env.contains("[ -x /usr/bin/Xwayland ] && export DISPLAY=:0\n"));
+        assert!(env.contains("export DEBIAN_FRONTEND=noninteractive\n"));
     }
 }
