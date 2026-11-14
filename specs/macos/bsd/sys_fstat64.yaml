@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/sys_fstat64.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# sys_fstat64.tests/macos.json.
+id: macos/syscall/bsd/sys_fstat64
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 339,
+  arguments in rdi, rsi, rdx, r10, r8, r9; arm64 `svc #0x80` with x16 =
+  339, arguments in x0..x5. On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. fstat64(fd, buf) fills struct stat64 (<sys/stat.h> with
+  64-bit inodes, 144 bytes: st_dev i32 at 0, st_mode u16 at 4, st_nlink
+  u16 at 6, st_ino u64 at 8, st_uid at 16, st_gid at 20, st_rdev at 24,
+  four timespecs (atime, mtime, ctime, birthtime) at 32..96, st_size at
+  96, st_blocks at 104, st_blksize i32 at 112, st_flags at 116, st_gen at
+  120) and returns 0. A new 5-byte file under umask 022 is S_IFREG|0644
+  with one link, size 5, a nonzero inode, the caller's uid and gid,
+  st_flags 0 and st_gen 0 (st_gen is hidden from unprivileged callers);
+  APFS gives st_blksize 4096 and st_blocks 8. An empty directory on APFS
+  is S_IFDIR|0755 with 2 links and size 64 (APFS counts entries: each adds
+  a link and 32 bytes, so a directory with two files and no subdirectory
+  has 4 links and size 128). /dev/null is S_IFCHR|0666, st_rdev 0x3000002
+  (major 3 in the top byte, minor 2), size 0. The map names the entry
+  sys_fstat64.
+returns:
+  success: "0, buf filled"
+errors:
+  not_open: "EBADF (9): fd 55, fd -1"
+  bad_buffer: "EFAULT (14): buffer at address 8"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
