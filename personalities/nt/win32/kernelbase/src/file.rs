@@ -76,7 +76,7 @@ pub unsafe extern "system" fn CreateFileW(
     if !st.is_success() {
         return fail(for_create_file(st), INVALID_HANDLE_VALUE);
     }
-    set_last_error(if file::existed(disposition, iosb.information) { ERROR_ALREADY_EXISTS } else { ERROR_SUCCESS });
+    set_last_error(if file::existed(disposition, iosb.information as u64) { ERROR_ALREADY_EXISTS } else { ERROR_SUCCESS });
     h
 }
 
@@ -102,8 +102,8 @@ pub unsafe extern "system" fn CreateFileA(
 /// (the byte count), `Offset`, `OffsetHigh`, `hEvent`.
 #[repr(C)]
 pub struct Overlapped {
-    pub internal: u64,
-    pub internal_high: u64,
+    pub internal: usize,
+    pub internal_high: usize,
     pub offset: u32,
     pub offset_high: u32,
     pub event: Handle,
@@ -130,7 +130,7 @@ unsafe fn transfer(handle: Handle, buf: *mut u8, len: u32, done: *mut u32, ov: *
         // SAFETY: the caller's OVERLAPPED; its first two fields are the
         // IO_STATUS_BLOCK the kernel completes (minwinbase.h).
         unsafe {
-            (*ov).internal = nt::STATUS_PENDING.0 as u64;
+            (*ov).internal = nt::STATUS_PENDING.0 as usize;
             let e = (*ov).event;
             (
                 ov as *mut IoStatusBlock,

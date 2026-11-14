@@ -262,26 +262,53 @@ pub unsafe extern "system" fn GetVersionExW(info: *mut u8) -> i32 {
 }
 
 /// The processor count (`NtQuerySystemInformation(SystemBasicInformation)`).
-pub(crate) fn processors() -> u32 {
+/// `SystemBasicInformation`: 64 bytes with `NumberOfProcessors` at 56, or 44 with it at 40 and
+/// `MaximumUserModeAddress` at 32 in a 32-bit process (ADR 0186).
+fn basic_information() -> Option<[u8; 64]> {
     let mut info = [0u8; 64];
+    let size = if cfg!(target_pointer_width = "32") { 44 } else { 64 };
     // SAFETY: a valid buffer of the class's size.
-    let st = unsafe { nt::NtQuerySystemInformation(0, info.as_mut_ptr(), 64, core::ptr::null_mut()) };
-    if st.is_success() { u32::from(info[56]).max(1) } else { 1 }
+    let st = unsafe { nt::NtQuerySystemInformation(0, info.as_mut_ptr(), size, core::ptr::null_mut()) };
+    st.is_success().then_some(info)
+}
+
+pub(crate) fn processors() -> u32 {
+    let at = if cfg!(target_pointer_width = "32") { 40 } else { 56 };
+    basic_information().map_or(1, |info| u32::from(info[at]).max(1))
 }
 
 /// `GetSystemInfo`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetSystemInfo(out: *mut u8) {
+    // SAFETY: the caller's SYSTEM_INFO.
+    unsafe { system_info(out, false) }
+}
+
+/// `GetNativeSystemInfo`: the same in a 64-bit process; in a 32-bit one the machine's x64
+/// architecture (Learn: `GetNativeSystemInfo`, ADR 0186).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetNativeSystemInfo(out: *mut u8) {
+    // SAFETY: as above.
+    unsafe { system_info(out, true) }
+}
+
+/// # Safety
+/// `out` is a writable `SYSTEM_INFO`.
+#[cfg(target_pointer_width = "64")]
+unsafe fn system_info(out: *mut u8, _native: bool) {
     let info = version::system_info(processors());
     // SAFETY: the caller's SYSTEM_INFO (48 bytes).
     unsafe { core::ptr::copy_nonoverlapping(info.as_ptr(), out, info.len()) };
 }
 
-/// `GetNativeSystemInfo`: the same for a 64-bit process.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetNativeSystemInfo(out: *mut u8) {
-    // SAFETY: as above.
-    unsafe { GetSystemInfo(out) }
+/// # Safety
+/// `out` is a writable `SYSTEM_INFO`.
+#[cfg(target_pointer_width = "32")]
+unsafe fn system_info(out: *mut u8, native: bool) {
+    let max = basic_information().map_or(0x7FFE_FFFF, |b| u32::from_le_bytes([b[32], b[33], b[34], b[35]]));
+    let info = version::system_info_32(processors(), native, max);
+    // SAFETY: the caller's SYSTEM_INFO (36 bytes in a 32-bit process).
+    unsafe { core::ptr::copy_nonoverlapping(info.as_ptr(), out, info.len()) };
 }
 
 // ----- FormatMessageW / FormatMessageA -------------------------------------------------------
@@ -522,15 +549,32 @@ pub unsafe extern "system" fn VerifyVersionInfoW(info: *const u8, type_mask: u32
     }
 }
 
-/// `IsWow64Process`: Poly runs 64-bit programs only, so never.
+/// Whether `process` runs as a 32-bit process on the 64-bit system
+/// (`NtQueryInformationProcess(ProcessWow64Information)`, ADR 0186); `Err` with the status.
+pub(crate) fn is_wow64(process: nt::Handle) -> Result<bool, poly_ntobj::NtStatus> {
+    let mut value = 0usize;
+    let size = core::mem::size_of::<usize>() as u32;
+    // SAFETY: a valid out-pointer of the class's size.
+    let st = unsafe {
+        nt::NtQueryInformationProcess(process, 26, (&raw mut value).cast(), size, core::ptr::null_mut())
+    };
+    if st.is_success() { Ok(value != 0) } else { Err(st) }
+}
+
+/// `IsWow64Process` (Learn): TRUE in `*wow64` for a 32-bit process on Poly's 64-bit system.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn IsWow64Process(_process: nt::Handle, wow64: *mut i32) -> i32 {
+pub unsafe extern "system" fn IsWow64Process(process: nt::Handle, wow64: *mut i32) -> i32 {
     if wow64.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    // SAFETY: the caller's BOOL.
-    unsafe { wow64.write(FALSE) };
-    TRUE
+    match is_wow64(process) {
+        Ok(w) => {
+            // SAFETY: the caller's BOOL.
+            unsafe { wow64.write(i32::from(w)) };
+            TRUE
+        }
+        Err(st) => crate::base::fail_status(st, FALSE),
+    }
 }
 
 /// `PRODUCT_PROFESSIONAL` (`winnt.h`).

@@ -39,7 +39,7 @@ fn with<R>(f: impl FnOnce(&mut Vec<(u64, u64)>) -> R) -> R {
 /// (`first` non-zero) or last; returns a handle for the removal (an opaque
 /// non-null value, distinct for every call).
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlAddVectoredExceptionHandler(first: u32, handler: *mut u8) -> *mut u8 {
+pub extern "system" fn RtlAddVectoredExceptionHandler(first: u32, handler: *mut u8) -> *mut u8 {
     if handler.is_null() {
         return core::ptr::null_mut();
     }
@@ -54,7 +54,7 @@ pub extern "C" fn RtlAddVectoredExceptionHandler(first: u32, handler: *mut u8) -
 /// `RtlRemoveVectoredExceptionHandler(Handle)`: non-zero if the handle was
 /// registered.
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32 {
+pub extern "system" fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32 {
     with(|l| match l.iter().position(|&(h, _)| h == handle as u64) {
         Some(i) => {
             l.remove(i);
@@ -78,7 +78,7 @@ pub unsafe fn call_handlers(record: *mut u8, context: *mut u8) -> bool {
     for h in handlers {
         // SAFETY: a handler the program registered, with the documented
         // `PVECTORED_EXCEPTION_HANDLER` signature.
-        if unsafe { core::mem::transmute::<u64, Handler>(h)(&mut pointers) } == CONTINUE_EXECUTION {
+        if unsafe { core::mem::transmute::<usize, Handler>(h as usize)(&mut pointers) } == CONTINUE_EXECUTION {
             return true;
         }
     }

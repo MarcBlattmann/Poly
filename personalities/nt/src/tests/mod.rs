@@ -548,6 +548,14 @@ impl Fake {
         f
     }
 
+    /// Make `[base, base + size)` plain read-write memory the test writes arguments to (a
+    /// 32-bit caller's, below 4 GiB, ADR 0186); the process's own memory model does not know it.
+    pub fn map_test_memory(&mut self, base: u64, size: u64) {
+        for a in (base..base + size).step_by(PAGE_SIZE as usize) {
+            self.mem.pages.insert(a, Page { prot: HwProt::RW, frame: frame(), section: None });
+        }
+    }
+
     /// Scratch space for `n` bytes, zeroed (8-aligned).
     pub fn alloc(&mut self, n: usize) -> u64 {
         let at = self.next;

@@ -53,6 +53,16 @@ pub static NTDLL: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ntdll.dll"))
 
 mod test_kernel32;
 
+/// The 32-bit modules (ADR 0186), built by `cargo xtask` for i686 from the same crates: the
+/// i686 `ntdll.dll` every 32-bit process maps (`NtSystem::ntdll32`), and `kernelbase.dll` and
+/// `kernel32.dll`, which the layout writes to `C:\Windows\SysWOW64`; and the 32-bit program
+/// the WOW64 ring-3 test runs (`test_wow64`). Empty without `xtask`.
+pub static NTDLL32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-ntdll.dll"));
+pub static KERNELBASE32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-kernelbase.dll"));
+pub static KERNEL32_32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-kernel32.dll"));
+pub static HELLO32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-hello32.exe"));
+mod test_wow64;
+
 /// Our `kernelbase.dll` and `kernel32.dll` (ADR 0079), built by `cargo
 /// xtask` from `personalities/nt/win32` and written to
 /// `C:\Windows\System32` by [`layout`], where the loader finds them as
@@ -311,17 +321,21 @@ fn wants_command_lines() -> bool {
     WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 || ONLY_SET.load(core::sync::atomic::Ordering::Relaxed)
 }
 
-/// The calling process's command line (`PEB.ProcessParameters` at PEB + 0x20,
-/// `RTL_USER_PROCESS_PARAMETERS.CommandLine` at + 0x70: `winternl.h`), at most 512 characters.
+/// The calling process's command line (`PEB.ProcessParameters`,
+/// `RTL_USER_PROCESS_PARAMETERS.CommandLine`: `winternl.h`; at the offsets of a 64-bit or a
+/// 32-bit process, ADR 0186), at most 512 characters.
 fn read_command_line(pid: u32) -> Option<String> {
-    let peb = with(|s| s.processes.get(&ProcessId(pid)).map(|p| p.peb))?;
+    let (peb, l) = with(|s| s.processes.get(&ProcessId(pid)).map(|p| (p.peb, p.layout())))?;
+    let n = l.ptr as usize;
     let mut b = [0u8; 8];
-    user::copy_from_user(&mut b, peb.checked_add(0x20)?).ok()?;
+    user::copy_from_user(&mut b[..n], peb.checked_add(l.peb_process_parameters)?).ok()?;
     let params = u64::from_le_bytes(b);
     let mut us = [0u8; 16];
-    user::copy_from_user(&mut us, params.checked_add(0x70)?).ok()?;
+    user::copy_from_user(&mut us[..2 * n], params.checked_add(l.pp_command_line)?).ok()?;
     let len = (u16::from_le_bytes([us[0], us[1]]) as usize / 2).min(512);
-    let buffer = u64::from_le_bytes(us[8..16].try_into().ok()?);
+    let mut buf = [0u8; 8];
+    buf[..n].copy_from_slice(&us[n..2 * n]);
+    let buffer = u64::from_le_bytes(buf);
     let mut bytes = alloc::vec![0u8; len * 2];
     user::copy_from_user(&mut bytes, buffer).ok()?;
     let units: Vec<u16> = bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
@@ -504,6 +518,8 @@ fn make_state(slot: &mut Option<NtState>) {
         finished: BTreeMap::new(),
         peak: BTreeMap::new(),
     };
+    // The i686 ntdll every 32-bit process maps (ADR 0186).
+    state.sys.ntdll32 = NTDLL32;
     // The Windows folders on C: and the registry values that follow
     // them (ADR 0073), before file I/O attaches C:.
     layout::prepare(&mut state.sys);
@@ -794,7 +810,12 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         .then(|| selected(process.pid))
         .filter(|&s| s)
         .map(|_| poly_personality_nt::trace::begin(&mut k, regs));
-    let outcome = poly_personality_nt::dispatch_with(&mut k, regs);
+    // A 32-bit thread's call comes in the 32-bit convention and is converted (ADR 0186).
+    let outcome = if crate::arch::user::compat() {
+        poly_personality_nt::wow64::dispatch32(&mut k, regs, |k, regs| poly_personality_nt::dispatch_with(k, regs))
+    } else {
+        poly_personality_nt::dispatch_with(&mut k, regs)
+    };
     if let Some(call) = traced {
         let status = regs.rax as u32;
         if trace != 0 && poly_personality_nt::trace::wanted(&call, status, trace == 2) {
@@ -1003,7 +1024,7 @@ fn start_params(
             let base = poly_personality_nt::params::write(proc, &mut b, ps.peb, params)?;
             // Its console and standard handles (ADR 0080, 0089).
             let (connection, std) = console::setup(&mut s.sys, &mut b, pid, thread, console_app, sources, creator)?;
-            poly_personality_nt::params::write_handles(&mut b, base, connection, std)?;
+            poly_personality_nt::params::write_handles_for(&proc.layout(), &mut b, base, connection, std)?;
             // Handles for its creator (NtCreateUserProcess, ADR 0079).
             let opened = match handles {
                 Some(h) => {
@@ -1121,10 +1142,36 @@ fn create_process(
     }
 }
 
+/// Whether NT process `pid` is a 32-bit one (ADR 0186).
+fn is_wow64(pid: u32) -> bool {
+    with_existing(|s| s.processes.get(&ProcessId(pid)).is_some_and(|p| p.wow64)).unwrap_or(false)
+}
+
+/// Start a thread of NT process `process` in ring 3 at `entry` with its TEB at `teb`: a 64-bit
+/// one with GS based at the TEB, or, in a 32-bit process, one in compatibility mode with FS
+/// based at its 32-bit TEB (ADR 0186). `tid`: the thread id already chosen, if any.
+pub(super) fn spawn_thread(
+    process: &Arc<Process>,
+    memory: &Arc<Memory>,
+    entry: user::Entry,
+    teb: u64,
+    hook: user::SyscallHook,
+    tid: Option<u32>,
+) -> Result<crate::thread::ThreadId, crate::thread::SpawnError> {
+    let (p, m) = (Arc::clone(process), Arc::clone(memory));
+    if is_wow64(process.pid) {
+        return user::spawn_nt32(p, m, entry, teb, hook, tid);
+    }
+    match tid {
+        Some(t) => user::spawn_nt_as(p, m, entry, teb, hook, t),
+        None => user::spawn_nt(p, m, entry, teb, hook),
+    }
+}
+
 /// Start a new NT process's first thread in ring 3 at `start`; if it
 /// cannot start, the process ends.
 pub(super) fn start_first_thread(process: &Arc<Process>, memory: &Arc<Memory>, start: &Start) -> Result<(), NtStatus> {
-    match user::spawn_nt(Arc::clone(process), Arc::clone(memory), start.entry, start.teb, user::DEFAULT_HOOK) {
+    match spawn_thread(process, memory, start.entry, start.teb, user::DEFAULT_HOOK, None) {
         Ok(kthread) => {
             // The creator waits on the process object, not the thread.
             let _ = thread::detach(kthread);
@@ -1274,7 +1321,7 @@ pub fn spawn_pe_with(
     let start = start_params(process, &memory, image, pid, &params, &sources, None)
         .map(|(start, _)| start)
         .map_err(SpawnError::Image)?;
-    match user::spawn_nt(Arc::clone(process), Arc::clone(&memory), start.entry, start.teb, hook) {
+    match spawn_thread(process, &memory, start.entry, start.teb, hook, None) {
         Ok(tid) => {
             let _ = thread::detach(tid);
             Ok(())

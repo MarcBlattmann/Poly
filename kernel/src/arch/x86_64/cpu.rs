@@ -110,6 +110,9 @@ pub const EFER_NXE: u64 = 1 << 11;
 pub const MSR_STAR: u32 = 0xc000_0081;
 /// IA32_LSTAR: the SYSCALL entry point in 64-bit mode.
 pub const MSR_LSTAR: u32 = 0xc000_0082;
+/// IA32_CSTAR: the SYSCALL entry point in compatibility mode (AMD; Intel
+/// CPUs raise #UD there instead).
+pub const MSR_CSTAR: u32 = 0xc000_0083;
 /// IA32_FMASK: RFLAGS bits SYSCALL clears.
 pub const MSR_FMASK: u32 = 0xc000_0084;
 /// IA32_FS_BASE: the FS segment base in 64-bit mode.

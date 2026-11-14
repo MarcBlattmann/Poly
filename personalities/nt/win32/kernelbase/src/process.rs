@@ -20,10 +20,12 @@ use core::sync::atomic::{AtomicPtr, Ordering};
 use poly_kernelbase::error::*;
 use poly_kernelbase::{env, text};
 
-const PP_COMMAND_LINE: u64 = 0x70;
-const PP_IMAGE_PATH: u64 = 0x60;
-const PP_ENVIRONMENT: u64 = 0x80;
-const PP_ENVIRONMENT_SIZE: u64 = 0x88;
+// The parameters' fields, at the offsets of this build's process (ADR 0186, `poly_rtl::layout`).
+const PP_COMMAND_LINE: u64 = NATIVE.pp_command_line;
+const PP_IMAGE_PATH: u64 = NATIVE.pp_image_path_name;
+const PP_ENVIRONMENT: u64 = NATIVE.pp_environment;
+const PP_ENVIRONMENT_SIZE: u64 = NATIVE.pp_environment_size;
+use poly_rtl::layout::NATIVE;
 
 // ----- the environment ---------------------------------------------------------------
 
@@ -39,7 +41,7 @@ unsafe fn block<'a>() -> &'a [u16] {
     // SAFETY: the kernel (or `set_block`) wrote a valid pointer and size.
     unsafe {
         let at = ((pp + PP_ENVIRONMENT) as *const *const u16).read();
-        let bytes = ((pp + PP_ENVIRONMENT_SIZE) as *const u64).read() as usize;
+        let bytes = ((pp + PP_ENVIRONMENT_SIZE) as *const usize).read();
         if at.is_null() || bytes < 4 { &[0, 0] } else { core::slice::from_raw_parts(at, bytes / 2) }
     }
 }
@@ -72,7 +74,7 @@ fn set_block(state: &mut State, new: &[u16]) -> bool {
     unsafe {
         core::ptr::copy_nonoverlapping(new.as_ptr(), p, new.len());
         ((pp + PP_ENVIRONMENT) as *mut *mut u16).write(p);
-        ((pp + PP_ENVIRONMENT_SIZE) as *mut u64).write((new.len() * 2) as u64);
+        ((pp + PP_ENVIRONMENT_SIZE) as *mut usize).write(new.len() * 2);
     }
     if !state.env_alloc.is_null() {
         // SAFETY: the block we allocated before.
@@ -168,7 +170,7 @@ pub extern "system" fn GetCommandLineW() -> *const u16 {
         return EMPTY.as_ptr();
     }
     // SAFETY: a UNICODE_STRING the kernel wrote, NUL-terminated (ADR 0073).
-    let buf = unsafe { ((pp + PP_COMMAND_LINE + 8) as *const *const u16).read() };
+    let buf = unsafe { ((pp + PP_COMMAND_LINE + NATIVE.ptr) as *const *const u16).read() };
     if buf.is_null() { EMPTY.as_ptr() } else { buf }
 }
 
@@ -206,7 +208,7 @@ pub fn image_path() -> Vec<u16> {
 
 /// Poly's own: the starting current directory in the process parameters
 /// (`UNICODE_STRING`, ADR 0079, `poly_kernelbase::process`).
-const PP_CURRENT_DIRECTORY: u64 = poly_kernelbase::process::PP_CURRENT_DIRECTORY as u64;
+const PP_CURRENT_DIRECTORY: u64 = NATIVE.pp_current_directory;
 
 /// The initial current directory: the one the creator passed
 /// (`CreateProcessW`'s `lpCurrentDirectory`, or the creator's own), else
@@ -290,8 +292,8 @@ fn std_index(which: u32) -> Option<usize> {
 /// Poly's own places of the console connection and the standard handles
 /// in `RTL_USER_PROCESS_PARAMETERS` (ADR 0080: `winternl.h`'s
 /// `Reserved2[0]`, `[2]`, `[3]`, `[4]`).
-const PP_CONSOLE_HANDLE: u64 = 0x10;
-const PP_STANDARD_INPUT: u64 = 0x20;
+const PP_CONSOLE_HANDLE: u64 = NATIVE.pp_console_handle;
+const PP_STANDARD_INPUT: u64 = NATIVE.pp_standard_input;
 
 /// At `DLL_PROCESS_ATTACH`: the standard handles and the console
 /// connection the kernel (or the creating process) put in the parameters
@@ -307,7 +309,7 @@ pub fn init_std_handles() -> Handle {
     let (console, std) = unsafe {
         let console = ((pp + PP_CONSOLE_HANDLE) as *const isize).read();
         let std: [Handle; 3] =
-            core::array::from_fn(|i| ((pp + PP_STANDARD_INPUT + 8 * i as u64) as *const isize).read());
+            core::array::from_fn(|i| ((pp + PP_STANDARD_INPUT + NATIVE.ptr * i as u64) as *const isize).read());
         (console, std)
     };
     with_state(|s| {
@@ -358,14 +360,14 @@ pub extern "system" fn GetCurrentThread() -> Handle {
 #[unsafe(no_mangle)]
 pub extern "system" fn GetCurrentProcessId() -> u32 {
     // SAFETY: the TEB is valid.
-    unsafe { ((teb() + 0x40) as *const u64).read() as u32 }
+    unsafe { crate::base::ptr_at(teb() + NATIVE.teb_client_id) as u32 }
 }
 
 /// `GetCurrentThreadId`: `TEB.ClientId.UniqueThread` (TEB + 0x48).
 #[unsafe(no_mangle)]
 pub extern "system" fn GetCurrentThreadId() -> u32 {
     // SAFETY: the TEB is valid.
-    unsafe { ((teb() + 0x48) as *const u64).read() as u32 }
+    unsafe { crate::base::ptr_at(teb() + NATIVE.teb_client_id + NATIVE.ptr) as u32 }
 }
 
 /// `GetCurrentThreadStackLimits`: the thread's stack reservation and top, from the TEB
@@ -379,9 +381,9 @@ pub unsafe extern "system" fn GetCurrentThreadStackLimits(low: *mut usize, high:
     // SAFETY: the TEB is valid; the caller's pointers are writable.
     unsafe {
         let (lo, hi) = poly_kernelbase::process::stack_limits(
-            ((t + 0x1478) as *const u64).read(),
-            ((t + 0x10) as *const u64).read(),
-            ((t + 0x08) as *const u64).read(),
+            crate::base::ptr_at(t + NATIVE.teb_deallocation_stack),
+            crate::base::ptr_at(t + NATIVE.teb_stack_limit),
+            crate::base::ptr_at(t + NATIVE.teb_stack_base),
         );
         low.write(lo as usize);
         high.write(hi as usize);
@@ -415,18 +417,19 @@ fn modules() -> Vec<(u64, Vec<u16>)> {
     // SAFETY: ntdll keeps the loader data in process memory (ADR 0071);
     // the list is circular through its head.
     unsafe {
-        let ldr = ((peb() + 0x18) as *const u64).read();
+        let l = crate::base::LDR;
+        let ldr = crate::base::ptr_at(peb() + NATIVE.peb_ldr);
         if ldr == 0 {
             return out;
         }
-        let head = ldr + 0x20;
-        let mut link = (head as *const u64).read();
+        let head = ldr + l.ldr_in_memory_order;
+        let mut link = crate::base::ptr_at(head);
         let mut guard = 0;
         while link != head && link != 0 && guard < 4096 {
-            let entry = link - 0x10;
-            let base = ((entry + 0x30) as *const u64).read();
-            out.push((base, unicode_at(entry + 0x48).to_vec()));
-            link = (link as *const u64).read();
+            let entry = link - l.entry_in_memory_order;
+            let base = crate::base::ptr_at(entry + l.entry_dll_base);
+            out.push((base, unicode_at(entry + l.entry_full_name).to_vec()));
+            link = crate::base::ptr_at(link);
             guard += 1;
         }
     }

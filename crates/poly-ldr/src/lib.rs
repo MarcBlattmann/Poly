@@ -39,9 +39,11 @@ pub mod path;
 #[cfg(test)]
 mod tests;
 
+pub use ldrdata::{
+    Bitness, LDR_IN_INIT_ORDER, LDR_IN_LOAD_ORDER, LdrLayout, PEB_LDR, walk as walk_list, walk_in as walk_list_in,
+};
 pub use ldrdata::{ENTRY_BASE_NAME, ENTRY_IN_INIT_ORDER, ENTRY_IN_LOAD_ORDER, ENTRY_IN_MEMORY_ORDER};
 pub use ldrdata::{ENTRY_DLL_BASE, ENTRY_ENTRY_POINT, ENTRY_FULL_NAME, ENTRY_SIZE_OF_IMAGE, LDR_IN_MEMORY_ORDER};
-pub use ldrdata::{LDR_IN_INIT_ORDER, LDR_IN_LOAD_ORDER, PEB_LDR, walk as walk_list};
 pub use loader::{
     ADDREF_PIN, Callout, CalloutKind, Config, DelayFailure, LoadOp, Loader, MAX_FORWARDS, ModuleId, ModuleInfo,
     TEB_TLS_POINTER, Unload,
@@ -146,7 +148,6 @@ pub(crate) fn read_u64(p: &mut dyn Process, addr: u64) -> Result<u64, NtStatus> 
     Ok(u64::from_le_bytes(b[..8].try_into().map_err(|_| status::STATUS_ACCESS_VIOLATION)?))
 }
 
-#[allow(dead_code)]
 pub(crate) fn read_u32(p: &mut dyn Process, addr: u64) -> Result<u32, NtStatus> {
     let b = p.memory(addr, 4)?;
     Ok(u32::from_le_bytes(b[..4].try_into().map_err(|_| status::STATUS_ACCESS_VIOLATION)?))
@@ -163,6 +164,22 @@ pub(crate) fn write_bytes(p: &mut dyn Process, addr: u64, data: &[u8]) -> Result
 
 pub(crate) fn write_u64(p: &mut dyn Process, addr: u64, v: u64) -> Result<(), NtStatus> {
     write_bytes(p, addr, &v.to_le_bytes())
+}
+
+/// A pointer-sized value (`size` 4 or 8 bytes) at `addr`.
+pub(crate) fn read_ptr(p: &mut dyn Process, size: u64, addr: u64) -> Result<u64, NtStatus> {
+    if size == 4 { read_u32(p, addr).map(u64::from) } else { read_u64(p, addr) }
+}
+
+/// Write a pointer-sized value; a value a 4-byte pointer cannot hold is
+/// refused (`STATUS_INVALID_PARAMETER`) rather than truncated.
+pub(crate) fn write_ptr(p: &mut dyn Process, size: u64, addr: u64, v: u64) -> Result<(), NtStatus> {
+    if size == 4 {
+        let v = u32::try_from(v).map_err(|_| status::STATUS_INVALID_PARAMETER)?;
+        write_u32(p, addr, v)
+    } else {
+        write_u64(p, addr, v)
+    }
 }
 
 pub(crate) fn write_u32(p: &mut dyn Process, addr: u64, v: u32) -> Result<(), NtStatus> {

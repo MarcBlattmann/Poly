@@ -349,7 +349,7 @@ fn spawn(
     teb: u64,
 ) -> Result<(), NtStatus> {
     let tid_u32 = tref.0 as u32;
-    match user::spawn_nt_as(Arc::clone(process), Arc::clone(memory), entry, teb, user::DEFAULT_HOOK, tid_u32) {
+    match super::spawn_thread(process, memory, entry, teb, user::DEFAULT_HOOK, Some(tid_u32)) {
         Ok(kid) => {
             let _ = thread::detach(kid);
             if let Some(f) = process.thread_flags(tid_u32) {

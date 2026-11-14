@@ -25,6 +25,8 @@ struct Fake {
     regions: BTreeMap<u64, Region>,
     next_any: u64,
     next_heap: u64,
+    /// Where the loader's heap starts: what `images` and `heap_blocks` split at.
+    heap_from: u64,
     tried: Vec<String>,
 }
 
@@ -34,7 +36,12 @@ fn s(v: &[u16]) -> String {
 
 impl Fake {
     fn new() -> Fake {
-        Fake { next_any: 0x7_0000_0000, next_heap: 0x10_0000_0000, ..Fake::default() }
+        Fake { next_any: 0x7_0000_0000, next_heap: 0x10_0000_0000, heap_from: 0x10_0000_0000, ..Fake::default() }
+    }
+
+    /// An address space of a 32-bit process: everything below 4 GiB.
+    fn new32() -> Fake {
+        Fake { next_any: 0x6000_0000, next_heap: 0x8000_0000, heap_from: 0x8000_0000, ..Fake::default() }
     }
 
     fn file(&mut self, dos_path: &str, bytes: Vec<u8>) {
@@ -69,11 +76,11 @@ impl Fake {
     }
 
     fn images(&self) -> usize {
-        self.regions.keys().filter(|&&b| b < 0x10_0000_0000).count()
+        self.regions.keys().filter(|&&b| b < self.heap_from).count()
     }
 
     fn heap_blocks(&self) -> usize {
-        self.regions.keys().filter(|&&b| b >= 0x10_0000_0000).count()
+        self.regions.keys().filter(|&&b| b >= self.heap_from).count()
     }
 }
 
@@ -221,7 +228,7 @@ fn world(exe_image: &[u8]) -> World {
     p.insert(PEB, 0x1000);
     p.insert(TEB, 0x2000);
     p.insert(TEB2, 0x2000);
-    let mut l = Loader::new(Config { dirs: dirs() });
+    let mut l = Loader::new(Config { dirs: dirs(), ..Config::default() });
     l.init_ldr_data(&mut p, PEB).unwrap();
     let eb = p.map_image(exe_image);
     let nb = p.map_image(&ntdll_image());
@@ -862,3 +869,5 @@ fn peb_ldr_data_says_how_big_it_is_and_that_it_is_initialised() {
     assert_eq!(read_u32(&mut w.p, ldr).unwrap(), 0x58, "Length is sizeof(PEB_LDR_DATA)");
     assert_eq!(w.p.memory(ldr + 4, 1).unwrap(), &[1], "Initialized");
 }
+
+mod x86;

@@ -23,32 +23,45 @@ fn main() {
     let services = Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/services.rs");
     println!("cargo:rerun-if-changed={}", services.display());
     let text = std::fs::read_to_string(&services).expect("read services.rs");
+    let x86 = std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("x86");
+    // The i686 stubs pop their arguments (`stdcall`): their counts come from the 32-bit
+    // signature table (ADR 0186).
+    let sigs = Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/wow64/sigs.rs");
+    println!("cargo:rerun-if-changed={}", sigs.display());
+    let counts = if x86 { arg_counts(&std::fs::read_to_string(&sigs).expect("read sigs.rs")) } else { Vec::new() };
     let mut asm = String::from(".text\n");
     let mut seen: Vec<String> = Vec::new();
-    for (num, name) in parse(&text) {
-        if name.starts_with("Poly") {
-            assert!(!seen.contains(&name), "duplicate service name {name}");
-            seen.push(name.clone());
-            writeln!(asm, ".globl {name}\n{name}:\n    mov r10, rcx\n    mov eax, {num}\n    syscall\n    ret\n")
-                .unwrap();
-            continue;
-        }
-        if !name.starts_with("Nt") {
+    for (num, variant, name) in parse(&text) {
+        let poly = name.starts_with("Poly");
+        if !poly && !name.starts_with("Nt") {
             continue;
         }
         assert!(!seen.contains(&name), "duplicate service name {name}");
         seen.push(name.clone());
         let zw = format!("Zw{}", &name[2..]);
-        // Two exported entry points sharing one body.
-        writeln!(
-            asm,
-            ".globl {name}\n.globl {zw}\n{name}:\n{zw}:\n    mov r10, rcx\n    mov eax, {num}\n    syscall\n    ret\n"
-        )
-        .unwrap();
-        // Export both names from the DLL (apps import Nt*/Zw* from ntdll);
-        // /EXPORT also keeps the symbol from being GC'd.
-        println!("cargo:rustc-link-arg=/EXPORT:{name}");
-        println!("cargo:rustc-link-arg=/EXPORT:{zw}");
+        let names: Vec<&str> = if poly { vec![name.as_str()] } else { vec![name.as_str(), zw.as_str()] };
+        if x86 {
+            let Some(&(_, n)) = counts.iter().find(|(v, _)| *v == variant) else {
+                panic!("{name} has no row in wow64/sigs.rs");
+            };
+            // `int 0xF4` with EAX = the number, EDX = the arguments (ADR 0186); `stdcall`
+            // names (`_NtClose@4`), so Rust's declarations of them link.
+            for label in &names {
+                writeln!(asm, ".globl \"_{label}@{}\"\n\"_{label}@{}\":", 4 * n, 4 * n).unwrap();
+            }
+            writeln!(asm, "    mov eax, {num}\n    lea edx, [esp + 4]\n    int 0xF4\n    ret {}\n", 4 * n).unwrap();
+        } else {
+            for label in &names {
+                writeln!(asm, ".globl {label}\n{label}:").unwrap();
+            }
+            writeln!(asm, "    mov r10, rcx\n    mov eax, {num}\n    syscall\n    ret\n").unwrap();
+        }
+        if !poly {
+            // Export both names from the DLL (apps import Nt*/Zw* from ntdll);
+            // /EXPORT also keeps the symbol from being GC'd.
+            println!("cargo:rustc-link-arg=/EXPORT:{name}");
+            println!("cargo:rustc-link-arg=/EXPORT:{zw}");
+        }
     }
     let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("syscalls.s");
     std::fs::write(&out, asm).expect("write stubs");
@@ -59,15 +72,36 @@ fn main() {
     println!("cargo:rustc-link-arg=/EXPORT:PolyDebugPrint");
     // RtlCaptureContext is assembly too (ADR 0087).
     let exports = ["/EXPORT:LdrInitializeThunk", "/EXPORT:KiUserApcDispatcher", "/EXPORT:RtlCaptureContext"];
-    for link in ["/NOENTRY", "/BASE:0x7FF000000000"].into_iter().chain(exports) {
+    // The i686 ntdll lives below 2 GiB (ADR 0186); the x64 one high up (ADR 0071).
+    let base = if x86 { "/BASE:0x77000000" } else { "/BASE:0x7FF000000000" };
+    for link in ["/NOENTRY", base].into_iter().chain(exports) {
         println!("cargo:rustc-link-arg={link}");
     }
+}
+
+/// The number of arguments of each row `(Service::Variant, &[A, B, ...])` of the 32-bit
+/// signature table.
+fn arg_counts(text: &str) -> Vec<(String, usize)> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("(Service::") {
+        let row = &rest[start + "(Service::".len()..];
+        let Some(comma) = row.find(',') else { break };
+        let variant = row[..comma].trim().to_string();
+        let after = row[comma + 1..].trim_start();
+        rest = &row[comma..];
+        let Some(list) = after.strip_prefix("&[") else { continue };
+        let Some(end) = list.find(']') else { break };
+        let items = list[..end].split(',').filter(|i| !i.trim().is_empty()).count();
+        out.push((variant, items));
+    }
+    out
 }
 
 /// Every `(number, "Name")` of a `(Service::X, <number>, "Name")` tuple in
 /// the text (one per line or several on a line), whose number is an
 /// integer literal or Poly's table expression.
-fn parse(text: &str) -> Vec<(u32, String)> {
+fn parse(text: &str) -> Vec<(u32, String, String)> {
     let mut out = Vec::new();
     let mut rest = text;
     while let Some(start) = rest.find("(Service::") {
@@ -97,8 +131,9 @@ fn parse(text: &str) -> Vec<(u32, String)> {
         }
         let Some(num) = parse_int(parts[1]) else { continue };
         let name = parts[2].trim().trim_matches('"');
+        let variant = parts[0].trim_start_matches("(Service::").trim_start_matches("Service::").to_string();
         if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric()) {
-            out.push((num, name.to_string()));
+            out.push((num, variant, name.to_string()));
         }
     }
     out

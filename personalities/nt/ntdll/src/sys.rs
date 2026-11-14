@@ -35,14 +35,15 @@ impl Process for Sys {
         let name = UnicodeName::new(nt_path);
         let oa = ObjectAttributes::new(&name);
         let mut handle: isize = 0;
-        let mut iosb = [0u8; 16];
+        // IO_STATUS_BLOCK: Status (pointer-sized union), Information.
+        let mut iosb = [0usize; 2];
         // SAFETY: valid out-pointers and a well-formed OBJECT_ATTRIBUTES.
         let st = unsafe {
             NtCreateFile(
                 &mut handle,
                 FILE_READ,
                 oa.as_ptr(),
-                iosb.as_mut_ptr(),
+                iosb.as_mut_ptr().cast::<u8>(),
                 core::ptr::null(),
                 0,
                 SHARE_READ,
@@ -59,7 +60,7 @@ impl Process for Sys {
             let mut info = [0u8; 24];
             // SAFETY: valid pointers; FileStandardInformation is 24 bytes.
             let st = unsafe {
-                NtQueryInformationFile(handle, iosb.as_mut_ptr(), info.as_mut_ptr(), 24, FILE_STANDARD_INFORMATION)
+                NtQueryInformationFile(handle, iosb.as_mut_ptr().cast::<u8>(), info.as_mut_ptr(), 24, FILE_STANDARD_INFORMATION)
             };
             if !st.is_success() {
                 return Err(st);
@@ -76,7 +77,7 @@ impl Process for Sys {
                         0,
                         core::ptr::null(),
                         core::ptr::null(),
-                        iosb.as_mut_ptr(),
+                        iosb.as_mut_ptr().cast::<u8>(),
                         buf[done..].as_mut_ptr(),
                         (size - done) as u32,
                         &offset,
@@ -86,7 +87,7 @@ impl Process for Sys {
                 if !st.is_success() {
                     return Err(st);
                 }
-                let got = u64::from_le_bytes(iosb[8..16].try_into().unwrap()) as usize;
+                let got = iosb[1];
                 if got == 0 {
                     break;
                 }
@@ -198,25 +199,22 @@ impl Waiter for SysPlatform {
 struct UnicodeName {
     length: u16,
     maximum: u16,
-    _pad: u32,
     buffer: *const u16,
 }
 
 impl UnicodeName {
     fn new(units: &[u16]) -> UnicodeName {
         let bytes = (units.len() * 2).min(0xFFFE) as u16;
-        UnicodeName { length: bytes, maximum: bytes, _pad: 0, buffer: units.as_ptr() }
+        UnicodeName { length: bytes, maximum: bytes, buffer: units.as_ptr() }
     }
 }
 
 #[repr(C)]
 struct ObjectAttributes {
     length: u32,
-    _pad0: u32,
     root: isize,
     name: *const UnicodeName,
     attributes: u32,
-    _pad1: u32,
     security: *const u8,
     qos: *const u8,
 }
@@ -227,11 +225,9 @@ impl ObjectAttributes {
     fn new(name: &UnicodeName) -> ObjectAttributes {
         ObjectAttributes {
             length: core::mem::size_of::<ObjectAttributes>() as u32,
-            _pad0: 0,
             root: 0,
             name,
             attributes: Self::OBJ_CASE_INSENSITIVE,
-            _pad1: 0,
             security: core::ptr::null(),
             qos: core::ptr::null(),
         }

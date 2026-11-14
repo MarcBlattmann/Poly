@@ -279,7 +279,7 @@ unsafe fn overlapped_result(
             // SAFETY: the caller's out-pointer.
             unsafe { bytes.write(high as u32) };
         }
-        return match np::overlapped_outcome(status, high) {
+        return match np::overlapped_outcome(status, high as u64) {
             Ok(_) => TRUE,
             Err((error, _)) => fail(error, FALSE),
         };
@@ -390,7 +390,7 @@ unsafe fn read_write_ex(
     let record = Box::into_raw(Box::new(ApcRecord { routine, overlapped: ov }));
     // SAFETY: the caller's OVERLAPPED.
     let offset = unsafe {
-        (*ov).internal = nt::STATUS_PENDING.0 as u64;
+        (*ov).internal = nt::STATUS_PENDING.0 as usize;
         poly_kernelbase::file::overlapped_offset((*ov).offset, (*ov).offset_high)
     };
     let apc = io_apc as unsafe extern "system" fn(usize, *mut IoStatusBlock, usize) as *const u8;
