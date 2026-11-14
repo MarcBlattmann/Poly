@@ -592,6 +592,21 @@ fn gaw_min_inactive_as_on_windows() {
 }
 
 #[test]
+fn gaw_background_a_as_on_windows() {
+    replay("GetActiveWindow", "gaw_background_a", true);
+}
+
+#[test]
+fn gaw_background_b_as_on_windows() {
+    replay("GetActiveWindow", "gaw_background_b", true);
+}
+
+#[test]
+fn gaw_background_c_as_on_windows() {
+    replay("GetActiveWindow", "gaw_background_c", true);
+}
+
+#[test]
 fn gf_zorder_as_on_windows() {
     replay("GetFocus", "gf_zorder", true);
 }

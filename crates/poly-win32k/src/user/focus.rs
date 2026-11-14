@@ -308,7 +308,9 @@ pub fn activate_with<E: Env + ?Sized>(env: &E, y: u32, how: How) -> u32 {
         set(env, 0, y, SET_FOCUS);
         send(env, u64::from(y), WM_SETFOCUS, u64::from(old_focus), 0);
     }
-    if background { 0 } else { x }
+    // NULL behind another thread of the process (SetActiveWindow.yaml `background`); with
+    // another process in the foreground the previous active window (gaw_background_c).
+    if behind_sibling { 0 } else { x }
 }
 
 /// Whether the foreground is another thread's of our process (then a

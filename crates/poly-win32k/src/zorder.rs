@@ -22,7 +22,11 @@
 //! the oracle's session the runner's keeper, a hidden window of its
 //! process, and a console window). A thread that has lost the right to
 //! take the foreground cannot put a window that is not topmost above the
-//! foreground process's windows: its top is below the *barrier*.
+//! foreground process's windows: its top is below the *barrier*. Nor does
+//! "on top" mean the top of the band for it: a window goes directly above
+//! the highest visible window of the thread that is not topmost, so below
+//! the hidden ones that already lie above that window and below the
+//! thread's helper (GetActiveWindow.yaml `background_z_order`).
 //!
 //! **Who takes the activation** when a window goes is decided by the
 //! thread's activation history, not by the z order ([`successor`]).
@@ -116,28 +120,50 @@ fn band_end(list: &[Top], order: &[u32], topmost: bool) -> usize {
     if topmost { band_start(list, order, false) } else { order.len() }
 }
 
-/// The top of a band for a window that may not pass `barrier` (a window of
-/// the foreground process in the band of the windows that are not topmost).
-fn top_slot(list: &[Top], order: &[u32], topmost: bool, barrier: Option<u32>) -> usize {
+/// What holds a thread back that has not the right to take the foreground
+/// while another process has it (GetForegroundWindow.yaml `foreground_right`,
+/// GetActiveWindow.yaml `background_z_order`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Barrier {
+    /// The window of the foreground process the thread's windows stay below.
+    pub window: u32,
+    /// The thread's input queue: its highest visible window is where its
+    /// windows go.
+    pub queue: Key,
+}
+
+/// The top of a band for a window that may not pass `barrier`: below that
+/// window, and (`directly_above`) directly above the highest visible window
+/// of that thread that is not topmost, if it has one.
+fn top_slot(list: &[Top], order: &[u32], topmost: bool, barrier: Option<u32>, directly_above: Option<Key>) -> usize {
     let start = band_start(list, order, topmost);
     if topmost {
         return start;
     }
-    match barrier.and_then(|b| order.iter().position(|&h| h == b)) {
+    let slot = match barrier.and_then(|b| order.iter().position(|&h| h == b)) {
         Some(i) if i >= start => i + 1,
         _ => start,
+    };
+    let highest_visible = directly_above.and_then(|q| {
+        order
+            .iter()
+            .position(|&h| find(list, h).is_some_and(|t| t.queue == q && t.is(VISIBLE) && !t.is(HELPER | TOPMOST)))
+    });
+    match highest_visible {
+        Some(i) if i >= slot => i,
+        _ => slot,
     }
 }
 
 /// `hwnd` raised to the top of its band, the windows it owns above it in
 /// the order they had. The new order; the window moved when it differs
 /// from the old one.
-pub fn raise(list: &[Top], hwnd: u32, barrier: Option<u32>) -> Vec<u32> {
+pub fn raise(list: &[Top], hwnd: u32, barrier: Option<Barrier>) -> Vec<u32> {
     let Some(w) = find(list, hwnd) else { return handles(list) };
     // What it owns, and what those own (an owned popup's helper: gaw_owner).
     let owned: Vec<u32> = list.iter().filter(|t| t.hwnd != hwnd && owned_by(list, t, hwnd)).map(|t| t.hwnd).collect();
     let mut order: Vec<u32> = list.iter().map(|t| t.hwnd).filter(|h| *h != hwnd && !owned.contains(h)).collect();
-    let at = top_slot(list, &order, w.is(TOPMOST), barrier);
+    let at = top_slot(list, &order, w.is(TOPMOST), barrier.map(|b| b.window), barrier.map(|b| b.queue));
     order.insert(at, hwnd);
     for (i, &o) in owned.iter().enumerate() {
         order.insert(at + i, o);
@@ -165,14 +191,14 @@ pub fn sink(list: &[Top], hwnd: u32) -> Vec<u32> {
 /// Where a new window goes: the top of its band; a helper directly below
 /// the window that owns it (GetFocus.yaml `ime_window`: "at first lies
 /// BELOW that window"). The index in `list`, which does not have it yet.
-pub fn new_slot(list: &[Top], new: &Top, barrier: Option<u32>) -> usize {
+pub fn new_slot(list: &[Top], new: &Top, barrier: Option<Barrier>) -> usize {
     let order = handles(list);
     if new.is(HELPER)
         && let Some(i) = order.iter().position(|&h| h == new.owner)
     {
         return i + 1;
     }
-    top_slot(list, &order, new.is(TOPMOST), barrier)
+    top_slot(list, &order, new.is(TOPMOST), barrier.map(|b| b.window), barrier.map(|b| b.queue))
 }
 
 /// The helper `helper` after the focus changed in its thread: on top of
@@ -182,7 +208,7 @@ pub fn new_slot(list: &[Top], new: &Top, barrier: Option<u32>) -> usize {
 pub fn helper_to_top(list: &[Top], helper: u32, barrier: Option<u32>) -> Vec<u32> {
     let Some(w) = find(list, helper) else { return handles(list) };
     let mut order: Vec<u32> = list.iter().map(|t| t.hwnd).filter(|h| *h != helper).collect();
-    let at = top_slot(list, &order, w.is(TOPMOST), barrier);
+    let at = top_slot(list, &order, w.is(TOPMOST), barrier, None);
     order.insert(at, helper);
     order
 }
@@ -442,15 +468,61 @@ mod tests {
         // barrier of the band of the windows that are not topmost.
         let list = [keeper(), win(KH, 0), helper(A, 0), plain(A), console()];
         let b = plain(B);
-        assert_eq!(new_slot(&list, &b, Some(KH)), 2);
+        let held = Some(Barrier { window: KH, queue: ME });
+        assert_eq!(new_slot(&list, &b, held), 3, "directly above A, below the helper");
         assert_eq!(new_slot(&list, &b, None), 1);
         let list = [keeper(), win(KH, 0), plain(B), helper(A, 0), plain(A)];
-        assert_eq!(raise(&list, B, Some(KH)), handles(&list), "it cannot pass: no move");
-        assert_eq!(raise(&list, A, Some(KH)), vec![K, KH, I, A, B], "inside its own windows it moves");
+        assert_eq!(
+            raise(&list, B, held),
+            vec![K, KH, I, B, A],
+            "directly above the highest visible window, below the helper"
+        );
+        assert_eq!(raise(&list, A, held), vec![K, KH, I, A, B], "inside its own windows it moves");
         assert_eq!(raise(&list, B, None), vec![K, B, KH, I, A], "with the right it passes");
         // A topmost window is not held back.
         let t = win(C, TOPMOST);
-        assert_eq!(new_slot(&list, &t, Some(KH)), 0);
+        assert_eq!(new_slot(&list, &t, held), 0);
+    }
+
+    /// GetActiveWindow.yaml `background_z_order` (the examples: K the keeper, i
+    /// the helper, ~ hidden): a window of a thread that is not in the foreground
+    /// goes directly above the highest visible window of the thread.
+    #[test]
+    fn a_background_thread_puts_its_windows_directly_above_its_highest_visible_window() {
+        let held = Some(Barrier { window: KH, queue: ME });
+        let hidden = |h| win(h, 0);
+        let at = |list: &[Top], new: &Top| {
+            let mut l = list.to_vec();
+            l.insert(new_slot(list, new, held), *new);
+            handles(&l)
+        };
+        // A visible and active, then B, C and D created hidden: K^ i B~ C~ D~ A.
+        let mut list = vec![keeper(), win(KH, 0), helper(A, 0), plain(A)];
+        for h in [B, C, D] {
+            let t = hidden(h);
+            list.insert(new_slot(&list, &t, held), t);
+        }
+        assert_eq!(handles(&list), vec![K, KH, I, B, C, D, A]);
+        // A visible, B hidden, then C visible: K^ i B~ C A; then D hidden: K^ i B~ D~ C A.
+        let list = [keeper(), win(KH, 0), helper(A, 0), hidden(B), plain(A)];
+        assert_eq!(at(&list, &plain(C)), vec![K, KH, I, B, C, A]);
+        let list = [keeper(), win(KH, 0), helper(A, 0), hidden(B), plain(C), plain(A)];
+        assert_eq!(at(&list, &hidden(D)), vec![K, KH, I, B, D, C, A]);
+        // A, B, C visible and SetWindowPos(A, HWND_TOP): K^ i A C B, then D hidden: K^ i D~ A C B.
+        let list = [keeper(), win(KH, 0), helper(A, 0), plain(C), plain(B), plain(A)];
+        let order = raise(&list, A, held);
+        assert_eq!(order, vec![K, KH, I, A, C, B]);
+        let list: Vec<Top> = order.iter().map(|&h| *list.iter().find(|t| t.hwnd == h).unwrap()).collect();
+        assert_eq!(at(&list, &hidden(D)), vec![K, KH, I, D, A, C, B]);
+        // A hidden window that already is directly above the highest visible one does not move.
+        let list = [keeper(), win(KH, 0), helper(A, 0), hidden(B), plain(A)];
+        assert_eq!(raise(&list, B, held), handles(&list));
+        // No window visible: each new window on top (K^ C~ B~ A~ i).
+        let list = [keeper(), win(KH, 0), hidden(B), hidden(A), helper(A, 0)];
+        assert_eq!(at(&list, &hidden(C)), vec![K, KH, C, B, A, I]);
+        // Topmost windows are not affected.
+        let list = [keeper(), win(KH, 0), helper(A, 0), plain(A)];
+        assert_eq!(at(&list, &win(B, TOPMOST)), vec![B, K, KH, I, A]);
     }
 
     #[test]

@@ -349,7 +349,15 @@ const SPI_VALUES: &[(u32, &[i32])] = &[
 
 /// `SystemParametersInfoW` for the read-only getters (`SystemParametersInfoW.yaml`).
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn SystemParametersInfoW(action: u32, param: u32, pv: *mut u8, _ini: u32) -> i32 {
+pub unsafe extern "system" fn SystemParametersInfoW(action: u32, param: u32, pv: *mut u8, ini: u32) -> i32 {
+    super::first_call();
+    // SAFETY: the caller's promises, passed on.
+    unsafe { spi_get(action, param, pv, ini) }
+}
+
+/// The getters of [`SystemParametersInfoW`] without the first-call clearing of the last error
+/// (`SystemParametersInfoForDpi` with DPI 0 does not count as that first call).
+unsafe fn spi_get(action: u32, param: u32, pv: *mut u8, _ini: u32) -> i32 {
     match action {
         0x0030 => {
             if pv.is_null() {
@@ -463,7 +471,7 @@ pub unsafe extern "system" fn SystemParametersInfoForDpi(
 ) -> i32 {
     if dpi == 0 {
         // SAFETY: forwarded unchanged.
-        return unsafe { SystemParametersInfoW(action, param, pv, ini) };
+        return unsafe { spi_get(action, param, pv, ini) };
     }
     let bad = |_: ()| {
         set_last_error(ERROR_INVALID_PARAMETER);

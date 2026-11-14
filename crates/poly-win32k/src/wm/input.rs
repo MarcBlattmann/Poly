@@ -154,18 +154,19 @@ impl Wm {
     /// (GetForegroundWindow.yaml `foreground_right`; Learn, SetWindowPos:
     /// "To use SetWindowPos to bring a window to the top, the process that
     /// owns the window must have SetForegroundWindow permission").
-    pub(super) fn barrier(&self, key: Key) -> Option<u32> {
+    pub(super) fn barrier(&self, key: Key) -> Option<zorder::Barrier> {
         if foreign(key) || self.may_take_foreground(key) {
             return None;
         }
         let fg = self.foreground();
-        if fg == 0 || !self.is_foreign(fg) {
-            None
+        let window = if fg == 0 || !self.is_foreign(fg) {
+            return None;
         } else if fg == self.keeper {
-            Some(self.keeper_aux)
+            self.keeper_aux
         } else {
-            Some(fg)
-        }
+            fg
+        };
+        Some(zorder::Barrier { window, queue: self.input_key(key) })
     }
 
     /// Give the desktop's children a new order.
@@ -211,7 +212,7 @@ impl Wm {
         }
         let list = self.tops();
         let order = if to_top {
-            zorder::helper_to_top(&list, helper, self.barrier(thread))
+            zorder::helper_to_top(&list, helper, self.barrier(thread).map(|b| b.window))
         } else {
             zorder::helper_above_owner(&list, helper, active)
         };
