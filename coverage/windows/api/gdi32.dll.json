@@ -171,7 +171,7 @@
 {"symbol":"ExtFloodFill","src":["wine-spec"],"seeds":["wine:gdi32/tests/metafile.c:test_mf_FloodFill","wine:gdi32/tests/dib.c:draw_graphics"]},
 {"symbol":"ExtSelectClipRgn","src":["wine-spec"],"seeds":["wine:gdi32/tests/clipping.c:test_window_dc_clipping","wine:gdi32/tests/clipping.c:test_memory_dc_clipping","wine:gdi32/tests/mapping.c:test_dc_layout","wine:gdi32/tests/dib.c:draw_graphics"]},
 {"symbol":"ExtTextOutA","src":["wine-spec"],"seeds":["wine:gdi32/tests/metafile.c:test_ExtTextOut","wine:gdi32/tests/metafile.c:test_mf_ExtTextOut_on_path","wine:gdi32/tests/metafile.c:test_emf_ExtTextOut_on_path","wine:gdi32/tests/font.c:test_bitmap_font_glyph_index","wine:gdi32/tests/dib.c:draw_text_2"]},
-{"symbol":"ExtTextOutW","status":"claimed","claimed_by":"impl-win-text","src":["wine-spec"],"seeds":["wine:gdi32/tests/metafile.c:test_ExtTextOutScale","wine:gdi32/tests/font.c:test_bitmap_font_glyph_index"]},
+{"symbol":"ExtTextOutW","status":"green","tests_visible":9,"tests_held_out":4,"src":["wine-spec"],"seeds":["wine:gdi32/tests/metafile.c:test_ExtTextOutScale","wine:gdi32/tests/font.c:test_bitmap_font_glyph_index"]},
 {"symbol":"FillPath","src":["wine-spec"],"seeds":["wine:gdi32/tests/path.c:test_path_state"]},
 {"symbol":"FillRgn","src":["wine-spec"]},
 {"symbol":"FixBrushOrgEx","src":["wine-spec"],"seeds":["wine:gdi32/tests/brush.c:test_brush_org"]},
