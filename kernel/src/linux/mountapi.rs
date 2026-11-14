@@ -110,16 +110,22 @@ impl FileObject for ContextFile {
 struct Ops<'a> {
     made: &'a mut Made,
     files: &'a crate::fs::Files,
+    /// The caller may make file systems.
+    privileged: bool,
 }
 
 impl SuperblockOps for Ops<'_> {
+    fn privileged(&self) -> bool {
+        self.privileged
+    }
+
     fn create(&mut self, req: &CreateRequest) -> Result<(), Errno> {
         if req.fstype == FsType::Overlay {
             // The layers named by the parameters, looked up now.
             let (fs, read_only) = super::admin::build_overlay(self.files, &req.data)?;
             self.made.fs = Some(fs);
             self.made.source = if req.source == b"none" { b"overlay".to_vec() } else { req.source.clone() };
-            self.made.options = req.data.clone();
+            self.made.options = poly_overlayfs::shown_options(&req.data);
             self.made.read_only = req.read_only || read_only;
             return Ok(());
         }
@@ -272,11 +278,15 @@ impl Thread<'_> {
         self.install_context(ctx, Made { picked: Some(m), ..Made::default() }, cloexec)
     }
 
-    pub(super) fn mnt_fsconfig(&mut self, fd: i32, cmd: &Command<'_>) -> Result<(), Errno> {
+    pub(super) fn mnt_context_file(&self, fd: i32) -> Result<Arc<ContextFile>, Errno> {
+        self.context_file(fd)
+    }
+
+    pub(super) fn mnt_fsconfig(&mut self, fd: i32, cmd: &Command<'_>, privileged: bool) -> Result<(), Errno> {
         let obj = self.context_file(fd)?;
         let mut state = obj.state.lock();
         let mut made = obj.made.lock();
-        state.config(cmd, &mut Ops { made: &mut made, files: &self.process().files })
+        state.config(cmd, &mut Ops { made: &mut made, files: &self.process().files, privileged })
     }
 
     pub(super) fn mnt_fsmount(&mut self, fd: i32, attrs: u64, cloexec: bool) -> Result<i32, Errno> {
