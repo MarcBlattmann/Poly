@@ -34,7 +34,9 @@ unsafe extern "system" {
     pub fn NtCreateEvent(handle: *mut isize, access: u32, attributes: *const u8, kind: u32, initial: u8) -> NtStatus;
     pub fn NtSetEvent(handle: isize, previous: *mut i32) -> NtStatus;
     pub fn NtWaitForSingleObject(handle: isize, alertable: u8, timeout: *const i64) -> NtStatus;
+    #[cfg_attr(target_arch = "x86", allow(dead_code))]
     pub fn NtContinue(context: *mut u8, test_alert: u8) -> NtStatus;
+    #[cfg_attr(target_arch = "x86", allow(dead_code))]
     pub fn NtRaiseException(record: *const u8, context: *mut u8, first_chance: u8) -> NtStatus;
     pub fn NtCreateFile(
         handle: *mut isize,

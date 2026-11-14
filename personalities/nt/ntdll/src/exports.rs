@@ -100,7 +100,11 @@ pub extern "system" fn RtlDowncaseUnicodeChar(c: u16) -> u16 {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn RtlUpcaseUnicodeString(d: *mut UnicodeString, s: *const UnicodeString, alloc: u8) -> NtStatus {
+pub unsafe extern "system" fn RtlUpcaseUnicodeString(
+    d: *mut UnicodeString,
+    s: *const UnicodeString,
+    alloc: u8,
+) -> NtStatus {
     // SAFETY: the Rtl* contract.
     unsafe { string::case_unicode_string(d, s, alloc != 0, true, &HeapAlloc) }
 }
@@ -160,7 +164,10 @@ pub unsafe extern "system" fn RtlAppendUnicodeToString(d: *mut UnicodeString, s:
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn RtlAppendUnicodeStringToString(d: *mut UnicodeString, s: *const UnicodeString) -> NtStatus {
+pub unsafe extern "system" fn RtlAppendUnicodeStringToString(
+    d: *mut UnicodeString,
+    s: *const UnicodeString,
+) -> NtStatus {
     // SAFETY: as above.
     unsafe { string::append_unicode_string_to_string(d, s) }
 }
@@ -242,7 +249,11 @@ pub unsafe extern "system" fn RtlIntegerToUnicodeString(value: u32, base: u32, d
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn RtlUnicodeStringToInteger(s: *const UnicodeString, base: u32, value: *mut u32) -> NtStatus {
+pub unsafe extern "system" fn RtlUnicodeStringToInteger(
+    s: *const UnicodeString,
+    base: u32,
+    value: *mut u32,
+) -> NtStatus {
     // SAFETY: as above.
     unsafe { string::unicode_string_to_integer(s, base, value) }
 }
@@ -320,14 +331,21 @@ pub unsafe extern "system" fn RtlInitializeCriticalSection(cs: *mut CriticalSect
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn RtlInitializeCriticalSectionAndSpinCount(cs: *mut CriticalSection, spin: u32) -> NtStatus {
+pub unsafe extern "system" fn RtlInitializeCriticalSectionAndSpinCount(
+    cs: *mut CriticalSection,
+    spin: u32,
+) -> NtStatus {
     // SAFETY: as above.
     unsafe { (*cs).init(u64::from(spin)) };
     SUCCESS
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn RtlInitializeCriticalSectionEx(cs: *mut CriticalSection, spin: u32, _flags: u32) -> NtStatus {
+pub unsafe extern "system" fn RtlInitializeCriticalSectionEx(
+    cs: *mut CriticalSection,
+    spin: u32,
+    _flags: u32,
+) -> NtStatus {
     // SAFETY: as above.
     unsafe { (*cs).init(u64::from(spin)) };
     SUCCESS

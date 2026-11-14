@@ -60,7 +60,13 @@ impl Process for Sys {
             let mut info = [0u8; 24];
             // SAFETY: valid pointers; FileStandardInformation is 24 bytes.
             let st = unsafe {
-                NtQueryInformationFile(handle, iosb.as_mut_ptr().cast::<u8>(), info.as_mut_ptr(), 24, FILE_STANDARD_INFORMATION)
+                NtQueryInformationFile(
+                    handle,
+                    iosb.as_mut_ptr().cast::<u8>(),
+                    info.as_mut_ptr(),
+                    24,
+                    FILE_STANDARD_INFORMATION,
+                )
             };
             if !st.is_success() {
                 return Err(st);

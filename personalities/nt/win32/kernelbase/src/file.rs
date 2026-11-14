@@ -76,7 +76,11 @@ pub unsafe extern "system" fn CreateFileW(
     if !st.is_success() {
         return fail(for_create_file(st), INVALID_HANDLE_VALUE);
     }
-    set_last_error(if file::existed(disposition, iosb.information as u64) { ERROR_ALREADY_EXISTS } else { ERROR_SUCCESS });
+    set_last_error(if file::existed(disposition, iosb.information as u64) {
+        ERROR_ALREADY_EXISTS
+    } else {
+        ERROR_SUCCESS
+    });
     h
 }
 

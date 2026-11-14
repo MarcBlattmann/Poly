@@ -11,6 +11,7 @@ use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// `EXCEPTION_CONTINUE_EXECUTION` (`excpt.h`).
+#[cfg_attr(target_arch = "x86", allow(dead_code))] // 32-bit dispatch is a later stage (ADR 0186)
 pub const CONTINUE_EXECUTION: i32 = -1;
 
 struct List {
@@ -71,6 +72,7 @@ pub extern "system" fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32
 ///
 /// # Safety
 /// `record` and `context` are a valid `EXCEPTION_RECORD` and `CONTEXT`.
+#[cfg_attr(target_arch = "x86", allow(dead_code))]
 pub unsafe fn call_handlers(record: *mut u8, context: *mut u8) -> bool {
     let handlers: Vec<u64> = with(|l| l.iter().map(|&(_, h)| h).collect());
     let mut pointers: [*mut u8; 2] = [record, context];

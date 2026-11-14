@@ -81,7 +81,7 @@ pub fn redirect_system32(path: &[u16]) -> Option<alloc::vec::Vec<u16>> {
     if !(tail.is_empty() || tail[0] == b'\\' as u16) {
         return None;
     }
-    let sub = if tail.is_empty() { &tail[..] } else { &tail[1..] };
+    let sub = if tail.is_empty() { tail } else { &tail[1..] };
     for e in EXEMPT {
         let e: alloc::vec::Vec<u16> = e.encode_utf16().collect();
         if sub.starts_with(&e) && (sub.len() == e.len() || sub[e.len()] == b'\\' as u16) {

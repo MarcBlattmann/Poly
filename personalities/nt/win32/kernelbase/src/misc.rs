@@ -555,9 +555,8 @@ pub(crate) fn is_wow64(process: nt::Handle) -> Result<bool, poly_ntobj::NtStatus
     let mut value = 0usize;
     let size = core::mem::size_of::<usize>() as u32;
     // SAFETY: a valid out-pointer of the class's size.
-    let st = unsafe {
-        nt::NtQueryInformationProcess(process, 26, (&raw mut value).cast(), size, core::ptr::null_mut())
-    };
+    let st =
+        unsafe { nt::NtQueryInformationProcess(process, 26, (&raw mut value).cast(), size, core::ptr::null_mut()) };
     if st.is_success() { Ok(value != 0) } else { Err(st) }
 }
 

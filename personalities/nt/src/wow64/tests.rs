@@ -10,7 +10,9 @@ use crate::vm::{LOWEST_ADDRESS, VirtualMemory};
 use alloc::vec;
 use alloc::vec::Vec;
 use poly_abi::{Outcome, SyscallRegs};
-use poly_ntobj::status::{STATUS_ACCESS_VIOLATION, STATUS_INFO_LENGTH_MISMATCH, STATUS_NOT_IMPLEMENTED, STATUS_SUCCESS};
+use poly_ntobj::status::{
+    STATUS_ACCESS_VIOLATION, STATUS_INFO_LENGTH_MISMATCH, STATUS_NOT_IMPLEMENTED, STATUS_SUCCESS,
+};
 
 /// Where the test's 32-bit caller keeps its arguments and data.
 const LOW: u64 = 0x6000_0000;
@@ -227,10 +229,109 @@ fn the_process_says_it_is_a_32_bit_one() {
     let ret = c.put32(0);
     assert_eq!(c.call(Service::QueryInformationProcess, &[CURRENT, 26, value, 4, ret]), STATUS_SUCCESS);
     assert_eq!(c.u32_at(ret), 4);
-    assert_eq!(u64::from(c.u32_at(value)), c.f.proc.peb);
+    assert_eq!(c.u32_at(value), c.f.proc.peb as u32);
     // A 64-bit process asking about itself: zero.
     let mut f = Fake::new();
     let out = f.alloc(8);
     assert_eq!(f.call(Service::QueryInformationProcess, &[SELF, 26, out, 8, 0]), STATUS_SUCCESS);
     assert_eq!(f.u64_at(out), 0);
+}
+
+/// A stand-in for the i686 `ntdll`: a PE32 DLL exporting the three entry points.
+fn fake_ntdll32() -> &'static [u8] {
+    use poly_ldr::builder::{Export, PeBuilder, Section, TEXT, Target};
+    let export = |name: &str, ordinal, rva| Export { name: Some(name.into()), ordinal, target: Target::Rva(rva) };
+    let dll = PeBuilder {
+        image_base: 0x7700_0000,
+        dll: true,
+        sections: vec![Section::new(".text", vec![0xCC; 0x30], TEXT)],
+        export_name: "ntdll.dll".into(),
+        exports: vec![
+            export("LdrInitializeThunk", 1, 0x1000),
+            export("KiUserApcDispatcher", 2, 0x1010),
+            export("KiUserExceptionDispatcher", 3, 0x1020),
+        ],
+        ..PeBuilder::x86()
+    }
+    .write();
+    alloc::boxed::Box::leak(dll.into_boxed_slice())
+}
+
+/// A PE32 executable at 0x400000 with its entry at RVA 0x1000.
+fn exe32() -> Vec<u8> {
+    use poly_ldr::builder::{PeBuilder, Section, TEXT};
+    PeBuilder {
+        image_base: 0x40_0000,
+        entry: 0x1000,
+        sections: vec![Section::new(".text", vec![0xC3], TEXT)],
+        ..PeBuilder::x86()
+    }
+    .write()
+}
+
+#[test]
+fn a_pe32_executable_starts_a_32_bit_process_below_4_gib() {
+    let mut f = Fake::bare();
+    f.sys.ntdll32 = fake_ntdll32();
+    let tid = crate::tests::TID;
+    let ps = crate::exec::start_process(
+        &mut f.sys,
+        &mut f.proc,
+        &mut f.mem,
+        &exe32(),
+        &crate::tests::fake_ntdll(),
+        None,
+        tid,
+    )
+    .expect("starts");
+    assert!(ps.wow64 && f.proc.wow64);
+    // Large-address aware (the builder marks it so): a 4 GiB space.
+    assert_eq!(f.proc.vm.end(), 0xFFFF_0000);
+    assert_eq!(ps.image_base, 0x40_0000);
+    assert_eq!(ps.ntdll_base, 0x7700_0000);
+    assert_eq!(ps.entry, 0x7700_1000, "LdrInitializeThunk of the i686 ntdll");
+    for a in [ps.teb, ps.peb, ps.rsp, ps.stack_base] {
+        assert!(a < 1 << 32, "{a:#x}");
+    }
+    let u32_at = |f: &Fake, a: u64| f.u32_at(a);
+    let l = poly_rtl::layout::X86;
+    // The 32-bit TEB: an empty SEH chain, the stack, itself, the client id, the PEB.
+    assert_eq!(u32_at(&f, ps.teb + l.teb_exception_list), 0xFFFF_FFFF);
+    assert_eq!(u64::from(u32_at(&f, ps.teb + l.teb_stack_base)), ps.stack_base);
+    assert_eq!(u64::from(u32_at(&f, ps.teb + l.teb_stack_limit)), ps.stack_limit);
+    assert_eq!(u64::from(u32_at(&f, ps.teb + l.teb_self)), ps.teb);
+    assert_eq!(u64::from(u32_at(&f, ps.teb + l.teb_client_id + 4)), tid.0);
+    assert_eq!(u64::from(u32_at(&f, ps.teb + l.teb_peb)), ps.peb);
+    assert_eq!(u32_at(&f, ps.peb + l.peb_image_base), 0x40_0000);
+    // The start frame: a zero return address, the entry point, the PEB, the image base.
+    let frame: Vec<u32> = (0..4).map(|i| u32_at(&f, ps.rsp + 4 * i)).collect();
+    assert_eq!(frame, [0, 0x40_1000, ps.peb as u32, 0x40_0000]);
+    // Exceptions and APCs are not delivered to 32-bit code yet.
+    assert_eq!((f.proc.exception_dispatcher, f.proc.apc_dispatcher), (0, 0));
+    // The parameters have the 32-bit layout.
+    let params = crate::params::for_program("C:\\Apps\\app.exe", &["a b"], vec![0, 0]);
+    let base = crate::params::write(&mut f.proc, &mut f.mem, ps.peb, &params).unwrap();
+    assert!(base < 1 << 32);
+    assert_eq!(u64::from(u32_at(&f, ps.peb + l.peb_process_parameters)), base);
+    let len = f.bytes_at(base + l.pp_image_path_name, 2);
+    assert_eq!(u16::from_le_bytes([len[0], len[1]]) as usize, "C:\\Apps\\app.exe".len() * 2);
+    let buffer = u64::from(u32_at(&f, base + l.pp_image_path_name + 4));
+    let text: Vec<u16> =
+        f.bytes_at(buffer, "C:\\Apps\\app.exe".len() * 2).chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    assert_eq!(std::string::String::from_utf16(&text).unwrap(), "C:\\Apps\\app.exe");
+}
+
+#[test]
+fn without_an_i686_ntdll_a_pe32_executable_is_refused() {
+    let mut f = Fake::bare();
+    let r = crate::exec::start_process(
+        &mut f.sys,
+        &mut f.proc,
+        &mut f.mem,
+        &exe32(),
+        &crate::tests::fake_ntdll(),
+        None,
+        crate::tests::TID,
+    );
+    assert_eq!(r.err(), Some(poly_ntobj::status::STATUS_INVALID_IMAGE_FORMAT));
 }

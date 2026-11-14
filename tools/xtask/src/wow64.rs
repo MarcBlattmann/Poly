@@ -92,7 +92,11 @@ pub fn ensure() -> Result<PathBuf> {
         let _ = std::fs::remove_dir_all(&target);
     }
     prune(&cache);
-    crate::progress::note(&format!("32-bit modules built in {:.0?}, cached as {}", started.elapsed(), cached.display()));
+    crate::progress::note(&format!(
+        "32-bit modules built in {:.0?}, cached as {}",
+        started.elapsed(),
+        cached.display()
+    ));
     Ok(cached)
 }
 
@@ -172,10 +176,13 @@ fn programs_manifest(root: &Path) -> String {
     );
     // The compiler's 32-bit helper routines, which a C runtime would bring.
     let helpers = root.join("personalities/nt/msvc32");
-    s.push_str(&format!("
+    s.push_str(&format!(
+        "
 [dependencies]
 poly-msvc32 = {{ path = {:?} }}
-", helpers.to_string_lossy()));
+",
+        helpers.to_string_lossy()
+    ));
     for p in PROGRAMS {
         let path = root.join(PROGRAMS_DIR).join(format!("{p}.rs"));
         s.push_str(&format!("\n[[bin]]\nname = \"{p}\"\npath = {:?}\n", path.to_string_lossy()));

@@ -6,8 +6,10 @@
 //! - `last error`: `SetLastError` / `GetLastError` keep a value per thread;
 //! - `wow64 view`: the address of a local variable is below 4 GiB, and `IsWow64Process` says
 //!   the process is a 32-bit one on a 64-bit system (Learn: `IsWow64Process`);
-//! - `file`: a file in `%TEMP%` written with `CreateFileW`/`WriteFile`, read back with
-//!   `ReadFile`, its size from `GetFileSize`, then deleted.
+//! - `file`: a file in `C:\\Windows\\Temp` written with `CreateFileW`/`WriteFile`, read back
+//!   with `ReadFile`, its size from `GetFileSize`, then deleted;
+//! - `thread`: `CreateThread` runs a second 32-bit thread with its argument, its own id and its
+//!   own last error; `WaitForSingleObject` and `GetExitCodeThread` see it end with its result.
 //!
 //! It ends with `ExitProcess(0)` when every check passed, else with the number of the first
 //! one that failed. Not part of the x64 test corpus (`tests/windows/*.rs`): the oracle pipeline
@@ -43,6 +45,17 @@ unsafe extern "system" {
     fn GetLastError() -> u32;
     fn GetCurrentProcess() -> Handle;
     fn IsWow64Process(process: Handle, wow64: *mut i32) -> i32;
+    fn CreateThread(
+        security: *mut u8,
+        stack: usize,
+        start: extern "system" fn(usize) -> u32,
+        parameter: usize,
+        flags: u32,
+        id: *mut u32,
+    ) -> Handle;
+    fn WaitForSingleObject(handle: Handle, milliseconds: u32) -> u32;
+    fn GetExitCodeThread(thread: Handle, code: *mut u32) -> i32;
+    fn GetCurrentThreadId() -> u32;
     fn ExitProcess(code: u32) -> !;
 }
 
@@ -85,6 +98,37 @@ fn wow64_view() -> bool {
     ok != 0 && wow64 != 0 && address < 1 << 32
 }
 
+/// What the second thread saw: its id and its argument.
+static THREAD_SAW: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+extern "system" fn second_thread(parameter: usize) -> u32 {
+    // SAFETY: a plain kernel32 call.
+    let me = unsafe { GetCurrentThreadId() };
+    THREAD_SAW.store(me ^ parameter as u32, core::sync::atomic::Ordering::SeqCst);
+    // Its own last error, not the first thread's.
+    // SAFETY: as above.
+    unsafe { SetLastError(7) };
+    parameter as u32 + 1
+}
+
+fn thread() -> bool {
+    let mut id = 0u32;
+    // SAFETY: plain kernel32 calls; the routine has the documented `ThreadProc` signature.
+    unsafe {
+        SetLastError(5);
+        let h = CreateThread(core::ptr::null_mut(), 0, second_thread, 41, 0, &mut id);
+        if h == 0 {
+            return false;
+        }
+        let waited = WaitForSingleObject(h, 10_000) == 0;
+        let mut code = 0u32;
+        let got = GetExitCodeThread(h, &mut code) != 0;
+        CloseHandle(h);
+        let saw = THREAD_SAW.load(core::sync::atomic::Ordering::SeqCst);
+        waited && got && code == 42 && id != 0 && id != GetCurrentThreadId() && saw == id ^ 41 && GetLastError() == 5
+    }
+}
+
 fn file() -> bool {
     let mut name = [0u16; 64];
     for (d, s) in name.iter_mut().zip("C:\\Windows\\Temp\\poly-hello32.txt".encode_utf16()) {
@@ -118,8 +162,8 @@ fn file() -> bool {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mainCRTStartup() -> u32 {
-    let checks: [(&[u8], fn() -> bool); 3] =
-        [(b"last error\n", last_error), (b"wow64 view\n", wow64_view), (b"file\n", file)];
+    let checks: [(&[u8], fn() -> bool); 4] =
+        [(b"last error\n", last_error), (b"wow64 view\n", wow64_view), (b"file\n", file), (b"thread\n", thread)];
     if !out(b"hello\n") {
         // SAFETY: ends the process.
         unsafe { ExitProcess(1) }

@@ -164,7 +164,7 @@ fn put32(b: &mut [u8], at: usize, v: u32) {
 fn system_basic(w: &[u8], n: &mut [u8], f: &Facts) {
     n[..28].copy_from_slice(&w[..28]);
     put32(n, 28, crate::vm::LOWEST_ADDRESS as u32);
-    put32(n, 32, (f.end - 0x1_0001) as u32);
+    put32(n, 32, (f.end - 1) as u32);
     put32(n, 36, u32_at(w, 48));
     n[40] = w[56];
 }
@@ -470,7 +470,7 @@ fn write_back<K: NtKernel>(
                 n[4..].copy_from_slice(&s.get(wide + 8, 4)[..4]);
                 abi::write(k, narrow, &n)?;
             }
-            Back::Lengths { narrow, wide } => abi::write(k, narrow, &s.get(wide, 4)[..4].to_vec())?,
+            Back::Lengths { narrow, wide } => abi::write(k, narrow, &s.get(wide, 4)[..4])?,
         }
     }
     if let Some(i) = info {
@@ -575,7 +575,13 @@ impl<K: NtKernel> NtKernel for Thunked<'_, K> {
         self.k.wait(id, timeout, alertable)
     }
 
-    fn arm_timer(&mut self, timer: ObjectId, due: NtTimeout, period_ms: u32, apc: Option<Apc>) -> Result<bool, NtStatus> {
+    fn arm_timer(
+        &mut self,
+        timer: ObjectId,
+        due: NtTimeout,
+        period_ms: u32,
+        apc: Option<Apc>,
+    ) -> Result<bool, NtStatus> {
         self.k.arm_timer(timer, due, period_ms, apc)
     }
 

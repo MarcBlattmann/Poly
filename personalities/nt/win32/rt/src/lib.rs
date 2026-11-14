@@ -70,7 +70,10 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 macro_rules! process_heap_allocator {
     () => {
         mod process_heap {
-            #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+            #[cfg_attr(
+                target_arch = "x86",
+                link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated")
+            )]
             #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
             unsafe extern "system" {
                 pub fn GetProcessHeap() -> *mut u8;

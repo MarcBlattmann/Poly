@@ -115,7 +115,9 @@ fn embed_wow64() {
     println!("cargo:rerun-if-env-changed={WOW64_ENV}");
     let dir = std::env::var_os(WOW64_ENV).map(PathBuf::from);
     if dir.is_none() {
-        println!("cargo:warning={WOW64_ENV} is not set: this kernel runs no 32-bit programs (build with `cargo xtask`)");
+        println!(
+            "cargo:warning={WOW64_ENV} is not set: this kernel runs no 32-bit programs (build with `cargo xtask`)"
+        );
     }
     for name in ["ntdll.dll", "kernelbase.dll", "kernel32.dll", "hello32.exe"] {
         let to = out.join(format!("wow64-{name}"));
