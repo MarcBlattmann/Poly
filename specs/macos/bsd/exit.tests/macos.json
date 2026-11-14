@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "exit_code_42",
+      "source_sha256": "e5a134d46266c68d2addcc490eb56c45d13557929ec7e88e8e32c2d508dc618d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d03be68e544fedbf67243879f8eb342dd7ab1c5b9cda2a2d83cac0b97e4da473",
+          "exit_code": 42,
+          "stdout": "ok output before exit is written\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exit_code_negative",
+      "source_sha256": "a8a53a5e087351fd1867633f3a09e708034ee5ef7a370197cbd040148fd18e67",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "03f1938e3397d4d5517c4ac3dc28746b73a495dfae34d0c955303190eda737a8",
+          "exit_code": 255,
+          "stdout": "ok output before exit is written\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

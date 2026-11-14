@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "open_create",
+      "source_sha256": "57da0490a967d9c1855a3c356b980eeaa99a5d521efc99961adf287271ad9609",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a42b46aa979678a8b2b7a1198d918f8f5c6a9e7116a303dd7b884d45f1f1c60b",
+          "exit_code": 0,
+          "stdout": "ok O_CREAT of a new file\nok the lowest free descriptor, 3\nok mode 0666 less umask 022: regular file 0644\nok O_CREAT|O_EXCL of an existing file: EEXIST\nok O_CREAT|O_EXCL of a new file\nok umask 077: mode 0600\nok O_TRUNC of an existing file\nok it is empty afterwards\nok O_CREAT of an existing file without O_EXCL opens it\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "open_errors",
+      "source_sha256": "10827a9fc04b9cde1e4d7655ab00b56631c36faac8d9caf0319a2012da55d06e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3be80d06a7a1630b922c6a932af210857d70b1e233f5366b4b96fa883ebb32b2",
+          "exit_code": 0,
+          "stdout": "ok a missing file: ENOENT\nok the empty path: ENOENT\nok O_CREAT in a missing directory: ENOENT\nok O_DIRECTORY of a file: ENOTDIR\nok a file used as a directory: ENOTDIR\nok a directory for writing: EISDIR\nok a directory for reading and writing: EISDIR\nok a path at address 8: EFAULT\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -57,6 +57,7 @@ self-check and the Poly check (both run the reference OS).
 | Windows tests: build, bundle, run on Poly, compare | tool | `pipeline win build\|bundle\|poly\|diff\|show` (runner on the PC: `poly-oracle.ps1`) |
 | Windows tests on the oracle machine over SSH, record, compare | tool | `pipeline win remote --host homeserver2 [--record] [--diff]` (from a container host: `tools/pipeline/windows/poly-remote.sh`) |
 | Where Wine's conformance tests exercise an entry (spec agents) | tool | `cargo xtask coverage show <id>`; refreshed by `cargo xtask coverage seed-wine` |
+| macOS tests: build for x86_64 and arm64, run on the Mac, record `macos.json` | tool | `pipeline mac build\|run [--record]\|show` (on the oracle Mac only; ADR 0182) |
 
 All of these are `cargo xtask pipeline <command>`; the full option list is
 at the top of `tools/pipeline/src/main.rs`. Outputs go under
@@ -555,6 +556,63 @@ many seeds an entry has. The seeds are refreshed from a Wine checkout
 outside the repository with `cargo xtask coverage seed-wine <checkout>
 --revision <commit>`.
 
+## macOS test oracle
+
+The real macOS is the owner's MacBook Pro (Apple M1 Pro, macOS 27.0, build
+26A428), where a session runs with a worktree of this repository; tests are
+built and run there ([ADR 0182](adr/0182-macos-test-oracle.md); code in
+`tools/pipeline/src/mac.rs`). The pipeline tool builds on macOS; what needs
+Linux (the ptrace tracer, the diff runner's reference runs, app tests) says
+so there.
+
+**A test** is one C file, `tests/macos/<name>.c` (the corpus) or
+`specs/macos/<component>/<symbol>.tests/<name>.c`, named in lower case. It
+includes `poly_mtest.h` (`tests/macos/include`) and defines `int
+test_main(void)`; it makes BSD calls (`bsd3(SYS_write, 1, buf, n)`, which
+returns `sysret {ret, ret2, err}`: `err` is the errno when the carry flag
+was set) and Mach traps (`mach0(MACH_task_self_trap)`) directly and reports
+with `check(name, cond, got)`, `check_ok(name, r)`, `check_err(name, r,
+errno)`, `value(name, v)` and `finish()`, in the Linux corpus's output
+format. It calls nothing in libSystem: `mac build` refuses an executable
+that imports a symbol or loads a library other than libSystem. Never print
+addresses, port names, pids or times: every test runs three times per
+architecture and must print the same bytes each time. A value may differ
+between x86_64 and arm64 (the page size); each architecture is recorded on
+its own. A test starts in a fresh, empty scratch directory (use relative
+paths), with an empty environment.
+
+```sh
+cargo xtask pipeline mac build [--tests-dir DIR]... [--tests a,b]   # target/pipeline/macos/bin/<arch>/, manifest.json
+cargo xtask pipeline mac run [--tests-dir DIR]... [--tests a,b] [--runs 3] [--record]
+cargo xtask pipeline mac show specs/macos/<component>/<symbol>.tests/macos.json
+```
+
+`mac run` builds and runs every test (default: the corpus and every
+`specs/macos/*/*.tests/`) on both architectures and writes
+`target/pipeline/macos/results/macos-<time>.json`; `--record` merges the
+results into `macos.json` in each test's directory, per test and
+architecture. x86_64 runs under Rosetta 2; on a Mac without it, x86_64 is
+reported `unavailable` and left out of the recording (the arm64 results are
+kept), so recording again once Rosetta is installed adds x86_64. A test
+that timed out, did not start or was not the same on every run fails the
+command and is not recorded.
+
+**A macOS entry, end to end** (on the Mac; the held-out store is
+`~/poly-heldout`):
+
+```sh
+export POLY_HELDOUT_DIR=~/poly-heldout
+cargo xtask coverage claim macos/syscall/bsd/write --agent spec-macos-1
+cargo xtask pipeline spec new macos/syscall/bsd/write --agent spec-macos-1 --oracle-os "macOS 27.0 (26A428)"
+# write tests outside the repository, check them with mac run --tests-dir <that dir>, then:
+cargo xtask pipeline tests split macos/syscall/bsd/write <dir> --spec-agent spec-macos-1
+cargo xtask pipeline mac run --tests-dir specs/macos/bsd/write.tests --record
+cargo xtask pipeline mac run --tests-dir ~/poly-heldout/macos/syscall/bsd/write --record
+```
+
+Poly cannot run Mach-O programs yet, so there is no comparison with Poly
+(`mac poly`/`mac diff`) until Mach-O loading exists.
+
 ## Safety rules
 
 Reviewers check these on every agent PR; a violation stops the entry
@@ -584,4 +642,5 @@ Reviewers check these on every agent PR; a violation stops the entry
 - `data<i>` fields and times in the kernel's `POLY-SYSCALL` records.
   (`POLY-SIGNAL` reports every signal a thread takes but `SIGKILL`, as the
   ptrace tracer's signal-delivery-stops: ADR 0062.)
-- The macOS oracle and tracer (later phases).
+- A macOS boundary tracer, and running macOS tests on Poly (after Mach-O
+  loading; ADR 0182).

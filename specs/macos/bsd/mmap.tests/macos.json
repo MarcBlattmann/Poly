@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "mmap_errors",
+      "source_sha256": "0319cbbfc298b6e15c00269d0571228334aa4d434ab807c0fb46ba8b048508d9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1c25dfefc620040cb1404e4fa3d6d1edaf532315676160291666ee814197673b",
+          "exit_code": 0,
+          "stdout": "ok no MAP_ANON and fd -1: EBADF\nok fd 99: EBADF\nok MAP_FIXED at an unaligned address: EINVAL\nok length 2^62: ENOMEM\nok length -4096: EINVAL\nok PROT_READ of a write-only file: EACCES\nok MAP_SHARED writable of a read-only file: EACCES\nok MAP_PRIVATE writable of a read-only file works\nok a directory: EINVAL\nok /dev/null: ENODEV\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mmap_file",
+      "source_sha256": "3fbf81a61c4d62cedb6e31c8ecd2e3a40e682da6d71e7d1020da3bf82c9e4802",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5df34f2f87de58c1bbfbf1af3852bcd8644ce765ec4e6307e1521db17baf22fb",
+          "exit_code": 0,
+          "stdout": "ok map the file\nok the mapping shows the file\nok and zeros after its end\nok offset 3 is accepted\nok the address is 3 bytes into a page\nok and shows the file from offset 3\nok a MAP_SHARED store is in the file\nok a MAP_PRIVATE store is not\nok mapping past the end of the file succeeds\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

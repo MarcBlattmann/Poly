@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 17:49:33",
+  "tests": [
+    {
+      "name": "read_errors",
+      "source_sha256": "a61cd735ded27a80667cfca75c9aa591a8069417bfb4adb0919f2652a032766e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d113f4df958ed32d3ec493a73b0dcd9ae56db4bd341ec2f18e34dc2992fd3ca5",
+          "exit_code": 0,
+          "stdout": "ok fd 77: EBADF\nok a write-only descriptor: EBADF\nok a directory: EISDIR\nok a buffer at address 8: EFAULT\nok the failed read consumed nothing\nok at the end, the same buffer: 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "read_file",
+      "source_sha256": "b5c31fe56587ca8942be16da2e9fb71cc13ae3ad329ebf8e2fa0f6ac6f67083d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9b7491aed10b4073093dd19daba576d10ad1bd7ee4927f995112b8e68b26346c",
+          "exit_code": 0,
+          "stdout": "ok a count of 2 reads 2\nok the rest: 3 bytes\nok at the end: 0\nok a count of 0: 0\nok and the offset did not move\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
