@@ -39,6 +39,11 @@ pub const IMAGE_KEY: &str = "X-Poly-AppImage";
 /// FUSE (the AppImage project's `APPIMAGE_EXTRACT_AND_RUN`).
 pub const EXTRACT_AND_RUN: &str = "APPIMAGE_EXTRACT_AND_RUN";
 
+/// Whether an AppImage has to be started by extracting it
+/// ([`EXTRACT_AND_RUN`]) on Poly instead of by mounting its image through
+/// FUSE (ADR 0180 says which works and why).
+pub const RUNS_BY_EXTRACTING: bool = false;
+
 /// Most bytes of an icon or a desktop file read from an image.
 const FILE_LIMIT: u64 = 4 << 20;
 /// Most links followed in one path.

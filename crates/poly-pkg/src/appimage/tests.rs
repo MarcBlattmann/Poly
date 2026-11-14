@@ -392,3 +392,23 @@ fn desktop_keys_skip_translations_and_other_groups() {
     let keys = desktop_keys("# c\n[Desktop Entry]\nName=A\nName[de]=B\n\n[Desktop Action x]\nName=C\n");
     assert_eq!(keys, [("Name", "A")]);
 }
+
+/// A real AppImage, when `POLY_TEST_APPIMAGE` names one (a download, never
+/// committed): its desktop file and icon come out of it.
+#[test]
+#[ignore = "needs POLY_TEST_APPIMAGE=<path of an AppImage>"]
+fn a_real_appimage_is_read() {
+    use std::io::{Read, Seek, SeekFrom};
+    let path = std::env::var("POLY_TEST_APPIMAGE").expect("POLY_TEST_APPIMAGE");
+    let size = std::fs::metadata(&path).unwrap().len();
+    let mut head = std::vec![0u8; HEAD];
+    std::fs::File::open(&path).unwrap().read_exact(&mut head).unwrap();
+    let image = read(&head, size, move |at, buf| {
+        let mut f = std::fs::File::open(&path).unwrap();
+        f.seek(SeekFrom::Start(at)).is_ok() && f.read_exact(buf).is_ok()
+    })
+    .unwrap();
+    std::eprintln!("{} | {} | {} | icon {:?} bytes", image.name, image.summary, image.version, image.icon.as_ref().map(Vec::len));
+    std::eprintln!("{}", image.desktop);
+    assert!(!image.name.is_empty() && image.icon.is_some());
+}

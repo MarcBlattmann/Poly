@@ -139,8 +139,51 @@ fn read_package(path: &str) -> Result<(Vec<u8>, Option<Vec<u8>>), String> {
     Ok((head, control))
 }
 
+/// What was read of the AppImage at `path` (its first bytes are `head`):
+/// its desktop file and icon, from the image inside it.
+fn read_image(path: &str, head: &[u8]) -> Result<poly_pkg::appimage::Image, poly_pkg::Error> {
+    let size = poly_rt::fs::metadata(path).map_err(|_| poly_pkg::Error::Truncated)?.len();
+    let owned = path.to_string();
+    poly_pkg::appimage::read(head, size, move |at, buf| {
+        let Ok(mut file) = File::open(&owned) else { return false };
+        if file.seek(at as i64, poly_rt::abi::Whence::Start).is_err() {
+            return false;
+        }
+        let mut got = 0;
+        while got < buf.len() {
+            match file.read(&mut buf[got..]) {
+                Ok(0) => return false,
+                Ok(n) => got += n,
+                Err(poly_rt::Error::Interrupted) => {}
+                Err(_) => return false,
+            }
+        }
+        true
+    })
+}
+
+/// `from` copied to `to`, a megabyte at a time.
+fn copy_file(from: &str, to: &str) -> Result<(), String> {
+    let mut src = File::open(from).map_err(|e| alloc::format!("{from}: {e}"))?;
+    let dst = File::create(to).map_err(|e| alloc::format!("{to}: {e}"))?;
+    let mut buf = alloc::vec![0u8; 1 << 20];
+    loop {
+        match src.read(&mut buf) {
+            Ok(0) => return Ok(()),
+            Ok(n) => dst.write_all(&buf[..n]).map_err(|e| alloc::format!("{to}: {e}"))?,
+            Err(poly_rt::Error::Interrupted) => {}
+            Err(e) => return Err(alloc::format!("{from}: {e}")),
+        }
+    }
+}
+
 /// The installer for `path`, with what the base root has.
 fn model_for(path: &str) -> Installer {
+    if let Ok((head, _)) = read_package(path)
+        && format::detect(&head) == Some(format::Format::AppImage)
+    {
+        return Installer::for_image(path, read_image(path, &head));
+    }
     let mut model = match read_package(path) {
         Ok((head, control)) => Installer::new(path, Ok(&head), control.as_deref()),
         Err(why) => Installer::new(path, Err(&why), None),
@@ -348,6 +391,63 @@ impl view::Host for Native {
                 Some((id, app.name, app.icon))
             })
             .collect()
+    }
+
+    fn place_image(&mut self, path: &str, image: &poly_pkg::appimage::Image) -> Result<view::Placed, String> {
+        use poly_pkg::appimage;
+        let layout = appimage::layout(&data_home(), &appimage::slug(&image.name));
+        let dir_of = |p: &str| p.rsplit_once('/').map_or("/", |(d, _)| d).to_string();
+        for dir in [layout.dir.clone(), dir_of(&layout.desktop)] {
+            poly_rt::fs::create_dir_all(&dir).map_err(|e| alloc::format!("{dir}: {e}"))?;
+        }
+        // The copy under a name of its own, then in its place: a cut-off
+        // copy is never the app.
+        let part = alloc::format!("{}.part", layout.image);
+        copy_file(path, &part)?;
+        poly_rt::fs::set_mode(&part, 0o755).map_err(|e| alloc::format!("{part}: {e}"))?;
+        poly_rt::fs::rename(&part, &layout.image).map_err(|e| alloc::format!("{}: {e}", layout.image))?;
+        let icon = match &image.icon {
+            Some(png) => {
+                poly_rt::fs::write(&layout.icon, png).map_err(|e| alloc::format!("{}: {e}", layout.icon))?;
+                Some(layout.icon.clone())
+            }
+            None => None,
+        };
+        let text = appimage::desktop_file(image, &layout, appimage::RUNS_BY_EXTRACTING);
+        poly_rt::fs::write(&layout.desktop, text.as_bytes()).map_err(|e| alloc::format!("{}: {e}", layout.desktop))?;
+        Ok(view::Placed { id: layout.id, icon })
+    }
+
+    fn run_image(&mut self, path: &str) -> Result<(), String> {
+        // The AppImage specification's first step: it has to be executable.
+        let executable = poly_rt::fs::metadata(path).is_ok_and(|m| m.mode() & 0o111 != 0);
+        if !executable {
+            poly_rt::fs::set_mode(path, 0o755).map_err(|e| alloc::format!("{path}: {e}"))?;
+        }
+        // The desktop shows a busy pointer until the app has a window.
+        let mut startup = poly_app::startup::Startup::begin(path);
+        let mut cmd = Command::new(path);
+        cmd.arg0(path)
+            .envs(
+                poly_rt::env::vars()
+                    .filter_map(|v| core::str::from_utf8(v).ok())
+                    .filter(|v| !poly_app::startup::is_token_var(v)),
+            )
+            .envs(startup.environment().iter().map(String::as_str))
+            .stdin(Stdio::Null);
+        for (name, value) in poly_pkg::appimage::run_environment(poly_pkg::appimage::RUNS_BY_EXTRACTING) {
+            cmd.env(name, value);
+        }
+        match cmd.spawn() {
+            Ok(child) => {
+                startup.started(child.id());
+                Ok(())
+            }
+            Err(e) => {
+                startup.failed();
+                Err(alloc::format!("{e}"))
+            }
+        }
     }
 
     fn delete_image(&mut self, slug: &str) -> Result<(), String> {

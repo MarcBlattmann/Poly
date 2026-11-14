@@ -30,6 +30,11 @@ struct Fake {
     /// The AppImages whose files the window was asked to remove.
     deleted: Vec<String>,
     refuse_delete: bool,
+    /// The AppImages installed (path, name) and run.
+    placed: Vec<(String, String)>,
+    ran: Vec<String>,
+    refuse_place: bool,
+    refuse_run: bool,
 }
 
 struct FakeHost(Rc<RefCell<Fake>>);
@@ -55,6 +60,25 @@ impl Host for FakeHost {
     fn apps_of(&mut self, name: &str) -> Vec<(String, String, Option<String>)> {
         assert_eq!(name, "galculator");
         alloc::vec![("galculator.desktop".into(), "Galculator".into(), Some("galculator".into()))]
+    }
+
+    fn place_image(&mut self, path: &str, image: &poly_pkg::appimage::Image) -> Result<crate::view::Placed, String> {
+        let mut f = self.0.borrow_mut();
+        f.placed.push((path.into(), image.name.clone()));
+        if f.refuse_place {
+            Err("no space left".into())
+        } else {
+            Ok(crate::view::Placed {
+                id: "poly-appimage-hello-pixels.desktop".into(),
+                icon: Some("/h/icon.png".into()),
+            })
+        }
+    }
+
+    fn run_image(&mut self, path: &str) -> Result<(), String> {
+        let mut f = self.0.borrow_mut();
+        f.ran.push(path.into());
+        if f.refuse_run { Err("exec format error".into()) } else { Ok(()) }
     }
 
     fn delete_image(&mut self, slug: &str) -> Result<(), String> {
@@ -426,4 +450,70 @@ fn the_uninstall_button_is_the_danger_one_in_both_themes() {
         assert_ne!(fb.pixel((cancel.x + 6) as u32, (cancel.y + cancel.height / 2) as u32), Some(p.danger));
     }
     poly_shell::theme::set_light(false);
+}
+
+fn image_app() -> (InstallerApp, Rc<RefCell<Fake>>) {
+    let image = poly_pkg::appimage::Image {
+        name: "Hello Pixels".into(),
+        summary: "Draws a few pixels".into(),
+        version: "1.2.3".into(),
+        desktop: String::new(),
+        icon: None,
+        size: 5_000_000,
+    };
+    let model = Installer::for_image("/home/poly/Downloads/Hello.AppImage", Ok(image));
+    let fake = Rc::new(RefCell::new(Fake::default()));
+    (InstallerApp::new(model, Box::new(FakeHost(Rc::clone(&fake)))), fake)
+}
+
+#[test]
+fn an_appimage_asks_run_or_install_and_installs_on_the_next_look() {
+    let (mut app, fake) = image_app();
+    assert_eq!(app.title(), "Install Hello Pixels");
+    assert_eq!(app.button_rects(&ui()).len(), 3);
+    click(&mut app, Action::Install);
+    // The window shows "Installing" first; the copy is the next look's.
+    assert_eq!(app.model.phase, Phase::Working(Step::Place));
+    assert!(fake.borrow().placed.is_empty() && fake.borrow().started.is_empty());
+    assert!(app.deadline().is_some());
+    let mut cx = Cx::default();
+    app.tick(&mut cx);
+    assert_eq!(fake.borrow().placed, [("/home/poly/Downloads/Hello.AppImage".to_string(), "Hello Pixels".to_string())]);
+    assert_eq!(app.model.phase, Phase::Done);
+    assert_eq!(fake.borrow().changed, 1, "the launcher has it at once");
+    assert_eq!(
+        fake.borrow().reports,
+        ["installed Hello Pixels 1.2.3: Hello Pixels (poly-appimage-hello-pixels.desktop)"]
+    );
+    assert_eq!(app.model.buttons(), [("Close", Action::Close), ("Open", Action::Open)]);
+    let mut fb = MemoryFramebuffer::new(SIZE.0 as u32, SIZE.1 as u32);
+    app.draw(&mut fb, &ui(), true);
+    click(&mut app, Action::Open);
+    assert_eq!(fake.borrow().opened, ["poly-appimage-hello-pixels.desktop"]);
+}
+
+#[test]
+fn run_starts_the_appimage_where_it_is_and_installs_nothing() {
+    let (mut app, fake) = image_app();
+    let cx = click(&mut app, Action::Run);
+    assert_eq!(fake.borrow().ran, ["/home/poly/Downloads/Hello.AppImage"]);
+    assert!(quit(&cx));
+    assert!(fake.borrow().placed.is_empty() && fake.borrow().changed == 0);
+    // An AppImage that cannot start is the window's failure.
+    let (mut app, fake) = image_app();
+    fake.borrow_mut().refuse_run = true;
+    let cx = click(&mut app, Action::Run);
+    assert!(!quit(&cx));
+    assert_eq!(app.model.phase, Phase::Failed("Hello Pixels could not be started: exec format error.".into()));
+}
+
+#[test]
+fn an_appimage_that_cannot_be_copied_says_why() {
+    let (mut app, fake) = image_app();
+    fake.borrow_mut().refuse_place = true;
+    click(&mut app, Action::Install);
+    app.tick(&mut Cx::default());
+    assert_eq!(app.model.phase, Phase::Failed("The app could not be installed: no space left.".into()));
+    assert_eq!(fake.borrow().changed, 0);
+    assert!(fake.borrow().reports.iter().any(|l| l.starts_with("failed: ")));
 }

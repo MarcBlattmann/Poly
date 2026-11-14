@@ -12,6 +12,7 @@
 //! then [`Phase::Done`] or [`Phase::Failed`]. A file that is no package Poly installs stays in
 //! [`Phase::Refused`] with the reason.
 
+use crate::appimage::Image;
 use crate::apt::{self, Progress};
 use crate::deb::{self, Info};
 use crate::format::{self, Format};
@@ -41,6 +42,9 @@ pub enum Step {
     Autoremove,
     /// Take an installed AppImage's files away (the program does it).
     Delete,
+    /// Copy an AppImage into the user's folder and add its launcher entry
+    /// (the program does it).
+    Place,
 }
 
 /// What the window is for.
@@ -50,6 +54,8 @@ pub enum Task {
     Install,
     /// Remove an installed app (ADR 0180).
     Uninstall,
+    /// Install an AppImage, or run it without (ADR 0180).
+    Image,
 }
 
 /// Where the installer is.
@@ -78,6 +84,8 @@ pub enum Action {
     Open,
     /// Remove the app (ADR 0180).
     Uninstall,
+    /// Start the AppImage from where it is, without installing it.
+    Run,
 }
 
 /// What an uninstall removes (ADR 0180).
@@ -114,6 +122,8 @@ pub struct Installer {
     pub title: Option<String>,
     /// For an uninstall: which kind of install it removes.
     pub removal: Option<Removal>,
+    /// For an AppImage: what was read from it.
+    pub image: Option<Image>,
     /// What the package says about itself, if it could be read.
     pub package: Option<Info>,
     /// The version of this package installed already, if any.
@@ -153,6 +163,7 @@ impl Installer {
             path: path.to_string(),
             title: None,
             removal: None,
+            image: None,
             package: None,
             installed: None,
             phase: Phase::Ready,
@@ -175,7 +186,8 @@ impl Installer {
         match format::detect(head) {
             Some(Format::Deb) => {}
             Some(other) => {
-                it.phase = Phase::Refused(other.not_yet().unwrap_or("Poly cannot install this package.").to_string());
+                let why = other.not_yet().unwrap_or("This file is read by Installer::for_image.");
+                it.phase = Phase::Refused(why.to_string());
                 return it;
             }
             None => {
@@ -191,6 +203,21 @@ impl Installer {
         });
         match info {
             Ok(info) => it.package = Some(info),
+            Err(e) => it.phase = Phase::Refused(e.describe().to_string()),
+        }
+        it
+    }
+
+    /// The window for the AppImage at `path`: what was read of it, or why
+    /// it cannot be (ADR 0180). **Run** starts it from where it is,
+    /// **Install** copies it into the user's folder.
+    pub fn for_image(path: &str, image: Result<Image, crate::Error>) -> Installer {
+        let mut it = Installer::new(path, Err("nothing to read"), None);
+        it.task = Task::Image;
+        it.phase = Phase::Ready;
+        it.have_lists = true;
+        match image {
+            Ok(image) => it.image = Some(image),
             Err(e) => it.phase = Phase::Refused(e.describe().to_string()),
         }
         it
@@ -234,12 +261,24 @@ impl Installer {
         if let Some(title) = &self.title {
             return title;
         }
+        if let Some(image) = &self.image {
+            return &image.name;
+        }
         self.package.as_ref().map_or_else(|| file_name(&self.path), |p| p.name.as_str())
     }
 
     /// The line under the heading: the package's own summary.
     pub fn summary(&self) -> &str {
-        self.package.as_ref().map_or("", |p| p.summary.as_str())
+        match &self.image {
+            Some(image) => image.summary.as_str(),
+            None => self.package.as_ref().map_or("", |p| p.summary.as_str()),
+        }
+    }
+
+    /// The installation failed in a way only the program knows (a file it
+    /// could not write): say so.
+    pub fn fail(&mut self, why: &str) {
+        self.phase = Phase::Failed(why.to_string());
     }
 
     /// Whether the window is for removing an app.
@@ -249,6 +288,15 @@ impl Installer {
 
     /// The facts the window lists: label and value.
     pub fn facts(&self) -> Vec<(&'static str, String)> {
+        if let Some(image) = &self.image {
+            let mut out = Vec::new();
+            if !image.version.is_empty() {
+                out.push(("Version", image.version.clone()));
+            }
+            out.push(("Size", deb::human_kib(image.size.div_ceil(1024))));
+            out.push(("Kind", alloc::format!("Linux app, {}", Format::AppImage.name())));
+            return out;
+        }
         if let Some(Removal::Image { size, .. }) = &self.removal {
             return alloc::vec![
                 ("Size", deb::human_kib(size.div_ceil(1024))),
@@ -282,6 +330,10 @@ impl Installer {
         }
         match &self.phase {
             Phase::Refused(why) | Phase::Failed(why) => why.clone(),
+            Phase::Ready if self.image.is_some() => {
+                "Install copies the app to your user folder and adds it to the launcher and to Applications. Run starts it from where it is."
+                    .to_string()
+            }
             Phase::Ready => {
                 "Installing adds the app and what it needs from Debian's archive to this computer.".to_string()
             }
@@ -291,6 +343,7 @@ impl Installer {
             Phase::Working(Step::Configure) => alloc::format!("Preparing this computer (once): {}", self.activity),
             Phase::Working(Step::Update) => "Getting the list of Debian's packages\u{2026}".to_string(),
             Phase::Working(Step::Install) if self.activity.is_empty() => "Installing\u{2026}".to_string(),
+            Phase::Working(Step::Place) => "Installing\u{2026}".to_string(),
             // The steps of an uninstall ([`Installer::removal_message`]).
             Phase::Working(_) => self.activity.clone(),
             Phase::Done => match self.apps.first() {
@@ -333,6 +386,9 @@ impl Installer {
         }
         match &self.phase {
             Phase::Refused(_) | Phase::Failed(_) => alloc::vec![("Close", Action::Close)],
+            Phase::Ready if self.image.is_some() => {
+                alloc::vec![("Cancel", Action::Close), ("Run", Action::Run), ("Install", Action::Install)]
+            }
             Phase::Ready => {
                 let same = self.package.as_ref().is_some_and(|p| self.installed.as_deref() == Some(p.version.as_str()));
                 alloc::vec![
@@ -360,13 +416,14 @@ impl Installer {
             Step::Remove => apt::remove(self.package.as_ref().map_or("", |p| p.name.as_str()), self.status_fd),
             Step::Autoremove => apt::autoremove(self.status_fd),
             // The program does it.
-            Step::Delete => Vec::new(),
+            Step::Delete | Step::Place => Vec::new(),
         }
     }
 
     /// The step after `done` (`None`: the first), if one is left.
     fn next_step(&self, done: Option<Step>) -> Option<Step> {
         let all: Vec<(Step, bool)> = match &self.removal {
+            None if self.image.is_some() => alloc::vec![(Step::Place, true)],
             None => alloc::vec![
                 (Step::Configure, self.unconfigured > 0),
                 (Step::Update, !self.have_lists),
@@ -389,7 +446,8 @@ impl Installer {
     /// **Install** was clicked: the first command to run, if the package
     /// can be installed.
     pub fn start(&mut self) -> Option<Vec<String>> {
-        let known = self.package.is_some() || matches!(self.removal, Some(Removal::Image { .. }));
+        let known =
+            self.package.is_some() || self.image.is_some() || matches!(self.removal, Some(Removal::Image { .. }));
         if self.phase != Phase::Ready || !known {
             return None;
         }
@@ -457,6 +515,7 @@ impl Installer {
                 Step::Remove => "The app could not be uninstalled",
                 Step::Autoremove => "What only the app needed could not be removed",
                 Step::Delete => "The app's files could not be removed",
+                Step::Place => "The app could not be installed",
             };
             let lines: Vec<&str> = self.log.iter().map(String::as_str).collect();
             let why = match (step, apt::dpkg_error(&lines), apt::error_line(lines.iter().copied())) {
@@ -492,7 +551,7 @@ impl Installer {
                 self.phase = Phase::Done;
                 None
             }
-            Step::Install => {
+            Step::Install | Step::Place => {
                 let name = self.package.as_ref().map(|p| p.name.clone()).unwrap_or_default();
                 self.apps = apps(&name);
                 self.installed = self.package.as_ref().map(|p| p.version.clone());
@@ -827,6 +886,59 @@ Description: scientific calculator\n A GTK 3 calculator.\n";
                 "The app's files could not be removed: /home/poly/.local/share/poly/appimages/x: Permission denied."
                     .into()
             )
+        );
+    }
+
+    fn hello_image() -> Image {
+        Image {
+            name: "Hello Pixels".into(),
+            summary: "Draws a few pixels".into(),
+            version: "1.2.3".into(),
+            desktop: String::new(),
+            icon: None,
+            size: 5_000_000,
+        }
+    }
+
+    #[test]
+    fn an_appimage_is_run_or_installed_in_one_step_done_by_the_program() {
+        let mut it = Installer::for_image("/home/poly/Downloads/Hello.AppImage", Ok(hello_image()));
+        assert!(!it.uninstalling());
+        assert_eq!((it.name(), it.summary()), ("Hello Pixels", "Draws a few pixels"));
+        assert_eq!(
+            it.facts(),
+            [
+                ("Version", "1.2.3".to_string()),
+                ("Size", "4.7 MB".to_string()),
+                ("Kind", "Linux app, AppImage".to_string())
+            ]
+        );
+        assert_eq!(it.buttons(), [("Cancel", Action::Close), ("Run", Action::Run), ("Install", Action::Install)]);
+        assert!(it.message().starts_with("Install copies the app to your user folder"));
+        // Install: no command, the program places the files.
+        assert_eq!(it.start(), Some(Vec::new()));
+        assert_eq!(it.phase, Phase::Working(Step::Place));
+        assert!(it.buttons().is_empty() && it.busy());
+        assert_eq!(it.message(), "Installing\u{2026}");
+        let id = "poly-appimage-hello-pixels.desktop".to_string();
+        assert_eq!(it.finished(true, |_| alloc::vec![(id.clone(), "Hello Pixels".to_string())]), None);
+        assert_eq!(it.phase, Phase::Done);
+        assert_eq!(it.message(), "Hello Pixels is installed. It is in the launcher and in Applications.");
+        assert_eq!(it.buttons(), [("Close", Action::Close), ("Open", Action::Open)]);
+        assert_eq!(it.apps[0].0, id);
+        // An AppImage that cannot be read is refused with the reason.
+        let it = Installer::for_image("/tmp/old.AppImage", Err(crate::Error::OldAppImage));
+        assert_eq!(it.phase, Phase::Refused(crate::Error::OldAppImage.describe().into()));
+        assert_eq!(it.buttons(), [("Close", Action::Close)]);
+        assert_eq!(it.name(), "old.AppImage");
+        // The program's own failure.
+        let mut it = Installer::for_image("/tmp/a.AppImage", Ok(hello_image()));
+        it.start();
+        it.output("E: /root/.local/share/poly: No space left on device");
+        it.finished(false, |_| Vec::new());
+        assert_eq!(
+            it.phase,
+            Phase::Failed("The app could not be installed: /root/.local/share/poly: No space left on device.".into())
         );
     }
 

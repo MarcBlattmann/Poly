@@ -53,6 +53,14 @@ pub struct Pumped {
 }
 
 /// What the installer does to the system.
+/// What installing an AppImage made: its desktop file ID and the icon file
+/// it took out of the image (if it had one).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Placed {
+    pub id: String,
+    pub icon: Option<String>,
+}
+
 pub trait Host {
     /// Start the command `argv`.
     fn start(&mut self, argv: &[String]) -> Result<(), String>;
@@ -63,6 +71,11 @@ pub trait Host {
     /// The launcher entries package `name` brought: desktop file ID, the
     /// app's name, its icon's name.
     fn apps_of(&mut self, name: &str) -> Vec<(String, String, Option<String>)>;
+    /// Install the AppImage at `path`: copy it into the user's folder and
+    /// write the desktop file (and the icon) the launcher reads (ADR 0180).
+    fn place_image(&mut self, path: &str, image: &poly_pkg::appimage::Image) -> Result<Placed, String>;
+    /// Start the AppImage at `path` from where it is.
+    fn run_image(&mut self, path: &str) -> Result<(), String>;
     /// Take an installed AppImage's files away (its directory and desktop
     /// file); `slug` names it (ADR 0180).
     fn delete_image(&mut self, slug: &str) -> Result<(), String>;
@@ -216,6 +229,20 @@ impl InstallerApp {
                     cx.quit();
                 }
             }
+            Action::Run => {
+                let path = self.model.path.clone();
+                match self.host.run_image(&path) {
+                    Ok(()) => {
+                        self.host.report(&alloc::format!("started {} from {path}", self.model.name()));
+                        cx.quit();
+                    }
+                    Err(why) => {
+                        self.model.fail(&alloc::format!("{} could not be started: {why}.", self.model.name()));
+                        self.report_end();
+                        cx.redraw();
+                    }
+                }
+            }
             Action::Open => {
                 if let Some((id, _)) = self.model.apps.first() {
                     self.host.open(&id.clone());
@@ -266,8 +293,31 @@ impl InstallerApp {
         self.run(next, cx);
     }
 
+    /// Install the AppImage: its files are copied and its desktop file
+    /// written by the program.
+    fn place(&mut self, cx: &mut Cx) {
+        let (Some(image), path) = (self.model.image.clone(), self.model.path.clone()) else { return };
+        match self.host.place_image(&path, &image) {
+            Ok(placed) => {
+                self.app_icon = placed.icon;
+                let apps = alloc::vec![(placed.id, image.name.clone())];
+                self.model.finished(true, |_| apps);
+                self.host.apps_changed();
+            }
+            Err(why) => {
+                self.model.output(&alloc::format!("E: {why}"));
+                self.model.finished(false, |_| Vec::new());
+            }
+        }
+        self.report_end();
+        cx.redraw();
+    }
+
     /// The step the program does itself (an AppImage's files taken away).
     fn do_work(&mut self, cx: &mut Cx) {
+        if self.model.phase == Phase::Working(Step::Place) {
+            return self.place(cx);
+        }
         let result = match (&self.model.phase, &self.model.removal) {
             (Phase::Working(Step::Delete), Some(Removal::Image { slug, .. })) => {
                 let slug = slug.clone();
@@ -292,11 +342,20 @@ impl InstallerApp {
                 self.host.report(&alloc::format!("uninstalled {}: {}", self.model.name(), apps.join(", ")));
             }
             Phase::Done => {
-                let version = self.model.package.as_ref().map_or("", |p| p.version.as_str());
+                let version = match (&self.model.package, &self.model.image) {
+                    (Some(p), _) => p.version.as_str(),
+                    (None, Some(i)) => i.version.as_str(),
+                    _ => "",
+                };
                 let apps: Vec<String> =
                     self.model.apps.iter().map(|(id, name)| alloc::format!("{name} ({id})")).collect();
                 let apps = if apps.is_empty() { "no launcher entry".to_string() } else { apps.join(", ") };
-                self.host.report(&alloc::format!("installed {} {version}: {apps}", self.model.name()));
+                let name = if version.is_empty() {
+                    self.model.name().to_string()
+                } else {
+                    alloc::format!("{} {version}", self.model.name())
+                };
+                self.host.report(&alloc::format!("installed {name}: {apps}"));
             }
             Phase::Failed(why) => {
                 self.host.report(&alloc::format!("failed: {why}"));

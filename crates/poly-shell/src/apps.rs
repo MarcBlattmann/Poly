@@ -249,8 +249,9 @@ pub const INSTALLER_ID: &str = "poly-installer.desktop";
 /// MIME database's names): Debian packages, which it installs, and the
 /// formats it knows by sight and says so about (RPM, Flatpak references,
 /// snaps; ADR 0132).
-pub const PACKAGE_MIME_TYPES: [&str; 4] = [
+pub const PACKAGE_MIME_TYPES: [&str; 5] = [
     "application/vnd.debian.binary-package",
+    "application/vnd.appimage",
     "application/x-rpm",
     "application/vnd.flatpak.ref",
     "application/vnd.snap",
