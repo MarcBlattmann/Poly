@@ -146,7 +146,11 @@ impl Vfs {
     /// (`unlink(2)`, `rename(2)`: `EPERM` unless the caller owns the file
     /// or the directory or has `CAP_FOWNER`).
     pub(super) fn sticky_allows(cred: &Cred, dir: &Attr, victim: &Attr) -> Result<()> {
-        if dir.perm & S_ISVTX != 0 && !cred.has(cap::FOWNER) && cred.uid != dir.uid && cred.uid != victim.uid {
+        if dir.perm & S_ISVTX != 0
+            && !cred.has_over(cap::FOWNER, victim)
+            && cred.uid != dir.uid
+            && cred.uid != victim.uid
+        {
             Err(Errno::EPERM)
         } else {
             Ok(())
@@ -169,7 +173,7 @@ impl Vfs {
         } else {
             cred.gid
         };
-        if !is_dir && perm & S_ISGID != 0 && !cred.has(cap::FSETID) && !cred.in_group(gid) {
+        if !is_dir && perm & S_ISGID != 0 && !cred.has_over_ids(cap::FSETID, cred.uid, gid) && !cred.in_group(gid) {
             perm &= !S_ISGID;
         }
         (cred.uid, gid, perm)

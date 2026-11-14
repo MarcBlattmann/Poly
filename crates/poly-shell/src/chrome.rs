@@ -11,8 +11,8 @@
 //! to the item that opened it.
 
 use crate::theme::chrome as ct;
-use poly_wayland::compose::Rect;
 use poly_wayland::compose::paint::{Box2, Chrome, floor};
+use poly_wayland::compose::{Rect, Scale};
 
 /// Which side a surface is put against.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,8 +81,8 @@ impl Geometry {
 
     /// The shape at output scale `s` with its body `height` logical pixels
     /// high (opening and closing).
-    pub fn chrome(&self, top: i32, height: f32, s: i32) -> Chrome {
-        let f = s as f32;
+    pub fn chrome(&self, top: i32, height: f32, s: Scale) -> Chrome {
+        let f = s.factor();
         let x0 = (self.centre - self.width / 2.0) * f;
         Chrome {
             body: Box2 { x0, y0: (top * s) as f32, x1: x0 + self.width * f, y1: (top * s) as f32 + height * f },
@@ -95,7 +95,7 @@ impl Geometry {
 
     /// Everything it covers at full height, shoulders included, logical.
     pub fn bounds(&self, top: i32) -> Rect {
-        self.chrome(top, self.height, 1).bounds()
+        self.chrome(top, self.height, Scale::ONE).bounds()
     }
 
     fn lerp(a: Geometry, b: Geometry, t: f32) -> Geometry {

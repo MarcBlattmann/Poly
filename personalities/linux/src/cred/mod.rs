@@ -42,6 +42,34 @@ use crate::signal::deliver::with_own;
 use alloc::sync::Arc;
 
 /// Capability numbers (UAPI `linux/capability.h`).
+/// The secure bits (UAPI `linux/securebits.h`, `SECBIT_*`): six flags,
+/// each with a lock bit one position higher.
+pub mod secbit {
+    /// Root gets no capabilities at execve(2).
+    pub const NOROOT: u32 = 0x1;
+    pub const NOROOT_LOCKED: u32 = 0x2;
+    /// User id changes leave the capability sets alone.
+    pub const NO_SETUID_FIXUP: u32 = 0x4;
+    pub const NO_SETUID_FIXUP_LOCKED: u32 = 0x8;
+    /// The permitted set stays when every user id leaves 0.
+    pub const KEEP_CAPS: u32 = 0x10;
+    pub const KEEP_CAPS_LOCKED: u32 = 0x20;
+    /// `PR_CAP_AMBIENT_RAISE` is refused.
+    pub const NO_CAP_AMBIENT_RAISE: u32 = 0x40;
+    pub const NO_CAP_AMBIENT_RAISE_LOCKED: u32 = 0x80;
+    /// For interpreters (execveat(2)'s `AT_EXECVE_CHECK`); recorded only.
+    pub const EXEC_RESTRICT_FILE: u32 = 0x100;
+    pub const EXEC_RESTRICT_FILE_LOCKED: u32 = 0x200;
+    pub const EXEC_DENY_INTERACTIVE: u32 = 0x400;
+    pub const EXEC_DENY_INTERACTIVE_LOCKED: u32 = 0x800;
+    /// Every bit there is.
+    pub const ALL: u32 = 0xfff;
+    /// The lock bits (each locks the bit below it).
+    pub const LOCKS: u32 = 0xaaa;
+    /// The two `EXEC` pairs, which need no capability to change.
+    pub const EXEC: u32 = 0xf00;
+}
+
 pub mod cap {
     pub const CHOWN: u32 = 0;
     pub const DAC_OVERRIDE: u32 = 1;
@@ -214,6 +242,12 @@ pub struct FsIds {
     pub gid: u32,
     pub groups: Arc<[u32]>,
     pub caps: CapSet,
+    /// The files the capabilities reach: `None` in the initial user
+    /// namespace (every file), else the kernel ids the thread's namespace
+    /// maps ([`user::IdRanges`]): a capability over a file counts only if
+    /// the file's owner and group are both among them (the spec sheet of
+    /// userns_idmap, "chown and chmod by a namespace's root").
+    pub scope: Option<Arc<user::IdRanges>>,
 }
 
 /// `NGROUPS_MAX` (UAPI `linux/limits.h`): the most supplementary groups.
@@ -247,6 +281,11 @@ pub struct Creds {
     /// `SECBIT_KEEP_CAPS` (`PR_SET_KEEPCAPS`): keep the permitted set when
     /// every user id leaves 0. Cleared by execve(2).
     pub keep_caps: bool,
+    /// The other secure bits ([`secbit`]; `PR_SET_SECUREBITS`), without
+    /// `SECBIT_KEEP_CAPS`, which is [`keep_caps`](Self::keep_caps):
+    /// [`Creds::securebits`] gives the whole value. Inherited by fork
+    /// children.
+    pub secure_bits: u32,
     /// `PR_SET_NO_NEW_PRIVS`: execve(2) grants nothing (set-user-ID and
     /// set-group-ID bits are ignored). Inherited, never cleared.
     pub no_new_privs: bool,
@@ -309,6 +348,7 @@ impl Creds {
             groups: Arc::from([]),
             caps,
             keep_caps: false,
+            secure_bits: 0,
             no_new_privs: false,
             user_ns: None,
             landlock: None,
@@ -371,25 +411,39 @@ impl Creds {
 
     /// Who file permission checks see: file system ids, supplementary
     /// groups, effective capabilities. In a user namespace other than the
-    /// initial one only the capabilities the personality has checked
-    /// itself in the right namespace reach the VFS (`CAP_SYS_ADMIN` for
-    /// mounts, `CAP_SYS_CHROOT`): Poly does not yet apply capabilities(7)'s
-    /// rule that the file capabilities of a namespace act only on files
-    /// whose owner and group are mapped in it, so it applies none.
+    /// initial one the capabilities that reach the VFS are the ones the
+    /// personality has checked itself in the right namespace
+    /// (`CAP_SYS_ADMIN` for mounts, `CAP_SYS_CHROOT`) and the ones over
+    /// files (`CAP_CHOWN`, `CAP_DAC_OVERRIDE`, `CAP_DAC_READ_SEARCH`,
+    /// `CAP_FOWNER`, `CAP_FSETID`), which act only on files whose owner
+    /// and group the namespace maps ([`FsIds::scope`]).
     pub fn fs_ids(&self) -> FsIds {
         FsIds {
             uid: self.fsuid,
             gid: self.fsgid,
             groups: Arc::clone(&self.groups),
             caps: self.vfs_caps(self.caps.effective),
+            scope: self.file_scope(),
         }
+    }
+
+    fn file_scope(&self) -> Option<Arc<user::IdRanges>> {
+        self.user_ns.as_ref().map(|n| n.file_ranges())
     }
 
     fn vfs_caps(&self, caps: CapSet) -> CapSet {
         if self.user_ns.is_none() {
             caps
         } else {
-            caps.intersection(CapSet::only(cap::SYS_ADMIN).with(cap::SYS_CHROOT))
+            caps.intersection(
+                CapSet::only(cap::SYS_ADMIN)
+                    .with(cap::SYS_CHROOT)
+                    .with(cap::CHOWN)
+                    .with(cap::DAC_OVERRIDE)
+                    .with(cap::DAC_READ_SEARCH)
+                    .with(cap::FOWNER)
+                    .with(cap::FSETID),
+            )
         }
     }
 
@@ -400,7 +454,7 @@ impl Creds {
     /// non-root users, the check uses an empty set of capabilities."
     pub fn access_ids(&self) -> FsIds {
         let caps = if self.is_root(self.uid) { self.vfs_caps(self.caps.permitted) } else { CapSet::EMPTY };
-        FsIds { uid: self.uid, gid: self.gid, groups: Arc::clone(&self.groups), caps }
+        FsIds { uid: self.uid, gid: self.gid, groups: Arc::clone(&self.groups), caps, scope: self.file_scope() }
     }
 
     // ---- user ids -------------------------------------------------------
@@ -475,6 +529,13 @@ impl Creds {
         //    sets" (SECBIT_KEEP_CAPS keeps the permitted set, and the
         //    effective one unless rule 2 applies; the ambient set goes
         //    either way: to be confirmed by the diff runner).
+        // SECBIT_NO_SETUID_FIXUP "stops the kernel from adjusting the
+        // process's permitted, effective, and ambient capability sets when
+        // the thread's effective and filesystem UIDs are switched between
+        // zero and nonzero values" (capabilities(7)): none of the rules.
+        if self.secure_bits & secbit::NO_SETUID_FIXUP != 0 {
+            return Ok(());
+        }
         let was_root = root(old.0) || root(old.1) || root(old.2);
         if was_root && !root(uid) && !root(euid) && !root(suid) {
             if !self.keep_caps {
@@ -508,6 +569,9 @@ impl Creds {
     /// any of these capabilities that are enabled in the permitted set are
     /// enabled in the effective set."
     fn fix_fs_caps(&mut self, old_fsuid: u32) {
+        if self.secure_bits & secbit::NO_SETUID_FIXUP != 0 {
+            return;
+        }
         let (was, is) = (self.is_root(old_fsuid), self.is_root(self.fsuid));
         let c = &mut self.caps;
         if was && !is {
@@ -624,16 +688,66 @@ impl Creds {
     }
 
     /// `PR_CAP_AMBIENT_RAISE`: `EINVAL` for an unknown capability, `EPERM`
-    /// if it is not both permitted and inheritable.
+    /// if it is not both permitted and inheritable, and for every
+    /// capability (also one that is raised already) while
+    /// `SECBIT_NO_CAP_AMBIENT_RAISE` is set.
     pub fn raise_ambient(&mut self, cap: u32) -> Result<(), Errno> {
         if !cap::valid(cap) {
             return Err(Errno::EINVAL);
+        }
+        if self.secure_bits & secbit::NO_CAP_AMBIENT_RAISE != 0 {
+            return Err(Errno::EPERM);
         }
         let c = &mut self.caps;
         if !c.permitted.contains(cap) || !c.inheritable.contains(cap) {
             return Err(Errno::EPERM);
         }
         c.ambient = c.ambient.with(cap);
+        Ok(())
+    }
+
+    // ---- secure bits ----------------------------------------------------
+
+    /// `PR_GET_SECUREBITS`: the twelve bits of [`secbit`].
+    pub fn securebits(&self) -> u32 {
+        self.secure_bits | if self.keep_caps { secbit::KEEP_CAPS } else { 0 }
+    }
+
+    /// `PR_SET_SECUREBITS`: replace the whole value with `value` (the
+    /// spec sheet of seccomp_prctl, "The secure bits in full"). Every
+    /// refusal is `EPERM` and changes nothing:
+    /// - a bit above [`secbit::ALL`] (also one above bit 31);
+    /// - while a lock bit is set, a value without that lock bit or with
+    ///   its base bit changed;
+    /// - without `CAP_SETPCAP`, a value that changes one of the first four
+    ///   pairs (`NOROOT` to `NO_CAP_AMBIENT_RAISE`) or that changes
+    ///   nothing; the two `EXEC` pairs may be set, cleared and locked by
+    ///   anybody as long as nothing else changes in the call.
+    pub fn set_securebits(&mut self, value: u64) -> Result<(), Errno> {
+        if value & !u64::from(secbit::ALL) != 0 {
+            return Err(Errno::EPERM);
+        }
+        let (old, new) = (self.securebits(), value as u32);
+        let locks = old & secbit::LOCKS;
+        let changed = old ^ new;
+        if new & locks != locks || changed & (locks >> 1) != 0 {
+            return Err(Errno::EPERM);
+        }
+        if !self.capable(cap::SETPCAP) && (changed == 0 || changed & !secbit::EXEC != 0) {
+            return Err(Errno::EPERM);
+        }
+        self.keep_caps = new & secbit::KEEP_CAPS != 0;
+        self.secure_bits = new & !secbit::KEEP_CAPS;
+        Ok(())
+    }
+
+    /// `PR_SET_KEEPCAPS`: the `SECBIT_KEEP_CAPS` bit, for anybody; `EPERM`
+    /// for either value while `SECBIT_KEEP_CAPS_LOCKED` is set.
+    pub fn set_keep_caps(&mut self, keep: bool) -> Result<(), Errno> {
+        if self.secure_bits & secbit::KEEP_CAPS_LOCKED != 0 {
+            return Err(Errno::EPERM);
+        }
+        self.keep_caps = keep;
         Ok(())
     }
 

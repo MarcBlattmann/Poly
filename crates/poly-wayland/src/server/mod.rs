@@ -64,7 +64,7 @@ pub use dmabuf::{MOD_INVALID, MOD_LINEAR, format_table as dmabuf_format_table, f
 pub use external::WmEvent;
 pub use wm::{InternalEvent, WindowInfo};
 
-use crate::compose::{Framebuffer, Hit, Rect, Scene, WindowId};
+use crate::compose::{Framebuffer, Hit, Rect, Scale, Scene, WindowId};
 use crate::protocol::{
     wl_buffer, wl_callback, wl_compositor, wl_data_device, wl_data_device_manager, wl_data_offer, wl_data_source,
     wl_display, wl_keyboard, wl_output, wl_pointer, wl_region, wl_registry, wl_seat, wl_shm, wl_shm_pool,
@@ -149,8 +149,11 @@ pub struct OutputConfig {
     /// The mode, in physical pixels.
     pub width: u32,
     pub height: u32,
-    /// The integer scale (HiDPI): logical pixels are `scale` physical ones.
-    pub scale: u32,
+    /// The scale (HiDPI, 100 % to 800 %, fractions included): a logical pixel
+    /// is `scale` physical ones. `wl_output` and clients that know only
+    /// whole scales hear it rounded up ([`Scale::ceil`]), clients with
+    /// `wp_fractional_scale_v1` the exact fraction (ADR 0179).
+    pub scale: Scale,
     /// Refresh rate in millihertz.
     pub refresh_mhz: u32,
     /// Physical size in millimetres (0 if unknown).
@@ -166,7 +169,7 @@ impl Default for OutputConfig {
         OutputConfig {
             width: 1024,
             height: 768,
-            scale: 1,
+            scale: Scale::ONE,
             refresh_mhz: 60_000,
             physical_mm: (0, 0),
             make: "Poly".into(),

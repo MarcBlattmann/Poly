@@ -39,7 +39,7 @@ fn rectangles() {
     assert_eq!(a.union(&b), Rect::new(0, 0, 15, 15));
     assert!(a.intersect(&Rect::new(20, 20, 1, 1)).is_empty());
     assert_eq!(Rect::new(1, 1, 3, 3).scale_down_out(2), Rect::new(0, 0, 2, 2));
-    assert_eq!(Rect::new(1, 2, 3, 4).scale(2), Rect::new(2, 4, 6, 8));
+    assert_eq!(Rect::new(1, 2, 3, 4).scale(Scale::from_int(2)), Rect::new(2, 4, 6, 8));
     assert_eq!(Rect::new(0, 0, -3, 2), Rect::new(0, 0, 0, 2));
     assert!(a.contains(9, 0) && !a.contains(10, 0));
 }
@@ -517,4 +517,143 @@ fn shadows_stay_off_the_rows_a_shell_keeps() {
     scene.render(&mut fb);
     assert!((0..300).all(|x| fb.pixel(x, 23) == Some(BG)), "the reserved rows keep the background");
     assert_ne!(fb.pixel(100, 30), Some(BG), "below them the shadow shows");
+}
+
+// ---------------------------------------------------------------------------
+// Fractional scales (ADR 0179).
+
+/// A client drawing for a fractional scale: a buffer of scale 1 of the
+/// rounded size, shown at the logical size through a viewport.
+fn fractional_window(scene: &mut Scene, x: i32, y: i32, lw: i32, lh: i32, pixel: u32, decorated: bool) -> WindowId {
+    let s = scene.scale();
+    let (bw, bh) = s.buffer_size(lw, lh);
+    let id = window(scene, x, y, bw as u32, bh as u32, 1, pixel, decorated);
+    scene.set_view(id, View { destination: Some((lw, lh)), ..View::default() });
+    id
+}
+
+/// How many pixels along row `y` from `x0` are `colour`.
+fn run(fb: &MemoryFramebuffer, y: u32, x0: u32, colour: u32) -> u32 {
+    (x0..fb.width()).take_while(|&x| fb.pixel(x, y) == Some(colour)).count() as u32
+}
+
+#[test]
+fn a_frame_keeps_its_border_and_title_bar_wherever_it_is() {
+    let mut scene = Scene::new(400, 300, Scale::from_percent(150));
+    scene.set_theme(Theme::FLAT);
+    let border = Theme::FLAT.border_active;
+    let id = fractional_window(&mut scene, 40, 60, 100, 60, 0xff_20_40_60, true);
+    scene.set_active(id, true);
+    let mut widths = Vec::new();
+    for x in 40..46 {
+        for y in 60..64 {
+            scene.set_position(id, x, y);
+            let mut fb = MemoryFramebuffer::new(400, 300);
+            scene.render(&mut fb);
+            let r = scene.window(id).unwrap().placed(scene.scale());
+            let f = r.frame.unwrap();
+            // The border: 2 pixels (1 logical pixel at 150 %, rounded), on
+            // the left of the content, in the middle of its height.
+            let mid = (r.bounds.y + r.bounds.height / 2) as u32;
+            let left = (r.bounds.x - f.outer.x) as u32;
+            assert_eq!(run(&fb, mid, f.outer.x as u32, border), left, "left border at {x},{y}");
+            assert_eq!(left, 2);
+            // The content starts right after it, and the title bar is 36 high.
+            assert_eq!(fb.pixel(r.bounds.x as u32, mid), Some(0x20_40_60));
+            assert_eq!(r.bounds.y - f.title.y, 36);
+            widths.push((f.outer.width, f.outer.height));
+        }
+    }
+    // The frame is the content's size plus the same border everywhere.
+    assert!(widths.iter().all(|&w| w == widths[0]), "{widths:?}");
+    assert_eq!(widths[0], (150 + 4, 90 + 36 + 4));
+}
+
+#[test]
+fn a_fractional_buffer_is_copied_pixel_for_pixel() {
+    // Two halves of different colours: every pixel is one of the two (no
+    // blur at the seam) and the seam is where the buffer's is.
+    let mut scene = Scene::new(300, 200, Scale::from_percent(150));
+    scene.set_theme(Theme::FLAT);
+    let id = fractional_window(&mut scene, 11, 7, 101, 51, 0xff_aa_00_00, false);
+    let (bw, bh) = scene.scale().buffer_size(101, 51);
+    let c = scene.content_mut(id).unwrap();
+    for y in 0..bh as usize {
+        for x in (bw as usize / 2)..bw as usize {
+            c.pixels[y * bw as usize + x] = 0xff_00_00_bb;
+        }
+    }
+    let mut fb = MemoryFramebuffer::new(300, 200);
+    scene.render(&mut fb);
+    let s = scene.window(id).unwrap().placed(scene.scale()).surface;
+    assert_eq!((s.width, s.height), (bw, bh));
+    for y in s.y..s.bottom() {
+        for x in s.x..s.right() {
+            let want = if x - s.x >= bw / 2 { 0x00_00_bb } else { 0xaa_00_00 };
+            assert_eq!(fb.pixel(x as u32, y as u32), Some(want), "{x},{y}");
+        }
+    }
+    assert_eq!(fb.pixel(s.right() as u32, s.y as u32), Some(Theme::FLAT.background));
+}
+
+#[test]
+fn a_whole_scale_buffer_on_a_fractional_output_is_shrunk_smoothly() {
+    // A client that knows only whole scales draws at 2 for a 150 % output:
+    // a flat colour stays that colour, a seam between two is blended.
+    let mut scene = Scene::new(300, 200, Scale::from_percent(150));
+    scene.set_theme(Theme::FLAT);
+    let id = window(&mut scene, 0, 0, 200, 100, 2, 0xff_80_80_80, false);
+    let c = scene.content_mut(id).unwrap();
+    for y in 0..100 {
+        for x in 100..200 {
+            c.pixels[y * 200 + x] = 0xff_ff_ff_ff;
+        }
+    }
+    let mut fb = MemoryFramebuffer::new(300, 200);
+    scene.render(&mut fb);
+    // The window is 100x50 logical = 150x75 physical.
+    assert_eq!(fb.pixel(10, 10), Some(0x80_80_80));
+    assert_eq!(fb.pixel(140, 10), Some(0xff_ff_ff));
+    let seam = fb.pixel(75, 10).unwrap() & 0xff;
+    assert!((0x80..=0xff).contains(&seam));
+    assert_eq!(fb.pixel(150, 10), Some(Theme::FLAT.background));
+    // Shrinking never leaves the window's edge unpainted.
+    assert_ne!(fb.pixel(149, 74), Some(Theme::FLAT.background));
+}
+
+#[test]
+fn damage_at_a_fraction_redraws_everything_a_move_touches() {
+    for percent in [125, 150, 175] {
+        let scale = Scale::from_percent(percent);
+        let mut scene = Scene::new(500, 400, scale);
+        let a = fractional_window(&mut scene, 10, 10, 90, 70, 0xff_30_90_30, true);
+        let b = fractional_window(&mut scene, 50, 40, 61, 33, 0xff_90_30_30, true);
+        let mut fb = MemoryFramebuffer::new(500, 400);
+        scene.render(&mut fb);
+        for step in 0..9 {
+            scene.set_position(b, 50 + step * 3 + 1, 40 + step * 5 + 1);
+            scene.set_position(a, 10 + step, 10 + step * 2);
+            scene.render(&mut fb);
+            // What was drawn piece by piece is what a fresh scene draws.
+            let mut fresh = Scene::new(500, 400, scale);
+            let a2 = fractional_window(&mut fresh, 10 + step, 10 + step * 2, 90, 70, 0xff_30_90_30, true);
+            let b2 = fractional_window(&mut fresh, 50 + step * 3 + 1, 40 + step * 5 + 1, 61, 33, 0xff_90_30_30, true);
+            let _ = (a2, b2);
+            let mut whole = MemoryFramebuffer::new(500, 400);
+            fresh.render(&mut whole);
+            assert_eq!(fb.pixels(), whole.pixels(), "{percent} %, step {step}");
+        }
+    }
+}
+
+#[test]
+fn the_cursor_and_pointer_follow_the_same_conversion() {
+    let mut scene = Scene::new(300, 200, Scale::from_percent(150));
+    scene.set_cursor(Some((10, 10)));
+    let mut fb = MemoryFramebuffer::new(300, 200);
+    scene.render(&mut fb);
+    // The hot spot is the arrow's tip: logical (10, 10) is physical (15, 15).
+    assert_eq!(fb.pixel(15, 15), Some(0x000000));
+    assert_ne!(fb.pixel(14, 14), Some(0x000000));
+    assert_eq!(scene.logical_size(), (200, 133));
 }

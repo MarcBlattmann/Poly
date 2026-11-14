@@ -1,5 +1,5 @@
 [
-{"symbol":"CallNtPowerInformation","status":"claimed","claimed_by":"impl-chrome-s9","src":["wine-spec"]},
+{"symbol":"CallNtPowerInformation","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"CanUserWritePwrScheme","src":["wine-spec"]},
 {"symbol":"DeletePwrScheme","src":["wine-spec"]},
 {"symbol":"EnumPwrSchemes","src":["wine-spec"]},

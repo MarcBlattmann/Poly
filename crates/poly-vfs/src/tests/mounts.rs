@@ -122,7 +122,7 @@ fn bind_mounts() {
     env.mkdir("/a/b");
     env.write("/a/b/f", b"bound");
     env.mkdir("/mnt");
-    env.vfs.bind(&env.ctx, &env.root, At::Cwd, b"/a/b", At::Cwd, b"/mnt", MountFlags::default()).unwrap();
+    env.vfs.bind(&env.ctx, &env.root, At::Cwd, b"/a/b", At::Cwd, b"/mnt", false).unwrap();
     assert_eq!(env.read("/mnt/f").unwrap(), b"bound");
     let (s1, s2) = (env.stat("/a/b/f").unwrap(), env.stat("/mnt/f").unwrap());
     assert_eq!((s1.dev, s1.ino), (s2.dev, s2.ino));
@@ -140,11 +140,8 @@ fn bind_mounts() {
     assert_eq!(env.vfs.link(ctx, r, At::Cwd, b"/mnt/g", At::Cwd, b"/a/g2", false), Err(Errno::EXDEV));
     // A file onto a directory is refused.
     env.write("/file", b"");
-    assert_eq!(env.vfs.bind(ctx, r, At::Cwd, b"/file", At::Cwd, b"/a", MountFlags::default()), Err(Errno::ENOTDIR));
-    assert_eq!(
-        env.vfs.bind(ctx, &Cred::user(1, 1), At::Cwd, b"/a", At::Cwd, b"/mnt", MountFlags::default()),
-        Err(Errno::EPERM)
-    );
+    assert_eq!(env.vfs.bind(ctx, r, At::Cwd, b"/file", At::Cwd, b"/a", false), Err(Errno::ENOTDIR));
+    assert_eq!(env.vfs.bind(ctx, &Cred::user(1, 1), At::Cwd, b"/a", At::Cwd, b"/mnt", false), Err(Errno::EPERM));
 }
 
 #[test]
@@ -335,20 +332,20 @@ fn remounting_changes_a_mounts_flags() {
     assert_eq!(env.vfs.mount_at(ctx, r, At::Cwd, b"/m", true), Ok(id));
     assert_eq!(env.vfs.mount_at(ctx, r, At::Cwd, b"/m/f", true), Err(Errno::EINVAL));
     let ro = MountFlags { read_only: true, no_exec: true, ..MountFlags::default() };
-    env.vfs.remount(ctx, r, At::Cwd, b"/m", ro, true).unwrap();
+    env.vfs.remount(ctx, r, At::Cwd, b"/m", ro, None, true).unwrap();
     assert_eq!(env.open("/m/f", OpenFlags::WRONLY).map(|_| ()), Err(Errno::EROFS));
     assert!(env.vfs.mounts().iter().any(|m| m.id == id && m.flags == ro));
     let st = env.vfs.lookup(ctx, r, At::Cwd, b"/m", true).unwrap().statfs().unwrap();
     assert_eq!(st.flags & (ST_RDONLY | ST_NOEXEC), ST_RDONLY | ST_NOEXEC);
     // The other mount of the same file system keeps its own flags.
     assert_eq!(env.open("/m2/f", OpenFlags::WRONLY).map(|_| ()), Ok(()));
-    env.vfs.remount(ctx, r, At::Cwd, b"/m", MountFlags::default(), true).unwrap();
+    env.vfs.remount(ctx, r, At::Cwd, b"/m", MountFlags::default(), None, true).unwrap();
     assert_eq!(env.open("/m/f", OpenFlags::WRONLY).map(|_| ()), Ok(()));
     // Only the root of a mount, and only with CAP_SYS_ADMIN.
-    assert_eq!(env.vfs.remount(ctx, r, At::Cwd, b"/m/f", ro, true), Err(Errno::EINVAL));
-    assert_eq!(env.vfs.remount(ctx, &Cred::user(1, 1), At::Cwd, b"/m", ro, true), Err(Errno::EPERM));
+    assert_eq!(env.vfs.remount(ctx, r, At::Cwd, b"/m/f", ro, None, true), Err(Errno::EINVAL));
+    assert_eq!(env.vfs.remount(ctx, &Cred::user(1, 1), At::Cwd, b"/m", ro, None, true), Err(Errno::EPERM));
     // The root itself.
-    env.vfs.remount(ctx, r, At::Cwd, b"/", ro, true).unwrap();
+    env.vfs.remount(ctx, r, At::Cwd, b"/", ro, None, true).unwrap();
     assert_eq!(env.vfs.mkdir(ctx, r, At::Cwd, b"/x", 0o755), Err(Errno::EROFS));
 }
 
