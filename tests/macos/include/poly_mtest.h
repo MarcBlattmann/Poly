@@ -42,6 +42,7 @@ typedef long i64;
 typedef unsigned int u32;
 typedef int i32;
 typedef unsigned short u16;
+typedef short i16;
 typedef unsigned char u8;
 typedef unsigned long size_t;
 
@@ -57,6 +58,38 @@ typedef unsigned long size_t;
 #define SYS_getppid 39
 #define SYS_getgid 47
 #define SYS_umask 60
+#define SYS_fork 2
+#define SYS_wait4 7
+#define SYS_chdir 12
+#define SYS_fchdir 13
+#define SYS_chmod 15
+#define SYS_kill 37
+#define SYS_pipe 42
+#define SYS_sigaction 46
+#define SYS_sigprocmask 48
+#define SYS_sigpending 52
+#define SYS_ioctl 54
+#define SYS_symlink 57
+#define SYS_readlink 58
+#define SYS_execve 59
+#define SYS_vfork 66
+#define SYS_dup2 90
+#define SYS_fcntl 92
+#define SYS_sigsuspend 111
+#define SYS_sigreturn 184
+#define SYS_csops 169
+#define SYS_getattrlist 220
+#define SYS_posix_spawn 244
+#define SYS_shared_region_check_np 294
+#define SYS_issetugid 327
+#define SYS_stat64 338
+#define SYS_lstat64 340
+#define SYS_bsdthread_register 366
+#define SYS_kqueue 362
+#define SYS_kevent 363
+#define SYS_proc_info 336
+#define SYS_fstatat64 470
+#define SYS_getentropy 500
 #define SYS_munmap 73
 #define SYS_mprotect 74
 #define SYS_mkdir 136
@@ -80,7 +113,13 @@ typedef unsigned long size_t;
 /* errno values, <sys/errno.h>. */
 #define EPERM 1
 #define ENOENT 2
+#define ESRCH 3
+#define EINTR 4
+#define EIO 5
+#define ENXIO 6
+#define ENOEXEC 8
 #define EBADF 9
+#define ECHILD 10
 #define ENOMEM 12
 #define EACCES 13
 #define EFAULT 14
@@ -88,6 +127,10 @@ typedef unsigned long size_t;
 #define ENOTDIR 20
 #define EISDIR 21
 #define EINVAL 22
+#define ENOTTY 25
+#define EPIPE 32
+#define ELOOP 62
+#define ERANGE 34
 #define ENODEV 19
 #define ESPIPE 29
 #define ENAMETOOLONG 63
@@ -128,6 +171,99 @@ typedef unsigned long size_t;
 #define S_IFDIR 0040000
 #define S_IFREG 0100000
 #define S_IFIFO 0010000
+#define S_IFLNK 0120000
+
+/* <sys/signal.h> */
+#define SIGHUP 1
+#define SIGINT 2
+#define SIGQUIT 3
+#define SIGABRT 6
+#define SIGKILL 9
+#define SIGSEGV 11
+#define SIGSYS 12
+#define SIGPIPE 13
+#define SIGALRM 14
+#define SIGTERM 15
+#define SIGSTOP 17
+#define SIGTSTP 18
+#define SIGCONT 19
+#define SIGCHLD 20
+#define SIGINFO 29
+#define SIGUSR1 30
+#define SIGUSR2 31
+#define SA_RESTART 0x0002
+#define SA_RESETHAND 0x0004
+#define SA_NODEFER 0x0010
+#define SA_SIGINFO 0x0040
+#define SIG_DFL ((void *)0)
+#define SIG_IGN ((void *)1)
+#define SIG_BLOCK 1
+#define SIG_UNBLOCK 2
+#define SIG_SETMASK 3
+#define SIGBIT(sig) (1u << ((sig)-1))
+
+/* <sys/wait.h> */
+#define WNOHANG 1
+#define WUNTRACED 2
+#define W_EXITED(s) (((s) & 0177) == 0)
+#define W_EXITSTATUS(s) (((s) >> 8) & 0xff)
+#define W_TERMSIG(s) ((s) & 0177)
+#define W_STOPPED(s) (((s) & 0xff) == 0177)
+#define W_STOPSIG(s) (((s) >> 8) & 0xff)
+
+/* <sys/fcntl.h> commands */
+#define F_DUPFD 0
+#define F_GETFD 1
+#define F_SETFD 2
+#define F_GETFL 3
+#define F_SETFL 4
+#define F_DUPFD_CLOEXEC 67
+#define F_GETPATH 50
+#define FD_CLOEXEC 1
+#define AT_FDCWD (-2)
+#define AT_SYMLINK_NOFOLLOW 0x0020
+
+/* <sys/ioctl.h> */
+#define TIOCGWINSZ 0x40087468
+#define FIONREAD 0x4004667f
+#define FIONBIO 0x8004667e
+#define FIOCLEX 0x20006601
+#define FIONCLEX 0x20006602
+
+/* <sys/event.h> */
+#define EVFILT_READ (-1)
+#define EVFILT_WRITE (-2)
+#define EVFILT_VNODE (-4)
+#define EVFILT_PROC (-5)
+#define EVFILT_SIGNAL (-6)
+#define EVFILT_TIMER (-7)
+#define EV_ADD 0x0001
+#define EV_DELETE 0x0002
+#define EV_ENABLE 0x0004
+#define EV_DISABLE 0x0008
+#define EV_ONESHOT 0x0010
+#define EV_CLEAR 0x0020
+#define EV_RECEIPT 0x0040
+#define EV_EOF 0x8000
+#define EV_ERROR 0x4000
+#define NOTE_EXIT 0x80000000u
+struct poly_kevent {
+    u64 ident;
+    i16 filter;
+    u16 flags;
+    u32 fflags;
+    i64 data;
+    void *udata;
+};
+_Static_assert(sizeof(struct poly_kevent) == 32, "struct kevent is 32 bytes");
+
+/* <sys/proc_info.h> */
+#define PROC_INFO_CALL_PIDINFO 2
+#define PROC_PIDLISTFDS 1
+#define PROC_PIDTBSDINFO 3
+#define PROX_FDTYPE_VNODE 1
+#define PROX_FDTYPE_KQUEUE 5
+#define PROX_FDTYPE_PIPE 6
 
 /* <sys/dirent.h> */
 #define DT_UNKNOWN 0
@@ -275,6 +411,13 @@ static inline i64 poly_mach6(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f) {
 #define mach0(n) poly_mach6((n), 0, 0, 0, 0, 0, 0)
 #define mach1(n, a) poly_mach6((n), (i64)(a), 0, 0, 0, 0, 0)
 
+/* What the program was started with: a test that starts a child runs
+ * itself again (execve of poly_argv[0]) with an argument that selects its
+ * child part. The path is the one the runner gave, absolute. */
+static int poly_argc;
+static char **poly_argv;
+static char **poly_envp;
+
 /* The compiler may emit calls to these; defined here so that a test
  * imports nothing from libSystem. */
 void *memset(void *dst, int c, size_t n) {
@@ -373,8 +516,105 @@ static __attribute__((noreturn, unused)) void poly_exit(int code) {
     for (;;) bsd1(SYS_exit, code);
 }
 
+/* Signal actions the way the kernel takes them: struct __sigaction with a
+ * user-space trampoline (<sys/signal.h>; the kernel calls it with the
+ * handler, the info style, the signal, the siginfo and the context, and the
+ * trampoline ends with sigreturn). */
+struct poly_ksigaction {
+    void *handler;
+    void *tramp;
+    u32 mask;
+    i32 flags;
+};
+struct poly_usigaction {
+    void *handler;
+    u32 mask;
+    i32 flags;
+};
+static __attribute__((unused)) void poly_tramp(void (*h)(int, void *, void *), int style, int sig, void *info,
+                                               void *uctx) {
+    h(sig, info, uctx);
+    bsd2(SYS_sigreturn, uctx, style);
+    for (;;) {}
+}
+/* sigaction(sig, {handler, mask, flags}, old): handler is a function
+ * (int sig, void *siginfo, void *ucontext), SIG_IGN or SIG_DFL. */
+static __attribute__((unused)) sysret poly_sigaction(int sig, void *handler, u32 mask, i32 flags,
+                                                     struct poly_usigaction *old) {
+    struct poly_ksigaction n = {handler, (void *)poly_tramp, mask, flags};
+    return bsd3(SYS_sigaction, sig, &n, old);
+}
+static __attribute__((unused)) u32 poly_sigmask(void) {
+    u32 m = 0;
+    bsd3(SYS_sigprocmask, SIG_BLOCK, 0, &m);
+    return m;
+}
+
+/* Children: poly_start_self runs this program again with argv[1] = mode and
+ * argv[2] = arg (both may be 0) and returns the child's pid; the child part
+ * of a test is `if (is_child("mode"))`. */
+static __attribute__((unused)) int is_child(const char *mode) { return poly_argc > 1 && str_eq(poly_argv[1], mode); }
+static __attribute__((unused)) i64 poly_start_self(const char *mode, const char *arg, char **envp) {
+    char *argv[4] = {poly_argv[0], (char *)mode, (char *)arg, 0};
+    char *noenv[1] = {0};
+    sysret f = bsd0(SYS_fork);
+    if (f.ret2 == 1) {
+        bsd3(SYS_execve, poly_argv[0], argv, envp ? envp : noenv);
+        poly_exit(126);
+    }
+    return f.ret;
+}
+/* wait4 for one child: its wait status, or -1. */
+static __attribute__((unused)) int poly_wait(i64 pid) {
+    int st = -1;
+    sysret r = bsd4(SYS_wait4, pid, &st, 0, 0);
+    return r.err ? -1 : st;
+}
+static __attribute__((unused)) i64 poly_atoi(const char *s) {
+    i64 v = 0;
+    for (; *s >= '0' && *s <= '9'; s++) v = v * 10 + (*s - '0');
+    return v;
+}
+
+/* What a re-executed (or spawned) child can see of what it inherited, one
+ * line each: its arguments after argv[0], its environment, whether fds 5
+ * and 6 are open, the SIGUSR1 and SIGUSR2 handlers (0 default, 1 ignored,
+ * 2 a handler) and its signal mask. */
+static __attribute__((unused)) void poly_report_child(void) {
+    put("child args:");
+    for (int i = 1; i < poly_argc; i++) {
+        put(" [");
+        put(poly_argv[i]);
+        put("]");
+    }
+    put("\nchild env:");
+    for (char **e = poly_envp; *e; e++) {
+        put(" ");
+        put(*e);
+    }
+    put("\nchild fd5=");
+    put(bsd3(SYS_fcntl, 5, F_GETFD, 0).err ? "closed" : "open");
+    put(" fd6=");
+    put(bsd3(SYS_fcntl, 6, F_GETFD, 0).err ? "closed" : "open");
+    struct poly_usigaction o;
+    bsd3(SYS_sigaction, SIGUSR1, 0, &o);
+    put(" usr1=");
+    put_num(o.handler == SIG_DFL ? 0 : o.handler == SIG_IGN ? 1 : 2);
+    bsd3(SYS_sigaction, SIGUSR2, 0, &o);
+    put(" usr2=");
+    put_num(o.handler == SIG_DFL ? 0 : o.handler == SIG_IGN ? 1 : 2);
+    put(" mask=");
+    put_num(poly_sigmask());
+    put("\n");
+}
+
 int test_main(void);
 
-int main(void) { poly_exit(test_main()); }
+int main(int argc, char **argv, char **envp) {
+    poly_argc = argc;
+    poly_argv = argv;
+    poly_envp = envp;
+    poly_exit(test_main());
+}
 
 #endif

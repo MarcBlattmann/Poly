@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/fstatat64.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# fstatat64.tests/macos.json.
+id: macos/syscall/bsd/fstatat64
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 470,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 470, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. fstatat64(dirfd,
+  path, buf, flags) is stat64 for a path relative to a directory
+  descriptor: a relative path is resolved from dirfd, or from the working
+  directory when dirfd is AT_FDCWD, which is -2 on Darwin; an absolute
+  path ignores dirfd (even a descriptor that is not open). With flags 0 a
+  final symbolic link is followed, with AT_SYMLINK_NOFOLLOW (0x20) the
+  link is described as lstat64 does, also relative to a directory
+  descriptor. Flag bits that are not known (0x1000) are EINVAL; there is
+  no AT_EMPTY_PATH.
+returns:
+  success: "0, buf filled"
+errors:
+  bad_dirfd: "EBADF (9): a relative path with a descriptor that is not open"
+  dirfd_not_directory: "ENOTDIR (20): dirfd is a regular file"
+  missing: "ENOENT (2): a missing file, the empty path"
+  bad_flags: "EINVAL (22): flags 0x1000"
+  bad_pointer: "EFAULT (14): path or buffer at address 8"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

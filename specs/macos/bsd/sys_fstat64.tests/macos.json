@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "fstat_dir_dev",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "0920d6ee98e920e7d9b1aecbb40722b6ff71c64a455720219bea798ea939ae86",
+          "executable_sha256": "40376ba732b73a5d4f6cf09ce3aaf2d7c21281a69e943116e0a26cc3150d5797",
           "exit_code": 0,
           "stdout": "ok fstat64 of a directory\nok a directory, mode 0755\nok an empty directory has 2 links\nok and size 64 on APFS\nok fstat64 of /dev/null\nok a character device, mode 0666\nok device 3,2 (major in the top byte)\nok size 0\nsummary 8 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "638979e0ea5941cd1bdc400c4590d584399a697a8f315b70617e5d611c6f60e3",
+          "executable_sha256": "b4dc12516fa3bb012d8581dbd66b919187b18111033a23cbd94958452a2c962c",
           "exit_code": 0,
           "stdout": "ok fstat64 returns 0\nok a regular file, mode 0644\nok one link\nok size 5\nok an inode number\nok owned by the caller's uid\nok and gid\nok no flags\nok st_gen is 0 for an unprivileged caller\nok modified after 2023\nvalue st_blksize 4096\nvalue st_blocks 8\nsummary 10 passed, 0 failed\n",
           "stderr": "",
