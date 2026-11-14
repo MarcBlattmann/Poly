@@ -33,6 +33,8 @@
 //! - [`kbd`]: the keyboard layout (the oracle's German layout): virtual
 //!   keys, scan codes, characters and dead keys for `MapVirtualKeyW`,
 //!   `ToUnicode` and `TranslateMessage`.
+//! - [`zorder`]: the z order of top-level windows and who takes the
+//!   activation when a window goes (ADR 0176).
 //! - [`exports`]: what `user32.dll`, `gdi32.dll` and `win32u.dll` must
 //!   export, checked by `cargo xtask win32`.
 //!
@@ -65,3 +67,4 @@ pub mod surfaces;
 pub mod user;
 pub mod wire;
 pub mod wm;
+pub mod zorder;

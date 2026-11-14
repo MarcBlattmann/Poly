@@ -17,7 +17,7 @@
 //! are opened and closed.
 
 use crate::format;
-use crate::source::{IdMapFile, KernelName, MagicLink, Owner, ProcSource, ProcessInfo};
+use crate::source::{IdMapFile, IpcFile, KernelName, MagicLink, NetFile, Owner, ProcSource, ProcessInfo};
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -68,6 +68,10 @@ enum G {
     InotifyQueued,
     ThreadSelfLink,
     NsLastPid,
+    /// `/proc/net`, a link to `self/net`.
+    NetLink,
+    /// A file of the reader's IPC namespace.
+    Ipc(IpcFile),
 }
 
 /// No parent: in the root.
@@ -75,37 +79,55 @@ const TOP: usize = usize::MAX;
 
 /// The fixed tree: name, parent (an index here, or [`TOP`]), contents.
 const GLOBALS: &[(&[u8], usize, G)] = &[
-    (b"self", TOP, G::SelfLink),                      // 0
-    (b"mounts", TOP, G::MountsLink),                  // 1
-    (b"cpuinfo", TOP, G::Cpuinfo),                    // 2
-    (b"meminfo", TOP, G::Meminfo),                    // 3
-    (b"uptime", TOP, G::Uptime),                      // 4
-    (b"loadavg", TOP, G::Loadavg),                    // 5
-    (b"version", TOP, G::Version),                    // 6
-    (b"stat", TOP, G::Stat),                          // 7
-    (b"filesystems", TOP, G::Filesystems),            // 8
-    (b"sys", TOP, G::Dir),                            // 9
-    (b"kernel", 9, G::Dir),                           // 10
-    (b"ostype", 10, G::Ostype),                       // 11
-    (b"osrelease", 10, G::Osrelease),                 // 12
-    (b"version", 10, G::KernelVersion),               // 13
-    (b"hostname", 10, G::Hostname),                   // 14
-    (b"domainname", 10, G::Domainname),               // 15
-    (b"pid_max", 10, G::PidMax),                      // 16
-    (b"random", 10, G::Dir),                          // 17
-    (b"boot_id", 17, G::BootId),                      // 18
-    (b"uuid", 17, G::Uuid),                           // 19
-    (b"entropy_avail", 17, G::EntropyAvail),          // 20
-    (b"poolsize", 17, G::Poolsize),                   // 21
-    (b"fs", 9, G::Dir),                               // 22
-    (b"nr_open", 22, G::NrOpen),                      // 23
-    (b"cap_last_cap", 10, G::CapLastCap),             // 24
-    (b"inotify", 22, G::Dir),                         // 25
-    (b"max_user_watches", 25, G::InotifyWatches),     // 26
-    (b"max_user_instances", 25, G::InotifyInstances), // 27
-    (b"max_queued_events", 25, G::InotifyQueued),     // 28
-    (b"thread-self", TOP, G::ThreadSelfLink),         // 29
-    (b"ns_last_pid", 10, G::NsLastPid),               // 30
+    (b"self", TOP, G::SelfLink),                                 // 0
+    (b"mounts", TOP, G::MountsLink),                             // 1
+    (b"cpuinfo", TOP, G::Cpuinfo),                               // 2
+    (b"meminfo", TOP, G::Meminfo),                               // 3
+    (b"uptime", TOP, G::Uptime),                                 // 4
+    (b"loadavg", TOP, G::Loadavg),                               // 5
+    (b"version", TOP, G::Version),                               // 6
+    (b"stat", TOP, G::Stat),                                     // 7
+    (b"filesystems", TOP, G::Filesystems),                       // 8
+    (b"sys", TOP, G::Dir),                                       // 9
+    (b"kernel", 9, G::Dir),                                      // 10
+    (b"ostype", 10, G::Ostype),                                  // 11
+    (b"osrelease", 10, G::Osrelease),                            // 12
+    (b"version", 10, G::KernelVersion),                          // 13
+    (b"hostname", 10, G::Hostname),                              // 14
+    (b"domainname", 10, G::Domainname),                          // 15
+    (b"pid_max", 10, G::PidMax),                                 // 16
+    (b"random", 10, G::Dir),                                     // 17
+    (b"boot_id", 17, G::BootId),                                 // 18
+    (b"uuid", 17, G::Uuid),                                      // 19
+    (b"entropy_avail", 17, G::EntropyAvail),                     // 20
+    (b"poolsize", 17, G::Poolsize),                              // 21
+    (b"fs", 9, G::Dir),                                          // 22
+    (b"nr_open", 22, G::NrOpen),                                 // 23
+    (b"cap_last_cap", 10, G::CapLastCap),                        // 24
+    (b"inotify", 22, G::Dir),                                    // 25
+    (b"max_user_watches", 25, G::InotifyWatches),                // 26
+    (b"max_user_instances", 25, G::InotifyInstances),            // 27
+    (b"max_queued_events", 25, G::InotifyQueued),                // 28
+    (b"thread-self", TOP, G::ThreadSelfLink),                    // 29
+    (b"ns_last_pid", 10, G::NsLastPid),                          // 30
+    (b"net", TOP, G::NetLink),                                   // 31
+    (b"sysvipc", TOP, G::Dir),                                   // 32
+    (b"msg", 32, G::Ipc(IpcFile::SysvMsg)),                      // 33
+    (b"shm", 32, G::Ipc(IpcFile::SysvShm)),                      // 34
+    (b"sem", 32, G::Ipc(IpcFile::SysvSem)),                      // 35
+    (b"msgmni", 10, G::Ipc(IpcFile::Msgmni)),                    // 36
+    (b"msgmax", 10, G::Ipc(IpcFile::Msgmax)),                    // 37
+    (b"msgmnb", 10, G::Ipc(IpcFile::Msgmnb)),                    // 38
+    (b"shmmax", 10, G::Ipc(IpcFile::Shmmax)),                    // 39
+    (b"shmall", 10, G::Ipc(IpcFile::Shmall)),                    // 40
+    (b"shmmni", 10, G::Ipc(IpcFile::Shmmni)),                    // 41
+    (b"sem", 10, G::Ipc(IpcFile::Sem)),                          // 42
+    (b"mqueue", 22, G::Dir),                                     // 43
+    (b"queues_max", 43, G::Ipc(IpcFile::MqQueuesMax)),           // 44
+    (b"msg_max", 43, G::Ipc(IpcFile::MqMsgMax)),                 // 45
+    (b"msgsize_max", 43, G::Ipc(IpcFile::MqMsgsizeMax)),         // 46
+    (b"msg_default", 43, G::Ipc(IpcFile::MqMsgDefault)),         // 47
+    (b"msgsize_default", 43, G::Ipc(IpcFile::MqMsgsizeDefault)), // 48
 ];
 
 /// `/proc/sys/kernel/cap_last_cap`: the highest capability number
@@ -152,7 +174,12 @@ enum E {
     OomScoreAdj,
     OomScore,
     ClearRefs,
+    /// `/proc/<pid>/net`: the files of the process's network namespace.
+    NetDir,
 }
+
+/// The files of `/proc/<pid>/net`, in listing order.
+const NET_ENTRIES: [(&[u8], NetFile); 2] = [(b"dev", NetFile::Dev), (b"route", NetFile::Route)];
 
 impl E {
     /// The user namespace file it is, if it is one.
@@ -253,6 +280,7 @@ const PID_ENTRIES: &[(&[u8], E, u16)] = &[
     (b"oom_score_adj", E::OomScoreAdj, 0o644),
     (b"oom_score", E::OomScore, 0o444),
     (b"clear_refs", E::ClearRefs, 0o200),
+    (b"net", E::NetDir, 0o555),
 ];
 
 /// The files of `/proc/<pid>/task/<tid>`, in listing order.
@@ -278,6 +306,8 @@ enum Node {
     /// `/proc/<pid>/task/<tid>/stat` and `status`: the thread's.
     TaskStat(u32, u32),
     TaskStatus(u32, u32),
+    /// `/proc/<pid>/net/<file>`: an index into [`NET_ENTRIES`].
+    Net(u32, usize),
 }
 
 const K_ROOT: u64 = 1;
@@ -293,6 +323,7 @@ const K_TASK: u64 = 9;
 const K_TASKCOMM: u64 = 10;
 const K_TASKSTAT: u64 = 11;
 const K_TASKSTATUS: u64 = 12;
+const K_NET: u64 = 13;
 const INDEX_MASK: u64 = (1 << 24) - 1;
 
 impl Node {
@@ -310,6 +341,7 @@ impl Node {
             Node::TaskComm(p, t) => (p, K_TASKCOMM, u64::from(t)),
             Node::TaskStat(p, t) => (p, K_TASKSTAT, u64::from(t)),
             Node::TaskStatus(p, t) => (p, K_TASKSTATUS, u64::from(t)),
+            Node::Net(p, i) => (p, K_NET, i as u64),
         };
         (u64::from(pid) << 32) | (kind << 24) | (index & INDEX_MASK)
     }
@@ -332,6 +364,7 @@ impl Node {
             K_TASKCOMM if pid != 0 && index != 0 => Node::TaskComm(pid, index as u32),
             K_TASKSTAT if pid != 0 && index != 0 => Node::TaskStat(pid, index as u32),
             K_TASKSTATUS if pid != 0 && index != 0 => Node::TaskStatus(pid, index as u32),
+            K_NET if pid != 0 && (index as usize) < NET_ENTRIES.len() => Node::Net(pid, index as usize),
             _ => return None,
         })
     }
@@ -441,18 +474,21 @@ impl ProcFs {
             Node::Root | Node::Pid(_) | Node::Task(..) => FileType::Directory,
             Node::Global(i) => match GLOBALS[i].2 {
                 G::Dir => FileType::Directory,
-                G::SelfLink | G::MountsLink | G::ThreadSelfLink => FileType::Symlink,
+                G::SelfLink | G::MountsLink | G::ThreadSelfLink | G::NetLink => FileType::Symlink,
                 _ => FileType::Regular,
             },
             Node::Entry(_, i) => match PID_ENTRIES[i].1 {
-                E::FdDir | E::FdinfoDir | E::NsDir | E::TaskDir => FileType::Directory,
+                E::FdDir | E::FdinfoDir | E::NsDir | E::TaskDir | E::NetDir => FileType::Directory,
                 E::Exe | E::Cwd | E::Root => FileType::Symlink,
                 _ => FileType::Regular,
             },
             Node::Fd(..) | Node::Ns(..) => FileType::Symlink,
-            Node::FdInfo(..) | Node::NsFile(..) | Node::TaskComm(..) | Node::TaskStat(..) | Node::TaskStatus(..) => {
-                FileType::Regular
-            }
+            Node::FdInfo(..)
+            | Node::NsFile(..)
+            | Node::TaskComm(..)
+            | Node::TaskStat(..)
+            | Node::TaskStatus(..)
+            | Node::Net(..) => FileType::Regular,
         }
     }
 
@@ -471,6 +507,7 @@ impl ProcFs {
             Node::NsFile(..) => Node::Root,
             Node::Task(p, _) => Node::Entry(p, entry_index(E::TaskDir)),
             Node::TaskComm(p, t) | Node::TaskStat(p, t) | Node::TaskStatus(p, t) => Node::Task(p, t),
+            Node::Net(p, _) => Node::Entry(p, entry_index(E::NetDir)),
         }
     }
 
@@ -523,6 +560,10 @@ impl ProcFs {
                         .map(|k| (NS_KINDS[k].as_bytes().to_vec(), Node::Ns(p, k))),
                 )
             }
+            Node::Entry(p, i) if PID_ENTRIES[i].1 == E::NetDir => {
+                self.owner(p)?;
+                fixed(&mut out, &mut NET_ENTRIES.iter().enumerate().map(|(n, e)| (e.0.to_vec(), Node::Net(p, n))))
+            }
             Node::Entry(p, i) if PID_ENTRIES[i].1 == E::TaskDir => {
                 self.owner(p)?;
                 let mut tids = self.src.threads(p);
@@ -565,7 +606,7 @@ impl ProcFs {
     fn exists(&self, node: Node) -> bool {
         match node {
             Node::Root | Node::Global(_) => true,
-            Node::Pid(p) | Node::Entry(p, _) => self.src.owner(p).is_some(),
+            Node::Pid(p) | Node::Entry(p, _) | Node::Net(p, _) => self.src.owner(p).is_some(),
             Node::Fd(p, fd) | Node::FdInfo(p, fd) => self.has_fd(p, fd),
             Node::Ns(p, k) => self.src.namespace(p, k).is_some(),
             Node::NsFile(inum, k) => self.src.namespace_exists(inum, k),
@@ -605,7 +646,8 @@ impl ProcFs {
                 G::InotifyInstances => format::line(&decimal(u64::from(INOTIFY_MAX_USER_INSTANCES))),
                 G::InotifyQueued => format::line(&decimal(u64::from(INOTIFY_MAX_QUEUED_EVENTS))),
                 G::NsLastPid => format::line(&decimal(u64::from(src.ns_last_pid()))),
-                G::Dir | G::SelfLink | G::MountsLink | G::ThreadSelfLink => return Err(Errno::EINVAL),
+                G::Ipc(file) => src.ipc_file(file),
+                G::Dir | G::SelfLink | G::MountsLink | G::ThreadSelfLink | G::NetLink => return Err(Errno::EINVAL),
             },
             Node::Entry(p, i) => {
                 let info = self.process(p)?;
@@ -629,12 +671,13 @@ impl ProcFs {
                     E::OomScore => format::line(&decimal(src.oom_score_adj(p).clamp(0, 1000) as u64)),
                     // Write-only (proc_pid_clear_refs(5)).
                     E::ClearRefs => return Err(Errno::EINVAL),
-                    E::Exe | E::Cwd | E::Root | E::FdDir | E::FdinfoDir | E::NsDir | E::TaskDir => {
+                    E::Exe | E::Cwd | E::Root | E::FdDir | E::FdinfoDir | E::NsDir | E::TaskDir | E::NetDir => {
                         return Err(Errno::EINVAL);
                     }
                 }
             }
             Node::FdInfo(p, fd) => format::fdinfo(&src.fd(p, fd).ok_or(Errno::ENOENT)?),
+            Node::Net(p, i) => src.net_file(p, NET_ENTRIES[i].1).ok_or(Errno::ENOENT)?,
             Node::TaskComm(p, t) => {
                 let comm = match src.thread_comm(p, t) {
                     Some(c) => c,
@@ -662,6 +705,17 @@ impl ProcFs {
     /// `/proc/sys/kernel/ns_last_pid` (pid_namespaces(7)).
     fn is_ns_last_pid(node: Node) -> bool {
         matches!(node, Node::Global(i) if GLOBALS[i].2 == G::NsLastPid)
+    }
+
+    /// A setting of the IPC namespace, which a write sets.
+    fn ipc_setting(node: Node) -> Option<IpcFile> {
+        match node {
+            Node::Global(i) => match GLOBALS[i].2 {
+                G::Ipc(file) if file.writable() => Some(file),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     fn kernel_name_file(node: Node) -> Option<KernelName> {
@@ -786,6 +840,9 @@ impl FileSystem for ProcFs {
                         .map(|(k, inum)| Node::NsFile(inum, k)),
                 }
             }
+            Node::Entry(p, i) if PID_ENTRIES[i].1 == E::NetDir => {
+                NET_ENTRIES.iter().position(|e| e.0 == name).map(|n| Node::Net(p, n))
+            }
             Node::Entry(p, i) if PID_ENTRIES[i].1 == E::TaskDir => parse_number(name)
                 .filter(|&t| t != 0 && u64::from(t) <= INDEX_MASK && self.src.threads(p).contains(&t))
                 .map(|t| Node::Task(p, t)),
@@ -812,7 +869,8 @@ impl FileSystem for ProcFs {
             | Node::Task(p, _)
             | Node::TaskComm(p, _)
             | Node::TaskStat(p, _)
-            | Node::TaskStatus(p, _) => {
+            | Node::TaskStatus(p, _)
+            | Node::Net(p, _) => {
                 let info = self.owner(p)?;
                 let start = info.start_ns;
                 let time =
@@ -830,8 +888,9 @@ impl FileSystem for ProcFs {
             Node::TaskStat(..) | Node::TaskStatus(..) => 0o444,
             Node::Global(i) => match GLOBALS[i].2 {
                 G::Dir => 0o555,
-                G::SelfLink | G::MountsLink | G::ThreadSelfLink => 0o777,
+                G::SelfLink | G::MountsLink | G::ThreadSelfLink | G::NetLink => 0o777,
                 G::Hostname | G::Domainname | G::NsLastPid => 0o644,
+                G::Ipc(file) if file.writable() => 0o644,
                 _ => 0o444,
             },
             Node::Entry(_, i) => PID_ENTRIES[i].2,
@@ -839,7 +898,7 @@ impl FileSystem for ProcFs {
                 Some(f) => 0o500 | if f.read { 0o400 } else { 0 } | if f.write { 0o200 } else { 0 },
                 None => 0o700,
             },
-            Node::FdInfo(..) | Node::NsFile(..) => 0o444,
+            Node::FdInfo(..) | Node::NsFile(..) | Node::Net(..) => 0o444,
             Node::Ns(..) => 0o777,
         };
         // A namespace file's inode number is the namespace's (namespaces(7):
@@ -912,6 +971,8 @@ impl FileSystem for ProcFs {
                 src.current_pid().map(|p| decimal(u64::from(p))).ok_or(Errno::ENOENT)
             }
             Node::Global(i) if GLOBALS[i].2 == G::MountsLink => Ok(b"self/mounts".to_vec()),
+            // proc_net(5): the network namespace of whoever follows it.
+            Node::Global(i) if GLOBALS[i].2 == G::NetLink => Ok(b"self/net".to_vec()),
             // proc(5): "/proc/thread-self ... the same as /proc/self/task/<tid>".
             Node::Global(i) if GLOBALS[i].2 == G::ThreadSelfLink => {
                 let (pid, tid) = src.current_pid().zip(src.current_tid()).ok_or(Errno::ENOENT)?;
@@ -952,6 +1013,7 @@ impl FileSystem for ProcFs {
                 || Self::kernel_name_file(n).is_some()
                 || Self::process_setting(n).is_some()
                 || Self::is_ns_last_pid(n)
+                || Self::ipc_setting(n).is_some()
         })
     }
 
@@ -996,6 +1058,9 @@ impl FileSystem for ProcFs {
         if Self::is_ns_last_pid(node) {
             return self.src.write_ns_last_pid(data);
         }
+        if let Some(file) = Self::ipc_setting(node) {
+            return self.src.write_ipc_file(file, data);
+        }
         if let Some((p, e)) = Self::process_setting(node) {
             return self.write_setting(p, e, data);
         }
@@ -1013,7 +1078,10 @@ impl FileSystem for ProcFs {
         // nothing; the write that follows sets the value (Chromium opens
         // `oom_score_adj` with creat(2)).
         let node = self.node(ino)?;
-        if Self::kernel_name_file(node).is_some() || Self::process_setting(node).is_some() || Self::is_ns_last_pid(node)
+        if Self::kernel_name_file(node).is_some()
+            || Self::process_setting(node).is_some()
+            || Self::is_ns_last_pid(node)
+            || Self::ipc_setting(node).is_some()
         {
             Ok(())
         } else {

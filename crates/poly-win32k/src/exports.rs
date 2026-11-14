@@ -293,7 +293,6 @@ pub const IMM32_EXPORTS: &[&str] = &[
     "ImmSetCandidateWindow",
     "ImmGetCandidateWindow",
     "ImmGetDefaultIMEWnd",
-    "PolyImmWindowCreated",
 ];
 
 /// `gdi32.dll` functions of the first slice (and its private `PolyGdi*`
@@ -368,8 +367,10 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "OffsetRgn",
     "PatBlt",
     "PtInRegion",
+    "PtVisible",
     "RealizePalette",
     "RectInRegion",
+    "RectVisible",
     "Rectangle",
     "RemoveFontMemResourceEx",
     "RemoveFontResourceExW",

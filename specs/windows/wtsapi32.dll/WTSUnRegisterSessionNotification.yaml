@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/wtsapi32.dll/WTSUnRegisterSessionNotification.yaml
+id: windows/api/wtsapi32.dll/WTSUnRegisterSessionNotification
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  The same observations as the WTSRegisterSessionNotification entry of this DLL: every test of that entry calls both functions.
+summary: >
+  Ends one registration of a window for session notifications. Described in specs/windows/wtsapi32.dll/WTSRegisterSessionNotification.yaml (rules counted, never_registered, not_a_window) and tested by the tests in specs/windows/wtsapi32.dll/WTSRegisterSessionNotification.tests/; this entry has no tests of its own.
+same_as: "windows/api/wtsapi32.dll/WTSRegisterSessionNotification"
+interface:
+  signature: "BOOL WTSUnRegisterSessionNotification(HWND hWnd)"
+  returns: "nonzero on success; 0 and a last error on failure"
+chrome:
+  calls: "browser process, at exit: WTSUnRegisterSessionNotification(<the window registered at start-up>) = TRUE, once"
+rules:
+  same_sheet: "the rules counted, never_registered and not_a_window of the WTSRegisterSessionNotification sheet are this function's behaviour"
+  in_short: "TRUE once for every successful register of the window; then FALSE with ERROR_FILE_NOT_FOUND (2); FALSE with ERROR_INVALID_PARAMETER (87) for NULL and for anything that is not a live window"
+errors:
+  same_errors: "ERROR_FILE_NOT_FOUND (2) when the window is not registered; ERROR_INVALID_PARAMETER (87) when it is not a window"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  Everything the WTSRegisterSessionNotification sheet lists as not covered.

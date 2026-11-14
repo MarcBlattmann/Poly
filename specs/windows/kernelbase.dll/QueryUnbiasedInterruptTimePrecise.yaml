@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/QueryUnbiasedInterruptTimePrecise.yaml
+id: windows/api/kernelbase.dll/QueryUnbiasedInterruptTimePrecise
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above, and Chrome's calls in a fresh call-site trace of stage 1 (20 to 22 calls in the browser process, one call site, through api-ms-win-core-realtime-l1-1-1.dll). Microsoft Learn: "QueryUnbiasedInterruptTimePrecise function (realtimeapiset.h)", "QueryUnbiasedInterruptTime", "Interrupt time", "Acquiring high-resolution time stamps". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Writes the system's unbiased interrupt time: the time since start-up in 100-nanosecond units, not counting time spent asleep, read at the moment of the call (QueryUnbiasedInterruptTime gives the value of the last clock tick). It returns nothing and cannot fail. Chrome reads it as a monotonic clock.
+interface:
+  signature: "VOID QueryUnbiasedInterruptTimePrecise(PULONGLONG lpUnbiasedInterruptTimePrecise)"
+  returns: "nothing; *lpUnbiasedInterruptTimePrecise is set"
+  exported_by: "kernelbase.dll; the API set api-ms-win-core-realtime-l1-1-1.dll (what Chrome imports) resolves to it. kernel32.dll does not export it"
+chrome:
+  calls: "browser process, stage 1: QueryUnbiasedInterruptTimePrecise(&time), 20 to 22 times from one call site (chrome.dll+0xa0d1ed); the API set is a delay-loaded import, so the name has to exist: without it Chrome ends at the delay load"
+  on_failure: "tolerated as a function that does nothing in the fault-injection run (gap-map section 6a), but then Chrome's clock reads uninitialised values"
+rules:
+  value: "the value is written on every call, is above 0, and in 100,000 calls in a row never went backwards while changing many times; the last error is not touched"
+  unit: "100 nanoseconds: over a Sleep(200) it grew by between 1.9 and 10 million"
+  same_clock_as_coarse: "it is the same clock as QueryUnbiasedInterruptTime read more finely: in 1000 tries a precise reading taken between two coarse readings was never below the first and never more than one clock tick (20 ms allowed) above the second"
+  resolution: "finer than a millisecond: the part of the value below one millisecond differs from one reading to the next"
+  threads: "one clock for all threads: a reading taken on another thread lay between two readings of the calling thread taken around it, 50 times out of 50"
+errors:
+  none: "the function has no result and does not fail"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a microsecond per call"
+  guarantees: "monotonic; 100 ns units"
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, sizes and booleans; no line holds a handle, a pointer, a name of the machine or of its user, a hardware value or a time. Every check is a comparison of readings; no value is printed. The tests import kernelbase.dll for this function.
+not_covered: >
+  A NULL pointer, the behaviour across sleep and hibernation (what 'unbiased' means), the relation to QueryPerformanceCounter and to GetTickCount64 (the tick count was seen to be behind the interrupt time on the oracle, so no test compares them), and QueryInterruptTimePrecise.

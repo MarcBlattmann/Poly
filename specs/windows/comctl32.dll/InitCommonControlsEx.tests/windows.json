@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "31c236be97cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:40:58Z",
+  "tests": [
+    {
+      "name": "icc_call",
+      "exe_sha256": "5710a9ccc5d345fdc39fd9fa3665493e52669da336a3222f7a2d5836fffc8708",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q2hyb21lJ3MgY2FsbDogSW5pdENvbW1vbkNvbnRyb2xzRXgoZHdTaXplIDgsIGR3SUNDIDB4ZmYpID0gMQp0aGUgc2FtZSBjYWxsIGFnYWluOiBJbml0Q29tbW9uQ29udHJvbHNFeChkd1NpemUgOCwgZHdJQ0MgMHhmZikgPSAxCklDQ19XSU45NV9DTEFTU0VTIHwgSUNDX0RBVEVfQ0xBU1NFUyB8IElDQ19VU0VSRVhfQ0xBU1NFUyB8IElDQ19DT09MX0NMQVNTRVM6IEluaXRDb21tb25Db250cm9sc0V4KGR3U2l6ZSA4LCBkd0lDQyAweDdmZikgPSAxCmV2ZXJ5IGNsYXNzIGJpdCB1cCB0byBJQ0NfTkFUSVZFRk5UQ1RMX0NMQVNTOiBJbml0Q29tbW9uQ29udHJvbHNFeChkd1NpemUgOCwgZHdJQ0MgMHgzZmZmKSA9IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Chrome's call: InitCommonControlsEx(dwSize 8, dwICC 0xff) = 1\nthe same call again: InitCommonControlsEx(dwSize 8, dwICC 0xff) = 1\nICC_WIN95_CLASSES | ICC_DATE_CLASSES | ICC_USEREX_CLASSES | ICC_COOL_CLASSES: InitCommonControlsEx(dwSize 8, dwICC 0x7ff) = 1\nevery class bit up to ICC_NATIVEFNTCTL_CLASS: InitCommonControlsEx(dwSize 8, dwICC 0x3fff) = 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "icc_sizes",
+      "exe_sha256": "cdd75f10e9ed3c13e2715e5eccba0a5ae8053c84f9a277946a8348843481353e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIHJpZ2h0IHNpemUgZmlyc3Q6IEluaXRDb21tb25Db250cm9sc0V4KGR3U2l6ZSA4LCBkd0lDQyAweGZmKSA9IDEKYW5vdGhlciBkd1NpemU6IEluaXRDb21tb25Db250cm9sc0V4KGR3U2l6ZSAwLCBkd0lDQyAweGZmKSA9IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKYW5vdGhlciBkd1NpemU6IEluaXRDb21tb25Db250cm9sc0V4KGR3U2l6ZSA0LCBkd0lDQyAweGZmKSA9IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKYW5vdGhlciBkd1NpemU6IEluaXRDb21tb25Db250cm9sc0V4KGR3U2l6ZSA3LCBkd0lDQyAweGZmKSA9IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKYW5vdGhlciBkd1NpemU6IEluaXRDb21tb25Db250cm9sc0V4KGR3U2l6ZSA5LCBkd0lDQyAweGZmKSA9IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKYW5vdGhlciBkd1NpemU6IEluaXRDb21tb25Db250cm9sc0V4KGR3U2l6ZSAxMiwgZHdJQ0MgMHhmZikgPSAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCmFub3RoZXIgZHdTaXplOiBJbml0Q29tbW9uQ29udHJvbHNFeChkd1NpemUgMTYsIGR3SUNDIDB4ZmYpID0gMCBsYXN0IGVycm9yIHVuY2hhbmdlZAphbm90aGVyIGR3U2l6ZTogSW5pdENvbW1vbkNvbnRyb2xzRXgoZHdTaXplIDQyOTQ5NjcyOTUsIGR3SUNDIDB4ZmYpID0gMCBsYXN0IGVycm9yIHVuY2hhbmdlZAphZnRlciB0aGUgcmVmdXNlZCBjYWxsczogSW5pdENvbW1vbkNvbnRyb2xzRXgoZHdTaXplIDgsIGR3SUNDIDB4ZmYpID0gMQp3cm9uZyBzaXplLCBubyBjbGFzcyBiaXQ6IEluaXRDb21tb25Db250cm9sc0V4KGR3U2l6ZSAxMiwgZHdJQ0MgMHgwKSA9IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKd3Jvbmcgc2l6ZSwgYSBtYXNrIHZlcnNpb24gNSByZWZ1c2VzOiBJbml0Q29tbW9uQ29udHJvbHNFeChkd1NpemUgNCwgZHdJQ0MgMHg4MDAwKSA9IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the right size first: InitCommonControlsEx(dwSize 8, dwICC 0xff) = 1\nanother dwSize: InitCommonControlsEx(dwSize 0, dwICC 0xff) = 0 last error unchanged\nanother dwSize: InitCommonControlsEx(dwSize 4, dwICC 0xff) = 0 last error unchanged\nanother dwSize: InitCommonControlsEx(dwSize 7, dwICC 0xff) = 0 last error unchanged\nanother dwSize: InitCommonControlsEx(dwSize 9, dwICC 0xff) = 0 last error unchanged\nanother dwSize: InitCommonControlsEx(dwSize 12, dwICC 0xff) = 0 last error unchanged\nanother dwSize: InitCommonControlsEx(dwSize 16, dwICC 0xff) = 0 last error unchanged\nanother dwSize: InitCommonControlsEx(dwSize 4294967295, dwICC 0xff) = 0 last error unchanged\nafter the refused calls: InitCommonControlsEx(dwSize 8, dwICC 0xff) = 1\nwrong size, no class bit: InitCommonControlsEx(dwSize 12, dwICC 0x0) = 0 last error unchanged\nwrong size, a mask version 5 refuses: InitCommonControlsEx(dwSize 4, dwICC 0x8000) = 0 last error unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

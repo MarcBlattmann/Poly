@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetProcessShutdownParameters.yaml
+id: windows/api/kernel32.dll/GetProcessShutdownParameters
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  The same observations as the SetProcessShutdownParameters entry of this DLL: every test of that entry reads the values back with this function.
+summary: >
+  Returns the calling process's shutdown level and shutdown flags: (0x280, 0) for a process that never set them, otherwise the pair of the last accepted SetProcessShutdownParameters call. Described in specs/windows/kernel32.dll/SetProcessShutdownParameters.yaml and tested by the tests in specs/windows/kernel32.dll/SetProcessShutdownParameters.tests/; this entry has no tests of its own.
+same_as: "windows/api/kernel32.dll/SetProcessShutdownParameters"
+interface:
+  signature: "BOOL GetProcessShutdownParameters(LPDWORD lpdwLevel, LPDWORD lpdwFlags)"
+  returns: "nonzero on success"
+rules:
+  same_sheet: "the rules defaults, set_then_get, levels and get of the SetProcessShutdownParameters sheet are this function's behaviour"
+  in_short: "TRUE, *lpdwLevel and *lpdwFlags are the stored pair; the last error is not changed"
+errors:
+  none_seen: "no failure was seen with two valid pointers"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  NULL pointers; everything the SetProcessShutdownParameters sheet lists as not covered.

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "9b678454dfdd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:31:32Z",
+  "tests": [
+    {
+      "name": "cnpi_levels",
+      "exe_sha256": "763782dc07a2e4aaca3c67e2d94da5e24fefcf051a41c77c04ee271a161eb39e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U3lzdGVtQmF0dGVyeVN0YXRlIChTWVNURU1fQkFUVEVSWV9TVEFURSwgMzIgYnl0ZXMpOiBzdGF0dXMgMHgwOyB3cml0dGVuIHNvbWV0aGluZzogMTsgbm90aGluZyBwYXN0IHRoZSBzaXplOiAxClN5c3RlbUJhdHRlcnlTdGF0ZSAoU1lTVEVNX0JBVFRFUllfU1RBVEUsIDMyIGJ5dGVzKSwgb25lIGJ5dGUgdG9vIGZldzogc3RhdHVzIDB4YzAwMDAwMjM7IGJ5dGVzIHdyaXR0ZW4gMApTeXN0ZW1CYXR0ZXJ5U3RhdGUgKFNZU1RFTV9CQVRURVJZX1NUQVRFLCAzMiBieXRlcyksIGVpZ2h0IGJ5dGVzIG1vcmU6IHN0YXR1cyAweDA7IG5vdGhpbmcgcGFzdCB0aGUgc2l6ZTogMQpTeXN0ZW1Qb3dlckNhcGFiaWxpdGllcyAoU1lTVEVNX1BPV0VSX0NBUEFCSUxJVElFUywgNzYgYnl0ZXMpOiBzdGF0dXMgMHgwOyB3cml0dGVuIHNvbWV0aGluZzogMTsgbm90aGluZyBwYXN0IHRoZSBzaXplOiAxClN5c3RlbVBvd2VyQ2FwYWJpbGl0aWVzIChTWVNURU1fUE9XRVJfQ0FQQUJJTElUSUVTLCA3NiBieXRlcyksIG9uZSBieXRlIHRvbyBmZXc6IHN0YXR1cyAweGMwMDAwMDIzOyBieXRlcyB3cml0dGVuIDAKU3lzdGVtUG93ZXJDYXBhYmlsaXRpZXMgKFNZU1RFTV9QT1dFUl9DQVBBQklMSVRJRVMsIDc2IGJ5dGVzKSwgZWlnaHQgYnl0ZXMgbW9yZTogc3RhdHVzIDB4MDsgbm90aGluZyBwYXN0IHRoZSBzaXplOiAxClN5c3RlbUV4ZWN1dGlvblN0YXRlIChVTE9ORyk6IHN0YXR1cyAweDA7IHdyaXR0ZW4gc29tZXRoaW5nOiAxOyBub3RoaW5nIHBhc3QgdGhlIHNpemU6IDEKU3lzdGVtRXhlY3V0aW9uU3RhdGUgKFVMT05HKSwgb25lIGJ5dGUgdG9vIGZldzogc3RhdHVzIDB4YzAwMDAwMjM7IGJ5dGVzIHdyaXR0ZW4gMApTeXN0ZW1FeGVjdXRpb25TdGF0ZSAoVUxPTkcpLCBlaWdodCBieXRlcyBtb3JlOiBzdGF0dXMgMHgwOyBub3RoaW5nIHBhc3QgdGhlIHNpemU6IDEKTGFzdFdha2VUaW1lIChVTE9OR0xPTkcpOiBzdGF0dXMgMHgwOyB3cml0dGVuIHNvbWV0aGluZzogMTsgbm90aGluZyBwYXN0IHRoZSBzaXplOiAxCkxhc3RXYWtlVGltZSAoVUxPTkdMT05HKSwgb25lIGJ5dGUgdG9vIGZldzogc3RhdHVzIDB4YzAwMDAwMjM7IGJ5dGVzIHdyaXR0ZW4gMApMYXN0V2FrZVRpbWUgKFVMT05HTE9ORyksIGVpZ2h0IGJ5dGVzIG1vcmU6IHN0YXR1cyAweDA7IG5vdGhpbmcgcGFzdCB0aGUgc2l6ZTogMQpMYXN0U2xlZXBUaW1lIChVTE9OR0xPTkcpOiBzdGF0dXMgMHgwOyB3cml0dGVuIHNvbWV0aGluZzogMTsgbm90aGluZyBwYXN0IHRoZSBzaXplOiAxCkxhc3RTbGVlcFRpbWUgKFVMT05HTE9ORyksIG9uZSBieXRlIHRvbyBmZXc6IHN0YXR1cyAweGMwMDAwMDIzOyBieXRlcyB3cml0dGVuIDAKTGFzdFNsZWVwVGltZSAoVUxPTkdMT05HKSwgZWlnaHQgYnl0ZXMgbW9yZTogc3RhdHVzIDB4MDsgbm90aGluZyBwYXN0IHRoZSBzaXplOiAxClN5c3RlbUJhdHRlcnlTdGF0ZTogc3RhdHVzIDB4MDsgQWNPbkxpbmUsIEJhdHRlcnlQcmVzZW50LCBDaGFyZ2luZyBhbmQgRGlzY2hhcmdpbmcgYXJlIGVhY2ggMCBvciAxOiAxClN5c3RlbUV4ZWN1dGlvblN0YXRlOiBzdGF0dXMgMHgwOyBvbmx5IEVTXyBiaXRzIGFyZSBzZXQ6IDEKbGV2ZWwgMHhjODogc3RhdHVzIDB4YzAwMDAwMGQ7IGJ5dGVzIHdyaXR0ZW4gMApsZXZlbCAweGZmZmY6IHN0YXR1cyAweGMwMDAwMDBkOyBieXRlcyB3cml0dGVuIDAKbGV2ZWwgMHhmZmZmZmZmZjogc3RhdHVzIDB4YzAwMDAwMGQ7IGJ5dGVzIHdyaXR0ZW4gMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SystemBatteryState (SYSTEM_BATTERY_STATE, 32 bytes): status 0x0; written something: 1; nothing past the size: 1\nSystemBatteryState (SYSTEM_BATTERY_STATE, 32 bytes), one byte too few: status 0xc0000023; bytes written 0\nSystemBatteryState (SYSTEM_BATTERY_STATE, 32 bytes), eight bytes more: status 0x0; nothing past the size: 1\nSystemPowerCapabilities (SYSTEM_POWER_CAPABILITIES, 76 bytes): status 0x0; written something: 1; nothing past the size: 1\nSystemPowerCapabilities (SYSTEM_POWER_CAPABILITIES, 76 bytes), one byte too few: status 0xc0000023; bytes written 0\nSystemPowerCapabilities (SYSTEM_POWER_CAPABILITIES, 76 bytes), eight bytes more: status 0x0; nothing past the size: 1\nSystemExecutionState (ULONG): status 0x0; written something: 1; nothing past the size: 1\nSystemExecutionState (ULONG), one byte too few: status 0xc0000023; bytes written 0\nSystemExecutionState (ULONG), eight bytes more: status 0x0; nothing past the size: 1\nLastWakeTime (ULONGLONG): status 0x0; written something: 1; nothing past the size: 1\nLastWakeTime (ULONGLONG), one byte too few: status 0xc0000023; bytes written 0\nLastWakeTime (ULONGLONG), eight bytes more: status 0x0; nothing past the size: 1\nLastSleepTime (ULONGLONG): status 0x0; written something: 1; nothing past the size: 1\nLastSleepTime (ULONGLONG), one byte too few: status 0xc0000023; bytes written 0\nLastSleepTime (ULONGLONG), eight bytes more: status 0x0; nothing past the size: 1\nSystemBatteryState: status 0x0; AcOnLine, BatteryPresent, Charging and Discharging are each 0 or 1: 1\nSystemExecutionState: status 0x0; only ES_ bits are set: 1\nlevel 0xc8: status 0xc000000d; bytes written 0\nlevel 0xffff: status 0xc000000d; bytes written 0\nlevel 0xffffffff: status 0xc000000d; bytes written 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "cnpi_processors",
+      "exe_sha256": "c6c47ba399324b7c85d8a6209581376424cb01fc636922fad7b2ccac96c26887",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UHJvY2Vzc29ySW5mb3JtYXRpb24sIDI0IGJ5dGVzIHBlciBwcm9jZXNzb3I6IHN0YXR1cyAweDA7IHdyaXR0ZW4gc29tZXRoaW5nOiAxClByb2Nlc3NvckluZm9ybWF0aW9uLCBvbmUgYnl0ZSBsZXNzIHRoYW4gbmVlZGVkOiBzdGF0dXMgMHhjMDAwMDAyMzsgd3JpdHRlbjogbm90aGluZwpQcm9jZXNzb3JJbmZvcm1hdGlvbiwgb25lIHJlY29yZCBsZXNzIHRoYW4gbmVlZGVkOiBzdGF0dXMgMHhjMDAwMDAyMzsgd3JpdHRlbjogbm90aGluZwpQcm9jZXNzb3JJbmZvcm1hdGlvbiwgb25lIHJlY29yZCAoMjQgYnl0ZXMpOiBzdGF0dXMgMHhjMDAwMDAyMzsgd3JpdHRlbjogbm90aGluZwpQcm9jZXNzb3JJbmZvcm1hdGlvbiwgbm8gYnl0ZXM6IHN0YXR1cyAweGMwMDAwMDBkOyB3cml0dGVuOiBub3RoaW5nClByb2Nlc3NvckluZm9ybWF0aW9uLCBvbmUgYnl0ZSBtb3JlIHRoYW4gbmVlZGVkOiBzdGF0dXMgMHgwOyB3cml0dGVuOiB0aGUgcmVjb3JkcyBvZiBhbGwgcHJvY2Vzc29ycwpQcm9jZXNzb3JJbmZvcm1hdGlvbiwgb25lIHJlY29yZCBtb3JlIHRoYW4gbmVlZGVkOiBzdGF0dXMgMHgwOyB3cml0dGVuOiB0aGUgcmVjb3JkcyBvZiBhbGwgcHJvY2Vzc29ycwpQcm9jZXNzb3JJbmZvcm1hdGlvbiwgdHdpY2Ugd2hhdCBpcyBuZWVkZWQ6IHN0YXR1cyAweDA7IHdyaXR0ZW46IHRoZSByZWNvcmRzIG9mIGFsbCBwcm9jZXNzb3JzCndpdGggcm9vbSBmb3Igb25lIHJlY29yZCBtb3JlOiBzdGF0dXMgMHgwOyB0aGUgZmlyc3QgcmVjb3JkJ3MgTnVtYmVyIGlzIDA6IDE7IHRoZSByZWNvcmQgYWZ0ZXIgdGhlIGxhc3QgaXMgdW50b3VjaGVkOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ProcessorInformation, 24 bytes per processor: status 0x0; written something: 1\nProcessorInformation, one byte less than needed: status 0xc0000023; written: nothing\nProcessorInformation, one record less than needed: status 0xc0000023; written: nothing\nProcessorInformation, one record (24 bytes): status 0xc0000023; written: nothing\nProcessorInformation, no bytes: status 0xc000000d; written: nothing\nProcessorInformation, one byte more than needed: status 0x0; written: the records of all processors\nProcessorInformation, one record more than needed: status 0x0; written: the records of all processors\nProcessorInformation, twice what is needed: status 0x0; written: the records of all processors\nwith room for one record more: status 0x0; the first record's Number is 0: 1; the record after the last is untouched: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

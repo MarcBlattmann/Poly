@@ -40,6 +40,7 @@ pub mod mountapi;
 pub mod mqueue;
 pub mod mseal;
 pub mod msg;
+pub mod netdev;
 pub mod ns;
 pub mod nsfs;
 pub mod numa;

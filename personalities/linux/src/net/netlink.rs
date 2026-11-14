@@ -1,21 +1,33 @@
-//! `AF_NETLINK` / `NETLINK_ROUTE` (netlink(7), rtnetlink(7)), read-only:
-//! the dumps of links, addresses and routes that `ip addr`, `ip link`,
-//! `ip route` and the C library's `getifaddrs`, `if_nameindex` and
-//! `getaddrinfo` (`AI_ADDRCONFIG`) ask for.
+//! `AF_NETLINK` / `NETLINK_ROUTE` (netlink(7), rtnetlink(7)): the dumps
+//! of links, addresses and routes that `ip addr`, `ip link`, `ip route`
+//! and the C library's `getifaddrs`, `if_nameindex` and `getaddrinfo`
+//! (`AI_ADDRCONFIG`) ask for, and the two changes a sandbox makes to the
+//! loopback device of its new network namespace (ADR 0178).
 //!
 //! [`NetlinkSocket`] is the protocol state of one socket: its port id and
 //! the reply datagrams waiting to be read. A datagram the program sends
 //! is a sequence of requests ([`NetlinkSocket::request`]); each gets its
-//! answer from an [`Interfaces`] snapshot the kernel provides:
+//! answer from the devices of the socket's network namespace, which the
+//! kernel provides as a [`LinkEnv`]:
 //!
 //! - `RTM_GETLINK`, `RTM_GETADDR`, `RTM_GETROUTE` with `NLM_F_DUMP`: one
 //!   `RTM_NEW*` message per object (`NLM_F_MULTI`), then `NLMSG_DONE`;
 //!   without `NLM_F_DUMP`, `RTM_GETLINK` answers for the link the request
 //!   names (by index or `IFLA_IFNAME`; `ENODEV` otherwise).
-//! - Requests that would change something (`RTM_NEW*`, `RTM_DEL*`, ...)
-//!   and unknown types get `NLMSG_ERROR` with `-EOPNOTSUPP`; `NLM_F_ACK`
-//!   on a request that succeeded gets an `NLMSG_ERROR` with error 0
-//!   (netlink(7)).
+//! - `RTM_NEWLINK` and `RTM_SETLINK` for a link named by `ifi_index` (or
+//!   `IFLA_IFNAME`): the link goes up or down as `IFF_UP` in `ifi_flags`
+//!   says when `ifi_change` has that bit (or is 0: rtnetlink(7) reserves
+//!   the field); `ENODEV` for a link that is not there. `RTM_NEWADDR` of
+//!   127.0.0.1/8 on the loopback device gives it that address (`EEXIST`
+//!   if it has it).
+//! - A request that changes something needs `CAP_NET_ADMIN` in the user
+//!   namespace that owns the network namespace ([`LinkEnv::admin`]):
+//!   without it the answer is `-EPERM` (the netns_loopback sheet), with
+//!   it `-EOPNOTSUPP` for the changes Poly does not make. Unknown types
+//!   get `-EOPNOTSUPP`.
+//! - `NLM_F_ACK` on a request that succeeded gets an `NLMSG_ERROR` with
+//!   error 0 (netlink(7)); a failed one gets its error with or without
+//!   the flag.
 //!
 //! Routes are derived from the addresses and gateways: a subnet route per
 //! address (main table, `RTPROT_KERNEL`, scope link, the address as
@@ -24,7 +36,7 @@
 //! `RTN_LOCAL`, scope host) and a default route per gateway
 //! (`RTPROT_BOOT`). Reply datagrams carry at most [`DATAGRAM`] bytes of
 //! messages (at least one message). Multicast groups can be joined but no
-//! notifications are ever sent: nothing changes at run time yet.
+//! notifications are sent for the changes above.
 //!
 //! Layouts and constants from `linux/netlink.h`, `linux/rtnetlink.h`,
 //! `linux/if_link.h`, `linux/if_addr.h`, `linux/if.h`, `linux/if_arp.h`.
@@ -49,6 +61,7 @@ pub const NLM_F_DUMP: u16 = NLM_F_ROOT | NLM_F_MATCH;
 
 pub const RTM_NEWLINK: u16 = 16;
 pub const RTM_GETLINK: u16 = 18;
+pub const RTM_SETLINK: u16 = 19;
 pub const RTM_NEWADDR: u16 = 20;
 pub const RTM_GETADDR: u16 = 22;
 pub const RTM_NEWROUTE: u16 = 24;
@@ -136,6 +149,25 @@ pub struct Link {
     pub stats: LinkStats,
 }
 
+impl Link {
+    /// The device's flags (`IFF_*`, `linux/if.h`): `IFF_UP` when it is
+    /// administratively up, `IFF_RUNNING` and `IFF_LOWER_UP` when it is up
+    /// and has a carrier, and `IFF_LOOPBACK` for `lo` or `IFF_BROADCAST |
+    /// IFF_MULTICAST` for an Ethernet device. A loopback device that is
+    /// down has `IFF_LOOPBACK` only (0x8), one that is up 0x49 in the 16
+    /// bits `SIOCGIFFLAGS` reports.
+    pub fn flags(&self) -> u32 {
+        let mut f = 0;
+        if self.up {
+            f |= IFF_UP;
+            if self.carrier {
+                f |= IFF_RUNNING | IFF_LOWER_UP;
+            }
+        }
+        f | if self.loopback { IFF_LOOPBACK } else { IFF_BROADCAST | IFF_MULTICAST }
+    }
+}
+
 /// An address of an interface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IfAddr {
@@ -151,6 +183,51 @@ pub struct Interfaces {
     pub links: Vec<Link>,
     pub addrs: Vec<IfAddr>,
     pub gateways: Vec<(IpAddr, u32)>,
+}
+
+/// The devices of the network namespace a socket's requests act on.
+pub trait LinkEnv {
+    /// The links, their addresses and the default routers now.
+    fn interfaces(&mut self) -> Interfaces;
+
+    /// Whether the sender may change them: `CAP_NET_ADMIN` in the user
+    /// namespace that owns the network namespace.
+    fn admin(&self) -> bool;
+
+    /// Bring link `index` up or down (`ENODEV` if there is none,
+    /// `EOPNOTSUPP` for a device that cannot change).
+    fn set_up(&mut self, index: u32, up: bool) -> Result<(), Errno>;
+
+    /// Give the loopback device `index` the address 127.0.0.1/8 (`EEXIST`
+    /// if it has it).
+    fn add_loopback_address(&mut self, index: u32) -> Result<(), Errno>;
+}
+
+/// A snapshot as its own environment: every sender may change it (tests,
+/// and callers that only read).
+impl LinkEnv for Interfaces {
+    fn interfaces(&mut self) -> Interfaces {
+        self.clone()
+    }
+
+    fn admin(&self) -> bool {
+        true
+    }
+
+    fn set_up(&mut self, index: u32, up: bool) -> Result<(), Errno> {
+        let link = self.links.iter_mut().find(|l| l.index == index).ok_or(Errno::ENODEV)?;
+        link.up = up;
+        Ok(())
+    }
+
+    fn add_loopback_address(&mut self, index: u32) -> Result<(), Errno> {
+        let lo = IpAddr::V4(core::net::Ipv4Addr::LOCALHOST);
+        if self.addrs.iter().any(|a| a.index == index && a.addr == lo) {
+            return Err(Errno::EEXIST);
+        }
+        self.addrs.push(IfAddr { index, addr: lo, prefix_len: 8 });
+        Ok(())
+    }
 }
 
 /// A route, as `RTM_NEWROUTE` describes it.
@@ -302,14 +379,7 @@ struct Header {
 }
 
 fn link_message(l: &Link, flags: u16, seq: u32, port: u32) -> Vec<u8> {
-    let mut f = 0;
-    if l.up {
-        f |= IFF_UP;
-        if l.carrier {
-            f |= IFF_RUNNING | IFF_LOWER_UP;
-        }
-    }
-    f |= if l.loopback { IFF_LOOPBACK } else { IFF_BROADCAST | IFF_MULTICAST };
+    let f = l.flags();
     let mut m = Msg::new(RTM_NEWLINK, flags, seq, port);
     m.put(&[AF_UNSPEC, 0]);
     m.put(&(if l.loopback { ARPHRD_LOOPBACK } else { ARPHRD_ETHER }).to_le_bytes());
@@ -319,7 +389,7 @@ fn link_message(l: &Link, flags: u16, seq: u32, port: u32) -> Vec<u8> {
     let mut name = l.name.clone();
     name.push(0);
     m.attr(IFLA_IFNAME, &name);
-    m.attr(IFLA_TXQLEN, &1000u32.to_le_bytes());
+    m.attr(IFLA_TXQLEN, &super::dev::TXQLEN.to_le_bytes());
     let oper = if !l.up {
         IF_OPER_DOWN
     } else if l.loopback {
@@ -437,6 +507,50 @@ fn attrs(mut b: &[u8]) -> impl Iterator<Item = (u16, &[u8])> {
     })
 }
 
+/// The link a `struct ifinfomsg` request names: by `ifi_index`, or by
+/// `IFLA_IFNAME` when the index is 0.
+fn named_link<'a>(body: &[u8], ifs: &'a Interfaces) -> Option<&'a Link> {
+    let index = body.get(4..8).map(|i| i32::from_le_bytes([i[0], i[1], i[2], i[3]])).unwrap_or(0);
+    let name = attrs(body.get(16..).unwrap_or(&[]))
+        .find(|(t, _)| *t == IFLA_IFNAME)
+        .map(|(_, d)| d.split(|&c| c == 0).next().unwrap_or(d));
+    ifs.links.iter().find(|l| (index > 0 && l.index == index as u32) || (index <= 0 && name == Some(&l.name[..])))
+}
+
+/// A request of type `ty` that changes something (see the module
+/// documentation), with `body` after the netlink header.
+fn change(ty: u16, body: &[u8], env: &mut dyn LinkEnv) -> Result<(), Errno> {
+    if !env.admin() {
+        return Err(Errno::EPERM);
+    }
+    let ifs = env.interfaces();
+    match ty {
+        RTM_NEWLINK | RTM_SETLINK => {
+            // struct ifinfomsg: family, pad, type, index, flags, change.
+            let word = |at: usize| body.get(at..at + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+            let (Some(flags), Some(mask)) = (word(8), word(12)) else { return Err(Errno::EINVAL) };
+            let index = named_link(body, &ifs).ok_or(Errno::ENODEV)?.index;
+            if mask == 0 || mask & IFF_UP != 0 {
+                env.set_up(index, flags & IFF_UP != 0)?;
+            }
+            Ok(())
+        }
+        RTM_NEWADDR => {
+            // struct ifaddrmsg: family, prefix length, flags, scope, index.
+            let head = body.get(..8).ok_or(Errno::EINVAL)?;
+            let index = u32::from_le_bytes([head[4], head[5], head[6], head[7]]);
+            let link = ifs.links.iter().find(|l| l.index == index).ok_or(Errno::ENODEV)?;
+            let addr = attrs(&body[8..]).find(|(t, _)| *t == IFA_LOCAL || *t == IFA_ADDRESS).map(|(_, d)| d);
+            if link.loopback && head[0] == AF_INET && head[1] == 8 && addr == Some(&[127, 0, 0, 1][..]) {
+                env.add_loopback_address(index)
+            } else {
+                Err(Errno::EOPNOTSUPP)
+            }
+        }
+        _ => Err(Errno::EOPNOTSUPP),
+    }
+}
+
 /// One `NETLINK_ROUTE` socket's protocol state.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NetlinkSocket {
@@ -451,6 +565,13 @@ pub struct NetlinkSocket {
 impl NetlinkSocket {
     pub fn new() -> NetlinkSocket {
         NetlinkSocket::default()
+    }
+
+    /// Move the reply datagrams waiting in `from` to the end of this
+    /// socket's (the kernel answers a request on a copy of the socket,
+    /// outside its lock, and then queues what came of it).
+    pub fn take_replies(&mut self, from: &mut NetlinkSocket) {
+        self.queue.append(&mut from.queue);
     }
 
     /// Bytes of the next datagram, if any.
@@ -487,9 +608,9 @@ impl NetlinkSocket {
     }
 
     /// A datagram sent to the kernel: answer every request in it from
-    /// `ifs`. Malformed trailing bytes are ignored, as `NLMSG_OK` would
-    /// stop at them.
-    pub fn request(&mut self, data: &[u8], ifs: &Interfaces) {
+    /// `env` (and make the changes it asks for there). Malformed trailing
+    /// bytes are ignored, as `NLMSG_OK` would stop at them.
+    pub fn request(&mut self, data: &[u8], env: &mut dyn LinkEnv) {
         let mut at = 0;
         while data.len() - at >= NLMSG_HDRLEN {
             let b = &data[at..];
@@ -504,18 +625,29 @@ impl NetlinkSocket {
                 seq: u32::from_le_bytes([b[8], b[9], b[10], b[11]]),
             };
             let req = &b[..len];
-            let replies = self.answer(&h, req, ifs);
+            let replies = self.answer(&h, req, env);
             self.queue_messages(replies);
             at += align4(len).min(data.len() - at);
         }
     }
 
-    fn answer(&self, h: &Header, req: &[u8], ifs: &Interfaces) -> Vec<Vec<u8>> {
+    fn answer(&self, h: &Header, req: &[u8], env: &mut dyn LinkEnv) -> Vec<Vec<u8>> {
         let port = self.port;
         if h.flags & NLM_F_REQUEST == 0 || h.ty < NLMSG_MIN_TYPE {
             return Vec::new();
         }
         let body = &req[NLMSG_HDRLEN..];
+        // The types come in fours: new, delete, get, set
+        // (`linux/rtnetlink.h`). Everything but a get changes something.
+        if (h.ty - NLMSG_MIN_TYPE) % 4 != 2 {
+            let done = match change(h.ty, body, env) {
+                Ok(()) if h.flags & NLM_F_ACK == 0 => return Vec::new(),
+                Ok(()) => 0,
+                Err(e) => -i32::from(e.get()),
+            };
+            return alloc::vec![error_message(done, req, h, port)];
+        }
+        let ifs = &env.interfaces();
         let dump = h.flags & NLM_F_DUMP != 0;
         let multi = NLM_F_MULTI;
         let done = || {
@@ -534,15 +666,7 @@ impl NetlinkSocket {
             }
             RTM_GETLINK => {
                 // struct ifinfomsg: the index at bytes 4..8; or IFLA_IFNAME.
-                let index = body.get(4..8).map(|i| i32::from_le_bytes([i[0], i[1], i[2], i[3]])).unwrap_or(0);
-                let name = attrs(body.get(16..).unwrap_or(&[]))
-                    .find(|(t, _)| *t == IFLA_IFNAME)
-                    .map(|(_, d)| d.split(|&c| c == 0).next().unwrap_or(d));
-                let found = ifs
-                    .links
-                    .iter()
-                    .find(|l| (index > 0 && l.index == index as u32) || (index <= 0 && name == Some(&l.name[..])));
-                match found {
+                match named_link(body, ifs) {
                     Some(l) => {
                         out.push(link_message(l, 0, h.seq, port));
                         if h.flags & NLM_F_ACK != 0 {
@@ -653,7 +777,7 @@ mod tests {
     #[test]
     fn getaddr_dump_lists_every_address_then_done() {
         let mut s = NetlinkSocket { port: 42, ..NetlinkSocket::default() };
-        s.request(&request(RTM_GETADDR, NLM_F_REQUEST | NLM_F_DUMP, 7, &[0; 8]), &ifs());
+        s.request(&request(RTM_GETADDR, NLM_F_REQUEST | NLM_F_DUMP, 7, &[0; 8]), &mut ifs());
         let msgs = drain(&mut s);
         assert_eq!(msgs.len(), 4);
         assert!(msgs[..3].iter().all(|m| m.0 == RTM_NEWADDR && m.1 == NLM_F_MULTI && m.2 == 7));
@@ -670,7 +794,7 @@ mod tests {
         assert_eq!(attr_of(eth, 8, IFA_ADDRESS), Some(vec![10, 0, 2, 15]));
         assert_eq!(attr_of(eth, 8, IFA_BROADCAST), Some(vec![10, 0, 2, 255]));
         // Only IPv6, as getaddrinfo's AI_ADDRCONFIG check may ask.
-        s.request(&request(RTM_GETADDR, NLM_F_REQUEST | NLM_F_DUMP, 8, &[AF_INET6, 0, 0, 0, 0, 0, 0, 0]), &ifs());
+        s.request(&request(RTM_GETADDR, NLM_F_REQUEST | NLM_F_DUMP, 8, &[AF_INET6, 0, 0, 0, 0, 0, 0, 0]), &mut ifs());
         let msgs = drain(&mut s);
         assert_eq!(msgs.len(), 2);
         assert_eq!(attr_of(&msgs[0].3, 8, IFA_ADDRESS), Some(Ipv6Addr::LOCALHOST.octets().to_vec()));
@@ -679,7 +803,7 @@ mod tests {
     #[test]
     fn getlink_dump_and_single_link() {
         let mut s = NetlinkSocket { port: 1, ..NetlinkSocket::default() };
-        s.request(&request(RTM_GETLINK, NLM_F_REQUEST | NLM_F_DUMP, 1, &[0; 16]), &ifs());
+        s.request(&request(RTM_GETLINK, NLM_F_REQUEST | NLM_F_DUMP, 1, &[0; 16]), &mut ifs());
         let msgs = drain(&mut s);
         assert_eq!(msgs.iter().map(|m| m.0).collect::<Vec<_>>(), [RTM_NEWLINK, RTM_NEWLINK, NLMSG_DONE]);
         let eth = &msgs[1].3;
@@ -696,7 +820,7 @@ mod tests {
         // One link by index, with an acknowledgement.
         let mut body = [0u8; 16];
         body[4..8].copy_from_slice(&2i32.to_le_bytes());
-        s.request(&request(RTM_GETLINK, NLM_F_REQUEST | NLM_F_ACK, 5, &body), &ifs());
+        s.request(&request(RTM_GETLINK, NLM_F_REQUEST | NLM_F_ACK, 5, &body), &mut ifs());
         let msgs = drain(&mut s);
         assert_eq!((msgs[0].0, msgs[0].1), (RTM_NEWLINK, 0));
         assert_eq!(msgs[1].0, NLMSG_ERROR);
@@ -705,12 +829,12 @@ mod tests {
         // By name.
         let mut m = Msg::new(RTM_GETLINK, NLM_F_REQUEST, 6, 0);
         m.put(&[0; 16]).attr(IFLA_IFNAME, b"lo\0");
-        s.request(&m.finish(), &ifs());
+        s.request(&m.finish(), &mut ifs());
         let msgs = drain(&mut s);
         assert_eq!(u32::from_le_bytes(msgs[0].3[4..8].try_into().unwrap()), 1);
         // No such link.
         body[4..8].copy_from_slice(&9i32.to_le_bytes());
-        s.request(&request(RTM_GETLINK, NLM_F_REQUEST, 7, &body), &ifs());
+        s.request(&request(RTM_GETLINK, NLM_F_REQUEST, 7, &body), &mut ifs());
         let msgs = drain(&mut s);
         assert_eq!(msgs[0].0, NLMSG_ERROR);
         assert_eq!(i32::from_le_bytes(msgs[0].3[0..4].try_into().unwrap()), -19);
@@ -722,7 +846,7 @@ mod tests {
         let mut s = NetlinkSocket::new();
         s.request(
             &request(RTM_GETROUTE, NLM_F_REQUEST | NLM_F_DUMP, 3, &[AF_INET, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-            &ifs(),
+            &mut ifs(),
         );
         let msgs = drain(&mut s);
         let routes: Vec<_> = msgs.iter().filter(|m| m.0 == RTM_NEWROUTE).collect();
@@ -744,20 +868,159 @@ mod tests {
     #[test]
     fn changes_and_unknown_requests_are_refused() {
         let mut s = NetlinkSocket::new();
-        let req = request(RTM_NEWADDR, NLM_F_REQUEST | NLM_F_ACK, 9, &[0; 8]);
+        let req = request(RTM_NEWROUTE, NLM_F_REQUEST | NLM_F_ACK, 9, &[0; 12]);
         // Two requests in one datagram, and trailing garbage.
         let mut d = req.clone();
         d.extend(request(RTM_GETADDR, NLM_F_REQUEST | NLM_F_DUMP, 10, &[0; 8]));
         d.extend([1, 2, 3]);
-        s.request(&d, &ifs());
+        s.request(&d, &mut ifs());
         let msgs = drain(&mut s);
         assert_eq!(msgs[0].0, NLMSG_ERROR);
         assert_eq!(i32::from_le_bytes(msgs[0].3[0..4].try_into().unwrap()), -95);
         assert_eq!(&msgs[0].3[4..], &req[..]);
         assert_eq!(msgs.last().unwrap().0, NLMSG_DONE);
         // Not a request: ignored.
-        s.request(&request(RTM_GETLINK, NLM_F_DUMP, 1, &[0; 16]), &ifs());
+        s.request(&request(RTM_GETLINK, NLM_F_DUMP, 1, &[0; 16]), &mut ifs());
         assert_eq!(s.next_len(), None);
+    }
+
+    /// A netlink message header, an ifinfomsg and nothing else: what
+    /// bubblewrap and ip(8) send to bring a link up.
+    fn link_request(ty: u16, flags: u16, index: i32, ifflags: u32, change: u32) -> Vec<u8> {
+        let mut body = [0u8; 16];
+        body[4..8].copy_from_slice(&index.to_le_bytes());
+        body[8..12].copy_from_slice(&ifflags.to_le_bytes());
+        body[12..16].copy_from_slice(&change.to_le_bytes());
+        request(ty, flags, 77, &body)
+    }
+
+    /// An environment that refuses changes unless `admin`.
+    struct Env {
+        devices: crate::net::dev::Devices,
+        admin: bool,
+    }
+
+    impl LinkEnv for Env {
+        fn interfaces(&mut self) -> Interfaces {
+            self.devices.interfaces(LinkStats::default())
+        }
+        fn admin(&self) -> bool {
+            self.admin
+        }
+        fn set_up(&mut self, index: u32, up: bool) -> Result<(), Errno> {
+            if index != 1 {
+                return Err(Errno::ENODEV);
+            }
+            self.devices.set_lo_up(up);
+            Ok(())
+        }
+        fn add_loopback_address(&mut self, _: u32) -> Result<(), Errno> {
+            self.devices.add_lo_addr()
+        }
+    }
+
+    /// The netns_loopback sheet's sequence in a new network namespace.
+    #[test]
+    fn a_new_namespaces_loopback_is_brought_up_over_netlink() {
+        let mut env = Env { devices: crate::net::dev::Devices::new(), admin: true };
+        let mut s = NetlinkSocket { port: 9, ..NetlinkSocket::default() };
+        s.request(&request(RTM_GETLINK, NLM_F_REQUEST | NLM_F_DUMP, 77, &[0; 16]), &mut env);
+        let msgs = drain(&mut s);
+        assert_eq!(msgs.iter().map(|m| m.0).collect::<Vec<_>>(), [RTM_NEWLINK, NLMSG_DONE], "one link");
+        let lo = &msgs[0].3;
+        assert_eq!(i32::from_le_bytes(lo[4..8].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(lo[8..12].try_into().unwrap()), IFF_LOOPBACK, "down");
+        assert_eq!(attr_of(lo, 16, IFLA_IFNAME), Some(b"lo\0".to_vec()), "attribute length 4 + 3 = 7");
+        assert_eq!(attr_of(lo, 16, IFLA_MTU), Some(65536u32.to_le_bytes().to_vec()));
+        // No address yet.
+        s.request(&request(RTM_GETADDR, NLM_F_REQUEST | NLM_F_DUMP, 77, &[AF_INET, 0, 0, 0, 0, 0, 0, 0]), &mut env);
+        assert_eq!(drain(&mut s).iter().map(|m| m.0).collect::<Vec<_>>(), [NLMSG_DONE]);
+
+        // Up: acknowledged with error 0 and the request's header, 36 bytes.
+        s.request(&link_request(RTM_NEWLINK, NLM_F_REQUEST | NLM_F_ACK, 1, IFF_UP, IFF_UP), &mut env);
+        assert_eq!(s.next_len(), Some(36));
+        let msgs = drain(&mut s);
+        assert_eq!((msgs.len(), msgs[0].0, msgs[0].2), (1, NLMSG_ERROR, 77));
+        assert_eq!(i32::from_le_bytes(msgs[0].3[0..4].try_into().unwrap()), 0);
+        assert_eq!(u16::from_le_bytes([msgs[0].3[8], msgs[0].3[9]]), RTM_NEWLINK, "the request's header");
+        assert!(env.devices.lo_up());
+        s.request(&request(RTM_GETLINK, NLM_F_REQUEST | NLM_F_DUMP, 78, &[0; 16]), &mut env);
+        let msgs = drain(&mut s);
+        let flags = u32::from_le_bytes(msgs[0].3[8..12].try_into().unwrap());
+        assert_eq!(flags & 0xffff, 0x49, "IFF_UP | IFF_LOOPBACK | IFF_RUNNING");
+
+        // An unknown index.
+        s.request(&link_request(RTM_NEWLINK, NLM_F_REQUEST | NLM_F_ACK, 99, IFF_UP, IFF_UP), &mut env);
+        let msgs = drain(&mut s);
+        assert_eq!((msgs[0].0, i32::from_le_bytes(msgs[0].3[0..4].try_into().unwrap())), (NLMSG_ERROR, -19));
+
+        // The address it now has: 127.0.0.1/8, scope host, labelled lo.
+        s.request(&request(RTM_GETADDR, NLM_F_REQUEST | NLM_F_DUMP, 79, &[AF_INET, 0, 0, 0, 0, 0, 0, 0]), &mut env);
+        let msgs = drain(&mut s);
+        assert_eq!(msgs.iter().map(|m| m.0).collect::<Vec<_>>(), [RTM_NEWADDR, NLMSG_DONE]);
+        let a = &msgs[0].3;
+        assert_eq!((a[0], a[1], a[3]), (AF_INET, 8, RT_SCOPE_HOST));
+        assert_eq!(u32::from_le_bytes(a[4..8].try_into().unwrap()), 1);
+        assert_eq!(attr_of(a, 8, IFA_ADDRESS), Some(vec![127, 0, 0, 1]));
+        assert_eq!(attr_of(a, 8, IFA_LABEL), Some(b"lo\0".to_vec()));
+
+        // Down again without asking for an acknowledgement: no answer.
+        s.request(&link_request(RTM_SETLINK, NLM_F_REQUEST, 1, 0, IFF_UP), &mut env);
+        assert_eq!(s.next_len(), None);
+        assert!(!env.devices.lo_up());
+        // A change mask without IFF_UP leaves the link as it is.
+        s.request(&link_request(RTM_NEWLINK, NLM_F_REQUEST, 1, IFF_UP, IFF_MULTICAST), &mut env);
+        assert!(!env.devices.lo_up());
+        // By name, with a reserved (zero) change mask.
+        let mut m = Msg::new(RTM_NEWLINK, NLM_F_REQUEST, 80, 0);
+        let mut body = [0u8; 16];
+        body[8..12].copy_from_slice(&IFF_UP.to_le_bytes());
+        m.put(&body).attr(IFLA_IFNAME, b"lo\0");
+        s.request(&m.finish(), &mut env);
+        assert!(env.devices.lo_up());
+    }
+
+    #[test]
+    fn changes_need_cap_net_admin_and_only_some_are_made() {
+        let mut env = Env { devices: crate::net::dev::Devices::new(), admin: false };
+        let mut s = NetlinkSocket::new();
+        // Without the capability: dumps work, changes are EPERM.
+        s.request(&request(RTM_GETLINK, NLM_F_REQUEST | NLM_F_DUMP, 1, &[0; 16]), &mut env);
+        assert_eq!(drain(&mut s).len(), 2);
+        s.request(&link_request(RTM_NEWLINK, NLM_F_REQUEST | NLM_F_ACK, 1, IFF_UP, IFF_UP), &mut env);
+        let msgs = drain(&mut s);
+        assert_eq!((msgs[0].0, i32::from_le_bytes(msgs[0].3[0..4].try_into().unwrap())), (NLMSG_ERROR, -1));
+        assert!(!env.devices.lo_up());
+        // Refused before the link is looked up, and without NLM_F_ACK too.
+        s.request(&link_request(RTM_NEWLINK, NLM_F_REQUEST, 99, IFF_UP, IFF_UP), &mut env);
+        assert_eq!(i32::from_le_bytes(drain(&mut s)[0].3[0..4].try_into().unwrap()), -1);
+        s.request(&request(RTM_NEWADDR, NLM_F_REQUEST, 2, &[0; 8]), &mut env);
+        assert_eq!(i32::from_le_bytes(drain(&mut s)[0].3[0..4].try_into().unwrap()), -1);
+
+        // With it: 127.0.0.1/8 on lo is taken once; other addresses and
+        // deletions are not supported.
+        env.admin = true;
+        let newaddr = |addr: [u8; 4], len: u8, index: u32| {
+            let mut m = Msg::new(RTM_NEWADDR, NLM_F_REQUEST | NLM_F_ACK, 3, 0);
+            let mut head = [AF_INET, len, 0, RT_SCOPE_HOST, 0, 0, 0, 0];
+            head[4..8].copy_from_slice(&index.to_le_bytes());
+            m.put(&head).attr(IFA_LOCAL, &addr).attr(IFA_ADDRESS, &addr);
+            m.finish()
+        };
+        let code = |s: &mut NetlinkSocket| i32::from_le_bytes(drain(s)[0].3[0..4].try_into().unwrap());
+        s.request(&newaddr([127, 0, 0, 1], 8, 1), &mut env);
+        assert_eq!(code(&mut s), 0);
+        assert!(!env.devices.lo_up(), "an address does not bring the link up");
+        s.request(&newaddr([127, 0, 0, 1], 8, 1), &mut env);
+        assert_eq!(code(&mut s), -17);
+        s.request(&newaddr([10, 0, 0, 1], 24, 1), &mut env);
+        assert_eq!(code(&mut s), -95);
+        s.request(&newaddr([127, 0, 0, 1], 8, 5), &mut env);
+        assert_eq!(code(&mut s), -19);
+        s.request(&link_request(RTM_NEWLINK + 1, NLM_F_REQUEST | NLM_F_ACK, 1, 0, 0), &mut env);
+        assert_eq!(code(&mut s), -95, "RTM_DELLINK");
+        s.request(&request(RTM_NEWLINK, NLM_F_REQUEST | NLM_F_ACK, 4, &[0; 4]), &mut env);
+        assert_eq!(code(&mut s), -22, "too short for an ifinfomsg");
     }
 
     #[test]
@@ -767,7 +1030,7 @@ mod tests {
             many.addrs.push(IfAddr { index: 2, addr: IpAddr::V4(Ipv4Addr::new(10, 1, 0, i)), prefix_len: 16 });
         }
         let mut s = NetlinkSocket::new();
-        s.request(&request(RTM_GETADDR, NLM_F_REQUEST | NLM_F_DUMP, 1, &[0; 8]), &many);
+        s.request(&request(RTM_GETADDR, NLM_F_REQUEST | NLM_F_DUMP, 1, &[0; 8]), &mut many);
         assert!(s.queue.len() > 1);
         assert!(s.queue.iter().all(|d| d.len() <= DATAGRAM));
         let mut small = [0u8; 10];

@@ -9,8 +9,8 @@ use crate::args::Args;
 use crate::cred::cap;
 use crate::errno::{Errno, SysResult};
 use crate::ipc::msg::{
-    IPC_INFO, IPC_NOWAIT, MSG_COPY, MSG_EXCEPT, MSG_INFO, MSG_STAT, MSG_STAT_ANY, MSGMAX, Message, MsqidDs, Outcome,
-    Want, msginfo_bytes, with_table,
+    IPC_INFO, IPC_NOWAIT, MSG_COPY, MSG_EXCEPT, MSG_INFO, MSG_STAT, MSG_STAT_ANY, Message, MsqidDs, Outcome, Want,
+    msginfo_bytes, with_table,
 };
 use crate::ipc::shm::{IPC_RMID, IPC_SET, IPC_STAT, READ};
 use crate::kernel::{LinuxKernel, UserPtr};
@@ -75,7 +75,7 @@ pub fn msgget(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 ///
 /// `msqid` and `msgflg` are `int`s, `msgsz` a full `size_t`. In order:
 /// `EFAULT` if `mtype` cannot be read; `EINVAL` for a negative id or a
-/// size above [`MSGMAX`]; `EINVAL` for an `mtype` below 1; `EFAULT` if the
+/// size above the namespace's `msgmax`; `EINVAL` for an `mtype` below 1; `EFAULT` if the
 /// text cannot be read; then the table
 /// ([`MsgTable::send`](crate::ipc::msg::MsgTable::send)). A sender that
 /// does not fit sleeps until a waker sends its message for it, the queue
@@ -85,7 +85,8 @@ pub fn msgsnd(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let mut mtype = [0u8; 8];
     k.copy_from_user(msgp, &mut mtype)?;
     let mtype = i64::from_ne_bytes(mtype);
-    if id < 0 || size > MSGMAX {
+    let ns = with_own(k, |p| p.ns.ipc.clone());
+    if id < 0 || size > with_table(&ns, |t| t.limits.max) {
         return Err(Errno::EINVAL);
     }
     if mtype < 1 {
@@ -207,8 +208,7 @@ pub fn msgctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             Ok(0)
         }
         IPC_INFO | MSG_INFO => {
-            let (info, max) =
-                with_table(&ns, |t| (msginfo_bytes(if cmd == MSG_INFO { Some(t) } else { None }), t.max_index()));
+            let (info, max) = with_table(&ns, |t| (msginfo_bytes(t, cmd == MSG_INFO), t.max_index()));
             k.copy_to_user(buf, &info)?;
             Ok(max as u64)
         }

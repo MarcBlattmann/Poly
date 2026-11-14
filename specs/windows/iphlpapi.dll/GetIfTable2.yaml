@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/iphlpapi.dll/GetIfTable2.yaml
+id: windows/api/iphlpapi.dll/GetIfTable2
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-5
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above, and Chrome's call in the raw stage-1 traces and in a fresh call-site trace. Microsoft Learn: "GetIfTable2 function (netioapi.h)", "MIB_IF_TABLE2 structure", "MIB_IF_ROW2 structure", "FreeMibTable", "NET_LUID union", "IF_OPER_STATUS"; netioapi.h, ifdef.h, ipifcons.h. Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns a table with one row per network interface of the computer (also the loopback interface and virtual ones), in memory the caller frees with FreeMibTable; the result is a status code where 0 is success. Chrome reads it once on a worker thread for its network statistics. As with NetUserGetInfo, a success without a table is what Chrome cannot take.
+interface:
+  signature: "NETIO_STATUS GetIfTable2(PMIB_IF_TABLE2 *Table); VOID FreeMibTable(PVOID Memory)"
+  returns: "NO_ERROR (0) and *Table = the table; an error code otherwise"
+  table: "MIB_IF_TABLE2: ULONG NumEntries @0, then MIB_IF_ROW2 Table[NumEntries] starting at offset 8"
+  row: "MIB_IF_ROW2, 1352 bytes on x64: InterfaceLuid (u64) @0 (its top 16 bits are the interface type), InterfaceIndex @8, InterfaceGuid @12, Alias WCHAR[257] @28, Description WCHAR[257] @542, PhysicalAddressLength @1056, PhysicalAddress[32] @1060, PermanentPhysicalAddress[32] @1092, Mtu @1124, Type @1128, TunnelType @1132, MediaType @1136, PhysicalMediumType @1140, AccessType @1144, DirectionType @1148, InterfaceAndOperStatusFlags (u8) @1152, OperStatus @1156, AdminStatus @1160, MediaConnectState @1164, NetworkGuid @1168, ConnectionType @1184, TransmitLinkSpeed (u64) @1192, ReceiveLinkSpeed @1200, then 18 u64 counters from InOctets @1208 to OutQLen @1344"
+chrome:
+  call: "browser process, stage 1, once, on a worker thread (chrome.dll+0xdcec3dd): GetIfTable2(&table) = 0; then FreeMibTable(table). The table had 66 rows on the owner's PC"
+  fatal_verdict: "FATAL in the fault-injection run (gap-map section 6a), but that run returned 0 with no table: for this function 0 is success, so Chrome used a NULL table. What a failing error code does was not tried"
+rules:
+  success: "status 0 and a table with at least one row; a second call returns another block of memory with the same number of rows; calls keep working after FreeMibTable"
+  loopback: "exactly one row has Type IF_TYPE_SOFTWARE_LOOPBACK (24): OperStatus 1 (up), PhysicalAddressLength 0, Mtu above 0, InterfaceIndex above 0, a non-empty Alias and Description, TransmitLinkSpeed above 0, and the type again in the top 16 bits of its InterfaceLuid"
+  every_row: "in every row: InterfaceIndex is above 0 and no two rows share one; no two rows share an InterfaceLuid; the InterfaceLuid's top 16 bits equal the row's Type; Alias and Description are NUL-terminated inside their 257 characters; PhysicalAddressLength is at most 32; OperStatus is 1 to 7"
+  counters: "counters only grow: the loopback row is in the next table too (same InterfaceLuid) and its InOctets is not lower"
+errors:
+  none_seen: "no failure was seen with a valid pointer; a NULL pointer faults (access violation) instead of returning an error"
+side_effects: "allocates the table; the caller frees it with FreeMibTable"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, sizes and booleans; no line holds a handle, a pointer, a name of the machine or of its user, a hardware value or a time. The tests import iphlpapi.dll. Rows other than the loopback's are the machine's own (adapters, virtual switches) and are only checked for what holds for every row.
+not_covered: >
+  Which interfaces a machine has and their names, speeds, addresses and counters, GetIfTable2Ex, GetIfEntry2, the 32-bit GetIfTable, and what Chrome does with an error code.

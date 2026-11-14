@@ -177,3 +177,170 @@ kernel_test! {
         })
     }
 }
+
+/// `struct ifreq` for `lo` with `value` in the first two bytes of its
+/// union, at [`BUF`].
+fn ifreq_lo(value: u16) -> u64 {
+    let mut r = [0u8; 40];
+    r[..2].copy_from_slice(b"lo");
+    r[16..18].copy_from_slice(&value.to_le_bytes());
+    poke(BUF, &r);
+    BUF
+}
+
+/// `SIOCGIFFLAGS` of `lo` through socket `fd`.
+fn lo_flags(p: &Process, fd: u64) -> Result<u16, Errno> {
+    sys(p, nr::IOCTL, &[fd, 0x8913, ifreq_lo(0)])?;
+    let b = peek(BUF + 16, 2);
+    Ok(u16::from_le_bytes([b[0], b[1]]))
+}
+
+/// A `sockaddr_in` at `BUF + 64`.
+fn sockaddr_in(ip: [u8; 4], port: u16) -> u64 {
+    let mut a = [0u8; 16];
+    a[0] = 2;
+    a[2..4].copy_from_slice(&port.to_be_bytes());
+    a[4..8].copy_from_slice(&ip);
+    poke(BUF + 64, &a);
+    BUF + 64
+}
+
+kernel_test! {
+    /// ADR 0178: a network namespace has a stack and a loopback device of
+    /// its own, down until it is brought up; a socket stays in the
+    /// namespace it was made in.
+    fn a_new_network_namespace_has_its_own_loopback() -> TestResult {
+        let (process, memory) = setup()?;
+        run(&process, &memory, |p| -> Check {
+            const SIOCSIFFLAGS: u64 = 0x8914;
+            const SIOCGIFADDR: u64 = 0x8915;
+            let stacks = crate::net::namespace_stacks();
+            let outer = sys(p, nr::SOCKET, &[2, 2, 0]).map_err(|_| 1u64)?;
+            check!(2, lo_flags(p, outer) == Ok(0x49), "the initial lo is up");
+            check!(3, sys(p, nr::UNSHARE, &[CLONE_NEWNET]) == Ok(0));
+            let s = sys(p, nr::SOCKET, &[2, 2, 0]).map_err(|_| 4u64)?;
+            check!(5, lo_flags(p, s) == Ok(0x8), "down: IFF_LOOPBACK only");
+            check!(6, lo_flags(p, outer) == Ok(0x49), "the older socket is still in the initial namespace");
+            check!(7, crate::net::namespace_stacks() == stacks + 1);
+            check!(8, sys(p, nr::IOCTL, &[s, SIOCGIFADDR, ifreq_lo(0)]) == Err(Errno::EADDRNOTAVAIL));
+            // Nothing is reachable, though a loopback address can be bound.
+            check!(9, sys(p, nr::BIND, &[s, sockaddr_in([127, 0, 0, 1], 0), 16]) == Ok(0));
+            let c = sys(p, nr::SOCKET, &[2, 1, 0]).map_err(|_| 10u64)?;
+            check!(11, sys(p, nr::CONNECT, &[c, sockaddr_in([127, 0, 0, 1], 80), 16]) == Err(Errno::ENETUNREACH));
+            check!(12, sys(p, nr::CONNECT, &[c, sockaddr_in([10, 0, 0, 1], 80), 16]) == Err(Errno::ENETUNREACH));
+            let text_of = |path| text(p, path);
+            let dev = text_of("/proc/self/net/dev");
+            check!(13, dev.lines().count() == 3 && dev.contains("    lo:"));
+            check!(14, readlink(p, "/proc/net") == Ok(b"self/net".to_vec()));
+            // Up, as bubblewrap does it: TCP over the namespace's loopback.
+            check!(15, sys(p, nr::IOCTL, &[s, SIOCSIFFLAGS, ifreq_lo(0x49)]) == Ok(0));
+            check!(16, lo_flags(p, s) == Ok(0x49));
+            check!(17, sys(p, nr::IOCTL, &[s, SIOCGIFADDR, ifreq_lo(0)]) == Ok(0));
+            check!(18, peek(BUF + 20, 4) == [127, 0, 0, 1]);
+            let l = sys(p, nr::SOCKET, &[2, 1, 0]).map_err(|_| 19u64)?;
+            check!(20, sys(p, nr::BIND, &[l, sockaddr_in([127, 0, 0, 1], 0), 16]) == Ok(0));
+            check!(21, sys(p, nr::LISTEN, &[l, 4]) == Ok(0));
+            poke(BUF + 128, &16u32.to_le_bytes());
+            check!(22, sys(p, nr::GETSOCKNAME, &[l, BUF + 96, BUF + 128]) == Ok(0));
+            let port = peek(BUF + 98, 2);
+            let port = u16::from_be_bytes([port[0], port[1]]);
+            check!(23, port != 0);
+            check!(24, sys(p, nr::CONNECT, &[c, sockaddr_in([127, 0, 0, 1], port), 16]) == Ok(0));
+            let a = sys(p, nr::ACCEPT, &[l, 0, 0]).map_err(|_| 25u64)?;
+            poke(BUF + 200, b"ping");
+            check!(26, sys(p, nr::WRITE, &[c, BUF + 200, 4]) == Ok(4));
+            check!(27, sys(p, nr::READ, &[a, BUF + 300, 16]) == Ok(4));
+            check!(28, peek(BUF + 300, 4) == b"ping");
+            // A port nobody listens on is refused; elsewhere there is no route.
+            let r = sys(p, nr::SOCKET, &[2, 1, 0]).map_err(|_| 29u64)?;
+            check!(30, sys(p, nr::CONNECT, &[r, sockaddr_in([127, 0, 0, 1], 1), 16]) == Err(Errno::ECONNREFUSED));
+            check!(31, sys(p, nr::CONNECT, &[r, sockaddr_in([10, 0, 0, 1], 80), 16]) == Err(Errno::ENETUNREACH));
+            // The initial namespace does not see the listener: its own
+            // loopback has nobody on that port.
+            let o = sys(p, nr::SOCKET, &[2, 1, 0]);
+            check!(32, o.is_ok());
+            // (`o` is in the new namespace too: the process moved. The
+            // socket made before the unshare is the one outside.)
+            check!(33, sys(p, nr::CONNECT, &[outer, sockaddr_in([127, 0, 0, 1], port), 16]) == Ok(0), "UDP connect");
+            // Counters moved on the namespace's lo only after traffic.
+            let dev = text_of("/proc/self/net/dev");
+            let lo = dev.lines().find(|l| l.contains("lo:")).unwrap_or_default();
+            check!(34, lo.split_whitespace().nth(2).is_some_and(|packets| packets != "0"));
+            // Down again: flags 0x8, nothing reachable.
+            check!(35, sys(p, nr::IOCTL, &[s, SIOCSIFFLAGS, ifreq_lo(0)]) == Ok(0));
+            check!(36, lo_flags(p, s) == Ok(0x8));
+            check!(37, sys(p, nr::CONNECT, &[r, sockaddr_in([127, 0, 0, 1], port), 16]) == Err(Errno::ENETUNREACH));
+            // A second namespace starts from scratch.
+            check!(38, sys(p, nr::UNSHARE, &[CLONE_NEWNET]) == Ok(0));
+            let s2 = sys(p, nr::SOCKET, &[2, 2, 0]).map_err(|_| 39u64)?;
+            check!(40, lo_flags(p, s2) == Ok(0x8));
+            // Raw sockets can be made by the namespace's root; without the
+            // capability they are EPERM, and so is changing the device.
+            check!(41, sys(p, nr::SOCKET, &[2, 3, 255]).is_ok());
+            check!(42, sys(p, nr::SOCKET, &[17, 3, 0x300]).is_ok());
+            check!(43, sys(p, nr::SETRESUID, &[1000, 1000, 1000]) == Ok(0));
+            check!(44, sys(p, nr::SOCKET, &[2, 3, 255]) == Err(Errno::EPERM));
+            check!(45, sys(p, nr::SOCKET, &[17, 3, 0x300]) == Err(Errno::EPERM));
+            check!(46, sys(p, nr::IOCTL, &[s2, SIOCSIFFLAGS, ifreq_lo(0x49)]) == Err(Errno::EPERM));
+            check!(47, lo_flags(p, s2) == Ok(0x8), "the getters work");
+            Ok(())
+        })
+    }
+}
+
+kernel_test! {
+    /// ADR 0178: an IPC namespace owns its POSIX message queues (shown by
+    /// a message queue file system mounted from it), its System V objects
+    /// (`/proc/sysvipc`) and its settings.
+    fn an_ipc_namespace_owns_its_queues_and_settings() -> TestResult {
+        let (process, memory) = setup()?;
+        run(&process, &memory, |p| -> Check {
+            const O_CREAT_RDWR: u64 = 0o102;
+            const MS_REC_PRIVATE: u64 = 0x4000 | 0x40000;
+            const IPC_CREAT: u64 = 0o1000;
+            check!(1, sys(p, nr::UNSHARE, &[CLONE_NEWIPC | CLONE_NEWNS]) == Ok(0));
+            check!(2, sys(p, nr::MOUNT, &[cstr(1, ""), cstr(2, "/"), 0, MS_REC_PRIVATE, 0]) == Ok(0));
+            for (slot, dir) in [(1, "/tmp/mq-a"), (2, "/tmp/mq-b")] {
+                let made = sys(p, nr::MKDIRAT, &[AT_FDCWD, cstr(slot, dir), 0o755]);
+                check!(3, matches!(made, Ok(0) | Err(Errno::EEXIST)));
+            }
+            let mount = |dir: &str| sys(p, nr::MOUNT, &[cstr(3, "mqueue"), cstr(4, dir), cstr(5, "mqueue"), 0, 0]);
+            check!(4, mount("/tmp/mq-a") == Ok(0));
+            check!(5, read_file(p, "/tmp/mq-a/pk_q") == Err(Errno::ENOENT), "a new namespace has no queues");
+            let q = sys(p, nr::MQ_OPEN, &[cstr(1, "pk_q"), O_CREAT_RDWR, 0o600, 0]);
+            check!(6, q.is_ok());
+            let status = read_file(p, "/tmp/mq-a/pk_q").map_err(|_| 7u64)?;
+            check!(8, status.starts_with(b"QSIZE:0 "));
+            // System V: the first queue of the namespace is 0 and is listed.
+            let listed = |path: &str| text(p, path).lines().count();
+            check!(9, listed("/proc/sysvipc/msg") == 1 && listed("/proc/sysvipc/shm") == 1);
+            check!(10, sys(p, nr::MSGGET, &[0x706b_0001, IPC_CREAT | 0o600]) == Ok(0));
+            check!(11, listed("/proc/sysvipc/msg") == 2);
+            // A setting of this namespace.
+            let msgmni = text(p, "/proc/sys/kernel/msgmni");
+            check!(12, write_file(p, "/proc/sys/kernel/msgmni", "77") == Ok(2));
+            check!(13, text(p, "/proc/sys/kernel/msgmni") == "77\n");
+            check!(14, write_file(p, "/proc/sys/fs/mqueue/msg_max", "11") == Ok(2));
+
+            // A further namespace: none of it is there, while the mount
+            // made before keeps showing its own namespace's queue.
+            check!(15, sys(p, nr::UNSHARE, &[CLONE_NEWIPC]) == Ok(0));
+            check!(16, sys(p, nr::MQ_OPEN, &[cstr(1, "pk_q"), 2, 0, 0]) == Err(Errno::ENOENT));
+            check!(17, sys(p, nr::MSGGET, &[0x706b_0001, 0]) == Err(Errno::ENOENT));
+            check!(18, listed("/proc/sysvipc/msg") == 1);
+            check!(19, text(p, "/proc/sys/kernel/msgmni") == msgmni);
+            check!(20, text(p, "/proc/sys/fs/mqueue/msg_max") == "10\n");
+            check!(21, mount("/tmp/mq-b") == Ok(0));
+            check!(22, read_file(p, "/tmp/mq-b/pk_q") == Err(Errno::ENOENT));
+            check!(23, read_file(p, "/tmp/mq-a/pk_q").is_ok());
+            check!(24, sys(p, nr::MQ_OPEN, &[cstr(1, "pk_q"), O_CREAT_RDWR, 0o600, 0]).is_ok(), "another queue");
+            check!(25, read_file(p, "/tmp/mq-b/pk_q").is_ok());
+            check!(26, sys(p, nr::MQ_UNLINK, &[cstr(1, "pk_q")]) == Ok(0));
+            check!(27, read_file(p, "/tmp/mq-b/pk_q") == Err(Errno::ENOENT));
+            check!(28, read_file(p, "/tmp/mq-a/pk_q").is_ok(), "the outer queue is untouched");
+            check!(29, sys(p, nr::UMOUNT2, &[cstr(1, "/tmp/mq-b"), 0]) == Ok(0));
+            check!(30, sys(p, nr::UMOUNT2, &[cstr(1, "/tmp/mq-a"), 0]) == Ok(0));
+            Ok(())
+        })
+    }
+}

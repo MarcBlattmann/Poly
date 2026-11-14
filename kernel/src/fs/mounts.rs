@@ -8,6 +8,7 @@
 //! | `sysfs` | a sysfs, like `/sys` |
 //! | `devpts` | a view of the one set of pseudo-terminals (`/dev/pts`) |
 //! | `tmpfs`, `ramfs` | a new, empty tmpfs (root `mode`, `uid`, `gid` from the options) |
+//! | `mqueue` | the POSIX message queues of the mounter's IPC namespace (ADR 0178) |
 //! | `ext2` | the ext2 volume on the disk the source node names, behind the page cache |
 //!
 //! Disks: `/dev/vda`, `/dev/vdb`, ... are the virtio-blk functions in PCI
@@ -91,6 +92,9 @@ pub fn new_virtual(fs: FsType, root: RootOptions) -> Result<Arc<dyn FileSystem>,
             tmpfs.setattr(tmpfs.root(), &set)?;
             super::memfs::cached(tmpfs)
         }
+        // mq_overview(7): the queues of the IPC namespace of the process
+        // that mounts it.
+        FsType::Mqueue => super::mqueuefs::for_current(),
         FsType::Ext2 | FsType::Squashfs => return Err(Errno::ENOTBLK),
         FsType::Overlay | FsType::Fuse => return Err(Errno::EINVAL),
     })

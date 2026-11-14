@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "9b678454dfdd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:31:32Z",
+  "tests": [
+    {
+      "name": "wtsr_errors",
+      "exe_sha256": "4f77055650471fe835b821ba4d8470640ef384b355e3da9e53cc8d9fac399d00",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2luZG93IGNyZWF0ZWQgMQpXVFNSZWdpc3RlclNlc3Npb25Ob3RpZmljYXRpb24od2luZG93LCAweDIpID0gMCBsYXN0IGVycm9yIDg3CldUU1JlZ2lzdGVyU2Vzc2lvbk5vdGlmaWNhdGlvbih3aW5kb3csIDB4MykgPSAwIGxhc3QgZXJyb3IgODcKV1RTUmVnaXN0ZXJTZXNzaW9uTm90aWZpY2F0aW9uKHdpbmRvdywgMHgxMDApID0gMCBsYXN0IGVycm9yIDg3CldUU1JlZ2lzdGVyU2Vzc2lvbk5vdGlmaWNhdGlvbih3aW5kb3csIDB4ZmZmZmZmZmYpID0gMCBsYXN0IGVycm9yIDg3CldUU1VuUmVnaXN0ZXJTZXNzaW9uTm90aWZpY2F0aW9uKHdpbmRvdykgYWZ0ZXIgdGhvc2UgPSAwIGxhc3QgZXJyb3IgMgpXVFNSZWdpc3RlclNlc3Npb25Ob3RpZmljYXRpb24oTlVMTCwgMCkgPSAwIGxhc3QgZXJyb3IgODcKV1RTVW5SZWdpc3RlclNlc3Npb25Ob3RpZmljYXRpb24oTlVMTCkgPSAwIGxhc3QgZXJyb3IgODcKV1RTUmVnaXN0ZXJTZXNzaW9uTm90aWZpY2F0aW9uKDB4N2ZmZjAwMDAgKG5vIHdpbmRvdyksIDApID0gMCBsYXN0IGVycm9yIDg3CldUU1VuUmVnaXN0ZXJTZXNzaW9uTm90aWZpY2F0aW9uKDB4N2ZmZjAwMDAgKG5vIHdpbmRvdykpID0gMCBsYXN0IGVycm9yIDg3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "window created 1\nWTSRegisterSessionNotification(window, 0x2) = 0 last error 87\nWTSRegisterSessionNotification(window, 0x3) = 0 last error 87\nWTSRegisterSessionNotification(window, 0x100) = 0 last error 87\nWTSRegisterSessionNotification(window, 0xffffffff) = 0 last error 87\nWTSUnRegisterSessionNotification(window) after those = 0 last error 2\nWTSRegisterSessionNotification(NULL, 0) = 0 last error 87\nWTSUnRegisterSessionNotification(NULL) = 0 last error 87\nWTSRegisterSessionNotification(0x7fff0000 (no window), 0) = 0 last error 87\nWTSUnRegisterSessionNotification(0x7fff0000 (no window)) = 0 last error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    },
+    {
+      "name": "wtsr_window",
+      "exe_sha256": "53d1e65772a34fca1358c5066861e7f288b18b1d8bd1667c81085c9008e4b56c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V1RTVW5SZWdpc3RlclNlc3Npb25Ob3RpZmljYXRpb24oYSB3aW5kb3cgdGhhdCB3YXMgbmV2ZXIgcmVnaXN0ZXJlZCkgPSAwIGxhc3QgZXJyb3IgMgpXVFNSZWdpc3RlclNlc3Npb25Ob3RpZmljYXRpb24oc2Vjb25kIHdpbmRvdywgMCkgPSAxCkRlc3Ryb3lXaW5kb3coc2Vjb25kIHdpbmRvdywgc3RpbGwgcmVnaXN0ZXJlZCkgPSAxCldUU1VuUmVnaXN0ZXJTZXNzaW9uTm90aWZpY2F0aW9uKHRoZSBkZXN0cm95ZWQgd2luZG93KSA9IDAgbGFzdCBlcnJvciA4NwpXVFNSZWdpc3RlclNlc3Npb25Ob3RpZmljYXRpb24odGhlIGRlc3Ryb3llZCB3aW5kb3csIDApID0gMCBsYXN0IGVycm9yIDg3CldUU1JlZ2lzdGVyU2Vzc2lvbk5vdGlmaWNhdGlvbihhIHRoaXJkIHdpbmRvdywgMCkgPSAxCldUU1VuUmVnaXN0ZXJTZXNzaW9uTm90aWZpY2F0aW9uKHRoZSB0aGlyZCB3aW5kb3cpID0gMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WTSUnRegisterSessionNotification(a window that was never registered) = 0 last error 2\nWTSRegisterSessionNotification(second window, 0) = 1\nDestroyWindow(second window, still registered) = 1\nWTSUnRegisterSessionNotification(the destroyed window) = 0 last error 87\nWTSRegisterSessionNotification(the destroyed window, 0) = 0 last error 87\nWTSRegisterSessionNotification(a third window, 0) = 1\nWTSUnRegisterSessionNotification(the third window) = 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

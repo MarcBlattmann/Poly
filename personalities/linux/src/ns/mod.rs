@@ -14,10 +14,12 @@
 //! - **What each one holds.** [`user::UserNs`]: id maps, owner. [`pid::PidNs`]:
 //!   the numbers of its members. [`UtsNs`]: host and domain names. The
 //!   kernel holds what the others stand for: a mount namespace is a copy
-//!   of the mount table ([`MntNs::id`] names it), a network namespace has
-//!   only a loopback interface that is down, so its sockets reach nothing
-//!   ([`NetNs`]), an IPC namespace holds its System V shared memory
-//!   segments, semaphore sets and message queues ([`IpcNs::shm`],
+//!   of the mount table ([`MntNs::id`] names it). A network namespace
+//!   ([`NetNs`], ADR 0178) owns its devices (a loopback interface that
+//!   starts down, [`crate::net::dev::Devices`]) and what the kernel keeps
+//!   for it (its protocol stack, [`NetNs::kernel_state`]): the sockets
+//!   made in it see only that. An IPC namespace holds its System V shared
+//!   memory segments, semaphore sets and message queues ([`IpcNs::shm`],
 //!   [`IpcNs::sem`], [`IpcNs::msg`]). Cgroup and time namespaces
 //!   ([`CgroupNs`], [`TimeNs`]) have an identity only: Poly has no control
 //!   groups and no clock offsets. unshare(2) and setns(2) make and join
@@ -38,10 +40,12 @@ pub mod user;
 
 use crate::cred::{Caps, Creds, cap};
 use crate::errno::Errno;
+use crate::net::dev::Devices;
 use crate::task::clone::*;
 use alloc::collections::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use core::any::Any;
 use core::sync::atomic::{AtomicU32, Ordering};
 use lock::Mutex;
 use pid::{PidNs, PidNsRef};
@@ -201,15 +205,19 @@ impl UtsNs {
     }
 }
 
-/// An IPC namespace (ipc_namespaces(7)): its System V shared memory
-/// segments and semaphore sets. Poly has no System V message queues, nor
-/// POSIX message queues, yet.
+/// An IPC namespace (ipc_namespaces(7)): it owns its System V shared
+/// memory segments, semaphore sets and message queues, its POSIX message
+/// queues, and the limits of each (the tables carry them): what
+/// `/proc/sysvipc`, `/proc/sys/kernel/{msg*,shm*,sem}`,
+/// `/proc/sys/fs/mqueue` and a message queue file system mounted from it
+/// show (ADR 0178). Everything goes with the namespace.
 #[derive(Debug)]
 pub struct IpcNs {
     common: Common,
     shm: Mutex<crate::ipc::shm::ShmTable>,
     sem: Mutex<crate::ipc::sem::SemTable>,
     msg: Mutex<crate::ipc::msg::MsgTable>,
+    mq: Mutex<crate::ipc::mqueue::MqTable>,
 }
 
 impl IpcNs {
@@ -221,6 +229,7 @@ impl IpcNs {
             shm: Mutex::new(crate::ipc::shm::ShmTable::new()),
             sem: Mutex::new(crate::ipc::sem::SemTable::new()),
             msg: Mutex::new(crate::ipc::msg::MsgTable::new()),
+            mq: Mutex::new(crate::ipc::mqueue::MqTable::new()),
         });
         register(ipc.inum(), Handle::Ipc(Some(ipc.clone())));
         ipc
@@ -240,14 +249,75 @@ impl IpcNs {
     pub fn msg(&self) -> &Mutex<crate::ipc::msg::MsgTable> {
         &self.msg
     }
+
+    /// Its POSIX message queue names (a new namespace has none).
+    pub fn mq(&self) -> &Mutex<crate::ipc::mqueue::MqTable> {
+        &self.mq
+    }
 }
 
 /// A network namespace (network_namespaces(7)): a new one has only a
-/// loopback interface, which is down, and no addresses; the kernel's
-/// sockets made in it reach nothing outside it.
+/// loopback interface, which is down, and no addresses; the sockets made
+/// in it reach nothing outside it. It owns its devices and, through
+/// [`kernel_state`](Self::kernel_state), the kernel's protocol stack for
+/// them; a socket keeps the namespace it was made in alive.
 #[derive(Debug)]
 pub struct NetNs {
     common: Common,
+    devices: Mutex<Devices>,
+    /// What the kernel keeps for the namespace, made at first use.
+    kernel: Mutex<Option<Arc<dyn Any + Send + Sync>>>,
+}
+
+/// The devices of the initial network namespace.
+static INITIAL_NET: Mutex<Devices> = Mutex::new(Devices::initial());
+
+impl NetNs {
+    /// A new network namespace owned by `owner`, registered under its
+    /// inode number: one device, `lo`, down.
+    pub fn create(owner: &UserNsRef) -> Arc<NetNs> {
+        let net = Arc::new(NetNs {
+            common: Common::new(owner),
+            devices: Mutex::new(Devices::new()),
+            kernel: Mutex::new(None),
+        });
+        register(net.inum(), Handle::Net(Some(net.clone())));
+        net
+    }
+
+    /// Run `f` on the namespace's devices, locked. `f` must not block or
+    /// call the kernel.
+    pub fn with_devices<R>(&self, f: impl FnOnce(&mut Devices) -> R) -> R {
+        f(&mut self.devices.lock())
+    }
+
+    /// What the kernel keeps for this namespace (its protocol stack):
+    /// made by `make` the first time, the same object afterwards. It
+    /// lives as long as the namespace. `make` must not block.
+    pub fn kernel_state(&self, make: impl FnOnce() -> Arc<dyn Any + Send + Sync>) -> Arc<dyn Any + Send + Sync> {
+        self.kernel.lock().get_or_insert_with(make).clone()
+    }
+
+    /// The kernel's state for this namespace if it has been made.
+    pub fn kernel_state_if_made(&self) -> Option<Arc<dyn Any + Send + Sync>> {
+        self.kernel.lock().clone()
+    }
+}
+
+/// Run `f` on the devices of network namespace `ns` (`None`: the initial
+/// one), locked. `f` must not block or call the kernel.
+pub fn with_net_devices<R>(ns: &Option<Arc<NetNs>>, f: impl FnOnce(&mut Devices) -> R) -> R {
+    match ns {
+        Some(n) => n.with_devices(f),
+        None => f(&mut INITIAL_NET.lock()),
+    }
+}
+
+/// The user namespace that owns network namespace `ns`: `CAP_NET_ADMIN`
+/// and `CAP_NET_RAW` there govern its devices and raw sockets
+/// (network_namespaces(7), capabilities(7)).
+pub fn net_owner(ns: &Option<Arc<NetNs>>) -> UserNsRef {
+    ns.as_ref().and_then(|n| n.owner().clone())
 }
 
 /// A cgroup namespace (cgroup_namespaces(7)). Poly has no control groups,
@@ -393,12 +463,18 @@ impl Namespaces {
         self.mnt.as_ref().and_then(|m| m.owner().clone())
     }
 
+    /// The user namespace that owns the IPC namespace (mounting its
+    /// message queue file system is `CAP_SYS_ADMIN` there).
+    pub fn ipc_owner(&self) -> UserNsRef {
+        self.ipc.as_ref().and_then(|m| m.owner().clone())
+    }
+
     pub fn uts_owner(&self) -> UserNsRef {
         self.uts.as_ref().and_then(|m| m.owner().clone())
     }
 
     pub fn net_owner(&self) -> UserNsRef {
-        self.net.as_ref().and_then(|m| m.owner().clone())
+        net_owner(&self.net)
     }
 }
 
@@ -663,9 +739,7 @@ pub fn make(
         n.ipc = Some(IpcNs::create(&owner));
     }
     if flags & CLONE_NEWNET != 0 {
-        let net = Arc::new(NetNs { common: Common::new(&owner) });
-        register(net.inum(), Handle::Net(Some(net.clone())));
-        n.net = Some(net);
+        n.net = Some(NetNs::create(&owner));
     }
     if flags & CLONE_NEWCGROUP != 0 {
         let cgroup = Arc::new(CgroupNs { common: Common::new(&owner) });

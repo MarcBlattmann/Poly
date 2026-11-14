@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "9b678454dfdd",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-11T11:31:32Z",
+  "tests": [
+    {
+      "name": "quitp_basic",
+      "exe_sha256": "86ee765a86d11da46c266a7ad4ec7198a3f31f9c06b972773c5de159f89dc914",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIHZhbHVlIGlzIHdyaXR0ZW46IDE7IGl0IGlzIGFib3ZlIDA6IDE7IHRoZSBsYXN0IGVycm9yIGlzIHVuY2hhbmdlZAoxMDAwMDAgY2FsbHMgaW4gYSByb3c6IHdlbnQgYmFja3dhcmRzIDAgdGltZXM7IHRoZSB2YWx1ZSBjaGFuZ2VkIGJldHdlZW4gY2FsbHMgYXQgbGVhc3QgMTAwIHRpbWVzOiAxCm92ZXIgU2xlZXAoMjAwKSB0aGUgdmFsdWUgZ3JldyBieSBiZXR3ZWVuIDE5MDAwMDAgYW5kIDEwMDAwMDAwICgxMDAgbnMgdW5pdHMpOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the value is written: 1; it is above 0: 1; the last error is unchanged\n100000 calls in a row: went backwards 0 times; the value changed between calls at least 100 times: 1\nover Sleep(200) the value grew by between 1900000 and 10000000 (100 ns units): 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 257
+    },
+    {
+      "name": "quitp_threads",
+      "exe_sha256": "dc52d0302b9b76f600006fcb3d6f8a6919f3f8688234f11918e896bad18e15a9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSByZWFkaW5nIG9uIGFub3RoZXIgdGhyZWFkIGxpZXMgYmV0d2VlbiB0d28gb2YgdGhpcyB0aHJlYWQ6IDUwIG9mIDUwCnRoZSB2YWx1ZSBpcyBiZXR3ZWVuIG9uZSBzZWNvbmQgYW5kIHRlbiB5ZWFyczogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a reading on another thread lies between two of this thread: 50 of 50\nthe value is between one second and ten years: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

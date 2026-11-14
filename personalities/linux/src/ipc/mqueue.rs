@@ -1,9 +1,13 @@
 //! POSIX message queues (mq_overview(7)): the named queues of an IPC
 //! namespace and what one queue holds.
 //!
-//! - [`MqTable`]: the names of one IPC namespace (`with_names`), each
-//!   naming a [`Queue`]. `mq_unlink` removes only the name: descriptors
-//!   already open keep the queue (an `Arc`) and its messages.
+//! - [`MqTable`]: the names of one IPC namespace (`with_names`; the
+//!   namespace owns the table, ADR 0178), each naming a [`Queue`], and
+//!   the namespace's limits ([`MqLimits`], `/proc/sys/fs/mqueue`).
+//!   `mq_unlink` removes only the name: descriptors already open keep the
+//!   queue (an `Arc`) and its messages. A message queue file system
+//!   mounted by a process of the namespace lists the names
+//!   ([`MqTable::entries`]).
 //! - [`Queue`]: messages ordered by priority, highest first, FIFO within a
 //!   priority; at most `maxmsg` of at most `msgsize` bytes. A receiver that
 //!   finds the queue empty or a sender that finds it full gets a ticket and
@@ -162,6 +166,8 @@ pub enum ReceiveStep {
 
 /// Ticket numbers, unique over all queues.
 static TICKETS: AtomicU64 = AtomicU64::new(1);
+/// Queue numbers ([`Queue::id`]), never reused.
+static QUEUE_IDS: AtomicU64 = AtomicU64::new(0);
 /// Open file identities ([`Registration::file`]).
 static FILE_IDS: AtomicU64 = AtomicU64::new(1);
 
@@ -218,6 +224,9 @@ impl State {
 
 /// One message queue.
 pub struct Queue {
+    /// A number that names this queue among all queues ever made (its
+    /// file's inode number in a message queue file system).
+    pub id: u64,
     /// `mq_maxmsg`, `mq_msgsize`.
     pub maxmsg: usize,
     pub msgsize: usize,
@@ -238,6 +247,7 @@ impl core::fmt::Debug for Queue {
 impl Queue {
     pub fn new(maxmsg: usize, msgsize: usize, mode: u16, uid: u32, gid: u32) -> Arc<Queue> {
         Arc::new(Queue {
+            id: QUEUE_IDS.fetch_add(1, Ordering::Relaxed),
             maxmsg,
             msgsize,
             mode,
@@ -251,6 +261,12 @@ impl Queue {
     /// Messages queued now (`mq_curmsgs`).
     pub fn curmsgs(&self) -> usize {
         self.state.lock().count
+    }
+
+    /// Bytes of the messages queued now (`QSIZE`, the size of the
+    /// queue's file).
+    pub fn bytes(&self) -> usize {
+        self.state.lock().bytes
     }
 
     /// Whether a receive (first) or a send (second) would not block.
@@ -510,23 +526,105 @@ pub struct OpenRequest<'a> {
     pub gid: u32,
 }
 
-/// The queue names of one IPC namespace.
+/// The limits of one IPC namespace: the files of `/proc/sys/fs/mqueue`
+/// (mq_overview(7)), which a write there changes for that namespace only
+/// (ipc_namespaces(7)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MqLimits {
+    /// `queues_max`: the queues a caller without `CAP_SYS_RESOURCE` may
+    /// make.
+    pub queues_max: usize,
+    /// `msg_max`, `msgsize_max`: the most such a caller may ask for.
+    pub msg_max: i64,
+    pub msgsize_max: i64,
+    /// `msg_default`, `msgsize_default`: a queue made without attributes
+    /// (capped by `msg_max` and `msgsize_max`).
+    pub msg_default: i64,
+    pub msgsize_default: i64,
+}
+
+impl MqLimits {
+    pub const DEFAULT: MqLimits = MqLimits {
+        queues_max: QUEUES_MAX,
+        msg_max: MSG_MAX,
+        msgsize_max: MSGSIZE_MAX,
+        msg_default: DEFAULT_MAXMSG,
+        msgsize_default: DEFAULT_MSGSIZE,
+    };
+}
+
+impl Default for MqLimits {
+    fn default() -> MqLimits {
+        MqLimits::DEFAULT
+    }
+}
+
+/// The queue names of one IPC namespace, and its limits.
 #[derive(Debug, Default)]
 pub struct MqTable {
     names: BTreeMap<Vec<u8>, Arc<Queue>>,
+    pub limits: MqLimits,
 }
 
 impl MqTable {
     pub const fn new() -> MqTable {
-        MqTable { names: BTreeMap::new() }
+        MqTable { names: BTreeMap::new(), limits: MqLimits::DEFAULT }
+    }
+
+    /// Every name and its queue, in name order (a message queue file
+    /// system's listing).
+    pub fn entries(&self) -> Vec<(Vec<u8>, Arc<Queue>)> {
+        self.names.iter().map(|(n, q)| (n.clone(), q.clone())).collect()
+    }
+
+    /// The named queue with number `id` ([`Queue::id`]).
+    pub fn by_id(&self, id: u64) -> Option<Arc<Queue>> {
+        self.names.values().find(|q| q.id == id).cloned()
+    }
+
+    /// Remove `name` for a caller whose right to was checked elsewhere
+    /// (unlink(2) of the queue's file: the file system's sticky
+    /// directory): `ENOENT` if there is no such queue.
+    pub fn remove(&mut self, name: &[u8]) -> Result<(), Errno> {
+        self.names.remove(name).map(|_| ()).ok_or(Errno::ENOENT)
+    }
+
+    /// A new queue named `name` (not in use: the caller checked) with
+    /// `attr`, or without it the namespace's defaults: `EINVAL` for sizes
+    /// of 0 or less or above the caller's limits, `ENOSPC` beyond
+    /// `queues_max` (callers with `CAP_SYS_RESOURCE` pass both).
+    pub fn create(
+        &mut self,
+        name: &[u8],
+        (mode, uid, gid): (u16, u32, u32),
+        attr: Option<MqAttr>,
+        sys_resource: bool,
+    ) -> Result<Arc<Queue>, Errno> {
+        let l = self.limits;
+        let (maxmsg, msgsize) = match attr {
+            None => (l.msg_default.min(l.msg_max), l.msgsize_default.min(l.msgsize_max)),
+            Some(a) => {
+                let (max, size) =
+                    if sys_resource { (HARD_MSGMAX, HARD_MSGSIZEMAX) } else { (l.msg_max, l.msgsize_max) };
+                if a.maxmsg <= 0 || a.msgsize <= 0 || a.maxmsg > max || a.msgsize > size {
+                    return Err(Errno::EINVAL);
+                }
+                (a.maxmsg, a.msgsize)
+            }
+        };
+        if !sys_resource && self.names.len() >= l.queues_max {
+            return Err(Errno::ENOSPC);
+        }
+        let q = Queue::new(maxmsg as usize, msgsize as usize, mode & 0o777, uid, gid);
+        self.names.insert(name.to_vec(), q.clone());
+        Ok(q)
     }
 
     /// mq_open after the name's syntax was checked: an existing queue is
     /// `EEXIST` with `O_CREAT | O_EXCL`, `EINVAL` for access mode 3,
     /// `EACCES` unless its mode grants the access; a missing one `ENOENT`
-    /// without `O_CREAT`, else made from the attributes (`EINVAL` for
-    /// sizes of 0 or less, above the caller's limits; `ENOSPC` beyond
-    /// [`QUEUES_MAX`]).
+    /// without `O_CREAT`, else made from the attributes
+    /// ([`create`](Self::create)).
     pub fn open(&mut self, req: &OpenRequest<'_>, who: &Caller) -> Result<Arc<Queue>, Errno> {
         use oflag::*;
         let want = match req.flags & O_ACCMODE {
@@ -553,23 +651,7 @@ impl MqTable {
         if want == 0xff {
             return Err(Errno::EINVAL);
         }
-        let (maxmsg, msgsize) = match req.attr {
-            None => (DEFAULT_MAXMSG, DEFAULT_MSGSIZE),
-            Some(a) => {
-                let (max, size) =
-                    if who.sys_resource { (HARD_MSGMAX, HARD_MSGSIZEMAX) } else { (MSG_MAX, MSGSIZE_MAX) };
-                if a.maxmsg <= 0 || a.msgsize <= 0 || a.maxmsg > max || a.msgsize > size {
-                    return Err(Errno::EINVAL);
-                }
-                (a.maxmsg, a.msgsize)
-            }
-        };
-        if !who.sys_resource && self.names.len() >= QUEUES_MAX {
-            return Err(Errno::ENOSPC);
-        }
-        let q = Queue::new(maxmsg as usize, msgsize as usize, req.mode & 0o777, req.uid, req.gid);
-        self.names.insert(req.name.to_vec(), q.clone());
-        Ok(q)
+        self.create(req.name, (req.mode, req.uid, req.gid), req.attr, who.sys_resource)
     }
 
     /// mq_unlink after the name's syntax was checked: `ENOENT` if there is
@@ -590,16 +672,17 @@ impl MqTable {
     }
 }
 
-/// The names of every IPC namespace, by its inode number (0: the initial
-/// one). A namespace's names stay after it is gone: inode numbers are
-/// never reused, so nobody sees them again.
-static NAMES: Mutex<BTreeMap<u32, MqTable>> = Mutex::new(BTreeMap::new());
+/// The queue names of the initial IPC namespace.
+static INITIAL: Mutex<MqTable> = Mutex::new(MqTable::new());
 
 /// Run `f` on the queue names of IPC namespace `ns` (`None`: the initial
-/// one), locked. `f` must not block or call the kernel.
+/// one), locked: the namespace owns them, so they go with it. `f` must
+/// not block or call the kernel.
 pub fn with_names<R>(ns: &Option<Arc<IpcNs>>, f: impl FnOnce(&mut MqTable) -> R) -> R {
-    let key = ns.as_ref().map_or(0, |n| n.inum());
-    f(NAMES.lock().entry(key).or_default())
+    match ns {
+        Some(ns) => f(&mut ns.mq().lock()),
+        None => f(&mut INITIAL.lock()),
+    }
 }
 
 /// An open queue descriptor, as the kernel describes it to the handlers.

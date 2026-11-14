@@ -36,6 +36,180 @@ pub const CLR_INVALID: u32 = 0xFFFF_FFFF;
 pub const ETO_OPAQUE: u32 = 0x0002;
 pub const ETO_CLIPPED: u32 = 0x0004;
 pub const ETO_GLYPH_INDEX: u32 = 0x0010;
+pub const ETO_RTLREADING: u32 = 0x0080;
+pub const ETO_NUMERICSLOCAL: u32 = 0x0400;
+pub const ETO_NUMERICSLATIN: u32 = 0x0800;
+pub const ETO_IGNORELANGUAGE: u32 = 0x1000;
+pub const ETO_PDY: u32 = 0x2000;
+pub const ETO_REVERSE_INDEX_MAP: u32 = 0x1_0000;
+/// Every option `wingdi.h` defines (`ExtTextOutW.yaml`, option_bits).
+pub const ETO_DEFINED: u32 = ETO_OPAQUE
+    | ETO_CLIPPED
+    | ETO_GLYPH_INDEX
+    | ETO_RTLREADING
+    | ETO_NUMERICSLOCAL
+    | ETO_NUMERICSLATIN
+    | ETO_IGNORELANGUAGE
+    | ETO_PDY
+    | ETO_REVERSE_INDEX_MAP;
+
+/// Why `ExtTextOutW` drew nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextOutError {
+    /// Not a DC: the only failure with an error code
+    /// (`ERROR_INVALID_HANDLE`).
+    BadDc,
+    /// Options the call cannot have; no error code.
+    Refused,
+}
+
+/// Where the reference point of a text lies in its cell, from the bits of
+/// `SetTextAlign`'s value (`ExtTextOutW.yaml`, alignment): of the
+/// horizontal bits (mask 6) 2 alone and 4 alone are the right edge and 6
+/// the centre; of the vertical ones (mask 24) 8 alone is the bottom and 16
+/// or 24 the baseline. The other bits do not move the text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextAlign {
+    pub horizontal: HAlign,
+    pub vertical: VAlign,
+    /// `TA_UPDATECP`: the current position is the reference point.
+    pub update_cp: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HAlign {
+    Left,
+    Right,
+    Center,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VAlign {
+    Top,
+    Bottom,
+    Baseline,
+}
+
+impl TextAlign {
+    pub fn from_bits(align: u32) -> TextAlign {
+        TextAlign {
+            horizontal: match align & TA_CENTER {
+                0 => HAlign::Left,
+                TA_CENTER => HAlign::Center,
+                _ => HAlign::Right,
+            },
+            vertical: match align & TA_BASELINE {
+                0 => VAlign::Top,
+                TA_BOTTOM => VAlign::Bottom,
+                _ => VAlign::Baseline,
+            },
+            update_cp: align & TA_UPDATECP != 0,
+        }
+    }
+
+    /// The first origin of a text `width` long (the sum of `lpDx`, which
+    /// may be zero or negative) for the reference `x`: a centred text with
+    /// an odd width has its extra pixel on the left.
+    pub fn first_origin(self, x: i32, width: i32) -> i32 {
+        match self.horizontal {
+            HAlign::Left => x,
+            HAlign::Right => x.wrapping_sub(width),
+            HAlign::Center => (2 * i64::from(x) - i64::from(width)).div_euclid(2) as i32,
+        }
+    }
+
+    /// Where `TA_UPDATECP` leaves the current position's x: the other end
+    /// of the text; a centred text does not move it.
+    pub fn end_x(self, x: i32, width: i32) -> i32 {
+        match self.horizontal {
+            HAlign::Left => x.wrapping_add(width),
+            HAlign::Right => x.wrapping_sub(width),
+            HAlign::Center => x,
+        }
+    }
+}
+
+/// The columns of the background of text drawn with `lpDx` in OPAQUE mode
+/// (`ExtTextOutW.yaml`, dx_cell): from the first origin to the first origin
+/// plus the sum where the sum is positive, widened to hold the ink of
+/// every glyph (`ink`: the leftmost ink column and the column after the
+/// rightmost one).
+pub fn dx_cell_columns(first_origin: i32, sum: i32, ink: Option<(i32, i32)>) -> (i32, i32) {
+    let (mut left, mut right) = (first_origin, first_origin.saturating_add(sum.max(0)));
+    if let Some((l, r)) = ink {
+        left = left.min(l);
+        right = right.max(r);
+    }
+    (left, right)
+}
+
+/// What `GetTextExtentExPointW` got as its DC.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DcArg {
+    Null,
+    /// A handle that is not a DC.
+    NotDc,
+    Dc,
+}
+
+/// What `GetTextExtentExPointW` does before it measures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExtentExCheck {
+    /// FALSE and no output written, with the error code if there is one.
+    Fail(Option<u32>),
+    /// TRUE: the size is 0x0, the fit 0, `alpDx` is not touched.
+    Empty,
+    Measure,
+}
+
+/// `GetTextExtentExPointW`'s checks in their order
+/// (`GetTextExtentExPointW.yaml`, order): the DC (only a handle that is
+/// not a DC sets an error code) and `lpSize`; a NULL string is an empty
+/// string whatever the count and the maximum are; a count of 0; a negative
+/// count; a negative maximum, which only counts when `lpnFit` is given.
+pub fn extent_ex_check(
+    dc: DcArg,
+    null_size: bool,
+    null_text: bool,
+    count: i32,
+    max: i32,
+    wants_fit: bool,
+) -> ExtentExCheck {
+    match dc {
+        DcArg::Null => return ExtentExCheck::Fail(None),
+        DcArg::NotDc => return ExtentExCheck::Fail(Some(ERROR_INVALID_HANDLE)),
+        DcArg::Dc => {}
+    }
+    if null_size {
+        ExtentExCheck::Fail(None)
+    } else if null_text || count == 0 {
+        ExtentExCheck::Empty
+    } else if count < 0 || (wants_fit && max < 0) {
+        ExtentExCheck::Fail(None)
+    } else {
+        ExtentExCheck::Measure
+    }
+}
+
+/// The fit and how many `alpDx` entries `GetTextExtentExPointW` writes
+/// for the running extents of a string: with `lpnFit` the characters
+/// whose running extent is at most the maximum, and only those entries;
+/// without it the maximum plays no part and every entry is written.
+pub fn extent_ex_fit(running: &[i32], max: i32, wants_fit: bool) -> (usize, usize) {
+    let fit = running.iter().take_while(|&&w| w <= max).count();
+    (fit, if wants_fit { fit } else { running.len() })
+}
+
+/// Whether `ExtTextOutW` takes `options` (`ExtTextOutW.yaml`, option_bits
+/// and pdy): `ETO_PDY` needs an `lpDx` array; a bit `wingdi.h` does not
+/// define is ignored, unless `ETO_GLYPH_INDEX` or `ETO_IGNORELANGUAGE` is
+/// set too.
+pub fn eto_options_ok(options: u32, has_dx: bool) -> bool {
+    if options & ETO_PDY != 0 && !has_dx {
+        return false;
+    }
+    options & !ETO_DEFINED == 0 || options & (ETO_GLYPH_INDEX | ETO_IGNORELANGUAGE) == 0
+}
 
 pub const TRANSPARENT: i32 = 1;
 pub const OPAQUE: i32 = 2;
@@ -98,6 +272,10 @@ struct DcState {
     /// selected still draws with (DeleteObject.yaml `selected_brush_pen`).
     brush_used: bool,
     pen_used: bool,
+    /// The DC has drawn with the selected brush / pen itself (a save does
+    /// not count): a brush or pen deleted then stays whole (`second_dc`).
+    brush_drawn: bool,
+    pen_drawn: bool,
     /// The clip region, in device coordinates (`SelectClipRgn.yaml`).
     clip: Option<Region>,
     /// `SetViewportOrgEx` / `SetWindowOrgEx`: device = logical - window
@@ -149,6 +327,16 @@ enum Obj {
         delete_pending: bool,
         stock: bool,
     },
+    /// A brush. Deleted (DeleteObject.yaml `deleted_not_selected_brush`,
+    /// `selected_brush_pen`, `second_dc`, `handle_after_delete`):
+    /// `deleted`, while no DC had it: the handle still answers and can be
+    /// selected, painting white, until another brush is deleted or a few
+    /// dozen brushes were created (`age`); `delete_pending`, while a DC
+    /// that had not drawn with it had it selected: it still has its type
+    /// and another DC accepts it, both painting white; `dead`, once a DC
+    /// painted with such a brush or the time of a `deleted` one is up:
+    /// the handle answers nothing any more, though the DCs that have it
+    /// keep naming it and paint white.
     Brush {
         style: u32,
         color: u32,
@@ -156,6 +344,12 @@ enum Obj {
         stock: bool,
         deleted: bool,
         delete_pending: bool,
+        dead: bool,
+        age: u8,
+        /// Deleted while a DC that had drawn with it had it selected: it
+        /// stays whole, and every later delete returns 1 without doing
+        /// anything (`second_dc`).
+        kept: bool,
     },
     Pen {
         style: u32,
@@ -163,6 +357,8 @@ enum Obj {
         color: u32,
         stock: bool,
         delete_pending: bool,
+        /// As a brush's `kept`.
+        kept: bool,
     },
     Font {
         /// The bitmap face of a stock font.
@@ -204,6 +400,10 @@ const MAX_GENERATION: u8 = 0x7F;
 /// object's handle keeps answering `GetObjectType` (DeleteObject.yaml: the
 /// old type "forever") until its slot comes round.
 const DEAD_SLOTS: usize = 256;
+/// How many brushes can be created before a brush deleted while no DC had
+/// it stops answering (DeleteObject.yaml `handle_after_delete`: "still 2
+/// after 8 creations, 0 after 64").
+const BRUSH_LINGER: u8 = 32;
 
 /// What `GetDeviceCaps` of the screen reports.
 #[derive(Clone, Copy, Debug)]
@@ -322,8 +522,18 @@ impl Gdi {
             stock: true,
             deleted: false,
             delete_pending: false,
+            dead: false,
+            age: 0,
+            kept: false,
         };
-        let pen = |c: u32, style: u32| Obj::Pen { style, width: 1, color: c, stock: true, delete_pending: false };
+        let pen = |c: u32, style: u32| Obj::Pen {
+            style,
+            width: 1,
+            color: c,
+            stock: true,
+            delete_pending: false,
+            kept: false,
+        };
         let font = |f: Face| Obj::Font {
             face: f,
             stock: true,
@@ -376,6 +586,16 @@ impl Gdi {
     }
 
     fn add(&mut self, o: Obj) -> u32 {
+        // How long a deleted handle answers (DeleteObject.yaml
+        // `handle_after_delete`): a deleted pen or region reads type 0 as
+        // soon as the next pen or region is created; a brush deleted while
+        // no DC had it, after a few dozen other brushes.
+        match &o {
+            Obj::Pen { .. } => self.forget_dead(OBJ_PEN),
+            Obj::Region(_) => self.forget_dead(OBJ_REGION),
+            Obj::Brush { .. } => self.age_deleted_brushes(false),
+            _ => {}
+        }
         let reuse = if self.free.len() > DEAD_SLOTS { self.free.pop_front() } else { None };
         let i = match reuse {
             Some(i) => {
@@ -448,6 +668,8 @@ impl Gdi {
             palette: self.stock(DEFAULT_PALETTE),
             brush_used: false,
             pen_used: false,
+            brush_drawn: false,
+            pen_drawn: false,
             clip: None,
             viewport_org: (0, 0),
             window_org: (0, 0),
@@ -554,6 +776,53 @@ impl Gdi {
         matches!(d.kind, DcKind::Display { .. }).then_some(d.vis_origin)
     }
 
+    /// The handles of deleted objects of type `ty` stop answering
+    /// `GetObjectType` (their slots wait for reuse as before).
+    fn forget_dead(&mut self, ty: u32) {
+        for o in self.objs.iter_mut() {
+            if matches!(o, Some(Obj::Dead(t)) if *t == ty) {
+                *o = None;
+            }
+        }
+    }
+
+    /// Another brush was created, or (`now`) deleted: the brushes deleted
+    /// while no DC had them grow older, and the ones whose time is up stop
+    /// answering (DeleteObject.yaml `handle_after_delete`).
+    fn age_deleted_brushes(&mut self, now: bool) {
+        let mut over: Vec<usize> = Vec::new();
+        for (i, o) in self.objs.iter_mut().enumerate() {
+            if let Some(Obj::Brush { deleted: true, dead: false, age, .. }) = o {
+                *age = age.saturating_add(1);
+                if now || *age >= BRUSH_LINGER {
+                    over.push(i);
+                }
+            }
+        }
+        for i in over {
+            let h = u64::from(self.handle_of(i));
+            if self.held(h) {
+                if let Some(Obj::Brush { dead, .. }) = self.objs[i].as_mut() {
+                    *dead = true;
+                }
+            } else {
+                self.release(i, 0);
+            }
+        }
+    }
+
+    /// Whether a DC has drawn with brush or pen `h` since it selected it,
+    /// in its state now or a saved one.
+    fn held_drawn(&self, h: u64) -> bool {
+        let h = h as u32;
+        self.objs.iter().flatten().any(|o| match o {
+            Obj::Dc(d) => core::iter::once(&d.state)
+                .chain(d.saved.iter())
+                .any(|s| (s.brush == h && s.brush_drawn) || (s.pen == h && s.pen_drawn)),
+            _ => false,
+        })
+    }
+
     /// Slot `i`'s object is gone: its handle answers `GetObjectType` with
     /// `ty` (0: nothing) until the slot is used again.
     fn release(&mut self, i: usize, ty: u32) {
@@ -590,7 +859,7 @@ impl Gdi {
         let held = self.held(h);
         let Some(i) = self.index_of(h) else { return };
         let (pending, ty) = match &self.objs[i] {
-            Some(Obj::Brush { delete_pending, .. }) => (*delete_pending, 0),
+            Some(Obj::Brush { delete_pending, dead, .. }) => (*delete_pending || *dead, 0),
             Some(Obj::Pen { delete_pending, .. }) => (*delete_pending, OBJ_PEN),
             Some(Obj::Font { delete_pending, .. }) => (*delete_pending, OBJ_FONT),
             Some(Obj::Bitmap { delete_pending, selected_in, .. }) => (*delete_pending && *selected_in == 0, OBJ_BITMAP),
@@ -645,7 +914,17 @@ impl Gdi {
     /// a brush of that style. It paints as a solid brush of `color` for
     /// now (the hatch lines' colour; black for a pattern).
     pub fn create_styled_brush(&mut self, style: u32, color: u32, hatch: u64) -> u32 {
-        self.add(Obj::Brush { style, color, hatch, stock: false, deleted: false, delete_pending: false })
+        self.add(Obj::Brush {
+            style,
+            color,
+            hatch,
+            stock: false,
+            deleted: false,
+            delete_pending: false,
+            dead: false,
+            age: 0,
+            kept: false,
+        })
     }
 
     /// `DeleteDC`: (result, error).
@@ -661,9 +940,27 @@ impl Gdi {
 
     /// `DeleteObject` (DeleteObject.yaml). A stock object stays; an object
     /// a DC has selected waits (`delete_pending`) and goes when it is
-    /// deselected; a second delete of either fails.
+    /// deselected; a second delete of either fails. A brush or pen that a
+    /// DC which has it selected has drawn with stays whole: the call
+    /// returns 1 and changes nothing (`second_dc`: GetObject still works,
+    /// another DC accepts it and draws in its colour, a second delete
+    /// returns 1 again, and when every DC has let go the handle still is
+    /// the object). One that a state was only saved with waits like an
+    /// unused one, but draws in its own colour in the states that were
+    /// saved with it (`savedc_states`, do_brush_uses: gone when the last
+    /// state lets go).
     pub fn delete_object(&mut self, h: u64) -> bool {
         let held = self.held(h);
+        let used = held && self.held_drawn(h);
+        if matches!(
+            self.obj(h),
+            Some(Obj::Brush { stock: false, deleted: false, delete_pending: false, dead: false, .. })
+        ) && !used
+        {
+            // A brush is deleted: the ones deleted before it while no DC
+            // had them stop answering (`handle_after_delete`).
+            self.age_deleted_brushes(true);
+        }
         let Some(i) = self.index_of(h) else { return false };
         let stock_slot = i <= STOCK_COUNT as usize;
         let Some(o) = self.objs[i].as_mut() else { return false };
@@ -674,11 +971,16 @@ impl Gdi {
             }
             Obj::DeadDc | Obj::Dead(_) => false,
             Obj::Brush { stock: true, .. } | Obj::Pen { stock: true, .. } | Obj::Font { stock: true, .. } => true,
+            Obj::Brush { kept: true, .. } | Obj::Pen { kept: true, .. } => true,
             Obj::Bitmap { stock: true, .. } => true,
             Obj::Palette if stock_slot => true,
-            Obj::Brush { deleted, delete_pending, .. } => {
-                if *deleted || *delete_pending {
+            Obj::Brush { deleted, delete_pending, dead, kept, .. } => {
+                if *deleted || *delete_pending || *dead {
                     return false;
+                }
+                if used {
+                    *kept = true;
+                    return true;
                 }
                 if held {
                     *delete_pending = true;
@@ -692,6 +994,12 @@ impl Gdi {
             Obj::Pen { delete_pending, .. } | Obj::Font { delete_pending, .. } => {
                 if *delete_pending {
                     return false;
+                }
+                if used {
+                    if let Obj::Pen { kept, .. } = o {
+                        *kept = true;
+                    }
+                    return true;
                 }
                 if held {
                     *delete_pending = true;
@@ -741,6 +1049,7 @@ impl Gdi {
             Some(Obj::DeadDc) => OBJ_DC,
             Some(Obj::Dead(ty)) => *ty,
             Some(Obj::Bitmap { .. }) => OBJ_BITMAP,
+            Some(Obj::Brush { dead: true, .. }) => 0,
             Some(Obj::Brush { .. }) => OBJ_BRUSH,
             Some(Obj::Pen { .. }) => OBJ_PEN,
             Some(Obj::Font { .. }) => OBJ_FONT,
@@ -769,7 +1078,8 @@ impl Gdi {
                 b[46..48].copy_from_slice(&bmp.bpp.to_le_bytes());
                 b[52..56].copy_from_slice(&((bmp.stride as u32) * height).to_le_bytes());
             }
-            Obj::Font { .. } => b.resize(348, 0),
+            // DeleteObject.yaml `font_getobject`: min(size asked, 356) bytes.
+            Obj::Font { .. } => b.resize(356, 0),
             _ => {}
         }
         Some(b)
@@ -788,6 +1098,7 @@ impl Gdi {
             // A brush or pen deleted while selected answers nothing
             // (DeleteObject.yaml `selected_brush_pen`: GetObject 0).
             Obj::Brush { delete_pending: true, .. } | Obj::Pen { delete_pending: true, .. } => return None,
+            Obj::Brush { dead: true, .. } => return None,
             Obj::Brush { style, color, hatch, .. } => {
                 let mut b = vec![0u8; 16];
                 b[0..4].copy_from_slice(&style.to_le_bytes());
@@ -837,8 +1148,11 @@ impl Gdi {
         }
         let kind = match self.obj(obj) {
             // An object whose deletion waits for its DC cannot be selected
-            // anywhere (DeleteObject.yaml `selected_brush_pen`: NULL).
-            Some(Obj::Brush { delete_pending: true, .. })
+            // anywhere (DeleteObject.yaml `selected_brush_pen`: NULL), but a
+            // brush no DC has painted with yet (`second_dc`: the second DC
+            // accepts it and both paint white); once one has, the handle is
+            // dead.
+            Some(Obj::Brush { dead: true, .. })
             | Some(Obj::Pen { delete_pending: true, .. })
             | Some(Obj::Font { delete_pending: true, .. })
             | Some(Obj::Bitmap { delete_pending: true, .. }) => return Ok(0),
@@ -860,10 +1174,12 @@ impl Gdi {
         let old = match kind {
             OBJ_BRUSH => {
                 d.state.brush_used = false;
+                d.state.brush_drawn = false;
                 core::mem::replace(&mut d.state.brush, h)
             }
             OBJ_PEN => {
                 d.state.pen_used = false;
+                d.state.pen_drawn = false;
                 core::mem::replace(&mut d.state.pen, h)
             }
             OBJ_FONT => core::mem::replace(&mut d.state.font, h),
@@ -902,11 +1218,21 @@ impl Gdi {
     // ----- creating objects
 
     pub fn create_solid_brush(&mut self, color: u32) -> u32 {
-        self.add(Obj::Brush { style: BS_SOLID, color, hatch: 0, stock: false, deleted: false, delete_pending: false })
+        self.add(Obj::Brush {
+            style: BS_SOLID,
+            color,
+            hatch: 0,
+            stock: false,
+            deleted: false,
+            delete_pending: false,
+            dead: false,
+            age: 0,
+            kept: false,
+        })
     }
 
     pub fn create_pen(&mut self, style: u32, width: i32, color: u32) -> u32 {
-        self.add(Obj::Pen { style, width, color, stock: false, delete_pending: false })
+        self.add(Obj::Pen { style, width, color, stock: false, delete_pending: false, kept: false })
     }
 
     /// `CreateFontIndirectW`: the font mapper (ADR 0142, `crate::fontmap`)
@@ -1331,6 +1657,24 @@ impl Gdi {
         (r.kind(), r.bounds().offset(dx.wrapping_neg(), dy.wrapping_neg()))
     }
 
+    /// `PtVisible`: whether the logical point is within what the DC draws
+    /// on (BeginPaint.yaml `visible_points`: inside the update region of a
+    /// paint DC and not cut away by the windows that clip it); `None` for
+    /// a bad DC.
+    pub fn pt_visible(&self, dc: u64, x: i32, y: i32) -> Option<bool> {
+        let d = self.dc(dc)?;
+        let (dx, dy) = d.state.to_device();
+        Some(self.drawable(d).contains_point(x.wrapping_add(dx), y.wrapping_add(dy)))
+    }
+
+    /// `RectVisible`: whether any part of the logical rectangle is within
+    /// what the DC draws on; `None` for a bad DC.
+    pub fn rect_visible(&self, dc: u64, r: Rect) -> Option<bool> {
+        let d = self.dc(dc)?;
+        let (dx, dy) = d.state.to_device();
+        Some(self.drawable(d).intersects_rect(r.normalized().offset(dx, dy)))
+    }
+
     /// The kind of what a DC draws on now (the clip calls' result).
     fn drawable_kind(&self, dc: u64) -> i32 {
         self.dc(dc).map_or(0, |d| self.drawable(d).kind())
@@ -1497,7 +1841,7 @@ impl Gdi {
         const WHITE: u32 = 0x00FF_FFFF;
         match self.obj(u64::from(brush)) {
             Some(Obj::Brush { style: BS_NULL, .. }) => None,
-            Some(Obj::Brush { deleted: true, .. }) => Some(Rgb::from_colorref(WHITE)),
+            Some(Obj::Brush { deleted: true, .. } | Obj::Brush { dead: true, .. }) => Some(Rgb::from_colorref(WHITE)),
             Some(Obj::Brush { delete_pending: true, color, .. }) => {
                 Some(Rgb::from_colorref(if brush == state.brush && state.brush_used { *color } else { WHITE }))
             }
@@ -1513,6 +1857,7 @@ impl Gdi {
     /// (DeleteObject.yaml `selected_brush_pen`).
     fn handle_brush_color(&self, brush: u32, state: &DcState) -> Option<Rgb> {
         match self.obj(u64::from(brush)) {
+            Some(Obj::Brush { dead: true, .. }) => None,
             Some(Obj::Brush { delete_pending: true, .. }) if !(brush == state.brush && state.brush_used) => None,
             _ => self.brush_color(brush, state),
         }
@@ -1534,18 +1879,31 @@ impl Gdi {
     }
 
     /// The DC draws with its selected brush (`brush`) and / or pen now: a
-    /// live one counts as used from here on.
+    /// live one counts as used from here on. A brush that was deleted
+    /// while a DC had it selected unused is dead once a DC has painted
+    /// with it (DeleteObject.yaml `second_dc`: GetObjectType 0, SelectObject
+    /// NULL, though the DCs keep naming it and paint white).
     fn mark_used(&mut self, dc: u64, brush: bool, pen: bool) {
+        let Some(d) = self.dc(dc) else { return };
+        let (current, own) = (u64::from(d.state.brush), d.state.brush_used);
+        if brush
+            && !own
+            && let Some(Obj::Brush { delete_pending: true, dead, .. }) = self.obj_mut(current)
+        {
+            *dead = true;
+        }
         let Some(d) = self.dc(dc) else { return };
         let b = brush
             && matches!(
                 self.obj(u64::from(d.state.brush)),
-                Some(Obj::Brush { deleted: false, delete_pending: false, .. })
+                Some(Obj::Brush { deleted: false, delete_pending: false, dead: false, .. })
             );
         let p = pen && matches!(self.obj(u64::from(d.state.pen)), Some(Obj::Pen { delete_pending: false, .. }));
         if let Some(s) = self.state(dc) {
             s.brush_used |= b;
             s.pen_used |= p;
+            s.brush_drawn |= b;
+            s.pen_drawn |= p;
         }
     }
 
@@ -2043,11 +2401,7 @@ impl Gdi {
         self.ext_text_out(dc, x, y, 0, None, text, None)
     }
 
-    /// `ExtTextOutW`: `options` are `ETO_OPAQUE` (the rectangle is filled
-    /// with the background colour first), `ETO_CLIPPED` (the text is
-    /// clipped to it) and `ETO_GLYPH_INDEX` (`text` holds glyph indices);
-    /// `advances` are `lpDx`, the distance from each character's origin to
-    /// the next. False for a bad DC or options `ETO_*` cannot all have.
+    /// `ExtTextOutW`, as a yes or no: see [`Gdi::try_ext_text_out`].
     #[allow(clippy::too_many_arguments)]
     pub fn ext_text_out(
         &mut self,
@@ -2059,9 +2413,30 @@ impl Gdi {
         text: &[u16],
         advances: Option<&[i32]>,
     ) -> bool {
-        let Some(d) = self.dc(dc) else { return false };
-        if options == u32::MAX {
-            return false;
+        self.try_ext_text_out(dc, x, y, options, rect, text, advances).is_ok()
+    }
+
+    /// `ExtTextOutW` (`ExtTextOutW.yaml`): `options` are `ETO_OPAQUE` (the
+    /// rectangle is filled with the background colour first),
+    /// `ETO_CLIPPED` (the text is clipped to it), `ETO_GLYPH_INDEX` (`text`
+    /// holds glyph indices) and `ETO_PDY` (`advances` holds two values for
+    /// every character); `advances` are `lpDx`, the distance from each
+    /// character's origin to the next, which may be zero or negative. Their
+    /// sum is the text's width for the alignment and the current position.
+    #[allow(clippy::too_many_arguments)]
+    pub fn try_ext_text_out(
+        &mut self,
+        dc: u64,
+        x: i32,
+        y: i32,
+        options: u32,
+        rect: Option<Rect>,
+        text: &[u16],
+        advances: Option<&[i32]>,
+    ) -> Result<(), TextOutError> {
+        let Some(d) = self.dc(dc) else { return Err(TextOutError::BadDc) };
+        if !eto_options_ok(options, advances.is_some()) {
+            return Err(TextOutError::Refused);
         }
         let state = d.state.clone();
         let rect = rect.map(normalized);
@@ -2071,28 +2446,33 @@ impl Gdi {
             self.fill_rect_color(dc, r, state.bk);
         }
         if text.is_empty() {
-            return true;
+            return Ok(());
         }
         let glyph_index = options & ETO_GLYPH_INDEX != 0;
         let sel = self.font_sel(dc);
         let tf = sel.typeface();
         let tm = tf.metrics();
-        let advance = |i: usize, c: u16| match advances.and_then(|a| a.get(i)) {
-            Some(&dx) => dx,
-            None if glyph_index => tf.glyph_width(c),
-            None => tf.advance(c),
+        // `ETO_PDY`: pairs, along the line and across it.
+        let pdy = options & ETO_PDY != 0;
+        let step = if pdy { 2 } else { 1 };
+        let own = |c: u16| if glyph_index { tf.glyph_width(c) } else { tf.advance(c) };
+        let along: Option<Vec<i32>> = advances.map(|a| {
+            text.iter().enumerate().map(|(i, &c)| a.get(i * step).copied().unwrap_or_else(|| own(c))).collect()
+        });
+        let across: Option<Vec<i32>> =
+            advances.filter(|_| pdy).map(|a| (0..text.len()).map(|i| a.get(i * 2 + 1).copied().unwrap_or(0)).collect());
+        let cx: i32 = match &along {
+            Some(a) => a.iter().fold(0i32, |s, &v| s.wrapping_add(v)),
+            None => text.iter().fold(0i32, |s, &c| s.wrapping_add(own(c))),
         };
-        let cx: i32 = text.iter().enumerate().map(|(i, &c)| advance(i, c)).sum();
-        let (rx, ry) = if state.align & TA_UPDATECP != 0 { state.pos } else { (x, y) };
-        let x0 = match state.align & TA_CENTER {
-            TA_RIGHT => rx - cx,
-            TA_CENTER => rx - cx / 2,
-            _ => rx,
-        };
-        let top = match state.align & TA_BASELINE {
-            TA_BOTTOM => ry - tm.height,
-            TA_BASELINE => ry - tm.ascent,
-            _ => ry,
+        let rise: i32 = across.as_ref().map_or(0, |a| a.iter().fold(0i32, |s, &v| s.wrapping_add(v)));
+        let align = TextAlign::from_bits(state.align);
+        let (rx, ry) = if align.update_cp { state.pos } else { (x, y) };
+        let x0 = align.first_origin(rx, cx);
+        let top = match align.vertical {
+            VAlign::Top => ry,
+            VAlign::Bottom => ry - tm.height,
+            VAlign::Baseline => ry - tm.ascent,
         };
         // The baseline origin: with an escapement the text's own axes turn
         // about the reference point.
@@ -2114,20 +2494,21 @@ impl Gdi {
             (rx + round_pixel(dx), ry + round_pixel(dy))
         };
         let clip = if options & ETO_CLIPPED != 0 { rect } else { None };
-        let end = self.draw_run(dc, ox, oy, text, glyph_index, clip, advances, cx, true);
-        if state.align & TA_UPDATECP != 0
+        let run = Run { text, glyph_index, advances: along.as_deref(), rises: across.as_deref(), cx, fill: true };
+        let end = self.draw_run(dc, ox, oy, &run, clip);
+        if align.update_cp
             && let Some(s) = self.state(dc)
         {
-            s.pos.0 = match state.align & TA_CENTER {
-                TA_RIGHT => rx - cx,
-                TA_CENTER => rx,
-                _ => rx + cx,
-            };
+            s.pos.0 = align.end_x(rx, cx);
+            // `ETO_PDY`: against the sum of the second values.
+            if align.horizontal != HAlign::Center {
+                s.pos.1 = ry.wrapping_sub(rise);
+            }
             if esc != 0 {
                 s.pos = end;
             }
         }
-        true
+        Ok(())
     }
 
     /// Draw `text` (as in [`Gdi::draw_run`]) with its cell's top left at
@@ -2150,7 +2531,8 @@ impl Gdi {
             Some(a) => text.iter().enumerate().map(|(i, &c)| a.get(i).copied().unwrap_or_else(|| tf.advance(c))).sum(),
             None => tf.extent(text).0,
         };
-        self.draw_run(dc, x0, y0 + ascent, text, false, clip, advances, cx, fill);
+        let run = Run { text, glyph_index: false, advances, rises: None, cx, fill };
+        self.draw_run(dc, x0, y0 + ascent, &run, clip);
     }
 
     /// Fill the background cell of a line of text `w` wide whose top left is
@@ -2172,26 +2554,13 @@ impl Gdi {
         });
     }
 
-    /// Draw `text` (glyph indices if `glyph_index`) with its first pen
-    /// position at (`ox`, `oy`) on the baseline, in logical coordinates,
-    /// clipped to `clip` too when given; `cx` is its length along the
-    /// baseline. A glyph of an outline font is blended into the surface by
-    /// its coverage (grey scale antialiasing) or, for a bi-level font, set;
-    /// a bitmap face's pixels are set. Underline and strike-out follow the
+    /// Draw `run` with its first pen position at (`ox`, `oy`) on the
+    /// baseline, in logical coordinates, clipped to `clip` too when given.
+    /// A glyph of an outline font is blended into the surface by its
+    /// coverage (grey scale antialiasing) or, for a bi-level font, set; a
+    /// bitmap face's pixels are set. Underline and strike-out follow the
     /// `LOGFONTW`. Returns where the pen ends (logical).
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn draw_run(
-        &mut self,
-        dc: u64,
-        ox: i32,
-        oy: i32,
-        text: &[u16],
-        glyph_index: bool,
-        clip: Option<Rect>,
-        advances: Option<&[i32]>,
-        cx: i32,
-        fill: bool,
-    ) -> (i32, i32) {
+    pub(crate) fn draw_run(&mut self, dc: u64, ox: i32, oy: i32, run: &Run<'_>, clip: Option<Rect>) -> (i32, i32) {
         let sel = self.font_sel(dc);
         let tf = sel.typeface();
         let tm = tf.metrics();
@@ -2200,19 +2569,42 @@ impl Gdi {
         let clip = clip.map(|c| self.device_rect(dc, c));
         let (under, strike) = tf.line_metrics();
         let esc = tf.outline().map_or(0, |o| o.escapement);
+        let hard = tf.outline().is_none_or(|o| o.bilevel);
+        let cx = run.cx;
         let mut cache = self.text.glyphs.take().unwrap_or_else(|| GlyphCache::new(GLYPH_CACHE_BYTES));
         let mut end = (dx0, dy0);
+        // Every pixel of the glyphs with its coverage; the pen's end.
+        let glyphs = |cache: &mut GlyphCache, put: &mut dyn FnMut(i32, i32, [u8; 3])| -> (i32, i32) {
+            if tf.is_outline() {
+                return tf.draw_outline(cache, run.text, run.glyph_index, dx0, dy0, run.advances, run.rises, put);
+            }
+            let (mut x, mut y0) = (dx0, dy0 - tm.ascent);
+            for (i, &c) in run.text.iter().enumerate() {
+                let (w, rows) = tf.face.glyph(c);
+                for (r, &row) in rows.iter().enumerate().take(tm.height as usize) {
+                    if row == 0 {
+                        continue;
+                    }
+                    for col in 0..w.min(16) {
+                        if row & (0x8000 >> col) != 0 {
+                            put(x + col, y0 + r as i32, [255; 3]);
+                        }
+                    }
+                }
+                x += run.advances.and_then(|a| a.get(i).copied()).unwrap_or(w);
+                y0 -= run.rises.and_then(|a| a.get(i).copied()).unwrap_or(0);
+            }
+            (x, y0 + tm.ascent)
+        };
         self.with_target(dc, |b, state, dclip, _| {
             let clip = match clip {
                 Some(c) => dclip.intersect_rect(c),
                 None => dclip.clone(),
             };
             let fg_rgb = Rgb::from_colorref(state.text);
-            let fg = b.from_rgb(fg_rgb);
-            if state.bk_mode != TRANSPARENT && fill {
-                let cell = if esc == 0 {
-                    Rect::new(dx0, dy0 - tm.ascent, dx0 + cx, dy0 - tm.ascent + tm.height)
-                } else {
+            if state.bk_mode != TRANSPARENT && run.fill {
+                let top = dy0 - tm.ascent;
+                let cell = if esc != 0 {
                     // The box around the turned cell.
                     let (sn, cs) = crate::outline::sin_cos(esc);
                     let mut bb = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
@@ -2225,37 +2617,34 @@ impl Gdi {
                         }
                     }
                     Rect::new(bb.0, bb.1, bb.2, bb.3)
+                } else if run.advances.is_none() {
+                    Rect::new(dx0, top, dx0 + cx, top + tm.height)
+                } else {
+                    // `lpDx`: one rectangle that also holds the ink of every
+                    // glyph, and with `ETO_PDY` every character's cell at
+                    // its own height.
+                    let mut ink: Option<(i32, i32)> = None;
+                    glyphs(&mut cache, &mut |px, _, a| {
+                        if is_ink(a, hard) {
+                            ink = Some(ink.map_or((px, px + 1), |(l, r)| (l.min(px), r.max(px + 1))));
+                        }
+                    });
+                    let (left, right) = dx_cell_columns(dx0, cx, ink);
+                    let (mut up, mut high, mut low) = (0i32, 0i32, 0i32);
+                    for r in run.rises.unwrap_or(&[]).iter().take(run.text.len().saturating_sub(1)) {
+                        up = up.wrapping_add(*r);
+                        high = high.max(up);
+                        low = low.min(up);
+                    }
+                    Rect::new(left, top - high, right, top + tm.height - low)
                 };
                 Self::fill(b, &clip, cell, 0xF0, Some(Rgb::from_colorref(state.bk)));
             }
-            if tf.is_outline() {
-                end = tf.draw_outline(&mut cache, text, glyph_index, dx0, dy0, advances, |px, py, a| {
-                    if clip.contains_point(px, py) {
-                        Self::blend(b, px, py, fg_rgb, a, tf.outline().is_some_and(|o| o.bilevel));
-                    }
-                });
-            } else {
-                let y0 = dy0 - tm.ascent;
-                let mut x = dx0;
-                for (i, &c) in text.iter().enumerate() {
-                    let (w, rows) = tf.face.glyph(c);
-                    for (r, &row) in rows.iter().enumerate().take(tm.height as usize) {
-                        if row == 0 {
-                            continue;
-                        }
-                        for col in 0..w.min(16) {
-                            if row & (0x8000 >> col) != 0 {
-                                let (px, py) = (x + col, y0 + r as i32);
-                                if clip.contains_point(px, py) {
-                                    b.set_raw(px, py, fg);
-                                }
-                            }
-                        }
-                    }
-                    x += advances.and_then(|a| a.get(i).copied()).unwrap_or(w);
+            end = glyphs(&mut cache, &mut |px, py, a| {
+                if clip.contains_point(px, py) {
+                    Self::blend(b, px, py, fg_rgb, a, hard);
                 }
-                end = (x, dy0);
-            }
+            });
             if esc == 0 {
                 if sel.underline {
                     let top = dy0 + under.0;
@@ -2321,6 +2710,29 @@ impl Gdi {
             d.surface = bitmap;
         }
     }
+}
+
+/// A run of text for [`Gdi::draw_run`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Run<'a> {
+    /// Characters, or glyph indices if `glyph_index`.
+    pub text: &'a [u16],
+    pub glyph_index: bool,
+    /// `lpDx`: the distance from each character's origin to the next.
+    pub advances: Option<&'a [i32]>,
+    /// `ETO_PDY`'s second values: how far the characters after each one
+    /// move up.
+    pub rises: Option<&'a [i32]>,
+    /// The text's length along the baseline.
+    pub cx: i32,
+    /// Fill the background cell in OPAQUE mode.
+    pub fill: bool,
+}
+
+/// Whether a pixel with this coverage gets text colour: a bi-level glyph's
+/// pixel from half coverage on, any coverage of a smoothed one.
+fn is_ink(alpha: [u8; 3], hard: bool) -> bool {
+    if hard { (u32::from(alpha[0]) + u32::from(alpha[1]) + u32::from(alpha[2])) / 3 >= 128 } else { alpha != [0; 3] }
 }
 
 /// `FillRect`'s rectangle: an inverted one is filled with its sides

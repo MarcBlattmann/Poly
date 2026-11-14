@@ -523,3 +523,46 @@ fn scheduling_argument_order() {
     assert_eq!(sys(&mut k, nr::SCHED_RR_GET_INTERVAL, &[0, 0]), Err(Errno::EFAULT));
     assert_eq!(sys(&mut k, nr::SCHED_GET_PRIORITY_MIN, &[7]), Ok(0));
 }
+
+/// The ns_uts_ipc sheet's ownership rule for mounts: `mqueue` shows the
+/// caller's IPC namespace and `sysfs` its network namespace, so mounting
+/// them needs `CAP_SYS_ADMIN` in the user namespace that owns that
+/// namespace; `devpts` shows none.
+#[test]
+fn mounting_mqueue_and_sysfs_needs_the_namespaces_owner() {
+    use crate::task::clone::{CLONE_NEWIPC, CLONE_NEWNET, CLONE_NEWNS, CLONE_NEWUSER};
+    let mount = |k: &mut FakeKernel, fstype: &[u8]| {
+        let p = strings(k, &[fstype, b"/mnt", fstype]);
+        sys(k, nr::MOUNT, &[p[0], p[1], p[2], 0, 0])
+    };
+    // An unprivileged user with a user and a mount namespace of its own:
+    // its IPC and network namespaces still belong to the initial user
+    // namespace.
+    let (mut k, log) = kernel();
+    *k.creds_mut() = Creds::default();
+    assert_eq!(sys(&mut k, nr::UNSHARE, &[CLONE_NEWUSER | CLONE_NEWNS]), Ok(0));
+    assert_eq!(mount(&mut k, b"mqueue"), Err(Errno::EPERM));
+    assert_eq!(mount(&mut k, b"sysfs"), Err(Errno::EPERM));
+    assert_eq!(mount(&mut k, b"devpts"), Ok(0));
+    assert_eq!(mount(&mut k, b"tmpfs"), Ok(0));
+    assert_eq!(log.lock().unwrap().mounts.len(), 2);
+    // With IPC and network namespaces made in the same call, they are its.
+    let (mut k, log) = kernel();
+    *k.creds_mut() = Creds::default();
+    assert_eq!(sys(&mut k, nr::UNSHARE, &[CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWIPC | CLONE_NEWNET]), Ok(0));
+    assert_eq!(mount(&mut k, b"mqueue"), Ok(0));
+    assert_eq!(mount(&mut k, b"sysfs"), Ok(0));
+    assert_eq!(mount(&mut k, b"devpts"), Ok(0));
+    assert_eq!(log.lock().unwrap().mounts.len(), 3);
+    // Only one of the two: each mount asks about its own namespace.
+    let (mut k, _) = kernel();
+    *k.creds_mut() = Creds::default();
+    assert_eq!(sys(&mut k, nr::UNSHARE, &[CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWIPC]), Ok(0));
+    assert_eq!(mount(&mut k, b"mqueue"), Ok(0));
+    assert_eq!(mount(&mut k, b"sysfs"), Err(Errno::EPERM));
+    // Root of the initial namespace mounts both.
+    let (mut k, _) = kernel();
+    assert_eq!(mount(&mut k, b"mqueue"), Ok(0));
+    assert_eq!(mount(&mut k, b"sysfs"), Ok(0));
+    assert_eq!(FsType::from_name(b"mqueue"), Ok(FsType::Mqueue));
+}

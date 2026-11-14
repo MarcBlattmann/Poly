@@ -64,7 +64,26 @@ fn require_mount(k: &mut dyn LinuxKernel) -> Result<bool, Errno> {
 /// bind mounts and mount the following types of filesystems: /proc ...,
 /// /sys ..., devpts, tmpfs, ramfs, mqueue, bpf, overlayfs" of which Poly
 /// has the first five).
-const USERNS_MOUNTABLE: &[&[u8]] = &[b"proc", b"sysfs", b"devpts", b"tmpfs", b"ramfs", b"overlay"];
+const USERNS_MOUNTABLE: &[&[u8]] = &[b"proc", b"sysfs", b"devpts", b"tmpfs", b"ramfs", b"overlay", b"mqueue"];
+
+/// A file system that shows a namespace can only be mounted by a caller
+/// with `CAP_SYS_ADMIN` in the user namespace that owns that namespace
+/// (`EPERM`): `mqueue` shows the caller's IPC namespace and `sysfs` its
+/// network namespace (the ns_uts_ipc sheet: after unshare(CLONE_NEWUSER
+/// | CLONE_NEWNS) alone both mounts are `EPERM`, with CLONE_NEWIPC and
+/// CLONE_NEWNET as well they work; devpts shows no namespace).
+pub fn require_fs_owner(k: &mut dyn LinuxKernel, fstype: &[u8]) -> Result<(), Errno> {
+    let owner = match fstype {
+        b"mqueue" => with_own(k, |p| p.ns.ipc_owner()),
+        b"sysfs" => with_own(k, |p| p.ns.net_owner()),
+        _ => return Ok(()),
+    };
+    let creds = cred::current(k);
+    if !crate::ns::user::ns_capable(&creds, &owner, cap::SYS_ADMIN) {
+        return Err(Errno::EPERM);
+    }
+    Ok(())
+}
 
 // ---- mount -------------------------------------------------------------
 
@@ -164,6 +183,9 @@ pub fn mount(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         && fstype.as_slice() != b"fuse"
     {
         return Err(Errno::EPERM);
+    }
+    if let MountRequest::New { fstype, .. } = &req {
+        require_fs_owner(k, fstype)?;
     }
     admin(k)?.mount(&req).map(|()| 0)
 }

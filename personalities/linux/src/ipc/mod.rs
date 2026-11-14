@@ -1,7 +1,10 @@
 //! System V IPC (svipc(7)): the objects of an IPC namespace. Shared
 //! memory ([`shm`]), semaphore sets ([`sem`]) and message queues
-//! ([`msg`]).
+//! ([`msg`]); POSIX message queues ([`mqueue`]); and what `/proc` shows
+//! of a namespace: the listings of `/proc/sysvipc` and its settings
+//! ([`files`]).
 
+pub mod files;
 pub mod mqueue;
 pub mod msg;
 pub mod sem;
