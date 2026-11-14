@@ -291,6 +291,69 @@ static EXCEPTIONS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32
 static WAITS_EVERY: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 static WAITS_STARTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
+/// `poly.nt.trail[=N]` (`poly_personality_nt::trace::TRAIL_FLAG`): the calls each process keeps;
+/// 0 is off.
+static TRAIL_LEN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+/// `poly.nt.only=<text>` (`poly_personality_nt::trace::ONLY_FLAG`): empty for every process.
+static ONLY: Mutex<String> = Mutex::new(String::new());
+/// The command lines of NT processes, read from their PEB at their first system call while a
+/// diagnostic that names processes is on (`poly.nt.only`, `poly.nt.waits`).
+static COMMAND_LINES: Mutex<BTreeMap<u32, String>> = Mutex::new(BTreeMap::new());
+/// The trails of `poly.nt.trail`, by process.
+static TRAILS: Mutex<BTreeMap<u32, poly_personality_nt::trace::Trail>> = Mutex::new(BTreeMap::new());
+
+/// `poly.nt.only` was given.
+static ONLY_SET: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Whether a diagnostic needs the processes' command lines.
+fn wants_command_lines() -> bool {
+    WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 || ONLY_SET.load(core::sync::atomic::Ordering::Relaxed)
+}
+
+/// The calling process's command line (`PEB.ProcessParameters` at PEB + 0x20,
+/// `RTL_USER_PROCESS_PARAMETERS.CommandLine` at + 0x70: `winternl.h`), at most 512 characters.
+fn read_command_line(pid: u32) -> Option<String> {
+    let peb = with(|s| s.processes.get(&ProcessId(pid)).map(|p| p.peb))?;
+    let mut b = [0u8; 8];
+    user::copy_from_user(&mut b, peb.checked_add(0x20)?).ok()?;
+    let params = u64::from_le_bytes(b);
+    let mut us = [0u8; 16];
+    user::copy_from_user(&mut us, params.checked_add(0x70)?).ok()?;
+    let len = (u16::from_le_bytes([us[0], us[1]]) as usize / 2).min(512);
+    let buffer = u64::from_le_bytes(us[8..16].try_into().ok()?);
+    let mut bytes = alloc::vec![0u8; len * 2];
+    user::copy_from_user(&mut bytes, buffer).ok()?;
+    let units: Vec<u16> = bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    Some(String::from_utf16_lossy(&units))
+}
+
+/// Remember the calling process's command line if a diagnostic needs it and it is not known.
+fn note_command_line(pid: u32) {
+    if !wants_command_lines() || COMMAND_LINES.lock().contains_key(&pid) {
+        return;
+    }
+    if let Some(line) = read_command_line(pid) {
+        COMMAND_LINES.lock().insert(pid, line);
+    }
+}
+
+/// Whether `poly.nt.only` selects process `pid` (for the trace and the trail).
+fn selected(pid: u32) -> bool {
+    let only = ONLY.lock().clone();
+    let lines = COMMAND_LINES.lock();
+    poly_personality_nt::trace::selects(lines.get(&pid).map(String::as_str), &only)
+}
+
+/// `poly.nt.trail`: write process `pid`'s last calls (an exception with `code` was handed to it).
+fn write_trail(pid: u32, code: u32) {
+    let calls = TRAILS.lock().get_mut(&pid).map(|t| t.take()).unwrap_or_default();
+    let line = COMMAND_LINES.lock().get(&pid).cloned().unwrap_or_default();
+    crate::kprintln!("nt-trail: p{pid} exception {code:#x}, its last {} calls: {line}", calls.len());
+    for c in calls {
+        crate::kprintln!("nt-trail: {c}");
+    }
+}
+
 /// Start the wait reporter once, with the first NT program.
 fn start_waits_reporter() {
     use core::sync::atomic::Ordering::SeqCst;
@@ -312,8 +375,9 @@ fn waits_main(_: usize) -> usize {
                 .pending_wait_list()
                 .iter()
                 .map(|w| {
+                    let pid = s.processes.values().find(|p| p.thread(w.thread).is_some()).map_or(0, |p| p.pid.0);
                     let mut line = alloc::format!(
-                        "nt-waits: t{} {}{} on",
+                        "nt-waits: p{pid} t{} {}{} on",
                         w.thread.0,
                         if w.all { "all" } else { "any" },
                         if w.alertable { " alertable" } else { "" }
@@ -336,6 +400,10 @@ fn waits_main(_: usize) -> usize {
         for l in lines {
             crate::kprintln!("{l}");
         }
+        let known: Vec<(u32, String)> = COMMAND_LINES.lock().iter().map(|(p, l)| (*p, l.clone())).collect();
+        for (pid, line) in known {
+            crate::kprintln!("nt-waits: p{pid} is {line}");
+        }
     }
 }
 
@@ -346,6 +414,16 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
         let words = poly_personality_nt::diag::exception_stack_words(exceptions);
         EXCEPTIONS.store(words as u32, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: logging every exception delivered to user mode, {words} stack quadwords");
+    }
+    use poly_personality_nt::trace::{ONLY_FLAG, TRAIL_FLAG, trail_len};
+    if let Some(n) = trail_len(boot.has_flag(TRAIL_FLAG), boot.arg(TRAIL_FLAG)) {
+        TRAIL_LEN.store(n, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("nt: every process keeps its last {n} system calls for a breakpoint (poly.nt.trail)");
+    }
+    if let Some(only) = boot.arg(ONLY_FLAG) {
+        *ONLY.lock() = String::from(only);
+        ONLY_SET.store(true, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("nt: the trace and the trail are kept for processes whose command line has {only:?}");
     }
     if let Some(v) = boot.arg("poly.nt.waits") {
         WAITS_EVERY.store(v.parse().unwrap_or(30), core::sync::atomic::Ordering::Relaxed);
@@ -384,6 +462,9 @@ pub fn take_exit_status(pid: u32) -> Option<u32> {
 }
 
 fn note_exit_status(pid: u32, status: NtStatus, by_process: bool) {
+    if by_process {
+        TRAILS.lock().remove(&pid);
+    }
     if WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 {
         crate::kprintln!(
             "nt-waits: p{pid} {} status {:#x}",
@@ -613,6 +694,12 @@ impl NtKernel for Kernel {
     }
 
     fn exception_delivered(&mut self, record: &poly_seh::ExceptionRecord, ctx: &poly_seh::Context) {
+        if TRAIL_LEN.load(core::sync::atomic::Ordering::Relaxed) != 0
+            && poly_personality_nt::trace::writes_trail(record.code)
+            && selected(self.pid.0)
+        {
+            write_trail(self.pid.0, record.code);
+        }
         let words = EXCEPTIONS.load(core::sync::atomic::Ordering::Relaxed);
         if words != 0 {
             exception::report_delivered(self.pid, self.tid, record, ctx, words as usize);
@@ -700,12 +787,21 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let tid = user::current_tid().unwrap_or(process.pid);
     let mut k = Kernel::new(ProcessId(process.pid), ThreadRef(u64::from(tid)), memory);
     let trace = TRACE.load(core::sync::atomic::Ordering::Relaxed);
-    let traced = (trace != 0).then(|| poly_personality_nt::trace::begin(&mut k, regs));
+    let trail = TRAIL_LEN.load(core::sync::atomic::Ordering::Relaxed);
+    note_command_line(process.pid);
+    let traced = (trace != 0 || trail != 0)
+        .then(|| selected(process.pid))
+        .filter(|&s| s)
+        .map(|_| poly_personality_nt::trace::begin(&mut k, regs));
     let outcome = poly_personality_nt::dispatch_with(&mut k, regs);
     if let Some(call) = traced {
         let status = regs.rax as u32;
-        if poly_personality_nt::trace::wanted(&call, status, trace == 2) {
+        if trace != 0 && poly_personality_nt::trace::wanted(&call, status, trace == 2) {
             crate::kprintln!("{}", poly_personality_nt::trace::render(process.pid, tid, &call, status));
+        }
+        if trail != 0 {
+            let line = poly_personality_nt::trace::render(process.pid, tid, &call, status);
+            TRAILS.lock().entry(process.pid).or_default().push(line, trail);
         }
     }
     // Any wait a signalling call satisfied: wake those threads.

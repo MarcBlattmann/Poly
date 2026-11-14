@@ -419,19 +419,55 @@ pub const STAGES: [Stage; 3] = [
 /// The probe of stage 9 (`tests/windows/chrome_probe.rs`).
 pub const PROBE: &str = "chrome_probe";
 
+/// What a debugging run changes in the stage files (`chrome-win run --chrome-arg A --launch-seconds N`):
+/// more arguments for Chrome (its own logging, `--enable-logging=stderr --v=1`) and a shorter wait,
+/// so the launcher prints Chrome's standard error before QEMU is stopped. Empty for every other run.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Debugging {
+    pub chrome_args: Vec<String>,
+    pub seconds: Option<u32>,
+    /// The call tracer (`--kit`) and the kernel's NT call trail log only processes whose
+    /// command line contains this (`--trace-only`).
+    pub trace_only: Option<String>,
+    /// The call tracer keeps the last N calls and writes them at a breakpoint (`--trace-ring`).
+    pub trace_ring: Option<u32>,
+    /// The kernel keeps every process's last N NT calls for a breakpoint (`--trail`).
+    pub trail: Option<u32>,
+    /// The call tracer writes each function's first call with each outcome only
+    /// (`--trace-first`: `POLYTRACE_FIRST`).
+    pub trace_first: bool,
+    /// The call tracer also writes its ring this many seconds after a process started
+    /// (`--ring-at`): what a process that went quiet did last.
+    pub ring_at: Option<u32>,
+}
+
+static DEBUGGING: std::sync::Mutex<Option<Debugging>> = std::sync::Mutex::new(None);
+
 /// `stage<N>.cmd` for the launcher: the program, its command line, its
 /// directory, the seconds to wait (see `tests/windows/chrome_launch.rs`).
 pub fn stage_cmd(stage: &Stage) -> String {
+    let debugging = DEBUGGING.lock().map(|d| d.clone().unwrap_or_default()).unwrap_or_default();
+    stage_cmd_with(stage, &debugging)
+}
+
+/// [`stage_cmd`] with a run's [`Debugging`] changes (Chrome's own arguments only: a probe gets none).
+pub fn stage_cmd_with(stage: &Stage, debugging: &Debugging) -> String {
     let exe = match stage.program {
         Some(p) => format!("C:\\poly-test\\{p}.exe"),
         None => format!("{APP_DOS}\\chrome.exe"),
     };
     let mut cmdline = format!("\"{exe}\"");
-    for a in stage.args {
+    let extra: &[String] = if stage.program.is_none() { &debugging.chrome_args } else { &[] };
+    // Chrome's switches go before the page (its last argument).
+    let (page, switches) = match stage.args.split_last() {
+        Some((last, rest)) if stage.program.is_none() => (Some(*last), rest),
+        _ => (None, stage.args),
+    };
+    for a in switches.iter().copied().chain(extra.iter().map(String::as_str)).chain(page) {
         cmdline.push(' ');
         cmdline.push_str(a);
     }
-    format!("{exe}\n{cmdline}\n{APP_DOS}\n{}\n", stage.seconds)
+    format!("{exe}\n{cmdline}\n{APP_DOS}\n{}\n", debugging.seconds.unwrap_or(stage.seconds))
 }
 
 /// The kit's trace file, written by `polytrace.dll` in Chrome's directory.
@@ -440,8 +476,30 @@ pub const TRACE_FILE: &str = "polytrace.jsonl";
 /// [`stage_cmd`] for a run with the Poly-side call tracer: the logger writes every record when
 /// its call returns (`POLYTRACE_SYNC`, so a process that dies leaves its trace) and the launcher
 /// sends the trace file to the kernel log afterwards.
+///
+/// A debugging run can trace only some processes (`--trace-only TEXT`: `POLYTRACE_ONLY`, a
+/// process whose command line contains the text) and keep only their last calls, written when
+/// they meet a breakpoint (`--trace-ring N`: `POLYTRACE_RING`, ADR 0155 step 11).
 pub fn stage_cmd_traced(stage: &Stage) -> String {
-    format!("{}POLYTRACE_SYNC=1\n{TRACE_FILE}\n", stage_cmd(stage))
+    let debugging = DEBUGGING.lock().map(|d| d.clone().unwrap_or_default()).unwrap_or_default();
+    format!("{}{}\n{TRACE_FILE}\n", stage_cmd(stage), trace_env(&debugging))
+}
+
+/// The launcher's environment line for the call tracer (see [`stage_cmd_traced`]).
+pub fn trace_env(debugging: &Debugging) -> String {
+    let mut env = match debugging.trace_ring {
+        _ if debugging.trace_first => "POLYTRACE_FIRST=1".to_string(),
+        Some(n) => format!("POLYTRACE_RING={n}"),
+        None => "POLYTRACE_SYNC=1".to_string(),
+    };
+    if let Some(at) = debugging.ring_at {
+        env.push_str(&format!(" POLYTRACE_RING_AT={at}"));
+    }
+    if let Some(only) = &debugging.trace_only {
+        env.push_str(" POLYTRACE_ONLY=");
+        env.push_str(only);
+    }
+    env
 }
 
 /// The tree of the disk: Chrome, the launcher, the stages, the test
@@ -645,7 +703,8 @@ pub const MEMORY: &str = "4G";
 pub const CPUS: u32 = 4;
 
 /// `cargo xtask chrome-win run [--stage N] [--trace] [--exceptions[=N]] [--waits[=SECS]] [--release]
-/// [--fresh-disk] [--timeout SECS] [--memory=SIZE] [--cpus=N]`: boot a
+/// [--fresh-disk] [--timeout SECS] [--chrome-arg ARG]... [--launch-seconds N] [--trace-only TEXT]
+/// [--trace-ring N] [--ring-at SECS] [--trace-first] [--trail N] [--memory=SIZE] [--cpus=N]`: boot a
 /// stage headless (the kernel mounts the disk and runs the launcher as its
 /// first program), collect the serial log, print what it says. Works on
 /// every host (no QMP). `--exceptions` asks the kernel to log every exception
@@ -656,6 +715,7 @@ fn run(args: &[String]) -> Result {
     let mut kit_names: Vec<String> = Vec::new();
     let mut exceptions: Option<String> = None;
     let mut waits: Option<String> = None;
+    let mut debugging = Debugging::default();
     let mut rest: Vec<String> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -678,6 +738,33 @@ fn run(args: &[String]) -> Result {
             }
             "--release" => release = true,
             "--fresh-disk" => fresh = true,
+            "--chrome-arg" => debugging.chrome_args.push(it.next().ok_or("--chrome-arg needs an argument")?.clone()),
+            "--trace-only" => debugging.trace_only = Some(it.next().ok_or("--trace-only needs a text")?.clone()),
+            "--trace-first" => debugging.trace_first = true,
+            "--ring-at" => {
+                debugging.ring_at =
+                    Some(it.next().ok_or("--ring-at needs seconds")?.parse().map_err(|e| format!("--ring-at: {e}"))?)
+            }
+            "--trail" => {
+                debugging.trail =
+                    Some(it.next().ok_or("--trail needs a number")?.parse().map_err(|e| format!("--trail: {e}"))?)
+            }
+            "--trace-ring" => {
+                debugging.trace_ring = Some(
+                    it.next()
+                        .ok_or("--trace-ring needs a number")?
+                        .parse()
+                        .map_err(|e| format!("--trace-ring: {e}"))?,
+                )
+            }
+            "--launch-seconds" => {
+                debugging.seconds = Some(
+                    it.next()
+                        .ok_or("--launch-seconds needs seconds")?
+                        .parse()
+                        .map_err(|e| format!("--launch-seconds: {e}"))?,
+                )
+            }
             "--timeout" => {
                 timeout = it.next().ok_or("--timeout needs seconds")?.parse().map_err(|e| format!("--timeout: {e}"))?
             }
@@ -689,6 +776,13 @@ fn run(args: &[String]) -> Result {
         .find(|s| s.number == stage)
         .ok_or_else(|| format!("no stage {stage} yet (stages: 1..={})", STAGES.len()))?;
     eprintln!("==> stage {}: {}", st.number, st.name);
+    if debugging != Debugging::default() {
+        eprintln!(
+            "==> debugging run: Chrome also gets {:?}, the launcher waits {:?} s",
+            debugging.chrome_args, debugging.seconds
+        );
+    }
+    *DEBUGGING.lock().map_err(|e| e.to_string())? = Some(debugging);
     fetch()?;
     let kernel = crate::build_kernel(release)?;
     let kit = if kit_names.is_empty() { None } else { Some(build_kit(&kit_names)?) };
@@ -730,6 +824,20 @@ fn kernel_arguments(trace: bool, exceptions: Option<&str>, waits: Option<&str>) 
     if let Some(value) = waits {
         more.push_str(" poly.nt.waits");
         more.push_str(value);
+    }
+    more
+}
+
+/// The kernel arguments of a debugging run: `poly.nt.only` for `--trace-only` (the NT call
+/// trace and trail of the matching processes only) and `poly.nt.trail=N` for `--trail N`.
+pub fn debugging_kernel_arguments(d: &Debugging) -> String {
+    let mut more = String::new();
+    if let Some(only) = &d.trace_only {
+        more.push_str(" poly.nt.only=");
+        more.push_str(only);
+    }
+    if let Some(n) = d.trail {
+        more.push_str(&format!(" poly.nt.trail={n}"));
     }
     more
 }
@@ -874,7 +982,9 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
     let _ = std::fs::remove_file(&log);
     let res = crate::resources::Resources::from_args(&o.rest)?;
     eprintln!("{}", res.describe(MEMORY, CPUS));
-    let more = kernel_arguments(o.trace, o.exceptions.as_deref(), o.waits.as_deref());
+    let mut more = kernel_arguments(o.trace, o.exceptions.as_deref(), o.waits.as_deref());
+    let debugging = DEBUGGING.lock().map(|d| d.clone().unwrap_or_default()).unwrap_or_default();
+    more.push_str(&debugging_kernel_arguments(&debugging));
     // The kernel mounts the disk and runs the launcher (NT programs are the
     // first program's business, a Linux shell cannot exec one): no
     // initramfs. The launcher's path has no space; Chrome's does not matter.
@@ -1089,6 +1199,20 @@ mod tests {
         assert_eq!(lines[3], "300");
         // The sandbox stage is the same without the flag.
         assert!(!stage_cmd(&STAGES[1]).contains("--no-sandbox"));
+        // A debugging run's switches go before the page; its wait replaces the stage's.
+        let d = Debugging { chrome_args: vec!["--v=1".into()], seconds: Some(40), ..Debugging::default() };
+        let cmd = stage_cmd_with(&STAGES[0], &d);
+        let lines: Vec<&str> = cmd.lines().collect();
+        assert!(lines[1].ends_with("--dump-dom --v=1 file:///C:/poly-test/s1.html"), "{cmd}");
+        assert_eq!(lines[3], "40");
+        // A probe gets no Chrome switches.
+        assert!(!stage_cmd_with(&STAGES[2], &d).contains("--v=1"));
+        // The tracer's environment: every call written, or a filtered ring.
+        assert_eq!(trace_env(&Debugging::default()), "POLYTRACE_SYNC=1");
+        let ring = Debugging { trace_only: Some("--type=renderer".into()), trace_ring: Some(500), ..d };
+        assert_eq!(trace_env(&ring), "POLYTRACE_RING=500 POLYTRACE_ONLY=--type=renderer");
+        let kernel = Debugging { trail: Some(128), ..ring };
+        assert_eq!(debugging_kernel_arguments(&kernel), " poly.nt.only=--type=renderer poly.nt.trail=128");
     }
 
     #[test]
