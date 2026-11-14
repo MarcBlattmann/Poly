@@ -76,7 +76,7 @@ pub struct Apc {
 
 /// A request to create a thread in the calling process
 /// (`NtCreateThreadEx`), once the service has decoded its arguments.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ThreadCreate {
     /// The user routine the thread runs, called as `routine(argument)`.
     pub start_routine: u64,
@@ -97,7 +97,7 @@ pub struct ThreadCreate {
 
 /// What [`NtKernel::create_thread`] produced: a handle to the new thread's
 /// object in the caller's table and the new thread's client id.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ThreadCreated {
     pub handle: poly_ntobj::Handle,
     pub client: ClientId,

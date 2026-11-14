@@ -256,6 +256,10 @@ struct NtState {
     /// Each live process's creation time, a `FILETIME`
     /// (`NtQueryInformationProcess(ProcessTimes)`, ADR 0087).
     created: BTreeMap<ProcessId, u64>,
+    /// What an ended process's `ProcessTimes` stay at: its creation time and the kernel and user
+    /// CPU time it used, taken as it ended (`QueryProcessCycleTime` of an exited process "still
+    /// answers TRUE, with a value not lower than while it ran, and the same value on every call").
+    finished: BTreeMap<ProcessId, [u64; 3]>,
 }
 
 static STATE: Mutex<Option<NtState>> = Mutex::new(None);
@@ -345,6 +349,7 @@ fn make_state(slot: &mut Option<NtState>) {
         ctl: BTreeMap::new(),
         timers: BTreeMap::new(),
         created: BTreeMap::new(),
+        finished: BTreeMap::new(),
     };
     // The Windows folders on C: and the registry values that follow
     // them (ADR 0073), before file I/O attaches C:.
@@ -568,7 +573,9 @@ impl NtKernel for Kernel {
     }
 
     fn process_times(&self, pid: ProcessId) -> Option<[u64; 3]> {
-        let created = with(|s| s.created.get(&pid).copied())?;
+        let Some(created) = with(|s| s.created.get(&pid).copied()) else {
+            return with(|s| s.finished.get(&pid).copied());
+        };
         let cpu = crate::process::find(pid.0).map(|p| crate::cputime::process(&p)).unwrap_or_default();
         Some([created, cpu.system_ns / 100, cpu.user_ns / 100])
     }
@@ -772,6 +779,7 @@ fn start_params(
     let started = with(|s| {
         s.processes.insert(pid, NtProcess::new(pid));
         s.created.insert(pid, registry::filetime_now());
+        s.finished.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
         proc.dynamic_code_blocked = handles.is_some_and(|h| h.dynamic_code_blocked);
         let mut b = MemBackend { memory, sections: &mut s.sections };
@@ -994,8 +1002,18 @@ pub fn thread_exit(pid: u32, tid: u32, status: ExitStatus, memory: &Arc<Memory>)
 /// The NT process `pid` has ended (its last thread is going): drop its
 /// objects, views and handles. Its memory itself goes with `user::Memory`.
 pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
+    // What it used, kept for the handles that outlive it (the last thread is still counted).
+    let used = crate::process::find(pid).map(|p| crate::cputime::process(&p));
     with(|s| {
-        s.created.remove(&ProcessId(pid));
+        if let (Some(created), Some(cpu)) = (s.created.remove(&ProcessId(pid)), used) {
+            const KEEP: usize = 4096;
+            if s.finished.len() >= KEEP
+                && let Some(oldest) = s.finished.keys().next().copied()
+            {
+                s.finished.remove(&oldest);
+            }
+            s.finished.insert(ProcessId(pid), [created, cpu.system_ns / 100, cpu.user_ns / 100]);
+        }
         if let Some(mut proc) = s.processes.remove(&ProcessId(pid)) {
             let mut b = MemBackend { memory, sections: &mut s.sections };
             exec::process_exit(&mut s.sys, &mut proc, &mut b);

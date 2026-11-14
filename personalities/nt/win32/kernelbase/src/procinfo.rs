@@ -290,12 +290,10 @@ pub unsafe extern "system" fn K32GetMappedFileNameW(process: Handle, address: u6
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
     let modules = module_spans();
-    let device = match procinfo::module_at(&modules, address) {
-        Some(path) => match device_name(path) {
-            Some(d) => d,
-            None => return fail(ERROR_FILE_INVALID, 0),
-        },
-        // Not one of the loader's images: ask the kernel what file the address is in.
+    // One of the loader's images: the file of its path. Anything else (and an image whose file
+    // cannot be opened by that path): ask the kernel what file the address is in.
+    let device = match procinfo::module_at(&modules, address).and_then(device_name) {
+        Some(d) => d,
         None => match mapped_view_name(process, address) {
             Ok(d) => d,
             Err(e) => return fail(e, 0),

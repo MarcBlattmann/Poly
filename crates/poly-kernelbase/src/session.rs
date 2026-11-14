@@ -32,6 +32,11 @@ pub const WTS_DOMAIN_NAME: u32 = 7;
 pub const WTS_CONNECT_STATE: u32 = 8;
 pub const WTS_CLIENT_NAME: u32 = 10;
 pub const WTS_CLIENT_PROTOCOL_TYPE: u32 = 16;
+/// `WTSSessionInfo`: a `WTSINFOW` (`wtsapi32.h`), 216 bytes.
+pub const WTS_SESSION_INFO: u32 = 24;
+/// `sizeof(WTSINFOW)` on x64: `State`, `SessionId`, six counters, `WinStationName[32]`,
+/// `Domain[17]`, `UserName[21]`, then five `LARGE_INTEGER` times (the sheet: 216 bytes).
+pub const WTSINFO_SIZE: usize = 216;
 /// `WTSSessionInfoEx`: a `WTSINFOEXW` (the class Chrome asks, the sheet's `wtsq_chrome`).
 pub const WTS_SESSION_INFO_EX: u32 = 25;
 /// `sizeof(WTSINFOEXW)` on x64 (`wtsapi32.h`: `Level`, then `WTSINFOEX_LEVEL1_W`).
@@ -83,6 +88,21 @@ pub fn wts_query(s: &Session<'_>, session: u32, class: u32) -> Result<Vec<u8>, u
         WTS_CONNECT_STATE => WTS_ACTIVE.to_le_bytes().to_vec(),
         WTS_CLIENT_PROTOCOL_TYPE => 0u16.to_le_bytes().to_vec(),
         WTS_IS_REMOTE_SESSION => alloc::vec![0u8],
+        WTS_SESSION_INFO => {
+            // WTSINFOW: State at 0, SessionId at 4, the counters (zero), WinStationName[32] at 32,
+            // Domain[17] at 96, UserName[21] at 130, ConnectTime at 176, DisconnectTime,
+            // LastInputTime, LogonTime, CurrentTime at 208.
+            let mut b = alloc::vec![0u8; WTSINFO_SIZE];
+            b[0..4].copy_from_slice(&WTS_ACTIVE.to_le_bytes());
+            b[4..8].copy_from_slice(&s.id.to_le_bytes());
+            for (at, text, room) in [(32usize, &console[..], 31usize), (96, s.computer, 16), (130, s.user, 20)] {
+                for (i, c) in text.iter().take(room).enumerate() {
+                    b[at + 2 * i..at + 2 * i + 2].copy_from_slice(&c.to_le_bytes());
+                }
+            }
+            b[208..216].copy_from_slice(&s.now.to_le_bytes());
+            b
+        }
         WTS_SESSION_INFO_EX => {
             // WTSINFOEXW: Level 1 at 0; WTSINFOEX_LEVEL1_W at 8: SessionId, SessionState,
             // SessionFlags, WinStationName[33] at 20, UserName[21] at 86, DomainName[18] at
@@ -109,6 +129,66 @@ pub fn wts_query(s: &Session<'_>, session: u32, class: u32) -> Result<Vec<u8>, u
 /// `WM_WTSSESSION_CHANGE`.
 pub fn wts_register(hwnd: usize, flags: u32) -> Result<(), u32> {
     if hwnd == 0 || flags > NOTIFY_FOR_ALL_SESSIONS { Err(ERROR_INVALID_PARAMETER) } else { Ok(()) }
+}
+
+/// The windows registered for session notifications, with how many times each was: the sheet's
+/// rule `counted`: every successful register of a window is undone by one unregister, and a
+/// window that is not registered (or was registered as often as it was unregistered) fails with
+/// `ERROR_FILE_NOT_FOUND`.
+#[derive(Debug)]
+pub struct Registrations {
+    slots: [(usize, u32); Self::SLOTS],
+}
+
+/// `ERROR_FILE_NOT_FOUND` (`winerror.h`): the window is not registered.
+pub const ERROR_FILE_NOT_FOUND: u32 = 2;
+/// `ERROR_NOT_ENOUGH_MEMORY` (`winerror.h`): no room for another window.
+pub const ERROR_NOT_ENOUGH_MEMORY: u32 = 8;
+
+impl Registrations {
+    pub const SLOTS: usize = 64;
+
+    pub const fn new() -> Self {
+        Registrations { slots: [(0, 0); Self::SLOTS] }
+    }
+
+    /// One more registration of `hwnd`.
+    pub fn register(&mut self, hwnd: usize) -> Result<(), u32> {
+        if let Some(slot) = self.slots.iter_mut().find(|s| s.0 == hwnd) {
+            slot.1 = slot.1.saturating_add(1);
+            return Ok(());
+        }
+        match self.slots.iter_mut().find(|s| s.0 == 0) {
+            Some(slot) => {
+                *slot = (hwnd, 1);
+                Ok(())
+            }
+            None => Err(ERROR_NOT_ENOUGH_MEMORY),
+        }
+    }
+
+    /// One registration of `hwnd` ends: `ERROR_FILE_NOT_FOUND` if it has none.
+    pub fn unregister(&mut self, hwnd: usize) -> Result<(), u32> {
+        let Some(slot) = self.slots.iter_mut().find(|s| s.0 == hwnd) else { return Err(ERROR_FILE_NOT_FOUND) };
+        slot.1 -= 1;
+        if slot.1 == 0 {
+            slot.0 = 0;
+        }
+        Ok(())
+    }
+
+    /// All registrations of `hwnd` go (the window was destroyed).
+    pub fn forget(&mut self, hwnd: usize) {
+        for slot in self.slots.iter_mut().filter(|s| s.0 == hwnd) {
+            *slot = (0, 0);
+        }
+    }
+}
+
+impl Default for Registrations {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ----- powrprof -------------------------------------------------------------------------------
@@ -230,12 +310,20 @@ pub fn power_information(level: u32, processors: u32, input_given: bool, output_
 /// `sizeof(INITCOMMONCONTROLSEX)`: `dwSize` and `dwICC`.
 pub const INITCOMMONCONTROLSEX_SIZE: u32 = 8;
 
+/// The `ICC_*` bits of version 5.82 (`commctrl.h`): `ICC_LISTVIEW_CLASSES` (0x1) to
+/// `ICC_NATIVEFNTCTL_CLASS` (0x2000). `ICC_STANDARD_CLASSES` (0x4000) and `ICC_LINK_CLASS`
+/// (0x8000) are version 6's.
+pub const ICC_VERSION_5_BITS: u32 = 0x3FFF;
+
 /// `InitCommonControlsEx(picce)`: Learn: "Returns TRUE if successful, or FALSE otherwise";
-/// `dwSize` is "the size of the structure, in bytes". Poly accepts a structure of that size:
-/// the control classes themselves are not there yet, so a program that then creates a common
-/// control gets no window (`CreateWindowExW` fails for the unknown class).
-pub fn init_common_controls(size: u32) -> bool {
-    size == INITCOMMONCONTROLSEX_SIZE
+/// `dwSize` is "the size of the structure, in bytes". The sheet (version 5.82, what a program
+/// without a manifest gets): `dwSize` must be exactly 8; `dwICC` 0 and any mix of the bits 0x1 to
+/// 0x2000 are TRUE; a mask with a bit above them (0x4000 and 0x8000 included, which only version
+/// 6 knows) is FALSE. A failure leaves the last error as it was. The control classes themselves
+/// are not there yet, so a program that then creates a common control gets no window
+/// (`CreateWindowExW` fails for the unknown class).
+pub fn init_common_controls(size: u32, icc: u32) -> bool {
+    size == INITCOMMONCONTROLSEX_SIZE && icc & !ICC_VERSION_5_BITS == 0
 }
 
 #[cfg(test)]
@@ -266,6 +354,14 @@ mod tests {
         assert_eq!(wts_query(&s, 2, WTS_SESSION_ID), Err(1733));
         assert_eq!(wts_query(&s, 0x7FFF, WTS_CLIENT_PROTOCOL_TYPE), Ok(vec![0, 0]));
         assert_eq!(wts_query(&s, 1, 100), Err(ERROR_INVALID_PARAMETER));
+        // WTSSessionInfo: 216 bytes, State as WTSConnectState and SessionId at offset 4.
+        let info = wts_query(&s, WTS_CURRENT_SESSION, WTS_SESSION_INFO).unwrap();
+        assert_eq!(info.len(), 216);
+        assert_eq!(u32::from_le_bytes(info[0..4].try_into().unwrap()), 0);
+        assert_eq!(u32::from_le_bytes(info[4..8].try_into().unwrap()), 1);
+        assert_eq!((info[32], info[130], info[96]), (b'C', b'p', b'P'));
+        assert_eq!(u64::from_le_bytes(info[208..216].try_into().unwrap()), 0x01DC_0000_0000_0000);
+        assert_eq!(wts_query(&s, 2, WTS_SESSION_INFO), Err(1733));
         // WTSSessionInfoEx: 232 bytes, level 1, this session, active, unlocked, "Console".
         let ex = wts_query(&s, WTS_CURRENT_SESSION, WTS_SESSION_INFO_EX).unwrap();
         let d = |at: usize| u32::from_le_bytes(ex[at..at + 4].try_into().unwrap());
@@ -281,6 +377,24 @@ mod tests {
         assert_eq!(wts_register(0x1234, NOTIFY_FOR_ALL_SESSIONS), Ok(()));
         assert_eq!(wts_register(0, 0), Err(ERROR_INVALID_PARAMETER));
         assert_eq!(wts_register(0x1234, 2), Err(ERROR_INVALID_PARAMETER));
+        // Registrations are counted per window (the sheet's rule `counted`).
+        let mut r = Registrations::new();
+        assert_eq!(r.unregister(0x1234), Err(ERROR_FILE_NOT_FOUND));
+        assert_eq!((r.register(0x1234), r.register(0x1234), r.register(0x5678)), (Ok(()), Ok(()), Ok(())));
+        assert_eq!((r.unregister(0x1234), r.unregister(0x1234)), (Ok(()), Ok(())));
+        assert_eq!(r.unregister(0x1234), Err(ERROR_FILE_NOT_FOUND));
+        assert_eq!(r.unregister(0x5678), Ok(()));
+        // A destroyed window's registrations all go.
+        r.register(9).unwrap();
+        r.register(9).unwrap();
+        r.forget(9);
+        assert_eq!(r.unregister(9), Err(ERROR_FILE_NOT_FOUND));
+        // Room for 64 windows and no more.
+        for hwnd in 1..=Registrations::SLOTS {
+            r.register(hwnd).unwrap();
+        }
+        assert_eq!(r.register(1000), Err(ERROR_NOT_ENOUGH_MEMORY));
+        assert_eq!(r.register(5), Ok(()));
     }
 
     #[test]
@@ -322,8 +436,21 @@ mod tests {
 
     #[test]
     fn common_controls_want_the_structure_size() {
-        assert!(init_common_controls(8));
-        assert!(!init_common_controls(0));
-        assert!(!init_common_controls(16));
+        assert!(init_common_controls(8, 0xFF));
+        assert!(!init_common_controls(0, 0xFF));
+        assert!(!init_common_controls(16, 0xFF));
+        // The sheet's sizes: only exactly 8.
+        for size in [0, 4, 7, 9, 12, 16, 0xFFFF_FFFF] {
+            assert!(!init_common_controls(size, 0xFF), "{size}");
+        }
+        // Each bit of version 5.82 alone, mixes of them, and nothing asked for.
+        for bit in 0..14 {
+            assert!(init_common_controls(8, 1 << bit), "{bit}");
+        }
+        assert!(init_common_controls(8, 0x7FF) && init_common_controls(8, 0x3FFF) && init_common_controls(8, 0));
+        // ICC_STANDARD_CLASSES, ICC_LINK_CLASS, any mask holding one, and undefined bits.
+        for icc in [0x4000, 0x8000, 0xC000, 0xFFFF, 0xFFFF_FFFF, 0xFFFF_0000, 0x1_0001, 0x4001] {
+            assert!(!init_common_controls(8, icc), "{icc:#x}");
+        }
     }
 }

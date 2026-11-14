@@ -11,7 +11,6 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
 use poly_kernelbase::session::{self, Session};
 
 poly_win32_rt::process_heap_allocator!();
@@ -19,9 +18,13 @@ poly_win32_rt::process_heap_allocator!();
 #[link(name = "kernel32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn SetLastError(error: u32);
-    fn GetEnvironmentVariableW(name: *const u16, buf: *mut u16, size: u32) -> u32;
     fn GetComputerNameW(buf: *mut u16, size: *mut u32) -> i32;
     fn GetSystemTimeAsFileTime(time: *mut u64);
+}
+
+#[link(name = "advapi32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GetUserNameW(buf: *mut u16, size: *mut u32) -> i32;
 }
 
 #[link(name = "user32", kind = "raw-dylib")]
@@ -39,7 +42,7 @@ fn is_window(hwnd: usize) -> bool {
 /// `ERROR_INVALID_HANDLE`, `ERROR_INVALID_PARAMETER`, `ERROR_NOT_ENOUGH_MEMORY` (`winerror.h`).
 const ERROR_INVALID_HANDLE: u32 = 6;
 const ERROR_INVALID_PARAMETER: u32 = 87;
-const ERROR_NOT_ENOUGH_MEMORY: u32 = 8;
+const ERROR_NOT_ENOUGH_MEMORY: u32 = session::ERROR_NOT_ENOUGH_MEMORY;
 
 fn fail(error: u32) -> i32 {
     // SAFETY: a plain call.
@@ -58,56 +61,65 @@ fn session_id() -> u32 {
     }
 }
 
-/// The windows registered for session notifications (0: a free slot). Poly's session never
-/// changes state, so nothing is ever sent to them; they are kept because unregistering a window
-/// that is not registered fails (the sheet).
-static REGISTERED: [core::sync::atomic::AtomicUsize; 64] = [const { core::sync::atomic::AtomicUsize::new(0) }; 64];
+/// The windows registered for session notifications. Poly's session never changes state, so
+/// nothing is ever sent to them; they are kept (with a count each) because unregistering a window
+/// that is not registered fails, and every register needs its own unregister (the sheet).
+struct Locked {
+    lock: core::sync::atomic::AtomicBool,
+    registrations: core::cell::UnsafeCell<session::Registrations>,
+}
 
-/// `ERROR_FILE_NOT_FOUND` (`winerror.h`): the window is not registered.
-const ERROR_FILE_NOT_FOUND: u32 = 2;
+// SAFETY: `registrations` is only touched with `lock` held.
+unsafe impl Sync for Locked {}
+
+static REGISTERED: Locked = Locked {
+    lock: core::sync::atomic::AtomicBool::new(false),
+    registrations: core::cell::UnsafeCell::new(session::Registrations::new()),
+};
+
+/// Run `f` on the registrations, alone.
+fn registrations<R>(f: impl FnOnce(&mut session::Registrations) -> R) -> R {
+    use core::sync::atomic::Ordering;
+    while REGISTERED.lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    // SAFETY: the lock is held; nothing in `f` calls back into this module.
+    let r = f(unsafe { &mut *REGISTERED.registrations.get() });
+    REGISTERED.lock.store(false, Ordering::Release);
+    r
+}
 
 /// `WTSRegisterSessionNotification(hWnd, dwFlags)`: the window is to get
-/// `WM_WTSSESSION_CHANGE`.
+/// `WM_WTSSESSION_CHANGE`. Each successful call is one registration of the window (a window
+/// registered twice needs two unregisters), whatever the flags.
 #[unsafe(no_mangle)]
 pub extern "system" fn WTSRegisterSessionNotification(hwnd: usize, flags: u32) -> i32 {
-    use core::sync::atomic::Ordering;
     if let Err(e) = session::wts_register(hwnd, flags) {
         return fail(e);
     }
     if !is_window(hwnd) {
         return fail(ERROR_INVALID_PARAMETER);
     }
-    if REGISTERED.iter().any(|slot| slot.load(Ordering::Acquire) == hwnd) {
-        return 1;
+    match registrations(|r| r.register(hwnd)) {
+        Ok(()) => 1,
+        Err(e) => fail(e),
     }
-    for slot in &REGISTERED {
-        if slot.compare_exchange(0, hwnd, Ordering::AcqRel, Ordering::Acquire).is_ok() {
-            return 1;
-        }
-    }
-    fail(ERROR_NOT_ENOUGH_MEMORY)
 }
 
-/// `WTSUnRegisterSessionNotification(hWnd)`: FALSE with `ERROR_FILE_NOT_FOUND` for a window
-/// that is not registered (`specs/windows/wtsapi32.dll/WTSRegisterSessionNotification.yaml`).
+/// `WTSUnRegisterSessionNotification(hWnd)`: ends one registration; FALSE with
+/// `ERROR_FILE_NOT_FOUND` for a window that is not registered
+/// (`specs/windows/wtsapi32.dll/WTSRegisterSessionNotification.yaml`), `ERROR_INVALID_PARAMETER`
+/// for NULL or a window that is gone (its registrations go with it).
 #[unsafe(no_mangle)]
 pub extern "system" fn WTSUnRegisterSessionNotification(hwnd: usize) -> i32 {
-    use core::sync::atomic::Ordering;
     if !is_window(hwnd) {
-        // A destroyed window's registration goes with it.
-        for slot in &REGISTERED {
-            let _ = slot.compare_exchange(hwnd, 0, Ordering::AcqRel, Ordering::Acquire);
-        }
+        registrations(|r| r.forget(hwnd));
         return fail(ERROR_INVALID_PARAMETER);
     }
-    {
-        for slot in &REGISTERED {
-            if slot.compare_exchange(hwnd, 0, Ordering::AcqRel, Ordering::Acquire).is_ok() {
-                return 1;
-            }
-        }
+    match registrations(|r| r.unregister(hwnd)) {
+        Ok(()) => 1,
+        Err(e) => fail(e),
     }
-    fail(ERROR_FILE_NOT_FOUND)
 }
 
 /// `WTSQuerySessionInformationW(hServer, SessionId, WTSInfoClass, ppBuffer, pBytesReturned)`:
@@ -127,11 +139,12 @@ pub unsafe extern "system" fn WTSQuerySessionInformationW(
     if server != 0 {
         return fail(ERROR_INVALID_HANDLE);
     }
+    // WTSUserName "is the name GetUserNameW gives" (the sheet).
     let mut user = [0u16; 257];
-    let name: Vec<u16> = "USERNAME\0".encode_utf16().collect();
-    // SAFETY: a NUL-terminated name; the buffer holds 257 characters.
-    let n = unsafe { GetEnvironmentVariableW(name.as_ptr(), user.as_mut_ptr(), 257) } as usize;
-    let user = &user[..if n < 257 { n } else { 0 }];
+    let mut len = 257u32;
+    // SAFETY: the buffer holds `len` characters.
+    let ok = unsafe { GetUserNameW(user.as_mut_ptr(), &mut len) };
+    let user = &user[..if ok != 0 { (len as usize).saturating_sub(1).min(256) } else { 0 }];
     let mut computer = [0u16; 64];
     let mut len = 64u32;
     // SAFETY: the buffer holds `len` characters.

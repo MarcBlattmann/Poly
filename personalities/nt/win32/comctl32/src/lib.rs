@@ -15,7 +15,14 @@ pub unsafe extern "system" fn InitCommonControlsEx(init: *const u32) -> i32 {
         return 0;
     }
     // SAFETY: the caller's INITCOMMONCONTROLSEX; `dwSize` is its first member.
-    i32::from(poly_kernelbase::session::init_common_controls(unsafe { init.read_unaligned() }))
+    let size = unsafe { init.read_unaligned() };
+    if size != poly_kernelbase::session::INITCOMMONCONTROLSEX_SIZE {
+        // A structure of another size has no `dwICC` to trust (it may be shorter than 8 bytes).
+        return 0;
+    }
+    // SAFETY: `dwSize` says the structure is 8 bytes: `dwICC` follows (`commctrl.h`).
+    let icc = unsafe { init.add(1).read_unaligned() };
+    i32::from(poly_kernelbase::session::init_common_controls(size, icc))
 }
 
 /// `InitCommonControls()`: "Registers and initializes certain common control window classes"

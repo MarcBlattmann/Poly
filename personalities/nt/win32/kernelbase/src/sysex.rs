@@ -722,3 +722,23 @@ pub unsafe extern "system" fn QueryUnbiasedInterruptTime(out: *mut u64) -> i32 {
     unsafe { out.write_unaligned(interrupt_time()) };
     TRUE
 }
+
+/// `QueryInterruptTime` (`realtimeapiset.h`): the interrupt time, which also counts time spent
+/// asleep; Poly never sleeps, so it is the unbiased time. No result.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn QueryInterruptTime(out: *mut u64) {
+    if !out.is_null() {
+        // SAFETY: the caller's out-pointer.
+        unsafe { out.write_unaligned(interrupt_time()) };
+    }
+}
+
+/// `QueryInterruptTimePrecise` (`realtimeapiset.h`): as `QueryInterruptTime`, read at the moment
+/// of the call. No result.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn QueryInterruptTimePrecise(out: *mut u64) {
+    if !out.is_null() {
+        // SAFETY: the caller's out-pointer.
+        unsafe { out.write_unaligned(interrupt_time()) };
+    }
+}

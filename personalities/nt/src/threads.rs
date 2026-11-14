@@ -95,7 +95,8 @@ pub fn create_thread_ex<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<Nt
         return Err(STATUS_NOT_IMPLEMENTED);
     }
     // `ObjectAttributes` (`lpThreadAttributes`): the descriptor of the new thread object.
-    let security = abi::read_attributes(k, abi::arg(k, regs, 2)?)?.security;
+    let attributes_at = abi::arg(k, regs, 2)?;
+    let security = abi::read_attributes(k, attributes_at)?.security;
     let req = ThreadCreate {
         security,
         start_routine,
@@ -206,8 +207,9 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
     let extra = read_create_attributes(k, attributes)?;
     // The descriptors of the new process and thread objects (`lpProcessAttributes`,
     // `lpThreadAttributes`).
-    let process_security = abi::read_attributes(k, abi::arg(k, regs, 4)?)?.security;
-    let thread_security = abi::read_attributes(k, abi::arg(k, regs, 5)?)?.security;
+    let (process_at, thread_at) = (abi::arg(k, regs, 4)?, abi::arg(k, regs, 5)?);
+    let process_security = abi::read_attributes(k, process_at)?.security;
+    let thread_security = abi::read_attributes(k, thread_at)?.security;
     let caller = k.caller();
     let (jobs, join) = k.with_state(|sys, _, _| -> Result<(Vec<u64>, bool)> {
         let jobs = crate::job::resolve_jobs(sys, &caller, &extra.jobs)?;
