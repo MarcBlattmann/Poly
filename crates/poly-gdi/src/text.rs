@@ -273,6 +273,10 @@ struct Wrap {
     /// `DT_EDITCONTROL`: a word wider than the line is broken between
     /// characters.
     break_words: bool,
+    /// The drawing call without `DT_EDITCONTROL` (`DrawTextW.yaml`,
+    /// `last_line`): a line wider than the rectangle that ends at an explicit
+    /// line break is followed by an empty line.
+    empty_after_wide: bool,
 }
 
 /// The lines of a paragraph `t[s..e]` wrapped at blanks: a blank that fits
@@ -321,7 +325,8 @@ fn wrap(tf: &Typeface<'_>, t: &[Ch], s: usize, e: usize, wr: Wrap, tabs: Tabs, o
 }
 
 /// The lines of `t`: one for a single line, else one for every line break
-/// (a break at the very end adds an empty line), wrapped when asked.
+/// (a break at the very end adds an empty line, which `draw_text_ex` takes
+/// off again), wrapped when asked.
 fn lines(tf: &Typeface<'_>, t: &[Ch], single: bool, wr: Option<Wrap>, tabs: Tabs) -> Vec<Ln> {
     let mut out = Vec::new();
     if single {
@@ -332,7 +337,16 @@ fn lines(tf: &Typeface<'_>, t: &[Ch], single: bool, wr: Option<Wrap>, tabs: Tabs
     loop {
         let p = (start..t.len()).find(|&i| matches!(unit(t[i]), LF | CR)).unwrap_or(t.len());
         match wr {
-            Some(wr) => wrap(tf, t, start, p, wr, tabs, &mut out),
+            Some(wr) => {
+                wrap(tf, t, start, p, wr, tabs, &mut out);
+                // The line that ends at the break is wider than the room (a
+                // word wider than the rectangle; with a blank behind it the
+                // wrap itself has left an empty line already).
+                let wide = out.last().is_some_and(|l| line_width(tf, &t[l.a..l.b], tabs) > wr.width);
+                if wr.empty_after_wide && p < t.len() && wide {
+                    out.push(Ln { a: p, b: p, next: p });
+                }
+            }
             None => out.push(Ln { a: start, b: p, next: p }),
         }
         if p >= t.len() {
@@ -413,9 +427,9 @@ struct Shown {
 /// (`DrawTextW.yaml`, ellipsis). `DT_WORD_ELLIPSIS` cuts every line that
 /// is too wide and never takes over what follows. `DT_END_ELLIPSIS` and
 /// `DT_PATH_ELLIPSIS` act on the last line only: the one that holds the
-/// end of the text (not the empty line a break at the very end makes: the
-/// line before it), or, when the height left lines out, the last line laid
-/// out, which then takes all the text that is left, its line breaks as
+/// end of the text (`all` has no empty line after a break at the very end:
+/// the line before it), or, when the height left lines out, the last line
+/// laid out, which then takes all the text that is left, its line breaks as
 /// characters without width. `DT_PATH_ELLIPSIS` gives a cut line the path
 /// form.
 fn ellipsize(tf: &Typeface<'_>, t: &[Ch], all: &[Ln], n: usize, f: Format, width: i32, tabs: Tabs) -> Shown {
@@ -442,8 +456,7 @@ fn ellipsize(tf: &Typeface<'_>, t: &[Ch], all: &[Ln], n: usize, f: Format, width
             shown[last] = fitted;
             took_rest = true;
         } else {
-            let ends_in_break = t.last().is_some_and(|&c| matches!(unit(c), LF | CR));
-            let last = if n >= 2 && all[n - 1].a == t.len() && ends_in_break { n - 2 } else { n - 1 };
+            let last = n - 1;
             if !cut[last] {
                 let fitted = fit(&shown[last]);
                 if fitted != shown[last] {
@@ -561,8 +574,17 @@ impl Gdi {
         }
         let tabs = Tabs { expand: f.expand_tabs(), stop: f.tab_chars.saturating_mul(tm.ave_char_width).max(1) };
         let edit = f.has(DT_EDITCONTROL);
-        let wr = f.wraps().then_some(Wrap { width, break_words: edit });
-        let all = lines(&tf, &t, single, wr, tabs);
+        let wr = f.wraps().then_some(Wrap { width, break_words: edit, empty_after_wide: !edit && !calc });
+        let mut all = lines(&tf, &t, single, wr, tabs);
+        // A break at the very end of the text leaves an empty last line
+        // (`DrawTextW.yaml`, `last_line`). It is no line of the layout:
+        // without `DT_EDITCONTROL` it is counted on top of the lines laid
+        // out, whatever the height, with it it does not exist.
+        let final_break = !single && t.last().is_some_and(|&c| matches!(unit(c), LF | CR));
+        if final_break {
+            all.pop();
+        }
+        let empty_last = usize::from(final_break && !edit);
         // The lines laid out; measuring and `DT_NOCLIP` lay out every line.
         let noclip = f.has(DT_NOCLIP);
         let n = if calc || noclip || single {
@@ -581,11 +603,9 @@ impl Gdi {
         let drawn = if shown.took_rest { text.len() } else { at[all[n - 1].next.min(t.len())].min(text.len()) };
         let contents = shown.lines;
         let widths: Vec<i32> = contents.iter().map(|l| line_width(&tf, l, tabs)).collect();
-        // A last line that took the rest of the text counts the empty line
-        // a break at the very end of the text makes, though nothing of it is
-        // shown (`DrawTextW.yaml`, ellipsis).
-        let counted =
-            contents.len() + usize::from(shown.took_rest && t.last().is_some_and(|&c| matches!(unit(c), LF | CR)));
+        // The empty last line after a final break counts, though nothing of
+        // it is shown.
+        let counted = contents.len() + empty_last;
         let total = h.saturating_mul(counted as i32);
         let room = rect.bottom - rect.top - h;
         let vertical = f.vertical();
