@@ -375,3 +375,163 @@ fn exec_as_root_and_after_dropping_root() {
     let (c, _) = a.exec(&ExecFile { uid: BOB, perm: 0o4755, ..plain });
     assert_eq!((c.caps.permitted, c.caps.ambient), (CapSet::EMPTY, CapSet::EMPTY));
 }
+
+// ---- secure bits (the spec sheet of linux/api/pkg/seccomp_prctl) ----------
+
+#[test]
+fn every_secure_bit_can_be_set_and_higher_bits_are_eperm() {
+    let mut c = Creds::root();
+    assert_eq!(c.securebits(), 0);
+    // Each of the twelve bits by itself, a lock also without its base bit.
+    for bit in 0..12 {
+        let mut one = Creds::root();
+        one.set_securebits(1 << bit).unwrap();
+        assert_eq!(one.securebits(), 1 << bit);
+    }
+    // The value is replaced as a whole.
+    for v in [0x4, 0x10, 0x40, 0x100, 0x400, 0x554, 0x5, 0] {
+        c.set_securebits(v).unwrap();
+        assert_eq!(u64::from(c.securebits()), v);
+    }
+    c.set_securebits(0x5).unwrap();
+    for v in [0x1000, 0x1_0000, 0x1004, 1 << 32, u64::MAX] {
+        assert_eq!(c.set_securebits(v), Err(Errno::EPERM), "{v:#x}");
+    }
+    assert_eq!(c.securebits(), 0x5, "a refused change changes nothing");
+    // KEEP_CAPS is the flag of PR_SET_KEEPCAPS.
+    c.set_securebits(0x10).unwrap();
+    assert!(c.keep_caps);
+    c.set_keep_caps(false).unwrap();
+    assert_eq!(c.securebits(), 0);
+    c.set_keep_caps(true).unwrap();
+    assert_eq!(c.securebits(), 0x10);
+}
+
+#[test]
+fn a_lock_bit_keeps_itself_and_its_base_bit() {
+    let mut c = Creds::root();
+    c.set_securebits(0xc).unwrap();
+    for v in [0, 0x8, 0x4] {
+        assert_eq!(c.set_securebits(v), Err(Errno::EPERM), "{v:#x}");
+    }
+    assert_eq!(c.securebits(), 0xc);
+    // Other bits may change in the same call.
+    c.set_securebits(0x1c).unwrap();
+    c.set_securebits(0xc).unwrap();
+    // The lock alone: its base bit must stay clear.
+    let mut c = Creds::root();
+    c.set_securebits(0x800).unwrap();
+    for v in [0xc00, 0x100, 0] {
+        assert_eq!(c.set_securebits(v), Err(Errno::EPERM), "{v:#x}");
+    }
+    c.set_securebits(0x800).unwrap();
+    c.set_securebits(0x900).unwrap();
+    assert_eq!(c.securebits(), 0x900);
+    // NOROOT with its lock: more bits may be added, none taken.
+    let mut c = Creds::root();
+    c.set_securebits(3).unwrap();
+    assert_eq!(c.set_securebits(0), Err(Errno::EPERM));
+    assert_eq!(c.set_securebits(2), Err(Errno::EPERM));
+    c.set_securebits(0x2f).unwrap();
+    assert_eq!(c.securebits(), 0x2f);
+    // PR_SET_KEEPCAPS while KEEP_CAPS is locked: EPERM for both values.
+    assert_eq!(c.set_keep_caps(false), Err(Errno::EPERM));
+    assert_eq!(c.set_keep_caps(true), Err(Errno::EPERM));
+    assert_eq!(c.securebits(), 0x2f);
+    let mut c = Creds::root();
+    c.set_securebits(0x30).unwrap();
+    assert_eq!(c.set_keep_caps(false), Err(Errno::EPERM));
+    assert_eq!(c.set_keep_caps(true), Err(Errno::EPERM));
+    assert_eq!(c.securebits(), 0x30);
+}
+
+#[test]
+fn without_setpcap_only_the_exec_pairs_change() {
+    let mut c = Creds::root();
+    c.set_securebits(0x41).unwrap();
+    c.set_resgid(Some(65534), Some(65534), Some(65534)).unwrap();
+    c.set_resuid(Some(65534), Some(65534), Some(65534)).unwrap();
+    assert!(!c.capable(cap::SETPCAP));
+    assert_eq!(c.securebits(), 0x41);
+    for v in [0x41, 0, 0x40, 0x45, 0x2041, 0x540] {
+        assert_eq!(c.set_securebits(v), Err(Errno::EPERM), "{v:#x}");
+    }
+    assert_eq!(c.securebits(), 0x41);
+    c.set_securebits(0x141).unwrap();
+    assert_eq!(c.set_securebits(0x141), Err(Errno::EPERM), "the value that is there already");
+    c.set_securebits(0x41).unwrap();
+    c.set_securebits(0xc41).unwrap();
+    assert_eq!(c.set_securebits(0x41), Err(Errno::EPERM), "locked now");
+    assert_eq!(c.securebits(), 0xc41);
+    // PR_SET_KEEPCAPS needs no capability.
+    c.set_keep_caps(true).unwrap();
+    assert_eq!(c.securebits(), 0xc51);
+    // With the capability the same value is accepted.
+    let mut r = Creds::root();
+    r.set_securebits(0x800).unwrap();
+    r.set_securebits(0x800).unwrap();
+}
+
+#[test]
+fn no_cap_ambient_raise_refuses_every_raise() {
+    let mut c = Creds::root();
+    let two = CapSet::only(cap::CHOWN).with(cap::KILL);
+    c.set_caps(CapSet::ALL, CapSet::ALL, two).unwrap();
+    c.raise_ambient(cap::CHOWN).unwrap();
+    c.set_securebits(0x40).unwrap();
+    assert_eq!(c.raise_ambient(cap::KILL), Err(Errno::EPERM));
+    assert_eq!(c.raise_ambient(cap::CHOWN), Err(Errno::EPERM), "also one that is raised already");
+    assert_eq!(c.raise_ambient(99), Err(Errno::EINVAL));
+    // What is in the set stays, and can be lowered.
+    assert_eq!(c.caps.ambient, CapSet::only(cap::CHOWN));
+    c.lower_ambient(cap::CHOWN).unwrap();
+    assert!(c.caps.ambient.is_empty());
+    c.set_securebits(0).unwrap();
+    c.raise_ambient(cap::KILL).unwrap();
+    // Fork children inherit the bits (the credentials are copied).
+    c.set_securebits(0xc0).unwrap();
+    let mut child = c.clone();
+    assert_eq!(child.securebits(), 0xc0);
+    assert_eq!(child.set_securebits(0), Err(Errno::EPERM));
+    assert_eq!(child.raise_ambient(cap::CHOWN), Err(Errno::EPERM));
+}
+
+#[test]
+fn leaving_uid_0_under_the_secure_bits() {
+    let leave = |bits: u64| {
+        let mut c = Creds::root();
+        c.set_securebits(bits).unwrap();
+        c.set_resuid(Some(65534), Some(65534), Some(65534)).unwrap();
+        c
+    };
+    // Normally both sets become empty, and a capset cannot bring one back.
+    let mut c = leave(0);
+    assert!(c.caps.permitted.is_empty() && c.caps.effective.is_empty());
+    assert_eq!(c.set_caps(CapSet::only(cap::KILL), CapSet::only(cap::KILL), CapSet::EMPTY), Err(Errno::EPERM));
+    // NO_SETUID_FIXUP: both stay as they were.
+    let c = leave(0x4);
+    assert_eq!((c.caps.permitted, c.caps.effective), (CapSet::ALL, CapSet::ALL));
+    // KEEP_CAPS: the permitted set stays, the effective one is emptied and
+    // can be filled again; the bit is still set.
+    let mut c = leave(0x10);
+    assert_eq!((c.caps.permitted, c.caps.effective), (CapSet::ALL, CapSet::EMPTY));
+    c.set_caps(CapSet::only(cap::KILL), CapSet::ALL, CapSet::EMPTY).unwrap();
+    assert_eq!(c.securebits(), 0x10);
+    // setfsuid under NO_SETUID_FIXUP leaves the effective set alone too.
+    let mut c = Creds::root();
+    c.set_securebits(0x4).unwrap();
+    c.set_fsuid(65534);
+    assert_eq!(c.caps.effective, CapSet::ALL);
+}
+
+#[test]
+fn noroot_gives_root_nothing_at_exec() {
+    let plain = ExecFile { uid: 0, gid: 0, perm: 0o755, nosuid: false };
+    let mut c = Creds::root();
+    c.set_securebits(0x1).unwrap();
+    let (after, _) = c.exec(&plain);
+    assert!(after.caps.permitted.is_empty() && after.caps.effective.is_empty());
+    assert_eq!(after.securebits(), 0x1, "kept across execve");
+    let (after, _) = Creds::root().exec(&plain);
+    assert_eq!(after.caps.permitted, CapSet::ALL);
+}

@@ -854,6 +854,27 @@ impl<L: RawLock + Default + 'static> FileSystem for Overlay<L> {
         })
     }
 
+    /// A regular file's data are in the layer that shows it: the upper
+    /// copy once there is one, else the lower file. A writable shared
+    /// mapping copies the file up first (the spec sheet of
+    /// overlayfs_copyup), so what is written through it lands in the
+    /// upper layer.
+    fn backing_file(&self, ino: Ino, for_write: bool) -> Result<Option<(Arc<dyn FileSystem>, Ino)>> {
+        self.with(|o| {
+            if o.node(ino)?.kind != FileType::Regular {
+                return Ok(None);
+            }
+            if for_write {
+                let up = o.up()?.clone();
+                let u = o.ensure_upper(ino)?;
+                return Ok(Some((up.fs, u)));
+            }
+            let real = o.real(ino)?;
+            let top = real.first().ok_or(Errno::ENOENT)?;
+            Ok(Some((o.layer(top.layer).fs.clone(), top.ino)))
+        })
+    }
+
     fn readdir(&self, dir: Ino, pos: u64, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<()> {
         // Collect under the lock, hand out without it.
         let mut entries: Vec<(Ino, FileType, Vec<u8>, u64)> = Vec::new();

@@ -8,7 +8,7 @@ use poly_shell::draw::{Fonts, Text};
 use poly_shell::settings::{Change, Settings};
 use poly_shell::settings_ui::{Page, SystemInfo};
 use poly_shell::{Key, Panel, Shell, apps};
-use poly_wayland::compose::{Framebuffer, Layer, MemoryFramebuffer, Rect};
+use poly_wayland::compose::{Framebuffer, Layer, MemoryFramebuffer, Rect, Scale};
 use std::path::Path;
 
 fn leak(path: &Path) -> Option<Font<'static>> {
@@ -24,8 +24,8 @@ fn save(fb: &MemoryFramebuffer, name: &str) {
 
 fn draw(shell: &Shell, fb: &mut MemoryFramebuffer) {
     let all = Rect::new(0, 0, fb.width() as i32, fb.height() as i32);
-    shell.below().draw(fb, all, 1);
-    shell.above().draw(fb, all, 1);
+    shell.below().draw(fb, all, Scale::from_int(1));
+    shell.above().draw(fb, all, Scale::from_int(1));
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn the_shell_in_the_light_theme() {
     for page in Page::ALL {
         s.settings_window.open_at(page);
         let mut w = MemoryFramebuffer::new(1200, 800);
-        s.draw_settings(&mut w, 1200, 800, 1, &info, 1_793_491_200);
+        s.draw_settings(&mut w, 1200, 800, Scale::from_int(1), &info, 1_793_491_200);
         let name = page.label().to_lowercase().replace(" & ", "-").replace(' ', "-");
         save(&w, &format!("light-settings-{name}-1200.png"));
         assert_eq!(w.pixel(10, 700), Some(poly_shell::theme::LIGHT.s0), "{page:?}: the light ground");

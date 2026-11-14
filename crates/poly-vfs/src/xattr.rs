@@ -469,7 +469,7 @@ impl NodeRef {
         let mut perm = (attr.perm & !0o777) | acl.perm;
         // As chmod(2): the set-group-ID bit goes for a caller outside the
         // file's group without CAP_FSETID.
-        if !cred.has(cap::FSETID) && !cred.in_group(attr.gid) {
+        if !cred.has_over(cap::FSETID, &attr) && !cred.in_group(attr.gid) {
             perm &= !crate::S_ISGID;
         }
         fs.setattr(self.ino(), &SetAttr { perm: Some(perm), ..SetAttr::default() }).map(|_| ())

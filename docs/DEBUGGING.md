@@ -1423,6 +1423,9 @@ more arguments make a trace small enough to run to its end:
   under the process's `poly.exits` line when it ends (`linux:   trail pid 86:
   112505.1 strace: pid 86 futex(...) = 0`). A long run is not slowed down, and
   the calls that led to an exit with status 0 that nobody expected can be read.
+  A process a fault kills (`SIGSEGV`, `SIGTRAP`, ...) gets a `killed by signal
+  N (fault)` line with its trail too, before the line that names the fault's
+  address.
 
 `cargo xtask chromium STEP...` takes `POLY_CHROMIUM_APPEND` (more kernel
 arguments, as `chromium run`) and `POLY_CHROMIUM_LOG` (a file for the whole

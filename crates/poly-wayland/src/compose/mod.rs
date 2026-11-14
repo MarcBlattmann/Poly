@@ -9,18 +9,21 @@
 //! virtio-gpu's `B8G8R8X8` resources and Linux's `XRGB8888` name too.
 //!
 //! Coordinates are logical (what clients and the frame are laid out in)
-//! until rendering, which multiplies them by the output's integer scale
-//! (HiDPI): a window whose buffer scale equals the output's is copied pixel
-//! for pixel, others are scaled by nearest neighbour.
+//! until rendering, which converts them by the output's [`Scale`] (HiDPI,
+//! 100 % to 800 %, fractions included; ADR 0179): a window whose buffer
+//! matches the output's pixels is copied pixel for pixel, others are scaled
+//! (bilinear when shrunk, nearest neighbour otherwise).
 
 mod busy;
 mod frame;
 pub mod paint;
 mod render;
+mod scale;
 mod scene;
 mod text;
 
 pub use frame::{BORDER, BUTTON_GAP, CLOSE_SIZE, CORNER_RADIUS, TITLE_HEIGHT, Theme};
+pub use scale::{Scale, UNIT as SCALE_UNIT};
 pub use scene::{
     BUSY_PHASES, BUSY_SIZE, Backdrop, CURSOR_SIZE, Content, CursorLook, Hit, Placement, Scene, View, Window, WindowId,
     buffer_point,
@@ -86,17 +89,13 @@ impl Rect {
         Rect::new(self.x.saturating_add(dx), self.y.saturating_add(dy), self.width, self.height)
     }
 
-    /// Every coordinate multiplied by `s`.
-    pub fn scale(&self, s: i32) -> Rect {
-        Rect::new(
-            self.x.saturating_mul(s),
-            self.y.saturating_mul(s),
-            self.width.saturating_mul(s),
-            self.height.saturating_mul(s),
-        )
+    /// Logical to physical pixels by the edges ([`Scale::rect`]).
+    pub fn scale(&self, s: Scale) -> Rect {
+        s.rect(*self)
     }
 
-    /// Divided by `s`, rounded outwards (buffer pixels to logical ones).
+    /// Divided by the whole buffer scale `s`, rounded outwards (buffer
+    /// pixels to logical ones).
     pub fn scale_down_out(&self, s: i32) -> Rect {
         if s <= 1 {
             return *self;
@@ -130,9 +129,9 @@ pub trait Framebuffer {
 /// [`Scene::damage_logical`].
 pub trait Layer {
     /// Draw the part of the layer inside `clip` (physical pixels, inside
-    /// the framebuffer) for an output of integer scale `scale`. A layer
-    /// below the windows must cover all of `clip`.
-    fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: i32);
+    /// the framebuffer) for an output of scale `scale`. A layer below the
+    /// windows must cover all of `clip`.
+    fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: Scale);
 }
 
 /// A framebuffer in memory: the compositor's off-screen target until the

@@ -41,7 +41,7 @@ use crate::tz::TimeZone;
 use alloc::string::String;
 use alloc::vec::Vec;
 use poly_dbus::notifications::Notify;
-use poly_wayland::compose::{Framebuffer, Layer, Rect, WindowId};
+use poly_wayland::compose::{Framebuffer, Layer, Rect, Scale, WindowId};
 
 pub use panels::{ControlView, Panel};
 
@@ -479,7 +479,7 @@ impl Shell {
             && ((0..rt::HEIGHT).contains(&self.pointer.1) || self.motion.drawn(self.now_ms).is_some())
     }
 
-    fn draw_edge(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
+    fn draw_edge(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale) {
         if !self.edge_shows() {
             return;
         }
@@ -490,8 +490,8 @@ impl Shell {
                 continue;
             }
             match self.motion.drawn(self.now_ms) {
-                Some((_, g, h)) => g.chrome(rt::HEIGHT, h, s).outline(fb, cl, self.width * s, s, fg(), alpha),
-                None => fill(fb, cl, Rect::new(0, rt::HEIGHT * s, self.width * s, s), fg(), alpha),
+                Some((_, g, h)) => g.chrome(rt::HEIGHT, h, s).outline(fb, cl, self.width * s, s.line(1), fg(), alpha),
+                None => fill(fb, cl, Rect::new(0, rt::HEIGHT * s, self.width * s, s.line(1)), fg(), alpha),
             }
         }
     }
@@ -682,7 +682,7 @@ impl Shell {
     /// What the surface covers now, logical.
     fn current_extent(&self) -> Rect {
         match self.motion.drawn(self.now_ms) {
-            Some((_, g, h)) => g.chrome(rt::HEIGHT, h, 1).bounds(),
+            Some((_, g, h)) => g.chrome(rt::HEIGHT, h, Scale::ONE).bounds(),
             None => Rect::default(),
         }
     }
@@ -1040,7 +1040,7 @@ impl Shell {
     // The settings window's contents.
 
     /// Draw the settings window, `w` × `h` logical at scale `s`.
-    pub fn draw_settings(&self, fb: &mut dyn Framebuffer, w: i32, h: i32, s: i32, info: &SystemInfo, utc: i64) {
+    pub fn draw_settings(&self, fb: &mut dyn Framebuffer, w: i32, h: i32, s: Scale, info: &SystemInfo, utc: i64) {
         let now = self.local_time(utc);
         let cx = Context { settings: &self.settings, info, text: &self.text, now: &now, utc, pictures: &self.pictures };
         self.settings_window.draw(fb, w, h, s, &cx);
@@ -1105,14 +1105,14 @@ impl Shell {
         if n == 1 { "1 new notification".into() } else { alloc::format!("{n} new notifications") }
     }
 
-    fn draw_ridge(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
+    fn draw_ridge(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale) {
         let ridge = self.ridge_rect().scale(s);
         if ridge.intersect(&clip).is_empty() {
             return;
         }
         fill(fb, clip, ridge, crate::theme::pal().bar, 255);
         let l = self.ridge_layout();
-        let fs = s as f32;
+        let fs = s.factor();
         let icon_y = ((rt::HEIGHT - rt::ICON) / 2 * s) as f32;
         // The system menu: Lucide's dashed circle.
         lucide::CIRCLE_DASHED.draw(fb, clip, (rt::MENU_ICON_X * s) as f32, icon_y, (rt::ICON * s) as f32, fg(), 255);
@@ -1157,7 +1157,7 @@ impl Shell {
     // -----------------------------------------------------------------
     // The surface.
 
-    fn draw_surface(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
+    fn draw_surface(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale) {
         let Some((kind, g, h)) = self.motion.drawn(self.now_ms) else { return };
         let shape = g.chrome(rt::HEIGHT, h, s);
         if shape.bounds().intersect(&clip).is_empty() {
@@ -1181,9 +1181,9 @@ impl Shell {
         }
     }
 
-    fn draw_launcher(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, top: i32) {
+    fn draw_launcher(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale, top: i32) {
         let l = self.launcher_layout(top);
-        let fs = s as f32;
+        let fs = s.factor();
         // The search row: Lucide's search glyph at 60 %, the text or the
         // placeholder, the caret.
         let search = l.search.scale(s);
@@ -1213,17 +1213,18 @@ impl Shell {
             self.text.draw_style(fb, clip, tx as f32, baseline, right, query, st, fg(), 255)
         };
         let caret_h = 18 * s;
-        fill(fb, clip, Rect::new(end as i32 + s / 2, cy - caret_h / 2, s.max(1), caret_h), fg(), 255);
+        let caret_w = s.line(1);
+        fill(fb, clip, Rect::new(end as i32 + caret_w / 2, cy - caret_h / 2, caret_w, caret_h), fg(), 255);
         if l.rows == 0 {
             return;
         }
         let w = l.body.width * s;
         let bx = l.body.x * s;
-        fill(fb, clip, Rect::new(bx, search.bottom(), w, s), fg(), lt::DIVIDER_ALPHA);
+        fill(fb, clip, Rect::new(bx, search.bottom(), w, s.line(1)), fg(), lt::DIVIDER_ALPHA);
         // The section title: 11 px medium at 50 %, `px-2.5 pt-2`.
         let sst = Style::new(Face::Medium, lt::SECTION_SIZE).scaled(s);
         let sx = bx + (lt::LIST_PADDING + lt::ROW_PADDING) * s;
-        let sb = search.bottom() + s + 8 * s + (sst.size * 1.5 / 2.0 + self.text.cap(sst) / 2.0) as i32;
+        let sb = search.bottom() + s.line(1) + 8 * s + (sst.size * 1.5 / 2.0 + self.text.cap(sst) / 2.0) as i32;
         let windows = self.window_rows();
         let first = if windows > 0 { "Windows" } else { "Apps" };
         self.text.draw_style(fb, clip, sx as f32, sb, bx + w, first, sst, fg(), lt::SECTION_ALPHA);
@@ -1282,7 +1283,7 @@ impl Shell {
         // The footer: what Enter does.
         if let Some(f) = l.footer {
             let f = f.scale(s);
-            fill(fb, clip, Rect::new(f.x, f.y - s, f.width, s), fg(), lt::DIVIDER_ALPHA);
+            fill(fb, clip, Rect::new(f.x, f.y - s.line(1), f.width, s.line(1)), fg(), lt::DIVIDER_ALPHA);
             let fst = Style::new(Face::Sans, lt::FOOTER_SIZE).scaled(s);
             let cst = Style::new(Face::Sans, lt::CHIP_SIZE).scaled(s);
             let chip = "\u{21b5}";
@@ -1297,11 +1298,11 @@ impl Shell {
             let lw = self.text.measure(label, fst) as i32;
             let lx = x - 6 * s - lw;
             let lb = self.text.centre(f.y, f.height, fst);
-            self.text.draw_style(fb, clip, lx as f32, lb, lx + lw + s, label, fst, fg(), lt::SUBTITLE_ALPHA);
+            self.text.draw_style(fb, clip, lx as f32, lb, lx + lw + s.line(1), label, fst, fg(), lt::SUBTITLE_ALPHA);
         }
     }
 
-    fn draw_switcher(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32, top: i32) {
+    fn draw_switcher(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale, top: i32) {
         let (_, cards) = self.switcher_layout(top);
         let st = Style::new(Face::Sans, sw::TEXT_SIZE).scaled(s);
         for (i, (card, e)) in cards.iter().zip(self.switcher.entries()).enumerate() {
@@ -1333,10 +1334,10 @@ impl Shell {
             let tr = Rect::new(area.x + (area.width - tw) / 2, area.y + (area.height - thh) / 2, tw, thh);
             let vis = tr.intersect(&clip);
             for y in vis.y..vis.bottom() {
-                let sy = ((y - tr.y) / s) as u32;
+                let sy = s.to_logical(y - tr.y) as u32;
                 let row = fb.row_mut(y as u32);
                 for x in vis.x..vis.right() {
-                    let sx = ((x - tr.x) / s) as u32;
+                    let sx = s.to_logical(x - tr.x) as u32;
                     let p = th.pixels.get((sy * th.width + sx) as usize).copied().unwrap_or(0);
                     row[x as usize] = if e.minimized { draw::mix(row[x as usize], p, 128) } else { p | 0xff00_0000 };
                 }
@@ -1344,7 +1345,7 @@ impl Shell {
         }
     }
 
-    fn draw_snap(&self, fb: &mut dyn Framebuffer, clip: Rect, s: i32) {
+    fn draw_snap(&self, fb: &mut dyn Framebuffer, clip: Rect, s: Scale) {
         let Some(r) = self.snap else { return };
         let r = r.scale(s);
         if r.intersect(&clip).is_empty() {
@@ -1377,23 +1378,18 @@ pub struct Below<'a>(&'a Shell);
 pub struct Above<'a>(&'a Shell);
 
 impl Layer for Below<'_> {
-    fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: i32) {
+    fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: Scale) {
         let sh = self.0;
-        wallpaper::Cache::draw(
-            &sh.wall,
-            fb,
-            clip,
-            &sh.settings.wallpaper,
-            sh.width * scale,
-            sh.height * scale,
-            &sh.pictures,
-        );
+        // The picture is the output's own size, all its physical pixels (a
+        // fractional scale's logical size times it can fall a pixel short).
+        let (w, h) = (fb.width() as i32, fb.height() as i32);
+        wallpaper::Cache::draw(&sh.wall, fb, clip, &sh.settings.wallpaper, w, h, &sh.pictures);
         sh.draw_ridge(fb, clip, scale);
     }
 }
 
 impl Layer for Above<'_> {
-    fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: i32) {
+    fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: Scale) {
         self.0.draw_snap(fb, clip, scale);
         self.0.draw_surface(fb, clip, scale);
         self.0.draw_edge(fb, clip, scale);
