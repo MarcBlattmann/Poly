@@ -118,6 +118,10 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("CreateMutexW", "api-ms-win-core-synch-l1-1-0"),
     ("ReleaseMutex", "api-ms-win-core-synch-l1-1-0"),
     ("CreateSemaphoreW", "api-ms-win-core-synch-l1-1-0"),
+    // The ANSI forms (ADR 0155 step 11: V8 makes its semaphores with `CreateSemaphoreA`).
+    ("CreateEventA", "api-ms-win-core-synch-l1-1-0"),
+    ("CreateMutexA", "api-ms-win-core-synch-l1-1-0"),
+    ("CreateSemaphoreA", "api-ms-win-core-synch-l1-1-0"),
     ("ReleaseSemaphore", "api-ms-win-core-synch-l1-1-0"),
     ("WaitForSingleObject", "api-ms-win-core-synch-l1-1-0"),
     ("WaitForSingleObjectEx", "api-ms-win-core-synch-l1-1-0"),
@@ -423,6 +427,10 @@ pub const KERNEL32_NTDLL_FORWARDS: &[(&str, &str)] = &[
     ("RtlVirtualUnwind", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlUnwindEx", "api-ms-win-core-rtlsupport-l1-1-0"),
     ("RtlPcToFileHeader", "api-ms-win-core-rtlsupport-l1-1-0"),
+    // Function tables of code made at run time (Learn: "RtlAddFunctionTable", kernel32.dll;
+    // ADR 0155 step 11).
+    ("RtlAddFunctionTable", "api-ms-win-core-rtlsupport-l1-1-0"),
+    ("RtlDeleteFunctionTable", "api-ms-win-core-rtlsupport-l1-1-0"),
 ];
 
 /// The exports of our `oleaut32.dll` (ADR 0087) with the ordinals programs

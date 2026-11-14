@@ -276,6 +276,46 @@ pub unsafe extern "system" fn CreateSemaphoreW(
     }
 }
 
+/// The wide form of an optional ANSI object name (Learn: the ANSI functions take the name in the
+/// ANSI code page): `None` for no name, `Some` with the NUL.
+unsafe fn ansi_name(name: *const u8) -> Option<alloc::vec::Vec<u16>> {
+    // SAFETY: the caller's string, or NULL.
+    unsafe { ansi_arg(name) }.map(|w| with_nul(&w))
+}
+
+/// `CreateSemaphoreA` (Learn: the ANSI form of `CreateSemaphoreW`). V8's semaphores are made with
+/// it (`CreateSemaphoreA(NULL, 0, 0x7FFFFFFF, NULL)` in every Chrome renderer, ADR 0155 step 11).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateSemaphoreA(
+    security: *const u8,
+    initial: i32,
+    maximum: i32,
+    name: *const u8,
+) -> Handle {
+    // SAFETY: the caller's name, or NULL.
+    let w = unsafe { ansi_name(name) };
+    // SAFETY: a NUL-terminated name or NULL; the rest as given.
+    unsafe { CreateSemaphoreW(security, initial, maximum, w.as_ref().map_or(core::ptr::null(), |w| w.as_ptr())) }
+}
+
+/// `CreateEventA` (Learn: the ANSI form of `CreateEventW`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateEventA(security: *const u8, manual: i32, initial: i32, name: *const u8) -> Handle {
+    // SAFETY: the caller's name, or NULL.
+    let w = unsafe { ansi_name(name) };
+    // SAFETY: a NUL-terminated name or NULL; the rest as given.
+    unsafe { CreateEventW(security, manual, initial, w.as_ref().map_or(core::ptr::null(), |w| w.as_ptr())) }
+}
+
+/// `CreateMutexA` (Learn: the ANSI form of `CreateMutexW`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateMutexA(security: *const u8, owner: i32, name: *const u8) -> Handle {
+    // SAFETY: the caller's name, or NULL.
+    let w = unsafe { ansi_name(name) };
+    // SAFETY: a NUL-terminated name or NULL; the rest as given.
+    unsafe { CreateMutexW(security, owner, w.as_ref().map_or(core::ptr::null(), |w| w.as_ptr())) }
+}
+
 /// `ReleaseSemaphore`: going over the maximum is `ERROR_TOO_MANY_POSTS`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ReleaseSemaphore(semaphore: Handle, count: i32, previous: *mut i32) -> i32 {

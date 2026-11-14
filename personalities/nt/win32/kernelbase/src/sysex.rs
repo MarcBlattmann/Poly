@@ -242,9 +242,8 @@ fn place(
 /// `VirtualAlloc2`: `VirtualAlloc` in another process, with extended
 /// parameters (address requirements are honoured; NUMA nodes and attribute
 /// flags are ignored; partitions and user-physical pages are
-/// `ERROR_NOT_SUPPORTED`). A placeholder (`MEM_RESERVE_PLACEHOLDER`) is an
-/// ordinary `PAGE_NOACCESS` reservation; `MEM_REPLACE_PLACEHOLDER` commits
-/// (or keeps) the reservation at the address.
+/// `ERROR_NOT_SUPPORTED`). Placeholders (`MEM_RESERVE_PLACEHOLDER`,
+/// `MEM_REPLACE_PLACEHOLDER`) are the kernel's (`poly_personality_nt::vm`, ADR 0155 step 11).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn VirtualAlloc2(
     process: Handle,
@@ -261,22 +260,15 @@ pub unsafe extern "system" fn VirtualAlloc2(
         Ok(r) => r,
         Err(e) => return fail(e, core::ptr::null_mut()),
     };
-    let mut kind = kind;
-    if kind & MEM_RESERVE_PLACEHOLDER != 0 {
-        if protect != PAGE_NOACCESS || kind & MEM_RESERVE == 0 {
-            return fail(ERROR_INVALID_PARAMETER, core::ptr::null_mut());
-        }
-        kind &= !MEM_RESERVE_PLACEHOLDER;
+    if kind & MEM_RESERVE_PLACEHOLDER != 0 && protect != PAGE_NOACCESS {
+        return fail(ERROR_INVALID_PARAMETER, core::ptr::null_mut());
     }
-    if kind & MEM_REPLACE_PLACEHOLDER != 0 {
-        // The placeholder is the reservation already there: commit in it.
-        if address.is_null() || size == 0 {
-            return fail(ERROR_INVALID_PARAMETER, core::ptr::null_mut());
-        }
-        kind &= !(MEM_REPLACE_PLACEHOLDER | MEM_RESERVE);
-        if kind == 0 {
-            return address;
-        }
+    // Learn: a replacement names the placeholder's base and size, and its address requirements
+    // are all zeroes.
+    if kind & MEM_REPLACE_PLACEHOLDER != 0
+        && (address.is_null() || size == 0 || req.alignment != 0 || req.lowest != 0 || req.highest != 0)
+    {
+        return fail(ERROR_INVALID_PARAMETER, core::ptr::null_mut());
     }
     if address.is_null() && (req.alignment != 0 || req.lowest != 0 || req.highest != 0) {
         let mut take = |at: usize| {
@@ -297,8 +289,8 @@ pub unsafe extern "system" fn VirtualAlloc2(
 }
 
 /// `MapViewOfFile3`: `MapViewOfFile` in another process, with extended
-/// parameters. `MEM_REPLACE_PLACEHOLDER` maps over a reservation at
-/// `address` (the reservation is released and the view mapped there).
+/// parameters. `MEM_REPLACE_PLACEHOLDER` maps the view in place of the placeholder at
+/// `address` (the kernel's, `NtMapViewOfSection` with that type).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn MapViewOfFile3(
     mapping: Handle,
@@ -321,7 +313,10 @@ pub unsafe extern "system" fn MapViewOfFile3(
     if replace && (address.is_null() || size == 0) {
         return fail(ERROR_INVALID_PARAMETER, core::ptr::null_mut());
     }
-    let alloc = kind & !MEM_REPLACE_PLACEHOLDER & !MEM_RESERVE_PLACEHOLDER;
+    if kind & MEM_RESERVE_PLACEHOLDER != 0 {
+        return fail(ERROR_INVALID_PARAMETER, core::ptr::null_mut());
+    }
+    let alloc = kind;
     let map_at = |at: usize| -> Result<*mut u8, NtStatus> {
         let (mut base, mut sz, mut off) = (at as *mut u8, size, offset as i64);
         // SAFETY: valid in/out pointers.
@@ -331,21 +326,9 @@ pub unsafe extern "system" fn MapViewOfFile3(
         if st.is_success() { Ok(base) } else { Err(st) }
     };
     if replace {
-        let (mut base, mut sz) = (address, size);
-        // SAFETY: the reservation the caller holds at `address`.
-        let st = unsafe { nt::NtFreeVirtualMemory(process, &mut base, &mut sz, MEM_RELEASE) };
-        if !st.is_success() {
-            return fail_status(st, core::ptr::null_mut());
-        }
         return match map_at(address as usize) {
             Ok(p) => p,
-            Err(st) => {
-                // Put the reservation back.
-                let (mut b, mut s) = (address, size);
-                // SAFETY: valid in/out pointers.
-                unsafe { nt::NtAllocateVirtualMemory(process, &mut b, 0, &mut s, MEM_RESERVE, PAGE_NOACCESS) };
-                fail_status(st, core::ptr::null_mut())
-            }
+            Err(st) => fail_status(st, core::ptr::null_mut()),
         };
     }
     if address.is_null() && (req.alignment != 0 || req.lowest != 0 || req.highest != 0) {
@@ -359,35 +342,17 @@ pub unsafe extern "system" fn MapViewOfFile3(
     }
 }
 
-/// `UnmapViewOfFile2`: `MEM_PRESERVE_PLACEHOLDER` leaves the address range
-/// reserved (a placeholder).
+/// `UnmapViewOfFile2`: `MEM_PRESERVE_PLACEHOLDER` turns a view that replaced a placeholder back
+/// into it (`NtUnmapViewOfSectionEx`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn UnmapViewOfFile2(process: Handle, base: *const u8, flags: u32) -> i32 {
     if flags & !(MEM_UNMAP_WITH_TRANSIENT_BOOST | MEM_PRESERVE_PLACEHOLDER) != 0 {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
     let process = process_of(process);
-    // The view's size, for re-reserving it.
-    let mut info = [0u8; 48];
-    let mut region = 0usize;
-    if flags & MEM_PRESERVE_PLACEHOLDER != 0 {
-        // SAFETY: valid pointers; MEMORY_BASIC_INFORMATION is 48 bytes.
-        let st = unsafe { nt::NtQueryVirtualMemory(process, base, 0, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
-        if st.is_success() {
-            region = u64::from_le_bytes(info[24..32].try_into().unwrap()) as usize;
-        }
-    }
     // SAFETY: an address; the kernel checks it.
-    let st = unsafe { nt::NtUnmapViewOfSection(process, base) };
-    if !st.is_success() {
-        return fail_status(st, FALSE);
-    }
-    if region != 0 {
-        let (mut b, mut s) = (base as *mut u8, region);
-        // SAFETY: valid in/out pointers.
-        unsafe { nt::NtAllocateVirtualMemory(process, &mut b, 0, &mut s, MEM_RESERVE, PAGE_NOACCESS) };
-    }
-    TRUE
+    let st = unsafe { nt::NtUnmapViewOfSectionEx(process, base, flags) };
+    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
 }
 
 // ----- locale, geography ---------------------------------------------------------------------------

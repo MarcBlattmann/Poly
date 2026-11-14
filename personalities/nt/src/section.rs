@@ -315,7 +315,9 @@ fn map_access(p: Protection) -> AccessMask {
 ///
 /// - `InheritDisposition` is `ViewShare` or `ViewUnmap`
 ///   (`STATUS_INVALID_PARAMETER_8`); `AllocationType` may only hold
-///   `MEM_TOP_DOWN` and `MEM_RESERVE` (`STATUS_INVALID_PARAMETER_9`); both to
+///   `MEM_TOP_DOWN`, `MEM_RESERVE` and, for a data section, `MEM_REPLACE_PLACEHOLDER` (the view
+///   replaces the placeholder of exactly its range, [`crate::vm::VirtualMemory::insert_view`])
+///   (`STATUS_INVALID_PARAMETER_9`); both to
 ///   be confirmed by the spec agent. Inheritance has no effect until
 ///   processes can be created by others.
 /// - Data sections: the view's protection must suit the section's
@@ -343,7 +345,7 @@ pub fn map_view(
     if req.inherit != VIEW_SHARE && req.inherit != VIEW_UNMAP {
         return Err(STATUS_INVALID_PARAMETER_8);
     }
-    if req.allocation_type & !(MEM_TOP_DOWN | MEM_RESERVE) != 0 {
+    if req.allocation_type & !(MEM_TOP_DOWN | MEM_RESERVE | MEM_REPLACE_PLACEHOLDER) != 0 {
         return Err(STATUS_INVALID_PARAMETER_9);
     }
     let protect = Protection::new(req.protect, false)?;
@@ -367,6 +369,10 @@ pub fn map_section(
     let top_down = req.allocation_type & MEM_TOP_DOWN != 0;
 
     let (view, source, status) = if let Some(img) = section.image() {
+        // Learn ("MapViewOfFile3"): only data views replace placeholders.
+        if req.allocation_type & MEM_REPLACE_PLACEHOLDER != 0 {
+            return Err(STATUS_INVALID_PARAMETER_9);
+        }
         if req.offset.is_some_and(|o| o != 0) {
             return Err(STATUS_INVALID_PARAMETER_6);
         }
@@ -390,6 +396,7 @@ pub fn map_section(
             protect: PAGE_EXECUTE_WRITECOPY,
             info,
             pages,
+            replace: false,
         };
         let mut status = STATUS_SUCCESS;
         if req.base == 0 {
@@ -450,8 +457,16 @@ pub fn map_section(
             max: Some(section.protect),
             reserve: section.is_reserve(),
         };
-        let view =
-            NewView { base: req.base, size, zero_bits: req.zero_bits, top_down, protect: req.protect, info, pages };
+        let view = NewView {
+            base: req.base,
+            size,
+            zero_bits: req.zero_bits,
+            top_down,
+            protect: req.protect,
+            info,
+            pages,
+            replace: req.allocation_type & MEM_REPLACE_PLACEHOLDER != 0,
+        };
         if section.is_reserve() && commit_pages > 0 {
             b.commit_section(section.backing, start, commit_pages as u64 * PAGE_SIZE);
             if let Some(SectionKind::Pagefile { committed: Some(c) }) = sys.section_mut(key).map(|s| &mut s.kind) {
@@ -490,8 +505,26 @@ pub fn map_section(
 /// `NtUnmapViewOfSection` in the calling process: `addr` is anywhere in
 /// the view. Its pages go, then its reference on the section.
 pub fn unmap_view(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backend, addr: u64) -> Result<(), NtStatus> {
+    unmap_view_ex(sys, proc, b, addr, false)
+}
+
+/// [`unmap_view`]; with `preserve` (`MEM_PRESERVE_PLACEHOLDER`) a placeholder takes the view's
+/// range: the one it replaced (Learn, "UnmapViewOfFile2"), or, for a view that replaced none,
+/// a new one (Poly's reading, to be confirmed by the spec agent; `k32test`'s Chrome tests rely on
+/// the range staying reserved).
+pub fn unmap_view_ex(
+    sys: &mut NtSystem,
+    proc: &mut NtProcess,
+    b: &mut dyn Backend,
+    addr: u64,
+    preserve: bool,
+) -> Result<(), NtStatus> {
     let a = proc.vm.remove_view(addr)?;
     b.release(a.base, a.size);
+    if preserve {
+        // The range was the view's a moment ago: it is free.
+        let _ = proc.vm.put_placeholder(a.base, a.size);
+    }
     if let AllocKind::View(v) = a.kind {
         let _ = sys.objects.dereference(v.object);
     }
