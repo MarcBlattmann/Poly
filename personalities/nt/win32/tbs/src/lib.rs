@@ -7,14 +7,7 @@
 
 use poly_win32_rt as _;
 
-poly_win32_rt::fail_exports!(
-    "tbs",
-    value(0x8028_400F),
-    [
-        Tbsi_GetDeviceInfo,
-        Tbsip_Submit_Command,
-    ]
-);
+poly_win32_rt::fail_exports!("tbs", value(0x8028_400F), [Tbsi_GetDeviceInfo, Tbsip_Submit_Command,]);
 
 /// The entry point (`DllMain`): nothing to set up.
 #[unsafe(no_mangle)]

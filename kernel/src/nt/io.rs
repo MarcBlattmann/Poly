@@ -166,7 +166,11 @@ pub(super) fn drain() {
                 );
             }
             if c.iosb != 0 && m.write(c.iosb, &c.iosb_bytes()).is_err() {
-                crate::kprintln!("nt: p{}: a completion's status block could not be written at {:#x}", c.process.0, c.iosb);
+                crate::kprintln!(
+                    "nt: p{}: a completion's status block could not be written at {:#x}",
+                    c.process.0,
+                    c.iosb
+                );
             }
         }
         drop(memory);

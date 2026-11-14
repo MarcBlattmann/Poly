@@ -879,9 +879,7 @@ impl IoState {
             .instances
             .values()
             .map(|i| {
-                let chan = |c: &Chan| {
-                    alloc::format!("{}B/{}m/{}r", c.available(), c.entries.len(), c.readers.len())
-                };
+                let chan = |c: &Chan| alloc::format!("{}B/{}m/{}r", c.available(), c.entries.len(), c.readers.len());
                 alloc::format!(
                     "pipe #{} {} {:?} server [{}] client [{}] to-server {} to-client {} listeners {}",
                     i.id,

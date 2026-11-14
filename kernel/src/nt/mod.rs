@@ -118,12 +118,17 @@ pub static POWRPROF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/powrprof.
 /// Our `uxtheme.dll` (ADR 0155, step 9): no visual style is active.
 pub static UXTHEME: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uxtheme.dll"));
 /// The DLLs Chrome's browser delay-loads once a page loads (ADR 0155, step 12): `setupapi`,
-/// `pdh`, `tbs`, `cfgmgr32` and `wintrust`, whose exports exist and fail.
+/// `pdh`, `tbs`, `cfgmgr32`, `wintrust`, `ncrypt`, `propsys`, `wevtapi` and `hid`, whose exports
+/// exist and fail.
 pub static SETUPAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/setupapi.dll"));
 pub static PDH: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pdh.dll"));
 pub static TBS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/tbs.dll"));
 pub static CFGMGR32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cfgmgr32.dll"));
 pub static WINTRUST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wintrust.dll"));
+pub static NCRYPT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ncrypt.dll"));
+pub static PROPSYS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/propsys.dll"));
+pub static WEVTAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wevtapi.dll"));
+pub static HID: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hid.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -397,11 +402,8 @@ fn waits_main(_: usize) -> usize {
                     for &o in &w.objects {
                         let kind = objects.object_type(o);
                         let name = objects.object_name(o).map(|n| alloc::string::String::from_utf16_lossy(&n));
-                        let held: Vec<String> = objects
-                            .holders(o)
-                            .iter()
-                            .map(|(p, h)| alloc::format!("p{}:{:#x}", p.0, h.0))
-                            .collect();
+                        let held: Vec<String> =
+                            objects.holders(o).iter().map(|(p, h)| alloc::format!("p{}:{:#x}", p.0, h.0)).collect();
                         line.push_str(&alloc::format!(
                             " [{:?} {} cookie {:#x} held {}]",
                             kind,

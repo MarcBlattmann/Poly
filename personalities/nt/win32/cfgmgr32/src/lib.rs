@@ -9,12 +9,7 @@ use poly_win32_rt as _;
 poly_win32_rt::fail_exports!(
     "cfgmgr32",
     value(0x34),
-    [
-        CM_Get_DevNode_PropertyW,
-        CM_Get_Device_IDW,
-        CM_Get_Parent,
-        CM_Locate_DevNodeW,
-    ]
+    [CM_Get_DevNode_PropertyW, CM_Get_Device_IDW, CM_Get_Parent, CM_Locate_DevNodeW,]
 );
 
 /// The entry point (`DllMain`): nothing to set up.

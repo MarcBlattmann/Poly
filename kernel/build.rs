@@ -95,6 +95,10 @@ fn embed_win32() {
         "tbs.dll",
         "cfgmgr32.dll",
         "wintrust.dll",
+        "ncrypt.dll",
+        "propsys.dll",
+        "wevtapi.dll",
+        "hid.dll",
     ] {
         match &dir {
             Some(d) => {

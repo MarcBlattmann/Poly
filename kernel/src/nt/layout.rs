@@ -175,6 +175,10 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("tbs.dll", super::TBS),
         ("cfgmgr32.dll", super::CFGMGR32),
         ("wintrust.dll", super::WINTRUST),
+        ("ncrypt.dll", super::NCRYPT),
+        ("propsys.dll", super::PROPSYS),
+        ("wevtapi.dll", super::WEVTAPI),
+        ("hid.dll", super::HID),
     ] {
         if bytes.is_empty() {
             continue;

@@ -156,6 +156,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hid"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "httptest"
 version = "0.0.1"
 dependencies = [
@@ -222,6 +229,13 @@ dependencies = [
  "poly-crt",
  "poly-cxxeh",
  "poly-win32-crt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "ncrypt"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -453,6 +467,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "propsys"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "s1test"
 version = "0.0.1"
 dependencies = [
@@ -554,6 +575,13 @@ name = "version"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "wevtapi"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 

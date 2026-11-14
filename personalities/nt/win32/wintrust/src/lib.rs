@@ -8,13 +8,7 @@
 
 use poly_win32_rt as _;
 
-poly_win32_rt::fail_exports!(
-    "wintrust",
-    value(0x800B_0001),
-    [
-        WinVerifyTrust,
-    ]
-);
+poly_win32_rt::fail_exports!("wintrust", value(0x800B_0001), [WinVerifyTrust,]);
 
 poly_win32_rt::fail_exports!(
     "wintrust",

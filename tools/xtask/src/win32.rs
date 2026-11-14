@@ -100,6 +100,10 @@ pub const OUTPUTS: &[&str] = &[
     "tbs.dll",
     "cfgmgr32.dll",
     "wintrust.dll",
+    "ncrypt.dll",
+    "propsys.dll",
+    "wevtapi.dll",
+    "hid.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -236,6 +240,10 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/tbs",
             "personalities/nt/win32/cfgmgr32",
             "personalities/nt/win32/wintrust",
+            "personalities/nt/win32/ncrypt",
+            "personalities/nt/win32/propsys",
+            "personalities/nt/win32/wevtapi",
+            "personalities/nt/win32/hid",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
