@@ -141,6 +141,7 @@ mod hostscreen;
 mod initramfs;
 mod input;
 mod installer;
+mod installer2;
 mod ktest;
 mod libsearch;
 mod macimports;
@@ -1684,6 +1685,11 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // installer with the disk's own apt and dpkg, found in the launcher and
     // started; skipped until the packages are fetched (installer.rs, ADR 0173).
     ("linux-installer", installer::boot_test),
+    // The same app uninstalled from Files' Applications folder with Debian's
+    // apt, and an AppImage downloaded in the guest, installed, run and
+    // uninstalled; skipped until the packages are fetched (installer2.rs,
+    // ADR 0180).
+    ("linux-installer-2", installer2::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1757,6 +1763,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
             "chromium",
             "chromium-desktop",
             "linux-installer",
+            "linux-installer-2",
         ],
     ),
     // About 60 s each: 7-Zip's command line on the NT personality, one boot per

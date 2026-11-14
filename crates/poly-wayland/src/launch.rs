@@ -310,6 +310,11 @@ pub enum Control {
     /// desktop starts its own installer, which shows the package and
     /// installs nothing before its **Install** is clicked.
     Install { path: String },
+    /// `uninstall <id>`: open the installer's window to uninstall the app
+    /// with this desktop file ID (ADR 0180). Files' Applications folder
+    /// asks so; the window shows what goes and asks, and nothing is removed
+    /// before its **Uninstall** is clicked.
+    Uninstall { id: String },
     /// `rescan`: the installed apps changed (the installer added one): read
     /// them again, so the launcher offers them (ADR 0173).
     Rescan,
@@ -339,6 +344,7 @@ impl Control {
             "cancel" => valid_token(rest).then(|| Control::Cancel { token: rest.into() }),
             "open" => valid_app_id(rest).then(|| Control::Open { id: rest.into() }),
             "install" => valid_path(rest).then(|| Control::Install { path: rest.into() }),
+            "uninstall" => valid_app_id(rest).then(|| Control::Uninstall { id: rest.into() }),
             _ => None,
         }
     }
@@ -351,6 +357,7 @@ impl Control {
             Control::Cancel { token } => format!("cancel {token}\n"),
             Control::Open { id } => format!("open {id}\n"),
             Control::Install { path } => format!("install {path}\n"),
+            Control::Uninstall { id } => format!("uninstall {id}\n"),
             Control::Rescan => String::from("rescan\n"),
         }
     }
@@ -617,6 +624,8 @@ mod tests {
             Control::Open { id: "poly:Settings".into() },
             Control::Open { id: "org.example.Text Editor.desktop".into() },
             Control::Install { path: "/home/poly/Downloads/my app_1.0 (2).deb".into() },
+            Control::Uninstall { id: "galculator.desktop".into() },
+            Control::Uninstall { id: "poly-appimage-hello-pixels.desktop".into() },
             Control::Rescan,
         ];
         for c in lines {
@@ -634,6 +643,9 @@ mod tests {
         assert_eq!(Control::parse("install "), None);
         assert_eq!(Control::parse("install /tmp/a\u{1b}[2J.deb"), None);
         assert_eq!(Control::parse("rescan now"), None);
+        // Only an app ID on one line is an app to uninstall.
+        assert_eq!(Control::parse("uninstall "), None);
+        assert_eq!(Control::parse("uninstall a\u{7}b"), None);
         assert_eq!(Control::parse(" rescan \n"), Some(Control::Rescan));
     }
 }
