@@ -389,7 +389,7 @@ pub fn default_volumes(vfs: &Vfs, ctx: &FsContext) -> Vec<VolumeConfig> {
 
 impl IoState {
     /// The file a DOS path (`X:\dir\file`, or `\??\X:\dir\file`) names, as the object manager spells
-    /// it: `(\Device\PolyFs<N>, the path below that volume)`. The drive letter picks the volume.
+    /// it: `(\Device\HarddiskVolume<N>, the path below that volume)`. The drive letter picks the volume.
     pub fn dos_file_name(&self, dos: &[u16]) -> Option<(Vec<u16>, Vec<u16>)> {
         let sep = |c: u16| c == u16::from(b'\\') || c == u16::from(b'/');
         let nt_prefix = wide("\\??\\");
