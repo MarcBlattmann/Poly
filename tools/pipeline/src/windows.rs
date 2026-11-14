@@ -62,6 +62,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "shlwapi.dll",
     "shell32.dll",
     "comctl32.dll",
+    "comdlg32.dll",
     "powrprof.dll",
     "wtsapi32.dll",
     "netapi32.dll",
@@ -1346,6 +1347,9 @@ mod tests {
         // Chrome's first-stage DLLs (spec-chrome-win-5).
         let shell = image(&[("SHELL32.dll", &["SHGetKnownFolderPath"]), ("SHLWAPI.dll", &["PathMatchSpecW"])], 3);
         assert_eq!(check_image(&shell).unwrap()["shell32.dll"], ["SHGetKnownFolderPath"]);
+        // The common dialogs' tests import comdlg32 (spec-win-apps-2).
+        let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
+        assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
         let other = image(&[("winhttp.dll", &["WinHttpOpen"])], 3);
         assert!(check_image(&other).unwrap_err().contains("winhttp.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);

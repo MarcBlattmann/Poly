@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "gdi_ids",
+      "exe_sha256": "ebba8d8242ae8737b9e41bd7e824822f5006bc839487fa31c43ae75107526d38",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dHdvIGJ1dHRvbnMgd2l0aCBpZCAyMDAxOiBHZXREbGdJdGVtIGlzIHRoZSBuZXdlciBvbmUgMCB0aGUgb2xkZXIgb25lIDEKYWZ0ZXIgbW92aW5nIGEgdG8gdGhlIHRvcCBvZiB0aGUgeiBvcmRlcjogYSAxCmFmdGVyIEdXTFBfSUQgMjAwMjogR2V0RGxnSXRlbSgyMDAyKSBpcyBhIDEgR2V0RGxnQ3RybElEKGEpIDIwMDIKaGlkZGVuIGFuZCBkaXNhYmxlZCBjb250cm9scyBhcmUgZm91bmQ6IDEKYSBncmFuZGNoaWxkIGlzIG5vdCBmb3VuZCBieSB0aGUgZGlhbG9nOiAxOyBmb3VuZCBieSBpdHMgcGFyZW50OiAxCmFmdGVyIGRlc3Ryb3lpbmcgYjogaWQgMjAwMSBpcyBmb3VuZCAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "two buttons with id 2001: GetDlgItem is the newer one 0 the older one 1\nafter moving a to the top of the z order: a 1\nafter GWLP_ID 2002: GetDlgItem(2002) is a 1 GetDlgCtrlID(a) 2002\nhidden and disabled controls are found: 1\na grandchild is not found by the dialog: 1; found by its parent: 1\nafter destroying b: id 2001 is found 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    }
+  ]
+}

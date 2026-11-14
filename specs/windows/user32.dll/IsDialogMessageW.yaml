@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/IsDialogMessageW.yaml
+id: windows/api/user32.dll/IsDialogMessageW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Does the dialog's keyboard handling for a message: returns TRUE when the dialog consumed it (the caller must not translate or dispatch it).
+interface:
+  signature: "BOOL IsDialogMessageW(HWND hDlg, LPMSG lpMsg)"
+rules:
+  tab: "WM_KEYDOWN VK_TAB for a control inside the dialog moves the focus to the next control with WS_TABSTOP (skipping disabled and hidden ones and the controls without a tab stop), wraps around at the end, and sends the old control EN_KILLFOCUS and the new one EN_SETFOCUS (WM_COMMAND with the notification in the high word); the full cycle of the first template is 1003 1004 1007 1008 1 2 1002 1003"
+  arrows: "in a group of radio buttons the arrow keys (Down, Right: next; Up, Left: previous) move the focus to the neighbour in the group and check it, wrapping inside the group; each step sends WM_COMMAND with BN_CLICKED (twice per step for the radio button gaining the focus)"
+  enter: "WM_KEYDOWN VK_RETURN for the edit control or for a push button sends WM_COMMAND (BN_CLICKED) with the id of the default push button to the dialog (DM_GETDEFID: 1 for the first template; after DM_SETDEFID(2): 2, whichever control has the focus; a Return in the Cancel button with the focus still gives id 1 while 1 is the default); a disabled default button gives no command"
+  escape: "Escape sends WM_COMMAND with IDCANCEL (2) to the dialog"
+  mnemonics: "WM_SYSCHAR with a mnemonic letter of a button focuses it and clicks it (a check box toggles; a radio button is checked and focused: Alt+W on \"T&wo\"); a static text's mnemonic focuses the next control with a tab stop; a letter with no mnemonic: TRUE and nothing happens"
+  other_messages: "WM_KEYUP, WM_CHAR (the edit control gets it as input: EN_UPDATE and EN_CHANGE appear), WM_MOUSEMOVE, WM_NULL for dialog controls: TRUE (handled by the dialog manager: the edit control receives the character)"
+  not_for_the_dialog: "a message whose window is NULL, is the desktop window or is not in the dialog: FALSE and nothing happens; a bad dialog handle: FALSE"
+  dlgcode: "the focus window's WM_GETDLGCODE decides which keys it keeps (the edit control keeps characters and arrows)"
+errors:
+  none: "no last error is set"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Keys while Shift, Ctrl or Alt are really down (the tests cannot press keys: the key state of the thread is 'up'); real mouse input; modeless dialogs in a message loop of their own.

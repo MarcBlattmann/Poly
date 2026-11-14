@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "il_destroy_a",
+      "exe_sha256": "c8cdb6084d43900ba11143dc40e9dca950dad45d3a896186aba9d9989647c181",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RGVzdHJveSB0aGUgb3JpZ2luYWw6IDEKdGhlIGR1cGxpY2F0ZSBrZWVwcyBpdHMgaW1hZ2VzOiAyCkRlc3Ryb3kgdGhlIG9yaWdpbmFsIGFnYWluOiAwCkRlc3Ryb3kgdGhlIGR1cGxpY2F0ZTogMQpEZXN0cm95IE5VTEw6IDAKRGVzdHJveSBhIG1hZGUtdXAgaGFuZGxlOiAwCmFuIGljb24gdGFrZW4gZnJvbSB0aGUgbGlzdCB3b3JrcyBhZnRlciB0aGUgbGlzdCBpcyBnb25lOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Destroy the original: 1\nthe duplicate keeps its images: 2\nDestroy the original again: 0\nDestroy the duplicate: 1\nDestroy NULL: 0\nDestroy a made-up handle: 0\nan icon taken from the list works after the list is gone: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}
