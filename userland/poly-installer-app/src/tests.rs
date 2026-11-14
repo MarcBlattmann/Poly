@@ -18,6 +18,10 @@ use poly_shell::draw::Text;
 use poly_wayland::compose::MemoryFramebuffer;
 use poly_wayland::compose::Scale;
 
+/// The colour theme is one setting for the whole process: the tests that
+/// switch it take turns, or one sees the other's colours.
+static THEME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// What the window did to the system, and what the system answers.
 #[derive(Default)]
 struct Fake {
@@ -244,6 +248,7 @@ fn a_command_that_cannot_start_is_a_failure() {
 
 #[test]
 fn draws_every_state_in_both_themes() {
+    let _theme = THEME.lock().unwrap_or_else(|e| e.into_inner());
     for light in [false, true] {
         poly_shell::theme::set_light(light);
         let p = poly_shell::theme::pal();
@@ -438,6 +443,7 @@ fn an_appimage_is_removed_by_the_window_itself_on_the_next_look() {
 
 #[test]
 fn the_uninstall_button_is_the_danger_one_in_both_themes() {
+    let _theme = THEME.lock().unwrap_or_else(|e| e.into_inner());
     for light in [false, true] {
         poly_shell::theme::set_light(light);
         let p = poly_shell::theme::pal();
