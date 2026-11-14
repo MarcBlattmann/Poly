@@ -115,11 +115,11 @@ const fn k(path: &'static str, values: &'static [(&'static str, Data)]) -> Defau
     DefaultKey { path, values }
 }
 
-/// The version Poly reports: Windows 10 (`CurrentMajorVersionNumber` 10),
-/// build 19045, the last Windows 10 build (Learn: "Windows 10 release
-/// information"). Programs compare build numbers to decide which APIs they
-/// may use, so this states the API level Poly aims at; `RtlGetVersion`
-/// and the PEB report the same numbers when they exist.
+/// The version Poly reports: Windows 11 (`CurrentMajorVersionNumber` 10, as on Windows 11),
+/// build 26200 (25H2, Learn: "Windows 11 release information"), the build of the machine the
+/// spec sheets were observed on (ADR 0189). Programs compare build numbers to decide which APIs
+/// they may use, so this states the API level Poly aims at; `RtlGetVersion` and the PEB report
+/// the same numbers when they exist.
 pub const BUILD: &str = "26200";
 
 pub const SYSTEM_KEYS: &[DefaultKey] = &[
@@ -157,7 +157,7 @@ pub const SOFTWARE_KEYS: &[DefaultKey] = &[
             ("CurrentVersion", Sz("6.3")),
             ("CurrentBuild", Sz(BUILD)),
             ("CurrentBuildNumber", Sz(BUILD)),
-            // The release the build belongs to (Windows 10 22H2, `19045.2006` and later): programs
+            // The release the build belongs to (Windows 11 25H2, `26200.9974`): programs
             // that report the OS version read these (Chrome's browser process, on Windows,
             // queries `UBR`, `DisplayVersion` and `ReleaseId`, the traces of ADR 0155).
             ("UBR", Dword(9974)),
