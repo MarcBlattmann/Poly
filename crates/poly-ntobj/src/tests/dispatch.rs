@@ -324,6 +324,13 @@ fn cancelling_waits() {
     assert_eq!((wk[0].wait, wk[0].thread, wk[0].status), (w3, T3, STATUS_WAIT_0));
     // Too late to cancel a satisfied wait.
     assert_eq!(om.cancel_wait(w3, WaitCancel::Timeout), Err(STATUS_INVALID_PARAMETER));
+    // A satisfied wait whose wake is still queued: its status, once.
+    let w6 = blocked(om.wait_objects(T2, &[e], WaitType::Any, false, Timeout::Finite));
+    om.set_event(e).unwrap();
+    assert_eq!(om.cancel_wait(w6, WaitCancel::Timeout), Err(STATUS_INVALID_PARAMETER));
+    assert_eq!(om.take_wake(w6), Some(STATUS_WAIT_0));
+    assert_eq!(om.take_wake(w6), None);
+    assert!(wakes(&mut om).is_empty());
     let w4 = blocked(om.wait_objects(T3, &[e], WaitType::Any, true, Timeout::Infinite));
     assert_eq!(om.cancel_wait(w4, WaitCancel::UserApc), Ok(STATUS_USER_APC));
     let w5 = blocked(wait1(&mut om, T3, e));

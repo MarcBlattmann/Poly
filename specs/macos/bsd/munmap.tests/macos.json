@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "munmap_basic",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "68fac23abaa9a2c8c94f9f44701d35566a3279f4a31ca53700fc80105ca0292b",
+          "executable_sha256": "8abc44273742044ee56142959b9ca92a9c55b66adc288cfeeebb8e02ce28b40c",
           "exit_code": 0,
           "stdout": "ok mprotect of the mapped page\nok munmap returns 0\nok then mprotect: ENOMEM\nok munmap of the unmapped page again\nok MAP_FIXED maps the same address again\nok and the new page is zero filled\nsummary 6 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "9292e5ccee2478aa5bdb10542499d4ea2a0b99a9137e65203389ab2c1d8a4010",
+          "executable_sha256": "16fd1b16e27ba5ad63484b3ae27dc83bd566355bc93df3e918086114be436d75",
           "exit_code": 0,
           "stdout": "ok an unaligned address: EINVAL\nok length 0: EINVAL\nok a negative length: EINVAL\nok the mapping is still there\nok length 2^62 returns 0\nok and unmapped nothing\nsummary 6 passed, 0 failed\n",
           "stderr": "",

@@ -1,0 +1,17 @@
+[package]
+name = "hid"
+description = "Our hid.dll (ADR 0155, step 12): the HID functions Chrome delay-loads, on a system without HID devices"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "hid"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

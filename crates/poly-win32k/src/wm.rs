@@ -214,6 +214,35 @@ struct Timer {
     flagged: bool,
 }
 
+impl Wm {
+    /// One line per thread queue that holds anything, for a wait report (`poly.nt.waits`, ADR
+    /// 0155 step 12): the posted messages (`msg@hwnd`, first eight), the `changed` wake bits,
+    /// the sends waiting and the input messages. A thread that waits on its queue event while
+    /// its queue holds a message is a lost wakeup.
+    pub fn queue_debug_lines(&self) -> Vec<alloc::string::String> {
+        self.queues
+            .iter()
+            .filter(|(_, q)| !q.posted.is_empty() || !q.sent.is_empty() || !q.raw.is_empty() || q.changed != 0)
+            .map(|(k, q)| {
+                let posted: Vec<alloc::string::String> =
+                    q.posted.iter().take(8).map(|m| alloc::format!("{:#x}@{:#x}", m.msg, m.hwnd)).collect();
+                alloc::format!(
+                    "queue p{} t{}: posted {} [{}] changed {:#x} sent {} receiving {} raw {} quit {:?}",
+                    k.0,
+                    k.1,
+                    q.posted.len(),
+                    posted.join(" "),
+                    q.changed,
+                    q.sent.len(),
+                    q.receiving.len(),
+                    q.raw.len(),
+                    q.quit
+                )
+            })
+            .collect()
+    }
+}
+
 /// The session's window manager.
 #[derive(Debug)]
 pub struct Wm {

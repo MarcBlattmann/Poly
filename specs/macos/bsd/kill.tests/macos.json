@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "kill_checks",
+      "source_sha256": "07e1a5ae0a659c84eed1f84a86d9cc32ca0b36a4cdd682f3239e56d75b0198c1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2ad9c9df33cb90a3b867721a617187627ac1b85b340a2d1061750b10dd3937cc",
+          "exit_code": 0,
+          "stdout": "ok signal 0 to itself\nok a pid that does not exist: ESRCH\nok pid 1: EPERM\nok signal 32: EINVAL\nok signal -1: EINVAL\nok EINVAL comes before ESRCH: signal 32 to a missing pid\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "kill_stop_continue",
+      "source_sha256": "61f2c823fb81541ceb4b2eb33e73115a77d6b14e00e622b06de0f81c491f81c9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a6d7d8476662b1616d66389defa3e34382bbc23d0341883f707b141b8a3b9647",
+          "exit_code": 0,
+          "stdout": "ok SIGSTOP\nok reported as stopped: 0x117f\nok the stop is reported once: then 0\nok SIGCONT\nok the continued child is running: 0\nok then killed: status 9\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

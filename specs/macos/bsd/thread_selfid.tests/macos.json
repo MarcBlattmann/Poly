@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "tsid_ignores_arguments",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "1c22f4e1e38d1dc4611b4ba35beea1cb028cb6e692b84db50ebba6d6dec8743e",
+          "executable_sha256": "fa2524a446b22bc065b9d6bbd840fc7b69eebe069a9c617ee4fccff3c2ff5cb6",
           "exit_code": 0,
           "stdout": "ok thread_selfid with arguments succeeds\nok and gives the same id\nsummary 2 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "e8eb576427b7cd70f2893d3f9172dc16481ecb094f24d1bd5717b4a38b27a843",
+          "executable_sha256": "b2582e01721628f45aad4fa06be7981508b23758653bdf829bd9869d4ba2ec5b",
           "exit_code": 0,
           "stdout": "ok the thread id is not the pid\nsummary 1 passed, 0 failed\n",
           "stderr": "",

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "proc_info_errors",
+      "source_sha256": "fe702d402782f7f436ed7bf0cf35de838f9c91dcc205c475be78cf43fc2aba40",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "42e74a43eed1aa1ff396826f3a5b5a3e32e9bf393686946ec72699c8bcd359ea",
+          "exit_code": 0,
+          "stdout": "ok a pid that does not exist: ESRCH\nok flavor 9999: EINVAL\nok call 99: EINVAL\nok the buffer at address 8: EFAULT\nok a good call afterwards\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "proc_info_listfds",
+      "source_sha256": "0bb350ee8f823309d5d8f936e0e01dcb5f58253bf5593d169b4e7d726eb6b052",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "33f983073fa1e6f98159c6382fb2dfeb4288616fec138445ed654a317903f24e",
+          "exit_code": 0,
+          "stdout": "ok the call returns a multiple of 8\nok the file (fd 3) is a vnode\nok the pipe's read end (fd 4) is a pipe\nok and its write end (fd 5)\nok the kqueue (fd 6) is a kqueue\nok an fd that is not open is not listed\nok the list is in ascending order, from fd 0\nok a closed descriptor disappears from the list\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

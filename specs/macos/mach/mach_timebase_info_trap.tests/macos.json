@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "timebase_bad_pointer",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "6b3d20573261627aefe38d24ca7892f88c22dc279d03a5663342ed2b727e9b9a",
+          "executable_sha256": "c74ac928cd5174f02bda719a3599c08bd67a502718458c60d720143621402a91",
           "exit_code": 0,
           "stdout": "ok NULL: KERN_SUCCESS\nok address 8: KERN_SUCCESS\nok a good pointer afterwards\nsummary 3 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "4d705f8b6a85879bd3783525ff084d9bbfc33223c89b3fa4fe72a0fd6e548a2f",
+          "executable_sha256": "f030aff473a75d303ebddc5132de938557daf43d15478cdd43e21a579026733e",
           "exit_code": 0,
           "stdout": "ok KERN_SUCCESS again\nok the same numer and denom\nsummary 2 passed, 0 failed\n",
           "stderr": "",

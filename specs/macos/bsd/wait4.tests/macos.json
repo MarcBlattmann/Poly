@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "wait4_signals",
+      "source_sha256": "e95d7a72a0bdb927165c3909ffdd1ff88cd6b5a0c1d65f0b4190d439aaf457df",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "02376a188735cdfac58d2ddee4419a76be1e86dfd60eacbdbb23a6a2e66e228a",
+          "exit_code": 0,
+          "stdout": "ok WNOHANG while the child runs: 0\nok killed by SIGTERM: status 15\nok killed by SIGKILL: status 9\nok stopped by SIGSTOP with WUNTRACED: 0x117f\nok WIFSTOPPED and the stop signal\nok a stopped child can still be killed: status 9\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "wait4_status",
+      "source_sha256": "030e0f628043fc6a1f0bc30139b4b39bfcb2f0d96626897e4fc5a32f284e7d71",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "82c98aa59cbd9b466e9c2fc0ba2ad29c104e8ee965bd3da7d5351d6b4beb4bb6",
+          "exit_code": 0,
+          "stdout": "ok wait4 returns the child's pid\nok a normal exit: status is code << 8\nok the child is gone: ECHILD\nok wait4 returns the child's pid\nok a normal exit: status is code << 8\nok the child is gone: ECHILD\nok wait4 returns the child's pid\nok a normal exit: status is code << 8\nok the child is gone: ECHILD\nok pid -1 with a NULL status pointer reaps any child\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

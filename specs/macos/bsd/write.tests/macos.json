@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "write_counts",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "114b81c0ebb6f335bd67bcb65487e6b0e420a6b76d6f6201b1f72419a247feda",
+          "executable_sha256": "305d0fd1088c23019c5d6ce24e4441357821dcb87045f8f3a3c6f548c10d32d8",
           "exit_code": 0,
           "stdout": "line written by write\nok write to stdout returns the count\nok a count of 0 returns 0\nok open a new file\nok first write returns 5\nok second write returns 3\nok the file is 8 bytes\nok an O_APPEND write returns 1\nok O_APPEND wrote at the end, not at offset 0\nsummary 8 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "a5c879e7f257317a85eac8b8e18a35d41b23006a7de3ec1a803c27e947f91c0c",
+          "executable_sha256": "b92caf50879e42e299c3b2be145453ce34596bb8065c4c089b5f16dcd5190250",
           "exit_code": 0,
           "stdout": "ok open /dev/null\nok 3 bytes: 3\nok 100000 bytes: 100000\nok 0 bytes: 0\nsummary 4 passed, 0 failed\n",
           "stderr": "",

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "sr_basic",
+      "source_sha256": "bb3971821ca90b1fcf47d265ff0785ce6f3ae2711f08fd199c5505dcd56f62c6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "29441740fdb7fa7839f15dabfe2732d2c3c14f5cee524566fd56dad8fa376f25",
+          "exit_code": 0,
+          "stdout": "ok returns 0\nok the address is nonzero\nok and 4096-byte aligned\nvalue shared cache address 6471352320\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "sr_errors",
+      "source_sha256": "0f7fd80d5be8decf5793bbc1ad4eaf1413930dfe3adb0c52fe2cd7bdd852e238",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "05e0acbba0c10f5628e36c8d3ffefcf5c6bb08e3cb231b63919b6b8797e0532f",
+          "exit_code": 0,
+          "stdout": "ok a good call\nok the pointer at address 8: EFAULT\nok a good call after the failed one\nok with the same address\nok a NULL pointer: returns 0\nok a good call after the NULL one: EINVAL\nok and again: EINVAL\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

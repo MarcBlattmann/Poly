@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "close_invalid",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "6fcbfc3e6ec6915f9687631e6122e9ce76c0d348180a27ad49c994bd93abbceb",
+          "executable_sha256": "f53108d3a283a4e115f0aee97d1dc4205f3fa18ca37d629ced33e849899dcc15",
           "exit_code": 0,
           "stdout": "ok fd -1: EBADF\nok fd 99: EBADF\nok fd 100000: EBADF\nsummary 3 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "513511db1e0e796a6b6555d9d54239b376282e96d04be6b684d597c40dbfa42c",
+          "executable_sha256": "a6c1514249b94a0a97831c478d16f67fed626ded8cac9699a02bbe48d3c027e6",
           "exit_code": 0,
           "stdout": "ok two opens give 3 and 4\nok after closing 3, open gives 3\nok close stdin\nok after closing 0, open gives 0\nsummary 4 passed, 0 failed\n",
           "stderr": "",

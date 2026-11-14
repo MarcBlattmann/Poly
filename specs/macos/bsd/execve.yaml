@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/execve.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# execve.tests/macos.json.
+id: macos/syscall/bsd/execve
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 59,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 59, arguments in x0..x5 (second result in x1). On
+  failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. execve(path, argv,
+  envp) replaces the program of the calling process (same pid, same
+  parent) and does not return on success. The new program gets exactly the
+  argument and environment arrays it is given; an empty environment stays
+  empty. What it keeps: open descriptors unless they are close-on-exec,
+  signals that are ignored (SIG_IGN), and the signal mask; signals that
+  had a handler go back to the default action. The exit status reaches the
+  parent as for any process. A file starting with "#!" runs its
+  interpreter: the arguments are the interpreter, the words after it on
+  the line (split at blanks: "#!prog child 3" gives "child" and "3"), the
+  script's path exactly as given to execve, and the caller's arguments
+  after argv[0]. Failures that happen before the point of no return return
+  the errno to the caller, which keeps running: a bad argv pointer in a
+  child is EFAULT (14).
+returns:
+  success: "does not return; the process runs the new program"
+errors:
+  missing: "ENOENT (2): a missing file, the empty path"
+  not_executable: "EACCES (13): a directory, a file without execute permission"
+  not_a_program: "ENOEXEC (8): an executable file that is neither a Mach-O file nor an interpreter script"
+  not_a_directory: "ENOTDIR (20): a file used as a directory"
+  bad_pointer: "EFAULT (14): path at address 8; argv at address 8"
+side_effects: "the address space is replaced; close-on-exec descriptors are closed; handlers reset"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
