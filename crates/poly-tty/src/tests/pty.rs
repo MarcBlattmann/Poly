@@ -7,7 +7,7 @@ use crate::ioctl::*;
 use crate::ldisc::INPUT_BUFFER;
 use crate::pty::{MASTER_BUFFER, PTMX, PTY_SLAVE_MAJOR, Ptys};
 use crate::sig::{SIGCONT, SIGHUP, SIGINT, SIGWINCH};
-use crate::termios::{Termios, Winsize, cc, lflag};
+use crate::termios::{TCIFLUSH, TCIOFLUSH, TCOFLUSH, TCOOFF, TCOON, Termios, Winsize, cc, iflag, lflag};
 use crate::tty::Ttys;
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -325,4 +325,208 @@ fn vhangup_kills_the_open_files_but_not_the_terminal() {
     // A session without a terminal: nothing happens.
     env.ttys.vhangup(10);
     assert!(env.host.take_signals().is_empty());
+}
+
+// ---- packet mode (TIOCPKT) --------------------------------------------------
+
+fn set_int(f: &OpenFile, env: &Env, request: u32, v: i32) -> Result<u64, Errno> {
+    env.host.poke(USER, &v.to_le_bytes());
+    f.ioctl(request, USER)
+}
+
+fn packet_pair(env: &Env) -> (Arc<OpenFile>, Arc<OpenFile>) {
+    let (m, n) = env.master();
+    let s = env.slave(n, OpenFlags::RDWR | OpenFlags::NOCTTY).unwrap();
+    nonblocking(&m);
+    nonblocking(&s);
+    assert_eq!(set_int(&m, env, TIOCPKT, 1), Ok(0));
+    (m, s)
+}
+
+fn apply(f: &OpenFile, env: &Env, t: &Termios) {
+    env.host.poke(USER, &t.to_bytes());
+    assert_eq!(f.ioctl(TCSETS, USER), Ok(0));
+}
+
+#[test]
+fn tiocpkt_switches_packet_mode_and_tiocgpkt_reports_it() {
+    let env = Env::new();
+    let (m, n) = env.master();
+    let s = env.slave(n, OpenFlags::RDWR | OpenFlags::NOCTTY).unwrap();
+    assert_eq!(m.ioctl(TIOCGPKT, USER + 16), Ok(0));
+    assert_eq!(env.host.peek_int(USER + 16), 0, "off at first");
+    assert_eq!(set_int(&m, &env, TIOCPKT, 5), Ok(0), "any nonzero value enables");
+    assert_eq!(m.ioctl(TIOCGPKT, USER + 16), Ok(0));
+    assert_eq!(env.host.peek_int(USER + 16), 1);
+    assert_eq!(set_int(&m, &env, TIOCPKT, 0), Ok(0));
+    assert_eq!(m.ioctl(TIOCGPKT, USER + 16), Ok(0));
+    assert_eq!(env.host.peek_int(USER + 16), 0);
+    // Bad pointers.
+    assert_eq!(m.ioctl(TIOCPKT, 0), Err(Errno::EFAULT));
+    assert_eq!(m.ioctl(TIOCGPKT, 0), Err(Errno::EFAULT));
+    // The slave answers neither.
+    assert_eq!(s.ioctl(TIOCPKT, USER), Err(Errno::ENOTTY));
+    assert_eq!(s.ioctl(TIOCGPKT, USER), Err(Errno::ENOTTY));
+}
+
+#[test]
+fn packet_reads_start_with_a_zero_status_byte_before_data() {
+    let env = Env::new();
+    let (m, s) = packet_pair(&env);
+    assert_eq!(read_some(&m, 100), Err(Errno::EAGAIN), "nothing yet, no empty packet");
+    assert_eq!(s.write(b"out\n"), Ok(4));
+    assert_eq!(read_some(&m, 100).unwrap(), b"\0out\r\n");
+    // A short buffer: the rest comes in the next packet, with its own status byte.
+    assert_eq!(s.write(b"abcdef"), Ok(6));
+    assert_eq!(read_some(&m, 3).unwrap(), b"\0ab");
+    assert_eq!(read_some(&m, 100).unwrap(), b"\0cdef");
+    // A one-byte buffer takes only the status byte and leaves the data.
+    assert_eq!(s.write(b"xy"), Ok(2));
+    assert_eq!(read_some(&m, 1).unwrap(), b"\0");
+    assert_eq!(read_some(&m, 100).unwrap(), b"\0xy");
+    // A read of nothing stays a read of nothing.
+    assert_eq!(read_some(&m, 0), Ok(vec![]));
+    // Writes to the master are not framed (the echo of "z" is the data).
+    assert_eq!(m.write(b"z"), Ok(1));
+    assert_eq!(read_some(&m, 100).unwrap(), b"\0z");
+    // Packet mode off: plain data again.
+    assert_eq!(set_int(&m, &env, TIOCPKT, 0), Ok(0));
+    assert_eq!(s.write(b"q"), Ok(1));
+    assert_eq!(read_some(&m, 100).unwrap(), b"q");
+}
+
+#[test]
+fn packet_status_for_flushes() {
+    let env = Env::new();
+    let (m, s) = packet_pair(&env);
+    // The slave flushes its input queue.
+    assert_eq!(s.ioctl(TCFLSH, u64::from(TCIFLUSH)), Ok(0));
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_FLUSHREAD]);
+    assert_eq!(read_some(&m, 100), Err(Errno::EAGAIN), "reported once");
+    // Its output queue: the data not read yet is gone, the status says so.
+    assert_eq!(s.write(b"lost"), Ok(4));
+    assert_eq!(s.ioctl(TCFLSH, u64::from(TCOFLUSH)), Ok(0));
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_FLUSHWRITE]);
+    assert_eq!(read_some(&m, 100), Err(Errno::EAGAIN));
+    // Both at once: one byte with both bits.
+    assert_eq!(s.ioctl(TCFLSH, u64::from(TCIOFLUSH)), Ok(0));
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_FLUSHREAD | TIOCPKT_FLUSHWRITE]);
+    // TCSETSF throws input away too.
+    let t = Termios::sane(38400);
+    env.host.poke(USER, &t.to_bytes());
+    assert_eq!(s.ioctl(TCSETSF, USER), Ok(0));
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_FLUSHREAD]);
+}
+
+#[test]
+fn packet_status_for_stop_and_start() {
+    let env = Env::new();
+    let (m, s) = packet_pair(&env);
+    // tcflow(TCOOFF / TCOON) on the slave.
+    assert_eq!(s.ioctl(TCXONC, u64::from(TCOOFF)), Ok(0));
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_STOP]);
+    assert_eq!(s.ioctl(TCXONC, u64::from(TCOON)), Ok(0));
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_START]);
+    // Starting output that is not stopped says nothing.
+    assert_eq!(s.ioctl(TCXONC, u64::from(TCOON)), Ok(0));
+    assert_eq!(read_some(&m, 100), Err(Errno::EAGAIN));
+    // ^S and ^Q typed on the master.
+    assert_eq!(m.write(b"\x13"), Ok(1));
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_STOP]);
+    assert_eq!(m.write(b"\x11"), Ok(1));
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_START]);
+    // Both before the read: one byte with both bits.
+    s.ioctl(TCXONC, u64::from(TCOOFF)).unwrap();
+    s.ioctl(TCXONC, u64::from(TCOON)).unwrap();
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_STOP | TIOCPKT_START]);
+}
+
+#[test]
+fn packet_status_for_flow_control_and_attribute_changes() {
+    let env = Env::new();
+    let (m, s) = packet_pair(&env);
+    let sane = Termios::sane(38400);
+    // The same attributes again: nothing changed.
+    apply(&s, &env, &sane);
+    assert_eq!(read_some(&m, 100), Err(Errno::EAGAIN));
+    // IXON off: flow control goes away.
+    let mut t = sane;
+    t.iflag &= !iflag::IXON;
+    apply(&s, &env, &t);
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_NOSTOP | TIOCPKT_IOCTL]);
+    // IXON on again.
+    apply(&s, &env, &sane);
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_DOSTOP | TIOCPKT_IOCTL]);
+    // Another change: only the IOCTL bit.
+    let mut t = sane;
+    t.lflag &= !lflag::ECHO;
+    apply(&s, &env, &t);
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_IOCTL]);
+    // Another stop character: no longer ^S/^Q flow control.
+    let mut t = sane;
+    t.cc[cc::VSTOP] = 0x07;
+    apply(&s, &env, &t);
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_NOSTOP | TIOCPKT_IOCTL]);
+    // The status comes before data waiting in the buffer.
+    s.write(b"d").unwrap();
+    apply(&s, &env, &sane);
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_DOSTOP | TIOCPKT_IOCTL]);
+    assert_eq!(read_some(&m, 100).unwrap(), b"\0d");
+}
+
+#[test]
+fn outside_packet_mode_nothing_is_reported_and_switching_off_drops_the_pending_status() {
+    let env = Env::new();
+    let (m, n) = env.master();
+    let s = env.slave(n, OpenFlags::RDWR | OpenFlags::NOCTTY).unwrap();
+    nonblocking(&m);
+    s.ioctl(TCFLSH, u64::from(TCIFLUSH)).unwrap();
+    assert_eq!(read_some(&m, 100), Err(Errno::EAGAIN), "not in packet mode: no status");
+    assert!(!m.poll().contains(PollEvents::IN));
+    assert_eq!(set_int(&m, &env, TIOCPKT, 1), Ok(0));
+    s.ioctl(TCFLSH, u64::from(TCIFLUSH)).unwrap();
+    assert!(m.poll().contains(PollEvents::IN));
+    assert_eq!(set_int(&m, &env, TIOCPKT, 0), Ok(0));
+    assert!(!m.poll().contains(PollEvents::IN), "switched off: the pending status is gone");
+    assert_eq!(read_some(&m, 100), Err(Errno::EAGAIN));
+}
+
+#[test]
+fn packet_poll_is_readable_while_a_status_is_pending() {
+    let env = Env::new();
+    let (m, s) = packet_pair(&env);
+    assert!(!m.poll().contains(PollEvents::IN));
+    s.ioctl(TCXONC, u64::from(TCOOFF)).unwrap();
+    assert!(m.poll().contains(PollEvents::IN));
+    assert_eq!(read_some(&m, 100).unwrap(), [TIOCPKT_STOP]);
+    assert!(!m.poll().contains(PollEvents::IN));
+}
+
+#[test]
+fn a_blocked_packet_reader_wakes_for_a_status() {
+    let env = Env::new();
+    let (m, n) = env.master();
+    let s = env.slave(n, OpenFlags::RDWR | OpenFlags::NOCTTY).unwrap();
+    assert_eq!(set_int(&m, &env, TIOCPKT, 1), Ok(0));
+    let reader = {
+        let m = m.clone();
+        thread::spawn(move || {
+            act_as(Some(caller(10, 10, 10)));
+            read_some(&m, 100)
+        })
+    };
+    env.host.wait_blocked(1);
+    assert_eq!(s.ioctl(TCXONC, u64::from(TCOOFF)), Ok(0));
+    assert_eq!(reader.join().unwrap().unwrap(), [TIOCPKT_STOP]);
+}
+
+#[test]
+fn packet_reads_end_with_eio_once_the_slave_is_closed() {
+    let env = Env::new();
+    let (m, s) = packet_pair(&env);
+    s.write(b"bye").unwrap();
+    drop(s);
+    assert!(m.poll().contains(PollEvents::HUP));
+    assert_eq!(read_some(&m, 100).unwrap(), b"\0bye");
+    assert_eq!(read_some(&m, 100), Err(Errno::EIO));
 }
