@@ -962,6 +962,33 @@ fn lseek_pread_pwrite() {
 }
 
 #[test]
+fn pread_of_a_regular_file_gives_everything_up_to_its_end() {
+    // read(2): fewer bytes than asked only at the end of a regular file.
+    // squashfuse (an AppImage's FUSE server) takes a short pread of its
+    // image for an I/O error; one of 64 KiB made every exec from the
+    // mount EIO.
+    let mut e = env();
+    let len: u64 = 200 * 1024;
+    let data: Vec<u8> = (0..len).map(|i| (i * 7 + i / 251) as u8).collect();
+    let ctx = e.vfs.root_context().unwrap();
+    let f = e.vfs.open(&ctx, &Cred::root(), At::Cwd, b"/big", OpenFlags::CREAT | OpenFlags::WRONLY, 0o644).unwrap();
+    f.write(&data).unwrap();
+    let k = &mut e.k;
+    let buf = 0x100_0000;
+    k.map_range(buf, len + 4096, RW);
+    let p = s(k, 0, b"/big");
+    let fd = sys(k, nr::OPEN, &[p, 0, 0]).unwrap();
+    assert_eq!(sys(k, nr::PREAD64, &[fd, buf, 180 * 1024, 1000]), Ok(180 * 1024));
+    assert_eq!(k.peek(buf, 180 * 1024), &data[1000..1000 + 180 * 1024]);
+    // Short only at the end of the file; the offset never moves.
+    assert_eq!(sys(k, nr::PREAD64, &[fd, buf, len, 100 * 1024]), Ok(len - 100 * 1024));
+    assert_eq!(k.peek(buf, (len - 100 * 1024) as usize), &data[100 * 1024..]);
+    assert_eq!(sys(k, nr::LSEEK, &[fd, 0, 1]), Ok(0), "pread leaves the offset");
+    // Unwritable memory after the first chunk: the bytes copied so far.
+    assert_eq!(sys(k, nr::PREAD64, &[fd, buf + len + 4096 - 70 * 1024, 140 * 1024, 0]), Ok(70 * 1024));
+}
+
+#[test]
 fn dup_dup2_dup3() {
     let mut e = env();
     let k = &mut e.k;

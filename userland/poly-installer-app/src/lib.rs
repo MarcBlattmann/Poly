@@ -163,6 +163,12 @@ fn read_image(path: &str, head: &[u8]) -> Result<poly_pkg::appimage::Image, poly
 }
 
 /// `from` copied to `to`, a megabyte at a time.
+/// Whether an AppImage is started by extracting it: only on a system
+/// without FUSE; otherwise its runtime mounts the image (ADR 0180).
+fn extracting() -> bool {
+    poly_pkg::appimage::runs_by_extracting(poly_rt::fs::metadata(poly_pkg::appimage::FUSE_DEVICE).is_ok())
+}
+
 fn copy_file(from: &str, to: &str) -> Result<(), String> {
     let mut src = File::open(from).map_err(|e| alloc::format!("{from}: {e}"))?;
     let dst = File::create(to).map_err(|e| alloc::format!("{to}: {e}"))?;
@@ -425,7 +431,7 @@ impl view::Host for Native {
             }
             None => None,
         };
-        let text = appimage::desktop_file(image, &layout, appimage::RUNS_BY_EXTRACTING);
+        let text = appimage::desktop_file(image, &layout, extracting());
         poly_rt::fs::write(&layout.desktop, text.as_bytes()).map_err(|e| alloc::format!("{}: {e}", layout.desktop))?;
         Ok(view::Placed { id: layout.id, icon })
     }
@@ -447,7 +453,7 @@ impl view::Host for Native {
             )
             .envs(startup.environment().iter().map(String::as_str))
             .stdin(Stdio::Null);
-        for (name, value) in poly_pkg::appimage::run_environment(poly_pkg::appimage::RUNS_BY_EXTRACTING) {
+        for (name, value) in poly_pkg::appimage::run_environment(extracting()) {
             cmd.env(name, value);
         }
         match cmd.spawn() {

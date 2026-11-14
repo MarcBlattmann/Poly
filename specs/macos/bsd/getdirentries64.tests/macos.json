@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "gde_errors",
+      "source_sha256": "151351edac56f1d84146636f691f4c47f90b0ad26d5bc173d7600d9166b1059e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f7840da1877e94c588a92f945ed9d31fc12124b6795e6c3874e99be1d62545f0",
+          "exit_code": 0,
+          "stdout": "ok a 32-byte buffer: EINVAL\nok a file: EINVAL\nok fd 99: EBADF\nok a NULL position pointer: EFAULT\nok a buffer at address 8: EFAULT\nok a position pointer at address 8: EFAULT\nok afterwards the directory reads normally\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "gde_list",
+      "source_sha256": "c2163ed5c5b66e93c082fe995b79b66d61f6bd5ad458760c93b71b5075c536b6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0db3592046e1131e72d1b108ee7c81212f17d582cf9b5378d97a28b132ce35ee",
+          "exit_code": 0,
+          "stdout": "ok 5 entries of 32 bytes: 160\nok ., .., a, bb, sub with their types\nok each 32 bytes, name length, an inode\nok 5 records\nok at the end: 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
