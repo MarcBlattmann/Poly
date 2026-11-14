@@ -275,7 +275,7 @@ fn imports(name: &str, pe: &poly_pe::Pe<'_>) -> Result<std::collections::BTreeMa
 
 /// Check the set: every module is an x86 image; `ntdll` exports what the kernel enters and
 /// what `kernelbase` imports from it, by undecorated names; `kernel32` imports only from
-/// `kernelbase`; each test program imports only from `kernel32`.
+/// `kernelbase`; each test program imports only from `kernel32` and `ntdll`.
 fn verify(dir: &Path) -> Result {
     let ntdll = read(&dir.join("ntdll.dll"))?;
     let ntdll = parse("ntdll.dll", &ntdll)?;
@@ -306,7 +306,7 @@ fn verify(dir: &Path) -> Result {
         let bytes = read(&dir.join(&file))?;
         let pe = parse(&file, &bytes)?;
         for dll in imports(&file, &pe)?.keys() {
-            if dll != "kernel32.dll" {
+            if dll != "kernel32.dll" && dll != "ntdll.dll" {
                 return Err(format!("{file} imports {dll}"));
             }
         }

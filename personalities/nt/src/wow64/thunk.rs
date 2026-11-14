@@ -50,6 +50,10 @@ pub enum Arg {
     CI,
     /// A `HANDLE` array counted by the first argument.
     HA,
+    /// `CONTEXT*` (in).
+    CX,
+    /// `EXCEPTION_RECORD*` (in).
+    ER,
     /// Not converted yet: must be null.
     X,
 }
@@ -377,6 +381,25 @@ fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Re
                 let wide = s.alloc(16)?;
                 s.put(wide, &u64::from(process).to_le_bytes());
                 s.put(wide + 8, &u64::from(thread).to_le_bytes());
+                wide
+            }
+            Arg::CX => {
+                let mut b = alloc::vec![0u8; super::context::CONTEXT32_SIZE];
+                abi::read(k, p, &mut b)?;
+                let bytes = super::context::from_context32(&b).to_bytes();
+                let wide = s.alloc(bytes.len())?;
+                s.put(wide, &bytes);
+                wide
+            }
+            Arg::ER => {
+                let mut b = [0u8; super::context::EXCEPTION_RECORD32_SIZE];
+                abi::read(k, p, &mut b)?;
+                let Some(record) = super::context::from_record32(&b) else {
+                    return Ok(Prepared::Done(poly_ntobj::status::STATUS_INVALID_PARAMETER));
+                };
+                let bytes = record.to_bytes();
+                let wide = s.alloc(bytes.len())?;
+                s.put(wide, &bytes);
                 wide
             }
             Arg::HA => {

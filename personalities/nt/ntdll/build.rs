@@ -71,7 +71,11 @@ fn main() {
     // The diagnostics service is exported for Poly's own stub DLLs (ADR 0155).
     println!("cargo:rustc-link-arg=/EXPORT:PolyDebugPrint");
     // RtlCaptureContext is assembly too (ADR 0087).
-    let exports = ["/EXPORT:LdrInitializeThunk", "/EXPORT:KiUserApcDispatcher", "/EXPORT:RtlCaptureContext"];
+    let mut exports = vec!["/EXPORT:LdrInitializeThunk", "/EXPORT:KiUserApcDispatcher", "/EXPORT:RtlCaptureContext"];
+    if x86 {
+        // The i686 build's frame-based exception exports are assembly too (ADR 0186).
+        exports.extend(["/EXPORT:RtlRaiseException", "/EXPORT:RtlUnwind"]);
+    }
     // The i686 ntdll lives below 2 GiB (ADR 0186); the x64 one high up (ADR 0071).
     let base = if x86 { "/BASE:0x77000000" } else { "/BASE:0x7FF000000000" };
     for link in ["/NOENTRY", base].into_iter().chain(exports) {

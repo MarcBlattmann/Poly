@@ -265,6 +265,10 @@ pub struct Fake {
     pub sockets: Option<SocketFactory>,
     /// Bump allocator in the scratch area.
     next: u64,
+    /// The last context `load_context` was given, when [`Fake::accept_contexts`] is set (the
+    /// WOW64 tests); otherwise `load_context` is not implemented, as before.
+    pub loaded: Option<poly_seh::Context>,
+    pub accept_contexts: bool,
 }
 
 /// What the fake's `socket_create` calls.
@@ -295,6 +299,14 @@ impl NtKernel for Fake {
 
     fn net_info(&self) -> (Vec<[u8; 4]>, alloc::string::String) {
         (vec![[10, 0, 2, 3]], "polytest".into())
+    }
+
+    fn load_context(&mut self, ctx: &poly_seh::Context, _flags: u32) -> Result<(), NtStatus> {
+        if !self.accept_contexts {
+            return Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED);
+        }
+        self.loaded = Some(ctx.clone());
+        Ok(())
     }
 
     fn net_interfaces(&self) -> Vec<poly_iphlp::IfInfo> {
@@ -537,6 +549,8 @@ impl Fake {
             children: Vec::new(),
             sockets: None,
             next: SCRATCH,
+            loaded: None,
+            accept_contexts: false,
         }
     }
 

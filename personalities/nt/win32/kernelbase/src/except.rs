@@ -17,9 +17,13 @@ const EXCEPTION_MAXIMUM_PARAMETERS: usize = 15;
 /// `RaiseException` raises carries it (observed on Windows 11 25H2:
 /// `_CxxThrowException.yaml`, `record_flags`).
 const EXCEPTION_SOFTWARE_ORIGINATE: u32 = 0x80;
-/// `sizeof(EXCEPTION_RECORD)` on x64 (`winnt.h`): code, flags, the nested
-/// record, the address, the parameter count and 15 parameters.
-const EXCEPTION_RECORD_SIZE: usize = 152;
+/// `EXCEPTION_RECORD` (`winnt.h`): code, flags, the nested record, the address, the parameter
+/// count and 15 parameters (pointer-sized): 152 bytes on x64, 80 in a 32-bit process (ADR 0186).
+const PTR: usize = core::mem::size_of::<usize>();
+const RECORD_COUNT: usize = 8 + 2 * PTR;
+const RECORD_PARAMETERS: usize = (RECORD_COUNT + 4).next_multiple_of(PTR);
+const EXCEPTION_RECORD_SIZE: usize = RECORD_PARAMETERS + EXCEPTION_MAXIMUM_PARAMETERS * PTR;
+const _: () = assert!(EXCEPTION_RECORD_SIZE == if PTR == 8 { 152 } else { 80 });
 
 /// `RaiseException`: an `EXCEPTION_RECORD` with the code, the
 /// `EXCEPTION_NONCONTINUABLE` flag if given, and up to
@@ -34,11 +38,12 @@ pub unsafe extern "system" fn RaiseException(code: u32, flags: u32, count: u32, 
     let flags = (flags & EXCEPTION_NONCONTINUABLE) | EXCEPTION_SOFTWARE_ORIGINATE;
     r[4..8].copy_from_slice(&flags.to_le_bytes());
     let n = if args.is_null() { 0 } else { (count as usize).min(EXCEPTION_MAXIMUM_PARAMETERS) };
-    r[24..28].copy_from_slice(&(n as u32).to_le_bytes());
+    r[RECORD_COUNT..RECORD_COUNT + 4].copy_from_slice(&(n as u32).to_le_bytes());
     for i in 0..n {
         // SAFETY: the caller's array of `count` arguments.
-        let v = unsafe { args.add(i).read_unaligned() } as u64;
-        r[32 + i * 8..40 + i * 8].copy_from_slice(&v.to_le_bytes());
+        let v = unsafe { args.add(i).read_unaligned() };
+        let at = RECORD_PARAMETERS + i * PTR;
+        r[at..at + PTR].copy_from_slice(&v.to_le_bytes());
     }
     // SAFETY: a valid record.
     unsafe { nt::RtlRaiseException(r.as_ptr()) };

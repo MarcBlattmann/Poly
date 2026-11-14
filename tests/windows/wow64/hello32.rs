@@ -1,6 +1,6 @@
 //! The first 32-bit Windows program Poly runs (ADR 0186): built for `i686-pc-windows-msvc` by
-//! `cargo xtask wow64`, it imports from `kernel32.dll` only (as an ordinary 32-bit console
-//! program does) and checks, one line on standard output each:
+//! `cargo xtask wow64`, it imports from `kernel32.dll` (and `RtlUnwind` from `ntdll.dll`), as an
+//! ordinary 32-bit console program does, and checks, one line on standard output each:
 //!
 //! - `hello`: `GetStdHandle(STD_OUTPUT_HANDLE)` and `WriteFile` on the console;
 //! - `last error`: `SetLastError` / `GetLastError` keep a value per thread;
@@ -9,7 +9,10 @@
 //! - `file`: a file in `C:\\Windows\\Temp` written with `CreateFileW`/`WriteFile`, read back
 //!   with `ReadFile`, its size from `GetFileSize`, then deleted;
 //! - `thread`: `CreateThread` runs a second 32-bit thread with its argument, its own id and its
-//!   own last error; `WaitForSingleObject` and `GetExitCodeThread` see it end with its result.
+//!   own last error; `WaitForSingleObject` and `GetExitCodeThread` see it end with its result;
+//! - `seh`: an access violation and a `RaiseException` under a frame-based handler linked at
+//!   `fs:[0]` (what `__try` compiles to) reach it and continue, and `RtlUnwind` (imported from
+//!   `ntdll`) unwinds an inner frame.
 //!
 //! It ends with `ExitProcess(0)` when every check passed, else with the number of the first
 //! one that failed. Not part of the x64 test corpus (`tests/windows/*.rs`): the oracle pipeline
@@ -56,7 +59,13 @@ unsafe extern "system" {
     fn WaitForSingleObject(handle: Handle, milliseconds: u32) -> u32;
     fn GetExitCodeThread(thread: Handle, code: *mut u32) -> i32;
     fn GetCurrentThreadId() -> u32;
+    fn RaiseException(code: u32, flags: u32, count: u32, arguments: *const usize);
     fn ExitProcess(code: u32) -> !;
+}
+
+#[link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated")]
+unsafe extern "system" {
+    fn RtlUnwind(target_frame: *mut u8, target_ip: *mut u8, record: *mut u8, return_value: usize);
 }
 
 /// `STD_OUTPUT_HANDLE`, `GENERIC_READ`, `GENERIC_WRITE`, `CREATE_ALWAYS`, `OPEN_EXISTING`,
@@ -158,6 +167,161 @@ fn thread() -> bool {
     }
 }
 
+// ----- structured exception handling ---------------------------------------------------------
+//
+// A 32-bit program's handlers are frame-based: an `EXCEPTION_REGISTRATION_RECORD` (`Next`,
+// `Handler`) pushed on the stack and linked at `fs:[0]`, which is what a compiler makes of
+// `__try` (`winnt.h`; Learn: "Structured Exception Handling").
+
+use core::sync::atomic::{AtomicU32, Ordering};
+
+/// What the handler saw: the exception code, its first parameter, and the unwind calls.
+static SEEN_CODE: AtomicU32 = AtomicU32::new(0);
+static SEEN_PARAMETER: AtomicU32 = AtomicU32::new(0);
+static UNWOUND: AtomicU32 = AtomicU32::new(0);
+
+/// `STATUS_ACCESS_VIOLATION`, `EXCEPTION_UNWINDING` (`ntstatus.h`, `winnt.h`).
+const ACCESS_VIOLATION: u32 = 0xC000_0005;
+const EXCEPTION_UNWINDING: u32 = 2;
+/// The program's own exception code.
+const MY_CODE: u32 = 0xE000_1234;
+
+/// An `EXCEPTION_ROUTINE` (`cdecl`): note the exception, step over the faulting 6-byte store of
+/// an access violation, continue execution (`ExceptionContinueExecution`); during an unwind,
+/// count the call and go on (`ExceptionContinueSearch`).
+unsafe extern "C" fn handler(record: *mut u32, _frame: *mut u8, context: *mut u8, _dc: *mut u8) -> u32 {
+    // SAFETY: the dispatcher's x86 EXCEPTION_RECORD (code 0, flags 4, parameters from 20) and
+    // CONTEXT (`Eip` at 0xB8).
+    unsafe {
+        if record.add(1).read() & EXCEPTION_UNWINDING != 0 {
+            UNWOUND.fetch_add(1, Ordering::SeqCst);
+            return 1;
+        }
+        let code = record.read();
+        SEEN_CODE.store(code, Ordering::SeqCst);
+        SEEN_PARAMETER.store(record.add(5).read(), Ordering::SeqCst);
+        if code == ACCESS_VIOLATION {
+            let eip = context.add(0xB8).cast::<u32>();
+            eip.write(eip.read() + 6);
+        }
+    }
+    0
+}
+
+extern "C" fn raise_mine() {
+    let parameter = [0x42usize];
+    // SAFETY: a plain kernel32 call with one argument.
+    unsafe { RaiseException(MY_CODE, 0, 1, parameter.as_ptr()) };
+}
+
+/// The first SEH step that failed, or `None`.
+fn seh_step() -> Option<&'static [u8]> {
+    // A store to address 0 under a frame whose handler steps over it.
+    // SAFETY: the frame is pushed, linked, and unlinked and popped again by the same block; the
+    // handler resumes after the 6-byte `mov dword ptr [eax], 1` (C7 00 01 00 00 00).
+    unsafe {
+        core::arch::asm!(
+            "push edx",
+            "mov eax, fs:[0]",
+            "push eax",
+            "mov fs:[0], esp",
+            "xor eax, eax",
+            ".byte 0xC7, 0x00, 0x01, 0x00, 0x00, 0x00",
+            "pop ecx",
+            "mov fs:[0], ecx",
+            "add esp, 4",
+            inout("edx") handler as *const () as usize => _,
+            out("eax") _,
+            out("ecx") _,
+        );
+    }
+    if SEEN_CODE.load(Ordering::SeqCst) != ACCESS_VIOLATION || SEEN_PARAMETER.load(Ordering::SeqCst) != 1 {
+        return Some(b"an access violation was not handled as a write");
+    }
+    // A software exception (`RaiseException`), its handler continuing execution: the call
+    // returns.
+    // SAFETY: as above; the raising function is called with the frame linked.
+    unsafe {
+        core::arch::asm!(
+            "push edx",
+            "mov eax, fs:[0]",
+            "push eax",
+            "mov fs:[0], esp",
+            "call {raise}",
+            "pop ecx",
+            "mov fs:[0], ecx",
+            "add esp, 4",
+            inout("edx") handler as *const () as usize => _,
+            raise = sym raise_mine,
+            clobber_abi("C"),
+        );
+    }
+    if SEEN_CODE.load(Ordering::SeqCst) != MY_CODE || SEEN_PARAMETER.load(Ordering::SeqCst) != 0x42 {
+        return Some(b"RaiseException did not reach the handler");
+    }
+    // `RtlUnwind` to an outer frame: the inner frame's handler is called once, unwinding, the
+    // chain is the outer frame's again, and the call returns.
+    let (before, after): (u32, u32);
+    // SAFETY: two frames are pushed and linked; RtlUnwind unlinks the inner one and returns
+    // (`stdcall`, its 16 bytes popped); the block pops both and restores the chain.
+    unsafe {
+        core::arch::asm!(
+            "mov ebx, fs:[0]",
+            "push edx",
+            "mov eax, fs:[0]",
+            "push eax",
+            "mov fs:[0], esp",
+            "mov edi, esp",
+            "push edx",
+            "mov eax, fs:[0]",
+            "push eax",
+            "mov fs:[0], esp",
+            "push 0",
+            "push 0",
+            "push 0",
+            "push edi",
+            "call {unwind}",
+            "mov eax, fs:[0]",
+            "sub eax, edi",
+            "add esp, 8",
+            "pop ecx",
+            "mov fs:[0], ecx",
+            "add esp, 4",
+            inout("edx") handler as *const () as usize => _,
+            unwind = sym RtlUnwind,
+            out("ebx") before,
+            out("eax") after,
+            out("edi") _,
+            clobber_abi("C"),
+        );
+    }
+    if UNWOUND.load(Ordering::SeqCst) != 1 || after != 0 {
+        return Some(b"RtlUnwind did not unwind the inner frame");
+    }
+    // SAFETY: FS is the TEB.
+    let now: u32 = unsafe {
+        let v: u32;
+        core::arch::asm!("mov {}, fs:[0]", out(reg) v);
+        v
+    };
+    if now != before {
+        return Some(b"the frame chain was not restored");
+    }
+    None
+}
+
+fn seh() -> bool {
+    match seh_step() {
+        None => true,
+        Some(step) => {
+            out(b"seh step failed: ");
+            out(step);
+            out(b"\n");
+            false
+        }
+    }
+}
+
 fn file() -> bool {
     let mut name = [0u16; 64];
     for (d, s) in name.iter_mut().zip("C:\\Windows\\Temp\\poly-hello32.txt".encode_utf16()) {
@@ -191,8 +355,13 @@ fn file() -> bool {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mainCRTStartup() -> u32 {
-    let checks: [(&[u8], fn() -> bool); 4] =
-        [(b"last error\n", last_error), (b"wow64 view\n", wow64_view), (b"file\n", file), (b"thread\n", thread)];
+    let checks: [(&[u8], fn() -> bool); 5] = [
+        (b"last error\n", last_error),
+        (b"wow64 view\n", wow64_view),
+        (b"file\n", file),
+        (b"thread\n", thread),
+        (b"seh\n", seh),
+    ];
     if !out(b"hello\n") {
         // SAFETY: ends the process.
         unsafe { ExitProcess(1) }

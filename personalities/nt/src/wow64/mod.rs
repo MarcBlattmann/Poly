@@ -14,9 +14,12 @@
 //! scratch window above 4 GiB that only the call sees, runs the ordinary 64-bit service, and
 //! copies the results back in the 32-bit layout.
 //!
-//! What it does not do yet is listed in ADR 0186's staged plan (exceptions, APCs, contexts,
-//! GUI).
+//! Exceptions reach the i686 `ntdll`'s `KiUserExceptionDispatcher` with an x86 `CONTEXT` and
+//! `EXCEPTION_RECORD` on the thread's stack ([`context`]), which walks the thread's SEH frames
+//! (`fs:[0]`); `NtContinue` and `NtRaiseException` take the x86 structures. What is not done yet
+//! is listed in ADR 0186's staged plan (APCs, `NtGetContextThread`, the GUI).
 
+pub mod context;
 pub mod sigs;
 pub mod thunk;
 

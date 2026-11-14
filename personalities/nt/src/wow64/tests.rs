@@ -29,6 +29,7 @@ impl Caller32 {
         f.proc.wow64 = true;
         f.proc.vm = VirtualMemory::with_range(LOWEST_ADDRESS, address_end(0));
         f.map_test_memory(LOW, LOW_SIZE);
+        f.accept_contexts = true;
         Caller32 { f, next: LOW + 0x100 }
     }
 
@@ -183,7 +184,7 @@ fn memory_basic_information_has_the_32_bit_layout() {
 fn an_unconverted_structure_and_an_unknown_service_are_not_implemented() {
     let mut c = Caller32::new();
     let ctx = c.put(&[0u8; 0x2CC]);
-    assert_eq!(c.call(Service::Continue, &[ctx, 0]), STATUS_NOT_IMPLEMENTED);
+    assert_eq!(c.call(Service::SetContextThread, &[0xFFFF_FFFE, ctx]), STATUS_NOT_IMPLEMENTED);
     // A win32k (table 1) number has no 32-bit signature yet.
     let (outcome, status) = c.call_outcome(0x1000, &[]);
     assert!(matches!(outcome, Outcome::Unimplemented { .. }));
@@ -306,8 +307,8 @@ fn a_pe32_executable_starts_a_32_bit_process_below_4_gib() {
     // The start frame: a zero return address, the entry point, the PEB, the image base.
     let frame: Vec<u32> = (0..4).map(|i| u32_at(&f, ps.rsp + 4 * i)).collect();
     assert_eq!(frame, [0, 0x40_1000, ps.peb as u32, 0x40_0000]);
-    // Exceptions and APCs are not delivered to 32-bit code yet.
-    assert_eq!((f.proc.exception_dispatcher, f.proc.apc_dispatcher), (0, 0));
+    // Exceptions go to the i686 ntdll's dispatcher; APCs are not delivered to 32-bit code yet.
+    assert_eq!((f.proc.exception_dispatcher, f.proc.apc_dispatcher), (0x7700_1020, 0));
     // The parameters have the 32-bit layout.
     let params = crate::params::for_program("C:\\Apps\\app.exe", &["a b"], vec![0, 0]);
     let base = crate::params::write(&mut f.proc, &mut f.mem, ps.peb, &params).unwrap();
@@ -366,4 +367,49 @@ fn a_32_bit_process_opening_system32_gets_syswow64() {
         converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]),
         "\\??\\C:\\Windows\\System32\\drivers\\etc\\hosts"
     );
+}
+
+#[test]
+fn a_raised_exception_reaches_the_32_bit_dispatcher_with_x86_structures() {
+    use crate::wow64::context::{CONTEXT32_SIZE, from_context32, to_record32};
+    let mut c = Caller32::new();
+    c.f.proc.exception_dispatcher = 0x7700_1020;
+    // The thread's stack: a page of the test memory.
+    let esp = (LOW + LOW_SIZE - 0x100) as u32;
+    let mut ctx = [0u8; CONTEXT32_SIZE];
+    ctx[0..4].copy_from_slice(&0x1_0007u32.to_le_bytes());
+    ctx[0xB8..0xBC].copy_from_slice(&0x40_1234u32.to_le_bytes());
+    ctx[0xC4..0xC8].copy_from_slice(&esp.to_le_bytes());
+    ctx[0xB0..0xB4].copy_from_slice(&0xAAAAu32.to_le_bytes());
+    let ctx_at = c.put(&ctx);
+    let rec = poly_seh::ExceptionRecord::new(0xE000_0001, 0, 0x40_1234, &[7]);
+    let rec_at = c.put(&to_record32(&rec));
+    assert_eq!(c.call(Service::RaiseException, &[rec_at, ctx_at, 1]), STATUS_SUCCESS);
+    // The fake kernel recorded the dispatcher's registers.
+    let loaded = c.f.loaded.clone().expect("a context was loaded");
+    assert_eq!(loaded.rip, 0x7700_1020);
+    let sp = loaded.rsp();
+    assert!(sp < u64::from(esp) && sp >= LOW);
+    let words: Vec<u32> = (0..3).map(|i| c.f.u32_at(sp + 4 * i)).collect();
+    assert_eq!(words[0], 0, "the zero return address");
+    let (record32, context32) = (u64::from(words[1]), u64::from(words[2]));
+    assert_eq!(c.f.u32_at(record32), 0xE000_0001);
+    assert_eq!(c.f.u32_at(record32 + 16), 1);
+    assert_eq!(c.f.u32_at(record32 + 20), 7);
+    let back = from_context32(&c.f.bytes_at(context32, CONTEXT32_SIZE));
+    assert_eq!((back.rip, back.gpr[0], back.gpr[4]), (0x40_1234, 0xAAAA, u64::from(esp)));
+}
+
+#[test]
+fn nt_continue_loads_an_x86_context() {
+    let mut c = Caller32::new();
+    let mut ctx = [0u8; 0x2CC];
+    ctx[0..4].copy_from_slice(&0x1_0003u32.to_le_bytes());
+    ctx[0xB8..0xBC].copy_from_slice(&0x40_2000u32.to_le_bytes());
+    ctx[0xC4..0xC8].copy_from_slice(&0x0012_F000u32.to_le_bytes());
+    ctx[0xA8..0xAC].copy_from_slice(&0x55u32.to_le_bytes());
+    let at = c.put(&ctx);
+    assert_eq!(c.call(Service::Continue, &[at, 0]), STATUS_SUCCESS);
+    let loaded = c.f.loaded.clone().expect("loaded");
+    assert_eq!((loaded.rip, loaded.rsp(), loaded.gpr[2]), (0x40_2000, 0x12_F000, 0x55));
 }

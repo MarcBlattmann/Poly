@@ -19,6 +19,8 @@
 //! | `IO` | `IO_STATUS_BLOCK*` (out) | a 64-bit copy; `Status` and `Information` written back |
 //! | `CI` | `CLIENT_ID*` (in) | a 64-bit copy |
 //! | `HA` | a `HANDLE` array whose count is the first argument (`NtWaitForMultipleObjects`) | a 64-bit copy |
+//! | `CX` | `CONTEXT*` (in): the x86 `CONTEXT` ([`super::context`]) | a 64-bit `CONTEXT` |
+//! | `ER` | `EXCEPTION_RECORD*` (in) | a 64-bit `EXCEPTION_RECORD` |
 //! | `X` | a structure (or a 32-bit code address the kernel would call) not converted yet: a null pointer passes, anything else makes the call `STATUS_NOT_IMPLEMENTED` | — |
 
 use super::thunk::Arg;
@@ -119,8 +121,8 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::FlushKey, &[H]),
     (Service::NotifyChangeKey, &[H, H, X, V, IO, V, V, P, V, V]),
     (Service::SetInformationKey, &[H, V, P, V]),
-    (Service::RaiseException, &[X, X, V]),
-    (Service::Continue, &[X, V]),
+    (Service::RaiseException, &[ER, CX, V]),
+    (Service::Continue, &[CX, V]),
     (Service::QuerySystemTime, &[P]),
     (Service::QueryPerformanceCounter, &[P, P]),
     (Service::QuerySystemInformation, &[V, P, V, P]),
