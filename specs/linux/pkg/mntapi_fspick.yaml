@@ -35,7 +35,12 @@ summary: >
   missing path); a user who is root in a user namespace they own may pick
   and reconfigure mounts of filesystems created in that namespace, while
   fspick of a foreign mount (the root mount) succeeds and its
-  CMD_RECONFIGURE is EPERM.
+  CMD_RECONFIGURE is EPERM. That refusal ends the context: every command
+  after it is EBUSY (setting a parameter, a second CMD_RECONFIGURE, CREATE,
+  fsmount) and a read of the messages is ENODATA; the mount itself is not
+  changed. The same holds for a descriptor handed to a caller without
+  CAP_SYS_ADMIN: setting parameters is fine, CMD_RECONFIGURE is EPERM and
+  ends the context (see mntapi_fsconfig).
 returns:
   success: "descriptor >= 3, a filesystem context; its link reads anon_inode:[fscontext]"
   reconfigure_effect: "size=2m after size=1m: f_blocks 256 -> 512; nr_blocks=100: 100; ro: EROFS and ST_RDONLY; rw: writable again"

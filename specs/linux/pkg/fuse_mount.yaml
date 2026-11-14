@@ -80,6 +80,9 @@ errors:
   type_empty_subtype: "EINVAL (22): type 'fuse.' (empty subtype)"
   bad_mountpoint: "ENOENT (2): mount point does not exist; EINVAL (22): MS_REMOUNT of a directory that is not a mount point"
   same_fd_twice: "not specified and not tested: a descriptor that already belongs to a mount, given to a second mount call, gave 0 once and EBUSY (16) after the first mount was detached, on the oracle"
+  option_order: "EINVAL (22) comes before ENOTDIR: when anything in the options is wrong in itself (fd= missing, text, empty, closed, or not an open /dev/fuse file such as stdin; user_id=, group_id= or rootmode= missing or bad; an unknown option) the root's type is not judged against the mount point, so a regular root over a directory with fd=999 is EINVAL, as is a directory root over a regular file"
+  flag_with_value: "EINVAL (22): default_permissions or allow_other given a value, any value (=1, =0, =x, empty)"
+  failed_mount_fd: "after a mount that failed with EINVAL the descriptor can still be used for a good mount; after one that failed with ENOTDIR it cannot: a new mount with it is ENOTCONN (107), over the same mount point or another one, and the descriptor is not usable for a mount again"
   device_unbound: "EPERM (1): read or write on a /dev/fuse descriptor that is not bound to a mount (also size 0)"
   device_small_read: "EINVAL (22): read buffer below 8192 bytes while the INIT request is queued (nothing consumed)"
   device_short_write: "EINVAL (22): write shorter than 16 bytes"
@@ -95,13 +98,14 @@ threading: >
   request. The tests run the server as a child process that reads and
   answers sequentially.
 ordering:
+  - "mount(2) judges the options first (descriptor, ids, rootmode value), then the fit of the root's type to the mount point"
   - "mount(2) returns before any request is read; INIT is the first request of a connection"
   - "at unmount the server's read of ENODEV comes after the RELEASE requests of files that were open"
 timing:
   typical: "microseconds to a few hundred microseconds per request round trip"
   guarantees: "none"
 tests:
-  visible: 5  # count in <symbol>.tests/
+  visible: 6  # count in <symbol>.tests/
   held_out: 2  # count kept by the diff runner
 # Notes: opcodes, struct layouts and option names from the public
 # linux/fuse.h and the kernel's public fuse documentation;
