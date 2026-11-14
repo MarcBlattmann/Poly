@@ -73,6 +73,24 @@ pub const MACHINE_USER_SHELL_FOLDERS: &str =
     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders";
 pub const MACHINE_SHELL_FOLDERS: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders";
 
+/// The font files of Poly's font store (DejaVu 2.37, `cargo xtask fonts fetch`, ADR 0105), as the
+/// values of `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts` (Learn: the value name is
+/// the face's name and its type, the data the file name in `C:\Windows\Fonts`).
+pub const FONT_LIST: [(&str, &str); 12] = [
+    ("DejaVu Sans (TrueType)", "DejaVuSans.ttf"),
+    ("DejaVu Sans Bold (TrueType)", "DejaVuSans-Bold.ttf"),
+    ("DejaVu Sans Oblique (TrueType)", "DejaVuSans-Oblique.ttf"),
+    ("DejaVu Sans Bold Oblique (TrueType)", "DejaVuSans-BoldOblique.ttf"),
+    ("DejaVu Serif (TrueType)", "DejaVuSerif.ttf"),
+    ("DejaVu Serif Bold (TrueType)", "DejaVuSerif-Bold.ttf"),
+    ("DejaVu Serif Italic (TrueType)", "DejaVuSerif-Italic.ttf"),
+    ("DejaVu Serif Bold Italic (TrueType)", "DejaVuSerif-BoldItalic.ttf"),
+    ("DejaVu Sans Mono (TrueType)", "DejaVuSansMono.ttf"),
+    ("DejaVu Sans Mono Bold (TrueType)", "DejaVuSansMono-Bold.ttf"),
+    ("DejaVu Sans Mono Oblique (TrueType)", "DejaVuSansMono-Oblique.ttf"),
+    ("DejaVu Sans Mono Bold Oblique (TrueType)", "DejaVuSansMono-BoldOblique.ttf"),
+];
+
 fn entry(under: Under, key: &str, name: &str, kind: u32, data: &str, policy: Policy) -> Entry {
     Entry { under, key: key.into(), volatile: false, name: name.into(), kind, data: data.into(), policy }
 }
@@ -105,6 +123,13 @@ pub fn entries(reg: &Registry, user: &User) -> Vec<Entry> {
     let profile = user.profile();
     let me = alloc::format!("{PROFILE_LIST}\\{}", user.sid);
     v.push(entry(Machine, &me, "ProfileImagePath", REG_EXPAND_SZ, &profile, Fixed));
+
+    // The fonts Poly installs (ADR 0181): the font list of Windows, `name (TrueType)` -> file in
+    // `C:\Windows\Fonts`. A program that installs a font adds its own value.
+    let fonts_key = alloc::format!("{NT_CURRENT_VERSION}\\Fonts");
+    for (name, file) in FONT_LIST {
+        v.push(entry(Machine, &fonts_key, name, REG_SZ, file, Default));
+    }
 
     let env = alloc::format!("{}\\Control\\Session Manager\\Environment", current_control_set(reg));
     for (name, data) in [("TEMP", "%SystemRoot%\\TEMP"), ("TMP", "%SystemRoot%\\TEMP"), ("windir", "%SystemRoot%")] {
