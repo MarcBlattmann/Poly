@@ -1,6 +1,6 @@
 [
 {"symbol":"fuse_init","status":"green","tests_visible":4,"tests_held_out":2,"src":["poly-adr-0132"]},
-{"symbol":"fuse_mount","status":"green","tests_visible":5,"tests_held_out":2,"src":["poly-adr-0132"]},
+{"symbol":"fuse_mount","status":"claimed","claimed_by":"impl-linux-pkg","src":["poly-adr-0132"]},
 {"symbol":"fuse_readonly","status":"green","tests_visible":3,"tests_held_out":2,"src":["poly-adr-0132"]},
 {"symbol":"fuse_write","status":"green","tests_visible":3,"tests_held_out":1,"src":["poly-adr-0132"]},
 {"symbol":"loop_attach","status":"green","tests_visible":3,"tests_held_out":2,"src":["poly-adr-0132"]},
@@ -12,7 +12,7 @@
 {"symbol":"mntapi_fsopen","status":"green","tests_visible":2,"tests_held_out":1,"src":["poly-adr-0132"]},
 {"symbol":"mntapi_fspick","status":"green","tests_visible":2,"tests_held_out":1,"src":["poly-adr-0132"]},
 {"symbol":"mntapi_mount_setattr","status":"green","tests_visible":4,"tests_held_out":2,"src":["poly-adr-0132"]},
-{"symbol":"mntapi_move_mount","status":"green","tests_visible":3,"tests_held_out":1,"src":["poly-adr-0132"]},
+{"symbol":"mntapi_move_mount","status":"claimed","claimed_by":"impl-linux-pkg","src":["poly-adr-0132"]},
 {"symbol":"mntapi_open_tree","status":"green","tests_visible":3,"tests_held_out":1,"src":["poly-adr-0132"]},
 {"symbol":"mount_bind_propagation","status":"green","tests_visible":5,"tests_held_out":2,"src":["poly-adr-0132"]},
 {"symbol":"netns_loopback","status":"green","tests_visible":3,"tests_held_out":1,"src":["poly-adr-0132"]},
@@ -33,5 +33,5 @@
 {"symbol":"squashfs_mount","status":"green","tests_visible":3,"tests_held_out":1,"src":["poly-adr-0132"]},
 {"symbol":"squashfs_tree","status":"green","tests_visible":3,"tests_held_out":1,"src":["poly-adr-0132"]},
 {"symbol":"userns_idmap","status":"green","tests_visible":5,"tests_held_out":2,"src":["poly-adr-0132"]},
-{"symbol":"userns_mount","status":"green","tests_visible":2,"tests_held_out":1,"src":["poly-adr-0132"]}
+{"symbol":"userns_mount","status":"claimed","claimed_by":"impl-linux-pkg","src":["poly-adr-0132"]}
 ]
