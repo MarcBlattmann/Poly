@@ -9,7 +9,7 @@ use alloc::collections::BTreeMap;
 use core::cell::RefCell;
 use poly_font::{Bitmap, Font, LayoutOptions, RenderMode, layout, quantize, render_glyph_scaled};
 use poly_wayland::compose::paint::{self, Radii};
-use poly_wayland::compose::{Framebuffer, Rect, TextRenderer};
+use poly_wayland::compose::{Framebuffer, Rect, Scale, TextRenderer};
 
 pub use poly_wayland::compose::paint::mix;
 
@@ -104,8 +104,8 @@ impl Style {
     }
 
     /// The same at output scale `s`.
-    pub fn scaled(self, s: i32) -> Style {
-        Style { size: self.size * s as f32, ..self }
+    pub fn scaled(self, s: Scale) -> Style {
+        Style { size: self.size * s.factor(), ..self }
     }
 }
 
@@ -448,6 +448,9 @@ impl Text {
     }
 }
 
+/// A title glyph at one scale: its advance, bitmap and the line's baseline.
+type TitleGlyph = (u32, poly_font::Bitmap, i32);
+
 /// Window titles in an outline font, for the compositor's neutral frame
 /// (its [`TextRenderer`] cells): each character rendered once at
 /// `size` pixels and placed in a cell as wide as its advance (rounded;
@@ -456,8 +459,8 @@ pub struct TitleFont {
     font: Font<'static>,
     size: f32,
     line_height: u32,
-    baseline: i32,
-    glyphs: RefCell<alloc::collections::BTreeMap<char, (u32, poly_font::Bitmap)>>,
+    /// Each character at each scale (120ths): its advance and bitmap.
+    glyphs: RefCell<alloc::collections::BTreeMap<(char, u32), TitleGlyph>>,
 }
 
 impl core::fmt::Debug for TitleFont {
@@ -467,26 +470,34 @@ impl core::fmt::Debug for TitleFont {
 }
 
 impl TitleFont {
-    /// `font` at `size` pixels per em, in lines `line_height` high.
+    /// `font` at `size` pixels per em, in lines `line_height` high (logical
+    /// pixels: at a scale the glyphs are drawn at the scaled size, not
+    /// stretched).
     pub fn new(font: Font<'static>, size: f32, line_height: u32) -> TitleFont {
-        let v = font.vmetrics();
+        TitleFont { font, size, line_height, glyphs: RefCell::new(alloc::collections::BTreeMap::new()) }
+    }
+
+    /// The baseline in a line of physical height `lh` for glyphs of `size`
+    /// pixels per em: ascent and descent centred in the line.
+    fn baseline(&self, size: f32, lh: u32) -> i32 {
+        let v = self.font.vmetrics();
         let scale = size / f32::from(v.units_per_em.max(1));
         let ascent = f32::from(v.ascender) * scale;
         let descent = -f32::from(v.descender) * scale;
-        // Centre ascent + descent in the line.
-        let baseline = ((line_height as f32 - (ascent + descent)) / 2.0 + ascent + 0.5) as i32;
-        TitleFont { font, size, line_height, baseline, glyphs: RefCell::new(alloc::collections::BTreeMap::new()) }
+        ((lh as f32 - (ascent + descent)) / 2.0 + ascent + 0.5) as i32
     }
 
-    fn with_glyph<R>(&self, c: char, f: impl FnOnce(u32, &poly_font::Bitmap) -> R) -> R {
+    fn with_glyph<R>(&self, c: char, s: Scale, f: impl FnOnce(u32, &poly_font::Bitmap, i32) -> R) -> R {
         let mut glyphs = self.glyphs.borrow_mut();
-        let entry = glyphs.entry(c).or_insert_with(|| {
+        let entry = glyphs.entry((c, s.as_120ths())).or_insert_with(|| {
+            let size = self.size * s.factor();
             let g = self.font.glyph_index(c).unwrap_or(poly_font::GlyphId(0));
             let upem = f32::from(self.font.units_per_em().max(1));
-            let advance = (f32::from(self.font.advance(g)) * self.size / upem + 0.5) as u32;
-            (advance, poly_font::render_glyph(&self.font, g, self.size, 0.0, RenderMode::Gray))
+            let advance = (f32::from(self.font.advance(g)) * size / upem + 0.5) as u32;
+            let baseline = self.baseline(size, self.line_height_at(s));
+            (advance, poly_font::render_glyph(&self.font, g, size, 0.0, RenderMode::Gray), baseline)
         });
-        f(entry.0, &entry.1)
+        f(entry.0, &entry.1, entry.2)
     }
 }
 
@@ -496,13 +507,25 @@ impl TextRenderer for TitleFont {
     }
 
     fn advance(&self, c: char) -> u32 {
-        self.with_glyph(c, |adv, _| adv)
+        self.advance_at(c, Scale::ONE)
     }
 
     fn coverage(&self, c: char, x: u32, y: u32) -> u8 {
-        self.with_glyph(c, |_, bm| {
+        self.coverage_at(c, x, y, Scale::ONE)
+    }
+
+    fn line_height_at(&self, s: Scale) -> u32 {
+        s.px(self.line_height as i32) as u32
+    }
+
+    fn advance_at(&self, c: char, s: Scale) -> u32 {
+        self.with_glyph(c, s, |adv, _, _| adv)
+    }
+
+    fn coverage_at(&self, c: char, x: u32, y: u32, s: Scale) -> u8 {
+        self.with_glyph(c, s, |_, bm, baseline| {
             let bx = x as i32 - bm.left;
-            let by = y as i32 - (self.baseline + bm.top);
+            let by = y as i32 - (baseline + bm.top);
             if bx < 0 || by < 0 { 0 } else { bm.coverage(bx as u32, by as u32) }
         })
     }

@@ -19,6 +19,13 @@ pub const E_FAIL: u32 = 0x8000_4005;
 pub const E_INVALIDARG: u32 = 0x8007_0057;
 /// `E_POINTER` (`winerror.h`).
 pub const E_POINTER: u32 = 0x8000_4003;
+/// `HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)`: no such known folder, or its directory is not
+/// there (`specs/windows/shell32.dll/SHGetKnownFolderPath.yaml`).
+pub const E_FILE_NOT_FOUND: u32 = 0x8007_0002;
+/// `E_ACCESSDENIED` (`winerror.h`): a token without `TOKEN_QUERY`.
+pub const E_ACCESSDENIED: u32 = 0x8007_0005;
+/// `E_HANDLE` (`winerror.h`): `hToken` is no token handle.
+pub const E_HANDLE: u32 = 0x8007_0006;
 /// `E_OUTOFMEMORY` (`winerror.h`).
 pub const E_OUTOFMEMORY: u32 = 0x8007_000E;
 /// `HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)`: the folder's path cannot be made (a variable
@@ -28,6 +35,8 @@ pub const E_PATH_NOT_FOUND: u32 = 0x8007_0003;
 /// `KF_FLAG_CREATE` (`KNOWN_FOLDER_FLAG`, `shlobj_core.h`): "Forces the creation of the
 /// specified folder if that folder does not already exist."
 pub const KF_FLAG_CREATE: u32 = 0x0000_8000;
+/// `KF_FLAG_DONT_VERIFY`: "Do not verify the folder's existence".
+pub const KF_FLAG_DONT_VERIFY: u32 = 0x0000_4000;
 
 /// A known folder: its name without `FOLDERID_`, its GUID as the 16 bytes a `KNOWNFOLDERID`
 /// has in memory, and its default path (starting with `%VARIABLE%`; empty for a folder that
@@ -69,9 +78,38 @@ pub fn flags_accepted(flags: u32) -> bool {
     !lonely && flags & KF_FLAG_ALIAS_ONLY == 0
 }
 
-/// `SHGetKnownFolderPath`'s answer for an id: the path, or the `HRESULT`.
+/// `SHGetKnownFolderPath`'s answer for an id: the path, or the `HRESULT`. An id that is no known
+/// folder (also the all-zero GUID) is `HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)`, as the sheet
+/// observed.
 pub fn known_folder_path(id: &[u8; 16], variable: impl Fn(&str) -> Option<Vec<u16>>) -> Result<Vec<u16>, u32> {
-    path(lookup(id).ok_or(E_INVALIDARG)?, variable)
+    path(lookup(id).ok_or(E_FILE_NOT_FOUND)?, variable)
+}
+
+/// The path of a folder for the default user (`hToken` -1): a folder below the user's profile
+/// moves to the same place below the Default profile (a sibling of it in the directory the
+/// profiles are in); every other folder is unchanged (sheet rule `token`: Windows is unchanged).
+pub fn for_default_user(path: &[u16], profile: &[u16]) -> Vec<u16> {
+    let backslash = u16::from(b'\\');
+    let mut profile = profile;
+    while let [rest @ .., last] = profile
+        && *last == backslash
+        && rest.len() > 2
+    {
+        profile = rest;
+    }
+    let lower = |c: u16| if (u16::from(b'A')..=u16::from(b'Z')).contains(&c) { c + 32 } else { c };
+    let below = !profile.is_empty()
+        && path.len() >= profile.len()
+        && path[..profile.len()].iter().zip(profile).all(|(a, b)| lower(*a) == lower(*b))
+        && (path.len() == profile.len() || path[profile.len()] == backslash);
+    if !below {
+        return path.to_vec();
+    }
+    let Some(slash) = profile.iter().rposition(|&c| c == backslash) else { return path.to_vec() };
+    let mut out = profile[..slash + 1].to_vec();
+    out.extend("Default".encode_utf16());
+    out.extend_from_slice(&path[profile.len()..]);
+    out
 }
 
 /// Every known folder of Learn's "KNOWNFOLDERID" page.
@@ -869,9 +907,24 @@ mod tests {
         // FOLDERID_ComputerFolder is virtual: no path.
         assert_eq!(text("0AC0837C-BBF8-452A-850D-79D08E667CA7"), Err(E_FAIL));
         // Not a known folder.
-        assert_eq!(text("00000000-0000-0000-0000-000000000000"), Err(E_INVALIDARG));
+        assert_eq!(text("00000000-0000-0000-0000-000000000000"), Err(E_FILE_NOT_FOUND));
         // FOLDERID_ProgramData: %ALLUSERSPROFILE% is not set in this environment.
         assert_eq!(text("62AB5D82-FDC1-4DC3-A9DD-070D1D495D97"), Err(E_PATH_NOT_FOUND));
+    }
+
+    #[test]
+    fn the_default_user_has_its_own_profile_and_system_folders_stay() {
+        let w = |s: &str| -> Vec<u16> { s.encode_utf16().collect() };
+        let profile = w("C:\\Users\\poly");
+        let moved = |p: &str| String::from_utf16(&for_default_user(&w(p), &profile)).unwrap();
+        assert_eq!(moved("C:\\Users\\poly"), "C:\\Users\\Default");
+        assert_eq!(moved("C:\\Users\\poly\\Downloads"), "C:\\Users\\Default\\Downloads");
+        assert_eq!(moved("c:\\users\\POLY\\AppData\\Local"), "C:\\Users\\Default\\AppData\\Local");
+        assert_eq!(moved("C:\\Windows"), "C:\\Windows");
+        assert_eq!(moved("C:\\Users\\polyglot"), "C:\\Users\\polyglot");
+        assert_eq!(moved("C:\\Users"), "C:\\Users");
+        let with_slash = for_default_user(&w("C:\\Users\\poly\\x"), &w("C:\\Users\\poly\\"));
+        assert_eq!(String::from_utf16(&with_slash).unwrap(), "C:\\Users\\Default\\x");
     }
 
     #[test]

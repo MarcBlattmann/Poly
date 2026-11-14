@@ -1657,6 +1657,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // display event, a DRM hotplug event, a new KMS mode, the shell and
     // windows laid out again; desktop.rs, ADR 0145).
     ("desktop-resize", desktop::resize_boot_test),
+    // The display scale switched to 150 % in the settings: the shell, the
+    // frames and the pointer follow the same conversion (desktop.rs, ADR 0179).
+    ("desktop-scale", desktop::scale_boot_test),
     // A Windows GUI program's window on the desktop through win32k's
     // desktop link, /dev/win32k (desktop.rs, ADR 0131).
     ("desktop-win32", desktop::win32_boot_test),
@@ -1763,7 +1766,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
     // About 60 s: the compositor and the desktop.
-    ("desktop", &["wayland", "wayland-kms", "desktop", "desktop-resize", "desktop-win32"]),
+    ("desktop", &["wayland", "wayland-kms", "desktop", "desktop-resize", "desktop-scale", "desktop-win32"]),
     // About 55 s: window management, notifications and the settings window.
     ("desktop-shell", &["desktop-shell"]),
     // About 85 s: Poly's own Files and Terminal on the desktop.
@@ -2533,7 +2536,7 @@ mod tests {
         assert_eq!(names(&["=desktop"]), ["desktop"]);
         assert_eq!(
             names(&["desktop"]),
-            ["desktop", "desktop-shell", "desktop-resize", "desktop-win32", "desktop-apps"]
+            ["desktop", "desktop-shell", "desktop-resize", "desktop-scale", "desktop-win32", "desktop-apps"]
         );
         assert!(select_boot_groups(&["self".into()]).is_err());
         assert!(select_boot_groups(&["nope".into()]).is_err());

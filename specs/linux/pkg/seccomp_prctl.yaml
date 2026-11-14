@@ -71,9 +71,13 @@ summary: >
   PR_GET_KEEPCAPS read 1, PR_SET_KEEPCAPS 0 or 1 clears or sets the bit
   in PR_GET_SECUREBITS; PR_SET_KEEPCAPS takes only 0 or 1 (2 is EINVAL),
   needs no capability (uid 65534 may set it), and is EPERM for both
-  values while KEEP_CAPS_LOCKED (0x20) is set. NO_CAP_AMBIENT_RAISE makes
-  PR_CAP_AMBIENT_RAISE EPERM for every capability, also one that is in
-  the permitted and inheritable sets and one that is already raised; the
+  values while KEEP_CAPS_LOCKED (0x20) is set; the value is judged first,
+  so a value other than 0 or 1 (2, 3, -1) is EINVAL also while the bit is
+  locked, and so is a nonzero second argument. NO_CAP_AMBIENT_RAISE makes
+  PR_CAP_AMBIENT_RAISE EPERM for every valid capability, also one that is in
+  the permitted and inheritable sets and one that is already raised; an
+  invalid capability number (63, 200, -1) or a nonzero fourth argument stays
+  EINVAL with the bit set, and so does an unknown operation; the
   capabilities already in the ambient set stay and LOWER still works;
   after the bit is cleared RAISE works again; set together with its
   lock it cannot be cleared again, and fork children inherit both. setresuid from uid 0 to

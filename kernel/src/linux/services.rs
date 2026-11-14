@@ -797,6 +797,16 @@ impl LinuxKernel for Thread<'_> {
                 kprintln!("linux: {} pid {} {who}killed by signal {signal}", super::strace::stamp(), self.process.pid);
                 super::strace::write_trail(self.process.pid, &who);
             }
+        } else if super::strace::exits_logged() {
+            // A fault that kills: `fault` logs the line about it after
+            // this; the trail shows the calls that led there.
+            let who = self.comm_for_log();
+            kprintln!(
+                "linux: {} pid {} {who}killed by signal {signal} (fault)",
+                super::strace::stamp(),
+                self.process.pid
+            );
+            super::strace::write_trail(self.process.pid, &who);
         }
         self.process.group_exit(status);
         self.exit = Some(status);

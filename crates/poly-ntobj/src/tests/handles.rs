@@ -224,6 +224,30 @@ fn a_duplicate_gets_no_more_than_the_descriptor_allows() {
     assert_eq!(om.granted_access(&c, all), Ok(EVENT_ALL_ACCESS));
 }
 
+/// `MAXIMUM_ALLOWED` is dropped from a duplicate's request, not "all the descriptor allows"
+/// (specs/windows/kernel32.dll/DuplicateHandle.yaml, rule `zero_and_unknown_bits`).
+#[test]
+fn a_duplicate_drops_maximum_allowed() {
+    let (mut om, c) = setup();
+    let (token, _) = om.new_token(poly_security::token::Token::poly_user(), T1).unwrap();
+    om.set_process_token(P1, token).unwrap();
+    let sd = poly_security::sdstr::parse(&w("D:")).unwrap();
+    let attrs = ObjectAttributes { root: None, name: None, attributes: 0, security: Some(&sd) };
+    let ev = om.nt_create_event(&c, &attrs, EVENT_ALL_ACCESS, EventType::Notification, false).unwrap();
+    let read = om.nt_duplicate_object(&c, P1, ev.handle, Some(P1), SYNCHRONIZE, 0, 0).unwrap().unwrap();
+    // Alone: no access at all (an empty DACL would give READ_CONTROL | WRITE_DAC as "maximum").
+    let h = om.nt_duplicate_object(&c, P1, read, Some(P1), MAXIMUM_ALLOWED, 0, 0).unwrap().unwrap();
+    assert_eq!(om.granted_access(&c, h), Ok(0));
+    // With a bit the source has: just that bit.
+    let h = om.nt_duplicate_object(&c, P1, read, Some(P1), MAXIMUM_ALLOWED | SYNCHRONIZE, 0, 0).unwrap().unwrap();
+    assert_eq!(om.granted_access(&c, h), Ok(SYNCHRONIZE));
+    // With a bit it lacks: judged as that bit alone, which the descriptor refuses.
+    assert_eq!(
+        om.nt_duplicate_object(&c, P1, read, Some(P1), MAXIMUM_ALLOWED | EVENT_MODIFY_STATE, 0, 0),
+        Err(STATUS_ACCESS_DENIED)
+    );
+}
+
 #[test]
 fn duplicate_close_source() {
     let (mut om, c) = setup();
