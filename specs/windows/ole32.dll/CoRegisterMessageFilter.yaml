@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoRegisterMessageFilter.yaml
+id: windows/api/ole32.dll/CoRegisterMessageFilter
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  The same observations as the CoInitializeEx entry of this DLL; its tests call this function.
+summary: >
+  Installs a message filter for the apartment thread: (NULL, &old) returns 0 with old NULL on an apartment-threaded thread and 0x80004021 on a multithreaded one. No tests of its own.
+same_as: "windows/api/ole32.dll/CoInitializeEx"
+interface:
+  signature: "see the sheet it points to"
+rules:
+  values: "see the message_filter rule of CoInitializeEx"
+errors:
+  see_sheet: "the errors of that sheet"
+side_effects: "see the sheet it points to"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  Everything that sheet lists as not covered.

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "com_guid",
+      "exe_sha256": "990b6b17e340c39458e6e292b3c5851af26bdae4965ac043bde5e0774de49c06",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q0xTSURGcm9tU3RyaW5nKGEgYnJhY2VkIGNsYXNzIGlkKSA9IDB4MDogWzAwLCAwMCwgMDAsIDAwLCAwMCwgMDAsIDAwLCAwMCwgYzAsIDAwLCAwMCwgMDAsIDAwLCAwMCwgMDAsIDQ2XQpDTFNJREZyb21TdHJpbmcod2l0aG91dCBicmFjZXMpID0gMHg4MDA0MDFmMywgb3V0cHV0IHVudG91Y2hlZCAwCkNMU0lERnJvbVN0cmluZyhvbmUgZGlnaXQgdG9vIG1hbnkpID0gMHg4MDA0MDFmMywgb3V0cHV0IHVudG91Y2hlZCAwCkNMU0lERnJvbVN0cmluZyhhbiBlbXB0eSBzdHJpbmcpID0gMHg4MDA0MDFmMywgb3V0cHV0IHVudG91Y2hlZCAxCkNMU0lERnJvbVN0cmluZyhhIG5hbWUgdGhhdCBpcyBubyBQcm9nSUQpID0gMHg4MDA0MDFmMywgb3V0cHV0IHVudG91Y2hlZCAwClN0cmluZ0Zyb21DTFNJRChJSURfSVVua25vd24pID0gMHgwOiB7MDAwMDAwMDAtMDAwMC0wMDAwLUMwMDAtMDAwMDAwMDAwMDQ2fSAoMzggY2hhcmFjdGVycykKU3RyaW5nRnJvbUNMU0lEKGFsbCBvbmVzKSA9IDB4MDoge0ZGRkZGRkZGLUZGRkYtRkZGRi1GRkZGLUZGRkZGRkZGRkZGRn0gKDM4IGNoYXJhY3RlcnMpCnJvdW5kIHRyaXA6IDB4MCAweDAsIHNhbWUgaWQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CLSIDFromString(a braced class id) = 0x0: [00, 00, 00, 00, 00, 00, 00, 00, c0, 00, 00, 00, 00, 00, 00, 46]\nCLSIDFromString(without braces) = 0x800401f3, output untouched 0\nCLSIDFromString(one digit too many) = 0x800401f3, output untouched 0\nCLSIDFromString(an empty string) = 0x800401f3, output untouched 1\nCLSIDFromString(a name that is no ProgID) = 0x800401f3, output untouched 0\nStringFromCLSID(IID_IUnknown) = 0x0: {00000000-0000-0000-C000-000000000046} (38 characters)\nStringFromCLSID(all ones) = 0x0: {FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF} (38 characters)\nround trip: 0x0 0x0, same id 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "com_guid_b",
+      "exe_sha256": "7814a2b334cce0b848cd079668d92e7e5819019cb220395b67a23182e10d519c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q0xTSURGcm9tU3RyaW5nKGxvd2VyIGNhc2UgbGV0dGVycykgPSAweDA6IFswYSwgMDAsIDAwLCAwMCwgZGUsIGJjLCAxMiwgZjAsIGMwLCAwMCwgMDAsIDAwLCAwMCwgMDAsIDAwLCA0Zl0KQ0xTSURGcm9tU3RyaW5nKG1pc3NpbmcgdGhlIGNsb3NpbmcgYnJhY2UpID0gMHg4MDA0MDFmMywgb3V0cHV0IHVudG91Y2hlZCAwCkNMU0lERnJvbVN0cmluZyhhIG5vbi1oZXhhZGVjaW1hbCBkaWdpdCkgPSAweDgwMDQwMWYzLCBvdXRwdXQgdW50b3VjaGVkIDAKQ0xTSURGcm9tU3RyaW5nKGxlYWRpbmcgd2hpdGUgc3BhY2UpID0gMHg4MDA0MDFmMywgb3V0cHV0IHVudG91Y2hlZCAwCkNMU0lERnJvbVN0cmluZyhOVUxMKSA9IDB4MCAodGhlIGFsbC16ZXJvIGlkKQpTdHJpbmdGcm9tQ0xTSUQoYSBtaXhlZCBpZCkgPSAweDA6IHsxMjM0NTY3OC05QUJDLURFRjAtMTEyMi0zMzQ0NTU2Njc3ODh9ICgzOCBjaGFyYWN0ZXJzKQpTdHJpbmdGcm9tQ0xTSUQoTlVMTCBpZCkgPSAweDgwMDcwMDU3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CLSIDFromString(lower case letters) = 0x0: [0a, 00, 00, 00, de, bc, 12, f0, c0, 00, 00, 00, 00, 00, 00, 4f]\nCLSIDFromString(missing the closing brace) = 0x800401f3, output untouched 0\nCLSIDFromString(a non-hexadecimal digit) = 0x800401f3, output untouched 0\nCLSIDFromString(leading white space) = 0x800401f3, output untouched 0\nCLSIDFromString(NULL) = 0x0 (the all-zero id)\nStringFromCLSID(a mixed id) = 0x0: {12345678-9ABC-DEF0-1122-334455667788} (38 characters)\nStringFromCLSID(NULL id) = 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}
