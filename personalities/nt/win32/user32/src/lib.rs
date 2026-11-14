@@ -1218,7 +1218,10 @@ static FIRST_CALL_DONE: core::sync::atomic::AtomicBool = core::sync::atomic::Ato
 /// The FIRST call of the process to `GetSystemMetrics`, `GetSystemMetricsForDpi`,
 /// `SystemParametersInfoW`, `AdjustWindowRect` or `CreateWindowExW` sets the
 /// last error to 0 before it returns; once per process, not per thread, and
-/// after one of them has done it none of the others does.
+/// after one of them has done it none of the others does. The sheet has this
+/// in a process of a desktop session only (in session 0, without a desktop,
+/// no call clears the error); every Poly program runs on Poly's desktop, so
+/// it always does.
 pub(crate) fn first_call() {
     if !FIRST_CALL_DONE.swap(true, core::sync::atomic::Ordering::AcqRel) {
         set_last_error(0);

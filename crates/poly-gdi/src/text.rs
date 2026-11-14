@@ -287,9 +287,12 @@ struct Wrap {
 /// follows its last piece goes on behind that piece.
 fn wrap(tf: &Typeface<'_>, t: &[Ch], s: usize, e: usize, wr: Wrap, tabs: Tabs, out: &mut Vec<Ln>) {
     let fits = |a: usize, b: usize| line_width(tf, &t[a..b], tabs) <= wr.width;
+    // A blank, and a tab that expands, end a word (`DrawTextW.yaml`,
+    // `last_line`: "AABBAABBAB	AB" in 60 breaks at the tab).
+    let blank = |c: Ch| unit(c) == SPACE || (tabs.expand && unit(c) == TAB);
     let (mut a, mut i) = (s, s);
     while i < e {
-        if unit(t[i]) == SPACE {
+        if blank(t[i]) {
             if a != i && !fits(a, i + 1) {
                 out.push(Ln { a, b: i, next: i + 1 });
                 a = i + 1;
@@ -298,7 +301,7 @@ fn wrap(tf: &Typeface<'_>, t: &[Ch], s: usize, e: usize, wr: Wrap, tabs: Tabs, o
             continue;
         }
         let mut j = i;
-        while j < e && unit(t[j]) != SPACE {
+        while j < e && !blank(t[j]) {
             j += 1;
         }
         if fits(a, j) {
@@ -572,8 +575,10 @@ impl Gdi {
         if f.wraps() && width <= 0 {
             return DrawOut { height: 1, modified: None, drawn: 0 };
         }
-        let tabs = Tabs { expand: f.expand_tabs(), stop: f.tab_chars.saturating_mul(tm.ave_char_width).max(1) };
         let edit = f.has(DT_EDITCONTROL);
+        // `DT_EDITCONTROL`: the average character width is an edit control's.
+        let average = if edit { tf.edit_average_width() } else { tm.ave_char_width };
+        let tabs = Tabs { expand: f.expand_tabs(), stop: f.tab_chars.saturating_mul(average).max(1) };
         let wr = f.wraps().then_some(Wrap { width, break_words: edit, empty_after_wide: !edit && !calc });
         let mut all = lines(&tf, &t, single, wr, tabs);
         // A break at the very end of the text leaves an empty last line

@@ -202,3 +202,22 @@ fn a_wide_word_at_a_break_brings_an_empty_line_in_the_drawing_call_only() {
     // DT_NOCLIP does not change it.
     assert_eq!(height("AAAAABnAB", 20, w | DT_NOCLIP).0, 48);
 }
+
+#[test]
+fn an_expanding_tab_ends_a_word_and_the_edit_control_has_its_own_average_width() {
+    let w = DT_WORDBREAK | DT_EXPANDTABS;
+    // "AABBAABBAB" is 100 wide, the tab would take the line to 128: the line breaks at the tab,
+    // which is dropped (dt_pf_last_wide).
+    assert_eq!(height("AABBAABBABtABnAB", 100, w), (48, 48));
+    // Without DT_EXPANDTABS the tab has no width and is no break.
+    assert_eq!(height("AABBAABBABtAB", 100, DT_WORDBREAK), (16, 16));
+    // The edit control's average width is 7 here (the 52 letters are 338 wide, the letters the
+    // font lacks as wide as a blank), so a tab stop is 56: 100 goes to 112, 48 to 56.
+    let (mut g, dc, _px) = sans();
+    let t = unescape("AABBAABBABtAB");
+    for (flags, width) in [(DT_EXPANDTABS, 148), (DT_EXPANDTABS | DT_EDITCONTROL, 132)] {
+        let mut r = Rect::new(10, 10, 70, 100);
+        g.draw_text(dc, &t, &mut r, flags | DT_CALCRECT);
+        assert_eq!(r.right - r.left, width, "flags {flags:#x}");
+    }
+}
