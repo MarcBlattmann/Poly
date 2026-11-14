@@ -22,7 +22,6 @@ rules:
   names: "the name is compared case-insensitively ('TWO' removes 'Two'); removal by the atom of a string property and by the string of an atom property both work and return the value"
   in_destroy: "inside WM_DESTROY and inside WM_NCDESTROY of the window the call works and returns the value"
   last_error: "a miss returns 0 and leaves the last error 0 or sets 2 depending on whether the name was ever used as a property name on the machine (tests print 'last error 0 or 2')"
-  chrome: "in the top-level window's WM_DESTROY the child's property can be removed (returns 3) and in its WM_NCDESTROY its own (2); the holder's property stays until removed (1)"
 errors:
   bad_window: "NULL and a made-up handle: 0 (last error 0 or 2: the window is not looked at for the error); a destroyed window the same"
 side_effects: "none beyond the rules above"

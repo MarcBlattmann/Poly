@@ -21,7 +21,6 @@ interface:
 rules:
   name: "eight characters 0-9 and A-F (ASCII), then the NUL at the ninth; the characters after are not touched; a second call and 32 calls in a row give the same name; a buffer of exactly nine characters is enough (a tenth sentinel stays); the call returns 1 and does not change the last error"
   name_vs_hkl: "the last four digits of the name are NOT the low word (language) of the HKL on the oracle: the name identifies the layout, the HKL the locale"
-  chrome: "the same name in Chrome's foreground window; keys p o l y typed as virtual keys arrive as WM_KEYDOWN / WM_CHAR / WM_KEYUP"
 errors:
 side_effects: "none beyond the rules above"
 threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"

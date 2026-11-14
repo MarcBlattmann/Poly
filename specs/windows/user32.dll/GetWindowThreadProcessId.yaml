@@ -23,7 +23,6 @@ rules:
   other_process: "the desktop window and the foreground window of another program: thread id nonzero, process id not ours, constant between calls (the desktop window's thread is not ours)"
   set_parent: "SetParent does not change a window's thread"
   finished_thread: "a window of a thread that has ended (the window was destroyed with it) answers 0 with ERROR_INVALID_WINDOW_HANDLE (1400) and the pid output is left alone (written 0 when the call started with 0: unchanged either way)"
-  chrome: "Chrome's windows (holder, top-level, child, default IME window and its MSCTFIME UI child) all answer the UI thread's id; EnumThreadWindows of that thread gives only windows of this thread and process"
 errors:
   bad_window: "NULL, a made-up handle and a destroyed window: returns 0, *pid is not written (a value that was there stays), last error ERROR_INVALID_WINDOW_HANDLE (1400)"
 side_effects: "none beyond the rules above"

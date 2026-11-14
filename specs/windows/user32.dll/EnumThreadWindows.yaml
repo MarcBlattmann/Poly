@@ -23,7 +23,6 @@ rules:
   stop: "proc returning 0 after two windows: the function returns 0 and no more calls; a normal enumeration returns 1"
   destroy_during: "destroying a window of the thread (B) from the first callback: the enumeration goes on, B is not reported after it is gone, the function returns 1 and the last error is ERROR_INVALID_WINDOW_HANDLE (1400)"
   no_windows: "a thread that has no windows or does not exist: returns 1 with no calls; the thread id 0x7FFFFFF0: last error ERROR_INVALID_PARAMETER (87)"
-  chrome: "the thread's windows after Chrome's three are built: main~, hid~, ime~ (hidden); after the show and focus: main, ctf~, ime~, hid~; the z order of the thread's windows is what EnumThreadWindows reports"
 errors:
   unused_thread: "an unknown thread id: returns 1, no calls, last error ERROR_INVALID_PARAMETER (87)"
 side_effects: "none beyond the rules above"

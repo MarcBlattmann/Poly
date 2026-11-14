@@ -22,7 +22,7 @@ rules:
   basic: "screen DC, buffer of 1024 characters, size 1024: returns 1 and *size is the length of the path plus the NUL (the path is not printed: it depends on the machine); on the oracle the first call leaves error 2012 in the last-error slot with a successful return (an error that is left over: with the last error set to 0 before the call the result is a plain success: 'error marker 0' returns 1, error 0); the same for a DC of CreateDCW(DISPLAY), a window DC and a memory DC made from the display DC"
   small_buffer: "size 0 or 1 with a buffer, and size 0 with a NULL buffer: returns 0 with ERROR_INSUFFICIENT_BUFFER (122), *size is the needed size (nonzero) and the buffer is not touched; the needed size equals the size of the successful call; a second call with the learnt size returns 1 and leaves *size unchanged"
   null_size: "a NULL size pointer: returns 0 with ERROR_INVALID_PARAMETER (87), also with a NULL buffer; a valid call afterwards works; a NULL buffer with a size of 1024 crashes (access violation): the call writes through it (not tried)"
-  invalid_dc: "NULL, made-up, deleted and bitmap handles: see the test for the printed result per handle (the test crashed in a form that was removed)"
+  invalid_dc: "NULL, made-up, deleted and bitmap handles as the DC: the visible test prints what the call returns and the last error for each of them"
 errors:
   small_buffer: "see rules.small_buffer"
   null_size: "see rules.null_size"

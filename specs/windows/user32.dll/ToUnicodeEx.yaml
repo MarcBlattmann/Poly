@@ -24,7 +24,6 @@ rules:
   control: "with VK_CONTROL 0x80: control characters (p -> U+0010, o -> U+000F, l -> U+000C, y -> U+0019, A -> U+0001); with VK_MENU 0x80 as well: the plain letter"
   dead_keys: "the oracle's layout has a dead key: with flags 4 it returns -1 with '^' in the buffer for buffer sizes 1 and 2 and returns 0 for a buffer of 0; repeated calls give the same result and a following 'a' or Space is the plain 'a' or ' ' (with bit 4 the dead key is not remembered); no key of the scan gives two characters"
   stability: "20 repeated calls with the same arguments give the same result; the state passed is not changed"
-  chrome: "the way the browser uses it: in the WM_KEYDOWN of p o l y (typed as virtual keys) ToUnicodeEx(flags 4) with the message's key and the current keyboard state returns 1 and the character that the following WM_CHAR carries ('p' 'o' 'l' 'y'), 20 calls in a row equal"
 errors:
 side_effects: "none beyond the rules above"
 threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"

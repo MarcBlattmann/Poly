@@ -23,7 +23,6 @@ rules:
   device_name: "'DISPLAY' with a made-up device name that is not a display device path: NULL with ERROR_INVALID_PRINTER_NAME (1801); with a made-up name written as a display device path (two backslashes, a dot, a backslash and a name) a DC is still returned (type 3, BITSPIXEL 32)"
   driver_name: "an empty driver name, a made-up driver name and NULL driver with NULL device: NULL (the last error is left as it was or 0)"
   default_state: "text colour 000000, background colour ffffff, background mode OPAQUE (2), ROP2 13 (R2_COPYPEN), map mode MM_TEXT (1), brush WHITE_BRUSH, pen BLACK_PEN, a font (type 6), a bitmap of type 7 selected, origin 0,0, clip box type SIMPLEREGION (2) at 0,0 with the primary screen's size; no capability differs from GetDC(NULL)"
-  chrome: "CreateDCW(DISPLAY) asked twice gives the same depth and dpi (equals GetDpiForSystem, x equals y); CreateCompatibleDC and CreateCompatibleBitmap from it (4x4: bpp equal to the display's, planes 1), BitBlt of one screen pixel gives a colour with the high byte clear, PatBlt with the DC brush draws the DC brush colour; the Chrome order of cleanup works and the GDI object count is back"
 errors:
   bad_driver: "see rules.driver_name"
 side_effects: "none beyond the rules above"

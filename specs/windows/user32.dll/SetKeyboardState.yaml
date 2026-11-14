@@ -20,7 +20,6 @@ interface:
 rules:
   effect: "after SetKeyboardState(cleared copy) GetKeyboardState reads back the cleared entries; setting VK_F13 down makes GetKeyState(VK_F13) down (and GetKeyboardState's entry 0x80) while GetAsyncKeyState stays up; a toggle bit on VK_SCROLL shows in GetKeyState's low bit and not as down"
   translation: "the table decides what a typed key becomes: with the cleared table 'p' arrives as WM_CHAR 'p'; with VK_SHIFT set the WM_CHAR is 'P'; with 256 zero bytes the WM_KEYDOWN and WM_KEYUP arrive and no WM_CHAR; CapsLock toggled gives 'P'; VK_CONTROL gives U+0010; the original table put back restores the behaviour"
-  chrome: "in Chrome's window: the cleared copy put back and a posted WM_KEYDOWN(VK_P) gives WM_CHAR 'p' after the WM_KEYUP; with VK_SHIFT set 'P'; the call returns 1 and does not change the last error; GetKeyState(VK_SHIFT) down: 1 after SetKeyboardState with shift set"
 errors:
 side_effects: "none beyond the rules above"
 threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"

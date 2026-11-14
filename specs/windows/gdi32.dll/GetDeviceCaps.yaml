@@ -24,7 +24,6 @@ rules:
   dc_kinds: "the DC of CreateDCW('DISPLAY'), of CreateICW('DISPLAY'), GetDC(window), GetWindowDC(window) and a fresh CreateCompatibleDC(screen) differ from the screen DC in no capability; a memory DC keeps BITSPIXEL 32 with CreateCompatibleBitmap(screen), CreateBitmap(w, h, 1, 32), 32-bit and 24-bit DIB sections and the initial 1x1 bitmap, and with CreateBitmap(12, 7, 1, 1) selected too (the memory DC reports the display's depth); a compatible DC of a memory DC likewise; CreateCompatibleBitmap of a monochrome DC is 1 bit per pixel"
   bad_index: "indexes -1, 1, 3, 5, 7, 9, 13, 15, 100, 122-124, 200, 399-401 (not defined): 0 with the last error unchanged"
   invalid_dc: "NULL, a made-up handle and a deleted DC: 0"
-  chrome: "the screen DC, asked twice, gives the same answers: depth 32, dpi x equals dpi y and equals GetDpiForSystem, HORZRES/VERTRES the primary screen's; DeleteDC of the display DC before the memory DC made from it: the memory DC keeps working (BITSPIXEL, HORZRES), GetDeviceCaps of the deleted DC gives 0; GDI objects are back to the count before the sequence"
 errors:
 side_effects: "none beyond the rules above"
 threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"

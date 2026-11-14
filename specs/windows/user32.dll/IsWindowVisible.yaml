@@ -27,7 +27,6 @@ rules:
   set_parent: "a visible child moved with SetParent under a hidden window answers 0 at once and 1 when that window is shown; moved back under a visible one 1"
   special_windows: "the desktop window 1; a message-only window with WS_VISIBLE 0; WS_EX_LAYERED and WS_EX_NOREDIRECTIONBITMAP popups with WS_VISIBLE 1"
   destroyed: "a destroyed window and its children and owned windows: 0"
-  chrome: "Chrome's windows: before anything is shown the holder, top-level window and child all 0; the child shown with SWP_SHOWWINDOW while its parent is hidden 0; top-level shown: main 1 and child 1; minimized: main 1 (iconic) and the child 0 (it was moved under the hidden holder with SetParent); restored: both 1; SW_HIDE of the top-level window: 0 and 0; SW_SHOWNA: 1 and 1; after DestroyWindow: 0"
 errors:
   null_or_bad: "NULL, a made-up handle and a destroyed window: 0 with ERROR_INVALID_WINDOW_HANDLE (1400)"
 side_effects: "none beyond the rules above"

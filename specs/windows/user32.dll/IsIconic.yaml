@@ -23,7 +23,6 @@ rules:
   style_bit: "WS_MINIMIZE set with SetWindowLongPtrW(GWL_STYLE) makes the call answer 1 at once (nothing moves), cleared 0; a window created hidden with WS_MINIMIZE answers 1 (IsWindowVisible 0) and 0 after SW_SHOWNORMAL; a child created with WS_MINIMIZE answers 1"
   maximize_exclusive: "a maximized window: IsIconic 0; SW_SHOWMINNOACTIVE of a maximized window: IsIconic 1 and IsZoomed 0 (the maximized state is remembered for the restore)"
   parent_state: "the state of the parent does not count: a child maximized with SW_SHOWMAXIMIZED answers 0 while its parent is minimized and the parent answers 1"
-  chrome: "Chrome's top-level window (NCCALCSIZE handled by the window): shown 0; SW_MINIMIZE 1 (window rectangle -32000,-32000,-31840,-31972, client 0,0,0,0; GetWindowPlacement show 2); SW_RESTORE 0 (rectangle back at 40,40 640x400); SW_SHOWMAXIMIZED 0 (IsZoomed 1); its child 0 in every state"
 errors:
   null_or_bad: "NULL and a made-up handle: 0 with ERROR_INVALID_WINDOW_HANDLE (1400)"
 side_effects: "none beyond the rules above"

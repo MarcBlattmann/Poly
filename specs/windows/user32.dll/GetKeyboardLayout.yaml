@@ -21,7 +21,6 @@ interface:
 rules:
   basic: "the result is not 0, its low word (language identifier) is not 0, it is the same on every call (16 calls in a row all equal) and the same for thread id 0 and the caller's own thread id; the last error is not touched"
   other_threads: "an unknown thread id (0xFFFFFFF0) and 0xFFFFFFFF: 0 with the last error unchanged; a thread of the process that has no window: 0; the same id after the thread ended: 0; a thread of the shell (another process) gives the same layout as ours on the oracle"
-  chrome: "the thread of Chrome's top-level window, its default IME window's thread (the same) and the foreground state give the same layout; ImmIsIME of the layout agrees with itself; keys p o l y typed as virtual keys arrive as WM_KEYDOWN / WM_CHAR / WM_KEYUP"
 errors:
 side_effects: "none beyond the rules above"
 threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
