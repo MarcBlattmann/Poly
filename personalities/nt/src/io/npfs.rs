@@ -861,6 +861,42 @@ impl IoState {
     }
 
     /// The instance count and state of pipe `key`, for tests.
+    /// One line per pipe instance for a wait report (`poly.nt.waits`, ADR 0155 step 12): its
+    /// name, state, the two ends' processes, and per direction the unread bytes, the queued
+    /// messages and the reads waiting. A direction with data *and* a waiting read is a lost
+    /// wakeup.
+    pub fn np_debug_lines(&self, objects: &poly_ntobj::ObjectManager) -> Vec<alloc::string::String> {
+        // Which processes hold a handle to an end's file object, and its handle values.
+        let holders = |file: Option<u64>| -> alloc::string::String {
+            let Some(rec) = file.and_then(|f| self.files.get(&f)) else { return "-".into() };
+            let h = objects.holders(rec.object);
+            if h.is_empty() {
+                return "none".into();
+            }
+            h.iter().map(|(p, h)| alloc::format!("p{}:{:#x}", p.0, h.0)).collect::<Vec<_>>().join(",")
+        };
+        self.np
+            .instances
+            .values()
+            .map(|i| {
+                let chan = |c: &Chan| {
+                    alloc::format!("{}B/{}m/{}r", c.available(), c.entries.len(), c.readers.len())
+                };
+                alloc::format!(
+                    "pipe #{} {} {:?} server [{}] client [{}] to-server {} to-client {} listeners {}",
+                    i.id,
+                    alloc::string::String::from_utf16_lossy(&i.name),
+                    i.state,
+                    holders(i.server_file),
+                    holders(i.client_file),
+                    chan(&i.to_server),
+                    chan(&i.to_client),
+                    i.listeners.len()
+                )
+            })
+            .collect()
+    }
+
     pub fn np_instance_count(&self, key: &[u16]) -> usize {
         self.np.pipes.get(key).map_or(0, |p| p.instances.len())
     }

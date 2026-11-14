@@ -89,6 +89,12 @@ fn embed_win32() {
         "mfplat.dll",
         "powrprof.dll",
         "uxtheme.dll",
+        // ADR 0155, step 12.
+        "setupapi.dll",
+        "pdh.dll",
+        "tbs.dll",
+        "cfgmgr32.dll",
+        "wintrust.dll",
     ] {
         match &dir {
             Some(d) => {

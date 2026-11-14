@@ -43,6 +43,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cfgmgr32"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "comctl32"
 version = "0.0.1"
 dependencies = [
@@ -251,6 +258,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdh"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "poly-com"
 version = "0.0.1"
 
@@ -455,6 +469,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "setupapi"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "shcore"
 version = "0.0.1"
 dependencies = [
@@ -475,6 +496,13 @@ name = "shlwapi"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "tbs"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -559,6 +587,13 @@ name = "winmm"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "wintrust"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 

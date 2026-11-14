@@ -109,7 +109,7 @@ pub fn drain_wakes() {
         let mut v = Vec::new();
         while let Some(w) = s.sys.objects.pop_wake() {
             let c = s.ctl.entry(w.thread).or_default();
-            c.completion = Some(w.status);
+            c.completion = Some((w.wait, w.status));
             if let Some(f) = &c.flags {
                 v.push(Arc::clone(f));
             }
@@ -148,11 +148,22 @@ pub fn wait(pid: ProcessId, tid: ThreadRef, id: WaitId, timeout: NtTimeout, aler
         }
         let next = with(|s| {
             let c = s.ctl.entry(tid).or_default();
-            if let Some(st) = c.completion.take() {
-                c.blocked = None;
-                return Next::Done(st);
+            // Only this wait's completion: one for an earlier wait is stale (ADR 0155 step 12).
+            match c.completion.take() {
+                Some((w, st)) if w == id => {
+                    c.blocked = None;
+                    return Next::Done(st);
+                }
+                _ => {}
             }
-            if alertable && let Some(apc) = c.apcs.pop_front() {
+            if alertable && c.apcs.front().is_some() {
+                // Satisfied before the APC could end it: the object is taken, report it (the
+                // APC runs at the next alertable wait).
+                if let Some(st) = s.sys.objects.take_wake(id) {
+                    c.blocked = None;
+                    return Next::Done(st);
+                }
+                let apc = c.apcs.pop_front().expect("checked");
                 c.blocked = None;
                 let _ = s.sys.objects.cancel_wait(id, WaitCancel::UserApc);
                 return Next::Apc(apc);
@@ -171,17 +182,26 @@ pub fn wait(pid: ProcessId, tid: ThreadRef, id: WaitId, timeout: NtTimeout, aler
             Unparked::TimedOut => {
                 return with(|s| {
                     let c = s.ctl.entry(tid).or_default();
-                    if let Some(st) = c.completion.take() {
-                        c.blocked = None;
+                    c.blocked = None;
+                    if let Some((w, st)) = c.completion.take()
+                        && w == id
+                    {
                         return st;
                     }
-                    c.blocked = None;
+                    // Satisfied, its wake not drained yet: the object is taken, so this is
+                    // not a timeout.
+                    if let Some(st) = s.sys.objects.take_wake(id) {
+                        return st;
+                    }
                     s.sys.objects.cancel_wait(id, WaitCancel::Timeout).unwrap_or(STATUS_TIMEOUT)
                 });
             }
             Unparked::Interrupted => {
                 with(|s| {
-                    s.ctl.entry(tid).or_default().blocked = None;
+                    let c = s.ctl.entry(tid).or_default();
+                    c.blocked = None;
+                    c.completion = None;
+                    let _ = s.sys.objects.take_wake(id);
                     let _ = s.sys.objects.cancel_wait(id, WaitCancel::Terminated);
                 });
                 // The thread is ending (its process is exiting or it was

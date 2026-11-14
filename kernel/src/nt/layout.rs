@@ -169,6 +169,12 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("mfplat.dll", super::MFPLAT),
         ("powrprof.dll", super::POWRPROF),
         ("uxtheme.dll", super::UXTHEME),
+        // ADR 0155, step 12.
+        ("setupapi.dll", super::SETUPAPI),
+        ("pdh.dll", super::PDH),
+        ("tbs.dll", super::TBS),
+        ("cfgmgr32.dll", super::CFGMGR32),
+        ("wintrust.dll", super::WINTRUST),
     ] {
         if bytes.is_empty() {
             continue;

@@ -1,0 +1,17 @@
+[package]
+name = "pdh"
+description = "Our pdh.dll (ADR 0155, step 12): performance counter queries Chrome delay-loads, on a system without performance counters"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "pdh"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

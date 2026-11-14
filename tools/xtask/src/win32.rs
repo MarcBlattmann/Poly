@@ -94,6 +94,12 @@ pub const OUTPUTS: &[&str] = &[
     "mfplat.dll",
     "powrprof.dll",
     "uxtheme.dll",
+    // ADR 0155, step 12.
+    "setupapi.dll",
+    "pdh.dll",
+    "tbs.dll",
+    "cfgmgr32.dll",
+    "wintrust.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -225,6 +231,11 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/mfplat",
             "personalities/nt/win32/powrprof",
             "personalities/nt/win32/uxtheme",
+            "personalities/nt/win32/setupapi",
+            "personalities/nt/win32/pdh",
+            "personalities/nt/win32/tbs",
+            "personalities/nt/win32/cfgmgr32",
+            "personalities/nt/win32/wintrust",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",

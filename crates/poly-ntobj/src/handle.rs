@@ -61,7 +61,7 @@ impl Handle {
         !self.is_pseudo() && self.0 & KERNEL_HANDLE_BITS == KERNEL_HANDLE_BITS
     }
 
-    const fn from_index(index: u32, kernel: bool) -> Handle {
+    pub(crate) const fn from_index(index: u32, kernel: bool) -> Handle {
         let v = (index as u64 + 1) * 4;
         Handle(if kernel { v | KERNEL_HANDLE_BITS } else { v })
     }
@@ -145,7 +145,7 @@ impl HandleTable {
         Some(e)
     }
 
-    fn iter(&self) -> impl Iterator<Item = (u32, &HandleEntry)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (u32, &HandleEntry)> {
         self.entries.iter().enumerate().filter_map(|(i, e)| e.as_ref().map(|e| (i as u32, e)))
     }
 

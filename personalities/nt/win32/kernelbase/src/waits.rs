@@ -40,8 +40,10 @@ struct Wait {
     thread_id: AtomicU32,
     running: AtomicU32,
     cancelled: AtomicBool,
-    /// A completion event to signal when the running callback ends.
+    /// A completion event to signal when the wait's thread is done.
     event: AtomicIsize,
+    /// The wait's thread is done (it signals the event after setting this).
+    done: AtomicBool,
     refs: AtomicU32,
 }
 
@@ -107,6 +109,7 @@ unsafe extern "system" fn wait_thread(param: *mut u8) -> u32 {
             break;
         }
     }
+    wr.done.store(true, Ordering::SeqCst);
     wr.signal_completion();
     // SAFETY: this thread's reference.
     unsafe { release(w) };
@@ -150,6 +153,7 @@ pub unsafe extern "system" fn RegisterWaitForSingleObject(
         running: AtomicU32::new(0),
         cancelled: AtomicBool::new(false),
         event: AtomicIsize::new(0),
+        done: AtomicBool::new(false),
         refs: AtomicU32::new(2),
     }));
     // SAFETY: a valid entry point; the thread gets `w`.
@@ -191,7 +195,7 @@ pub unsafe extern "system" fn UnregisterWaitEx(wait: Handle, completion_event: H
     let wr = unsafe { &*w };
     let completion = waitreg::completion(completion_event);
     if completion == Completion::Event {
-        wr.event.store(completion_event, Ordering::Release);
+        wr.event.store(completion_event, Ordering::SeqCst);
     }
     wr.cancelled.store(true, Ordering::Release);
     // SAFETY: our event.
@@ -203,8 +207,12 @@ pub unsafe extern "system" fn UnregisterWaitEx(wait: Handle, completion_event: H
         unsafe { nt::NtWaitForSingleObject(wr.thread.load(Ordering::Acquire), 0, core::ptr::null()) };
     }
     if !outcome.signal_later && completion == Completion::Event {
-        // Nothing to wait for: the event is not signaled.
+        // The call failed otherwise: the event is not signaled.
         let _ = wr.event.compare_exchange(completion_event, 0, Ordering::AcqRel, Ordering::Acquire);
+    } else if outcome.signal_later && wr.done.load(Ordering::SeqCst) {
+        // The wait's thread ended before the event was stored (a `WT_EXECUTEONLYONCE` wait
+        // that fired): nobody else will signal it. `signal_completion` takes the event once.
+        wr.signal_completion();
     }
     // SAFETY: the caller's reference.
     unsafe { release(w) };
