@@ -172,6 +172,19 @@ fn mounted(init: Option<(u32, u32, u16)>, opts: Options, handler: Handler) -> (A
     (env, fs)
 }
 
+#[test]
+fn a_failed_mount_ties_the_descriptor_to_it() {
+    let who = Caller { uid: 0, gid: 0, pid: 1, umask: 0o22 };
+    let conn = Conn::new();
+    conn.fail_mount();
+    assert!(conn.is_bound());
+    assert_eq!(conn.bind(who), Err(Errno::ENOTCONN));
+    // A connection of a live mount is not a failed one.
+    let live = Conn::new();
+    live.bind(who).unwrap();
+    assert_eq!(live.bind(who), Err(Errno::EINVAL));
+}
+
 fn opts() -> Options {
     Options { root_mode: 0o40755, ..Options::default() }
 }

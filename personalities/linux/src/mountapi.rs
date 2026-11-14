@@ -958,9 +958,13 @@ mod tests {
         created: Option<CreateRequest>,
         fail: Option<Errno>,
         reconfigured: Vec<Option<bool>>,
+        nobody: bool,
     }
 
     impl SuperblockOps for Fake {
+        fn privileged(&self) -> bool {
+            !self.nobody
+        }
         fn create(&mut self, req: &CreateRequest) -> Result<(), Errno> {
             if let Some(e) = self.fail {
                 return Err(e);
@@ -978,7 +982,7 @@ mod tests {
     }
 
     fn fake() -> Fake {
-        Fake { created: None, fail: None, reconfigured: Vec::new() }
+        Fake { created: None, fail: None, reconfigured: Vec::new(), nobody: false }
     }
 
     fn set<'a>(key: &'a [u8], value: Value<'a>) -> Command<'a> {
@@ -1189,5 +1193,74 @@ mod tests {
         assert_eq!(show(b"", &r(Some(1 << 20), None)), "size=1024k");
         // Nothing about the limits: as it was (the mode is not a reconfigure's).
         assert_eq!(show(b"size=1024k,mode=755", &r(None, None)), "size=1024k,mode=755");
+    }
+
+    #[test]
+    fn create_needs_the_privilege_and_a_refusal_changes_nothing() {
+        let mut ops = fake();
+        ops.nobody = true;
+        let mut c = FsContext::new(b"overlay").unwrap();
+        // Before the parameters are judged (an overlay without lowerdir).
+        assert_eq!(c.config(&Command::Create, &mut ops), Err(Errno::EPERM));
+        assert_eq!(c.config(&Command::CreateExcl, &mut ops), Err(Errno::EPERM));
+        assert_eq!(c.phase(), Phase::Open);
+        assert_eq!(c.config(&Command::Reconfigure, &mut ops), Err(Errno::EBUSY));
+        c.config(&set(b"redirect_dir", Value::String(b"on")), &mut ops).unwrap();
+        ops.nobody = false;
+        assert_eq!(c.config(&Command::Create, &mut ops), Ok(()));
+        assert_eq!(ops.created.clone().unwrap().data, b"redirect_dir=on");
+    }
+
+    #[test]
+    fn a_failed_context_is_busy_for_everything() {
+        let mut ops = fake();
+        let mut c = FsContext::new(b"tmpfs").unwrap();
+        ops.fail = Some(Errno::EINVAL);
+        assert_eq!(c.config(&Command::Create, &mut ops), Err(Errno::EINVAL));
+        ops.fail = None;
+        assert_eq!(c.begin_mount(), Err(Errno::EBUSY));
+        assert_eq!(c.config(&set(b"size", Value::String(b"1m")), &mut ops), Err(Errno::EBUSY));
+        assert_eq!(c.read_log(64), Err(Errno::ENODATA));
+    }
+
+    #[test]
+    fn overlay_directory_messages_and_lowerdir_plus() {
+        struct Dirs;
+        impl SuperblockOps for Dirs {
+            fn create(&mut self, _: &CreateRequest) -> Result<(), Errno> {
+                Ok(())
+            }
+            fn reconfigure(&mut self, _: Option<bool>, _: &[u8]) -> Result<(), Errno> {
+                Ok(())
+            }
+            fn check_directory(&mut self, path: &[u8]) -> Result<(), Errno> {
+                match path {
+                    b"/file" => Err(Errno::EINVAL),
+                    b"/dir" | b"/dir2" => Ok(()),
+                    _ => Err(Errno::ENOENT),
+                }
+            }
+        }
+        let mut c = FsContext::new(b"overlay").unwrap();
+        let mut ops = Dirs;
+        assert_eq!(c.config(&set(b"lowerdir+", Value::String(b"/missing")), &mut ops), Err(Errno::ENOENT));
+        assert_eq!(c.config(&set(b"lowerdir", Value::String(b"/dir:/file")), &mut ops), Err(Errno::EINVAL));
+        assert_eq!(
+            c.read_log(256).unwrap(),
+            b"e overlay: /file is not a directory
+"
+        );
+        assert_eq!(c.config(&set(b"upperdir", Value::String(b"")), &mut ops), Err(Errno::EINVAL));
+        assert_eq!(
+            c.read_log(256).unwrap(),
+            b"e overlay: Bad value for 'upperdir'
+"
+        );
+        // A trailing ':' says nothing.
+        assert_eq!(c.config(&set(b"lowerdir", Value::String(b"/dir:")), &mut ops), Err(Errno::EINVAL));
+        assert_eq!(c.read_log(256), Err(Errno::ENODATA));
+        assert_eq!(c.config(&set(b"lowerdir+", Value::String(b"/dir")), &mut ops), Ok(()));
+        assert_eq!(c.config(&set(b"lowerdir+", Value::String(b"/dir2")), &mut ops), Ok(()));
+        assert_eq!(c.data(), b"lowerdir+=/dir,lowerdir+=/dir2");
     }
 }

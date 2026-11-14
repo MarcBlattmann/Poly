@@ -742,7 +742,11 @@ impl<L: RawLock + Default + 'static> Ops<'_, L> {
         if name == b".." {
             return Ok(self.node(dir)?.parent);
         }
-        self.lookup_child(dir, name)?.ok_or(Errno::ENOENT)
+        let ino = self.lookup_child(dir, name)?.ok_or(Errno::ENOENT)?;
+        // A name that was only listed so far is looked up now: an entry
+        // that cannot be used (a redirect that is refused or bad) fails here.
+        self.real(ino)?;
+        Ok(ino)
     }
 
     fn add_child(&mut self, dir: Ino, name: &[u8], kind: FileType, upper: Ino) -> Ino {

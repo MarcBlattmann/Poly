@@ -298,13 +298,16 @@ fn share_group_makes_the_target_a_peer_of_the_source() {
     env.bind("/a", "/b", false).unwrap();
     env.new_tmpfs("/other");
     let share = |src: &str, dst: &str| env.vfs.share_group(&env.root, &env.found(src), &env.found(dst));
-    // Private mounts: accepted, nothing to share.
-    assert_eq!(share("/a", "/b"), Ok(()));
+    // A private source has no group to give: nothing changes.
+    assert_eq!(share("/a", "/b"), Err(Errno::EINVAL));
     assert_eq!(env.found("/b").mount().peer_group(), 0);
     let a = env.found("/a").mount().clone();
     env.vfs.set_propagation(core::slice::from_ref(&a), crate::propagation::MS_SHARED);
     assert_eq!(share("/a", "/b"), Ok(()));
     assert_eq!(env.found("/b").mount().peer_group(), a.peer_group());
+    // The target is shared now, the same mount twice has nothing to join.
+    assert_eq!(share("/a", "/b"), Err(Errno::EINVAL));
+    assert_eq!(share("/a", "/a"), Err(Errno::EINVAL));
     // A mount made below one now appears below the other.
     env.mkdir("/a/s");
     env.new_tmpfs("/a/s");
@@ -668,6 +671,9 @@ fn a_namespace_copied_for_another_user_namespace_is_locked() {
     assert_eq!(env.remount_flags("/x", noexec, Some(0)), Err(Errno::EPERM));
     assert_eq!(env.remount_flags("/y", none, Some(0x10)), Err(Errno::EPERM));
     assert_eq!(env.remount_flags("/y", none, Some(0x20)), Err(Errno::EPERM));
+    // nodiratime is part of the mode.
+    assert_eq!(env.remount_flags("/x", noexec, Some(0x90)), Err(Errno::EPERM));
+    assert_eq!(env.remount_flags("/y", none, Some(0x80)), Err(Errno::EPERM));
     assert_eq!(env.remount_flags("/y", none, Some(0)), Ok(()));
     assert_eq!(env.remount_flags("/y", none, None), Ok(()));
     assert_eq!(env.found("/x").mount().attrs() & 0x70, 0x10, "kept");
