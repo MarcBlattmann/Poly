@@ -309,7 +309,9 @@ impl Link {
             version: VERSION,
             width: width as u32,
             height: height as u32,
-            scale,
+            // Windows apps draw at a whole scale; the compositor shrinks
+            // their pictures to a fractional output's (ADR 0179).
+            scale: scale.ceil(),
             frame: FrameMetrics::POLY,
         };
         let mut out = Vec::new();
