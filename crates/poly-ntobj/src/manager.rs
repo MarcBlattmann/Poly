@@ -278,6 +278,20 @@ impl ObjectManager {
         self.get(id).map(|o| o.header.kind)
     }
 
+    /// The processes holding a handle to object `id`, with the handle values (diagnostics: who
+    /// owns which end of a pipe, ADR 0155 step 12).
+    pub fn holders(&self, id: ObjectId) -> alloc::vec::Vec<(ProcessId, crate::Handle)> {
+        let mut out = alloc::vec::Vec::new();
+        for (pid, record) in &self.processes {
+            for (index, entry) in record.table.iter() {
+                if entry.object == id {
+                    out.push((*pid, crate::Handle::from_index(index, false)));
+                }
+            }
+        }
+        out
+    }
+
     pub fn handle_count(&self, id: ObjectId) -> Option<u32> {
         self.get(id).map(|o| o.header.handle_count)
     }

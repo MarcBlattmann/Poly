@@ -6,7 +6,7 @@
 {"symbol":"Tbsi_Create_Attestation_From_Log","src":["wine-spec"]},
 {"symbol":"Tbsi_Create_Windows_Key","src":["wine-spec"]},
 {"symbol":"Tbsi_FilterLog","src":["wine-spec"]},
-{"symbol":"Tbsi_GetDeviceInfo","src":["wine-spec"]},
+{"symbol":"Tbsi_GetDeviceInfo","status":"stub","src":["wine-spec"]},
 {"symbol":"Tbsi_Get_OwnerAuth","src":["wine-spec"]},
 {"symbol":"Tbsi_Get_TCG_Log","src":["wine-spec"]},
 {"symbol":"Tbsi_Get_TCG_Log_Ex","src":["wine-spec"]},
@@ -16,7 +16,7 @@
 {"symbol":"Tbsi_ShaHash","src":["wine-spec"]},
 {"symbol":"Tbsip_Cancel_Commands","src":["wine-spec"]},
 {"symbol":"Tbsip_Context_Close","src":["wine-spec"]},
-{"symbol":"Tbsip_Submit_Command","src":["wine-spec"]},
+{"symbol":"Tbsip_Submit_Command","status":"stub","src":["wine-spec"]},
 {"symbol":"Tbsip_Submit_Command_NonBlocking","src":["wine-spec"]},
 {"symbol":"Tbsip_TestInterruptInformation","src":["wine-spec"]},
 {"symbol":"Tbsip_TestMorBit","src":["wine-spec"]}

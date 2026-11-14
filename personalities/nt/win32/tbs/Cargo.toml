@@ -1,0 +1,17 @@
+[package]
+name = "tbs"
+description = "Our tbs.dll (ADR 0155, step 12): the TPM base services Chrome delay-loads, on a system without a TPM"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "tbs"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true
