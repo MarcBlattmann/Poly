@@ -63,6 +63,7 @@ pub mod objects;
 pub mod pagemap;
 pub mod params;
 pub mod pe_writer;
+pub mod procattrs;
 pub mod protect;
 pub mod registry;
 pub mod section;
@@ -234,6 +235,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         ResumeThread => threads::resume_thread(k, regs),
         SuspendProcess => threads::suspend_process(k, regs),
         ResumeProcess => threads::resume_process(k, regs),
+        GetCurrentProcessorNumber => threads::get_current_processor_number(k, regs),
         GetContextThread => threads::get_context_thread(k, regs),
         SetContextThread => threads::set_context_thread(k, regs),
 

@@ -75,6 +75,11 @@ pub struct NtSystem {
     /// The job objects and which process belongs to which (ADR 0169).
     pub jobs: crate::job::Jobs,
 
+    /// What a process keeps that another can set and a child inherits: error mode, memory
+    /// priority, power throttling ([`crate::procattrs`]). A process without an entry has the
+    /// defaults.
+    pub proc_attrs: BTreeMap<ProcessId, crate::procattrs::ProcAttrs>,
+
     sections: BTreeMap<u64, Section>,
     next_key: u64,
 }
@@ -112,6 +117,7 @@ impl NtSystem {
             process_exits: BTreeMap::new(),
             win32k: crate::win32k::Win32k::default(),
             jobs: crate::job::Jobs::default(),
+            proc_attrs: BTreeMap::new(),
             sections: BTreeMap::new(),
             next_key: 1,
         }
@@ -176,6 +182,7 @@ impl NtSystem {
                 ObjectType::IoCompletion => self.io.port_deleted(d.cookie),
                 ObjectType::Process => {
                     self.process_exits.remove(&ProcessId(d.cookie as u32));
+                    self.proc_attrs.remove(&ProcessId(d.cookie as u32));
                     self.jobs.process_forgotten(ProcessId(d.cookie as u32));
                 }
                 ObjectType::Job => self.jobs.deleted(d.cookie),

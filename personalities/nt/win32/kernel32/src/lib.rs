@@ -251,6 +251,82 @@ pub extern "system" fn GetActiveProcessorCount(group: u16) -> u32 {
     }
 }
 
+#[link(name = "kernelbase", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        security: *const u8,
+        disposition: u32,
+        flags: u32,
+        template: isize,
+    ) -> isize;
+    fn ReadFile(file: isize, buf: *mut u8, len: u32, read: *mut u32, overlapped: *mut u8) -> i32;
+    fn WriteFile(file: isize, buf: *const u8, len: u32, written: *mut u32, overlapped: *mut u8) -> i32;
+    fn CloseHandle(handle: isize) -> i32;
+}
+
+/// `CopyFileW(lpExistingFileName, lpNewFileName, bFailIfExists)` (Learn names no API set:
+/// `kernel32`'s own): the bytes of the file are written to the new one, which is made (`CREATE_NEW`
+/// when `bFailIfExists`, so an existing file is `ERROR_FILE_EXISTS`) or replaced. Attributes and
+/// streams are not copied.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CopyFileW(existing: *const u16, new: *const u16, fail_if_exists: i32) -> i32 {
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const FILE_SHARE_READ: u32 = 1;
+    const CREATE_NEW: u32 = 1;
+    const CREATE_ALWAYS: u32 = 2;
+    const OPEN_EXISTING: u32 = 3;
+    const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+    // SAFETY: the caller's NUL-terminated names; handles are closed on every path.
+    unsafe {
+        let src = CreateFileW(existing, GENERIC_READ, FILE_SHARE_READ, core::ptr::null(), OPEN_EXISTING, 0, 0);
+        if src == -1 {
+            return 0;
+        }
+        let disposition = if fail_if_exists != 0 { CREATE_NEW } else { CREATE_ALWAYS };
+        let dst = CreateFileW(new, GENERIC_WRITE, 0, core::ptr::null(), disposition, FILE_ATTRIBUTE_NORMAL, 0);
+        if dst == -1 {
+            let e = poly_kernelbase_last_error();
+            CloseHandle(src);
+            SetLastError(e);
+            return 0;
+        }
+        let mut buf = alloc::vec![0u8; 64 * 1024];
+        let mut ok = 1;
+        loop {
+            let mut got = 0u32;
+            if ReadFile(src, buf.as_mut_ptr(), buf.len() as u32, &mut got, core::ptr::null_mut()) == 0 {
+                ok = 0;
+                break;
+            }
+            if got == 0 {
+                break;
+            }
+            let mut put = 0u32;
+            if WriteFile(dst, buf.as_ptr(), got, &mut put, core::ptr::null_mut()) == 0 || put != got {
+                ok = 0;
+                break;
+            }
+        }
+        let e = poly_kernelbase_last_error();
+        CloseHandle(src);
+        CloseHandle(dst);
+        if ok == 0 {
+            SetLastError(e);
+        }
+        ok
+    }
+}
+
+#[link(name = "kernelbase", kind = "raw-dylib")]
+unsafe extern "system" {
+    #[link_name = "GetLastError"]
+    fn poly_kernelbase_last_error() -> u32;
+}
+
 /// The entry point (`DllMain`): nothing to set up.
 #[unsafe(no_mangle)]
 pub extern "system" fn kernel32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
