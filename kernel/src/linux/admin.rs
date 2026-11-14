@@ -119,10 +119,10 @@ pub(super) fn build_overlay(
     };
     let mut lowers: Vec<Layer> = Vec::new();
     let (mut upper, mut work) = (None, None);
-    let (mut userxattr, mut redirect) = (false, Redirect::Off);
+    let (mut userxattr, mut redirect) = (false, Redirect::Follow);
     for (name, value) in admin::options(data) {
         match (name, value) {
-            (b"lowerdir", Some(v)) => {
+            (b"lowerdir" | b"lowerdir+", Some(v)) => {
                 for part in v.split(|&b| b == b':') {
                     lowers.push(layer_of(part)?);
                 }
@@ -245,6 +245,10 @@ impl Thread<'_> {
         // Only a directory mounts over a directory, and only something
         // else over a file.
         if (opts.root_kind() == FileType::Directory) != target_is_dir {
+            // The descriptor stays tied to the failed mount.
+            if !conn.is_bound() {
+                conn.fail_mount();
+            }
             return Err(Errno::ENOTDIR);
         }
         let cred = files.cred();
@@ -302,7 +306,7 @@ impl Thread<'_> {
         let id = files.mount_fs(target, fs, mflags).map_err(vfs_errno)?;
         mounts::record_source(id, if source.is_empty() { b"overlay" } else { source });
         if let Some(m) = crate::fs::vfs().mount_by_id(id) {
-            m.set_sb_info(if source.is_empty() { b"overlay" } else { source }, data);
+            m.set_sb_info(if source.is_empty() { b"overlay" } else { source }, &poly_overlayfs::shown_options(data));
             super::mountapi::own_superblock(&m);
         }
         Ok(())
@@ -550,8 +554,16 @@ impl LinuxAdmin for Thread<'_> {
         self.mnt_fspick(at, cloexec)
     }
 
-    fn fsconfig(&mut self, fd: i32, cmd: &Command<'_>) -> Result<(), Errno> {
-        self.mnt_fsconfig(fd, cmd)
+    fn fsconfig(&mut self, fd: i32, cmd: &Command<'_>, privileged: bool) -> Result<(), Errno> {
+        self.mnt_fsconfig(fd, cmd, privileged)
+    }
+
+    fn fsconfig_fd(&mut self, fd: i32) -> Result<(), Errno> {
+        self.mnt_context_file(fd).map(|_| ())
+    }
+
+    fn fd_is_open(&mut self, fd: i32) -> bool {
+        self.process().files.file(fd).is_ok()
     }
 
     fn fsmount(&mut self, fd: i32, attrs: u64, cloexec: bool) -> Result<i32, Errno> {

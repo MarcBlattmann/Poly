@@ -411,8 +411,22 @@ pub trait LinuxAdmin {
     /// fsconfig(2) on descriptor `fd`: `EBADF` if it is not open (or
     /// `O_PATH`), `EINVAL` if it is no context; then
     /// [`FsContext::config`](crate::mountapi::FsContext::config).
-    fn fsconfig(&mut self, _fd: i32, _cmd: &Command<'_>) -> Result<(), Errno> {
+    ///
+    /// `privileged` is whether the caller has `CAP_SYS_ADMIN` where mounts
+    /// are made (`FSCONFIG_CMD_CREATE` needs it).
+    fn fsconfig(&mut self, _fd: i32, _cmd: &Command<'_>, _privileged: bool) -> Result<(), Errno> {
         Err(Errno::ENOSYS)
+    }
+
+    /// The descriptor of an fsconfig(2) call: `EBADF` if it is not open
+    /// (or `O_PATH`), `EINVAL` if it is no context.
+    fn fsconfig_fd(&mut self, _fd: i32) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// Whether `fd` is an open descriptor of the caller.
+    fn fd_is_open(&mut self, _fd: i32) -> bool {
+        false
     }
 
     /// fsmount(2): a detached mount of the superblock context `fd` made,

@@ -330,6 +330,11 @@ pub trait SuperblockOps {
         let _ = path;
         Ok(())
     }
+    /// Whether the caller may make file systems (`CAP_SYS_ADMIN` where
+    /// mounts are made): `FSCONFIG_CMD_CREATE` needs it.
+    fn privileged(&self) -> bool {
+        true
+    }
 }
 
 /// A file system context: the state behind an `fsopen(2)` / `fspick(2)`
@@ -472,6 +477,11 @@ impl FsContext {
                 if self.purpose != Purpose::Create {
                     return Err(Errno::EBUSY);
                 }
+                // The state comes before the privilege, the privilege before
+                // the judging of the parameters; a refusal changes nothing.
+                if !ops.privileged() {
+                    return Err(Errno::EPERM);
+                }
                 let fstype = self.fstype.ok_or(Errno::EINVAL)?;
                 // A file system on a device needs to be told which; a
                 // failed create ends the context.
@@ -578,18 +588,46 @@ impl FsContext {
             && let Some(v) = &value
         {
             match key {
-                b"lowerdir" => {
+                b"lowerdir" | b"lowerdir+" => {
                     for dir in v.split(|&b| b == b':') {
-                        ops.check_directory(dir)?;
+                        self.check_layer(dir, ops)?;
                     }
                 }
-                b"upperdir" | b"workdir" => ops.check_directory(v)?,
+                b"upperdir" | b"workdir" => {
+                    if v.is_empty() {
+                        return Err(self.reject("Bad value for", key));
+                    }
+                    self.check_layer(v, ops)?;
+                }
                 _ => {}
             }
         }
-        self.options.retain(|(k, _)| k.as_slice() != key);
+        if key != b"lowerdir+" {
+            self.options.retain(|(k, _)| k.as_slice() != key);
+        }
         self.options.push((key.to_vec(), value));
         Ok(())
+    }
+
+    /// One directory of an overlay: an empty one is `EINVAL` (without a
+    /// message), a missing one is the lookup's error (without a message), one
+    /// that is no directory is `EINVAL` and says so.
+    fn check_layer(&mut self, dir: &[u8], ops: &mut dyn SuperblockOps) -> Result<(), Errno> {
+        if dir.is_empty() {
+            return Err(Errno::EINVAL);
+        }
+        match ops.check_directory(dir) {
+            Err(Errno::EINVAL) => {
+                let text = format!(
+                    "e overlay: {} is not a directory
+",
+                    core::str::from_utf8(dir).unwrap_or("?")
+                );
+                self.log(text.as_bytes());
+                Err(Errno::EINVAL)
+            }
+            other => other,
+        }
     }
 
     /// The parameters given so far as `mount(2)` data.
@@ -613,7 +651,7 @@ impl FsContext {
     /// context.
     pub fn begin_mount(&mut self) -> Result<(), Errno> {
         match (self.purpose, self.phase) {
-            (Purpose::Reconfigure, _) | (_, Phase::Mounted) => Err(Errno::EBUSY),
+            (Purpose::Reconfigure, _) | (_, Phase::Mounted | Phase::Failed) => Err(Errno::EBUSY),
             (Purpose::Create, Phase::Created) => {
                 self.phase = Phase::Mounted;
                 Ok(())

@@ -247,10 +247,10 @@ impl Mount {
     }
 
     /// Whether the access time mode is locked and `attrs` (`MOUNT_ATTR_*`
-    /// bits, the mode in `0x70`) names another mode than the mount has
+    /// bits, the mode in `0x70` and `NODIRATIME` 0x80) names another mode than the mount has
     /// (`EPERM`).
     pub fn atime_locked_against(&self, attrs: u32) -> bool {
-        self.locks() & lock::ATIME != 0 && (attrs ^ self.attrs()) & 0x70 != 0
+        self.locks() & lock::ATIME != 0 && (attrs ^ self.attrs()) & 0xf0 != 0
     }
 
     /// After a copy of `original` was made (a bind mount, a copied

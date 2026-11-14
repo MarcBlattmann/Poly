@@ -264,24 +264,31 @@ fn string(k: &dyn LinuxKernel, p: UserPtr, max: usize) -> Result<Vec<u8>, Errno>
 
 /// fsconfig(fd, cmd, key, value, aux)
 ///
-/// The command and its argument shapes first (`EOPNOTSUPP`, `EINVAL`),
-/// then the descriptor (`EBADF`, `EINVAL` for one that is no context),
-/// then the context's own rules.
+/// The checks in the order of the spec sheet of mntapi_fsconfig: a negative
+/// descriptor (`EINVAL`), the command (`EOPNOTSUPP`), the shape of the
+/// arguments (`EINVAL`), the descriptor (`EBADF`, `EINVAL` for one that is no
+/// context), the key and value from memory (`EFAULT`), the aux descriptor of
+/// `FSCONFIG_SET_FD`, and then the context's own rules (the parameter, the
+/// state, the privilege).
 pub fn fsconfig(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let (fd, cmd, key, value, aux) = (a.fd(0), a.uint(1), a.ptr(2), a.ptr(3), a.int(4));
+    if fd < 0 {
+        return Err(Errno::EINVAL);
+    }
     let (has_key, has_value) = (!key.is_null(), !value.is_null());
     let shape_ok = match cmd {
         FSCONFIG_SET_FLAG => has_key && !has_value && aux == 0,
         FSCONFIG_SET_STRING => has_key && has_value && aux == 0,
         FSCONFIG_SET_BINARY => has_key && has_value && aux > 0 && aux as usize <= 1 << 20,
         FSCONFIG_SET_PATH | FSCONFIG_SET_PATH_EMPTY => has_key && has_value,
-        FSCONFIG_SET_FD => has_key && !has_value && aux >= 0,
+        FSCONFIG_SET_FD => has_key && !has_value,
         FSCONFIG_CMD_CREATE | FSCONFIG_CMD_RECONFIGURE | FSCONFIG_CMD_CREATE_EXCL => !has_key && !has_value && aux == 0,
         _ => return Err(Errno::EOPNOTSUPP),
     };
     if !shape_ok {
         return Err(Errno::EINVAL);
     }
+    admin(k)?.fsconfig_fd(fd)?;
     let key = if has_key { string(k, key, KEY_MAX)? } else { Vec::new() };
     let data = match cmd {
         FSCONFIG_SET_STRING | FSCONFIG_SET_PATH | FSCONFIG_SET_PATH_EMPTY => string(k, value, PAGE)?,
@@ -292,6 +299,14 @@ pub fn fsconfig(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         }
         _ => Vec::new(),
     };
+    if cmd == FSCONFIG_SET_FD {
+        if aux < 0 {
+            return Err(Errno::EINVAL);
+        }
+        if !admin(k)?.fd_is_open(aux) {
+            return Err(Errno::EBADF);
+        }
+    }
     let command = match cmd {
         FSCONFIG_SET_FLAG => Command::Set { key: &key, value: Value::Flag },
         FSCONFIG_SET_STRING => Command::Set { key: &key, value: Value::String(&data) },
@@ -302,10 +317,8 @@ pub fn fsconfig(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         FSCONFIG_CMD_CREATE_EXCL => Command::CreateExcl,
         _ => Command::Reconfigure,
     };
-    if fd < 0 {
-        return Err(Errno::EBADF);
-    }
-    admin(k)?.fsconfig(fd, &command).map(|()| 0)
+    let privileged = require_mount(k).is_ok();
+    admin(k)?.fsconfig(fd, &command, privileged).map(|()| 0)
 }
 
 /// fsmount(fs_fd, flags, attr_flags)

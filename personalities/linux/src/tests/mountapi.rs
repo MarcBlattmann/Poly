@@ -70,9 +70,15 @@ impl LinuxAdmin for Recorder {
         self.note(format!("fsopen {:?} {cloexec}", ctx.purpose()));
         Ok(3)
     }
-    fn fsconfig(&mut self, fd: i32, cmd: &Command<'_>) -> Result<(), Errno> {
+    fn fsconfig(&mut self, fd: i32, cmd: &Command<'_>, _privileged: bool) -> Result<(), Errno> {
         self.note(format!("fsconfig {fd} {cmd:?}"));
         Ok(())
+    }
+    fn fsconfig_fd(&mut self, _fd: i32) -> Result<(), Errno> {
+        Ok(())
+    }
+    fn fd_is_open(&mut self, fd: i32) -> bool {
+        fd < 100
     }
     fn fsmount(&mut self, fd: i32, attrs: u64, cloexec: bool) -> Result<i32, Errno> {
         self.note(format!("fsmount {fd} {attrs:#x} {cloexec}"));
@@ -294,12 +300,17 @@ fn fsconfig_shapes_then_descriptor() {
     assert_eq!(sys(&mut k, nr::FSCONFIG, &[3, c(FSCONFIG_SET_STRING), key, 0, 0]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::FSCONFIG, &[3, c(FSCONFIG_SET_STRING), key, val, 1]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::FSCONFIG, &[3, c(FSCONFIG_CMD_CREATE), key, 0, 0]), Err(Errno::EINVAL));
-    assert_eq!(sys(&mut k, nr::FSCONFIG, &[u64::MAX, c(FSCONFIG_CMD_CREATE), 0, 0, 0]), Err(Errno::EBADF));
+    assert_eq!(sys(&mut k, nr::FSCONFIG, &[u64::MAX, c(FSCONFIG_CMD_CREATE), 0, 0, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::FSCONFIG, &[0x1_0000_0003, c(FSCONFIG_CMD_CREATE), 0, 0, 0]), Ok(0));
+    assert_eq!(sys(&mut k, nr::FSCONFIG, &[3, c(FSCONFIG_SET_FD), key, 0, 150]), Err(Errno::EBADF));
+    assert_eq!(sys(&mut k, nr::FSCONFIG, &[3, c(FSCONFIG_SET_FD), key, 0, u64::MAX]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::FSCONFIG, &[3, c(FSCONFIG_SET_FD), key, 0, 1]), Ok(0));
     assert_eq!(sys(&mut k, nr::FSCONFIG, &[3, c(FSCONFIG_SET_STRING), key, val, 0]), Ok(0));
     assert_eq!(sys(&mut k, nr::FSCONFIG, &[3, c(FSCONFIG_CMD_RECONFIGURE), 0, 0, 0]), Ok(0));
     let log = taken(&log);
     let want = format!("fsconfig 3 {:?}", Command::Set { key: b"size", value: Value::String(b"1m") });
-    assert_eq!(log, [want, String::from("fsconfig 3 Reconfigure")]);
+    let fd = format!("fsconfig 3 {:?}", Command::Set { key: b"size", value: Value::Fd(1) });
+    assert_eq!(log, [String::from("fsconfig 3 Create"), fd, want, String::from("fsconfig 3 Reconfigure")]);
 }
 
 #[test]

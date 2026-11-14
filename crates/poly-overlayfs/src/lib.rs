@@ -18,7 +18,11 @@
 //!   directory created over a whiteout is opaque.
 //! - **Renaming** a file moves its upper copy and leaves a whiteout behind
 //!   if a lower layer has the old name; a directory that exists in a lower
-//!   layer cannot be renamed (`EXDEV`, as with `redirect_dir=off`).
+//!   layer can only be renamed with `redirect_dir=on` (`EXDEV` otherwise): the
+//!   upper layer then gets the directory under the new name with a
+//!   `trusted.overlay.redirect` attribute naming the lower directory, which
+//!   lookups follow (`redirect_dir=on|off|follow`; `nofollow` refuses entries
+//!   that carry one).
 //!
 //! Every overlay inode is one name in the merged tree (a lower file with two
 //! names is two inodes, as with `index=off`), found again by its place in
@@ -58,11 +62,17 @@ impl core::fmt::Debug for Layer {
     }
 }
 
-/// `redirect_dir=`: whether renaming a lower directory is supported.
+/// `redirect_dir=`: whether renaming a lower directory is supported, and
+/// whether redirects that are in the layers already are followed. Only `On`
+/// makes redirects; `NoFollow` makes every entry that carries one unusable
+/// (`EPERM`); `Off` and `Follow` follow them (a kernel built with the
+/// always-follow setting does that for `off`, the spec sheet of
+/// overlayfs_copyup).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Redirect {
     Off,
     Follow,
+    NoFollow,
     On,
 }
 
@@ -71,12 +81,35 @@ impl Redirect {
     pub fn from_value(v: &[u8]) -> Result<Redirect> {
         match v {
             b"on" => Ok(Redirect::On),
-            b"off" | b"nofollow" => Ok(Redirect::Off),
+            b"off" => Ok(Redirect::Off),
+            b"nofollow" => Ok(Redirect::NoFollow),
             b"follow" => Ok(Redirect::Follow),
             _ => Err(Errno::EINVAL),
         }
     }
 }
+
+/// The option string as mountinfo shows it: `redirect_dir=off` and
+/// `redirect_dir=follow` are left out (they are what the kernel does without
+/// the option), `on` and `nofollow` stay.
+pub fn shown_options(data: &[u8]) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::new();
+    for part in data.split(|&b| b == b',') {
+        if part == b"redirect_dir=off" || part == b"redirect_dir=follow" {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push(b',');
+        }
+        out.extend_from_slice(part);
+    }
+    out
+}
+
+/// The longest absolute redirect value (the leading `/` counted).
+const MAX_REDIRECT: usize = 256;
+/// How many redirects in a row are followed.
+const MAX_FOLLOW: usize = 8;
 
 /// How an overlay is made.
 #[derive(Clone, Debug)]
@@ -121,7 +154,9 @@ pub struct Overlay<L: RawLock + Default + 'static = RawSpinLock> {
     layers: Vec<Layer>,
     has_upper: bool,
     opaque: &'static [u8],
+    redirect_attr: &'static [u8],
     internal: &'static [u8],
+    redirect: Redirect,
     state: Lock<L, State>,
 }
 
@@ -129,6 +164,27 @@ impl<L: RawLock + Default + 'static> core::fmt::Debug for Overlay<L> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Overlay").field("layers", &self.layers.len()).finish_non_exhaustive()
     }
+}
+
+/// The names of a redirect value: one name (relative), or the parts of an
+/// absolute path. A value that is empty, ends in `/`, has a `/` inside a
+/// relative value or `..` (or an empty part) in it is unusable.
+fn redirect_components(value: &[u8]) -> Result<Vec<Vec<u8>>> {
+    if value.is_empty() || value.last() == Some(&b'/') {
+        return Err(Errno::EINVAL);
+    }
+    let body = if value[0] == b'/' { &value[1..] } else { value };
+    if value[0] != b'/' && body.contains(&b'/') {
+        return Err(Errno::EINVAL);
+    }
+    let mut out = Vec::new();
+    for c in body.split(|&b| b == b'/') {
+        if c.is_empty() || c == b".." || c == b"." {
+            return Err(Errno::EINVAL);
+        }
+        out.push(c.to_vec());
+    }
+    Ok(out)
 }
 
 fn whiteout_node() -> NewNode {
@@ -154,10 +210,10 @@ impl<L: RawLock + Default + 'static> Overlay<L> {
         let mut layers = Vec::new();
         layers.extend(config.upper);
         layers.extend(config.lowers);
-        let (opaque, internal): (&'static [u8], &'static [u8]) = if config.userxattr {
-            (b"user.overlay.opaque", b"user.overlay.")
+        let (opaque, redirect_attr, internal): (&'static [u8], &'static [u8], &'static [u8]) = if config.userxattr {
+            (b"user.overlay.opaque", b"user.overlay.redirect", b"user.overlay.")
         } else {
-            (b"trusted.overlay.opaque", b"trusted.overlay.")
+            (b"trusted.overlay.opaque", b"trusted.overlay.redirect", b"trusted.overlay.")
         };
         let mut root_real = Vec::new();
         for (i, l) in layers.iter().enumerate() {
@@ -183,7 +239,9 @@ impl<L: RawLock + Default + 'static> Overlay<L> {
             layers,
             has_upper,
             opaque,
+            redirect_attr,
             internal,
+            redirect: config.redirect,
             state: Lock::new(State { nodes, by_name: BTreeMap::new(), next: ROOT + 1 }),
         })
     }
@@ -263,11 +321,107 @@ impl<L: RawLock + Default + 'static> Ops<'_, L> {
                     out.push(r);
                 }
             }
-            if a.kind == FileType::Directory && self.is_opaque(&r) {
-                break;
+            if a.kind == FileType::Directory {
+                if let Some(v) = self.redirect_of(&r) {
+                    // The directory's content is the lower directory the
+                    // redirect names, not what the same name has below.
+                    if self.o.redirect == Redirect::NoFollow {
+                        return Err(Errno::EPERM);
+                    }
+                    let targets = self.follow_redirect(parent, r.layer, &v, 0)?;
+                    out.extend(targets);
+                    break;
+                }
+                if self.is_opaque(&r) {
+                    break;
+                }
             }
         }
         Ok(kind.map(|k| (out, k)))
+    }
+
+    /// The redirect attribute of directory `r`, if it has one.
+    fn redirect_of(&self, r: &Real) -> Option<Vec<u8>> {
+        self.layer(r.layer).fs.getxattr(r.ino, self.o.redirect_attr).ok()
+    }
+
+    /// The directories a redirect `value` held by an entry of layer `layer`
+    /// names: looked up in the layers below that layer only, merged. A
+    /// relative value is a sibling of the entry (a name in the parts of its
+    /// parent), an absolute one counts from the overlay's root. A value that
+    /// names nothing or a file names no directory at all.
+    fn follow_redirect(&self, parent: &[Real], layer: usize, value: &[u8], depth: usize) -> Result<Vec<Real>> {
+        if depth >= MAX_FOLLOW {
+            return Err(Errno::ELOOP);
+        }
+        let absolute = value.first() == Some(&b'/');
+        let comps = redirect_components(value)?;
+        let starts: Vec<(usize, Ino)> = if absolute {
+            (layer + 1..self.o.layers.len()).map(|j| (j, self.layer(j).root)).collect()
+        } else {
+            parent.iter().filter(|p| p.layer > layer).map(|p| (p.layer, p.ino)).collect()
+        };
+        let found = self.walk_layers(&starts, &comps)?;
+        let mut out = Vec::new();
+        for r in found {
+            out.push(r);
+            if let Some(v) = self.redirect_of(&r) {
+                // A redirect in the layer below is followed in turn.
+                let up_parent =
+                    if absolute { self.parts_at(&comps[..comps.len() - 1], r.layer)? } else { parent.to_vec() };
+                out.extend(self.follow_redirect(&up_parent, r.layer, &v, depth + 1)?);
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    /// The merged directories of the absolute path `comps` in the layers
+    /// below `layer`.
+    fn parts_at(&self, comps: &[Vec<u8>], layer: usize) -> Result<Vec<Real>> {
+        let starts: Vec<(usize, Ino)> = (layer + 1..self.o.layers.len()).map(|j| (j, self.layer(j).root)).collect();
+        self.walk_layers(&starts, comps)
+    }
+
+    /// The directory `comps` names below each of `starts` (a layer and a
+    /// directory of it), highest layer first, up to the first layer that
+    /// hides what is below it (a whiteout, a file, an opaque directory).
+    fn walk_layers(&self, starts: &[(usize, Ino)], comps: &[Vec<u8>]) -> Result<Vec<Real>> {
+        let mut out = Vec::new();
+        for &(layer, start) in starts {
+            let l = self.layer(layer);
+            let mut cur = start;
+            let mut missing = false;
+            let mut blocked = false;
+            for c in comps {
+                let child = match l.fs.lookup(cur, c) {
+                    Ok(c) => c,
+                    Err(Errno::ENOENT) => {
+                        missing = true;
+                        break;
+                    }
+                    Err(e) => return Err(e),
+                };
+                let a = l.fs.getattr(child)?;
+                if is_whiteout(&a) || a.kind != FileType::Directory {
+                    blocked = true;
+                    break;
+                }
+                cur = child;
+            }
+            if blocked {
+                break;
+            }
+            if missing {
+                continue;
+            }
+            let r = Real { layer, ino: cur };
+            out.push(r);
+            if self.is_opaque(&r) {
+                break;
+            }
+        }
+        Ok(out)
     }
 
     /// Whether a lower layer of directory `parent` has `name` (not hidden by
@@ -320,6 +474,85 @@ impl<L: RawLock + Default + 'static> Ops<'_, L> {
 
     fn check_dir(&mut self, dir: Ino) -> Result<()> {
         if self.node(dir)?.kind == FileType::Directory { Ok(()) } else { Err(Errno::ENOTDIR) }
+    }
+
+    // ----- redirects -----
+
+    /// Where the lower content of directory `ino` is, as an absolute path of
+    /// the lower layers (`None` for a directory with no lower content).
+    fn origin_path(&mut self, ino: Ino) -> Result<Option<Vec<Vec<u8>>>> {
+        if ino == ROOT {
+            return Ok(Some(Vec::new()));
+        }
+        let real = self.real(ino)?;
+        if real.iter().all(|r| self.is_upper(r)) {
+            return Ok(None);
+        }
+        let (parent, name) = {
+            let n = self.node(ino)?;
+            (n.parent, n.name.clone())
+        };
+        let mut base = self.origin_path(parent)?.unwrap_or_default();
+        if self.is_upper(&real[0])
+            && let Some(v) = self.redirect_of(&real[0])
+        {
+            // A redirect of the overlay's own: its value names the origin.
+            if v.first() == Some(&b'/') {
+                return Ok(Some(redirect_components(&v)?));
+            }
+            base.push(v);
+            return Ok(Some(base));
+        }
+        base.push(name);
+        Ok(Some(base))
+    }
+
+    /// The redirect value for directory `src` moving from the directory
+    /// `from` (where it is called `name`) to the directory `to`: `None` when
+    /// it has no lower content, else the name of the lower directory alone
+    /// while it stays in its parent, the lower path from the root otherwise
+    /// (and an absolute value stays absolute). `EXDEV` when that is too long.
+    fn redirect_value(&mut self, src: Ino, from: Ino, name: &[u8], to: Ino) -> Result<Option<Vec<u8>>> {
+        let Some(origin) = self.origin_path(src)? else { return Ok(None) };
+        let real = self.real(src)?;
+        let existing = if self.is_upper(&real[0]) { self.redirect_of(&real[0]) } else { None };
+        let value = if from == to {
+            match existing {
+                Some(v) => v,
+                None => name.to_vec(),
+            }
+        } else {
+            let mut v = Vec::new();
+            for c in &origin {
+                v.push(b'/');
+                v.extend_from_slice(c);
+            }
+            v
+        };
+        if value.len() > MAX_REDIRECT {
+            return Err(Errno::EXDEV);
+        }
+        Ok(Some(value))
+    }
+
+    /// Whether a lower layer has a directory `name` in the merged directory
+    /// whose parts are `parent`.
+    fn lower_has_dir(&self, parent: &[Real], name: &[u8]) -> Result<bool> {
+        for p in parent {
+            if self.is_upper(p) {
+                continue;
+            }
+            let l = self.layer(p.layer);
+            match l.fs.lookup(p.ino, name) {
+                Ok(c) => {
+                    let a = l.fs.getattr(c)?;
+                    return Ok(a.kind == FileType::Directory);
+                }
+                Err(Errno::ENOENT) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(false)
     }
 
     // ----- copy-up -----
@@ -415,6 +648,11 @@ impl<L: RawLock + Default + 'static> Ops<'_, L> {
             up.fs.setattr(new, &set)?;
         }
         self.copy_xattrs(&sl, src.ino, &up, new);
+        if a.kind == FileType::Directory && self.redirect_of(&src).is_some() {
+            // The lower directory shows what its redirect names: the copy
+            // keeps that by redirecting to the lower entry itself.
+            up.fs.setxattr(new, self.o.redirect_attr, &name, SetMode::default()).map_err(|_| Errno::EIO)?;
+        }
         let mut r = vec![Real { layer: 0, ino: new }];
         if a.kind == FileType::Directory {
             r.extend_from_slice(&real);
@@ -531,8 +769,11 @@ impl<L: RawLock + Default + 'static> Ops<'_, L> {
         }
         let up_dir = self.ensure_upper(dir)?;
         let hid = self.remove_whiteout(&up, up_dir, name)?;
+        // With redirect_dir=on a directory made in a directory that exists
+        // below is marked opaque too.
+        let below = self.o.redirect == Redirect::On && self.real(dir)?.iter().any(|r| !self.is_upper(r));
         let n = up.fs.mkdir(up_dir, name, perm, uid, gid)?;
-        if hid {
+        if hid || below {
             up.fs.setxattr(n, self.o.opaque, b"y", SetMode::default()).map_err(|_| Errno::EIO)?;
         }
         Ok(self.add_child(dir, name, FileType::Directory, n))
@@ -630,14 +871,25 @@ impl<L: RawLock + Default + 'static> Ops<'_, L> {
         let src_kind = self.node(src)?.kind;
         let src_real = self.real(src)?;
         let from_lower = src_real.iter().any(|r| !self.is_upper(r));
+        let redirects = self.o.redirect == Redirect::On;
+        // The redirects a directory that exists in a lower layer needs at
+        // its new place (only redirect_dir=on renames one).
+        let mut src_redirect = None;
+        let mut dst_redirect = None;
         if src_kind == FileType::Directory && from_lower {
-            return Err(Errno::EXDEV);
+            if !redirects {
+                return Err(Errno::EXDEV);
+            }
+            src_redirect = self.redirect_value(src, od, on, nd)?;
         }
         if let Some(d) = dst {
             let dk = self.node(d)?.kind;
             if flags.exchange {
                 if dk == FileType::Directory && self.real(d)?.iter().any(|r| !self.is_upper(r)) {
-                    return Err(Errno::EXDEV);
+                    if !redirects {
+                        return Err(Errno::EXDEV);
+                    }
+                    dst_redirect = self.redirect_value(d, nd, nn, od)?;
                 }
             } else if src_kind == FileType::Directory {
                 if dk != FileType::Directory {
@@ -653,10 +905,11 @@ impl<L: RawLock + Default + 'static> Ops<'_, L> {
         let src_up = self.ensure_upper(src)?;
         let up_od = self.ensure_upper(od)?;
         let up_nd = self.ensure_upper(nd)?;
+        let mut dst_up = None;
         if flags.exchange
             && let Some(d) = dst
         {
-            self.ensure_upper(d)?;
+            dst_up = Some(self.ensure_upper(d)?);
         }
         let new_parent_real = self.real(nd)?;
         let old_parent_real = self.real(od)?;
@@ -685,8 +938,27 @@ impl<L: RawLock + Default + 'static> Ops<'_, L> {
             over_lower = src_kind == FileType::Directory && self.lower_has(&new_parent_real, nn)?;
         }
         up.fs.rename(up_od, on, up_nd, nn, RenameFlags { noreplace: false, exchange: flags.exchange })?;
-        if over_lower {
+        if let Some(v) = &src_redirect {
+            up.fs.setxattr(src_up, self.o.redirect_attr, v, SetMode::default()).map_err(|_| Errno::EIO)?;
+        } else if over_lower {
             up.fs.setxattr(src_up, self.o.opaque, b"y", SetMode::default()).map_err(|_| Errno::EIO)?;
+        }
+        if flags.exchange {
+            if let (Some(v), Some(du)) = (&dst_redirect, dst_up) {
+                up.fs.setxattr(du, self.o.redirect_attr, v, SetMode::default()).map_err(|_| Errno::EIO)?;
+            }
+            // A directory that lands on the name of a lower directory must
+            // not merge with it.
+            if src_kind == FileType::Directory && src_redirect.is_none() && self.lower_has_dir(&new_parent_real, nn)? {
+                up.fs.setxattr(src_up, self.o.opaque, b"y", SetMode::default()).map_err(|_| Errno::EIO)?;
+            }
+            if let (Some(d), Some(du)) = (dst, dst_up)
+                && self.node(d)?.kind == FileType::Directory
+                && dst_redirect.is_none()
+                && self.lower_has_dir(&old_parent_real, on)?
+            {
+                up.fs.setxattr(du, self.o.opaque, b"y", SetMode::default()).map_err(|_| Errno::EIO)?;
+            }
         }
         if !flags.exchange && self.lower_has(&old_parent_real, on)? {
             self.make_whiteout(&up, up_od, on)?;
