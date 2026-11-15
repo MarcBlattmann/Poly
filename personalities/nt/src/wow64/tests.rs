@@ -586,3 +586,28 @@ fn a_32_bit_user32_calls_win32k_with_the_same_request_bytes_and_a_4_byte_reply_l
     let reply: Reply = poly_win32k::wire::decode(&c.f.bytes_at(u64::from(out), n)).expect("a reply");
     assert!(matches!(reply, Reply::Desktop { .. }), "{reply:?}");
 }
+
+#[test]
+fn rename_link_and_completion_inputs_are_widened() {
+    use crate::wow64::thunk::set_file_input_for_tests as widen;
+    // FILE_RENAME_INFORMATION, 32 bits: ReplaceIfExists, RootDirectory (-1 here), length 4, "AB".
+    let mut b = vec![1u8, 0, 0, 0];
+    b.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+    b.extend_from_slice(&4u32.to_le_bytes());
+    b.extend_from_slice(&[b'A', 0, b'B', 0]);
+    let w = widen(10, &b).unwrap().unwrap();
+    assert_eq!(w.len(), 24);
+    assert_eq!(w[0], 1);
+    assert_eq!(u64::from_le_bytes(w[8..16].try_into().unwrap()), u64::MAX, "the handle sign extended");
+    assert_eq!(u32::from_le_bytes(w[16..20].try_into().unwrap()), 4);
+    assert_eq!(&w[20..], &[b'A', 0, b'B', 0]);
+    assert_eq!(widen(11, &b[..8]), Some(Err(STATUS_INFO_LENGTH_MISMATCH)));
+    // FILE_COMPLETION_INFORMATION: Port, Key.
+    let w = widen(30, &[0x10, 0, 0, 0, 0x78, 0x56, 0x34, 0x12]).unwrap().unwrap();
+    assert_eq!(
+        (u64::from_le_bytes(w[0..8].try_into().unwrap()), u64::from_le_bytes(w[8..16].try_into().unwrap())),
+        (0x10, 0x1234_5678)
+    );
+    // FileBasicInformation has no pointers.
+    assert_eq!(widen(4, &[0u8; 40]), None);
+}

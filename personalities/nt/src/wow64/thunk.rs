@@ -259,6 +259,45 @@ const INFO: &[InfoSpec] = &[
     },
 ];
 
+/// `NtSetInformationFile`'s input classes with pointer-sized fields (`wdm.h`/`ntifs.h`):
+/// `FileRenameInformation` (10), `FileLinkInformation` (11), their `Ex` forms (65, 72) —
+/// `ReplaceIfExists`/`Flags`, `RootDirectory` (a handle), `FileNameLength`, `FileName`: the name
+/// at 12 in 32 bits, 20 in 64 — and `FileCompletionInformation` (30: `Port`, `Key`).
+const SET_FILE_RENAME_CLASSES: [u32; 4] = [10, 11, 65, 72];
+const FILE_COMPLETION_INFORMATION: u32 = 30;
+
+/// The 64-bit copy of a 32-bit `NtSetInformationFile` input of class `class` (`b`: the caller's
+/// `length` bytes), or `None` when the class has the same layout in both widths.
+fn set_file_input(class: u32, b: &[u8]) -> Option<Result<Vec<u8>, NtStatus>> {
+    if SET_FILE_RENAME_CLASSES.contains(&class) {
+        if b.len() < 12 {
+            return Some(Err(STATUS_INFO_LENGTH_MISMATCH));
+        }
+        let len = (u32_at(b, 8) as usize).min(b.len() - 12);
+        let mut w = alloc::vec![0u8; 20 + len];
+        w[0..4].copy_from_slice(&b[0..4]);
+        w[8..16].copy_from_slice(&sign(u32_at(b, 4)).to_le_bytes());
+        w[16..20].copy_from_slice(&(len as u32).to_le_bytes());
+        w[20..].copy_from_slice(&b[12..12 + len]);
+        return Some(Ok(w));
+    }
+    if class == FILE_COMPLETION_INFORMATION {
+        if b.len() < 8 {
+            return Some(Err(STATUS_INFO_LENGTH_MISMATCH));
+        }
+        let mut w = alloc::vec![0u8; 16];
+        w[0..8].copy_from_slice(&sign(u32_at(b, 0)).to_le_bytes());
+        w[8..16].copy_from_slice(&u64::from(u32_at(b, 4)).to_le_bytes());
+        return Some(Ok(w));
+    }
+    None
+}
+
+#[cfg(test)]
+pub(crate) fn set_file_input_for_tests(class: u32, b: &[u8]) -> Option<Result<Vec<u8>, NtStatus>> {
+    set_file_input(class, b)
+}
+
 /// A converted information call: where the 64-bit result goes and what the caller gets.
 #[derive(Debug)]
 struct InfoCall {
@@ -435,6 +474,22 @@ fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Option<Service>, sig: &[Arg
             }
         };
         args.push(wide);
+    }
+    // An input class with pointer-sized fields: the service reads a 64-bit copy.
+    if service == Some(Service::SetInformationFile) && narrow[2] != 0 {
+        let length = (narrow[3] as usize).min(0x1_0000);
+        let mut b = alloc::vec![0u8; length];
+        abi::read(k, u64::from(narrow[2]), &mut b)?;
+        match set_file_input(narrow[4], &b) {
+            None => {}
+            Some(Err(status)) => return Ok(Prepared::Done(status)),
+            Some(Ok(w)) => {
+                let wide = s.alloc(w.len())?;
+                s.put(wide, &w);
+                args[2] = wide;
+                args[3] = w.len() as u64;
+            }
+        }
     }
     // An information class with pointer-sized fields: the service writes the 64-bit form into
     // the window, the caller gets the 32-bit one.

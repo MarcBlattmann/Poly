@@ -6,15 +6,17 @@
 //! - `create`: `CreateWindowExW` makes an overlapped window; its window procedure (a 32-bit
 //!   `stdcall` function `user32` calls) sees `WM_CREATE` with the `lpParam` given in the 32-bit
 //!   `CREATESTRUCTW`, and `GetWindowTextW` / `GetClientRect` answer;
-//! - `paint`: `ShowWindow` + `UpdateWindow` send `WM_PAINT`, whose handler fills the update
-//!   rectangle through `BeginPaint` / `FillRect` / `EndPaint` (the 64-byte 32-bit
-//!   `PAINTSTRUCT`) and reads the colour back with `GetPixel`;
+//! - `paint`: with `--paint` (on Poly's desktop), `ShowWindow` + `UpdateWindow` send
+//!   `WM_PAINT`, whose handler fills the update rectangle through `BeginPaint` / `FillRect` /
+//!   `EndPaint` (the 64-byte 32-bit `PAINTSTRUCT`) and reads the colour back with `GetPixel`;
+//!   without it (the kernel test, no interactive display: nothing is visible, so nothing is
+//!   invalid) `BeginPaint` is called directly and the fill goes to a memory DC;
 //! - `messages`: `SendMessageW` returns the window procedure's result; a posted message reaches
 //!   it through `GetMessageW` / `DispatchMessageW` with its `wParam` and `lParam`, and
 //!   `DestroyWindow` / `PostQuitMessage` end the loop with the quit code.
 //!
 //! Started with `--show` it keeps its window open for 30 seconds instead of closing it (for a
-//! screenshot). It ends with `ExitProcess(0)` when every check passed, else with the number of
+//! screenshot: `cargo xtask win-app run --mode desktop --args "--show --paint"`). It ends with `ExitProcess(0)` when every check passed, else with the number of
 //! the first that failed.
 
 #![no_std]
@@ -113,6 +115,10 @@ unsafe extern "system" {
     fn CreateSolidBrush(color: u32) -> Handle;
     fn GetPixel(hdc: Handle, x: i32, y: i32) -> u32;
     fn DeleteObject(object: Handle) -> i32;
+    fn CreateCompatibleDC(hdc: Handle) -> Handle;
+    fn CreateBitmap(w: i32, h: i32, planes: u32, bits: u32, data: *const u8) -> Handle;
+    fn SelectObject(hdc: Handle, object: Handle) -> Handle;
+    fn DeleteDC(hdc: Handle) -> i32;
 }
 
 #[link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated")]
@@ -140,6 +146,10 @@ static CREATED_WITH: AtomicU32 = AtomicU32::new(0);
 static PAINTED: AtomicU32 = AtomicU32::new(u32::MAX);
 static POSTED: AtomicU32 = AtomicU32::new(0);
 static SHOW: AtomicU32 = AtomicU32::new(0);
+static PAINT_ON_SCREEN: AtomicU32 = AtomicU32::new(0);
+/// How many `WM_PAINT`s came, and the last `BeginPaint` DC.
+static PAINTS: AtomicU32 = AtomicU32::new(0);
+static PAINT_DC: AtomicU32 = AtomicU32::new(0);
 
 fn out(text: &[u8]) {
     let mut written = 0u32;
@@ -167,7 +177,9 @@ extern "system" fn wndproc(hwnd: Handle, msg: u32, w: usize, l: isize) -> isize 
             }
             WM_PAINT => {
                 let mut ps: PaintStruct = core::mem::zeroed();
+                PAINTS.fetch_add(1, Ordering::SeqCst);
                 let hdc = BeginPaint(hwnd, &mut ps);
+                PAINT_DC.store(hdc as u32, Ordering::SeqCst);
                 if hdc != 0 {
                     let brush = CreateSolidBrush(FILL);
                     FillRect(hdc, &ps.paint, brush);
@@ -200,16 +212,29 @@ extern "system" fn wndproc(hwnd: Handle, msg: u32, w: usize, l: isize) -> isize 
     }
 }
 
+/// `v` as 8 hex digits.
+fn hex(v: u32) -> [u8; 8] {
+    core::array::from_fn(|i| b"0123456789abcdef"[(v >> (28 - 4 * i)) as usize & 0xF])
+}
+
 fn fail(n: u32, what: &[u8]) -> ! {
     out(b"failed: ");
     out(what);
-    out(b"\n");
+    out(b" (painted ");
+    out(&hex(PAINTED.load(Ordering::SeqCst)));
+    out(b", paints ");
+    out(&hex(PAINTS.load(Ordering::SeqCst)));
+    out(b", dc ");
+    out(&hex(PAINT_DC.load(Ordering::SeqCst)));
+    out(b", posted ");
+    out(&hex(POSTED.load(Ordering::SeqCst)));
+    out(b")\n");
     // SAFETY: ends the process.
     unsafe { ExitProcess(n) }
 }
 
-/// Whether the command line contains `--show`.
-fn show_requested() -> bool {
+/// Whether the command line contains `flag` (at most 7 characters).
+fn flag_given(flag: &str) -> bool {
     // SAFETY: the process's NUL-terminated command line.
     unsafe {
         let line = GetCommandLineW();
@@ -219,15 +244,19 @@ fn show_requested() -> bool {
             v[n] = line.add(n).read();
             n += 1;
         }
-        let flag: [u16; 6] = wide("--show");
-        v[..n].windows(6).any(|w| w == flag)
+        let flag: [u16; 7] = wide(flag);
+        let len = flag.iter().position(|&c| c == 0).unwrap_or(7);
+        v[..n].windows(len).any(|w| w == &flag[..len])
     }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mainCRTStartup() -> u32 {
-    if show_requested() {
+    if flag_given("--show") {
         SHOW.store(1, Ordering::SeqCst);
+    }
+    if flag_given("--paint") {
+        PAINT_ON_SCREEN.store(1, Ordering::SeqCst);
     }
     out(b"gui32\n");
     let class: [u16; 16] = wide("PolyGui32");
@@ -280,7 +309,36 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         out(b"create\n");
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
-        if core::mem::size_of::<PaintStruct>() != 64 || PAINTED.load(Ordering::SeqCst) != FILL {
+        // On a desktop (`--paint`) the window was invalid when shown and UpdateWindow sent
+        // WM_PAINT; without one (the kernel test) nothing of it is visible and nothing is
+        // painted (Poly paints only on an interactive display), so BeginPaint is called here
+        // and the drawing goes to a memory DC.
+        if PAINT_ON_SCREEN.load(Ordering::SeqCst) != 0 {
+            if PAINTED.load(Ordering::SeqCst) != FILL {
+                fail(4, b"paint");
+            }
+        } else {
+            let mut ps: PaintStruct = core::mem::zeroed();
+            ps.restore = 0x5A5A;
+            let dc = BeginPaint(hwnd, &mut ps);
+            let same = dc != 0 && ps.hdc == dc && ps.restore == 0;
+            EndPaint(hwnd, &ps);
+            let mem = CreateCompatibleDC(0);
+            let bitmap = CreateBitmap(16, 16, 1, 32, core::ptr::null());
+            let old = SelectObject(mem, bitmap);
+            let brush = CreateSolidBrush(FILL);
+            let r = Rect { left: 0, top: 0, right: 16, bottom: 16 };
+            FillRect(mem, &r, brush);
+            PAINTED.store(GetPixel(mem, 5, 5), Ordering::SeqCst);
+            SelectObject(mem, old);
+            DeleteObject(brush);
+            DeleteObject(bitmap);
+            DeleteDC(mem);
+            if !same || PAINTED.load(Ordering::SeqCst) != FILL {
+                fail(4, b"paint");
+            }
+        }
+        if core::mem::size_of::<PaintStruct>() != 64 {
             fail(4, b"paint");
         }
         out(b"paint\n");

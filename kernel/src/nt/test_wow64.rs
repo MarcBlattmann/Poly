@@ -89,8 +89,9 @@ mod tests {
     kernel_test! {
         /// A 32-bit GUI program (ADR 0186 stage 4): `gui32.exe` (`tests/windows/wow64/gui32.rs`)
         /// registers a class, makes a window whose 32-bit window procedure `user32` calls,
-        /// paints it through `BeginPaint`/`FillRect`, sends and posts it messages and ends its
-        /// message loop, all through the i686 `user32`, `gdi32` and `win32u` in SysWOW64.
+        /// calls `BeginPaint` and fills a memory DC (no `WM_PAINT` without an interactive
+        /// display), sends and posts it messages and ends its message loop, all through the
+        /// i686 `user32`, `gdi32` and `win32u` in SysWOW64.
         fn nt_wow64_32_bit_window_program_paints_and_gets_messages() -> TestResult {
             if crate::fs::vfs().root_context().is_err() {
                 return Err("no VFS for the WOW64 test");
