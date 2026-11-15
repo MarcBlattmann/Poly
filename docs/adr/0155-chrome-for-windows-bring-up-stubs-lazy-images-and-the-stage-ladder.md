@@ -936,3 +936,7 @@ loader's own "failed" log lines.
   own family (`pdh`, `cfgmgr32`: its value; `ncrypt`: `NTE_NOT_SUPPORTED`, `BCrypt*` a status; `HidP_*`: its status,
   `HidD_*` FALSE; `propsys`: `E_NOTIMPL`; `setupapi`: FALSE, `(HANDLE)-1` for `SetupDiGetClassDevs*`; `wevtapi`: FALSE;
   `wintrust`: FALSE).
+- **Only the 64-bit modules.** The 32-bit modules of ADR 0186 (i686 `ntdll`, `kernelbase`, `kernel32`, `win32u`, `gdi32`,
+  `user32`) carry none of the fail-only exports or doc-derived functions of this step (`#[cfg(target_arch = "x86_64")]`,
+  and `build.rs` skips the ordinals, forwarders and aliases there): a stub without parameters is wrong for `stdcall`, and the
+  i686 `ntdll` has its own `RtlUnwind`.

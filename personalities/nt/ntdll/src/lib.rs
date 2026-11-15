@@ -166,4 +166,6 @@ fn run_callouts(callouts: &[Callout]) -> Result<(), usize> {
     Ok(())
 }
 
+// The 32-bit ntdll (ADR 0186) has its own exports (`RtlUnwind` ...): a stub that takes no arguments would also leave them.
+#[cfg(target_arch = "x86_64")]
 mod apps;

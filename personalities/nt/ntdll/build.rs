@@ -72,8 +72,10 @@ fn main() {
     println!("cargo:rustc-link-arg=/EXPORT:PolyDebugPrint");
     // The memory functions the Windows applications import from ntdll (ADR 0155, step 10): the
     // `compiler_builtins` ones, as `ucrtbase.dll` exports them.
-    for name in ["memcpy", "memmove", "memset", "memcmp"] {
-        println!("cargo:rustc-link-arg=/EXPORT:{name}");
+    if !x86 {
+        for name in ["memcpy", "memmove", "memset", "memcmp"] {
+            println!("cargo:rustc-link-arg=/EXPORT:{name}");
+        }
     }
     // RtlCaptureContext is assembly too (ADR 0087).
     let mut exports = vec!["/EXPORT:LdrInitializeThunk", "/EXPORT:KiUserApcDispatcher", "/EXPORT:RtlCaptureContext"];
