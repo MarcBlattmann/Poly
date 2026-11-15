@@ -210,6 +210,36 @@ fn file(f: &mut Fake, key: u64, bytes: Vec<u8>) -> u64 {
     h.0
 }
 
+/// Prohibit-dynamic-code lets the views of image sections be executable (what the loader makes
+/// of a module) and nothing else (ADR 0196).
+#[test]
+fn prohibit_dynamic_code_exempts_image_views_only() {
+    let mut f = Fake::new();
+    let fh = file(&mut f, 3, test_exe(false));
+    let (s, h) = create(&mut f, "", 0, PAGE_EXECUTE_WRITECOPY, SEC_IMAGE, fh);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (_, v, n, _) = map(&mut f, h, 0, None, 0, PAGE_READONLY);
+    f.proc.set_mitigation(poly_kernelbase::mitigation::State::new().with_creation_words(1 << 36, 0));
+    assert!(f.proc.dynamic_code_blocked);
+    // The module's sections change protection, as the loader does after it relocated.
+    let b = f.put_u64(v);
+    let sz = f.put_u64(0x1000);
+    let old = f.alloc(4);
+    for prot in [PAGE_READWRITE, PAGE_EXECUTE_READ] {
+        assert_eq!(f.call(Service::ProtectVirtualMemory, &[SELF, b, sz, u64::from(prot), old]), STATUS_SUCCESS);
+    }
+    // Private memory cannot become executable.
+    let (st, p, _) = allocate(&mut f, 0, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    assert_eq!(st, STATUS_SUCCESS);
+    let pbase = f.put_u64(p);
+    let blocked = NtStatus(0xC000_0604);
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[SELF, pbase, sz, u64::from(PAGE_EXECUTE_READ), old]), blocked);
+    // A range that leaves the view is not the view's.
+    let past = f.put_u64(v + n - 0x1000);
+    let two = f.put_u64(0x2000);
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[SELF, past, two, u64::from(PAGE_EXECUTE_READ), old]), blocked);
+}
+
 #[test]
 fn image_sections_from_files() {
     let mut f = Fake::new();

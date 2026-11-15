@@ -479,8 +479,23 @@ unsafe fn create(
     }
     blob.insert(0, records);
     let attribute_blob = if records == 0 { core::ptr::null() } else { blob.as_ptr() as *const u8 };
+    // The `SECURITY_CAPABILITIES` attribute starts the child in an AppContainer whose profile
+    // exists (the sheet: error 2 without it): the child's token is a lowbox token made of the
+    // creator's own (ADR 0196).
+    let mut lowbox: Option<Handle> = None;
+    if let Some(sc) = parsed.security_capabilities {
+        if r.token.is_some() {
+            return fail(ERROR_INVALID_PARAMETER, FALSE);
+        }
+        // SAFETY: the caller's structure, which the list's contract keeps valid.
+        match unsafe { crate::appcontainer::start_in_container(sc as *const crate::appcontainer::SecurityCapabilities) } {
+            Ok(h) => lowbox = Some(h),
+            Err(e) => return fail(e, FALSE),
+        }
+    }
+    let token = r.token.or(lowbox);
     let mut process_flags = if r.inherit_handles { p::NT_PROCESS_INHERIT_HANDLES } else { 0 };
-    if r.token.is_some() {
+    if token.is_some() {
         process_flags |= NT_PROCESS_POLY_TOKEN;
     }
     let thread_flags = if flags & CREATE_SUSPENDED != 0 { p::NT_THREAD_CREATE_SUSPENDED } else { 0 };
@@ -508,10 +523,14 @@ unsafe fn create(
             thread_flags,
             buf.as_ptr(),
             // Poly's token flag: CreateInfo is the token handle.
-            r.token.unwrap_or(0) as *mut u8,
+            token.unwrap_or(0) as *mut u8,
             attribute_blob,
         )
     };
+    if let Some(h) = lowbox {
+        // SAFETY: the token made above; the child has its own copy.
+        unsafe { nt::NtClose(h) };
+    }
     if !st.is_success() {
         return fail_status(st, FALSE);
     }

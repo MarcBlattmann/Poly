@@ -14,7 +14,8 @@
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
 
-use poly_crypto::sha256::Sha256;
+extern crate alloc;
+
 use poly_win32_cryptrt as _;
 
 #[link(name = "kernelbase", kind = "raw-dylib")]
@@ -64,26 +65,6 @@ pub unsafe extern "system" fn GetProfileType(flags: *mut u32) -> i32 {
 const E_INVALIDARG: i32 = 0x8007_0057u32 as i32;
 const E_OUTOFMEMORY: i32 = 0x8007_000Eu32 as i32;
 
-/// The 40 bytes of the SID of `name` (UTF-16 units).
-fn derive(name: &[u16]) -> [u8; 40] {
-    let mut h = Sha256::new();
-    for &u in name {
-        // Lower-case what has a simple lower case (`char::to_lowercase`).
-        let lower = char::from_u32(u32::from(u))
-            .and_then(|c| c.to_lowercase().next())
-            .map_or(u, |c| if (c as u32) <= 0xFFFF { c as u32 as u16 } else { u });
-        h.update(&lower.to_le_bytes());
-    }
-    let digest = h.finish();
-    let mut sid = [0u8; 40];
-    sid[0] = 1;
-    sid[1] = 8;
-    sid[7] = 15;
-    sid[8..12].copy_from_slice(&2u32.to_le_bytes());
-    sid[12..40].copy_from_slice(&digest[..28]);
-    sid
-}
-
 /// `DeriveAppContainerSidFromAppContainerName`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn DeriveAppContainerSidFromAppContainerName(name: *const u16, sid: *mut *mut u8) -> i32 {
@@ -104,7 +85,7 @@ pub unsafe extern "system" fn DeriveAppContainerSidFromAppContainerName(name: *c
         return E_INVALIDARG;
     }
     // SAFETY: `n` units were just read.
-    let bytes = derive(unsafe { core::slice::from_raw_parts(name, n) });
+    let bytes = poly_security::appcontainer::package_sid(unsafe { core::slice::from_raw_parts(name, n) }).to_bytes();
     // SAFETY: no preconditions.
     let p = unsafe { LocalAlloc(0, bytes.len()) };
     if p.is_null() {
@@ -117,6 +98,8 @@ pub unsafe extern "system" fn DeriveAppContainerSidFromAppContainerName(name: *c
     }
     0
 }
+
+mod profile;
 
 /// The entry point (`DllMain`): nothing to set up.
 #[unsafe(no_mangle)]

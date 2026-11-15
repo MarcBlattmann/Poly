@@ -387,7 +387,26 @@ pub struct Token {
     pub origin: u64,
     /// The token object's own security: the creator's default DACL.
     pub object_dacl: Option<Vec<u8>>,
+    /// The AppContainer a lowbox token belongs to (`NtCreateLowBoxToken`, ADR 0196).
+    pub app_container: Option<AppContainer>,
     flags: u32,
+}
+
+/// What makes a token a lowbox token: the container's package SID, the number the system gave
+/// that SID, and the capabilities (SIDs and their `SE_GROUP_*` attributes).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AppContainer {
+    pub sid: Sid,
+    pub number: u32,
+    pub capabilities: Vec<(Sid, u32)>,
+}
+
+/// `dacl` with an allow entry (`GENERIC_ALL`) for `sid` after the others (a NULL DACL stays one).
+fn with_container_ace(dacl: &Option<Vec<u8>>, sid: &Sid) -> Option<Vec<u8>> {
+    let d = dacl.as_ref()?;
+    let mut aces = acl::aces_in(d);
+    aces.extend(acl::aces_in(&acl::build(acl::ACL_REVISION, &[(0, 0, GENERIC_ALL, sid)])));
+    Some(crate::sdops::acl_of(d.first().copied().unwrap_or(acl::ACL_REVISION), &aces))
 }
 
 /// The single user's logon session LUID: its logon SID `S-1-5-5-0-123456789`
@@ -448,6 +467,7 @@ impl Token {
             elevation_type: TOKEN_ELEVATION_TYPE_DEFAULT,
             session: 0,
             origin: POLY_LOGON_LUID,
+            app_container: None,
             flags: 0,
         }
     }
@@ -514,6 +534,7 @@ impl Token {
             privileges: &self.privileges,
             integrity: self.integrity_rid(),
             write_restricted: self.write_restricted(),
+            app_container: self.app_container.as_ref().map(|a| (&a.sid, &a.capabilities[..])),
         }
     }
 
@@ -542,6 +563,32 @@ impl Token {
         t.kind = kind;
         t.level = if kind == TOKEN_PRIMARY { SECURITY_IMPERSONATION } else { level };
         t
+    }
+
+    /// `NtCreateLowBoxToken` (what `CreateAppContainerToken` makes, ADR 0196): a primary token
+    /// with the source's user, groups and session, Low integrity, mandatory policy 1, two
+    /// privileges at most (`SeChangeNotifyPrivilege` and `SeIncreaseWorkingSetPrivilege`, when
+    /// the source has them), the container SID, `number` and the capabilities as given. A
+    /// restricted source gives a restricted token. A token that is a container already makes no
+    /// container.
+    pub fn lowbox(&self, sid: Sid, number: u32, capabilities: Vec<(Sid, u32)>, id: u64) -> Result<Token, SecErr> {
+        if self.app_container.is_some() {
+            return Err(SecErr::InvalidParameter);
+        }
+        let mut t = self.duplicate(TOKEN_PRIMARY, SECURITY_IMPERSONATION, id);
+        for (g, a) in t.groups.iter_mut() {
+            if *a & SE_GROUP_INTEGRITY != 0 {
+                *g = sid::mandatory(rid::SECURITY_MANDATORY_LOW_RID);
+            }
+        }
+        t.privileges.retain(|&(l, _)| l == 23 || l == 33);
+        t.mandatory_policy = 1;
+        // What the container makes, and its own token, belong to it too: its SID is in the
+        // default DACL (and in the one of the token object).
+        t.default_dacl = with_container_ace(&t.default_dacl, &sid);
+        t.object_dacl = with_container_ace(&t.object_dacl, &sid);
+        t.app_container = Some(AppContainer { sid, number, capabilities });
+        Ok(t)
     }
 
     /// `CreateRestrictedToken` / `NtFilterToken`: groups made deny-only,
@@ -756,6 +803,7 @@ impl Token {
             && self.groups == other.groups
             && self.restricted == other.restricted
             && self.privileges == other.privileges
+            && self.app_container == other.app_container
             && self.flags & (F_HAS_RESTRICTIONS | F_WRITE_RESTRICTED)
                 == other.flags & (F_HAS_RESTRICTIONS | F_WRITE_RESTRICTED)
     }
@@ -792,7 +840,14 @@ impl Token {
             TOKEN_GROUPS => token_groups(&mut out, base, self.groups.iter().map(|(s, a)| (s, *a))),
             TOKEN_RESTRICTED_SIDS => token_groups(&mut out, base, self.restricted.iter().map(|(s, a)| (s, *a))),
             TOKEN_LOGON_SID => token_groups(&mut out, base, self.logon_sid().into_iter().map(|(s, a)| (s, *a))),
-            TOKEN_CAPABILITIES | TOKEN_DEVICE_GROUPS => {
+            TOKEN_CAPABILITIES => match &self.app_container {
+                Some(a) => token_groups(&mut out, base, a.capabilities.iter().map(|(s, at)| (s, *at))),
+                None => {
+                    token_groups(&mut out, base, core::iter::empty());
+                    out.resize(24, 0);
+                }
+            },
+            TOKEN_DEVICE_GROUPS => {
                 token_groups(&mut out, base, core::iter::empty());
                 out.resize(24, 0);
             }
@@ -873,12 +928,13 @@ impl Token {
             }
             TOKEN_UI_ACCESS => u32s(&mut out, &[u32::from(self.flags & F_UI_ACCESS != 0)]),
             TOKEN_MANDATORY_POLICY => u32s(&mut out, &[self.mandatory_policy]),
-            TOKEN_IS_APP_CONTAINER
-            | TOKEN_APP_CONTAINER_NUMBER
-            | TOKEN_PRIVATE_NAME_SPACE
-            | TOKEN_IS_SANDBOXED
-            | TOKEN_IS_APP_SILO => u32s(&mut out, &[0]),
-            TOKEN_APP_CONTAINER_SID => out.extend_from_slice(&0u64.to_le_bytes()),
+            TOKEN_IS_APP_CONTAINER | TOKEN_IS_SANDBOXED => u32s(&mut out, &[u32::from(self.app_container.is_some())]),
+            TOKEN_APP_CONTAINER_NUMBER => u32s(&mut out, &[self.app_container.as_ref().map_or(0, |a| a.number)]),
+            TOKEN_PRIVATE_NAME_SPACE | TOKEN_IS_APP_SILO => u32s(&mut out, &[0]),
+            TOKEN_APP_CONTAINER_SID => match &self.app_container {
+                Some(a) => pointer_then(&mut out, base, &a.sid.to_bytes()),
+                None => out.extend_from_slice(&0u64.to_le_bytes()),
+            },
             TOKEN_USER_CLAIM_ATTRIBUTES | TOKEN_DEVICE_CLAIM_ATTRIBUTES | TOKEN_SECURITY_ATTRIBUTES => {
                 out.extend_from_slice(&[0; 16])
             }
@@ -1033,6 +1089,27 @@ mod tests {
         let d = t.duplicate(TOKEN_IMPERSONATION, SECURITY_IDENTIFICATION, 78);
         assert_eq!(u32_at(&d.query(class::TOKEN_STATISTICS, 0).unwrap(), 28), SECURITY_IDENTIFICATION);
         assert_eq!(u64_at(&d.query(class::TOKEN_STATISTICS, 0).unwrap(), 0), 78);
+    }
+
+    #[test]
+    fn a_lowbox_token_is_low_with_two_privileges_and_its_container() {
+        let src = Token::poly_user();
+        let sid = crate::appcontainer::package_sid(&[b'x' as u16]);
+        let cap = Sid::new(15, &[3, 1]);
+        let t = src.lowbox(sid.clone(), 7, alloc::vec![(cap.clone(), SE_GROUP_ENABLED)], 99).unwrap();
+        assert_eq!((t.kind, t.id, t.integrity_rid(), t.mandatory_policy), (TOKEN_PRIMARY, 99, 0x1000, 1));
+        assert_eq!(t.privileges, [(23, 3), (33, 3)]);
+        assert_eq!(t.groups.len(), src.groups.len());
+        let word = |c| u32::from_le_bytes(t.query(c, 0).unwrap()[..4].try_into().unwrap());
+        assert_eq!((word(class::TOKEN_IS_APP_CONTAINER), word(class::TOKEN_IS_SANDBOXED)), (1, 1));
+        assert_eq!(word(class::TOKEN_APP_CONTAINER_NUMBER), 7);
+        assert_eq!(t.query(class::TOKEN_APP_CONTAINER_SID, 0x1000).unwrap().len(), 48);
+        assert_eq!(word(class::TOKEN_CAPABILITIES), 1);
+        assert_eq!(src.query(class::TOKEN_APP_CONTAINER_SID, 0).unwrap(), 0u64.to_le_bytes());
+        // A copy keeps the container; a container makes no container.
+        assert_eq!(t.duplicate(TOKEN_IMPERSONATION, SECURITY_IMPERSONATION, 100).app_container, t.app_container);
+        assert!(t.lowbox(sid, 8, Vec::new(), 101).is_err());
+        assert!(!t.same_context(&src));
     }
 
     #[test]

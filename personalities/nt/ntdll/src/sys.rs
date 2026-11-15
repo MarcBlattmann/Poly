@@ -23,8 +23,6 @@ const SHARE_READ: u32 = 0x01;
 const OPEN: u32 = 1;
 /// `FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT`.
 const OPTIONS: u32 = 0x40 | 0x20;
-/// Poly's bit in a protection that says the loader asks (the personality's `memory::PAGE_POLY_LOADER`).
-const PAGE_POLY_LOADER: u32 = 0x0100_0000;
 /// `FILE_LIST_DIRECTORY`, `FILE_DIRECTORY_FILE`.
 const FILE_LIST_DIRECTORY: u32 = 0x0001;
 const FILE_DIRECTORY_FILE: u32 = 0x01;
@@ -239,9 +237,6 @@ impl Process for Sys {
         let mut a = addr as *mut u8;
         let mut sz = size as usize;
         let mut old = 0u32;
-        // The loader maps a module's sections with ordinary memory: a process that prohibits dynamic
-        // code still loads modules (Poly's bit, `PAGE_POLY_LOADER` of the personality).
-        let protect = if protect & 0xF0 != 0 { protect | PAGE_POLY_LOADER } else { protect };
         // SAFETY: valid pointers; the range is ours.
         let st = unsafe { NtProtectVirtualMemory(CURRENT_PROCESS, &mut a, &mut sz, protect, &mut old) };
         if st.is_success() { Ok(()) } else { Err(st) }

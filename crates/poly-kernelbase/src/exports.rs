@@ -296,6 +296,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("SetProcessAffinityMask", "api-ms-win-core-processtopology-obsolete-l1-1-0"),
     ("SetThreadAffinityMask", "api-ms-win-core-processtopology-obsolete-l1-1-0"),
     ("OpenEventW", "api-ms-win-core-synch-l1-1-0"),
+    ("OpenMutexW", "api-ms-win-core-synch-l1-1-0"),
     ("RaiseException", "api-ms-win-core-errorhandling-l1-1-0"),
     ("SetUnhandledExceptionFilter", "api-ms-win-core-errorhandling-l1-1-0"),
     ("UnhandledExceptionFilter", "api-ms-win-core-errorhandling-l1-1-0"),
@@ -424,6 +425,8 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetCurrentProcessorNumber", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetCurrentProcessorNumberEx", "api-ms-win-core-processthreads-l1-1-1"),
     ("GetProcessHandleCount", "api-ms-win-core-processthreads-l1-1-0"),
+    // ADR 0196: the page of `GetAppContainerNamedObjectPath` names kernel32.dll and no API set (the contract is a guess).
+    ("GetAppContainerNamedObjectPath", "api-ms-win-core-processthreads-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our

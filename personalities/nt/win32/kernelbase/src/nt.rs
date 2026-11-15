@@ -320,6 +320,7 @@ unsafe extern "system" {
     pub fn NtSuspendThread(handle: Handle, previous: *mut u32) -> NtStatus;
     pub fn NtResumeThread(handle: Handle, previous: *mut u32) -> NtStatus;
     pub fn NtOpenEvent(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
+    pub fn NtOpenMutant(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
     pub fn RtlRaiseException(record: *const u8);
     pub fn NtQueryInformationThread(
         handle: Handle,

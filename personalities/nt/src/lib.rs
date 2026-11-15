@@ -320,6 +320,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         AdjustPrivilegesToken => security::adjust_privileges_token(k, regs),
         DuplicateToken => security::duplicate_token(k, regs),
         FilterToken => security::filter_token(k, regs),
+        CreateLowBoxToken => security::create_lowbox_token(k, regs),
         AdjustGroupsToken => security::adjust_groups_token(k, regs),
         SetInformationToken => security::set_information_token(k, regs),
         CompareTokens => security::compare_tokens(k, regs),

@@ -307,6 +307,14 @@ impl VirtualMemory {
         self.allocations.range(..=addr).next_back().map(|(_, a)| a).filter(|a| a.contains(addr))
     }
 
+    /// Whether `[addr, addr + size)` lies in one view of an image section (`MEM_IMAGE`): what
+    /// the prohibit-dynamic-code mitigation lets be executable, as Windows maps modules as
+    /// image sections (ADR 0196).
+    pub fn is_image_view(&self, addr: u64, size: u64) -> bool {
+        let Some(a) = self.allocation(page_down(addr)) else { return false };
+        a.type_value() == MEM_IMAGE && addr.checked_add(size).is_some_and(|end| end <= a.end())
+    }
+
     fn allocation_mut(&mut self, addr: u64) -> Option<&mut Allocation> {
         self.allocations.range_mut(..=addr).next_back().map(|(_, a)| a).filter(|a| a.contains(addr))
     }

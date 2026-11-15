@@ -156,19 +156,19 @@ fn argument_errors() {
 }
 
 #[test]
-fn prohibit_dynamic_code_blocks_executable_memory_but_not_the_loaders_sections() {
-    use crate::memory::PAGE_POLY_LOADER;
+fn prohibit_dynamic_code_blocks_executable_private_memory() {
     let mut f = Fake::new();
     let (st, base, _) = allocate(&mut f, 0, 0x2000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     assert_eq!(st, STATUS_SUCCESS);
     f.proc.set_mitigation(poly_kernelbase::mitigation::State::new().with_creation_words(1 << 36, 0));
     assert!(f.proc.dynamic_code_blocked);
-    // Memory cannot be made executable, whether new or by a protection change.
+    // Private memory cannot be made executable, whether new or by a protection change; the old
+    // `PAGE_POLY_LOADER` bit of ADR 0192 is no exemption (it is not even a protection now).
     let blocked = NtStatus(0xC000_0604);
     assert_eq!(allocate(&mut f, 0, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE).0, blocked);
     assert_eq!(protect(&mut f, base, 0x1000, PAGE_EXECUTE_READ).0, blocked);
-    // What `ntdll`'s loader asks for with Poly's bit goes through (modules are sections on Windows).
-    let (st, old) = protect(&mut f, base, 0x1000, PAGE_EXECUTE_READ | PAGE_POLY_LOADER);
-    assert_eq!((st, old), (STATUS_SUCCESS, PAGE_READWRITE));
-    assert_eq!(query(&mut f, base).protect, PAGE_EXECUTE_READ, "the bit is not part of the protection");
+    assert_ne!(protect(&mut f, base, 0x1000, PAGE_EXECUTE_READ | 0x0100_0000).0, STATUS_SUCCESS);
+    assert_eq!(query(&mut f, base).protect, PAGE_READWRITE);
+    // Memory that is not executable is no matter.
+    assert_eq!(protect(&mut f, base, 0x1000, PAGE_READONLY).0, STATUS_SUCCESS);
 }

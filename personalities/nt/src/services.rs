@@ -357,6 +357,9 @@ pub enum Service {
     /// `NtFilterToken(ExistingToken, Flags, SidsToDisable*,
     /// PrivilegesToDelete*, RestrictedSids*, NewToken*)`.
     FilterToken,
+    /// `NtCreateLowBoxToken(NewToken*, ExistingToken, DesiredAccess, ObjectAttributes*,
+    /// PackageSid*, CapabilityCount, Capabilities*, HandleCount, Handles*)` (ADR 0196).
+    CreateLowBoxToken,
     /// `NtAdjustGroupsToken(TokenHandle, ResetToDefault, NewState*,
     /// BufferLength, PreviousState*, ReturnLength*)`.
     AdjustGroupsToken,
@@ -578,7 +581,7 @@ pub const HANDLE_SERVICES: [(Service, u32, &str); 1] =
     [(Service::SetInformationObject, 0x011, "NtSetInformationObject")];
 
 /// Access tokens (ADR 0083).
-pub const SECURITY_SERVICES: [(Service, u32, &str); 16] = [
+pub const SECURITY_SERVICES: [(Service, u32, &str); 17] = [
     (Service::OpenProcessToken, 0x180, "NtOpenProcessToken"),
     (Service::OpenProcessTokenEx, 0x181, "NtOpenProcessTokenEx"),
     (Service::OpenThreadToken, 0x182, "NtOpenThreadToken"),
@@ -595,6 +598,7 @@ pub const SECURITY_SERVICES: [(Service, u32, &str); 16] = [
     (Service::QuerySecurityObject, 0x18D, "NtQuerySecurityObject"),
     (Service::SetSecurityObject, 0x18E, "NtSetSecurityObject"),
     (Service::SetInformationThread, 0x18F, "NtSetInformationThread"),
+    (Service::CreateLowBoxToken, 0x190, "NtCreateLowBoxToken"),
 ];
 
 /// Named pipes and I/O completion ports (ADR 0169), in the file I/O group.

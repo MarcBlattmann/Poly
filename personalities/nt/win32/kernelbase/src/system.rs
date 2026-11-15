@@ -354,6 +354,22 @@ pub unsafe extern "system" fn OpenEventW(access: u32, inherit: i32, name: *const
     if st.is_success() { h } else { fail_status(st, 0) }
 }
 
+/// `OpenMutexW`: as `OpenEventW`, for a mutex (Learn: the name is required).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn OpenMutexW(access: u32, inherit: i32, name: *const u16) -> Handle {
+    // SAFETY: the caller's string.
+    let Some(full) = (unsafe { wide_arg(name) }).and_then(poly_kernelbase::sync::object_name) else {
+        return fail(ERROR_INVALID_PARAMETER, 0);
+    };
+    let string = UnicodeString::new(&full);
+    let attrs = if inherit != 0 { nt::OBJ_INHERIT } else { 0 };
+    let oa = ObjectAttributes::new(Some(&string), attrs);
+    let mut h: Handle = 0;
+    // SAFETY: valid pointers.
+    let st = unsafe { nt::NtOpenMutant(&mut h, access, &oa) };
+    if st.is_success() { h } else { fail_status(st, 0) }
+}
+
 /// `GetModuleHandleA`: the name through the ANSI code page, then
 /// `GetModuleHandleW`.
 #[unsafe(no_mangle)]

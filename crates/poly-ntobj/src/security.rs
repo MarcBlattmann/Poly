@@ -63,15 +63,18 @@ pub struct ObjectSecurity {
 /// Users and RESTRICTED read (and execute for files). Files also let
 /// Authenticated Users modify (a folder under the user profile or the temp
 /// folder) and Everyone read and execute (what `KnownDlls` gives a
-/// restricted token on Windows: the system DLLs load for any token).
+/// restricted token on Windows: the system DLLs load for any token), and `ALL APPLICATION
+/// PACKAGES` and `ALL RESTRICTED APPLICATION PACKAGES` read and execute (what `C:\Windows` gives
+/// an AppContainer on Windows: its processes load the system DLLs, ADR 0196; Poly's volumes keep no
+/// descriptors of their own, so a container reads what Everyone reads).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DefaultSd {
     File,
     Key,
 }
 
-const FILE_SDDL: &str = "O:BAG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;AU)(A;OICI;FRFX;;;BU)(A;OICI;FRFX;;;RC)(A;OICI;FRFX;;;WD)";
-const KEY_SDDL: &str = "O:BAG:SYD:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;BU)(A;CI;KR;;;RC)";
+const FILE_SDDL: &str = "O:BAG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;AU)(A;OICI;FRFX;;;BU)(A;OICI;FRFX;;;RC)(A;OICI;FRFX;;;WD)(A;OICI;FRFX;;;AC)(A;OICI;FRFX;;;S-1-15-2-2)";
+const KEY_SDDL: &str = "O:BAG:SYD:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;BU)(A;CI;KR;;;RC)(A;CI;KR;;;AC)(A;CI;KR;;;S-1-15-2-2)";
 
 fn sddl(s: &str) -> Vec<u8> {
     let w: Vec<u16> = s.encode_utf16().collect();
@@ -384,6 +387,16 @@ impl ObjectManager {
         }
         let creator = self.security.effective(caller.process, caller.thread);
         self.assign_security(id, kind, creator, explicit);
+    }
+
+    /// A file or key just made with the descriptor of its creator's `SECURITY_ATTRIBUTES` or
+    /// `OBJECT_ATTRIBUTES`: what the descriptor names is kept for its path as if it had been
+    /// set on it (`replace_security`), the rest stays what the parents pass down. A descriptor
+    /// that does not parse is left out.
+    pub fn set_creation_security(&mut self, id: ObjectId, kind: ObjectType, explicit: &[u8]) {
+        if let Some(parts) = Parts::from_relative(explicit) {
+            self.replace_security(id, kind, parts);
+        }
     }
 
     /// Replace the stored descriptor of `id` (generic rights mapped).

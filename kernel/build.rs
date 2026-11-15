@@ -100,6 +100,7 @@ fn embed_win32() {
         "propsys.dll",
         "wevtapi.dll",
         "hid.dll",
+        "mdmregistration.dll",
     ] {
         match &dir {
             Some(d) => {
