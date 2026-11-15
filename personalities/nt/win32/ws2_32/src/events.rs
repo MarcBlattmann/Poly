@@ -584,7 +584,8 @@ pub unsafe extern "system" fn WSALookupServiceBeginW(query: *const u8, flags: u3
         return fail(e);
     }
     let h = LOOKUP_BASE + LOOKUPS.fetch_add(1, Ordering::AcqRel) + 1;
-    let Some(slot) = LOOKUP_LIVE.iter().position(|s| s.compare_exchange(0, h, Ordering::AcqRel, Ordering::Acquire).is_ok())
+    let Some(slot) =
+        LOOKUP_LIVE.iter().position(|s| s.compare_exchange(0, h, Ordering::AcqRel, Ordering::Acquire).is_ok())
     else {
         return fail(WSAEMFILE);
     };
@@ -609,7 +610,8 @@ pub unsafe extern "system" fn WSALookupServiceNextW(
         return fail(e);
     }
     let v = lookup as usize;
-    let Some(slot) = (if v == 0 { None } else { LOOKUP_LIVE.iter().position(|s| s.load(Ordering::Acquire) == v) }) else {
+    let Some(slot) = (if v == 0 { None } else { LOOKUP_LIVE.iter().position(|s| s.load(Ordering::Acquire) == v) })
+    else {
         return fail(WSA_INVALID_HANDLE);
     };
     if LOOKUP_DONE[slot].load(Ordering::Acquire) != 0 {
