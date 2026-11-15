@@ -42,7 +42,6 @@ poly_win32_rt::fail_exports!(
         SetMiterLimit,
         SetPixelFormat,
         SetPolyFillMode,
-        SetROP2,
         StartDocW,
         StartPage,
         StrokeAndFillPath,

@@ -11,10 +11,8 @@ poly_win32_rt::fail_exports!(
         BufferedPaintRenderAnimation,
         BufferedPaintSetAlpha,
         BufferedPaintStopAllAnimations,
-        EnableThemeDialogTexture,
         EndBufferedAnimation,
         EndPanningFeedback,
-        SetWindowTheme,
         SetWindowThemeAttribute,
         UpdatePanningFeedback,
     ]
@@ -26,8 +24,6 @@ poly_win32_rt::fail_exports!(
     [
         BeginBufferedAnimation,
         BeginPanningFeedback,
-        GetThemeSysColor,
-        IsThemeBackgroundPartiallyTransparent,
         OpenThemeDataForDpi,
         ord_133,
         ord_135,
@@ -38,19 +34,7 @@ poly_win32_rt::fail_exports!(
     "uxtheme",
     value(0x80070006),
     [
-        DrawThemeParentBackground,
-        DrawThemeText,
         DrawThemeTextEx,
-        GetCurrentThemeName,
-        GetThemeBackgroundRegion,
-        GetThemeBool,
-        GetThemeColor,
-        GetThemeEnumValue,
-        GetThemeFont,
-        GetThemeInt,
-        GetThemeMargins,
-        GetThemePropertyOrigin,
-        GetThemeSysFont,
         GetThemeTransitionDuration,
     ]
 );

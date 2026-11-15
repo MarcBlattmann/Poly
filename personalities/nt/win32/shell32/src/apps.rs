@@ -12,7 +12,6 @@ poly_win32_rt::fail_exports!(
         SHCreateItemFromIDList,
         SHCreateShellItem,
         SHCreateShellItemArrayFromShellItem,
-        SHGetFolderPathA,
         SHGetIDListFromObject,
         SHGetKnownFolderIDList,
         SHGetKnownFolderItem,

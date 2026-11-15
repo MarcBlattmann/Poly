@@ -230,6 +230,35 @@ pub fn step(frame: &mut TrapFrame) -> bool {
             let _ = user::copy_from_user(&mut words, frame.rsp);
             let w = |i: usize| u32::from_le_bytes([words[4 * i], words[4 * i + 1], words[4 * i + 2], words[4 * i + 3]]);
             crate::kprintln!("nt-api: {name} ret={:#x} args {:#x} {:#x} {:#x} {:#x}", w(0), w(1), w(2), w(3), w(4));
+            // The name a program looks a function or a DLL up by (the arguments are pointers to strings).
+            let text_at = |at: u32, wide: bool| -> Option<String> {
+                if at < 0x1_0000 {
+                    return None;
+                }
+                let mut b = [0u8; 96];
+                user::copy_from_user(&mut b, u64::from(at)).ok()?;
+                Some(if wide {
+                    let units: Vec<u16> =
+                        b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
+                    String::from_utf16_lossy(&units)
+                } else {
+                    let end = b.iter().position(|&c| c == 0).unwrap_or(b.len());
+                    String::from_utf8_lossy(&b[..end]).into_owned()
+                })
+            };
+            let lower = name.to_ascii_lowercase();
+            let looked_up = if lower.ends_with("!getprocaddress") {
+                text_at(w(2), false)
+            } else if lower.ends_with("!loadlibrarya") || lower.ends_with("!loadlibraryexa") {
+                text_at(w(1), false)
+            } else if lower.ends_with("!loadlibraryw") || lower.ends_with("!loadlibraryexw") {
+                text_at(w(1), true)
+            } else {
+                None
+            };
+            if let Some(t) = looked_up {
+                crate::kprintln!("nt-api:   looks up {t:?}");
+            }
             if name.contains("InitializeCriticalSection") {
                 // The object around a critical section: what the constructor wrote before it.
                 let mut b = [0u8; 64];

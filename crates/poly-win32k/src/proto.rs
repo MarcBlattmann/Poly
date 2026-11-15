@@ -385,6 +385,9 @@ crate::wire_enum! {
         /// the size (`OP_CREATE`) or the position (`OP_SET_POS`), `tid` the thread asked about
         /// (`OP_QUERY`, 0: the calling one). A `Caret`.
         114 => Caret { op: u8, hwnd: u32, a: i32, b: i32, tid: u32 },
+        /// `SetClassLongPtrW(hwnd, index, value)`: the class value `index` (`GCL_*` or an extra byte offset) of the
+        /// window's class set; the old value in a `Value`.
+        115 => SetClassLong { hwnd: u64, index: i32, value: u64 },
     }
 }
 

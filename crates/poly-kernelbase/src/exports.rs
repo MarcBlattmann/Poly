@@ -81,6 +81,9 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetFileAttributesA", "api-ms-win-core-file-l1-1-0"),
     ("SetFileAttributesW", "api-ms-win-core-file-l1-1-0"),
     ("FindFirstFileW", "api-ms-win-core-file-l1-1-0"),
+    ("FindFirstFileA", "api-ms-win-core-file-l1-1-0"),
+    ("FindFirstFileExA", "api-ms-win-core-file-l1-1-0"),
+    ("FindNextFileA", "api-ms-win-core-file-l1-1-0"),
     ("FindNextFileW", "api-ms-win-core-file-l1-1-0"),
     ("FindClose", "api-ms-win-core-file-l1-1-0"),
     ("GetFullPathNameW", "api-ms-win-core-file-l1-1-0"),
@@ -401,6 +404,10 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("ReplaceFileW", "api-ms-win-core-file-l1-2-0"),
     ("GetFinalPathNameByHandleW", "api-ms-win-core-file-l2-1-0"),
     ("GetLongPathNameW", "api-ms-win-core-file-l1-1-0"),
+    ("CreateToolhelp32Snapshot", "api-ms-win-core-toolhelp-l1-1-0"),
+    ("Process32FirstW", "api-ms-win-core-toolhelp-l1-1-0"),
+    ("Process32NextW", "api-ms-win-core-toolhelp-l1-1-0"),
+    ("GetShortPathNameW", "api-ms-win-core-file-l1-1-0"),
     // The ANSI forms of the environment, version and directory functions (impl-win-apps: the
     // programs of the app survey call them before anything else).
     ("GetEnvironmentVariableA", "api-ms-win-core-processenvironment-l1-1-0"),

@@ -761,6 +761,31 @@ impl Wm {
         Reply::Value { value: v }
     }
 
+    /// `SetClassLongPtrW`: the class's value is replaced and the old one answered. The icon, cursor, brush, menu name,
+    /// window procedure, instance and style are the class's own fields; an offset into the class's extra bytes sets
+    /// eight of them. The atom and the sizes cannot be set (`ERROR_INVALID_INDEX`).
+    fn set_class_long(&mut self, hwnd: u64, index: i32, value: u64) -> Reply {
+        let Some(class) = self.get(hwnd).map(|w| w.class) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
+        let Some(c) = self.classes[class].as_mut() else { return err(ERROR_INVALID_WINDOW_HANDLE) };
+        let old = match index {
+            -26 => core::mem::replace(&mut c.style, value as u32) as u64,
+            -24 => core::mem::replace(&mut c.wndproc, value),
+            -16 => core::mem::replace(&mut c.instance, value),
+            -14 => core::mem::replace(&mut c.icon, value),
+            -12 => core::mem::replace(&mut c.cursor, value),
+            -10 => core::mem::replace(&mut c.brush, value),
+            -8 => core::mem::replace(&mut c.menu_name, value),
+            -34 => core::mem::replace(&mut c.icon_sm, value),
+            i if i >= 0 && (i as usize) + 8 <= c.extra.len() => {
+                let old = read_le(&c.extra, i as usize, 8);
+                c.extra[i as usize..i as usize + 8].copy_from_slice(&value.to_le_bytes());
+                old
+            }
+            _ => return err(ERROR_INVALID_INDEX),
+        };
+        Reply::Value { value: old }
+    }
+
     // ----- windows
 
     fn create(&mut self, ctx: Ctx, s: CreateSpec) -> Reply {
@@ -1932,6 +1957,7 @@ impl Wm {
                 None => err(ERROR_CLASS_DOES_NOT_EXIST),
             },
             Request::ClassLong { hwnd, index } => self.class_long(hwnd, index),
+            Request::SetClassLong { hwnd, index, value } => self.set_class_long(hwnd, index, value),
             Request::ClassName { hwnd } => match self.get(hwnd) {
                 Some(w) => {
                     Reply::Text { text: self.classes[w.class].as_ref().map(|c| c.name.clone()).unwrap_or_default() }

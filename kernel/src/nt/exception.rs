@@ -257,6 +257,44 @@ fn end_after_unhandled(mut k: Kernel) -> ! {
     let record = unhandled.0;
     drop(unhandled);
     drop(k);
+    // What the exception's parameters point at: a language runtime's exception object (Delphi's
+    // 0x0EEDFADE carries one) says its class by its first word and its message by a text field.
+    for (i, &p) in record.parameters().iter().enumerate() {
+        if !(0x1_0000..0xffff_ffff).contains(&p) {
+            continue;
+        }
+        let mut b = [0u8; 64];
+        if user::copy_from_user(&mut b, p).is_err() {
+            continue;
+        }
+        let hex: alloc::string::String = b.iter().map(|x| alloc::format!("{x:02x}")).collect();
+        structures.push(alloc::format!("parameter {i} {p:#x}: {hex}"));
+        for (j, d) in b.chunks_exact(4).take(8).enumerate() {
+            let d = u64::from(u32::from_le_bytes([d[0], d[1], d[2], d[3]]));
+            if d < 0x1_0000 {
+                continue;
+            }
+            // A Delphi `UnicodeString`: code page and element size (2), reference count, length, then units.
+            let mut head = [0u8; 12];
+            if user::copy_from_user(&mut head, d - 12).is_err() {
+                continue;
+            }
+            let (size, len) =
+                (u16::from_le_bytes([head[2], head[3]]), u32::from_le_bytes([head[8], head[9], head[10], head[11]]));
+            if size == 2 && (1..=400).contains(&len) {
+                let mut units = alloc::vec![0u8; len as usize * 2];
+                if user::copy_from_user(&mut units, d).is_ok() {
+                    let text: alloc::vec::Vec<u16> =
+                        units.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+                    structures.push(alloc::format!(
+                        "parameter {i} field +{:#x} is the text {:?}",
+                        4 * j,
+                        alloc::string::String::from_utf16_lossy(&text)
+                    ));
+                }
+            }
+        }
+    }
     structures.push(alloc::format!("teb, tls array, peb, image base, ldr, params, first tls slots {tls:x?}"));
     drop(tls);
     end_unhandled(pid, tid, &record, frames, regs, words, structures)

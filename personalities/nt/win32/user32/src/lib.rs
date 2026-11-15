@@ -843,6 +843,25 @@ pub extern "system" fn GetClassLongPtrW(hwnd: H, index: i32) -> usize {
     }
 }
 
+/// `SetClassLongPtrW`: the previous value, or 0 with the last error for a bad window or index.
+#[unsafe(no_mangle)]
+pub extern "system" fn SetClassLongPtrW(hwnd: H, index: i32, value: isize) -> usize {
+    match call(Request::SetClassLong { hwnd: hwnd as u64, index, value: value as usize as u64 }) {
+        Reply::Value { value } => value as usize,
+        Reply::Error { code } => {
+            set_last_error(code);
+            0
+        }
+        _ => 0,
+    }
+}
+
+/// `SetClassLongW`: the 32-bit form (the value is a `LONG`, the previous value a `DWORD`).
+#[unsafe(no_mangle)]
+pub extern "system" fn SetClassLongW(hwnd: H, index: i32, value: i32) -> u32 {
+    SetClassLongPtrW(hwnd, index, value as u32 as isize) as u32
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetClassLongW(hwnd: H, index: i32) -> u32 {
     GetClassLongPtrW(hwnd, index) as u32

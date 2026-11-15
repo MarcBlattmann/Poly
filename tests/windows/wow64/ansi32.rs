@@ -43,6 +43,12 @@ unsafe extern "system" {
     fn DecodePointer(pointer: usize) -> usize;
 }
 
+#[link(name = "ws2_32", kind = "raw-dylib", import_name_type = "undecorated")]
+unsafe extern "system" {
+    fn WSAStartup(version: u16, data: *mut u8) -> i32;
+    fn WSACleanup() -> i32;
+}
+
 #[link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated")]
 unsafe extern "system" {
     fn CharUpperBuffW(text: *mut u16, count: u32) -> u32;
@@ -368,6 +374,33 @@ fn critical_section() -> bool {
     }
 }
 
+/// `WSADATA` of a 32-bit process is 400 bytes (`winsock2.h`: the strings come before `iMaxSockets`, `iMaxUdpDg` and
+/// `lpVendorInfo`); the 64-bit layout written there ran eight bytes past it, over the caller's frame.
+fn winsock_data() -> bool {
+    let mut data = [0xC3u8; 416];
+    // SAFETY: documented calls with a buffer larger than WSADATA.
+    unsafe {
+        at(1);
+        if WSAStartup(0x0202, data.as_mut_ptr()) != 0 {
+            return false;
+        }
+        at(2);
+        if data[400..] != [0xC3; 16] {
+            return false;
+        }
+        at(3);
+        // wVersion, wHighVersion, then szDescription at 4.
+        if u16::from_le_bytes([data[0], data[1]]) != 0x0202 || &data[4..15] != b"WinSock 2.0" {
+            return false;
+        }
+        at(4);
+        // szSystemStatus at 261, iMaxSockets and iMaxUdpDg at 390 and 392 (0 for version 2).
+        let ok = &data[261..268] == b"Running" && data[390..394] == [0; 4];
+        WSACleanup();
+        ok
+    }
+}
+
 /// A memory manager reserves a region, commits it page by page, and may commit pages it has
 /// committed already (an overlapping range): the contents stay (Learn, `VirtualAlloc`: "an attempt
 /// to commit a page that is already committed does not cause the function to fail").
@@ -462,7 +495,7 @@ fn image_regions() -> bool {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mainCRTStartup() -> u32 {
-    let checks: [(&[u8], fn() -> bool); 11] = [
+    let checks: [(&[u8], fn() -> bool); 12] = [
         (b"locale\n", locale_a),
         (b"string types\n", string_types),
         (b"mapping\n", mapping),
@@ -474,6 +507,7 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         (b"section tails\n", section_tails),
         (b"recommit\n", recommit),
         (b"critical section\n", critical_section),
+        (b"winsock data\n", winsock_data),
     ];
     if !out(b"ansi32\n") {
         // SAFETY: ends the process.

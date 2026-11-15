@@ -167,6 +167,35 @@ pub unsafe extern "system" fn SHGetFolderPathW(
     shell::S_OK
 }
 
+/// `SHGetFolderPathA`: `SHGetFolderPathW` with the path in the ANSI code page (1252: a path of the
+/// profile has no character it lacks).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SHGetFolderPathA(
+    hwnd: *mut u8,
+    folder: i32,
+    token: *mut u8,
+    flags: u32,
+    path: *mut u8,
+) -> u32 {
+    if path.is_null() {
+        return shell::E_INVALIDARG;
+    }
+    let mut wide = [0u16; MAX_PATH];
+    // SAFETY: a MAX_PATH buffer.
+    let hr = unsafe { SHGetFolderPathW(hwnd, folder, token, flags, wide.as_mut_ptr()) };
+    if hr != shell::S_OK {
+        return hr;
+    }
+    let n = wide.iter().position(|&c| c == 0).unwrap_or(MAX_PATH - 1);
+    let ansi = poly_kernelbase::text::to_ansi(&wide[..n]);
+    // SAFETY: Learn: the caller's buffer is MAX_PATH bytes.
+    unsafe {
+        core::ptr::copy_nonoverlapping(ansi.as_ptr(), path, ansi.len());
+        path.add(ansi.len()).write(0);
+    }
+    shell::S_OK
+}
+
 // ----- SHGetKnownFolderPath (step 9) --------------------------------------------------------------
 
 /// The value of an environment variable, without the NUL (`None` when it is not set).

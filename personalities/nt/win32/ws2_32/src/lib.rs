@@ -28,6 +28,7 @@
 extern crate alloc;
 
 pub mod afd;
+pub mod asyncsel;
 pub mod events;
 pub mod ext;
 pub mod names;
@@ -147,25 +148,40 @@ pub unsafe extern "system" fn WSAStartup(version: u16, data: *mut u8) -> i32 {
     // SAFETY: the caller's WSADATA.
     unsafe { write_wsadata(data, used, high) };
     let (sockets, dg) = poly_winsock::wsadata_limits(used);
-    // SAFETY: the same WSADATA (`iMaxSockets` at 4, `iMaxUdpDg` at 6).
+    // SAFETY: the same WSADATA; `iMaxSockets` and `iMaxUdpDg` are at 4 and 6 in the 64-bit layout, at 390 and
+    // 392 (after the two strings) in the 32-bit one.
     unsafe {
-        core::ptr::write_unaligned(data.add(4).cast::<u16>(), sockets);
-        core::ptr::write_unaligned(data.add(6).cast::<u16>(), dg);
+        let (at_sockets, at_dg) = if cfg!(target_pointer_width = "32") { (WSADATA32_MAX_SOCKETS, WSADATA32_MAX_SOCKETS + 2) } else { (4, 6) };
+        core::ptr::write_unaligned(data.add(at_sockets).cast::<u16>(), sockets);
+        core::ptr::write_unaligned(data.add(at_dg).cast::<u16>(), dg);
     }
     STARTED.fetch_add(1, Ordering::SeqCst);
     0
 }
 
+/// `WSADATA` in a 32-bit process (`winsock2.h`, not `_WIN64`): `wVersion`, `wHighVersion`, `szDescription[257]` at 4,
+/// `szSystemStatus[129]` at 261, `iMaxSockets` at 390, `iMaxUdpDg` at 392, `lpVendorInfo` at 396: 400 bytes. The
+/// 64-bit layout (408 bytes) writes eight bytes past it, over the caller's saved registers.
+const WSADATA32_SIZE: usize = 400;
+const WSADATA32_DESCRIPTION: usize = 4;
+const WSADATA32_STATUS: usize = WSADATA32_DESCRIPTION + WSADESCRIPTION_LEN + 1;
+const WSADATA32_MAX_SOCKETS: usize = WSADATA32_STATUS + WSASYS_STATUS_LEN + 1;
+
 unsafe fn write_wsadata(data: *mut u8, used: u16, high: u16) {
-    // SAFETY: WSADATA_SIZE bytes the caller owns.
+    let (size, description, status) = if cfg!(target_pointer_width = "32") {
+        (WSADATA32_SIZE, WSADATA32_DESCRIPTION, WSADATA32_STATUS)
+    } else {
+        (WSADATA_SIZE, WSADATA_DESCRIPTION, WSADATA_STATUS)
+    };
+    // SAFETY: the WSADATA bytes of this process's layout, which the caller owns.
     unsafe {
-        core::ptr::write_bytes(data, 0, WSADATA_SIZE);
+        core::ptr::write_bytes(data, 0, size);
         core::ptr::write_unaligned(data.cast::<u16>(), used);
         core::ptr::write_unaligned(data.add(2).cast::<u16>(), high);
-        let desc = b"WinSock 2.0";
-        core::ptr::copy_nonoverlapping(desc.as_ptr(), data.add(WSADATA_DESCRIPTION), desc.len());
-        let status = b"Running";
-        core::ptr::copy_nonoverlapping(status.as_ptr(), data.add(WSADATA_STATUS), status.len());
+        let text = b"WinSock 2.0";
+        core::ptr::copy_nonoverlapping(text.as_ptr(), data.add(description), text.len());
+        let text = b"Running";
+        core::ptr::copy_nonoverlapping(text.as_ptr(), data.add(status), text.len());
     }
 }
 

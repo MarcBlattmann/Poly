@@ -57,6 +57,7 @@ mod sync;
 mod sysex;
 mod system;
 mod tls;
+mod toolhelp;
 mod waits;
 
 #[global_allocator]

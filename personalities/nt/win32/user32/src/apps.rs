@@ -120,8 +120,6 @@ poly_win32_rt::fail_exports!(
         ScrollWindowEx,
         SendMessageCallbackW,
         SetClassLongPtrA,
-        SetClassLongPtrW,
-        SetClassLongW,
         SetClipboardViewer,
         SetCoalescableTimer,
         SetDisplayAutoRotationPreferences,

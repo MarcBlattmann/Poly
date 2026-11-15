@@ -274,6 +274,8 @@ struct DcState {
     text: u32,
     bk: u32,
     bk_mode: i32,
+    /// `SetROP2`'s drawing mode (`R2_COPYPEN`, 13, at first).
+    rop2: i32,
     align: u32,
     brush: u32,
     pen: u32,
@@ -787,6 +789,7 @@ impl Gdi {
             text: 0,
             bk: 0x00FF_FFFF,
             bk_mode: OPAQUE,
+            rop2: 13,
             align: 0,
             brush: self.stock(WHITE_BRUSH),
             pen: self.stock(BLACK_PEN),
@@ -1578,6 +1581,17 @@ impl Gdi {
     }
     pub fn bk_mode(&mut self, dc: u64) -> i32 {
         self.state(dc).map_or(0, |s| s.bk_mode)
+    }
+    /// `SetROP2`: the previous mode, 0 for a mode outside `R2_BLACK` (1) to `R2_LAST` (16) or a bad DC.
+    /// Drawing does not honour any mode but `R2_COPYPEN` yet; the mode is kept for `GetROP2`.
+    pub fn set_rop2(&mut self, dc: u64, mode: i32) -> i32 {
+        if !(1..=16).contains(&mode) {
+            return 0;
+        }
+        self.state(dc).map_or(0, |s| core::mem::replace(&mut s.rop2, mode))
+    }
+    pub fn rop2(&mut self, dc: u64) -> i32 {
+        self.state(dc).map_or(0, |s| s.rop2)
     }
     pub fn set_text_align(&mut self, dc: u64, a: u32) -> u32 {
         self.state(dc).map_or(0xFFFF_FFFF, |s| core::mem::replace(&mut s.align, a))

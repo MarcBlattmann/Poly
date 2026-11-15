@@ -252,15 +252,88 @@ pub unsafe extern "system" fn GetDCOrgEx(hdc: H, pt: *mut i32) -> i32 {
     1
 }
 
-/// `GetROP2`: no `SetROP2` yet, so every DC draws with R2_COPYPEN (13).
+/// `GetROP2`: the drawing mode of the DC (`R2_COPYPEN`, 13, until `SetROP2`).
 #[unsafe(no_mangle)]
 pub extern "system" fn GetROP2(hdc: H) -> i32 {
     if gdi(|g| g.is_dc(hdc as u64)) {
-        13
+        gdi(|g| g.rop2(hdc as u64))
     } else {
         set_last_error(ERROR_INVALID_HANDLE);
         0
     }
+}
+
+/// `SetROP2(hdc, rop2)`: the previous mode; 0 for a bad DC or a mode outside `R2_BLACK` to `R2_LAST`.
+/// Only `R2_COPYPEN` is drawn yet.
+#[unsafe(no_mangle)]
+pub extern "system" fn SetROP2(hdc: H, mode: i32) -> i32 {
+    if !gdi(|g| g.is_dc(hdc as u64)) {
+        set_last_error(ERROR_INVALID_HANDLE);
+        return 0;
+    }
+    let old = gdi(|g| g.set_rop2(hdc as u64, mode));
+    if old == 0 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+    }
+    old
+}
+
+/// `GetNearestColor(hdc, colorref)`: the colour the device can show nearest to it. The display is
+/// true colour (24 bits of colour), so every RGB colour is its own nearest; `CLR_INVALID` (with
+/// `ERROR_INVALID_HANDLE`) for a bad DC.
+#[unsafe(no_mangle)]
+pub extern "system" fn GetNearestColor(hdc: H, color: u32) -> u32 {
+    if !gdi(|g| g.is_dc(hdc as u64)) {
+        set_last_error(ERROR_INVALID_HANDLE);
+        return 0xFFFF_FFFF;
+    }
+    color & 0x00FF_FFFF
+}
+
+/// `CreateBrushIndirect(lplb)`: a brush from a `LOGBRUSH` (`wingdi.h`: style, colour, hatch; the hatch is
+/// pointer-sized: 12 bytes in a 32-bit process). `BS_SOLID`, `BS_NULL` (`BS_HOLLOW`), `BS_HATCHED`,
+/// `BS_PATTERN` and `BS_DIBPATTERNPT`; any other style is NULL.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateBrushIndirect(lb: *const u8) -> H {
+    if lb.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller's LOGBRUSH: two 32-bit fields and the pointer-sized hatch.
+    let (style, color, hatch) = unsafe {
+        let hatch = if PTR == 4 { u64::from(lb.add(8).cast::<u32>().read_unaligned()) } else { lb.add(8).cast::<u64>().read_unaligned() };
+        (lb.cast::<u32>().read_unaligned(), lb.add(4).cast::<u32>().read_unaligned(), hatch)
+    };
+    match style {
+        0 => gdi(|g| g.create_solid_brush(color)) as H,
+        1 => gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_NULL, 0, 0)) as H,
+        2 if (0..=5).contains(&(hatch as i64)) => gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_HATCHED, color, hatch)) as H,
+        3 if gdi(|g| g.object_type(hatch)) == poly_gdi::gdi::OBJ_BITMAP => {
+            gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_PATTERN, 0, hatch)) as H
+        }
+        5 if hatch != 0 => gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_DIBPATTERNPT, 0, hatch)) as H,
+        _ => 0,
+    }
+}
+
+/// `CreatePenIndirect(plgpn)`: a pen from a `LOGPEN` (style, the width in `x` of a `POINT`, colour).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreatePenIndirect(lp: *const u8) -> H {
+    if lp.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller's 16-byte LOGPEN.
+    let (style, width, color) = unsafe {
+        (lp.cast::<u32>().read_unaligned(), lp.add(4).cast::<i32>().read_unaligned(), lp.add(12).cast::<u32>().read_unaligned())
+    };
+    gdi(|g| g.create_pen(style, width, color)) as H
+}
+
+/// `UnrealizeObject(h)`: TRUE for a brush or palette ("resets the origin of a brush or resets a logical
+/// palette"); FALSE for anything else (Learn: not for stock objects, which this does not tell apart).
+#[unsafe(no_mangle)]
+pub extern "system" fn UnrealizeObject(h: H) -> i32 {
+    let kind = gdi(|g| g.object_type(h as u64));
+    i32::from(kind == poly_gdi::gdi::OBJ_BRUSH || kind == poly_gdi::gdi::OBJ_PAL)
 }
 
 /// `GetMapMode`: no `SetMapMode` yet, so every DC is MM_TEXT (1).
