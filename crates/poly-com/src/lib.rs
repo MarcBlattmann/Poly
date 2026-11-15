@@ -10,6 +10,8 @@
 //!   every successful call is balanced by an uninitialize).
 //! - [`guid`]: `GUID`s as text (`CLSIDFromString`, `StringFromCLSID`,
 //!   `StringFromGUID2`, `IIDFromString`).
+//! - [`propvariant`]: which `PROPVARIANT` types exist and what each owns
+//!   (`PropVariantClear`, `PropVariantCopy`).
 //! - [`hstring`]: `HSTRING`s (`WindowsCreateString` and friends, Learn:
 //!   "HSTRING", "Windows Runtime strings").
 //!
@@ -25,6 +27,7 @@ pub mod apartment;
 pub mod guid;
 pub mod hresult;
 pub mod hstring;
+pub mod propvariant;
 
 /// What `ole32.dll` must export, as code (`cargo xtask win32` checks it).
 pub const OLE32_EXPORTS: &[&str] = &[
@@ -57,6 +60,7 @@ pub const OLE32_EXPORTS: &[&str] = &[
     "StringFromIID",
     "CoCreateGuid",
     "PropVariantClear",
+    "PropVariantCopy",
     "WindowsCreateString",
     "WindowsCreateStringReference",
     "WindowsDeleteString",

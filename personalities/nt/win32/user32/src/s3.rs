@@ -71,11 +71,6 @@ pub extern "system" fn DisplayConfigGetDeviceInfo(_packet: *mut u8) -> i32 {
     ERROR_NOT_SUPPORTED as i32
 }
 
-#[unsafe(no_mangle)]
-pub extern "system" fn GetThreadDesktop(_tid: u32) -> usize {
-    0x0000_0030
-}
-
 #[allow(dead_code)]
 fn keep() -> u32 {
     SYS.tid()
