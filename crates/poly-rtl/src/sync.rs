@@ -732,17 +732,19 @@ mod tests {
     use std::time::{Duration, Instant};
     use std::vec::Vec;
 
+    type TestEvent = Arc<(Mutex<bool>, Condvar)>;
+
     /// Events as (signalled, condvar) pairs, and a pool of the ones handed back.
     #[derive(Default)]
     struct Host {
-        events: Mutex<HashMap<u64, Arc<(Mutex<bool>, Condvar)>>>,
+        events: Mutex<HashMap<u64, TestEvent>>,
         free: Mutex<Vec<u64>>,
         next: AtomicU64,
         made: AtomicU64,
     }
 
     impl Host {
-        fn ev(&self, e: u64) -> Arc<(Mutex<bool>, Condvar)> {
+        fn ev(&self, e: u64) -> TestEvent {
             self.events.lock().unwrap().get(&e).unwrap().clone()
         }
     }
@@ -983,13 +985,9 @@ mod tests {
         // Nobody wakes it: a timeout, and the lock comes back.
         lot.acquire_exclusive(&*host, &lock);
         let t0 = Instant::now();
-        let woken = lot.sleep(
-            &*host,
-            &cv,
-            rel_ms(100),
-            &mut || lot.release_exclusive(&*host, &lock),
-            &mut || lot.acquire_exclusive(&*host, &lock),
-        );
+        let woken = lot.sleep(&*host, &cv, rel_ms(100), &mut || lot.release_exclusive(&*host, &lock), &mut || {
+            lot.acquire_exclusive(&*host, &lock)
+        });
         assert!(!woken);
         assert!(t0.elapsed() >= Duration::from_millis(90));
         assert_eq!(lock.load(Ordering::Relaxed), 1, "the lock is held again");
@@ -999,13 +997,9 @@ mod tests {
         lot.wake_one(&*host, &cv);
         lot.wake_all(&*host, &cv);
         lot.acquire_exclusive(&*host, &lock);
-        assert!(!lot.sleep(
-            &*host,
-            &cv,
-            rel_ms(50),
-            &mut || lot.release_exclusive(&*host, &lock),
-            &mut || lot.acquire_exclusive(&*host, &lock)
-        ));
+        assert!(!lot.sleep(&*host, &cv, rel_ms(50), &mut || lot.release_exclusive(&*host, &lock), &mut || {
+            lot.acquire_exclusive(&*host, &lock)
+        }));
         lot.release_exclusive(&*host, &lock);
         // Three sleepers, woken one at a time in the order they went to sleep.
         let order = Arc::new(Mutex::new(Vec::new()));
@@ -1014,13 +1008,9 @@ mod tests {
                 let (lot, host, cv, lock, order) = (lot.clone(), host.clone(), cv.clone(), lock.clone(), order.clone());
                 let t = std::thread::spawn(move || {
                     lot.acquire_exclusive(&*host, &lock);
-                    let woken = lot.sleep(
-                        &*host,
-                        &cv,
-                        None,
-                        &mut || lot.release_exclusive(&*host, &lock),
-                        &mut || lot.acquire_exclusive(&*host, &lock),
-                    );
+                    let woken = lot.sleep(&*host, &cv, None, &mut || lot.release_exclusive(&*host, &lock), &mut || {
+                        lot.acquire_exclusive(&*host, &lock)
+                    });
                     assert!(woken);
                     assert_eq!(lock.load(Ordering::Relaxed) & 1, 1, "returns with the lock");
                     order.lock().unwrap().push(i);
@@ -1121,7 +1111,8 @@ mod tests {
         let lot = Arc::new(Lot::new());
         let host = Arc::new(Host::default());
         let (cv, lock) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
-        let (go, inside, max) = (Arc::new(AtomicU64::new(0)), Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+        let (go, inside, max) =
+            (Arc::new(AtomicU64::new(0)), Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
         let threads: Vec<_> = (0..8)
             .map(|_| {
                 let (lot, host, cv, lock, go, inside, max) =
@@ -1129,13 +1120,9 @@ mod tests {
                 std::thread::spawn(move || {
                     lot.acquire_exclusive(&*host, &lock);
                     while go.load(Ordering::Relaxed) == 0 {
-                        lot.sleep(
-                            &*host,
-                            &cv,
-                            None,
-                            &mut || lot.release_exclusive(&*host, &lock),
-                            &mut || lot.acquire_exclusive(&*host, &lock),
-                        );
+                        lot.sleep(&*host, &cv, None, &mut || lot.release_exclusive(&*host, &lock), &mut || {
+                            lot.acquire_exclusive(&*host, &lock)
+                        });
                     }
                     let n = inside.fetch_add(1, Ordering::SeqCst) + 1;
                     max.fetch_max(n, Ordering::SeqCst);
@@ -1268,7 +1255,8 @@ mod tests {
             std::thread::spawn(move || {
                 let c = 7u32;
                 // SAFETY: valid pointers of the stated size.
-                let r = unsafe { lot.wait_on_address(&*host, cell.as_ptr().cast(), (&c as *const u32).cast(), 4, None) };
+                let r =
+                    unsafe { lot.wait_on_address(&*host, cell.as_ptr().cast(), (&c as *const u32).cast(), 4, None) };
                 v.store(r as u64 + 100, Ordering::SeqCst);
             })
         };

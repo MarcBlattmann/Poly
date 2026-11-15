@@ -49,10 +49,10 @@ mod resource;
 mod secdata;
 mod security;
 mod spawn;
-mod threadpool;
 mod sync;
 mod sysex;
 mod system;
+mod threadpool;
 mod tls;
 mod waits;
 

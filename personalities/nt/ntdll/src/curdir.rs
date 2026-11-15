@@ -108,7 +108,8 @@ pub unsafe extern "system" fn RtlSetCurrentDirectory_U(path: *const u8) -> NtSta
         if buf.is_null() { Vec::new() } else { core::slice::from_raw_parts(buf, len).to_vec() }
     };
     // A full drive path; anything else is taken relative to the directory now.
-    let drive = given.len() >= 2 && given[1] == u16::from(b':') && (given[0] < 0x80 && (given[0] as u8).is_ascii_alphabetic());
+    let drive =
+        given.len() >= 2 && given[1] == u16::from(b':') && (given[0] < 0x80 && (given[0] as u8).is_ascii_alphabetic());
     let full = if drive && given.get(2) == Some(&BACKSLASH) {
         given
     } else if drive {

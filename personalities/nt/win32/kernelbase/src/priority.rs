@@ -50,7 +50,13 @@ pub extern "system" fn GetThreadPriority(thread: Handle) -> i32 {
     let mut base = 0i32;
     // SAFETY: valid pointers.
     let st = unsafe {
-        nt::NtQueryInformationThread(thread, THREAD_POLY_BASE_PRIORITY, (&mut base as *mut i32).cast(), 4, core::ptr::null_mut())
+        nt::NtQueryInformationThread(
+            thread,
+            THREAD_POLY_BASE_PRIORITY,
+            (&mut base as *mut i32).cast(),
+            4,
+            core::ptr::null_mut(),
+        )
     };
     if !st.is_success() {
         return fail_status(st, THREAD_PRIORITY_ERROR_RETURN);
@@ -77,7 +83,9 @@ pub extern "system" fn SetThreadPriority(thread: Handle, priority: i32) -> i32 {
 pub extern "system" fn GetPriorityClass(process: Handle) -> u32 {
     let mut info = [0u8; 2];
     // SAFETY: valid pointers.
-    let st = unsafe { nt::NtQueryInformationProcess(process, PROCESS_PRIORITY_CLASS, info.as_mut_ptr(), 2, core::ptr::null_mut()) };
+    let st = unsafe {
+        nt::NtQueryInformationProcess(process, PROCESS_PRIORITY_CLASS, info.as_mut_ptr(), 2, core::ptr::null_mut())
+    };
     if !st.is_success() {
         return fail_status(st, 0);
     }
@@ -103,7 +111,13 @@ pub unsafe extern "system" fn GetThreadPriorityBoost(thread: Handle, disabled: *
     let mut base = 0i32;
     // SAFETY: valid pointers.
     let st = unsafe {
-        nt::NtQueryInformationThread(thread, THREAD_POLY_BASE_PRIORITY, (&mut base as *mut i32).cast(), 4, core::ptr::null_mut())
+        nt::NtQueryInformationThread(
+            thread,
+            THREAD_POLY_BASE_PRIORITY,
+            (&mut base as *mut i32).cast(),
+            4,
+            core::ptr::null_mut(),
+        )
     };
     if !st.is_success() {
         return fail_status(st, FALSE);
@@ -119,7 +133,13 @@ pub extern "system" fn SetThreadPriorityBoost(thread: Handle, _disable: i32) -> 
     let mut base = 0i32;
     // SAFETY: valid pointers.
     let st = unsafe {
-        nt::NtQueryInformationThread(thread, THREAD_POLY_BASE_PRIORITY, (&mut base as *mut i32).cast(), 4, core::ptr::null_mut())
+        nt::NtQueryInformationThread(
+            thread,
+            THREAD_POLY_BASE_PRIORITY,
+            (&mut base as *mut i32).cast(),
+            4,
+            core::ptr::null_mut(),
+        )
     };
     if st.is_success() { TRUE } else { fail_status(st, FALSE) }
 }

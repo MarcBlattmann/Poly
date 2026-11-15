@@ -254,7 +254,11 @@ pub unsafe extern "system" fn RtlRunOnceInitialize(once: *mut usize) {
 
 /// `RtlRunOnceBeginInitialize`: `STATUS_PENDING` when the caller must initialise.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn RtlRunOnceBeginInitialize(once: *mut usize, flags: u32, context: *mut *mut u8) -> NtStatus {
+pub unsafe extern "system" fn RtlRunOnceBeginInitialize(
+    once: *mut usize,
+    flags: u32,
+    context: *mut *mut u8,
+) -> NtStatus {
     // SAFETY: the caller's object.
     match LOT.run_once_begin(&Host, unsafe { word(once) }, flags) {
         Ok(Some(c)) => {

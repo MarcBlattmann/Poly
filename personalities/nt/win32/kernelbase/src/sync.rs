@@ -91,9 +91,7 @@ pub extern "system" fn ExitThread(code: u32) -> ! {
 pub unsafe extern "system" fn GetExitCodeThread(thread: Handle, code: *mut u32) -> i32 {
     let mut info = [0u8; 48];
     // SAFETY: valid pointers.
-    let st = unsafe {
-        nt::NtQueryInformationThread(thread, 0x1001, info.as_mut_ptr(), 48, core::ptr::null_mut())
-    };
+    let st = unsafe { nt::NtQueryInformationThread(thread, 0x1001, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
     if !st.is_success() {
         return fail_status(st, FALSE);
     }
@@ -507,7 +505,11 @@ pub unsafe extern "system" fn InitOnceExecuteOnce(
     let st = unsafe {
         nt::RtlRunOnceExecuteOnce(
             once,
-            Some(core::mem::transmute::<InitOnceFn, unsafe extern "system" fn(*mut usize, *mut u8, *mut *mut u8) -> u32>(f)),
+            Some(
+                core::mem::transmute::<InitOnceFn, unsafe extern "system" fn(*mut usize, *mut u8, *mut *mut u8) -> u32>(
+                    f,
+                ),
+            ),
             parameter,
             context,
         )

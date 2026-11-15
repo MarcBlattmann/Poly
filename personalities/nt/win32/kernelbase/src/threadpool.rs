@@ -133,8 +133,12 @@ struct Locked<T>(UnsafeCell<T>);
 // SAFETY: only used with `LOCK` held.
 unsafe impl<T> Sync for Locked<T> {}
 
-static G: Locked<Globals> =
-    Locked(UnsafeCell::new(Globals { default_pool: core::ptr::null_mut(), services: Vec::new(), io_port: 0, io_objects: Vec::new() }));
+static G: Locked<Globals> = Locked(UnsafeCell::new(Globals {
+    default_pool: core::ptr::null_mut(),
+    services: Vec::new(),
+    io_port: 0,
+    io_objects: Vec::new(),
+}));
 static LOCK: AtomicUsize = AtomicUsize::new(0);
 /// Waiters for an object to have no callback left (every object's) sleep here.
 static IDLE_CV: AtomicUsize = AtomicUsize::new(0);
@@ -252,7 +256,14 @@ unsafe fn spawn_worker(pool: *mut Pool) {
             0 => (0, 0),
             n => (n, 0x1_0000),
         };
-        let h = crate::sync::CreateThread(core::ptr::null(), stack, worker as *const u8, pool.cast(), flags, core::ptr::null_mut());
+        let h = crate::sync::CreateThread(
+            core::ptr::null(),
+            stack,
+            worker as *const u8,
+            pool.cast(),
+            flags,
+            core::ptr::null_mut(),
+        );
         if h == 0 {
             (*pool).state.spawn_failed();
         } else {
@@ -284,7 +295,7 @@ unsafe extern "system" fn worker(arg: *mut u8) -> u32 {
     lock();
     loop {
         // SAFETY: the pool lives while this thread is counted.
-        match unsafe { (*pool).state.next() } {
+        match unsafe { (*pool).state.take_next() } {
             Next::Run(job) => {
                 unlock();
                 // SAFETY: a job queued on this pool.
@@ -567,7 +578,11 @@ pub unsafe extern "system" fn CreateThreadpoolCleanupGroup() -> *mut u8 {
 /// callbacks (dropping those that have not started if asked), tell each member's cancel callback,
 /// and close the members.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn CloseThreadpoolCleanupGroupMembers(group: *mut u8, cancel: i32, cleanup_context: *mut u8) {
+pub unsafe extern "system" fn CloseThreadpoolCleanupGroupMembers(
+    group: *mut u8,
+    cancel: i32,
+    cleanup_context: *mut u8,
+) {
     if group.is_null() {
         return;
     }
@@ -608,7 +623,9 @@ pub unsafe extern "system" fn CloseThreadpoolCleanupGroupMembers(group: *mut u8,
         unlock();
         if cancel_callback != 0 {
             // SAFETY: the environment's callback, called with the object's and the caller's contexts.
-            unsafe { core::mem::transmute::<usize, CancelCallback>(cancel_callback)(context as *mut u8, cleanup_context) };
+            unsafe {
+                core::mem::transmute::<usize, CancelCallback>(cancel_callback)(context as *mut u8, cleanup_context)
+            };
         }
         lock();
         // SAFETY: the lock is held.
@@ -722,12 +739,19 @@ unsafe fn service_for(o: *mut Object) -> *mut Service {
             }
         }
         let mut control: Handle = 0;
-        let st = nt::NtCreateEvent(&mut control, poly_kernelbase::sync::EVENT_ALL_ACCESS, core::ptr::null(), poly_kernelbase::sync::SYNCHRONIZATION_EVENT, 0);
+        let st = nt::NtCreateEvent(
+            &mut control,
+            poly_kernelbase::sync::EVENT_ALL_ACCESS,
+            core::ptr::null(),
+            poly_kernelbase::sync::SYNCHRONIZATION_EVENT,
+            0,
+        );
         if !st.is_success() {
             return core::ptr::null_mut();
         }
         let s = Box::into_raw(Box::new(Service { control, objects: Vec::new() }));
-        let h = crate::sync::CreateThread(core::ptr::null(), 0, service as *const u8, s.cast(), 0, core::ptr::null_mut());
+        let h =
+            crate::sync::CreateThread(core::ptr::null(), 0, service as *const u8, s.cast(), 0, core::ptr::null_mut());
         if h == 0 {
             drop(Box::from_raw(s));
             close(control);
@@ -942,7 +966,12 @@ pub unsafe extern "system" fn CreateThreadpoolWait(callback: usize, context: *mu
 
 /// `SetThreadpoolWaitEx(wait, handle, timeout, reserved)`: whether the wait was set before.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn SetThreadpoolWaitEx(wait: *mut u8, handle: Handle, timeout: *const u32, _reserved: *mut u8) -> i32 {
+pub unsafe extern "system" fn SetThreadpoolWaitEx(
+    wait: *mut u8,
+    handle: Handle,
+    timeout: *const u32,
+    _reserved: *mut u8,
+) -> i32 {
     let o = wait as *mut Object;
     lock();
     // SAFETY: the lock is held; the caller's wait and FILETIME.
@@ -953,7 +982,8 @@ pub unsafe extern "system" fn SetThreadpoolWaitEx(wait: *mut u8, handle: Handle,
             (*o).set = false;
         } else {
             (*o).handle = handle;
-            (*o).deadline = if timeout.is_null() { NEVER } else { rules::deadline(filetime(timeout), now(), system_now()) };
+            (*o).deadline =
+                if timeout.is_null() { NEVER } else { rules::deadline(filetime(timeout), now(), system_now()) };
             (*o).set = arm(o);
         }
         was
@@ -991,7 +1021,8 @@ unsafe extern "system" fn io_thread(port: *mut u8) -> u32 {
     loop {
         let (mut bytes, mut key, mut ov) = (0u32, 0usize, core::ptr::null_mut());
         // SAFETY: valid out-pointers; wait forever.
-        let ok = unsafe { crate::iocp::GetQueuedCompletionStatus(port, &mut bytes, &mut key, &mut ov, 0xFFFF_FFFF) } != 0;
+        let ok =
+            unsafe { crate::iocp::GetQueuedCompletionStatus(port, &mut bytes, &mut key, &mut ov, 0xFFFF_FFFF) } != 0;
         let error = if ok { 0 } else { last_error() };
         if ov.is_null() {
             // SAFETY: a short sleep so a failing port does not spin.
@@ -1020,7 +1051,12 @@ unsafe extern "system" fn io_thread(port: *mut u8) -> u32 {
 
 /// `CreateThreadpoolIo(file, callback, context, environment)`: `file` is opened for overlapped I/O.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn CreateThreadpoolIo(file: Handle, callback: usize, context: *mut u8, env: *const u8) -> *mut u8 {
+pub unsafe extern "system" fn CreateThreadpoolIo(
+    file: Handle,
+    callback: usize,
+    context: *mut u8,
+    env: *const u8,
+) -> *mut u8 {
     // SAFETY: the caller's environment.
     let o = unsafe { create(Kind::Io, callback, context as usize, env) };
     lock();
@@ -1035,7 +1071,14 @@ pub unsafe extern "system" fn CreateThreadpoolIo(file: Handle, callback: usize, 
                 unlock();
                 return fail(e, core::ptr::null_mut());
             }
-            let h = crate::sync::CreateThread(core::ptr::null(), 0, io_thread as *const u8, port as *mut u8, 0, core::ptr::null_mut());
+            let h = crate::sync::CreateThread(
+                core::ptr::null(),
+                0,
+                io_thread as *const u8,
+                port as *mut u8,
+                0,
+                core::ptr::null_mut(),
+            );
             if h == 0 {
                 let e = last_error();
                 close(port);
@@ -1121,7 +1164,11 @@ pub unsafe extern "system" fn SetEventWhenCallbackReturns(instance: *mut Instanc
 
 /// `ReleaseSemaphoreWhenCallbackReturns`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn ReleaseSemaphoreWhenCallbackReturns(instance: *mut Instance, semaphore: Handle, count: u32) {
+pub unsafe extern "system" fn ReleaseSemaphoreWhenCallbackReturns(
+    instance: *mut Instance,
+    semaphore: Handle,
+    count: u32,
+) {
     // SAFETY: as above.
     unsafe { (*instance).actions.push(Action::ReleaseSemaphore(semaphore, count as i32)) };
 }
@@ -1135,7 +1182,10 @@ pub unsafe extern "system" fn ReleaseMutexWhenCallbackReturns(instance: *mut Ins
 
 /// `LeaveCriticalSectionWhenCallbackReturns`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn LeaveCriticalSectionWhenCallbackReturns(instance: *mut Instance, cs: *mut CriticalSection) {
+pub unsafe extern "system" fn LeaveCriticalSectionWhenCallbackReturns(
+    instance: *mut Instance,
+    cs: *mut CriticalSection,
+) {
     // SAFETY: as above.
     unsafe { (*instance).actions.push(Action::LeaveCriticalSection(cs)) };
 }

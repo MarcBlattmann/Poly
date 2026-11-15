@@ -357,7 +357,8 @@ fn publish(f: *mut File, s: &mut Stream) {
             s.user_buf as usize
         };
         if write {
-            (base, ptr, cnt) = (b, b + len, if len == 0 { 0 } else { (s.bufsize.saturating_sub(len)).min(i32::MAX as usize) as i32 });
+            (base, ptr, cnt) =
+                (b, b + len, if len == 0 { 0 } else { (s.bufsize.saturating_sub(len)).min(i32::MAX as usize) as i32 });
             s.published = Some(Published { ptr, len, write: true });
         } else if s.last == Last::Read {
             let n = readable(s);

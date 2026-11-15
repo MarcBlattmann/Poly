@@ -37,7 +37,12 @@ unsafe extern "system" {
 /// # Safety
 /// `handle` is writable.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn LsaOpenPolicy(_system: *const u8, attributes: *const u8, access: u32, handle: *mut *mut u8) -> u32 {
+pub unsafe extern "system" fn LsaOpenPolicy(
+    _system: *const u8,
+    attributes: *const u8,
+    access: u32,
+    handle: *mut *mut u8,
+) -> u32 {
     if attributes.is_null() || handle.is_null() {
         return STATUS_INVALID_PARAMETER;
     }

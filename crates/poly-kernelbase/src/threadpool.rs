@@ -100,7 +100,7 @@ impl<J> PoolState<J> {
     }
 
     /// What the calling thread does next: take a job, or note it sleeps (`idle`).
-    pub fn next(&mut self) -> Next<J> {
+    pub fn take_next(&mut self) -> Next<J> {
         if let Some(j) = self.queue.pop_front() {
             return Next::Run(j);
         }
@@ -185,17 +185,17 @@ mod tests {
         assert_eq!(p.push(3), Dispatch { wake: false, spawn: false }, "at the maximum the job waits");
         assert_eq!(p.threads, 2);
         // The threads run the jobs in order, then sleep.
-        assert_eq!(p.next(), Next::Run(1));
-        assert_eq!(p.next(), Next::Run(2));
-        assert_eq!(p.next(), Next::Run(3));
-        assert_eq!(p.next(), Next::Sleep { may_end: true });
+        assert_eq!(p.take_next(), Next::Run(1));
+        assert_eq!(p.take_next(), Next::Run(2));
+        assert_eq!(p.take_next(), Next::Run(3));
+        assert_eq!(p.take_next(), Next::Sleep { may_end: true });
         // One sleeper: a job wakes it and starts nobody; a second job in a row needs a second thread.
         p.set_max(3);
         let d = p.push(4);
         assert_eq!(d, Dispatch { wake: true, spawn: false });
         assert_eq!(p.push(5), Dispatch { wake: true, spawn: true });
         p.woke();
-        assert_eq!(p.next(), Next::Run(4));
+        assert_eq!(p.take_next(), Next::Run(4));
         assert_eq!(p.threads, 3);
         p.spawn_failed();
         assert_eq!(p.threads, 2);
@@ -208,7 +208,7 @@ mod tests {
         assert_eq!(p.set_min(5), 5);
         assert_eq!((p.min, p.max, p.threads), (5, 5, 5));
         assert_eq!(p.set_min(2), 0, "lowering starts nothing");
-        assert_eq!(p.next(), Next::Sleep { may_end: true });
+        assert_eq!(p.take_next(), Next::Sleep { may_end: true });
         // Above the minimum a thread that found nothing ends; at it, it stays.
         p.woke();
         assert!(p.idle_exit());
@@ -224,8 +224,8 @@ mod tests {
         let mut p = PoolState::<u32>::default();
         assert!(p.push(1).spawn);
         p.closing = true;
-        assert_eq!(p.next(), Next::Run(1));
-        assert_eq!(p.next(), Next::Exit);
+        assert_eq!(p.take_next(), Next::Run(1));
+        assert_eq!(p.take_next(), Next::Exit);
         assert_eq!(p.threads, 0);
     }
 
@@ -250,7 +250,7 @@ mod tests {
                 let h = std::thread::spawn(move || {
                     let mut g = state.0.lock().unwrap();
                     loop {
-                        match g.next() {
+                        match g.take_next() {
                             Next::Run(j) => {
                                 drop(g);
                                 {
@@ -285,7 +285,13 @@ mod tests {
                                 state.1.notify_one();
                             }
                             if d.spawn {
-                                spawn_worker(state.clone(), done.clone(), running.clone(), peak.clone(), handles.clone());
+                                spawn_worker(
+                                    state.clone(),
+                                    done.clone(),
+                                    running.clone(),
+                                    peak.clone(),
+                                    handles.clone(),
+                                );
                             }
                         }
                     })

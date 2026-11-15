@@ -504,7 +504,8 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
         // ImageFileName: a UNICODE_STRING and its text, the NT name of the image.
         27 => {
             let us = abi::caller_unicode_size(k);
-            let (device, path) = k.with_state(|sys, proc, _| crate::memory::mapped_file_of(sys, proc, proc.image_base))?;
+            let (device, path) =
+                k.with_state(|sys, proc, _| crate::memory::mapped_file_of(sys, proc, proc.image_base))?;
             // The name as the kernel was given the image's path may end in a NUL.
             let path = path.map(|mut p| {
                 while p.last() == Some(&0) {
