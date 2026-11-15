@@ -39,6 +39,25 @@ fn own_process(process: Handle) -> Option<bool> {
 
 /// `SetThreadPriority` (Learn): one of the `THREAD_PRIORITY_*` levels, or
 /// `THREAD_MODE_BACKGROUND_BEGIN/END` for the calling thread.
+/// The level this process's table holds for the thread `thread` names (`THREAD_PRIORITY_NORMAL`
+/// when none was set), and a way to record a level there: the kernel keeps a live thread's
+/// priority, the table also the one of a thread that has ended.
+pub(crate) fn table_priority(thread: Handle) -> i32 {
+    let error = last_error();
+    let level = thread_id(thread).map_or(0, |tid| with(|p| p.thread(tid)));
+    set_last_error(error);
+    level
+}
+
+pub(crate) fn remember_priority(thread: Handle, level: i32) {
+    // The handle may not be one `GetThreadId` can read: the caller's last error stays as it is.
+    let error = last_error();
+    if let Some(tid) = thread_id(thread) {
+        let _ = with(|p| p.set_thread(tid, level, tid == crate::process::GetCurrentThreadId()));
+    }
+    set_last_error(error);
+}
+
 pub(crate) fn set_thread_priority_mode(thread: Handle, value: i32) -> i32 {
     let Some(tid) = thread_id(thread) else { return FALSE };
     let current = tid == crate::process::GetCurrentThreadId();

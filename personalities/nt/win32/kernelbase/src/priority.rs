@@ -61,7 +61,8 @@ pub extern "system" fn GetThreadPriority(thread: Handle) -> i32 {
     if !st.is_success() {
         return fail_status(st, THREAD_PRIORITY_ERROR_RETURN);
     }
-    base.clamp(-15, 15)
+    // A thread that has ended no longer holds its level in the kernel: the table does.
+    if base == 0 { crate::sched::table_priority(thread) } else { base.clamp(-15, 15) }
 }
 
 /// `SetThreadPriority`: -2 to 2, 15 and -15 (and 16 and -16, which are the same ends) are valid.
@@ -79,7 +80,11 @@ pub extern "system" fn SetThreadPriority(thread: Handle, priority: i32) -> i32 {
     };
     // SAFETY: valid pointer.
     let st = unsafe { nt::NtSetInformationThread(thread, THREAD_BASE_PRIORITY, (&base as *const i32).cast(), 4) };
-    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    crate::sched::remember_priority(thread, base.clamp(-15, 15));
+    TRUE
 }
 
 /// `GetPriorityClass`: 0 and the error when the handle cannot be read.
