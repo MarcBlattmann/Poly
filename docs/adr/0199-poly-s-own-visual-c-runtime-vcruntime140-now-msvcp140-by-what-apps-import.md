@@ -288,3 +288,63 @@ output for our own programs. Round 1 delivered:
   members), `locale` basics, `_Query_*` siblings beyond the sheets, exceptions across a DLL built by
   Microsoft's compiler (only ucrtbase/kernel32 callbacks), i686.
 
+
+## Update 2026-11-15: implementer round 1 (impl-vcrt)
+
+The sheets of spec-vcrt-1, implemented from the sheets and visible tests only (no Microsoft STL
+headers or sources, no other runtime's source). 44 of the 45 visible tests pass on Poly.
+
+- **`__CxxFrameHandler4`** (`poly_cxxeh::fh4`, host-tested): the compressed tables are decoded into
+  the logical structures of FH3 (unwind map with the next state of each entry, try blocks with
+  their clauses, IP-to-state with the sheet's strictly-below lookup) and the FH3 decisions run on
+  them; what is new is a catch funclet's own table (header bit 0x01, its own states, the
+  function's frame read through `ParentFrameOffset`), the three unwind action kinds (destructor of
+  an object at a frame offset, of an object whose address the frame holds, a cleanup funclet; the
+  offsets are from the function's establisher frame), and continuation lists (the funclet then
+  returns an index). Header bits 0x02 (separated code) and 0x04 were not observed: a table with
+  0x02 is refused (the frame is skipped, logged nowhere), 0x04 is ignored.
+- **Where the handler lives.** The catch blocks in progress, the current exception and the count
+  of uncaught exceptions are per-thread state that `_CxxThrowException`, `__CxxFrameHandler3` and
+  `__CxxFrameHandler4` must share (a throw counts up in one, a catch counts down in the other; a
+  rethrow is completed from the catch block another handler entered). So the handler is in Poly's
+  `vcruntime140.dll` (an extra export, `__CxxFrameHandler4`), and `vcruntime140_1.dll`'s export is
+  a forwarder to it. Consequence: Poly's `vcruntime140_1.dll` needs Poly's `vcruntime140.dll`; a
+  program that brings Microsoft's `vcruntime140.dll` brings `vcruntime140_1.dll` with it (they
+  come as a pair from the redistributable and in every app-local copy seen).
+- **RTTI** (`poly_cxxeh::rtti`, host-tested): `dynamic_cast` starts from the complete object (the
+  locator's offset, the construction displacement if any); a target subobject that contains the
+  source subobject is taken when the path is public, otherwise a target that occurs once
+  publicly when the source is a public base (this is what makes a cast from either of two
+  ambiguous `A`s sideways work, as observed). `VfDelta` (observed on Poly with the sheet's own
+  test): the compiler passes the subobject that holds the virtual table pointer and the distance
+  back to the source pointer, for a source whose pointer is in a virtual base.
+  `std::bad_cast`/`std::bad_typeid` are thrown with RTTI and throw records `vcruntime140.dll`
+  writes into a buffer of its own image at attach (`rtti::write_chain`).
+- **`type_info::name()`** (`poly_cxxeh::undname`): the spellings of the sheet; the name is made
+  once, stored in the descriptor's `_UndecoratedName` with a compare-exchange, and its block is
+  linked into the module's `__type_info_node` (the first 8 bytes used as a list head; Poly has no
+  SList functions yet), which `__std_type_info_destroy_list` frees. `__std_type_info_hash` is the
+  observed FNV-1a over the name after its dot, folded.
+- **`msvcp140.dll`** (new, x64, `personalities/nt/win32/msvcp140`, logic in `crates/poly-msvcp`):
+  time, `_Mtx_*` (on an SRW lock with the sheet's owner and count fields; `_Mtx_trylock` of a plain
+  mutex without `_Mtx_try` blocks, as observed), `_Cnd_*`, `_Thrd_*`, eight recursive `_Lockit`
+  locks, the `_X*` helpers and `_Throw_Cpp_error`, `uncaught_exceptions` (vcruntime140's count).
+  Its exception classes' RTTI and throw records are generated as assembly with `.rva` entries
+  (read-only, nothing filled at load). Installed like `vcruntime140*` (own-copy marker,
+  `install_own_copy`). The other 1,440 x64 names are fail-only (`stub: msvcp140!name`, 0), generated
+  from a checked-in list; the 117 data names among them are zeroed writable blocks (256 bytes for
+  virtual tables, 512 for the standard streams, 64 otherwise: no sizes are specified yet).
+  Unspecified siblings implemented by their documented contracts: `_Mtx_timedlock`,
+  `_Cnd_timedwait`, `_Syserror_map`.
+- **Open:** `_Throw_Cpp_error`'s `e.code().category() == std::generic_category()` is false on Poly:
+  the program builds `generic_category()` inline, so equality depends on `error_category`'s layout
+  and identity, which no sheet gives (a spec item for the next round). i686 is unchanged (the
+  32-bit runtime waits for the i686 `ucrtbase`).
+- **KeePassXC 2.8.0 after this round:** `keepassxc-cli --version` no longer aborts (its C++
+  exceptions are caught); it exits 1 without output in the `char` stream classes (`basic_ios`,
+  `basic_ostream`, `basic_streambuf`, `ios_base::width/good`, `setstate`, `_Osfx`: fail-only).
+  `KeePassXC.exe` gets past Qt6Core's start (the steady clock works), catches the C++ exceptions
+  `qwindows.dll` and `botan-3.dll` throw, and ends with a general-protection fault in
+  `Qt6Gui.dll+0x699ca0` before a window, after `msvcp140_1!_Aligned_get_default_resource` (a
+  stub returning null) and `ucrtbase!_fdclass`. Next spec round: the stream classes and locale
+  basics, `msvcp140_1!_Aligned_get_default_resource`, `error_category`.

@@ -93,7 +93,7 @@ start downloads about 230 MB once. More commands are in
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
 
-**Now:** Phase 5, NT personality and Windows console apps. **Next milestone:** Our own msvcp140 and siblings, in the order of the names apps import (ADR 0199)
+**Now:** Phase 5, NT personality and Windows console apps. **Next milestone:** Our own msvcp140 and siblings, in the order of the names apps import (ADR 0199; first names: threads, time, the throw helpers, _Lockit; the stream classes and locale next)
 
 <a href="docs/ROADMAP.md">
 <picture>
