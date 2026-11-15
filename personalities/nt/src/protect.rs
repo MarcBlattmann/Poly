@@ -53,7 +53,8 @@ impl Protection {
         // `PAGE_TARGETS_INVALID` / `PAGE_TARGETS_NO_UPDATE` (0x40000000, Learn: "Memory Protection
         // Constants"): a control-flow-guard attribute of executable pages. Poly has no CFG bitmap, so
         // it is accepted with an execute protection and dropped (V8 asks for it).
-        let value = if value & PAGE_TARGETS_INVALID != 0 && value & 0xF0 != 0 { value & !PAGE_TARGETS_INVALID } else { value };
+        let value =
+            if value & PAGE_TARGETS_INVALID != 0 && value & 0xF0 != 0 { value & !PAGE_TARGETS_INVALID } else { value };
         let base = value & BASE_MASK;
         let modifiers = value & !BASE_MASK;
         let ok = base.is_power_of_two()
