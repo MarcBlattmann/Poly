@@ -8,7 +8,8 @@
 use super::set_last_error;
 use poly_kernelbase::resource as res;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn FindResourceExW(module: *mut u8, ty: *const u16, name: *const u16, lang: u16) -> *mut u8;
     fn LoadResource(module: *mut u8, res: *mut u8) -> *mut u8;
