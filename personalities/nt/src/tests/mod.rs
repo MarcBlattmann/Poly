@@ -181,6 +181,10 @@ impl Backend for Mem {
         Ok(())
     }
 
+    fn read(&mut self, addr: u64, buf: &mut [u8]) -> Result<(), NtStatus> {
+        Mem::read(self, addr, buf).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
+    }
+
     fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
         self.write_bytes(addr, data).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }

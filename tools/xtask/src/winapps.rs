@@ -19,7 +19,8 @@
 //!     Without steps: `launch`, `sleep:20`, `shot:window`, `sleep:20`, `shot:later`.
 //!   - Options: `--name N` (default: the program's file stem), `--args "..."` (the program's
 //!     command line after its name), `--dir-cwd REL`, `--seconds S`, `--timeout S` (QEMU's
-//!     limit), `--exceptions[=N]`, `--trace`, `--release`, `--out DIR` (log, summary and
+//!     limit), `--exceptions[=N]`, `--trace`, `--kernel "OPTIONS"` (more kernel options, such as
+//!     `poly.nt.waits=10 poly.nt.trail`), `--release`, `--out DIR` (log, summary and
 //!     screenshots; default `target/win-app/<name>-out`), `--memory=SIZE`, `--cpus=N`.
 
 use crate::chromewin::{Module, walk};
@@ -141,6 +142,8 @@ struct Opts {
     timeout: u64,
     exceptions: Option<String>,
     trace: bool,
+    /// More kernel options (`--kernel "poly.nt.waits=10 poly.nt.trail"`): the other diagnostics.
+    kernel: String,
     release: bool,
     out: PathBuf,
     #[cfg_attr(not(unix), allow(dead_code))]
@@ -192,6 +195,7 @@ fn parse(args: &[String]) -> Result<Opts> {
             }
         }),
         trace: args.iter().any(|a| a == "--trace"),
+        kernel: flag(args, "--kernel").unwrap_or_default(),
         release: args.iter().any(|a| a == "--release"),
         name,
         steps,
@@ -243,6 +247,10 @@ fn kernel_arguments(o: &Opts) -> String {
     if let Some(v) = &o.exceptions {
         more.push_str(" poly.nt.exceptions");
         more.push_str(v);
+    }
+    for option in o.kernel.split_whitespace() {
+        more.push(' ');
+        more.push_str(option);
     }
     more
 }
