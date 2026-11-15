@@ -160,6 +160,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("VirtualFreeEx", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualProtectEx", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualQueryEx", "api-ms-win-core-memory-l1-1-0"),
+    ("FlushInstructionCache", "api-ms-win-core-processthreads-l1-1-0"),
     ("ReadProcessMemory", "api-ms-win-core-memory-l1-1-0"),
     ("WriteProcessMemory", "api-ms-win-core-memory-l1-1-0"),
     ("HeapCreate", "api-ms-win-core-heap-l1-1-0"),

@@ -123,16 +123,31 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
         return Err(STATUS_ACCESS_VIOLATION);
     }
     let new = new as u32;
+    // A protection that is no `PAGE_*` value (0, two at once) is refused before the memory is
+    // looked at, and `*OldProtect` stays as it was (the sheet of `VirtualProtectEx`).
+    crate::protect::Protection::new(new, false)?;
     let own = is_own(k, process);
-    let (base, size, old) = on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| {
+    let changed = on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| {
         // What the mitigation lets be executable are the views of image sections (Learn,
         // "Process Mitigation Policies": modules are mapped, not made): the loader's own
         // modules, nothing a program makes out of private memory (ADR 0196).
         if own && proc.dynamic_code_blocked && executable(new) && !proc.vm.is_image_view(base, size) {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
         }
-        proc.vm.protect(b, base, size, new)
+        Ok(proc.vm.protect(b, base, size, new))
     })?;
+    let (base, size, old) = match changed {
+        Ok(done) => done,
+        Err(e) => {
+            // A range the protection could not be applied to leaves `PAGE_NOACCESS` as the old one
+            // (the sheet of `VirtualProtectEx`: a private page made `PAGE_WRITECOPY`, a reserved
+            // page), where a call refused before it looked at the memory writes nothing.
+            if size != 0 {
+                abi::write_u32(k, old_ptr, PAGE_NOACCESS)?;
+            }
+            return Err(e);
+        }
+    };
     abi::write_u64(k, base_ptr, base)?;
     abi::write_u64(k, size_ptr, size)?;
     abi::write_u32(k, old_ptr, old)?;

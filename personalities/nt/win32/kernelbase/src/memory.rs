@@ -93,10 +93,31 @@ pub unsafe extern "system" fn VirtualProtectEx(
     if old.is_null() {
         return fail(ERROR_NOACCESS, FALSE);
     }
+    // A size of 0 is refused before anything changes (the sheet: FALSE, `ERROR_INVALID_PARAMETER`,
+    // the old protection untouched).
+    if size == 0 {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
     let (mut base, mut sz) = (address, size);
     // SAFETY: valid in/out pointers.
     let st = unsafe { nt::NtProtectVirtualMemory(process, &mut base, &mut sz, protect, old) };
     if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+}
+
+/// `FlushInstructionCache(process, address, size)` (Learn: "Flushes the instruction cache for the
+/// specified process"): x86-64 keeps the instruction cache coherent with writes, so for a process
+/// handle all it does is accept it (Chrome's sandbox calls it after patching a target: the sheet
+/// of `VirtualProtectEx`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn FlushInstructionCache(process: nt::Handle, _address: *const u8, _size: usize) -> i32 {
+    if process != nt::CURRENT_PROCESS {
+        // SAFETY: `process` is only looked at.
+        if unsafe { crate::spawn::GetProcessId(process as _) } == 0 {
+            // Not a process handle: GetProcessId set the error (ERROR_INVALID_HANDLE).
+            return FALSE;
+        }
+    }
+    TRUE
 }
 
 /// `VirtualQueryEx`: the bytes of `MEMORY_BASIC_INFORMATION` written, or 0.

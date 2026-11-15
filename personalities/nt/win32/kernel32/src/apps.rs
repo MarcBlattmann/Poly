@@ -172,7 +172,6 @@ poly_win32_rt::fail_exports!(
         FindNextFileA,
         FindNextVolumeW,
         FindVolumeClose,
-        FlushInstructionCache,
         FoldStringW,
         FreeEnvironmentStringsA,
         FreeLibraryAndExitThread,
