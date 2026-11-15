@@ -457,6 +457,21 @@ impl Server {
         }
     }
 
+    /// The owner of internal window `w` asks to move it with the pointer
+    /// (a Windows window's `SC_MOVE` after a press on its caption): a
+    /// move while the press that went to it is held. Nothing when no
+    /// button is held any more.
+    pub fn internal_start_move(&mut self, w: WindowId) {
+        if self.seat.input.buttons.is_empty() || self.seat.input.grab.is_some() || !self.internal.contains_key(&w) {
+            return;
+        }
+        // The rest of the press is the move's, not the window's.
+        if self.seat.input.internal_grab == Some(w) {
+            self.seat.input.internal_grab = None;
+        }
+        self.start_move(w);
+    }
+
     /// Start moving window `w` with the pointer (while a button is held).
     pub(super) fn start_move(&mut self, w: WindowId) {
         if self.seat.input.buttons.is_empty() || self.seat.input.grab.is_some() {
