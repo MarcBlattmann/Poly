@@ -169,8 +169,17 @@ mod tests {
 
     #[test]
     fn class_ids_are_the_documented_ones() {
-        assert_eq!(&CLSID_STD_GLOBAL_INTERFACE_TABLE.to_text()[..], &"{00000323-0000-0000-C000-000000000046}".encode_utf16().collect::<Vec<_>>()[..]);
-        assert_eq!(&IID_IGLOBAL_INTERFACE_TABLE.to_text()[..], &"{00000146-0000-0000-C000-000000000046}".encode_utf16().collect::<Vec<_>>()[..]);
-        assert_eq!(&CLSID_BACKGROUND_COPY_MANAGER.to_text()[..], &"{4991D34B-80A1-4291-83B6-3328366B9097}".encode_utf16().collect::<Vec<_>>()[..]);
+        assert_eq!(
+            &CLSID_STD_GLOBAL_INTERFACE_TABLE.to_text()[..],
+            &"{00000323-0000-0000-C000-000000000046}".encode_utf16().collect::<Vec<_>>()[..]
+        );
+        assert_eq!(
+            &IID_IGLOBAL_INTERFACE_TABLE.to_text()[..],
+            &"{00000146-0000-0000-C000-000000000046}".encode_utf16().collect::<Vec<_>>()[..]
+        );
+        assert_eq!(
+            &CLSID_BACKGROUND_COPY_MANAGER.to_text()[..],
+            &"{4991D34B-80A1-4291-83B6-3328366B9097}".encode_utf16().collect::<Vec<_>>()[..]
+        );
     }
 }

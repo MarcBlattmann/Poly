@@ -32,14 +32,17 @@ extern crate alloc;
 
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
-use poly_com::apartment::{
-    APTTYPEQUALIFIER_NONE, BLOCK_SIZE, BlockLayout, COINIT_APARTMENTTHREADED, ComState, InitKind, MainSta, Model, MtaThreads, coinit_is_valid,
-};
-#[cfg(target_arch = "x86")]
-use poly_com::apartment::BLOCK_X86;
 #[cfg(target_arch = "x86_64")]
 use poly_com::apartment::BLOCK_X64;
-use poly_com::git::{CLSID_BACKGROUND_COPY_MANAGER, CLSID_STD_GLOBAL_INTERFACE_TABLE, IID_IGLOBAL_INTERFACE_TABLE, Owner, Table};
+#[cfg(target_arch = "x86")]
+use poly_com::apartment::BLOCK_X86;
+use poly_com::apartment::{
+    APTTYPEQUALIFIER_NONE, BLOCK_SIZE, BlockLayout, COINIT_APARTMENTTHREADED, ComState, InitKind, MainSta, Model,
+    MtaThreads, coinit_is_valid,
+};
+use poly_com::git::{
+    CLSID_BACKGROUND_COPY_MANAGER, CLSID_STD_GLOBAL_INTERFACE_TABLE, IID_IGLOBAL_INTERFACE_TABLE, Owner, Table,
+};
 use poly_com::guid::{GUID_TEXT_LEN, Guid};
 use poly_com::hresult::*;
 use poly_com::hstring::{self, HString, Header};
@@ -413,7 +416,8 @@ pub extern "system" fn RoUninitialize() {
 
 // ----- activation ----------------------------------------------------------------------
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyDebugPrint(text: *const u8, length: usize) -> u32;
 }
@@ -445,7 +449,13 @@ unsafe fn is_guid(p: *const Guid, want: &Guid) -> bool {
 /// with an outer unknown). The failing call still gives the thread its COM block (sheet
 /// `TEB.ReservedForOle`). The log names the class, so a program that stops after asking for one
 /// shows which; BITS is one such class: where the service is missing Windows answers the same.
-unsafe fn not_registered(function: &str, clsid: *const Guid, iid: *const Guid, outer: bool, ppv: *mut *mut c_void) -> Hresult {
+unsafe fn not_registered(
+    function: &str,
+    clsid: *const Guid,
+    iid: *const Guid,
+    outer: bool,
+    ppv: *mut *mut c_void,
+) -> Hresult {
     if ppv.is_null() {
         return E_POINTER;
     }
@@ -456,7 +466,8 @@ unsafe fn not_registered(function: &str, clsid: *const Guid, iid: *const Guid, o
         return CO_E_NOTINITIALIZED;
     }
     // SAFETY: the caller's GUID.
-    let name = if unsafe { is_guid(clsid, &CLSID_BACKGROUND_COPY_MANAGER) } { " (BITS: not installed here)" } else { "" };
+    let name =
+        if unsafe { is_guid(clsid, &CLSID_BACKGROUND_COPY_MANAGER) } { " (BITS: not installed here)" } else { "" };
     log(&alloc::format!(
         "stub: ole32: {function}: class {}{name} is not registered (interface {})",
         guid_text(clsid),
@@ -583,7 +594,8 @@ struct Git {
 // SAFETY: `table` is only touched with `locked` held (`with_git`).
 unsafe impl Sync for Git {}
 
-static GIT_TABLE: Git = Git { locked: core::sync::atomic::AtomicBool::new(false), table: core::cell::UnsafeCell::new(Table::new()) };
+static GIT_TABLE: Git =
+    Git { locked: core::sync::atomic::AtomicBool::new(false), table: core::cell::UnsafeCell::new(Table::new()) };
 
 fn with_git<R>(f: impl FnOnce(&mut Table) -> R) -> R {
     while GIT_TABLE.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
@@ -634,7 +646,12 @@ fn git_pointer() -> *mut c_void {
 /// `CoCreateInstance(CLSID_StdGlobalInterfaceTable, ...)` (sheet `CLSID_StdGlobalInterfaceTable`):
 /// the same object for every thread; in-process contexts only; no aggregation; only `IUnknown` and
 /// `IGlobalInterfaceTable`.
-unsafe fn create_global_interface_table(outer: *mut c_void, context: u32, iid: *const Guid, ppv: *mut *mut c_void) -> Hresult {
+unsafe fn create_global_interface_table(
+    outer: *mut c_void,
+    context: u32,
+    iid: *const Guid,
+    ppv: *mut *mut c_void,
+) -> Hresult {
     if ppv.is_null() {
         return E_POINTER;
     }
@@ -687,7 +704,12 @@ unsafe extern "system" fn git_release(_this: *mut c_void) -> u32 {
 
 /// `RegisterInterfaceInGlobal`: one reference of the object is kept until the cookie is revoked or
 /// the registering apartment ends; the interface id is not checked against the object.
-unsafe extern "system" fn git_register(_this: *mut c_void, object: *mut c_void, iid: *const Guid, cookie: *mut u32) -> Hresult {
+unsafe extern "system" fn git_register(
+    _this: *mut c_void,
+    object: *mut c_void,
+    iid: *const Guid,
+    cookie: *mut u32,
+) -> Hresult {
     if object.is_null() || iid.is_null() || cookie.is_null() {
         return E_INVALIDARG;
     }
@@ -737,7 +759,8 @@ unsafe extern "system" fn git_get(_this: *mut c_void, cookie: u32, iid: *const G
         // SAFETY: a registered COM object (the registration holds a reference); the caller's pointers.
         unsafe {
             let object = r.object as *mut c_void;
-            let vtbl = *(object as *const *const unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> Hresult);
+            let vtbl = *(object
+                as *const *const unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> Hresult);
             return (*vtbl)(object, iid, out);
         }
     }
