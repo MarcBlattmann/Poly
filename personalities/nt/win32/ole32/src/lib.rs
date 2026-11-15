@@ -24,6 +24,8 @@
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
 
+extern crate alloc;
+
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
 use poly_com::apartment::{APTTYPEQUALIFIER_NONE, Apartment, Model};
@@ -234,15 +236,31 @@ pub extern "system" fn RoUninitialize() {
 
 // ----- activation ----------------------------------------------------------------------
 
-/// `CoGetClassObject`: no class is registered.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn CoGetClassObject(
-    _clsid: *const Guid,
-    _context: u32,
-    _server_info: *mut c_void,
-    _iid: *const Guid,
-    ppv: *mut *mut c_void,
-) -> Hresult {
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn PolyDebugPrint(text: *const u8, length: usize) -> u32;
+}
+
+/// A line in the kernel log, as the fail-only exports write (`stub: ole32: ...`).
+fn log(text: &str) {
+    // SAFETY: the service reads `text.len()` bytes.
+    unsafe { PolyDebugPrint(text.as_ptr(), text.len()) };
+}
+
+/// `{XXXXXXXX-...}` for the log; `{?}` for a NULL pointer.
+fn guid_text(guid: *const Guid) -> alloc::string::String {
+    if guid.is_null() {
+        return alloc::string::String::from("{?}");
+    }
+    // SAFETY: the caller's GUID.
+    let text = unsafe { (*guid).to_text() };
+    alloc::string::String::from_utf16_lossy(&text)
+}
+
+/// Activation of a class Poly does not have: the out parameter is cleared and the answer is
+/// `REGDB_E_CLASSNOTREG` (`CO_E_NOTINITIALIZED` on a thread with no apartment). The log names
+/// the class, so a program that stops after asking for one shows which.
+unsafe fn not_registered(function: &str, clsid: *const Guid, iid: *const Guid, ppv: *mut *mut c_void) -> Hresult {
     if ppv.is_null() {
         return E_POINTER;
     }
@@ -251,20 +269,38 @@ pub unsafe extern "system" fn CoGetClassObject(
     if apartment().model().is_none() {
         return CO_E_NOTINITIALIZED;
     }
+    log(&alloc::format!(
+        "stub: ole32: {function}: class {} is not registered (interface {})",
+        guid_text(clsid),
+        guid_text(iid)
+    ));
     REGDB_E_CLASSNOTREG
+}
+
+/// `CoGetClassObject`: no class is registered.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoGetClassObject(
+    clsid: *const Guid,
+    _context: u32,
+    _server_info: *mut c_void,
+    iid: *const Guid,
+    ppv: *mut *mut c_void,
+) -> Hresult {
+    // SAFETY: the caller's pointers.
+    unsafe { not_registered("CoGetClassObject", clsid, iid, ppv) }
 }
 
 /// `CoCreateInstance`: no class is registered.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoCreateInstance(
-    _clsid: *const Guid,
+    clsid: *const Guid,
     _outer: *mut c_void,
     _context: u32,
-    _iid: *const Guid,
+    iid: *const Guid,
     ppv: *mut *mut c_void,
 ) -> Hresult {
-    // SAFETY: the same checks.
-    unsafe { CoGetClassObject(core::ptr::null(), 0, core::ptr::null_mut(), core::ptr::null(), ppv) }
+    // SAFETY: the caller's pointers.
+    unsafe { not_registered("CoCreateInstance", clsid, iid, ppv) }
 }
 
 /// `MULTI_QI` (`objidl.h`).

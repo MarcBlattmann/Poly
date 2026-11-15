@@ -14,6 +14,7 @@ use super::{Kernel, with};
 use crate::process::{ExitStatus, Process};
 use crate::sync::Mutex;
 use crate::user::{self, Fault, UserRegs};
+use alloc::string::String;
 use alloc::vec::Vec;
 use poly_ntobj::{NtStatus, ProcessId, ThreadRef};
 use poly_personality_nt::exception::{self as nt_exception, CpuFault};
@@ -266,7 +267,14 @@ fn end_after_unhandled(mut k: Kernel) -> ! {
 /// dispatcher: where it was raised (module and offset), the registers, and `words` quadwords of
 /// the stack with the code addresses and the text found in them. Everything is on the heap (the
 /// thread's kernel stack is 16 KiB) and freed before the thread goes back to user mode.
-pub(super) fn report_delivered(pid: ProcessId, tid: ThreadRef, record: &ExceptionRecord, ctx: &Context, words: usize) {
+pub(super) fn report_delivered(
+    pid: ProcessId,
+    tid: ThreadRef,
+    record: &ExceptionRecord,
+    ctx: &Context,
+    words: usize,
+    memory: usize,
+) {
     use poly_personality_nt::diag;
     let read = |at: u64, buf: &mut [u8]| user::copy_from_user(buf, at).is_ok();
     let teb = with(|s| s.processes.get(&pid)?.thread(tid).map(|t| t.teb)).unwrap_or(0);
@@ -285,7 +293,61 @@ pub(super) fn report_delivered(pid: ProcessId, tid: ThreadRef, record: &Exceptio
     for line in diag::exception_report(&at, record.parameters(), &ctx.gpr, &stack, &modules) {
         crate::kprintln!("{line}");
     }
+    if memory != 0 {
+        let text: Vec<String> = diag::referenced_text(&read, &stack, &modules)
+            .into_iter()
+            .map(|(i, t)| alloc::format!("+{:#x} {t}", i * 8))
+            .collect();
+        if !text.is_empty() {
+            crate::kprintln!("nt-exc: pid {} tid {} text the stack points to: {}", at.pid, at.tid, text.join(", "));
+        }
+    }
     drop(stack);
+    if memory != 0 {
+        // What the thread's last calls left below its stack pointer.
+        let mut below: Vec<u64> = Vec::with_capacity(diag::STALE_WORDS);
+        for i in 1..=diag::STALE_WORDS as u64 {
+            let mut b = [0u8; 8];
+            below.push(if read(rsp.wrapping_sub(8 * i), &mut b) { u64::from_le_bytes(b) } else { 0 });
+        }
+        if let Some(line) = diag::stale_code(&at, &below, &modules) {
+            crate::kprintln!("{line}");
+        }
+        let text: Vec<String> = diag::referenced_text(&read, &below, &modules)
+            .into_iter()
+            .map(|(i, t)| alloc::format!("-{:#x} {t}", (i + 1) * 8))
+            .collect();
+        if !text.is_empty() {
+            crate::kprintln!("nt-exc: pid {} tid {} text its last calls point to: {}", at.pid, at.tid, text.join(", "));
+        }
+        // The nearest of those quadwords as they are: the locals of the last call.
+        for (i, line) in below.chunks(4).take(24).enumerate() {
+            let words: Vec<String> = line.iter().map(|w| alloc::format!("{w:016x}")).collect();
+            crate::kprintln!(
+                "nt-exc: pid {} tid {} below -{:#06x}: {}",
+                at.pid,
+                at.tid,
+                (i * 4 + 1) * 8,
+                words.join(" ")
+            );
+        }
+    }
+    if memory != 0 {
+        // `poly.nt.exceptions.mem`: what the registers point to, a line at a time (a line that
+        // cannot be read, an unmapped page, is left out).
+        for (name, pointer) in diag::pointer_registers(&ctx.gpr) {
+            let start = (pointer - (memory as u64 / 4).min(pointer)) & !(diag::MEMORY_LINE as u64 - 1);
+            let end = pointer.saturating_add(memory as u64);
+            let mut line = [0u8; diag::MEMORY_LINE];
+            let mut address = start;
+            while address < end {
+                if read(address, &mut line) {
+                    crate::kprintln!("{}", diag::memory_line(&at, name, pointer, address, &line));
+                }
+                address += diag::MEMORY_LINE as u64;
+            }
+        }
+    }
     if record.code == diag::STATUS_STACK_OVERFLOW {
         // What fills the stack: every value up to the stack's base (`NT_TIB.StackBase`,
         // TEB + 8) that points into a module, counted. Read a page at a time.
