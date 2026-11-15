@@ -19,7 +19,6 @@ use crate::image::ImageSection;
 use crate::protect::{Protection, view_allowed};
 use crate::system::{NtProcess, NtSystem, Section, SectionKind};
 use crate::vm::{ALLOCATION_GRANULARITY, AllocKind, NewView, PAGE_SIZE, PageState, ViewInfo, map_view_pages, page_up};
-use alloc::vec;
 use core::result::Result;
 use poly_ntobj::access::*;
 use poly_ntobj::status::*;
@@ -98,7 +97,7 @@ pub fn create_section(
             let size = page_up(size).expect("bounded");
             let pages = (size / PAGE_SIZE) as usize;
             let reserve = a & SEC_RESERVE != 0;
-            let committed = reserve.then(|| vec![false; pages]);
+            let committed = if reserve { Some(crate::image::try_filled(pages, false)?) } else { None };
             (size, SectionKind::Pagefile { committed }, SectionSource::Pagefile { size, committed: !reserve })
         }
         Some(h) => {
@@ -133,6 +132,15 @@ pub fn create_section(
         Section { size, protect, attributes: a, backing: 0, kind },
         &source,
     )
+}
+
+/// The state of each of `n` pages, `STATUS_NO_MEMORY` when the kernel heap cannot hold the
+/// list (a view of a terabyte would panic it).
+fn page_states(n: usize, state: impl Fn(usize) -> PageState) -> Result<alloc::vec::Vec<PageState>, NtStatus> {
+    let mut v = alloc::vec::Vec::new();
+    v.try_reserve_exact(n).map_err(|_| STATUS_NO_MEMORY)?;
+    v.extend((0..n).map(state));
+    Ok(v)
 }
 
 /// Size (and image) of a section of file `key`.
@@ -376,7 +384,7 @@ pub fn map_section(
         if req.offset.is_some_and(|o| o != 0) {
             return Err(STATUS_INVALID_PARAMETER_6);
         }
-        let pages: alloc::vec::Vec<PageState> = img.pages.iter().map(|&p| PageState::Committed(p)).collect();
+        let pages = page_states(img.pages.len(), |i| PageState::Committed(img.pages[i]))?;
         let pages = crate::pagemap::PageMap::from_states(&pages);
         let info = ViewInfo {
             section: key,
@@ -434,15 +442,9 @@ pub fn map_section(
         let commit_pages = (page_up(req.commit_size).unwrap_or(size).min(size) / PAGE_SIZE) as usize;
         let pages = match &section.kind {
             SectionKind::Pagefile { committed: Some(c) } => {
-                let states: alloc::vec::Vec<PageState> = (0..n)
-                    .map(|i| {
-                        if c[first + i] || i < commit_pages {
-                            PageState::Committed(protect)
-                        } else {
-                            PageState::Reserved
-                        }
-                    })
-                    .collect();
+                let states = page_states(n, |i| {
+                    if c[first + i] || i < commit_pages { PageState::Committed(protect) } else { PageState::Reserved }
+                })?;
                 crate::pagemap::PageMap::from_states(&states)
             }
             _ => crate::pagemap::PageMap::new(n, PageState::Committed(protect)),

@@ -704,6 +704,41 @@ that `UnmapViewOfFile2(MEM_PRESERVE_PLACEHOLDER)` of a view that replaced no pla
 `RtlGrowFunctionTable` ignores a count below the current one or above the maximum; which of two
 overlapping tables wins (Poly: the first registered).
 
+## Addendum: executables bigger than 4 MiB, and running out of memory (`nt-big-images`)
+
+The first survey of popular Windows programs (`windows-app-survey`) found that starting any
+executable over about 4 MiB panicked the kernel: `NtCreateUserProcess` read the whole file into
+one `Vec<u8>` (`IoState::read_all`), and the kernel heap hands out at most one 4 MiB buddy block.
+Notepad++, WinMerge, KeePassXC, WinSCP, Sumatra PDF, XnView MP, Audacity, Node.js and VS Code
+(8 to 238 MB) all died there, and a failed allocation is a panic, not a status.
+
+- **No executable is read whole.** `create_user_process` opens the image path, takes the file's
+  pages through `ImageSection::from_reader` (the lazy image of this ADR: the headers, then each
+  page when a view touches it, from the page cache) and hands the `ImageSection` to the kernel in
+  `ProcessCreate`. `exec::start_process_listed` and `start_child` take an `ImageSection`; the
+  byte-slice entry points (`start_process`, `start_process_from`) stay for small, kernel-made
+  images. The shell's `run` and the first program (`program::prepare`) build the image the same
+  way, instead of reading the file into a `Vec`. `IoState::read_all` is gone.
+- **Linux and Mach-O.** A Linux ELF was already loaded from its file's pages (`read_headers`
+  reads a page, then at most 64 KiB, with `try_reserve`); Mach-O is refused before any load.
+  Nothing changed there. The user-mode loader in `ntdll` reads a DLL into the process's own heap
+  (user memory, not the kernel's), so a DLL over 4 MiB loads (Chrome's 310 MB `chrome.dll` does);
+  it costs the file's size twice in that process and is not a kernel panic.
+- **Memory that runs out is a status.** Everything an image makes in proportion to its size now
+  goes through `try_filled` / `try_push` (`Vec::try_reserve_exact`): the page-protection table
+  and its scratch, the header read, the base-relocation block list (16 bytes per page of
+  relocations: a relocated image of about 1 GiB or more fails with `STATUS_NO_MEMORY` where it
+  used to panic), the eager copy of a small image, the section's page lists. The caller gets
+  `STATUS_NO_MEMORY` (`SpawnError::Image`); the process record is torn down as for any other
+  failed start.
+- **Tests.** Host: a counting file proves a 64 MiB image reads only its headers and one page per
+  page touched, `NtCreateUserProcess` starts a 24 MiB executable, a big non-image file is
+  `STATUS_INVALID_IMAGE_FORMAT`, `try_filled` reports `STATUS_NO_MEMORY`. Boot
+  (`nt::test_bigimage`): a generated 64 MiB executable (`poly_ldr::builder::append_section` pads
+  a small program with a data section that exists only as the file's length) starts and exits
+  with its status; an image whose relocation table needs more than one heap block fails with
+  `STATUS_NO_MEMORY` and the kernel goes on.
+
 ## Addendum: stage 1 passes (`chrome-win-s12`, step 12)
 
 After step 11 every process of stage 1 lived, and about 12 s in the whole tree went quiet (the

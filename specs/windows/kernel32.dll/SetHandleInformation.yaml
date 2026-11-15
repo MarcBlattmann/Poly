@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetHandleInformation.yaml
+id: windows/api/kernel32.dll/SetHandleInformation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CreateRestrictedToken", "SetThreadToken", "RevertToSelf", "CreateProcessAsUserW", "Mandatory Integrity Control", "Restricted Tokens", "Access Control Lists", "Registry Key Security and Access Rights", "SetHandleInformation function (handleapi.h)", "GetHandleInformation", "GetProcessHandleCount", "DuplicateHandle"; handleapi.h, processthreadsapi.h and winbase.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Sets the inherit and protect-from-close flags of a handle. Chrome's confined targets (storage service and renderers) call it while they close the handles they must not keep, and GetProcessHandleCount; some of their DuplicateHandle calls fail with ERROR_ACCESS_DENIED in stage 2. The tests build the sandbox's token pair from public calls: the process token is a restricted primary token (CreateRestrictedToken with DISABLE_MAX_PRIVILEGE, Administrators and Users as deny-only, restricted to the Null SID S-1-0-0) lowered to Untrusted integrity (S-1-16-0); the main thread of the suspended child gets an impersonation token (restricted copy with no group disabled, restricted to Everyone, Users, RESTRICTED and the Null SID, same integrity) through SetThreadToken(&thread, token) before ResumeThread; the child calls RevertToSelf() after its start-up. The same questions are asked in the unrestricted parent for contrast. In these tests none of the handle calls changed with the restriction: the same results in the unrestricted parent, in the impersonating target and after RevertToSelf. In particular a restricted target could duplicate a handle that the other process made with SYNCHRONIZE only and ask for EVENT_MODIFY_STATE (the object's default security grants it); the refused duplicates Chrome meets are to objects whose security descriptor does not (see the DuplicateHandle sheet).
+interface:
+  signature: "BOOL SetHandleInformation(HANDLE h, DWORD mask, DWORD flags); BOOL GetHandleInformation(HANDLE h, LPDWORD flags); BOOL GetProcessHandleCount(HANDLE process, PDWORD count)"
+chrome:
+  calls: "SetHandleInformation 42 calls (browser, renderers, utility); GetProcessHandleCount 4 calls in the confined renderers and utility processes; DuplicateHandle up to 1333 calls, some refused with 5 in the confined GPU, network, storage and renderers"
+rules:
+  flags: "GetHandleInformation of a fresh event: flags 0; SetHandleInformation(h, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) = TRUE and the flags read 1; SetHandleInformation(h, INHERIT|PROTECT_FROM_CLOSE, 0) = TRUE and the flags read 0; SetHandleInformation(NULL, 1, 1): FALSE, error 6"
+  handle_count: "GetProcessHandleCount(self) = TRUE; one more handle raises the count by 1, closing it lowers it by 1; GetProcessHandleCount(NULL): FALSE, error 6"
+  duplicates: "DuplicateHandle(self, event, self, &new, SYNCHRONIZE, FALSE, 0) = TRUE; from the full handle with access 2 (EVENT_MODIFY_STATE) and with DUPLICATE_SAME_ACCESS: TRUE; from the SYNCHRONIZE-only handle with access 2: TRUE (the object's security grants it), with SYNCHRONIZE: TRUE; from a SYNCHRONIZE-only handle made by the parent and inherited, access 2: TRUE, SYNCHRONIZE: TRUE, SAME_ACCESS: TRUE: in the unrestricted parent, while impersonating and after RevertToSelf alike"
+errors:
+  bad_handle: "ERROR_INVALID_HANDLE (6)"
+side_effects: "changes the handle's flags"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  HANDLE_FLAG_PROTECT_FROM_CLOSE's effect on CloseHandle (it raises an exception), duplicates of objects whose security descriptors refuse the restricted token (the refusal Chrome sees), handles to files or sections.
