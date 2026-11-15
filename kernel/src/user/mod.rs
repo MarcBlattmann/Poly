@@ -224,6 +224,24 @@ pub fn spawn_nt_as(
     start_thread(process, arch, Some(memory), entry, None, hook, Some(tid), thread::CpuSet::ALL).map(|(id, _)| id)
 }
 
+/// Start a 32-bit NT thread (ADR 0186): it runs in compatibility mode, with
+/// FS based at its 32-bit TEB (`NtCurrentTeb` reads `fs:[0x18]`) and GS
+/// unused. `tid`: the process thread id already chosen, if any (as for
+/// [`spawn_nt_as`]). Returns its kernel thread.
+pub fn spawn_nt32(
+    process: Arc<Process>,
+    memory: Arc<Memory>,
+    entry: Entry,
+    fs_base: u64,
+    hook: SyscallHook,
+    tid: Option<u32>,
+) -> Result<ThreadId, SpawnError> {
+    let space = Arc::clone(memory.space());
+    let mut arch = arch::user::ThreadState::with_state(space, &[], fs_base, 0).ok_or(SpawnError::NoMemory)?;
+    arch.set_compat();
+    start_thread(process, arch, Some(memory), entry, None, hook, tid, thread::CpuSet::ALL).map(|(id, _)| id)
+}
+
 /// Start a thread of `process` in `memory` that begins with every
 /// register of `regs`, the FPU state `fpu` (an image from [`fpu_image`])
 /// and FS / GS bases `fs_base` / `gs_base`: the child of `clone` or

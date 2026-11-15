@@ -89,6 +89,7 @@ jobs:
         run: |
           echo "ntdll=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
           echo "win32=$(cargo xtask win32 --cache-key)" >> "$GITHUB_OUTPUT"
+          echo "wow64=$(cargo xtask wow64 --cache-key)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         with:
           path: target/ntdll-cache
@@ -98,6 +99,11 @@ jobs:
         with:
           path: target/win32-cache
           key: ${{ steps.keys.outputs.win32 }}
+      # The 32-bit modules (ADR 0186).
+      - uses: actions/cache@v4
+        with:
+          path: target/wow64-cache
+          key: ${{ steps.keys.outputs.wow64 }}
       - run: cargo xtask ci lint
       # The coverage map's checks (README and ROADMAP against coverage/) are
       # a minute: with lint, which ends sooner than the boots.
@@ -170,6 +176,7 @@ jobs:
         run: |
           echo "ntdll=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
           echo "win32=$(cargo xtask win32 --cache-key)" >> "$GITHUB_OUTPUT"
+          echo "wow64=$(cargo xtask wow64 --cache-key)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         if: matrix.part == 'kernel'
         with:
@@ -180,6 +187,11 @@ jobs:
         with:
           path: target/win32-cache
           key: ${{ steps.keys.outputs.win32 }}
+      - uses: actions/cache@v4
+        if: matrix.part == 'kernel'
+        with:
+          path: target/wow64-cache
+          key: ${{ steps.keys.outputs.wow64 }}
       # 7-Zip's 7za.exe for the traced scenario's kit and the 7-Zip
       # scenario's driver (ADR 0087, 0091), kept in a cache by version.
       - name: 7-Zip's cache

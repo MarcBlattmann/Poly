@@ -97,6 +97,8 @@
 //!                       --cache-key: print the name it is cached under
 //!   win32               the same for kernelbase.dll, kernel32.dll, ucrtbase.dll, msvcrt.dll and
 //!                       the test programs (win32.rs)
+//!   wow64               the same for the 32-bit (i686) ntdll.dll, kernelbase.dll, kernel32.dll
+//!                       and the 32-bit test programs of tests/windows/wow64 (wow64.rs, ADR 0186)
 //!   win fetch-7zip      download the pinned 7-Zip 7za.exe (x64) into the cache, checked (sevenzip.rs)
 //!   win imports <exe | 7zip> [--markdown <file>] [--check]
 //!                       what a Windows program imports and what of it our DLLs lack
@@ -181,6 +183,7 @@ mod winapp;
 mod winapps;
 mod winimports;
 mod wintrace;
+mod wow64;
 mod xwayland;
 
 use hostfs::UnixStream;
@@ -271,6 +274,7 @@ const COMMANDS: &[&str] = &[
     "system-messages",
     "ntdll",
     "win32",
+    "wow64",
     "win",
     "dynamic-initramfs",
     "busybox-initramfs",
@@ -309,6 +313,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("wayland") => wayland::run(&root(), rest),
         Some("ntdll") => ntdll::command(rest),
         Some("win32") => win32::command(rest),
+        Some("wow64") => wow64::command(rest),
         Some("win") => sevenzip::command(rest),
         Some("dynamic-initramfs") => dynamic::command(),
         Some("busybox-initramfs") => busybox::command(),
@@ -357,14 +362,22 @@ fn step(name: &str, cmd: &mut Command) -> Result {
 /// 0071). The two are made at the same time (each its own cargo build in a
 /// target directory of its own, or taken from the cache).
 fn kernel_cargo() -> Result<Command> {
-    let (dll, win32) = thread::scope(|s| {
+    let (dll, win32, wow64) = thread::scope(|s| {
         let dll = s.spawn(ntdll::ensure);
+        let wow64 = s.spawn(wow64::ensure);
         let win32 = win32::ensure();
-        (dll.join().unwrap_or_else(|_| Err("building ntdll.dll panicked".into())), win32)
+        (
+            dll.join().unwrap_or_else(|_| Err("building ntdll.dll panicked".into())),
+            win32,
+            wow64.join().unwrap_or_else(|_| Err("building the 32-bit modules panicked".into())),
+        )
     });
-    let (dll, win32) = (dll?, win32?);
+    let (dll, win32, wow64) = (dll?, win32?, wow64?);
     let mut cmd = cargo();
-    cmd.current_dir(kernel_dir()).env(ntdll::KERNEL_ENV, dll).env(win32::KERNEL_ENV, win32);
+    cmd.current_dir(kernel_dir())
+        .env(ntdll::KERNEL_ENV, dll)
+        .env(win32::KERNEL_ENV, win32)
+        .env(wow64::KERNEL_ENV, wow64);
     Ok(cmd)
 }
 
@@ -2471,6 +2484,7 @@ fn pipeline(args: &[String]) -> Result {
     {
         cmd.env(ntdll::KERNEL_ENV, ntdll::ensure()?);
         cmd.env(win32::KERNEL_ENV, win32::ensure()?);
+        cmd.env(wow64::KERNEL_ENV, wow64::ensure()?);
     }
     step("pipeline", &mut cmd)
 }

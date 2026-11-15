@@ -562,6 +562,7 @@ v_exports! {
 
 mod positional;
 
+#[cfg(target_arch = "x86_64")]
 mod apps;
 
 /// `ceilf` (C99; the classic runtime exports it too): exact, so `poly_crt::math` (host-tested).

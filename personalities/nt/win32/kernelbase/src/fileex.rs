@@ -15,7 +15,8 @@ use poly_kernelbase::file::*;
 use poly_kernelbase::fileex::{self, QueryPlan, ReplaceStep, SetPlan};
 use poly_ntobj::NtStatus;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtQueryFullAttributesFile(attributes: *const ObjectAttributes, info: *mut u8) -> NtStatus;
     fn NtLockFile(
@@ -180,7 +181,7 @@ pub unsafe extern "system" fn SetFileInformationByHandle(handle: Handle, class: 
     }
     // SAFETY: the caller's buffer of `size` bytes.
     let bytes = unsafe { core::slice::from_raw_parts(buf, size as usize) };
-    match fileex::set_plan(class, bytes, &|win32| nt_path(win32)) {
+    match fileex::set_plan_in(core::mem::size_of::<usize>(), class, bytes, &|win32| nt_path(win32)) {
         Ok(SetPlan::Nt { nt_class, bytes }) => match set_info(handle, nt_class, &bytes) {
             Ok(()) => TRUE,
             Err(st) => fail_status(st, FALSE),
@@ -223,7 +224,7 @@ pub unsafe extern "system" fn LockFileEx(
     // SAFETY: not null (the range was checked); the first fields of an
     // OVERLAPPED are the IO_STATUS_BLOCK the kernel completes.
     let (iosb, event) = unsafe {
-        (*overlapped).internal = nt::STATUS_PENDING.0 as u64;
+        (*overlapped).internal = nt::STATUS_PENDING.0 as usize;
         (overlapped as *mut IoStatusBlock, (*overlapped).event)
     };
     // SAFETY: valid pointers.

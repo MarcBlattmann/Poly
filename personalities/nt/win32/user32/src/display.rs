@@ -11,7 +11,8 @@ use poly_win32k::proto::{Reply, Request};
 use poly_win32k::spi;
 use poly_win32k::user::{self as u};
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CreateSolidBrush(color: u32) -> usize;
     fn GetClipBox(hdc: usize, rect: *mut i32) -> i32;
@@ -350,13 +351,14 @@ unsafe fn spi_get(action: u32, param: u32, pv: *mut u8, _ini: u32) -> i32 {
         }
         0x0042 => {
             // SAFETY: as above.
-            if pv.is_null() || read32(pv, 0) != 16 {
+            // HIGHCONTRASTW: cbSize, dwFlags, a pointer (16 bytes, 12 in a 32-bit process).
+            if pv.is_null() || read32(pv, 0) as usize != 8 + core::mem::size_of::<usize>() {
                 set_last_error(ERROR_INVALID_PARAMETER);
                 return 0;
             }
             put32(pv, 4, 0x7E);
-            // SAFETY: the 8-byte scheme pointer of the structure.
-            unsafe { core::ptr::write_unaligned(pv.add(8) as *mut u64, 0) };
+            // SAFETY: the pointer-sized scheme field of the structure.
+            unsafe { core::ptr::write_unaligned(pv.add(8) as *mut usize, 0) };
             1
         }
         0x0012 | 0 => {

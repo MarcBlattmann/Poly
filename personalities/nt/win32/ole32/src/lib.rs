@@ -799,6 +799,7 @@ pub extern "system" fn ole32_main(_module: *mut u8, _reason: u32, _reserved: *mu
 
 mod delayed;
 
+#[cfg(target_arch = "x86_64")]
 mod apps;
 
 /// `IsEqualGUID(rguid1, rguid2)`: whether two GUIDs are equal (Learn: `guiddef.h`; the logic is

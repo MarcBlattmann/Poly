@@ -15,9 +15,12 @@
 
 #![no_std]
 
-use core::arch::global_asm;
+// The i686 build's `__chkstk` (whose 32-bit contract differs) and 64-bit arithmetic helpers
+// come from `poly-msvc32` (ADR 0186).
+extern crate poly_msvc32;
 
-global_asm!(
+#[cfg(target_arch = "x86_64")]
+core::arch::global_asm!(
     r#"
     .text
     .globl __chkstk
@@ -67,7 +70,11 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 macro_rules! process_heap_allocator {
     () => {
         mod process_heap {
-            #[link(name = "kernel32", kind = "raw-dylib")]
+            #[cfg_attr(
+                target_arch = "x86",
+                link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated")
+            )]
+            #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
             unsafe extern "system" {
                 pub fn GetProcessHeap() -> *mut u8;
                 pub fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
@@ -98,7 +105,8 @@ macro_rules! process_heap_allocator {
     };
 }
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyDebugPrint(text: *const u8, length: usize) -> u32;
     fn RtlSetLastWin32Error(error: u32);

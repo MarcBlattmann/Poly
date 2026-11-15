@@ -1,7 +1,8 @@
 [
 {"symbol":"#138","src":["wine-spec"]},
-{"symbol":"CreateAppContainerProfile","status":"stub","src":["wine-spec"]},
+{"symbol":"CreateAppContainerProfile","status":"claimed","claimed_by":"spec-chrome-win-s2b","src":["wine-spec"]},
 {"symbol":"CreateEnvironmentBlock","status":"stub","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_create_env"]},
+{"symbol":"DeleteAppContainerProfile","status":"claimed","claimed_by":"spec-chrome-win-s2b","src":["windows-export-probe"]},
 {"symbol":"DeriveAppContainerSidFromAppContainerName","status":"green","tests_visible":1,"tests_held_out":1,"src":["chrome-win-trace"]},
 {"symbol":"DestroyEnvironmentBlock","status":"stub","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_create_env"]},
 {"symbol":"EnterCriticalPolicySection","status":"stub","src":["wine-spec"]},
@@ -9,6 +10,8 @@
 {"symbol":"ExpandEnvironmentStringsForUserW","src":["wine-spec"]},
 {"symbol":"GetAllUsersProfileDirectoryA","src":["wine-spec"]},
 {"symbol":"GetAllUsersProfileDirectoryW","src":["wine-spec"]},
+{"symbol":"GetAppContainerFolderPath","status":"claimed","claimed_by":"spec-chrome-win-s2b","src":["windows-export-probe"]},
+{"symbol":"GetAppContainerRegistryLocation","status":"claimed","claimed_by":"spec-chrome-win-s2b","src":["windows-export-probe"]},
 {"symbol":"GetAppliedGPOListW","src":["wine-spec"]},
 {"symbol":"GetDefaultUserProfileDirectoryA","src":["wine-spec"]},
 {"symbol":"GetDefaultUserProfileDirectoryW","src":["wine-spec"]},

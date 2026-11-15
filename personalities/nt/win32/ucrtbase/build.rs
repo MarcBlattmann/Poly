@@ -4,12 +4,15 @@
 
 fn main() {
     // BEGIN generated: the names the Windows applications of the survey import (ADR 0155, step 10).
-    for (name, target) in APPS_FORWARDS {
-        println!("cargo:rustc-link-arg=/EXPORT:{name}={target}");
-    }
-    // The "optimized" `_o_` exports are the function of the name without the prefix.
-    for name in APPS_ALIASES {
-        println!("cargo:rustc-link-arg=/EXPORT:{name}={}", &name[3..]);
+    // The 32-bit modules (ADR 0186) carry none of these: a fail-only stub takes no arguments and `stdcall` would leave them.
+    if std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|a| a == "x86_64") {
+        for (name, target) in APPS_FORWARDS {
+            println!("cargo:rustc-link-arg=/EXPORT:{name}={target}");
+        }
+        // The "optimized" `_o_` exports are the function of the name without the prefix.
+        for name in APPS_ALIASES {
+            println!("cargo:rustc-link-arg=/EXPORT:{name}={}", &name[3..]);
+        }
     }
     // END generated
     println!("cargo:rerun-if-changed=../../../../crates/poly-crt/src/exports.rs");

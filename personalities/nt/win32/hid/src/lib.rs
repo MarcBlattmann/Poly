@@ -39,4 +39,5 @@ pub extern "system" fn hid_main(_module: *mut u8, _reason: u32, _reserved: *mut 
     1
 }
 
+#[cfg(target_arch = "x86_64")]
 mod apps;

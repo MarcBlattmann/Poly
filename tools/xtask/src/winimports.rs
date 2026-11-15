@@ -422,6 +422,20 @@ pub fn load_ours() -> Result<Ours> {
     Ok(ours)
 }
 
+/// What a 32-bit program can bind to: the exports of Poly's i686 modules (`cargo xtask wow64`,
+/// ADR 0186), the only DLLs in `SysWOW64`.
+pub fn load_ours_x86() -> Result<Ours> {
+    let mut ours = Ours::default();
+    let dir = crate::wow64::ensure()?;
+    for f in crate::wow64::MODULES {
+        let path = dir.join(f);
+        let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        ours.dlls.insert(f.to_string(), exports_of(&bytes)?);
+        ours.ordinals.insert(f.to_string(), ordinals_of(&bytes)?);
+    }
+    Ok(ours)
+}
+
 /// The coverage statuses of every DLL in `ours` and every DLL `imports`
 /// name (resolved), from `coverage/windows/api/`.
 pub fn load_coverage(root: &Path, ours: &Ours, imports: &[Import]) -> Result<Coverage> {

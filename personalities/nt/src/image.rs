@@ -495,7 +495,10 @@ impl ImageSection {
     fn checked_plan<'a>(pe: &Pe<'a>, file_len: u64) -> Result<poly_pe::LoadPlan<'a>, NtStatus> {
         let bad = |_| STATUS_INVALID_IMAGE_FORMAT;
         let info = *pe.info();
-        if info.machine() != poly_pe::machine::AMD64 || info.bits() != Bits::Pe32Plus {
+        // An x64 PE32+ image, or an x86 PE32 one for a 32-bit process (ADR 0186).
+        let x64 = info.machine() == poly_pe::machine::AMD64 && info.bits() == Bits::Pe32Plus;
+        let x86 = info.machine() == poly_pe::machine::I386 && info.bits() == Bits::Pe32;
+        if !x64 && !x86 {
             return Err(STATUS_INVALID_IMAGE_FORMAT);
         }
         pe.load_plan_in(file_len).map_err(bad)
@@ -516,6 +519,11 @@ impl ImageSection {
         pages.try_reserve_exact(rights.len()).map_err(|_| STATUS_NO_MEMORY)?;
         pages.extend(rights.iter().map(|r| Protection::new(r.protection(), false).expect("a base protection")));
         Ok(pages)
+    }
+
+    /// An x86 (PE32) image: it runs in a 32-bit process (ADR 0186).
+    pub fn is_x86(&self) -> bool {
+        self.info.machine() == poly_pe::machine::I386
     }
 
     pub fn image_base(&self) -> u64 {
