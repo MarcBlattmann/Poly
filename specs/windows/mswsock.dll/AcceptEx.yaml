@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/mswsock.dll/AcceptEx.yaml
+id: windows/api/mswsock.dll/AcceptEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "AcceptEx function (mswsock.h)", "GetAcceptExSockaddrs function", "ConnectEx function", "WSAIoctl function", "SIO_GET_EXTENSION_FUNCTION_POINTER control code", "setsockopt SO_UPDATE_ACCEPT_CONTEXT"; mswsock.h and winsock2.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Accepts a connection into a pre-made socket, overlapped. Not called by Chrome's stage 4; it is the entry for the overlapped accept/connect family, with ConnectEx (no export: obtained through WSAIoctl(SIO_GET_EXTENSION_FUNCTION_POINTER)) and the extension-pointer answers Chrome relies on (it asks every UDP socket for WSARecvMsg: GUID {F689D7C8-6F1F-436B-8A53-E54FE351C322}, answered with an 8-byte pointer, bytes returned 8). The tests give the layout of the AcceptEx buffer (the data first, then the local address and the remote address each 16 bytes larger than a sockaddr_in), when the request completes, the state of the accepted socket before SO_UPDATE_ACCEPT_CONTEXT, and the completion packet.
+interface:
+  signature: "BOOL AcceptEx(SOCKET listen, SOCKET accept, PVOID buf, DWORD recvlen, DWORD locallen, DWORD remotelen, LPDWORD received, LPOVERLAPPED ov); void GetAcceptExSockaddrs(...); BOOL (*ConnectEx)(SOCKET, const sockaddr*, int, PVOID send, DWORD sendlen, LPDWORD sent, LPOVERLAPPED)"
+  result: "TRUE (completed) or FALSE with ERROR_IO_PENDING 997"
+chrome:
+  calls: "not called; the WSAIoctl(SIO_GET_EXTENSION_FUNCTION_POINTER, WSAID_WSARECVMSG) call is made 8 times per network service run, each returning 0 with bytes returned 8"
+rules:
+  accept_pending: "AcceptEx(listener, a, buf, 16, 32, 32, &got, &ov) returns FALSE/WSA_IO_PENDING; the connect alone does not complete it (not signalled after 300 ms); after the client sends 5 bytes the event is signalled and WSAGetOverlappedResult is TRUE with 5 bytes, flags 0; the data is at the start of buf"
+  buffer_layout: "GetAcceptExSockaddrs(buf, 16, 32, 32): the local address is at offset 16 (right after the data area), length 16, family 2, the listener's port and 127.0.0.1; the remote address at offset 48 (16 + 32), length 16, the client's port and 127.0.0.1"
+  accepted_socket_state: "before SO_UPDATE_ACCEPT_CONTEXT (set on the accept socket with the listener's SOCKET value, 8 bytes): getpeername -1/WSAENOTCONN, getsockname -1/WSAEINVAL; after it (returns 0) getpeername returns the client and data flows both ways"
+  no_data_buffer: "recvlen 0: the request completes when the client connects (TRUE, 0 bytes)"
+  bad_arguments: "address lengths of 16 (less than sockaddr size + 16): the call is accepted (pending); lengths 0: -1/WSAEFAULT; a non-socket as the accept socket: -1/WSAENOTSOCK; the accept socket used as the listener: -1/WSAEINVAL"
+  port: "a listener associated with a completion port: the packet is TRUE with 0 bytes, the key, the OVERLAPPED, Internal 0, InternalHigh 0; closing the listener with a request pending: packet FALSE with error 995"
+  connectex: "the pointer is obtained (0); on an unbound socket: FALSE/WSAEINVAL; after bind to 0.0.0.0:0 it returns FALSE/WSA_IO_PENDING, completes (event), result TRUE with 0 bytes; getpeername is -1/WSAENOTCONN until setsockopt(SO_UPDATE_CONNECT_CONTEXT, NULL, 0) returns 0, then it reports the listener; with 7 bytes of send data the result's bytes is 7 and the peer receives 7; to a closed port it completes with FALSE, Internal 0xC0000236 (STATUS_CONNECTION_REFUSED), WSAGetOverlappedResult WSAECONNREFUSED; on a connected socket FALSE/WSAEISCONN; on a UDP socket FALSE/WSAEINVAL; with a name length of 4: FALSE/WSAEADDRNOTAVAIL"
+  extension_pointers: "an unknown GUID: -1/WSAEINVAL and no pointer; the GUIDs of AcceptEx and GetAcceptExSockaddrs and WSARecvMsg give 0 with 8 bytes returned (also on a TCP socket); an output buffer of 4 bytes: -1/WSAEFAULT"
+errors:
+  pending: "ERROR_IO_PENDING 997"
+  inval: "WSAEINVAL 10022"
+  fault: "WSAEFAULT 10014"
+  notsock: "WSAENOTSOCK 10038"
+side_effects: "makes a connection on the accept socket; completes a packet"
+threading: "any thread; the buffer and OVERLAPPED stay alive until completion"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  AcceptEx with an accept socket of another type or protocol, DisconnectEx and TransmitFile, WSAID_ACCEPTEX through the extension pointer being the same function, the receive buffer with data that arrives later than the connection (partial), WSASendMsg.

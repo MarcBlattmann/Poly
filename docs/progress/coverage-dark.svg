@@ -1934,8 +1934,8 @@
 </g>
 <g><title>winhttp: 0 / 49 done (0.0%)</title>
 <rect x="514.2" y="624.3" width="7.4" height="9.1" fill="#21262d"/>
-<rect x="514.2" y="624.3" width="0.9" height="9.1" fill="#bb8009"/>
-<rect x="515.1" y="624.3" width="2.7" height="9.1" fill="#388bfd"/>
+<rect x="514.2" y="624.3" width="0.8" height="9.1" fill="#bb8009"/>
+<rect x="515.0" y="624.3" width="2.9" height="9.1" fill="#388bfd"/>
 <rect x="513.2" y="623.3" width="9.4" height="11.1" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>cryptui: 0 / 48 done (0.0%)</title>
@@ -2104,6 +2104,7 @@
 </g>
 <g><title>mswsock: 0 / 32 done (0.0%)</title>
 <rect x="568.3" y="652.0" width="7.0" height="5.6" fill="#21262d"/>
+<rect x="568.3" y="652.0" width="0.4" height="5.6" fill="#388bfd"/>
 <rect x="567.3" y="651.0" width="9.0" height="7.6" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>coremessaging: 0 / 31 done (0.0%)</title>

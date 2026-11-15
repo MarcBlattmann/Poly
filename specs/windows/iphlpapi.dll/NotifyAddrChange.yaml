@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/iphlpapi.dll/NotifyAddrChange.yaml
+id: windows/api/iphlpapi.dll/NotifyAddrChange
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "NotifyAddrChange function (iphlpapi.h)", "CancelIPChangeNotify function", "OVERLAPPED structure"; iphlpapi.h, minwinbase.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Asks to be told (through an OVERLAPPED's event) when an IP address of the machine changes. Chrome's network change notifier creates an event with WSACreateEvent, puts it into an OVERLAPPED and calls NotifyAddrChange(&handle, &overlapped) once at start (browser and network service): the result is 997 (ERROR_IO_PENDING), a handle is written, and the event is signalled only when an address changes; at exit it calls CancelIPChangeNotify(&overlapped) -> TRUE. The tests show the pending state (Internal 0x103, GetOverlappedResult without waiting: 996), that the event stays unsignalled for 200 ms, and that the cancel returns TRUE, signals the event within 1 s, sets the OVERLAPPED's status to 0xC0000120 (STATUS_CANCELLED) and makes GetOverlappedResult fail with 995. Requests can be repeated on a reset OVERLAPPED and several can be pending at once; each cancel only affects its own.
+interface:
+  signature: "DWORD NotifyAddrChange(PHANDLE h, LPOVERLAPPED ov); BOOL CancelIPChangeNotify(LPOVERLAPPED ov)"
+  result: "NotifyAddrChange: ERROR_IO_PENDING (997) with an OVERLAPPED; CancelIPChangeNotify: TRUE or FALSE"
+chrome:
+  calls: "WSACreateEvent() -> NotifyAddrChange(&h, &ov{hEvent = event}) -> 997 (once in the browser, once in the network service); CancelIPChangeNotify(&ov) -> TRUE once at the end; WSACloseEvent(event)"
+rules:
+  pending: "NotifyAddrChange(&h, &ov) with ov.hEvent a WSA event: 997, h written (non-NULL), ov.Internal low 32 bits 0x103 (STATUS_PENDING); GetOverlappedResult(h, &ov, &n, FALSE) while pending: FALSE, error 996 (ERROR_IO_INCOMPLETE); the event is not signalled within 200 ms"
+  cancel: "CancelIPChangeNotify(&ov): TRUE (last error untouched); the event is signalled within 1 s; ov.Internal low 32 bits 0xC0000120; GetOverlappedResult: FALSE, error 995 (ERROR_OPERATION_ABORTED)"
+  cancel_twice_unknown: "a second cancel of the same OVERLAPPED, a cancel of an OVERLAPPED never used and a cancel of NULL: FALSE (the last error is not set)"
+  repeat: "after the cancel and a ResetEvent, a fresh OVERLAPPED with the same event: 997 and a handle again"
+  two_pending: "a second request with a second OVERLAPPED and event at the same time: 997; cancelling the first does not signal the second event; cancelling the second ends it; both events are signalled after both cancels"
+  no_event: "an OVERLAPPED whose hEvent is NULL: 997 and a handle; cancel TRUE"
+  null_handle: "a NULL handle pointer with an OVERLAPPED: 997 (a handle is not required)"
+errors:
+  io_pending: "ERROR_IO_PENDING (997)"
+  io_incomplete: "ERROR_IO_INCOMPLETE (996)"
+  aborted: "ERROR_OPERATION_ABORTED (995)"
+side_effects: "a pending request holds the OVERLAPPED until it is cancelled or an address changes"
+threading: "any thread; the event is signalled from a system thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). The tests assume that no IP address of the oracle changes during the 200 ms and 1 s waits (the event not being signalled after 200 ms is part of the record).
+not_covered: >
+  An actual address change (cannot be provoked offline), NotifyAddrChange without an OVERLAPPED (blocks until a change), completion through an I/O completion port, the written handle's use beyond GetOverlappedResult, NotifyIpInterfaceChange and NotifyUnicastIpAddressChange.

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "winhttpgetproxyforurl_args_b",
+      "exe_sha256": "358ddf3d6553c2911881c3afcb73b6c41bcc6511383a760064f74accbd3a4e6b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V2luSHR0cE9wZW4oV0lOSFRUUF9BQ0NFU1NfVFlQRV9OT19QUk9YWSk6IGhhbmRsZSBtYWRlIDEKV2luSHR0cEdldFByb3h5Rm9yVXJsIEFVVE9fREVURUNUIHdpdGggbm8gZGV0ZWN0IGZsYWdzOiByZXN1bHQgMCBsYXN0IGVycm9yIDg3Cldpbkh0dHBHZXRQcm94eUZvclVybCBOVUxMIHJlc3VsdCBzdHJ1Y3R1cmU6IHJlc3VsdCAwIGxhc3QgZXJyb3IgODcKV2luSHR0cENsb3NlSGFuZGxlIGFnYWluIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WinHttpOpen(WINHTTP_ACCESS_TYPE_NO_PROXY): handle made 1\nWinHttpGetProxyForUrl AUTO_DETECT with no detect flags: result 0 last error 87\nWinHttpGetProxyForUrl NULL result structure: result 0 last error 87\nWinHttpCloseHandle again 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "winhttpgetproxyforurl_args_c",
+      "exe_sha256": "1301325f0d95d47118afa13d3e847666f156101da84fa5a1b7e266215d299fa6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V2luSHR0cEdldFByb3h5Rm9yVXJsIG9wdGlvbnMgd2l0aCBubyBmbGFnczogcmVzdWx0IDAgbGFzdCBlcnJvciA4NwpXaW5IdHRwR2V0UHJveHlGb3JVcmwgTlVMTCBVUkw6IHJlc3VsdCAwIGxhc3QgZXJyb3IgODcKV2luSHR0cEdldFByb3h5Rm9yVXJsIGEgc3RyaW5nIHRoYXQgaXMgbm90IGEgVVJMOiByZXN1bHQgMCBsYXN0IGVycm9yIDEyMDA2Cldpbkh0dHBHZXRQcm94eUZvclVybCBvbiBhIGNsb3NlZCBzZXNzaW9uOiByZXN1bHQgMCBsYXN0IGVycm9yIDYKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WinHttpGetProxyForUrl options with no flags: result 0 last error 87\nWinHttpGetProxyForUrl NULL URL: result 0 last error 87\nWinHttpGetProxyForUrl a string that is not a URL: result 0 last error 12006\nWinHttpGetProxyForUrl on a closed session: result 0 last error 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

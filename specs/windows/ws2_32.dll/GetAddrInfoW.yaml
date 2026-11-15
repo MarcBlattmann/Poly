@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/GetAddrInfoW.yaml
+id: windows/api/ws2_32.dll/GetAddrInfoW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "GetAddrInfoW function (ws2tcpip.h)", "ADDRINFOW structure", "FreeAddrInfoW"; winsock2.h, ws2tcpip.h, ws2def.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  The wide form of getaddrinfo (ADDRINFOW lists, wide node and service strings). Chrome does not call it in stage 4 (it uses getaddrinfo); the tests show that it behaves like getaddrinfo for numeric hosts: the same flags in the results (0x4 for a literal), the same family and socket type checks, the same error codes in the return value, WSAGetLastError and GetLastError.
+interface:
+  signature: "INT GetAddrInfoW(PCWSTR node, PCWSTR service, const ADDRINFOW *hints, PADDRINFOW *result); void FreeAddrInfoW(PADDRINFOW)"
+chrome:
+  calls: "not called in stage 4 (the committed traces list getaddrinfo, not GetAddrInfoW)"
+rules:
+  numeric: "\"127.0.0.1\" with AF_UNSPEC/SOCK_STREAM: one entry, ai_flags 0x4, family 2, type 1, protocol 0, length 16, canonname NULL, port 0; \"127.0.0.1\" \"80\" AI_NUMERICHOST|AI_NUMERICSERV: port 80; \"::1\" \"http\" AF_INET6: family 23, length 28, port 80"
+  localhost: "\"localhost\" AF_INET: one entry 127.0.0.1 port 0, ai_flags 0"
+  null_node: "NULL node with AI_PASSIVE and service \"8080\": 0.0.0.0 port 8080, ai_flags 0; NULL node and NULL service: 11001"
+  errors: "a name with AI_NUMERICHOST: 11001; family 99: 10047; socket type 99: 10044; an unknown service name: 10109; the code is the return value, WSAGetLastError and GetLastError"
+  no_hints: "no hints: one entry with socket type 0, ai_flags 0x4"
+  non_ascii: "a numeric host with a non-ASCII digit character (U+0661) and AI_NUMERICHOST: 11001"
+  free: "FreeAddrInfoW(NULL) returns without harm"
+errors:
+  host_not_found: "WSAHOST_NOT_FOUND (11001)"
+  service: "WSATYPE_NOT_FOUND (10109)"
+  family: "WSAEAFNOSUPPORT (10047)"
+  socktype: "WSAESOCKTNOSUPPORT (10044)"
+side_effects: "allocates the result list"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  Everything the getaddrinfo sheet lists as not covered; GetAddrInfoExW (asynchronous and synchronous) was not tested.

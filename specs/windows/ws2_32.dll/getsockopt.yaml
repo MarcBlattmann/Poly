@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/getsockopt.yaml
+id: windows/api/ws2_32.dll/getsockopt
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Reads a socket option. Chrome reads SO_RCVBUF and SO_SNDBUF back on every UDP socket ((SOL_SOCKET, 0x1002, buf, &4) and 0x1001; value 0x100000 as set). Observed: some options are returned as a single byte and the length says so: SO_KEEPALIVE, SO_DONTROUTE and TCP_NODELAY on TCP, and IPV6_V6ONLY and SO_RANDOMIZE_PORT on UDP return length 1 (only the byte is written, the other bytes of a 4-byte buffer stay as they were); the rest (SO_TYPE, SO_ERROR, SO_RCVBUF, SO_SNDBUF, IPV6_V6ONLY on TCP, SO_REUSEADDR, SO_ACCEPTCONN...) are 4 bytes. Defaults of a fresh socket: SO_TYPE 1/2, SO_ACCEPTCONN 0 (1 on a listener), SO_ERROR 0, SO_KEEPALIVE 0, SO_REUSEADDR 0, SO_EXCLUSIVEADDRUSE 0, SO_BROADCAST 0 on UDP (WSAENOPROTOOPT on TCP), SO_MAX_MSG_SIZE 65507 on UDP and -1 on TCP, SO_CONNECT_TIME -1 unconnected and 0 right after connect, IP_TTL 128, IPV6_UNICAST_HOPS 128, IPV6_V6ONLY 1 (also on an IPv4 socket); SIO_KEEPALIVE_VALS {1,45000,45000} afterwards reads SO_KEEPALIVE 1, TCP_KEEPIDLE 45 and TCP_KEEPINTVL 45 (seconds). Short buffers: WSAEFAULT and the length is left as given; a larger buffer: the length becomes the option's size (4); with a 16-byte buffer the 4 bytes after the value are written as zeros.
+interface:
+  signature: "int getsockopt(SOCKET s, int level, int optname, char *optval, int *optlen)"
+  result: "0, or SOCKET_ERROR with the WSA error"
+chrome:
+  calls: "getsockopt (#7) 4 to 12 calls per run: (udp, 0xFFFF, 0x1002, buf, &4) and (udp, 0xFFFF, 0x1001, buf, &4), result 0, value 0x100000"
+rules:
+  sizes: "length 1 (one byte written, the rest of a 4-byte buffer untouched): SO_KEEPALIVE, SO_DONTROUTE, TCP_NODELAY on TCP, IPV6_V6ONLY and SO_RANDOMIZE_PORT on UDP; every other option observed is length 4 (SO_BROADCAST, SO_REUSEADDR, SO_EXCLUSIVEADDRUSE, SO_RCVBUF, SO_SNDBUF, SO_TYPE, SO_ERROR, SO_ACCEPTCONN, IPV6_V6ONLY on TCP, IPV6_ECN, SO_RANDOMIZE_PORT on TCP)"
+  defaults_tcp: "SO_TYPE 1, SO_ACCEPTCONN 0, SO_ERROR 0, SO_KEEPALIVE 0, SO_REUSEADDR 0, SO_EXCLUSIVEADDRUSE 0, SO_DONTROUTE 0, SO_OOBINLINE 0, SO_DEBUG 0, SO_RCVTIMEO 0, SO_SNDTIMEO 0, SO_RCVBUF and SO_SNDBUF positive, SO_MAX_MSG_SIZE -1, SO_CONNECT_TIME -1, TCP_NODELAY 0, IP_TTL 128, IP_TOS 0, IPV6_V6ONLY 1 even on an IPv4 socket; SO_BROADCAST: WSAENOPROTOOPT"
+  defaults_udp: "SO_TYPE 2, SO_MAX_MSG_SIZE 65507, SO_BROADCAST 0, SO_ACCEPTCONN: WSAENOPROTOOPT, TCP_NODELAY: WSAEINVAL (length 0), SO_RCVBUF/SO_SNDBUF positive"
+  ipv6: "a fresh IPv6 TCP socket: IPV6_V6ONLY 1, IPV6_UNICAST_HOPS 128"
+  connected: "client SO_ACCEPTCONN 0, listener 1, accepted 0; SO_CONNECT_TIME 0..9 on both connected sockets; accepted SO_TYPE 1"
+  protocol_info: "SO_PROTOCOL_INFOW (0x2005) on a connected IPv4 TCP socket: 0, length 628, iAddressFamily 2, iSocketType 1, iProtocol 6 (offsets 76, 88, 92 of the 628-byte WSAPROTOCOL_INFOW)"
+  keepalive_vals: "after WSAIoctl(SIO_KEEPALIVE_VALS, {1,45000,45000}): SO_KEEPALIVE reads 1 (one byte), TCP_KEEPIDLE 45 and TCP_KEEPINTVL 45 (4 bytes)"
+  errors_basic: "level 999: WSAEINVAL and the length is set to 0; unknown option 0x9999: WSAENOPROTOOPT and the length set to 0; not a socket: WSAENOTSOCK, length unchanged"
+  short_buffers: "SO_RCVBUF with length 1, 2, 3, 0: WSAEFAULT and the length is left as given; SO_LINGER and SO_TYPE with length 2: WSAEFAULT; NULL length pointer or NULL value: WSAEFAULT; length 8 or 16: 0, the length becomes 4 and the next 4 bytes of the buffer are zeroed; TCP_NODELAY with length 1 is accepted (length 1)"
+errors:
+  level: "WSAEINVAL 10022"
+  option: "WSAENOPROTOOPT 10042"
+  buffer: "WSAEFAULT 10014"
+  socket: "WSAENOTSOCK 10038"
+side_effects: "none; SO_ERROR is not cleared by the read"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  the machine-dependent defaults (buffer sizes, keepalive defaults) beyond "positive", options of IPv6 multicast, SO_PROTOCOL_INFOW fields other than the three listed.
