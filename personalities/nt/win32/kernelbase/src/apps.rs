@@ -52,7 +52,6 @@ poly_win32_rt::fail_exports!(
         EnumSystemLocalesW,
         FindAtomW,
         FlushInstructionCache,
-        FreeLibraryAndExitThread,
         GetDateFormatEx,
         GetDateFormatW,
         GetDiskFreeSpaceA,

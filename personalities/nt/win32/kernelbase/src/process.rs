@@ -635,6 +635,15 @@ pub unsafe extern "system" fn LoadLibraryW(name: *const u16) -> *mut u8 {
     unsafe { LoadLibraryExW(name, 0, 0) }
 }
 
+/// `FreeLibraryAndExitThread(module, exitCode)`: unload the module, then end the calling thread
+/// (a thread of the module's own code uses it so it never returns into unloaded code).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn FreeLibraryAndExitThread(module: *mut u8, code: u32) -> ! {
+    // SAFETY: the caller's module handle; the thread ends right after.
+    unsafe { FreeLibrary(module) };
+    crate::sync::ExitThread(code)
+}
+
 /// `FreeLibrary`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn FreeLibrary(module: *mut u8) -> i32 {

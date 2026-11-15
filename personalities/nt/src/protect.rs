@@ -38,6 +38,8 @@ impl HwProt {
 }
 
 const BASE_MASK: u32 = 0xFF;
+/// `PAGE_TARGETS_INVALID` and `PAGE_TARGETS_NO_UPDATE` (`winnt.h`).
+const PAGE_TARGETS_INVALID: u32 = 0x4000_0000;
 const MODIFIERS: u32 = PAGE_GUARD | PAGE_NOCACHE | PAGE_WRITECOMBINE;
 
 /// A checked `PAGE_*` value.
@@ -48,6 +50,10 @@ impl Protection {
     /// Check `value` (see the module docs). `private`: for private memory,
     /// where the copy-on-write protections are refused.
     pub fn new(value: u32, private: bool) -> Result<Protection, NtStatus> {
+        // `PAGE_TARGETS_INVALID` / `PAGE_TARGETS_NO_UPDATE` (0x40000000, Learn: "Memory Protection
+        // Constants"): a control-flow-guard attribute of executable pages. Poly has no CFG bitmap, so
+        // it is accepted with an execute protection and dropped (V8 asks for it).
+        let value = if value & PAGE_TARGETS_INVALID != 0 && value & 0xF0 != 0 { value & !PAGE_TARGETS_INVALID } else { value };
         let base = value & BASE_MASK;
         let modifiers = value & !BASE_MASK;
         let ok = base.is_power_of_two()
@@ -140,6 +146,14 @@ pub fn view_allowed(section: Protection, view: Protection) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_cfg_attribute_goes_with_execute_protections_only() {
+        use super::*;
+        assert_eq!(Protection::new(0x4000_0040, true).unwrap().value(), PAGE_EXECUTE_READWRITE);
+        assert_eq!(Protection::new(0x4000_0020, true).unwrap().value(), PAGE_EXECUTE_READ);
+        assert!(Protection::new(0x4000_0004, true).is_err());
+    }
+
     use super::*;
 
     #[test]

@@ -150,6 +150,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("LoadLibraryW", "api-ms-win-core-libraryloader-l1-2-0"),
     ("GetProcAddress", "api-ms-win-core-libraryloader-l1-1-0"),
     ("FreeLibrary", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("FreeLibraryAndExitThread", "api-ms-win-core-libraryloader-l1-1-0"),
     // ADR 0114: 7-Zip asks for it with `GetProcAddress`.
     ("SetDefaultDllDirectories", "api-ms-win-core-libraryloader-l1-1-0"),
     // Memory (memoryapi.h, heapapi.h, winbase.h).

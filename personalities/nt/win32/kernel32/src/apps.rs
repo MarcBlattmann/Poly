@@ -153,7 +153,6 @@ poly_win32_rt::fail_exports!(
         FlushInstructionCache,
         FoldStringW,
         FreeEnvironmentStringsA,
-        FreeLibraryAndExitThread,
         GetAppContainerNamedObjectPath,
         GetBinaryTypeA,
         GetBinaryTypeW,
