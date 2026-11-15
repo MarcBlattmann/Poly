@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32.dll/ImageList_GetIcon.yaml
+id: windows/api/comctl32.dll/ImageList_GetIcon
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Makes a new icon from an image of the list (colour bitmap and mask of the image's size, hotspot at the middle); the caller destroys the icon with DestroyIcon. Every call gives a new handle.
+interface:
+  signature: "HICON ImageList_GetIcon(HIMAGELIST himl, int i, UINT flags)"
+rules:
+  icon: "an 8x8 image of a list with a mask gives GetIconInfo fIcon 1, hotspot (4,4) (half the size), a colour bitmap of 32 bits 8x8 and a mask of 1 bit 8x8; a 16x12 list gives hotspot (8,6) and 16x12 bitmaps"
+  pixels: "image 0 (mask: left four pixels transparent, right four opaque, red image): colour (1,1) #000000 and mask bit (1,1) 1 (transparent), colour (6,1) #FF0000 and mask 0; an opaque image gives its colour (#00FF00) and mask 0 everywhere; an image that is entirely masked gives colour #000000 and mask 1; the flags ILD_NORMAL and ILD_TRANSPARENT give the same icon; ILD_MASK gives black colour at the opaque pixels too (#000000 at (6,1)) with the same mask"
+  no_mask_list: "a list without a mask gives an icon with an all-zero mask (0 everywhere) and the image colour (#FFFF00)"
+  handles: "two calls give two different handles; DestroyIcon returns TRUE; the icon can be given to ImageList_ReplaceIcon and gives the same pixels when drawn from the other list"
+  roundtrip: "a module icon loaded at 16x16 and put into a list with ImageList_ReplaceIcon(-1) is drawn (DrawIconEx and ImageList_Draw) with the same 256 pixels, the pixel (1,1) #1EC81E; ImageList_GetIcon of it and ImageList_ReplaceIcon of that into another list draw the same again; the icon is not consumed by ImageList_ReplaceIcon; a 32x32 icon appended to a 16x16 list is accepted (index 1, count 2)"
+errors:
+  bad_index: "an index past the end and -1: NULL, last error unchanged; a NULL list: NULL"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  The screen DC and device-dependent bitmaps (the tests draw into a 32-bit DIB section, whose pixels are read back, no fonts are involved), alpha blending of 32-bit images with an alpha channel (the test images have alpha 0 or 0xFF and the results here are for the image data given), ILD_SCALE and ILD_DPISCALE, overlay images and drag images, the colour of ILD_SELECTED and ILD_FOCUS (the system highlight colour #0078D4 on the oracle, COLOR_HIGHLIGHT, is used for blending).

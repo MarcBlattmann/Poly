@@ -67,6 +67,10 @@ pub extern "system" fn GetThreadPriority(thread: Handle) -> i32 {
 /// `SetThreadPriority`: -2 to 2, 15 and -15 (and 16 and -16, which are the same ends) are valid.
 #[unsafe(no_mangle)]
 pub extern "system" fn SetThreadPriority(thread: Handle, priority: i32) -> i32 {
+    // The background modes (`THREAD_MODE_BACKGROUND_BEGIN` and `_END`) are `sched.rs`'s.
+    if priority == 0x1_0000 || priority == 0x2_0000 {
+        return crate::sched::set_thread_priority_mode(thread, priority);
+    }
     let base = match priority {
         -2..=2 => priority,
         15 | 16 => 16,
@@ -95,51 +99,13 @@ pub extern "system" fn GetPriorityClass(process: Handle) -> u32 {
 /// `SetPriorityClass`.
 #[unsafe(no_mangle)]
 pub extern "system" fn SetPriorityClass(process: Handle, class: u32) -> i32 {
+    // `PROCESS_MODE_BACKGROUND_BEGIN` and `_END` are `sched.rs`'s.
+    if class == 0x10_0000 || class == 0x20_0000 {
+        return crate::sched::set_priority_class_mode(process, class);
+    }
     let Some(c) = nt_class(class) else { return fail(ERROR_INVALID_PARAMETER, FALSE) };
     let info = [0u8, c];
     // SAFETY: valid pointer.
     let st = unsafe { nt::NtSetInformationProcess(process, PROCESS_PRIORITY_CLASS, info.as_ptr(), 2) };
-    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
-}
-
-/// `GetThreadPriorityBoost`: Poly never turns the boost off.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetThreadPriorityBoost(thread: Handle, disabled: *mut i32) -> i32 {
-    if disabled.is_null() {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    let mut base = 0i32;
-    // SAFETY: valid pointers.
-    let st = unsafe {
-        nt::NtQueryInformationThread(
-            thread,
-            THREAD_POLY_BASE_PRIORITY,
-            (&mut base as *mut i32).cast(),
-            4,
-            core::ptr::null_mut(),
-        )
-    };
-    if !st.is_success() {
-        return fail_status(st, FALSE);
-    }
-    // SAFETY: the caller's out-pointer.
-    unsafe { disabled.write(FALSE) };
-    TRUE
-}
-
-/// `SetThreadPriorityBoost`: accepted for a thread that can be set, and ignored.
-#[unsafe(no_mangle)]
-pub extern "system" fn SetThreadPriorityBoost(thread: Handle, _disable: i32) -> i32 {
-    let mut base = 0i32;
-    // SAFETY: valid pointers.
-    let st = unsafe {
-        nt::NtQueryInformationThread(
-            thread,
-            THREAD_POLY_BASE_PRIORITY,
-            (&mut base as *mut i32).cast(),
-            4,
-            core::ptr::null_mut(),
-        )
-    };
     if st.is_success() { TRUE } else { fail_status(st, FALSE) }
 }

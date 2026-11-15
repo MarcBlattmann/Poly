@@ -39,6 +39,7 @@
     },
     {
       "name": "sw_chrome_show",
+      "session": "interactive-bottom",
       "exe_sha256": "7fb6f4d5bfb202082c30bc236042c50b33aa013c19391e8cc3f9c334a5928bd2",
       "status": "ran",
       "exit_code": 0,

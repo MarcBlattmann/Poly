@@ -940,3 +940,107 @@ loader's own "failed" log lines.
   `user32`) carry none of the fail-only exports or doc-derived functions of this step (`#[cfg(target_arch = "x86_64")]`,
   and `build.rs` skips the ordinals, forwarders and aliases there): a stub without parameters is wrong for `stdcall`, and the
   i686 `ntdll` has its own `RtlUnwind`.
+## Addendum (2026-11-15): S3 hunt, the browser window stays up
+
+Chrome's S3 window (`--disable-gpu --no-sandbox`, Poly's desktop, `cargo xtask win-app run --mode
+desktop`) died in every run: either before its window (an access violation in
+`KiUserExceptionDispatcher` after a stack overflow of the browser's main thread) or 60–90 s after
+it (a breakpoint `0x80000003` at `chrome.dll+0xc62f809` on a browser thread-pool worker, the
+address the S1 flake had). Found with Poly's own diagnostics only (the per-thread trail of the
+breaking thread, the other threads' calls beside it, the wait report's suspended threads and CPU
+columns, the kernel's `stub:` lines); Chrome's own log (`--enable-logging --log-file`, read back
+from the disk image with `debugfs`) had no message for either.
+
+1. **The stack overflow: no fonts on the `win-app` disk.** Each level of the recursion made the
+   same three win32k requests (`Desktop`, twice from user32 and once from gdi32's
+   `GetDeviceCaps`), the pattern of a screen-DPI query around a font set-up: the failure step 9
+   recorded for stage 1 (Chrome's UI font set-up finds no face and starts over until the stack is
+   full). `chrome-win`'s disk carries Poly's fonts in `C:\Windows\Fonts`; `win-app`'s did not.
+   It does now (`winapps::disk`), and the `win-app` desktop file escapes `%` as `%%` (the Desktop
+   Entry Specification's field codes ate the `%20` and `%23` of a `data:` URL).
+2. **`GetThreadContext` of a suspended thread that waits in the kernel did not answer.** Chrome's
+   stack sampler (a browser thread, one in each renderer) suspends a thread every 50 ms, reads its
+   context and resumes it. Poly's `NtGetContextThread` waited (2 s, yielding) for the target to
+   park at its return to user mode, which a thread blocked in `NtRemoveIoCompletion` or
+   `NtWaitForMultipleObjects` does not reach: the wait report showed `p2 t24 suspend count 1
+   running` and the sampler with 19 s of system time; every sample kept its target suspended up to
+   2 s. A thread that does not run now has its user registers in the trap frame at the top of its
+   kernel stack (its last entry from ring 3); the kernel reads them there under the thread table's
+   lock (`thread::user_regs_of`, `arch::user::regs_at`), as Windows answers at once for a
+   suspended thread (Learn, `GetThreadContext`). `k32test`: a thread suspended in an infinite wait
+   gives its context in under a second and does not end while suspended.
+3. **The breakpoint: `K32GetModuleInformation` and `K32GetProcessMemoryInfo` were fail-only
+   stubs.** The breaking worker's trail ended, each time, in a batch of `stub:` prints 38 bytes
+   long, right after the UI thread posted it a task; the browser called
+   `kernel32!K32GetModuleInformation` 900 times in a run (and `K32GetProcessMemoryInfo`). Both are
+   implemented from Learn: `MODULEINFO` from the loader's module list and the module's PE headers
+   (`AddressOfEntryPoint`; another process's modules answer `ERROR_PARTIAL_COPY` for now),
+   `PROCESS_MEMORY_COUNTERS[_EX[2]]` from a new `NtQueryInformationProcess(ProcessVmCounters)`
+   that reports the kernel's page counts (working set, its peak, the process's own pages as its
+   commit and private usage; Poly counts no reserved address space, so the virtual sizes are the
+   working set's). With them the browser ran through every following run (table below).
+4. **The other constantly hit stubs, from Learn** (`poly_kernelbase::priority`,
+   `kernelbase/src/sched.rs`): `Set/GetThreadPriority`, `Set/GetThreadPriorityBoost`,
+   `Set/GetProcessPriorityBoost`, `Set/GetPriorityClass` (kept per process and read back, every
+   documented value accepted, the background modes only for the caller; Poly's scheduler has no
+   priorities yet), `SetThreadInformation` (sizes checked), `GetThreadTimes` (new
+   `NtQueryInformationThread(ThreadTimes)` from the kernel's per-thread CPU time; the thread's
+   creation time is its process's), `QueryThreadCycleTime` (its kernel + user time in 100 ns
+   units stands in for cycles). The table they keep takes no lock and allocates nothing, because
+   the sampler asks while the thread it reads is suspended. `GetThreadContext`, `SetThreadContext`
+   and `TerminateThread` are the same wrappers as `win-git-bash`'s (ADR 0194), placed identically.
+
+**Memory.** With ADR 0188's shared image pages (merged from `main`) a desktop run peaks at about
+500 MiB of user pages, 200 MiB of page cache and 80 MiB of kernel heap (seven renderers, a GPU and
+two utility processes); the default 4 GiB is enough (`win-app` keeps its 4 GiB default; the
+`--memory=6G` of the first S3 runs is not needed).
+
+## Addendum (2026-11-15): S3 hunt 2, the page paints the way it does on Windows
+
+**Context.** Round 1 saw Chrome's browser UI but a white page. Every run of round 2, round 1's
+code included, took another path: the GPU process created its "Intermediate D3D Window" (a
+layered `WS_CHILD` of the browser's window, as on Windows, `s3-windows.md` step 4), win32k
+refused it, and the GPU process stopped on a CHECK three times, after which the browser exited
+("GPU process isn't usable"). Round 1's runs never reached that window and drew through GDI
+(`SetWorldTransform` 7 000-10 000 times a run, 0 times in round 2), most likely because of state
+in its long-lived profile. The path of round 2 is Windows' own: Chrome's software compositor
+(`--disable-gpu`) rasterises each frame itself, copies it into a Direct3D 11 texture, and shows
+it with a DXGI composition swap chain that DirectComposition puts into that child window.
+
+**Decision.** Poly provides that path from public documentation and the public SDK headers
+(interface identifiers, vtable orders, structure layouts of `d3d11.h`, `dxgi.h`, `dxgi1_2.h`,
+`dcomp.h`; `dcomp.h` is C++ only, its overloaded methods take their slots in reverse order of
+declaration as the Microsoft C++ ABI lays them out):
+
+1. **Layered child windows** for a process whose manifest declares Windows 8 or later
+   (`supportedOS`; Learn, "Layered Windows"). Without one the window is still refused without a
+   last error (`SetLayeredWindowAttributes.yaml` `children`). `user32` tells win32k once
+   (`Request::LayeredChildren`) when it is asked for such a window.
+2. **`dxgi.dll`**: a factory (`IDXGIFactory`, `1`, `2`) with one software adapter
+   (`DXGI_ADAPTER_FLAG_SOFTWARE`, the basic render driver's ids) whose one output is the screen;
+   swap chains are made by `d3d11.dll` (`PolyD3D11CreateSwapChain*`, found with
+   `GetProcAddress` so the two DLLs do not import each other).
+3. **`d3d11.dll`**: a software device. 2D textures live in memory; `Map`/`Unmap`, `CopyResource`,
+   `CopySubresourceRegion`, `UpdateSubresource`, `ClearRenderTargetView`, render target views,
+   `IDXGIDevice1` (its adapter is dxgi's), `ID3D11Multithread`. Drawing with shaders is not
+   implemented (Chrome's software path does not draw); every method that is not implemented logs
+   `stub: d3d11: <interface>::<method>` the first time and fails, so the next program that needs
+   one says which. Swap chains present their back buffer into their window with GDI
+   (`SetDIBitsToDevice`); the first three presents are logged (`d3d11: present ...`).
+4. **`dcomp.dll`**: devices (`IDCompositionDevice`, `IDCompositionDesktopDevice`), targets for an
+   HWND, visuals. `Commit` binds each swap chain that is the content of a target's visual to the
+   target's window (`PolyD3D11BindSwapChain`); offsets, transforms and clips are accepted and not
+   applied (Chrome's visual is at the window's origin).
+5. **A child window draws into its top-level window's surface** (ADR 0128 addendum below), also
+   from another process: the GPU process's present reaches the browser window's surface.
+6. **gdi32 world transformations** (`SetGraphicsMode`, `Set/Get/ModifyWorldTransform`,
+   `CombineTransform`; drawing, clipping and `BitBlt` follow them), `StretchBlt`,
+   `StretchDIBits`, `SetDIBitsToDevice`, `Set/GetStretchBltMode`, and `CreateDIBSection` over the
+   section it is given (it ignored `hSection`).
+
+**Consequences.** The page paints: green with its heading (`chrome-win-s3-hunt-2-page-paints-green.png`),
+also after a maximize (`...-maximized-by-caption-dclick.png`). The `0xc62f809` breakpoint of the
+browser still comes in some runs (once 35 s after the window without input, once around a
+maximize and restore); in runs with a slow start (window after 30 s, Chrome's services restarted)
+the page stays "Loading". Both are open (hand-off `chrome-win-s3-hunt-2.md`). The trace now names
+the win32k request of each `PolyUserCall` (`win32k#0x0(...) "CreateWindow { ... }"`).

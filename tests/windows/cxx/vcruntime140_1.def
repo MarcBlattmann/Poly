@@ -1,0 +1,8 @@
+; Import names of vcruntime140_1.dll for the C++ Windows test programs built by Microsoft's
+; compiler (`poly-cxx: compiler=msvc`, tools/pipeline/windows/msvc-build.ps1; ADR 0199). The
+; DLL's export table has exactly these names (exported names are ABI facts, CLEAN_ROOM.md).
+LIBRARY vcruntime140_1.dll
+EXPORTS
+    __CxxFrameHandler4
+    __NLG_Dispatch2
+    __NLG_Return2

@@ -164,7 +164,10 @@ impl Notify {
         status: NtStatus,
         info: u64,
     ) {
-        if self.event == 0 && self.apc_routine == 0 {
+        // A file with a completion port gets its packet for a request that finished at once, too
+        // (unless the file asked to skip it on success).
+        let has_port = sys.io.file(file.1).is_some_and(|r| r.port.is_some());
+        if self.event == 0 && self.apc_routine == 0 && !has_port {
             return;
         }
         if let Ok(mut irp) = self.irp(sys, caller, file, false, IrpOp::Write { offset: None, data: Vec::new(), key: 0 })

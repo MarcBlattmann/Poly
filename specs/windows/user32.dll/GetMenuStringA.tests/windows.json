@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "gmsa_text",
+      "exe_sha256": "e287e6c77ebe5d6eb15217e077208fb4faf5b4fd7ef45077b4859ca0a61b3154",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QU5TSSBjb2RlIHBhZ2UgMTI1Mgpwb3NpdGlvbiAwOiA0IGVycj0tMiBieXRlcyAnT3Blbicgd3JpdHRlbj01CnBvc2l0aW9uIDEgKGhpZ2ggYnl0ZXMpOiAxMCBlcnI9LTIgYnl0ZXMgJ2NhZjxlOT4gPDgwPiA8ODE+IDxmZj4nIHdyaXR0ZW49MTEKcG9zaXRpb24gMiAoVSs0RTJELCBVKzA0MTYsIFUrMjBBQzogbm8gQU5TSSBmb3JtKTogNyBlcnI9LTIgYnl0ZXMgJ2NhZjxlOT4/Pzw4MD4nIHdyaXR0ZW49OApzZXBhcmF0b3I6IDAgZXJyPS0xIGJ5dGVzICcnIHdyaXR0ZW49MQplbXB0eSB0ZXh0OiAwIGVycj0tMSBieXRlcyAnJyB3cml0dGVuPTEKcG9wdXAgYnkgcG9zaXRpb246IDUgZXJyPS0yIGJ5dGVzICdQb3B1cCcgd3JpdHRlbj02CmJ5IGNvbW1hbmQgMjogMTAgZXJyPS0yIGJ5dGVzICdjYWY8ZTk+IDw4MD4gPDgxPiA8ZmY+JyB3cml0dGVuPTExCmJ5IGNvbW1hbmQgOTk5IChhYnNlbnQpOiAwIGVycj0xNDU2IGJ5dGVzICcnIHdyaXR0ZW49MQpwb3NpdGlvbiA5OSAoYWJzZW50KTogMCBlcnI9MTQ1NiBieXRlcyAnJyB3cml0dGVuPTEKc2l6ZSA0IG9mICdPcGVuJzogMyBlcnI9LTIgYnl0ZXMgJ09wZScgd3JpdHRlbj00CnNpemUgNSBvZiAnT3Blbic6IDQgZXJyPS0yIGJ5dGVzICdPcGVuJyB3cml0dGVuPTUKc2l6ZSAzIG9mICdPcGVuJzogMiBlcnI9LTIgYnl0ZXMgJ09wJyB3cml0dGVuPTMKc2l6ZSAxOiAwIGVycj0tMSBieXRlcyAnJyB3cml0dGVuPTEKc2l6ZSAwOiA0IGVycj0tMiBieXRlcyAnJyB3cml0dGVuPTAKc2l6ZSAtMTogNCBlcnI9LTIgYnl0ZXMgJ09wZW4nIHdyaXR0ZW49NQpzaXplIDYgb2YgdGhlIGhpZ2gtYnl0ZSB0ZXh0OiA1IGVycj0tMiBieXRlcyAnY2FmPGU5PiAnIHdyaXR0ZW49NgpzaXplIDQgb2YgdGhlIG1peGVkIHRleHQ6IDMgZXJyPS0yIGJ5dGVzICdjYWYnIHdyaXR0ZW49NApOVUxMIGJ1ZmZlciwgc2l6ZSAwICh0aGUgbGVuZ3RoKTogNApOVUxMIGJ1ZmZlciwgc2l6ZSAwIGZvciB0aGUgbWl4ZWQgdGV4dDogNwpiYWQgbWVudTogMCBlcnI9ODcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ANSI code page 1252\nposition 0: 4 err=-2 bytes 'Open' written=5\nposition 1 (high bytes): 10 err=-2 bytes 'caf<e9> <80> <81> <ff>' written=11\nposition 2 (U+4E2D, U+0416, U+20AC: no ANSI form): 7 err=-2 bytes 'caf<e9>??<80>' written=8\nseparator: 0 err=-1 bytes '' written=1\nempty text: 0 err=-1 bytes '' written=1\npopup by position: 5 err=-2 bytes 'Popup' written=6\nby command 2: 10 err=-2 bytes 'caf<e9> <80> <81> <ff>' written=11\nby command 999 (absent): 0 err=1456 bytes '' written=1\nposition 99 (absent): 0 err=1456 bytes '' written=1\nsize 4 of 'Open': 3 err=-2 bytes 'Ope' written=4\nsize 5 of 'Open': 4 err=-2 bytes 'Open' written=5\nsize 3 of 'Open': 2 err=-2 bytes 'Op' written=3\nsize 1: 0 err=-1 bytes '' written=1\nsize 0: 4 err=-2 bytes '' written=0\nsize -1: 4 err=-2 bytes 'Open' written=5\nsize 6 of the high-byte text: 5 err=-2 bytes 'caf<e9> ' written=6\nsize 4 of the mixed text: 3 err=-2 bytes 'caf' written=4\nNULL buffer, size 0 (the length): 4\nNULL buffer, size 0 for the mixed text: 7\nbad menu: 0 err=87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

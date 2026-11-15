@@ -1,0 +1,54 @@
+; Import names of vcruntime140.dll that the C++ Windows test programs may use
+; when they take their C++ runtime from it (ADR 0199; `poly-cxx: runtime=vcruntime140`
+; or `win build --cxx-runtime vcruntime140`). Names from the DLL's export table
+; (exported names are ABI facts, CLEAN_ROOM.md); `win build` makes the import
+; library from this file.
+LIBRARY vcruntime140.dll
+EXPORTS
+    __CxxFrameHandler
+    __CxxFrameHandler2
+    __CxxFrameHandler3
+    _CxxThrowException
+    __C_specific_handler
+    _purecall
+    memcpy
+    memmove
+    memset
+    memcmp
+    __current_exception
+    __current_exception_context
+    __uncaught_exception
+    __uncaught_exceptions
+    __processing_throw
+    __DestructExceptionObject
+    __std_exception_copy
+    __std_exception_destroy
+    __std_type_info_compare
+    __std_type_info_hash
+    __std_terminate
+    __std_type_info_name
+    __std_type_info_destroy_list
+    __RTDynamicCast
+    __RTtypeid
+    __RTCastToVoid
+    _is_exception_typeof
+    __AdjustPointer
+    __CxxDetectRethrow
+    __BuildCatchObject
+    __TypeMatch
+    __unDName
+    __unDNameEx
+    set_unexpected
+    _get_unexpected
+    unexpected
+    _set_se_translator
+    _local_unwind
+    memchr
+    strchr
+    strrchr
+    strstr
+    wcschr
+    wcsrchr
+    wcsstr
+    __intrinsic_setjmp
+    longjmp

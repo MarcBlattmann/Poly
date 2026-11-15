@@ -169,6 +169,7 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::UnmapViewOfSectionEx, &[H, V, V]),
     (Service::SuspendProcess, &[H]),
     (Service::ResumeProcess, &[H]),
+    (Service::GetCurrentProcessorNumber, &[]),
 ];
 
 /// The 32-bit signature of `service`, if it has one.

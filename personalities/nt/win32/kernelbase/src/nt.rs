@@ -347,6 +347,8 @@ unsafe extern "system" {
     ) -> NtStatus;
     pub fn NtSetInformationThread(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
     pub fn NtSetInformationProcess(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
+    /// The CPU number the caller runs on, as the return value (Poly's `NtGetCurrentProcessorNumber`).
+    pub fn NtGetCurrentProcessorNumber() -> u32;
     pub fn NtTerminateProcess(process: Handle, status: NtStatus) -> NtStatus;
 
     pub fn NtQuerySystemTime(time: *mut i64) -> NtStatus;

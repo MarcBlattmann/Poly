@@ -2248,6 +2248,8 @@ fn source_checks(changed: Option<&[String]>) -> Result {
     wayland::run(&root(), &["--check".into()])?;
     eprintln!("==> global_asm! labels");
     asmlabels::check(&kernel_dir().join("src"))?;
+    eprintln!("==> 32-bit forms of the Win32 modules' raw-dylib links");
+    wow64::check_links(&root())?;
     eprintln!("==> merge conflict markers");
     conflicts::check(&root(), changed)?;
     eprintln!("==> the CI workflow runs every part and boot test shard");

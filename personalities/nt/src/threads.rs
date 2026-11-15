@@ -10,11 +10,12 @@ use crate::abi;
 use crate::consts::*;
 use crate::kernel::{NtKernel, ThreadCreate};
 use crate::objects::{Result, return_handle};
+use crate::procattrs::ProcAttrs;
 use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::access::{
-    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION,
-    THREAD_QUERY_LIMITED_INFORMATION, THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME, THREAD_TERMINATE,
+    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_SET_INFORMATION, THREAD_GET_CONTEXT,
+    THREAD_QUERY_INFORMATION, THREAD_SET_CONTEXT, THREAD_SET_INFORMATION, THREAD_SUSPEND_RESUME, THREAD_TERMINATE,
 };
 use poly_ntobj::status::*;
 use poly_ntobj::{Handle, NtStatus, ObjectType, ProcessId, ThreadRef};
@@ -217,6 +218,11 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         let jobs = crate::job::resolve_jobs(sys, &caller, &extra.jobs)?;
         Ok((jobs, sys.jobs.check_create(caller.process, extra.breakaway)?))
     })?;
+    let mitigation = extra.mitigation_state();
+    let desktop = {
+        let spec = params.startup.desktop.clone();
+        k.with_state(|sys, proc, _| sys.winsta.child_start(&mut sys.objects, proc.pid, caller.thread, spec))
+    };
     let req = crate::kernel::ProcessCreate {
         image,
         params,
@@ -228,7 +234,9 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         inherit_only: extra.handle_list,
         jobs,
         join_creator_jobs: join,
-        dynamic_code_blocked: extra.mitigation & PROHIBIT_DYNAMIC_CODE != 0,
+        mitigation,
+        desktop,
+        error_mode: extra.error_mode,
         process_security,
         thread_security,
     };
@@ -243,18 +251,31 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
 /// `CREATE_BREAKAWAY_FROM_JOB`. The attribute list is `{ count: u64,
 /// { kind: u64, value: u64, size: u64 } * count }`; `kind` 1 is the handle
 /// list (`value` points at `size` bytes of handles), 2 the mitigation policy
-/// (`value` is the 64-bit mask), 3 the job list (as the handle list), 4 the
-/// breakaway request.
+/// (`value` points at the two 64-bit words, `size` 8 or 16), 3 the job list (as the handle list),
+/// 4 the breakaway request, 5 the creator's error mode (the 32-bit `value`), 6 the child
+/// process policy (`value` is the 32-bit value).
 #[derive(Default)]
 struct CreateAttributes {
     handle_list: Option<Vec<Handle>>,
-    mitigation: u64,
+    /// The two mitigation words (`PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY`; the second is 0 for a
+    /// value of 8 bytes or less).
+    mitigation: [u64; 2],
+    /// `PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY`'s value.
+    child_policy: u32,
     jobs: Vec<u64>,
     breakaway: bool,
+    /// The creator's error mode (`SetErrorMode`), which the child starts with.
+    error_mode: u32,
 }
 
-/// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON` (`winbase.h`).
-const PROHIBIT_DYNAMIC_CODE: u64 = 1 << 36;
+impl CreateAttributes {
+    /// The mitigation state the child starts with.
+    fn mitigation_state(&self) -> poly_kernelbase::mitigation::State {
+        poly_kernelbase::mitigation::State::new()
+            .with_creation_words(self.mitigation[0], self.mitigation[1])
+            .with_child_policy(self.child_policy)
+    }
+}
 
 fn read_create_attributes<K: NtKernel>(k: &mut K, at: u64) -> Result<CreateAttributes> {
     let mut out = CreateAttributes::default();
@@ -276,9 +297,17 @@ fn read_create_attributes<K: NtKernel>(k: &mut K, at: u64) -> Result<CreateAttri
         };
         match kind {
             1 => out.handle_list = Some(list(k)?.into_iter().map(Handle).collect()),
-            2 => out.mitigation = value,
+            2 => {
+                // `value` points at the caller's words (ADR 0192).
+                out.mitigation[0] = abi::read_u64(k, value)?;
+                if size >= 16 {
+                    out.mitigation[1] = abi::read_u64(k, value + 8)?;
+                }
+            }
+            6 => out.child_policy = value as u32,
             3 => out.jobs = list(k)?,
             4 => out.breakaway = value != 0,
+            5 => out.error_mode = value as u32,
             _ => {}
         }
     }
@@ -369,7 +398,7 @@ pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
     /// `ProcessPriorityClass`: a `PROCESS_PRIORITY_CLASS` (foreground flag, class 1 to 6).
     const PROCESS_PRIORITY_CLASS: u64 = 18;
     if class == PROCESS_PRIORITY_CLASS {
-        let pid = process_of(k, Handle(h), poly_ntobj::access::PROCESS_SET_INFORMATION)?;
+        let pid = process_of(k, Handle(h), PROCESS_SET_INFORMATION)?;
         if length != 2 {
             return Err(STATUS_INFO_LENGTH_MISMATCH);
         }
@@ -386,6 +415,21 @@ pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
         }
         return Ok(STATUS_SUCCESS);
     }
+    // The values a process keeps for itself and a child inherits (`crate::procattrs`): any
+    // process whose handle has `PROCESS_SET_INFORMATION`.
+    if ProcAttrs::class_size(class).is_some() {
+        let size = ProcAttrs::class_size(class).unwrap_or(0);
+        if length as usize != size {
+            return Err(STATUS_INFO_LENGTH_MISMATCH);
+        }
+        let pid = process_of(k, Handle(h), PROCESS_SET_INFORMATION)?;
+        let mut data = alloc::vec![0u8; size];
+        abi::read(k, info, &mut data)?;
+        return k.with_state(|sys, _, _| {
+            let attrs = sys.proc_attrs.entry(pid).or_insert_with(|| ProcAttrs::new(0));
+            attrs.set(class, &data).map(|()| STATUS_SUCCESS)
+        });
+    }
     if class != PROCESS_MITIGATION_POLICY {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
@@ -398,11 +442,35 @@ pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
     }
     let policy = abi::read_u32(k, info)?;
     let flags = abi::read_u32(k, info + 4)?;
-    k.with_state(|_, proc, _| match policy {
-        2 if flags & 1 != 0 => proc.dynamic_code_blocked = true,
-        4 if flags & 1 != 0 => proc.win32k_disabled = true,
-        _ => {}
+    let done = k.with_state(|_, proc, _| {
+        let mut state = proc.mitigation;
+        state.set(policy, flags).map(|()| proc.set_mitigation(state))
     });
+    // The Win32 error travels in the status (`STATUS_UNSUCCESSFUL` carries nothing): the failures
+    // are `kernelbase`'s to name; this service answers invalid parameter, not supported or denied.
+    done.map(|()| STATUS_SUCCESS).map_err(|e| match e {
+        poly_kernelbase::mitigation::SetError::InvalidParameter => STATUS_INVALID_PARAMETER,
+        poly_kernelbase::mitigation::SetError::NotSupported => STATUS_NOT_SUPPORTED,
+        poly_kernelbase::mitigation::SetError::AccessDenied => STATUS_ACCESS_DENIED,
+    })
+}
+
+/// `NtQueryInformationProcess(ProcessMitigationPolicy)` (class 52, Poly's reading: `info` is a
+/// `PROCESS_MITIGATION_POLICY_INFORMATION` whose `Policy` the caller fills and whose `Flags` the
+/// service writes): the flags word of the policy for the process `h` names (the caller or another
+/// process the handle may query).
+fn query_mitigation<K: NtKernel>(k: &mut K, h: u64, info: u64, length: u64) -> Result<NtStatus> {
+    if length != 8 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
+    let policy = abi::read_u32(k, info)?;
+    let flags = if pid == k.caller().process {
+        k.with_state(|_, proc, _| proc.mitigation.get(policy))
+    } else {
+        k.with_process(pid, |_, proc, _| proc.mitigation.get(policy)).ok_or(STATUS_PROCESS_IS_TERMINATING)?
+    };
+    abi::write_u32(k, info + 4, flags)?;
     Ok(STATUS_SUCCESS)
 }
 
@@ -436,6 +504,22 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
     }
     let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
     let le32 = |v: u32| v.to_le_bytes();
+    // What a process keeps for itself (`crate::procattrs`: the hard-error mode, the memory priority, the
+    // power-throttling state), the mitigation policies and the handle count, as the system keeps them.
+    if class == 52 {
+        return query_mitigation(k, h, buf, u64::from(length));
+    }
+    if ProcAttrs::class_size(u64::from(class)).is_some() {
+        let bytes = k.with_state(|sys, _, _| {
+            sys.proc_attrs
+                .get(&pid)
+                .copied()
+                .unwrap_or(ProcAttrs::new(0))
+                .get(u64::from(class))
+                .expect("a class it keeps")
+        });
+        return reply(k, buf, length, ret, &bytes);
+    }
     match class {
         PROCESS_BASIC_INFORMATION => {
             if length != PROCESS_BASIC_INFORMATION_SIZE as u32 && length != 64 {
@@ -472,18 +556,21 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
         }
         // IoCounters.
         2 => reply(k, buf, length, ret, &[0u8; 48]),
-        PROCESS_TIMES => query_process_times(k, pid, buf, length, ret),
+        PROCESS_TIMES => process_times_reply(k, pid, buf, length, ret),
         // DebugPort.
         7 => reply(k, buf, length, ret, &[0u8; 8]),
-        // DefaultHardErrorMode, PriorityBoost, BreakOnTermination.
-        12 | 22 | 29 => reply(k, buf, length, ret, &le32(0)),
+        // PriorityBoost, BreakOnTermination.
+        22 | 29 => reply(k, buf, length, ret, &le32(0)),
         // PriorityClass: PROCESS_PRIORITY_CLASS (foreground flag, class).
         18 => {
             let class = k.with_state(|_, proc, _| proc.priority_class);
             reply(k, buf, length, ret, &[0, class])
         }
-        // HandleCount.
-        20 => reply(k, buf, length, ret, &le32(8)),
+        // HandleCount: the open handles of the process.
+        20 => {
+            let n = k.with_state(|sys, _, _| sys.objects.process_handle_count(pid).unwrap_or(0));
+            reply(k, buf, length, ret, &le32(n as u32))
+        }
         // AffinityMask.
         21 => reply(k, buf, length, ret, &1u64.to_le_bytes()),
         // SessionInformation: the session id of the PEB.
@@ -536,8 +623,16 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
         36 => reply(k, buf, length, ret, &le32(pid.0 ^ 0x5EED_C0DE)),
         // ImageInformation (SECTION_IMAGE_INFORMATION).
         37 => reply(k, buf, length, ret, &[0u8; 64]),
-        // QuotaLimits and VmCounters have lengths Poly's callers do not use.
-        1 | 3 => Err(STATUS_INFO_LENGTH_MISMATCH),
+        // VmCounters: the plain structure or the extended one, by its exact length.
+        PROCESS_VM_COUNTERS => {
+            if length as usize != VM_COUNTERS_SIZE && length as usize != VM_COUNTERS_EX_SIZE {
+                return Err(STATUS_INFO_LENGTH_MISMATCH);
+            }
+            let c = k.memory_counters(pid).unwrap_or_default();
+            reply(k, buf, length, ret, &c.bytes()[..length as usize])
+        }
+        // QuotaLimits has a length Poly's callers do not use.
+        1 => Err(STATUS_INFO_LENGTH_MISMATCH),
         32 => Err(STATUS_INVALID_PARAMETER),
         _ => Err(STATUS_INVALID_INFO_CLASS),
     }
@@ -570,7 +665,7 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
                 _ => &[QUERY, LIMITED],
             };
             let tid = t(k, rights)?;
-            let (exit, teb, pid, start, priority, created) = k.with_state(|_sys, proc, _| {
+            let (exit, teb, pid, start, priority) = k.with_state(|_sys, proc, _| {
                 let th = proc.thread(tid);
                 (
                     proc.thread_exit_status(tid).unwrap_or(STATUS_PENDING),
@@ -578,10 +673,9 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
                     proc.pid,
                     th.map_or(0, |t| t.start),
                     th.map_or(0, |t| t.base_priority),
-                    0u64,
                 )
             });
-            let created = if created == 0 { k.process_times(pid).map_or(0, |t| t[0]) } else { created };
+            let affinity = k.thread_affinity(tid).unwrap_or(0);
             match class {
                 THREAD_BASIC_INFORMATION => {
                     let mut b = [0u8; THREAD_BASIC_INFORMATION_SIZE];
@@ -589,14 +683,17 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
                     b[8..16].copy_from_slice(&teb.to_le_bytes());
                     b[16..24].copy_from_slice(&u64::from(pid.0).to_le_bytes());
                     b[24..32].copy_from_slice(&tid.0.to_le_bytes());
-                    b[32..40].copy_from_slice(&1u64.to_le_bytes());
+                    b[32..40].copy_from_slice(&affinity.to_le_bytes());
                     b[40..44].copy_from_slice(&8i32.to_le_bytes());
                     b[44..48].copy_from_slice(&priority.to_le_bytes());
                     reply(k, buf, length, ret, &b)
                 }
                 1 => {
-                    let mut b = [0u8; 32];
+                    let [created, kernel, user] = k.thread_times(pid, tid).unwrap_or([0; 3]);
+                    let mut b = [0u8; KERNEL_USER_TIMES_SIZE];
                     b[0..8].copy_from_slice(&created.to_le_bytes());
+                    b[16..24].copy_from_slice(&kernel.to_le_bytes());
+                    b[24..32].copy_from_slice(&user.to_le_bytes());
                     reply(k, buf, length, ret, &b)
                 }
                 9 => reply(k, buf, length, ret, &start.to_le_bytes()),
@@ -628,6 +725,28 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
         }
         _ => Err(STATUS_INVALID_INFO_CLASS),
     }
+}
+
+/// `ThreadAffinityMask` (`ntddk.h`'s `THREADINFOCLASS`): `NtSetInformationThread` takes a
+/// `KAFFINITY`.
+pub const THREAD_AFFINITY_MASK: u64 = 4;
+
+/// `NtSetInformationThread(ThreadAffinityMask)`: the thread may run only on the CPUs of the mask
+/// (those the system has; a mask with none is `STATUS_INVALID_PARAMETER`). Needs
+/// `THREAD_SET_INFORMATION`.
+pub fn set_thread_affinity<K: NtKernel>(k: &mut K, h: Handle, info: u64, length: u64) -> Result<NtStatus> {
+    let tid = thread_of(k, h, THREAD_SET_INFORMATION)?;
+    if length != 8 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let mask = abi::read_u64(k, info)?;
+    k.set_thread_affinity(tid, mask)?;
+    Ok(STATUS_SUCCESS)
+}
+
+/// `NtGetCurrentProcessorNumber()`: the number of the CPU the calling thread runs on.
+pub fn get_current_processor_number<K: NtKernel>(k: &mut K, _regs: &SyscallRegs) -> Result<NtStatus> {
+    Ok(NtStatus(k.current_processor()))
 }
 
 pub fn suspend_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
@@ -708,17 +827,54 @@ pub fn set_context_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<
     Ok(STATUS_SUCCESS)
 }
 
-/// `NtQueryInformationProcess(ProcessTimes)` (ADR 0087): the creation time
-/// Poly noted when the process was made (a `FILETIME`), an exit time of 0
-/// (Poly keeps no times of ended processes), and the kernel and user CPU
-/// time the kernel counted ([`NtKernel::process_times`]), in 100 ns units.
-fn query_process_times<K: NtKernel>(k: &mut K, pid: ProcessId, buf: u64, length: u32, ret: u64) -> Result<NtStatus> {
+/// `NtQueryInformationProcess(ProcessTimes)` (ADR 0087): the creation time Poly noted when the
+/// process was made (a `FILETIME`), an exit time of 0 (Poly keeps no times of ended processes), and
+/// the kernel and user CPU time the kernel counted ([`NtKernel::process_times`]), in 100 ns units.
+fn process_times_reply<K: NtKernel>(k: &mut K, pid: ProcessId, buf: u64, length: u32, ret: u64) -> Result<NtStatus> {
     let [created, kernel, user] = k.process_times(pid).unwrap_or([0; 3]);
     let mut b = [0u8; KERNEL_USER_TIMES_SIZE];
     b[0..8].copy_from_slice(&created.to_le_bytes());
     b[16..24].copy_from_slice(&kernel.to_le_bytes());
     b[24..32].copy_from_slice(&user.to_le_bytes());
     reply(k, buf, length, ret, &b)
+}
+
+/// A process's memory in pages, what `VM_COUNTERS_EX` (`ntddk.h`) reports in bytes: the page
+/// faults, the pages it maps now (its working set) and the most it mapped at once, and its own
+/// pages (not shared with another process or the page cache: its commit charge and private
+/// usage) now and at most. Poly does not count reserved address space: the virtual sizes are
+/// the working set's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VmCounters {
+    pub faults: u64,
+    pub resident: u64,
+    pub peak_resident: u64,
+    pub private: u64,
+    pub peak_private: u64,
+}
+
+impl VmCounters {
+    /// The `VM_COUNTERS_EX` bytes (x64): `PeakVirtualSize`, `VirtualSize`, `PageFaultCount`
+    /// (a `ULONG`, padded), `PeakWorkingSetSize`, `WorkingSetSize`, the four quota pool sizes
+    /// (0), `PagefileUsage`, `PeakPagefileUsage`, `PrivateUsage`.
+    pub fn bytes(&self) -> [u8; VM_COUNTERS_EX_SIZE] {
+        const PAGE: u64 = 4096;
+        let peak_resident = self.peak_resident.max(self.resident) * PAGE;
+        let resident = self.resident * PAGE;
+        let private = self.private * PAGE;
+        let peak_private = self.peak_private.max(self.private) * PAGE;
+        let mut b = [0u8; VM_COUNTERS_EX_SIZE];
+        let mut put = |at: usize, v: u64| b[at..at + 8].copy_from_slice(&v.to_le_bytes());
+        put(0, peak_resident);
+        put(8, resident);
+        put(24, peak_resident);
+        put(32, resident);
+        put(72, private);
+        put(80, peak_private);
+        put(88, private);
+        b[16..20].copy_from_slice(&(self.faults.min(u64::from(u32::MAX)) as u32).to_le_bytes());
+        b
+    }
 }
 
 /// Answer a query with exactly `info`: every class has one length, any other is

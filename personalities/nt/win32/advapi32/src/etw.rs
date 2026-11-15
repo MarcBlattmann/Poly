@@ -9,7 +9,8 @@
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use poly_etw as etw;
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn SetLastError(error: u32);
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;

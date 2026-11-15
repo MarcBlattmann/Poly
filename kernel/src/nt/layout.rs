@@ -152,6 +152,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("netapi32.dll", super::NETAPI32),
         ("secur32.dll", super::SECUR32),
         ("dhcpcsvc.dll", super::DHCPCSVC),
+        ("mswsock.dll", super::MSWSOCK),
         ("dnsapi.dll", super::DNSAPI),
         ("dbghelp.dll", super::DBGHELP),
         // ADR 0170.
@@ -179,12 +180,31 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("propsys.dll", super::PROPSYS),
         ("wevtapi.dll", super::WEVTAPI),
         ("hid.dll", super::HID),
+        ("dxgi.dll", super::DXGI),
+        ("d3d11.dll", super::D3D11),
+        ("dcomp.dll", super::DCOMP),
     ] {
         if bytes.is_empty() {
             continue;
         }
         match create::install_file(&vr, &root, "Windows\\System32", name, bytes) {
             Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to System32"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
+        }
+    }
+    // Poly's own Visual C++ runtime (ADR 0199). A user who installs
+    // Microsoft's (`vc_redist`) keeps it: a file there without Poly's marker
+    // is not rewritten (owner decision 5).
+    for (name, bytes) in [("vcruntime140.dll", super::VCRUNTIME140), ("vcruntime140_1.dll", super::VCRUNTIME140_1)] {
+        if bytes.is_empty() {
+            continue;
+        }
+        match create::install_own_copy(&vr, &root, "Windows\\System32", name, bytes, create::OWN_COPY_MARKER) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to System32"),
+            Ok(create::Installed::Yielded) => {
+                crate::kprintln!("nt: layout: {name} in System32 is not Poly's (an installed runtime): kept")
+            }
             Ok(_) => {}
             Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
         }
@@ -210,14 +230,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
     }
     // The 32-bit modules go into SysWOW64, the System32 of a 32-bit program (ADR 0186; Learn:
     // "File System Redirector").
-    for (name, bytes) in [
-        ("ntdll.dll", super::NTDLL32),
-        ("kernelbase.dll", super::KERNELBASE32),
-        ("kernel32.dll", super::KERNEL32_32),
-        ("win32u.dll", super::WIN32U32),
-        ("gdi32.dll", super::GDI32_32),
-        ("user32.dll", super::USER32_32),
-    ] {
+    for &(name, bytes) in super::WOW64_DLLS {
         if bytes.is_empty() {
             continue;
         }

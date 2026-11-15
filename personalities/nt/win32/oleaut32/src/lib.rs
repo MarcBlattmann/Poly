@@ -22,7 +22,8 @@ extern crate alloc;
 use poly_kernelbase::oleaut::{self, *};
 use poly_win32_rt as _;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetProcessHeap() -> *mut u8;
     fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
@@ -299,7 +300,8 @@ pub unsafe extern "system" fn SysAllocStringByteLen(s: *const u8, len: u32) -> B
     }
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CompareStringW(locale: u32, flags: u32, a: *const u16, a_len: i32, b: *const u16, b_len: i32) -> i32;
 }

@@ -112,6 +112,11 @@ pub const PROCESS_BASIC_INFORMATION: u32 = 0;
 /// the creation, exit, kernel and user times as four `LARGE_INTEGER`s
 /// (ADR 0087).
 pub const PROCESS_TIMES: u32 = 4;
+/// `ProcessVmCounters` (`ntddk.h`'s `PROCESSINFOCLASS`): a `VM_COUNTERS` (88 bytes on x64) or
+/// a `VM_COUNTERS_EX` (96: `PrivateUsage` after it).
+pub const PROCESS_VM_COUNTERS: u32 = 3;
+pub const VM_COUNTERS_SIZE: usize = 88;
+pub const VM_COUNTERS_EX_SIZE: usize = 96;
 pub const KERNEL_USER_TIMES_SIZE: usize = 32;
 /// `ProcessWow64Information` (Learn: `NtQueryInformationProcess`): a `ULONG_PTR`, nonzero (Poly:
 /// the address of its 32-bit PEB) when the process runs as a 32-bit one (ADR 0186).
@@ -119,6 +124,8 @@ pub const PROCESS_WOW64_INFORMATION: u32 = 26;
 
 /// `THREADINFOCLASS` (`winternl.h` / `ntpsapi.h`).
 pub const THREAD_BASIC_INFORMATION: u32 = 0;
+/// `ThreadTimes` (`ntddk.h`): a `KERNEL_USER_TIMES` (creation, exit, kernel, user).
+pub const THREAD_TIMES: u32 = 1;
 
 /// `sizeof(PROCESS_BASIC_INFORMATION)` on x64 (`winternl.h`): `NTSTATUS
 /// ExitStatus` (0, 4 pad), `PPEB PebBaseAddress` (8), `ULONG_PTR

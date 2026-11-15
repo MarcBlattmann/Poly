@@ -75,6 +75,12 @@ pub struct NtSystem {
     /// The job objects and which process belongs to which (ADR 0169).
     pub jobs: crate::job::Jobs,
 
+    /// The window stations and desktops and who is on them (ADR 0192).
+    pub winsta: crate::winsta::WinSta,
+    /// What a process keeps that another can set and a child inherits: error mode, memory
+    /// priority, power throttling ([`crate::procattrs`]). A process without an entry has the
+    /// defaults.
+    pub proc_attrs: BTreeMap<ProcessId, crate::procattrs::ProcAttrs>,
     /// Poly's i686 `ntdll.dll` (ADR 0186), mapped into every 32-bit process as the 64-bit one is
     /// into the others; empty when the kernel has none (a 32-bit executable is then refused).
     pub ntdll32: &'static [u8],
@@ -116,6 +122,8 @@ impl NtSystem {
             process_exits: BTreeMap::new(),
             win32k: crate::win32k::Win32k::default(),
             jobs: crate::job::Jobs::default(),
+            winsta: crate::winsta::WinSta::default(),
+            proc_attrs: BTreeMap::new(),
             ntdll32: &[],
             sections: BTreeMap::new(),
             next_key: 1,
@@ -181,9 +189,11 @@ impl NtSystem {
                 ObjectType::IoCompletion => self.io.port_deleted(d.cookie),
                 ObjectType::Process => {
                     self.process_exits.remove(&ProcessId(d.cookie as u32));
+                    self.proc_attrs.remove(&ProcessId(d.cookie as u32));
                     self.jobs.process_forgotten(ProcessId(d.cookie as u32));
                 }
                 ObjectType::Job => self.jobs.deleted(d.cookie),
+                ObjectType::WindowStation | ObjectType::Desktop => self.winsta.deleted(&mut self.objects, d.id),
                 _ => {}
             }
             // A closed file object's or a deleted job's reference on its
@@ -241,6 +251,8 @@ pub struct NtProcess {
     /// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON`:
     /// memory cannot be made executable (ADR 0169).
     pub dynamic_code_blocked: bool,
+    /// Its mitigation policies (ADR 0192): the creation attributes and `SetProcessMitigationPolicy`.
+    pub mitigation: poly_kernelbase::mitigation::State,
     /// Its exit status, once known: the first `NtTerminateProcess` of it
     /// sets it, else its last thread's end ([`crate::exec::thread_exit`]);
     /// a running process is pending.
@@ -288,6 +300,7 @@ impl NtProcess {
             default_stack_commit: 0x1000,
             exit_status: None,
             dynamic_code_blocked: false,
+            mitigation: poly_kernelbase::mitigation::State::new(),
             exception_dispatcher: 0,
             win32k_disabled: false,
             image_name: None,
@@ -295,6 +308,14 @@ impl NtProcess {
             priority_class: 2,
             parent: 0,
         }
+    }
+
+    /// Take `state` as the process's mitigation policies and update what the kernel enforces
+    /// from them: the dynamic-code and win32k policies only go on (a policy that is on stays).
+    pub fn set_mitigation(&mut self, state: poly_kernelbase::mitigation::State) {
+        self.dynamic_code_blocked |= state.dynamic_code_blocked();
+        self.win32k_disabled |= state.win32k_disabled();
+        self.mitigation = state;
     }
 
     pub fn thread(&self, thread: ThreadRef) -> Option<&NtThread> {

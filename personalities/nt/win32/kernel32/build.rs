@@ -18,6 +18,11 @@ fn main() {
     for &(name, contract) in poly_kernelbase::exports::KERNEL32_FORWARDS.iter().chain(ntdll) {
         println!("cargo:rustc-link-arg=/EXPORT:{name}={contract}.{name}");
     }
+    // The 32-bit `kernel32` also forwards `RtlUnwind` (frame-based unwinding; the x64 one has
+    // `RtlUnwindEx` above) to the i686 `ntdll` (ADR 0186).
+    if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("x86") {
+        println!("cargo:rustc-link-arg=/EXPORT:RtlUnwind=api-ms-win-core-rtlsupport-l1-1-0.RtlUnwind");
+    }
     println!("cargo:rustc-link-arg=/ENTRY:kernel32_main");
     // The version resource (ADR 0155, step 9): programs read the system's version from this
     // file (Learn, "Getting the System Version"). lld-link takes a `.res` file as an input.
@@ -34,11 +39,9 @@ const APPS_FORWARDS: &[(&str, &str)] = &[
     ("DecodePointer", "kernelbase.DecodePointer"),
     ("DisableThreadLibraryCalls", "kernelbase.DisableThreadLibraryCalls"),
     ("EncodePointer", "kernelbase.EncodePointer"),
-    ("GetErrorMode", "kernelbase.GetErrorMode"),
     ("InterlockedDecrement", "kernelbase.InterlockedDecrement"),
     ("InterlockedIncrement", "kernelbase.InterlockedIncrement"),
     ("MulDiv", "kernelbase.MulDiv"),
-    ("SetErrorMode", "kernelbase.SetErrorMode"),
     ("__C_specific_handler", "ntdll.__C_specific_handler"),
 ];
 // END generated consts

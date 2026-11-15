@@ -468,3 +468,27 @@ fn an_internal_window_at_a_fraction_and_when_it_stops_fitting() {
     let c = srv.scene().window(s).unwrap().content();
     assert_eq!((c.scale, c.view.destination), (2, None));
 }
+
+#[test]
+fn an_internal_window_moves_with_the_pointer_when_its_owner_asks_during_a_press() {
+    // A Windows window's own caption (ADR 0128): the press reaches win32k,
+    // DefWindowProc answers SC_MOVE, the compositor asks for the move.
+    let (mut srv, _) = server();
+    let s = srv.add_internal_window("Chrome", "windows", 200, 100);
+    srv.set_internal_pixels(s, 200, 100, &[0x12_3456; 200 * 100], None);
+    let (x, y) = srv.scene().window(s).unwrap().position();
+    // No button held: nothing.
+    srv.internal_start_move(s);
+    motion(&mut srv, x + 20, y + 10);
+    assert_eq!(srv.scene().window(s).unwrap().position(), (x, y));
+    srv.handle_input(InputEvent::PointerButton { time: 1, button: BTN_LEFT, pressed: true });
+    srv.take_internal_events();
+    srv.internal_start_move(s);
+    motion(&mut srv, x + 60, y + 40);
+    assert_eq!(srv.scene().window(s).unwrap().position(), (x + 40, y + 30));
+    // The moves are the server's, not the window's.
+    assert!(srv.take_internal_events().iter().all(|e| !matches!(e, InternalEvent::Motion { .. })));
+    srv.handle_input(InputEvent::PointerButton { time: 2, button: BTN_LEFT, pressed: false });
+    motion(&mut srv, x + 80, y + 50);
+    assert_eq!(srv.scene().window(s).unwrap().position(), (x + 40, y + 30), "released: the move is over");
+}

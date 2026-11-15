@@ -13,7 +13,7 @@ use poly_win32k::services::Win32kService;
 use poly_win32k::wire;
 
 /// Make the system call `number` as a `win32u` stub would.
-fn raw(f: &mut Fake, number: u32, args: &[u64]) -> (Outcome, u32) {
+pub(super) fn raw(f: &mut Fake, number: u32, args: &[u64]) -> (Outcome, u32) {
     let mut regs = SyscallRegs { rax: u64::from(number), rsp: STACK, ..Default::default() };
     let slots = [&mut regs.r10, &mut regs.rdx, &mut regs.r8, &mut regs.r9];
     for (slot, &a) in slots.into_iter().zip(args) {
@@ -27,7 +27,7 @@ fn raw(f: &mut Fake, number: u32, args: &[u64]) -> (Outcome, u32) {
 }
 
 /// One `PolyUserCall` round trip.
-fn user_call(f: &mut Fake, req: &Request, cap: usize) -> (NtStatus, Option<Reply>, u64) {
+pub(super) fn user_call(f: &mut Fake, req: &Request, cap: usize) -> (NtStatus, Option<Reply>, u64) {
     let bytes = wire::encode(req);
     let req_ptr = f.put(&bytes);
     let out = f.alloc(cap.max(1));

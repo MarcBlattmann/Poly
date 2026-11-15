@@ -56,7 +56,6 @@ poly_win32_rt::fail_exports!(
         GetDateFormatW,
         GetDiskFreeSpaceA,
         GetEffectivePackageStatusForUserSid,
-        GetModuleFileNameA,
         GetNumaProcessorNode,
         GetSystemMetadataPathForPackage,
         GetTempPathA,
