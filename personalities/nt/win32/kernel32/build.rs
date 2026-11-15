@@ -34,11 +34,9 @@ const APPS_FORWARDS: &[(&str, &str)] = &[
     ("DecodePointer", "kernelbase.DecodePointer"),
     ("DisableThreadLibraryCalls", "kernelbase.DisableThreadLibraryCalls"),
     ("EncodePointer", "kernelbase.EncodePointer"),
-    ("GetErrorMode", "kernelbase.GetErrorMode"),
     ("InterlockedDecrement", "kernelbase.InterlockedDecrement"),
     ("InterlockedIncrement", "kernelbase.InterlockedIncrement"),
     ("MulDiv", "kernelbase.MulDiv"),
-    ("SetErrorMode", "kernelbase.SetErrorMode"),
     ("__C_specific_handler", "ntdll.__C_specific_handler"),
 ];
 // END generated consts
