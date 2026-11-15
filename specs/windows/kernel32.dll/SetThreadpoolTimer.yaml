@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetThreadpoolTimer.yaml
+id: windows/api/kernel32.dll/SetThreadpoolTimer
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Thread Pools, Using the Thread Pool Functions, CreateThreadpoolWork, SubmitThreadpoolWork, WaitForThreadpoolWorkCallbacks, CloseThreadpoolWork, CreateThreadpoolTimer, SetThreadpoolTimer, SetThreadpoolTimerEx, IsThreadpoolTimerSet, CreateThreadpoolWait, SetThreadpoolWait, SetThreadpoolWaitEx, CreateThreadpoolIo, StartThreadpoolIo, CancelThreadpoolIo, CreateThreadpool, SetThreadpoolThreadMaximum, SetThreadpoolThreadMinimum, CreateThreadpoolCleanupGroup, CloseThreadpoolCleanupGroupMembers, CallbackMayRunLong, SetEventWhenCallbackReturns and its siblings, DisassociateCurrentThreadFromCallback, TrySubmitThreadpoolCallback, RegisterWaitForSingleObject, UnregisterWaitEx, QueueUserWorkItem, Thread Pool Callback Environments (TP_CALLBACK_ENVIRON_V3 layout and the inline helpers from winbase.h / threadpoolapiset.h). Wine's tests and source were not read.
+summary: >
+  Arms a thread pool timer: a due time (negative FILETIME: relative, in 100 ns units; positive: absolute; NULL: cancel), an optional period in milliseconds and a window length. The callback runs on a pool thread. SetThreadpoolTimerEx returns whether the timer was set before; IsThreadpoolTimerSet asks; WaitForThreadpoolTimerCallbacks waits for running callbacks and can cancel pending ones.
+interface:
+  signature: "void SetThreadpoolTimer(PTP_TIMER timer, PFILETIME due, DWORD period, DWORD window); BOOL SetThreadpoolTimerEx(...); BOOL IsThreadpoolTimerSet(PTP_TIMER); void WaitForThreadpoolTimerCallbacks(PTP_TIMER, BOOL cancel); PTP_TIMER CreateThreadpoolTimer(PTP_TIMER_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON)"
+rules:
+  one_shot: "a relative due time of 150 ms (period 0) calls the callback once, not before 120 ms and well within 3 s, with the creation context; nothing fired after 60 ms; no second call."
+  is_set: "a new timer is not set; after SetThreadpoolTimer it is set; it still reports set after the one-shot has fired; a periodic timer is set; after a NULL due time it is not set."
+  periodic: "due 50 ms and period 100 ms: between 4 and 9 callbacks in the first 750 ms; SetThreadpoolTimer(timer, NULL, 0, 0) followed by WaitForThreadpoolTimerCallbacks(timer, TRUE) ends them (no callback in the next 400 ms)."
+  replace: "setting a timer again replaces the earlier setting (60 s, then 100 ms: fired after about 100 ms)."
+  immediate: "due time 0 and an absolute time in the past (FILETIME 1) call the callback at once."
+  ex_result: "SetThreadpoolTimerEx returns FALSE for a timer that was not set, TRUE for one that was; cancelling (NULL due) returns TRUE for a set timer and FALSE for an unset one."
+  waiting: "WaitForThreadpoolTimerCallbacks(timer, FALSE) returns only after a callback that is running has finished (state 'done' afterwards)."
+errors:
+  none: "none provoked"
+side_effects: "the callback runs on a pool thread"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "due times are met with the system timer granularity (about 15 ms)"
+  guarantees: "never before the due time minus the clock tolerance"
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll (and ntdll.dll / advapi32.dll where named) by name. A callback that must not have run yet is observed after 200-300 ms, a callback that must run is waited for up to 5 s, so a failing implementation fails an observation instead of hanging the run. Only the main thread writes observations; callbacks store into atomics. Pool sizes are set explicitly where concurrency is observed (a private pool). Timer periods are observed as counts with generous bounds. Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  The window length (coalescing), priorities, timers in private pools with several threads.

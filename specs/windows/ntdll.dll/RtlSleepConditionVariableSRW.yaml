@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlSleepConditionVariableSRW.yaml
+id: windows/api/ntdll.dll/RtlSleepConditionVariableSRW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Slim Reader/Writer (SRW) Locks, Condition Variables, One-Time Initialization, Critical Section Objects, InitOnceExecuteOnce / InitOnceBeginInitialize functions, SleepConditionVariableSRW / SleepConditionVariableCS, Using One-Time Initialization. Layouts and constants from winnt.h (RTL_SRWLOCK, RTL_CONDITION_VARIABLE, RTL_RUN_ONCE, RTL_CRITICAL_SECTION), ntstatus.h and winerror.h. Wine's tests and source were not read.
+summary: >
+  Atomically releases an SRW lock the caller holds and sleeps on a condition variable until woken or timed out, then takes the lock again in the same mode before returning. The timeout is a pointer to a 64-bit time (NULL: wait forever; negative: relative, in 100 ns units; positive: absolute system time). Returns STATUS_SUCCESS when woken, STATUS_TIMEOUT (0x102) on timeout. kernel32's SleepConditionVariableSRW wraps it with milliseconds and a BOOL result.
+interface:
+  signature: "NTSTATUS RtlSleepConditionVariableSRW(PRTL_CONDITION_VARIABLE cv, PRTL_SRWLOCK lock, PLARGE_INTEGER timeout, ULONG flags)"
+rules:
+  timeout_status: "a relative timeout of 100 ms returned STATUS_TIMEOUT (0x102) after at least 80 ms; a timeout pointer to 0 returns STATUS_TIMEOUT at once (under 500 ms); an absolute time in the past (the value 1) returns STATUS_TIMEOUT at once."
+  lock_reacquired: "after a timeout the caller holds the lock again as it did before: exclusive (word low bits 1; RtlTryAcquireSRWLockExclusive on the same thread fails), or shared with flags = 1 (word 0x11); releasing it in that mode frees the lock."
+  flags: "the flags are 0 (exclusive lock) or RTL_CONDITION_VARIABLE_LOCKMODE_SHARED (1); the values 2, 4, 0x10 and 0x80000000 return STATUS_INVALID_PARAMETER_2 (0xC00000F0) at once."
+  mismatched_mode: "sleeping with flag 0 while holding the lock shared, or with flag 1 while holding it exclusive, is not refused (timeout status 0x102 in a child process)."
+  lock_not_held: "sleeping with the SHARED flag on a lock that is not held raises STATUS_RESOURCE_NOT_OWNED (0xC0000264); sleeping on an exclusive lock that is not held never returned in the one run that tried it (not part of the tests)."
+  wake: "woken by RtlWakeConditionVariable or RtlWakeAllConditionVariable the call returns STATUS_SUCCESS with the lock held again by the woken thread, only once the lock is free (see those sheets)."
+  kernel32_form: "SleepConditionVariableSRW(cv, lock, milliseconds, flags): FALSE with ERROR_TIMEOUT (1460) on timeout (also for 0 ms), FALSE with ERROR_INVALID_PARAMETER (87) for flags 2."
+errors:
+  timeout: "STATUS_TIMEOUT 0x102 (kernel32: FALSE, ERROR_TIMEOUT 1460)"
+  bad_flags: "STATUS_INVALID_PARAMETER_2 0xC00000F0 (kernel32: ERROR_INVALID_PARAMETER 87)"
+  not_owned: "exception 0xC0000264 for a shared sleep without the lock"
+side_effects: "releases and re-takes the lock"
+threading: "any thread; the lock must be held by the caller in the mode named by the flags"
+ordering: ["the lock is released before the thread sleeps and re-taken before the call returns"]
+timing:
+  typical: "a 100 ms timeout returns after 100 ms plus the timer granularity (observed: at least 80, under 3000 ms)"
+  guarantees: "never returns early by more than the clock tolerance"
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing ntdll.dll and kernel32.dll by name. Every wait that must not return is observed after 300 ms of waiting, every wait that must return is bounded by 5 s or more, so a failing implementation fails an observation instead of hanging the run. Observations are statuses, counts, booleans and small words; lock words are shown only when they are zero or small (the lock value of an uncontended lock). Counts of threads and loops are fixed so the outputs are identical on every run. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x600D: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Spurious wake-ups, absolute times in the future, timeouts above a second.

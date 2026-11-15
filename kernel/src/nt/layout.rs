@@ -152,6 +152,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("netapi32.dll", super::NETAPI32),
         ("secur32.dll", super::SECUR32),
         ("dhcpcsvc.dll", super::DHCPCSVC),
+        ("mswsock.dll", super::MSWSOCK),
         ("dnsapi.dll", super::DNSAPI),
         ("dbghelp.dll", super::DBGHELP),
         // ADR 0170.
@@ -185,6 +186,22 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         }
         match create::install_file(&vr, &root, "Windows\\System32", name, bytes) {
             Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to System32"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
+        }
+    }
+    // Poly's own Visual C++ runtime (ADR 0199). A user who installs
+    // Microsoft's (`vc_redist`) keeps it: a file there without Poly's marker
+    // is not rewritten (owner decision 5).
+    for (name, bytes) in [("vcruntime140.dll", super::VCRUNTIME140), ("vcruntime140_1.dll", super::VCRUNTIME140_1)] {
+        if bytes.is_empty() {
+            continue;
+        }
+        match create::install_own_copy(&vr, &root, "Windows\\System32", name, bytes, create::OWN_COPY_MARKER) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to System32"),
+            Ok(create::Installed::Yielded) => {
+                crate::kprintln!("nt: layout: {name} in System32 is not Poly's (an installed runtime): kept")
+            }
             Ok(_) => {}
             Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
         }

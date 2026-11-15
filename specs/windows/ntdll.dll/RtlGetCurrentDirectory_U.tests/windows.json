@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "e9565857a6d3",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:30:27Z",
+  "tests": [
+    {
+      "name": "rtl_curdir",
+      "exe_sha256": "04832573c59afffb89257051b00cbd8db09ee67577eea651c88fcd43e79147cf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UnRsR2V0Q3VycmVudERpcmVjdG9yeV9VIHJldHVybmVkIGEgbGVuZ3RoOiAxOyB0aGUgYnl0ZSBjb3VudCBpcyB0d2ljZSB0aGUgY2hhcmFjdGVyIGNvdW50IG9mIEdldEN1cnJlbnREaXJlY3RvcnlXOiAxCiAgdGhlIHBhdGggc3RhcnRzIHdpdGggYSBkcml2ZSBsZXR0ZXIgYW5kIGEgY29sb24gYW5kIGEgYmFja3NsYXNoOiAxCmJ1ZmZlciBvZiB0ZXh0IC0gMiBieXRlczogcmV0dXJucyB0ZXh0ICsgTlVMLCB3cm90ZSBhbnl0aGluZyAwCkdldEN1cnJlbnREaXJlY3RvcnlXIHdpdGggYSAyLXVuaXQgYnVmZmVyOiByZXR1cm5zIHRleHQrTlVMIGNoYXJhY3RlcnMgMQphZnRlciBzZXR0aW5nIGl0IHdpdGggYSB0cmFpbGluZyBiYWNrc2xhc2g6IGxlbmd0aCBpcyB0aGUgc2FtZSBhcyBiZWZvcmUKUnRsU2V0Q3VycmVudERpcmVjdG9yeV9VIG9mIGEgbWlzc2luZyBkaXJlY3Rvcnk6IDB4YzAwMDAwMzQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RtlGetCurrentDirectory_U returned a length: 1; the byte count is twice the character count of GetCurrentDirectoryW: 1\n  the path starts with a drive letter and a colon and a backslash: 1\nbuffer of text - 2 bytes: returns text + NUL, wrote anything 0\nGetCurrentDirectoryW with a 2-unit buffer: returns text+NUL characters 1\nafter setting it with a trailing backslash: length is the same as before\nRtlSetCurrentDirectory_U of a missing directory: 0xc0000034\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "rtl_curdir_b",
+      "exe_sha256": "eb93ca56866181acb5bd7074409d49730928cd8129309a9473f847d139a849cf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICB0aGUgdGV4dCBhZ3JlZXM6IDEKYnVmZmVyIG9mIDAgYnl0ZXM6IHJldHVybnMgdGV4dCArIE5VTCwgd3JvdGUgYW55dGhpbmcgMApidWZmZXIgb2YgZXhhY3QgdGV4dCBzaXplIGJ5dGVzOiByZXR1cm5zIHRleHQgKyBOVUwsIHdyb3RlIGFueXRoaW5nIDAKc2NyYXRjaCBkaXJlY3RvcnkgY3JlYXRlZDogMQpyb290IEM6XDogNiBieXRlcywgZW5kcyB3aXRoIGEgYmFja3NsYXNoOiAxCiAgdGhlIGRpcmVjdG9yeSBpcyB1bmNoYW5nZWQ6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  the text agrees: 1\nbuffer of 0 bytes: returns text + NUL, wrote anything 0\nbuffer of exact text size bytes: returns text + NUL, wrote anything 0\nscratch directory created: 1\nroot C:\\: 6 bytes, ends with a backslash: 1\n  the directory is unchanged: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

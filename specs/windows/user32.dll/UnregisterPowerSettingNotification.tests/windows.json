@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "upsn_basic",
+      "exe_sha256": "d446cc649cdd1c6ab8be03e5fe63a75bc7be6221c004ec890d78064b7c4c36b1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVsZWFzZTogcmV0dXJucyAxLCBsYXN0IGVycm9yIGxlZnQgYWxvbmUgdHJ1ZQpyZWxlYXNlIGFnYWluOiByZXR1cm5zIDAsIGxhc3QgZXJyb3IgODcKTlVMTDogcmV0dXJucyAwLCBsYXN0IGVycm9yIDg3CmEgZGV2aWNlLW5vdGlmaWNhdGlvbiBoYW5kbGU6IDAgKGVycm9yIDg3KSwgYSBzdXNwZW5kL3Jlc3VtZSBoYW5kbGU6IDAgKGVycm9yIDg3KQpyZWxlYXNlZCBmcm9tIGFub3RoZXIgdGhyZWFkOiByZXR1cm5zIDEKYW5kIHRoZW4gZnJvbSB0aGlzIG9uZTogMApyZWxlYXNlZCBpbnNpZGUgdGhlIGhhbmRsZXIgb2YgYSBwb3dlciBtZXNzYWdlOiAxCnRoZSBoYW5kbGUgaXMgZ29uZTogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "release: returns 1, last error left alone true\nrelease again: returns 0, last error 87\nNULL: returns 0, last error 87\na device-notification handle: 0 (error 87), a suspend/resume handle: 0 (error 87)\nreleased from another thread: returns 1\nand then from this one: 0\nreleased inside the handler of a power message: 1\nthe handle is gone: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 178
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "e4622196baa4",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T14:03:13Z",
+  "tests": [
+    {
+      "name": "runonce_init",
+      "exe_sha256": "2dd86f7aef4b641aaa6d151e93f4a107ad260c4d9675193bf51e585d82322872",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSB6ZXJvIG9iamVjdCwgZmlyc3QgZXhlY3V0ZTogMHgwIGNvbnRleHQgMHg0MDAgd29yZCAweDQwMgpiZWdpbjogMHgxMDMgd29yZCAweDEKICBjb21wbGV0ZTogMHgwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a zero object, first execute: 0x0 context 0x400 word 0x402\nbegin: 0x103 word 0x1\n  complete: 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "runonce_init_c",
+      "exe_sha256": "f57ee5d3297dfed44236312c64d05213af6210fe3b91d62965f6cff1a9467fbb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBleGVjdXRlcyBhZ2FpbjogMHgwIGNvbnRleHQgMHg0MDAKICBiZWdpbiBhZ2FpbjogMHgxMDMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  executes again: 0x0 context 0x400\n  begin again: 0x103\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    }
+  ]
+}

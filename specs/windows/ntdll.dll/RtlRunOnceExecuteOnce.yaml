@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlRunOnceExecuteOnce.yaml
+id: windows/api/ntdll.dll/RtlRunOnceExecuteOnce
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Slim Reader/Writer (SRW) Locks, Condition Variables, One-Time Initialization, Critical Section Objects, InitOnceExecuteOnce / InitOnceBeginInitialize functions, SleepConditionVariableSRW / SleepConditionVariableCS, Using One-Time Initialization. Layouts and constants from winnt.h (RTL_SRWLOCK, RTL_CONDITION_VARIABLE, RTL_RUN_ONCE, RTL_CRITICAL_SECTION), ntstatus.h and winerror.h. Wine's tests and source were not read.
+summary: >
+  One-time initialisation: runs the callback once for an RTL_RUN_ONCE object; every caller returns only after the initialisation has finished and gets the context value the callback stored. A callback that fails leaves the object unstarted so the next caller tries again. kernel32's InitOnceExecuteOnce wraps it with BOOLs.
+interface:
+  signature: "NTSTATUS RtlRunOnceExecuteOnce(PRTL_RUN_ONCE once, PRTL_RUN_ONCE_INIT_FN fn, PVOID param, PVOID *context); ULONG NTAPI fn(PRTL_RUN_ONCE once, PVOID param, PVOID *context)"
+rules:
+  first_call: "status 0, the callback ran once with the object's own address, the caller's parameter and a writable context slot (the tests always pass a context pointer to the call that runs the callback), the caller's context out value is what the callback stored (0x400 in the tests); afterwards the object's word is the stored value with bit 1 set (0x402)."
+  later_calls: "STATUS_SUCCESS without calling the callback, the context out value again (a third call with a NULL context pointer also succeeds)."
+  callback_fails: "a callback that returns 0: the call returns STATUS_UNSUCCESSFUL (0xC0000001), the object's word is 0 again, a context value the callback wrote into its slot is also written to the caller's slot (0x400 seen); the next call runs the callback again (calls counted 1, 2, 3), the third (succeeding) gave context 0x800."
+  zero_context: "a callback that stores 0 completes the object: STATUS_SUCCESS, context 0."
+  context_bits: "a callback that stores a context value with either of the two low bits set (1, 2, 3, 0x401, 0x7fffffff) makes the call RAISE the exception STATUS_INVALID_PARAMETER_3 (0xC00000F1) in the calling thread (it ends the process when unhandled); 4 and 0x404 are accepted."
+  threads: "four threads calling at once: the callback ran once, all four returned STATUS_SUCCESS, each after the callback finished (its done flag was set) and each with the context; when the first callback fails, the callback ran twice, three callers got success and the caller whose callback failed STATUS_UNSUCCESSFUL."
+errors:
+  callback_failed: "STATUS_UNSUCCESSFUL 0xC0000001"
+  bad_context: "exception 0xC00000F1 raised"
+side_effects: "runs the callback"
+threading: "any thread; waiters block until the running initialisation ends"
+ordering: []
+timing:
+  typical: "the callback's own time"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing ntdll.dll and kernel32.dll by name. Every wait that must not return is observed after 300 ms of waiting, every wait that must return is bounded by 5 s or more, so a failing implementation fails an observation instead of hanging the run. Observations are statuses, counts, booleans and small words; lock words are shown only when they are zero or small (the lock value of an uncontended lock). Counts of threads and loops are fixed so the outputs are identical on every run. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x600D: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  A callback that re-enters the same object, a NULL callback.

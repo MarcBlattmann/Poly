@@ -33,7 +33,7 @@
 //! handoff record <entry> --spec-agent A --implementer B [--allow-dirty]
 //! handoff bundle <entry>... --out DIR            what the implementer receives (one or more entries)
 //! handoff verify [<entry>] [--received DIR]      prove the hand-offs (and no leaks)
-//! win build [--tests-dir DIR]... [--tests a,b] [--out DIR]
+//! win build [--tests-dir DIR]... [--tests a,b] [--out DIR] [--cxx-runtime msvcrt|vcruntime140]
 //!                                                Windows test programs (tests/windows/*.rs, ADR 0075, and
 //!                                                *.cpp, ADR 0098) into
 //!                                                target/pipeline/windows/bin/*.exe + manifest.json
@@ -47,7 +47,8 @@
 //!                                                compare Windows results with Poly (or another result file)
 //! win show <results.json> [--tests a,b]          print a result file's observations
 //! win polycheck [--kernel ELF] [--jobs N]         the visible tests of every green Windows entry on Poly
-//!                                                against their recorded windows.json: all must pass (CI)
+//!                                                against their recorded windows.json: all must pass (CI);
+//!                                                the msvcrt.dll C++ tests again built for vcruntime140 (ADR 0199)
 //! win scenario poly [--bin-dir DIR] [--data-dir DIR] [--tests a,b] [--kernel ELF] [--build-kernel]
 //!                   [--timeout SECS] [--out FILE]
 //!                                                run scenario drivers (ADR 0088) on Poly with their data files

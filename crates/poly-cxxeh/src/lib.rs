@@ -23,6 +23,8 @@
 //!   (the function, a catch block, an unwind action), which try blocks
 //!   apply, whether a clause takes the exception (or `terminate` must be
 //!   called), and which unwind actions run between two states.
+//! - [`typeinfo`]: `type_info` comparison and hashing and the copy of an exception's text,
+//!   for `vcruntime140.dll` (ADR 0199).
 //! - [`catches`]: the per-thread list of catch blocks in progress: the
 //!   state of a frame whose catch block runs, the exception a rethrow
 //!   means, and when an exception object is destroyed.
@@ -44,6 +46,7 @@ pub mod consts;
 pub mod frame;
 pub mod tables;
 pub mod throw;
+pub mod typeinfo;
 
 #[cfg(test)]
 mod tests;

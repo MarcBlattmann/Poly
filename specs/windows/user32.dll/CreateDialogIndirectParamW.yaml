@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/CreateDialogIndirectParamW.yaml
+id: windows/api/user32.dll/CreateDialogIndirectParamW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Creates a modeless dialog from a DLGTEMPLATE (or DLGTEMPLATEEX) in memory: WM_INITDIALOG has run before the call returns; the dialog is shown only if the template has WS_VISIBLE.
+interface:
+  signature: "HWND CreateDialogIndirectParamW(HINSTANCE hInstance, LPCDLGTEMPLATEW lpTemplate, HWND hWndParent, DLGPROC lpDialogFunc, LPARAM lParamInit)"
+rules:
+  init: "WM_INITDIALOG with lParamInit (31) runs inside the call; the window is class \"#32770\", enabled, IsWindowUnicode 1 and not visible (also with WS_VISIBLE in session 0, and ShowWindow(SW_SHOW) returns 0 and does not make IsWindowVisible TRUE there); the title 'Indirect' and the child 1002 with its text 'initial'; DM_GETDEFID is 0x534B0001 for a template with a default push button with id 1"
+  extended: "a DLGTEMPLATEEX creates a window with the child id 0x12345; GetWindowContextHelpId is the template's help id (99); extended style 0x10101; a non-ASCII title keeps its UTF-16 units (0x54, 0xE9, 0x4E2D)"
+  independent: "two dialogs from one template are two windows with their own controls"
+  end_destroy: "EndDialog on the modeless dialog returns TRUE and leaves the window; DestroyWindow sends WM_DESTROY then WM_NCDESTROY to the procedure"
+  controls_and_messages: "the controls are in template order with their styles; GetNextDlgTabItem goes 1002, 1, 2; SetDlgItemTextW and GetDlgItemTextW work on them; WM_CLOSE reaches the procedure first and returns 0, the default handling posts the command (IDCANCEL); IsDialogMessageW with Enter sends WM_COMMAND IDOK"
+  owner: "with an owner window GW_OWNER is the owner, which stays enabled; destroying the owner destroys the dialog"
+  version: "an extended template with dlgVer 2 is accepted: a window is made"
+errors:
+  template: "an unknown control class: NULL with 1407; a bad parent: NULL with 1400"
+  null_procedure: "a NULL dialog procedure makes the window (the default dialog procedure is used) and the last error is set to 87 by the call even though it succeeds (not specified)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Templates that are truncated or not aligned, templates with a menu or a class name (see CreateDialogParamW for resources), the dialog on a visible desktop.

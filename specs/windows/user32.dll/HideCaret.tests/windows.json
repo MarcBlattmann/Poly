@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "hc_errors",
+      "exe_sha256": "0257e64dffc9da6330ce2c01697cb2baf10f6586d880ff6c3c36e19ca7d0070d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SGlkZUNhcmV0IHdpdGggbm8gY2FyZXQ6IDAgZXJyPTUKSGlkZUNhcmV0KE5VTEwpIHdpdGggbm8gY2FyZXQ6IDAgZXJyPTUKQ3JlYXRlQ2FyZXQgaW4gdzogMQpIaWRlQ2FyZXQodzIpIChhbm90aGVyIHdpbmRvdyBvZiB0aGlzIHRocmVhZCk6IDAgZXJyPS0xCmNhcmV0IGlzIHN0aWxsIHNob3duCkhpZGVDYXJldChtYWRlLXVwIGhhbmRsZSk6IDAgZXJyPTE0MDAKSGlkZUNhcmV0KGRlc2t0b3Agd2luZG93KTogMCBlcnI9LTEKICBvdGhlciB0aHJlYWQ6IEhpZGVDYXJldCh3aW5kb3cgb2YgdGhlIG1haW4gdGhyZWFkKSA9IDAgZXJyPTUKICBvdGhlciB0aHJlYWQ6IEhpZGVDYXJldChOVUxMKSA9IDAgZXJyPTUKY2FyZXQgYWZ0ZXIgdGhlIG90aGVyIHRocmVhZCdzIGNhbGxzOiBzaG93bgpIaWRlQ2FyZXQodyk6IDEKY2FyZXQgaXMgaGlkZGVuCkRlc3Ryb3lXaW5kb3codyk6IDEKSGlkZUNhcmV0KHcpIGFmdGVyIHRoZSB3aW5kb3cgaXMgZ29uZTogMCBlcnI9MTQwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "HideCaret with no caret: 0 err=5\nHideCaret(NULL) with no caret: 0 err=5\nCreateCaret in w: 1\nHideCaret(w2) (another window of this thread): 0 err=-1\ncaret is still shown\nHideCaret(made-up handle): 0 err=1400\nHideCaret(desktop window): 0 err=-1\n  other thread: HideCaret(window of the main thread) = 0 err=5\n  other thread: HideCaret(NULL) = 0 err=5\ncaret after the other thread's calls: shown\nHideCaret(w): 1\ncaret is hidden\nDestroyWindow(w): 1\nHideCaret(w) after the window is gone: 0 err=1400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}

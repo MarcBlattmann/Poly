@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlSleepConditionVariableCS.yaml
+id: windows/api/ntdll.dll/RtlSleepConditionVariableCS
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Slim Reader/Writer (SRW) Locks, Condition Variables, One-Time Initialization, Critical Section Objects, InitOnceExecuteOnce / InitOnceBeginInitialize functions, SleepConditionVariableSRW / SleepConditionVariableCS, Using One-Time Initialization. Layouts and constants from winnt.h (RTL_SRWLOCK, RTL_CONDITION_VARIABLE, RTL_RUN_ONCE, RTL_CRITICAL_SECTION), ntstatus.h and winerror.h. Wine's tests and source were not read.
+summary: >
+  Like RtlSleepConditionVariableSRW for a critical section: leaves the section ONCE for the sleep and enters it again before returning. A section the caller owns more than once therefore stays owned during the sleep; the recursion count is back to what it was on return.
+interface:
+  signature: "NTSTATUS RtlSleepConditionVariableCS(PRTL_CONDITION_VARIABLE cv, PRTL_CRITICAL_SECTION cs, PLARGE_INTEGER timeout)"
+rules:
+  timeout: "a section entered twice, 100 ms relative timeout: STATUS_TIMEOUT (0x102) after at least 80 ms, recursion count 2 afterwards, owner is the calling thread; two leaves bring recursion to 0 and the lock count to -1. A timeout pointer to 0 returns STATUS_TIMEOUT at once."
+  owned_once: "a waiter that owns the section once: another thread's RtlEnterCriticalSection returns while it sleeps (recursion count 1 seen by that thread); after a wake the waiter does not return while the other thread owns the section; when the other leaves the waiter returns with STATUS_SUCCESS, recursion count 1, owner itself."
+  owned_twice: "a waiter that owns the section twice releases only one level: RtlTryEnterCriticalSection from another thread fails during the sleep, the recursion count seen from outside is 1; after the wake the waiter returns STATUS_SUCCESS with recursion count 2 and itself as owner."
+  kernel32_form: "SleepConditionVariableCS(cv, cs, milliseconds): FALSE with ERROR_TIMEOUT (1460) on timeout, also for 0 ms."
+errors:
+  timeout: "STATUS_TIMEOUT 0x102 (kernel32: FALSE, ERROR_TIMEOUT 1460)"
+side_effects: "leaves and re-enters the section"
+threading: "the caller must own the section"
+ordering: []
+timing:
+  typical: "as RtlSleepConditionVariableSRW"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing ntdll.dll and kernel32.dll by name. Every wait that must not return is observed after 300 ms of waiting, every wait that must return is bounded by 5 s or more, so a failing implementation fails an observation instead of hanging the run. Observations are statuses, counts, booleans and small words; lock words are shown only when they are zero or small (the lock value of an uncontended lock). Counts of threads and loops are fixed so the outputs are identical on every run. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x600D: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Sleeping on a section the caller does not own.

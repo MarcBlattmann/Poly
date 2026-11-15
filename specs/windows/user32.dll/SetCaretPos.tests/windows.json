@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "scp_basic",
+      "exe_sha256": "790bccc28ca8d2389d7a69d3d1ffd459bc85d1f5be885d7f7cadf65fdc5ce5f3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlQ2FyZXQgNCB4IDIwOiAxClNldENhcmV0UG9zKDEwLCAyMCk6IDEKICByZWFkIGJhY2s6IEdldENhcmV0UG9zID0gMSBlcnI9LTIgcG9pbnQgKDEwLDIwKQogIHJlY3RhbmdsZTogR2V0R1VJVGhyZWFkSW5mbyAxIGNhcmV0IHdpbmRvdyBvdXJzIHJlY3QgKDEwLDIwLDE0LDQwKSBjYXJldC1ibGlua2luZyAwClNldENhcmV0UG9zKDAsIDApOiAxCiAgcmVhZCBiYWNrOiBHZXRDYXJldFBvcyA9IDEgZXJyPS0yIHBvaW50ICgwLDApCiAgcmVjdGFuZ2xlOiBHZXRHVUlUaHJlYWRJbmZvIDEgY2FyZXQgd2luZG93IG91cnMgcmVjdCAoMCwwLDQsMjApIGNhcmV0LWJsaW5raW5nIDAKU2V0Q2FyZXRQb3MoLTUsIC03KTogMQogIHJlYWQgYmFjazogR2V0Q2FyZXRQb3MgPSAxIGVycj0tMiBwb2ludCAoLTUsLTcpCiAgcmVjdGFuZ2xlOiBHZXRHVUlUaHJlYWRJbmZvIDEgY2FyZXQgd2luZG93IG91cnMgcmVjdCAoLTUsLTcsLTEsMTMpIGNhcmV0LWJsaW5raW5nIDAKU2V0Q2FyZXRQb3MoMTAwMCwgMjAwMCk6IDEKICByZWFkIGJhY2s6IEdldENhcmV0UG9zID0gMSBlcnI9LTIgcG9pbnQgKDEwMDAsMjAwMCkKICByZWN0YW5nbGU6IEdldEdVSVRocmVhZEluZm8gMSBjYXJldCB3aW5kb3cgb3VycyByZWN0ICgxMDAwLDIwMDAsMTAwNCwyMDIwKSBjYXJldC1ibGlua2luZyAwClNldENhcmV0UG9zKDMyNzY3LCAzMjc2Nyk6IDEKICByZWFkIGJhY2s6IEdldENhcmV0UG9zID0gMSBlcnI9LTIgcG9pbnQgKDMyNzY3LDMyNzY3KQogIHJlY3RhbmdsZTogR2V0R1VJVGhyZWFkSW5mbyAxIGNhcmV0IHdpbmRvdyBvdXJzIHJlY3QgKDMyNzY3LDMyNzY3LDMyNzcxLDMyNzg3KSBjYXJldC1ibGlua2luZyAwClNldENhcmV0UG9zKC0zMjc2OCwgMzI3NjcpOiAxCiAgcmVhZCBiYWNrOiBHZXRDYXJldFBvcyA9IDEgZXJyPS0yIHBvaW50ICgtMzI3NjgsMzI3NjcpCiAgcmVjdGFuZ2xlOiBHZXRHVUlUaHJlYWRJbmZvIDEgY2FyZXQgd2luZG93IG91cnMgcmVjdCAoLTMyNzY4LDMyNzY3LC0zMjc2NCwzMjc4NykgY2FyZXQtYmxpbmtpbmcgMApTZXRDYXJldFBvcyg2NTUzNiwgNjU1MzcpOiAxCiAgcmVhZCBiYWNrOiBHZXRDYXJldFBvcyA9IDEgZXJyPS0yIHBvaW50ICg2NTUzNiw2NTUzNykKICByZWN0YW5nbGU6IEdldEdVSVRocmVhZEluZm8gMSBjYXJldCB3aW5kb3cgb3VycyByZWN0ICg2NTUzNiw2NTUzNyw2NTU0MCw2NTU1NykgY2FyZXQtYmxpbmtpbmcgMApTZXRDYXJldFBvcygyMTQ3NDgzNjQ3LCAtMjE0NzQ4MzY0OCk6IDEKICByZWFkIGJhY2s6IEdldENhcmV0UG9zID0gMSBlcnI9LTIgcG9pbnQgKDIxNDc0ODM2NDcsLTIxNDc0ODM2NDgpCiAgcmVjdGFuZ2xlOiBHZXRHVUlUaHJlYWRJbmZvIDEgY2FyZXQgd2luZG93IG91cnMgcmVjdCAoMjE0NzQ4MzY0NywtMjE0NzQ4MzY0OCwtMjE0NzQ4MzY0NSwtMjE0NzQ4MzYyOCkgY2FyZXQtYmxpbmtpbmcgMApTZXRDYXJldFBvcygzLCA0KTogMQogIHJlYWQgYmFjazogR2V0Q2FyZXRQb3MgPSAxIGVycj0tMiBwb2ludCAoMyw0KQogIHJlY3RhbmdsZTogR2V0R1VJVGhyZWFkSW5mbyAxIGNhcmV0IHdpbmRvdyBvdXJzIHJlY3QgKDMsNCw3LDI0KSBjYXJldC1ibGlua2luZyAwCmNhcmV0IGhpZGRlbiAoU2V0Q2FyZXRQb3MgZG9lcyBub3Qgc2hvdyBpdCkKY2FyZXQgc2hvd24gYWZ0ZXIgU2V0Q2FyZXRQb3Mgd2hpbGUgc2hvd24KcG9zaXRpb24gYWZ0ZXIgQ3JlYXRlQ2FyZXQ6IEdldENhcmV0UG9zID0gMSBlcnI9LTIgcG9pbnQgKDUwLDYwKQpwb3NpdGlvbiBhZnRlciBEZXN0cm95Q2FyZXQ6IEdldENhcmV0UG9zID0gMSBlcnI9LTIgcG9pbnQgKDUwLDYwKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateCaret 4 x 20: 1\nSetCaretPos(10, 20): 1\n  read back: GetCaretPos = 1 err=-2 point (10,20)\n  rectangle: GetGUIThreadInfo 1 caret window ours rect (10,20,14,40) caret-blinking 0\nSetCaretPos(0, 0): 1\n  read back: GetCaretPos = 1 err=-2 point (0,0)\n  rectangle: GetGUIThreadInfo 1 caret window ours rect (0,0,4,20) caret-blinking 0\nSetCaretPos(-5, -7): 1\n  read back: GetCaretPos = 1 err=-2 point (-5,-7)\n  rectangle: GetGUIThreadInfo 1 caret window ours rect (-5,-7,-1,13) caret-blinking 0\nSetCaretPos(1000, 2000): 1\n  read back: GetCaretPos = 1 err=-2 point (1000,2000)\n  rectangle: GetGUIThreadInfo 1 caret window ours rect (1000,2000,1004,2020) caret-blinking 0\nSetCaretPos(32767, 32767): 1\n  read back: GetCaretPos = 1 err=-2 point (32767,32767)\n  rectangle: GetGUIThreadInfo 1 caret window ours rect (32767,32767,32771,32787) caret-blinking 0\nSetCaretPos(-32768, 32767): 1\n  read back: GetCaretPos = 1 err=-2 point (-32768,32767)\n  rectangle: GetGUIThreadInfo 1 caret window ours rect (-32768,32767,-32764,32787) caret-blinking 0\nSetCaretPos(65536, 65537): 1\n  read back: GetCaretPos = 1 err=-2 point (65536,65537)\n  rectangle: GetGUIThreadInfo 1 caret window ours rect (65536,65537,65540,65557) caret-blinking 0\nSetCaretPos(2147483647, -2147483648): 1\n  read back: GetCaretPos = 1 err=-2 point (2147483647,-2147483648)\n  rectangle: GetGUIThreadInfo 1 caret window ours rect (2147483647,-2147483648,-2147483645,-2147483628) caret-blinking 0\nSetCaretPos(3, 4): 1\n  read back: GetCaretPos = 1 err=-2 point (3,4)\n  rectangle: GetGUIThreadInfo 1 caret window ours rect (3,4,7,24) caret-blinking 0\ncaret hidden (SetCaretPos does not show it)\ncaret shown after SetCaretPos while shown\nposition after CreateCaret: GetCaretPos = 1 err=-2 point (50,60)\nposition after DestroyCaret: GetCaretPos = 1 err=-2 point (50,60)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

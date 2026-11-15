@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/DefDlgProcA.yaml
+id: windows/api/user32.dll/DefDlgProcA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The default window procedure of a dialog class registered with DLGWINDOWEXTRA (30) extra bytes: the dialog procedure (given to CreateDialogParam) is called first, then the default handling. The A form is for a class registered with RegisterClassExA: strings reach the dialog procedure as bytes.
+interface:
+  signature: "LRESULT DefDlgProcA(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)"
+rules:
+  conversion: "code page: the oracle's ANSI code page (CP_ACP) is 1252 and its OEM code page 850, the display language English; every conversion below is recorded with 1252. Bytes 0x00-0x7F are the same in every ANSI code page; the results for bytes above 0x7F depend on the code page: 0x80 is U+20AC (euro), 0x81 U+0081 (kept, not assigned in 1252), 0xA0-0xFF are U+00A0-U+00FF (0xE9 is U+00E9, 0xFF U+00FF); a character with no form in the code page (U+4E2D, U+0416) becomes '?' (0x3F)"
+  window_class: "a template whose class name is a class of the test (cbWndExtra 30, procedure that calls DefDlgProcA) gives a window of that class; IsWindowUnicode is 0 for the dialog and for all its controls (with a class registered by RegisterClassExW and DefDlgProcW: 1)"
+  creation_order: "the class procedure gets WM_SETFONT first, then WM_INITDIALOG (the dialog procedure's own WM_INITDIALOG is called from DefDlgProc with lParam 77, as given); after creation the focus is on the first tab stop (3001); DM_GETDEFID is 0x534B0001 (IDOK, a default push button with id 1)"
+  focus: "WM_SETFOCUS to the dialog leaves the focus on the first control (3001); WM_NEXTDLGCTL (0, 0) moves to the next tab stop (3002), (1, 0) to the previous one (3001) and (control handle, 1) to that control (2); each is returned as 1 and sends the dialog procedure the message first"
+  defid: "DM_SETDEFID(2) returns 1 and DM_GETDEFID then returns 0x534B0002; DM_SETDEFID(0x7777) for an id that is no control also returns 1 and DM_GETDEFID returns 0x534B7777"
+  close: "WM_CLOSE reaches the class procedure and the dialog procedure and returns 0; the default handling posts WM_COMMAND (IDCANCEL, from the Cancel button) (observed as a posted message: 'WM_COMMAND id 2 notify 0 from control 2'); the window still exists"
+  commands: "WM_COMMAND IDOK sent to the dialog reaches the class procedure and then the dialog procedure and returns 0; WM_DESTROY and WM_NCDESTROY reach both procedures"
+  text_messages: "SendMessageA and SendMessageW with WM_SETTEXT both reach the dialog procedure as bytes ('caf<E9> <80> <81> <FF>' and 'caf<E9>??<80>') and set the title; SetWindowTextA ('ST<E9>') likewise; WM_GETTEXT and WM_GETTEXTLENGTH return 3 for the title 'ST<U+00E9>' (bytes 'ST<E9>' to the A call, units to the W call); the dialog procedure sees WM_GETTEXT with the wParam given (and the sizes of other conversions)"
+  no_procedure: "CreateDialogParam with a NULL dialog procedure still makes the window; DM_GETDEFID gives 0x534B0001; WM_CLOSE returns 0 and the window stays"
+errors:
+  none: "DefDlgProc has no failure result of its own"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Other ANSI code pages (a double-byte code page such as 932 or 936 changes byte counts and the conversion of every byte above 0x7F), the thread's own locale (the functions use the system ANSI code page), characters outside the code page with a best-fit form other than '?' (none was seen in 1252 for U+4E2D, U+0416). Messages that need the keyboard, mouse or activation (WM_ACTIVATE, WM_ENABLE and notifications of the controls at creation vary between runs and were left out of the tests).

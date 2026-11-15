@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "04c812707009",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:02:31Z",
+  "tests": [
+    {
+      "name": "cv_cs",
+      "exe_sha256": "a44f530a07b94a6bb981b9cffd2adf0a3913d65f6ea6e1f5428cc499fdb03374",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UnRsSW5pdGlhbGl6ZUNyaXRpY2FsU2VjdGlvbjogMHgwCiAgcmVjdXJzaW9uIGNvdW50IGFmdGVyOiAyIG93bmVyIGlzIHRoaXMgdGhyZWFkOiAxCmRlcHRoIDE6IHRoaXMgdGhyZWFkIGVudGVyZWQgd2hpbGUgdGhlIHdhaXRlciBzbGVlcHM6IHJlY3Vyc2lvbiAxCiAgc3RhdHVzIDB4MCByZWN1cnNpb24gYWZ0ZXIgdGhlIHNsZWVwIDEgb3duZXIgd2FzIHRoZSB3YWl0ZXIgMQogIHdhaXRlciByZXR1cm5lZDogMQprZXJuZWwzMiBTbGVlcENvbmRpdGlvblZhcmlhYmxlQ1MsIDEwMCBtczogMCBlcnJvciAxNDYwCiAgc2hhcmVkLCA1MCBtczogMCBlcnJvciAxNDYwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RtlInitializeCriticalSection: 0x0\n  recursion count after: 2 owner is this thread: 1\ndepth 1: this thread entered while the waiter sleeps: recursion 1\n  status 0x0 recursion after the sleep 1 owner was the waiter 1\n  waiter returned: 1\nkernel32 SleepConditionVariableCS, 100 ms: 0 error 1460\n  shared, 50 ms: 0 error 1460\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1040
+    },
+    {
+      "name": "cv_cs_c",
+      "exe_sha256": "2ed9e1be015595146b8cc62fd189b7faea8e136561f1514b71fc0735cc0cef53",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MTAwIG1zIHJlbGF0aXZlOiBzdGF0dXMgMHgxMDIgd2FpdGVkIGF0IGxlYXN0IDgwIG1zOiAxCnRpbWVvdXQgMDogc3RhdHVzIDB4MTAyCiAgZW5kZWQ6IDEKICByZWN1cnNpb24gY291bnQgc2VlbiBmcm9tIG91dHNpZGU6IDEKICBzdGF0dXMgMHgwIHJlY3Vyc2lvbiBhZnRlciB0aGUgc2xlZXAgMiBvd25lciB3YXMgdGhlIHdhaXRlciAxCmtlcm5lbDMyIFNsZWVwQ29uZGl0aW9uVmFyaWFibGVTUlcsIDEwMCBtczogMCBlcnJvciAxNDYwCiAgbG9jayBmcmVlOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "100 ms relative: status 0x102 waited at least 80 ms: 1\ntimeout 0: status 0x102\n  ended: 1\n  recursion count seen from outside: 1\n  status 0x0 recursion after the sleep 2 owner was the waiter 1\nkernel32 SleepConditionVariableSRW, 100 ms: 0 error 1460\n  lock free: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1001
+    }
+  ]
+}

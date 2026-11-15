@@ -116,6 +116,7 @@ dependencies = [
 name = "dhcpcsvc"
 version = "0.0.1"
 dependencies = [
+ "poly-iphlp",
  "poly-win32-netrt",
  "poly-win32-rt",
 ]
@@ -230,9 +231,18 @@ name = "msvcrt"
 version = "0.0.1"
 dependencies = [
  "poly-crt",
- "poly-cxxeh",
  "poly-win32-crt",
+ "poly-win32-cxxrt",
  "poly-win32-rt",
+]
+
+[[package]]
+name = "mswsock"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-netrt",
+ "poly-win32-rt",
+ "poly-winsock",
 ]
 
 [[package]]
@@ -425,6 +435,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-win32-cxxrt"
+version = "0.0.1"
+dependencies = [
+ "poly-cxxeh",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "poly-win32-gui"
 version = "0.0.1"
 
@@ -584,6 +602,22 @@ dependencies = [
 
 [[package]]
 name = "uxtheme"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "vcruntime140"
+version = "0.0.1"
+dependencies = [
+ "poly-cxxeh",
+ "poly-win32-cxxrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "vcruntime140_1"
 version = "0.0.1"
 dependencies = [
  "poly-win32-rt",

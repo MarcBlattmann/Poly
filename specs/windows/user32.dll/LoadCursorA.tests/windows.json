@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "lca_module",
+      "exe_sha256": "e54b8b959db2c50552d5602d275f6522ab93dab88ea801e526effd15ff280c23",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U01fQ1hDVVJTT1IgMzIgU01fQ1lDVVJTT1IgMzIKTG9hZEN1cnNvckEoNjAwKTogR2V0SWNvbkluZm8gMSBmSWNvbiAwIGhvdHNwb3QgKDUsNykgY29sb3VyIDMyeDMyIGJpdHMgMzIgbWFzayAzMngzMiBiaXRzIDEgcGl4ZWwgKDIsMik9I2M4MWUxZQphIHNlY29uZCBMb2FkQ3Vyc29yQSBnaXZlcyB0aGUgc2FtZSBoYW5kbGU6IDEKTG9hZEN1cnNvckEoJ05BTUVEQ1VSJykgKG9uZSAzMngzMiBpbWFnZSwgaG90c3BvdCAxLDEpOiBHZXRJY29uSW5mbyAxIGZJY29uIDAgaG90c3BvdCAoMSwxKSBjb2xvdXIgMzJ4MzIgYml0cyAzMiBtYXNrIDMyeDMyIGJpdHMgMSBwaXhlbCAoMiwyKT0jMWUxZWM4CkxvYWRDdXJzb3JBKCduYW1lZGN1cicpOiB3aW5kb3cKTG9hZEN1cnNvckEoTlVMTCwgNjAwKTogbnVsbCBlcnI9MTgxNApMb2FkSW1hZ2VBKDYwMCwgSU1BR0VfQ1VSU09SKSAxNngxNjogR2V0SWNvbkluZm8gMSBmSWNvbiAwIGhvdHNwb3QgKDIsMykgY29sb3VyIDE2eDE2IGJpdHMgMzIgbWFzayAxNngxNiBiaXRzIDEgcGl4ZWwgKDIsMik9IzFlYzgxZQpMb2FkSW1hZ2VBKDYwMCwgSU1BR0VfQ1VSU09SKSAzMngzMjogR2V0SWNvbkluZm8gMSBmSWNvbiAwIGhvdHNwb3QgKDUsNykgY29sb3VyIDMyeDMyIGJpdHMgMzIgbWFzayAzMngzMiBiaXRzIDEgcGl4ZWwgKDIsMik9I2M4MWUxZQpMb2FkSW1hZ2VBKDYwMCwgSU1BR0VfQ1VSU09SKSAyNHgyNDogR2V0SWNvbkluZm8gMSBmSWNvbiAwIGhvdHNwb3QgKDQsNSkgY29sb3VyIDI0eDI0IGJpdHMgMzIgbWFzayAyNHgyNCBiaXRzIDEgcGl4ZWwgKDIsMik9I2M4MWUxZQpMb2FkSW1hZ2VBKDYwMCwgSU1BR0VfQ1VSU09SKSAweDAgd2l0aCBMUl9ERUZBVUxUU0laRTogR2V0SWNvbkluZm8gMSBmSWNvbiAwIGhvdHNwb3QgKDUsNykgY29sb3VyIDMyeDMyIGJpdHMgMzIgbWFzayAzMngzMiBiaXRzIDEgcGl4ZWwgKDIsMik9I2M4MWUxZQpMb2FkSW1hZ2VBKDYwMCwgSU1BR0VfQ1VSU09SKSAweDA6IEdldEljb25JbmZvIDEgZkljb24gMCBob3RzcG90ICg1LDcpIGNvbG91ciAzMngzMiBiaXRzIDMyIG1hc2sgMzJ4MzIgYml0cyAxIHBpeGVsICgyLDIpPSNjODFlMWUKTG9hZEltYWdlQSg2MDAsIElNQUdFX0NVUlNPUikgNDh4NDg6IEdldEljb25JbmZvIDEgZkljb24gMCBob3RzcG90ICg4LDExKSBjb2xvdXIgNDh4NDggYml0cyAzMiBtYXNrIDQ4eDQ4IGJpdHMgMSBwaXhlbCAoMiwyKT0jYzgxZTFlCkxSX1NIQVJFRCB0d2ljZSBnaXZlcyB0aGUgc2FtZSBoYW5kbGU6IDEKd2l0aG91dCBMUl9TSEFSRUQgdHdvIGhhbmRsZXM6IDEKRGVzdHJveUN1cnNvciBvZiBhbiB1bnNoYXJlZCBjdXJzb3IgMSB0d2ljZSAwCkxvYWRDdXJzb3JBIGFic2VudCBudW1iZXI6IDEgZXJyPTE4MTMKTG9hZEN1cnNvckEgYWJzZW50IG5hbWU6IDEgZXJyPTE4MTMKTG9hZEN1cnNvckEgb2YgYW4gaWNvbiBncm91cCAoNTAwKTogMSBlcnI9MTgxMwpMb2FkQ3Vyc29yQSBvZiBhIHNpbmdsZSBSVF9DVVJTT1IgaW1hZ2UgbnVtYmVyICgxMSk6IDEgZXJyPTE4MTMKTG9hZEN1cnNvckEgb2YgYSBiaXRtYXAgbnVtYmVyICg0MDApOiAxIGVycj0xODEzCkxvYWRDdXJzb3JBIHdpdGggYSBtYWRlLXVwIG1vZHVsZTogMSBlcnI9MTgxMgpMb2FkSWNvbkEgb2YgdGhlIGN1cnNvciBncm91cCBudW1iZXI6IDEgZXJyPTE4MTMKTG9hZEN1cnNvckEoTlVMTCwgMzI1MTIpOiBHZXRJY29uSW5mbyAxIGZJY29uIDAgaG90c3BvdCAoMCwwKSBjb2xvdXIgMzJ4MzIgYml0cyAzMiBtYXNrIDMyeDMyIGJpdHMgMSBwaXhlbCAoMiwyKT0jMDEwMjEwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SM_CXCURSOR 32 SM_CYCURSOR 32\nLoadCursorA(600): GetIconInfo 1 fIcon 0 hotspot (5,7) colour 32x32 bits 32 mask 32x32 bits 1 pixel (2,2)=#c81e1e\na second LoadCursorA gives the same handle: 1\nLoadCursorA('NAMEDCUR') (one 32x32 image, hotspot 1,1): GetIconInfo 1 fIcon 0 hotspot (1,1) colour 32x32 bits 32 mask 32x32 bits 1 pixel (2,2)=#1e1ec8\nLoadCursorA('namedcur'): window\nLoadCursorA(NULL, 600): null err=1814\nLoadImageA(600, IMAGE_CURSOR) 16x16: GetIconInfo 1 fIcon 0 hotspot (2,3) colour 16x16 bits 32 mask 16x16 bits 1 pixel (2,2)=#1ec81e\nLoadImageA(600, IMAGE_CURSOR) 32x32: GetIconInfo 1 fIcon 0 hotspot (5,7) colour 32x32 bits 32 mask 32x32 bits 1 pixel (2,2)=#c81e1e\nLoadImageA(600, IMAGE_CURSOR) 24x24: GetIconInfo 1 fIcon 0 hotspot (4,5) colour 24x24 bits 32 mask 24x24 bits 1 pixel (2,2)=#c81e1e\nLoadImageA(600, IMAGE_CURSOR) 0x0 with LR_DEFAULTSIZE: GetIconInfo 1 fIcon 0 hotspot (5,7) colour 32x32 bits 32 mask 32x32 bits 1 pixel (2,2)=#c81e1e\nLoadImageA(600, IMAGE_CURSOR) 0x0: GetIconInfo 1 fIcon 0 hotspot (5,7) colour 32x32 bits 32 mask 32x32 bits 1 pixel (2,2)=#c81e1e\nLoadImageA(600, IMAGE_CURSOR) 48x48: GetIconInfo 1 fIcon 0 hotspot (8,11) colour 48x48 bits 32 mask 48x48 bits 1 pixel (2,2)=#c81e1e\nLR_SHARED twice gives the same handle: 1\nwithout LR_SHARED two handles: 1\nDestroyCursor of an unshared cursor 1 twice 0\nLoadCursorA absent number: 1 err=1813\nLoadCursorA absent name: 1 err=1813\nLoadCursorA of an icon group (500): 1 err=1813\nLoadCursorA of a single RT_CURSOR image number (11): 1 err=1813\nLoadCursorA of a bitmap number (400): 1 err=1813\nLoadCursorA with a made-up module: 1 err=1812\nLoadIconA of the cursor group number: 1 err=1813\nLoadCursorA(NULL, 32512): GetIconInfo 1 fIcon 0 hotspot (0,0) colour 32x32 bits 32 mask 32x32 bits 1 pixel (2,2)=#010210\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}
