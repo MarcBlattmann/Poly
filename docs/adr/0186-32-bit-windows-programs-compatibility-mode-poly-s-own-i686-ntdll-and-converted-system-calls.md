@@ -399,3 +399,15 @@ Inputs as above (Learn, the SDK headers' `_X86_` and 32-bit layouts), nothing el
   `GetWindowTextW`, `GetClientRect`, `BeginPaint` (the 64-byte `PAINTSTRUCT`), `FillRect` and
   `GetPixel` on a memory DC, `SendMessageW`, `PostMessageW`, `GetMessageW`/`DispatchMessageW`,
   `DestroyWindow`, `PostQuitMessage`.
+- **A 32-bit `polystub.dll`** (`poly_stubs::build_x86`): a missing import of a 32-bit program
+  binds to a stub as on x64 (ADR 0155), but a 32-bit stub cannot return: the function is `stdcall`
+  and pops its own arguments, and the import does not say how many. So the stub logs
+  `stub: dll!name` and ends the process with `STATUS_NOT_IMPLEMENTED`; the load succeeds and the
+  first missing function the program really calls is named. `cargo xtask win-app` builds it for a
+  PE32 program against the i686 modules and puts it in `SysWOW64`.
+- **WinSCP 6.7.1 (portable, 32-bit, C++ Builder)**: every import of its 32 DLLs binds (496 to the
+  32-bit stubs: 26 of its DLLs have no i686 build yet), its start-up code runs, and it ends at its
+  first missing function, `kernel32!SetThreadLocale`; behind that are the registry, COM, shell and
+  common-control functions of the DLLs that are still x64-only (`advapi32`, `ole32`, `oleaut32`,
+  `shell32`, `comctl32`, `comdlg32`, ...). The next step is building those for i686 as this stage
+  did for `user32` and `gdi32`.
