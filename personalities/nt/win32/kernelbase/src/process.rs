@@ -367,6 +367,12 @@ pub extern "system" fn GetStdHandle(which: u32) -> Handle {
     }
 }
 
+/// The process's three standard handles (input, output, error), as
+/// `GetStdHandle` returns them.
+pub(crate) fn std_handles() -> [Handle; 3] {
+    with_state(|s| s.std)
+}
+
 /// `SetStdHandle`.
 #[unsafe(no_mangle)]
 pub extern "system" fn SetStdHandle(which: u32, handle: Handle) -> i32 {

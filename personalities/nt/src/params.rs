@@ -184,6 +184,29 @@ impl Parameters {
     pub fn given_std_handles(&self) -> Option<[u64; 3]> {
         (self.startup.flags() & STARTF_USESTDHANDLES != 0).then_some(self.std_handles)
     }
+
+    /// The creator's own standard handles, which `CreateProcessW` puts in
+    /// the same place when the child inherits them (no
+    /// `STARTF_USESTDHANDLES`, ADR 0194); zeros if none.
+    pub fn inherited_std_handles(&self) -> [u64; 3] {
+        if self.startup.flags() & STARTF_USESTDHANDLES != 0 { [0; 3] } else { self.std_handles }
+    }
+}
+
+/// The standard handles a child takes from its creator, each `None` where
+/// the child gets its own (its console's, or the terminal's): the ones the
+/// creator chose (`STARTF_USESTDHANDLES`, all three as they are, ADR 0089),
+/// else each inherited one that is a handle in the child's table after
+/// inheritance (`valid`; ADR 0194).
+pub fn creator_std_handles(
+    given: Option<[u64; 3]>,
+    inherited: [u64; 3],
+    valid: &dyn Fn(u64) -> bool,
+) -> [Option<u64>; 3] {
+    match given {
+        Some(g) => g.map(Some),
+        None => inherited.map(|h| (h != 0 && valid(h)).then_some(h)),
+    }
 }
 
 fn put_u64(buf: &mut [u8], at: u64, v: u64) {
@@ -483,6 +506,16 @@ mod tests {
     }
 
     #[test]
+    fn a_child_takes_chosen_handles_as_they_are_and_inherited_ones_that_exist() {
+        let valid = |h: u64| h == 0x24 || h == 0x28;
+        // Chosen (STARTF_USESTDHANDLES): all three, even zero or not open.
+        assert_eq!(creator_std_handles(Some([0, 0x99, 0x24]), [0x24; 3], &valid), [Some(0), Some(0x99), Some(0x24)]);
+        // Inherited: only handles the child has; the rest are its own.
+        assert_eq!(creator_std_handles(None, [0, 0x24, 0x30], &valid), [None, Some(0x24), None]);
+        assert_eq!(creator_std_handles(None, [0; 3], &valid), [None; 3]);
+    }
+
+    #[test]
     fn quoting_round_trips_through_the_documented_rules() {
         let cases: &[&str] = &[
             "plain",
@@ -574,7 +607,11 @@ mod tests {
         };
         with_dir.std_handles = [4, 8, 0xC];
         assert_eq!(with_dir.given_std_handles(), Some([4, 8, 0xC]));
+        assert_eq!(with_dir.inherited_std_handles(), [0; 3]);
         assert_eq!(p.given_std_handles(), None);
+        let mut inherited = p.clone();
+        inherited.std_handles = [0, 0x24, 0x28];
+        assert_eq!(inherited.inherited_std_handles(), [0, 0x24, 0x28]);
         let img = image(base, &with_dir).unwrap();
         let mut reader = |addr: u64, buf: &mut [u8]| {
             let off = (addr - base) as usize;
