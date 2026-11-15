@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "e9565857a6d3",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:30:27Z",
+  "tests": [
+    {
+      "name": "nqip_classes",
+      "exe_sha256": "59a5e3df19ca4980b4d3cfa0e3ae0dee0fd5fadf853a0f41f1457bc49d48174f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xhc3MgMCBQcm9jZXNzQmFzaWNJbmZvcm1hdGlvbiwgNDggYnl0ZXM6IDB4MCByZXR1cm5lZCBsZW5ndGggNDgKY2xhc3MgMCB3aXRoIGxlbmd0aCA4OiAweGMwMDAwMDA0IHJldHVybmVkIGxlbmd0aCB1bmNoYW5nZWQKY2xhc3MgMCB3aXRoIGxlbmd0aCA2NDogMHgwIHJldHVybmVkIGxlbmd0aCA2NApjbGFzcyAyNCB3aXRoIGxlbmd0aCAxOiAweGMwMDAwMDA0IHJldHVybmVkIGxlbmd0aCB1bmNoYW5nZWQKY2xhc3MgMjQgd2l0aCBsZW5ndGggODogMHhjMDAwMDAwNCByZXR1cm5lZCBsZW5ndGggdW5jaGFuZ2VkCmNsYXNzIDMgVm1Db3VudGVycywgMTI4IGJ5dGVzOiAweGMwMDAwMDA0IHJldHVybmVkIGxlbmd0aCB1bmNoYW5nZWQKY2xhc3MgNSBCYXNlUHJpb3JpdHksIDQgYnl0ZXM6IDB4YzAwMDAwMDMgcmV0dXJuZWQgbGVuZ3RoIHVuY2hhbmdlZApjbGFzcyA4IEV4Y2VwdGlvblBvcnQsIDggYnl0ZXM6IDB4YzAwMDAwMDMgcmV0dXJuZWQgbGVuZ3RoIHVuY2hhbmdlZApjbGFzcyAxOCBQcmlvcml0eUNsYXNzLCAyIGJ5dGVzOiAweDAgcmV0dXJuZWQgbGVuZ3RoIDIKY2xhc3MgMjIgUHJpb3JpdHlCb29zdCwgNCBieXRlczogMHgwIHJldHVybmVkIGxlbmd0aCA0CmNsYXNzIDMwIERlYnVnT2JqZWN0SGFuZGxlLCA4IGJ5dGVzOiAweGMwMDAwMzUzIHJldHVybmVkIGxlbmd0aCA4CmNsYXNzIDMzIElvUHJpb3JpdHksIDQgYnl0ZXM6IDB4MCByZXR1cm5lZCBsZW5ndGggNApjbGFzcyAzNyBJbWFnZUluZm9ybWF0aW9uICgzNyksIDY0IGJ5dGVzOiAweDAgcmV0dXJuZWQgbGVuZ3RoIDY0CmRlYnVnIHBvcnQgd2l0aCBubyBkZWJ1Z2dlcjogMHgwIHZhbHVlIDAKV09XNjQgaW5mb3JtYXRpb24gb2YgYSA2NC1iaXQgcHJvY2VzczogMHgwIGxlbmd0aCA4IHZhbHVlIDAKaGFuZGxlIHdpdGggUFJPQ0VTU19RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OLCBjbGFzcyAyNDogMHgwCmhhbmRsZSB3aXRoIFNZTkNIUk9OSVpFIG9ubHksIGNsYXNzIDI0OiAweGMwMDAwMDIyCmhhbmRsZSB3aXRoIFBST0NFU1NfUVVFUllfSU5GT1JNQVRJT04sIGNsYXNzIDI0OiAweDAKdGhlIHRocmVhZCBwc2V1ZG8taGFuZGxlOiAweGMwMDAwMDI0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "class 0 ProcessBasicInformation, 48 bytes: 0x0 returned length 48\nclass 0 with length 8: 0xc0000004 returned length unchanged\nclass 0 with length 64: 0x0 returned length 64\nclass 24 with length 1: 0xc0000004 returned length unchanged\nclass 24 with length 8: 0xc0000004 returned length unchanged\nclass 3 VmCounters, 128 bytes: 0xc0000004 returned length unchanged\nclass 5 BasePriority, 4 bytes: 0xc0000003 returned length unchanged\nclass 8 ExceptionPort, 8 bytes: 0xc0000003 returned length unchanged\nclass 18 PriorityClass, 2 bytes: 0x0 returned length 2\nclass 22 PriorityBoost, 4 bytes: 0x0 returned length 4\nclass 30 DebugObjectHandle, 8 bytes: 0xc0000353 returned length 8\nclass 33 IoPriority, 4 bytes: 0x0 returned length 4\nclass 37 ImageInformation (37), 64 bytes: 0x0 returned length 64\ndebug port with no debugger: 0x0 value 0\nWOW64 information of a 64-bit process: 0x0 length 8 value 0\nhandle with PROCESS_QUERY_LIMITED_INFORMATION, class 24: 0x0\nhandle with SYNCHRONIZE only, class 24: 0xc0000022\nhandle with PROCESS_QUERY_INFORMATION, class 24: 0x0\nthe thread pseudo-handle: 0xc0000024\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    },
+    {
+      "name": "nqip_classes_b",
+      "exe_sha256": "b9be26f82f040c6e168af4e8ddf4aac59a2fd66ce63135a76ffcfc1269b0c5ec",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBleGl0IHN0YXR1cyAweDEwMyAoU1RJTExfQUNUSVZFKSBvd24gcGlkIG1hdGNoZXMgMSBQRUIgcG9pbnRlciBzZXQgMSBwYXJlbnQgcGlkIHNldCAxIGJhc2UgcHJpb3JpdHkgOApjbGFzcyAwIHdpdGggbGVuZ3RoIDQ3OiAweGMwMDAwMDA0IHJldHVybmVkIGxlbmd0aCB1bmNoYW5nZWQKY2xhc3MgMjQgUHJvY2Vzc1Nlc3Npb25JbmZvcm1hdGlvbiwgNCBieXRlczogMHgwIHJldHVybmVkIGxlbmd0aCA0IHZhbHVlIGlzIHRoZSBzZXNzaW9uIGlkIDEKY2xhc3MgMjQgd2l0aCBsZW5ndGggMzogMHhjMDAwMDAwNCByZXR1cm5lZCBsZW5ndGggdW5jaGFuZ2VkCmNsYXNzIDEgUXVvdGFMaW1pdHMsIDQwIGJ5dGVzOiAweGMwMDAwMDA0IHJldHVybmVkIGxlbmd0aCB1bmNoYW5nZWQKY2xhc3MgMyBWbUNvdW50ZXJzIChWTV9DT1VOVEVSU19FWCksIDE0NCBieXRlczogMHhjMDAwMDAwNCByZXR1cm5lZCBsZW5ndGggdW5jaGFuZ2VkCmNsYXNzIDYgUmFpc2VQcmlvcml0eSwgNCBieXRlczogMHhjMDAwMDAwMyByZXR1cm5lZCBsZW5ndGggdW5jaGFuZ2VkCmNsYXNzIDkgQWNjZXNzVG9rZW4sIDE2IGJ5dGVzOiAweGMwMDAwMDAzIHJldHVybmVkIGxlbmd0aCB1bmNoYW5nZWQKY2xhc3MgMjAgSGFuZGxlQ291bnQsIDQgYnl0ZXM6IDB4MCByZXR1cm5lZCBsZW5ndGggNApjbGFzcyAyNiBXT1c2NCBpbmZvcm1hdGlvbiwgOCBieXRlczogMHgwIHJldHVybmVkIGxlbmd0aCA4CmNsYXNzIDMxIERlYnVnRmxhZ3MsIDQgYnl0ZXM6IDB4MCByZXR1cm5lZCBsZW5ndGggNApjbGFzcyAzNCBFeGVjdXRlRmxhZ3MsIDQgYnl0ZXM6IDB4MCByZXR1cm5lZCBsZW5ndGggNApjbGFzcyAxMjcgaW52YWxpZCBjbGFzcyAxMjcsIDggYnl0ZXM6IDB4YzAwMDAwMDMgcmV0dXJuZWQgbGVuZ3RoIHVuY2hhbmdlZApkZWJ1ZyBmbGFnczogMHgwIHZhbHVlIDEKaW1hZ2UgZmlsZSBuYW1lOiAweDAgbGVuZ3RoIGZpZWxkIHBsYXVzaWJsZSAxIHN0cmluZyBpbiB0aGUgYnVmZmVyIGVuZHMgd2l0aCAuZXhlIDEgcmV0dXJuZWQgbGVuZ3RoIGNvdmVycyB0aGUgdXNlZCBwYXJ0IDEKaGFuZGxlIHdpdGggUFJPQ0VTU19RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OLCBjbGFzcyAyNzogMHgwCmhhbmRsZSB3aXRoIFNZTkNIUk9OSVpFIG9ubHksIGNsYXNzIDI3OiAweGMwMDAwMDIyCmhhbmRsZSB3aXRoIFBST0NFU1NfUVVFUllfSU5GT1JNQVRJT04sIGNsYXNzIDI3OiAweDAKTlVMTCBidWZmZXI6IDB4YzAwMDAwMDUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  exit status 0x103 (STILL_ACTIVE) own pid matches 1 PEB pointer set 1 parent pid set 1 base priority 8\nclass 0 with length 47: 0xc0000004 returned length unchanged\nclass 24 ProcessSessionInformation, 4 bytes: 0x0 returned length 4 value is the session id 1\nclass 24 with length 3: 0xc0000004 returned length unchanged\nclass 1 QuotaLimits, 40 bytes: 0xc0000004 returned length unchanged\nclass 3 VmCounters (VM_COUNTERS_EX), 144 bytes: 0xc0000004 returned length unchanged\nclass 6 RaisePriority, 4 bytes: 0xc0000003 returned length unchanged\nclass 9 AccessToken, 16 bytes: 0xc0000003 returned length unchanged\nclass 20 HandleCount, 4 bytes: 0x0 returned length 4\nclass 26 WOW64 information, 8 bytes: 0x0 returned length 8\nclass 31 DebugFlags, 4 bytes: 0x0 returned length 4\nclass 34 ExecuteFlags, 4 bytes: 0x0 returned length 4\nclass 127 invalid class 127, 8 bytes: 0xc0000003 returned length unchanged\ndebug flags: 0x0 value 1\nimage file name: 0x0 length field plausible 1 string in the buffer ends with .exe 1 returned length covers the used part 1\nhandle with PROCESS_QUERY_LIMITED_INFORMATION, class 27: 0x0\nhandle with SYNCHRONIZE only, class 27: 0xc0000022\nhandle with PROCESS_QUERY_INFORMATION, class 27: 0x0\nNULL buffer: 0xc0000005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    }
+  ]
+}

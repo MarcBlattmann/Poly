@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ucrtbase.dll/_get_stream_buffer_pointers.yaml
+id: windows/api/ucrtbase.dll/_get_stream_buffer_pointers
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (and, for the MSYS2 calls, the API trace of PortableGit 2.56.1's sh.exe and msys-2.0.dll made with the repository's trace kit: only the calls the runtime makes into kernel32 and ntdll, with their arguments and results; no Microsoft or MSYS2 code was read). Microsoft Learn for the documented calls named in each sheet; constants and layouts from winnt.h, winbase.h, winternl.h, ntstatus.h, winerror.h, ntsecapi.h, stdio.h.
+summary: >
+  Undocumented UCRT helper that Qt6 (and so XnView MP, Audacity, Firefox) calls right after start-up: hands out pointers to the buffer fields of a FILE stream, so inlined getc/putc code can read them. Returns 0 and writes three pointers; today Poly's version returns 0 and writes nothing, so the program reads through NULL (the null read both Qt applications end in).
+interface:
+  signature: "int __cdecl _get_stream_buffer_pointers(FILE *stream, char ***base, char ***ptr, int **cnt)"
+rules:
+  result: "returns 0 for a FILE returned by fopen (read, write, text and binary modes) and for stdin, stdout and stderr (__acrt_iob_func 0..2); all three out pointers are written."
+  slot_layout: "the pointers point INTO the stream's own record, not into the buffer: relative to the FILE pointer *ptr is at +0x0, *base at +0x8 and *cnt at +0x10 (this x64 build of the UCRT); calling it twice gives the same three slot addresses. Every deref goes through the slots: (*base) is the buffer start (char*), (*ptr) the current position (char*), (*cnt) an int count of bytes left."
+  fresh_stream: "a stream just opened for reading (nothing read) and one for writing (nothing written): *base is NULL, *cnt is 0."
+  read_buffer: "after the first fgetc on a binary file read buffer is set: position-in-buffer 1, count 4095 (the default buffer is 4096 bytes), the byte at *ptr is the next byte of the file; after reading 100 bytes in all: position 100, count 3996; after 300 bytes: 300 / 3796; after 4100 bytes (the buffer was refilled at 4096): position 4, count 4092; after fseek to 0 the buffer is kept with position 0 and count 0 (it refills at the next read) and one more fgetc gives position 1 and count 511 (the buffer is 512 bytes after a seek)."
+  text_mode: "a text mode read after one fgetc: position 1, count 25 (the file's byte 26 is the Ctrl-Z character 0x1A, which ends a text mode read: only 25 bytes are left in the buffer); the layout is the same as in binary mode."
+  setvbuf: "after setvbuf(_IOFBF, NULL, 8192) the buffer exists before the first read (*base set, position 0, count 0) and after fgetc gives position 1, count 8191; with the program's own 512-byte buffer *base is that buffer and the count after one fgetc is 511; after setvbuf(_IONBF) *base points inside the FILE record itself (a one-byte buffer, |offset| < 0x400), after fgetc position 1 and count 1."
+  write_buffer: "a stream opened for writing: *base NULL before the first write; after fwrite of 10 bytes position 10 and count 4086 (bytes of room left); after 100 bytes 100 / 3996; after fflush position 0, count 0; after 10000 bytes in all position 1708, count 2388."
+  bad_arguments: "a NULL stream raises the fail-fast exception 0xC0000409 (invalid parameter handler, no return); NULL for any one of the three out pointers, or a stream that was closed, returned 0 without a fault (child exit 0x60000000)."
+errors:
+  null_stream: "process ends with 0xC0000409 (STATUS_STACK_BUFFER_OVERRUN used by the fail-fast)"
+side_effects: "none"
+threading: "the stream must not be used by another thread at the time"
+ordering: []
+timing:
+  typical: "well under a microsecond"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing the DLLs named by the sheet by name. Observations are statuses, error codes, counts and offsets; never addresses, handles, process or thread ids, file names or times. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x6000_0000 | status: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  What Qt reads after the call (its own code); wide-character and memory streams (fmemopen is not available); streams opened with _fdopen or _popen; locking (the _nolock family).

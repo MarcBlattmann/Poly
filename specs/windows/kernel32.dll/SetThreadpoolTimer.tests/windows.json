@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ecada78ec668",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:11:17Z",
+  "tests": [
+    {
+      "name": "tp_timer_b",
+      "exe_sha256": "106551102c6550847ff64d7842bb1b82d7eb0906efd137845b9074dd184168c4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bmV3IHRpbWVyIGlzIHNldDogMAogIGZpcmVkIG9uY2U6IDEgZmlyc3QgY2FsbCBhZnRlciBhdCBsZWFzdCAxMjAgbXM6IDEgd2l0aGluIDMgczogMSBjb250ZXh0IG9rIDEKICBpcyBzZXQgd2hpbGUgcGVyaW9kaWM6IDEKZHVlIHRpbWUgMCAobm93KTogZmlyZWQgd2l0aGluIDUgczogMQogIGFnYWluIG9uIGEgc2V0IHRpbWVyOiAxCmNhbGxiYWNrIHJ1bm5pbmc6IHN0YXRlIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "new timer is set: 0\n  fired once: 1 first call after at least 120 ms: 1 within 3 s: 1 context ok 1\n  is set while periodic: 1\ndue time 0 (now): fired within 5 s: 1\n  again on a set timer: 1\ncallback running: state 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2793
+    },
+    {
+      "name": "tp_timer_c",
+      "exe_sha256": "940778990f317c913201a077f64d99b02bd007c073a02c899625476de8f85eed",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWZ0ZXIgU2V0VGhyZWFkcG9vbFRpbWVyKDE1MCBtcyk6IGlzIHNldCAxCiAgaXMgc2V0IGFmdGVyIHRoZSBvbmUgc2hvdCBmaXJlZDogMQogIGNhbmNlbGxlZCB3aXRoIGEgTlVMTCBkdWUgdGltZTogbm8gbW9yZSBjYWxsYmFja3MgMSBpcyBzZXQgMAphYnNvbHV0ZSB0aW1lIGluIHRoZSBwYXN0OiBmaXJlZCB3aXRoaW4gNSBzOiAxCiAgY2FuY2VsbGluZyBhIHNldCB0aW1lcjogMQogIGFmdGVyIHRoZSB3YWl0aW5nIGNhbGw6IHN0YXRlIDIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "after SetThreadpoolTimer(150 ms): is set 1\n  is set after the one shot fired: 1\n  cancelled with a NULL due time: no more callbacks 1 is set 0\nabsolute time in the past: fired within 5 s: 1\n  cancelling a set timer: 1\n  after the waiting call: state 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2791
+    }
+  ]
+}

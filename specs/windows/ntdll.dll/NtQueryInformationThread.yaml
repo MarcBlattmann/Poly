@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtQueryInformationThread.yaml
+id: windows/api/ntdll.dll/NtQueryInformationThread
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (and, for the MSYS2 calls, the API trace of PortableGit 2.56.1's sh.exe and msys-2.0.dll made with the repository's trace kit: only the calls the runtime makes into kernel32 and ntdll, with their arguments and results; no Microsoft or MSYS2 code was read). Microsoft Learn for the documented calls named in each sheet; constants and layouts from winnt.h, winbase.h, winternl.h, ntstatus.h, winerror.h, ntsecapi.h, stdio.h.
+summary: >
+  Queries a thread and, with NtOpenThread, which access masks open a thread and which classes each mask may query: basic information (class 0) needs THREAD_QUERY_INFORMATION or THREAD_QUERY_LIMITED_INFORMATION; the Win32 start address (class 9, which the MSYS2 runtime's signal thread asks about itself through the pseudo-handle) needs THREAD_QUERY_INFORMATION. THREAD_SET_LIMITED_INFORMATION (0x400, the mask the runtime opens its own thread with) opens but queries nothing.
+interface:
+  signature: "NTSTATUS NtQueryInformationThread(HANDLE thread, THREADINFOCLASS class, PVOID info, ULONG length, PULONG returnLength); NTSTATUS NtOpenThread(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, PCLIENT_ID)"
+rules:
+  open_masks: "NtOpenThread with a CLIENT_ID naming a thread of this process (process id 0, thread id) succeeds for the masks 0x40, 0x800, 0x400, 0x20, SYNCHRONIZE, 0x8, 0x2, 0x1FFFFF and MAXIMUM_ALLOWED, and gives STATUS_ACCESS_DENIED (0xC0000022) for the mask 0."
+  basic_information: "class 0 (48 bytes: exit status at 0, TEB pointer at 8, client id at 16 and 24, affinity at 32, Priority at 40, BasePriority at 44) succeeds for handles with 0x40, 0x800 or all access (0x1FFFFF, MAXIMUM_ALLOWED): exit status 0x103, thread and process ids match, priority 8, base priority 0; for the masks 0x400, 0x20, SYNCHRONIZE, 0x8 and 0x2: STATUS_ACCESS_DENIED. Lengths 0, 8, 47, 49 and 64: 0xC0000004 (returned length unchanged)."
+  times: "class 1 (32 bytes) succeeds with 0x40, 0x800 and full access, denied for the others."
+  start_address: "class 9 (8 bytes) succeeds with 0x40 and full access (a non-zero address, returned length 8) and gives 0xC0000022 with 0x800 and the other masks; on the pseudo-handle of the calling thread it succeeds (length 8)."
+  pseudo_handle: "the current-thread pseudo-handle, class 0: success, length 48, the thread id of the caller."
+  other_classes: "with 16-byte buffers on a full-access handle: classes 23, 30, 38 and 41 succeed (16 returned for 23, 38 and 41, 8 for 39 which also succeeds), classes 1, 11, 12, 14, 16, 17, 18, 20, 22, 24, 25, 32, 33, 35, 36, 40, 42, 43 give 0xC0000004; classes 2, 4, 5, 7, 8, 10, 15, 19, 27, 28, 31 give 0xC0000003 (invalid class), 21, 29 and 34 0xC0000022, 26 0xC0000005, 37 0xC000000D; class 3 (4 bytes) 0xC0000003."
+  bad_handles: "NULL: 0xC0000008; the process pseudo-handle: 0xC0000024. NtOpenThread with a thread id that does not exist (0xFFFFFF00) or thread id 0: STATUS_INVALID_CID (0xC000000B)."
+errors:
+  denied: "0xC0000022"
+  mismatch: "0xC0000004"
+  bad_class: "0xC0000003"
+  bad_cid: "0xC000000B"
+side_effects: "NtOpenThread creates a handle"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing the DLLs named by the sheet by name. Observations are statuses, error codes, counts and offsets; never addresses, handles, process or thread ids, file names or times. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x6000_0000 | status: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Threads of other processes, the classes that need privileges, a thread that has ended (the answer depended on the machine: the thread object can outlive its last handle for a moment).

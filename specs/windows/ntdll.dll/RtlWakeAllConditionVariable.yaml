@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlWakeAllConditionVariable.yaml
+id: windows/api/ntdll.dll/RtlWakeAllConditionVariable
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Slim Reader/Writer (SRW) Locks, Condition Variables, One-Time Initialization, Critical Section Objects, InitOnceExecuteOnce / InitOnceBeginInitialize functions, SleepConditionVariableSRW / SleepConditionVariableCS, Using One-Time Initialization. Layouts and constants from winnt.h (RTL_SRWLOCK, RTL_CONDITION_VARIABLE, RTL_RUN_ONCE, RTL_CRITICAL_SECTION), ntstatus.h and winerror.h. Wine's tests and source were not read.
+summary: >
+  Wakes every thread sleeping on the condition variable; each returns when it has taken its lock again (exclusive waiters one after another, shared waiters together).
+interface:
+  signature: "void RtlWakeAllConditionVariable(PRTL_CONDITION_VARIABLE cv)"
+rules:
+  all_return: "eight exclusive-mode waiters all returned with STATUS_SUCCESS and never two inside the lock at once; two exclusive and two shared waiters on one variable all returned."
+  other_variables: "waiters of another variable were not woken (woken 0 after 300 ms; woken after the wake all on their own variable)."
+  ping_pong: "two threads handing a token over with one lock and one variable, 300 turns each with RtlWakeAllConditionVariable after every turn, alternate strictly (A B A B ... for 600 turns) with no lost wake-up (every wait limited to 5 s, none timed out)."
+  same_as_wake_one: "lost wake, lock-held and ordering rules are those of RtlWakeConditionVariable."
+errors:
+  none: "no error results"
+side_effects: "makes the sleeping threads runnable"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "milliseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing ntdll.dll and kernel32.dll by name. Every wait that must not return is observed after 300 ms of waiting, every wait that must return is bounded by 5 s or more, so a failing implementation fails an observation instead of hanging the run. Observations are statuses, counts, booleans and small words; lock words are shown only when they are zero or small (the lock value of an uncontended lock). Counts of threads and loops are fixed so the outputs are identical on every run. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x600D: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Waking waiters with different timeouts.

@@ -1,0 +1,98 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "04c812707009",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:02:31Z",
+  "tests": [
+    {
+      "name": "k32_srw_block",
+      "exe_sha256": "dc57ee8eeb351ffd2858bae9def29943487ba3445a204d9b0acd0f2e9dfa0002",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFpbiBob2xkcyBleGNsdXNpdmUsIHRocmVhZCBhc2tzIGV4Y2x1c2l2ZTogZ290IGl0IHdoaWxlIG1haW4gaG9sZHM6IDAKICBsb2NrIGZyZWUgYWZ0ZXJ3YXJkczogMQogIHRocmVhZCBlbmRlZDogMQogIGFmdGVyIG1haW4gcmVsZWFzZWQ6IGdvdCBpdDogMQptYWluIGhvbGRzIHNoYXJlZCwgdGhyZWFkIGFza3Mgc2hhcmVkOiBnb3QgaXQgd2hpbGUgbWFpbiBob2xkczogMQogIGxvY2sgZnJlZSBhZnRlcndhcmRzOiAxCiAgbmV3IHJlYWRlciBnb3QgdGhlIGxvY2sgd2hpbGUgdGhlIHdyaXRlciB3YWl0czogMAogIGFmdGVyIHRoZSB3cml0ZXIgcmVsZWFzZWQ6IHJlYWRlciBnb3QgaXQ6IDEKdHdvIHdyaXRlcnMgYmVoaW5kIGEgcmVhZGVyOiBmaXJzdCBoYXMgaXQ6IDEsIHNlY29uZCBoYXMgaXQ6IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "main holds exclusive, thread asks exclusive: got it while main holds: 0\n  lock free afterwards: 1\n  thread ended: 1\n  after main released: got it: 1\nmain holds shared, thread asks shared: got it while main holds: 1\n  lock free afterwards: 1\n  new reader got the lock while the writer waits: 0\n  after the writer released: reader got it: 1\ntwo writers behind a reader: first has it: 1, second has it: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2861
+    },
+    {
+      "name": "k32_srw_block_c",
+      "exe_sha256": "ea07b4177ea786dd3af4f65e999329e67a6df78f8524658c5ec9640021f3df2d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICB0aHJlYWQgZW5kZWQ6IDEKICBhZnRlciBtYWluIHJlbGVhc2VkOiBnb3QgaXQ6IDEKbWFpbiBob2xkcyBzaGFyZWQsIHRocmVhZCBhc2tzIGV4Y2x1c2l2ZTogZ290IGl0IHdoaWxlIG1haW4gaG9sZHM6IDAKICBsb2NrIGZyZWUgYWZ0ZXJ3YXJkczogMQogIHRocmVhZCBlbmRlZDogMQogIHRyeSBzaGFyZWQgd2l0aCBhIHdyaXRlciB3YWl0aW5nOiAwCiAgcmVhZGVyIGJlZm9yZSB0aGUgd3JpdGVyIGlzIGRvbmU6IDAKICBsb2NrIGZyZWUgYWZ0ZXJ3YXJkczogMQogIHRocmVhZHMgZW5kZWQ6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  thread ended: 1\n  after main released: got it: 1\nmain holds shared, thread asks exclusive: got it while main holds: 0\n  lock free afterwards: 1\n  thread ended: 1\n  try shared with a writer waiting: 0\n  reader before the writer is done: 0\n  lock free afterwards: 1\n  threads ended: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2846
+    },
+    {
+      "name": "k32_srw_counter",
+      "exe_sha256": "b052094a2ef641f47b829de83a1b3dbc944894d0c817c81a1b7acb5884bfbb79",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zm91ciBpbmNyZW1lbnRpbmcgdGhyZWFkcyBlbmRlZDogMQpjb3VudGVyOiAyMDAwMAp3b3JkIGF0IHRoZSBlbmQ6IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "four incrementing threads ended: 1\ncounter: 20000\nword at the end: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 163
+    },
+    {
+      "name": "k32_srw_counter_b",
+      "exe_sha256": "cf1e00339f7ec112a4ee1cd256ad57305712f8f03d1bca55dcbe58eb8717323d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y291bnRlcjogODAwMDAKdHdvIHdyaXRlcnMgYW5kIHR3byByZWFkZXJzIGVuZGVkOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "counter: 80000\ntwo writers and two readers ended: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 163
+    },
+    {
+      "name": "k32_srw_counter_c",
+      "exe_sha256": "68ecb35a91804aa008a34d42af046437421541275c33a6ae2fd0a47cd352d58e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zm91ciB0cnktYWNxdWlyZSBzcGlubmVycyBlbmRlZDogMQphPTEwMDAwIGI9MTAwMDAgcmVhZHM9NDAwMDAgbWlzbWF0Y2hlcyBzZWVuIGJ5IHJlYWRlcnM9MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "four try-acquire spinners ended: 1\na=10000 b=10000 reads=40000 mismatches seen by readers=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 163
+    },
+    {
+      "name": "k32_srw_try",
+      "exe_sha256": "63ab285613ad5d6055d248b860c614870a3870a6e60f405000a0d419be135927",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhdGljIHplcm8gd29yZDogMAp3b3JkIHdoaWxlIGV4Y2x1c2l2ZTogMHgxCndvcmQgYWZ0ZXIgcmVsZWFzZTogMAp0cnkgc2hhcmVkIChzZWNvbmQpOiAxCnRyeSBleGNsdXNpdmUgd2l0aCBvbmUgcmVhZGVyIGxlZnQ6IDAKZWlnaHQgc2hhcmVkIGFjcXVpc2l0aW9ucyB0b29rOiA4Cm1vZGUgMDogaG9sZGVyIGhhcyB0aGUgbG9jazogMQptb2RlIDA6IGhvbGRlciBlbmRlZDogMQptb2RlIDE6IGhvbGRlciBzdGFydGVkIDEKbW9kZSAxOiB0cnkgc2hhcmVkOiAxCm1vZGUgMTogd29yZCBhdCB0aGUgZW5kOiAwCnRyeSBleGNsdXNpdmUgYWZ0ZXIgdGhpcyB0aHJlYWQgcmVsZWFzZWQgaXQ6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "static zero word: 0\nword while exclusive: 0x1\nword after release: 0\ntry shared (second): 1\ntry exclusive with one reader left: 0\neight shared acquisitions took: 8\nmode 0: holder has the lock: 1\nmode 0: holder ended: 1\nmode 1: holder started 1\nmode 1: try shared: 1\nmode 1: word at the end: 0\ntry exclusive after this thread released it: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 82
+    }
+  ]
+}
