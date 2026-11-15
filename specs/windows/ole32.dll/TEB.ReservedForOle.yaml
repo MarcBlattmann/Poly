@@ -1,0 +1,72 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/TEB.ReservedForOle.yaml
+id: windows/api/ole32.dll/TEB.ReservedForOle
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64; the 32-bit layout of the same fields on the same machine (WOW64), observed once"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-com-ole-tls
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above: they read the thread's own TEB field `ReservedForOle`
+  (winternl.h, `TEB.ReservedForOle`: byte offset 0x1758 of the 64-bit TEB, whose address is the 64-bit `gs` base, and
+  0xF80 of the 32-bit TEB, whose address is the `fs` base; both offsets follow from the header's field list) and plain
+  32-bit values inside the block it points to, next to what CoGetApartmentType says in the same state. Only data of our
+  own test processes is observed; no Microsoft binary was decompiled or disassembled, no code bytes of any Microsoft
+  binary are recorded, and the meaning given to the values below is inferred from which values appear together with
+  which calls, not from any binary. Why this matters: the hunt in the hand-off `fable-c62f809` found that Chrome's
+  component updater reads the apartment of its COM thread directly from this field (the 32-bit value at offset 0x14 of
+  the block) and not through CoGetApartmentType. Microsoft Learn: "CoInitializeEx", "CoUninitialize",
+  "CoGetApartmentType", "OleInitialize", "OleUninitialize", "RoInitialize", "RoUninitialize", "COINIT",
+  "RO_INIT_TYPE", "APTTYPE", "APTTYPEQUALIFIER"; objbase.h, combaseapi.h, roapi.h, winerror.h (S_FALSE 1,
+  RPC_E_CHANGED_MODE 0x80010106, CO_E_NOTINITIALIZED 0x800401F0, E_INVALIDARG 0x80070057). Wine's tests were not read.
+summary: >
+  What `TEB.ReservedForOle` of a thread holds in every state of COM, OLE and Windows Runtime initialisation. The field is
+  NULL on a thread that has not used COM, also on one that only lives in the process's multithreaded apartment
+  without having called CoInitializeEx. The first CoInitializeEx, OleInitialize or RoInitialize on a thread allocates a
+  block that the field points to; the block is never freed or detached while the thread lives (CoUninitialize leaves the
+  same block there). The 32-bit value at +0x14 of the block (x64; +0x0C in a 32-bit process) is a set of bits that
+  changes with the apartment model and the optional flags and is 0x1 once everything was undone. Table of the
+  observed values below (all numbers are hexadecimal; "value" is the 32-bit value at +0x14 on x64).
+interface:
+  signature: "reads of TEB.ReservedForOle (winternl.h) after HRESULT CoInitializeEx(LPVOID reserved, DWORD coinit); void CoUninitialize(void); HRESULT OleInitialize(LPVOID reserved); void OleUninitialize(void); HRESULT RoInitialize(RO_INIT_TYPE type); void RoUninitialize(void)"
+  layout_x64: "TEB + 0x1758 = pointer to the block (NULL or not). In the block: +0x14 the flags value; +0x28 the count of successful initialisations of the thread that are not yet undone (CoInitializeEx, OleInitialize and RoInitialize each add one, S_FALSE results included; CoUninitialize, OleUninitialize and RoUninitialize each remove one); +0x2c the count of OleInitialize calls not yet undone. Other dwords of the block are pointers or process-wide counters and are not part of this sheet; the dwords at +0x00 to +0x0C are 0 in every state observed and +0x10 is 0 except after an out-of-process activation."
+  layout_x86: "TEB + 0xF80 = pointer to the block. In the block: +0x0C the flags value (the same numbers as +0x14 on x64), +0x18 the initialisation count, +0x1C the OLE count. Observed once, in a 32-bit process on the same machine (CoInitializeEx 2, 6, 0, 4 each with a nested call and two CoUninitialize calls, OleInitialize and OleUninitialize); the dwords at +0x00 to +0x08 are 0, +0x10 is 0 in the states observed."
+  value_bits: "values seen: 0x1, 0x81, 0xC1, 0x141, 0x2000C1, 0x200141, and 0x3 after an out-of-process activation (see CLSID_BackgroundCopyManager). Read as bits (inferred from the combinations): 0x1 set once the thread has used COM in any way and never cleared again; 0x80 apartment threaded; 0x100 multithreaded; 0x40 together with 0x80 when the apartment threaded call carried COINIT_DISABLE_OLE1DDE; 0x200000 once RoInitialize initialised the thread; 0x2 on a thread that used an out-of-process class. The numbers in the rules are the contract, the reading of the bits is only a help."
+chrome:
+  calls: "Chrome's UI thread calls CoInitializeEx with flags 6 (value C1 on x64) and its other threads with flags 4 (value 141), see CoInitializeEx; the downloader of the component updater (components/update_client/background_downloader_win.cc, task DoStartDownload) reads this field and the value at +0x14 as the first thing it does. Which of the values it accepts is not known from this sheet; every value Windows produces is listed so that Poly can give the same one for each state."
+rules:
+  states_x64: "each line: state => block pointer, value at +0x14, count at +0x28, OLE count at +0x2c, CoGetApartmentType (hr, type, qualifier). (1) a new thread, nothing called yet => NULL; CoGetApartmentType 0x800401F0 (outputs untouched). Same for the main thread of the test process before any call, and for a worker while no thread of the process initialised COM. (2) CoInitializeEx(2) first call (S_OK) => set, 0x81, 1, 0; 0, type 3 (the process's first apartment-threaded thread; type 0 for a later one while the first lives), qualifier 0. (3) CoInitializeEx(6) => set, 0xC1, 1, 0; type 3 (or 0). (4) CoInitializeEx(0xA) (2 with SPEED_OVER_MEMORY) => 0x81; 0xE => 0xC1. (5) CoInitializeEx(0) => set, 0x141, 1, 0; 0, type 1, qualifier 0. (6) CoInitializeEx(4) => 0x141; 8 => 0x141; 0xC => 0x141 (the flags 4 and 8 change nothing for a multithreaded call). (7) the same model again (S_FALSE, result 1) => same block, same value, count 2. (8) the other model on an initialised thread (RPC_E_CHANGED_MODE 0x80010106) => nothing changes, count stays. (9) after one CoUninitialize of two => count 1, value unchanged, CoGetApartmentType still succeeds. (10) after the last matching CoUninitialize => the pointer is NOT cleared and is the same block as before, value 0x1, count 0, OLE count 0; CoGetApartmentType 0x800401F0 (outputs untouched). An extra CoUninitialize changes nothing. (11) CoInitializeEx again after (10) with the same or the other model => the same block, the values of (2) to (6) again, count 1; so the block of a thread is allocated once and reused."
+  states_ole: "OleInitialize(NULL) on a new thread => S_OK, set, 0x81, 1, OLE count 1, type 3; a nested call S_FALSE, 0x81, count 2, OLE count 2; OleUninitialize once => 0x81, 1, 1; twice => 0x1, 0, 0 and CoGetApartmentType 0x800401F0. On an apartment-threaded thread made by CoInitializeEx(2): OleInitialize is S_OK, 0x81, count 2, OLE count 1; OleUninitialize => count 1, OLE count 0, value 0x81, still initialised; CoUninitialize then => 0x1. On a multithreaded thread (CoInitializeEx(0)): OleInitialize 0x80010106 and nothing changes (0x141, count 1, OLE count 0). OleInitialize(1) (non-NULL reserved) is E_INVALIDARG and allocates nothing on a new thread."
+  states_ro: "RoInitialize(RO_INIT_SINGLETHREADED 0) on a new thread => S_OK, set, 0x2000C1, count 1, OLE count 0, type 3, qualifier 0 (note C1: the Windows Runtime initialisation behaves like the DISABLE_OLE1DDE apartment-threaded kind); a nested call S_FALSE, same value, count 2; RoInitialize(1) on it 0x80010106; RoUninitialize once => count 1, value unchanged; twice => 0x1, count 0, apartment 0x800401F0; a third RoUninitialize changes nothing. RoInitialize(RO_INIT_MULTITHREADED 1) on a thread whose block exists but is uninitialised => S_OK, 0x200141, 1, 0, type 1; nested S_FALSE count 2; RoInitialize(0) 0x80010106; the same two RoUninitialize calls leave 0x1. RoInitialize after CoInitializeEx(2) on the same thread: RoInitialize(0) = S_FALSE (1), value stays 0x81 (the 0x200000 bit is not set), count 2; RoInitialize(1) = 0x80010106; RoUninitialize => count 1; CoUninitialize => 0x1. RoInitialize and RoUninitialize are found in combase.dll."
+  implicit_mta: "a thread that never called CoInitializeEx while another thread of the process holds the multithreaded apartment: the pointer is NULL and CoGetApartmentType gives 0, type 1 (MTA), qualifier 1 (implicit MTA). After that thread made its first COM call that needed the apartment (CoCreateInstance of the global interface table, S_OK) the pointer is set, the value 0x1, count 0, OLE count 0, CoGetApartmentType still 0, type 1, qualifier 1. After CoCreateInstance of an out-of-process class (CLSID_BackgroundCopyManager) the value is 0x3 (and stays 0x3 after the thread's own CoUninitialize on a thread that had initialised itself). The holder thread (CoInitializeEx(0), value 0x141) has 0x1 after its CoUninitialize."
+  first_use_allocates: "on a thread that did not initialise COM, these calls leave the pointer NULL: CoGetApartmentType, CoUninitialize, CoInitializeEx with invalid flags (1, 0x10, 0xFFFFFFFF; E_INVALIDARG) or a non-NULL reserved pointer (E_INVALIDARG), OleInitialize(1), CoTaskMemAlloc, CoTaskMemFree, CLSIDFromString. These calls make the pointer non-NULL with value 0x1, count 0 even though they fail with CO_E_NOTINITIALIZED (0x800401F0): CoCreateInstance, CoGetClassObject, CoGetObjectContext. CoGetApartmentType stays 0x800401F0 afterwards."
+  per_thread: "every thread has its own field and block; threads do not share blocks; what one thread did to its own state never changes another thread's field (the implicit MTA thread above stays NULL while the holder's field is set)."
+  main_thread: "the main thread of a process behaves like any worker: NULL before the first call (tested), and after CoInitializeEx(2) the same set block with 0x81, count 1, type 3 (seen in an exploratory run; the recorded tests initialise on workers so that the first-apartment-threaded-thread rule is shown)."
+errors:
+  changed_mode: "RPC_E_CHANGED_MODE 0x80010106 (CoInitializeEx, OleInitialize and RoInitialize of the other model; nothing changes)"
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0 (CoGetApartmentType and the failing creation calls above)"
+  bad_arguments: "E_INVALIDARG 0x80070057; no block is allocated by them"
+side_effects: "the first successful (and, for the three creation calls above, the first failing) COM call of a thread allocates its block; it is never released while the thread lives (not observed after the thread's end)"
+threading: "the field and the block belong to the thread; only the thread itself reads them in these tests"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants,
+  the TEB offset of winternl.h read through the segment register). Observations are NULL or not, the plain 32-bit
+  values at +0x14, +0x28 and +0x2c of the block (never the pointer), HRESULTs and whether two blocks are the same;
+  never addresses, thread ids, handles or times. Each scenario runs on a thread of its own and the parent prints its
+  lines after joining it, so every state starts from a thread that has not used COM; the cross-thread scenarios use
+  unnamed events with bounded waits (10 s). RoInitialize is found with LoadLibrary and GetProcAddress in combase.dll
+  (the DLL is not imported by name), and the held-out test prints the case where it is missing instead of failing.
+not_covered: >
+  The neutral apartment (a thread only enters it while executing a call into a neutral-apartment object, which needs a
+  registered class; not observable without changing the registry), what happens to the block when the thread ends
+  (nothing is observable from outside), the dwords of the block other than +0x14, +0x28 and +0x2c, the 32-bit layout
+  beyond the one run mentioned above (it is not in a recorded test: the support crate of the tests is 64-bit only),
+  CoInitialize (the old call without flags) and CoInitializeSecurity, apartments created by other means (COM server
+  threads, CoRegisterClassObject), and the behaviour on a machine whose BITS or COM configuration differs.
