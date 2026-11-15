@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSAAsyncSelect.yaml
+id: windows/api/ws2_32.dll/WSAAsyncSelect
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs are Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers; the test fonts are TrueType files the test writes itself, so no Microsoft font is involved). Microsoft Learn reference pages of the functions, messages and notifications named here (Winsock, "Scroll Bars", "Dialog Boxes", "Common Controls", "Shell Functions"); winsock2.h, winuser.h, wingdi.h, commctrl.h, shlobj.h, shellapi.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Asks Winsock to post the window message wMsg to hWnd when the network events named in lEvent happen to the socket, and makes the socket non-blocking. PuTTY's terminal and its network layer use it for every connection (FD_READ | FD_WRITE | FD_OOB | FD_CLOSE for a connected socket, FD_CONNECT while connecting) and stop at this call on Poly. Observed on loopback TCP sockets.
+interface:
+  signature: "int WSAAsyncSelect(SOCKET s, HWND hWnd, unsigned int wMsg, long lEvent)"
+rules:
+  notification: "the message is posted (not sent) to the window of the registration: wParam is the socket, the low word of lParam the event (FD_READ 0x01, FD_WRITE 0x02, FD_OOB 0x04, FD_ACCEPT 0x08, FD_CONNECT 0x10, FD_CLOSE 0x20) and the high word the error code of the event (0 for success)"
+  non_blocking: "a registered socket is non-blocking: connect returns -1 with WSAEWOULDBLOCK (10035), recv with nothing to read returns -1 with 10035; WSAAsyncSelect itself returns 0"
+  connect: "a connecting socket registered for FD_CONNECT | FD_READ | FD_WRITE | FD_CLOSE gets FD_CONNECT (error 0) and then FD_WRITE once the connection is made (and no FD_READ or FD_CLOSE); a connection to a loopback port nobody listens on gets FD_CONNECT with error WSAECONNREFUSED (10061) after about two seconds (the connect call itself returned -1 / 10035)"
+  accept: "a listening socket registered for FD_ACCEPT gets one FD_ACCEPT for any number of waiting connections; every accept call that leaves another connection waiting is followed by one more FD_ACCEPT, the accept that takes the last one by none; the socket accept returns has the registration of the listening socket (same window, message and event mask, FD_ACCEPT only) and is non-blocking (recv with nothing to read: 10035); calling WSAAsyncSelect on it replaces that registration"
+  write: "a connected socket that is writable gets FD_WRITE when it is registered (an accepted socket registered with FD_WRITE: FD_WRITE at once); while the send buffer is full (send returned -1 / 10035) there is none; once the peer has read the data and send would work again, one FD_WRITE follows"
+  read: "FD_READ is posted when data arrives; more data arriving while the first is unread does not post another (10 bytes then 10 more bytes: one FD_READ); a recv that leaves data in the queue (recv of 4 of 20) posts FD_READ again, a recv that takes everything does not; data already waiting when WSAAsyncSelect is called (after a cancel with events 0) is reported by an FD_READ (and FD_WRITE for a writable socket) at once"
+  close: "when the peer closes in an orderly way the socket gets FD_CLOSE with error 0 and recv then returns 0 with no error; when the peer closes with a linger time of 0 (reset) FD_CLOSE carries WSAECONNABORTED (10053); FD_CLOSE is posted once"
+  cancel: "WSAAsyncSelect(s, hWnd, 0, 0) cancels the registration (returns 0); no message is posted while it is cancelled; ioctlsocket(FIONBIO, 1) on a registered socket returns 0 and FIONBIO 0 fails with WSAEINVAL (10022); after cancelling both work"
+  replace: "a second registration of the same socket replaces the first: the notifications go to the second message number only"
+  events_mask: "lEvent 0 and any mask of the bits 0x01 to 0x200 (FD_QOS 0x40, FD_GROUP_QOS 0x80, FD_ROUTING_INTERFACE_CHANGE 0x100 and FD_ADDRESS_LIST_CHANGE 0x200 are accepted) are accepted with 0, also on an unconnected socket (FD_READ, FD_WRITE, FD_OOB, FD_ACCEPT, FD_CONNECT, FD_CLOSE each alone) and a message number of 0; a mask with a bit from 0x400 up (0x400, 0x800, 0x7FF, 0x401, 0x10000, 0x7FFFFFFF, 0xFFFFFFFF) is refused: -1 and WSAEINVAL (10022)"
+  pending_messages: "a notification that is already posted stays in the queue and is delivered after closesocket; a window that is destroyed takes its queue with it (nothing is delivered); the socket's later events are posted to the old window handle and lost"
+errors:
+  not_started: "before WSAStartup: -1 with WSANOTINITIALISED (10093)"
+  bad_socket: "INVALID_SOCKET and a made-up socket value: -1 with WSAENOTSOCK (10038)"
+  bad_window: "a NULL window and a made-up window handle: -1 with WSAEINVAL (10022)"
+  bad_events: "see events_mask: -1 with WSAEINVAL (10022)"
+side_effects: "sets the socket non-blocking; posts window messages to the thread of the window"
+threading: "the messages go to the queue of the thread that owns hWnd; the tests use one thread"
+ordering: []
+timing:
+  typical: "notifications on loopback arrive within a few milliseconds; the refused connection takes about two seconds"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Out-of-band data (FD_OOB), UDP and other protocols, FD_QOS and the other rarely used events, windows of other threads or processes, the order of messages of different sockets, sockets that are connected to other machines, WSAEventSelect (a separate entry), what the message queue does under load, the exact moment of FD_WRITE after a full buffer (only that it follows).

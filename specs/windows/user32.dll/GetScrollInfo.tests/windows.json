@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "gsi_masks",
+      "exe_sha256": "055a51501315e77e38bc9d6b11bfd278f68d5a3181fa29a42ada41b26195b90b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmFuZ2UgMTAuLjkwIHBhZ2UgOCBwb3MgMzM6IFNldFNjcm9sbEluZm8oU0JfVkVSVCwgbWFzayAweDcsIG1pbiAxMCwgbWF4IDkwLCBwYWdlIDgsIHBvcyAzMykgPSAzMwpmaWVsZHMgb2YgdGhlIG1hc2sgb25seTogR2V0U2Nyb2xsSW5mbyhTQl9WRVJULCBtYXNrIDB4MSkgPSAxIG1pbiAxMCBtYXggOTAgcGFnZSAxMzEwNyBwb3MgMTc0NzYgdHJhY2sgMjE4NDUKZmllbGRzIG9mIHRoZSBtYXNrIG9ubHk6IEdldFNjcm9sbEluZm8oU0JfVkVSVCwgbWFzayAweDIpID0gMSBtaW4gNDM2OSBtYXggODczOCBwYWdlIDggcG9zIDE3NDc2IHRyYWNrIDIxODQ1CmZpZWxkcyBvZiB0aGUgbWFzayBvbmx5OiBHZXRTY3JvbGxJbmZvKFNCX1ZFUlQsIG1hc2sgMHg0KSA9IDEgbWluIDQzNjkgbWF4IDg3MzggcGFnZSAxMzEwNyBwb3MgMzMgdHJhY2sgMjE4NDUKZmllbGRzIG9mIHRoZSBtYXNrIG9ubHk6IEdldFNjcm9sbEluZm8oU0JfVkVSVCwgbWFzayAweDEwKSA9IDEgbWluIDQzNjkgbWF4IDg3MzggcGFnZSAxMzEwNyBwb3MgMTc0NzYgdHJhY2sgMzMKZmllbGRzIG9mIHRoZSBtYXNrIG9ubHk6IEdldFNjcm9sbEluZm8oU0JfVkVSVCwgbWFzayAweDUpID0gMSBtaW4gMTAgbWF4IDkwIHBhZ2UgMTMxMDcgcG9zIDMzIHRyYWNrIDIxODQ1CmZpZWxkcyBvZiB0aGUgbWFzayBvbmx5OiBHZXRTY3JvbGxJbmZvKFNCX1ZFUlQsIG1hc2sgMHgxMikgPSAxIG1pbiA0MzY5IG1heCA4NzM4IHBhZ2UgOCBwb3MgMTc0NzYgdHJhY2sgMzMKZmllbGRzIG9mIHRoZSBtYXNrIG9ubHk6IEdldFNjcm9sbEluZm8oU0JfVkVSVCwgbWFzayAweDE3KSA9IDEgbWluIDEwIG1heCA5MCBwYWdlIDggcG9zIDMzIHRyYWNrIDMzCmZpZWxkcyBvZiB0aGUgbWFzayBvbmx5OiBHZXRTY3JvbGxJbmZvKFNCX1ZFUlQsIG1hc2sgMHgxZikgPSAxIG1pbiAxMCBtYXggOTAgcGFnZSA4IHBvcyAzMyB0cmFjayAzMwpmaWVsZHMgb2YgdGhlIG1hc2sgb25seTogR2V0U2Nyb2xsSW5mbyhTQl9WRVJULCBtYXNrIDB4OCkgPSAwIGVyciAtMSBtaW4gNDM2OSBtYXggODczOCBwYWdlIDEzMTA3IHBvcyAxNzQ3NiB0cmFjayAyMTg0NQphIHBhZ2UgdGhhdCBjb3ZlcnMgdGhlIHJhbmdlOiBTZXRTY3JvbGxJbmZvKFNCX1ZFUlQsIG1hc2sgMHgyLCBtaW4gMCwgbWF4IDAsIHBhZ2UgMjAwLCBwb3MgMCkgPSAxMAphZnRlciAodGhlIGJhciBpcyBoaWRkZW4pOiBHZXRTY3JvbGxJbmZvKFNCX1ZFUlQsIG1hc2sgMHgxNykgPSAxIG1pbiAxMCBtYXggOTAgcGFnZSA4MSBwb3MgMTAgdHJhY2sgMTAKcmFuZ2UgMC4uMDogU2V0U2Nyb2xsSW5mbyhTQl9WRVJULCBtYXNrIDB4MywgbWluIDAsIG1heCAwLCBwYWdlIDAsIHBvcyAwKSA9IDAKZW1wdHkgcmFuZ2U6IEdldFNjcm9sbEluZm8oU0JfVkVSVCwgbWFzayAweDE3KSA9IDEgbWluIDAgbWF4IDAgcGFnZSAwIHBvcyAwIHRyYWNrIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "range 10..90 page 8 pos 33: SetScrollInfo(SB_VERT, mask 0x7, min 10, max 90, page 8, pos 33) = 33\nfields of the mask only: GetScrollInfo(SB_VERT, mask 0x1) = 1 min 10 max 90 page 13107 pos 17476 track 21845\nfields of the mask only: GetScrollInfo(SB_VERT, mask 0x2) = 1 min 4369 max 8738 page 8 pos 17476 track 21845\nfields of the mask only: GetScrollInfo(SB_VERT, mask 0x4) = 1 min 4369 max 8738 page 13107 pos 33 track 21845\nfields of the mask only: GetScrollInfo(SB_VERT, mask 0x10) = 1 min 4369 max 8738 page 13107 pos 17476 track 33\nfields of the mask only: GetScrollInfo(SB_VERT, mask 0x5) = 1 min 10 max 90 page 13107 pos 33 track 21845\nfields of the mask only: GetScrollInfo(SB_VERT, mask 0x12) = 1 min 4369 max 8738 page 8 pos 17476 track 33\nfields of the mask only: GetScrollInfo(SB_VERT, mask 0x17) = 1 min 10 max 90 page 8 pos 33 track 33\nfields of the mask only: GetScrollInfo(SB_VERT, mask 0x1f) = 1 min 10 max 90 page 8 pos 33 track 33\nfields of the mask only: GetScrollInfo(SB_VERT, mask 0x8) = 0 err -1 min 4369 max 8738 page 13107 pos 17476 track 21845\na page that covers the range: SetScrollInfo(SB_VERT, mask 0x2, min 0, max 0, page 200, pos 0) = 10\nafter (the bar is hidden): GetScrollInfo(SB_VERT, mask 0x17) = 1 min 10 max 90 page 81 pos 10 track 10\nrange 0..0: SetScrollInfo(SB_VERT, mask 0x3, min 0, max 0, page 0, pos 0) = 0\nempty range: GetScrollInfo(SB_VERT, mask 0x17) = 1 min 0 max 0 page 0 pos 0 track 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

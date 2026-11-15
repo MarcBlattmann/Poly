@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/gdi32.dll/GetOutlineTextMetricsA.yaml
+id: windows/api/gdi32.dll/GetOutlineTextMetricsA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs are Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers; the test fonts are TrueType files the test writes itself, so no Microsoft font is involved). Microsoft Learn reference pages of the functions, messages and notifications named here (Winsock, "Scroll Bars", "Dialog Boxes", "Common Controls", "Shell Functions"); winsock2.h, winuser.h, wingdi.h, commctrl.h, shlobj.h, shellapi.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns the metrics of the TrueType font selected into a device context: a fixed part (OUTLINETEXTMETRICA, 232 bytes on x64) followed by the family, face, style and full name as NUL-terminated strings whose offsets from the start of the structure are stored in the four pointer-sized name members. PuTTY's terminal calls it to find the underline position and the font's design metrics. Observed with fonts the test writes itself (TrueType files built in memory and added with AddFontMemResourceEx): the numbers follow from the font file, not from a Microsoft font.
+interface:
+  signature: "UINT GetOutlineTextMetricsA(HDC hdc, UINT cjCopy, LPOUTLINETEXTMETRICA potm)"
+rules:
+  size: "with cjCopy 0 (or a NULL buffer) the result is the size needed: 232 bytes for the structure plus the four names with their NULs in the order family, face, style, full name: 286 for the font 'PolyDlg Mixed' (names 'PolyDlg Mixed', 'PolyDlg Mixed', 'Regular', 'PolyDlg Mixed 1.0' = 14 + 14 + 8 + 18 bytes) and 283 for 'PolyDlg Even'; the size does not depend on the font size"
+  copy: "with cjCopy at least the needed size (286, 287 or 1024 for the test font) the result is the needed size (286) and that many bytes are written (otmSize is 286); the strings follow the fixed part in the same buffer"
+  short_buffer: "cjCopy 0 with a buffer: result 0, nothing written, the last error unchanged; cjCopy of 1 to 231 (1, 4, 8, 100 tried): the first cjCopy bytes of the structure are written and the result is cjCopy; cjCopy from 232 up to needed - 1 (285): result 0 with ERROR_INSUFFICIENT_BUFFER (1003), the 232 bytes of the fixed part are written; a NULL buffer with cjCopy equal to the needed size returns the needed size like cjCopy 0"
+  textmetric: "otmTextMetrics is the font's TEXTMETRICA for the size selected: at 16 pixels per em (lfHeight -16) for the test font: height 16, ascent 12, descent 4, internal leading 0, external leading 2, average width 8, maximum width 16, weight 400, overhang 0, aspect 96 x 96, first character 0x1E, last 0xFF, default 0x1F, break 0x20, pitch and family 0x07, character set 0"
+  design: "otmEMSquare is unitsPerEm (1024); otmAscent, otmDescent (negative), otmLineGap, the cap height, the x height, the font box, the Mac ascent / descent / line gap and the sub / superscript and underscore / strikeout sizes are the font file's values scaled to the selected size and rounded: at -16, -32 and -12 pixels the values were 12/-4/2, 24/-8/4 and 9/-3/2 for ascent/descent/line gap, strikeout size 1/2/1 and position 4/8/3, underscore size 1/2/1 and position -2/-4/-2; the values double when the size doubles; the slope rise is 1 and run 0 for an upright font, italic angle 0; the minimum ppem is 8"
+  panose: "otmPanoseNumber is the font's PANOSE from its OS/2 table ([2, 0, 0, 3, 0, 0, 0, 0, 0, 0] for the proportional test font), otmfsSelection the OS/2 fsSelection (0x40: regular), otmfsType 0"
+  names: "the four name offsets point behind the fixed part, in increasing order; the names are the font's name table entries: family, face (the same as family for a regular face), style ('Regular') and full name ('PolyDlg Mixed 1.0' where the font's full name is 'PolyDlg Mixed 1.0'); the structure ends with the last name's NUL"
+  size_independent: "the same call at lfHeight -12, -16, -32 and +16 (cell height) gives results scaled as described; a negative and a positive height for the same pixel size give the same numbers"
+  dc: "a screen DC and a memory DC with the same font give the same size"
+errors:
+  bad_dc: "a NULL DC, a made-up DC and a deleted DC: 0 with ERROR_INVALID_HANDLE (6)"
+  small_buffer: "needed - 1 bytes: 0 with ERROR_INSUFFICIENT_BUFFER (1003)"
+side_effects: "none"
+threading: "the DC's thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Bitmap and device fonts (the stock fonts report values that depend on the installed fonts; the tests do not use them), the Unicode form GetOutlineTextMetricsW, bold and italic faces and synthesised styles, fonts with hinting or kerning tables, the exact rule that maps the font's OS/2 cap height and x height to otmsCapEmHeight and otmsXHeight (the values 8 and 4 at 16 pixels were observed for a font whose OS/2 table says 768 and 512), OpenType fonts.
