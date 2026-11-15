@@ -1,5 +1,5 @@
 [
-{"symbol":"IsDestinationReachableA","src":["wine-spec"]},
-{"symbol":"IsDestinationReachableW","src":["wine-spec"]},
-{"symbol":"IsNetworkAlive","src":["wine-spec"]}
+{"symbol":"IsDestinationReachableA","status":"stub","src":["wine-spec"]},
+{"symbol":"IsDestinationReachableW","status":"stub","src":["wine-spec"]},
+{"symbol":"IsNetworkAlive","status":"stub","src":["wine-spec"]}
 ]

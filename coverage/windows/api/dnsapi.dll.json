@@ -30,7 +30,7 @@
 {"symbol":"DnsEnableBNodeResolverThread","src":["wine-spec"]},
 {"symbol":"DnsEnableDynamicRegistration","src":["wine-spec"]},
 {"symbol":"DnsExtractRecordsFromMessage_UTF8","src":["wine-spec"],"seeds":["wine:dnsapi/tests/record.c:test_DnsExtractRecordsFromMessage"]},
-{"symbol":"DnsExtractRecordsFromMessage_W","src":["wine-spec"],"seeds":["wine:dnsapi/tests/record.c:test_DnsExtractRecordsFromMessage"]},
+{"symbol":"DnsExtractRecordsFromMessage_W","status":"stub","src":["wine-spec"],"seeds":["wine:dnsapi/tests/record.c:test_DnsExtractRecordsFromMessage"]},
 {"symbol":"DnsFindAuthoritativeZone","src":["wine-spec"]},
 {"symbol":"DnsFlushResolverCache","status":"claimed","claimed_by":"impl-chrome-b35","src":["wine-spec"]},
 {"symbol":"DnsFlushResolverCacheEntry_A","src":["wine-spec"],"seeds":["wine:dnsapi/tests/name.c:test_DnsFlushResolverCacheEntry_A"]},
@@ -80,8 +80,8 @@
 {"symbol":"DnsNameCopyAllocate","src":["wine-spec"]},
 {"symbol":"DnsNotifyResolver","src":["wine-spec"]},
 {"symbol":"DnsQueryConfig","src":["wine-spec"],"seeds":["wine:dnsapi/tests/query.c:test_DnsQueryConfig","wine:dnsapi/tests/query.c:test_DnsQuery"]},
-{"symbol":"DnsQueryEx","src":["wine-spec"]},
-{"symbol":"DnsQuery_A","src":["wine-spec"]},
+{"symbol":"DnsQueryEx","status":"stub","src":["wine-spec"]},
+{"symbol":"DnsQuery_A","status":"stub","src":["wine-spec"]},
 {"symbol":"DnsQuery_UTF8","src":["wine-spec"]},
 {"symbol":"DnsQuery_W","src":["wine-spec"],"seeds":["wine:dnsapi/tests/cache.c:test_DnsGetCacheDataTable","wine:dnsapi/tests/query.c:test_DnsQuery"]},
 {"symbol":"DnsRecordBuild_UTF8","src":["wine-spec"]},
@@ -138,7 +138,7 @@
 {"symbol":"DnsWinsRecordFlagForString","src":["wine-spec"]},
 {"symbol":"DnsWinsRecordFlagString","src":["wine-spec"]},
 {"symbol":"DnsWriteQuestionToBuffer_UTF8","src":["wine-spec"]},
-{"symbol":"DnsWriteQuestionToBuffer_W","src":["wine-spec"]},
+{"symbol":"DnsWriteQuestionToBuffer_W","status":"stub","src":["wine-spec"]},
 {"symbol":"DnsWriteReverseNameStringForIpAddress","src":["wine-spec"]},
 {"symbol":"GetCurrentTimeInSeconds","src":["wine-spec"]}
 ]
