@@ -119,6 +119,8 @@ pub const PROCESS_WOW64_INFORMATION: u32 = 26;
 
 /// `THREADINFOCLASS` (`winternl.h` / `ntpsapi.h`).
 pub const THREAD_BASIC_INFORMATION: u32 = 0;
+/// `ThreadTimes` (`ntddk.h`): a `KERNEL_USER_TIMES` (creation, exit, kernel, user).
+pub const THREAD_TIMES: u32 = 1;
 
 /// `sizeof(PROCESS_BASIC_INFORMATION)` on x64 (`winternl.h`): `NTSTATUS
 /// ExitStatus` (0, 4 pad), `PPEB PebBaseAddress` (8), `ULONG_PTR

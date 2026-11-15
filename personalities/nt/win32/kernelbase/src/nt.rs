@@ -319,6 +319,9 @@ unsafe extern "system" {
     ) -> NtStatus;
     pub fn NtSuspendThread(handle: Handle, previous: *mut u32) -> NtStatus;
     pub fn NtResumeThread(handle: Handle, previous: *mut u32) -> NtStatus;
+    pub fn NtTerminateThread(handle: Handle, status: u32) -> NtStatus;
+    pub fn NtGetContextThread(handle: Handle, context: *mut u8) -> NtStatus;
+    pub fn NtSetContextThread(handle: Handle, context: *const u8) -> NtStatus;
     pub fn NtOpenEvent(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
     pub fn RtlRaiseException(record: *const u8);
     pub fn NtQueryInformationThread(

@@ -87,6 +87,7 @@ pub mod nls;
 pub mod oleaut;
 pub mod path;
 pub mod pipe;
+pub mod priority;
 pub mod process;
 pub mod procinfo;
 pub mod propstore;

@@ -428,6 +428,9 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
 /// while live), the TEB base and the client id.
 pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
+    if class as u32 == THREAD_TIMES {
+        return query_thread_times(k, h, buf, length, ret);
+    }
     if class as u32 != THREAD_BASIC_INFORMATION {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
@@ -532,6 +535,21 @@ fn query_process_times<K: NtKernel>(k: &mut K, h: u64, buf: u64, length: u64, re
     // PROCESS_QUERY_LIMITED_INFORMATION access right".
     let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
     let [created, kernel, user] = k.process_times(pid).unwrap_or([0; 3]);
+    let mut b = [0u8; KERNEL_USER_TIMES_SIZE];
+    b[0..8].copy_from_slice(&created.to_le_bytes());
+    b[16..24].copy_from_slice(&kernel.to_le_bytes());
+    b[24..32].copy_from_slice(&user.to_le_bytes());
+    write_info(k, buf, length, ret, &b)
+}
+
+/// `NtQueryInformationThread(ThreadTimes)` (Learn, `GetThreadTimes`: the handle needs
+/// `THREAD_QUERY_INFORMATION` or `THREAD_QUERY_LIMITED_INFORMATION`): the creation time the
+/// kernel knows, an exit time of 0 while the thread runs, and the kernel and user CPU time
+/// ([`NtKernel::thread_times`]), in 100 ns units.
+fn query_thread_times<K: NtKernel>(k: &mut K, h: u64, buf: u64, length: u64, ret: u64) -> Result<NtStatus> {
+    let tid = thread_of_any(k, Handle(h), &[THREAD_QUERY_LIMITED_INFORMATION, THREAD_QUERY_INFORMATION])?;
+    let pid = k.with_state(|_, proc, _| proc.pid);
+    let [created, kernel, user] = k.thread_times(pid, tid).unwrap_or([0; 3]);
     let mut b = [0u8; KERNEL_USER_TIMES_SIZE];
     b[0..8].copy_from_slice(&created.to_le_bytes());
     b[16..24].copy_from_slice(&kernel.to_le_bytes());

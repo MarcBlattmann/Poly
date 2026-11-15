@@ -969,6 +969,13 @@ impl NtKernel for Kernel {
         Some([created, seen[0], seen[1]])
     }
 
+    fn thread_times(&self, pid: ProcessId, thread: ThreadRef) -> Option<[u64; 3]> {
+        // The thread's own start is not kept: its process's creation time stands in for it.
+        let created = with(|s| s.created.get(&pid).copied())?;
+        let cpu = crate::cputime::thread(pid.0, thread.0 as u32)?;
+        Some([created, cpu.system_ns / 100, cpu.user_ns / 100])
+    }
+
     fn save_hive(&mut self, file: &str, data: &[u8]) -> Result<(), NtStatus> {
         registry::save(file, data)
     }

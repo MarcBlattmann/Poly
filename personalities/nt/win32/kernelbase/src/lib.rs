@@ -42,6 +42,7 @@ mod privilege;
 mod process;
 mod procinfo;
 mod registry;
+mod sched;
 mod secdata;
 mod security;
 mod spawn;

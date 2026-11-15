@@ -288,6 +288,9 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     // 0087). The contract is the oldest version of the one each page's
     // "APILocation" metadata names (as ADR 0083 reads advapi32's).
     ("ResumeThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("TerminateThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadContext", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadContext", "api-ms-win-core-processthreads-l1-1-0"),
     ("SuspendThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetProcessTimes", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetStartupInfoW", "api-ms-win-core-processthreads-l1-1-0"),
@@ -420,6 +423,19 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),
     ("K32GetMappedFileNameW", "api-ms-win-core-psapi-l1-1-0"),
     ("ProcessIdToSessionId", "api-ms-win-core-processthreads-l1-1-0"),
+    // Chrome S3 hunt: scheduling settings and thread times (the browser, its GPU process and
+    // crash handler call them all the time; Learn's "API set" rows).
+    ("SetThreadPriority", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadPriority", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadPriorityBoost", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadPriorityBoost", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetProcessPriorityBoost", "api-ms-win-core-processthreads-l1-1-2"),
+    ("GetProcessPriorityBoost", "api-ms-win-core-processthreads-l1-1-2"),
+    ("SetPriorityClass", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetPriorityClass", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadInformation", "api-ms-win-core-processthreads-l1-1-3"),
+    ("GetThreadTimes", "api-ms-win-core-processthreads-l1-1-0"),
+    ("QueryThreadCycleTime", "api-ms-win-core-realtime-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our
