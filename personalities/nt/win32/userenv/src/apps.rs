@@ -4,8 +4,6 @@
 //! implementation replaces a name here by defining it elsewhere in the crate and deleting it from the list.
 //! Generated from the programs' import tables (names only) and our export table.
 
-poly_win32_rt::fail_exports!("userenv", hresult, [CreateAppContainerProfile,]);
-
 poly_win32_rt::fail_exports!(
     "userenv",
     win32,

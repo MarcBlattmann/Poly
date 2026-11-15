@@ -57,7 +57,6 @@ poly_win32_rt::fail_exports!(
         CreateThreadpoolTimer,
         CreateThreadpoolWait,
         CreateWaitableTimerExW,
-        DeriveCapabilitySidsFromName,
         EnumSystemLocalesEx,
         EnumSystemLocalesW,
         FindAtomW,

@@ -52,7 +52,6 @@ fail_exports!(
         NtQueryQuotaInformationFile,
         NtQueryTimerResolution,
         NtQueryWnfStateData,
-        NtReadVirtualMemory,
         NtRollbackTransaction,
         NtSetEaFile,
         NtSetIoCompletionEx,
