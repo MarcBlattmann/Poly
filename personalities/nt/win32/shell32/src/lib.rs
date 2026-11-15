@@ -26,7 +26,8 @@ const ERROR_NOT_ENOUGH_MEMORY: u32 = 8;
 /// `MAX_PATH` (`minwindef.h`): the size of the buffer `SHGetFolderPathW` fills.
 const MAX_PATH: usize = 260;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetProcessHeap() -> *mut u8;
     fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
@@ -42,17 +43,20 @@ unsafe extern "system" {
     fn ReleaseSRWLockExclusive(lock: *mut usize);
 }
 
-#[link(name = "user32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn IsWindow(hwnd: usize) -> i32;
 }
 
-#[link(name = "advapi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "advapi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetTokenInformation(token: *mut u8, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> i32;
 }
 
-#[link(name = "ole32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ole32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ole32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CoTaskMemAlloc(bytes: usize) -> *mut u8;
 }

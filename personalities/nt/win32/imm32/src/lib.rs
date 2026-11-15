@@ -18,19 +18,22 @@ use poly_win32k::ime::{Assoc, ImeOp, ImeRes};
 use poly_win32k::proto::{Reply, Request, WinInfo};
 use poly_win32k::wire;
 
-#[link(name = "win32u", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "win32u", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
 }
 
-#[link(name = "user32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn SendMessageW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
     fn GetGUIThreadInfo(tid: u32, gti: *mut u8) -> i32;
     fn PrivateLayoutInstalled(hkl: usize) -> i32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetCurrentThreadId() -> u32;
 }

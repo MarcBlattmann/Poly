@@ -30,7 +30,8 @@ use poly_wincrypt::store::{self, AddAction, FindPara, Location, Provider};
 use poly_x509::Certificate;
 use poly_x509::chain::{self, error as trust};
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CreateEventW(sa: *const u8, manual: i32, initial: i32, name: *const u16) -> isize;
 }

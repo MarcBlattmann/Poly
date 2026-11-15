@@ -21,7 +21,8 @@ use poly_win32_rt as _;
 
 type Handle = isize;
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;
     fn LocalFree(mem: *mut u8) -> *mut u8;
@@ -330,7 +331,8 @@ pub unsafe extern "system" fn ConvertSecurityDescriptorToStringSecurityDescripto
 
 // ----- security information through a handle --------------------------------------------
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtQuerySecurityObject(handle: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> u32;
     fn NtSetSecurityObject(handle: Handle, info: u32, sd: *const u8) -> u32;

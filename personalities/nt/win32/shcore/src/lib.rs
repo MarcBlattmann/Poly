@@ -8,7 +8,8 @@
 use poly_win32_gui::set_last_error;
 use poly_win32_rt as _;
 
-#[link(name = "user32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetMonitorInfoW(monitor: usize, info: *mut u8) -> i32;
     fn GetThreadDpiAwarenessContext() -> isize;
