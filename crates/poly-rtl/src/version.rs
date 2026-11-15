@@ -94,9 +94,93 @@ pub unsafe fn get_nt_version_numbers(major: *mut u32, minor: *mut u32, build: *m
     }
 }
 
+/// The update build revision (`UBR`) Poly reports with [`BUILD`]: the fourth part of
+/// `10.0.26200.9974` (`poly_registry::defaults`, ADR 0189).
+pub const UPDATE: u32 = 9974;
+
+/// `DEVICEFAMILYINFOENUM_*` (`winnt.h`): the device family. Poly is a desktop.
+pub const DEVICEFAMILYINFOENUM_DESKTOP: u32 = 3;
+/// `DEVICEFAMILYDEVICEFORM_*` (`winnt.h`): the form of the device; Poly does not know it
+/// (`DEVICEFAMILYDEVICEFORM_UNKNOWN`, which Learn documents as "not set").
+pub const DEVICEFAMILYDEVICEFORM_UNKNOWN: u32 = 0;
+
+/// `RtlGetDeviceFamilyInfoEnum(pullUAPInfo, pulDeviceFamily, pulDeviceForm)`: the universal
+/// application platform version, the device family and the device form, each through its
+/// pointer (null ones are skipped). The UAP version is the version Poly reports as one 64-bit
+/// number, `major << 48 | minor << 32 | build << 16 | revision`.
+///
+/// # Safety
+/// Each pointer is null or valid for writing its type.
+pub unsafe fn get_device_family_info_enum(uap: *mut u64, family: *mut u32, form: *mut u32) {
+    // SAFETY: the caller's contract.
+    unsafe {
+        if !uap.is_null() {
+            uap.write_unaligned(uap_info());
+        }
+        if !family.is_null() {
+            family.write_unaligned(DEVICEFAMILYINFOENUM_DESKTOP);
+        }
+        if !form.is_null() {
+            form.write_unaligned(DEVICEFAMILYDEVICEFORM_UNKNOWN);
+        }
+    }
+}
+
+/// The UAP version of [`get_device_family_info_enum`].
+pub const fn uap_info() -> u64 {
+    ((MAJOR as u64) << 48) | ((MINOR as u64) << 32) | ((BUILD as u64) << 16) | UPDATE as u64
+}
+
+/// `ERROR_INSUFFICIENT_BUFFER` (`winerror.h`).
+pub const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+
+/// The family and form names `RtlConvertDeviceFamilyInfoToString` gives for the values this
+/// module reports: `Windows.Desktop` and `Unknown`.
+pub const DEVICE_FAMILY_NAME: &str = "Windows.Desktop";
+pub const DEVICE_FORM_NAME: &str = "Unknown";
+
+/// `RtlConvertDeviceFamilyInfoToString(pulDeviceFamilyBufferSize, pulDeviceFormBufferSize,
+/// DeviceFamily, DeviceForm)`: the names of the family and the form of this system as NUL-terminated
+/// UTF-16 strings. The sizes are in bytes, with the NUL: on input what the buffers hold, on output
+/// what the strings need. 0 on success; `ERROR_INSUFFICIENT_BUFFER` when a buffer is too small
+/// (the sizes then say what is needed and nothing is written to that buffer).
+///
+/// # Safety
+/// The size pointers are valid for reading and writing a `u32`; each buffer is null or valid for
+/// writing the number of bytes its size says.
+pub unsafe fn convert_device_family_info_to_string(
+    family_size: *mut u32,
+    form_size: *mut u32,
+    family: *mut u16,
+    form: *mut u16,
+) -> u32 {
+    if family_size.is_null() || form_size.is_null() {
+        return ERROR_INSUFFICIENT_BUFFER;
+    }
+    let mut result = 0;
+    // SAFETY: the caller's contract.
+    unsafe {
+        for (size, buf, text) in [(family_size, family, DEVICE_FAMILY_NAME), (form_size, form, DEVICE_FORM_NAME)] {
+            let need = ((text.len() + 1) * 2) as u32;
+            let have = size.read_unaligned();
+            size.write_unaligned(need);
+            if buf.is_null() || have < need {
+                result = ERROR_INSUFFICIENT_BUFFER;
+                continue;
+            }
+            for (i, c) in text.encode_utf16().enumerate() {
+                buf.add(i).write_unaligned(c);
+            }
+            buf.add(text.len()).write_unaligned(0);
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    extern crate std;
 
     #[test]
     fn both_forms() {
@@ -140,5 +224,36 @@ mod tests {
         // SAFETY: null pointers are skipped.
         unsafe { get_nt_version_numbers(core::ptr::null_mut(), &mut d, core::ptr::null_mut()) };
         assert_eq!(d, 0);
+    }
+
+    #[test]
+    fn device_family_is_a_desktop_of_the_reported_version() {
+        let (mut uap, mut family, mut form) = (0u64, 0u32, 99u32);
+        // SAFETY: valid locals.
+        unsafe { get_device_family_info_enum(&mut uap, &mut family, &mut form) };
+        assert_eq!(uap, 0x000A_0000_6658_26F6);
+        assert_eq!((family, form), (3, 0));
+        // Null outputs are skipped.
+        // SAFETY: as above.
+        unsafe { get_device_family_info_enum(core::ptr::null_mut(), &mut family, core::ptr::null_mut()) };
+    }
+
+    #[test]
+    fn device_family_names() {
+        let (mut fs, mut os) = (32u32, 16u32);
+        let (mut f, mut o) = ([0xAAAAu16; 16], [0xAAAAu16; 8]);
+        // SAFETY: buffers as large as their sizes say.
+        let r = unsafe { convert_device_family_info_to_string(&mut fs, &mut os, f.as_mut_ptr(), o.as_mut_ptr()) };
+        assert_eq!((r, fs, os), (0, 32, 16));
+        assert_eq!(f[..16].to_vec(), "Windows.Desktop\0".encode_utf16().collect::<std::vec::Vec<_>>());
+        assert_eq!(o[..8].to_vec(), "Unknown\0".encode_utf16().collect::<std::vec::Vec<_>>());
+        // Too small: the size says what is needed, the buffer is left alone.
+        let (mut fs, mut os) = (4u32, 16u32);
+        let (mut f, mut o) = ([0xAAAAu16; 16], [0xAAAAu16; 8]);
+        // SAFETY: as above.
+        let r = unsafe { convert_device_family_info_to_string(&mut fs, &mut os, f.as_mut_ptr(), o.as_mut_ptr()) };
+        assert_eq!((r, fs, os), (ERROR_INSUFFICIENT_BUFFER, 32, 16));
+        assert_eq!(f[0], 0xAAAA);
+        assert_eq!(o[0], u16::from(b'U'));
     }
 }
