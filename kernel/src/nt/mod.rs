@@ -1008,7 +1008,13 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let traced = (trace != 0 || trail != 0)
         .then(|| selected(process.pid))
         .filter(|&s| s)
-        .map(|_| poly_personality_nt::trace::begin(&mut k, regs));
+        .map(|_| {
+            if crate::arch::user::compat() {
+                poly_personality_nt::trace::begin32(&mut k, regs)
+            } else {
+                poly_personality_nt::trace::begin(&mut k, regs)
+            }
+        });
     // A 32-bit thread's call comes in the 32-bit convention and is converted (ADR 0186).
     let outcome = if crate::arch::user::compat() {
         poly_personality_nt::wow64::dispatch32(&mut k, regs, |k, regs| poly_personality_nt::dispatch_with(k, regs))
