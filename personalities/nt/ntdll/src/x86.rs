@@ -190,6 +190,9 @@ const EXCEPTION_STACK_INVALID: u32 = 0x8;
 const CONTINUE_EXECUTION: u32 = 0;
 /// `STATUS_NONCONTINUABLE_EXCEPTION`, `STATUS_UNWIND` (`ntstatus.h`).
 const STATUS_NONCONTINUABLE_EXCEPTION: u32 = 0xC000_0025;
+/// `STATUS_INVALID_EXCEPTION_HANDLER` (`ntstatus.h`): a frame's handler is not one its image
+/// allows (SafeSEH).
+const STATUS_INVALID_EXCEPTION_HANDLER: u32 = 0xC000_01A5;
 const STATUS_UNWIND: u32 = 0xC000_0027;
 /// The end of the frame chain.
 const CHAIN_END: u32 = 0xFFFF_FFFF;
@@ -236,6 +239,16 @@ fn frame_ok(frame: u32) -> bool {
     frame & 3 == 0 && frame >= limit && frame.checked_add(8).is_some_and(|end| end <= base)
 }
 
+/// Whether the handler of a frame may be called (SafeSEH, ADR 0186): if it lies in a loaded
+/// image, the image's table decides ([`poly_pe::handler_is_safe`]); code outside any image
+/// (a heap or a stack: a thunk made at run time) is not judged.
+fn handler_is_safe(handler: u32) -> bool {
+    let Some(module) = crate::with_loader(|l, _| l.find(u64::from(handler))) else { return true };
+    // SAFETY: a loaded module is mapped for its whole size.
+    let image = unsafe { core::slice::from_raw_parts(module.base as usize as *const u8, module.size as usize) };
+    poly_pe::handler_is_safe(image, module.base as u32, handler)
+}
+
 /// Offer the exception to the vectored handlers and then to each frame's handler: whether one
 /// continues execution (with `context` as it left it).
 ///
@@ -256,12 +269,24 @@ unsafe fn dispatch(record: *mut u8, context: *mut u8) -> bool {
             return false;
         }
         let mut dc = [0u32; 1];
-        // SAFETY: a registration record on the stack: its handler takes the documented
-        // arguments.
-        let disposition = unsafe {
-            let handler = u32_at(frame as usize as *const u8, 4);
-            poly_call_handler(handler, record, frame, context, dc.as_mut_ptr().cast())
-        };
+        // SAFETY: a checked registration record on the stack: `Handler` is its second field.
+        let handler = unsafe { u32_at(frame as usize as *const u8, 4) };
+        if !handler_is_safe(handler) {
+            // The image does not list it among its safe handlers: an exception of its own, whose
+            // record names the first (what the system does for an invalid handler).
+            let mut nested = [0u8; RECORD_SIZE];
+            // SAFETY: a record on our stack.
+            unsafe {
+                set_u32(nested.as_mut_ptr(), RECORD_CODE, STATUS_INVALID_EXCEPTION_HANDLER);
+                set_u32(nested.as_mut_ptr(), RECORD_FLAGS, EXCEPTION_NONCONTINUABLE);
+                set_u32(nested.as_mut_ptr(), RECORD_NESTED, record as u32);
+                syscalls::NtRaiseException(nested.as_ptr(), context, 0);
+            }
+            return false;
+        }
+        // SAFETY: the handler takes the documented arguments.
+        let disposition =
+            unsafe { poly_call_handler(handler, record, frame, context, dc.as_mut_ptr().cast()) };
         if disposition == CONTINUE_EXECUTION {
             // SAFETY: the caller's record.
             if unsafe { u32_at(record, RECORD_FLAGS) } & EXCEPTION_NONCONTINUABLE == 0 {

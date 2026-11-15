@@ -62,6 +62,7 @@ pub static HELLO32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-hell
 pub static USER32_32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-user32.dll"));
 pub static GUI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-gui32.exe"));
 pub static SYS32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-sys32.exe"));
+pub static SAFESEH32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-safeseh32.exe"));
 
 include!(concat!(env!("OUT_DIR"), "/wow64_dlls.rs"));
 mod test_wow64;

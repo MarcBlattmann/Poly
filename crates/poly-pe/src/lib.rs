@@ -53,6 +53,7 @@ mod plan;
 mod read;
 mod reloc;
 mod resource;
+mod safeseh;
 mod tls;
 mod view;
 
@@ -71,6 +72,7 @@ pub use imports::{
     ImportDescriptors, ImportEntries, ImportEntry, ImportRequest, ImportSymbol, bind_delay_imports, bind_imports,
 };
 pub use loadcfg::LoadConfig;
+pub use safeseh::handler_is_safe;
 pub use plan::{LoadPlan, Region, Regions};
 pub use reloc::{Reloc, RelocBlock, RelocBlocks, RelocEntries, RelocStats, relocate};
 pub use resource::{
