@@ -856,6 +856,35 @@ fn edit(h: H, msg: u32, w: usize, l: isize) -> isize {
             }
             if line == want { text.len() as isize } else { -1 }
         }
+        // EM_GETLINE: line `w` into the buffer `l`, whose first unit says how many fit; no NUL is written
+        // and the count copied comes back (0 when there is no such line).
+        EM_GETLINE => {
+            if l == 0 {
+                return 0;
+            }
+            let text = text_of(h);
+            let mut line = 0;
+            let mut start = 0;
+            for (i, &c) in text.iter().enumerate() {
+                if line == w {
+                    break;
+                }
+                if c == 10 {
+                    line += 1;
+                    start = i + 1;
+                }
+            }
+            if line != w {
+                return 0;
+            }
+            // SAFETY: the caller's buffer starts with the number of units it holds.
+            let room = unsafe { (l as *const u16).read_unaligned() } as usize;
+            let body: Vec<u16> = text[start..].iter().copied().take_while(|&c| c != 13 && c != 10).collect();
+            let n = body.len().min(room);
+            // SAFETY: `room` units are the caller's.
+            unsafe { core::ptr::copy_nonoverlapping(body.as_ptr(), l as *mut u16, n) };
+            n as isize
+        }
         EM_LINELENGTH => {
             let text = text_of(h);
             let start = if w as i32 == -1 { 0 } else { w.min(text.len()) };

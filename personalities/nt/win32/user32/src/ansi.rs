@@ -203,8 +203,8 @@ pub struct Conv {
 
 enum Undo {
     None,
-    /// A buffer filled by the receiver in form `from` (`to` receives); copy it back to `buf`.
-    Buf { to: Form, buf: usize, cap: usize, temp: usize, line: bool },
+    /// A buffer the receiver (form `to`) fills for the sender (form `from`); copy it back to `buf`.
+    Buf { from: Form, to: Form, buf: usize, cap: usize, temp: usize, line: bool },
 }
 
 /// The form of the procedure window `h` is called through.
@@ -289,7 +289,7 @@ pub fn enter(h: H, from: Form, to: Form, msg: u32, w: usize, l: isize) -> Conv {
             Conv {
                 w: nw,
                 l: p as isize,
-                undo: Undo::Buf { to, buf: l as usize, cap, temp: p, line },
+                undo: Undo::Buf { from, to, buf: l as usize, cap, temp: p, line },
                 _hold: alloc::vec![buf],
             }
         }
@@ -336,10 +336,10 @@ pub fn enter(h: H, from: Form, to: Form, msg: u32, w: usize, l: isize) -> Conv {
 
 impl Conv {
     /// Takes the result of the receiver back to the sender's form (and copies the text it wrote).
-    pub fn finish(self, from: Form, result: isize) -> isize {
+    pub fn finish(self, result: isize) -> isize {
         match self.undo {
             Undo::None => result,
-            Undo::Buf { to, buf, cap, temp, line } => {
+            Undo::Buf { from, to, buf, cap, temp, line } => {
                 let n = result.max(0) as usize;
                 // The text the receiver wrote, in the receiver's form, converted into the
                 // sender's buffer (`cap` units of the sender's form).

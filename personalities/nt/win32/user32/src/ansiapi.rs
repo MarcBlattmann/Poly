@@ -226,7 +226,7 @@ pub fn send_form(hwnd: H, msg: u32, w: usize, l: isize, from: Form) -> isize {
         // Another thread's window: its thread knows nothing of our form; make it UTF-16 here.
         let c = ansi::enter(hwnd, from, Form::Wide, msg, w, l);
         let r = u::send(&SYS, hwnd as u64, msg, c.w as u64, c.l as u64) as isize;
-        c.finish(from, r)
+        c.finish(r)
     }
 }
 
@@ -259,7 +259,7 @@ pub fn def_form(hwnd: H, msg: u32, w: usize, l: isize, from: Form) -> isize {
     }
     let c = ansi::enter(hwnd, from, Form::Wide, msg, w, l);
     let r = u::def_window_proc(&SYS, hwnd as u64, msg, c.w as u64, c.l as u64) as isize;
-    c.finish(from, r)
+    c.finish(r)
 }
 
 /// `CallWindowProcA`: calls `proc_` with an ANSI message.
@@ -349,4 +349,39 @@ pub unsafe extern "system" fn DispatchMessageA(msg: *const CMsg) -> isize {
     }
     // SAFETY: a MSG of ours.
     unsafe { super::DispatchMessageW(&m) }
+}
+
+/// What an ANSI procedure reads as through the wide `GetWindowLongPtr` (a thunk, here the pointer with a mark).
+pub const THUNK_TAG: u64 = 1 << 62;
+
+/// Whether `hwnd` is an ANSI dialog window of the system dialog class.
+pub fn is_ansi_dialog(hwnd: H) -> bool {
+    info(hwnd).is_some_and(|i| !i.unicode && i.wndproc == poly_win32k::dlg::sysproc::DIALOG)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetWindowLongPtrA(hwnd: H, index: i32) -> isize {
+    match call(Request::GetLong { hwnd: hwnd as u64, index, size: 8 }) {
+        Reply::Value { value } => value as isize,
+        Reply::Error { code } => {
+            set_last_error(code);
+            0
+        }
+        _ => 0,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetWindowLongA(hwnd: H, index: i32) -> i32 {
+    super::GetWindowLongW(hwnd, index)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetWindowLongPtrA(hwnd: H, index: i32, value: isize) -> isize {
+    super::SetWindowLongPtrW(hwnd, index, value)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetWindowLongA(hwnd: H, index: i32, value: i32) -> i32 {
+    super::SetWindowLongW(hwnd, index, value)
 }

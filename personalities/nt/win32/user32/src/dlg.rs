@@ -107,6 +107,29 @@ struct Dlg {
 
 static DLGS: SpinLock<BTreeMap<u32, Dlg>> = SpinLock::new(BTreeMap::new());
 
+/// The context help ids of windows (`SetWindowContextHelpId`; a dialog made from an extended
+/// template has the template's).
+static HELP_IDS: SpinLock<BTreeMap<u32, u32>> = SpinLock::new(BTreeMap::new());
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetWindowContextHelpId(hwnd: H) -> u32 {
+    if info(hwnd).is_none() {
+        set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    }
+    HELP_IDS.with(|m| m.get(&(hwnd as u32)).copied().unwrap_or(0))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetWindowContextHelpId(hwnd: H, id: u32) -> i32 {
+    if info(hwnd).is_none() {
+        set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    }
+    HELP_IDS.with(|m| m.insert(hwnd as u32, id));
+    1
+}
+
 fn dlg_state<R>(h: H, f: impl FnOnce(&mut Dlg) -> R) -> R {
     DLGS.with(|m| f(m.entry(h as u32).or_default()))
 }
@@ -282,6 +305,11 @@ pub fn create_dialog_window(
         return 0;
     }
     let (style, ex) = dlg::window_styles(tpl);
+    // A modal dialog is a top-level window (DialogBox*: `ERROR_TLW_WITH_WSCHILD`).
+    if modal && style & WS_CHILD != 0 {
+        set_last_error(poly_win32k::wm::ERROR_TLW_WITH_WSCHILD);
+        return 0;
+    }
     let visible = tpl.style & WS_VISIBLE != 0;
     let child_dialog = style & WS_CHILD != 0;
     let (hfont, mut units) = dialog_font(tpl);
@@ -354,6 +382,9 @@ pub fn create_dialog_window(
     };
     if hwnd == 0 {
         return 0;
+    }
+    if tpl.help_id != 0 {
+        HELP_IDS.with(|m| m.insert(hwnd as u32, tpl.help_id));
     }
     dlg_state(hwnd, |d| {
         d.modal = modal;
@@ -518,7 +549,20 @@ fn control_color_brush(msg: u32) -> isize {
 }
 
 pub fn dialog_proc(h: H, msg: u32, w: usize, l: isize) -> isize {
-    dialog_proc_in(h, msg, w, l, Form::Wide)
+    dialog_entry(h, msg, w, l, Form::Wide)
+}
+
+/// The dialog procedure for a message of form `form`. A message of the other form than an ANSI
+/// dialog window's is converted once, before anything sees it (so the text the dialog keeps has
+/// been through the code page, `SendMessageW(WM_SETTEXT)` on an ANSI dialog).
+pub fn dialog_entry(h: H, msg: u32, w: usize, l: isize, form: Form) -> isize {
+    if form == Form::Wide && ansi::is_text_message(msg) && info(h).is_some_and(|i| !i.unicode) {
+        let c = ansi::enter(h, Form::Wide, Form::Ansi, msg, w, l);
+        let (cw, cl) = (c.w, c.l);
+        let r = dialog_proc_in(h, msg, cw, cl, Form::Ansi);
+        return c.finish(r);
+    }
+    dialog_proc_in(h, msg, w, l, form)
 }
 
 /// The default handling for a message of form `form`; the dialog procedure of the dialog gets
@@ -552,7 +596,7 @@ fn dialog_proc_in(h: H, msg: u32, w: usize, l: isize, form: Form) -> isize {
         let (cw, cl) = (c.w, c.l);
         // SAFETY: the documented call.
         let raw = unsafe { f(h, msg, cw, cl) };
-        r = c.finish(to, raw);
+        r = c.finish(raw);
         handled = r != 0;
     }
     match msg {
@@ -648,6 +692,7 @@ fn dialog_proc_in(h: H, msg: u32, w: usize, l: isize, form: Form) -> isize {
         }
         ctl::WM_NCDESTROY => {
             DLGS.with(|m| m.remove(&(h as u32)));
+            HELP_IDS.with(|m| m.remove(&(h as u32)));
             def(h, msg, w, l)
         }
         _ => def(h, msg, w, l),
@@ -665,7 +710,7 @@ pub extern "system" fn DefDlgProcW(h: H, msg: u32, w: usize, l: isize) -> isize 
 
 #[unsafe(no_mangle)]
 pub extern "system" fn DefDlgProcA(h: H, msg: u32, w: usize, l: isize) -> isize {
-    dialog_proc_in(h, msg, w, l, Form::Ansi)
+    dialog_entry(h, msg, w, l, Form::Ansi)
 }
 
 // ---- items

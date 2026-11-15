@@ -178,11 +178,16 @@ impl Env for Sys {
 
     fn call_proc(&self, proc_: u64, hwnd: u32, msg: u32, w: u64, l: u64) -> u64 {
         if proc_ != 0 && proc_ <= poly_win32k::dlg::sysproc::MAX {
-            // A system class's procedure (`Button`, `Edit`, `#32770`, ...): UTF-16.
+            // A dialog window takes either form itself (an ANSI dialog hands its procedure bytes).
+            if proc_ == poly_win32k::dlg::sysproc::DIALOG {
+                let form = if ansi::is_text_message(msg) { ansi::take_form() } else { ansi::Form::Wide };
+                return dlg::dialog_entry(hwnd as H, msg, w as usize, l as isize, form) as u64;
+            }
+            // A system class's procedure (`Button`, `Edit`, ...): UTF-16.
             if ansi::is_text_message(msg) && ansi::take_form() == ansi::Form::Ansi {
                 let c = ansi::enter(hwnd as H, ansi::Form::Ansi, ansi::Form::Wide, msg, w as usize, l as isize);
                 let r = ctl::builtin(proc_, hwnd as H, msg, c.w, c.l) as u64;
-                return c.finish(ansi::Form::Ansi, r as isize) as u64;
+                return c.finish(r as isize) as u64;
             }
             return ctl::builtin(proc_, hwnd as H, msg, w as usize, l as isize) as u64;
         }
@@ -201,7 +206,7 @@ impl Env for Sys {
                 let c = ansi::enter(hwnd as H, from, to, msg, w as usize, l as isize);
                 // SAFETY: the documented call.
                 let r = unsafe { f(hwnd as H, msg, c.w, c.l) };
-                return c.finish(to, r) as u64;
+                return c.finish(r) as u64;
             }
         }
         // SAFETY: the documented call.
@@ -943,6 +948,11 @@ pub unsafe extern "system" fn MapWindowPoints(from: H, to: H, pts: *mut i32, n: 
 #[unsafe(no_mangle)]
 pub extern "system" fn GetWindowLongPtrW(hwnd: H, index: i32) -> isize {
     match call(Request::GetLong { hwnd: hwnd as u64, index, size: 8 }) {
+        // The dialog procedure of an ANSI dialog reads as a thunk through the wide function
+        // (DialogBoxParamA.yaml: `GetWindowLongPtrW(DWLP_DLGPROC)` is not the procedure given).
+        Reply::Value { value } if index == 8 && value != 0 && ansiapi::is_ansi_dialog(hwnd) => {
+            (value ^ ansiapi::THUNK_TAG) as isize
+        }
         Reply::Value { value } => value as isize,
         Reply::Error { code } => {
             set_last_error(code);
@@ -2490,7 +2500,7 @@ fn with_cursor<R>(f: impl FnOnce(&mut usize) -> R) -> R {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn LoadCursorW(instance: H, name: *const u16) -> H {
     if instance != 0 {
-        return icons::load_module_icon(instance, name, 2, 0, 0, 0x40);
+        return icons::load_module_icon(instance, name, 2, 0, 0, 0x40 | 0x8000);
     }
     let id = if (name as usize) >> 16 == 0 {
         Some(name as usize as u16)
