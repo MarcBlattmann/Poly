@@ -219,7 +219,9 @@ impl Rd<'_> {
 /// `None` when it is cut short.
 pub fn parse_template(data: &[u8]) -> Option<DlgTemplate> {
     let mut r = Rd { d: data, at: 0 };
-    let ex = data.len() >= 4 && data[0] == 1 && data[1] == 0 && data[2] == 0xFF && data[3] == 0xFF;
+    // The signature 0xFFFF marks an extended template whatever its `dlgVer` says (a version 2 header is
+    // not rejected, DialogBoxIndirectParamW.yaml `extended_version`).
+    let ex = data.len() >= 4 && data[2] == 0xFF && data[3] == 0xFF;
     let (style, ex_style, help_id, count);
     if ex {
         r.at = 4;

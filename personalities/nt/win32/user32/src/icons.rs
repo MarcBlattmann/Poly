@@ -107,13 +107,40 @@ fn system_icon(index: usize) -> Image {
     icofile::system_icon(index)
 }
 
+/// The arrow the colour system cursors show: a body of #010210 on a transparent ground (the
+/// colour of the oracle's arrow where `LoadCursorA.yaml` looks, at (2, 2)).
+fn arrow(hot: (i32, i32)) -> Image {
+    const POLY: [(i32, i32); 7] = [(0, 0), (0, 16), (4, 12), (7, 19), (9, 18), (6, 11), (12, 11)];
+    let inside = |px: i32, py: i32| {
+        // Even-odd crossing count of the pixel centre against the polygon's edges.
+        let (x, y) = (px * 2 + 1, py * 2 + 1);
+        let mut inside = false;
+        for i in 0..POLY.len() {
+            let (a, b) = (POLY[i], POLY[(i + 1) % POLY.len()]);
+            let (ax, ay, bx, by) = (a.0 * 2, a.1 * 2, b.0 * 2, b.1 * 2);
+            if (ay > y) != (by > y) && x < ax + (y - ay) * (bx - ax) / (by - ay) {
+                inside = !inside;
+            }
+        }
+        inside
+    };
+    let mut img = blank(32, 32, true, hot);
+    for py in 0..32 {
+        for px in 0..32 {
+            let at = (py * 32 + px) as usize;
+            if inside(px, py) {
+                img.bgra[at * 4..at * 4 + 4].copy_from_slice(&[0x10, 0x02, 0x01, 0xFF]);
+            } else {
+                img.and[at] = 1;
+            }
+        }
+    }
+    img
+}
+
 fn system_cursor(index: usize) -> (Image, bool) {
     let (_, hx, hy, colour) = CURSORS[index];
-    if colour {
-        (blank(32, 32, true, (hx as i32, hy as i32)), false)
-    } else {
-        (blank(32, 32, true, (hx as i32, hy as i32)), true)
-    }
+    if colour { (arrow((hx as i32, hy as i32)), false) } else { (blank(32, 32, true, (hx as i32, hy as i32)), true) }
 }
 
 /// Run `f` on the object behind a handle (system ones are made on demand);
@@ -520,7 +547,7 @@ fn resource_id(name: *const u16) -> Option<u16> {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn LoadIconW(instance: H, name: *const u16) -> usize {
     if instance != 0 {
-        return load_module_icon(instance, name, 1, 0, 0, LR_DEFAULTSIZE);
+        return load_module_icon(instance, name, 1, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
     }
     match resource_id(name) {
         Some(id @ 32512..=32518) => ICON_BASE + usize::from(id - 32512),
@@ -772,10 +799,50 @@ fn group_to_ico(module: usize, group: &[u8], cursor: bool) -> Option<Vec<u8>> {
 /// `LoadImageW` / `LoadIconW` / `LoadCursorW` of an icon (`kind` 1) or a cursor (2) of a module.
 pub fn load_module_icon(module: usize, name: *const u16, kind: u32, cx: i32, cy: i32, flags: u32) -> usize {
     let cursor = kind == 2;
-    let Some(group) = resource_bytes(module, name, if cursor { 12 } else { 14 }) else { return 0 };
-    let Some(bytes) = group_to_ico(module, &group, cursor) else { return 0 };
     let (w, h) = if flags & LR_DEFAULTSIZE != 0 && cx == 0 { (32, 32) } else { (cx, cy) };
-    icon_from_ico(&bytes, kind, w, h)
+    // A shared image is made once per module, resource and size (LR_SHARED, which LoadIconW and
+    // LoadCursorW imply): the same handle the next time.
+    let key = if flags & LR_SHARED != 0 { shared_key(module, name, kind, w, h) } else { None };
+    if let Some(k) = &key
+        && let Some(h) = SHARED.with(|s| s.iter().find(|e| &e.0 == k).map(|e| e.1))
+    {
+        return h;
+    }
+    let Some(group) = resource_bytes(module, name, if cursor { 12 } else { 14 }) else {
+        // The group is not there: the type of the answer is "no such resource of this type" for
+        // names the module does not have (LoadIconW.yaml `not_found`).
+        if poly_win32_gui::last_error() == ERROR_RESOURCE_NAME_NOT_FOUND {
+            set_last_error(ERROR_RESOURCE_TYPE_NOT_FOUND);
+        }
+        return 0;
+    };
+    let Some(bytes) = group_to_ico(module, &group, cursor) else { return 0 };
+    let made = icon_from_ico(&bytes, kind, w, h);
+    if let (Some(k), true) = (key, made != 0) {
+        SHARED.with(|s| s.push((k, made)));
+    }
+    made
+}
+
+type SharedKey = (usize, Vec<u16>, u32, i32, i32);
+
+/// The shared images made so far, by (module, resource name or `#id`, kind, width, height).
+static SHARED: SpinLock<Vec<(SharedKey, usize)>> = SpinLock::new(Vec::new());
+
+fn shared_key(module: usize, name: *const u16, kind: u32, w: i32, h: i32) -> Option<SharedKey> {
+    let id = if (name as usize) >> 16 == 0 {
+        alloc::vec![0x23, name as usize as u16]
+    } else {
+        // SAFETY: a NUL-terminated name.
+        let mut s = unsafe { wide(name, -1) };
+        for c in &mut s {
+            if (u16::from(b'a')..=u16::from(b'z')).contains(c) {
+                *c -= 32;
+            }
+        }
+        s
+    };
+    Some((module, id, kind, w, h))
 }
 
 fn icon_from_ico(bytes: &[u8], kind: u32, w: i32, h: i32) -> usize {
@@ -786,14 +853,18 @@ fn icon_from_ico(bytes: &[u8], kind: u32, w: i32, h: i32) -> usize {
     if kind == 2 {
         let mut c = img;
         let src_hot = pick.hot;
-        c.hot = (
-            (i64::from(src_hot.0) * i64::from(c.w) / i64::from(pick.w.max(1))) as i32,
-            (i64::from(src_hot.1) * i64::from(c.h) / i64::from(pick.h.max(1))) as i32,
-        );
+        c.hot = (scaled_hot(src_hot.0, c.w, pick.w), scaled_hot(src_hot.1, c.h, pick.h));
         obj_from_image(c, true, false)
     } else {
         obj_from_image(img, false, true)
     }
+}
+
+/// A hotspot coordinate in an image scaled from `from` to `to` pixels, rounded to the nearest
+/// (LoadImageW.yaml: (5, 7) of 32 pixels is (4, 5) at 24 and (8, 11) at 48).
+fn scaled_hot(hot: i32, to: i32, from: i32) -> i32 {
+    let from = i64::from(from.max(1));
+    ((i64::from(hot) * i64::from(to) * 2 + from) / (2 * from)) as i32
 }
 
 /// `LoadBitmapW(hInstance, name)`: `LoadImageW` of a bitmap with no flags.
@@ -833,10 +904,7 @@ fn load_file(name: *const u16, kind: u32, cx: i32, cy: i32, flags: u32) -> usize
         let mut c = img;
         let src_hot = pick.hot;
         let _ = ftype;
-        c.hot = (
-            (i64::from(src_hot.0) * i64::from(c.w) / i64::from(pick.w.max(1))) as i32,
-            (i64::from(src_hot.1) * i64::from(c.h) / i64::from(pick.h.max(1))) as i32,
-        );
+        c.hot = (scaled_hot(src_hot.0, c.w, pick.w), scaled_hot(src_hot.1, c.h, pick.h));
         obj_from_image(c, true, false)
     } else {
         obj_from_image(img, false, true)

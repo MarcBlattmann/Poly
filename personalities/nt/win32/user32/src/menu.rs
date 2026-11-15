@@ -309,6 +309,11 @@ pub(crate) unsafe fn read_info(p: *const u8, ansi: bool) -> Result<InfoIn, u32> 
             return Err(ERROR_INVALID_PARAMETER);
         }
         let mask = rd32(p, 4);
+        // MIIM_TYPE is the old way to say fType and the text: not together with the new ones
+        // (SetMenuItemInfoA.yaml `smia_fields`).
+        if mask & mn::MIIM_TYPE != 0 && mask & (mn::MIIM_STRING | mn::MIIM_FTYPE | mn::MIIM_BITMAP) != 0 {
+            return Err(ERROR_INVALID_PARAMETER);
+        }
         let ftype = rd32(p, 8);
         let type_data = rd64(p, 56) as usize;
         let string_type = ftype & (mn::MFT_BITMAP | mn::MFT_OWNERDRAW | mn::MFT_SEPARATOR) == 0;
@@ -334,16 +339,8 @@ pub(crate) unsafe fn read_text(p: usize, ansi: bool) -> Vec<u16> {
         // SAFETY: the caller's string.
         return unsafe { wide(p as *const u16, -1) };
     }
-    let mut v = Vec::new();
-    let mut q = p as *const u8;
     // SAFETY: the caller's NUL-terminated string.
-    unsafe {
-        while *q != 0 {
-            v.push(u16::from(*q));
-            q = q.add(1);
-        }
-    }
-    v
+    unsafe { super::ansi::wide_of_a(p as *const u8) }
 }
 
 #[unsafe(no_mangle)]
@@ -397,21 +394,16 @@ pub unsafe extern "system" fn GetMenuItemInfoW(menu: H, item: u32, by_pos: i32, 
 
 /// Copy `text` as ANSI (characters above Latin-1 become `?`): as [`copy_text`].
 pub(crate) unsafe fn copy_text_a(text: &[u16], buf: *mut u8, max: i32) -> i32 {
-    let n = text.len();
+    let bytes = super::ansi::ansi_of(text);
+    let n = bytes.len();
     if buf.is_null() || max == 0 {
         return n as i32;
     }
-    if max < 0 {
-        // SAFETY: a buffer the caller gave (a negative size writes the NUL only).
-        unsafe { *buf = 0 };
-        return n as i32;
-    }
-    let k = n.min(max as usize - 1);
-    // SAFETY: room for `max` bytes.
+    // A size below zero writes the whole text (GetMenuStringA.yaml: size -1 gives 'Open').
+    let k = if max < 0 { n } else { n.min(max as usize - 1) };
+    // SAFETY: room for `max` bytes (the caller's claim for a negative size).
     unsafe {
-        for (i, c) in text.iter().take(k).enumerate() {
-            *buf.add(i) = if *c < 0x100 { *c as u8 } else { b'?' };
-        }
+        core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, k);
         *buf.add(k) = 0;
     }
     k as i32

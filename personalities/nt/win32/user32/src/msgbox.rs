@@ -141,6 +141,19 @@ unsafe extern "system" fn box_proc(h: H, msg: u32, w: usize, _l: isize) -> isize
 
 /// `MessageBoxW(hWnd, lpText, lpCaption, uType)`.
 pub fn message_box(owner: H, text: &[u16], caption: &[u16], ty: u32) -> i32 {
+    message_box_in(owner, text, caption, ty, 0, 0)
+}
+
+/// `MB_USERICON` (`winuser.h`).
+const MB_USERICON: u32 = 0x80;
+
+/// The box of `message_box` with the instance of its resources and, for `MB_USERICON`, the
+/// number of the icon group in that instance.
+pub fn message_box_in(owner: H, text: &[u16], caption: &[u16], ty: u32, inst: usize, user_icon: u16) -> i32 {
+    if owner != 0 && super::info(owner).is_none() {
+        set_last_error(1400);
+        return 0;
+    }
     let Some(btns) = buttons(ty & MB_TYPEMASK) else {
         set_last_error(87);
         return 0;
@@ -154,6 +167,8 @@ pub fn message_box(owner: H, text: &[u16], caption: &[u16], ty: u32) -> i32 {
         0x20 => Some(32514),
         0x30 => Some(32515),
         0x40 => Some(32516),
+        // MB_USERICON: the icon static is there with or without an icon to put into it.
+        MB_USERICON => Some(user_icon),
         _ => None,
     };
     let def_index = (((ty & MB_DEFMASK) >> 8) as usize).min(btns.len() - 1);
@@ -252,13 +267,13 @@ pub fn message_box(owner: H, text: &[u16], caption: &[u16], ty: u32) -> i32 {
         v.retain(|x| x.0 != 0);
         v.push((0, btns[def_index].0));
     });
-    let r = run_dialog(&tpl, 0, owner, box_proc as usize, 0, true);
+    let r = run_dialog(&tpl, inst, owner, box_proc as usize, 0, true);
     if r <= 0 {
         return 0;
     }
     let r = r as i32;
-    // `MB_OK`'s button has the id of Cancel but the result is OK.
-    if ty & MB_TYPEMASK == 0 && r == IDCANCEL as i32 { IDOK as i32 } else { r }
+    // MB_OK's result is always OK (`MessageBoxIndirectW.yaml` `result`): its button has the id of Cancel.
+    if ty & MB_TYPEMASK == 0 { IDOK as i32 } else { r }
 }
 
 fn caption_of(p: *const u16) -> Vec<u16> {
@@ -291,20 +306,9 @@ pub unsafe extern "system" fn MessageBoxExW(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn MessageBoxA(owner: H, text: *const u8, caption: *const u8, ty: u32) -> i32 {
-    let widen = |p: *const u8| -> Vec<u16> {
-        let mut v = Vec::new();
-        if !p.is_null() {
-            let mut i = 0;
-            // SAFETY: a NUL-terminated string.
-            while unsafe { *p.add(i) } != 0 {
-                v.push(u16::from(unsafe { *p.add(i) }));
-                i += 1;
-            }
-        }
-        v
-    };
-    let t = widen(text);
-    let c = if caption.is_null() { utf16("Error") } else { widen(caption) };
+    // SAFETY: NUL-terminated strings or NULL.
+    let t = unsafe { super::ansi::wide_of_a(text) };
+    let c = if caption.is_null() { utf16("Error") } else { unsafe { super::ansi::wide_of_a(caption) } };
     message_box(owner, &t, &c, ty)
 }
 
@@ -312,4 +316,69 @@ pub unsafe extern "system" fn MessageBoxA(owner: H, text: *const u8, caption: *c
 pub unsafe extern "system" fn MessageBoxExA(owner: H, text: *const u8, caption: *const u8, ty: u32, _lang: u16) -> i32 {
     // SAFETY: as MessageBoxA.
     unsafe { MessageBoxA(owner, text, caption, ty) }
+}
+
+/// `MSGBOXPARAMSW` (`winuser.h`: 80 bytes on x64, 40 in 32 bits). The size is not checked.
+#[repr(C)]
+struct MsgBoxParams {
+    size: u32,
+    owner: usize,
+    instance: usize,
+    text: usize,
+    caption: usize,
+    style: u32,
+    icon: usize,
+    help_id: usize,
+    callback: usize,
+    language: u32,
+}
+
+/// A text or caption of a `MSGBOXPARAMS`: a string, or a string id of the instance (`None` for NULL).
+unsafe fn param_text(inst: usize, p: usize, ansi: bool) -> Option<Vec<u16>> {
+    if p == 0 {
+        return None;
+    }
+    if p < 0x1_0000 {
+        let mut buf = [0u16; 1024];
+        // SAFETY: our buffer; the instance may be anything (LoadStringW says so).
+        let n = if inst != 0 {
+            unsafe { super::strings::LoadStringW(inst as *mut u8, p as u32, buf.as_mut_ptr(), 1024) }
+        } else {
+            0
+        };
+        return Some(buf[..n.max(0) as usize].to_vec());
+    }
+    if ansi {
+        // SAFETY: a NUL-terminated string.
+        Some(unsafe { super::ansi::wide_of_a(p as *const u8) })
+    } else {
+        // SAFETY: a NUL-terminated string.
+        Some(unsafe { super::wide(p as *const u16, -1) })
+    }
+}
+
+unsafe fn indirect(p: *const MsgBoxParams, ansi: bool) -> i32 {
+    if p.is_null() {
+        set_last_error(998);
+        return 0;
+    }
+    // SAFETY: the caller's MSGBOXPARAMS.
+    let m = unsafe { core::ptr::read_unaligned(p) };
+    // SAFETY: strings or ids as above.
+    let text = unsafe { param_text(m.instance, m.text, ansi) }.unwrap_or_default();
+    let caption = unsafe { param_text(m.instance, m.caption, ansi) }.unwrap_or_else(|| utf16("Error"));
+    let icon = if m.icon != 0 && m.icon < 0x1_0000 { m.icon as u16 } else { 0 };
+    message_box_in(m.owner, &text, &caption, m.style, m.instance, icon)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn MessageBoxIndirectW(p: *const u8) -> i32 {
+    // SAFETY: the caller's MSGBOXPARAMSW.
+    unsafe { indirect(p as *const MsgBoxParams, false) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn MessageBoxIndirectA(p: *const u8) -> i32 {
+    // SAFETY: the caller's MSGBOXPARAMSA.
+    unsafe { indirect(p as *const MsgBoxParams, true) }
 }

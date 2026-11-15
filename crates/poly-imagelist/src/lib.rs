@@ -46,6 +46,9 @@ pub const ILD_OVERLAYMASK: u32 = 0xF00;
 /// `ILCF_*`: `ImageList_Copy` flags.
 pub const ILCF_SWAP: u32 = 1;
 
+/// The images lie in rows of this many in the image bitmap.
+pub const COLUMNS: i32 = 4;
+
 /// The largest edge of an image the list accepts.
 pub const MAX_EDGE: i32 = 16384;
 
@@ -113,6 +116,10 @@ pub struct ImageList {
     pub cy: i32,
     pub flags: u32,
     pub grow: i32,
+    /// The images the list was made for (`ImageList_Create`'s `cInitial`).
+    pub initial: i32,
+    /// The rows of the image bitmap (`GetImageInfo`): four images wide, grown a `grow` ahead.
+    pub rows: i32,
     pub bk: u32,
     pub images: Vec<Image>,
     /// `ImageList_SetOverlayImage`: overlay 1..=15 shows image `overlay[n - 1]` (-1: none).
@@ -121,11 +128,30 @@ pub struct ImageList {
 
 impl ImageList {
     /// `ImageList_Create`: `None` for a size that is not positive (or too big).
-    pub fn new(cx: i32, cy: i32, flags: u32, _initial: i32, grow: i32) -> Option<ImageList> {
+    pub fn new(cx: i32, cy: i32, flags: u32, initial: i32, grow: i32) -> Option<ImageList> {
         if cx <= 0 || cy <= 0 || cx > MAX_EDGE || cy > MAX_EDGE {
             return None;
         }
-        Some(ImageList { cx, cy, flags, grow, bk: CLR_NONE, images: Vec::new(), overlay: [-1; 15] })
+        let initial = initial.clamp(0, 1 << 16);
+        Some(ImageList {
+            cx,
+            cy,
+            flags,
+            grow,
+            initial,
+            rows: ((initial + COLUMNS - 1) / COLUMNS).max(1),
+            bk: CLR_NONE,
+            images: Vec::new(),
+            overlay: [-1; 15],
+        })
+    }
+
+    /// The image bitmap has room for `n` images and `grow` more (rows are added when it is full:
+    /// `ImageList_GetImageInfo.yaml` `ili_changes`: 5 images of a list that grows by 1 make two rows).
+    fn room_for(&mut self, n: usize) {
+        if n as i64 > i64::from(self.rows) * i64::from(COLUMNS) {
+            self.rows = ((n as i32 + self.grow.max(1) + COLUMNS - 1) / COLUMNS).max(1);
+        }
     }
 
     fn masked(&self) -> bool {
@@ -189,6 +215,8 @@ impl ImageList {
         for i in 0..n {
             let img = self.cut(color, mask, i, key);
             self.images.push(img);
+            let len = self.images.len();
+            self.room_for(len);
         }
         first
     }
@@ -254,6 +282,8 @@ impl ImageList {
         let img = self.icon_image(color, mask);
         if index == -1 {
             self.images.push(img);
+            let len = self.images.len();
+            self.room_for(len);
             self.count() - 1
         } else {
             self.images[index as usize] = img;
@@ -288,6 +318,8 @@ impl ImageList {
                 self.images.push(b);
             }
         }
+        // The bitmap is made for the count and a `grow` more (and shrinks to it).
+        self.rows = ((n as i32 + self.grow.max(1) + COLUMNS - 1) / COLUMNS).max(1);
         true
     }
 
@@ -299,6 +331,7 @@ impl ImageList {
         self.cx = cx;
         self.cy = cy;
         self.images.clear();
+        self.rows = ((self.initial + COLUMNS - 1) / COLUMNS).max(1);
         true
     }
 
@@ -313,18 +346,21 @@ impl ImageList {
         if index < 0 || index >= self.count() {
             return None;
         }
-        Some([index * self.cx, 0, (index + 1) * self.cx, self.cy])
+        let (col, row) = (index % COLUMNS, index / COLUMNS);
+        Some([col * self.cx, row * self.cy, (col + 1) * self.cx, (row + 1) * self.cy])
     }
 
-    /// The image strip as `B, G, R, A` bytes, `count * cx` wide.
+    /// The image bitmap as `B, G, R, A` bytes: four images wide, `rows` high.
     pub fn strip_bgra(&self) -> (i32, i32, Vec<u8>) {
-        let w = self.count() * self.cx;
-        let mut out = vec![0u8; (w as usize) * (self.cy as usize) * 4];
+        let w = COLUMNS * self.cx;
+        let h = self.rows.max((self.count() + COLUMNS - 1) / COLUMNS).max(1) * self.cy;
+        let mut out = vec![0u8; (w as usize) * (h as usize) * 4];
         for (i, img) in self.images.iter().enumerate() {
+            let (ox, oy) = ((i as i32 % COLUMNS) * self.cx, (i as i32 / COLUMNS) * self.cy);
             for y in 0..self.cy as usize {
                 for x in 0..self.cx as usize {
                     let p = img.argb[y * self.cx as usize + x];
-                    let at = (y * w as usize + i * self.cx as usize + x) * 4;
+                    let at = ((oy as usize + y) * w as usize + ox as usize + x) * 4;
                     out[at] = p as u8;
                     out[at + 1] = (p >> 8) as u8;
                     out[at + 2] = (p >> 16) as u8;
@@ -332,7 +368,7 @@ impl ImageList {
                 }
             }
         }
-        (w, self.cy, out)
+        (w, h, out)
     }
 
     /// The mask strip, one `B, G, R, A` pixel per image pixel: white where transparent.
@@ -366,6 +402,10 @@ impl ImageList {
 
     /// `ImageList_Copy` inside one list: image `src` to image `dst` (or swapped).
     pub fn copy_within(&mut self, dst: i32, src: i32, flags: u32) -> bool {
+        // Only ILCF_MOVE (0) and ILCF_SWAP (1) are flags (ImageList_Copy.yaml: others fail).
+        if flags & !ILCF_SWAP != 0 {
+            return false;
+        }
         let n = self.count();
         if dst < 0 || src < 0 || dst >= n || src >= n {
             return false;
@@ -442,24 +482,38 @@ impl ImageList {
         let a = p >> 24;
         let bk = if bk == CLR_DEFAULT { self.bk } else { bk };
         let fill_bk = flags & ILD_TRANSPARENT == 0 && bk != CLR_NONE;
-        if flags & ILD_MASK != 0 {
-            // The mask itself: black where the image is, white where it is not.
-            return if a < 128 { Shade::Color(0xFF_FFFF) } else { Shade::Color(0) };
+        if flags & ILD_MASK != 0 && self.masked() {
+            // The mask goes over the destination with AND when there is no background (the opaque pixels
+            // black, the rest left alone); with a background it is copied (the rest white).
+            return if a >= 128 {
+                Shade::Color(0)
+            } else if fill_bk {
+                Shade::Color(0xFF_FFFF)
+            } else {
+                Shade::Skip
+            };
+        }
+        if flags & ILD_IMAGE != 0 {
+            // The colour bitmap as it is: its transparent pixels are black.
+            return Shade::Color(argb_to_colorref(p));
         }
         if a == 0 {
             return if fill_bk { Shade::Color(bk & 0xFF_FFFF) } else { Shade::Skip };
         }
-        let mut c = argb_to_colorref(p);
-        let blend = if flags & ILD_BLEND50 != 0 {
-            50
-        } else if flags & ILD_BLEND25 != 0 {
-            25
-        } else {
-            0
-        };
-        if blend != 0 {
-            let f = if fg == CLR_DEFAULT || fg == CLR_NONE { highlight } else { fg };
-            c = mix(c, f, blend);
+        let c = argb_to_colorref(p);
+        if flags & (ILD_BLEND25 | ILD_BLEND50) != 0 {
+            // Blending dithers: every second pixel takes the blend colour (the highlight colour for
+            // `CLR_DEFAULT`) and the others keep the image; with `CLR_NONE` there is no blend colour,
+            // the image shows at the first kind only and the destination at the others.
+            let even = (x + y) % 2 == 0;
+            if fg == CLR_NONE {
+                if !even {
+                    return Shade::Skip;
+                }
+            } else if even {
+                let b = if fg == CLR_DEFAULT { highlight } else { fg };
+                return Shade::Color(b & 0xFF_FFFF);
+            }
         }
         if a == 255 { Shade::Color(c) } else { Shade::Alpha(c, a as u8) }
     }
@@ -626,6 +680,29 @@ mod tests {
         assert_eq!(l.image_rect(0), None);
         l.set_count(2);
         assert_eq!(l.image_rect(1), Some([2, 0, 4, 2]));
+        l.set_count(6);
+        assert_eq!(l.image_rect(5), Some([2, 2, 4, 4]));
+    }
+
+    #[test]
+    fn the_image_bitmap_is_four_wide_and_grows_ahead() {
+        // `ImageList_GetImageInfo.yaml` `ili_changes`: a list of 8x8 images that grows by 1.
+        let mut l = ImageList::new(8, 8, ILC_COLOR32 | ILC_MASK, 1, 1).unwrap();
+        let one = strip(8, 8, &[0xFF0000]);
+        for _ in 0..5 {
+            l.add(&bm(&one), None);
+        }
+        assert_eq!(l.strip_bgra().0, 32);
+        assert_eq!((l.strip_bgra().1, l.rows), (16, 2));
+        l.remove(1);
+        assert_eq!(l.strip_bgra().1, 16, "removing does not shrink it");
+        l.set_count(8);
+        assert_eq!(l.strip_bgra().1, 24);
+        l.set_count(2);
+        assert_eq!(l.strip_bgra().1, 8);
+        l.set_icon_size(16, 16);
+        l.add(&bm(&strip(16, 16, &[0x0000FF])), None);
+        assert_eq!((l.strip_bgra().0, l.strip_bgra().1), (64, 16));
     }
 
     #[test]
@@ -670,11 +747,14 @@ mod tests {
         // The list's own background with CLR_DEFAULT.
         l.set_bk(0x00AA00);
         assert_eq!(l.shade(0, 1, 0, ILD_NORMAL, CLR_DEFAULT, CLR_NONE, 0), Shade::Color(0xAA00));
-        // Blend half way to white.
-        assert_eq!(l.shade(0, 0, 0, ILD_BLEND50, CLR_NONE, 0xFF_FFFF, 0), Shade::Color(0xFF_7F7F));
-        // The mask.
+        // Blending dithers: the even pixels take the blend colour, the odd ones keep the image.
+        assert_eq!(l.shade(0, 0, 0, ILD_BLEND50, CLR_NONE, 0xFF_FFFF, 0), Shade::Color(0xFF_FFFF));
+        // The mask: black where the image is, the destination left alone (no background) or white (one).
         assert_eq!(l.shade(0, 0, 0, ILD_MASK, CLR_NONE, CLR_NONE, 0), Shade::Color(0));
-        assert_eq!(l.shade(0, 1, 0, ILD_MASK, CLR_NONE, CLR_NONE, 0), Shade::Color(0xFF_FFFF));
+        assert_eq!(l.shade(0, 1, 0, ILD_MASK, CLR_NONE, CLR_NONE, 0), Shade::Skip);
+        assert_eq!(l.shade(0, 1, 0, ILD_MASK, 0x123456, CLR_NONE, 0), Shade::Color(0xFF_FFFF));
+        // The bitmap as it is.
+        assert_eq!(l.shade(0, 1, 0, ILD_IMAGE, CLR_NONE, CLR_NONE, 0), Shade::Color(0));
         assert_eq!(l.shade(5, 0, 0, ILD_NORMAL, CLR_NONE, CLR_NONE, 0), Shade::Skip);
     }
 

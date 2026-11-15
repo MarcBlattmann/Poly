@@ -11,8 +11,6 @@ poly_win32_rt::fail_exports!(
     win32,
     [
         CreatePropertySheetPageW,
-        CreateStatusWindowW,
-        CreateToolbarEx,
         DefSubclassProc,
         FlatSB_GetScrollInfo,
         FlatSB_GetScrollPos,

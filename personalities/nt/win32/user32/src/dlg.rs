@@ -5,6 +5,8 @@
 //! the behaviour is the spec sheets' (`DialogBoxParamW`, `CreateDialogParamW`,
 //! `EndDialog`, `GetDlgItem`, `SetDlgItemTextW`, `IsDialogMessageW`, ...).
 
+use super::ansi::{self, Form};
+use super::ansiapi;
 use super::ctl::{self, BM_CLICK, BN_CLICKED, send};
 use super::{H, SYS, SpinLock, call, info, set_last_error, u, wide};
 use alloc::collections::BTreeMap;
@@ -104,6 +106,29 @@ struct Dlg {
 }
 
 static DLGS: SpinLock<BTreeMap<u32, Dlg>> = SpinLock::new(BTreeMap::new());
+
+/// The context help ids of windows (`SetWindowContextHelpId`; a dialog made from an extended
+/// template has the template's).
+static HELP_IDS: SpinLock<BTreeMap<u32, u32>> = SpinLock::new(BTreeMap::new());
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetWindowContextHelpId(hwnd: H) -> u32 {
+    if info(hwnd).is_none() {
+        set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    }
+    HELP_IDS.with(|m| m.get(&(hwnd as u32)).copied().unwrap_or(0))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetWindowContextHelpId(hwnd: H, id: u32) -> i32 {
+    if info(hwnd).is_none() {
+        set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    }
+    HELP_IDS.with(|m| m.insert(hwnd as u32, id));
+    1
+}
 
 fn dlg_state<R>(h: H, f: impl FnOnce(&mut Dlg) -> R) -> R {
     DLGS.with(|m| f(m.entry(h as u32).or_default()))
@@ -272,11 +297,19 @@ pub fn create_dialog_window(
     modal: bool,
     px_units: bool,
 ) -> H {
+    // An `A` dialog (`DialogBoxParamA` and the others) makes ANSI windows of the dialog and of
+    // all its controls; their texts go through the ANSI code page when they are made.
+    let ansi = ansiapi::take_ansi_dialog();
     if parent != 0 && info(parent).is_none() {
         set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return 0;
     }
     let (style, ex) = dlg::window_styles(tpl);
+    // A modal dialog is a top-level window (DialogBox*: `ERROR_TLW_WITH_WSCHILD`).
+    if modal && style & WS_CHILD != 0 {
+        set_last_error(poly_win32k::wm::ERROR_TLW_WITH_WSCHILD);
+        return 0;
+    }
     let visible = tpl.style & WS_VISIBLE != 0;
     let child_dialog = style & WS_CHILD != 0;
     let (hfont, mut units) = dialog_font(tpl);
@@ -317,7 +350,7 @@ pub fn create_dialog_window(
             c
         },
     );
-    let mut title = tpl.title.clone();
+    let mut title = if ansi { lossy(&tpl.title) } else { tpl.title.clone() };
     title.push(0);
     let init = InitData { magic: MAGIC, proc_ };
     let menu = match &tpl.menu {
@@ -331,7 +364,8 @@ pub fn create_dialog_window(
     };
     // SAFETY: NUL-terminated names; `init` outlives the creation messages.
     let hwnd = unsafe {
-        super::CreateWindowExW(
+        create_w(
+            ansi,
             ex,
             class.as_ptr(),
             title.as_ptr(),
@@ -348,6 +382,9 @@ pub fn create_dialog_window(
     };
     if hwnd == 0 {
         return 0;
+    }
+    if tpl.help_id != 0 {
+        HELP_IDS.with(|m| m.insert(hwnd as u32, tpl.help_id));
     }
     dlg_state(hwnd, |d| {
         d.modal = modal;
@@ -367,6 +404,7 @@ pub fn create_dialog_window(
         };
         cls.push(0);
         let mut text = match &it.title {
+            SzOrd::Str(s) if ansi => lossy(s),
             SzOrd::Str(s) => s.clone(),
             _ => Vec::new(),
         };
@@ -385,20 +423,7 @@ pub fn create_dialog_window(
         let data = if it.data.is_empty() { 0 } else { it.data.as_ptr() as usize };
         // SAFETY: NUL-terminated names; the creation data outlives the call.
         let c = unsafe {
-            super::CreateWindowExW(
-                cex,
-                cls.as_ptr(),
-                text.as_ptr(),
-                cstyle,
-                px,
-                py,
-                pw,
-                ph,
-                hwnd,
-                it.id as usize,
-                inst,
-                data,
-            )
+            create_w(ansi, cex, cls.as_ptr(), text.as_ptr(), cstyle, px, py, pw, ph, hwnd, it.id as usize, inst, data)
         };
         if c == 0 {
             if tpl.style & dlg::DS_NOFAILCREATE != 0 {
@@ -454,6 +479,39 @@ pub fn create_dialog_window(
     hwnd
 }
 
+/// What a text becomes when it goes through the ANSI code page and back.
+fn lossy(text: &[u16]) -> Vec<u16> {
+    poly_kernelbase::text::from_ansi(&poly_kernelbase::text::to_ansi(text))
+}
+
+/// `CreateWindowExW`, for an ANSI window when `ansi`.
+#[allow(clippy::too_many_arguments)]
+unsafe fn create_w(
+    ansi: bool,
+    ex: u32,
+    class: *const u16,
+    name: *const u16,
+    style: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    parent: H,
+    menu: H,
+    inst: usize,
+    param: usize,
+) -> H {
+    if ansi {
+        // SAFETY: as the caller's.
+        ansiapi::with_ansi_window(|| unsafe {
+            super::CreateWindowExW(ex, class, name, style, x, y, w, h, parent, menu, inst, param)
+        })
+    } else {
+        // SAFETY: as the caller's.
+        unsafe { super::CreateWindowExW(ex, class, name, style, x, y, w, h, parent, menu, inst, param) }
+    }
+}
+
 fn dlgproc_of_unset(h: H) -> bool {
     get_long(h, DWLP_DLGPROC).is_none()
 }
@@ -477,6 +535,26 @@ fn control_color_brush(msg: u32) -> isize {
 }
 
 pub fn dialog_proc(h: H, msg: u32, w: usize, l: isize) -> isize {
+    dialog_entry(h, msg, w, l, Form::Wide)
+}
+
+/// The dialog procedure for a message of form `form`. A message of the other form than an ANSI
+/// dialog window's is converted once, before anything sees it (so the text the dialog keeps has
+/// been through the code page, `SendMessageW(WM_SETTEXT)` on an ANSI dialog).
+pub fn dialog_entry(h: H, msg: u32, w: usize, l: isize, form: Form) -> isize {
+    if form == Form::Wide && ansi::is_text_message(msg) && info(h).is_some_and(|i| !i.unicode) {
+        let c = ansi::enter(h, Form::Wide, Form::Ansi, msg, w, l);
+        let (cw, cl) = (c.w, c.l);
+        let r = dialog_proc_in(h, msg, cw, cl, Form::Ansi);
+        return c.finish(r);
+    }
+    dialog_proc_in(h, msg, w, l, form)
+}
+
+/// The default handling for a message of form `form`; the dialog procedure of the dialog gets
+/// the message in the form of the dialog window (an ANSI window: bytes).
+fn dialog_proc_in(h: H, msg: u32, w: usize, l: isize, form: Form) -> isize {
+    let def = |h: H, msg: u32, w: usize, l: isize| ansiapi::def_form(h, msg, w, l, form);
     if msg == WM_NCCREATE {
         let cs = l as *const CreateStructW;
         if !cs.is_null() {
@@ -499,8 +577,12 @@ pub fn dialog_proc(h: H, msg: u32, w: usize, l: isize) -> isize {
     if proc_ != 0 {
         // SAFETY: the application's dialog procedure.
         let f: DlgProc = unsafe { core::mem::transmute(proc_) };
+        let to = if info(h).is_some_and(|i| !i.unicode) { Form::Ansi } else { Form::Wide };
+        let c = ansi::enter(h, form, to, msg, w, l);
+        let (cw, cl) = (c.w, c.l);
         // SAFETY: the documented call.
-        r = unsafe { f(h, msg, w, l) };
+        let raw = unsafe { f(h, msg, cw, cl) };
+        r = c.finish(raw);
         handled = r != 0;
     }
     match msg {
@@ -526,7 +608,8 @@ pub fn dialog_proc(h: H, msg: u32, w: usize, l: isize) -> isize {
         WM_CLOSE => {
             let cancel = find_item(h, 2);
             if cancel != 0 && info(cancel).is_some_and(|i| i.style & 0x0800_0000 == 0) {
-                send(h, ctl::WM_COMMAND, 2, cancel as isize);
+                // The dialog manager posts IDCANCEL (DefDlgProcA.yaml `close`: not sent).
+                super::PostMessageW(h, ctl::WM_COMMAND, 2, cancel as isize);
             } else {
                 super::MessageBeep(0);
             }
@@ -596,6 +679,7 @@ pub fn dialog_proc(h: H, msg: u32, w: usize, l: isize) -> isize {
         }
         ctl::WM_NCDESTROY => {
             DLGS.with(|m| m.remove(&(h as u32)));
+            HELP_IDS.with(|m| m.remove(&(h as u32)));
             def(h, msg, w, l)
         }
         _ => def(h, msg, w, l),
@@ -609,6 +693,11 @@ fn def(h: H, msg: u32, w: usize, l: isize) -> isize {
 #[unsafe(no_mangle)]
 pub extern "system" fn DefDlgProcW(h: H, msg: u32, w: usize, l: isize) -> isize {
     dialog_proc(h, msg, w, l)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn DefDlgProcA(h: H, msg: u32, w: usize, l: isize) -> isize {
+    dialog_entry(h, msg, w, l, Form::Ansi)
 }
 
 // ---- items
@@ -664,6 +753,54 @@ pub unsafe extern "system" fn GetDlgItemTextW(dlg: H, id: i32, buf: *mut u16, ma
         return 0;
     }
     send(c, ctl::WM_GETTEXT, max as u32 as usize, buf as isize) as u32
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetDlgItemTextA(dlg: H, id: i32, text: *const u8) -> i32 {
+    let c = GetDlgItem(dlg, id);
+    if c == 0 {
+        return 0;
+    }
+    ansiapi::send_form(c, ctl::WM_SETTEXT, 0, text as isize, Form::Ansi);
+    1
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetDlgItemTextA(dlg: H, id: i32, buf: *mut u8, max: i32) -> u32 {
+    let c = GetDlgItem(dlg, id);
+    if c == 0 {
+        if max > 0 && !buf.is_null() {
+            // SAFETY: the caller's buffer of at least one byte.
+            unsafe { *buf = 0 };
+        }
+        return 0;
+    }
+    if max < 0 {
+        // A negative size: an empty string and the last error 0 (GetDlgItemTextA.yaml `size -1`).
+        if !buf.is_null() {
+            // SAFETY: the caller's buffer.
+            unsafe { *buf = 0 };
+        }
+        set_last_error(0);
+        return 0;
+    }
+    if max == 0 {
+        return 0;
+    }
+    let n = ansiapi::send_form(c, ctl::WM_GETTEXT, max as usize, buf as isize, Form::Ansi) as u32;
+    if n == 0 && max == 1 {
+        set_last_error(0);
+    }
+    n
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SendDlgItemMessageA(dlg: H, id: i32, msg: u32, w: usize, l: isize) -> isize {
+    let c = GetDlgItem(dlg, id);
+    if c == 0 {
+        return 0;
+    }
+    ansiapi::send_form(c, msg, w, l, Form::Ansi)
 }
 
 #[unsafe(no_mangle)]
@@ -1037,6 +1174,70 @@ pub unsafe extern "system" fn CreateDialogIndirectParamW(
         return 0;
     };
     create_dialog_window(&tpl, inst, parent, proc_, param, false, false)
+}
+
+/// A resource name of an `A` function as the `W` functions take it.
+unsafe fn name_w(name: *const u8) -> (Vec<u16>, *const u16) {
+    if (name as usize) < 0x1_0000 {
+        return (Vec::new(), name as *const u16);
+    }
+    // SAFETY: a NUL-terminated name.
+    let mut w = unsafe { ansi::wide_of_a(name) };
+    w.push(0);
+    let p = w.as_ptr();
+    (w, p)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateDialogParamA(
+    inst: usize,
+    name: *const u8,
+    parent: H,
+    proc_: usize,
+    param: isize,
+) -> H {
+    // SAFETY: a resource id or a NUL-terminated name.
+    let (_keep, p) = unsafe { name_w(name) };
+    // SAFETY: the name just made.
+    ansiapi::with_ansi_dialog(|| unsafe { CreateDialogParamW(inst, p, parent, proc_, param) })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateDialogIndirectParamA(
+    inst: usize,
+    template: *const u8,
+    parent: H,
+    proc_: usize,
+    param: isize,
+) -> H {
+    // SAFETY: the caller's template.
+    ansiapi::with_ansi_dialog(|| unsafe { CreateDialogIndirectParamW(inst, template, parent, proc_, param) })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DialogBoxParamA(
+    inst: usize,
+    name: *const u8,
+    parent: H,
+    proc_: usize,
+    param: isize,
+) -> isize {
+    // SAFETY: a resource id or a NUL-terminated name.
+    let (_keep, p) = unsafe { name_w(name) };
+    // SAFETY: the name just made.
+    ansiapi::with_ansi_dialog(|| unsafe { DialogBoxParamW(inst, p, parent, proc_, param) })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DialogBoxIndirectParamA(
+    inst: usize,
+    template: *const u8,
+    parent: H,
+    proc_: usize,
+    param: isize,
+) -> isize {
+    // SAFETY: the caller's template.
+    ansiapi::with_ansi_dialog(|| unsafe { DialogBoxIndirectParamW(inst, template, parent, proc_, param) })
 }
 
 /// A template in memory has no stated length: the parser reads what it needs.
