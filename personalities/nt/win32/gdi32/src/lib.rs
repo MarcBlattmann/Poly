@@ -29,6 +29,8 @@ unsafe extern "system" {
 unsafe extern "system" {
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
     fn VirtualFree(addr: *mut u8, size: usize, kind: u32) -> i32;
+    fn MapViewOfFile(section: usize, access: u32, high: u32, low: u32, size: usize) -> *mut u8;
+    fn UnmapViewOfFile(base: *const u8) -> i32;
     fn CreateFileW(
         name: *const u16,
         access: u32,
@@ -329,8 +331,16 @@ pub extern "system" fn DeleteObject(h: H) -> i32 {
         (ok, if gone { mem } else { None })
     });
     if let Some((addr, _)) = freed {
-        // SAFETY: pages this DLL allocated for the DIB section.
-        unsafe { VirtualFree(addr as *mut u8, 0, MEM_RELEASE) };
+        let view = world::SECTION_VIEWS.with(|v| {
+            let i = v.iter().position(|e| e.0 == addr)?;
+            Some(v.swap_remove(i).1)
+        });
+        match view {
+            // SAFETY: the view CreateDIBSection mapped for this DIB section.
+            Some(base) => unsafe { UnmapViewOfFile(base as *const u8) },
+            // SAFETY: pages this DLL allocated for the DIB section.
+            None => unsafe { VirtualFree(addr as *mut u8, 0, MEM_RELEASE) },
+        };
     }
     if !ok {
         set_last_error(0);
@@ -462,8 +472,8 @@ pub unsafe extern "system" fn CreateDIBSection(
     info: *const u8,
     _usage: u32,
     bits: *mut *mut u8,
-    _section: H,
-    _offset: u32,
+    section: H,
+    offset: u32,
 ) -> H {
     let fail = |code: u32| {
         if !bits.is_null() {
@@ -491,11 +501,39 @@ pub unsafe extern "system" fn CreateDIBSection(
         Ok(v) => v,
         Err(code) => return fail(code),
     };
-    // SAFETY: fresh zeroed pages.
-    let mem = unsafe { VirtualAlloc(core::ptr::null_mut(), len.max(1), MEM_COMMIT_RESERVE, PAGE_READWRITE) };
-    if mem.is_null() {
-        return fail(8);
-    }
+    let mem = if section != 0 {
+        // The bits are the file mapping's (Learn: `hSection`, `dwOffset`, a
+        // multiple of a DWORD): a view from the allocation granularity at
+        // or below the offset.
+        if offset % 4 != 0 {
+            return fail(87);
+        }
+        const GRANULARITY: u32 = 0x1_0000;
+        const FILE_MAP_READ_WRITE: u32 = 0x6;
+        const FILE_MAP_COPY: u32 = 0x1;
+        let start = offset & !(GRANULARITY - 1);
+        let skip = (offset - start) as usize;
+        // SAFETY: a section handle of the caller; the view is ours.
+        let mut base = unsafe { MapViewOfFile(section, FILE_MAP_READ_WRITE, 0, start, len + skip) };
+        if base.is_null() {
+            // SAFETY: as above, for a copy-on-write section.
+            base = unsafe { MapViewOfFile(section, FILE_MAP_COPY, 0, start, len + skip) };
+        }
+        if base.is_null() {
+            return fail(8);
+        }
+        // SAFETY: `skip` bytes into the view.
+        let bits_at = unsafe { base.add(skip) };
+        world::SECTION_VIEWS.with(|v| v.push((bits_at as u64, base as u64)));
+        bits_at
+    } else {
+        // SAFETY: fresh zeroed pages.
+        let mem = unsafe { VirtualAlloc(core::ptr::null_mut(), len.max(1), MEM_COMMIT_RESERVE, PAGE_READWRITE) };
+        if mem.is_null() {
+            return fail(8);
+        }
+        mem
+    };
     let handle = gdi(|g| g.create_dib(w, h, bpp, colors, mem as u64, len));
     if !bits.is_null() {
         // SAFETY: the caller's out-pointer.
@@ -2049,6 +2087,7 @@ pub extern "system" fn gdi32_main(_module: *mut u8, _reason: u32, _reserved: *mu
 }
 
 mod delayed;
+mod world;
 
 #[cfg(target_arch = "x86_64")]
 mod apps;

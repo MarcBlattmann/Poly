@@ -179,6 +179,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("propsys.dll", super::PROPSYS),
         ("wevtapi.dll", super::WEVTAPI),
         ("hid.dll", super::HID),
+        ("dxgi.dll", super::DXGI),
     ] {
         if bytes.is_empty() {
             continue;

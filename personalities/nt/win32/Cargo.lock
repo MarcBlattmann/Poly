@@ -148,6 +148,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dxgi"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "gdi32"
 version = "0.0.1"
 dependencies = [

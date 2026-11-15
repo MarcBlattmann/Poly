@@ -290,6 +290,9 @@ pub struct Link {
     surfaces: WindowsSurfaces,
     copies: Copies,
     incoming: Stream<ToCompositor>,
+    /// Interactive moves win32k asked for (`DefWindowProc`'s `SC_MOVE`),
+    /// started once the server is at hand.
+    moves: Vec<WindowId>,
 }
 
 impl Link {
@@ -321,7 +324,13 @@ impl Link {
             return None;
         }
         println!("poly-compositor: desktop link to Windows apps on {DEVICE}");
-        Some(Link { fd, surfaces: WindowsSurfaces::new(), copies: Copies::default(), incoming: Stream::new() })
+        Some(Link {
+            fd,
+            surfaces: WindowsSurfaces::new(),
+            copies: Copies::default(),
+            incoming: Stream::new(),
+            moves: Vec::new(),
+        })
     }
 
     /// The device, to poll for reading.
@@ -388,6 +397,11 @@ impl Link {
     pub fn pump_server(&mut self, server: &mut poly_wayland::server::Server) {
         let before: Vec<WindowId> = self.surfaces.surfaces.values().map(|s| s.window).collect();
         self.pump(server.scene_mut());
+        // A press on a Windows window's own caption: the server moves it
+        // with the pointer while the button is held (ADR 0128).
+        for w in core::mem::take(&mut self.moves) {
+            server.internal_start_move(w);
+        }
         let after: Vec<(WindowId, bool)> = self
             .surfaces
             .surfaces
@@ -459,9 +473,10 @@ impl Link {
                     }
                     Action::Send(rec) => rec.encode(&mut out),
                     Action::Activate(w) => scene.raise(w),
-                    // The copy was made with the buffer record; input,
-                    // cursors and interactive moves come with a later slice.
-                    Action::TakeBuffer(_) | Action::Cursor(..) | Action::BeginMove(_) | Action::BeginResize(..) => {}
+                    Action::BeginMove(w) => self.moves.push(w),
+                    // The copy was made with the buffer record; cursors
+                    // and interactive resizes come with a later slice.
+                    Action::TakeBuffer(_) | Action::Cursor(..) | Action::BeginResize(..) => {}
                 }
             }
         }

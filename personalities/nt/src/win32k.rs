@@ -256,6 +256,17 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
                     Reply::Error { code: 87 }
                 };
             }
+            // DefWindowProc's SC_MOVE / SC_SIZE: the compositor drags the surface (ADR 0128).
+            Request::MoveSize { hwnd, edges } => {
+                let w = &mut sys.win32k;
+                let Some(id) = w.surfaces.surface(hwnd) else { return Reply::Error { code: 1400 } };
+                if edges == 0 {
+                    w.desktop.begin_move(id);
+                } else {
+                    w.desktop.begin_resize(id, poly_win32k::link::Edges(edges));
+                }
+                return Reply::Ok {};
+            }
             // A system cursor over a top-level window's surface (ADR 0172).
             Request::CursorShape { hwnd, idc } => {
                 let w = &mut sys.win32k;

@@ -186,18 +186,6 @@ pub const SYSTEM_DLLS: &[SystemDll] = &[
         forwards: &[],
     },
     SystemDll {
-        file: "dxgi.dll",
-        exports: &[
-            ("CreateDXGIFactory", Fail::Value(0x887A0004)),
-            ("CreateDXGIFactory1", Fail::Value(0x887A0004)),
-            ("CreateDXGIFactory2", Fail::Value(0x887A0004)),
-            ("DXGID3D10CreateDevice", Fail::Value(0x887A0004)),
-            ("DXGID3D10RegisterLayers", Fail::Value(0x887A0004)),
-            ("DXGIGetDebugInterface1", Fail::Value(0x887A0004)),
-        ],
-        forwards: &[],
-    },
-    SystemDll {
         file: "msimg32.dll",
         exports: &[
             ("AlphaBlend", Fail::Win32),

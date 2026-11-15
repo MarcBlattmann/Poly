@@ -211,8 +211,9 @@ pub unsafe extern "system" fn UpdateLayeredWindow(
         flag |= u::SWP_NOSIZE;
     }
     u::set_window_pos(&SYS, hwnd as u64, 0, x, y, cx, cy, flag);
-    // The content: the source's pixels into the window's surface.
-    if src != 0 && i.style & poly_win32k::metrics::WS_CHILD == 0 {
+    // The content: the source's pixels into the window's surface (a
+    // layered child's, Windows 8 and later: its parent's, where it is).
+    if src != 0 {
         let (sx, sy) = if ppt_src.is_null() {
             (0, 0)
         } else {
@@ -225,8 +226,12 @@ pub unsafe extern "system" fn UpdateLayeredWindow(
             unsafe { BitBlt(dc, 0, 0, cx, cy, src, sx, sy, SRCCOPY) };
             super::ReleaseDC(hwnd, dc);
         }
-        // The kernel composes the screen from the pixels themselves, with
-        // their alpha (a screen DC as the source has no bitmap to give).
+        // The kernel composes a top-level window from the pixels
+        // themselves, with their alpha (a screen DC as the source has no
+        // bitmap to give); a child is part of its parent's surface.
+        if i.style & poly_win32k::metrics::WS_CHILD != 0 {
+            return 1;
+        }
         let pixels = if src_bitmap != 0 { super::clipboard::bitmap_pixels(src_bitmap) } else { None };
         let content = pixels.and_then(|(bw, bh, px)| {
             poly_win32k::guic::ulw_content(&px, bw, bh, sx, sy, cx, cy, poly_win32k::surfaces::MAX_CONTENT)

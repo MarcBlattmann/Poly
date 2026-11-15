@@ -315,6 +315,9 @@ pub struct Wm {
     ime: crate::ime::Ime,
     /// DPI awareness: processes that set theirs, and threads' own (`guic`).
     proc_dpi: BTreeMap<u32, u8>,
+    /// Processes whose manifest declares Windows 8 or later
+    /// (`Request::LayeredChildren`): they may create layered child windows.
+    layered_children: alloc::collections::BTreeSet<u32>,
     thread_dpi: BTreeMap<Key, u8>,
 }
 
@@ -379,6 +382,7 @@ impl Wm {
             clip: crate::clip::Clipboard::new(),
             ime: crate::ime::Ime::default(),
             proc_dpi: BTreeMap::new(),
+            layered_children: alloc::collections::BTreeSet::new(),
             thread_dpi: BTreeMap::new(),
         };
         // Index 0 is never a window.
@@ -767,8 +771,9 @@ impl Wm {
         }
         // A layered child window needs a manifest that declares Windows 8
         // support: without one it is not created, and no last error is set
-        // (SetLayeredWindowAttributes.yaml `children`).
-        if child && s.ex_style & guic::WS_EX_LAYERED != 0 {
+        // (SetLayeredWindowAttributes.yaml `children`; Learn, "Layered
+        // Windows": Windows 8 supports them for child windows).
+        if child && s.ex_style & guic::WS_EX_LAYERED != 0 && !self.layered_children.contains(&ctx.pid) {
             return err(0);
         }
         // A message-only window of style 0 is overlapped too (its client
@@ -2023,7 +2028,14 @@ impl Wm {
                 Some(w) => Reply::Value { value: u64::from(core::mem::replace(&mut w.ime, code)) },
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
-            Request::CursorShape { .. } | Request::ScreenPixel { .. } | Request::LayeredContent { .. } => Reply::Ok {},
+            Request::CursorShape { .. }
+            | Request::ScreenPixel { .. }
+            | Request::LayeredContent { .. }
+            | Request::MoveSize { .. } => Reply::Ok {},
+            Request::LayeredChildren {} => {
+                self.layered_children.insert(ctx.pid);
+                Reply::Ok {}
+            }
             Request::WindowRgn { hwnd, set, rects } => match self.get_mut(u64::from(hwnd)) {
                 Some(w) => {
                     w.region = set.then(|| {
