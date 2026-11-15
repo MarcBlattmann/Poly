@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "gcp_persist",
+      "exe_sha256": "c9b51e0ea51db8f48c2867f40cc357e082e7893f73857e745f50dac882358073",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FyZXQgaW4gYTogR2V0Q2FyZXRQb3MgPSAxIGVycj0tMiBwb2ludCAoMjEsMjIpCiAgb3RoZXIgdGhyZWFkOiBHZXRDYXJldFBvcyA9IDEgKDExMSwyMjIpCm1haW4gdGhyZWFkIGFmdGVyIHRoZSBvdGhlciB0aHJlYWQgc2V0ICgxMTEsIDIyMik6IEdldENhcmV0UG9zID0gMSBlcnI9LTIgcG9pbnQgKDIxLDIyKQphZnRlciBEZXN0cm95Q2FyZXQ6IEdldENhcmV0UG9zID0gMSBlcnI9LTIgcG9pbnQgKDIxLDIyKQphZnRlciBEZXN0cm95V2luZG93OiBHZXRDYXJldFBvcyA9IDEgZXJyPS0yIHBvaW50ICgyMSwyMikKY2FyZXQgaW4gYSBuZXcgd2luZG93OiBHZXRDYXJldFBvcyA9IDEgZXJyPS0yIHBvaW50ICgyMSwyMikKICByZWN0YW5nbGU6IEdldEdVSVRocmVhZEluZm8gMSBjYXJldCB3aW5kb3cgb3VycyByZWN0ICgyMSwyMiwyMywzOCkgY2FyZXQtYmxpbmtpbmcgMAphZnRlciBTZXRDYXJldFBvcygwLCAwKTogR2V0Q2FyZXRQb3MgPSAxIGVycj0tMiBwb2ludCAoMCwwKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "caret in a: GetCaretPos = 1 err=-2 point (21,22)\n  other thread: GetCaretPos = 1 (111,222)\nmain thread after the other thread set (111, 222): GetCaretPos = 1 err=-2 point (21,22)\nafter DestroyCaret: GetCaretPos = 1 err=-2 point (21,22)\nafter DestroyWindow: GetCaretPos = 1 err=-2 point (21,22)\ncaret in a new window: GetCaretPos = 1 err=-2 point (21,22)\n  rectangle: GetGUIThreadInfo 1 caret window ours rect (21,22,23,38) caret-blinking 0\nafter SetCaretPos(0, 0): GetCaretPos = 1 err=-2 point (0,0)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

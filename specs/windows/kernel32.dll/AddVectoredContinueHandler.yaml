@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/AddVectoredContinueHandler.yaml
+id: windows/api/kernel32.dll/AddVectoredContinueHandler
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (and, for the MSYS2 calls, the API trace of PortableGit 2.56.1's sh.exe and msys-2.0.dll made with the repository's trace kit: only the calls the runtime makes into kernel32 and ntdll, with their arguments and results; no Microsoft or MSYS2 code was read). Microsoft Learn for the documented calls named in each sheet; constants and layouts from winnt.h, winbase.h, winternl.h, ntstatus.h, winerror.h, ntsecapi.h, stdio.h.
+summary: >
+  Registers a vectored continue handler (the MSYS2 runtime registers one at start-up): called after an exception has been resolved by an exception handler that continued execution, in registration order (FIRST puts the handler first); returns a handle for RemoveVectoredContinueHandler. Poly stores them but never calls them.
+interface:
+  signature: "PVOID AddVectoredContinueHandler(ULONG first, PVECTORED_EXCEPTION_HANDLER handler); ULONG RemoveVectoredContinueHandler(PVOID handle); PVOID AddVectoredExceptionHandler(ULONG first, PVECTORED_EXCEPTION_HANDLER); ULONG RemoveVectoredExceptionHandler(PVOID)"
+rules:
+  handle: "both Add calls return a non-NULL handle; Remove returns 1 for a registered handle and 0 for a handle already removed, NULL, or a handle of the other kind (an exception handler's handle given to RemoveVectoredContinueHandler)."
+  when_called: "with an exception handler that answers EXCEPTION_CONTINUE_EXECUTION (-1) to a continuable software exception (RaiseException(0xE0A00001, 0, 0, NULL)), the continue handler runs after it (order 'a' then 'x'), sees the same exception record (the code), and the RaiseException call then returns; a continue handler answering -1 (EXCEPTION_CONTINUE_EXECUTION) changes nothing visible (still 'a' then 'x')."
+  order: "continue handlers: added with first = 1 goes before earlier ones (order y x), added with first = 0 goes last (y x y); exception handlers: first = 1 goes before (b a), a handler added last (first = 0) did not run because an earlier one resolved the exception."
+  removal: "after RemoveVectoredContinueHandler(x) the raise runs only the exception handler."
+  not_called: "when no exception handler continues (the only exception handler answers EXCEPTION_CONTINUE_SEARCH, or none exists) the continue handler is NOT called and the exception ends the process with its own code (0xE0A00001 in both child cases)."
+errors:
+  none: "no error results; Remove returns 0 for an unknown handle"
+side_effects: "registers a handler for the process"
+threading: "any thread; the list is process-wide"
+ordering: ["exception handlers first, then continue handlers when the exception was resolved by continuing"]
+timing:
+  typical: "microseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing the DLLs named by the sheet by name. Observations are statuses, error codes, counts and offsets; never addresses, handles, process or thread ids, file names or times. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x6000_0000 | status: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Continue handlers after SEH-resolved exceptions (no SEH frames in these tests), hardware exceptions, handlers that return -1 for exceptions they did not see.

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "cdi_controls",
+      "exe_sha256": "4d781ae772a0de37a08c8b669a72b7239d9da3639b145608df9f4ca135d2c30d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hpbGQgaWQgMTAwMSBjbGFzcyAnU3RhdGljJyBzdHlsZSAweDUwMDAwMDAwIHRleHQgJyZOYW1lOicKY2hpbGQgaWQgMTAwMiBjbGFzcyAnRWRpdCcgc3R5bGUgMHg1MDAxMDA4MCB0ZXh0ICdpbml0aWFsJwpjaGlsZCBpZCAxIGNsYXNzICdCdXR0b24nIHN0eWxlIDB4NTAwMTAwMDEgdGV4dCAnT0snCmNoaWxkIGlkIDIgY2xhc3MgJ0J1dHRvbicgc3R5bGUgMHg1MDAxMDAwMCB0ZXh0ICdDYW5jZWwnCmZpcnN0IHRhYiBzdG9wIGlzIGNvbnRyb2wgMTAwMgphZnRlciBpdCAxCmFmdGVyIHRoYXQgMgpTZXREbGdJdGVtVGV4dFcoMTAwMik6IDEKR2V0RGxnSXRlbVRleHRXKDEwMDIpOiAzCiAgdGV4dCB1bml0cyAweDZlIDB4NjUgMHg3NwpETV9HRVRERUZJRCAweDUzNGIwMDAxCldNX0NMT1NFOiAwCm1lc3NhZ2VzIGxlZnQgYWZ0ZXIgV01fQ0xPU0U6IDEKICBXTV9DTE9TRQpJc0RpYWxvZ01lc3NhZ2VXIEVudGVyOiAxCiAgV01fQ09NTUFORCBpZCAxCkdldFdpbmRvd0NvbnRleHRIZWxwSWQgb2YgdGhlIGV4dGVuZGVkIGRpYWxvZyA5OQpleCBzdHlsZSAweDEwMTAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "child id 1001 class 'Static' style 0x50000000 text '&Name:'\nchild id 1002 class 'Edit' style 0x50010080 text 'initial'\nchild id 1 class 'Button' style 0x50010001 text 'OK'\nchild id 2 class 'Button' style 0x50010000 text 'Cancel'\nfirst tab stop is control 1002\nafter it 1\nafter that 2\nSetDlgItemTextW(1002): 1\nGetDlgItemTextW(1002): 3\n  text units 0x6e 0x65 0x77\nDM_GETDEFID 0x534b0001\nWM_CLOSE: 0\nmessages left after WM_CLOSE: 1\n  WM_CLOSE\nIsDialogMessageW Enter: 1\n  WM_COMMAND id 1\nGetWindowContextHelpId of the extended dialog 99\nex style 0x10101\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

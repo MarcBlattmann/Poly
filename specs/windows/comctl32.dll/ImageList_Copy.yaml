@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32.dll/ImageList_Copy.yaml
+id: windows/api/comctl32.dll/ImageList_Copy
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Copies (ILCF_MOVE = 0) or swaps (ILCF_SWAP = 1) images inside a list. Both list arguments must be the same list: between two different lists the call fails.
+interface:
+  signature: "BOOL ImageList_Copy(HIMAGELIST himlDst, int iDst, HIMAGELIST himlSrc, int iSrc, UINT uFlags)"
+rules:
+  move: "ILCF_MOVE of image 2 onto 0 in a list of four (red, green, blue, yellow) gives (blue, green, blue, yellow): the destination is replaced, the source stays, the count stays 4"
+  swap: "ILCF_SWAP of 1 and 3 gives (red, yellow, blue, green); copying an image onto itself (the same index) returns TRUE and changes nothing, for MOVE and SWAP"
+  different_lists: "a source list that is not the destination list (equal or different image sizes, with and without a mask, 24 and 32 bits, MOVE and SWAP): FALSE and both lists unchanged; ImageList_Duplicate makes an independent list (a copy into it does not change the original)"
+errors:
+  bad_arguments: "a destination or a source index past the end or -1, flags 2 and 0xFFFF (undefined), a swap with a destination of 9, and a NULL list as either argument: FALSE, last error unchanged, the list unchanged"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  The screen DC and device-dependent bitmaps (the tests draw into a 32-bit DIB section, whose pixels are read back, no fonts are involved), alpha blending of 32-bit images with an alpha channel (the test images have alpha 0 or 0xFF and the results here are for the image data given), ILD_SCALE and ILD_DPISCALE, overlay images and drag images, the colour of ILD_SELECTED and ILD_FOCUS (the system highlight colour #0078D4 on the oracle, COLOR_HIGHLIGHT, is used for blending).

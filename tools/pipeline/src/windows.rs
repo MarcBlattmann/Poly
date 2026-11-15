@@ -81,6 +81,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "crypt32.dll",
     "secur32.dll",
     "dhcpcsvc.dll",
+    "ucrtbase.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
@@ -1394,6 +1395,9 @@ mod tests {
         // The common dialogs' tests import comdlg32 (spec-win-apps-2).
         let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
         assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
+        // The C runtime entries' tests import ucrtbase (spec-win-apps-4).
+        let crt = image(&[("ucrtbase.dll", &["_get_stream_buffer_pointers"])], 3);
+        assert_eq!(check_image(&crt).unwrap()["ucrtbase.dll"], ["_get_stream_buffer_pointers"]);
         // Chrome's network stage (spec-chrome-win-s4).
         let net = image(&[("WS2_32.dll", &["WSAStartup"]), ("crypt32.dll", &["CertOpenStore"])], 3);
         assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);

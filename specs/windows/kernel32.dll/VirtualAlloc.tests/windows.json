@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ecada78ec668",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:11:17Z",
+  "tests": [
+    {
+      "name": "va_commit_limit_b",
+      "exe_sha256": "1030055e532af7d2b1a00da12168755aa7b6a9bd8ff38c4ba26c18ace2e8d11b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVzZXJ2ZSAwIGJ5dGVzOiBOVUxMIGVycm9yIDg3CnJlc2VydmUgMzIgVEI6IG9rCnJlc2VydmUgMTI4IFRCOiBOVUxMIGVycm9yIDg3CnJlc2VydmUgMl42NCAtIDEgcGFnZTogTlVMTCBlcnJvciA4NwpyZXNlcnZlIGFuZCBjb21taXQgMTYgVEI6IE5VTEwgZXJyb3IgMTQ1NQpyZXNlcnZlIGFuZCBjb21taXQgMTI4IFRCOiBOVUxMIGVycm9yIDg3Ck50IHJlc2VydmUgMTI4IFRCOiBzdGF0dXMgMHhjMDAwMDAwZCBzaXplIHVuY2hhbmdlZApOdCByZXNlcnZlIGFuZCBjb21taXQgNCBUQjogc3RhdHVzIDB4YzAwMDAxMmQgc2l6ZSB1bmNoYW5nZWQKTnQgcmVzZXJ2ZSBhbmQgY29tbWl0IDJeNjQgLSAxIHBhZ2U6IHN0YXR1cyAweGMwMDAwMDBkIHNpemUgdW5jaGFuZ2VkCiAgY29tbWl0IDMyIFRCIGluc2lkZSBpdDogZXJyb3IgMTQ1NQpqb2Jwcm9jOiBjaGlsZCBleGl0IDB4NjAwZApjaGlsZDogY29tbWl0IDE2IE1CIHVuZGVyIHRoZSA2NCBNQiBsaW1pdDogb2sKY2hpbGQ6IE50QWxsb2NhdGVWaXJ0dWFsTWVtb3J5IHRoZSBzYW1lOiBzdGF0dXMgMHhjMDAwMDEyZCBzaXplIHVuY2hhbmdlZApjaGlsZDogY29tbWl0IDEyOCBNQiBpbnNpZGUgdGhlIHJlc2VydmF0aW9uOiBlcnJvciAxNDU1CmpvYmpvYjogY2hpbGQgZXhpdCAweDYwMGQKY2hpbGQ6IGNvbW1pdCAxNiBNQiB1bmRlciB0aGUgNjQgTUIgbGltaXQ6IG9rCmNoaWxkOiBOdEFsbG9jYXRlVmlydHVhbE1lbW9yeSB0aGUgc2FtZTogc3RhdHVzIDB4YzAwMDAxMmQgc2l6ZSB1bmNoYW5nZWQKY2hpbGQ6IGNvbW1pdCAxMjggTUIgaW5zaWRlIHRoZSByZXNlcnZhdGlvbjogZXJyb3IgMTQ1NQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "reserve 0 bytes: NULL error 87\nreserve 32 TB: ok\nreserve 128 TB: NULL error 87\nreserve 2^64 - 1 page: NULL error 87\nreserve and commit 16 TB: NULL error 1455\nreserve and commit 128 TB: NULL error 87\nNt reserve 128 TB: status 0xc000000d size unchanged\nNt reserve and commit 4 TB: status 0xc000012d size unchanged\nNt reserve and commit 2^64 - 1 page: status 0xc000000d size unchanged\n  commit 32 TB inside it: error 1455\njobproc: child exit 0x600d\nchild: commit 16 MB under the 64 MB limit: ok\nchild: NtAllocateVirtualMemory the same: status 0xc000012d size unchanged\nchild: commit 128 MB inside the reservation: error 1455\njobjob: child exit 0x600d\nchild: commit 16 MB under the 64 MB limit: ok\nchild: NtAllocateVirtualMemory the same: status 0xc000012d size unchanged\nchild: commit 128 MB inside the reservation: error 1455\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 606
+    },
+    {
+      "name": "va_commit_limit_c",
+      "exe_sha256": "da21a62d2470b1f4a6a93341c7d96f64e5ea3552bf2254d8fe9b3185006a7358",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29tbWl0IDAgYnl0ZXM6IE5VTEwgZXJyb3IgODcKcmVzZXJ2ZSAxMDAgVEI6IG9rCnJlc2VydmUgMjU2IFRCOiBOVUxMIGVycm9yIDg3CnJlc2VydmUgMl42NCAtIDE6IE5VTEwgZXJyb3IgODcKcmVzZXJ2ZSBhbmQgY29tbWl0IDY0IFRCOiBOVUxMIGVycm9yIDE0NTUKcmVzZXJ2ZSBhbmQgY29tbWl0IDJeNjM6IE5VTEwgZXJyb3IgODcKTnQgcmVzZXJ2ZSAyNTYgVEI6IHN0YXR1cyAweGMwMDAwMDBkIHNpemUgdW5jaGFuZ2VkCk50IHJlc2VydmUgYW5kIGNvbW1pdCA2NCBUQjogc3RhdHVzIDB4YzAwMDAxMmQgc2l6ZSB1bmNoYW5nZWQKTnQgc2l6ZSAwOiBzdGF0dXMgMHhjMDAwMDAwZCBzaXplIHVuY2hhbmdlZAogIE50IGNvbW1pdCAzMiBUQiBpbnNpZGUgaXQ6IHN0YXR1cyAweGMwMDAwMTJkCmNoaWxkOiBTZXRJbmZvcm1hdGlvbkpvYk9iamVjdDogMQpjaGlsZDogY29tbWl0IDMyIE1CIG1vcmUgKDQ4IE1CIGluIGFsbCk6IG9rCmNoaWxkOiBOdEFsbG9jYXRlVmlydHVhbE1lbW9yeSBjb21taXQgMjU2IE1COiBzdGF0dXMgMHhjMDAwMDEyZCBzaXplIHVuY2hhbmdlZApjaGlsZDogY29tbWl0IDggTUIgaW5zaWRlIHRoZSByZXNlcnZhdGlvbiAoNTYgTUIgaW4gYWxsKTogb2sKY2hpbGQ6IFNldEluZm9ybWF0aW9uSm9iT2JqZWN0OiAxCmNoaWxkOiBjb21taXQgMzIgTUIgbW9yZSAoNDggTUIgaW4gYWxsKTogb2sKY2hpbGQ6IE50QWxsb2NhdGVWaXJ0dWFsTWVtb3J5IGNvbW1pdCAyNTYgTUI6IHN0YXR1cyAweGMwMDAwMTJkIHNpemUgdW5jaGFuZ2VkCmNoaWxkOiBjb21taXQgOCBNQiBpbnNpZGUgdGhlIHJlc2VydmF0aW9uICg1NiBNQiBpbiBhbGwpOiBvawpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "commit 0 bytes: NULL error 87\nreserve 100 TB: ok\nreserve 256 TB: NULL error 87\nreserve 2^64 - 1: NULL error 87\nreserve and commit 64 TB: NULL error 1455\nreserve and commit 2^63: NULL error 87\nNt reserve 256 TB: status 0xc000000d size unchanged\nNt reserve and commit 64 TB: status 0xc000012d size unchanged\nNt size 0: status 0xc000000d size unchanged\n  Nt commit 32 TB inside it: status 0xc000012d\nchild: SetInformationJobObject: 1\nchild: commit 32 MB more (48 MB in all): ok\nchild: NtAllocateVirtualMemory commit 256 MB: status 0xc000012d size unchanged\nchild: commit 8 MB inside the reservation (56 MB in all): ok\nchild: SetInformationJobObject: 1\nchild: commit 32 MB more (48 MB in all): ok\nchild: NtAllocateVirtualMemory commit 256 MB: status 0xc000012d size unchanged\nchild: commit 8 MB inside the reservation (56 MB in all): ok\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 614
+    }
+  ]
+}

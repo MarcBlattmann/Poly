@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/AppendMenuA.yaml
+id: windows/api/user32.dll/AppendMenuA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Appends an item with an ANSI text to a menu: the text is converted with the ANSI code page and is kept as UTF-16 (read back with GetMenuStringW and, converted again, with GetMenuStringA). Flags, ids and states are those of AppendMenuW; owner-draw and bitmap items take a value instead of a string.
+interface:
+  signature: "BOOL AppendMenuA(HMENU hMenu, UINT uFlags, UINT_PTR uIDNewItem, LPCSTR lpNewItem)"
+rules:
+  conversion: "code page: the oracle's ANSI code page (CP_ACP) is 1252 and its OEM code page 850, the display language English; every conversion below is recorded with 1252. Bytes 0x00-0x7F are the same in every ANSI code page; the results for bytes above 0x7F depend on the code page: 0x80 is U+20AC (euro), 0x81 U+0081 (kept, not assigned in 1252), 0xA0-0xFF are U+00A0-U+00FF (0xE9 is U+00E9, 0xFF U+00FF); a character with no form in the code page (U+4E2D, U+0416) becomes '?' (0x3F)"
+  strings: "'Open', 'caf<E9> <80> <81> <FF>' (UTF-16 'caf<U+00E9> <U+20AC> <U+0081> <U+00FF>'), '&Save<TAB>Ctrl+S' (the tab is kept) and a text of 200 characters are items with that text (the 200 character text reads back with 99 characters in a 100 unit buffer); the ids 101, 0, 0xFFFF and 0x10000 are kept as given"
+  separators: "MF_SEPARATOR gives an item with state 0x803 (grayed, disabled, separator) whatever the text; a string item with a NULL text is also a separator (state 0x803), an empty string is an item with the empty text and state 0"
+  flags: "MF_CHECKED | MF_GRAYED gives state 9; MF_DISABLED 2; MF_MENUBREAK and MF_MENUBARBREAK give the type bits 0x40 and 0x20; MF_DEFAULT and MF_HELP as the wide call does (item type 0x4000 for MF_HELP); every item made with AppendMenuA equals the one AppendMenuW makes for the same text (id, state, type, text, text length)"
+  popups: "MF_POPUP with a menu handle makes a popup item with the converted text ('Popup<U+00E9>'), state 0x110 as reported by GetMenuState; a value that is not a menu handle is accepted (an item with the id 0x0bad0bad, state 0)"
+  value_items: "MF_OWNERDRAW stores the value as the item data (0x7777) with type 0x100; MF_BITMAP stores the bitmap handle (the same handle is read back as hbmpItem) with type 0x4; neither has a text (GetMenuStringA returns 0)"
+  menu_bar: "items and popups can be appended to a menu bar the same way; MF_BYPOSITION in the flags is ignored (the item is appended)"
+errors:
+  bad_menu: "a made-up menu handle, NULL and a window handle: FALSE with ERROR_INVALID_MENU_HANDLE (1401)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Other ANSI code pages (a double-byte code page such as 932 or 936 changes byte counts and the conversion of every byte above 0x7F), the thread's own locale (the functions use the system ANSI code page), characters outside the code page with a best-fit form other than '?' (none was seen in 1252 for U+4E2D, U+0416).

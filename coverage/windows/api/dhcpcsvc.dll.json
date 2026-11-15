@@ -2,7 +2,7 @@
 {"symbol":"DhcpAcquireParameters","src":["wine-spec"]},
 {"symbol":"DhcpAcquireParametersByBroadcast","src":["wine-spec"]},
 {"symbol":"DhcpCApiCleanup","status":"claimed","claimed_by":"impl-chrome-b35","src":["wine-spec"]},
-{"symbol":"DhcpCApiInitialize","status":"claimed","claimed_by":"impl-chrome-b35","src":["wine-spec"]},
+{"symbol":"DhcpCApiInitialize","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"DhcpDeRegisterConnectionStateNotification","src":["wine-spec"]},
 {"symbol":"DhcpDeRegisterOptions","src":["wine-spec"]},
 {"symbol":"DhcpDeRegisterParamChange","src":["wine-spec"]},

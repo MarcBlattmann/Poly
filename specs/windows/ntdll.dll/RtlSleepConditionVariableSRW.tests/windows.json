@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "04c812707009",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:02:31Z",
+  "tests": [
+    {
+      "name": "cv_srw_timeout",
+      "exe_sha256": "7b8a529ddd3ef3d73ae5deba74b497b3d73f743afae999382ddd0233066a4d85",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29uZGl0aW9uIHZhcmlhYmxlIHdvcmQ6IDAKICBsb2NrIHdvcmQgc2hvd3MgZXhjbHVzaXZlOiAweDEKZXhjbHVzaXZlLCBhYnNvbHV0ZSB0aW1lIGluIHRoZSBwYXN0OiBzdGF0dXMgMHgxMDIgdW5kZXIgNTAwIG1zOiAxCiAgdHJ5IGV4Y2x1c2l2ZSB3aGlsZSB0aGlzIHRocmVhZCBob2xkcyBpdCBzaGFyZWQ6IDAKZmxhZ3MgMHg0OiBzdGF0dXMgMHhjMDAwMDBmMApjaGlsZCBzaGFyZWRfbm90X2hlbGQ6IDB4YzAwMDAyNjQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "condition variable word: 0\n  lock word shows exclusive: 0x1\nexclusive, absolute time in the past: status 0x102 under 500 ms: 1\n  try exclusive while this thread holds it shared: 0\nflags 0x4: status 0xc00000f0\nchild shared_not_held: 0xc0000264\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 404
+    },
+    {
+      "name": "cv_srw_timeout_c",
+      "exe_sha256": "801bf7cef635437d85ee677c53d7eee8678aac22e8f1d77ced72d2d806bc490b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBsb2NrIGhlbGQgYWdhaW4gKHRyeSBleGNsdXNpdmUgZmFpbHMgb24gdGhpcyB0aHJlYWQpOiAwCmV4Y2x1c2l2ZSwgdGltZW91dCAwOiBzdGF0dXMgMHgxMDIgdW5kZXIgNTAwIG1zOiAxCiAgbG9jayB3b3JkIHNob3dzIG9uZSByZWFkZXI6IDB4MTEKZmxhZ3MgMHgyOiBzdGF0dXMgMHhjMDAwMDBmMApmbGFncyAweDgwMDAwMDAwOiBzdGF0dXMgMHhjMDAwMDBmMApjaGlsZCBoZWxkX2V4Y2x1c2l2ZV9mbGFnX3NoYXJlZDogMHgxMDIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  lock held again (try exclusive fails on this thread): 0\nexclusive, timeout 0: status 0x102 under 500 ms: 1\n  lock word shows one reader: 0x11\nflags 0x2: status 0xc00000f0\nflags 0x80000000: status 0xc00000f0\nchild held_exclusive_flag_shared: 0x102\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 407
+    }
+  ]
+}

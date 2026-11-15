@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlInitializeSRWLock.yaml
+id: windows/api/ntdll.dll/RtlInitializeSRWLock
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Slim Reader/Writer (SRW) Locks, Condition Variables, One-Time Initialization, Critical Section Objects, InitOnceExecuteOnce / InitOnceBeginInitialize functions, SleepConditionVariableSRW / SleepConditionVariableCS, Using One-Time Initialization. Layouts and constants from winnt.h (RTL_SRWLOCK, RTL_CONDITION_VARIABLE, RTL_RUN_ONCE, RTL_CRITICAL_SECTION), ntstatus.h and winerror.h. Wine's tests and source were not read.
+summary: >
+  Writes the unlocked state (the word 0) into an SRW lock, whatever the object held before; the zero word is also what static initialisation (SRWLOCK_INIT) gives.
+interface:
+  signature: "void RtlInitializeSRWLock(PRTL_SRWLOCK lock)"
+rules:
+  zero: "an object holding all ones (garbage) or a lock that is held exclusive reads as 0 afterwards and the lock can be acquired at once (try exclusive TRUE, shared acquire and release work)."
+  same_for_siblings: "RtlInitializeConditionVariable and RtlRunOnceInitialize do the same for their objects: the word becomes 0 (a completed run-once object, word 0x402-style, is unstarted again: check-only gives STATUS_UNSUCCESSFUL)."
+  usable: "a condition variable initialised this way can be slept on at once (RtlSleepConditionVariableSRW with a 50 ms timeout returns STATUS_TIMEOUT)."
+errors:
+  none: "no error results"
+side_effects: "overwrites the object"
+threading: "the object must not be in use"
+ordering: []
+timing:
+  typical: "well under a microsecond"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing ntdll.dll and kernel32.dll by name. Every wait that must not return is observed after 300 ms of waiting, every wait that must return is bounded by 5 s or more, so a failing implementation fails an observation instead of hanging the run. Observations are statuses, counts, booleans and small words; lock words are shown only when they are zero or small (the lock value of an uncontended lock). Counts of threads and loops are fixed so the outputs are identical on every run. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x600D: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Initialising a lock that threads are waiting on.

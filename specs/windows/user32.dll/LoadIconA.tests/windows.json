@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "lia_system",
+      "exe_sha256": "3b520b01bff5b45fadac32526507151e144a32950dd1a7df9bb7a2c810e042ca",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aWNvbiBhcHBsaWNhdGlvbjogTG9hZEljb25BIHdpbmRvdyBMb2FkSWNvblcgd2luZG93IHNhbWUgaGFuZGxlIDEKaWNvbiBoYW5kOiBMb2FkSWNvbkEgd2luZG93IExvYWRJY29uVyB3aW5kb3cgc2FtZSBoYW5kbGUgMQppY29uIHF1ZXN0aW9uOiBMb2FkSWNvbkEgd2luZG93IExvYWRJY29uVyB3aW5kb3cgc2FtZSBoYW5kbGUgMQppY29uIGV4Y2xhbWF0aW9uOiBMb2FkSWNvbkEgd2luZG93IExvYWRJY29uVyB3aW5kb3cgc2FtZSBoYW5kbGUgMQppY29uIGFzdGVyaXNrOiBMb2FkSWNvbkEgd2luZG93IExvYWRJY29uVyB3aW5kb3cgc2FtZSBoYW5kbGUgMQppY29uIHdpbmxvZ286IExvYWRJY29uQSB3aW5kb3cgTG9hZEljb25XIHdpbmRvdyBzYW1lIGhhbmRsZSAxCmljb24gc2hpZWxkOiBMb2FkSWNvbkEgd2luZG93IExvYWRJY29uVyB3aW5kb3cgc2FtZSBoYW5kbGUgMQpMb2FkSWNvbkEoTlVMTCwgJ2FwcGxpY2F0aW9uJyk6IDEgZXJyPTE4MTMKTG9hZEljb25BKE5VTEwsIDMyNTE5KTogMSBlcnI9MTgxMwpMb2FkSWNvbkEoJ0FQUElDT04nKTogd2luZG93IHNhbWUgYXMgTG9hZEljb25XOiAxCkxvYWRJY29uQSgnQVBQXHhDOScpIChub3QgYSByZXNvdXJjZSBuYW1lKTogMSBlcnI9MTgxMwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "icon application: LoadIconA window LoadIconW window same handle 1\nicon hand: LoadIconA window LoadIconW window same handle 1\nicon question: LoadIconA window LoadIconW window same handle 1\nicon exclamation: LoadIconA window LoadIconW window same handle 1\nicon asterisk: LoadIconA window LoadIconW window same handle 1\nicon winlogo: LoadIconA window LoadIconW window same handle 1\nicon shield: LoadIconA window LoadIconW window same handle 1\nLoadIconA(NULL, 'application'): 1 err=1813\nLoadIconA(NULL, 32519): 1 err=1813\nLoadIconA('APPICON'): window same as LoadIconW: 1\nLoadIconA('APP\\xC9') (not a resource name): 1 err=1813\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

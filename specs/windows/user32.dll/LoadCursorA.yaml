@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/LoadCursorA.yaml
+id: windows/api/user32.dll/LoadCursorA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Loads a cursor by number or by ANSI name: the system cursors for a NULL module and the cursor groups of the executable. The same handles and cursors as LoadCursorW give.
+interface:
+  signature: "HCURSOR LoadCursorA(HINSTANCE hInstance, LPCSTR lpCursorName)"
+rules:
+  system: "LoadCursorA(NULL, IDC_*) gives the same handle as LoadCursorW for the ten ids tried (32512-32516, 32646, 32648-32651); a string name is not a system id (NULL with 1814); 32000 and 1 give NULL with 1814"
+  module: "the cursor group 600 (32x32 with hotspot (5,7) and 16x16 with hotspot (2,3)) gives the 32x32 cursor: fIcon 0, hotspot (5,7), colour 32 bits 32x32, mask 1 bit, the pixel (200,30,30); a second call gives the same handle; 'NAMEDCUR' and 'namedcur' find the single-image group (hotspot (1,1), pixel (30,30,200)) and the same handle as LoadCursorW gives; LoadImageA(IMAGE_CURSOR) with 16x16 gives the 16 image with hotspot (2,3), 24x24 a 24x24 cursor from the 32 image with hotspot (4,5), 48x48 a 48x48 one with hotspot (8,11), 0x0 the 32 image; LR_SHARED twice gives the same handle; without it two handles and DestroyCursor TRUE then FALSE"
+  absent: "a name or number that is not in the executable, an icon group, a single RT_CURSOR image number (11) and a bitmap number: NULL with ERROR_RESOURCE_TYPE_NOT_FOUND (1813); a made-up module: 1812; the NULL module with 600: 1814"
+errors:
+  see_rules: "NULL with 1813, 1812 or 1814 as in the rules"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Other ANSI code pages (a double-byte code page such as 932 or 936 changes byte counts and the conversion of every byte above 0x7F), the thread's own locale (the functions use the system ANSI code page), characters outside the code page with a best-fit form other than '?' (none was seen in 1252 for U+4E2D, U+0416). Animated cursors (RT_ANICURSOR), colour depths other than 24 bits, LoadCursorFromFile.

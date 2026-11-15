@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/GetMenuBarInfo.yaml
+id: windows/api/user32.dll/GetMenuBarInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Fills a MENUBARINFO (48 bytes in a 64-bit process): the screen rectangle of the menu bar (item 0) or of an item, the menu handle, the window that holds the bar and two focus flags. The numbers of the rectangles depend on the fonts; the tests print only their relations.
+interface:
+  signature: "BOOL GetMenuBarInfo(HWND hwnd, LONG idObject, LONG idItem, PMENUBARINFO pmbi)"
+rules:
+  bar: "OBJID_MENU (-3) item 0 of a window with a menu returns TRUE: hMenu is the window's menu, hwndMenu NULL, fBarFocused and fFocused 0; the rectangle is as wide as the client area, starts at the client area's left screen coordinate and ends above the client area's top (the bar lies between the title and the client area) with a height above 0"
+  items: "items 1 to n (the menu has four items) each return TRUE with the same hMenu; each rectangle lies inside the bar rectangle with a positive width and height; after items are added and removed (and DrawMenuBar) the n-th item exists exactly for n up to the count: item 5 gives FALSE for four items; the item rectangles are in order from left to right, do not overlap, and a MF_MENUBREAK item makes the bar higher; a narrow window gives a bar that is not lower than before"
+  system_menu: "OBJID_SYSMENU (-1) item 0 and 1 give TRUE with hMenu not the window's menu (the system menu), the item 0 rectangle is not as wide as the client area and the item 1 rectangle lies inside the item 0 rectangle with a positive size"
+  no_menu: "a window without a menu: FALSE, last error not changed (also after SetMenu(NULL))"
+errors:
+  bad_object: "OBJID_CLIENT (-4): FALSE with ERROR_INVALID_MENU_HANDLE (1401); objects 0 and 5: FALSE, last error unchanged; item -1 and 5: FALSE, unchanged"
+  bad_window: "a made-up window and NULL: FALSE with ERROR_INVALID_WINDOW_HANDLE (1400)"
+  bad_structure: "cbSize 0 and 8: FALSE with ERROR_INVALID_PARAMETER (87); a NULL structure pointer: FALSE with ERROR_NOACCESS (998)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  The actual rectangles (menu font and the theme decide them, so they are not printed), the focus flags while the menu is used with the keyboard (interactive session), items of popups opened by the user, the system menu's other items.

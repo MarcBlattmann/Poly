@@ -32,8 +32,6 @@ pub const GAA_FLAG_INCLUDE_ALL_INTERFACES: u32 = 0x100;
 pub const GAA_FLAG_INCLUDE_ALL_COMPARTMENTS: u32 = 0x200;
 pub const GAA_FLAG_INCLUDE_TUNNEL_BINDINGORDER: u32 = 0x400;
 pub const GAA_FLAG_SKIP_DNS_INFO: u32 = 0x800;
-/// Every `GAA_FLAG_*` bit; others are `ERROR_INVALID_PARAMETER`.
-const GAA_ALL: u32 = 0xFFF;
 
 pub const ADAPTER_SIZE: usize = 448;
 pub const UNICAST_SIZE: usize = 64;
@@ -105,7 +103,8 @@ fn link(o: &mut Out, prev: &mut Option<usize>, first: &mut usize, at: usize) {
 /// The bytes `GetAdaptersAddresses` writes at `base`: `Err(ERROR_NO_DATA)` when no adapter
 /// qualifies, `Err(ERROR_INVALID_PARAMETER)` for a bad family or flags.
 pub fn build(ifs: &[IfInfo], family: u32, flags: u32, base: u64) -> Result<Vec<u8>, u32> {
-    if !matches!(family, AF_UNSPEC | AF_INET | AF_INET6) || flags & !GAA_ALL != 0 {
+    // Flag bits Windows does not define are not refused (observed).
+    if !matches!(family, AF_UNSPEC | AF_INET | AF_INET6) {
         return Err(ERROR_INVALID_PARAMETER);
     }
     let chosen: Vec<&IfInfo> = ifs.iter().filter(|f| included(f, family)).collect();
@@ -214,11 +213,10 @@ pub fn build(ifs: &[IfInfo], family: u32, flags: u32, base: u64) -> Result<Vec<u
         let d = o.wide(&f.description());
         let p = o.ptr(d);
         o.put_u64(a + 64, p);
-        if flags & GAA_FLAG_SKIP_FRIENDLY_NAME == 0 {
-            let n = o.wide(&f.friendly_name());
-            let p = o.ptr(n);
-            o.put_u64(a + 72, p);
-        }
+        // `GAA_FLAG_SKIP_FRIENDLY_NAME` has no effect on Windows 11 (observed): the name is always there.
+        let n = o.wide(&f.friendly_name());
+        let p = o.ptr(n);
+        o.put_u64(a + 72, p);
         if f.has_physical_address() {
             o.put_bytes(a + 80, &f.mac);
             o.put_u32(a + 88, 6);
@@ -235,7 +233,8 @@ pub fn build(ifs: &[IfInfo], family: u32, flags: u32, base: u64) -> Result<Vec<u
         }
         let _ = DHCPV4_ENABLED; // Poly's addresses are static (boot setting).
         o.put_u32(a + 92, aflags);
-        o.put_u32(a + 96, f.mtu);
+        // The software loopback adapter reports `0xFFFFFFFF` as its MTU (observed on Windows).
+        o.put_u32(a + 96, if f.kind == Kind::Loopback { u32::MAX } else { f.mtu });
         o.put_u32(a + 100, f.if_type());
         o.put_u32(a + 104, if f.up { OPER_UP } else { OPER_DOWN });
         o.put_u32(a + 108, if f.ipv6.is_some() { f.index } else { 0 });
@@ -384,10 +383,11 @@ mod tests {
             | GAA_FLAG_SKIP_FRIENDLY_NAME
             | GAA_FLAG_SKIP_UNICAST;
         let b = build(&ifs, AF_UNSPEC, flags, 0x2000).unwrap();
-        for off in [24, 32, 40, 48, 72, 176, 208] {
+        for off in [24, 32, 40, 48, 176, 208] {
             assert_eq!(u64_at(&b, off), 0, "{off}");
         }
         assert_ne!(u64_at(&b, 64), 0, "description is always there");
+        assert_ne!(u64_at(&b, 72), 0, "SKIP_FRIENDLY_NAME does not remove the friendly name");
     }
 
     #[test]
@@ -407,7 +407,7 @@ mod tests {
         assert_eq!(u16_at(&b, sa), 23);
         assert_eq!(build(&[], AF_UNSPEC, 0, 0), Err(ERROR_NO_DATA));
         assert_eq!(build(&[eth()], 99, 0, 0), Err(ERROR_INVALID_PARAMETER));
-        assert_eq!(build(&[eth()], AF_UNSPEC, 0x8000, 0), Err(ERROR_INVALID_PARAMETER));
+        assert!(build(&[eth()], AF_UNSPEC, 0x4000_0000, 0).is_ok(), "unknown flag bits are accepted");
     }
 
     #[test]
@@ -427,6 +427,7 @@ mod tests {
         let b = build(&[IfInfo::loopback()], AF_UNSPEC, 0, 0x1000).unwrap();
         assert_eq!(u32_at(&b, 88), 0);
         assert_eq!(u32_at(&b, 100), 24);
+        assert_eq!(u32_at(&b, 96), 0xFFFF_FFFF);
         assert_eq!(u32_at(&b, 216), 75);
         assert_eq!(wide_at(&b, (u64_at(&b, 72) - 0x1000) as usize), "Loopback Pseudo-Interface 1");
     }

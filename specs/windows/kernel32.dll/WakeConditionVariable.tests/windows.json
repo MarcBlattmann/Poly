@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "04c812707009",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:02:31Z",
+  "tests": [
+    {
+      "name": "k32_cv_wake",
+      "exe_sha256": "6014cc5ce8f897e2524f0a145ed5322587ef4e9a68a0df04cf1dc0d2fb5eedca",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2FpdGVyIDAgYXNsZWVwOiB0cnVlCmFmdGVyIG9uZSB3YWtlOiB3b2tlbiAxCiAgMzAwIG1zIGxhdGVyIHN0aWxsOiB3b2tlbiAyCndha2Ugb3JkZXI6IDAgMSAyCndvcmQgd2l0aCBubyB3YWl0ZXJzOiAwCiAgYWZ0ZXIgdGhlIHdha2VyIHJlbGVhc2VkOiB3b2tlbiAzCiAgYm90aCBoZWxkIHRoZSBsb2NrIGF0IHRoZSBzYW1lIHRpbWU6IDIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "waiter 0 asleep: true\nafter one wake: woken 1\n  300 ms later still: woken 2\nwake order: 0 1 2\nword with no waiters: 0\n  after the waker released: woken 3\n  both held the lock at the same time: 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1362
+    },
+    {
+      "name": "k32_cv_wake_c",
+      "exe_sha256": "b8eb6851634817fd4202fe9e0dc600711d30b9e779a8b0a9e86f7276749b0394",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2FpdGVyIDIgYXNsZWVwOiB0cnVlCmFmdGVyIHRoZSBzZWNvbmQgd2FrZTogd29rZW4gMgphbGwgd2FpdGVycyBlbmRlZDogMQp3YWl0ZXJzIHRoYXQgaGVsZCB0aGUgbG9jayB3aGVuIHRoZXkgcmV0dXJuZWQ6IDMKd2FrZSBhbGwgd2hpbGUgdGhlIHdha2VyIGhvbGRzIHRoZSBsb2NrOiB3b2tlbiAwCnR3byBzaGFyZWQtbW9kZSB3YWl0ZXJzIHdva2VuIHRvZ2V0aGVyOiBlbmRlZCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "waiter 2 asleep: true\nafter the second wake: woken 2\nall waiters ended: 1\nwaiters that held the lock when they returned: 3\nwake all while the waker holds the lock: woken 0\ntwo shared-mode waiters woken together: ended 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1384
+    }
+  ]
+}
