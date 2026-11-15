@@ -995,7 +995,8 @@ pub unsafe extern "system" fn StringFromGUID2(guid: *const Guid, buf: *mut u16, 
 
 /// `StringFromCLSID` / `StringFromIID`: the text in task memory.
 unsafe fn string_from_guid(guid: *const Guid, out: *mut *mut u16) -> Hresult {
-    if out.is_null() {
+    // The sheets: a NULL id or a NULL output is E_INVALIDARG.
+    if out.is_null() || guid.is_null() {
         return E_INVALIDARG;
     }
     // SAFETY: the caller's out parameter.
