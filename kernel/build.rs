@@ -132,7 +132,7 @@ fn embed_wow64() {
     // The modules the kernel names (`nt::NTDLL32`, ...) and the test programs; always present
     // (empty without `xtask`).
     let mut names: Vec<String> =
-        ["ntdll.dll", "kernelbase.dll", "kernel32.dll", "win32u.dll", "gdi32.dll", "user32.dll", "hello32.exe", "gui32.exe"]
+        ["ntdll.dll", "kernelbase.dll", "kernel32.dll", "win32u.dll", "gdi32.dll", "user32.dll", "hello32.exe", "gui32.exe", "sys32.exe"]
             .iter()
             .map(|n| n.to_string())
             .collect();

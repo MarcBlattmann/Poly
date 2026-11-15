@@ -104,7 +104,7 @@ pub unsafe extern "system" fn CommandLineToArgvW(cmd_line: *const u16, num_args:
         let n = unsafe { GetModuleFileNameW(core::ptr::null_mut(), path.as_mut_ptr(), 1024) } as usize;
         args.push(Vec::from(&path[..n.min(1023)]));
     }
-    let size = shell::argv_block_size(&args);
+    let size = shell::argv_block_size(&args, core::mem::size_of::<usize>());
     // SAFETY: LMEM_FIXED (0): the handle is the block's address.
     let block = unsafe { LocalAlloc(0, size) };
     if block.is_null() {
@@ -114,7 +114,7 @@ pub unsafe extern "system" fn CommandLineToArgvW(cmd_line: *const u16, num_args:
     }
     // SAFETY: `block` is `size` writable bytes; `num_args` is the caller's out-pointer.
     unsafe {
-        shell::write_argv_block(&args, block as u64, core::slice::from_raw_parts_mut(block, size));
+        shell::write_argv_block(&args, block as usize as u64, core::mem::size_of::<usize>(), core::slice::from_raw_parts_mut(block, size));
         num_args.write(args.len() as i32);
     }
     block.cast()

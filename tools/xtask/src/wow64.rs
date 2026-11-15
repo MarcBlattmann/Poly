@@ -68,7 +68,7 @@ pub fn modules() -> impl Iterator<Item = &'static str> {
     CORE_MODULES.iter().chain(SYSTEM_MODULES).copied()
 }
 /// The test programs (`tests/windows/wow64/<name>.rs`).
-pub const PROGRAMS: &[&str] = &["hello32", "gui32"];
+pub const PROGRAMS: &[&str] = &["hello32", "gui32", "sys32"];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 /// Exports the kernel and every 32-bit program need from the i686 `ntdll`.
@@ -208,6 +208,7 @@ fn cache_key(root: &Path) -> Result<u64> {
         &[
             "tests/windows/wow64/hello32.rs",
             "tests/windows/wow64/gui32.rs",
+            "tests/windows/wow64/sys32.rs",
             "personalities/nt/win32/Cargo.toml",
             "personalities/nt/win32/Cargo.lock",
             "personalities/nt/src/services.rs",
@@ -288,6 +289,7 @@ poly-msvc32 = {{ path = {:?} }}
 
 /// Build everything into `target`; the directory with the outputs.
 fn build(root: &Path, target: &Path) -> Result<PathBuf> {
+    check_links(root)?;
     let out = target.join("out");
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let ntdll_target = target.join("ntdll");
@@ -431,7 +433,7 @@ fn verify(dir: &Path) -> Result {
         let bytes = read(&dir.join(&file))?;
         let pe = parse(&file, &bytes)?;
         for dll in imports(&file, &pe)?.keys() {
-            if !ours.contains(&dll.as_str()) {
+            if !set.contains(&dll.as_str()) {
                 return Err(format!("{file} imports {dll}"));
             }
         }
