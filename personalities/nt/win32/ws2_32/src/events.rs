@@ -377,12 +377,23 @@ pub unsafe fn from_protocol_info(info: *const u8) -> Result<Socket, u32> {
 
 // ----- WSALookupService* --------------------------------------------------------------------
 
-/// The lookup handles handed out (never reused); a query finds nothing.
+/// The lookup handles handed out and not ended yet (never reused: the counter only goes up).
+const LOOKUP_SLOTS: usize = 128;
+static LOOKUP_LIVE: [AtomicUsize; LOOKUP_SLOTS] = [const { AtomicUsize::new(0) }; LOOKUP_SLOTS];
 static LOOKUPS: AtomicUsize = AtomicUsize::new(0);
+/// Per slot: 1 once the lookup's only result was handed out.
+static LOOKUP_DONE: [AtomicUsize; LOOKUP_SLOTS] = [const { AtomicUsize::new(0) }; LOOKUP_SLOTS];
+/// The name of the one network every lookup of the `NS_ALL`/`NS_NLA` name spaces finds, and the size of a
+/// `WSAQUERYSETW` (x64).
+const LOOKUP_RESULT_NAME: &str = "Poly Network";
+const QUERY_SET_SIZE: usize = 120;
+/// The tag of a lookup handle: small distinct non-zero values, so they are not mistaken for others.
+const LOOKUP_BASE: usize = 0x4C55_0000;
 
 /// `WSALookupServiceBeginW(lpqsRestrictions, dwControlFlags, lphLookup)`: no name-space provider of
-/// Poly's resolves service queries, so the query is accepted and `WSALookupServiceNextW` ends it
-/// (`WSA_E_NO_MORE`) at once.
+/// Poly's resolves service queries, so the query (of the name spaces `poly_winsock::resolve::lookup_begin`
+/// accepts) starts a lookup and `WSALookupServiceNextW` ends it (`WSA_E_NO_MORE`) at once. The
+/// query set is `WSAQUERYSETW` (x64): `dwSize` at 0, `dwNameSpace` at 40.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn WSALookupServiceBeginW(query: *const u8, flags: u32, lookup: *mut Handle) -> i32 {
     if let Err(e) = check_started() {
@@ -391,39 +402,81 @@ pub unsafe extern "system" fn WSALookupServiceBeginW(query: *const u8, flags: u3
     if query.is_null() || lookup.is_null() {
         return fail(WSAEFAULT);
     }
-    if flags == 0 {
-        return fail(WSAEINVAL);
+    // SAFETY: checked non-null: the caller's WSAQUERYSETW.
+    let (size, namespace) = unsafe {
+        (core::ptr::read_unaligned(query.cast::<u32>()), core::ptr::read_unaligned(query.add(40).cast::<u32>()))
+    };
+    if let Err(e) = poly_winsock::resolve::lookup_begin(size, namespace, flags) {
+        return fail(e);
     }
-    let h = LOOKUPS.fetch_add(1, Ordering::AcqRel) + 1;
-    // SAFETY: checked non-null. Handles are small distinct non-zero values tagged so they are not mistaken for others.
-    unsafe { lookup.write((0x4C55_0000 + h) as Handle) };
+    let h = LOOKUP_BASE + LOOKUPS.fetch_add(1, Ordering::AcqRel) + 1;
+    let Some(slot) = LOOKUP_LIVE.iter().position(|s| s.compare_exchange(0, h, Ordering::AcqRel, Ordering::Acquire).is_ok())
+    else {
+        return fail(WSAEMFILE);
+    };
+    LOOKUP_DONE[slot].store(0, Ordering::Release);
+    // SAFETY: checked non-null.
+    unsafe { lookup.write(h as Handle) };
     0
 }
 
-/// `WSALookupServiceNextW(hLookup, dwControlFlags, lpdwBufferLength, lpqsResults)`.
+/// `WSALookupServiceNextW(hLookup, dwControlFlags, lpdwBufferLength, lpqsResults)`: the first call gives
+/// one result, a `WSAQUERYSETW` of the one network Poly has (observed on Windows: a first result with
+/// `dwSize` of at least 80); a buffer too small gets `WSAEFAULT` and the length needed; after that
+/// `WSA_E_NO_MORE`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn WSALookupServiceNextW(
     lookup: Handle,
     _flags: u32,
-    _len: *mut u32,
-    _results: *mut u8,
+    len: *mut u32,
+    results: *mut u8,
 ) -> i32 {
     if let Err(e) = check_started() {
         return fail(e);
     }
-    if !is_lookup(lookup) {
+    let v = lookup as usize;
+    let Some(slot) = (if v == 0 { None } else { LOOKUP_LIVE.iter().position(|s| s.load(Ordering::Acquire) == v) }) else {
         return fail(WSA_INVALID_HANDLE);
+    };
+    if LOOKUP_DONE[slot].load(Ordering::Acquire) != 0 {
+        return fail(WSA_E_NO_MORE);
     }
-    fail(WSA_E_NO_MORE)
+    if len.is_null() {
+        return fail(WSAEFAULT);
+    }
+    let name: Vec<u16> = LOOKUP_RESULT_NAME.encode_utf16().chain([0]).collect();
+    let need = QUERY_SET_SIZE + name.len() * 2;
+    // SAFETY: checked non-null: the caller's length.
+    let have = unsafe { len.read() } as usize;
+    // SAFETY: as above.
+    unsafe { len.write(need as u32) };
+    if results.is_null() || have < need {
+        return fail(WSAEFAULT);
+    }
+    // SAFETY: the caller's buffer of `have >= need` bytes.
+    unsafe {
+        core::ptr::write_bytes(results, 0, QUERY_SET_SIZE);
+        results.cast::<u32>().write_unaligned(QUERY_SET_SIZE as u32);
+        let text = results.add(QUERY_SET_SIZE);
+        core::ptr::copy_nonoverlapping(name.as_ptr().cast::<u8>(), text, name.len() * 2);
+        results.add(8).cast::<*mut u8>().write_unaligned(text);
+        // `dwNameSpace`: NS_NLA.
+        results.add(40).cast::<u32>().write_unaligned(15);
+    }
+    LOOKUP_DONE[slot].store(1, Ordering::Release);
+    0
 }
 
-/// `WSALookupServiceEnd(hLookup)`.
+/// `WSALookupServiceEnd(hLookup)`: the handle is dead afterwards.
 #[unsafe(no_mangle)]
 pub extern "system" fn WSALookupServiceEnd(lookup: Handle) -> i32 {
     if let Err(e) = check_started() {
         return fail(e);
     }
-    if !is_lookup(lookup) {
+    let v = lookup as usize;
+    let ended =
+        v != 0 && LOOKUP_LIVE.iter().any(|s| s.compare_exchange(v, 0, Ordering::AcqRel, Ordering::Acquire).is_ok());
+    if !ended {
         return fail(WSA_INVALID_HANDLE);
     }
     0
@@ -431,5 +484,5 @@ pub extern "system" fn WSALookupServiceEnd(lookup: Handle) -> i32 {
 
 fn is_lookup(h: Handle) -> bool {
     let v = h as usize;
-    v > 0x4C55_0000 && v <= 0x4C55_0000 + LOOKUPS.load(Ordering::Acquire)
+    v != 0 && LOOKUP_LIVE.iter().any(|s| s.load(Ordering::Acquire) == v)
 }

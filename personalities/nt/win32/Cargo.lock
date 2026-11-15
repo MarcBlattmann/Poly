@@ -114,6 +114,7 @@ dependencies = [
 name = "dhcpcsvc"
 version = "0.0.1"
 dependencies = [
+ "poly-iphlp",
  "poly-win32-netrt",
  "poly-win32-rt",
 ]

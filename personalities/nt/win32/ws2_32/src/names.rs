@@ -131,7 +131,8 @@ fn resolve_all(node: Option<&str>, service: Option<&str>, h: &Hints) -> Result<(
         Host::Addrs(a) => (a, None),
         Host::Lookup(name) => lookup(&name, h)?,
     };
-    let entries = resolve::entries(&addrs, port, scope, h);
+    let numeric = node.is_some_and(|n| resolve::numeric_host(n).is_some());
+    let entries = resolve::entries(&addrs, port, scope, h, numeric);
     if entries.is_empty() {
         return Err(EAI_NONAME);
     }
@@ -150,6 +151,11 @@ unsafe fn read_hints(p: *const u8) -> Hints {
             family: core::ptr::read_unaligned(p.add(ADDRINFO_FAMILY).cast::<i32>()),
             socktype: core::ptr::read_unaligned(p.add(ADDRINFO_SOCKTYPE).cast::<i32>()),
             protocol: core::ptr::read_unaligned(p.add(ADDRINFO_PROTOCOL).cast::<i32>()),
+            // `ai_addrlen`, `ai_canonname`, `ai_addr` and `ai_next` must be zero (`WSANO_RECOVERY` else).
+            reserved: core::ptr::read_unaligned(p.add(ADDRINFO_ADDRLEN).cast::<usize>()) != 0
+                || core::ptr::read_unaligned(p.add(ADDRINFO_CANONNAME).cast::<usize>()) != 0
+                || core::ptr::read_unaligned(p.add(ADDRINFO_ADDR).cast::<usize>()) != 0
+                || core::ptr::read_unaligned(p.add(ADDRINFO_NEXT).cast::<usize>()) != 0,
         }
     }
 }
@@ -181,7 +187,7 @@ fn build_list(entries: &[Entry], canonical: Option<&str>, flags: i32, wide: bool
         }
         // SAFETY: a fresh zeroed block of `size` bytes.
         unsafe {
-            core::ptr::write_unaligned(p.add(ADDRINFO_FLAGS).cast::<i32>(), flags & (AI_PASSIVE | AI_CANONNAME));
+            core::ptr::write_unaligned(p.add(ADDRINFO_FLAGS).cast::<i32>(), e.flags);
             core::ptr::write_unaligned(p.add(ADDRINFO_FAMILY).cast::<i32>(), e.family);
             core::ptr::write_unaligned(p.add(ADDRINFO_SOCKTYPE).cast::<i32>(), e.socktype);
             core::ptr::write_unaligned(p.add(ADDRINFO_PROTOCOL).cast::<i32>(), e.protocol);
@@ -239,6 +245,8 @@ fn finish(r: Result<*mut u8, u32>, result: *mut *mut u8) -> i32 {
         Ok(list) => {
             // SAFETY: the caller's result pointer.
             unsafe { *result = list };
+            // A successful call sets the last error to 0 (observed on Windows).
+            set_error(0);
             0
         }
         Err(e) => {
@@ -298,15 +306,21 @@ fn name_info(sa: *const u8, salen: i32, flags: i32) -> Result<(SocketAddr, Strin
     Ok((a, host, serv))
 }
 
-/// Copy `s` and a NUL to `out` of `len` units: `WSAEFAULT` if it does not
-/// fit (nothing to do for a null buffer).
+/// `ERROR_INSUFFICIENT_BUFFER` (`winerror.h`): what `getnameinfo` returns for a buffer that is too short.
+const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+
+/// Copy `s` and a NUL to `out` of `len` units. A null buffer or a length of 0 is not written (the part
+/// is not asked for); a buffer that is too short gets the first `len` characters and
+/// `ERROR_INSUFFICIENT_BUFFER` (observed on Windows).
 unsafe fn put_str(s: &str, out: *mut u8, len: usize, _wide: bool) -> Result<(), u32> {
-    if out.is_null() {
+    if out.is_null() || len == 0 {
         return Ok(());
     }
     let b = s.as_bytes();
     if b.len() + 1 > len {
-        return Err(WSAEFAULT);
+        // SAFETY: `len` bytes of the caller's buffer.
+        unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), out, len) };
+        return Err(ERROR_INSUFFICIENT_BUFFER);
     }
     // SAFETY: `len` bytes of the caller's buffer.
     unsafe {
@@ -317,12 +331,14 @@ unsafe fn put_str(s: &str, out: *mut u8, len: usize, _wide: bool) -> Result<(), 
 }
 
 unsafe fn put_wide(s: &str, out: *mut u16, len: usize) -> Result<(), u32> {
-    if out.is_null() {
+    if out.is_null() || len == 0 {
         return Ok(());
     }
     let units: Vec<u16> = s.encode_utf16().collect();
     if units.len() + 1 > len {
-        return Err(WSAEFAULT);
+        // SAFETY: `len` units of the caller's buffer.
+        unsafe { core::ptr::copy_nonoverlapping(units.as_ptr(), out, len) };
+        return Err(ERROR_INSUFFICIENT_BUFFER);
     }
     // SAFETY: `len` units of the caller's buffer.
     unsafe {
