@@ -29,6 +29,7 @@ rules:
   inherit: "the inherit flag TRUE gives an inheritable handle (inheritable=1), FALSE not"
   spelling: "the name \"Local\\\\<name>\" opens the job created as \"<name>\"; an upper-case spelling of a name created in mixed case does not open it (NULL)"
   shared: "a limit set with a SET_ATTRIBUTES handle (active process limit 4) is seen by the creator and by a QUERY handle; a QUERY|SET_ATTRIBUTES handle sets and the creator sees limit 6"
+  default_priority_class: "reading the limits (class 2) through QueryInformationJobObject on the creator's or a QUERY handle of a job that only has ActiveProcessLimit set reports PriorityClass 0x20 (NORMAL_PRIORITY_CLASS) and SchedulingClass 5 (see QueryInformationJobObject: kernel32 supplies the default priority class)"
   rights_enforced: "through a QUERY handle: set fails (5), assign fails (5), terminate fails (5, member stays alive); through ASSIGN_PROCESS: set, query, terminate fail (5) and assign works (accounting total=1 active=1); through TERMINATE: set, query, assign fail (5) and terminate works (member exit code 0xd); through SET_ATTRIBUTES: set works, query fails (5); WaitForSingleObject(handle, 0) on a QUERY-only handle returns WAIT_FAILED (0xffffffff) with error 5 (no SYNCHRONIZE); on the creator's handle, after TerminateJobObject had emptied the job, it returns 0 (signalled)"
 errors:
   no_rights: "desired access 0 fails: NULL, error 5"
