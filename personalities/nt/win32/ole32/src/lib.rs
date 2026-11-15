@@ -1139,7 +1139,10 @@ pub unsafe extern "system" fn PropVariantClear(pv: *mut u8) -> Hresult {
     // SAFETY: a 24-byte PROPVARIANT.
     unsafe {
         let vt = (pv as *const u16).read_unaligned();
-        let hr = if propvariant::classify(vt).is_some() {
+        // `VT_ILLEGAL` (0xFFFF) is accepted and owns nothing (PropVariantClear.yaml `pvc_errors`).
+        let hr = if vt == 0xFFFF {
+            S_OK
+        } else if propvariant::classify(vt).is_some() {
             clear_owned(pv);
             S_OK
         } else {
