@@ -84,6 +84,10 @@ pub struct PerCpu {
     pub(super) tss: AtomicPtr<super::gdt::TaskStateSegment>,
     /// Bring-up state, see `smp.rs`.
     pub(super) state: AtomicU32,
+    /// The running user thread is a 32-bit (WOW64) thread: it returns to
+    /// ring 3 in compatibility mode (`gdt::USER_CODE32`, ADR 0186). Set on
+    /// every switch to a user thread.
+    pub(super) user_compat: AtomicBool,
 }
 
 impl PerCpu {
@@ -107,6 +111,7 @@ impl PerCpu {
             next_pcid: AtomicU16::new(1),
             tss: AtomicPtr::new(core::ptr::null_mut()),
             state: AtomicU32::new(0),
+            user_compat: AtomicBool::new(false),
         }
     }
 

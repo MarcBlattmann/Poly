@@ -6,7 +6,9 @@
 //!   else anywhere (64 KiB aligned) and is relocated; an image without
 //!   relocations whose base is taken fails with
 //!   `STATUS_CONFLICTING_ADDRESSES` (Poly's choice of status). Only x64
-//!   PE32+ images load (`STATUS_INVALID_IMAGE_FORMAT`). The headers are
+//!   PE32+ images load into a 64-bit process, only I386 PE32 images into a
+//!   32-bit one ([`Bitness`], chosen in [`Config`]); anything else is
+//!   `STATUS_INVALID_IMAGE_FORMAT`. The headers are
 //!   read-only, each section gets the protection its `IMAGE_SCN_MEM_*`
 //!   flags say (a page two sections share gets both's rights).
 //! - **Imports** are resolved DLL by DLL, symbol by symbol: by name (the
@@ -36,14 +38,15 @@
 //! - **TLS.** A module with a TLS directory gets the lowest free index,
 //!   written to its `AddressOfIndex`. Every thread has an array of block
 //!   pointers at `TEB.ThreadLocalStoragePointer` (TEB + 0x58), one block
-//!   per index: a copy of the template plus the zero fill. A DLL loaded
+//!   per index: a copy of the template plus the zero fill (a 32-bit process
+//!   has 4-byte slots and the pointer at TEB + 0x2C). A DLL loaded
 //!   later gets blocks in every running thread too; threads that existed
 //!   before it do not get `DLL_THREAD_ATTACH` for it (`DllMain`).
 
-use crate::ldrdata::{self, EntryData};
+use crate::ldrdata::{self, Bitness, EntryData, LdrLayout};
 use crate::path::{self, Dirs};
 use crate::status::*;
-use crate::{PAGE_SIZE, Process, page, read_u64, reason, write_u32, write_u64};
+use crate::{PAGE_SIZE, Process, page, read_ptr, reason, write_ptr, write_u32};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec;
@@ -53,8 +56,12 @@ use poly_pe::{ExportTarget, ForwardTarget, ImportSymbol, Pe};
 
 /// Most forwarders followed for one symbol.
 pub const MAX_FORWARDS: usize = 16;
-/// `TEB.ThreadLocalStoragePointer` (see the module documentation).
+/// `TEB.ThreadLocalStoragePointer` of a 64-bit process (see the module
+/// documentation); a 32-bit one has it at [`LdrLayout::teb_tls_pointer`] of
+/// [`Bitness::X86`].
 pub const TEB_TLS_POINTER: u64 = 0x58;
+/// The highest address a 32-bit process's image may end at.
+const X86_LIMIT: u64 = 1 << 32;
 /// `LDR_ADDREF_DLL_PIN`: `LdrAddRefDll`'s flag to pin a module.
 pub const ADDREF_PIN: u32 = 1;
 
@@ -82,10 +89,14 @@ pub struct Callout {
     pub reserved: u64,
 }
 
-/// The directories the search order uses.
+/// The directories the search order uses, and the kind of process the
+/// loader runs in.
 #[derive(Clone, Debug, Default)]
 pub struct Config {
     pub dirs: Dirs,
+    /// 64-bit (the default) or 32-bit: which images load and how the
+    /// loader's structures in process memory are laid out.
+    pub bitness: Bitness,
 }
 
 /// What a public caller may know about a module.
@@ -336,6 +347,7 @@ pub struct Loader {
     load_order: Vec<ModuleId>,
     init_order: Vec<ModuleId>,
     dirs: Dirs,
+    bitness: Bitness,
     ldr: u64,
     tls_slots: Vec<Option<ModuleId>>,
     threads: Vec<ThreadTls>,
@@ -352,13 +364,28 @@ pub struct Loader {
 
 impl Loader {
     pub fn new(config: Config) -> Loader {
-        Loader { dirs: config.dirs, ..Loader::default() }
+        Loader { dirs: config.dirs, bitness: config.bitness, ..Loader::default() }
+    }
+
+    /// The kind of process this loader runs in.
+    pub fn bitness(&self) -> Bitness {
+        self.bitness
+    }
+
+    /// The offsets of the structures this loader keeps in process memory.
+    pub fn layout(&self) -> &'static LdrLayout {
+        self.bitness.layout()
+    }
+
+    /// Bytes in a pointer of the process: 8 or 4.
+    fn ptr_size(&self) -> u64 {
+        self.bitness.pointer_size()
     }
 
     /// Make `PEB_LDR_DATA` and point `PEB.Ldr` at it (`peb` 0: only make
     /// it). Call before adding modules.
     pub fn init_ldr_data(&mut self, p: &mut dyn Process, peb: u64) -> Result<u64, NtStatus> {
-        self.ldr = ldrdata::create(p, peb)?;
+        self.ldr = ldrdata::create(p, self.layout(), peb)?;
         Ok(self.ldr)
     }
 
@@ -503,8 +530,10 @@ impl Loader {
     /// Insert a module record and its `LDR_DATA_TABLE_ENTRY`.
     fn insert(&mut self, p: &mut dyn Process, mut m: Module) -> Result<ModuleId, NtStatus> {
         if self.ldr != 0 {
+            let lay = self.layout();
             let rec = ldrdata::create_entry(
                 p,
+                lay,
                 &EntryData {
                     base: m.base,
                     entry_point: m.entry,
@@ -515,8 +544,8 @@ impl Loader {
                     time_date_stamp: m.time_date_stamp,
                 },
             )?;
-            ldrdata::insert_tail(p, self.ldr + ldrdata::LDR_IN_LOAD_ORDER, rec + ldrdata::ENTRY_IN_LOAD_ORDER)?;
-            ldrdata::insert_tail(p, self.ldr + ldrdata::LDR_IN_MEMORY_ORDER, rec + ldrdata::ENTRY_IN_MEMORY_ORDER)?;
+            ldrdata::insert_tail(p, lay, self.ldr + lay.ldr_in_load_order, rec + lay.entry_in_load_order)?;
+            ldrdata::insert_tail(p, lay, self.ldr + lay.ldr_in_memory_order, rec + lay.entry_in_memory_order)?;
             m.record = rec;
         }
         let id = match self.modules.iter().position(Option::is_none) {
@@ -533,10 +562,12 @@ impl Loader {
         Ok(id)
     }
 
-    /// Read what the loader keeps from a mapped image's headers.
-    fn describe(img: &[u8], base: u64, path: &[u16]) -> Result<Module, NtStatus> {
+    /// Read what the loader keeps from a mapped image's headers (the image
+    /// must be one this process can run).
+    fn describe(&self, img: &[u8], base: u64, path: &[u16]) -> Result<Module, NtStatus> {
         let pe = Pe::parse_mapped(img).map_err(bad)?;
         let info = pe.info();
+        self.check_format(info)?;
         let entry = match info.entry_point() {
             0 => 0,
             rva => base + u64::from(rva),
@@ -565,6 +596,19 @@ impl Loader {
         })
     }
 
+    /// Only AMD64 PE32+ images run in a 64-bit process, only I386 PE32 images
+    /// in a 32-bit one.
+    fn check_format(&self, info: &poly_pe::ImageInfo) -> Result<(), NtStatus> {
+        let (machine, bits) = match self.bitness {
+            Bitness::X64 => (poly_pe::machine::AMD64, poly_pe::Bits::Pe32Plus),
+            Bitness::X86 => (poly_pe::machine::I386, poly_pe::Bits::Pe32),
+        };
+        if info.machine() != machine || info.bits() != bits {
+            return Err(STATUS_INVALID_IMAGE_FORMAT);
+        }
+        Ok(())
+    }
+
     /// Register an image the kernel mapped: `ntdll` itself (`bound`: its
     /// imports need nothing and it counts as attached) or the executable
     /// (bound later by [`process_init`](Self::process_init)). Both are
@@ -582,7 +626,7 @@ impl Loader {
             u64::from(pe.info().size_of_image()).div_ceil(PAGE_SIZE) * PAGE_SIZE
         };
         let img = p.memory(base, size as usize)?;
-        let mut m = Loader::describe(img, base, path)?;
+        let mut m = self.describe(img, base, path)?;
         m.protections = image_protections(img)?;
         m.pinned = true;
         m.refs = 1;
@@ -600,7 +644,8 @@ impl Loader {
     fn link_init(&mut self, p: &mut dyn Process, id: ModuleId) -> Result<(), NtStatus> {
         let rec = self.m(id).record;
         if self.ldr != 0 && rec != 0 && self.m(id).dll {
-            ldrdata::insert_tail(p, self.ldr + ldrdata::LDR_IN_INIT_ORDER, rec + ldrdata::ENTRY_IN_INIT_ORDER)?;
+            let lay = self.layout();
+            ldrdata::insert_tail(p, lay, self.ldr + lay.ldr_in_init_order, rec + lay.entry_in_init_order)?;
         }
         Ok(())
     }
@@ -679,16 +724,15 @@ impl Loader {
             let head = p.memory(base, PAGE_SIZE as usize)?;
             *Pe::parse_mapped(head).map_err(bad)?.info()
         };
-        if info.machine() != poly_pe::machine::AMD64 || info.bits() != poly_pe::Bits::Pe32Plus {
-            return Err(STATUS_INVALID_IMAGE_FORMAT);
-        }
+        // A view of an image of the process's own machine (a PE32 one in a 32-bit process).
+        self.check_format(&info)?;
         let preferred = info.image_base();
         // Writable while it is bound (copy on write in a view); `apply_protections` restores.
         p.protect(base, size, page::READWRITE)?;
         if relocate {
             poly_pe::relocate(p.memory(base, size as usize)?, &info, base).map_err(bad)?;
         }
-        let mut m = Loader::describe(p.memory(base, size as usize)?, base, path)?;
+        let mut m = self.describe(p.memory(base, size as usize)?, base, path)?;
         m.view = true;
         m.preferred = preferred;
         m.state = State::Loading;
@@ -731,9 +775,7 @@ impl Loader {
     ) -> Result<ModuleId, NtStatus> {
         let pe = Pe::parse(file).map_err(bad)?;
         let info = *pe.info();
-        if info.machine() != poly_pe::machine::AMD64 || info.bits() != poly_pe::Bits::Pe32Plus {
-            return Err(STATUS_INVALID_IMAGE_FORMAT);
-        }
+        self.check_format(&info)?;
         let plan = pe.load_plan().map_err(bad)?;
         let size = u64::from(plan.size_of_image).div_ceil(PAGE_SIZE) * PAGE_SIZE;
         let mut image = vec![0u8; size as usize];
@@ -743,6 +785,11 @@ impl Loader {
             Err(_) if plan.relocatable => p.allocate(None, size)?,
             Err(_) => return Err(STATUS_CONFLICTING_ADDRESSES),
         };
+        // A 32-bit process's image must lie wholly below 4 GiB.
+        if self.bitness == Bitness::X86 && base.checked_add(size).is_none_or(|end| end > X86_LIMIT) {
+            p.free(base);
+            return Err(STATUS_NO_MEMORY);
+        }
         let mapped = (|| -> Result<(), NtStatus> {
             if base != plan.image_base {
                 poly_pe::relocate(&mut image, &info, base).map_err(bad)?;
@@ -756,7 +803,8 @@ impl Loader {
             return Err(e);
         }
         drop(image);
-        let mut m = match Loader::describe(p.memory(base, size as usize)?, base, path) {
+        let described = self.describe(p.memory(base, size as usize)?, base, path);
+        let mut m = match described {
             Ok(m) => m,
             Err(e) => {
                 p.free(base);
@@ -831,8 +879,9 @@ impl Loader {
             self.add_edge(Some(id), dep, op);
             if self.bound_still_valid(dll, &bound, dep) {
                 let mut v = Vec::new();
+                let w = self.ptr_size();
                 for j in 0..dll.symbols.len() {
-                    v.push(read_u64(p, base + u64::from(dll.iat_rva) + 8 * j as u64)?);
+                    v.push(read_ptr(p, w, base + u64::from(dll.iat_rva) + w * j as u64)?);
                 }
                 addrs.push(v);
                 continue;
@@ -988,19 +1037,20 @@ impl Loader {
             crate::write_bytes(p, block, &template)?;
         }
         let index = tls.index as usize;
+        let (w, tls_pointer) = (self.ptr_size(), self.layout().teb_tls_pointer);
         let th = &mut self.threads[t];
         if index >= th.cap {
             let cap = (index + 1).max(th.cap * 2).max(4);
-            let array = p.alloc(cap * 8)?;
+            let array = p.alloc(cap * w as usize)?;
             for (i, &(_, b)) in self.threads[t].blocks.iter().enumerate() {
-                write_u64(p, array + 8 * i as u64, b)?;
+                write_ptr(p, w, array + w * i as u64, b)?;
             }
             let th = &mut self.threads[t];
             let old = th.array;
             th.array = array;
             th.cap = cap;
             let teb = th.teb;
-            write_u64(p, teb + TEB_TLS_POINTER, array)?;
+            write_ptr(p, w, teb + tls_pointer, array)?;
             if old != 0 {
                 p.free_alloc(old);
             }
@@ -1011,19 +1061,20 @@ impl Loader {
         }
         th.blocks[index] = (raw, block);
         let array = th.array;
-        write_u64(p, array + 8 * index as u64, block)
+        write_ptr(p, w, array + w * index as u64, block)
     }
 
     /// Free every thread's block for module `id` and its index.
     fn drop_tls(&mut self, p: &mut dyn Process, id: ModuleId) {
         let Some(index) = self.m(id).tls.as_ref().map(|t| t.index as usize) else { return };
+        let w = self.ptr_size();
         for th in &mut self.threads {
             if let Some(&(raw, _)) = th.blocks.get(index)
                 && raw != 0
             {
                 p.free_alloc(raw);
                 th.blocks[index] = (0, 0);
-                let _ = write_u64(p, th.array + 8 * index as u64, 0);
+                let _ = write_ptr(p, w, th.array + w * index as u64, 0);
             }
         }
         if let Some(s) = self.tls_slots.get_mut(index) {
@@ -1229,7 +1280,7 @@ impl Loader {
             self.drop_tls(p, id);
             let m = self.modules[id].take().expect("checked");
             if m.record != 0 {
-                let _ = ldrdata::destroy_entry(p, m.record);
+                let _ = ldrdata::destroy_entry(p, self.layout(), m.record);
             }
             if m.owned {
                 p.free(m.base);
@@ -1324,6 +1375,9 @@ impl Loader {
             return Err(fail(STATUS_INVALID_PARAMETER, Vec::new(), None, LoadOp::default(), true));
         };
         let (base, size) = (self.m(pid).base, self.m(pid).size);
+        let w = self.ptr_size();
+        // The ordinal flag of a lookup table entry: its top bit.
+        let ordinal_flag = 1u64 << (8 * w - 1);
         let parsed = (|| -> Result<(Vec<u8>, u64, u64, Sym), NtStatus> {
             let img = p.memory(base, size as usize)?;
             let at = descriptor.checked_sub(base).filter(|&o| o + 32 <= size).ok_or(STATUS_INVALID_PARAMETER)? as usize;
@@ -1332,9 +1386,9 @@ impl Loader {
             let (name_rva, handle_rva, iat_rva, int_rva) = (field(4), field(8), field(12), field(16));
             let index = thunk
                 .checked_sub(base + u64::from(iat_rva))
-                .filter(|o| o % 8 == 0 && thunk < base + size)
+                .filter(|o| o % w == 0 && thunk < base + size)
                 .ok_or(STATUS_INVALID_PARAMETER)?
-                / 8;
+                / w;
             let cstr = |rva: u64| -> Result<Vec<u8>, NtStatus> {
                 let s = img.get(rva as usize..).ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
                 let n =
@@ -1342,26 +1396,30 @@ impl Loader {
                 Ok(s[..n].to_vec())
             };
             let dll = cstr(u64::from(name_rva))?;
-            let entry_at = (u64::from(int_rva) + 8 * index) as usize;
+            let entry_at = (u64::from(int_rva) + w * index) as usize;
             let raw = img
-                .get(entry_at..entry_at + 8)
-                .map(|b| u64::from_le_bytes(b.try_into().unwrap_or([0; 8])))
+                .get(entry_at..entry_at + w as usize)
+                .map(|b| {
+                    let mut v = [0u8; 8];
+                    v[..b.len()].copy_from_slice(b);
+                    u64::from_le_bytes(v)
+                })
                 .ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
-            let sym = if raw & (1 << 63) != 0 {
+            let sym = if raw & ordinal_flag != 0 {
                 Sym::Ordinal(raw as u16)
             } else {
                 let hn = raw & 0x7FFF_FFFF;
                 let hint = img.get(hn as usize..hn as usize + 2).map_or(0, |b| u16::from_le_bytes([b[0], b[1]]));
                 Sym::Name { hint, name: cstr(hn + 2)? }
             };
-            Ok((dll, base + u64::from(handle_rva), base + u64::from(iat_rva) + 8 * index, sym))
+            Ok((dll, base + u64::from(handle_rva), base + u64::from(iat_rva) + w * index, sym))
         })();
         let (dll, handle_slot, slot, sym) = match parsed {
             Ok(x) => x,
             Err(e) => return Err(fail(e, Vec::new(), None, LoadOp::default(), true)),
         };
         let mut op = LoadOp::default();
-        let handle = match read_u64(p, handle_slot) {
+        let handle = match read_ptr(p, w, handle_slot) {
             Ok(h) => h,
             Err(e) => return Err(fail(e, dll, Some(&sym), op, true)),
         };
@@ -1431,7 +1489,7 @@ impl Loader {
         if !writable {
             p.protect(pg, PAGE_SIZE, page::READWRITE)?;
         }
-        let r = write_u64(p, at, v);
+        let r = write_ptr(p, self.ptr_size(), at, v);
         if !writable {
             p.protect(pg, PAGE_SIZE, prot)?;
         }
@@ -1477,6 +1535,7 @@ impl Loader {
     /// Free a thread's TLS.
     pub fn thread_exit(&mut self, p: &mut dyn Process, teb: u64) {
         let Some(i) = self.threads.iter().position(|t| t.teb == teb) else { return };
+        let (w, tls_pointer) = (self.ptr_size(), self.layout().teb_tls_pointer);
         let t = self.threads.swap_remove(i);
         for (raw, _) in t.blocks {
             if raw != 0 {
@@ -1484,7 +1543,7 @@ impl Loader {
             }
         }
         if t.array != 0 {
-            let _ = write_u64(p, teb + TEB_TLS_POINTER, 0);
+            let _ = write_ptr(p, w, teb + tls_pointer, 0);
             p.free_alloc(t.array);
         }
     }

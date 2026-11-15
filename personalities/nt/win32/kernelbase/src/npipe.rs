@@ -50,7 +50,7 @@ pub(crate) unsafe fn fsctl(
         // SAFETY: the caller's OVERLAPPED; its first two fields are the
         // IO_STATUS_BLOCK the kernel completes.
         unsafe {
-            (*ov).internal = nt::STATUS_PENDING.0 as u64;
+            (*ov).internal = nt::STATUS_PENDING.0 as usize;
             let e = (*ov).event;
             (ov as *mut IoStatusBlock, e & !1, if e & 1 != 0 { core::ptr::null() } else { ov as *const u8 })
         }
@@ -77,7 +77,7 @@ pub(crate) unsafe fn fsctl(
         st = NtStatus(unsafe { (*iosb).status } as u32);
     }
     // SAFETY: the status block is ours or the caller's.
-    (st, unsafe { (*iosb).information })
+    (st, unsafe { (*iosb).information } as u64)
 }
 
 fn query(handle: Handle, class: u32, out: &mut [u8]) -> Result<(), NtStatus> {
@@ -178,7 +178,7 @@ pub unsafe extern "system" fn CreateNamedPipeW(
     if !st.is_success() {
         return fail_status(st, INVALID_HANDLE_VALUE);
     }
-    set_last_error(np::created_error(iosb.information));
+    set_last_error(np::created_error(iosb.information as u64));
     h
 }
 

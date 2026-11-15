@@ -28,6 +28,7 @@ poly-seh.workspace = true
 poly-vfs.workspace = true
 # win32k's logic: the service table, the desktop link (ADR 0128).
 poly-win32k.workspace = true
+poly-rtl.workspace = true
 
 [lints]
 workspace = true

@@ -45,22 +45,29 @@ pub struct Field {
     pub width: usize,
 }
 
-/// The writes that fill in the fields, in offset order.
+/// The writes that fill in the fields of a 64-bit PEB, in offset order.
 pub fn fields(f: Facts) -> [Field; 11] {
-    let w4 = |at, value: u32| Field { at, value: u64::from(value), width: 4 };
+    fields_for(&crate::layout::X64, f)
+}
+
+/// The writes that fill in the fields of a PEB laid out as `l` (a 32-bit process's PEB has
+/// them at other offsets and a 4-byte `LoaderLock`, ADR 0186), in offset order.
+pub fn fields_for(l: &crate::layout::Layout, f: Facts) -> [Field; 11] {
+    let at = |o: u64| o as usize;
+    let w4 = |o: u64, value: u32| Field { at: at(o), value: u64::from(value), width: 4 };
     let (sub, major, minor) = f.subsystem;
     [
-        w4(NUMBER_OF_PROCESSORS, f.processors.clamp(1, 64)),
-        w4(NT_GLOBAL_FLAG, 0),
-        Field { at: LOADER_LOCK, value: f.loader_lock, width: 8 },
-        w4(OS_MAJOR_VERSION, version::MAJOR),
-        w4(OS_MINOR_VERSION, version::MINOR),
-        Field { at: OS_BUILD_NUMBER, value: u64::from(version::BUILD & 0xFFFF), width: 2 },
-        Field { at: OS_CSD_VERSION, value: 0, width: 2 },
-        w4(OS_PLATFORM_ID, version::PLATFORM_WIN32_NT),
-        w4(IMAGE_SUBSYSTEM, u32::from(sub)),
-        w4(IMAGE_SUBSYSTEM_MAJOR_VERSION, u32::from(major)),
-        w4(IMAGE_SUBSYSTEM_MINOR_VERSION, u32::from(minor)),
+        w4(l.peb_number_of_processors, f.processors.clamp(1, 64)),
+        w4(l.peb_nt_global_flag, 0),
+        Field { at: at(l.peb_loader_lock), value: f.loader_lock, width: l.ptr as usize },
+        w4(l.peb_os_major_version, version::MAJOR),
+        w4(l.peb_os_minor_version, version::MINOR),
+        Field { at: at(l.peb_os_build_number), value: u64::from(version::BUILD & 0xFFFF), width: 2 },
+        Field { at: at(l.peb_os_csd_version), value: 0, width: 2 },
+        w4(l.peb_os_platform_id, version::PLATFORM_WIN32_NT),
+        w4(l.peb_image_subsystem, u32::from(sub)),
+        w4(l.peb_image_subsystem_major, u32::from(major)),
+        w4(l.peb_image_subsystem_minor, u32::from(minor)),
     ]
 }
 
@@ -106,5 +113,19 @@ mod tests {
         for pair in w.windows(2) {
             assert!(pair[0].at + pair[0].width <= pair[1].at, "{pair:?}");
         }
+    }
+
+    #[test]
+    fn the_x64_table_matches_the_constants_and_x86_has_its_own_offsets() {
+        let x64 = crate::layout::X64;
+        assert_eq!(
+            (x64.peb_number_of_processors, x64.peb_loader_lock, x64.peb_image_subsystem_minor),
+            (NUMBER_OF_PROCESSORS as u64, LOADER_LOCK as u64, IMAGE_SUBSYSTEM_MINOR_VERSION as u64)
+        );
+        let f = Facts { processors: 2, subsystem: (3, 6, 0), loader_lock: 0x1234 };
+        let x86 = fields_for(&crate::layout::X86, f);
+        let lock = x86.iter().find(|w| w.value == 0x1234).unwrap();
+        assert_eq!((lock.at, lock.width), (0xA0, 4));
+        assert!(x86.windows(2).all(|w| w[0].at + w[0].width <= w[1].at));
     }
 }

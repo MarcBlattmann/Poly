@@ -108,7 +108,7 @@ members = [
     "userland/poly-terminal",
     "userland/poly-wl-demo",
 ]
-exclude = ["kernel", "userland/native", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
+exclude = ["kernel", "userland/native", "personalities/nt/ntdll", "personalities/nt/msvc32", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 
 [workspace.package]
 version = "0.0.1"

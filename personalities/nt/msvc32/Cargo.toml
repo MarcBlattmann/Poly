@@ -1,0 +1,18 @@
+# The helper routines MSVC-style 32-bit code calls (ADR 0186): `__chkstk`, and
+# 64-bit division, remainder, multiplication and shifts on i686. Linked by our
+# i686 ntdll.dll and the Win32 modules built for i686; empty on every other
+# target. Its own workspace, like ntdll's. No third-party crates.
+[workspace]
+
+[package]
+name = "poly-msvc32"
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

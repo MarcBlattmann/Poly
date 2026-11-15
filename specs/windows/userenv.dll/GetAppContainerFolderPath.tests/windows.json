@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "15bb70091a8b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T11:00:14Z",
+  "tests": [
+    {
+      "name": "gacfp_paths",
+      "exe_sha256": "ca430ad2d8671e054bd9844cf4b82e5f61743831dec75f1db9a839074384b2ca",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHJvZmlsZTogMHgwCnRoZSBmb2xkZXIgVGVtcCBpbnNpZGUgaXQgZXhpc3RzOiB0cnVlCnRleHQgdGhhdCBpcyBubyBTSUQ6IDB4ODAwNzA1MzksIG91dHB1dCBwb2ludGVyIHdyaXR0ZW4gZmFsc2UsIHBhdGggJycKQUxMIEFQUExJQ0FUSU9OIFBBQ0tBR0VTOiAweDgwMDcxMDlhLCBvdXRwdXQgcG9pbnRlciB3cml0dGVuIGZhbHNlLCBwYXRoICcnCmFmdGVyIHRoZSBwcm9maWxlIGlzIGRlbGV0ZWQ6IDB4ODAwNzAwMDIgJycKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "profile: 0x0\nthe folder Temp inside it exists: true\ntext that is no SID: 0x80070539, output pointer written false, path ''\nALL APPLICATION PACKAGES: 0x8007109a, output pointer written false, path ''\nafter the profile is deleted: 0x80070002 ''\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    },
+    {
+      "name": "gacfp_paths_b",
+      "exe_sha256": "a7ce31af5940c82d1935cd28f52a26b6c2b7d132ba1e702b0cb5092763e54b62",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zm9sZGVyOiAweDAgZW5kcyB3aXRoICdcQXBwRGF0YVxMb2NhbFxQYWNrYWdlc1xwb2x5czJiLmZvbGQxXEFDJwp0aGUgc2FtZSB0ZXh0IGFnYWluOiAweDAsIHNhbWUgcGF0aCB0cnVlCmFuIGVtcHR5IHRleHQ6IDB4ODAwNzA1MzksIG91dHB1dCBwb2ludGVyIHdyaXR0ZW4gZmFsc2UsIHBhdGggJycKYSBjYXBhYmlsaXR5IFNJRDogMHg4MDA3MTA5YSwgb3V0cHV0IHBvaW50ZXIgd3JpdHRlbiBmYWxzZSwgcGF0aCAnJwp0aGUgZGlyZWN0b3J5IGlzIGdvbmU6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "folder: 0x0 ends with '\\AppData\\Local\\Packages\\polys2b.fold1\\AC'\nthe same text again: 0x0, same path true\nan empty text: 0x80070539, output pointer written false, path ''\na capability SID: 0x8007109a, output pointer written false, path ''\nthe directory is gone: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 67
+    }
+  ]
+}

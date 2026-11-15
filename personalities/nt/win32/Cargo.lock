@@ -219,6 +219,7 @@ version = "0.0.1"
 dependencies = [
  "poly-console",
  "poly-kernelbase",
+ "poly-ldr",
  "poly-ntobj",
  "poly-pe",
  "poly-rtl",
@@ -370,7 +371,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-ldr"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+ "poly-pe",
+]
+
+[[package]]
 name = "poly-libm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-msvc32"
 version = "0.0.1"
 
 [[package]]
@@ -450,6 +463,9 @@ dependencies = [
 [[package]]
 name = "poly-win32-rt"
 version = "0.0.1"
+dependencies = [
+ "poly-msvc32",
+]
 
 [[package]]
 name = "poly-win32k"

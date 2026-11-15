@@ -19,7 +19,8 @@ use poly_security::sid::Sid;
 use poly_security::token::{self, class};
 use poly_security::{access, error as serr};
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtOpenProcessToken(process: Handle, access: u32, token: *mut Handle) -> NtStatus;
     fn NtOpenThreadToken(thread: Handle, access: u32, as_self: u8, token: *mut Handle) -> NtStatus;
