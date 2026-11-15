@@ -88,6 +88,9 @@ crate::wire_struct! {
         pub parent: u64,
         pub menu: u64,
         pub instance: u64,
+        /// An ANSI window although its class is one of the system's (`CreateWindowExA` of `Button`,
+        /// an `A` dialog's controls): `IsWindowUnicode` says 0.
+        pub ansi: bool,
     }
 }
 
@@ -173,6 +176,9 @@ crate::wire_struct! {
         /// Not a layered window, or one that has had its attributes (or
         /// `UpdateLayeredWindow`) set: it paints.
         pub lay_ready: bool,
+        /// The height of the menu bar that is drawn above the client area
+        /// (it is part of the window's surface; 0: none).
+        pub menu_bar: i32,
     }
 }
 
@@ -372,6 +378,13 @@ crate::wire_enum! {
         /// in its manifest: it may create layered child windows (Learn,
         /// "Layered Windows"): an `Ok`.
         112 => LayeredChildren {},
+        /// The height of the menu bar `user32` draws above the window's client
+        /// area, inside its surface (0: none): an `Ok`.
+        113 => MenuBar { hwnd: u32, height: i32 },
+        /// A caret operation (`crate::caret::OP_*`): `hwnd` the window argument (0: none), `a` and `b`
+        /// the size (`OP_CREATE`) or the position (`OP_SET_POS`), `tid` the thread asked about
+        /// (`OP_QUERY`, 0: the calling one). A `Caret`.
+        114 => Caret { op: u8, hwnd: u32, a: i32, b: i32, tid: u32 },
     }
 }
 
@@ -411,6 +424,9 @@ crate::wire_enum! {
         /// thread loses it and `hwnd` gets the foreground (0: the window
         /// of another process that had it before).
         25 => Next { kind: u8, hwnd: u32 },
+        /// What a caret call did (`Request::Caret`): `ok`; `code` the error when not (`caret::UNCHANGED`: leave the
+        /// last error); the caret's window (0: none), its size, the position and whether it is shown.
+        26 => Caret { ok: bool, code: u32, hwnd: u32, width: i32, height: i32, x: i32, y: i32, shown: bool },
         100 => Clip { res: crate::clip::ClipRes },
         /// The answer to `Request::Winsta`.
         120 => Winsta { res: crate::winsta::WinstaRes },
@@ -446,6 +462,7 @@ mod tests {
                 parent: 0,
                 menu: 0,
                 instance: 0x1_4000_0000,
+                ansi: false,
             },
         };
         assert_eq!(decode::<Request>(&encode(&r)), Some(r));

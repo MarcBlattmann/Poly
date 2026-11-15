@@ -103,7 +103,7 @@ impl Win32k {
                 // buttons and keys (ADR 0136).
                 FromCompositor::Pointer { surface, x, y, .. } => {
                     if let Some(i) = self.surfaces.hwnd_of(surface).and_then(|h| self.wm.info(h)) {
-                        self.wm.link_pointer(i.client.left + x, i.client.top + y, &mut fx);
+                        self.wm.link_pointer(i.client.left + x, i.client.top - i.menu_bar + y, &mut fx);
                     }
                 }
                 FromCompositor::Button { button, pressed, .. } => self.wm.link_button(button, pressed, &mut fx),
