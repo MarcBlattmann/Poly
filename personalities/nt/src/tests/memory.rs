@@ -176,7 +176,10 @@ fn memory_of_another_process_is_allocated_written_read_protected_and_freed() {
     let (st, base, size) = {
         let b = f.put_u64(0);
         let s = f.put_u64(0x2000);
-        let st = f.call(Service::AllocateVirtualMemory, &[h, b, 0, s, u64::from(MEM_RESERVE | MEM_COMMIT), u64::from(PAGE_READWRITE)]);
+        let st = f.call(
+            Service::AllocateVirtualMemory,
+            &[h, b, 0, s, u64::from(MEM_RESERVE | MEM_COMMIT), u64::from(PAGE_READWRITE)],
+        );
         (st, f.u64_at(b), f.u64_at(s))
     };
     assert_eq!((st, size), (STATUS_SUCCESS, 0x2000));
