@@ -5,7 +5,8 @@
 
 use poly_kernelbase::winpath as wp;
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn SetLastError(error: u32);
 }

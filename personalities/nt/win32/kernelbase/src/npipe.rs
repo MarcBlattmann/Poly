@@ -107,6 +107,11 @@ pub unsafe extern "system" fn CreateNamedPipeA(
 ) -> Handle {
     // SAFETY: the caller's string.
     let Some(wide) = (unsafe { ansi_arg(name) }) else { return fail(ERROR_PATH_NOT_FOUND, INVALID_HANDLE_VALUE) };
+    // An empty ANSI name is `ERROR_PATH_NOT_FOUND` here (CreateNamedPipeA.yaml); the wide
+    // function says `ERROR_INVALID_NAME` for the same name (CreateNamedPipeW.yaml).
+    if wide.is_empty() {
+        return fail(ERROR_PATH_NOT_FOUND, INVALID_HANDLE_VALUE);
+    }
     let wide = with_nul(&wide);
     // SAFETY: a NUL-terminated string made above; the rest are the caller's.
     unsafe {

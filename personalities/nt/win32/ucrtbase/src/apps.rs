@@ -97,7 +97,6 @@ poly_win32_rt::fail_exports!(
         lgamma,
         lgammaf,
         lgammal,
-        rand_s,
         strtoimax,
         strtoumax,
         tmpfile,

@@ -153,15 +153,17 @@ pub fn pipe_name(win32: &[u16]) -> Result<&[u16], u32> {
 }
 
 /// The error `CreateNamedPipe[AW]` gives for a name that cannot be a pipe's, or `None`
-/// (`specs/windows/kernel32.dll/CreateNamedPipeA.yaml`, `name_prefix` and `name_suffix`): an empty
-/// name is `ERROR_PATH_NOT_FOUND`; the name must be `\\.\pipe\` (or `\\?\pipe\`, `\??\pipe\`) and a
-/// suffix, the prefix in any letter case and `/` taken for `\`; no prefix, a suffix that is
-/// empty, `.`, `..` or a single space, `\\localhost\...` and other devices are
-/// `ERROR_INVALID_NAME`, `\\server\...` is `ERROR_BAD_NETPATH`, and a suffix of 255 units or more
-/// `ERROR_PATH_NOT_FOUND`.
+/// (`specs/windows/kernel32.dll/CreateNamedPipeW.yaml`, `names`, and `CreateNamedPipeA.yaml`,
+/// `name_prefix` and `name_suffix`): the name must be `\\.\pipe\` (or `\\?\pipe\`, `\??\pipe\`) and
+/// a suffix, the prefix in any letter case and `/` taken for `\`. An empty name, no prefix, a
+/// suffix that is empty, `.`, `..` or a single space and `\\localhost\...` are
+/// `ERROR_INVALID_NAME`; a device other than the pipe directory (`\\.\something`) is
+/// `ERROR_FILE_NOT_FOUND`, except the mail slot directory, which is `ERROR_INVALID_NAME`;
+/// `\\server\...` is `ERROR_BAD_NETPATH`; a suffix of 255 units or more is `ERROR_PATH_NOT_FOUND`.
+/// (`CreateNamedPipeA` alone gives `ERROR_PATH_NOT_FOUND` for an empty name.)
 pub fn create_name_error(name: &[u16]) -> Option<u32> {
     if name.is_empty() {
-        return Some(ERROR_PATH_NOT_FOUND);
+        return Some(ERROR_INVALID_NAME);
     }
     let n: Vec<u16> = name.iter().map(|&c| if c == u16::from(b'/') { u16::from(b'\\') } else { c }).collect();
     let fold = |c: u16| if (u16::from(b'A')..=u16::from(b'Z')).contains(&c) { c + 32 } else { c };
@@ -181,7 +183,18 @@ pub fn create_name_error(name: &[u16]) -> Option<u32> {
             };
         }
     }
-    if starts("\\\\") && !starts("\\\\.\\") && !starts("\\\\?\\") && !starts("\\\\localhost\\") {
+    // A device other than the pipe directory, `\\.\<device>...`: one that does not exist is
+    // `ERROR_FILE_NOT_FOUND` (`specs/windows/kernel32.dll/CreateNamedPipeW.yaml`, `names`: "a name
+    // outside the pipe directory (`\\.\something`)"); the mail slot directory exists, but is
+    // not a pipe's (`CreateNamedPipeA.yaml`: `\\.\mailslot\x` is `ERROR_INVALID_NAME`).
+    if (starts("\\\\.") || starts("\\\\?")) && (n.len() == 3 || n[3] == u16::from(b'\\')) {
+        let device = n.get(4..).unwrap_or(&[]);
+        let device = &device[..device.iter().position(|&c| c == u16::from(b'\\')).unwrap_or(device.len())];
+        let mailslot: Vec<u16> = "mailslot".encode_utf16().collect();
+        let is_mailslot = device.len() == mailslot.len() && device.iter().zip(&mailslot).all(|(&a, &b)| fold(a) == b);
+        return Some(if is_mailslot { ERROR_INVALID_NAME } else { ERROR_FILE_NOT_FOUND });
+    }
+    if starts("\\\\") && !starts("\\\\localhost\\") {
         return Some(ERROR_BAD_NETPATH);
     }
     Some(ERROR_INVALID_NAME)
@@ -382,33 +395,69 @@ mod tests {
         assert_eq!(pipe_name(&w("plain")), Err(ERROR_BAD_PATHNAME));
     }
 
+    fn create_name(s: &str) -> Option<u32> {
+        create_name_error(&w(s))
+    }
+
+    /// W sheet, `names`: the name must be `\\.\pipe\<name>`.
     #[test]
-    fn create_names() {
-        let e = |s: &str| create_name_error(&w(s));
-        assert_eq!(e(""), Some(ERROR_PATH_NOT_FOUND));
-        for ok in
-            [r"\\.\pipe\x", r"\\.\PIPE\x", "//./pipe/x", r"\\?\pipe\x", r"\??\pipe\x", r"\\.\pipe\a\b", r"\\.\pipe\x. "]
-        {
-            assert_eq!(e(ok), None, "{ok}");
-        }
-        for bad in [
-            "pt_x",
-            r"\\.\pipe\",
-            r"\\localhost\pipe\x",
-            r"\\.\mailslot\x",
-            r"C:\pt_x",
-            r"\pipe\x",
-            r"\\.\pipe\.",
-            r"\\.\pipe\..",
-            r"\\.\pipe\ ",
+    fn create_names_in_the_pipe_directory_are_accepted() {
+        for ok in [
+            r"\\.\pipe\x",
+            r"\\.\PIPE\x",
+            "//./pipe/x",
+            r"\\?\pipe\x",
+            r"\??\pipe\x",
+            r"\\.\pipe\a\b",
+            r"\\.\pipe\x. ",
+            // A trailing backslash is part of the name (A sheet, `name_suffix`).
+            r"\\.\pipe\x\",
         ] {
-            assert_eq!(e(bad), Some(ERROR_INVALID_NAME), "{bad}");
+            assert_eq!(create_name(ok), None, "{ok}");
         }
-        assert_eq!(e(r"\\pipe\x"), Some(ERROR_BAD_NETPATH));
+    }
+
+    /// W sheet: `\\.\pipe\` with nothing after it, and an empty name, are `ERROR_INVALID_NAME` (123).
+    #[test]
+    fn create_names_without_a_pipe_name_are_invalid() {
+        assert_eq!(create_name(""), Some(ERROR_INVALID_NAME));
+        assert_eq!(create_name(r"\\.\pipe\"), Some(ERROR_INVALID_NAME));
+        assert_eq!(create_name(r"\\.\PIPE\"), Some(ERROR_INVALID_NAME));
+        for bad in [r"\\.\pipe\.", r"\\.\pipe\..", r"\\.\pipe\ "] {
+            assert_eq!(create_name(bad), Some(ERROR_INVALID_NAME), "{bad}");
+        }
+    }
+
+    /// W sheet: a name outside the pipe directory (`\\.\something`) is `ERROR_FILE_NOT_FOUND` (2);
+    /// A sheet: the mail slot directory, which exists, is 123.
+    #[test]
+    fn create_names_outside_the_pipe_directory() {
+        for outside in
+            [r"\\.\something", r"\\.\something\x", r"\\.\other\pipe\x", r"\\.", r"\\.\", r"\\?\other\x", r"//./Foo/x"]
+        {
+            assert_eq!(create_name(outside), Some(ERROR_FILE_NOT_FOUND), "{outside}");
+        }
+        for mailslot in [r"\\.\mailslot\x", r"\\.\MAILSLOT\x", r"\\.\mailslot"] {
+            assert_eq!(create_name(mailslot), Some(ERROR_INVALID_NAME), "{mailslot}");
+        }
+    }
+
+    /// A sheet, `name_prefix`: no prefix, other roots and servers.
+    #[test]
+    fn create_names_without_the_prefix() {
+        for bad in ["pt_x", r"\\localhost\pipe\x", r"C:\pt_x", r"\pipe\x"] {
+            assert_eq!(create_name(bad), Some(ERROR_INVALID_NAME), "{bad}");
+        }
+        assert_eq!(create_name(r"\\pipe\x"), Some(ERROR_BAD_NETPATH));
+    }
+
+    /// A sheet, `name_suffix`: 200 units work, 255 and more are `ERROR_PATH_NOT_FOUND`.
+    #[test]
+    fn create_names_have_a_length_limit() {
         let long = |n: usize| alloc::format!(r"\\.\pipe\{}", "x".repeat(n));
-        assert_eq!(e(&long(200)), None);
-        assert_eq!(e(&long(255)), Some(ERROR_PATH_NOT_FOUND));
-        assert_eq!(e(&long(300)), Some(ERROR_PATH_NOT_FOUND));
+        assert_eq!(create_name(&long(200)), None);
+        assert_eq!(create_name(&long(255)), Some(ERROR_PATH_NOT_FOUND));
+        assert_eq!(create_name(&long(300)), Some(ERROR_PATH_NOT_FOUND));
     }
 
     #[test]

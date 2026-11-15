@@ -700,3 +700,16 @@ pub unsafe extern "system" fn RemoveVectoredExceptionHandler(handle: *mut u8) ->
     // SAFETY: as above.
     unsafe { nt::RtlRemoveVectoredExceptionHandler(handle) }
 }
+
+/// `AddVectoredContinueHandler`, `RemoveVectoredContinueHandler`: ntdll's.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn AddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8 {
+    // SAFETY: ntdll's export, which only records the pointer.
+    unsafe { nt::RtlAddVectoredContinueHandler(first, handler) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RemoveVectoredContinueHandler(handle: *mut u8) -> u32 {
+    // SAFETY: ntdll's export, which only compares the handle.
+    unsafe { nt::RtlRemoveVectoredContinueHandler(handle) }
+}

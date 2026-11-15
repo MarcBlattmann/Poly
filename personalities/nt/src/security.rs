@@ -988,6 +988,16 @@ pub fn check_view(t: &Token) -> CheckToken<'_> {
     t.check_view()
 }
 
+/// `NtAllocateLocallyUniqueId(Luid*)` (Learn: `ZwAllocateLocallyUniqueId`, `AllocateLocallyUniqueId`): a
+/// `LUID` (`winnt.h`: `LowPart` then `HighPart`, 8 bytes) no other call or token of this boot
+/// has; the same counter as the tokens' ids.
+pub fn allocate_locally_unique_id<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [out] = abi::args::<K, 1>(k, regs)?;
+    let luid = k.with_state(|sys, _, _| sys.objects.security.new_luid());
+    abi::write_u64(k, out, luid)?;
+    Ok(STATUS_SUCCESS)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::services::Service;
